@@ -924,7 +924,11 @@ static void aplicarIdioma(int op);
 // arquivo. Ver o comentario em aplicarIdioma.
 static float legendaEspera;
 
-static int valor[AJ_N] = {
+// SEM TAMANHO DECLARADO, de proposito, e conferido logo depois da lista: com
+// `valor[AJ_N]` a inicializacao parcial passava em silencio e as ultimas
+// opcoes ficavam no zero. Foi o que aconteceu com as sete linhas do Stalker e
+// do Xtream (#149, ver a nota delas abaixo).
+static int valor[] = {
   0, 0, 0,          /* qualidade, DV, Atmos */
   0,                /* idioma de legenda: 0 = seguir a conta */
   // AUDIO NO ORIGINAL POR PADRAO (LING_OPC_ORIGINAL, o ULTIMO item de
@@ -1031,9 +1035,22 @@ static int valor[AJ_N] = {
   // DIFERENTE de zero nesta faixa (a de agora) teria caido no lugar errado.
   // Explicitados um a um, e nao contados de cabeca.
   0, 0, 0,          /* perfil, sincronizacao, addons: linhas de leitura/acao */
+  // AS SETE DO STALKER E DO XTREAM FALTAVAM AQUI (#149). Elas entraram no enum
+  // entre os addons e "onde o + salva" sem entrar nesta lista, e dali para
+  // baixo cada padrao caiu sete casas antes: o 1 de "envio sozinho" pousava em
+  // "onde o + salva" (que por acaso tambem nasce 1, e por isso nada se viu), e
+  // o envio ficava no 0 da inicializacao parcial. O remendo que forcava o
+  // desligado em ajustes_iniciar apagava a escolha da pessoa a cada abertura
+  // da tela, que e o #149.
+  0, 0, 0,          /* portal Stalker, MAC, remover: acoes */
+  0, 0, 0, 0,       /* servidor, usuario, senha Xtream, remover: acoes */
   1,                /* onde o + salva: watchlist do Trakt (ver V_SALVOS) */
   0, 0, 0,          /* trakt, simkl, sair: acoes */
-  0, 0, 0, 1,       /* versao, atualizar, registro, envio sozinho: DESLIGADO */
+  // ENVIO SOZINHO LIGADO DE FABRICA (dono, 26/09/2026: "melhor deixar
+  // automatico o log, isso que ajuda a gente"). O registro nao leva senha nem
+  // chave, e e dele que sai a triagem. No Tizen o cartao de consentimento
+  // (telemetria.c) continua perguntando na primeira abertura, e o nao grava.
+  0, 0, 0, 0,       /* versao, atualizar, registro, envio sozinho: LIGADO */
   0,                /* espaco */
   0,                /* memoria para imagens: automatico */
 
@@ -1056,6 +1073,8 @@ static int valor[AJ_N] = {
   0,                /* diagnostico */
   0,                /* teste de velocidade: acao */
 };
+_Static_assert(sizeof valor / sizeof *valor == AJ_N,
+               "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
 
 // Pedido de abrir a lista de addons, lido e zerado pelo app.c. A tela nao e
 // aberta daqui porque quem troca de tela e o app.c — ajustes.c nao conhece as
@@ -1975,10 +1994,13 @@ int ajustes_iniciar(void) {
   // ANTES de conferir: e rotulosDeIdioma quem preenche nLingua.
   rotulosDeIdioma();
   conferirPadroes();
-  // Fora do vetor posicional de proposito: aquele vetor ja esta com menos
-  // entradas do que o enum (as ultimas ficam em 0), e um 1 no lugar errado
-  // ligaria outra coisa. O arquivo, lido depois, sobrescreve.
-  valor[AJ_ENVIO_AUTO] = 1;
+  // #149: aqui havia `valor[AJ_ENVIO_AUTO] = 1` (desligado), o padrao do envio
+  // automatico escrito fora do vetor porque o vetor estava sete casas curto. Mesmo
+  // defeito do bloco abaixo: esta funcao roda a cada abertura da tela, depois
+  // do arquivo lido, e o "arquivo, lido depois, sobrescreve" do comentario nao
+  // acontecia — ligar o envio durava ate a proxima visita aos Ajustes. O
+  // padrao mora no vetor agora, conferido pelo _Static_assert dele.
+  //
   // BUG (#82/#86, 1.3.9 e 1.3.10): havia aqui um bloco Samsung escrevendo
   // AJ_DET_TRAILER_AUTO = AJ_HERO_TRAILER = 1 (desligado) como "padrao de
   // fabrica". So que ajustes_iniciar() roda TODA VEZ que a tela de Ajustes
