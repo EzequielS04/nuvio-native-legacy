@@ -1190,6 +1190,14 @@ int main(int argc, char **argv) {
   SDL_DestroyWindow(win);
   IMG_Quit();
   SDL_Quit();
+#ifdef __EMSCRIPTEN__
+  // O SDL_Quit apaga TODOS os hints (SDL_ClearHints, SDL.c do port 2.32.10),
+  // inclusive o de ASYNCIFY acima — e os fios de trabalho continuam vivos
+  // ate a pagina fechar. O primeiro SDL_Delay de um deles depois disto via
+  // emscripten_sleep e abortava: "Aborted(invalid state: 1)" logo depois do
+  // "fim" em todo log de saida da Samsung 1.5.0. Repor o hint aqui fecha isso.
+  SDL_SetHint(SDL_HINT_EMSCRIPTEN_ASYNCIFY, "0");
+#endif
   printf("fim\n");
 #ifdef __EMSCRIPTEN__
   // SAIR DE VERDADE NO TIZEN. Aqui o laco de quadro acabou e o main devolve,
