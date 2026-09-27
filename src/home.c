@@ -1633,8 +1633,12 @@ static void sincronizarFileiras(void) {
     }
     // MAX_CARDS - 1: a ultima coluna e do card "Ver tudo". Sem reservar, uma
     // fileira cheia empurraria o card para fora do vetor de animacao.
-    // DESC_ITENS_POR_FILEIRA (#163), que tem de caber em MAX_CARDS - 1.
-    fileiras[destino].n   = cf->n > DESC_ITENS_POR_FILEIRA ? DESC_ITENS_POR_FILEIRA : cf->n;
+    // "Itens por fileira" (#163), no maximo DESC_ITENS_POR_FILEIRA, que tem de
+    // caber em MAX_CARDS - 1. Diminuir vale na hora (corta aqui); aumentar,
+    // quando os catalogos forem pedidos de novo.
+    { int teto = ajustes_itens_fileira();
+      if (teto > DESC_ITENS_POR_FILEIRA) teto = DESC_ITENS_POR_FILEIRA;
+      fileiras[destino].n = cf->n > teto ? teto : cf->n; }
     // UMA COLUNA A MAIS: o card "Ver tudo" no fim. So em fileira que veio de um
     // CATALOGO de addon — "Continuar assistindo" e as listas do Trakt nao tem
     // continuacao para pedir (o base fica vazio nelas).

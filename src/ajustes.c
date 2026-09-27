@@ -171,6 +171,8 @@ typedef enum {
   AJ_MENU_EXPLORAR, AJ_MENU_GUIA, AJ_MENU_AGENDA, AJ_MENU_PERFIL,
   // Trailer do cartaz em foco no destaque (#124). No fim pelo mesmo motivo.
   AJ_FOCO_TRAILER,
+  // Itens por fileira da Home (#163). No fim pelo mesmo motivo.
+  AJ_ITENS_FILEIRA,
   AJ_N
 } OpcaoId;
 
@@ -238,6 +240,9 @@ static const char *V_CW[]        = { "Card", "Largo", "P\xc3\xb4ster" };
 static const char *V_CW_FONTE[]  = { "Ambas", "Conta Nuvio", "Trakt", "Simkl" };
 // `continueWatchingSortMode`, normalizado em normalizeContinueWatchingSortMode.
 static const char *V_CW_ORDEM[]  = { "Padrão", "Estilo streaming", "Separar futuros" };
+// Itens por fileira da Home (#163). O INDICE e o que fica gravado; o numero de
+// cada um esta em ajustes_itens_fileira. 24 e o teto de DESC_ITENS_POR_FILEIRA.
+static const char *V_ITENS_FIL[] = { "12", "18", "24" };
 // O que o toque curto de OK faz num card da retomada (issue #93): abre o
 // episodio direto no player, ou abre a pagina do titulo como sempre fez.
 // Local, como cwFonteLocal — o app oficial nao tem esta escolha.
@@ -605,6 +610,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Agenda na barra lateral",         V_LIGA, 2),   // local: menuAgendaLocal
   ESC("Perfil e Stats na barra lateral", V_LIGA, 2),   // local: menuPerfilLocal
   ESC("Trailer do cartaz em foco",       V_LIGA, 2),   // focusedPosterBackdropTrailerEnabled
+  ESC("Itens por fileira",               V_ITENS_FIL, 3), // local: itensFileiraLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -712,6 +718,7 @@ static const char *CHAVE[] = {
   "menuExplorarLocal", "menuGuiaLocal", "menuAgendaLocal", "menuPerfilLocal",
   // A MESMA chave do web (layoutPreferences), entao segue a conta.
   "focusedPosterBackdropTrailerEnabled",
+  "itensFileiraLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -797,7 +804,7 @@ static const Item TELA[] = {
       OPC(AJ_LANDSCAPE), OPC(AJ_HERO_CHEIO), OPC(AJ_HERO_FUNDO),
       OPC(AJ_HERO_ARTE_DIF), OPC(AJ_HERO_TRAILER),
     GRP("Conteúdo da Home", "Controle o que aparece na home e na busca.", "aj_rows-3"),
-      OPC(AJ_FIL_LIMITE), OPC(AJ_FIL_ORDEM),
+      OPC(AJ_FIL_LIMITE), OPC(AJ_ITENS_FILEIRA), OPC(AJ_FIL_ORDEM),
       OPC(AJ_RAIL), OPC(AJ_RAIL_MODERNA), OPC(AJ_RAIL_BLUR),
       OPC(AJ_MENU_EXPLORAR), OPC(AJ_MENU_GUIA), OPC(AJ_MENU_AGENDA),
       OPC(AJ_MENU_PERFIL),
@@ -1097,6 +1104,7 @@ static int valor[] = {
   0,                /* teste de velocidade: acao */
   0, 0, 0, 0,       /* explorar, guia, agenda, perfil na barra lateral: ligados */
   1,                /* trailer do cartaz em foco: desligado (DEFAULT do web) */
+  0,                /* itens por fileira: 12, como sempre foi (ver V_ITENS_FIL) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1299,6 +1307,12 @@ int  ajustes_menu_explorar(void)      { return lig(AJ_MENU_EXPLORAR); }
 int  ajustes_menu_guia(void)          { return lig(AJ_MENU_GUIA); }
 int  ajustes_menu_agenda(void)        { return lig(AJ_MENU_AGENDA); }
 int  ajustes_menu_perfil(void)        { return lig(AJ_MENU_PERFIL); }
+int  ajustes_itens_fileira(void) {
+  static const int N[] = { 12, 18, 24 };
+  int i = valor[AJ_ITENS_FILEIRA];
+  if (i < 0 || i >= (int)(sizeof N / sizeof *N)) i = 0;
+  return N[i];
+}
 int  ajustes_trailer_cartaz(void) {
   // A MESMA dependencia de inativa(AJ_FOCO_TRAILER), escrita aqui porque
   // inativa() vem bem mais abaixo no arquivo.
@@ -1838,6 +1852,7 @@ static int somenteDesteAparelho(int op) {
     // deste aparelho.
     case AJ_TRAILER_FONTE:
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
+    case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
       return 1;
     default:
@@ -2377,6 +2392,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_HERO_ARTE_DIF: return "Desligado: card, destaque e página do título mostram a mesma imagem. Ligado: o card fica com a arte do catálogo e o destaque usa outra foto — TMDB vira outro fundo do TMDB; em Automático, ou se a escolhida repetir o card, usa Apple TV, outro fundo do TMDB, fanart.tv, anime ou Trakt.";
     case AJ_HERO_TRAILER: return "Com o foco parado no destaque do topo, o trailer do título toca sem som no lugar da arte. Mover o foco volta para a arte.";
     case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis.";
+    case AJ_ITENS_FILEIRA: return "Quantos títulos cada fileira da Home mostra antes do Ver tudo. Mais itens usam mais memória: em TV com 1 GB de memória a Home pode ficar mais lenta ou fechar. Aumentar vale na próxima vez que o app abrir.";
     case AJ_FIL_ORDEM: return "Abre a lista de fileiras para reordenar, ligar, desligar e escolher o card de cada uma. É lá que dá para ver de onde cada fileira vem.";
     case AJ_RAIL: return "A barra de navegação da esquerda fica sempre aberta, ou recolhida até você ir até ela.";
     case AJ_RAIL_MODERNA: return "Troca a barra lateral pela versão nova, com ícones maiores. Ela ignora a escolha entre recolhida e fixa.";

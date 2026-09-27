@@ -1837,8 +1837,11 @@ static void *fioCatalogo(void *u) {
     t->inicioMs = descAgoraMs();
     pthread_mutex_unlock(&catTrava);
 
-    got = lerCatalogo(t->base, t->tipo, t->id, t->itens,
-                      MAX_POR_FILEIRA, MAX_POR_FILEIRA, &respondeu);
+    // QUANTOS e o ajuste (12/18/24, #163); o balde tem sempre o teto.
+    { int q = ajustes_itens_fileira();
+      if (q > MAX_POR_FILEIRA) q = MAX_POR_FILEIRA;
+      got = lerCatalogo(t->base, t->tipo, t->id, t->itens,
+                        MAX_POR_FILEIRA, q, &respondeu); }
 
     pthread_mutex_lock(&catTrava);
     t->n = got;

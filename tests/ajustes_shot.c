@@ -143,6 +143,9 @@ int main(int argc, char **argv) {
   tecla(SDLK_DOWN);                            // Limite de fileiras
   snprintf(nome, sizeof nome, "%s-previa-fileiras.bmp", saida);
   captura(nome, w);
+  tecla(SDLK_DOWN);                            // Itens por fileira (#163)
+  snprintf(nome, sizeof nome, "%s-itens-fileira.bmp", saida);
+  captura(nome, w);
   tecla(SDLK_DOWN);                            // Ordenar e ativar fileiras
   snprintf(nome, sizeof nome, "%s-acao.bmp", saida);
   captura(nome, w);
