@@ -312,43 +312,7 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie) {
              TMDB, serie ? "tv" : "movie", idTmdb, chave);
     corpo = rede_baixar(url, 20);
     if (corpo) {
-      const char *p = js_array(corpo, NULL, "cast");
-      int k = 0;
-      while (p && k < d->nElenco) {
-        const char *f = js_fim(p);
-        char caminhoFoto[128] = "";
-        js_texto(p, f, "character", d->elenco[k].papel, sizeof d->elenco[k].papel);
-        d->elenco[k].tmdb = (long)js_num(p, f, "id", 0.0);
-        if (js_texto(p, f, "profile_path", caminhoFoto, sizeof caminhoFoto) &&
-            caminhoFoto[0] == '/')
-          snprintf(d->elenco[k].foto, sizeof d->elenco[k].foto,
-                   "https://image.tmdb.org/t/p/w185%s", caminhoFoto);
-        // O TMDB devolve o elenco na mesma ordem de importancia que o Cinemeta,
-        // entao casar por posicao acerta na pratica; casar por nome falharia nos
-        // acentos e nos nomes escritos de forma diferente entre as duas bases.
-        k++;
-        p = js_prox(f);
-      }
-      // E A LISTA CRESCE: o Cinemeta para em 3-5 nomes no `cast` e era isso que
-      // a fileira mostrava (issue #94: "so 3 pessoas no elenco"). `p` ja esta
-      // na entrada seguinte a ultima enriquecida; daqui em diante cada entrada
-      // do cast do TMDB vira um NOME NOVO, ate o teto do vetor. Sem o TMDB
-      // ligado este bloco nem roda — nada muda para quem nao o configurou.
-      while (p && d->nElenco < CAT_ELENCO_MAX) {
-        const char *f = js_fim(p);
-        int k2 = d->nElenco;
-        char caminhoFoto[128] = "";
-        js_texto(p, f, "name", d->elenco[k2].nome, sizeof d->elenco[k2].nome);
-        js_texto(p, f, "character", d->elenco[k2].papel, sizeof d->elenco[k2].papel);
-        d->elenco[k2].tmdb = (long)js_num(p, f, "id", 0.0);
-        if (js_texto(p, f, "profile_path", caminhoFoto, sizeof caminhoFoto) &&
-            caminhoFoto[0] == '/')
-          snprintf(d->elenco[k2].foto, sizeof d->elenco[k2].foto,
-                   "https://image.tmdb.org/t/p/w185%s", caminhoFoto);
-        // Entrada sem nome nao vira pessoa na fileira: pula sem contar.
-        if (d->elenco[k2].nome[0]) d->nElenco++;
-        p = js_prox(f);
-      }
+      desc_tmdb_elenco(corpo, d);
       free(corpo);
     }
   }
@@ -3839,6 +3803,100 @@ static void metaCacheGuardar(const char *id, const char *corpo) {
 // teste (tests/cateps.c): casa por numero e so escreve nos eps da temporada
 // pedida; voto ausente ou zero deixa nota=0, que na tela simplesmente nao
 // desenha selo. Devolve quantos episodios ganharam nota.
+// ELENCO DO TMDB CASADO POR NOME (#153). Aqui era por POSICAO: foto, papel e
+// id da N-esima entrada do TMDB iam para o N-esimo nome do Cinemeta, na
+// suposicao de que as duas bases ordenam o elenco igual. Nao ordenam: na foto
+// do #153 a fileira mostrou Jacob Tremblay com o rosto e o papel de Shailene
+// Woodley, e ela com os dele — dado errado com cara de dado certo.
+//
+// A comparacao e so de letras e digitos, em minuscula e sem acento latino
+// (normElenco): "Zoë", "Zoe" e "ZOE" casam; "J. K. Simmons" e "JK Simmons"
+// tambem. Nome que nao casa com ninguem fica SEM foto e sem papel — melhor
+// que o de outra pessoa. As entradas do TMDB que nao casaram entram no fim,
+// na ordem do TMDB, ate o teto (o #94: o Cinemeta para em 3-5 nomes), sem
+// repetir quem ja esta na lista. Pura; devolve quantos nomes ganharam foto
+// ou papel por casamento.
+static char normDobra(unsigned char segundo) {
+  unsigned cp = (unsigned)segundo + 0x40u;
+  if (cp >= 0xC0 && cp <= 0xDE && cp != 0xD7) cp += 0x20;
+  if (cp >= 0xE0 && cp <= 0xE6) return 'a';
+  if (cp == 0xE7)               return 'c';
+  if (cp >= 0xE8 && cp <= 0xEB) return 'e';
+  if (cp >= 0xEC && cp <= 0xEF) return 'i';
+  if (cp == 0xF1)               return 'n';
+  if ((cp >= 0xF2 && cp <= 0xF6) || cp == 0xF8) return 'o';
+  if (cp >= 0xF9 && cp <= 0xFC) return 'u';
+  if (cp == 0xFD || cp == 0xFF) return 'y';
+  return 0;
+}
+static void normElenco(const char *s, char *dst, size_t tam) {
+  const unsigned char *p = (const unsigned char *)(s ? s : "");
+  size_t k = 0;
+  while (*p && k + 1 < tam) {
+    unsigned char c = *p++;
+    char o = 0;
+    if (c >= 'A' && c <= 'Z') o = (char)(c + 32);
+    else if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) o = (char)c;
+    else if (c == 0xC3 && *p) o = normDobra(*p++);
+    else if (c >= 0x80) { while ((*p & 0xC0) == 0x80) p++; }
+    if (o) dst[k++] = o;
+  }
+  dst[k] = 0;
+}
+
+int desc_tmdb_elenco(const char *json, CatItem *d) {
+  enum { MAX_TMDB = 48 };
+  struct { char nome[64], papel[64], foto[512]; long id; int usado; } *t;
+  char alvo[64], outro[64];
+  const char *p;
+  int n = 0, i, k, casados = 0;
+  if (!json || !d) return 0;
+  t = calloc(MAX_TMDB, sizeof *t);
+  if (!t) return 0;
+  for (p = js_array(json, NULL, "cast"); p && n < MAX_TMDB; p = js_prox(js_fim(p))) {
+    const char *f = js_fim(p);
+    char caminhoFoto[128] = "";
+    js_texto(p, f, "name", t[n].nome, sizeof t[n].nome);
+    if (!t[n].nome[0]) continue;   // sem nome nao vira pessoa na fileira
+    js_texto(p, f, "character", t[n].papel, sizeof t[n].papel);
+    t[n].id = (long)js_num(p, f, "id", 0.0);
+    if (js_texto(p, f, "profile_path", caminhoFoto, sizeof caminhoFoto) &&
+        caminhoFoto[0] == '/')
+      snprintf(t[n].foto, sizeof t[n].foto, "https://image.tmdb.org/t/p/w185%s", caminhoFoto);
+    n++;
+  }
+  // Os nomes que ja estao na lista (do Cinemeta, ou de uma passada anterior).
+  for (k = 0; k < d->nElenco; k++) {
+    normElenco(d->elenco[k].nome, alvo, sizeof alvo);
+    if (!alvo[0]) continue;
+    for (i = 0; i < n; i++) {
+      if (t[i].usado) continue;
+      normElenco(t[i].nome, outro, sizeof outro);
+      if (strcmp(alvo, outro)) continue;
+      t[i].usado = 1;
+      if (t[i].papel[0])
+        snprintf(d->elenco[k].papel, sizeof d->elenco[k].papel, "%s", t[i].papel);
+      if (t[i].foto[0])
+        snprintf(d->elenco[k].foto, sizeof d->elenco[k].foto, "%s", t[i].foto);
+      if (t[i].id > 0) d->elenco[k].tmdb = t[i].id;
+      casados++;
+      break;
+    }
+  }
+  // E A LISTA CRESCE (#94), com quem sobrou do TMDB.
+  for (i = 0; i < n && d->nElenco < CAT_ELENCO_MAX; i++) {
+    int j = d->nElenco;
+    if (t[i].usado) continue;
+    snprintf(d->elenco[j].nome, sizeof d->elenco[j].nome, "%s", t[i].nome);
+    snprintf(d->elenco[j].papel, sizeof d->elenco[j].papel, "%s", t[i].papel);
+    snprintf(d->elenco[j].foto, sizeof d->elenco[j].foto, "%s", t[i].foto);
+    d->elenco[j].tmdb = t[i].id;
+    d->nElenco++;
+  }
+  free(t);
+  return casados;
+}
+
 int desc_tmdb_notas_temporada(const char *json, CatEp *eps, int n,
                               int temporada) {
   const char *p;

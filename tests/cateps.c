@@ -291,6 +291,40 @@ int main(void) {
     assert(eps2[0].nota == 0); }
   puts("ok  nota TMDB por episodio casa numero/temporada e ignora o que falta");
 
+  // 9. #153: o elenco do TMDB casa POR NOME. A ordem das duas bases difere
+  //    (o caso da foto: Tremblay e Woodley trocados), a grafia tambem (acento,
+  //    caixa, ponto), e nome sem par nao ganha o rosto de ninguem.
+  { static CatItem it;
+    const char *json =
+      "{\"cast\":["
+      "{\"id\":1,\"name\":\"Russell Crowe\",\"character\":\"Henry Murray\",\"profile_path\":\"/rc.jpg\"},"
+      "{\"id\":2,\"name\":\"Shailene Woodley\",\"character\":\"Joanne Miller\",\"profile_path\":\"/sw.jpg\"},"
+      "{\"id\":3,\"name\":\"Jacob Tremblay\",\"character\":\"Ted Kaczynski\",\"profile_path\":\"/jt.jpg\"},"
+      "{\"id\":4,\"name\":\"Zoë Kravitz\",\"character\":\"X\"},"
+      "{\"id\":5,\"name\":\"\"},"
+      "{\"id\":6,\"name\":\"J.K. Simmons\",\"character\":\"Y\",\"profile_path\":\"/jk.jpg\"}]}";
+    memset(&it, 0, sizeof it);
+    snprintf(it.elenco[0].nome, sizeof it.elenco[0].nome, "Russell Crowe");
+    snprintf(it.elenco[1].nome, sizeof it.elenco[1].nome, "Jacob Tremblay");
+    snprintf(it.elenco[2].nome, sizeof it.elenco[2].nome, "Shailene Woodley");
+    snprintf(it.elenco[3].nome, sizeof it.elenco[3].nome, "ZOE KRAVITZ");
+    snprintf(it.elenco[4].nome, sizeof it.elenco[4].nome, "Ninguem Aqui");
+    it.nElenco = 5;
+    assert(desc_tmdb_elenco(json, &it) == 4);
+    assert(!strcmp(it.elenco[1].papel, "Ted Kaczynski"));
+    assert(strstr(it.elenco[1].foto, "/jt.jpg") && it.elenco[1].tmdb == 3);
+    assert(!strcmp(it.elenco[2].papel, "Joanne Miller"));
+    assert(strstr(it.elenco[2].foto, "/sw.jpg") && it.elenco[2].tmdb == 2);
+    assert(it.elenco[3].tmdb == 4 && !it.elenco[3].foto[0]);   // casou sem foto
+    assert(!it.elenco[4].foto[0] && !it.elenco[4].papel[0] && it.elenco[4].tmdb == 0);
+    // Quem sobrou do TMDB entra no fim; o sem nome nao.
+    assert(it.nElenco == 6);
+    assert(!strcmp(it.elenco[5].nome, "J.K. Simmons") && it.elenco[5].tmdb == 6);
+    // Segunda passada (reabrir o detalhe) nao duplica ninguem.
+    assert(desc_tmdb_elenco(json, &it) == 5);
+    assert(it.nElenco == 6); }
+  puts("ok  elenco do TMDB casa por nome, nao por posicao (#153)");
+
   puts("cateps: tudo ok");
   return 0;
 }

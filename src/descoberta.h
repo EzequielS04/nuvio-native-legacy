@@ -208,6 +208,10 @@ int desc_episodios_carregando(int indiceItem);
 // /tv/<id>/season/<n> do TMDB. Pura; devolve quantos ganharam nota.
 int  desc_tmdb_notas_temporada(const char *json, CatEp *eps, int n,
                                int temporada);
+// Casa o `cast` de /credits do TMDB com o elenco do item POR NOME (sem acento,
+// caixa nem pontuacao) e completa a lista com o resto do TMDB (#153). Pura;
+// devolve quantos nomes casaram.
+int  desc_tmdb_elenco(const char *json, CatItem *d);
 // Tipo(s) em que perguntar o /meta do Cinemeta, na ordem (1 ou 2). Tipo
 // incerto ("anime" etc.) tenta serie e depois filme. Puras.
 int  desc_meta_tipos(const char *tipo, const char *saida[2]);
