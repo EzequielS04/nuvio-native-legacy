@@ -44,6 +44,27 @@ int main(void) {
   assert(mkdtemp(dir));
   snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dir);
 
+  // 0. MIGRACAO UNICA (1.5.1): quem chega da 1.5.0 com "desligado" no disco
+  //    (quase sempre gravado pelo defeito) volta ligado UMA vez; a marca
+  //    envio-151.txt impede a segunda. Diretorio proprio, sem marca.
+  { char d0[] = "/tmp/nuvio-aj-envio0-XXXXXX", c0[700], m0[700];
+    FILE *mf;
+    assert(mkdtemp(d0));
+    snprintf(c0, sizeof c0, "%s/ajustes.txt", d0);
+    snprintf(m0, sizeof m0, "%s/envio-151.txt", d0);
+    escrever(c0, "envioAuto 1\n");
+    ajustes_dir(d0);
+    assert(ajustes_envio_auto());
+    assert(noDisco(c0) == 0);
+    mf = fopen(m0, "r"); assert(mf); fclose(mf);
+    // Depois da migracao, desligar vale de novo e sobrevive ao arranque.
+    escrever(c0, "envioAuto 1\n");
+    ajustes_dir(d0);
+    assert(!ajustes_envio_auto());
+    unlink(c0); unlink(m0);
+    { char t0[700]; snprintf(t0, sizeof t0, "%s/ajustes.tmp", d0); unlink(t0); }
+    rmdir(d0); }
+
   // 1. Arranque sem linha no arquivo: LIGADO de fabrica, e abrir a tela nao
   //    muda isso.
   escrever(caminho, "idioma 0\n");
@@ -85,7 +106,8 @@ int main(void) {
   assert(noDisco(caminho) == 1);
 
   unlink(caminho);
-  { char tmp[700]; snprintf(tmp, sizeof tmp, "%s/ajustes.tmp", dir); unlink(tmp); }
+  { char tmp[700]; snprintf(tmp, sizeof tmp, "%s/ajustes.tmp", dir); unlink(tmp);
+    snprintf(tmp, sizeof tmp, "%s/envio-151.txt", dir); unlink(tmp); }
   rmdir(dir);
   puts("ajustes_envio_auto: ok");
   return 0;

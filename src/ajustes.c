@@ -1539,6 +1539,31 @@ void ajustes_dir(const char *dir) {
     }
   }
   fclose(f);
+  // MIGRACAO UNICA (1.5.1, #149): religa o envio automatico. Ate a 1.5.0 a
+  // abertura da tela de Ajustes desligava o envio e a gravacao seguinte
+  // levava o "desligado" ao disco — quem o tem no arquivo, na maioria, nao
+  // escolheu isso. O dono decidiu religar uma vez. A unica recusa que se sabe
+  // distinguir e o "nao" do cartao de consentimento do Tizen
+  // (telemetria-perguntado.txt = 0): essa fica. A marca mora ao lado do
+  // ajustes.txt, e o gravar() abaixo e quem avisa o IDBFS no Tizen.
+  { char marca[640];
+    FILE *m;
+    snprintf(marca, sizeof marca, "%s/envio-151.txt", dirAjustes);
+    m = fopen(marca, "r");
+    if (m) fclose(m);
+    else {
+      char *resp = dados_ler("telemetria-perguntado.txt");
+      int disseNao = resp && resp[0] == '0';
+      free(resp);
+      if (!disseNao && valor[AJ_ENVIO_AUTO] != 0) {
+        valor[AJ_ENVIO_AUTO] = 0;
+        printf("[ajustes] envio automatico religado (migracao unica do #149)\n");
+        fflush(stdout);
+      }
+      m = fopen(marca, "w");
+      if (m) { fputs("1\n", m); fclose(m); }
+      gravar();
+    } }
 #if defined(__EMSCRIPTEN__) && !defined(NV_TRAILER_AUTO_TIZEN)
   // MIGRACAO UNICA (1.3.10): o .wgt da 1.3.9 saiu de uma build com
   // NV_TRAILER_AUTO_TIZEN (a das fotos das notas), entao na Samsung o
