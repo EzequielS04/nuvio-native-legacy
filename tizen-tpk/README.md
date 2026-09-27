@@ -22,17 +22,21 @@ O mesmo app C do webOS e do `.wgt`, empacotado como app .NET da Samsung.
 
 | Pacote | TFM | Para |
 |---|---|---|
+| `NuvioTpk40` | tizen40 + TVGLApplication | Tizen 4.0-5.5 (TVs 2018-2020) |
 | `NuvioTpk60` | tizen80 (API8) | Tizen 6.0 (TVs 2021) |
 | `NuvioTpk65` | tizen90 (API9) | Tizen 6.5 e 7.0 (2022-2023) |
 | `NuvioTpk` | net6.0-tizen8.0 (API11) | Tizen 8+ (2024 em diante) |
 
-O `GLWindow` mudou de assinatura na API9 e de nome na API11, por isso tres.
-Tizen 4/5 (2018-2020) nao: la a `.so` propria e recusada com certificado
-Public (`tizen-tpk-spike/`, #137). Essas TVs seguem no `.wgt`.
+O `GLWindow` mudou de assinatura na API9 e de nome na API11, por isso tres
+pacotes para 6+. No 4.0-5.5 nao ha GLWindow: o `NuvioTpk40` usa a
+`TVGLApplication` da Samsung (pacote `Tizen.NET.TV`), no molde do
+JuvoPlayer.OpenGL, com o video numa janela ElmSharp rebaixada. La a `.so`
+propria foi recusada com certificado Public (spike.2, #137, cara de UEP); o
+manifesto declara um privilegio Partner para o Apps2Samsung assinar como
+Partner. Se ainda assim a TV recusar, a tela mostra o erro do `dlopen`.
 
-## O que falta nesta primeira versao
+## O que falta
 
-- troca de faixa de audio e legenda, legenda embutida e externa;
 - cabecalhos de addon alem de `User-Agent` e `Cookie` (o player da Samsung
   nao aceita `Referer`);
 - nada disto rodou numa TV ainda: so no host falso (`tools/tpk-testa.sh`).
