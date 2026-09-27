@@ -4,9 +4,9 @@
     "desde": "2026-09-27",
     "ate": "2026-11-15",
     "plataforma": "tizen",
-    "titulo": "Nuvio nativo para Samsung: versão de prévia",
+    "titulo": "Native Nuvio for Samsung: preview build",
     "titulo_en": "Native Nuvio for Samsung: preview build",
-    "texto": "Já dá para testar o Nuvio como app nativo da Samsung (.tpk), mais rápido e sem navegador por baixo. Ele instala ao lado deste, não substitui. Baixe pelo GitHub: Releases › Samsung native app (.tpk) — preview, escolha o arquivo pelo ano da TV e instale com o Apps2Samsung. Ainda não foi testado em TV de verdade: conte como foi em github.com/iqui27/nuvio-native-legacy/issues/137.",
+    "texto": "You can now try Nuvio as a native Samsung app (.tpk): faster, with no browser underneath. It installs next to this one and doesn't replace it. Get it on GitHub: Releases › Samsung native app (.tpk) — preview, pick the file for your TV year and install with Apps2Samsung. It hasn't been tested on a real TV yet: tell us how it went at github.com/iqui27/nuvio-native-legacy/issues/137.",
     "texto_en": "You can now try Nuvio as a native Samsung app (.tpk): faster, with no browser underneath. It installs next to this one and doesn't replace it. Get it on GitHub: Releases › Samsung native app (.tpk) — preview, pick the file for your TV year and install with Apps2Samsung. It hasn't been tested on a real TV yet: tell us how it went at github.com/iqui27/nuvio-native-legacy/issues/137."
   },
   {
