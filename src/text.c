@@ -42,20 +42,25 @@ typedef struct {
 // e exatamente o borrao que o dono viu comparando com o app web, onde o
 // navegador rasteriza no devicePixelRatio.
 static float escalaTxt = 1.0f;
-static TTF_Font *fontes[TXT_NFONTES];
+static TTF_Font *fontes[TXT_FAMILIA_N][TXT_NFONTES];
+static TxtFamilia fonteInterface = TXT_FAMILIA_INTER;
+static TxtFamilia fonteInterfaceFallback = TXT_FAMILIA_INTER;
 
 // Os arquivos TTF dos tres pesos, LIDOS UMA VEZ e mantidos vivos enquanto o app
 // vive: as faces do FreeType leem deles sob demanda, entao liberar aqui e
 // leitura de memoria liberada no primeiro glifo novo. Sao ~900 KB no total.
 // `donoPeso` marca quais ponteiros sao proprios: pesos que apontam para o mesmo
 // arquivo compartilham o buffer e so um deles libera.
-static unsigned char *bytesPeso[3];
-static size_t         tamPeso[3];
-static int            donoPeso[3];
+static unsigned char *bytesPeso[TXT_FAMILIA_N][3];
+static size_t         tamPeso[TXT_FAMILIA_N][3];
+static int            donoPeso[TXT_FAMILIA_N][3];
+static int            familiaCarregada[TXT_FAMILIA_N];
+static int            familiaTentada[TXT_FAMILIA_N];
+static char           caminhoPeso[TXT_FAMILIA_N][3][512];
 // O RWops de cada estilo. Guardado porque abrimos com freesrc=0 (o buffer e
 // compartilhado, a fonte nao pode fecha-lo) e alguem tem de fechar em
 // txt_encerrar.
-static SDL_RWops     *rwFonte[TXT_NFONTES];
+static SDL_RWops     *rwFonte[TXT_FAMILIA_N][TXT_NFONTES];
 
 // Le o arquivo inteiro para um buffer novo. NULL se nao abrir.
 static unsigned char *lerTudo(const char *caminho, size_t *tam) {
@@ -75,18 +80,37 @@ static unsigned char *lerTudo(const char *caminho, size_t *tam) {
   *tam = (size_t)n;
   return b;
 }
-// As alternativas so sao abertas para os 16 estilos de legenda e sob demanda.
-// Abrir a matriz inteira (todas as familias x todos os estilos do app) gastaria
-// memoria numa TV fraca por uma preferencia que afeta no maximo quatro linhas.
+// Pesos de fontes legadas que não têm três faces reais usam síntese. Fontes
+// novas e Inter carregam as faces reais, uma família por vez e sob demanda.
 #define TXT_LEG_N (TXT_LEG_200 - TXT_LEG_50 + 1)
-static TTF_Font *fontesLegAlt[TXT_FAMILIA_N][TXT_LEG_N];
-static unsigned char fonteLegTentada[TXT_FAMILIA_N][TXT_LEG_N];
+static TTF_Font *fontesLegendaLG[TXT_LEG_N];
 static int avisoFallback[TXT_FAMILIA_N];
+static unsigned char tentouLegendaLG[TXT_LEG_N];
 const char *const TXT_FAMILIAS_PT[TXT_FAMILIA_N] = {
-  "Inter", "LG Display", "Droid Sans"
+  "Inter", "LG Display", "Droid Sans", "Montserrat", "Roboto",
+  "Atkinson Hyperlegible Next"
 };
 
 static Entrada cache[MAX_LINHAS];
+
+static void limparCacheTexto(void) {
+  for (int i = 0; i < MAX_LINHAS; i++) {
+    if (cache[i].ocupado && cache[i].linha.tex) {
+      gfx_tex_esquecer(cache[i].linha.tex);
+      glDeleteTextures(1, &cache[i].linha.tex);
+    }
+    memset(&cache[i], 0, sizeof cache[i]);
+  }
+}
+
+void txt_definir_fonte_interface(TxtFamilia familia) {
+  if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N ||
+      familia == fonteInterface) return;
+  fonteInterface = familia;
+  limparCacheTexto();
+}
+
+TxtFamilia txt_fonte_interface(void) { return fonteInterface; }
 
 // Quantas linhas NOVAS podem ser rasterizadas por quadro.
 //
@@ -306,7 +330,7 @@ static Uint32 decodifica(const unsigned char *p, int *n) {
 // ASCII — o caminho comum sai na primeira comparacao. A linha rasterizada e
 // cacheada por text.c, mas a CHAVE do cache e montada com o texto ja limpo,
 // entao este passe roda por quadro; e por isso que a saida rapida importa.
-static const char *semDecorativoSemGlifo(TxtEstilo estilo, const char *s,
+static const char *semDecorativoSemGlifo(TTF_Font *fonte, const char *s,
                                          char *dst, size_t tam) {
   const unsigned char *p = (const unsigned char *)s;
   size_t k = 0;
@@ -323,7 +347,7 @@ static const char *semDecorativoSemGlifo(TxtEstilo estilo, const char *s,
     int tirar = 0, falta = 0;
     char comum = 0;
     if (cp >= 0x80)
-      falta = cp >= 0x10000 || !TTF_GlyphIsProvided(fontes[estilo], (Uint16)cp);
+      falta = cp >= 0x10000 || !TTF_GlyphIsProvided(fonte, (Uint16)cp);
     // LETRA ESTILIZADA SEM GLIFO VIRA A LETRA COMUM (#144): "RᴇLᴇAꜱᴇ" sai
     // "RELEASE", e nao "R▯L▯AS▯" nem a linha inteira na fonte de reserva.
     if (falta) comum = nv_dobra_estilizada(cp);
@@ -357,86 +381,156 @@ static Escrita escritaDe(Uint32 cp) {
   return ESC_CIRILICO_ETC;
 }
 
+static int carregarFamilia(TxtFamilia familia);
+
 // Fonte com que a linha `s` deve ser desenhada. Devolve a principal quando ela
 // da conta — que e o caso da esmagadora maioria das linhas.
-static TTF_Font *fonteDe(TxtEstilo estilo, const char *s) {
+static TTF_Font *fonteDe(TxtFamilia familia, TxtEstilo estilo, const char *s) {
   Uint32 cp = primeiroNaoAscii(s);
   Escrita e;
-  if (!cp || cp >= 0x10000) return fontes[estilo];
+  TTF_Font *principal = NULL;
+  if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N)
+    familia = TXT_FAMILIA_INTER;
+  if (!fontes[familia][estilo] && !familiaTentada[familia])
+    carregarFamilia(familia);
+  if (!fontes[familia][estilo]) {
+    if (familia == fonteInterface && !avisoFallback[familia]) {
+      printf("fonte de interface %s indisponivel; usando %s\n",
+             TXT_FAMILIAS_PT[familia], TXT_FAMILIAS_PT[fonteInterfaceFallback]);
+      avisoFallback[familia] = 1;
+    }
+    familia = familiaCarregada[familia] ? familia : fonteInterfaceFallback;
+    if (!fontes[familia][estilo]) familia = TXT_FAMILIA_INTER;
+  }
+  principal = fontes[familia][estilo];
+  if (!principal) return NULL;
+  if (!cp || cp >= 0x10000) return principal;
   // Acentos do portugues e do espanhol estao na Inter; so cai na reserva o que
   // ela realmente nao tem.
-  if (TTF_GlyphIsProvided(fontes[estilo], (Uint16)cp)) return fontes[estilo];
+  if (TTF_GlyphIsProvided(principal, (Uint16)cp)) return principal;
   e = escritaDe(cp);
-  if (!caminhoReserva[e][0]) return fontes[estilo];
+  if (!caminhoReserva[e][0]) return principal;
   if (!reservas[e][estilo])
     reservas[e][estilo] = TTF_OpenFont(caminhoReserva[e],
                                        (int)(ESTILOS[estilo].corpo * escalaTxt + 0.5f));
-  return reservas[e][estilo] ? reservas[e][estilo] : fontes[estilo];
+  return reservas[e][estilo] ? reservas[e][estilo] : principal;
 }
 
 static TTF_Font *fonteLegendaDe(TxtEstilo estilo, const char *s,
                                 TxtFamilia familia) {
-  int i;
-  const char *caminho;
-  if (familia <= TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N ||
-      estilo < TXT_LEG_50 || estilo > TXT_LEG_200)
-    return fonteDe(estilo, s);
-  i = estilo - TXT_LEG_50;
-  if (fontesLegAlt[familia][i]) return fontesLegAlt[familia][i];
-  if (fonteLegTentada[familia][i]) return fonteDe(estilo, s);
-  fonteLegTentada[familia][i] = 1;
-  caminho = familia == TXT_FAMILIA_LG
-          ? "/usr/share/fonts/LG_Display-Regular.ttf"
-          : "/usr/share/fonts/DroidSans.ttf";
-  fontesLegAlt[familia][i] = TTF_OpenFont(
-      caminho, (int)(ESTILOS[estilo].corpo * escalaTxt + 0.5f));
-  if (!fontesLegAlt[familia][i]) {
-    if (!avisoFallback[familia]) {
-      printf("fonte de legenda %s indisponivel; usando Inter\n",
-             TXT_FAMILIAS_PT[familia]);
-      avisoFallback[familia] = 1;
+  if (familia == TXT_FAMILIA_LG && estilo >= TXT_LEG_50 && estilo <= TXT_LEG_200) {
+    int i = estilo - TXT_LEG_50;
+    if (!fontesLegendaLG[i] && !tentouLegendaLG[i]) {
+      tentouLegendaLG[i] = 1;
+      fontesLegendaLG[i] = TTF_OpenFont("/usr/share/fonts/LG_Display-Regular.ttf",
+          (int)(ESTILOS[estilo].corpo * escalaTxt + 0.5f));
+      if (!fontesLegendaLG[i] && !avisoFallback[TXT_FAMILIA_LG]) {
+        printf("fonte de legenda LG Display indisponivel; usando fallback\n");
+        avisoFallback[TXT_FAMILIA_LG] = 1;
+      }
     }
-    return fonteDe(estilo, s);
+    if (fontesLegendaLG[i]) return fontesLegendaLG[i];
   }
-  return fontesLegAlt[familia][i];
+  return fonteDe(familia, estilo, s);
+}
+
+static void liberarFamilia(TxtFamilia familia) {
+  for (int i = 0; i < TXT_NFONTES; i++) {
+    if (fontes[familia][i]) TTF_CloseFont(fontes[familia][i]);
+    fontes[familia][i] = NULL;
+    if (rwFonte[familia][i]) SDL_FreeRW(rwFonte[familia][i]);
+    rwFonte[familia][i] = NULL;
+  }
+  for (int p = 0; p < 3; p++) {
+    if (donoPeso[familia][p]) free(bytesPeso[familia][p]);
+    bytesPeso[familia][p] = NULL;
+    tamPeso[familia][p] = 0;
+    donoPeso[familia][p] = 0;
+  }
+  familiaCarregada[familia] = 0;
+}
+
+// Cada família lê só seus três arquivos, e só quando uma linha passa a usar
+// aquela família. As dezenas de TTF_Font por tamanho são abertas sobre os
+// mesmos buffers em memória; a TV não relê cada arquivo para cada estilo.
+static int carregarFamilia(TxtFamilia familia) {
+  if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N) return 0;
+  if (familiaCarregada[familia]) return 1;
+  if (familiaTentada[familia]) return 0;
+  familiaTentada[familia] = 1;
+  for (int p = 0; p < 3; p++) {
+    int j;
+    for (j = 0; j < p; j++)
+      if (!strcmp(caminhoPeso[familia][p], caminhoPeso[familia][j])) break;
+    if (j < p) {
+      bytesPeso[familia][p] = bytesPeso[familia][j];
+      tamPeso[familia][p] = tamPeso[familia][j];
+      continue;
+    }
+    bytesPeso[familia][p] = lerTudo(caminhoPeso[familia][p], &tamPeso[familia][p]);
+    donoPeso[familia][p] = bytesPeso[familia][p] != NULL;
+    if (!bytesPeso[familia][p]) {
+      printf("fonte %s indisponivel: %s\n", TXT_FAMILIAS_PT[familia],
+             caminhoPeso[familia][p]);
+      liberarFamilia(familia);
+      familiaTentada[familia] = 1;
+      return 0;
+    }
+  }
+  for (int i = 0; i < TXT_NFONTES; i++) {
+    int peso = ESTILOS[i].peso;
+    SDL_RWops *rw = SDL_RWFromConstMem(bytesPeso[familia][peso],
+                                       (int)tamPeso[familia][peso]);
+    fontes[familia][i] = rw
+      ? TTF_OpenFontRW(rw, 0, (int)(ESTILOS[i].corpo * escalaTxt + 0.5f))
+      : NULL;
+    rwFonte[familia][i] = rw;
+    if (!fontes[familia][i]) {
+      if (rw) SDL_FreeRW(rw);
+      rwFonte[familia][i] = NULL;
+      printf("TTF_OpenFont %s: %s\n", TXT_FAMILIAS_PT[familia], TTF_GetError());
+      liberarFamilia(familia);
+      familiaTentada[familia] = 1;
+      return 0;
+    }
+    // As fontes de sistema legadas não trazem faces de todos os pesos.
+    if ((familia == TXT_FAMILIA_LG || familia == TXT_FAMILIA_DROID) &&
+        peso == PESO_BOLD)
+      TTF_SetFontStyle(fontes[familia][i], TTF_STYLE_BOLD);
+  }
+  familiaCarregada[familia] = 1;
+  printf("fonte: %s (%d estilos, 3 arquivos)\n", TXT_FAMILIAS_PT[familia], TXT_NFONTES);
+  return 1;
 }
 
 int txt_iniciar(const char *dirRecursos, float escala) {
   if (escala < 0.5f) escala = 1.0f;
   escalaTxt = escala;
   if (TTF_Init() != 0) { printf("TTF_Init: %s\n", TTF_GetError()); return 0; }
-  // A fonte da propria LG e a que a interface da TV usa; DroidSans e a reserva.
-  // A Inter vai EMBARCADA no pacote. A TV so tem as fontes da LG e as do app da
-  // Netflix — nada proximo da SF Pro do tvOS. A Inter foi desenhada como
-  // alternativa livre com metricas parecidas, e e o que aproxima o desenho das
-  // letras do original. As fontes da LG ficam de reserva: se o pacote for
-  // instalado sem a pasta fonts/, o app continua legivel em vez de morrer.
   char base[512] = "";
-  if (dirRecursos && *dirRecursos) {
-    snprintf(base, sizeof base, "%s/", dirRecursos);
-  } else {
+  if (dirRecursos && *dirRecursos) snprintf(base, sizeof base, "%s/", dirRecursos);
+  else {
     char *bp = SDL_GetBasePath();
     if (bp) { snprintf(base, sizeof base, "%s", bp); SDL_free(bp); }
   }
 
-  char inter[3][512];
-  snprintf(inter[PESO_REGULAR], 512, "%sfonts/InterDisplay-Regular.ttf", base);
-  snprintf(inter[PESO_MEDIUM],  512, "%sfonts/InterDisplay-Medium.ttf",  base);
-  snprintf(inter[PESO_BOLD],    512, "%sfonts/InterDisplay-Bold.ttf",    base);
-
-  const char *lg[3] = { "/usr/share/fonts/LG_Display-Light.ttf",
-                        "/usr/share/fonts/LG_Display-Regular.ttf",
-                        "/usr/share/fonts/LG_Display-Regular.ttf" };
-  const char *droid[3] = { "/usr/share/fonts/DroidSans.ttf",
-                           "/usr/share/fonts/DroidSans.ttf",
-                           "/usr/share/fonts/DroidSans.ttf" };
-
-  const char *familias[3][3] = {
-    { inter[0], inter[1], inter[2] },
-    { lg[0], lg[1], lg[2] },
-    { droid[0], droid[1], droid[2] },
-  };
-  const char *nomes[3] = { "Inter (embarcada)", "LG Display", "DroidSans" };
+  snprintf(caminhoPeso[TXT_FAMILIA_INTER][0], 512, "%sfonts/InterDisplay-Regular.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_INTER][1], 512, "%sfonts/InterDisplay-Medium.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_INTER][2], 512, "%sfonts/InterDisplay-Bold.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_MONTSERRAT][0], 512, "%sfonts/Montserrat-Regular.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_MONTSERRAT][1], 512, "%sfonts/Montserrat-Medium.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_MONTSERRAT][2], 512, "%sfonts/Montserrat-Bold.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_ROBOTO][0], 512, "%sfonts/Roboto-Regular.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_ROBOTO][1], 512, "%sfonts/Roboto-Medium.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_ROBOTO][2], 512, "%sfonts/Roboto-Bold.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][0], 512, "%sfonts/AtkinsonHyperlegibleNext-Regular.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][1], 512, "%sfonts/AtkinsonHyperlegibleNext-Medium.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][2], 512, "%sfonts/AtkinsonHyperlegibleNext-Bold.ttf", base);
+  snprintf(caminhoPeso[TXT_FAMILIA_LG][0], 512, "%s", "/usr/share/fonts/LG_Display-Light.ttf");
+  snprintf(caminhoPeso[TXT_FAMILIA_LG][1], 512, "%s", "/usr/share/fonts/LG_Display-Regular.ttf");
+  snprintf(caminhoPeso[TXT_FAMILIA_LG][2], 512, "%s", "/usr/share/fonts/LG_Display-Regular.ttf");
+  for (int p = 0; p < 3; p++)
+    snprintf(caminhoPeso[TXT_FAMILIA_DROID][p], 512, "%s", "/usr/share/fonts/DroidSans.ttf");
 
   // Caminho da reserva CJK. Na TV e a DroidSansFallback; no Mac, a fonte do
   // sistema que cobre CJK — ali isto e so para a previa nao mentir.
@@ -468,93 +562,37 @@ int txt_iniciar(const char *dirRecursos, float escala) {
     } }
 
   marco("fontes: inicio");
-  for (int c = 0; c < 3; c++) {
-    int todas = 1;
-    // UM ARQUIVO, UMA LEITURA.
-    //
-    // MEDIDO: 1035 ms na TV contra 12 ms no Mac para o MESMO txt_iniciar. Nao e
-    // o FreeType que custa — e o armazenamento do aparelho. TTF_OpenFont abre e
-    // LE O ARQUIVO INTEIRO a cada chamada, e sao TXT_NFONTES chamadas sobre
-    // apenas TRES arquivos distintos (Regular, Medium, Bold): a mesma dezena de
-    // leituras da mesma dezena de megabytes, num disco que entrega ~1 MB/s de
-    // arquivo pequeno.
-    //
-    // Aqui os tres arquivos sao lidos UMA vez para a memoria e cada estilo abre
-    // sobre esses bytes com TTF_OpenFontRW. Nao ha fio nenhum de proposito: o
-    // gargalo era I/O REPETIDO, e paralelizar leituras redundantes no mesmo
-    // armazenamento lento nao as torna menos redundantes — nao fazer as
-    // leituras torna. Serial e mais previsivel, e nada disso encosta na
-    // thread-safety duvidosa do FreeType.
-    for (int p = 0; p < 3; p++) {
-      int j;
-      // A LG repete Regular em dois pesos e a Droid nos tres: nao ler de novo.
-      for (j = 0; j < p; j++)
-        if (!strcmp(familias[c][p], familias[c][j])) break;
-      if (j < p) { bytesPeso[p] = bytesPeso[j]; tamPeso[p] = tamPeso[j]; donoPeso[p] = 0; continue; }
-      bytesPeso[p] = lerTudo(familias[c][p], &tamPeso[p]);
-      donoPeso[p] = bytesPeso[p] ? 1 : 0;
-      if (!bytesPeso[p]) { todas = 0; break; }
-    }
-    if (todas)
-      for (int i = 0; i < TXT_NFONTES; i++) {
-        int peso = ESTILOS[i].peso;
-        // Um RWops POR fonte: o FreeType le pelo stream durante toda a vida da
-        // face, entao dois estilos nao podem dividir a mesma posicao de leitura.
-        // Sao bytes em memoria — criar o RWops nao custa I/O.
-        SDL_RWops *rw = SDL_RWFromConstMem(bytesPeso[peso], (int)tamPeso[peso]);
-        // freesrc=0: quem libera o RWops e o TTF_CloseFont em txt_encerrar? Nao
-        // — passamos 0 e guardamos o ponteiro, porque o buffer e compartilhado
-        // entre estilos e nao pode ser liberado pela primeira fonte a fechar.
-        fontes[i] = rw ? TTF_OpenFontRW(rw, 0, (int)(ESTILOS[i].corpo * escalaTxt + 0.5f)) : NULL;
-        rwFonte[i] = rw;
-        // A LG usa SDL 2.0.4: SDL_RWclose so existe nas versoes novas do SDL.
-        // SDL_FreeRW e a ABI disponivel no webOS 4 e libera corretamente o
-        // stream criado por SDL_RWFromConstMem.
-        if (!fontes[i]) { if (rw) SDL_FreeRW(rw); rwFonte[i] = NULL; todas = 0; break; }
-        // negrito sintetico so na reserva, que nao tem arquivo Bold proprio
-        if (c > 0 && ESTILOS[i].peso == PESO_BOLD) TTF_SetFontStyle(fontes[i], TTF_STYLE_BOLD);
-      }
-    if (todas) {
-      printf("fonte: %s (%d estilos, 3 leituras)\n", nomes[c], TXT_NFONTES);
+  const TxtFamilia fallback[] = { TXT_FAMILIA_INTER, TXT_FAMILIA_LG, TXT_FAMILIA_DROID };
+  for (int i = 0; i < (int)(sizeof fallback / sizeof fallback[0]); i++)
+    if (carregarFamilia(fallback[i])) {
+      fonteInterfaceFallback = fallback[i];
+      if (fonteInterface < TXT_FAMILIA_INTER || fonteInterface >= TXT_FAMILIA_N)
+        fonteInterface = fallback[i];
       marco("fontes: prontas");
       return 1;
     }
-    for (int i = 0; i < TXT_NFONTES; i++) {
-      if (fontes[i]) TTF_CloseFont(fontes[i]);
-      fontes[i] = NULL;
-      if (rwFonte[i]) SDL_FreeRW(rwFonte[i]);
-      rwFonte[i] = NULL;
-    }
-    for (int p = 0; p < 3; p++) {
-      if (donoPeso[p]) free(bytesPeso[p]);
-      bytesPeso[p] = NULL; tamPeso[p] = 0; donoPeso[p] = 0;
-    }
-  }
   printf("txt: nenhuma fonte carregou\n");
   marco("fontes: nenhuma carregou");
+  TTF_Quit();
   return 0;
 }
 
 void txt_encerrar(void) {
-  for (int i = 0; i < MAX_LINHAS; i++)
-    if (cache[i].ocupado && cache[i].linha.tex) glDeleteTextures(1, &cache[i].linha.tex);
+  limparCacheTexto();
   // ORDEM: a fonte primeiro, o RWops depois, o buffer por ultimo. A face do
   // FreeType ainda referencia o stream, e o stream, os bytes.
-  for (int i = 0; i < TXT_NFONTES; i++) {
-    if (fontes[i]) TTF_CloseFont(fontes[i]);
-    fontes[i] = NULL;
-    if (rwFonte[i]) SDL_FreeRW(rwFonte[i]);
-    rwFonte[i] = NULL;
+  for (int f = 0; f < TXT_FAMILIA_N; f++) liberarFamilia((TxtFamilia)f);
+  for (int i = 0; i < TXT_LEG_N; i++) {
+    if (fontesLegendaLG[i]) TTF_CloseFont(fontesLegendaLG[i]);
+    fontesLegendaLG[i] = NULL;
+  }
+  memset(tentouLegendaLG, 0, sizeof tentouLegendaLG);
+  for (int i = 0; i < TXT_NFONTES; i++)
     for (int e = 0; e < ESC_N; e++)
-      if (reservas[e][i]) TTF_CloseFont(reservas[e][i]);
-  }
-  for (int p = 0; p < 3; p++) {
-    if (donoPeso[p]) free(bytesPeso[p]);
-    bytesPeso[p] = NULL; tamPeso[p] = 0; donoPeso[p] = 0;
-  }
-  for (int f = 1; f < TXT_FAMILIA_N; f++)
-    for (int i = 0; i < TXT_LEG_N; i++)
-      if (fontesLegAlt[f][i]) TTF_CloseFont(fontesLegAlt[f][i]);
+      if (reservas[e][i]) { TTF_CloseFont(reservas[e][i]); reservas[e][i] = NULL; }
+  memset(familiaTentada, 0, sizeof familiaTentada);
+  memset(avisoFallback, 0, sizeof avisoFallback);
+  memset(caminhoReserva, 0, sizeof caminhoReserva);
   TTF_Quit();
 }
 
@@ -575,20 +613,18 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
                              int b, int a, TxtFamilia familia, int enfase) {
   TxtLinha vazia = {0, 0, 0};
   char limpo[1024];
-  if (!s || !*s || estilo < 0 || estilo >= TXT_NFONTES || !fontes[estilo]) return vazia;
-
   if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N)
     familia = TXT_FAMILIA_INTER;
+  if (!s || !*s || estilo < 0 || estilo >= TXT_NFONTES ||
+      !fonteDe(familia, estilo, s)) return vazia;
 
   // ANTES DA CHAVE do cache, para que a linha limpa seja a linha guardada: duas
   // entradas que diferem so por um emoji que ninguem desenha passam a ser a
   // mesma, o que tambem alivia a tabela na tela de fontes.
-  // SO NA FAMILIA PRINCIPAL. A limpeza pergunta a fontes[estilo] se o glifo
-  // existe, e as familias de legenda usam outro vetor de fontes (fontesLegAlt):
-  // aplicar o mesmo teste ali tiraria de uma legenda um simbolo que a fonte
-  // DELA tem. A tela que motivou isto — a lista de fontes — e toda Inter.
+  // A limpeza continua restrita à Inter legada. As outras famílias e legendas
+  // preservam símbolos que a própria face sabe desenhar.
   if (familia == TXT_FAMILIA_INTER) {
-    s = semDecorativoSemGlifo(estilo, s, limpo, sizeof limpo);
+    s = semDecorativoSemGlifo(fonteDe(familia, estilo, s), s, limpo, sizeof limpo);
     if (!*s) return vazia;
   }
 
@@ -651,6 +687,7 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   Uint64 t0 = SDL_GetPerformanceCounter();
   SDL_Color cor = { (Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a };
   TTF_Font *fonte = fonteLegendaDe(estilo, s, familia);
+  if (!fonte) return vazia;
   // SOMA ao estilo que a fonte ja tem, e RESTAURA depois. As familias de
   // reserva nascem com TTF_STYLE_BOLD ligado (ver txt_iniciar); zerar aqui
   // tiraria delas o peso que o app inteiro conta com.
@@ -692,7 +729,7 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
 }
 
 TxtLinha txt_linha(TxtEstilo estilo, const char *s, int r, int g, int b, int a) {
-  return linhaFamilia(estilo, i18n(s), r, g, b, a, TXT_FAMILIA_INTER, 0);
+  return linhaFamilia(estilo, i18n(s), r, g, b, a, fonteInterface, 0);
 }
 
 TxtLinha txt_linha_familia(TxtEstilo estilo, const char *s, int r, int g,
@@ -762,7 +799,7 @@ float txt_tracking(TxtEstilo estilo, const char *s, int r, int g, int b,
 TxtLinha txt_linha_corta(TxtEstilo estilo, const char *s, int r, int g, int b,
                          int a, float maxW) {
   return txt_linha_corta_familia(estilo, s, r, g, b, a, maxW,
-                                 TXT_FAMILIA_INTER);
+                                 fonteInterface);
 }
 
 static TxtLinha cortaFamilia(TxtEstilo estilo, const char *s, int r, int g,
@@ -810,8 +847,51 @@ TxtLinha txt_linha_corta_enfase(TxtEstilo estilo, const char *s, int r, int g,
   return cortaFamilia(estilo, s, r, g, b, a, maxW, familia, enfase);
 }
 
-float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
-                float x, float y, float larg, float leading, float alpha, int maxLinhas) {
+static void desenhaBlocoLinha(TxtEstilo estilo, const char *s, int r, int g, int b,
+                              float x, float y, float larg, float alpha,
+                              int reticencias) {
+  if (!reticencias) {
+    TxtLinha l = txt_linha(estilo, s, r, g, b, 255);
+    txt_desenhar_alpha(l, x, y, alpha);
+    return;
+  }
+  {
+    char fim[512];
+    size_t n = strlen(s);
+    if (n >= sizeof fim - 4) {
+      n = sizeof fim - 4;
+      while (n > 0 && ((unsigned char)s[n] & 0xC0) == 0x80) n--;
+    }
+    memcpy(fim, s, n); fim[n] = 0;
+    for (;;) {
+      char teste[512];
+      snprintf(teste, sizeof teste, "%s\xe2\x80\xa6", fim);
+      TxtLinha l = txt_linha(estilo, teste, r, g, b, 255);
+      if (l.w <= larg) {
+        txt_desenhar_alpha(l, x, y, alpha);
+        return;
+      }
+      // Remove palavras completas primeiro; uma unica palavra longa cai para
+      // codepoints UTF-8, para nunca deixar um acento pela metade.
+      size_t corte = n;
+      while (corte > 0 && fim[corte - 1] != ' ') corte--;
+      if (corte > 0) n = corte - 1;
+      else {
+        if (!n) break;
+        n--;
+        while (n > 0 && ((unsigned char)fim[n] & 0xC0) == 0x80) n--;
+      }
+      fim[n] = 0;
+      if (!n) break;
+    }
+    { TxtLinha l = txt_linha(estilo, "\xe2\x80\xa6", r, g, b, 255);
+      txt_desenhar_alpha(l, x, y, alpha); }
+  }
+}
+
+static float txt_bloco_impl(TxtEstilo estilo, const char *s, int r, int g, int b,
+                            float x, float y, float larg, float leading,
+                            float alpha, int maxLinhas, int reticencias) {
   // Mesma razao do corte: a quebra de linha e feita no texto final.
   s = i18n(s);
   if (!s || !*s) return 0.0f;
@@ -839,7 +919,14 @@ float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
 
     char tentativa[512];
     size_t nl = strlen(linha);
-    if (nl + np + 2 >= sizeof tentativa) break;
+    if (nl + np + 2 >= sizeof tentativa) {
+      if (reticencias) {
+        desenhaBlocoLinha(estilo, linha[0] ? linha : ini, r, g, b,
+                          x, y + usado, larg, alpha, 1);
+        return usado + leading;
+      }
+      break;
+    }
     memcpy(tentativa, linha, nl);
     if (nl) tentativa[nl++] = ' ';
     memcpy(tentativa + nl, ini, np);
@@ -847,12 +934,28 @@ float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
 
     TxtLinha m = txt_linha(estilo, tentativa, r, g, b, 255);
     if (m.w > larg && linha[0]) {
+      if (reticencias && maxLinhas > 0 && nLinhas + 1 >= maxLinhas) {
+        desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
+                          alpha, 1);
+        return usado + leading;
+      }
       // nao coube: fecha a linha atual e recomeca com a palavra
       TxtLinha l = txt_linha(estilo, linha, r, g, b, 255);
       txt_desenhar_alpha(l, x, y + usado, alpha);
       usado += leading; nLinhas++;
       if (maxLinhas > 0 && nLinhas >= maxLinhas) return usado;
       memcpy(linha, ini, np); linha[np] = 0;
+      if (reticencias && txt_linha(estilo, linha, r, g, b, 255).w > larg) {
+        desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
+                          alpha, 1);
+        return usado + leading;
+      }
+    } else if (m.w > larg && reticencias) {
+      // Uma palavra sem espacos pode ser maior que a coluna. O caminho normal
+      // de txt_bloco preserva o comportamento antigo; esta variante sinaliza
+      // o corte e limita o glifo por largura, inclusive em texto UTF-8 longo.
+      desenhaBlocoLinha(estilo, ini, r, g, b, x, y + usado, larg, alpha, 1);
+      return usado + leading;
     } else {
       memcpy(linha, tentativa, nl + np + 1);
     }
@@ -860,6 +963,11 @@ float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
     // acabar. `linha` pode estar vazia (dois \n seguidos): ai a linha em branco
     // e desenhada de proposito — e o vao que quem escreveu o texto pediu.
     if (quebra && (maxLinhas <= 0 || nLinhas < maxLinhas)) {
+      if (reticencias && maxLinhas > 0 && nLinhas + 1 >= maxLinhas && *p) {
+        desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
+                          alpha, 1);
+        return usado + leading;
+      }
       if (linha[0]) {
         TxtLinha l = txt_linha(estilo, linha, r, g, b, 255);
         txt_desenhar_alpha(l, x, y + usado, alpha);
@@ -869,11 +977,30 @@ float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
     }
   }
   if (linha[0] && (maxLinhas <= 0 || nLinhas < maxLinhas)) {
-    TxtLinha l = txt_linha(estilo, linha, r, g, b, 255);
-    txt_desenhar_alpha(l, x, y + usado, alpha);
+    if (reticencias && maxLinhas > 0 && *p)
+      desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
+                        alpha, 1);
+    else {
+      TxtLinha l = txt_linha(estilo, linha, r, g, b, 255);
+      txt_desenhar_alpha(l, x, y + usado, alpha);
+    }
     usado += leading;
   }
   return usado;
+}
+
+float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
+                float x, float y, float larg, float leading, float alpha,
+                int maxLinhas) {
+  return txt_bloco_impl(estilo, s, r, g, b, x, y, larg, leading, alpha,
+                        maxLinhas, 0);
+}
+
+float txt_bloco_corta(TxtEstilo estilo, const char *s, int r, int g, int b,
+                      float x, float y, float larg, float leading,
+                      float alpha, int maxLinhas) {
+  return txt_bloco_impl(estilo, s, r, g, b, x, y, larg, leading, alpha,
+                        maxLinhas, 1);
 }
 
 // Quebra igual a txt_bloco, mas posiciona cada linha pela BORDA DIREITA. A

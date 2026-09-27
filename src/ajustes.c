@@ -173,6 +173,8 @@ typedef enum {
   AJ_FOCO_TRAILER,
   // Itens por fileira da Home (#163). No fim pelo mesmo motivo.
   AJ_ITENS_FILEIRA,
+  // A fonte da interface é independente da família das legendas.
+  AJ_FONTE_UI,
   AJ_N
 } OpcaoId;
 
@@ -215,6 +217,9 @@ static const char *V_ASPTRAIL[]  = { "Zoom cinema", "Zoom leve", "Zoom ultra", "
 static const char *V_TRAILFONTE[] = { "Automático", "Apple TV", "IMDb", "YouTube" };
 static const char *V_IDIOMA[]    = { "Português", "English" };
 static const char *V_ANIM[]      = { "Completas", "Reduzidas" };
+static const char *V_FONTE_UI[]  = { "Inter", "LG Display", "Droid Sans",
+                                     "Montserrat", "Roboto",
+                                     "Atkinson Hyperlegible Next" };
 // A ORDEM IMPORTA: o indice 0 e o padrao (ver a lista de padroes, que e
 // posicional), e o padrao tem de ser 1080p. Numa TV que NAO concede a
 // superficie 4K a escolha nao faz nada, e numa que concede ela quadruplica o
@@ -611,6 +616,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Perfil e Stats na barra lateral", V_LIGA, 2),   // local: menuPerfilLocal
   ESC("Trailer do cartaz em foco",       V_LIGA, 2),   // focusedPosterBackdropTrailerEnabled
   ESC("Itens por fileira",               V_ITENS_FIL, 3), // local: itensFileiraLocal
+  ESC("Fonte da interface", V_FONTE_UI, 6),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -719,6 +725,7 @@ static const char *CHAVE[] = {
   // A MESMA chave do web (layoutPreferences), entao segue a conta.
   "focusedPosterBackdropTrailerEnabled",
   "itensFileiraLocal",
+  "fonteInterface",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -798,6 +805,7 @@ static const Item TELA[] = {
   // mesma decisao (de onde sai o destaque).
   SEC("Aparência", "Cor de destaque, idioma e animações", "aj_palette"),
     OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_IDIOMA), OPC(AJ_ANIM),
+    OPC(AJ_FONTE_UI),
 
   SEC("Layout", "Estrutura da página inicial e estilos de pôster", "aj_layout-dashboard"),
     GRP("Layout da Home", "Escolha a estrutura e a fonte do destaque.", "aj_panel-top"),
@@ -949,6 +957,7 @@ static int  nValores(int op);
 // setter de "onde o + salva" grava na hora e vem antes dela.
 static void gravar(void);
 static void aplicarIdioma(int op);
+static int somenteDesteAparelho(int op);
 // Segundos restantes antes de refazer a busca de legendas. Declarada aqui, e
 // nao junto de aplicarIdioma, porque ajustes_atualizar a le e vem ANTES dela no
 // arquivo. Ver o comentario em aplicarIdioma.
@@ -1105,6 +1114,7 @@ static int valor[] = {
   0, 0, 0, 0,       /* explorar, guia, agenda, perfil na barra lateral: ligados */
   1,                /* trailer do cartaz em foco: desligado (DEFAULT do web) */
   0,                /* itens por fileira: 12, como sempre foi (ver V_ITENS_FIL) */
+  TXT_FAMILIA_INTER,/* fonte da interface: independente da legenda */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1127,8 +1137,9 @@ static int focoItem = 0;
 static int focoOp = -1;
 // Pedido do cartao de novidades ("Experimentar a cor viva"): a proxima
 // abertura pousa na linha da cor, dentro de Aparencia (ver ajustes_iniciar).
-static int abrirNaCor;
+static int abrirNaCor, abrirNaFonte;
 void ajustes_abrir_na_cor(void) { abrirNaCor = 1; }
+void ajustes_abrir_na_fonte(void) { abrirNaFonte = 1; }
 int  ajustes_opcao_em_foco(void) { return focoOp; }
 // Categoria mostrada na lista. Com o foco no indice ela e a categoria em foco
 // la; com o foco na lista, a do item.
@@ -1638,6 +1649,7 @@ void ajustes_dir(const char *dir) {
   rotulosDeIdioma();
   aplicarIdioma(AJ_LEG_LINGUA);
   aplicarIdioma(AJ_AUD_LINGUA);
+  txt_definir_fonte_interface((TxtFamilia)valor[AJ_FONTE_UI]);
   // O teto de imagens escolhido vale desde o arranque, nao so quando a tela
   // de Ajustes e aberta. tex_iniciar ja rodou (main.c); isto so o corrige.
   if (valor[AJ_TEX_MB] > 0) tex_definir_orcamento_mb(ajustes_tex_mb());
@@ -1719,6 +1731,7 @@ int ajustes_aplicar_blob(const char *json) {
     // (heroCatalogKeys, versao, espaco) e nao vem do blob.
     if (OPCOES[i].tipo == OP_LEITURA || OPCOES[i].tipo == OP_ACAO) continue;
     if (!CHAVE[i] || CHAVE[i][0] == '-') continue;
+    if (i == AJ_FONTE_UI) continue;
     // MEDIDO na TV, com uma conta de verdade: o blob NAO e um mapa plano de
     // camelCase. Ele e
     //   {"version":1,"features":{"layout_settings":{
@@ -1838,6 +1851,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_FIL_ORDEM:
     case AJ_CW_FONTE:
     case AJ_BORDA_FOCO:
+    case AJ_FONTE_UI:
     case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO:
     case AJ_FONTE_REPOR:
@@ -2070,6 +2084,7 @@ int ajustes_iniciar(void) {
   // ANTES de conferir: e rotulosDeIdioma quem preenche nLingua.
   rotulosDeIdioma();
   conferirPadroes();
+  txt_definir_fonte_interface((TxtFamilia)valor[AJ_FONTE_UI]);
   // #149: aqui havia `valor[AJ_ENVIO_AUTO] = 1` (desligado), o padrao do envio
   // automatico escrito fora do vetor porque o vetor estava sete casas curto. Mesmo
   // defeito do bloco abaixo: esta funcao roda a cada abertura da tela, depois
@@ -2096,6 +2111,7 @@ int ajustes_iniciar(void) {
   // foco JA na linha da cor, e nao no indice — quem apertou o botao quer
   // trocar a cor, nao achar onde ela mora.
   if (abrirNaCor) { abrirNaCor = 0; focarOpcao(AJ_TEMA); }
+  if (abrirNaFonte) { abrirNaFonte = 0; focarOpcao(AJ_FONTE_UI); }
   filAberta = 0; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
   emEdicao = 0;
   valor[AJ_FIL_LIMITE] = fil_limite();
@@ -2463,6 +2479,7 @@ static const char *ajudaOpcao(int op) {
 
     // --- Interface e conta
     case AJ_IDIOMA: return "Idioma de toda a interface. Não muda o idioma das legendas nem do áudio.";
+    case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
     case AJ_TEMA: return "Cor do anel que marca onde está o foco. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena: estilizada também tinge o fundo, gradiente pinta os botões com as cores da arte e imersiva deixa a cor vazar pela tela como luz. Ficam só nesta TV.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
@@ -2956,6 +2973,8 @@ static void mudarValor(int op, int dir) {
     // O rotulo de tipo e os generos das fileiras sao montados na entrada do
     // catalogo, ja no idioma da interface; trocar o idioma remonta.
     if (op == AJ_IDIOMA) desc_repetir();
+    if (op == AJ_FONTE_UI)
+      txt_definir_fonte_interface((TxtFamilia)valor[op]);
     // A FONTE DO CONTINUAR tambem remonta, e por um motivo diferente do
     // idioma: quem monta aquela fileira e montarContinuar (descoberta.c), e
     // o conteudo dela nao e refeito por desc_remontar_fileiras — essa so
@@ -4418,6 +4437,1079 @@ static float desenhaPrevia(int op, float x, float y, float w) {
   (void)y0;
 }
 
+// Diagramas pequenos do painel de ajuda. Sao superficies do proprio renderer,
+// com o acento ativo, e representam fluxos de produto sem simular estados reais
+// de conta, sincronizacao, diagnostico ou metricas.
+static void ajudaMiniTexto(const char *s, float x, float y, float w,
+                           int r, int g, int b) {
+  TxtLinha l = txt_linha_corta(TXT_CAPTION2, i18n(s), r, g, b, 255, w);
+  txt_desenhar(l, x, y);
+}
+
+static void ajudaMiniCaixa(float x, float y, float w, float h, int ativa,
+                           float ar, float ag, float ab) {
+  if (ativa) {
+    GfxRect r = { x, y, w, h };
+    gfx_cor(r, 10.0f / h, ar, ag, ab, 0.92f);
+  } else {
+    GfxRect r = { x, y, w, h };
+    gfx_cor(r, 10.0f / h, 0.095f, 0.10f, 0.12f, 1.0f);
+  }
+}
+
+static void ajudaMiniSeta(float x, float y) {
+  GfxRect haste = { x, y + 15.0f, 25.0f, 2.0f };
+  gfx_cor(haste, 0.0f, 0.45f, 0.47f, 0.52f, 0.9f);
+  { TxtLinha l = txt_linha(TXT_HEADLINE, "→", 175, 178, 186, 255);
+    txt_desenhar(l, x + 18.0f, y); }
+}
+
+static float ajudaFluxoCatalogos(float x, float y, float w) {
+  float ar, ag, ab, h = 188.0f, sx = x + 18.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  ajudaMiniCaixa(sx, y + 30.0f, 112.0f, 54.0f, 1, ar, ag, ab);
+  ajudaMiniTexto("Addon", sx + 14.0f, y + 46.0f, 86.0f,
+                 ajustes_tinta_foco(), ajustes_tinta_foco(), ajustes_tinta_foco());
+  ajudaMiniSeta(sx + 122.0f, y + 36.0f);
+  { float gx = sx + 168.0f, gw = w - 204.0f;
+    ajudaMiniTexto("Catálogo", gx, y + 10.0f, gw, 190, 193, 201);
+    for (int row = 0; row < 2; row++) {
+      float ry = y + 46.0f + row * 62.0f;
+      gfx_cor((GfxRect){ gx, ry, gw, 48.0f }, 6.0f / 48.0f,
+              0.07f, 0.075f, 0.09f, 1.0f);
+      for (int k = 0; k < 4; k++) {
+        float cw = (gw - 30.0f) / 4.0f;
+        gfx_cor((GfxRect){ gx + 6.0f + k * (cw + 6.0f), ry + 7.0f,
+                           cw, 34.0f }, 4.0f / 34.0f,
+                0.27f, 0.29f, 0.34f, 1.0f);
+      }
+    }
+  }
+  return h;
+}
+
+static float ajudaFluxoMetadata(float x, float y, float w) {
+  float ar, ag, ab, h = 188.0f, sx = x + 16.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  ajudaMiniCaixa(sx, y + 20.0f, 120.0f, 50.0f, 0, ar, ag, ab);
+  ajudaMiniTexto("TMDB", sx + 18.0f, y + 36.0f, 85.0f, 214, 217, 224);
+  ajudaMiniCaixa(sx, y + 82.0f, 120.0f, 50.0f, 0, ar, ag, ab);
+  ajudaMiniTexto("IMDb", sx + 18.0f, y + 98.0f, 85.0f, 214, 217, 224);
+  ajudaMiniSeta(sx + 130.0f, y + 58.0f);
+  { float px = sx + 174.0f, pw = w - 204.0f;
+    ajudaMiniCaixa(px, y + 18.0f, pw, 152.0f, 0, ar, ag, ab);
+    gfx_cor((GfxRect){ px + 12.0f, y + 30.0f, 62.0f, 82.0f }, 6.0f / 62.0f,
+            0.27f, 0.29f, 0.34f, 1.0f);
+    ajudaMiniTexto("Título", px + 88.0f, y + 30.0f, pw - 100.0f,
+                   238, 239, 242);
+    gfx_cor((GfxRect){ px + 88.0f, y + 62.0f, pw * 0.48f, 4.0f }, 0.5f,
+            0.50f, 0.52f, 0.57f, 1.0f);
+    gfx_cor((GfxRect){ px + 88.0f, y + 74.0f, pw * 0.62f, 4.0f }, 0.5f,
+            0.38f, 0.40f, 0.45f, 1.0f);
+    ajudaMiniTexto("Detalhes", px + 12.0f, y + 124.0f, 92.0f,
+                   178, 181, 189);
+    ajudaMiniTexto("Nota", px + 116.0f, y + 124.0f, 60.0f,
+                   ar * 255, ag * 255, ab * 255);
+  }
+  return h;
+}
+
+static float ajudaFluxoSobre(float x, float y, float w) {
+  float ar, ag, ab, h = 170.0f, gap = 14.0f, bw = (w - 3.0f * gap) / 2.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  ajudaMiniCaixa(x + gap, y + 20.0f, bw, 56.0f, 0, ar, ag, ab);
+  ajudaMiniTexto("Perfil", x + gap + 16.0f, y + 38.0f, bw - 28.0f,
+                 220, 222, 228);
+  ajudaMiniCaixa(x + 2.0f * gap + bw, y + 20.0f, bw, 56.0f, 1, ar, ag, ab);
+  ajudaMiniTexto("Conta", x + 2.0f * gap + bw + 16.0f, y + 38.0f,
+                 bw - 28.0f, ajustes_tinta_foco(), ajustes_tinta_foco(), ajustes_tinta_foco());
+  // Linhas de acao sem dizer que ha uma conta conectada ou sincronizada.
+  for (int i = 0; i < 2; i++) {
+    float rx = x + gap + i * (bw + gap), ry = y + 96.0f;
+    gfx_cor((GfxRect){ rx, ry, bw, 42.0f }, 6.0f / 42.0f,
+            0.07f, 0.075f, 0.09f, 1.0f);
+    gfx_cor((GfxRect){ rx + 12.0f, ry + 12.0f, bw * 0.55f, 4.0f }, 0.5f,
+            0.58f, 0.60f, 0.64f, 0.9f);
+    gfx_cor((GfxRect){ rx + 12.0f, ry + 23.0f, bw * 0.35f, 3.0f }, 0.5f,
+            0.38f, 0.40f, 0.44f, 0.9f);
+  }
+  return h;
+}
+
+static float ajudaFluxoAparencia(float x, float y, float w) {
+  float ar, ag, ab, h = 188.0f;
+  int tinta;
+  ajustes_acento(&ar, &ag, &ab);
+  tinta = ajustes_tinta_foco();
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  // Uma tela de exemplo mostra o acento apenas como foco, sem sugerir uma
+  // escolha fixa de paleta. A amostra de idioma fica ao lado.
+  ajudaMiniCaixa(x + 18.0f, y + 18.0f, 238.0f, 108.0f, 0, ar, ag, ab);
+  gfx_cor((GfxRect){ x + 30.0f, y + 30.0f, 214.0f, 28.0f }, 5.0f / 28.0f,
+          0.08f, 0.09f, 0.11f, 1.0f);
+  ajudaMiniCaixa(x + 30.0f, y + 66.0f, 214.0f, 42.0f, 1, ar, ag, ab);
+  gfx_cor((GfxRect){ x + 44.0f, y + 84.0f, 74.0f, 4.0f }, 0.5f,
+          tinta / 255.0f, tinta / 255.0f, tinta / 255.0f, 0.85f);
+  ajudaMiniTexto("Cor de destaque", x + 30.0f, y + 127.0f, 238.0f,
+                 191, 194, 202);
+  ajudaMiniCaixa(x + 286.0f, y + 18.0f, w - 304.0f, 108.0f, 0, ar, ag, ab);
+  { TxtLinha aa = txt_linha(TXT_HEADLINE, "Aa", 235, 237, 241, 255);
+    txt_desenhar(aa, x + 310.0f, y + 30.0f); }
+  ajudaMiniTexto("Idioma", x + 310.0f, y + 70.0f, w - 328.0f,
+                 175, 178, 186);
+  ajudaMiniCaixa(x + 18.0f, y + 158.0f, w - 36.0f, 26.0f, 0, ar, ag, ab);
+  ajudaMiniTexto("Animações", x + 30.0f, y + 160.0f, 132.0f,
+                 185, 188, 196);
+  for (int i = 0; i < 3; i++) {
+    float bx = x + 190.0f + i * 96.0f;
+    gfx_cor((GfxRect){ bx, y + 169.0f, 58.0f, 4.0f }, 0.5f,
+            i == 1 ? ar : 0.48f, i == 1 ? ag : 0.50f,
+            i == 1 ? ab : 0.54f, 0.9f);
+  }
+  return h;
+}
+
+static float ajudaFluxoIntegracoes(float x, float y, float w) {
+  return ajudaFluxoMetadata(x, y, w);
+}
+
+static float ajudaFluxoReproducao(float x, float y, float w) {
+  float ar, ag, ab, h = 188.0f, tinta;
+  ajustes_acento(&ar, &ag, &ab);
+  tinta = ajustes_tinta_foco() / 255.0f;
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  // Mini-player: imagem, progresso e duas trilhas selecionáveis identificam
+  // a reprodução sem inventar arquivo ou valores de qualidade.
+  ajudaMiniCaixa(x + 14.0f, y + 14.0f, w - 28.0f, 102.0f, 0, ar, ag, ab);
+  gfx_cor((GfxRect){ x + 26.0f, y + 26.0f, 118.0f, 76.0f }, 6.0f / 76.0f,
+          0.20f, 0.22f, 0.27f, 1.0f);
+  gfx_cor((GfxRect){ x + 40.0f, y + 42.0f, 90.0f, 44.0f }, 5.0f / 44.0f,
+          0.28f, 0.30f, 0.36f, 1.0f);
+  gfx_cor((GfxRect){ x + 166.0f, y + 38.0f, w - 198.0f, 5.0f }, 0.5f,
+          0.80f, 0.82f, 0.86f, 0.9f);
+  gfx_cor((GfxRect){ x + 166.0f, y + 58.0f, w - 234.0f, 4.0f }, 0.5f,
+          0.38f, 0.40f, 0.45f, 0.9f);
+  gfx_cor((GfxRect){ x + 166.0f, y + 78.0f, w - 270.0f, 4.0f }, 0.5f,
+          0.32f, 0.34f, 0.39f, 0.9f);
+  gfx_cor((GfxRect){ x + 26.0f, y + 122.0f, w - 52.0f, 4.0f }, 0.5f,
+          0.27f, 0.29f, 0.33f, 1.0f);
+  gfx_cor((GfxRect){ x + 26.0f, y + 122.0f, (w - 52.0f) * 0.44f, 4.0f },
+          0.5f, ar, ag, ab, 1.0f);
+  ajudaMiniCaixa(x + 18.0f, y + 140.0f, 174.0f, 34.0f, 1, ar, ag, ab);
+  ajudaMiniTexto("Áudio", x + 32.0f, y + 147.0f, 146.0f,
+                 tinta * 255, tinta * 255, tinta * 255);
+  ajudaMiniCaixa(x + 206.0f, y + 140.0f, w - 224.0f, 34.0f, 0, ar, ag, ab);
+  ajudaMiniTexto("Legenda", x + 220.0f, y + 147.0f, w - 252.0f,
+                 196, 199, 206);
+  return h;
+}
+
+static float ajudaFluxoHistorico(float x, float y, float w) {
+  float ar, ag, ab, h = 170.0f, bw = (w - 66.0f) / 3.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  ajudaMiniCaixa(x + 16.0f, y + 24.0f, bw, 48.0f, 0, ar, ag, ab);
+  ajudaMiniTexto("Trakt", x + 28.0f, y + 40.0f, bw - 24.0f,
+                 209, 212, 220);
+  ajudaMiniCaixa(x + 16.0f, y + 88.0f, bw, 48.0f, 0, ar, ag, ab);
+  ajudaMiniTexto("Simkl", x + 28.0f, y + 104.0f, bw - 24.0f,
+                 209, 212, 220);
+  ajudaMiniSeta(x + bw + 28.0f, y + 55.0f);
+  { float rx = x + 2.0f * bw + 56.0f, rw = w - (rx - x) - 16.0f;
+    ajudaMiniCaixa(rx, y + 22.0f, rw, 116.0f, 0, ar, ag, ab);
+    ajudaMiniTexto("Histórico", rx + 12.0f, y + 34.0f, rw - 24.0f,
+                   216, 219, 226);
+    for (int i = 0; i < 4; i++)
+      gfx_cor((GfxRect){ rx + 12.0f, y + 68.0f + i * 14.0f,
+                         rw - 24.0f - (i % 2) * 40.0f, 4.0f }, 0.5f,
+              0.36f, 0.38f, 0.43f, 0.9f);
+  }
+  return h;
+}
+
+static float ajudaFluxoAvancado(float x, float y, float w) {
+  float ar, ag, ab, h = 170.0f, bx = x + 16.0f, bw = 232.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  ajudaMiniCaixa(bx, y + 14.0f, bw, 40.0f, 0, ar, ag, ab);
+  ajudaMiniTexto("Resolução da interface", bx + 10.0f, y + 26.0f, bw - 20.0f,
+                 203, 206, 214);
+  ajudaMiniCaixa(bx, y + 64.0f, bw, 40.0f, 0, ar, ag, ab);
+  ajudaMiniTexto("Memória para imagens", bx + 10.0f, y + 76.0f, bw - 20.0f,
+                 203, 206, 214);
+  ajudaMiniCaixa(bx, y + 114.0f, bw, 40.0f, 0, ar, ag, ab);
+  ajudaMiniTexto("Diagnóstico", bx + 10.0f, y + 126.0f, bw - 20.0f,
+                 203, 206, 214);
+  ajudaMiniSeta(x + 250.0f, y + 66.0f);
+  { float tx = x + 296.0f, tw = w - 314.0f;
+    ajudaMiniCaixa(tx, y + 28.0f, tw, 112.0f, 0, ar, ag, ab);
+    gfx_cor((GfxRect){ tx + 14.0f, y + 42.0f, tw - 28.0f, 74.0f },
+            6.0f / 74.0f, 0.035f, 0.04f, 0.05f, 1.0f);
+    gfx_cor((GfxRect){ tx + tw * 0.38f, y + 118.0f, tw * 0.24f, 5.0f },
+            0.5f, ar, ag, ab, 0.9f);
+  }
+  return h;
+}
+
+static int grupoTemOpcao(int grupo, int op) {
+  for (int i = grupo + 1; i < AJ_N_TELA && grupoDoItem[i] == grupo; i++)
+    if (TELA[i].tipo == IT_OPC && TELA[i].op == op) return 1;
+  return 0;
+}
+
+static float desenhaPreviaGrupo(int grupo, float x, float y, float w) {
+  float ar, ag, ab;
+  ajustes_acento(&ar, &ag, &ab);
+  if (grupoTemOpcao(grupo, AJ_LANDSCAPE) || grupoTemOpcao(grupo, AJ_HERO_CHEIO))
+    return desenhaPrevia(AJ_LANDSCAPE, x, y, w);
+  if (grupoTemOpcao(grupo, AJ_FIL_LIMITE))
+    return desenhaPrevia(AJ_FIL_LIMITE, x, y, w);
+  if (grupoTemOpcao(grupo, AJ_CW_ESTILO))
+    return desenhaPrevia(AJ_CW_ESTILO, x, y, w);
+  if (grupoTemOpcao(grupo, AJ_LARGURA_DP))
+    return desenhaPrevia(AJ_LARGURA_DP, x, y, w);
+  if (grupoTemOpcao(grupo, AJ_EXPANDIR)) {
+    float cw = 72.0f, ch = 112.0f, gap = 24.0f;
+    for (int i = 0; i < 3; i++) {
+      float px = x + 34.0f + i * (cw + gap);
+      float scale = i == 1 ? 1.12f : 1.0f;
+      if (i == 1) gfx_cor((GfxRect){ px - 6, y - 6, cw + 12, ch + 12 },
+                          12.0f / (cw + 12), ar, ag, ab, 0.9f);
+      previaCartaz(px, y, cw * scale, ch * scale, 12.0f, ar, ag, ab, 1.0f);
+    }
+    return 140.0f;
+  }
+  if (grupoTemOpcao(grupo, AJ_DET_TRAILER) || grupoTemOpcao(grupo, AJ_DET_VEU)) {
+    float hero = 74.0f, rowY = y + 92.0f, cardW = (w - 32.0f) / 3.0f;
+    ajudaMiniCaixa(x, y, w, 82.0f, 0, ar, ag, ab);
+    previaCartaz(x + 14.0f, y + 10.0f, 48.0f, 62.0f, 8.0f,
+                 ar, ag, ab, 0.7f);
+    gfx_cor((GfxRect){ x + 78.0f, y + 22.0f, w * 0.42f, 6.0f }, 0.5f,
+            0.85f, 0.86f, 0.89f, 0.9f);
+    gfx_cor((GfxRect){ x + 78.0f, y + 40.0f, w * 0.65f, 4.0f }, 0.5f,
+            0.43f, 0.45f, 0.50f, 0.9f);
+    for (int i = 0; i < 3; i++) {
+      float cx = x + i * (cardW + 16.0f);
+      gfx_cor((GfxRect){ cx, rowY, cardW, hero }, 8.0f / hero,
+              i == 0 ? 0.23f : 0.16f, i == 0 ? 0.25f : 0.17f,
+              i == 0 ? 0.31f : 0.18f, 1.0f);
+      gfx_cor((GfxRect){ cx + 8.0f, rowY + hero - 15.0f, cardW * 0.7f, 3.0f },
+              0.5f, 0.83f, 0.84f, 0.87f, 0.85f);
+    }
+    return 174.0f;
+  }
+  if (grupoTemOpcao(grupo, AJ_TMDB_LIGADO))
+    return ajudaFluxoMetadata(x, y, w);
+  if (grupoTemOpcao(grupo, AJ_MDB_LIGADO))
+    return ajudaFluxoIntegracoes(x, y, w);
+  if (grupoTemOpcao(grupo, AJ_FANART_CHAVE)) {
+    float h = 166.0f;
+    ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+    gfx_cor((GfxRect){ x + 14.0f, y + 14.0f, w - 28.0f, 94.0f },
+            10.0f / 94.0f, 0.15f, 0.17f, 0.21f, 1.0f);
+    gfx_cor((GfxRect){ x + 34.0f, y + 30.0f, 58.0f, 72.0f }, 6.0f / 58.0f,
+            0.30f, 0.32f, 0.38f, 1.0f);
+    for (int i = 0; i < 3; i++)
+      gfx_cor((GfxRect){ x + 112.0f, y + 34.0f + i * 18.0f,
+                         w * 0.44f, 4.0f }, 0.5f,
+              i == 1 ? ar : 0.40f, i == 1 ? ag : 0.42f,
+              i == 1 ? ab : 0.46f, 0.9f);
+    return h;
+  }
+  return 0.0f;
+}
+
+static float desenhaPreviaCategoria(int sec, float x, float y, float w) {
+  switch (sec) {
+    case 0: return ajudaFluxoSobre(x, y, w);            // Perfil/conta
+    case 1: return ajudaFluxoAparencia(x, y, w);        // Cor, idioma, movimento
+    case 2: return desenhaPrevia(AJ_LANDSCAPE, x, y, w);// Home em miniatura
+    case 3: return ajudaFluxoCatalogos(x, y, w);        // Addon -> fileiras
+    case 4: return ajudaFluxoIntegracoes(x, y, w);      // Fontes -> detalhes
+    case 5: return ajudaFluxoReproducao(x, y, w);       // Fonte/qualidade/trilhas
+    case 6: return ajudaFluxoHistorico(x, y, w);        // Servicos -> historico
+    case 7: return ajudaFluxoAvancado(x, y, w);         // Ajustes da TV -> tela
+    case 8: {                                           // Versao e suporte
+      float ar, ag, ab, h = 170.0f;
+      ajustes_acento(&ar, &ag, &ab);
+      ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+      ajudaMiniTexto("Versão", x + 18.0f, y + 16.0f, w - 36.0f,
+                     220, 222, 229);
+      gfx_cor((GfxRect){ x + 18.0f, y + 48.0f, w - 36.0f, 4.0f }, 0.5f,
+              0.37f, 0.39f, 0.44f, 1.0f);
+      ajudaMiniCaixa(x + 18.0f, y + 78.0f, (w - 48.0f) * 0.5f, 52.0f,
+                     1, ar, ag, ab);
+      ajudaMiniTexto("Atualizar o app", x + 30.0f, y + 96.0f, (w - 72.0f) * 0.5f,
+                     ajustes_tinta_foco(), ajustes_tinta_foco(), ajustes_tinta_foco());
+      ajudaMiniCaixa(x + w * 0.5f + 6.0f, y + 78.0f,
+                     (w - 48.0f) * 0.5f, 52.0f, 0, ar, ag, ab);
+      ajudaMiniTexto("Enviar registro", x + w * 0.5f + 18.0f,
+                     y + 96.0f, w * 0.5f - 36.0f, 210, 213, 220);
+      return h;
+    }
+  }
+  return 0.0f;
+}
+
+// Previews em foco por opção. Cada família desenha a mesma superfície do app
+// e realça a peça que a opção altera; os controles binários usam `valor[]`.
+// Não mostram valores de conta/chaves e não encenam conclusão de ações remotas.
+typedef enum {
+  AJPV_REPRO, AJPV_HOME, AJPV_CONTINUAR, AJPV_DETALHE, AJPV_FOCO,
+  AJPV_PROFUNDIDADE, AJPV_CARTAZ, AJPV_INTERFACE, AJPV_CONTA,
+  AJPV_RASTREIO, AJPV_ABOUT, AJPV_TMDB, AJPV_MDB, AJPV_TV, AJPV_ACAO
+} AjPreview;
+
+static AjPreview familiaPreviaOpcao(int op) {
+  switch (op) {
+    case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA:
+    case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
+    case AJ_FONTE_AUTO: case AJ_FONTE_REPOR:
+      return AJPV_REPRO;
+    case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
+    case AJ_HERO_ARTE_DIF: case AJ_HERO_TRAILER: case AJ_FIL_LIMITE:
+    case AJ_FIL_ORDEM: case AJ_RAIL: case AJ_RAIL_MODERNA:
+    case AJ_RAIL_BLUR: case AJ_HERO: case AJ_HERO_CATALOGOS:
+    case AJ_PS_FUNDO: case AJ_DESCOBRIR: case AJ_ROTULOS:
+    case AJ_NOME_ADDON: case AJ_SUFIXO_TIPO: case AJ_OCULTAR_NLANC:
+    case AJ_NOTAS_HOME: case AJ_GRAD_CLASSICO:
+      return AJPV_HOME;
+    case AJ_CW_LIGADO: case AJ_CW_OK: case AJ_CW_FONTE:
+    case AJ_CW_ESTILO: case AJ_CW_THUMB: case AJ_CW_BLUR_PROX:
+    case AJ_CW_FURTHEST: case AJ_CW_NAO_EXIBIDOS: case AJ_CW_ORDEM:
+      return AJPV_CONTINUAR;
+    case AJ_DET_BLUR_NAO_VISTOS: case AJ_DET_TRAILER: case AJ_DET_META_EXT:
+    case AJ_DET_DATA_CHEIA: case AJ_DET_VEU: case AJ_DET_TRAILER_AUTO:
+    case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO: case AJ_TRAILER_FONTE:
+      return AJPV_DETALHE;
+    case AJ_EXPANDIR: case AJ_EXPANDIR_ATRASO: case AJ_NAV_RAPIDA:
+    case AJ_BORDA_FOCO:
+      return AJPV_FOCO;
+    case AJ_PROF: case AJ_PROF_BORDA: case AJ_PROF_BRILHO:
+    case AJ_PROF_COBERTURA: case AJ_PROF_POSTERS: case AJ_PROF_CW:
+    case AJ_PROF_EPS: case AJ_PROF_ELENCO: case AJ_PROF_TRAILERS:
+      return AJPV_PROFUNDIDADE;
+    case AJ_LARGURA_DP: case AJ_RAIO_DP:
+      return AJPV_CARTAZ;
+    case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
+    case AJ_COR_LOGO: case AJ_FONTE_UI:
+      return AJPV_INTERFACE;
+    case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
+      return AJPV_CONTA;
+    case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL:
+      return AJPV_RASTREIO;
+    case AJ_VERSAO_I: case AJ_ATUALIZAR: case AJ_ENVIAR_LOG:
+    case AJ_ENVIO_AUTO:
+      return AJPV_ABOUT;
+    case AJ_TMDB_LIGADO: case AJ_TMDB_IDIOMA: case AJ_TMDB_ARTE:
+    case AJ_TMDB_BASICO: case AJ_TMDB_FICHA: case AJ_TMDB_DATAS:
+    case AJ_TMDB_ELENCO: case AJ_TMDB_PROD: case AJ_TMDB_REDES:
+    case AJ_TMDB_EPS: case AJ_TMDB_TRAILERS: case AJ_TMDB_MAIS:
+    case AJ_TMDB_COL: case AJ_TMDB_CW:
+      return AJPV_TMDB;
+    case AJ_MDB_LIGADO: case AJ_MDB_CHAVE: case AJ_MDB_TRAKT:
+    case AJ_MDB_IMDB: case AJ_MDB_TMDB: case AJ_MDB_LETTER:
+    case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA: case AJ_MDB_META:
+    case AJ_MDB_MAL:
+      return AJPV_MDB;
+    case AJ_RESOLUCAO: case AJ_QUALIDADE_IMG: case AJ_TEX_MB:
+    case AJ_ESPACO:
+      return AJPV_TV;
+    case AJ_ADDONS: case AJ_STALKER_PORTAL: case AJ_STALKER_MAC:
+    case AJ_STALKER_LIMPAR: case AJ_XTREAM_SERVIDOR: case AJ_XTREAM_USUARIO:
+    case AJ_XTREAM_SENHA: case AJ_XTREAM_LIMPAR: case AJ_FANART_CHAVE:
+    case AJ_DIAGNOSTICO: case AJ_VELOCIDADE:
+      return AJPV_ACAO;
+    default:
+      return (AjPreview)-1;
+  }
+}
+
+static void previaRealce(float x, float y, float w, float h,
+                         float ar, float ag, float ab) {
+  const float t = 3.0f;
+  gfx_cor((GfxRect){x, y, w, t}, 0.0f, ar, ag, ab, 0.95f);
+  gfx_cor((GfxRect){x, y + h - t, w, t}, 0.0f, ar, ag, ab, 0.95f);
+  gfx_cor((GfxRect){x, y, t, h}, 0.0f, ar, ag, ab, 0.95f);
+  gfx_cor((GfxRect){x + w - t, y, t, h}, 0.0f, ar, ag, ab, 0.95f);
+}
+
+static void previaMarcador(int op, float x, float y, float w, float h,
+                           float ar, float ag, float ab) {
+  int on = OPCOES[op].valores == V_LIGA ? lig(op) : 0;
+  ajudaMiniCaixa(x, y, w, h, on, ar, ag, ab);
+  previaRealce(x - 2.0f, y - 2.0f, w + 4.0f, h + 4.0f, ar, ag, ab);
+}
+
+static void previaSwitch(int op, float x, float y, float w,
+                         float ar, float ag, float ab) {
+  int ligado = lig(op);
+  gfx_cor((GfxRect){x, y, w, 24.0f}, 0.5f,
+          ligado ? ar : 0.28f, ligado ? ag : 0.29f,
+          ligado ? ab : 0.32f, 0.95f);
+  gfx_cor((GfxRect){x + (ligado ? w - 22.0f : 2.0f), y + 2.0f,
+                     20.0f, 20.0f}, 0.5f, 0.92f, 0.93f, 0.95f, 1.0f);
+}
+
+static void previaLinhas(float x, float y, float w, int n,
+                         float ar, float ag, float ab, int marcada) {
+  for (int i = 0; i < n; i++) {
+    float yy = y + i * 19.0f;
+    float ww = w * (0.48f + 0.09f * (float)(i % 3));
+    if (i == marcada) {
+      gfx_cor((GfxRect){x, yy - 4.0f, w, 14.0f}, 5.0f/14.0f,
+              ar, ag, ab, 0.92f);
+      gfx_cor((GfxRect){x + 8.0f, yy + 1.0f, ww, 4.0f}, 0.5f,
+              ajustes_tinta_foco()/255.0f,
+              ajustes_tinta_foco()/255.0f,
+              ajustes_tinta_foco()/255.0f, 0.95f);
+    } else {
+      gfx_cor((GfxRect){x + 8.0f, yy + 1.0f, ww, 4.0f}, 0.5f,
+              0.40f, 0.42f, 0.47f, 0.9f);
+    }
+  }
+}
+
+static float previaReproducaoOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 142.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  // Tela e barra de progresso do player.
+  gfx_cor((GfxRect){x + 14.0f, y + 14.0f, w - 28.0f, 76.0f}, 7.0f/76.0f,
+          0.055f, 0.06f, 0.075f, 1.0f);
+  gfx_cor((GfxRect){x + 27.0f, y + 23.0f, 84.0f, 54.0f}, 5.0f/54.0f,
+          0.25f, 0.27f, 0.33f, 1.0f);
+  gfx_cor((GfxRect){x + 128.0f, y + 30.0f, w - 158.0f, 5.0f}, 0.5f,
+          0.80f, 0.82f, 0.85f, 0.9f);
+  gfx_cor((GfxRect){x + 128.0f, y + 46.0f, w - 190.0f, 4.0f}, 0.5f,
+          0.39f, 0.41f, 0.46f, 0.9f);
+  gfx_cor((GfxRect){x + 128.0f, y + 61.0f, w - 220.0f, 4.0f}, 0.5f,
+          0.32f, 0.34f, 0.39f, 0.9f);
+  if (op == AJ_QUALIDADE) {
+    float bw = (w - 48.0f) / 3.0f;
+    for (int i = 0; i < 3; i++) {
+      float bh = 24.0f + i * 10.0f;
+      float bx = x + 14.0f + i * (bw + 10.0f);
+      gfx_cor((GfxRect){bx, y + 122.0f - bh, bw, bh}, 4.0f/bh,
+              0.20f, 0.22f, 0.27f, 1.0f);
+      if ((valor[op] == 1) || (valor[op] == 2 && i < 2) ||
+          (valor[op] == 3 && i == 0) || valor[op] == 0)
+        gfx_cor((GfxRect){bx + bw - 5.0f, y + 122.0f - bh, 5.0f, bh},
+                0.0f, ar, ag, ab, 0.95f);
+    }
+    previaRealce(x + 12.0f, y + 98.0f, w - 24.0f, 34.0f, ar, ag, ab);
+  } else if (op == AJ_DV || op == AJ_ATMOS) {
+    const char *badge = op == AJ_DV ? "DV" : "ATMOS";
+    int bx = op == AJ_DV ? (int)(x + 18.0f) : (int)(x + 100.0f);
+    ajudaMiniCaixa((float)bx, y + 102.0f, op == AJ_DV ? 70.0f : 104.0f,
+                   28.0f, lig(op), ar, ag, ab);
+    TxtLinha t = txt_linha(TXT_CAPTION2, badge,
+                           lig(op) ? ajustes_tinta_foco() : 194,
+                           lig(op) ? ajustes_tinta_foco() : 197,
+                           lig(op) ? ajustes_tinta_foco() : 203, 255);
+    txt_desenhar(t, (float)bx + 10.0f, y + 106.0f);
+    previaRealce((float)bx - 2.0f, y + 100.0f,
+                 op == AJ_DV ? 74.0f : 108.0f, 32.0f, ar, ag, ab);
+  } else if (op == AJ_AUD_LINGUA || op == AJ_LEG_LINGUA) {
+    float ty = y + 101.0f;
+    for (int i = 0; i < 2; i++) {
+      float tx = x + 14.0f + i * ((w - 38.0f) * 0.5f + 10.0f);
+      GfxRect r = {tx, ty, (w - 38.0f) * 0.5f, 28.0f};
+      gfx_cor(r, 6.0f/28.0f, 0.11f, 0.12f, 0.15f, 1.0f);
+      if (i == (valor[op] ? 1 : 0)) previaRealce(tx, ty, r.w, r.h, ar, ag, ab);
+    }
+    previaLinhas(x + 24.0f, y + 102.0f, w - 48.0f, 1, ar, ag, ab,
+                 valor[op] ? 0 : -1);
+  } else if (op == AJ_PAUSA_OVERLAY) {
+    GfxRect r = {x + 110.0f, y + 96.0f, w - 220.0f, 36.0f};
+    ajudaMiniCaixa(r.x, r.y, r.w, r.h, lig(op), ar, ag, ab);
+    previaSwitch(op, r.x + r.w - 74.0f, r.y + 6.0f, 58.0f, ar, ag, ab);
+    previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
+  } else {
+    float col = (w - 50.0f) / 3.0f;
+    for (int i = 0; i < 3; i++) {
+      float bx = x + 14.0f + i * (col + 11.0f);
+      GfxRect r = {bx, y + 104.0f, col, 27.0f};
+      gfx_cor(r, 6.0f/27.0f, 0.12f, 0.13f, 0.16f, 1.0f);
+      if ((op == AJ_FONTE_AUTO && i == valor[op]) ||
+          (op == AJ_FONTE_MANUAL && i == (lig(op) ? 1 : 0)) ||
+          (op == AJ_FONTE_REPOR && i == valor[op]))
+        previaRealce(bx, r.y, r.w, r.h, ar, ag, ab);
+    }
+  }
+  return h;
+}
+
+static float previaHomeOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 148.0f;
+  int hero = valor[AJ_HERO] == 0;
+  int full = valor[AJ_HERO_CHEIO] == 0;
+  int landscape = valor[AJ_LANDSCAPE] == 0;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  float rail = (valor[AJ_RAIL_MODERNA] == 0) ? 46.0f :
+               (valor[AJ_RAIL] == 1 ? 30.0f : 0.0f);
+  if (rail > 0.0f) {
+    GfxRect r = {x + 8.0f, y + 8.0f, rail, h - 16.0f};
+    gfx_cor(r, 5.0f/rail, 0.10f, 0.11f, 0.14f, 1.0f);
+    for (int i = 0; i < 4; i++) {
+      float ry = y + 20.0f + i * 25.0f;
+      gfx_cor((GfxRect){r.x + 8.0f, ry, rail - 16.0f, 5.0f}, 0.5f,
+              (op == AJ_RAIL || op == AJ_RAIL_MODERNA) && i == 1 ? ar : 0.38f,
+              (op == AJ_RAIL || op == AJ_RAIL_MODERNA) && i == 1 ? ag : 0.40f,
+              (op == AJ_RAIL || op == AJ_RAIL_MODERNA) && i == 1 ? ab : 0.44f,
+              valor[AJ_RAIL_BLUR] == 0 ? 0.55f : 0.95f);
+    }
+    if (op == AJ_RAIL || op == AJ_RAIL_MODERNA || op == AJ_RAIL_BLUR)
+      previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
+  }
+  float cx = x + rail + 18.0f, cw = w - rail - 28.0f;
+  float heroH = hero ? (full ? 60.0f : 42.0f) : 0.0f;
+  if (hero) {
+    GfxRect hr = {cx, y + 10.0f, cw, heroH};
+    gfx_cor(hr, 6.0f/heroH, 0.19f, 0.21f, 0.27f, 1.0f);
+    gfx_cor((GfxRect){cx + 12.0f, hr.y + 12.0f, cw * 0.40f, 4.0f},
+            0.5f, 0.70f, 0.72f, 0.76f, 0.9f);
+    if (op == AJ_HERO || op == AJ_HERO_CHEIO || op == AJ_HERO_FUNDO ||
+        op == AJ_HERO_ARTE_DIF || op == AJ_HERO_TRAILER ||
+        op == AJ_HERO_CATALOGOS || op == AJ_GRAD_CLASSICO)
+      previaRealce(hr.x, hr.y, hr.w, hr.h, ar, ag, ab);
+    if (valor[AJ_HERO_TRAILER] == 0) {
+      gfx_cor((GfxRect){cx + cw - 24.0f, hr.y + 8.0f, 14.0f, 14.0f},
+              0.5f, ar, ag, ab, 0.95f);
+    }
+  }
+  int rows = op == AJ_FIL_LIMITE ? valor[AJ_FIL_LIMITE] : 2;
+  if (rows < 1) rows = 1;
+  if (rows > 2) rows = 2;
+  for (int row = 0; row < rows; row++) {
+    float ry = y + 18.0f + heroH + row * 45.0f;
+    float cardW = landscape ? (cw - 36.0f) / 4.0f : (cw - 60.0f) / 6.0f;
+    int count = landscape ? 4 : 6;
+    // A fileira que o foco altera fica em destaque. Campos próprios mostram
+    // somente seções que de fato estão ligadas/desligadas.
+    int isTargetRow = (op >= AJ_FIL_LIMITE && op <= AJ_PS_FUNDO) ||
+                      (op == AJ_LANDSCAPE);
+    if (row == 0 && (op == AJ_FIL_ORDEM || op == AJ_FIL_LIMITE))
+      previaRealce(cx - 2.0f, ry - 4.0f, cw + 4.0f, 38.0f, ar, ag, ab);
+    if ((op == AJ_HERO || op == AJ_HERO_CATALOGOS) && !hero) continue;
+    for (int k = 0; k < count; k++) {
+      float bx = cx + k * (cardW + 6.0f);
+      float ch = landscape ? 20.0f : 31.0f;
+      GfxRect card = {bx, ry, cardW, ch};
+      int cardTarget = (op == AJ_LANDSCAPE) ||
+        (op == AJ_ROTULOS && valor[op] == 0) ||
+        (op == AJ_NOME_ADDON && valor[op] == 0) ||
+        (op == AJ_SUFIXO_TIPO && valor[op] == 0) ||
+        (op == AJ_OCULTAR_NLANC && valor[op] != 0 && k == count - 1) ||
+        (op == AJ_NOTAS_HOME && k == count - 1) ||
+        (op == AJ_HERO_ARTE_DIF && k == 0);
+      gfx_cor(card, 4.0f/ch, 0.21f, 0.23f, 0.28f,
+              op == AJ_LANDSCAPE && !landscape ? 0.42f : 0.9f);
+      if (cardTarget) previaRealce(bx, ry, cardW, ch, ar, ag, ab);
+      if ((op == AJ_ROTULOS && valor[op] == 0) ||
+          (op == AJ_NOME_ADDON && valor[op] == 0) ||
+          (op == AJ_SUFIXO_TIPO && valor[op] == 0) ||
+          (op == AJ_NOTAS_HOME && k == count - 1))
+        gfx_cor((GfxRect){bx + 4.0f, ry + ch - 6.0f, cardW * 0.55f, 2.0f},
+                0.5f, ar, ag, ab, 0.95f);
+    }
+  }
+  if (op == AJ_DESCOBRIR || op == AJ_PS_FUNDO || op == AJ_HERO_ARTE_DIF) {
+    float bx = cx + cw - 56.0f;
+    GfxRect r = {bx, y + 14.0f, 44.0f, 32.0f};
+    gfx_cor(r, 5.0f/32.0f, 0.24f, 0.26f, 0.31f, 1.0f);
+    previaRealce(bx, r.y, r.w, r.h, ar, ag, ab);
+  }
+  if (op == AJ_RAIL_BLUR && valor[op] == 0)
+    gfx_cor((GfxRect){cx + 6.0f, y + 8.0f, cw - 12.0f, 2.0f}, 0.0f, ar, ag, ab, 0.8f);
+  if (op == AJ_HERO_FUNDO || op == AJ_HERO_CATALOGOS || op == AJ_FIL_ORDEM ||
+      op == AJ_DESCOBRIR || op == AJ_PS_FUNDO || op == AJ_GRAD_CLASSICO)
+    previaRealce(cx, y + 8.0f, cw, h - 16.0f, ar, ag, ab);
+  return h;
+}
+
+static float previaContinuarOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 144.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  if (valor[AJ_CW_LIGADO] == 0 || op == AJ_CW_LIGADO) {
+    for (int i = 0; i < 3; i++) {
+      float cw = (w - 52.0f) / 3.0f, cx = x + 14.0f + i * (cw + 12.0f);
+      float ch = valor[AJ_CW_ESTILO] == 2 ? 62.0f : 38.0f;
+      float cy = y + 14.0f;
+      GfxRect card = {cx, cy, cw, ch};
+      float fade = i == 2 && valor[AJ_CW_BLUR_PROX] == 0 ? 0.38f : 0.92f;
+      gfx_cor(card, 5.0f/ch, 0.22f, 0.24f, 0.30f, fade);
+      if (i == 0 && (op == AJ_CW_LIGADO || op == AJ_CW_ESTILO ||
+                     op == AJ_CW_THUMB || op == AJ_CW_FONTE ||
+                     op == AJ_CW_OK || op == AJ_TMDB_CW))
+        previaRealce(cx, cy, cw, ch, ar, ag, ab);
+      gfx_cor((GfxRect){cx + 8.0f, cy + ch - 12.0f, cw * 0.46f, 3.0f},
+              0.5f, ar, ag, ab, 0.9f * fade);
+      if (op == AJ_CW_THUMB && valor[op] == 0 && i == 0) {
+        gfx_cor((GfxRect){cx + cw - 24.0f, cy + 8.0f, 16.0f, 20.0f},
+                3.0f/16.0f, 0.43f, 0.46f, 0.52f, 1.0f);
+      }
+      if (op == AJ_CW_FURTHEST && i == 2) previaRealce(cx, cy, cw, ch, ar, ag, ab);
+    }
+  } else {
+    gfx_cor((GfxRect){x + 18.0f, y + 22.0f, w - 36.0f, 84.0f},
+            8.0f/84.0f, 0.12f, 0.13f, 0.16f, 1.0f);
+    previaRealce(x + 18.0f, y + 22.0f, w - 36.0f, 84.0f, ar, ag, ab);
+  }
+  if (op == AJ_CW_NAO_EXIBIDOS && valor[op] != 0)
+    gfx_cor((GfxRect){x + w - 30.0f, y + 98.0f, 12.0f, 12.0f},
+            0.5f, 0.30f, 0.31f, 0.34f, 0.5f);
+  if (op == AJ_CW_ORDEM) {
+    previaRealce(x + 8.0f, y + 116.0f, w - 16.0f, 18.0f, ar, ag, ab);
+    gfx_cor((GfxRect){x + 20.0f, y + 123.0f, w - 40.0f, 3.0f},
+            0.5f, ar, ag, ab, 0.9f);
+  }
+  if (op == AJ_CW_OK) {
+    float bx = x + 20.0f, by = y + 112.0f, bw = w - 40.0f;
+    ajudaMiniCaixa(bx, by, bw, 24.0f, 1, ar, ag, ab);
+    previaRealce(bx, by, bw, 24.0f, ar, ag, ab);
+  }
+  return h;
+}
+
+static float previaDetalheOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 150.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  GfxRect poster = {x + 14.0f, y + 14.0f, 66.0f, 94.0f};
+  gfx_cor(poster, 6.0f/66.0f, 0.24f, 0.26f, 0.32f, 1.0f);
+  gfx_cor((GfxRect){x + 96.0f, y + 22.0f, w - 114.0f, 5.0f},
+          0.5f, 0.82f, 0.84f, 0.88f, 0.9f);
+  previaLinhas(x + 96.0f, y + 38.0f, w - 114.0f, 3, ar, ag, ab,
+               op == AJ_DET_META_EXT || op == AJ_DET_DATA_CHEIA ? 0 : -1);
+  if (op == AJ_DET_BLUR_NAO_VISTOS) {
+    for (int i = 0; i < 4; i++) {
+      float bx = x + 14.0f + i * ((w - 44.0f) / 4.0f + 5.0f);
+      GfxRect r = {bx, y + 118.0f, (w - 44.0f) / 4.0f, 22.0f};
+      gfx_cor(r, 4.0f/22.0f, 0.28f, 0.30f, 0.35f,
+              i > 0 ? 0.35f : 0.9f);
+      if (i == 1) previaRealce(bx, r.y, r.w, r.h, ar, ag, ab);
+    }
+  } else if (op == AJ_DET_TRAILER || op == AJ_DET_TRAILER_AUTO ||
+             op == AJ_TRAILER_QUAL || op == AJ_TRAILER_ASPECTO ||
+             op == AJ_TRAILER_FONTE) {
+    GfxRect video = {x + 98.0f, y + 68.0f, w - 116.0f, 62.0f};
+    gfx_cor(video, 5.0f/62.0f, 0.08f, 0.09f, 0.11f, 1.0f);
+    if (op == AJ_DET_TRAILER || op == AJ_DET_TRAILER_AUTO)
+      previaRealce(video.x, video.y, video.w, video.h, ar, ag, ab);
+    gfx_cor((GfxRect){video.x + video.w*0.5f - 8.0f, video.y + 21.0f,
+                      16.0f, 20.0f}, 6.0f/16.0f, ar, ag, ab, 0.9f);
+  } else if (op == AJ_DET_VEU) {
+    float pct = (float)valor[op] / 100.0f;
+    GfxRect veil = {poster.x, poster.y, poster.w, poster.h};
+    gfx_cor(veil, 6.0f/66.0f, 0.0f, 0.0f, 0.0f, pct * 0.8f);
+    gfx_cor((GfxRect){x + 96.0f, y + 124.0f, w - 114.0f, 5.0f},
+            0.5f, 0.27f, 0.29f, 0.33f, 1.0f);
+    gfx_cor((GfxRect){x + 96.0f, y + 124.0f, (w - 114.0f)*pct, 5.0f},
+            0.5f, ar, ag, ab, 1.0f);
+  } else {
+    int n = op == AJ_DET_TRAILER ? 4 : 3;
+    for (int i = 0; i < n; i++) {
+      float cw = (w - 44.0f) / (float)n, bx = x + 14.0f + i * (cw + 5.0f);
+      float by = y + 118.0f;
+      gfx_cor((GfxRect){bx, by, cw, 22.0f}, 4.0f/22.0f,
+              0.22f, 0.24f, 0.29f, 1.0f);
+      if ((op == AJ_DET_DATA_CHEIA && i == 0) ||
+          (op == AJ_DET_META_EXT && i == 1))
+        previaRealce(bx, by, cw, 22.0f, ar, ag, ab);
+    }
+  }
+  if (op == AJ_DET_TRAILER && valor[op] != 0)
+    gfx_cor((GfxRect){x + 100.0f, y + 70.0f, w - 120.0f, 58.0f},
+            5.0f/58.0f, 0.07f, 0.08f, 0.10f, 0.55f);
+  if (op == AJ_DET_META_EXT || op == AJ_DET_DATA_CHEIA)
+    previaRealce(x + 92.0f, y + 16.0f, w - 108.0f, 78.0f, ar, ag, ab);
+  return h;
+}
+
+static float previaFocoOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 136.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  float cardW = (w - 56.0f) / 3.0f;
+  for (int i = 0; i < 3; i++) {
+    float bx = x + 14.0f + i * (cardW + 14.0f);
+    float ch = i == 1 && (op == AJ_EXPANDIR || op == AJ_EXPANDIR_ATRASO) &&
+               valor[AJ_EXPANDIR] == 0 ? 78.0f : 60.0f;
+    float by = y + 16.0f + (78.0f - ch);
+    previaCartaz(bx, by, cardW, ch, (float)valor[AJ_RAIO_DP] * 2.0f,
+                 ar, ag, ab, 0.92f);
+    if (i == 1) {
+      if (op == AJ_BORDA_FOCO && lig(op))
+        previaRealce(bx - 3.0f, by - 3.0f, cardW + 6.0f, ch + 6.0f, ar, ag, ab);
+      else if (op == AJ_EXPANDIR || op == AJ_EXPANDIR_ATRASO)
+        previaRealce(bx - 3.0f, by - 3.0f, cardW + 6.0f, ch + 6.0f, ar, ag, ab);
+    }
+  }
+  if (op == AJ_EXPANDIR_ATRASO) {
+    float bw = w - 40.0f, fill = bw * ((float)valor[op] / 10.0f);
+    gfx_cor((GfxRect){x + 20.0f, y + 114.0f, bw, 5.0f}, 0.5f,
+            0.30f, 0.32f, 0.37f, 1.0f);
+    gfx_cor((GfxRect){x + 20.0f, y + 114.0f, fill, 5.0f}, 0.5f,
+            ar, ag, ab, 1.0f);
+  } else if (op == AJ_NAV_RAPIDA) {
+    for (int i = 0; i < 3; i++) {
+      float yy = y + 30.0f + i * 32.0f;
+      gfx_cor((GfxRect){x + 24.0f, yy, w - 48.0f, 4.0f}, 0.5f,
+              0.34f, 0.36f, 0.41f, 0.85f);
+      gfx_cor((GfxRect){x + 24.0f + (lig(op) ? 120.0f : 12.0f), yy - 5.0f,
+                        12.0f, 14.0f}, 0.5f, ar, ag, ab, 1.0f);
+    }
+    previaRealce(x + 14.0f, y + 18.0f, w - 28.0f, 100.0f, ar, ag, ab);
+  }
+  return h;
+}
+
+static float previaProfundidadeOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 136.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  for (int i = 0; i < 3; i++) {
+    float cw = (w - 56.0f) / 3.0f;
+    float bx = x + 14.0f + i * (cw + 14.0f), by = y + 20.0f;
+    GfxRect r = {bx, by, cw, 84.0f};
+    float borda = (float)valor[AJ_PROF_BORDA] / 100.0f;
+    float reflexo = (float)valor[AJ_PROF_BRILHO] / 100.0f;
+    float cobertura = (float)valor[AJ_PROF_COBERTURA] / 100.0f;
+    int alvo = (op == AJ_PROF_POSTERS && i == 0) ||
+               (op == AJ_PROF_CW && i == 1) ||
+               ((op == AJ_PROF_EPS || op == AJ_PROF_ELENCO ||
+                 op == AJ_PROF_TRAILERS) && i == 2) ||
+               op == AJ_PROF || op == AJ_PROF_BORDA ||
+               op == AJ_PROF_BRILHO || op == AJ_PROF_COBERTURA;
+    gfx_cor(r, 6.0f/84.0f, 0.20f, 0.22f, 0.28f, 1.0f);
+    if (lig(AJ_PROF) && alvo) {
+      gfx_cor((GfxRect){bx - 3.0f, by - 3.0f, cw + 6.0f, 90.0f},
+              8.0f/90.0f, ar, ag, ab, 0.15f + borda * 0.65f);
+      gfx_cor((GfxRect){bx + 4.0f, by + 4.0f, cw - 8.0f, 3.0f}, 0.5f,
+              ar, ag, ab, 0.2f + cobertura * 0.8f);
+      gfx_cor((GfxRect){bx + 8.0f, by + 15.0f, cw * 0.45f, 18.0f},
+              5.0f/18.0f, 0.92f, 0.94f, 0.97f, reflexo * 0.65f);
+    }
+    if (alvo) previaRealce(bx, by, cw, r.h, ar, ag, ab);
+  }
+  previaSwitch(AJ_PROF, x + w - 86.0f, y + 108.0f, 64.0f, ar, ag, ab);
+  return h;
+}
+
+static float previaCartazOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 138.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  for (int i = 0; i < 3; i++) {
+    float cw = (w - 56.0f) / 3.0f, cx = x + 14.0f + i * (cw + 14.0f);
+    float ratio = op == AJ_LARGURA_DP ? (0.80f + i * 0.10f) : 0.76f;
+    float ww = cw * ratio, hh = 76.0f, xx = cx + (cw - ww) * 0.5f;
+    float radius = (float)ajustes_raio_poster_px();
+    float q = (float)valor[AJ_QUALIDADE_IMG] * 0.25f + 0.45f;
+    previaCartaz(xx, y + 16.0f, ww, hh, radius, ar, ag, ab, q);
+    if ((op == AJ_LARGURA_DP && i == 1) ||
+        (op == AJ_RAIO_DP && i == 1) || (op == AJ_QUALIDADE_IMG && i == 2))
+      previaRealce(xx - 3.0f, y + 13.0f, ww + 6.0f, hh + 6.0f, ar, ag, ab);
+  }
+  if (op == AJ_LARGURA_DP || op == AJ_RAIO_DP || op == AJ_QUALIDADE_IMG) {
+    float value = op == AJ_LARGURA_DP ? (float)valor[op] / 200.0f :
+                  op == AJ_RAIO_DP ? (float)valor[op] / 40.0f :
+                  (float)valor[op] / 2.0f;
+    gfx_cor((GfxRect){x + 18.0f, y + 112.0f, w - 36.0f, 5.0f}, 0.5f,
+            0.30f, 0.32f, 0.37f, 1.0f);
+    gfx_cor((GfxRect){x + 18.0f, y + 112.0f, (w - 36.0f)*value, 5.0f},
+            0.5f, ar, ag, ab, 1.0f);
+  }
+  return h;
+}
+
+static float previaInterfaceOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 140.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  if (op == AJ_FONTE_UI) {
+    TxtFamilia familia = txt_fonte_interface();
+    TxtLinha sample = txt_linha_familia(TXT_HEADLINE,
+                         i18n("Aa  Nuvio  0123"), 235, 237, 241, 255, familia);
+    txt_desenhar(sample, x + 18.0f, y + 20.0f);
+    TxtLinha nome = txt_linha(TXT_CAPTION2,
+                       TXT_FAMILIAS_PT[familia], 190, 193, 201, 255);
+    txt_desenhar(nome, x + 18.0f, y + 82.0f);
+    previaRealce(x + 12.0f, y + 10.0f, w - 24.0f, 116.0f, ar, ag, ab);
+  } else if (op == AJ_IDIOMA) {
+    TxtLinha sample = txt_linha(TXT_HEADLINE,
+           valor[op] == 0 ? i18n("Olá · Ação") : i18n("Hello · Action"),
+           235, 237, 241, 255);
+    txt_desenhar(sample, x + 24.0f, y + 30.0f);
+    previaRealce(x + 14.0f, y + 20.0f, w - 28.0f, 56.0f, ar, ag, ab);
+  } else if (op == AJ_ANIM) {
+    int reduzida = valor[op] != 0;
+    for (int i = 0; i < 3; i++) {
+      float bx = x + 18.0f + i * ((w - 64.0f) / 3.0f + 14.0f);
+      float xx = reduzida ? bx + 16.0f : bx + (i == 1 ? 16.0f : 0.0f);
+      GfxRect r = {xx, y + 34.0f, (w - 64.0f) / 3.0f, 48.0f};
+      gfx_cor(r, 6.0f/48.0f, 0.26f, 0.28f, 0.34f, 0.95f);
+      if (i == 1) previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
+      if (i < 2) ajudaMiniSeta(bx + r.w, y + 44.0f);
+    }
+  } else if (op == AJ_RESOLUCAO) {
+    GfxRect display = {x + 24.0f, y + 20.0f, w - 48.0f, 88.0f};
+    gfx_cor(display, 6.0f/88.0f, 0.06f, 0.07f, 0.09f, 1.0f);
+    previaRealce(display.x, display.y, display.w, display.h, ar, ag, ab);
+    gfx_cor((GfxRect){display.x + display.w*0.35f, display.y + 92.0f,
+                      display.w*0.30f, 4.0f}, 0.5f, ar, ag, ab, 0.9f);
+  } else {
+    // A cor configurada fica na borda do controle em foco. Cor da logo altera
+    // a amostra de marca separadamente e não presume nenhum título carregado.
+    GfxRect card = {x + 18.0f, y + 20.0f, w - 36.0f, 92.0f};
+    gfx_cor(card, 6.0f/92.0f, 0.075f, 0.08f, 0.10f, 1.0f);
+    if (op == AJ_COR_LOGO) {
+      gfx_cor((GfxRect){card.x + 16.0f, card.y + 24.0f, card.w * 0.38f, 14.0f},
+              0.5f, lig(op) ? ar : 0.82f, lig(op) ? ag : 0.83f,
+              lig(op) ? ab : 0.85f, 1.0f);
+      previaRealce(card.x + 10.0f, card.y + 12.0f, card.w * 0.55f, 42.0f, ar, ag, ab);
+    } else {
+      gfx_cor((GfxRect){card.x + 12.0f, card.y + 28.0f, card.w - 24.0f, 30.0f},
+              6.0f/30.0f, ar, ag, ab, 0.95f);
+      previaRealce(card.x + 12.0f, card.y + 28.0f, card.w - 24.0f, 30.0f, ar, ag, ab);
+    }
+  }
+  return h;
+}
+
+static float previaContaOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 138.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  // Apenas uma estrutura de campos; os dados de perfil/serviço não são copiados
+  // para a prévia nem revelados, mesmo que existam no aparelho.
+  for (int i = 0; i < 3; i++) {
+    float by = y + 15.0f + i * 37.0f;
+    GfxRect row = {x + 14.0f, by, w - 28.0f, 28.0f};
+    gfx_cor(row, 5.0f/28.0f, 0.075f, 0.08f, 0.10f, 1.0f);
+    gfx_cor((GfxRect){row.x + 12.0f, row.y + 11.0f, row.w * 0.50f, 4.0f},
+            0.5f, 0.43f, 0.45f, 0.50f, 0.9f);
+    if ((op == AJ_PERFIL_ATIVO && i == 0) ||
+        (op == AJ_SYNC && i == 1) || (op == AJ_SAIR && i == 2))
+      previaRealce(row.x, row.y, row.w, row.h, ar, ag, ab);
+  }
+  return h;
+}
+
+static float previaRastreioOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 138.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  const char *nomes[] = {"Trakt", "Simkl", i18n("Lista do Nuvio")};
+  for (int i = 0; i < 3; i++) {
+    float bw = (w - 52.0f) / 3.0f;
+    float bx = x + 14.0f + i * (bw + 12.0f);
+    ajudaMiniCaixa(bx, y + 24.0f, bw, 60.0f,
+                   op == AJ_SALVOS_DEST && i == valor[op], ar, ag, ab);
+    TxtLinha t = txt_linha_corta(TXT_CAPTION2, i18n(nomes[i]),
+                   op == AJ_SALVOS_DEST && i == valor[op]
+                     ? ajustes_tinta_foco() : 202,
+                   op == AJ_SALVOS_DEST && i == valor[op]
+                     ? ajustes_tinta_foco() : 205,
+                   op == AJ_SALVOS_DEST && i == valor[op]
+                     ? ajustes_tinta_foco() : 211, 255, bw - 18.0f);
+    txt_desenhar(t, bx + 9.0f, y + 45.0f);
+    if (op == AJ_TRAKT && i == 0) previaRealce(bx, y + 24.0f, bw, 60.0f, ar, ag, ab);
+    if (op == AJ_SIMKL && i == 1) previaRealce(bx, y + 24.0f, bw, 60.0f, ar, ag, ab);
+  }
+  return h;
+}
+
+static float previaAboutOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 138.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  if (op == AJ_VERSAO_I || op == AJ_ATUALIZAR) {
+    ajudaMiniTexto("Versão", x + 16.0f, y + 18.0f, w - 32.0f, 210, 213, 220);
+    GfxRect r = {x + 16.0f, y + 56.0f, w - 32.0f, 46.0f};
+    gfx_cor(r, 6.0f/46.0f, 0.08f, 0.09f, 0.11f, 1.0f);
+    if (op == AJ_ATUALIZAR) previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
+    else gfx_cor((GfxRect){r.x + 12.0f, r.y + 21.0f, r.w * 0.30f, 4.0f},
+                 0.5f, 0.54f, 0.56f, 0.61f, 1.0f);
+  } else {
+    GfxRect log = {x + 16.0f, y + 20.0f, w - 32.0f, 82.0f};
+    gfx_cor(log, 6.0f/82.0f, 0.07f, 0.08f, 0.10f, 1.0f);
+    for (int i = 0; i < 3; i++)
+      gfx_cor((GfxRect){log.x + 12.0f, log.y + 16.0f + i*18.0f,
+                        log.w * (0.55f + 0.10f*i), 4.0f},
+              0.5f, 0.38f, 0.40f, 0.45f, 0.9f);
+    if (op == AJ_ENVIAR_LOG) previaRealce(log.x, log.y, log.w, log.h, ar, ag, ab);
+    else previaSwitch(op, log.x + log.w - 78.0f, log.y + 52.0f, 64.0f, ar, ag, ab);
+  }
+  return h;
+}
+
+static float previaTmdbOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 146.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  // Página do título: cartaz, texto, ficha, elenco, episódios e fileiras.
+  GfxRect poster = {x + 12.0f, y + 14.0f, 54.0f, 74.0f};
+  gfx_cor(poster, 5.0f/54.0f, 0.23f, 0.25f, 0.30f, 1.0f);
+  previaLinhas(x + 78.0f, y + 18.0f, w - 92.0f, 3, ar, ag, ab,
+               op == AJ_TMDB_BASICO ? 0 : -1);
+  GfxRect ficha = {x + 78.0f, y + 74.0f, w - 92.0f, 18.0f};
+  gfx_cor(ficha, 4.0f/18.0f, 0.13f, 0.14f, 0.17f, 1.0f);
+  if (op == AJ_TMDB_FICHA || op == AJ_TMDB_DATAS)
+    previaRealce(ficha.x, ficha.y, ficha.w, ficha.h, ar, ag, ab);
+  for (int i = 0; i < 3; i++) {
+    float bx = x + 12.0f + i * ((w - 38.0f)/3.0f + 7.0f);
+    GfxRect tile = {bx, y + 106.0f, (w - 38.0f)/3.0f, 25.0f};
+    gfx_cor(tile, 4.0f/25.0f, 0.19f, 0.21f, 0.26f,
+            valor[op] == 0 ? 0.92f : 0.50f);
+    int alvo = (op == AJ_TMDB_ELENCO && i == 0) ||
+               (op == AJ_TMDB_PROD && i == 0) ||
+               (op == AJ_TMDB_REDES && i == 1) ||
+               (op == AJ_TMDB_EPS && i == 2) ||
+               (op == AJ_TMDB_TRAILERS && i == 0) ||
+               (op == AJ_TMDB_MAIS && i == 1) ||
+               (op == AJ_TMDB_COL && i == 2) ||
+               (op == AJ_TMDB_CW && i == 0) ||
+               (op == AJ_TMDB_ARTE && i == 0) ||
+               op == AJ_TMDB_LIGADO || op == AJ_TMDB_IDIOMA;
+    if (alvo) previaRealce(tile.x, tile.y, tile.w, tile.h, ar, ag, ab);
+  }
+  if (op == AJ_TMDB_ARTE) previaRealce(poster.x, poster.y, poster.w, poster.h, ar, ag, ab);
+  if (op == AJ_TMDB_BASICO) previaRealce(x + 74.0f, y + 12.0f, w - 88.0f, 58.0f, ar, ag, ab);
+  if (op == AJ_TMDB_IDIOMA) {
+    GfxRect lang = {x + w - 90.0f, y + 12.0f, 76.0f, 18.0f};
+    previaRealce(lang.x, lang.y, lang.w, lang.h, ar, ag, ab);
+  }
+  return h;
+}
+
+static float previaMdbOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 136.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  const int ops[] = {AJ_MDB_TRAKT, AJ_MDB_IMDB, AJ_MDB_TMDB, AJ_MDB_LETTER,
+                     AJ_MDB_TOMATES, AJ_MDB_AUDIENCIA, AJ_MDB_META, AJ_MDB_MAL};
+  for (int i = 0; i < 8; i++) {
+    int col = i % 4, row = i / 4, id = ops[i];
+    float cw = (w - 44.0f) / 4.0f;
+    float bx = x + 10.0f + col * (cw + 6.0f), by = y + 18.0f + row * 48.0f;
+    int on = valor[id] == 0;
+    ajudaMiniCaixa(bx, by, cw, 32.0f, on, ar, ag, ab);
+    if (op == id || op == AJ_MDB_LIGADO || op == AJ_MDB_CHAVE)
+      previaRealce(bx, by, cw, 32.0f, ar, ag, ab);
+  }
+  if (op == AJ_MDB_CHAVE) {
+    // Campo mascarado; o desenho deliberadamente não consulta nem mostra a chave.
+    GfxRect key = {x + 18.0f, y + 114.0f, w - 36.0f, 12.0f};
+    gfx_cor(key, 4.0f/12.0f, 0.08f, 0.09f, 0.11f, 1.0f);
+    for (int i = 0; i < 6; i++)
+      gfx_cor((GfxRect){key.x + 12.0f + 20.0f*i, key.y + 4.0f, 4.0f, 4.0f},
+              0.5f, 0.50f, 0.52f, 0.56f, 0.9f);
+    previaRealce(key.x, key.y, key.w, key.h, ar, ag, ab);
+  }
+  return h;
+}
+
+static float previaTvOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 136.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  if (op == AJ_ESPACO) return desenhaPainelImagens(x, y, w);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  GfxRect screen = {x + 28.0f, y + 16.0f, w - 56.0f, 82.0f};
+  gfx_cor(screen, 6.0f/82.0f, 0.055f, 0.06f, 0.075f, 1.0f);
+  gfx_cor((GfxRect){screen.x + 12.0f, screen.y + 12.0f, screen.w - 24.0f, 4.0f},
+          0.5f, 0.34f, 0.36f, 0.41f, 0.9f);
+  if (op == AJ_RESOLUCAO) {
+    float mult = valor[op] == 1 ? 0.66f : 0.34f;
+    gfx_cor((GfxRect){screen.x + screen.w * 0.14f, screen.y + 30.0f,
+                      screen.w * mult, 25.0f}, 4.0f/25.0f, ar, ag, ab, 0.85f);
+  } else if (op == AJ_QUALIDADE_IMG) {
+    for (int i = 0; i < 3; i++)
+      gfx_cor((GfxRect){screen.x + 16.0f + i*28.0f, screen.y + 30.0f,
+                        20.0f, 28.0f}, 3.0f/20.0f, 0.22f + i*0.10f,
+              0.24f + i*0.10f, 0.30f + i*0.10f, 0.95f);
+    previaRealce(screen.x + 10.0f + valor[op]*28.0f, screen.y + 24.0f,
+                 32.0f, 40.0f, ar, ag, ab);
+  } else {
+    int cap = valor[AJ_TEX_MB] == 0 ? 5 : valor[AJ_TEX_MB];
+    for (int i = 0; i < 6; i++) {
+      float bw = (screen.w - 36.0f) / 6.0f;
+      float bx = screen.x + 12.0f + i * (bw + 2.0f);
+      gfx_cor((GfxRect){bx, screen.y + 38.0f, bw, 20.0f}, 3.0f/20.0f,
+              i < cap ? ar : 0.28f, i < cap ? ag : 0.29f,
+              i < cap ? ab : 0.32f, 0.9f);
+    }
+    previaRealce(screen.x + 8.0f, screen.y + 30.0f, screen.w - 16.0f, 36.0f, ar, ag, ab);
+  }
+  return h;
+}
+
+static float previaAcaoOpcao(int op, float x, float y, float w) {
+  float ar, ag, ab, h = 132.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  if (op == AJ_ADDONS) {
+    for (int i = 0; i < 4; i++) {
+      float bw = (w - 48.0f)/4.0f, bx = x + 12.0f + i * (bw + 8.0f);
+      ajudaMiniCaixa(bx, y + 28.0f, bw, 60.0f, 0, ar, ag, ab);
+    }
+  } else if (op == AJ_DIAGNOSTICO || op == AJ_VELOCIDADE) {
+    for (int i = 0; i < 3; i++) {
+      float bx = x + 20.0f, by = y + 16.0f + i * 34.0f;
+      GfxRect row = {bx, by, w - 40.0f, 24.0f};
+      gfx_cor(row, 5.0f/24.0f, 0.08f, 0.09f, 0.11f, 1.0f);
+      gfx_cor((GfxRect){bx + 12.0f, by + 10.0f, row.w * (0.35f + i*0.12f), 4.0f},
+              0.5f, 0.40f, 0.42f, 0.47f, 0.9f);
+    }
+    previaRealce(x + 14.0f, y + 12.0f, w - 28.0f, 102.0f, ar, ag, ab);
+  } else {
+    // Stalker/Xtream/fanart: formulário de endpoint/usuário/chave sem copiar
+    // credenciais reais. Ações de remoção mostram só o campo afetado.
+    for (int i = 0; i < 3; i++) {
+      float bx = x + 18.0f, by = y + 18.0f + i * 31.0f;
+      GfxRect row = {bx, by, w - 36.0f, 22.0f};
+      gfx_cor(row, 4.0f/22.0f, 0.075f, 0.08f, 0.10f, 1.0f);
+      for (int k = 0; k < 4; k++)
+        gfx_cor((GfxRect){bx + 12.0f + k*18.0f, by + 9.0f, 5.0f, 4.0f},
+                0.5f, 0.43f, 0.45f, 0.50f, 0.9f);
+      int field = (op == AJ_STALKER_PORTAL || op == AJ_XTREAM_SERVIDOR) ? i == 0 :
+                  (op == AJ_STALKER_MAC || op == AJ_XTREAM_USUARIO) ? i == 1 :
+                  (op == AJ_XTREAM_SENHA || op == AJ_FANART_CHAVE) ? i == 2 :
+                  i == 0;
+      if (field) previaRealce(row.x, row.y, row.w, row.h, ar, ag, ab);
+    }
+  }
+  return h;
+}
+
+static float previaOpcao(int op, float x, float y, float w) {
+  AjPreview fam = familiaPreviaOpcao(op);
+  switch (fam) {
+    case AJPV_REPRO: return previaReproducaoOpcao(op, x, y, w);
+    case AJPV_HOME: return previaHomeOpcao(op, x, y, w);
+    case AJPV_CONTINUAR: return previaContinuarOpcao(op, x, y, w);
+    case AJPV_DETALHE: return previaDetalheOpcao(op, x, y, w);
+    case AJPV_FOCO: return previaFocoOpcao(op, x, y, w);
+    case AJPV_PROFUNDIDADE: return previaProfundidadeOpcao(op, x, y, w);
+    case AJPV_CARTAZ: return previaCartazOpcao(op, x, y, w);
+    case AJPV_INTERFACE: return previaInterfaceOpcao(op, x, y, w);
+    case AJPV_CONTA: return previaContaOpcao(op, x, y, w);
+    case AJPV_RASTREIO: return previaRastreioOpcao(op, x, y, w);
+    case AJPV_ABOUT: return previaAboutOpcao(op, x, y, w);
+    case AJPV_TMDB: return previaTmdbOpcao(op, x, y, w);
+    case AJPV_MDB: return previaMdbOpcao(op, x, y, w);
+    case AJPV_TV: return previaTvOpcao(op, x, y, w);
+    case AJPV_ACAO: return previaAcaoOpcao(op, x, y, w);
+    default: return 0.0f;
+  }
+}
+
 void ajustes_desenhar(Uint32 agora) {
   // Fundo opaco proprio: a tela cobre tudo e nao pode depender de quem desenhou
   // antes dela — sem isto a home aparece entre as linhas da lista.
@@ -4451,44 +5543,57 @@ void ajustes_desenhar(Uint32 agora) {
   float hx = AJ_LISTA_X + AJ_LISTA_W + 52.0f;
   float hw = NV_TELA_W - NV_MARGEM_X - hx;
   if (hw > 240.0f) {
-    // O ICONE DA CATEGORIA, grande, abre o painel. Ele nao e enfeite: e a mesma
-    // marca da coluna da esquerda, e e o que liga "onde estou" a "o que estou
-    // lendo" sem obrigar a ler dois titulos.
-    GfxRect gi = { hx, AJ_TOPO + 4.0f, 56.0f, 56.0f };
+    // O icone de categoria reaparece enquanto se personaliza uma opcao, ligando
+    // o contexto da coluna esquerda ao painel de ajuda. No indice, o cabecalho
+    // central ja da esse contexto e o painel fica reduzido a orientacao util.
+    GfxRect gi = { hx, AJ_TOPO + 4.0f, 42.0f, 42.0f };
     float hy;
-    gfx_icone(gi, itSec->icone, 0.88f, 0.89f, 0.93f, 1.0f);
-    { TxtLinha tipo = txt_linha(TXT_CAPTION, focoIndice ? "Categoria"
-                          : noGrupo ? "Grupo"
-                          : inativa(focoOp) ? "Indisponível agora"
-                          : soLeitura(focoOp) ? "Informação"
-                          : OPCOES[focoOp].tipo == OP_ACAO ? "Abre uma tela"
-                          : "Personalizar", 168, 171, 180, 255);
-      txt_desenhar(tipo, gi.x + gi.w + 16.0f, gi.y + (gi.h - tipo.h) * 0.5f); }
-    hy = gi.y + gi.h + 22.0f;
-    // PITCH 44 para o headline, o mesmo do painel do explorar: o `leading` do
-    // txt_bloco e a distancia de uma linha a outra, e nao o vao.
-    hy += txt_bloco(TXT_HEADLINE,
-                   focoIndice ? itSec->titulo : noGrupo ? itFoco->titulo : OPCOES[focoOp].rotulo,
-                   237, 238, 242, hx, hy, hw, 44, 1, 3);
-    hy += 18.0f;
-    hy += txt_bloco(TXT_CAPTION,
-                   focoIndice ? SECAO_AJUDA[sec] : noGrupo ? itFoco->sub : ajudaOpcao(focoOp),
-                   183, 186, 194, hx, hy, hw, 32, 1, 8);
-    // O QUE MUDA NA PRATICA. A frase de ajuda diz o que a opcao E; esta diz o
-    // que acontece quando ela muda, que e a pergunta de quem esta com o
-    // controle na mao. Vazia quando nao ha nada honesto a dizer.
-    { const char *ef = (focoIndice || noGrupo) ? NULL : efeitoOpcao(focoOp);
-      if (ef) {
-        hy += 16.0f;
-        hy += txt_bloco(TXT_CAPTION, ef, 150, 176, 150, hx, hy, hw, 32, 1, 4);
-      } }
-    if (!focoIndice && !noGrupo && focoOp == AJ_ESPACO) {
+    if (!focoIndice) {
+      gfx_icone(gi, itSec->icone, 0.88f, 0.89f, 0.93f, 1.0f);
+      { TxtLinha tipo = txt_linha(TXT_CAPTION, noGrupo ? "Grupo"
+                            : inativa(focoOp) ? "Indisponível agora"
+                            : soLeitura(focoOp) ? "Informação"
+                            : OPCOES[focoOp].tipo == OP_ACAO ? "Abre uma tela"
+                            : "Personalizar", 168, 171, 180, 255);
+        txt_desenhar(tipo, gi.x + gi.w + 14.0f,
+                     gi.y + (gi.h - tipo.h) * 0.5f); }
+      hy = gi.y + gi.h + 22.0f;
+      // PITCH 44 para o headline, o mesmo do painel do explorar: o `leading`
+      // do txt_bloco e a distancia de uma linha a outra, e nao o vao.
+      hy += txt_bloco(TXT_HEADLINE,
+                     noGrupo ? itFoco->titulo : OPCOES[focoOp].rotulo,
+                     237, 238, 242, hx, hy, hw, 44, 1, 3);
+      hy += 18.0f;
+      hy += txt_bloco(TXT_CAPTION,
+                     noGrupo ? itFoco->sub : ajudaOpcao(focoOp),
+                     183, 186, 194, hx, hy, hw, 32, 1, 8);
+      // O QUE MUDA NA PRATICA. A frase de ajuda diz o que a opcao E; esta diz
+      // o que acontece quando ela muda, que e a pergunta de quem esta com o
+      // controle na mao. Vazia quando nao ha nada honesto a dizer.
+      { const char *ef = noGrupo ? NULL : efeitoOpcao(focoOp);
+        if (ef) {
+          hy += 16.0f;
+          hy += txt_bloco(TXT_CAPTION, ef, 150, 176, 150, hx, hy, hw, 32, 1, 4);
+        } }
+    } else {
+      // O cabecalho central ja identifica categoria e titulo. No indice, a
+      // coluna lateral usa so a explicacao curta, sem repetir icone, tipo e
+      // titulo no painel de ajuda.
+      hy = AJ_TOPO + 8.0f;
+      hy += txt_bloco(TXT_CAPTION, SECAO_AJUDA[sec], 183, 186, 194,
+                      hx, hy, hw, 32, 1, 6);
       hy += 22.0f;
-      hy += desenhaPainelImagens(hx, hy, hw);
+      hy += desenhaPreviaCategoria(sec, hx, hy, hw);
+    }
+    if (!focoIndice && noGrupo) {
+      float ph;
+      hy += 22.0f;
+      ph = desenhaPreviaGrupo(focoItem, hx, hy, hw);
+      hy += ph > 0.0f ? ph : -22.0f;
     } else if (!focoIndice && !noGrupo) {
       float ph;
       hy += 22.0f;
-      ph = desenhaPrevia(focoOp, hx, hy, hw);
+      ph = previaOpcao(focoOp, hx, hy, hw);
       hy += ph > 0.0f ? ph : -22.0f;
     }
     hy += 34.0f;
@@ -4615,3 +5720,31 @@ void ajustes_desenhar(Uint32 agora) {
   // tela, e tem de ficar por cima ate do cartao de vinculo.
   if (teclado_aberto()) teclado_desenhar(agora);
 }
+
+#ifdef AJUSTES_TESTE
+int ajustes_teste_focar_opcao(int op) {
+  int i;
+  montarTela();
+  if (op < 0 || op >= AJ_N) return 0;
+  for (i = 0; i < AJ_N_TELA; i++) {
+    if (TELA[i].tipo != IT_OPC || TELA[i].op != op) continue;
+    secAtual = secDoItem[i];
+    if (grupoDoItem[i] >= 0) grupoAberto[secAtual] = grupoDoItem[i];
+    focar(i);
+    focoIndice = 0;
+    scrollY = velY = 0.0f;
+    return 1;
+  }
+  return 0;
+}
+
+int ajustes_teste_familia_previa(int op) {
+  return (int)familiaPreviaOpcao(op);
+}
+
+void ajustes_teste_fonte_interface(int familia) {
+  if (familia < TXT_FAMILIA_INTER || familia > TXT_FAMILIA_ATKINSON) return;
+  valor[AJ_FONTE_UI] = familia;
+  txt_definir_fonte_interface((TxtFamilia)familia);
+}
+#endif
