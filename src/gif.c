@@ -83,30 +83,44 @@ static unsigned char *lerTudo(const char *caminho, size_t *n) {
 // GIF derrubou a pagina: as tres sessoes morreram na home, 150 a 420 s depois
 // do ultimo GIF. O que esta medido e o custo acima.
 //
-// A MEDIDA E O QUE O GIF DECODIFICA POR VOLTA, quadros x tela logica x 4. Nao e
-// memoria presa (o decodificador guarda um quadro composto por vez, ver
-// "decodificador" abaixo), e o trabalho de decode por volta. A tabela ficou
-// como estava na 1.4.6 quando o decode passou a ser nativo (1.4.7): o custo
-// por quadro caiu, mas nao ha medida em TV de 2 GB que justifique mexer nela.
+// A MEDIDA E O RITMO: bytes compostos POR SEGUNDO, tela logica x 4 x quadros
+// / duracao da volta (#141, 26/09/2026). Ate a 1.5.0 era o que o GIF compoe
+// POR VOLTA (quadros x tela x 4), e isso mede o COMPRIMENTO do GIF, nao o
+// peso: o "Apple TV+" das colecoes (241 quadros 500x281) dava 129 MB e ficava
+// parado, enquanto a carga dele por segundo e a de um GIF de 21 quadros do
+// mesmo tamanho e cadencia. O decodificador guarda um quadro composto por vez
+// (ver "decodificador" abaixo) e roda em fio proprio desde a 1.4.7: o que ele
+// tem de aguentar e o ritmo, e a volta longa so demora mais para repetir.
 //
-//   RAM <= 1 GB       0   nao anima: fica o primeiro quadro, parado
-//   1 GB < RAM < 4   48 MB  35x512x512 (37 MB) e 51x360x360 (26 MB) animam;
-//                          75x500x375 (56 MB) fica parado
-//   RAM >= 4 GB     sem teto (o que sempre foi)
-//   sem deviceMemory 48 MB  Chromium que nao informa e o mais velho
+// MEDIDO EM CAMPO (Tizen, deviceMemory 2, 1.4.7 e 1.5.0, linhas "deu a volta"):
+//   21x498x448 em 1050 ms = 17,8 MB/s -> volta real 1366-1382 ms (76% do ritmo)
+//   21x500x500 em 1470 ms = 14,3 MB/s -> 1474 ms
+//   54x498x278 em 2700 ms = 11,0 MB/s -> 2754 ms
+//   120x320x180 em 2500 ms = 11,1 MB/s -> 2522 ms
+// O decode custou 0,04 a 0,31 us por pixel. O teto de 2 GB fica logo acima do
+// mais pesado que ja anima (17,8): 20 MB/s. Acima disso o GIF atrasaria mais
+// que os 24% daquele e a animacao passaria a se ler como travada.
 //
-// Os 48 MB sao CHUTE pelos GIFs dos registros, nao medida de limite: nenhum
-// aparelho de 2 GB aqui. Os GIFs de colecao vistos (21x498x448 = 19 MB,
-// 45x480x270 = 23 MB) continuam animando em 2 GB.
-size_t gif_custo(int quadros, int telaW, int telaH) {
+//   RAM <= 1 GB        0     nao anima: fica o primeiro quadro, parado
+//   1 GB < RAM < 4    20 MB/s
+//   RAM >= 4 GB      sem teto (o que sempre foi)
+//   sem deviceMemory  20 MB/s Chromium que nao informa e o mais velho
+//
+// O 1 GB continua zero pelo mesmo motivo de antes: quadros de 2,3 s na TV
+// que ja passava segundos parada com a propria home.
+size_t gif_custo(int quadros, int telaW, int telaH, int nominalMs) {
+  double porVolta;
   if (quadros < 1 || telaW < 1 || telaH < 1) return 0;
-  return (size_t)quadros * (size_t)telaW * (size_t)telaH * 4u;
+  // Volta sem atraso declarado: 100 ms por quadro, como os navegadores.
+  if (nominalMs <= 0) nominalMs = quadros * 100;
+  porVolta = (double)quadros * (double)telaW * (double)telaH * 4.0;
+  return (size_t)(porVolta * 1000.0 / (double)nominalMs);
 }
 
 size_t gif_orcamento_para(double memGB) {
-  if (memGB <= 0.0) return (size_t)48 * 1024 * 1024;
+  if (memGB <= 0.0) return (size_t)20 * 1024 * 1024;
   if (memGB <= 1.0) return 0;
-  if (memGB < 4.0) return (size_t)48 * 1024 * 1024;
+  if (memGB < 4.0) return (size_t)20 * 1024 * 1024;
   return GIF_SEM_TETO;
 }
 
@@ -131,7 +145,7 @@ static size_t orcamento(void) {
     else if (!orc)
       printf("[gif] orcamento de animacao: nenhum (deviceMemory=%g GB): GIF fica no primeiro quadro\n", gb);
     else
-      printf("[gif] orcamento de animacao: %u MB por GIF (deviceMemory=%g GB)\n",
+      printf("[gif] orcamento de animacao: %u MB/s por GIF (deviceMemory=%g GB)\n",
              (unsigned)(orc / (1024 * 1024)), gb);
     fflush(stdout);
   }
@@ -784,18 +798,19 @@ static void abrir(const char *caminho, int largAlvo) {
     return;
   }
   gif_fio_tamanho(fio, NULL, NULL, &fioQ);
-  // O ORCAMENTO (1.4.6) continua valendo: recusado, fica a foto parada.
-  custo = gif_custo(fioQ, telaW, telaH);
+  nominal = gif_fio_nominal(fio);
+  // O ORCAMENTO continua valendo, agora por RITMO (#141): recusado, fica a
+  // foto parada.
+  custo = gif_custo(fioQ, telaW, telaH, nominal);
   orc = orcamento();
   if (orc != GIF_SEM_TETO && custo > orc) {
-    printf("[gif] %d quadros %dx%d = %u MB por volta, acima do orcamento de %u MB: fica o primeiro quadro\n",
-           fioQ, telaW, telaH, (unsigned)(custo / (1024 * 1024)), (unsigned)(orc / (1024 * 1024)));
+    printf("[gif] %d quadros %dx%d em %d ms = %.1f MB/s, acima do orcamento de %u MB/s: fica o primeiro quadro\n",
+           fioQ, telaW, telaH, nominal, custo / (1024.0 * 1024.0), (unsigned)(orc / (1024 * 1024)));
     fflush(stdout);
     soltarFioAtual();
     recusado = 1;
     return;
   }
-  nominal = gif_fio_nominal(fio);
   texW = texH = 0;
   proxTroca = 0.0;
   inicioVolta = 0.0;

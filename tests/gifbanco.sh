@@ -6,8 +6,8 @@
 #
 # OS GIFS SAO GERADOS, com o ffmpeg, nos tamanhos dos registros do #84 e do
 # orcamento da 1.4.6: 35 quadros 512x512 (avatar de 1050 ms), 75 quadros
-# 500x375 e 198 quadros 250x250 (o do rawldon; 198 x 250 x 250 x 4 cabe nos
-# 48 MB de 2 GB). O conteudo e FOTO em movimento (tests/amostra.jpg com zoom e
+# 500x375 e 198 quadros 250x250 (o do rawldon; o teto de 2 GB e por ritmo,
+# ver gif_custo). O conteudo e FOTO em movimento (tests/amostra.jpg com zoom e
 # pan): quadro inteiro mudando e 256 cores e o pior caso do LZW — um avatar
 # de desenho animado custa menos. O encoder do ffmpeg recorta cada quadro ao
 # retangulo que mudou e usa transparencia, como os GIFs de verdade.

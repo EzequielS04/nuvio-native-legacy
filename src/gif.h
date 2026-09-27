@@ -31,15 +31,16 @@
 int gif_pode_animar(void);
 
 // ORCAMENTO DE ANIMACAO POR RAM (24/09/2026, TV de 1 GB que morria na tela de
-// perfis e na home). O custo de um GIF e o que ele decodifica por volta:
-// quadros x tela logica x 4 bytes (gif_custo) — o que o decodificador compoe
-// por volta. `memGB` e o
-// navigator.deviceMemory (0 = o navegador nao disse). Devolve bytes; 0 = nao
-// anima; GIF_SEM_TETO = sem limite (o comportamento de antes). A tabela, e de
-// onde veio cada numero, esta em gif.c. Aritmetica pura: testada no Mac.
+// perfis e na home). O custo de um GIF e o RITMO de decode (#141): bytes que o
+// decodificador compoe por segundo, quadros x tela logica x 4 / volta em ms
+// (gif_custo; volta 0 = 100 ms por quadro). `memGB` e o
+// navigator.deviceMemory (0 = o navegador nao disse). Devolve bytes por
+// segundo; 0 = nao anima; GIF_SEM_TETO = sem limite (o comportamento de
+// antes). A tabela, e de onde veio cada numero, esta em gif.c. Aritmetica
+// pura: testada no Mac.
 #define GIF_SEM_TETO ((size_t)-1)
 size_t gif_orcamento_para(double memGB);
-size_t gif_custo(int quadros, int telaW, int telaH);
+size_t gif_custo(int quadros, int telaW, int telaH, int nominalMs);
 
 // Chamar UMA VEZ POR QUADRO de tela (main.c). Solta a animacao corrente
 // quando ninguem pediu gif_textura ha mais de NV_GIF_OCIOSO_MS: e o que
