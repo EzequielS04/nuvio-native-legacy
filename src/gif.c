@@ -11,6 +11,31 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
+// .tpk da Samsung: o mesmo decodificador C do Tizen web (1.4.7), sem o
+// navegador — relogio por clock_gettime e RAM pelo /proc/meminfo.
+#if defined(__EMSCRIPTEN__) || defined(NV_TPK)
+#define NV_GIF_ANIMA 1
+#endif
+#ifdef NV_TPK
+static double emscripten_get_now(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return t.tv_sec * 1000.0 + t.tv_nsec / 1e6;
+}
+// Mesma pergunta do navigator.deviceMemory, em GB: MemTotal.
+static double gif_js_memoria_gb(void) {
+  FILE *f = fopen("/proc/meminfo", "r");
+  char l[128];
+  double gb = 0;
+  if (!f) return 0;
+  while (fgets(l, sizeof l, f)) {
+    unsigned long kb;
+    if (sscanf(l, "MemTotal: %lu kB", &kb) == 1) { gb = kb / (1024.0 * 1024.0); break; }
+  }
+  fclose(f);
+  return gb;
+}
+#endif
 
 // ---------------------------------------------------------------- estrutura
 //
@@ -124,6 +149,7 @@ size_t gif_orcamento_para(double memGB) {
   return GIF_SEM_TETO;
 }
 
+#ifdef NV_GIF_ANIMA
 #ifdef __EMSCRIPTEN__
 EM_JS(double, gif_js_memoria_gb, (), {
   try {
@@ -131,6 +157,7 @@ EM_JS(double, gif_js_memoria_gb, (), {
     return (typeof m === 'number' && m > 0) ? m : 0;
   } catch (e) { return 0; }
 });
+#endif
 
 // Decidido uma vez: a RAM nao muda com o app aberto.
 static size_t orcamento(void) {
@@ -731,7 +758,7 @@ void gif_fio_medida(const GifFio *f, int *quadros, double *ms) {
 }
 
 // ---------------------------------------------------------------- animacao
-#ifdef __EMSCRIPTEN__
+#ifdef NV_GIF_ANIMA
 
 // QUEM CONTA O TEMPO E O APP, E NAO O NAVEGADOR (#49): o relogio e daqui, e o
 // quadro so troca quando o `atraso` do proprio GIF vence. Desde a 1.4.7 quem

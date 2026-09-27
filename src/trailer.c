@@ -196,7 +196,7 @@ static int volumePendente, recortePendente, pausado;
 static Uint32 reaplicarAte, reaplicarEm, tocandoDesde;
 static int quadroInteiroEnviado;
 int trailer_suportado(void) {
-#if defined(__APPLE__) || defined(NV_TPK)
+#if defined(__APPLE__)
   return 0;
 #else
   // O FRACASSO NAO TRAVA, MAS TEM TETO. O deploy mata o processo e relanca

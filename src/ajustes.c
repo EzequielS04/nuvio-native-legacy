@@ -1624,7 +1624,7 @@ void ajustes_dir(const char *dir) {
       if (m) { fputs("1\n", m); fclose(m); }
       gravar();
     } }
-#if defined(__EMSCRIPTEN__) && !defined(NV_TRAILER_AUTO_TIZEN)
+#if (defined(__EMSCRIPTEN__) || defined(NV_TPK)) && !defined(NV_TRAILER_AUTO_TIZEN)
   // MIGRACAO UNICA (1.3.10): o .wgt da 1.3.9 saiu de uma build com
   // NV_TRAILER_AUTO_TIZEN (a das fotos das notas), entao na Samsung o
   // autoplay do trailer nasceu LIGADO — e qualquer gravacao de ajustes
