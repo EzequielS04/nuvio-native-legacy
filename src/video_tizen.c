@@ -134,6 +134,8 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
       tocando: 0,
       pronto: 0,         // prepareAsync terminou
       posMs: 0,
+      // #147: relogios das leituras sincronas do "estado" (ver la).
+      durMs: 0, tDur: 0, tEvento: 0, tSeek: 0, tLento: 0,
       erro: "",
       fim: 0,
       bufPct: 0,
@@ -204,6 +206,7 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
         oncurrentplaytime:   function (ms) {
           if (S.geracao !== geracao) return;
           S.posMs = +ms || 0;
+          S.tEvento = Date.now();
         },
         onerror:             function (e) {
           if (S.geracao !== geracao) return;
@@ -260,6 +263,7 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
     // "abrir -> sair -> abrir" que o caminho da LG ja tinha.
     try { if (S.aberto) { p.stop(); p.close(); } } catch (e) {}
     S.aberto = 0; S.tocando = 0; S.pronto = 0; S.posMs = 0;
+    S.durMs = 0; S.tDur = 0; S.tEvento = 0; S.tSeek = 0;
     S.erro = ""; S.fim = 0; S.bufPct = 0; S.larg = 0; S.alt = 0;
     S.trilhas = null;   // titulo novo: a lista de faixas do titulo anterior nao vale
     S.legTxt = ""; S.legAte = 0; S.legN = 0;
@@ -387,6 +391,7 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
     // aqui mesmo) ou outra coisa no mesmo quadro. So depois disso vale
     // tentar pause/seek/play ou outra estrategia.
     S.legTxt = ""; S.legAte = 0;   // a fala de antes do salto nao vale no destino
+    S.tSeek = Date.now();          // o "estado" volta a ler getCurrentTime por 1,5 s
     var t0 = performance.now();
     try { p4.seekTo(a | 0, function () {}, function () {}); } catch (e) { return 0; }
     var dt = performance.now() - t0;
@@ -434,10 +439,31 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
     var p6 = pl();
     var dur = 0;
     if (p6 && S.aberto && S.pronto) {
-      try { dur = (+p6.getDuration() || 0) / 1000.0; } catch (e) {}
-      // oncurrentplaytime cobre o caso normal; getCurrentTime cobre o instante
-      // logo apos um seek, em que o evento ainda nao veio.
-      try { var t = +p6.getCurrentTime(); if (t >= 0) S.posMs = t; } catch (e) {}
+      // DUAS CHAMADAS SINCRONAS AO SERVIDOR DE MIDIA A CADA QUADRO (#147).
+      // Isto rodava getDuration() e getCurrentTime() em todo quadro. Com video
+      // tocando, o registro 3702 (Tizen, 1.5.1) mostra o passo de atualizacao
+      // em 41-42 ms por quadro e um de 1494 ms, e a queixa e o controle lento
+      // SO com o player aberto. Que sao ESTAS chamadas nao esta medido — a
+      // linha "estado lento" abaixo e quem vai dizer. O que se sabe e que nao
+      // precisam ser por quadro:
+      //   - a duracao nao muda num VOD: relida a cada 5 s (1 s enquanto for 0,
+      //     que e o caso do canal ao vivo);
+      //   - a posicao chega pelo oncurrentplaytime; getCurrentTime so cobre o
+      //     instante logo apos um seek, ou o evento sumido por mais de 1 s.
+      var agora = Date.now(), t0 = agora, gasto;
+      if (agora - S.tDur > (S.durMs > 0 ? 5000 : 1000)) {
+        S.tDur = agora;
+        try { S.durMs = +p6.getDuration() || 0; } catch (e) {}
+      }
+      dur = S.durMs / 1000.0;
+      if (agora - S.tSeek < 1500 || agora - S.tEvento > 1000) {
+        try { var t = +p6.getCurrentTime(); if (t >= 0) S.posMs = t; } catch (e) {}
+      }
+      gasto = Date.now() - t0;
+      if (gasto > 20 && agora - S.tLento > 10000) {
+        S.tLento = agora;
+        try { if (window.__nvDiag) window.__nvDiag("[video] estado lento: " + gasto + " ms", 0); } catch (e) {}
+      }
     }
     var o = dst >> 3;
     HEAPF64[o + 0] = S.posMs / 1000.0;

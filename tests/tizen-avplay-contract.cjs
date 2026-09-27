@@ -120,6 +120,30 @@ const call = (op, text = '', a = 0, b = 0, c = 0, d = 0, dst = 0, size = 0) =>
   velho.onsubtitlechange('5000', 'do titulo anterior', '0', []);
   check('stale onsubtitlechange from a previous open is ignored', () => assert.equal(legTexto().t, ''));
 
+  // #147: o "estado" roda a cada quadro e nao pode chamar o servidor de midia
+  // a cada vez. Com o evento de tempo chegando, nem getCurrentTime nem
+  // getDuration; logo depois de um seek, getCurrentTime volta.
+  {
+    const av = context.webapis.avplay;
+    const gct = av.getCurrentTime, gd = av.getDuration;
+    let nTempo = 0, nDur = 0;
+    call('estado', '', 0, 0, 0, 0, 8, 64);          // primeira leitura: guarda a duracao
+    av.getCurrentTime = function () { nTempo++; return gct.call(this); };
+    av.getDuration = function () { nDur++; return gd.call(this); };
+    context.__nvav.tEvento = Date.now();            // oncurrentplaytime acabou de chegar
+    context.__nvav.tSeek = 0;
+    for (let i = 0; i < 20; i++) call('estado', '', 0, 0, 0, 0, 8, 64);
+    check('estado does not call AVPlay getters every frame (#147)', () => {
+      assert.equal(nTempo, 0);
+      assert.equal(nDur, 0);
+      assert.equal(context.HEAPF64[2], 7200);       // a duracao guardada continua valendo
+    });
+    call('buscar', '', 60000);
+    call('estado', '', 0, 0, 0, 0, 8, 64);
+    check('estado reads getCurrentTime right after a seek (#147)', () => assert.equal(nTempo, 1));
+    av.getCurrentTime = gct; av.getDuration = gd;
+  }
+
   // A failed prepare metadata read must be recoverable through `faixas`, and
   // that fallback must be cached just like the normal prepare path.
   const player = context.webapis.avplay;
