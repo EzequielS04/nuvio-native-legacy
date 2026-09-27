@@ -377,7 +377,7 @@ static int epgIdx = -1;
 // por player_definir_episodio: um `static int` dentro da funcao registraria a
 // PRIMEIRA reproducao da sessao e ficaria mudo em todas as outras — que e
 // justamente quando o relato acontece.
-static int credAvisado, credFimAvisado;
+static int credAvisado, credFimAvisado, semProxAvisado;
 static double credAvisadoEm;
 static int introIdx=-1, introT=-1, introE=-1;
 static int retomadaAplicada, retomarPct;
@@ -469,7 +469,7 @@ void player_definir_episodio(int t, int e) {
     if (idx != introIdx || introT || introE) {
       introIdx = idx; introT = introE = 0;
       intro_pedir(c->imdb, 0, 0);
-      credAvisado = credFimAvisado = 0; credAvisadoEm = 0;
+      credAvisado = credFimAvisado = semProxAvisado = 0; credAvisadoEm = 0;
     }
     return;
   }
@@ -513,7 +513,7 @@ void player_definir_episodio(int t, int e) {
   }
   if(idx!=introIdx||epT!=introT||epE!=introE){
     introIdx=idx;introT=epT;introE=epE;intro_pedir(c->imdb,epT,epE);
-    credAvisado=credFimAvisado=0;credAvisadoEm=0;
+    credAvisado=credFimAvisado=semProxAvisado=0;credAvisadoEm=0;
   }
 }
 
@@ -1555,6 +1555,17 @@ int player_regra_concluiu(double posSeg, double durSeg, double cred) {
 
 static int ofertaProximo(void) {
   const CatEp *p=player_proximo_episodio();
+  // #151: "o Proximo as vezes nao aparece". Sem proximo episodio na lista o
+  // cartao nao existe, e isso nao deixava rastro: uma linha por episodio, nos
+  // 2 minutos finais, com o tamanho da lista e se ela ainda estava chegando.
+  // Lista vazia = o player abriu sem os episodios do titulo; lista cheia sem
+  // proximo = fim da serie, ou a temporada seguinte ainda nao esta no addon.
+  if(!p&&epT>0&&duracaoSeg>1&&duracaoSeg-posSeg<=PLR_CRED_PISO_S&&!semProxAvisado){
+    semProxAvisado=1;
+    printf("[posplay] sem proximo episodio depois de T%dE%d: lista com %d episodios%s\n",
+           epT,epE,cat_n_episodios(idx),desc_episodios_carregando(idx)?" (ainda carregando)":"");
+    fflush(stdout);
+  }
   if(!p||duracaoSeg<=1)return 0;
   // DUAS FONTES, NESTA ORDEM, e e a mesma ordem do posplay.c: o capitulo do
   // Matroska descreve ESTA copia, o TheIntroDB descreve o lancamento. Esta
