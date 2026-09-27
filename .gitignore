@@ -70,3 +70,8 @@ listas-p*.txt
 /.planning/
 /docs/diagnosticos/
 /graphify-out/
+
+# Skills do projeto (versionadas; o resto de .claude/ e local)
+!.claude/
+.claude/*
+!.claude/skills/
