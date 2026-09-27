@@ -95,12 +95,18 @@ void nv_tpk_video_faixa(int tipo, int idx, const char *lingua) {
 }
 __attribute__((visibility("default")))
 void nv_tpk_video_faixas_fim(int selAudio, int selLeg) {
+  // Segunda leitura (o host rele o audio com o video ja tocando, #165): so o
+  // audio muda; a legenda que o app ja escolheu fica.
+  int releitura = (nAudio || nLeg) && !nNovasL && nLeg;
   memcpy(faixaAudio, novasA, sizeof novasA);
-  memcpy(faixaLeg, novasL, sizeof novasL);
   audioAtual = selAudio >= 0 ? selAudio : 0;
-  legAtual = -1;   // a TV ate pode ter uma escolhida; quem liga e o app (faixas.c)
+  if (!releitura) {
+    memcpy(faixaLeg, novasL, sizeof novasL);
+    legAtual = -1;   // a TV ate pode ter uma escolhida; quem liga e o app (faixas.c)
+    nLeg = nNovasL;
+  }
   (void)selLeg;
-  nAudio = nNovasA; nLeg = nNovasL;
+  nAudio = nNovasA;
   nNovasA = nNovasL = 0;
   printf("[video] faixas: %d audio, %d legenda\n", nAudio, nLeg);
   fflush(stdout);

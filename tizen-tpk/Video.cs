@@ -80,18 +80,31 @@ namespace NuvioTpk
             catch (Exception e) { if (tipo != 2) Log("escolher " + tipo + "/" + idx + ": " + e.Message); }
         }
 
-        // Lista de faixas para o C, uma vez por video, logo depois do prepare.
-        void Faixas(Player p)
+        // Lista de faixas para o C, logo depois do prepare. Devolve quantas
+        // faixas de audio o player listou.
+        int Faixas(Player p, bool soAudio = false)
         {
-            int selA = -1, selL = -1;
+            int selA = -1, selL = -1, nA = 0;
             try
             {
                 var a = p.AudioTrackInfo;
-                int n = a.GetCount();
-                for (int i = 0; i < n; i++) nv_tpk_video_faixa(0, i, Lingua(() => a.GetLanguageCode(i)));
+                nA = a.GetCount();
+                for (int i = 0; i < nA; i++) nv_tpk_video_faixa(0, i, Lingua(() => a.GetLanguageCode(i)));
                 try { selA = a.Selected; } catch { }
             }
             catch (Exception e) { Log("faixas de audio: " + e.Message); }
+            // #165: legenda listada e audio nao. Se o video tem som, a faixa que
+            // toca aparece como unica, em vez de "nenhuma faixa".
+            if (nA == 0)
+            {
+                try
+                {
+                    var ap = p.StreamInfo.GetAudioProperties();
+                    if (ap.Channels > 0) { nv_tpk_video_faixa(0, 0, ""); selA = 0; Log($"audio sem lista do player: {ap.Channels} canais, {ap.SampleRate} Hz"); }
+                }
+                catch (Exception e) { Log("propriedades de audio: " + e.Message); }
+            }
+            if (soAudio) { nv_tpk_video_faixas_fim(selA, -1); return nA; }
             try
             {
                 var l = p.SubtitleTrackInfo;
@@ -100,8 +113,9 @@ namespace NuvioTpk
                 try { selL = l.Selected; } catch { }
             }
             catch (Exception e) { Log("faixas de legenda: " + e.Message); }
-            Log($"faixas do player: audio sel={selA}, legenda sel={selL}");
+            Log($"faixas do player: {nA} audio (sel={selA}), legenda sel={selL}");
             nv_tpk_video_faixas_fim(selA, selL);
+            return nA;
         }
 
         static string Lingua(Func<string> f)
@@ -160,10 +174,17 @@ namespace NuvioTpk
                 int dur = 0;
                 try { dur = p.StreamInfo.GetDuration(); } catch { }
                 try { var v = p.StreamInfo.GetVideoProperties(); nv_tpk_video_evento(EV_TAMANHO, v.Size.Width, v.Size.Height); } catch { }
-                Faixas(p);
+                int nAudio = Faixas(p);
                 nv_tpk_video_evento(EV_PRONTO, dur, 0);
                 p.Start();
                 nv_tpk_video_evento(EV_TOCANDO, 0, 0);
+                // Alguns contêineres/HLS so publicam as faixas de audio depois
+                // que a reproducao comeca: le de novo, uma vez.
+                if (nAudio == 0)
+                {
+                    await System.Threading.Tasks.Task.Delay(2000);
+                    if (minha == sessao && player == p) Faixas(p, true);
+                }
             }
             catch (Exception e)
             {
