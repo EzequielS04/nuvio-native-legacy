@@ -24,6 +24,11 @@ int  ajustes_pediu_addons(void);   // 1 quando o Back deve fechar a tela
 int  ajustes_pediu_diagnostico(void);
 // OK em "Teste de velocidade" (Ajustes › Diagnóstico). Lido e zerado pelo app.c.
 int  ajustes_pediu_velocidade(void);
+// Itens da barra lateral que a pessoa pode esconder (#162). 1 = aparece.
+int  ajustes_menu_explorar(void);
+int  ajustes_menu_guia(void);
+int  ajustes_menu_agenda(void);
+int  ajustes_menu_perfil(void);
 // A proxima abertura da tela (ajustes_iniciar) pousa o foco em "Cor de
 // destaque" em vez da primeira linha. E o "Experimentar a cor viva" do cartao
 // da 1.4.8: chamar ANTES de trocar para TELA_AJUSTES.

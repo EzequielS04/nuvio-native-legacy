@@ -164,6 +164,11 @@ typedef enum {
   // "Teste de velocidade" de dentro dela exigia passar pela escolha do
   // objetivo so para chegar la.
   AJ_VELOCIDADE,
+  // ITENS DA BARRA LATERAL QUE SE ESCONDEM (#162: "nao uso Trakt nem TV ao
+  // vivo, nao quero Perfil e Stats nem o Guia"). NO FIM do enum de proposito:
+  // valor[] e CHAVE sao posicionais, e inserir no meio deslocaria o padrao de
+  // tudo o que vem depois (o defeito do #149).
+  AJ_MENU_EXPLORAR, AJ_MENU_GUIA, AJ_MENU_AGENDA, AJ_MENU_PERFIL,
   AJ_N
 } OpcaoId;
 
@@ -593,6 +598,10 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Chave do fanart.tv"),
   ACAO("Diagnóstico e otimização"),
   ACAO("Teste de velocidade"),
+  ESC("Explorar na barra lateral",       V_LIGA, 2),   // local: menuExplorarLocal
+  ESC("Guia TV na barra lateral",        V_LIGA, 2),   // local: menuGuiaLocal
+  ESC("Agenda na barra lateral",         V_LIGA, 2),   // local: menuAgendaLocal
+  ESC("Perfil e Stats na barra lateral", V_LIGA, 2),   // local: menuPerfilLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -696,6 +705,8 @@ static const char *CHAVE[] = {
   "-fanartChave",
   "-diagnostico",
   "-velocidade",
+  // Locais e SEM o "-": sobrevivem ao fechamento, e o web nao tem a escolha.
+  "menuExplorarLocal", "menuGuiaLocal", "menuAgendaLocal", "menuPerfilLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -783,6 +794,8 @@ static const Item TELA[] = {
     GRP("Conteúdo da Home", "Controle o que aparece na home e na busca.", "aj_rows-3"),
       OPC(AJ_FIL_LIMITE), OPC(AJ_FIL_ORDEM),
       OPC(AJ_RAIL), OPC(AJ_RAIL_MODERNA), OPC(AJ_RAIL_BLUR),
+      OPC(AJ_MENU_EXPLORAR), OPC(AJ_MENU_GUIA), OPC(AJ_MENU_AGENDA),
+      OPC(AJ_MENU_PERFIL),
       OPC(AJ_HERO), OPC(AJ_HERO_CATALOGOS), OPC(AJ_DESCOBRIR),
       OPC(AJ_GRAD_CLASSICO), OPC(AJ_ROTULOS), OPC(AJ_NOME_ADDON),
       OPC(AJ_SUFIXO_TIPO), OPC(AJ_OCULTAR_NLANC), OPC(AJ_NOTAS_HOME),
@@ -1077,6 +1090,7 @@ static int valor[] = {
   0,                /* chave do fanart.tv: acao (o valor mora em fanart.txt) */
   0,                /* diagnostico */
   0,                /* teste de velocidade: acao */
+  0, 0, 0, 0,       /* explorar, guia, agenda, perfil na barra lateral: ligados */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1275,6 +1289,10 @@ int   ajustes_trailer_qualidade(void) { static const int t[] = { 0, 1080, 720, 4
 // Fonte do trailer: o TRF_* de trailerfonte.h. Fora da lista le Automatico.
 int   ajustes_trailer_fonte(void)     { int v = valor[AJ_TRAILER_FONTE]; return (v >= 0 && v < 4) ? v : 0; }
 int  ajustes_envio_auto(void)         { return lig(AJ_ENVIO_AUTO); }
+int  ajustes_menu_explorar(void)      { return lig(AJ_MENU_EXPLORAR); }
+int  ajustes_menu_guia(void)          { return lig(AJ_MENU_GUIA); }
+int  ajustes_menu_agenda(void)        { return lig(AJ_MENU_AGENDA); }
+int  ajustes_menu_perfil(void)        { return lig(AJ_MENU_PERFIL); }
 void ajustes_definir_envio_auto(int ligado) { valor[AJ_ENVIO_AUTO] = ligado ? 0 : 1; gravar(); }
 // ARTE DO DESTAQUE ESCOLHIDA PELO DIAGNOSTICO, e so depois de a pessoa ver a
 // proposta na tela e apertar OK no botao (diagnostico.c): nunca sozinho. Os
@@ -1809,6 +1827,7 @@ static int somenteDesteAparelho(int op) {
     // deste aparelho.
     case AJ_TRAILER_FONTE:
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
+    case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
       return 1;
     default:
       return 0;
@@ -2192,6 +2211,10 @@ static int inativa(int op) {
     case AJ_RAIL:         return ajustes_rail_moderna();
     case AJ_RAIL_BLUR:    return !ajustes_rail_moderna();
     case AJ_HERO_CATALOGOS: return !ajustes_hero_ligado();
+    // #162: o Descobrir do app web (navegar catalogos por tipo e genero) ainda
+    // nao existe nesta TV — o "Explorar" daqui e outra tela. A escolha vem e
+    // vai para a conta, mas aqui nao muda nada, e a linha tem de dizer isso.
+    case AJ_DESCOBRIR:    return 1;
     case AJ_CW_OK: case AJ_CW_FONTE:
     case AJ_CW_ESTILO: case AJ_CW_THUMB: case AJ_CW_FURTHEST:
     case AJ_CW_NAO_EXIBIDOS: case AJ_CW_ORDEM:
@@ -2292,6 +2315,7 @@ static const char *ajudaOpcao(int op) {
     if (op == AJ_RAIL) return "Desative a barra lateral moderna para escolher entre recolhida e fixa.";
     if (op == AJ_RAIL_BLUR) return "Ative a barra lateral moderna para usar o desfoque.";
     if (op == AJ_HERO_CATALOGOS) return "Ative Mostrar destaque para exibir os catálogos no topo da Home.";
+    if (op == AJ_DESCOBRIR) return "A tela Descobrir do app web ainda não existe nesta TV. A escolha fica guardada na conta.";
     if (op >= AJ_CW_OK && op <= AJ_CW_ORDEM)
       return op == AJ_CW_BLUR_PROX && ajustes_cw_ligado()
         ? "Ative Miniatura do episódio para desfocar a imagem do próximo episódio."
@@ -2424,6 +2448,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_ENVIAR_LOG: return "Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.";
     case AJ_ENVIO_AUTO: return "Ligado, o app manda o registro sozinho: o da sessão anterior ao abrir e o desta a cada minuto. Sem senhas nem chaves; serve para achar o que trava a Samsung. Desligue quando quiser.";
     case AJ_DIAGNOSTICO: return "Testa manifestos, fontes e artes dos addons, mede os tempos e aplica um perfil seguro de Qualidade ou Desempenho. O teste não marca títulos como assistidos.";
+    case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
+      return "Desligado, o item some da barra lateral. Nada é apagado: ligue de novo para ele voltar.";
     case AJ_VELOCIDADE: return "Mede a velocidade dos seus addons e das fontes nesta TV e diz até quantos GB por filme e por episódio tocam sem travar. Não muda nenhum ajuste.";
 
     // --- Integracoes

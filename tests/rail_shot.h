@@ -47,6 +47,10 @@ static void rail_shot_aplicar(void) {
   // gravado e o da lista, entao "modernSidebar 0" e LIGADA.
   fprintf(f, "collapseSidebar %d\nmodernSidebar %d\n",
           strcmp(m, "recolhida") ? 1 : 0, strcmp(m, "moderna") ? 1 : 0);
+  // NUVIO_RAIL_OCULTOS=1 (#162): Guia e Agenda escondidos, para ver a barra
+  // com menos itens.
+  { const char *o = getenv("NUVIO_RAIL_OCULTOS");
+    if (o && *o == '1') fputs("menuGuiaLocal 1\nmenuAgendaLocal 1\n", f); }
   fclose(f);
   ajustes_dir(dir);
 }
