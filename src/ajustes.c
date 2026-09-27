@@ -169,6 +169,8 @@ typedef enum {
   // valor[] e CHAVE sao posicionais, e inserir no meio deslocaria o padrao de
   // tudo o que vem depois (o defeito do #149).
   AJ_MENU_EXPLORAR, AJ_MENU_GUIA, AJ_MENU_AGENDA, AJ_MENU_PERFIL,
+  // Trailer do cartaz em foco no destaque (#124). No fim pelo mesmo motivo.
+  AJ_FOCO_TRAILER,
   AJ_N
 } OpcaoId;
 
@@ -602,6 +604,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Guia TV na barra lateral",        V_LIGA, 2),   // local: menuGuiaLocal
   ESC("Agenda na barra lateral",         V_LIGA, 2),   // local: menuAgendaLocal
   ESC("Perfil e Stats na barra lateral", V_LIGA, 2),   // local: menuPerfilLocal
+  ESC("Trailer do cartaz em foco",       V_LIGA, 2),   // focusedPosterBackdropTrailerEnabled
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -707,6 +710,8 @@ static const char *CHAVE[] = {
   "-velocidade",
   // Locais e SEM o "-": sobrevivem ao fechamento, e o web nao tem a escolha.
   "menuExplorarLocal", "menuGuiaLocal", "menuAgendaLocal", "menuPerfilLocal",
+  // A MESMA chave do web (layoutPreferences), entao segue a conta.
+  "focusedPosterBackdropTrailerEnabled",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -809,7 +814,7 @@ static const Item TELA[] = {
       OPC(AJ_DET_DATA_CHEIA), OPC(AJ_DET_VEU), OPC(AJ_DET_TRAILER_AUTO),
       OPC(AJ_TRAILER_QUAL), OPC(AJ_TRAILER_ASPECTO), OPC(AJ_TRAILER_FONTE),
     GRP("Foco no pôster", "Defina o comportamento ao selecionar um título.", "aj_scan"),
-      OPC(AJ_EXPANDIR), OPC(AJ_EXPANDIR_ATRASO), OPC(AJ_BORDA_FOCO),
+      OPC(AJ_EXPANDIR), OPC(AJ_EXPANDIR_ATRASO), OPC(AJ_FOCO_TRAILER), OPC(AJ_BORDA_FOCO),
     GRP("Estilo dos cartões", "Largura, arredondamento e efeito de profundidade.", "aj_gallery-vertical-end"),
       OPC(AJ_LARGURA_DP), OPC(AJ_RAIO_DP),
       OPC(AJ_PROF), OPC(AJ_PROF_BORDA), OPC(AJ_PROF_BRILHO),
@@ -1091,6 +1096,7 @@ static int valor[] = {
   0,                /* diagnostico */
   0,                /* teste de velocidade: acao */
   0, 0, 0, 0,       /* explorar, guia, agenda, perfil na barra lateral: ligados */
+  1,                /* trailer do cartaz em foco: desligado (DEFAULT do web) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1293,6 +1299,11 @@ int  ajustes_menu_explorar(void)      { return lig(AJ_MENU_EXPLORAR); }
 int  ajustes_menu_guia(void)          { return lig(AJ_MENU_GUIA); }
 int  ajustes_menu_agenda(void)        { return lig(AJ_MENU_AGENDA); }
 int  ajustes_menu_perfil(void)        { return lig(AJ_MENU_PERFIL); }
+int  ajustes_trailer_cartaz(void) {
+  // A MESMA dependencia de inativa(AJ_FOCO_TRAILER), escrita aqui porque
+  // inativa() vem bem mais abaixo no arquivo.
+  return lig(AJ_FOCO_TRAILER) && (lig(AJ_EXPANDIR) || valor[AJ_LANDSCAPE] == 0);
+}
 void ajustes_definir_envio_auto(int ligado) { valor[AJ_ENVIO_AUTO] = ligado ? 0 : 1; gravar(); }
 // ARTE DO DESTAQUE ESCOLHIDA PELO DIAGNOSTICO, e so depois de a pessoa ver a
 // proposta na tela e apertar OK no botao (diagnostico.c): nunca sozinho. Os
@@ -2221,6 +2232,9 @@ static int inativa(int op) {
       return !ajustes_cw_ligado();
     case AJ_CW_BLUR_PROX: return !ajustes_cw_ligado() || !ajustes_cw_thumb_episodio();
     case AJ_EXPANDIR_ATRASO: return !ajustes_expandir_poster();
+    // Como no web (getFocusedPosterFlowConfig): o trailer do cartaz so existe
+    // com o cartaz expandindo ou com cartazes deitados.
+    case AJ_FOCO_TRAILER: return !ajustes_expandir_poster() && valor[AJ_LANDSCAPE] != 0;
     // Sem versao nova no GitHub nao ha o que atualizar: a linha continua
     // visivel e APAGADA, em vez de sumir — sumir mudaria a contagem de linhas
     // debaixo do dedo, que e a regra ja escrita para a tela de Layout.
@@ -2321,6 +2335,7 @@ static const char *ajudaOpcao(int op) {
         ? "Ative Miniatura do episódio para desfocar a imagem do próximo episódio."
         : "Ative Continuar assistindo para ajustar os cards de retomada.";
     if (op == AJ_EXPANDIR_ATRASO) return "Ative Expandir pôster ao focar para ajustar o tempo de espera.";
+    if (op == AJ_FOCO_TRAILER) return "Ative Expandir pôster ao focar, ou Pôsteres horizontais, para usar o trailer do cartaz em foco.";
     if (op > AJ_TMDB_LIGADO && op <= AJ_TMDB_CW)
       return "Ative TMDB para ajustar o que ele enriquece.";
     if (op > AJ_MDB_LIGADO && op <= AJ_MDB_MAL)
@@ -2416,6 +2431,7 @@ static const char *ajudaOpcao(int op) {
     // --- Posteres e cards
     case AJ_EXPANDIR: return "O cartaz em foco cresce e abre a arte deitada atrás dele depois de um instante parado.";
     case AJ_EXPANDIR_ATRASO: return "Quanto tempo o foco precisa ficar parado antes de o cartaz expandir.";
+    case AJ_FOCO_TRAILER: return "Com o foco parado num cartaz, o trailer toca sem som no lugar da arte do destaque, depois do mesmo tempo de espera da expansão.";
     case AJ_NAV_RAPIDA: return "Andar de lado numa fileira não espera a animação terminar. Serve para controle que repete rápido.";
     case AJ_BORDA_FOCO: return "O anel colorido que marca o cartaz em foco na Home. Desligado, o foco fica só pelo tamanho do cartaz.";
     case AJ_PROF: return "Dá relevo aos cartazes: borda iluminada e um reflexo que acompanha o foco.";

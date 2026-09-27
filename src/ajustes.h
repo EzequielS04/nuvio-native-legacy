@@ -29,6 +29,9 @@ int  ajustes_menu_explorar(void);
 int  ajustes_menu_guia(void);
 int  ajustes_menu_agenda(void);
 int  ajustes_menu_perfil(void);
+// "Trailer do cartaz em foco" (#124, focusedPosterBackdropTrailerEnabled),
+// ja considerando a dependencia: 1 so com expandir ou cartaz deitado ligados.
+int  ajustes_trailer_cartaz(void);
 // A proxima abertura da tela (ajustes_iniciar) pousa o foco em "Cor de
 // destaque" em vez da primeira linha. E o "Experimentar a cor viva" do cartao
 // da 1.4.8: chamar ANTES de trocar para TELA_AJUSTES.

@@ -3055,7 +3055,19 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
   int pronto;
   Uint32 decorrido;
   if (!trailer_suportado()) return;
-  pronto = topo && focoHero && ajustes_hero_ligado() && ajustes_trailer_hero() &&
+  // DUAS PORTAS PARA O MESMO TRAILER. Com o foco no destaque, "Trailer no
+  // destaque". Com o foco num CARTAZ das fileiras (#124: "parado num titulo do
+  // catalogo, nada toca"), "Trailer do cartaz em foco" — o
+  // focusedPosterBackdropTrailerEnabled do web, destino hero_media: o destaque
+  // ja segue o card em repouso (heroAtual, ver "O HERO SEGUE O FOCO"), entao o
+  // trailer toca onde a arte dele ja esta. Espera o mesmo tempo da expansao do
+  // cartaz, contado de quando o foco parou nele.
+  { int noHero = focoHero && ajustes_hero_ligado() && ajustes_trailer_hero();
+    int noCartaz = !focoHero && ajustes_hero_ligado() && ajustes_trailer_cartaz() &&
+                   heroPendente == heroAtual &&
+                   agora - heroPendenteEm >= (Uint32)(ajustes_expandir_poster_atraso() * 1000.0f);
+    pronto = topo && (noHero || noCartaz); }
+  pronto = pronto &&
            heroDesejado < 0 && heroAtual >= 0 && heroEntra >= 0.999f && heroSai <= 0.001f &&
            !(foco.fileira >= 0 && foco.fileira < nFileiras &&
              (fileiras[foco.fileira].tipo == FILEIRA_CATALOGOS ||
