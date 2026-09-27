@@ -585,6 +585,14 @@ static void desenhaPlaceholderHero(GfxRect r, const CatItem *item, float alpha,
                                    int esperando) {
   GfxRect bloco = { r.x + r.w * 0.58f, r.y + 32.0f,
                     r.w * 0.34f, r.h - 64.0f };
+  // A CAMINHO, NADA (#164). O bloco "Carregando arte…" entrava a cada troca
+  // de foco em que a arte passava do prazo — na Samsung o decode de uma arte
+  // de destaque leva 300-900 ms, entao era quase toda troca — e o bloco
+  // aparecendo e sumindo lia como um piscar. O que o #21 exige continua: a
+  // arte do titulo ANTERIOR ja saiu (heroSai), nada falso fica na tela. So
+  // nao ha mais um cartao por cima do vazio; a arte nova entra quando chegar.
+  // "Arte indisponível" (titulo sem arte nenhuma) continua sendo desenhado.
+  if (esperando) return;
   gfx_cor(bloco, 0.035f, 0.075f, 0.082f, 0.098f, alpha * 0.92f);
   { TxtLinha t = txt_linha(TXT_HERO_META,
                             esperando ? "Carregando arte…" : "Arte indisponível",
