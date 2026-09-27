@@ -510,6 +510,12 @@ static void *fioCanalFn(void *u) {
       if (ateV[0] && versaoMaior(NV_VERSAO, ateV)) ok = 0;
 #ifdef __EMSCRIPTEN__
       if (plat[0] && strcmp(plat, "todas") && strcmp(plat, "tizen")) ok = 0;
+#elif defined(NV_TPK)
+      // O .tpk tambem e Samsung: vale o "tizen" de sempre, mais o "tizen-tpk"
+      // so dele. O anuncio do proprio preview (id com "tpk-preview") nao faz
+      // sentido dentro dele.
+      if (plat[0] && strcmp(plat, "todas") && strcmp(plat, "tizen") && strcmp(plat, "tizen-tpk")) ok = 0;
+      if (strstr(id, "tpk-preview")) ok = 0;
 #else
       if (plat[0] && strcmp(plat, "todas") && strcmp(plat, "lg")) ok = 0;
 #endif
