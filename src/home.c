@@ -72,6 +72,7 @@ int player_aberto(void);
 // vetor — o card nunca acendia ao receber foco e a memoria do vizinho era
 // corrompida em silencio.
 #define MAX_CARDS 33
+_Static_assert(DESC_ITENS_POR_FILEIRA <= MAX_CARDS - 1, "itens por fileira + Ver tudo cabem em MAX_CARDS");
 // A faixa editorial precisa de uma terceira alternativa para não terminar
 // visualmente depois de apenas dois cards. Quando o catálogo que virou
 // destaque entrega menos que isso, completamos com títulos já publicados no
@@ -1624,7 +1625,8 @@ static void sincronizarFileiras(void) {
     }
     // MAX_CARDS - 1: a ultima coluna e do card "Ver tudo". Sem reservar, uma
     // fileira cheia empurraria o card para fora do vetor de animacao.
-    fileiras[destino].n   = cf->n > 12 ? 12 : cf->n;
+    // DESC_ITENS_POR_FILEIRA (#163), que tem de caber em MAX_CARDS - 1.
+    fileiras[destino].n   = cf->n > DESC_ITENS_POR_FILEIRA ? DESC_ITENS_POR_FILEIRA : cf->n;
     // UMA COLUNA A MAIS: o card "Ver tudo" no fim. So em fileira que veio de um
     // CATALOGO de addon — "Continuar assistindo" e as listas do Trakt nao tem
     // continuacao para pedir (o base fica vazio nelas).

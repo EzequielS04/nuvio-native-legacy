@@ -169,7 +169,7 @@ int  desc_buscando(void);
 // vezes a mesma coisa nao refaz a busca.
 // --- VER TUDO: um catalogo inteiro, em paginas ------------------------------
 //
-// A home mostra 12 itens por fileira (MAX_POR_FILEIRA). O catalogo tem mais, e
+// A home mostra DESC_ITENS_POR_FILEIRA itens por fileira. O catalogo tem mais, e
 // o protocolo Stremio pagina por `skip`:
 //   <base>/catalog/<tipo>/<id>/skip=<n>.json
 // E o mesmo caminho da busca, com outro filtro no lugar do termo.
@@ -177,6 +177,13 @@ int  desc_buscando(void);
 // Assincrono, como todo o resto: dispara e volta na hora. Quem desenha pergunta
 // quantos ja chegaram.
 #define VT_MAX 1000
+
+// ITENS POR FILEIRA DA HOME (#163: "da para passar de 12?"). Eram 12. O web
+// usa 15 no layout padrao e 24 no classico (HOME_MAX_ITEMS_PER_ROW_CLASSIC,
+// homeConstants.js); aqui e 24. home.c reserva MAX_CARDS = 33 colunas (os
+// cartazes mais o "Ver tudo"), entao cabe. Custo: ~15,6 KB por item em RAM,
+// e as capas continuam carregando so quando entram na tela.
+#define DESC_ITENS_POR_FILEIRA 24
 
 // Comeca (ou continua) a leitura do catalogo. `pagina` 0 e o inicio; cada
 // pagina seguinte pede skip = pagina * VT_PASSO. Repetir a mesma pagina nao
