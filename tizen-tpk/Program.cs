@@ -29,6 +29,8 @@ namespace NuvioTpk
         [DllImport("libnuvio.so")] static extern int nv_tpk_quadro();
         [DllImport("libnuvio.so")] static extern void nv_tpk_config(int esperaMs, int swapZero);
         [DllImport("libnuvio.so")] static extern void nv_tpk_tecla(string nome, int apertou);
+        [DllImport("libdl.so.2")] static extern IntPtr dlopen(string path, int flags);
+        [DllImport("libdl.so.2")] static extern IntPtr dlerror();
 
         const int W = 1920, H = 1080;
 
@@ -45,9 +47,26 @@ namespace NuvioTpk
 
             string dados = DirectoryInfo.Data;
             string arte = IOPath.Combine(DirectoryInfo.Resource, "art");
-            video = new Video(() => new Display(NuiWindow.Instance),
-                              a => { if (principal != null) principal.Post(_ => a(), null); else a(); },
-                              dados, W, H);
+
+            // A .so aberta por caminho absoluto ANTES do primeiro DllImport, como
+            // no pacote do Tizen 4/5: se o launcher desta TV nao procurar no lib/
+            // do pacote (4/5 nao procurava; no 6.5 ninguem mediu, #170), o
+            // DllImport("libnuvio.so") casa pelo soname com a ja carregada.
+            string so = IOPath.Combine(IOPath.GetFullPath(IOPath.Combine(DirectoryInfo.Resource, "..")), "lib", "libnuvio.so");
+            dlerror();
+            if (dlopen(so, 2 | 0x100) == IntPtr.Zero)
+            {
+                string e = Marshal.PtrToStringAnsi(dlerror());
+                Erro("The TV did not let Nuvio load its native library.", so + ": " + (string.IsNullOrEmpty(e) ? "refused without a message" : e));
+                return;
+            }
+            try
+            {
+                video = new Video(() => new Display(NuiWindow.Instance),
+                                  a => { if (principal != null) principal.Post(_ => a(), null); else a(); },
+                                  dados, W, H);
+            }
+            catch (Exception e) { Erro("Nuvio could not start the player.", e.GetType().Name + ": " + e.Message); return; }
 
             // API8: o callback roda no fio principal e o DALi troca os buffers
             // mesmo em quadro pulado, entao espera o app terminar o quadro.
@@ -60,15 +79,24 @@ namespace NuvioTpk
 #else
                 nv_tpk_config(50, 1);
 #endif
-                if (nv_tpk_iniciar(arte, dados, W, H) != 0) throw new Exception("nv_tpk_iniciar falhou");
+                if (nv_tpk_iniciar(arte, dados, W, H) != 0) throw new Exception("nv_tpk_iniciar failed");
             }
             catch (Exception e)
             {
-                File.WriteAllText(IOPath.Combine(dados, "tpk-erro.txt"), e.ToString());
-                Exit();
+                try { File.WriteAllText(IOPath.Combine(dados, "tpk-erro.txt"), e.ToString()); } catch { }
+                Erro("Nuvio could not start.", e.GetType().Name + ": " + e.Message);
                 return;
             }
 
+            try
+            {
+                CriaJanelaGL();
+            }
+            catch (Exception e) { Erro("Nuvio could not open its window.", e.GetType().Name + ": " + e.Message); return; }
+        }
+
+        void CriaJanelaGL()
+        {
             gl = new GLWindow("nuvio", new NuiRect(0, 0, W, H), true);
 #if NV_API8
             gl.SetEglConfig(false, false, 0, GLWindow.GLESVersion.Version_2_0);
@@ -97,6 +125,27 @@ namespace NuvioTpk
                 return true;
             };
             vigia.Start();
+        }
+
+        // Em vez de fechar em silencio: o motivo na tela, com a TV, para foto.
+        void Erro(string titulo, string detalhe)
+        {
+            // Sem `fim`: o relogio (se ja existir) fecharia o app antes da foto.
+            if (gl != null) { try { gl.Hide(); } catch { } }
+            var w = NuiWindow.Instance;
+            w.BackgroundColor = NuiColor.Black;
+            string versao = "?", modelo = "?";
+            try { Tizen.System.Information.TryGetValue<string>("http://tizen.org/feature/platform.version", out versao); } catch { }
+            try { Tizen.System.Information.TryGetValue<string>("http://tizen.org/system/model_name", out modelo); } catch { }
+            var t = new Tizen.NUI.BaseComponents.TextLabel
+            {
+                Text = titulo + "\n\n" + detalhe + "\n\nTV " + modelo + " / Tizen " + versao + " / " + RuntimeInformation.FrameworkDescription +
+                       "\n\nPlease post a PHOTO of this screen in issue #137 on GitHub (iqui27/nuvio-native-legacy). Back closes.",
+                MultiLine = true, TextColor = NuiColor.White, PointSize = 20,
+                Size2D = new Size2D(W - 160, H - 160), Position2D = new Position2D(80, 80),
+            };
+            w.Add(t);
+            w.KeyEvent += (s, e) => { if (e.Key.State == Key.StateType.Down && (e.Key.KeyPressedName == "XF86Back" || e.Key.KeyPressedName == "Escape")) Exit(); };
         }
 
         void Tecla(Key k)
