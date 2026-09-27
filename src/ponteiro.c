@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#if !defined(__APPLE__) && !defined(__EMSCRIPTEN__)
+#if !defined(__APPLE__) && !defined(__EMSCRIPTEN__) && !defined(NV_TPK)
 #include <dlfcn.h>
 #define NV_PONT_WEBOS 1
 #endif

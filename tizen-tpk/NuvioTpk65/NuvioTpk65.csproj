@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Host do Nuvio .tpk. Um Program.cs para as tres faixas de API (ver o
+       porque de cada uma em tizen-tpk-spike/dotnet): o GLWindow mudou de
+       assinatura na API9 e de nome na API11. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>tizen90</TargetFramework>
+    <RootNamespace>NuvioTpk</RootNamespace>
+    <AssemblyName>NuvioTpk65</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>$(DefineConstants);NV_API9</DefineConstants>
+    <LangVersion>8.0</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Program.cs" />
+    <PackageReference Include="Tizen.NET" Version="9.0.*"><ExcludeAssets>Runtime</ExcludeAssets></PackageReference>
+    <PackageReference Include="Tizen.NET.Sdk" Version="1.1.*" />
+  </ItemGroup>
+</Project>

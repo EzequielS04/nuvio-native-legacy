@@ -340,6 +340,8 @@ int avisos_enviar_diagnostico(const char *execucao_id, const char *relatorio,
            NV_VERSAO,
 #ifdef __EMSCRIPTEN__
            "tizen",
+#elif defined(NV_TPK)
+           "tizen-tpk",
 #elif defined(__APPLE__)
            "mac",
 #else
@@ -431,6 +433,8 @@ static void *enviarRegistro(void *u) {
              NV_VERSAO,
 #ifdef __EMSCRIPTEN__
              "tizen",
+#elif defined(NV_TPK)
+             "tizen-tpk",
 #elif defined(__APPLE__)
              "mac",
 #else

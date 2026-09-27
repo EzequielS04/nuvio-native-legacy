@@ -12,7 +12,7 @@
 // o alvo Tizen (WASM) precisa pular exatamente os mesmos. Nomear a condicao
 // evita ter de lembrar de dois simbolos em cada ponto - sem isto o primeiro
 // build para o navegador ainda tentava abrir libwayland-client.so.0.
-#if defined(__APPLE__) || defined(__EMSCRIPTEN__)
+#if defined(__APPLE__) || defined(__EMSCRIPTEN__) || defined(NV_TPK)
 #define NV_SEM_WEBOS 1
 #endif
 #include <stdio.h>
