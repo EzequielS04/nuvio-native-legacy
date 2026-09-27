@@ -4392,37 +4392,46 @@ void ajustes_desenhar(Uint32 agora) {
   float hx = AJ_LISTA_X + AJ_LISTA_W + 52.0f;
   float hw = NV_TELA_W - NV_MARGEM_X - hx;
   if (hw > 240.0f) {
-    // O ICONE DA CATEGORIA, grande, abre o painel. Ele nao e enfeite: e a mesma
-    // marca da coluna da esquerda, e e o que liga "onde estou" a "o que estou
-    // lendo" sem obrigar a ler dois titulos.
+    // O icone de categoria reaparece enquanto se personaliza uma opcao, ligando
+    // o contexto da coluna esquerda ao painel de ajuda. No indice, o cabecalho
+    // central ja da esse contexto e o painel fica reduzido a orientacao util.
     GfxRect gi = { hx, AJ_TOPO + 4.0f, 56.0f, 56.0f };
     float hy;
-    gfx_icone(gi, itSec->icone, 0.88f, 0.89f, 0.93f, 1.0f);
-    { TxtLinha tipo = txt_linha(TXT_CAPTION, focoIndice ? "Categoria"
-                          : noGrupo ? "Grupo"
-                          : inativa(focoOp) ? "Indisponível agora"
-                          : soLeitura(focoOp) ? "Informação"
-                          : OPCOES[focoOp].tipo == OP_ACAO ? "Abre uma tela"
-                          : "Personalizar", 168, 171, 180, 255);
-      txt_desenhar(tipo, gi.x + gi.w + 16.0f, gi.y + (gi.h - tipo.h) * 0.5f); }
-    hy = gi.y + gi.h + 22.0f;
-    // PITCH 44 para o headline, o mesmo do painel do explorar: o `leading` do
-    // txt_bloco e a distancia de uma linha a outra, e nao o vao.
-    hy += txt_bloco(TXT_HEADLINE,
-                   focoIndice ? itSec->titulo : noGrupo ? itFoco->titulo : OPCOES[focoOp].rotulo,
-                   237, 238, 242, hx, hy, hw, 44, 1, 3);
-    hy += 18.0f;
-    hy += txt_bloco(TXT_CAPTION,
-                   focoIndice ? SECAO_AJUDA[sec] : noGrupo ? itFoco->sub : ajudaOpcao(focoOp),
-                   183, 186, 194, hx, hy, hw, 32, 1, 8);
-    // O QUE MUDA NA PRATICA. A frase de ajuda diz o que a opcao E; esta diz o
-    // que acontece quando ela muda, que e a pergunta de quem esta com o
-    // controle na mao. Vazia quando nao ha nada honesto a dizer.
-    { const char *ef = (focoIndice || noGrupo) ? NULL : efeitoOpcao(focoOp);
-      if (ef) {
-        hy += 16.0f;
-        hy += txt_bloco(TXT_CAPTION, ef, 150, 176, 150, hx, hy, hw, 32, 1, 4);
-      } }
+    if (!focoIndice) {
+      gfx_icone(gi, itSec->icone, 0.88f, 0.89f, 0.93f, 1.0f);
+      { TxtLinha tipo = txt_linha(TXT_CAPTION, noGrupo ? "Grupo"
+                            : inativa(focoOp) ? "Indisponível agora"
+                            : soLeitura(focoOp) ? "Informação"
+                            : OPCOES[focoOp].tipo == OP_ACAO ? "Abre uma tela"
+                            : "Personalizar", 168, 171, 180, 255);
+        txt_desenhar(tipo, gi.x + gi.w + 28.0f,
+                     gi.y + (gi.h - tipo.h) * 0.5f); }
+      hy = gi.y + gi.h + 22.0f;
+      // PITCH 44 para o headline, o mesmo do painel do explorar: o `leading`
+      // do txt_bloco e a distancia de uma linha a outra, e nao o vao.
+      hy += txt_bloco(TXT_HEADLINE,
+                     noGrupo ? itFoco->titulo : OPCOES[focoOp].rotulo,
+                     237, 238, 242, hx, hy, hw, 44, 1, 3);
+      hy += 18.0f;
+      hy += txt_bloco(TXT_CAPTION,
+                     noGrupo ? itFoco->sub : ajudaOpcao(focoOp),
+                     183, 186, 194, hx, hy, hw, 32, 1, 8);
+      // O QUE MUDA NA PRATICA. A frase de ajuda diz o que a opcao E; esta diz
+      // o que acontece quando ela muda, que e a pergunta de quem esta com o
+      // controle na mao. Vazia quando nao ha nada honesto a dizer.
+      { const char *ef = noGrupo ? NULL : efeitoOpcao(focoOp);
+        if (ef) {
+          hy += 16.0f;
+          hy += txt_bloco(TXT_CAPTION, ef, 150, 176, 150, hx, hy, hw, 32, 1, 4);
+        } }
+    } else {
+      // O cabecalho central ja identifica categoria e titulo. No indice, a
+      // coluna lateral usa so a explicacao curta, sem repetir icone, tipo e
+      // titulo no painel de ajuda.
+      hy = AJ_TOPO + 8.0f;
+      hy += txt_bloco(TXT_CAPTION, SECAO_AJUDA[sec], 183, 186, 194,
+                      hx, hy, hw, 32, 1, 6);
+    }
     if (!focoIndice && !noGrupo && focoOp == AJ_ESPACO) {
       hy += 22.0f;
       hy += desenhaPainelImagens(hx, hy, hw);

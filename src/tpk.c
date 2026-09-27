@@ -70,6 +70,9 @@ int nv_tpk_iniciar(const char *arte, const char *dados, int w, int h) {
   if (w > 0 && h > 0) { telaW = w; telaH = h; }
   snprintf(dirArte, sizeof dirArte, "%s", arte);
   snprintf(log, sizeof log, "%s/nuvio.log", dados);
+  { char ant[600];
+    snprintf(ant, sizeof ant, "%s/nuvio-anterior.log", dados);
+    setenv("NUVIO_LOG_ANTERIOR", ant, 1); }
   setenv("NUVIO_DADOS", dados, 1);
   setenv("NUVIO_LOG", log, 1);
   setenv("HOME", dados, 1);

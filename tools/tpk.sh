@@ -80,7 +80,7 @@ VER=$(sed -n 's/^NV_VERSAO=//p' "$ENVF")
 # de art/, que e onde o main.c procura.
 ARTE=$(bash tools/tizen-art.sh)
 rm -f "$SAIDA"/*.tpk
-for p in NuvioTpk60 NuvioTpk65 NuvioTpk; do
+for p in NuvioTpk40 NuvioTpk60 NuvioTpk65 NuvioTpk; do
   H=tizen-tpk/$p
   rm -rf "$H/lib" "$H/res" "$H/bin" "$H/obj"
   mkdir -p "$H/lib" "$H/res" "$H/shared/res"

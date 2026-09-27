@@ -3728,8 +3728,9 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
   // Sem sinopse o espaco
   // fica vazio: melhor um card com menos texto que um card com texto errado.
   if (epSin)
-    txt_bloco(TXT_DET_SIN, epSin, 255, 255, 255, tx, r.y + NV_DETP_EP_SIN_Y,
-              NV_DETP_EP_TEXTO_W, NV_DETP_EP_LD_SIN, a * 0.9f, 3);
+    txt_bloco_corta(TXT_DET_SIN, epSin, 255, 255, 255, tx,
+                    r.y + NV_DETP_EP_SIN_Y, NV_DETP_EP_TEXTO_W,
+                    NV_DETP_EP_LD_SIN, a * 0.9f, 3);
 
   // Meta: relogio + duracao + data, 20/400 rgb(179,179,179), com 38 de folga
   // entre os dois blocos.

@@ -804,8 +804,51 @@ TxtLinha txt_linha_corta_enfase(TxtEstilo estilo, const char *s, int r, int g,
   return cortaFamilia(estilo, s, r, g, b, a, maxW, familia, enfase);
 }
 
-float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
-                float x, float y, float larg, float leading, float alpha, int maxLinhas) {
+static void desenhaBlocoLinha(TxtEstilo estilo, const char *s, int r, int g, int b,
+                              float x, float y, float larg, float alpha,
+                              int reticencias) {
+  if (!reticencias) {
+    TxtLinha l = txt_linha(estilo, s, r, g, b, 255);
+    txt_desenhar_alpha(l, x, y, alpha);
+    return;
+  }
+  {
+    char fim[512];
+    size_t n = strlen(s);
+    if (n >= sizeof fim - 4) {
+      n = sizeof fim - 4;
+      while (n > 0 && ((unsigned char)s[n] & 0xC0) == 0x80) n--;
+    }
+    memcpy(fim, s, n); fim[n] = 0;
+    for (;;) {
+      char teste[512];
+      snprintf(teste, sizeof teste, "%s\xe2\x80\xa6", fim);
+      TxtLinha l = txt_linha(estilo, teste, r, g, b, 255);
+      if (l.w <= larg) {
+        txt_desenhar_alpha(l, x, y, alpha);
+        return;
+      }
+      // Remove palavras completas primeiro; uma unica palavra longa cai para
+      // codepoints UTF-8, para nunca deixar um acento pela metade.
+      size_t corte = n;
+      while (corte > 0 && fim[corte - 1] != ' ') corte--;
+      if (corte > 0) n = corte - 1;
+      else {
+        if (!n) break;
+        n--;
+        while (n > 0 && ((unsigned char)fim[n] & 0xC0) == 0x80) n--;
+      }
+      fim[n] = 0;
+      if (!n) break;
+    }
+    { TxtLinha l = txt_linha(estilo, "\xe2\x80\xa6", r, g, b, 255);
+      txt_desenhar_alpha(l, x, y, alpha); }
+  }
+}
+
+static float txt_bloco_impl(TxtEstilo estilo, const char *s, int r, int g, int b,
+                            float x, float y, float larg, float leading,
+                            float alpha, int maxLinhas, int reticencias) {
   // Mesma razao do corte: a quebra de linha e feita no texto final.
   s = i18n(s);
   if (!s || !*s) return 0.0f;
@@ -833,7 +876,14 @@ float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
 
     char tentativa[512];
     size_t nl = strlen(linha);
-    if (nl + np + 2 >= sizeof tentativa) break;
+    if (nl + np + 2 >= sizeof tentativa) {
+      if (reticencias) {
+        desenhaBlocoLinha(estilo, linha[0] ? linha : ini, r, g, b,
+                          x, y + usado, larg, alpha, 1);
+        return usado + leading;
+      }
+      break;
+    }
     memcpy(tentativa, linha, nl);
     if (nl) tentativa[nl++] = ' ';
     memcpy(tentativa + nl, ini, np);
@@ -841,12 +891,28 @@ float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
 
     TxtLinha m = txt_linha(estilo, tentativa, r, g, b, 255);
     if (m.w > larg && linha[0]) {
+      if (reticencias && maxLinhas > 0 && nLinhas + 1 >= maxLinhas) {
+        desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
+                          alpha, 1);
+        return usado + leading;
+      }
       // nao coube: fecha a linha atual e recomeca com a palavra
       TxtLinha l = txt_linha(estilo, linha, r, g, b, 255);
       txt_desenhar_alpha(l, x, y + usado, alpha);
       usado += leading; nLinhas++;
       if (maxLinhas > 0 && nLinhas >= maxLinhas) return usado;
       memcpy(linha, ini, np); linha[np] = 0;
+      if (reticencias && txt_linha(estilo, linha, r, g, b, 255).w > larg) {
+        desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
+                          alpha, 1);
+        return usado + leading;
+      }
+    } else if (m.w > larg && reticencias) {
+      // Uma palavra sem espacos pode ser maior que a coluna. O caminho normal
+      // de txt_bloco preserva o comportamento antigo; esta variante sinaliza
+      // o corte e limita o glifo por largura, inclusive em texto UTF-8 longo.
+      desenhaBlocoLinha(estilo, ini, r, g, b, x, y + usado, larg, alpha, 1);
+      return usado + leading;
     } else {
       memcpy(linha, tentativa, nl + np + 1);
     }
@@ -854,6 +920,11 @@ float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
     // acabar. `linha` pode estar vazia (dois \n seguidos): ai a linha em branco
     // e desenhada de proposito — e o vao que quem escreveu o texto pediu.
     if (quebra && (maxLinhas <= 0 || nLinhas < maxLinhas)) {
+      if (reticencias && maxLinhas > 0 && nLinhas + 1 >= maxLinhas && *p) {
+        desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
+                          alpha, 1);
+        return usado + leading;
+      }
       if (linha[0]) {
         TxtLinha l = txt_linha(estilo, linha, r, g, b, 255);
         txt_desenhar_alpha(l, x, y + usado, alpha);
@@ -863,11 +934,30 @@ float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
     }
   }
   if (linha[0] && (maxLinhas <= 0 || nLinhas < maxLinhas)) {
-    TxtLinha l = txt_linha(estilo, linha, r, g, b, 255);
-    txt_desenhar_alpha(l, x, y + usado, alpha);
+    if (reticencias && maxLinhas > 0 && *p)
+      desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
+                        alpha, 1);
+    else {
+      TxtLinha l = txt_linha(estilo, linha, r, g, b, 255);
+      txt_desenhar_alpha(l, x, y + usado, alpha);
+    }
     usado += leading;
   }
   return usado;
+}
+
+float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
+                float x, float y, float larg, float leading, float alpha,
+                int maxLinhas) {
+  return txt_bloco_impl(estilo, s, r, g, b, x, y, larg, leading, alpha,
+                        maxLinhas, 0);
+}
+
+float txt_bloco_corta(TxtEstilo estilo, const char *s, int r, int g, int b,
+                      float x, float y, float larg, float leading,
+                      float alpha, int maxLinhas) {
+  return txt_bloco_impl(estilo, s, r, g, b, x, y, larg, leading, alpha,
+                        maxLinhas, 1);
 }
 
 // Quebra igual a txt_bloco, mas posiciona cada linha pela BORDA DIREITA. A

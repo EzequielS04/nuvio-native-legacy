@@ -49,7 +49,12 @@
 #define AV_MAX        40
 #define AV_VISTOS_ARQ "avisos-vistos.txt"
 #define AV_MARCA_ARQ  "sessao-viva.txt"
+#ifdef NV_TPK
+// No .tpk o /tmp nao e do app: o anterior fica na pasta de dados (tpk.c).
+#define AV_LOG_ANTERIOR (getenv("NUVIO_LOG_ANTERIOR"))
+#else
 #define AV_LOG_ANTERIOR "/tmp/nuvio-anterior.log"
+#endif
 #define AV_REGISTRO_MAX (200 * 1024)
 // 20 s, nao 6 (dono, 20/09/2026: "teria que ficar mais tempo"). Quem esta
 // olhando um card do outro lado da tela leva um tempo para notar o canto.

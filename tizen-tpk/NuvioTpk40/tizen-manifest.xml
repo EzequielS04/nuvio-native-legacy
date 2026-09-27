@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns="http://tizen.org/ns/packages" api-version="4" package="NuvioTV002.Nuvio" version="1.5.1">
+  <profile name="tv" />
+  <ui-application appid="NuvioTV002.Nuvio" exec="NuvioTpk40.dll" type="dotnet"
+                  multiple="false" taskmanage="true" nodisplay="false" launch_mode="single">
+    <label>Nuvio</label>
+    <icon>NuvioTpk40.png</icon>
+  </ui-application>
+  <privileges>
+    <privilege>http://tizen.org/privilege/internet</privilege>
+    <privilege>http://tizen.org/privilege/network.get</privilege>
+    <!-- So para o Apps2Samsung assinar como Partner. O app nao usa DRM. -->
+    <privilege>http://developer.samsung.com/privilege/drminfo</privilege>
+  </privileges>
+</manifest>
