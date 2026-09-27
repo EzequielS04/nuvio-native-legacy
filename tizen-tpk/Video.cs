@@ -23,6 +23,7 @@ namespace NuvioTpk
         [DllImport("libnuvio.so")] static extern void nv_tpk_video_faixa(int tipo, int idx, string lingua);
         [DllImport("libnuvio.so")] static extern void nv_tpk_video_faixas_fim(int selAudio, int selLeg);
         [DllImport("libnuvio.so")] static extern void nv_tpk_video_legenda(string texto, int durMs);
+        [DllImport("libnuvio.so")] static extern void nv_tpk_log(string linha);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void FnAbrir(IntPtr url, IntPtr cabecalhos);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void FnSemArg();
@@ -99,6 +100,7 @@ namespace NuvioTpk
                 try { selL = l.Selected; } catch { }
             }
             catch (Exception e) { Log("faixas de legenda: " + e.Message); }
+            Log($"faixas do player: audio sel={selA}, legenda sel={selL}");
             nv_tpk_video_faixas_fim(selA, selL);
         }
 
@@ -118,6 +120,7 @@ namespace NuvioTpk
 
         public void Log(string s)
         {
+            try { nv_tpk_log(s); } catch { }
             try { File.AppendAllText(logArq, DateTime.Now.ToString("HH:mm:ss ") + s + "\n"); } catch { }
         }
 

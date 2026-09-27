@@ -127,6 +127,14 @@ int nv_tpk_iniciar(const char *arte, const char *dados, int w, int h) {
   return 0;
 }
 
+// Linha do host (.NET) no mesmo nuvio.log do app: e o log que o painel da TV
+// (tecla vermelha) mostra e o que o envio automatico sobe.
+__attribute__((visibility("default")))
+void nv_tpk_log(const char *linha) {
+  printf("[host] %s\n", linha ? linha : "");
+  fflush(stdout);
+}
+
 // 1 depois que o main() do app devolveu: o host fecha.
 __attribute__((visibility("default")))
 int nv_tpk_terminou(void) { return terminou; }
