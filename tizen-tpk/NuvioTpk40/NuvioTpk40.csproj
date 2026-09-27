@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Host do Nuvio para Tizen 4.0/5.0 (TVs 2018-2019). Sem GLWindow nessa
-       API: por enquanto so carrega a libnuvio.so e diz na tela se a TV deixou.
+  <!-- Host do Nuvio para Tizen 4.0/5.0 (TVs 2018-2019), sobre a
+       TVGLApplication da Samsung (ver Program40.cs).
        O manifesto declara um privilegio Partner para o Apps2Samsung assinar o
        pacote como Partner (WgtPrivileges.cs); com assinatura Public a TV
        recusou a .so no spike.2 (UEP). Ver tizen-tpk/README.md. -->
@@ -13,7 +13,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program40.cs" />
+    <Compile Include="../Video.cs" />
     <PackageReference Include="Tizen.NET" Version="4.0.*"><ExcludeAssets>Runtime</ExcludeAssets></PackageReference>
     <PackageReference Include="Tizen.NET.Sdk" Version="1.1.*" />
+    <!-- TVGLApplication (janela GL do Tizen 4/5) mora aqui; e o que o
+         JuvoPlayer.OpenGL e o exemplo SamsungDForum/OpenGLES usam. A TV ja
+         tem a assembly: so a referencia vai no pacote. -->
+    <PackageReference Include="Tizen.NET.TV" Version="4.4.0.1341"><ExcludeAssets>Runtime</ExcludeAssets></PackageReference>
   </ItemGroup>
 </Project>

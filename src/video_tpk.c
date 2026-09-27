@@ -6,10 +6,14 @@
 // que acontece pelo nv_tpk_video_evento, de qualquer fio. O app le o estado no
 // fio dele; por isso os campos sao volatile e nada aqui bloqueia.
 //
-// Primeira versao: sem troca de faixa de audio/legenda (o player escolhe a
-// padrao do arquivo) e sem legenda embutida desenhada pelo app.
+// Faixas: o host manda a lista depois do prepare (nv_tpk_video_faixa) e o app
+// escolhe por hEscolher. Legenda EMBUTIDA: o player entrega o texto por evento
+// (SubtitleUpdated, com duracao) e o app desenha, igual ao Tizen web. Legenda
+// EXTERNA (OpenSubtitles/addon) nem passa por aqui: legenda.c baixa e desenha.
 #ifdef NV_TPK
 #include "video.h"
+#include "idioma.h"
+#include "linguas.h"
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <string.h>
@@ -25,6 +29,15 @@ static FnSemArg hParar;
 static FnInt    hPausar, hBuscar, hVolume;
 static FnRet    hJanela;
 static FnPos    hPos;
+typedef void (*FnEscolher)(int tipo, int idx);
+static FnEscolher hEscolher;
+
+#define MAX_FAIXAS 32
+static VideoFaixa faixaAudio[MAX_FAIXAS], faixaLeg[MAX_FAIXAS];
+static volatile int nAudio, nLeg, audioAtual, legAtual = -1;
+static SDL_mutex *travaLeg;
+static char legTexto[1024];
+static Uint32 legAte;
 
 static char urlAtual[4096];
 static char cabecalhos[2048];
@@ -38,6 +51,70 @@ void nv_tpk_video_registrar(FnAbrir abrir, FnSemArg parar, FnInt pausar, FnInt b
                             FnInt volume, FnRet janela, FnPos pos) {
   hAbrir = abrir; hParar = parar; hPausar = pausar; hBuscar = buscar;
   hVolume = volume; hJanela = janela; hPos = pos;
+}
+
+__attribute__((visibility("default")))
+void nv_tpk_video_registrar_faixas(FnEscolher escolher) { hEscolher = escolher; }
+
+void video_escolher_audio(int i);
+
+// Mesma regra do video.c / video_tizen.c: sem preferencia ou sem faixa que
+// case, fica a do arquivo.
+static void escolherAudioPreferido(void) {
+  const char *pref = ling_audio();
+  int i;
+  if (!pref[0] || nAudio < 2) return;
+  if (audioAtual >= 0 && audioAtual < nAudio && faixaAudio[audioAtual].idioma[0] &&
+      ling_casa(faixaAudio[audioAtual].idioma, pref)) return;
+  for (i = 0; i < nAudio; i++) {
+    if (!faixaAudio[i].idioma[0] || !ling_casa(faixaAudio[i].idioma, pref)) continue;
+    printf("[video] audio preferido: %s (faixa %d de %d)\n", ling_nome(faixaAudio[i].idioma), i + 1, nAudio);
+    video_escolher_audio(i);
+    return;
+  }
+}
+
+// Host, fio principal, depois do prepare: uma chamada por faixa (tipo 0 =
+// audio, 1 = legenda) e no fim nv_tpk_video_faixas_fim. O contador so sobe no
+// fim, com a lista inteira escrita: o app nunca le faixa pela metade.
+static VideoFaixa novasA[MAX_FAIXAS], novasL[MAX_FAIXAS];
+static int nNovasA, nNovasL;
+__attribute__((visibility("default")))
+void nv_tpk_video_faixa(int tipo, int idx, const char *lingua) {
+  VideoFaixa *f;
+  const char *l = lingua ? lingua : "";
+  if (tipo == 0) { if (nNovasA >= MAX_FAIXAS) return; f = &novasA[nNovasA++]; }
+  else           { if (nNovasL >= MAX_FAIXAS) return; f = &novasL[nNovasL++]; }
+  memset(f, 0, sizeof *f);
+  f->numero = idx;
+  f->ordinalMkv = tipo ? idx : -1;
+  if (strcmp(l, "und") && strcmp(l, "unknown")) snprintf(f->idioma, sizeof f->idioma, "%s", l);
+  if (f->idioma[0]) snprintf(f->rotulo, sizeof f->rotulo, "%s", i18n(ling_nome(f->idioma)));
+  else snprintf(f->rotulo, sizeof f->rotulo, "%s %d", i18n(tipo ? "Legenda" : "Áudio"),
+                tipo ? nNovasL : nNovasA);
+}
+__attribute__((visibility("default")))
+void nv_tpk_video_faixas_fim(int selAudio, int selLeg) {
+  memcpy(faixaAudio, novasA, sizeof novasA);
+  memcpy(faixaLeg, novasL, sizeof novasL);
+  audioAtual = selAudio >= 0 ? selAudio : 0;
+  legAtual = -1;   // a TV ate pode ter uma escolhida; quem liga e o app (faixas.c)
+  (void)selLeg;
+  nAudio = nNovasA; nLeg = nNovasL;
+  nNovasA = nNovasL = 0;
+  printf("[video] faixas: %d audio, %d legenda\n", nAudio, nLeg);
+  fflush(stdout);
+  escolherAudioPreferido();
+}
+
+// Host: texto da legenda embutida escolhida, valido por `durMs`.
+__attribute__((visibility("default")))
+void nv_tpk_video_legenda(const char *texto, int durMs) {
+  if (!travaLeg) return;
+  SDL_LockMutex(travaLeg);
+  snprintf(legTexto, sizeof legTexto, "%s", texto ? texto : "");
+  legAte = SDL_GetTicks() + (Uint32)(durMs > 0 ? durMs : 3000);
+  SDL_UnlockMutex(travaLeg);
 }
 
 enum { EV_PRONTO = 1, EV_TOCANDO = 2, EV_PAUSADO = 3, EV_FIM = 4, EV_ERRO = 5,
@@ -62,7 +139,7 @@ void nv_tpk_video_evento(int tipo, int a, int b) {
   if (tipo != EV_BUFFER) { printf("[video] tpk evento %d (%d, %d)\n", tipo, a, b); fflush(stdout); }
 }
 
-int  video_iniciar(void) { return hAbrir != NULL; }
+int  video_iniciar(void) { if (!travaLeg) travaLeg = SDL_CreateMutex(); return hAbrir != NULL; }
 int  video_iniciar_auto(void) { return hAbrir != NULL; }
 int  video_registro_negado(void) { return 0; }
 
@@ -70,6 +147,8 @@ int video_tocar(const char *u) {
   snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : "");
   ativo = 1; pronto = falhou = terminou = tocando = 0;
   largura = altura = durMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
+  nAudio = nLeg = 0; audioAtual = 0; legAtual = -1; legAte = 0;
+  if (!travaLeg) travaLeg = SDL_CreateMutex();
   sessao++;
   if (!hAbrir) { falhou = 1; printf("[video] tpk: host sem player\n"); return 0; }
   hAbrir(urlAtual, cabecalhos);
@@ -109,20 +188,38 @@ int  video_ativo(void) { return ativo; }
 int  video_falhou(void) { return falhou; }
 int  video_audio_nao_suportado(void) { return 0; }
 int  video_terminou(void) { return terminou; }
-int  video_n_audio(void) { return 0; }
-int  video_n_legenda(void) { return 0; }
-const VideoFaixa *video_audio(int i) { (void)i; return 0; }
-const VideoFaixa *video_legenda(int i) { (void)i; return 0; }
-int  video_legenda_ordinal_mkv(int i) { (void)i; return -1; }
+int  video_n_audio(void) { return nAudio; }
+int  video_n_legenda(void) { return nLeg; }
+const VideoFaixa *video_audio(int i) { return (i >= 0 && i < nAudio) ? &faixaAudio[i] : 0; }
+const VideoFaixa *video_legenda(int i) { return (i >= 0 && i < nLeg) ? &faixaLeg[i] : 0; }
+int  video_legenda_ordinal_mkv(int i) { return (i >= 0 && i < nLeg) ? faixaLeg[i].ordinalMkv : -1; }
 int  video_mkv_sondado(void) { return 2; }
 void video_sondar_mkv_agora(void) {}
-int  video_audio_atual(void) { return 0; }
-int  video_legenda_atual(void) { return -1; }
-void video_escolher_audio(int i) { (void)i; }
-void video_escolher_legenda(int i) { (void)i; }
-int  video_legenda_nativa(char *d, int t) { (void)t; if (d) d[0] = 0; return 0; }
+int  video_audio_atual(void) { return audioAtual; }
+int  video_legenda_atual(void) { return legAtual; }
+void video_escolher_audio(int i) {
+  if (i < 0 || i >= nAudio) return;
+  audioAtual = i;
+  if (hEscolher) hEscolher(0, faixaAudio[i].numero);
+}
+void video_escolher_legenda(int i) {
+  if (i >= nLeg) return;
+  legAtual = i;
+  if (travaLeg) { SDL_LockMutex(travaLeg); legTexto[0] = 0; legAte = 0; SDL_UnlockMutex(travaLeg); }
+  if (i >= 0 && hEscolher) hEscolher(1, faixaLeg[i].numero);
+}
+int  video_legenda_nativa(char *d, int t) {
+  if (!d || t < 2) return 0;
+  d[0] = 0;
+  if (!ativo || legAtual < 0 || !travaLeg) return 0;
+  SDL_LockMutex(travaLeg);
+  if (legTexto[0] && (Sint32)(legAte - SDL_GetTicks()) > 0) snprintf(d, (size_t)t, "%s", legTexto);
+  SDL_UnlockMutex(travaLeg);
+  return d[0] != 0;
+}
 void video_legenda_externa(const char *u) { (void)u; }
-void video_legenda_estilo(const VideoLegendaEstilo *e) { (void)e; }
+// O atraso do estilo vale para a embutida (o player desloca o evento).
+void video_legenda_estilo(const VideoLegendaEstilo *e) { if (e && hEscolher) hEscolher(2, e->atrasoMs); }
 int  video_tem_atmos(void) { return 0; }
 int  video_tem_dolby_vision(void) { return 0; }
 const char *video_hdr(void) { return "none"; }

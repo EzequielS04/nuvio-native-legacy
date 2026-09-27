@@ -13,6 +13,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../Program.cs" />
+    <Compile Include="../Video.cs" />
 
   </ItemGroup>
 </Project>

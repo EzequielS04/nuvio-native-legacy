@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 static void salvar(void) {
   static unsigned char buf[1920 * 1080 * 4];
@@ -28,6 +29,7 @@ int main(int argc, char **argv) {
   int (*iniciar)(const char *, const char *, int, int) = dlsym(h, "nv_tpk_iniciar");
   int (*quadro)(void) = dlsym(h, "nv_tpk_quadro");
   void (*tecla)(const char *, int) = dlsym(h, "nv_tpk_tecla");
+  void (*config)(int, int) = dlsym(h, "nv_tpk_config");
   if (!iniciar || !quadro || !tecla) { printf("simbolos faltando\n"); return 1; }
 
   printf("host: dlopen ok\n");
@@ -47,20 +49,25 @@ int main(int argc, char **argv) {
   if (!eglMakeCurrent(d, s, s, x)) { printf("makecurrent falhou\n"); return 1; }
   printf("host: GL %s\n", glGetString(GL_RENDERER));
 
+  if (config) config(50, 0);   // o mesmo do GLWindow API9+ e da TVGLApplication
   if (iniciar("/work/tizen-tpk/NuvioTpk60/res/art", "/tmp/dados", 1920, 1080) != 0) { printf("iniciar falhou\n"); return 1; }
   struct timespec t0, t1; clock_gettime(CLOCK_MONOTONIC, &t0);
-  int i;
-  for (i = 0; i < quadros; i++) {
-    if (!quadro()) { printf("host: app pediu para sair no quadro %d\n", i); break; }
-    if (i == quadros / 2) { tecla("Down", 1); tecla("Down", 0); }
-    if (i == quadros - 3) salvar();
+  int i, trocas = 0, pulos = 0;
+  for (i = 0; trocas < quadros; i++) {
+    int r = quadro();
+    if (r < 0) { printf("host: app pediu para sair no quadro %d\n", i); break; }
+    if (r == 0) { pulos++; if (i > quadros * 50) break; usleep(16000); continue; }
+    trocas++;
+    if (trocas == quadros / 2) { tecla("Down", 1); tecla("Down", 0); }
+    if (trocas == quadros - 3) salvar();
     eglSwapBuffers(d, s);
   }
   clock_gettime(CLOCK_MONOTONIC, &t1);
   double seg = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
   unsigned char px[4] = {0};
   glReadPixels(960, 540, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
-  printf("host: %d quadros em %.1f s; pixel central %d,%d,%d,%d\n", i, seg, px[0], px[1], px[2], px[3]);
+  printf("host: %d trocas, %d pulos; ", trocas, pulos);
+  printf("host: %d chamadas em %.1f s; pixel central %d,%d,%d,%d\n", i, seg, px[0], px[1], px[2], px[3]);
 
   return 0;
 }

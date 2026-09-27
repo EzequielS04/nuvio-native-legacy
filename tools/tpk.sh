@@ -66,7 +66,7 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" \
   gcc -shared -o /work/build/tpk/libnuvio.so /tmp/o/*.o -Wl,--no-undefined \
     -Wl,-soname,libnuvio.so -Wl,--exclude-libs,ALL \
     -L/deps/lib -lSDL2_ttf -lSDL2_image -lSDL2 /usr/lib/arm-linux-gnueabi/libz.a \
-    -lGLESv2 -lEGL -ldl -lpthread -lm -lrt
+    -lGLESv2 -ldl -lpthread -lm -lrt
   echo "  $(ls -la /work/build/tpk/libnuvio.so | awk "{print \$5}") bytes"
   objdump -T /work/build/tpk/libnuvio.so | grep -oE "GLIBC_[0-9.]+" | sort -uV | tail -1 | sed "s/^/  glibc minima: /"
   objdump -p /work/build/tpk/libnuvio.so | grep NEEDED

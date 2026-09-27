@@ -603,6 +603,11 @@ int main(int argc, char **argv) {
   }
 #endif
   SDL_GLContext ctx = SDL_GL_CreateContext(win);
+#ifdef NV_TPK
+  // Sem GL (Tizen 4/5 sem superficie) nao ha o que desenhar; sai e o host
+  // mostra o motivo (nv_tpk_erro).
+  if (!ctx) { printf("[tpk] sem contexto GL, saindo\n"); SDL_Quit(); return 2; }
+#endif
   // O cursor do Magic Remote e desenhado pelo app (ponteiro.c). Depois do
   // contexto: o log de arranque dele le a janela corrente.
   ponteiro_iniciar();
