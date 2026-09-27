@@ -291,6 +291,24 @@ int main(void) {
     assert(eps2[0].nota == 0); }
   puts("ok  nota TMDB por episodio casa numero/temporada e ignora o que falta");
 
+  // 8b. #150: a sinopse no idioma pedido entra; vazia deixa a do Cinemeta.
+  { CatEp e3[2];
+    const char *json =
+      "{\"episodes\":["
+      "{\"episode_number\":1,\"overview\":\"Walter descobre o c\\u00e2ncer.\"},"
+      "{\"episode_number\":2,\"overview\":\"\"}]}";
+    memset(e3, 0, sizeof e3);
+    e3[0].temporada = 1; e3[0].episodio = 1;
+    snprintf(e3[0].sinopse, sizeof e3[0].sinopse, "Walter learns he has cancer.");
+    e3[1].temporada = 1; e3[1].episodio = 2;
+    snprintf(e3[1].sinopse, sizeof e3[1].sinopse, "English only.");
+    assert(desc_tmdb_notas_temporada(json, e3, 2, 1) == 1);
+    assert(!strcmp(e3[0].sinopse, "Walter descobre o c\xc3\xa2ncer."));
+    assert(!strcmp(e3[1].sinopse, "English only."));
+    // Mesma resposta de novo: nada muda, nada conta.
+    assert(desc_tmdb_notas_temporada(json, e3, 2, 1) == 0); }
+  puts("ok  sinopse TMDB no idioma pedido; vazia mantem a do addon (#150)");
+
   // 9. #153: o elenco do TMDB casa POR NOME. A ordem das duas bases difere
   //    (o caso da foto: Tremblay e Woodley trocados), a grafia tambem (acento,
   //    caixa, ponto), e nome sem par nao ganha o rosto de ninguem.

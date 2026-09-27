@@ -3802,7 +3802,7 @@ static void metaCacheGuardar(const char *id, const char *corpo) {
 // episode_number e vote_average (0..10). Funcao PURA, chamada tambem pelo
 // teste (tests/cateps.c): casa por numero e so escreve nos eps da temporada
 // pedida; voto ausente ou zero deixa nota=0, que na tela simplesmente nao
-// desenha selo. Devolve quantos episodios ganharam nota.
+// desenha selo. Devolve quantos episodios ganharam nota ou sinopse (#150).
 // ELENCO DO TMDB CASADO POR NOME (#153). Aqui era por POSICAO: foto, papel e
 // id da N-esima entrada do TMDB iam para o N-esimo nome do Cinemeta, na
 // suposicao de que as duas bases ordenam o elenco igual. Nao ordenam: na foto
@@ -3910,7 +3910,21 @@ int desc_tmdb_notas_temporada(const char *json, CatEp *eps, int n,
       for (i = 0; i < n; i++)
         if (eps[i].temporada == temporada && eps[i].episodio == num) {
           double v = js_num(p, f, "vote_average", 0.0);
-          if (v > 0.0) { eps[i].nota = (int)(v * 10.0 + 0.5); feitos++; }
+          char sin[sizeof eps[i].sinopse];
+          int mudou = 0;
+          if (v > 0.0) { eps[i].nota = (int)(v * 10.0 + 0.5); mudou = 1; }
+          // SINOPSE NO IDIOMA ESCOLHIDO (#150). O pedido ja vai com
+          // language=desc_tmdb_idioma(), e o `overview` vinha sendo jogado
+          // fora: a sinopse da fileira era a do Cinemeta, sempre em ingles.
+          // Vazio (o TMDB sem traducao) deixa a que ja estava. O NOME do
+          // episodio fica de fora de proposito: sem traducao o TMDB devolve
+          // "Episódio 3", pior que o titulo original.
+          if (js_texto(p, f, "overview", sin, sizeof sin) && sin[0] &&
+              strcmp(sin, eps[i].sinopse)) {
+            snprintf(eps[i].sinopse, sizeof eps[i].sinopse, "%s", sin);
+            mudou = 1;
+          }
+          feitos += mudou;
           break;
         }
     }
@@ -4221,7 +4235,7 @@ static void *buscarEps(void *u) {
             }
             if (preenchidas > 0) {
               cat_definir_episodios(alvoItem, tmp, neps);
-              printf("[desc] %s: notas TMDB em %d episodios\n",
+              printf("[desc] %s: nota/sinopse TMDB em %d episodios\n",
                      edit.titulo, preenchidas);
               fflush(stdout);
             }
