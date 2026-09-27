@@ -136,6 +136,7 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
       posMs: 0,
       // #147: relogios das leituras sincronas do "estado" (ver la).
       durMs: 0, tDur: 0, tEvento: 0, tSeek: 0, tLento: 0,
+      tPos: 0,           // quando posMs foi lido (evento ou getCurrentTime)
       erro: "",
       fim: 0,
       bufPct: 0,
@@ -206,7 +207,7 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
         oncurrentplaytime:   function (ms) {
           if (S.geracao !== geracao) return;
           S.posMs = +ms || 0;
-          S.tEvento = Date.now();
+          S.tEvento = S.tPos = Date.now();
         },
         onerror:             function (e) {
           if (S.geracao !== geracao) return;
@@ -263,7 +264,7 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
     // "abrir -> sair -> abrir" que o caminho da LG ja tinha.
     try { if (S.aberto) { p.stop(); p.close(); } } catch (e) {}
     S.aberto = 0; S.tocando = 0; S.pronto = 0; S.posMs = 0;
-    S.durMs = 0; S.tDur = 0; S.tEvento = 0; S.tSeek = 0;
+    S.durMs = 0; S.tDur = 0; S.tEvento = 0; S.tSeek = 0; S.tPos = 0;
     S.erro = ""; S.fim = 0; S.bufPct = 0; S.larg = 0; S.alt = 0;
     S.trilhas = null;   // titulo novo: a lista de faixas do titulo anterior nao vale
     S.legTxt = ""; S.legAte = 0; S.legN = 0;
@@ -359,7 +360,7 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
   if (op === "parar") {
     var p2 = pl();
     ++S.geracao;
-    S.tocando = 0; S.pronto = 0; S.fim = 0; S.posMs = 0;
+    S.tocando = 0; S.pronto = 0; S.fim = 0; S.posMs = 0; S.tPos = 0;
     S.trilhas = null; S.legTxt = ""; S.legAte = 0;
     if (!p2 || !S.aberto) { S.aberto = 0; return 0; }
     S.aberto = 0;
@@ -449,15 +450,19 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
       //   - a duracao nao muda num VOD: relida a cada 5 s (1 s enquanto for 0,
       //     que e o caso do canal ao vivo);
       //   - a posicao chega pelo oncurrentplaytime; getCurrentTime so cobre o
-      //     instante logo apos um seek, ou o evento sumido por mais de 1 s.
+      //     instante logo apos um seek, ou o evento sumido por mais de 1 s
+      //     (e ai no maximo 4 vezes por segundo).
       var agora = Date.now(), t0 = agora, gasto;
       if (agora - S.tDur > (S.durMs > 0 ? 5000 : 1000)) {
         S.tDur = agora;
         try { S.durMs = +p6.getDuration() || 0; } catch (e) {}
       }
       dur = S.durMs / 1000.0;
-      if (agora - S.tSeek < 1500 || agora - S.tEvento > 1000) {
-        try { var t = +p6.getCurrentTime(); if (t >= 0) S.posMs = t; } catch (e) {}
+      // Reserva (evento sumido: pausa, buffering, firmware que nao manda) no
+      // maximo a cada 250 ms; logo depois de um seek, todo quadro.
+      if (agora - S.tSeek < 1500 ||
+          (agora - S.tEvento > 1000 && agora - S.tPos >= 250)) {
+        try { var t = +p6.getCurrentTime(); if (t >= 0) { S.posMs = t; S.tPos = agora; } } catch (e) {}
       }
       gasto = Date.now() - t0;
       if (gasto > 20 && agora - S.tLento > 10000) {
@@ -466,7 +471,15 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
       }
     }
     var o = dst >> 3;
-    HEAPF64[o + 0] = S.posMs / 1000.0;
+    // A POSICAO ANDA ENTRE DOIS EVENTOS. Sem getCurrentTime por quadro, posMs
+    // so muda quando o oncurrentplaytime chega; a legenda externa (desenhada
+    // pelo C a partir desta posicao) andaria aos saltos. Tocando, soma o tempo
+    // desde a ultima leitura, ate 1 s — mais que isso e evento sumido, e ai o
+    // getCurrentTime acima ja voltou a ler.
+    var desde = (S.tocando && S.tPos) ? Date.now() - S.tPos : 0;
+    if (desde < 0) desde = 0;
+    if (desde > 1000) desde = 1000;
+    HEAPF64[o + 0] = (S.posMs + desde) / 1000.0;
     HEAPF64[o + 1] = dur;
     HEAPF64[o + 2] = S.tocando ? 1 : 0;
     HEAPF64[o + 3] = S.pronto ? 1 : 0;
