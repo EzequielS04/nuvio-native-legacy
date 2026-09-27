@@ -2150,8 +2150,27 @@ static void corLegenda(int i,int *r,int *g,int *b){
 // O \pos vem em PlayResX/PlayResY do cabecalho e vira pixel de tela por regra
 // de tres. A ancora ASS e a do libass: 1-3 base, 4-6 meio, 7-9 topo; 1/4/7
 // esquerda, 2/5/8 centro, 3/6/9 direita.
-typedef struct { TxtLinha cor[4], borda[4]; int n; float w, h; } LegBloco;
+#define PLR_LEG_LINHAS 6
+#define PLR_LEG_LARG   1660.0f
+typedef struct { TxtLinha cor[PLR_LEG_LINHAS], borda[PLR_LEG_LINHAS]; int n; float w, h; } LegBloco;
 
+static void blocoLinha(LegBloco *bl, TxtEstilo est, const char *linha, int r, int g, int b,
+                       TxtFamilia fam, int enf) {
+  if (bl->n >= PLR_LEG_LINHAS) return;
+  bl->cor[bl->n]   = txt_linha_corta_enfase(est, linha, r, g, b, 255, PLR_LEG_LARG, fam, enf);
+  bl->borda[bl->n] = legEstilo.borda ? txt_linha_corta_enfase(est, linha, 0, 0, 0, 255, PLR_LEG_LARG, fam, enf) : (TxtLinha){0};
+  if (bl->cor[bl->n].w > bl->w) bl->w = bl->cor[bl->n].w;
+  bl->h += bl->cor[bl->n].h + (bl->n ? 5 : 0);
+  bl->n++;
+}
+
+// QUEBRA POR PALAVRA (#156). Cada linha do arquivo ia inteira para o corte com
+// reticencias: uma fala longa numa linha so (comum em SRT externo, que nao
+// quebra) virava "... ele disse que…" e o resto da fala sumia. Agora a linha
+// quebra onde passa da largura, como o player do sistema faz com a legenda
+// embutida. O \n do arquivo continua sendo quebra dura. Medir cada tentativa
+// rasteriza, como em txt_bloco; o cache de linhas do text.c devolve as mesmas
+// no quadro seguinte.
 static void montarBloco(const LegendaCue *c, TxtEstilo est, int r, int g, int b, LegBloco *bl) {
   char texto[768], *linha, *salva;
   TxtFamilia fam = (TxtFamilia)legEstilo.familia;
@@ -2159,12 +2178,21 @@ static void montarBloco(const LegendaCue *c, TxtEstilo est, int r, int g, int b,
   bl->n = 0; bl->w = 0; bl->h = 0;
   snprintf(texto, sizeof texto, "%s", c->texto);
   linha = strtok_r(texto, "\n", &salva);
-  while (linha && bl->n < 4) {
-    bl->cor[bl->n]   = txt_linha_corta_enfase(est, linha, r, g, b, 255, 1660, fam, enf);
-    bl->borda[bl->n] = legEstilo.borda ? txt_linha_corta_enfase(est, linha, 0, 0, 0, 255, 1660, fam, enf) : (TxtLinha){0};
-    if (bl->cor[bl->n].w > bl->w) bl->w = bl->cor[bl->n].w;
-    bl->h += bl->cor[bl->n].h + (bl->n ? 5 : 0);
-    bl->n++; linha = strtok_r(NULL, "\n", &salva);
+  while (linha && bl->n < PLR_LEG_LINHAS) {
+    char atual[768] = "", tent[768];
+    char *palavra, *sp;
+    for (palavra = strtok_r(linha, " ", &sp); palavra; palavra = strtok_r(NULL, " ", &sp)) {
+      snprintf(tent, sizeof tent, "%s%s%s", atual, atual[0] ? " " : "", palavra);
+      if (atual[0] &&
+          txt_linha_corta_enfase(est, tent, r, g, b, 255, 1e9f, fam, enf).w > PLR_LEG_LARG) {
+        blocoLinha(bl, est, atual, r, g, b, fam, enf);
+        snprintf(atual, sizeof atual, "%s", palavra);
+      } else {
+        snprintf(atual, sizeof atual, "%s", tent);
+      }
+    }
+    if (atual[0]) blocoLinha(bl, est, atual, r, g, b, fam, enf);
+    linha = strtok_r(NULL, "\n", &salva);
   }
 }
 

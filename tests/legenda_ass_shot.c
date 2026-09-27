@@ -156,6 +156,19 @@ int main(int argc, char **argv) {
     player_leg_estilo_tocou(PLR_LEG_NADA);
     snprintf(nome, sizeof nome, "%s-en.bmp", saida); captura(nome, w);
   }
+  // #156: fala LONGA numa linha so (o SRT externo nao quebra). Tem de sair em
+  // duas ou tres linhas inteiras, sem reticencias.
+  { static const char *ASS_LONGA =
+      "[Script Info]\nScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\n\n"
+      "[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+      "Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1\n\n"
+      "[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+      "Dialogue: 0,0:00:30.00,0:05:00.00,Default,,0,0,0,,I told you a hundred times that we should never have come back to this house after what happened last winter, and now look at us, stuck here again with no way out\n";
+    char *c = strdup(ASS_LONGA);
+    legenda_definir_corpo(c); free(c);
+    *player_leg_estilo() = (VideoLegendaEstilo){ 120, 0, 0, 3, 1, 0, 0, TXT_FAMILIA_INTER };
+    player_leg_estilo_tocou(PLR_LEG_NADA);
+    snprintf(nome, sizeof nome, "%s-fala-longa.bmp", saida); captura(nome, w); }
   puts("legenda_ass_shot: ok");
   return 0;
 }
