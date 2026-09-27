@@ -449,7 +449,12 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Barra lateral moderna",      V_LIGA, 2),   // modernSidebar
   ESC("Desfoque da barra moderna",  V_LIGA, 2),   // modernSidebarBlur
   ESC("Mostrar destaque",           V_LIGA, 2),   // heroSectionEnabled
-  LER("Catálogos do destaque"),                   // heroCatalogKeys (contagem)
+  // #160: era LER com a CONTAGEM de heroCatalogKeys, e ninguem preenchia a
+  // contagem nem o destaque lia essas chaves: a linha dizia "Todos" para
+  // sempre e nao fazia nada. Agora mostra e troca a fonte real do destaque
+  // (fil_hero_fonte), a mesma da folha de fileiras. A chave continua "-":
+  // quem grava a escolha e fileiras.c.
+  ACAO("Catálogos do destaque"),                  // fil_hero_fonte
   ESC("Fundo da escolha de perfil", V_PS_FUNDO, 2), // local: ver psfundo.c
   ESC("Local do Descobrir",         V_DESCOBRIR, 3), // discoverLocation
   ESC("Rótulos nos pôsteres",       V_LIGA, 2),   // posterLabelsEnabled
@@ -1148,9 +1153,10 @@ static float velY = 0.0f;
 static float paginaA = 1.0f;   // entrada da pagina da categoria (0..1)
 static int sair = 0;
 
-// Quantos catalogos o destaque usa. 0 = todos, que e o que o web escreve como
-// "Todos" quando heroCatalogKeys esta vazio — e o caso do perfil do dono.
-static int heroCatalogos = 0;
+// Rotulo da fonte do destaque (fil_hero_fonte). Definida junto da folha de
+// fileiras, mais abaixo.
+static const char *heroFonteRotulo(void);
+static void heroFonteCiclar(int dir);
 
 static int lig(int op)  { return valor[op] == 0; }
 
@@ -2156,13 +2162,7 @@ static const char *textoLeitura(int op) {
     // linha e de leitura justamente porque nao ha teclado nesta tela.
     return extras_mdblist_tem_chave() ? i18n("definida") : i18n("ausente");
   }
-  if (op == AJ_HERO_CATALOGOS) {
-    // "Todos" com a lista vazia e o que o web escreve (common_all), e e o estado
-    // do perfil do dono. Um "0" ali leria como "nenhum", o oposto do que e.
-    if (heroCatalogos <= 0) return i18n("Todos");
-    snprintf(buf, sizeof buf, "%d", heroCatalogos);
-    return buf;
-  }
+  if (op == AJ_HERO_CATALOGOS) return heroFonteRotulo();
   if (op == AJ_ESPACO) {
     // CURTO O BASTANTE PARA CABER NA COLUNA: "201.0 MB em 209 imagens" era
     // cortado em "209..." na TV, e o numero que sobrava era o menos util. O
@@ -2343,7 +2343,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_RAIL_MODERNA: return "Troca a barra lateral pela versão nova, com ícones maiores. Ela ignora a escolha entre recolhida e fixa.";
     case AJ_RAIL_BLUR: return "Desfoca a arte atrás da barra lateral moderna em vez de usar um fundo sólido.";
     case AJ_HERO: return "O bloco grande no topo da Home, com a arte e o nome de um título em destaque.";
-    case AJ_HERO_CATALOGOS: return "Quantidade de catálogos incluídos no destaque. Esta linha é apenas informativa.";
+    case AJ_HERO_CATALOGOS: return "De onde vêm os títulos do destaque: os primeiros do catálogo, um sorteio, ou uma fileira da Home. OK troca.";
     case AJ_PS_FUNDO: return "A tela \"Quem está assistindo?\" mostra arte do catálogo atrás dos perfis. Desligado volta à tela lisa de antes.";
     case AJ_DESCOBRIR: return "Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.";
     case AJ_ROTULOS: return "Escreve o nome do título abaixo do cartaz. A maior parte da arte já traz o nome impresso.";
@@ -3034,6 +3034,7 @@ void ajustes_evento(const SDL_Event *e) {
     if (focoOp == AJ_ENVIAR_LOG) { avisos_enviar_registro_atual(); return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
     if (focoOp == AJ_DIAGNOSTICO) { pediuDiagnostico = 1; return; }
+    if (focoOp == AJ_HERO_CATALOGOS) { if (!inativa(focoOp)) heroFonteCiclar(+1); return; }
     if (focoOp == AJ_VELOCIDADE) { pediuVelocidade = 1; return; }
     if (focoOp == AJ_STALKER_PORTAL || focoOp == AJ_STALKER_MAC) {
       int mac = focoOp == AJ_STALKER_MAC;
