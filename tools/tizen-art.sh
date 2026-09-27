@@ -66,7 +66,14 @@ if find "$DESTINO" -name '*.webp' | grep -q .; then
   command -v sips >/dev/null || { echo "tizen-art.sh: sips ausente, nao da para converter webp" >&2; exit 1; }
   N=0
   for w in $(find "$DESTINO" -name '*.webp'); do
-    sips -s format png "$w" --out "${w%.webp}.png" >/dev/null 2>&1 || {
+    # BADGES NA ALTURA DE USO (#159). Os selos vem com 194 px de altura e sao
+    # desenhados com 28 no maximo (BADGE_H); no Tizen cada um custava ~300 ms
+    # de decode ("[tex] decode lento: 312 ms ... 663x194 (saiu 160x47)",
+    # registros 3595-3632) justo quando a folha de fontes abre. 64 px e ~2,3x
+    # a altura de desenho: continua nitido e decodifica ~9x menos pixels.
+    RED=""
+    case "$w" in */badges/*) RED="--resampleHeight 64" ;; esac
+    sips -s format png $RED "$w" --out "${w%.webp}.png" >/dev/null 2>&1 || {
       echo "tizen-art.sh: falhou convertendo $w" >&2; exit 1; }
     rm -f "$w"; N=$((N+1))
   done

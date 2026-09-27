@@ -887,7 +887,7 @@ static int lerCatalogo(const char *base, const char *tipo, const char *id,
 #define DECL_MAX 512
 // Quantos itens cada fileira mostra. A home desenha no maximo MAX_CARDS (12) e
 // buscar mais e trafego que ninguem ve.
-#define MAX_POR_FILEIRA 12
+#define MAX_POR_FILEIRA DESC_ITENS_POR_FILEIRA   // ver descoberta.h (#163)
 
 // filsMontadas = as janelas do bloco QUE ESTA PUBLICADO, e nada alem disso.
 // desc_remontar_fileiras republica este vetor por cima do bloco da tela sem
@@ -1775,7 +1775,9 @@ static void ordenarPorSnapshot(CatFileira *fil, int n) {
 static void preservarFileirasAusentes(CatItem **lote, int *n, int *cap,
                                        CatFileira *fil, int *nFil) {
   int r;
-  CatItem tmp[MAX_POR_FILEIRA];
+  // static pelo mesmo motivo do daLinhaAnterior de montar(): 24 CatItem sao
+  // ~375 KB, e o fio que monta tem 2 MB de pilha no Tizen. Um fio so chama.
+  static CatItem tmp[MAX_POR_FILEIRA];
   if (!lote || !*lote || !n || !cap || !fil || !nFil) return;
   for (r = 0; r < cat_n_fileiras() && *nFil < CAT_FIL_MAX; r++) {
     const CatFileira *old = cat_fileira(r);
@@ -1835,8 +1837,11 @@ static void *fioCatalogo(void *u) {
     t->inicioMs = descAgoraMs();
     pthread_mutex_unlock(&catTrava);
 
-    got = lerCatalogo(t->base, t->tipo, t->id, t->itens,
-                      MAX_POR_FILEIRA, MAX_POR_FILEIRA, &respondeu);
+    // QUANTOS e o ajuste (12/18/24, #163); o balde tem sempre o teto.
+    { int q = ajustes_itens_fileira();
+      if (q > MAX_POR_FILEIRA) q = MAX_POR_FILEIRA;
+      got = lerCatalogo(t->base, t->tipo, t->id, t->itens,
+                        MAX_POR_FILEIRA, q, &respondeu); }
 
     pthread_mutex_lock(&catTrava);
     t->n = got;
@@ -3136,7 +3141,7 @@ static void *montar(void *u) {
             const CatItem *origem = tarefas[k].itens;
             // Rascunho de quem monta para a linha anterior de um catalogo
             // LARGADO: o balde dele ainda e do fio, que pode escrever nele.
-            // static: 12 CatItem passam de 190 KB, e montar() roda num fio so.
+            // static: MAX_POR_FILEIRA CatItem passam de 370 KB, e montar() roda num fio so.
             static CatItem daLinhaAnterior[MAX_POR_FILEIRA];
             for (;;) {
               int pr;

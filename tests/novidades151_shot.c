@@ -86,7 +86,7 @@ static void regras(void) {
   tecla(SDLK_ESCAPE); assert(!novidades151_aberto());
   assert(novidades151_pedido() == N151_PEDIU_NADA);
   assert(novidades151_pedido() == N151_PEDIU_NADA);
-  char *marca = dados_ler("novidades-151-ui.txt");
+  char *marca = dados_ler("novidades-152-ui.txt");
   assert(marca != NULL);
   free(marca);
   novidades151_primeira_vez(); assert(!novidades151_aberto());
@@ -99,6 +99,21 @@ static void regras(void) {
   tecla(SDLK_RIGHT); assert(novidades151_aberto()); esperarCena(500);
   unsigned long long c2 = capturarCena("assert-cena-2.png");
   assert(c0 != c1 && c1 != c2 && c0 != c2);
+  // As tres cenas da 1.5.2 (barra lateral, trailer, correcoes) tambem sao
+  // distintas entre si e das anteriores, e a sexta volta para a primeira.
+  { unsigned long long h[3]; int i, j;
+    for (i = 0; i < 3; i++) {
+      char nome[40];
+      tecla(SDLK_RIGHT); assert(novidades151_aberto()); esperarCena(500);
+      snprintf(nome, sizeof nome, "assert-cena-%d.png", 3 + i);
+      h[i] = capturarCena(nome);
+      assert(h[i] != c0 && h[i] != c1 && h[i] != c2);
+      for (j = 0; j < i; j++) assert(h[i] != h[j]);
+    }
+    // A cena 0 anima (o foco passeia entre as fontes), entao o quadro de volta
+    // nao repete o hash do primeiro: basta ter saido da sexta.
+    tecla(SDLK_RIGHT); esperarCena(500);
+    assert(capturarCena("assert-cena-volta.png") != h[2]); }
 
   // CTA Explorar fecha e seu pedido é consumido exatamente uma vez.
   tecla(SDLK_RETURN); assert(!novidades151_aberto());
@@ -111,14 +126,14 @@ static void regras(void) {
   assert(novidades151_pedido() == N151_PEDIU_NADA);
   novidades151_abrir(); tecla(SDLK_ESCAPE);
   assert(!novidades151_aberto() && novidades151_pedido() == N151_PEDIU_NADA);
-  puts("PASS: primeira vez, Back, cenas e CTAs da 1.5.1");
+  puts("PASS: primeira vez, Back, cenas e CTAs da 1.5.2");
 }
 
 static void capturasIdioma(int ingles, int reduzidas, const char *tag) {
   char nome[128];
   ajustesDeTeste(ingles, reduzidas);
   novidades151_abrir();
-  for (int cena = 0; cena < 3; cena++) {
+  for (int cena = 0; cena < 6; cena++) {
     if (cena) { tecla(SDLK_RIGHT); esperarCena(500); }
     snprintf(nome, sizeof nome, "cena%d-%s.png", cena, tag);
     capturarCena(nome);

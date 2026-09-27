@@ -72,6 +72,7 @@ int player_aberto(void);
 // vetor — o card nunca acendia ao receber foco e a memoria do vizinho era
 // corrompida em silencio.
 #define MAX_CARDS 33
+_Static_assert(DESC_ITENS_POR_FILEIRA <= MAX_CARDS - 1, "itens por fileira + Ver tudo cabem em MAX_CARDS");
 // A faixa editorial precisa de uma terceira alternativa para não terminar
 // visualmente depois de apenas dois cards. Quando o catálogo que virou
 // destaque entrega menos que isso, completamos com títulos já publicados no
@@ -584,6 +585,14 @@ static void desenhaPlaceholderHero(GfxRect r, const CatItem *item, float alpha,
                                    int esperando) {
   GfxRect bloco = { r.x + r.w * 0.58f, r.y + 32.0f,
                     r.w * 0.34f, r.h - 64.0f };
+  // A CAMINHO, NADA (#164). O bloco "Carregando arte…" entrava a cada troca
+  // de foco em que a arte passava do prazo — na Samsung o decode de uma arte
+  // de destaque leva 300-900 ms, entao era quase toda troca — e o bloco
+  // aparecendo e sumindo lia como um piscar. O que o #21 exige continua: a
+  // arte do titulo ANTERIOR ja saiu (heroSai), nada falso fica na tela. So
+  // nao ha mais um cartao por cima do vazio; a arte nova entra quando chegar.
+  // "Arte indisponível" (titulo sem arte nenhuma) continua sendo desenhado.
+  if (esperando) return;
   gfx_cor(bloco, 0.035f, 0.075f, 0.082f, 0.098f, alpha * 0.92f);
   { TxtLinha t = txt_linha(TXT_HERO_META,
                             esperando ? "Carregando arte…" : "Arte indisponível",
@@ -1624,7 +1633,12 @@ static void sincronizarFileiras(void) {
     }
     // MAX_CARDS - 1: a ultima coluna e do card "Ver tudo". Sem reservar, uma
     // fileira cheia empurraria o card para fora do vetor de animacao.
-    fileiras[destino].n   = cf->n > 12 ? 12 : cf->n;
+    // "Itens por fileira" (#163), no maximo DESC_ITENS_POR_FILEIRA, que tem de
+    // caber em MAX_CARDS - 1. Diminuir vale na hora (corta aqui); aumentar,
+    // quando os catalogos forem pedidos de novo.
+    { int teto = ajustes_itens_fileira();
+      if (teto > DESC_ITENS_POR_FILEIRA) teto = DESC_ITENS_POR_FILEIRA;
+      fileiras[destino].n = cf->n > teto ? teto : cf->n; }
     // UMA COLUNA A MAIS: o card "Ver tudo" no fim. So em fileira que veio de um
     // CATALOGO de addon — "Continuar assistindo" e as listas do Trakt nao tem
     // continuacao para pedir (o base fica vazio nelas).
@@ -3053,7 +3067,19 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
   int pronto;
   Uint32 decorrido;
   if (!trailer_suportado()) return;
-  pronto = topo && focoHero && ajustes_hero_ligado() && ajustes_trailer_hero() &&
+  // DUAS PORTAS PARA O MESMO TRAILER. Com o foco no destaque, "Trailer no
+  // destaque". Com o foco num CARTAZ das fileiras (#124: "parado num titulo do
+  // catalogo, nada toca"), "Trailer do cartaz em foco" — o
+  // focusedPosterBackdropTrailerEnabled do web, destino hero_media: o destaque
+  // ja segue o card em repouso (heroAtual, ver "O HERO SEGUE O FOCO"), entao o
+  // trailer toca onde a arte dele ja esta. Espera o mesmo tempo da expansao do
+  // cartaz, contado de quando o foco parou nele.
+  { int noHero = focoHero && ajustes_hero_ligado() && ajustes_trailer_hero();
+    int noCartaz = !focoHero && ajustes_hero_ligado() && ajustes_trailer_cartaz() &&
+                   heroPendente == heroAtual &&
+                   agora - heroPendenteEm >= (Uint32)(ajustes_expandir_poster_atraso() * 1000.0f);
+    pronto = topo && (noHero || noCartaz); }
+  pronto = pronto &&
            heroDesejado < 0 && heroAtual >= 0 && heroEntra >= 0.999f && heroSai <= 0.001f &&
            !(foco.fileira >= 0 && foco.fileira < nFileiras &&
              (fileiras[foco.fileira].tipo == FILEIRA_CATALOGOS ||

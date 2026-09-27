@@ -69,6 +69,26 @@
 // Rotulos e ordem conferidos na referencia.
 static const char *ROTULOS[MENU_N] = { "Início", "Explorar", "Guia TV", "Busca", "Biblioteca", "Agenda", "Perfil e Stats", "Ajustes" };
 
+// ITEM ESCONDIDO (#162): Explorar, Guia, Agenda e Perfil somem da barra quando
+// desligados nos Ajustes. Inicio, Busca, Biblioteca e Ajustes ficam sempre —
+// sem os Ajustes nao haveria como trazer os outros de volta. Esconder so tira
+// a linha: desenho, alvos do ponteiro e setas pulam o item, e as linhas
+// visiveis continuam centralizadas na altura da tela.
+static int mostra(int i) {
+  switch (i) {
+    case MENU_EXPLORAR: return ajustes_menu_explorar();
+    case MENU_GUIA:     return ajustes_menu_guia();
+    case MENU_AGENDA:   return ajustes_menu_agenda();
+    case MENU_PERFIL:   return ajustes_menu_perfil();
+    default:            return 1;
+  }
+}
+static float topoLinhas(void) {
+  int i, n = 0;
+  for (i = 0; i < MENU_N; i++) n += mostra(i);
+  return (NV_TELA_H - n * NV_MENU_LINHA_H) * 0.5f;
+}
+
 // RODAPE: quem esta usando o app, e a porta para trocar. Ele e um item de
 // FOCO a mais, no indice MENU_N — nao entrou no enum de proposito, porque
 // trocar de perfil nao e uma aba do app e ninguem deve poder "navegar" para
@@ -134,10 +154,13 @@ static void ponteiroLinha(int i, int b) {
 }
 static void ponteiroFora(int a, int b) { (void)a; (void)b; menu_fechar(); }
 static void alvosDasLinhas(float x, float w) {
-  float y = (NV_TELA_H - MENU_N * NV_MENU_LINHA_H) * 0.5f;
+  float y = topoLinhas();
   if (!ponteiro_ativo()) return;
-  for (int i = 0; i < MENU_N; i++, y += NV_MENU_LINHA_H)
+  for (int i = 0; i < MENU_N; i++) {
+    if (!mostra(i)) continue;
     ponteiro_alvo(x, y, w, NV_MENU_LINHA_H, ponteiroLinha, NULL, i, 0);
+    y += NV_MENU_LINHA_H;
+  }
   ponteiro_alvo(x, NV_TELA_H - NV_MARGEM_Y - NV_MENU_RODAPE_H, w, NV_MENU_RODAPE_H,
                 ponteiroLinha, NULL, MENU_RODAPE, 0);
 }
@@ -147,8 +170,10 @@ static void desenhaRailFixa(void) {
   gfx_cor(painel, 0.0f, 0.055f, 0.058f, 0.064f, 1.0f);
   float sr, sg, sb;
   corFocoMenu(&sr, &sg, &sb);
-  float y = (NV_TELA_H - MENU_N * NV_MENU_LINHA_H) * 0.5f;
-  for (int i = 0; i < MENU_N; i++, y += NV_MENU_LINHA_H) {
+  float y = topoLinhas() - NV_MENU_LINHA_H;
+  for (int i = 0; i < MENU_N; i++) {
+    if (!mostra(i)) continue;
+    y += NV_MENU_LINHA_H;
     int atual = (i == destino);
     float lum = atual ? 0.94f : NV_MENU_INATIVO;
     if (atual) {
@@ -177,7 +202,7 @@ void menu_abrir(void) {
   // O destaque comeca sempre no destino em vigor, nunca onde ficou da ultima
   // vez: a barra e um mapa de onde voce esta, e abrir com o destaque em outro
   // item faria o usuario ler que ja mudou de tela.
-  linha = destino;
+  linha = mostra(destino) ? destino : MENU_INICIO;
   aberto = 1;
 }
 void menu_fechar(void) { aberto = 0; linha = destino; }
@@ -224,8 +249,15 @@ void menu_evento(const SDL_Event *e) {
   if (k == SDLK_RIGHT || k == SDLK_RETURN || k == SDLK_KP_ENTER) { escolher(); return; }
   // Sem rotacao nas pontas: a barra e curta e o usuario ve as quatro linhas de
   // uma vez, entao dar a volta no fim da lista le como falha, nao como atalho.
-  if (k == SDLK_DOWN && linha < NV_MENU_FOCOS - 1) linha++;
-  else if (k == SDLK_UP && linha > 0)       linha--;
+  if (k == SDLK_DOWN) {
+    int j = linha + 1;
+    while (j < MENU_N && !mostra(j)) j++;
+    if (j < NV_MENU_FOCOS) linha = j;
+  } else if (k == SDLK_UP) {
+    int j = linha - 1;
+    while (j >= 0 && !mostra(j)) j--;
+    if (j >= 0) linha = j;
+  }
   // ESQUERDA morre aqui de proposito: a barra ja e a borda da tela.
 }
 
@@ -391,8 +423,10 @@ void menu_desenhar(Uint32 agora) {
   // esta estreita, e ve-se a palavra aparecendo fora dela.
   gfx_recorte(px, 0, w, NV_TELA_H);
 
-  float y = (NV_TELA_H - MENU_N * NV_MENU_LINHA_H) * 0.5f;
-  for (int i = 0; i < MENU_N; i++, y += NV_MENU_LINHA_H) {
+  float y = topoLinhas() - NV_MENU_LINHA_H;
+  for (int i = 0; i < MENU_N; i++) {
+    if (!mostra(i)) continue;
+    y += NV_MENU_LINHA_H;
     float f = animFoco[i];
     float cy = y + NV_MENU_LINHA_H * 0.5f;
 

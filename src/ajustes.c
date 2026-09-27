@@ -164,6 +164,15 @@ typedef enum {
   // "Teste de velocidade" de dentro dela exigia passar pela escolha do
   // objetivo so para chegar la.
   AJ_VELOCIDADE,
+  // ITENS DA BARRA LATERAL QUE SE ESCONDEM (#162: "nao uso Trakt nem TV ao
+  // vivo, nao quero Perfil e Stats nem o Guia"). NO FIM do enum de proposito:
+  // valor[] e CHAVE sao posicionais, e inserir no meio deslocaria o padrao de
+  // tudo o que vem depois (o defeito do #149).
+  AJ_MENU_EXPLORAR, AJ_MENU_GUIA, AJ_MENU_AGENDA, AJ_MENU_PERFIL,
+  // Trailer do cartaz em foco no destaque (#124). No fim pelo mesmo motivo.
+  AJ_FOCO_TRAILER,
+  // Itens por fileira da Home (#163). No fim pelo mesmo motivo.
+  AJ_ITENS_FILEIRA,
   // A fonte da interface é independente da família das legendas.
   AJ_FONTE_UI,
   AJ_N
@@ -236,6 +245,9 @@ static const char *V_CW[]        = { "Card", "Largo", "P\xc3\xb4ster" };
 static const char *V_CW_FONTE[]  = { "Ambas", "Conta Nuvio", "Trakt", "Simkl" };
 // `continueWatchingSortMode`, normalizado em normalizeContinueWatchingSortMode.
 static const char *V_CW_ORDEM[]  = { "Padrão", "Estilo streaming", "Separar futuros" };
+// Itens por fileira da Home (#163). O INDICE e o que fica gravado; o numero de
+// cada um esta em ajustes_itens_fileira. 24 e o teto de DESC_ITENS_POR_FILEIRA.
+static const char *V_ITENS_FIL[] = { "12", "18", "24" };
 // O que o toque curto de OK faz num card da retomada (issue #93): abre o
 // episodio direto no player, ou abre a pagina do titulo como sempre fez.
 // Local, como cwFonteLocal — o app oficial nao tem esta escolha.
@@ -454,7 +466,12 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Barra lateral moderna",      V_LIGA, 2),   // modernSidebar
   ESC("Desfoque da barra moderna",  V_LIGA, 2),   // modernSidebarBlur
   ESC("Mostrar destaque",           V_LIGA, 2),   // heroSectionEnabled
-  LER("Catálogos do destaque"),                   // heroCatalogKeys (contagem)
+  // #160: era LER com a CONTAGEM de heroCatalogKeys, e ninguem preenchia a
+  // contagem nem o destaque lia essas chaves: a linha dizia "Todos" para
+  // sempre e nao fazia nada. Agora mostra e troca a fonte real do destaque
+  // (fil_hero_fonte), a mesma da folha de fileiras. A chave continua "-":
+  // quem grava a escolha e fileiras.c.
+  ACAO("Catálogos do destaque"),                  // fil_hero_fonte
   ESC("Fundo da escolha de perfil", V_PS_FUNDO, 2), // local: ver psfundo.c
   ESC("Local do Descobrir",         V_DESCOBRIR, 3), // discoverLocation
   ESC("Rótulos nos pôsteres",       V_LIGA, 2),   // posterLabelsEnabled
@@ -593,6 +610,12 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Chave do fanart.tv"),
   ACAO("Diagnóstico e otimização"),
   ACAO("Teste de velocidade"),
+  ESC("Explorar na barra lateral",       V_LIGA, 2),   // local: menuExplorarLocal
+  ESC("Guia TV na barra lateral",        V_LIGA, 2),   // local: menuGuiaLocal
+  ESC("Agenda na barra lateral",         V_LIGA, 2),   // local: menuAgendaLocal
+  ESC("Perfil e Stats na barra lateral", V_LIGA, 2),   // local: menuPerfilLocal
+  ESC("Trailer do cartaz em foco",       V_LIGA, 2),   // focusedPosterBackdropTrailerEnabled
+  ESC("Itens por fileira",               V_ITENS_FIL, 3), // local: itensFileiraLocal
   ESC("Fonte da interface", V_FONTE_UI, 6),
 };
 
@@ -697,6 +720,11 @@ static const char *CHAVE[] = {
   "-fanartChave",
   "-diagnostico",
   "-velocidade",
+  // Locais e SEM o "-": sobrevivem ao fechamento, e o web nao tem a escolha.
+  "menuExplorarLocal", "menuGuiaLocal", "menuAgendaLocal", "menuPerfilLocal",
+  // A MESMA chave do web (layoutPreferences), entao segue a conta.
+  "focusedPosterBackdropTrailerEnabled",
+  "itensFileiraLocal",
   "fonteInterface",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
@@ -784,8 +812,10 @@ static const Item TELA[] = {
       OPC(AJ_LANDSCAPE), OPC(AJ_HERO_CHEIO), OPC(AJ_HERO_FUNDO),
       OPC(AJ_HERO_ARTE_DIF), OPC(AJ_HERO_TRAILER),
     GRP("Conteúdo da Home", "Controle o que aparece na home e na busca.", "aj_rows-3"),
-      OPC(AJ_FIL_LIMITE), OPC(AJ_FIL_ORDEM),
+      OPC(AJ_FIL_LIMITE), OPC(AJ_ITENS_FILEIRA), OPC(AJ_FIL_ORDEM),
       OPC(AJ_RAIL), OPC(AJ_RAIL_MODERNA), OPC(AJ_RAIL_BLUR),
+      OPC(AJ_MENU_EXPLORAR), OPC(AJ_MENU_GUIA), OPC(AJ_MENU_AGENDA),
+      OPC(AJ_MENU_PERFIL),
       OPC(AJ_HERO), OPC(AJ_HERO_CATALOGOS), OPC(AJ_DESCOBRIR),
       OPC(AJ_GRAD_CLASSICO), OPC(AJ_ROTULOS), OPC(AJ_NOME_ADDON),
       OPC(AJ_SUFIXO_TIPO), OPC(AJ_OCULTAR_NLANC), OPC(AJ_NOTAS_HOME),
@@ -799,7 +829,7 @@ static const Item TELA[] = {
       OPC(AJ_DET_DATA_CHEIA), OPC(AJ_DET_VEU), OPC(AJ_DET_TRAILER_AUTO),
       OPC(AJ_TRAILER_QUAL), OPC(AJ_TRAILER_ASPECTO), OPC(AJ_TRAILER_FONTE),
     GRP("Foco no pôster", "Defina o comportamento ao selecionar um título.", "aj_scan"),
-      OPC(AJ_EXPANDIR), OPC(AJ_EXPANDIR_ATRASO), OPC(AJ_BORDA_FOCO),
+      OPC(AJ_EXPANDIR), OPC(AJ_EXPANDIR_ATRASO), OPC(AJ_FOCO_TRAILER), OPC(AJ_BORDA_FOCO),
     GRP("Estilo dos cartões", "Largura, arredondamento e efeito de profundidade.", "aj_gallery-vertical-end"),
       OPC(AJ_LARGURA_DP), OPC(AJ_RAIO_DP),
       OPC(AJ_PROF), OPC(AJ_PROF_BORDA), OPC(AJ_PROF_BRILHO),
@@ -1081,6 +1111,9 @@ static int valor[] = {
   0,                /* chave do fanart.tv: acao (o valor mora em fanart.txt) */
   0,                /* diagnostico */
   0,                /* teste de velocidade: acao */
+  0, 0, 0, 0,       /* explorar, guia, agenda, perfil na barra lateral: ligados */
+  1,                /* trailer do cartaz em foco: desligado (DEFAULT do web) */
+  0,                /* itens por fileira: 12, como sempre foi (ver V_ITENS_FIL) */
   TXT_FAMILIA_INTER,/* fonte da interface: independente da legenda */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
@@ -1159,9 +1192,10 @@ static float velY = 0.0f;
 static float paginaA = 1.0f;   // entrada da pagina da categoria (0..1)
 static int sair = 0;
 
-// Quantos catalogos o destaque usa. 0 = todos, que e o que o web escreve como
-// "Todos" quando heroCatalogKeys esta vazio — e o caso do perfil do dono.
-static int heroCatalogos = 0;
+// Rotulo da fonte do destaque (fil_hero_fonte). Definida junto da folha de
+// fileiras, mais abaixo.
+static const char *heroFonteRotulo(void);
+static void heroFonteCiclar(int dir);
 
 static int lig(int op)  { return valor[op] == 0; }
 
@@ -1280,6 +1314,21 @@ int   ajustes_trailer_qualidade(void) { static const int t[] = { 0, 1080, 720, 4
 // Fonte do trailer: o TRF_* de trailerfonte.h. Fora da lista le Automatico.
 int   ajustes_trailer_fonte(void)     { int v = valor[AJ_TRAILER_FONTE]; return (v >= 0 && v < 4) ? v : 0; }
 int  ajustes_envio_auto(void)         { return lig(AJ_ENVIO_AUTO); }
+int  ajustes_menu_explorar(void)      { return lig(AJ_MENU_EXPLORAR); }
+int  ajustes_menu_guia(void)          { return lig(AJ_MENU_GUIA); }
+int  ajustes_menu_agenda(void)        { return lig(AJ_MENU_AGENDA); }
+int  ajustes_menu_perfil(void)        { return lig(AJ_MENU_PERFIL); }
+int  ajustes_itens_fileira(void) {
+  static const int N[] = { 12, 18, 24 };
+  int i = valor[AJ_ITENS_FILEIRA];
+  if (i < 0 || i >= (int)(sizeof N / sizeof *N)) i = 0;
+  return N[i];
+}
+int  ajustes_trailer_cartaz(void) {
+  // A MESMA dependencia de inativa(AJ_FOCO_TRAILER), escrita aqui porque
+  // inativa() vem bem mais abaixo no arquivo.
+  return lig(AJ_FOCO_TRAILER) && (lig(AJ_EXPANDIR) || valor[AJ_LANDSCAPE] == 0);
+}
 void ajustes_definir_envio_auto(int ligado) { valor[AJ_ENVIO_AUTO] = ligado ? 0 : 1; gravar(); }
 // ARTE DO DESTAQUE ESCOLHIDA PELO DIAGNOSTICO, e so depois de a pessoa ver a
 // proposta na tela e apertar OK no botao (diagnostico.c): nunca sozinho. Os
@@ -1817,6 +1866,8 @@ static int somenteDesteAparelho(int op) {
     // deste aparelho.
     case AJ_TRAILER_FONTE:
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
+    case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
+    case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
       return 1;
     default:
       return 0;
@@ -2172,13 +2223,7 @@ static const char *textoLeitura(int op) {
     // linha e de leitura justamente porque nao ha teclado nesta tela.
     return extras_mdblist_tem_chave() ? i18n("definida") : i18n("ausente");
   }
-  if (op == AJ_HERO_CATALOGOS) {
-    // "Todos" com a lista vazia e o que o web escreve (common_all), e e o estado
-    // do perfil do dono. Um "0" ali leria como "nenhum", o oposto do que e.
-    if (heroCatalogos <= 0) return i18n("Todos");
-    snprintf(buf, sizeof buf, "%d", heroCatalogos);
-    return buf;
-  }
+  if (op == AJ_HERO_CATALOGOS) return heroFonteRotulo();
   if (op == AJ_ESPACO) {
     // CURTO O BASTANTE PARA CABER NA COLUNA: "201.0 MB em 209 imagens" era
     // cortado em "209..." na TV, e o numero que sobrava era o menos util. O
@@ -2208,12 +2253,19 @@ static int inativa(int op) {
     case AJ_RAIL:         return ajustes_rail_moderna();
     case AJ_RAIL_BLUR:    return !ajustes_rail_moderna();
     case AJ_HERO_CATALOGOS: return !ajustes_hero_ligado();
+    // #162: o Descobrir do app web (navegar catalogos por tipo e genero) ainda
+    // nao existe nesta TV — o "Explorar" daqui e outra tela. A escolha vem e
+    // vai para a conta, mas aqui nao muda nada, e a linha tem de dizer isso.
+    case AJ_DESCOBRIR:    return 1;
     case AJ_CW_OK: case AJ_CW_FONTE:
     case AJ_CW_ESTILO: case AJ_CW_THUMB: case AJ_CW_FURTHEST:
     case AJ_CW_NAO_EXIBIDOS: case AJ_CW_ORDEM:
       return !ajustes_cw_ligado();
     case AJ_CW_BLUR_PROX: return !ajustes_cw_ligado() || !ajustes_cw_thumb_episodio();
     case AJ_EXPANDIR_ATRASO: return !ajustes_expandir_poster();
+    // Como no web (getFocusedPosterFlowConfig): o trailer do cartaz so existe
+    // com o cartaz expandindo ou com cartazes deitados.
+    case AJ_FOCO_TRAILER: return !ajustes_expandir_poster() && valor[AJ_LANDSCAPE] != 0;
     // Sem versao nova no GitHub nao ha o que atualizar: a linha continua
     // visivel e APAGADA, em vez de sumir — sumir mudaria a contagem de linhas
     // debaixo do dedo, que e a regra ja escrita para a tela de Layout.
@@ -2308,11 +2360,13 @@ static const char *ajudaOpcao(int op) {
     if (op == AJ_RAIL) return "Desative a barra lateral moderna para escolher entre recolhida e fixa.";
     if (op == AJ_RAIL_BLUR) return "Ative a barra lateral moderna para usar o desfoque.";
     if (op == AJ_HERO_CATALOGOS) return "Ative Mostrar destaque para exibir os catálogos no topo da Home.";
+    if (op == AJ_DESCOBRIR) return "A tela Descobrir do app web ainda não existe nesta TV. A escolha fica guardada na conta.";
     if (op >= AJ_CW_OK && op <= AJ_CW_ORDEM)
       return op == AJ_CW_BLUR_PROX && ajustes_cw_ligado()
         ? "Ative Miniatura do episódio para desfocar a imagem do próximo episódio."
         : "Ative Continuar assistindo para ajustar os cards de retomada.";
     if (op == AJ_EXPANDIR_ATRASO) return "Ative Expandir pôster ao focar para ajustar o tempo de espera.";
+    if (op == AJ_FOCO_TRAILER) return "Ative Expandir pôster ao focar, ou Pôsteres horizontais, para usar o trailer do cartaz em foco.";
     if (op > AJ_TMDB_LIGADO && op <= AJ_TMDB_CW)
       return "Ative TMDB para ajustar o que ele enriquece.";
     if (op > AJ_MDB_LIGADO && op <= AJ_MDB_MAL)
@@ -2354,12 +2408,13 @@ static const char *ajudaOpcao(int op) {
     case AJ_HERO_ARTE_DIF: return "Desligado: card, destaque e página do título mostram a mesma imagem. Ligado: o card fica com a arte do catálogo e o destaque usa outra foto — TMDB vira outro fundo do TMDB; em Automático, ou se a escolhida repetir o card, usa Apple TV, outro fundo do TMDB, fanart.tv, anime ou Trakt.";
     case AJ_HERO_TRAILER: return "Com o foco parado no destaque do topo, o trailer do título toca sem som no lugar da arte. Mover o foco volta para a arte.";
     case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis.";
+    case AJ_ITENS_FILEIRA: return "Quantos títulos cada fileira da Home mostra antes do Ver tudo. Mais itens usam mais memória: em TV com 1 GB de memória a Home pode ficar mais lenta ou fechar. Aumentar vale na próxima vez que o app abrir.";
     case AJ_FIL_ORDEM: return "Abre a lista de fileiras para reordenar, ligar, desligar e escolher o card de cada uma. É lá que dá para ver de onde cada fileira vem.";
     case AJ_RAIL: return "A barra de navegação da esquerda fica sempre aberta, ou recolhida até você ir até ela.";
     case AJ_RAIL_MODERNA: return "Troca a barra lateral pela versão nova, com ícones maiores. Ela ignora a escolha entre recolhida e fixa.";
     case AJ_RAIL_BLUR: return "Desfoca a arte atrás da barra lateral moderna em vez de usar um fundo sólido.";
     case AJ_HERO: return "O bloco grande no topo da Home, com a arte e o nome de um título em destaque.";
-    case AJ_HERO_CATALOGOS: return "Quantidade de catálogos incluídos no destaque. Esta linha é apenas informativa.";
+    case AJ_HERO_CATALOGOS: return "De onde vêm os títulos do destaque: os primeiros do catálogo, um sorteio, ou uma fileira da Home. OK troca.";
     case AJ_PS_FUNDO: return "A tela \"Quem está assistindo?\" mostra arte do catálogo atrás dos perfis. Desligado volta à tela lisa de antes.";
     case AJ_DESCOBRIR: return "Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.";
     case AJ_ROTULOS: return "Escreve o nome do título abaixo do cartaz. A maior parte da arte já traz o nome impresso.";
@@ -2408,6 +2463,7 @@ static const char *ajudaOpcao(int op) {
     // --- Posteres e cards
     case AJ_EXPANDIR: return "O cartaz em foco cresce e abre a arte deitada atrás dele depois de um instante parado.";
     case AJ_EXPANDIR_ATRASO: return "Quanto tempo o foco precisa ficar parado antes de o cartaz expandir.";
+    case AJ_FOCO_TRAILER: return "Com o foco parado num cartaz, o trailer toca sem som no lugar da arte do destaque, depois do mesmo tempo de espera da expansão.";
     case AJ_NAV_RAPIDA: return "Andar de lado numa fileira não espera a animação terminar. Serve para controle que repete rápido.";
     case AJ_BORDA_FOCO: return "O anel colorido que marca o cartaz em foco na Home. Desligado, o foco fica só pelo tamanho do cartaz.";
     case AJ_PROF: return "Dá relevo aos cartazes: borda iluminada e um reflexo que acompanha o foco.";
@@ -2441,6 +2497,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_ENVIAR_LOG: return "Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.";
     case AJ_ENVIO_AUTO: return "Ligado, o app manda o registro sozinho: o da sessão anterior ao abrir e o desta a cada minuto. Sem senhas nem chaves; serve para achar o que trava a Samsung. Desligue quando quiser.";
     case AJ_DIAGNOSTICO: return "Testa manifestos, fontes e artes dos addons, mede os tempos e aplica um perfil seguro de Qualidade ou Desempenho. O teste não marca títulos como assistidos.";
+    case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
+      return "Desligado, o item some da barra lateral. Nada é apagado: ligue de novo para ele voltar.";
     case AJ_VELOCIDADE: return "Mede a velocidade dos seus addons e das fontes nesta TV e diz até quantos GB por filme e por episódio tocam sem travar. Não muda nenhum ajuste.";
 
     // --- Integracoes
@@ -3053,6 +3111,7 @@ void ajustes_evento(const SDL_Event *e) {
     if (focoOp == AJ_ENVIAR_LOG) { avisos_enviar_registro_atual(); return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
     if (focoOp == AJ_DIAGNOSTICO) { pediuDiagnostico = 1; return; }
+    if (focoOp == AJ_HERO_CATALOGOS) { if (!inativa(focoOp)) heroFonteCiclar(+1); return; }
     if (focoOp == AJ_VELOCIDADE) { pediuVelocidade = 1; return; }
     if (focoOp == AJ_STALKER_PORTAL || focoOp == AJ_STALKER_MAC) {
       int mac = focoOp == AJ_STALKER_MAC;

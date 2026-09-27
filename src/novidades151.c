@@ -1,5 +1,8 @@
-// Cartao de novidades da 1.5.1. Tres cenas com amostras reais de tipografia
-// e desenhos simples dos novos paines de Ajustes.
+// Cartao de novidades da 1.5.2 (nasceu como 1.5.1, mas a 1.5.1 saiu antes
+// dele: nunca foi publicado com esse numero). Seis cenas: as tres primeiras com
+// amostras reais de tipografia e desenhos dos paineis de Ajustes; as tres
+// ultimas com o que entrou depois (barra lateral, trailer do cartaz em foco,
+// correcoes).
 #include "novidades151.h"
 #include "ajustes.h"
 #include "anim.h"
@@ -15,7 +18,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define N151_ARQ          "novidades-151-ui.txt"
+// Marca nova: quem ja viu o rascunho da 1.5.1 (a TV do dono) ve o da 1.5.2.
+#define N151_ARQ          "novidades-152-ui.txt"
 #define N151_W            1600.0f
 #define N151_H             880.0f
 #define N151_X            ((NV_TELA_W - N151_W) * 0.5f)
@@ -31,7 +35,7 @@
 #define N151_FECHAR_MS     150.0f
 #define N151_TRANSICAO_S     0.42f
 #define N151_CENA_S          6.2f
-#define N151_CENAS              3
+#define N151_CENAS              6
 
 enum { N151_AGORA = 0, N151_EXPLORAR = 1 };
 
@@ -41,12 +45,18 @@ static float entrada, transicao = 1.0f, relogioCena;
 
 typedef struct { const char *titulo, *descricao; } CenaTexto;
 static const CenaTexto TEXTOS[N151_CENAS] = {
-  { "Fontes para a interface e legendas",
-    "Inter, Montserrat, Roboto e Atkinson Hyperlegible Next para menus. A legenda mantém sua escolha no player." },
-  { "Prévia por categoria e opção",
-    "Veja como cada ajuste afeta pôsteres, detalhes e reprodução." },
-  { "Mais clareza em Ajustes",
-    "A ajuda visual acompanha o item em foco; sinopses longas terminam com reticências." }
+  { "Fonte da interface",
+    "Escolha entre Inter, Montserrat, Roboto e Atkinson Hyperlegible Next em Ajustes › Aparência. A fonte da legenda continua sendo definida no player." },
+  { "Prévia nos Ajustes",
+    "Ao lado de cada opção, uma prévia mostra o efeito nos pôsteres, na página do título e no player." },
+  { "Textos que cabem na tela",
+    "A ajuda acompanha a opção em foco. Sinopses longas terminam em reticências em vez de sair do quadro." },
+  { "Barra lateral e fileiras",
+    "Explorar, Guia TV, Agenda e Perfil e Stats podem sair da barra lateral, e cada fileira pode mostrar 12, 18 ou 24 títulos. As duas opções ficam em Ajustes › Layout." },
+  { "Trailer no pôster em foco",
+    "Quando o foco para num título, o trailer toca sem som no destaque. A opção fica em Ajustes › Layout › Foco no pôster e vem desligada." },
+  { "Correções",
+    "Problemas relatados nas issues do GitHub." }
 };
 
 static void mudarCena(int nova) {
@@ -300,7 +310,7 @@ static void desenhoClareza(float x, float y, float a) {
   { const char *sinopse = i18n("Uma pista inesperada aproxima a equipe da verdade por trás do mistério e muda o rumo de toda a temporada.");
     txt_bloco_corta(TXT_DET_SIN, sinopse, 211, 215, 223, pagina.x + 22.0f,
                     pagina.y + 302.0f, pagina.w - 44.0f, 35.0f, a, 3); }
-  { txt_bloco(TXT_CAPTION2, i18n("Prévia por categoria e opção"),
+  { txt_bloco(TXT_CAPTION2, i18n("Prévia nos Ajustes"),
               202, 206, 215, ajuda.x + 20.0f, ajuda.y + 18.0f,
               ajuda.w - 40.0f, 25.0f, a, 2); }
   { GfxRect foco = { ajuda.x + 18.0f, ajuda.y + 82.0f, ajuda.w - 36.0f, 86.0f };
@@ -319,12 +329,127 @@ static void desenhoClareza(float x, float y, float a) {
     } }
 }
 
+// BARRA LATERAL: a rail com os icones de verdade; Guia e Agenda somem e os
+// outros fecham o vao. A direita, a mesma fileira com 12, 18 e 24 titulos.
+static void desenhoBarra(float x, float y, float a) {
+  static const char *const IC[] = { "menu_home", "portal", "menu_guide", "menu_search",
+                                    "menu_library", "menu_agenda", "menu_profile",
+                                    "menu_settings" };
+  float ar, ag, ab;
+  // 0..1: quanto Guia e Agenda ja sumiram. Some, fica, volta, no ciclo da cena.
+  float fase = fmodf(relogioCena, 6.0f);
+  float some = anim_suave(anim_clamp((fase - 0.8f) / 0.9f, 0.0f, 1.0f)) *
+               (1.0f - anim_suave(anim_clamp((fase - 4.6f) / 0.9f, 0.0f, 1.0f)));
+  GfxRect rail = { x + 18.0f, y + 18.0f, 150.0f, N151_PREV_H - 36.0f };
+  int i;
+  ajustes_acento(&ar, &ag, &ab);
+  caixa(rail, 16.0f, a);
+  { float passo = 58.0f, n = 8.0f - 2.0f * some;
+    float yy = rail.y + (rail.h - n * passo) * 0.5f;
+    for (i = 0; i < 8; i++) {
+      int oculto = (i == 2 || i == 5);
+      float al = oculto ? 1.0f - some : 1.0f;
+      float h = oculto ? passo * (1.0f - some) : passo;
+      if (al > 0.01f) {
+        GfxRect ic = { rail.x + (rail.w - 34.0f) * 0.5f, yy + (h - 34.0f) * 0.5f, 34.0f, 34.0f };
+        if (i == 3) {
+          GfxRect m = { rail.x + 22.0f, yy + 8.0f, rail.w - 44.0f, passo - 16.0f };
+          gfx_cor(m, 0.3f, ar, ag, ab, 0.9f * a);
+        }
+        { float c = (i == 3) ? ajustes_acento_tinta(NULL, NULL, NULL) : 0.88f;
+          gfx_icone(ic, IC[i], c, c, c + 0.02f, a * al); }
+      }
+      yy += h;
+    } }
+  // Fileira: a contagem troca a cada 2 s, e os cartoes encolhem para caber.
+  { static const int NS[] = { 12, 18, 24 };
+    int k = ((int)(relogioCena / 2.0f)) % 3, nItens = NS[k];
+    GfxRect area = { x + 192.0f, y + 18.0f, N151_PREV_W - 210.0f, N151_PREV_H - 36.0f };
+    char num[16];
+    caixa(area, 16.0f, a);
+    { TxtLinha l = txt_linha(TXT_CAPTION2, i18n("Itens por fileira"), 202, 206, 215, 255);
+      txt_desenhar_alpha(l, area.x + 22.0f, area.y + 22.0f, a); }
+    snprintf(num, sizeof num, "%d", nItens);
+    { TxtLinha l = txt_linha(TXT_TITULO3, num, 244, 246, 250, 255);
+      txt_desenhar_alpha(l, area.x + 22.0f, area.y + 52.0f, a); }
+    { int col = nItens / 3, lin;
+      float gw = area.w - 44.0f, cw = (gw - (float)(col - 1) * 6.0f) / (float)col;
+      // Tres linhas cabem no painel: a altura segue a largura ate o limite dele.
+      float chMax = (area.h - 150.0f - 22.0f - 20.0f) / 3.0f;
+      float ch = cw * 1.45f < chMax ? cw * 1.45f : chMax;
+      for (lin = 0; lin < 3; lin++)
+        for (i = 0; i < col; i++) {
+          GfxRect c = { area.x + 22.0f + (float)i * (cw + 6.0f),
+                        area.y + 150.0f + (float)lin * (ch + 10.0f), cw, ch };
+          gfx_cor(c, 6.0f / ch, 0.20f, 0.22f, 0.28f, a * (lin == 0 ? 1.0f : 0.55f));
+        } } }
+}
+
+// TRAILER NO CARTAZ EM FOCO: o foco anda na fileira, para num cartaz e, depois
+// da espera, o destaque vira video (faixas de luz andando no lugar da arte).
+static void desenhoTrailer(float x, float y, float a) {
+  float ar, ag, ab;
+  float fase = fmodf(relogioCena, 6.0f);
+  int foco = fase < 1.0f ? 0 : fase < 2.0f ? 1 : 2;
+  float video = anim_suave(anim_clamp((fase - 3.0f) / 0.6f, 0.0f, 1.0f));
+  GfxRect hero = { x + 18.0f, y + 18.0f, N151_PREV_W - 36.0f, 300.0f };
+  int i;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_cor(hero, 16.0f / hero.h, 0.16f + 0.05f * foco, 0.17f, 0.22f, a);
+  if (video > 0.01f) {
+    for (i = 0; i < 5; i++) {
+      float t = fmodf(relogioCena * 0.35f + (float)i * 0.21f, 1.0f);
+      GfxRect f = { hero.x + t * (hero.w - 90.0f), hero.y, 90.0f, hero.h };
+      gfx_cor(f, 0.0f, ar, ag, ab, 0.10f * video * a);
+    }
+    { TxtLinha l = txt_linha(TXT_CAPTION2, i18n("Trailer"), 240, 242, 246, 255);
+      GfxRect p = { hero.x + hero.w - (float)l.w - 44.0f, hero.y + 18.0f, (float)l.w + 26.0f, 34.0f };
+      gfx_cor(p, 0.5f, 0.0f, 0.0f, 0.0f, 0.45f * video * a);
+      txt_desenhar_alpha(l, p.x + 13.0f, p.y + (p.h - (float)l.h) * 0.5f, video * a); }
+  }
+  gfx_cor((GfxRect){hero.x + 28.0f, hero.y + hero.h - 82.0f, 230.0f, 12.0f},
+          0.5f, 0.86f, 0.88f, 0.92f, 0.9f * a);
+  gfx_cor((GfxRect){hero.x + 28.0f, hero.y + hero.h - 56.0f, 330.0f, 6.0f},
+          0.5f, 0.58f, 0.61f, 0.67f, 0.8f * a);
+  for (i = 0; i < 4; i++)
+    miniPoster(x + 18.0f + (float)i * 166.0f, y + 346.0f, 150.0f, 212.0f,
+               i == foco, ar, ag, ab, a);
+}
+
+// TAMBEM NESTA VERSAO: lista curta, uma linha por correcao.
+static void desenhoCorrecoes(float x, float y, float a) {
+  static const char *const L[] = {
+    "Canais ao vivo que fechavam o app em algumas TVs LG",
+    "Chamadas em excesso ao player da Samsung durante a reprodução",
+    "Letras estilizadas que sumiam dos nomes das fontes de vídeo",
+    "Aviso de carregamento piscando na troca de arte do destaque",
+    "Opção Catálogos do destaque sem efeito"
+  };
+  float ar, ag, ab;
+  int i;
+  ajustes_acento(&ar, &ag, &ab);
+  for (i = 0; i < 5; i++) {
+    GfxRect r = { x + 18.0f, y + 22.0f + (float)i * 108.0f, N151_PREV_W - 36.0f, 94.0f };
+    caixa(r, 14.0f, a);
+    gfx_cor((GfxRect){r.x + 22.0f, r.y + r.h * 0.5f - 6.0f, 12.0f, 12.0f}, 0.5f,
+            ar, ag, ab, a);
+    // Mede com alfa zero (a linha fica no cache) para centrar uma ou duas linhas.
+    { float h = txt_bloco(TXT_BODY, i18n(L[i]), 222, 225, 231, r.x + 54.0f, r.y,
+                          r.w - 76.0f, 32.0f, 0.0f, 2);
+      txt_bloco(TXT_BODY, i18n(L[i]), 222, 225, 231, r.x + 54.0f,
+                r.y + (r.h - h) * 0.5f + 3.0f, r.w - 76.0f, 32.0f, a, 2); }
+  }
+}
+
 static void desenhoCena(int c, float x, float y, float a) {
   GfxRect fundo = { x, y, N151_PREV_W, N151_PREV_H };
   gfx_cor(fundo, 18.0f / fundo.h, 0.052f, 0.058f, 0.072f, a);
   if (c == 0) desenhoFontes(x, y, a);
   else if (c == 1) desenhoOpcoes(x, y, a);
-  else desenhoClareza(x, y, a);
+  else if (c == 2) desenhoClareza(x, y, a);
+  else if (c == 3) desenhoBarra(x, y, a);
+  else if (c == 4) desenhoTrailer(x, y, a);
+  else desenhoCorrecoes(x, y, a);
 }
 
 void novidades151_desenhar(Uint32 agora) {
@@ -347,7 +472,7 @@ void novidades151_desenhar(Uint32 agora) {
 
   { TxtLinha tag = txt_linha(TXT_CAPTION2, i18n("NOVO NO NUVIO"),
                              150, 155, 169, 255);
-    TxtLinha tit = txt_linha(TXT_TITULO2, i18n("Novidades da 1.5.1"),
+    TxtLinha tit = txt_linha(TXT_TITULO2, i18n("Novidades da 1.5.2"),
                              246, 247, 250, 255);
     txt_desenhar_alpha(tag, N151_X + N151_PAD, top + 42.0f, a * 0.9f);
     txt_desenhar_alpha(tit, N151_X + N151_PAD, top + 72.0f, a); }
@@ -380,7 +505,7 @@ void novidades151_desenhar(Uint32 agora) {
     int i;
     for (i = 0; i < N151_CENAS; i++) {
       float d = i == cena ? 14.0f : 9.0f;
-      float dx = cx + (float)(i - 1) * 28.0f;
+      float dx = cx + ((float)i - (float)(N151_CENAS - 1) * 0.5f) * 28.0f;
       GfxRect dot = {dx - 20.0f, cy - 20.0f, 40.0f, 40.0f};
       gfx_cor((GfxRect){dx - d * 0.5f, cy - d * 0.5f, d, d}, 0.5f,
               i == cena ? ar : 0.48f, i == cena ? ag : 0.50f,

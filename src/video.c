@@ -356,6 +356,10 @@ static int       fonX = -1, fonY, fonW, fonH, dstX = -1, dstY, dstW, dstH;
 // Caracteristicas do fluxo, tiradas do evento videoInfo da assinatura do uMS.
 // O ACB precisa delas para descrever o video ao pipeline de exibicao.
 static int       vidW = 1920, vidH = 1080, vidTaxa = 30;
+// Tamanho do quadro usado na ultima SDL_webOSSetExportedWindow (#158). Quando o
+// videoInfo chega depois com outro tamanho, a janela e reaplicada com ele.
+static int       expSrcW, expSrcH;
+static void      expJanelaAplicar(void);
 static long      vidBits;
 static char      vidVarredura[24] = "progressive";
 // hdrType real informado pelo uMS para a camada que chegou ao decoder. Isto
@@ -852,6 +856,10 @@ static int aoEvento(LSHandle *h, LSMessage *m, void *u) {
     double v;
     v = numeroDe(p, "\"width\":");      if (v > 0) vidW = (int)v;
     v = numeroDe(p, "\"height\":");     if (v > 0) vidH = (int)v;
+    // O quadro real chegou diferente do que a janela exportada recebeu como
+    // origem (#158): reaplica, sem recorte de fonte (esse tem caminho proprio).
+    if (expWin[0] && fonX < 0 && expSrcW > 0 && (vidW != expSrcW || vidH != expSrcH))
+      expJanelaAplicar();
     v = numeroDe(p, "\"frameRate\":");  if (v > 0) vidTaxa = (int)v;
     v = numeroDe(p, "\"bitRate\":");    if (v > 0) vidBits = (long)v;
     { const char *q = strstr(p, "\"scanType\":\"");
@@ -1856,6 +1864,29 @@ static void seekAgora(double segundos) {
 // ali; um plano de hardware nao descarta o excedente como o compositor do
 // navegador faz com transform: scale(). Quem amplia e o video_janela_fonte
 // abaixo, recortando a FONTE.
+// A JANELA EXPORTADA COM O QUADRO INTEIRO COMO ORIGEM (#158). Aqui ia `src`
+// NULL ("o quadro inteiro"), e o SDL de parte das TVs repassa o nulo direto ao
+// protocolo: "error marshalling arguments for set_exported_window (signature
+// oo): null value passed for arg 0". Em umas TVs isso so fica no log (1.4.2:
+// o video seguia tocando); em outras a conexao com o Wayland cai, o SDL manda
+// SDL_QUIT e o app fecha — o "aperto play no canal e o app sai" do #158, com
+// "tipo=0x100" logo depois do erro nos registros 4000 e 4012 (LG C4).
+// `src` e o quadro que o decoder entrega, como no guia de midia do webosbrew
+// e no ss4s: {0, 0, largura, altura}. Quem recorta a fonte e o
+// video_janela_fonte. Antes do videoInfo vidW/vidH ainda sao os da midia
+// anterior (ou 1920x1080); quando ele chega com outro tamanho, a janela e
+// reaplicada (ver o bloco do videoInfo).
+static void expJanelaAplicar(void) {
+  SDL_Rect src, dst;
+  if (!expWin[0] || !sdlExpJanela || janW < 1 || janH < 1) return;
+  src.x = 0; src.y = 0; src.w = vidW > 0 ? vidW : 1920; src.h = vidH > 0 ? vidH : 1080;
+  dst.x = janX; dst.y = janY; dst.w = janW; dst.h = janH;
+  expSrcW = src.w; expSrcH = src.h;
+  printf("[video] janela exportada (quadro %dx%d) -> %d\n", src.w, src.h,
+         sdlExpJanela(expWin, &src, &dst));
+  fflush(stdout);
+}
+
 void video_janela(int x, int y, int w, int h) {
   long tarefa = 0;
   int cheia = (x == 0 && y == 0 && w == 1920 && h == 1080);
@@ -1877,10 +1908,7 @@ void video_janela(int x, int y, int w, int h) {
   printf("[video] janela %d,%d %dx%d cheia=%d\n", x, y, w, h, cheia);
   fflush(stdout);
   if (expWin[0]) {
-    // src NULL = o quadro inteiro. Quem recorta a fonte e o video_janela_fonte.
-    SDL_Rect dst; dst.x = x; dst.y = y; dst.w = w; dst.h = h;
-    printf("[video] janela exportada -> %d\n", sdlExpJanela(expWin, NULL, &dst));
-    fflush(stdout);
+    expJanelaAplicar();
     return;
   }
   acbJanela(acb, x, y, w, h, cheia, &tarefa);

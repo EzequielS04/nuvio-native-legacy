@@ -232,6 +232,7 @@ void  marco(const char *n)                 { if (!strcmp(n, "montar: inicio")) m
 void  SDL_Delay(Uint32 ms)                 { usleep(ms * 1000); }
 int   ajustes_idioma_ingles(void)          { return 0; }
 int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127)
+int   ajustes_itens_fileira(void)          { return 12; }   // padrao (#163)
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
 int   ajustes_cw_ligado(void)              { return 1; }
 int   ajustes_cw_estilo(void)              { return 0; }
