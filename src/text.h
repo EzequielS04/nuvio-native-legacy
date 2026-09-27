@@ -50,17 +50,26 @@ typedef enum {
 
 typedef struct { GLuint tex; int w, h; } TxtLinha;
 
-// Familia alternativa usada SOMENTE pelo renderer de legenda externa. A
-// interface continua em Inter; misturar a familia da legenda com menus faria
-// a preferencia de reproducao redesenhar o app inteiro.
+// A selecao de interface e legenda usa IDs compartilhados, mas preferencias
+// independentes. Preserve os IDs legados: ficam gravados em dados existentes.
 typedef enum {
   TXT_FAMILIA_INTER = 0,
   TXT_FAMILIA_LG,
   TXT_FAMILIA_DROID,
+  TXT_FAMILIA_MONTSERRAT,
+  TXT_FAMILIA_ROBOTO,
+  TXT_FAMILIA_ATKINSON,
   TXT_FAMILIA_N
 } TxtFamilia;
 
 extern const char *const TXT_FAMILIAS_PT[TXT_FAMILIA_N];
+
+// A interface e a legenda mantem preferencias independentes. A familia da
+// interface afeta somente txt_linha()/os blocos e invalida as texturas de
+// texto quando muda; chamadas txt_linha_familia continuam usando a familia
+// que o chamador escolheu para a legenda.
+void txt_definir_fonte_interface(TxtFamilia familia);
+TxtFamilia txt_fonte_interface(void);
 
 // Instrumentacao: quantas linhas foram RASTERIZADAS (nao vieram do cache) no
 // quadro e quanto tempo isso custou. Rasterizar texto e a operacao mais cara
@@ -88,9 +97,9 @@ void txt_novo_quadro(void);
 
 TxtLinha txt_linha(TxtEstilo estilo, const char *s, int r, int g, int b, int a);
 
-// Igual a txt_linha, mas escolhe uma das familias seguras para a legenda. Se a
-// fonte do sistema nao existir (por exemplo na previa do Mac), cai na Inter
-// embarcada e registra o fallback uma vez no log.
+// Igual a txt_linha, mas escolhe uma familia explicita. Usado pela legenda
+// para manter sua preferencia independente da interface. Familia indisponivel
+// cai no fallback ativo e registra o problema uma vez no log.
 TxtLinha txt_linha_familia(TxtEstilo estilo, const char *s, int r, int g,
                            int b, int a, TxtFamilia familia);
 
@@ -130,6 +139,13 @@ float txt_tracking(TxtEstilo estilo, const char *s, int r, int g, int b,
 // suficiente" quando o conteudo vem de fora.
 float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
                 float x, float y, float larg, float leading, float alpha, int maxLinhas);
+
+// Igual a txt_bloco, mas indica com reticencias quando `maxLinhas` omite texto.
+// Uma palavra maior que a linha tambem e cortada com reticencias sem estourar
+// a largura. maxLinhas <= 0 mantem o comportamento sem limite de linhas.
+float txt_bloco_corta(TxtEstilo estilo, const char *s, int r, int g, int b,
+                      float x, float y, float larg, float leading,
+                      float alpha, int maxLinhas);
 
 // Mesmo bloco, mas ALINHADO A DIREITA: cada linha termina em `xDir`. Os
 // creditos do canto inferior direito precisam disso — alinhados a esquerda,

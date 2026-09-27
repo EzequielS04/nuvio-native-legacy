@@ -22,6 +22,43 @@
 #include <stdlib.h>
 #include <string.h>
 
+static const char *const AJ_IDS[] = {
+  "AJ_QUALIDADE", "AJ_DV", "AJ_ATMOS", "AJ_LEG_LINGUA",
+  "AJ_AUD_LINGUA", "AJ_PAUSA_OVERLAY", "AJ_FONTE_MANUAL", "AJ_FONTE_AUTO",
+  "AJ_FONTE_REPOR", "AJ_LANDSCAPE", "AJ_HERO_CHEIO", "AJ_HERO_FUNDO",
+  "AJ_HERO_ARTE_DIF", "AJ_HERO_TRAILER", "AJ_FIL_LIMITE", "AJ_FIL_ORDEM",
+  "AJ_RAIL", "AJ_RAIL_MODERNA", "AJ_RAIL_BLUR", "AJ_HERO",
+  "AJ_HERO_CATALOGOS", "AJ_PS_FUNDO", "AJ_DESCOBRIR", "AJ_ROTULOS",
+  "AJ_NOME_ADDON", "AJ_SUFIXO_TIPO", "AJ_OCULTAR_NLANC", "AJ_NOTAS_HOME",
+  "AJ_GRAD_CLASSICO", "AJ_CW_LIGADO", "AJ_CW_OK", "AJ_CW_FONTE",
+  "AJ_CW_ESTILO", "AJ_CW_THUMB", "AJ_CW_BLUR_PROX", "AJ_CW_FURTHEST",
+  "AJ_CW_NAO_EXIBIDOS", "AJ_CW_ORDEM", "AJ_DET_BLUR_NAO_VISTOS", "AJ_DET_TRAILER",
+  "AJ_DET_META_EXT", "AJ_DET_DATA_CHEIA", "AJ_DET_VEU", "AJ_DET_TRAILER_AUTO",
+  "AJ_TRAILER_QUAL", "AJ_TRAILER_ASPECTO", "AJ_TRAILER_FONTE", "AJ_EXPANDIR",
+  "AJ_EXPANDIR_ATRASO", "AJ_NAV_RAPIDA", "AJ_BORDA_FOCO", "AJ_PROF",
+  "AJ_PROF_BORDA", "AJ_PROF_BRILHO", "AJ_PROF_COBERTURA", "AJ_PROF_POSTERS",
+  "AJ_PROF_CW", "AJ_PROF_EPS", "AJ_PROF_ELENCO", "AJ_PROF_TRAILERS",
+  "AJ_LARGURA_DP", "AJ_RAIO_DP", "AJ_QUALIDADE_IMG", "AJ_IDIOMA",
+  "AJ_ANIM", "AJ_RESOLUCAO", "AJ_TEMA", "AJ_COR_LOGO",
+  "AJ_PERFIL_ATIVO", "AJ_SYNC", "AJ_ADDONS", "AJ_STALKER_PORTAL",
+  "AJ_STALKER_MAC", "AJ_STALKER_LIMPAR", "AJ_XTREAM_SERVIDOR", "AJ_XTREAM_USUARIO",
+  "AJ_XTREAM_SENHA", "AJ_XTREAM_LIMPAR", "AJ_SALVOS_DEST", "AJ_TRAKT",
+  "AJ_SIMKL", "AJ_SAIR", "AJ_VERSAO_I", "AJ_ATUALIZAR",
+  "AJ_ENVIAR_LOG", "AJ_ENVIO_AUTO", "AJ_ESPACO", "AJ_TEX_MB",
+  "AJ_TMDB_LIGADO", "AJ_TMDB_IDIOMA", "AJ_TMDB_ARTE", "AJ_TMDB_BASICO",
+  "AJ_TMDB_FICHA", "AJ_TMDB_DATAS", "AJ_TMDB_ELENCO", "AJ_TMDB_PROD",
+  "AJ_TMDB_REDES", "AJ_TMDB_EPS", "AJ_TMDB_TRAILERS", "AJ_TMDB_MAIS",
+  "AJ_TMDB_COL", "AJ_TMDB_CW", "AJ_MDB_LIGADO", "AJ_MDB_CHAVE",
+  "AJ_MDB_TRAKT", "AJ_MDB_IMDB", "AJ_MDB_TMDB", "AJ_MDB_LETTER",
+  "AJ_MDB_TOMATES", "AJ_MDB_AUDIENCIA", "AJ_MDB_META", "AJ_MDB_MAL",
+  "AJ_FANART_CHAVE", "AJ_DIAGNOSTICO", "AJ_VELOCIDADE", "AJ_FONTE_UI",
+};
+
+extern int ajustes_teste_focar_opcao(int op);
+extern int ajustes_teste_familia_previa(int op);
+extern void ajustes_teste_fonte_interface(int familia);
+static int quadrosCaptura = 60;
+
 static void tecla(SDL_Keycode k) {
   SDL_Event e = { 0 };
   e.type = SDL_KEYDOWN;
@@ -32,7 +69,7 @@ static void tecla(SDL_Keycode k) {
 static void captura(const char *nome, SDL_Window *win) {
   int i;
   rail_shot_aplicar();
-  for (i = 0; i < 60; i++) {
+  for (i = 0; i < quadrosCaptura; i++) {
     SDL_PumpEvents();
     txt_novo_quadro();
     tex_novo_quadro();
@@ -42,7 +79,7 @@ static void captura(const char *nome, SDL_Window *win) {
     glClear(GL_COLOR_BUFFER_BIT);
     ajustes_desenhar(SDL_GetTicks());
     rail_shot_desenhar(MENU_AJUSTES);
-    if (i == 59) {
+    if (i == quadrosCaptura - 1) {
       unsigned char *pix = malloc(1920 * 1080 * 4);
       SDL_Surface *s;
       int y;
@@ -52,7 +89,7 @@ static void captura(const char *nome, SDL_Window *win) {
       assert(s);
       for (y = 0; y < 1080; y++)
         memcpy((char *)s->pixels + y * s->pitch, pix + (1079 - y) * 1920 * 4, 1920 * 4);
-      assert(SDL_SaveBMP(s, nome) == 0);
+      assert(strstr(nome, ".png") ? IMG_SavePNG(s, nome) == 0 : SDL_SaveBMP(s, nome) == 0);
       SDL_FreeSurface(s);
       free(pix);
     }
@@ -112,6 +149,43 @@ int main(int argc, char **argv) {
   fil_remover(12);  // Animes
 
   ajustes_iniciar();
+
+  if (getenv("NUVIO_AJUSTES_OPCOES")) {
+    static const char *const FAMILIAS[] = {
+      "reproducao", "home", "continuar", "detalhe", "foco", "profundidade",
+      "cartaz", "interface", "conta", "rastreio", "sobre", "tmdb", "mdblist",
+      "tv", "acao"
+    };
+    FILE *manifest;
+    const char *dir = saida;
+    quadrosCaptura = 60;
+    snprintf(nome, sizeof nome, "%s/coverage.tsv", dir);
+    manifest = fopen(nome, "w");
+    assert(manifest);
+    assert(sizeof AJ_IDS / sizeof *AJ_IDS == 116);
+    for (i = 0; i < (int)(sizeof AJ_IDS / sizeof *AJ_IDS); i++) {
+      int familia = ajustes_teste_familia_previa(i);
+      assert(familia >= 0 && familia < (int)(sizeof FAMILIAS / sizeof *FAMILIAS));
+      assert(ajustes_teste_focar_opcao(i));
+      snprintf(nome, sizeof nome, "%s/%s.png", dir, AJ_IDS[i]);
+      captura(nome, w);
+      fprintf(manifest, "%s\t%s\n", AJ_IDS[i], FAMILIAS[familia]);
+    }
+    /* A amostra mostra também as alternativas mais pedidas, sem gravá-las. */
+    { static const struct { int familia; const char *sufixo; } fontes[] = {
+        { TXT_FAMILIA_INTER, "Inter" }, { TXT_FAMILIA_MONTSERRAT, "Montserrat" },
+        { TXT_FAMILIA_ROBOTO, "Roboto" }, { TXT_FAMILIA_ATKINSON, "Atkinson" }
+      };
+      for (i = 0; i < (int)(sizeof fontes / sizeof *fontes); i++) {
+        ajustes_teste_fonte_interface(fontes[i].familia);
+        assert(ajustes_teste_focar_opcao((int)(sizeof AJ_IDS / sizeof *AJ_IDS) - 1));
+        snprintf(nome, sizeof nome, "%s/AJ_FONTE_UI-%s.png", dir, fontes[i].sufixo);
+        captura(nome, w);
+      }
+    }
+    fclose(manifest);
+    goto fim_capturas;
+  }
 
   // A TELA ABRE COM O FOCO NA COLUNA DE CATEGORIAS, na primeira (Conta), e a
   // lista mostra o que ha nela.
@@ -289,7 +363,7 @@ int main(int argc, char **argv) {
   // grupos). Paginas de 6 passos. `LINHAS` e quantos itens com foco a
   // categoria tem no nivel de cima (grupos contam um); `GRUPOS`, as linhas de
   // cada grupo — espelho de TELA[] em ajustes.c.
-  { static const int LINHAS[9] = { 3, 4, 6, 8, 3, 9, 3, 7, 4 };
+  { static const int LINHAS[9] = { 3, 5, 6, 8, 3, 9, 3, 7, 4 };
     static const int GRUPOS[9][6] = {
       [2] = { 5, 15, 9, 9, 3, 11 },            // Layout
       [4] = { 14, 10, 1 },                     // Integracoes
@@ -299,6 +373,8 @@ int main(int argc, char **argv) {
       tecla(SDLK_LEFT);
       for (i = 0; i < 12; i++) tecla(SDLK_UP);
       for (i = 0; i < c; i++) tecla(SDLK_DOWN);
+      snprintf(nome, sizeof nome, "%s-categoria-c%d.bmp", saida, c);
+      captura(nome, w);                         // painel de ajuda da categoria
       tecla(SDLK_RETURN);
       for (p = 0; p * 6 < LINHAS[c]; p++) {
         snprintf(nome, sizeof nome, "%s-todas-c%d-%d.bmp", saida, c, p);
@@ -340,6 +416,7 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-abrir-na-cor.bmp", saida);
   captura(nome, w);
 
+  fim_capturas:
   tex_encerrar();
   txt_encerrar();
   gfx_encerrar();
