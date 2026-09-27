@@ -1,4 +1,5 @@
 #include "text.h"
+#include "dobra.h"
 #include "idioma.h"
 #include "gfx.h"
 #include "layout.h"
@@ -319,10 +320,15 @@ static const char *semDecorativoSemGlifo(TxtEstilo estilo, const char *s,
   while (*p) {
     int n = 1;
     Uint32 cp = decodifica(p, &n);
-    int tirar = 0;
-    if (decorativo(cp))
-      tirar = cp >= 0x10000 ||
-              !TTF_GlyphIsProvided(fontes[estilo], (Uint16)cp);
+    int tirar = 0, falta = 0;
+    char comum = 0;
+    if (cp >= 0x80)
+      falta = cp >= 0x10000 || !TTF_GlyphIsProvided(fontes[estilo], (Uint16)cp);
+    // LETRA ESTILIZADA SEM GLIFO VIRA A LETRA COMUM (#144): "RᴇLᴇAꜱᴇ" sai
+    // "RELEASE", e nao "R▯L▯AS▯" nem a linha inteira na fonte de reserva.
+    if (falta) comum = nv_dobra_estilizada(cp);
+    if (comum) { dst[k++] = comum; p += n; continue; }
+    if (decorativo(cp)) tirar = falta;
     if (!tirar) { int i; for (i = 0; i < n; i++) dst[k++] = (char)p[i]; }
     p += n;
   }

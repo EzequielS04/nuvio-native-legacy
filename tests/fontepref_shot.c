@@ -123,8 +123,11 @@ int main(int argc, char **argv) {
         "Silo.S02E05.2160p.WEB-DL.DV.HDR.Atmos.mp4\n11.2 GB", 2160, 1, 1);
   fonte(&v[1], "Torrentio", "Torrentio\n1080p",
         "Silo.S02E05.1080p.WEB.x264.mkv\nEnglish", 1080, 0, 0);
+  // #144: o formatador escreve com versalete e subscrito ("RᴇLᴇAꜱᴇ",
+  // "S₀₁ᴇ₀₈", "ᴇN · ᴊA"), que a Inter nao tem. Tem de sair em letra comum.
   fonte(&v[2], "AIOStreams", "AIOStreams\n1080p",
-        "Silo.S02E05.1080p.DUAL.mkv\nDual Audio", 1080, 0, 0);
+        "R\xe1\xb4\x87L\xe1\xb4\x87" "A\xea\x9c\xb1\xe1\xb4\x87 Silo S\xe2\x82\x80\xe2\x82\x82\xe1\xb4\x87\xe2\x82\x80\xe2\x82\x85"
+        " \xe1\xb4\x87N \xc2\xb7 \xe1\xb4\x8a" "A \xc2\xb7 S\xe1\xb4\x9c" "B\nDual Audio", 1080, 0, 0);
   // A LEMBRADA CARREGA BADGES DE PROPOSITO: e a linha que recebe A MARCA e o
   // realce ao mesmo tempo, entao e nela que "pilula clara sobre linha clara" e
   // "badge branca sobre linha clara" aparecem juntas.
