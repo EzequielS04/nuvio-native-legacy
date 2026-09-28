@@ -102,6 +102,7 @@ void  prog_remover(const char *c)          { (void)c; }
 void  prog_marcar_removido(const char *i)  { (void)i; }
 int   prog_removido_vence(const char *i, long long ms) { (void)i; (void)ms; return 0; }
 int   trakt_continuar(CatItem *s, int m)   { (void)s; (void)m; return 0; }
+int   trakt_continuar_falhou(void)        { return 0; }
 // Simkl (issue #110): sem vinculo nos testes de fileira, como o Trakt acima.
 int   simkl_ativo(void)                    { return 0; }
 int   simkl_continuar(CatItem *s, int m)   { (void)s; (void)m; return 0; }

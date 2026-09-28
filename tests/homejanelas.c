@@ -204,6 +204,7 @@ int trakt_continuar(CatItem *s, int m) {
   }
   return i;
 }
+int   trakt_continuar_falhou(void)        { return 0; }
 // Segunda chamada = segunda montagem. E ali, no log, entre "trakt continuar
 // assistindo" e "trakt atividade dos amigos", que o sync entrega as colecoes:
 // "[desc] fileiras remontadas sem rede: 12 de 12". A config muda junto.

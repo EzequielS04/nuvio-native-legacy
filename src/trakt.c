@@ -728,12 +728,16 @@ static void carregarHistoricoReal(const char *const *cab) {
   free(corpo);
 }
 
+static volatile int continuarFalhou;
+int trakt_continuar_falhou(void) { return continuarFalhou; }
+
 int trakt_continuar(CatItem *saida, int max) {
   const char *cab[4];
   char aut[200], chave[140];
   char *corpo;
   const char *p;
   int n = 0;
+  continuarFalhou = 0;
   if (!ligado) return 0;
   snprintf(aut, sizeof aut, "Authorization: Bearer %s", token);
   snprintf(chave, sizeof chave, "trakt-api-key: %s", cliente);
@@ -743,7 +747,7 @@ int trakt_continuar(CatItem *saida, int max) {
   cab[3] = NULL;
   nPlay = 0;
   corpo = rede_baixar_com("https://api.trakt.tv/sync/playback?extended=full", 25, cab);
-  if (!corpo) { printf("[trakt] sem resposta\n"); return 0; }
+  if (!corpo) { continuarFalhou = 1; printf("[trakt] sem resposta\n"); return 0; }
   // O corpo e um array na raiz; js_array procura por chave, entao anda-se a mao.
   p = strchr(corpo, '[');
   p = p ? p + 1 : NULL;

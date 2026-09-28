@@ -348,10 +348,12 @@ static const CatItem *item(void) {
 }
 // O indice CORRENTE do titulo aberto: re-resolvido pelo IMDb, porque o que foi
 // guardado em `idx` pode ter sido deslocado por uma republicacao. Cai em `idx`
-// quando o titulo nao esta mais no catalogo (ou nao tem IMDb).
+// quando o titulo nao esta mais no catalogo (ou nao tem IMDb). #151: fica em
+// `idx` enquanto ele for o mesmo titulo — a primeira copia pelo IMDb costuma
+// ser o card do CW, que nao tem a lista de episodios.
 static int idxAtual(void) {
   if (temFixo && itemFixo.imdb[0]) {
-    int i = cat_indice_por_imdb(itemFixo.imdb);
+    int i = cat_indice_titulo(itemFixo.imdb, idx);
     if (i >= 0) return i;
   }
   return idx;
@@ -398,8 +400,9 @@ int player_pediu_proximo(int *t,int *e) {
 }
 const CatEp *player_proximo_episodio(void) {
   const CatEp *melhor=NULL;
-  for(int i=0;i<cat_n_episodios(idx);i++) {
-    const CatEp *p=cat_episodio(idx,i);if(!p)continue;
+  int ix=idxAtual(),n=cat_n_episodios(ix);
+  for(int i=0;i<n;i++) {
+    const CatEp *p=cat_episodio(ix,i);if(!p)continue;
     if(p->temporada<epT||(p->temporada==epT&&p->episodio<=epE))continue;
     if(!melhor||p->temporada<melhor->temporada||
        (p->temporada==melhor->temporada&&p->episodio<melhor->episodio))melhor=p;
@@ -504,8 +507,8 @@ void player_definir_episodio(int t, int e) {
   snprintf(linhaEp, sizeof linhaEp, i18n("T%dE%d"), epT, epE);
   if (epT == c->temporada && epE == c->episodio && c->nomeEpisodio[0])
     snprintf(linhaEp, sizeof linhaEp, i18n("T%dE%d · %s"), epT, epE, c->nomeEpisodio);
-  for (int i = 0; i < cat_n_episodios(idx); i++) {
-    const CatEp *ep = cat_episodio(idx, i);
+  for (int ix = idxAtual(), i = 0; i < cat_n_episodios(ix); i++) {
+    const CatEp *ep = cat_episodio(ix, i);
     if (ep && ep->temporada == epT && ep->episodio == epE) {
       snprintf(linhaEp, sizeof linhaEp, i18n("T%dE%d · %s"), epT, epE, ep->nome);
       break;
@@ -1563,7 +1566,7 @@ static int ofertaProximo(void) {
   if(!p&&epT>0&&duracaoSeg>1&&duracaoSeg-posSeg<=PLR_CRED_PISO_S&&!semProxAvisado){
     semProxAvisado=1;
     printf("[posplay] sem proximo episodio depois de T%dE%d: lista com %d episodios%s\n",
-           epT,epE,cat_n_episodios(idx),desc_episodios_carregando(idx)?" (ainda carregando)":"");
+           epT,epE,cat_n_episodios(idxAtual()),desc_episodios_carregando(idxAtual())?" (ainda carregando)":"");
     fflush(stdout);
   }
   if(!p||duracaoSeg<=1)return 0;

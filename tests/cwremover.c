@@ -124,6 +124,7 @@ int trakt_continuar(CatItem *s, int m) {
   }
   return i;
 }
+int   trakt_continuar_falhou(void)        { return 0; }
 
 static long long agora = 1000000;
 static long long relogioTeste(void) { return agora; }

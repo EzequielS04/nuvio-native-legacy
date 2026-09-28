@@ -33,7 +33,8 @@ char *dados_ler(const char *nome)                 { (void)nome; return NULL; }
 int   dados_gravar(const char *nome, const char *c) { (void)nome; (void)c; return 1; }
 int   dados_apagar(const char *nome)              { (void)nome; return 1; }
 void  SDL_Delay(Uint32 ms)                 { usleep(ms * 1000); }
-int   ajustes_cw_fonte(void)               { return 0; }   // AJ_CWF_AMBAS
+static int fonteTeste;          // 0 = AJ_CWF_AMBAS, 2 = so o Trakt
+int   ajustes_cw_fonte(void)               { return fonteTeste; }
 int   ajustes_tmdb_ligado(void)            { return 0; }
 int   ajustes_tmdb_basico(void)            { return 0; }
 int   ajustes_tmdb_arte(void)              { return 0; }
@@ -138,8 +139,10 @@ int trakt_e_a_seguir(const char *id) {
   return 0;
 }
 int simkl_e_a_seguir(const char *id) { (void)id; return 0; }
+static int traktFalhouTeste;    // #151: o Trakt respondeu HTTP 500
 int trakt_continuar(CatItem *s, int m) {
   int i;
+  if (traktFalhouTeste) return 0;
   for (i = 0; i < NFALSO && i < m; i++) {
     const Falso *f = &tabela[i];
     memset(&s[i], 0, sizeof s[i]);
@@ -155,6 +158,7 @@ int trakt_continuar(CatItem *s, int m) {
   }
   return i;
 }
+int   trakt_continuar_falhou(void)        { return traktFalhouTeste; }
 
 static long long relogioProg(void) { return 1000000; }
 
@@ -271,6 +275,29 @@ int main(void) {
       assert(!cwo_e_futuro("tt6773088:1:6"));
       puts("ok  brothers sem data: conta como exibido (e o log diz)"); }
     naoExibidosTeste = 1; }
+
+  // #151: TRAKT SEM RESPOSTA NAO ESVAZIA A FILEIRA. Com a fonte so no Trakt a
+  // lista nova sai vazia; o que estava publicado fica. Com o Trakt de volta e
+  // de verdade vazio, a fileira esvazia (o guarda e so para "nao sei").
+  { CatItem lote[CONT_MAX], velho[3];
+    int nc, k;
+    memset(velho, 0, sizeof velho);
+    for (k = 0; k < 3; k++) {
+      snprintf(velho[k].imdb, sizeof velho[k].imdb, "ttV%d", k);
+      snprintf(velho[k].tipo, sizeof velho[k].tipo, "movie");
+    }
+    cat_trocar_continuar(velho, 3);
+    fonteTeste = 2;
+    traktFalhouTeste = 1;
+    nc = montarContinuar(lote, CONT_MAX);
+    assert(nc == 3 && !strcmp(lote[0].imdb, "ttV0") && !strcmp(lote[2].imdb, "ttV2"));
+    puts("ok  trakt sem resposta: a fileira publicada fica (#151)");
+    traktFalhouTeste = 0;
+    nTabela = 0;
+    nc = montarContinuar(lote, CONT_MAX);
+    assert(nc == 0);
+    puts("ok  trakt respondeu vazio: a fileira esvazia");
+    fonteTeste = 0; }
   puts("cwordem_desc: tudo ok");
   return 0;
 }

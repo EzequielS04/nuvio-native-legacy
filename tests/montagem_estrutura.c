@@ -216,6 +216,7 @@ int   ajustes_salvos_no_simkl(void)        { return 1; }   // para simkl_plantow
 int   trakt_enfeitar_lote(CatItem *s, int n) { (void)s; return n; }
 int   trakt_social(CatItem *s, int m)      { (void)s; (void)m; return 0; }
 int   trakt_continuar(CatItem *s, int m)   { (void)s; (void)m; return 0; }
+int   trakt_continuar_falhou(void)        { return 0; }
 int   trakt_e_a_seguir(const char *id)     { (void)id; return 0; }
 const char *nuvem_trakt_cliente(void)      { return ""; }
 int   arte_reserva_registrar(const char *url, const char *imdb, int poster) {

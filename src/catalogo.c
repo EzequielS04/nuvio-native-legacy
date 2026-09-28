@@ -922,6 +922,36 @@ int cat_indice_por_imdb(const char *imdb) {
   return -1;
 }
 
+// O MESMO TITULO EM DUAS FILEIRAS (#151). A serie que a pessoa esta vendo
+// costuma estar em "Continuar assistindo" E na fileira de onde o detalhe foi
+// aberto — e os episodios so sao publicados na copia do detalhe. O player
+// re-resolvia pelo IMDb com cat_indice_por_imdb, que devolve a PRIMEIRA copia
+// (a do CW, no topo): ao trocar de fonte dentro do player, ele reabria nessa
+// copia, sem lista, e o "Proximo episodio" sumia. No log do #151 (id 4439):
+// detalhe com 132 episodios e, na troca de fonte, "lista com 0 episodios".
+//
+// Ordem: a copia que o chamador ja tinha, se ainda e o mesmo titulo e tem
+// episodios; senao qualquer copia com episodios; senao a do chamador (filme
+// nao tem lista); senao a primeira.
+int cat_indice_titulo(const char *imdb, int preferido) {
+  int i, m = cat_n(), primeiro = -1, comEps = -1, prefOk = 0;
+  const CatItem *c;
+  if (!imdb || !imdb[0] || m < 1) return -1;
+  if (preferido >= 0 && preferido < m && (c = cat_item(preferido)) &&
+      c->imdb[0] && mesmoTitulo(c->imdb, imdb)) {
+    if (cat_n_episodios(preferido) > 0) return preferido;
+    prefOk = 1;
+  }
+  for (i = 0; i < m && comEps < 0; i++) {
+    c = cat_item(i);
+    if (!c || !c->imdb[0] || !mesmoTitulo(c->imdb, imdb)) continue;
+    if (primeiro < 0) primeiro = i;
+    if (cat_n_episodios(i) > 0) comEps = i;
+  }
+  if (comEps >= 0) return comEps;
+  return prefOk ? preferido : primeiro;
+}
+
 static int normalizarIndice(int indice) {
   int i = cat_n();
   if (i < 1) return -1;

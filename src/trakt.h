@@ -85,6 +85,9 @@ int trakt_playback_remover(const char *imdb);
 int trakt_episodios_marcar(const char *imdb, const VistoPar *pares, int qtd,
                            int visto);
 int  trakt_continuar(CatItem *saida, int max);
+// 1 quando a ULTIMA trakt_continuar nao teve resposta (rede, HTTP 5xx): o 0
+// que ela devolveu e "nao sei", e nao "nada em andamento" (#151).
+int  trakt_continuar_falhou(void);
 // O id ("tt:S:E") e um item "a seguir" da ultima leitura — proximo episodio de
 // serie cujo ultimo visto terminou. Entra na fileira com progresso 0.
 int trakt_e_a_seguir(const char *id);

@@ -110,6 +110,7 @@ void  prog_remover(const char *c)          { (void)c; }
 void  prog_marcar_removido(const char *i)  { (void)i; }
 int   prog_removido_vence(const char *i, long long ms) { (void)i; (void)ms; return 0; }
 int   trakt_continuar(CatItem *s, int m)   { (void)s; (void)m; return 0; }
+int   trakt_continuar_falhou(void)        { return 0; }
 // Simkl (issue #110): sem vinculo nos testes de fileira, como o Trakt acima.
 int   simkl_ativo(void)                    { return 0; }
 int   simkl_continuar(CatItem *s, int m)   { (void)s; (void)m; return 0; }
@@ -240,6 +241,23 @@ int main(void) {
   cat_definir_tudo(itens, 3, NULL, 0);
   assert(cat_n_episodios(0) == 0);
   puts("ok  trocar o catalogo inteiro invalida as faixas");
+
+  // D2) #151: A MESMA SERIE EM DUAS FILEIRAS. Indice 0 e o card do CW, 2 e a
+  //     copia de onde o detalhe abriu e a unica com episodios. Reabrir o
+  //     player pela primeira copia (cat_indice_por_imdb) perdia a lista.
+  montarCatalogo();
+  snprintf(itens[2].imdb, sizeof itens[2].imdb, "tt0");
+  cat_definir_tudo(itens, 3, NULL, 0);
+  publicar(2, "S", 3);
+  assert(cat_indice_por_imdb("tt0") == 0);               // o defeito: CW primeiro
+  assert(cat_indice_titulo("tt0", 2) == 2);              // fica onde estava
+  assert(cat_indice_titulo("tt0", 0) == 2);              // CW sem lista: vai a copia com
+  assert(cat_indice_titulo("tt0", -1) == 2);
+  assert(cat_indice_titulo("tt0", 1) == 2);              // 1 e outro titulo
+  assert(cat_indice_titulo("tt0:1:3", 0) == 2);          // id com episodio grudado
+  assert(cat_indice_titulo("tt1", 1) == 1);              // filme/sem lista: o proprio
+  assert(cat_indice_titulo("tt9", 1) == -1);
+  puts("ok  mesma serie em duas fileiras: a copia com episodios vence a do CW");
 
   // E) APPEND DE ARTE: o caminho unitário precisa registrar poster e fundo
   // exatamente como o lote e a publicação completa. Repetir o mesmo item é

@@ -18,6 +18,7 @@
 #include "trakt.h"
 #include "simkl.h"
 #include "progresso.h"
+#include "perfis.h"
 #include "artereserva.h"
 #include <stdint.h>   /* uintptr_t: a geracao viaja no argumento do fio */
 #include <stdio.h>
@@ -2223,6 +2224,32 @@ static int montarContinuar(CatItem *saida, int max) {
                semData, naoExibidos ? "ligado" : "desligado", cortados, cortadosFut); } }
 
   if (nJ > max) nJ = max;
+  // "SUMIU DO CONTINUAR ASSISTINDO" (#151, log id 4439): o Trakt respondeu
+  // HTTP 500, a parte da conta veio 0 no mesmo ciclo (6 s antes eram 12) e a
+  // fileira foi publicada VAZIA. Lista vazia com a fonte remota muda e
+  // "nao sei", nao "nada em andamento": fica o que ja estava na tela. Tirar um
+  // card a mao nao passa por aqui (desc_tirar_continuar tira do publicado), e
+  // o ciclo seguinte com o Trakt de volta refaz a fileira normalmente.
+  if (nJ == 0 && querTrakt && trakt_continuar_falhou()) {
+    int k = cat_copiar_fileira("continue_watching", saida, max, NULL);
+    // A metade que falta provar: por que a conta veio 0. Registros no
+    // progresso deste perfil, antes dos filtros de 1-90%.
+    if (querConta) {
+      ProgRegistro *rd = malloc(sizeof *rd * PROG_MAX);
+      if (rd) {
+        printf("[desc] continuar assistindo: conta vazia (%d registro(s) no progresso, perfil %d)\n",
+               prog_ler(rd, PROG_MAX), perfis_ativo());
+        free(rd);
+      }
+    }
+    if (k > 0) {
+      printf("[desc] continuar assistindo: Trakt sem resposta e lista vazia; "
+             "mantidos os %d card(s) da tela\n", k);
+      fflush(stdout);
+      free(doSimkl);
+      return k;
+    }
+  }
   for (i = 0; i < nJ; i++) {
     saida[i] = *juntos[i].item;
     if (getenv("NUVIO_CW_LOG"))

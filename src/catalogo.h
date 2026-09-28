@@ -246,6 +246,9 @@ int  cat_blocos_aposentados(void);
 void cat_dir_gravacao(const char *dir);
 
 int cat_indice_por_imdb(const char *imdb);
+// Como cat_indice_por_imdb, mas fica em `preferido` enquanto ele for o mesmo
+// titulo e prefere uma copia COM episodios (#151; ver catalogo.c).
+int cat_indice_titulo(const char *imdb, int preferido);
 
 // Acrescenta um titulo ao FIM e devolve o indice, ou -1. Para o titulo que veio
 // de fora do catalogo (filmografia de ator, "Mais como este"). Ver a nota sobre
