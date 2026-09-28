@@ -17,6 +17,7 @@ static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 // absorvida sem no-go; cinco (MKVASS_FALHAS_MAX) levam a NOGO_REDE e a retomada.
 static int falhar = 5, pedidos, cortados;
 char *rede_baixar(const char *url, int s) { (void)url; (void)s; return NULL; }
+char *rede_baixar_bin(const char *url, int s, long *n) { (void)url; (void)s; (void)n; return NULL; }
 // O mkvass pede por rede_baixar_trecho_st (status, erro e url final); o
 // transporte local responde como um servidor sem redirecionamento: a url
 // final e a propria, e a falha e "sem resposta" (HTTP 0).

@@ -468,9 +468,110 @@ int legenda_extrair(const char *corpo, LegendaCue **saida) {
   return legenda_extrair_srt(corpo,saida);
 }
 
+// --- CHARSET (pedido do dono, 28/09, comparando com o fork do Corby7) ---------
+//
+// O parser e o desenho falam UTF-8. Legenda do OpenSubtitles em portugues,
+// espanhol ou frances chega muitas vezes em Windows-1252 (Latin-1), e ai todo
+// acento e um byte solto que nao forma UTF-8: o texto saia com quadrados.
+// UTF-16 (com BOM) tem zeros no meio e nem chegava ao parser — rede_baixar
+// devolve texto e o strlen parava no primeiro zero.
+//
+// A ORDEM: BOM de UTF-16 -> converte; BOM de UTF-8 -> tira; UTF-8 valido ->
+// fica; o resto e um codepage de 8 bits. Entre os de 8 bits so da para
+// ADIVINHAR, e a adivinhacao aqui e uma so: texto cirilico (Windows-1251) e
+// feito de PALAVRAS inteiras de bytes altos, enquanto o latino tem o acento
+// solto entre letras ASCII. Mais da metade dos bytes altos com vizinho alto ->
+// 1251; senao 1252. Grego, turco, arabe etc. em codepage proprio NAO estao
+// cobertos (sairiam como letras latinas erradas, nao quadrados).
+static const unsigned short CP1252_80[32] = {
+  0x20AC,0xFFFD,0x201A,0x0192,0x201E,0x2026,0x2020,0x2021,0x02C6,0x2030,0x0160,0x2039,0x0152,0xFFFD,0x017D,0xFFFD,
+  0xFFFD,0x2018,0x2019,0x201C,0x201D,0x2022,0x2013,0x2014,0x02DC,0x2122,0x0161,0x203A,0x0153,0xFFFD,0x017E,0x0178 };
+static const unsigned short CP1251_80[64] = {
+  0x0402,0x0403,0x201A,0x0453,0x201E,0x2026,0x2020,0x2021,0x20AC,0x2030,0x0409,0x2039,0x040A,0x040C,0x040B,0x040F,
+  0x0452,0x2018,0x2019,0x201C,0x201D,0x2022,0x2013,0x2014,0xFFFD,0x2122,0x0459,0x203A,0x045A,0x045C,0x045B,0x045F,
+  0x00A0,0x040E,0x045E,0x0408,0x00A4,0x0490,0x00A6,0x00A7,0x0401,0x00A9,0x0404,0x00AB,0x00AC,0x00AD,0x00AE,0x0407,
+  0x00B0,0x00B1,0x0406,0x0456,0x0491,0x00B5,0x00B6,0x00B7,0x0451,0x2116,0x0454,0x00BB,0x0458,0x0405,0x0455,0x0457 };
+
+static int poeUtf8(char *d, unsigned cp) {
+  if (cp < 0x80)    { d[0]=(char)cp; return 1; }
+  if (cp < 0x800)   { d[0]=(char)(0xC0|cp>>6); d[1]=(char)(0x80|(cp&63)); return 2; }
+  if (cp < 0x10000) { d[0]=(char)(0xE0|cp>>12); d[1]=(char)(0x80|((cp>>6)&63));
+                      d[2]=(char)(0x80|(cp&63)); return 3; }
+  d[0]=(char)(0xF0|cp>>18); d[1]=(char)(0x80|((cp>>12)&63));
+  d[2]=(char)(0x80|((cp>>6)&63)); d[3]=(char)(0x80|(cp&63)); return 4;
+}
+
+static int utf8Valido(const unsigned char *p, long n) {
+  long i = 0;
+  while (i < n) {
+    unsigned c = p[i];
+    int k = c < 0x80 ? 0 : (c & 0xE0) == 0xC0 ? 1 : (c & 0xF0) == 0xE0 ? 2 : (c & 0xF8) == 0xF0 ? 3 : -1;
+    if (k < 0 || (k == 1 && c < 0xC2) || i + k >= n + (k ? 0 : 1)) return 0;
+    for (int j = 1; j <= k; j++) if ((p[i + j] & 0xC0) != 0x80) return 0;
+    i += k + 1;
+  }
+  return 1;
+}
+
+char *legenda_utf8(const char *bytes, long n, const char **origem) {
+  const unsigned char *b = (const unsigned char *)bytes;
+  const char *o = "utf-8";
+  char *out, *d;
+  long i;
+  if (!bytes || n < 0) return NULL;
+  if (n >= 2 && ((b[0] == 0xFF && b[1] == 0xFE) || (b[0] == 0xFE && b[1] == 0xFF))) {
+    int le = b[0] == 0xFF;
+    o = le ? "utf-16le" : "utf-16be";
+    d = out = malloc((size_t)(n / 2) * 3 + 4);
+    if (!out) return NULL;
+    for (i = 2; i + 1 < n; i += 2) {
+      unsigned cp = le ? (unsigned)(b[i] | b[i+1] << 8) : (unsigned)(b[i] << 8 | b[i+1]);
+      if (cp >= 0xD800 && cp <= 0xDBFF && i + 3 < n) {
+        unsigned lo = le ? (unsigned)(b[i+2] | b[i+3] << 8) : (unsigned)(b[i+2] << 8 | b[i+3]);
+        if (lo >= 0xDC00 && lo <= 0xDFFF) { cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00); i += 2; }
+        else cp = 0xFFFD;
+      } else if (cp >= 0xD800 && cp <= 0xDFFF) cp = 0xFFFD;
+      if (!cp) continue;
+      d += poeUtf8(d, cp);
+    }
+    *d = 0;
+  } else {
+    if (n >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) { b += 3; n -= 3; }
+    if (utf8Valido(b, n)) {
+      out = malloc((size_t)n + 1);
+      if (!out) return NULL;
+      memcpy(out, b, (size_t)n); out[n] = 0;
+    } else {
+      long altos = 0, colados = 0;
+      int cir;
+      for (i = 0; i < n; i++)
+        if (b[i] >= 0xC0) { altos++; if ((i && b[i-1] >= 0xC0) || (i + 1 < n && b[i+1] >= 0xC0)) colados++; }
+      cir = altos >= 8 && colados * 2 > altos;
+      o = cir ? "windows-1251" : "windows-1252";
+      d = out = malloc((size_t)n * 3 + 1);
+      if (!out) return NULL;
+      for (i = 0; i < n; i++) {
+        unsigned c = b[i], cp;
+        if (!c) continue;
+        if (c < 0x80) cp = c;
+        else if (cir) cp = c >= 0xC0 ? 0x0410 + (c - 0xC0) : CP1251_80[c - 0x80];
+        else cp = c < 0xA0 ? CP1252_80[c - 0x80] : c;
+        d += poeUtf8(d, cp);
+      }
+      *d = 0;
+    }
+  }
+  if (origem) *origem = o;
+  return out;
+}
+
 typedef struct { char url[1400]; unsigned g; } Pedido;
 static void *baixar(void *u) {
-  Pedido *p=u; char *corpo=rede_baixar(p->url,20); LegendaCue *v=NULL;
+  Pedido *p=u; long nb=0; const char *cs="utf-8";
+  char *bruto=rede_baixar_bin(p->url,20,&nb);
+  char *corpo=bruto?legenda_utf8(bruto,nb,&cs):NULL; LegendaCue *v=NULL;
+  free(bruto);
+  if (corpo && strcmp(cs,"utf-8")) { printf("[legenda] texto em %s, convertido para UTF-8\n",cs); fflush(stdout); }
   int ass=corpo?legenda_eh_ass(corpo):0;
   int n=corpo?legenda_extrair(corpo,&v):0;
   double dur=0;
