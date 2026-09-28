@@ -14,6 +14,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Tizen.Multimedia;
+using ElmSharp;
 using Tizen.NUI;
 using IOPath = System.IO.Path;
 using NuiWindow = Tizen.NUI.Window;
@@ -38,6 +39,7 @@ namespace NuvioTpk
         volatile bool fim;
         NuiTimer vigia;
         Video video;
+        ElmSharp.Window janelaVideo;
 
         protected override void OnCreate()
         {
@@ -62,7 +64,16 @@ namespace NuvioTpk
             }
             try
             {
-                video = new Video(() => new Display(NuiWindow.Instance),
+                // Video no plano de hardware, numa janela ElmSharp propria,
+                // mostrada e REBAIXADA sob o GLWindow — o padrao do
+                // JuvoPlayer.OpenGL e do nosso NuvioTpk40. Preso a
+                // Window.Instance (que nao e a janela mostrada) o plano ficava
+                // com z-order indefinido e aparecia a tela anterior (loja/canal)
+                // no lugar do filme (#137, Tizen 6/9).
+                janelaVideo = new ElmSharp.Window("nuvio-video") { Geometry = new ElmSharp.Rect(0, 0, W, H), Alpha = true };
+                janelaVideo.Show();
+                janelaVideo.Lower();
+                video = new Video(() => new Display(janelaVideo),
                                   a => { if (principal != null) principal.Post(_ => a(), null); else a(); },
                                   dados, W, H);
             }
@@ -115,6 +126,7 @@ namespace NuvioTpk
             gl.KeyEvent += (s, e) => Tecla(e.Key);
             NuiWindow.Instance.KeyEvent += (s, e) => Tecla(e.Key);
             gl.Show();
+            gl.Raise();   // UI acima do plano de video
 
             // Exit() tem de sair do fio principal, e Quadro() roda no de desenho.
             vigia = new NuiTimer(250);

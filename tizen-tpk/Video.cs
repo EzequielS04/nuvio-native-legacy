@@ -42,6 +42,7 @@ namespace NuvioTpk
         FnAbrir fAbrir; FnSemArg fParar; FnInt fPausar, fBuscar, fVolume; FnRet fJanela; FnPos fPos; FnEscolher fEscolher;
 
         Player player;
+        AudioStreamPolicy foco;
         int sessao;
         volatile int posMs;
 
@@ -152,6 +153,17 @@ namespace NuvioTpk
             {
                 var p = new Player();
                 player = p;
+                // Foco de audio: sem isto o audio do canal/tuner da TV continua
+                // tocando por baixo do filme, e ao sair a TV fica numa fonte
+                // morta (#137, Tizen 6/9). Media + Playback interrompe o tuner;
+                // ReleaseFocus em Parar devolve a fonte anterior a TV.
+                try
+                {
+                    if (foco == null) foco = new AudioStreamPolicy(AudioStreamType.Media);
+                    foco.AcquireFocus(AudioStreamFocusOptions.Playback, (AudioStreamBehaviors)0, null);
+                    p.ApplyAudioStreamPolicy(foco);
+                }
+                catch (Exception e) { Log("foco de audio: " + e.Message); }
                 p.PlaybackCompleted += (s, e) => { if (minha == sessao) nv_tpk_video_evento(EV_FIM, 0, 0); };
                 p.ErrorOccurred += (s, e) => { if (minha == sessao) { Log("erro " + e.Error); nv_tpk_video_evento(EV_ERRO, (int)e.Error, 0); } };
                 p.BufferingProgressChanged += (s, e) => { if (minha == sessao) nv_tpk_video_evento(EV_BUFFER, e.Percent, 0); };
@@ -198,6 +210,7 @@ namespace NuvioTpk
             sessao++;
             var p = player;
             player = null;
+            if (foco != null) { try { foco.ReleaseFocus(AudioStreamFocusOptions.Playback, (AudioStreamBehaviors)0, null); } catch { } }
             if (p == null) return;
             try { if (p.State == PlayerState.Playing || p.State == PlayerState.Paused) p.Stop(); } catch { }
             try { if (p.State != PlayerState.Idle) p.Unprepare(); } catch { }
