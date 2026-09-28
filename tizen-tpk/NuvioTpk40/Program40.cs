@@ -74,9 +74,12 @@ namespace NuvioTpk
                 janelaVideo.Lower();
                 video = new Video(() => new Tizen.Multimedia.Display(janelaVideo), a => EcoreMainloop.PostAndWakeUp(a), dados, W, H);
 
-                // OnUpdate roda no fio principal: nunca segura mais que 50 ms, e
-                // devolver false pula a troca de buffers.
-                nv_tpk_config(50, 0);
+                // OnUpdate SEMPRE devolve true, como o JuvoPlayer.OpenGL: com
+                // false no arranque (app ainda sem quadro) a TVGLApplication
+                // parava de chamar, o app nunca recebia o contexto e ficava
+                // tela preta sem log (Tizen 5.0, 28/09). Espera sem limite:
+                // no arranque limpa para preto, depois espera o quadro do app.
+                nv_tpk_config(-1, 0);
                 if (nv_tpk_iniciar(Path.Combine(dir.Resource, "art"), dados, W, H) != 0)
                 {
                     Erro("O Nuvio nao conseguiu iniciar.", Marshal.PtrToStringAnsi(nv_tpk_erro()) ?? "nv_tpk_iniciar falhou");
@@ -105,7 +108,9 @@ namespace NuvioTpk
         // os buffers; false = nada novo neste quadro.
         protected override bool OnUpdate()
         {
-            if (!rodando || fim) return false;
+            // Nunca false enquanto o app vive: a TVGLApplication para de chamar.
+            if (fim) return false;
+            if (!rodando) return true;
             int r = nv_tpk_quadro();
             if (r < 0) fim = true;
             return r > 0;

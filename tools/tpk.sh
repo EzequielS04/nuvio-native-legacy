@@ -25,12 +25,14 @@ docker info >/dev/null 2>&1 || { echo "Docker parado: abra o Docker/OrbStack" >&
 docker image inspect nuvio-tpk-sdk >/dev/null 2>&1 ||
   docker build --platform linux/arm/v5 -t nuvio-tpk-sdk tools/tpk/
 
-if [ ! -f "$CACHE/prefix/lib/libSDL2.a" ] || [ ! -f "$CACHE/prefix/lib/libSDL2_ttf.a" ]; then
+if [ ! -f "$CACHE/prefix/lib/libSDL2.a" ] || [ ! -f "$CACHE/prefix/lib/libSDL2_ttf.a" ] ||
+   [ ! -f "$CACHE/prefix/lib/libwebp.a" ] || [ ! -f "$CACHE/prefix/lib/.sdlimage-webp" ]; then
   echo "[deps] SDL2/SDL2_image/SDL2_ttf estaticos (demora na primeira vez)"
   mkdir -p "$CACHE/src"
   for u in https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-2.30.9.tar.gz \
            https://github.com/libsdl-org/SDL_image/releases/download/release-2.8.2/SDL2_image-2.8.2.tar.gz \
-           https://github.com/libsdl-org/SDL_ttf/releases/download/release-2.22.0/SDL2_ttf-2.22.0.tar.gz; do
+           https://github.com/libsdl-org/SDL_ttf/releases/download/release-2.22.0/SDL2_ttf-2.22.0.tar.gz \
+           https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.4.0.tar.gz; do
     d="$CACHE/src/$(basename "$u" .tar.gz)"
     [ -d "$d" ] || curl -fsSL "$u" | tar xz -C "$CACHE/src"
   done
@@ -61,11 +63,12 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" \
     "gcc $CFLAGS -c {} -o /tmp/o/\$(basename {} .c).o -DNV_TPK -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS @/tmp/flags -I/deps/include -I/deps/include/SDL2" 
   # SDL e zlib ESTATICOS: a TV nao tem libSDL2 garantida, e a libz entra junto
   # para nao depender da versao do aparelho. GLES/EGL/dl/pthread/m sao do
-  # sistema (API nativa publica do Tizen). curl, libjpeg e libwebp continuam
+  # sistema (API nativa publica do Tizen). libwebp tambem estatica (o Tizen nao
+  # a expoe a apps; o SDL_image decodifica WebP com ela). curl e libjpeg continuam
   # por dlopen em execucao, como na LG (rede.c, jpegrapido.c, webp.c).
   gcc -shared -o /work/build/tpk/libnuvio.so /tmp/o/*.o -Wl,--no-undefined \
     -Wl,-soname,libnuvio.so -Wl,--exclude-libs,ALL \
-    -L/deps/lib -lSDL2_ttf -lSDL2_image -lSDL2 /usr/lib/arm-linux-gnueabi/libz.a \
+    -L/deps/lib -lSDL2_ttf -lSDL2_image -lwebpdemux -lwebp -lsharpyuv -lSDL2 /usr/lib/arm-linux-gnueabi/libz.a \
     -lGLESv2 -ldl -lpthread -lm -lrt
   echo "  $(ls -la /work/build/tpk/libnuvio.so | awk "{print \$5}") bytes"
   objdump -T /work/build/tpk/libnuvio.so | grep -oE "GLIBC_[0-9.]+" | sort -uV | tail -1 | sed "s/^/  glibc minima: /"
