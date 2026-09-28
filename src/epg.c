@@ -527,8 +527,11 @@ static int wProcessar(EpgGrade *g, char *xml) {
 // --- carga: disco, rede, gzip -------------------------------------------------------
 // O buffer de saida CRESCE conforme o inflate avanca — uma estimativa fixa
 // (gz*10) estourava nas fontes regionais maiores (PT1 comprime ~11x).
-static char *desgzip(const char *buf, long n, long *nOut) {
+// `teto` 0 = sem teto; acima dele o inflate para e devolve NULL (a grade do
+// provedor pode vir com dezenas de MB, ver epg_fonte_extra).
+static char *desgzip(const char *buf, long n, long *nOut, long teto) {
   z_stream z; long cap = n * 6 + (1 << 20), feito = 0;
+  if (teto > 0 && cap > teto + (1 << 16)) cap = teto + (1 << 16);
   char *out = malloc((size_t)cap);
   if (!out) return NULL;
   memset(&z, 0, sizeof z);
@@ -536,7 +539,9 @@ static char *desgzip(const char *buf, long n, long *nOut) {
   z.next_in = (Bytef *)buf; z.avail_in = (uInt)n;
   for (;;) {
     if (cap - feito < (1 << 16)) {                 // folga minima: dobra
-      char *no = realloc(out, (size_t)(cap * 2));
+      char *no;
+      if (teto > 0 && feito > teto) { inflateEnd(&z); free(out); return NULL; }
+      no = realloc(out, (size_t)(cap * 2));
       if (!no) { inflateEnd(&z); free(out); return NULL; }
       out = no; cap *= 2;
     }
@@ -574,25 +579,27 @@ static long arquivoIdade(const char *nome) {
 // primeira carga.
 //
 // Escrita direta no caminho, sob a trava de FS que o Tizen exige.
-static void gravarGz(int i, const char *gz, long n) {
+static int gravarBin(const char *nome, const char *nomeTs, const char *gz, long n) {
   char cam[640], tbuf[24]; FILE *f;
   int ok = 0;
-  if (!dados_caminho(cam, sizeof cam, CACHE_GZ[i])) return;
+  if (!dados_caminho(cam, sizeof cam, nome)) return 0;
   dados_fs_travar();
   f = fopen(cam, "wb");
   if (f) { ok = fwrite(gz, 1, (size_t)n, f) == (size_t)n; ok = (fclose(f) == 0) && ok; }
   dados_fs_liberar();
-  if (!ok) return;
+  if (!ok) return 0;
   snprintf(tbuf, sizeof tbuf, "%ld", (long)time(NULL));
-  dados_gravar_leve(CACHE_TS[i], tbuf);
+  dados_gravar_leve(nomeTs, tbuf);
   dados_marcar_sujo(1);
+  return 1;
 }
+static void gravarGz(int i, const char *gz, long n) { gravarBin(CACHE_GZ[i], CACHE_TS[i], gz, n); }
 
 // Le o .gz do cache (binario: dados_ler corta no primeiro NUL).
-static char *lerGz(int i, long *n) {
+static char *lerBin(const char *nome, long *n) {
   char cam[640]; FILE *f; char *b = NULL; long t;
   *n = 0;
-  if (!dados_caminho(cam, sizeof cam, CACHE_GZ[i])) return NULL;
+  if (!dados_caminho(cam, sizeof cam, nome)) return NULL;
   dados_fs_travar();
   f = fopen(cam, "rb");
   if (f) {
@@ -606,10 +613,11 @@ static char *lerGz(int i, long *n) {
   dados_fs_liberar();
   return b;
 }
+static char *lerGz(int i, long *n) { return lerBin(CACHE_GZ[i], n); }
 
 // gzip -> XML com o NUL no fim (o parser trata como texto).
 static char *abrirGz(const char *gz, long ngz, long *nOut) {
-  char *xml = desgzip(gz, ngz, nOut), *c;
+  char *xml = desgzip(gz, ngz, nOut, 0), *c;
   if (!xml) return NULL;
   c = realloc(xml, (size_t)*nOut + 1);
   if (!c) { free(xml); return NULL; }
@@ -642,9 +650,113 @@ static char *obterXml(int i, long *nOut) {
   return xml;
 }
 
+// --- a grade do PROPRIO PROVEDOR (#158) --------------------------------------
+//
+// As cinco fontes acima sao brasileiras e latinas. No #158 (LG C4, Xtream com
+// canais romenos) o guia mostrava 797 canais de grade e nenhum programa: nada
+// ali cobre a Romenia, e o epg_channel_id que o Xtream manda em cada canal so
+// existe no XMLTV do proprio provedor (<servidor>/xmltv.php), que o app nao
+// baixava. Esta e a sexta fonte, opcional, definida por quem sabe dela
+// (guia.c, com o cadastro do Xtream).
+//
+// A URL LEVA USUARIO E SENHA: nunca sai em log, e no disco fica so um hash
+// dela (para saber se o cache e desta fonte), nunca ela.
+//
+// TAMANHO: um provedor grande entrega dezenas de MB. Acima do teto a grade e
+// ignorada com uma linha de log — melhor sem grade do provedor que o app
+// fechando por memoria (no Tizen o heap inteiro e 256 MiB).
+#ifdef __EMSCRIPTEN__
+#define EPG_EXTRA_TETO_REDE (12L << 20)
+#define EPG_EXTRA_TETO_XML  (48L << 20)
+#else
+#define EPG_EXTRA_TETO_REDE (32L << 20)
+#define EPG_EXTRA_TETO_XML  (128L << 20)
+#endif
+static const char *EXTRA_BIN = "epg-extra.bin";
+static const char *EXTRA_TS  = "epg-extra.ts";
+static const char *EXTRA_ID  = "epg-extra.id";
+static char extraUrl[1100];
+static volatile int extraMudou;
+
+static void hashUrl(const char *u, char *dst, size_t tam) {
+  unsigned long long h = 1469598103934665603ULL;
+  for (; *u; u++) { h ^= (unsigned char)*u; h *= 1099511628211ULL; }
+  snprintf(dst, tam, "%016llx", h);
+}
+
+// Bytes da rede (gzip ou XML puro, o xmltv.php manda os dois conforme o
+// painel) -> XML terminado em NUL, ou NULL.
+static char *abrirExtra(const char *b, long n, long *nOut) {
+  char *xml;
+  if (n > 2 && (unsigned char)b[0] == 0x1f && (unsigned char)b[1] == 0x8b) {
+    xml = desgzip(b, n, nOut, EPG_EXTRA_TETO_XML);
+    if (xml) { char *c = realloc(xml, (size_t)*nOut + 1);
+               if (!c) { free(xml); return NULL; }
+               xml = c; xml[*nOut] = 0; }
+  } else {
+    xml = malloc((size_t)n + 1);
+    if (xml) { memcpy(xml, b, (size_t)n); xml[n] = 0; *nOut = n; }
+  }
+  if (!xml) return NULL;
+  { long k = 0;                                 // BOM e espaco antes do '<'
+    while (k < *nOut && k < 64 && xml[k] != '<') k++;
+    if (k >= *nOut || xml[k] != '<') { free(xml); return NULL; }
+    if (k) { memmove(xml, xml + k, (size_t)(*nOut - k) + 1); *nOut -= k; } }
+  return xml;
+}
+
+static char *obterExtra(const char *url, long *nOut) {
+  char id[24], *b, *xml, *velho;
+  long n = 0;
+  RedeControle ctl;
+  RedeMedida med;
+  hashUrl(url, id, sizeof id);
+  velho = dados_ler(EXTRA_ID);
+  if (velho && !strcmp(velho, id) && arquivoIdade(EXTRA_TS) < EPG_CACHE_SEG) {
+    b = lerBin(EXTRA_BIN, &n);
+    xml = b ? abrirExtra(b, n, nOut) : NULL;
+    free(b);
+    if (xml) { free(velho); return xml; }
+  }
+  free(velho);
+  memset(&ctl, 0, sizeof ctl);
+  memset(&med, 0, sizeof med);
+  ctl.max_bytes = EPG_EXTRA_TETO_REDE;
+  b = rede_baixar_bin_medido_controle(url, 120, NULL, &ctl, &n, &med);
+  if (!b || med.limitado) {
+    printf("[epg] grade do provedor: %s\n",
+           med.limitado ? "maior que o teto, ignorada"
+                        : med.status ? "resposta sem corpo" : "sem resposta");
+    if (med.status && med.status != 200) printf("[epg] grade do provedor: HTTP %d\n", med.status);
+    fflush(stdout);
+    free(b);
+    return NULL;
+  }
+  xml = abrirExtra(b, n, nOut);
+  if (xml && gravarBin(EXTRA_BIN, EXTRA_TS, b, n)) dados_gravar_leve(EXTRA_ID, id);
+  if (!xml) { printf("[epg] grade do provedor: %ld B que nao sao XMLTV\n", n); fflush(stdout); }
+  free(b);
+  return xml;
+}
+
+void epg_fonte_extra(const char *url) {
+  if (!url) url = "";
+  pthread_mutex_lock(&trava);
+  if (strcmp(url, extraUrl)) {
+    snprintf(extraUrl, sizeof extraUrl, "%s", url);
+    extraMudou = 1;
+  }
+  pthread_mutex_unlock(&trava);
+}
+
 static void *fioEpg(void *u) {
   int i, ok = 0;
+  char extra[sizeof extraUrl];
   (void)u;
+  pthread_mutex_lock(&trava);
+  snprintf(extra, sizeof extra, "%s", extraUrl);
+  extraMudou = 0;
+  pthread_mutex_unlock(&trava);
   if (!wAbrir(&W)) { pendPronto = 1; pendOk = 0; return NULL; }
   for (i = 0; i < EPG_N_FONTES; i++) {
     long n = 0;
@@ -652,6 +764,17 @@ static void *fioEpg(void *u) {
     if (xml) {
       int achou = wProcessar(&W, xml);
       printf("[epg] %s: %d programas\n", CACHE_XML[i], achou);
+      fflush(stdout);
+      free(xml);
+      ok = 1;
+    }
+  }
+  if (extra[0]) {
+    long n = 0;
+    char *xml = obterExtra(extra, &n);
+    if (xml) {
+      int achou = wProcessar(&W, xml);
+      printf("[epg] grade do provedor: %d programas (%ld KB)\n", achou, n / 1024);
       fflush(stdout);
       free(xml);
       ok = 1;
@@ -702,6 +825,10 @@ void epg_passo(void) {
   if (estado == EPG_PRONTO && !fioVivo &&
       time(NULL) - carregadaEm > EPG_CACHE_SEG)
     epg_iniciar();
+  // A grade do provedor chegou (ou saiu) depois da carga: refaz. As cinco
+  // fontes fixas vem do cache do disco, so a nova vai a rede.
+  else if (extraMudou && !fioVivo && (estado == EPG_PRONTO || estado == EPG_FALHOU))
+    epg_iniciar();
 }
 
 // A grade lista canais SEM programa: a BR1 real tem 266 <channel> e so 105
@@ -721,6 +848,20 @@ static int comGrade(int i, const char *chave) {
       if (!strcmp(chave, P.canais[j].chaves[c])) return j;
   }
   return i;
+}
+
+int epg_match_id(const char *id) {
+  int i, r = -1;
+  if (estado != EPG_PRONTO || !id || !id[0]) return -1;
+  pthread_mutex_lock(&trava);
+  for (i = 0; i < P.nCanais; i++)
+    if (!strcmp(P.canais[i].id, id)) {
+      // Canal da grade sem programa nao e resposta: o nome ainda pode casar
+      // com outro que tenha (ver comGrade).
+      if (P.canais[i].evN > 0) { r = i; break; }
+    }
+  pthread_mutex_unlock(&trava);
+  return r;
 }
 
 int epg_match(const char *nome) {

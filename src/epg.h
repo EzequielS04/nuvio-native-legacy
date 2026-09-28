@@ -62,6 +62,13 @@ void epg_passo(void);
 // ou -1. So responde com epg_estado()==EPG_PRONTO; antes disso devolve -1 e
 // quem chamou deve tentar de novo depois.
 int  epg_match(const char *nome);
+// Pelo id do <channel> da grade (o epg_channel_id do Xtream), exato. So
+// devolve canal COM programa; -1 e "tente pelo nome" (#158).
+int  epg_match_id(const char *id);
+// Sexta fonte, opcional: a grade XMLTV do proprio provedor de IPTV (gzip ou
+// XML). "" tira. Pode chamar de qualquer fio; a (re)carga acontece em
+// epg_passo. A URL pode levar credencial: epg.c nunca a imprime.
+void epg_fonte_extra(const char *url);
 
 // Programa NO AR no instante `agora` (qualquer instante, nao so o presente:
 // para desenhar a coluna de amanha, passe amanha) no canal `epg` (indice

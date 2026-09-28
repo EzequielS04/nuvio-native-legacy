@@ -343,6 +343,26 @@ int xtream_e_id(const char *id) {
   return id && !strncmp(id, "xtream:", 7);
 }
 
+int xtream_url_xmltv(char *url, unsigned n) {
+  char u[300], s[300];
+  if (!url || n < 2) return 0;
+  url[0] = 0;
+  pthread_mutex_lock(&trava);
+  carregarTravado();
+  if (!servidor[0] || !usuario[0] || !senha[0]) { pthread_mutex_unlock(&trava); return 0; }
+#ifdef __EMSCRIPTEN__
+  // O Chromium do Tizen barra http:// (ver chamar), e o proxy do servico de
+  // recomendacoes so repassa o player_api.php: a grade do provedor so vem
+  // quando o painel e https.
+  if (strncmp(servidor, "https://", 8)) { pthread_mutex_unlock(&trava); return 0; }
+#endif
+  urlenc(usuario, u, sizeof u);
+  urlenc(senha, s, sizeof s);
+  snprintf(url, n, "%s/xmltv.php?username=%s&password=%s", servidor, u, s);
+  pthread_mutex_unlock(&trava);
+  return 1;
+}
+
 int xtream_url(const char *id, char *url, unsigned n) {
   char u[300], s[300];
   if (!xtream_e_id(id) || !url || n < 2) return 0;

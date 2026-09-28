@@ -198,6 +198,7 @@ typedef struct {
   char base[600];
   int  cat;      // indice em cats[]
   int  epg;      // -1 = ainda nao resolvido; -2 = sem grade real
+  char epgId[64];  // id do canal no XMLTV do provedor (Xtream), quando ha
   int  fav;      // espelho do arquivo, para o desenho nao varrer a lista
 } GCanal;
 
@@ -827,8 +828,8 @@ static void *fioGuia(void *u) {
     free(st);
   }
   // XTREAM, pela mesma porta e pelas mesmas razoes (ver xtream.h). O epg_id
-  // que o servidor manda nao entra: o EPG do guia casa por nome, e o id do
-  // Xtream e do XMLTV do proprio provedor, que o app nao baixa.
+  // que o servidor manda casa com o XMLTV do proprio provedor, que o EPG baixa
+  // como sexta fonte (#158, ver epg_fonte_extra); sem ele, o nome.
   if (xtream_configurado()) {
     XtreamCanal *xt = malloc(sizeof *xt * G_MAX_CANAL);
     int n = xt ? xtream_canais(xt, G_MAX_CANAL) : 0, i;
@@ -841,6 +842,7 @@ static void *fioGuia(void *u) {
       snprintf(c.id,   sizeof c.id,   "%s", xt[i].id);
       snprintf(c.nome, sizeof c.nome, "%s", xt[i].nome);
       snprintf(c.logo, sizeof c.logo, "%s", xt[i].logo);
+      snprintf(c.epgId, sizeof c.epgId, "%s", xt[i].epgId);
       c.cat = sCatDe(xt[i].categoria[0] ? xt[i].categoria : "Outros");
       if (c.cat >= 0) { sCanais[sNCanais++] = c; ok = 1; }
     }
@@ -1108,6 +1110,12 @@ void guia_carregar(void) {
   // A lista de ontem NA HORA; a de hoje vem atras. Ver o bloco do cache.
   if (!cacheLido) { cacheLido = 1; if (estado == G_PARADO && nCanais == 0) cacheLer(); }
   if (estado == G_PARADO || estado == G_FALHOU) iniciarCarga();
+  // A grade do proprio provedor Xtream (#158), ANTES da primeira carga do EPG
+  // para nao carregar duas vezes. Sem cadastro, "" (tira a de um cadastro que
+  // saiu). Nao vai a rede: e so o cadastro.
+  { char u[1100];
+    if (!xtream_url_xmltv(u, sizeof u)) u[0] = 0;
+    epg_fonte_extra(u); }
   epg_iniciar();
 }
 
@@ -1844,7 +1852,8 @@ void guia_evento(const SDL_Event *e) {
 static int epgDo(GCanal *c) {
   if (c->epg == -1) {
     if (epg_estado() != EPG_PRONTO) return -1;
-    c->epg = epg_match(c->nome);
+    c->epg = c->epgId[0] ? epg_match_id(c->epgId) : -1;
+    if (c->epg < 0) c->epg = epg_match(c->nome);
     if (c->epg < 0) c->epg = -2;
   }
   return c->epg;

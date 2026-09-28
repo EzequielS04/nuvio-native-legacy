@@ -1021,7 +1021,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
     if (ci && ci->imdb[0] && !canalSessao) parental_pedir(ci->imdb);
     // A grade EPG comeca a baixar ja: o banner "agora/a seguir" do OSD e o
     // overlay do guia dependem dela. Idempotente.
-    if (canalSessao) { epg_iniciar(); guia_carregar(); } }
+    if (canalSessao) { guia_carregar(); epg_iniciar(); } }
   tocando = 1; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f;
   pedFontes = erroFonte = pedFaixas = pedProxT = pedProxE = 0; inicioImagem = 0;
   erroTitulo[0] = erroDica[0] = 0;

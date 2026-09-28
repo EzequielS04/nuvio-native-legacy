@@ -18,9 +18,54 @@
 #include <string.h>
 #include <time.h>
 #include "../src/epg.h"
+#include "../src/rede.h"
+#include <zlib.h>
 
 // dubles do que epg.c referencia mas o teste nao exercita
 char *rede_baixar_bin(const char *u, int s, long *n) { (void)u;(void)s;(void)n; return 0; }
+
+// A GRADE DO PROVEDOR (#158) vem por aqui. `extraCorpo`/`extraN` e o que o
+// "servidor" responde; `extraLimitado` simula o teto de bytes atingido.
+static char *extraCorpo; static long extraN; static int extraLimitado, extraPedidos;
+static char extraUltimaUrl[1100];
+char *rede_baixar_bin_medido_controle(const char *url, int segundos,
+                                      const char *const *cab, const RedeControle *c,
+                                      long *tam, RedeMedida *m) {
+  char *b;
+  (void)segundos; (void)cab; (void)c;
+  extraPedidos++;
+  snprintf(extraUltimaUrl, sizeof extraUltimaUrl, "%s", url);
+  if (m) { memset(m, 0, sizeof *m); m->status = 200; m->limitado = extraLimitado; }
+  if (!extraCorpo) { if (m) m->status = 0; return NULL; }
+  b = malloc((size_t)extraN);
+  memcpy(b, extraCorpo, (size_t)extraN);
+  *tam = extraN;
+  return b;
+}
+
+static long gz(const char *in, char **out) {
+  z_stream z; long cap = (long)strlen(in) + 256;
+  *out = malloc((size_t)cap);
+  memset(&z, 0, sizeof z);
+  deflateInit2(&z, 6, Z_DEFLATED, 16 + 15, 8, Z_DEFAULT_STRATEGY);
+  z.next_in = (Bytef *)in; z.avail_in = (uInt)strlen(in);
+  z.next_out = (Bytef *)*out; z.avail_out = (uInt)cap;
+  deflate(&z, Z_FINISH);
+  deflateEnd(&z);
+  return (long)z.total_out;
+}
+
+// Roda o fio da carga ate publicar (epg_passo e quem publica).
+static int carregar(void) {
+  int k;
+  for (k = 0; k < 2000; k++) {
+    struct timespec ts = { 0, 2000000 };
+    epg_passo();
+    if (epg_estado() == EPG_PRONTO || epg_estado() == EPG_FALHOU) return epg_estado();
+    nanosleep(&ts, NULL);
+  }
+  return -1;
+}
 char *dados_ler(const char *n)        { (void)n; return 0; }
 int   dados_gravar_leve(const char *n, const char *c) { (void)n;(void)c; return 1; }
 void  dados_marcar_sujo(int l)        { (void)l; }
@@ -102,6 +147,53 @@ int main(void) {
           epg_match("Aladdin 24h") < 0);
   confere("agora fora de canal valido devolve 0",
           !epg_agora(9999, agora, &p));
+
+  // --- pelo id do canal (#158) ---------------------------------------------
+  confere("id exato casa (Globo.RJ.br)",
+          epg_match_id("Globo.RJ.br") >= 0 && epg_match_id("Globo.RJ.br") == epg_match("Globo RJ"));
+  confere("id de canal sem programa nao e resposta (Sony.br)",
+          epg_match_id("Sony.br") < 0);
+  confere("id vazio ou desconhecido: -1",
+          epg_match_id("") < 0 && epg_match_id("ProTV.ro") < 0);
+
+  // --- a grade do provedor como sexta fonte ---------------------------------
+  { char molde2[1200], *z = NULL; long nz;
+    int e;
+    snprintf(molde2, sizeof molde2,
+      "\xEF\xBB\xBF\n<?xml version=\"1.0\"?><tv>"
+      "<channel id=\"ProTV.ro\"><display-name>PRO TV HD</display-name></channel>"
+      "<programme channel=\"ProTV.ro\" start=\"%s\" stop=\"%s\"><title>Stirile Pro TV</title></programme>"
+      "</tv>", ini1, fim1);
+    extraCorpo = molde2; extraN = (long)strlen(molde2);
+    epg_fonte_extra("http://painel.exemplo:8080/xmltv.php?username=u&password=SEGREDO");
+    epg_iniciar();
+    e = carregar();
+    confere("XML puro (com BOM) do provedor carrega", e == EPG_PRONTO);
+    { int g = epg_match_id("ProTV.ro");
+      confere("canal romeno casa pelo epg_channel_id",
+              g >= 0 && epg_agora(g, agora, &p) && !strcmp(p.titulo, "Stirile Pro TV")); }
+    confere("pediu a URL do provedor", strstr(extraUltimaUrl, "xmltv.php") != NULL);
+
+    // gzip: o xmltv.php de alguns paineis responde comprimido
+    nz = gz(molde2 + 4, &z);
+    extraCorpo = z; extraN = nz;
+    epg_fonte_extra("http://outro.exemplo/xmltv.php?username=u&password=p");
+    e = carregar();                        // epg_passo ve a troca e recarrega
+    confere("gzip do provedor carrega", e == EPG_PRONTO && epg_match_id("ProTV.ro") >= 0);
+
+    // acima do teto: ignorada, e o resto da grade segue
+    extraLimitado = 1;
+    epg_fonte_extra("http://grande.exemplo/xmltv.php?username=u&password=p");
+    e = carregar();
+    confere("acima do teto: ignorada sem derrubar a carga", epg_match_id("ProTV.ro") < 0);
+    extraLimitado = 0;
+
+    // "" tira a fonte
+    { int antes = extraPedidos;
+      epg_fonte_extra("");
+      e = carregar();
+      confere("sem fonte extra, nada e pedido", extraPedidos == antes); }
+    free(z); extraCorpo = NULL; }
 
   if (falhas) { printf("FALHOU: %d checagem(ns)\n", falhas); return 1; }
   puts("PASS: EPG casa nomes do addon com a grade e responde agora/proximos.");

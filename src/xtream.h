@@ -65,5 +65,9 @@ int xtream_e_id(const char *id);
 // Monta a URL do canal em `url`. Nao vai a rede: e so o cadastro + o id. 0
 // quando o id nao e deste modulo ou nao ha cadastro.
 int xtream_url(const char *id, char *url, unsigned n);
+// A grade XMLTV do proprio provedor (<servidor>/xmltv.php), que e onde o
+// epg_channel_id de cada canal existe (#158). Leva a credencial: nunca em log.
+// 0 sem cadastro, ou na Samsung com painel http (bloqueado, ver xtream.c).
+int xtream_url_xmltv(char *url, unsigned n);
 
 #endif
