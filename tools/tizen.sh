@@ -200,7 +200,28 @@ if [ "${NUVIO_ASS_LIBASS:-1}" = "1" ]; then
   ASS_CFLAGS="-DNV_ASS_LIBASS -I$ASS_ROOT/include"
   ASS_LIBS="-L$ASS_ROOT/lib -Wl,--start-group -lass -lharfbuzz -lfribidi -lfreetype -Wl,--end-group"
 fi
-eval emcc $SOURCES ${EXTRA_SOURCES} -o "$SAIDA/index.html" -O2 "$ENV_D" ${NUVIO_EXTRA_CFLAGS:-} $ASS_CFLAGS $ASS_LIBS \
+# WEBP ANIMADO (#141): a libwebp de tools/build-webp-wasm.sh liga NV_WEBP_ANIM
+# em src/gif.c. Sem ela o build segue e o WebP animado fica na foto parada,
+# como ate a 1.5.2 — por isso aviso, e nao erro. Mesmo symlink curto da libass
+# (caminho do checkout com espacos).
+WEBP_ROOT_REAL="${NUVIO_WEBP_ROOT:-$PWD/build/webp-wasm}"
+WEBP_CFLAGS=""
+WEBP_LIBS=""
+if [ -f "$WEBP_ROOT_REAL/lib/libwebp.a" ] && [ -f "$WEBP_ROOT_REAL/include/webp/demux.h" ]; then
+  WEBP_ROOT_SHORT="${TMPDIR:-/tmp}/nuvio-webp-wasm-root-$(id -u)"
+  WEBP_ROOT_CANON=$(cd "$WEBP_ROOT_REAL" && pwd -P)
+  if [ -L "$WEBP_ROOT_SHORT" ] || [ ! -e "$WEBP_ROOT_SHORT" ]; then
+    ln -sfn "$WEBP_ROOT_CANON" "$WEBP_ROOT_SHORT"
+  else
+    echo "tizen.sh: caminho temporario libwebp ja existe e nao e symlink: $WEBP_ROOT_SHORT" >&2
+    exit 1
+  fi
+  WEBP_CFLAGS="-DNV_WEBP_ANIM -I$WEBP_ROOT_SHORT/include"
+  WEBP_LIBS="-L$WEBP_ROOT_SHORT/lib -lwebp"
+else
+  echo "tizen.sh: AVISO libwebp WASM ausente em $WEBP_ROOT_REAL: WebP animado desligado (rode tools/build-webp-wasm.sh)" >&2
+fi
+eval emcc $SOURCES ${EXTRA_SOURCES} -o "$SAIDA/index.html" -O2 "$ENV_D" ${NUVIO_EXTRA_CFLAGS:-} $ASS_CFLAGS $ASS_LIBS $WEBP_CFLAGS $WEBP_LIBS \
   -sWASM_BIGINT=0 \
   -sUSE_SDL=2 -sUSE_SDL_IMAGE=2 -sUSE_SDL_TTF=2 -sUSE_LIBJPEG=1 \
   `# zlib do emscripten: epg.c infla o XMLTV .gz do epgshare01 com inflate.` \

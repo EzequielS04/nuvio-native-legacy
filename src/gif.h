@@ -52,6 +52,12 @@ void gif_ocioso(void);
 // O arquivo e um GIF com MAIS DE UM quadro? Le so a estrutura de blocos, que e
 // toda prefixada por tamanho — nao decodifica pixel nenhum.
 int gif_animado(const char *caminho);
+// WEBP ANIMADO (#141): o focusGif de algumas colecoes e WebP ("RIFF"). Anima
+// pelo mesmo caminho do GIF onde o build tem a libwebp com demux
+// (NV_WEBP_ANIM); gif_webp_suportado diz se este build tem. Os bytes sao WebP
+// com o bit de animacao do VP8X? (so o cabecalho, nenhum pixel)
+int gif_webp_suportado(void);
+int gif_webp_animado_bytes(const unsigned char *b, size_t n);
 
 // UM QUADRO LOCALIZADO NO ARQUIVO, sem nenhum pixel decodificado.
 //

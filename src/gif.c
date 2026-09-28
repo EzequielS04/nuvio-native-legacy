@@ -11,6 +11,9 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
+#ifdef NV_WEBP_ANIM
+#include <webp/demux.h>
+#endif
 
 // ---------------------------------------------------------------- estrutura
 //
@@ -221,7 +224,7 @@ int gif_animado(const char *caminho) {
   if (!b) return 0;
   // DOIS JA RESPONDEM A PERGUNTA. Varrer um GIF de duzentos quadros ate o fim
   // so para dizer "sim" seria trabalho jogado fora.
-  r = gif_mapear(b, n, q, 2) > 1;
+  r = gif_mapear(b, n, q, 2) > 1 || (gif_webp_suportado() && gif_webp_animado_bytes(b, n));
   free(b);
   return r;
 }
@@ -287,6 +290,12 @@ struct GifDec {
   // Tabela do LZW: 4096 codigos de ate 12 bits (ver lzw()).
   uint32_t pos[4096];
   uint16_t compr[4096];
+#ifdef NV_WEBP_ANIM
+  // WEBP ANIMADO (#141): a libwebp compoe cada quadro inteiro na tela dela, e
+  // `tela` aponta para esse buffer (nao e nosso: nao se libera).
+  WebPAnimDecoder *wdec;
+  int *watraso;
+#endif
 };
 
 static int lerByte(Leitor *l) {
@@ -440,6 +449,10 @@ void gif_tamanho_saida(int telaW, int telaH, int largAlvo, int *saidaW, int *sai
 
 void gif_dec_fechar(GifDec *d) {
   if (!d) return;
+#ifdef NV_WEBP_ANIM
+  if (d->wdec) { WebPAnimDecoderDelete(d->wdec); d->tela = NULL; }
+  free(d->watraso);
+#endif
   free(d->b); free(d->q); free(d->tela); free(d->salvo); free(d->idx);
   free(d->saida); free(d->colX); free(d->linY);
   free(d);
@@ -449,11 +462,94 @@ void gif_dec_fechar(GifDec *d) {
 // durante a abertura (depois encolhe para os que existem).
 #define NV_GIF_MAX_Q 4096
 
+// --- WEBP ANIMADO (#141) ------------------------------------------------------
+//
+// O log do #141 (Samsung) dizia 'cartaz "Prime" nao anima: o arquivo nao e GIF
+// (magica 52494646)': o focusGif da colecao e WebP animado ("RIFF"). O resto
+// do caminho (fio, fila, orcamento por ritmo, reducao ao card) e o mesmo do
+// GIF; so a composicao do quadro e da libwebp. So existe onde a libwebp com
+// demux entra no build (NV_WEBP_ANIM): Tizen .wgt via tools/build-webp-wasm.sh.
+// Sem ela, gif_webp_animado responde 0 e fica a foto parada, como antes.
+int gif_webp_animado_bytes(const unsigned char *b, size_t n) {
+  // RIFF....WEBPVP8X, e o bit de animacao (0x02) nas flags do VP8X.
+  return n >= 30 && !memcmp(b, "RIFF", 4) && !memcmp(b + 8, "WEBPVP8X", 8) && (b[20] & 0x02);
+}
+#ifdef NV_WEBP_ANIM
+int gif_webp_suportado(void) { return 1; }
+static GifDec *webpAbrir(unsigned char *b, size_t n, int saidaW, int saidaH) {
+  WebPData dado;
+  WebPAnimDecoderOptions op;
+  WebPAnimInfo info;
+  WebPDemuxer *dmx;
+  WebPIterator it;
+  GifDec *d;
+  int i;
+  dado.bytes = b; dado.size = n;
+  if (!WebPAnimDecoderOptionsInit(&op)) { free(b); return NULL; }
+  op.color_mode = MODE_RGBA;   // bytes R,G,B,A: o mesmo uint32 que o GIF compoe
+  op.use_threads = 0;          // ja estamos num fio proprio
+  d = (GifDec *)calloc(1, sizeof *d);
+  if (!d) { free(b); return NULL; }
+  d->b = b; d->n = n; d->anterior = -1;
+  d->wdec = WebPAnimDecoderNew(&dado, &op);
+  if (!d->wdec || !WebPAnimDecoderGetInfo(d->wdec, &info) || info.frame_count < 2 ||
+      info.canvas_width < 1 || info.canvas_height < 1 ||
+      (long)info.canvas_width * info.canvas_height > GIF_TELA_MAX ||
+      saidaW < 1 || saidaH < 1 || saidaW > (int)info.canvas_width || saidaH > (int)info.canvas_height) {
+    gif_dec_fechar(d);
+    return NULL;
+  }
+  d->telaW = (int)info.canvas_width; d->telaH = (int)info.canvas_height;
+  d->nq = (int)info.frame_count;
+  d->saidaW = saidaW; d->saidaH = saidaH;
+  // A duracao de cada quadro vem do demux: o decodificador so a da quadro a
+  // quadro, e o orcamento (gif_custo) precisa da volta inteira ANTES.
+  d->watraso = (int *)malloc(sizeof(int) * (size_t)d->nq);
+  dmx = WebPDemux(&dado);
+  if (!d->watraso || !dmx) { if (dmx) WebPDemuxDelete(dmx); gif_dec_fechar(d); return NULL; }
+  for (i = 0; i < d->nq; i++) d->watraso[i] = 100;
+  if (WebPDemuxGetFrame(dmx, 1, &it)) {
+    i = 0;
+    do {
+      // 0 e "o mais rapido possivel": navegador trata como 100 ms, como no GIF.
+      if (i < d->nq) d->watraso[i++] = it.duration > 10 ? it.duration : 100;
+    } while (WebPDemuxNextFrame(&it));
+    WebPDemuxReleaseIterator(&it);
+  }
+  WebPDemuxDelete(dmx);
+  d->saida = (uint32_t *)calloc((size_t)saidaW * saidaH, 4);
+  d->colX = (int *)malloc(sizeof(int) * (size_t)(saidaW + 1));
+  d->linY = (int *)malloc(sizeof(int) * (size_t)(saidaH + 1));
+  if (!d->saida || !d->colX || !d->linY) { gif_dec_fechar(d); return NULL; }
+  for (i = 0; i <= saidaW; i++) d->colX[i] = (int)((long)i * d->telaW / saidaW);
+  for (i = 0; i <= saidaH; i++) d->linY[i] = (int)((long)i * d->telaH / saidaH);
+  return d;
+}
+static int webpProximo(GifDec *d, int *y0s, int *y1s) {
+  uint8_t *buf = NULL;
+  int ts = 0, i;
+  if (!WebPAnimDecoderHasMoreFrames(d->wdec)) { WebPAnimDecoderReset(d->wdec); d->prox = 0; }
+  if (!WebPAnimDecoderGetNext(d->wdec, &buf, &ts) || !buf) return -1;
+  d->tela = (uint32_t *)(void *)buf;   // tela composta, do decodificador
+  i = d->prox;
+  d->anterior = i;
+  d->prox = (i + 1) % d->nq;
+  reduzir(d, 0, 0, d->saidaW, d->saidaH);
+  *y0s = 0; *y1s = d->saidaH;
+  return i;
+}
+#else
+int gif_webp_suportado(void) { return 0; }
+#endif
+
 GifDec *gif_dec_abrir(unsigned char *b, size_t n, int saidaW, int saidaH) {
   GifDec *d;
   GifQuadro *q;
   int nq, telaW, telaH, i, precisaSalvo = 0;
   if (!b) return NULL;
+#ifdef NV_WEBP_ANIM
+  if (gif_webp_animado_bytes(b, n)) return webpAbrir(b, n, saidaW, saidaH);
+#endif
   if (n < 14 || memcmp(b, "GIF8", 4)) { free(b); return NULL; }
   telaW = b[6] | (b[7] << 8);
   telaH = b[8] | (b[9] << 8);
@@ -488,7 +584,13 @@ GifDec *gif_dec_abrir(unsigned char *b, size_t n, int saidaW, int saidaH) {
 
 int gif_dec_quadros(const GifDec *d) { return d ? d->nq : 0; }
 void gif_dec_tela(const GifDec *d, int *w, int *h) { *w = d ? d->telaW : 0; *h = d ? d->telaH : 0; }
-int gif_dec_atraso(const GifDec *d, int i) { return d && i >= 0 && i < d->nq ? d->q[i].atraso : 100; }
+int gif_dec_atraso(const GifDec *d, int i) {
+  if (!d || i < 0 || i >= d->nq) return 100;
+#ifdef NV_WEBP_ANIM
+  if (d->watraso) return d->watraso[i];
+#endif
+  return d->q[i].atraso;
+}
 const unsigned char *gif_dec_saida(const GifDec *d) { return d ? (const unsigned char *)d->saida : NULL; }
 const unsigned char *gif_dec_composta(const GifDec *d) { return d ? (const unsigned char *)d->tela : NULL; }
 
@@ -500,6 +602,9 @@ int gif_dec_proximo(GifDec *d, int *y0s, int *y1s) {
   int i, k, palN = 0, transp = -1, entrel, larg, alt, campos;
   int x0, y0, x1, y1, dx0 = 0, dy0 = 0, dx1 = 0, dy1 = 0, tem;
   if (!d || !y0s || !y1s) return -1;
+#ifdef NV_WEBP_ANIM
+  if (d->wdec) return webpProximo(d, y0s, y1s);
+#endif
   i = d->prox;
   q = &d->q[i];
   b = d->b;
@@ -785,9 +890,15 @@ static void abrir(const char *caminho, int largAlvo) {
   unsigned char *b = lerTudo(caminho, &n);
   GifQuadro q0[2];
   if (!b) return;
-  if (gif_mapear(b, n, q0, 2) < 2) { free(b); return; }
-  telaW = b[6] | (b[7] << 8);
-  telaH = b[8] | (b[9] << 8);
+  if (gif_webp_suportado() && gif_webp_animado_bytes(b, n)) {
+    // Tela do VP8X: largura-1 e altura-1 em 24 bits LE, nos bytes 24 e 27.
+    telaW = 1 + (b[24] | b[25] << 8 | b[26] << 16);
+    telaH = 1 + (b[27] | b[28] << 8 | b[29] << 16);
+  } else {
+    if (gif_mapear(b, n, q0, 2) < 2) { free(b); return; }
+    telaW = b[6] | (b[7] << 8);
+    telaH = b[8] | (b[9] << 8);
+  }
   gif_tamanho_saida(telaW, telaH, largAlvo, &fioW, &fioH);
   fio = gif_fio_abrir(b, n, fioW, fioH);      // dono de `b` daqui em diante
   if (!fio) {

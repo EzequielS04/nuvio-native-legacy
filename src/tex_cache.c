@@ -1,4 +1,5 @@
 #include "tex_cache.h"
+#include "gif.h"
 #include <dirent.h>
 #include <sys/stat.h>
 #include <utime.h>
@@ -1652,6 +1653,14 @@ static int baixarParaItem(int idx, const char *url, char *dst, size_t tam, int *
       ok = gravarLocal(dst, (const char *)corpo, n, trace);
       free(corpo);
       return ok;
+    }
+    // WEBP ANIMADO (#141): alem da textura parada de sempre (o Worker le o
+    // primeiro quadro), o arquivo para gif.c animar — ele le por caminho, como
+    // o GIF acima. So quando este build anima WebP; senao nada muda.
+    if (gif_webp_suportado() && gif_webp_animado_bytes(corpo, (size_t)n) && dirCache[0]) {
+      char arq[600];
+      nomeDeCache(url, arq, sizeof arq);
+      gravarLocal(arq, (const char *)corpo, n, trace);
     }
     /* JPEG/PNG/WebP bytes are already compressed. Persist the response as-is;
      * decoding remains the existing worker path and no raw RGBA is stored. */
