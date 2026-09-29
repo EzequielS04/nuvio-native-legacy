@@ -346,10 +346,20 @@ static void testar(void) {
     cat_definir(&tv,1);
     player_abrir(0,NULL);
     assert(player_aberto());
+    // ZAPPING COM DEBOUNCE (aovivo.h): o toque NAO troca na hora — soma, e o
+    // pedido sai 600 ms depois do ultimo toque com o deslocamento total.
     { SDL_Event e={0};e.type=SDL_KEYDOWN;e.key.keysym.scancode=480; /* CH_UP */
-      player_evento(&e);assert(player_pediu_zap()==1 && !player_pediu_zap()); }
+      player_evento(&e);assert(player_pediu_zap()==0);
+      player_atualizar(0.016f,SDL_GetTicks()+100);assert(player_pediu_zap()==0);
+      player_atualizar(0.016f,SDL_GetTicks()+900);
+      assert(player_pediu_zap()==1 && !player_pediu_zap()); }
     { SDL_Event e={0};e.type=SDL_KEYDOWN;e.key.keysym.scancode=481; /* CH_DOWN */
-      player_evento(&e);assert(player_pediu_zap()==-1); }
+      player_evento(&e);player_evento(&e);
+      player_atualizar(0.016f,SDL_GetTicks()+900);assert(player_pediu_zap()==-2); }
+    // CH+ e CH- que se cancelam nao trocam nada.
+    { SDL_Event e={0};e.type=SDL_KEYDOWN;e.key.keysym.scancode=480;
+      player_evento(&e);e.key.keysym.scancode=481;player_evento(&e);
+      player_atualizar(0.016f,SDL_GetTicks()+900);assert(player_pediu_zap()==0); }
     { SDL_Event e={0};e.type=SDL_KEYDOWN;e.key.keysym.sym=SDLK_DOWN;
       player_evento(&e);assert(player_pediu_guia()==1 && !player_pediu_guia()); }
     { SDL_Event e={0};e.type=SDL_KEYDOWN;e.key.keysym.scancode=489; /* BLUE */
@@ -367,7 +377,7 @@ static void testar(void) {
     { SDL_Event e={0};e.type=SDL_KEYDOWN;e.key.keysym.sym=SDLK_DOWN;
       player_evento(&e);assert(player_pediu_guia()==1); }
     { SDL_Event e={0};e.type=SDL_KEYDOWN;e.key.keysym.scancode=480;
-      player_evento(&e);assert(player_pediu_zap()==1); }
+      player_evento(&e);player_atualizar(0.016f,SDL_GetTicks()+900);assert(player_pediu_zap()==1); }
     // player_marcar_canal: quem abriu pelo guia marca a sessao mesmo que o
     // indice ja tenha vindo errado de uma republicacao anterior.
     player_encerrar();

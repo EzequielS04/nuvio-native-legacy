@@ -2434,7 +2434,8 @@ void app_atualizar(float dt, Uint32 agora) {
       (tela != TELA_GUIA || !guia_aberta()))
     player_fechar_mini();
 
-  // CH+/- COM CANAL NO AR: zap na ordem do guia. A lista pode ainda nao ter
+  // CH+/- COM CANAL NO AR: zap na ordem do guia (`dir` e o deslocamento que o
+  // debounce do player somou, nao so +1/-1). A lista pode ainda nao ter
   // sido carregada (guia nunca aberto nesta sessao): a primeira tecla dispara
   // a carga e nao troca nada, a seguinte ja zapeia.
   { int dir = player_pediu_zap();
@@ -2444,6 +2445,14 @@ void app_atualizar(float dt, Uint32 agora) {
       if (id[0] && guia_zap(id, dir, &it)) tocarCanal(&it);
       else guia_carregar();
     } }
+
+  // RECARREGAR (botao do OSD do canal): mesma acao do zap com deslocamento 0 —
+  // o proprio canal, fonte buscada de novo.
+  if (player_pediu_recarregar() && player_aberto() && aguardandoFonte != 2) {
+    const char *id = player_id_canal();
+    CatItem it;
+    if (id[0] && guia_zap(id, 0, &it)) tocarCanal(&it);
+  }
 
   // BAIXO/AZUL COM CANAL NO AR: o overlay do guia abre focado no canal que
   // esta tocando. player_id_canal e o id congelado na abertura — o indice no

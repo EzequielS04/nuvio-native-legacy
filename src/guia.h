@@ -21,6 +21,7 @@
 #define NV_GUIA_H
 #include <SDL2/SDL.h>
 #include "catalogo.h"
+#include "epg.h"
 
 void guia_abrir(void);           // tela cheia
 void guia_overlay_abrir(void);   // por cima do player (video continua atras)
@@ -41,6 +42,15 @@ void guia_carregar(void);
 // guia, ja como CatItem pronto para tocar. 0 = lista ainda nao carregada —
 // chame guia_carregar e tente de novo na proxima tecla.
 int  guia_zap(const char *idAtual, int dir, CatItem *saida);
+// Igual, mas so ESPIA o alvo (banner do zapping): nao mexe na origem do pedido.
+int  guia_zap_ver(const char *idAtual, int dir, CatItem *saida);
+
+// Para o OSD do canal ao vivo (aovivo.h): posicao na ordem do guia, categoria,
+// favorito e o programa no ar de QUALQUER canal da lista (banner do zapping).
+int  guia_info_canal(const char *id, int *numero, int *total, char *cat, size_t n);
+int  guia_e_favorito(const char *id);
+void guia_alternar_favorito(const char *id);
+int  guia_programa_agora(const char *id, time_t t, EpgProg *p);
 
 void guia_evento(const SDL_Event *e);
 void guia_atualizar(float dt, Uint32 agora);

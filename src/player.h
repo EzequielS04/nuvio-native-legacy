@@ -86,9 +86,11 @@ void player_definir_fonte(const char *url);
 int  player_aberto(void);   // 1 enquanto a tela existe, inclusive durante o fade de saida
 // Pedidos que so existem com um CANAL no ar (tipo "channel"/"tv"):
 // `player_pediu_guia` — BAIXO ou a tecla azul pediram o overlay do guia.
-// `player_pediu_zap` — CH+/CH- do controle (NV_SCANCODE_CH_UP/DOWN): +1/-1.
+// `player_pediu_zap` — CH+/CH- (NV_SCANCODE_CH_UP/DOWN), PgUp/PgDn e os botoes
+//   do OSD, somados por um debounce de 600 ms (aovivo.h): o deslocamento total.
 int  player_pediu_guia(void);
-int  player_pediu_zap(void);
+int  player_pediu_zap(void);        // deslocamento em canais (+3, -1...), 0 = nenhum
+int  player_pediu_recarregar(void);  // "Recarregar" do OSD: refaz a fonte do mesmo canal
 // Identidade do canal congelada na abertura: o indice do catalogo pode ser
 // remapeado por uma republicacao da descoberta em plena reproducao, e zap/foco
 // do guia nao podem depender dele. "" quando a sessao nao e de canal.
