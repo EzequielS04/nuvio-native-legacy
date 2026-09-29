@@ -3891,13 +3891,17 @@ void home_desenhar(Uint32 agora) {
             continue;
           }
           if(tipo==FILEIRA_SOCIAL && fileiras[r].ini<0) {
+            // ESTADO VAZIO NA COR DE REALCE (nao num roxo fixo) e com a tinta que
+            // contrasta com ela; sem repetir "Entre amigos", que ja e o titulo da
+            // fileira logo acima (revisao da home, 29/09/2026).
             GfxRect b={px,py,w,h};
-            gfx_cor(b,.055f,.115f,.09f,.15f,1);
-            if(f>.01f)gfx_rect(b,0,GFX_ANEL,0,.008f,0,.055f,.95f,.93f,.99f,f);
-            txt_desenhar(txt_linha_corta(TXT_CALLOUT,"Entre amigos",240,234,248,255,w-48),px+24,py+24);
-            txt_desenhar(txt_linha_corta(TXT_CAPTION,"Nenhuma atividade disponível agora.",195,183,211,255,w-48),px+24,py+91);
-            txt_desenhar(txt_linha_corta(TXT_CAPTION,"Siga pessoas no Trakt para descobrir mais.",195,183,211,255,w-48),px+24,py+126);
-            txt_desenhar(txt_linha_corta(TXT_CAPTION,"OK · Conferir conexão",240,231,250,255,w-48),px+24,py+h-50);
+            float ar,ag,ab; ajustes_acento(&ar,&ag,&ab);
+            int t1=ajustes_tinta_foco(), t2=ajustes_tinta_foco2();
+            gfx_cor(b,.055f,ar,ag,ab,1);
+            if(f>.01f)gfx_rect(b,0,GFX_ANEL,0,.008f,0,.055f,t1/255.0f,t1/255.0f,t1/255.0f,f);
+            txt_desenhar(txt_linha_corta(TXT_CALLOUT,"Nenhuma atividade disponível agora.",t1,t1,t1,255,w-48),px+24,py+24);
+            txt_bloco(TXT_CAPTION,i18n("Siga pessoas no Trakt ou adicione amigos do Nuvio."),t2,t2,t2,px+24,py+91,w-48,30.0f,1.0f,2);
+            txt_desenhar(txt_linha_corta(TXT_CAPTION,"OK · Conferir conexão",t1,t1,t1,255,w-48),px+24,py+h-50);
             if(foco.fileira==r)temItemFoco=0;
             continue;
           }
@@ -3945,7 +3949,7 @@ void home_desenhar(Uint32 agora) {
             txt_desenhar(acao,tx,conteudoTopo+38.0f);
             TxtLinha titulo=txt_linha_corta(TXT_CW_META,cItem->titulo,228,231,239,255,tw);
             txt_desenhar(titulo,tx,conteudoTopo+92.0f);
-            TxtLinha ep=txt_linha_corta(TXT_MINI,cItem->temporada?cItem->direcao:i18n("Filme"),181,185,196,255,tw);
+            TxtLinha ep=txt_linha_corta(TXT_MINI,(cItem->temporada||!strcmp(cItem->tipo,"series"))?cItem->direcao:i18n("Filme"),181,185,196,255,tw);
             txt_desenhar(ep,tx,conteudoTopo+130.0f);
             TxtLinha fonte=txt_linha_corta(TXT_MINI,cItem->provNome[0]?cItem->provNome:"Trakt",155,161,174,255,tw);
             txt_desenhar(fonte,tx,conteudoBase-14.0f);
