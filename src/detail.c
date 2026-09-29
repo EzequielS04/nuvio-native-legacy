@@ -47,6 +47,7 @@
 #include "tex_cache.h"
 #include "focus.h"
 #include "anim.h"
+#include "trailercinema.h"
 #include "revela.h"
 #include "textogate.h"
 #include "layout.h"
@@ -201,8 +202,9 @@ static float  trailerFade = 0.0f;
 // trailer tocando, o bloco de texto do heroi desce e apaga e so o logo fica,
 // pequeno, no canto inferior esquerdo. Qualquer tecla traz o bloco de volta
 // (o trailer continua); Voltar fecha o trailer sem sair da pagina.
-static float  trailerCopy = 0.0f;      // 0 = bloco no lugar, 1 = so o logo embaixo
-static int    trailerCopyOculta = 0;   // a intencao; trailerCopy e a mola
+// A conta (borda de subida, mola, medidas do logo) e de trailercinema.h, que a
+// home divide (mesmo modo cinema no destaque).
+static TrailerCinema trailerCinema;
 // A FONTE do trailer `k` desta pagina, no formato que trailer_abrir espera:
 // URL (Apple HLS nos dois alvos, MP4 do IMDb na LG) ou id do YouTube (Samsung,
 // lista do TMDB). NULL quando ainda nao ha — ou quando nao vai haver, e ai
@@ -876,7 +878,7 @@ static void desenhaArteDetalhe(GfxRect alvo, GLuint tex, const char *arte,
         gfx_rect(alvo, tex, GFX_DETALHE, veu, 0, 0, 0.0f, 0, 0, 0, alpha * (1.0f - trailerFade));
       // No modo cinema o bloco de texto saiu: o veu sai junto (fica 15%,
       // para o logo pequeno do canto nao flutuar sobre uma cena clara).
-      gfx_rect(alvo, 0, GFX_DETALHE, veu * (1.0f - 0.85f * anim_suave(trailerCopy)), 1.0f, 0, 0.0f, 0, 0, 0, alpha * trailerFade);
+      gfx_rect(alvo, 0, GFX_DETALHE, veu * (1.0f - 0.85f * trailercinema_t(&trailerCinema)), 1.0f, 0, 0.0f, 0, 0, 0, alpha * trailerFade);
     } else
       gfx_rect(alvo, tex, GFX_DETALHE, veu, 0, 0, 0.0f, 0, 0, 0, alpha);
   } else {
@@ -934,7 +936,7 @@ void detail_abrir(const HomeItem *it) {
   trailer_fechar(); trailerDesde = 0; trailerTentado = 0; trailerFade = 0.0f;
   trailerEtapa = 0; trailerPrazo = 0;
   trailerSemFonteLogado = 0;
-  trailerCopy = 0.0f; trailerCopyOculta = 0;
+  trailercinema_zerar(&trailerCinema);
   idx = it->indice;
   revistaVista = cat_revisao();
   // Guarda identidade e copia ANTES de qualquer republicacao. Ver revalidarIdx.
@@ -1525,9 +1527,9 @@ void detail_evento(const SDL_Event *e) {
   if (trocaarte_aberto()) { trocaarte_evento(e); return; }
   // MODO CINEMA: a primeira tecla so devolve o bloco de texto (o trailer
   // segue); Voltar fecha o trailer e fica na pagina.
-  if (trailerCopyOculta && e->type == SDL_KEYDOWN && !e->key.repeat) {
+  if (trailerCinema.oculta && e->type == SDL_KEYDOWN && !e->key.repeat) {
     SDL_Keycode kc = e->key.keysym.sym;
-    trailerCopyOculta = 0;
+    trailercinema_tecla(&trailerCinema);
     if (kc == SDLK_AC_BACK || kc == SDLK_ESCAPE || kc == SDLK_BACKSPACE || kc == SDLK_DELETE ||
         e->key.keysym.scancode == NV_SCANCODE_BACK) trailer_fechar();
     return;
@@ -2179,14 +2181,9 @@ void detail_atualizar(float dt, Uint32 agora) {
     }
 #endif
     { float alvo = (trailer_aberto() && trailer_tocando()) ? 1.0f : 0.0f;
-      static int tocavaAntes;
       int toca = alvo > 0.5f && !trailer_cheia();
-      // Borda de subida: o trailer COMECOU a tocar -> esconde o bloco.
-      if (toca && !tocavaAntes) trailerCopyOculta = 1;
-      if (!toca) trailerCopyOculta = 0;
-      tocavaAntes = toca;
       trailerFade = anim_mola(trailerFade, alvo, dt, NV_MOLA_SCROLL);
-      trailerCopy = anim_mola(trailerCopy, trailerCopyOculta ? 1.0f : 0.0f, dt, NV_MOLA_SCROLL); }
+      trailercinema_passo(&trailerCinema, toca, dt, ajustes_animacoes_reduzidas()); }
   }
   // O CATALOGO TROCOU: OS EPISODIOS FORAM JUNTO, E NINGUEM OS REPEDIA.
   //
@@ -2803,14 +2800,12 @@ static void desenhaPonto(float x, float yCentro, float lum, float a) {
 static void logoCinema(float a) {
   const char *arqLogo = logoDe(idx);
   GLuint texLogo = arqLogo ? tex_obter_larg_qualquer(arqLogo, NV_DETW_LOGO_MAXW) : 0;
-  float baseY = NV_TELA_H - 96.0f;
+  float baseY = trailercinema_base();
   if (a <= 0.005f) return;
   if (texLogo) {
     float asp = tex_aspecto(arqLogo);
     float h, w;
-    if (asp <= 0.0f) asp = 2.5f;
-    h = NV_DETW_LOGO_H * 0.62f; w = h * asp;
-    if (w > NV_DETW_LOGO_MAXW * 0.5f) { w = NV_DETW_LOGO_MAXW * 0.5f; h = w / asp; }
+    trailercinema_logo(asp, &w, &h);
     gfx_tex_aspect_atual = 0.0f;
     { GfxModo m = tex_marca_escura(arqLogo) ? GFX_MARCA : GFX_TEXTO;
       gfx_rect((GfxRect){ NV_DETW2_X, baseY - h, w, h }, texLogo, m, 0, 0, 0, 0.0f, 1, 1, 1, a); }
@@ -5228,7 +5223,7 @@ void detail_desenhar(Uint32 agora) {
   // O conteudo SOBE para o lugar enquanto aparece, no lugar de so surgir: e a
   // contraparte do texto da home, que desce e apaga. Junto, le como um bloco
   // trocando de arranjo, que e o que o dono pediu.
-  { float c = anim_suave(trailerCopy);
+  { float c = trailercinema_t(&trailerCinema);
     // Modo cinema: o bloco desce 220 px enquanto apaga; o logo pequeno entra
     // no canto de baixo. As duas molas sao a mesma, entao o cruzamento e limpo.
     // Com "Trocar arte" aberta o texto da pagina sai e fica a arte: o que se
@@ -5241,7 +5236,7 @@ void detail_desenhar(Uint32 agora) {
       float k = (1.0f - c) * (1.0f - ta);
       if (gh > 0.0f) {
         float f = textogate_passo(&gateHero, 0, SDL_GetTicks());
-        heroWeb(a2 * k * f, -scrollY + (1.0f - a2) * NV_TELA_H * 0.05f + c * 220.0f);
+        heroWeb(a2 * k * f, -scrollY + (1.0f - a2) * NV_TELA_H * 0.05f + c * NV_CINEMA_DESCE);
       } else {
         heroWeb(NV_TXTGATE_AQUECER, -scrollY + NV_TELA_H * 0.05f);
         textogate_passo(&gateHero, txt_pendentes - pend0,
