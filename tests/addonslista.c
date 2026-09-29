@@ -33,9 +33,16 @@ static int nDebridNovaBusca;
 // guarda o tipo de cada pedido, na ordem, para conferir quem foi primeiro.
 static const char *respCanalTv, *respCanalChannel;
 static char pedidosCanal[200];
+// lento.test (#182): as primeiras `falhasLento` requisicoes NAO respondem (o
+// timeout do AIOStreams frio); as seguintes respondem com uma fonte.
+static int falhasLento, chamadasLento;
 char *rede_baixar(const char *url, int s) {
   const char *r;
   (void)s;
+  if (strstr(url, "lento.test")) {
+    if (++chamadasLento <= falhasLento) return NULL;
+    return strdup("{\"streams\":[{\"url\":\"https://x/l.mp4\"}]}");
+  }
   if (strstr(url, "canal.test")) {
     int tv = strstr(url, "/stream/tv/") != NULL;
     strncat(pedidosCanal, tv ? "tv," : "channel,",
@@ -203,6 +210,29 @@ int main(void) {
     while (addons_estado() == ADD_BUSCANDO) usleep(1000);
     if (!addons_motivo_vazio(m, sizeof m)) snprintf(m, sizeof m, "(sem causa)");
     conferirTexto("channel mudo, tv vazio", m, "Canal TV não tem fonte para este canal agora"); }
+
+  // ---- #182: addon lento aparece sozinho, sem recarregar a mao
+  conferir("addon lento entrou", addons_adicionar("Lento", "https://lento.test/manifest.json"), 1);
+  // 11) nao respondeu na 1a tentativa, respondeu na 2a: a lista ja o traz.
+  falhasLento = 1; chamadasLento = 0;
+  addons_definir_origem("https://lento.test");
+  addons_buscar("tt0000011", "movie");
+  addons_definir_origem(NULL);
+  while (addons_estado() == ADD_BUSCANDO) usleep(1000);
+  conferir("lento respondeu na segunda tentativa", addons_estado(), ADD_PRONTO);
+  conferir("duas requisicoes", chamadasLento, 2);
+  // 12) fora do ar de verdade: duas consultas gastam a 2a tentativa, a terceira
+  //     nao (um addon morto nao pode dobrar o prazo de toda abertura).
+  falhasLento = 1000; chamadasLento = 0;
+  { int k, esperado[3] = { 2, 2, 1 };
+    for (k = 0; k < 3; k++) {
+      int antes = chamadasLento;
+      addons_definir_origem("https://lento.test");
+      addons_buscar("tt0000012", "movie");
+      addons_definir_origem(NULL);
+      while (addons_estado() == ADD_BUSCANDO) usleep(1000);
+      conferir("addon morto: requisicoes da consulta", chamadasLento - antes, esperado[k]);
+    } }
 
   remove(caminho);
   rmdir(dir);

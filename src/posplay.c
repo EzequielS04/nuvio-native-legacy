@@ -9,6 +9,7 @@
 #include "layout.h"
 #include "anim.h"
 #include "ajustes.h"
+#include "vistoep.h"
 #include "detail.h"
 #include "descoberta.h"
 #include "video.h"
@@ -366,6 +367,16 @@ int posplay_evento(const SDL_Event *e) {
   return 0;
 }
 
+// #177: a mesma regra da lista de episodios (#133). O proximo episodio e, por
+// definicao, o que a pessoa ainda nao viu: fica desfocado enquanto o ajuste
+// estiver ligado, salvo se o mapa afirma que ja foi visto (reassistindo).
+int posplay_desfocar_thumb(int idxCatalogo, int temporada, int episodio) {
+  const CatItem *ci;
+  if (!ajustes_desfocar_nao_assistidos()) return 0;
+  ci = cat_item(idxCatalogo);
+  return !(ci && vistoep_estado(ci->imdb, temporada, episodio) == 1);
+}
+
 void posplay_desenhar(Uint32 agora, float baseY) {
   float a = anim, x = NV_DETP_X;
   if (a < 0.01f) return;
@@ -413,6 +424,8 @@ void posplay_desenhar(Uint32 agora, float baseY) {
                        : (ci ? ci->backdrop : "");
       GLuint t = arte[0] ? tex_obter_larg(arte, tr.w) : 0;
       gfx_cor(tr, PP_EP_RAIO / tr.h, .19f, .19f, .20f, a);
+      // Sem copia desfocada pronta, gfx_desfocado devolve 0 e fica o fundo.
+      if (t && posplay_desfocar_thumb(idx, proxT, proxE)) t = gfx_desfocado(t, arte);
       if (t) {
         gfx_tex_aspect_atual = tex_aspecto(arte);
         gfx_rect(tr, t, GFX_CARD, 0, 0, 0, PP_EP_RAIO / tr.h, 0, 0, 0, a);

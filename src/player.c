@@ -56,6 +56,7 @@ static void avisarCascaAberto(int v) { EM_ASM({ window.nvPlayerAberto = $0; }, v
 static void avisarCascaAberto(int v) { (void)v; }
 #endif
 #include "trakt.h"
+#include "traktscrobble.h"
 #include "sync.h"
 #include "parental.h"
 #include "episodios.h"
@@ -209,6 +210,7 @@ static Uint32 scrubUltimo;
 
 static int   aberto = 0, saindo = 0, pediuSair = 0;
 static int   idx = 0;
+#define PLR_SCR_TOCOU_S 5.0f   // #179: reproducao continua antes do /scrobble/start
 static int   tocando = 1;
 // Botao em foco na fileira de transporte. Comeca no PLAY porque e a resposta
 // que nove de cada dez aberturas quer: o dedo para no centro e o OK decide.
@@ -2035,6 +2037,35 @@ void player_atualizar(float dt, Uint32 agora) {
     if (posSeg >= duracaoSeg) { posSeg = duracaoSeg; if (!ehCanal()) tocando = 0; }
   }
 
+  // TRAKT "NOW WATCHING" (#179). Ate a 1.5.3 o Trakt so ouvia pause/stop, ao
+  // SAIR: nunca havia /scrobble/start, e sem ele o episodio nao aparece em
+  // "Now Watching" nem o progresso anda durante a exibicao. Start depois de
+  // PLR_SCR_TOCOU_S de reproducao continua (o web espera 15 s: evita mandar a
+  // cada troca de fonte); pause ao pausar. Mesma guarda do encerramento: fluxo
+  // curto (<120 s, clipe de erro do provedor) e canal ao vivo nao falam.
+  { int ok = comVideo && video_pronto() && video_ativo() && tocando && !scrubbing &&
+             !saindo && !erroFonte && !esperandoFonte && !ehCanal() &&
+             duracaoSeg >= 120.0f;
+    static float tocouS;
+    const CatItem *cs = item();
+    if (ok && cs && cs->imdb[0]) {
+      char id[64];
+      if (epT > 0 && epE > 0) snprintf(id, sizeof id, "%.*s:%d:%d", (int)strcspn(cs->imdb,":"), cs->imdb, epT, epE);
+      else snprintf(id, sizeof id, "%s", cs->imdb);
+      tocouS += dt;
+      if (tocouS >= PLR_SCR_TOCOU_S) trakt_scrobble(SCR_EV_TOCANDO, id, posSeg, duracaoSeg);
+    } else {
+      // Pausou (ou o video parou de andar): so fala se ha um start em pe.
+      if (tocouS > 0.0f && cs && cs->imdb[0] && comVideo && video_pronto() && !ehCanal() &&
+          duracaoSeg >= 120.0f && !scrubbing) {
+        char id[64];
+        if (epT > 0 && epE > 0) snprintf(id, sizeof id, "%.*s:%d:%d", (int)strcspn(cs->imdb,":"), cs->imdb, epT, epE);
+        else snprintf(id, sizeof id, "%s", cs->imdb);
+        trakt_scrobble(SCR_EV_PAUSOU, id, posSeg, duracaoSeg);
+      }
+      tocouS = 0.0f;
+    } }
+
   // PÓS-REPRODUÇÃO: o proximo episodio ou os relacionados, no fim do titulo.
   { const CatItem *ci = item();
     int eSerie = ci && !strcmp(ci->tipo, "series");
@@ -2438,6 +2469,20 @@ static void desenharAcoesEpisodio(void){
   }
 }
 
+// O anel de "carregando", o mesmo da abertura da fonte e do rebuffer (#182).
+static void anelCarregando(Uint32 agora, float alfa) {
+  float fr, fg, fb;
+  int k;
+  corFocoPlayer(&fr, &fg, &fb);
+  for (k = 0; k < 12; k++) {
+    float ang = k * 6.2831853f / 12.0f + agora * .006f;
+    float br = .18f + .82f * k / 11.0f;
+    GfxRect pt = {NV_TELA_W*.5f + cosf(ang)*24 - 4,
+                  NV_TELA_H*.5f + sinf(ang)*24 - 4,8,8};
+    gfx_cor(pt,.5f,fr,fg,fb,br*alfa);
+  }
+}
+
 void player_desenhar(Uint32 agora) {
   (void)agora;
   if (!aberto) return;
@@ -2518,7 +2563,6 @@ void player_desenhar(Uint32 agora) {
   // coisa com o que ja existe, e leem bem de longe.
   if (player_carregando()) {
     GfxRect escuro = { 0, 0, NV_TELA_W, NV_TELA_H };
-    int k;
     gfx_cor(escuro, 0.0f, 0, 0, 0, 0.55f * entrada);
     // A MARCA DO CANAL VEM DO BACKDROP QUANDO NAO HA `logo`. O FrostView (e os
     // addons de canal em geral) nao preenche `logo`: manda a marca em poster e
@@ -2539,16 +2583,7 @@ void player_desenhar(Uint32 agora) {
       txt_desenhar_alpha(t,(NV_TELA_W-t.w)*.5f,NV_TELA_H*.5f-150,entrada);
     }
     // Anel com cauda luminosa, animado sem novas texturas por quadro.
-    { float fr, fg, fb;
-      corFocoPlayer(&fr, &fg, &fb);
-      for (k = 0; k < 12; k++) {
-      float ang = k * 6.2831853f / 12.0f + agora * .006f;
-      float br = .18f + .82f * k / 11.0f;
-      GfxRect pt = {NV_TELA_W*.5f + cosf(ang)*24 - 4,
-                    NV_TELA_H*.5f + sinf(ang)*24 - 4,8,8};
-      gfx_cor(pt,.5f,fr,fg,fb,br*entrada);
-      }
-    }
+    anelCarregando(agora, entrada);
     { TxtLinha lc = txt_linha(TXT_CALLOUT, "Abrindo fonte", 236, 237, 242, 255);
       txt_desenhar_alpha(lc, NV_TELA_W * 0.5f - lc.w * 0.5f,
                          NV_TELA_H * 0.5f + 50, 0.85f * entrada); }
@@ -2557,6 +2592,11 @@ void player_desenhar(Uint32 agora) {
       txt_desenhar_alpha(le,(NV_TELA_W-le.w)*.5f,NV_TELA_H*.5f+94,entrada);
     }
   }
+  // REBUFFER (#182 pediu um indicador): com o video ja rodando, o buffer que
+  // esvazia congelava a imagem sem nenhum sinal. So o anel, sem veu nem texto,
+  // e so depois de 600 ms parado — o vai-e-volta curto de um seek nao acende.
+  else if (comVideo && !erroFonte && !saindo && video_bufferando_ms() >= 600)
+    anelCarregando(agora, entrada);
   if (erroFonte) {
     gfx_cor(tela,0,.02f,.02f,.025f,.65f);
     // Cortadas na largura: o motivo leva o nome do addon, que e da pessoa.

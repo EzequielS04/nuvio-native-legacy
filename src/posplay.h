@@ -44,6 +44,8 @@ int  posplay_evento(const SDL_Event *e);
 // `baseY` e a linha ACIMA da qual o painel cabe inteiro — o topo do que o
 // player ja desenha. Ancorar pela base, e nao por um y fixo, e o que impede o
 // painel de cair em cima da barra de tempo.
+// 1 quando o still do proximo episodio deve sair desfocado (#177).
+int  posplay_desfocar_thumb(int idxCatalogo, int temporada, int episodio);
 void posplay_desenhar(Uint32 agora, float baseY);
 // Fecha e zera. Chamado quando o player abre outra coisa.
 void posplay_fechar(void);

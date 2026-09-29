@@ -7,6 +7,8 @@
 #include "posplay.h"
 #include "catalogo.h"
 #include "player.h"
+#include "ajustes.h"
+#include "vistoep.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -308,6 +310,19 @@ int main(void) {
       }
     } }
   puts("ok  o cartao de proximo episodio obedece ao marcador de creditos");
+
+  // #177: o still do proximo episodio segue "desfocar nao assistidos".
+  ajustes_aplicar_blob("{\"features\":{\"layout_settings\":{"
+    "\"blur_unwatched_episodes\":{\"type\":\"boolean\",\"value\":false}}}}");
+  assert(posplay_desfocar_thumb(0, 5, 4) == 0);            // ajuste desligado
+  ajustes_aplicar_blob("{\"features\":{\"layout_settings\":{"
+    "\"blur_unwatched_episodes\":{\"type\":\"boolean\",\"value\":true}}}}");
+  assert(posplay_desfocar_thumb(0, 5, 4) == 1);            // nao visto: desfoca
+  vistoep_definir("tt0944947", 5, 4, 0);
+  assert(posplay_desfocar_thumb(0, 5, 4) == 1);            // sabido NAO visto
+  vistoep_definir("tt0944947", 5, 4, 1);
+  assert(posplay_desfocar_thumb(0, 5, 4) == 0);            // reassistindo: nitido
+  puts("ok  o still do proximo episodio obedece a desfocar nao assistidos");
 
   puts("posplay: tudo ok");
   return 0;
