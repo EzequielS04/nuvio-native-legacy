@@ -34,9 +34,17 @@ namespace NuvioTpk
 
         const int W = 1920, H = 1080;
 
+        // CANARIO (#137): toca res/silencio.mp4 pelo player do filme logo que a
+        // janela sobe, para a TV tirar o audio do Samsung TV Plus que segue por
+        // baixo (ver Video.PrimeAudio). false = desliga, o host volta a ser o de
+        // antes. Espera PRIME_ESPERA_MS depois do gl.Show() para nao disputar
+        // com a abertura.
+        const bool PRIME_AUDIO = true;
+        const int PRIME_ESPERA_MS = 1500;
+
         GLWindow gl;
         volatile bool fim;
-        NuiTimer vigia;
+        NuiTimer vigia, prime;
         Video video;
 
         protected override void OnCreate()
@@ -125,6 +133,27 @@ namespace NuvioTpk
                 return true;
             };
             vigia.Start();
+
+            AgendaPrime();
+        }
+
+        // Nunca derruba nada: qualquer falha vira linha no log e o app segue.
+        void AgendaPrime()
+        {
+            if (!PRIME_AUDIO) return;
+            try
+            {
+                string arq = IOPath.Combine(DirectoryInfo.Resource, "silencio.mp4");
+                prime = new NuiTimer(PRIME_ESPERA_MS);
+                prime.Tick += (s, e) =>
+                {
+                    try { if (!fim && video != null) video.PrimeAudio(arq); }
+                    catch (Exception ex) { video?.Log("[audio] prime fail " + ex.GetType().Name + ": " + ex.Message); }
+                    return false;
+                };
+                prime.Start();
+            }
+            catch (Exception e) { video?.Log("[audio] prime fail agendar " + e.GetType().Name + ": " + e.Message); }
         }
 
         // Em vez de fechar em silencio: o motivo na tela, com a TV, para foto.
