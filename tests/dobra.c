@@ -37,6 +37,8 @@ int main(void) {
   assert(!strcmp(dobrar("\uFF28\uFF24\uFF32 \uFF14\uFF2B"), "HDR 4K"));
   assert(!strcmp(dobrar("\U0001D7EE\U0001D7ED\U0001D7F2\U0001D7ECp"), "2160p"));  // digitos sans bold
   assert(!strcmp(dobrar("\u029C\u1D07\u1D20\u1D04"), "HEVC"));
+  assert(!strcmp(dobrar("\u1D34\u1D30 \u02B0\u1D48"), "HD hd"));          // sobrescrito
+  assert(!strcmp(dobrar("\U0001F170\U0001F171"), "AB"));                  // quadradas
   assert(!strcmp(dobrar("Fundação 1080p"), "Fundação 1080p"));   // texto comum intacto
   puts("dobra: ok");
   return 0;

@@ -1,6 +1,7 @@
 #include "streams.h"
 #include "idioma.h"
 #include "badges.h"
+#include "limpa.h"
 #include <pthread.h>
 #include "rede.h"
 #include "gfx.h"
@@ -802,6 +803,36 @@ static int botaoDe(int i) {
   return BT_FECHAR;
 }
 static int nBotoes(void) { return video_pode_forcar_sdr() ? 4 : 3; }
+// TEXTO DE ADDON LIMPO, GUARDADO POR LISTA (#144). nv_limpar_texto percorre o
+// texto e consulta tabelas: barato, mas a folha desenha ~10 linhas por quadro a
+// 60 Hz. Cada fonte e limpa na primeira vez que aparece e o resultado fica ate
+// a lista mudar (listaGeracao sobe a cada stream_definir_lista). O texto CRU
+// continua em Stream: deteccao de selo, preferencia lembrada e o
+// .mkv/.mp4 leem o original e nao podem mudar por causa de um enfeite.
+typedef struct { char nome[208]; char desc[1024]; char pronto; } TextoLimpo;
+static TextoLimpo *limpos;
+static unsigned limposGeracao;
+static int limposN;
+
+static void limpo(int i, const char **nome, const char **desc) {
+  const Stream *s = &lista[i];
+  TextoLimpo *t;
+  if (!limpos || limposGeracao != listaGeracao || limposN != n) {
+    free(limpos);
+    limpos = n > 0 ? calloc((size_t)n, sizeof *limpos) : NULL;
+    limposGeracao = listaGeracao;
+    limposN = limpos ? n : 0;
+  }
+  if (!limpos || i < 0 || i >= limposN) { *nome = s->rotulo; *desc = s->descricao; return; }
+  t = &limpos[i];
+  if (!t->pronto) {
+    nv_limpar_texto(s->rotulo, t->nome, sizeof t->nome, NV_LIMPA_UMA_LINHA);
+    nv_limpar_texto(s->descricao, t->desc, sizeof t->desc, NV_LIMPA_UMA_LINHA);
+    t->pronto = 1;
+  }
+  *nome = t->nome; *desc = t->desc;
+}
+
 static const char *rotuloBotao(int b) {
   if (b == BT_RECARREGAR) return "Recarregar";
   if (b == BT_SEM_HDR)    return "Sem HDR";
@@ -1057,11 +1088,11 @@ void stream_folha_desenhar(Uint32 agora) {
       int c3=sel?tinta2:194, c4=sel?tinta2:224;
       corTitulo=c1; corProv=c2; corDesc=c3; corMeta=c4; }
     float lx=x+62,w=FOLHA_W-124;
-    char nome[sizeof s->rotulo],descricao[sizeof s->descricao];
-    snprintf(nome,sizeof nome,"%s",s->rotulo);snprintf(descricao,sizeof descricao,"%s",s->descricao);
-    // SDL_ttf nao interpreta quebras de linha; nao renderizar glifos .notdef.
-    for(char *p=nome;*p;p++)if((unsigned char)*p<32)*p=' ';
-    for(char *p=descricao;*p;p++)if((unsigned char)*p<32)*p=' ';
+    // Texto de addon LIMPO uma vez por lista (limpo(), abaixo), nao por quadro:
+    // emoji, bandeira, versalete e tracos de caixa saem, e a quebra de linha da
+    // descricao vira separador (#144).
+    const char *nome,*descricao;
+    limpo(i,&nome,&descricao);
     txt_desenhar_alpha(txt_linha_corta(TXT_PAINEL_ITEM,nome,corTitulo,C8(corTitulo+1),C8(corTitulo+3),255,w),lx,y+16,anim);
     // A FONTE LEMBRADA, MARCADA. Sem a marca, quem abre a folha para conferir
     // continua procurando a propria fonte entre dezenas de linhas — que e a
@@ -1124,7 +1155,9 @@ void stream_folha_desenhar(Uint32 agora) {
     // y+197 numa linha de 214), entao nenhum vao entre as linhas de baixo
     // muda — so entra ar debaixo da pilula. Mexer na pilula em vez disso a
     // tiraria do centro da linha do provedor, que e onde ela esta ancorada.
-    txt_bloco(TXT_PG_FIM,descricao,corDesc,C8(corDesc+3),C8(corDesc+8),lx,y+86,w,25,anim,2);
+    // txt_bloco_corta: o que passa das duas linhas termina em reticencias na
+    // ULTIMA linha visivel, e nao some sem aviso no meio de uma frase.
+    txt_bloco_corta(TXT_PG_FIM,descricao,corDesc,C8(corDesc+3),C8(corDesc+8),lx,y+86,w,25,anim,2);
     char meta[192],qual[24]="";
     float mx = lx;
     const char *cont = containerDa(s);
