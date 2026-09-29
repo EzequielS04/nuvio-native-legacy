@@ -3,7 +3,7 @@
 
 ESTRUTURA. idioma_tab.h e a tabela mestra: { chave em portugues, ingles },
 ORDENADA por strcmp dos BYTES DECODIFICADOS (aspas = 0x22, \\n = 0x0A — nao o
-texto literal com a barra). idioma_ro.h, idioma_uk.h e idioma_ru.h tem UMA
+texto literal com a barra). idioma_ro.h, idioma_uk.h, idioma_ru.h, idioma_fr.h, idioma_de.h e idioma_es.h tem UMA
 linha por entrada da mestra, na MESMA ordem:  T("chave pt", "traducao").
 O compilador descarta a chave (macro T); ela existe para o revisor humano ler
 a linha inteira e para este script conferir que o alinhamento nao escorregou.
@@ -22,7 +22,11 @@ O QUE CONFERE (sai com codigo 1 no primeiro defeito de qualquer idioma):
      verdade: o espaco da frente separa de um numero desenhado antes);
   9. ucraniano e russo tem de conter cirilico, salvo o que e nome proprio,
      sigla ou formato (VERBATIM abaixo) ou igual a chave/ao ingles — texto em
-     alfabeto latino ali e traducao que ficou por fazer.
+     alfabeto latino ali e traducao que ficou por fazer;
+ 10. fr, de e es (e ro) NAO podem ter cirilico, e so podem usar caracteres que
+     as fontes embarcadas (deploy/app/fonts) desenham: o cmap de cada TTF e lido
+     aqui mesmo (sem dependencia externa) e um caractere que falte em qualquer
+     uma das fontes de interface reprova. Cobertura medida, nao suposta.
 
 Uso:
     python3 tools/idiomas.py                 # confere tudo
@@ -35,7 +39,9 @@ import re, sys, pathlib
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 SRC = RAIZ / "src"
-IDIOMAS = ("ro", "uk", "ru")
+IDIOMAS = ("ro", "uk", "ru", "fr", "de", "es")
+LATINOS = ("ro", "fr", "de", "es")
+FONTES = RAIZ / "deploy" / "app" / "fonts"
 
 LIT = r'"((?:[^"\\]|\\.)*)"'
 LINHA_MESTRA = re.compile(r'^\s*\{\s*' + LIT + r'\s*,\s*' + LIT + r'\s*\},?\s*$')
@@ -72,6 +78,46 @@ def decodificar(s):
 MARCADOR = re.compile(rb"%[-+ #0]*[0-9]*(?:\.[0-9]+)?(?:hh|h|ll|l|z|j|t)?[diouxXeEfgGcsp%]")
 def marcadores(b):
     return [m for m in MARCADOR.findall(b) if m != b"%%"]
+
+def cmap_ttf(caminho):
+    """Codepoints com glifo no cmap (formatos 4 e 12) de um TTF."""
+    import struct
+    d = caminho.read_bytes()
+    n = struct.unpack(">H", d[4:6])[0]
+    off = None
+    for i in range(n):
+        tag, _cs, o, _ln = struct.unpack(">4sIII", d[12 + 16 * i:28 + 16 * i])
+        if tag == b"cmap": off = o
+    cps = set()
+    nt = struct.unpack(">H", d[off + 2:off + 4])[0]
+    for i in range(nt):
+        _p, _e, so = struct.unpack(">HHI", d[off + 4 + 8 * i:off + 12 + 8 * i])
+        s = off + so
+        fmt = struct.unpack(">H", d[s:s + 2])[0]
+        if fmt == 4:
+            sc = struct.unpack(">H", d[s + 6:s + 8])[0] // 2
+            fins = struct.unpack(">%dH" % sc, d[s + 14:s + 14 + 2 * sc])
+            st = s + 16 + 2 * sc
+            ini = struct.unpack(">%dH" % sc, d[st:st + 2 * sc])
+            dl = st + 2 * sc
+            delta = struct.unpack(">%dh" % sc, d[dl:dl + 2 * sc])
+            ro = dl + 2 * sc
+            rng = struct.unpack(">%dH" % sc, d[ro:ro + 2 * sc])
+            for k in range(sc):
+                for c in range(ini[k], fins[k] + 1):
+                    if c == 0xFFFF: continue
+                    if rng[k] == 0: g = (c + delta[k]) & 0xFFFF
+                    else:
+                        p = ro + 2 * k + rng[k] + 2 * (c - ini[k])
+                        g = struct.unpack(">H", d[p:p + 2])[0]
+                        if g: g = (g + delta[k]) & 0xFFFF
+                    if g: cps.add(c)
+        elif fmt == 12:
+            ng = struct.unpack(">I", d[s + 12:s + 16])[0]
+            for k in range(ng):
+                a, b, g = struct.unpack(">III", d[s + 16 + 12 * k:s + 28 + 12 * k])
+                if g: cps.update(range(a, b + 1))
+    return cps
 
 def ler_mestra():
     itens = []
@@ -147,6 +193,23 @@ def conferir():
             # 6. quebras de linha
             if bk.count(b"\n") != bv.count(b"\n"):
                 erro("%s:%d: numero de \\n difere: %r -> %r" % (arq, m, pt, val))
+    # 10. cobertura de fonte dos idiomas latinos
+    fontes = {f.name: cmap_ttf(f) for f in sorted(FONTES.glob("*.ttf"))}
+    for cod in LATINOS:
+        usados = {}
+        for n, pt, val in ler_irma(cod):
+            try: t = decodificar(val).decode("utf-8"); k = decodificar(pt).decode("utf-8")
+            except Exception: continue
+            # so o que a TRADUCAO introduz: setas e marcas da propria chave (↑ ↓ ✓)
+            # sao pre-existentes em todos os idiomas e o texto.c as trata a parte.
+            for ch in t:
+                if ch >= " " and ch not in k and ch not in usados: usados[ch] = n
+        for ch, n in sorted(usados.items()):
+            if "\u0400" <= ch <= "\u04ff":
+                erro("idioma_%s.h:%d: cirilico (%r) numa tabela latina" % (cod, n, ch))
+            for nome, cps in fontes.items():
+                if ord(ch) not in cps:
+                    erro("idioma_%s.h:%d: U+%04X (%s) nao existe em %s" % (cod, n, ord(ch), ch, nome))
     return mestra, erros
 
 def sincronizar():

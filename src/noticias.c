@@ -126,6 +126,9 @@ static const struct { const char *cod, *serie, *filme, *hl, *gl, *ceid; } PAR[ID
   { "ro", "serial",                              "film",                         "ro",    "RO", "RO:ro" },
   { "uk", "серіал", "фільм", "uk", "UA", "UA:uk" },
   { "ru", "сериал", "фильм", "ru", "RU", "RU:ru" },
+  { "fr", "s\xc3\xa9rie",                       "film",                         "fr",    "FR", "FR:fr" },
+  { "de", "Serie",                               "Film",                         "de",    "DE", "DE:de" },
+  { "es", "serie",                               "película",                     "es",    "ES", "ES:es" },
 };
 
 // "Sat, 20 Sep 2026 12:00:00 GMT" -> "20 Sep" / "20 set" / "20 вер".

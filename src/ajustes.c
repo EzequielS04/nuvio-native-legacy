@@ -222,7 +222,8 @@ static const char *V_ASPTRAIL[]  = { "Zoom cinema", "Zoom leve", "Zoom ultra", "
 static const char *V_TRAILFONTE[] = { "Automático", "Apple TV", "IMDb", "YouTube" };
 // Nomes NATIVOS, sem i18n: quem trocou para um idioma que nao le precisa achar o seu.
 // A ordem e a de IDIOMA_* (idiomacod.h) e a do valor gravado: so acrescentar no fim.
-static const char *V_IDIOMA[]    = { "Português", "English", "Română", "Українська", "Русский" };
+static const char *V_IDIOMA[]    = { "Português", "English", "Română", "Українська", "Русский",
+                                     "Français", "Deutsch", "Español" };
 static const char *V_ANIM[]      = { "Completas", "Reduzidas" };
 static const char *V_FONTE_UI[]  = { "Inter", "LG Display", "Droid Sans",
                                      "Montserrat", "Roboto",
@@ -1455,6 +1456,9 @@ const char *ajustes_tmdb_idioma(void) {
       case IDIOMA_RO: return "ro-RO";
       case IDIOMA_UK: return "uk-UA";
       case IDIOMA_RU: return "ru-RU";
+      case IDIOMA_FR: return "fr-FR";
+      case IDIOMA_DE: return "de-DE";
+      case IDIOMA_ES: return "es-ES";
       default:        return "pt-BR";
     }
   }

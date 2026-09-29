@@ -485,7 +485,7 @@ static void *fioCanalFn(void *u) {
       const char *f = js_fim(p);
       char id[72] = "", desde[12] = "", ate[12] = "", plat[12] = "", ateV[16] = "";
       char tit[160] = "", titEn[160] = "", txt[420] = "", txtEn[420] = "";
-      // Romeno, ucraniano e russo leem o texto em ingles: o canal so tem pt e en, e
+      // Todo idioma que nao o portugues le o texto em ingles: o canal so tem pt e en, e
       // o ingles e o que mais gente entende. So o portugues le o portugues.
       int ingles = ajustes_idioma() != IDIOMA_PT, ok = 1;
       js_texto(p, f, "id", id, sizeof id);

@@ -36,6 +36,15 @@ static const char *const TAB_UK[] = {
 static const char *const TAB_RU[] = {
 #include "idioma_ru.h"
 };
+static const char *const TAB_FR[] = {
+#include "idioma_fr.h"
+};
+static const char *const TAB_DE[] = {
+#include "idioma_de.h"
+};
+static const char *const TAB_ES[] = {
+#include "idioma_es.h"
+};
 #undef T
 // Uma tabela com o numero errado de linhas desalinharia TODAS as traducoes
 // depois dela — falha na compilacao, nao em silencio na tela.
@@ -45,6 +54,12 @@ _Static_assert(sizeof TAB_UK / sizeof *TAB_UK == sizeof TAB / sizeof *TAB,
                "idioma_uk.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
 _Static_assert(sizeof TAB_RU / sizeof *TAB_RU == sizeof TAB / sizeof *TAB,
                "idioma_ru.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_FR / sizeof *TAB_FR == sizeof TAB / sizeof *TAB,
+               "idioma_fr.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_DE / sizeof *TAB_DE == sizeof TAB / sizeof *TAB,
+               "idioma_de.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_ES / sizeof *TAB_ES == sizeof TAB / sizeof *TAB,
+               "idioma_es.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
 
 // A traducao da entrada `i` no idioma `lg` (nunca IDIOMA_PT). Valor vazio cai no
 // ingles: uma entrada nova ainda sem traducao aparece em ingles, nao em branco.
@@ -54,6 +69,9 @@ static const char *traduzida(int i, int lg) {
     case IDIOMA_RO: r = TAB_RO[i]; break;
     case IDIOMA_UK: r = TAB_UK[i]; break;
     case IDIOMA_RU: r = TAB_RU[i]; break;
+    case IDIOMA_FR: r = TAB_FR[i]; break;
+    case IDIOMA_DE: r = TAB_DE[i]; break;
+    case IDIOMA_ES: r = TAB_ES[i]; break;
     default: break;
   }
   return r && *r ? r : TAB[i].en;

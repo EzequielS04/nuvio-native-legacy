@@ -82,11 +82,11 @@ int ajustes_fonte_primeira(void);
 // para canal ao vivo, que tem o watchdog proprio em app.c.
 int ajustes_fonte_repor(void);
 
-// Idioma da interface: um IDIOMA_* de idiomacod.h (pt, en, ro, uk, ru). Valor
+// Idioma da interface: um IDIOMA_* de idiomacod.h (pt, en, ro, uk, ru, fr, de, es). Valor
 // gravado fora do intervalo (arquivo editado a mao) cai em portugues.
 int ajustes_idioma(void);
 // 1 so quando e ingles. Os textos montados com "%d.%d" e o formato de data
-// americano usam isto; romeno, ucraniano e russo usam virgula decimal e data
+// americano usam isto; romeno, ucraniano, russo, frances, alemao e espanhol usam virgula decimal e data
 // dia-mes-ano, como o portugues, e por isso NAO entram aqui.
 int ajustes_idioma_ingles(void);
 
