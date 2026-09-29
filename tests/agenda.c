@@ -73,6 +73,14 @@ static char *falsoBaixar(const char *url, int segundos, const char *const *cab, 
   return NULL;
 }
 
+// A mesma rede, 150 ms mais lenta: o pedido fica EM VOO tempo bastante para o
+// teste trocar de serie no meio dele.
+static char *baixarLento(const char *url, int segundos, const char *const *cab, int *st) {
+  struct timespec t = { 0, 150000000 };
+  nanosleep(&t, NULL);
+  return falsoBaixar(url, segundos, cab, st);
+}
+
 // "Reiniciar o app": esquece o que esta na RAM e obriga a releitura do disco.
 // E o unico jeito honesto de provar que o lembrete SOBREVIVEU — conferir a
 // variavel que acabou de ser escrita nao prova nada sobre o arquivo.
@@ -561,6 +569,101 @@ int main(void) {
       CONFERE(r && strstr(r->poster, "image.tmdb.org"), "cartaz do TMDB: [%s]", r ? r->poster : ""); }
   }
   agenda_rede_teste(NULL);
+
+  // --- HISTORICO DE LANCAMENTOS (o modal) ------------------------------------
+  //
+  // A fixture do Cinemeta tem T0E3 (especial, fica fora), T4E6 03/09, T4E7
+  // 10/09, T4E8 23/09, T4E9 30/09 e T4E10 sem dia (fora: nao foi ao ar).
+  { char *cm = lerArquivo("tests/fixtures/cinemeta_serie_voltando.json");
+    AgEp h[8];
+    int n;
+    CONFERE(cm != NULL, "fixture do Cinemeta");
+    n = agenda_historico_ler(cm, "2026-09-05", "2026-09-23", h, 8);
+    CONFERE(n == 2, "desde 05/09 ate 23/09: dois episodios, veio %d", n);
+    CONFERE(n == 2 && h[0].temporada == 4 && h[0].episodio == 7 && !strcmp(h[0].data, "2026-09-10"),
+            "o primeiro e T4E7 em 10/09 (ordem de data, nao do arquivo)");
+    CONFERE(n == 2 && h[1].episodio == 8 && !strcmp(h[1].nome, "Follow the Anger"),
+            "o segundo e T4E8 com o nome: [%s]", n == 2 ? h[1].nome : "");
+    CONFERE(n == 2 && h[0].visto == -1, "o parse nao inventa visto: %d", n ? h[0].visto : 9);
+    // O dia do lembrete e o dia de hoje ENTRAM na janela.
+    n = agenda_historico_ler(cm, "2026-09-10", "2026-09-10", h, 8);
+    CONFERE(n == 1 && h[0].episodio == 7, "janela de um dia inclui as duas bordas (%d)", n);
+    // Sem lembrete: os ultimos que ja sairam, sem o especial e sem o futuro.
+    n = agenda_historico_ler(cm, "", "2026-09-23", h, 8);
+    CONFERE(n == 3 && h[0].episodio == 6 && h[2].episodio == 8,
+            "sem lembrete: T4E6..T4E8 (%d)", n);
+    // Teto: ficam os MAIS NOVOS.
+    n = agenda_historico_ler(cm, "2026-09-01", "2026-09-30", h, 2);
+    CONFERE(n == 2 && h[0].episodio == 8 && h[1].episodio == 9,
+            "teto de 2 guarda T4E8 e T4E9 (%d: %d,%d)", n, n > 0 ? h[0].episodio : 0, n > 1 ? h[1].episodio : 0);
+    n = agenda_historico_ler(cm, "2026-09-24", "2026-09-26", h, 8);
+    CONFERE(n == 0, "nada saiu entre 24 e 26/09 (%d)", n);
+    CONFERE(agenda_historico_ler("{}", "", "2026-09-23", h, 8) == 0, "corpo sem meta: zero");
+    CONFERE(agenda_historico_ler(NULL, "", "2026-09-23", h, 8) == 0, "corpo nulo: zero");
+    // O proximo a assistir: o primeiro NAO visto; so desconhecidos -> o
+    // primeiro; tudo visto -> -1.
+    { AgEp v[3] = { { 4, 6, "", "", 1 }, { 4, 7, "", "", 0 }, { 4, 8, "", "", -1 } };
+      CONFERE(agenda_historico_proximo(v, 3) == 1, "proximo = o primeiro nao visto");
+      v[1].visto = 1;
+      CONFERE(agenda_historico_proximo(v, 3) == 2, "sem nao visto confirmado: o desconhecido");
+      v[2].visto = 1;
+      CONFERE(agenda_historico_proximo(v, 3) == -1, "tudo visto: nada a assistir"); }
+    free(cm); }
+
+  // O caminho do modal: um pedido ao Cinemeta (pela rede falsa), a janela
+  // desde o dia em que o lembrete foi LIGADO, e o visto do mapa vistoep.
+  agenda_rede_teste(falsoBaixar);
+  agenda_definir_hoje("2026-09-05");
+  agenda_registrar("tt10986410", "Ted Lasso", "", "Returning Series", 4, 7,
+                   "Yes & Baby", "2026-09-10", "2026-09-03");
+  if (agenda_lembrete("tt10986410")) agenda_alternar_lembrete("tt10986410");
+  CONFERE(agenda_alternar_lembrete("tt10986410") == 1, "lembrete ligado em 05/09");
+  CONFERE(!strcmp(agenda_lembrete_desde("tt10986410"), "2026-09-05"),
+          "o dia em que ligou: [%s]", agenda_lembrete_desde("tt10986410"));
+  reiniciar();
+  CONFERE(!strcmp(agenda_lembrete_desde("tt10986410"), "2026-09-05"),
+          "o dia sobrevive ao disco (4o campo): [%s]", agenda_lembrete_desde("tt10986410"));
+  agenda_definir_hoje("2026-09-23");
+  nCinemeta = 0;
+  vistoep_esquecer();
+  vistoep_definir("tt10986410", 4, 7, 1);
+  vistoep_definir("tt10986410", 4, 8, 0);
+  agenda_historico_pedir("tt10986410");
+  { AgEp h[8];
+    int n = 0, est = AG_HIST_BUSCANDO, k;
+    for (k = 0; k < 300 && est == AG_HIST_BUSCANDO; k++) {
+      n = agenda_historico("tt10986410", h, 8, &est);
+      if (est == AG_HIST_BUSCANDO) { struct timespec t = { 0, 10000000 }; nanosleep(&t, NULL); }
+    }
+    CONFERE(est == AG_HIST_PRONTO, "historico pronto (estado %d)", est);
+    CONFERE(n == 2 && h[0].episodio == 7 && h[0].visto == 1 && h[1].episodio == 8 && h[1].visto == 0,
+            "janela desde 05/09 com o visto do mapa (%d)", n);
+    CONFERE(n == 2 && agenda_historico_proximo(h, n) == 1, "proximo a assistir = T4E8");
+    // Repetir dentro da validade nao pede de novo.
+    agenda_historico_pedir("tt10986410");
+    CONFERE(nCinemeta == 1, "um pedido so por abertura (%d)", nCinemeta); }
+  // TROCA DE SERIE COM O PEDIDO EM VOO (modal fechado e aberto em outra linha
+  // antes do Cinemeta responder): o fio em voo busca a segunda, que nao pode
+  // ficar em BUSCANDO para sempre. A rede lenta segura o primeiro pedido.
+  agenda_rede_teste(baixarLento);
+  agenda_historico_pedir("tt5550001");
+  agenda_historico_pedir("tt5550002");
+  { AgEp h[8];
+    int est = AG_HIST_BUSCANDO, k;
+    for (k = 0; k < 300 && est == AG_HIST_BUSCANDO; k++) {
+      agenda_historico("tt5550002", h, 8, &est);
+      if (est == AG_HIST_BUSCANDO) { struct timespec t = { 0, 10000000 }; nanosleep(&t, NULL); }
+    }
+    CONFERE(est == AG_HIST_PRONTO, "segunda serie pedida com o fio em voo fica pronta (estado %d)", est); }
+  agenda_rede_teste(falsoBaixar);
+  // Arquivo de lembretes de VERSAO ANTERIOR (tres campos): o historico usa a
+  // data do episodio anunciado como comeco da janela.
+  dados_gravar(arquivo("lembretes"), "tt10986410\t2026-09-10\t0\n");
+  reiniciar();
+  CONFERE(!strcmp(agenda_lembrete_desde("tt10986410"), "2026-09-10"),
+          "sem o 4o campo, vale a data do lembrete: [%s]", agenda_lembrete_desde("tt10986410"));
+  agenda_rede_teste(NULL);
+  agenda_definir_hoje("2026-09-16");
 
   if (falhas) { printf("FALHOU: %d\n", falhas); return 1; }
   puts("PASS: agenda (datas, situacao, parse do TMDB, lembretes, perfis).");
