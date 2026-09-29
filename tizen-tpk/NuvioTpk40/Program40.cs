@@ -562,18 +562,29 @@ namespace NuvioTpk
             }
             try { syscall_cache(ARM_NR_cacheflush, map, (IntPtr)(map.ToInt64() + span), 0); } catch { }
 
+            // Enderecos em 32 bits SEM sinal. Antes: `(uint)` punha -1 em
+            // 4294967295, a guarda `!= -1` nunca pegava, e `(IntPtr)long`
+            // acima de int.MaxValue lanca OverflowException num processo de
+            // 32 bits — o laco morria ali e as inits seguintes nao rodavam
+            // (sigmaboy19, 29/09, "dt-init threw OverflowException").
+            // Agora: 0 e 0xFFFFFFFF sao sentinelas, endereco fora do mapa e
+            // pulado (com nota), e cada init roda no seu proprio try.
             Etapa("begin dt-init");
-            try
+            uint mapIni = unchecked((uint)map.ToInt32());
+            uint mapFim = unchecked(mapIni + (uint)span);
+            int inits = 0, pulados = 0;
+            Func<uint, bool> noMapa = x => x >= mapIni && x < mapFim;
+            Action<uint, string> roda = (fp, nome) =>
             {
-                if (initFn != 0) Marshal.GetDelegateForFunctionPointer<InitFn>((IntPtr)initFn)();
-                for (long a = 0; a < initArraySz; a += 4)
-                {
-                    long fnp = (uint)Marshal.ReadInt32((IntPtr)(initArray + a));
-                    if (fnp != 0 && fnp != -1) Marshal.GetDelegateForFunctionPointer<InitFn>((IntPtr)fnp)();
-                }
-            }
-            catch (Exception ex) { /* init pode chamar GL antes do contexto; segue */ Etapa("note dt-init threw " + ex.GetType().Name + ": " + ex.Message); }
-            Etapa("ok dt-init");
+                if (fp == 0 || fp == 0xFFFFFFFFu) return;
+                if (!noMapa(fp)) { pulados++; Etapa("note dt-init " + nome + " fora da lib 0x" + fp.ToString("x8")); return; }
+                try { Marshal.GetDelegateForFunctionPointer<InitFn>(new IntPtr(unchecked((int)fp)))(); inits++; }
+                catch (Exception ex) { /* init pode chamar GL antes do contexto; segue */ Etapa("note dt-init " + nome + " threw " + ex.GetType().Name + ": " + ex.Message); }
+            };
+            if (initFn != 0) roda(unchecked((uint)initFn), "DT_INIT");
+            for (long a = 0; a < initArraySz; a += 4)
+                roda(unchecked((uint)Marshal.ReadInt32(new IntPtr(unchecked((int)(uint)(initArray + a))))), "init_array[" + (a / 4) + "]");
+            Etapa("ok dt-init " + inits + " rodaram, " + pulados + " fora da lib");
 
             // Liga NvLib.* pelo dynsym local. Guarda o mapa vivo antes, para o
             // Libera nao rodar se um simbolo faltar (mantemos evidencia).
