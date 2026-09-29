@@ -9,6 +9,7 @@
 #include "ajustes.h"
 #include "faixas.h"
 #include "gfx.h"
+#include "badges.h"
 #include "text.h"
 #include "tex_cache.h"
 #include "episodios.h"
@@ -70,14 +71,17 @@ static AoVivoOsd base(void) {
   o.epg.proxIni = o.epg.agoraFim;
   { int b[] = { AV_B_GUIA, AV_B_ANT, AV_B_PROX, AV_B_FAV, AV_B_AUDIO, AV_B_LEGENDA, AV_B_INFO, AV_B_RECARREGAR, AV_B_FONTE };
     o.nBotoes = 9; memcpy(o.botoes, b, sizeof b); }
-  o.foco = 0; snprintf(o.res, sizeof o.res, "HD");
-  o.fr = .24f; o.fg = .52f; o.fb = .95f;
+  o.foco = 0; snprintf(o.res, sizeof o.res, "1080p");
   return o;
 }
 static void dOsd(void *u) { aovivo_osd_desenhar((AoVivoOsd *)u, 1.0f); }
 static void dBanner(void *u) { aovivo_banner_desenhar((AoVivoBanner *)u, 1.0f); }
 typedef struct { const char *n, *l, *t, *d; } Erro;
-static void dErro(void *u) { Erro *e = u; aovivo_erro_desenhar(e->n, e->l, e->t, e->d, 1.0f); aovivo_osd_desenhar(&(AoVivoOsd){0}, 1.0f); }
+// O cartao de erro com o OSD de pe por cima, como no player (o OSD do canal
+// continua valendo: marca, programacao e os botoes Fonte/Recarregar).
+static void dErro(void *u) { Erro *e = u; AoVivoOsd o = base(); o.foco = 8;
+  aovivo_erro_desenhar(e->n, e->l, e->t, e->d, 1.0f); aovivo_osd_desenhar(&o, 1.0f); }
+static void dErroSo(void *u) { Erro *e = u; aovivo_erro_desenhar(e->n, e->l, e->t, e->d, 1.0f); }
 static void dPlayer(void *u) { (void)u; player_atualizar(1.f / 60, SDL_GetTicks()); player_desenhar(SDL_GetTicks()); }
 
 int main(int argc, char **argv) {
@@ -99,6 +103,16 @@ int main(int argc, char **argv) {
   glViewport(0, 0, LW, LH); gfx_tamanho_alvo(LW, LH); assert(gfx_iniciar());
   assert(txt_iniciar("deploy/app", 1)); tex_iniciar(64);
   gfx_icones_dir("deploy/app/art");
+  badges_carregar("deploy/app/art");   // marcas de formato (4K, 1080p); no app quem faz e home.c
+  // Idioma e acento pelo caminho de verdade, como em social_shot: portugues e
+  // OCEANO (2) por padrao; NUVIO_SHOT_EN=1 e NUVIO_SHOT_THEME=<n> trocam.
+  { char caminho[700]; FILE *f;
+    const char *en = getenv("NUVIO_SHOT_EN"), *tema = getenv("NUVIO_SHOT_THEME");
+    snprintf(caminho, sizeof caminho, "%s/ajustes.txt", getenv("NUVIO_DADOS"));
+    f = fopen(caminho, "w"); assert(f);
+    fprintf(f, "idioma %d\nselected_theme %d\n", en && *en == '1', tema && *tema ? atoi(tema) : 2);
+    fclose(f);
+    ajustes_dir(getenv("NUVIO_DADOS")); }
   ajustes_iniciar();
   if (getenv("NUVIO_SHOT_VIDRO")) ajustes_definir_vidro(1);
 
@@ -118,14 +132,21 @@ int main(int argc, char **argv) {
       int b[] = { AV_B_PAUSA, AV_B_GUIA, AV_B_ANT, AV_B_PROX, AV_B_AUDIO, AV_B_LEGENDA, AV_B_INFO, AV_B_RECARREGAR, AV_B_FONTE };
       v.logo = ""; v.numero = 0; v.epg.temAgora = v.epg.temProx = 0; v.pausado = 1; v.res[0] = 0;
       v.nBotoes = 9; memcpy(v.botoes, b, sizeof b);
-      snprintf(nome, sizeof nome, "%s-osd-sem-logo-sem-grade.bmp", saida); foto(nome, dOsd, &v); } }
+      snprintf(nome, sizeof nome, "%s-osd-sem-logo-sem-grade.bmp", saida); foto(nome, dOsd, &v); }
+    // Os dez botoes (pausa + favorito) com rotulos longos: a fileira nao cabe e
+    // os botoes fora do foco viram disco.
+    { AoVivoOsd v = base();
+      int b[] = { AV_B_PAUSA, AV_B_GUIA, AV_B_ANT, AV_B_PROX, AV_B_FAV, AV_B_AUDIO, AV_B_LEGENDA, AV_B_INFO, AV_B_RECARREGAR, AV_B_FONTE };
+      v.nBotoes = 10; memcpy(v.botoes, b, sizeof b); v.favorito = 1; v.foco = 7; snprintf(v.res, sizeof v.res, "4K");
+      snprintf(nome, sizeof nome, "%s-osd-dez-botoes.bmp", saida); foto(nome, dOsd, &v); } }
   { AoVivoBanner b = { "Globo News", LOGO, "Em Foco com Andréia Sadi", 13, 1 };
     snprintf(nome, sizeof nome, "%s-zap-banner.bmp", saida); foto(nome, dBanner, &b);
     b.salto = 3; b.numero = 15; b.nome = "SporTV 3 com um nome muito longo para testar o corte"; b.logo = "";
     snprintf(nome, sizeof nome, "%s-zap-banner-salto.bmp", saida); foto(nome, dBanner, &b); }
   { Erro e = { "Sportv 2 HD", LOGO, "O provedor recusou o usuario e a senha",
                "Confira o cadastro do Xtream em Ajustes > Conta de TV ao vivo." };
-    snprintf(nome, sizeof nome, "%s-erro.bmp", saida); foto(nome, dErro, &e); }
+    snprintf(nome, sizeof nome, "%s-erro.bmp", saida); foto(nome, dErro, &e);
+    snprintf(nome, sizeof nome, "%s-erro-sem-osd.bmp", saida); foto(nome, dErroSo, &e); }
 
   // O PLAYER DE VERDADE com um canal marcado: prova a fiacao (OSD proprio no
   // lugar dos controles de filme; OK/direita percorrem os botoes).

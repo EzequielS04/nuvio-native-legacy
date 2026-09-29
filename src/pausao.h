@@ -78,8 +78,8 @@ typedef struct { float pos, dur; float fr, fg, fb; } PausaoCena;
 
 // O painel e uma CAMADA DE TELA CHEIA (1920x1080 em unidades de layout, seja
 // qual for o drawable): veu de ponta a ponta, selo "Pausado" e relogio no alto,
-// a ficha ancorada na margem inferior e a barra de onde o filme parou colada
-// na borda de baixo. O quadro continua visivel por tras — so escurecido.
+// a ficha ancorada na margem inferior e, embaixo dela, a barra de onde o filme
+// parou (trilho de 4 px na margem do conteudo, o tempo na ponta direita). O quadro continua visivel por tras — so escurecido.
 //
 // HISTORICO: ate a 1.5.2 ele era uma faixa ancorada por `baseY` (o topo do que
 // o player ja desenhava), com veu so do topo do texto para baixo e texto em

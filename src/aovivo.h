@@ -63,11 +63,12 @@ typedef struct {
   int nBotoes, botoes[AV_B_N];       // ids AV_B_*, na ordem de desenho
   int foco;                          // indice em botoes[]; -1 = nenhum
   int favorito, pausado, bufferando;
-  char res[16];                      // "HD", "4K" ou ""
+  char res[16];                      // "4K", "1080p", "720p" (viram marca), "SD" ou ""
   int infoAberta, nInfo;
   char info[AV_INFO_LINHAS][72];
-  float fr, fg, fb;                  // acento do player (contraste ja tratado)
 } AoVivoOsd;
+// Foco, barra e botoes leem o acento de ajustes_acento() (via botoes.c), como
+// o guia: o OSD nao recebe cor de quem chama.
 const char *aovivo_rotulo(int botao);
 void aovivo_osd_desenhar(const AoVivoOsd *o, float a);
 

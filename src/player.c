@@ -1797,7 +1797,7 @@ static void avMontarOsd(AoVivoOsd *o) {
   o->pausado = !tocando && avPodePausar();
   o->bufferando = comVideo && video_bufferando_ms() > 1500u;
   if (w >= 3840) snprintf(o->res, sizeof o->res, "4K");
-  else if (w >= 1920) snprintf(o->res, sizeof o->res, "HD");
+  else if (w >= 1920) snprintf(o->res, sizeof o->res, "1080p");
   else if (w >= 1200) snprintf(o->res, sizeof o->res, "720p");
   else if (w > 0) snprintf(o->res, sizeof o->res, "SD");
   o->infoAberta = infoAV;
@@ -1814,7 +1814,6 @@ static void avMontarOsd(AoVivoOsd *o) {
     snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Codec, quadros e taxa: a TV não informa"));
     o->nInfo = k;
   }
-  corFocoPlayer(&o->fr, &o->fg, &o->fb);
 }
 
 // Teclas do OSD do canal (CH+/-, azul e BAIXO ja foram tratados antes).
