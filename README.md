@@ -51,6 +51,25 @@ so on Samsung the update card only tells you there's a new version.
 
 Tizen **5.5 or newer**. Tizen 4 (2018 sets) doesn't run it yet (#96).
 
+#### Native `.tpk` (in progress)
+
+There's now a **native** Samsung build too: the same C app running directly on
+the TV (OpenGL ES, no web engine), packaged as a `.tpk`. It drops the browser
+layer the WebAssembly build sits on.
+
+- **Tizen 6.0+ (2021 and newer): working** — full app confirmed on Tizen 6.0.
+  Get it from the `native-tpk-preview.2` release (one file per Tizen version).
+- **Tizen 4.0/5.0/5.5 (2018-2020): experimental** — loading native code from
+  the app folder is blocked by the TV (UEP), so the build loads the library via
+  a `memfd` route instead. On real 2018/2019 sets the app now **loads and
+  renders**; a sign-in crash is being fixed. Release `native-tpk-tizen45.1`.
+
+Install like the `.wgt`: sign with your TV's DUID (Apps2Samsung) and install in
+Developer Mode. Follow progress in the
+**[Samsung native project board](https://github.com/users/iqui27/projects/2)**,
+the [milestone](https://github.com/iqui27/nuvio-native-legacy/milestone/1), and
+[issue #137](https://github.com/iqui27/nuvio-native-legacy/issues/137).
+
 ### Hisense VIDAA (experimental)
 
 VIDAA apps are hosted pages, not packages. Bookmark
@@ -72,8 +91,11 @@ HTTPS page, and YouTube trailers only in the single-threaded build.
 | LG webOS 5+ | **Works**, reported by users (2020 CX up to 2024 B4). I don't have one. |
 | LG webOS 3.x | **Works**, reported by testers (webOS 3.4.3). Same package as everyone else. I don't have one. |
 | LG webOS 2.x | Loads according to firmware symbol dumps. Never run. |
-| Samsung Tizen 5.5+ | **Works**, many users. |
-| Samsung Tizen 4 | Not yet (#96). |
+| Samsung Tizen 6+ (WebAssembly) | **Works**, many users. |
+| Samsung Tizen 6+ (native .tpk) | **Works** (preview), confirmed on Tizen 6.0. |
+| Samsung Tizen 5.5 (WebAssembly) | **Works**. |
+| Samsung Tizen 4/5 (native .tpk) | **Experimental** — loads on real sets, sign-in crash being fixed (#180). |
+| Samsung Tizen 4 (WebAssembly) | Not yet (#96). |
 | Hisense VIDAA | Experimental, untested. |
 
 On webOS 3, keep in mind that many of those sets can't decode H.265 or HDR, and
