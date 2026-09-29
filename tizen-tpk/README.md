@@ -35,8 +35,30 @@ propria foi recusada com certificado Public (spike.2, #137, cara de UEP); o
 manifesto declara um privilegio Partner para o Apps2Samsung assinar como
 Partner. Se ainda assim a TV recusar, a tela mostra o erro do `dlopen`.
 
+## Estado atual (2026-09-29)
+
+Provado em TV real, nao afirmado:
+
+- **Tizen 6.0 (2021): FUNCIONA.** rawldon (AU7000) roda como app principal —
+  video, audio, legenda, GIF e trailer. `Tpk60`/`Tpk65`/`Tpk` sao a rota boa
+  para 6+.
+- **Tizen 9 (2024): sem confirmacao.** Hov1122 (QN90D) nao reabriu depois do
+  revert `fdc2d34`; falta relato.
+- **Tizen 4.0/5.0 (2018-2019): a `.so` de ARQUIVO e barrada pela UEP.**
+  Medido no probe (optiman, QE55Q6FNA, Tizen 4.0): `dlopen` de `lib/` e de
+  `data/` falham ("failed to map segment"), MAS memoria anonima executavel e
+  permitida (`mprotect +EXEC` OK). Rota em teste: carregar a `libnuvio.so` por
+  `memfd_create` (syscall 385, a libc da TV nao exporta o nome) + `dlopen`
+  em `/proc/self/fd/N`, com um carregador de ELF em memoria anonima como
+  reserva. Host `NuvioTpk40` sendo adaptado para isso.
+- **NaCl (.nexe em .wgt): descartado** — nao instala nas TVs testadas
+  (optiman erro 118019, rawldon idem).
+
 ## O que falta
 
 - cabecalhos de addon alem de `User-Agent` e `Cookie` (o player da Samsung
   nao aceita `Referer`);
-- nada disto rodou numa TV ainda: so no host falso (`tools/tpk-testa.sh`).
+- zoom/recorte do trailer no `.tpk` (ROI do player), e audio inconsistente em
+  tela cheia (#178, Tizen 6.0);
+- foco de audio: o canario `AudioStreamPolicy` NAO calou o YouTube por baixo
+  nem devolveu o audio ao sair (rawldon, Tizen 6.0) — precisa de outra via.
