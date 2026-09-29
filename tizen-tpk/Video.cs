@@ -14,7 +14,17 @@ using Tizen.Multimedia;
 
 namespace NuvioTpk
 {
-    class Video
+    // Despacho dos pontos de entrada de video/log do libnuvio, comum aos dois
+    // hosts. POR PADRAO cada delegate aponta para o [DllImport("libnuvio.so")]
+    // correspondente — que resolve pelo soname. E o caminho dos hosts Tizen 6+
+    // (NuvioTpk/60/65) e tambem da rota memfd do NuvioTpk40, onde a lib entra no
+    // link map do loader: comportamento identico ao codigo anterior.
+    //
+    // So o NuvioTpk40, quando a lib e carregada pelo carregador de ELF proprio
+    // (a lib NAO entra no link map, entao DllImport-por-soname NAO resolveria),
+    // chama NvVid.Ligar(resolve) para repontar estes delegates para ponteiros de
+    // funcao vindos do dynsym do carregador. Nada disso e acionado nos 6+.
+    static class NvVid
     {
         [DllImport("libnuvio.so")] static extern void nv_tpk_video_registrar(IntPtr abrir, IntPtr parar, IntPtr pausar,
                                                                               IntPtr buscar, IntPtr volume, IntPtr janela, IntPtr pos);
@@ -25,6 +35,41 @@ namespace NuvioTpk
         [DllImport("libnuvio.so")] static extern void nv_tpk_video_legenda(string texto, int durMs);
         [DllImport("libnuvio.so")] static extern void nv_tpk_log(string linha);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void RegistrarDel(IntPtr abrir, IntPtr parar, IntPtr pausar, IntPtr buscar, IntPtr volume, IntPtr janela, IntPtr pos);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void EventoDel(int tipo, int a, int b);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void RegistrarFaixasDel(IntPtr escolher);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void FaixaDel(int tipo, int idx, string lingua);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void FaixasFimDel(int selAudio, int selLeg);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void LegendaDel(string texto, int durMs);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)] public delegate void LogDel(string linha);
+
+        // Padrao: as thunks de P/Invoke acima (soname). O NuvioTpk40 repontа na
+        // rota ELF.
+        public static RegistrarDel Registrar = nv_tpk_video_registrar;
+        public static EventoDel Evento = nv_tpk_video_evento;
+        public static RegistrarFaixasDel RegistrarFaixas = nv_tpk_video_registrar_faixas;
+        public static FaixaDel Faixa = nv_tpk_video_faixa;
+        public static FaixasFimDel FaixasFim = nv_tpk_video_faixas_fim;
+        public static LegendaDel Legenda = nv_tpk_video_legenda;
+        public static LogDel LogNativo = nv_tpk_log;
+
+        // Repontа tudo por ponteiro de funcao (rota do carregador ELF do
+        // NuvioTpk40). resolve(nome) devolve o endereco do simbolo no dynsym.
+        public static void Ligar(Func<string, IntPtr> resolve)
+        {
+            IntPtr p;
+            if ((p = resolve("nv_tpk_video_registrar")) != IntPtr.Zero) Registrar = Marshal.GetDelegateForFunctionPointer<RegistrarDel>(p);
+            if ((p = resolve("nv_tpk_video_evento")) != IntPtr.Zero) Evento = Marshal.GetDelegateForFunctionPointer<EventoDel>(p);
+            if ((p = resolve("nv_tpk_video_registrar_faixas")) != IntPtr.Zero) RegistrarFaixas = Marshal.GetDelegateForFunctionPointer<RegistrarFaixasDel>(p);
+            if ((p = resolve("nv_tpk_video_faixa")) != IntPtr.Zero) Faixa = Marshal.GetDelegateForFunctionPointer<FaixaDel>(p);
+            if ((p = resolve("nv_tpk_video_faixas_fim")) != IntPtr.Zero) FaixasFim = Marshal.GetDelegateForFunctionPointer<FaixasFimDel>(p);
+            if ((p = resolve("nv_tpk_video_legenda")) != IntPtr.Zero) Legenda = Marshal.GetDelegateForFunctionPointer<LegendaDel>(p);
+            if ((p = resolve("nv_tpk_log")) != IntPtr.Zero) LogNativo = Marshal.GetDelegateForFunctionPointer<LogDel>(p);
+        }
+    }
+
+    class Video
+    {
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void FnAbrir(IntPtr url, IntPtr cabecalhos);
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void FnSemArg();
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void FnInt(int v);
@@ -59,12 +104,12 @@ namespace NuvioTpk
             fVolume = v => Principal(() => { if (player != null) player.Volume = Math.Max(0, Math.Min(100, v)) / 100f; });
             fJanela = (x, y, w, h) => Principal(() => Janela(x, y, w, h));
             fPos = () => posMs;
-            nv_tpk_video_registrar(Marshal.GetFunctionPointerForDelegate(fAbrir), Marshal.GetFunctionPointerForDelegate(fParar),
+            NvVid.Registrar(Marshal.GetFunctionPointerForDelegate(fAbrir), Marshal.GetFunctionPointerForDelegate(fParar),
                                    Marshal.GetFunctionPointerForDelegate(fPausar), Marshal.GetFunctionPointerForDelegate(fBuscar),
                                    Marshal.GetFunctionPointerForDelegate(fVolume), Marshal.GetFunctionPointerForDelegate(fJanela),
                                    Marshal.GetFunctionPointerForDelegate(fPos));
             fEscolher = (tipo, idx) => Principal(() => Escolher(tipo, idx));
-            nv_tpk_video_registrar_faixas(Marshal.GetFunctionPointerForDelegate(fEscolher));
+            NvVid.RegistrarFaixas(Marshal.GetFunctionPointerForDelegate(fEscolher));
         }
 
         // 0 = audio, 1 = legenda embutida, 2 = atraso da legenda (ms).
@@ -89,7 +134,7 @@ namespace NuvioTpk
             {
                 var a = p.AudioTrackInfo;
                 nA = a.GetCount();
-                for (int i = 0; i < nA; i++) nv_tpk_video_faixa(0, i, Lingua(() => a.GetLanguageCode(i)));
+                for (int i = 0; i < nA; i++) NvVid.Faixa(0, i, Lingua(() => a.GetLanguageCode(i)));
                 try { selA = a.Selected; } catch { }
             }
             catch (Exception e) { Log("faixas de audio: " + e.Message); }
@@ -100,21 +145,21 @@ namespace NuvioTpk
                 try
                 {
                     var ap = p.StreamInfo.GetAudioProperties();
-                    if (ap.Channels > 0) { nv_tpk_video_faixa(0, 0, ""); selA = 0; Log($"audio sem lista do player: {ap.Channels} canais, {ap.SampleRate} Hz"); }
+                    if (ap.Channels > 0) { NvVid.Faixa(0, 0, ""); selA = 0; Log($"audio sem lista do player: {ap.Channels} canais, {ap.SampleRate} Hz"); }
                 }
                 catch (Exception e) { Log("propriedades de audio: " + e.Message); }
             }
-            if (soAudio) { nv_tpk_video_faixas_fim(selA, -1); return nA; }
+            if (soAudio) { NvVid.FaixasFim(selA, -1); return nA; }
             try
             {
                 var l = p.SubtitleTrackInfo;
                 int n = l.GetCount();
-                for (int i = 0; i < n; i++) nv_tpk_video_faixa(1, i, Lingua(() => l.GetLanguageCode(i)));
+                for (int i = 0; i < n; i++) NvVid.Faixa(1, i, Lingua(() => l.GetLanguageCode(i)));
                 try { selL = l.Selected; } catch { }
             }
             catch (Exception e) { Log("faixas de legenda: " + e.Message); }
             Log($"faixas do player: {nA} audio (sel={selA}), legenda sel={selL}");
-            nv_tpk_video_faixas_fim(selA, selL);
+            NvVid.FaixasFim(selA, selL);
             return nA;
         }
 
@@ -134,7 +179,7 @@ namespace NuvioTpk
 
         public void Log(string s)
         {
-            try { nv_tpk_log(s); } catch { }
+            try { NvVid.LogNativo(s); } catch { }
             try { File.AppendAllText(logArq, DateTime.Now.ToString("HH:mm:ss ") + s + "\n"); } catch { }
         }
 
@@ -152,11 +197,11 @@ namespace NuvioTpk
             {
                 var p = new Player();
                 player = p;
-                p.PlaybackCompleted += (s, e) => { if (minha == sessao) nv_tpk_video_evento(EV_FIM, 0, 0); };
-                p.ErrorOccurred += (s, e) => { if (minha == sessao) { Log("erro " + e.Error); nv_tpk_video_evento(EV_ERRO, (int)e.Error, 0); } };
-                p.BufferingProgressChanged += (s, e) => { if (minha == sessao) nv_tpk_video_evento(EV_BUFFER, e.Percent, 0); };
-                p.PlaybackInterrupted += (s, e) => { if (minha == sessao) { Log("interrompido: " + e.Reason); nv_tpk_video_evento(EV_PAUSADO, 0, 0); } };
-                p.SubtitleUpdated += (s, e) => { if (minha == sessao) nv_tpk_video_legenda(e.Text ?? "", (int)e.Duration); };
+                p.PlaybackCompleted += (s, e) => { if (minha == sessao) NvVid.Evento(EV_FIM, 0, 0); };
+                p.ErrorOccurred += (s, e) => { if (minha == sessao) { Log("erro " + e.Error); NvVid.Evento(EV_ERRO, (int)e.Error, 0); } };
+                p.BufferingProgressChanged += (s, e) => { if (minha == sessao) NvVid.Evento(EV_BUFFER, e.Percent, 0); };
+                p.PlaybackInterrupted += (s, e) => { if (minha == sessao) { Log("interrompido: " + e.Reason); NvVid.Evento(EV_PAUSADO, 0, 0); } };
+                p.SubtitleUpdated += (s, e) => { if (minha == sessao) NvVid.Legenda(e.Text ?? "", (int)e.Duration); };
                 foreach (var linha in (cabecalhos ?? "").Split('\n'))
                 {
                     int i = linha.IndexOf(':');
@@ -173,11 +218,11 @@ namespace NuvioTpk
                 if (minha != sessao) { p.Unprepare(); p.Dispose(); return; }
                 int dur = 0;
                 try { dur = p.StreamInfo.GetDuration(); } catch { }
-                try { var v = p.StreamInfo.GetVideoProperties(); nv_tpk_video_evento(EV_TAMANHO, v.Size.Width, v.Size.Height); } catch { }
+                try { var v = p.StreamInfo.GetVideoProperties(); NvVid.Evento(EV_TAMANHO, v.Size.Width, v.Size.Height); } catch { }
                 int nAudio = Faixas(p);
-                nv_tpk_video_evento(EV_PRONTO, dur, 0);
+                NvVid.Evento(EV_PRONTO, dur, 0);
                 p.Start();
-                nv_tpk_video_evento(EV_TOCANDO, 0, 0);
+                NvVid.Evento(EV_TOCANDO, 0, 0);
                 // Alguns contêineres/HLS so publicam as faixas de audio depois
                 // que a reproducao comeca: le de novo, uma vez.
                 if (nAudio == 0)
@@ -189,7 +234,7 @@ namespace NuvioTpk
             catch (Exception e)
             {
                 Log("abrir: " + e);
-                if (minha == sessao) nv_tpk_video_evento(EV_ERRO, -1, 0);
+                if (minha == sessao) NvVid.Evento(EV_ERRO, -1, 0);
             }
         }
 
@@ -209,8 +254,8 @@ namespace NuvioTpk
             if (player == null) return;
             try
             {
-                if (pausa && player.State == PlayerState.Playing) { player.Pause(); nv_tpk_video_evento(EV_PAUSADO, 0, 0); }
-                else if (!pausa && player.State == PlayerState.Paused) { player.Start(); nv_tpk_video_evento(EV_TOCANDO, 0, 0); }
+                if (pausa && player.State == PlayerState.Playing) { player.Pause(); NvVid.Evento(EV_PAUSADO, 0, 0); }
+                else if (!pausa && player.State == PlayerState.Paused) { player.Start(); NvVid.Evento(EV_TOCANDO, 0, 0); }
             }
             catch (Exception e) { Log("pausar: " + e.Message); }
         }
