@@ -42,6 +42,13 @@ int  trailer_cheia(void);
 // 1 quando ha video de fato tocando: so ai a pagina abre o furo — antes
 // disso mostrar um buraco preto seria pior que a arte.
 int  trailer_tocando(void);
+// 1 quando o PLANO pode aparecer: quem desenha o furo (fundo, destaque, tela
+// cheia) pergunta isto alem de trailer_tocando. No .tpk (#178) o recorte do
+// zoom so e pedido ~800 ms depois de tocar; ate ele assentar o quadro inteiro
+// com tarja estaria na tela, e a pessoa via "tarja 1 s, depois zoom". Ate la
+// fica a arte (ou preto na tela cheia). Seguranca: 2 s depois de tocar mostra
+// de qualquer jeito, nunca prende o trailer. Na LG e no .wgt e sempre 1.
+int  trailer_mostra_video(void);
 // 1 quando o ultimo elemento fechado pelo atualizador terminou por erro.
 // Permite ao hero tentar a proxima fonte (Apple -> YouTube) uma unica vez,
 // sem confundir fechamento voluntario com falha de rede.

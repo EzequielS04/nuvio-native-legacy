@@ -195,6 +195,20 @@ static int volumePendente, recortePendente, pausado;
 // `playing`), e um recorte pedido cedo demais pode ser engolido por um deles.
 static Uint32 reaplicarAte, reaplicarEm, tocandoDesde;
 static int quadroInteiroEnviado;
+#ifdef NV_TPK
+// O PLANO ESCONDIDO ATE O RECORTE ASSENTAR (#178, trailer_mostra_video).
+// `recorteEnviadoEm` e o instante do primeiro recorte desta fonte; o ROI vai
+// ao host por fila (Video.cs, Principal), e o respiro cobre essa viagem e o
+// SetRoi. Sem recorte em NV_TRAILER_TPK_ROI_PRAZO_MS de tocando (quadro sem
+// tamanho, host que nao responde), mostra assim mesmo.
+#define NV_TRAILER_TPK_ROI_ASSENTA_MS 300
+#define NV_TRAILER_TPK_ROI_PRAZO_MS   2000
+// Sem nem `tocando` (o host sempre manda logo depois do Start), a tela cheia
+// abre o furo mesmo assim neste prazo: e o comportamento de antes.
+#define NV_TRAILER_TPK_SEM_TOCAR_MS   6000
+static Uint32 recorteEnviadoEm;
+static int    mostraLogado;
+#endif
 int trailer_suportado(void) {
 #if defined(__APPLE__)
   return 0;
@@ -250,6 +264,9 @@ static void nativoAplicar(void) {
       video_janela_fonte(sx, sy, sw, sh,
                          (int)rect.x, (int)rect.y, (int)rect.w, (int)rect.h);
     recortePendente = 0;
+#ifdef NV_TPK
+    if (!recorteEnviadoEm) recorteEnviadoEm = SDL_GetTicks() | 1;
+#endif
     if (!reaplicarAte) { reaplicarAte = SDL_GetTicks() + 6000; reaplicarEm = SDL_GetTicks() + 1500; }
   }
   if (reaplicarAte && SDL_GetTicks() >= reaplicarEm) {
@@ -287,6 +304,9 @@ void trailer_abrir(const char *fonte, GfxRect r, int som, int modoCheia) {
     if (!video_tocar(fonte)) return;
     volumePendente = 1; recortePendente = 1; pausado = 0; reaplicarAte = 0;
     tocandoDesde = 0; quadroInteiroEnviado = 0;
+#ifdef NV_TPK
+    recorteEnviadoEm = 0; mostraLogado = 0;
+#endif
   } else if (comSom != som) volumePendente = 1;
   video_janela((int)r.x, (int)r.y, (int)r.w, (int)r.h);
   if (!nova) recortePendente = 1;
@@ -334,6 +354,27 @@ int trailer_tocando(void) {
   return e == 1 || e == 3;
 #else
   return aberto && video_pronto() && !video_falhou() && !video_terminou();
+#endif
+}
+int trailer_mostra_video(void) {
+#if defined(NV_TPK) && !defined(__EMSCRIPTEN__)
+  Uint32 t = SDL_GetTicks();
+  const char *porque = NULL;
+  if (!aberto) return 0;
+  // "Original": nada a recortar, o LetterBox de sempre ja e a imagem certa.
+  if (ajustes_trailer_zoom() <= 1.001f) return 1;
+  if (recorteEnviadoEm && t - recorteEnviadoEm >= NV_TRAILER_TPK_ROI_ASSENTA_MS) porque = "recorte assentou";
+  else if (tocandoDesde && t - tocandoDesde >= NV_TRAILER_TPK_ROI_PRAZO_MS) porque = "sem recorte em 2 s, mostra assim";
+  else if (!tocandoDesde && abertoEm && t - abertoEm >= NV_TRAILER_TPK_SEM_TOCAR_MS) porque = "sem tocando, mostra assim";
+  if (!porque) return 0;
+  if (!mostraLogado) {
+    mostraLogado = 1;
+    printf("[trailer] tpk: plano visivel +%ums (%s)\n", (unsigned)(t - abertoEm), porque);
+    fflush(stdout);
+  }
+  return 1;
+#else
+  return 1;
 #endif
 }
 GfxRect trailer_retangulo(void) { return rect; }

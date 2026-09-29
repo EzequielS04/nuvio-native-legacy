@@ -2456,6 +2456,10 @@ static const char *ajudaOpcao(int op) {
       // defeito.
 #ifdef __EMSCRIPTEN__
       return "De onde vem o trailer da tela do título e do destaque. Automático tenta a Apple TV, depois o IMDb e, sem os dois, o YouTube (só na tela do título); uma fonte escolhida é a única tentada. Nesta TV o trailer toca sempre sem som.";
+#elif defined(NV_TPK)
+      // .tpk: a Apple toca sem audio (trailerapple.c, varianteMidia), entao o
+      // botao Trailer em Automatico prefere o IMDb (trailerfonte_ordem_cheia).
+      return "De onde vem o trailer da tela do título e do destaque. Automático tenta a Apple TV e, sem ela, o IMDb; no botão de trailer, que toca com som, o IMDb vem primeiro, porque o da Apple toca sem som nesta TV. Uma fonte escolhida é a única tentada. O YouTube não toca nesta TV.";
 #else
       return "De onde vem o trailer da tela do título e do destaque. Automático tenta a Apple TV e, sem ela, o IMDb; uma fonte escolhida é a única tentada. O YouTube não toca nesta TV.";
 #endif

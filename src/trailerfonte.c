@@ -41,9 +41,32 @@ int trailerfonte_ordem(int ajuste, int tizen, int ordem[3]) {
   return n;
 }
 
-TrailerDecisao trailerfonte_escolher(int ajuste, int tizen, const TrailerCandidatos *c,
-                                     const char **url, int *qual) {
-  int ordem[3], n = trailerfonte_ordem(ajuste, tizen, ordem), i;
+// .tpk: Apple la e so video (ver trailerfonte.h, trailerfonte_ordem_cheia).
+#ifdef NV_TPK
+static int imdbPrimeiroCheia = 1;
+#else
+static int imdbPrimeiroCheia = 0;
+#endif
+int  trailerfonte_imdb_primeiro_cheia(void) { return imdbPrimeiroCheia; }
+void trailerfonte_definir_imdb_primeiro_cheia(int sim) { imdbPrimeiroCheia = sim ? 1 : 0; }
+
+int trailerfonte_ordem_cheia(int ajuste, int tizen, int som, int ordem[3]) {
+  int n = trailerfonte_ordem(ajuste, tizen, ordem), i, j;
+  int automatico = !(ajuste == TRF_APPLE || ajuste == TRF_IMDB || ajuste == TRF_YOUTUBE);
+  if (!som || !automatico || !imdbPrimeiroCheia) return n;
+  // O IMDb sobe para a frente; o resto mantem a ordem relativa.
+  for (i = 1; i < n; i++)
+    if (ordem[i] == TRF_IMDB) {
+      for (j = i; j > 0; j--) ordem[j] = ordem[j - 1];
+      ordem[0] = TRF_IMDB;
+      break;
+    }
+  return n;
+}
+
+static TrailerDecisao escolherNaOrdem(const int *ordem, int n, const TrailerCandidatos *c,
+                                      const char **url, int *qual) {
+  int i;
   if (url) *url = NULL;
   if (qual) *qual = 0;
   if (!c) return TRF_NENHUMA;
@@ -65,6 +88,19 @@ TrailerDecisao trailerfonte_escolher(int ajuste, int tizen, const TrailerCandida
     if (!respondeu) return TRF_ESPERA;
   }
   return TRF_NENHUMA;
+}
+
+TrailerDecisao trailerfonte_escolher(int ajuste, int tizen, const TrailerCandidatos *c,
+                                     const char **url, int *qual) {
+  int ordem[3], n = trailerfonte_ordem(ajuste, tizen, ordem);
+  return escolherNaOrdem(ordem, n, c, url, qual);
+}
+
+TrailerDecisao trailerfonte_escolher_cheia(int ajuste, int tizen, int som,
+                                           const TrailerCandidatos *c,
+                                           const char **url, int *qual) {
+  int ordem[3], n = trailerfonte_ordem_cheia(ajuste, tizen, som, ordem);
+  return escolherNaOrdem(ordem, n, c, url, qual);
 }
 
 int trailerfonte_depois(int ajuste, int tizen, int qual) {
