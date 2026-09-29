@@ -1,5 +1,7 @@
 # Nuvio .tpk (Samsung Tizen 6+)
 
+> **Acompanhamento:** [Project (quadro)](https://github.com/users/iqui27/projects/2) · [Milestone](https://github.com/iqui27/nuvio-native-legacy/milestone/1) · [issue #137 (testes)](https://github.com/iqui27/nuvio-native-legacy/issues/137). Na aba Issues, filtre `label:samsung-native` (tudo do nativo) e `label:"status: blocked"` (travado).
+
 O mesmo app C do webOS e do `.wgt`, empacotado como app .NET da Samsung.
 
     bash tools/tpk.sh          # build/tpk/Nuvio-<versao>-NuvioTpk{60,65,}.tpk
