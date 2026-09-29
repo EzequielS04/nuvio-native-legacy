@@ -264,6 +264,8 @@ float ajustes_raio_poster_px(void);   // raio em px (dp x 2)
 // desligada, TODOS os ajustes_tmdb_* / ajustes_mdblist_fonte() devolvem 0.
 int         ajustes_tmdb_ligado(void);          // tmdb_enabled
 const char *ajustes_tmdb_idioma(void);          // "pt-BR", "en-US"… (TMDB)
+// Pais da grade do Guia de TV (#158): "" = automatico, senao "RO", "BR"...
+const char *ajustes_epg_pais(void);
 int         ajustes_tmdb_arte(void);            // tmdb_use_artwork
 int         ajustes_tmdb_basico(void);          // tmdb_use_basic_info
 int         ajustes_tmdb_ficha(void);           // tmdb_use_details

@@ -791,6 +791,7 @@ static int    tocando, pronto;
 static double posSeg, durSeg;
 static int    vidW, vidH;
 static int    houveErro;
+static char   erroTexto[96];   // ver logarErro e video_erro_texto
 
 static char   urlAtual[1024];
 static int    fonteMp4;
@@ -868,7 +869,7 @@ int video_tocar(const char *url) {
   creditosNomeado = creditosUltimo = 0.0;
   snprintf(urlAtual, sizeof urlAtual, "%s", url);
   nAudio = nLeg = 0; audioAtual = 0; legAtual = -1; faixasLidas = 0;
-  posSeg = durSeg = 0; vidW = vidH = 0; houveErro = 0;
+  posSeg = durSeg = 0; vidW = vidH = 0; houveErro = 0; erroTexto[0] = 0;
   seekEm = 0;
   // Sonda de MKV so faz sentido em MKV. Num MP4 e descida garantidamente
   // perdida pela MESMA conexao que esta transmitindo — o log da LG dizia
@@ -1018,11 +1019,14 @@ static void lerInfoFluxo(void) {
 // A razao que o AVPlay deu (S.erro no JS: o objeto do onerror, ou o
 // "open:/prepare:/play:" que os catch gravam). 200 bytes cobrem a mensagem do
 // AVPlay sem despejar pilha no log.
+// Guarda o comeco da razao do AVPlay em erroTexto (video_erro_texto): e o que
+// cabe no cartao de erro do canal.
 static void logarErro(const char *onde) {
   char buf[200];
   buf[0] = 0;
   if (avChamar("erro", NULL, 0, 0, 0, 0, buf, (int)sizeof buf) < 1 || !buf[0]) return;
   buf[sizeof buf - 1] = 0;
+  snprintf(erroTexto, sizeof erroTexto, "%s", buf);
   printf("[video] avplay erro (%s): %s\n", onde, buf);
   fflush(stdout);
 }
@@ -1370,6 +1374,8 @@ int    video_ativo(void)      { return ativo; }
 // video.c (webOS): app.c usa isto no watchdog de canal para pular a fonte
 // morta sem esperar o prazo. Sem esta definicao o alvo Tizen nem linkava.
 int    video_falhou(void)     { return houveErro; }
+const char *video_erro_texto(void) { return houveErro ? erroTexto : ""; }
+int    video_decoder_anunciou(void) { return 1; }
 // O AVPlay nao separa "audio nao suportado" de erro geral; sem sinal proprio.
 int    video_audio_nao_suportado(void) { return 0; }
 // O trailer deste alvo nao passa pelo AVPlay (ver trailer.c); nao ha fim a

@@ -15,6 +15,7 @@
 #include "dados.h"
 #include "stalker.h"
 #include "xtream.h"
+#include "xtepg.h"
 #include "teclado.h"
 #include "descoberta.h"
 #include "extras.h"
@@ -146,6 +147,7 @@ typedef enum {
   AJ_PERFIL_ATIVO, AJ_SYNC, AJ_ADDONS,
   AJ_STALKER_PORTAL, AJ_STALKER_MAC, AJ_STALKER_LIMPAR,
   AJ_XTREAM_SERVIDOR, AJ_XTREAM_USUARIO, AJ_XTREAM_SENHA, AJ_XTREAM_LIMPAR,
+  AJ_XTREAM_CONTA, AJ_EPG_PAIS,
   AJ_SALVOS_DEST, AJ_TRAKT, AJ_SIMKL, AJ_SAIR,
   // Sobre
   AJ_VERSAO_I, AJ_ATUALIZAR, AJ_ENVIAR_LOG, AJ_ENVIO_AUTO, AJ_ESPACO, AJ_TEX_MB,
@@ -295,6 +297,19 @@ static const char *V_HERO_FONTE[] = {
 // passa a entrar nos Salvos (descoberta.c). Nomes em ajustes.h (AJ_SALVOS_*).
 static const char *V_SALVOS[]    = { "Lista do Nuvio", "Watchlist do Trakt",
                                      "Plan to Watch do Simkl" };
+// PAIS DA GRADE DO GUIA (#158). O indice e o gravado ("epgPaisLocal N"):
+// novos entram NO FIM. O nome de cada pais vai na propria lingua dele, que e
+// como quem mora la o procura numa lista, e dispensa traducao. O codigo na
+// frente e o que epg_paises_definir recebe (ver EPG_PAIS_COD).
+static const char *V_EPG_PAIS[]  = {
+  "Automático", "RO · România", "BR · Brasil", "PT · Portugal", "ES · España",
+  "MX · México", "AR · Argentina", "IT · Italia", "FR · France",
+  "DE · Deutschland", "UK · United Kingdom", "TR · Türkiye", "GR · Ελλάδα",
+  "HU · Magyarország", "BG · България", "RS · Srbija", "HR · Hrvatska",
+  "NL · Nederland", "AL · Shqipëri", "CZ · Česko", "SE · Sverige",
+  "CL · Chile", "CO · Colombia", "PE · Perú"
+};
+#define AJ_N_EPG_PAIS ((int)(sizeof V_EPG_PAIS / sizeof *V_EPG_PAIS))
 // `tmdb_language` no blob da conta guarda so o idioma BASE ("pt", "en") —
 // normalizeTmdbLanguageForAndroid corta a regiao. A lista aqui e curta de
 // proposito: a do web e gerada de AVAILABLE_LANGUAGES inteiro, e atravessar
@@ -565,6 +580,8 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Usuário Xtream"),
   ACAO("Senha Xtream"),
   ACAO("Remover o Xtream"),
+  LER("Conta Xtream"),
+  ESC("Grade de programação",      V_EPG_PAIS, AJ_N_EPG_PAIS),
   ESC("Onde o + salva",             V_SALVOS, 3),
   ACAO("Trakt"),
   ACAO("Simkl"),
@@ -712,6 +729,8 @@ static const char *CHAVE[] = {
   // levam "-": nada delas entra no ajustes.txt nem no blob da conta.
   "-stalkerPortal", "-stalkerMac", "-stalkerLimpar",
   "-xtreamServidor", "-xtreamUsuario", "-xtreamSenha", "-xtreamLimpar",
+  // A grade e LOCAL e sem "-": o app oficial nao tem a escolha (#158).
+  "-xtreamConta", "epgPaisLocal",
   "salvosDestino", "-trakt", "-simkl", "-sair",
   "-versao", "-atualizar", "-registro", "envioAuto", "-espaco", "texturasMB",
   // Integracoes: os nomes sao exatamente os que profileSettingsSyncService.js
@@ -861,7 +880,9 @@ static const Item TELA[] = {
       OPC(AJ_STALKER_PORTAL), OPC(AJ_STALKER_MAC), OPC(AJ_STALKER_LIMPAR),
     ROT("Xtream Codes"),
       OPC(AJ_XTREAM_SERVIDOR), OPC(AJ_XTREAM_USUARIO), OPC(AJ_XTREAM_SENHA),
-      OPC(AJ_XTREAM_LIMPAR),
+      OPC(AJ_XTREAM_LIMPAR), OPC(AJ_XTREAM_CONTA),
+    ROT("Guia TV"),
+      OPC(AJ_EPG_PAIS),
 
   SEC("Integrações", "Serviços de metadados e de notas", "aj_plug"),
     GRP("TMDB", "Metadados, arte, elenco e trailers vindos do TMDB.", "aj_database"),
@@ -1099,6 +1120,7 @@ static int valor[] = {
   // da tela, que e o #149.
   0, 0, 0,          /* portal Stalker, MAC, remover: acoes */
   0, 0, 0, 0,       /* servidor, usuario, senha Xtream, remover: acoes */
+  0, 0,             /* conta Xtream (leitura); grade: automatica */
   1,                /* onde o + salva: watchlist do Trakt (ver V_SALVOS) */
   0, 0, 0,          /* trakt, simkl, sair: acoes */
   // ENVIO SOZINHO LIGADO DE FABRICA (dono, 26/09/2026: "melhor deixar
@@ -1441,6 +1463,15 @@ int ajustes_tmdb_ligado(void)         { return lig(AJ_TMDB_LIGADO); }
 // Codigo no formato da API do TMDB ("pt-BR", "en-US"). "Da interface" (0)
 // segue o idioma do app, que e o comportamento que desc_tmdb_idioma() sempre
 // teve.
+// "" = automatico; senao o codigo de 2 letras do pais (ver V_EPG_PAIS).
+const char *ajustes_epg_pais(void) {
+  static char c[3];
+  int v = valor[AJ_EPG_PAIS];
+  if (v <= 0 || v >= AJ_N_EPG_PAIS) return "";
+  c[0] = V_EPG_PAIS[v][0]; c[1] = V_EPG_PAIS[v][1]; c[2] = 0;
+  return c;
+}
+
 const char *ajustes_tmdb_idioma(void) {
   static const char *L[] = {
     NULL, "pt-BR", "en-US", "es-ES", "fr-FR", "de-DE", "it-IT", "pt-PT",
@@ -1897,6 +1928,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_FONTE_AUTO:
     case AJ_FONTE_REPOR:
     case AJ_SALVOS_DEST:
+    case AJ_EPG_PAIS:       /* pais da grade: por aparelho, o web nao tem */
     // Arte do destaque: o web nao tem as chaves (heroFundoLocal,
     // heroDifferentFromCard); ficam neste aparelho mesmo que um blob futuro
     // traga algo com o mesmo nome.
@@ -2184,6 +2216,31 @@ static const char *textoLeitura(int op) {
     return strcmp(xtream_usuario(), "-") ? xtream_usuario() : i18n("Não configurado");
   if (op == AJ_XTREAM_SENHA)
     return strcmp(xtream_senha_mascarada(), "-") ? xtream_senha_mascarada() : i18n("Não configurado");
+  if (op == AJ_XTREAM_CONTA) {
+    // So o que a conta diz de si (status, vencimento, telas). Sem usuario:
+    // a linha acima ja o mostra, e esta tela vai para foto de issue.
+    static char bufConta[160];
+    XtreamConta c;
+    long long agora = (long long)time(NULL);
+    if (!xtream_configurado()) return i18n("Não configurado");
+    if (!xtream_conta(&c)) return i18n("abra o Guia para conferir");
+    if (!c.auth) return i18n("recusada pelo servidor");
+    { int a = xtream_conta_aviso(&c, agora);
+      if (a == XA_EXPIRADA) return i18n("vencida");
+      if (a == XA_DESATIVADA) return i18n("desativada pelo provedor");
+      if (c.expira > 0) {
+        time_t t = (time_t)c.expira;
+        struct tm *m = localtime(&t);
+        char d[16];
+        strftime(d, sizeof d, "%d/%m/%Y", m);
+        if (c.maxConexoes > 0)
+          snprintf(bufConta, sizeof bufConta, i18n("ativa até %s · %d de %d telas"), d, c.conexoes, c.maxConexoes);
+        else snprintf(bufConta, sizeof bufConta, i18n("ativa até %s"), d);
+      } else if (c.maxConexoes > 0)
+        snprintf(bufConta, sizeof bufConta, i18n("ativa · %d de %d telas"), c.conexoes, c.maxConexoes);
+      else snprintf(bufConta, sizeof bufConta, "%s", i18n("ativa"));
+      return bufConta; }
+  }
   if (op == AJ_FANART_CHAVE) return fanartMascarada();
   if (op == AJ_ENVIAR_LOG) {
     switch (avisos_envio_estado()) {
@@ -2439,6 +2496,8 @@ static const char *ajudaOpcao(int op) {
     }
     case AJ_XTREAM_SENHA: return "A senha da assinatura. É credencial: vai dentro de cada URL de canal e nunca aparece nesta tela em claro.";
     case AJ_XTREAM_LIMPAR: return "Apaga servidor, usuário e senha deste perfil, e os canais somem do Guia. Sair da conta também apaga.";
+    case AJ_XTREAM_CONTA: return "O que o servidor Xtream disse da assinatura na última carga do Guia: se está ativa, quando vence e quantas telas estão em uso.";
+    case AJ_EPG_PAIS: return "De que país vem a programação dos canais no Guia. Automático escolhe pelo idioma e pelos nomes dos canais (RO:, |RO|…). A grade do próprio provedor Xtream entra sempre que existir.";
     case AJ_FONTE_MANUAL: return "Ao mandar reproduzir, abre a lista de fontes em vez de escolher sozinho. Canal ao vivo não pergunta.";
     case AJ_FONTE_AUTO: return "Melhor fonte: prefere 4K, Dolby Vision e MP4 e confere uma fonte por vez. Primeira da lista: toca a primeira que o addon mandou e não confere nenhuma outra — para quem já filtra e ordena no AIOStreams.";
     case AJ_FONTE_REPOR: return "Quantas outras fontes o automático tenta quando a escolhida não abre. Cada tentativa pode adicionar um arquivo na sua conta de debrid.";
@@ -3189,7 +3248,8 @@ void ajustes_evento(const SDL_Event *e) {
                             : (!sen && strcmp(xtream_usuario(), "-")) ? xtream_usuario() : NULL);
       return;
     }
-    if (focoOp == AJ_XTREAM_LIMPAR) { xtream_esquecer(); return; }
+    // A grade curta guardada era da conta que saiu (#158).
+    if (focoOp == AJ_XTREAM_LIMPAR) { xtream_esquecer(); xtepg_limpar(); return; }
     if (focoOp == AJ_FANART_CHAVE) {
       // A chave NUNCA volta para o campo (a modal fica na tela e a tela vira
       // foto); confirmar vazio esquece a que estava.
@@ -4872,6 +4932,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_ADDONS: case AJ_STALKER_PORTAL: case AJ_STALKER_MAC:
     case AJ_STALKER_LIMPAR: case AJ_XTREAM_SERVIDOR: case AJ_XTREAM_USUARIO:
     case AJ_XTREAM_SENHA: case AJ_XTREAM_LIMPAR: case AJ_FANART_CHAVE:
+    case AJ_XTREAM_CONTA:
     case AJ_DIAGNOSTICO: case AJ_VELOCIDADE:
       return AJPV_ACAO;
     default:

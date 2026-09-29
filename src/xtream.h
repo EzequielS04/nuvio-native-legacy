@@ -27,6 +27,8 @@
 #ifndef NV_XTREAM_H
 #define NV_XTREAM_H
 
+#include <time.h>
+
 // ---------------------------------------------------------------- cadastro
 void xtream_carregar(void);
 int  xtream_configurado(void);          // servidor, usuario e senha presentes
@@ -57,14 +59,58 @@ int xtream_canais(XtreamCanal *saida, int max);
 // mesmo vazia, ou sem cadastro), XT_SEM_RESPOSTA, XT_RECUSOU (auth 0). O guia
 // diz isso na tela; antes o "0" do Xtream sumia no meio dos canais dos addons
 // e so o log sabia.
-enum { XT_OK, XT_SEM_RESPOSTA, XT_RECUSOU };
+// XT_PAGINA (#158): respondeu, mas com uma pagina HTML (Cloudflare, WAF,
+// portal cativo) em vez da lista — nao e senha errada, e a primeira versao
+// dizia que era. XT_HTTP: respondeu 4xx/5xx que nao e de credencial; o codigo
+// esta em xtream_ultimo_http (403 bloqueio, 429 rajada, 458 telas, 5xx painel).
+enum { XT_OK, XT_SEM_RESPOSTA, XT_RECUSOU, XT_PAGINA, XT_HTTP };
 int xtream_ultima_falha(void);
+int xtream_ultimo_http(void);
+
+// ----------------------------------------------------------------- conta
+// user_info do player_api.php (#158). Tudo opcional: -1/0/"" = nao veio.
+typedef struct {
+  int  valido;             // houve user_info na resposta
+  int  http;               // status do pedido (0 = sem resposta)
+  int  auth;
+  char status[24];         // "Active", "Expired", "Banned", "Disabled"
+  long long expira;        // epoch; 0 = sem vencimento
+  int  conexoes, maxConexoes;
+  int  teste;              // is_trial
+  int  formatosDeclarados; // allowed_output_formats veio
+  int  temM3u8, temTs;
+} XtreamConta;
+// Vai a rede (BLOQUEIA: fio do guia) e guarda a copia. 1 se veio user_info.
+int xtream_conta_ler(XtreamConta *c);
+// A ultima copia, sem rede. 1 se valida.
+int xtream_conta(XtreamConta *c);
+// So o parse, para os testes.
+int xtream_conta_parse(const char *json, XtreamConta *c);
+// O que a tela deve avisar sobre a conta em `agora` (epoch).
+enum { XA_NADA, XA_RECUSOU, XA_EXPIRADA, XA_DESATIVADA, XA_TELAS_CHEIAS, XA_VENCE_LOGO };
+int xtream_conta_aviso(const XtreamConta *c, long long agora);
 
 // ------------------------------------------------------------ reproducao
 int xtream_e_id(const char *id);
 // Monta a URL do canal em `url`. Nao vai a rede: e so o cadastro + o id. 0
 // quando o id nao e deste modulo ou nao ha cadastro.
 int xtream_url(const char *id, char *url, unsigned n);
+// Os formatos a tentar, em ordem ("m3u8"/"ts"), pelo que a conta declara e
+// pelo que ja tocou nesta sessao. Devolve quantos (1 ou 2).
+int xtream_formatos(const char *ext[2]);
+// A URL com a extensao pedida.
+int xtream_url_formato(const char *id, const char *ext, char *url, unsigned n);
+// Avisa que esta URL tocou (loadCompleted): o formato dela vai primeiro nos
+// proximos canais da sessao.
+void xtream_formato_funcionou(const char *url);
+
+// --------------------------------------------------------- grade curta
+// get_short_epg de UM canal (#158): sem o XMLTV inteiro. `titulo` ja
+// decodificado do base64. xtream_epg_curto BLOQUEIA (rede); devolve quantos,
+// ou -1 em falha (status HTTP em *status, 0 = sem resposta).
+typedef struct { time_t ini, fim; char titulo[112]; } XtreamProg;
+int xtream_epg_curto(const char *id, XtreamProg *out, int cap, int *status);
+int xtream_epg_parse(const char *json, XtreamProg *out, int cap);
 // A grade XMLTV do proprio provedor (<servidor>/xmltv.php), que e onde o
 // epg_channel_id de cada canal existe (#158). Leva a credencial: nunca em log.
 // 0 sem cadastro, ou na Samsung com painel http (bloqueado, ver xtream.c).
