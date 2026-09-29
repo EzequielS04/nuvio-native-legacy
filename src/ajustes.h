@@ -41,6 +41,10 @@ int  ajustes_itens_fileira(void);
 void ajustes_abrir_na_cor(void);
 // Atalho do cartão de novidades para a tipografia da interface.
 void ajustes_abrir_na_fonte(void);
+// Atalhos do cartao da 1.6.0: Ajustes › Layout na linha "Layout da home", e
+// Ajustes › Aparência na linha "Interface de vidro". Mesma regra da cor.
+void ajustes_abrir_no_layout(void);
+void ajustes_abrir_no_vidro(void);
 // A linha em foco (indice AJ_*; -1 com o foco num grupo), para os testes
 // conferirem onde a tela abriu.
 int  ajustes_opcao_em_foco(void);
