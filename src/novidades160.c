@@ -121,7 +121,7 @@ static void arte(int f, GfxRect r, float raioPx, float veu, float a) {
   if (!t) { gfx_cor(r, rr(raioPx, r), 0.10f, 0.11f, 0.13f, a); return; }
   gfx_tex_aspect_atual = tex_aspecto(fundo[f]);
   if (gfx_tex_aspect_atual <= 0.0f) gfx_tex_aspect_atual = 16.0f / 9.0f;
-  gfx_rect(r, t, GFX_VITRINE, veu, 0.35f, 0.0f, rr(raioPx, r), 1, 1, 1, a);
+  gfx_rect(r, t, GFX_VITRINE, veu, 0.35f, 0.0f, rr(raioPx, r), 0, 0, 0, a);   // uCor.r = 0: veu de baixo no padrao
   gfx_tex_aspect_atual = 0.0f;
 }
 

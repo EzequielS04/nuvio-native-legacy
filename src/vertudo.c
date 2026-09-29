@@ -411,7 +411,7 @@ static void themeBackground(float a) {
         gfx_tex_aspect_atual=0;
       }
     } else {
-      const char *art=collection->hero[0]?collection->hero:collection->cover;
+      const char *art=col_banner(collection);
       GLuint tex=art[0]?tex_obter_hero(art):0;
       if(tex) {
         gfx_tex_aspect_atual=tex_aspecto(art);

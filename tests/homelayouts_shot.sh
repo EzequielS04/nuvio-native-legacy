@@ -11,7 +11,7 @@ cd "$(dirname "$0")/.."
 
 saida="${1:-/tmp/nv-home-layouts-shots}"
 mkdir -p "$saida"
-NUVIO_DADOS=$(mktemp -d /tmp/nuvio-homelayouts-shot.XXXXXX)
+NUVIO_DADOS=$(mktemp -d "${TMPDIR:-/tmp}/nuvio-homelayouts-shot.XXXXXX")
 export NUVIO_DADOS
 trap 'rm -rf "$NUVIO_DADOS"' EXIT
 
@@ -20,12 +20,18 @@ for source in src/*.c; do
   case "$source" in src/main.c) continue;; esac
   sources+=("$source")
 done
-cc "${sources[@]}" tests/homelayouts_shot.c -Isrc -o /tmp/nuvio-homelayouts-shot \
+# Nunca executar um binario velho se o compilador falhar. O filtro anterior
+# terminava em `|| true` e escondia inclusive erros de link.
+if ! cc "${sources[@]}" tests/homelayouts_shot.c -Isrc -o "$NUVIO_DADOS/shot" \
   -O1 -g ${NV_CFLAGS:-} -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
   -L/opt/homebrew/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lz -framework OpenGL \
-  -Wall -Wextra -Wno-deprecated-declarations -Wno-macro-redefined 2>&1 \
-  | grep -E "homelayouts_shot|error|home\.c" || true
-/tmp/nuvio-homelayouts-shot "$saida/h" "${2:-012}"
+  -Wall -Wextra -Wno-deprecated-declarations -Wno-macro-redefined \
+  >"$NUVIO_DADOS/build.log" 2>&1; then
+  cat "$NUVIO_DADOS/build.log" >&2
+  exit 1
+fi
+grep -E "homelayouts_shot|error|home\.c" "$NUVIO_DADOS/build.log" || true
+"$NUVIO_DADOS/shot" "$saida/h" "${2:-012}"
 [ -n "${NV_KEEP:-}" ] && exit 0   # deixa os BMP, para comparar byte a byte
 for f in "$saida"/h-*.bmp; do
   [ -e "$f" ] || continue

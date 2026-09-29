@@ -8,6 +8,7 @@
 #include "../src/extras.h"
 #include "../src/anim.h"
 #include "../src/trailerfonte.h"
+#include "../src/trailercinema.h"   // static inline: antes do `#define static`, senao vira inline sem corpo
 #include <stdio.h>
 #include <string.h>
 
@@ -28,6 +29,7 @@ static int imdbReady, imdbAnswered;
 static int opened;
 static int playing;
 static int openedCount;
+static int sourceRequests;
 static int appleFailure;
 static char lastSource[128];
 
@@ -37,6 +39,10 @@ const CatItem *cat_item(int i) { return i == 0 ? &item : NULL; }
 int ajustes_hero_ligado(void) { return 1; }
 int ajustes_trailer_hero(void) { return trailerSetting; }
 int ajustes_tmdb_trailers(void) { return 1; }
+int ajustes_home_layout(void) { return 0; }
+int ajustes_trailer_cartaz(void) { return 0; }
+float ajustes_expandir_poster_atraso(void) { return 0.5f; }
+int ajustes_animacoes_reduzidas(void) { return 0; }
 int ajustes_trailer_fonte(void) { return fonteSetting; }
 
 int trailer_suportado(void) { return 1; }
@@ -67,6 +73,7 @@ void trailer_abrir(const char *source, GfxRect r, int som, int cheia) {
 
 void trailerapple_pedir(const char *imdb, const char *titulo, const char *meta, int serie) {
   (void)imdb; (void)titulo; (void)meta; (void)serie;
+  sourceRequests++;
 }
 const char *trailerapple_url(const char *imdb) {
   (void)imdb;
@@ -76,7 +83,7 @@ int trailerapple_respondeu(const char *imdb) { (void)imdb; return appleReady; }
 
 // IMDb (#136): na Samsung ele existe quando a build tem o servico de
 // recomendacoes; aqui trailerfonte_definir_imdb_tizen decide.
-void trailerimdb_pedir(const char *imdb) { (void)imdb; }
+void trailerimdb_pedir(const char *imdb) { (void)imdb; sourceRequests++; }
 const char *trailerimdb_url(const char *imdb, const char **nome) {
   (void)imdb; if (nome) *nome = "Trailer";
   return imdbReady ? "https://media.test/imdb.mp4" : NULL;
@@ -85,6 +92,7 @@ int trailerimdb_respondeu(const char *imdb) { (void)imdb; return imdbReady || im
 
 void extras_hero_trailer_pedir(const char *imdb, int serie, long tmdbId) {
   (void)imdb; (void)serie; (void)tmdbId;
+  sourceRequests++;
 }
 int extras_hero_trailer_obter(const char *imdb, char *dst, unsigned cap) {
   (void)imdb;
@@ -119,6 +127,8 @@ static void resetState(const char *id) {
   heroTrailerFonte = 0;
   heroTrailerAppleFalhou = 0;
   heroTrailerFade = 0.0f;
+  heroTrailerTocouN = 0;   // cada caso reinicia a memoria da sessao no teste
+  heroTrailerMemoriaFalhou = 0;
   trailerSetting = 1;
   fonteSetting = TRF_AUTO;
   lastSom = -1;
@@ -137,6 +147,55 @@ static void resetState(const char *id) {
 int main(void) {
   const Uint32 start = 100;
   int rc = 0;
+
+  // UM TRAILER POR TITULO NA SESSAO (dono, 30/09). Tocou (o `playing` chegou),
+  // o foco sai do destaque e volta: a arte fica, o trailer nao recomeca.
+  resetState("tt0000080");
+  appleReady = 1;
+  home_trailer_passo(1, 0.016f, start);
+  home_trailer_passo(1, 0.016f, start + NV_TRAILER_HERO_ESPERA_MS);
+  rc |= check("primeira vez: o trailer abre", opened && openedCount == 1);
+  playing = 1;
+  home_trailer_passo(1, 0.016f, start + NV_TRAILER_HERO_ESPERA_MS + 1);
+  rc |= check("tocando marca o titulo como ja tocado", heroTrailerJaTocou("tt0000080"));
+  rc |= check("tocando ainda segura a rotacao", heroTrailerSegurando(start + NV_TRAILER_HERO_ESPERA_MS + 1));
+  home_trailer_passo(0, 0.016f, start + 5000);   // o foco saiu do destaque: fecha
+  rc |= check("saiu de cena: fecha o trailer", !opened);
+  focoHero = 1;
+  sourceRequests = 0;
+  home_trailer_passo(1, 0.016f, start + 6000);
+  home_trailer_passo(1, 0.016f, start + 6000 + NV_TRAILER_HERO_MAX_ESPERA_MS + NV_TRAILER_HERO_ESPERA_MS);
+  rc |= check("voltou ao mesmo titulo: nao toca de novo", !opened && openedCount == 1);
+  rc |= check("titulo ja tocado nao consulta fontes novamente", sourceRequests == 0);
+  rc |= check("titulo ja tocado nao segura a rotacao", !heroTrailerSegurando(start + 6000 + NV_TRAILER_HERO_ESPERA_MS));
+  // Outro titulo continua tocando normalmente.
+  snprintf(item.imdb, sizeof item.imdb, "%s", "tt0000081");
+  home_trailer_passo(1, 0.016f, start + 20000);
+  home_trailer_passo(1, 0.016f, start + 20000 + NV_TRAILER_HERO_ESPERA_MS);
+  rc |= check("outro titulo ainda toca", opened && openedCount == 2);
+  // Trailer que abriu mas NUNCA tocou (sem `playing`) nao conta como tocado.
+  resetState("tt0000082");
+  appleReady = 1;
+  home_trailer_passo(1, 0.016f, start);
+  home_trailer_passo(1, 0.016f, start + NV_TRAILER_HERO_ESPERA_MS);
+  rc |= check("abriu sem tocar: nao marca", opened && !heroTrailerJaTocou("tt0000082"));
+
+  // Um catalogo longo nao pode expulsar titulo ja tocado da memoria da sessao.
+  heroTrailerMarcarTocou("tt-session-old");
+  for (int i = 0; i < 160; i++) {
+    char id[24];
+    snprintf(id, sizeof id, "tt-session-%07d", i);
+    heroTrailerMarcarTocou(id);
+  }
+  rc |= check("played title stays blocked beyond 96 titles",
+              heroTrailerJaTocou("tt-session-old"));
+
+  resetState("tt0000083");
+  heroTrailerMemoriaFalhou = 1;
+  sourceRequests = 0;
+  home_trailer_passo(1, 0.016f, start);
+  rc |= check("sem memoria: nao consulta fonte nem prende rotacao",
+              sourceRequests == 0 && !heroTrailerSegurando(start + 1));
 
   // Apple is ready and opens, but fails before playback. The next source on
   // Samsung is IMDb (#136) and it is attempted exactly once. YouTube, even

@@ -20,6 +20,7 @@
 #include "ajustes.h"
 #include "artehero.h"
 #include "catalogo.h"
+#include "colecoes.h"
 #include "corviva.h"
 #include "dados.h"
 #include "gfx.h"
@@ -55,7 +56,7 @@ static const Fil FILS[] = {
   { "comedia_movie", "Comédia - Filme",      "movie",  10, 1 },
   { "ficcao_movie", "Ficção científica - Filme", "movie", 10, 1 },
 };
-#define NF (int)(sizeof FILS / sizeof *FILS)
+#define NF (getenv("NV_COL") ? 3 : (int)(sizeof FILS / sizeof *FILS))
 
 static SDL_Window *janela;
 static const char *dirDados;
@@ -126,7 +127,7 @@ int main(int argc, char **argv) {
   const char *saida = argc > 1 ? argv[1] : "/tmp/nv-home-layouts-shots/h";
   const char *camadas = argc > 2 ? argv[2] : "012";
   static CatItem itens[80];
-  static CatFileira fils[NF];
+  static CatFileira fils[8];
   SDL_GLContext gl;
   char bmp[800], cache[700];
   int i, k, total = 0, ini = 0;
@@ -196,6 +197,18 @@ int main(int argc, char **argv) {
     ini += FILS[k].n;
     total = ini;
   }
+  if (getenv("NV_COL")) {   // NV_COL=1: um grupo de colecao no fim, com as quatro cadeias de arte
+    const char *fonte = "\"sources\":[{\"addonBaseUrl\":\"https://addon.invalid/x\",\"type\":\"movie\",\"catalogId\":\"k\"}]";
+    char js[4000];
+    snprintf(js, sizeof js,
+      "{\"collections\":[{\"id\":\"cs\",\"title\":\"Streaming\",\"backdropImageUrl\":\"deploy/app/art/07.jpg\",\"folders\":["
+      "{\"id\":\"a\",\"title\":\"Com hero e capa\",\"heroBackdropUrl\":\"deploy/app/art/03.jpg\",\"coverImageUrl\":\"deploy/app/art/poster/12.jpg\",%s},"
+      "{\"id\":\"b\",\"title\":\"So capa\",\"coverImageUrl\":\"deploy/app/art/05.jpg\",%s},"
+      "{\"id\":\"c\",\"title\":\"So fundo da colecao\",%s},"
+      "{\"id\":\"d\",\"title\":\"Com hero sem capa\",\"heroBackdropUrl\":\"deploy/app/art/09.jpg\",%s}]}]}",
+      fonte, fonte, fonte, fonte);
+    assert(col_definir_json(js) == 4);
+  }
   cat_definir_tudo(itens, total, fils, NF);
   quadros(60, NULL);
 
@@ -205,6 +218,7 @@ int main(int argc, char **argv) {
       for (vidro = 0; vidro < 2; vidro++) {
         int r;
         ajusta(layout, vidro);
+        assert(ajustes_home_layout() == layout);
         for (r = 0; r < 14; r++) tecla(SDLK_UP);
         quadros(120, NULL);
         snprintf(bmp, sizeof bmp, "%s-L%d-g%d-0-destaque.bmp", saida, layout, vidro);

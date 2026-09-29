@@ -294,6 +294,16 @@ int col_carregar(const char *dir) {
     }
   }free(body);aplicarExtras();return count;
 }
+const char *col_banner(const ColFolder *f) {
+  if (!f) return "";
+  if (f->hero[0]) return f->hero;
+  if (f->cover[0]) return f->cover;
+  return f->groupBackdrop;
+}
+const char *col_capa(const ColFolder *f) {
+  if (!f) return "";
+  return f->cover[0] ? f->cover : f->groupBackdrop;
+}
 void col_cor(const ColFolder *f,float *r,float *g,float *b) {
   *r=.16f;*g=.23f;*b=.30f;if(!f)return;
   if(strstr(f->title,"Netflix")){*r=.52f;*g=.035f;*b=.065f;}
@@ -326,7 +336,7 @@ static int fPulProvedor, fPulSemFonte, fPulSemTitulo, fPulCheio, fGifCortado;
 static char fPrimeiraPulada[128];
 
 static void lerColecaoWeb(const char *c, const char *ce) {
-  char group[64], groupId[64], fundo[512];
+  char group[64] = "", groupId[64] = "", fundo[512] = "";   // js_texto nao zera o que nao acha
   js_texto(c, ce, "title", group, sizeof group);
   js_texto(c, ce, "id", groupId, sizeof groupId);
   js_texto(c, ce, "backdropImageUrl", fundo, sizeof fundo);
@@ -337,7 +347,8 @@ static void lerColecaoWeb(const char *c, const char *ce) {
     snprintf(v->groupId, sizeof v->groupId, "%s", groupId);
     js_texto(p, pe, "id", v->id, sizeof v->id); js_texto(p, pe, "title", v->title, sizeof v->title);
     js_texto(p, pe, "coverImageUrl", v->cover, sizeof v->cover);
-    if (!js_texto(p, pe, "heroBackdropUrl", v->hero, sizeof v->hero)) snprintf(v->hero, sizeof v->hero, "%s", fundo);
+    js_texto(p, pe, "heroBackdropUrl", v->hero, sizeof v->hero);
+    snprintf(v->groupBackdrop, sizeof v->groupBackdrop, "%s", fundo);
     js_texto(p, pe, "titleLogoUrl", v->logo, sizeof v->logo);
     // GIF DE FOCO (#29). Fica como URL, igual a cover/hero/logo: quem for
     // anima-lo pede o arquivo ao cache de disco (tex_arquivo) na hora em que o
