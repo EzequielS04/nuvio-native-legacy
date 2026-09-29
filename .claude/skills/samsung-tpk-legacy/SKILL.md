@@ -1,52 +1,58 @@
 ---
 name: samsung-tpk-legacy
-description: O .tpk nativo do Nuvio para Samsung Tizen 4.0-5.5 (TVs 2018-2020), pacote NuvioTpk40 sobre a TVGLApplication da Samsung com assinatura Partner. Use ao mexer em tizen-tpk/NuvioTpk40, ao ler relatos de TVs 2018-2020, ou ao decidir o que fazer se a TV bloquear a .so.
+description: O .tpk nativo do Nuvio para Samsung Tizen 4.0-5.5 (TVs 2018-2020), pacote NuvioTpk40 sobre a TVGLApplication, com a lib carregada por memfd (ou carregador ELF proprio) porque a UEP barra .so de arquivo. Use ao mexer em tizen-tpk/NuvioTpk40, em src/rede.c sob NV_TPK40, ao ler relatos de TVs 2018-2020, ou em erro de instalacao 118014.
 ---
 
 # .tpk Tizen 4.0–5.5 (TVGLApplication)
 
-Mesma `libnuvio.so` e mesmo protocolo de quadro do 6+ (skill `samsung-tpk`),
-com outro host, porque essas APIs não têm GLWindow:
+Provado em 29/09/2026: 2x Tizen 4.0 (optiman, rawldon UA40N5300) e 2x 5.0
+(singhsamarveer UE55RU7170, KeijoMika QE65Q80R) — login, home, filme 4K,
+trailer. Entra no release normal desde a 1.5.4.
 
-- `Tizen.TV.NUI.GLApplication.TVGLApplication` (pacote NuGet `Tizen.NET.TV`
-  4.4.0.1341, `ExcludeAssets=Runtime`: a assembly já está na TV). `OnUpdate()`
-  roda no fio principal com o contexto corrente; devolver `true` faz ela
-  trocar os buffers. Espera do quadro: 50 ms (`nv_tpk_config(50, 0)`).
-- Vídeo: janela ElmSharp separada, `Show()` + `Lower()`, dada ao
-  `Tizen.Multimedia.Display`. É exatamente o molde do
-  `JuvoPlayer.OpenGL` (github.com/SamsungDForum/JuvoPlayer). O exemplo mínimo
-  da Samsung é github.com/SamsungDForum/OpenGLES.
-- O DllImport do Tizen 4/5 não procura no `lib/` do pacote ("liblibX.so.so").
-  O host abre a `.so` por caminho absoluto com `dlopen` e o DllImport casa
-  pelo soname (`-Wl,-soname,libnuvio.so` em `tools/tpk.sh`). Chamar
-  `dlerror()` uma vez ANTES do `dlopen`, senão o CLR zera a mensagem.
+## Como carrega (`tizen-tpk/NuvioTpk40/Program40.cs`)
 
-Build, teste e publicação: iguais aos da skill `samsung-tpk` (`tools/tpk.sh`
-gera os quatro pacotes juntos).
+- **UEP**: a TV recusa `dlopen` de `.so` em arquivo nao assinado (com Public
+  OU Partner), mas permite memoria anonima executavel.
+- `CarregaNativo`: 1) `memfd_create` por **syscall 385** (a libc do 4/5 nao
+  exporta o simbolo) + `dlopen("/proc/self/fd/N")`; 2) se falhar, carregador
+  ELF32-ARM proprio em C# (PT_LOAD, relocacoes RELATIVE/GLOB_DAT/JUMP_SLOT/
+  ABS32, `DT_INIT_ARRAY`, `mprotect`, `cacheflush`). Na TV do sigmaboy19 o
+  memfd falhou e o ELF carregou — os dois caminhos sao reais.
+- O carregador ELF RECUSA (com mensagem na tela) o que nao sabe: PT_TLS,
+  relocacao desconhecida, sem DT_HASH, simbolo nao resolvido.
 
-## O bloqueio (UEP)
+## A lib propria do 4/5 (`libnuvio-tpk40.so`, `-DNV_TPK40`)
 
-Com assinatura Public, TVs 4.0/5.0 recusaram a `.so` própria (dlopen com erro
-vazio) e o executável próprio (`Operation not permitted`), no spike.2 de
-26/09/2026 (#137). A causa provável é o UEP da Samsung, que verifica a
-assinatura de código em partições graváveis. A FAQ da Samsung diz que `.so`
-própria precisa ser "assinada" e que isso exige ser parceiro do Seller Office.
+- **Sem TLS**: os `_Thread_local` de `src/rede.c` viram campos da struct
+  `RedeFio` (pthread_key). Era o crash de sign-in (#180): o carregador ELF
+  ignorava R_ARM_TLS_* e o primeiro HTTPS morria.
+- **Com DT_HASH** (`--hash-style=both`).
+- `tools/tpk.sh` passo [1b/3] recompila so as unidades que citam `NV_TPK40` e
+  FALHA se sobrar TLS ou faltar DT_HASH (`tests/tpk40_tls.sh`).
+- Anexo de auto-atualizacao proprio: `libnuvio-<v>-tpk40-arm.so`
+  (`src/atualizacao.c` procura `-tpk40-arm.so` sob `NV_TPK40`). Nunca deixe o
+  4/5 baixar a lib comum.
+- `dt-init`: enderecos em `uint` (32 bits); 0 e 0xFFFFFFFF sao sentinelas;
+  cada init no seu try (antes, OverflowException abortava as inits).
 
-O que o pacote faz a respeito:
-- O manifesto declara `http://developer.samsung.com/privilege/drminfo` (nível
-  Partner). O Apps2Samsung vê isso (`WgtPrivileges.cs`) e re-assina o pacote
-  como **Partner** sozinho. O app não usa DRM.
-- Se mesmo assim a TV recusar, o host tenta a cópia em `data/` e mostra uma
-  tela com o erro real do `dlopen`, a montagem da pasta, o modelo e a versão
-  do Tizen, e pede FOTO na #137.
+## Assinatura: PUBLIC, sem `drminfo`
 
-Ainda NÃO provado em TV (27/09/2026): se a assinatura Partner do pacote
-basta, ou se a Samsung exige assinar a própria `.so` (só parceiro). Se as
-fotos mostrarem o bloqueio mesmo com Partner, essas TVs ficam no `.wgt`
-(Tizen 4 experimental, skill `samsung-wgt`). Não gaste mais tempo com truques
-de caminho ou nome: nenhum deles assina o binário.
+O manifesto NAO declara `http://developer.samsung.com/privilege/drminfo`. Com
+ele o Apps2Samsung assinava Partner e parte das TVs recusava a instalacao com
+**`install failed[118014]`** (rawldon UA40N5300). Sem ele instala e abre.
+`tools/release-samsung.sh` recusa pacote 4/5 com drminfo.
 
-## Tizen 5.5 (2020)
+## Diagnostico
 
-API7, sem GLWindow: vai neste pacote também (api-version 4 roda no 5.5, e o
-`Tizen.NET.TV` existe até a 5.5).
+- Rastro `data/tpk-etapas.txt` (host + nativo: `read-so`, `memfd`,
+  `elf-loader`, `dt-init`, `libcurl-dlopen` (o 4/5 tem `libcurl.so.4`),
+  `https-1`, `sign-in-thread`). Etapa aberta na abertura seguinte vira
+  "Previous launch stopped at: ..." na tela. Sem handler de SIGSEGV: o CoreCLR
+  ja e dono desse sinal.
+- Desempenho: GPU Mali-TDVX (1 GB) presa no preenchimento; o nivel de GPU
+  adaptativo (`src/gpunivel.c`) desce para efeitos leves. Posteres cinza ao
+  rolar rapido = decode atrasado (orcamento de textura 64 MB no `.tpk`).
+
+## Tizen 5.5
+
+API7 sem GLWindow: vai neste pacote (api-version 4 roda no 5.5).

@@ -1,79 +1,97 @@
 ---
 name: samsung-tpk
-description: Gerar, testar e publicar o Nuvio nativo .tpk para Samsung Tizen 6.0+ (host .NET com NUI GLWindow, pacotes NuvioTpk60/65/NuvioTpk). Use para qualquer build .tpk, atualização da preview nativa da Samsung, ou mudança em src/tpk.c, src/video_tpk.c, tizen-tpk/.
+description: Gerar, testar e publicar o Nuvio nativo .tpk para Samsung Tizen 6.0+ (host .NET NUI; GLWindow no 6.0/6.5, GLView na janela principal no 8/9; pacotes NuvioTpk60/65/NuvioTpk). Use para qualquer build .tpk, canario nativo da Samsung, ou mudanca em src/tpk.c, src/video_tpk.c, src/gpunivel.c, tizen-tpk/.
 ---
 
-# .tpk Tizen 6+ (GLWindow)
+# .tpk Tizen 6+ (NUI)
 
-O mesmo C do app (`src/*.c`, `-DNV_TPK`) vira `libnuvio.so`. Um host .NET abre
-um `GLWindow` e, a cada quadro, passa o contexto EGL ao fio do app
-(`src/tpk.c`). O vídeo é `Tizen.Multimedia.Player` no plano de vídeo
-(`tizen-tpk/Video.cs` + `src/video_tpk.c`). Arquitetura e tabela de pacotes:
-`tizen-tpk/README.md`. O mesmo `tools/tpk.sh` gera também o pacote do 4/5
-(skill `samsung-tpk-legacy`).
+O mesmo C do app (`src/*.c`, `-DNV_TPK`) vira `libnuvio.so`. Um host .NET
+(`tizen-tpk/Program.cs`, compartilhado pelos tres pacotes) desenha e, a cada
+quadro, passa o contexto EGL ao fio do app (`src/tpk.c`). Video:
+`Tizen.Multimedia.Player` no plano de video (`tizen-tpk/Video.cs` +
+`src/video_tpk.c`). Arquitetura: `tizen-tpk/README.md`. O `tools/tpk.sh` gera
+tambem o pacote do 4/5 (skill `samsung-tpk-legacy`).
+
+| Pacote | API | Tizen | Superficie |
+|---|---|---|---|
+| `NuvioTpk60` | 8 (`NV_API8`) | 6.0 | GLWindow |
+| `NuvioTpk65` | 9 (`NV_API9`) | 6.5–7 | GLWindow |
+| `NuvioTpk` | 11 | 8–9 | **GLView na janela principal** (`API11_GLVIEW`) |
 
 ## Build
 
 ```bash
 git worktree add --detach ../nuvio-tpk-build <commit>   # nunca da arvore suja
-cd ../nuvio-tpk-build && bash tools/tpk.sh
+cd ../nuvio-tpk-build
+NUVIO_PROPERTIES=".../NuvioWeb-0.3.38-beta/local.properties" bash tools/tpk.sh
+git checkout -- tizen-tpk/*/tizen-manifest.xml          # o tpk.sh reescreve a versao
 ```
 
-Sai em `build/tpk/Nuvio-<versao>-NuvioTpk{40,60,65,}.tpk`.
+Sai em `build/tpk/`: os quatro `.tpk`, `libnuvio.so` (6+), `libnuvio-tpk40.so`
+(4/5, sem TLS) e os anexos de auto-atualizacao `libnuvio-<v>-tpk-arm.so` /
+`-tpk40-arm.so`. Para release use `tools/release-samsung.sh` (skill
+`samsung-release`), que faz isto e confere tudo.
 
-Pré-requisitos (a primeira vez demora):
-- Docker/OrbStack LIGADO. Se o daemon estiver parado, os scripts não avisam
-  bem: `open -a OrbStack`. O compilador é a imagem `nuvio-tpk-sdk`
-  (`tools/tpk/Dockerfile`, Debian buster armel, glibc 2.28). O gcc do Tizen
-  Studio no Mac roda por Rosetta e dá "internal compiler error" no SDL.
-- Dependências estáticas (SDL2 com vídeo dummy, SDL2_image com stb,
-  SDL2_ttf com freetype embutido) em `~/.cache/nuvio-tpk/prefix`, feitas por
-  `tools/tpk/deps.sh`. O caminho não pode ter espaço (autotools).
-- `.NET 8 SDK` em `~/.dotnet` + workload Tizen.
-- `tools/env.sh` (chaves do servidor em `../NuvioWeb-0.3.38-beta/local.properties`).
+Pre-requisitos: Docker/OrbStack ligado (`open -a OrbStack`; com o daemon
+parado o build falha mal); imagem `nuvio-tpk-sdk` (`tools/tpk/Dockerfile`,
+Debian buster armel, glibc 2.28); deps estaticas em `~/.cache/nuvio-tpk/prefix`
+(`tools/tpk/deps.sh`, caminho sem espaco); `.NET 8 SDK` em `~/.dotnet` +
+workload Tizen.
 
 ## Testar sem TV
 
-```bash
-bash tools/tpk-testa.sh 60
-```
+`bash tools/tpk-testa.sh 60` roda a `.so` num host falso ARM (Mesa por
+software). NAO exercita o host .NET, o player, nem a janela: mudanca em
+`tizen-tpk/*.cs` so se prova na TV (canario).
 
-Roda a `.so` num host falso (`tools/tpk/hostfalso.c`) no container ARM, com
-Mesa por software e o mesmo protocolo de quadro (1 troca / 0 pula / -1 fim).
-Saída em `build/tpk/teste/`: `nuvio.log` e `quadro.png`. Esperado: `[t] ~3500
-primeiro quadro na tela`, `[tecla]` da tecla injetada e, sem sessão, a tela
-de login com QR. Os muitos "pulos" são o Mesa lento, não defeito.
+## O que ja foi provado na TV (29/09/2026) e nao pode regredir
 
-## Regras que já custaram caro
+- **Tizen 8/9 pelo menu da TV**: com GLWindow separado a TV PAUSAVA o app ~3 s
+  depois de abrir (quando o GLWindow pegava o foco) e fechava em ~10 s; pelo
+  Apps2Samsung abria. Com `GLView` dentro da janela principal abre normal
+  (S90C, QN90D/S90D, CU7700). Nao volte a GLWindow no API11.
+- **Samsung TV Plus tocando por baixo**: 1,5 s apos abrir o host toca
+  `res/silencio.mp4` pelo mesmo caminho do filme e solta (`PRIME_AUDIO`).
+  AudioStreamPolicy NAO resolve (testado, e deixa a TV preta ao sair).
+- **Trailer**: no `.tpk` a Apple toca so variante de VIDEO (sem audio, o master
+  travava o muse-server); a tela cheia e o cartao que continua no detalhe
+  tentam o IMDb primeiro. O zoom esconde o plano ate o recorte assentar.
+- **Nivel de GPU** (`src/gpunivel.c`): adaptativo nos primeiros ~20 s de home;
+  desce no maximo ao nivel 1 (efeitos leves). O 720p (nivel 2) ficou borrado
+  demais nas 5.0 e so existe forcado. Ajuste "Efeitos visuais"
+  (Automatico/Completos/Leves) em Avancado, so no `.tpk`.
+- Selo HDR: so "Fonte HDR10/HDR10+/HDR" lido da fonte. Samsung nao tem Dolby
+  Vision; nunca anunciar DV.
 
-- `nv_tpk_quadro` NUNCA pode segurar o framework: na API8 (Tizen 6.0) o
-  callback do GLWindow roda no fio PRINCIPAL do NUI. Espera limitada
-  (`nv_tpk_config`), -1 quando o app acabou.
-- API8 troca buffers mesmo em quadro pulado (callback void): lá a espera é
-  sem limite e o arranque limpa para preto. API9+ respeita o retorno 0.
-- `eglSwapInterval(0)` na API9+: o swap com vsync derrubava o Tizen 9 a
-  3 fps; o DALi já dorme até 60 Hz.
-- EGL por `dlopen` (`src/tpk_egl.h`): nenhum rootstrap do Tizen traz libEGL.
-  Não voltar a linkar `-lEGL`.
-- Teclas: mesma tabela do `.wgt` (`tools/tizen-shell.html`). O play/pause do
-  Smart Remote novo é `XF86PlayBack`, CH+ é `XF86RaiseChannel` (vira `s`).
-- Avisos do canal: o `.tpk` aceita `plataforma` `tizen` e `tizen-tpk`
-  (`src/avisos.c`), não os da LG.
-- `Referer` não passa: o player só aceita `UserAgent` e `Cookie`.
+## Chaves de janela (topo de `tizen-tpk/Program.cs`)
 
-## Publicar
+`JANELA_PRINCIPAL_OPACA`, `JANELA_PRINCIPAL_TRANSPARENTE`, `JANELA_GL_OPACA`,
+`JANELA_SOBE_GL_APPCONTROL`, `JANELA_SAIDA_LIMPA`, `API11_GLVIEW`,
+`PRIME_AUDIO`. Cada uma loga `[janela] ...` e grava no rastro. Para isolar
+um relato, desligue UMA por canario.
 
-1. Credenciais: `unzip -l <tpk> | grep -iE "addons\.txt|trakt\.txt|tmdb\.txt|mdblist|sessao|collections\.json"` → vazio.
-2. `gh release upload native-tpk-exp.N build/tpk/*.tpk --clobber` (preview
-   existente) ou `gh release create native-tpk-exp.N --prerelease
-   --latest=false ...`.
-3. Descrição com a tabela por ano de TV e o estado real do teste (até
-   27/09/2026: só simulador + 1 TV Tizen 6.0 em #165). Avisar na #137 e pelo
-   `avisos.json` (skill `samsung-release`).
+## Rastro de etapas (diagnostico sem TV aqui)
 
-## Referências que resolveram dúvidas
+`data/tpk-etapas.txt`: `begin/ok/fail <etapa>` e `note ...` do host e do
+nativo. Na abertura seguinte vira `tpk-etapas-anterior.txt`, sobe no log como
+`[etapa-anterior]` e, se uma etapa ficou aberta, a TV mostra "Previous launch
+stopped at: <etapa>" — peca FOTO disso ao testador. Linha `[tv] modelo=...
+tizen=... host=...` diz qual TV e qual pacote.
 
-- `dali-adaptor` `gl-window-render-thread.cpp` / `gl-window-impl.cpp`
-  (git.tizen.org): semântica do retorno do callback, swap e AddIdle da 6.0.
-- Nomes de tecla: developer.samsung.com/smarttv/develop/tizen-net-tv/guides/user-interaction.html
-- `tizen-tpk-spike/`: o que foi medido em TVs reais (lib/, pthread, GLWindow).
+## Regras que ja custaram caro
+
+- `nv_tpk_quadro` NUNCA segura o framework (API8 roda o callback no fio
+  PRINCIPAL). Retorno: 1 troca, 0 pula, -1 fim.
+- `eglSwapInterval(0)` na API9+ (vsync derrubava o Tizen 9 a 3 fps).
+- EGL por `dlopen` (`src/tpk_egl.h`); nao linkar `-lEGL`.
+- `Referer` nao passa no player: so `UserAgent` e `Cookie`.
+- Avisos: `plataforma` `tizen` e `tizen-tpk` (`src/avisos.c`).
+- Auto-atualizacao (#181): sem lib encenada o host faz o `dlopen` de sempre;
+  com lib encenada e verificada por sha256 (digest do anexo da release) carrega
+  por memfd. Falha no staging apaga e volta para a empacotada.
+
+## Referencias
+
+- dali-adaptor `gl-window-impl.cpp` / `gl-window-render-thread.cpp`: retorno
+  do callback, swap, iconify pausa o fio de desenho.
+- `tizen-tpk-spike/`: o que foi medido em TVs reais (GLView provado no 9).
