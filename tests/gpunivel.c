@@ -50,17 +50,17 @@ int main(void) {
   assert(strstr(gravado, "nivel=0"));
   puts("ok  60 fps: fica no nivel 0 e grava");
 
-  // 2. O registro 8825: 25 fps, espera 34 ms contra 5 de CPU -> 1, depois 2.
+  // 2. O registro 8825: 25 fps, espera 34 ms contra 5 de CPU -> 1 e PARA.
+  //    O 720p (nivel 2) nunca e escolhido sozinho: no teste das duas Tizen 5.0
+  //    (#180) o texto ficou borrado demais; "efeitos" ganhou.
   gpun_teste_reiniciar(); gravado[0] = 0;
   rodar(8, 40.0, 34.0, 5.0, 1, 1);          // aquece 3 s + janela de 4 s
   assert(gpun_nivel() == 1 && leves == 1 && !gpun_teste_decidido());
   assert(strstr(gravado, "nivel=1"));
   rodar(7, 40.0, 34.0, 5.0, 1, 1);          // assenta 2 s + janela de 4 s
-  assert(gpun_nivel() == 2 && leves == 1);
-  assert(strstr(gravado, "nivel=2"));
-  rodar(7, 40.0, 34.0, 5.0, 1, 1);          // ja no ultimo: decide
-  assert(gpun_nivel() == 2 && gpun_teste_decidido());
-  puts("ok  25 fps presos na GPU: desce 0 -> 1 -> 2, grava cada degrau e para");
+  assert(gpun_nivel() == 1 && gpun_teste_decidido());
+  assert(!strstr(gravado, "nivel=2"));
+  puts("ok  25 fps presos na GPU: desce 0 -> 1, grava e para (720p so forcado)");
 
   // 3. Desce ate onde o FPS fica bom e para ali.
   gpun_teste_reiniciar();

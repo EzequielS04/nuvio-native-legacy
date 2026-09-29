@@ -16,6 +16,7 @@
 #include "tpk_egl.h"
 #endif
 
+#define GPUN_NIVEL_AUTO_MAX 1   // adaptativo nunca passa daqui (720p so forcado)
 #define GPUN_ARQ "gpu-nivel.txt"
 // Regra do adaptativo (gpunivel.h). Os numeros:
 //  - 45 fps: abaixo disso o registro 8825 (22-29) e o jank visivel; a Tizen 6
@@ -368,8 +369,12 @@ void gpun_medir(double dtms, double espera, double cpu, int naHome, int cheia) {
   janN = 0; janMs = janEsp = janCpu = 0;
   if (fps >= GPUN_FPS_BOM) { decidir("fps bom"); return; }
   if (e >= GPUN_ESPERA_MIN && e > c) {
-    if (nivel < 2) {
-      aplicar(nivel + 1, nivel == 0 ? "GPU presa: efeitos leves" : "GPU presa: desenho interno 1280x720");
+    // O adaptativo PARA no nivel 1. Teste nas duas Tizen 5.0 (#180, 29/09):
+    // "efeitos" ficou liso e bonito; o 720p ficou mais liso mas com o texto
+    // borrado demais. O nivel 2 continua existindo, so por NV_TPK_NIVEL_FORCADO
+    // ou NUVIO_GPU_NIVEL — nunca escolhido sozinho.
+    if (nivel < GPUN_NIVEL_AUTO_MAX) {
+      aplicar(nivel + 1, "GPU presa: efeitos leves");
       gravar();
       aquece = GPUN_ASSENTA_MS;
       if (totalMs >= GPUN_TETO_MS) decidir("teto de tempo de medida");
