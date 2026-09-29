@@ -399,14 +399,20 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  vec3 c = texture2D(uTex, clamp(cover(vUv), 0.0, 1.0)).rgb;\n"
   "  vec3 bg = uFundo;\n"   // #0d0d0d fora do estilizado
   "  float x = vUv.x;\n"
-  "  float a = 1.0 - clamp(x/0.0780,0.0,1.0)*0.05\n"
-  "                - clamp((x-0.0780)/0.0936,0.0,1.0)*0.11\n"
-  "                - clamp((x-0.1716)/0.1092,0.0,1.0)*0.14\n"
-  "                - clamp((x-0.2808)/0.1248,0.0,1.0)*0.18\n"
-  "                - clamp((x-0.4056)/0.1092,0.0,1.0)*0.18\n"
-  "                - clamp((x-0.5148)/0.0936,0.0,1.0)*0.16\n"
-  "                - clamp((x-0.6084)/0.0936,0.0,1.0)*0.11\n"
-  "                - clamp((x-0.7020)/0.0780,0.0,1.0)*0.07;\n"
+  // CURVA LISA NO LUGAR DAS RAMPAS (dono, 29/09/2026: "o gradiente do
+  // detalhe ainda esta duro"). As oito rampas lineares por partes do web tem
+  // quinas de inclinacao em cada parada; na TV, com 8 bits por canal, cada
+  // quina vira uma faixa visivel, e a ultima (78%) termina com inclinacao
+  // nao-nula — a arte "comeca" numa linha. 1 - smoothstep(0, 0.82, x) passa
+  // pelas mesmas paradas com erro <= 0,05 (0.975/0.887/0.507/0.166/0.055 contra
+  // 0.95/0.84/0.52/0.18/0.07) e chega a zero com inclinacao zero.
+  //
+  // E a BASE: a arte terminava seca na borda de baixo, onde a pagina continua
+  // no fundo liso. Uma rampa vertical nos ultimos 30% leva a arte ao fundo sem
+  // borda; as duas se combinam como camadas (1-(1-a)(1-b)).
+  "  float a = 1.0 - smoothstep(0.0, 0.82, x);\n"
+  "  float ab = smoothstep(0.70, 1.0, vUv.y) * 0.92;\n"
+  "  a = 1.0 - (1.0 - a) * (1.0 - ab);\n"
   // uFoco = FORCA da vinheta: 1 no topo, 0 com a pagina rolada. No web a
   // vinheta e uma CAMADA IRMA do backdrop e tem opacidade propria — ao rolar,
   // `.detail-scrolled` leva a arte a 0.15 E a vinheta a 0 (components.css:17348).
