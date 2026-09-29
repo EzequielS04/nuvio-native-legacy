@@ -70,6 +70,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "vistoep.h"   /* o check de "assistido" na lista de episodios (issue #100) */
 #include "pausao.h"
 #include "aovivo.h"
+#include "botoes.h"
 #include "scrobble.h"
 #include "home.h"
 #include "descoberta.h"
@@ -246,15 +247,9 @@ static int trechoPulavel(double *fim);
 // cena clara quanto a uma escura. A cor configurada continua sendo a fonte,
 // mas o miolo recebe a mesma mistura suave usada nos outros paineis: assim o
 // controle e reconhecivel sem virar um adesivo neon sobre o filme.
-static void corFocoPlayer(float *r, float *g, float *b) {
-  float ar, ag, ab, lum, k = 0.74f;
-  ajustes_acento(&ar, &ag, &ab);
-  lum = 0.2126f * ar + 0.7152f * ag + 0.0722f * ab;
-  if (lum > 0.88f) k = 0.88f;
-  *r = 0.055f + (ar - 0.055f) * k;
-  *g = 0.058f + (ag - 0.058f) * k;
-  *b = 0.068f + (ab - 0.068f) * k;
-}
+// A conta mora em botoes.c desde 29/09/2026 (botao_cor_foco): o foco do
+// player de filme e o de todo botao do app passaram a ser a mesma cor.
+static void corFocoPlayer(float *r, float *g, float *b) { botao_cor_foco(r, g, b); }
 
 static void superficieFocoPlayer(GfxRect r, float raio, float mola, float a) {
   float fr, fg, fb;
@@ -409,6 +404,16 @@ static int pedGuia, pedZap;   // pedidos de canal: overlay do guia / CH+/-
 static AoVivoZap zapEst;
 static float bannerAV;         // 0..1, a entrada do banner do zapping
 static int botaoAV, infoAV, pedRecarregar;
+// ATRAS DO AO VIVO (29/09/2026). Canal com janela de tempo (DVR do provedor)
+// pausa; quem pausa fica atras da transmissao, e o OSD diz quanto e oferece
+// "Voltar ao vivo". A conta NAO e `duracao - posicao` crua: na borda do ao vivo
+// o pipeline ja fica uns segundos atras (a latencia do HLS), e isso nao e
+// atraso de quem assiste. `avLat0` e essa folga, medida na primeira leitura
+// tocando; atraso = (duracao - posicao) - avLat0. Pausado, o pipeline para de
+// andar (a duracao pode nao crescer), entao o atraso e o da hora da pausa mais
+// o relogio desde ela (`avPausaDesde`).
+static double avLat0 = -1.0, avAtraso;
+static Uint32 avPausaDesde;
 // Indice EPG do canal no ar, resolvido uma vez por abertura (-2 = sem grade).
 static int epgIdx = -1;
 // Diagnostico da janela do cartao de proximo episodio. Zerados a cada episodio
@@ -1064,6 +1069,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   erroTitulo[0] = erroDica[0] = 0;
   pedGuia = pedZap = 0;
   memset(&zapEst, 0, sizeof zapEst); bannerAV = 0.0f; botaoAV = 0; infoAV = 0; pedRecarregar = 0;
+  avLat0 = -1.0; avAtraso = 0.0; avPausaDesde = 0;
   retomadaAplicada=0; semRetomada=0;
   botao = PLR_PLAY;
   memset(focoB, 0, sizeof focoB);
@@ -1733,9 +1739,46 @@ static void alternarTocando(void) {
 // congelada e a transmissao seguindo sem ele. Sem janela, o OK so acorda o OSD.
 static int avPodePausar(void) { return comVideo && video_duracao() > 0.5; }
 
+// Segundos atras do ao vivo agora (0 no ao vivo ou sem janela).
+static int avAtrasoS(Uint32 agora) {
+  double t = avAtraso;
+  if (!avPodePausar()) return 0;
+  if (!tocando && avPausaDesde) t += (double)(agora - avPausaDesde) / 1000.0;
+  if (t > video_duracao()) t = video_duracao();   // nao volta alem da janela
+  return t > 0.0 ? (int)(t + 0.5) : 0;
+}
+// Por quadro (player_atualizar), com ou sem OSD na tela: a pausa conta mesmo
+// com os controles recolhidos.
+static void avRelogioAoVivo(Uint32 agora) {
+  double d;
+  if (!ehCanal() || !avPodePausar()) { avLat0 = -1.0; avAtraso = 0.0; avPausaDesde = 0; return; }
+  d = video_duracao() - video_pos();
+  if (d < 0.0) d = 0.0;
+  if (tocando) {
+    avPausaDesde = 0;
+    if (avLat0 < 0.0 || d < avLat0) avLat0 = d;   // mais perto da borda: recalibra
+    avAtraso = d - avLat0;
+  } else if (!avPausaDesde) {
+    avPausaDesde = agora ? agora : 1;
+  }
+}
+// "Voltar ao vivo": a borda da janela menos a folga medida, e tocando.
+static void avVoltarAoVivo(void) {
+  double alvo = video_duracao() - (avLat0 > 0.0 ? avLat0 : 0.0);
+  if (!avPodePausar()) return;
+  video_buscar(alvo > 0.0 ? alvo : 0.0);
+  if (!tocando) { tocando = 1; video_pausar(0); }
+  avAtraso = 0.0; avPausaDesde = 0;
+  botaoAV = 0;   // o botao some da fileira; o foco volta ao primeiro
+}
+
+// Mostrar "Voltar ao vivo" a partir de 10 s atras: abaixo disso o atraso e
+// ruido de rede, e o botao piscaria.
+#define AV_ATRASO_BOTAO_S 10
 static int avBotoes(int *ids) {
   int n = 0;
   if (avPodePausar()) ids[n++] = AV_B_PAUSA;
+  if (avAtrasoS(SDL_GetTicks()) >= AV_ATRASO_BOTAO_S) ids[n++] = AV_B_AOVIVO;
   ids[n++] = AV_B_GUIA;
   ids[n++] = AV_B_ANT;
   ids[n++] = AV_B_PROX;
@@ -1755,6 +1798,7 @@ static void avZap(int dir) { aovivo_zap_apertar(&zapEst, dir, SDL_GetTicks()); }
 static void avAtivar(int b) {
   switch (b) {
     case AV_B_PAUSA: alternarTocando(); break;
+    case AV_B_AOVIVO: avVoltarAoVivo(); break;
     case AV_B_GUIA: pedGuia = 1; break;
     case AV_B_ANT: avZap(-1); break;
     case AV_B_PROX: avZap(1); break;
@@ -1796,11 +1840,18 @@ static void avMontarOsd(AoVivoOsd *o) {
   o->foco = (botaoAV < n) ? botaoAV : n - 1;
   o->favorito = guia_e_favorito(id);
   o->pausado = !tocando && avPodePausar();
+  o->atrasoS = avAtrasoS(SDL_GetTicks());
+  o->pausaS = (o->pausado && avPausaDesde) ? (int)((SDL_GetTicks() - avPausaDesde) / 1000u) : 0;
+  o->janelaS = avPodePausar() ? (int)video_duracao() : 0;
   o->bufferando = comVideo && video_bufferando_ms() > 1500u;
-  if (w >= 3840) snprintf(o->res, sizeof o->res, "4K");
-  else if (w >= 1920) snprintf(o->res, sizeof o->res, "1080p");
-  else if (w >= 1200) snprintf(o->res, sizeof o->res, "720p");
-  else if (w > 0) snprintf(o->res, sizeof o->res, "SD");
+  // RESOLUCAO pela ALTURA medida, e so onde a marca nao afirma mais do que se
+  // mediu (a mesma regra dos selos do filme): 1440p nao e 1080p nem 4K, e fica
+  // sem marca.
+  if (h >= 2160) snprintf(o->res, sizeof o->res, "4K");
+  else if (h >= 1440) o->res[0] = 0;
+  else if (h >= 1080) snprintf(o->res, sizeof o->res, "1080p");
+  else if (h >= 720) snprintf(o->res, sizeof o->res, "720p");
+  else if (h > 0) snprintf(o->res, sizeof o->res, "SD");
   o->infoAberta = infoAV;
   if (infoAV) {
     int k = 0;
@@ -2129,6 +2180,7 @@ void player_atualizar(float dt, Uint32 agora) {
     int off = 0;
     bannerAV = anim_mola(bannerAV, zapEst.pend ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
     if (aovivo_zap_pronto(&zapEst, agora, &off)) pedZap = off;
+    avRelogioAoVivo(agora);
   } else {
     bannerAV = 0.0f;
   }

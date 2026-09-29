@@ -25,6 +25,7 @@
 #include "badges.h"
 #include "botoes.h"
 #include "guia.h"
+#include "pausao.h"
 #include "gfx.h"
 #include "text.h"
 #include "layout.h"
@@ -44,19 +45,17 @@
 #define AV_BTN_H   BOTAO_H_SECUNDARIO
 #define AV_BASE     56.0f    // da fileira de botoes ate a borda de baixo
 
+// Duracao em relogio, sem palavra (nao precisa de traducao): 3:12, 1:04:09.
+static void relogioDur(char *b, size_t n, int seg) {
+  if (seg < 0) seg = 0;
+  if (seg >= 3600) snprintf(b, n, "%d:%02d:%02d", seg / 3600, (seg / 60) % 60, seg % 60);
+  else snprintf(b, n, "%d:%02d", seg / 60, seg % 60);
+}
+
 static void hhmm(char *b, size_t n, time_t t) {
   struct tm lt;
   localtime_r(&t, &lt);
   strftime(b, n, "%H:%M", &lt);
-}
-
-// "4K", "1080p" (ou "HD"), "720p" -> a marca; -1 sem marca (SD vai em selo).
-static int marcaDaResolucao(const char *res) {
-  if (!res || !res[0]) return -1;
-  if (!strcmp(res, "4K")) return FMT_4K;
-  if (!strcmp(res, "1080p") || !strcmp(res, "HD")) return FMT_1080;
-  if (!strcmp(res, "720p")) return FMT_720;
-  return -1;
 }
 
 static const char *icone(int b) {
@@ -69,6 +68,7 @@ static const char *icone(int b) {
     case AV_B_INFO: return "aj_info";
     case AV_B_RECARREGAR: return "aj_rotate-ccw-clock";
     case AV_B_FONTE: return "fontes";
+    case AV_B_AOVIVO: return "avancar";
     default: return NULL;
   }
 }
@@ -85,6 +85,7 @@ const char *aovivo_rotulo(int b) {
     case AV_B_INFO: return "Informações";
     case AV_B_RECARREGAR: return "Recarregar";
     case AV_B_FONTE: return "Fonte";
+    case AV_B_AOVIVO: return "Voltar ao vivo";
     default: return "";
   }
 }
@@ -147,7 +148,10 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
 
   // Dois degrades, como os controles de filme: o do alto sustenta a marca e o
   // relogio; o de baixo, a programacao e os botoes. Acompanham a entrada.
-  gfx_rect((GfxRect){ 0, 0, NV_TELA_W, 320.0f }, 0, GFX_VEU_TOPO, 0, 0, 0, 0.0f, 0, 0, 0, 0.72f * a);
+  // Pausado ou atras do ao vivo, o alto leva mais tres linhas a direita: o
+  // mesmo degrade, mais comprido (nenhuma camada a mais por quadro).
+  gfx_rect((GfxRect){ 0, 0, NV_TELA_W, (o->pausado || o->atrasoS > 0) ? 460.0f : 320.0f }, 0,
+           GFX_VEU_TOPO, 0, 0, 0, 0.0f, 0, 0, 0, 0.72f * a);
   gfx_rect((GfxRect){ 0, NV_TELA_H - 560.0f, NV_TELA_W, 560.0f }, 0, GFX_VEU_BAIXO, 0, 0, 0, 0.0f, 0, 0, 0, 0.90f * a);
 
   // --- ALTO ESQUERDO: a linha do canal do guia ------------------------------------
@@ -156,7 +160,7 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
   { GfxRect lx = { AV_X, AV_Y, AV_LOGO_W, AV_LOGO_H };
     float tx = AV_X + AV_LOGO_W + 28.0f, yl = AV_Y + 2.0f, xs;
     TxtLinha nome, num;
-    int fm = marcaDaResolucao(o->res);
+    int fm = marca_resolucao(o->res);
     guia_logo_desenhar(o->logo, o->nome, lx, AV_LOGO_W, AV_LOGO_H - 8.0f, AV_LOGO_TOM, a);
     nome = txt_linha_corta(TXT_HEADLINE, o->nome && o->nome[0] ? o->nome : "Canal",
                            246, 247, 250, 255, 1000.0f);
@@ -191,9 +195,46 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
     lh = txt_linha(TXT_PG_RELOGIO, hora, 255, 255, 255, 255);
     txt_desenhar_alpha(lh, NV_TELA_W - AV_X - lh.w, yr, a * 0.96f);
     yr += lh.h + 6.0f;
-    if (o->bufferando || o->pausado) {
-      TxtLinha lb = txt_linha(TXT_DET_META2, o->bufferando ? "Carregando o fluxo…" : "Pausado",
-                              196, 198, 206, 255);
+    // PAUSADO / ATRAS DO AO VIVO (dono, 29/09/2026: "mais bonito e
+    // informativo"). O selo e o do painel de pausa do filme (pausao_selo), e
+    // embaixo, em duas linhas: quanto atras da transmissao, e ha quanto tempo
+    // pausado com quanto da para voltar. Tocando atrasado (depois de
+    // Continuar), sem selo: so a primeira linha, e o "Voltar ao vivo" na
+    // fileira de botoes.
+    if (o->pausado) {
+      yr += 6.0f;
+      pausao_selo(NV_TELA_W - AV_X, yr, 1, a);
+      yr += PAUSAO_SELO_H + 12.0f;
+    }
+    if (o->atrasoS > 0) {
+      char d[24], l1[96];
+      TxtLinha t;
+      relogioDur(d, sizeof d, o->atrasoS);
+      snprintf(l1, sizeof l1, i18n("%s atrás do ao vivo"), d);
+      t = txt_linha(TXT_DET_META, l1, 236, 237, 242, 255);
+      txt_desenhar_alpha(t, NV_TELA_W - AV_X - t.w, yr, a);
+      yr += t.h + 4.0f;
+    }
+    if (o->pausado && (o->pausaS > 0 || o->janelaS >= 60)) {
+      char l2[160] = "", p1[64] = "", p2[80] = "";
+      TxtLinha t;
+      if (o->pausaS > 0) {
+        char d[24];
+        relogioDur(d, sizeof d, o->pausaS);
+        snprintf(p1, sizeof p1, i18n("Pausado há %s"), d);
+      }
+      if (o->janelaS >= 60) {
+        char d[24];
+        relogioDur(d, sizeof d, o->janelaS);
+        snprintf(p2, sizeof p2, i18n("Dá para voltar até %s"), d);
+      }
+      snprintf(l2, sizeof l2, "%s%s%s", p1, (p1[0] && p2[0]) ? "  \xc2\xb7  " : "", p2);
+      t = txt_linha(TXT_DET_META2, l2, 214, 216, 222, 255);
+      txt_desenhar_alpha(t, NV_TELA_W - AV_X - t.w, yr, a);
+      yr += t.h + 6.0f;
+    }
+    if (o->bufferando) {
+      TxtLinha lb = txt_linha(TXT_DET_META2, "Carregando o fluxo…", 196, 198, 206, 255);
       txt_desenhar_alpha(lb, NV_TELA_W - AV_X - lb.w, yr, a);
       yr += lb.h + 6.0f;
     }
@@ -244,6 +285,17 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
       ajustes_acento(&ar, &ag, &ab);
       an = tr; an.w = tr.w * f;
       gfx_cor(tr, 0.5f, 1, 1, 1, 0.14f * a);
+      // Atras do ao vivo, a barra mostra os dois pontos: o acento vai ate onde
+      // a IMAGEM esta; dali ate a transmissao, um trecho claro neutro. O
+      // atraso que passa do comeco do programa enche o trecho inteiro.
+      if (o->atrasoS > 0 && e->agoraFim > e->agoraIni) {
+        float fa = (float)o->atrasoS / (float)(e->agoraFim - e->agoraIni);
+        GfxRect atras = an;
+        if (fa > f) fa = f;
+        an.w = tr.w * (f - fa);
+        atras.x = tr.x + an.w; atras.w = tr.w * fa;
+        if (atras.w > 0.5f) gfx_cor(atras, 0.5f, 1, 1, 1, 0.42f * a);
+      }
       if (an.w > 0.5f) gfx_cor(an, 0.5f, ar, ag, ab, a);
       yb = tr.y - 18.0f;
     }
@@ -252,7 +304,24 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
     { char meta[160];
       float mx;
       yb -= 32.0f;
-      mx = AV_X + guia_selo_ao_vivo(AV_X, yb, a) + 16.0f;
+      // No ao vivo, o selo vermelho do guia. ATRAS dele, o selo vira neutro e
+      // diz quanto ("−3:12"): vermelho quer dizer "isto e a transmissao agora",
+      // e deixa de ser verdade.
+      if (o->atrasoS > 0) {
+        char d[24], ds[32];
+        TxtLinha t;
+        GfxRect r;
+        relogioDur(d, sizeof d, o->atrasoS);
+        snprintf(ds, sizeof ds, "\xe2\x88\x92%s", d);
+        t = txt_linha(TXT_PG_ROTULO, ds, 240, 241, 245, 255);
+        r = (GfxRect){ AV_X, yb, (float)t.w + 26.0f, 32.0f };
+        if (ajustes_vidro()) gfx_vidro_painel(r, 0.5f, 0.55f, a);
+        else gfx_cor(r, 0.5f, 1, 1, 1, 0.18f * a);
+        txt_desenhar_alpha(t, r.x + 13.0f, r.y + (r.h - (float)t.h) * 0.5f, a);
+        mx = AV_X + r.w + 16.0f;
+      } else {
+        mx = AV_X + guia_selo_ao_vivo(AV_X, yb, a) + 16.0f;
+      }
       if (e->temAgora) {
         char h1[8], h2[8], resto[64];
         int falta = (int)((e->agoraFim - agoraT + 59) / 60);

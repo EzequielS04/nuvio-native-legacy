@@ -7,9 +7,10 @@
 #include "idioma.h"
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <ctype.h>
 #include <stdlib.h>
-static const char *ids[]={"r-4k","r-1080","r-720","q-remux","q-bluray","q-webdl","q-webrip","q-seadex","v-dv","v-hdr10plus","v-hdr10","v-hdr","v-hlg","v-imax-enhanced","v-imax","v-sdr","a-atmos-dv","a-atmos","a-truehd-dv","a-truehd","a-dtsx","a-dtshdma","a-dtshd","a-dts","a-dd-dv","a-ddp","a-dd","c-71","c-51","co-x265","co-x264","co-av1","p-netflix","p-prime","p-appletv","p-disney","p-max","p-hulu","p-peacock","p-paramount","p-crave","p-crunchyroll"};
+static const char *ids[]={"r-4k","r-1080","r-720","r-sd","q-remux","q-bluray","q-webdl","q-webrip","q-seadex","v-dv","v-hdr10plus","v-hdr10","v-hdr","v-hlg","v-imax-enhanced","v-imax","v-sdr","a-atmos-dv","a-atmos","a-truehd-dv","a-truehd","a-dtsx","a-dtshdma","a-dtshd","a-dts","a-dd-dv","a-ddp","a-dd","c-71","c-51","co-x265","co-x264","co-av1","p-netflix","p-prime","p-appletv","p-disney","p-max","p-hulu","p-peacock","p-paramount","p-crave","p-crunchyroll"};
 #define NB (sizeof ids/sizeof ids[0])
 static struct {char image[700],name[64];} art[NB];
 static uint64_t bit(const char *id){for(size_t i=0;i<NB;i++)if(!strcmp(id,ids[i]))return UINT64_C(1)<<i;return 0;}
@@ -84,6 +85,12 @@ int badges_fonte_hdr_marca(uint64_t mask) {
 // do foco, o vidro e o realce sem arquivo novo.
 static const struct { const char *id; const char *texto; } FORMATOS[FMT_N] = {
   [FMT_4K]={"r-4k","4K"},[FMT_1080]={"r-1080","1080p"},[FMT_720]={"r-720","720p"},
+  // SD nao vinha no pacote de marcas: r-sd.webp (29/09/2026) foi desenhada na
+  // mesma caixa do 4K (altura de glifo 119 em 194, topo em 37), para a fileira
+  // de resolucoes ter um corpo so. badges_detectar NAO a acende: "sd" solto no
+  // nome de uma fonte e ruido demais; so quem sabe a resolucao (o guia, o
+  // player) pede FMT_SD.
+  [FMT_SD]={"r-sd","SD"},
   [FMT_SDR]={"v-sdr","SDR"},[FMT_HDR]={"v-hdr","HDR"},[FMT_HDR10]={"v-hdr10","HDR10"},
   [FMT_HDR10P]={"v-hdr10plus","HDR10+"},[FMT_HLG]={"v-hlg","HLG"},
   [FMT_DV]={"v-dv","Dolby Vision"},[FMT_ATMOS]={"a-atmos","Dolby Atmos"},
@@ -96,6 +103,14 @@ static const struct { const char *id; const char *texto; } FORMATOS[FMT_N] = {
 static int indiceFormato(FormatoMarca f) {
   if ((int)f < 0 || f >= FMT_N) return -1;
   for (size_t i = 0; i < NB; i++) if (!strcmp(ids[i], FORMATOS[f].id)) return (int)i;
+  return -1;
+}
+int marca_resolucao(const char *nome) {
+  if (!nome || !nome[0]) return -1;
+  if (!strcasecmp(nome, "4K") || !strcasecmp(nome, "UHD") || !strcasecmp(nome, "2160p")) return FMT_4K;
+  if (!strcasecmp(nome, "1080p") || !strcasecmp(nome, "FHD")) return FMT_1080;
+  if (!strcasecmp(nome, "720p") || !strcasecmp(nome, "HD")) return FMT_720;
+  if (!strcasecmp(nome, "SD")) return FMT_SD;
   return -1;
 }
 const char *marca_formato_nome(FormatoMarca f) {

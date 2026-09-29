@@ -133,6 +133,17 @@ int main(int argc, char **argv) {
       v.logo = ""; v.numero = 0; v.epg.temAgora = v.epg.temProx = 0; v.pausado = 1; v.res[0] = 0;
       v.nBotoes = 9; memcpy(v.botoes, b, sizeof b);
       snprintf(nome, sizeof nome, "%s-osd-sem-logo-sem-grade.bmp", saida); foto(nome, dOsd, &v); }
+    // CANAL COM JANELA DE TEMPO, PAUSADO: o selo do painel de pausa, quanto
+    // atras do ao vivo, ha quanto tempo pausado e quanto da para voltar; a barra
+    // em dois tons e o "Voltar ao vivo" logo depois do Continuar.
+    { AoVivoOsd v = base();
+      int b[] = { AV_B_PAUSA, AV_B_AOVIVO, AV_B_GUIA, AV_B_ANT, AV_B_PROX, AV_B_AUDIO, AV_B_LEGENDA, AV_B_INFO, AV_B_FONTE };
+      v.nBotoes = 9; memcpy(v.botoes, b, sizeof b); v.foco = 1;
+      v.pausado = 1; v.atrasoS = 12 * 60 + 12; v.pausaS = 11 * 60 + 5; v.janelaS = 2 * 3600;
+      snprintf(nome, sizeof nome, "%s-osd-pausado-atras.bmp", saida); foto(nome, dOsd, &v);
+      // Continuou: tocando 12 min atras, sem selo; so a linha e o botao.
+      v.pausado = 0; v.pausaS = 0; v.foco = 0;
+      snprintf(nome, sizeof nome, "%s-osd-atrasado-tocando.bmp", saida); foto(nome, dOsd, &v); }
     // Os dez botoes (pausa + favorito) com rotulos longos: a fileira nao cabe e
     // os botoes fora do foco viram disco.
     { AoVivoOsd v = base();
