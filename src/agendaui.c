@@ -348,16 +348,19 @@ static int agQuebraCru(TxtEstilo estilo, const char *s, float larg, int max,
   if (!s || !s[0] || larg <= 0.0f || max <= 0) return 0;
   while (*p && n < max - 1) {
     char *l = linhas[n];
+    int espacoAntes = 1;     // o token anterior veio separado por espaco? (txt_token_tam)
     l[0] = 0;
     while (*p) {
       const char *ini = p;
       char tent[512];
       size_t nl = strlen(l), np;
-      while (*p && *p != ' ' && *p != '\n') p++;
+      int espaco;
+      p += txt_token_tam(p);
       np = (size_t)(p - ini);
+      espaco = (*p == ' ' || *p == '\n');
       if (nl + np + 2 >= sizeof tent) { p = ini; break; }
       memcpy(tent, l, nl);
-      if (nl) tent[nl++] = ' ';
+      if (nl && espacoAntes) tent[nl++] = ' ';
       memcpy(tent + nl, ini, np);
       tent[nl + np] = 0;
       // A MEDIDA E A MESMA QUE VAI DESENHAR. Estimar por largura media de glifo
@@ -369,6 +372,7 @@ static int agQuebraCru(TxtEstilo estilo, const char *s, float larg, int max,
       }
       memcpy(l, tent, nl + np + 1);
       while (*p == ' ' || *p == '\n') p++;
+      espacoAntes = espaco;
     }
     if (!l[0]) break;
     n++;
@@ -666,9 +670,9 @@ void agendaui_atualizar(float dt, Uint32 agora) {
 // A regra do bloco Latin-1 e uma so: 0xC3 0xAn/0xBn -> 0xC3 (0xAn - 0x20);
 // romeno e cirilico entram pela mesma funcao (idiomacod.h).
 static void maiusc(char *dst, size_t tam, const char *s) {
-  // Latin-1, romeno e cirilico (ver idioma_maiusc em idiomacod.h): o mes chega
-  // em qualquer dos cinco idiomas.
-  idioma_maiusc(dst, tam, s);
+  // Latin-1, Latin Estendido-A, vietnamita, grego e cirilico (ver idioma_maiusc_em
+  // em idiomacod.h): o mes chega em qualquer dos idiomas. O turco muda o "i".
+  idioma_maiusc_em(ajustes_idioma(), dst, tam, s);
 }
 
 // "setembro de 2026" em caixa alta, pronto para o cabecalho.
@@ -680,7 +684,7 @@ static void rotuloMes(const char *iso, char *dst, size_t tam) {
   // i18n aqui e nao no desenho: a string sai composta com o ano e nunca casaria
   // com uma chave da tabela (ver idioma.h). O nome do mes e traduzido sozinho.
   maiusc(nome, sizeof nome, i18n(agenda_mes_nome(m)));
-  snprintf(dst, tam, "%s %d", nome, a);
+  idioma_mes_ano(ajustes_idioma(), nome, a, dst, tam);
 }
 
 // Uma regua de 1px atravessando a coluna do conteudo. E a unica linha

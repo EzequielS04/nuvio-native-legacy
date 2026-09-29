@@ -112,6 +112,52 @@ int main(int argc, char **argv) {
            TXT_FAMILIAS_PT[familias[i]], reg, med, bold);
   }
 
+  // FONTE DE CADA LINHA (30 idiomas): a familia escolhida desenha o que tem; o que
+  // ela nao tem vai para a Inter embarcada (grego e cirilico na Atkinson e na
+  // Montserrat, vietnamita na Atkinson) e so o CJK sai para uma reserva. A regra
+  // e por linha INTEIRA e por QUALQUER caractere que falte, nao pelo primeiro
+  // fora do ASCII: "OK · 再生" abre com um "·" que a Inter tem.
+  { const char *gr = "Σεπτέμβριος · Ρυθμίσεις", *vi = "Tiếng Việt · Cài đặt",
+               *ru = "Настройки", *pl = "Wrzesień · łódź", *ja = "設定 · 再生",
+               *misto = "OK · 再生", *r;
+    const TxtFamilia todas[] = { TXT_FAMILIA_INTER, TXT_FAMILIA_MONTSERRAT,
+                                 TXT_FAMILIA_ROBOTO, TXT_FAMILIA_ATKINSON };
+    for (int i = 0; i < 4; i++) {
+      const TxtFamilia f = todas[i];
+      r = txt_fonte_da_linha(f, TXT_DET_SIN, "Only ASCII 123"); assert(r && !strcmp(r, "principal"));
+      r = txt_fonte_da_linha(f, TXT_DET_SIN, pl); assert(r && !strcmp(r, "principal"));
+      r = txt_fonte_da_linha(f, TXT_DET_SIN, gr);
+      assert(r && !strcmp(r, f == TXT_FAMILIA_INTER || f == TXT_FAMILIA_ROBOTO ? "principal" : "inter"));
+      r = txt_fonte_da_linha(f, TXT_DET_SIN, vi);
+      assert(r && !strcmp(r, f == TXT_FAMILIA_ATKINSON ? "inter" : "principal"));
+      r = txt_fonte_da_linha(f, TXT_DET_SIN, ru);
+      assert(r && !strcmp(r, f == TXT_FAMILIA_ATKINSON ? "inter" : "principal"));
+      r = txt_fonte_da_linha(f, TXT_DET_SIN, ja); assert(r && !strncmp(r, "reserva:CJK", 11));
+      r = txt_fonte_da_linha(f, TXT_DET_SIN, misto); assert(r && !strncmp(r, "reserva:CJK", 11));
+      /* e nenhuma delas devolve linha vazia ou de largura zero */
+      assert(largura(TXT_DET_SIN, gr) > 0 && largura(TXT_DET_SIN, vi) > 0 && largura(TXT_DET_SIN, ja) > 0);
+    }
+    /* decorativo que a Inter nao tem NAO derruba a linha para a reserva */
+    r = txt_fonte_da_linha(TXT_FAMILIA_INTER, TXT_DET_SIN, "\xe2\x9a\xa1 1080p"); assert(r && !strcmp(r, "principal"));
+  }
+
+  // O WASM da Samsung nao tem fonte de sistema: so a CJK embarcada. Reabre o
+  // renderer fingindo isso (NUVIO_SEM_RESERVA_DE_SISTEMA) e confere que ja e zh
+  // saem da DroidSansFallback-Subset.ttf, e que a linha existe.
+  txt_definir_fonte_interface(TXT_FAMILIA_INTER);
+  txt_encerrar();
+  setenv("NUVIO_SEM_RESERVA_DE_SISTEMA", "1", 1);
+  assert(txt_iniciar("deploy/app", 1));
+  { const char *r = txt_fonte_da_linha(TXT_FAMILIA_INTER, TXT_DET_SIN, "\xe8\xae\xbe\xe7\xbd\xae \xc2\xb7 \xe6\x92\xad\xe6\x94\xbe");
+    assert(r && strstr(r, "DroidSansFallback-Subset.ttf") && !strncmp(r, "reserva:CJK", 11));
+    assert(largura(TXT_DET_SIN, "\xe8\xae\xbe\xe7\xbd\xae \xc2\xb7 \xe6\x92\xad\xe6\x94\xbe") > 0);
+    assert(largura(TXT_DET_SIN, "\xe8\xa8\xad\xe5\xae\x9a") > 0);
+    r = txt_fonte_da_linha(TXT_FAMILIA_ATKINSON, TXT_DET_SIN, "\xce\xa3\xce\xb5\xcf\x80"); assert(r && !strcmp(r, "inter")); }
+  txt_encerrar();
+  unsetenv("NUVIO_SEM_RESERVA_DE_SISTEMA");
+  assert(txt_iniciar("deploy/app", 1));
+  txt_definir_fonte_interface(TXT_FAMILIA_ATKINSON);
+
   // O family explícito da legenda é independente do getter global. A largura
   // Inter fica igual, mesmo com Atkinson selecionada para a interface.
   txt_definir_fonte_interface(TXT_FAMILIA_ATKINSON);
