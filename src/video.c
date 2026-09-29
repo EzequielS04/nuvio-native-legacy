@@ -95,7 +95,9 @@ static void aplicarEstilo(void);
 // Mesmo limite de Stream.url: o pipeline recebe a URL original, e cortar a
 // copia faria somente a sonda MKV/ASS falhar (inclusive apos tentar de novo).
 static char  urlAtual[4096];
+#ifndef NV_TPK
 const char *video_url_atual(void) { return urlAtual; }
+#endif
 // Recuperacao de pipeline destruido: pedida pelo fio de resposta do luna e
 // executada no fio principal (video_bombear), porque recarregar de dentro do
 // tratador de evento reentra no mesmo caminho que acabou de falhar.
@@ -138,7 +140,7 @@ static int       fioMkvVivo;
 // abertura e fazer o load correto ser ignorado.
 static unsigned  sessao;
 
-#ifdef __APPLE__
+#if defined(__APPLE__)
 // No Mac nao existe barramento nem plano de video. Os cotos deixam o resto do
 // app compilar e rodar igual, so sem imagem em movimento.
 int  video_iniciar(void) { return 0; }
@@ -205,7 +207,8 @@ int  video_pode_forcar_sdr(void) { return 0; }
 int  video_recorte_fonte(void) { return 1; }
 void video_forcar_sdr(void) {}
 void video_encerrar(void) {}
-#else
+// .tpk da Samsung: o player e o do host .NET, em video_tpk.c.
+#elif !defined(NV_TPK)
 #include <dlfcn.h>
 
 typedef struct LSHandle LSHandle;
