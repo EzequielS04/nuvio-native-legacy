@@ -251,10 +251,11 @@ check('hero pede retry idempotente no mesmo titulo', /if \(!heroTrailerTentado\)
 check('worker nao usa metadata ampla', /\/videos\?api_key=/.test(extras) && !/lacoHeroTrailer[\s\S]*extras_pedir\(/.test(extras));
 check('retry vazio tem cooldown e nao bloqueio permanente', extras.includes('HERO_TRAILER_RETRY_S') && !/heroTrailerTentativas >= 2/.test(extras));
 
-// Samsung: o <video> nunca recebe o master da Apple (o motor HLS da TV trava
-// no ABR dele — trailerapple.c, varianteMidia), so a playlist de midia.
+// Samsung (.wgt E .tpk: os dois tocam pelo muse-server): o player nunca recebe
+// o master da Apple (o motor HLS da TV trava no ABR dele — trailerapple.c,
+// varianteMidia), so a playlist de midia. NV_TRAILER_SAMSUNG cobre os dois.
 check('Samsung entrega a variante de midia, nao o master',
-  /#ifdef __EMSCRIPTEN__\s*r = e->toca\[0\] \? e->toca : NULL;/.test(apple) && /varianteMidia\(m, /.test(apple));
+  /#ifdef NV_TRAILER_SAMSUNG\s*r = e->toca\[0\] \? e->toca : NULL;/.test(apple) && /#if defined\(__EMSCRIPTEN__\) \|\| defined\(NV_TPK\)\s*#define NV_TRAILER_SAMSUNG 1/.test(apple) && /varianteMidia\(m, /.test(apple));
 // Pagina de titulo: prazo e degrau seguinte, com log.
 const prep = number('NV_TRAILER_PREPARA_MS');
 check('detalhe tem prazo finito de preparo (~8 s)', prep >= 5000 && prep <= 10000);
@@ -273,7 +274,11 @@ check('hero nao abre a proxima fonte antes de a Apple responder',
   /if \(d == TRF_ESPERA && !venceu\) goto trailer_hero_fim;/.test(home) &&
   /venceu = decorrido >= NV_TRAILER_HERO_MAX_ESPERA_MS/.test(home));
 check('hero e detalhe escolhem pela regra do ajuste "Fonte do trailer"',
-  /trailerfonte_escolher\(trailerfonte_ajuste\(\), trailerfonte_tizen\(\), &c, &u, &qual\)/.test(home) &&
+  // O destaque usa a variante _destaque (no .tpk o IMDb vem antes, para o
+  // trailer continuar com som no detalhe; na LG e no .wgt e a mesma ordem) e o
+  // detalhe a _cheia no botao de trailer — as tres saem da mesma regra
+  // (trailerfonte.c, tests/trailer-fonte.sh prova as ordens).
+  /trailerfonte_escolher_destaque\(trailerfonte_ajuste\(\), trailerfonte_tizen\(\), &c, &u, &qual\)/.test(home) &&
   /trailerfonte_escolher\(aj, tz, &c, &u, &q\)/.test(detail));
 
 // SAMSUNG SEMPRE MUDA (dono, 22/09/2026: "trailer fica mudo"). Tres travas:

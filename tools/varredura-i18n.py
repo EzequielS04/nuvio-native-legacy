@@ -262,6 +262,11 @@ IGNORAR = {
     "definido por gpun_definir_nivel", "nenhum", "padrao", "sem alvo interno",
     "teto de tempo de medida",
     "lento pela CPU ou pelo resto, nao pela GPU: menos pixel nao ajuda",
+    # .tpk: so vao ao nuvio.log / erro de compilacao / nome de arquivo.
+    "NV_TPK40 e so da libnuvio.so do Tizen 4/5; nunca junto com Emscripten",
+    "libEGL nao encontrada na TV", "libnuvio.staged.ver",
+    "sem recorte em 2 s, mostra assim", "sem tocando, mostra assim",
+    "eglMakeCurrent no fio do app falhou: 0x%x",
     "crédit", "crédito",            # palavra procurada no capitulo do MKV
     "episodio", "episódio",         # palavra procurada no nome do video TMDB (extras.c)
     # Nome proprio e sigla: iguais nos dois idiomas.
