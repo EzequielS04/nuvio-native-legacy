@@ -588,6 +588,21 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-14-serie-studios-accent.png", saida);
   gravar(nome);
 
+  // --- 15. FILME, Studios em foco: a fileira ao lado das outras, para julgar
+  //         cabecalho, margem, raio e foco contra o resto da pagina.
+  abrir(1, SEC_ESTUDIOS, 1);
+  snprintf(nome, sizeof nome, "%s-15-filme-studios-accent.png", saida);
+  gravar(nome);
+
+  // --- 16. FILME, foco no elenco com a pagina rolada ate Studios: a fileira
+  //         em repouso ao lado da fileira focada de outro tipo.
+  abrir(1, SEC_ELENCO, 0);
+  parado = 1;
+  scrollY = conteudoSec[SEC_ESTUDIOS] - 620.0f;
+  quadros(40);
+  snprintf(nome, sizeof nome, "%s-16-filme-studios-repouso.png", saida);
+  gravar(nome);
+
   SDL_GL_DeleteContext(gl);
   SDL_DestroyWindow(janela);
   SDL_Quit();

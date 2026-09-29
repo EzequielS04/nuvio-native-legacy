@@ -92,7 +92,6 @@ static void heroReiniciar(void);
 #define EST_CARD_W   240.0f
 #define EST_CARD_H   100.0f
 #define EST_GAP       18.0f
-#define EST_TITULO_H  46.0f   // linha do titulo proprio na serie
 // MEDIDO na referencia (TCL, 1920x1080): cartao 722x466, vao 25, canto 20.
 // 722x466 era o MEDIDO na TCL; o dono, olhando a C9 em 19/09/2026, mandou
 // encolher ("ta gigante") — o mesmo veredito dos botoes do detalhe na 1.3.2.
@@ -477,7 +476,14 @@ static float docFim = NV_DETP_FIM;
 static const char *cabecalhoDe(int r) {
   // TRAILERS E A EXCECAO na serie (#123): a fileira entrou empilhada abaixo
   // das bandas de audiencia e nao ha aba acima dela que diga o que ela e.
-  if (ehSerie()) return r == SEC_TRAILERS ? "Trailers" : NULL;
+  // ESTUDIOS TAMBEM (serie): o titulo era uma linha cinza pequena desenhada
+  // DENTRO da secao, e ao lado do "Trailers" e do "Estúdios" do filme parecia
+  // de outra pagina. Agora e o mesmo TXT_HEADLINE, com o mesmo vao.
+  if (ehSerie()) {
+    if (r == SEC_TRAILERS) return "Trailers";
+    if (r == SEC_ESTUDIOS) return "Redes e estúdios";
+    return NULL;
+  }
   switch (r) {
     case SEC_ELENCO:   return "Elenco";
     case SEC_TRAILERS:     return "Trailers";
@@ -486,8 +492,6 @@ static const char *cabecalhoDe(int r) {
     // o subtitulo "Avaliações do Trakt". Com os dois saiam DOIS titulos
     // empilhados dizendo a mesma coisa.
     case SEC_COMENTARIOS:  return NULL;
-    // Na serie o titulo sai DENTRO da secao (desenhaEstudios), porque as secoes
-    // dela nao levam cabecalho — mesmo motivo do "trakt Comentarios".
     case SEC_ESTUDIOS:     return "Estúdios";
     case SEC_DETALHES:     return "Detalhes do Filme";
     // As duas abaixo trazem o proprio titulo DENTRO do painel (os modulos
@@ -630,12 +634,16 @@ static void recalcularLayout(void) {
     // Estudios/redes empilham DEPOIS dos comentarios, como no web
     // (renderCompanySections monta a secao ao fim do corpo da pagina).
     topoSec[SEC_ESTUDIOS] = conteudoSec[SEC_ESTUDIOS] = y;
+    // Com cabecalho proprio, como os trailers acima e o filme: o topo do grupo
+    // e a linha do titulo e o conteudo fica NV_DETF_CAB_H + NV_DETF_CAB_GAP abaixo.
+    if (secaoN(SEC_ESTUDIOS) > 0)
+      conteudoSec[SEC_ESTUDIOS] = y + NV_DETF_CAB_H + NV_DETF_CAB_GAP;
     // ESTUDIOS DEIXOU DE SER A ULTIMA e por isso passou a ADIANTAR `y`. Antes
     // ela so media o proprio fim para o docFim; com a secao de frases embaixo,
     // nao adiantar aqui punha as duas no mesmo topo — o mesmo defeito que a
     // secao do Trakt ja teve contra os avatares do elenco.
     if (secaoN(SEC_ESTUDIOS) > 0) {
-      y += alturaSecao(SEC_ESTUDIOS) + NV_DETF_SEC_GAP;
+      y = conteudoSec[SEC_ESTUDIOS] + alturaSecao(SEC_ESTUDIOS) + NV_DETF_SEC_GAP;
       float fim = y + NV_DETF_PAD_FIM - NV_DETF_SEC_GAP;
       if (fim > docFim) docFim = fim;
     }
@@ -1234,9 +1242,7 @@ static float alturaSecao(int r) {
     // + o cabecalho: sem ele a secao seguinte ("Detalhes do Filme") era
     // empilhada usando so a altura dos cartoes e saia POR CIMA deles.
     case SEC_COMENTARIOS:  return alturaCabComentarios() + COM_CARD_H;
-    // Na serie o titulo "Redes e estudios" sai DENTRO da secao (cabecalhoDe
-    // devolve NULL para ela), entao a linha do titulo entra na altura.
-    case SEC_ESTUDIOS:     return EST_CARD_H + (ehSerie() ? EST_TITULO_H : 0.0f);
+    case SEC_ESTUDIOS:     return EST_CARD_H;
     case SEC_DETALHES:     return nLinhasDetalhe() * NV_DETF_DET_LINHA;
     // As duas sob demanda: a CHAMADA enquanto ninguem entrou (titulo +
     // procedencia + custo, tres linhas) e a altura MEDIDA no ultimo desenho
@@ -4379,7 +4385,10 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
   const char *logo = extras_estudio_logo(i);
   float ar, ag, ab;
   GLuint t;
-  if (f > 0.001f) {
+  // Vidro ligado: repouso tambem e o painel de vidro (foco so soma o aro), como
+  // os cartoes de "Recomendacoes". Sem isso o cartao trocava de material ao
+  // receber o foco (azul-marinho -> vidro).
+  if (f > 0.001f || ajustes_vidro()) {
     ajustes_acento(&ar, &ag, &ab);
     gfx_cartao_foco_vidro(r, 14.0f / EST_CARD_H, f, a, ar, ag, ab);
   } else {
@@ -4913,7 +4922,7 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
   // que a fileira e, e o rotulo acima dela repetia a palavra duas vezes em
   // linhas seguidas. No FILME cada secao continua carregando o proprio nome,
   // porque la nao existe a barra de abas para dizer o que e o que.
-  { const char *cab = cabecalhoDe(r);   // na serie, so "Trailers"
+  { const char *cab = cabecalhoDe(r);   // na serie: Trailers e Estudios
     if (cab) {
       TxtLinha lc = txt_linha(TXT_HEADLINE, cab, 245, 248, 255, 255);
       txt_desenhar_alpha(lc, NV_DETP_X, y - lc.h - NV_DETF_CAB_GAP, a);
@@ -4927,20 +4936,13 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
   // secaoN(SEC_TEMPORADAS) ja devolveu 0 e nao se chega aqui.
   if (r == SEC_TEMPORADAS) resumoTemporada(NV_DETP_X, y, a);
 
-  // Na serie a secao de estudios/redes nao tem cabecalho externo — o titulo
-  // sai aqui, como o "trakt Comentarios" sai dentro da secao de comentarios.
-  if (r == SEC_ESTUDIOS && ehSerie()) {
-    TxtLinha lt = txt_linha(TXT_DET_META2, "Redes e estúdios", 150, 154, 163, 255);
-    txt_desenhar_alpha(lt, NV_DETP_X, y, a * 0.9f);
-  }
-
   for (int c = 0; c < n && c < N_ITENS; c++) {
     float f = animFoco[r][c];
     float x = xItem(r, c) - scrollSec[r];
     float w = larguraItem(r, c);
     if (x > NV_TELA_W || x + w < -w) continue;
     if (ponteiro_ativo() && a > 0.3f && c < secaoColunas(r) && alturaAlvo(r) > 0.0f)
-      ponteiro_alvo(x, r == SEC_ESTUDIOS && ehSerie() ? y + EST_TITULO_H : y,
+      ponteiro_alvo(x, y,
                     w, alturaAlvo(r), ponteiroDetalhe, NULL, r, c);
     switch (r) {
       case SEC_TEMPORADAS: {
@@ -4985,7 +4987,7 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
         if (c == 0) frasesAlt = desenhaFrases(NV_DETP_X, y, a);
         break;
       case SEC_ESTUDIOS:
-        desenhaEstudio(x, y + (ehSerie() ? EST_TITULO_H : 0.0f), c, f, a);
+        desenhaEstudio(x, y, c, f, a);
         break;
       case SEC_DETALHES: desenhaDetalhes(x, y, f, a); break;
       default: desenhaElenco(x, y, c, f, a); break;
