@@ -69,6 +69,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "visto.h"     /* fim de episodio/filme para Simkl e conta */
 #include "vistoep.h"   /* o check de "assistido" na lista de episodios (issue #100) */
 #include "pausao.h"
+#include "scrobble.h"
 #include "home.h"
 #include "descoberta.h"
 #include "guia.h"
@@ -1161,6 +1162,17 @@ int   player_foco_na_barra(void) { return barraFoco; }
 int   player_so_barra(void) { return soBarra && visivel; }
 float player_posicao_seg(void) { return posSeg; }
 
+// Id do titulo em cena no formato do Trakt ("tt1", "tt1:T:E", "tmdb:m1").
+// Serie com episodio conhecido leva ":T:E"; o "tmdb:t123" guarda o ':' do
+// prefixo, entao o corte e no SEGUNDO ':' nesse caso.
+static void idTrakt(const CatItem *ci, char *dst, size_t n) {
+  const char *base = ci->imdb;
+  size_t l = strcspn(base, ":");
+  if (!strncmp(base, "tmdb:", 5)) l += 1 + strcspn(base + l + 1, ":");
+  if (epT > 0 && epE > 0) snprintf(dst, n, "%.*s:%d:%d", (int)l, base, epT, epE);
+  else snprintf(dst, n, "%s", base);
+}
+
 void player_encerrar(void) {
   // Salvar ANTES de parar: video_parar descarrega o pipeline e a posicao some
   // junto. Titulo quase no fim conta como visto por inteiro — voltar a um card
@@ -1218,8 +1230,7 @@ void player_encerrar(void) {
     // so aqui deixaria este app discordando dos outros aparelhos do dono.
     if (ci && ci->imdb[0]) {
       char id[64];
-      if (epT > 0 && epE > 0) snprintf(id, sizeof id, "%.*s:%d:%d", (int)strcspn(ci->imdb,":"),ci->imdb, epT, epE);
-      else snprintf(id, sizeof id, "%s", ci->imdb);
+      idTrakt(ci, id, sizeof id);
       trakt_marcar(id, pos, duracaoSeg);
       // O CHECK NA LISTA, LOCALMENTE E AGORA — a outra metade do #100.
       //
@@ -2024,6 +2035,13 @@ void player_atualizar(float dt, Uint32 agora) {
       if(retomarPct>0) video_buscar(d*retomarPct/100.0);
     }
     tocando = video_tocando();
+    // Scrobble start/pause do Trakt (issue #179). Nao bloqueia: so enfileira.
+    { const CatItem *ci = ehCanal() ? NULL : item();
+      if (ci && ci->imdb[0]) {
+        char id[64];
+        idTrakt(ci, id, sizeof id);
+        scrobble_passo(id, posSeg, duracaoSeg, tocando, video_pronto(), SDL_GetTicks());
+      } }
     relogio_amostra(&relLeg, video_pos(), monoSeg(), tocando && !scrubbing);
     // A cada 10 s: o numero cru do pipeline e o do relogio da legenda, no
     // mesmo instante. A diferenca e o que a interpolacao acrescenta (0..~250).
