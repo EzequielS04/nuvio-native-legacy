@@ -94,6 +94,7 @@ int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127
 int   ajustes_itens_fileira(void)          { return 12; }   // padrao (#163)
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
 int   ajustes_idioma_ingles(void)          { return 0; }
+int ajustes_idioma(void) { return 0; }
 unsigned homeestado_geracao(void) { return 1; }
 int homeestado_contexto_valido(void) { return snapshotValido; }
 int homeestado_tem_fileira(const char *chave) { return snapshotTem && chave && !strcmp(chave, "old-row"); }
@@ -163,6 +164,7 @@ int   fil_unir(const char *const *c, int n, int *s, int m) {
   int i; (void)c; for (i = 0; i < n && i < m; i++) s[i] = i; return i;
 }
 const char *i18n(const char *s)            { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 void  marco(const char *n)                 { (void)n; }
 void  prog_chave(char *d, unsigned n, const char *c, int t, int e) {
   (void)c; (void)t; (void)e; if (n) d[0] = 0;

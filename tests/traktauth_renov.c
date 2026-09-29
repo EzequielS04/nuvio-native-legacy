@@ -70,6 +70,7 @@ int  sync_empurrar_credencial(const char *p, const char *j) {
 }
 void desc_repetir(void)         { nRepetir++; }
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 
 // ---- cenario ----------------------------------------------------------------
 

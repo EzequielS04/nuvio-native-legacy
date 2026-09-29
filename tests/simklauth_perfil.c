@@ -58,6 +58,7 @@ const char *nuvem_simkl_app(void)     { return "nuvio"; }
 void nuvem_url_escapar(const char *v, char *d, unsigned t) { snprintf(d, t, "%s", v); }
 int  sync_empurrar_credencial(const char *p, const char *j) { (void)p; (void)j; return 0; }
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 char *rede_baixar_st(const char *url, int seg, const char *const *cab, int *st) {
   (void)seg; (void)cab;
   *st = 200;

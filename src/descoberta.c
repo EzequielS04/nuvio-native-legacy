@@ -46,7 +46,7 @@ void desc_data_extenso(const char *iso, char *dst, size_t tam) {
     int dia = (iso[8] - '0') * 10 + (iso[9] - '0');
     if (mes >= 1 && mes <= 12) {
       snprintf(dst, tam, i18n("%d de %s de %c%c%c%c"),
-               dia, i18n(MES[mes - 1]), iso[0], iso[1], iso[2], iso[3]);
+               dia, idioma_mes_data(mes, MES[mes - 1]), iso[0], iso[1], iso[2], iso[3]);
       return;
     }
     snprintf(dst, tam, "%c%c%c%c", iso[0], iso[1], iso[2], iso[3]);
@@ -147,7 +147,11 @@ const char *desc_genero_pt(const char *g) {
   size_t i;
   if (!g || !*g) return "";
   for (i = 0; i < sizeof T / sizeof *T; i++)
-    if (!strcasecmp(g, T[i].en)) return T[i].pt;
+    // Romeno, ucraniano e russo passam pelo portugues, que e a chave da tabela.
+    // A traducao e feita AQUI e nao no desenho porque o genero entra em textos
+    // montados ("Filme  ·  Drama"), que nunca casariam com uma chave.
+    if (!strcasecmp(g, T[i].en))
+      return ajustes_idioma() > IDIOMA_EN ? i18n(T[i].pt) : T[i].pt;
   return g;
 }
 

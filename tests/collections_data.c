@@ -12,10 +12,12 @@
 // 0 = portugues, o padrao — e o idioma em que as asserçoes deste arquivo
 // escreveram os rotulos esperados.
 int ajustes_idioma_ingles(void) { return 0; }
+int ajustes_idioma(void) { return 0; }
 // Integracao TMDB ligada por padrao — ver a nota igual em tests/colfileiras.c.
 int ajustes_tmdb_ligado(void) { return 1; }
 const char *ajustes_tmdb_idioma(void) { return "pt-BR"; }
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 // Ramo de fonte nao-addon (issue #44) e refazer da fileira CW (#38): nao sao
 // o que este teste mede, mas fioVerTudo/fioContinuar referenciam os simbolos.
 const char *nuvem_trakt_cliente(void) { return ""; }

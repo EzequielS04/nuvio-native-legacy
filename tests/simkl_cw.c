@@ -40,6 +40,7 @@ const char *nuvem_simkl_cliente(void) { return "cid-teste"; }
 const char *nuvem_simkl_app(void) { return "nuvio"; }
 void nuvem_url_escapar(const char *v, char *dst, unsigned tam) { snprintf(dst, tam, "%s", v); }
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 // O enfeite real vai ao Cinemeta; aqui devolve o lote como veio.
 int trakt_enfeitar_lote(CatItem *saida, int n) { (void)saida; return n; }
 

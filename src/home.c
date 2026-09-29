@@ -2642,7 +2642,7 @@ static void desenhaHero(Uint32 agora, float saida) {
     char quando[32];
     if (cwo_e_futuro(ci->imdb) &&
         cwo_data_curta(cwo_estreia(ci->imdb), (long long)time(NULL) * 1000LL,
-                       ajustes_idioma_ingles(), 1, quando, sizeof quando))
+                       ajustes_idioma(), 1, quando, sizeof quando))
       snprintf(destaque, sizeof destaque, i18n("ESTREIA %s"), quando);
     else snprintf(destaque, sizeof destaque, "%s", i18n("A SEGUIR"));
   }

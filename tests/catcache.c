@@ -29,9 +29,11 @@
 // O cache grava o idioma no cabecalho (texto ja montado nao pode ser lido de
 // volta no idioma errado). 0 = portugues, que e o padrao.
 int ajustes_idioma_ingles(void) { return 0; }
+int ajustes_idioma(void) { return 0; }
 // cat_carregar traduz o rotulo do tipo do catalogo do pacote por aqui. Devolver
 // a entrada e o que i18n faz em portugues, que e o idioma deste teste.
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 
 // --- DUBLES ------------------------------------------------------------------
 // A pasta gravavel e a identidade sao entradas do teste, nao do ambiente: e

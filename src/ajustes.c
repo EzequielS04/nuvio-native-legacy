@@ -215,7 +215,9 @@ static const char *V_ASPTRAIL[]  = { "Zoom cinema", "Zoom leve", "Zoom ultra", "
 // Fonte do trailer (trailerfonte.h). O indice e o gravado e o TRF_* do
 // modulo: 0 Automatico, 1 Apple, 2 IMDb, 3 YouTube — nao reordenar.
 static const char *V_TRAILFONTE[] = { "Automático", "Apple TV", "IMDb", "YouTube" };
-static const char *V_IDIOMA[]    = { "Português", "English" };
+// Nomes NATIVOS, sem i18n: quem trocou para um idioma que nao le precisa achar o seu.
+// A ordem e a de IDIOMA_* (idiomacod.h) e a do valor gravado: so acrescentar no fim.
+static const char *V_IDIOMA[]    = { "Português", "English", "Română", "Українська", "Русский" };
 static const char *V_ANIM[]      = { "Completas", "Reduzidas" };
 static const char *V_FONTE_UI[]  = { "Inter", "LG Display", "Droid Sans",
                                      "Montserrat", "Roboto",
@@ -298,6 +300,10 @@ static const char *V_TMDB_LING[] = {
   "Deutsch", "Italiano", "Português (Portugal)", "日本語", "한국어", "中文",
   "Română", "Українська", "Русский"
 };
+_Static_assert(sizeof V_TMDB_LING / sizeof *V_TMDB_LING == 14,
+               "V_TMDB_LING casa com ESC(..., 14), W_TMDB_LING e L[] de ajustes_tmdb_idioma");
+_Static_assert(sizeof V_IDIOMA / sizeof *V_IDIOMA == IDIOMA_N,
+               "V_IDIOMA: um rotulo por IDIOMA_* de idiomacod.h");
 // Preenchido em rotulosDeIdioma(), no arranque: os nomes saem de linguas.c em
 // vez de serem uma segunda lista escrita a mao aqui. LING_MAX_OPC e folga: se
 // linguas.c crescer, o excedente simplesmente nao aparece — melhor que ler
@@ -533,7 +539,7 @@ static const Opcao OPCOES[AJ_N] = {
   NUM("Arredondamento",             0, 40, 1, " dp"),   // posterCardCornerRadiusDp
   ESC("Qualidade da imagem",        V_QUALIMG, 3),
 
-  ESC("Idioma",                     V_IDIOMA, 2),
+  ESC("Idioma",                     V_IDIOMA, IDIOMA_N),
   ESC("Animações",                  V_ANIM, 2),
   ESC("Resolução da interface",     V_RESOLUCAO, 2),
   ESC("Cor de destaque",            V_TEMA, AJ_N_TEMAS_OPC),  // selected_theme (+4 locais)
@@ -1213,7 +1219,11 @@ int ajustes_fonte_repor(void) {
   int v = valor[AJ_FONTE_REPOR];
   return v < 0 ? 0 : v > 3 ? 3 : v;     // arquivo editado a mao: dentro da tabela
 }
-int ajustes_idioma_ingles(void)       { return valor[AJ_IDIOMA] == 1; }
+int ajustes_idioma(void) {
+  int v = valor[AJ_IDIOMA];
+  return v >= 0 && v < IDIOMA_N ? v : IDIOMA_PT;
+}
+int ajustes_idioma_ingles(void)       { return ajustes_idioma() == IDIOMA_EN; }
 
 // 1 = o tema escolhido e um dos dinamicos (cor viva), que so existem nesta TV.
 static int temaDinamico(void) {
@@ -1421,7 +1431,15 @@ const char *ajustes_tmdb_idioma(void) {
   if (v < 0 || v >= (int)(sizeof L / sizeof *L)) v = 0;
   // "Da interface" resolve AQUI, na hora de perguntar, e nao na gravacao:
   // trocar o idioma do app tem de refletir sem tocar neste ajuste.
-  if (!L[v]) return ajustes_idioma_ingles() ? "en-US" : "pt-BR";
+  if (!L[v]) {
+    switch (ajustes_idioma()) {
+      case IDIOMA_EN: return "en-US";
+      case IDIOMA_RO: return "ro-RO";
+      case IDIOMA_UK: return "uk-UA";
+      case IDIOMA_RU: return "ru-RU";
+      default:        return "pt-BR";
+    }
+  }
   return L[v];
 }
 #define TMDB_USA(op) (lig(AJ_TMDB_LIGADO) && lig(op))
@@ -5245,7 +5263,9 @@ static float previaInterfaceOpcao(int op, float x, float y, float w) {
     previaRealce(x + 12.0f, y + 10.0f, w - 24.0f, 116.0f, ar, ag, ab);
   } else if (op == AJ_IDIOMA) {
     TxtLinha sample = txt_linha(TXT_HEADLINE,
-           valor[op] == 0 ? i18n("Olá · Ação") : i18n("Hello · Action"),
+           // pt, ro, uk e ru pela chave portuguesa (cada idioma a traduz);
+           // ingles pela chave inglesa, que a tabela devolve como esta.
+           valor[op] == IDIOMA_EN ? i18n("Hello · Action") : i18n("Olá · Ação"),
            235, 237, 241, 255);
     txt_desenhar(sample, x + 24.0f, y + 30.0f);
     previaRealce(x + 14.0f, y + 20.0f, w - 28.0f, 56.0f, ar, ag, ab);

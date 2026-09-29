@@ -57,6 +57,7 @@ void vertudo_abrir(const char *b, const char *t, const char *c, const char *ti) 
 }
 void vertudo_colecao(const ColFolder *f) { (void)f; nVerTudoCol++; }
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 
 static Uint32 relogio = 1000;
 static void quadro(int quantos) {

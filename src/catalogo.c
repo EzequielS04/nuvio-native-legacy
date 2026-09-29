@@ -519,7 +519,7 @@ int cat_carregar(const char *dirArte) {
 // <SDL2/SDL.h>, e catalogo.c e compilado sem SDL por tests/catcache.sh — que e
 // justamente o teste deste cache. Incluir o cabecalho troca um teste leve por
 // um que precisa da biblioteca grafica inteira para conferir um fwrite.
-int ajustes_idioma_ingles(void);
+int ajustes_idioma(void);
 
 #define CACHE_MAGIA  0x4E56434Bu   /* "NVCK" */
 // VERSAO 2: o cabecalho passou a carregar a identidade do dono. Subir a versao
@@ -559,7 +559,7 @@ typedef struct {
   // credencial de addon do usuario anterior.
   char usuario[64];   // `sub` do JWT; "" quando deslogado
   int  perfil;        // perfis_ativo()
-  int  ingles;        // ajustes_idioma_ingles() quando o arquivo foi escrito
+  int  ingles;        // ajustes_idioma() (IDIOMA_*; 0 pt, 1 en como antes) quando o arquivo foi escrito
 } CacheCab;
 
 // Quem esta logado AGORA. Chamada nas duas pontas — gravar e ler — e por isso o
@@ -697,7 +697,7 @@ int cat_gravar_cache_se_identidade(const char *dirArte, const char *donoEsperado
   // byte impossivel e vaza pedaco de pilha para o disco.
   memset(&c, 0, sizeof c);
   c.magia = CACHE_MAGIA; c.versao = CACHE_VERSAO;
-  c.ingles = ajustes_idioma_ingles();
+  c.ingles = ajustes_idioma();
   c.tamItem = (unsigned)sizeof(CatItem);
   c.tamFileira = (unsigned)sizeof(CatFileira);
   c.nItens = n; c.nFileiras = nFils;
@@ -779,7 +779,7 @@ int cat_ler_cache(const char *dirArte) {
   // os arquivos antigos UMA VEZ; sem esta linha, trocar de idioma depois disso
   // nao invalidaria nada e a home voltaria a dizer "Programa de TV" em ingles.
   if (strcmp(c.usuario, usuario) != 0 || c.perfil != perfil ||
-      c.ingles != ajustes_idioma_ingles()) {
+      c.ingles != ajustes_idioma()) {
     fclose(f);
     printf("[cat] cache descartado (era de outro usuario/perfil/idioma)\n");
     fflush(stdout);
