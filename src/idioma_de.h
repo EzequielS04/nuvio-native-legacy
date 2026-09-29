@@ -1492,6 +1492,7 @@
   T("Para baixo: teste de velocidade · Voltar sai", "Unten: Geschwindigkeitstest · Zurück beendet"),
   T("Para cima volta ao objetivo · Voltar sai", "Oben zurück zum Ziel · Zurück beendet"),
   T("Para quem?", "Für wen?"),
+  T("Pausado", "Pausiert"),
   T("País de Origem", "Herkunftsland"),
   T("Países Baixos", "Niederlande"),
   T("Pede o OK duas vezes. Para voltar a usar é preciso digitar tudo de novo.", "Fragt zweimal nach OK. Zum erneuten Nutzen musst du alles neu eingeben."),

@@ -1492,6 +1492,7 @@
   T("Para baixo: teste de velocidade · Voltar sai", "Вниз: тест швидкості · Назад: вийти"),
   T("Para cima volta ao objetivo · Voltar sai", "Вгору: назад до мети · Назад: вийти"),
   T("Para quem?", "Для кого?"),
+  T("Pausado", "Пауза"),
   T("País de Origem", "Країна походження"),
   T("Países Baixos", "Нідерланди"),
   T("Pede o OK duas vezes. Para voltar a usar é preciso digitar tudo de novo.", "Просить OK двічі. Щоб користуватися знову, доведеться ввести все заново."),

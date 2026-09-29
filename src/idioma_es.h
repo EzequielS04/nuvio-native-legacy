@@ -1492,6 +1492,7 @@
   T("Para baixo: teste de velocidade · Voltar sai", "Abajo: prueba de velocidad · Atrás sale"),
   T("Para cima volta ao objetivo · Voltar sai", "Arriba vuelve al objetivo · Atrás sale"),
   T("Para quem?", "¿Para quién?"),
+  T("Pausado", "En pausa"),
   T("País de Origem", "País de origen"),
   T("Países Baixos", "Países Bajos"),
   T("Pede o OK duas vezes. Para voltar a usar é preciso digitar tudo de novo.", "Pide OK dos veces. Para volver a usarlo hay que escribir todo de nuevo."),

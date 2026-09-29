@@ -2646,17 +2646,14 @@ void player_desenhar(Uint32 agora) {
   // ANTES do corte por `a`: desenha-lo depois do `return` de "tocando limpo"
   // faria dele um painel que so aparece quando ja ha barra na tela.
   //
-  // A BASE e a mesma linha que a barra de progresso usa, menos uma folga. Com
-  // os controles agora convivendo com o painel, um y fixo poria os dois no
-  // mesmo lugar — foi o "layer quebrado" que o dono viu. Este calculo repete o
-  // de desenharControles de proposito: la ele depende de `desce`, que so existe
-  // durante a animacao de entrada dos controles, e amarrar o painel a isso o
-  // faria tremer junto.
-  // BASE NO RODAPE: o painel ocupa o lugar do player, que esta recolhido
-  // enquanto ele esta de pe. PLR_PAD_Y e a mesma margem inferior que os
-  // controles usam, entao os dois pousam na mesma linha e a troca entre um e
-  // outro nao desloca nada na tela.
-  pausao_desenhar(agora, NV_TELA_H - PLR_PAD_Y);
+  // CAMADA DE TELA CHEIA: o painel de pausa cobre o quadro inteiro (veu de ponta
+  // a ponta, selo no alto, ficha na margem inferior, barra na borda) e por isso
+  // nao depende mais de onde o player desenha os controles — que saem de cena
+  // enquanto ele esta de pe. Ver pausao.h.
+  { PausaoCena cena;
+    cena.pos = posSeg; cena.dur = ehCanal() ? 0.0f : duracaoSeg;
+    corFocoPlayer(&cena.fr, &cena.fg, &cena.fb);
+    pausao_desenhar(agora, &cena); }
 
   // O PAINEL DE POS-REPRODUCAO DESENHA AQUI, e o lugar importa.
   //

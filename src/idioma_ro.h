@@ -1492,6 +1492,7 @@
   T("Para baixo: teste de velocidade · Voltar sai", "Jos: test de viteză · Înapoi iese"),
   T("Para cima volta ao objetivo · Voltar sai", "Sus revine la obiectiv · Înapoi iese"),
   T("Para quem?", "Pentru cine?"),
+  T("Pausado", "În pauză"),
   T("País de Origem", "Țara de origine"),
   T("Países Baixos", "Țările de Jos"),
   T("Pede o OK duas vezes. Para voltar a usar é preciso digitar tudo de novo.", "Cere OK de două ori. Pentru a-l folosi din nou trebuie să introduci totul de la capăt."),

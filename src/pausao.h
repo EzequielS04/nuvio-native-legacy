@@ -71,16 +71,22 @@ int  pausao_visivel(void);
 // So chame com o painel de pe. Ver o enum acima.
 int  pausao_evento(const SDL_Event *e);
 
-// `baseY` e a linha ACIMA da qual o painel tem de caber inteiro — na pratica o
-// topo do que o player ja desenha (titulo e barra de progresso). O painel e
-// medido e ancorado por essa base, e nao por um y fixo: com um y fixo ele
-// brigava com a barra de tempo, que foi o defeito relatado. Os controles NAO
-// somem mais quando ele sobe; os dois convivem, empilhados.
-void pausao_desenhar(Uint32 agora, float baseY);
+// O que o player sabe e o painel nao: onde o filme parou e a cor de destaque
+// do player (ja com o contraste tratado por corFocoPlayer). `dur` <= 0 tira a
+// barra e o "termina as".
+typedef struct { float pos, dur; float fr, fg, fb; } PausaoCena;
 
-// Folga entre a base do painel e a barra de progresso. Sem ela o cartao encosta
-// no trilho e os dois leem como uma coisa so.
-#define PAUSAO_FOLGA 28.0f
+// O painel e uma CAMADA DE TELA CHEIA (1920x1080 em unidades de layout, seja
+// qual for o drawable): veu de ponta a ponta, selo "Pausado" e relogio no alto,
+// a ficha ancorada na margem inferior e a barra de onde o filme parou colada
+// na borda de baixo. O quadro continua visivel por tras — so escurecido.
+//
+// HISTORICO: ate a 1.5.2 ele era uma faixa ancorada por `baseY` (o topo do que
+// o player ja desenhava), com veu so do topo do texto para baixo e texto em
+// 1160 de largura. O dono relatou: "quando o player ta parado, as infos que
+// mostra com o overlay nao pegam a tela inteira". Como os controles saem de
+// cena enquanto o painel esta de pe, ele nao precisa mais se esquivar deles.
+void pausao_desenhar(Uint32 agora, const PausaoCena *cena);
 
 // Fim da reproducao: zera o relogio e o painel. Sem isto o proximo filme
 // abriria com o cronometro do anterior ja meio andado.

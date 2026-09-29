@@ -1492,6 +1492,7 @@
   { "Para baixo: teste de velocidade · Voltar sai", "Down: speed test · Back exits" },
   { "Para cima volta ao objetivo · Voltar sai", "Up: back to the goal · Back exits" },
   { "Para quem?", "To whom?" },
+  { "Pausado", "Paused" },
   { "País de Origem", "Country" },
   { "Países Baixos", "Netherlands" },
   { "Pede o OK duas vezes. Para voltar a usar é preciso digitar tudo de novo.", "Asks for OK twice. To use it again you will need to type everything in again." },
