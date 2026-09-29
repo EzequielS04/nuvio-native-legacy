@@ -1897,7 +1897,6 @@
   T("Severo", "Alvorligt"),
   T("Sex", "Fre"),
   T("Seções", "Sektioner"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Følg personer på Trakt for at opdage mere."),
   T("Sim, pode me mostrar", "Ja, I må gerne vise mig"),
   T("Sincronização", "Synkronisering"),
   T("Singapura", "Singapore"),

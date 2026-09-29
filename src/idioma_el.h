@@ -1897,7 +1897,6 @@
   T("Severo", "Έντονο"),
   T("Sex", "Παρ"),
   T("Seções", "Ενότητες"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Ακολούθησε άτομα στο Trakt για να ανακαλύψεις περισσότερα."),
   T("Sim, pode me mostrar", "Ναι, μπορείτε να με εμφανίζετε"),
   T("Sincronização", "Συγχρονισμός"),
   T("Singapura", "Σιγκαπούρη"),

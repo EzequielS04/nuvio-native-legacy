@@ -1897,7 +1897,6 @@
   T("Severo", "Ozbiljno"),
   T("Sex", "Pet"),
   T("Seções", "Odjeljci"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Pratite ljude na Traktu da otkrijete više."),
   T("Sim, pode me mostrar", "Da, možete me prikazivati"),
   T("Sincronização", "Sinhronizuj"),
   T("Singapura", "Singapur"),

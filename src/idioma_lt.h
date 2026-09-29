@@ -1897,7 +1897,6 @@
   T("Severo", "Stiprus"),
   T("Sex", "Pn"),
   T("Seções", "Skyriai"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Sekite žmones Trakt, kad atrastumėte daugiau."),
   T("Sim, pode me mostrar", "Taip, galite mane rodyti"),
   T("Sincronização", "Sinchronizuoti"),
   T("Singapura", "Singapūras"),

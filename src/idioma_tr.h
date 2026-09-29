@@ -1897,7 +1897,6 @@
   T("Severo", "Şiddetli"),
   T("Sex", "Cum"),
   T("Seções", "Bölümler"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Daha fazlasını keşfetmek için Trakt'ta insanları takip et."),
   T("Sim, pode me mostrar", "Evet, beni gösterebilirsin"),
   T("Sincronização", "Senkronize et"),
   T("Singapura", "Singapur"),

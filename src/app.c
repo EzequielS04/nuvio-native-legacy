@@ -50,6 +50,7 @@
 #include "salvos.h"
 #include "recomenda.h"
 #include "recenviar.h"
+#include "pessoas.h"
 #include "salvospainel.h"
 #include "salvosintro.h"
 #include "novidades.h"
@@ -1213,6 +1214,9 @@ void app_evento(const SDL_Event *e) {
   // painel da tecla AZUL — as tres portas que a abrem. Abaixo do cartao de
   // aviso, que e uma pergunta sobre outra recomendacao.
   if (recenviar_aberto()) { recenviar_evento(e); return; }
+  // ENCONTRAR PESSOAS (busca, perfil, pedidos): mesma altura da modal de
+  // recomendar — abre da aba Social e de Ajustes, e devolve o foco a quem abriu.
+  if (pessoas_aberto()) { pessoas_evento(e); return; }
 
   // A folha de fontes fica acima de tudo: ela e uma pergunta, e enquanto ela
   // esta em pe nada mais deve responder ao D-pad.
@@ -2705,7 +2709,7 @@ void app_atualizar(float dt, Uint32 agora) {
                      !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() &&
                      !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades151_aberto() && !telemetria_aberto() &&
                      !recintro_aberto() && !atualizacao_aberta() && !agendaviso_aberto() &&
-                     !recomenda_aberta() && !recenviar_aberto() && !faixas_aberta() &&
+                     !recomenda_aberta() && !recenviar_aberto() && !pessoas_aberto() && !faixas_aberta() &&
                      !episodios_aberto() && !stream_folha_aberta() && !guia_overlay_aberta() &&
                      !registro_aberto(),
                      dt, agora);
@@ -2714,6 +2718,7 @@ void app_atualizar(float dt, Uint32 agora) {
   spainel_atualizar(dt, agora);
   recomenda_atualizar(dt, agora);
   recenviar_atualizar(dt, agora);
+  pessoas_atualizar(dt, agora);
   sintro_atualizar(dt, agora);
   novidades_atualizar(dt, agora);
   novidades11_atualizar(dt, agora);
@@ -2968,6 +2973,8 @@ void app_desenhar(Uint32 agora) {
     glem_desenhar(agora);
   CAMADA_SE(recenviar_aberto());
   if (!registro_aberto()) recenviar_desenhar(agora);
+  CAMADA_SE(pessoas_aberto());
+  if (!registro_aberto()) pessoas_desenhar(agora);
   CAMADA_SE(recomenda_aberta());
   if (!registro_aberto()) recomenda_desenhar(agora);
   CAMADA_SE(pipintro_aberto());

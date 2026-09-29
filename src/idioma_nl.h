@@ -1897,7 +1897,6 @@
   T("Severo", "Streng"),
   T("Sex", "Vr"),
   T("Seções", "Secties"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Volg mensen op Trakt om meer te ontdekken."),
   T("Sim, pode me mostrar", "Ja, je mag me tonen"),
   T("Sincronização", "Synchroniseren"),
   T("Singapura", "Singapore"),

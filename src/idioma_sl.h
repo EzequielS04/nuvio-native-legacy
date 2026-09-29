@@ -1897,7 +1897,6 @@
   T("Severo", "Stroga"),
   T("Sex", "Pet"),
   T("Seções", "Razdelki"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Sledite ljudem na Traktu, da odkrijete več."),
   T("Sim, pode me mostrar", "Da, lahko mi pokažete"),
   T("Sincronização", "Sinhronizacija"),
   T("Singapura", "Singapur"),

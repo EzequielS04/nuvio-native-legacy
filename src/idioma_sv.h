@@ -1897,7 +1897,6 @@
   T("Severo", "Kraftigt"),
   T("Sex", "Fre"),
   T("Seções", "Avsnitt"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Följ personer på Trakt för att upptäcka mer."),
   T("Sim, pode me mostrar", "Ja, du får visa mig"),
   T("Sincronização", "Synkronisering"),
   T("Singapura", "Singapore"),

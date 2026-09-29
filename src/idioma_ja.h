@@ -1897,7 +1897,6 @@
   T("Severo", "重度"),
   T("Sex", "金"),
   T("Seções", "セクション"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Trakt で人をフォローすると、もっと見つかります。"),
   T("Sim, pode me mostrar", "はい、表示してかまいません"),
   T("Sincronização", "同期"),
   T("Singapura", "シンガポール"),

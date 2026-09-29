@@ -48,6 +48,8 @@
 #include "artereserva.h"
 #include "corviva.h"
 #include "p2p.h"
+#include "pessoas.h"
+#include "recomenda.h"
 #include "posterprov.h"
 #include "rede.h"
 #include "debrid.h"
@@ -214,6 +216,9 @@ typedef enum {
   // mesmo motivo dos outros: valor[] e CHAVE[] sao posicionais.
   AJ_NT_IMDB, AJ_NT_TOMATES, AJ_NT_AUDIENCIA, AJ_NT_META, AJ_NT_METAUSER,
   AJ_NT_TRAKT, AJ_NT_TMDB, AJ_NT_LETTER, AJ_NT_MAL, AJ_NT_EBERT, AJ_NT_SCORE,
+  // Entre amigos alem do Trakt (pessoas.h): "Perfil pesquisavel" e o editor do
+  // perfil publico. No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_PERFIL_PESQ, AJ_PERFIL_EDITAR,
   AJ_N
 } OpcaoId;
 
@@ -746,6 +751,13 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("MyAnimeList",                V_LIGA, 2),   // local: notaTituloMal
   ESC("Roger Ebert (crítica)",      V_LIGA, 2),   // local: notaTituloEbert
   ESC("Nota do MDBList",            V_LIGA, 2),   // local: notaTituloScore
+  // O ESTADO DESTE INTERRUPTOR NAO MORA EM valor[]: ele e o que recomenda.c diz
+  // (recomenda_pesquisavel), reescrito a cada quadro em ajustes_atualizar.
+  // Duas fontes da verdade para "estou aparecendo para os outros?" divergiriam
+  // no primeiro sair/entrar de conta — e o erro seria a pessoa achar que esta
+  // escondida estando visivel.
+  ESC("Perfil pesquisável",              V_LIGA, 2),
+  ACAO("Meu perfil público"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -876,6 +888,8 @@ static const char *CHAVE[] = {
   "notaTituloImdb", "notaTituloTomates", "notaTituloAudiencia", "notaTituloMeta",
   "notaTituloMetaUser", "notaTituloTrakt", "notaTituloTmdb", "notaTituloLetter",
   "notaTituloMal", "notaTituloEbert", "notaTituloScore",
+  // Sem gravar: o estado vive em recomendacoes-perfil.txt (recomenda.c), por conta.
+  "-perfilPesquisavel", "-perfilEditar",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -949,7 +963,8 @@ typedef struct {
 // se repete entre categorias.
 static const Item TELA[] = {
   SEC("Conta", "Conta e status de sincronização", "aj_user-round"),
-    OPC(AJ_PERFIL_ATIVO), OPC(AJ_SYNC), OPC(AJ_SAIR),
+    OPC(AJ_PERFIL_ATIVO), OPC(AJ_SYNC), OPC(AJ_PERFIL_PESQ), OPC(AJ_PERFIL_EDITAR),
+    OPC(AJ_SAIR),
 
   // "Cor da logo" logo abaixo da cor: so vale com um tema dinamico, e e a
   // mesma decisao (de onde sai o destaque).
@@ -1303,6 +1318,8 @@ static int valor[] = {
   // existir a escolha (IMDb, Rotten Tomatoes, Trakt). V_LIGA: 0 = Ligado.
   0, 0, 1, 1, 1,   /* imdb, tomates, popcornmeter, metacritic, metacritic usuarios */
   0, 1, 1, 1, 1, 1,/* trakt, tmdb, letterboxd, mal, ebert, nota do mdblist */
+  1,                /* perfil pesquisavel: DESLIGADO (V_LIGA: 1 = Desligado). Padrao de todo mundo. */
+  0,                /* meu perfil publico: acao */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -2830,6 +2847,8 @@ static int somenteDesteAparelho(int op) {
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
     case AJ_VIDRO:          /* visual desta TV: a GPU de cada uma aguenta diferente */
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
+    case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
+    case AJ_PERFIL_EDITAR:
     case AJ_P2P_LIGADO:     /* o servidor P2P e um aparelho da rede desta casa */
     case AJ_POSTER_PROV:    /* servico e rede desta casa: nao segue a conta */
     case AJ_DET_SO_CINEMETA: /* o web nao tem esta escolha */
@@ -3139,6 +3158,11 @@ static const char *textoLeitura(int op) {
       return bufConta; }
   }
   if (op == AJ_FANART_CHAVE) return fanartMascarada();
+  if (op == AJ_PERFIL_EDITAR) {
+    RecPerfil pf;
+    recomenda_perfil(&pf);
+    return pf.apelido[0] ? pf.apelido : i18n("Não configurado");
+  }
   if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco : i18n("Não configurado");
   if (op == AJ_P2P_TESTAR) return p2pTesteTexto();
   if (op >= AJ_POSTER_INST && op <= AJ_POSTER_TESTAR) return pstTexto(op);
@@ -3319,6 +3343,13 @@ static int mutavel(int op)   { return OPCOES[op].tipo != OP_LEITURA &&
 // alcancada pelo cima/baixo.
 static int visivel(int i) {
   int g = grupoDoItem[i];
+  // SEM O SERVICO SOCIAL NA BUILD, as duas linhas do perfil publico nao
+  // existem: um interruptor que nao liga nada e pior que interruptor nenhum
+  // (a mesma regra da aba Social, ver recomenda_ativo).
+  if (TELA[i].tipo == IT_OPC &&
+      (TELA[i].op == AJ_PERFIL_PESQ || TELA[i].op == AJ_PERFIL_EDITAR) &&
+      !recomenda_ativo())
+    return 0;
   return g < 0 || grupoAberto[secDoItem[i]] == g;
 }
 static int focavel(int i) {
@@ -3513,6 +3544,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_DEBRID_RD: return "Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.";
     case AJ_DEBRID_TB: return "Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.";
     case AJ_DEBRID_PM: return "Chave de API do Premiumize. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.";
+    case AJ_PERFIL_PESQ: return "Desligado por padrão. Ligado, outras pessoas do Nuvio podem te achar pelo apelido e ver o que você escolher mostrar: bio, gêneros favoritos, foto e o que assistiu recentemente. Nunca aparecem e-mail, conta, addons nem aparelho. Desligar apaga o perfil do servidor na hora.";
+    case AJ_PERFIL_EDITAR: return "Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.";
     case AJ_P2P_TESTAR: return "Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.";
     case AJ_POSTER_PROV: return "Troca os cartazes retrato por um pronto de um serviço externo, com notas, selos 4K/HDR e faixa Top 10 no próprio cartaz. SpatialPosters (instância pública ou a sua), RPDB (com chave) ou um modelo de URL seu. Só cartazes de card: o destaque e os fundos não mudam. Se o serviço não responde, volta ao cartaz normal.";
     case AJ_POSTER_INST: return "Endereço da instância do SpatialPosters. Vazio usa a pública (spatial-posters.vercel.app), que é gratuita e compartilhada; para muitos cartazes, rode a sua com Docker.";
@@ -4218,6 +4251,9 @@ static void desenhaRiscoFolha(void) {
 // de efeitos colaterais para manter iguais.
 static void mudarValorDireto(int op, int dir) {
   const Opcao *o = &OPCOES[op];
+  // O PERFIL PESQUISAVEL NAO GIRA valor[]: liga/desliga de verdade em
+  // recomenda.c (que grava, avisa o servidor e, sem apelido, pede um).
+  if (op == AJ_PERFIL_PESQ) { pessoas_definir_pesquisavel(!recomenda_pesquisavel()); return; }
   if (o->tipo == OP_NUMERO) {
     // Numero NAO circula: passar de 100% para 0% com um toque a mais e um
     // salto que ninguem pede, e no controle da TV a seta repete sozinha.
@@ -4446,6 +4482,7 @@ void ajustes_evento(const SDL_Event *e) {
                         64, ST_ALFA_PORTAL, p2pEndereco[0] ? p2pEndereco : NULL);
       return;
     }
+    if (focoOp == AJ_PERFIL_EDITAR) { pessoas_abrir_perfil(); return; }
     if (focoOp == AJ_P2P_TESTAR) { p2pTesteIniciar(); return; }
     if (focoOp >= AJ_POSTER_INST && focoOp <= AJ_POSTER_TESTAR) { pstAtivar(focoOp); return; }
     if (debIdx(focoOp) >= 0) {
@@ -4500,13 +4537,16 @@ void ajustes_evento(const SDL_Event *e) {
 void ajustes_atualizar(float dt, Uint32 agora) {
   (void)agora;
   montarTela();
+  valor[AJ_PERFIL_PESQ] = recomenda_pesquisavel() ? 0 : 1;   // V_LIGA: 0 = Ligado
   p2pTesteRecolher();
   pstTesteRecolher();
   adTesteRecolher();
-  if (teclado_aberto()) teclado_atualizar(dt, agora);
+  if (teclado_aberto() && !pessoas_aberto()) teclado_atualizar(dt, agora);
   // O resultado e CONSUMIDO NA LEITURA (ver teclado.h): ler duas vezes daria
   // TECLADO_NADA na segunda, e por isso a gravacao acontece aqui, uma vez.
-  { int r = teclado_resultado();
+  // COM A MODAL DE PESSOAS ABERTA O TECLADO E DELA: ler aqui consumiria o
+  // resultado antes de ela ver (e o apelido digitado se perderia em silencio).
+  { int r = pessoas_aberto() ? TECLADO_NADA : teclado_resultado();
     if (r == TECLADO_PRONTO && stCampo) {
       if (stCampo == AJ_STALKER_MAC) stalker_definir_mac(teclado_texto());
       else if (stCampo == AJ_XTREAM_SERVIDOR) xtream_definir_servidor(teclado_texto());
@@ -6159,6 +6199,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
+    case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR:
       return AJPV_CONTA;
     case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL:
       return AJPV_RASTREIO;

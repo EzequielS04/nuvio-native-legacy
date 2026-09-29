@@ -1897,7 +1897,6 @@
   T("Severo", "嚴重"),
   T("Sex", "週五"),
   T("Seções", "區段"),
-  T("Siga pessoas no Trakt para descobrir mais.", "在 Trakt 上追蹤更多人，發現更多內容。"),
   T("Sim, pode me mostrar", "好的，可以顯示我"),
   T("Sincronização", "同步"),
   T("Singapura", "新加坡"),

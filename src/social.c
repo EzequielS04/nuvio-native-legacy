@@ -1,6 +1,7 @@
 #include "social.h"
 #include "idioma.h"
 #include "trakt.h"
+#include "recomenda.h"
 #include "rede.h"
 #include "js.h"
 #include "gfx.h"
@@ -105,6 +106,28 @@ static int extrairAtividades(const char *corpo, SocialDados *d, const char *acao
 static void *carregar(void *arg) {
   SocialTarefa *t=arg; SocialDados *d=calloc(1,sizeof *d); const char *cab[4]; char aut[200],chave[140],url[512],*body;
   if(!d){free(t);return NULL;} d->geracao=t->geracao;d->pessoa=t->pessoa;d->estado=SOCIAL_INDISPONIVEL;
+  // AMIGO DO NUVIO (nosso servico, nao o Trakt): o id vem em socialSlug com o
+  // prefixo "nuvio:" (recomenda.c, lerFeedCorpo). O que ele compartilhou ja veio
+  // no feed da fileira, entao esta tela responde SEM rede — e sem Trakt, que e
+  // justamente o caso de quem so tem conta Nuvio. Nao ha bio nem cidade: o
+  // amigo nao publicou isso para amigos, so a atividade.
+  if(!strncmp(d->pessoa.socialSlug,"nuvio:",6)) {
+    RecAtivAmigo *rec=calloc(20,sizeof *rec); int q,nr=rec?recomenda_amigo_atividades(d->pessoa.socialSlug,rec,20):0;
+    for(q=0;q<nr&&d->n<20;q++){
+      Atividade *a=&d->atividades[d->n]; time_t t=(time_t)rec[q].criado; struct tm local;
+      memset(a,0,sizeof *a);
+      snprintf(a->pessoa,sizeof a->pessoa,"%s",d->pessoa.socialNome);
+      snprintf(a->acao,sizeof a->acao,"%s",i18n(rec[q].agora?"assistindo agora":"assistiu"));
+      snprintf(a->titulo,sizeof a->titulo,"%s",rec[q].titulo);
+      snprintf(a->detalhe,sizeof a->detalhe,"%s",!strcmp(rec[q].tipo,"series")?"Série":"Filme");
+      if(t>0&&localtime_r(&t,&local))strftime(a->horario,sizeof a->horario,"%d/%m/%Y · %H:%M",&local);
+      snprintf(a->imdb,sizeof a->imdb,"%s",rec[q].imdb);
+      snprintf(a->poster,sizeof a->poster,"https://images.metahub.space/poster/medium/%s/img",rec[q].imdb);
+      d->n++;
+    }
+    free(rec);
+    d->estado=d->n?SOCIAL_PRONTO:SOCIAL_SEM_ATIVIDADE;
+  } else
   if(!slugValido(d->pessoa.socialSlug)||!trakt_cabecalhos(cab,aut,sizeof aut,chave,sizeof chave))d->estado=!trakt_ativo()?SOCIAL_DESCONECTADO:SOCIAL_INDISPONIVEL;
   else {
     snprintf(url,sizeof url,"https://api.trakt.tv/users/%s?extended=full",d->pessoa.socialSlug); body=rede_baixar_com(url,10,cab);

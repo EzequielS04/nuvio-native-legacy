@@ -15,6 +15,7 @@
 #include "nuvem.h"
 #include "cwordem.h"
 #include "js.h"
+#include "recomenda.h"
 #include "trakt.h"
 #include "simkl.h"
 #include "progresso.h"
@@ -3060,6 +3061,12 @@ static void *montar(void *u) {
   // Sob a MESMA trava: trakt_social e montarContinuar compartilham os buffers
   // de trakt_enfeitar_lote com o fio de desc_refazer_continuar.
   nSocial = trakt_social(lote + n, 8);
+  // ... E OS AMIGOS DO NUVIO. 251 das 310 contas do servico social nao tem
+  // Trakt (docs/ANALISE-ADDONS-AMIGOS.md): para elas a fileira so existia vazia.
+  // A uniao vem do nosso servico (amigos MUTUOS que ligaram a atividade), um
+  // titulo uma vez so, e ainda sob a mesma trava: usa os mesmos buffers de
+  // enfeite que o Trakt acima.
+  nSocial = recomenda_social_mesclar(lote + n, nSocial, 8);
   pthread_mutex_unlock(&contTrava);
   n += nSocial;
   marco("trakt atividade dos amigos");

@@ -1897,7 +1897,6 @@
   T("Severo", "Силно"),
   T("Sex", "Пет"),
   T("Seções", "Раздели"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Следвайте хора в Trakt, за да откриете още."),
   T("Sim, pode me mostrar", "Да, можете да ме показвате"),
   T("Sincronização", "Синхронизирай"),
   T("Singapura", "Сингапур"),

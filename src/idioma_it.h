@@ -1897,7 +1897,6 @@
   T("Severo", "Severo"),
   T("Sex", "Ven"),
   T("Seções", "Sezioni"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Segui persone su Trakt per scoprire di più."),
   T("Sim, pode me mostrar", "Sì, puoi mostrarmi"),
   T("Sincronização", "Sincronizza"),
   T("Singapura", "Singapore"),

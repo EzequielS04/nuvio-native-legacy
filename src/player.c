@@ -73,6 +73,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "aovivo.h"
 #include "botoes.h"
 #include "scrobble.h"
+#include "recomenda.h"
 #include "home.h"
 #include "descoberta.h"
 #include "guia.h"
@@ -1267,6 +1268,10 @@ void player_encerrar(void) {
       char id[64];
       idTrakt(ci, id, sizeof id);
       trakt_marcar(id, pos, duracaoSeg);
+      // "ASSISTIU" para os amigos, so quando CONCLUIU e so se ela ligou a
+      // atividade (ou os "vistos recentemente" do perfil). Largar aos 8% nao
+      // assistiu nada — e nao chega a lugar nenhum.
+      recomenda_atividade_fim(ci, concluiu);
       // O CHECK NA LISTA, LOCALMENTE E AGORA — a outra metade do #100.
       //
       // O relato e preciso: "mostra a barra de progresso mas nao fica com o
@@ -2250,7 +2255,13 @@ void player_atualizar(float dt, Uint32 agora) {
         char id[64];
         idTrakt(ci, id, sizeof id);
         scrobble_passo(id, posSeg, duracaoSeg, tocando, video_pronto(), SDL_GetTicks());
-      } }
+      }
+      // "ASSISTINDO AGORA" para os amigos, SO se a pessoa ligou o nivel 2 em
+      // Ajustes (recomenda.c decide; com tudo desligado isto nao faz nada).
+      // Filme/episodio de verdade, nunca o clipe curto de erro do provedor.
+      if (ci && ci->imdb[0] && video_pronto() && duracaoSeg >= 120.0f)
+        recomenda_atividade_passo(ci, tocando);
+    }
     relogio_amostra(&relLeg, video_pos(), monoSeg(), tocando && !scrubbing);
     // A cada 10 s: o numero cru do pipeline e o do relogio da legenda, no
     // mesmo instante. A diferenca e o que a interpolacao acrescenta (0..~250).

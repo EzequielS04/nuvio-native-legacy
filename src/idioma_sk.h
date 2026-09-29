@@ -1897,7 +1897,6 @@
   T("Severo", "Prísna"),
   T("Sex", "Pi"),
   T("Seções", "Sekcie"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Sledujte ľudí na Trakte, aby ste objavili viac."),
   T("Sim, pode me mostrar", "Áno, môžete mi ukázať"),
   T("Sincronização", "Synchronizácia"),
   T("Singapura", "Singapur"),

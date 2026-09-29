@@ -1897,7 +1897,6 @@
   T("Severo", "Nặng"),
   T("Sex", "T6"),
   T("Seções", "Các phần"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Hãy theo dõi mọi người trên Trakt để khám phá thêm."),
   T("Sim, pode me mostrar", "Có, bạn có thể hiển thị tôi"),
   T("Sincronização", "Đồng bộ"),
   T("Singapura", "Singapore"),

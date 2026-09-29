@@ -1897,7 +1897,6 @@
   T("Severo", "Berat"),
   T("Sex", "Jum"),
   T("Seções", "Bagian"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Ikuti orang di Trakt untuk menemukan lebih banyak."),
   T("Sim, pode me mostrar", "Ya, boleh tampilkan aku"),
   T("Sincronização", "Sinkronisasi"),
   T("Singapura", "Singapura"),

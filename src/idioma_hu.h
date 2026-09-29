@@ -1897,7 +1897,6 @@
   T("Severo", "Szigorú"),
   T("Sex", "Pé"),
   T("Seções", "Szakaszok"),
-  T("Siga pessoas no Trakt para descobrir mais.", "Kövess embereket a Trakton, hogy többet fedezz fel."),
   T("Sim, pode me mostrar", "Igen, megmutathattok"),
   T("Sincronização", "Szinkronizálás"),
   T("Singapura", "Szingapúr"),
