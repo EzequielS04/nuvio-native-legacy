@@ -89,6 +89,17 @@ int ajustes_idioma(void);
 // americano usam isto; romeno, ucraniano, russo, frances, alemao e espanhol usam virgula decimal e data
 // dia-mes-ano, como o portugues, e por isso NAO entram aqui.
 int ajustes_idioma_ingles(void);
+// IDIOMA AUTOMATICO (ver "IDIOMA AUTOMATICO" em ajustes.c). Enquanto a pessoa
+// nunca escolheu um idioma nesta TV, a interface segue a conta (tmdb_language,
+// depois o idioma de legenda), depois a TV, depois o ingles.
+// _iniciar: uma vez, depois de ajustes_dir (le o locale da TV e resolve).
+//   `aoMudar` roda quando o automatico TROCA o idioma depois do arranque (a
+//   conta chegou, a TV respondeu): `codigo` e o "pt"/"ro"..., `fonte` o IDA_*
+//   de idiomaauto.h e `notificar` 0 se foi a propria pessoa que pediu
+//   "Automático". main.c remonta as fileiras e avisa. Pode ser NULL.
+// _tick: por quadro, recolhe o locale da webOS, que chega de um fio.
+void ajustes_idioma_auto_iniciar(void (*aoMudar)(const char *codigo, int fonte, int notificar));
+void ajustes_idioma_auto_tick(void);
 
 // COR DO ANEL DE FOCO, escolhida em "Cor de destaque" ou herdada da conta
 // (selected_theme). Um "tema" neste app e so isto: ver TEMA_ACENTO em

@@ -38,7 +38,8 @@ int main(void) {
   assert(valor[AJ_LARGURA_DP] == 126);
   assert(valor[AJ_RAIO_DP] == 12);            // canto normal, nao pilula
   assert(valor[AJ_QUALIDADE_IMG] == 1);       // Padrao
-  assert(valor[AJ_IDIOMA] == 1);              // English (release publico)
+  assert(valor[AJ_IDIOMA] == 0);              // Automatico
+  assert(ajustes_idioma() == IDIOMA_EN);      // sem conta nem TV: English (release publico)
   assert(valor[AJ_ANIM] == 0);                // animacoes completas
   assert(valor[AJ_RESOLUCAO] == 0);           // 1080p
   assert(valor[AJ_TEMA] == 0);

@@ -40,6 +40,9 @@
 #define NV_AVISOS_H
 #include <SDL2/SDL.h>
 
+// Avisa (toast + item na lista) que o idioma da interface foi escolhido sozinho.
+// Um item por idioma, entao so uma vez por idioma. Chamado por ajustes.c.
+void avisos_idioma_definido(const char *codigo, const char *texto);
 void avisos_iniciar(void);   // depois de dados_iniciar; grava a marca de sessao
 void avisos_encerrar(void);  // saida limpa: apaga a marca
 // Ultimo sinal de vida na marca de sessao: evento de janela ("oculto",

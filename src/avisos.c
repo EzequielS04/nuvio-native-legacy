@@ -219,6 +219,16 @@ static void toast(int novos) {
   toastPendente = 1;
 }
 
+void avisos_idioma_definido(const char *codigo, const char *texto) {
+  char id[72];
+  int novo;
+  snprintf(id, sizeof id, "idioma:%s", codigo ? codigo : "");
+  pthread_mutex_lock(&trava);
+  novo = por(id, AV_CANAL, i18n("Idioma"), texto ? texto : "", NULL);
+  pthread_mutex_unlock(&trava);
+  toast(novo);
+}
+
 int avisos_n_novos(void) {
   int i, k = 0;
   for (i = 0; i < n; i++) if (!itens[i].visto) k++;
