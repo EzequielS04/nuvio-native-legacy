@@ -15,3 +15,9 @@ cc ${flags[@]+"${flags[@]}"} "${sources[@]}" tests/posplay.c -Isrc -o /tmp/nuvio
   -L/opt/homebrew/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lz -framework OpenGL \
   -Wno-deprecated-declarations -Wno-macro-redefined
 /tmp/nuvio-posplay-tests "$@"
+
+# #177: o cartao do proximo episodio desfoca o still pela mesma regra do detalhe.
+# O desenho nao roda sem janela; aqui a guarda e estatica, para ninguem tirar.
+grep -q 'ajustes_desfocar_nao_assistidos()' src/posplay.c
+grep -q 'gfx_desfocado(t, arte)' src/posplay.c
+echo "posplay: desfoque do proximo episodio presente (#177)"
