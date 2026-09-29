@@ -35,6 +35,11 @@ static const char *idLimpo(const char *imdb, char *dst, size_t tam) {
   dst[i] = 0;
   return dst;
 }
+static int idLimpoOk(const CatItem *item, char *dst, size_t tam) {
+  if (!item || strncmp(item->imdb, "tt", 2)) return 0;
+  idLimpo(item->imdb, dst, tam);
+  return dst[0] != 0;
+}
 
 static int (*jaFalhou)(const char *) = NULL;
 void artehero_definir_falhou(int (*falhou)(const char *caminho)) {
@@ -77,9 +82,29 @@ static int fundoOriginal(void) {
 #endif
 }
 
+// fixar() mora mais abaixo (anel de buffers); declarado aqui para o card.
+static const char *fixar(const char *u, const char *tmp);
+
+const char *artehero_url_metahub_fundo(const CatItem *item) {
+  char id[32], buf[256];
+  if (!idLimpoOk(item, id, sizeof id)) return NULL;
+  snprintf(buf, sizeof buf, "https://images.metahub.space/background/medium/%s/img", id);
+  return falhou(buf) ? NULL : fixar(buf, buf);
+}
+
 const char *artehero_url_card(const CatItem *item) {
   if (!item) return NULL;
   if (item->backdrop[0]) return item->backdrop;
+  // SEM FUNDO, A MESMA REGRA DO DESTAQUE (artehero_url): o metahub monta um
+  // por id do IMDb antes de cair no cartaz. O card deitado so tinha o cartaz,
+  // e o cartaz em pe dentro de um card deitado sai como uma faixa estreita no
+  // meio do escuro — "AI for you" na C9 (29/09), enquanto o destaque do mesmo
+  // titulo mostrava a foto larga certa.
+  { char id[32], buf[256];
+    if (idLimpoOk(item, id, sizeof id)) {
+      snprintf(buf, sizeof buf, "https://images.metahub.space/background/medium/%s/img", id);
+      if (!falhou(buf)) return fixar(buf, buf);
+    } }
   if (item->poster[0]) return item->poster;
   return NULL;
 }
@@ -89,7 +114,6 @@ const char *artehero_url_card(const CatItem *item) {
 // e com um `static char buf` so o segundo pedido reescrevia o primeiro: o hero
 // de Continuar assistindo desenhava o still do titulo anterior. fixar() esta
 // mais abaixo e e o mesmo anel das fontes.
-static const char *fixar(const char *u, const char *tmp);
 
 const char *artehero_url_episodio(const CatItem *item) {
   char buf[512];

@@ -1087,11 +1087,24 @@ double gfx_ms_rect = 0.0, gfx_ms_outros = 0.0;
 // contador e uma medida por quadro.
 double gfx_fill = 0.0;
 double gfx_fill_vis = 0.0;
+unsigned long long gfx_modos_desligados = 0;
 int    gfx_n_cheio = 0;   // desenhos que cobrem >= 50% da tela
 double gfx_fill_modo[GFX_NMODOS];
+double gfx_fill_modo_ult[GFX_NMODOS];   // o do quadro anterior (o log le este)
 static int efeitosLeves = 0;
 void gfx_definir_efeitos_leves(int leves) { efeitosLeves = leves ? 1 : 0; }
 int  gfx_efeitos_leves(void) { return efeitosLeves; }
+void gfx_veu_base(GfxRect card, float raio, float fracao, float alfa) {
+  GfxRect v;
+  if (fracao <= 0.0f || alfa <= 0.001f) return;
+  if (fracao > 1.0f) fracao = 1.0f;
+  v = (GfxRect){ card.x, card.y + card.h * (1.0f - fracao), card.w, card.h * fracao };
+  // GFX_BRILHO_TOPO com uPar.y > 0: cheio da BASE ate 42% e zero no topo do
+  // retangulo. O raio vira fracao da altura DESTE retangulo (o shader mede
+  // pela altura), senao o canto do veu fecha mais que o do card.
+  gfx_rect(v, 0, GFX_BRILHO_TOPO, 0, 1.0f, 0.42f, raio / fracao,
+           0.02f, 0.02f, 0.03f, alfa);
+}
 static int efeitosMinimos = 0;
 void gfx_definir_efeitos_minimos(int m) { efeitosMinimos = m ? 1 : 0; }
 int  gfx_efeitos_minimos(void) { return efeitosMinimos; }
@@ -1101,6 +1114,7 @@ void gfx_novo_quadro(void) {
   gfx_n_rect = gfx_n_prog = gfx_n_bind = gfx_n_outros = 0;
   gfx_ms_rect = gfx_ms_outros = 0.0;
   gfx_fill = 0.0; gfx_fill_vis = 0.0; gfx_n_cheio = 0;
+  memcpy(gfx_fill_modo_ult, gfx_fill_modo, sizeof gfx_fill_modo);
   memset(gfx_fill_modo, 0, sizeof gfx_fill_modo);
   desfGeradosQuadro = 0;
 }
@@ -1134,6 +1148,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   if (efeitosLeves && (modo == GFX_BRILHO_TOPO || modo == GFX_LUZ)) return;
   // Efeitos minimos: sombra e halo tambem saem (o anel continua marcando o foco).
   if (efeitosMinimos && modo == GFX_SOMBRA) return;
+  if (gfx_modos_desligados && ((gfx_modos_desligados >> (unsigned)modo) & 1ull)) return;
   if (gfxFreqMs == 0.0) gfxFreqMs = 1000.0 / (double)SDL_GetPerformanceFrequency();
   (void)gfxFreqMs;
 #ifdef NV_PERF_FINO

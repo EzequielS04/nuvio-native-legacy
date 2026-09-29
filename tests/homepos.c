@@ -23,6 +23,7 @@ void tex_cache_marcar_larg(int grupo, const char *url, float larg, int essencial
 }
 int tex_falhou(const char *url) { (void)url; return 0; }
 int tex_largura_fonte(const char *url) { (void)url; return 0; }
+float tex_aspecto(const char *c) { (void)c; return 0.0f; }
 Uint32 SDL_GetTicks(void) { return 0; }
 
 // DUBLE DE DISCO EM MEMORIA, e nao os dubles vazios de home_layout.c: aqui o

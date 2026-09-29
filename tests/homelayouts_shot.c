@@ -241,6 +241,10 @@ int main(int argc, char **argv) {
           snprintf(bmp, sizeof bmp, "%s-L%d-g%d-%d-fileira.bmp", saida, layout, vidro, r + 1);
           quadros(1, bmp);
           printf("[shot] L%d g%d fileira %d: fill=%.2f vis=%.2f rects=%d\n", layout, vidro, r + 1, fillUlt, fillVisUlt, rectUlt);
+          if (getenv("NV_FILL_MODOS")) {
+            int m; printf("[shot]   modos:");
+            for (m = 0; m < GFX_NMODOS; m++) if (modoUlt[m] > 0.02) printf(" %d=%.2f", m, modoUlt[m]);
+            printf("\n"); }
           if (r == 2) {   // um passo para o lado: rolagem horizontal + foco
             tecla(SDLK_RIGHT); tecla(SDLK_RIGHT);
             quadros(110, NULL);

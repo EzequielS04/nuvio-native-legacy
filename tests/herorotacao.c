@@ -39,6 +39,7 @@ const char *addons_base_por_id(const char *id) { (void)id; return ""; }
 const char *addons_nome_por_id(const char *id) { (void)id; return ""; }
 int  tex_falhou(const char *u) { (void)u; return 0; }
 int  tex_largura_fonte(const char *u) { (void)u; return 0; }
+float tex_aspecto(const char *u) { (void)u; return 0.0f; }
 const char *tex_arquivo(const char *u) { (void)u; return NULL; }
 int  player_aberto(void) { return 0; }
 int  detail_aberto(void) { return 0; }

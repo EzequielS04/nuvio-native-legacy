@@ -259,6 +259,8 @@ IGNORAR = {
     "abrir", "buscar", "erro",      # nomes de operacao do bridge JS (video_tizen.c)
     "fontes", "legenda", "mais", "nao", "poster",  # chaves internas, nao rotulo
     "fileiras", "ordem-da-conta",  # partes do contexto no log de homeestado.c
+    # motivo do degrau no log "[gpu-nivel] nivel 1 -> 2 (...)" (gpunivel.c aplicar)
+    "GPU presa mesmo com efeitos leves: efeitos minimos",
     # Pontos de parada da volta condenada (descoberta.c, CONDENADA): so log.
     "antes de pedir os catalogos", "depois da atividade dos amigos",
     "depois do continuar assistindo", "depois dos catalogos",

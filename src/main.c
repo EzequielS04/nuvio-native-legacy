@@ -1228,6 +1228,18 @@ int main(int argc, char **argv) {
                pior, pEv, pBomb, pUplN, pUplB / 1048576.0,
                pUpd, pClr, pDes, pAux, pSwap);
       }
+      // Instrumento de campo (gfx.h, gfx_modos_desligados): a lista em
+      // /tmp/nuvio-gfx-off desliga modos de desenho; e o preenchimento do
+      // ultimo quadro por modo, para saber quem pesa sem recompilar.
+      { FILE *fo = fopen("/tmp/nuvio-gfx-off", "r");
+        unsigned long long m = 0; int n;
+        if (fo) { while (fscanf(fo, "%d", &n) == 1) if (n >= 0 && n < GFX_NMODOS) m |= 1ull << n; fclose(fo); }
+        if (m != gfx_modos_desligados) { printf("[gpu-modos] desligados=%llx\n", m); gfx_modos_desligados = m; }
+        if (fo || getenv("NUVIO_FILL_MODOS")) {
+          int k; printf("[gpu-modos] fill:");
+          for (k = 0; k < GFX_NMODOS; k++) if (gfx_fill_modo_ult[k] > 0.02) printf(" %d=%.2f", k, gfx_fill_modo_ult[k]);
+          printf("\n");
+        } }
 #ifdef NV_TPK
       // Quanto de tela o pior quadro pintou (gfx_fill, em telas 1920x1080) e
       // em que nivel de GPU (gpunivel.h): e o que separa "a GPU nao da conta

@@ -99,6 +99,9 @@ const char *artehero_url_destaque(const CatItem *item, int fonte, int diferente)
 
 // A url que o item guarda, sem política — para quem desenha pequeno.
 const char *artehero_url_card(const CatItem *item);
+// Fundo DEITADO do metahub pelo id do IMDb, ou NULL (sem tt, ou ja falhou).
+// Para o card deitado que recebeu uma arte EM PE do addon (home.c).
+const char *artehero_url_metahub_fundo(const CatItem *item);
 
 // O STILL DO EPISÓDIO EM ANDAMENTO, em tamanho de tela cheia, ou NULL.
 //

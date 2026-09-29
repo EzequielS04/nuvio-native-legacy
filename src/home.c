@@ -804,6 +804,13 @@ static const char *arte_por_formato(const CatItem *item, int deitado) {
   if (deitado) {
     const char *b = artehero_url_card_fonte(item, ajustes_hero_fonte(),
                                             ajustes_hero_arte_diferente());
+    // ARTE EM PE NUM CARD DEITADO: alguns addons (a "AI for you" na C9,
+    // 29/09) mandam o cartaz no lugar do fundo, e ele saia como uma faixa
+    // estreita no meio do card escuro. Medido pelo arquivo ja decodificado:
+    // mais alto que largo = cartaz; o metahub monta o fundo pelo IMDb.
+    if (b) { float ap = tex_aspecto(b);
+      if (ap > 0.0f && ap < 1.0f) { const char *m = artehero_url_metahub_fundo(item);
+        if (m) return m; } }
     return b ? b : (item->poster[0] ? item->poster : NULL);
   }
   // POSTER PERSONALIZADO (posterprov.h): so o cartaz retrato de card. Desligado
@@ -993,8 +1000,13 @@ static void desenhaFaixaAberta(const CatItem *ci, int r, float px, float py,
   float cx = px + w - pad, cy = py + h - pad - ch;
   float a = abre;
   int delta = 0, novo = 0, temTend;
-  { GfxRect veu = { px, py, w, h };
-    gfx_rect(veu, 0, GFX_VEU, 0, 0, 0, NV_RAIO_CARD, 0, 0, 0, 0.72f * abre); }
+  // VEU SO NA METADE DE BAIXO, onde a faixa mora. Era o GFX_VEU do cartao
+  // inteiro (base + esquerda de cima a baixo): o card aberto e o maior desenho
+  // da home parada, e na C9 a fileira de cards grandes caia de 60 para 44 fps
+  // so por ficar parada nele (29/09, clr=33 ms = GPU presa). Mesmo veu da
+  // legenda do cartaz deitado: zero no topo do retangulo, raio convertido para
+  // a altura dele.
+  gfx_veu_base((GfxRect){ px, py, w, h }, NV_RAIO_CARD, 0.55f, 0.72f * abre);
   temTend = (r >= 0 && r < nFileiras)
           ? tend_delta(fileiras[r].chave, ci->imdb, &delta, &novo) : 0;
 
@@ -2636,13 +2648,18 @@ static void desenhaHero(Uint32 agora, float saida) {
 
   if(lay==HOME_LAYOUT_MODERNA && foco.fileira>=0 && foco.fileira<nFileiras && fileiras[foco.fileira].tipo==FILEIRA_SOCIAL) {
     float x=ajustes_conteudo_x(),a=1-saida;
-    gfx_rect((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,GFX_SOCIAL,0,0,0,0,1,1,1,1);
     const Fileira *s=&fileiras[foco.fileira];
     const CatItem *p=(fileiraItemIndice(s, foco.coluna) >= 0)
                     ?cat_item_exato(fileiraItemIndice(s, foco.coluna)):NULL;
+    const char *arte=p?arte_hero_do_item(p):NULL;   // tela cheia: arte grande
+    GLuint ta=arte?tex_obter_hero(arte):0;
+    // O fundo social so onde a arte NAO cobre. Com a arte do titulo opaca por
+    // cima (tela cheia), ele era uma tela inteira pintada e escondida: a C9
+    // parada na fileira "Entre amigos" ficava a 34 fps (29/09).
+    if (!ta || aArte < 0.999f || r.w < NV_TELA_W || r.h < NV_TELA_H ||
+        nv_ambiente_forca > 0.001f)   // imersivo: o hero deixa o fundo vazar (uVaza)
+      gfx_rect((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,GFX_SOCIAL,0,0,0,0,1,1,1,1);
     if(p) {
-      const char *arte=arte_hero_do_item(p);   // tela cheia: arte grande
-      GLuint ta=arte?tex_obter_hero(arte):0;
       if(arte)corviva_definir(arte,CORVIVA_HOME);
       // A atividade continua com um ambiente discreto, mas quando o Trakt
       // trouxe arte real ela vira o assunto do hero. A pessoa fica apenas na
@@ -4445,8 +4462,10 @@ void home_desenhar(Uint32 agora) {
           }
 
           if (editorial(tipo)) {
-            GfxRect veu = { px, py, w, h };
-            gfx_rect(veu, 0, GFX_VEU, 0, 0, 0, raio, 0, 0, 0, 0.88f);
+            // Base e nao cartao inteiro: logo, nome e genero moram no terco de
+            // baixo. O GFX_VEU inteiro era 1,18 tela na "AI for you" e a C9
+            // parada nela ficava a 48 fps; sem ele, 60 (29/09).
+            gfx_veu_base((GfxRect){ px, py, w, h }, raio, 0.62f, 0.90f);
 
 
             // Logo do titulo, como no aparelho: cada producao tem tipografia

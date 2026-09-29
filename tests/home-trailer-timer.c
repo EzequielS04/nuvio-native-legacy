@@ -49,6 +49,10 @@ int trailer_suportado(void) { return 1; }
 int trailer_aberto(void) { return opened; }
 int trailer_cheia(void) { return 0; }
 int trailer_tocando(void) { return opened && playing; }
+int trailer_mostra_video(void) { return 1; }   // .tpk: 0 ate o recorte assentar
+static int donoTrailer;
+void trailer_marcar_dono(int dono, const char *imdb) { (void)imdb; donoTrailer = dono; }
+int trailer_dono(void) { return opened ? donoTrailer : 0; }
 int trailer_falhou(void) {
   int r = appleFailure;
   appleFailure = 0;

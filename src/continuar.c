@@ -44,7 +44,9 @@ void continuar_desenhar(const CatItem *ci, GfxRect r) {
   {
   float esc = r.w / NV_DESTAQUE_W;
   float pad = NV_CW_PAD * esc, largura = r.w - pad * 2;
-  gfx_rect(r, 0, GFX_VEU, 0, 0, 0, NV_RAIO_CARD, 0, 0, 0, .85f);
+  // Veu so na base (gfx.h, gfx_veu_base): o nome e o episodio ficam embaixo;
+  // o selo de cima tem o proprio fundo.
+  gfx_veu_base(r, NV_RAIO_CARD, 0.66f, .88f);
 
   // Um retangulo compacto, nao uma pilula. Nunca inventar status de estreia.
   if (ci->restanteMin > 0 || (ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb)))) {

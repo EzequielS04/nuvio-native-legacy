@@ -352,6 +352,11 @@ extern int    gfx_n_cheio;   // desenhos cobrindo >= 50% da tela
 // O mesmo gfx_fill repartido por modo (programa): diz QUAL shader cobre a
 // tela, que e a pergunta de uma GPU presa em preenchimento (gpunivel.h).
 extern double gfx_fill_modo[GFX_NMODOS];
+// INSTRUMENTO DE CAMPO: bit N ligado = o modo N nao e desenhado. main.c le a
+// lista de /tmp/nuvio-gfx-off a cada 3 s (numeros separados por espaco). Serve
+// para medir na TV quanto fps cada tipo de desenho custa, sem recompilar.
+extern unsigned long long gfx_modos_desligados;
+extern double gfx_fill_modo_ult[GFX_NMODOS];
 void gfx_novo_quadro(void);
 
 // EFEITOS LEVES (nivel 1 de gpunivel.h). 1 = sem o dither dos degrades (o
@@ -359,6 +364,11 @@ void gfx_novo_quadro(void);
 // realces puramente decorativos (GFX_BRILHO_TOPO, GFX_LUZ). E um uniform, e
 // nao outra compilacao: trocar de nivel no meio da sessao nao pode custar a
 // compilacao inteira dos shaders (0,7-2 s numa TV fraca).
+// VEU SO NA BASE de um card: degrade vertical que chega a zero em `fracao` da
+// altura (medida da base), com os cantos de baixo do card. `raio` e o do card
+// (fracao da altura DELE). Substitui o GFX_VEU de cartao inteiro, que cobria
+// arte onde nao ha texto e custava fps na C9 (29/09: 48 -> 60 sem ele).
+void gfx_veu_base(GfxRect card, float raio, float fracao, float alfa);
 void gfx_definir_efeitos_leves(int leves);
 int  gfx_efeitos_leves(void);
 // EFEITOS MINIMOS (nivel 2 de gpunivel.h), por cima dos leves: sem a luz de
