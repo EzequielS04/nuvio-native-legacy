@@ -49,6 +49,7 @@
 #include "descoberta.h"  /* desc_repetir: addon novo so entra com ciclo novo */
 #include "stalker.h"
 #include "xtream.h"
+#include "xtepg.h"     /* grade curta por canal do Xtream (#158) */
 #include "dados.h"
 #include "perfis.h"   /* perfis_ativo: o cache do guia e por perfil */
 #include "marco.h"
@@ -672,6 +673,8 @@ static int sXtHttp, xtHttp;
 // Usa nCanais/nCats, entao so vale depois deles declarados — por isso o
 // prototipo aqui e a definicao perto do desenho.
 static int xtAviso(char *sub, size_t tam);
+// Ver a definicao, junto do EPG por canal (#158).
+static void epgPaisesEscolher(void);
 
 static void sondaManifestos(void) {
   int a;
@@ -1091,6 +1094,13 @@ static void publicar(void) {
   fflush(stdout);
   marco("guia: lista da rede publicada");
   if (nCanais > 0) cacheGravar();
+  // A lista nova pode trazer a dica de pais que faltava (#158).
+  epgPaisesEscolher();
+  // Da grade do provedor so interessam os canais desta lista (#158).
+  { static const char *ids[G_MAX_CANAL];
+    int k = 0;
+    for (i = 0; i < nCanais; i++) if (canais[i].epgId[0]) ids[k++] = canais[i].epgId;
+    epg_fonte_extra_ids(ids, k); }
 }
 
 static void iniciarCarga(void) {
@@ -1123,6 +1133,9 @@ void guia_carregar(void) {
   { char u[1100];
     if (!xtream_url_xmltv(u, sizeof u)) u[0] = 0;
     epg_fonte_extra(u); }
+  // Os paises da grade tambem ANTES da primeira carga (#158): com a lista do
+  // cache ja na tela, a dica do Xtream existe desde o primeiro quadro.
+  epgPaisesEscolher();
   epg_iniciar();
 }
 
@@ -1379,6 +1392,7 @@ const char *guia_canal_origem(void) { return pedidoBase; }
 static time_t janelaIni(time_t agoraT);
 static time_t instanteFoco(time_t agoraT);
 static int epgDo(GCanal *c);
+static int gAgora(GCanal *c, time_t t, EpgProg *p);   // ver a definicao (#158)
 static void pedirCanal(GCanal *c);
 
 // O instante que o foco aponta, na grade cheia ou na faixa do mini guia.
@@ -1390,10 +1404,8 @@ static time_t tFocoAgora(void) {
 
 // O programa da celula em foco (o que cobre tFocoAgora), 1 se ha.
 static int programaFocado(GCanal *c, EpgProg *p) {
-  int epg;
   if (!c) return 0;
-  epg = epgDo(c);
-  return epg >= 0 && epg_agora(epg, tFocoAgora(), p);
+  return gAgora(c, tFocoAgora(), p);
 }
 
 // OK NUMA CELULA DO FUTURO MARCA (OU DESMARCA) O LEMBRETE — programa que nao
@@ -1879,6 +1891,84 @@ static int xtAviso(char *sub, size_t tam) {
   }
 }
 
+// --- de que pais vem a grade (#158) ---------------------------------------
+// A ESCOLHA MANUAL (Ajustes > Conteudo > Guia TV) manda. No automatico, nesta
+// ordem, ate tres paises:
+//   1. o prefixo de pais dos canais e das categorias do Xtream ("RO: Pro TV",
+//      "RO | SPORT", "|RO| Antena 1") ou o nome do pais na categoria
+//      ("ROMANIA"), quando cobre pelo menos 5% dos canais do Xtream (e 10
+//      canais). E a dica mais especifica que existe: diz de onde vem a lista
+//      que a pessoa assina, e nao de onde e a pessoa.
+//   2. a regiao do idioma dos metadados ("ro-RO" -> RO, "pt-BR" -> BR);
+//   3. o idioma do app (portugues = as cinco de sempre, romeno = RO).
+// Nada disso = as cinco de sempre (epg_paises_definir("")), que e o que quem
+// nunca mexeu ja via.
+typedef struct { const char *palavra, *pais; } GPaisPalavra;
+static const GPaisPalavra PAIS_PALAVRA[] = {
+  { "romania", "RO" }, { "rom\xc3\xa2nia", "RO" }, { "romana", "RO" }, { "romanian", "RO" },
+  { "portugal", "PT" }, { "brasil", "BR" }, { "brazil", "BR" }, { "espana", "ES" },
+  { "espa\xc3\xb1""a", "ES" }, { "spain", "ES" }, { "italia", "IT" }, { "italy", "IT" },
+  { "france", "FR" }, { "deutschland", "DE" }, { "germany", "DE" }, { "turkey", "TR" },
+  { "turkiye", "TR" }, { "greece", "GR" }, { "bulgaria", "BG" }, { "hungary", "HU" },
+  { "magyar", "HU" }, { "serbia", "RS" }, { "croatia", "HR" }, { "hrvatska", "HR" },
+  { "netherlands", "NL" }, { "nederland", "NL" }, { "albania", "AL" }, { "mexico", "MX" },
+  { "argentina", "AR" }, { "united kingdom", "UK" },
+};
+
+static const char *paisDoTexto(const char *t, char buf[4]) {
+  char low[96];
+  size_t i;
+  int k;
+  epg_sem_prefixo(t, buf);
+  if (buf[0] && epg_pais_existe(buf)) return buf;
+  for (i = 0; t[i] && i < sizeof low - 1; i++)
+    low[i] = (char)((t[i] >= 'A' && t[i] <= 'Z') ? t[i] + 32 : t[i]);
+  low[i] = 0;
+  for (k = 0; k < (int)(sizeof PAIS_PALAVRA / sizeof PAIS_PALAVRA[0]); k++)
+    if (strstr(low, PAIS_PALAVRA[k].palavra)) return PAIS_PALAVRA[k].pais;
+  return NULL;
+}
+
+static void epgPaisesEscolher(void) {
+  char lista[24] = "";
+  const char *manual = ajustes_epg_pais();
+  int n = 0;
+  #define ADD(c) do { if ((c) && (c)[0] && n < 3 && !strstr(lista, (c)) && epg_pais_existe(c)) { \
+      if (lista[0]) strcat(lista, ","); strncat(lista, (c), 2); n++; } } while (0)
+  if (manual[0]) { epg_paises_definir(manual); return; }
+  { // 1. dicas da lista do Xtream
+    char cod[8][3]; int cont[8], nc = 0, nXt = 0, i, j;
+    for (i = 0; i < nCanais; i++) {
+      char b[4]; const char *p;
+      if (!xtream_e_id(canais[i].id)) continue;
+      nXt++;
+      p = paisDoTexto(canais[i].nome, b);
+      if (!p && canais[i].cat >= 0 && canais[i].cat < nCats) p = paisDoTexto(cats[canais[i].cat], b);
+      if (!p) continue;
+      for (j = 0; j < nc && strcmp(cod[j], p); j++) {}
+      if (j == nc) { if (nc == 8) continue; snprintf(cod[nc], 3, "%s", p); cont[nc++] = 0; }
+      cont[j]++;
+    }
+    for (;;) {                                   // maior contagem primeiro
+      int m = -1;
+      for (j = 0; j < nc; j++) if (cont[j] > 0 && (m < 0 || cont[j] > cont[m])) m = j;
+      if (m < 0) break;
+      if (cont[m] >= 10 && cont[m] * 20 >= nXt) ADD(cod[m]);
+      cont[m] = 0;
+    } }
+  { // 2. regiao do idioma dos metadados
+    const char *t = ajustes_tmdb_idioma();
+    if (t && strlen(t) == 5 && t[2] == '-') { char r[3] = { t[3], t[4], 0 }; if (!strcmp(r, "GB")) snprintf(r, 3, "UK"); ADD(r); } }
+  // 3. idioma do app
+  if (ajustes_idioma() == IDIOMA_RO) ADD("RO");
+  #undef ADD
+  // Portugues (e o pt-BR que o "da interface" devolve) cai nas cinco de sempre
+  // sem precisar dizer: BR sozinho seria menos do que quem ja usa tinha.
+  if (!strcmp(lista, "BR") || !strcmp(lista, "PT") || !strcmp(lista, "BR,PT") || !strcmp(lista, "PT,BR"))
+    lista[0] = 0;
+  epg_paises_definir(lista);
+}
+
 // --- EPG por canal ---------------------------------------------------------------
 // Resolve e cacheia o indice da grade. -2 marca "sem grade real" para nao
 // consultar de novo a cada quadro.
@@ -1892,12 +1982,50 @@ static int epgDo(GCanal *c) {
   return c->epg;
 }
 
+// A GRADE DE UM CANAL, venha de onde vier (#158): primeiro a XMLTV (epg.c:
+// provedor, epgshare01 do pais), e, para canal Xtream que nao casou nela, a
+// grade curta do proprio painel (xtepg.c). Pedir e barato e so acontece para
+// o canal que esta sendo desenhado. Sem grade ainda (-1, EPG carregando) o
+// pedido tambem sai: a XMLTV pode demorar um minuto, a curta vem em um
+// segundo, e quando a XMLTV casar ela passa na frente.
+static int xtCurta(GCanal *c) {
+  if (!xtream_e_id(c->id)) return 0;
+  xtepg_querer(c->id);
+  return 1;
+}
+static int gAgora(GCanal *c, time_t t, EpgProg *p) {
+  int epg = epgDo(c);
+  if (epg >= 0) return epg_agora(epg, t, p);
+  return xtCurta(c) && xtepg_agora(c->id, t, p);
+}
+static int gProximo(GCanal *c, time_t t, int k, EpgProg *p) {
+  int epg = epgDo(c);
+  if (epg >= 0) return epg_proximo(epg, t, k, p);
+  return xtCurta(c) && xtepg_proximo(c->id, t, k, p);
+}
+static int gTemGrade(GCanal *c) {
+  return epgDo(c) >= 0 || (xtream_e_id(c->id) && xtepg_tem(c->id));
+}
+static int gFaixa(GCanal *c, time_t de, time_t ate, EpgProg *out, int cap) {
+  int epg = epgDo(c);
+  if (epg >= 0) return epg_faixa(epg, de, ate, out, cap);
+  return xtCurta(c) ? xtepg_faixa(c->id, de, ate, out, cap) : 0;
+}
+
 // Quando a grade EPG e (re)publicada, os indices guardados morrem — a troca
 // inteira do vetor torna todo -1 de novo.
 static int epgRev, epgEraPronto;
 static void epgPasso(void) {
   int pronto = epg_estado() == EPG_PRONTO;
+  // Trocou o pais em Ajustes com o guia aberto: refaz a escolha (o epg_passo
+  // abaixo ve a troca e recarrega).
+  { static char ultimo[4] = "?";
+    if (strcmp(ultimo, ajustes_epg_pais())) {
+      snprintf(ultimo, sizeof ultimo, "%s", ajustes_epg_pais());
+      epgPaisesEscolher();
+    } }
   epg_passo();
+  xtepg_passo();
   if (pronto && !epgEraPronto) {
     epgRev++;
     for (int i = 0; i < nCanais; i++) canais[i].epg = -1;
@@ -2203,9 +2331,9 @@ static void desenharCard(GCanal *c, float x, float y, float foco, float a,
   GfxRect r = { x, y, G_CARD_W, G_CARD_H };
   float lum = anim_mistura(0.075f, 0.16f, foco);
   EpgProg ag, px;
-  int epg = epgDo(c);
-  int temAgora = epg >= 0 && epg_agora(epg, agoraT, &ag);
-  int temProx  = epg >= 0 && epg_proximo(epg, agoraT, 0, &px);
+  int temAgora = gAgora(c, agoraT, &ag);
+  int temProx  = gProximo(c, agoraT, 0, &px);
+  int epg = gTemGrade(c) ? 0 : -1;
 
   // FOCO = O CARTAO PREENCHIDO NA COR DO FUNDO DO LOGO, sem anel. Pedido do
   // dono (16/09), olhando a captura do guia: "quando ta selecionado ficar com
@@ -2415,8 +2543,8 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
   EpgProg p;
   if (!c) return;
   ajustes_acento(&ar, &ag, &ab);
-  epg = epgDo(c);
-  tem = epg >= 0 && epg_agora(epg, tFoco, &p);
+  tem = gAgora(c, tFoco, &p);
+  epg = gTemGrade(c) ? 0 : -1;
   noAr = tem && p.ini <= agoraT && agoraT < p.fim;
 
   // PREVIEW. O plano de video vive ATRAS da superficie GL; o furo e o que o
@@ -2598,7 +2726,7 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
 
   // A SEGUIR, ancorado na base do heroi (alinhado a base do preview).
   { EpgProg q;
-    if (epg >= 0 && epg_proximo(epg, tFoco, 0, &q)) {
+    if (gProximo(c, tFoco, 0, &q)) {
       char hh[8];
       TxtLinha l = txt_linha(TXT_PG_ROTULO, i18n("A SEGUIR"), 140, 143, 152, 255);
       TxtLinha hr, tt;
@@ -2960,7 +3088,8 @@ static void desenharLinhaLista(GCanal *c, float y, int focada, float a,
   time_t fimJ = ini + (time_t)G_L_JANELA_MIN * 60;
   float ppm = G_L_FAIXA_W / (float)G_L_JANELA_MIN;
   GfxRect col = { G_AREA_X, y, G_L_COL, h };
-  int epg = epgDo(c);
+  // Grade da XMLTV ou, no Xtream, a curta (#158): ver gFaixa.
+  int epg = (epgDo(c) >= 0 || (xtCurta(c) && xtepg_tem(c->id))) ? 0 : -1;
 
   if (passo == 0) {
     float l = focada ? G_SUP_COL_FOCO : G_SUP_COL;
@@ -3003,7 +3132,7 @@ static void desenharLinhaLista(GCanal *c, float y, int focada, float a,
 
   if (epg >= 0) {
     EpgProg ps[16];
-    int n = epg_faixa(epg, ini, fimJ, ps, 16), k, desenhou = 0;
+    int n = gFaixa(c, ini, fimJ, ps, 16), k, desenhou = 0;
     if (n > 16) n = 16;
     for (k = 0; k < n; k++) {
       time_t i0 = ps[k].ini > ini ? ps[k].ini : ini;

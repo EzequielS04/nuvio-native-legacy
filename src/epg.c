@@ -42,8 +42,11 @@
 #include <string.h>
 #include <pthread.h>
 #include <zlib.h>
+#include <strings.h>
 
-#define EPG_MAX_CANAL 1400
+// 2400 e nao 1400 (#158): as cinco de sempre ja davam 797 canais, e RO1+RO2
+// somam mais 518.
+#define EPG_MAX_CANAL 2400
 #define EPG_MAX_CHAVES 6
 // A grade fala ~3,5 dias para a frente; renovar duas vezes por dia cobre a
 // virada sem baixar ~1,4 MB a cada abertura do app.
@@ -66,26 +69,58 @@
 #define EPG_ARENA_INI (1L << 20)
 #define EPG_ARENA_MAX (16L << 20)
 
-// BR1/BR2 cobrem o FrostView. PT1/MX1/AR1 entram para os OUTROS addons de
-// canal que o dono possa instalar — Portugal e America Latina sao os
-// catalogos de canal mais comuns depois do brasileiro. US/UK ficam fora:
-// 6,5 MB de gzip viram ~60 MB de XML, caro demais para um ganho raro.
-#define EPG_N_FONTES 5
-static const char *FONTE[EPG_N_FONTES] = {
-  "https://epgshare01.online/epgshare01/epg_ripper_BR1.xml.gz",
-  "https://epgshare01.online/epgshare01/epg_ripper_BR2.xml.gz",
-  "https://epgshare01.online/epgshare01/epg_ripper_PT1.xml.gz",
-  "https://epgshare01.online/epgshare01/epg_ripper_MX1.xml.gz",
-  "https://epgshare01.online/epgshare01/epg_ripper_AR1.xml.gz",
+// AS FONTES DO epgshare01, POR PAIS (#158). Ate a 1.5.3 eram cinco fixas —
+// BR1/BR2 (o FrostView), PT1, MX1 e AR1 — e a pessoa do #158, com canais
+// romenos, tinha 797 canais de grade e nenhum que fosse dela. O epgshare01
+// publica um arquivo (ou mais) por pais: epg_ripper_<PAIS><N>.xml.gz, 195
+// arquivos na listagem de 29/09/2026. A tabela abaixo e o subconjunto que cabe
+// numa TV: os de ate ~5 MB de gzip. US2 (6,5 MB), PL1 (8,5 MB) e o
+// ALL_SOURCES1 (194 MB) ficam de fora pelo mesmo motivo que US/UK ficavam —
+// o XML aberto passa de 60 MB. MEDIDO em 29/09: RO1 = 1,68 MB de gzip,
+// 21 MB de XML, 370 canais, 45692 programas; RO2 = 13 KB, 148 canais.
+//
+// QUEM ESCOLHE e guia.c (epg_paises_definir): o ajuste de Ajustes > Conteudo,
+// ou, no automatico, o idioma do app e dos metadados mais o prefixo de pais
+// dos canais do Xtream ("RO: Pro TV", "|RO| Antena 1"). Sem escolha nenhuma,
+// as cinco de sempre — e o que quem nunca mexeu continua vendo.
+typedef struct { const char *pais; const char *arquivos; } EpgPais;
+static const EpgPais PAISES[] = {
+  { "AL", "AL1" }, { "AR", "AR1" }, { "AT", "AT1" }, { "AU", "AU1" },
+  { "BA", "BA1" }, { "BE", "BE2" }, { "BG", "BG1" }, { "BR", "BR1 BR2" },
+  { "CA", "CA2" }, { "CH", "CH1" }, { "CL", "CL1" }, { "CO", "CO1" },
+  { "CY", "CY1" }, { "CZ", "CZ1" }, { "DE", "DE1" }, { "DK", "DK1" },
+  { "ES", "ES1" }, { "FI", "FI1" }, { "FR", "FR1" }, { "GR", "GR1" },
+  { "HR", "HR1" }, { "HU", "HU1" }, { "IE", "IE1" }, { "IL", "IL1" },
+  { "IT", "IT1" }, { "LT", "LT1" }, { "LV", "LV1" }, { "MT", "MT1" },
+  { "MX", "MX1" }, { "NL", "NL1" }, { "NO", "NO1" }, { "NZ", "NZ1" },
+  { "PE", "PE1" }, { "PT", "PT1" }, { "RO", "RO1 RO2" }, { "RS", "RS1" },
+  { "SE", "SE1" }, { "SK", "SK1" }, { "TR", "TR1 TR3" }, { "UK", "UK1" },
+  { "UY", "UY1" },
 };
-// CACHE_XML so da nome ao log e apaga o cache antigo (ver gravarGz); o que
-// fica gravado e o .gz, CACHE_GZ.
-static const char *CACHE_XML[EPG_N_FONTES] = {
-  "epg-br1.xml", "epg-br2.xml", "epg-pt1.xml", "epg-mx1.xml", "epg-ar1.xml" };
-static const char *CACHE_GZ[EPG_N_FONTES] = {
-  "epg-br1.xml.gz", "epg-br2.xml.gz", "epg-pt1.xml.gz", "epg-mx1.xml.gz", "epg-ar1.xml.gz" };
-static const char *CACHE_TS[EPG_N_FONTES]  = {
-  "epg-br1.ts",  "epg-br2.ts",  "epg-pt1.ts",  "epg-mx1.ts",  "epg-ar1.ts"  };
+#define EPG_N_PAISES ((int)(sizeof PAISES / sizeof PAISES[0]))
+// Teto de arquivos numa carga: cada um e um XML inteiro em memoria durante o
+// processamento (um de cada vez), mas a grade publicada soma todos.
+#define EPG_MAX_FONTES 8
+static const char *PADRAO_ARQ[] = { "BR1", "BR2", "PT1", "MX1", "AR1" };
+// Arquivos ativos ("RO1"...). Escritos sob `trava`; o fio copia no comeco.
+static char fontesArq[EPG_MAX_FONTES][8];
+static int  nFontesArq = -1;           // -1 = nunca definido: o padrao
+static char paisesAtivos[64];
+static volatile int fontesMudaram;
+
+// URL e nomes de cache de um arquivo. Os nomes das cinco antigas sao os
+// mesmos de antes ("epg-br1.xml.gz"): quem atualiza nao baixa tudo de novo.
+static void nomesFonte(const char *arq, char *url, size_t nu, char *xml, char *gz,
+                       char *ts, size_t nn) {
+  char m[8]; size_t i;
+  for (i = 0; arq[i] && i < sizeof m - 1; i++)
+    m[i] = (char)((arq[i] >= 'A' && arq[i] <= 'Z') ? arq[i] + 32 : arq[i]);
+  m[i] = 0;
+  if (url) snprintf(url, nu, "https://epgshare01.online/epgshare01/epg_ripper_%s.xml.gz", arq);
+  if (xml) snprintf(xml, nn, "epg-%s.xml", m);
+  if (gz)  snprintf(gz,  nn, "epg-%s.xml.gz", m);
+  if (ts)  snprintf(ts,  nn, "epg-%s.ts", m);
+}
 
 typedef struct {
   char id[96];
@@ -156,6 +191,20 @@ static int letraBase(unsigned cp) {
   if (cp == 0xB3) return '3';            // ³ (ids "HD.³.br" do epgshare01)
   // Latin estendido A (š ž ł…): faixas de pares maiuscula/minuscula com a
   // mesma letra de base. O que nao esta aqui vira separador, nunca erro.
+  // ROMENO COM VIRGULA (#158): Ș ș Ț ț sao U+0218..U+021B, fora do Latin
+  // estendido A. Viravam separador — "TVR Timișoara" (id do RO1) saia como
+  // "tvrtimi" + "oara". As variantes com cedilha (Ş ş Ţ ţ) caem na faixa abaixo.
+  if (cp == 0x218 || cp == 0x219) return 's';
+  if (cp == 0x21A || cp == 0x21B) return 't';
+  // Letras modificadoras dos nomes de painel ("PRO TV ᴴᴰ", "ᶠᴴᴰ", "ᴿᴬᵂ"):
+  // viram a letra comum, e o token ("hd", "fhd", "raw") cai como qualidade.
+  if (cp >= 0x1D2C && cp <= 0x1D42) {
+    static const char M[] = "a?b?de?ghijklmn?o?prtuw";
+    char c = M[cp - 0x1D2C];
+    return c == '?' ? 0 : c;
+  }
+  if (cp == 0x1DA0) return 'f';
+  if (cp == 0x2C7D) return 'v';
   if (cp >= 0x100 && cp <= 0x17F) {
     if (cp <= 0x105) return 'a';
     if (cp <= 0x10D) return 'c';
@@ -182,10 +231,14 @@ static int letraBase(unsigned cp) {
 }
 
 static int tokenInutil(const char *t, int n, int curta) {
-  static const char *qual[] = { "hd","fhd","uhd","4k","sd","hdtv","fullhd" };
+  // Qualidade e codec: nomes de painel IPTV trazem isto em todo canal ("PRO TV
+  // FHD", "Antena 1 HEVC", "Digi Sport 1 RAW 50FPS") e a grade nao.
+  static const char *qual[] = { "hd","fhd","uhd","4k","8k","sd","hdtv","fullhd",
+                                "hevc","h265","h264","raw","50fps","60fps","25fps",
+                                "1080p","1080i","720p","2160p","backup","hq","lq" };
   static const char *marc[] = { "canal","channel","tv","rede","and","e" };
   int i;
-  for (i = 0; i < 7; i++)
+  for (i = 0; i < (int)(sizeof qual / sizeof qual[0]); i++)
     if ((int)strlen(qual[i]) == n && !strncmp(qual[i], t, (size_t)n)) return 1;
   if (curta)
     for (i = 0; i < 6; i++)
@@ -196,10 +249,49 @@ static int tokenInutil(const char *t, int n, int curta) {
 // Escreve a chave em `dst`. Devolve o comprimento. Se `prim` nao e NULL,
 // recebe o PRIMEIRO token aceito — e a forma de reconhecer afiliada
 // regional: "SBT RJ" abre com "sbt", a chave inteira da grade da rede-mae.
+// PREFIXO DE PAIS OU DE PACOTE no comeco do nome (#158): "RO: Pro TV",
+// "RO | Antena 1", "|RO| Kanal D", "[RO] Digi 24", "VIP: HBO". A grade nao tem
+// isso, e "ro" colado na frente ("roprotv") nao casa com nada. Reconhece de 2
+// a 4 letras seguidas de ':' ou '|' ou ']' (com espacos opcionais), e o
+// par "XX - " so para os codigos de pais conhecidos — "TV - Record" nao pode
+// perder o "TV". Devolve onde o nome comeca; `pais` recebe o prefixo em
+// maiusculas quando tem 2 letras (dica de pais para o guia), ou "".
+const char *epg_sem_prefixo(const char *s, char pais[4]) {
+  const char *p = s, *q;
+  int n = 0, abre = 0;
+  if (pais) pais[0] = 0;
+  if (!s) return s;
+  while (*p == ' ') p++;
+  if (*p == '|' || *p == '[' || *p == '(') { abre = 1; p++; while (*p == ' ') p++; }
+  for (q = p; ((*q >= 'A' && *q <= 'Z') || (*q >= 'a' && *q <= 'z')) && n < 5; q++) n++;
+  if (n < 2 || n > 4) return s;
+  { const char *r = q;
+    while (*r == ' ') r++;
+    if (*r == ':' || *r == '|' || *r == ']' || *r == ')' ||
+        ((*r == '-' || !strncmp(r, "\xe2\x80\xa2", 3)) && !abre && n == 2)) {
+      if (*r == '-' || *r == ':' || *r == '|' || *r == ']' || *r == ')') {
+        // "XX - " sem ser pais conhecido: nao e prefixo.
+        if (*r == '-' && n == 2) {
+          char c[3] = { (char)(p[0] & ~32), (char)(p[1] & ~32), 0 };
+          if (!epg_pais_existe(c)) return s;
+        }
+        r++;
+      } else r += 3;
+      // "|RO|" tem a barra de fechamento colada.
+      while (*r == ' ' || *r == '|' || *r == ':' || *r == '-') r++;
+      if (!*r) return s;                       // o nome inteiro era "RO:"
+      if (pais && n == 2) { pais[0] = (char)(p[0] & ~32); pais[1] = (char)(p[1] & ~32); pais[2] = 0; }
+      return r;
+    } }
+  return s;
+}
+
 static int normChave(const char *s, char *dst, int cap, int curta,
                      char *prim, int pcap) {
   char tok[48]; int tn = 0, n = 0, primOk = 0;
-  unsigned cp; const unsigned char *p = (const unsigned char *)s;
+  unsigned cp; const unsigned char *p;
+  s = epg_sem_prefixo(s, NULL);
+  p = (const unsigned char *)s;
   if (prim && pcap > 0) prim[0] = 0;
   #define FLUSHTOK() do { \
     if (tn && !tokenInutil(tok, tn, curta)) { \
@@ -435,7 +527,18 @@ static void wFechar(EpgGrade *g) {
 
 // Processa um buffer XMLTV inteiro EM cima de `g` (junta ao que ja existe —
 // BR1 e BR2 passam pelos mesmos vetores). O buffer e escrito no processo.
-static int wProcessar(EpgGrade *g, char *xml) {
+// FILTRO DE CANAIS da grade do provedor (#158). O xmltv.php traz a grade de
+// TODOS os canais do painel — dezenas de milhares num provedor europeu — e o
+// PASSO 1 abaixo para no EPG_MAX_CANAL: os canais que a pessoa tem podiam
+// ficar de fora so por virem depois no arquivo. Com o filtro, so entram os
+// ids que o Xtream deu como epg_channel_id. NULL = sem filtro (epgshare01).
+static char (*filtroIds)[64];
+static int nFiltroIds;
+static int cmpId(const void *a, const void *b) { return strcmp((const char *)a, (const char *)b); }
+
+static int wProcessarF(EpgGrade *g, char *xml, char (*filtro)[64], int nFiltro);
+static int wProcessar(EpgGrade *g, char *xml) { return wProcessarF(g, xml, NULL, 0); }
+static int wProcessarF(EpgGrade *g, char *xml, char (*filtro)[64], int nFiltro) {
   char *p = xml, *fecha;
   int n = 0, descartados = 0;
   time_t agora = time(NULL);
@@ -446,7 +549,8 @@ static int wProcessar(EpgGrade *g, char *xml) {
     int i;
     fecha = strstr(p, "</channel>");
     if (!fecha) break;
-    if (achaAtr(p, fecha, "id", id, sizeof id)) {
+    if (achaAtr(p, fecha, "id", id, sizeof id) &&
+        (!filtro || bsearch(id, filtro, (size_t)nFiltro, sizeof filtro[0], cmpId))) {
       i = wCanalPorId(g, id);
       if (i < 0) {
         if (g->nCanais >= EPG_MAX_CANAL) break;
@@ -593,7 +697,6 @@ static int gravarBin(const char *nome, const char *nomeTs, const char *gz, long 
   dados_marcar_sujo(1);
   return 1;
 }
-static void gravarGz(int i, const char *gz, long n) { gravarBin(CACHE_GZ[i], CACHE_TS[i], gz, n); }
 
 // Le o .gz do cache (binario: dados_ler corta no primeiro NUL).
 static char *lerBin(const char *nome, long *n) {
@@ -613,7 +716,6 @@ static char *lerBin(const char *nome, long *n) {
   dados_fs_liberar();
   return b;
 }
-static char *lerGz(int i, long *n) { return lerBin(CACHE_GZ[i], n); }
 
 // gzip -> XML com o NUL no fim (o parser trata como texto).
 static char *abrirGz(const char *gz, long ngz, long *nOut) {
@@ -625,29 +727,111 @@ static char *abrirGz(const char *gz, long ngz, long *nOut) {
   return c;
 }
 
-static char *obterXml(int i, long *nOut) {
+static char *obterXml(const char *arq, long *nOut) {
   char *xml;
   long ngz = 0;
-  char *gz;
+  char *gz, url[160], nXml[40], nGz[40], nTs[40];
+  nomesFonte(arq, url, sizeof url, nXml, nGz, nTs, sizeof nXml);
   // O cache antigo, de XML aberto, sai: no Tizen ele era a maior descarga do
-  // IDBFS. Sem arquivo, dados_apagar nao faz nada.
-  { static int limpou[EPG_N_FONTES];
-    if (!limpou[i]) { limpou[i] = 1; dados_apagar(CACHE_XML[i]); } }
+  // IDBFS. Sem arquivo, dados_apagar nao faz nada. Uma vez por arquivo e
+  // processo (os nomes cabem numa lista curta).
+  { static char limpou[16][8]; static int nLimpou;
+    int k;
+    for (k = 0; k < nLimpou && strcmp(limpou[k], arq); k++) {}
+    if (k == nLimpou && nLimpou < 16) {
+      snprintf(limpou[nLimpou++], sizeof limpou[0], "%s", arq);
+      dados_apagar(nXml);
+    } }
   // Cache fresco primeiro: a abertura nao paga a rede quando o arquivo do dia
   // ja esta no aparelho.
-  if (arquivoIdade(CACHE_TS[i]) < EPG_CACHE_SEG) {
-    gz = lerGz(i, &ngz);
+  if (arquivoIdade(nTs) < EPG_CACHE_SEG) {
+    gz = lerBin(nGz, &ngz);
     xml = gz ? abrirGz(gz, ngz, nOut) : NULL;
     free(gz);
     if (xml && xml[0] == '<') return xml;
     free(xml);
   }
-  gz = rede_baixar_bin(FONTE[i], 60, &ngz);
-  if (!gz) return NULL;
+  gz = rede_baixar_bin(url, 60, &ngz);
+  if (!gz) { printf("[epg] %s: sem resposta\n", nXml); fflush(stdout); return NULL; }
   xml = abrirGz(gz, ngz, nOut);
-  if (xml && xml[0] == '<') gravarGz(i, gz, ngz);
+  if (xml && xml[0] == '<') gravarBin(nGz, nTs, gz, ngz);
   free(gz);
   return xml;
+}
+
+// Ver o topo de PAISES. `codigos` = "RO,BR" (paises); "" volta ao padrao.
+// Pais desconhecido e ignorado. Devolve quantos ARQUIVOS ficaram ativos.
+int epg_paises_definir(const char *codigos) {
+  char arq[EPG_MAX_FONTES][8], ativos[64] = "";
+  int n = 0, i, mudou;
+  const char *p = codigos ? codigos : "";
+  while (*p && n < EPG_MAX_FONTES) {
+    char c[4]; int k = 0;
+    while (*p == ',' || *p == ' ') p++;
+    while (*p && *p != ',' && *p != ' ' && k < 3) {
+      c[k++] = (char)((*p >= 'a' && *p <= 'z') ? *p - 32 : *p); p++;
+    }
+    c[k] = 0;
+    while (*p && *p != ',' && *p != ' ') p++;
+    if (!k) continue;
+    if (!strcmp(c, "GB")) snprintf(c, sizeof c, "UK");
+    for (i = 0; i < EPG_N_PAISES; i++)
+      if (!strcmp(PAISES[i].pais, c)) {
+        const char *a = PAISES[i].arquivos;
+        int j, ja = 0;
+        for (j = 0; ativos[j]; j += 3) if (!strncmp(ativos + j, c, 2)) ja = 1;
+        if (ja) break;
+        if (strlen(ativos) + 3 < sizeof ativos) {
+          if (ativos[0]) strcat(ativos, ",");
+          strcat(ativos, c);
+        }
+        while (*a && n < EPG_MAX_FONTES) {
+          int m = 0;
+          while (*a == ' ') a++;
+          while (*a && *a != ' ' && m < 7) arq[n][m++] = *a++;
+          arq[n][m] = 0;
+          if (m) n++;
+        }
+        break;
+      }
+  }
+  if (!n) {
+    for (i = 0; i < (int)(sizeof PADRAO_ARQ / sizeof PADRAO_ARQ[0]); i++)
+      snprintf(arq[n++], sizeof arq[0], "%s", PADRAO_ARQ[i]);
+    snprintf(ativos, sizeof ativos, "BR,PT,MX,AR");
+  }
+  pthread_mutex_lock(&trava);
+  mudou = n != nFontesArq;
+  for (i = 0; !mudou && i < n; i++) if (strcmp(arq[i], fontesArq[i])) mudou = 1;
+  if (mudou) {
+    // A primeira definicao nao e "mudanca": a carga ainda nao aconteceu, ou
+    // aconteceu com o padrao — e so o padrao que difere pede recarga.
+    int eraPadrao = nFontesArq < 0;
+    int igualPadrao = n == 5;
+    for (i = 0; igualPadrao && i < 5; i++) if (strcmp(arq[i], PADRAO_ARQ[i])) igualPadrao = 0;
+    for (i = 0; i < n; i++) snprintf(fontesArq[i], sizeof fontesArq[i], "%s", arq[i]);
+    nFontesArq = n;
+    if (!(eraPadrao && igualPadrao)) fontesMudaram = 1;
+  }
+  snprintf(paisesAtivos, sizeof paisesAtivos, "%s", ativos);
+  pthread_mutex_unlock(&trava);
+  if (mudou) { printf("[epg] paises da grade: %s (%d arquivo(s))\n", ativos, n); fflush(stdout); }
+  return n;
+}
+
+const char *epg_paises_ativos(void) {
+  static char c[64];
+  pthread_mutex_lock(&trava);
+  snprintf(c, sizeof c, "%s", nFontesArq < 0 ? "BR,PT,MX,AR" : paisesAtivos);
+  pthread_mutex_unlock(&trava);
+  return c;
+}
+
+int epg_pais_existe(const char *pais) {
+  int i;
+  if (!pais) return 0;
+  for (i = 0; i < EPG_N_PAISES; i++) if (!strcasecmp(PAISES[i].pais, pais)) return 1;
+  return !strcasecmp(pais, "GB");
 }
 
 // --- a grade do PROPRIO PROVEDOR (#158) --------------------------------------
@@ -724,9 +908,14 @@ static char *obterExtra(const char *url, long *nOut) {
   ctl.max_bytes = EPG_EXTRA_TETO_REDE;
   b = rede_baixar_bin_medido_controle(url, 120, NULL, &ctl, &n, &med);
   if (!b || med.limitado) {
-    printf("[epg] grade do provedor: %s\n",
+    // O teto vai no log (#158): "maior que o teto" sem o numero nao dizia se
+    // faltava pouco ou muito. No registro 6311 foi esta linha, e dali para a
+    // frente a grade do provedor nunca entrou — a grade curta por canal
+    // (get_short_epg, ver guia.c) e o epgshare01 do pais cobrem esse caso.
+    printf("[epg] grade do provedor: %s (teto %ld MB, %ld ms)\n",
            med.limitado ? "maior que o teto, ignorada"
-                        : med.status ? "resposta sem corpo" : "sem resposta");
+                        : med.status ? "resposta sem corpo" : "sem resposta",
+           (long)(EPG_EXTRA_TETO_REDE >> 20), (long)med.ms);
     if (med.status && med.status != 200) printf("[epg] grade do provedor: HTTP %d\n", med.status);
     fflush(stdout);
     free(b);
@@ -737,6 +926,22 @@ static char *obterExtra(const char *url, long *nOut) {
   if (!xml) { printf("[epg] grade do provedor: %ld B que nao sao XMLTV\n", n); fflush(stdout); }
   free(b);
   return xml;
+}
+
+void epg_fonte_extra_ids(const char *const *ids, int n) {
+  char (*novo)[64] = NULL;
+  int i, k = 0;
+  if (ids && n > 0) novo = malloc(sizeof *novo * (size_t)n);
+  if (novo)
+    for (i = 0; i < n; i++)
+      if (ids[i] && ids[i][0]) snprintf(novo[k++], sizeof novo[0], "%s", ids[i]);
+  if (novo && k) qsort(novo, (size_t)k, sizeof novo[0], cmpId);
+  pthread_mutex_lock(&trava);
+  free(filtroIds);
+  filtroIds = k ? novo : NULL;
+  nFiltroIds = k;
+  if (!k) free(novo);
+  pthread_mutex_unlock(&trava);
 }
 
 void epg_fonte_extra(const char *url) {
@@ -753,17 +958,28 @@ static void *fioEpg(void *u) {
   int i, ok = 0;
   char extra[sizeof extraUrl];
   (void)u;
+  char arq[EPG_MAX_FONTES][8];
+  int nArq;
   pthread_mutex_lock(&trava);
   snprintf(extra, sizeof extra, "%s", extraUrl);
   extraMudou = 0;
+  fontesMudaram = 0;
+  if (nFontesArq < 0) {
+    for (nArq = 0; nArq < (int)(sizeof PADRAO_ARQ / sizeof PADRAO_ARQ[0]); nArq++)
+      snprintf(arq[nArq], sizeof arq[0], "%s", PADRAO_ARQ[nArq]);
+  } else {
+    for (nArq = 0; nArq < nFontesArq; nArq++) snprintf(arq[nArq], sizeof arq[0], "%s", fontesArq[nArq]);
+  }
   pthread_mutex_unlock(&trava);
   if (!wAbrir(&W)) { pendPronto = 1; pendOk = 0; return NULL; }
-  for (i = 0; i < EPG_N_FONTES; i++) {
+  for (i = 0; i < nArq; i++) {
     long n = 0;
-    char *xml = obterXml(i, &n);
+    char *xml = obterXml(arq[i], &n);
     if (xml) {
+      char nXml[40];
       int achou = wProcessar(&W, xml);
-      printf("[epg] %s: %d programas\n", CACHE_XML[i], achou);
+      nomesFonte(arq[i], NULL, 0, nXml, NULL, NULL, sizeof nXml);
+      printf("[epg] %s: %d programas\n", nXml, achou);
       fflush(stdout);
       free(xml);
       ok = 1;
@@ -773,7 +989,15 @@ static void *fioEpg(void *u) {
     long n = 0;
     char *xml = obterExtra(extra, &n);
     if (xml) {
-      int achou = wProcessar(&W, xml);
+      // O filtro e copiado sob a trava: o fio do guia pode troca-lo durante
+      // o processamento.
+      char (*f)[64] = NULL; int nf = 0, achou;
+      pthread_mutex_lock(&trava);
+      if (filtroIds && nFiltroIds > 0 && (f = malloc(sizeof *f * (size_t)nFiltroIds)) != NULL) {
+        memcpy(f, filtroIds, sizeof *f * (size_t)nFiltroIds); nf = nFiltroIds; }
+      pthread_mutex_unlock(&trava);
+      achou = wProcessarF(&W, xml, f, nf);
+      free(f);
       printf("[epg] grade do provedor: %d programas (%ld KB)\n", achou, n / 1024);
       fflush(stdout);
       free(xml);
@@ -827,7 +1051,8 @@ void epg_passo(void) {
     epg_iniciar();
   // A grade do provedor chegou (ou saiu) depois da carga: refaz. As cinco
   // fontes fixas vem do cache do disco, so a nova vai a rede.
-  else if (extraMudou && !fioVivo && (estado == EPG_PRONTO || estado == EPG_FALHOU))
+  else if ((extraMudou || fontesMudaram) && !fioVivo &&
+           (estado == EPG_PRONTO || estado == EPG_FALHOU))
     epg_iniciar();
 }
 
@@ -862,6 +1087,16 @@ int epg_match_id(const char *id) {
     }
   pthread_mutex_unlock(&trava);
   return r;
+}
+
+// GUARDA DE NUMERO (#158): o casamento por prefixo NAO pode parar no meio de
+// um numero. "Pro TV 2" (chave "protv2") herdava a grade de "Pro TV"
+// ("protv") pela regra 3, e "Digi Sport 1" a de "Digi Sport" — outro canal,
+// outra programacao. Verdadeiro quando o caractere depois do corte e digito e
+// o de antes tambem, ou o de depois e digito e a parte comum termina em
+// letra (o numero e do canal, nao da rede).
+static int cortaNumero(const char *k, long corte) {
+  return k[corte] >= '0' && k[corte] <= '9';
 }
 
 int epg_match(const char *nome) {
@@ -899,7 +1134,8 @@ int epg_match(const char *nome) {
     for (j = 0; j < P.canais[i].nChaves; j++) {
       long tc = (long)strlen(P.canais[i].chaves[j]);
       if (tc >= 4 && tc < t &&
-          !strncmp(k1, P.canais[i].chaves[j], (size_t)tc) && tc > melhorTam)
+          !strncmp(k1, P.canais[i].chaves[j], (size_t)tc) && tc > melhorTam &&
+          !cortaNumero(k1, tc))
         { melhor = i; melhorTam = tc; chave = P.canais[i].chaves[j]; }
     }
   if (melhor >= 0) DEVOLVE(melhor, chave);
@@ -910,7 +1146,8 @@ int epg_match(const char *nome) {
       for (i = 0; i < P.nCanais; i++)
         for (j = 0; j < P.canais[i].nChaves; j++)
           if ((long)strlen(P.canais[i].chaves[j]) > t &&
-              !strncmp(P.canais[i].chaves[j], k1, (size_t)t) && melhor != i) {
+              !strncmp(P.canais[i].chaves[j], k1, (size_t)t) && melhor != i &&
+              !cortaNumero(P.canais[i].chaves[j], t)) {
             melhor = i; nCand++; chave = P.canais[i].chaves[j];
           }
     if (nCand == 1) DEVOLVE(melhor, chave); }
@@ -927,7 +1164,12 @@ int epg_match(const char *nome) {
         const char *kv = P.canais[i].chaves[j];
         long tc = (long)strlen(kv);
         if (tc < 6 || t <= tc) continue;
-        if (!strstr(k1, kv) && !(k2[0] && strstr(k2, kv))) continue;
+        { const char *em = strstr(k1, kv);
+          if (!em && k2[0]) em = strstr(k2, kv);
+          if (!em) continue;
+          // A guarda de numero vale aqui tambem: "digisport1" nao herda
+          // "digisport" pelo meio do nome.
+          if (cortaNumero(em, tc)) continue; }
         if (tc > melhorTc) { melhorTc = tc; melhor = i; melhorChave = kv; ambig = 0; }
         else if (tc == melhorTc && i != melhor &&
                  !(melhorChave && !strcmp(melhorChave, kv)))

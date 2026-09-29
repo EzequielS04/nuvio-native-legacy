@@ -260,6 +260,10 @@ IGNORAR = {
     "depois dos manifestos", "esperando os catalogos", "lendo os manifestos",
     "crédit", "crédito",            # palavra procurada no capitulo do MKV
     "episodio", "episódio",         # palavra procurada no nome do video TMDB (extras.c)
+    # #158: dados, nao rotulo. A tabela de letras modificadoras (U+1D2C..)
+    # da normalizacao de nome de canal (epg.c) e uma palavra procurada no nome
+    # de categoria do Xtream para achar o pais da grade (guia.c).
+    "a?b?de?ghijklmn?o?prtuw", "românia",
     # Nome proprio e sigla: iguais nos dois idiomas.
     "IMDb", "Trakt", "YouTube", "PIN", "AI-powered",
     # Tabela de acentos -> letra base da normalizacao de titulo (trailerapple.c):

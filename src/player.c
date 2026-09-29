@@ -73,6 +73,8 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "descoberta.h"
 #include "guia.h"
 #include "epg.h"
+#include "xtream.h"
+#include "xtepg.h"   /* grade curta do Xtream quando a XMLTV nao casa (#158) */
 #include "ajustes.h"
 #include <time.h>
 #include <stdio.h>
@@ -367,6 +369,23 @@ static int idxAtual(void) {
 }
 static int ehCanal(void) { return canalSessao; }
 const char *player_id_canal(void) { return canalSessao ? itemCanal.imdb : ""; }
+
+// Programa do canal no ar: a XMLTV (epgIdx) ou, num canal Xtream que nao
+// casou nela, a grade curta do painel (#158). xtepg_passo aqui porque o guia,
+// que o chama por quadro, pode nem estar aberto com o canal em tela cheia.
+static int pAgora(int epgIdx, time_t t, EpgProg *p) {
+  const char *id = player_id_canal();
+  if (epgIdx >= 0) return epg_agora(epgIdx, t, p);
+  if (!xtream_e_id(id)) return 0;
+  xtepg_querer(id);
+  xtepg_passo();
+  return xtepg_agora(id, t, p);
+}
+static int pProximo(int epgIdx, time_t t, int k, EpgProg *p) {
+  const char *id = player_id_canal();
+  if (epgIdx >= 0) return epg_proximo(epgIdx, t, k, p);
+  return xtream_e_id(id) && xtepg_proximo(id, t, k, p);
+}
 // Marcacao deterministica para quem JA SABE que e canal (o guia): cobre a
 // janela em que uma republicacao cai entre o cat_acrescentar e o player_abrir
 // — o item no indice ja pode ser outro quando player_abrir le.
@@ -1479,7 +1498,7 @@ void player_mini_desenhar(Uint32 agora) {
     EpgProg ag;
     snprintf(rot, sizeof rot, "%s", itemCanal.titulo[0] ? itemCanal.titulo
                                                         : i18n("Canal"));
-    if (epgIdx >= 0 && epg_agora(epgIdx, time(NULL), &ag)) {
+    if (pAgora(epgIdx, time(NULL), &ag)) {
       size_t u = strlen(rot);
       snprintf(rot + u, sizeof rot - u, "  \xc2\xb7  %s", ag.titulo);
     }
@@ -1649,13 +1668,13 @@ static void linhasCanal(char *l1, size_t n1, char *l2, size_t n2) {
     epgIdx = epg_match(itemCanal.titulo);
     if (epgIdx < 0) epgIdx = -2;
   }
-  if (epgIdx >= 0 && epg_agora(epgIdx, agoraT, &ag)) {
+  if (pAgora(epgIdx, agoraT, &ag)) {
     char h1[8], h2[8];
     localtime_r(&ag.ini, &lt); strftime(h1, sizeof h1, "%H:%M", &lt);
     localtime_r(&ag.fim, &lt); strftime(h2, sizeof h2, "%H:%M", &lt);
     snprintf(l1, n1, "%s  %s\xe2\x80\x93%s  \xc2\xb7  %s",
              i18n("AGORA"), h1, h2, ag.titulo);
-    if (epg_proximo(epgIdx, agoraT, 0, &px)) {
+    if (pProximo(epgIdx, agoraT, 0, &px)) {
       char h3[8];
       localtime_r(&px.ini, &lt); strftime(h3, sizeof h3, "%H:%M", &lt);
       snprintf(l2, n2, "%s %s  \xc2\xb7  %s", i18n("A seguir"), h3, px.titulo);
@@ -1671,7 +1690,7 @@ static void linhasCanal(char *l1, size_t n1, char *l2, size_t n2) {
 static float fracCanal(void) {
   time_t agoraT = time(NULL);
   EpgProg ag;
-  if (epgIdx >= 0 && epg_agora(epgIdx, agoraT, &ag) && ag.fim > ag.ini)
+  if (pAgora(epgIdx, agoraT, &ag) && ag.fim > ag.ini)
     return anim_clamp((float)(agoraT - ag.ini) / (float)(ag.fim - ag.ini),
                       0.0f, 1.0f);
   return 0.0f;
