@@ -61,6 +61,7 @@
 #include "recenviar.h"
 #include "serieaud.h"
 #include "seriefrases.h"
+#include "notasui.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -118,7 +119,7 @@ static void heroReiniciar(void);
 #define FR_COL_W    1040.0f
 #define FR_COL_GAP    96.0f
 
-#define N_SECOES    13
+#define N_SECOES    15
 #define N_ELENCO    6
 
 static HomeItem item;
@@ -387,12 +388,19 @@ static const float AUD_PISO[3] = { 380.0f, 402.0f, 484.0f };
 // com topoSec explicito em recalcularLayout, e SEC_DETALHES nem existe la.
 typedef enum { SEC_TEMPORADAS, SEC_EPISODIOS, SEC_ABAS_INFO, SEC_ELENCO,
                SEC_AUD_ARCO, SEC_AUD_RADAR, SEC_AUD_DIGITAL,
+               // NOTAS: heatmap das fontes + resumo (e, em serie, a grade de
+               // episodios). Vem logo depois da audiencia por ser o fecho do
+               // que a aba "Avaliacoes" comeca; em filme, onde nao ha abas,
+               // e o UNICO lugar em que as notas aparecem alem da linha do
+               // titulo.
+               SEC_NOTAS, SEC_NOTAS_EP,
                SEC_TRAILERS, SEC_RELACIONADOS, SEC_COMENTARIOS,
                SEC_ESTUDIOS, SEC_FRASES, SEC_DETALHES } TipoSecao;
 // Definida adiante, junto do resto das consultas ao catalogo; declarada aqui
 // porque recalcularLayout, cabecalhoDe e nAvaliaveis, todas acima dela,
 // precisam separar serie de filme.
 static int ehSerie(void);
+static const NotasSecao *notasDados(void);
 static float alturaCabComentarios(void);
 static int temporadaEm(int c);
 static int epAbsoluto(int c);
@@ -481,6 +489,8 @@ static const char *cabecalhoDe(int r) {
   // ESTUDIOS TAMBEM (serie): o titulo era uma linha cinza pequena desenhada
   // DENTRO da secao, e ao lado do "Trailers" e do "Estúdios" do filme parecia
   // de outra pagina. Agora e o mesmo TXT_HEADLINE, com o mesmo vao.
+  if (r == SEC_NOTAS) return "Notas";
+  if (r == SEC_NOTAS_EP) return "Notas por episódio";
   if (ehSerie()) {
     if (r == SEC_TRAILERS) return "Trailers";
     if (r == SEC_ESTUDIOS) return "Redes e estúdios";
@@ -617,6 +627,16 @@ static void recalcularLayout(void) {
       { float fim = y + NV_DETF_PAD_FIM - NV_DETF_SEC_GAP;
         if (fim > docFim) docFim = fim; }
     }
+    // NOTAS: heatmap por fonte e grade de episodios, com cabecalho proprio como
+    // os trailers logo abaixo (topo do grupo = linha do titulo).
+    for (r = SEC_NOTAS; r <= SEC_NOTAS_EP; r++) {
+      topoSec[r] = conteudoSec[r] = y;
+      if (secaoN(r) <= 0) continue;
+      conteudoSec[r] = y + NV_DETF_CAB_H + NV_DETF_CAB_GAP;
+      y = conteudoSec[r] + alturaSecao(r) + NV_DETF_SEC_GAP;
+      { float fim = y + NV_DETF_PAD_FIM - NV_DETF_SEC_GAP;
+        if (fim > docFim) docFim = fim; }
+    }
     // TRAILERS NA SERIE (#123), na posicao que o enum ja dava a eles (depois
     // da audiencia, antes dos comentarios — a ordem do D-pad). Com cabecalho,
     // como no filme: o topo do grupo e a linha do titulo, o conteudo abaixo.
@@ -707,6 +727,24 @@ static int notaDe(int i) {
   const CatItem *ci = cat_item(i);
   return ci ? ci->nota : 0;
 }
+// O que a secao "Notas" e a linha do titulo sabem do titulo aberto: as notas de
+// cada fonte (as que a pessoa escondeu em Ajustes ja chegam zeradas, e o IMDb
+// cai na reserva do catalogo quando o MDBList nao respondeu) e, em serie, as
+// funcoes que entregam as notas por episodio. Barata: e chamada varias vezes
+// por quadro (empilhamento, foco, desenho).
+static const NotasSecao *notasDados(void) {
+  static NotasSecao s;
+  int i;
+  for (i = 0; i < EX_NFONTES; i++) s.cru[i] = extras_nota(i);
+  if (!s.cru[EX_IMDB] && ajustes_mdblist_fonte(EX_IMDB)) s.cru[EX_IMDB] = notaDe(idx);
+  s.nTemp = ehSerie() ? extras_n_temporadas() : 0;
+  s.tempNum = extras_temporada_numero;
+  s.nEps = extras_n_eps;
+  s.epNum = extras_ep_numero;
+  s.epNota = extras_ep_nota;
+  return &s;
+}
+
 // Quantos itens a aba de Avaliacoes tem para focar: as temporadas, em serie; os
 // cartoes de nota, em filme. Serve so a navegacao — o desenho ja sabe o que
 // mostrar em cada caso.
@@ -1259,6 +1297,8 @@ static float alturaSecao(int r) {
       return audAlt[b] > AUD_PISO[b] ? audAlt[b] : AUD_PISO[b];
     }
     case SEC_FRASES:    return frasesAberta ? frasesAlt : CHAMADA_H;
+    case SEC_NOTAS:     return notasui_fontes_altura(notasDados());
+    case SEC_NOTAS_EP:  return notasui_grade_altura(notasDados());
   }
   return 0.0f;
 }
@@ -1407,6 +1447,13 @@ static int secaoN(int r) {
     // consulta que nunca aconteceu.
     case SEC_FRASES:
       return (ci && ci->imdb[0]) ? 1 : 0;
+    // UMA COLUNA, como as frases: nada dentro dela se escolhe, o foco so precisa
+    // pousar para a pagina rolar ate o painel. Sem nenhuma nota nem nota de
+    // episodio a secao nao existe (nada de painel vazio).
+    case SEC_NOTAS:
+      return notasui_fontes_tem(notasDados()) ? 1 : 0;
+    case SEC_NOTAS_EP:
+      return (ehSerie() && notasui_grade_tem(notasDados())) ? 1 : 0;
   }
   return 0;
 }
@@ -1963,6 +2010,8 @@ static float larguraItem(int r, int c) {
     case SEC_AUD_ARCO:
     case SEC_AUD_RADAR:
     case SEC_AUD_DIGITAL:
+    case SEC_NOTAS:
+    case SEC_NOTAS_EP:
     case SEC_FRASES:      return NV_TELA_W - NV_DETP_X * 2;
     default:              return NV_DETP_EL_W;
   }
@@ -1991,7 +2040,7 @@ static float xItem(int r, int c) {
     // lado: sao posicoes dentro de um grafico que ocupa a faixa inteira. Todas
     // comecam em NV_DETP_X, e quem marca a escolhida e serieaud_selecionar.
     // Frases idem, com a coluna unica.
-    if (EH_AUD(r) || r == SEC_FRASES) continue;
+    if (EH_AUD(r) || r == SEC_FRASES || r == SEC_NOTAS || r == SEC_NOTAS_EP) continue;
     if (r == SEC_TEMPORADAS) x += larguraTemporada(k) + NV_DETP_TEMP_GAP;
     else x += larguraAbaInfo(k) + NV_DETP_ABA_SEP * 2 + 9.0f;  // 9 = largura do "|"
   }
@@ -2404,7 +2453,7 @@ void detail_atualizar(float dt, Uint32 agora) {
         // posicao DENTRO de um desenho de largura fixa, nao um item que possa
         // sair da tela. Sem esta linha a regra geral abaixo empurrava a secao
         // inteira 24 px para a esquerda assim que o foco saia da coluna 0.
-        else if (EH_AUD(r) || r == SEC_FRASES) alvo = 0.0f;
+        else if (EH_AUD(r) || r == SEC_FRASES || r == SEC_NOTAS || r == SEC_NOTAS_EP) alvo = 0.0f;
         else if (foco.coluna == 0) alvo = 0.0f;
         else if (x + w > alvo + vista - 24.0f) alvo = x + w - vista + 24.0f;
         else if (x < alvo + 24.0f)             alvo = x - 24.0f;
@@ -2869,6 +2918,7 @@ static Uint32 metaChegouEm;
 
 static void heroReiniciar(void) {
   textogate_reiniciar(&gateHero);
+  notasui_reiniciar();
   sinVisto[0] = sinAnt[0] = 0; sinVistoInit = 0; sinTrocaDesde = 0;
   hSinVis = 0.0f; hSinInit = 0; hSinTick = 0;
   metaEsqVisto = 0; metaChegouEm = 0;
@@ -3318,36 +3368,22 @@ static void heroWeb(float a, float desloc) {
       txt_desenhar_alpha(la, x, yc - la.h * 0.5f, a);
       x += la.w; algo = 1;
     }
-    if (ci && ci->nota > 0) {
-      if (algo) { desenhaPonto(x + NV_DETW2_SEP, yc, 0.502f, a);
-                  x += NV_DETW2_SEP * 2 + NV_DETW2_PONTO_D; }
-      x += desenhaSeloImdb(x, yc, ci->nota, a);
-    }
-    const int fontes[] = { EX_TOMATOES, EX_TRAKT };
-    for(int i=0;i<2;i++) {
-      int n=extras_nota(fontes[i]);
-      if(n<=0) continue;
-      // Rotten Tomatoes: tomate FRESCO de 60% para cima, o RESPINGO verde
-      // abaixo — e a convencao do proprio site, e o icone e que diz o
-      // veredito antes do numero. Trakt: o WORDMARK (nome), nao o icone.
-      const char *marca;
-      if(fontes[i]==EX_TOMATOES) marca=extras_caminho_marca_nome(n>=600?"tomatoes_fresh":"tomatoes_rotten");
-      else marca=extras_caminho_marca_nome("trakt_wordmark");
-      GLuint logo=tex_obter(marca);
-      char valor[20];snprintf(valor,sizeof valor,"%d%%",n/10);
-      TxtLinha lv=txt_linha(TXT_DET_META2,valor,220,220,225,255);
-      float mh=fontes[i]==EX_TRAKT?22.0f:32.0f,mw=mh;
-      if(logo){float ap=tex_aspecto(marca);if(ap>0)mw=mh*ap;if(mw>110)mw=110;}
-      if(x+24+mw+10+lv.w>NV_DETW2_X+NV_HERO_SIN_W)break;
-      x+=24;
-      // GFX_TEXTO e nao GFX_SNAP: o SNAP ignora o alfa da textura e o tomate saia
-      // com um quadrado escuro em volta. O TEXTO preserva o RGB e usa o alfa.
-      // O wordmark do Trakt e escuro: vai por GFX_MARCA, que tinge o alfa.
-      if(logo){GfxModo m=fontes[i]==EX_TRAKT&&tex_marca_escura(marca)?GFX_MARCA:GFX_TEXTO;
-        gfx_rect((GfxRect){x,yc-mh*.5f,mw,mh},logo,m,0,0,0,0,.93f,.94f,.96f,a);}
-      else {TxtLinha label=txt_linha(TXT_MINI,extras_fonte_marca(fontes[i]),200,200,205,255);
-        txt_desenhar_alpha(label,x,yc-label.h*.5f,a);mw=label.w;}
-      x+=mw+10;txt_desenhar_alpha(lv,x,yc-lv.h*.5f,a);x+=lv.w;
+    // NOTAS DA LINHA: as fontes que a pessoa escolheu em Ajustes > Notas no
+    // titulo, cada uma com a marca e a escala do proprio site (IMDb 7,8;
+    // Rotten Tomatoes 87%; Metacritic num quadrado colorido). De fabrica sao as
+    // mesmas de sempre: IMDb, Rotten Tomatoes, Trakt. Quando a linha nao cabe
+    // saem primeiro as menos importantes (notasfontes.c) — nunca estoura.
+    { NotasPlano plano;
+      float pontoW = NV_DETW2_SEP * 2 + NV_DETW2_PONTO_D;
+      notasui_planejar(&plano, notasDados()->cru,
+                       NV_DETW2_X + NV_DETW2_TEXTO_W - x,
+                       algo ? pontoW : 0.0f, NULL);
+      if (plano.n > 0) {
+        if (algo) { desenhaPonto(x + NV_DETW2_SEP, yc, 0.502f, a);
+                    x += pontoW; }
+        x = notasui_desenhar_linha(&plano, x, yc, a);
+        algo = 1;
+      }
     }
     // QUANTO DA SERIE VOCE JA VIU, no fim da linha de meta.
     //
@@ -3373,7 +3409,7 @@ static void heroWeb(float a, float desloc) {
                  p100, vis, exib);
         { TxtLinha lp = txt_linha(TXT_DET_SIN, pct, 179, 179, 179, 255);
           if (x + NV_DETW2_SEP * 2 + NV_DETW2_PONTO_D + lp.w
-              <= NV_DETW2_X + NV_HERO_SIN_W) {
+              <= NV_DETW2_X + NV_DETW2_TEXTO_W) {
             desenhaPonto(x + NV_DETW2_SEP, yc, 0.502f, a);
             x += NV_DETW2_SEP * 2 + NV_DETW2_PONTO_D;
             txt_desenhar_alpha(lp, x, yc - lp.h * 0.5f, a);
@@ -4203,13 +4239,15 @@ static void moldura(GfxRect r, float raio, float a) {
 // web convertidos para PNG em art/marcas — desenhar um retangulo colorido com
 // as iniciais, que era o que estava aqui, fica com cara de esboco ao lado de
 // componentes que usam arte de verdade.
-static void cartaoNota(float x, float y, const char *marca, const char *valor,
-                       float a) {
+static void cartaoNota(float x, float y, int fonte, const char *marca,
+                       const char *valor, float a) {
   GfxRect card = { x, y, AVAL_CARD_W, AVAL_CARD_H };
   const char *cam = marca;
   GLuint t;
   moldura(card, 14.0f, a);
-  t = tex_obter(cam);
+  // Marca desenhada (MyAnimeList, Roger Ebert, MDBList): sem arquivo, `marca`
+  // vem NULL e a caixa da marca e preenchida por notasui.
+  t = cam ? tex_obter(cam) : 0;
   { TxtLinha lv = txt_linha(TXT_TITULO3, valor, 245, 248, 255, 255);
     float hLogo = 28.0f, hBloco = hLogo + 12.0f + lv.h;
     float yb = y + (AVAL_CARD_H - hBloco) * 0.5f;
@@ -4226,6 +4264,8 @@ static void cartaoNota(float x, float y, const char *marca, const char *valor,
         gfx_tex_aspect_atual = 0.0f;
         gfx_rect(rl, t, GFX_CARD, 0, 0, 0, 0.0f, 0, 0, 0, a); }
     }
+    if (!cam)
+      notasui_marca_cartao(fonte, 0, x + AVAL_CARD_W * 0.5f, yb + 14.0f, 28.0f, a);
     txt_desenhar_alpha(lv, x + (AVAL_CARD_W - lv.w) * 0.5f, yb + 28.0f + 12.0f, a);
   }
 }
@@ -4319,12 +4359,13 @@ static void desenhaAvaliacoes(float x, float y, float a) {
     // escala e "cru x 10", e para o imdb o cru e 0..10.
     if (i == EX_IMDB && !v && ajustes_mdblist_fonte(EX_IMDB)) v = notaDe(idx);
     if (!v) continue;
-    if (extras_fonte_percentual(i))
-      snprintf(txt, sizeof txt, "%d%%", (v + 5) / 10);
-    else
-      snprintf(txt, sizeof txt, "%.1f", v / 10.0f);
-    cartaoNota(x + col * (AVAL_CARD_W + AVAL_CARD_GAP), y,
-               extras_caminho_marca(i), txt, a);
+    // Na escala do site (notasfontes.c): 87%, 7,8, 72 — o Metacritic nao leva
+    // "%" e o Letterboxd e de 0 a 5.
+    nf_texto(i, v, !ajustes_idioma_ingles(), 0, txt, sizeof txt);
+    cartaoNota(x + col * (AVAL_CARD_W + AVAL_CARD_GAP), y, i,
+               (i == EX_MAL || i == EX_EBERT || i == EX_MDBSCORE) ? NULL
+               : i == EX_METAUSER ? extras_caminho_marca_nome("metacritic")
+               : extras_caminho_marca(i), txt, a);
     col++;
   }
 }
@@ -4981,6 +5022,8 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
     case SEC_AUD_ARCO:
     case SEC_AUD_RADAR:
     case SEC_AUD_DIGITAL:
+    case SEC_NOTAS:
+    case SEC_NOTAS_EP:
     case SEC_TRAILERS:
     case SEC_FRASES:
     case SEC_COMENTARIOS:
@@ -5069,6 +5112,12 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
         break;
       case SEC_FRASES:
         if (c == 0) frasesAlt = desenhaFrases(NV_DETP_X, y, a);
+        break;
+      case SEC_NOTAS:
+        if (c == 0) notasui_fontes_desenhar(notasDados(), NV_DETP_X, y, a);
+        break;
+      case SEC_NOTAS_EP:
+        if (c == 0) notasui_grade_desenhar(notasDados(), NV_DETP_X, y, a);
         break;
       case SEC_ESTUDIOS:
         desenhaEstudio(x, y, c, f, a);

@@ -27,9 +27,15 @@ int  extras_votos_trakt(void);
 // metaDetailsScreen.js:3410). Todas menos IMDb e Trakt vem do mdbList, que
 // precisa da chave do dono em art/mdblist.txt; sem o arquivo elas ficam em 0 e
 // a fileira mostra so as duas que temos por conta propria.
+//
+// As quatro ultimas (usuarios do Metacritic, MyAnimeList, Roger Ebert e a nota
+// agregada do MDBList) so sao pedidas quando a pessoa as liga na linha do
+// titulo (ajustes_nota_titulo): cada fonte e um POST a mais, e ninguem paga
+// quatro viagens por algo que nao vai ver. No FIM do enum de proposito — o
+// indice e o do vetor de notas e o das marcas.
 typedef enum {
   EX_TRAKT, EX_IMDB, EX_TMDB, EX_TOMATOES, EX_AUDIENCE, EX_METACRITIC,
-  EX_LETTERBOXD, EX_NFONTES
+  EX_LETTERBOXD, EX_METAUSER, EX_MAL, EX_EBERT, EX_MDBSCORE, EX_NFONTES
 } ExFonte;
 
 // Le art/mdblist.txt. Sem ele o modulo funciona com Trakt e IMDb apenas.

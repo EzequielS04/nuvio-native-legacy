@@ -27,7 +27,10 @@ static char dirArteEx[512];
 // Nome do provedor na api do mdbList E nome do arquivo de marca em art/marcas.
 // A ordem e a do enum, que e a do renderExternalRatingsRow do web.
 static const char *FONTE[EX_NFONTES] = {
-  "trakt", "imdb", "tmdb", "tomatoes", "audience", "metacritic", "letterboxd"
+  "trakt", "imdb", "tmdb", "tomatoes", "audience", "metacritic", "letterboxd",
+  // Nomes de provedor da api do MDBList. Estas quatro NAO tem arquivo de marca
+  // (art/marcas): notasui.c desenha a marca delas, e o nome so serve a api.
+  "metacriticuser", "myanimelist", "rogerebert", "score"
 };
 
 // A ESCALA MUDA POR PROVEDOR, e nao do jeito que parece. CONFERIDO na api com
@@ -52,7 +55,8 @@ static int emDecimos(double v) {
 
 // 1 quando a nota da fonte e uma PORCENTAGEM; 0 quando e nota de 0 a 10.
 int extras_fonte_percentual(int fonte) {
-  return fonte != EX_IMDB && fonte != EX_LETTERBOXD;
+  return fonte != EX_IMDB && fonte != EX_LETTERBOXD && fonte != EX_METAUSER &&
+         fonte != EX_MAL && fonte != EX_EBERT;
 }
 
 void extras_definir_chave(const char *chave) {
@@ -615,6 +619,9 @@ static void *buscar(void *arg) {
              "{\"ids\":[\"%s\"],\"provider\":\"imdb\"}", id);
     for (k = 0; k < EX_NFONTES; k++) {
       char u[300], *rp;
+      // As fontes extras so custam a viagem quando a pessoa as pediu na linha
+      // do titulo (o padrao e desligado): sao quatro POSTs a mais por titulo.
+      if (k >= EX_METAUSER && !ajustes_nota_titulo(k)) continue;
       snprintf(u, sizeof u, "https://api.mdblist.com/rating/%s/%s?apikey=%s",
                serie ? "show" : "movie", FONTE[k], mdbChave);
       rp = rede_postar(u, 12, cabJ, corpoPost);
