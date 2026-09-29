@@ -57,7 +57,7 @@ for H in NuvioTpk40 NuvioTpk60 NuvioTpk65 NuvioTpk; do
   T="build/tpk/Nuvio-$VER-$H.tpk"
   [ -f "$T" ] || { echo "release-samsung: faltou $T" >&2; exit 1; }
   confere "$T"
-  MV=$(unzip -p "$T" tizen-manifest.xml | sed -n 's/.* version="\([0-9.]*\)".*/\1/p' | head -1)
+  MV=$(unzip -p "$T" tizen-manifest.xml | grep '<manifest' | sed -n 's/.*[[:space:]]version="\([0-9.]*\)".*/\1/p' | head -1)
   [ "$MV" = "$VER" ] || { echo "release-samsung: $T diz versao $MV" >&2; exit 1; }
   if [ "$H" = NuvioTpk40 ] && unzip -p "$T" tizen-manifest.xml | grep -q drminfo; then
     echo "release-samsung: $T pede drminfo (Partner). Tire do manifesto: Public funciona e Partner recusa em parte das TVs." >&2; exit 1
