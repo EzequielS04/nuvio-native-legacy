@@ -136,3 +136,31 @@ mesma carga. Se **C** falhar mas **D** passar, a saida e um carregador de ELF
 proprio em memoria anonima (mmap + relocacoes + `mprotect RX`). Se as duas
 falharem, a rota nativa em .tpk esta fechada para 4/5 (resta o NaCl em `.wgt`,
 que outro agente estuda).
+
+## Spike 2 de UEP (Tizen 4/5) — `NvMemfd`
+
+    bash tools/tizen-memfd-spike.sh   # tizen-tpk-spike/out/NvMemfd-0.1.0.tpk
+
+Pacote/appid proprio (`NuvioTV002.NvMemfd`); nao encosta nos publicados.
+
+**O que o `NvUepProbe` rodou numa TV real (optiman, QE55Q6FNA, Tizen 4.0):**
+A `dlopen lib/` FALHOU, B `dlopen data/` FALHOU ("failed to map segment from
+shared object"), C `memfd` deu **EXCECAO `EntryPointNotFoundException:
+'memfd_create'`** (a libc do Tizen 4/5 nao exporta esse simbolo), D
+`mprotect +EXEC` **OK**. Ou seja: `mmap PROT_EXEC` de ARQUIVO e barrado, mas
+memoria ANONIMA executavel e liberada — e a linha C so falhou por chamar
+`memfd_create` por NOME.
+
+`NvMemfd` corrige e amplia, cada teste em `try/catch` (uma falha nao impede a
+proxima), tela + `data/tpk-host.log`:
+
+| # | Teste | Esperado |
+|---|---|---|
+| 1 | `syscall(385)` (memfd_create por NUMERO, ARM EABI) + `write` + `dlopen("/proc/self/fd/N")` | **se OK, a rota preferida existe** |
+| 2 | Carregador de ELF32 ARM proprio em C# (rota D): `mmap` anon RW, mapeia PT_LOAD, aplica `R_ARM_RELATIVE/GLOB_DAT/JUMP_SLOT/ABS32`, resolve externos por `dlsym(RTLD_DEFAULT)`, roda `DT_INIT_ARRAY`, `mprotect +EXEC`, chama `nv_probe` pelo dynsym | OK = plano B sem arquivo nenhum |
+| 3 | Diz na tela QUAL metodo carregou codigo nativo | — |
+
+A `libnvprobe.so` e a mesma `native/uepprobe.c` do spike 1, mas linkada com
+`--hash-style=both` para o `DT_HASH` existir (o carregador em C# usa `nchain`
+para contar simbolos). Se **1** passar (`nv_probe=42`), o proximo passo e
+carregar a `libnuvio.so` real por memfd no host `NuvioTpk40`.
