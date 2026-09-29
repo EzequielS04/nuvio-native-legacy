@@ -2518,7 +2518,7 @@ static void desenhaBotao(GfxRect r, const char *rot, int icone, int focado, floa
       // Vidro: o mesmo disco de botao_disco (branco cheio em foco, glifo escuro).
       gfx_vidro_painel(r, NV_RAIO_PILL, 0.55f, a);
       gfx_vidro_pilula_cheia(r, NV_RAIO_PILL, focado ? 1.0f : 0.0f, a);
-      ic = focado ? 0.078f : 1.0f;
+      ic = focado ? (float)gfx_vidro_tinta(1.0f) / 255.0f : 1.0f;
     } else
     if (focado) { float fr, fg, fb; ic = focoAcento(&fr, &fg, &fb);
                   luzFoco(r, a);
@@ -2589,9 +2589,11 @@ static void desenhaBotao(GfxRect r, const char *rot, int icone, int focado, floa
   // o mesmo botao em dois tamanhos, e o Play brigava com o botao em foco.
   { float tinta = 235.0f / 255.0f, fr = 0.14f, fg = 0.15f, fb = 0.17f;
     if (ajustes_vidro()) {
-      gfx_vidro_painel(r, NV_RAIO_PILL, 0.55f, a);
+      // Play: vidro com lavagem e aro do realce em repouso; em foco, a pilula
+      // cheia na cor do realce (branca no tema padrao).
+      gfx_vidro_painel_acento(r, NV_RAIO_PILL, 0.55f, a);
       gfx_vidro_pilula_cheia(r, NV_RAIO_PILL, focado ? 1.0f : 0.0f, a);
-      tinta = focado ? 0.078f : tinta;
+      tinta = focado ? (float)gfx_vidro_tinta(1.0f) / 255.0f : tinta;
     } else {
     if (focado) { tinta = focoAcento(&fr, &fg, &fb); luzFoco(r, a); }
     gfx_cor(r, NV_RAIO_PILL, fr, fg, fb, a); }
@@ -3607,6 +3609,12 @@ static void desenhaTemporada(GfxRect r, int c, float f, float a) {
   // Os tres degraus na COR DE REALCE (layout.h): cheia na focada, 60% na
   // escolhida em repouso, #222 na que nao e nada.
   float fr, fg, fb, ti = ajustes_acento_tinta(&fr, &fg, &fb);
+  if (ajustes_vidro()) {
+    // Vidro: repouso = fio; a escolhida leva a lavagem e o aro do realce; a
+    // focada e a pilula cheia no realce. Os tres degraus seguem existindo.
+    if (sel) gfx_vidro_painel_acento(r, raio, 0.5f, a); else gfx_vidro_painel(r, raio, 0.4f, a);
+    gfx_vidro_pilula_cheia(r, raio, f, a);
+  } else
   { float br = sel ? fr * 0.6f : 0.133f, bg = sel ? fg * 0.6f : 0.133f,
           bb = sel ? fb * 0.6f : 0.133f;
     gfx_cor(r, raio, br + (fr - br) * f, bg + (fg - bg) * f, bb + (fb - bb) * f, a); }
@@ -3614,6 +3622,7 @@ static void desenhaTemporada(GfxRect r, int c, float f, float a) {
   // contrasta com ele (ti), em degrau no meio da mola.
   { int t = (int)(ti * 255.0f + 0.5f);
     int cor = (sel || f > 0.5f) ? t : 179;
+    if (ajustes_vidro()) cor = f > 0.5f ? t : (sel ? 245 : 179);   // escolhida: superficie escura
     TxtLinha l = txt_linha(TXT_PLR_CORPO, rot, cor, cor, cor, 255);
     // 500 de peso na Inter Regular: uma segunda passada meio pixel a direita.
     txt_peso(l, r.x + (r.w - l.w) * 0.5f, r.y + (r.h - l.h) * 0.5f, a, 0.5f); }
@@ -3676,6 +3685,8 @@ static float desenhaNotaEpisodio(float x, float y, const char *fonte,
   ajustes_acento(&ar, &ag, &ab);
   // Fundo quase-preto com uma lavagem mínima do accent: a marca continua
   // discreta sobre a foto e deixa de parecer um bloco cinza genérico.
+  if (ajustes_vidro()) gfx_vidro_painel(selo, 0.5f, 0.6f, a);   // o ponto segue no realce
+  else
   gfx_cor(selo, 0.5f, .055f + ar * .06f, .062f + ag * .06f,
           .078f + ab * .07f, .94f * a);
   gfx_cor((GfxRect){x + pad, y + (selo.h - ponto) * .5f, ponto, ponto},
@@ -3747,6 +3758,7 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
     gfx_esqueleto(th, raioTh, 0.133f, 0.133f, 0.133f, a);
   else gfx_cor(th, raioTh, 0.133f, 0.133f, 0.133f, a);
   veuEpisodio(th, a);
+  if (ajustes_vidro()) gfx_anel(th, raioTh, 1.5f, 1, 1, 1, 0.14f * a);   // vidro: aro fino na miniatura
 
   // EPISODIO JA ASSISTIDO, segundo o Trakt: mascara escura sobre a miniatura e
   // um check no canto. Pedido do dono, e resolve uma pergunta que a lista nao
@@ -3774,12 +3786,15 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
     float d = 36.0f;
     GfxRect selo = { th.x + th.w - d - 16.0f, th.y + 16.0f, d, d };
     gfx_cor(th, raioTh, 0.0f, 0.0f, 0.0f, 0.22f * a);
+    if (ajustes_vidro()) gfx_vidro_painel(selo, 0.5f, 0.7f, a);
+    else
     gfx_cor(selo, 0.5f, 1, 1, 1, 0.92f * a);
     // O check e o icone (art/icones/check.png, o mesmo do card da home), nao
     // mais dois tracos feitos de quadradinhos em degrau — a 36 px isso era o
     // "tick de baixa resolucao" do #74.
+    { float ck = ajustes_vidro() ? 1.0f : 0.05f;
     gfx_icone((GfxRect){ selo.x + 7.0f, selo.y + 7.0f, d - 14.0f, d - 14.0f }, "check",
-              0.05f, 0.05f, 0.05f, a);
+              ck, ck, ck, a); }
   }
 
   // NADA DE RESERVA INVENTADA. Aqui as quatro linhas caiam numa tabela de
@@ -3812,6 +3827,8 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
     { TxtLinha l = txt_linha(TXT_CAPTION2, cab, 255, 255, 255, 255);
       float w = l.w + NV_DETP_EP_SELO_PADX * 2;
       GfxRect s = { xs, r.y + NV_DETP_EP_SELO_Y, w, NV_DETP_EP_SELO_H };
+      if (ajustes_vidro()) gfx_vidro_painel(s, 12.0f / NV_DETP_EP_SELO_H, 0.6f, a);
+      else
       gfx_cor(s, 12.0f / NV_DETP_EP_SELO_H, 0.05f, 0.05f, 0.06f, 0.78f * a);
       txt_peso(l, s.x + NV_DETP_EP_SELO_PADX,
                s.y + (NV_DETP_EP_SELO_H - l.h) * 0.5f, a, 1.0f);
@@ -3836,9 +3853,15 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
     // "ESTREIA" apontar, e ai o selo precisa se bastar: "NÃO EXIBIDO".
     if (epNaoExibido(ep)) {
       const char *rot = epData ? i18n("ESTREIA") : i18n("NÃO EXIBIDO");
-      TxtLinha l = txt_linha(TXT_CAPTION2, rot, 20, 20, 20, 255);
+      const int vid = ajustes_vidro();
+      // Vidro: o ambar vira lavagem + aro e texto ambar (a cor ainda diz "atencao").
+      TxtLinha l = vid ? txt_linha(TXT_CAPTION2, rot, 245, 199, 77, 255)
+                       : txt_linha(TXT_CAPTION2, rot, 20, 20, 20, 255);
       float w = l.w + NV_DETP_EP_SELO_PADX * 2;
       GfxRect s = { xs, r.y + NV_DETP_EP_SELO_Y, w, NV_DETP_EP_SELO_H };
+      if (vid) { gfx_cor(s, 12.0f / NV_DETP_EP_SELO_H, 0.961f, 0.780f, 0.302f, 0.14f * a);
+                 gfx_anel(s, 12.0f / NV_DETP_EP_SELO_H, 1.5f, 0.961f, 0.780f, 0.302f, 0.6f * a); }
+      else
       gfx_cor(s, 12.0f / NV_DETP_EP_SELO_H, 0.961f, 0.780f, 0.302f, a);
       // Mesmo peso extra do selo vizinho: sao a mesma peca tipografica, e o
       // texto escuro sobre superficie clara ja parece mais grosso do que e
@@ -4148,6 +4171,7 @@ static void moldura(GfxRect r, float raio, float a) {
   // SUPERFICIE ESCURA TINGIDA, um degrau acima do fundo. O cinza #2D2D2D da
   // primeira versao competia com os graficos e fazia esta aba parecer um modal
   // separado; o navy quase-preto mantem a hierarquia sem virar uma placa.
+  if (ajustes_vidro()) { gfx_vidro_painel(r, raio, 0.5f, a); return; }
   gfx_cor(r, raio, 0.082f, 0.094f, 0.118f, 0.92f * a);
   // SEM FIO DE CONTORNO. Havia aqui um anel branco a 14% que existia para
   // "fechar" o cartao sobre a arte de fundo — o dono mandou tirar em 16/09
@@ -4650,12 +4674,18 @@ static float cabecalhoComentarios(float x, float y, float a) {
         float dw = r.w * (cresce - 1.0f), dh = r.h * (cresce - 1.0f);
         GfxRect rc = { r.x - dw * 0.5f, r.y - dh * 0.5f, r.w + dw, r.h + dh };
         float lum = 0.176f;                     // #2D2D2D
+        if (ajustes_vidro()) {
+          if (sel) gfx_vidro_painel_acento(rc, NV_RAIO_PILL, 0.5f, a);
+          else gfx_vidro_painel(rc, NV_RAIO_PILL, 0.4f, a);
+          gfx_vidro_pilula_cheia(rc, NV_RAIO_PILL, f, a);
+        } else {
         gfx_cor(rc, NV_RAIO_PILL, lum, lum, lum, a);
         if (f > 0.01f) { float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
                          gfx_cor(rc, NV_RAIO_PILL, ar, ag, ab, f * a); }
         else if (sel) { float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
                         gfx_cor(rc, NV_RAIO_PILL, ar * 0.6f, ag * 0.6f,
                                 ab * 0.6f, a); }
+        }
         r = rc; }
       // A TINTA DO TEXTO E CALCULADA, nao cravada: a cor de realce e escolha
       // da pessoa nos Ajustes, e com um realce escuro o preto sobre os 60%
@@ -4668,6 +4698,7 @@ static float cabecalhoComentarios(float x, float y, float a) {
         else if (sel)   ls = (0.2126f*ar + 0.7152f*ag + 0.0722f*ab) * 0.6f;
         else            ls = 0.176f;
         cor = (ls > 0.55f) ? 17 : 255;
+        if (ajustes_vidro()) cor = f > 0.5f ? gfx_vidro_tinta(1.0f) : 255;   // so o foco e cheio
         { TxtLinha l = txt_linha(TXT_PLR_CORPO, rotuloPilulaCom(k), cor, cor, cor, 255);
           txt_peso(l, r.x + (r.w - l.w) * 0.5f, r.y + (r.h - l.h) * 0.5f, a, 0.5f); } }
       px += w + COM_PILL_GAP;
@@ -4717,7 +4748,12 @@ static void desenhaComentarios(float x, float y, float a) {
     // entrada nova de cache por quadro.
     moldura(card, 20.0f, a);
     int tintaEsc = 1;   // tinta escura sobre o foco (realce claro); 0 = clara
-    if (foc) { float fr, fg, fb; tintaEsc = ajustes_acento_tinta(&fr, &fg, &fb) < 0.5f;
+    // Vidro: o cartao em foco segue translucido (contorno no realce), entao o
+    // texto NAO inverte; `focCor` e o "foco cheio" das cores abaixo.
+    const int focCor = foc && !ajustes_vidro();
+    if (foc && ajustes_vidro())
+      gfx_vidro_foco(card, 20.0f / (COM_CARD_W < COM_CARD_H ? COM_CARD_W : COM_CARD_H), 1.0f, a);
+    else if (foc) { float fr, fg, fb; tintaEsc = ajustes_acento_tinta(&fr, &fg, &fb) < 0.5f;
       gfx_cor(card, 20.0f / (COM_CARD_W < COM_CARD_H ? COM_CARD_W
                                                      : COM_CARD_H),
               fr, fg, fb, a); }
@@ -4725,15 +4761,15 @@ static void desenhaComentarios(float x, float y, float a) {
     { TxtLinha lu = txt_linha_corta(TXT_ROW_TITULO,
                                     daSerie ? extras_comentario_usuario(i)
                                             : extras_comentario_ep_usuario(i),
-                                    foc ? (tintaEsc ? 17 : 255) : 238, foc ? (tintaEsc ? 17 : 255) : 241,
-                                    foc ? (tintaEsc ? 20 : 255) : 248, 255, larg);
+                                    focCor ? (tintaEsc ? 17 : 255) : 238, focCor ? (tintaEsc ? 17 : 255) : 241,
+                                    focCor ? (tintaEsc ? 20 : 255) : 248, 255, larg);
       txt_desenhar_alpha(lu, px, y + COM_PAD, a); }
 
     // O texto para ANTES do rodape: sem o teto de linhas ele passava por cima
     // das curtidas. 6 linhas de 30 terminam em 246; o rodape comeca em 288.
     txt_bloco(TXT_DET_META2, daSerie ? extras_comentario_texto(i)
                                      : extras_comentario_ep_texto(i),
-              foc ? (tintaEsc ? 45 : 235) : 190, foc ? (tintaEsc ? 47 : 236) : 195, foc ? (tintaEsc ? 52 : 240) : 205,
+              focCor ? (tintaEsc ? 45 : 235) : 190, focCor ? (tintaEsc ? 47 : 236) : 195, focCor ? (tintaEsc ? 52 : 240) : 205,
               px, y + COM_PAD + 42.0f, larg, 30.0f, a * 0.95f, 6);
 
     { int nota = daSerie ? extras_comentario_nota(i)

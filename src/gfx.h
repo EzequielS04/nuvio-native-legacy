@@ -369,7 +369,7 @@ void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a);
 // FOCO de uma pilula/linha JA desenhada com gfx_vidro_painel: o miolo clareia
 // (branco a 9 %) e o contorno de 2 px em branco acende com a mola `foco`.
 void gfx_vidro_foco(GfxRect r, float raio, float foco, float a);
-// FOCO de um cartaz/cartao de arte: contorno branco de 3 px POR FORA, com 2 px
+// FOCO de um cartaz/cartao de arte: contorno na cor do realce (branco no padrao) de 3 px POR FORA, com 2 px
 // de vao — limpo, sem brilho colorido nem sombra.
 void gfx_vidro_cartao(GfxRect r, float raio, float foco, float a);
 // FOCO de botao de acao e item de menu: a pilula vira BRANCA cheia (a mola
@@ -379,6 +379,9 @@ void gfx_vidro_pilula_cheia(GfxRect r, float raio, float foco, float a);
 // Tinta do texto sobre a superficie de vidro: escura sobre a pilula branca do
 // foco, clara (235) no resto.
 int  gfx_vidro_tinta(float foco);
+// Como gfx_vidro_painel, mas com lavagem e aro na COR DO REALCE: a acao
+// principal em repouso (Play) e as marcas de estado mantem o tema visivel.
+void gfx_vidro_painel_acento(GfxRect r, float raio, float fundo, float a);
 // A luz de realce dos paineis flutuantes (ver GFX_LUZ): `raio` e o dos cantos
 // do painel, na mesma fracao do menor lado que gfx_cor usa; (cx, cy) e o
 // centro da luz em pixels RELATIVOS ao canto superior esquerdo de `r` (pode

@@ -1,0 +1,117 @@
+// CAPTURA DO MENU LATERAL (rail + aberto) E DA FOLHA DE FAIXAS, sem interacao e sem rede.
+// Serve ao "Interface de vidro" (compile com -DNV_VIDRO_TESTE para forcar ligado).
+//
+// Mesmo motivo de tests/ajustes_shot.c: interface de TV julgada so por codigo
+// sai ilegivel a 3 m. E esta tela em especial nao da para alcancar na TV por
+// tecla injetada — ela abre pelo botao de episodios DO PLAYER, e chegar la
+// exige reproduzir algo. Uma captura headless e repetivel e nao gasta fonte.
+#include "menu.h"
+#include "faixas.h"
+#include "gfx.h"
+#include "text.h"
+#include "tex_cache.h"
+#include "ajustes.h"
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static int qual = 0;   // 0 = menu lateral, 1 = folha de faixas
+static void tecla(SDL_Keycode k) {
+  SDL_Event e;
+  memset(&e, 0, sizeof e);
+  e.type = SDL_KEYDOWN;
+  e.key.keysym.sym = k;
+  if (qual) faixas_evento(&e); else menu_evento(&e);
+}
+
+static void captura(const char *nome, SDL_Window *win) {
+  int i;
+  for (i = 0; i < 50; i++) {
+    SDL_PumpEvents();
+    txt_novo_quadro();
+    tex_novo_quadro();
+    tex_bombear(6);
+    if (qual) faixas_atualizar(1.0f / 60.0f, SDL_GetTicks()); else menu_atualizar(1.0f / 60.0f, SDL_GetTicks());
+    glClearColor(0.05f, 0.05f, 0.06f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    if (qual) faixas_desenhar(SDL_GetTicks()); else menu_desenhar(SDL_GetTicks());
+    if (i == 49) {
+      unsigned char *pix = malloc(1920 * 1080 * 4);
+      SDL_Surface *s;
+      int y;
+      assert(pix);
+      glReadPixels(0, 0, 1920, 1080, GL_RGBA, GL_UNSIGNED_BYTE, pix);
+      s = SDL_CreateRGBSurfaceWithFormat(0, 1920, 1080, 32, SDL_PIXELFORMAT_RGBA32);
+      assert(s);
+      for (y = 0; y < 1080; y++)
+        memcpy((char *)s->pixels + y * s->pitch, pix + (1079 - y) * 1920 * 4, 1920 * 4);
+      assert(SDL_SaveBMP(s, nome) == 0);
+      SDL_FreeSurface(s);
+      free(pix);
+    }
+    SDL_GL_SwapWindow(win);
+  }
+  printf("captura: %s\n", nome);
+}
+
+int main(int argc, char **argv) {
+  const char *saida = argc > 1 ? argv[1] : "/tmp/nuvio-vidro-menu";
+  char nome[600];
+  SDL_Window *w;
+  SDL_GLContext gl;
+
+  // Mesmo accent Ocean da captura social; o tema e ajustavel pelo ambiente.
+  { const char *dir = getenv("NUVIO_DADOS");
+    if (dir && *dir) {
+      const char *temaEnv = getenv("NUVIO_SHOT_THEME");
+      char caminho[700];
+      FILE *f;
+      int tema = temaEnv && *temaEnv ? atoi(temaEnv) : 2;
+      if (tema < 0 || tema >= 16) tema = 2;
+      snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dir);
+      f = fopen(caminho, "w"); assert(f);
+      fprintf(f, "idioma 0\nselected_theme %d\ncollapseSidebar 1\n", tema);
+      fclose(f);
+      ajustes_dir(dir);
+    } }
+
+  assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) == 0);
+  IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+  w = SDL_CreateWindow("Nuvio: revisao dos episodios", SDL_WINDOWPOS_CENTERED,
+                       SDL_WINDOWPOS_CENTERED, 1920, 1080,
+                       SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
+  assert(w);
+  gl = SDL_GL_CreateContext(w);
+  assert(gl);
+  SDL_GL_SetSwapInterval(0);
+  glViewport(0, 0, 1920, 1080);
+  gfx_tamanho_alvo(1920, 1080);
+  assert(gfx_iniciar());
+  assert(txt_iniciar("deploy/app", 1));
+  tex_iniciar(64);
+  gfx_icones_dir("deploy/app/art");
+
+  menu_iniciar();
+  snprintf(nome, sizeof nome, "%s-rail.bmp", saida);
+  captura(nome, w);
+  menu_abrir();
+  tecla(SDLK_DOWN); tecla(SDLK_DOWN);
+  snprintf(nome, sizeof nome, "%s-menu.bmp", saida);
+  captura(nome, w);
+  menu_fechar();
+  qual = 1;
+  faixas_reiniciar();
+  faixas_abrir_em(1);
+  snprintf(nome, sizeof nome, "%s-faixas.bmp", saida);
+  captura(nome, w);
+
+  tex_encerrar(); txt_encerrar(); gfx_encerrar();
+  SDL_GL_DeleteContext(gl); SDL_DestroyWindow(w); SDL_Quit();
+  puts("PASS: capturas do menu e das faixas gravadas.");
+  return 0;
+}
