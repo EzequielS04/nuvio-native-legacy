@@ -1070,6 +1070,15 @@ void stream_folha_desenhar(Uint32 agora) {
     else if(vid) gfx_vidro_painel((GfxRect){bx,44,120,50},.5f,.5f,anim);
     else    gfx_cor((GfxRect){bx,44,120,50},.3f,.075f,.079f,.092f,anim);
     int c=sel?ajustes_tinta_foco():224;
+    if(botaoDe(i)==BT_SEM_HDR) {
+      // "Sem" + a marca HDR no lugar da palavra (traduzido antes de trocar).
+      // Caixa de 30 px centrada na linha do texto.
+      float tw=marca_rotulo_largura(TXT_PG_FIM,"Sem HDR",FMT_HDR,30.0f);
+      if(tw<=112.0f) {
+        marca_rotulo(TXT_PG_FIM,"Sem HDR",FMT_HDR,bx+(120-tw)*.5f,58,30.0f,c,anim);
+        continue;
+      }
+    }
     TxtLinha l=txt_linha(TXT_PG_FIM,rotuloBotao(botaoDe(i)),c,c,c,255);
     txt_desenhar_alpha(l,bx+(120-l.w)*.5f,58,anim);
   }
@@ -1239,7 +1248,10 @@ void stream_folha_desenhar(Uint32 agora) {
       txt_desenhar_alpha(m, pil.x + 10.0f, pil.y + 4.0f, anim);
       mx = lx + pil.w + 10.0f;
     }
-    snprintf(meta,sizeof meta,"%s%s%s%s",cont,qual,s->dolbyVision?" · Dolby Vision":"",s->dolbyAtmos?" · Atmos":"");
+    // DV e Atmos NAO entram mais como palavra: a fileira de marcas logo
+    // abaixo ja desenha o logo deles (badges_detectar), e dizer os dois era
+    // repetir. Pedido do dono (29/09): logo sempre que citar formato.
+    snprintf(meta,sizeof meta,"%s%s",cont,qual);
     if(s->tamanhoMB) {size_t p=strlen(meta);snprintf(meta+p,sizeof meta-p," · %.1f GB",s->tamanhoMB/1024.0);}
     { const char *texto = meta;
       // A sigla ja esta na pilula: o texto comeca depois dela e do " · " (4

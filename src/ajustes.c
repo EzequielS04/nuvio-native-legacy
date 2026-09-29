@@ -28,6 +28,7 @@
 #include "gfx.h"
 #include "text.h"
 #include "tex_cache.h"
+#include "badges.h"
 #include "anim.h"
 #include "layout.h"
 #include "sessao.h"
@@ -4140,6 +4141,30 @@ static void desenhaInterruptor(float xDir, float y, float h, int ligado,
   txt_desenhar_alpha(t, pill.x + (pill.w - t.w) * 0.5f, pill.y + (pill.h - t.h) * 0.5f, a);
 }
 
+// MARCAS DE FORMATO NAS LINHAS (29/09/2026). O titulo de "Dolby Vision" e
+// "Dolby Atmos" ganha o logo ao lado; o valor "4K/1080p/720p" da qualidade
+// maxima vira a marca. Os valores continuam sendo as mesmas strings (o que
+// ajustes_qualidade() devolve e streams.c compara): so o DESENHO muda.
+#define AJ_MARCA_ROTULO_H 44.0f
+#define AJ_MARCA_VALOR_H  40.0f
+static int marcaDaOpcao(int op) {
+  return op == AJ_DV ? FMT_DV : op == AJ_ATMOS ? FMT_ATMOS : -1;
+}
+static int marcaDoValor(int op, const char *v) {
+  if (op != AJ_QUALIDADE || !v) return -1;
+  if (!strcmp(v, "4K"))    return FMT_4K;
+  if (!strcmp(v, "1080p")) return FMT_1080;
+  if (!strcmp(v, "720p"))  return FMT_720;
+  return -1;
+}
+static void desenhaValorLinha(TxtLinha val, int fv, float x, float yLinha, float vy,
+                              int cv, float a) {
+  if (fv < 0) { txt_desenhar_alpha(val, x, vy, a); return; }
+  { float k = cv / 255.0f;
+    marca_formato((FormatoMarca)fv, x, yLinha + (AJ_LINHA_H - AJ_MARCA_VALOR_H) * 0.5f,
+                  AJ_MARCA_VALOR_H, k, k, k, a); }
+}
+
 // TRES NATUREZAS DE LINHA, TRES CAUDAS (a regra do topo do arquivo, agora no
 // vocabulario do web): interruptor = pilula Ligado/Desligado; lista de valores,
 // numero e acao = valor + chevron "›" (o `renderActionRow` do web: "tem mais
@@ -4182,6 +4207,10 @@ static void desenhaLinha(int item, float y, float f, float dx, float aPag) {
     float valorDir = chevron ? xDir - chv.w - 16.0f : xDir;
     TxtLinha val = txt_linha_corta(TXT_CALLOUT, v, cv, cv, cv, 255, 340.0f);
     float vy = y + (AJ_LINHA_H - val.h) * 0.5f;
+    // "4K", "1080p" e "720p" da qualidade maxima saem como MARCA. A largura da
+    // marca substitui a do texto para o resto da conta (cauda, pilula de edicao).
+    int fv = marcaDoValor(op, v);
+    if (fv >= 0) val.w = (int)(marca_formato_largura((FormatoMarca)fv, AJ_MARCA_VALOR_H) + 0.5f);
     cauda = xDir - (valorDir - val.w);
 
     // Barra de preenchimento da linha numerica. Sem ela, "28%" nao diz nada
@@ -4219,18 +4248,31 @@ static void desenhaLinha(int item, float y, float f, float dx, float aPag) {
       txt_desenhar_alpha(dir, xDir - dir.w, y + (AJ_LINHA_H - dir.h) * 0.5f, aTexto * f);
       txt_desenhar_alpha(esq, vd - val.w - 14.0f - esq.w,
                          y + (AJ_LINHA_H - esq.h) * 0.5f, aTexto * f);
-      txt_desenhar_alpha(val, vd - val.w, vy, aTexto);
+      desenhaValorLinha(val, fv, vd - val.w, y, vy, cv, aTexto);
     } else {
       if (chevron)
         txt_desenhar_alpha(chv, xDir - chv.w,
                            vy + (val.h - chv.h) * 0.5f - 2.0f, aTexto);
-      txt_desenhar_alpha(val, valorDir - val.w, vy, aTexto);
+      desenhaValorLinha(val, fv, valorDir - val.w, y, vy, cv, aTexto);
     }
   }
 
   TxtLinha rot = txt_linha_corta(TXT_CALLOUT, OPCOES[op].rotulo, cr, cr, cr, 255,
                                  linha.w - AJ_PAD * 2.0f - cauda - 28.0f);
   txt_desenhar_alpha(rot, linha.x + AJ_PAD, y + (AJ_LINHA_H - rot.h) * 0.5f, aTexto);
+  // A MARCA AO LADO DO TITULO: "Dolby Vision" e "Dolby Atmos" mostram o logo
+  // que a opcao liga. Fica depois do texto, centrada na linha, e so entra se
+  // couber antes da cauda (a marca some antes de cortar o rotulo).
+  { int fm = marcaDaOpcao(op);
+    if (fm >= 0) {
+      float mw = marca_formato_largura((FormatoMarca)fm, AJ_MARCA_ROTULO_H);
+      float mx = linha.x + AJ_PAD + (float)rot.w + 22.0f;
+      if (mx + mw < linha.x + linha.w - AJ_PAD - cauda - 20.0f) {
+        float k = cr / 255.0f;
+        marca_formato((FormatoMarca)fm, mx, y + (AJ_LINHA_H - AJ_MARCA_ROTULO_H) * 0.5f,
+                      AJ_MARCA_ROTULO_H, k, k, k, aTexto);
+      }
+    } }
 }
 
 // GRUPO RECOLHIVEL: titulo e descricao a esquerda (a composicao das linhas de
@@ -5176,15 +5218,15 @@ static float desenhaPrevia(int op, float x, float y, float w) {
     }
     case AJ_QUALIDADE: {
       // Quatro barras, uma por resolucao; as que o teto deixa passar acesas.
-      static const char *R[] = { "720p", "1080p", "4K" };
       int teto = valor[AJ_QUALIDADE], i;   // 0 auto, 1 4K, 2 1080p, 3 720p
       float bw = (w - 2.0f * 14.0f) / 3.0f;
       for (i = 0; i < 3; i++) {
         int passa = teto == 0 || (teto == 1) || (teto == 2 && i <= 1) || (teto == 3 && i == 0);
         float bh = 40.0f + (float)i * 40.0f, px = x + (float)i * (bw + 14.0f);
         gfx_cor((GfxRect){ px, y + 120.0f - bh, bw, bh }, 6.0f / bw, passa ? ar : 0.30f, passa ? ag : 0.32f, passa ? ab : 0.38f, passa ? 0.9f : 0.6f);
-        { TxtLinha l = txt_linha(TXT_MINI, R[i], 200, 203, 210, 255);
-          txt_desenhar(l, px + (bw - l.w) * 0.5f, y + 128.0f); }
+        { static const FormatoMarca F[] = { FMT_720, FMT_1080, FMT_4K };
+          float mw = marca_formato_largura(F[i], 30.0f);
+          marca_formato(F[i], px + (bw - mw) * 0.5f, y + 124.0f, 30.0f, 0.78f, 0.80f, 0.82f, 1.0f); }
       }
       return 128.0f + 30.0f;
     }
@@ -5662,17 +5704,17 @@ static float previaReproducaoOpcao(int op, float x, float y, float w) {
     }
     previaRealce(x + 12.0f, y + 98.0f, w - 24.0f, 34.0f, ar, ag, ab);
   } else if (op == AJ_DV || op == AJ_ATMOS) {
-    const char *badge = op == AJ_DV ? "DV" : "ATMOS";
-    int bx = op == AJ_DV ? (int)(x + 18.0f) : (int)(x + 100.0f);
-    ajudaMiniCaixa((float)bx, y + 102.0f, op == AJ_DV ? 70.0f : 104.0f,
-                   28.0f, lig(op), ar, ag, ab);
-    TxtLinha t = txt_linha(TXT_CAPTION2, badge,
-                           lig(op) ? ajustes_tinta_foco() : 194,
-                           lig(op) ? ajustes_tinta_foco() : 197,
-                           lig(op) ? ajustes_tinta_foco() : 203, 255);
-    txt_desenhar(t, (float)bx + 10.0f, y + 106.0f);
-    previaRealce((float)bx - 2.0f, y + 100.0f,
-                 op == AJ_DV ? 74.0f : 108.0f, 32.0f, ar, ag, ab);
+    // A MARCA do formato no lugar de "DV"/"ATMOS" (pedido do dono, 29/09):
+    // a previa mostra o logo que a opcao liga. Pilula de 42 px para a marca de
+    // duas linhas do Dolby ler; a largura sai da propria arte.
+    FormatoMarca fm = op == AJ_DV ? FMT_DV : FMT_ATMOS;
+    float mh = 34.0f, mw = marca_formato_largura(fm, mh);
+    float pw = mw + 24.0f, py = y + 93.0f;
+    float bx = x + 18.0f;
+    float tinta = lig(op) ? ajustes_tinta_foco() / 255.0f : 0.78f;
+    ajudaMiniCaixa(bx, py, pw, 42.0f, lig(op), ar, ag, ab);
+    marca_formato(fm, bx + 12.0f, py + 4.0f, mh, tinta, tinta, tinta, 1.0f);
+    previaRealce(bx - 2.0f, py - 2.0f, pw + 4.0f, 46.0f, ar, ag, ab);
   } else if (op == AJ_AUD_LINGUA || op == AJ_LEG_LINGUA) {
     float ty = y + 101.0f;
     for (int i = 0; i < 2; i++) {

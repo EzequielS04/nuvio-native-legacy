@@ -38,7 +38,10 @@ static void fonte(Stream *s, const char *provedor, const char *rotulo,
   // ela e preenchida por stream_parse, que esta captura nao usa. Sem esta
   // linha a base da linha sai vazia e a regressao de "badge branca sobre linha
   // clara" fica invisivel justamente na ferramenta que existe para ve-la.
-  s->badges = badges_detectar(descricao);
+  { char texto[3200];
+    // Como stream_parse: rotulo + descricao, e o DV tambem vale como dado.
+    snprintf(texto, sizeof texto, "%s %s", rotulo, descricao);
+    s->badges = badges_detectar(texto); }
 }
 
 static void captura(const char *nome, SDL_Window *win) {
