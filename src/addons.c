@@ -44,6 +44,10 @@ static struct {
   // Catalogos de canal do manifesto (ver addons_catalogos_canal). `canalLido`
   // separa "nao declara nenhum" de "manifesto ainda nao lido".
   AddCatCanal canal[ADD_CANAL_MAX]; int nCanal, canalLido;
+  // #182: consultas SEGUIDAS em que o addon ficou sem resposta nas duas
+  // tentativas. Com 2 ou mais ele e dado como fora do ar e nao ganha a segunda
+  // chance (senao um addon morto somaria o prazo dela a toda abertura).
+  int mudoSeg;
 } addon[ADD_MAX];
 static int nAddon;
 static unsigned versaoLista;   // ver addons_versao
@@ -240,7 +244,7 @@ int addons_definir_lista(const AddonRemoto *nova, int n) {
     addon[aceitos].catalogo = 1;
     addon[aceitos].legenda = 1;
     addon[aceitos].sondado = 0;
-    addon[aceitos].canalLido = 0; addon[aceitos].nCanal = 0;
+    addon[aceitos].canalLido = 0; addon[aceitos].nCanal = 0; addon[aceitos].mudoSeg = 0;
     addon[aceitos].ativo = nova[i].ativo ? 1 : 0;
     aceitos++;
   }
@@ -654,7 +658,7 @@ int addons_adicionar(const char *nome, const char *urlManifest) {
   addon[nAddon].legenda = 0;
   addon[nAddon].ativo = 1;
   addon[nAddon].sondado = 0;
-  addon[nAddon].canalLido = 0; addon[nAddon].nCanal = 0;
+  addon[nAddon].canalLido = 0; addon[nAddon].nCanal = 0; addon[nAddon].mudoSeg = 0;
   nAddon++;
   versaoLista++;
   printf("[addons] instalado pelo guia: %s (%s)\n",
@@ -947,6 +951,7 @@ typedef struct {
   int nBaldes, proxBalde;
   int (*cancelado)(void *);   // NULL = nunca cancela
   void *ctx;
+  int timeout;                // segundos por requisicao (12 na 1a rodada)
   pthread_mutex_t trava;
 } Consulta;
 
@@ -990,7 +995,7 @@ static void *fioFontes(void *u) {
     snprintf(url, sizeof url, "%s/stream/%s/%s.json", addon[i].base, t1, c->id);
     // 12 s e nao 25: com os addons em paralelo o timeout deixa de ser somado,
     // mas continua sendo o tempo que o dono espera pelo mais lento.
-    corpo = rede_baixar(url, 12);
+    corpo = rede_baixar(url, c->timeout > 0 ? c->timeout : 12);
     achados = NULL; n = 0;
     if (corpo) n = stream_extrair(corpo, addon[i].nome, &achados);
     // CANAL AO VIVO TEM DOIS NOMES DE TIPO NO PROTOCOLO, e addons diferentes
@@ -1019,7 +1024,7 @@ static void *fioFontes(void *u) {
     if (n <= 0 && t2 && t2[0] && !(c->cancelado && c->cancelado(c->ctx))) {
       char *alt;
       snprintf(url, sizeof url, "%s/stream/%s/%s.json", addon[i].base, t2, c->id);
-      alt = rede_baixar(url, 12);
+      alt = rede_baixar(url, c->timeout > 0 ? c->timeout : 12);
       if (alt) {
         Stream *a2 = NULL;
         int n2 = stream_extrair(alt, addon[i].nome, &a2);
@@ -1065,6 +1070,52 @@ static const char *tipoAlternativo(const char *tipo) {
   if (!strcmp(tipo, "tv"))      return "channel";
   if (!strcmp(tipo, "channel")) return "tv";
   return "";
+}
+
+// SEGUNDA CHANCE (#182: "addons sometimes not loading, I must reload source a
+// few times to see the addon fetch (AIOStreams)"). Um addon que agrega varios
+// scrapers (AIOStreams) demora mais que os 12 s na primeira consulta de um
+// titulo e responde rapido na seguinte, porque ja guardou o resultado — o que
+// o dono fazia a mao com Recarregar. A lista era publicada sem ele e nada mais
+// o perguntava. Agora quem NAO respondeu (timeout ou erro; lista vazia conta
+// como resposta) e perguntado UMA vez mais, em paralelo, com 20 s, antes de a
+// lista ser publicada. Custo limitado: um addon que falha nas duas rodadas
+// duas consultas seguidas deixa de ganhar a segunda (mudoSeg).
+static void segundaChance(Consulta *c, int fios) {
+  Consulta c2;
+  int q, m = 0, criados = 0;
+  pthread_t f[ADD_FIOS];
+  int *orig;
+  if (c->cancelado && c->cancelado(c->ctx)) return;
+  orig = calloc((size_t)c->nBaldes, sizeof *orig);
+  memset(&c2, 0, sizeof c2);
+  c2.baldes = calloc((size_t)c->nBaldes, sizeof(BaldeFonte));
+  if (!orig || !c2.baldes) { free(orig); free(c2.baldes); return; }
+  for (q = 0; q < c->nBaldes; q++) {
+    int i = c->baldes[q].idx;
+    if (c->baldes[q].respondeu || addon[i].mudoSeg >= 2) continue;
+    c2.baldes[m].idx = i; orig[m++] = q;
+  }
+  if (m > 0) {
+    c2.id = c->id; c2.tipo = c->tipo; c2.tipoAlt = c->tipoAlt;
+    c2.nBaldes = m; c2.cancelado = c->cancelado; c2.ctx = c->ctx;
+    c2.timeout = 20;
+    pthread_mutex_init(&c2.trava, NULL);
+    printf("[addons] %d sem resposta: segunda tentativa (20 s)\n", m);
+    fflush(stdout);
+    if (fios > ADD_FIOS) fios = ADD_FIOS;
+    for (q = 0; q < fios && q < m; q++)
+      if (pthread_create(&f[criados], NULL, fioFontes, &c2) == 0) criados++;
+    if (!criados) fioFontes(&c2);
+    for (q = 0; q < criados; q++) pthread_join(f[q], NULL);
+    for (q = 0; q < m; q++) {
+      if (!c2.baldes[q].respondeu) continue;
+      c->baldes[orig[q]] = c2.baldes[q];
+      printf("[addons] %s: respondeu na segunda tentativa\n", addon[c2.baldes[q].idx].nome);
+    }
+    pthread_mutex_destroy(&c2.trava);
+  }
+  free(c2.baldes); free(orig);
 }
 
 static int consultar(const char *id, const char *tipo, const char *base, int fios,
@@ -1143,9 +1194,12 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
       if (pthread_create(&f[criados], NULL, fioFontes, &c) == 0) criados++;
     if (!criados) fioFontes(&c);          // sem fios: em serie, mesmo resultado
     for (q = 0; q < criados; q++) pthread_join(f[q], NULL);
+    segundaChance(&c, fios);
     // Junta NA ORDEM DOS ADDONS, que e a ordem em que o dono os instalou.
     for (q = 0; q < c.nBaldes; q++) {
       int k = c.baldes[q].n;
+      if (c.baldes[q].respondeu) addon[c.baldes[q].idx].mudoSeg = 0;
+      else addon[c.baldes[q].idx].mudoSeg++;
       if (rs) {
         const char *nome = addon[c.baldes[q].idx].nome;
         rs->consultados++;

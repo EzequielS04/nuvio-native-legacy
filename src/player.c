@@ -2469,6 +2469,20 @@ static void desenharAcoesEpisodio(void){
   }
 }
 
+// O anel de "carregando", o mesmo da abertura da fonte e do rebuffer (#182).
+static void anelCarregando(Uint32 agora, float alfa) {
+  float fr, fg, fb;
+  int k;
+  corFocoPlayer(&fr, &fg, &fb);
+  for (k = 0; k < 12; k++) {
+    float ang = k * 6.2831853f / 12.0f + agora * .006f;
+    float br = .18f + .82f * k / 11.0f;
+    GfxRect pt = {NV_TELA_W*.5f + cosf(ang)*24 - 4,
+                  NV_TELA_H*.5f + sinf(ang)*24 - 4,8,8};
+    gfx_cor(pt,.5f,fr,fg,fb,br*alfa);
+  }
+}
+
 void player_desenhar(Uint32 agora) {
   (void)agora;
   if (!aberto) return;
@@ -2549,7 +2563,6 @@ void player_desenhar(Uint32 agora) {
   // coisa com o que ja existe, e leem bem de longe.
   if (player_carregando()) {
     GfxRect escuro = { 0, 0, NV_TELA_W, NV_TELA_H };
-    int k;
     gfx_cor(escuro, 0.0f, 0, 0, 0, 0.55f * entrada);
     // A MARCA DO CANAL VEM DO BACKDROP QUANDO NAO HA `logo`. O FrostView (e os
     // addons de canal em geral) nao preenche `logo`: manda a marca em poster e
@@ -2570,16 +2583,7 @@ void player_desenhar(Uint32 agora) {
       txt_desenhar_alpha(t,(NV_TELA_W-t.w)*.5f,NV_TELA_H*.5f-150,entrada);
     }
     // Anel com cauda luminosa, animado sem novas texturas por quadro.
-    { float fr, fg, fb;
-      corFocoPlayer(&fr, &fg, &fb);
-      for (k = 0; k < 12; k++) {
-      float ang = k * 6.2831853f / 12.0f + agora * .006f;
-      float br = .18f + .82f * k / 11.0f;
-      GfxRect pt = {NV_TELA_W*.5f + cosf(ang)*24 - 4,
-                    NV_TELA_H*.5f + sinf(ang)*24 - 4,8,8};
-      gfx_cor(pt,.5f,fr,fg,fb,br*entrada);
-      }
-    }
+    anelCarregando(agora, entrada);
     { TxtLinha lc = txt_linha(TXT_CALLOUT, "Abrindo fonte", 236, 237, 242, 255);
       txt_desenhar_alpha(lc, NV_TELA_W * 0.5f - lc.w * 0.5f,
                          NV_TELA_H * 0.5f + 50, 0.85f * entrada); }
@@ -2588,6 +2592,11 @@ void player_desenhar(Uint32 agora) {
       txt_desenhar_alpha(le,(NV_TELA_W-le.w)*.5f,NV_TELA_H*.5f+94,entrada);
     }
   }
+  // REBUFFER (#182 pediu um indicador): com o video ja rodando, o buffer que
+  // esvazia congelava a imagem sem nenhum sinal. So o anel, sem veu nem texto,
+  // e so depois de 600 ms parado — o vai-e-volta curto de um seek nao acende.
+  else if (comVideo && !erroFonte && !saindo && video_bufferando_ms() >= 600)
+    anelCarregando(agora, entrada);
   if (erroFonte) {
     gfx_cor(tela,0,.02f,.02f,.025f,.65f);
     // Cortadas na largura: o motivo leva o nome do addon, que e da pessoa.
