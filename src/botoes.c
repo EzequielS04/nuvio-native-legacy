@@ -36,7 +36,9 @@ float botao_largura(const char *rotulo, const char *icone, int primario) {
 int botao_superficie(GfxRect r, float foco, float a) {
   float fr, fg, fb, ti = ajustes_acento_tinta(&fr, &fg, &fb);
   if (ajustes_vidro()) {
-    gfx_vidro_painel(r, 0.5f, 0.55f, a);
+    // Acao principal: em repouso o vidro leva a lavagem e o aro do realce (e
+    // assim o tema continua visivel); em foco, a pilula CHEIA no realce.
+    gfx_vidro_painel_acento(r, 0.5f, 0.55f, a);
     gfx_vidro_pilula_cheia(r, 0.5f, foco, a);
     return gfx_vidro_tinta(foco);
   }
@@ -59,8 +61,14 @@ void botao_pilula(GfxRect r, const char *rotulo, const char *icone,
 
   if (vidro) {
     // O mesmo vidro nos dois tamanhos: a hierarquia continua sendo a altura
-    // (72 x 56), e o foco e a pilula branca com texto escuro.
-    c = botao_superficie(r, foco, a);
+    // (72 x 56) e a lavagem do realce so vai no primario. O foco e a pilula
+    // cheia no realce (branca no tema padrao) com a tinta que contrasta.
+    if (primario) c = botao_superficie(r, foco, a);
+    else {
+      gfx_vidro_painel(r, 0.5f, 0.55f, a);
+      gfx_vidro_pilula_cheia(r, 0.5f, foco, a);
+      c = gfx_vidro_tinta(foco);
+    }
   } else if (primario) {
     botao_superficie(r, foco, a);
   } else {
@@ -99,7 +107,7 @@ void botao_disco(GfxRect r, const char *icone, float foco, float a) {
   float g = r.w * 0.333f;
   GfxRect ig = { r.x + (r.w - g) * 0.5f, r.y + (r.h - g) * 0.5f, g, g };
   if (vidro) {
-    ic = foco >= 0.5f ? 0.078f : 1.0f;
+    ic = foco >= 0.5f ? (float)gfx_vidro_tinta(foco) / 255.0f : 1.0f;
     gfx_vidro_painel(r, 0.5f, 0.55f, a);
     gfx_vidro_pilula_cheia(r, 0.5f, foco, a);
   } else {

@@ -306,6 +306,10 @@ static void menuDesenhar(float x, float larg, float anim) {
     gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,0,0,0,.72f*anim);
     // Cartao opaco e neutro; o accent fica reservado a opcao focada, sem luz
     // atravessando o painel e tingindo a arte atras.
+    if (ajustes_vidro()) {   // vidro: translucido com fio, a arte de tras aparece
+      gfx_cor(m,.05f,.075f,.078f,.09f,.92f*anim);
+      gfx_anel(m,.05f,1.5f,1,1,1,.14f*anim);
+    } else
     gfx_cor(m,.05f,.052f,.055f,.068f,.99f*anim);
 
     // CABECALHO COM A ARTE DO EPISODIO. Sem miniatura o texto ocupa a linha
@@ -619,6 +623,12 @@ void episodios_desenhar(void) {
   float tinta = ajustes_acento_tinta(&ar, &ag, &ab);
   int focoTxt = (int)(tinta * 255.0f + 0.5f);
   gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,.02f,.02f,.025f,.35f*anim);
+  const int vid = ajustes_vidro();
+  if (vid) {   // vidro: painel translucido e um fio, sem bloco cheio
+    GfxRect pn = {x,0,EP_W,NV_TELA_H};
+    gfx_cor(pn,.025f,.075f,.078f,.09f,.86f*anim);
+    gfx_anel(pn,.025f,1.5f,1,1,1,.12f*anim);
+  } else
   gfx_cor((GfxRect){x,0,EP_W,NV_TELA_H},.025f,.038f,.041f,.052f,anim);
   // A hierarquia vem de tipografia e superfícies, nao de um halo no topo:
   // a luz colorida lavava o fundo e competia com a temporada e a linha focadas.
@@ -632,7 +642,9 @@ void episodios_desenhar(void) {
   { int cor=grupo==-1?focoTxt:190;
     // Acao ghost: sem caixa permanente, a superficie aparece apenas quando
     // recebe foco, com o mesmo tom contido usado pela selecao da temporada.
-    if (grupo==-1)
+    if (grupo==-1 && vid)
+      gfx_vidro_pilula_cheia((GfxRect){x+EP_W-146,44,110,50},.5f,1.0f,anim);
+    else if (grupo==-1)
       gfx_cor((GfxRect){x+EP_W-146,44,110,50},.3f,
               tinta>.5f?.15f+ar*.10f:.78f,
               tinta>.5f?.065f+ag*.03f:.79f,
@@ -674,7 +686,11 @@ void episodios_desenhar(void) {
     // Cada episodio recebe uma base escura, quase fundida ao painel; o foco
     // sobe para ameixa. A diferenca curta preserva o ritmo dos cartoes sem
     // empilhar bordas nem deixar o acento rosa dominar a folha.
-    if (sel) {
+    if (vid) {   // superficie de fio; o foco soma o contorno na cor do realce
+      gfx_cor(row,.12f,1,1,1,.035f*anim);
+      gfx_anel(row,.12f,1.0f,1,1,1,.09f*anim);
+      if (sel) gfx_vidro_foco(row,.12f,1.0f,anim);
+    } else if (sel) {
       if (tinta < .5f) {
         // Acento branco pede uma superficie clara: a tinta escura devolvida
         // por ajustes_acento_tinta passa a ter contraste real, nao so teorico.
@@ -686,6 +702,8 @@ void episodios_desenhar(void) {
     } else {
       gfx_cor(row,.12f,.062f,.066f,.079f,.92f*anim);
     }
+    // Vidro: a linha em foco segue translucida, entao o texto nao inverte.
+    const int inv = sel && !vid;
     r.x+=3; r.y+=3; r.w-=6; r.h-=6;
     const CatItem *ci=cat_item(titulo);
     const char *arte=ep->thumb[0]?ep->thumb:(ci?ci->backdrop:"");
@@ -698,7 +716,11 @@ void episodios_desenhar(void) {
       if(t3){arte=res;tex=t3;}
     }
     GfxRect tr={x+54,y+14,184,130};
-    gfx_cor(tr,.10f,sel?.16f:.145f,sel?.17f:.15f,sel?.20f:.17f,anim);
+    if (vid) gfx_cor(tr,.10f,.13f,.135f,.15f,anim);
+    else
+    if (vid) gfx_cor(tr,.10f,.13f,.135f,.15f,anim);
+    else
+    gfx_cor(tr,.10f,inv?.16f:.145f,inv?.17f:.15f,inv?.20f:.17f,anim);
     // DESFOCAR NAO ASSISTIDOS (#133), com a mesma regra do card do detalhe:
     // so o que o mapa afirma como visto fica nitido — e o que esta tocando
     // agora, que a pessoa ja esta vendo. Sem copia pronta, fica o fundo.
@@ -709,15 +731,15 @@ void episodios_desenhar(void) {
     if(tex){gfx_tex_aspect_atual=tex_aspecto(arte);gfx_rect(tr,tex,GFX_CARD,0,0,0,.10f,0,0,0,anim);gfx_tex_aspect_atual=0;}
     char num[40];snprintf(num,sizeof num,i18n("T%dE%d"),ep->temporada,ep->episodio);
     gfx_cor((GfxRect){tr.x+8,tr.y+92,72,30},.15f,
-            sel?.045f:.025f,sel?.048f:.025f,sel?.06f:.03f,.92f*anim);
-    { int badgeTxt = sel && tinta < .5f ? 242 : sel ? focoTxt : 240;
+            inv?.045f:.025f,inv?.048f:.025f,inv?.06f:.03f,(vid?.62f:.92f)*anim);
+    { int badgeTxt = inv && tinta < .5f ? 242 : inv ? focoTxt : 240;
       txt_desenhar_alpha(txt_linha(TXT_MINI,num,badgeTxt,badgeTxt,
-                                   sel && tinta < .5f ? 245 : badgeTxt,255),
+                                   inv && tinta < .5f ? 245 : badgeTxt,255),
                          tr.x+15,tr.y+97,anim); }
     float tx=x+260, w=EP_W-310;
     txt_desenhar_alpha(txt_linha_corta(TXT_PAINEL_ITEM,ep->nome[0]?ep->nome:num,
-                                       sel?focoTxt:242,sel?focoTxt:243,
-                                       sel?focoTxt:245,255,w),tx,y+16,anim);
+                                       inv?focoTxt:242,inv?focoTxt:243,
+                                       inv?focoTxt:245,255,w),tx,y+16,anim);
     int atual=ep->temporada==atualT && ep->episodio==atualE;
     // O ESTADO SAI DO MAPA, e nao mais da matriz [20][40] de extras.c. A
     // matriz so guarda o "sim": ela nao distingue "nao viu" de "nao sei", e
@@ -733,9 +755,9 @@ void episodios_desenhar(void) {
     if (atual)
       gfx_cor((GfxRect){tx-18,y+25,8,8},.5f,ar,ag,ab,.95f*anim);
     { int er,eg,eb;
-      if (atual) { er=sel?focoTxt:(int)(ar*255.0f+0.5f); eg=sel?focoTxt:(int)(ag*255.0f+0.5f); eb=sel?focoTxt:(int)(ab*255.0f+0.5f); }
-      else if (visto==1) er=eg=eb=sel?focoTxt:198;
-      else er=eg=eb=sel?focoTxt:180;
+      if (atual) { er=inv?focoTxt:(int)(ar*255.0f+0.5f); eg=inv?focoTxt:(int)(ag*255.0f+0.5f); eb=inv?focoTxt:(int)(ab*255.0f+0.5f); }
+      else if (visto==1) er=eg=eb=inv?focoTxt:198;
+      else er=eg=eb=inv?focoTxt:180;
       TxtLinha le=txt_linha_corta(TXT_PG_FIM,estado,er,eg,eb,255,w);
       txt_desenhar_alpha(le,tx,y+48,anim);
       // Voto do TMDB por episodio (issue #87), no mesmo selo escuro que o card
@@ -745,11 +767,15 @@ void episodios_desenhar(void) {
         snprintf(valor,sizeof valor,ajustes_idioma_ingles()?"TMDB %d.%d":"TMDB %d,%d",ep->nota/10,ep->nota%10);
         TxtLinha ln=txt_linha(TXT_PG_FIM,valor,229,231,236,255);
         GfxRect selo={tx+le.w+10,y+45,ln.w+14,26};
-        gfx_cor(selo,.18f,sel?.08f:.15f,sel?.085f:.15f,sel?.10f:.17f,.94f*anim);
+        if (vid) gfx_vidro_painel(selo,.18f,.55f,anim);
+        else
+        if (vid) gfx_vidro_painel(selo,.18f,.55f,anim);
+        else
+        gfx_cor(selo,.18f,inv?.08f:.15f,inv?.085f:.15f,inv?.10f:.17f,.94f*anim);
         txt_desenhar_alpha(ln,selo.x+7,y+48,anim);
       } }
-    txt_bloco(TXT_PG_FIM,ep->sinopse,sel?focoTxt*.78f:186,sel?focoTxt*.80f:188,
-             sel?focoTxt*.84f:194,tx,y+78,w,25,anim,3);
+    txt_bloco(TXT_PG_FIM,ep->sinopse,inv?focoTxt*.78f:186,inv?focoTxt*.80f:188,
+             inv?focoTxt*.84f:194,tx,y+78,w,25,anim,3);
   }
   if(!n) txt_bloco(TXT_PG_FIM,desc_episodios_carregando(titulo)?
     "Carregando episódios…":"Episódios indisponíveis. Selecione a temporada e pressione OK para tentar novamente.",

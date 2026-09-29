@@ -851,8 +851,18 @@ static void focoFonte(GfxRect r, float raio, float alfa) {
   corFocoFonte(&sr, &sg, &sb);
   // Retangulos de linha sao altos; metade da intensidade da pilula mantem a
   // luz visivel sem espalhar uma mancha por varios cartoes vizinhos.
+  // Vidro: a linha em foco continua translucida, com o contorno (e um tom de
+  // 9 %) na cor do realce — nada de bloco cheio nem luz atras. Os pequenos
+  // (botoes e filtros) usam a pilula cheia, ver focoFontePilula.
+  if (ajustes_vidro()) { gfx_vidro_foco(r, raio, 1.0f, alfa); return; }
   botao_luz(r, 0.55f, alfa);
   gfx_cor(r, raio, sr, sg, sb, alfa);
+}
+// Botao/filtro em foco no vidro: pilula CHEIA no realce (branca no padrao), com
+// a tinta que contrasta; fora do vidro e o foco de sempre.
+static void focoFontePilula(GfxRect r, float raio, float alfa) {
+  if (ajustes_vidro()) { gfx_vidro_pilula_cheia(r, raio, 1.0f, alfa); return; }
+  focoFonte(r, raio, alfa);
 }
 
 // EQUALIZADOR DO "REPRODUZINDO AGORA". O player nativo nao expoe amplitude
@@ -967,9 +977,15 @@ void stream_folha_desenhar(Uint32 agora) {
   if(anim<.005f) return;
   float x=NV_TELA_W-FOLHA_W+(1-anim)*FOLHA_W;
   // O foco tem fill solido; o painel permanece neutro e so o alvo recebe halo.
+  const int vid = ajustes_vidro();
   gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,.02f,.02f,.025f,.35f*anim);
   // Painel flutuante com raio amplo e material neutro. A separacao vem do
   // veu e da superficie, nao de uma luz decorativa presa ao canto.
+  if (vid) {   // vidro: translucido com fio de 1,5 px, como o menu de contexto
+    GfxRect pn = {x,24,FOLHA_W,NV_TELA_H-48};
+    gfx_cor(pn,28.0f/FOLHA_W,.075f,.078f,.09f,.86f*anim);
+    gfx_anel(pn,28.0f/FOLHA_W,1.5f,1,1,1,.14f*anim);
+  } else
   gfx_cor((GfxRect){x,24,FOLHA_W,NV_TELA_H-48},28.0f/FOLHA_W,.055f,.058f,.068f,.965f*anim);
   txt_desenhar_alpha(txt_linha(TXT_PAINEL_TITULO,"Fontes",240,241,243,255),x+40,44,anim);
   int ptr = aberta && anim > .5f && ponteiro_ativo();
@@ -986,7 +1002,8 @@ void stream_folha_desenhar(Uint32 agora) {
     int sel=grupo==-1 && foco==i;
     // Acoes seguem o accent solido e a tinta calculada pelo tema.
     if (ptr) ponteiro_alvo(bx, 44, 120, 50, ponteiroFolhaBotao, NULL, i, 0);
-    if(sel) focoFonte((GfxRect){bx,44,120,50},.3f,anim);
+    if(sel) focoFontePilula((GfxRect){bx,44,120,50},vid?.5f:.3f,anim);
+    else if(vid) gfx_vidro_painel((GfxRect){bx,44,120,50},.5f,.5f,anim);
     else    gfx_cor((GfxRect){bx,44,120,50},.3f,.075f,.079f,.092f,anim);
     int c=sel?ajustes_tinta_foco():224;
     TxtLinha l=txt_linha(TXT_PG_FIM,rotuloBotao(botaoDe(i)),c,c,c,255);
@@ -1011,7 +1028,8 @@ void stream_folha_desenhar(Uint32 agora) {
     float w=i?232:108;int sel=i==filtro;
     int c=sel&&grupo==0?ajustes_tinta_foco():sel?245:190;
     if (ptr) ponteiro_alvo(tx, 182, w, 50, NULL, ponteiroFolhaFiltro, i, 0);
-    if(sel && grupo==0) focoFonte((GfxRect){tx,182,w,50},.5f,anim);
+    if(sel && grupo==0) focoFontePilula((GfxRect){tx,182,w,50},.5f,anim);
+    else if(vid) { if(sel) gfx_vidro_painel((GfxRect){tx,182,w,50},.5f,.62f,anim); }   // so o filtro escolhido leva superficie
     else gfx_cor((GfxRect){tx,182,w,50},.5f,
                  sel?.092f:.075f,sel?.096f:.079f,sel?.110f:.092f,anim);
     TxtLinha l=txt_linha_corta(TXT_PG_FIM,provedores[i],c,c,c,255,w-24);
@@ -1049,12 +1067,19 @@ void stream_folha_desenhar(Uint32 agora) {
       float b = y + r.h > NV_TELA_H - 32 ? NV_TELA_H - 32 : y + r.h;
       if (b > t) ponteiro_alvo(r.x, t, r.w, b - t, ponteiroFolhaLinha, NULL, row, 0);
     }
-    if(sel) focoFonte(r,.10f,anim);
+    // Vidro: a linha em foco NAO inverte (segue translucida), entao o texto
+    // e as marcas ficam nas cores de repouso.
+    const int inv = sel && !vid;
+    if(vid) {   // superficie de fio: quase nada em repouso, o foco soma o contorno
+      gfx_cor(r,.10f,1,1,1,.035f*anim); gfx_anel(r,.10f,1.0f,1,1,1,.09f*anim);
+      if(sel) focoFonte(r,.10f,anim);
+    }
+    else if(sel) focoFonte(r,.10f,anim);
     else gfx_cor(r,.10f,.062f,.066f,.079f,.92f*anim);
     // O proprio material colorido identifica o foco; nao sobrepor outro ponto.
     { int tinta=ajustes_tinta_foco(), tinta2=ajustes_tinta_foco2();
-      int c1=sel?tinta:240, c2=sel?tinta2:175;
-      int c3=sel?tinta2:194, c4=sel?tinta2:224;
+      int c1=inv?tinta:240, c2=inv?tinta2:175;
+      int c3=inv?tinta2:194, c4=inv?tinta2:224;
       corTitulo=c1; corProv=c2; corDesc=c3; corMeta=c4; }
     float lx=x+62,w=FOLHA_W-124;
     char nome[sizeof s->rotulo],descricao[sizeof s->descricao];
@@ -1099,10 +1124,12 @@ void stream_folha_desenhar(Uint32 agora) {
       ajustes_acento(&ar, &ag, &ab);
       // Sobre linha clara a pilula veste a superficie de repouso da linha
       // (.135,.135,.14) com o texto claro das demais linhas nao selecionadas.
-      if (sel) { ar = .135f; ag = .135f; ab = .14f; }
-      m = txt_linha(TXT_MINI, rot, sel ? 234 : ajustes_tinta_foco(), sel ? 236 : ajustes_tinta_foco(), sel ? 242 : ajustes_tinta_foco(), 255);
+      if (inv) { ar = .135f; ag = .135f; ab = .14f; }
+      // Vidro: lavagem e aro do realce, texto claro (sem pilula cheia).
+      m = txt_linha(TXT_MINI, rot, inv ? 234 : vid ? 235 : ajustes_tinta_foco(), inv ? 236 : vid ? 235 : ajustes_tinta_foco(), inv ? 242 : vid ? 238 : ajustes_tinta_foco(), 255);
       pil = (GfxRect){ lx + w - (float)m.w - 24.0f, y + 44.0f, (float)m.w + 24.0f, (float)m.h + 10.0f };
-      gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, anim);
+      if (vid) gfx_vidro_painel_acento(pil, NV_RAIO_PILL, 0.4f, anim);
+      else gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, anim);
       txt_desenhar_alpha(m, pil.x + 12.0f, pil.y + 5.0f, anim);
       // 40 px E NAO 24 DE FOLGA. Com 24 o nome de um addon longo era cortado a
       // 23 px da pilula — dois blocos de texto encostados que o olho le como
@@ -1117,7 +1144,7 @@ void stream_folha_desenhar(Uint32 agora) {
     if (wProv < 120.0f) wProv = 120.0f;
     txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,i==atual?"Reproduzindo agora":s->provedor,corProv,C8(corProv+3),C8(corProv+10),255,wProv),lx,y+46,anim);
     if (i == atual)
-      desenharAudioBars(lx + w - FOLHA_AUDIO_W, y + 40.0f, anim, sel, agora);
+      desenharAudioBars(lx + w - FOLHA_AUDIO_W, y + 40.0f, anim, inv, agora);
     // AS TRES LINHAS DE BAIXO DESCEM 10 px, EM BLOCO. A pilula acaba em y+69 e
     // a descricao comecava em y+76: 8 px de tinta a tinta, que a 3 m viram
     // zero. Os 10 px saem da sobra do RODAPE da linha (as badges acabavam em
@@ -1138,10 +1165,11 @@ void stream_folha_desenhar(Uint32 agora) {
       TxtLinha m;
       GfxRect pil;
       ajustes_acento(&ar, &ag, &ab);
-      if (sel) { ar = .135f; ag = .135f; ab = .14f; }
-      m = txt_linha(TXT_MINI, "MP4", sel ? 234 : ajustes_tinta_foco(), sel ? 236 : ajustes_tinta_foco(), sel ? 242 : ajustes_tinta_foco(), 255);
+      if (inv) { ar = .135f; ag = .135f; ab = .14f; }
+      m = txt_linha(TXT_MINI, "MP4", inv ? 234 : vid ? 235 : ajustes_tinta_foco(), inv ? 236 : vid ? 235 : ajustes_tinta_foco(), inv ? 242 : vid ? 238 : ajustes_tinta_foco(), 255);
       pil = (GfxRect){ lx, y + 146.0f, (float)m.w + 20.0f, (float)m.h + 8.0f };
-      gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, anim);
+      if (vid) gfx_vidro_painel_acento(pil, NV_RAIO_PILL, 0.4f, anim);
+      else gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, anim);
       txt_desenhar_alpha(m, pil.x + 10.0f, pil.y + 4.0f, anim);
       mx = lx + pil.w + 10.0f;
     }

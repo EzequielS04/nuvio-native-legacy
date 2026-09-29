@@ -259,8 +259,10 @@ static void superficieFocoPlayer(GfxRect r, float raio, float mola, float a) {
   if (ajustes_vidro()) {
     // Referencia: controle em foco = o mesmo disco escuro com aro branco; o
     // glifo continua branco. Nada de preenchimento na cor de realce.
+    // O aro segue a cor do realce (branco no padrao).
+    ajustes_acento(&fr, &fg, &fb);
     gfx_cor(r, raio, 0.16f, 0.16f, 0.17f, 0.70f * a);
-    gfx_anel(r, raio, 2.5f, 1, 1, 1, 0.96f * a);
+    gfx_anel(r, raio, 2.5f, fr, fg, fb, 0.96f * a);
     return;
   }
   corFocoPlayer(&fr, &fg, &fb);
@@ -2442,7 +2444,7 @@ static void desenharAcoesEpisodio(void){
                     tipo==INTRO_CREDITOS?i18n("Pular créditos"):
                     i18n("Pular abertura");
     int sel=skipFoco&&visivel;
-    int tinta = ajustes_vidro() ? 250 : ajustes_tinta_foco();
+    int tinta = ajustes_vidro() ? 250 : ajustes_tinta_foco();   // vidro: o miolo continua escuro
     TxtLinha t=sel?txt_linha(TXT_BODY,rot,tinta,tinta,tinta,255):txt_linha(TXT_BODY,rot,250,250,252,255);
     // Com controles visiveis, ancora em 664: deixa 72 px de ar ate o titulo
     // (que comeca em ~808) e o botao compacto de 72 px nao invade essa area.

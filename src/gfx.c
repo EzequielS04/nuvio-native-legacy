@@ -1263,7 +1263,7 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
   f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco);
   if (ajustes_vidro()) {   // vidro: superficie fina + contorno branco, sem mancha
     gfx_vidro_painel(r, raio, 0.45f, alfa);
-    if (f > 0.01f) gfx_anel(r, raio, 3.0f, 1, 1, 1, 0.96f * f * alfa);
+    if (f > 0.01f) gfx_anel(r, raio, 3.0f, cr, cg, cb, 0.96f * f * alfa);
     return;
   }
   luminancia = cr * 0.2126f + cg * 0.7152f + cb * 0.0722f;
@@ -1298,23 +1298,47 @@ void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a) {
   gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, fundo * a);
   gfx_anel(r, raio, 1.5f, 1, 1, 1, 0.14f * a);
 }
+// A COR DO FOCO NO VIDRO E O REALCE ESCOLHIDO. O vidro muda a SUPERFICIE (fina,
+// translucida, sem brilho nem sombra), nao a cor de quem esta selecionado: com
+// o tema padrao o realce e branco e o resultado e o da referencia (contorno /
+// pilula brancos); com "Cor de destaque" ou os temas dinamicos o contorno e a
+// pilula seguem a cor. Forcar branco aqui apagava o realce de todas as telas.
 void gfx_vidro_foco(GfxRect r, float raio, float foco, float a) {
-  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco);
+  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco), cr, cg, cb;
   if (f <= 0.01f || a <= 0.001f) return;
-  gfx_cor(r, raio, 1, 1, 1, 0.09f * f * a);
-  gfx_anel(r, raio, 2.0f, 1, 1, 1, 0.96f * f * a);
+  ajustes_acento(&cr, &cg, &cb);
+  gfx_cor(r, raio, cr, cg, cb, 0.09f * f * a);
+  gfx_anel(r, raio, 2.0f, cr, cg, cb, 0.96f * f * a);
 }
 void gfx_vidro_cartao(GfxRect r, float raio, float foco, float a) {
-  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco);
+  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco), cr, cg, cb;
   if (f <= 0.01f || a <= 0.001f) return;
-  gfx_anel_fora(r, raio, 2.0f, 3.0f, 1, 1, 1, 0.96f * f * a);
+  ajustes_acento(&cr, &cg, &cb);
+  gfx_anel_fora(r, raio, 2.0f, 3.0f, cr, cg, cb, 0.96f * f * a);
 }
 void gfx_vidro_pilula_cheia(GfxRect r, float raio, float foco, float a) {
-  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco);
+  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco), cr, cg, cb;
   if (f <= 0.01f || a <= 0.001f) return;
-  gfx_cor(r, raio, 0.96f, 0.96f, 0.97f, f * a);
+  ajustes_acento(&cr, &cg, &cb);
+  gfx_cor(r, raio, cr, cg, cb, f * a);
 }
-int gfx_vidro_tinta(float foco) { return foco >= 0.5f ? 20 : 235; }
+// Texto sobre a pilula cheia: a tinta que contrasta com o realce (escura sobre
+// realce claro, branca sobre escuro); fora do foco, o cinza claro de sempre.
+int gfx_vidro_tinta(float foco) {
+  if (foco < 0.5f) return 235;
+  return ajustes_acento_tinta(NULL, NULL, NULL) < 0.5f ? 20 : 255;
+}
+// Superficie de um painel/pilula NA COR DO REALCE (acao principal em repouso):
+// o vidro comum com uma lavagem do realce e aro na cor dele. Sem realce
+// (tema branco) fica um degrau mais claro que o vidro, sem cor nenhuma.
+void gfx_vidro_painel_acento(GfxRect r, float raio, float fundo, float a) {
+  float cr, cg, cb;
+  if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
+  ajustes_acento(&cr, &cg, &cb);
+  gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, fundo * a);
+  gfx_cor(r, raio, cr, cg, cb, 0.20f * a);
+  gfx_anel(r, raio, 1.5f, cr, cg, cb, 0.55f * a);
+}
 void gfx_luz_canto(GfxRect r, float raio, float cx, float cy, float alcance,
                    float cr, float cg, float cb, float ca) {
   if (r.w <= 0.0f || r.h <= 0.0f || ca <= 0.001f) return;

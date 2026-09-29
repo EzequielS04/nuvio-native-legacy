@@ -993,8 +993,9 @@ static int pilula(GfxRect r, float raio, float f, int escolhida) {
   if (ajustes_vidro()) {
     // Pilula de filtro da referencia: vidro escuro; em foco, contorno branco;
     // a escolhida (aba ativa) fica um degrau mais clara.
-    gfx_vidro_painel(r, raio, 0.62f, 1.0f);
-    if (escolhida) gfx_cor(r, raio, 1, 1, 1, 0.10f * (0.6f + 0.4f * anim_clamp(f, 0, 1)));
+    // A escolhida leva a lavagem e o aro do realce (o tema segue visivel).
+    if (escolhida) gfx_vidro_painel_acento(r, raio, 0.62f, 1.0f);
+    else gfx_vidro_painel(r, raio, 0.62f, 1.0f);
     gfx_vidro_foco(r, raio, f, 1.0f);
     return escolhida || f > 0.5f ? 255 : 220;
   }
@@ -1091,8 +1092,7 @@ static void desenhaModo(int a, float f) {
     brilhoFoco(r, 0.9f, f, 1.0f);
     if (ajustes_vidro()) {
       // aba ativa: vidro um degrau mais claro; com o foco, contorno branco
-      gfx_vidro_painel(r, 0.5f, 0.62f, 1.0f);
-      gfx_cor(r, 0.5f, 1, 1, 1, 0.10f);
+      gfx_vidro_painel_acento(r, 0.5f, 0.62f, 1.0f);
       gfx_vidro_foco(r, 0.5f, f, 1.0f);
     } else
     gfx_cor(r, 0.5f, ar * k, ag * k, ab * k, 1.0f);
