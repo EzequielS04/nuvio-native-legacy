@@ -176,6 +176,9 @@ typedef enum {
   AJ_ITENS_FILEIRA,
   // A fonte da interface é independente da família das legendas.
   AJ_FONTE_UI,
+  // Efeitos visuais do .tpk (#180): automatico / completos / leves. No fim
+  // pelo mesmo motivo; so aparece na tela do .tpk.
+  AJ_GPU_EFEITOS,
   AJ_N
 } OpcaoId;
 
@@ -249,6 +252,7 @@ static const char *V_CW_ORDEM[]  = { "Padrão", "Estilo streaming", "Separar fut
 // Itens por fileira da Home (#163). O INDICE e o que fica gravado; o numero de
 // cada um esta em ajustes_itens_fileira. 24 e o teto de DESC_ITENS_POR_FILEIRA.
 static const char *V_ITENS_FIL[] = { "12", "18", "24" };
+static const char *V_GPU_EF[]    = { "Automático", "Completos", "Leves" };
 // O que o toque curto de OK faz num card da retomada (issue #93): abre o
 // episodio direto no player, ou abre a pagina do titulo como sempre fez.
 // Local, como cwFonteLocal — o app oficial nao tem esta escolha.
@@ -618,6 +622,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Trailer do cartaz em foco",       V_LIGA, 2),   // focusedPosterBackdropTrailerEnabled
   ESC("Itens por fileira",               V_ITENS_FIL, 3), // local: itensFileiraLocal
   ESC("Fonte da interface", V_FONTE_UI, 6),
+  ESC("Efeitos visuais", V_GPU_EF, 3),   // local: gpuEfeitosLocal (.tpk)
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -727,6 +732,7 @@ static const char *CHAVE[] = {
   "focusedPosterBackdropTrailerEnabled",
   "itensFileiraLocal",
   "fonteInterface",
+  "gpuEfeitosLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -888,6 +894,9 @@ static const Item TELA[] = {
   // "o que ha de errado com esta TV".
   SEC("Avançado", "Desempenho, navegação, cache e diagnósticos", "aj_monitor-cog"),
     OPC(AJ_NAV_RAPIDA), OPC(AJ_RESOLUCAO), OPC(AJ_QUALIDADE_IMG),
+#ifdef NV_TPK
+    OPC(AJ_GPU_EFEITOS),
+#endif
     OPC(AJ_TEX_MB), OPC(AJ_ESPACO),
     ROT("Diagnóstico"),
       OPC(AJ_DIAGNOSTICO), OPC(AJ_VELOCIDADE),
@@ -1116,6 +1125,7 @@ static int valor[] = {
   1,                /* trailer do cartaz em foco: desligado (DEFAULT do web) */
   0,                /* itens por fileira: 12, como sempre foi (ver V_ITENS_FIL) */
   TXT_FAMILIA_INTER,/* fonte da interface: independente da legenda */
+  0,                /* efeitos visuais do .tpk: automatico (adaptativo, ate o nivel 1) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1319,6 +1329,7 @@ int  ajustes_menu_explorar(void)      { return lig(AJ_MENU_EXPLORAR); }
 int  ajustes_menu_guia(void)          { return lig(AJ_MENU_GUIA); }
 int  ajustes_menu_agenda(void)        { return lig(AJ_MENU_AGENDA); }
 int  ajustes_menu_perfil(void)        { return lig(AJ_MENU_PERFIL); }
+int  ajustes_gpu_efeitos(void) { return valor[AJ_GPU_EFEITOS]; }
 int  ajustes_itens_fileira(void) {
   static const int N[] = { 12, 18, 24 };
   int i = valor[AJ_ITENS_FILEIRA];
@@ -1868,6 +1879,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_TRAILER_FONTE:
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
+    case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
       return 1;
     default:
@@ -2494,6 +2506,7 @@ static const char *ajudaOpcao(int op) {
 
     // --- Interface e conta
     case AJ_IDIOMA: return "Idioma de toda a interface. Não muda o idioma das legendas nem do áudio.";
+    case AJ_GPU_EFEITOS: return "Automático mede a TV nos primeiros segundos e, se ela não der conta, tira os efeitos mais pesados. Completos mantém tudo; Leves tira desfoque e brilho para deixar a navegação mais lisa.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
     case AJ_TEMA: return "Cor do anel que marca onde está o foco. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena: estilizada também tinge o fundo, gradiente pinta os botões com as cores da arte e imersiva deixa a cor vazar pela tela como luz. Ficam só nesta TV.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";

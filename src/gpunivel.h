@@ -54,6 +54,8 @@ void gpun_log_perfil(long memMB, int texMb, int fios, int heroi);
 int  gpun_nivel(void);
 // Troca o nivel na hora, sem medir nem gravar (captura de teste).
 void gpun_definir_nivel(int n);
+// Ajuste "Efeitos visuais" do .tpk: 0 automatico, 1 completos, 2 leves.
+void gpun_preferencia(int p);
 
 // Laco de quadro: _inicio ANTES do glClear da tela (liga o alvo interno no
 // nivel 2), _fim depois do ultimo desenho e antes do swap (amplia e descarta).

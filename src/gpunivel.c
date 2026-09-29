@@ -156,7 +156,7 @@ static void ler(void) {
            GPUN_ARQ, c, chave);
     return;
   }
-  nivel = n;
+  nivel = n > GPUN_NIVEL_AUTO_MAX ? GPUN_NIVEL_AUTO_MAX : n;
   origem = "salvo";
 }
 #endif
@@ -230,6 +230,22 @@ void gpun_iniciar(int w, int h) {
   }
 #endif
   aplicar(nivel, "");
+}
+
+// Ajuste "Efeitos visuais" (so .tpk): 0 automatico, 1 completos, 2 leves.
+// Completos/Leves fixam o nivel e desligam a medida; Automatico volta a medir
+// a partir do que esta gravado (ou do 0). Build com NV_TPK_NIVEL_FORCADO
+// ignora: o canario de teste manda.
+void gpun_preferencia(int p) {
+#if defined(NV_TPK) && !defined(NV_TPK_NIVEL_FORCADO)
+  if (p == 1) { adaptativo = 0; aplicar(0, "ajuste: efeitos completos"); return; }
+  if (p == 2) { adaptativo = 0; aplicar(1, "ajuste: efeitos leves"); return; }
+  adaptativo = 1; decidido = 0; origem = "adaptativo"; nivel = 0;
+  ler();
+  aplicar(nivel, "ajuste: automatico");
+#else
+  (void)p;
+#endif
 }
 
 int gpun_nivel(void) { return nivel; }

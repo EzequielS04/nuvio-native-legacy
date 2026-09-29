@@ -34,6 +34,8 @@ int  ajustes_menu_perfil(void);
 int  ajustes_trailer_cartaz(void);
 // "Itens por fileira" da Home (#163): 12, 18 ou 24. Padrao 12.
 int  ajustes_itens_fileira(void);
+// Efeitos visuais do .tpk: 0 automatico, 1 completos (nivel 0), 2 leves (nivel 1).
+int  ajustes_gpu_efeitos(void);
 // A proxima abertura da tela (ajustes_iniciar) pousa o foco em "Cor de
 // destaque" em vez da primeira linha. E o "Experimentar a cor viva" do cartao
 // da 1.4.8: chamar ANTES de trocar para TELA_AJUSTES.

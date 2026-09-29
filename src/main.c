@@ -673,6 +673,8 @@ int main(int argc, char **argv) {
   // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
   // o nivel de partida ANTES de tex_iniciar, que tira o perfil do aparelho.
   gpun_iniciar(dw, dh);
+  int gpuPref = ajustes_gpu_efeitos();
+  if (gpuPref) gpun_preferencia(gpuPref);
   printf("[arranque] gfx_iniciar (compila os shaders)\n"); fflush(stdout);
   marco("gfx_iniciar");
   if (!gfx_iniciar()) { printf("[arranque] gfx_iniciar FALHOU\n"); fflush(stdout); return 1; }
@@ -1022,6 +1024,8 @@ int main(int argc, char **argv) {
     gfx_ambiente_preparar();
     // Nivel 2: o quadro inteiro vai para o alvo interno de 1280x720 (o clear
     // abaixo ja limpa ele); gpun_quadro_fim amplia para a janela.
+    // Mudou "Efeitos visuais" nos Ajustes: aplica no proximo quadro.
+    if (ajustes_gpu_efeitos() != gpuPref) { gpuPref = ajustes_gpu_efeitos(); gpun_preferencia(gpuPref); }
     gpun_quadro_inicio();
     glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
