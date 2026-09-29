@@ -9,6 +9,7 @@
 #include "js.h"
 #include "nuvem.h"
 #include "cwordem.h"
+#include "traktscrobble.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1223,58 +1224,76 @@ int trakt_lista(const char *qual, CatItem *saida, int max) {
 
 // --- gravar progresso -------------------------------------------------------
 
-static char marcaId[64];
-static double marcaPos, marcaDur;
-static pthread_t fioMarca;
-static int fioMarcaVivo;
+// SCROBBLE (#179). Um trabalhador unico e uma vaga PENDENTE: o ultimo pedido
+// vence, entao apertar pausa repetidamente nao empilha chamadas (o Trakt limita
+// a taxa). A decisao de qual chamada mandar mora em traktscrobble.c.
+static pthread_mutex_t travaScr = PTHREAD_MUTEX_INITIALIZER;
+static ScrobbleEstado scrEstado;
+static struct { int acao; char id[64]; double pct; int tem; } scrPend;
+static int scrFioVivo;
 
-static void *enviarMarca(void *u) {
+static void enviarScrobble(int acao, const char *id, double pct) {
   const char *cab[4];
-  char aut[200], chave[140], corpo[400], *r;
-  char id[24];
-  int t = 0, e = 0;
-  const char *dp;
-  double pct;
-  (void)u;
-  snprintf(id, sizeof id, "%s", marcaId);
-  dp = strchr(id, ':');
-  if (dp) { sscanf(dp + 1, "%d:%d", &t, &e); *(char *)dp = 0; }
-  pct = 100.0 * marcaPos / marcaDur;
-  if (pct < 0.0) pct = 0.0;
-  if (pct > 100.0) pct = 100.0;
-
+  char aut[200], chave[140], corpo[400], url[64], *r;
+  int status = 0;
   snprintf(aut, sizeof aut, "Authorization: Bearer %s", token);
   snprintf(chave, sizeof chave, "trakt-api-key: %s", cliente);
   cab[0] = aut; cab[1] = "trakt-api-version: 2"; cab[2] = chave; cab[3] = NULL;
-
-  // Pause preserva o ponto; stop registra a conclusao. Mantemos o limiar
-  // conservador de 90% deste cliente. Pause sozinho nunca conclui o episodio.
-  if (t > 0 && e > 0)
-    snprintf(corpo, sizeof corpo,
-             "{\"show\":{\"ids\":{\"imdb\":\"%s\"}},"
-             "\"episode\":{\"season\":%d,\"number\":%d},\"progress\":%.2f}",
-             id, t, e, pct);
+  scrobble_corpo(corpo, sizeof corpo, id, pct);
+  snprintf(url, sizeof url, "https://api.trakt.tv/scrobble/%s", scrobble_nome(acao));
+  r = rede_postar_st(url, 20, cab, corpo, &status);
+  // O log NUNCA leva o token. rede_postar devolvia corpo nao nulo tambem em
+  // 401/422, e o log antigo dizia "ok" para isso: o erro ficava invisivel.
+  if (status >= 200 && status < 300)
+    printf("[trakt] %s %s %.1f%% -> ok (%d)\n", scrobble_nome(acao), id, pct, status);
+  else if (status == 409)
+    printf("[trakt] %s %s %.1f%% -> 409 ja registrado, ignorado\n", scrobble_nome(acao), id, pct);
   else
-    snprintf(corpo, sizeof corpo,
-             "{\"movie\":{\"ids\":{\"imdb\":\"%s\"}},\"progress\":%.2f}",
-             id, pct);
-
-  r = rede_postar(pct >= 90 ? "https://api.trakt.tv/scrobble/stop" :
-                             "https://api.trakt.tv/scrobble/pause", 20, cab, corpo);
-  printf("[trakt] %s %s %.1f%% -> %s\n", pct>=90?"stop":"pause",marcaId,pct,r?"ok":"falhou");
+    printf("[trakt] %s %s %.1f%% -> FALHOU http=%d%s%.80s\n", scrobble_nome(acao), id, pct,
+           status, r && *r ? " corpo=" : "", r ? r : "");
   fflush(stdout);
   free(r);
-  fioMarcaVivo = 0;
-  return NULL;
 }
 
+static void *fioScrobble(void *u) {
+  (void)u;
+  for (;;) {
+    int acao; char id[64]; double pct;
+    pthread_mutex_lock(&travaScr);
+    if (!scrPend.tem) { scrFioVivo = 0; pthread_mutex_unlock(&travaScr); return NULL; }
+    acao = scrPend.acao; pct = scrPend.pct;
+    snprintf(id, sizeof id, "%s", scrPend.id);
+    scrPend.tem = 0;
+    pthread_mutex_unlock(&travaScr);
+    enviarScrobble(acao, id, pct);
+  }
+}
+
+// Enfileira. Devolve a acao decidida (SCR_NADA quando nao ha o que mandar).
+int trakt_scrobble(int evento, const char *imdb, double posSeg, double durSeg) {
+  int acao;
+  double pct;
+  pthread_t t;
+  if (!ligado || !imdb || !*imdb || durSeg <= 1.0) return SCR_NADA;
+  pct = 100.0 * posSeg / durSeg;
+  pthread_mutex_lock(&travaScr);
+  acao = scrobble_decidir(&scrEstado, evento, imdb, pct);
+  if (acao != SCR_NADA) {
+    scrPend.acao = acao; scrPend.pct = pct; scrPend.tem = 1;
+    snprintf(scrPend.id, sizeof scrPend.id, "%s", imdb);
+    if (!scrFioVivo) {
+      scrFioVivo = 1;
+      if (pthread_create(&t, NULL, fioScrobble, NULL) != 0) scrFioVivo = 0;
+      else pthread_detach(t);
+    }
+  }
+  pthread_mutex_unlock(&travaScr);
+  return acao;
+}
+
+// Saida do player: stop (>= 90%) ou pause, como sempre foi.
 void trakt_marcar(const char *imdb, double posSeg, double durSeg) {
-  if (!ligado || !imdb || !*imdb || durSeg <= 1.0 || fioMarcaVivo) return;
-  snprintf(marcaId, sizeof marcaId, "%s", imdb);
-  marcaPos = posSeg; marcaDur = durSeg;
-  fioMarcaVivo = 1;
-  if (pthread_create(&fioMarca, NULL, enviarMarca, NULL) != 0) fioMarcaVivo = 0;
-  else pthread_detach(fioMarca);
+  trakt_scrobble(SCR_EV_SAIU, imdb, posSeg, durSeg);
 }
 
 // --- WATCHLIST: escrever e ler ------------------------------------------------

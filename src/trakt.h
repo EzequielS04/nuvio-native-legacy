@@ -106,6 +106,10 @@ int  trakt_perfil(PerfilDados *saida);
 // Ate agora o app so LIA o Trakt; sem isto, assistir aqui nao mexia no
 // "continue assistindo" dos outros aparelhos dele. Nao bloqueia: sai num fio.
 void trakt_marcar(const char *imdb, double posSeg, double durSeg);
+// Scrobble durante a reproducao (#179): /scrobble/start ("Now Watching") ao
+// tocar, /scrobble/pause ao pausar. `evento` e SCR_EV_* de traktscrobble.h.
+// Nao bloqueia; repeticoes (start ja em pe, pause sem start) sao descartadas.
+int  trakt_scrobble(int evento, const char *imdb, double posSeg, double durSeg);
 
 // Watchlist ("Minha Lista") e colecao ("Comprados") do dono. `qual` e
 // "watchlist" ou "collection". BLOQUEIA — chamar do fio de descoberta.

@@ -56,6 +56,7 @@ static void avisarCascaAberto(int v) { EM_ASM({ window.nvPlayerAberto = $0; }, v
 static void avisarCascaAberto(int v) { (void)v; }
 #endif
 #include "trakt.h"
+#include "traktscrobble.h"
 #include "sync.h"
 #include "parental.h"
 #include "episodios.h"
@@ -209,6 +210,7 @@ static Uint32 scrubUltimo;
 
 static int   aberto = 0, saindo = 0, pediuSair = 0;
 static int   idx = 0;
+#define PLR_SCR_TOCOU_S 5.0f   // #179: reproducao continua antes do /scrobble/start
 static int   tocando = 1;
 // Botao em foco na fileira de transporte. Comeca no PLAY porque e a resposta
 // que nove de cada dez aberturas quer: o dedo para no centro e o OK decide.
@@ -2034,6 +2036,35 @@ void player_atualizar(float dt, Uint32 agora) {
     // derrubar o estado para pausado com a transmissao ainda no ar.
     if (posSeg >= duracaoSeg) { posSeg = duracaoSeg; if (!ehCanal()) tocando = 0; }
   }
+
+  // TRAKT "NOW WATCHING" (#179). Ate a 1.5.3 o Trakt so ouvia pause/stop, ao
+  // SAIR: nunca havia /scrobble/start, e sem ele o episodio nao aparece em
+  // "Now Watching" nem o progresso anda durante a exibicao. Start depois de
+  // PLR_SCR_TOCOU_S de reproducao continua (o web espera 15 s: evita mandar a
+  // cada troca de fonte); pause ao pausar. Mesma guarda do encerramento: fluxo
+  // curto (<120 s, clipe de erro do provedor) e canal ao vivo nao falam.
+  { int ok = comVideo && video_pronto() && video_ativo() && tocando && !scrubbing &&
+             !saindo && !erroFonte && !esperandoFonte && !ehCanal() &&
+             duracaoSeg >= 120.0f;
+    static float tocouS;
+    const CatItem *cs = item();
+    if (ok && cs && cs->imdb[0]) {
+      char id[64];
+      if (epT > 0 && epE > 0) snprintf(id, sizeof id, "%.*s:%d:%d", (int)strcspn(cs->imdb,":"), cs->imdb, epT, epE);
+      else snprintf(id, sizeof id, "%s", cs->imdb);
+      tocouS += dt;
+      if (tocouS >= PLR_SCR_TOCOU_S) trakt_scrobble(SCR_EV_TOCANDO, id, posSeg, duracaoSeg);
+    } else {
+      // Pausou (ou o video parou de andar): so fala se ha um start em pe.
+      if (tocouS > 0.0f && cs && cs->imdb[0] && comVideo && video_pronto() && !ehCanal() &&
+          duracaoSeg >= 120.0f && !scrubbing) {
+        char id[64];
+        if (epT > 0 && epE > 0) snprintf(id, sizeof id, "%.*s:%d:%d", (int)strcspn(cs->imdb,":"), cs->imdb, epT, epE);
+        else snprintf(id, sizeof id, "%s", cs->imdb);
+        trakt_scrobble(SCR_EV_PAUSOU, id, posSeg, duracaoSeg);
+      }
+      tocouS = 0.0f;
+    } }
 
   // PÓS-REPRODUÇÃO: o proximo episodio ou os relacionados, no fim do titulo.
   { const CatItem *ci = item();
