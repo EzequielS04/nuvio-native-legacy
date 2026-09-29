@@ -173,12 +173,64 @@ void video_buscar(double s) {
   terminou = 0;
 }
 void video_janela(int x, int y, int w, int h) { if (hJanela) hJanela(x, y, w, h); }
+
+// RECORTE DE FONTE EMULADO PELO RETANGULO DE DESTINO (ROI).
+//
+// O webOS recorta pela FONTE: o ACB aceita (sx,sy,sw,sh) do quadro decodificado
+// mais um destino, e os modos de aspecto do player saem disso. O
+// Tizen.Multimedia.Player (tizen-tpk/Video.cs) NAO tem retangulo de fonte — so
+// DisplaySettings.SetRoi, que e o DESTINO na tela. A primeira versao disto
+// descartava a fonte e aplicava so o destino, e o resultado era que TODO modo
+// de aspecto desenhava o mesmo retangulo: na TV o botao de recorte/zoom nao
+// mudava nada, em nenhum modo (#178).
+//
+// A conta que substitui: desenhar o recorte (sx,sy,sw,sh) dentro de
+// (dx,dy,dw,dh) e o MESMO que desenhar o quadro INTEIRO num retangulo maior,
+// deslocado para que o pedaco desejado caia sobre o destino.
+//
+//   escalaX = dw/sw            (quanto a fonte e ampliada na horizontal)
+//   escalaY = dh/sh            (idem vertical)
+//   W = qw * escalaX           (o quadro inteiro nessa escala)
+//   H = qh * escalaY
+//   X = dx - sx * escalaX      (recua a origem para o recorte cair em dx)
+//   Y = dy - sy * escalaY
+//
+// O que sobra para fora da tela e o que o recorte descartaria. O ROI resultante
+// pode ser MAIOR que a tela e ter origem NEGATIVA — e Video.cs.Janela deixa
+// esse retangulo passar cru ao SetRoi (so cai em LetterBox no quadro cheio sem
+// zoom). NAO VERIFICADO numa TV Samsung se o firmware honra ROI fora da tela;
+// por isso esta build sai como canario. Se o firmware grampear, o zoom nao
+// acontece, mas a imagem continua na tela — a causa fica do lado do firmware e
+// o log abaixo mostra o retangulo pedido.
+static int ultRoiX, ultRoiY, ultRoiW, ultRoiH, temRoi;
 void video_janela_fonte(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh) {
-  (void)sx; (void)sy; (void)sw; (void)sh;
-  video_janela(dx, dy, dw, dh);
+  double qw = largura, qh = altura, ex, ey;
+  int X, Y, W, H;
+
+  // Sem as dimensoes do quadro, ou sem recorte de verdade, o destino cru serve.
+  if (qw < 2.0 || qh < 2.0 || sw <= 0 || sh <= 0) { temRoi = 0; video_janela(dx, dy, dw, dh); return; }
+  // Recorte que cobre o quadro inteiro E o caso sem zoom: mesma coisa.
+  if (sx <= 0 && sy <= 0 && sw >= (int)qw && sh >= (int)qh) { temRoi = 0; video_janela(dx, dy, dw, dh); return; }
+
+  ex = (double)dw / (double)sw;
+  ey = (double)dh / (double)sh;
+  W  = (int)(qw * ex + 0.5);
+  H  = (int)(qh * ey + 0.5);
+  X  = (int)(dx - sx * ex + 0.5);
+  Y  = (int)(dy - sy * ey + 0.5);
+
+  printf("[video] tpk recorte %d,%d %dx%d de %.0fx%.0f -> roi %d,%d %dx%d\n",
+         sx, sy, sw, sh, qw, qh, X, Y, W, H);
+  fflush(stdout);
+
+  ultRoiX = X; ultRoiY = Y; ultRoiW = W; ultRoiH = H; temRoi = 1;
+  video_janela(X, Y, W, H);
 }
-int  video_recorte_fonte(void) { return 0; }
-void video_recorte_reaplicar(void) {}
+int  video_recorte_fonte(void) { return 1; }
+// O host prende o plano em mais de um ponto depois do prepare; um ROI pedido
+// cedo pode ser engolido. trailer.c/player.c repetem o pedido nos primeiros
+// segundos por aqui — reenvia o ultimo ROI calculado, sem recalcular.
+void video_recorte_reaplicar(void) { if (temRoi) video_janela(ultRoiX, ultRoiY, ultRoiW, ultRoiH); }
 const char *video_url_atual(void) { return urlAtual; }
 double video_pos(void) { return (hPos && pronto) ? hPos() / 1000.0 : 0; }
 double video_duracao(void) { return durMs / 1000.0; }

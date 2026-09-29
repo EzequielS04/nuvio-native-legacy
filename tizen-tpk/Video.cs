@@ -227,7 +227,20 @@ namespace NuvioTpk
             if (player == null) return;
             try
             {
-                if (x == 0 && y == 0 && w >= telaW && h >= telaH) { player.DisplaySettings.Mode = PlayerDisplayMode.LetterBox; return; }
+                // QUADRO CHEIO SEM ZOOM: LetterBox, o mesmo caminho da reproducao
+                // normal nos 4 hosts. A reproducao cheia pede exatamente a tela
+                // (0,0,telaW,telaH), entao esta guarda continua sendo um no-op
+                // para ela — 6+ e o host 4/5 nao mudam.
+                //
+                // ZOOM (#178): o recorte de fonte emulado (src/video_tpk.c
+                // video_janela_fonte) manda um ROI que RECUA a origem para
+                // negativo ou ESTOURA a tela, para que a fatia desejada do quadro
+                // preencha o destino. Antes, `w >= telaW && h >= telaH` engolia um
+                // ROI ampliado ancorado em 0,0 de volta para LetterBox, matando o
+                // zoom. Agora so o quadro EXATO da tela vira LetterBox; qualquer
+                // ROI de zoom (origem negativa OU maior que a tela) passa cru ao
+                // SetRoi.
+                if (x == 0 && y == 0 && w == telaW && h == telaH) { player.DisplaySettings.Mode = PlayerDisplayMode.LetterBox; return; }
                 player.DisplaySettings.Mode = PlayerDisplayMode.Roi;
                 player.DisplaySettings.SetRoi(new Rectangle(x, y, w, h));
             }
