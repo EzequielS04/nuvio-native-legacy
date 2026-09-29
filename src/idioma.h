@@ -22,7 +22,7 @@
 #define NV_IDIOMA_H
 
 // Devolve `s` traduzido quando o idioma NAO e o portugues (ingles, romeno,
-// ucraniano ou russo — ver idiomacod.h) e a chave existe; senao devolve o
+// ucraniano, russo, frances, alemao ou espanhol — ver idiomacod.h) e a chave existe; senao devolve o
 // proprio `s`. Nunca devolve NULL se `s` nao for NULL, e o ponteiro
 // devolvido vive tanto quanto o programa (tabela estatica).
 const char *i18n(const char *s);

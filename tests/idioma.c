@@ -5,7 +5,7 @@
 //   cc tests/idioma.c src/idioma.c -Isrc -I/opt/homebrew/include \
 //      -o /tmp/t-idioma && /tmp/t-idioma
 //
-// Cobre tambem os outros idiomas (ro, uk, ru): toda chave de idioma_tab.h tem de
+// Cobre tambem os outros idiomas (ro, uk, ru, fr, de, es): toda chave de idioma_tab.h tem de
 // voltar traduzida, nao vazia, com os MESMOS marcadores printf e os mesmos \n
 // que o portugues — o mesmo que tools/idiomas.py confere no texto, aqui pelo
 // caminho que o app usa (i18n), que e onde um desalinhamento de tabela aparece.
@@ -65,7 +65,8 @@ static void marcadores(const char *s, char *out, size_t cap) {
 static int quebras(const char *s) { int n = 0; for (; *s; s++) if (*s == '\n') n++; return n; }
 
 static void varredura(void) {
-  static const int LINGUAS[] = { IDIOMA_EN, IDIOMA_RO, IDIOMA_UK, IDIOMA_RU };
+  static const int LINGUAS[] = { IDIOMA_EN, IDIOMA_RO, IDIOMA_UK, IDIOMA_RU,
+                                 IDIOMA_FR, IDIOMA_DE, IDIOMA_ES };
   size_t i, k, n = sizeof CHAVES / sizeof *CHAVES;
   for (k = 0; k < sizeof LINGUAS / sizeof *LINGUAS; k++) {
     lg = LINGUAS[k];
@@ -145,6 +146,33 @@ int main(void) {
   lg = IDIOMA_RU; confere_mes(7, "julho", "июля");
   lg = IDIOMA_RU; confere_mes(3, "mar\xc3\xa7o", "марта");
   lg = IDIOMA_RU; confere_mes(13, "x", "x");   /* fora de 1..12: cai na tabela */
+
+  // Frances, alemao e espanhol: uma amostra com a marca de cada um (acento
+  // agudo/grave, "ß"/umlaut, "¿"/"ñ") e o mes por extenso, que nesses tres nao
+  // declina e sai da propria tabela.
+  lg = IDIOMA_FR;
+  confere("Ajustes", "Réglages");
+  confere("Quem está assistindo?", "Qui regarde?");
+  confere_mes(7, "julho", "juillet");
+  confere_mes(8, "agosto", "août");
+  lg = IDIOMA_DE;
+  confere("Ajustes", "Einstellungen");
+  confere_mes(3, "mar\xc3\xa7o", "März");
+  lg = IDIOMA_ES;
+  confere("Ajustes", "Ajustes");
+  confere("Quem está assistindo?", "¿Quién está viendo?");
+  confere_mes(7, "julho", "julio");
+
+  // Mes abreviado e caixa alta: sem lixo no meio de um acento de 2 bytes.
+  { char o[32];
+    if (strcmp(idioma_mes_curto(IDIOMA_FR, 0), "janv.") || strcmp(idioma_mes_curto(IDIOMA_DE, 2), "März") ||
+        strcmp(idioma_mes_curto(IDIOMA_ES, 8), "sep") || idioma_mes_curto(IDIOMA_ES, 12)[0]) {
+      printf("FALHOU: mes curto fr/de/es\n"); falhas++; }
+    idioma_maiusc(o, sizeof o, "ao\xc3\xbbt");        if (strcmp(o, "AO\xc3\x9bT"))  { printf("FALHOU: maiusc aout\n"); falhas++; }
+    idioma_maiusc(o, sizeof o, "m\xc3\xa4rz");        if (strcmp(o, "M\xc3\x84RZ"))  { printf("FALHOU: maiusc marz\n"); falhas++; }
+    idioma_maiusc(o, sizeof o, "c\xc5\x93ur");        if (strcmp(o, "C\xc5\x92UR"))  { printf("FALHOU: maiusc coeur\n"); falhas++; }
+    idioma_maiusc(o, sizeof o, "a\xc3\x9f");          if (strcmp(o, "A\xc3\x9f"))    { printf("FALHOU: maiusc eszett\n"); falhas++; }
+    idioma_maiusc(o, sizeof o, "se\xc3\xb1or");       if (strcmp(o, "SE\xc3\x91OR")) { printf("FALHOU: maiusc senor\n"); falhas++; } }
 
   // A tabela inteira, em cada idioma.
   varredura();

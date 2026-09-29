@@ -260,6 +260,7 @@ IGNORAR = {
     "depois dos manifestos", "esperando os catalogos", "lendo os manifestos",
     "crédit", "crédito",            # palavra procurada no capitulo do MKV
     "episodio", "episódio",         # palavra procurada no nome do video TMDB (extras.c)
+    "película",                     # palavra de apoio da busca de manchetes em espanhol (noticias.c, PAR)
     # Nome proprio e sigla: iguais nos dois idiomas.
     "IMDb", "Trakt", "YouTube", "PIN", "AI-powered",
     # Tabela de acentos -> letra base da normalizacao de titulo (trailerapple.c):
