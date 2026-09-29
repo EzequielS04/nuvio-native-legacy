@@ -1045,10 +1045,11 @@ void stream_folha_desenhar(Uint32 agora) {
   gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,.02f,.02f,.025f,.35f*anim);
   // Painel flutuante com raio amplo e material neutro. A separacao vem do
   // veu e da superficie, nao de uma luz decorativa presa ao canto.
-  if (vid) {   // vidro: translucido com fio de 1,5 px, como o menu de contexto
+  if (vid) {   // vidro SEM aro (dono, 29/09): a borda vem so do contraste do
+    // miolo translucido e de um brilho largo no topo, nao de um fio desenhado.
     GfxRect pn = {x,24,FOLHA_W,NV_TELA_H-48};
-    gfx_cor(pn,28.0f/FOLHA_W,.075f,.078f,.09f,.86f*anim);
-    gfx_anel(pn,28.0f/FOLHA_W,1.5f,1,1,1,.14f*anim);
+    gfx_cor(pn,28.0f/FOLHA_W,.085f,.088f,.10f,.78f*anim);
+    gfx_rect(pn,0,GFX_BRILHO_TOPO,0,0.38f,0,28.0f/FOLHA_W,.88f,.92f,1.0f,.06f*anim);
   } else
   gfx_cor((GfxRect){x,24,FOLHA_W,NV_TELA_H-48},28.0f/FOLHA_W,.055f,.058f,.068f,.965f*anim);
   txt_desenhar_alpha(txt_linha(TXT_PAINEL_TITULO,"Fontes",240,241,243,255),x+40,44,anim);
@@ -1067,7 +1068,7 @@ void stream_folha_desenhar(Uint32 agora) {
     // Acoes seguem o accent solido e a tinta calculada pelo tema.
     if (ptr) ponteiro_alvo(bx, 44, 120, 50, ponteiroFolhaBotao, NULL, i, 0);
     if(sel) focoFontePilula((GfxRect){bx,44,120,50},vid?.5f:.3f,anim);
-    else if(vid) gfx_vidro_painel((GfxRect){bx,44,120,50},.5f,.5f,anim);
+    else if(vid) gfx_cor((GfxRect){bx,44,120,50},.5f,1,1,1,.07f*anim);   // pilula sem aro
     else    gfx_cor((GfxRect){bx,44,120,50},.3f,.075f,.079f,.092f,anim);
     int c=sel?ajustes_tinta_foco():224;
     if(botaoDe(i)==BT_SEM_HDR) {
@@ -1102,7 +1103,7 @@ void stream_folha_desenhar(Uint32 agora) {
     int c=sel&&grupo==0?ajustes_tinta_foco():sel?245:190;
     if (ptr) ponteiro_alvo(tx, 182, w, 50, NULL, ponteiroFolhaFiltro, i, 0);
     if(sel && grupo==0) focoFontePilula((GfxRect){tx,182,w,50},.5f,anim);
-    else if(vid) { if(sel) gfx_vidro_painel((GfxRect){tx,182,w,50},.5f,.62f,anim); }   // so o filtro escolhido leva superficie
+    else if(vid) { if(sel) gfx_cor((GfxRect){tx,182,w,50},.5f,1,1,1,.08f*anim); }   // so o filtro escolhido leva superficie, sem aro
     else gfx_cor((GfxRect){tx,182,w,50},.5f,
                  sel?.092f:.075f,sel?.096f:.079f,sel?.110f:.092f,anim);
     TxtLinha l=txt_linha_corta(TXT_PG_FIM,provedores[i],c,c,c,255,w-24);
@@ -1143,8 +1144,8 @@ void stream_folha_desenhar(Uint32 agora) {
     // Vidro: a linha em foco NAO inverte (segue translucida), entao o texto
     // e as marcas ficam nas cores de repouso.
     const int inv = sel && !vid;
-    if(vid) {   // superficie de fio: quase nada em repouso, o foco soma o contorno
-      gfx_cor(r,.10f,1,1,1,.035f*anim); gfx_anel(r,.10f,1.0f,1,1,1,.09f*anim);
+    if(vid) {   // vidro: em repouso so um veu claro, sem contorno; o foco soma o aro
+      gfx_cor(r,.10f,1,1,1,.05f*anim);
       if(sel) focoFonte(r,.10f,anim);
     }
     else if(sel) focoFonte(r,.10f,anim);

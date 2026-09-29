@@ -175,7 +175,6 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
     }
     yl += (float)nome.h + 8.0f;
     xs = tx;
-    if (o->categoria && o->categoria[0]) xs += guia_etiqueta(o->categoria, xs, yl, 420.0f, a) + 14.0f;
     if (fm >= 0) {
       xs += marca_formato((FormatoMarca)fm, xs, yl + 2.0f, 30.0f, 0.86f, 0.87f, 0.90f, a) + 14.0f;
     } else if (o->res[0]) {
