@@ -43,6 +43,7 @@
 #include "artereserva.h"
 #include "corviva.h"
 #include "p2p.h"
+#include "debrid.h"
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -188,6 +189,9 @@ typedef enum {
   // P2P experimental (p2p.h). No fim pelo mesmo motivo: valor[] e CHAVE[] sao
   // posicionais.
   AJ_P2P_LIGADO, AJ_P2P_URL, AJ_P2P_TESTAR,
+  // Chaves de debrid digitadas nesta TV (debrid.h). No fim pelo mesmo motivo.
+  // AllDebrid primeiro: e o unico que a conta nao traz.
+  AJ_DEBRID_AD, AJ_DEBRID_AD_TESTAR, AJ_DEBRID_RD, AJ_DEBRID_TB, AJ_DEBRID_PM,
   AJ_N
 } OpcaoId;
 
@@ -659,6 +663,11 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Servidor P2P (experimental)",     V_LIGA, 2),   // local: p2pLocal
   ACAO("Endereço do servidor P2P"),
   ACAO("Testar servidor P2P"),
+  ACAO("Chave do AllDebrid"),
+  ACAO("Testar chave do AllDebrid"),
+  ACAO("Chave do Real-Debrid"),
+  ACAO("Chave do TorBox"),
+  ACAO("Chave do Premiumize"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -775,6 +784,8 @@ static const char *CHAVE[] = {
   // Ligado: LOCAL e SEM o "-" (sobrevive ao fechamento). O endereco mora em
   // p2p.txt (dados), por aparelho; o teste e so uma acao.
   "p2pLocal", "-p2pEndereco", "-p2pTestar",
+  // Credenciais: moram em debrid.txt (dados), por aparelho, nunca aqui.
+  "-debridAD", "-debridADTestar", "-debridRD", "-debridTB", "-debridPM",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -912,6 +923,9 @@ static const Item TELA[] = {
       OPC(AJ_MDB_MAL),
     GRP("fanart.tv", "Chave pessoal para a arte do destaque.", "aj_images"),
       OPC(AJ_FANART_CHAVE),
+    GRP("Debrid", "Chaves de API para tocar torrents pelo seu serviço.", "aj_plug"),
+      OPC(AJ_DEBRID_AD), OPC(AJ_DEBRID_AD_TESTAR), OPC(AJ_DEBRID_RD),
+      OPC(AJ_DEBRID_TB), OPC(AJ_DEBRID_PM),
 
   // Os blocos do web (playback_section_*) como ROTULOS e nao grupos: sao nove
   // linhas, e as mais usadas do app (qualidade, idiomas) nao podem ficar atras
@@ -1172,6 +1186,7 @@ static int valor[] = {
   1,                /* interface de vidro: DESLIGADA (V_LIGA: 1 = Desligado) */
   1,                /* servidor P2P: DESLIGADO (V_LIGA: 1 = Desligado) */
   0, 0,             /* endereco, testar: acoes */
+  0, 0, 0, 0, 0,    /* chaves de debrid (AllDebrid, testar, RD, TB, PM): acoes */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1733,6 +1748,129 @@ static const char *p2pTesteTexto(void) {
   }
 }
 
+// CHAVES DE DEBRID DIGITADAS NESTA TV (debrid.h). Moram em debrid.txt na pasta
+// de dados, uma linha "servico=chave" por servico, por aparelho — credencial do
+// mesmo grau do fanart.txt. tools/arm.sh a tira do .ipk (ARQ_DE_PESSOA) e a tela
+// so a mostra mascarada. O valor NUNCA volta para o campo da modal.
+static const char *DEB_SERV[5] = { "alldebrid", "alldebrid", "realdebrid", "torbox", "premiumize" };
+static char debLocal[5][100];
+static int debIdx(int op) {
+  switch (op) {
+    case AJ_DEBRID_AD: return 0;
+    case AJ_DEBRID_RD: return 2;
+    case AJ_DEBRID_TB: return 3;
+    case AJ_DEBRID_PM: return 4;
+    default: return -1;
+  }
+}
+static const char *DEB_ALFA =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.";
+static void debLimpar(char *dst, size_t n, const char *t) {
+  size_t i, k = 0;
+  for (i = 0; t && t[i] && k + 1 < n; i++)
+    if (strchr(DEB_ALFA, t[i]) && t[i]) dst[k++] = t[i];
+  dst[k] = 0;
+}
+static void debGravar(void) {
+  char out[5 * 128];
+  int i, u = 0, algum = 0;
+  out[0] = 0;
+  for (i = 0; i < 5; i++) {
+    if (i == 1 || !debLocal[i][0]) continue;
+    u += snprintf(out + u, sizeof out - (size_t)u, "%s=%s\n", DEB_SERV[i], debLocal[i]);
+    algum = 1;
+  }
+  if (algum) dados_gravar("debrid.txt", out);
+  else dados_apagar("debrid.txt");
+}
+static void debCarregar(void) {
+  char *t = dados_ler("debrid.txt"), *l, *fim;
+  int i;
+  memset(debLocal, 0, sizeof debLocal);
+  for (l = t; l && *l; l = fim ? fim + 1 : NULL) {
+    char *eq;
+    fim = strchr(l, '\n');
+    if (fim) *fim = 0;
+    eq = strchr(l, '=');
+    if (eq) {
+      *eq = 0;
+      for (i = 0; i < 5; i++)
+        if (i != 1 && !strcmp(l, DEB_SERV[i])) debLimpar(debLocal[i], sizeof debLocal[i], eq + 1);
+    }
+    if (!fim) break;
+  }
+  free(t);
+  for (i = 0; i < 5; i++) if (i != 1 && debLocal[i][0]) debrid_definir_chave_local(DEB_SERV[i], debLocal[i]);
+}
+static void debDefinir(int op, const char *txt) {
+  int i = debIdx(op);
+  if (i < 0) return;
+  debLimpar(debLocal[i], sizeof debLocal[i], txt);
+  debrid_definir_chave_local(DEB_SERV[i], debLocal[i]);   // vazio apaga
+  debGravar();
+}
+static const char *debValor(int op) {
+  static char buf[64], m[24];
+  int i = debIdx(op);
+  const char *serv;
+  if (i < 0) return "";
+  serv = DEB_SERV[i];
+  debrid_chave_mascarada(serv, m, sizeof m);
+  switch (debrid_origem(serv)) {
+    case 2: snprintf(buf, sizeof buf, "%s", m[0] ? m : "····"); return buf;
+    case 1: snprintf(buf, sizeof buf, i18n("da conta · %s"), m[0] ? m : "····"); return buf;
+    default: return i18n("Não configurado");
+  }
+}
+
+// "TESTAR CHAVE DO ALLDEBRID": um GET v4/user, que espera a rede; fio proprio
+// como o teste do P2P para a TV nao parar de desenhar.
+static pthread_t adFio;
+static int adFioVivo;
+static _Atomic int adTeste;             // 0 nunca/livre, 1 testando, 2 pronto, 3 fio terminou
+static int adTesteOk;
+static char adTesteMsg[64], adTesteData[16];
+static void *adTesteFio(void *u) {
+  char m[64], d[16];
+  (void)u;
+  adTesteOk = debrid_testar_alldebrid(m, sizeof m, d, sizeof d);
+  snprintf(adTesteData, sizeof adTesteData, "%s", d);
+  snprintf(adTesteMsg, sizeof adTesteMsg, "%s", m);
+  atomic_store_explicit(&adTeste, 3, memory_order_release);
+  return NULL;
+}
+static void adTesteIniciar(void) {
+  if (adFioVivo) return;
+  atomic_store_explicit(&adTeste, 1, memory_order_release);
+  if (pthread_create(&adFio, NULL, adTesteFio, NULL) != 0) {
+    snprintf(adTesteMsg, sizeof adTesteMsg, "sem resposta do servidor");
+    adTesteOk = 0;
+    atomic_store_explicit(&adTeste, 2, memory_order_release);
+    return;
+  }
+  adFioVivo = 1;
+}
+static void adTesteRecolher(void) {
+  if (adFioVivo && atomic_load_explicit(&adTeste, memory_order_acquire) == 3) {
+    pthread_join(adFio, NULL);
+    adFioVivo = 0;
+    atomic_store_explicit(&adTeste, 2, memory_order_release);
+  }
+}
+// O texto vem de debrid_testar_alldebrid como CHAVE de i18n (frases fixas,
+// listadas em idioma_tab.h); a de "premium até %s" leva a data a parte.
+static const char *adTesteTexto(void) {
+  static char buf[64];
+  int e = atomic_load_explicit(&adTeste, memory_order_acquire);
+  if (e == 0) return debrid_origem("alldebrid") ? i18n("OK testa") : i18n("informe a chave primeiro");
+  if (e == 1 || e == 3) return i18n("testando…");
+  if (adTesteOk && adTesteData[0]) {
+    snprintf(buf, sizeof buf, i18n("premium até %s"), adTesteData);
+    return buf;
+  }
+  return i18n(adTesteMsg);
+}
+
 void ajustes_dir(const char *dir) {
   FILE *f;
   char caminho[600], linha[96];
@@ -1740,6 +1878,7 @@ void ajustes_dir(const char *dir) {
   snprintf(dirAjustes, sizeof dirAjustes, "%s", dir);
   fanartCarregar();
   p2pCarregar();
+  debCarregar();
   // ANTES DO LACO, e nao so no fim (#129): limita() confere as duas linhas de
   // idioma contra nValores() -> nLingua, e quem preenche nLingua e esta
   // chamada. No arranque ela ainda nao tinha rodado: a lista tinha "1 valor",
@@ -2337,6 +2476,8 @@ static const char *textoLeitura(int op) {
   if (op == AJ_FANART_CHAVE) return fanartMascarada();
   if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco : i18n("Não configurado");
   if (op == AJ_P2P_TESTAR) return p2pTesteTexto();
+  if (debIdx(op) >= 0) return debValor(op);
+  if (op == AJ_DEBRID_AD_TESTAR) return adTesteTexto();
   if (op == AJ_ENVIAR_LOG) {
     switch (avisos_envio_estado()) {
       case 1:  return i18n("enviando…");
@@ -2679,6 +2820,11 @@ static const char *ajudaOpcao(int op) {
     case AJ_TEMA: return "Cor do anel que marca onde está o foco. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena: estilizada também tinge o fundo, gradiente pinta os botões com as cores da arte e imersiva deixa a cor vazar pela tela como luz. Ficam só nesta TV.";
     case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
     case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
+    case AJ_DEBRID_AD: return "Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.";
+    case AJ_DEBRID_AD_TESTAR: return "Pergunta ao AllDebrid se a chave vale e até quando a conta é premium. Não mostra seu usuário nem e-mail.";
+    case AJ_DEBRID_RD: return "Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.";
+    case AJ_DEBRID_TB: return "Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.";
+    case AJ_DEBRID_PM: return "Chave de API do Premiumize. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.";
     case AJ_P2P_TESTAR: return "Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.";
     case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
@@ -3365,6 +3511,17 @@ void ajustes_evento(const SDL_Event *e) {
       return;
     }
     if (focoOp == AJ_P2P_TESTAR) { p2pTesteIniciar(); return; }
+    if (debIdx(focoOp) >= 0) {
+      // Como o fanart: a chave NUNCA volta para o campo; vazio apaga.
+      stCampo = focoOp;
+      teclado_abrir_com(focoOp == AJ_DEBRID_AD ? "Chave do AllDebrid"
+                        : focoOp == AJ_DEBRID_RD ? "Chave do Real-Debrid"
+                        : focoOp == AJ_DEBRID_TB ? "Chave do TorBox" : "Chave do Premiumize",
+                        "Chave de API da sua conta. Vazio apaga.",
+                        96, DEB_ALFA, NULL);
+      return;
+    }
+    if (focoOp == AJ_DEBRID_AD_TESTAR) { adTesteIniciar(); return; }
     if (focoOp == AJ_TRAKT) { traktauth_comecar(); return; }
     if (focoOp == AJ_SIMKL) { simklauth_comecar(); return; }
     if (focoOp == AJ_SAIR) {
@@ -3407,6 +3564,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   (void)agora;
   montarTela();
   p2pTesteRecolher();
+  adTesteRecolher();
   if (teclado_aberto()) teclado_atualizar(dt, agora);
   // O resultado e CONSUMIDO NA LEITURA (ver teclado.h): ler duas vezes daria
   // TECLADO_NADA na segunda, e por isso a gravacao acontece aqui, uma vez.
@@ -3418,6 +3576,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       else if (stCampo == AJ_XTREAM_SENHA)    xtream_definir_senha(teclado_texto());
       else if (stCampo == AJ_FANART_CHAVE)    fanartDefinir(teclado_texto());
       else if (stCampo == AJ_P2P_URL)         ajustes_definir_p2p_url(teclado_texto());
+      else if (debIdx(stCampo) >= 0)          debDefinir(stCampo, teclado_texto());
       else                           stalker_definir_portal(teclado_texto());
       stCampo = 0;
     } else if (r == TECLADO_CANCELOU) {
@@ -5044,6 +5203,8 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_XTREAM_CONTA:
     case AJ_DIAGNOSTICO: case AJ_VELOCIDADE:
     case AJ_P2P_URL: case AJ_P2P_TESTAR:
+    case AJ_DEBRID_AD: case AJ_DEBRID_AD_TESTAR: case AJ_DEBRID_RD:
+    case AJ_DEBRID_TB: case AJ_DEBRID_PM:
       return AJPV_ACAO;
     default:
       return (AjPreview)-1;

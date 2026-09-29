@@ -8,6 +8,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <stdatomic.h>
+#include <time.h>
 
 // As tres bases. A versao esta EMBUTIDA no caminho de proposito: o TorBox pede
 // /v1/ antes de /api/ (api.torbox.app/v1/api/...), e deixar isso implicito na
@@ -16,15 +17,34 @@
 #define RD "https://api.real-debrid.com/rest/1.0"
 #define TB "https://api.torbox.app/v1/api"
 #define PM "https://www.premiumize.me/api"
+// AllDebrid API v4 (docs.alldebrid.com). Base SEM versao: as rotas de status
+// sao v4.1 e as demais v4, entao a versao vai em cada rota, pelo mesmo motivo
+// do TorBox acima. `agent` segue na query mesmo a documentacao dizendo que
+// deixou de ser exigido em 15/01/2025 ("Removed agent and version
+// requirements"): e um identificador sem segredo, e servidor que ignora
+// parametro a mais nao reclama.
+#define AD "https://api.alldebrid.com"
+#define AD_AGENTE "agent=nuvio"
 
-enum { SRD, STB, SPM, SN };
-static const char *nomeServ[SN] = { "Real-Debrid", "TorBox", "Premiumize" };
+enum { SRD, STB, SPM, SAD, SN };
+static const char *nomeServ[SN] = { "Real-Debrid", "TorBox", "Premiumize", "AllDebrid" };
 
 // UMA CHAVE POR SERVICO, e nao uma so. A conta pode trazer mais de uma
 // credencial "debrid:*" (sync.c chama esta funcao uma vez por provedor), e
 // guardar so a ultima faria o resultado depender da ORDEM que o servidor
 // devolve as linhas — o pior tipo de defeito, porque muda sozinho.
+//
+// TRES ORIGENS, e `chave` e a EFETIVA: a que vale para o resolvedor.
+//   chaveConta — vinda do sync ("debrid:<servico>"), some no logout;
+//   chaveLocal — digitada nesta TV (Ajustes > Integracoes > Debrid), fica no
+//                aparelho e SOBREVIVE ao logout: nao e da conta de ninguem.
+// A local vence quando existe: e a pessoa dizendo "use esta". Sem ela vale a
+// da conta. O AllDebrid so entra por aqui: o app web oficial (0.3.38) nao
+// tem o servico (grep em debridProviders.js: so torbox, premiumize e
+// realdebrid), entao nenhuma conta o traz hoje.
 static char chave[SN][200];
+static char chaveConta[SN][200];
+static char chaveLocal[SN][200];
 static int  alvoT, alvoE;
 
 // RECUSA DE CONTA POR BUSCA. recusado[q] guarda o status HTTP da recusa (0 =
@@ -68,7 +88,17 @@ static int idServico(const char *s) {
   if (!strcasecmp(s, "torbox")     || !strcasecmp(s, "tor-box"))     return STB;
   if (!strcasecmp(s, "premiumize") || !strcasecmp(s, "premiumize-me")
       || !strcasecmp(s, "premiumizeme")) return SPM;
+  if (!strcasecmp(s, "alldebrid")  || !strcasecmp(s, "all-debrid")
+      || !strcasecmp(s, "all_debrid") || !strcasecmp(s, "ad")) return SAD;
   return -1;
+}
+
+// Recalcula a efetiva de um servico. Chave nova zera "sem plano" e o aviso: a
+// pessoa trocou a chave justamente para sair daquele estado.
+static void efetiva(int q) {
+  const char *k = chaveLocal[q][0] ? chaveLocal[q] : chaveConta[q];
+  if (strcmp(chave[q], k)) { atomic_store(&semPlano[q], 0); atomic_store(&avisado[q], 0); }
+  snprintf(chave[q], sizeof chave[q], "%s", k);
 }
 
 void debrid_definir_chave(const char *servico, const char *k) {
@@ -79,9 +109,34 @@ void debrid_definir_chave(const char *servico, const char *k) {
     printf("[debrid] %s: servico sem resolvedor aqui, ignorado\n", servico);
     return;
   }
-  if (strcmp(chave[q], k)) { atomic_store(&semPlano[q], 0); atomic_store(&avisado[q], 0); }
-  snprintf(chave[q], sizeof chave[q], "%s", k);
+  snprintf(chaveConta[q], sizeof chaveConta[q], "%s", k);
+  efetiva(q);
   printf("[debrid] chave do %s vinda da conta\n", nomeServ[q]);
+}
+
+// Chave digitada nesta TV. Vazia apaga (volta a valer a da conta, se houver).
+// O log diz so o servico: a chave nunca vai para ele.
+void debrid_definir_chave_local(const char *servico, const char *k) {
+  int q = servico ? idServico(servico) : -1;
+  if (q < 0) return;
+  snprintf(chaveLocal[q], sizeof chaveLocal[q], "%s", k ? k : "");
+  efetiva(q);
+  printf("[debrid] chave local do %s %s\n", nomeServ[q], chaveLocal[q][0] ? "definida" : "apagada");
+}
+int debrid_origem(const char *servico) {
+  int q = servico ? idServico(servico) : -1;
+  if (q < 0) return 0;
+  return chaveLocal[q][0] ? 2 : chaveConta[q][0] ? 1 : 0;
+}
+// "····abcd": so os 4 ultimos, o bastante para reconhecer QUAL chave e.
+const char *debrid_chave_mascarada(const char *servico, char *dst, unsigned n) {
+  int q = servico ? idServico(servico) : -1;
+  size_t L;
+  if (dst && n) dst[0] = 0;
+  if (q < 0 || !chave[q][0] || !dst || !n) return dst;
+  L = strlen(chave[q]);
+  snprintf(dst, n, "····%s", L > 8 ? chave[q] + L - 4 : "");
+  return dst;
 }
 // So conta servico que PODE resolver: com todas as chaves em conta sem plano,
 // streams.c descarta os torrents sem url logo na lista (como sem debrid) e a
@@ -93,12 +148,14 @@ int debrid_ativo(void) {
 }
 void debrid_esquecer(void) {
   int q;
-  memset(chave, 0, sizeof chave); alvoT = alvoE = 0;
+  // Logout: a chave DA CONTA sai; a digitada nesta TV fica (ver chaveLocal).
+  memset(chaveConta, 0, sizeof chaveConta); alvoT = alvoE = 0;
   atomic_store(&foraCache, 0);
   for (q = 0; q < SN; q++) {
     atomic_store(&recusado[q], 0);
     atomic_store(&semPlano[q], 0);
     atomic_store(&avisado[q], 0);
+    efetiva(q);
   }
 }
 void debrid_nova_busca(void) {
@@ -135,12 +192,17 @@ int debrid_sem_plano(void) {
 // montado com %s nunca casaria com a tabela.
 const char *debrid_sem_plano_frase(int mascara) {
   int tb = (mascara & (1 << STB)) != 0, pm = (mascara & (1 << SPM)) != 0;
-  int rd = (mascara & (1 << SRD)) != 0;
-  if (tb + pm + rd > 1)
+  int rd = (mascara & (1 << SRD)) != 0, ad = (mascara & (1 << SAD)) != 0;
+  if (tb + pm + rd + ad > 1)
     return "Suas contas de debrid são gratuitas e não permitem uso pela API — as fontes torrent ficam de fora";
   if (tb) return "Sua conta TorBox é gratuita e não permite uso pela API — fontes torrent do TorBox ficam de fora";
   if (pm) return "Sua conta Premiumize é gratuita e não permite uso pela API — fontes torrent do Premiumize ficam de fora";
   if (rd) return "Sua conta Real-Debrid não é premium e não permite uso pela API — fontes torrent do Real-Debrid ficam de fora";
+  // semPlano == 2 e a chave RECUSADA (AUTH_BAD_APIKEY), nao o plano: a
+  // pessoa age em lugares diferentes (trocar a chave x assinar).
+  if (ad) return atomic_load(&semPlano[SAD]) == 2
+      ? "Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid"
+      : "Sua conta AllDebrid não é premium — as fontes torrent do AllDebrid ficam de fora";
   return NULL;
 }
 
@@ -268,7 +330,8 @@ int debrid_eh_sem_plano(int st, const char *r) {
   (void)st;
   if (!r) return 0;
   return strstr(r, "PLAN_RESTRICTED") != NULL || contem(r, "not premium")
-      || contem(r, "not_premium") || contem(r, "premium account required");
+      || contem(r, "not_premium") || contem(r, "premium account required")
+      || strstr(r, "MAGNET_MUST_BE_PREMIUM") != NULL;
 }
 
 static int erroDeConta(int st, const char *r) {
@@ -280,9 +343,26 @@ static int erroDeConta(int st, const char *r) {
   if (r && (strstr(r, "ACTIVE_LIMIT") || strstr(r, "MONTHLY_LIMIT")
             || strstr(r, "COOLDOWN_LIMIT") || strstr(r, "PLAN_RESTRICTED")
             || strstr(r, "BAD_TOKEN") || strstr(r, "AUTH_ERROR")
-            || strstr(r, "NO_AUTH")))
+            || strstr(r, "NO_AUTH")
+            // AllDebrid responde erro de conta com HTTP 200 e o codigo no
+            // corpo (docs.alldebrid.com, "Error codes")
+            || strstr(r, "AUTH_BAD_APIKEY") || strstr(r, "AUTH_MISSING_APIKEY")
+            || strstr(r, "AUTH_BLOCKED") || strstr(r, "MAGNET_TOO_MANY_ACTIVE")))
     return 1;
   return 0;
+}
+
+// O AllDebrid devolve HTTP 200 com {"status":"error","error":{"code":...}}, e
+// o "status HTTP" que o resto deste arquivo guarda em recusado[] (e mostra no
+// log como "AllDebrid 401") tem de ser um numero. Traduz o codigo para o
+// equivalente: chave = 401, plano = 403, limite = 429. Outro codigo (do
+// torrent, nao da conta) fica como veio.
+static int adStatusSintetico(int st, const char *r) {
+  if (!r) return st;
+  if (strstr(r, "AUTH_BAD_APIKEY") || strstr(r, "AUTH_MISSING_APIKEY")) return 401;
+  if (strstr(r, "AUTH_BLOCKED") || strstr(r, "MAGNET_MUST_BE_PREMIUM")) return 403;
+  if (strstr(r, "MAGNET_TOO_MANY_ACTIVE")) return 429;
+  return st;
 }
 
 // Registra a falha de uma chamada e devolve o que o resolvedor devolve: 0
@@ -300,6 +380,8 @@ static int falha(int q, const char *rota, int st, const char *r) {
   } else {
     char campo[CORPO_LOG + 1], e[64] = "", d[CORPO_LOG + 1] = "";
     if (js_texto(r, NULL, "error", campo, sizeof campo)) corpoSeguro(campo, e, sizeof e);
+    // AllDebrid: "error" e um objeto {code,message}
+    else if (js_texto(r, NULL, "code", campo, sizeof campo)) corpoSeguro(campo, e, sizeof e);
     if (js_texto(r, NULL, "detail", campo, sizeof campo)
         || js_texto(r, NULL, "message", campo, sizeof campo))
       corpoSeguro(campo, d, sizeof d);
@@ -311,6 +393,15 @@ static int falha(int q, const char *rota, int st, const char *r) {
     if (atomic_compare_exchange_strong(&semPlano[q], &zero, 1))
       printf("[debrid] %s: conta sem plano para a API; fora pelo resto da sessao\n",
              nomeServ[q]);
+  }
+  if (q == SAD) {
+    // chave recusada e diferente de plano (ver debrid_sem_plano_frase)
+    if (r && (strstr(r, "AUTH_BAD_APIKEY") || strstr(r, "AUTH_MISSING_APIKEY"))) {
+      int zero = 0;
+      if (atomic_compare_exchange_strong(&semPlano[q], &zero, 2))
+        printf("[debrid] AllDebrid: chave recusada; fora pelo resto da sessao\n");
+    }
+    if (st >= 200 && st < 300) st = adStatusSintetico(st, r);
   }
   return erroDeConta(st, r) ? -(st > 0 ? st : 1) : 0;
 }
@@ -672,6 +763,242 @@ static int resolverPM(const char *infoHash, int fileIdx, char *url, unsigned n) 
   return 1;
 }
 
+// ---------------------------------------------------------------- AllDebrid
+//
+// Rotas (documentacao oficial, docs.alldebrid.com; a auth e o cabecalho
+// "Authorization: Bearer", entao a chave NUNCA entra na URL):
+//   POST v4/magnet/upload      magnets[]=<magnet>     -> data.magnets[0]{id,ready,error?}
+//   POST v4.1/magnet/status    id=<id>                -> data.magnets{statusCode,downloaded,size}
+//   POST v4/magnet/files       id[]=<id>              -> data.magnets[0].files (arvore n/s/l/e)
+//   POST v4/link/unlock        link=<l>               -> data.link (ou data.delayed)
+//   POST v4/link/delayed       id=<delayed>           -> data.status 2 = pronto, data.link
+//   POST v4/magnet/delete      id=<id>
+//   GET  v4/user                                      -> data.user{isPremium,premiumUntil}
+//
+// SEM CONSULTA DE CACHE SEPARADA. O RD/TorBox/Premiumize tem uma rota de "esta
+// em cache?"; a do AllDebrid (magnet/instant) nao consta mais na documentacao
+// atual. O jeito documentado e o proprio upload: `ready` true = "already
+// available". Isso quer dizer que perguntar JA ADICIONA o magnet a conta (como
+// o addMagnet do RD). Para nao encher o limite de 30 magnets ativos
+// (MAGNET_TOO_MANY_ACTIVE) com cada candidata fora de cache do automatico, ver
+// adDescartar.
+//
+// AS ROTAS FORAM LIDAS NA DOCUMENTACAO E TESTADAS CONTRA UMA REDE FALSA; nada
+// disto foi medido contra uma conta AllDebrid real (hipotese ate alguem ter uma).
+
+// Dois formatos de "urlencoded" para o mesmo campo: `id` simples e `id[]`.
+static char *adPost(const char *rota, const char *corpo, int *st) {
+  char r2[200];
+  snprintf(r2, sizeof r2, "%s%c" AD_AGENTE, rota, strchr(rota, '?') ? '&' : '?');
+  return post_form(AD, r2, SAD, corpo, st);
+}
+
+// Resposta 2xx de sucesso? O AllDebrid erra com HTTP 200 e "status":"error".
+static int adOk(const char *r, int st) {
+  char s[16];
+  return ok2xx(r, st) && js_texto(r, NULL, "status", s, sizeof s) && !strcmp(s, "success");
+}
+
+// Buffer crescente para a lista achatada de arquivos.
+typedef struct { char *p; size_t n, cap; int itens; } AdBuf;
+static void adAdd(AdBuf *b, const char *t, size_t L) {
+  if (!b->p) return;
+  if (b->n + L + 1 > b->cap) {
+    size_t c = (b->cap + L + 1) * 2;
+    char *q = realloc(b->p, c);
+    if (!q) { free(b->p); b->p = NULL; return; }
+    b->p = q; b->cap = c;
+  }
+  memcpy(b->p + b->n, t, L); b->n += L; b->p[b->n] = 0;
+}
+static void adEsc(AdBuf *b, const char *t) {
+  for (; *t; t++) {
+    unsigned char c = (unsigned char)*t;
+    if (c == '"' || c == '\\') { char e[2] = { '\\', (char)c }; adAdd(b, e, 2); }
+    else if (c < ' ') adAdd(b, " ", 1);
+    else adAdd(b, t, 1);
+  }
+}
+
+// A arvore {"n":nome,"e":[...]} (pasta) / {"n","s","l"} (arquivo) vira a lista
+// plana [{"path","size","link"}] em ORDEM DE DOCUMENTO, que e o que
+// escolherArquivo sabe ler — a ordem de escolha continua escrita uma vez so.
+// O indice do fileIdx do addon e o do torrent inteiro; a ordem da arvore do
+// AllDebrid e HIPOTESE de que coincide (numa temporada em pastas pode nao).
+#define AD_MAX_ARQUIVOS 2000
+#define AD_PROF 8
+static void adAchatar(const char *arr, AdBuf *b, int prof) {
+  const char *p;
+  for (p = arr; p && (*p == '{') && b->itens < AD_MAX_ARQUIVOS; p = js_prox(js_fim(p))) {
+    const char *f = js_fim(p), *sub = js_array(p, f, "e");
+    char nome[600], link[900];
+    if (sub) { if (prof < AD_PROF) adAchatar(sub, b, prof + 1); continue; }
+    if (!js_texto(p, f, "n", nome, sizeof nome)) continue;
+    if (!js_texto(p, f, "l", link, sizeof link)) continue;
+    if (b->itens) adAdd(b, ",", 1);
+    adAdd(b, "{\"path\":\"", 9); adEsc(b, nome);
+    { char t[48]; snprintf(t, sizeof t, "\",\"size\":%.0f,\"link\":\"", js_num(p, f, "s", 0));
+      adAdd(b, t, strlen(t)); }
+    adEsc(b, link); adAdd(b, "\"}", 2);
+    b->itens++;
+  }
+}
+
+// Apaga um magnet que ESTE pedido acabou de criar e nao serve. So o que ainda
+// nao baixou nada e esta na fila/comecando (statusCode 0 ou 1, 0 bytes): um
+// magnet que a pessoa ja tinha na conta, andando, nao e apagado. E hipotese
+// que o upload de um magnet ja existente devolve o id dele; se devolver outro
+// o pior caso e apagar um download recem-comecado de 0 bytes.
+static void adDescartar(const char *id) {
+  char corpo[64], *r; int st = 0;
+  snprintf(corpo, sizeof corpo, "id=%s", id);
+  r = adPost("v4/magnet/delete", corpo, &st);
+  free(r);
+}
+
+// `manual` 0 (automatico): so o que ja esta pronto (`ready`). 1: a pessoa
+// escolheu o torrent; se nao esta pronto, o AllDebrid segue baixando e devolve
+// DEBRID_BAIXANDO com o progresso, que fica na conta para a proxima escolha.
+static int resolverAD(const char *infoHash, int fileIdx, char *url, unsigned n,
+                      int manual, int *pct) {
+  char corpo[700], enc[600], id[32], lnk[900], sub[16], h[80];
+  char *r; int st = 0, tent, sc = -1, pronto;
+  const char *files, *el;
+  AdBuf b = { NULL, 0, 0, 0 };
+
+  hashMin(h, sizeof h, infoHash);      // o servico compara TEXTO, como o TorBox
+  snprintf(corpo, sizeof corpo, "magnet:?xt=urn:btih:%s", h);
+  urlenc(enc, sizeof enc, corpo);
+  snprintf(corpo, sizeof corpo, "magnets%%5B%%5D=%s", enc);
+  r = adPost("v4/magnet/upload", corpo, &st);
+  if (!adOk(r, st)) { int v = falha(SAD, "upload", st, r); free(r); return v; }
+  // erro POR MAGNET (MAGNET_INVALID_URI...) vem dentro de magnets[0]
+  // O id do AllDebrid e NUMERO no JSON ("id":123), nao texto.
+  if (js_texto(r, NULL, "code", sub, sizeof sub) || js_num(r, NULL, "id", -1) < 0) {
+    int v = falha(SAD, "upload", st, r); free(r); return v;
+  }
+  snprintf(id, sizeof id, "%.0f", js_num(r, NULL, "id", -1));
+  { char rd[16];
+    pronto = js_bruto(r, NULL, "ready", rd, sizeof rd) && !strncmp(rd, "true", 4); }
+  free(r);
+
+  if (!pronto && !manual) {
+    // fora de cache: o automatico nao espera. Descarta o que acabou de criar
+    // (ver adDescartar) e diz "fora de cache".
+    int sc0 = -1; double baixado = 0;
+    snprintf(corpo, sizeof corpo, "id=%s", id);
+    r = adPost("v4.1/magnet/status", corpo, &st);
+    if (adOk(r, st)) { sc0 = (int)js_num(r, NULL, "statusCode", -1); baixado = js_num(r, NULL, "downloaded", 0); }
+    free(r);
+    if (sc0 >= 0 && sc0 <= 1 && baixado <= 0) adDescartar(id);
+    printf("[debrid] AllDebrid: %s fora de cache\n", infoHash);
+    return FORA;
+  }
+
+  // statusCode 4 = Ready. 5-15 = erro do torrent (sem peer, muito grande, 20
+  // min sem baixar...). Tres olhadas de 1 s, como os outros; em cache a
+  // primeira ja diz 4.
+  for (tent = 0; tent < 3; tent++) {
+    snprintf(corpo, sizeof corpo, "id=%s", id);
+    r = adPost("v4.1/magnet/status", corpo, &st);
+    if (!adOk(r, st)) { int v = falha(SAD, "status", st, r); free(r); return v; }
+    sc = (int)js_num(r, NULL, "statusCode", -1);
+    if (pct) {
+      double tam = js_num(r, NULL, "size", 0), bx = js_num(r, NULL, "downloaded", 0);
+      *pct = tam > 0 ? (int)(bx * 100.0 / tam) : -1;
+    }
+    free(r);
+    if (sc == 4) break;
+    if (sc >= 5) {
+      printf("[debrid] AllDebrid: %s falhou no servico (statusCode %d)\n", infoHash, sc);
+      return 0;
+    }
+    if (tent < 2) sleep(1);
+  }
+  if (sc != 4) {
+    if (!manual) return FORA;
+    printf("[debrid] AllDebrid: %s baixando (%d%%, statusCode %d); fica na conta, "
+           "a proxima escolha toca quando terminar\n", infoHash, pct ? *pct : -1, sc);
+    return DEBRID_BAIXANDO;
+  }
+
+  snprintf(corpo, sizeof corpo, "id%%5B%%5D=%s", id);
+  r = adPost("v4/magnet/files", corpo, &st);
+  if (!adOk(r, st) || !(files = js_array(r, NULL, "files"))) {
+    int v = falha(SAD, "files", st, r); free(r); return v;
+  }
+  b.p = malloc(4096); b.cap = 4096;
+  if (b.p) { b.p[0] = '['; b.p[1] = 0; b.n = 1; }
+  adAchatar(files, &b, 0);
+  free(r);
+  if (!b.p) return 0;
+  adAdd(&b, "]", 1);
+  el = escolherArquivo(b.p + 1, fileIdx, "path", "size");
+  if (!el || !js_texto(el, js_fim(el), "link", lnk, sizeof lnk)) {
+    printf("[debrid] AllDebrid: sem video utilizavel em %s\n", infoHash);
+    free(b.p); return 0;
+  }
+  free(b.p);
+
+  urlenc(enc, sizeof enc, lnk);
+  snprintf(corpo, sizeof corpo, "link=%s", enc);
+  r = adPost("v4/link/unlock", corpo, &st);
+  if (!adOk(r, st)) { int v = falha(SAD, "unlock", st, r); free(r); return v; }
+  if (js_texto(r, NULL, "link", url, n)) { free(r); return 1; }
+  // "delayed": links que precisam de tempo para ser gerados. Raro em torrent
+  // (o link de arquivo pronto costuma sair na hora), mas e o contrato.
+  { char did[48];
+    if (js_bruto(r, NULL, "delayed", did, sizeof did)) {
+      char *q = did; int t2;
+      while (*q == '"') q++;
+      { char *e = q; while (*e && *e != '"') e++; *e = 0; }
+      free(r);
+      for (t2 = 0; t2 < 3; t2++) {
+        snprintf(corpo, sizeof corpo, "id=%s", q);
+        r = adPost("v4/link/delayed", corpo, &st);
+        if (adOk(r, st) && js_num(r, NULL, "status", 0) == 2 && js_texto(r, NULL, "link", url, n)) {
+          free(r); return 1;
+        }
+        free(r);
+        sleep(1);
+      }
+      return 0;
+    } }
+  falha(SAD, "unlock", st, r); free(r);
+  return 0;
+}
+
+// "Testar chave" (Ajustes): GET v4/user. Devolve 1 e a frase da conta em
+// `msg` (nunca a chave, nem o e-mail/usuario: esta tela vira foto de issue),
+// ou 0 com o motivo. BLOQUEIA; quem chama usa um fio.
+int debrid_testar_alldebrid(char *msg, unsigned n, char *data, unsigned nd) {
+  char *r; int st = 0;
+  if (msg && n) msg[0] = 0;
+  if (data && nd) data[0] = 0;
+  if (!chave[SAD][0]) { if (msg && n) snprintf(msg, n, "sem chave"); return 0; }
+  r = get_auth(AD, "v4/user?" AD_AGENTE, SAD, &st);
+  if (!r) { if (msg && n) snprintf(msg, n, "sem resposta do servidor"); return 0; }
+  if (!adOk(r, st)) {
+    if (msg && n) snprintf(msg, n, "%s",
+        strstr(r, "AUTH_BAD_APIKEY") || strstr(r, "AUTH_MISSING_APIKEY") ? "chave recusada"
+        : strstr(r, "AUTH_BLOCKED") ? "bloqueada por região ou IP" : "sem resposta válida");
+    falha(SAD, "user", st, r);
+    free(r); return 0;
+  }
+  { char b[16]; double ate = js_num(r, NULL, "premiumUntil", 0);
+    int premium = js_bruto(r, NULL, "isPremium", b, sizeof b) && !strncmp(b, "true", 4);
+    if (premium && ate > 0) {
+      time_t t = (time_t)ate; struct tm *m = localtime(&t); char d[16] = "";
+      if (m) strftime(d, sizeof d, "%d/%m/%Y", m);
+      // `msg` e chave de i18n; com data, quem mostra usa "premium até %s"
+      if (msg && n) snprintf(msg, n, "premium");
+      if (data && nd) snprintf(data, nd, "%s", d);
+    } else if (premium) { if (msg && n) snprintf(msg, n, "premium"); }
+    else if (msg && n) snprintf(msg, n, "conta sem premium");
+    free(r);
+    return premium; }
+}
+
 // ---------------------------------------------------------------- resolver
 
 // Uma volta pelos servicos com chave, na ORDEM FIXA. `baixarTB` 1 = o TorBox
@@ -697,8 +1024,11 @@ static int volta(const char *infoHash, int fileIdx, char *url, unsigned n,
     // depois de cada 403 do TorBox, torrent por torrent.
     if (atomic_load(&recusado[q]) || atomic_load(&semPlano[q])) continue;
     url[0] = 0;
+    // `qb != NULL` e a escolha MANUAL (ver debrid_resolver_escolhido): o
+    // AllDebrid so deixa o download andar quando a pessoa escolheu o torrent.
     deu = (q == SRD) ? resolverRD(infoHash, fileIdx, url, n, &p)
         : (q == STB) ? resolverTB(infoHash, fileIdx, url, n, baixarTB, &p)
+        : (q == SAD) ? resolverAD(infoHash, fileIdx, url, n, qb != NULL, &p)
                      : resolverPM(infoHash, fileIdx, url, n);
     if (deu < 0) {
       int zero = 0;
