@@ -230,6 +230,47 @@
 #define NV_HOME_HERO_BOTAO_GAP 26.0f
 #define NV_LEGACY_ROW_HEAD_H 46.0f // titulo + margem ate os cards (564 - 518)
 
+// --- LAYOUTS DA HOME (ajustes_home_layout) ---------------------------------
+// MODERNA e tudo o que esta acima. As medidas abaixo sao DESTES DOIS layouts
+// novos e nao vem de captura do app web: o Padrao segue o `classic` do app
+// oficial (destaque contido, fileiras num fundo liso) e a Dinamica e a Apple
+// TV; os numeros sao de projeto, conferidos nas capturas de
+// tests/homelayouts_shot.sh.
+//
+// PADRAO — banner no topo, fileiras abaixo. O banner fica parado (ele NAO
+// rola): a fileira em foco se ancora em NV_PAD_TOPO_FIL, como na Moderna, so
+// que mais embaixo, e as de cima somem no corte logo abaixo do banner.
+//   banner: y 36..488 (452 de altura), x/largura pela margem da barra lateral
+//   fileiras: titulo da fileira em foco em 544 -> 56 px de respiro
+#define NV_PAD_BANNER_Y    36.0f
+#define NV_PAD_BANNER_H   452.0f
+#define NV_PAD_BANNER_RAIO 32.0f   // px
+#define NV_PAD_TOPO_FIL   544.0f
+#define NV_PAD_TEXTO_X     56.0f   // recuo do texto dentro do banner
+#define NV_PAD_TEXTO_BASE  40.0f   // do fim do botao ate a base do banner
+#define NV_PAD_LOGO_H     116.0f
+#define NV_PAD_LOGO_MAX_W 380.0f
+#define NV_PAD_SIN_W      760.0f
+//
+// DINAMICA — o destaque ocupa 0..780 e ROLA com a pagina: com o foco no
+// destaque a primeira fileira espia por baixo (titulo em 800); descendo, o
+// destaque sobe e some e a fileira em foco se ancora em NV_DIN_TOPO_FIL. A
+// diferenca entre as duas e a "empurra" do destaque (mesma mola da Moderna, com
+// o sinal trocado: a rolagem fica NEGATIVA com o foco no destaque).
+#define NV_DIN_HERO_H     780.0f
+#define NV_DIN_REPOUSO_FIL 800.0f  // titulo da 1a fileira com o destaque em foco
+#define NV_DIN_TOPO_FIL   150.0f   // titulo da fileira em foco, rolando
+#define NV_DIN_LOGO_H     168.0f
+#define NV_DIN_LOGO_MAX_W 520.0f
+#define NV_DIN_DEST_W     720.0f   // cartao de destaque grande (16:9)
+#define NV_DIN_DEST_H     405.0f
+#define NV_DIN_LARGA_W    384.0f   // faixa deitada
+#define NV_DIN_LARGA_H    216.0f
+#define NV_DIN_PAINEL_RAIO 36.0f   // canto do painel de vidro de cada fileira
+// Faixa do numeral do Top 10: o numeral mora no vao a esquerda do cartaz e o
+// cobre por 22 px (a Apple faz assim), entao o passo da fileira cresce por ela.
+#define NV_TOP10_NUM_FAIXA 138.0f
+
 // As quatro secoes visuais que a home do Apple TV usa, cada uma com proporcao
 // propria — OBSERVADO nas fotos de referencia:
 //  1. HERO      arte 16:9 full-bleed que TROCA sozinha (carrossel + dots)

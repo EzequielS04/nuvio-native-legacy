@@ -247,6 +247,10 @@ def contexto(txt, i):
 # "nao sei o que e": sem esta lista a ferramenta nao pode virar teste, e sem
 # virar teste ela nao impede a proxima regressao.
 IGNORAR = {
+    # Palavras que o nome PUBLICO do catalogo tem quando ele e um ranking; sao
+    # dado de comparacao de home.c (sinalRanking, layout Dinamica), nunca texto
+    # desenhado. "top", "popular" e "trending" ja nao acusam por serem ASCII.
+    "em alta", "mais vist", "tendência",
     "-perfil",                      # sufixo de nome de arquivo (ajustes.c)
     "biblioteca.h", "catalogo.h", "fileiras.h", "perfil.h", "legenda.h",
     "perfil.txt",                   # #include e nome de arquivo

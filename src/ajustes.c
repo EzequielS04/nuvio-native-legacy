@@ -198,6 +198,8 @@ typedef enum {
   // Posteres personalizados (posterprov.h). No fim pelo mesmo motivo.
   AJ_POSTER_PROV, AJ_POSTER_INST, AJ_POSTER_TOKEN, AJ_POSTER_EXTRA,
   AJ_POSTER_CHAVE, AJ_POSTER_MODELO, AJ_POSTER_TESTAR,
+  // Layout da home (Moderna / Padrao / Dinamica). No fim pelo mesmo motivo.
+  AJ_HOME_LAYOUT,
   AJ_N
 } OpcaoId;
 
@@ -206,6 +208,20 @@ static const char *V_LIGA[]      = { "Ligado", "Desligado" };
 // Provedor dos posteres personalizados. O INDICE e o gravado ("posterProvLocal")
 // e o PP_* de posterprov.h: so acrescentar no fim.
 static const char *V_POSTER_PROV[] = { "Desligado", "SpatialPosters", "RPDB", "Modelo próprio" };
+// LAYOUT DA HOME. O INDICE e o gravado (homeLayoutLocal) e o HOME_LAYOUT_* de
+// ajustes.h: 0 = Moderna (a de sempre, e o padrao), 1 = Padrao, 2 = Dinamica.
+//
+// O app oficial tem `homeLayout` (layoutPreferences.js) com "modern", "grid" e
+// "classic", que a conta guarda como selected_layout = MODERN | GRID | CLASSIC.
+// Moderna = modern e Padrao = classic (destaque contido, fileiras num fundo
+// liso), mas a escolha e LOCAL: a Dinamica nao tem par na conta, e gravar
+// "DINAMICA" num enum que o app web valida faria os outros aparelhos cairem no
+// padrao. Ver somenteDesteAparelho.
+//
+// O rotulo da terceira leva "(Apple TV)" porque "Dinâmica" a secas e a chave da
+// traducao dos temas de cor ("Matching color"): o mesmo texto nas duas linhas
+// deixaria a home em ingles com o nome do tema.
+static const char *V_HOME_LAYOUT[] = { "Moderna", "Padrão", "Dinâmica (Apple TV)" };
 // "Fonte automatica" (issue #130). O INDICE e o gravado (fonteAutoLocal) e o
 // FONTEAUTO_* de fonteauto.h: 0 = a regra de pontuacao, 1 = a primeira da
 // lista do addon, e so ela — o "Auto-play first source" do Nuvio.
@@ -685,6 +701,7 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Chave do RPDB"),
   ACAO("Modelo de URL dos pôsteres"),
   ACAO("Testar pôsteres"),
+  ESC("Layout da home",             V_HOME_LAYOUT, 3), // local: ver V_HOME_LAYOUT
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -805,6 +822,8 @@ static const char *CHAVE[] = {
   // aparelho, e o teste e so uma acao.
   "posterProvLocal", "-posterInst", "-posterToken", "-posterExtra",
   "-posterChave", "-posterModelo", "-posterTestar",
+  // LOCAL e SEM o "-": a Dinamica nao existe na conta (ver V_HOME_LAYOUT).
+  "homeLayoutLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -888,7 +907,7 @@ static const Item TELA[] = {
 
   SEC("Layout", "Estrutura da página inicial e estilos de pôster", "aj_layout-dashboard"),
     GRP("Layout da Home", "Escolha a estrutura e a fonte do destaque.", "aj_panel-top"),
-      OPC(AJ_LANDSCAPE), OPC(AJ_HERO_CHEIO), OPC(AJ_HERO_FUNDO),
+      OPC(AJ_HOME_LAYOUT), OPC(AJ_LANDSCAPE), OPC(AJ_HERO_CHEIO), OPC(AJ_HERO_FUNDO),
       OPC(AJ_HERO_ARTE_DIF), OPC(AJ_HERO_TRAILER),
     GRP("Conteúdo da Home", "Controle o que aparece na home e na busca.", "aj_rows-3"),
       OPC(AJ_FIL_LIMITE), OPC(AJ_ITENS_FILEIRA), OPC(AJ_FIL_ORDEM),
@@ -1217,6 +1236,7 @@ static int valor[] = {
   0, 0,             /* endereco, testar: acoes */
   0,                /* posteres personalizados: DESLIGADO (indice 0) */
   0, 0, 0, 0, 0, 0,/* endereco, token, parametros, chave, modelo, testar: acoes */
+  0,                /* layout da home: Moderna (a de sempre) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1426,6 +1446,10 @@ int ajustes_rail_recolhida(void)      { return ajustes_rail_moderna() ? 0 : lig(
 int ajustes_rail_moderna_blur(void)   { return lig(AJ_RAIL_BLUR); }
 int ajustes_hero_ligado(void)         { return lig(AJ_HERO); }
 int ajustes_hero_cheio(void)          { return lig(AJ_HERO_CHEIO); }
+int ajustes_home_layout(void) {
+  int v = valor[AJ_HOME_LAYOUT];
+  return v >= 0 && v < HOME_LAYOUT_N ? v : HOME_LAYOUT_MODERNA;
+}
 int ajustes_hero_arte_diferente(void) { return lig(AJ_HERO_ARTE_DIF); }
 int ajustes_hero_fonte(void) {
   int v = valor[AJ_HERO_FUNDO];
@@ -2566,6 +2590,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_TRAILER_FONTE:
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
     case AJ_VIDRO:          /* visual desta TV: a GPU de cada uma aguenta diferente */
+    case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_P2P_LIGADO:     /* o servidor P2P e um aparelho da rede desta casa */
     case AJ_POSTER_PROV:    /* servico e rede desta casa: nao segue a conta */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
@@ -2983,6 +3008,9 @@ static int inativa(int op) {
     case AJ_RAIL:         return ajustes_rail_moderna();
     case AJ_RAIL_BLUR:    return !ajustes_rail_moderna();
     case AJ_HERO_CATALOGOS: return !ajustes_hero_ligado();
+    // O fundo em tela cheia e da Moderna: no Padrao o destaque e um banner e na
+    // Dinamica ele e sempre de ponta a ponta e rola junto com as fileiras.
+    case AJ_HERO_CHEIO:   return ajustes_home_layout() != HOME_LAYOUT_MODERNA;
     // #162: o Descobrir do app web (navegar catalogos por tipo e genero) ainda
     // nao existe nesta TV — o "Explorar" daqui e outra tela. A escolha vem e
     // vai para a conta, mas aqui nao muda nada, e a linha tem de dizer isso.
@@ -3096,6 +3124,7 @@ static const char *ajudaOpcao(int op) {
     if (op == AJ_RAIL) return "Desative a barra lateral moderna para escolher entre recolhida e fixa.";
     if (op == AJ_RAIL_BLUR) return "Ative a barra lateral moderna para usar o desfoque.";
     if (op == AJ_HERO_CATALOGOS) return "Ative Mostrar destaque para exibir os catálogos no topo da Home.";
+    if (op == AJ_HERO_CHEIO) return "Só vale no layout Moderna. No Padrão o destaque é um banner, e na Dinâmica ele ocupa a largura toda e sobe junto com a rolagem.";
     if (op == AJ_DESCOBRIR) return "A tela Descobrir do app web ainda não existe nesta TV. A escolha fica guardada na conta.";
     if (op >= AJ_CW_OK && op <= AJ_CW_ORDEM)
       return op == AJ_CW_BLUR_PROX && ajustes_cw_ligado()
@@ -3229,6 +3258,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_POSTER_CHAVE: return "Sua chave do RPDB (ratingposterdb.com). Fica só nesta TV e nunca aparece nos registros.";
     case AJ_POSTER_MODELO: return "Endereço com {imdb}, {tmdb}, {type} (movie ou series) e {tipo_tmdb} (movie ou tv), por exemplo https://meu.servidor/{type}/{imdb}.jpg. Quem não tiver o dado que o modelo pede fica com o cartaz normal.";
     case AJ_POSTER_TESTAR: return "Baixa o cartaz de um filme conhecido com a configuração atual e mostra se deu certo. O primeiro cartaz de cada título é montado no servidor e pode levar alguns segundos.";
+    case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso, como nos apps de streaming clássicos. Dinâmica: estilo Apple TV, com o destaque que sobe e some ao descer, fileiras de tamanhos diferentes (destaques grandes, Top 10 com numerais, cartazes e faixas deitadas) sobre um fundo de vidro fosco tingido pela arte.";
     case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
@@ -5818,6 +5848,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR:
       return AJPV_REPRO;
+    case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
     case AJ_HERO_ARTE_DIF: case AJ_HERO_TRAILER: case AJ_FIL_LIMITE:
     case AJ_FIL_ORDEM: case AJ_RAIL: case AJ_RAIL_MODERNA:
@@ -5999,7 +6030,11 @@ static float previaReproducaoOpcao(int op, float x, float y, float w) {
 static float previaHomeOpcao(int op, float x, float y, float w) {
   float ar, ag, ab, h = 148.0f;
   int hero = valor[AJ_HERO] == 0;
-  int full = valor[AJ_HERO_CHEIO] == 0;
+  // O layout da home decide a forma do destaque: Padrao contido, Dinamica de
+  // ponta a ponta e mais alto; na Moderna vale "Fundo em tela cheia".
+  int lay = valor[AJ_HOME_LAYOUT];
+  int full = lay == HOME_LAYOUT_DINAMICA ? 1
+           : lay == HOME_LAYOUT_PADRAO ? 0 : valor[AJ_HERO_CHEIO] == 0;
   int landscape = valor[AJ_LANDSCAPE] == 0;
   ajustes_acento(&ar, &ag, &ab);
   ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
@@ -6020,7 +6055,7 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
       previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
   }
   float cx = x + rail + 18.0f, cw = w - rail - 28.0f;
-  float heroH = hero ? (full ? 60.0f : 42.0f) : 0.0f;
+  float heroH = hero ? (lay == HOME_LAYOUT_DINAMICA ? 66.0f : full ? 60.0f : 42.0f) : 0.0f;
   if (hero) {
     GfxRect hr = {cx, y + 10.0f, cw, heroH};
     gfx_cor(hr, 6.0f/heroH, 0.19f, 0.21f, 0.27f, 1.0f);
@@ -6040,8 +6075,11 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
   if (rows > 2) rows = 2;
   for (int row = 0; row < rows; row++) {
     float ry = y + 18.0f + heroH + row * 45.0f;
-    float cardW = landscape ? (cw - 36.0f) / 4.0f : (cw - 60.0f) / 6.0f;
-    int count = landscape ? 4 : 6;
+    // Dinamica: a primeira fileira e a de destaques grandes (dois cartoes largos).
+    int grande = lay == HOME_LAYOUT_DINAMICA && row == 0;
+    float cardW = grande ? (cw - 6.0f) / 2.0f
+                : landscape ? (cw - 36.0f) / 4.0f : (cw - 60.0f) / 6.0f;
+    int count = grande ? 2 : landscape ? 4 : 6;
     // A fileira que o foco altera fica em destaque. Campos próprios mostram
     // somente seções que de fato estão ligadas/desligadas.
     int isTargetRow = (op >= AJ_FIL_LIMITE && op <= AJ_PS_FUNDO) ||
@@ -6051,7 +6089,7 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
     if ((op == AJ_HERO || op == AJ_HERO_CATALOGOS) && !hero) continue;
     for (int k = 0; k < count; k++) {
       float bx = cx + k * (cardW + 6.0f);
-      float ch = landscape ? 20.0f : 31.0f;
+      float ch = grande ? 26.0f : landscape ? 20.0f : 31.0f;
       GfxRect card = {bx, ry, cardW, ch};
       int cardTarget = (op == AJ_LANDSCAPE) ||
         (op == AJ_ROTULOS && valor[op] == 0) ||

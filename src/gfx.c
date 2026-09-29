@@ -18,9 +18,12 @@ typedef struct {
         grad0, grad1, grad2, tempo, reg0, reg1, reg2, reg3, vaza;
   GLint alt;     // uAlt: altura do rect em pixels do alvo (a rampa de 1 px do SDF)
   GLint margem;  // uMargem do VS: 1 px de folga no quad dos modos de SDF
+  GLint banda, bandaX;  // uBanda[6], uBandaX: so o GFX_FUNDO_DIN declara
   float altAtual, margemAtual;  // o ultimo valor enviado: so chama o GL se mudar
 } Programa;
 static Programa progs[GFX_NMODOS];
+// Prateleiras da home Dinamica, assadas no fundo (GFX_FUNDO_DIN).
+static float dinBanda[6][4], dinBandaX, dinBandaVidro;
 static int progAtual = -1;
 // Proporcao da textura corrente, para o "cover". Fica global porque o desenho e
 // imediato: quem chama define antes de cada rect com textura.
@@ -876,6 +879,79 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  vec3 c = (uReg0*wE + uReg1*wD + uReg2*wT + uReg3*wB) / max(w, 0.001);\n"
   "  gl_FragColor = nv_dither(c, min(w, 1.0) * 0.72 * uCor.a);\n"
   "}\n",
+
+  // GFX_VITRINE — ver gfx.h. O veu escurece PARA PRETO (o fundo da pagina e
+  // #0D0D0D, indistinguivel dele), sem depender de uFundo. As duas rampas sao
+  // as do GFX_VEU (base e esquerda), com a esquerda mais larga: no Dinamica o
+  // texto ocupa 40% da largura e no banner do Padrao, 45%.
+  "void main(){\n"
+  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  if (m <= 0.001) discard;\n"
+  "  vec2 uv = vUv;\n"
+  "  float ra = uAspect / max(uTexAsp, 0.01);\n"
+  "  if (uTexAsp > 0.0) {\n"
+  "    if (ra > 1.0) uv.y = uv.y / ra + uPar.x * (1.0 - 1.0 / ra);\n"
+  "    else          uv.x = (uv.x - 0.5) * ra + 0.5;\n"
+  "  }\n"
+  "  vec3 c = texture2D(uTex, clamp(uv, 0.0, 1.0)).rgb;\n"
+  "  float ge = smoothstep(0.62, 0.0, vUv.x) * 0.80 * uFoco;\n"
+  "  float gb = smoothstep(0.38, 1.0, vUv.y) * 0.72 * uFoco;\n"
+  "  c *= 1.0 - clamp(ge + gb - ge * gb, 0.0, 1.0);\n"
+  "  float d = smoothstep(0.66, 1.0, vUv.y);\n"
+  "  gl_FragColor = nv_dither(c, uCor.a * m * (1.0 - uPar.y * d * d));\n"
+  "}\n",
+
+  // GFX_FUNDO_DIN — ver gfx.h. O alvo e um FBO (origem embaixo): o y inverte,
+  // como no GFX_FUNDO. O brilho cai de 0,92 no topo a 0,46 na base: a base e
+  // onde moram as fileiras, e o texto branco e o cartaz precisam de chao mais
+  // escuro; o topo, que a arte do destaque cobre, pode ser claro.
+  //
+  // AS PRATELEIRAS DE VIDRO SAO ASSADAS AQUI, e nao em quadros por cima. Cada
+  // fileira e um retangulo arredondado que escurece/clareia o fundo e ganha um
+  // aro de fio de cabelo: como retangulos separados eram ~0,25 de tela EM
+  // MISTURA por fileira (quatro por quadro), e MEDIDO na C9 uma unica camada de
+  // tela cheia misturada ja custa 12 fps. Aqui o fundo e OPACO e sem mistura, e a
+  // conta das prateleiras entra no MESMO fragmento — so onde o fragmento cai
+  // dentro de uma faixa (o `if` por faixa evita o SDF nos outros 60%).
+  //   uBanda[i] = (y de cima, y de baixo, foco 0..1, alfa do grupo); alfa 0 = vazia
+  //   uBandaX   = (x da borda esquerda, 1 = vidro | 0 = veu escuro)
+  "uniform vec4 uBanda[6];\n"
+  "uniform vec2 uBandaX;\n"
+  "void main(){\n"
+  "  vec3 cb = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y)).rgb;\n"
+  "  float l = dot(cb, vec3(0.299, 0.587, 0.114));\n"
+  "  cb = mix(vec3(l), cb, 1.35);\n"
+  "  cb = mix(cb, uCor.rgb * (0.30 + l), uPar.x);\n"
+  "  float ky = mix(0.92, 0.46, smoothstep(0.0, 1.0, vUv.y));\n"
+  "  float vg = 1.0 - 0.35 * smoothstep(0.5, 0.0, min(vUv.x, 1.0 - vUv.x));\n"
+  "  vec3 c = clamp(cb * ky * vg * uFoco, 0.0, 1.0);\n"
+  "  vec2 px = vUv * vec2(1920.0, 1080.0);\n"
+  "  float aa = 1080.0 / uAlt;\n"
+  "  for (int i = 0; i < 6; i++) {\n"
+  "    vec4 b = uBanda[i];\n"
+  "    if (b.w > 0.003 && px.y > b.x - 2.0 && px.y < b.y + 2.0 && px.x > uBandaX.x - 2.0) {\n"
+  "      vec2 ce = vec2((uBandaX.x + 2000.0) * 0.5, (b.x + b.y) * 0.5);\n"
+  "      vec2 he = vec2((2000.0 - uBandaX.x) * 0.5, (b.y - b.x) * 0.5);\n"
+  "      vec2 q = abs(px - ce) - (he - 36.0);\n"
+  "      float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 36.0;\n"
+  "      float ga = b.w * clamp(0.5 - d / aa, 0.0, 1.0);\n"
+  "      if (ga > 0.001) {\n"
+  "        float f = b.z;\n"
+  "        float aro = clamp(0.5 + (d + 1.5) / aa, 0.0, 1.0);\n"
+  "        if (uBandaX.y > 0.5) {\n"
+  "          float topo = (0.06 + 0.04 * f) * (1.0 - smoothstep(0.0, 0.36, (px.y - b.x) / (b.y - b.x)));\n"
+  "          c = mix(c, vec3(0.06, 0.07, 0.09), (0.34 - 0.06 * f) * ga);\n"
+  "          c = mix(c, vec3(1.0), (0.06 + 0.05 * f + topo) * ga);\n"
+  "          c = mix(c, vec3(1.0), (0.14 + 0.12 * f) * aro * ga);\n"
+  "        } else {\n"
+  "          c = mix(c, vec3(0.0), (0.30 - 0.10 * f) * ga);\n"
+  "          c = mix(c, vec3(1.0), (0.035 + 0.05 * f) * aro * ga);\n"
+  "        }\n"
+  "      }\n"
+  "    }\n"
+  "  }\n"
+  "  gl_FragColor = nv_dither(c, uCor.a);\n"
+  "}\n",
 };
 
 // Cada corpo declara o que usa; montar so o necessario mantem o shader enxuto.
@@ -902,7 +978,9 @@ static const struct { int sdf, cover; } PRECISA[GFX_NMODOS] = {
   {0,0},   /* GFX_CEU — procedural, sem textura */
   {1,0},   /* GFX_COR_GRAD — SDF do GFX_COR */
   {1,0},   /* GFX_ANEL_GRAD — SDF do GFX_ANEL */
-  {0,0}    /* GFX_AMBIENTE — procedural, tela cheia */
+  {0,0},   /* GFX_AMBIENTE — procedural, tela cheia */
+  {1,0},   /* GFX_VITRINE — SDF para os cantos; o cover e proprio (ancoragem) */
+  {0,0}    /* GFX_FUNDO_DIN — uma leitura de textura, tela cheia */
 };
 
 static GLuint compila(GLenum tipo, const char *src) {
@@ -954,6 +1032,8 @@ int gfx_iniciar(void) {
     progs[m].vaza   = glGetUniformLocation(p, "uVaza");
     progs[m].alt    = glGetUniformLocation(p, "uAlt");
     progs[m].margem = glGetUniformLocation(p, "uMargem");
+    progs[m].banda  = glGetUniformLocation(p, "uBanda");
+    progs[m].bandaX = glGetUniformLocation(p, "uBandaX");
     progs[m].altAtual = -1.0f;
     progs[m].margemAtual = 0.0f;   // o default de um uniform recem-linkado e 0
     glUseProgram(p);
@@ -1032,13 +1112,14 @@ double gfx_ms_rect = 0.0, gfx_ms_outros = 0.0;
 // Sem contar a area, "quantas camadas cheias tem esta tela" e chute — com o
 // contador e uma medida por quadro.
 double gfx_fill = 0.0;
+double gfx_fill_vis = 0.0;
 int    gfx_n_cheio = 0;   // desenhos que cobrem >= 50% da tela
 static double gfxFreqMs = 0.0;
 static int desfGeradosQuadro = 0;   // ver gfx_desfocado
 void gfx_novo_quadro(void) {
   gfx_n_rect = gfx_n_prog = gfx_n_bind = gfx_n_outros = 0;
   gfx_ms_rect = gfx_ms_outros = 0.0;
-  gfx_fill = 0.0; gfx_n_cheio = 0;
+  gfx_fill = 0.0; gfx_fill_vis = 0.0; gfx_n_cheio = 0;
   desfGeradosQuadro = 0;
 }
 // Relogio dos pontos de GL que NAO sao gfx_rect: recorte, FBO do snapshot e as
@@ -1073,6 +1154,10 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   gfx_n_rect++;
   { float area = (r.w * r.h) / (NV_TELA_W * NV_TELA_H);
     gfx_fill += area;
+    { float x0 = r.x < 0.0f ? 0.0f : r.x, y0 = r.y < 0.0f ? 0.0f : r.y;
+      float x1 = r.x + r.w > NV_TELA_W ? NV_TELA_W : r.x + r.w;
+      float y1 = r.y + r.h > NV_TELA_H ? NV_TELA_H : r.y + r.h;
+      if (x1 > x0 && y1 > y0) gfx_fill_vis += (double)((x1 - x0) * (y1 - y0)) / (NV_TELA_W * NV_TELA_H); }
     if (area >= 0.5f) gfx_n_cheio++; }
   Programa *P = &progs[modo];
   if (progAtual != (int)modo) { glUseProgram(P->prog); progAtual = (int)modo; gfx_n_prog++; }
@@ -1121,6 +1206,10 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     }
     if (P->alt >= 0 && alt != P->altAtual) { glUniform1f(P->alt, alt); P->altAtual = alt; }
     if (P->margem >= 0 && mg != P->margemAtual) { glUniform1f(P->margem, mg); P->margemAtual = mg; } }
+  if (P->banda >= 0) {   // prateleiras do GFX_FUNDO_DIN (gfx_fundo_din_prateleiras)
+    glUniform4fv(P->banda, 6, &dinBanda[0][0]);
+    glUniform2f(P->bandaX, dinBandaX, dinBandaVidro);
+  }
   if (P->cor >= 0)    glUniform4f(P->cor, cr, cg, cb, ca * gfx_opacidade_grupo);
   if (tex && tex != texAtual) {
     glActiveTexture(GL_TEXTURE0);
@@ -1214,7 +1303,9 @@ static void ambAssar(void) {
   }
 }
 
+static void dinPreparaPendentes(void);
 void gfx_ambiente_preparar(void) {
+  dinPreparaPendentes();
   if (nv_ambiente_forca <= 0.003f || snapAtivo || !ambPreparar()) return;
   ambAssar();
 }
@@ -1245,6 +1336,132 @@ void gfx_ambiente(float alfa) {
     gfx_rect(tela, ambTex, GFX_SNAP, 0, 0.0f, 1.0f, 0.0f, 0, 0, 0, alfa);
   }
 }
+// --- FUNDO DA HOME DINAMICA ---------------------------------------------------
+//
+// Duas copias desfocadas de 160x90 da arte do titulo em foco, para o fundo de
+// vidro fosco da home Dinamica. HIPOTESE, nao medido na TV: 160x90 x 4 passadas
+// (uma copia + tres do gaussiano de 9 amostras) somam ~60 mil fragmentos, tres
+// por cento de UMA tela cheia, e so na troca de arte. O que custa por quadro e
+// o quad de tela cheia com UMA leitura de textura (gfx_fundo_din_desenhar),
+// sem blend.
+//
+// Por que 160x90 e nao os 480x270 do borrao da pagina de titulo: aquele e
+// desfoque para a arte ainda se reconhecer atras do texto; este e uma mancha de
+// cor, e cada texel de 160x90 vira 12x12 px na tela — o bilinear da ampliacao
+// e metade do desfoque, de graca.
+#define DIN_W 160
+#define DIN_H 90
+static GLuint dinFbo[3], dinTex[3];     // 0,1 = resultados (slots); 2 = temporario
+static int dinFalhou;
+static unsigned long dinChave[2];       // o que cada slot guarda (0 = vazio)
+static struct { int ativo; GLuint tex; float asp; unsigned long chave; } dinPend[2];
+
+static int dinPreparar(void) {
+  int i;
+  if (dinFbo[0]) return 1;
+  if (dinFalhou) return 0;
+  for (i = 0; i < 3; i++) {
+    GLenum st;
+    glGenTextures(1, &dinTex[i]);
+    glBindTexture(GL_TEXTURE_2D, dinTex[i]);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, DIN_W, DIN_H, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glGenFramebuffers(1, &dinFbo[i]);
+    glBindFramebuffer(GL_FRAMEBUFFER, dinFbo[i]);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dinTex[i], 0);
+    st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (st != GL_FRAMEBUFFER_COMPLETE) {
+      int k;
+      printf("[home] fundo dinamico sem quadro pequeno (fbo 0x%x): sem fundo\n", st);
+      for (k = 0; k < 3; k++) {
+        if (dinFbo[k]) glDeleteFramebuffers(1, &dinFbo[k]);
+        if (dinTex[k]) glDeleteTextures(1, &dinTex[k]);
+        dinFbo[k] = dinTex[k] = 0;
+      }
+      dinFalhou = 1;
+      return 0;
+    }
+  }
+  gfx_tex_esquecer(0);  // os binds acima foram por fora do gfx_rect
+  return 1;
+}
+
+void gfx_fundo_din_pedir(int slot, GLuint tex, float aspecto, unsigned long chave) {
+  if (slot < 0 || slot > 1 || !tex || !chave) return;
+  if (dinChave[slot] == chave) return;
+  dinPend[slot].ativo = 1; dinPend[slot].tex = tex;
+  dinPend[slot].asp = aspecto; dinPend[slot].chave = chave;
+}
+
+void gfx_fundo_din_prateleiras(const float b[][4], int n, float x0, int vidro) {
+  int i;
+  memset(dinBanda, 0, sizeof dinBanda);
+  for (i = 0; i < n && i < 6; i++) memcpy(dinBanda[i], b[i], sizeof dinBanda[i]);
+  dinBandaX = x0; dinBandaVidro = vidro ? 1.0f : 0.0f;
+}
+
+unsigned long gfx_fundo_din_chave(int slot) {
+  return (slot >= 0 && slot <= 1) ? dinChave[slot] : 0;
+}
+
+static void dinAssar(int slot) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  GLint fboAnt, vpAnt[4];
+  int twAnt = telaW, thAnt = telaH;
+  float px = 1.6f / (float)DIN_W, py = 1.6f / (float)DIN_H;
+  GFX_OUTRO_INI();
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fboAnt);
+  glGetIntegerv(GL_VIEWPORT, vpAnt);
+  telaW = DIN_W; telaH = DIN_H;
+  glViewport(0, 0, DIN_W, DIN_H);
+  glDisable(GL_BLEND);
+  // arte (cover) -> temporario; depois horizontal, vertical, horizontal.
+  glBindFramebuffer(GL_FRAMEBUFFER, dinFbo[2]);
+  gfx_tex_aspect_atual = dinPend[slot].asp;
+  gfx_rect(tela, dinPend[slot].tex, GFX_SNAP, 0, 0, 0, 0.0f, 0, 0, 0, 1.0f);
+  gfx_tex_aspect_atual = 0.0f;
+  glBindFramebuffer(GL_FRAMEBUFFER, dinFbo[slot]);
+  gfx_rect(tela, dinTex[2], GFX_BLUR, 0, px, 0.0f, 0.0f, 0, 0, 0, 1.0f);
+  glBindFramebuffer(GL_FRAMEBUFFER, dinFbo[2]);
+  gfx_rect(tela, dinTex[slot], GFX_BLUR, 0, 0.0f, py, 0.0f, 0, 0, 0, 1.0f);
+  glBindFramebuffer(GL_FRAMEBUFFER, dinFbo[slot]);
+  gfx_rect(tela, dinTex[2], GFX_BLUR, 0, px, 0.0f, 0.0f, 0, 0, 0, 1.0f);
+  glEnable(GL_BLEND);
+  telaW = twAnt; telaH = thAnt;
+  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
+  glViewport(vpAnt[0], vpAnt[1], vpAnt[2], vpAnt[3]);
+  gfx_tex_esquecer(0);
+  GFX_OUTRO_FIM();
+  dinChave[slot] = dinPend[slot].chave;
+  dinPend[slot].ativo = 0;
+}
+
+static void dinPreparaPendentes(void) {
+  int s;
+  if (snapAtivo) return;
+  for (s = 0; s < 2; s++)
+    if (dinPend[s].ativo && dinPreparar()) dinAssar(s);
+}
+
+void gfx_fundo_din_desenhar(int a, int b, float mistura,
+                            float tr, float tg, float tb, float tinta, float brilho) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  if (!dinFbo[0] || a < 0 || a > 1 || !dinChave[a]) return;
+  gfx_tex_aspect_atual = 0.0f;
+  // O slot `a` OPACO e sem mistura: o quad substitui o clear, e a GPU nao
+  // precisa ler a tela para misturar (a mesma regra do ambiente, MEDIDA na C9).
+  glDisable(GL_BLEND);
+  gfx_rect(tela, dinTex[a], GFX_FUNDO_DIN, brilho, tinta, 0, 0.0f, tr, tg, tb, 1.0f);
+  glEnable(GL_BLEND);
+  if (b >= 0 && b <= 1 && b != a && dinChave[b] && mistura > 0.003f)
+    gfx_rect(tela, dinTex[b], GFX_FUNDO_DIN, brilho, tinta, 0, 0.0f, tr, tg, tb,
+             mistura > 1.0f ? 1.0f : mistura);
+}
+
 void gfx_anel(GfxRect r, float raio, float esp,
               float cr, float cg, float cb, float ca) {
   if (r.h <= 0.0f || esp <= 0.0f) return;
