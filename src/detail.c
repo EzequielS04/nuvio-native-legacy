@@ -4431,14 +4431,17 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
   const char *logo = extras_estudio_logo(i);
   float ar, ag, ab;
   GLuint t;
-  // Vidro ligado: repouso tambem e o painel de vidro (foco so soma o aro), como
-  // os cartoes de "Recomendacoes". Sem isso o cartao trocava de material ao
-  // receber o foco (azul-marinho -> vidro).
-  if (f > 0.001f || ajustes_vidro()) {
+  // REPOUSO = a MESMA superficie neutra dos outros cartoes da pagina (moldura:
+  // navy escuro, ou o vidro neutro com a Interface de vidro). Antes o repouso
+  // com vidro ligado passava por gfx_cartao_foco_vidro com foco 0, que ainda
+  // lava o cartao na cor do realce — com tema Dinamico o cartao ficava num
+  // degrade amarelado que nenhum outro cartao tem (dono, 29/09/2026). O foco e
+  // o mesmo de "Mais como este": o cartao de realce por cima.
+  moldura(r, 14.0f, a);
+  if (f > 0.001f) {
     ajustes_acento(&ar, &ag, &ab);
-    gfx_cartao_foco_vidro(r, 14.0f / EST_CARD_H, f, a, ar, ag, ab);
-  } else {
-    moldura(r, 14.0f, a);
+    if (ajustes_vidro()) gfx_vidro_cartao(r, 14.0f / EST_CARD_H, f, a);
+    else gfx_cartao_foco_vidro(r, 14.0f / EST_CARD_H, f, a, ar, ag, ab);
   }
   t = logo[0] ? tex_obter(logo) : 0;
   if (t) {
@@ -4454,7 +4457,12 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
     { GfxRect rl = { x + (EST_CARD_W - w) * 0.5f,
                      y + (EST_CARD_H - h) * 0.5f, w, h };
       gfx_tex_aspect_atual = 0.0f;
-      if (recorte && tex_marca_escura(logo)) {
+      // LOGO RECORTADO SEMPRE BRANCO (dono: "a logo nao fica branca e fica
+      // ruim de ler"). So o logo escuro era pintado; o colorido ia com a cor
+      // do arquivo e o escuro medio (o "T-STREET" preto a 80%) escapava da
+      // medida de tex_marca_escura e sumia no cartao. Logo com fundo proprio
+      // (sem recorte) continua como veio: ali a placa faz parte da marca.
+      if (recorte) {
         float tom = 0.93f;
         gfx_rect(rl, t, GFX_MARCA, 0, 0, 0, 0.0f, tom, tom, tom, a);
       } else {
