@@ -286,6 +286,129 @@ float rec_selo_tipo(float x, float y, const char *tipo, int escuro, float alfa);
 // — quem chama nao precisa perguntar antes.
 float rec_selo_imdb(float x, float y, int nota, int escuro, float alfa);
 
+// =============================================================================
+// ENTRE AMIGOS ALEM DO TRAKT: perfil publico opcional, busca, pedidos de
+// amizade, bloqueio e atividade dos amigos.
+//
+// O modelo de privacidade inteiro esta em docs/SOCIAL-PRIVACIDADE.md e e imposto
+// no servidor (servidor/recomendacoes/src/amigos.js); o que este lado faz e
+// NAO MANDAR NADA que a pessoa nao ligou. As tres coisas que saem, e so quando
+// ela liga cada uma:
+//   perfil publico   apelido, bio curta, generos, foto (opcional), "vistos
+//                    recentemente" (opcional) — para quem PROCURA por ela;
+//   atividade        o que assistiu (e, no nivel 2, "assistindo agora") —
+//                    so para AMIGOS MUTUOS;
+//   nada mais        nunca e-mail, id de conta, addon, IP, aparelho.
+// Tudo nasce DESLIGADO, e desligar apaga do servidor na hora.
+// =============================================================================
+
+// Ids de genero aceitos pelo servidor (lista fechada). O rotulo passa por i18n
+// em quem desenha; o id e o que viaja.
+#define REC_GENEROS_N 14
+const char *rec_genero_id(int i);
+const char *rec_genero_rotulo(int i);   // chave de i18n em portugues
+
+#define REC_APELIDO_MAX 20
+#define REC_BIO_MAX     80
+
+// MEU perfil, como esta neste aparelho. `publicado` e o "Perfil pesquisavel".
+typedef struct {
+  int  publicado;             // 0 = ninguem me acha (padrao)
+  char apelido[REC_APELIDO_MAX + 4];
+  char bio[REC_BIO_MAX + 4];
+  unsigned generos;           // mascara: bit i = rec_genero_id(i)
+  int  foto;                  // 1 = mostrar a foto da conta
+  int  recentes;              // 1 = "vistos recentemente" no cartao publico
+  int  ativ;                  // atividade para AMIGOS: 0 nada, 1 assistiu, 2 + agora
+} RecPerfil;
+
+int  recomenda_perfil(RecPerfil *saida);
+// Grava no aparelho NA HORA e enfileira o aviso ao servidor (o "sim" so vale
+// quando ele souber; a falha de rede repete no proximo ciclo). Exige apelido
+// de 2+ letras — devolve 0 sem apelido. Publicar tambem liga o "aparecer".
+int  recomenda_perfil_publicar(const RecPerfil *p);
+// Despublica: o servidor apaga apelido/bio/generos/foto e sorteia outro handle.
+void recomenda_perfil_despublicar(void);
+// So o nivel de atividade para amigos (0/1/2), sem mexer no perfil publico.
+void recomenda_atividade_nivel(int nivel);
+// "Apagar meus dados sociais": perfil, atividade e pedidos enviados. Nao mexe
+// em contatos nem recomendacoes.
+void recomenda_apagar_dados_sociais(void);
+// 1 quando o perfil esta publicado neste aparelho.
+int  recomenda_pesquisavel(void);
+
+// UMA PESSOA VISTA POR ESTRANHO: so o que ela escolheu mostrar.
+typedef struct {
+  char pub[16];               // handle opaco; NUNCA o id da conta
+  char apelido[REC_APELIDO_MAX + 12];
+  char avatar[256];
+  char bio[REC_BIO_MAX + 12];
+  unsigned generos;
+  char relacao[12];           // "" | "amigo" | "enviado" | "recebido"
+  int  emComum;               // titulos em comum (so nas sugestoes de gosto)
+} RecPessoa;
+
+#define REC_BUSCA_MAX    10
+#define REC_PEDIDOS_MAX  20
+#define REC_BLOQ_MAX     20
+
+enum { REC_SOC_NADA = 0, REC_SOC_INDO, REC_SOC_OK,
+       REC_SOC_FALHA,
+       REC_SOC_LIMITE,         // 429: muitas buscas/pedidos, tente mais tarde
+       REC_SOC_NAO_ACHOU,      // 404
+       REC_SOC_SEM_APELIDO,    // 409: pedir amizade exige um apelido
+       REC_SOC_CURTA };        // busca com menos de 3 letras (nem sai do aparelho)
+
+// UMA OPERACAO SOCIAL POR VEZ (a mesma disciplina de vincular/remover): todas
+// devolvem 1 quando entraram na fila e o resultado sai em recomenda_soc_estado().
+int  recomenda_buscar(const char *texto);        // apelido (3+) ou codigo de 6
+int  recomenda_sugeridos_gosto(void);            // ver nota em recomenda.c
+int  recomenda_ver_perfil(const char *pub);
+int  recomenda_pedir_amizade(const char *pub);
+int  recomenda_aceitar(const char *pub);
+int  recomenda_recusar(const char *pub);
+int  recomenda_cancelar_pedido(const char *pub);
+int  recomenda_bloquear(const char *pubOuId);
+int  recomenda_desbloquear(const char *pub);
+int  recomenda_listar_pedidos(void);
+int  recomenda_listar_bloqueados(void);
+int  recomenda_soc_estado(void);
+void recomenda_soc_limpar(void);
+
+int  recomenda_n_achados(void);
+int  recomenda_achado(int i, RecPessoa *saida);
+// 1 = veio de uma busca, 2 = das sugestoes de gosto. Serve para o titulo da lista.
+int  recomenda_achados_origem(void);
+int  recomenda_cartao(RecPessoa *saida);         // o ultimo perfil aberto
+// Titulos "vistos recentemente" do cartao aberto (so vem se a pessoa ligou).
+int  recomenda_cartao_n_recentes(void);
+int  recomenda_cartao_recente(int i, char *titulo, size_t tam);
+int  recomenda_n_pedidos(void);                  // pedidos RECEBIDOS pendentes
+int  recomenda_pedido(int i, RecPessoa *saida);
+int  recomenda_n_bloqueados(void);
+int  recomenda_bloqueado(int i, char *pub, size_t tp, char *nome, size_t tn);
+
+// --- ATIVIDADE ---------------------------------------------------------------
+//
+// O player avisa (recomenda_atividade_passo / _fim) e ESTE MODULO decide se
+// algo sai: sem o interruptor ligado nao ha nem fila. O envio e por titulo
+// (imdb, titulo, tipo, ano, nota) — sem episodio, sem tempo, sem fonte.
+void recomenda_atividade_passo(const CatItem *ci, int tocando);
+void recomenda_atividade_fim(const CatItem *ci, int concluiu);
+
+// A FILEIRA "ENTRE AMIGOS". Recebe os `nTrakt` itens que o Trakt ja montou em
+// `itens` (capacidade `max`) e devolve a lista UNIDA: os amigos Nuvio (nosso
+// servico, so amigos mutuos que ligaram a atividade) entram com o nome e a foto
+// do amigo, cada titulo aparece UMA vez (o mais recente) e as duas fontes se
+// alternam. Sincrona e de rede — so chamar de dentro do fio da descoberta.
+// Titulos que o amigo Nuvio `id` (o socialSlug do item) compartilhou, da ultima
+// leitura do feed — sem rede. Devolve quantos copiou em `titulos`.
+int  recomenda_amigo_atividades(const char *id, char titulos[][160], int max);
+int  recomenda_social_mesclar(CatItem *itens, int nTrakt, int max);
+// Funde `novos` (n) em `itens`(nTrakt) SEM rede: a regra de uniao, separada
+// para o teste. Devolve o novo total.
+int  rec_social_unir(CatItem *itens, int nTrakt, const CatItem *nuvio, int nNuvio, int max);
+
 // Apaga cache, cursor e marca do cartao do aparelho. Chamar de
 // sync_esquecer_usuario: recomendacao e tao pessoal quanto a lista de salvos.
 void recomenda_esquecer(void);
