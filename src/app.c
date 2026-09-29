@@ -952,6 +952,11 @@ int app_iniciar(const char *dirArte) {
   return 1;
 }
 
+int app_na_home(void) {
+  return tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() &&
+         !novidades151_aberto();
+}
+
 void app_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
 

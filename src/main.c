@@ -24,6 +24,7 @@
 #endif
 #include <unistd.h>   // dup2 (o stderr no mesmo descritor do log)
 #include "gfx.h"
+#include "gpunivel.h"
 #include "text.h"
 #include "marco.h"
 #include "rede.h"
@@ -669,6 +670,9 @@ int main(int argc, char **argv) {
   printf("[arranque] rede_preparar\n"); fflush(stdout);
   // ANTES de tex_iniciar e de app_iniciar, que sao quem cria os fios de rede.
   rede_preparar();
+  // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
+  // o nivel de partida ANTES de tex_iniciar, que tira o perfil do aparelho.
+  gpun_iniciar(dw, dh);
   printf("[arranque] gfx_iniciar (compila os shaders)\n"); fflush(stdout);
   marco("gfx_iniciar");
   if (!gfx_iniciar()) { printf("[arranque] gfx_iniciar FALHOU\n"); fflush(stdout); return 1; }
@@ -712,6 +716,9 @@ int main(int argc, char **argv) {
   navegador_iniciar();
 #endif
   tex_iniciar(192);
+  { int mb = 0; long mem = 0;
+    tex_orcamento_info(&mb, &mem, NULL, NULL);
+    gpun_log_perfil(mem, mb, tex_fios_rede(), tex_teto_heroi()); }
   // A POLITICA DE ARTE PERGUNTA AO CACHE o que ja falhou: e assim que ela sabe
   // passar do metahub (1920, barato) para a reserva do TMDB sem pedir duas
   // vezes a mesma arte que nao existe. Ver artehero.h.
@@ -962,6 +969,18 @@ int main(int argc, char **argv) {
                          pNBind=fNBind; pNBusca=fNBusca; pOutMs=fOutMs; pNOut=fNOut; pFill=fFill; pNCheio=fNCheio; }
       if (dtms > 33.0) janks++;
     }
+#ifdef NV_TPK
+    // NIVEL DE GPU ADAPTATIVO (gpunivel.h): o quadro que acabou, repartido em
+    // ESPERA (clr + swap: o driver devolvendo buffer, a GPU atrasada) e CPU.
+    // "Cheia" = artes na tela (o conjunto quente do cache), conferido a cada
+    // meio segundo: a home vazia roda a 60 e nao diz nada sobre a GPU.
+    { static Uint32 cheiaEm; static int cheia;
+      if (agora - cheiaEm >= 500u) {
+        int it = 0, pe = 0, qu = 0; long b = 0, bq = 0;
+        tex_estatisticas(&it, &pe, &b, &qu, &bq);
+        cheia = qu >= 8; cheiaEm = agora; }
+      gpun_medir(dtms, fClr + fSwap, fEv + fBomb + fUpd + fDes + fAux, app_na_home(), cheia); }
+#endif
     // zera os contadores do quadro que comeca agora; o que foi medido acima
     // pertence ao quadro anterior, que e o que acabou de custar dtms
     txtMsQuadro = txt_ms; txtNQuadro = txt_rasterizadas;
@@ -1001,6 +1020,9 @@ int main(int argc, char **argv) {
     tex_novo_quadro();
     gfx_sem_recorte();
     gfx_ambiente_preparar();
+    // Nivel 2: o quadro inteiro vai para o alvo interno de 1280x720 (o clear
+    // abaixo ja limpa ele); gpun_quadro_fim amplia para a janela.
+    gpun_quadro_inicio();
     glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     // "Dinâmica imersiva": a luz da arte POR BAIXO de toda tela, logo depois do
@@ -1017,6 +1039,7 @@ int main(int argc, char **argv) {
     // GIF QUE NINGUEM DESENHOU ha 1,5 s sai da memoria (tela de perfis
     // fechada, foco fora do cartaz). Ver gif_ocioso em gif.h.
     gif_ocioso();
+    gpun_quadro_fim();
     fDes = NV_DT(t0);
     fGfxMs = gfx_ms_rect; fTexMs = tex_ms_busca;
     fNRect = gfx_n_rect; fNProg = gfx_n_prog; fNBind = gfx_n_bind; fNBusca = tex_n_busca;
@@ -1157,6 +1180,13 @@ int main(int argc, char **argv) {
                pior, pEv, pBomb, pUplN, pUplB / 1048576.0,
                pUpd, pClr, pDes, pAux, pSwap);
       }
+#ifdef NV_TPK
+      // Quanto de tela o pior quadro pintou (gfx_fill, em telas 1920x1080) e
+      // em que nivel de GPU (gpunivel.h): e o que separa "a GPU nao da conta
+      // deste quadro" de "este quadro pinta mais que o normal".
+      printf("[gpu] nivel=%d fill-pior=%.2fx cheias=%d rects=%d\n",
+             gpun_nivel(), pFill, pNCheio, pNRect);
+#endif
       fflush(stdout);
       // A MESMA linha vai para um arquivo. No aparelho a saida padrao do app
       // lancado pelo applicationManager nao chega a lugar nenhum que se possa

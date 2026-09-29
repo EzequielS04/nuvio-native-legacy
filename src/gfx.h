@@ -190,7 +190,12 @@ typedef enum {
   // macias (esquerda, direita, topo, base) com as cores de regiao da arte,
   // numa passada so de tela cheia, com dither contra faixas. Use gfx_ambiente.
   GFX_AMBIENTE = 33,
-  GFX_NMODOS = 34
+  // GFX_COPIA — a textura INTEIRA, RGB e ALPHA, sem SDF nem efeito. E a
+  // ampliacao do alvo interno de 1280x720 (gpunivel.h, nivel 2): o alpha tem
+  // de passar junto, senao o furo do plano de video some. uPar.y > 0.5 = a
+  // fonte e um FBO (origem embaixo), como no GFX_SNAP.
+  GFX_COPIA = 34,
+  GFX_NMODOS = 35
 } GfxModo;
 
 typedef struct {
@@ -317,7 +322,18 @@ extern int    gfx_n_outros;  // chamadas de recorte/FBO/desfoque
 extern double gfx_ms_outros; // ms de CPU nesses pontos de GL
 extern double gfx_fill;      // area submetida no quadro, em telas cheias
 extern int    gfx_n_cheio;   // desenhos cobrindo >= 50% da tela
+// O mesmo gfx_fill repartido por modo (programa): diz QUAL shader cobre a
+// tela, que e a pergunta de uma GPU presa em preenchimento (gpunivel.h).
+extern double gfx_fill_modo[GFX_NMODOS];
 void gfx_novo_quadro(void);
+
+// EFEITOS LEVES (nivel 1 de gpunivel.h). 1 = sem o dither dos degrades (o
+// ruido highp por pixel em todo veu, rampa do destaque e luz) e sem os dois
+// realces puramente decorativos (GFX_BRILHO_TOPO, GFX_LUZ). E um uniform, e
+// nao outra compilacao: trocar de nivel no meio da sessao nao pode custar a
+// compilacao inteira dos shaders (0,7-2 s numa TV fraca).
+void gfx_definir_efeitos_leves(int leves);
+int  gfx_efeitos_leves(void);
 
 void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
               float parx, float pary, float raio,

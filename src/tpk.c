@@ -84,7 +84,7 @@ int tpk_egl_carregar(void) {
   PEGA(Initialize, "eglInitialize"); PEGA(BindAPI, "eglBindAPI");
   PEGA(CreateWindowSurface, "eglCreateWindowSurface"); PEGA(CreateContext, "eglCreateContext");
   PEGA(SwapInterval, "eglSwapInterval"); PEGA(SwapBuffers, "eglSwapBuffers");
-  PEGA(MakeCurrent, "eglMakeCurrent");
+  PEGA(MakeCurrent, "eglMakeCurrent"); PEGA(GetProcAddress, "eglGetProcAddress");
 #undef PEGA
   return tpkEgl.MakeCurrent && tpkEgl.GetCurrentContext ? 0 : -1;
 }

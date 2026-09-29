@@ -7,6 +7,7 @@
 #include <math.h>
 #include "anim.h"
 #include "corviva.h"
+#include "gpunivel.h"
 
 // Um programa por modo, e os uniforms de cada um: as posicoes NAO coincidem
 // entre programas, entao guardar um conjunto so devolveria lixo no segundo
@@ -17,7 +18,8 @@ typedef struct {
         grad0, grad1, grad2, tempo, reg0, reg1, reg2, reg3, vaza;
   GLint alt;     // uAlt: altura do rect em pixels do alvo (a rampa de 1 px do SDF)
   GLint margem;  // uMargem do VS: 1 px de folga no quad dos modos de SDF
-  float altAtual, margemAtual;  // o ultimo valor enviado: so chama o GL se mudar
+  GLint leve;    // uLeve: 1 = efeitos leves (sem dither), ver gfx_definir_efeitos_leves
+  float altAtual, margemAtual, leveAtual;  // o ultimo valor enviado: so chama o GL se mudar
 } Programa;
 static Programa progs[GFX_NMODOS];
 static int progAtual = -1;
@@ -155,7 +157,12 @@ static const char *FS_CABECA =
   "  return nv_bayer2(p * 0.5) * 0.25 + nv_bayer2(p) + 0.03125;\n"
   "}\n"
   "#endif\n"
+  // uLeve > 0.5 = EFEITOS LEVES (gpunivel.h, nivel 1): a cor sai sem o ruido.
+  // O desvio e uniforme para o desenho inteiro, entao todo fragmento toma o
+  // mesmo lado e o ruido (o highp e o fract) nao e executado.
+  "uniform float uLeve;\n"
   "vec4 nv_dither(vec3 c, float a){\n"
+  "  if (uLeve > 0.5) return vec4(c, a);\n"
   "  float n = (nv_ruido() - 0.5) * (1.0 / 255.0);\n"
   "  return vec4(clamp(c + n / max(a, 0.004), 0.0, 1.0), a);\n"
   "}\n"
@@ -864,6 +871,14 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  vec3 c = (uReg0*wE + uReg1*wD + uReg2*wT + uReg3*wB) / max(w, 0.001);\n"
   "  gl_FragColor = nv_dither(c, min(w, 1.0) * 0.5 * uCor.a);\n"
   "}\n",
+
+  // GFX_COPIA — ampliacao do alvo interno (gpunivel.c). RGB E ALPHA da
+  // textura, que e o que diferencia do GFX_SNAP (la o alpha vem de uCor): o
+  // furo de alpha 0 por onde o plano de video aparece tem de sobreviver.
+  "void main(){\n"
+  "  vec2 uv = (uPar.y > 0.5) ? vec2(vUv.x, 1.0 - vUv.y) : vUv;\n"
+  "  gl_FragColor = texture2D(uTex, uv);\n"
+  "}\n",
 };
 
 // Cada corpo declara o que usa; montar so o necessario mantem o shader enxuto.
@@ -890,7 +905,8 @@ static const struct { int sdf, cover; } PRECISA[GFX_NMODOS] = {
   {0,0},   /* GFX_CEU — procedural, sem textura */
   {1,0},   /* GFX_COR_GRAD — SDF do GFX_COR */
   {1,0},   /* GFX_ANEL_GRAD — SDF do GFX_ANEL */
-  {0,0}    /* GFX_AMBIENTE — procedural, tela cheia */
+  {0,0},   /* GFX_AMBIENTE — procedural, tela cheia */
+  {0,0}    /* GFX_COPIA — so a leitura da textura */
 };
 
 static GLuint compila(GLenum tipo, const char *src) {
@@ -942,8 +958,10 @@ int gfx_iniciar(void) {
     progs[m].vaza   = glGetUniformLocation(p, "uVaza");
     progs[m].alt    = glGetUniformLocation(p, "uAlt");
     progs[m].margem = glGetUniformLocation(p, "uMargem");
+    progs[m].leve   = glGetUniformLocation(p, "uLeve");
     progs[m].altAtual = -1.0f;
     progs[m].margemAtual = 0.0f;   // o default de um uniform recem-linkado e 0
+    progs[m].leveAtual = 0.0f;
     glUseProgram(p);
     glUniform2f(progs[m].tela, NV_TELA_W, NV_TELA_H);
     glUniform1i(progs[m].tex, 0);
@@ -1021,12 +1039,17 @@ double gfx_ms_rect = 0.0, gfx_ms_outros = 0.0;
 // contador e uma medida por quadro.
 double gfx_fill = 0.0;
 int    gfx_n_cheio = 0;   // desenhos que cobrem >= 50% da tela
+double gfx_fill_modo[GFX_NMODOS];
+static int efeitosLeves = 0;
+void gfx_definir_efeitos_leves(int leves) { efeitosLeves = leves ? 1 : 0; }
+int  gfx_efeitos_leves(void) { return efeitosLeves; }
 static double gfxFreqMs = 0.0;
 static int desfGeradosQuadro = 0;   // ver gfx_desfocado
 void gfx_novo_quadro(void) {
   gfx_n_rect = gfx_n_prog = gfx_n_bind = gfx_n_outros = 0;
   gfx_ms_rect = gfx_ms_outros = 0.0;
   gfx_fill = 0.0; gfx_n_cheio = 0;
+  memset(gfx_fill_modo, 0, sizeof gfx_fill_modo);
   desfGeradosQuadro = 0;
 }
 // Relogio dos pontos de GL que NAO sao gfx_rect: recorte, FBO do snapshot e as
@@ -1053,6 +1076,10 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   if (nv_grad_ativo && (modo == GFX_COR || modo == GFX_ANEL) &&
       cr == nv_acento_viva[0] && cg == nv_acento_viva[1] && cb == nv_acento_viva[2])
     modo = modo == GFX_COR ? GFX_COR_GRAD : GFX_ANEL_GRAD;
+  // Efeitos leves: os dois realces que so enfeitam (brilho no alto do card,
+  // luz de canto de painel) nao sao desenhados. Nenhum carrega informacao — o
+  // foco continua marcado pelo anel e pelo especular do GFX_CARD.
+  if (efeitosLeves && (modo == GFX_BRILHO_TOPO || modo == GFX_LUZ)) return;
   if (gfxFreqMs == 0.0) gfxFreqMs = 1000.0 / (double)SDL_GetPerformanceFrequency();
   (void)gfxFreqMs;
 #ifdef NV_PERF_FINO
@@ -1061,6 +1088,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   gfx_n_rect++;
   { float area = (r.w * r.h) / (NV_TELA_W * NV_TELA_H);
     gfx_fill += area;
+    gfx_fill_modo[modo] += area;
     if (area >= 0.5f) gfx_n_cheio++; }
   Programa *P = &progs[modo];
   if (progAtual != (int)modo) { glUseProgram(P->prog); progAtual = (int)modo; gfx_n_prog++; }
@@ -1109,6 +1137,10 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     }
     if (P->alt >= 0 && alt != P->altAtual) { glUniform1f(P->alt, alt); P->altAtual = alt; }
     if (P->margem >= 0 && mg != P->margemAtual) { glUniform1f(P->margem, mg); P->margemAtual = mg; } }
+  if (P->leve >= 0 && (float)efeitosLeves != P->leveAtual) {
+    P->leveAtual = (float)efeitosLeves;
+    glUniform1f(P->leve, P->leveAtual);
+  }
   if (P->cor >= 0)    glUniform4f(P->cor, cr, cg, cb, ca * gfx_opacidade_grupo);
   if (tex && tex != texAtual) {
     glActiveTexture(GL_TEXTURE0);
@@ -1145,6 +1177,16 @@ static GLuint ambFbo, ambTex;
 static int ambFalhou;
 static float ambChave[20];
 
+// O ALVO LIGADO AGORA, para devolver a ele — e nao ao 0 — depois de criar um
+// FBO. Com o alvo interno do nivel 2 (gpunivel.c) a "tela" do quadro e um FBO,
+// e voltar cegamente ao 0 no meio do desenho mandaria o resto do quadro para a
+// janela, fora da ampliacao.
+static GLint fboLigado(void) {
+  GLint f = 0;
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &f);
+  return f;
+}
+
 static int ambPreparar(void) {
   GLenum st;
   if (ambFbo) return 1;
@@ -1158,10 +1200,11 @@ static int ambPreparar(void) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   gfx_tex_esquecer(0);  // o bind acima foi por fora do gfx_rect
   glGenFramebuffers(1, &ambFbo);
-  glBindFramebuffer(GL_FRAMEBUFFER, ambFbo);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ambTex, 0);
-  st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  { GLint ant = fboLigado();
+    glBindFramebuffer(GL_FRAMEBUFFER, ambFbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ambTex, 0);
+    st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant); }
   if (st != GL_FRAMEBUFFER_COMPLETE) {
     printf("[cor] luz imersiva sem quadro pequeno (fbo 0x%x): desenho direto\n", st);
     glDeleteFramebuffers(1, &ambFbo); glDeleteTextures(1, &ambTex);
@@ -1328,10 +1371,11 @@ int gfx_snap_iniciar(int w, int h) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   gfx_tex_esquecer(0);  // o bind acima foi por fora do gfx_rect
   glGenFramebuffers(1, &snapFbo);
+  GLint ant = fboLigado();
   glBindFramebuffer(GL_FRAMEBUFFER, snapFbo);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, snapTex, 0);
   GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant);
   if (st != GL_FRAMEBUFFER_COMPLETE) {
     printf("snapshot indisponivel (fbo 0x%x) — seguindo sem ele\n", st);
     glDeleteFramebuffers(1, &snapFbo); glDeleteTextures(1, &snapTex);
@@ -1434,10 +1478,11 @@ static int criaAlvo(int i, int w, int h) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   gfx_tex_esquecer(0);  // o bind acima foi por fora do gfx_rect
   glGenFramebuffers(1, &borFbo[i]);
+  GLint ant = fboLigado();
   glBindFramebuffer(GL_FRAMEBUFFER, borFbo[i]);
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, borTex[i], 0);
   GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant);
   return st == GL_FRAMEBUFFER_COMPLETE;
 }
 
@@ -1460,10 +1505,15 @@ void gfx_borrao_gerar(int via, unsigned int tex, float texAspecto) {
   if (!borFbo[a0] || !tex) return;
   GfxRect cheio = { 0, 0, NV_TELA_W, NV_TELA_H };
   GFX_OUTRO_INI();
+  GLint fboAnt = fboLigado(), vpAnt[4];
+  glGetIntegerv(GL_VIEWPORT, vpAnt);
   glDisable(GL_BLEND);
   glViewport(0, 0, borW, borH);
 
   glBindFramebuffer(GL_FRAMEBUFFER, borFbo[a0]);
+  // As tres passadas cobrem o alvo inteiro, opacas: o que havia nele nao
+  // interessa, e dizer isso a GPU de ladrilhos poupa a leitura dele.
+  gpun_descartar_cor(0);
   gfx_tex_aspect_atual = texAspecto;
   gfx_rect(cheio, tex, GFX_SNAP, 0, 0, 0, 0.0f, 0, 0, 0, 1.0f);
   gfx_tex_aspect_atual = 0.0f;
@@ -1472,13 +1522,16 @@ void gfx_borrao_gerar(int via, unsigned int tex, float texAspecto) {
   // 4px do alvo, que esticado 4x ainda deixa a estrutura da imagem visivel.
   float px = NV_BLUR_PASSO / (float)borW, py = NV_BLUR_PASSO / (float)borH;
   glBindFramebuffer(GL_FRAMEBUFFER, borFbo[a1]);
+  gpun_descartar_cor(0);
   gfx_rect(cheio, borTex[a0], GFX_BLUR, 0, px, 0.0f, 0.0f, 0, 0, 0, 1.0f);
   glBindFramebuffer(GL_FRAMEBUFFER, borFbo[a0]);
+  gpun_descartar_cor(0);
   gfx_rect(cheio, borTex[a1], GFX_BLUR, 0, 0.0f, py, 0.0f, 0, 0, 0, 1.0f);
 
   glEnable(GL_BLEND);
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glViewport(0, 0, telaW, telaH);
+  // Volta ao alvo de ANTES (a janela, ou o alvo interno do nivel 2), e nao ao 0.
+  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
+  glViewport(vpAnt[0], vpAnt[1], vpAnt[2], vpAnt[3]);
   GFX_OUTRO_FIM();
 }
 
@@ -1620,10 +1673,12 @@ GLuint gfx_desfocado(GLuint src, const char *chave) {
     // o resultado sai de pe para o GFX_CARD, como uma arte comum.
     glBindFramebuffer(GL_FRAMEBUFFER, desfFbo);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, desfTmp, 0);
+    gpun_descartar_cor(0);   // a passada cobre o alvo inteiro, opaca
     gfx_rect(cheio, src, GFX_BLUR, 0, NV_DESF_PASSO / (float)NV_DESF_W, 0.0f,
              0.0f, 0, 0, 0, 1.0f);
     // Passada 2: vertical, do intermediario para a textura guardada.
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, dst, 0);
+    gpun_descartar_cor(0);
     gfx_rect(cheio, desfTmp, GFX_BLUR, 0, 0.0f, NV_DESF_PASSO / (float)NV_DESF_H,
              0.0f, 0, 0, 0, 1.0f);
     gfx_tex_aspect_atual = aspAnt;

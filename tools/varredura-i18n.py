@@ -258,6 +258,10 @@ IGNORAR = {
     "antes de pedir os catalogos", "depois da atividade dos amigos",
     "depois do continuar assistindo", "depois dos catalogos",
     "depois dos manifestos", "esperando os catalogos", "lendo os manifestos",
+    # Motivos e origens do nivel de GPU (gpunivel.c): so vao ao nuvio.log.
+    "definido por gpun_definir_nivel", "nenhum", "padrao", "sem alvo interno",
+    "teto de tempo de medida",
+    "lento pela CPU ou pelo resto, nao pela GPU: menos pixel nao ajuda",
     "crédit", "crédito",            # palavra procurada no capitulo do MKV
     "episodio", "episódio",         # palavra procurada no nome do video TMDB (extras.c)
     # Nome proprio e sigla: iguais nos dois idiomas.

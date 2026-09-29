@@ -45,12 +45,37 @@ static void tabela(void) {
   ptv_padrao(PTV_TIZEN, 1024, &p);
   assert(p.texMb == 64 && p.fiosRede == 2 && p.heroiLarg == 1280);
   puts("ok  tabela por aparelho (LG MemTotal, Tizen deviceMemory)");
+  // .tpk nativo (PTV_TPK): tabela propria, e a LG/Tizen acima nao mudaram.
+  assert(ptv_tex_auto_mb(PTV_TPK, 0) == 96);
+  assert(ptv_tex_auto_mb(PTV_TPK, 1108) == 64);   // registro 8825, Tizen 5.0
+  assert(ptv_tex_auto_mb(PTV_TPK, 2048) == 96);
+  assert(ptv_tex_auto_mb(PTV_TPK, 3072) == 128);
+  assert(ptv_tex_teto_mb(PTV_TPK, 1108) == 96);
+  assert(ptv_tex_teto_mb(PTV_TPK, 3072) == 256);
+  assert(ptv_fios_rede_max(PTV_TPK) == 4);
+  ptv_definir_gpu_fraca(0);
+  ptv_padrao(PTV_TPK, 1108, &p);
+  assert(p.texMb == 64 && p.fiosRede == 2 && p.heroiLarg == 1280);
+  ptv_padrao(PTV_TPK, 2048, &p);
+  assert(p.texMb == 96 && p.fiosRede == 4 && p.heroiLarg == 1920);
+  ptv_definir_gpu_fraca(1);
+  ptv_padrao(PTV_TPK, 2048, &p);
+  assert(p.heroiLarg == 1280);
+  ptv_definir_gpu_fraca(0);
+  assert(ptv_gpu_fraca("Mali-TDVX"));
+  assert(ptv_gpu_fraca("Mali-T830"));
+  assert(ptv_gpu_fraca("Mali-450 MP"));
+  assert(!ptv_gpu_fraca("Mali-G52"));
+  assert(!ptv_gpu_fraca("Mali-G71"));
+  assert(!ptv_gpu_fraca("Apple M4 Pro"));
+  assert(!ptv_gpu_fraca(NULL));
+  puts("ok  tabela do .tpk nativo (PTV_TPK) e GPU fraca pelo GL_RENDERER");
 }
 
 // NENHUM candidato, em nenhuma RAM, em nenhum modo, passa do teto.
 static void limites(void) {
   int i, plat, modo;
-  for (plat = 0; plat < 2; plat++)
+  for (plat = 0; plat < 3; plat++)
     for (modo = 0; modo < 2; modo++)
       for (i = 0; i < N_RAMS; i++) {
         PtvPerfil c;
