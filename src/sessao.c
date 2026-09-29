@@ -245,6 +245,9 @@ static void *fioPedir(void *u) {
   char *resp;
   int st = 0;
   (void)u;
+#ifdef NV_TPK40
+  nv_tpk40_etapa("note sign-in-thread started");   // rastro do Tizen 4/5 (#180)
+#endif
   erro[0] = 0;
   codigo[0] = 0;
   urlLogin[0] = 0;

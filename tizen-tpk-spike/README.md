@@ -95,3 +95,72 @@ Testes (uma linha na tela cada, OK/FALHOU + mensagem; usuário manda foto):
 - Emulador no winpc: não feito. É x86 (a `.so` ARM falharia lá de qualquer
   jeito) e o Tizen 10 recusou pacote por cadeia de certificado. Nenhuma das
   três telas foi vista rodando: a UI .NET só vai ser exercitada na TV.
+
+## Spike de UEP (Tizen 4/5) — `NvUepProbe`
+
+    bash tools/tizen-uep-spike.sh   # tizen-tpk-spike/out/NvUepProbe-0.1.0.tpk
+
+Pacote/appid proprio (`NuvioTV002.NvUepProbe`); nao encosta nos publicados.
+
+**Pergunta:** o `NvSpikeLegacy` ja provou que na Tizen 4/5 FALHAM o DllImport da
+`.so` propria (dlopen de arquivo) e o `Process.Start` de binario estatico — a
+UEP (Unauthorized Execution Prevention) recusa `mmap PROT_EXEC` de arquivo nao
+assinado por autor confiavel ("failed to map segment from shared object"). Ha
+como carregar codigo C proprio de outra forma?
+
+**Hipotese (evidencia externa):** a pesquisa de seguranca de TV Samsung da
+califio (MADBugs/samsung-tv, TV KantS2/Linux 4.1.10/ARMv7 — a mesma geracao
+2018-2019 das TVs que falharam) mostra que a UEP bloqueia execucao de ARQUIVO,
+mas nao de MEMORIA ANONIMA: o exploit roda binario nao assinado por um wrapper
+`memfd` ("loaded a program into an anonymous in-memory file descriptor and
+executed it from memory instead of from a normal file path"). O proprio JIT do
+.NET ja depende de memoria anonima executavel, entao ela tem de ser permitida.
+
+`Program.cs` testa, em ordem, mostrando cada resultado na tela e em
+`data/tpk-host.log`:
+
+| # | Teste | Esperado |
+|---|---|---|
+| A | `dlopen(lib/libnvprobe.so)` | FALHA (confirma UEP ativa) |
+| B | `dlopen(data/` copia`)` | FALHA (copia fora da base de assinaturas) |
+| C | `memfd_create` + `dlopen("/proc/self/fd/N")` | **se OK, a rota existe** |
+| D | `mmap` anon RW + `mprotect(+PROT_EXEC)` | OK = carregador proprio viavel |
+
+A `.so` de teste (`native/uepprobe.c`) NAO tem segredo: so `nv_probe()==42` e um
+teste de pthread. Compilada no mesmo container ARM do `tools/tpk.sh`
+(`arm32v5/debian:buster`, glibc 2.28, softfp NEON), carrega nas TVs alvo.
+
+Se **C** der OK, a `libnuvio.so` real passa a ser carregada assim (ship como
+recurso, nunca em `lib/`, aberta por memfd) e o host GL do `NuvioTpk40` adota a
+mesma carga. Se **C** falhar mas **D** passar, a saida e um carregador de ELF
+proprio em memoria anonima (mmap + relocacoes + `mprotect RX`). Se as duas
+falharem, a rota nativa em .tpk esta fechada para 4/5 (resta o NaCl em `.wgt`,
+que outro agente estuda).
+
+## Spike 2 de UEP (Tizen 4/5) — `NvMemfd`
+
+    bash tools/tizen-memfd-spike.sh   # tizen-tpk-spike/out/NvMemfd-0.1.0.tpk
+
+Pacote/appid proprio (`NuvioTV002.NvMemfd`); nao encosta nos publicados.
+
+**O que o `NvUepProbe` rodou numa TV real (optiman, QE55Q6FNA, Tizen 4.0):**
+A `dlopen lib/` FALHOU, B `dlopen data/` FALHOU ("failed to map segment from
+shared object"), C `memfd` deu **EXCECAO `EntryPointNotFoundException:
+'memfd_create'`** (a libc do Tizen 4/5 nao exporta esse simbolo), D
+`mprotect +EXEC` **OK**. Ou seja: `mmap PROT_EXEC` de ARQUIVO e barrado, mas
+memoria ANONIMA executavel e liberada — e a linha C so falhou por chamar
+`memfd_create` por NOME.
+
+`NvMemfd` corrige e amplia, cada teste em `try/catch` (uma falha nao impede a
+proxima), tela + `data/tpk-host.log`:
+
+| # | Teste | Esperado |
+|---|---|---|
+| 1 | `syscall(385)` (memfd_create por NUMERO, ARM EABI) + `write` + `dlopen("/proc/self/fd/N")` | **se OK, a rota preferida existe** |
+| 2 | Carregador de ELF32 ARM proprio em C# (rota D): `mmap` anon RW, mapeia PT_LOAD, aplica `R_ARM_RELATIVE/GLOB_DAT/JUMP_SLOT/ABS32`, resolve externos por `dlsym(RTLD_DEFAULT)`, roda `DT_INIT_ARRAY`, `mprotect +EXEC`, chama `nv_probe` pelo dynsym | OK = plano B sem arquivo nenhum |
+| 3 | Diz na tela QUAL metodo carregou codigo nativo | — |
+
+A `libnvprobe.so` e a mesma `native/uepprobe.c` do spike 1, mas linkada com
+`--hash-style=both` para o `DT_HASH` existir (o carregador em C# usa `nchain`
+para contar simbolos). Se **1** passar (`nv_probe=42`), o proximo passo e
+carregar a `libnuvio.so` real por memfd no host `NuvioTpk40`.
