@@ -841,7 +841,8 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // parede atras da TV) e oscilam alguns por cento em periodos diferentes, e a
   // intensidade de cada uma tambem: nunca duas batem juntas, entao a tela nao
   // "pulsa", ela respira. A cor e a media PONDERADA das luzes e o alfa a soma
-  // delas, no maximo 0,5 — a luz tinge, nao pinta.
+  // delas, no maximo 0,72 (era 0,5 e a luz quase nao
+  // aparecia) — tinge forte, mas o texto branco por cima ainda le.
   //
   // DITHER: o nv_dither do cabecalho. O daqui somava n/255 na cor E no alfa
   // sem dividir pelo alfa, e com o alfa em no maximo 0,5 o pixel final andava
@@ -856,13 +857,13 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float A = uAspect;\n"
   "  vec2 q = vUv * vec2(A, 1.0);\n"
   "  float b = uTempo * 0.35;\n"
-  "  float wE = luz(q, vec2(-0.12*A + 0.03*sin(b),         0.55 + 0.06*sin(b*0.7)), 1.05) * (0.85 + 0.15*sin(b*0.9));\n"
-  "  float wD = luz(q, vec2( 1.12*A + 0.03*sin(b+2.0),     0.45 + 0.06*cos(b*0.8)), 1.05) * (0.85 + 0.15*sin(b*1.1+1.7));\n"
-  "  float wT = luz(q, vec2( 0.55*A + 0.08*sin(b*0.5+1.0), -0.28), 0.95) * (0.85 + 0.15*sin(b*0.7+3.1));\n"
-  "  float wB = luz(q, vec2( 0.45*A + 0.08*cos(b*0.6),     1.28), 0.95) * (0.85 + 0.15*sin(b*1.3+4.4));\n"
+  "  float wE = luz(q, vec2(-0.12*A + 0.03*sin(b),         0.55 + 0.06*sin(b*0.7)), 1.30) * (0.85 + 0.15*sin(b*0.9));\n"
+  "  float wD = luz(q, vec2( 1.12*A + 0.03*sin(b+2.0),     0.45 + 0.06*cos(b*0.8)), 1.30) * (0.85 + 0.15*sin(b*1.1+1.7));\n"
+  "  float wT = luz(q, vec2( 0.55*A + 0.08*sin(b*0.5+1.0), -0.28), 1.15) * (0.85 + 0.15*sin(b*0.7+3.1));\n"
+  "  float wB = luz(q, vec2( 0.45*A + 0.08*cos(b*0.6),     1.28), 1.15) * (0.85 + 0.15*sin(b*1.3+4.4));\n"
   "  float w = wE + wD + wT + wB;\n"
   "  vec3 c = (uReg0*wE + uReg1*wD + uReg2*wT + uReg3*wB) / max(w, 0.001);\n"
-  "  gl_FragColor = nv_dither(c, min(w, 1.0) * 0.5 * uCor.a);\n"
+  "  gl_FragColor = nv_dither(c, min(w, 1.0) * 0.72 * uCor.a);\n"
   "}\n",
 };
 
