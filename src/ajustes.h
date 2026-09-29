@@ -102,6 +102,12 @@ void ajustes_acento(float *r, float *g, float *b);
 int  ajustes_cor_viva(void);
 // "Cor da logo": 1 = com tema dinamico, o destaque sai do logo do titulo.
 int  ajustes_cor_logo(void);
+// "Interface de vidro" (local, desligada de fabrica): 1 = paineis translucidos
+// com borda fina e foco em contorno branco. Cada tela decide o seu desenho;
+// o miolo comum esta em gfx_vidro_* (gfx.h).
+int  ajustes_vidro(void);
+// So para as capturas de teste e o atalho de quem ja sabe: grava como a tela.
+void ajustes_definir_vidro(int ligado);
 // A MESMA cor mais a TINTA que contrasta com ela: devolve 0.067 (#111) sobre
 // realce claro e 1.0 (branco) sobre realce escuro, luminancia Rec.709 com o
 // degrau em 0,55. E a regra de FOCO de layout.h (preenchimento na cor de

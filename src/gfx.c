@@ -7,6 +7,7 @@
 #include <math.h>
 #include "anim.h"
 #include "corviva.h"
+#include "ajustes.h"
 
 // Um programa por modo, e os uniforms de cada um: as posicoes NAO coincidem
 // entre programas, entao guardar um conjunto so devolveria lixo no segundo
@@ -1260,6 +1261,11 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
   GfxRect halo;
   if (r.w <= 0.0f || r.h <= 0.0f || alfa <= 0.001f) return;
   f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco);
+  if (ajustes_vidro()) {   // vidro: superficie fina + contorno branco, sem mancha
+    gfx_vidro_painel(r, raio, 0.45f, alfa);
+    if (f > 0.01f) gfx_anel(r, raio, 3.0f, 1, 1, 1, 0.96f * f * alfa);
+    return;
+  }
   luminancia = cr * 0.2126f + cg * 0.7152f + cb * 0.0722f;
   lavagem = 0.29f * (1.0f - 0.48f * (luminancia > 0.65f ? (luminancia - 0.65f) / 0.35f : 0.0f));
   baseR = 0.057f + cr * 0.028f;
@@ -1284,6 +1290,31 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
              0.88f, 0.92f, 1.0f, 0.13f * f * alfa);
   }
 }
+// Cor do miolo do vidro: 0,16 e um degrau ACIMA do fundo escuro da pagina, e
+// nao um preto — sobre #0D0D0D um miolo preto some e so o aro sobra.
+#define VIDRO_MIOLO 0.16f
+void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a) {
+  if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
+  gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, fundo * a);
+  gfx_anel(r, raio, 1.5f, 1, 1, 1, 0.14f * a);
+}
+void gfx_vidro_foco(GfxRect r, float raio, float foco, float a) {
+  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco);
+  if (f <= 0.01f || a <= 0.001f) return;
+  gfx_cor(r, raio, 1, 1, 1, 0.09f * f * a);
+  gfx_anel(r, raio, 2.0f, 1, 1, 1, 0.96f * f * a);
+}
+void gfx_vidro_cartao(GfxRect r, float raio, float foco, float a) {
+  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco);
+  if (f <= 0.01f || a <= 0.001f) return;
+  gfx_anel_fora(r, raio, 2.0f, 3.0f, 1, 1, 1, 0.96f * f * a);
+}
+void gfx_vidro_pilula_cheia(GfxRect r, float raio, float foco, float a) {
+  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco);
+  if (f <= 0.01f || a <= 0.001f) return;
+  gfx_cor(r, raio, 0.96f, 0.96f, 0.97f, f * a);
+}
+int gfx_vidro_tinta(float foco) { return foco >= 0.5f ? 20 : 235; }
 void gfx_luz_canto(GfxRect r, float raio, float cx, float cy, float alcance,
                    float cr, float cg, float cb, float ca) {
   if (r.w <= 0.0f || r.h <= 0.0f || ca <= 0.001f) return;

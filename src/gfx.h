@@ -346,6 +346,39 @@ void gfx_anel_fora(GfxRect peca, float raio, float folga, float esp,
 // A area extra fica limitada a um unico item focado, nunca a tela inteira.
 void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
                            float cr, float cg, float cb);
+// --- INTERFACE DE VIDRO (Ajustes > Aparencia; ajustes_vidro()) ---------------
+// O miolo comum do visual "vidro" (referencia: outro fork do app, em video):
+// superficie translucida que deixa a arte de tras passar, borda de fio de
+// cabelo, cantos generosos, e o foco marcado por CONTORNO BRANCO em vez de
+// preenchimento na cor de realce ou brilho colorido. Quem decide se usa e a
+// tela (ajustes_vidro()); estas funcoes so desenham, e desligado nenhuma delas
+// e chamada — o desenho antigo fica byte a byte o mesmo.
+//
+// SEM DESFOQUE DE FUNDO, de proposito: o vidro real pede uma copia do quadro
+// ATRAS de cada painel, e nesta GPU (C9) ate um quad de tela cheia com blend
+// derrubou o quadro (ver a luz imersiva, assada em 320x180). Aqui e uma cor
+// unica com alfa — a arte de tras aparece por ela, so que nitida — e o custo
+// e o de um gfx_cor por painel.
+//
+// Superficie de um painel/pilula/linha: cinza-frio translucido + aro de 1,5 px
+// a 14 % de branco. `fundo` e o alfa do miolo (0,55 em pilula sobre pagina
+// escura; ~0,78 num painel flutuante sobre arte, onde o texto precisa de
+// contraste). Em repouso 0,16 x 0,55 sobre o fundo #0D0D0D da 0,11 — o cinza
+// das pilulas do video de referencia.
+void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a);
+// FOCO de uma pilula/linha JA desenhada com gfx_vidro_painel: o miolo clareia
+// (branco a 9 %) e o contorno de 2 px em branco acende com a mola `foco`.
+void gfx_vidro_foco(GfxRect r, float raio, float foco, float a);
+// FOCO de um cartaz/cartao de arte: contorno branco de 3 px POR FORA, com 2 px
+// de vao — limpo, sem brilho colorido nem sombra.
+void gfx_vidro_cartao(GfxRect r, float raio, float foco, float a);
+// FOCO de botao de acao e item de menu: a pilula vira BRANCA cheia (a mola
+// interpola a opacidade), e o texto passa a escuro em foco >= 0,5 — quem chama
+// escolhe a tinta com gfx_vidro_tinta.
+void gfx_vidro_pilula_cheia(GfxRect r, float raio, float foco, float a);
+// Tinta do texto sobre a superficie de vidro: escura sobre a pilula branca do
+// foco, clara (235) no resto.
+int  gfx_vidro_tinta(float foco);
 // A luz de realce dos paineis flutuantes (ver GFX_LUZ): `raio` e o dos cantos
 // do painel, na mesma fracao do menor lado que gfx_cor usa; (cx, cy) e o
 // centro da luz em pixels RELATIVOS ao canto superior esquerdo de `r` (pode
