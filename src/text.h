@@ -48,9 +48,7 @@ typedef enum {
   TXT_NFONTES
 } TxtEstilo;
 
-// `nasc` e o instante (ms) em que a linha foi rasterizada, e 0 quando nao ha
-// o que esmaecer: txt_desenhar_alpha usa para a linha ENTRAR em vez de pipocar.
-typedef struct { GLuint tex; int w, h; unsigned nasc; } TxtLinha;
+typedef struct { GLuint tex; int w, h; } TxtLinha;
 
 // A selecao de interface e legenda usa IDs compartilhados, mas preferencias
 // independentes. Preserve os IDs legados: ficam gravados em dados existentes.
