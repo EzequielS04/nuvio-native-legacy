@@ -48,6 +48,7 @@
 #include "app.h"
 #include "registro.h"
 #include "avisos.h"
+#include "seguro.h"
 #include "video.h"
 #include "addons.h"
 #include "ajustes.h"
@@ -531,6 +532,12 @@ int main(int argc, char **argv) {
   // e e a que estabelece o idioma e o espelho do limite de fileiras. Reler o
   // mesmo arquivo duas vezes e barato e deixa aquele bloco intacto.
   ajustes_dir(dados_dir()[0] ? dados_dir() : dirArte);
+  // MODO SEGURO, LOGO DEPOIS DE LER OS AJUSTES e antes de qualquer coisa que os
+  // use para decidir peso: a superficie 4K (logo abaixo) e o teto de fileiras
+  // sao lidos daqui. Se a sessao anterior caiu logo depois de uma mudanca
+  // arriscada, ela e desfeita agora; ver seguro.h. O veredito de queda vem de
+  // avisos_iniciar (acima), que ja descontou a despedida do Tizen.
+  ajustes_seguro_iniciar(avisos_sessao_anterior_caiu());
   // MESMA PASTA DO ajustes_dir logo acima, e pelo mesmo motivo: sem isto
   // art/player.txt (estilo de legenda, aspecto) gravava na pasta de ARTE, nao
   // na de DADOS — e so a de dados sobrevive a TV matando o processo (issue
@@ -1112,6 +1119,7 @@ int main(int argc, char **argv) {
              rssMB(),
              dados_persistente() ? "" : "  <<< SEM PERSISTENCIA");
       avisos_sinal(NULL, (float)rssMB());   // batida: no maximo 1 a cada 60 s
+      seguro_batida(SDL_GetTicks() / 1000); // confirma mudancas arriscadas depois de 3 min
       corviva_gravar_se_preciso(0);          // corviva.txt: no maximo 1 a cada 20 s
       dados_sync_sucessos = 0;
       dados_sync_falhas = 0;

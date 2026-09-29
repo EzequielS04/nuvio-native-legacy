@@ -43,6 +43,15 @@
 // Avisa (toast + item na lista) que o idioma da interface foi escolhido sozinho.
 // Um item por idioma, entao so uma vez por idioma. Chamado por ajustes.c.
 void avisos_idioma_definido(const char *codigo, const char *texto);
+// 1 se a sessao ANTERIOR nao se despediu (crash, kill por memoria, energia),
+// ja descontada a despedida do Tizen (pagina escondida = a TV fechou em segundo
+// plano, nao e queda). Valido depois de avisos_iniciar; o modo seguro (seguro.h)
+// decide o que desfazer a partir disto. Existe porque dados_despedida_ler apaga
+// o que le: so avisos_iniciar pode pergunta-lo, uma vez.
+int  avisos_sessao_anterior_caiu(void);
+// Aviso do modo seguro (ajuste desfeito, perfil seguro): entra na lista com toast.
+// Um item por `id`; o id leva o numero da sessao, entao cada queda avisa uma vez.
+void avisos_modo_seguro(const char *id, const char *titulo, const char *texto);
 void avisos_iniciar(void);   // depois de dados_iniciar; grava a marca de sessao
 void avisos_encerrar(void);  // saida limpa: apaga a marca
 // Ultimo sinal de vida na marca de sessao: evento de janela ("oculto",
