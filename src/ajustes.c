@@ -204,6 +204,12 @@ typedef enum {
   // Chaves de debrid digitadas nesta TV (debrid.h). No fim pelo mesmo motivo.
   // AllDebrid primeiro: e o unico que a conta nao traz.
   AJ_DEBRID_AD, AJ_DEBRID_AD_TESTAR, AJ_DEBRID_RD, AJ_DEBRID_TB, AJ_DEBRID_PM,
+  // Quais notas aparecem na LINHA DO TITULO (hero da pagina de detalhe). Na
+  // ordem em que a linha as desenha (notasfontes.c: nf_posicao). LOCAIS: o app
+  // oficial nao tem esta linha, entao nao ha campo dela na conta. No fim pelo
+  // mesmo motivo dos outros: valor[] e CHAVE[] sao posicionais.
+  AJ_NT_IMDB, AJ_NT_TOMATES, AJ_NT_AUDIENCIA, AJ_NT_META, AJ_NT_METAUSER,
+  AJ_NT_TRAKT, AJ_NT_TMDB, AJ_NT_LETTER, AJ_NT_MAL, AJ_NT_EBERT, AJ_NT_SCORE,
   AJ_N
 } OpcaoId;
 
@@ -711,6 +717,18 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Chave do Real-Debrid"),
   ACAO("Chave do TorBox"),
   ACAO("Chave do Premiumize"),
+  // Notas na linha do titulo (ver o enum). Ligado/Desligado como as demais.
+  ESC("IMDb",                       V_LIGA, 2),   // local: notaTituloImdb
+  ESC("Rotten Tomatoes (crítica)",  V_LIGA, 2),   // local: notaTituloTomates
+  ESC("Popcornmeter (público)",     V_LIGA, 2),   // local: notaTituloAudiencia
+  ESC("Metacritic (crítica)",       V_LIGA, 2),   // local: notaTituloMeta
+  ESC("Metacritic (usuários)",      V_LIGA, 2),   // local: notaTituloMetaUser
+  ESC("Trakt",                      V_LIGA, 2),   // local: notaTituloTrakt
+  ESC("TMDB",                       V_LIGA, 2),   // local: notaTituloTmdb
+  ESC("Letterboxd",                 V_LIGA, 2),   // local: notaTituloLetter
+  ESC("MyAnimeList",                V_LIGA, 2),   // local: notaTituloMal
+  ESC("Roger Ebert (crítica)",      V_LIGA, 2),   // local: notaTituloEbert
+  ESC("Nota do MDBList",            V_LIGA, 2),   // local: notaTituloScore
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -835,6 +853,10 @@ static const char *CHAVE[] = {
   "homeLayoutLocal",
   // Credenciais: moram em debrid.txt (dados), por aparelho, nunca aqui.
   "-debridAD", "-debridADTestar", "-debridRD", "-debridTB", "-debridPM",
+  // LOCAIS e SEM o "-": sobrevivem ao fechamento; o web nao tem a linha.
+  "notaTituloImdb", "notaTituloTomates", "notaTituloAudiencia", "notaTituloMeta",
+  "notaTituloMetaUser", "notaTituloTrakt", "notaTituloTmdb", "notaTituloLetter",
+  "notaTituloMal", "notaTituloEbert", "notaTituloScore",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -974,6 +996,10 @@ static const Item TELA[] = {
       OPC(AJ_MDB_IMDB), OPC(AJ_MDB_TMDB), OPC(AJ_MDB_LETTER),
       OPC(AJ_MDB_TOMATES), OPC(AJ_MDB_AUDIENCIA), OPC(AJ_MDB_META),
       OPC(AJ_MDB_MAL),
+    GRP("Notas no título", "Quais notas aparecem na linha do título.", "aj_star"),
+      OPC(AJ_NT_IMDB), OPC(AJ_NT_TOMATES), OPC(AJ_NT_AUDIENCIA), OPC(AJ_NT_META),
+      OPC(AJ_NT_METAUSER), OPC(AJ_NT_TRAKT), OPC(AJ_NT_TMDB), OPC(AJ_NT_LETTER),
+      OPC(AJ_NT_MAL), OPC(AJ_NT_EBERT), OPC(AJ_NT_SCORE),
     GRP("fanart.tv", "Chave pessoal para a arte do destaque.", "aj_images"),
       OPC(AJ_FANART_CHAVE),
     GRP("Debrid", "Chaves de API para tocar torrents pelo seu serviço.", "aj_plug"),
@@ -1252,6 +1278,10 @@ static int valor[] = {
   0, 0, 0, 0, 0, 0,/* endereco, token, parametros, chave, modelo, testar: acoes */
   0,                /* layout da home: Moderna (a de sempre) */
   0, 0, 0, 0, 0,    /* chaves de debrid (AllDebrid, testar, RD, TB, PM): acoes */
+  // Notas na linha do titulo: de fabrica so o que a linha ja mostrava antes de
+  // existir a escolha (IMDb, Rotten Tomatoes, Trakt). V_LIGA: 0 = Ligado.
+  0, 0, 1, 1, 1,   /* imdb, tomates, popcornmeter, metacritic, metacritic usuarios */
+  0, 1, 1, 1, 1, 1,/* trakt, tmdb, letterboxd, mal, ebert, nota do mdblist */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1662,15 +1692,36 @@ int ajustes_mdblist_ligado(void)      { return lig(AJ_MDB_LIGADO); }
 // NAO combina com o master de proposito: o master corta a CONSULTA ao mdbList,
 // e as notas Trakt/IMDb que o app tem por conta propria (sem chave nenhuma)
 // nao sao dados do mdbList — esconde-las junto seria punir o usuario pelo que
-// outro servico faz. Cada show_* continua valendo sobre a sua fonte. MAL nao
-// tem fonte no extras de hoje — o ajuste fica gravado a espera dela.
+// outro servico faz. Cada show_* continua valendo sobre a sua fonte.
 int ajustes_mdblist_fonte(int fonte) {
   static const int OP[] = {
     AJ_MDB_TRAKT, AJ_MDB_IMDB, AJ_MDB_TMDB, AJ_MDB_TOMATES,
-    AJ_MDB_AUDIENCIA, AJ_MDB_META, AJ_MDB_LETTER
+    AJ_MDB_AUDIENCIA, AJ_MDB_META, AJ_MDB_LETTER,
+    // As quatro seguintes: usuarios do Metacritic segue o interruptor do
+    // Metacritic; MyAnimeList tem o dele (mdblist_show_mal). Roger Ebert e a
+    // nota agregada NAO existem na conta — sao sempre "disponiveis" e quem
+    // manda e a escolha da linha do titulo.
+    AJ_MDB_META, AJ_MDB_MAL, -1, -1
   };
   if (fonte < 0 || fonte >= (int)(sizeof OP / sizeof *OP)) return 0;
+  if (OP[fonte] < 0) return 1;
   return lig(OP[fonte]);
+}
+
+// A fonte entra na LINHA DO TITULO? Duas condicoes: a pessoa a ligou (aqui) E a
+// fonte esta disponivel (mdblist_show_* da conta, via ajustes_mdblist_fonte —
+// o mesmo interruptor que ja escondia o cartao da aba). Trakt e IMDb nao
+// dependem do master do MDBList, como no resto do arquivo.
+int ajustes_nota_titulo(int fonte) {
+  static const int OP[EX_NFONTES] = {
+    /* EX_TRAKT */ AJ_NT_TRAKT, /* EX_IMDB */ AJ_NT_IMDB, /* EX_TMDB */ AJ_NT_TMDB,
+    /* EX_TOMATOES */ AJ_NT_TOMATES, /* EX_AUDIENCE */ AJ_NT_AUDIENCIA,
+    /* EX_METACRITIC */ AJ_NT_META, /* EX_LETTERBOXD */ AJ_NT_LETTER,
+    /* EX_METAUSER */ AJ_NT_METAUSER, /* EX_MAL */ AJ_NT_MAL,
+    /* EX_EBERT */ AJ_NT_EBERT, /* EX_MDBSCORE */ AJ_NT_SCORE
+  };
+  if (fonte < 0 || fonte >= EX_NFONTES) return 0;
+  return lig(OP[fonte]) && ajustes_mdblist_fonte(fonte);
 }
 
 // Onde os ajustes ficam. Ate a versao anterior nada era gravado: mexer numa
@@ -2734,6 +2785,10 @@ static int somenteDesteAparelho(int op) {
     case AJ_POSTER_PROV:    /* servico e rede desta casa: nao segue a conta */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
+    // Linha do titulo: o web nao tem, e nenhuma conta pode desliga-las aqui.
+    case AJ_NT_IMDB: case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
+    case AJ_NT_METAUSER: case AJ_NT_TRAKT: case AJ_NT_TMDB: case AJ_NT_LETTER:
+    case AJ_NT_MAL: case AJ_NT_EBERT: case AJ_NT_SCORE:
       return 1;
     default:
       return 0;
@@ -3185,6 +3240,13 @@ static int inativa(int op) {
     case AJ_MDB_LETTER: case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA:
     case AJ_MDB_META: case AJ_MDB_MAL:
       return !ajustes_mdblist_ligado();
+    // Linha do titulo: a nota que so o MDBList traz fica APAGADA sem a chave (ou
+    // com o master desligado) — ligar nao faria aparecer nada, e a linha diz
+    // por que (motivo abaixo). IMDb e Trakt funcionam sem chave.
+    case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
+    case AJ_NT_METAUSER: case AJ_NT_TMDB: case AJ_NT_LETTER: case AJ_NT_MAL:
+    case AJ_NT_EBERT: case AJ_NT_SCORE:
+      return !ajustes_mdblist_ligado() || !extras_mdblist_tem_chave();
     // Cada campo so vale para o provedor dele; o teste, para qualquer um ligado.
     case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
       return valor[AJ_POSTER_PROV] != PP_SPATIAL;
@@ -3277,6 +3339,10 @@ static const char *ajudaOpcao(int op) {
       return "Ative TMDB para ajustar o que ele enriquece.";
     if (op > AJ_MDB_LIGADO && op <= AJ_MDB_MAL)
       return "Ative MDBList para escolher as fontes de nota.";
+    if (op >= AJ_NT_IMDB && op <= AJ_NT_SCORE)
+      return extras_mdblist_tem_chave()
+        ? "Ative MDBList para mostrar esta nota."
+        : "Esta nota vem do MDBList e precisa da chave dele na sua conta Nuvio.";
     return "Ative Efeito de profundidade para personalizar este detalhe.";
   }
   switch (op) {
@@ -3448,6 +3514,10 @@ static const char *ajudaOpcao(int op) {
     case AJ_MDB_LETTER: case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA:
     case AJ_MDB_META: case AJ_MDB_MAL:
       return "Mostra ou esconde esta fonte na fileira de notas da página do título.";
+    case AJ_NT_IMDB: case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
+    case AJ_NT_METAUSER: case AJ_NT_TRAKT: case AJ_NT_TMDB: case AJ_NT_LETTER:
+    case AJ_NT_MAL: case AJ_NT_EBERT: case AJ_NT_SCORE:
+      return "Mostra esta nota na linha do título, com a marca e a escala do próprio site. Se a linha não couber, saem primeiro as menos importantes. A aba de notas continua mostrando todas.";
     default: return "Use as setas laterais para escolher. A preferência é aplicada ao alterar o valor.";
   }
 }
@@ -6053,6 +6123,9 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_MDB_IMDB: case AJ_MDB_TMDB: case AJ_MDB_LETTER:
     case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA: case AJ_MDB_META:
     case AJ_MDB_MAL:
+    case AJ_NT_IMDB: case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
+    case AJ_NT_METAUSER: case AJ_NT_TRAKT: case AJ_NT_TMDB: case AJ_NT_LETTER:
+    case AJ_NT_MAL: case AJ_NT_EBERT: case AJ_NT_SCORE:
       return AJPV_MDB;
     case AJ_RESOLUCAO: case AJ_QUALIDADE_IMG: case AJ_TEX_MB:
     case AJ_ESPACO:

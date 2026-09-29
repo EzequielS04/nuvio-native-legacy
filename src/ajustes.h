@@ -313,6 +313,8 @@ int         ajustes_mdblist_ligado(void);       // mdblist_enabled
 // `fonte` e um ExFonte de extras.h (trakt, imdb, tmdb, tomatoes, audience,
 // metacritic, letterboxd). 0 = esconder a nota dessa fonte na fileira.
 int         ajustes_mdblist_fonte(int fonte);   // mdblist_show_*
+// A fonte (ExFonte) entra na linha do titulo? Escolha local + disponibilidade.
+int         ajustes_nota_titulo(int fonte);
 
 // --- AJUSTES QUE VEM DA CONTA ------------------------------------------------
 // Aplica o blob de `sync_pull_profile_settings_blob` (o objeto `settings_json`,
