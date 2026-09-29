@@ -69,6 +69,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "visto.h"     /* fim de episodio/filme para Simkl e conta */
 #include "vistoep.h"   /* o check de "assistido" na lista de episodios (issue #100) */
 #include "pausao.h"
+#include "aovivo.h"
 #include "scrobble.h"
 #include "home.h"
 #include "descoberta.h"
@@ -402,6 +403,12 @@ static int epT, epE, pedFontes, erroFonte, pedProxT, pedProxE;
 // tocar. Ver a nota la — segura a invalidacao da lista de fontes (#101).
 static int abrindoSessao;
 static int pedGuia, pedZap;   // pedidos de canal: overlay do guia / CH+/-
+// OSD PROPRIO DO CANAL AO VIVO (aovivo.h). O zapping acumula toques e so pede a
+// troca depois do debounce; `pedZap` passa a ser um DESLOCAMENTO (pode ser 3 ou
+// -2), 0 = nenhum. `pedRecarregar` refaz a busca de fonte do mesmo canal.
+static AoVivoZap zapEst;
+static float bannerAV;         // 0..1, a entrada do banner do zapping
+static int botaoAV, infoAV, pedRecarregar;
 // Indice EPG do canal no ar, resolvido uma vez por abertura (-2 = sem grade).
 static int epgIdx = -1;
 // Diagnostico da janela do cartao de proximo episodio. Zerados a cada episodio
@@ -421,6 +428,7 @@ int player_indice(void) { return idxAtual(); }
 const char *player_linha_episodio(void) { return linhaEp; }
 int  player_pediu_guia(void) { int v = pedGuia; pedGuia = 0; return v; }
 int  player_pediu_zap(void)  { int v = pedZap;  pedZap  = 0; return v; }
+int  player_pediu_recarregar(void) { int v = pedRecarregar; pedRecarregar = 0; return v; }
 void player_episodio_atual(int *t, int *e) { *t = epT; *e = epE; }
 int player_pediu_fontes(void) { int p = pedFontes; pedFontes = 0; return p; }
 int player_pediu_proximo(int *t,int *e) {
@@ -1055,6 +1063,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   pedFontes = erroFonte = pedFaixas = pedProxT = pedProxE = 0; inicioImagem = 0;
   erroTitulo[0] = erroDica[0] = 0;
   pedGuia = pedZap = 0;
+  memset(&zapEst, 0, sizeof zapEst); bannerAV = 0.0f; botaoAV = 0; infoAV = 0; pedRecarregar = 0;
   retomadaAplicada=0; semRetomada=0;
   botao = PLR_PLAY;
   memset(focoB, 0, sizeof focoB);
@@ -1709,10 +1718,125 @@ static float fracCanal(void) {
   return 0.0f;
 }
 
+static int avPodePausar(void);
 static void alternarTocando(void) {
+  // Canal sem janela de tempo nao pausa (ver avPodePausar): a tecla fisica de
+  // Pause tambem cai aqui, e congelar um ao vivo so desincroniza o som.
+  if (ehCanal() && !avPodePausar()) return;
   tocando = !tocando;
   if (comVideo) video_pausar(!tocando);
 }
+
+// --- CANAL AO VIVO: fileira de botoes e dados do OSD proprio ----------------------
+// PAUSAR: so quando o fluxo tem janela de tempo (duracao > 0, o DVR do provedor).
+// Um ao vivo puro nao pausa de verdade: o botao apertado deixaria a imagem
+// congelada e a transmissao seguindo sem ele. Sem janela, o OK so acorda o OSD.
+static int avPodePausar(void) { return comVideo && video_duracao() > 0.5; }
+
+static int avBotoes(int *ids) {
+  int n = 0;
+  if (avPodePausar()) ids[n++] = AV_B_PAUSA;
+  ids[n++] = AV_B_GUIA;
+  ids[n++] = AV_B_ANT;
+  ids[n++] = AV_B_PROX;
+  if (guia_info_canal(player_id_canal(), NULL, NULL, NULL, 0)) ids[n++] = AV_B_FAV;
+  ids[n++] = AV_B_AUDIO;
+  ids[n++] = AV_B_LEGENDA;
+  ids[n++] = AV_B_INFO;
+  ids[n++] = AV_B_RECARREGAR;
+  ids[n++] = AV_B_FONTE;
+  return n;
+}
+
+// CH+/CH-, PgUp/PgDn e os botoes "Canal -/+": nenhum troca na hora, todos
+// somam ao debounce (aovivo.h).
+static void avZap(int dir) { aovivo_zap_apertar(&zapEst, dir, SDL_GetTicks()); }
+
+static void avAtivar(int b) {
+  switch (b) {
+    case AV_B_PAUSA: alternarTocando(); break;
+    case AV_B_GUIA: pedGuia = 1; break;
+    case AV_B_ANT: avZap(-1); break;
+    case AV_B_PROX: avZap(1); break;
+    case AV_B_FAV: guia_alternar_favorito(player_id_canal()); break;
+    case AV_B_AUDIO: pedFaixas = 1; break;
+    case AV_B_LEGENDA: pedFaixas = 2; break;
+    case AV_B_INFO: infoAV = !infoAV; break;
+    case AV_B_RECARREGAR: pedRecarregar = 1; break;
+    case AV_B_FONTE: pedFontes = 1; break;
+  }
+}
+
+// Reune o que o OSD do canal precisa: identidade (marca, numero, categoria),
+// programacao, botoes e o estado do fluxo.
+static void avMontarOsd(AoVivoOsd *o) {
+  static char cat[64];
+  int ids[AV_B_N], i, n = avBotoes(ids), w = video_largura(), h = video_altura();
+  const char *id = player_id_canal();
+  memset(o, 0, sizeof *o);
+  o->nome = itemCanal.titulo;
+  o->logo = itemCanal.poster;
+  o->desc = itemCanal.sinopse;
+  cat[0] = 0;
+  guia_info_canal(id, &o->numero, &o->total, cat, sizeof cat);
+  if (!cat[0]) {
+    // Sem lista de guia: a categoria vem no genero do item ("Canal · Esportes").
+    const char *sep = strstr(itemCanal.genero, " \xc2\xb7 ");
+    if (sep) snprintf(cat, sizeof cat, "%s", sep + 3);
+  }
+  o->categoria = cat;
+  if (epgIdx == -1 && epg_estado() == EPG_PRONTO) {
+    epgIdx = epg_match(itemCanal.titulo);
+    if (epgIdx < 0) epgIdx = -2;
+  }
+  if (id[0] && xtream_e_id(id)) { xtepg_querer(id); xtepg_passo(); }
+  aovivo_epg_montar(epgIdx, id, time(NULL), &o->epg);
+  for (i = 0; i < n; i++) o->botoes[i] = ids[i];
+  o->nBotoes = n;
+  o->foco = (botaoAV < n) ? botaoAV : n - 1;
+  o->favorito = guia_e_favorito(id);
+  o->pausado = !tocando && avPodePausar();
+  o->bufferando = comVideo && video_bufferando_ms() > 1500u;
+  if (w >= 3840) snprintf(o->res, sizeof o->res, "4K");
+  else if (w >= 1920) snprintf(o->res, sizeof o->res, "HD");
+  else if (w >= 1200) snprintf(o->res, sizeof o->res, "720p");
+  else if (w > 0) snprintf(o->res, sizeof o->res, "SD");
+  o->infoAberta = infoAV;
+  if (infoAV) {
+    int k = 0;
+    if (w > 0 && h > 0) snprintf(o->info[k++], sizeof o->info[0], i18n("Resolução: %dx%d"), w, h);
+    else snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Resolução: ainda não informada"));
+    if (strcasecmp(video_hdr(), "none") && video_hdr()[0])
+      snprintf(o->info[k++], sizeof o->info[0], i18n("Imagem: %s"), video_tem_dolby_vision() ? "Dolby Vision" : video_hdr());
+    if (video_tem_atmos()) snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Áudio: Dolby Atmos"));
+    if (comVideo && video_bufferando_ms() > 0)
+      snprintf(o->info[k++], sizeof o->info[0], i18n("Buffer: carregando há %u s"), video_bufferando_ms() / 1000u);
+    else snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Buffer: estável"));
+    snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Codec, quadros e taxa: a TV não informa"));
+    o->nInfo = k;
+  }
+  corFocoPlayer(&o->fr, &o->fg, &o->fb);
+}
+
+// Teclas do OSD do canal (CH+/-, azul e BAIXO ja foram tratados antes).
+static void avTecla(SDL_Keycode k) {
+  int ids[AV_B_N], n = avBotoes(ids);
+  int ok = (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE);
+  if (botaoAV >= n) botaoAV = n - 1;
+  if (botaoAV < 0) botaoAV = 0;
+  if (!visivel) {
+    soBarra = 0;
+    // Escondido, o OK e o gesto do aparelho: pausa se pausa, senao mostra o OSD.
+    if (ok && avPodePausar()) { botaoAV = 0; alternarTocando(); }
+    acordar();
+    return;
+  }
+  if (ok) { avAtivar(ids[botaoAV]); acordar(); return; }
+  if (k == SDLK_LEFT && botaoAV > 0) botaoAV--;
+  else if (k == SDLK_RIGHT && botaoAV < n - 1) botaoAV++;
+  acordar();
+}
+
 
 // AVANCO. So vale com os controles em pe: cegamente, seta seria um pulo
 // invisivel — com os botoes, quem aperta esta olhando para a barra.
@@ -1808,18 +1932,23 @@ void player_evento(const SDL_Event *e) {
   // precisa da interface aberta. O 0 e a tecla livre no controle da LG.
   if (k == SDLK_0 || k == SDLK_KP_0) { player_aspecto_ciclar(); return; }
 
-  // CANAL AO VIVO: o guia e o controle remoto dele. BAIXO e o botao AZUL abrem
-  // o overlay do guia em qualquer estado — controles em pe ou escondidos — e
-  // e la que mora "o que esta passando / trocar de canal". CH+/- (scancodes
-  // 480/481 do SDL_webOS.h da LG) zapeiam na ordem do guia sem overlay no
-  // meio; no Tizen o CH+ ja chega aqui como "s" pela casca (tizen-shell.html).
+  // CANAL AO VIVO: OSD proprio (aovivo.h) e teclas proprias. BAIXO e o botao
+  // AZUL abrem o overlay do guia em qualquer estado — e la que mora "o que esta
+  // passando / trocar de canal". CH+/- (scancodes 480/481 do SDL_webOS.h da LG)
+  // e PgUp/PgDn zapeiam na ordem do guia: cada toque soma ao debounce e o canal
+  // so troca 600 ms depois do ultimo, com um banner dizendo quem vai tocar. No
+  // Tizen o CH+ ja chega aqui como "s" pela casca (tizen-shell.html).
+  // CIMA/BAIXO NAO zapeiam: BAIXO ja era o guia (decisao do dono) e CIMA acorda
+  // o OSD; trocar isso quebraria o gesto que a mao ja sabe.
   if (ehCanal()) {
     int sc = e->key.keysym.scancode;
-    if (sc == NV_SCANCODE_CH_UP)   { pedZap = 1;  return; }
-    if (sc == NV_SCANCODE_CH_DOWN) { pedZap = -1; return; }
+    if (sc == NV_SCANCODE_CH_UP   || k == SDLK_PAGEUP)   { avZap(1);  return; }
+    if (sc == NV_SCANCODE_CH_DOWN || k == SDLK_PAGEDOWN) { avZap(-1); return; }
     if (k == SDLK_DOWN || k == SDLK_s || sc == NV_SCANCODE_BLUE) {
       pedGuia = 1; return;
     }
+    avTecla(k);
+    return;
   }
 
   if (!visivel) {
@@ -1995,6 +2124,15 @@ void player_atualizar(float dt, Uint32 agora) {
   }
 
   entrada = anim_mola(entrada, saindo ? 0.0f : 1.0f, dt, NV_MOLA_TELA);
+  // ZAPPING: o prazo do debounce vence aqui. O banner segura o OSD longe enquanto
+  // ha troca pendente; o deslocamento vira o pedido que o app executa.
+  if (ehCanal()) {
+    int off = 0;
+    bannerAV = anim_mola(bannerAV, zapEst.pend ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
+    if (aovivo_zap_pronto(&zapEst, agora, &off)) pedZap = off;
+  } else {
+    bannerAV = 0.0f;
+  }
   // Marca o primeiro quadro COM IMAGEM. E daqui que a guia parental conta o
   // tempo dela — contar da abertura da tela faria a guia gastar o prazo
   // enquanto o app ainda procurava fonte, e ela sumiria antes de o filme
@@ -2116,7 +2254,7 @@ void player_atualizar(float dt, Uint32 agora) {
                    // esta condicao o painel subia sozinho no meio de um avanco
                    // longo — o "componente que aparece quando ta pausado
                    // piscando" do relato.
-                   !tocando && !scrubbing && !saindo && !erroFonte &&
+                   !ehCanal() && !tocando && !scrubbing && !saindo && !erroFonte &&
                    !player_carregando() &&
                    !episodios_aberto() && !stream_folha_aberta() &&
                    !faixas_aberta() && !ofertaProximo() && !posplay_visivel(),
@@ -2603,7 +2741,11 @@ void player_desenhar(Uint32 agora) {
       txt_desenhar_alpha(le,(NV_TELA_W-le.w)*.5f,NV_TELA_H*.5f+94,entrada);
     }
   }
-  if (erroFonte) {
+  if (erroFonte && ehCanal()) {
+    // Cartao no estilo do ao vivo: a marca do canal e a causa (provedor, conta)
+    // que o app ja calculou em erroTitulo/erroDica.
+    aovivo_erro_desenhar(itemCanal.titulo, itemCanal.poster, erroTitulo, erroDica, entrada);
+  } else if (erroFonte) {
     gfx_cor(tela,0,.02f,.02f,.025f,.65f);
     // Cortadas na largura: o motivo leva o nome do addon, que e da pessoa.
     TxtLinha er=txt_linha_corta(TXT_CALLOUT,erroTitulo[0]?erroTitulo:"Não foi possível abrir a fonte",240,241,243,255,NV_TELA_W-240);
@@ -2646,17 +2788,14 @@ void player_desenhar(Uint32 agora) {
   // ANTES do corte por `a`: desenha-lo depois do `return` de "tocando limpo"
   // faria dele um painel que so aparece quando ja ha barra na tela.
   //
-  // A BASE e a mesma linha que a barra de progresso usa, menos uma folga. Com
-  // os controles agora convivendo com o painel, um y fixo poria os dois no
-  // mesmo lugar — foi o "layer quebrado" que o dono viu. Este calculo repete o
-  // de desenharControles de proposito: la ele depende de `desce`, que so existe
-  // durante a animacao de entrada dos controles, e amarrar o painel a isso o
-  // faria tremer junto.
-  // BASE NO RODAPE: o painel ocupa o lugar do player, que esta recolhido
-  // enquanto ele esta de pe. PLR_PAD_Y e a mesma margem inferior que os
-  // controles usam, entao os dois pousam na mesma linha e a troca entre um e
-  // outro nao desloca nada na tela.
-  pausao_desenhar(agora, NV_TELA_H - PLR_PAD_Y);
+  // CAMADA DE TELA CHEIA: o painel de pausa cobre o quadro inteiro (veu de ponta
+  // a ponta, selo no alto, ficha na margem inferior, barra na borda) e por isso
+  // nao depende mais de onde o player desenha os controles — que saem de cena
+  // enquanto ele esta de pe. Ver pausao.h.
+  { PausaoCena cena;
+    cena.pos = posSeg; cena.dur = ehCanal() ? 0.0f : duracaoSeg;
+    corFocoPlayer(&cena.fr, &cena.fg, &cena.fb);
+    pausao_desenhar(agora, &cena); }
 
   // O PAINEL DE POS-REPRODUCAO DESENHA AQUI, e o lugar importa.
   //
@@ -2802,6 +2941,36 @@ void player_desenhar(Uint32 agora) {
   // O botao de pular fica POR CIMA dos degrades e dos controles: desenhado
   // antes deles, o veu de 400px do rodape o afogava assim que a barra subia —
   // era o "aparece e some" do relato. Sem controles ele e a unica coisa na tela.
+  // CANAL AO VIVO: banner do zapping (sobrepoe tudo enquanto a troca espera o
+  // debounce) e o OSD proprio no lugar dos controles de filme.
+  if (ehCanal()) {
+    if (zapEst.pend && bannerAV > 0.004f) {
+      CatItem alvo;
+      AoVivoBanner bn;
+      EpgProg ep;
+      char ag[160] = "";
+      int num = 0;
+      if (guia_zap_ver(player_id_canal(), zapEst.pend, &alvo)) {
+        if (guia_programa_agora(alvo.imdb, time(NULL), &ep) && ep.titulo)
+          snprintf(ag, sizeof ag, "%s", ep.titulo);
+        guia_info_canal(alvo.imdb, &num, NULL, NULL, 0);
+        bn.nome = alvo.titulo; bn.logo = alvo.poster; bn.agoraTit = ag;
+        bn.numero = num; bn.salto = zapEst.pend;
+        aovivo_banner_desenhar(&bn, entrada * bannerAV);
+      }
+    }
+    if (a > 0.005f) {
+      AoVivoOsd o;
+      desenharLegendaExterna();
+      if (!zapEst.pend) {
+        avMontarOsd(&o);
+        aovivo_osd_desenhar(&o, a);
+      }
+    } else {
+      desenharLegendaExterna();
+    }
+    return;
+  }
   if (a <= 0.005f) {
     // O chrome pode estar completamente recolhido enquanto a legenda ainda
     // e conteudo do filme. Desenha-la antes do retorno preserva ASS/SRT/VTT

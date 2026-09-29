@@ -40,6 +40,7 @@
 // `pendPronto` e o fio de desenho copia para os vetores publicados. Leitores
 // nunca tocam no staging — mesma disciplina do epg.c.
 #include "guia.h"
+#include "aovivo.h"
 #include "fontecache.h"
 #include "ajustes.h"   /* ajustes_acento: cor do anel de foco */
 #include "epg.h"
@@ -1469,14 +1470,56 @@ static void pedirCanal(GCanal *c) {
 // que o addon os declara), entao o CH+/− percorre exatamente o que se ve na
 // tela. Da volta nas pontas: de "premiere" para "globo" direto e o jeito
 // antigo de zapear, nao um erro de foco.
-int guia_zap(const char *idAtual, int dir, CatItem *saida) {
+static int zapAlvo(const char *idAtual, int dir, CatItem *saida, int aplicar) {
   int i, alvo = 0;
   if (!saida || estado != G_PRONTO || nCanais < 1) return 0;
   for (i = 0; i < nCanais; i++)
     if (!strcmp(canais[i].id, idAtual ? idAtual : "")) { alvo = i; break; }
-  alvo = (alvo + dir + nCanais) % nCanais;
+  // `dir` pode ser um deslocamento maior que 1 (o zapping com debounce soma os
+  // toques) e 0 devolve o proprio canal (recarregar a fonte).
+  alvo = aovivo_ordem(nCanais, alvo, dir);
   canalParaItem(&canais[alvo], saida);
+  // A origem so muda quando o zap VAI tocar; o banner do zapping so espia.
+  if (aplicar) snprintf(pedidoBase, sizeof pedidoBase, "%s", canais[alvo].base);
   return 1;
+}
+int guia_zap(const char *idAtual, int dir, CatItem *saida) {
+  return zapAlvo(idAtual, dir, saida, 1);
+}
+int guia_zap_ver(const char *idAtual, int dir, CatItem *saida) {
+  return zapAlvo(idAtual, dir, saida, 0);
+}
+
+// Onde o canal esta na ordem do guia e de que categoria e: o numero que o OSD
+// do player mostra. 0 com a lista ainda nao carregada ou canal fora dela.
+int guia_info_canal(const char *id, int *numero, int *total, char *cat, size_t n) {
+  int i;
+  if (estado != G_PRONTO || nCanais < 1 || !id || !id[0]) return 0;
+  for (i = 0; i < nCanais; i++) if (!strcmp(canais[i].id, id)) break;
+  if (i >= nCanais) return 0;
+  if (numero) *numero = i + 1;
+  if (total) *total = nCanais;
+  if (cat && n) snprintf(cat, n, "%s", canais[i].cat >= 0 ? cats[canais[i].cat] : "");
+  return 1;
+}
+
+int guia_e_favorito(const char *id) {
+  if (!favLido) favLer();
+  return id && id[0] && favIndice(id) >= 0;
+}
+
+void guia_alternar_favorito(const char *id) {
+  GCanal *c = canalPorId(id);
+  if (!favLido) favLer();
+  if (c) favAlternar(c);
+}
+
+// O programa NO AR do canal `id` (a mesma consulta do cartao do guia, com a
+// XMLTV e a grade curta do Xtream). O ponteiro de titulo vale ate o proximo
+// epg_passo/xtepg_passo: quem guarda copia.
+int guia_programa_agora(const char *id, time_t t, EpgProg *p) {
+  GCanal *c = canalPorId(id);
+  return c && p && gAgora(c, t, p);
 }
 
 static void moverVertical(int dir) {

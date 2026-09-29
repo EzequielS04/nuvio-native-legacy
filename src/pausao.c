@@ -5,6 +5,8 @@
 #include "text.h"
 #include "anim.h"
 #include "layout.h"
+#include "idioma.h"
+#include <time.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -13,29 +15,30 @@
 // pular na cara de quem so ajustou o volume.
 #define PAUSAO_ESPERA_MS  5000u
 
-// Faixa DISCRETA, ancorada na base, e nao a tela cheia que o web pinta. Duas
-// razoes: aqui o painel toma o lugar dos controles (que nesta tela nao somem
-// sozinhos enquanto pausado, player.c:767), e cobrir o quadro inteiro apagaria
-// justamente o frame que a pessoa parou para olhar. O veu de baixo ja e o mesmo
-// GFX_VEU_BAIXO da barra de controles — nao ha efeito novo nem passada extra.
-#define PAUSAO_X          96.0f    // mesmo recuo do conteudo do rodape (PLR_MARGEM)
-#define PAUSAO_LARG     1160.0f    // largura util do texto; sobra do lado direito
+// CAMADA DE TELA CHEIA. O painel foi uma faixa discreta ancorada no rodape (veu
+// so do topo do texto para baixo, texto em 1160 de largura) e o dono relatou
+// que "as infos que mostra com o overlay nao pegam a tela inteira". Agora o veu
+// vai de ponta a ponta e o conteudo se distribui pelo 1920x1080 com as margens
+// do app. O quadro continua legivel por tras: o veu geral e leve, e o que
+// segura o texto sao os degrades de cima e de baixo.
+#define PAUSAO_X          96.0f    // mesmo recuo do conteudo do player (PLR_MARGEM)
+#define PAUSAO_Y          64.0f    // topo do selo e do relogio
+#define PAUSAO_BASE       88.0f    // margem inferior da ficha (acima da barra)
+#define PAUSAO_LARG     1480.0f    // largura util do texto da ficha
 // Passo entre linhas da sinopse. E PASSO, nao vao: txt_bloco desenha a linha i
 // em y + i*leading. O mesmo numero que a pagina de titulo usa neste estilo.
 #define PAUSAO_LD_SIN     40.0f
-#define PAUSAO_SIN_LINHAS     2
-#define PAUSAO_PAD        32.0f
-// Opacidade do veu. Fraca de proposito: e "uma leve gradacao bem minima", nao
-// um painel. Acima de ~0.6 volta a parecer o cartao solido que foi recusado.
-#define PAUSAO_VEU_A       0.55f
-// Teto: acima disto o painel entraria na zona de overscan do topo.
-#define PAUSAO_TETO       96.0f
+#define PAUSAO_SIN_LINHAS     3
+// Veu: geral, mais o degrade de cima (selo/relogio) e o de baixo (a ficha).
+#define PAUSAO_VEU_GERAL   0.34f
+#define PAUSAO_VEU_TOPO    0.62f
+#define PAUSAO_VEU_BAIXO   0.86f
+#define PAUSAO_TOPO_H     280.0f
+#define PAUSAO_BAIXO_H    640.0f
 #define PAUSAO_CHIP_H     44.0f
 #define PAUSAO_CHIP_PAD   18.0f
 #define PAUSAO_CHIP_GAP   10.0f
-// Teto do desenho: abaixo disto o conteudo entraria na zona que a TV corta por
-// overscan. Quem nao couber simplesmente nao e desenhado — encolher a fonte
-// para caber daria uma linha ilegivel a tres metros de distancia.
+#define PAUSAO_TRILHO_H    6.0f
 
 // Quantos nomes de elenco cabem. O web para em oito (:568); aqui o teto e o do
 // dado, nao o do layout: CatItem guarda seis.
@@ -112,25 +115,71 @@ int pausao_evento(const SDL_Event *e) {
   return PAUSAO_CONSUMIU;
 }
 
-void pausao_desenhar(Uint32 agora, float baseY) {
+static void fmtT(char *b, size_t n, float seg) {
+  int t = (int)(seg < 0 ? 0 : seg + 0.5f);
+  if (t >= 3600) snprintf(b, n, "%d:%02d:%02d", t / 3600, (t / 60) % 60, t % 60);
+  else           snprintf(b, n, "%d:%02d", t / 60, t % 60);
+}
+
+void pausao_desenhar(Uint32 agora, const PausaoCena *cena) {
   const CatItem *c;
-  float a = anim, y, sobe, alt = 0.0f, hSin = 0.0f, larg;
+  float a = anim, y, sobe, alt = 0.0f, hSin = 0.0f, larg = PAUSAO_LARG;
   char meta[192];
   const char *sepEp = NULL;
   TxtLinha lKick, lTit, lMeta, lEp, lCast;
-  int temMeta = 0, temEp = 0, temCast, i;
+  int temMeta = 0, temEp = 0, temCast, i, vidro;
   (void)agora;
 
   if (a <= 0.004f) return;
   c = cat_item(idxItem);
   if (!c) return;
+  vidro = ajustes_vidro();
 
-  larg = PAUSAO_LARG;
+  // --- VEU DE PONTA A PONTA ---------------------------------------------------
+  // Tres camadas, todas do tamanho da tela em unidades de layout (NV_TELA_W x
+  // NV_TELA_H; o gfx mapeia para o drawable, entao 4K cobre igual): um escurecido
+  // geral leve, o degrade do topo (para o selo e o relogio terem contra o que
+  // se apoiar) e o do rodape (a ficha).
+  { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+    GfxRect topo = { 0, 0, NV_TELA_W, PAUSAO_TOPO_H };
+    GfxRect base = { 0, NV_TELA_H - PAUSAO_BAIXO_H, NV_TELA_W, PAUSAO_BAIXO_H };
+    gfx_cor(tela, 0.0f, 0, 0, 0, PAUSAO_VEU_GERAL * a);
+    gfx_rect(topo, 0, GFX_VEU_TOPO, 0, 0, 0, 0.0f, 0, 0, 0, PAUSAO_VEU_TOPO * a);
+    gfx_rect(base, 0, GFX_VEU_BAIXO, 0, 0, 0, 0.0f, 0, 0, 0, PAUSAO_VEU_BAIXO * a); }
 
-  // MEDIR ANTES DE DESENHAR. O painel e ancorado pela BASE, logo acima do que o
-  // player desenha, entao a altura tem de ser conhecida para saber onde a
-  // primeira linha comeca. A versao anterior desenhava de cima para baixo a
-  // partir de um y fixo e por isso brigava com a barra de progresso.
+  // --- ALTO: selo "Pausado" a esquerda, relogio (e fim) a direita ----------------
+  { TxtLinha lp = txt_linha(TXT_PLR_CORPO, "Pausado", 246, 247, 250, 255);
+    float d = 56.0f, pw = d + 18.0f + (float)lp.w + 26.0f;
+    GfxRect pil = { PAUSAO_X, PAUSAO_Y, pw, d };
+    GfxRect ic  = { PAUSAO_X + 8.0f, PAUSAO_Y + 8.0f, d - 16.0f, d - 16.0f };
+    if (vidro) gfx_vidro_painel(pil, 0.5f, 0.55f, a);
+    else       gfx_cor(pil, 0.5f, 1, 1, 1, 0.16f * a);
+    gfx_icone(ic, "pause", 0.96f, 0.96f, 0.96f, 0.94f * a);
+    txt_desenhar_alpha(lp, PAUSAO_X + d + 6.0f, PAUSAO_Y + (d - (float)lp.h) * 0.5f, a); }
+  { time_t agoraT = time(NULL);
+    struct tm lt;
+    char hora[8];
+    TxtLinha lh;
+    float yR = PAUSAO_Y;
+    localtime_r(&agoraT, &lt);
+    strftime(hora, sizeof hora, "%H:%M", &lt);
+    lh = txt_linha(TXT_PG_RELOGIO, hora, 255, 255, 255, 255);
+    txt_desenhar_alpha(lh, NV_TELA_W - PAUSAO_X - lh.w, yR, a * 0.96f);
+    yR += lh.h + 2.0f;
+    if (cena && cena->dur > 0.0f) {
+      double falta = cena->dur - cena->pos;
+      time_t t2 = agoraT + (time_t)(falta > 0.0 ? falta : 0.0);
+      struct tm lf; char h2[8], fim[40];
+      TxtLinha lfim;
+      localtime_r(&t2, &lf);
+      strftime(h2, sizeof h2, "%H:%M", &lf);
+      snprintf(fim, sizeof fim, i18n("Termina \xc3\xa0" "s %s"), h2);
+      lfim = txt_linha(TXT_PG_FIM, fim, 255, 255, 255, 255);
+      txt_desenhar_alpha(lfim, NV_TELA_W - PAUSAO_X - lfim.w, yR, a * 0.78f);
+    } }
+
+  // --- FICHA: medida antes, ancorada na base -------------------------------------
+  // A altura tem de ser conhecida para saber onde a primeira linha comeca.
   lKick = txt_linha(TXT_PLR_CORPO, "Você está assistindo", 214, 216, 222, 255);
   lTit  = txt_linha_corta(TXT_TITULO2, c->titulo, 255, 255, 255, 255, larg);
   alt = (float)lKick.h + 10.0f + (float)lTit.h + 8.0f;
@@ -166,8 +215,8 @@ void pausao_desenhar(Uint32 agora, float baseY) {
   // x = -1 mede sem desenhar. E o mesmo recurso que detail.c usa para saber a
   // altura da sinopse antes de decidir o resto da coluna.
   if (c->sinopse[0]) {
-    hSin = txt_bloco(TXT_DET_SIN, c->sinopse, 214, 216, 222, -1.0f, 0.0f,
-                     larg, PAUSAO_LD_SIN, 0.0f, PAUSAO_SIN_LINHAS);
+    hSin = txt_bloco_corta(TXT_DET_SIN, c->sinopse, 214, 216, 222, -1.0f, 0.0f,
+                           larg, PAUSAO_LD_SIN, 0.0f, PAUSAO_SIN_LINHAS);
     alt += hSin + 20.0f;
   }
   temCast = c->nElenco > 0;
@@ -176,24 +225,10 @@ void pausao_desenhar(Uint32 agora, float baseY) {
     alt += (float)lCast.h + 8.0f + PAUSAO_CHIP_H;
   }
 
-  // Sobe 24px entrando. E o unico movimento do painel: sem ele o bloco aparece
-  // de estalo e se le como falha de desenho, e com mais do que isso o texto
-  // ainda esta andando quando ja da para tentar ler.
+  // Sobe 24px entrando. E o unico movimento do painel.
   sobe = (1.0f - a) * 24.0f;
-  y = baseY - alt + sobe;
-  if (y < PAUSAO_TETO) y = PAUSAO_TETO;
-
-  // GRADACAO LEVE, e nao o cartao solido que esteve aqui por uma versao. O
-  // dono viu os dois e preferiu o texto direto sobre a cena: o cartao fechava
-  // um bloco preto no meio do quadro. O que sobra e um veu de baixo discreto,
-  // so o suficiente para o branco do texto ter contra o que se apoiar quando a
-  // cena e clara. A altura acompanha o bloco medido, e nao um valor fixo, para
-  // a gradacao nunca comecar acima do texto.
-  { float h = alt + PAUSAO_PAD * 2.0f;
-    float topo = y - PAUSAO_PAD;
-    if (topo + h < NV_TELA_H) h = NV_TELA_H - topo;
-    { GfxRect veu = { 0, topo, NV_TELA_W, h };
-      gfx_rect(veu, 0, GFX_VEU_BAIXO, 0, 0, 0, 0.0f, 0, 0, 0, PAUSAO_VEU_A * a); } }
+  y = NV_TELA_H - PAUSAO_BASE - alt + sobe;
+  if (y < PAUSAO_Y + 96.0f) y = PAUSAO_Y + 96.0f;   // nunca sobe sobre o selo
 
   txt_desenhar_alpha(lKick, PAUSAO_X, y, a * 0.62f);
   y += lKick.h + 10.0f;
@@ -202,18 +237,16 @@ void pausao_desenhar(Uint32 agora, float baseY) {
   if (temMeta) { txt_desenhar_alpha(lMeta, PAUSAO_X, y, a * 0.72f); y += lMeta.h + 6.0f; }
   if (temEp)   { txt_desenhar_alpha(lEp, PAUSAO_X, y, a * 0.90f);   y += lEp.h + 14.0f; }
   if (hSin > 0.0f) {
-    // PASSO ENTRE LINHAS, nao vao entre elas. O valor anterior era 8, e por
-    // isso as duas linhas da sinopse eram desenhadas quase uma sobre a outra —
-    // o "texto embolado" da foto. 40 e o mesmo passo que a pagina de titulo usa
-    // para este estilo (NV_DETW2_LD_SIN).
-    txt_bloco(TXT_DET_SIN, c->sinopse, 214, 216, 222, PAUSAO_X, y, larg,
-              PAUSAO_LD_SIN, a * 0.84f, PAUSAO_SIN_LINHAS);
+    // PASSO ENTRE LINHAS, nao vao entre elas (o "texto embolado" da foto, quando
+    // era 8). 40 e o passo da pagina de titulo para este estilo. Com reticencias
+    // quando a sinopse passa das linhas: cortar no meio da frase parecia erro.
+    txt_bloco_corta(TXT_DET_SIN, c->sinopse, 214, 216, 222, PAUSAO_X, y, larg,
+                    PAUSAO_LD_SIN, a * 0.84f, PAUSAO_SIN_LINHAS);
     y += hSin + 20.0f;
   }
 
   // ELENCO. Pastilhas so com o NOME, como o .player-pause-cast-chip do web
-  // (:7480) — o papel do personagem esta no CatItem, mas o web nao o mostra
-  // nesta tela e acrescenta-lo dobraria a largura de cada pastilha.
+  // (:7480). No vidro a pastilha e o proprio vidro fosco do app.
   if (temCast) {
     float x = PAUSAO_X;
     txt_desenhar_alpha(lCast, PAUSAO_X, y, a * 0.50f);
@@ -222,13 +255,34 @@ void pausao_desenhar(Uint32 agora, float baseY) {
       TxtLinha l = txt_linha(TXT_MINI, c->elenco[i].nome, 240, 241, 246, 255);
       float w = (float)l.w + PAUSAO_CHIP_PAD * 2.0f;
       GfxRect chip;
-      if (x + w > PAUSAO_X + larg) break;   // uma fileira so
+      if (x + w > NV_TELA_W - PAUSAO_X) break;   // uma fileira so
       chip.x = x; chip.y = y; chip.w = w; chip.h = PAUSAO_CHIP_H;
       // Raio e FRACAO do menor lado nesta API (ver gfx.h): 0.5 e a pilula.
-      gfx_cor(chip, 0.5f, 1, 1, 1, 0.14f * a);
+      if (vidro) gfx_vidro_painel(chip, 0.5f, 0.55f, a);
+      else       gfx_cor(chip, 0.5f, 1, 1, 1, 0.14f * a);
       txt_desenhar_alpha(l, x + PAUSAO_CHIP_PAD,
                          y + (PAUSAO_CHIP_H - (float)l.h) * 0.5f, a * 0.92f);
       x += w + PAUSAO_CHIP_GAP;
     }
+  }
+
+  // --- BARRA: de onde o filme parou, colada na borda de baixo, de ponta a ponta --
+  if (cena && cena->dur > 0.0f) {
+    float f = cena->pos / cena->dur;
+    GfxRect trilho = { 0, NV_TELA_H - PAUSAO_TRILHO_H, NV_TELA_W, PAUSAO_TRILHO_H };
+    GfxRect feito;
+    char t1[24], t2[24], tudo[52];
+    TxtLinha lt;
+    if (f < 0.0f) f = 0.0f;
+    if (f > 1.0f) f = 1.0f;
+    gfx_cor(trilho, 0.0f, 1, 1, 1, 0.24f * a);
+    feito = trilho; feito.w = NV_TELA_W * f;
+    if (feito.w > 0.5f) gfx_cor(feito, 0.0f, cena->fr, cena->fg, cena->fb, a);
+    fmtT(t1, sizeof t1, cena->pos);
+    fmtT(t2, sizeof t2, cena->dur);
+    snprintf(tudo, sizeof tudo, "%s / %s", t1, t2);
+    lt = txt_linha(TXT_PLR_CORPO, tudo, 255, 255, 255, 230);
+    txt_desenhar_alpha(lt, NV_TELA_W - PAUSAO_X - lt.w,
+                       NV_TELA_H - PAUSAO_TRILHO_H - 22.0f - (float)lt.h, a * 0.88f);
   }
 }
