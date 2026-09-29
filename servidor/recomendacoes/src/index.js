@@ -11,6 +11,7 @@
 
 import { rotaXtream } from "./xtream.js";
 import { rotaTrailerImdb, rotaTrailerYoutube } from "./trailer.js";
+import { rotaNoticia, rotaNoticiaImg } from "./noticia.js";
 
 const DIA = 86400;
 const RETENCAO = 90 * DIA;
@@ -548,6 +549,13 @@ export default {
     // pagina que embute o YouTube com origem valida. Regras em trailer.js.
     if (rota === "/v1/trailer/imdb" && req.method === "GET") return rotaTrailerImdb(url, fetch, caches.default);
     if (rota === "/v1/trailer/yt" && req.method === "GET") return rotaTrailerYoutube(url);
+
+    // NOTICIA COMPLETA (modal de noticia da Agenda na Samsung): o link do RSS
+    // -> pagina do veiculo -> texto e capa; e o repasse da capa (so image/*).
+    // Sem sessao, como /v1/noticias. Limites (SSRF, tetos, prazo, cache de
+    // 1 h) em noticia.js.
+    if (rota === "/v1/noticia" && req.method === "GET") return rotaNoticia(url, fetch, caches.default);
+    if (rota === "/v1/noticia/img" && req.method === "GET") return rotaNoticiaImg(url, fetch, caches.default);
 
     // NOTICIAS DE UM TITULO (Agenda, 1.3.11). O RSS de busca do Google News
     // nao manda CORS, e na Samsung (wgt em file://) o fetch morre antes de
