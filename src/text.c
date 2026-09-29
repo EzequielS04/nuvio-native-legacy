@@ -1033,6 +1033,10 @@ static float txt_bloco_impl(TxtEstilo estilo, const char *s, int r, int g, int b
       usado += leading; nLinhas++;
       if (maxLinhas > 0 && nLinhas >= maxLinhas) return usado;
       memcpy(linha, ini, np); linha[np] = 0;
+      // Separador "·" sozinho no comeco da linha nova e sobra da linha de
+      // cima ("... RELEASE ·" / "· NETFLIX"): quem separa ja ficou la. Some.
+      if (np == 2 && (unsigned char)ini[0] == 0xC2 && (unsigned char)ini[1] == 0xB7)
+        linha[0] = 0;
       if (reticencias && txt_largura(estilo, linha) > larg) {
         desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
                           alpha, 1);
