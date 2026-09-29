@@ -54,12 +54,19 @@
 #define FIL_CHAVE   192
 #define FIL_TITULO   96
 
-// Limite de fileiras da home. 7 e o pedido do dono; o teto continua sendo o
-// CAT_FIL_MAX (16) do web para este runtime, e abaixo de 3 a home deixa de ser
-// uma home.
+// Limite de fileiras da home. 7 e o pedido do dono; o teto e o CAT_FIL_MAX
+// (40, o do navegador de mesa), e abaixo de 3 a home deixa de ser uma home.
+// Era 16. Acima de FIL_LIMITE_SEGURO (o teto antigo, que rodou em TV de verdade)
+// a tela de Ajustes mostra o aviso de memoria e o modo seguro (seguro.h) passa
+// a vigiar a mudanca.
 #define FIL_LIMITE_MIN     3
-#define FIL_LIMITE_MAX    16
+#define FIL_LIMITE_MAX    40
 #define FIL_LIMITE_PADRAO  7
+// Ate aqui e o que sempre foi permitido sem aviso.
+#define FIL_LIMITE_SEGURO 16
+// Acima disto a mudanca entra no diario do modo seguro (reverte sozinha se o
+// app cair logo depois).
+#define FIL_LIMITE_VIGIADO 12
 
 // Formas de card que a home JA implementa (o enum TipoFileira de home.h). A
 // tela de Ajustes so oferece o que o desenho sabe fazer, e a traducao para

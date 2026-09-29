@@ -327,10 +327,19 @@ void cat_definir(const CatItem *lista, int n);
 //   5. colecoes com `pinToTop` vao na frente e nunca sao cortadas
 //   6. corta o total em `getHomeRowLimit()`
 //
-// O teto para NOS e 16: `HOME_MAX_ROWS_LEGACY_TV` em homeConstants.js, o ramo
+// O teto para NOS era 16: `HOME_MAX_ROWS_LEGACY_TV` em homeConstants.js, o ramo
 // que `isLegacyTvRuntime()` escolhe — e esta TV e exatamente esse caso. O 40 do
 // `HOME_MAX_ROWS_DEFAULT` e do navegador de mesa.
-#define CAT_FIL_MAX 16
+//
+// 40 desde a "Fileiras da home" ate 40 (pedido do dono, com aviso de memoria):
+// o mesmo numero do navegador de mesa, e o maior que a estrutura aguenta sem
+// mexer em mais nada. CONTA, nao medicao em TV: o custo de uma fileira e o dos
+// seus itens, e CatItem pesa 15,6 KB; 40 fileiras x 24 itens = 960 titulos
+// (~15 MB de catalogo) contra CAT_MAX = 2000, entao o vetor de itens continua
+// sendo o teto de verdade e nao estoura. Cada CatFileira pesa ~1 KB: os vetores
+// de fileira (40 x 1 KB = 40 KB) sao static onde eram de pilha — ver
+// cat_ler_cache, cat_trocar_continuar e montar().
+#define CAT_FIL_MAX 40
 
 typedef struct {
   char chave[192];   // homeCatalogKey: <addonId>_<tipo>_<catalogoId>

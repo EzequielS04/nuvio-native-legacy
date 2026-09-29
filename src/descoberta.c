@@ -1064,6 +1064,7 @@ static int lerCatalogo(const char *base, const char *tipo, const char *id,
 // "Amigos assistindo" (ini=12 n=2) virava "The Martian"/"Project Hail Mary"
 // sem nome. Por isso montar() monta em filsLote e so copia para ca junto com
 // o cat_definir_tudo que publica aquele mesmo lote. tests/homejanelas.sh.
+_Static_assert(FIL_LIMITE_MAX <= CAT_FIL_MAX, "o limite escolhido em Ajustes cabe no vetor de fileiras");
 static CatFileira filsMontadas[CAT_FIL_MAX];
 static int nFileirasMontadas;
 static CatFileira filsLote[CAT_FIL_MAX];
@@ -3038,7 +3039,8 @@ static void *montar(void *u) {
     // reentrada que isto quebre.
     Decl *decls = declsMontagem;
     int nDecl = 0, k;
-    CatFileira fil[CAT_FIL_MAX];
+    // static: 40 KB. montar() roda num fio so por vez (ver declsMontagem).
+    static CatFileira fil[CAT_FIL_MAX];
     int nFil = 0;
     // A fileira 0 e "Continuar assistindo", que ja foi montada acima. Ela e
     // SINTETICA: nao esta na ordem do web e nao pode ser desligada por chave —

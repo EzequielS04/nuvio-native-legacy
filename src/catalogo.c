@@ -744,7 +744,8 @@ int cat_ler_cache(const char *dirArte) {
   CacheCab c;
   FILE *f;
   CatItem *novo;
-  CatFileira lidas[CAT_FIL_MAX];
+  // static: 40 x 1 KB nao pertence a pilha. Roda uma vez, no arranque.
+  static CatFileira lidas[CAT_FIL_MAX];
   int nLidas = 0;
   caminhoCache(dirArte, caminho, sizeof caminho);
   f = fopen(caminho, "rb");
@@ -1573,7 +1574,8 @@ void cat_definir_tudo(const CatItem *lista, int qtd,
 // Roda sob pubTrava: a descoberta pode estar trocando o catalogo neste mesmo
 // instante, e duas trocas simultaneas liberariam o mesmo bloco duas vezes.
 void cat_trocar_continuar(const CatItem *lista, int qtd) {
-  CatFileira novas[CAT_FIL_MAX];
+  // static (40 KB): so e usado depois de pubTrava, que serializa as chamadas.
+  static CatFileira novas[CAT_FIL_MAX];
   CatItem *novo;
   int r, cw = -1, cwIni = 0, cwN = 0, delta, novoN, nv = 0;
   if (qtd < 0) qtd = 0;

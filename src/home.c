@@ -64,10 +64,14 @@ int player_aberto(void);
 #include "ponteiro.h"
 
 #define MAX_ARTE   64
-// 16, o teto do web para ESTE runtime: HOME_MAX_ROWS_LEGACY_TV em
-// js/ui/screens/home/homeConstants.js, que e o ramo escolhido por
-// isLegacyTvRuntime(). O HOME_MAX_ROWS_DEFAULT de 40 e do navegador de mesa.
-#define MAX_FIL    32
+// Era 32 para as 16 fileiras (CAT_FIL_MAX) do web neste runtime, mais o que a
+// home acrescenta por conta propria (grupos de colecao, social, retomada). Com
+// CAT_FIL_MAX em 40 (o HOME_MAX_ROWS_DEFAULT do web) o dobro seria 80, mas os
+// acrescimos nao crescem junto: 64 sobra para 40 + colecoes + social + retomada.
+// Custo: as tabelas por fileira aqui somam ~200 KB estaticos (Fileira pesa
+// 1,3 KB); nada disto mora na pilha.
+#define MAX_FIL    64
+_Static_assert(MAX_FIL >= CAT_FIL_MAX + 16, "a home precisa de folga sobre o teto do catalogo");
 // 13 e nao 12: sao 12 CARTAZES mais a coluna do card "Ver tudo", que ocupa a
 // posicao seguinte a ultima arte. Com 12 aqui, animFoco[r][12] escrevia fora do
 // vetor — o card nunca acendia ao receber foco e a memoria do vizinho era
@@ -1617,7 +1621,9 @@ static void sincronizarFileiras(void) {
   // saiam so a chave do foco, a coluna e os scrollX, e era a ausencia do
   // colunaLembrada que fazia a memoria de coluna morrer a cada republicacao.
   posCapturar();
-  Fileira antigas[MAX_FIL];
+  // static: com MAX_FIL em 64 isto sao ~82 KB, e a funcao ja carrega outro vetor
+  // do mesmo tamanho (arranjo). Roda so no fio de desenho.
+  static Fileira antigas[MAX_FIL];
   int nAntigas = nFileiras;
   memcpy(antigas, fileiras, sizeof antigas);
   int temDestaque = 0;
