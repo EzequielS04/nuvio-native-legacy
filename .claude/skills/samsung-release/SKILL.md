@@ -11,7 +11,7 @@ Quatro entregáveis. Cada um tem skill própria com os detalhes; esta é a ordem
 |---|---|---|---|
 | `.wgt` (WASM) | `samsung-wgt` | Tizen 5.5+ (2020+) | release normal `vX.Y.Z`, junto do `.ipk` da LG |
 | `.wgt` Tizen 4 exp | `samsung-wgt` (seção Tizen 4) | 2018–2019 | pre-release `native-tizen4-exp.N` |
-| `.tpk` 6+ (NUI GLWindow) | `samsung-tpk` | Tizen 6.0+ (2021+) | pre-release `native-tpk-exp.N` |
+| `.tpk` 6+ (NUI GLWindow) | `samsung-tpk` | Tizen 6.0+ (2021+) | **release normal `vX.Y.Z`** (preview), junto do `.ipk` e do `.wgt` |
 | `.tpk` 4/5 (TVGLApplication) | `samsung-tpk-legacy` | Tizen 4.0–5.5 (2018–2020) | mesma pre-release do `.tpk` |
 
 ## Ordem
@@ -40,6 +40,26 @@ Quatro entregáveis. Cada um tem skill própria com os detalhes; esta é a ordem
      `plataforma`: `"tizen"` alcança o `.wgt` e o `.tpk`; `"tizen-tpk"` só o
      `.tpk`; `"lg"` só a LG. Anúncio do próprio `.tpk` leva `tpk-preview` no
      `id` (o `.tpk` ignora esses; ver `src/avisos.c`).
+
+## O `.tpk` 6+ na esteira normal (desde 29/09/2026)
+
+O nativo Tizen 6+ virou artefato do release normal `vX.Y.Z` — anexado JUNTO do
+`.ipk` da LG e do `.wgt`, NÃO no lugar deles. É opt-in: quem quer o nativo baixa
+o `.tpk`, o resto segue no `.wgt`. Anexar os TRÊS de 6+ (`NuvioTpk60`,
+`NuvioTpk65`, `NuvioTpk`) com rótulo de arquivo por Tizen, e nas notas deixar
+claro que é **preview** (só o 6.0 foi confirmado em TV; 6.5/7/8/9 sem relato).
+
+REGRA para não quebrar o que funciona (host .NET não é pego pelo host falso):
+- Só entra na esteira o 6+ cujo host já foi provado — hoje o tronco (`fdc2d34`).
+- Mudança de host ainda NÃO confirmada em TV (ex.: zoom do trailer, auto-update)
+  fica em **canário à parte** (`canario-*` pre-release) até um testador confirmar;
+  só depois é dobrada no release normal.
+- O `.tpk` 4/5 (`samsung-tpk-legacy`) NÃO entra na esteira normal enquanto o
+  crash de sign-in (#180) não for resolvido — segue em pre-release própria.
+
+Passo de build na esteira: da worktree limpa, `bash tools/tpk.sh` gera os 4
+`.tpk` em `build/tpk/`; anexar só os 3 de 6+ ao `gh release create` do `vX.Y.Z`.
+O `.tpk` é grande (~24 MB cada); os três somam ~72 MB no release.
 
 ## Logs dos testadores
 
