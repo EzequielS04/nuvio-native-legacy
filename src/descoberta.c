@@ -4093,6 +4093,41 @@ static void episodiosDoAddon(int alvoItem, const char *serie, const char *titulo
   free(melhorCorpo);
 }
 
+// ITEM RASO (#176). Titulo aberto de "Salvos"/Biblioteca nao chega como o da
+// busca: o SalvoItem guarda so titulo, poster e meta, e a lista do Trakt
+// (trakt_lista) so titulo, imdb e a arte SINTETICA do metahub. Sem sinopse, sem
+// id do TMDB, com fundo e logo montados pelo id (que a busca nao tem) e
+// classificacao "14" cravada. A busca e as fileiras entram por deMeta, que le
+// tudo isso do mesmo /meta que buscarEps ja tem na mao — entao o que falta e
+// copiar de la, e o detalhe fica igual em qualquer entrada.
+//
+// Raso = sem sinopse. Um item completo nao e tocado. Poster e generos ficam
+// (o poster ja esta na tela; os generos buscarEps ja regrava).
+static void completarRaso(CatItem *dst, const char *corpo, const char *tipo) {
+  const char *m = corpo ? strstr(corpo, "\"meta\"") : NULL;
+  CatItem *cheio;
+  if (!m || !dst || dst->sinopse[0]) return;
+  cheio = malloc(sizeof *cheio);
+  if (!cheio) return;
+  if (deMeta(m, NULL, tipo, cheio)) {
+    snprintf(dst->sinopse, sizeof dst->sinopse, "%s", cheio->sinopse);
+    if (cheio->meta[0]) snprintf(dst->meta, sizeof dst->meta, "%s", cheio->meta);
+    if (cheio->nota > 0) dst->nota = cheio->nota;
+    if (cheio->tmdb > 0 && dst->tmdb <= 0) dst->tmdb = cheio->tmdb;
+    // Fundo e logo do /meta MANDAM, inclusive o logo vazio: o do metahub que
+    // o item raso montou pode nem existir, e a busca desenharia o nome.
+    if (cheio->backdrop[0]) {
+      snprintf(dst->backdrop, sizeof dst->backdrop, "%s", cheio->backdrop);
+      snprintf(dst->backdropCatalogo, sizeof dst->backdropCatalogo, "%s", cheio->backdropCatalogo);
+      snprintf(dst->backdropTmdb, sizeof dst->backdropTmdb, "%s", cheio->backdropTmdb);
+      snprintf(dst->backdropTrakt, sizeof dst->backdropTrakt, "%s", cheio->backdropTrakt);
+    }
+    snprintf(dst->logo, sizeof dst->logo, "%s", cheio->logo);
+    if (!strcmp(dst->classificacao, "14")) dst->classificacao[0] = 0;
+  }
+  free(cheio);
+}
+
 static void *buscarEps(void *u) {
   int alvoItem = epItem;
   const CatItem *orig = cat_item(alvoItem);
@@ -4260,6 +4295,7 @@ static void *buscarEps(void *u) {
               edit.temporadas[i2] = edit.temporadas[j2];
               edit.temporadas[j2] = tmp;
             } } }
+    completarRaso(&edit, corpo, ehFilme ? "movie" : "series");
     // Publica texto, generos e temporadas antes do enriquecimento de imagens.
     cat_atualizar_item(alvoItem, &edit);
     marco("detalhe: meta basico na tela");

@@ -151,6 +151,14 @@ static const char *META_FILME_OK =
   "{\"meta\":{\"id\":\"tt0111161\",\"type\":\"movie\",\"name\":\"The Shawshank Redemption\","
   "\"director\":[\"Frank Darabont\"],\"cast\":[\"Tim Robbins\"],\"videos\":[]}}";
 
+// Meta completo, como o Cinemeta devolve (#176): descricao, fundo, logo, ano.
+static const char *META_COMPLETO =
+  "{\"meta\":{\"id\":\"tt0000176\",\"type\":\"movie\",\"name\":\"Filme Salvo\","
+  "\"poster\":\"https://p.test/poster.jpg\",\"background\":\"https://p.test/fundo.jpg\","
+  "\"logo\":\"https://p.test/logo.png\",\"description\":\"Sinopse de verdade.\","
+  "\"releaseInfo\":\"2019\",\"runtime\":\"2h 1min\",\"moviedb_id\":4242,"
+  "\"imdbRating\":\"8.1\",\"genres\":[\"Drama\"],\"cast\":[\"Ator Um\"],\"videos\":[]}}";
+
 static char pedidos[16][600];
 static int nPedidos;
 
@@ -162,6 +170,7 @@ char *rede_baixar(const char *u, int t) {
     if (strstr(u, "/meta/movie/tt13293588.json"))  return strdup(META_FILME_ERRADO);
     if (strstr(u, "/meta/series/tt13293588.json")) return strdup(META_SERIE);
     if (strstr(u, "/meta/movie/tt0111161.json"))   return strdup(META_FILME_OK);
+    if (strstr(u, "/meta/movie/tt0000176.json"))   return strdup(META_COMPLETO);
   }
   if (strstr(u, "addon.test/SEGREDO/meta/series/tt13293588.json")) return strdup(META_SERIE_ADDON);
   return NULL;   // TMDB, outros addons: fora do teste
@@ -296,6 +305,48 @@ int main(void) {
   assert(!pediu("addon.test"));
   assert(cat_n_episodios(0) == 3);
   puts("ok  sem addon de meta a lista do Cinemeta fica como era");
+  // 8) ITEM RASO (#176): o que "Salvos" e a lista do Trakt entregam (titulo,
+  //    poster, fundo/logo do metahub, "14" do Trakt) sai do detalhe igual ao
+  //    que a busca entrega: sinopse, ano, tmdb, fundo e logo do /meta.
+  limparCacheMeta();
+  { CatItem it;
+    memset(&it, 0, sizeof it);
+    snprintf(it.imdb, sizeof it.imdb, "tt0000176");
+    snprintf(it.tipo, sizeof it.tipo, "movie");
+    snprintf(it.titulo, sizeof it.titulo, "Filme Salvo");
+    snprintf(it.poster, sizeof it.poster, "https://p.test/poster.jpg");
+    snprintf(it.backdrop, sizeof it.backdrop, "https://images.metahub.space/background/medium/tt0000176/img");
+    snprintf(it.logo, sizeof it.logo, "https://images.metahub.space/logo/medium/tt0000176/img");
+    snprintf(it.classificacao, sizeof it.classificacao, "14");
+    it.naLista = 1;
+    cat_definir_tudo(&it, 1, NULL, 0); }
+  abrir();
+  { const CatItem *ci = cat_item(0);
+    assert(ci);
+    assert(!strcmp(ci->sinopse, "Sinopse de verdade."));
+    assert(!strncmp(ci->meta, "2019", 4));
+    assert(ci->tmdb == 4242);
+    assert(!strcmp(ci->backdrop, "https://p.test/fundo.jpg"));
+    assert(!strcmp(ci->logo, "https://p.test/logo.png"));
+    assert(ci->classificacao[0] == 0);
+    assert(ci->naLista == 1);                            // o que era do item fica
+    assert(!strcmp(ci->poster, "https://p.test/poster.jpg")); }
+  puts("ok  item raso (salvos/Trakt) sai do detalhe com o meta da busca");
+  // Item que JA tem sinopse nao e tocado (o do catalogo/busca).
+  limparCacheMeta();
+  { CatItem it;
+    memset(&it, 0, sizeof it);
+    snprintf(it.imdb, sizeof it.imdb, "tt0000176");
+    snprintf(it.tipo, sizeof it.tipo, "movie");
+    snprintf(it.titulo, sizeof it.titulo, "Filme Salvo");
+    snprintf(it.poster, sizeof it.poster, "https://p.test/poster.jpg");
+    snprintf(it.backdrop, sizeof it.backdrop, "https://x.test/outro-fundo.jpg");
+    snprintf(it.sinopse, sizeof it.sinopse, "Sinopse do catalogo.");
+    cat_definir_tudo(&it, 1, NULL, 0); }
+  abrir();
+  assert(!strcmp(cat_item(0)->sinopse, "Sinopse do catalogo."));
+  assert(!strcmp(cat_item(0)->backdrop, "https://x.test/outro-fundo.jpg"));
+  puts("ok  item completo nao e sobrescrito");
   puts("detalheanime: tudo ok");
   return 0;
 }
