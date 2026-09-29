@@ -225,6 +225,7 @@ int  desc_tmdb_elenco(const char *json, CatItem *d);
 int  desc_meta_tipos(const char *tipo, const char *saida[2]);
 void desc_meta_chave(char *dst, size_t n, const char *tipo, const char *id);
 int  desc_meta_tem_temporadas(const char *corpo);
+int  desc_meta_n_episodios(const char *corpo);
 
 // Busca o meta de um titulo que o catalogo NAO tem e o acrescenta ao fim.
 // Nao bloqueia. Serve ao credito de um ator e ao item de "Mais como este":

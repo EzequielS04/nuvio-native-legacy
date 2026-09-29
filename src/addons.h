@@ -120,7 +120,7 @@ const Legenda *addons_legenda(int i);
 //
 // A conta pode ter addon DESLIGADO, e ele continua na lista: some das consultas
 // mas aparece na tela, para poder ser religado sem pegar o celular.
-enum { ADD_CATALOGO = 0, ADD_STREAM, ADD_LEGENDA };
+enum { ADD_CATALOGO = 0, ADD_STREAM, ADD_LEGENDA, ADD_META };
 
 const char *addons_nome(int i);
 int  addons_ativo(int i);

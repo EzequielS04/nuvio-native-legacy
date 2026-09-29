@@ -3994,6 +3994,18 @@ int desc_meta_tem_temporadas(const char *corpo) {
   return 0;
 }
 
+// Quantos videos com temporada > 0 a resposta do /meta traz.
+int desc_meta_n_episodios(const char *corpo) {
+  const char *v = corpo ? js_array(corpo, NULL, "videos") : NULL;
+  int n = 0;
+  while (v) {
+    const char *f = js_fim(v);
+    if ((int)js_num(v, f, "season", -1) > 0) n++;
+    v = js_prox(f);
+  }
+  return n;
+}
+
 static int publicarEpisodios(const char *corpo, int alvoItem, const char *titulo) {
 // Em par com CAT_EP_MAX (catalogo.c): um titulo que caiba no store nao pode
 // truncar no parse, e um que nao caiba trunca aqui em vez de zerar os outros.
@@ -4035,6 +4047,50 @@ static int publicarEpisodios(const char *corpo, int alvoItem, const char *titulo
   printf("[desc] %s: %d episodios publicados antes dos extras\n", titulo, n);
   fflush(stdout);
   return n;
+}
+
+// O Cinemeta as vezes conhece MENOS episodios que o addon de metadados do
+// usuario (#174: "Mis muertos tristes" tinha 1 de 4; #175: a serie so estava
+// completa noutra fonte). Pergunta o /meta/series de cada addon ativo que
+// declara o resource "meta" e, se algum trouxer mais episodios que o Cinemeta,
+// publica a lista dele no lugar. So troca por lista MAIOR: quem ja estava
+// completo continua como estava. A URL do addon carrega credencial, entao o
+// log diz so o nome.
+static void episodiosDoAddon(int alvoItem, const char *serie, const char *titulo,
+                             int nCine) {
+  char *melhorCorpo = NULL;
+  const char *melhorNome = "";
+  int melhor = nCine, i, n = addons_n();
+  for (i = 0; i < n; i++) {
+    char url[700], chave[40], *c2;
+    const char *base;
+    unsigned h = 2166136261u;
+    int n2;
+    if (!addons_ativo(i) || !addons_sondado(i) || !addons_fornece(i, ADD_META)) continue;
+    base = addons_base(i);
+    if (!base || !base[0] || strstr(base, "cinemeta")) continue;
+    for (const char *q = base; *q; q++) h = (h ^ (unsigned char)*q) * 16777619u;
+    snprintf(chave, sizeof chave, "%08x/%s", h, serie);
+    snprintf(url, sizeof url, "%s/meta/series/%s.json", base, serie);
+    c2 = metaCacheObter(chave);
+    if (!c2) {
+      c2 = rede_baixar(url, 15);
+      if (!c2) continue;
+      metaCacheGuardar(chave, c2);
+    }
+    n2 = desc_meta_n_episodios(c2);
+    if (n2 > melhor) {
+      free(melhorCorpo);
+      melhorCorpo = c2; melhor = n2; melhorNome = addons_nome(i);
+    } else free(c2);
+  }
+  if (!melhorCorpo) return;
+  printf("[desc] %s: %s tem %d episodios contra %d do Cinemeta; usando a lista do addon\n",
+         titulo, melhorNome, melhor, nCine);
+  fflush(stdout);
+  publicarEpisodios(melhorCorpo, alvoItem, titulo);
+  arte_reserva_episodios(serie, melhorCorpo);
+  free(melhorCorpo);
 }
 
 static void *buscarEps(void *u) {
@@ -4108,11 +4164,12 @@ static void *buscarEps(void *u) {
     base.tmdb = 0;
   }
   if (!ehFilme) {
-    publicarEpisodios(corpo, alvoItem, it->titulo);
+    int nCine = publicarEpisodios(corpo, alvoItem, it->titulo);
     // Temporada e data de cada episodio para a reserva do still: quando o
     // TMDB divide a serie em outras temporadas (One Piece), e por elas que o
     // still do TMDB e achado (artereserva.h).
     arte_reserva_episodios(serie, corpo);
+    episodiosDoAddon(alvoItem, serie, it->titulo, nCine);
   }
   // O MAPA DE EPISODIOS VISTOS NAO E PEDIDO AQUI, e essa linha existe para dizer
   // por que: extras.c JA baixa /shows/<id>/progress/watched ao abrir o titulo,

@@ -204,6 +204,23 @@ int main(void) {
     if (!addons_motivo_vazio(m, sizeof m)) snprintf(m, sizeof m, "(sem causa)");
     conferirTexto("channel mudo, tv vazio", m, "Canal TV não tem fonte para este canal agora"); }
 
+  // RESOURCE "meta" (#174/#175), num addon proprio no fim para nao mexer nos
+  // nomes e capacidades que as verificacoes acima leem. Duas formas do
+  // protocolo (objeto e string); quem nao declara fica sem.
+  { int a = addons_n(), b, c;
+    addons_adicionar("Meta A", "https://meta-a.test/manifest.json");
+    addons_adicionar("Meta B", "https://meta-b.test/manifest.json");
+    addons_adicionar("Meta C", "https://meta-c.test/manifest.json");
+    b = a + 1; c = a + 2;
+    addons_manifesto_lido(a, "{\"id\":\"m.a\",\"name\":\"Meta A\",\"resources\":"
+                             "[\"catalog\",{\"name\":\"meta\",\"types\":[\"series\"]}]}");
+    addons_manifesto_lido(b, "{\"id\":\"m.b\",\"name\":\"Meta B\",\"resources\":[\"meta\",\"subtitles\"]}");
+    addons_manifesto_lido(c, "{\"id\":\"m.c\",\"name\":\"Meta C\",\"resources\":[\"stream\"]}");
+    conferir("meta (objeto)", addons_fornece(a, ADD_META), 1);
+    conferir("meta (string)", addons_fornece(b, ADD_META), 1);
+    conferir("meta (nao declara)", addons_fornece(c, ADD_META), 0);
+    conferir("legenda segue lida do manifesto", addons_fornece(b, ADD_LEGENDA), 1); }
+
   remove(caminho);
   rmdir(dir);
   if (falhas) { printf("%d falha(s)\n", falhas); return 1; }

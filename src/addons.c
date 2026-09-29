@@ -39,6 +39,7 @@
 static struct {
   char nome[64]; char base[600];
   int fonte, catalogo, legenda;
+  int meta;      // declara o resource "meta" (ficha e lista de episodios)
   int ativo, sondado;
   char id[96];   // "id" do manifesto; as colecoes da conta apontam para ele
   // Catalogos de canal do manifesto (ver addons_catalogos_canal). `canalLido`
@@ -597,6 +598,7 @@ int addons_fornece(int i, int oque) {
   if (i < 0 || i >= nAddon) return 0;
   if (oque == ADD_CATALOGO) return addon[i].catalogo;
   if (oque == ADD_STREAM)   return addon[i].fonte;
+  if (oque == ADD_META)     return addon[i].meta;
   return addon[i].legenda;
 }
 int addons_alternar(int i) {
@@ -675,7 +677,7 @@ static int sondaViva;
 
 static void capacidadesDoManifesto(int i, const char *corpo) {
   const char *r = strstr(corpo, "\"resources\"");
-  int cat = 0, str = 0, leg = 0;
+  int cat = 0, str = 0, leg = 0, met = 0;
   // O ID E O NOME VEM PRIMEIRO, ANTES DE QUALQUER RETORNO CEDO.
   //
   // Estavam no fim da funcao, depois de tres `return` que dependem de
@@ -757,13 +759,15 @@ static void capacidadesDoManifesto(int i, const char *corpo) {
       cat = strstr(trecho, "catalog")   != NULL;
       str = strstr(trecho, "stream")    != NULL;
       leg = strstr(trecho, "subtitles") != NULL;
+      met = strstr(trecho, "\"meta\"") != NULL;
       free(trecho); } }
   addon[i].catalogo = cat;
   addon[i].fonte    = str;
   addon[i].legenda  = leg;
+  addon[i].meta     = met;
   addon[i].sondado  = 1;
-  printf("[addons] %s: catalogo=%d stream=%d legenda=%d\n",
-         addon[i].nome, cat, str, leg);
+  printf("[addons] %s: catalogo=%d stream=%d legenda=%d meta=%d\n",
+         addon[i].nome, cat, str, leg, met);
   fflush(stdout);
 }
 

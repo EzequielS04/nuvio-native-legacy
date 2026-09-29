@@ -98,6 +98,8 @@ int dados_apagar(const char *nome) {
 int   addons_n(void)                   { return 1; }
 const char *addons_base(int i)         { (void)i; return BASE; }
 int   addons_ativo(int i)              { (void)i; return 1; }
+int   addons_fornece(int i, int oque)     { (void)i; (void)oque; return 0; }
+int   addons_sondado(int i)              { (void)i; return 0; }
 const char *addons_id_manifesto(int i) { (void)i; return AID; }
 const char *addons_nome(int i)         { (void)i; return "Addon"; }
 unsigned addons_versao(void)           { return 1; }

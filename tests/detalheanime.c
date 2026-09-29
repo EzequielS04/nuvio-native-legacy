@@ -35,6 +35,7 @@ const char *i18n(const char *s)         { return s; }
 const char *dados_dir(void)             { return ""; }
 const char *sessao_usuario(void)        { return ""; }
 int         perfis_ativo(void)          { return 1; }
+int   ajustes_itens_fileira(void)          { return 12; }   // padrao (#163)
 unsigned homeestado_geracao(void) { return 1; }
 int homeestado_contexto_valido(void) { return 0; }
 int homeestado_tem_fileira(const char *chave) { (void)chave; return 0; }
@@ -113,8 +114,12 @@ int   trakt_enfeitar_lote(CatItem *s, int n) { (void)s; (void)n; return 0; }
 int   trakt_lista(const char *q, CatItem *s, int m) { (void)q; (void)s; (void)m; return 0; }
 int   trakt_social(CatItem *s, int m)      { (void)s; (void)m; return 0; }
 const char *nuvem_trakt_cliente(void)      { return ""; }
-int   addons_n(void)                       { return 0; }
-const char *addons_base(int i)             { (void)i; return ""; }
+// Um addon de metadados, ligado so no caso 7 (o resto do teste roda sem addon).
+static int addonMeta;
+int   addons_n(void)                       { return addonMeta ? 1 : 0; }
+int   addons_sondado(int i)                { (void)i; return 1; }
+int   addons_fornece(int i, int oque)      { (void)i; return oque == ADD_META; }
+const char *addons_base(int i)             { (void)i; return addonMeta ? "https://addon.test/SEGREDO" : ""; }
 const char *addons_id_manifesto(int i)     { (void)i; return ""; }
 const char *addons_nome(int i)            { (void)i; return "addon"; }
 unsigned addons_versao(void)             { return 1; }   // estatico no teste
@@ -135,6 +140,13 @@ static const char *META_SERIE =
   "{\"id\":\"tt13293588:1:1\",\"season\":1,\"episode\":1,\"name\":\"Jobless Reincarnation\"},"
   "{\"id\":\"tt13293588:1:2\",\"season\":1,\"episode\":2,\"name\":\"Getting Ahead of Myself\"},"
   "{\"id\":\"tt13293588:2:1\",\"season\":2,\"episode\":1,\"name\":\"The Brokenhearted Mage\"}]}}";
+// O addon do usuario conhece 5 episodios da mesma serie; o Cinemeta so 3.
+static const char *META_SERIE_ADDON =
+  "{\"meta\":{\"id\":\"tt13293588\",\"type\":\"series\","
+  "\"name\":\"Mushoku Tensei\",\"videos\":["
+  "{\"season\":1,\"episode\":1,\"name\":\"A\"},{\"season\":1,\"episode\":2,\"name\":\"B\"},"
+  "{\"season\":1,\"episode\":3,\"name\":\"C\"},{\"season\":2,\"episode\":1,\"name\":\"D\"},"
+  "{\"season\":2,\"episode\":2,\"name\":\"E\"}]}}";
 static const char *META_FILME_OK =
   "{\"meta\":{\"id\":\"tt0111161\",\"type\":\"movie\",\"name\":\"The Shawshank Redemption\","
   "\"director\":[\"Frank Darabont\"],\"cast\":[\"Tim Robbins\"],\"videos\":[]}}";
@@ -151,7 +163,8 @@ char *rede_baixar(const char *u, int t) {
     if (strstr(u, "/meta/series/tt13293588.json")) return strdup(META_SERIE);
     if (strstr(u, "/meta/movie/tt0111161.json"))   return strdup(META_FILME_OK);
   }
-  return NULL;   // TMDB, addons: fora do teste
+  if (strstr(u, "addon.test/SEGREDO/meta/series/tt13293588.json")) return strdup(META_SERIE_ADDON);
+  return NULL;   // TMDB, outros addons: fora do teste
 }
 char *rede_baixar_com(const char *u, int t, const char *const *c) {
   (void)c; return rede_baixar(u, t); }
@@ -263,6 +276,26 @@ int main(void) {
     assert(desc_meta_tipos("", t) == 2);
     assert(desc_meta_tem_temporadas(META_SERIE));
     assert(!desc_meta_tem_temporadas(META_FILME_ERRADO)); }
+  // 7) Cinemeta com MENOS episodios que o addon de metadados (#174, #175): a
+  //    lista do addon entra no lugar. Com o addon trazendo igual ou menos, a
+  //    do Cinemeta fica.
+  limparCacheMeta();
+  addonMeta = 1;
+  catalogoCom("tt13293588", "series", "Mushoku Tensei: Jobless Reincarnation");
+  abrir();
+  assert(pediu("addon.test/SEGREDO/meta/series/tt13293588.json"));
+  assert(cat_n_episodios(0) == 5);
+  puts("ok  addon com mais episodios que o Cinemeta: lista do addon");
+  limparCacheMeta();
+  assert(desc_meta_n_episodios(META_SERIE) == 3);
+  assert(desc_meta_n_episodios(META_FILME_ERRADO) == 0);
+  assert(desc_meta_n_episodios(NULL) == 0);
+  addonMeta = 0;
+  catalogoCom("tt13293588", "series", "Mushoku Tensei: Jobless Reincarnation");
+  abrir();
+  assert(!pediu("addon.test"));
+  assert(cat_n_episodios(0) == 3);
+  puts("ok  sem addon de meta a lista do Cinemeta fica como era");
   puts("detalheanime: tudo ok");
   return 0;
 }

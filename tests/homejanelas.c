@@ -255,6 +255,8 @@ int   fil_podar_catalogos(const char *const *ids, const char *const *bases, int 
 int   fil_addon_novo(const char *id, const char *base) { (void)id; (void)base; return 0; }
 int   addons_perfil_da_lista(void)         { return 0; }
 int   addons_ativo(int i)                  { (void)i; return 1; }
+int   addons_fornece(int i, int oque)     { (void)i; (void)oque; return 0; }
+int   addons_sondado(int i)              { (void)i; return 0; }
 int   fil_limite(void)                     { return 16; }
 int   fil_oculta(const char *c)            { (void)c; return 0; }
 // Dubles da escolha da cota (#126): nada escolhido na TV, e o registro dos
