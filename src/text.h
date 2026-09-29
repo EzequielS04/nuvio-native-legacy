@@ -80,6 +80,13 @@ extern int    txt_rasterizadas;
 // nao cabe no que a tela desenha, e o texto pisca.
 extern int    txt_despejos;
 extern double txt_ms;
+// Linhas recusadas por falta de orcamento de rasterizacao (voltaram vazias).
+// Leia a diferenca antes/depois de desenhar um bloco: zero = o bloco esta
+// inteiro na tela; diferente de zero = ainda faltam linhas (proximo quadro).
+extern int    txt_pendentes;
+// Largura em unidades de layout que txt_linha() daria, SEM rasterizar nem
+// gastar orcamento. Para medir/quebrar texto; nao desenha nada.
+int  txt_largura(TxtEstilo estilo, const char *s);
 
 // `dirRecursos` e a pasta que contem fonts/. No aparelho e a pasta do app; no
 // Mac, a pasta do pacote — sem esse parametro a fonte so era procurada ao lado
