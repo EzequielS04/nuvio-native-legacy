@@ -14,6 +14,7 @@
   <ItemGroup>
     <Compile Include="Program40.cs" />
     <Compile Include="../Video.cs" />
+    <Compile Include="../Carga.cs" />
     <PackageReference Include="Tizen.NET" Version="4.0.*"><ExcludeAssets>Runtime</ExcludeAssets></PackageReference>
     <PackageReference Include="Tizen.NET.Sdk" Version="1.1.*" />
     <!-- TVGLApplication (janela GL do Tizen 4/5) mora aqui; e o que o

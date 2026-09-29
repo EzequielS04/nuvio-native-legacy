@@ -208,14 +208,38 @@ namespace NuvioTpk
             // do pacote (4/5 nao procurava; no 6.5 ninguem mediu, #170), o
             // DllImport("libnuvio.so") casa pelo soname com a ja carregada.
             string so = IOPath.Combine(IOPath.GetFullPath(IOPath.Combine(DirectoryInfo.Resource, "..")), "lib", "libnuvio.so");
+
+            // AUTO-ATUALIZACAO (opt-in por staging verificado): SO quando ha uma
+            // libnuvio.so encenada e VERIFICADA mais nova que a empacotada, ela e
+            // memfd-carregada aqui (RTLD_GLOBAL -> os DllImport-por-soname passam a
+            // resolver nela). SEM staging, este 6+ nao usa memfd nenhum: cai no
+            // dlopen simples de sempre, byte a byte igual ao anterior. Qualquer
+            // falha no staging apaga o staging e volta para a empacotada — a
+            // tentativa de atualizar nunca impede o app de abrir.
             Etapa("begin dlopen-so");
-            dlerror();
-            if (dlopen(so, 2 | 0x100) == IntPtr.Zero)
+            bool carregou = false;
+            try
             {
-                string e = Marshal.PtrToStringAnsi(dlerror());
-                Etapa("fail dlopen-so " + e);
-                Erro("The TV did not let Nuvio load its native library.", so + ": " + (string.IsNullOrEmpty(e) ? "refused without a message" : e));
-                return;
+                string staged = NvCarga.DecidirStaged(dados, NvCarga.VersaoEmpacotada(DirectoryInfo.Resource), out string _);
+                if (staged != null)
+                {
+                    IntPtr h = NvCarga.MemfdDlopen(File.ReadAllBytes(staged), out string _);
+                    if (h != IntPtr.Zero) { carregou = true; Etapa("note loaded staged lib by memfd"); }
+                    else { Etapa("note staged lib failed, using the bundled one"); NvCarga.ApagarStaged(dados); }
+                }
+            }
+            catch { try { NvCarga.ApagarStaged(dados); } catch { } carregou = false; }
+
+            if (!carregou)
+            {
+                dlerror();
+                if (dlopen(so, 2 | 0x100) == IntPtr.Zero)
+                {
+                    string e = Marshal.PtrToStringAnsi(dlerror());
+                    Etapa("fail dlopen-so " + e);
+                    Erro("The TV did not let Nuvio load its native library.", so + ": " + (string.IsNullOrEmpty(e) ? "refused without a message" : e));
+                    return;
+                }
             }
             soCarregada = true;
             Etapa("ok dlopen-so");

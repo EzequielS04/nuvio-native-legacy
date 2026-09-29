@@ -152,7 +152,15 @@ namespace NuvioTpk
             var dir = Tizen.Applications.Application.Current.DirectoryInfo;
             string dados = dir.Data;
             string raiz = Path.GetFullPath(Path.Combine(dir.Resource, ".."));
-            string so = Path.Combine(raiz, "lib", "libnuvio.so");
+            string bundled = Path.Combine(raiz, "lib", "libnuvio.so");
+
+            // AUTO-ATUALIZACAO: se ha uma libnuvio.so encenada e VERIFICADA mais
+            // nova que a empacotada, CarregaNativo a carrega pela mesma rota memfd
+            // (a lib do 4/5 SEMPRE entra por memfd/ELF, entao aqui so muda QUAL
+            // arquivo). Se a encenada falhar por qualquer motivo, apaga o staging e
+            // tenta a empacotada — atualizar nunca impede o app de abrir.
+            string staged = NvCarga.DecidirStaged(dados, NvCarga.VersaoEmpacotada(dir.Resource), out string _);
+            string so = staged ?? bundled;
 
             // Rastro: o arquivo do arranque anterior vira -anterior, e a etapa
             // em que ele parou (se parou) vai para a tela depois que o app subir.
@@ -162,6 +170,12 @@ namespace NuvioTpk
             string falhaMemfd, falhaElf;
             if (!CarregaNativo(so, out falhaMemfd, out falhaElf))
             {
+                if (staged != null)
+                {
+                    Etapa("note staged lib failed, falling back to the bundled one");
+                    NvCarga.ApagarStaged(dados);
+                    if (CarregaNativo(bundled, out falhaMemfd, out falhaElf)) goto carregado;
+                }
                 Etapa("note launch failed: native library did not load");
                 Erro("A TV nao deixou o Nuvio nativo carregar.",
                      "memfd (syscall 385): " + falhaMemfd,
@@ -169,6 +183,7 @@ namespace NuvioTpk
                      "montagem: " + Montagem(raiz));
                 return;
             }
+            carregado:;
 
             try
             {

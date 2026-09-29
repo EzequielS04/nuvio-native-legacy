@@ -148,6 +148,9 @@ for p in NuvioTpk40 NuvioTpk60 NuvioTpk65 NuvioTpk; do
   if [ "$p" = NuvioTpk40 ]; then cp "$SAIDA/libnuvio-tpk40.so" "$H/lib/libnuvio.so"
   else cp "$SAIDA/libnuvio.so" "$H/lib/"; fi
   cp -R "$ARTE" "$H/res/art"
+  # Versao EMPACOTADA para a auto-atualizacao (tizen-tpk/Carga.cs): o host so
+  # aplica uma libnuvio.so encenada em data/ se ela for mais nova que isto.
+  printf '%s' "$VER" > "$H/res/versao.txt"
   cp -R deploy/app/fonts "$H/res/fonts"
   # Clipe mudo do canario de audio (#137, Video.PrimeAudio); so o host 6+ usa.
   [ "$p" = NuvioTpk40 ] || cp tizen-tpk/silencio.mp4 "$H/res/"
@@ -184,3 +187,15 @@ if [ -n "$CANARIO" ]; then
   done
   ls -la "$SAIDA/$CANARIO"
 fi
+
+# ANEXO DA AUTO-ATUALIZACAO. A release publica ESTA .so (mesma dos quatro
+# pacotes) com o sufixo que src/atualizacao.c (acharSo) procura; o GitHub anexa
+# o `digest` sha256, que e a barreira de seguranca do staging. Sem este anexo na
+# release, o app simplesmente nao oferece a auto-atualizacao (cai na pagina).
+cp "$SAIDA/libnuvio.so" "$SAIDA/libnuvio-$VER-tpk-arm.so"
+echo "  $SAIDA/libnuvio-$VER-tpk-arm.so (anexo de auto-atualizacao; suba na release)"
+# O 4/5 roda a lib SEM TLS (libnuvio-tpk40.so): anexo proprio, que so o host
+# 4/5 procura (atualizacao.c com NV_TPK40). Baixar a comum ali quebraria o
+# carregador ELF, que recusa PT_TLS.
+cp "$SAIDA/libnuvio-tpk40.so" "$SAIDA/libnuvio-$VER-tpk40-arm.so"
+echo "  $SAIDA/libnuvio-$VER-tpk40-arm.so (anexo de auto-atualizacao do 4/5)"

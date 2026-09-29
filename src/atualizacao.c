@@ -34,6 +34,88 @@
 #define NV_VERSAO "dev"
 #endif
 
+// ===================== AUTO-ATUALIZACAO DO .tpk (SO NV_TPK) =====================
+// Numa TV Samsung o Nuvio nativo E a libnuvio.so (UI, catalogo, player, sync); o
+// host .NET quase nunca muda. Este bloco deixa o app se atualizar SEM o usuario
+// reinstalar o .tpk: quando a release anexa uma libnuvio.so mais nova para esta
+// ABI, baixamos por HTTPS, CONFERIMOS o sha256 e so entao ENCENAMOS o arquivo em
+// data/ (staging). O host, no proximo arranque, memfd-carrega a .so encenada em
+// vez da empacotada (Program.cs / Program40.cs).
+//
+// SEGURANCA: isto carrega CODIGO NATIVO REMOTO. A unica barreira e o sha256, e
+// ele vem do MESMO lugar da checagem de versao — o campo `digest` do anexo no
+// JSON da release do GitHub, por HTTPS (AT_URL). E o mesmo campo ja usado para o
+// ipkHash da LG. Nunca carregamos em processo aqui: so encenamos; quem carrega
+// e o host, no proximo arranque, e so depois de reconferir o hash do arquivo
+// encenado. Em QUALQUER duvida o host apaga o staging e volta para a empacotada.
+#ifdef NV_TPK
+#include <stdint.h>
+#include <unistd.h>
+#include <strings.h>
+
+// SHA-256 compacto (FIPS 180-4). So para conferir o anexo baixado; nao ha
+// sha256 alcancavel sob NV_TPK (a libcrypto do aparelho nao e garantida).
+typedef struct { uint32_t h[8]; uint64_t n; unsigned char b[64]; size_t k; } At_Sha;
+static void at_sha_bloco(At_Sha *s, const unsigned char *p) {
+  static const uint32_t K[64] = {
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2 };
+  uint32_t w[64], a,b,c,d,e,f,g,h; int i;
+  for (i = 0; i < 16; i++)
+    w[i] = (uint32_t)p[i*4]<<24 | (uint32_t)p[i*4+1]<<16 | (uint32_t)p[i*4+2]<<8 | p[i*4+3];
+  for (i = 16; i < 64; i++) {
+    uint32_t s0 = (w[i-15]>>7|w[i-15]<<25) ^ (w[i-15]>>18|w[i-15]<<14) ^ (w[i-15]>>3);
+    uint32_t s1 = (w[i-2]>>17|w[i-2]<<15) ^ (w[i-2]>>19|w[i-2]<<13) ^ (w[i-2]>>10);
+    w[i] = w[i-16] + s0 + w[i-7] + s1;
+  }
+  a=s->h[0];b=s->h[1];c=s->h[2];d=s->h[3];e=s->h[4];f=s->h[5];g=s->h[6];h=s->h[7];
+  for (i = 0; i < 64; i++) {
+    uint32_t S1 = (e>>6|e<<26) ^ (e>>11|e<<21) ^ (e>>25|e<<7);
+    uint32_t ch = (e&f) ^ (~e&g);
+    uint32_t t1 = h + S1 + ch + K[i] + w[i];
+    uint32_t S0 = (a>>2|a<<30) ^ (a>>13|a<<19) ^ (a>>22|a<<10);
+    uint32_t maj = (a&b) ^ (a&c) ^ (b&c);
+    uint32_t t2 = S0 + maj;
+    h=g;g=f;f=e;e=d+t1;d=c;c=b;b=a;a=t1+t2;
+  }
+  s->h[0]+=a;s->h[1]+=b;s->h[2]+=c;s->h[3]+=d;s->h[4]+=e;s->h[5]+=f;s->h[6]+=g;s->h[7]+=h;
+}
+static void at_sha_init(At_Sha *s) {
+  s->h[0]=0x6a09e667;s->h[1]=0xbb67ae85;s->h[2]=0x3c6ef372;s->h[3]=0xa54ff53a;
+  s->h[4]=0x510e527f;s->h[5]=0x9b05688c;s->h[6]=0x1f83d9ab;s->h[7]=0x5be0cd19;
+  s->n=0;s->k=0;
+}
+static void at_sha_up(At_Sha *s, const unsigned char *p, size_t n) {
+  s->n += (uint64_t)n * 8;
+  while (n) {
+    size_t take = 64 - s->k; if (take > n) take = n;
+    memcpy(s->b + s->k, p, take); s->k += take; p += take; n -= take;
+    if (s->k == 64) { at_sha_bloco(s, s->b); s->k = 0; }
+  }
+}
+static void at_sha_fim(At_Sha *s, char *hex65) {
+  unsigned char len[8]; int i;
+  uint64_t bits = s->n;
+  unsigned char um = 0x80;
+  for (i = 0; i < 8; i++) len[7-i] = (unsigned char)(bits >> (i*8));
+  at_sha_up(s, &um, 1);
+  while (s->k != 56) { unsigned char z = 0; at_sha_up(s, &z, 1); }
+  at_sha_up(s, len, 8);
+  for (i = 0; i < 8; i++)
+    snprintf(hex65 + i*8, 9, "%08x", s->h[i]);
+}
+// sha256 hex de um buffer inteiro em memoria -> hex65 (64 chars + NUL).
+static void at_sha256_hex(const unsigned char *buf, size_t n, char *hex65) {
+  At_Sha s; at_sha_init(&s); at_sha_up(&s, buf, n); at_sha_fim(&s, hex65);
+}
+#endif
+
 #define AT_URL   "https://api.github.com/repos/iqui27/nuvio-native-legacy/releases/latest"
 #define AT_ARQ   "atualizacao-vista.txt"
 #define AT_PAGINA "https://github.com/iqui27/nuvio-native-legacy/releases"
@@ -73,6 +155,13 @@ static char notas[6144];          // texto ja limpo, linhas separadas por \n
 // alvo nao sabe instalar, e ai nem se procura).
 static char ipkUrl[512];
 static char ipkHash[80];          // sha256 em hex; vazio quando a release nao diz
+#ifdef NV_TPK
+// Anexo libnuvio.so desta ABI (auto-atualizacao do .tpk). soUrl/soHash vem do
+// JSON da release; soVer e a tag (== tagNova) que essa .so entrega.
+static char soUrl[512];
+static char soHash[80];
+static char soVer[32];
+#endif
 
 // INSTALAR DE DENTRO DO APP so existe no webOS, e a razao e de plataforma:
 // aqui o app roda como ROOT (webosbrew) e alcanca o luna-send, que e quem fala
@@ -201,6 +290,29 @@ static int terminaEm(const char *s, size_t n, const char *sufixo) {
   return n >= k && !strncmp(s + n - k, AT_SUFIXO2, k);
 }
 
+// O sha256 hex do anexo cuja browser_download_url comeca em `ini`. O campo
+// `digest` vem ANTES do browser_download_url dentro do mesmo anexo (ordem do
+// JSON do GitHub: ... size, digest, download_count, ..., browser_download_url),
+// entao a busca e PARA TRAS a partir da url — ir para frente pegaria o digest do
+// anexo SEGUINTE. Escreve "" quando o anexo nao tem digest.
+static void hashAntesDe(const char *corpo, const char *ini, char *hash, size_t tamHash) {
+  const char *d = NULL, *q = corpo;
+  if (!hash || !tamHash) return;
+  hash[0] = 0;
+  while (q < ini) {
+    const char *r = strstr(q, "\"digest\":");
+    if (!r || r > ini) break;
+    d = r; q = r + 8;
+  }
+  if (!d) return;
+  d = strchr(d + 8, '"');
+  if (!d) return;
+  d++;
+  if (!strncmp(d, "sha256:", 7)) d += 7;   // so o hex interessa
+  { const char *e = strchr(d, '"');
+    if (e && (size_t)(e - d) < tamHash) { memcpy(hash, d, (size_t)(e - d)); hash[e - d] = 0; } }
+}
+
 // `sufixo` obrigatorio. NAO ha reserva para "qualquer .ipk": uma release sem o
 // anexo desta variante e motivo para NAO oferecer o botao e mandar a pessoa
 // para a pagina — trocar de variante calada e justamente o defeito.
@@ -226,36 +338,54 @@ static int acharIpk(const char *corpo, char *dst, size_t tam,
       // `undefined` e responde `returnValue: false` com "Invalid file
       // checksum" — MEDIDO na C9, e o arquivo ate chegou a ser instalado, o
       // que e pior: sucesso reportado como falha.
-      //
-      // O campo vem ANTES do browser_download_url dentro do mesmo anexo (a
-      // ordem do JSON do GitHub e ... size, digest, download_count, ...,
-      // browser_download_url), entao a busca e PARA TRAS a partir da url. Ir
-      // para frente pegaria o digest do anexo SEGUINTE.
-      if (hash && tamHash) {
-        const char *d = NULL, *q = corpo;
-        while (q < ini) {
-          const char *r = strstr(q, "\"digest\":");
-          if (!r || r > ini) break;
-          d = r; q = r + 8;
-        }
-        if (d) {
-          d = strchr(d + 8, '"');
-          if (d) {
-            const char *e;
-            d++;
-            if (!strncmp(d, "sha256:", 7)) d += 7;   // so o hex interessa
-            e = strchr(d, '"');
-            if (e && (size_t)(e - d) < tamHash) {
-              memcpy(hash, d, (size_t)(e - d)); hash[e - d] = 0;
-            }
-          }
-        }
-      }
+      hashAntesDe(corpo, ini, hash, tamHash);
       return 1;
     }
   }
   return 0;
 }
+
+#ifdef NV_TPK
+// O anexo da libnuvio.so DESTA ABI e o seu sha256. Uma release do .tpk anexa UMA
+// libnuvio.so (a build de tpk.sh e unica, ARMv7 softfp, compartilhada pelos
+// quatro pacotes), com o sufixo AT_SO_SUFIXO. Casa por sufixo EXATO (sem o
+// AT_SUFIXO2 do .ipk) e le o digest do MESMO anexo por hashAntesDe. Sem o
+// digest, ignora o anexo: sem hash nao ha como confiar em codigo nativo remoto.
+// O 4/5 (NV_TPK40) roda a lib SEM TLS, que o carregador ELF exige: baixa o
+// anexo proprio. "-tpk-arm.so" nao casa com "-tpk40-arm.so", entao um pacote
+// nunca pega a lib do outro.
+#ifdef NV_TPK40
+#define AT_SO_SUFIXO "-tpk40-arm.so"
+#else
+#define AT_SO_SUFIXO "-tpk-arm.so"
+#endif
+static int acharSo(const char *corpo, char *dst, size_t tam, char *hash, size_t tamHash) {
+  const char *p = corpo;
+  const char *chave = "\"browser_download_url\":";
+  size_t k = strlen(AT_SO_SUFIXO);
+  dst[0] = 0;
+  if (hash && tamHash) hash[0] = 0;
+  while ((p = strstr(p, chave)) != NULL) {
+    const char *ini;
+    size_t n;
+    p += strlen(chave);
+    while (*p == ' ') p++;
+    if (*p != '"') continue;
+    ini = ++p;
+    while (*p && *p != '"') p++;
+    n = (size_t)(p - ini);
+    if (n > k && n < tam && !strncmp(ini + n - k, AT_SO_SUFIXO, k)) {
+      char h[80] = "";
+      hashAntesDe(corpo, ini, h, sizeof h);
+      if (!h[0]) continue;                 // sem digest: nao confiar
+      memcpy(dst, ini, n); dst[n] = 0;
+      snprintf(hash, tamHash, "%s", h);
+      return 1;
+    }
+  }
+  return 0;
+}
+#endif
 
 // Markdown das notas -> linhas de tela. Devolve em `dst`, linhas por \n.
 static void limparNotas(const char *md, char *dst, size_t tam) {
@@ -313,6 +443,10 @@ static int fioConsulta(void *arg) {
     // Sem anexo da variante desta build, ipkUrl fica vazio e podeInstalar()
     // devolve 0: o cartao aparece so com a URL da pagina.
     if (AT_INSTALA) acharIpk(corpo, ipkUrl, sizeof ipkUrl, ipkHash, sizeof ipkHash, AT_SUFIXO);
+#ifdef NV_TPK
+    // Anexo libnuvio.so para a auto-atualizacao do .tpk (staging por hash).
+    acharSo(corpo, soUrl, sizeof soUrl, soHash, sizeof soHash);
+#endif
     free(corpo);
   }
   SDL_LockMutex(mtx);
@@ -321,6 +455,11 @@ static int fioConsulta(void *arg) {
     if (maisNova(v, NV_VERSAO)) {
       snprintf(tagNova, sizeof tagNova, "%s", v);
       limparNotas(body, notas, sizeof notas);
+#ifdef NV_TPK
+      // So a versao mais nova entra: soVer marca a .so encenada e o host a
+      // compara com a versao empacotada antes de aplicar.
+      snprintf(soVer, sizeof soVer, "%s", v);
+#endif
     }
     printf("[atualizacao] instalada %s, no GitHub %s%s\n", NV_VERSAO, v,
            tagNova[0] ? " -- NOVA" : "");
@@ -436,6 +575,88 @@ static int podeInstalar(void) {
   return AT_INSTALA && ipkUrl[0] && estado == AT_PARADO && temInstalador();
 }
 
+#ifdef NV_TPK
+// BAIXA E ENCENA a libnuvio.so nova. NUNCA carrega em processo: grava
+// data/libnuvio.staged.so (+ .sha256 e .ver) e o host memfd-carrega no proximo
+// arranque. A barreira e o sha256: baixa para data/libnuvio.download, confere o
+// hash contra soHash (do digest da release, por HTTPS) e so entao renomeia
+// atomicamente. Hash errado, download parcial ou erro de escrita => apaga tudo e
+// nao encena nada. Em duvida, o app segue com a .so empacotada.
+static int fioBaixarSo(void *arg) {
+  char dl[600] = "", so[600] = "", sh[600] = "", vr[600] = "";
+  char hex[65] = "", verLocal[32];
+  char *buf;
+  long n = 0;
+  FILE *f;
+  int ok = 0;
+  (void)arg;
+  SDL_LockMutex(mtx); snprintf(verLocal, sizeof verLocal, "%s", soVer); SDL_UnlockMutex(mtx);
+  if (!dados_caminho(dl, sizeof dl, "libnuvio.download") ||
+      !dados_caminho(so, sizeof so, "libnuvio.staged.so") ||
+      !dados_caminho(sh, sizeof sh, "libnuvio.staged.sha256") ||
+      !dados_caminho(vr, sizeof vr, "libnuvio.staged.ver")) {
+    printf("[atualizacao] sem pasta de dados para encenar a .so\n"); fflush(stdout);
+    SDL_LockMutex(mtx); estado = AT_FALHOU; SDL_UnlockMutex(mtx);
+    return 0;
+  }
+  printf("[atualizacao] baixando libnuvio.so nova (%s)\n", soUrl); fflush(stdout);
+  buf = rede_baixar_bin(soUrl, 120, &n);
+  if (!buf || n <= 0) {
+    printf("[atualizacao] download da .so falhou\n"); fflush(stdout);
+    free(buf);
+    SDL_LockMutex(mtx); estado = AT_FALHOU; SDL_UnlockMutex(mtx);
+    return 0;
+  }
+  SDL_LockMutex(mtx); snprintf(instPasso, sizeof instPasso, "Verificando"); SDL_UnlockMutex(mtx);
+  at_sha256_hex((const unsigned char *)buf, (size_t)n, hex);
+  if (strcasecmp(hex, soHash) != 0) {
+    printf("[atualizacao] sha256 NAO confere: baixado %.12s... esperado %.12s...\n", hex, soHash);
+    fflush(stdout);
+    free(buf);
+    SDL_LockMutex(mtx); estado = AT_FALHOU; SDL_UnlockMutex(mtx);
+    return 0;
+  }
+  // Hash confere: grava o arquivo temporario e renomeia atomicamente. So depois
+  // vem o .sha256 e o .ver — se o processo morrer no meio, faltar o .sha256 faz
+  // o host ignorar o staging (ele reconfere o hash do arquivo encenado).
+  f = fopen(dl, "wb");
+  if (f) {
+    ok = fwrite(buf, 1, (size_t)n, f) == (size_t)n;
+    if (fflush(f) != 0) ok = 0;
+    fclose(f);
+  }
+  free(buf);
+  if (!ok) {
+    printf("[atualizacao] nao consegui gravar %s\n", dl); fflush(stdout);
+    unlink(dl);
+    SDL_LockMutex(mtx); estado = AT_FALHOU; SDL_UnlockMutex(mtx);
+    return 0;
+  }
+  if (rename(dl, so) != 0) {
+    printf("[atualizacao] rename para staged falhou\n"); fflush(stdout);
+    unlink(dl);
+    SDL_LockMutex(mtx); estado = AT_FALHOU; SDL_UnlockMutex(mtx);
+    return 0;
+  }
+  { char linha[80]; snprintf(linha, sizeof linha, "%s\n", hex); dados_gravar("libnuvio.staged.sha256", linha); (void)sh; }
+  { char linha[48]; snprintf(linha, sizeof linha, "%s\n", verLocal); dados_gravar("libnuvio.staged.ver", linha); (void)vr; }
+  printf("[atualizacao] libnuvio.so %s encenada; aplica no proximo arranque\n", verLocal);
+  fflush(stdout);
+  SDL_LockMutex(mtx); estado = AT_PRONTO; SDL_UnlockMutex(mtx);
+  return 0;
+}
+
+// 1 quando ha uma libnuvio.so nova para encenar e nada em andamento.
+static int podeAtualizarTpk(void) {
+  return soUrl[0] && soHash[0] && soVer[0] && estado == AT_PARADO;
+}
+#else
+static int podeAtualizarTpk(void) { return 0; }
+#endif
+
+// Ha um botao de acao (instalar .ipk na LG, ou encenar .so nova no .tpk)?
+static int podeAgir(void) { return podeInstalar() || podeAtualizarTpk(); }
+
 // Quanto da para rolar: o que sobra das notas alem da janela. 0 = cabe tudo.
 static float rolarMax(void) {
   float m = notasH - vistaH;
@@ -507,7 +728,7 @@ void atualizacao_evento(const SDL_Event *e) {
     return;
   }
   if (estado == AT_INSTALANDO) return;
-  if (podeInstalar() && (k == SDLK_LEFT || k == SDLK_RIGHT)) {
+  if (podeAgir() && (k == SDLK_LEFT || k == SDLK_RIGHT)) {
     foco = k == SDLK_LEFT ? 0 : 1;
     return;
   }
@@ -521,6 +742,16 @@ void atualizacao_evento(const SDL_Event *e) {
       else { SDL_LockMutex(mtx); estado = AT_FALHOU; SDL_UnlockMutex(mtx); }
       return;
     }
+#ifdef NV_TPK
+    if (podeAtualizarTpk() && foco == 0) {
+      SDL_Thread *t;
+      SDL_LockMutex(mtx); estado = AT_INSTALANDO; SDL_UnlockMutex(mtx);
+      t = SDL_CreateThread(fioBaixarSo, "nv-baixar-so", NULL);
+      if (t) { SDL_DetachThread(t); fioInst = t; }
+      else { SDL_LockMutex(mtx); estado = AT_FALHOU; SDL_UnlockMutex(mtx); }
+      return;
+    }
+#endif
     fechar();
   }
 }
@@ -663,7 +894,7 @@ void atualizacao_desenhar(Uint32 agora) {
         snprintf(n, sizeof n, "%d%%", (int)(pct + 0.5f));
         t = txt_linha(TXT_CAPTION, n, 200, 204, 214, 255);
         txt_desenhar_alpha(t, x + larg + 20.0f, y + 40.0f, a * 0.95f); } }
-  } else if (podeInstalar()) {
+  } else if (podeAgir()) {
     const char *rot[2];
     float bx = x;
     int i;
@@ -687,7 +918,7 @@ void atualizacao_desenhar(Uint32 agora) {
   if (estado != AT_INSTALANDO && estado != AT_PRONTO) {
     int mais = rolarMax() > 0.5f;
     TxtLinha t = txt_linha(TXT_CAPTION2,
-        podeInstalar()
+        podeAgir()
           ? (mais ? i18n("↑ ↓  Mais notas   ·   Voltar para fechar") : i18n("Voltar para fechar"))
           : (mais ? i18n("↑ ↓  Mais notas   ·   OK para fechar") : i18n("OK para fechar")),
         150, 154, 165, 255);
