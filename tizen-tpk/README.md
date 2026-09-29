@@ -63,6 +63,15 @@ Provado em TV real, nao afirmado:
   nuvio.log (`[etapa-anterior]`). O vigia sobe o GLWindow (`Raise`) se as
   chamadas de desenho pararem por 1,5 s com o app em primeiro plano e a janela
   principal visivel; se em 4 s nao voltar, a tela explica, com os numeros.
+- **Canario de janela** (`canary/tpk-janela`, NADA provado em TV): chaves
+  `JANELA_*` no topo do `Program.cs`, cada uma com linha `[janela] ...` no
+  nuvio.log e nota no rastro. Padroes: principal em `WindowMode.Transparent`
+  so na API11 (Tizen 9 pelo menu); `SetOpaqueState(true)` na principal na
+  API8/API9 (app anterior e TV Plus por baixo); GLWindow opaco DESLIGADO (ele
+  cobriria a propria janela do video); GLWindow sobe apos cada AppControl fora
+  da API8; saida limpa (player solto com Display nenhum, janelas escondidas,
+  `_exit` se o processo ainda viver 4 s depois do `Exit()`). O `PRIME_AUDIO`
+  (clipe mudo, provado contra o TV Plus) segue ligado e independente.
 - **Tizen 4.0/5.0 (2018-2019): a `.so` de ARQUIVO e barrada pela UEP.**
   Medido no probe (optiman, QE55Q6FNA, Tizen 4.0): `dlopen` de `lib/` e de
   `data/` falham ("failed to map segment"), MAS memoria anonima executavel e

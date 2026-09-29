@@ -64,6 +64,75 @@ namespace NuvioTpk
         const bool PRIME_AUDIO = true;
         const int PRIME_ESPERA_MS = 1500;
 
+        // ================= CANARIO DE JANELA (#137, #170) =================
+        // Relatos (rawldon, Tizen 6.0): (1) a tela anterior do YouTube aparece
+        // atras do trailer; (2) fechar o Nuvio deixa a TV preta e muda; (4)
+        // Tizen 9 pelo menu: primeiro quadro e o GLWindow para. Hipotese NAO
+        // provada: empilhamento/opacidade das janelas. Cada chave abaixo e
+        // independente, e cada uma escreve "[janela] ..." no nuvio.log e uma
+        // nota no rastro de etapas, para um relato apontar qual importou.
+        //
+        // Base (TizenFX + dali-adaptor, lidos na fonte):
+        //  - NUIApplication() = NUICoreBackend("", WindowMode.Opaque): a janela
+        //    principal nasce OPACA; o DALi passa isso a
+        //    ecore_wl2_window_alpha_set (window-base-ecore-wl2.cpp).
+        //  - Window/GLWindow.SetOpaqueState(true) -> tizen_policy_set_opaque_state:
+        //    o gerenciador de janelas trata a janela translucida como opaca ao
+        //    calcular a visibilidade (doc do TizenFX; sem efeito numa janela ja
+        //    opaca). Janela coberta por uma opaca fica "fully obscured".
+        //  - GLWindow iconificado para o fio de desenho (gl-window-impl.cpp,
+        //    OnIconifyChanged -> mGlWindowRenderThread->Pause).
+        //
+        // JANELA_PRINCIPAL_TRANSPARENTE: a principal nasce em
+        // WindowMode.Transparent. Alvo: (4). Se o lancador do Tizen 9 sobe a
+        // principal por cima do GLWindow, uma principal OPACA cobre o GLWindow,
+        // que e iconificado e para de desenhar; transparente, nao cobre. Liga
+        // so na API11 (o host do Tizen 7+/9, onde o (4) acontece); 6.0 e 6.5
+        // ficam como estao.
+#if NV_API11
+        const bool JANELA_PRINCIPAL_TRANSPARENTE = true;
+#else
+        const bool JANELA_PRINCIPAL_TRANSPARENTE = false;
+#endif
+        // JANELA_PRINCIPAL_OPACA: SetOpaqueState(true) na principal (a de
+        // BAIXO do Nuvio, dona do video). Alvo: (1) e o TV Plus por baixo. Diz
+        // ao gerenciador que o Nuvio cobre o app anterior sem mexer na ordem
+        // entre as nossas duas janelas: o GLWindow (em cima, translucido) nao
+        // e coberto, e o video, na principal, tambem nao. Desligada na API11,
+        // onde a principal e transparente de proposito (subindo por cima do
+        // GLWindow, opaca, voltaria a cobri-lo: o (4) de novo).
+#if NV_API11
+        const bool JANELA_PRINCIPAL_OPACA = false;
+#else
+        const bool JANELA_PRINCIPAL_OPACA = true;
+#endif
+        // JANELA_GL_OPACA: SetOpaqueState(true) no GLWindow. O outro jeito de
+        // dizer "o Nuvio cobre a tela". DESLIGADA: o GLWindow esta POR CIMA da
+        // janela do video, e opaco para o gerenciador cobriria a propria janela
+        // do video (que pode ser iconificada e levar o video junto). So para
+        // um teste dirigido, se a principal opaca nao bastar.
+        const bool JANELA_GL_OPACA = false;
+        // JANELA_SOBE_GL_APPCONTROL: a cada AppControl (e como o menu da TV
+        // abre/reabre o app), sobe o GLWindow 300 ms depois. Alvo: (4). Na
+        // API8 so registra (6.0 funciona).
+#if NV_API8
+        const bool JANELA_SOBE_GL_APPCONTROL = false;
+#else
+        const bool JANELA_SOBE_GL_APPCONTROL = true;
+#endif
+        // JANELA_SAIDA_LIMPA: ao sair, solta o player (Stop/Unprepare/Display
+        // nenhum/Dispose), esconde as janelas e so entao Exit(); se o processo
+        // ainda estiver vivo JANELA_SAIDA_PRAZO_MS depois, _exit(0). Alvo: (2):
+        // se a TV fica preta porque o processo nao morre (ou morre segurando o
+        // plano de video), o rastro do proximo arranque diz qual das duas.
+        const bool JANELA_SAIDA_LIMPA = true;
+        const int JANELA_SAIDA_PRAZO_MS = 4000;
+
+        // O modo da principal so pode ser escolhido no construtor. ("", Opaque)
+        // e exatamente o NUIApplication() de antes (NUICoreBackend: stylesheet
+        // "" e Opaque por padrao, conferido na API8 e na API11 do TizenFX).
+        Program() : base("", JANELA_PRINCIPAL_TRANSPARENTE ? WindowMode.Transparent : WindowMode.Opaque) { }
+
         GLWindow gl;
         volatile bool fim;
         NuiTimer vigia, prime;
@@ -93,10 +162,17 @@ namespace NuvioTpk
             var principal = SynchronizationContext.Current;
             var janela = NuiWindow.Instance;
             janela.BackgroundColor = NuiColor.Transparent;
+            Janela("principal modo=" + (JANELA_PRINCIPAL_TRANSPARENTE ? "Transparent" : "Opaque (padrao)") + " host=" + Host);
+            if (JANELA_PRINCIPAL_OPACA)
+            {
+                try { janela.SetOpaqueState(true); Janela("principal SetOpaqueState(true) -> IsOpaqueState=" + janela.IsOpaqueState()); }
+                catch (Exception e) { Janela("principal SetOpaqueState falhou " + e.GetType().Name + ": " + e.Message); }
+            }
+            else Janela("principal SetOpaqueState: desligado");
             // Rastro nunca derruba o arranque: sem esses eventos, o app segue.
             try
             {
-                janela.VisibilityChanged += (s, e) => { principalVisivel = e.Visibility; Etapa("note main-window visible=" + e.Visibility + Contagem()); };
+                janela.VisibilityChanged += (s, e) => { principalVisivel = e.Visibility; Etapa("note main-window visible=" + e.Visibility + Contagem()); Janela("principal visivel=" + e.Visibility, false); };
                 janela.FocusChanged += (s, e) => { Etapa("note main-window focus=" + e.FocusGained + Contagem()); if (e.FocusGained) SobeGlSePreciso("main-window focus"); };
             }
             catch (Exception e) { Etapa("note main-window events unavailable " + e.GetType().Name + ": " + e.Message); }
@@ -225,22 +301,32 @@ namespace NuvioTpk
             NuiWindow.Instance.KeyEvent += (s, e) => Tecla(e.Key, "main");
             try
             {
-                gl.VisibilityChanged += (s, e) => { glVisivel = e.Visibility; Etapa("note gl-window visible=" + e.Visibility + Contagem()); };
+                gl.VisibilityChanged += (s, e) => { glVisivel = e.Visibility; Etapa("note gl-window visible=" + e.Visibility + Contagem()); Janela("gl visivel=" + e.Visibility, false); };
                 gl.FocusChanged += (s, e) => Etapa("note gl-window focus=" + e.FocusGained + Contagem());
             }
             catch (Exception e) { Etapa("note gl-window events unavailable " + e.GetType().Name + ": " + e.Message); }
             gl.Show();
+            if (JANELA_GL_OPACA)
+            {
+                try { gl.SetOpaqueState(true); Janela("gl SetOpaqueState(true) -> IsOpaqueState=" + gl.IsOpaqueState()); }
+                catch (Exception e) { Janela("gl SetOpaqueState falhou " + e.GetType().Name + ": " + e.Message); }
+            }
+            else Janela("gl SetOpaqueState: desligado (translucido, como antes)");
+            // O canario de audio (PRIME_AUDIO) nao depende de nenhuma chave de
+            // janela; se a principal opaca ja pausar o TV Plus sozinha, o clipe
+            // so fica redundante. A linha diz o que estava ligado junto.
+            Janela("prime de audio " + (PRIME_AUDIO ? "ligado" : "desligado") + " (independe destas chaves)");
 
             // Exit() tem de sair do fio principal, e Quadro() roda no de desenho.
             vigia = new NuiTimer(250);
             vigia.Tick += (s, e) =>
             {
-                if (fim) { Etapa("note app ended (main returned)"); video.Parar(); Exit(); return false; }
+                if (fim) { Etapa("note app ended (main returned)"); Sair("app ended"); return false; }
                 video.Tique();
                 // ~3 s depois de abrir, quando o main() do app ja redirecionou
                 // o stdout para o nuvio.log: uma linha dizendo que TV e esta,
                 // para o D1 separar os relatos por versao da Tizen.
-                if (!tvLogada && ++tiques >= 12) { tvLogada = true; LogaTv(); }
+                if (!tvLogada && ++tiques >= 12) { LogaTv(); tvLogada = true; DespejaJanela(); }
                 Vigia();
                 return true;
             };
@@ -291,7 +377,7 @@ namespace NuvioTpk
         // cima (tecla Home), as duas ficam invisiveis e o app nao se intromete.
         void SobeGl(string porque)
         {
-            if (gl == null || erroNaTela) return;
+            if (gl == null || erroNaTela || saindo) return;
             subidas++;
             Etapa("note raise gl-window #" + subidas + " (" + porque + ")" + Contagem() + " mainVisible=" + principalVisivel + " glVisible=" + glVisivel);
             try { gl.Show(); gl.Raise(); } catch (Exception e) { Etapa("note raise failed " + e.GetType().Name + ": " + e.Message); }
@@ -319,7 +405,7 @@ namespace NuvioTpk
         // houve (com os numeros) para uma foto.
         void Vigia()
         {
-            if (gl == null || erroNaTela) return;
+            if (gl == null || erroNaTela || saindo) return;
             long parado = ParadoMs();
             if (parado < 1500 || pausado || !principalVisivel)
             {
@@ -399,7 +485,7 @@ namespace NuvioTpk
                     Size2D = new Size2D(W - 160, H - 160), Position2D = new Position2D(80, 80),
                 };
                 w.Add(t);
-                w.KeyEvent += (s, e) => { if (e.Key.State == Key.StateType.Down && (e.Key.KeyPressedName == "XF86Back" || e.Key.KeyPressedName == "Escape")) Exit(); };
+                w.KeyEvent += (s, e) => { if (e.Key.State == Key.StateType.Down && (e.Key.KeyPressedName == "XF86Back" || e.Key.KeyPressedName == "Escape")) Sair("error screen back"); };
                 // No Tizen 9 outra janela pode estar por cima: esta vem para a frente.
                 w.Show();
                 w.Raise();
@@ -524,7 +610,7 @@ namespace NuvioTpk
                 primeiraTecla = true;
                 Etapa("ok first-key " + k.KeyPressedName + " via " + janela + Contagem());
             }
-            if (telaParado != null && k.State == Key.StateType.Down && (k.KeyPressedName == "XF86Back" || k.KeyPressedName == "Escape")) { Exit(); return; }
+            if (telaParado != null && k.State == Key.StateType.Down && (k.KeyPressedName == "XF86Back" || k.KeyPressedName == "Escape")) { Sair("stalled screen back"); return; }
             nv_tpk_tecla(k.KeyPressedName, k.State == Key.StateType.Down ? 1 : 0);
         }
 
@@ -567,8 +653,102 @@ namespace NuvioTpk
         protected override void OnTerminate()
         {
             Etapa("note terminate" + Contagem());
-            video?.Parar();
+            if (JANELA_SAIDA_LIMPA) { SoltaTudo("terminate"); ArmaSaidaForcada("terminate"); }
+            else video?.Parar();
             base.OnTerminate();
+        }
+
+        protected override void OnAppControlReceived(Tizen.Applications.AppControlReceivedEventArgs e)
+        {
+            string op = "?";
+            try { op = e?.ReceivedAppControl?.Operation ?? "?"; } catch { }
+            Etapa("note appcontrol op=" + op + Contagem() + " mainVisible=" + principalVisivel + " glVisible=" + glVisivel);
+            try { base.OnAppControlReceived(e); } catch (Exception x) { Etapa("note appcontrol base threw " + x.GetType().Name + ": " + x.Message); }
+            if (!JANELA_SOBE_GL_APPCONTROL || gl == null) return;
+            try
+            {
+                var t = new NuiTimer(300);
+                t.Tick += (s, a) => { Janela("appcontrol: sobe o gl"); SobeGl("appcontrol"); return false; };
+                t.Start();
+            }
+            catch (Exception x) { Janela("appcontrol: timer falhou " + x.GetType().Name + ": " + x.Message); }
+        }
+
+        // ================= SAIDA (canario de janela, problema 2) =================
+
+        bool saindo;
+
+        // Todo fechamento pedido pelo app passa aqui (fim do main, Voltar nas
+        // telas de erro). Sem JANELA_SAIDA_LIMPA e o Parar()+Exit() de antes.
+        void Sair(string porque)
+        {
+            if (saindo) return;
+            saindo = true;
+            Etapa("note exit begin (" + porque + ")" + Contagem());
+            if (!JANELA_SAIDA_LIMPA) { video?.Parar(); Exit(); return; }
+            SoltaTudo(porque);
+            ArmaSaidaForcada(porque);
+            Exit();
+        }
+
+        bool soltou;
+
+        // Player solto por inteiro (Display nenhum antes do Dispose) e as duas
+        // janelas escondidas, para a TV voltar a tela dela sem esperar o
+        // processo sumir. Cada passo isolado: um que falhe nao segura o resto.
+        void SoltaTudo(string porque)
+        {
+            if (soltou) return;
+            soltou = true;
+            try { video?.Encerrar(); Janela("saida: player solto (" + porque + ")"); } catch (Exception e) { Janela("saida: player falhou " + e.GetType().Name + ": " + e.Message); }
+            try { gl?.Hide(); Janela("saida: gl escondido"); } catch (Exception e) { Janela("saida: gl.Hide falhou " + e.GetType().Name + ": " + e.Message); }
+            try { NuiWindow.Instance.Hide(); Janela("saida: principal escondida"); } catch (Exception e) { Janela("saida: principal.Hide falhou " + e.GetType().Name + ": " + e.Message); }
+        }
+
+        [DllImport("libc.so.6", EntryPoint = "_exit")] static extern void c_exit(int code);
+        bool forcadaArmada;
+
+        // Fio de fundo: se o Exit() normal nao levar o processo em
+        // JANELA_SAIDA_PRAZO_MS, anota no rastro (o proximo arranque le) e
+        // sai por _exit. Com o Exit() normal funcionando, o processo acaba
+        // antes e este fio morre junto.
+        void ArmaSaidaForcada(string porque)
+        {
+            if (forcadaArmada) return;
+            forcadaArmada = true;
+            try
+            {
+                var t = new Thread(() =>
+                {
+                    Thread.Sleep(JANELA_SAIDA_PRAZO_MS);
+                    Etapa("note exit watchdog: process still alive " + JANELA_SAIDA_PRAZO_MS + " ms after exit (" + porque + "), forcing _exit");
+                    try { c_exit(0); } catch { Environment.Exit(0); }
+                }) { IsBackground = true, Name = "nuvio-saida" };
+                t.Start();
+            }
+            catch (Exception e) { Etapa("note exit watchdog failed " + e.GetType().Name + ": " + e.Message); }
+        }
+
+        // ================= LOG DE JANELA =================
+        // "[janela] ..." no nuvio.log (o que sobe para o D1) e nota no rastro.
+        // Antes de o main() do app redirecionar o stdout (~3 s), as linhas
+        // ficam guardadas e saem logo depois da linha [tv].
+        readonly List<string> janelaFila = new List<string>();
+
+        void Janela(string linha, bool rastro = true)
+        {
+            if (rastro) Etapa("note janela " + linha);
+            string l = "[janela] " + linha + " t=" + (relogio.ElapsedMilliseconds / 1000.0).ToString("0.0") + "s";
+            if (tvLogada && video != null) { video.Log(l); return; }
+            lock (janelaFila) { if (janelaFila.Count < 60) janelaFila.Add(l); }
+        }
+
+        void DespejaJanela()
+        {
+            if (video == null) return;
+            string[] ls;
+            lock (janelaFila) { ls = janelaFila.ToArray(); janelaFila.Clear(); }
+            foreach (var l in ls) video.Log(l);
         }
 
         static void Main(string[] args)

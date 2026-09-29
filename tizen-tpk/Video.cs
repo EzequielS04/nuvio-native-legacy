@@ -267,6 +267,26 @@ namespace NuvioTpk
             try { p.Dispose(); } catch { }
         }
 
+        // SAIDA do app (canario de janela, #137 "fechar deixa a TV preta"): o
+        // mesmo Parar(), mas com o plano de video devolvido de forma explicita
+        // (Display nenhum com o player ja em Idle, antes do Dispose) e uma linha
+        // por passo no log. Cada passo isolado: nenhum segura a saida.
+        public void Encerrar()
+        {
+            SoltaPrimer();
+            sessao++;
+            var p = player;
+            player = null;
+            if (p == null) { Log("[janela] saida: sem player aberto"); return; }
+            PlayerState st = PlayerState.Idle;
+            try { st = p.State; } catch { }
+            try { if (st == PlayerState.Playing || st == PlayerState.Paused) p.Stop(); } catch (Exception e) { Log("[janela] saida: stop " + e.Message); }
+            try { if (p.State != PlayerState.Idle) p.Unprepare(); } catch (Exception e) { Log("[janela] saida: unprepare " + e.Message); }
+            try { p.Display = null; } catch (Exception e) { Log("[janela] saida: display nenhum " + e.GetType().Name + ": " + e.Message); }
+            try { p.Dispose(); } catch (Exception e) { Log("[janela] saida: dispose " + e.Message); }
+            Log("[janela] saida: player de " + st + " solto (stop/unprepare/display/dispose)");
+        }
+
         void Pausar(bool pausa)
         {
             if (player == null) return;
