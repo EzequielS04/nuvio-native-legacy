@@ -725,8 +725,14 @@ void ctx_desenhar(Uint32 agora) {
   float ar_, ag_, ab_; ajustes_acento(&ar_, &ag_, &ab_);
   { GfxRect p = { x, y, CTX_W, alt };
     float menor = alt < CTX_W ? alt : CTX_W, raio = 28.0f / menor;
+    if (ajustes_vidro()) {
+      // Painel de vidro: cinza-frio escuro, translucido (a home aparece por
+      // tras do veu), fio de 1,5 px e nenhuma luz colorida.
+      gfx_cor(p, raio, 0.075f, 0.078f, 0.09f, 0.86f * a);
+      gfx_anel(p, raio, 1.5f, 1, 1, 1, 0.14f * a);
+    } else {
     gfx_cor(p, raio, 0.055f, 0.058f, 0.068f, 0.94f * a);
-    gfx_luz_canto(p, raio, CTX_W * 0.1f, -CTX_W * 0.1f, CTX_W * 0.65f, ar_, ag_, ab_, 0.22f * a); }
+    gfx_luz_canto(p, raio, CTX_W * 0.1f, -CTX_W * 0.1f, CTX_W * 0.65f, ar_, ag_, ab_, 0.22f * a); } }
 
   { TxtLinha t = txt_linha(TXT_CAPTION2, "TÍTULO SELECIONADO", 174, 178, 188, 255);
     txt_desenhar_alpha(t, x + CTX_PAD, y + CTX_PAD, a * 0.95f); }

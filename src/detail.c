@@ -2508,6 +2508,12 @@ static void desenhaBotao(GfxRect r, const char *rot, int icone, int focado, floa
     // A PELE E A DA TABELA (botoes.h, 21/09/2026): repouso 0.14/0.15/0.17 e
     // nao #222, foco realce + tinta + luz. O tamanho (escala no foco) e o
     // glifo continuam daqui.
+    if (ajustes_vidro()) {
+      // Vidro: o mesmo disco de botao_disco (branco cheio em foco, glifo escuro).
+      gfx_vidro_painel(r, NV_RAIO_PILL, 0.55f, a);
+      gfx_vidro_pilula_cheia(r, NV_RAIO_PILL, focado ? 1.0f : 0.0f, a);
+      ic = focado ? 0.078f : 1.0f;
+    } else
     if (focado) { float fr, fg, fb; ic = focoAcento(&fr, &fg, &fb);
                   luzFoco(r, a);
                   gfx_cor(r, NV_RAIO_PILL, fr, fg, fb, a); }
@@ -2576,8 +2582,13 @@ static void desenhaBotao(GfxRect r, const char *rot, int icone, int focado, floa
   // referencia web — branco em repouso e branco em foco (tema padrao) eram
   // o mesmo botao em dois tamanhos, e o Play brigava com o botao em foco.
   { float tinta = 235.0f / 255.0f, fr = 0.14f, fg = 0.15f, fb = 0.17f;
+    if (ajustes_vidro()) {
+      gfx_vidro_painel(r, NV_RAIO_PILL, 0.55f, a);
+      gfx_vidro_pilula_cheia(r, NV_RAIO_PILL, focado ? 1.0f : 0.0f, a);
+      tinta = focado ? 0.078f : tinta;
+    } else {
     if (focado) { tinta = focoAcento(&fr, &fg, &fb); luzFoco(r, a); }
-    gfx_cor(r, NV_RAIO_PILL, fr, fg, fb, a);
+    gfx_cor(r, NV_RAIO_PILL, fr, fg, fb, a); }
     tintaBotao = tinta; }
 
   // Triangulo 28x30 e vao de 21 ate a tinta do rotulo, medidos no aparelho

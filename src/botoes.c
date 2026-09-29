@@ -16,6 +16,8 @@ void botao_luz(GfxRect r, float foco, float a) {
   float fr, fg, fb;
   GfxRect luz;
   if (foco < 0.01f) return;
+  // Vidro: foco e a pilula branca, sem brilho colorido por tras.
+  if (ajustes_vidro()) return;
   ajustes_acento(&fr, &fg, &fb);
   // 0,9x a altura de folga em cada lado e alpha 0,35 x mola: a luz da pilula
   // em foco do menu lateral, copiada e nao reinterpretada.
@@ -33,6 +35,11 @@ float botao_largura(const char *rotulo, const char *icone, int primario) {
 
 int botao_superficie(GfxRect r, float foco, float a) {
   float fr, fg, fb, ti = ajustes_acento_tinta(&fr, &fg, &fb);
+  if (ajustes_vidro()) {
+    gfx_vidro_painel(r, 0.5f, 0.55f, a);
+    gfx_vidro_pilula_cheia(r, 0.5f, foco, a);
+    return gfx_vidro_tinta(foco);
+  }
   botao_luz(r, foco, a);
   gfx_cor(r, 0.5f, anim_mistura(BT_REP_R, fr, foco),
           anim_mistura(BT_REP_G, fg, foco), anim_mistura(BT_REP_B, fb, foco), a);
@@ -44,12 +51,17 @@ void botao_pilula(GfxRect r, const char *rotulo, const char *icone,
   float fr, fg, fb, ti = ajustes_acento_tinta(&fr, &fg, &fb);
   int emFoco = foco >= 0.5f;
   int c = emFoco ? (int)(ti * 255.0f + 0.5f) : BT_TEXTO_REP;
+  int vidro = ajustes_vidro();
   float raio = 0.5f;
   TxtLinha l;
   float temIcone = (icone && icone[0]) ? 1.0f : 0.0f;
   float grupo, x0, padx = primario ? BOTAO_PAD_X : BOTAO_PAD_X2;
 
-  if (primario) {
+  if (vidro) {
+    // O mesmo vidro nos dois tamanhos: a hierarquia continua sendo a altura
+    // (72 x 56), e o foco e a pilula branca com texto escuro.
+    c = botao_superficie(r, foco, a);
+  } else if (primario) {
     botao_superficie(r, foco, a);
   } else {
     botao_luz(r, foco, a);
@@ -81,12 +93,19 @@ void botao_pilula(GfxRect r, const char *rotulo, const char *icone,
 void botao_disco(GfxRect r, const char *icone, float foco, float a) {
   float fr, fg, fb, ti = ajustes_acento_tinta(&fr, &fg, &fb);
   float ic = foco >= 0.5f ? ti : 1.0f;
+  int vidro = ajustes_vidro();
   // O glifo mede um terco do disco — proporcao medida no aparelho (detail.h,
   // NV_DETW2_CIRC_GLIFO).
   float g = r.w * 0.333f;
   GfxRect ig = { r.x + (r.w - g) * 0.5f, r.y + (r.h - g) * 0.5f, g, g };
-  botao_luz(r, foco, a);
-  gfx_cor(r, 0.5f, anim_mistura(BT_REP_R, fr, foco),
-          anim_mistura(BT_REP_G, fg, foco), anim_mistura(BT_REP_B, fb, foco), a);
+  if (vidro) {
+    ic = foco >= 0.5f ? 0.078f : 1.0f;
+    gfx_vidro_painel(r, 0.5f, 0.55f, a);
+    gfx_vidro_pilula_cheia(r, 0.5f, foco, a);
+  } else {
+    botao_luz(r, foco, a);
+    gfx_cor(r, 0.5f, anim_mistura(BT_REP_R, fr, foco),
+            anim_mistura(BT_REP_G, fg, foco), anim_mistura(BT_REP_B, fb, foco), a);
+  }
   gfx_icone(ig, icone, ic, ic, ic, a);
 }

@@ -255,6 +255,13 @@ static void corFocoPlayer(float *r, float *g, float *b) {
 static void superficieFocoPlayer(GfxRect r, float raio, float mola, float a) {
   float fr, fg, fb;
   GfxRect luz;
+  if (ajustes_vidro()) {
+    // Referencia: controle em foco = o mesmo disco escuro com aro branco; o
+    // glifo continua branco. Nada de preenchimento na cor de realce.
+    gfx_cor(r, raio, 0.16f, 0.16f, 0.17f, 0.70f * a);
+    gfx_anel(r, raio, 2.5f, 1, 1, 1, 0.96f * a);
+    return;
+  }
   corFocoPlayer(&fr, &fg, &fb);
   if (mola > 0.01f) {
     luz.x = r.x - r.h * 0.85f; luz.y = r.y - r.h * 0.85f;
@@ -2417,7 +2424,7 @@ static void desenharAcoesEpisodio(void){
                     tipo==INTRO_CREDITOS?i18n("Pular créditos"):
                     i18n("Pular abertura");
     int sel=skipFoco&&visivel;
-    int tinta = ajustes_tinta_foco();
+    int tinta = ajustes_vidro() ? 250 : ajustes_tinta_foco();
     TxtLinha t=sel?txt_linha(TXT_BODY,rot,tinta,tinta,tinta,255):txt_linha(TXT_BODY,rot,250,250,252,255);
     // Com controles visiveis, ancora em 664: deixa 72 px de ar ate o titulo
     // (que comeca em ~808) e o botao compacto de 72 px nao invade essa area.
@@ -2428,7 +2435,7 @@ static void desenharAcoesEpisodio(void){
     if (ponteiroNoPlayer()) ponteiro_alvo(p.x, p.y, p.w, p.h, ponteiroSkip, NULL, 0, 0);
     if(sel) superficieFocoPlayer(p,.27f,1.0f,.96f*entrada);
     else gfx_cor(p,.27f,.118f,.118f,.118f,.85f*entrada);
-    { float tintaIcone = sel ? ajustes_acento_tinta(NULL, NULL, NULL) : 1.0f;
+    { float tintaIcone = (sel && !ajustes_vidro()) ? ajustes_acento_tinta(NULL, NULL, NULL) : 1.0f;
       gfx_icone((GfxRect){64.0f+lado,y+(h-ladoIcone)*0.5f,ladoIcone,ladoIcone},
                 "avancar",tintaIcone,tintaIcone,tintaIcone,entrada); }
     // O icone e o texto formam um unico grupo: padding simetrico e cada um
@@ -2929,7 +2936,7 @@ void player_desenhar(Uint32 agora) {
       if (ponteiroNoPlayer() && ac > 0.3f)
         ponteiro_alvo(cxs[i] - PLR_BTN_D * 0.5f, cyBotoes - PLR_BTN_D * 0.5f,
                       PLR_BTN_D, PLR_BTN_D, ponteiroBotao, NULL, i, 0);
-      float lum = sel ? ajustes_acento_tinta(NULL, NULL, NULL) : 0.94f;
+      float lum = (sel && !ajustes_vidro()) ? ajustes_acento_tinta(NULL, NULL, NULL) : 0.94f;
       switch (i) {
         case PLR_PLAY:    iconePlayPause(cxs[i], cyBotoes, ac, tocando, lum); break;
         case PLR_CC:      iconeLegendas(cxs[i], cyBotoes, ac, lum); break;

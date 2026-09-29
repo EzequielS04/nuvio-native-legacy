@@ -61,7 +61,9 @@
 // ajustes_acento_tinta, que todos os modulos usam.
 #define AJ_TEXTO_ESCURO  (tintaFoco())
 #define AJ_TEXTO_ESCURO2 (tintaFoco() > 128 ? 232 : 50)   // valor, um degrau abaixo
-static int tintaFoco(void) { return ajustes_acento_tinta(NULL, NULL, NULL) > 0.5f ? 255 : 20; }
+// Vidro: a linha em foco continua TRANSLUCIDA (so ganha contorno), entao o texto
+// fica claro seja qual for o realce.
+static int tintaFoco(void) { return ajustes_vidro() || ajustes_acento_tinta(NULL, NULL, NULL) > 0.5f ? 255 : 20; }
 static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foco e clara?
 #define AJ_LINHA_H       88.0f
 #define AJ_LINHA_GAP      8.0f
@@ -175,6 +177,9 @@ typedef enum {
   AJ_ITENS_FILEIRA,
   // A fonte da interface é independente da família das legendas.
   AJ_FONTE_UI,
+  // Interface de vidro: visual translucido, so desta TV. No fim pelo mesmo
+  // motivo dos outros: valor[] e CHAVE[] sao posicionais.
+  AJ_VIDRO,
   AJ_N
 } OpcaoId;
 
@@ -617,6 +622,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Trailer do cartaz em foco",       V_LIGA, 2),   // focusedPosterBackdropTrailerEnabled
   ESC("Itens por fileira",               V_ITENS_FIL, 3), // local: itensFileiraLocal
   ESC("Fonte da interface", V_FONTE_UI, 6),
+  ESC("Interface de vidro",              V_LIGA, 2),   // local: vidroLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -726,6 +732,8 @@ static const char *CHAVE[] = {
   "focusedPosterBackdropTrailerEnabled",
   "itensFileiraLocal",
   "fonteInterface",
+  // LOCAL e SEM o "-": o web nao tem esta escolha e ela precisa sobreviver.
+  "vidroLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -804,7 +812,7 @@ static const Item TELA[] = {
   // "Cor da logo" logo abaixo da cor: so vale com um tema dinamico, e e a
   // mesma decisao (de onde sai o destaque).
   SEC("Aparência", "Cor de destaque, idioma e animações", "aj_palette"),
-    OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_IDIOMA), OPC(AJ_ANIM),
+    OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_IDIOMA), OPC(AJ_ANIM),
     OPC(AJ_FONTE_UI),
 
   SEC("Layout", "Estrutura da página inicial e estilos de pôster", "aj_layout-dashboard"),
@@ -1115,6 +1123,7 @@ static int valor[] = {
   1,                /* trailer do cartaz em foco: desligado (DEFAULT do web) */
   0,                /* itens por fileira: 12, como sempre foi (ver V_ITENS_FIL) */
   TXT_FAMILIA_INTER,/* fonte da interface: independente da legenda */
+  1,                /* interface de vidro: DESLIGADA (V_LIGA: 1 = Desligado) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1226,6 +1235,15 @@ int ajustes_cor_viva(void) {
        : CORVIVA_DESLIGADA;
 }
 int ajustes_cor_logo(void) { return lig(AJ_COR_LOGO); }
+// Lida por todo desenho de painel/pilula/foco (uma comparacao): so o visual
+// muda, nenhum layout, e desligada nada do desenho antigo e tocado.
+#ifdef NV_VIDRO_TESTE
+// So nas capturas (tests/vidro_shots.sh): liga o vidro sem passar pelo arquivo.
+int ajustes_vidro(void) { return 1; }
+#else
+int ajustes_vidro(void) { return lig(AJ_VIDRO); }
+#endif
+void ajustes_definir_vidro(int ligado) { valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); }
 
 // Cor do ANEL DE FOCO. Ver TEMA_ACENTO: um tema aqui e so isto.
 //
@@ -1866,6 +1884,7 @@ static int somenteDesteAparelho(int op) {
     // deste aparelho.
     case AJ_TRAILER_FONTE:
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
+    case AJ_VIDRO:          /* visual desta TV: a GPU de cada uma aguenta diferente */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
       return 1;
@@ -2481,6 +2500,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_IDIOMA: return "Idioma de toda a interface. Não muda o idioma das legendas nem do áudio.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
     case AJ_TEMA: return "Cor do anel que marca onde está o foco. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena: estilizada também tinge o fundo, gradiente pinta os botões com as cores da arte e imersiva deixa a cor vazar pela tela como luz. Ficam só nesta TV.";
+    case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
     case AJ_RESOLUCAO: return "Desenha a interface em 4K nas TVs que permitem. Muitas ignoram o pedido e continuam em 1080p — o log diz qual é o caso. Vale reiniciar o app depois de mudar. O vídeo já é 4K nos dois casos.";
@@ -3344,7 +3364,15 @@ static const char *textoValor(int op) {
 // preenchimento no acento com o halo macio atras (DESIGN.md: "Foco = linha
 // preenchida com a cor de realce, sem anel"). `f` e a mola do foco (0..1).
 static void desenhaSuperficie(GfxRect r, float raio, float f, float a) {
-  float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
+  float ar, ag, ab;
+  if (ajustes_vidro()) {
+    // Referencia: linha em foco = retangulo arredondado com contorno branco de
+    // 2 px e miolo um pouco mais claro; as outras ficam quase sem superficie.
+    gfx_cor(r, raio, 1, 1, 1, 0.035f * a);
+    gfx_vidro_foco(r, raio, f, a);
+    return;
+  }
+  ajustes_acento(&ar, &ag, &ab);
   gfx_cor(r, raio, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B, 0.34f * a);
   // Brilho difuso por tras da linha em foco (0,9x a altura de folga em cima
   // e embaixo, alpha 0,35 x mola): a mesma luz da pilula do menu lateral
@@ -4795,7 +4823,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_LARGURA_DP: case AJ_RAIO_DP:
       return AJPV_CARTAZ;
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
-    case AJ_COR_LOGO: case AJ_FONTE_UI:
+    case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
       return AJPV_CONTA;
