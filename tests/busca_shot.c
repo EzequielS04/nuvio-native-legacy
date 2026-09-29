@@ -124,6 +124,41 @@ int main(int argc, char **argv) {
   { int i; tecla(SDLK_DOWN); for (i = 0; i < 10; i++) tecla(SDLK_RIGHT); }
   snprintf(nome, sizeof nome, "%s-recentes-limpar.bmp", saida);
   captura(nome);
+  // TECLADO CIRILICO (#176): com o idioma dos metadados em russo aparece a
+  // tecla de layout na fileira de baixo; ela troca o teclado e o texto digitado
+  // sai em UTF-8 inteiro, e o "apagar" tira um CARACTER, nao um byte.
+  ajustes_aplicar_blob("{\"tmdb_language\":\"ru\"}");
+  assert(!strcmp(ajustes_tmdb_idioma(), "ru-RU"));
+  buscasrec_limpar();
+  busca_iniciar();
+  snprintf(nome, sizeof nome, "%s-latino-com-tecla.bmp", saida);
+  captura(nome);
+  { int i;
+    for (i = 0; i < 6; i++) tecla(SDLK_DOWN);      /* fileira de baixo */
+    for (i = 0; i < 3; i++) tecla(SDLK_RIGHT);     /* tecla de layout */
+    tecla(SDLK_RETURN);                            /* cirilico */
+    snprintf(nome, sizeof nome, "%s-cirilico.bmp", saida);
+    captura(nome);
+    for (i = 0; i < 3; i++) tecla(SDLK_LEFT);      /* espaco (coluna 0) */
+    for (i = 0; i < 7; i++) tecla(SDLK_UP);        /* primeira fileira: "а" */
+    tecla(SDLK_RETURN);                            /* а */
+    tecla(SDLK_RIGHT); tecla(SDLK_RETURN);         /* б */
+    assert(!strcmp(busca_consulta(), "\xd0\xb0\xd0\xb1"));
+    { SDL_Event t;
+      memset(&t, 0, sizeof t);
+      t.type = SDL_TEXTINPUT;
+      snprintf(t.text.text, sizeof t.text.text, "\xc8\x99");   /* ș */
+      busca_evento(&t);
+      assert(!strcmp(busca_consulta(), "\xd0\xb0\xd0\xb1\xc8\x99"));
+      memset(&t, 0, sizeof t);
+      t.type = SDL_TEXTINPUT;
+      snprintf(t.text.text, sizeof t.text.text, "x");             /* ASCII: KEYDOWN cuida */
+      busca_evento(&t);
+      assert(!strcmp(busca_consulta(), "\xd0\xb0\xd0\xb1\xc8\x99")); }
+    tecla(SDLK_BACKSPACE);                         /* tira o ș inteiro */
+    assert(!strcmp(busca_consulta(), "\xd0\xb0\xd0\xb1"));
+    snprintf(nome, sizeof nome, "%s-cirilico-digitado.bmp", saida);
+    captura(nome); }
   puts("PASS: capturas da Busca gravadas.");
   return 0;
 }

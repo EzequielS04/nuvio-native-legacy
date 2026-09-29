@@ -32,4 +32,7 @@ int  busca_pediu_abrir(int *indiceCatalogo);
 // foco nos resultados.
 int  busca_item_focado(HomeItem *out);
 
+// O texto do campo (UTF-8), como a pessoa o digitou. Para testes.
+const char *busca_consulta(void);
+
 #endif
