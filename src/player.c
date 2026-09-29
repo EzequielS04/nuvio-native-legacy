@@ -2993,9 +2993,13 @@ void player_desenhar(Uint32 agora) {
     // seria esconder metade da resposta.
     if (video_tem_dolby_vision())                  selos[nSelos++] = "Dolby Vision";
     else if (!strcasecmp(video_hdr(), "HDR10"))    selos[nSelos++] = "HDR10";
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || defined(NV_TPK)
     else {
       // AVPlay nao confirma HDR ativo. Identifica apenas a fonte selecionada.
+      // No .tpk o player nativo tambem nao devolve o modo (video_hdr() e
+      // "none"), entao vale o mesmo rotulo de FONTE. Nunca "Dolby Vision":
+      // TV Samsung nao tem DV, toca a camada HDR10 do arquivo — por isso
+      // badges_fonte_hdr so conhece HDR10+/HDR10/HDR e fonte so-DV fica sem selo.
       const Stream *fonte = stream_item(stream_atual());
       const char *hdr = fonte ? badges_fonte_hdr(fonte->badges) : NULL;
       if (hdr) selos[nSelos++] = hdr;
