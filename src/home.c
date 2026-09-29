@@ -57,6 +57,7 @@ int player_aberto(void);
 #include <ctype.h>
 #include <time.h>
 #include "trailer.h"
+#include "trailercinema.h"
 #include "trailerimdb.h"
 #include "trailerapple.h"
 #include "trailerfonte.h"
@@ -345,6 +346,12 @@ static int    heroTrailerFonte = 0, heroTrailerAppleFalhou = 0;
 // TRF_* da fonte aberta (trailerfonte.h), so para o log dizer qual desistiu.
 static int    heroTrailerQual = 0;
 static float  heroTrailerFade = 0.0f;
+// MODO CINEMA no destaque (dono, 29/09/2026: "quando o trailer comecar no hero,
+// deixar ele igual a quando ta no details do titulo: so a arte do titulo
+// embaixo e passando o trailer, e voltar ao normal quando acabar"). A conta e
+// a do detalhe (trailercinema.h). So vale para o trailer do DESTAQUE: no do
+// cartaz em foco as fileiras sao o assunto, esconde-las apagaria o cartaz.
+static TrailerCinema heroCinema;
 static char   heroTrailerYoutubeId[16];
 static int heroTrailerSegurando(Uint32 agora);
 
@@ -1298,6 +1305,18 @@ int home_iniciar(const char *dirArte) {
 
 void home_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
+
+  // MODO CINEMA: a primeira tecla devolve a UI (o trailer segue, como no
+  // detalhe). Esquerda/direita/baixo NAO se perdem: sao navegacao, e o destaque
+  // muda ou o foco desce mesmo — o trailer acaba junto e a UI ja esta voltando.
+  // OK, Voltar e Cima so devolvem: nao abrem o titulo nem perguntam se sai sem
+  // a pessoa ter visto a tela. (O KEYUP do OK que sobra e ignorado la embaixo:
+  // okPressionando nao foi armado.)
+  if (heroCinema.oculta && e->type == SDL_KEYDOWN && !e->key.repeat) {
+    SDL_Keycode kc = e->key.keysym.sym;
+    trailercinema_tecla(&heroCinema);
+    if (kc != SDLK_LEFT && kc != SDLK_RIGHT && kc != SDLK_DOWN) return;
+  }
 
   // SEGURAR O OK ABRE O MENU DO CARTAZ.
   //
@@ -2563,7 +2582,11 @@ static void desenhaHero(Uint32 agora, float saida) {
   heroArteRect = r;
 
   float aTexto = 1.0f - saida;
-  float descidaCopy = saida * NV_TELA_H * 0.06f;
+  // MODO CINEMA: o bloco desce NV_CINEMA_DESCE enquanto apaga (o do detalhe) e
+  // so o logo fica. `aCopy` e a opacidade do que SOME; o logo segue `aTexto`.
+  float cin = trailercinema_t(&heroCinema);
+  float aCopy = aTexto * (1.0f - cin);
+  float descidaCopy = saida * NV_TELA_H * 0.06f + cin * NV_CINEMA_DESCE;
   if (aTexto <= 0.004f) return;
 
   // BLOCO DE TEXTO DO HERO — transcrito do CSS do app web, nao deduzido de
@@ -2657,7 +2680,8 @@ static void desenhaHero(Uint32 agora, float saida) {
                           - NV_LD_HERO_SEC) : ySin;
   float yMeta = ySec - ((temSec || sinopse[0]) ? NV_HERO_COPY_LINHA : 0.0f)
                 - (metaLinha[0] ? NV_LD_HERO_META : 0.0f);
-  float logoY = yMeta - NV_HERO_COPY_LINHA - NV_LOGO_HERO_H;
+  // O logo NAO desce com o bloco: ele faz o caminho ate o canto de baixo (abaixo).
+  float logoY = yMeta - NV_HERO_COPY_LINHA - NV_LOGO_HERO_H - cin * NV_CINEMA_DESCE;
   float x = ajustes_conteudo_x();
 
   // Logo do titulo, ou o nome em texto quando nao ha logo
@@ -2694,6 +2718,17 @@ static void desenhaHero(Uint32 agora, float saida) {
     if (wTit > maxWLogo) { wTit = maxWLogo; hTit = wTit / ap; }
     // object-position: left top — a arte encosta no TOPO da caixa.
     GfxRect rl = { x, logoY, wTit, hTit };
+    // MODO CINEMA: o logo ENCOLHE e ANDA ate o canto inferior esquerdo (o do
+    // detalhe cruza-apaga, mas la o logo pequeno e outro desenho; aqui e o mesmo
+    // logo, entao o caminho e continuo). Mesmas medidas de trailercinema.h.
+    if (cin > 0.0f) {
+      float wc, hc, fim;
+      trailercinema_logo(ap, &wc, &hc);
+      fim = trailercinema_base();
+      rl.w = anim_mistura(wTit, wc, cin);
+      rl.h = anim_mistura(hTit, hc, cin);
+      rl.y = anim_mistura(logoY + hTit, fim, cin) - rl.h;
+    }
     gfx_tex_aspect_atual = 0.0f;
     // Logo escuro vira branco. Mesma regra da tela de detalhe: o TMDB nao marca
     // claro/escuro, entao a decisao sai da luminancia MEDIDA (tex_luminancia).
@@ -2715,12 +2750,18 @@ static void desenhaHero(Uint32 agora, float saida) {
     if (ci && ci->titulo[0]) {
       TxtLinha tit = txt_linha(TXT_TITULO1, ci->titulo, 255, 255, 255, 255);
       txt_desenhar_alpha(tit, x, logoY + NV_LOGO_HERO_H - (float)tit.h,
-                         aTexto);
+                         aTexto * (1.0f - cin));
+      // Sem logo, o nome pequeno entra embaixo (o mesmo do detalhe).
+      if (cin > 0.005f) {
+        TxtLinha t2 = txt_linha_corta(TXT_TITULO2, ci->titulo, 255, 255, 255, 255,
+                                      NV_DETW_LOGO_MAXW * 0.5f);
+        txt_desenhar_alpha(t2, x, trailercinema_base() - t2.h, aTexto * cin);
+      }
     }
   }
 
-  if (metaLinha[0]) {
-    float badgeW=ci?badges_desenhar(badges_provedor(ci->provNome),x,yMeta,150,24,aTexto):0;
+  if (metaLinha[0] && aCopy > 0.004f) {
+    float badgeW=ci?badges_desenhar(badges_provedor(ci->provNome),x,yMeta,150,24,aCopy):0;
     TxtLinha lm = txt_linha_corta(TXT_HERO_META, metaLinha, 179, 179, 179, 255,
                                   NV_HERO_SIN_W-badgeW);
     // META E SINOPSE TROCAM NA HORA, sem esvanecer com a arte. MEDIDO: no
@@ -2729,12 +2770,12 @@ static void desenhaHero(Uint32 agora, float saida) {
     // alfa de troca aqui era invencao nossa — e, com o rasterizador fazendo 2
     // linhas por quadro (text.c:40), esvanecer texto que ainda esta assentando
     // e o pior caso possivel.
-    txt_desenhar_alpha(lm, x+badgeW, yMeta, aTexto);
+    txt_desenhar_alpha(lm, x+badgeW, yMeta, aCopy);
   }
 
-  if (temSec) {
+  if (temSec && aCopy > 0.004f) {
     float cx = x;
-    float a = aTexto;
+    float a = aCopy;
     if (destaque[0]) {
       // .home-modern-hero-highlight: branco cheio, peso 600, tracking 0.04em.
       cx += txt_tracking(TXT_HERO_SEC, destaque, 255, 255, 255, cx, ySec, a,
@@ -2757,9 +2798,9 @@ static void desenhaHero(Uint32 agora, float saida) {
     }
   }
 
-  if (sinopse[0])
+  if (sinopse[0] && aCopy > 0.004f)
     txt_bloco(TXT_HERO_SIN, sinopse, 255, 255, 255, x, ySin, NV_HERO_SIN_W,
-              NV_LD_HERO_SIN, aTexto, 3);
+              NV_LD_HERO_SIN, aCopy, 3);
 
   // O BOTAO E A POSICAO, que so existem enquanto o destaque tem o foco.
   //
@@ -2774,33 +2815,38 @@ static void desenhaHero(Uint32 agora, float saida) {
       // promessa de comecar o filme, e quem aperta acaba numa pagina: o rotulo
       // tem de descrever o que a tecla FAZ, nao o que seria bonito escrever.
       const char *rot = i18n("Ver título");
-      int tb = ajustes_tinta_foco();
-      TxtLinha lb = txt_linha(TXT_CALLOUT, rot, tb, tb, tb, 255);
-      float bh = NV_HERO_BOTAO_H;
-      float bw = lb.w + 96.0f;
-      float by = base + NV_HOME_HERO_BOTAO_GAP;
-      GfxRect bt = { x, by, bw, bh };
-      // Brilho difuso por tras do botao (0,9x a altura de folga, alpha 0,35):
-      // a luz da pilula em foco do menu lateral (21/09/2026). Uma mancha de
-      // ~450x160 px sobre a arte do hero — 0,035 tela, o unico acrescimo de
-      // preenchimento da home nesta cara nova.
-      { GfxRect luz = { bt.x - bh * 0.9f, bt.y - bh * 0.9f, bw + bh * 1.8f, bh * 2.8f };
-        gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * aBotao); }
-      // Raio = metade da ALTURA: o raio do gfx_cor e fracao da altura do
-      // retangulo, entao 0,5 e a pilula exata em qualquer largura.
-      gfx_cor(bt, 0.5f, ar, ag, ab, aBotao);
-      // O TRIANGULO DE REPRODUZIR NAO ENTRA AQUI. Ele e a marca universal de
-      // "comeca agora" e este botao nao comeca nada; desenha-lo seria a mesma
-      // mentira do rotulo, so que em forma.
-      txt_desenhar_alpha(lb, x + (bw - lb.w) * 0.5f, by + (bh - lb.h) * 0.5f,
-                         aBotao);
+      // Em cinema o botao e o contador nao se desenham (o itemFoco la embaixo
+      // segue valendo: a tecla que devolve a UI nao pode abrir o titulo errado).
+      float aBtn = aBotao * (1.0f - cin);
+      if (aBtn > 0.004f) {
+        int tb = ajustes_tinta_foco();
+        TxtLinha lb = txt_linha(TXT_CALLOUT, rot, tb, tb, tb, 255);
+        float bh = NV_HERO_BOTAO_H;
+        float bw = lb.w + 96.0f;
+        float by = base + NV_HOME_HERO_BOTAO_GAP;
+        GfxRect bt = { x, by, bw, bh };
+        // Brilho difuso por tras do botao (0,9x a altura de folga, alpha 0,35):
+        // a luz da pilula em foco do menu lateral (21/09/2026). Uma mancha de
+        // ~450x160 px sobre a arte do hero — 0,035 tela, o unico acrescimo de
+        // preenchimento da home nesta cara nova.
+        { GfxRect luz = { bt.x - bh * 0.9f, bt.y - bh * 0.9f, bw + bh * 1.8f, bh * 2.8f };
+          gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * aBtn); }
+        // Raio = metade da ALTURA: o raio do gfx_cor e fracao da altura do
+        // retangulo, entao 0,5 e a pilula exata em qualquer largura.
+        gfx_cor(bt, 0.5f, ar, ag, ab, aBtn);
+        // O TRIANGULO DE REPRODUZIR NAO ENTRA AQUI. Ele e a marca universal de
+        // "comeca agora" e este botao nao comeca nada; desenha-lo seria a mesma
+        // mentira do rotulo, so que em forma.
+        txt_desenhar_alpha(lb, x + (bw - lb.w) * 0.5f, by + (bh - lb.h) * 0.5f,
+                           aBtn);
 
-      { char pos[24];
-        int p = heroPosDe(heroIntencao());
-        snprintf(pos, sizeof pos, "%d / %d", (p < 0 ? 0 : p) + 1, n);
-        TxtLinha lp = txt_linha(TXT_HERO_META, pos, 196, 199, 208, 255);
-        txt_desenhar_alpha(lp, x + bw + 28.0f, by + (bh - lp.h) * 0.5f,
-                           aBotao * 0.92f); }
+        { char pos[24];
+          int p = heroPosDe(heroIntencao());
+          snprintf(pos, sizeof pos, "%d / %d", (p < 0 ? 0 : p) + 1, n);
+          TxtLinha lp = txt_linha(TXT_HERO_META, pos, 196, 199, 208, 255);
+          txt_desenhar_alpha(lp, x + bw + 28.0f, by + (bh - lp.h) * 0.5f,
+                             aBtn * 0.92f); }
+      }
 
       // CONTINUIDADE DA ABERTURA: a pagina de titulo cresce a partir do
       // retangulo que o item ocupava. Com o foco no destaque esse retangulo e a
@@ -3259,7 +3305,13 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
 trailer_hero_fim:
   { float alvo = (heroTrailerItem >= 0 && heroTrailerItem == heroAtual &&
                   trailer_aberto() && !trailer_cheia() && trailer_tocando()) ? 1.0f : 0.0f;
-    heroTrailerFade = anim_mola(heroTrailerFade, alvo, dt, NV_MOLA_SCROLL); }
+    heroTrailerFade = anim_mola(heroTrailerFade, alvo, dt, NV_MOLA_SCROLL);
+    // MODO CINEMA: so com o trailer do DESTAQUE tocando (foco no hero). No do
+    // cartaz em foco as fileiras sao o assunto. Fora do topo zera de vez, senao
+    // a volta de outra tela mostraria um quadro do estado velho.
+    { int toca = topo && focoHero && ajustes_trailer_hero() && alvo > 0.5f;
+      trailercinema_passo(&heroCinema, toca, dt, ajustes_animacoes_reduzidas());
+      if (!topo) trailercinema_zerar(&heroCinema); } }
 }
 
 void home_desenhar(Uint32 agora) {
@@ -3285,7 +3337,13 @@ void home_desenhar(Uint32 agora) {
   // e nao de um relogio proprio: dois relogios descasariam e a home sairia
   // adiantada ou atrasada em relacao a arte que entra.
   float descida = pd * NV_TELA_H * 0.08f;
-  if (pd >= 0.996f) return;   // detalhe assentado: nada da home aparece
+  if (pd >= 0.996f) return;
+  // MODO CINEMA: as fileiras descem NV_CINEMA_DESCE e apagam (o mesmo que o
+  // bloco do hero faz), para o trailer ficar inteiro. Assentado, NAO SE
+  // DESENHAM: nem fileiras, nem cartazes, nem o aviso de "cabem mais fileiras".
+  const float cinema = trailercinema_t(&heroCinema);
+  const int fileirasOcultas = cinema >= 0.996f;
+  descida += cinema * NV_CINEMA_DESCE;   // detalhe assentado: nada da home aparece
 
   // VIEWPORT DAS FILEIRAS. `.home-modern-rows-viewport` (components.css:6929) e
   // um bloco absoluto com bottom:0, height 52% e overflow-y:auto — ou seja as
@@ -3299,7 +3357,7 @@ void home_desenhar(Uint32 agora) {
   // ou o do cache): e o caso de a pessoa ter desligado todas em Ajustes. Sem
   // texto, o hero sozinho com o resto da tela vazia le como travamento — e ela
   // nao teria como adivinhar que foi ela quem apagou a home.
-  if (nFileiras < 1) {
+  if (nFileiras < 1 && !fileirasOcultas) {
     float tx = ajustes_conteudo_x();
     TxtLinha t = txt_linha(TXT_ROW_TITULO, "Nenhuma fileira ativa", 240, 241, 245, 255);
     txt_desenhar(t, tx, NV_SHELF_TOP);
@@ -3318,10 +3376,10 @@ void home_desenhar(Uint32 agora) {
   // A LUZ DO FOCO: uma varredura por foco novo, nenhuma com a tecla presa.
   float varreFoco = revela_varre(&revVarre,
                                  focoHero ? -1 : foco.fileira * 64 + foco.coluna, agora);
-  for (int r = 0; r < nFileiras; r++) {
+  for (int r = 0; r < (fileirasOcultas ? 0 : nFileiras); r++) {
     TipoFileira tipo = fileiras[r].tipo;
     float fade=anim_clamp((y-(NV_SHELF_TOP-80))/80,0,1);
-    gfx_opacidade_grupo=fade*fade*(3-2*fade);
+    gfx_opacidade_grupo=fade*fade*(3-2*fade)*(1.0f-cinema);
     const float grupoFil = gfx_opacidade_grupo;
     { int n = fileiras[r].n;
       int visivel = y < NV_TELA_H && y + NV_LEGACY_ROW_HEAD_H + alturaFil(r) > NV_SHELF_TOP - 96;
@@ -3957,17 +4015,17 @@ void home_desenhar(Uint32 agora) {
   // O texto diz O CAMINHO e nao so o fato. "Ha mais catalogos" sem dizer onde
   // mudar seria informar e nao resolver.
   { int fora = desc_catalogos_fora() + cortadasPeloLimite;
-    if (fora > 0 && nFileiras > 0) {
+    if (fora > 0 && nFileiras > 0 && !fileirasOcultas) {
       char aviso[160];
       snprintf(aviso, sizeof aviso,
                fora == 1 ? i18n("Cabe %d fileira a mais aqui")
                          : i18n("Cabem %d fileiras a mais aqui"), fora);
       TxtLinha l = txt_linha(TXT_CAPTION, aviso, 196, 199, 208, 255);
-      txt_desenhar_alpha(l, ajustes_conteudo_x(), y, 0.92f);
+      txt_desenhar_alpha(l, ajustes_conteudo_x(), y, 0.92f * (1.0f - cinema));
       { TxtLinha c = txt_linha(TXT_CAPTION2,
                                "Ajustes  ·  Fileiras da Home  ·  Limite de fileiras",
                                150, 152, 160, 255);
-        txt_desenhar_alpha(c, ajustes_conteudo_x(), y + l.h + 6.0f, 0.92f); }
+        txt_desenhar_alpha(c, ajustes_conteudo_x(), y + l.h + 6.0f, 0.92f * (1.0f - cinema)); }
     } }
 
   // PERGUNTA DE SAIDA. Fica por cima de tudo e some sozinha em 3 s; o segundo
