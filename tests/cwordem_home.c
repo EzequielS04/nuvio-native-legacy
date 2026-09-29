@@ -46,6 +46,7 @@ void vertudo_abrir(const char *b, const char *t, const char *c, const char *ti) 
 }
 void vertudo_colecao(const ColFolder *f) { (void)f; }
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 // A troca de ordenacao em Ajustes refaz a fileira pela descoberta; aqui a
 // montagem nao existe, entao o pedido so e contado.
 void desc_refazer_continuar(void) {}

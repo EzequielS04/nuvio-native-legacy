@@ -113,6 +113,12 @@ void desc_data_extenso(const char *iso, char *dst, size_t tam);
 // pacote guardam os generos em INGLES, e eles apareciam crus numa interface em
 // portugues. Genero fora da tabela sai como veio.
 const char *desc_genero_pt(const char *g);
+// Valores crus do TMDB/Trakt/Cinemeta que vao para a tela (ver descoberta.c).
+// desc_status_chave devolve a CHAVE em portugues (passe por i18n) ou NULL.
+const char *desc_status_chave(const char *raw, int serie);
+void desc_pais_txt(const char *lista, char *dst, size_t tam);
+void desc_duracao_min(int min, char *dst, size_t tam);
+void desc_duracao_txt(const char *cru, char *dst, size_t tam);
 
 // --- busca por titulo --------------------------------------------------------
 // Consulta o Cinemeta em filme e serie. NAO BLOQUEIA: dispara um fio e volta na
@@ -216,6 +222,30 @@ int desc_episodios_carregando(int indiceItem);
 // devolve quantos episodios mudaram.
 int  desc_tmdb_notas_temporada(const char *json, CatEp *eps, int n,
                                int temporada);
+// O mesmo, escolhendo o que entra alem da nota (#176): DESC_EPT_SINOPSE,
+// DESC_EPT_NOME (nome traduzido; o generico "Episodio 3" nunca entra) e
+// DESC_EPT_SO_VAZIO (so preenche o que esta vazio, para nao pisar num texto que
+// veio do addon de metadados quando a pessoa o prefere).
+#define DESC_EPT_SINOPSE  1
+#define DESC_EPT_NOME     2
+#define DESC_EPT_SO_VAZIO 4
+int  desc_tmdb_notas_temporada_ex(const char *json, CatEp *eps, int n,
+                                  int temporada, int textos);
+// 1 quando `nome` e o rotulo sem traducao do TMDB ("Episode 3"). Pura.
+int  desc_nome_episodio_generico(const char *nome, int episodio);
+// Junta duas listas de episodios ORDENADAS por (temporada, episodio): para cada
+// episodio de `base` que `outro` tambem tem, `modo` DESC_MESCLA_TEXTO troca
+// nome e sinopse pelos do outro quando ele os tem; DESC_MESCLA_VAZIOS so
+// preenche o que a base nao tem (nome, sinopse, thumb, duracao). Pura.
+#define DESC_MESCLA_TEXTO  1
+#define DESC_MESCLA_VAZIOS 2
+void desc_mesclar_episodios(CatEp *base, int nb, const CatEp *outro, int no,
+                            int modo);
+// Localiza (titulo e sinopse) os itens de catalogo de indices `idx`, em fio
+// proprio e sem bloquear: fonte e o addon de metadados quando a pessoa o
+// prefere, ou o TMDB no idioma configurado (#176). Chamada barata e repetivel:
+// o que ja foi resolvido vem do cache.
+void desc_localizar_indices(const int *idx, int n);
 // Casa o `cast` de /credits do TMDB com o elenco do item POR NOME (sem acento,
 // caixa nem pontuacao) e completa a lista com o resto do TMDB (#153). Pura;
 // devolve quantos nomes casaram.
@@ -225,6 +255,7 @@ int  desc_tmdb_elenco(const char *json, CatItem *d);
 int  desc_meta_tipos(const char *tipo, const char *saida[2]);
 void desc_meta_chave(char *dst, size_t n, const char *tipo, const char *id);
 int  desc_meta_tem_temporadas(const char *corpo);
+int  desc_meta_n_episodios(const char *corpo);
 
 // Busca o meta de um titulo que o catalogo NAO tem e o acrescenta ao fim.
 // Nao bloqueia. Serve ao credito de um ator e ao item de "Mais como este":

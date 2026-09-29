@@ -107,6 +107,19 @@ int js_texto(const char *ini, const char *fim, const char *chave,
     }
     dst[k++] = *p++;
   }
+  // Cortou por FALTA DE ESPACO no meio de um caractere de 2-4 bytes? Uma
+  // sinopse em russo ou ucraniano gasta 2 bytes por letra e estoura o buffer
+  // de 900 com facilidade; o byte solto no fim vira um quadrado na tela. Volta
+  // ate a fronteira do ultimo caractere inteiro.
+  if (*p && *p != '"' && k > 0 && ((unsigned char)dst[k - 1] & 0x80)) {
+    size_t j = k;
+    while (j > 0 && ((unsigned char)dst[j - 1] & 0xC0) == 0x80) j--;
+    if (j > 0) {
+      unsigned char lead = (unsigned char)dst[j - 1];
+      size_t need = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1;
+      if (k - (j - 1) < need) k = j - 1;
+    }
+  }
   dst[k] = 0;
   return k > 0;
 }

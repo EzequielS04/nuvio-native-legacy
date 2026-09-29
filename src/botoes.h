@@ -57,6 +57,11 @@ int  botao_superficie(GfxRect r, float foco, float a);
 // Botao redondo so com icone. `r` e o quadrado do disco.
 void botao_disco(GfxRect r, const char *icone, float foco, float a);
 
+// A cor de FOCO de todo botao (preenchimento e luz): o acento escurecido, a
+// mesma do player de filme. Devolve a tinta (0.067 ou 1.0) por
+// ajustes_acento_tinta. Quem pinta uma superficie de foco propria usa esta.
+float botao_cor_foco(float *r, float *g, float *b);
+
 // So a luz difusa por tras de um botao em foco, para quem ja tem a pilula
 // desenhada de outro jeito (o Play de detail.c, que cresce no foco).
 void botao_luz(GfxRect r, float foco, float a);

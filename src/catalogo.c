@@ -1,4 +1,5 @@
 #include "catalogo.h"
+#include "idbase.h"
 #include "tendencia.h"
 #include "artereserva.h"
 // FRACO: os testes leves compilam catalogo.c sozinho (tests/catcache.sh e
@@ -519,7 +520,7 @@ int cat_carregar(const char *dirArte) {
 // <SDL2/SDL.h>, e catalogo.c e compilado sem SDL por tests/catcache.sh — que e
 // justamente o teste deste cache. Incluir o cabecalho troca um teste leve por
 // um que precisa da biblioteca grafica inteira para conferir um fwrite.
-int ajustes_idioma_ingles(void);
+int ajustes_idioma(void);
 
 #define CACHE_MAGIA  0x4E56434Bu   /* "NVCK" */
 // VERSAO 2: o cabecalho passou a carregar a identidade do dono. Subir a versao
@@ -559,7 +560,7 @@ typedef struct {
   // credencial de addon do usuario anterior.
   char usuario[64];   // `sub` do JWT; "" quando deslogado
   int  perfil;        // perfis_ativo()
-  int  ingles;        // ajustes_idioma_ingles() quando o arquivo foi escrito
+  int  ingles;        // ajustes_idioma() (IDIOMA_*; 0 pt, 1 en como antes) quando o arquivo foi escrito
 } CacheCab;
 
 // Quem esta logado AGORA. Chamada nas duas pontas — gravar e ler — e por isso o
@@ -697,7 +698,7 @@ int cat_gravar_cache_se_identidade(const char *dirArte, const char *donoEsperado
   // byte impossivel e vaza pedaco de pilha para o disco.
   memset(&c, 0, sizeof c);
   c.magia = CACHE_MAGIA; c.versao = CACHE_VERSAO;
-  c.ingles = ajustes_idioma_ingles();
+  c.ingles = ajustes_idioma();
   c.tamItem = (unsigned)sizeof(CatItem);
   c.tamFileira = (unsigned)sizeof(CatFileira);
   c.nItens = n; c.nFileiras = nFils;
@@ -744,7 +745,8 @@ int cat_ler_cache(const char *dirArte) {
   CacheCab c;
   FILE *f;
   CatItem *novo;
-  CatFileira lidas[CAT_FIL_MAX];
+  // static: 40 x 1 KB nao pertence a pilha. Roda uma vez, no arranque.
+  static CatFileira lidas[CAT_FIL_MAX];
   int nLidas = 0;
   caminhoCache(dirArte, caminho, sizeof caminho);
   f = fopen(caminho, "rb");
@@ -779,7 +781,7 @@ int cat_ler_cache(const char *dirArte) {
   // os arquivos antigos UMA VEZ; sem esta linha, trocar de idioma depois disso
   // nao invalidaria nada e a home voltaria a dizer "Programa de TV" em ingles.
   if (strcmp(c.usuario, usuario) != 0 || c.perfil != perfil ||
-      c.ingles != ajustes_idioma_ingles()) {
+      c.ingles != ajustes_idioma()) {
     fclose(f);
     printf("[cat] cache descartado (era de outro usuario/perfil/idioma)\n");
     fflush(stdout);
@@ -1211,6 +1213,32 @@ const CatEp *cat_episodio(int indiceItem, int i) {
   return &eps[epIni[indiceItem] + i];
 }
 
+int cat_id_stream(int indiceItem, int t, int e, char *dst, unsigned tam) {
+  const CatItem *c = cat_item(indiceItem);
+  char base[96];
+  int i, n;
+  if (!dst || !tam) return 0;
+  dst[0] = 0;
+  if (!c || !c->imdb[0]) return 0;
+  idbase_copiar(c->imdb, base, sizeof base);
+  if (t <= 0 || e <= 0) { snprintf(dst, tam, "%s", c->imdb); return 1; }
+  if (!idbase_e_imdb(c->imdb)) {
+    n = cat_n_episodios(indiceItem);
+    for (i = 0; i < n; i++) {
+      const CatEp *ep = cat_episodio(indiceItem, i);
+      if (ep && ep->temporada == t && ep->episodio == e && ep->vid[0]) {
+        snprintf(dst, tam, "%s", ep->vid);
+        return 1;
+      }
+    }
+    // Sem o video: a convencao dos addons de anime e "<id>:<episodio>".
+    snprintf(dst, tam, "%s:%d", base, e);
+    return 1;
+  }
+  snprintf(dst, tam, "%s:%d:%d", base, t, e);
+  return 1;
+}
+
 int cat_n_fileiras(void) { return nFils; }
 const CatFileira *cat_fileira(int r) {
   return (r >= 0 && r < nFils) ? &fils[r] : NULL;
@@ -1573,7 +1601,8 @@ void cat_definir_tudo(const CatItem *lista, int qtd,
 // Roda sob pubTrava: a descoberta pode estar trocando o catalogo neste mesmo
 // instante, e duas trocas simultaneas liberariam o mesmo bloco duas vezes.
 void cat_trocar_continuar(const CatItem *lista, int qtd) {
-  CatFileira novas[CAT_FIL_MAX];
+  // static (40 KB): so e usado depois de pubTrava, que serializa as chamadas.
+  static CatFileira novas[CAT_FIL_MAX];
   CatItem *novo;
   int r, cw = -1, cwIni = 0, cwN = 0, delta, novoN, nv = 0;
   if (qtd < 0) qtd = 0;

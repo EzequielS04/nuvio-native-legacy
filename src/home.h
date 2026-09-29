@@ -15,7 +15,11 @@ typedef enum {
   FILEIRA_SERVICO,     // catálogo por serviço: landscape compacto
   FILEIRA_SOCIAL,      // atividade dos amigos: editorial largo com autoria
   FILEIRA_RETORNO,     // sessão recém-interrompida: faixa compacta de retomar
-  FILEIRA_CATALOGOS    // atalhos para catálogos existentes, não títulos
+  FILEIRA_CATALOGOS,   // atalhos para catálogos existentes, não títulos
+  // SO NO LAYOUT DINAMICA (ajustes_home_layout): formas que a Apple TV usa e a
+  // home Moderna nao tem. Nascem em dinAtribuirTipos, nunca do catalogo.
+  FILEIRA_TOP10_NUM,   // ranking: numeral grande ao lado de cada cartaz
+  FILEIRA_LARGA        // cartao deitado 16:9 maior que o da Moderna
 } TipoFileira;
 
 // O item sob o foco, com o retangulo que ele ocupa na tela NESTE quadro. A

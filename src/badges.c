@@ -4,11 +4,13 @@
 #include "text.h"
 #include "tex_cache.h"
 #include "ajustes.h"
+#include "idioma.h"
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <ctype.h>
 #include <stdlib.h>
-static const char *ids[]={"r-4k","r-1080","r-720","q-remux","q-bluray","q-webdl","q-webrip","q-seadex","v-dv","v-hdr10plus","v-hdr10","v-hdr","v-imax-enhanced","v-imax","v-sdr","a-atmos-dv","a-atmos","a-truehd-dv","a-truehd","a-dtsx","a-dtshdma","a-dtshd","a-dts","a-dd-dv","a-ddp","a-dd","c-71","c-51","co-x265","co-x264","co-av1","p-netflix","p-prime","p-appletv","p-disney","p-max","p-hulu","p-peacock","p-paramount","p-crave","p-crunchyroll"};
+static const char *ids[]={"r-4k","r-1080","r-720","r-sd","q-remux","q-bluray","q-webdl","q-webrip","q-seadex","v-dv","v-hdr10plus","v-hdr10","v-hdr","v-hlg","v-imax-enhanced","v-imax","v-sdr","a-atmos-dv","a-atmos","a-truehd-dv","a-truehd","a-dtsx","a-dtshdma","a-dtshd","a-dts","a-dd-dv","a-ddp","a-dd","c-71","c-51","co-x265","co-x264","co-av1","p-netflix","p-prime","p-appletv","p-disney","p-max","p-hulu","p-peacock","p-paramount","p-crave","p-crunchyroll"};
 #define NB (sizeof ids/sizeof ids[0])
 static struct {char image[700],name[64];} art[NB];
 static uint64_t bit(const char *id){for(size_t i=0;i<NB;i++)if(!strcmp(id,ids[i]))return UINT64_C(1)<<i;return 0;}
@@ -18,7 +20,7 @@ uint64_t badges_detectar(const char *metadata) {
   uint64_t m=0;
 #define HAS(t) token(s,t)
 #define ADD(id) (m|=bit(id))
-  int dv=HAS("dv")||HAS("dovi")||HAS("dolby vision")||HAS("dolby.vision")||HAS("dolby-vision")||HAS("dolby_vision");
+  int dv=HAS("dv")||HAS("dovi")||HAS("dolbyvision")||HAS("dolby vision")||HAS("dolby.vision")||HAS("dolby-vision")||HAS("dolby_vision");
   int atmos=HAS("atmos"),thd=HAS("truehd")||HAS("true-hd")||HAS("true hd");
   int ddp=HAS("ddp")||strstr(s,"ddp5")||strstr(s,"ddp7")||HAS("dd+")||HAS("eac3")||HAS("eac-3")||HAS("e-ac-3");
   int dd=HAS("ac3")||HAS("ac-3")||HAS("dd5.1")||HAS("dd2.0");
@@ -30,7 +32,7 @@ uint64_t badges_detectar(const char *metadata) {
   if(HAS("webrip")||HAS("web-rip")||HAS("web.rip"))ADD("q-webrip");
   if(HAS("seadex"))ADD("q-seadex");
   if(HAS("hdr10+")||HAS("hdr10plus")||HAS("hdr10p"))ADD("v-hdr10plus");
-  else if(HAS("hdr10"))ADD("v-hdr10");else if(HAS("hdr")||HAS("hlg"))ADD("v-hdr");
+  else if(HAS("hdr10"))ADD("v-hdr10");else if(HAS("hlg"))ADD("v-hlg");else if(HAS("hdr"))ADD("v-hdr");
   if(HAS("imax enhanced")||HAS("imax.enhanced"))ADD("v-imax-enhanced");else if(HAS("imax"))ADD("v-imax");
   if(HAS("sdr"))ADD("v-sdr");
   if(atmos)ADD(dv?"a-atmos-dv":"a-atmos");
@@ -54,12 +56,104 @@ uint64_t badges_detectar(const char *metadata) {
 #undef ADD
   return m;
 }
-uint64_t badges_provedor(const char *name){return badges_detectar(name)&(~UINT64_C(0)<<31);}
-const char *badges_fonte_hdr(uint64_t mask) {
-  if (mask & bit("v-hdr10plus")) return "Fonte HDR10+";
-  if (mask & bit("v-hdr10")) return "Fonte HDR10";
-  if (mask & bit("v-hdr")) return "Fonte HDR";
-  return NULL;
+// Provedores comecam em p-netflix; a conta sai do nome e nao de um 31 cravado,
+// que quebrou em silencio quando entrou o v-hlg no meio da tabela.
+uint64_t badges_provedor(const char *name){
+  static uint64_t dePartida;
+  if(!dePartida){uint64_t b=bit("p-netflix");dePartida=~UINT64_C(0)<<__builtin_ctzll(b);}
+  return badges_detectar(name)&dePartida;
+}
+// Marca do HDR que a FONTE anuncia (nao o que o painel ativou), ou -1. Trocou
+// badges_fonte_hdr, que devolvia a frase "Fonte HDR10+" em texto.
+int badges_fonte_hdr_marca(uint64_t mask) {
+  if (mask & bit("v-hdr10plus")) return FMT_HDR10P;
+  if (mask & bit("v-hdr10")) return FMT_HDR10;
+  if (mask & bit("v-hlg")) return FMT_HLG;
+  if (mask & bit("v-hdr")) return FMT_HDR;
+  return -1;
+}
+
+// --- MARCA DE FORMATO, UMA SO PORTA (29/09/2026) -----------------------------
+//
+// Pedido do dono: "vamos usar as logos sempre que formos referenciar HDR,
+// HDR10+, Dolby Vision, Dolby Atmos, etc." Antes cada tela escrevia a palavra
+// (a folha de fontes "Dolby Vision · Atmos", o player "Dolby Vision", "HDR10",
+// os Ajustes "DV"/"ATMOS") e so a fileira de badges da folha usava a arte.
+//
+// As artes sao as mesmas de badges/: brancas, forma no ALFA. Por isso o
+// desenho vai sempre por GFX_MARCA, que tinge com a cor pedida — segue a tinta
+// do foco, o vidro e o realce sem arquivo novo.
+static const struct { const char *id; const char *texto; } FORMATOS[FMT_N] = {
+  [FMT_4K]={"r-4k","4K"},[FMT_1080]={"r-1080","1080p"},[FMT_720]={"r-720","720p"},
+  // SD nao vinha no pacote de marcas: r-sd.webp (29/09/2026) foi desenhada na
+  // mesma caixa do 4K (altura de glifo 119 em 194, topo em 37), para a fileira
+  // de resolucoes ter um corpo so. badges_detectar NAO a acende: "sd" solto no
+  // nome de uma fonte e ruido demais; so quem sabe a resolucao (o guia, o
+  // player) pede FMT_SD.
+  [FMT_SD]={"r-sd","SD"},
+  [FMT_SDR]={"v-sdr","SDR"},[FMT_HDR]={"v-hdr","HDR"},[FMT_HDR10]={"v-hdr10","HDR10"},
+  [FMT_HDR10P]={"v-hdr10plus","HDR10+"},[FMT_HLG]={"v-hlg","HLG"},
+  [FMT_DV]={"v-dv","Dolby Vision"},[FMT_ATMOS]={"a-atmos","Dolby Atmos"},
+  [FMT_DTS]={"a-dts","DTS"},[FMT_DTSX]={"a-dtsx","DTS:X"},[FMT_DTSHD]={"a-dtshd","DTS-HD"},
+  [FMT_TRUEHD]={"a-truehd","Dolby TrueHD"},[FMT_DD]={"a-dd","Dolby Digital"},
+  [FMT_DDP]={"a-ddp","Dolby Digital+"},[FMT_IMAX]={"v-imax","IMAX"},
+  [FMT_IMAX_ENH]={"v-imax-enhanced","IMAX Enhanced"},[FMT_AV1]={"co-av1","AV1"},
+  [FMT_HEVC]={"co-x265","HEVC"},[FMT_AVC]={"co-x264","AVC"},[FMT_REMUX]={"q-remux","Remux"},
+};
+static int indiceFormato(FormatoMarca f) {
+  if ((int)f < 0 || f >= FMT_N) return -1;
+  for (size_t i = 0; i < NB; i++) if (!strcmp(ids[i], FORMATOS[f].id)) return (int)i;
+  return -1;
+}
+int marca_resolucao(const char *nome) {
+  if (!nome || !nome[0]) return -1;
+  if (!strcasecmp(nome, "4K") || !strcasecmp(nome, "UHD") || !strcasecmp(nome, "2160p")) return FMT_4K;
+  if (!strcasecmp(nome, "1080p") || !strcasecmp(nome, "FHD")) return FMT_1080;
+  if (!strcasecmp(nome, "720p") || !strcasecmp(nome, "HD")) return FMT_720;
+  if (!strcasecmp(nome, "SD")) return FMT_SD;
+  return -1;
+}
+const char *marca_formato_nome(FormatoMarca f) {
+  return ((int)f >= 0 && f < FMT_N) ? FORMATOS[f].texto : "";
+}
+// Largura sem desenhar, para o chamador alinhar a direita ou centralizar. Com a
+// textura ainda nao decodificada tex_aspecto vale 0 e a largura cai no palpite
+// (2,2 x altura): o quadro seguinte corrige, e a marca aparece no lugar certo.
+float marca_formato_largura(FormatoMarca f, float altura) {
+  int i = indiceFormato(f);
+  float asp;
+  if (i < 0) return 0.0f;
+  if (!art[i].image[0]) return (float)txt_largura(TXT_MINI, FORMATOS[f].texto);
+  asp = tex_aspecto(art[i].image);
+  if (asp <= 0.0f) { tex_obter_larg(art[i].image, 128); asp = 2.2f; }
+  { float w = altura * asp; return w > altura * 4.6f ? altura * 4.6f : w; }
+}
+float marca_formato(FormatoMarca f, float x, float y, float altura,
+                    float r, float g, float b, float a) {
+  int i = indiceFormato(f);
+  GLuint t;
+  float asp;
+  if (i < 0) return 0.0f;
+  if (art[i].image[0]) {
+    // Decodifica na largura de uso: 128 cobre as marcas de linha, e as largas
+    // (DTS-HD a 44 px de caixa passa de 180) pedem 256 para nao borrar.
+    float w = altura * 4.6f;
+    t = tex_obter_larg(art[i].image, altura * 4.16f > 128.0f ? 256.0f : 128.0f);
+    asp = tex_aspecto(art[i].image);
+    if (t && asp > 0.0f) {
+      w = altura * asp;
+      if (w > altura * 4.6f) w = altura * 4.6f;
+      gfx_rect((GfxRect){ x, y + (altura - w / asp) * 0.5f, w, w / asp }, t,
+               GFX_MARCA, 0, 0, 0, 0, r, g, b, a);
+      return w;
+    }
+  }
+  // SEM ARTE (pacote sem badges/, ou ainda decodificando): o nome em texto, na
+  // mesma cor. Melhor a palavra que um buraco — e some assim que a textura vem.
+  { TxtLinha l = txt_linha(TXT_MINI, FORMATOS[f].texto, (int)(r * 255.0f), (int)(g * 255.0f),
+                           (int)(b * 255.0f), 255);
+    txt_desenhar_alpha(l, x, y + (altura - (float)l.h) * 0.5f, a);
+    return (float)l.w; }
 }
 void badges_carregar(const char *dir) {
   char path[700];snprintf(path,sizeof path,"%s/badges/index.json",dir);FILE *f=fopen(path,"rb");if(!f)return;
@@ -76,7 +170,7 @@ void badges_carregar(const char *dir) {
 // "nas fontes as badges inferiores ... nao mudaram de cor para preto quando
 // selecionadas".
 //
-// DA PARA TINGIR porque as 41 artes de badges/ sao MONOCROMATICAS BRANCAS — a
+// DA PARA TINGIR porque as 42 artes de badges/ sao MONOCROMATICAS BRANCAS — a
 // forma mora no alfa e o RGB e 255 em todas (conferido arquivo por arquivo).
 // Entao o escuro vai por GFX_MARCA, que pega a forma do alfa e a cor de uCor.
 //
@@ -104,6 +198,57 @@ float badges_desenhar(uint64_t mask,float x,float y,float maxW,float h,float a) 
 }
 float badges_desenhar_escura(uint64_t mask,float x,float y,float maxW,float h,float a) {
   return fileira(mask,x,y,maxW,h,a,1);
+}
+
+// ROTULO COM A PALAVRA DO FORMATO TROCADA PELA MARCA ("Sem HDR" -> "Sem" +
+// logo). O rotulo e traduzido ANTES de procurar a palavra: "Ohne HDR", "Без HDR"
+// e "No HDR" saem do mesmo caminho, sem cravar a lingua. Sem a palavra na
+// traducao, ou sem espaco, cai no texto puro.
+static int partesRotulo(const char *rotulo, FormatoMarca f, char *ante, size_t na,
+                        char *depois, size_t nd) {
+  const char *t = i18n(rotulo), *nome = marca_formato_nome(f), *p;
+  size_t ln = strlen(nome);
+  ante[0] = depois[0] = 0;
+  if (!ln || !(p = strstr(t, nome))) return 0;
+  snprintf(ante, na, "%.*s", (int)(p - t), t);
+  snprintf(depois, nd, "%s", p + ln);
+  // Os espacos ao redor da palavra viram o respiro da marca (6 px).
+  { size_t k = strlen(ante); while (k && ante[k - 1] == ' ') ante[--k] = 0; }
+  { char *q = depois; while (*q == ' ') q++; memmove(depois, q, strlen(q) + 1); }
+  return 1;
+}
+float marca_rotulo_largura(TxtEstilo est, const char *rotulo, FormatoMarca f, float altura) {
+  char a[96], d[96];
+  float w = 0.0f;
+  if (!partesRotulo(rotulo, f, a, sizeof a, d, sizeof d))
+    return (float)txt_linha(est, rotulo, 0, 0, 0, 255).w;
+  if (a[0]) w += (float)txt_linha(est, a, 0, 0, 0, 255).w + 6.0f;
+  w += marca_formato_largura(f, altura);
+  if (d[0]) w += (float)txt_linha(est, d, 0, 0, 0, 255).w + 6.0f;
+  return w;
+}
+float marca_rotulo(TxtEstilo est, const char *rotulo, FormatoMarca f, float x, float y,
+                   float altura, int tinta, float a) {
+  char an[96], de[96];
+  float k = (float)tinta / 255.0f, x0 = x;
+  if (!partesRotulo(rotulo, f, an, sizeof an, de, sizeof de)) {
+    TxtLinha l = txt_linha(est, rotulo, tinta, tinta, tinta, 255);
+    txt_desenhar_alpha(l, x, y, a);
+    return (float)l.w;
+  }
+  {
+    TxtLinha ref = txt_linha(est, an[0] ? an : de[0] ? de : "H", tinta, tinta, tinta, 255);
+    float cy = y + (float)ref.h * 0.5f;
+    if (an[0]) { txt_desenhar_alpha(ref, x, y, a); x += (float)ref.w + 6.0f; }
+    x += marca_formato(f, x, cy - altura * 0.5f, altura, k, k, k, a);
+    if (de[0]) {
+      TxtLinha l = txt_linha(est, de, tinta, tinta, tinta, 255);
+      x += 6.0f;
+      txt_desenhar_alpha(l, x, y, a);
+      x += (float)l.w;
+    }
+  }
+  return x - x0;
 }
 
 // --- SELOS DE TEXTO ----------------------------------------------------------
@@ -138,7 +283,7 @@ float badge_desenhar(float x, float y, const char *texto, BadgeEstilo estilo, fl
 static void notaTexto(char *dst, size_t n, int nota) {
   // Separador decimal pelo idioma: "8,4" em portugues, "8.4" em ingles — em
   // ingles a virgula le como milhar interrompido (ver recomenda.c).
-  snprintf(dst, n, ajustes_idioma_ingles() ? "%d.%d" : "%d,%d", nota / 10, nota % 10);
+  snprintf(dst, n, idioma_ponto_decimal(ajustes_idioma()) ? "%d.%d" : "%d,%d", nota / 10, nota % 10);
 }
 float badge_imdb_largura(int nota) {
   char t[8]; TxtLinha l;

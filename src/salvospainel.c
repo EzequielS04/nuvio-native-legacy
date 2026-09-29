@@ -19,6 +19,7 @@
 #include "recomenda.h"
 #include "avisos.h"
 #include "recenviar.h"
+#include "pessoas.h"
 #include "catalogo.h"
 #include "ctxmenu.h"
 #include "gfx.h"
@@ -191,10 +192,11 @@ static int nRecs;
 // uma tela separada com laco proprio: o D-pad, a rolagem, a animacao de foco e
 // o recorte do painel ja funcionam para linhas, e uma segunda maquina de estado
 // para duas pilulas divergiria da primeira na primeira correcao.
+//   SPS_ENCONTRAR           "Encontrar pessoas" (busca, perfil, pedidos; pessoas.c)
 //   SPS_AMIGO               um contato ja adicionado (foto + nome), sob o
 //                           cabecalho "Seus amigos" (dono, 20/09/2026)
 enum { SPS_CONSENT_NAO = 0, SPS_CONSENT_SIM, SPS_REC, SPS_SUG,
-       SPS_ADICIONAR, SPS_APARECER, SPS_AMIGO };
+       SPS_ADICIONAR, SPS_APARECER, SPS_AMIGO, SPS_ENCONTRAR };
 typedef struct { unsigned char tipo; short idx; } SPSocial;
 #define SP_SOCIAL_MAX (REC_MAX + REC_SUGESTOES_MAX + REC_CONTATOS_MAX + 4)
 static SPSocial social[SP_SOCIAL_MAX];
@@ -458,6 +460,7 @@ static float socialAlt(int i) {
     case SPS_SUG:       return SPS_H_SUG;
     case SPS_AMIGO:     return SPS_H_AMIGO;
     case SPS_ADICIONAR: return SPS_H_ACAO;
+    case SPS_ENCONTRAR: return SPS_H_ACAO;
     case SPS_APARECER:  return SPS_H_APARECER;
     default:            return SPS_H_CONSENT;
   }
@@ -532,6 +535,11 @@ static void reconstruirSocial(void) {
   nCtts = recomenda_contatos(ctts, REC_CONTATOS_MAX);
   for (i = 0; i < nCtts && nSocial < SP_SOCIAL_MAX; i++) {
     social[nSocial].tipo = SPS_AMIGO; social[nSocial].idx = (short)i; nSocial++;
+  }
+  // ENCONTRAR PESSOAS logo acima de "Adicionar um amigo": as duas sao portas
+  // para gente nova, e a segunda so serve a quem ja tem o codigo na mao.
+  if (nSocial < SP_SOCIAL_MAX) {
+    social[nSocial].tipo = SPS_ENCONTRAR; social[nSocial].idx = 0; nSocial++;
   }
   if (nSocial < SP_SOCIAL_MAX) {
     social[nSocial].tipo = SPS_ADICIONAR; social[nSocial].idx = 0; nSocial++;
@@ -757,6 +765,10 @@ void spainel_evento(const SDL_Event *e) {
           // por cima dele e Voltar devolve o foco aqui, em vez de jogar a
           // pessoa de volta na home.
           recenviar_abrir_amigos();
+          return;
+        case SPS_ENCONTRAR:
+          // Como a tela de amigos: o painel FICA aberto atras da modal.
+          pessoas_abrir();
           return;
         case SPS_AMIGO:
           // Sem acao por enquanto: a linha existe para mostrar quem ja esta
@@ -993,7 +1005,7 @@ static void badge_imdb_foco_transicao(float x, float y, int nota,
   TxtLinha repouso, foco, marca;
   GfxRect p;
   if (nota <= 0) return;
-  snprintf(texto, sizeof texto, ajustes_idioma_ingles() ? "%d.%d" : "%d,%d",
+  snprintf(texto, sizeof texto, idioma_ponto_decimal(ajustes_idioma()) ? "%d.%d" : "%d,%d",
            nota / 10, nota % 10);
   repouso = txt_linha(TXT_CAPTION2, texto, 235, 235, 235, 255);
   foco = txt_linha(TXT_CAPTION2, texto, tintaFoco, tintaFoco, tintaFoco, 255);
@@ -1682,14 +1694,17 @@ static void desenhaAmigoLinha(int i, int idx, float dx, float y, float a) {
     // Trakt (socialSlug/socialAcao/titulo); o contato do Trakt tem id
     // "trakt:<slug>". Sem atividade, fica a origem.
     snprintf(linha2, sizeof linha2, "%s", i18n(origem));
-    if (!strncmp(c->id, "trakt:", 6)) {
+    // O amigo do NUVIO (id "nuvio:...") tambem: a fileira o traz com o proprio id
+    // em socialSlug (recomenda.c, lerFeedCorpo), so que sem o prefixo cortado.
+    if (!strncmp(c->id, "trakt:", 6) || !strncmp(c->id, "nuvio:", 6)) {
       int r, k;
+      const char *chaveSocial = !strncmp(c->id, "trakt:", 6) ? c->id + 6 : c->id;
       for (r = 0; r < cat_n_fileiras(); r++) {
         const CatFileira *f = cat_fileira(r);
         if (!f || strcmp(f->chave, "social_activity")) continue;
         for (k = 0; k < f->n; k++) {
           const CatItem *it = cat_item(f->ini + k);
-          if (!it || strcmp(it->socialSlug, c->id + 6)) continue;
+          if (!it || strcmp(it->socialSlug, chaveSocial)) continue;
           if (it->temporada > 0 && it->episodio > 0) {
             char te[24];
             snprintf(te, sizeof te, i18n("T%dE%d"), it->temporada, it->episodio);
@@ -1911,6 +1926,13 @@ void spainel_desenhar(Uint32 agora) {
           case SPS_REC: desenhaRecLinha(i, social[i].idx, x, y, a); break;
           case SPS_SUG: desenhaSugLinha(i, social[i].idx, x, y, a); break;
           case SPS_AMIGO: desenhaAmigoLinha(i, social[i].idx, x, y, a); break;
+          case SPS_ENCONTRAR: {
+            char rot[96];
+            int np = recomenda_n_pedidos();
+            if (np > 0) snprintf(rot, sizeof rot, i18n("Encontrar pessoas (%d)"), np);
+            else snprintf(rot, sizeof rot, "%s", "Encontrar pessoas");
+            desenhaBotaoLinha(i, x, y, alt, a, rot, NULL, "menu_search", 0);
+            break; }
           case SPS_ADICIONAR:
             // A linha de "Adicionar um amigo" fecha a lista, e nao um botao
             // solto no rodape: ela rola com o resto e recebe foco como qualquer

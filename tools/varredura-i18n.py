@@ -247,7 +247,12 @@ def contexto(txt, i):
 # "nao sei o que e": sem esta lista a ferramenta nao pode virar teste, e sem
 # virar teste ela nao impede a proxima regressao.
 IGNORAR = {
+    # Palavras que o nome PUBLICO do catalogo tem quando ele e um ranking; sao
+    # dado de comparacao de home.c (sinalRanking, layout Dinamica), nunca texto
+    # desenhado. "top", "popular" e "trending" ja nao acusam por serem ASCII.
+    "em alta", "mais vist", "tendência",
     "-perfil",                      # sufixo de nome de arquivo (ajustes.c)
+    "recomendacoes-perfil.txt",     # nome de arquivo do perfil publico (recomenda.c)
     "biblioteca.h", "catalogo.h", "fileiras.h", "perfil.h", "legenda.h",
     "perfil.txt",                   # #include e nome de arquivo
     "com.webos.media.client.nuvio", # id do cliente LS2
@@ -269,6 +274,18 @@ IGNORAR = {
     "eglMakeCurrent no fio do app falhou: 0x%x",
     "crédit", "crédito",            # palavra procurada no capitulo do MKV
     "episodio", "episódio",         # palavra procurada no nome do video TMDB (extras.c)
+    "película",                     # palavra de apoio da busca de manchetes em espanhol (noticias.c, PAR)
+    "seriál",                       # idem em tcheco e eslovaco (noticias.c, PAR)
+    # Nome NATIVO de um idioma no seletor (ajustes.c, V_IDIOMA): sem i18n de
+    # proposito, quem trocou para uma lingua que nao le precisa achar a sua.
+    "Türkçe",
+    # "Ola" escrito em cada idioma (novidades160.c, OLA): a cena dos idiomas
+    # mostra cada lingua nela mesma, sem traducao de proposito.
+    "Olá", "Xin chào",
+    # #158: dados, nao rotulo. A tabela de letras modificadoras (U+1D2C..)
+    # da normalizacao de nome de canal (epg.c) e uma palavra procurada no nome
+    # de categoria do Xtream para achar o pais da grade (guia.c).
+    "a?b?de?ghijklmn?o?prtuw", "românia",
     # Nome proprio e sigla: iguais nos dois idiomas.
     "IMDb", "Trakt", "YouTube", "PIN", "AI-powered",
     # Tabela de acentos -> letra base da normalizacao de titulo (trailerapple.c):
@@ -346,6 +363,9 @@ IGNORAR = {
     "faixa nao e ASS",
     "sem indice da faixa",
     "sem CueRelativePosition",
+    # Chave do JSON do worker (noticia.c, /v1/noticia) e fragmento de class
+    # HTML que o extrator descarta (leitura.c, "saiba-mais"): dado, nao rotulo.
+    '"titulo"', "saiba-mais",
 }
 
 def sem_corpo_em_js(txt):

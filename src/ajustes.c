@@ -16,17 +16,20 @@
 #include "dados.h"
 #include "stalker.h"
 #include "xtream.h"
+#include "xtepg.h"
 #include "teclado.h"
 #include "descoberta.h"
 #include "extras.h"
 #include "fileiras.h"
 #include "listas.h"
 #include "idioma.h"
+#include "idiomaauto.h"
 #include "linguas.h"
 #include "addons.h"
 #include "gfx.h"
 #include "text.h"
 #include "tex_cache.h"
+#include "badges.h"
 #include "anim.h"
 #include "layout.h"
 #include "sessao.h"
@@ -38,10 +41,21 @@
 #include "qr.h"
 #include "atualizacao.h"
 #include "avisos.h"
+#include "seguro.h"
+#include "botoes.h"
+#include <time.h>
 #include "js.h"
 #include "artehero.h"
 #include "artereserva.h"
 #include "corviva.h"
+#include "p2p.h"
+#include "pessoas.h"
+#include "recomenda.h"
+#include "posterprov.h"
+#include "rede.h"
+#include "debrid.h"
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,7 +76,9 @@
 // ajustes_acento_tinta, que todos os modulos usam.
 #define AJ_TEXTO_ESCURO  (tintaFoco())
 #define AJ_TEXTO_ESCURO2 (tintaFoco() > 128 ? 232 : 50)   // valor, um degrau abaixo
-static int tintaFoco(void) { return ajustes_acento_tinta(NULL, NULL, NULL) > 0.5f ? 255 : 20; }
+// Vidro: a linha em foco continua TRANSLUCIDA (so ganha contorno), entao o texto
+// fica claro seja qual for o realce.
+static int tintaFoco(void) { return ajustes_vidro() || ajustes_acento_tinta(NULL, NULL, NULL) > 0.5f ? 255 : 20; }
 static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foco e clara?
 #define AJ_LINHA_H       88.0f
 #define AJ_LINHA_GAP      8.0f
@@ -145,6 +161,7 @@ typedef enum {
   AJ_PERFIL_ATIVO, AJ_SYNC, AJ_ADDONS,
   AJ_STALKER_PORTAL, AJ_STALKER_MAC, AJ_STALKER_LIMPAR,
   AJ_XTREAM_SERVIDOR, AJ_XTREAM_USUARIO, AJ_XTREAM_SENHA, AJ_XTREAM_LIMPAR,
+  AJ_XTREAM_CONTA, AJ_EPG_PAIS,
   AJ_SALVOS_DEST, AJ_TRAKT, AJ_SIMKL, AJ_SAIR,
   // Sobre
   AJ_VERSAO_I, AJ_ATUALIZAR, AJ_ENVIAR_LOG, AJ_ENVIO_AUTO, AJ_ESPACO, AJ_TEX_MB,
@@ -179,11 +196,55 @@ typedef enum {
   // Efeitos visuais do .tpk (#180): automatico / completos / leves. No fim
   // pelo mesmo motivo; so aparece na tela do .tpk.
   AJ_GPU_EFEITOS,
+  // Interface de vidro: visual translucido, so desta TV. No fim pelo mesmo
+  // motivo dos outros: valor[] e CHAVE[] sao posicionais.
+  AJ_VIDRO,
+  // P2P experimental (p2p.h). No fim pelo mesmo motivo: valor[] e CHAVE[] sao
+  // posicionais.
+  AJ_P2P_LIGADO, AJ_P2P_URL, AJ_P2P_TESTAR,
+  // Posteres personalizados (posterprov.h). No fim pelo mesmo motivo.
+  AJ_POSTER_PROV, AJ_POSTER_INST, AJ_POSTER_TOKEN, AJ_POSTER_EXTRA,
+  AJ_POSTER_CHAVE, AJ_POSTER_MODELO, AJ_POSTER_TESTAR,
+  // Layout da home (Moderna / Padrao / Dinamica). No fim pelo mesmo motivo.
+  AJ_HOME_LAYOUT,
+  // Chaves de debrid digitadas nesta TV (debrid.h). No fim pelo mesmo motivo.
+  // AllDebrid primeiro: e o unico que a conta nao traz.
+  AJ_DEBRID_AD, AJ_DEBRID_AD_TESTAR, AJ_DEBRID_RD, AJ_DEBRID_TB, AJ_DEBRID_PM,
+  // Ficha do titulo: catalogo primeiro (descoberta.c, metaCatalogo). Ligado =
+  // "Usar sempre o Cinemeta" (o comportamento de antes). No fim pelo mesmo
+  // motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_DET_SO_CINEMETA,
+  // Quais notas aparecem na LINHA DO TITULO (hero da pagina de detalhe). Na
+  // ordem em que a linha as desenha (notasfontes.c: nf_posicao). LOCAIS: o app
+  // oficial nao tem esta linha, entao nao ha campo dela na conta. No fim pelo
+  // mesmo motivo dos outros: valor[] e CHAVE[] sao posicionais.
+  AJ_NT_IMDB, AJ_NT_TOMATES, AJ_NT_AUDIENCIA, AJ_NT_META, AJ_NT_METAUSER,
+  AJ_NT_TRAKT, AJ_NT_TMDB, AJ_NT_LETTER, AJ_NT_MAL, AJ_NT_EBERT, AJ_NT_SCORE,
+  // Entre amigos alem do Trakt (pessoas.h): "Perfil pesquisavel" e o editor do
+  // perfil publico. No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_PERFIL_PESQ, AJ_PERFIL_EDITAR,
   AJ_N
 } OpcaoId;
 
 static const char *V_QUALIDADE[] = { "Automática", "4K", "1080p", "720p" };
 static const char *V_LIGA[]      = { "Ligado", "Desligado" };
+// Provedor dos posteres personalizados. O INDICE e o gravado ("posterProvLocal")
+// e o PP_* de posterprov.h: so acrescentar no fim.
+static const char *V_POSTER_PROV[] = { "Desligado", "SpatialPosters", "RPDB", "Modelo próprio" };
+// LAYOUT DA HOME. O INDICE e o gravado (homeLayoutLocal) e o HOME_LAYOUT_* de
+// ajustes.h: 0 = Moderna (a de sempre, e o padrao), 1 = Padrao, 2 = Dinamica.
+//
+// O app oficial tem `homeLayout` (layoutPreferences.js) com "modern", "grid" e
+// "classic", que a conta guarda como selected_layout = MODERN | GRID | CLASSIC.
+// Moderna = modern e Padrao = classic (destaque contido, fileiras num fundo
+// liso), mas a escolha e LOCAL: a Dinamica nao tem par na conta, e gravar
+// "DINAMICA" num enum que o app web valida faria os outros aparelhos cairem no
+// padrao. Ver somenteDesteAparelho.
+//
+// O rotulo da terceira leva "(Apple TV)" porque "Dinâmica" a secas e a chave da
+// traducao dos temas de cor ("Matching color"): o mesmo texto nas duas linhas
+// deixaria a home em ingles com o nome do tema.
+static const char *V_HOME_LAYOUT[] = { "Moderna", "Padrão", "Dinâmica (Apple TV)" };
 // "Fonte automatica" (issue #130). O INDICE e o gravado (fonteAutoLocal) e o
 // FONTEAUTO_* de fonteauto.h: 0 = a regra de pontuacao, 1 = a primeira da
 // lista do addon, e so ela — o "Auto-play first source" do Nuvio.
@@ -219,7 +280,21 @@ static const char *V_ASPTRAIL[]  = { "Zoom cinema", "Zoom leve", "Zoom ultra", "
 // Fonte do trailer (trailerfonte.h). O indice e o gravado e o TRF_* do
 // modulo: 0 Automatico, 1 Apple, 2 IMDb, 3 YouTube — nao reordenar.
 static const char *V_TRAILFONTE[] = { "Automático", "Apple TV", "IMDb", "YouTube" };
-static const char *V_IDIOMA[]    = { "Português", "English" };
+// Nomes NATIVOS, sem i18n: quem trocou para um idioma que nao le precisa achar o seu.
+// A ordem e a de IDIOMA_* (idiomacod.h) e a do valor gravado: so acrescentar no fim.
+// EXCECAO: o primeiro rotulo, "Automático", e o unico que passa por i18n (os
+// demais sao nativos de proposito). Ele nao e um idioma: valor[AJ_IDIOMA] e o
+// INDICE DESTA LISTA (0 = automatico, 1 + IDIOMA_* = escolha manual), e o que
+// vai para o disco e outra coisa (ver "IDIOMA AUTOMATICO" mais abaixo).
+static const char *V_IDIOMA[]    = { "Automático", "Português", "English", "Română", "Українська", "Русский",
+                                     "Français", "Deutsch", "Español",
+                                     // Os 22 de 2026-09, na ordem de IDIOMA_IT... IDIOMA_ZHTW. Os tres
+                                     // ultimos (日本語, 简体中文, 繁體中文) so desenham porque text.c manda
+                                     // a linha para a fonte de reserva CJK (ver fonteDe).
+                                     "Italiano", "Nederlands", "Polski", "Türkçe", "Português (Portugal)",
+                                     "Svenska", "Dansk", "Norsk", "Čeština", "Slovenčina", "Slovenščina",
+                                     "Magyar", "Lietuvių", "Bosanski", "Srpski", "Български", "Ελληνικά",
+                                     "Bahasa Indonesia", "Tiếng Việt", "日本語", "简体中文", "繁體中文" };
 static const char *V_ANIM[]      = { "Completas", "Reduzidas" };
 static const char *V_FONTE_UI[]  = { "Inter", "LG Display", "Droid Sans",
                                      "Montserrat", "Roboto",
@@ -292,6 +367,19 @@ static const char *V_HERO_FONTE[] = {
 // passa a entrar nos Salvos (descoberta.c). Nomes em ajustes.h (AJ_SALVOS_*).
 static const char *V_SALVOS[]    = { "Lista do Nuvio", "Watchlist do Trakt",
                                      "Plan to Watch do Simkl" };
+// PAIS DA GRADE DO GUIA (#158). O indice e o gravado ("epgPaisLocal N"):
+// novos entram NO FIM. O nome de cada pais vai na propria lingua dele, que e
+// como quem mora la o procura numa lista, e dispensa traducao. O codigo na
+// frente e o que epg_paises_definir recebe (ver EPG_PAIS_COD).
+static const char *V_EPG_PAIS[]  = {
+  "Automático", "RO · România", "BR · Brasil", "PT · Portugal", "ES · España",
+  "MX · México", "AR · Argentina", "IT · Italia", "FR · France",
+  "DE · Deutschland", "UK · United Kingdom", "TR · Türkiye", "GR · Ελλάδα",
+  "HU · Magyarország", "BG · България", "RS · Srbija", "HR · Hrvatska",
+  "NL · Nederland", "AL · Shqipëri", "CZ · Česko", "SE · Sverige",
+  "CL · Chile", "CO · Colombia", "PE · Perú"
+};
+#define AJ_N_EPG_PAIS ((int)(sizeof V_EPG_PAIS / sizeof *V_EPG_PAIS))
 // `tmdb_language` no blob da conta guarda so o idioma BASE ("pt", "en") —
 // normalizeTmdbLanguageForAndroid corta a regiao. A lista aqui e curta de
 // proposito: a do web e gerada de AVAILABLE_LANGUAGES inteiro, e atravessar
@@ -300,8 +388,18 @@ static const char *V_SALVOS[]    = { "Lista do Nuvio", "Watchlist do Trakt",
 // interface esta em portugues, en-US em ingles.
 static const char *V_TMDB_LING[] = {
   "Da interface", "Português (Brasil)", "English", "Español", "Français",
-  "Deutsch", "Italiano", "Português (Portugal)", "日本語", "한국어", "中文"
+  "Deutsch", "Italiano", "Português (Portugal)", "日本語", "한국어", "中文",
+  "Română", "Українська", "Русский",
+  // Acrescentados com os 22 idiomas da interface (o indice gravado dos 14
+  // primeiros nao muda). "中文" acima e o simplificado; o tradicional vem no fim.
+  "Nederlands", "Polski", "Türkçe", "Svenska", "Dansk", "Norsk", "Čeština",
+  "Slovenčina", "Slovenščina", "Magyar", "Lietuvių", "Bosanski", "Srpski",
+  "Български", "Ελληνικά", "Bahasa Indonesia", "Tiếng Việt", "繁體中文"
 };
+_Static_assert(sizeof V_TMDB_LING / sizeof *V_TMDB_LING == 32,
+               "V_TMDB_LING casa com ESC(..., 32), W_TMDB_LING e L[] de ajustes_tmdb_idioma");
+_Static_assert(sizeof V_IDIOMA / sizeof *V_IDIOMA == IDIOMA_N + 1,
+               "V_IDIOMA: \"Automático\" e um rotulo por IDIOMA_* de idiomacod.h");
 // Preenchido em rotulosDeIdioma(), no arranque: os nomes saem de linguas.c em
 // vez de serem uma segunda lista escrita a mao aqui. LING_MAX_OPC e folga: se
 // linguas.c crescer, o excedente simplesmente nao aparece — melhor que ler
@@ -537,7 +635,7 @@ static const Opcao OPCOES[AJ_N] = {
   NUM("Arredondamento",             0, 40, 1, " dp"),   // posterCardCornerRadiusDp
   ESC("Qualidade da imagem",        V_QUALIMG, 3),
 
-  ESC("Idioma",                     V_IDIOMA, 2),
+  ESC("Idioma",                     V_IDIOMA, IDIOMA_N + 1),
   ESC("Animações",                  V_ANIM, 2),
   ESC("Resolução da interface",     V_RESOLUCAO, 2),
   ESC("Cor de destaque",            V_TEMA, AJ_N_TEMAS_OPC),  // selected_theme (+4 locais)
@@ -557,6 +655,8 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Usuário Xtream"),
   ACAO("Senha Xtream"),
   ACAO("Remover o Xtream"),
+  LER("Conta Xtream"),
+  ESC("Grade de programação",      V_EPG_PAIS, AJ_N_EPG_PAIS),
   ESC("Onde o + salva",             V_SALVOS, 3),
   ACAO("Trakt"),
   ACAO("Simkl"),
@@ -583,7 +683,7 @@ static const Opcao OPCOES[AJ_N] = {
   // nativo sempre enriqueceu por ele — nascer desligado apagaria elenco com
   // foto, ficha e trailers de quem ja usa o app sem nunca ter visto o ajuste.
   ESC("TMDB",                       V_LIGA, 2),   // tmdb_enabled
-  ESC("Idioma dos metadados",       V_TMDB_LING, 11), // tmdb_language
+  ESC("Idioma dos metadados",       V_TMDB_LING, 32), // tmdb_language
   ESC("Arte localizada",            V_LIGA, 2),   // tmdb_use_artwork
   ESC("Título e sinopse",           V_LIGA, 2),   // tmdb_use_basic_info
   ESC("Ficha técnica",              V_LIGA, 2),   // tmdb_use_details
@@ -623,6 +723,47 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Itens por fileira",               V_ITENS_FIL, 3), // local: itensFileiraLocal
   ESC("Fonte da interface", V_FONTE_UI, 6),
   ESC("Efeitos visuais", V_GPU_EF, 3),   // local: gpuEfeitosLocal (.tpk)
+  ESC("Interface de vidro",              V_LIGA, 2),   // local: vidroLocal
+  // EXPERIMENTAL (p2p.h). Tocar torrent sem debrid, por um servidor de
+  // streaming do Stremio na rede local. LOCAL: o web nao tem esta escolha.
+  ESC("Servidor P2P (experimental)",     V_LIGA, 2),   // local: p2pLocal
+  ACAO("Endereço do servidor P2P"),
+  ACAO("Testar servidor P2P"),
+  // POSTERES PERSONALIZADOS (posterprov.h). Desligado de fabrica. LOCAL: o web
+  // nao tem esta escolha e o servico e por aparelho/rede.
+  ESC("Pôsteres personalizados",         V_POSTER_PROV, 4),   // local: posterProvLocal
+  ACAO("Endereço do SpatialPosters"),
+  ACAO("Token do SpatialPosters"),
+  ACAO("Parâmetros do SpatialPosters"),
+  ACAO("Chave do RPDB"),
+  ACAO("Modelo de URL dos pôsteres"),
+  ACAO("Testar pôsteres"),
+  ESC("Layout da home",             V_HOME_LAYOUT, 3), // local: ver V_HOME_LAYOUT
+  ACAO("Chave do AllDebrid"),
+  ACAO("Testar chave do AllDebrid"),
+  ACAO("Chave do Real-Debrid"),
+  ACAO("Chave do TorBox"),
+  ACAO("Chave do Premiumize"),
+  ESC("Usar sempre o Cinemeta",          V_LIGA, 2),   // local: soCinemetaLocal
+  // Notas na linha do titulo (ver o enum). Ligado/Desligado como as demais.
+  ESC("IMDb",                       V_LIGA, 2),   // local: notaTituloImdb
+  ESC("Rotten Tomatoes (crítica)",  V_LIGA, 2),   // local: notaTituloTomates
+  ESC("Popcornmeter (público)",     V_LIGA, 2),   // local: notaTituloAudiencia
+  ESC("Metacritic (crítica)",       V_LIGA, 2),   // local: notaTituloMeta
+  ESC("Metacritic (usuários)",      V_LIGA, 2),   // local: notaTituloMetaUser
+  ESC("Trakt",                      V_LIGA, 2),   // local: notaTituloTrakt
+  ESC("TMDB",                       V_LIGA, 2),   // local: notaTituloTmdb
+  ESC("Letterboxd",                 V_LIGA, 2),   // local: notaTituloLetter
+  ESC("MyAnimeList",                V_LIGA, 2),   // local: notaTituloMal
+  ESC("Roger Ebert (crítica)",      V_LIGA, 2),   // local: notaTituloEbert
+  ESC("Nota do MDBList",            V_LIGA, 2),   // local: notaTituloScore
+  // O ESTADO DESTE INTERRUPTOR NAO MORA EM valor[]: ele e o que recomenda.c diz
+  // (recomenda_pesquisavel), reescrito a cada quadro em ajustes_atualizar.
+  // Duas fontes da verdade para "estou aparecendo para os outros?" divergiriam
+  // no primeiro sair/entrar de conta — e o erro seria a pessoa achar que esta
+  // escondida estando visivel.
+  ESC("Perfil pesquisável",              V_LIGA, 2),
+  ACAO("Meu perfil público"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -704,6 +845,8 @@ static const char *CHAVE[] = {
   // levam "-": nada delas entra no ajustes.txt nem no blob da conta.
   "-stalkerPortal", "-stalkerMac", "-stalkerLimpar",
   "-xtreamServidor", "-xtreamUsuario", "-xtreamSenha", "-xtreamLimpar",
+  // A grade e LOCAL e sem "-": o app oficial nao tem a escolha (#158).
+  "-xtreamConta", "epgPaisLocal",
   "salvosDestino", "-trakt", "-simkl", "-sair",
   "-versao", "-atualizar", "-registro", "envioAuto", "-espaco", "texturasMB",
   // Integracoes: os nomes sao exatamente os que profileSettingsSyncService.js
@@ -733,6 +876,27 @@ static const char *CHAVE[] = {
   "itensFileiraLocal",
   "fonteInterface",
   "gpuEfeitosLocal",
+  // LOCAL e SEM o "-": o web nao tem esta escolha e ela precisa sobreviver.
+  "vidroLocal",
+  // Ligado: LOCAL e SEM o "-" (sobrevive ao fechamento). O endereco mora em
+  // p2p.txt (dados), por aparelho; o teste e so uma acao.
+  "p2pLocal", "-p2pEndereco", "-p2pTestar",
+  // Escolha LOCAL e sem "-". Os campos moram em posteres.txt (dados), por
+  // aparelho, e o teste e so uma acao.
+  "posterProvLocal", "-posterInst", "-posterToken", "-posterExtra",
+  "-posterChave", "-posterModelo", "-posterTestar",
+  // LOCAL e SEM o "-": a Dinamica nao existe na conta (ver V_HOME_LAYOUT).
+  "homeLayoutLocal",
+  // Credenciais: moram em debrid.txt (dados), por aparelho, nunca aqui.
+  "-debridAD", "-debridADTestar", "-debridRD", "-debridTB", "-debridPM",
+  // LOCAL e SEM o "-": o web nao tem esta escolha e ela precisa sobreviver.
+  "soCinemetaLocal",
+  // LOCAIS e SEM o "-": sobrevivem ao fechamento; o web nao tem a linha.
+  "notaTituloImdb", "notaTituloTomates", "notaTituloAudiencia", "notaTituloMeta",
+  "notaTituloMetaUser", "notaTituloTrakt", "notaTituloTmdb", "notaTituloLetter",
+  "notaTituloMal", "notaTituloEbert", "notaTituloScore",
+  // Sem gravar: o estado vive em recomendacoes-perfil.txt (recomenda.c), por conta.
+  "-perfilPesquisavel", "-perfilEditar",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -806,17 +970,18 @@ typedef struct {
 // se repete entre categorias.
 static const Item TELA[] = {
   SEC("Conta", "Conta e status de sincronização", "aj_user-round"),
-    OPC(AJ_PERFIL_ATIVO), OPC(AJ_SYNC), OPC(AJ_SAIR),
+    OPC(AJ_PERFIL_ATIVO), OPC(AJ_SYNC), OPC(AJ_PERFIL_PESQ), OPC(AJ_PERFIL_EDITAR),
+    OPC(AJ_SAIR),
 
   // "Cor da logo" logo abaixo da cor: so vale com um tema dinamico, e e a
   // mesma decisao (de onde sai o destaque).
   SEC("Aparência", "Cor de destaque, idioma e animações", "aj_palette"),
-    OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_IDIOMA), OPC(AJ_ANIM),
+    OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_IDIOMA), OPC(AJ_ANIM),
     OPC(AJ_FONTE_UI),
 
   SEC("Layout", "Estrutura da página inicial e estilos de pôster", "aj_layout-dashboard"),
     GRP("Layout da Home", "Escolha a estrutura e a fonte do destaque.", "aj_panel-top"),
-      OPC(AJ_LANDSCAPE), OPC(AJ_HERO_CHEIO), OPC(AJ_HERO_FUNDO),
+      OPC(AJ_HOME_LAYOUT), OPC(AJ_LANDSCAPE), OPC(AJ_HERO_CHEIO), OPC(AJ_HERO_FUNDO),
       OPC(AJ_HERO_ARTE_DIF), OPC(AJ_HERO_TRAILER),
     GRP("Conteúdo da Home", "Controle o que aparece na home e na busca.", "aj_rows-3"),
       OPC(AJ_FIL_LIMITE), OPC(AJ_ITENS_FILEIRA), OPC(AJ_FIL_ORDEM),
@@ -833,6 +998,7 @@ static const Item TELA[] = {
       OPC(AJ_CW_NAO_EXIBIDOS), OPC(AJ_CW_ORDEM),
     GRP("Página de detalhes", "Personalize as telas de títulos e episódios.", "aj_file-text"),
       OPC(AJ_DET_BLUR_NAO_VISTOS), OPC(AJ_DET_TRAILER), OPC(AJ_DET_META_EXT),
+      OPC(AJ_DET_SO_CINEMETA),
       OPC(AJ_DET_DATA_CHEIA), OPC(AJ_DET_VEU), OPC(AJ_DET_TRAILER_AUTO),
       OPC(AJ_TRAILER_QUAL), OPC(AJ_TRAILER_ASPECTO), OPC(AJ_TRAILER_FONTE),
     GRP("Foco no pôster", "Defina o comportamento ao selecionar um título.", "aj_scan"),
@@ -842,6 +1008,10 @@ static const Item TELA[] = {
       OPC(AJ_PROF), OPC(AJ_PROF_BORDA), OPC(AJ_PROF_BRILHO),
       OPC(AJ_PROF_COBERTURA), OPC(AJ_PROF_POSTERS), OPC(AJ_PROF_CW),
       OPC(AJ_PROF_EPS), OPC(AJ_PROF_ELENCO), OPC(AJ_PROF_TRAILERS),
+    GRP("Pôsteres personalizados", "Cartazes prontos de um serviço externo, com notas e selos.", "aj_images"),
+      OPC(AJ_POSTER_PROV), OPC(AJ_POSTER_INST), OPC(AJ_POSTER_TOKEN),
+      OPC(AJ_POSTER_EXTRA), OPC(AJ_POSTER_CHAVE), OPC(AJ_POSTER_MODELO),
+      OPC(AJ_POSTER_TESTAR),
 
   // O "Content & Discovery" do web (addons e plugins). Os portais IPTV moram
   // aqui porque sao exatamente isto: mais uma fonte de conteudo, e nao dados
@@ -852,7 +1022,9 @@ static const Item TELA[] = {
       OPC(AJ_STALKER_PORTAL), OPC(AJ_STALKER_MAC), OPC(AJ_STALKER_LIMPAR),
     ROT("Xtream Codes"),
       OPC(AJ_XTREAM_SERVIDOR), OPC(AJ_XTREAM_USUARIO), OPC(AJ_XTREAM_SENHA),
-      OPC(AJ_XTREAM_LIMPAR),
+      OPC(AJ_XTREAM_LIMPAR), OPC(AJ_XTREAM_CONTA),
+    ROT("Guia TV"),
+      OPC(AJ_EPG_PAIS),
 
   SEC("Integrações", "Serviços de metadados e de notas", "aj_plug"),
     GRP("TMDB", "Metadados, arte, elenco e trailers vindos do TMDB.", "aj_database"),
@@ -866,8 +1038,15 @@ static const Item TELA[] = {
       OPC(AJ_MDB_IMDB), OPC(AJ_MDB_TMDB), OPC(AJ_MDB_LETTER),
       OPC(AJ_MDB_TOMATES), OPC(AJ_MDB_AUDIENCIA), OPC(AJ_MDB_META),
       OPC(AJ_MDB_MAL),
+    GRP("Notas no título", "Quais notas aparecem na linha do título.", "aj_star"),
+      OPC(AJ_NT_IMDB), OPC(AJ_NT_TOMATES), OPC(AJ_NT_AUDIENCIA), OPC(AJ_NT_META),
+      OPC(AJ_NT_METAUSER), OPC(AJ_NT_TRAKT), OPC(AJ_NT_TMDB), OPC(AJ_NT_LETTER),
+      OPC(AJ_NT_MAL), OPC(AJ_NT_EBERT), OPC(AJ_NT_SCORE),
     GRP("fanart.tv", "Chave pessoal para a arte do destaque.", "aj_images"),
       OPC(AJ_FANART_CHAVE),
+    GRP("Debrid", "Chaves de API para tocar torrents pelo seu serviço.", "aj_plug"),
+      OPC(AJ_DEBRID_AD), OPC(AJ_DEBRID_AD_TESTAR), OPC(AJ_DEBRID_RD),
+      OPC(AJ_DEBRID_TB), OPC(AJ_DEBRID_PM),
 
   // Os blocos do web (playback_section_*) como ROTULOS e nao grupos: sao nove
   // linhas, e as mais usadas do app (qualidade, idiomas) nao podem ficar atras
@@ -900,6 +1079,8 @@ static const Item TELA[] = {
     OPC(AJ_TEX_MB), OPC(AJ_ESPACO),
     ROT("Diagnóstico"),
       OPC(AJ_DIAGNOSTICO), OPC(AJ_VELOCIDADE),
+    ROT("Experimental"),
+      OPC(AJ_P2P_LIGADO), OPC(AJ_P2P_URL), OPC(AJ_P2P_TESTAR),
 
   SEC("Sobre", "Versão, atualizações e registros", "aj_info"),
     OPC(AJ_VERSAO_I), OPC(AJ_ATUALIZAR), OPC(AJ_ENVIAR_LOG), OPC(AJ_ENVIO_AUTO),
@@ -965,6 +1146,13 @@ static int secFim(int s) { return s + 1 < nSecoes ? secIni[s + 1] : AJ_N_TELA; }
 static int  nValores(int op);
 // Definida junto da leitura do arquivo, bem abaixo; declarada aqui porque o
 // setter de "onde o + salva" grava na hora e vem antes dela.
+static int inativa(int op);
+static void pstAplicar(void);
+static void pstCarregar(void);
+static void pstDefinir(int op, const char *texto);
+static void pstAtivar(int op);
+static void pstTesteRecolher(void);
+static const char *pstTexto(int op);
 static void gravar(void);
 static void aplicarIdioma(int op);
 static int somenteDesteAparelho(int op);
@@ -1067,11 +1255,13 @@ static int valor[] = {
   12,               /* arredondamento, dp */
   1,                /* qualidade da imagem: Padrão (0 Baixa, 1 Padrão, 2 Alta) */
 
-  // Idioma 1 = English. O padrao NAO e o do dono do pacote: quem instala vem
-  // do release publico, e ler uma interface em portugues sem ter escolhido e
-  // pior do que ler em ingles sem ter escolhido. Quem prefere portugues troca
-  // em Ajustes -> Interface, e a escolha fica gravada.
-  1, 0, 0,          /* idioma, animacoes, resolucao (0 = 1080p) */
+  // Idioma 0 = Automatico: a conta (tmdb_language, depois o idioma de legenda),
+  // depois o idioma da TV, depois English. O padrao NAO e o do dono do pacote:
+  // quem instala vem do release publico, e ler uma interface em portugues sem
+  // ter escolhido e pior do que ler em ingles sem ter escolhido — por isso o
+  // ultimo degrau e o ingles. Quem prefere outro troca em Ajustes -> Interface,
+  // e a escolha fica gravada (e desliga o automatico).
+  0, 0, 0,          /* idioma, animacoes, resolucao (0 = 1080p) */
   0,                /* tema (cor de destaque): o primeiro, o de sempre */
   0,                /* cor da logo (so com tema dinamico): ligada */
   // O COMENTARIO ANTIGO AQUI ESTAVA ERRADO, e o erro so nao machucou por sorte.
@@ -1093,6 +1283,7 @@ static int valor[] = {
   // da tela, que e o #149.
   0, 0, 0,          /* portal Stalker, MAC, remover: acoes */
   0, 0, 0, 0,       /* servidor, usuario, senha Xtream, remover: acoes */
+  0, 0,             /* conta Xtream (leitura); grade: automatica */
   1,                /* onde o + salva: watchlist do Trakt (ver V_SALVOS) */
   0, 0, 0,          /* trakt, simkl, sair: acoes */
   // ENVIO SOZINHO LIGADO DE FABRICA (dono, 26/09/2026: "melhor deixar
@@ -1126,6 +1317,20 @@ static int valor[] = {
   0,                /* itens por fileira: 12, como sempre foi (ver V_ITENS_FIL) */
   TXT_FAMILIA_INTER,/* fonte da interface: independente da legenda */
   0,                /* efeitos visuais do .tpk: automatico (adaptativo, ate o nivel 1) */
+  1,                /* interface de vidro: DESLIGADA (V_LIGA: 1 = Desligado) */
+  1,                /* servidor P2P: DESLIGADO (V_LIGA: 1 = Desligado) */
+  0, 0,             /* endereco, testar: acoes */
+  0,                /* posteres personalizados: DESLIGADO (indice 0) */
+  0, 0, 0, 0, 0, 0,/* endereco, token, parametros, chave, modelo, testar: acoes */
+  0,                /* layout da home: Moderna (a de sempre) */
+  0, 0, 0, 0, 0,    /* chaves de debrid (AllDebrid, testar, RD, TB, PM): acoes */
+  1,                /* usar sempre o Cinemeta: DESLIGADO (V_LIGA: 1 = Desligado) -> catalogo primeiro */
+  // Notas na linha do titulo: de fabrica so o que a linha ja mostrava antes de
+  // existir a escolha (IMDb, Rotten Tomatoes, Trakt). V_LIGA: 0 = Ligado.
+  0, 0, 1, 1, 1,   /* imdb, tomates, popcornmeter, metacritic, metacritic usuarios */
+  0, 1, 1, 1, 1, 1,/* trakt, tmdb, letterboxd, mal, ebert, nota do mdblist */
+  1,                /* perfil pesquisavel: DESLIGADO (V_LIGA: 1 = Desligado). Padrao de todo mundo. */
+  0,                /* meu perfil publico: acao */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1148,9 +1353,11 @@ static int focoItem = 0;
 static int focoOp = -1;
 // Pedido do cartao de novidades ("Experimentar a cor viva"): a proxima
 // abertura pousa na linha da cor, dentro de Aparencia (ver ajustes_iniciar).
-static int abrirNaCor, abrirNaFonte;
+static int abrirNaCor, abrirNaFonte, abrirNoLayout, abrirNoVidro;
 void ajustes_abrir_na_cor(void) { abrirNaCor = 1; }
 void ajustes_abrir_na_fonte(void) { abrirNaFonte = 1; }
+void ajustes_abrir_no_layout(void) { abrirNoLayout = 1; }
+void ajustes_abrir_no_vidro(void) { abrirNoVidro = 1; }
 int  ajustes_opcao_em_foco(void) { return focoOp; }
 // Categoria mostrada na lista. Com o foco no indice ela e a categoria em foco
 // la; com o foco na lista, a do item.
@@ -1213,7 +1420,15 @@ static int lig(int op)  { return valor[op] == 0; }
 int ajustes_animacoes_reduzidas(void) { return valor[AJ_ANIM] == 1; }
 // Lido UMA vez, na criacao da janela, antes de qualquer desenho: trocar isto
 // com o app aberto nao redimensiona a superficie. Ver main.c.
-int ajustes_4k(void)                  { return valor[AJ_RESOLUCAO] == 1; }
+// PERFIL SEGURO (seguro.h): quando ligado, os acessores dos ajustes que pesam
+// devolvem o valor seguro SEM tocar em valor[] nem no arquivo. Ler o valor por
+// cima em vez de sobrescreve-lo e o que garante que gravar() (que escreve valor[]
+// inteiro) e o blob da conta nunca levam o valor de emergencia para o disco.
+// Uma variavel daqui (e nao seguro_perfil_ativo()) para os acessores nao puxarem
+// seguro.c: varios testes compilam ajustes.c com uma lista curta de fontes.
+static int perfilSeguro;
+#define SEGURO perfilSeguro
+int ajustes_4k(void)                  { return valor[AJ_RESOLUCAO] == 1 && !SEGURO; }
 int ajustes_dolby_vision(void)        { return lig(AJ_DV); }
 int ajustes_dolby_atmos(void)         { return lig(AJ_ATMOS); }
 int ajustes_pausa_overlay(void)       { return lig(AJ_PAUSA_OVERLAY); }
@@ -1223,13 +1438,50 @@ int ajustes_fonte_repor(void) {
   int v = valor[AJ_FONTE_REPOR];
   return v < 0 ? 0 : v > 3 ? 3 : v;     // arquivo editado a mao: dentro da tabela
 }
-int ajustes_idioma_ingles(void)       { return valor[AJ_IDIOMA] == 1; }
+// IDIOMA AUTOMATICO DA INTERFACE.
+//
+// ESTADO. valor[AJ_IDIOMA] e o INDICE DA LISTA da tela: 0 = "Automático", e
+// 1 + IDIOMA_* = a escolha manual. Assim a lista mostra "Automático" primeiro
+// sem que nenhum outro codigo do app mude de numero. Quem quer o idioma usa
+// ajustes_idioma(), que devolve sempre um IDIOMA_*: o RESOLVIDO no automatico,
+// o escolhido no manual.
+//
+// DISCO (ajustes.txt). O numero do idioma continua sendo o que sempre foi:
+//   idioma N           IDIOMA_* em vigor (no automatico, o ultimo resolvido:
+//                      e o que a TV mostra no arranque, antes da conta chegar)
+//   idiomaAutoLocal 1  automatico ligado. Ausente = escolha manual.
+//   idiomaFonteLocal N IDA_* de onde o automatico tirou o idioma. Serve so para
+//                      o arranque: um idioma que veio da CONTA nao e refeito com
+//                      o locale da TV (a conta ainda nao chegou e o idioma
+//                      piscaria em cada abertura); o que veio da TV ou do
+//                      padrao e refeito na hora.
+// QUEM JA TINHA O APP. Um ajustes.txt com "idioma" e sem "idiomaAutoLocal" veio
+// de antes desta chave (ou de alguem que escolheu): nao ha como distinguir, e
+// mudar a lingua de quem ja estava lendo em uma seria a pior surpresa possivel,
+// entao conta como MANUAL. So nasce automatico quem nunca gravou um "idioma".
+static int idiomaEfetivo = IDIOMA_EN;   // o resolvido; so vale com valor[AJ_IDIOMA] == 0
+static int idiomaPosArranque;           // 1 depois de ajustes_idioma_auto_iniciar
+static int idiomaUltimaFonte = -1;      // a ultima decisao logada (nao repetir a linha)
+static int idiomaFonteGravada = IDA_PADRAO;  // idiomaFonteLocal: de onde veio o gravado
+static void (*idiomaGancho)(const char *codigo, int fonte, int notificar);
+static int sistemaPendente;             // 1 = a TV ainda nao respondeu o locale (webOS)
+static char contaTmdbLing[24];      // tmdb_language cru do blob da conta
+static char contaLegLing[24];       // subtitle_preferred_language cru
+static char sistemaLoc[32];         // locale da TV ("pt-BR"), "" = desconhecido
+
+int ajustes_idioma(void) {
+  if (valor[AJ_IDIOMA] == 0) return idiomaEfetivo;
+  { int v = valor[AJ_IDIOMA] - 1;
+    return v >= 0 && v < IDIOMA_N ? v : IDIOMA_PT; }
+}
+int ajustes_idioma_ingles(void)       { return ajustes_idioma() == IDIOMA_EN; }
 
 // 1 = o tema escolhido e um dos dinamicos (cor viva), que so existem nesta TV.
 static int temaDinamico(void) {
   return valor[AJ_TEMA] >= AJ_TEMA_DINAMICA && valor[AJ_TEMA] < AJ_N_TEMAS_OPC;
 }
 int ajustes_cor_viva(void) {
+  if (SEGURO) return CORVIVA_DESLIGADA;   // qualquer tema dinamico: a cor viva anima a arte inteira
   return valor[AJ_TEMA] == AJ_TEMA_DINAMICA   ? CORVIVA_SIMPLES
        : valor[AJ_TEMA] == AJ_TEMA_ESTILIZADA ? CORVIVA_ESTILIZADA
        : valor[AJ_TEMA] == AJ_TEMA_GRADIENTE  ? CORVIVA_GRADIENTE
@@ -1237,6 +1489,18 @@ int ajustes_cor_viva(void) {
        : CORVIVA_DESLIGADA;
 }
 int ajustes_cor_logo(void) { return lig(AJ_COR_LOGO); }
+// Lida por todo desenho de painel/pilula/foco (uma comparacao): so o visual
+// muda, nenhum layout, e desligada nada do desenho antigo e tocado.
+#ifdef NV_VIDRO_TESTE
+// So nas capturas (tests/vidro_shots.sh): liga o vidro sem passar pelo arquivo.
+int ajustes_vidro(void) { return 1; }
+#else
+int ajustes_vidro(void) { return lig(AJ_VIDRO) && !SEGURO; }
+#endif
+static void riscoNotar(int op, int antes);
+void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_VIDRO, a); }
+int ajustes_p2p_ligado(void) { return lig(AJ_P2P_LIGADO) && !SEGURO; }
+void ajustes_definir_p2p_ligado(int ligado) { int a = valor[AJ_P2P_LIGADO]; valor[AJ_P2P_LIGADO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_P2P_LIGADO, a); }
 
 // Cor do ANEL DE FOCO. Ver TEMA_ACENTO: um tema aqui e so isto.
 //
@@ -1245,7 +1509,8 @@ int ajustes_cor_logo(void) { return lig(AJ_COR_LOGO); }
 // chamam esta funcao, varias vezes por quadro: nenhuma conta mora aqui.
 void ajustes_acento(float *r, float *g, float *b) {
   int i = valor[AJ_TEMA];
-  if (temaDinamico()) { corviva_acento(r, g, b); return; }
+  if (SEGURO && temaDinamico()) i = 0;    // sem cor viva, o realce fixo padrao
+  else if (temaDinamico()) { corviva_acento(r, g, b); return; }
   if (i < 0 || i >= AJ_N_TEMAS) i = 0;   // arquivo de outra versao: branco
   if (r) *r = TEMA_ACENTO[i].r;
   if (g) *g = TEMA_ACENTO[i].g;
@@ -1277,6 +1542,10 @@ int ajustes_rail_recolhida(void)      { return ajustes_rail_moderna() ? 0 : lig(
 int ajustes_rail_moderna_blur(void)   { return lig(AJ_RAIL_BLUR); }
 int ajustes_hero_ligado(void)         { return lig(AJ_HERO); }
 int ajustes_hero_cheio(void)          { return lig(AJ_HERO_CHEIO); }
+int ajustes_home_layout(void) {
+  int v = valor[AJ_HOME_LAYOUT];
+  return v >= 0 && v < HOME_LAYOUT_N ? v : HOME_LAYOUT_MODERNA;
+}
 int ajustes_hero_arte_diferente(void) { return lig(AJ_HERO_ARTE_DIF); }
 int ajustes_hero_fonte(void) {
   int v = valor[AJ_HERO_FUNDO];
@@ -1288,6 +1557,7 @@ int ajustes_hero_fonte(void) {
 int ajustes_ps_fundo_automatico(void) { return lig(AJ_PS_FUNDO); }
 int ajustes_tex_mb(void) {
   int i = valor[AJ_TEX_MB];
+  if (SEGURO && i >= 5) i = 0;            // 400/512 MB: volta ao automatico da RAM
   return (i >= 0 && i < 7) ? TEX_MB_DE[i] : 0;
 }
 int ajustes_posteres_deitados(void)   { return lig(AJ_LANDSCAPE); }
@@ -1318,7 +1588,7 @@ void ajustes_definir_salvos_no_trakt(int noTrakt) {
 int ajustes_data_completa(void)       { return lig(AJ_DET_DATA_CHEIA); }
 float ajustes_detalhe_veu(void)       { int v = valor[AJ_DET_VEU]; return (v < 0 ? 0 : v > 100 ? 100 : v) / 100.0f; }
 int   ajustes_trailer_auto(void)      { return lig(AJ_DET_TRAILER_AUTO); }
-int   ajustes_trailer_hero(void)      { return lig(AJ_HERO_TRAILER); }
+int   ajustes_trailer_hero(void)      { return lig(AJ_HERO_TRAILER) && !SEGURO; }
 float ajustes_trailer_zoom(void)      { static const float z[] = { 1.34f, 1.15f, 1.55f, 1.0f }; int v = valor[AJ_TRAILER_ASPECTO]; return (v >= 0 && v < 4) ? z[v] : 1.34f; }
 // Teto de definicao do trailer: 0 = a maior que houver.
 int   ajustes_trailer_qualidade(void) { static const int t[] = { 0, 1080, 720, 480 }; int v = valor[AJ_TRAILER_QUAL]; return (v >= 0 && v < 4) ? t[v] : 0; }
@@ -1333,13 +1603,13 @@ int  ajustes_gpu_efeitos(void) { return valor[AJ_GPU_EFEITOS]; }
 int  ajustes_itens_fileira(void) {
   static const int N[] = { 12, 18, 24 };
   int i = valor[AJ_ITENS_FILEIRA];
-  if (i < 0 || i >= (int)(sizeof N / sizeof *N)) i = 0;
+  if (i < 0 || i >= (int)(sizeof N / sizeof *N) || SEGURO) i = 0;
   return N[i];
 }
 int  ajustes_trailer_cartaz(void) {
   // A MESMA dependencia de inativa(AJ_FOCO_TRAILER), escrita aqui porque
   // inativa() vem bem mais abaixo no arquivo.
-  return lig(AJ_FOCO_TRAILER) && (lig(AJ_EXPANDIR) || valor[AJ_LANDSCAPE] == 0);
+  return lig(AJ_FOCO_TRAILER) && !SEGURO && (lig(AJ_EXPANDIR) || valor[AJ_LANDSCAPE] == 0);
 }
 void ajustes_definir_envio_auto(int ligado) { valor[AJ_ENVIO_AUTO] = ligado ? 0 : 1; gravar(); }
 // ARTE DO DESTAQUE ESCOLHIDA PELO DIAGNOSTICO, e so depois de a pessoa ver a
@@ -1369,6 +1639,7 @@ int ajustes_cw_ordem(void)            { return valor[AJ_CW_ORDEM]; }
 int ajustes_desfocar_nao_assistidos(void) { return lig(AJ_DET_BLUR_NAO_VISTOS); }
 int ajustes_botao_trailer(void)       { return lig(AJ_DET_TRAILER); }
 int ajustes_meta_externo(void)        { return lig(AJ_DET_META_EXT); }
+int ajustes_meta_so_cinemeta(void)    { return lig(AJ_DET_SO_CINEMETA); }
 
 int   ajustes_expandir_poster(void)   { return lig(AJ_EXPANDIR); }
 float ajustes_expandir_poster_atraso(void) { return (float)valor[AJ_EXPANDIR_ATRASO]; }
@@ -1389,7 +1660,7 @@ int   ajustes_largura_poster_dp(void) { return valor[AJ_LARGURA_DP]; }
 int   ajustes_raio_poster_dp(void)    { return valor[AJ_RAIO_DP]; }
 // 0 baixa, 1 padrao, 2 alta. Quem consome sao tex_cache (teto de decodificacao)
 // e artehero (qual url pedir para a arte de tela cheia).
-int   ajustes_qualidade_imagem(void)  { return valor[AJ_QUALIDADE_IMG]; }
+int   ajustes_qualidade_imagem(void)  { return SEGURO && valor[AJ_QUALIDADE_IMG] == 2 ? 1 : valor[AJ_QUALIDADE_IMG]; }
 // dpToPx = 2 em buildModernHomeSizingStyle. 12dp -> 24px, que e o raio medido.
 float ajustes_raio_poster_px(void)    { return (float)valor[AJ_RAIO_DP] * 2.0f; }
 
@@ -1423,16 +1694,61 @@ int ajustes_tmdb_ligado(void)         { return lig(AJ_TMDB_LIGADO); }
 // Codigo no formato da API do TMDB ("pt-BR", "en-US"). "Da interface" (0)
 // segue o idioma do app, que e o comportamento que desc_tmdb_idioma() sempre
 // teve.
+// "" = automatico; senao o codigo de 2 letras do pais (ver V_EPG_PAIS).
+const char *ajustes_epg_pais(void) {
+  static char c[3];
+  int v = valor[AJ_EPG_PAIS];
+  if (v <= 0 || v >= AJ_N_EPG_PAIS) return "";
+  c[0] = V_EPG_PAIS[v][0]; c[1] = V_EPG_PAIS[v][1]; c[2] = 0;
+  return c;
+}
+
 const char *ajustes_tmdb_idioma(void) {
   static const char *L[] = {
     NULL, "pt-BR", "en-US", "es-ES", "fr-FR", "de-DE", "it-IT", "pt-PT",
-    "ja-JP", "ko-KR", "zh-CN"
+    "ja-JP", "ko-KR", "zh-CN", "ro-RO", "uk-UA", "ru-RU",
+    "nl-NL", "pl-PL", "tr-TR", "sv-SE", "da-DK", "nb-NO", "cs-CZ", "sk-SK",
+    "sl-SI", "hu-HU", "lt-LT", "bs-BA", "sr-RS", "bg-BG", "el-GR", "id-ID",
+    "vi-VN", "zh-TW"
   };
   int v = valor[AJ_TMDB_IDIOMA];
   if (v < 0 || v >= (int)(sizeof L / sizeof *L)) v = 0;
   // "Da interface" resolve AQUI, na hora de perguntar, e nao na gravacao:
   // trocar o idioma do app tem de refletir sem tocar neste ajuste.
-  if (!L[v]) return ajustes_idioma_ingles() ? "en-US" : "pt-BR";
+  if (!L[v]) {
+    switch (ajustes_idioma()) {
+      case IDIOMA_EN: return "en-US";
+      case IDIOMA_RO: return "ro-RO";
+      case IDIOMA_UK: return "uk-UA";
+      case IDIOMA_RU: return "ru-RU";
+      case IDIOMA_FR: return "fr-FR";
+      case IDIOMA_DE: return "de-DE";
+      case IDIOMA_ES: return "es-ES";
+      case IDIOMA_IT: return "it-IT";
+      case IDIOMA_NL: return "nl-NL";
+      case IDIOMA_PL: return "pl-PL";
+      case IDIOMA_TR: return "tr-TR";
+      case IDIOMA_PTPT: return "pt-PT";
+      case IDIOMA_SV: return "sv-SE";
+      case IDIOMA_DA: return "da-DK";
+      case IDIOMA_NO: return "nb-NO";    // o TMDB chama o bokmal de "nb"
+      case IDIOMA_CS: return "cs-CZ";
+      case IDIOMA_SK: return "sk-SK";
+      case IDIOMA_SL: return "sl-SI";
+      case IDIOMA_HU: return "hu-HU";
+      case IDIOMA_LT: return "lt-LT";
+      case IDIOMA_BS: return "bs-BA";
+      case IDIOMA_SR: return "sr-RS";
+      case IDIOMA_BG: return "bg-BG";
+      case IDIOMA_EL: return "el-GR";
+      case IDIOMA_ID: return "id-ID";
+      case IDIOMA_VI: return "vi-VN";
+      case IDIOMA_JA: return "ja-JP";
+      case IDIOMA_ZHCN: return "zh-CN";
+      case IDIOMA_ZHTW: return "zh-TW";
+      default:        return "pt-BR";
+    }
+  }
   return L[v];
 }
 #define TMDB_USA(op) (lig(AJ_TMDB_LIGADO) && lig(op))
@@ -1454,15 +1770,36 @@ int ajustes_mdblist_ligado(void)      { return lig(AJ_MDB_LIGADO); }
 // NAO combina com o master de proposito: o master corta a CONSULTA ao mdbList,
 // e as notas Trakt/IMDb que o app tem por conta propria (sem chave nenhuma)
 // nao sao dados do mdbList — esconde-las junto seria punir o usuario pelo que
-// outro servico faz. Cada show_* continua valendo sobre a sua fonte. MAL nao
-// tem fonte no extras de hoje — o ajuste fica gravado a espera dela.
+// outro servico faz. Cada show_* continua valendo sobre a sua fonte.
 int ajustes_mdblist_fonte(int fonte) {
   static const int OP[] = {
     AJ_MDB_TRAKT, AJ_MDB_IMDB, AJ_MDB_TMDB, AJ_MDB_TOMATES,
-    AJ_MDB_AUDIENCIA, AJ_MDB_META, AJ_MDB_LETTER
+    AJ_MDB_AUDIENCIA, AJ_MDB_META, AJ_MDB_LETTER,
+    // As quatro seguintes: usuarios do Metacritic segue o interruptor do
+    // Metacritic; MyAnimeList tem o dele (mdblist_show_mal). Roger Ebert e a
+    // nota agregada NAO existem na conta — sao sempre "disponiveis" e quem
+    // manda e a escolha da linha do titulo.
+    AJ_MDB_META, AJ_MDB_MAL, -1, -1
   };
   if (fonte < 0 || fonte >= (int)(sizeof OP / sizeof *OP)) return 0;
+  if (OP[fonte] < 0) return 1;
   return lig(OP[fonte]);
+}
+
+// A fonte entra na LINHA DO TITULO? Duas condicoes: a pessoa a ligou (aqui) E a
+// fonte esta disponivel (mdblist_show_* da conta, via ajustes_mdblist_fonte —
+// o mesmo interruptor que ja escondia o cartao da aba). Trakt e IMDb nao
+// dependem do master do MDBList, como no resto do arquivo.
+int ajustes_nota_titulo(int fonte) {
+  static const int OP[EX_NFONTES] = {
+    /* EX_TRAKT */ AJ_NT_TRAKT, /* EX_IMDB */ AJ_NT_IMDB, /* EX_TMDB */ AJ_NT_TMDB,
+    /* EX_TOMATOES */ AJ_NT_TOMATES, /* EX_AUDIENCE */ AJ_NT_AUDIENCIA,
+    /* EX_METACRITIC */ AJ_NT_META, /* EX_LETTERBOXD */ AJ_NT_LETTER,
+    /* EX_METAUSER */ AJ_NT_METAUSER, /* EX_MAL */ AJ_NT_MAL,
+    /* EX_EBERT */ AJ_NT_EBERT, /* EX_MDBSCORE */ AJ_NT_SCORE
+  };
+  if (fonte < 0 || fonte >= EX_NFONTES) return 0;
+  return lig(OP[fonte]) && ajustes_mdblist_fonte(fonte);
 }
 
 // Onde os ajustes ficam. Ate a versao anterior nada era gravado: mexer numa
@@ -1487,7 +1824,9 @@ static const char *W_CW_ORDEM[]  = { "default", "streaming_style", "split_upcomi
 // valor atual em vez de inventar um.
 static const char *W_TMDB_LING[] = {
   "interface", "pt", "en", "es", "fr", "de", "it", "pt-pt", "ja", "ko", "zh",
-  NULL
+  "ro", "uk", "ru",
+  "nl", "pl", "tr", "sv", "da", "no", "cs", "sk", "sl", "hu", "lt", "bs", "sr",
+  "bg", "el", "id", "vi", "zh-tw", NULL
 };
 
 // `heroSectionEnabled` -> `hero_section_enabled`. Uma sequencia de maiusculas
@@ -1582,12 +1921,209 @@ static const char *fanartMascarada(void) {
   return m;
 }
 
+// ENDERECO DO SERVIDOR P2P (p2p.h). Mora em p2p.txt na pasta de dados, por
+// aparelho: e o IP de um PC/NAS da casa desta TV, sem sentido em outra.
+static char p2pEndereco[200];
+static void p2pCarregar(void) {
+  char *t = dados_ler("p2p.txt");
+  p2pEndereco[0] = 0;
+  // Reaplica a normalizacao: arquivo editado a mao ou de outra versao nao pode
+  // virar URL torta.
+  if (t && !p2p_normalizar_url(t, p2pEndereco, sizeof p2pEndereco)) p2pEndereco[0] = 0;
+  free(t);
+}
+const char *ajustes_p2p_url(void) { return p2pEndereco; }
+int ajustes_definir_p2p_url(const char *texto) {
+  char nova[200] = "";
+  size_t i = 0;
+  while (texto && (texto[i] == ' ' || texto[i] == '\t')) i++;
+  if (texto && texto[i] && !p2p_normalizar_url(texto, nova, sizeof nova)) return 0;
+  snprintf(p2pEndereco, sizeof p2pEndereco, "%s", nova);
+  if (nova[0]) dados_gravar("p2p.txt", nova);
+  else dados_apagar("p2p.txt");
+  return 1;
+}
+
+// "TESTAR SERVIDOR P2P": p2p_testar espera ate P2P_PRAZO_TESTE s pela rede, e a
+// TV nao pode parar de desenhar. Um fio por vez; ajustes_atualizar recolhe.
+static pthread_t p2pFio;
+static int p2pFioVivo;
+static _Atomic int p2pTeste;            // 0 nunca/livre, 1 testando, 2 pronto
+static int p2pTesteErro;
+static char p2pTesteVersao[32];
+static void *p2pTesteFio(void *u) {
+  char v[32];
+  int e = p2p_testar(v, sizeof v);
+  (void)u;
+  p2pTesteErro = e;
+  snprintf(p2pTesteVersao, sizeof p2pTesteVersao, "%s", v);
+  atomic_store_explicit(&p2pTeste, 3, memory_order_release);
+  return NULL;
+}
+static void p2pTesteIniciar(void) {
+  if (p2pFioVivo) return;
+  atomic_store_explicit(&p2pTeste, 1, memory_order_release);
+  if (pthread_create(&p2pFio, NULL, p2pTesteFio, NULL) != 0) {
+    p2pTesteErro = P2P_ERR_SERVIDOR;
+    atomic_store_explicit(&p2pTeste, 2, memory_order_release);
+    return;
+  }
+  p2pFioVivo = 1;
+}
+static void p2pTesteRecolher(void) {
+  if (p2pFioVivo && atomic_load_explicit(&p2pTeste, memory_order_acquire) == 3) {
+    pthread_join(p2pFio, NULL);
+    p2pFioVivo = 0;
+    atomic_store_explicit(&p2pTeste, 2, memory_order_release);
+  }
+}
+static const char *p2pTesteTexto(void) {
+  static char buf[64];
+  int e = atomic_load_explicit(&p2pTeste, memory_order_acquire);
+  if (e == 0) return i18n("OK testa");
+  if (e == 1 || e == 3) return i18n("testando…");
+  switch (p2pTesteErro) {
+    case P2P_OK:
+      snprintf(buf, sizeof buf, i18n("conectado · versão %s"), p2pTesteVersao);
+      return buf;
+    case P2P_ERR_DESLIGADO:   return i18n("informe o endereço primeiro");
+    case P2P_ERR_NAO_STREMIO: return i18n("respondeu, mas não é um servidor Stremio");
+    default:                  return i18n("sem resposta do servidor");
+  }
+}
+
+// CHAVES DE DEBRID DIGITADAS NESTA TV (debrid.h). Moram em debrid.txt na pasta
+// de dados, uma linha "servico=chave" por servico, por aparelho — credencial do
+// mesmo grau do fanart.txt. tools/arm.sh a tira do .ipk (ARQ_DE_PESSOA) e a tela
+// so a mostra mascarada. O valor NUNCA volta para o campo da modal.
+static const char *DEB_SERV[5] = { "alldebrid", "alldebrid", "realdebrid", "torbox", "premiumize" };
+static char debLocal[5][100];
+static int debIdx(int op) {
+  switch (op) {
+    case AJ_DEBRID_AD: return 0;
+    case AJ_DEBRID_RD: return 2;
+    case AJ_DEBRID_TB: return 3;
+    case AJ_DEBRID_PM: return 4;
+    default: return -1;
+  }
+}
+static const char *DEB_ALFA =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.";
+static void debLimpar(char *dst, size_t n, const char *t) {
+  size_t i, k = 0;
+  for (i = 0; t && t[i] && k + 1 < n; i++)
+    if (strchr(DEB_ALFA, t[i]) && t[i]) dst[k++] = t[i];
+  dst[k] = 0;
+}
+static void debGravar(void) {
+  char out[5 * 128];
+  int i, u = 0, algum = 0;
+  out[0] = 0;
+  for (i = 0; i < 5; i++) {
+    if (i == 1 || !debLocal[i][0]) continue;
+    u += snprintf(out + u, sizeof out - (size_t)u, "%s=%s\n", DEB_SERV[i], debLocal[i]);
+    algum = 1;
+  }
+  if (algum) dados_gravar("debrid.txt", out);
+  else dados_apagar("debrid.txt");
+}
+static void debCarregar(void) {
+  char *t = dados_ler("debrid.txt"), *l, *fim;
+  int i;
+  memset(debLocal, 0, sizeof debLocal);
+  for (l = t; l && *l; l = fim ? fim + 1 : NULL) {
+    char *eq;
+    fim = strchr(l, '\n');
+    if (fim) *fim = 0;
+    eq = strchr(l, '=');
+    if (eq) {
+      *eq = 0;
+      for (i = 0; i < 5; i++)
+        if (i != 1 && !strcmp(l, DEB_SERV[i])) debLimpar(debLocal[i], sizeof debLocal[i], eq + 1);
+    }
+    if (!fim) break;
+  }
+  free(t);
+  for (i = 0; i < 5; i++) if (i != 1 && debLocal[i][0]) debrid_definir_chave_local(DEB_SERV[i], debLocal[i]);
+}
+static void debDefinir(int op, const char *txt) {
+  int i = debIdx(op);
+  if (i < 0) return;
+  debLimpar(debLocal[i], sizeof debLocal[i], txt);
+  debrid_definir_chave_local(DEB_SERV[i], debLocal[i]);   // vazio apaga
+  debGravar();
+}
+static const char *debValor(int op) {
+  static char buf[64], m[24];
+  int i = debIdx(op);
+  const char *serv;
+  if (i < 0) return "";
+  serv = DEB_SERV[i];
+  debrid_chave_mascarada(serv, m, sizeof m);
+  switch (debrid_origem(serv)) {
+    case 2: snprintf(buf, sizeof buf, "%s", m[0] ? m : "····"); return buf;
+    case 1: snprintf(buf, sizeof buf, i18n("da conta · %s"), m[0] ? m : "····"); return buf;
+    default: return i18n("Não configurado");
+  }
+}
+
+// "TESTAR CHAVE DO ALLDEBRID": um GET v4/user, que espera a rede; fio proprio
+// como o teste do P2P para a TV nao parar de desenhar.
+static pthread_t adFio;
+static int adFioVivo;
+static _Atomic int adTeste;             // 0 nunca/livre, 1 testando, 2 pronto, 3 fio terminou
+static int adTesteOk;
+static char adTesteMsg[64], adTesteData[16];
+static void *adTesteFio(void *u) {
+  char m[64], d[16];
+  (void)u;
+  adTesteOk = debrid_testar_alldebrid(m, sizeof m, d, sizeof d);
+  snprintf(adTesteData, sizeof adTesteData, "%s", d);
+  snprintf(adTesteMsg, sizeof adTesteMsg, "%s", m);
+  atomic_store_explicit(&adTeste, 3, memory_order_release);
+  return NULL;
+}
+static void adTesteIniciar(void) {
+  if (adFioVivo) return;
+  atomic_store_explicit(&adTeste, 1, memory_order_release);
+  if (pthread_create(&adFio, NULL, adTesteFio, NULL) != 0) {
+    snprintf(adTesteMsg, sizeof adTesteMsg, "sem resposta do servidor");
+    adTesteOk = 0;
+    atomic_store_explicit(&adTeste, 2, memory_order_release);
+    return;
+  }
+  adFioVivo = 1;
+}
+static void adTesteRecolher(void) {
+  if (adFioVivo && atomic_load_explicit(&adTeste, memory_order_acquire) == 3) {
+    pthread_join(adFio, NULL);
+    adFioVivo = 0;
+    atomic_store_explicit(&adTeste, 2, memory_order_release);
+  }
+}
+// O texto vem de debrid_testar_alldebrid como CHAVE de i18n (frases fixas,
+// listadas em idioma_tab.h); a de "premium até %s" leva a data a parte.
+static const char *adTesteTexto(void) {
+  static char buf[64];
+  int e = atomic_load_explicit(&adTeste, memory_order_acquire);
+  if (e == 0) return debrid_origem("alldebrid") ? i18n("OK testa") : i18n("informe a chave primeiro");
+  if (e == 1 || e == 3) return i18n("testando…");
+  if (adTesteOk && adTesteData[0]) {
+    snprintf(buf, sizeof buf, i18n("premium até %s"), adTesteData);
+    return buf;
+  }
+  return i18n(adTesteMsg);
+}
+
 void ajustes_dir(const char *dir) {
   FILE *f;
   char caminho[600], linha[96];
   if (!dir || !*dir) return;
   snprintf(dirAjustes, sizeof dirAjustes, "%s", dir);
   fanartCarregar();
+  p2pCarregar();
+  pstCarregar();
+  debCarregar();
   // ANTES DO LACO, e nao so no fim (#129): limita() confere as duas linhas de
   // idioma contra nValores() -> nLingua, e quem preenche nLingua e esta
   // chamada. No arranque ela ainda nao tinha rodado: a lista tinha "1 valor",
@@ -1597,10 +2133,26 @@ void ajustes_dir(const char *dir) {
   rotulosDeIdioma();
   snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dirAjustes);
   f = fopen(caminho, "r");
-  if (!f) return;
+  if (!f) {
+    // Nunca gravou nada: o idioma nasce automatico (o padrao de valor[]).
+    valor[AJ_IDIOMA] = 0;
+    return;
+  }
+  { int viuIdioma = 0, viuAuto = 0, idiomaGravado = IDIOMA_EN, autoGravado = 0;
   while (fgets(linha, sizeof linha, f)) {
     char chave[64]; int v, i;
     if (sscanf(linha, "%63s %d", chave, &v) != 2) continue;
+    // O idioma nao passa pelo laco: o numero do disco e um IDIOMA_*, e o
+    // indice da lista da tela e outro (ver "IDIOMA AUTOMATICO").
+    if (!strcmp(chave, "idioma")) {
+      if (v >= 0 && v < IDIOMA_N) { idiomaGravado = v; viuIdioma = 1; }
+      continue;
+    }
+    if (!strcmp(chave, "idiomaAutoLocal")) { autoGravado = v == 1; viuAuto = 1; continue; }
+    if (!strcmp(chave, "idiomaFonteLocal")) {
+      if (v >= IDA_TMDB && v <= IDA_PADRAO) idiomaFonteGravada = v;
+      continue;
+    }
     for (i = 0; i < AJ_N; i++) {
       if (!CHAVE[i] || strcmp(CHAVE[i], chave)) continue;
       if (OPCOES[i].tipo == OP_LEITURA || OPCOES[i].tipo == OP_ACAO) continue;
@@ -1609,6 +2161,15 @@ void ajustes_dir(const char *dir) {
       valor[i] = limita(i, v);
       break;
     }
+  }
+  // Escolha manual: "idioma" gravado e SEM a marca de automatico (arquivo de
+  // antes da marca, ou de quem escolheu). Sem "idioma" nenhum, nunca houve
+  // escolha e o automatico vale.
+  if (viuIdioma && !(viuAuto && autoGravado)) valor[AJ_IDIOMA] = 1 + idiomaGravado;
+  else valor[AJ_IDIOMA] = 0;
+  // No automatico, o gravado e o ultimo resolvido: a TV abre nele e a conta,
+  // quando chegar, corrige.
+  if (valor[AJ_IDIOMA] == 0 && viuIdioma) idiomaEfetivo = idiomaGravado;
   }
   fclose(f);
   // MIGRACAO UNICA (1.5.1, #149): religa o envio automatico. Ate a 1.5.0 a
@@ -1656,7 +2217,7 @@ void ajustes_dir(const char *dir) {
   // O limite mora em fileiras.c; esta linha e so o espelho dele. Ler daqui em
   // vez de gravar evita a divergencia: o arquivo de ajustes nao guarda o
   // numero, entao nao ha como os dois discordarem.
-  valor[AJ_FIL_LIMITE] = fil_limite();
+  valor[AJ_FIL_LIMITE] = fil_limite_gravado();
   // A escolha lida do disco so existe de verdade quando chega em linguas.c.
   rotulosDeIdioma();
   aplicarIdioma(AJ_LEG_LINGUA);
@@ -1665,6 +2226,7 @@ void ajustes_dir(const char *dir) {
   // O teto de imagens escolhido vale desde o arranque, nao so quando a tela
   // de Ajustes e aberta. tex_iniciar ja rodou (main.c); isto so o corrige.
   if (valor[AJ_TEX_MB] > 0) tex_definir_orcamento_mb(ajustes_tex_mb());
+  pstAplicar();
 }
 
 static void gravar(void) {
@@ -1682,6 +2244,13 @@ static void gravar(void) {
     // um "(null) 0" gravado assim que derrubou o app na leitura seguinte.
     if (!CHAVE[i] || CHAVE[i][0] == '-') continue;
     if (OPCOES[i].tipo == OP_LEITURA || OPCOES[i].tipo == OP_ACAO) continue;
+    if (i == AJ_IDIOMA) {
+      // O numero do disco e o IDIOMA_* em vigor; a marca diz se e automatico.
+      fprintf(f, "%s %d\n", CHAVE[i], ajustes_idioma());
+      fprintf(f, "idiomaAutoLocal %d\n", valor[i] == 0);
+      fprintf(f, "idiomaFonteLocal %d\n", idiomaFonteGravada);
+      continue;
+    }
     fprintf(f, "%s %d\n", CHAVE[i], valor[i]);
   }
   fclose(f);
@@ -1694,8 +2263,417 @@ static void gravar(void) {
   // OUTRO modulo pedisse — e num app que so navegou, ate o proximo arranque,
   // onde voltava ao padrao. Na LG o disco e real e nada disto acontecia.
   dados_marcar_sujo(0);
+  // Provedor de poster ou idioma da interface mudaram? So reconfigura se a
+  // configuracao final for outra (reconfigurar zera a memoria de falhas).
+  pstAplicar();
 }
 
+
+// POSTERES PERSONALIZADOS (posterprov.h). Os campos moram em posteres.txt
+// (chave=valor por linha) na pasta de dados: por aparelho, como fanart.txt e
+// p2p.txt. O provedor escolhido mora em ajustes.txt (posterProvLocal).
+//
+// NADA DISTO VAI PARA O LOG NEM PARA A TELA POR INTEIRO: o token e a chave
+// aparecem mascarados ("····abcd"), como a chave do fanart.tv.
+static char pstInst[PP_INSTANCIA_MAX], pstToken[PP_TOKEN_MAX + 1], pstExtra[PP_EXTRA_MAX + 1];
+static char pstChave[PP_CHAVE_MAX], pstModelo[PP_MODELO_MAX];
+// Ultima recusa de um campo digitado (0 = nenhuma); aparece na linha "Testar".
+enum { PST_OK = 0, PST_TOKEN_RUIM, PST_INST_RUIM, PST_EXTRA_RUIM, PST_CHAVE_RUIM, PST_MODELO_RUIM };
+static int pstAviso;
+
+static const char *pstCodigoLingua(void) {
+  static const char *L[] = { "pt", "en", "ro", "uk", "ru", "fr", "de", "es" };
+  int i = ajustes_idioma();
+  return (i >= 0 && i < 8) ? L[i] : "pt";
+}
+// Copia sem estourar `n` (e sem o aviso de truncamento do snprintf).
+static void pstCopia(char *dst, size_t n, const char *src) {
+  size_t k = src ? strlen(src) : 0;
+  if (k >= n) k = n - 1;
+  if (k) memcpy(dst, src, k);
+  dst[k] = 0;
+}
+static void pstAplicar(void) {
+  PosterProvCfg c;
+  memset(&c, 0, sizeof c);
+  c.prov = valor[AJ_POSTER_PROV];
+  pstCopia(c.instancia, sizeof c.instancia, pstInst);
+  pstCopia(c.token, sizeof c.token, pstToken);
+  pstCopia(c.extra, sizeof c.extra, pstExtra);
+  pstCopia(c.chave, sizeof c.chave, pstChave);
+  pstCopia(c.modelo, sizeof c.modelo, pstModelo);
+  pstCopia(c.lang, sizeof c.lang, pstCodigoLingua());
+  if (memcmp(&c, posterprov_cfg(), sizeof c)) posterprov_configurar(&c);
+}
+static void pstSalvar(void) {
+  char b[PP_INSTANCIA_MAX + PP_TOKEN_MAX + PP_EXTRA_MAX + PP_CHAVE_MAX + PP_MODELO_MAX + 64];
+  if (!pstInst[0] && !pstToken[0] && !pstExtra[0] && !pstChave[0] && !pstModelo[0]) {
+    dados_apagar("posteres.txt");
+    return;
+  }
+  snprintf(b, sizeof b, "inst=%s\ntoken=%s\nextra=%s\nchave=%s\nmodelo=%s\n",
+           pstInst, pstToken, pstExtra, pstChave, pstModelo);
+  dados_gravar("posteres.txt", b);
+}
+static void pstCarregar(void) {
+  char *t = dados_ler("posteres.txt"), *p, *fim;
+  char v[PP_MODELO_MAX + 8];
+  pstInst[0] = pstToken[0] = pstExtra[0] = pstChave[0] = pstModelo[0] = 0;
+  for (p = t; p && *p; p = fim ? fim + 1 : NULL) {
+    char *eq;
+    size_t n;
+    fim = strchr(p, '\n');
+    n = fim ? (size_t)(fim - p) : strlen(p);
+    eq = memchr(p, '=', n);
+    if (!eq) continue;
+    { size_t nv = n - (size_t)(eq + 1 - p);
+      if (nv >= sizeof v) continue;
+      memcpy(v, eq + 1, nv); v[nv] = 0;
+      if (nv && v[nv - 1] == '\r') v[nv - 1] = 0; }
+    // Reaplica as MESMAS validacoes de quando se digita: arquivo editado a mao
+    // ou de outra versao nao pode virar URL torta.
+    if (!strncmp(p, "inst=", 5)) { if (!posterprov_normalizar_instancia(v, pstInst, sizeof pstInst)) pstInst[0] = 0; }
+    else if (!strncmp(p, "token=", 6)) { if (!posterprov_extrair_token(v, pstToken, sizeof pstToken, NULL, 0)) pstToken[0] = 0; }
+    else if (!strncmp(p, "extra=", 6)) { if (!posterprov_extra_normalizar(v, pstExtra, sizeof pstExtra)) pstExtra[0] = 0; }
+    else if (!strncmp(p, "chave=", 6)) { pstCopia(pstChave, sizeof pstChave, v); }
+    else if (!strncmp(p, "modelo=", 7)) { if (posterprov_modelo_valido(v)) pstCopia(pstModelo, sizeof pstModelo, v); }
+  }
+  free(t);
+}
+// O que a pessoa digitou/colou num campo. Vazio apaga.
+static void pstDefinir(int op, const char *texto) {
+  char b[PP_MODELO_MAX + 8], inst[PP_INSTANCIA_MAX];
+  size_t i = 0, k;
+  pstAviso = PST_OK;
+  while (texto && (texto[i] == ' ' || texto[i] == '\t')) i++;
+  pstCopia(b, sizeof b, texto ? texto + i : "");
+  k = strlen(b);
+  while (k && (b[k - 1] == ' ' || b[k - 1] == '\t')) b[--k] = 0;
+  switch (op) {
+    case AJ_POSTER_INST:
+      if (!b[0]) pstInst[0] = 0;
+      else if (!posterprov_normalizar_instancia(b, pstInst, sizeof pstInst)) { pstAviso = PST_INST_RUIM; return; }
+      break;
+    case AJ_POSTER_TOKEN:
+      // Aceita o manifest colado inteiro: o host vira a instancia.
+      if (!posterprov_extrair_token(b, pstToken, sizeof pstToken, inst, sizeof inst)) { pstAviso = PST_TOKEN_RUIM; return; }
+      if (inst[0]) pstCopia(pstInst, sizeof pstInst, inst);
+      break;
+    case AJ_POSTER_EXTRA:
+      if (!posterprov_extra_normalizar(b, pstExtra, sizeof pstExtra)) { pstAviso = PST_EXTRA_RUIM; return; }
+      break;
+    case AJ_POSTER_CHAVE: {
+      PosterProvCfg c;
+      char u[PP_URL_MAX];
+      memset(&c, 0, sizeof c);
+      c.prov = PP_RPDB;
+      pstCopia(c.chave, sizeof c.chave, b);
+      if (b[0] && !posterprov_montar_url(&c, "tt0111161", 0, "movie", u, sizeof u)) { pstAviso = PST_CHAVE_RUIM; return; }
+      pstCopia(pstChave, sizeof pstChave, b);
+      break; }
+    case AJ_POSTER_MODELO:
+      if (b[0] && !posterprov_modelo_valido(b)) { pstAviso = PST_MODELO_RUIM; return; }
+      pstCopia(pstModelo, sizeof pstModelo, b);
+      break;
+  }
+  pstSalvar();
+  pstAplicar();
+}
+
+// "TESTAR POSTERES": baixa o cartaz de um filme conhecido. Um cartaz frio e
+// montado no servidor (medido ~3 s na instancia publica), entao o prazo e de
+// 20 s e a TV nao pode parar de desenhar: um fio por vez, recolhido em
+// ajustes_atualizar (mesmo desenho do teste do servidor P2P).
+static pthread_t pstFio;
+static int pstFioVivo;
+static _Atomic int pstTeste;            // 0 nunca, 1 testando, 2 pronto, 3 fio acabou
+enum { PST_T_OK = 0, PST_T_CONFIG, PST_T_SEM_RESPOSTA, PST_T_NAO_IMAGEM };
+static int pstTesteRes;
+static long pstTesteKB, pstTesteMs;
+static void *pstTesteFio(void *u) {
+  PosterProvCfg c = *posterprov_cfg();
+  char url[PP_URL_MAX];
+  long n = 0;
+  (void)u;
+  if (!posterprov_montar_url(&c, "tt0111161", 278, "movie", url, sizeof url)) {
+    pstTesteRes = PST_T_CONFIG;
+  } else {
+    Uint32 t0 = SDL_GetTicks();
+    char *r = rede_baixar_bin(url, 20, &n);
+    pstTesteMs = (long)(SDL_GetTicks() - t0);
+    pstTesteKB = (n + 512) / 1024;
+    if (!r || n <= 512) pstTesteRes = PST_T_SEM_RESPOSTA;
+    else {
+      const unsigned char *b0 = (const unsigned char *)r;
+      int img = (b0[0] == 0xFF && b0[1] == 0xD8) || (b0[0] == 0x89 && b0[1] == 'P') ||
+                (b0[0] == 'R' && b0[1] == 'I' && b0[2] == 'F' && b0[3] == 'F');
+      pstTesteRes = img ? PST_T_OK : PST_T_NAO_IMAGEM;
+    }
+    free(r);
+  }
+  atomic_store_explicit(&pstTeste, 3, memory_order_release);
+  return NULL;
+}
+static void pstTesteIniciar(void) {
+  if (pstFioVivo) return;
+  pstAviso = PST_OK;
+  pstAplicar();
+  atomic_store_explicit(&pstTeste, 1, memory_order_release);
+  if (pthread_create(&pstFio, NULL, pstTesteFio, NULL) != 0) {
+    pstTesteRes = PST_T_SEM_RESPOSTA;
+    atomic_store_explicit(&pstTeste, 2, memory_order_release);
+    return;
+  }
+  pstFioVivo = 1;
+}
+static void pstTesteRecolher(void) {
+  if (pstFioVivo && atomic_load_explicit(&pstTeste, memory_order_acquire) == 3) {
+    pthread_join(pstFio, NULL);
+    pstFioVivo = 0;
+    atomic_store_explicit(&pstTeste, 2, memory_order_release);
+  }
+}
+static const char *pstMascara(const char *seg) {
+  static char m[24];
+  size_t n = strlen(seg);
+  if (!n) return i18n("Não configurado");
+  snprintf(m, sizeof m, "····%s", n > 4 ? seg + n - 4 : "");
+  return m;
+}
+static const char *pstTexto(int op) {
+  static char buf[96];
+  switch (op) {
+    case AJ_POSTER_INST:
+      return pstInst[0] ? pstInst : i18n("Instância pública");
+    case AJ_POSTER_TOKEN:  return pstMascara(pstToken);
+    case AJ_POSTER_EXTRA:  return pstExtra[0] ? pstExtra : i18n("Nenhum");
+    case AJ_POSTER_CHAVE:  return pstMascara(pstChave);
+    case AJ_POSTER_MODELO:
+      if (!pstModelo[0]) return i18n("Não configurado");
+      return posterprov_redigir(pstModelo, buf, sizeof buf);   // so o host
+    default: break;
+  }
+  // AJ_POSTER_TESTAR
+  switch (pstAviso) {
+    case PST_TOKEN_RUIM:  return i18n("token inválido (até 400 letras, números e _ . ~ = -)");
+    case PST_INST_RUIM:   return i18n("endereço inválido");
+    case PST_EXTRA_RUIM:  return i18n("parâmetros inválidos (fmt, format, config e c não valem)");
+    case PST_CHAVE_RUIM:  return i18n("chave inválida");
+    case PST_MODELO_RUIM: return i18n("modelo inválido: use http(s):// e {imdb}, {tmdb}, {type} ou {tipo_tmdb}");
+    default: break;
+  }
+  { int e = atomic_load_explicit(&pstTeste, memory_order_acquire);
+    if (e == 0) return i18n("OK testa");
+    if (e == 1 || e == 3) return i18n("testando…");
+    switch (pstTesteRes) {
+      case PST_T_OK:
+        snprintf(buf, sizeof buf, i18n("funcionou · %ld KB em %ld ms"), pstTesteKB, pstTesteMs);
+        return buf;
+      case PST_T_CONFIG:       return i18n("configuração incompleta ou grande demais");
+      case PST_T_NAO_IMAGEM:   return i18n("respondeu, mas não é uma imagem");
+      default:                 return i18n("sem resposta do serviço");
+    } }
+}
+// Teclado de cada campo. O TOKEN e o MODELO sao longos: usam o teclado LONGO.
+static const char *PST_ALFA_INST   = "abcdefghijklmnopqrstuvwxyz0123456789.:-";
+static const char *PST_ALFA_TOKEN  =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.~=-:/";
+static const char *PST_ALFA_EXTRA  = "abcdefghijklmnopqrstuvwxyz0123456789=&_.,-%";
+static const char *PST_ALFA_CHAVE  =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
+static const char *PST_ALFA_MODELO = "abcdefghijklmnopqrstuvwxyz0123456789:/.-_?=&{}%";
+static void pstAtivar(int op) {
+  if (inativa(op)) return;
+  switch (op) {
+    case AJ_POSTER_INST:
+      stCampo = op;
+      teclado_abrir_com("Endereço do SpatialPosters", "Ex.: posters.meudominio.com ou 192.168.1.5:3000. Vazio usa a pública.",
+                        PP_INSTANCIA_MAX - 1, PST_ALFA_INST, pstInst[0] ? pstInst : NULL);
+      break;
+    case AJ_POSTER_TOKEN:
+      // O token NAO volta para o campo (a modal fica na tela e a tela vira foto).
+      stCampo = op;
+      teclado_abrir_com("Token do SpatialPosters", "Token ou endereço do manifest (…/c/TOKEN/manifest.json). Vazio apaga.",
+                        PP_TOKEN_MAX, PST_ALFA_TOKEN, NULL);
+      break;
+    case AJ_POSTER_EXTRA:
+      stCampo = op;
+      teclado_abrir_com("Parâmetros do SpatialPosters", "Ex.: bs=vetro&side=right. Vazio apaga.",
+                        PP_EXTRA_MAX, PST_ALFA_EXTRA, pstExtra[0] ? pstExtra : NULL);
+      break;
+    case AJ_POSTER_CHAVE:
+      stCampo = op;
+      teclado_abrir_com("Chave do RPDB", "Sua chave em ratingposterdb.com. Vazio apaga.",
+                        PP_CHAVE_MAX - 1, PST_ALFA_CHAVE, NULL);
+      break;
+    case AJ_POSTER_MODELO:
+      stCampo = op;
+      teclado_abrir_com("Modelo de URL dos pôsteres", "Ex.: https://meu.servidor/{type}/{imdb}.jpg. Vazio apaga.",
+                        PP_MODELO_MAX - 1, PST_ALFA_MODELO, pstModelo[0] ? pstModelo : NULL);
+      break;
+    case AJ_POSTER_TESTAR:
+      pstTesteIniciar();
+      break;
+  }
+}
+
+
+// IDIOMA AUTOMATICO — o resto (estado e regra: ver ajustes_idioma e idiomaauto.h).
+//
+// Aplica a regra sobre o que se sabe AGORA (conta, TV) e, se o idioma mudou,
+// grava, remonta as fileiras e avisa. `notificar` e 0 no arranque (a TV ainda
+// nem desenhou nada) e 1 depois; sem ajustes_idioma_auto_iniciar (os testes) a
+// remontagem e o aviso ficam de fora, porque descoberta e avisos nao existem.
+static void idiomaResolver(int notificar) {
+  int fonte, novo, mudou;
+  if (valor[AJ_IDIOMA] != 0) return;          // escolha manual: o automatico nao mexe
+  novo = idiomaauto_resolver(contaTmdbLing, contaLegLing, sistemaLoc, &fonte);
+  mudou = novo != idiomaEfetivo;
+  // Sem conta nem locale ainda (a TV responde depois): cair no ingles agora
+  // trocaria o idioma gravado por um que ja vai ser corrigido em instantes.
+  if (fonte == IDA_PADRAO && sistemaPendente) return;
+  if (!mudou && fonte == idiomaUltimaFonte) return;   // nada novo: sem linha repetida
+  idiomaUltimaFonte = fonte;
+  idiomaFonteGravada = fonte;
+  printf("[idioma] automatico: %s (fonte: %s)\n", idiomaauto_codigo(novo),
+         idiomaauto_fonte_nome(fonte));
+  fflush(stdout);
+  if (!mudou) { gravar(); return; }           // so a fonte mudou: fica gravada
+  idiomaEfetivo = novo;
+  gravar();
+  // Remontar as fileiras e avisar e do main.c (o gancho): estes dois modulos
+  // nao existem nos testes que incluem ajustes.c, e nem no arranque.
+  if (idiomaPosArranque && idiomaGancho)
+    idiomaGancho(idiomaauto_codigo(novo), fonte, notificar);
+}
+
+// A pessoa mexeu na linha de idioma (valor[AJ_IDIOMA] ja e o novo indice).
+// Voltar a "Automático" resolve de novo agora; qualquer outro valor e escolha
+// manual e o automatico nao toca mais no idioma.
+static void idiomaEscolhido(void) {
+  if (valor[AJ_IDIOMA] != 0) return;
+  idiomaUltimaFonte = -1;
+  // "O que estava na tela" era o idioma manual de que a pessoa acabou de sair;
+  // o resolvido pode coincidir com o guardado de antes e ainda assim precisa
+  // ser calculado de novo.
+  idiomaEfetivo = -1;
+  idiomaResolver(0);
+  if (idiomaEfetivo < 0) idiomaEfetivo = IDIOMA_EN;   // a TV ainda nao respondeu (webOS)
+}
+
+// O LOCALE DA TV.
+//   Tizen  navigator.language (segue a lingua da TV), lido na hora.
+//   Mac    NUVIO_LOCALE, LC_ALL / LC_MESSAGES / LANG; so para a previa.
+//   webOS  luna://com.webos.settingsservice/getSystemSettings localeInfo
+//          (locales.UI, "pt-BR"). Vai por luna-send como extras.c faz para o
+//          navegador, e num fio: o processo leva algumas centenas de ms na TV
+//          e o arranque nao espera por ele. O laco principal recolhe o
+//          resultado em ajustes_idioma_auto_tick.
+// NUNCA chamado por ajustes_dir: os testes que incluem ajustes.c nao dependem
+// do locale de quem os roda.
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+static void sistemaConsultar(void) {
+  EM_ASM({
+    try {
+      var b = new TextEncoder().encode(navigator.language || '');
+      var n = Math.min(b.length, $1 - 1);
+      HEAPU8.set(b.subarray(0, n), $0);
+      HEAPU8[$0 + n] = 0;
+    } catch (e) { HEAPU8[$0] = 0; }
+  }, sistemaLoc, (int)sizeof sistemaLoc);
+}
+static void sistemaRecolher(void) {}
+#elif defined(__APPLE__)
+static void sistemaConsultar(void) {
+  // NUVIO_LOCALE=ro-RO simula a TV em outra lingua na previa (e nos testes).
+  const char *v = getenv("NUVIO_LOCALE");
+  if (!v || !*v) v = getenv("LC_ALL");
+  if (!v || !*v) v = getenv("LC_MESSAGES");
+  if (!v || !*v) v = getenv("LANG");
+  snprintf(sistemaLoc, sizeof sistemaLoc, "%s", v ? v : "");
+}
+static void sistemaRecolher(void) {}
+#else
+#include <pthread.h>
+static char sistemaBruto[32];
+static volatile int sistemaPronto;             // 1 = o fio deixou o resultado
+static int sistemaIniciado;
+static void *sistemaFio(void *u) {
+  char buf[1024];
+  size_t n = 0;
+  FILE *p = popen("luna-send -n 1 -f luna://com.webos.settingsservice/getSystemSettings "
+                  "'{\"keys\":[\"localeInfo\"]}' 2>/dev/null", "r");
+  (void)u;
+  if (p) { n = fread(buf, 1, sizeof buf - 1, p); pclose(p); }
+  buf[n] = 0;
+  sistemaBruto[0] = 0;
+  js_texto(buf, buf + n, "UI", sistemaBruto, sizeof sistemaBruto);
+  sistemaPronto = 1;
+  return NULL;
+}
+static void sistemaConsultar(void) {
+  pthread_t t;
+  if (sistemaIniciado) return;
+  sistemaIniciado = 1;
+  sistemaPendente = 1;
+  if (pthread_create(&t, NULL, sistemaFio, NULL) == 0) pthread_detach(t);
+  else sistemaPronto = 1;
+}
+static void sistemaRecolher(void) {
+  if (!sistemaPronto) return;
+  sistemaPronto = 0;
+  snprintf(sistemaLoc, sizeof sistemaLoc, "%s", sistemaBruto);
+  sistemaPendente = 0;
+  printf("[idioma] locale da TV: \"%s\"\n", sistemaLoc);
+  fflush(stdout);
+  idiomaResolver(1);
+}
+#endif
+
+void ajustes_idioma_auto_iniciar(void (*aoMudar)(const char *codigo, int fonte, int notificar)) {
+  idiomaGancho = aoMudar;
+  if (valor[AJ_IDIOMA] == 0) {
+    sistemaConsultar();
+    if (sistemaLoc[0]) {
+      printf("[idioma] locale da TV: \"%s\"\n", sistemaLoc);
+      fflush(stdout);
+    }
+    if (idiomaFonteGravada == IDA_TMDB || idiomaFonteGravada == IDA_LEGENDA) {
+      // Veio da conta na ultima vez: fica assim ate o blob chegar.
+      idiomaUltimaFonte = idiomaFonteGravada;
+      printf("[idioma] automatico: %s (fonte: %s)\n", idiomaauto_codigo(idiomaEfetivo),
+             idiomaauto_fonte_nome(idiomaFonteGravada));
+      fflush(stdout);
+    } else idiomaResolver(0);
+  }
+  idiomaPosArranque = 1;
+}
+void ajustes_idioma_auto_tick(void) { sistemaRecolher(); }
+
+// tmdb_language / subtitle_preferred_language CRUS do blob (a conta manda
+// "pt-BR", "ro"...). O laco das opcoes guarda so o INDICE de V_TMDB_LING, que
+// perde a regiao e o que a lista nao tem; aqui interessa o codigo inteiro.
+static void idiomaContaDoBlob(const char *json, const char *fim) {
+  static const struct { const char *chave; char *dst; size_t tam; } M[] = {
+    { "tmdb_language",                contaTmdbLing, sizeof contaTmdbLing },
+    { "subtitle_preferred_language",  contaLegLing,  sizeof contaLegLing  },
+  };
+  size_t k;
+  for (k = 0; k < sizeof M / sizeof *M; k++) {
+    char bruto[80], texto[80];
+    size_t n;
+    if (!js_bruto(json, fim, M[k].chave, bruto, sizeof bruto)) continue;
+    if (bruto[0] == '{' &&
+        !js_bruto(bruto, bruto + strlen(bruto), "value", texto, sizeof texto))
+      continue;
+    if (bruto[0] != '{') snprintf(texto, sizeof texto, "%s", bruto);
+    n = strlen(texto);
+    if (n >= 2 && texto[0] == '"') { memmove(texto, texto + 1, n - 2); texto[n - 2] = 0; }
+    else if (!strcmp(texto, "null")) texto[0] = 0;
+    snprintf(M[k].dst, M[k].tam, "%s", texto);
+  }
+}
 
 // Idiomas de audio e legenda do blob. NAO passam pelo laco das opcoes abaixo
 // porque o valor deles nao e um indice de enum, e um codigo ISO ("en", "pt") —
@@ -1735,6 +2713,8 @@ int ajustes_aplicar_blob(const char *json) {
   if (!json || !*json) return 0;
   fim = json + strlen(json);
   idiomasDoBlob(json, fim);
+  idiomaContaDoBlob(json, fim);
+  idiomaResolver(1);
 
   for (i = 0; i < AJ_N; i++) {
     char snake[80], embrulho[400], bruto[160];
@@ -1743,7 +2723,7 @@ int ajustes_aplicar_blob(const char *json) {
     // (heroCatalogKeys, versao, espaco) e nao vem do blob.
     if (OPCOES[i].tipo == OP_LEITURA || OPCOES[i].tipo == OP_ACAO) continue;
     if (!CHAVE[i] || CHAVE[i][0] == '-') continue;
-    if (i == AJ_FONTE_UI) continue;
+    if (i == AJ_FONTE_UI || i == AJ_IDIOMA) continue;
     // MEDIDO na TV, com uma conta de verdade: o blob NAO e um mapa plano de
     // camelCase. Ele e
     //   {"version":1,"features":{"layout_settings":{
@@ -1868,6 +2848,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_FONTE_AUTO:
     case AJ_FONTE_REPOR:
     case AJ_SALVOS_DEST:
+    case AJ_EPG_PAIS:       /* pais da grade: por aparelho, o web nao tem */
     // Arte do destaque: o web nao tem as chaves (heroFundoLocal,
     // heroDifferentFromCard); ficam neste aparelho mesmo que um blob futuro
     // traga algo com o mesmo nome.
@@ -1878,9 +2859,20 @@ static int somenteDesteAparelho(int op) {
     // deste aparelho.
     case AJ_TRAILER_FONTE:
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
+    case AJ_VIDRO:          /* visual desta TV: a GPU de cada uma aguenta diferente */
+    case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
+    case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
+    case AJ_PERFIL_EDITAR:
+    case AJ_P2P_LIGADO:     /* o servidor P2P e um aparelho da rede desta casa */
+    case AJ_POSTER_PROV:    /* servico e rede desta casa: nao segue a conta */
+    case AJ_DET_SO_CINEMETA: /* o web nao tem esta escolha */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
+    // Linha do titulo: o web nao tem, e nenhuma conta pode desliga-las aqui.
+    case AJ_NT_IMDB: case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
+    case AJ_NT_METAUSER: case AJ_NT_TRAKT: case AJ_NT_TMDB: case AJ_NT_LETTER:
+    case AJ_NT_MAL: case AJ_NT_EBERT: case AJ_NT_SCORE:
       return 1;
     default:
       return 0;
@@ -2125,9 +3117,13 @@ int ajustes_iniciar(void) {
   // trocar a cor, nao achar onde ela mora.
   if (abrirNaCor) { abrirNaCor = 0; focarOpcao(AJ_TEMA); }
   if (abrirNaFonte) { abrirNaFonte = 0; focarOpcao(AJ_FONTE_UI); }
+  // Os dois atalhos do cartao da 1.6.0: o layout da home (dentro do grupo
+  // "Layout da Home", que focarOpcao abre) e a Interface de vidro.
+  if (abrirNoLayout) { abrirNoLayout = 0; focarOpcao(AJ_HOME_LAYOUT); }
+  if (abrirNoVidro) { abrirNoVidro = 0; focarOpcao(AJ_VIDRO); }
   filAberta = 0; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
   emEdicao = 0;
-  valor[AJ_FIL_LIMITE] = fil_limite();
+  valor[AJ_FIL_LIMITE] = fil_limite_gravado();
   // Tambem aqui, e nao so em ajustes_dir: sem arquivo de ajustes aquele caminho
   // volta cedo e os rotulos ficariam vazios na primeira abertura da tela.
   rotulosDeIdioma();
@@ -2155,7 +3151,42 @@ static const char *textoLeitura(int op) {
     return strcmp(xtream_usuario(), "-") ? xtream_usuario() : i18n("Não configurado");
   if (op == AJ_XTREAM_SENHA)
     return strcmp(xtream_senha_mascarada(), "-") ? xtream_senha_mascarada() : i18n("Não configurado");
+  if (op == AJ_XTREAM_CONTA) {
+    // So o que a conta diz de si (status, vencimento, telas). Sem usuario:
+    // a linha acima ja o mostra, e esta tela vai para foto de issue.
+    static char bufConta[160];
+    XtreamConta c;
+    long long agora = (long long)time(NULL);
+    if (!xtream_configurado()) return i18n("Não configurado");
+    if (!xtream_conta(&c)) return i18n("abra o Guia para conferir");
+    if (!c.auth) return i18n("recusada pelo servidor");
+    { int a = xtream_conta_aviso(&c, agora);
+      if (a == XA_EXPIRADA) return i18n("vencida");
+      if (a == XA_DESATIVADA) return i18n("desativada pelo provedor");
+      if (c.expira > 0) {
+        time_t t = (time_t)c.expira;
+        struct tm *m = localtime(&t);
+        char d[16];
+        strftime(d, sizeof d, "%d/%m/%Y", m);
+        if (c.maxConexoes > 0)
+          snprintf(bufConta, sizeof bufConta, i18n("ativa até %s · %d de %d telas"), d, c.conexoes, c.maxConexoes);
+        else snprintf(bufConta, sizeof bufConta, i18n("ativa até %s"), d);
+      } else if (c.maxConexoes > 0)
+        snprintf(bufConta, sizeof bufConta, i18n("ativa · %d de %d telas"), c.conexoes, c.maxConexoes);
+      else snprintf(bufConta, sizeof bufConta, "%s", i18n("ativa"));
+      return bufConta; }
+  }
   if (op == AJ_FANART_CHAVE) return fanartMascarada();
+  if (op == AJ_PERFIL_EDITAR) {
+    RecPerfil pf;
+    recomenda_perfil(&pf);
+    return pf.apelido[0] ? pf.apelido : i18n("Não configurado");
+  }
+  if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco : i18n("Não configurado");
+  if (op == AJ_P2P_TESTAR) return p2pTesteTexto();
+  if (op >= AJ_POSTER_INST && op <= AJ_POSTER_TESTAR) return pstTexto(op);
+  if (debIdx(op) >= 0) return debValor(op);
+  if (op == AJ_DEBRID_AD_TESTAR) return adTesteTexto();
   if (op == AJ_ENVIAR_LOG) {
     switch (avisos_envio_estado()) {
       case 1:  return i18n("enviando…");
@@ -2266,6 +3297,9 @@ static int inativa(int op) {
     case AJ_RAIL:         return ajustes_rail_moderna();
     case AJ_RAIL_BLUR:    return !ajustes_rail_moderna();
     case AJ_HERO_CATALOGOS: return !ajustes_hero_ligado();
+    // O fundo em tela cheia e da Moderna: no Padrao o destaque e um banner e na
+    // Dinamica ele e sempre de ponta a ponta e rola junto com as fileiras.
+    case AJ_HERO_CHEIO:   return ajustes_home_layout() != HOME_LAYOUT_MODERNA;
     // #162: o Descobrir do app web (navegar catalogos por tipo e genero) ainda
     // nao existe nesta TV — o "Explorar" daqui e outra tela. A escolha vem e
     // vai para a conta, mas aqui nao muda nada, e a linha tem de dizer isso.
@@ -2299,6 +3333,19 @@ static int inativa(int op) {
     case AJ_MDB_LETTER: case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA:
     case AJ_MDB_META: case AJ_MDB_MAL:
       return !ajustes_mdblist_ligado();
+    // Linha do titulo: a nota que so o MDBList traz fica APAGADA sem a chave (ou
+    // com o master desligado) — ligar nao faria aparecer nada, e a linha diz
+    // por que (motivo abaixo). IMDb e Trakt funcionam sem chave.
+    case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
+    case AJ_NT_METAUSER: case AJ_NT_TMDB: case AJ_NT_LETTER: case AJ_NT_MAL:
+    case AJ_NT_EBERT: case AJ_NT_SCORE:
+      return !ajustes_mdblist_ligado() || !extras_mdblist_tem_chave();
+    // Cada campo so vale para o provedor dele; o teste, para qualquer um ligado.
+    case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
+      return valor[AJ_POSTER_PROV] != PP_SPATIAL;
+    case AJ_POSTER_CHAVE:  return valor[AJ_POSTER_PROV] != PP_RPDB;
+    case AJ_POSTER_MODELO: return valor[AJ_POSTER_PROV] != PP_MODELO;
+    case AJ_POSTER_TESTAR: return valor[AJ_POSTER_PROV] == PP_DESLIGADO;
     default: return 0;
   }
 }
@@ -2315,6 +3362,13 @@ static int mutavel(int op)   { return OPCOES[op].tipo != OP_LEITURA &&
 // alcancada pelo cima/baixo.
 static int visivel(int i) {
   int g = grupoDoItem[i];
+  // SEM O SERVICO SOCIAL NA BUILD, as duas linhas do perfil publico nao
+  // existem: um interruptor que nao liga nada e pior que interruptor nenhum
+  // (a mesma regra da aba Social, ver recomenda_ativo).
+  if (TELA[i].tipo == IT_OPC &&
+      (TELA[i].op == AJ_PERFIL_PESQ || TELA[i].op == AJ_PERFIL_EDITAR) &&
+      !recomenda_ativo())
+    return 0;
   return g < 0 || grupoAberto[secDoItem[i]] == g;
 }
 static int focavel(int i) {
@@ -2373,6 +3427,7 @@ static const char *ajudaOpcao(int op) {
     if (op == AJ_RAIL) return "Desative a barra lateral moderna para escolher entre recolhida e fixa.";
     if (op == AJ_RAIL_BLUR) return "Ative a barra lateral moderna para usar o desfoque.";
     if (op == AJ_HERO_CATALOGOS) return "Ative Mostrar destaque para exibir os catálogos no topo da Home.";
+    if (op == AJ_HERO_CHEIO) return "Só vale no layout Moderna. No Padrão o destaque é um banner, e na Dinâmica ele ocupa a largura toda e sobe junto com a rolagem.";
     if (op == AJ_DESCOBRIR) return "A tela Descobrir do app web ainda não existe nesta TV. A escolha fica guardada na conta.";
     if (op >= AJ_CW_OK && op <= AJ_CW_ORDEM)
       return op == AJ_CW_BLUR_PROX && ajustes_cw_ligado()
@@ -2384,6 +3439,10 @@ static const char *ajudaOpcao(int op) {
       return "Ative TMDB para ajustar o que ele enriquece.";
     if (op > AJ_MDB_LIGADO && op <= AJ_MDB_MAL)
       return "Ative MDBList para escolher as fontes de nota.";
+    if (op >= AJ_NT_IMDB && op <= AJ_NT_SCORE)
+      return extras_mdblist_tem_chave()
+        ? "Ative MDBList para mostrar esta nota."
+        : "Esta nota vem do MDBList e precisa da chave dele na sua conta Nuvio.";
     return "Ative Efeito de profundidade para personalizar este detalhe.";
   }
   switch (op) {
@@ -2410,6 +3469,8 @@ static const char *ajudaOpcao(int op) {
     }
     case AJ_XTREAM_SENHA: return "A senha da assinatura. É credencial: vai dentro de cada URL de canal e nunca aparece nesta tela em claro.";
     case AJ_XTREAM_LIMPAR: return "Apaga servidor, usuário e senha deste perfil, e os canais somem do Guia. Sair da conta também apaga.";
+    case AJ_XTREAM_CONTA: return "O que o servidor Xtream disse da assinatura na última carga do Guia: se está ativa, quando vence e quantas telas estão em uso.";
+    case AJ_EPG_PAIS: return "De que país vem a programação dos canais no Guia. Automático escolhe pelo idioma e pelos nomes dos canais (RO:, |RO|…). A grade do próprio provedor Xtream entra sempre que existir.";
     case AJ_FONTE_MANUAL: return "Ao mandar reproduzir, abre a lista de fontes em vez de escolher sozinho. Canal ao vivo não pergunta.";
     case AJ_FONTE_AUTO: return "Melhor fonte: prefere 4K, Dolby Vision e MP4 e confere uma fonte por vez. Primeira da lista: toca a primeira que o addon mandou e não confere nenhuma outra — para quem já filtra e ordena no AIOStreams.";
     case AJ_FONTE_REPOR: return "Quantas outras fontes o automático tenta quando a escolhida não abre. Cada tentativa pode adicionar um arquivo na sua conta de debrid.";
@@ -2420,8 +3481,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_HERO_FUNDO: return "De onde vem a arte de fundo do destaque, da página do título e dos cards deitados: catálogo/Cinemeta, IMDb/Metahub, TMDB, Trakt, Apple TV, fanart.tv (com chave) ou Anime (Kitsu/AniList). Automático usa a do catálogo. MDBList fornece notas, não imagens.";
     case AJ_HERO_ARTE_DIF: return "Desligado: card, destaque e página do título mostram a mesma imagem. Ligado: o card fica com a arte do catálogo e o destaque usa outra foto — TMDB vira outro fundo do TMDB; em Automático, ou se a escolhida repetir o card, usa Apple TV, outro fundo do TMDB, fanart.tv, anime ou Trakt.";
     case AJ_HERO_TRAILER: return "Com o foco parado no destaque do topo, o trailer do título toca sem som no lugar da arte. Mover o foco volta para a arte.";
-    case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis.";
-    case AJ_ITENS_FILEIRA: return "Quantos títulos cada fileira da Home mostra antes do Ver tudo. Mais itens usam mais memória: em TV com 1 GB de memória a Home pode ficar mais lenta ou fechar. Aumentar vale na próxima vez que o app abrir.";
+    case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta, de 3 a 40. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis. Mais fileiras usam mais memória e rede: em TV com 1 GB de memória a Home pode ficar lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior.";
+    case AJ_ITENS_FILEIRA: return "Quantos títulos cada fileira da Home mostra antes do Ver tudo. Mais itens usam mais memória: em TV com 1 GB de memória a Home pode ficar mais lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior. Aumentar vale na próxima vez que o app abrir.";
     case AJ_FIL_ORDEM: return "Abre a lista de fileiras para reordenar, ligar, desligar e escolher o card de cada uma. É lá que dá para ver de onde cada fileira vem.";
     case AJ_RAIL: return "A barra de navegação da esquerda fica sempre aberta, ou recolhida até você ir até ela.";
     case AJ_RAIL_MODERNA: return "Troca a barra lateral pela versão nova, com ícones maiores. Ela ignora a escolha entre recolhida e fixa.";
@@ -2457,6 +3518,7 @@ static const char *ajudaOpcao(int op) {
 #else
       return "Mostra o botão de trailer na tela do título, quando existe um trailer conhecido.";
 #endif
+    case AJ_DET_SO_CINEMETA: return "Desligado (padrão): a ficha do título vem primeiro do add-on em cujo catálogo ele apareceu, com episódios e ids próprios (Kitsu, Xperience, AIOMetadata…), e o Cinemeta completa o que faltar. Ligado: só o Cinemeta, como antes.";
     case AJ_DET_META_EXT: return "Prefere a ficha do addon de metadados à do Cinemeta. Útil quando o seu addon tem sinopse e elenco melhores.";
     case AJ_DET_DATA_CHEIA: return "Escreve a data de estreia por extenso em vez de só o ano.";
     case AJ_DET_VEU: return "Quanto a vinheta escura cobre a arte na tela do título. Cem por cento é o padrão; zero mostra a arte limpa — o texto pode ficar difícil de ler sobre cenas claras.";
@@ -2505,10 +3567,29 @@ static const char *ajudaOpcao(int op) {
     case AJ_QUALIDADE_IMG: return "Quanto de pixel a arte carrega. Alta pede a versão grande de cada imagem e gasta mais memória; Baixa pede a menor, carrega antes e cabe em TV com pouca RAM.";
 
     // --- Interface e conta
-    case AJ_IDIOMA: return "Idioma de toda a interface. Não muda o idioma das legendas nem do áudio.";
+    case AJ_IDIOMA: return "Idioma de toda a interface. Automático segue a sua conta e, sem ela, o idioma da TV. Não muda o idioma das legendas nem do áudio.";
     case AJ_GPU_EFEITOS: return "Automático mede a TV nos primeiros segundos e, se ela não der conta, tira os efeitos mais pesados. Completos mantém tudo; Leves tira desfoque e brilho para deixar a navegação mais lisa.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
     case AJ_TEMA: return "Cor do anel que marca onde está o foco. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena: estilizada também tinge o fundo, gradiente pinta os botões com as cores da arte e imersiva deixa a cor vazar pela tela como luz. Ficam só nesta TV.";
+    case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
+    case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
+    case AJ_DEBRID_AD: return "Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.";
+    case AJ_DEBRID_AD_TESTAR: return "Pergunta ao AllDebrid se a chave vale e até quando a conta é premium. Não mostra seu usuário nem e-mail.";
+    case AJ_DEBRID_RD: return "Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.";
+    case AJ_DEBRID_TB: return "Chave de API do TorBox. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.";
+    case AJ_DEBRID_PM: return "Chave de API do Premiumize. Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.";
+    case AJ_PERFIL_PESQ: return "Desligado por padrão. Ligado, outras pessoas do Nuvio podem te achar pelo apelido e ver o que você escolher mostrar: bio, gêneros favoritos, foto e o que assistiu recentemente. Nunca aparecem e-mail, conta, addons nem aparelho. Desligar apaga o perfil do servidor na hora.";
+    case AJ_PERFIL_EDITAR: return "Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.";
+    case AJ_P2P_TESTAR: return "Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.";
+    case AJ_POSTER_PROV: return "Troca os cartazes retrato por um pronto de um serviço externo, com notas, selos 4K/HDR e faixa Top 10 no próprio cartaz. SpatialPosters (instância pública ou a sua), RPDB (com chave) ou um modelo de URL seu. Só cartazes de card: o destaque e os fundos não mudam. Se o serviço não responde, volta ao cartaz normal.";
+    case AJ_POSTER_INST: return "Endereço da instância do SpatialPosters. Vazio usa a pública (spatial-posters.vercel.app), que é gratuita e compartilhada; para muitos cartazes, rode a sua com Docker.";
+    case AJ_POSTER_TOKEN: return "Opcional. Token de configuração do SpatialPosters, ou o endereço do manifest colado inteiro. Um token completo costuma ter mais de 500 letras e não cabe aqui; prefira os parâmetros curtos ao lado ou os padrões da sua instância.";
+    case AJ_POSTER_EXTRA: return "Opcional. Ajustes curtos do cartaz, no formato do SpatialPosters, por exemplo bs=vetro&side=right (selo de vidro, faixa à direita). O idioma da interface já vai sozinho.";
+    case AJ_POSTER_CHAVE: return "Sua chave do RPDB (ratingposterdb.com). Fica só nesta TV e nunca aparece nos registros.";
+    case AJ_POSTER_MODELO: return "Endereço com {imdb}, {tmdb}, {type} (movie ou series) e {tipo_tmdb} (movie ou tv), por exemplo https://meu.servidor/{type}/{imdb}.jpg. Quem não tiver o dado que o modelo pede fica com o cartaz normal.";
+    case AJ_POSTER_TESTAR: return "Baixa o cartaz de um filme conhecido com a configuração atual e mostra se deu certo. O primeiro cartaz de cada título é montado no servidor e pode levar alguns segundos.";
+    case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso, como nos apps de streaming clássicos. Dinâmica: estilo Apple TV, com o destaque que sobe e some ao descer, fileiras de tamanhos diferentes (destaques grandes, Top 10 com numerais, cartazes e faixas deitadas) sobre um fundo de vidro fosco tingido pela arte.";
+    case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
     case AJ_RESOLUCAO: return "Desenha a interface em 4K nas TVs que permitem. Muitas ignoram o pedido e continuam em 1080p — o log diz qual é o caso. Vale reiniciar o app depois de mudar. O vídeo já é 4K nos dois casos.";
@@ -2551,6 +3632,10 @@ static const char *ajudaOpcao(int op) {
     case AJ_MDB_LETTER: case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA:
     case AJ_MDB_META: case AJ_MDB_MAL:
       return "Mostra ou esconde esta fonte na fileira de notas da página do título.";
+    case AJ_NT_IMDB: case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
+    case AJ_NT_METAUSER: case AJ_NT_TRAKT: case AJ_NT_TMDB: case AJ_NT_LETTER:
+    case AJ_NT_MAL: case AJ_NT_EBERT: case AJ_NT_SCORE:
+      return "Mostra esta nota na linha do título, com a marca e a escala do próprio site. Se a linha não couber, saem primeiro as menos importantes. A aba de notas continua mostrando todas.";
     default: return "Use as setas laterais para escolher. A preferência é aplicada ao alterar o valor.";
   }
 }
@@ -2972,12 +4057,237 @@ static void eventoFileiras(SDL_Keycode k) {
   }
 }
 
+// --- MODO SEGURO: quais ajustes vigiar e como desfaze-los ---------------------
+// A regra geral e o cabecalho de seguro.h. Aqui mora o que so este arquivo sabe:
+// QUAIS ajustes pesam, o que e "mais arriscado" para cada um e como se restaura.
+//
+// SO ENTRA O QUE EXISTE E PESA (memoria de imagem, GPU, preenchimento, rede):
+//   fileirasLimite   Fileiras da home acima de 12 (era o teto de 16; agora 40)
+//   itensFileira     Itens por fileira acima de 12 (18, 24)
+//   resolucao4k      Resolucao da interface em 4K (experimental)
+//   vidro            Interface de vidro (paineis translucidos = mais preenchimento)
+//   temaImersivo     Cor de destaque "Dinamica imersiva" (arte vazando como luz)
+//   trailerDestaque  Trailer no destaque do topo (decodifica video na home)
+//   trailerCartaz    Trailer do cartaz em foco (idem, a cada foco parado)
+//   p2p              Servidor P2P (experimental)
+//   qualidadeImagem  Qualidade da imagem "Alta" (a versao grande de cada arte)
+//   memoriaImagens   Memoria para imagens de 400 ou 512 MB (alto-cache)
+// FORA, POR NAO EXISTIREM neste tree: capas GIF/WebP animadas (nao ha ajuste; o
+// GIF do foco e da build, NV_LEVE), posteres personalizados e layout "Dinamica".
+// O "alto cache" que o dono usa na C9 e uma FLAG DE BUILD (arm.sh --alto-cache),
+// nao um ajuste: o que ha no app e "Memoria para imagens", ja incluida.
+typedef struct {
+  int         op;
+  const char *chave;              // id estavel no diario; nunca traduzir
+  int       (*nivel)(int v);      // 0 = seguro; maior = mais arriscado
+} Risco;
+static int nvFileiras(int v) { return v > FIL_LIMITE_VIGIADO ? v : 0; }
+static int nvItens(int v)    { return v > 0 ? v : 0; }
+static int nvLigado(int v)   { return v == 0; }        // V_LIGA: 0 = Ligado
+static int nv4k(int v)       { return v == 1; }
+static int nvImersiva(int v) { return v == AJ_TEMA_IMERSIVA; }
+static int nvQualAlta(int v) { return v == 2; }
+static int nvTexAlto(int v)  { return v >= 5 ? v : 0; }   // 400 e 512 MB
+static const Risco RISCOS[] = {
+  { AJ_FIL_LIMITE,     "fileirasLimite",  nvFileiras },
+  { AJ_ITENS_FILEIRA,  "itensFileira",    nvItens },
+  { AJ_RESOLUCAO,      "resolucao4k",     nv4k },
+  { AJ_VIDRO,          "vidro",           nvLigado },
+  { AJ_TEMA,           "temaImersivo",    nvImersiva },
+  { AJ_HERO_TRAILER,   "trailerDestaque", nvLigado },
+  { AJ_FOCO_TRAILER,   "trailerCartaz",   nvLigado },
+  { AJ_P2P_LIGADO,     "p2p",             nvLigado },
+  { AJ_QUALIDADE_IMG,  "qualidadeImagem", nvQualAlta },
+  { AJ_TEX_MB,         "memoriaImagens",  nvTexAlto },
+};
+#define N_RISCOS ((int)(sizeof RISCOS / sizeof *RISCOS))
+// O valor DE VERDADE: as fileiras moram em fileiras.c e valor[] guarda so o
+// espelho; o resto e valor[]. Nunca o efetivo do perfil seguro.
+static int riscoAtual(int op) { return op == AJ_FIL_LIMITE ? fil_limite_gravado() : valor[op]; }
+static const Risco *riscoDe(int op) {
+  int i;
+  for (i = 0; i < N_RISCOS; i++) if (RISCOS[i].op == op) return &RISCOS[i];
+  return NULL;
+}
+// Chamar DEPOIS de mudar o ajuste `op`, com o valor que ele tinha ANTES.
+// "ANTES" DE UMA RAJADA. Subir as fileiras de 7 para 30 sao 23 toques (a seta
+// repete), e o valor "anterior" que a pessoa entende e o 7, nao o 12 em que o
+// contador cruzou o limiar do diario. Toques a menos de 2,5 s um do outro contam
+// como UMA edicao, e a origem dela e o valor do primeiro toque.
+#define RISCO_RAJADA_MS 2500
+static Uint32 riscoT[AJ_N];
+static int    riscoOrigem[AJ_N];
+static char   riscoTem[AJ_N];   // riscoT valido (SDL_GetTicks() pode ser 0 no comeco)
+static void riscoNotar(int op, int antes) {
+  const Risco *r = riscoDe(op);
+  int depois;
+  if (!r) return;
+  depois = riscoAtual(op);
+  if (r->nivel(depois) > r->nivel(antes) && depois != antes)
+    seguro_mudou(r->chave, antes, depois, (long)time(NULL), SDL_GetTicks() / 1000);
+  else
+    seguro_ajustou(r->chave, depois, r->nivel(depois) > 0);
+}
+// O gancho de seguro_iniciar: devolve o ajuste ao valor de antes, SO se ele ainda
+// vale o que a mudanca deixou. Quem chama depois e ajustes_dir (segunda leitura,
+// de main.c) le o arquivo que gravar() acabou de escrever, entao os dois concordam.
+static int riscoAplicar(const char *chave, int novo, int ant) {
+  int i;
+  for (i = 0; i < N_RISCOS; i++) {
+    const Risco *r = &RISCOS[i];
+    if (strcmp(r->chave, chave)) continue;
+    if (riscoAtual(r->op) != novo) return 0;
+    if (r->op == AJ_FIL_LIMITE) {
+      fil_definir_limite(ant);
+      valor[AJ_FIL_LIMITE] = fil_limite_gravado();
+    } else valor[r->op] = ant;
+    gravar();
+    return 1;
+  }
+  return 0;   // chave de outra versao: nada a desfazer aqui
+}
+// Texto de um valor para os avisos: o mesmo rotulo que a linha mostra.
+static void riscoRotulo(int op, int v, char *dst, size_t tam) {
+  const Opcao *o = &OPCOES[op];
+  if (op == AJ_FIL_LIMITE) snprintf(dst, tam, "%d", v);
+  else if (o->tipo == OP_ESCOLHA && v >= 0 && v < o->n) snprintf(dst, tam, "%s", i18n(o->valores[v]));
+  else snprintf(dst, tam, "%d", v);
+}
+// Perfil seguro GRAVADO: a segunda queda rapida, ja no perfil seguro. Escreve no
+// arquivo os valores que o perfil seguro so simulava, para o proximo arranque nao
+// cair no mesmo laco. Fileiras e itens vao ao padrao de fabrica (7 e 12), abaixo
+// do teto de 12 do perfil de sessao — se 12 ja derrubou, 12 nao serve.
+static void riscoGravarSeguro(void) {
+  int i;
+  for (i = 0; i < N_RISCOS; i++) {
+    const Risco *r = &RISCOS[i];
+    int v = riscoAtual(r->op);
+    if (r->op == AJ_TEMA) { if (temaDinamico()) valor[AJ_TEMA] = 0; continue; }
+    if (r->nivel(v) <= 0) continue;
+    if (r->op == AJ_FIL_LIMITE) { fil_definir_limite(FIL_LIMITE_PADRAO); valor[AJ_FIL_LIMITE] = fil_limite_gravado(); }
+    else if (r->op == AJ_ITENS_FILEIRA || r->op == AJ_RESOLUCAO || r->op == AJ_TEX_MB) valor[r->op] = 0;
+    else if (r->op == AJ_QUALIDADE_IMG) valor[r->op] = 1;
+    else valor[r->op] = 1;   // interruptores V_LIGA: 1 = Desligado
+  }
+  gravar();
+}
+
+void ajustes_seguro_iniciar(int caiu) {
+  const SegDecisao *d = seguro_iniciar(caiu, (long)time(NULL), riscoAplicar);
+  char id[72], tit[80], txt[420];
+  int i;
+  perfilSeguro = d->modo == SEG_PERFIL_SEGURO;
+  for (i = 0; i < d->nRevertidas; i++) {
+    const SegMud *m = &d->revertidas[i];
+    int k;
+    for (k = 0; k < N_RISCOS; k++) if (!strcmp(RISCOS[k].chave, m->chave)) break;
+    if (k < N_RISCOS) {
+      char nome[80], novo[48], ant[48];
+      snprintf(nome, sizeof nome, "%s", i18n(OPCOES[RISCOS[k].op].rotulo));
+      riscoRotulo(RISCOS[k].op, m->novo, novo, sizeof novo);
+      riscoRotulo(RISCOS[k].op, m->ant, ant, sizeof ant);
+      snprintf(id, sizeof id, "seguro:%d:%s", d->sessao, m->chave);
+      snprintf(tit, sizeof tit, "%s", i18n("Ajuste desfeito"));
+      snprintf(txt, sizeof txt, i18n("O app fechou depois de mudar \"%s\" para %s. Voltei para %s para ele abrir de novo. Você pode tentar outra vez em Ajustes."),
+               nome, novo, ant);
+      avisos_modo_seguro(id, tit, txt);
+    }
+  }
+  if (d->modo == SEG_PERFIL_SEGURO) {
+    // Fileiras: teto de sessao em fileiras.c (nao mexe no arquivo); o resto sao
+    // os acessores acima, que leem seguro_perfil_ativo().
+    fil_definir_teto_sessao(FIL_LIMITE_VIGIADO);
+    snprintf(id, sizeof id, "seguro:%d:%s", d->sessao, "perfil");
+    snprintf(tit, sizeof tit, "%s", i18n("Modo seguro ligado"));
+    snprintf(txt, sizeof txt, "%s", i18n("O app fechou duas vezes seguidas logo depois de abrir. Nesta sessão ele roda sem vidro, 4K, tema imersivo e trailers, e com menos fileiras e itens. Seus ajustes salvos não mudaram."));
+    avisos_modo_seguro(id, tit, txt);
+  } else if (d->modo == SEG_PERSISTIR_SEGURO) {
+    riscoGravarSeguro();
+    snprintf(id, sizeof id, "seguro:%d:%s", d->sessao, "gravado");
+    snprintf(tit, sizeof tit, "%s", i18n("Ajustes seguros gravados"));
+    snprintf(txt, sizeof txt, "%s", i18n("O app continuou fechando mesmo no modo seguro. Gravei os ajustes seguros: sem vidro, 4K, tema imersivo e trailers, e com as fileiras e os itens de fábrica. Você pode mudar tudo de novo em Ajustes."));
+    avisos_modo_seguro(id, tit, txt);
+  }
+}
+
+// --- FOLHA DE CONFIRMACAO: mais fileiras / mais itens -------------------------
+// Primeira vez que a pessoa passa do que sempre coube, uma folha explica o preco.
+// Modal dentro desta tela (mesma razao da folha de fileiras: ajustes.c nao pede
+// nada a app.c). Depois de aceita uma vez, vale por aparelho (seguro.txt) e as
+// proximas mudancas nao perguntam — mas continuam vigiadas pelo diario.
+static int  riscoFolha;          // 0 fechada; senao SEG_AVISO_*
+static int  riscoFolhaOp, riscoFolhaDir;
+static int  riscoFolhaFoco;      // 0 = Continuar, 1 = Cancelar
+static void mudarValor(int op, int dir);
+// O valor a que `dir` levaria `op`, sem aplicar. Espelha mudarValor.
+static int passoAdiante(int op, int dir) {
+  const Opcao *o = &OPCOES[op];
+  if (o->tipo == OP_NUMERO) return limita(op, valor[op] + dir * o->passo);
+  { int n = nValores(op); return (valor[op] + (dir > 0 ? 1 : n - 1)) % n; }
+}
+// 1 quando a mudanca precisa da folha (e a abriu).
+static int riscoPedirConfirmacao(int op, int dir) {
+  int bit, de, para;
+  if (op == AJ_FIL_LIMITE) {
+    bit = SEG_AVISO_FILEIRAS;
+    de = riscoAtual(op); para = passoAdiante(op, dir);
+    if (!(para > FIL_LIMITE_SEGURO && para > de)) return 0;
+  } else if (op == AJ_ITENS_FILEIRA) {
+    bit = SEG_AVISO_ITENS;
+    de = valor[op]; para = passoAdiante(op, dir);
+    if (!(para > 0 && para > de)) return 0;
+  } else return 0;
+  if (seguro_aviso_visto(bit)) return 0;
+  riscoFolha = bit; riscoFolhaOp = op; riscoFolhaDir = dir; riscoFolhaFoco = 1;   // Cancelar de partida
+  return 1;
+}
+static const char *riscoFolhaTitulo(void) {
+  return riscoFolha == SEG_AVISO_FILEIRAS ? "Mais fileiras na Home" : "Mais itens por fileira";
+}
+static const char *riscoFolhaTexto(void) {
+  return riscoFolha == SEG_AVISO_FILEIRAS
+    ? "Mais fileiras usam mais memória e rede; em TVs com 1 GB a Home pode ficar lenta ou fechar. Se o app fechar, ele volta sozinho ao valor anterior."
+    : "Mais itens por fileira usam mais memória; em TVs com 1 GB a Home pode ficar lenta ou fechar. Se o app fechar, ele volta sozinho ao valor anterior.";
+}
+static void riscoFolhaEvento(SDL_Keycode k) {
+  if (k == SDLK_LEFT || k == SDLK_RIGHT) { riscoFolhaFoco = k == SDLK_LEFT ? 0 : 1; return; }
+  if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE || k == SDLK_DELETE) { riscoFolha = 0; return; }
+  if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
+    int bit = riscoFolha, op = riscoFolhaOp, dir = riscoFolhaDir, ok = riscoFolhaFoco == 0;
+    riscoFolha = 0;
+    if (!ok) return;
+    seguro_aviso_marcar(bit);
+    mudarValor(op, dir);   // agora vista: aplica de verdade
+  }
+}
+static void desenhaRiscoFolha(void) {
+  const float W = 980.0f, H = 380.0f;
+  float x = (NV_TELA_W - W) * 0.5f, y = (NV_TELA_H - H) * 0.5f, ar, ag, ab, bx, by;
+  TxtLinha t;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.78f);
+  gfx_cor((GfxRect){ x, y, W, H }, 28.0f / H, 0.055f, 0.058f, 0.068f, 0.97f);
+  gfx_luz_canto((GfxRect){ x, y, W, H }, 28.0f / H, W * 0.05f, -W * 0.15f, W * 0.5f, ar, ag, ab, 0.22f);
+  t = txt_linha(TXT_TITULO3, i18n(riscoFolhaTitulo()), 246, 247, 252, 255);
+  txt_desenhar(t, x + 56.0f, y + 48.0f);
+  txt_bloco(TXT_BODY, i18n(riscoFolhaTexto()), 200, 203, 210, x + 56.0f, y + 130.0f, W - 112.0f, 36.0f, 1.0f, 4);
+  bx = x + 56.0f; by = y + H - 48.0f - BOTAO_H_PRIMARIO;
+  { GfxRect r = { bx, by, botao_largura(i18n("Continuar"), NULL, 1), BOTAO_H_PRIMARIO };
+    botao_pilula(r, i18n("Continuar"), NULL, riscoFolhaFoco == 0 ? 1.0f : 0.0f, 1, 0, 1.0f);
+    bx += r.w + BOTAO_GAP; }
+  { GfxRect r = { bx, by + (BOTAO_H_PRIMARIO - BOTAO_H_SECUNDARIO), botao_largura(i18n("Cancelar"), NULL, 0), BOTAO_H_SECUNDARIO };
+    botao_pilula(r, i18n("Cancelar"), NULL, riscoFolhaFoco == 1 ? 1.0f : 0.0f, 0, 0, 1.0f); }
+}
+
 // UM PASSO NO VALOR DA OPCAO `op` (dir = +1 ou -1), com tudo o que a mudanca
 // tem de disparar, e a gravacao. Um lugar so para as setas do modo edicao e
 // para o OK do interruptor: dois caminhos para o mesmo valor eram duas listas
 // de efeitos colaterais para manter iguais.
-static void mudarValor(int op, int dir) {
+static void mudarValorDireto(int op, int dir) {
   const Opcao *o = &OPCOES[op];
+  // O PERFIL PESQUISAVEL NAO GIRA valor[]: liga/desliga de verdade em
+  // recomenda.c (que grava, avisa o servidor e, sem apelido, pede um).
+  if (op == AJ_PERFIL_PESQ) { pessoas_definir_pesquisavel(!recomenda_pesquisavel()); return; }
   if (o->tipo == OP_NUMERO) {
     // Numero NAO circula: passar de 100% para 0% com um toque a mais e um
     // salto que ninguem pede, e no controle da TV a seta repete sozinha.
@@ -2987,7 +4297,7 @@ static void mudarValor(int op, int dir) {
     // fileiras.c. Sem esta linha o numero mudaria na tela e a home nao.
     if (op == AJ_FIL_LIMITE) {
       fil_definir_limite(valor[op]);
-      valor[op] = fil_limite();
+      valor[op] = fil_limite_gravado();
     }
   } else {
     // Escolha circula: a lista e curta e voltar do fim ao inicio poupa
@@ -3000,7 +4310,7 @@ static void mudarValor(int op, int dir) {
     if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) aplicarIdioma(op);
     // O rotulo de tipo e os generos das fileiras sao montados na entrada do
     // catalogo, ja no idioma da interface; trocar o idioma remonta.
-    if (op == AJ_IDIOMA) desc_repetir();
+    if (op == AJ_IDIOMA) { idiomaEscolhido(); desc_repetir(); }
     if (op == AJ_FONTE_UI)
       txt_definir_fonte_interface((TxtFamilia)valor[op]);
     // A FONTE DO CONTINUAR tambem remonta, e por um motivo diferente do
@@ -3029,6 +4339,18 @@ static void mudarValor(int op, int dir) {
   // NAO vai dentro de gravar(): o blob da conta tambem chama gravar() e
   // nao pode marcar a TV como "fonte da verdade" por ter recebido a conta.
   sync_proteger_ajustes_locais();
+}
+
+// A porta de entrada: pede a folha de aviso quando a mudanca passa do que sempre
+// coube e, feita a mudanca, avisa o diario do modo seguro.
+static void mudarValor(int op, int dir) {
+  int antes = riscoDe(op) ? riscoAtual(op) : 0;
+  Uint32 agora = SDL_GetTicks();
+  if (riscoPedirConfirmacao(op, dir)) return;
+  if (!riscoTem[op] || agora - riscoT[op] > RISCO_RAJADA_MS) riscoOrigem[op] = antes;
+  riscoT[op] = agora; riscoTem[op] = 1;
+  mudarValorDireto(op, dir);
+  riscoNotar(op, riscoOrigem[op]);
 }
 
 // Interruptor = escolha entre Ligado e Desligado. E o `renderToggleRow` do web:
@@ -3064,6 +4386,8 @@ void ajustes_evento(const SDL_Event *e) {
       }
       return;
     } }
+  // A folha de aviso de memoria (mais fileiras/itens) e modal e vem antes de tudo.
+  if (riscoFolha) { riscoFolhaEvento(k); return; }
   // A folha de fileiras e modal, como a do vinculo acima.
   if (filAberta) { eventoFileiras(k); return; }
 
@@ -3174,7 +4498,8 @@ void ajustes_evento(const SDL_Event *e) {
                             : (!sen && strcmp(xtream_usuario(), "-")) ? xtream_usuario() : NULL);
       return;
     }
-    if (focoOp == AJ_XTREAM_LIMPAR) { xtream_esquecer(); return; }
+    // A grade curta guardada era da conta que saiu (#158).
+    if (focoOp == AJ_XTREAM_LIMPAR) { xtream_esquecer(); xtepg_limpar(); return; }
     if (focoOp == AJ_FANART_CHAVE) {
       // A chave NUNCA volta para o campo (a modal fica na tela e a tela vira
       // foto); confirmar vazio esquece a que estava.
@@ -3183,6 +4508,28 @@ void ajustes_evento(const SDL_Event *e) {
                         40, "0123456789abcdef", NULL);
       return;
     }
+    if (focoOp == AJ_P2P_URL) {
+      stCampo = focoOp;
+      // O endereco volta para o campo: corrigir um digito do IP nao pode obrigar
+      // a redigitar tudo no D-pad. Vazio esquece.
+      teclado_abrir_com("Endereço do servidor P2P", "IP e porta do servidor Stremio: 192.168.1.5:11470. Vazio apaga.",
+                        64, ST_ALFA_PORTAL, p2pEndereco[0] ? p2pEndereco : NULL);
+      return;
+    }
+    if (focoOp == AJ_PERFIL_EDITAR) { pessoas_abrir_perfil(); return; }
+    if (focoOp == AJ_P2P_TESTAR) { p2pTesteIniciar(); return; }
+    if (focoOp >= AJ_POSTER_INST && focoOp <= AJ_POSTER_TESTAR) { pstAtivar(focoOp); return; }
+    if (debIdx(focoOp) >= 0) {
+      // Como o fanart: a chave NUNCA volta para o campo; vazio apaga.
+      stCampo = focoOp;
+      teclado_abrir_com(focoOp == AJ_DEBRID_AD ? "Chave do AllDebrid"
+                        : focoOp == AJ_DEBRID_RD ? "Chave do Real-Debrid"
+                        : focoOp == AJ_DEBRID_TB ? "Chave do TorBox" : "Chave do Premiumize",
+                        "Chave de API da sua conta. Vazio apaga.",
+                        96, DEB_ALFA, NULL);
+      return;
+    }
+    if (focoOp == AJ_DEBRID_AD_TESTAR) { adTesteIniciar(); return; }
     if (focoOp == AJ_TRAKT) { traktauth_comecar(); return; }
     if (focoOp == AJ_SIMKL) { simklauth_comecar(); return; }
     if (focoOp == AJ_SAIR) {
@@ -3224,16 +4571,25 @@ void ajustes_evento(const SDL_Event *e) {
 void ajustes_atualizar(float dt, Uint32 agora) {
   (void)agora;
   montarTela();
-  if (teclado_aberto()) teclado_atualizar(dt, agora);
+  valor[AJ_PERFIL_PESQ] = recomenda_pesquisavel() ? 0 : 1;   // V_LIGA: 0 = Ligado
+  p2pTesteRecolher();
+  pstTesteRecolher();
+  adTesteRecolher();
+  if (teclado_aberto() && !pessoas_aberto()) teclado_atualizar(dt, agora);
   // O resultado e CONSUMIDO NA LEITURA (ver teclado.h): ler duas vezes daria
   // TECLADO_NADA na segunda, e por isso a gravacao acontece aqui, uma vez.
-  { int r = teclado_resultado();
+  // COM A MODAL DE PESSOAS ABERTA O TECLADO E DELA: ler aqui consumiria o
+  // resultado antes de ela ver (e o apelido digitado se perderia em silencio).
+  { int r = pessoas_aberto() ? TECLADO_NADA : teclado_resultado();
     if (r == TECLADO_PRONTO && stCampo) {
       if (stCampo == AJ_STALKER_MAC) stalker_definir_mac(teclado_texto());
       else if (stCampo == AJ_XTREAM_SERVIDOR) xtream_definir_servidor(teclado_texto());
       else if (stCampo == AJ_XTREAM_USUARIO)  xtream_definir_usuario(teclado_texto());
       else if (stCampo == AJ_XTREAM_SENHA)    xtream_definir_senha(teclado_texto());
       else if (stCampo == AJ_FANART_CHAVE)    fanartDefinir(teclado_texto());
+      else if (stCampo == AJ_P2P_URL)         ajustes_definir_p2p_url(teclado_texto());
+      else if (stCampo >= AJ_POSTER_INST && stCampo <= AJ_POSTER_MODELO) pstDefinir(stCampo, teclado_texto());
+      else if (debIdx(stCampo) >= 0)          debDefinir(stCampo, teclado_texto());
       else                           stalker_definir_portal(teclado_texto());
       stCampo = 0;
     } else if (r == TECLADO_CANCELOU) {
@@ -3372,7 +4728,15 @@ static const char *textoValor(int op) {
 // preenchimento no acento com o halo macio atras (DESIGN.md: "Foco = linha
 // preenchida com a cor de realce, sem anel"). `f` e a mola do foco (0..1).
 static void desenhaSuperficie(GfxRect r, float raio, float f, float a) {
-  float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
+  float ar, ag, ab;
+  if (ajustes_vidro()) {
+    // Referencia: linha em foco = retangulo arredondado com contorno branco de
+    // 2 px e miolo um pouco mais claro; as outras ficam quase sem superficie.
+    gfx_cor(r, raio, 1, 1, 1, 0.035f * a);
+    gfx_vidro_foco(r, raio, f, a);
+    return;
+  }
+  ajustes_acento(&ar, &ag, &ab);
   gfx_cor(r, raio, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B, 0.34f * a);
   // Brilho difuso por tras da linha em foco (0,9x a altura de folga em cima
   // e embaixo, alpha 0,35 x mola): a mesma luz da pilula do menu lateral
@@ -3410,6 +4774,30 @@ static void desenhaInterruptor(float xDir, float y, float h, int ligado,
     t = txt_linha(TXT_CAPTION, i18n("Desligado"), ct, ct, ct, 255);
   }
   txt_desenhar_alpha(t, pill.x + (pill.w - t.w) * 0.5f, pill.y + (pill.h - t.h) * 0.5f, a);
+}
+
+// MARCAS DE FORMATO NAS LINHAS (29/09/2026). O titulo de "Dolby Vision" e
+// "Dolby Atmos" ganha o logo ao lado; o valor "4K/1080p/720p" da qualidade
+// maxima vira a marca. Os valores continuam sendo as mesmas strings (o que
+// ajustes_qualidade() devolve e streams.c compara): so o DESENHO muda.
+#define AJ_MARCA_ROTULO_H 44.0f
+#define AJ_MARCA_VALOR_H  40.0f
+static int marcaDaOpcao(int op) {
+  return op == AJ_DV ? FMT_DV : op == AJ_ATMOS ? FMT_ATMOS : -1;
+}
+static int marcaDoValor(int op, const char *v) {
+  if (op != AJ_QUALIDADE || !v) return -1;
+  if (!strcmp(v, "4K"))    return FMT_4K;
+  if (!strcmp(v, "1080p")) return FMT_1080;
+  if (!strcmp(v, "720p"))  return FMT_720;
+  return -1;
+}
+static void desenhaValorLinha(TxtLinha val, int fv, float x, float yLinha, float vy,
+                              int cv, float a) {
+  if (fv < 0) { txt_desenhar_alpha(val, x, vy, a); return; }
+  { float k = cv / 255.0f;
+    marca_formato((FormatoMarca)fv, x, yLinha + (AJ_LINHA_H - AJ_MARCA_VALOR_H) * 0.5f,
+                  AJ_MARCA_VALOR_H, k, k, k, a); }
 }
 
 // TRES NATUREZAS DE LINHA, TRES CAUDAS (a regra do topo do arquivo, agora no
@@ -3454,6 +4842,10 @@ static void desenhaLinha(int item, float y, float f, float dx, float aPag) {
     float valorDir = chevron ? xDir - chv.w - 16.0f : xDir;
     TxtLinha val = txt_linha_corta(TXT_CALLOUT, v, cv, cv, cv, 255, 340.0f);
     float vy = y + (AJ_LINHA_H - val.h) * 0.5f;
+    // "4K", "1080p" e "720p" da qualidade maxima saem como MARCA. A largura da
+    // marca substitui a do texto para o resto da conta (cauda, pilula de edicao).
+    int fv = marcaDoValor(op, v);
+    if (fv >= 0) val.w = (int)(marca_formato_largura((FormatoMarca)fv, AJ_MARCA_VALOR_H) + 0.5f);
     cauda = xDir - (valorDir - val.w);
 
     // Barra de preenchimento da linha numerica. Sem ela, "28%" nao diz nada
@@ -3491,18 +4883,31 @@ static void desenhaLinha(int item, float y, float f, float dx, float aPag) {
       txt_desenhar_alpha(dir, xDir - dir.w, y + (AJ_LINHA_H - dir.h) * 0.5f, aTexto * f);
       txt_desenhar_alpha(esq, vd - val.w - 14.0f - esq.w,
                          y + (AJ_LINHA_H - esq.h) * 0.5f, aTexto * f);
-      txt_desenhar_alpha(val, vd - val.w, vy, aTexto);
+      desenhaValorLinha(val, fv, vd - val.w, y, vy, cv, aTexto);
     } else {
       if (chevron)
         txt_desenhar_alpha(chv, xDir - chv.w,
                            vy + (val.h - chv.h) * 0.5f - 2.0f, aTexto);
-      txt_desenhar_alpha(val, valorDir - val.w, vy, aTexto);
+      desenhaValorLinha(val, fv, valorDir - val.w, y, vy, cv, aTexto);
     }
   }
 
   TxtLinha rot = txt_linha_corta(TXT_CALLOUT, OPCOES[op].rotulo, cr, cr, cr, 255,
                                  linha.w - AJ_PAD * 2.0f - cauda - 28.0f);
   txt_desenhar_alpha(rot, linha.x + AJ_PAD, y + (AJ_LINHA_H - rot.h) * 0.5f, aTexto);
+  // A MARCA AO LADO DO TITULO: "Dolby Vision" e "Dolby Atmos" mostram o logo
+  // que a opcao liga. Fica depois do texto, centrada na linha, e so entra se
+  // couber antes da cauda (a marca some antes de cortar o rotulo).
+  { int fm = marcaDaOpcao(op);
+    if (fm >= 0) {
+      float mw = marca_formato_largura((FormatoMarca)fm, AJ_MARCA_ROTULO_H);
+      float mx = linha.x + AJ_PAD + (float)rot.w + 22.0f;
+      if (mx + mw < linha.x + linha.w - AJ_PAD - cauda - 20.0f) {
+        float k = cr / 255.0f;
+        marca_formato((FormatoMarca)fm, mx, y + (AJ_LINHA_H - AJ_MARCA_ROTULO_H) * 0.5f,
+                      AJ_MARCA_ROTULO_H, k, k, k, aTexto);
+      }
+    } }
 }
 
 // GRUPO RECOLHIVEL: titulo e descricao a esquerda (a composicao das linhas de
@@ -4448,15 +5853,15 @@ static float desenhaPrevia(int op, float x, float y, float w) {
     }
     case AJ_QUALIDADE: {
       // Quatro barras, uma por resolucao; as que o teto deixa passar acesas.
-      static const char *R[] = { "720p", "1080p", "4K" };
       int teto = valor[AJ_QUALIDADE], i;   // 0 auto, 1 4K, 2 1080p, 3 720p
       float bw = (w - 2.0f * 14.0f) / 3.0f;
       for (i = 0; i < 3; i++) {
         int passa = teto == 0 || (teto == 1) || (teto == 2 && i <= 1) || (teto == 3 && i == 0);
         float bh = 40.0f + (float)i * 40.0f, px = x + (float)i * (bw + 14.0f);
         gfx_cor((GfxRect){ px, y + 120.0f - bh, bw, bh }, 6.0f / bw, passa ? ar : 0.30f, passa ? ag : 0.32f, passa ? ab : 0.38f, passa ? 0.9f : 0.6f);
-        { TxtLinha l = txt_linha(TXT_MINI, R[i], 200, 203, 210, 255);
-          txt_desenhar(l, px + (bw - l.w) * 0.5f, y + 128.0f); }
+        { static const FormatoMarca F[] = { FMT_720, FMT_1080, FMT_4K };
+          float mw = marca_formato_largura(F[i], 30.0f);
+          marca_formato(F[i], px + (bw - mw) * 0.5f, y + 124.0f, 30.0f, 0.78f, 0.80f, 0.82f, 1.0f); }
       }
       return 128.0f + 30.0f;
     }
@@ -4797,6 +6202,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR:
       return AJPV_REPRO;
+    case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
     case AJ_HERO_ARTE_DIF: case AJ_HERO_TRAILER: case AJ_FIL_LIMITE:
     case AJ_FIL_ORDEM: case AJ_RAIL: case AJ_RAIL_MODERNA:
@@ -4810,6 +6216,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_CW_FURTHEST: case AJ_CW_NAO_EXIBIDOS: case AJ_CW_ORDEM:
       return AJPV_CONTINUAR;
     case AJ_DET_BLUR_NAO_VISTOS: case AJ_DET_TRAILER: case AJ_DET_META_EXT:
+    case AJ_DET_SO_CINEMETA:
     case AJ_DET_DATA_CHEIA: case AJ_DET_VEU: case AJ_DET_TRAILER_AUTO:
     case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO: case AJ_TRAILER_FONTE:
       return AJPV_DETALHE;
@@ -4823,9 +6230,10 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_LARGURA_DP: case AJ_RAIO_DP:
       return AJPV_CARTAZ;
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
-    case AJ_COR_LOGO: case AJ_FONTE_UI:
+    case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
+    case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR:
       return AJPV_CONTA;
     case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL:
       return AJPV_RASTREIO;
@@ -4842,6 +6250,9 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_MDB_IMDB: case AJ_MDB_TMDB: case AJ_MDB_LETTER:
     case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA: case AJ_MDB_META:
     case AJ_MDB_MAL:
+    case AJ_NT_IMDB: case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
+    case AJ_NT_METAUSER: case AJ_NT_TRAKT: case AJ_NT_TMDB: case AJ_NT_LETTER:
+    case AJ_NT_MAL: case AJ_NT_EBERT: case AJ_NT_SCORE:
       return AJPV_MDB;
     case AJ_RESOLUCAO: case AJ_QUALIDADE_IMG: case AJ_TEX_MB:
     case AJ_ESPACO:
@@ -4849,7 +6260,13 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_ADDONS: case AJ_STALKER_PORTAL: case AJ_STALKER_MAC:
     case AJ_STALKER_LIMPAR: case AJ_XTREAM_SERVIDOR: case AJ_XTREAM_USUARIO:
     case AJ_XTREAM_SENHA: case AJ_XTREAM_LIMPAR: case AJ_FANART_CHAVE:
+    case AJ_XTREAM_CONTA:
     case AJ_DIAGNOSTICO: case AJ_VELOCIDADE:
+    case AJ_P2P_URL: case AJ_P2P_TESTAR:
+    case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
+    case AJ_POSTER_CHAVE: case AJ_POSTER_MODELO: case AJ_POSTER_TESTAR:
+    case AJ_DEBRID_AD: case AJ_DEBRID_AD_TESTAR: case AJ_DEBRID_RD:
+    case AJ_DEBRID_TB: case AJ_DEBRID_PM:
       return AJPV_ACAO;
     default:
       return (AjPreview)-1;
@@ -4930,17 +6347,17 @@ static float previaReproducaoOpcao(int op, float x, float y, float w) {
     }
     previaRealce(x + 12.0f, y + 98.0f, w - 24.0f, 34.0f, ar, ag, ab);
   } else if (op == AJ_DV || op == AJ_ATMOS) {
-    const char *badge = op == AJ_DV ? "DV" : "ATMOS";
-    int bx = op == AJ_DV ? (int)(x + 18.0f) : (int)(x + 100.0f);
-    ajudaMiniCaixa((float)bx, y + 102.0f, op == AJ_DV ? 70.0f : 104.0f,
-                   28.0f, lig(op), ar, ag, ab);
-    TxtLinha t = txt_linha(TXT_CAPTION2, badge,
-                           lig(op) ? ajustes_tinta_foco() : 194,
-                           lig(op) ? ajustes_tinta_foco() : 197,
-                           lig(op) ? ajustes_tinta_foco() : 203, 255);
-    txt_desenhar(t, (float)bx + 10.0f, y + 106.0f);
-    previaRealce((float)bx - 2.0f, y + 100.0f,
-                 op == AJ_DV ? 74.0f : 108.0f, 32.0f, ar, ag, ab);
+    // A MARCA do formato no lugar de "DV"/"ATMOS" (pedido do dono, 29/09):
+    // a previa mostra o logo que a opcao liga. Pilula de 42 px para a marca de
+    // duas linhas do Dolby ler; a largura sai da propria arte.
+    FormatoMarca fm = op == AJ_DV ? FMT_DV : FMT_ATMOS;
+    float mh = 34.0f, mw = marca_formato_largura(fm, mh);
+    float pw = mw + 24.0f, py = y + 93.0f;
+    float bx = x + 18.0f;
+    float tinta = lig(op) ? ajustes_tinta_foco() / 255.0f : 0.78f;
+    ajudaMiniCaixa(bx, py, pw, 42.0f, lig(op), ar, ag, ab);
+    marca_formato(fm, bx + 12.0f, py + 4.0f, mh, tinta, tinta, tinta, 1.0f);
+    previaRealce(bx - 2.0f, py - 2.0f, pw + 4.0f, 46.0f, ar, ag, ab);
   } else if (op == AJ_AUD_LINGUA || op == AJ_LEG_LINGUA) {
     float ty = y + 101.0f;
     for (int i = 0; i < 2; i++) {
@@ -4974,7 +6391,11 @@ static float previaReproducaoOpcao(int op, float x, float y, float w) {
 static float previaHomeOpcao(int op, float x, float y, float w) {
   float ar, ag, ab, h = 148.0f;
   int hero = valor[AJ_HERO] == 0;
-  int full = valor[AJ_HERO_CHEIO] == 0;
+  // O layout da home decide a forma do destaque: Padrao contido, Dinamica de
+  // ponta a ponta e mais alto; na Moderna vale "Fundo em tela cheia".
+  int lay = valor[AJ_HOME_LAYOUT];
+  int full = lay == HOME_LAYOUT_DINAMICA ? 1
+           : lay == HOME_LAYOUT_PADRAO ? 0 : valor[AJ_HERO_CHEIO] == 0;
   int landscape = valor[AJ_LANDSCAPE] == 0;
   ajustes_acento(&ar, &ag, &ab);
   ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
@@ -4995,10 +6416,13 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
       previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
   }
   float cx = x + rail + 18.0f, cw = w - rail - 28.0f;
-  float heroH = hero ? (full ? 60.0f : 42.0f) : 0.0f;
+  // Padrao e Dinamica: destaque de borda a borda, do topo da miniatura e sem canto.
+  int sangra = lay != HOME_LAYOUT_MODERNA;
+  float heroH = hero ? (lay == HOME_LAYOUT_DINAMICA ? 66.0f : lay == HOME_LAYOUT_PADRAO ? 52.0f : full ? 60.0f : 42.0f) : 0.0f;
   if (hero) {
-    GfxRect hr = {cx, y + 10.0f, cw, heroH};
-    gfx_cor(hr, 6.0f/heroH, 0.19f, 0.21f, 0.27f, 1.0f);
+    GfxRect hr = sangra ? (GfxRect){x + rail, y, w - rail, heroH + 10.0f}
+                        : (GfxRect){cx, y + 10.0f, cw, heroH};
+    gfx_cor(hr, sangra ? 0.0f : 6.0f/heroH, 0.19f, 0.21f, 0.27f, 1.0f);
     gfx_cor((GfxRect){cx + 12.0f, hr.y + 12.0f, cw * 0.40f, 4.0f},
             0.5f, 0.70f, 0.72f, 0.76f, 0.9f);
     if (op == AJ_HERO || op == AJ_HERO_CHEIO || op == AJ_HERO_FUNDO ||
@@ -5015,8 +6439,15 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
   if (rows > 2) rows = 2;
   for (int row = 0; row < rows; row++) {
     float ry = y + 18.0f + heroH + row * 45.0f;
-    float cardW = landscape ? (cw - 36.0f) / 4.0f : (cw - 60.0f) / 6.0f;
-    int count = landscape ? 4 : 6;
+    // Dinamica: a primeira fileira e a de destaques grandes (dois cartoes largos).
+    int grande = lay == HOME_LAYOUT_DINAMICA && row == 0;
+    // Padrao: o cartaz em pe e 260 e nao 212 (home.c, escalaCartazPadrao) —
+    // cabem cinco na miniatura, nao seis.
+    int emPe = lay == HOME_LAYOUT_PADRAO ? 5 : 6;
+    float cardW = grande ? (cw - 6.0f) / 2.0f
+                : landscape ? (cw - 36.0f) / 4.0f
+                : (cw - 6.0f * (float)(emPe - 1) * 2.0f) / (float)emPe;
+    int count = grande ? 2 : landscape ? 4 : emPe;
     // A fileira que o foco altera fica em destaque. Campos próprios mostram
     // somente seções que de fato estão ligadas/desligadas.
     int isTargetRow = (op >= AJ_FIL_LIMITE && op <= AJ_PS_FUNDO) ||
@@ -5026,7 +6457,7 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
     if ((op == AJ_HERO || op == AJ_HERO_CATALOGOS) && !hero) continue;
     for (int k = 0; k < count; k++) {
       float bx = cx + k * (cardW + 6.0f);
-      float ch = landscape ? 20.0f : 31.0f;
+      float ch = grande ? 26.0f : landscape ? 20.0f : 31.0f;
       GfxRect card = {bx, ry, cardW, ch};
       int cardTarget = (op == AJ_LANDSCAPE) ||
         (op == AJ_ROTULOS && valor[op] == 0) ||
@@ -5272,7 +6703,9 @@ static float previaInterfaceOpcao(int op, float x, float y, float w) {
     previaRealce(x + 12.0f, y + 10.0f, w - 24.0f, 116.0f, ar, ag, ab);
   } else if (op == AJ_IDIOMA) {
     TxtLinha sample = txt_linha(TXT_HEADLINE,
-           valor[op] == 0 ? i18n("Olá · Ação") : i18n("Hello · Action"),
+           // pt, ro, uk e ru pela chave portuguesa (cada idioma a traduz);
+           // ingles pela chave inglesa, que a tabela devolve como esta.
+           ajustes_idioma() == IDIOMA_EN ? i18n("Hello · Action") : i18n("Olá · Ação"),
            235, 237, 241, 255);
     txt_desenhar(sample, x + 24.0f, y + 30.0f);
     previaRealce(x + 14.0f, y + 20.0f, w - 28.0f, 56.0f, ar, ag, ab);
@@ -5732,6 +7165,7 @@ void ajustes_desenhar(Uint32 agora) {
   // A folha de fileiras cobre a lista; o vinculo cobre as duas, porque ele e a
   // unica coisa aqui com prazo (o codigo do dispositivo expira).
   if (filAberta) desenhaFileiras();
+  if (riscoFolha) desenhaRiscoFolha();
 
   // Por cima de tudo: enquanto um vinculo esta em andamento, ele e a pergunta
   // da tela.
@@ -5765,6 +7199,16 @@ int ajustes_teste_focar_opcao(int op) {
   }
   return 0;
 }
+
+// O numero da opcao pela chave do disco/da conta ("idioma", "tmdb_language"): as
+// capturas nao conhecem o enum, que mora aqui. -1 se nao existe.
+int ajustes_teste_op_por_chave(const char *chave) {
+  int i;
+  for (i = 0; i < AJ_N; i++) if (CHAVE[i] && !strcmp(CHAVE[i], chave)) return i;
+  return -1;
+}
+// O primeiro dos onze interruptores de "Notas no titulo" (consecutivos no enum).
+int ajustes_teste_primeira_nota_titulo(void) { return AJ_NT_IMDB; }
 
 int ajustes_teste_familia_previa(int op) {
   return (int)familiaPreviaOpcao(op);

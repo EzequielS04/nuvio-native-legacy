@@ -12,11 +12,42 @@
 // Texto em repouso: 235, o mesmo dos selos (badges.h). 255 sobre 0.15 vibra.
 #define BT_TEXTO_REP 235
 
+// A COR DO FOCO (dono, 29/09/2026): o acento ESCURECIDO do player de filme,
+// e nao o acento cheio. Era a conta de corFocoPlayer (player.c), que agora
+// chama esta: o foco dos botoes redondos do filme e o das pilulas do ao vivo e
+// do resto do app sao a mesma cor. O acento vai 74% do caminho a partir do
+// painel escuro (0.055/0.058/0.068); o branco e o quase branco vao 88%, para
+// nao virarem cinza.
+// A TINTA continua a regra do dono de 21/09 (ajustes_acento_tinta): so o
+// acento branco ou quase branco leva texto escuro. Escurecer so ajuda o texto
+// branco sobre cor; o branco escurecido a 88% fica em ~0.89 de luminancia, e
+// o texto escuro sobre ele segue com contraste de sobra.
+float botao_cor_foco(float *r, float *g, float *b) {
+  float ar, ag, ab, lum, k = 0.74f, ti = ajustes_acento_tinta(&ar, &ag, &ab);
+  lum = 0.2126f * ar + 0.7152f * ag + 0.0722f * ab;
+  if (lum > 0.88f) k = 0.88f;
+  if (r) *r = 0.055f + (ar - 0.055f) * k;
+  if (g) *g = 0.058f + (ag - 0.058f) * k;
+  if (b) *b = 0.068f + (ab - 0.068f) * k;
+  return ti;
+}
+
+// Foco no VIDRO: a mesma pilula cheia de gfx_vidro_pilula_cheia, mas na cor
+// escurecida de botao_cor_foco — com vidro ou sem, o botao focado e da mesma cor.
+static void vidroFoco(GfxRect r, float foco, float a) {
+  float fr, fg, fb, f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco);
+  if (f <= 0.01f || a <= 0.001f) return;
+  botao_cor_foco(&fr, &fg, &fb);
+  gfx_cor(r, 0.5f, fr, fg, fb, f * a);
+}
+
 void botao_luz(GfxRect r, float foco, float a) {
   float fr, fg, fb;
   GfxRect luz;
   if (foco < 0.01f) return;
-  ajustes_acento(&fr, &fg, &fb);
+  // Vidro: foco e a pilula branca, sem brilho colorido por tras.
+  if (ajustes_vidro()) return;
+  botao_cor_foco(&fr, &fg, &fb);
   // 0,9x a altura de folga em cada lado e alpha 0,35 x mola: a luz da pilula
   // em foco do menu lateral, copiada e nao reinterpretada.
   luz.x = r.x - r.h * 0.9f; luz.y = r.y - r.h * 0.9f;
@@ -32,7 +63,14 @@ float botao_largura(const char *rotulo, const char *icone, int primario) {
 }
 
 int botao_superficie(GfxRect r, float foco, float a) {
-  float fr, fg, fb, ti = ajustes_acento_tinta(&fr, &fg, &fb);
+  float fr, fg, fb, ti = botao_cor_foco(&fr, &fg, &fb);
+  if (ajustes_vidro()) {
+    // Acao principal: em repouso o vidro leva a lavagem e o aro do realce (e
+    // assim o tema continua visivel); em foco, a pilula CHEIA no realce.
+    gfx_vidro_painel_acento(r, 0.5f, 0.55f, a);
+    vidroFoco(r, foco, a);
+    return gfx_vidro_tinta(foco);
+  }
   botao_luz(r, foco, a);
   gfx_cor(r, 0.5f, anim_mistura(BT_REP_R, fr, foco),
           anim_mistura(BT_REP_G, fg, foco), anim_mistura(BT_REP_B, fb, foco), a);
@@ -41,15 +79,26 @@ int botao_superficie(GfxRect r, float foco, float a) {
 
 void botao_pilula(GfxRect r, const char *rotulo, const char *icone,
                   float foco, int primario, int alinhar, float a) {
-  float fr, fg, fb, ti = ajustes_acento_tinta(&fr, &fg, &fb);
+  float fr, fg, fb, ti = botao_cor_foco(&fr, &fg, &fb);
   int emFoco = foco >= 0.5f;
   int c = emFoco ? (int)(ti * 255.0f + 0.5f) : BT_TEXTO_REP;
+  int vidro = ajustes_vidro();
   float raio = 0.5f;
   TxtLinha l;
   float temIcone = (icone && icone[0]) ? 1.0f : 0.0f;
   float grupo, x0, padx = primario ? BOTAO_PAD_X : BOTAO_PAD_X2;
 
-  if (primario) {
+  if (vidro) {
+    // O mesmo vidro nos dois tamanhos: a hierarquia continua sendo a altura
+    // (72 x 56) e a lavagem do realce so vai no primario. O foco e a pilula
+    // cheia no realce (branca no tema padrao) com a tinta que contrasta.
+    if (primario) c = botao_superficie(r, foco, a);
+    else {
+      gfx_vidro_painel(r, 0.5f, 0.55f, a);
+      vidroFoco(r, foco, a);
+      c = gfx_vidro_tinta(foco);
+    }
+  } else if (primario) {
     botao_superficie(r, foco, a);
   } else {
     botao_luz(r, foco, a);
@@ -79,14 +128,21 @@ void botao_pilula(GfxRect r, const char *rotulo, const char *icone,
 }
 
 void botao_disco(GfxRect r, const char *icone, float foco, float a) {
-  float fr, fg, fb, ti = ajustes_acento_tinta(&fr, &fg, &fb);
+  float fr, fg, fb, ti = botao_cor_foco(&fr, &fg, &fb);
   float ic = foco >= 0.5f ? ti : 1.0f;
+  int vidro = ajustes_vidro();
   // O glifo mede um terco do disco — proporcao medida no aparelho (detail.h,
   // NV_DETW2_CIRC_GLIFO).
   float g = r.w * 0.333f;
   GfxRect ig = { r.x + (r.w - g) * 0.5f, r.y + (r.h - g) * 0.5f, g, g };
-  botao_luz(r, foco, a);
-  gfx_cor(r, 0.5f, anim_mistura(BT_REP_R, fr, foco),
-          anim_mistura(BT_REP_G, fg, foco), anim_mistura(BT_REP_B, fb, foco), a);
+  if (vidro) {
+    ic = foco >= 0.5f ? (float)gfx_vidro_tinta(foco) / 255.0f : 1.0f;
+    gfx_vidro_painel(r, 0.5f, 0.55f, a);
+    vidroFoco(r, foco, a);
+  } else {
+    botao_luz(r, foco, a);
+    gfx_cor(r, 0.5f, anim_mistura(BT_REP_R, fr, foco),
+            anim_mistura(BT_REP_G, fg, foco), anim_mistura(BT_REP_B, fb, foco), a);
+  }
   gfx_icone(ig, icone, ic, ic, ic, a);
 }

@@ -281,6 +281,13 @@ void video_legenda_estilo(const VideoLegendaEstilo *e) { if (e && hEscolher) hEs
 int  video_tem_atmos(void) { return 0; }
 int  video_tem_dolby_vision(void) { return 0; }
 const char *video_hdr(void) { return "none"; }
+// Watchdog do ao vivo (#158, app.c): o host .NET nao repassa o texto do erro
+// nem o aviso de decoder, entao valem os neutros do .wgt — sem texto, e o
+// ramo "dado chegando e decoder mudo" nunca dispara aqui.
+const char *video_erro_texto(void) { return ""; }
+int video_decoder_anunciou(void) { return 1; }
+// Escala do alvo de desenho (GPU adaptativa, LG): o host .tpk nao usa.
+void video_escala_definir(int sw, int sh) { (void)sw; (void)sh; }
 int  video_largura(void) { return largura; }
 int  video_altura(void) { return altura; }
 int  video_pode_forcar_sdr(void) { return 0; }

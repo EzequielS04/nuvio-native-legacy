@@ -21,6 +21,8 @@
 #define NV_GUIA_H
 #include <SDL2/SDL.h>
 #include "catalogo.h"
+#include "epg.h"
+#include "gfx.h"   /* GfxRect de guia_logo_desenhar */
 
 void guia_abrir(void);           // tela cheia
 void guia_overlay_abrir(void);   // por cima do player (video continua atras)
@@ -41,6 +43,15 @@ void guia_carregar(void);
 // guia, ja como CatItem pronto para tocar. 0 = lista ainda nao carregada —
 // chame guia_carregar e tente de novo na proxima tecla.
 int  guia_zap(const char *idAtual, int dir, CatItem *saida);
+// Igual, mas so ESPIA o alvo (banner do zapping): nao mexe na origem do pedido.
+int  guia_zap_ver(const char *idAtual, int dir, CatItem *saida);
+
+// Para o OSD do canal ao vivo (aovivo.h): posicao na ordem do guia, categoria,
+// favorito e o programa no ar de QUALQUER canal da lista (banner do zapping).
+int  guia_info_canal(const char *id, int *numero, int *total, char *cat, size_t n);
+int  guia_e_favorito(const char *id);
+void guia_alternar_favorito(const char *id);
+int  guia_programa_agora(const char *id, time_t t, EpgProg *p);
 
 void guia_evento(const SDL_Event *e);
 void guia_atualizar(float dt, Uint32 agora);
@@ -80,5 +91,18 @@ void guia_preview_rect(float *x, float *y, float *w, float *h);
 // O CatItem do canal de um lembrete (e a origem para a busca de fonte): o do
 // guia quando a lista esta carregada, senao so id + nome guardados. 0 sem id.
 int  guia_item_do_canal(const char *id, const char *nome, const char *base, CatItem *it);
+
+// --- A CARA DO CANAL FORA DO GUIA (29/09/2026) -------------------------------
+// O player ao vivo (aovivoui.c) desenha a marca, o selo AO VIVO e a etiqueta
+// de categoria com as MESMAS funcoes do heroi do guia: a regra do dono para o
+// logo (sem azulejo; recortado de um tom so vira branco, `tom` 0.965; com fundo
+// proprio, cantos arredondados; sem arquivo, iniciais num azulejo escuro) vive
+// num lugar so. `cx` e a caixa onde o logo fica centrado, cabendo em maxW x maxH.
+void  guia_logo_desenhar(const char *logo, const char *nome, GfxRect cx,
+                         float maxW, float maxH, float tom, float a);
+// Pilula vermelha "AO VIVO" de 32 px; devolve a largura.
+float guia_selo_ao_vivo(float x, float y, float a);
+// Etiqueta translucida de 34 px (categoria); devolve a largura (0 sem texto).
+float guia_etiqueta(const char *s, float x, float y, float maxW, float a);
 
 #endif

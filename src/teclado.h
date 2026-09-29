@@ -28,6 +28,10 @@ const char *teclado_alfabeto(void);
 // cabe em 24, e o campo de texto que a modal ja usa quando as caixas ficam
 // estreitas rola pelo fim — texto longo sempre foi desenhavel aqui.
 #define TECLADO_MAX 64
+// Teto do campo LONGO: quem pede `max` acima de TECLADO_MAX ate isto. Existe
+// para o token de configuracao do SpatialPosters (centenas de caracteres). Quem
+// passa TECLADO_MAX ou menos continua igual.
+#define TECLADO_LONGO 400
 
 // Abre a modal. `titulo` e a linha de cima ("Código do amigo"), `dica` a linha
 // de apoio logo abaixo, e `max` o teto de caracteres (limitado a TECLADO_MAX).

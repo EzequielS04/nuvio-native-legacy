@@ -1,6 +1,7 @@
 #include "streams.h"
 #include "idioma.h"
 #include "badges.h"
+#include "limpa.h"
 #include <pthread.h>
 #include "rede.h"
 #include "gfx.h"
@@ -15,6 +16,7 @@
 #include "addons.h"
 #include "marco.h"
 #include "debrid.h"
+#include "p2p.h"
 #include "fonteauto.h"
 #include "video.h"
 #include "botoes.h"
@@ -110,7 +112,11 @@ static float velRol = 0.0f;
 // realce que diz "ainda e a mesma lista, voce so andou".
 
 
+static int soP2P(const Stream *s);
 static const char *containerDa(const Stream *s) {
+  // "P2P": torrent que so o servidor de streaming toca. Sigla igual nas duas
+  // linguas, como MP4/MKV.
+  if (soP2P(s)) return "P2P";
   if (s->mp4 || strstr(s->url, ".mp4") || strstr(s->rotulo, ".mp4")) return "MP4";
   if (strstr(s->url, ".mkv") || strstr(s->arquivo, ".mkv") || strstr(s->descricao, ".mkv")) return "MKV";
   if (strstr(s->url, ".m3u8") || strstr(s->rotulo, "HLS")) return "HLS";
@@ -121,6 +127,9 @@ static const char *containerDa(const Stream *s) {
   // apareceu na foto do album em ingles, com "ARQUIVO" no meio de "Sources",
   // "Reload" e "Automatic pick".
   return i18n("ARQUIVO");
+}
+static int soP2P(const Stream *s) {
+  return !s->url[0] && s->infoHash[0] && !debrid_ativo() && p2p_ativo();
 }
 
 static Uint32 recebidaEm;
@@ -139,9 +148,10 @@ void stream_definir_lista(const Stream *l, int qtd) {
   Stream *nova = l && qtd > 0 ? malloc(sizeof(Stream) * (size_t)qtd) : NULL;
   if (l && qtd > 0 && !nova) return;
   // Torrent sem url so fica se ha debrid para resolve-lo; senao seria uma linha
-  // que nunca toca (shouldListStream do web).
+  // que nunca toca (shouldListStream do web). O servidor P2P experimental
+  // (p2p.h) tambem o resolve, e so quando ligado.
   for (i = 0; i < qtd && nova; i++)
-    if (l[i].url[0] || debrid_ativo()) nova[k++] = l[i];
+    if (l[i].url[0] || debrid_ativo() || p2p_ativo()) nova[k++] = l[i];
   if (nova && qtd - k) printf("[fonte] %d torrents sem debrid descartados\n", qtd - k);
   descartadosSemDebrid = nova ? qtd - k : 0;
   pthread_mutex_lock(&verTrava);
@@ -261,6 +271,10 @@ static long pontos(const Stream *s) {
   // uma cacheada acima do teto ainda perde para uma fora de cache dentro dele,
   // como ja perdia para qualquer fonte dentro dele.
   if (s->foraCache) p -= 500000;
+  // P2P do servidor de streaming: o fim da fila. O automatico nem chega a
+  // toca-lo (nao ha debrid que o resolva), mas a ORDEM da folha tambem conta:
+  // link direto primeiro, torrent sem garantia de peers por ultimo.
+  if (soP2P(s)) p -= 600000;
   return p;
 }
 
@@ -433,6 +447,14 @@ static void falhouUma(int i, void *u) {
   if (!c->abortou) stream_automatico_excluir(i);
 }
 
+int stream_qtd_torrents(void) {
+  int i, q = 0;
+  pthread_mutex_lock(&verTrava);
+  for (i = 0; i < n; i++) if (!lista[i].url[0] && lista[i].infoHash[0]) q++;
+  pthread_mutex_unlock(&verTrava);
+  return q;
+}
+
 unsigned stream_lista_geracao(void) {
   unsigned g;
   pthread_mutex_lock(&verTrava);
@@ -443,7 +465,7 @@ unsigned stream_lista_geracao(void) {
 
 int stream_resolver_escolhida(int i, unsigned geracao, char *url, unsigned nu,
                               char *servico, unsigned ns, int *pct) {
-  char infoHash[48];
+  char infoHash[48], fontes[sizeof lista->fontes];
   int fileIdx, r;
   if (url && nu) url[0] = 0;
   if (!url || !nu) return 0;
@@ -460,11 +482,20 @@ int stream_resolver_escolhida(int i, unsigned geracao, char *url, unsigned nu,
     return 1;
   }
   snprintf(infoHash, sizeof infoHash, "%s", lista[i].infoHash);
+  snprintf(fontes, sizeof fontes, "%s", lista[i].fontes);
   fileIdx = lista[i].fileIdx;
   pthread_mutex_unlock(&verTrava);
   if (!infoHash[0]) return 0;
 
   r = debrid_resolver_escolhido(infoHash, fileIdx, url, nu, servico, ns, pct);
+  // SEM DEBRID QUE RESOLVA (sem chave, ou a conta recusou): o servidor P2P
+  // experimental, se a pessoa ligou. "Baixando" (2) NAO cai aqui: o debrid ja
+  // tem o torrent na conta e o certo e esperar por ele, nao abrir um segundo
+  // caminho para o mesmo arquivo.
+  if (r == 0 && p2p_ativo()) {
+    if (p2p_resolver(infoHash, fileIdx, fontes, url, nu) == P2P_OK) r = 1;
+    else { url[0] = 0; r = STREAM_P2P_FALHOU; }
+  }
   if (r == 1) {
     pthread_mutex_lock(&verTrava);
     if (listaGeracao == geracao && i < n)
@@ -472,6 +503,9 @@ int stream_resolver_escolhida(int i, unsigned geracao, char *url, unsigned nu,
     else r = -1;
     pthread_mutex_unlock(&verTrava);
     if (r < 0) url[0] = 0;
+  } else if (r == STREAM_P2P_FALHOU) {
+    printf("[fonte] %d torrent escolhido nao abriu no servidor P2P (erro %d)\n", i,
+           p2p_ultimo_erro());
   } else if (r == DEBRID_BAIXANDO) {
     printf("[fonte] %d torrent escolhido esta baixando no %s (%d%%)\n", i,
            servico && servico[0] ? servico : "debrid", pct ? *pct : -1);
@@ -802,6 +836,36 @@ static int botaoDe(int i) {
   return BT_FECHAR;
 }
 static int nBotoes(void) { return video_pode_forcar_sdr() ? 4 : 3; }
+// TEXTO DE ADDON LIMPO, GUARDADO POR LISTA (#144). nv_limpar_texto percorre o
+// texto e consulta tabelas: barato, mas a folha desenha ~10 linhas por quadro a
+// 60 Hz. Cada fonte e limpa na primeira vez que aparece e o resultado fica ate
+// a lista mudar (listaGeracao sobe a cada stream_definir_lista). O texto CRU
+// continua em Stream: deteccao de selo, preferencia lembrada e o
+// .mkv/.mp4 leem o original e nao podem mudar por causa de um enfeite.
+typedef struct { char nome[208]; char desc[1024]; char pronto; } TextoLimpo;
+static TextoLimpo *limpos;
+static unsigned limposGeracao;
+static int limposN;
+
+static void limpo(int i, const char **nome, const char **desc) {
+  const Stream *s = &lista[i];
+  TextoLimpo *t;
+  if (!limpos || limposGeracao != listaGeracao || limposN != n) {
+    free(limpos);
+    limpos = n > 0 ? calloc((size_t)n, sizeof *limpos) : NULL;
+    limposGeracao = listaGeracao;
+    limposN = limpos ? n : 0;
+  }
+  if (!limpos || i < 0 || i >= limposN) { *nome = s->rotulo; *desc = s->descricao; return; }
+  t = &limpos[i];
+  if (!t->pronto) {
+    nv_limpar_texto(s->rotulo, t->nome, sizeof t->nome, NV_LIMPA_UMA_LINHA);
+    nv_limpar_texto(s->descricao, t->desc, sizeof t->desc, NV_LIMPA_UMA_LINHA);
+    t->pronto = 1;
+  }
+  *nome = t->nome; *desc = t->desc;
+}
+
 static const char *rotuloBotao(int b) {
   if (b == BT_RECARREGAR) return "Recarregar";
   if (b == BT_SEM_HDR)    return "Sem HDR";
@@ -851,8 +915,18 @@ static void focoFonte(GfxRect r, float raio, float alfa) {
   corFocoFonte(&sr, &sg, &sb);
   // Retangulos de linha sao altos; metade da intensidade da pilula mantem a
   // luz visivel sem espalhar uma mancha por varios cartoes vizinhos.
+  // Vidro: a linha em foco continua translucida, com o contorno (e um tom de
+  // 9 %) na cor do realce — nada de bloco cheio nem luz atras. Os pequenos
+  // (botoes e filtros) usam a pilula cheia, ver focoFontePilula.
+  if (ajustes_vidro()) { gfx_vidro_foco(r, raio, 1.0f, alfa); return; }
   botao_luz(r, 0.55f, alfa);
   gfx_cor(r, raio, sr, sg, sb, alfa);
+}
+// Botao/filtro em foco no vidro: pilula CHEIA no realce (branca no padrao), com
+// a tinta que contrasta; fora do vidro e o foco de sempre.
+static void focoFontePilula(GfxRect r, float raio, float alfa) {
+  if (ajustes_vidro()) { gfx_vidro_pilula_cheia(r, raio, 1.0f, alfa); return; }
+  focoFonte(r, raio, alfa);
 }
 
 // EQUALIZADOR DO "REPRODUZINDO AGORA". O player nativo nao expoe amplitude
@@ -967,9 +1041,16 @@ void stream_folha_desenhar(Uint32 agora) {
   if(anim<.005f) return;
   float x=NV_TELA_W-FOLHA_W+(1-anim)*FOLHA_W;
   // O foco tem fill solido; o painel permanece neutro e so o alvo recebe halo.
+  const int vid = ajustes_vidro();
   gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,.02f,.02f,.025f,.35f*anim);
   // Painel flutuante com raio amplo e material neutro. A separacao vem do
   // veu e da superficie, nao de uma luz decorativa presa ao canto.
+  if (vid) {   // vidro SEM aro (dono, 29/09): a borda vem so do contraste do
+    // miolo translucido e de um brilho largo no topo, nao de um fio desenhado.
+    GfxRect pn = {x,24,FOLHA_W,NV_TELA_H-48};
+    gfx_cor(pn,28.0f/FOLHA_W,.085f,.088f,.10f,.78f*anim);
+    gfx_rect(pn,0,GFX_BRILHO_TOPO,0,0.38f,0,28.0f/FOLHA_W,.88f,.92f,1.0f,.06f*anim);
+  } else
   gfx_cor((GfxRect){x,24,FOLHA_W,NV_TELA_H-48},28.0f/FOLHA_W,.055f,.058f,.068f,.965f*anim);
   txt_desenhar_alpha(txt_linha(TXT_PAINEL_TITULO,"Fontes",240,241,243,255),x+40,44,anim);
   int ptr = aberta && anim > .5f && ponteiro_ativo();
@@ -986,9 +1067,19 @@ void stream_folha_desenhar(Uint32 agora) {
     int sel=grupo==-1 && foco==i;
     // Acoes seguem o accent solido e a tinta calculada pelo tema.
     if (ptr) ponteiro_alvo(bx, 44, 120, 50, ponteiroFolhaBotao, NULL, i, 0);
-    if(sel) focoFonte((GfxRect){bx,44,120,50},.3f,anim);
+    if(sel) focoFontePilula((GfxRect){bx,44,120,50},vid?.5f:.3f,anim);
+    else if(vid) gfx_cor((GfxRect){bx,44,120,50},.5f,1,1,1,.07f*anim);   // pilula sem aro
     else    gfx_cor((GfxRect){bx,44,120,50},.3f,.075f,.079f,.092f,anim);
     int c=sel?ajustes_tinta_foco():224;
+    if(botaoDe(i)==BT_SEM_HDR) {
+      // "Sem" + a marca HDR no lugar da palavra (traduzido antes de trocar).
+      // Caixa de 30 px centrada na linha do texto.
+      float tw=marca_rotulo_largura(TXT_PG_FIM,"Sem HDR",FMT_HDR,30.0f);
+      if(tw<=112.0f) {
+        marca_rotulo(TXT_PG_FIM,"Sem HDR",FMT_HDR,bx+(120-tw)*.5f,58,30.0f,c,anim);
+        continue;
+      }
+    }
     TxtLinha l=txt_linha(TXT_PG_FIM,rotuloBotao(botaoDe(i)),c,c,c,255);
     txt_desenhar_alpha(l,bx+(120-l.w)*.5f,58,anim);
   }
@@ -1011,7 +1102,8 @@ void stream_folha_desenhar(Uint32 agora) {
     float w=i?232:108;int sel=i==filtro;
     int c=sel&&grupo==0?ajustes_tinta_foco():sel?245:190;
     if (ptr) ponteiro_alvo(tx, 182, w, 50, NULL, ponteiroFolhaFiltro, i, 0);
-    if(sel && grupo==0) focoFonte((GfxRect){tx,182,w,50},.5f,anim);
+    if(sel && grupo==0) focoFontePilula((GfxRect){tx,182,w,50},.5f,anim);
+    else if(vid) { if(sel) gfx_cor((GfxRect){tx,182,w,50},.5f,1,1,1,.08f*anim); }   // so o filtro escolhido leva superficie, sem aro
     else gfx_cor((GfxRect){tx,182,w,50},.5f,
                  sel?.092f:.075f,sel?.096f:.079f,sel?.110f:.092f,anim);
     TxtLinha l=txt_linha_corta(TXT_PG_FIM,provedores[i],c,c,c,255,w-24);
@@ -1049,19 +1141,26 @@ void stream_folha_desenhar(Uint32 agora) {
       float b = y + r.h > NV_TELA_H - 32 ? NV_TELA_H - 32 : y + r.h;
       if (b > t) ponteiro_alvo(r.x, t, r.w, b - t, ponteiroFolhaLinha, NULL, row, 0);
     }
-    if(sel) focoFonte(r,.10f,anim);
+    // Vidro: a linha em foco NAO inverte (segue translucida), entao o texto
+    // e as marcas ficam nas cores de repouso.
+    const int inv = sel && !vid;
+    if(vid) {   // vidro: em repouso so um veu claro, sem contorno; o foco soma o aro
+      gfx_cor(r,.10f,1,1,1,.05f*anim);
+      if(sel) focoFonte(r,.10f,anim);
+    }
+    else if(sel) focoFonte(r,.10f,anim);
     else gfx_cor(r,.10f,.062f,.066f,.079f,.92f*anim);
     // O proprio material colorido identifica o foco; nao sobrepor outro ponto.
     { int tinta=ajustes_tinta_foco(), tinta2=ajustes_tinta_foco2();
-      int c1=sel?tinta:240, c2=sel?tinta2:175;
-      int c3=sel?tinta2:194, c4=sel?tinta2:224;
+      int c1=inv?tinta:240, c2=inv?tinta2:175;
+      int c3=inv?tinta2:194, c4=inv?tinta2:224;
       corTitulo=c1; corProv=c2; corDesc=c3; corMeta=c4; }
     float lx=x+62,w=FOLHA_W-124;
-    char nome[sizeof s->rotulo],descricao[sizeof s->descricao];
-    snprintf(nome,sizeof nome,"%s",s->rotulo);snprintf(descricao,sizeof descricao,"%s",s->descricao);
-    // SDL_ttf nao interpreta quebras de linha; nao renderizar glifos .notdef.
-    for(char *p=nome;*p;p++)if((unsigned char)*p<32)*p=' ';
-    for(char *p=descricao;*p;p++)if((unsigned char)*p<32)*p=' ';
+    // Texto de addon LIMPO uma vez por lista (limpo(), abaixo), nao por quadro:
+    // emoji, bandeira, versalete e tracos de caixa saem, e a quebra de linha da
+    // descricao vira separador (#144).
+    const char *nome,*descricao;
+    limpo(i,&nome,&descricao);
     txt_desenhar_alpha(txt_linha_corta(TXT_PAINEL_ITEM,nome,corTitulo,C8(corTitulo+1),C8(corTitulo+3),255,w),lx,y+16,anim);
     // A FONTE LEMBRADA, MARCADA. Sem a marca, quem abre a folha para conferir
     // continua procurando a propria fonte entre dezenas de linhas — que e a
@@ -1099,10 +1198,12 @@ void stream_folha_desenhar(Uint32 agora) {
       ajustes_acento(&ar, &ag, &ab);
       // Sobre linha clara a pilula veste a superficie de repouso da linha
       // (.135,.135,.14) com o texto claro das demais linhas nao selecionadas.
-      if (sel) { ar = .135f; ag = .135f; ab = .14f; }
-      m = txt_linha(TXT_MINI, rot, sel ? 234 : ajustes_tinta_foco(), sel ? 236 : ajustes_tinta_foco(), sel ? 242 : ajustes_tinta_foco(), 255);
+      if (inv) { ar = .135f; ag = .135f; ab = .14f; }
+      // Vidro: lavagem e aro do realce, texto claro (sem pilula cheia).
+      m = txt_linha(TXT_MINI, rot, inv ? 234 : vid ? 235 : ajustes_tinta_foco(), inv ? 236 : vid ? 235 : ajustes_tinta_foco(), inv ? 242 : vid ? 238 : ajustes_tinta_foco(), 255);
       pil = (GfxRect){ lx + w - (float)m.w - 24.0f, y + 44.0f, (float)m.w + 24.0f, (float)m.h + 10.0f };
-      gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, anim);
+      if (vid) gfx_vidro_painel_acento(pil, NV_RAIO_PILL, 0.4f, anim);
+      else gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, anim);
       txt_desenhar_alpha(m, pil.x + 12.0f, pil.y + 5.0f, anim);
       // 40 px E NAO 24 DE FOLGA. Com 24 o nome de um addon longo era cortado a
       // 23 px da pilula — dois blocos de texto encostados que o olho le como
@@ -1117,14 +1218,16 @@ void stream_folha_desenhar(Uint32 agora) {
     if (wProv < 120.0f) wProv = 120.0f;
     txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,i==atual?"Reproduzindo agora":s->provedor,corProv,C8(corProv+3),C8(corProv+10),255,wProv),lx,y+46,anim);
     if (i == atual)
-      desenharAudioBars(lx + w - FOLHA_AUDIO_W, y + 40.0f, anim, sel, agora);
+      desenharAudioBars(lx + w - FOLHA_AUDIO_W, y + 40.0f, anim, inv, agora);
     // AS TRES LINHAS DE BAIXO DESCEM 10 px, EM BLOCO. A pilula acaba em y+69 e
     // a descricao comecava em y+76: 8 px de tinta a tinta, que a 3 m viram
     // zero. Os 10 px saem da sobra do RODAPE da linha (as badges acabavam em
     // y+197 numa linha de 214), entao nenhum vao entre as linhas de baixo
     // muda — so entra ar debaixo da pilula. Mexer na pilula em vez disso a
     // tiraria do centro da linha do provedor, que e onde ela esta ancorada.
-    txt_bloco(TXT_PG_FIM,descricao,corDesc,C8(corDesc+3),C8(corDesc+8),lx,y+86,w,25,anim,2);
+    // txt_bloco_corta: o que passa das duas linhas termina em reticencias na
+    // ULTIMA linha visivel, e nao some sem aviso no meio de uma frase.
+    txt_bloco_corta(TXT_PG_FIM,descricao,corDesc,C8(corDesc+3),C8(corDesc+8),lx,y+86,w,25,anim,2);
     char meta[192],qual[24]="";
     float mx = lx;
     const char *cont = containerDa(s);
@@ -1138,14 +1241,18 @@ void stream_folha_desenhar(Uint32 agora) {
       TxtLinha m;
       GfxRect pil;
       ajustes_acento(&ar, &ag, &ab);
-      if (sel) { ar = .135f; ag = .135f; ab = .14f; }
-      m = txt_linha(TXT_MINI, "MP4", sel ? 234 : ajustes_tinta_foco(), sel ? 236 : ajustes_tinta_foco(), sel ? 242 : ajustes_tinta_foco(), 255);
+      if (inv) { ar = .135f; ag = .135f; ab = .14f; }
+      m = txt_linha(TXT_MINI, "MP4", inv ? 234 : vid ? 235 : ajustes_tinta_foco(), inv ? 236 : vid ? 235 : ajustes_tinta_foco(), inv ? 242 : vid ? 238 : ajustes_tinta_foco(), 255);
       pil = (GfxRect){ lx, y + 146.0f, (float)m.w + 20.0f, (float)m.h + 8.0f };
-      gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, anim);
+      if (vid) gfx_vidro_painel_acento(pil, NV_RAIO_PILL, 0.4f, anim);
+      else gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, anim);
       txt_desenhar_alpha(m, pil.x + 10.0f, pil.y + 4.0f, anim);
       mx = lx + pil.w + 10.0f;
     }
-    snprintf(meta,sizeof meta,"%s%s%s%s",cont,qual,s->dolbyVision?" · Dolby Vision":"",s->dolbyAtmos?" · Atmos":"");
+    // DV e Atmos NAO entram mais como palavra: a fileira de marcas logo
+    // abaixo ja desenha o logo deles (badges_detectar), e dizer os dois era
+    // repetir. Pedido do dono (29/09): logo sempre que citar formato.
+    snprintf(meta,sizeof meta,"%s%s",cont,qual);
     if(s->tamanhoMB) {size_t p=strlen(meta);snprintf(meta+p,sizeof meta-p," · %.1f GB",s->tamanhoMB/1024.0);}
     { const char *texto = meta;
       // A sigla ja esta na pilula: o texto comeca depois dela e do " · " (4

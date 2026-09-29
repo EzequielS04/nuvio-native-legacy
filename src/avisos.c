@@ -4,6 +4,7 @@
 #include "js.h"
 #include "gfx.h"
 #include "botoes.h"
+#include "seguro.h"
 #include "text.h"
 #include "anim.h"
 #include "layout.h"
@@ -222,6 +223,26 @@ static void toast(int novos) {
   if (novos <= 0) return;
   toastN += novos;
   toastPendente = 1;
+}
+
+void avisos_idioma_definido(const char *codigo, const char *texto) {
+  char id[72];
+  int novo;
+  snprintf(id, sizeof id, "idioma:%s", codigo ? codigo : "");
+  pthread_mutex_lock(&trava);
+  novo = por(id, AV_CANAL, i18n("Idioma"), texto ? texto : "", NULL);
+  pthread_mutex_unlock(&trava);
+  toast(novo);
+}
+
+int avisos_sessao_anterior_caiu(void) { return crashDetectado; }
+
+void avisos_modo_seguro(const char *id, const char *titulo, const char *texto) {
+  int novo;
+  pthread_mutex_lock(&trava);
+  novo = por(id, AV_CANAL, titulo ? titulo : "", texto ? texto : "", NULL);
+  pthread_mutex_unlock(&trava);
+  toast(novo);
 }
 
 int avisos_n_novos(void) {
@@ -494,7 +515,10 @@ static void *fioCanalFn(void *u) {
       const char *f = js_fim(p);
       char id[72] = "", desde[12] = "", ate[12] = "", plat[12] = "", ateV[16] = "";
       char tit[160] = "", titEn[160] = "", txt[420] = "", txtEn[420] = "";
-      int ingles = ajustes_idioma_ingles(), ok = 1;
+      // Todo idioma que nao o portugues le o texto em ingles: o canal so tem pt e en, e
+      // o ingles e o que mais gente entende. So o portugues (o do Brasil e o de
+      // Portugal) le o portugues.
+      int ingles = ajustes_idioma() != IDIOMA_PT && ajustes_idioma() != IDIOMA_PTPT, ok = 1;
       js_texto(p, f, "id", id, sizeof id);
       js_texto(p, f, "desde", desde, sizeof desde);
       js_texto(p, f, "ate", ate, sizeof ate);
@@ -700,6 +724,7 @@ void avisos_encerrar(void) {
   dados_despedida_fim();   // no Tizen: sincrono, vale mesmo se o apagar abaixo nao chegar ao disco
   dados_apagar(AV_MARCA_ARQ);
   vistosGravar();
+  seguro_encerrar();   // confirma o que estava em prova e fecha a sessao no diario
 }
 
 // Fontes que o app ja tem: um item por estado, atualizado a cada volta.

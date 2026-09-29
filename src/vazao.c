@@ -84,3 +84,186 @@ const char *vazao_dica(int otimoKbps) {
   if (otimoKbps >= 6000) return "Prefira 1080p WEB-DL; 4K pode pausar.";
   return "Prefira 720p ou 1080p leve.";
 }
+
+// ---------------------------------------------------------------------------
+// CICLO COMPLETO / POR ADD-ON (ver vazao.h).
+
+unsigned long vazao_chave(const char *u) {
+  unsigned long h = 2166136261UL;
+  if (!u || !*u) return 0;
+  for (; *u; u++) { h ^= (unsigned char)*u; h = (h * 16777619UL) & 0xffffffffUL; }
+  return h ? h : 1;
+}
+
+int vazao_host_publico(const char *u, char *h, size_t n) {
+  const char *p = u ? strstr(u, "://") : NULL, *arroba, *fim;
+  size_t k;
+  if (h && n) h[0] = 0;
+  if (!p || !h || n == 0) return 0;
+  p += 3;
+  fim = p + strcspn(p, "/?#");
+  // usuario:senha@host — a credencial nunca sai daqui. O '@' so vale ANTES do
+  // primeiro '/', '?' ou '#' (um '@' no caminho e parte do caminho).
+  arroba = memchr(p, '@', (size_t)(fim - p));
+  while (arroba) {
+    const char *outra = memchr(arroba + 1, '@', (size_t)(fim - arroba - 1));
+    if (!outra) break;
+    arroba = outra;
+  }
+  if (arroba) p = arroba + 1;
+  k = (size_t)(fim - p);
+  if (k >= n) k = n - 1;
+  memcpy(h, p, k);
+  h[k] = 0;
+  return k > 0;
+}
+
+int vazao_selecionar(VazCicloModo modo, const VazItem *it, int n, int cap,
+                     int *fila, VazSelecao *s) {
+  VazSelecao z;
+  int i, j, q = 0;
+  unsigned char *fora;
+  if (!s) s = &z;
+  memset(s, 0, sizeof *s);
+  if (!it || n < 1 || !fila || cap < 1) return 0;
+  s->candidatas = n;
+  fora = calloc((size_t)n, 1);
+  if (!fora) return 0;
+  // Debrid e link repetido saem antes de qualquer ordem.
+  for (i = 0; i < n; i++) {
+    if (!it[i].medivel) { fora[i] = 1; s->debrid++; continue; }
+    if (it[i].chave)
+      for (j = 0; j < i; j++)
+        if (!fora[j] && it[j].chave == it[i].chave) { fora[i] = 1; s->duplicadas++; break; }
+  }
+  if (modo == VCM_ADDON) {
+    for (i = 0; i < n; i++) {
+      int visto = 0;
+      if (fora[i]) continue;
+      for (j = 0; j < i; j++) if (!fora[j] && it[j].addon == it[i].addon) { visto = 1; break; }
+      if (visto) continue;
+      if (q < cap) fila[q++] = i; else s->foraDoLimite++;
+    }
+  } else if (modo == VCM_COMPLETO) {
+    // Revezamento: na rodada r entra a r-esima medivel de cada add-on, na
+    // ordem em que o add-on apareceu.
+    unsigned char *usada = calloc((size_t)n, 1), *vez = calloc((size_t)n, 1);
+    int restam = 0;
+    if (!usada || !vez) { free(usada); free(vez); free(fora); return 0; }
+    for (i = 0; i < n; i++) if (!fora[i]) restam++;
+    while (restam > 0) {
+      // Quem e a 1a nao usada do seu add-on, medido ANTES de esta rodada
+      // marcar qualquer uma (senao a 2a do mesmo add-on entrava junto).
+      for (i = 0; i < n; i++) {
+        vez[i] = !fora[i] && !usada[i];
+        for (j = 0; vez[i] && j < i; j++)
+          if (!fora[j] && !usada[j] && it[j].addon == it[i].addon) vez[i] = 0;
+      }
+      for (i = 0; i < n; i++) {
+        if (!vez[i]) continue;
+        usada[i] = 1;
+        restam--;
+        if (q < cap) fila[q++] = i; else s->foraDoLimite++;
+      }
+    }
+    free(usada);
+    free(vez);
+  } else {
+    for (i = 0; i < n; i++) {
+      if (fora[i]) continue;
+      if (q < cap) fila[q++] = i; else s->foraDoLimite++;
+    }
+  }
+  free(fora);
+  s->fila = q;
+  return q;
+}
+
+void vazao_agendar(const VazPlano *pl, const int *fila, int n, const VazOps *ops,
+                   VazAgenda *out) {
+  VazAgenda a;
+  unsigned long ini = 0;
+  int k;
+  memset(&a, 0, sizeof a);
+  if (!pl || !fila || !ops || !ops->medir) { if (out) *out = a; return; }
+  if (ops->agora) ini = ops->agora(ops->u);
+  for (k = 0; k < n; k++) {
+    int sit;
+    if (ops->cancelado && ops->cancelado(ops->u)) { a.cancelado = 1; break; }
+    if (pl->maxMedidas > 0 && a.medidas >= pl->maxMedidas) break;
+    if (pl->maxTentativas > 0 && a.tentadas >= pl->maxTentativas) break;
+    if (pl->orcamentoMs && ops->agora && (pl->orcamentoAposMedida ? a.medidas > 0 : a.tentadas > 0) &&
+        ops->agora(ops->u) - ini > pl->orcamentoMs) { a.semTempo = 1; break; }
+    a.tentadas++;
+    sit = ops->medir(fila[k], ops->u);
+    if (ops->cancelado && ops->cancelado(ops->u)) a.cancelado = 1;
+    if (sit == VS_OK) a.medidas++;
+    else if (sit == VS_HOST_REPETIDO) a.hostRepetido++;
+    else a.falhas++;
+    if (ops->passo) ops->passo(ops->u, k + 1, n);
+    if (a.cancelado) { k++; break; }
+  }
+  a.restantes = n - k;
+  if (a.restantes < 0) a.restantes = 0;
+  if (out) *out = a;
+}
+
+int vazao_necessario_kbps(int altura, long tamanhoMB, int duracaoS) {
+  if (tamanhoMB > 0 && duracaoS > 0)
+    return (int)((double)tamanhoMB * 8388.608 / (double)duracaoS + 0.5);
+  if (altura >= 2160) return 25000;
+  if (altura >= 1440) return 16000;
+  if (altura >= 1080) return 8000;
+  if (altura >= 720) return 4000;
+  if (altura > 0) return 2500;
+  return 0;
+}
+
+VazSuf vazao_suficiencia(const VazaoResumo *r, int necessarioKbps) {
+  if (!r || necessarioKbps <= 0) return VSU_SEM_REF;
+  if (r->otimoKbps >= necessarioKbps) return VSU_OK;
+  if (r->maximoKbps >= necessarioKbps) return VSU_JUSTO;
+  return VSU_NAO;
+}
+
+static int classe(const VazCicloRes *r) {
+  return r->sit == VS_OK ? 0 : r->sit == VS_DEBRID ? 2 : 1;
+}
+
+void vazao_ordenar(const VazCicloRes *r, int n, int *ordem) {
+  int i, j;
+  for (i = 0; i < n; i++) ordem[i] = i;
+  // Insercao: n <= 56 e a estabilidade (ordem de teste no empate) sai de graca.
+  for (i = 1; i < n; i++) {
+    int x = ordem[i];
+    j = i - 1;
+    while (j >= 0) {
+      const VazCicloRes *a = &r[ordem[j]], *b = &r[x];
+      int ca = classe(a), cb = classe(b), antes;
+      if (ca != cb) antes = cb < ca;
+      else if (ca == 0)
+        antes = b->r.medianaKbps > a->r.medianaKbps ||
+                (b->r.medianaKbps == a->r.medianaKbps && b->esperaMs < a->esperaMs);
+      else antes = 0;
+      if (!antes) break;
+      ordem[j + 1] = ordem[j];
+      j--;
+    }
+    ordem[j + 1] = x;
+  }
+}
+
+int vazao_mediana_addon(const VazCicloRes *r, int n, int addon, int *usadas) {
+  int v[VAZ_CICLO_LISTA_MAX], m = 0, i, a, b;
+  if (usadas) *usadas = 0;
+  for (i = 0; i < n && m < VAZ_CICLO_LISTA_MAX; i++)
+    if (r[i].sit == VS_OK && r[i].addon == addon) v[m++] = r[i].r.medianaKbps;
+  if (!m) return 0;
+  if (usadas) *usadas = m;
+  for (a = 1; a < m; a++) {
+    int x = v[a];
+    for (b = a - 1; b >= 0 && v[b] > x; b--) v[b + 1] = v[b];
+    v[b + 1] = x;
+  }
+  return (m & 1) ? v[m / 2] : (int)(((long)v[m / 2 - 1] + v[m / 2] + 1) / 2);
+}

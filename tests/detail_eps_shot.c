@@ -127,7 +127,8 @@ static int progVis, progExib;  // extras_progresso_serie
 void fx_pedir(const char *imdb, int serie, long tmdbId) {
   (void)imdb; (void)serie; (void)tmdbId;
 }
-int fx_carregando(void)       { return 0; }
+int fxCarregandoLigado;
+int fx_carregando(void)       { return fxCarregandoLigado; }
 int fx_n_comentarios(void)    { return 0; }
 int fx_n_comentarios_ep(void) { return 0; }
 int fx_n_relacionados(void)   { return 0; }
@@ -222,6 +223,7 @@ static const char *SINOPSE_ENSAIO =
   "linhas que o card reserva e mostrar onde o bloco corta, que e o unico jeito "
   "de julgar se o rodape ainda respira.";
 
+static CatFileira filEnsaio;
 static void montarCatalogo(void) {
   CatFileira fil;
   int i, t, n = 0;
@@ -257,13 +259,13 @@ static void montarCatalogo(void) {
   snprintf(itens[1].titulo, sizeof itens[1].titulo, "Filme de Ensaio");
   snprintf(itens[1].imdb, sizeof itens[1].imdb, IMDB_FILME);
   snprintf(itens[1].tipo, sizeof itens[1].tipo, "movie");
-  snprintf(itens[1].genero, sizeof itens[1].genero, "Filme · Ficção científica");
-  snprintf(itens[1].meta, sizeof itens[1].meta, "1999 · 2 h 16 min");
+  snprintf(itens[1].genero, sizeof itens[1].genero, "Filme  \xc2\xb7  Ficção científica  \xc2\xb7  Ação");
+  snprintf(itens[1].meta, sizeof itens[1].meta, "1999  \xc2\xb7  136 min");   // Cinemeta: minutos em ingles
   snprintf(itens[1].sinopse, sizeof itens[1].sinopse,
            "Sinopse de enchimento do filme, comprida o bastante para o bloco de "
            "texto do heroi ficar com a altura que tem num titulo de verdade.");
   snprintf(itens[1].classificacao, sizeof itens[1].classificacao, "14");
-  snprintf(itens[1].pais, sizeof itens[1].pais, "Estados Unidos");
+  snprintf(itens[1].pais, sizeof itens[1].pais, "United States, Australia");   // Cinemeta: ingles
   snprintf(itens[1].backdrop, sizeof itens[1].backdrop, "deploy/app/art/07.jpg");
   itens[1].nota = 87;
   for (i = 0; i < 6; i++) {
@@ -297,6 +299,7 @@ static void montarCatalogo(void) {
   snprintf(fil.titulo, sizeof fil.titulo, "Ensaio");
   snprintf(fil.tipo, sizeof fil.tipo, "series");
   cat_definir_tudo(itens, 2, &fil, 1);
+  filEnsaio = fil;
 
   for (t = 0; t < 3; t++) {
     for (i = 0; i < TEMP_N[t]; i++) {
@@ -444,7 +447,9 @@ int main(int argc, char **argv) {
     snprintf(cam, sizeof cam, "%s/ajustes.txt", dados_dir());
     f = fopen(cam, "w");
     assert(f);
-    fprintf(f, "idioma 0\n");
+    // NUVIO_SHOT_IDIOMA=N troca o idioma das capturas que nao sao as das notas
+    // da release (0 pt ... 7 es; ver idiomacod.h): serve a conferir traducao.
+    fprintf(f, "idioma %d\n", getenv("NUVIO_SHOT_IDIOMA") ? atoi(getenv("NUVIO_SHOT_IDIOMA")) : 0);
     fclose(f);
     ajustes_dir(dados_dir()); }
 
@@ -574,6 +579,39 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-12-hero-dourado-primario.png", saida);
   gravar(nome);
 
+  // --- 20. DADOS A CAMINHO (#172): sinopse e meta ainda nao chegaram. Esperado:
+  //         20a = quadro 1, hero escondido pelo portao do texto; 20b = esqueleto
+  //         das barras (sinopse em 3 linhas e o meta) reservando a altura; 20c =
+  //         o texto chegou ha ~90 ms (meio da troca); 20d = assentado.
+  { char sin0[900], gen0[160], meta0[160];
+    snprintf(sin0, sizeof sin0, "%s", itens[1].sinopse);
+    snprintf(gen0, sizeof gen0, "%s", itens[1].genero);
+    snprintf(meta0, sizeof meta0, "%s", itens[1].meta);
+    itens[1].sinopse[0] = itens[1].genero[0] = itens[1].meta[0] = 0;
+    itens[1].nota = 0;
+    cat_definir_tudo(itens, 2, &filEnsaio, 1);
+    fxCarregandoLigado = 1;
+    abrir(1, 0);
+    nivel = 0; botao = 0;
+    quadros(1);
+    snprintf(nome, sizeof nome, "%s-20a-dados-portao.png", saida);
+    gravar(nome);
+    quadros(90); SDL_Delay(400); quadros(30);
+    snprintf(nome, sizeof nome, "%s-20b-dados-esqueleto.png", saida);
+    gravar(nome);
+    snprintf(itens[1].sinopse, sizeof itens[1].sinopse, "%s", sin0);
+    snprintf(itens[1].genero, sizeof itens[1].genero, "%s", gen0);
+    snprintf(itens[1].meta, sizeof itens[1].meta, "%s", meta0);
+    itens[1].nota = 87;
+    cat_definir_tudo(itens, 2, &filEnsaio, 1);
+    quadros(1); SDL_Delay(90); quadros(1);
+    snprintf(nome, sizeof nome, "%s-20c-dados-troca.png", saida);
+    gravar(nome);
+    fxCarregandoLigado = 0;
+    SDL_Delay(400); quadros(30);
+    snprintf(nome, sizeof nome, "%s-20d-dados-assentado.png", saida);
+    gravar(nome); }
+
   // --- 16/17. TRAILERS EM INGLES com realce carmesim (tema 7): o anel segue a
   //            cor escolhida, nao o branco de fabrica.
   trailersLigados = 1;
@@ -608,7 +646,7 @@ int main(int argc, char **argv) {
     { char cam[600]; FILE *f;
       snprintf(cam, sizeof cam, "%s/ajustes.txt", dados_dir());
       f = fopen(cam, "w"); assert(f);
-      fprintf(f, "idioma 0\nblurUnwatchedEpisodes 1\n"); fclose(f);
+      fprintf(f, "idioma %d\nblurUnwatchedEpisodes 1\n", getenv("NUVIO_SHOT_IDIOMA") ? atoi(getenv("NUVIO_SHOT_IDIOMA")) : 0); fclose(f);
       ajustes_dir(dados_dir()); }
     assert(!ajustes_desfocar_nao_assistidos());
     fxDesfN = fxDesfOk = 0;
@@ -621,7 +659,7 @@ int main(int argc, char **argv) {
     { char cam[600]; FILE *f;
       snprintf(cam, sizeof cam, "%s/ajustes.txt", dados_dir());
       f = fopen(cam, "w"); assert(f);
-      fprintf(f, "idioma 0\nblurUnwatchedEpisodes 0\n"); fclose(f);
+      fprintf(f, "idioma %d\nblurUnwatchedEpisodes 0\n", getenv("NUVIO_SHOT_IDIOMA") ? atoi(getenv("NUVIO_SHOT_IDIOMA")) : 0); fclose(f);
       ajustes_dir(dados_dir()); }
     assert(ajustes_desfocar_nao_assistidos());
     fxDesfN = fxDesfOk = 0;

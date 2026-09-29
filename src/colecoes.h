@@ -20,6 +20,10 @@ typedef struct {
 } ColSource;
 typedef struct {
   char id[96], title[128], group[64], cover[512], hero[512], logo[512];
+  /* backdropImageUrl da COLECAO (o grupo), a arte que vale para toda pasta que
+     nao trouxe a sua. `hero` guarda so o heroBackdropUrl da PASTA. A escolha
+     entre eles mora em col_banner/col_capa, na ordem do app web. */
+  char groupBackdrop[512];
   char groupId[64];   /* id da colecao no web; a chave de ordem da conta e collection_<groupId> */
   char frameDir[600];
   char detailHero[512];
@@ -81,5 +85,12 @@ void col_despejar_fontes(int max);
 // oculto). Preenche `grupo` com o nome do grupo do melhor casamento.
 int col_diagnostico(const char *base, const char *type, const char *id,
                     char *grupo, unsigned n);
+// A arte que a PASTA mostra, na ordem do app web (homeScreen.js,
+// normalizeCollectionFolderItem): o BANNER (fundo do destaque e da tela da
+// colecao) e heroBackdropUrl, depois coverImageUrl, depois o backdropImageUrl da
+// colecao; a CAPA do cartaz e coverImageUrl, depois o backdropImageUrl da
+// colecao. "" quando nenhum campo veio — nada e inventado.
+const char *col_banner(const ColFolder *f);
+const char *col_capa(const ColFolder *f);
 void col_cor(const ColFolder *f, float *r, float *g, float *b);
 #endif

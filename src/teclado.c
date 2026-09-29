@@ -104,7 +104,7 @@ static float gradeH(void) {
 static float teH(void) { return TE_CAB + gradeH() + TE_RODAPE + TE_PAD; }
 static float teY(void) { return (NV_TELA_H - teH()) * 0.5f; }
 static const char *alfa(void) { return alfabetoAtual ? alfabetoAtual : ALFABETO; }
-static char  texto[TECLADO_MAX + 1];
+static char  texto[TECLADO_LONGO + 1];
 static int   n, maxN, resultado;
 static char  tituloAtual[96], dicaAtual[160];
 
@@ -145,7 +145,7 @@ void teclado_abrir_com(const char *titulo, const char *dica, int max,
   aberto = 1;
   fileira = 0; coluna = 0; colunaAntes = 0;
   resultado = TECLADO_NADA;
-  maxN = max > 0 && max <= TECLADO_MAX ? max : TECLADO_MAX;
+  maxN = max > 0 && max <= TECLADO_LONGO ? max : TECLADO_MAX;
   // TEXTO INICIAL: editar um portal ja cadastrado nao pode obrigar a redigitar
   // o endereco inteiro. Cortado em maxN, nunca truncado no meio de nada porque
   // o alfabeto e de um byte por caractere.

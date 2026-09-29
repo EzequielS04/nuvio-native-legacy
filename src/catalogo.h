@@ -124,6 +124,15 @@ typedef struct {
   // "a seguir" sem confirmacao): um vetor de instantes indexado por posicao
   // dessincroniza ali, em silencio.
   long long retomadoMs;
+  // DE QUAL ADDON ESTE ITEM VEIO (o catalogo ou a busca que o trouxe): o "id" do
+  // manifesto, ou "#<hash da base>" enquanto o manifesto nao foi lido. Nunca a
+  // URL (ela carrega credencial e este struct vai para o cache em disco).
+  //
+  // E o que deixa o detalhe perguntar a ficha (/meta) primeiro a QUEM PUBLICOU o
+  // titulo: "kitsu:41370" so quem o publicou sabe abrir, e o Cinemeta nunca o
+  // conheceu. Vazio = origem desconhecida (Trakt, Salvos, progresso, pacote).
+  // Mudar o tamanho invalida o cache em disco sozinho (ver sizeof(CatItem)).
+  char origem[96];
 } CatItem;
 
 // Um episodio de serie. Vem de art/episodios.txt, gerado a partir do campo
@@ -149,6 +158,11 @@ typedef struct {
   // cache nenhum: o unico dump binario e o do CatItem (catalogo-rede.bin) e
   // episodios.txt e texto, campo a campo — ambos leem o que sabem ler.
   int  nota;
+  // O ID DO VIDEO como o /meta o publicou ("kitsu:41370:5", "tt123:1:2"). E com
+  // ele que se pede fonte (/stream/series/<id>.json): o addon de anime tem id
+  // proprio por episodio, e montar "<titulo>:<T>:<E>" na mao so acerta no IMDb.
+  // Vazio = o meta nao trouxe; ver cat_id_stream.
+  char vid[64];
 } CatEp;
 
 // Le <dir>/catalogo.txt. Devolve quantos itens carregou (0 = nenhum, e quem
@@ -327,10 +341,19 @@ void cat_definir(const CatItem *lista, int n);
 //   5. colecoes com `pinToTop` vao na frente e nunca sao cortadas
 //   6. corta o total em `getHomeRowLimit()`
 //
-// O teto para NOS e 16: `HOME_MAX_ROWS_LEGACY_TV` em homeConstants.js, o ramo
+// O teto para NOS era 16: `HOME_MAX_ROWS_LEGACY_TV` em homeConstants.js, o ramo
 // que `isLegacyTvRuntime()` escolhe — e esta TV e exatamente esse caso. O 40 do
 // `HOME_MAX_ROWS_DEFAULT` e do navegador de mesa.
-#define CAT_FIL_MAX 16
+//
+// 40 desde a "Fileiras da home" ate 40 (pedido do dono, com aviso de memoria):
+// o mesmo numero do navegador de mesa, e o maior que a estrutura aguenta sem
+// mexer em mais nada. CONTA, nao medicao em TV: o custo de uma fileira e o dos
+// seus itens, e CatItem pesa 15,6 KB; 40 fileiras x 24 itens = 960 titulos
+// (~15 MB de catalogo) contra CAT_MAX = 2000, entao o vetor de itens continua
+// sendo o teto de verdade e nao estoura. Cada CatFileira pesa ~1 KB: os vetores
+// de fileira (40 x 1 KB = 40 KB) sao static onde eram de pilha — ver
+// cat_ler_cache, cat_trocar_continuar e montar().
+#define CAT_FIL_MAX 40
 
 typedef struct {
   char chave[192];   // homeCatalogKey: <addonId>_<tipo>_<catalogoId>
@@ -418,5 +441,11 @@ unsigned      cat_revisao(void);
 unsigned      cat_revisao_itens(void);
 int           cat_n_episodios(int indiceItem);
 const CatEp  *cat_episodio(int indiceItem, int i);   // indice circular; NULL se o catalogo esta vazio
+// O id que se pede aos addons de FONTE para o episodio (t,e) do item. Serie do
+// IMDb: "tt:T:E" (o id do video so vale se tambem for "tt"); serie de outro
+// espaco de ids ("kitsu:41370"): o id do video que o /meta trouxe, e na falta
+// dele "<id>:<E>" (a convencao do Kitsu/MAL). t<=0 ou e<=0 = sem episodio: devolve o id
+// do titulo. 1 se escreveu algo.
+int           cat_id_stream(int indiceItem, int t, int e, char *dst, unsigned tam);
 
 #endif

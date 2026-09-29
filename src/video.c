@@ -1,4 +1,5 @@
 #include "video.h"
+#include "video_escala.h"
 #include "idioma.h"
 #include "linguas.h"
 #include <SDL2/SDL.h>
@@ -7,6 +8,7 @@
 #include "mkvass.h"
 #include "js.h"
 #include "lsregistro.h"
+#include "rede.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -163,6 +165,7 @@ void video_janela_fonte(int sx,int sy,int sw,int sh,int dx,int dy,int dw,int dh)
   (void)sx;(void)sy;(void)sw;(void)sh;(void)dx;(void)dy;(void)dw;(void)dh;
 }
 void video_recorte_reaplicar(void) {}
+void video_escala_definir(int sw, int sh) { (void)sw; (void)sh; }
 double video_pos(void) { return 0; }
 double video_duracao(void) { return 0; }
 // Sem pipeline nao ha arquivo para ler capitulos: no Mac o pos-reproducao cai
@@ -175,6 +178,8 @@ int  video_tocando(void) { return 0; }
 int  video_pronto(void) { return 0; }
 int  video_ativo(void) { return 0; }
 int  video_falhou(void) { return 0; }
+const char *video_erro_texto(void) { return ""; }
+int  video_decoder_anunciou(void) { return 1; }
 int  video_audio_nao_suportado(void) { return 0; }
 int  video_terminou(void) { return 0; }
 unsigned video_bufferando_ms(void) { return 0; }
@@ -350,6 +355,18 @@ static long      acb;
 // Retangulo pedido pela UI. Guardado porque o ACB so aceita a janela depois do
 // loadCompleted, que chega muito depois de quem pediu.
 static int       janX, janY, janW = 1920, janH = 1080;
+// Tamanho da superficie (drawable) em que o retangulo de DESTINO do plano de
+// video e entendido; 1920x1080 ate o main dizer outra coisa. Ver video_escala.h.
+static int       escW = 1920, escH = 1080;
+// Destino em unidades de layout -> pixels da superficie. So o DESTINO escala: a
+// fonte (recorte) e o quadro `org` sao coordenadas do quadro decodificado.
+static SDL_Rect escDst(int x, int y, int w, int h) {
+  NvRetInt r = { x, y, w, h };
+  SDL_Rect o;
+  r = nv_video_escalar(r, 1920, 1080, escW, escH);
+  o.x = r.x; o.y = r.y; o.w = r.w; o.h = r.h;
+  return o;
+}
 // Ultimo par fonte/destino aplicado pelo setDisplayWindow do uMS, para nao
 // repetir a mesma chamada a cada quadro. fonX = -1 quer dizer "nada aplicado".
 static int       fonX = -1, fonY, fonW, fonH, dstX = -1, dstY, dstW, dstH;
@@ -395,6 +412,9 @@ static int dvPedido;
 static char      midia[64];
 static double    posSeg, durSeg;
 static int       tocando, pronto, ligado, falhou, terminou;
+// Ver video_erro_texto. Escrito no fio do LS2, lido pelo de desenho: e so
+// texto curto e o pior caso de corrida e ler meia mensagem num quadro.
+static char      erroTexto[96];
 // errorCode 200 "Audio Codec Not Supported": o VIDEO segue tocando e so o
 // audio morre. Ver o tratamento em lerEvento.
 static int       audioNaoSup;
@@ -493,19 +513,33 @@ static void esperar(int ms) { struct timespec t; t.tv_sec = ms / 1000;
 // /etc/starfish-release da a linha "Rockhopper release 4.10.2-31 (...)" — o
 // numero depois de "release" e o que vale. Sem o arquivo, a ausencia da
 // libAcbAPI ja e prova de 5+, porque foi nela que a LG apagou a lib.
+// A LINHA INTEIRA vai ao log uma vez (#158). O "pronto (webOS 5, ...)" do
+// registro 6311 (LG C4 atualizada para webOS 11.2) era o chute "sem ACB => 5"
+// e nao a versao: a TV do relato e as que tocam saiam iguais no log, e a
+// unica diferenca conhecida — o firmware — nao aparecia em lugar nenhum.
+static char releaseLinha[128];
 static int webosMaior(void) {
-  static int v;
+  static int v, lido;
   if (v) return v;
   { FILE *f = fopen("/etc/starfish-release", "r");
     if (f) {
       char linha[256];
       while (fgets(linha, sizeof linha, f)) {
         const char *r = strstr(linha, "release ");
+        if (!releaseLinha[0]) {
+          size_t n = strcspn(linha, "\r\n");
+          snprintf(releaseLinha, sizeof releaseLinha, "%.*s", (int)n, linha);
+        }
         if (r && sscanf(r + 8, "%d", &v) == 1 && v > 0) break;
         v = 0;
       }
       fclose(f);
     } }
+  if (!lido) {
+    lido = 1;
+    printf("[video] starfish-release: %s\n", releaseLinha[0] ? releaseLinha : "(sem arquivo)");
+    fflush(stdout);
+  }
   if (!v) v = expWin[0] ? 5 : 4;
   return v;
 }
@@ -634,12 +668,16 @@ static void *prenderPlano(void *u) {
   // COM RECORTE DE FONTE JA PEDIDO, prende o plano com o recorte — a janela
   // lisa aqui era o que desfazia o zoom do trailer (trailer.c pede o recorte
   // assim que o videoInfo chega, e este bind termina depois disso).
-  if (fonX >= 0 && acbJanelaCustom)
-    acbJanelaCustom(acb, fonX, fonY, fonW, fonH, dstX, dstY, dstW, dstH,
-                    (dstX == 0 && dstY == 0 && dstW == 1920 && dstH == 1080), &tarefa);
-  else
-    acbJanela(acb, janX, janY, janW, janH,
-              (janX == 0 && janY == 0 && janW == 1920 && janH == 1080), &tarefa);
+  { SDL_Rect d = escDst(fonX >= 0 ? dstX : janX, fonX >= 0 ? dstY : janY,
+                        fonX >= 0 ? dstW : janW, fonX >= 0 ? dstH : janH);
+    if (fonX >= 0 && acbJanelaCustom)
+      acbJanelaCustom(acb, fonX, fonY, fonW, fonH, d.x, d.y, d.w, d.h,
+                      (dstX == 0 && dstY == 0 && dstW == 1920 && dstH == 1080), &tarefa);
+    else {
+      d = escDst(janX, janY, janW, janH);
+      acbJanela(acb, d.x, d.y, d.w, d.h,
+                (janX == 0 && janY == 0 && janW == 1920 && janH == 1080), &tarefa);
+    } }
   acbEstado(acb, NV_ACB_FOREGROUND, estTocando, &tarefa);
   printf("[video] plano preso em %d,%d %dx%d%s\n", janX, janY, janW, janH,
          fonX >= 0 ? " (com recorte)" : "");
@@ -659,7 +697,7 @@ static void recorteNoPrimeiroQuadro(void) {
     int ok;
     org.x = 0; org.y = 0; org.w = vidW > 0 ? vidW : 1920; org.h = vidH > 0 ? vidH : 1080;
     src.x = fonX; src.y = fonY; src.w = fonW; src.h = fonH;
-    dst.x = dstX; dst.y = dstY; dst.w = dstW; dst.h = dstH;
+    dst = escDst(dstX, dstY, dstW, dstH);
     ok = sdlExpRecorte(expWin, &org, &src, &dst);
     printf("[video] recorte reaplicado no primeiro quadro (janela exportada) -> %d\n", ok);
     fflush(stdout);
@@ -981,11 +1019,13 @@ static int aoEvento(LSHandle *h, LSMessage *m, void *u) {
       // (trailer.c) pedia o zoom antes do `playing`, esta linha desfazia, e a
       // tarja preta voltava (dono, 20/09/2026: "mas ta com a barra").
       if (fonX >= 0 && acbJanelaCustom) {
-        acbJanelaCustom(acb, fonX, fonY, fonW, fonH, dstX, dstY, dstW, dstH,
+        SDL_Rect d = escDst(dstX, dstY, dstW, dstH);
+        acbJanelaCustom(acb, fonX, fonY, fonW, fonH, d.x, d.y, d.w, d.h,
                         (dstX == 0 && dstY == 0 && dstW == 1920 && dstH == 1080), &tarefa);
         printf("[video] recorte reaplicado com o fluxo ja tocando\n");
       } else {
-        acbJanela(acb, janX, janY, janW, janH,
+        SDL_Rect d = escDst(janX, janY, janW, janH);
+        acbJanela(acb, d.x, d.y, d.w, d.h,
                   (janX == 0 && janY == 0 && janW == 1920 && janH == 1080), &tarefa);
         printf("[video] janela reaplicada com o fluxo ja tocando\n");
       }
@@ -1015,6 +1055,19 @@ static int aoEvento(LSHandle *h, LSMessage *m, void *u) {
     snprintf(m, sizeof m, "pipeline erro: %.60s", q);
     { char *n2; for (n2 = m; *n2; n2++) if (*n2 == '\n' || *n2 == '\r') *n2 = ' '; }
     marco(m);
+    // Guardado para a tela (video_erro_texto): codigo e texto, sem o resto do
+    // JSON. "40403 server error:40403" e o que o registro 4958 (#158) trouxe
+    // no canal que o provedor dava como "Media Not Found".
+    { double cod = numeroDe(p, "\"errorCode\":");
+      const char *t = strstr(p, "errorText\":\"");
+      char txt[72] = "";
+      if (t) {
+        const char *f;
+        t += 12;
+        f = strchr(t, '"');
+        if (f && f - t < (int)sizeof txt) { memcpy(txt, t, (size_t)(f - t)); txt[f - t] = 0; }
+      }
+      snprintf(erroTexto, sizeof erroTexto, "%.0f %s", cod >= 0 ? cod : 0.0, txt); }
     // PIPELINE DESTRUIDO. Medido duas vezes na TV do dono: ~71 s depois de um
     // avanco, o uMS responde "com.webos.pipeline.<id> is not running" e o video
     // simplesmente para — o app nao fazia NADA, e era isso que ele descrevia
@@ -1654,7 +1707,12 @@ static void montarHttpHeader(char *dst, unsigned tam) {
     if (ck[0])  { u += snprintf(dst + u, tam - u, "%s\"cookies\":\"%s\"", algum++ ? "," : "", ck); }
     snprintf(dst + u, tam - u, "}},");
   }
-  printf("[video] httpHeader no load: %s\n", dst); fflush(stdout);
+  // O cookie do stream e credencial de terceiro (CloudFront assinado): o log
+  // vai para o D1, entao mostra so quais campos foram, nunca o valor.
+  printf("[video] httpHeader no load: referer=%s userAgent=%s cookies=%s\n",
+         ref[0] ? "sim" : "nao", ua[0] ? "sim" : "nao",
+         ck[0] ? "sim (omitido)" : "nao");
+  fflush(stdout);
 }
 
 static int tocarInterno(const char *url, int comDV) {
@@ -1778,7 +1836,46 @@ static int tocarInterno(const char *url, int comDV) {
       falhou = 1;
       return 0;
     } }
-  printf("[video] URL: %s\n", url); fflush(stdout);
+  // A URL INTEIRA NAO VAI AO LOG (#158). Ate a 1.5.3 esta linha imprimia a
+  // URL crua, e a do Xtream leva usuario e senha no caminho
+  // (<servidor>/live/U/P/<id>.m3u8): os registros 4958 e 6311 chegaram ao D1
+  // com a credencial do provedor da pessoa dentro. O host e a extensao bastam
+  // para a triagem ("qual servidor", "HLS ou TS").
+  { char pub[160], ext[12] = "";
+    const char *q = strchr(url, '?'), *b, *d;
+    size_t n = q ? (size_t)(q - url) : strlen(url);
+    for (b = url + n; b > url && b[-1] != '/'; b--) {}
+    for (d = url + n; d > b && d[-1] != '.'; d--) {}
+    if (d > b && (size_t)(url + n - d) < sizeof ext - 1) {
+      size_t k = (size_t)(url + n - d), i;
+      int ok = 1;
+      for (i = 0; i < k; i++) if (!isalnum((unsigned char)d[i])) ok = 0;
+      if (ok && k) { ext[0] = '.'; memcpy(ext + 1, d, k); ext[k + 1] = 0; }
+    }
+    printf("[video] URL: %s%s%s\n", rede_url_publica(url, pub, sizeof pub),
+           ext[0] ? " " : "", ext);
+    fflush(stdout); }
+  // JANELA EXPORTADA ANTES DO LOAD (#158) — DEFENSIVO, NAO PROVADO.
+  //
+  // O que o registro mostra (6311/6314, LG C4 em webOS 11.2, e 6362/6372,
+  // outra TV com PowerVR, outro provedor): o load volta errorCode 0, o
+  // resourceInfo reserva VDEC e ADEC, o bufferRange sobe (9 s numa, 36 s na
+  // outra) — e NUNCA chega videoInfo, sourceInfo nem loadCompleted, em
+  // NENHUMA fonte (Xtream, flixnest, sslip), ate o "Playing error" (100). Nas
+  // outras TVs com o mesmo caminho (c7ca4398, 7005) o videoInfo chega em ~3 s.
+  // Os dados chegam; o decoder nao se anuncia.
+  //
+  // O que muda aqui: ate agora o SetExportedWindow so era chamado DEPOIS do
+  // load (video_janela desiste sem mediaId, e o preview ja tinha gravado o
+  // retangulo antes — o "sem repetir" engolia a chamada seguinte). Na
+  // primeira reproducao de uma sessao a janela exportada ia ao pipeline sem
+  // nunca ter recebido quadro nem destino. A ordem do guia de midia do
+  // webosbrew e: cria a janela, SetExportedWindow, e so entao o load com o
+  // windowId. Se isto e o que o webOS 11 passou a exigir, nao sei: e a unica
+  // diferenca de protocolo que este lado controla, e custa uma chamada que o
+  // fluxo ja fazia (depois). A prova e o proximo registro dessa TV mostrar
+  // videoInfo.
+  if (expWin[0]) expJanelaAplicar();
   msDoLoad = agoraMs();
   chamarCtx("load", carga, aoCarregar, (void *)(uintptr_t)minhaSessao);
   return 1;
@@ -1800,6 +1897,7 @@ void video_parar(void) {
     chamar("unload", b, soLog);
   }
   midia[0] = 0; tocando = pronto = 0; falhou = 0; audioNaoSup = 0;
+  erroTexto[0] = 0;
 }
 
 void video_pausar(int pausado) {
@@ -1880,11 +1978,24 @@ static void expJanelaAplicar(void) {
   SDL_Rect src, dst;
   if (!expWin[0] || !sdlExpJanela || janW < 1 || janH < 1) return;
   src.x = 0; src.y = 0; src.w = vidW > 0 ? vidW : 1920; src.h = vidH > 0 ? vidH : 1080;
-  dst.x = janX; dst.y = janY; dst.w = janW; dst.h = janH;
+  dst = escDst(janX, janY, janW, janH);
   expSrcW = src.w; expSrcH = src.h;
   printf("[video] janela exportada (quadro %dx%d) -> %d\n", src.w, src.h,
          sdlExpJanela(expWin, &src, &dst));
   fflush(stdout);
+}
+
+// Chamada UMA vez pelo main, com o drawable que o SDL entregou. Fica em 1920x1080
+// (escala 1, o caminho da C9) se vier algo invalido.
+void video_escala_definir(int sw, int sh) {
+  if (sw < 1 || sh < 1) return;
+  escW = sw; escH = sh;
+  printf("[video] escala da janela %.3fx%.3f (superficie %dx%d, layout 1920x1080)%s\n",
+         (double)sw / 1920.0, (double)sh / 1080.0, sw, sh,
+         (sw == 1920 && sh == 1080) ? "" : " — HIPOTESE: destino lido no espaco da superficie (#176)");
+  fflush(stdout);
+  // Um retangulo ja guardado em pixels antigos nao existe: o cache de dedup e
+  // por unidades de layout, que nao mudaram, entao nada a invalidar.
 }
 
 void video_janela(int x, int y, int w, int h) {
@@ -1911,7 +2022,8 @@ void video_janela(int x, int y, int w, int h) {
     expJanelaAplicar();
     return;
   }
-  acbJanela(acb, x, y, w, h, cheia, &tarefa);
+  { SDL_Rect d = escDst(x, y, w, h);
+    acbJanela(acb, d.x, d.y, d.w, d.h, cheia, &tarefa); }
 }
 
 // A resposta do uMS ao setDisplayWindow, LOGADA — e AGIDA.
@@ -1938,7 +2050,7 @@ static int aoJanela(LSHandle *h, LSMessage *m, void *u) {
     printf("[video] uMS recusou o recorte de fonte; voltando a tela cheia pelo ACB\n");
     fflush(stdout);
     janX = janY = 0; janW = 1920; janH = 1080;
-    if (acb) acbJanela(acb, 0, 0, 1920, 1080, 1, &tarefa);
+    if (acb) acbJanela(acb, 0, 0, escW, escH, 1, &tarefa);
   }
   return 1;
 }
@@ -1955,10 +2067,12 @@ static int aoJanela(LSHandle *h, LSMessage *m, void *u) {
 // Mantem o acbJanela para o caso de tela cheia sem recorte, que ja funcionava.
 void video_recorte_reaplicar(void) {
   long tarefa = 0;
+  SDL_Rect d;
   if (fonX < 0 || !ligado || !midia[0] || !acb || !acbJanelaCustom) return;
+  d = escDst(dstX, dstY, dstW, dstH);
   printf("[video] recorte repetido: fonte %d,%d %dx%d -> destino %d,%d %dx%d -> %d\n",
          fonX, fonY, fonW, fonH, dstX, dstY, dstW, dstH,
-         acbJanelaCustom(acb, fonX, fonY, fonW, fonH, dstX, dstY, dstW, dstH,
+         acbJanelaCustom(acb, fonX, fonY, fonW, fonH, d.x, d.y, d.w, d.h,
                          (dstX == 0 && dstY == 0 && dstW == 1920 && dstH == 1080), &tarefa));
   fflush(stdout);
 }
@@ -2002,7 +2116,7 @@ void video_janela_fonte(int sx, int sy, int sw, int sh,
     SDL_Rect org, src, dst;
     org.x = 0;  org.y = 0;  org.w = vidW > 0 ? vidW : 1920; org.h = vidH > 0 ? vidH : 1080;
     src.x = sx; src.y = sy; src.w = sw; src.h = sh;
-    dst.x = dx; dst.y = dy; dst.w = dw; dst.h = dh;
+    dst = escDst(dx, dy, dw, dh);
     if (sdlExpRecorte && sdlExpRecorte(expWin, &org, &src, &dst)) return;
     // Recusou (ou nem existe): cair para tela cheia sem recorte pela mesma
     // regra do ACB — perde-se o zoom, nao a imagem.
@@ -2014,7 +2128,8 @@ void video_janela_fonte(int sx, int sy, int sw, int sh,
   // O caminho e o ACB, nao o luna direto: o hub recusa o app no tv.display.
   if (acbJanelaCustom && acb) {
     long tarefa = 0;
-    int r = acbJanelaCustom(acb, sx, sy, sw, sh, dx, dy, dw, dh, cheia, &tarefa);
+    SDL_Rect d = escDst(dx, dy, dw, dh);
+    int r = acbJanelaCustom(acb, sx, sy, sw, sh, d.x, d.y, d.w, d.h, cheia, &tarefa);
     printf("[video] acb janela custom -> %d\n", r); fflush(stdout);
     if (r) return;
     printf("[video] acb recusou o recorte; voltando a tela cheia\n"); fflush(stdout);
@@ -2039,6 +2154,8 @@ int    video_ativo(void)    { return midia[0] != 0; }
 // sem a flag, um pipeline que carrega e morre em seguida nunca dispara a
 // proxima da lista.
 int    video_falhou(void)   { return falhou; }
+const char *video_erro_texto(void) { return erroTexto; }
+int    video_decoder_anunciou(void) { return viuVideo; }
 int    video_audio_nao_suportado(void) { return audioNaoSup; }
 int    video_terminou(void) { return terminou; }
 unsigned video_bufferando_ms(void) {

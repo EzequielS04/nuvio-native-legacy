@@ -40,6 +40,8 @@
 // `pendPronto` e o fio de desenho copia para os vetores publicados. Leitores
 // nunca tocam no staging — mesma disciplina do epg.c.
 #include "guia.h"
+#include "badges.h"   /* marcas de resolucao no heroi */
+#include "aovivo.h"
 #include "fontecache.h"
 #include "ajustes.h"   /* ajustes_acento: cor do anel de foco */
 #include "epg.h"
@@ -49,6 +51,7 @@
 #include "descoberta.h"  /* desc_repetir: addon novo so entra com ciclo novo */
 #include "stalker.h"
 #include "xtream.h"
+#include "xtepg.h"     /* grade curta por canal do Xtream (#158) */
 #include "dados.h"
 #include "perfis.h"   /* perfis_ativo: o cache do guia e por perfil */
 #include "marco.h"
@@ -665,6 +668,15 @@ static int sFalhas, falhas;
 // canais" e a tela "619 canais". XT_OK / XT_SEM_RESPOSTA / XT_RECUSOU de
 // xtream.h; `s` e do fio, o outro e a copia publicada, como `falhas`.
 static int sXtFalha, xtFalha;
+// O codigo HTTP da lista quando xtFalha == XT_HTTP (#158): 403, 429, 458...
+static int sXtHttp, xtHttp;
+
+// Texto do cabecalho com o aviso da conta Xtream; 0 quando nao ha aviso.
+// Usa nCanais/nCats, entao so vale depois deles declarados — por isso o
+// prototipo aqui e a definicao perto do desenho.
+static int xtAviso(char *sub, size_t tam);
+// Ver a definicao, junto do EPG por canal (#158).
+static void epgPaisesEscolher(void);
 
 static void sondaManifestos(void) {
   int a;
@@ -833,7 +845,7 @@ static void *fioGuia(void *u) {
   if (xtream_configurado()) {
     XtreamCanal *xt = malloc(sizeof *xt * G_MAX_CANAL);
     int n = xt ? xtream_canais(xt, G_MAX_CANAL) : 0, i;
-    if (xt) sXtFalha = xtream_ultima_falha();
+    if (xt) { sXtFalha = xtream_ultima_falha(); sXtHttp = xtream_ultimo_http(); }
     for (i = 0; i < n && sNCanais < G_MAX_CANAL; i++) {
       GCanal c;
       if (sCanalPorId(xt[i].id) >= 0) continue;
@@ -1041,7 +1053,7 @@ static void publicar(void) {
   // REDE VAZIA NAO APAGA A LISTA QUE HA: sem resposta nenhuma (todos os addons
   // fora), a lista de ontem continua valendo mais que uma tela vazia.
   if (sNCanais == 0 && nCanais > 0) {
-    falhas = sFalhas; xtFalha = sXtFalha;
+    falhas = sFalhas; xtFalha = sXtFalha; xtHttp = sXtHttp;
     memcpy(sabe, sSabe, sizeof sSabe); nSabe = sNSabe;
     printf("[guia] rede sem canal nenhum: fica a lista que estava\n");
     fflush(stdout);
@@ -1051,7 +1063,7 @@ static void publicar(void) {
     if (nCanais > 0 && nova == assinaturaPublicada) {
       memcpy(sabe, sSabe, sizeof sSabe); nSabe = sNSabe;
       memcpy(fontes, sFontes, sizeof sFontes); nFontes = sNFontes;
-      falhas = sFalhas; xtFalha = sXtFalha;
+      falhas = sFalhas; xtFalha = sXtFalha; xtHttp = sXtHttp;
       printf("[guia] lista da rede igual a da tela: nao republicada\n");
       fflush(stdout);
       marco("guia: rede igual ao cache");
@@ -1066,7 +1078,7 @@ static void publicar(void) {
   // contagem das fileiras apenas.
   memcpy(fontes, sFontes, sizeof sFontes);
   nFontes = sNFontes;
-  falhas = sFalhas; xtFalha = sXtFalha;
+  falhas = sFalhas; xtFalha = sXtFalha; xtHttp = sXtHttp;
   memcpy(sabe, sSabe, sizeof sSabe);
   nSabe = sNSabe;
   (void)w;
@@ -1084,6 +1096,13 @@ static void publicar(void) {
   fflush(stdout);
   marco("guia: lista da rede publicada");
   if (nCanais > 0) cacheGravar();
+  // A lista nova pode trazer a dica de pais que faltava (#158).
+  epgPaisesEscolher();
+  // Da grade do provedor so interessam os canais desta lista (#158).
+  { static const char *ids[G_MAX_CANAL];
+    int k = 0;
+    for (i = 0; i < nCanais; i++) if (canais[i].epgId[0]) ids[k++] = canais[i].epgId;
+    epg_fonte_extra_ids(ids, k); }
 }
 
 static void iniciarCarga(void) {
@@ -1116,6 +1135,9 @@ void guia_carregar(void) {
   { char u[1100];
     if (!xtream_url_xmltv(u, sizeof u)) u[0] = 0;
     epg_fonte_extra(u); }
+  // Os paises da grade tambem ANTES da primeira carga (#158): com a lista do
+  // cache ja na tela, a dica do Xtream existe desde o primeiro quadro.
+  epgPaisesEscolher();
   epg_iniciar();
 }
 
@@ -1372,6 +1394,7 @@ const char *guia_canal_origem(void) { return pedidoBase; }
 static time_t janelaIni(time_t agoraT);
 static time_t instanteFoco(time_t agoraT);
 static int epgDo(GCanal *c);
+static int gAgora(GCanal *c, time_t t, EpgProg *p);   // ver a definicao (#158)
 static void pedirCanal(GCanal *c);
 
 // O instante que o foco aponta, na grade cheia ou na faixa do mini guia.
@@ -1383,10 +1406,8 @@ static time_t tFocoAgora(void) {
 
 // O programa da celula em foco (o que cobre tFocoAgora), 1 se ha.
 static int programaFocado(GCanal *c, EpgProg *p) {
-  int epg;
   if (!c) return 0;
-  epg = epgDo(c);
-  return epg >= 0 && epg_agora(epg, tFocoAgora(), p);
+  return gAgora(c, tFocoAgora(), p);
 }
 
 // OK NUMA CELULA DO FUTURO MARCA (OU DESMARCA) O LEMBRETE — programa que nao
@@ -1450,14 +1471,56 @@ static void pedirCanal(GCanal *c) {
 // que o addon os declara), entao o CH+/− percorre exatamente o que se ve na
 // tela. Da volta nas pontas: de "premiere" para "globo" direto e o jeito
 // antigo de zapear, nao um erro de foco.
-int guia_zap(const char *idAtual, int dir, CatItem *saida) {
+static int zapAlvo(const char *idAtual, int dir, CatItem *saida, int aplicar) {
   int i, alvo = 0;
   if (!saida || estado != G_PRONTO || nCanais < 1) return 0;
   for (i = 0; i < nCanais; i++)
     if (!strcmp(canais[i].id, idAtual ? idAtual : "")) { alvo = i; break; }
-  alvo = (alvo + dir + nCanais) % nCanais;
+  // `dir` pode ser um deslocamento maior que 1 (o zapping com debounce soma os
+  // toques) e 0 devolve o proprio canal (recarregar a fonte).
+  alvo = aovivo_ordem(nCanais, alvo, dir);
   canalParaItem(&canais[alvo], saida);
+  // A origem so muda quando o zap VAI tocar; o banner do zapping so espia.
+  if (aplicar) snprintf(pedidoBase, sizeof pedidoBase, "%s", canais[alvo].base);
   return 1;
+}
+int guia_zap(const char *idAtual, int dir, CatItem *saida) {
+  return zapAlvo(idAtual, dir, saida, 1);
+}
+int guia_zap_ver(const char *idAtual, int dir, CatItem *saida) {
+  return zapAlvo(idAtual, dir, saida, 0);
+}
+
+// Onde o canal esta na ordem do guia e de que categoria e: o numero que o OSD
+// do player mostra. 0 com a lista ainda nao carregada ou canal fora dela.
+int guia_info_canal(const char *id, int *numero, int *total, char *cat, size_t n) {
+  int i;
+  if (estado != G_PRONTO || nCanais < 1 || !id || !id[0]) return 0;
+  for (i = 0; i < nCanais; i++) if (!strcmp(canais[i].id, id)) break;
+  if (i >= nCanais) return 0;
+  if (numero) *numero = i + 1;
+  if (total) *total = nCanais;
+  if (cat && n) snprintf(cat, n, "%s", canais[i].cat >= 0 ? cats[canais[i].cat] : "");
+  return 1;
+}
+
+int guia_e_favorito(const char *id) {
+  if (!favLido) favLer();
+  return id && id[0] && favIndice(id) >= 0;
+}
+
+void guia_alternar_favorito(const char *id) {
+  GCanal *c = canalPorId(id);
+  if (!favLido) favLer();
+  if (c) favAlternar(c);
+}
+
+// O programa NO AR do canal `id` (a mesma consulta do cartao do guia, com a
+// XMLTV e a grade curta do Xtream). O ponteiro de titulo vale ate o proximo
+// epg_passo/xtepg_passo: quem guarda copia.
+int guia_programa_agora(const char *id, time_t t, EpgProg *p) {
+  GCanal *c = canalPorId(id);
+  return c && p && gAgora(c, t, p);
 }
 
 static void moverVertical(int dir) {
@@ -1846,6 +1909,110 @@ void guia_evento(const SDL_Event *e) {
   }
 }
 
+// Ver o prototipo, junto de xtFalha.
+static int xtAviso(char *sub, size_t tam) {
+  XtreamConta c;
+  long long agora = (long long)time(NULL);
+  int a;
+  if (!xtream_conta(&c)) return 0;
+  a = xtream_conta_aviso(&c, agora);
+  switch (a) {
+    case XA_EXPIRADA:
+      snprintf(sub, tam, i18n("%d canais · %d categorias · assinatura Xtream vencida"), nCanais, nCats);
+      return 1;
+    case XA_DESATIVADA: case XA_RECUSOU:
+      snprintf(sub, tam, i18n("%d canais · %d categorias · conta Xtream desativada"), nCanais, nCats);
+      return 1;
+    case XA_TELAS_CHEIAS:
+      snprintf(sub, tam, i18n("%d canais · %d categorias · telas do Xtream em uso (%d de %d)"),
+               nCanais, nCats, c.conexoes, c.maxConexoes);
+      return 1;
+    case XA_VENCE_LOGO:
+      snprintf(sub, tam, i18n("%d canais · %d categorias · o Xtream vence em %d dia(s)"),
+               nCanais, nCats, (int)((c.expira - agora) / 86400) + 1);
+      return 1;
+    default: return 0;
+  }
+}
+
+// --- de que pais vem a grade (#158) ---------------------------------------
+// A ESCOLHA MANUAL (Ajustes > Conteudo > Guia TV) manda. No automatico, nesta
+// ordem, ate tres paises:
+//   1. o prefixo de pais dos canais e das categorias do Xtream ("RO: Pro TV",
+//      "RO | SPORT", "|RO| Antena 1") ou o nome do pais na categoria
+//      ("ROMANIA"), quando cobre pelo menos 5% dos canais do Xtream (e 10
+//      canais). E a dica mais especifica que existe: diz de onde vem a lista
+//      que a pessoa assina, e nao de onde e a pessoa.
+//   2. a regiao do idioma dos metadados ("ro-RO" -> RO, "pt-BR" -> BR);
+//   3. o idioma do app (portugues = as cinco de sempre, romeno = RO).
+// Nada disso = as cinco de sempre (epg_paises_definir("")), que e o que quem
+// nunca mexeu ja via.
+typedef struct { const char *palavra, *pais; } GPaisPalavra;
+static const GPaisPalavra PAIS_PALAVRA[] = {
+  { "romania", "RO" }, { "rom\xc3\xa2nia", "RO" }, { "romana", "RO" }, { "romanian", "RO" },
+  { "portugal", "PT" }, { "brasil", "BR" }, { "brazil", "BR" }, { "espana", "ES" },
+  { "espa\xc3\xb1""a", "ES" }, { "spain", "ES" }, { "italia", "IT" }, { "italy", "IT" },
+  { "france", "FR" }, { "deutschland", "DE" }, { "germany", "DE" }, { "turkey", "TR" },
+  { "turkiye", "TR" }, { "greece", "GR" }, { "bulgaria", "BG" }, { "hungary", "HU" },
+  { "magyar", "HU" }, { "serbia", "RS" }, { "croatia", "HR" }, { "hrvatska", "HR" },
+  { "netherlands", "NL" }, { "nederland", "NL" }, { "albania", "AL" }, { "mexico", "MX" },
+  { "argentina", "AR" }, { "united kingdom", "UK" },
+};
+
+static const char *paisDoTexto(const char *t, char buf[4]) {
+  char low[96];
+  size_t i;
+  int k;
+  epg_sem_prefixo(t, buf);
+  if (buf[0] && epg_pais_existe(buf)) return buf;
+  for (i = 0; t[i] && i < sizeof low - 1; i++)
+    low[i] = (char)((t[i] >= 'A' && t[i] <= 'Z') ? t[i] + 32 : t[i]);
+  low[i] = 0;
+  for (k = 0; k < (int)(sizeof PAIS_PALAVRA / sizeof PAIS_PALAVRA[0]); k++)
+    if (strstr(low, PAIS_PALAVRA[k].palavra)) return PAIS_PALAVRA[k].pais;
+  return NULL;
+}
+
+static void epgPaisesEscolher(void) {
+  char lista[24] = "";
+  const char *manual = ajustes_epg_pais();
+  int n = 0;
+  #define ADD(c) do { if ((c) && (c)[0] && n < 3 && !strstr(lista, (c)) && epg_pais_existe(c)) { \
+      if (lista[0]) strcat(lista, ","); strncat(lista, (c), 2); n++; } } while (0)
+  if (manual[0]) { epg_paises_definir(manual); return; }
+  { // 1. dicas da lista do Xtream
+    char cod[8][3]; int cont[8], nc = 0, nXt = 0, i, j;
+    for (i = 0; i < nCanais; i++) {
+      char b[4]; const char *p;
+      if (!xtream_e_id(canais[i].id)) continue;
+      nXt++;
+      p = paisDoTexto(canais[i].nome, b);
+      if (!p && canais[i].cat >= 0 && canais[i].cat < nCats) p = paisDoTexto(cats[canais[i].cat], b);
+      if (!p) continue;
+      for (j = 0; j < nc && strcmp(cod[j], p); j++) {}
+      if (j == nc) { if (nc == 8) continue; snprintf(cod[nc], 3, "%s", p); cont[nc++] = 0; }
+      cont[j]++;
+    }
+    for (;;) {                                   // maior contagem primeiro
+      int m = -1;
+      for (j = 0; j < nc; j++) if (cont[j] > 0 && (m < 0 || cont[j] > cont[m])) m = j;
+      if (m < 0) break;
+      if (cont[m] >= 10 && cont[m] * 20 >= nXt) ADD(cod[m]);
+      cont[m] = 0;
+    } }
+  { // 2. regiao do idioma dos metadados
+    const char *t = ajustes_tmdb_idioma();
+    if (t && strlen(t) == 5 && t[2] == '-') { char r[3] = { t[3], t[4], 0 }; if (!strcmp(r, "GB")) snprintf(r, 3, "UK"); ADD(r); } }
+  // 3. idioma do app
+  if (ajustes_idioma() == IDIOMA_RO) ADD("RO");
+  #undef ADD
+  // Portugues (e o pt-BR que o "da interface" devolve) cai nas cinco de sempre
+  // sem precisar dizer: BR sozinho seria menos do que quem ja usa tinha.
+  if (!strcmp(lista, "BR") || !strcmp(lista, "PT") || !strcmp(lista, "BR,PT") || !strcmp(lista, "PT,BR"))
+    lista[0] = 0;
+  epg_paises_definir(lista);
+}
+
 // --- EPG por canal ---------------------------------------------------------------
 // Resolve e cacheia o indice da grade. -2 marca "sem grade real" para nao
 // consultar de novo a cada quadro.
@@ -1859,12 +2026,50 @@ static int epgDo(GCanal *c) {
   return c->epg;
 }
 
+// A GRADE DE UM CANAL, venha de onde vier (#158): primeiro a XMLTV (epg.c:
+// provedor, epgshare01 do pais), e, para canal Xtream que nao casou nela, a
+// grade curta do proprio painel (xtepg.c). Pedir e barato e so acontece para
+// o canal que esta sendo desenhado. Sem grade ainda (-1, EPG carregando) o
+// pedido tambem sai: a XMLTV pode demorar um minuto, a curta vem em um
+// segundo, e quando a XMLTV casar ela passa na frente.
+static int xtCurta(GCanal *c) {
+  if (!xtream_e_id(c->id)) return 0;
+  xtepg_querer(c->id);
+  return 1;
+}
+static int gAgora(GCanal *c, time_t t, EpgProg *p) {
+  int epg = epgDo(c);
+  if (epg >= 0) return epg_agora(epg, t, p);
+  return xtCurta(c) && xtepg_agora(c->id, t, p);
+}
+static int gProximo(GCanal *c, time_t t, int k, EpgProg *p) {
+  int epg = epgDo(c);
+  if (epg >= 0) return epg_proximo(epg, t, k, p);
+  return xtCurta(c) && xtepg_proximo(c->id, t, k, p);
+}
+static int gTemGrade(GCanal *c) {
+  return epgDo(c) >= 0 || (xtream_e_id(c->id) && xtepg_tem(c->id));
+}
+static int gFaixa(GCanal *c, time_t de, time_t ate, EpgProg *out, int cap) {
+  int epg = epgDo(c);
+  if (epg >= 0) return epg_faixa(epg, de, ate, out, cap);
+  return xtCurta(c) ? xtepg_faixa(c->id, de, ate, out, cap) : 0;
+}
+
 // Quando a grade EPG e (re)publicada, os indices guardados morrem — a troca
 // inteira do vetor torna todo -1 de novo.
 static int epgRev, epgEraPronto;
 static void epgPasso(void) {
   int pronto = epg_estado() == EPG_PRONTO;
+  // Trocou o pais em Ajustes com o guia aberto: refaz a escolha (o epg_passo
+  // abaixo ve a troca e recarrega).
+  { static char ultimo[4] = "?";
+    if (strcmp(ultimo, ajustes_epg_pais())) {
+      snprintf(ultimo, sizeof ultimo, "%s", ajustes_epg_pais());
+      epgPaisesEscolher();
+    } }
   epg_passo();
+  xtepg_passo();
   if (pronto && !epgEraPronto) {
     epgRev++;
     for (int i = 0; i < nCanais; i++) canais[i].epg = -1;
@@ -2117,11 +2322,13 @@ static void iniciaisDe(const char *nome, char *dst, size_t tam) {
 // SEM TEXTURA (baixando, ou o servidor de logo falhou: o log da C9 mostra
 // "corpo curto" do 24horas.cc e do imgur, e "sem corpo" do watchplay) o lugar
 // e um azulejo ESCURO discreto com as iniciais do canal. Nunca um bloco claro.
-static void logoNaCaixa(const GCanal *c, GfxRect cx, float maxW, float maxH,
-                        float tom, float a) {
+// PUBLICO (guia.h) desde 29/09/2026: o OSD do player ao vivo, o banner do
+// zapping e o cartao de erro desenham a marca do canal por AQUI, para o canal
+// ter a mesma cara no guia e no player (sem azulejo, branco quando recortado).
+void guia_logo_desenhar(const char *logo, const char *nome, GfxRect cx,
+                        float maxW, float maxH, float tom, float a) {
   GLuint t = 0;
   float ap = 0.0f, w, h, fr, fg, fb;
-  const char *logo = c ? c->logo : NULL;
   if (logo && logo[0]) {
     t = tex_obter_larg(logo, cx.w);
     ap = tex_aspecto(logo);
@@ -2132,7 +2339,7 @@ static void logoNaCaixa(const GCanal *c, GfxRect cx, float maxW, float maxH,
     GfxRect az = { cx.x + (cx.w - lado) * 0.5f, cx.y + (cx.h - lado) * 0.5f, lado, lado };
     int claro = tom < 0.5f;   // superficie clara (cartao em foco): azulejo claro
     TxtLinha l;
-    iniciaisDe(c ? c->nome : "", ini, sizeof ini);
+    iniciaisDe(nome ? nome : "", ini, sizeof ini);
     if (claro) gfx_cor(az, 0.22f, 0.0f, 0.0f, 0.0f, 0.10f * a);
     else       gfx_cor(az, 0.22f, 1.0f, 1.0f, 1.0f, 0.075f * a);
     if (ini[0]) {
@@ -2159,6 +2366,10 @@ static void logoNaCaixa(const GCanal *c, GfxRect cx, float maxW, float maxH,
       gfx_rect(lr, t, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, a);
   }
 }
+static void logoNaCaixa(const GCanal *c, GfxRect cx, float maxW, float maxH,
+                        float tom, float a) {
+  guia_logo_desenhar(c ? c->logo : NULL, c ? c->nome : "", cx, maxW, maxH, tom, a);
+}
 
 static void desenharLogo(const GCanal *c, GfxRect cx, float lado, float tom,
                          float a) {
@@ -2170,9 +2381,9 @@ static void desenharCard(GCanal *c, float x, float y, float foco, float a,
   GfxRect r = { x, y, G_CARD_W, G_CARD_H };
   float lum = anim_mistura(0.075f, 0.16f, foco);
   EpgProg ag, px;
-  int epg = epgDo(c);
-  int temAgora = epg >= 0 && epg_agora(epg, agoraT, &ag);
-  int temProx  = epg >= 0 && epg_proximo(epg, agoraT, 0, &px);
+  int temAgora = gAgora(c, agoraT, &ag);
+  int temProx  = gProximo(c, agoraT, 0, &px);
+  int epg = gTemGrade(c) ? 0 : -1;
 
   // FOCO = O CARTAO PREENCHIDO NA COR DO FUNDO DO LOGO, sem anel. Pedido do
   // dono (16/09), olhando a captura do guia: "quando ta selecionado ficar com
@@ -2270,7 +2481,9 @@ static void desenharCard(GCanal *c, float x, float y, float foco, float a,
 // --- heroi "agora" ---------------------------------------------------------------
 // Selo AO VIVO: pilula vermelha, texto branco. Devolve a largura, para a linha
 // de meta continuar ao lado dele.
-static float seloAoVivo(float x, float y, float a) {
+// PUBLICO (guia.h) desde 29/09/2026, pelo mesmo motivo de guia_logo_desenhar:
+// o selo do OSD ao vivo e ESTE selo, e nao um parecido.
+float guia_selo_ao_vivo(float x, float y, float a) {
   TxtLinha t = txt_linha(TXT_PG_ROTULO, i18n("AO VIVO"), 255, 255, 255, 255);
   GfxRect r = { x, y, (float)t.w + 26.0f, 32.0f };
   gfx_cor(r, 0.5f, 0.84f, 0.15f, 0.19f, a);
@@ -2280,7 +2493,7 @@ static float seloAoVivo(float x, float y, float a) {
 
 // Etiqueta discreta (categoria): vidro translucido, texto secundario. A
 // categoria era texto AZUL solto embaixo do nome, e competia com o titulo.
-static float etiqueta(const char *s, float x, float y, float maxW, float a) {
+float guia_etiqueta(const char *s, float x, float y, float maxW, float a) {
   TxtLinha t;
   GfxRect r;
   if (!s || !s[0]) return 0.0f;
@@ -2382,8 +2595,8 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
   EpgProg p;
   if (!c) return;
   ajustes_acento(&ar, &ag, &ab);
-  epg = epgDo(c);
-  tem = epg >= 0 && epg_agora(epg, tFoco, &p);
+  tem = gAgora(c, tFoco, &p);
+  epg = gTemGrade(c) ? 0 : -1;
   noAr = tem && p.ini <= agoraT && agoraT < p.fim;
 
   // PREVIEW. O plano de video vive ATRAS da superficie GL; o furo e o que o
@@ -2409,7 +2622,7 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
     // Fio de 1,5 px: o video le como parte da interface, e nao como buraco.
     gfx_rect(pv, 0, GFX_ANEL, 0, 1.5f / pv.h, 0, raio, 1, 1, 1, 0.16f * a);
     // Selo sobre o video: GL opaco por cima do furo aparece por cima do plano.
-    { float sw = seloAoVivo(pv.x + 20.0f, pv.y + pv.h - 52.0f, a);
+    { float sw = guia_selo_ao_vivo(pv.x + 20.0f, pv.y + pv.h - 52.0f, a);
       if (pc != c) {
         TxtLinha t = txt_linha_corta(TXT_PG_ROTULO, pc->nome, 245, 246, 250, 255, pv.w - sw - 80.0f);
         GfxRect r = { pv.x + 20.0f + sw + 8.0f, pv.y + pv.h - 52.0f, (float)t.w + 24.0f, 32.0f };
@@ -2457,7 +2670,7 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
       txt_desenhar_alpha(n, tx, ey + (34.0f - (float)n.h) * 0.5f, ha);
       tx += (float)n.w + 16.0f;
     }
-    tx += etiqueta(cat, tx, ey, 320.0f, ha);
+    tx += guia_etiqueta(cat, tx, ey, 320.0f, ha);
     if (c->fav) {
       TxtLinha s = txt_linha(TXT_DET_META2, "\xe2\x98\x85", 255, 214, 90, 255);
       txt_desenhar_alpha(s, tx + 12.0f, ey + (34.0f - (float)s.h) * 0.5f, ha);
@@ -2492,7 +2705,7 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
     } else if (epg == -2) {
       snprintf(meta, sizeof meta, "%s", i18n("Sem grade de programação"));
     }
-    if (noAr || !tem) mx += seloAoVivo(x, y, ha) + 16.0f;
+    if (noAr || !tem) mx += guia_selo_ao_vivo(x, y, ha) + 16.0f;
     if (meta[0]) {
       TxtLinha t = txt_linha_corta(TXT_DET_META, meta, 196, 198, 206, 255, x + w - mx);
       txt_desenhar_alpha(t, mx, y + (32.0f - (float)t.h) * 0.5f, ha);
@@ -2537,13 +2750,16 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
     if (molde && (d.nq > 0 || d.fontes > 0)) {
       float bx = x;
       int k;
+      // QUALIDADES COMO MARCA (dono, 29/09/2026): eram caixas de texto com
+      // contorno ("4K", "FHD", "HD", "SD"); agora sao as marcas de resolucao
+      // do app (badges.h), as mesmas do OSD ao vivo e da folha de fontes.
+      // Nome que nao e resolucao conhecida vai no selo neutro da tabela unica.
       for (k = 0; k < d.nq; k++) {
-        TxtLinha t = txt_linha(TXT_PG_ROTULO, d.q[k], 222, 224, 230, 255);
-        GfxRect r = { bx, y, (float)t.w + 20.0f, 30.0f };
-        gfx_cor(r, 0.2f, 1, 1, 1, 0.06f * ha);
-        gfx_rect(r, 0, GFX_ANEL, 0, 1.5f / r.h, 0, 0.2f, 1, 1, 1, 0.32f * ha);
-        txt_desenhar_alpha(t, r.x + 10.0f, r.y + (r.h - (float)t.h) * 0.5f, ha);
-        bx += r.w + 8.0f;
+        int fm = marca_resolucao(d.q[k]);
+        if (fm >= 0)
+          bx += marca_formato((FormatoMarca)fm, bx, y + 2.0f, 26.0f, 0.86f, 0.87f, 0.90f, ha) + 18.0f;
+        else
+          bx += badge_desenhar(bx, y + 1.0f, d.q[k], BADGE_NEUTRO, ha) + BADGE_GAP;
       }
       if (d.fontes > 0) {
         char f[48];
@@ -2565,7 +2781,7 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
 
   // A SEGUIR, ancorado na base do heroi (alinhado a base do preview).
   { EpgProg q;
-    if (epg >= 0 && epg_proximo(epg, tFoco, 0, &q)) {
+    if (gProximo(c, tFoco, 0, &q)) {
       char hh[8];
       TxtLinha l = txt_linha(TXT_PG_ROTULO, i18n("A SEGUIR"), 140, 143, 152, 255);
       TxtLinha hr, tt;
@@ -2927,7 +3143,8 @@ static void desenharLinhaLista(GCanal *c, float y, int focada, float a,
   time_t fimJ = ini + (time_t)G_L_JANELA_MIN * 60;
   float ppm = G_L_FAIXA_W / (float)G_L_JANELA_MIN;
   GfxRect col = { G_AREA_X, y, G_L_COL, h };
-  int epg = epgDo(c);
+  // Grade da XMLTV ou, no Xtream, a curta (#158): ver gFaixa.
+  int epg = (epgDo(c) >= 0 || (xtCurta(c) && xtepg_tem(c->id))) ? 0 : -1;
 
   if (passo == 0) {
     float l = focada ? G_SUP_COL_FOCO : G_SUP_COL;
@@ -2970,7 +3187,7 @@ static void desenharLinhaLista(GCanal *c, float y, int focada, float a,
 
   if (epg >= 0) {
     EpgProg ps[16];
-    int n = epg_faixa(epg, ini, fimJ, ps, 16), k, desenhou = 0;
+    int n = gFaixa(c, ini, fimJ, ps, 16), k, desenhou = 0;
     if (n > 16) n = 16;
     for (k = 0; k < n; k++) {
       time_t i0 = ps[k].ini > ini ? ps[k].ini : ini;
@@ -3182,7 +3399,7 @@ static void desenharPainelAddons(float a) {
       } else if (rc->desc[0]) {
         // Em ingles usa a quarta coluna se existir; senao a portuguesa, que e
         // melhor que linha vazia.
-        const char *desc = (ajustes_idioma_ingles() && rc->descEn[0]) ? rc->descEn : rc->desc;
+        const char *desc = (ajustes_idioma() != IDIOMA_PT && ajustes_idioma() != IDIOMA_PTPT && rc->descEn[0]) ? rc->descEn : rc->desc;
         if (f) txt_bloco(TXT_CAPTION, desc, 60, 62, 70,     x + 24.0f, yi + 46.0f, txtW, 27.0f, a, 2);
         else   txt_bloco(TXT_CAPTION, desc, 150, 153, 162,  x + 24.0f, yi + 46.0f, txtW, 27.0f, a, 2);
       }
@@ -3286,14 +3503,14 @@ static void desenharBanda(float a, Uint32 agora) {
   if (nLinhas() < 1 || !linhaItem(focoLin, focoCol)) return;
   ajustes_acento(&ar, &ag, &ab);
 
-  // Degrade: oito faixas sem sobreposicao, alfa subindo em curva. Meia tela
-  // de preenchimento uma vez so.
-  { float y = topo - 160.0f, hh = (NV_TELA_H - y) / 8.0f;
-    for (k = 0; k < 8; k++) {
-      float t = (float)(k + 1) / 8.0f;
-      gfx_cor((GfxRect){ 0.0f, y + hh * (float)k, NV_TELA_W, hh + 1.0f }, 0.0f,
-              0.02f, 0.02f, 0.025f, (0.10f + 0.84f * t * t) * a);
-    } }
+  // Uma rampa continua em vez de oito faixas de alfa constante: aquelas
+  // criavam emendas horizontais por definicao. GFX_VEU_BAIXO aplica nv_dither por
+  // fragmento; manter a mesma cor e o teto de alfa (0,94). O plano de video
+  // continua visivel no topo, e a base sustenta o texto da grade.
+  { float y = topo - 160.0f;
+    gfx_rect((GfxRect){ 0.0f, y, NV_TELA_W, NV_TELA_H - y }, 0,
+             GFX_VEU_BAIXO, 0, 0, 0, 0,
+             0.02f, 0.02f, 0.025f, 0.94f * a); }
 
   // Quem entra: sobe ate dois a partir do foco e completa descendo.
   { int l = focoLin, c = focoCol;
@@ -3384,21 +3601,29 @@ void guia_desenhar(Uint32 agora) {
     else if (falhas && !nCanais)
       snprintf(sub, sizeof sub, "%s",
                i18n("Os addons de canais não responderam."));
+    else if (xtFalha == XT_HTTP && !nCanais)
+      snprintf(sub, sizeof sub, i18n("O Xtream respondeu com erro HTTP %d."), xtHttp);
     else if (xtFalha && !nCanais)
       snprintf(sub, sizeof sub, "%s", xtFalha == XT_RECUSOU
                ? i18n("O Xtream recusou o usuário e a senha.")
+               : xtFalha == XT_PAGINA
+               ? i18n("O Xtream devolveu uma página da web em vez da lista.")
                : i18n("A lista do Xtream não respondeu."));
     else if (estado == G_FALHOU || (fontesOk && !nFontes))
       snprintf(sub, sizeof sub, "%s",
                i18n("Nenhum canal: sem addon de canais e sem portal IPTV."));
     // A falha do Xtream toma o lugar da contagem simples, e so ela: os canais
     // dos addons continuam na tela e funcionam, o que falta e o portal.
-    else if (xtFalha == XT_SEM_RESPOSTA)
+    else if (xtFalha == XT_SEM_RESPOSTA || xtFalha == XT_PAGINA || xtFalha == XT_HTTP)
       snprintf(sub, sizeof sub, i18n("%d canais · %d categorias · a lista do Xtream não respondeu"),
                nCanais, nCats);
     else if (xtFalha == XT_RECUSOU)
       snprintf(sub, sizeof sub, i18n("%d canais · %d categorias · o Xtream recusou o usuário e a senha"),
                nCanais, nCats);
+    // A CONTA XTREAM, quando ha o que dizer (#158): vencida, desativada,
+    // telas cheias ou vencendo. E a causa de "nenhum canal toca" que se sabe
+    // ANTES de tentar um canal. Lido do que o fio do guia guardou, sem rede.
+    else if (xtream_configurado() && xtAviso(sub, sizeof sub)) { }
     else
       snprintf(sub, sizeof sub, i18n("%d canais · %d categorias · segure %s para pular seção"),
                nCanais, nCats, "\xe2\x86\x91\xe2\x86\x93");
@@ -3538,7 +3763,15 @@ void guia_desenhar(Uint32 agora) {
     // mesma tela, quem configurou um portal e nao viu canal nenhum leria uma
     // frase que fala de outra coisa — e quem nao tem addon nem sabe que a
     // segunda porta existe.
-    const char *msg = xtFalha == XT_SEM_RESPOSTA
+    char msgHttp[240];
+    const char *msg;
+    snprintf(msgHttp, sizeof msgHttp,
+             i18n("O servidor Xtream respondeu com erro HTTP %d. O guia tenta de novo a cada 10 segundos enquanto esta tela estiver aberta."),
+             xtHttp);
+    msg = xtFalha == XT_HTTP ? msgHttp
+      : xtFalha == XT_PAGINA
+      ? i18n("O servidor Xtream devolveu uma página da web em vez da lista de canais. Tente mais tarde; se continuar, fale com o provedor.")
+      : xtFalha == XT_SEM_RESPOSTA
       ? i18n("A lista de canais do Xtream não respondeu agora. O guia tenta de novo a cada 10 segundos enquanto esta tela estiver aberta.")
       : xtFalha == XT_RECUSOU
       ? i18n("O Xtream recusou o usuário e a senha. Confira o cadastro em Ajustes › Conta.")

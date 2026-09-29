@@ -10,6 +10,7 @@
 #ifndef NV_AJUSTES_H
 #define NV_AJUSTES_H
 #include <SDL2/SDL.h>
+#include "idiomacod.h"
 
 int  ajustes_iniciar(void);
 
@@ -42,6 +43,10 @@ int  ajustes_gpu_efeitos(void);
 void ajustes_abrir_na_cor(void);
 // Atalho do cartão de novidades para a tipografia da interface.
 void ajustes_abrir_na_fonte(void);
+// Atalhos do cartao da 1.6.0: Ajustes › Layout na linha "Layout da home", e
+// Ajustes › Aparência na linha "Interface de vidro". Mesma regra da cor.
+void ajustes_abrir_no_layout(void);
+void ajustes_abrir_no_vidro(void);
 // A linha em foco (indice AJ_*; -1 com o foco num grupo), para os testes
 // conferirem onde a tela abriu.
 int  ajustes_opcao_em_foco(void);
@@ -83,7 +88,24 @@ int ajustes_fonte_primeira(void);
 // para canal ao vivo, que tem o watchdog proprio em app.c.
 int ajustes_fonte_repor(void);
 
+// Idioma da interface: um IDIOMA_* de idiomacod.h (pt, en, ro, uk, ru, fr, de, es). Valor
+// gravado fora do intervalo (arquivo editado a mao) cai em portugues.
+int ajustes_idioma(void);
+// 1 so quando e ingles. Os textos montados com "%d.%d" e o formato de data
+// americano usam isto; romeno, ucraniano, russo, frances, alemao e espanhol usam virgula decimal e data
+// dia-mes-ano, como o portugues, e por isso NAO entram aqui.
 int ajustes_idioma_ingles(void);
+// IDIOMA AUTOMATICO (ver "IDIOMA AUTOMATICO" em ajustes.c). Enquanto a pessoa
+// nunca escolheu um idioma nesta TV, a interface segue a conta (tmdb_language,
+// depois o idioma de legenda), depois a TV, depois o ingles.
+// _iniciar: uma vez, depois de ajustes_dir (le o locale da TV e resolve).
+//   `aoMudar` roda quando o automatico TROCA o idioma depois do arranque (a
+//   conta chegou, a TV respondeu): `codigo` e o "pt"/"ro"..., `fonte` o IDA_*
+//   de idiomaauto.h e `notificar` 0 se foi a propria pessoa que pediu
+//   "Automático". main.c remonta as fileiras e avisa. Pode ser NULL.
+// _tick: por quadro, recolhe o locale da webOS, que chega de um fio.
+void ajustes_idioma_auto_iniciar(void (*aoMudar)(const char *codigo, int fonte, int notificar));
+void ajustes_idioma_auto_tick(void);
 
 // COR DO ANEL DE FOCO, escolhida em "Cor de destaque" ou herdada da conta
 // (selected_theme). Um "tema" neste app e so isto: ver TEMA_ACENTO em
@@ -97,6 +119,21 @@ void ajustes_acento(float *r, float *g, float *b);
 int  ajustes_cor_viva(void);
 // "Cor da logo": 1 = com tema dinamico, o destaque sai do logo do titulo.
 int  ajustes_cor_logo(void);
+// "Interface de vidro" (local, desligada de fabrica): 1 = paineis translucidos
+// com borda fina e foco em contorno branco. Cada tela decide o seu desenho;
+// o miolo comum esta em gfx_vidro_* (gfx.h).
+int  ajustes_vidro(void);
+// So para as capturas de teste e o atalho de quem ja sabe: grava como a tela.
+void ajustes_definir_vidro(int ligado);
+// P2P EXPERIMENTAL (p2p.h). Desligado de fabrica. O endereco (o servidor de
+// streaming do Stremio na rede local) e por aparelho, em p2p.txt.
+int  ajustes_p2p_ligado(void);
+void ajustes_definir_p2p_ligado(int ligado);
+// Endereco ja normalizado ("http://192.168.1.5:11470"); "" quando nao ha.
+const char *ajustes_p2p_url(void);
+// Normaliza e grava; texto vazio esquece. 0 se o texto nao e um endereco (nada
+// muda), 1 se gravou.
+int  ajustes_definir_p2p_url(const char *texto);
 // A MESMA cor mais a TINTA que contrasta com ela: devolve 0.067 (#111) sobre
 // realce claro e 1.0 (branco) sobre realce escuro, luminancia Rec.709 com o
 // degrau em 0,55. E a regra de FOCO de layout.h (preenchimento na cor de
@@ -117,6 +154,11 @@ int   ajustes_rail_moderna(void);       // modernSidebar
 int   ajustes_rail_moderna_blur(void);  // modernSidebarBlur
 int   ajustes_hero_ligado(void);        // heroSectionEnabled
 int   ajustes_hero_cheio(void);         // modernHeroFullScreenBackdropEnabled
+// LAYOUT DA HOME (local): a estrutura da tela inicial. Moderna e o desenho de
+// sempre; Padrao contem o destaque num banner; Dinamica e o estilo Apple TV.
+enum { HOME_LAYOUT_MODERNA = 0, HOME_LAYOUT_PADRAO = 1, HOME_LAYOUT_DINAMICA = 2,
+       HOME_LAYOUT_N = 3 };
+int   ajustes_home_layout(void);
 int   ajustes_hero_fonte(void);         // origem local da arte do hero (ARTEHERO_*)
 // 1 = destaque/detalhe com foto diferente da do card (regra em artehero.h).
 int   ajustes_hero_arte_diferente(void);
@@ -188,6 +230,11 @@ int   ajustes_descobrir_na_busca(void); // searchDiscoverEnabled (derivado)
 // e a maioria ignora — a linha `janela=... drawable=...` do log diz o que ela
 // respondeu. Ver a nota em main.c.
 int   ajustes_4k(void);
+// MODO SEGURO (seguro.h). Chamar no arranque, DEPOIS de ajustes_dir e de
+// avisos_iniciar: `caiu` = a sessao anterior nao se despediu. Desfaz o ajuste
+// arriscado que estava em prova, liga o perfil seguro se as quedas se repetem e
+// avisa a pessoa. Sem efeito nas builds de teste (nada em prova, nada a avisar).
+void  ajustes_seguro_iniciar(int caiu);
 int   ajustes_cw_ligado(void);          // continueWatchingEnabled
 int   ajustes_cw_ok_toca(void);         // OK no card: 1 = toca direto (cwOkLocal)
 int   ajustes_cw_estilo(void);          // 0 card, 1 largo (wide), 2 poster
@@ -206,6 +253,9 @@ int   ajustes_cw_ordem(void);
 int   ajustes_desfocar_nao_assistidos(void); // blurUnwatchedEpisodes
 int   ajustes_botao_trailer(void);           // detailPageTrailerButtonEnabled
 int   ajustes_meta_externo(void);            // preferExternalMetaAddonDetail
+// "Usar sempre o Cinemeta": 1 = a ficha e os episodios vem so do Cinemeta (como
+// antes); 0 (padrao) = catalogo primeiro, ver descoberta.c (metaCatalogo).
+int   ajustes_meta_so_cinemeta(void);
 
 // --- LAYOUT: foco no poster --------------------------------------------------
 int   ajustes_expandir_poster(void);         // focusedPosterBackdropExpandEnabled
@@ -253,6 +303,8 @@ float ajustes_raio_poster_px(void);   // raio em px (dp x 2)
 // desligada, TODOS os ajustes_tmdb_* / ajustes_mdblist_fonte() devolvem 0.
 int         ajustes_tmdb_ligado(void);          // tmdb_enabled
 const char *ajustes_tmdb_idioma(void);          // "pt-BR", "en-US"… (TMDB)
+// Pais da grade do Guia de TV (#158): "" = automatico, senao "RO", "BR"...
+const char *ajustes_epg_pais(void);
 int         ajustes_tmdb_arte(void);            // tmdb_use_artwork
 int         ajustes_tmdb_basico(void);          // tmdb_use_basic_info
 int         ajustes_tmdb_ficha(void);           // tmdb_use_details
@@ -270,6 +322,8 @@ int         ajustes_mdblist_ligado(void);       // mdblist_enabled
 // `fonte` e um ExFonte de extras.h (trakt, imdb, tmdb, tomatoes, audience,
 // metacritic, letterboxd). 0 = esconder a nota dessa fonte na fileira.
 int         ajustes_mdblist_fonte(int fonte);   // mdblist_show_*
+// A fonte (ExFonte) entra na linha do titulo? Escolha local + disponibilidade.
+int         ajustes_nota_titulo(int fonte);
 
 // --- AJUSTES QUE VEM DA CONTA ------------------------------------------------
 // Aplica o blob de `sync_pull_profile_settings_blob` (o objeto `settings_json`,

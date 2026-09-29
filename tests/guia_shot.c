@@ -20,6 +20,7 @@
 //
 // Inclui src/guia.c: desenharCard e a lista de canais sao estaticos, e semear
 // por dentro e o unico jeito de fotografar o cartao sem addon no ar.
+#include "badges.h"
 #include "../src/guia.c"
 #include "guialembrete.h"
 #include "gfx.h"
@@ -237,6 +238,7 @@ int main(int argc, char **argv) {
   assert(txt_iniciar("deploy/app", 1));
   tex_iniciar(64);
   gfx_icones_dir("deploy/app/art");
+  badges_carregar("deploy/app/art");   // marcas de resolucao no heroi; no app quem faz e home.c
 
   poeCanal(0, "Canal Recortado HD", "tests/fixtures/logos/recortado.png");
   poeCanal(1, "Canal Recortado HD", "tests/fixtures/logos/recortado.png");

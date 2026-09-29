@@ -13,6 +13,7 @@
 #include "detail.h"
 #include "descoberta.h"
 #include "video.h"
+#include "vistoep.h"
 #include "player.h"
 #include <stdio.h>
 #include <string.h>
@@ -423,6 +424,14 @@ void posplay_desenhar(Uint32 agora, float baseY) {
     { const char *arte = (px && px->thumb[0]) ? px->thumb
                        : (ci ? ci->backdrop : "");
       GLuint t = arte[0] ? tex_obter_larg(arte, tr.w) : 0;
+      // DESFOCAR NAO ASSISTIDOS (blurUnwatchedEpisodes, #177). O cartao do
+      // fim do episodio mostrava o still nitido do proximo — justo o spoiler
+      // que o ajuste esconde no detalhe e na folha. Mesma regra deles: so o
+      // que o mapa afirma como visto fica nitido; o "nao sei" desfoca. Sem
+      // copia pronta o fundo cinza fica por um quadro, nunca a arte nitida.
+      if (t && ajustes_desfocar_nao_assistidos() &&
+          !(ci && vistoep_estado(ci->imdb, proxT, proxE) == 1))
+        t = gfx_desfocado(t, arte);
       gfx_cor(tr, PP_EP_RAIO / tr.h, .19f, .19f, .20f, a);
       // Sem copia desfocada pronta, gfx_desfocado devolve 0 e fica o fundo.
       if (t && posplay_desfocar_thumb(idx, proxT, proxE)) t = gfx_desfocado(t, arte);

@@ -49,6 +49,7 @@
 #include "app.h"
 #include "registro.h"
 #include "avisos.h"
+#include "seguro.h"
 #include "video.h"
 #include "addons.h"
 #include "ajustes.h"
@@ -60,6 +61,22 @@
 #include "trailer.h"
 #include "ponteiro.h"
 #include "gif.h"
+#include "idioma.h"
+#include "idiomaauto.h"
+// O idioma AUTOMATICO da interface mudou depois do arranque (a conta chegou, ou
+// a TV respondeu o locale). Titulos e generos das fileiras saem no idioma novo,
+// e a pessoa fica sabendo por que a tela trocou sozinha — uma vez por idioma
+// (o aviso tem um id por codigo e avisos-vistos.txt lembra). O texto ja sai no
+// idioma novo: i18n le ajustes_idioma().
+static void aoMudarIdiomaAuto(const char *codigo, int fonte, int notificar) {
+  desc_repetir();
+  if (!notificar) return;
+  avisos_idioma_definido(codigo,
+      fonte == IDA_SISTEMA
+        ? i18n("Idioma definido pelo sistema da TV · mudar em Ajustes")
+        : i18n("Idioma definido pela sua conta · mudar em Ajustes"));
+}
+
 #ifndef NV_SEM_WEBOS
 #include <dlfcn.h>
 
@@ -520,6 +537,12 @@ int main(int argc, char **argv) {
   // e e a que estabelece o idioma e o espelho do limite de fileiras. Reler o
   // mesmo arquivo duas vezes e barato e deixa aquele bloco intacto.
   ajustes_dir(dados_dir()[0] ? dados_dir() : dirArte);
+  // MODO SEGURO, LOGO DEPOIS DE LER OS AJUSTES e antes de qualquer coisa que os
+  // use para decidir peso: a superficie 4K (logo abaixo) e o teto de fileiras
+  // sao lidos daqui. Se a sessao anterior caiu logo depois de uma mudanca
+  // arriscada, ela e desfeita agora; ver seguro.h. O veredito de queda vem de
+  // avisos_iniciar (acima), que ja descontou a despedida do Tizen.
+  ajustes_seguro_iniciar(avisos_sessao_anterior_caiu());
   // MESMA PASTA DO ajustes_dir logo acima, e pelo mesmo motivo: sem isto
   // art/player.txt (estilo de legenda, aspecto) gravava na pasta de ARTE, nao
   // na de DADOS — e so a de dados sobrevive a TV matando o processo (issue
@@ -630,6 +653,9 @@ int main(int argc, char **argv) {
   SDL_GetWindowSize(win, &jw, &jh);
   printf("GPU: %s | %s\n", glGetString(GL_RENDERER), glGetString(GL_VERSION));
   printf("janela=%dx%d drawable=%dx%d\n", jw, jh, dw, dh);
+  // O plano de video e posicionado em pixels da superficie, o layout em 1920x1080
+  // (#176: com drawable 3840x2160 o video ocupava um quarto da tela).
+  video_escala_definir(dw, dh);
   // Pedir SDL_GL_ALPHA_SIZE nao garante receber: o EGL escolhe a config mais
   // proxima e pode entregar 0 bits de alpha em silencio. Com 0 aqui, o furo da
   // superficie e impossivel e o plano de video NUNCA vai aparecer, por mais
@@ -778,6 +804,7 @@ int main(int argc, char **argv) {
   addons_carregar(dirArte);
   // Ajustes tambem sao do USUARIO, nao do pacote.
   ajustes_dir(dirDados);
+  ajustes_idioma_auto_iniciar(aoMudarIdiomaAuto);
   // A estrutura persistida só pode ser comparada após carregar a configuração.
   homeestado_iniciar();
   { // Nativo conserva arte comprimida na pasta gravavel, sujeita a poda LRU.
@@ -1007,6 +1034,7 @@ int main(int argc, char **argv) {
     // COR VIVA: UMA vez por quadro, antes do desenho. Consome o pedido que o
     // desenho do quadro anterior fez (corviva_definir) e anda a transicao; o
     // desenho deste quadro so le o resultado (ajustes_acento, NV_COR_FUNDO_*).
+    ajustes_idioma_auto_tick();   // locale da TV (webOS): chega de um fio
     corviva_quadro(dt, ajustes_cor_viva(), ajustes_cor_logo(),
                    ajustes_animacoes_reduzidas());
     fUpd = NV_DT(t0);
@@ -1127,6 +1155,7 @@ int main(int argc, char **argv) {
              rssMB(),
              dados_persistente() ? "" : "  <<< SEM PERSISTENCIA");
       avisos_sinal(NULL, (float)rssMB());   // batida: no maximo 1 a cada 60 s
+      seguro_batida(SDL_GetTicks() / 1000); // confirma mudancas arriscadas depois de 3 min
       corviva_gravar_se_preciso(0);          // corviva.txt: no maximo 1 a cada 20 s
       dados_sync_sucessos = 0;
       dados_sync_falhas = 0;

@@ -39,9 +39,11 @@ int arte_reserva_episodios(const char *imdb, const char *corpo) { (void)imdb; (v
 
 // --- DUBLES: so fazem descoberta.c linkar (o conjunto de tests/cateps.c) -----
 int         ajustes_idioma_ingles(void) { return 0; }
+int ajustes_idioma(void) { return 0; }
 int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127)
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
 const char *i18n(const char *s)         { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 const char *dados_dir(void)             { return ""; }
 const char *sessao_usuario(void)        { return ""; }
 int         perfis_ativo(void)          { return 1; }
@@ -52,6 +54,9 @@ void  SDL_Delay(Uint32 ms)                 { usleep(ms * 1000); }
 int   ajustes_cw_fonte(void)               { return 0; }   // AJ_CWF_AMBAS
 int   ajustes_tmdb_ligado(void)            { return 0; }
 int   ajustes_tmdb_basico(void)            { return 0; }
+int   ajustes_meta_externo(void)           { return 0; }
+int   ajustes_meta_so_cinemeta(void)        { return 0; }
+int   addons_aceita_id(int i, const char *t, const char *id) { (void)i; (void)t; (void)id; return -1; }
 int   ajustes_tmdb_arte(void)              { return 0; }
 int   ajustes_tmdb_elenco(void)            { return 0; }
 int   ajustes_tmdb_cw(void)                { return 0; }
@@ -92,6 +97,8 @@ int   simkl_plantowatch(CatItem *s, int m) { (void)s; (void)m; return 0; }
 int   ajustes_salvos_no_simkl(void)        { return 0; }
 int   trakt_enfeitar_lote(CatItem *s, int n) { (void)s; return n; }
 int   trakt_lista(const char *q, CatItem *s, int m) { (void)q; (void)s; (void)m; return 0; }
+// O servico social proprio (recomenda.c) fica fora deste teste: a uniao e so o que o Trakt trouxe.
+int   recomenda_social_mesclar(CatItem *i, int nTrakt, int max) { (void)i; (void)max; return nTrakt; }
 int   trakt_social(CatItem *s, int m)      { (void)s; (void)m; return 0; }
 int   trakt_e_a_seguir(const char *id)     { (void)id; return 0; }
 const char *nuvem_trakt_cliente(void)      { return ""; }

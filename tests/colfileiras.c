@@ -94,6 +94,7 @@ int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127
 int   ajustes_itens_fileira(void)          { return 12; }   // padrao (#163)
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
 int   ajustes_idioma_ingles(void)          { return 0; }
+int ajustes_idioma(void) { return 0; }
 unsigned homeestado_geracao(void) { return 1; }
 int homeestado_contexto_valido(void) { return snapshotValido; }
 int homeestado_tem_fileira(const char *chave) { return snapshotTem && chave && !strcmp(chave, "old-row"); }
@@ -121,6 +122,9 @@ int cat_gravar_cache_se_identidade(const char *d, const char *u, int p) {
 // Integracao TMDB ligada por padrao, como no app de verdade — o portao
 // desc_chave_tmdb consulta estes stubs pelo caminho inteiro.
 int   ajustes_tmdb_ligado(void)            { return 1; }
+int   ajustes_meta_externo(void)           { return 0; }
+int   ajustes_meta_so_cinemeta(void)        { return 0; }
+int   addons_aceita_id(int i, const char *t, const char *id) { (void)i; (void)t; (void)id; return -1; }
 const char *ajustes_tmdb_idioma(void)      { return "pt-BR"; }
 int   cat_acrescentar(const CatItem *i)    { (void)i; return -1; }
 void  cat_atualizar_item(int i, const CatItem *n) { (void)i; (void)n; }
@@ -142,6 +146,8 @@ int   fil_podar_catalogos(const char *const *ids, const char *const *bases, int 
 int   fil_addon_novo(const char *id, const char *base) { (void)id; (void)base; return 0; }
 int   addons_perfil_da_lista(void)         { return 0; }
 int   addons_ativo(int i)                  { (void)i; return 1; }
+int   addons_fornece(int i, int oque)     { (void)i; (void)oque; return 0; }
+int   addons_sondado(int i)              { (void)i; return 0; }
 int   fil_limite(void)                     { return limiteFileiras; }
 int   fil_oculta(const char *c)            { (void)c; return 0; }
 // A assinatura ganhou addon/tipo/contagem quando a folha de fileiras passou a
@@ -160,6 +166,7 @@ int   fil_unir(const char *const *c, int n, int *s, int m) {
   int i; (void)c; for (i = 0; i < n && i < m; i++) s[i] = i; return i;
 }
 const char *i18n(const char *s)            { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 void  marco(const char *n)                 { (void)n; }
 void  prog_chave(char *d, unsigned n, const char *c, int t, int e) {
   (void)c; (void)t; (void)e; if (n) d[0] = 0;
@@ -185,6 +192,8 @@ int   simkl_plantowatch(CatItem *s, int m) { (void)s; (void)m; return 0; }
 int   ajustes_salvos_no_simkl(void)        { return 0; }
 int   trakt_enfeitar_lote(CatItem *s, int n) { (void)s; (void)n; return 0; }
 int   trakt_lista(const char *q, CatItem *s, int m) { (void)q; (void)s; (void)m; return 0; }
+// O servico social proprio (recomenda.c) fica fora deste teste: a uniao e so o que o Trakt trouxe.
+int   recomenda_social_mesclar(CatItem *i, int nTrakt, int max) { (void)i; (void)max; return nTrakt; }
 int   trakt_social(CatItem *s, int m)      { (void)s; (void)m; return 0; }
 // Fontes nao-addon (issue #44) e a refazagem da fileira CW (#38): o cenario
 // testado nao tem nenhum dos dois, mas o codigo referencia os simbolos.

@@ -36,6 +36,7 @@ const char *nuvem_simkl_app(void) { return "nuvio"; }
 const char *nuvem_trakt_cliente(void) { return "cli-trakt"; }
 void nuvem_url_escapar(const char *v, char *dst, unsigned tam) { snprintf(dst, tam, "%s", v); }
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 int sessao_logada(void) { return logada; }
 int perfis_ativo(void) { return 2; }
 const char *dados_cliente_id(void) { return "cliente-teste"; }

@@ -85,6 +85,8 @@ static const char *baseAtual(void)     { return versaoAddons > 1 ? BASE_NOVA : B
 int   addons_n(void)                   { return 1; }
 const char *addons_base(int i)         { (void)i; return baseAtual(); }
 int   addons_ativo(int i)              { (void)i; return 1; }
+int   addons_fornece(int i, int oque)     { (void)i; (void)oque; return 0; }
+int   addons_sondado(int i)              { (void)i; return 0; }
 const char *addons_id_manifesto(int i) { (void)i; return AID; }
 const char *addons_nome(int i)         { (void)i; return "Addon"; }
 unsigned addons_versao(void)           { return versaoAddons; }
@@ -184,6 +186,8 @@ int trakt_lista(const char *q, CatItem *s, int m) {
 // O "sync" que chega entre o Trakt e a leitura da lista de addons.
 enum { S_NADA, S_ADDONS, S_CREDENCIAL };
 static volatile int armadoSocial = S_NADA;
+// O servico social proprio (recomenda.c) fica fora deste teste: a uniao e so o que o Trakt trouxe.
+int   recomenda_social_mesclar(CatItem *i, int nTrakt, int max) { (void)i; (void)max; return nTrakt; }
 int trakt_social(CatItem *s, int m) {
   int a = armadoSocial;
   (void)s; (void)m;
@@ -231,6 +235,7 @@ static volatile int montagens;
 void  marco(const char *n)                 { if (!strcmp(n, "montar: inicio")) montagens++; }
 void  SDL_Delay(Uint32 ms)                 { usleep(ms * 1000); }
 int   ajustes_idioma_ingles(void)          { return 0; }
+int ajustes_idioma(void) { return 0; }
 int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127)
 int   ajustes_itens_fileira(void)          { return 12; }   // padrao (#163)
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
@@ -242,12 +247,16 @@ int   ajustes_hero_fonte(void)             { return 0; }
 int   ajustes_cw_fonte(void)               { return AJ_CWF_CONTA; }
 int   ajustes_tmdb_ligado(void)            { return 0; }
 int   ajustes_tmdb_basico(void)            { return 0; }
+int   ajustes_meta_externo(void)           { return 0; }
+int   ajustes_meta_so_cinemeta(void)        { return 0; }
+int   addons_aceita_id(int i, const char *t, const char *id) { (void)i; (void)t; (void)id; return -1; }
 int   ajustes_tmdb_arte(void)              { return 0; }
 int   ajustes_tmdb_elenco(void)            { return 0; }
 int   ajustes_tmdb_cw(void)                { return 0; }
 const char *ajustes_tmdb_idioma(void)      { return "pt-BR"; }
 const char *ajustes_tmdb_chave(void)       { return ""; }
 const char *i18n(const char *s)            { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 int   simkl_ativo(void)                    { return 0; }
 int   simkl_continuar(CatItem *s, int m)   { (void)s; (void)m; return 0; }
 int   simkl_e_a_seguir(const char *id)     { (void)id; return 0; }

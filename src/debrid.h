@@ -1,4 +1,5 @@
-// Resolucao LOCAL de torrent via debrid (Real-Debrid, TorBox, Premiumize),
+// Resolucao LOCAL de torrent via debrid (Real-Debrid, TorBox, Premiumize e
+// AllDebrid),
 // directDebridResolver.js do app web.
 //
 // Addons como Torrentio/Comet sem chave de debrid na URL devolvem streams so
@@ -24,11 +25,29 @@
 // por servico; chamar de novo para outro servico NAO apaga a anterior.
 void debrid_definir_chave(const char *servico, const char *chave);
 int  debrid_ativo(void);          // ha chave de um servico que sabemos resolver
-void debrid_esquecer(void);       // logout
+void debrid_esquecer(void);       // logout (a chave local, digitada na TV, fica)
+
+// Chave DIGITADA NESTA TV (Ajustes > Integracoes > Debrid). Vale no lugar da
+// que veio da conta, para o mesmo servico; vazia apaga. Aceita os mesmos nomes
+// de debrid_definir_chave, mais "alldebrid"/"all-debrid" — servico que o app
+// web oficial nao tem, entao so chega por aqui.
+void debrid_definir_chave_local(const char *servico, const char *chave);
+// De onde vem a chave em uso: 0 nenhuma, 1 conta, 2 digitada nesta TV.
+int  debrid_origem(const char *servico);
+// "····abcd" (so os 4 ultimos) ou "" sem chave. Devolve `dst`.
+const char *debrid_chave_mascarada(const char *servico, char *dst, unsigned n);
+// "Testar chave" do AllDebrid (GET /v4/user). BLOQUEIA: usar num fio. 1 =
+// conta premium (`msg` diz ate quando); 0 = nao (`msg` diz o motivo). A frase
+// nunca leva a chave nem o usuario/e-mail da conta.
+// `msg` e sempre uma chave de i18n; premium com vencimento traz a data
+// dd/mm/aaaa em `data` (quem mostra usa "premium até %s").
+int  debrid_testar_alldebrid(char *msg, unsigned n, char *data, unsigned nd);
 
 // Episodio alvo da proxima resolucao (0,0 = filme). Serve para escolher o
 // arquivo certo dentro de um torrent de temporada inteira.
 void debrid_definir_episodio(int temporada, int episodio);
+// O mesmo par, de volta: o P2P (p2p.c) escolhe o arquivo do episodio com ele.
+void debrid_episodio(int *temporada, int *episodio);
 
 // BLOQUEIA. Devolve 1 e grava em `url` um link direto que toca; 0 se nao deu.
 // So conteudo EM CACHE: e o caminho da escolha AUTOMATICA.

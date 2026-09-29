@@ -60,7 +60,7 @@ void continuar_desenhar(const CatItem *ci, GfxRect r) {
     char quando[32];
     if (ci->progresso == 0 && cwo_e_futuro(ci->imdb) &&
         cwo_data_curta(cwo_estreia(ci->imdb), (long long)time(NULL) * 1000LL,
-                       ajustes_idioma_ingles(), 0, quando, sizeof quando))
+                       ajustes_idioma(), 0, quando, sizeof quando))
       snprintf(selo, sizeof selo, i18n("Estreia %s"), quando);
     else if (ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb)))
       snprintf(selo, sizeof selo, "%s", i18n("A seguir"));

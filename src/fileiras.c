@@ -283,13 +283,31 @@ static void garantir(void) { if (!carregado) carregar(); }
 
 // ------------------------------------------------------------------ limite
 
+static int tetoSessao;   // 0 = nenhum; ver fil_definir_teto_sessao
+
 int fil_limite(void) {
+  int v;
+  pthread_mutex_lock(&trava);
+  garantir();
+  v = limite;
+  if (tetoSessao > 0 && v > tetoSessao) v = tetoSessao;
+  pthread_mutex_unlock(&trava);
+  return v;
+}
+
+int fil_limite_gravado(void) {
   int v;
   pthread_mutex_lock(&trava);
   garantir();
   v = limite;
   pthread_mutex_unlock(&trava);
   return v;
+}
+
+void fil_definir_teto_sessao(int teto) {
+  pthread_mutex_lock(&trava);
+  tetoSessao = teto > 0 ? limita(teto, FIL_LIMITE_MIN, FIL_LIMITE_MAX) : 0;
+  pthread_mutex_unlock(&trava);
 }
 
 // ----------------------------------------------------------------- destaque

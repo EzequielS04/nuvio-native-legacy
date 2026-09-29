@@ -69,6 +69,24 @@ int  epg_match_id(const char *id);
 // XML). "" tira. Pode chamar de qualquer fio; a (re)carga acontece em
 // epg_passo. A URL pode levar credencial: epg.c nunca a imprime.
 void epg_fonte_extra(const char *url);
+// Os ids (epg_channel_id do Xtream) que interessam na grade do provedor: so
+// eles entram dela (o arquivo traz o painel inteiro). NULL/0 tira o filtro.
+// Copia; vale a partir da proxima carga.
+void epg_fonte_extra_ids(const char *const *ids, int n);
+
+// PAISES DA GRADE (#158): quais arquivos do epgshare01 entram. `codigos` e uma
+// lista de paises ISO ("RO", "RO,BR"; "GB" = "UK"); vazio ou so desconhecidos
+// = as cinco de sempre (BR1, BR2, PT1, MX1, AR1). Mudar recarrega a grade no
+// proximo epg_passo. Devolve quantos arquivos ficaram. epg_paises_ativos: os
+// paises em uso, para log e tela. epg_pais_existe: ha arquivo para o pais.
+int epg_paises_definir(const char *codigos);
+const char *epg_paises_ativos(void);
+int epg_pais_existe(const char *pais);
+
+// O nome sem o prefixo de pais/pacote do painel ("RO: Pro TV" -> "Pro TV").
+// `pais` (opcional, 4 bytes) recebe o codigo de 2 letras quando o prefixo e
+// um, em maiusculas; "" senao. Nao aloca: devolve um ponteiro dentro de `s`.
+const char *epg_sem_prefixo(const char *s, char pais[4]);
 
 // Programa NO AR no instante `agora` (qualquer instante, nao so o presente:
 // para desenhar a coluna de amanha, passe amanha) no canal `epg` (indice

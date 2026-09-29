@@ -1,6 +1,7 @@
 #include "text.h"
 #include "dobra.h"
 #include "idioma.h"
+#include "ajustes.h"
 #include "gfx.h"
 #include "layout.h"
 #include "marco.h"
@@ -137,8 +138,24 @@ TxtFamilia txt_fonte_interface(void) { return fonteInterface; }
 #define TXT_POR_QUADRO 4
 static int rastNesteQuadro;
 static unsigned long quadroTxt = 1;
+extern double txt_ms;
+static double msIniQuadro;
 
-void txt_novo_quadro(void) { rastNesteQuadro = 0; quadroTxt++; }
+// TEXTO DE UMA VEZ (#172: "o texto aparece aos poucos, nao e fluido"; dono,
+// 29/09/2026: "tem como carregar de uma vez?"). Com um teto fixo de 4 linhas por
+// quadro, uma tela nova mostrava o texto entrando em degraus por varios quadros.
+// Agora o teto de 4 e o PISO: depois dele o rasterizador continua enquanto o
+// quadro tiver gasto menos de TXT_MS_QUADRO em texto (e ate TXT_MAX_QUADRO
+// linhas). O preco e UM quadro mais longo no instante em que a tela abre —
+// coberto pela propria animacao de entrada — em troca de o texto inteiro
+// aparecer junto. Em regime nada muda: sem linha nova, nada e rasterizado.
+#define TXT_MS_QUADRO  24.0
+#define TXT_MAX_QUADRO 64
+
+void txt_novo_quadro(void) {
+  rastNesteQuadro = 0; quadroTxt++;
+  msIniQuadro = txt_ms;
+}
 static unsigned long relogio = 1;
 int    txt_rasterizadas = 0;
 // Quantas linhas foram DESPEJADAS para dar lugar a outras. Zero e o estado
@@ -147,6 +164,10 @@ int    txt_rasterizadas = 0;
 // reclamacao de quem esta olhando a tela.
 int    txt_despejos = 0;
 double txt_ms = 0.0;
+// Linhas RECUSADAS por falta de orcamento no quadro (voltam vazias e entram
+// num quadro seguinte). Quem quer mostrar uma tela inteira de uma vez le a
+// diferenca antes/depois de desenhar: zero = tudo o que foi pedido existe.
+int    txt_pendentes = 0;
 
 // Peso por estilo. Cada peso e um ARQUIVO de verdade da Inter Display
 // (Regular 400, Medium 500, Bold 700) — nao ha passada repetida nem
@@ -224,6 +245,7 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 56, PESO_REGULAR }, { 60, PESO_REGULAR }, { 64, PESO_REGULAR },
   { 68, PESO_REGULAR }, { 72, PESO_REGULAR }, { 76, PESO_REGULAR },
   { 80, PESO_REGULAR },
+  { NV_TOP10_NUM_CORPO, PESO_BOLD },   // numeral do Top 10 da Dinamica
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.
@@ -243,26 +265,24 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
 // como "o CJK", e o nome de uma atriz iraniana continuava em quadradinhos: a
 // DroidSansFallback nao tem arabe. A TV traz arquivo separado para cada
 // familia de escrita, e e por isso que a escolha e por faixa de codepoint.
-typedef enum { ESC_CJK, ESC_ARABE, ESC_CIRILICO_ETC, ESC_N } Escrita;
-static TTF_Font *reservas[ESC_N][TXT_NFONTES];
-static char caminhoReserva[ESC_N][512];
-
-// Primeiro codepoint FORA do ASCII, ou 0. Decodifica UTF-8 na mao porque e o
-// unico ponto do app que precisa disso e puxar uma biblioteca por causa de tres
-// linhas nao se paga.
-static Uint32 primeiroNaoAscii(const char *s) {
-  const unsigned char *p = (const unsigned char *)s;
-  for (; *p; p++) {
-    if (*p < 0x80) continue;
-    if ((*p & 0xE0) == 0xC0 && p[1])
-      return (Uint32)((*p & 0x1F) << 6 | (p[1] & 0x3F));
-    if ((*p & 0xF0) == 0xE0 && p[1] && p[2])
-      return (Uint32)((*p & 0x0F) << 12 | (p[1] & 0x3F) << 6 | (p[2] & 0x3F));
-    if ((*p & 0xF8) == 0xF0) return 0x10000;   // fora do BMP: nao tratamos
-    return 0;
-  }
-  return 0;
-}
+//
+// CJK TEM TRES VARIANTES, e a que vale e a do IDIOMA DA INTERFACE: o mesmo hanzi
+// (骨, 直, 値) tem forma de japones, de chines simplificado e de tradicional, e a
+// fonte de sistema errada nao da tofu, da o desenho de outra lingua. ESC_CJK e o
+// padrao (japones primeiro, que era o unico), ESC_CJK_SC e ESC_CJK_TC entram
+// quando a interface esta em chines simplificado/tradicional.
+//
+// CADA ESCRITA TEM UMA LISTA de fontes (RES_CAND), em ordem de preferencia, e a
+// linha vai para a primeira que a desenha INTEIRA — ou, se nenhuma desenha, para
+// a que deixa menos caracteres de fora. A lista unica de antes escolhia "o
+// primeiro arquivo que existe": a LG_Display_JP existe em toda LG e nao tem 303
+// dos hanzi simplificados, entao um titulo chines saia em quadradinhos com a
+// DroidSansFallback (que os tem) logo ali ao lado.
+typedef enum { ESC_CJK, ESC_CJK_SC, ESC_CJK_TC, ESC_ARABE, ESC_CIRILICO_ETC, ESC_N } Escrita;
+#define RES_CAND 7
+static TTF_Font *reservas[ESC_N][RES_CAND][TXT_NFONTES];
+static unsigned char reservaFalhou[ESC_N][RES_CAND][TXT_NFONTES];
+static char caminhoReserva[ESC_N][RES_CAND][512];
 
 // Um codepoint DECORATIVO: simbolo, seta, pictograma, emoji, seletor de
 // variacao. Nao pertence a escrita nenhuma e por isso nao pode decidir com que
@@ -378,17 +398,96 @@ static Escrita escritaDe(Uint32 cp) {
   if (cp >= 0x2E80 && cp <= 0x9FFF) return ESC_CJK;
   if (cp >= 0xAC00 && cp <= 0xD7AF) return ESC_CJK;         // hangul
   if (cp >= 0xF900 && cp <= 0xFAFF) return ESC_CJK;
+  if (cp >= 0xFF00 && cp <= 0xFFEF) return ESC_CJK;         // largura total: "（）：～"
   return ESC_CIRILICO_ETC;
 }
 
 static int carregarFamilia(TxtFamilia familia);
 
+// Quantos caracteres da linha `s` a fonte NAO desenha, e o primeiro deles em
+// *primeiro. Conta so o que faz falta: ASCII nunca, os DECORATIVOS que a fonte
+// nao tem (setas, ⚡, emoji: semDecorativoSemGlifo os tira da linha) tambem nao,
+// e as letras estilizadas que nv_dobra_estilizada troca pela comum tambem nao.
+// Fora do BMP nao tratamos (TTF_GlyphIsProvided recebe Uint16), como antes.
+static int faltantes(TTF_Font *fonte, const char *s, Uint32 *primeiro) {
+  const unsigned char *p = (const unsigned char *)s;
+  int n = 0;
+  if (primeiro) *primeiro = 0;
+  while (*p) {
+    int tam = 1;
+    Uint32 cp;
+    if (*p < 0x80) { p++; continue; }
+    cp = decodifica(p, &tam);
+    p += tam;
+    if (cp >= 0x10000 || decorativo(cp)) continue;
+    if (TTF_GlyphIsProvided(fonte, (Uint16)cp)) continue;
+    if (nv_dobra_estilizada(cp)) continue;
+    if (!n && primeiro) *primeiro = cp;
+    n++;
+  }
+  return n;
+}
+
+// A variante CJK que a INTERFACE pede (ver Escrita).
+static Escrita variacaoCjk(void) {
+  int lg = ajustes_idioma();
+  return lg == IDIOMA_ZHCN ? ESC_CJK_SC : lg == IDIOMA_ZHTW ? ESC_CJK_TC : ESC_CJK;
+}
+
+// A fonte de reserva de `e` que melhor desenha `s`, na lista da escrita: a
+// primeira que desenha tudo, ou a que deixa menos de fora. NULL se nenhuma abriu.
+static TTF_Font *reservaDe(Escrita e, TxtEstilo estilo, const char *s) {
+  TTF_Font *melhor = NULL;
+  int menos = 0x7fffffff;
+  for (int c = 0; c < RES_CAND && caminhoReserva[e][c][0]; c++) {
+    TTF_Font *f = reservas[e][c][estilo];
+    int falta;
+    if (!f && !reservaFalhou[e][c][estilo]) {
+      f = reservas[e][c][estilo] = TTF_OpenFont(caminhoReserva[e][c],
+                                                (int)(ESTILOS[estilo].corpo * escalaTxt + 0.5f));
+      if (!f) reservaFalhou[e][c][estilo] = 1;
+    }
+    if (!f) continue;
+    falta = faltantes(f, s, NULL);
+    if (!falta) return f;
+    if (falta < menos) { menos = falta; melhor = f; }
+  }
+  return melhor;
+}
+
+// MEMORIA DA ESCOLHA. fonteDe roda para CADA linha de CADA quadro (linhaFamilia
+// a chama duas vezes, a medida de largura outras duas), e desde que a escolha
+// olha TODOS os caracteres — e nao so o primeiro fora do ASCII — o custo de uma
+// linha acentuada e um TTF_GlyphIsProvided por caractere, por chamada. Numa TV
+// ARM com 300 linhas na tela isso e dezenas de milhares de consultas por
+// quadro. A resposta so muda com a fonte (familia, estilo), com a variante CJK
+// (idioma da interface) e com o texto, entao cabe numa tabela direta chaveada
+// pelo hash do texto, como a do i18n. ASCII puro nem entra: sai na varredura.
+#define FD_MEM 512
+static struct { unsigned long long h; unsigned n; unsigned char fam, estilo, var; TTF_Font *f; } fdMem[FD_MEM];
+static void fdEsquecer(void) { memset(fdMem, 0, sizeof fdMem); }
+
 // Fonte com que a linha `s` deve ser desenhada. Devolve a principal quando ela
 // da conta — que e o caso da esmagadora maioria das linhas.
+//
+// A LINHA INTEIRA muda de fonte quando falta QUALQUER caractere (e nao so o
+// primeiro fora do ASCII, como era): "OK · 再生" comeca por um "·", que a Inter
+// tem, e o teste do primeiro caractere a deixava desenhar o resto em
+// quadradinhos. Ordem da troca:
+//   1. a INTER embarcada, se a familia escolhida nao e a Inter e ela desenha
+//      tudo. Cobre latim estendido, vietnamita (pilhas de diacriticos), grego e
+//      cirilico nos tres pesos (conferido por tools/idiomas.py) e e a unica
+//      fonte que existe em TODA plataforma — inclusive o WASM da Samsung, que nao
+//      tem fonte de sistema nenhuma. Antes disso Montserrat/Roboto sem grego ou
+//      Atkinson sem vietnamita/cirilico iam para a reserva do sistema, que no
+//      WASM nao existe.
+//   2. a lista de reserva da ESCRITA do primeiro caractere que a Inter tambem nao
+//      tem (japones/chines/hangul, arabe, o resto), fontes de sistema da TV e por
+//      ultimo a CJK embarcada (DroidSansFallback-Subset.ttf).
+static TTF_Font *fonteDeLento(TxtFamilia familia, TxtEstilo estilo, const char *s,
+                              TTF_Font *principal);
 static TTF_Font *fonteDe(TxtFamilia familia, TxtEstilo estilo, const char *s) {
-  Uint32 cp = primeiroNaoAscii(s);
-  Escrita e;
-  TTF_Font *principal = NULL;
+  TTF_Font *principal = NULL, *r;
   if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N)
     familia = TXT_FAMILIA_INTER;
   if (!fontes[familia][estilo] && !familiaTentada[familia])
@@ -404,16 +503,67 @@ static TTF_Font *fonteDe(TxtFamilia familia, TxtEstilo estilo, const char *s) {
   }
   principal = fontes[familia][estilo];
   if (!principal) return NULL;
-  if (!cp || cp >= 0x10000) return principal;
-  // Acentos do portugues e do espanhol estao na Inter; so cai na reserva o que
-  // ela realmente nao tem.
-  if (TTF_GlyphIsProvided(principal, (Uint16)cp)) return principal;
+  unsigned long long h = 1469598103934665603ull;
+  unsigned n = 0, slot;
+  { const unsigned char *p = (const unsigned char *)s;
+    while (*p && *p < 0x80) p++;
+    if (!*p) return principal;              // ASCII puro: o caminho de quase toda linha
+    for (p = (const unsigned char *)s; *p; p++, n++) { h ^= *p; h *= 1099511628211ull; } }
+  slot = (unsigned)(h % FD_MEM);
+  { const unsigned char var = (unsigned char)variacaoCjk();
+    if (fdMem[slot].f && fdMem[slot].h == h && fdMem[slot].n == n && fdMem[slot].fam == familia &&
+        fdMem[slot].estilo == estilo && fdMem[slot].var == var)
+      return fdMem[slot].f;
+    r = fonteDeLento(familia, estilo, s, principal);
+    fdMem[slot].h = h; fdMem[slot].n = n; fdMem[slot].fam = (unsigned char)familia;
+    fdMem[slot].estilo = (unsigned char)estilo; fdMem[slot].var = var; fdMem[slot].f = r;
+    return r; }
+}
+
+// A escolha em si (ver fonteDe), para uma linha com caractere fora do ASCII.
+static TTF_Font *fonteDeLento(TxtFamilia familia, TxtEstilo estilo, const char *s,
+                              TTF_Font *principal) {
+  Uint32 cp = 0;
+  Escrita e;
+  TTF_Font *r;
+  if (!faltantes(principal, s, &cp)) return principal;
+  if (familia != TXT_FAMILIA_INTER) {
+    if (!fontes[TXT_FAMILIA_INTER][estilo] && !familiaTentada[TXT_FAMILIA_INTER])
+      carregarFamilia(TXT_FAMILIA_INTER);
+    r = fontes[TXT_FAMILIA_INTER][estilo];
+    if (r) {
+      Uint32 cpInter = 0;
+      if (!faltantes(r, s, &cpInter)) return r;
+      cp = cpInter;
+    }
+  }
+  if (!cp) return principal;
   e = escritaDe(cp);
-  if (!caminhoReserva[e][0]) return principal;
-  if (!reservas[e][estilo])
-    reservas[e][estilo] = TTF_OpenFont(caminhoReserva[e],
-                                       (int)(ESTILOS[estilo].corpo * escalaTxt + 0.5f));
-  return reservas[e][estilo] ? reservas[e][estilo] : principal;
+  if (e == ESC_CJK) e = variacaoCjk();
+  r = reservaDe(e, estilo, s);
+  return r ? r : principal;
+}
+
+// Qual fonte desenharia a linha, em texto: "principal", "inter" (a Inter
+// embarcada no lugar da familia escolhida) ou "reserva:<escrita>:<arquivo>". NULL
+// se nenhuma fonte carregou. Existe para o teste e para o diagnostico: o
+// resultado de fonteDe so aparece na tela, e um quadradinho de .notdef nao se
+// mede.
+const char *txt_fonte_da_linha(TxtFamilia familia, TxtEstilo estilo, const char *s) {
+  static char buf[640];
+  static const char *NOME[ESC_N] = { "CJK", "CJK-sc", "CJK-tc", "arabe", "resto" };
+  TTF_Font *f = (s && estilo >= 0 && estilo < TXT_NFONTES) ? fonteDe(familia, estilo, s) : NULL;
+  if (!f) return NULL;
+  for (int fam = 0; fam < TXT_FAMILIA_N; fam++)
+    if (fontes[fam][estilo] == f)
+      return fam == (int)familia || familia < 0 || familia >= TXT_FAMILIA_N ? "principal" : "inter";
+  for (int e = 0; e < ESC_N; e++)
+    for (int c = 0; c < RES_CAND; c++)
+      if (reservas[e][c][estilo] == f) {
+        snprintf(buf, sizeof buf, "reserva:%s:%s", NOME[e], caminhoReserva[e][c]);
+        return buf;
+      }
+  return "principal";
 }
 
 static TTF_Font *fonteLegendaDe(TxtEstilo estilo, const char *s,
@@ -435,6 +585,7 @@ static TTF_Font *fonteLegendaDe(TxtEstilo estilo, const char *s,
 }
 
 static void liberarFamilia(TxtFamilia familia) {
+  fdEsquecer();
   for (int i = 0; i < TXT_NFONTES; i++) {
     if (fontes[familia][i]) TTF_CloseFont(fontes[familia][i]);
     fontes[familia][i] = NULL;
@@ -532,33 +683,60 @@ int txt_iniciar(const char *dirRecursos, float escala) {
   for (int p = 0; p < 3; p++)
     snprintf(caminhoPeso[TXT_FAMILIA_DROID][p], 512, "%s", "/usr/share/fonts/DroidSans.ttf");
 
-  // Caminho da reserva CJK. Na TV e a DroidSansFallback; no Mac, a fonte do
-  // sistema que cobre CJK — ali isto e so para a previa nao mentir.
-  // Largura 5, nao 4: a linha do arabe tem quatro candidatos mais o NULL, e o
-  // laco abaixo para no NULL. Com [4] o terminador era descartado em silencio e
-  // a busca do arabe seguia lendo a linha do cirilico.
-  { const char *cand[ESC_N][5] = {
-      /* ESC_CJK          */ { "/usr/share/fonts/LG_Display_JP.ttf",
-                               "/usr/share/fonts/DroidSansFallback.ttf",
-                               "/System/Library/Fonts/Hiragino Sans GB.ttc", NULL },
-      /* ESC_ARABE        */ { "/usr/share/fonts/DroidNaskh-Regular.ttf",
-                               "/usr/share/fonts/LG_Display_Urdu.ttf",
-                               "/System/Library/Fonts/Supplemental/GeezaPro.ttc",
-                               "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", NULL },
-      /* ESC_CIRILICO_ETC */ { "/usr/share/fonts/DroidSansFallback.ttf",
-                               "/usr/share/fonts/DroidSans.ttf",
-                               "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", NULL },
+  // Fontes de RESERVA (ver Escrita), em ordem de preferencia por escrita. Na TV
+  // sao as de sistema (LG e Droid, medidas no cmap de uma C9); no Mac, as do
+  // sistema que cobrem cada escrita — ali isto e so para a previa nao mentir; e
+  // por ultimo, para o CJK, o subconjunto embarcado (o WASM da Samsung nao tem
+  // fonte de sistema nenhuma).
+  // Largura RES_CAND: as listas abaixo tem no maximo 7 caminhos, e o laco para
+  // no NULL. Com um vetor menor que a lista o terminador era descartado em
+  // silencio e a busca seguia lendo a linha de baixo.
+  char cjkEmbarcada[600];
+  snprintf(cjkEmbarcada, sizeof cjkEmbarcada, "%sfonts/DroidSansFallback-Subset.ttf", base);
+  { const char *cand[ESC_N][RES_CAND + 1] = {
+      /* ESC_CJK (japones)  */ { "/usr/share/fonts/LG_Display_JP.ttf",
+                                 "/usr/share/fonts/DroidSansFallback.ttf",
+                                 "/usr/share/fonts/LG_Display-Regular.ttf",
+                                 "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+                                 "/System/Library/Fonts/Hiragino Sans GB.ttc",
+                                 cjkEmbarcada, NULL },
+      /* ESC_CJK_SC (zh-CN) */ { "/usr/share/fonts/DroidSansFallback.ttf",
+                                 "/usr/share/fonts/LG_Display-Regular.ttf",
+                                 "/System/Library/Fonts/Hiragino Sans GB.ttc",
+                                 "/System/Library/Fonts/STHeiti Light.ttc",
+                                 "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+                                 cjkEmbarcada, NULL },
+      /* ESC_CJK_TC (zh-TW) */ { "/usr/share/fonts/LG_Display_HK-Regular.ttf",
+                                 "/usr/share/fonts/DroidSansFallback.ttf",
+                                 "/usr/share/fonts/LG_Display-Regular.ttf",
+                                 "/System/Library/Fonts/STHeiti Light.ttc",
+                                 "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+                                 cjkEmbarcada, NULL },
+      /* ESC_ARABE          */ { "/usr/share/fonts/DroidNaskh-Regular.ttf",
+                                 "/usr/share/fonts/LG_Display_Urdu.ttf",
+                                 "/System/Library/Fonts/Supplemental/GeezaPro.ttc",
+                                 "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", NULL },
+      /* ESC_CIRILICO_ETC   */ { "/usr/share/fonts/DroidSansFallback.ttf",
+                                 "/usr/share/fonts/DroidSans.ttf",
+                                 "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", NULL },
     };
-    const char *nomeEsc[ESC_N] = { "CJK", "arabe", "resto" };
+    const char *nomeEsc[ESC_N] = { "CJK", "CJK-sc", "CJK-tc", "arabe", "resto" };
+    // NUVIO_SEM_RESERVA_DE_SISTEMA=1 finge o WASM da Samsung, onde so existe o
+    // que vai em deploy/app/fonts: as fontes de sistema saem da lista. Serve
+    // para ver, no Mac, o que aquela plataforma desenha (e para o teste).
+    const int soEmbarcada = getenv("NUVIO_SEM_RESERVA_DE_SISTEMA") != NULL;
     for (int e = 0; e < ESC_N; e++) {
-      for (int i = 0; cand[e][i]; i++) {
-        FILE *fr = fopen(cand[e][i], "rb");
+      int n = 0;
+      for (int i = 0; cand[e][i] && n < RES_CAND; i++) {
+        FILE *fr;
+        if (soEmbarcada && cand[e][i] != cjkEmbarcada) continue;
+        fr = fopen(cand[e][i], "rb");
         if (fr) { fclose(fr);
-                  snprintf(caminhoReserva[e], sizeof caminhoReserva[e], "%s", cand[e][i]);
-                  break; }
+                  snprintf(caminhoReserva[e][n], sizeof caminhoReserva[e][n], "%s", cand[e][i]);
+                  n++; }
       }
-      printf("reserva %s: %s\n", nomeEsc[e],
-             caminhoReserva[e][0] ? caminhoReserva[e] : "nenhuma");
+      printf("reserva %s: %d fonte(s)%s%s\n", nomeEsc[e], n, n ? ", 1a " : "",
+             n ? caminhoReserva[e][0] : "");
     } }
 
   marco("fontes: inicio");
@@ -589,7 +767,10 @@ void txt_encerrar(void) {
   memset(tentouLegendaLG, 0, sizeof tentouLegendaLG);
   for (int i = 0; i < TXT_NFONTES; i++)
     for (int e = 0; e < ESC_N; e++)
-      if (reservas[e][i]) { TTF_CloseFont(reservas[e][i]); reservas[e][i] = NULL; }
+      for (int c = 0; c < RES_CAND; c++)
+        if (reservas[e][c][i]) { TTF_CloseFont(reservas[e][c][i]); reservas[e][c][i] = NULL; }
+  memset(reservaFalhou, 0, sizeof reservaFalhou);
+  fdEsquecer();
   memset(familiaTentada, 0, sizeof familiaTentada);
   memset(avisoFallback, 0, sizeof avisoFallback);
   memset(caminhoReserva, 0, sizeof caminhoReserva);
@@ -629,8 +810,11 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   }
 
   char chave[288];
-  snprintf(chave, sizeof chave, "%d:%d:%d|%02x%02x%02x|%.234s", (int)familia,
-           (int)estilo, enfase & 3, r & 255, g & 255, b & 255, s);
+  // A VARIANTE CJK entra na chave: o mesmo hanzi tem forma de japones, de chines
+  // simplificado e de tradicional (ver Escrita), e trocar o idioma da interface
+  // nao pode devolver a textura da lingua anterior.
+  snprintf(chave, sizeof chave, "%d:%d:%d:%d|%02x%02x%02x|%.232s", (int)familia,
+           (int)estilo, enfase & 3, (int)variacaoCjk(), r & 255, g & 255, b & 255, s);
 
   // Hash da chave para evitar o strcmp em quase todas as entradas: a busca
   // roda para CADA linha de CADA quadro, e comparar 288 bytes centenas de
@@ -662,7 +846,11 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
 
   // Orcamento estourado: devolve vazio e tenta de novo no proximo quadro. A
   // linha aparece com um quadro de atraso em vez de travar o atual.
-  if (rastNesteQuadro >= TXT_POR_QUADRO) return vazia;
+  if (rastNesteQuadro >= TXT_POR_QUADRO &&
+      (rastNesteQuadro >= TXT_MAX_QUADRO || txt_ms - msIniQuadro >= TXT_MS_QUADRO)) {
+    txt_pendentes++;
+    return vazia;
+  }
   rastNesteQuadro++;
   int slot = livre;
   if (slot < 0) {
@@ -676,7 +864,7 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
         slot = i;
       }
   }
-  if (slot < 0) return vazia;
+  if (slot < 0) { txt_pendentes++; return vazia; }
   if (cache[slot].ocupado) txt_despejos++;
   if (cache[slot].ocupado && cache[slot].linha.tex) {
     // avisa o gfx: o nome pode ser reutilizado pelo glGenTextures logo abaixo
@@ -726,6 +914,51 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   cache[slot].quadroUso = quadroTxt;
   SDL_FreeSurface(cv);
   return cache[slot].linha;
+}
+
+// LARGURA SEM RASTERIZAR. A quebra de linha (txt_bloco) e o corte com
+// reticencias (txt_linha_corta) mediam cada tentativa com txt_linha, e txt_linha
+// RASTERIZA E GUARDA a linha: uma sinopse de 60 palavras rasterizava ~60
+// prefixos ("A", "A vida", "A vida de"...) so para descobrir onde quebrar, e
+// cada um custa ~2,4 ms na C9 (medido para uma linha). Alem de caro, enchia o
+// cache com linhas que ninguem desenha. Pior: estourado o orcamento do quadro
+// a medida voltava 0, o texto "cabia" em uma linha so e a quebra saia errada
+// ate o quadro em que tudo cabia — as palavras entravam aos poucos, que e o
+// defeito do #172. Aqui e so TTF_SizeUTF8: sem textura, sem orcamento.
+//
+// Devolve 0 onde linhaFamilia devolveria vazia (fonte ausente, string vazia).
+// HIPOTESE nao medida na TV: TTF_SizeUTF8 e a rotina que o TTF_RenderUTF8_Blended
+// usa para dimensionar a superficie, entao as larguras coincidem;
+// tests/text_largura.sh confere isso no Mac.
+static int larguraLinha(TxtEstilo estilo, const char *s, TxtFamilia familia,
+                        int enfase) {
+  char limpo[1024];
+  if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N)
+    familia = TXT_FAMILIA_INTER;
+  if (!s || !*s || estilo < 0 || estilo >= TXT_NFONTES ||
+      !fonteDe(familia, estilo, s)) return 0;
+  if (familia == TXT_FAMILIA_INTER) {
+    s = semDecorativoSemGlifo(fonteDe(familia, estilo, s), s, limpo, sizeof limpo);
+    if (!*s) return 0;
+  }
+  TTF_Font *fonte = fonteLegendaDe(estilo, s, familia);
+  if (!fonte) return 0;
+  int estiloAnt = TTF_GetFontStyle(fonte);
+  if (enfase) {
+    int novo = estiloAnt;
+    if (enfase & TXT_ENF_NEGRITO) novo |= TTF_STYLE_BOLD;
+    if (enfase & TXT_ENF_ITALICO) novo |= TTF_STYLE_ITALIC;
+    if (novo != estiloAnt) TTF_SetFontStyle(fonte, novo);
+  }
+  int w = 0, h = 0;
+  int ok = TTF_SizeUTF8(fonte, s, &w, &h);
+  if (enfase) TTF_SetFontStyle(fonte, estiloAnt);
+  if (ok != 0) return 0;
+  return (int)(w / escalaTxt + 0.5f);
+}
+
+int txt_largura(TxtEstilo estilo, const char *s) {
+  return larguraLinha(estilo, i18n(s), fonteInterface, 0);
 }
 
 TxtLinha txt_linha(TxtEstilo estilo, const char *s, int r, int g, int b, int a) {
@@ -808,10 +1041,10 @@ static TxtLinha cortaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   // Traduzir ANTES de cortar: o corte mede a largura e insere as reticencias,
   // e medir o portugues para desenhar o ingles poe as reticencias no lugar
   // errado — ou corta um texto que caberia inteiro.
-  TxtLinha l;
   s = i18n(s);
-  l = linhaFamilia(estilo, s, r, g, b, a, familia, enfase);
-  if (!s || !*s || (float)l.w <= maxW) return l;
+  // Mede sem rasterizar: so a linha FINAL vira textura (ver larguraLinha).
+  if (!s || !*s || (float)larguraLinha(estilo, s, familia, enfase) <= maxW)
+    return linhaFamilia(estilo, s, r, g, b, a, familia, enfase);
   char buf[512];
   size_t n = strlen(s);
   if (n >= sizeof buf - 4) n = sizeof buf - 4;
@@ -829,8 +1062,8 @@ static TxtLinha cortaFamilia(TxtEstilo estilo, const char *s, int r, int g,
     if (!n) break;
     char t[520];
     snprintf(t, sizeof t, "%s\xe2\x80\xa6", buf);
-    l = linhaFamilia(estilo, t, r, g, b, a, familia, enfase);
-    if ((float)l.w <= maxW) return l;
+    if ((float)larguraLinha(estilo, t, familia, enfase) <= maxW)
+      return linhaFamilia(estilo, t, r, g, b, a, familia, enfase);
   }
   return linhaFamilia(estilo, "\xe2\x80\xa6", r, g, b, a, familia, enfase);
 }
@@ -866,9 +1099,8 @@ static void desenhaBlocoLinha(TxtEstilo estilo, const char *s, int r, int g, int
     for (;;) {
       char teste[512];
       snprintf(teste, sizeof teste, "%s\xe2\x80\xa6", fim);
-      TxtLinha l = txt_linha(estilo, teste, r, g, b, 255);
-      if (l.w <= larg) {
-        txt_desenhar_alpha(l, x, y, alpha);
+      if (txt_largura(estilo, teste) <= larg) {
+        txt_desenhar_alpha(txt_linha(estilo, teste, r, g, b, 255), x, y, alpha);
         return;
       }
       // Remove palavras completas primeiro; uma unica palavra longa cai para
@@ -889,6 +1121,60 @@ static void desenhaBlocoLinha(TxtEstilo estilo, const char *s, int r, int g, int
   }
 }
 
+// QUEBRA DE LINHA EM ESCRITA SEM ESPACO. Japones e chines nao separam palavras
+// por espaco, entao um paragrafo inteiro era UMA "palavra" para as quebras deste
+// arquivo (e de agendaui.c) e saia por cima da borda da coluna. Aqui o
+// paragrafo e cortado em TOKENS: uma palavra de escrita com espaco (latim,
+// cirilico, grego, hangul) continua sendo a corrida ate o espaco, e cada
+// caractere CJK e um token so — com duas regras de tipografia que valem nas duas
+// linguas (kinsoku): pontuacao de FECHAR ("、。）」") nunca abre linha, entao
+// gruda no token anterior; pontuacao de ABRIR ("（「") nunca fecha linha, entao
+// leva o caractere seguinte junto.
+// Quem junta os tokens NAO poe espaco entre dois que vieram colados no texto.
+static int cjkLivre(Uint32 cp) {
+  return (cp >= 0x2E80 && cp <= 0x9FFF) || (cp >= 0xFF00 && cp <= 0xFFEF);
+}
+static int naoComecaLinha(Uint32 cp) {
+  switch (cp) {
+    case 0x3001: case 0x3002: case 0xFF0C: case 0xFF0E: case 0x30FB: case 0xFF1A:
+    case 0xFF1B: case 0xFF1F: case 0xFF01: case 0x30FC: case 0x3005: case 0x3009:
+    case 0x300B: case 0x300D: case 0x300F: case 0x3011: case 0x3015: case 0xFF09:
+    case 0xFF3D: case 0xFF5D: case 0xFF5E: case 0xFF65: return 1;
+    default: return 0;
+  }
+}
+static int abreCjk(Uint32 cp) {
+  switch (cp) {
+    case 0x3008: case 0x300A: case 0x300C: case 0x300E: case 0x3010: case 0x3014:
+    case 0xFF08: case 0xFF3B: case 0xFF5B: return 1;
+    default: return 0;
+  }
+}
+size_t txt_token_tam(const char *s) {
+  const unsigned char *q = (const unsigned char *)s;
+  int n = 1;
+  Uint32 cp;
+  if (!s || !*q || *q == ' ' || *q == '\n') return 0;
+  cp = decodifica(q, &n);
+  if (cjkLivre(cp) && !naoComecaLinha(cp)) {
+    q += n;
+    if (abreCjk(cp) && *q && *q != ' ' && *q != '\n') { decodifica(q, &n); q += n; }
+    while (*q && *q != ' ' && *q != '\n') {
+      cp = decodifica(q, &n);
+      if (!naoComecaLinha(cp)) break;
+      q += n;
+    }
+    return (size_t)((const char *)q - s);
+  }
+  for (;;) {
+    q += n;
+    if (!*q || *q == ' ' || *q == '\n') break;
+    cp = decodifica(q, &n);
+    if (cjkLivre(cp) && !naoComecaLinha(cp)) break;
+  }
+  return (size_t)((const char *)q - s);
+}
+
 static float txt_bloco_impl(TxtEstilo estilo, const char *s, int r, int g, int b,
                             float x, float y, float larg, float leading,
                             float alpha, int maxLinhas, int reticencias) {
@@ -899,11 +1185,12 @@ static float txt_bloco_impl(TxtEstilo estilo, const char *s, int r, int g, int b
   float usado = 0.0f;
   int nLinhas = 0;
   const char *p = s;
+  int espacoAntes = 1;     // o token anterior foi separado deste por espaco? (ver txt_token_tam)
   while (*p && (maxLinhas <= 0 || nLinhas < maxLinhas)) {
-    // pega a proxima palavra
+    // pega o proximo token (palavra, ou um caractere CJK)
     const char *ini = p;
-    int quebra;
-    while (*p && *p != ' ' && *p != '\n') p++;
+    int quebra, espaco;
+    p += txt_token_tam(p);
     size_t np = (size_t)(p - ini);
     // QUEBRA DURA NO \n, e isto e conserto de defeito visto em foto.
     //
@@ -915,6 +1202,7 @@ static float txt_bloco_impl(TxtEstilo estilo, const char *s, int r, int g, int b
     // #12 fotografou exatamente isso e eu li a foto como texto sem traducao,
     // que era outra coisa: sao dois defeitos na mesma tela.
     quebra = (*p == '\n');
+    espaco = (*p == ' ' || *p == '\n');
     while (*p == ' ' || *p == '\n') { if (*p == '\n') quebra = 1; p++; }
 
     char tentativa[512];
@@ -928,12 +1216,12 @@ static float txt_bloco_impl(TxtEstilo estilo, const char *s, int r, int g, int b
       break;
     }
     memcpy(tentativa, linha, nl);
-    if (nl) tentativa[nl++] = ' ';
+    if (nl && espacoAntes) tentativa[nl++] = ' ';
     memcpy(tentativa + nl, ini, np);
     tentativa[nl + np] = 0;
 
-    TxtLinha m = txt_linha(estilo, tentativa, r, g, b, 255);
-    if (m.w > larg && linha[0]) {
+    int mw = txt_largura(estilo, tentativa);
+    if (mw > larg && linha[0]) {
       if (reticencias && maxLinhas > 0 && nLinhas + 1 >= maxLinhas) {
         desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
                           alpha, 1);
@@ -945,12 +1233,16 @@ static float txt_bloco_impl(TxtEstilo estilo, const char *s, int r, int g, int b
       usado += leading; nLinhas++;
       if (maxLinhas > 0 && nLinhas >= maxLinhas) return usado;
       memcpy(linha, ini, np); linha[np] = 0;
-      if (reticencias && txt_linha(estilo, linha, r, g, b, 255).w > larg) {
+      // Separador "·" sozinho no comeco da linha nova e sobra da linha de
+      // cima ("... RELEASE ·" / "· NETFLIX"): quem separa ja ficou la. Some.
+      if (np == 2 && (unsigned char)ini[0] == 0xC2 && (unsigned char)ini[1] == 0xB7)
+        linha[0] = 0;
+      if (reticencias && txt_largura(estilo, linha) > larg) {
         desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
                           alpha, 1);
         return usado + leading;
       }
-    } else if (m.w > larg && reticencias) {
+    } else if (mw > larg && reticencias) {
       // Uma palavra sem espacos pode ser maior que a coluna. O caminho normal
       // de txt_bloco preserva o comportamento antigo; esta variante sinaliza
       // o corte e limita o glifo por largura, inclusive em texto UTF-8 longo.
@@ -975,6 +1267,7 @@ static float txt_bloco_impl(TxtEstilo estilo, const char *s, int r, int g, int b
       usado += leading; nLinhas++;
       linha[0] = 0;
     }
+    espacoAntes = espaco;
   }
   if (linha[0] && (maxLinhas <= 0 || nLinhas < maxLinhas)) {
     if (reticencias && maxLinhas > 0 && *p)
@@ -1016,10 +1309,11 @@ float txt_bloco_dir(TxtEstilo estilo, const char *s, int r, int g, int b,
   float usado = 0.0f;
   int nLinhas = 0;
   const char *p = s;
+  int espacoAntes = 1;
   while (*p && (maxLinhas <= 0 || nLinhas < maxLinhas)) {
     const char *ini = p;
-    int quebra;
-    while (*p && *p != ' ' && *p != '\n') p++;
+    int quebra, espaco;
+    p += txt_token_tam(p);
     size_t np = (size_t)(p - ini);
     // QUEBRA DURA NO \n, e isto e conserto de defeito visto em foto.
     //
@@ -1031,18 +1325,19 @@ float txt_bloco_dir(TxtEstilo estilo, const char *s, int r, int g, int b,
     // #12 fotografou exatamente isso e eu li a foto como texto sem traducao,
     // que era outra coisa: sao dois defeitos na mesma tela.
     quebra = (*p == '\n');
+    espaco = (*p == ' ' || *p == '\n');
     while (*p == ' ' || *p == '\n') { if (*p == '\n') quebra = 1; p++; }
 
     char tentativa[512];
     size_t nl = strlen(linha);
     if (nl + np + 2 >= sizeof tentativa) break;
     memcpy(tentativa, linha, nl);
-    if (nl) tentativa[nl++] = ' ';
+    if (nl && espacoAntes) tentativa[nl++] = ' ';
     memcpy(tentativa + nl, ini, np);
     tentativa[nl + np] = 0;
 
-    TxtLinha m = txt_linha(estilo, tentativa, r, g, b, 255);
-    if (m.w > larg && linha[0]) {
+    int mw = txt_largura(estilo, tentativa);
+    if (mw > larg && linha[0]) {
       TxtLinha l = txt_linha(estilo, linha, r, g, b, 255);
       if (xDir >= 0.0f) txt_desenhar_alpha(l, xDir - l.w, y + usado, alpha);
       usado += leading; nLinhas++;
@@ -1062,6 +1357,7 @@ float txt_bloco_dir(TxtEstilo estilo, const char *s, int r, int g, int b,
       usado += leading; nLinhas++;
       linha[0] = 0;
     }
+    espacoAntes = espaco;
   }
   if (linha[0] && (maxLinhas <= 0 || nLinhas < maxLinhas)) {
     TxtLinha l = txt_linha(estilo, linha, r, g, b, 255);

@@ -230,6 +230,68 @@
 #define NV_HOME_HERO_BOTAO_GAP 26.0f
 #define NV_LEGACY_ROW_HEAD_H 46.0f // titulo + margem ate os cards (564 - 518)
 
+// --- LAYOUTS DA HOME (ajustes_home_layout) ---------------------------------
+// MODERNA e tudo o que esta acima. As medidas abaixo sao DESTES DOIS layouts
+// novos e nao vem de captura do app web: o Padrao segue o `classic` do app
+// oficial (destaque contido, fileiras num fundo liso) e a Dinamica e a Apple
+// TV; os numeros sao de projeto, conferidos nas capturas de
+// tests/homelayouts_shot.sh.
+//
+// PADRAO — banner no topo, fileiras abaixo. O banner fica parado (ele NAO
+// rola): a fileira em foco se ancora em NV_PAD_TOPO_FIL, como na Moderna, so
+// que mais embaixo, e as de cima somem no corte logo abaixo do banner.
+//   banner: y 0..528, TELA CHEIA na largura (sem cartao nem canto); a arte se
+//   dissolve na base para o fundo e o texto fica no trecho opaco
+//   fileiras: titulo da fileira em foco em 544 -> 56 px de respiro
+#define NV_PAD_BANNER_Y     0.0f   // tela cheia: do topo, sem cartao
+#define NV_PAD_BANNER_H   528.0f   // termina 16 px antes do titulo da fileira
+#define NV_PAD_TOPO_FIL   544.0f
+#define NV_PAD_TEXTO_BASE  72.0f   // do fim do botao ate a base do banner
+#define NV_PAD_LOGO_H     116.0f
+#define NV_PAD_LOGO_MAX_W 380.0f
+#define NV_PAD_SIN_W      760.0f
+#define NV_PAD_FILEIRA_GAP 80.0f  // vao entre fileiras (a home original respira mais)
+// Cartaz em pe do Padrao: 260x390 (2:3), o tamanho da referencia (a home
+// original do Nuvio), no lugar dos 212x322 da Moderna. E o tamanho de FABRICA:
+// "Largura do item" continua valendo como fator sobre ele (home.c,
+// escalaCartazPadrao), com teto para a fileira em foco caber inteira na tela.
+#define NV_PAD_CARTAZ_W   260.0f
+#define NV_PAD_CARTAZ_H   390.0f
+#define NV_PAD_CARTAZ_FOLGA 40.0f  // da base do cartaz em foco ate a base da tela
+//
+// DINAMICA — o destaque ocupa 0..780 e ROLA com a pagina: com o foco no
+// destaque a primeira fileira espia por baixo (titulo em 800); descendo, o
+// destaque sobe e some e a fileira em foco se ancora em NV_DIN_TOPO_FIL. A
+// diferenca entre as duas e a "empurra" do destaque (mesma mola da Moderna, com
+// o sinal trocado: a rolagem fica NEGATIVA com o foco no destaque).
+#define NV_DIN_HERO_H     780.0f   // zona do TEXTO do destaque (a arte e maior)
+#define NV_DIN_ARTE_H    1080.0f   // a ARTE e a tela inteira, de borda a borda
+#define NV_DIN_ARTE_FADE_A  80.0f  // rolagem em que a arte comeca a apagar
+#define NV_DIN_ARTE_FADE_B 560.0f  // ...e em que ja sumiu
+#define NV_DIN_REPOUSO_FIL 800.0f  // titulo da 1a fileira com o destaque em foco
+#define NV_DIN_TOPO_FIL   150.0f   // titulo da fileira em foco, rolando
+#define NV_DIN_LOGO_H     168.0f
+#define NV_DIN_LOGO_MAX_W 520.0f
+#define NV_DIN_DEST_W     720.0f   // cartao de destaque grande (16:9)
+#define NV_DIN_DEST_H     405.0f
+#define NV_DIN_LARGA_W    384.0f   // faixa deitada
+#define NV_DIN_LARGA_H    216.0f
+#define NV_DIN_LARGA_VEU  0.62f    // altura do veu da legenda na faixa deitada
+#define NV_DIN_LARGA_PAD  20.0f    // recuo da legenda dentro da faixa
+#define NV_DIN_PAINEL_RAIO 36.0f   // canto do painel de vidro de cada fileira
+// Faixa do numeral do Top 10: o numeral mora no vao a esquerda do cartaz e o
+// cartaz cobre a ponta direita dele (a Apple faz assim), entao o passo da
+// fileira cresce por ela.
+#define NV_TOP10_NUM_FAIXA 138.0f
+// O numeral: corpo do TXT_RANK_GRANDE (os algarismos da Inter medem ~0,73 do
+// corpo, ~190 px contra o cartaz de 322 — perto de 60%, a proporcao da Apple),
+// quanto da largura dele fica POR BAIXO do cartaz, e a folga minima ate o
+// cartaz anterior (o "10" encolhe para caber, em vez de invadi-lo).
+#define NV_TOP10_NUM_CORPO 260
+#define NV_TOP10_NUM_SOB   0.20f
+#define NV_TOP10_NUM_FOLGA 14.0f
+#define NV_TOP10_NUM_BASE  0.80f   // linha de base / altura da linha (Inter: 0,969 de 1,211)
+
 // As quatro secoes visuais que a home do Apple TV usa, cada uma com proporcao
 // propria — OBSERVADO nas fotos de referencia:
 //  1. HERO      arte 16:9 full-bleed que TROCA sozinha (carrossel + dots)

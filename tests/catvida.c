@@ -36,7 +36,9 @@
 
 // --- DUBLES (os mesmos de tests/catfileira.c) --------------------------------
 int         ajustes_idioma_ingles(void) { return 0; }
+int ajustes_idioma(void) { return 0; }
 const char *i18n(const char *s)         { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 const char *dados_dir(void)             { return ""; }
 const char *sessao_usuario(void)        { return ""; }
 int         perfis_ativo(void)          { return 1; }

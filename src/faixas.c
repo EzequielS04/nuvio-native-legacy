@@ -683,18 +683,25 @@ static void coluna_desenhar(int col, float x, float larg, float y0, float a) {
     }
     float fr, fg, fb;
     corFocoFaixa(&fr, &fg, &fb);
-    if(sel) superficieFocoFaixa((GfxRect){x-20,y-14,larg+20,92},a);
-    int c=sel?ajustes_tinta_foco():230, sub=sel?ajustes_tinta_foco2():174;
-    if(col==FX_COL_ESTILO && estiloPreservadoAss(i)) { c=sel?c:128; sub=sel?sub:112; }
+    // Vidro: a linha em foco e so contorno na cor do realce sobre superficie
+    // translucida, entao o texto NAO inverte (inv = a linha e cheia e clara).
+    const int vid=ajustes_vidro(), inv=sel && !vid;
+    if(vid) {
+      GfxRect lr={x-20,y-14,larg+20,92};
+      gfx_cor(lr,0.18f,1,1,1,.035f*a); gfx_anel(lr,0.18f,1.0f,1,1,1,.09f*a);
+      if(sel) gfx_vidro_foco(lr,0.18f,1.0f,a);
+    } else if(sel) superficieFocoFaixa((GfxRect){x-20,y-14,larg+20,92},a);
+    int c=inv?ajustes_tinta_foco():230, sub=inv?ajustes_tinta_foco2():174;
+    if(col==FX_COL_ESTILO && estiloPreservadoAss(i)) { c=inv?c:128; sub=inv?sub:112; }
     txt_desenhar_alpha(txt_linha_corta(TXT_PAINEL_ITEM,rot,c,c,c,255,larg-72),x,y,a);
     if(marca && *marca)
       txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,marca,sub,sub,sub,255,larg-72),x,y+34,a);
     int ativo=col==0?i==video_audio_atual():
       col==1?i-1==legendaAtiva():0;
     if(ativo) {
-      int cr = sel ? c : (int)(fr * 255.0f + 0.5f);
-      int cg = sel ? c : (int)(fg * 255.0f + 0.5f);
-      int cb = sel ? c : (int)(fb * 255.0f + 0.5f);
+      int cr = inv ? c : (int)(fr * 255.0f + 0.5f);
+      int cg = inv ? c : (int)(fg * 255.0f + 0.5f);
+      int cb = inv ? c : (int)(fb * 255.0f + 0.5f);
       txt_desenhar_alpha(txt_linha(TXT_BODY,"✓",cr,cg,cb,255),x+larg-44,y+12,a);
     }
   }
@@ -709,7 +716,7 @@ void faixas_desenhar(Uint32 agora) {
   (void)agora;
   if(anim<.01f) return;
   float a=anim;
-  gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,.025f,.025f,.03f,.88f*a);
+  gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,.025f,.025f,.03f,(ajustes_vidro()?.80f:.88f)*a);
   txt_desenhar_alpha(txt_linha(TXT_PAINEL_TITULO,modo?"Legendas":"Áudio",242,243,245,255),56,48,a);
   txt_desenhar_alpha(txt_linha(TXT_PG_FIM,"Voltar para fechar",180,182,188,255),NV_TELA_W-250,60,a);
   visiveis=7;

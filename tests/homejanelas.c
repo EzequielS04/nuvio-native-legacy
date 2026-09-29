@@ -205,6 +205,8 @@ int trakt_continuar(CatItem *s, int m) {
   return i;
 }
 int   trakt_continuar_falhou(void)        { return 0; }
+// O servico social proprio (recomenda.c) fica fora deste teste: sem amigos Nuvio, a uniao e o que o Trakt trouxe.
+int   recomenda_social_mesclar(CatItem *i, int nTrakt, int max) { (void)i; (void)max; return nTrakt; }
 // Segunda chamada = segunda montagem. E ali, no log, entre "trakt continuar
 // assistindo" e "trakt atividade dos amigos", que o sync entrega as colecoes:
 // "[desc] fileiras remontadas sem rede: 12 de 12". A config muda junto.
@@ -236,8 +238,12 @@ int   ajustes_itens_fileira(void)          { return 12; }   // padrao (#163)
 int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127)
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
 int   ajustes_idioma_ingles(void)          { return 0; }
+int ajustes_idioma(void) { return 0; }
 int   ajustes_tmdb_ligado(void)            { return 0; }
 int   ajustes_tmdb_basico(void)            { return 0; }
+int   ajustes_meta_externo(void)           { return 0; }
+int   ajustes_meta_so_cinemeta(void)        { return 0; }
+int   addons_aceita_id(int i, const char *t, const char *id) { (void)i; (void)t; (void)id; return -1; }
 int   trakt_e_a_seguir(const char *id)     { (void)id; return 0; }
 const char *ajustes_tmdb_idioma(void)      { return "pt-BR"; }
 int   cat_acrescentar(const CatItem *i)    { (void)i; return -1; }
@@ -255,6 +261,8 @@ int   fil_podar_catalogos(const char *const *ids, const char *const *bases, int 
 int   fil_addon_novo(const char *id, const char *base) { (void)id; (void)base; return 0; }
 int   addons_perfil_da_lista(void)         { return 0; }
 int   addons_ativo(int i)                  { (void)i; return 1; }
+int   addons_fornece(int i, int oque)     { (void)i; (void)oque; return 0; }
+int   addons_sondado(int i)              { (void)i; return 0; }
 int   fil_limite(void)                     { return 16; }
 int   fil_oculta(const char *c)            { (void)c; return 0; }
 // Dubles da escolha da cota (#126): nada escolhido na TV, e o registro dos
@@ -268,6 +276,7 @@ int   fil_tem_ordem(void)                  { return 0; }
 int   fil_unir(const char *const *c, int n, int *s, int m) {
   int i; (void)c; for (i = 0; i < n && i < m; i++) s[i] = i; return i; }
 const char *i18n(const char *s)            { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 void  marco(const char *n)                 { (void)n; }
 void  prog_chave(char *d, unsigned n, const char *c, int t, int e) { (void)c; (void)t; (void)e; if (n) d[0] = 0; }
 void  prog_content_id(char *d, unsigned n, const char *i, int *t, int *e) { (void)i; (void)t; (void)e; if (n) d[0] = 0; }

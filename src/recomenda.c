@@ -25,6 +25,7 @@
 #include "layout.h"
 #include "idioma.h"
 #include "ajustes.h"
+#include "progresso.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -169,6 +170,85 @@ static float cartaoEntrada;
 static RecItem cartaoItem;
 static char  pedido[24];
 static int   temPedido;
+
+// =============================================================================
+// ENTRE AMIGOS ALEM DO TRAKT — estado (perfil publico, busca, pedidos, feed).
+// Ver a nota longa em recomenda.h e docs/SOCIAL-PRIVACIDADE.md.
+// =============================================================================
+//
+// ONDE O PERFIL MORA: recomendacoes-perfil.txt, e so ali. Ele e apagado por
+// recomenda_esquecer (troca de conta, sair) — uma pessoa que sai nao deixa o
+// apelido e a bio dela numa TV que outra vai usar. No servidor ele continua
+// existindo POR IDENTIDADE ate ela despublicar (Ajustes) ou apagar os dados
+// sociais; a proxima TV dela o adota no primeiro /v1/eu.
+#define REC_ARQ_PERFIL "recomendacoes-perfil.txt"
+
+static const char *const GENERO_ID[REC_GENEROS_N] = {
+  "acao", "aventura", "animacao", "comedia", "crime", "documentario", "drama",
+  "familia", "fantasia", "ficcao", "misterio", "romance", "suspense", "terror"
+};
+// Chaves de i18n (portugues), na mesma ordem dos ids.
+static const char *const GENERO_ROT[REC_GENEROS_N] = {
+  "Ação", "Aventura", "Animação", "Comédia", "Crime", "Documentário", "Drama",
+  "Família", "Fantasia", "Ficção científica", "Mistério", "Romance", "Suspense",
+  "Terror"
+};
+const char *rec_genero_id(int i) {
+  return (i >= 0 && i < REC_GENEROS_N) ? GENERO_ID[i] : "";
+}
+const char *rec_genero_rotulo(int i) {
+  return (i >= 0 && i < REC_GENEROS_N) ? GENERO_ROT[i] : "";
+}
+
+static RecPerfil perfil;
+static int       perfilTocado;     // a pessoa mexeu: nao adotar o do servidor
+static unsigned  perfilVersao;     // sobe a cada mudanca local (ver enviarPerfil)
+static int       perfilPendente;   // 0 nada, 1 publicar, 2 despublicar
+static int       ativPendente = -1;
+static int       apagarPendente;
+
+// A OPERACAO SOCIAL EM CURSO. Uma por vez, como vincular/remover: e sempre um
+// OK numa tela que espera a resposta.
+enum { SOC_BUSCAR = 1, SOC_GOSTO, SOC_VER, SOC_PEDIR, SOC_ACEITAR, SOC_RECUSAR,
+       SOC_CANCELAR, SOC_BLOQUEAR, SOC_DESBLOQ, SOC_PEDIDOS, SOC_BLOQUEADOS };
+static int  socOp;
+static char socArg[400];
+static int  socEstado;
+
+static RecPessoa achados[REC_BUSCA_MAX];
+static int       nAchados, achadosOrigem;
+static RecPessoa cartaoP;
+static int       temCartao;
+static char      cartaoRec[6][72];
+static int       nCartaoRec;
+static RecPessoa pedidosRec[REC_PEDIDOS_MAX];
+static int       nPedidos;
+static struct { char pub[16]; char nome[64]; } bloq[REC_BLOQ_MAX];
+static int       nBloq;
+
+// Atividade a enviar. Quatro bastam: o player gera um evento por titulo, e a
+// fila esvazia a cada ciclo de 200 ms.
+#define ATIV_FILA 4
+static struct { char imdb[24], tipo[8], titulo[160], ano[8]; int nota, agora; }
+  ativFila[ATIV_FILA];
+static int    nAtivFila;
+// O que ja foi dito, para nao repetir a cada quadro nem a cada retomada.
+static char   ativUltimo[24];
+static int    ativUltimoAgora;
+static Uint32 ativUltimoMs;
+
+// O feed dos amigos como veio da ultima leitura, para a tela "Ver perfil" do
+// amigo Nuvio (social.c) responder SEM rede.
+#define FEED_MAX 30
+static struct { char de[96]; char imdb[24], titulo[160], tipo[8]; int agora; long long criado; }
+  feed[FEED_MAX];
+static int nFeed;
+
+// Definidas mais abaixo, na parte publica desta secao; declaradas aqui porque
+// iniciar e responder_aparecer (que vem antes) as usam.
+static void gravarPerfil(void);
+static void carregarPerfil(void);
+static void perfilZerarPublico(void);
 
 int recomenda_ativo(void) { return NV_REC_URL[0] != 0; }
 int recomenda_aberta(void) { return cartaoAberto; }
@@ -353,6 +433,7 @@ void recomenda_iniciar(void) {
     if (v == REC_APARECER_NAO || v == REC_APARECER_SIM) aparecer = v;
     free(b);
   }
+  carregarPerfil();
   printf("[recomenda] %d na lista local, cursor %lld, aparecer %d\n",
          nItens, cursor, aparecer);
   fflush(stdout);
@@ -411,6 +492,13 @@ void recomenda_responder_aparecer(int sim) {
   aparecer = sim ? REC_APARECER_SIM : REC_APARECER_NAO;
   aparecerPendente = sim ? 1 : 0;
   gravarAparecer();
+  // "NAO" TAMBEM SOME COM O PERFIL: a rota /v1/descobrivel=0 despublica de
+  // verdade no servidor, e o aparelho tem de concordar (senao o Ajustes diria
+  // "pesquisavel" para um perfil que ja nao existe la).
+  if (!sim && perfil.publicado) {
+    perfilZerarPublico(); perfilTocado = 1; perfilVersao++; perfilPendente = 0;
+    gravarPerfil();
+  }
   SDL_UnlockMutex(mtx);
   // PEDE UM CICLO AGORA porque um "sim" so vale quando o servidor souber, e o
   // efeito visivel dele (as sugestoes) vem no mesmo ciclo.
@@ -593,10 +681,371 @@ void recomenda_envio_limpar(void) {
   SDL_UnlockMutex(mtx);
 }
 
+// =============================================================================
+// ENTRE AMIGOS ALEM DO TRAKT — API publica (o que a tela e o player chamam).
+// =============================================================================
+
+// Mesma limpeza do servidor (limparTexto): a-z0-9 e espaco, minusculo. Fazer
+// aqui o que ele faria evita a pessoa ver "Ana Luiza!" e receber "ana luiza".
+static void limpaCurto(char *dst, size_t tam, const char *src, size_t max) {
+  size_t k = 0;
+  int espaco = 0;
+  if (!src) src = "";
+  for (; *src && k < max && k + 1 < tam; src++) {
+    char c = *src;
+    if (c >= 'A' && c <= 'Z') c = (char)(c + 32);
+    if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+      if (espaco && k) dst[k++] = ' ';
+      espaco = 0;
+      if (k + 1 < tam && k < max) dst[k++] = c;
+    } else espaco = 1;
+  }
+  dst[k] = 0;
+}
+
+// Chamar com o mutex TOMADO.
+static void gravarPerfil(void) {
+  char t[400];
+  snprintf(t, sizeof t, "%d\t%d\t%d\t%d\t%u\t%d\t%s\t%s\n",
+           perfil.publicado, perfil.foto, perfil.recentes, perfil.ativ,
+           perfil.generos, perfilTocado, perfil.apelido, perfil.bio);
+  dados_gravar(REC_ARQ_PERFIL, t);
+}
+
+static void carregarPerfil(void) {
+  char *b = dados_ler(REC_ARQ_PERFIL);
+  memset(&perfil, 0, sizeof perfil);
+  perfilTocado = 0;
+  if (!b) return;
+  { char *p = b, *fim = strchr(b, '\n');
+    if (fim) *fim = 0;
+    perfil.publicado = atoi(campo(&p));
+    perfil.foto      = atoi(campo(&p));
+    perfil.recentes  = atoi(campo(&p));
+    perfil.ativ      = atoi(campo(&p));
+    perfil.generos   = (unsigned)strtoul(campo(&p), NULL, 10);
+    perfilTocado     = atoi(campo(&p));
+    limpaCurto(perfil.apelido, sizeof perfil.apelido, campo(&p), REC_APELIDO_MAX);
+    limpaCurto(perfil.bio, sizeof perfil.bio, p ? p : "", REC_BIO_MAX);
+    if (perfil.ativ < 0 || perfil.ativ > 2) perfil.ativ = 0;
+    perfil.generos &= (1u << REC_GENEROS_N) - 1u;
+    // publicado sem apelido nao existe: o servidor recusaria, e a tela nao teria
+    // o que mostrar como "meu perfil".
+    if (perfil.publicado && strlen(perfil.apelido) < 2) perfil.publicado = 0; }
+  free(b);
+}
+
+int recomenda_perfil(RecPerfil *saida) {
+  if (!saida) return 0;
+  memset(saida, 0, sizeof *saida);
+  if (!recomenda_ativo() || !mtx) return 0;
+  SDL_LockMutex(mtx); *saida = perfil; SDL_UnlockMutex(mtx);
+  return 1;
+}
+
+int recomenda_pesquisavel(void) {
+  int v;
+  if (!recomenda_ativo() || !mtx) return 0;
+  SDL_LockMutex(mtx); v = perfil.publicado; SDL_UnlockMutex(mtx);
+  return v;
+}
+
+int recomenda_perfil_publicar(const RecPerfil *p) {
+  RecPerfil novo;
+  if (!recomenda_ativo() || !p) return 0;
+  if (!mtx) mtx = SDL_CreateMutex();
+  novo = *p;
+  limpaCurto(novo.apelido, sizeof novo.apelido, p->apelido, REC_APELIDO_MAX);
+  limpaCurto(novo.bio, sizeof novo.bio, p->bio, REC_BIO_MAX);
+  if (strlen(novo.apelido) < 2) return 0;
+  novo.generos &= (1u << REC_GENEROS_N) - 1u;
+  novo.foto = novo.foto ? 1 : 0;
+  novo.recentes = novo.recentes ? 1 : 0;
+  novo.publicado = 1;
+  SDL_LockMutex(mtx);
+  // O nivel de atividade e uma decisao a parte (Ajustes): publicar o perfil nao
+  // a liga nem a desliga. So se o chamador mandou um valor diferente.
+  if (novo.ativ < 0 || novo.ativ > 2) novo.ativ = perfil.ativ;
+  if (novo.ativ != perfil.ativ) ativPendente = novo.ativ;
+  perfil = novo;
+  perfilTocado = 1;
+  perfilVersao++;
+  perfilPendente = 1;
+  // Publicar E aparecer sao a mesma escolha: quem publica um perfil aceita
+  // aparecer nas sugestoes (o servidor liga `descobrivel` na mesma chamada).
+  aparecer = REC_APARECER_SIM;
+  aparecerPendente = -1;
+  gravarAparecer();
+  gravarPerfil();
+  SDL_UnlockMutex(mtx);
+  recomenda_verificar();
+  SDL_LockMutex(mtx); pedidoAgora = 1; SDL_UnlockMutex(mtx);
+  return 1;
+}
+
+// Chamar com o mutex TOMADO.
+static void perfilZerarPublico(void) {
+  perfil.publicado = 0;
+  perfil.apelido[0] = 0;
+  perfil.bio[0] = 0;
+  perfil.generos = 0;
+  perfil.foto = 0;
+  perfil.recentes = 0;
+}
+
+void recomenda_perfil_despublicar(void) {
+  if (!recomenda_ativo()) return;
+  if (!mtx) mtx = SDL_CreateMutex();
+  SDL_LockMutex(mtx);
+  perfilZerarPublico();
+  perfilTocado = 1;
+  perfilVersao++;
+  perfilPendente = 2;
+  // "Nao aparecer" e a resposta que ela deu, e nao "nao perguntado": ninguem
+  // volta a ser perguntado por ter desligado.
+  aparecer = REC_APARECER_NAO;
+  aparecerPendente = -1;
+  gravarAparecer();
+  gravarPerfil();
+  SDL_UnlockMutex(mtx);
+  recomenda_verificar();
+  SDL_LockMutex(mtx); pedidoAgora = 1; SDL_UnlockMutex(mtx);
+}
+
+void recomenda_atividade_nivel(int nivel) {
+  if (!recomenda_ativo()) return;
+  if (nivel < 0) nivel = 0;
+  if (nivel > 2) nivel = 2;
+  if (!mtx) mtx = SDL_CreateMutex();
+  SDL_LockMutex(mtx);
+  perfil.ativ = nivel;
+  perfilTocado = 1;
+  perfilVersao++;
+  ativPendente = nivel;
+  // Desligar limpa o que ainda nao saiu: nada do que a pessoa acabou de negar
+  // pode ser enviado depois do gesto.
+  if (nivel == 0 && !perfil.recentes) nAtivFila = 0;
+  gravarPerfil();
+  SDL_UnlockMutex(mtx);
+  recomenda_verificar();
+  SDL_LockMutex(mtx); pedidoAgora = 1; SDL_UnlockMutex(mtx);
+}
+
+void recomenda_apagar_dados_sociais(void) {
+  if (!recomenda_ativo()) return;
+  if (!mtx) mtx = SDL_CreateMutex();
+  SDL_LockMutex(mtx);
+  memset(&perfil, 0, sizeof perfil);
+  perfilTocado = 1;
+  perfilVersao++;
+  perfilPendente = 0;
+  ativPendente = -1;
+  apagarPendente = 1;
+  nAtivFila = 0;
+  aparecer = REC_APARECER_NAO;
+  aparecerPendente = -1;
+  gravarAparecer();
+  gravarPerfil();
+  SDL_UnlockMutex(mtx);
+  recomenda_verificar();
+  SDL_LockMutex(mtx); pedidoAgora = 1; SDL_UnlockMutex(mtx);
+}
+
+// --- operacoes sociais ---------------------------------------------------------
+
+static int socIniciar(int op, const char *arg) {
+  if (!recomenda_ativo()) return 0;
+  if (!mtx) mtx = SDL_CreateMutex();
+  SDL_LockMutex(mtx);
+  if (socEstado == REC_SOC_INDO) { SDL_UnlockMutex(mtx); return 0; }
+  socOp = op;
+  snprintf(socArg, sizeof socArg, "%s", arg ? arg : "");
+  socEstado = REC_SOC_INDO;
+  SDL_UnlockMutex(mtx);
+  recomenda_verificar();
+  SDL_LockMutex(mtx); pedidoAgora = 1; SDL_UnlockMutex(mtx);
+  return 1;
+}
+
+// Handle publico: 10 letras/numeros. Recusar aqui poupa um 404 do servidor e,
+// principalmente, impede que algo maior que o buffer chegue ao JSON.
+static int pubValido(const char *s) {
+  int n = 0;
+  if (!s) return 0;
+  for (; *s; s++, n++)
+    if (!((*s >= 'a' && *s <= 'z') || (*s >= '0' && *s <= '9'))) return 0;
+  return n == 10;
+}
+
+int recomenda_buscar(const char *texto) {
+  char q[48];
+  limpaCurto(q, sizeof q, texto, 40);
+  // Espacos saem: o servidor compara apelidos sem eles, e um codigo ditado
+  // ("ab cd 12") tem de virar o codigo.
+  { char *w = q, *r = q; for (; *r; r++) if (*r != ' ') *w++ = *r; *w = 0; }
+  if (strlen(q) < 3) {
+    if (mtx) { SDL_LockMutex(mtx); socEstado = REC_SOC_CURTA; SDL_UnlockMutex(mtx); }
+    return 0;
+  }
+  return socIniciar(SOC_BUSCAR, q);
+}
+int recomenda_sugeridos_gosto(void)   { return socIniciar(SOC_GOSTO, ""); }
+int recomenda_ver_perfil(const char *pub)     { return pubValido(pub) && socIniciar(SOC_VER, pub); }
+int recomenda_pedir_amizade(const char *pub)  { return pubValido(pub) && socIniciar(SOC_PEDIR, pub); }
+int recomenda_aceitar(const char *pub)        { return pubValido(pub) && socIniciar(SOC_ACEITAR, pub); }
+int recomenda_recusar(const char *pub)        { return pubValido(pub) && socIniciar(SOC_RECUSAR, pub); }
+int recomenda_cancelar_pedido(const char *pub){ return pubValido(pub) && socIniciar(SOC_CANCELAR, pub); }
+int recomenda_desbloquear(const char *pub)    { return pubValido(pub) && socIniciar(SOC_DESBLOQ, pub); }
+int recomenda_listar_pedidos(void)    { return socIniciar(SOC_PEDIDOS, ""); }
+int recomenda_listar_bloqueados(void) { return socIniciar(SOC_BLOQUEADOS, ""); }
+// Bloquear aceita o handle (de um cartao) OU o id (da lista de amigos, onde ele
+// ja e conhecido). O prefixo diz qual e.
+int recomenda_bloquear(const char *pubOuId) {
+  char arg[112];
+  if (!pubOuId || !pubOuId[0]) return 0;
+  if (pubValido(pubOuId)) snprintf(arg, sizeof arg, "p:%s", pubOuId);
+  else if (strchr(pubOuId, ':') && strlen(pubOuId) < 100) snprintf(arg, sizeof arg, "i:%s", pubOuId);
+  else return 0;
+  return socIniciar(SOC_BLOQUEAR, arg);
+}
+
+int recomenda_soc_estado(void) {
+  int e;
+  if (!mtx) return REC_SOC_NADA;
+  SDL_LockMutex(mtx); e = socEstado; SDL_UnlockMutex(mtx);
+  return e;
+}
+void recomenda_soc_limpar(void) {
+  if (!mtx) return;
+  SDL_LockMutex(mtx);
+  if (socEstado != REC_SOC_INDO) socEstado = REC_SOC_NADA;
+  SDL_UnlockMutex(mtx);
+}
+
+int recomenda_n_achados(void) {
+  int n;
+  if (!recomenda_ativo() || !mtx) return 0;
+  SDL_LockMutex(mtx); n = nAchados; SDL_UnlockMutex(mtx);
+  return n;
+}
+int recomenda_achado(int i, RecPessoa *saida) {
+  int ok = 0;
+  if (!recomenda_ativo() || !mtx || !saida) return 0;
+  SDL_LockMutex(mtx);
+  if (i >= 0 && i < nAchados) { *saida = achados[i]; ok = 1; }
+  SDL_UnlockMutex(mtx);
+  return ok;
+}
+int recomenda_achados_origem(void) { return achadosOrigem; }
+int recomenda_cartao(RecPessoa *saida) {
+  int ok = 0;
+  if (!recomenda_ativo() || !mtx || !saida) return 0;
+  SDL_LockMutex(mtx);
+  if (temCartao) { *saida = cartaoP; ok = 1; }
+  SDL_UnlockMutex(mtx);
+  return ok;
+}
+int recomenda_cartao_n_recentes(void) { return nCartaoRec; }
+int recomenda_cartao_recente(int i, char *titulo, size_t tam) {
+  int ok = 0;
+  if (!mtx || !titulo || !tam) return 0;
+  SDL_LockMutex(mtx);
+  if (i >= 0 && i < nCartaoRec) { snprintf(titulo, tam, "%s", cartaoRec[i]); ok = 1; }
+  SDL_UnlockMutex(mtx);
+  return ok;
+}
+int recomenda_n_pedidos(void) {
+  int n;
+  if (!recomenda_ativo() || !mtx) return 0;
+  SDL_LockMutex(mtx); n = nPedidos; SDL_UnlockMutex(mtx);
+  return n;
+}
+int recomenda_pedido(int i, RecPessoa *saida) {
+  int ok = 0;
+  if (!recomenda_ativo() || !mtx || !saida) return 0;
+  SDL_LockMutex(mtx);
+  if (i >= 0 && i < nPedidos) { *saida = pedidosRec[i]; ok = 1; }
+  SDL_UnlockMutex(mtx);
+  return ok;
+}
+int recomenda_n_bloqueados(void) {
+  int n;
+  if (!recomenda_ativo() || !mtx) return 0;
+  SDL_LockMutex(mtx); n = nBloq; SDL_UnlockMutex(mtx);
+  return n;
+}
+int recomenda_bloqueado(int i, char *pub, size_t tp, char *nome, size_t tn) {
+  int ok = 0;
+  if (!recomenda_ativo() || !mtx) return 0;
+  SDL_LockMutex(mtx);
+  if (i >= 0 && i < nBloq) {
+    if (pub && tp) snprintf(pub, tp, "%s", bloq[i].pub);
+    if (nome && tn) snprintf(nome, tn, "%s", bloq[i].nome);
+    ok = 1;
+  }
+  SDL_UnlockMutex(mtx);
+  return ok;
+}
+
+// --- atividade (o player avisa; ESTE modulo decide se algo sai) --------------
+
+// Chamar com o mutex TOMADO.
+static void ativEnfileirar(const CatItem *ci, int agora) {
+  int i, k = 0;
+  if (nAtivFila >= ATIV_FILA) return;
+  // Um titulo por vez na fila: o ultimo estado dele e o que vale.
+  for (i = 0; i < nAtivFila; i++)
+    if (strcmp(ativFila[i].imdb, ci->imdb)) ativFila[k++] = ativFila[i];
+  nAtivFila = k;
+  memset(&ativFila[nAtivFila], 0, sizeof ativFila[0]);
+  snprintf(ativFila[nAtivFila].imdb,   sizeof ativFila[0].imdb,   "%s", ci->imdb);
+  snprintf(ativFila[nAtivFila].tipo,   sizeof ativFila[0].tipo,   "%s",
+           !strcmp(ci->tipo, "series") ? "series" : "movie");
+  snprintf(ativFila[nAtivFila].titulo, sizeof ativFila[0].titulo, "%s", ci->titulo);
+  { int j, n = 0;      // ano = os quatro primeiros digitos do meta, como recomenda_enviar
+    for (j = 0; ci->meta[j] && n < 4; j++)
+      if (ci->meta[j] >= '0' && ci->meta[j] <= '9') ativFila[nAtivFila].ano[n++] = ci->meta[j];
+      else if (n) break;
+    ativFila[nAtivFila].ano[n == 4 ? 4 : 0] = 0; }
+  ativFila[nAtivFila].nota = (ci->nota >= 0 && ci->nota <= 100) ? ci->nota : 0;
+  ativFila[nAtivFila].agora = agora;
+  nAtivFila++;
+  semTab(ativFila[nAtivFila - 1].titulo);
+}
+
+void recomenda_atividade_passo(const CatItem *ci, int tocando) {
+  Uint32 t;
+  if (!recomenda_ativo() || !mtx || !ci || !ci->imdb[0] || !tocando) return;
+  // "ASSISTINDO AGORA" SO NO NIVEL 2, e so uma vez por titulo (e de novo depois
+  // de 20 min, para o aviso de dez nao vencer com o filme ainda rodando).
+  SDL_LockMutex(mtx);
+  t = SDL_GetTicks();
+  if (perfil.ativ >= 2 &&
+      (strcmp(ativUltimo, ci->imdb) || !ativUltimoAgora ||
+       (Sint32)(t - ativUltimoMs) > 20 * 60 * 1000)) {
+    snprintf(ativUltimo, sizeof ativUltimo, "%s", ci->imdb);
+    ativUltimoAgora = 1;
+    ativUltimoMs = t;
+    ativEnfileirar(ci, 1);
+  }
+  SDL_UnlockMutex(mtx);
+}
+
+void recomenda_atividade_fim(const CatItem *ci, int concluiu) {
+  if (!recomenda_ativo() || !mtx || !ci || !ci->imdb[0]) return;
+  SDL_LockMutex(mtx);
+  // Saiu do titulo: da proxima vez que tocar, "agora" vale de novo.
+  ativUltimo[0] = 0; ativUltimoAgora = 0;
+  // "ASSISTIU" SO QUANDO CONCLUIU, e so com o interruptor (amigos) OU o
+  // "vistos recentemente" publico ligado. Quem largou aos 8% nao assistiu.
+  if (concluiu && (perfil.ativ >= 1 || perfil.recentes)) ativEnfileirar(ci, 0);
+  SDL_UnlockMutex(mtx);
+}
+
 void recomenda_esquecer(void) {
   if (!mtx) { dados_apagar(REC_ARQ); dados_apagar(REC_ARQ_CURSOR);
               dados_apagar(REC_ARQ_CARTAO); dados_apagar(REC_ARQ_EU);
-              dados_apagar(REC_ARQ_APARECER); return; }
+              dados_apagar(REC_ARQ_APARECER); dados_apagar(REC_ARQ_PERFIL); return; }
   SDL_LockMutex(mtx);
   geracao++;
   nItens = 0;
@@ -625,7 +1074,21 @@ void recomenda_esquecer(void) {
   vincCodigo[0] = 0; vincNome[0] = 0; vincEstado = REC_VINC_NADA;
   removerId[0] = 0;
   pedirTrakt = 0; traktEstado = REC_TRAKT_NADA; traktAchados = 0;
+  // O PERFIL, OS ACHADOS, OS PEDIDOS E A ATIVIDADE TAMBEM. Nada social de quem
+  // saiu pode aparecer na tela (ou seguir na fila) de quem entrar: o apelido, a
+  // bio, quem ela procurou, quem lhe pediu amizade, o que estava para ser dito
+  // sobre o que ela assistiu. O servidor guarda por identidade; a proxima TV dela
+  // o adota de novo no primeiro /v1/eu.
+  memset(&perfil, 0, sizeof perfil);
+  perfilTocado = 0; perfilVersao++;
+  perfilPendente = 0; ativPendente = -1; apagarPendente = 0;
+  socOp = 0; socArg[0] = 0; socEstado = REC_SOC_NADA;
+  nAchados = 0; achadosOrigem = 0; temCartao = 0; nCartaoRec = 0;
+  nPedidos = 0; nBloq = 0;
+  nAtivFila = 0; ativUltimo[0] = 0; ativUltimoAgora = 0;
+  nFeed = 0;
   SDL_UnlockMutex(mtx);
+  dados_apagar(REC_ARQ_PERFIL);
   dados_apagar(REC_ARQ);
   dados_apagar(REC_ARQ_CURSOR);
   dados_apagar(REC_ARQ_CARTAO);
@@ -1253,12 +1716,500 @@ static void confirmarVistas(const char **cab) {
   free(rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, NULL));
 }
 
+// =============================================================================
+// ENTRE AMIGOS ALEM DO TRAKT — rede (no fio, salvo recomenda_social_mesclar).
+// =============================================================================
+
+static unsigned mascaraGeneros(const char *p, const char *f) {
+  const char *g = strstr(p, "\"generos\"");
+  unsigned m = 0;
+  if (!g || g >= f || !(g = strchr(g, '['))) return 0;
+  for (g++; g < f && *g != ']'; g++) {
+    if (*g == '"') {
+      char id[24]; size_t k = 0; int i;
+      for (g++; g < f && *g != '"' && k + 1 < sizeof id; g++) id[k++] = *g;
+      id[k] = 0;
+      for (i = 0; i < REC_GENEROS_N; i++) if (!strcmp(id, GENERO_ID[i])) m |= 1u << i;
+      while (g < f && *g != '"') g++;
+    }
+  }
+  return m;
+}
+
+static int lerPessoa(const char *p, const char *f, RecPessoa *x) {
+  memset(x, 0, sizeof *x);
+  js_texto(p, f, "pub",     x->pub,     sizeof x->pub);
+  js_texto(p, f, "apelido", x->apelido, sizeof x->apelido);
+  js_texto(p, f, "avatar",  x->avatar,  sizeof x->avatar);
+  js_texto(p, f, "bio",     x->bio,     sizeof x->bio);
+  js_texto(p, f, "relacao", x->relacao, sizeof x->relacao);
+  x->emComum = (int)js_num(p, f, "emComum", 0.0);
+  x->generos = mascaraGeneros(p, f);
+  semTab(x->apelido); semTab(x->bio); semTab(x->avatar);
+  // Handle malformado ou sem nome: nao ha o que mostrar nem como agir.
+  return x->pub[0] && x->apelido[0];
+}
+
+// POST /v1/perfil, /despublicar, /apagar e /atividade — o que o aparelho decidiu
+// e o servidor ainda nao sabe. O pendente SO e limpo com o servidor confirmando
+// E se ninguem mudou de ideia no meio (perfilVersao).
+static void enviarPerfil(const char **cab) {
+  int op, ativ, apagar, st = 0;
+  unsigned ver;
+  RecPerfil p;
+  char corpo[512], *r;
+  SDL_LockMutex(mtx);
+  op = perfilPendente; ativ = ativPendente; apagar = apagarPendente;
+  ver = perfilVersao; p = perfil;
+  SDL_UnlockMutex(mtx);
+  if (apagar) {
+    url("/v1/perfil/apagar");
+    r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, "", &st);
+    free(r);
+    printf("[recomenda] apagar dados sociais HTTP %d\n", st); fflush(stdout);
+    if (st >= 200 && st < 300) {
+      SDL_LockMutex(mtx); if (perfilVersao == ver) apagarPendente = 0; SDL_UnlockMutex(mtx);
+    }
+    return;
+  }
+  if (op == 1) {
+    char ap[64], bi[220], gens[400] = "";
+    size_t k = 0;
+    int i;
+    jsonEsc(ap, sizeof ap, p.apelido);
+    jsonEsc(bi, sizeof bi, p.bio);
+    for (i = 0; i < REC_GENEROS_N; i++)
+      if (p.generos & (1u << i))
+        k += (size_t)snprintf(gens + k, sizeof gens - k, "%s\"%s\"", k ? "," : "", GENERO_ID[i]);
+    snprintf(corpo, sizeof corpo,
+             "{\"apelido\":\"%s\",\"bio\":\"%s\",\"generos\":[%s],\"avatar\":%d,\"recentes\":%d}",
+             ap, bi, gens, p.foto ? 1 : 0, p.recentes ? 1 : 0);
+    url("/v1/perfil");
+    r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st);
+    free(r);
+    printf("[recomenda] publicar perfil HTTP %d\n", st); fflush(stdout);
+    if (st >= 200 && st < 300) {
+      SDL_LockMutex(mtx); if (perfilVersao == ver) perfilPendente = 0; SDL_UnlockMutex(mtx);
+    }
+  } else if (op == 2) {
+    url("/v1/perfil/despublicar");
+    r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, "", &st);
+    free(r);
+    printf("[recomenda] despublicar perfil HTTP %d\n", st); fflush(stdout);
+    if (st >= 200 && st < 300) {
+      SDL_LockMutex(mtx); if (perfilVersao == ver) perfilPendente = 0; SDL_UnlockMutex(mtx);
+    }
+  }
+  if (ativ >= 0) {
+    snprintf(corpo, sizeof corpo, "{\"nivel\":%d}", ativ);
+    url("/v1/perfil/atividade");
+    r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st);
+    free(r);
+    printf("[recomenda] atividade nivel=%d HTTP %d\n", ativ, st); fflush(stdout);
+    if (st >= 200 && st < 300) {
+      SDL_LockMutex(mtx); if (ativPendente == ativ) ativPendente = -1; SDL_UnlockMutex(mtx);
+    }
+  }
+}
+
+// GET /v1/perfil uma vez por arranque. O servidor guarda por IDENTIDADE, e esta
+// TV pode ser a segunda da mesma pessoa (ou a mesma depois de um sair/entrar):
+// quem nunca mexeu aqui ADOTA o que o servidor tem; quem ja mexeu manda o dela.
+static void conciliarPerfil(const char **cab) {
+  char *r;
+  int st = 0;
+  url("/v1/perfil");
+  r = rede_baixar_st(fioUrl, REC_TEMPO_REDE, cab, &st);
+  if (r && st >= 200 && st < 300) {
+    int pub = (int)js_num(r, r + strlen(r), "publicado", 0.0) ? 1 : 0;
+    RecPerfil s;
+    memset(&s, 0, sizeof s);
+    s.publicado = pub;
+    js_texto(r, r + strlen(r), "apelido", s.apelido, sizeof s.apelido);
+    js_texto(r, r + strlen(r), "bio", s.bio, sizeof s.bio);
+    s.generos = mascaraGeneros(r, r + strlen(r));
+    s.foto = (int)js_num(r, r + strlen(r), "avatar", 0.0) ? 1 : 0;
+    s.recentes = (int)js_num(r, r + strlen(r), "recentes", 0.0) ? 1 : 0;
+    s.ativ = (int)js_num(r, r + strlen(r), "ativ", 0.0);
+    if (s.ativ < 0 || s.ativ > 2) s.ativ = 0;
+    SDL_LockMutex(mtx);
+    if (!perfilTocado) {
+      limpaCurto(s.apelido, sizeof s.apelido, s.apelido, REC_APELIDO_MAX);
+      limpaCurto(s.bio, sizeof s.bio, s.bio, REC_BIO_MAX);
+      if (s.publicado && strlen(s.apelido) < 2) s.publicado = 0;
+      perfil = s;
+      if (s.publicado) { aparecer = REC_APARECER_SIM; gravarAparecer(); }
+      gravarPerfil();
+    } else if (!perfilPendente && !apagarPendente) {
+      // Ja mexeu aqui e o servidor discorda: vale o daqui (mais novo por
+      // construcao), reenviado no proximo ciclo.
+      if (perfil.publicado != s.publicado) perfilPendente = perfil.publicado ? 1 : 2;
+      if (perfil.ativ != s.ativ && ativPendente < 0) ativPendente = perfil.ativ;
+    }
+    SDL_UnlockMutex(mtx);
+    printf("[recomenda] perfil no servidor: publicado %d, atividade %d\n", pub, s.ativ);
+    fflush(stdout);
+  }
+  free(r);
+}
+
+static void enviarAtividade(const char **cab) {
+  int n = 0;
+  for (;;) {
+    char corpo[560], t[340], ti[24], an[24], *r;
+    int st = 0, nota, agora;
+    char imdb[24], tipo[8], titulo[160], ano[8];
+    SDL_LockMutex(mtx);
+    if (nAtivFila < 1 || (perfil.ativ < 1 && !perfil.recentes)) {
+      nAtivFila = 0; SDL_UnlockMutex(mtx); return;
+    }
+    snprintf(imdb, sizeof imdb, "%s", ativFila[0].imdb);
+    snprintf(tipo, sizeof tipo, "%s", ativFila[0].tipo);
+    snprintf(titulo, sizeof titulo, "%s", ativFila[0].titulo);
+    snprintf(ano, sizeof ano, "%s", ativFila[0].ano);
+    nota = ativFila[0].nota; agora = ativFila[0].agora;
+    memmove(ativFila, ativFila + 1, sizeof ativFila[0] * (size_t)(--nAtivFila));
+    SDL_UnlockMutex(mtx);
+    jsonEsc(t, sizeof t, titulo);
+    jsonEsc(ti, sizeof ti, tipo);
+    jsonEsc(an, sizeof an, ano);
+    snprintf(corpo, sizeof corpo,
+             "{\"imdb\":\"%s\",\"tipo\":\"%s\",\"titulo\":\"%s\",\"ano\":\"%s\","
+             "\"nota\":%d,\"agora\":%d}",
+             imdb, ti, t, an, nota, agora ? 1 : 0);
+    url("/v1/atividade");
+    r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st);
+    free(r);
+    printf("[recomenda] atividade %s HTTP %d\n", agora ? "agora" : "assistiu", st);
+    fflush(stdout);
+    if (++n >= ATIV_FILA) return;
+  }
+}
+
+// Os titulos que ESTA pessoa concluiu, do progresso LOCAL (prog_ler), so para
+// perguntar "quem tem gosto parecido?". Vao no corpo do pedido e o servidor NAO
+// os guarda; o pedido so sai quando ela abre a tela de sugestoes.
+static int corpoGosto(char *corpo, size_t tam) {
+  ProgRegistro *reg = (ProgRegistro *)malloc(sizeof *reg * 120);
+  size_t k;
+  int i, n = 0, achou;
+  char vistos[40][24];
+  if (!reg) { snprintf(corpo, tam, "{\"imdbs\":[]}"); return 0; }
+  achou = prog_ler(reg, 120);
+  k = (size_t)snprintf(corpo, tam, "{\"imdbs\":[");
+  for (i = 0; i < achou && n < 40 && k + 32 < tam; i++) {
+    int j, dup = 0;
+    if (reg[i].durSeg < 120.0 || reg[i].posSeg < reg[i].durSeg * 0.8) continue;
+    if (strncmp(reg[i].contentId, "tt", 2)) continue;
+    for (j = 0; j < n; j++) if (!strcmp(vistos[j], reg[i].contentId)) dup = 1;
+    if (dup) continue;
+    snprintf(vistos[n], sizeof vistos[n], "%s", reg[i].contentId);
+    k += (size_t)snprintf(corpo + k, tam - k, "%s\"%s\"", n ? "," : "", vistos[n]);
+    n++;
+  }
+  snprintf(corpo + k, tam - k, "]}");
+  free(reg);
+  return n;
+}
+
+static int socEstadoDeStatus(int st) {
+  if (st >= 200 && st < 300) return REC_SOC_OK;
+  if (st == 404) return REC_SOC_NAO_ACHOU;
+  if (st == 409) return REC_SOC_SEM_APELIDO;
+  if (st == 429) return REC_SOC_LIMITE;
+  return REC_SOC_FALHA;
+}
+
+// GET /v1/pedidos: os pedidos de amizade que CHEGARAM. Devolve o HTTP.
+static int lerPedidos(const char **cab) {
+  char *r;
+  int st = 0;
+  unsigned ger;
+  SDL_LockMutex(mtx); ger = geracao; SDL_UnlockMutex(mtx);
+  url("/v1/pedidos");
+  r = rede_baixar_st(fioUrl, REC_TEMPO_REDE, cab, &st);
+  if (r && st >= 200 && st < 300) {
+    const char *p = js_array(r, NULL, "recebidos");
+    RecPessoa novos[REC_PEDIDOS_MAX];
+    int n = 0;
+    while (p && *p == '{' && n < REC_PEDIDOS_MAX) {
+      const char *f = js_fim(p);
+      if (lerPessoa(p, f, &novos[n])) n++;
+      p = js_prox(f);
+    }
+    SDL_LockMutex(mtx);
+    if (ger == geracao) { memcpy(pedidosRec, novos, sizeof(RecPessoa) * (size_t)n); nPedidos = n; }
+    SDL_UnlockMutex(mtx);
+  }
+  free(r);
+  return st;
+}
+
+static void tratarSocial(const char **cab) {
+  int op, st = 0, estado;
+  char arg[400], corpo[1200], esc[420], *r = NULL;
+  unsigned ger;
+  SDL_LockMutex(mtx);
+  op = socOp; snprintf(arg, sizeof arg, "%s", socArg); socOp = 0; ger = geracao;
+  SDL_UnlockMutex(mtx);
+  if (!op) return;
+  jsonEsc(esc, sizeof esc, arg);
+  switch (op) {
+    case SOC_BUSCAR:
+      snprintf(corpo, sizeof corpo, "{\"q\":\"%s\"}", esc);
+      url("/v1/perfis/buscar"); r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st); break;
+    case SOC_GOSTO:
+      corpoGosto(corpo, sizeof corpo);
+      url("/v1/perfis/sugeridos"); r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st); break;
+    case SOC_VER:
+      snprintf(corpo, sizeof corpo, "{\"pub\":\"%s\"}", esc);
+      url("/v1/perfis/ver"); r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st); break;
+    case SOC_PEDIR: case SOC_ACEITAR: case SOC_RECUSAR: case SOC_CANCELAR: case SOC_DESBLOQ:
+      snprintf(corpo, sizeof corpo, "{\"pub\":\"%s\"}", esc);
+      url(op == SOC_PEDIR ? "/v1/pedidos/enviar" : op == SOC_ACEITAR ? "/v1/pedidos/aceitar"
+          : op == SOC_RECUSAR ? "/v1/pedidos/recusar" : op == SOC_CANCELAR ? "/v1/pedidos/cancelar"
+          : "/v1/desbloquear");
+      r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st); break;
+    case SOC_BLOQUEAR: {
+      char e2[420];
+      jsonEsc(e2, sizeof e2, arg + 2);
+      snprintf(corpo, sizeof corpo, "{\"%s\":\"%s\"}", arg[0] == 'p' ? "pub" : "id", e2);
+      url("/v1/bloquear"); r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st); break; }
+    case SOC_PEDIDOS:
+      st = lerPedidos(cab); break;
+    case SOC_BLOQUEADOS:
+      url("/v1/bloqueados"); r = rede_baixar_st(fioUrl, REC_TEMPO_REDE, cab, &st); break;
+    default: break;
+  }
+  estado = socEstadoDeStatus(st);
+  printf("[recomenda] social op=%d HTTP %d\n", op, st); fflush(stdout);
+  SDL_LockMutex(mtx);
+  if (ger != geracao) { SDL_UnlockMutex(mtx); free(r); return; }   // saiu da conta
+  if (estado == REC_SOC_OK && r) {
+    const char *fim = r + strlen(r);
+    if (op == SOC_BUSCAR || op == SOC_GOSTO) {
+      const char *p = js_array(r, NULL, op == SOC_BUSCAR ? "resultados" : "sugeridos");
+      int n = 0;
+      while (p && *p == '{' && n < REC_BUSCA_MAX) {
+        const char *f = js_fim(p);
+        if (lerPessoa(p, f, &achados[n])) n++;
+        p = js_prox(f);
+      }
+      nAchados = n;
+      achadosOrigem = op == SOC_BUSCAR ? 1 : 2;
+    } else if (op == SOC_VER) {
+      if (lerPessoa(r, fim, &cartaoP)) {
+        const char *p = js_array(r, NULL, "recentes");
+        temCartao = 1; nCartaoRec = 0;
+        while (p && *p == '{' && nCartaoRec < 6) {
+          const char *f = js_fim(p);
+          js_texto(p, f, "titulo", cartaoRec[nCartaoRec], sizeof cartaoRec[0]);
+          semTab(cartaoRec[nCartaoRec]);
+          if (cartaoRec[nCartaoRec][0]) nCartaoRec++;
+          p = js_prox(f);
+        }
+      } else estado = REC_SOC_FALHA;
+    } else if (op == SOC_BLOQUEADOS) {
+      const char *p = js_array(r, NULL, "bloqueados");
+      int n = 0;
+      while (p && *p == '{' && n < REC_BLOQ_MAX) {
+        const char *f = js_fim(p);
+        js_texto(p, f, "pub", bloq[n].pub, sizeof bloq[n].pub);
+        js_texto(p, f, "nome", bloq[n].nome, sizeof bloq[n].nome);
+        semTab(bloq[n].nome);
+        if (bloq[n].pub[0]) n++;
+        p = js_prox(f);
+      }
+      nBloq = n;
+    } else if (op == SOC_ACEITAR || op == SOC_RECUSAR) {
+      int i, k = 0;   // o pedido tratado sai da caixa na hora
+      for (i = 0; i < nPedidos; i++)
+        if (strcmp(pedidosRec[i].pub, arg)) pedidosRec[k++] = pedidosRec[i];
+      nPedidos = k;
+    } else if (op == SOC_BLOQUEAR) {
+      // A amizade (se havia) caiu no servidor: a lista de contatos e relida.
+      contatosMs = SDL_GetTicks() - 1;
+    }
+  }
+  socEstado = estado;
+  SDL_UnlockMutex(mtx);
+  free(r);
+  // Aceitar/bloquear muda quem e contato.
+  if (estado == REC_SOC_OK && (op == SOC_ACEITAR || op == SOC_BLOQUEAR || op == SOC_PEDIR))
+    lerContatos(cab);
+}
+
+// ---------------------------------------------------------------------------
+// A FILEIRA "ENTRE AMIGOS": atividade dos amigos Nuvio.
+// ---------------------------------------------------------------------------
+
+// Identidade em buffers do CHAMADOR. identidade() usa os estaticos do fio de
+// rede; esta e chamada pela descoberta, em outro fio, e nao pode pisar neles.
+static int identidadeEm(const char **cab, char *aut, size_t na, char *via, size_t nv) {
+  const char *tcab[4];
+  char chave[160];
+  if (trakt_ativo() && trakt_cabecalhos(tcab, aut, na, chave, sizeof chave)) {
+    snprintf(via, nv, "X-Nuvio-Auth: trakt");
+  } else if (sessao_token()[0]) {
+    snprintf(aut, na, "Authorization: Bearer %s", sessao_token());
+    snprintf(via, nv, "X-Nuvio-Auth: nuvio");
+  } else return 0;
+  cab[0] = aut; cab[1] = via; cab[2] = NULL;
+  return 1;
+}
+
+// O PARSE DO FEED, separado da rede para o teste exercita-lo com o JSON que o
+// Worker emite de verdade. `r` e o corpo de GET /v1/amigos/atividade.
+static int lerFeedCorpo(const char *r, CatItem *saida, int max) {
+  const char *p;
+  int n = 0;
+  SDL_LockMutex(mtx);
+  nFeed = 0;
+  SDL_UnlockMutex(mtx);
+  p = js_array(r, NULL, "itens");
+  while (p && *p == '{' && n < max) {
+    const char *f = js_fim(p);
+    CatItem *d = &saida[n];
+    char nome[96] = "", tipo[8] = "", id[96] = "";
+    int agora;
+    long long criado;
+    memset(d, 0, sizeof *d);
+    js_texto(p, f, "imdb",   d->imdb,   sizeof d->imdb);
+    js_texto(p, f, "titulo", d->titulo, sizeof d->titulo);
+    js_texto(p, f, "tipo",   tipo,      sizeof tipo);
+    js_texto(p, f, "de",     id,        sizeof id);
+    js_texto(p, f, "deNome", nome,      sizeof nome);
+    js_texto(p, f, "deAvatar", d->socialAvatar, sizeof d->socialAvatar);
+    d->nota = (int)js_num(p, f, "nota", 0.0);
+    if (d->nota < 0 || d->nota > 100) d->nota = 0;
+    agora = (int)js_num(p, f, "agora", 0.0);
+    criado = (long long)js_num(p, f, "criado", 0.0);
+    semTab(d->titulo); semTab(nome);
+    if (!d->imdb[0] || strncmp(d->imdb, "tt", 2) || !id[0]) { p = js_prox(f); continue; }
+    snprintf(d->tipo, sizeof d->tipo, "%s", !strcmp(tipo, "series") ? "series" : "movie");
+    // O nome e o APELIDO que o amigo escolheu (o servidor manda o apelido, com
+    // o nome da conta so como reserva). Sem nome algum, "Amigo".
+    snprintf(d->socialNome, sizeof d->socialNome, "%s", nome[0] ? nome : "Amigo");
+    snprintf(d->pais, sizeof d->pais, "%s", d->socialNome);
+    // O id do amigo vai em socialSlug com o prefixo do servico ("nuvio:..."),
+    // que e o que separa o amigo Nuvio do slug do Trakt (slugValido nao aceita
+    // ':'). social.c usa isso para abrir a atividade dele SEM o Trakt.
+    snprintf(d->socialSlug, sizeof d->socialSlug, "%s", id);
+    snprintf(d->socialAcao, sizeof d->socialAcao, "%s",
+             agora ? "assistindo agora" : "assistiu");
+    snprintf(d->provNome, sizeof d->provNome, "%s", d->socialAcao);
+    snprintf(d->direcao, sizeof d->direcao, "%s",
+             !strcmp(d->tipo, "series") ? "Série" : "Filme");
+    d->retomadoMs = criado * 1000LL;
+    SDL_LockMutex(mtx);
+    if (nFeed < FEED_MAX) {
+      snprintf(feed[nFeed].de, sizeof feed[0].de, "%s", id);
+      snprintf(feed[nFeed].imdb, sizeof feed[0].imdb, "%s", d->imdb);
+      snprintf(feed[nFeed].titulo, sizeof feed[0].titulo, "%s", d->titulo);
+      snprintf(feed[nFeed].tipo, sizeof feed[0].tipo, "%s", d->tipo);
+      feed[nFeed].agora = agora; feed[nFeed].criado = criado;
+      nFeed++;
+    }
+    SDL_UnlockMutex(mtx);
+    n++;
+    p = js_prox(f);
+  }
+  return n;
+}
+
+static int lerFeedAmigos(CatItem *saida, int max) {
+  const char *cab[3];
+  char aut[3200], via[32], url_[300], *r;
+  int st = 0, n;
+  if (!identidadeEm(cab, aut, sizeof aut, via, sizeof via)) return 0;
+  snprintf(url_, sizeof url_, "%s%s", NV_REC_URL, "/v1/amigos/atividade");
+  r = rede_baixar_st(url_, REC_TEMPO_REDE, cab, &st);
+  if (!r || st < 200 || st >= 300) { free(r); return 0; }
+  n = lerFeedCorpo(r, saida, max);
+  free(r);
+  return n;
+}
+
+// A REGRA DE UNIAO, separada da rede para o teste. Ordem: quem esta assistindo
+// AGORA primeiro; depois as duas fontes se alternam (Trakt, Nuvio, Trakt...).
+// Cada titulo (imdb) entra UMA vez — o primeiro que aparece, que e o mais
+// recente de cada fonte. Nada passa de `max`.
+static int jaTem(const CatItem *v, int n, const char *imdb) {
+  int k;
+  for (k = 0; k < n; k++) if (!strcmp(v[k].imdb, imdb)) return 1;
+  return 0;
+}
+
+int rec_social_unir(CatItem *itens, int nTrakt, const CatItem *nuvio, int nNuvio, int max) {
+  CatItem *tmp;
+  int i = 0, j = 0, n = 0;
+  if (nNuvio <= 0) return nTrakt;
+  if (max < 1) return 0;
+  tmp = (CatItem *)malloc(sizeof *tmp * (size_t)max);
+  if (!tmp) return nTrakt;
+  for (j = 0; j < nNuvio && n < max; j++)
+    if (!strcmp(nuvio[j].socialAcao, "assistindo agora") && !jaTem(tmp, n, nuvio[j].imdb))
+      tmp[n++] = nuvio[j];
+  i = 0; j = 0;
+  while (n < max && (i < nTrakt || j < nNuvio)) {
+    if (i < nTrakt) { if (!jaTem(tmp, n, itens[i].imdb)) tmp[n++] = itens[i]; i++; }
+    if (n < max && j < nNuvio) { if (!jaTem(tmp, n, nuvio[j].imdb)) tmp[n++] = nuvio[j]; j++; }
+  }
+  memcpy(itens, tmp, sizeof *tmp * (size_t)n);
+  free(tmp);
+  return n;
+}
+
+int recomenda_social_mesclar(CatItem *itens, int nTrakt, int max) {
+  CatItem *nu;
+  int n;
+  if (!recomenda_ativo() || max < 1) return nTrakt;
+  if (!mtx) mtx = SDL_CreateMutex();
+  nu = (CatItem *)calloc((size_t)max, sizeof *nu);
+  if (!nu) return nTrakt;
+  n = lerFeedAmigos(nu, max);
+  if (n > 0) n = trakt_enfeitar_lote(nu, n);
+  n = rec_social_unir(itens, nTrakt, nu, n, max);
+  printf("[recomenda] entre amigos: %d do Trakt + Nuvio = %d\n", nTrakt, n);
+  fflush(stdout);
+  free(nu);
+  return n;
+}
+
+int recomenda_amigo_atividades(const char *id, RecAtivAmigo *saida, int max) {
+  int i, n = 0;
+  if (!recomenda_ativo() || !mtx || !id || !id[0] || !saida) return 0;
+  SDL_LockMutex(mtx);
+  for (i = 0; i < nFeed && n < max; i++)
+    if (!strcmp(feed[i].de, id)) {
+      snprintf(saida[n].imdb, sizeof saida[n].imdb, "%s", feed[i].imdb);
+      snprintf(saida[n].titulo, sizeof saida[n].titulo, "%s", feed[i].titulo);
+      snprintf(saida[n].tipo, sizeof saida[n].tipo, "%s", feed[i].tipo);
+      saida[n].agora = feed[i].agora;
+      saida[n].criado = feed[i].criado;
+      n++;
+    }
+  SDL_UnlockMutex(mtx);
+  return n;
+}
+
 // Um ciclo completo. 1 quando falou com o servidor (ou tentou); 0 quando nem
 // havia identidade para tentar, que e o caso do primeiro segundo do arranque.
 static int ciclo(void) {
   const char *cab[3];
   int reg, querSug;
   if (!identidade(cab)) return 0;
+  // TROCOU DE IDENTIDADE NO MEIO DA SESSAO (ligou ou desligou o Trakt): tudo o
+  // que este aparelho guarda pertence a OUTRA pessoa para o servidor — o perfil
+  // publicado, os pedidos, os achados, a fila de atividade. Guardar seria
+  // mostrar/enviar a conta errada; a regra e a de sair da conta.
+  { static char viaVista[32];
+    if (viaVista[0] && strcmp(viaVista, fioVia)) {
+      snprintf(viaVista, sizeof viaVista, "%s", fioVia);
+      recomenda_esquecer();
+      return 1;
+    }
+    snprintf(viaVista, sizeof viaVista, "%s", fioVia); }
   SDL_LockMutex(mtx);
   reg = registrado;
   SDL_UnlockMutex(mtx);
@@ -1277,13 +2228,19 @@ static int ciclo(void) {
     // varredura silenciosa no arranque. Reverter e recolocar uma linha aqui.
     lerContatos(cab);
     lerSugestoes(cab);
+    conciliarPerfil(cab);
+    lerPedidos(cab);
     contatosMs = SDL_GetTicks() + REC_CONTATOS_MS;
   } else if ((Sint32)(SDL_GetTicks() - contatosMs) >= 0) {
     lerContatos(cab);
     lerSugestoes(cab);
+    lerPedidos(cab);
     contatosMs = SDL_GetTicks() + REC_CONTATOS_MS;
   }
   enviarAparecer(cab);
+  enviarPerfil(cab);
+  enviarAtividade(cab);
+  tratarSocial(cab);
   enviarFila(cab);
   tratarContatos(cab);
   confirmarVistas(cab);

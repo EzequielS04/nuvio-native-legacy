@@ -1,4 +1,5 @@
 #include "addons.h"
+#include "idbase.h"
 #include "idioma.h"
 #include "linguas.h"
 #include "streams.h"
@@ -25,6 +26,8 @@
 // "some addons were missing (i dont know the reason)" do #42. Os dois tetos
 // agora sao o mesmo numero, e o corte, se um dia voltar a acontecer, e dito.
 #define ADD_MAX 16
+#define ADD_PREF_MAX 8
+#define ADD_PREF_TAM 24
 
 // `fonte` marca quem realmente entrega stream. Descoberto pelo manifesto: o
 // Xperience declara resources catalog/meta/subtitles e NENHUM stream, entao
@@ -39,6 +42,7 @@
 static struct {
   char nome[64]; char base[600];
   int fonte, catalogo, legenda;
+  int meta;      // declara o resource "meta" (ficha e lista de episodios)
   int ativo, sondado;
   char id[96];   // "id" do manifesto; as colecoes da conta apontam para ele
   // Catalogos de canal do manifesto (ver addons_catalogos_canal). `canalLido`
@@ -48,6 +52,11 @@ static struct {
   // tentativas. Com 2 ou mais ele e dado como fora do ar e nao ganha a segunda
   // chance (senao um addon morto somaria o prazo dela a toda abertura).
   int mudoSeg;
+  // O QUE O RESOURCE "meta" DECLARA (addons_aceita_id). `metaTipos` e "|series|movie|"
+  // em minuscula, vazio = o manifesto nao disse; `metaPref` sao os idPrefixes
+  // do resource (ou, na falta, os do manifesto), nMetaPref = 0 = nao disse.
+  char metaTipos[64];
+  char metaPref[ADD_PREF_MAX][ADD_PREF_TAM]; int nMetaPref;
 } addon[ADD_MAX];
 static int nAddon;
 static unsigned versaoLista;   // ver addons_versao
@@ -465,9 +474,9 @@ static int pedidoMudou(unsigned geracao) {
 }
 
 static void episodioPedido(const char *id, int *temporada, int *episodio) {
-  const char *p = strchr(id, ':');
-  *temporada = *episodio = 0;
-  if (p) sscanf(p + 1, "%d:%d", temporada, episodio);
+  // idbase_episodio, e nao o corte no primeiro ':': "kitsu:41370:5" lia
+  // temporada 41370 e filtrava toda fonte fora (idbase.h).
+  idbase_episodio(id, temporada, episodio);
 }
 
 static int episodioCorreto(const char *obj, const char *fim, int temporada, int episodio) {
@@ -601,6 +610,7 @@ int addons_fornece(int i, int oque) {
   if (i < 0 || i >= nAddon) return 0;
   if (oque == ADD_CATALOGO) return addon[i].catalogo;
   if (oque == ADD_STREAM)   return addon[i].fonte;
+  if (oque == ADD_META)     return addon[i].meta;
   return addon[i].legenda;
 }
 int addons_alternar(int i) {
@@ -677,9 +687,151 @@ int addons_adicionar(const char *nome, const char *urlManifest) {
 static pthread_t fioSonda;
 static int sondaViva;
 
+// --- O QUE O RESOURCE "meta" DECLARA (idPrefixes e types) -------------------
+//
+// Um manifesto Stremio pode dizer PARA QUE IDS cada resource serve, de dois
+// jeitos: na raiz ("idPrefixes":["tt"]) ou dentro do resource, como objeto
+// ({"name":"meta","types":["anime"],"idPrefixes":["kitsu:"]}). O de dentro
+// vence o da raiz. Sem isto o app so sabia que o addon TEM "meta", nunca de
+// quais ids — e para decidir a quem perguntar a ficha de "kitsu:41370" e o
+// prefixo que responde.
+
+// Valor (posicao do '[' , '{' ou do texto) de `chave` na PROFUNDIDADE 1 de
+// [ini,fim): as chaves de dentro de catalogs[]/resources[] nao contam. NULL sem
+// ela. `fim` NULL = ate o fim da string.
+static const char *chaveNaRaiz(const char *ini, const char *fim, const char *chave) {
+  size_t kl = strlen(chave);
+  int prof = 0;
+  const char *p;
+  if (!ini) return NULL;
+  if (!fim) fim = ini + strlen(ini);
+  for (p = ini; p < fim; p++) {
+    if (*p == '"') {
+      const char *a = p + 1, *q = a;
+      while (q < fim && *q != '"') { if (*q == '\\' && q + 1 < fim) q++; q++; }
+      if (prof == 1 && (size_t)(q - a) == kl && !strncmp(a, chave, kl)) {
+        const char *v = q + 1;
+        while (v < fim && (*v == ' ' || *v == '\t' || *v == '\n' || *v == '\r')) v++;
+        if (v < fim && *v == ':') {          // era chave, nao valor de outra
+          v++;
+          while (v < fim && (*v == ' ' || *v == '\t' || *v == '\n' || *v == '\r')) v++;
+          return v < fim ? v : NULL;
+        }
+      }
+      p = q;
+    } else if (*p == '{' || *p == '[') prof++;
+    else if (*p == '}' || *p == ']') prof--;
+  }
+  return NULL;
+}
+
+// Strings de um array JSON (v aponta para o '['). Devolve quantas copiou.
+static int lerStringsDoArray(const char *v, char (*out)[ADD_PREF_TAM], int max) {
+  const char *fim, *p;
+  int n = 0;
+  if (!v || *v != '[') return 0;
+  fim = js_fim(v);
+  if (!fim) return 0;
+  for (p = v + 1; p < fim && n < max; p++) {
+    if (*p == '"') {
+      size_t k = 0;
+      for (p++; p < fim && *p != '"'; p++) {
+        if (*p == '\\' && p + 1 < fim) p++;
+        if (k + 1 < ADD_PREF_TAM) out[n][k++] = *p;
+      }
+      out[n][k] = 0;
+      if (k) n++;
+    }
+  }
+  return n;
+}
+
+static void lerDeclaracaoMeta(int i, const char *corpo, const char *resources) {
+  char lista[ADD_PREF_MAX][ADD_PREF_TAM];
+  char tiposTopo[ADD_PREF_MAX][ADD_PREF_TAM];
+  char prefTopo[ADD_PREF_MAX][ADD_PREF_TAM];
+  int nT, nPT, n, k;
+  addon[i].nMetaPref = 0;
+  addon[i].metaTipos[0] = 0;
+  nT  = lerStringsDoArray(chaveNaRaiz(corpo, NULL, "types"), tiposTopo, ADD_PREF_MAX);
+  nPT = lerStringsDoArray(chaveNaRaiz(corpo, NULL, "idPrefixes"), prefTopo, ADD_PREF_MAX);
+  // Comeca pelo da raiz; o resource "meta", se declarar, troca.
+  for (k = 0; k < nPT; k++)
+    snprintf(addon[i].metaPref[k], ADD_PREF_TAM, "%s", prefTopo[k]);
+  addon[i].nMetaPref = nPT;
+  n = nT;
+  for (k = 0; k < nT; k++) snprintf(lista[k], ADD_PREF_TAM, "%s", tiposTopo[k]);
+  if (resources && *resources == '[') {
+    const char *fimR = js_fim(resources), *e;
+    e = resources + 1;
+    while (fimR && e < fimR) {
+      while (e < fimR && (*e == ' ' || *e == ',' || *e == '\n' || *e == '\t' || *e == '\r')) e++;
+      if (e >= fimR) break;
+      if (*e == '{') {
+        const char *fe = js_fim(e);
+        char nome[24] = "";
+        if (!fe) break;
+        js_texto_raiz_em(e, fe, "name", nome, sizeof nome);
+        if (!strcasecmp(nome, "meta")) {
+          const char *tp = chaveNaRaiz(e, fe, "types");
+          const char *pf = chaveNaRaiz(e, fe, "idPrefixes");
+          if (tp) n = lerStringsDoArray(tp, lista, ADD_PREF_MAX);
+          if (pf) {
+            char pr[ADD_PREF_MAX][ADD_PREF_TAM];
+            int np = lerStringsDoArray(pf, pr, ADD_PREF_MAX);
+            for (k = 0; k < np; k++) snprintf(addon[i].metaPref[k], ADD_PREF_TAM, "%s", pr[k]);
+            addon[i].nMetaPref = np;
+          }
+          break;
+        }
+        e = fe + 1;
+      } else if (*e == '"') {       // forma curta: "meta" herda os da raiz
+        for (e++; e < fimR && *e != '"'; e++) if (*e == '\\') e++;
+        e++;
+      } else e++;
+    }
+  }
+  if (n > 0) {
+    size_t o = 0;
+    addon[i].metaTipos[o++] = '|';
+    for (k = 0; k < n; k++) {
+      const char *t = lista[k];
+      for (; *t && o + 2 < sizeof addon[i].metaTipos; t++)
+        addon[i].metaTipos[o++] = (char)tolower((unsigned char)*t);
+      addon[i].metaTipos[o++] = '|';
+    }
+    addon[i].metaTipos[o] = 0;
+  }
+}
+
+// O addon `i` aceita pedir /meta/<tipo>/<id> ?
+//   1  = declara meta para esse tipo E esse prefixo de id;
+//   0  = nao serve: nao tem "meta", ou declarou tipos/prefixos e este nao esta;
+//  -1  = nao da para saber (manifesto ainda nao lido, ou sem idPrefixes) —
+//        quem chama decide se vale tentar UMA vez.
+// O tipo "" ou NULL nao filtra por tipo.
+int addons_aceita_id(int i, const char *tipo, const char *id) {
+  int k;
+  if (i < 0 || i >= nAddon || !id || !id[0]) return 0;
+  if (!addon[i].sondado) return -1;
+  if (!addon[i].meta) return 0;
+  if (tipo && tipo[0] && addon[i].metaTipos[0]) {
+    char marca[40];
+    snprintf(marca, sizeof marca, "|%s|", tipo);
+    for (k = 0; marca[k]; k++) marca[k] = (char)tolower((unsigned char)marca[k]);
+    if (!strstr(addon[i].metaTipos, marca)) return 0;
+  }
+  if (addon[i].nMetaPref <= 0) return -1;
+  for (k = 0; k < addon[i].nMetaPref; k++) {
+    size_t l = strlen(addon[i].metaPref[k]);
+    if (l && !strncmp(id, addon[i].metaPref[k], l)) return 1;
+  }
+  return 0;
+}
+
 static void capacidadesDoManifesto(int i, const char *corpo) {
   const char *r = strstr(corpo, "\"resources\"");
-  int cat = 0, str = 0, leg = 0;
+  int cat = 0, str = 0, leg = 0, met = 0;
   // O ID E O NOME VEM PRIMEIRO, ANTES DE QUALQUER RETORNO CEDO.
   //
   // Estavam no fim da funcao, depois de tres `return` que dependem de
@@ -761,13 +913,16 @@ static void capacidadesDoManifesto(int i, const char *corpo) {
       cat = strstr(trecho, "catalog")   != NULL;
       str = strstr(trecho, "stream")    != NULL;
       leg = strstr(trecho, "subtitles") != NULL;
+      met = strstr(trecho, "\"meta\"") != NULL;
       free(trecho); } }
+  lerDeclaracaoMeta(i, corpo, r);
   addon[i].catalogo = cat;
   addon[i].fonte    = str;
   addon[i].legenda  = leg;
+  addon[i].meta     = met;
   addon[i].sondado  = 1;
-  printf("[addons] %s: catalogo=%d stream=%d legenda=%d\n",
-         addon[i].nome, cat, str, leg);
+  printf("[addons] %s: catalogo=%d stream=%d legenda=%d meta=%d\n",
+         addon[i].nome, cat, str, leg, met);
   fflush(stdout);
 }
 
@@ -847,8 +1002,8 @@ void addons_buscar_legendas(const char *imdb, const char *tipo) {
   char id[64], tp[16];
   if (!nAddon || !imdb || !*imdb) return;
   serie = tipo && !strcmp(tipo, "series");
-  if (serie && !strchr(imdb, ':'))
-    snprintf(id, sizeof id, "%s:1:1", imdb);
+  if (serie && !idbase_tem_episodio(imdb))
+    snprintf(id, sizeof id, idbase_e_imdb(imdb) ? "%s:1:1" : "%s:1", imdb);
   else
     snprintf(id, sizeof id, "%s", imdb);
   snprintf(tp, sizeof tp, "%s", serie ? "series" : "movie");
@@ -1343,13 +1498,14 @@ void addons_buscar(const char *imdb, const char *tipo) {
   // "tt1234567:temporada:episodio". Como o catalogo ainda nao traz lista de
   // episodios, assume T1E1 — e o mesmo lugar onde o episodio real entra quando
   // houver.
-  if (serie && !strchr(imdb, ':'))
-    snprintf(alvoId, sizeof alvoId, "%s:1:1", imdb);
+  // Serie de addon de anime ("kitsu:41370") pede "id:episodio", nao "id:1:1".
+  if (serie && !idbase_tem_episodio(imdb))
+    snprintf(alvoId, sizeof alvoId, idbase_e_imdb(imdb) ? "%s:1:1" : "%s:1", imdb);
   else
     snprintf(alvoId, sizeof alvoId, "%s", imdb);
   snprintf(alvoTipo, sizeof alvoTipo, "%s", tipo && *tipo ? tipo : "movie");
-  { int t = 0, e = 0; const char *dp = strchr(alvoId, ':');
-    if (dp) sscanf(dp + 1, "%d:%d", &t, &e);
+  { int t = 0, e = 0;
+    idbase_episodio(alvoId, &t, &e);
     debrid_definir_episodio(t, e); }
   // O CACHE ANTES DA REDE. Canal que o guia engatilhou (ou que acabou de sair
   // do ar) responde daqui, sem fio nenhum; canal cujo prefetch esta na rede

@@ -8,6 +8,7 @@
 #include "anim.h"
 #include "corviva.h"
 #include "gpunivel.h"
+#include "ajustes.h"
 
 // Um programa por modo, e os uniforms de cada um: as posicoes NAO coincidem
 // entre programas, entao guardar um conjunto so devolveria lixo no segundo
@@ -212,7 +213,7 @@ static const char *FS_COVER =
   "}\n";
 
 static const char *FS_CORPO[GFX_NMODOS] = {
-  // GFX_CARD — arte com cantos, over-scan de parallax e especular no foco
+  // GFX_CARD — arte inteira com cantos e especular no foco (sem zoom nem corte)
   "void main(){\n"
   "  float d = sdf(vUv, uRaio, uAspect);\n"
   "  float m = borda(d);\n"
@@ -224,16 +225,20 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // a mesma do card vazio. Dentro de +/-25% de proporcao segue cover.
   "  float ra = uAspect / max(uTexAsp, 0.01);\n"
   "  float contem = (uForceCover < 0.5 && uTexAsp > 0.05 && (ra < 0.80 || ra > 1.25)) ? 1.0 : 0.0;\n"
-  "  vec2 uv = cover(vUv);\n"
+  "  vec2 uv0 = cover(vUv);\n"
   "  if (contem > 0.5) {\n"
-  "    uv = vUv;\n"
-  "    if (ra > 1.0) uv.x = (uv.x - 0.5) * ra + 0.5;\n"
-  "    else          uv.y = (uv.y - 0.5) / ra + 0.5;\n"
+  "    uv0 = vUv;\n"
+  "    if (ra > 1.0) uv0.x = (uv0.x - 0.5) * ra + 0.5;\n"
+  "    else          uv0.y = (uv0.y - 0.5) / ra + 0.5;\n"
   "  }\n"
-  // Over-scan de 3%: a Apple reserva essa margem em todas as bordas para que o
-  // parallax nunca revele borda vazia (diferenca entre "actual size" e "safe
-  // zone" nas tabelas do Top Shelf). Sem ela o clamp estica o pixel da borda.
-  "  uv = (uv - 0.5) * (0.94 - 0.05*uFoco) + 0.5 + uPar;\n"
+  // SEM OVER-SCAN E SEM ZOOM NO FOCO (issue #176). Havia aqui uma amostragem a
+  // 0.94 em repouso e 0.89 com foco (3% e ate 5,5% cortados de cada borda,
+  // "reserva de parallax" do Top Shelf da Apple) mais o deslocamento uPar. So
+  // que a arte que chega e o cartaz inteiro, e provedores como o TopPosters
+  // gravam a nota na BASE da imagem: o foco a cortava justo onde ela mora. Quem
+  // cresce no foco e o cartao inteiro (moldura + arte, home.c), nunca a arte
+  // por dentro. uPar segue so na luz, que nao corta nada.
+  "  vec2 uv = uv0;\n"
   "  vec3 cor = (contem > 0.5 && (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0))\n"
   "    ? vec3(0.173)\n"
   "    : texture2D(uTex, clamp(uv, 0.0, 1.0)).rgb;\n"
@@ -401,14 +406,20 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  vec3 c = texture2D(uTex, clamp(cover(vUv), 0.0, 1.0)).rgb;\n"
   "  vec3 bg = uFundo;\n"   // #0d0d0d fora do estilizado
   "  float x = vUv.x;\n"
-  "  float a = 1.0 - clamp(x/0.0780,0.0,1.0)*0.05\n"
-  "                - clamp((x-0.0780)/0.0936,0.0,1.0)*0.11\n"
-  "                - clamp((x-0.1716)/0.1092,0.0,1.0)*0.14\n"
-  "                - clamp((x-0.2808)/0.1248,0.0,1.0)*0.18\n"
-  "                - clamp((x-0.4056)/0.1092,0.0,1.0)*0.18\n"
-  "                - clamp((x-0.5148)/0.0936,0.0,1.0)*0.16\n"
-  "                - clamp((x-0.6084)/0.0936,0.0,1.0)*0.11\n"
-  "                - clamp((x-0.7020)/0.0780,0.0,1.0)*0.07;\n"
+  // CURVA LISA NO LUGAR DAS RAMPAS (dono, 29/09/2026: "o gradiente do
+  // detalhe ainda esta duro"). As oito rampas lineares por partes do web tem
+  // quinas de inclinacao em cada parada; na TV, com 8 bits por canal, cada
+  // quina vira uma faixa visivel, e a ultima (78%) termina com inclinacao
+  // nao-nula — a arte "comeca" numa linha. 1 - smoothstep(0, 0.82, x) passa
+  // pelas mesmas paradas com erro <= 0,05 (0.975/0.887/0.507/0.166/0.055 contra
+  // 0.95/0.84/0.52/0.18/0.07) e chega a zero com inclinacao zero.
+  //
+  // E a BASE: a arte terminava seca na borda de baixo, onde a pagina continua
+  // no fundo liso. Uma rampa vertical nos ultimos 30% leva a arte ao fundo sem
+  // borda; as duas se combinam como camadas (1-(1-a)(1-b)).
+  "  float a = 1.0 - smoothstep(0.0, 0.82, x);\n"
+  "  float ab = smoothstep(0.70, 1.0, vUv.y) * 0.92;\n"
+  "  a = 1.0 - (1.0 - a) * (1.0 - ab);\n"
   // uFoco = FORCA da vinheta: 1 no topo, 0 com a pagina rolada. No web a
   // vinheta e uma CAMADA IRMA do backdrop e tem opacidade propria — ao rolar,
   // `.detail-scrolled` leva a arte a 0.15 E a vinheta a 0 (components.css:17348).
@@ -691,7 +702,11 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float d = sdf(vUv, uRaio, uAspect);\n"
   "  float m = borda(d);\n"
   "  if (m <= 0.001) discard;\n"
-  "  float t = 1.0 - smoothstep(0.0, max(uPar.x, 0.001), vUv.y);\n"
+  // uPar.y > 0 VIRA A RAMPA DE BAIXO PARA CIMA (veu escuro sob a legenda do
+  // cartao deitado): cheia da base ate uPar.y e zero em uPar.x, medidos da
+  // base. Com uPar.y = 0 a conta e a de sempre, o realce do topo.
+  "  float yy = uPar.y > 0.0 ? 1.0 - vUv.y : vUv.y;\n"
+  "  float t = 1.0 - smoothstep(uPar.y, max(uPar.x, uPar.y + 0.001), yy);\n"
   "  gl_FragColor = nv_dither(uCor.rgb, uCor.a * t * t * m);\n"
   "}\n",
 
@@ -848,7 +863,8 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // parede atras da TV) e oscilam alguns por cento em periodos diferentes, e a
   // intensidade de cada uma tambem: nunca duas batem juntas, entao a tela nao
   // "pulsa", ela respira. A cor e a media PONDERADA das luzes e o alfa a soma
-  // delas, no maximo 0,5 — a luz tinge, nao pinta.
+  // delas, no maximo 0,72 (era 0,5 e a luz quase nao
+  // aparecia) — tinge forte, mas o texto branco por cima ainda le.
   //
   // DITHER: o nv_dither do cabecalho. O daqui somava n/255 na cor E no alfa
   // sem dividir pelo alfa, e com o alfa em no maximo 0,5 o pixel final andava
@@ -863,13 +879,43 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float A = uAspect;\n"
   "  vec2 q = vUv * vec2(A, 1.0);\n"
   "  float b = uTempo * 0.35;\n"
-  "  float wE = luz(q, vec2(-0.12*A + 0.03*sin(b),         0.55 + 0.06*sin(b*0.7)), 1.05) * (0.85 + 0.15*sin(b*0.9));\n"
-  "  float wD = luz(q, vec2( 1.12*A + 0.03*sin(b+2.0),     0.45 + 0.06*cos(b*0.8)), 1.05) * (0.85 + 0.15*sin(b*1.1+1.7));\n"
-  "  float wT = luz(q, vec2( 0.55*A + 0.08*sin(b*0.5+1.0), -0.28), 0.95) * (0.85 + 0.15*sin(b*0.7+3.1));\n"
-  "  float wB = luz(q, vec2( 0.45*A + 0.08*cos(b*0.6),     1.28), 0.95) * (0.85 + 0.15*sin(b*1.3+4.4));\n"
+  "  float wE = luz(q, vec2(-0.12*A + 0.03*sin(b),         0.55 + 0.06*sin(b*0.7)), 1.30) * (0.85 + 0.15*sin(b*0.9));\n"
+  "  float wD = luz(q, vec2( 1.12*A + 0.03*sin(b+2.0),     0.45 + 0.06*cos(b*0.8)), 1.30) * (0.85 + 0.15*sin(b*1.1+1.7));\n"
+  "  float wT = luz(q, vec2( 0.55*A + 0.08*sin(b*0.5+1.0), -0.28), 1.15) * (0.85 + 0.15*sin(b*0.7+3.1));\n"
+  "  float wB = luz(q, vec2( 0.45*A + 0.08*cos(b*0.6),     1.28), 1.15) * (0.85 + 0.15*sin(b*1.3+4.4));\n"
   "  float w = wE + wD + wT + wB;\n"
   "  vec3 c = (uReg0*wE + uReg1*wD + uReg2*wT + uReg3*wB) / max(w, 0.001);\n"
-  "  gl_FragColor = nv_dither(c, min(w, 1.0) * 0.5 * uCor.a);\n"
+  "  gl_FragColor = nv_dither(c, min(w, 1.0) * 0.72 * uCor.a);\n"
+  "}\n",
+
+  // GFX_VITRINE — ver gfx.h. O veu escurece PARA PRETO (o fundo da pagina e
+  // #0D0D0D, indistinguivel dele), sem depender de uFundo. As duas rampas sao
+  // as do GFX_VEU (base e esquerda), com a esquerda mais larga: no Dinamica o
+  // texto ocupa 40% da largura e no banner do Padrao, 45%.
+  "void main(){\n"
+  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  if (m <= 0.001) discard;\n"
+  "  vec2 uv = vUv;\n"
+  "  float ra = uAspect / max(uTexAsp, 0.01);\n"
+  "  if (uTexAsp > 0.0) {\n"
+  "    if (ra > 1.0) uv.y = uv.y / ra + uPar.x * (1.0 - 1.0 / ra);\n"
+  "    else          uv.x = (uv.x - 0.5) * ra + 0.5;\n"
+  "  }\n"
+  "  vec3 c = texture2D(uTex, clamp(uv, 0.0, 1.0)).rgb;\n"
+  "  float ge = smoothstep(0.62, 0.0, vUv.x) * 0.80 * uFoco;\n"
+  "  float gb = smoothstep(uCor.r > 0.0 ? uCor.r : 0.38, 1.0, vUv.y) * 0.72 * uFoco;\n"
+  "  c *= 1.0 - clamp(ge + gb - ge * gb, 0.0, 1.0);\n"
+  "  float d = smoothstep(0.66, 1.0, vUv.y);\n"
+  "  gl_FragColor = nv_dither(c, uCor.a * m * (1.0 - uPar.y * d * d));\n"
+  "}\n",
+
+  // GFX_FUNDO_DIN — ver gfx.h. SO COR: um degrade vertical de uma cor so. O
+  // topo e uCor.rgb, a base e essa cor vezes uFoco (a "queda"), com curva suave,
+  // e o dither de sempre para a rampa escura nao virar degrau na C9. Sem
+  // textura, sem laco, sem SDF: uma multiplicacao por pixel.
+  "void main(){\n"
+  "  vec3 c = uCor.rgb * mix(1.0, uFoco, smoothstep(0.0, 1.0, vUv.y));\n"
+  "  gl_FragColor = nv_dither(c, uCor.a);\n"
   "}\n",
 
   // GFX_COPIA — ampliacao do alvo interno (gpunivel.c). RGB E ALPHA da
@@ -906,6 +952,8 @@ static const struct { int sdf, cover; } PRECISA[GFX_NMODOS] = {
   {1,0},   /* GFX_COR_GRAD — SDF do GFX_COR */
   {1,0},   /* GFX_ANEL_GRAD — SDF do GFX_ANEL */
   {0,0},   /* GFX_AMBIENTE — procedural, tela cheia */
+  {1,0},   /* GFX_VITRINE — SDF para os cantos; o cover e proprio (ancoragem) */
+  {0,0},   /* GFX_FUNDO_DIN — procedural, so cor, tela cheia */
   {0,0}    /* GFX_COPIA — so a leitura da textura */
 };
 
@@ -1038,6 +1086,7 @@ double gfx_ms_rect = 0.0, gfx_ms_outros = 0.0;
 // Sem contar a area, "quantas camadas cheias tem esta tela" e chute — com o
 // contador e uma medida por quadro.
 double gfx_fill = 0.0;
+double gfx_fill_vis = 0.0;
 int    gfx_n_cheio = 0;   // desenhos que cobrem >= 50% da tela
 double gfx_fill_modo[GFX_NMODOS];
 static int efeitosLeves = 0;
@@ -1048,7 +1097,7 @@ static int desfGeradosQuadro = 0;   // ver gfx_desfocado
 void gfx_novo_quadro(void) {
   gfx_n_rect = gfx_n_prog = gfx_n_bind = gfx_n_outros = 0;
   gfx_ms_rect = gfx_ms_outros = 0.0;
-  gfx_fill = 0.0; gfx_n_cheio = 0;
+  gfx_fill = 0.0; gfx_fill_vis = 0.0; gfx_n_cheio = 0;
   memset(gfx_fill_modo, 0, sizeof gfx_fill_modo);
   desfGeradosQuadro = 0;
 }
@@ -1089,6 +1138,10 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   { float area = (r.w * r.h) / (NV_TELA_W * NV_TELA_H);
     gfx_fill += area;
     gfx_fill_modo[modo] += area;
+    { float x0 = r.x < 0.0f ? 0.0f : r.x, y0 = r.y < 0.0f ? 0.0f : r.y;
+      float x1 = r.x + r.w > NV_TELA_W ? NV_TELA_W : r.x + r.w;
+      float y1 = r.y + r.h > NV_TELA_H ? NV_TELA_H : r.y + r.h;
+      if (x1 > x0 && y1 > y0) gfx_fill_vis += (double)((x1 - x0) * (y1 - y0)) / (NV_TELA_W * NV_TELA_H); }
     if (area >= 0.5f) gfx_n_cheio++; }
   Programa *P = &progs[modo];
   if (progAtual != (int)modo) { glUseProgram(P->prog); progAtual = (int)modo; gfx_n_prog++; }
@@ -1276,6 +1329,22 @@ void gfx_ambiente(float alfa) {
     gfx_rect(tela, ambTex, GFX_SNAP, 0, 0.0f, 1.0f, 0.0f, 0, 0, 0, alfa);
   }
 }
+// --- FUNDO DA HOME DINAMICA ---------------------------------------------------
+//
+// SO COR. O fundo antigo assava a arte do titulo desfocada em 160x90 (quatro
+// passadas por troca, mais um quad de tela cheia com leitura de textura e, na
+// dissolucao, um SEGUNDO quad de tela cheia com mistura) e custava demais na
+// C9. Agora e um unico quad OPACO, sem mistura e sem textura: um degrade
+// vertical de UMA cor (a do titulo em foco, cruzada no CPU por home.c). Nada e
+// assado, nada e decodificado, nenhum FBO.
+void gfx_fundo_din_desenhar(const float topo[3], float queda) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  gfx_tex_aspect_atual = 0.0f;
+  glDisable(GL_BLEND);   // substitui o clear: a GPU nao le a tela para misturar
+  gfx_rect(tela, 0, GFX_FUNDO_DIN, queda, 0, 0, 0.0f, topo[0], topo[1], topo[2], 1.0f);
+  glEnable(GL_BLEND);
+}
+
 void gfx_anel(GfxRect r, float raio, float esp,
               float cr, float cg, float cb, float ca) {
   if (r.h <= 0.0f || esp <= 0.0f) return;
@@ -1298,6 +1367,11 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
   GfxRect halo;
   if (r.w <= 0.0f || r.h <= 0.0f || alfa <= 0.001f) return;
   f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco);
+  if (ajustes_vidro()) {   // vidro: superficie fina + contorno branco, sem mancha
+    gfx_vidro_painel(r, raio, 0.45f, alfa);
+    if (f > 0.01f) gfx_anel(r, raio, 3.0f, cr, cg, cb, 0.96f * f * alfa);
+    return;
+  }
   luminancia = cr * 0.2126f + cg * 0.7152f + cb * 0.0722f;
   lavagem = 0.29f * (1.0f - 0.48f * (luminancia > 0.65f ? (luminancia - 0.65f) / 0.35f : 0.0f));
   baseR = 0.057f + cr * 0.028f;
@@ -1321,6 +1395,55 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
     gfx_rect(r, 0, GFX_BRILHO_TOPO, 0, 0.38f, 0, raio,
              0.88f, 0.92f, 1.0f, 0.13f * f * alfa);
   }
+}
+// Cor do miolo do vidro: 0,16 e um degrau ACIMA do fundo escuro da pagina, e
+// nao um preto — sobre #0D0D0D um miolo preto some e so o aro sobra.
+#define VIDRO_MIOLO 0.16f
+void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a) {
+  if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
+  gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, fundo * a);
+  gfx_anel(r, raio, 1.5f, 1, 1, 1, 0.14f * a);
+}
+// A COR DO FOCO NO VIDRO E O REALCE ESCOLHIDO. O vidro muda a SUPERFICIE (fina,
+// translucida, sem brilho nem sombra), nao a cor de quem esta selecionado: com
+// o tema padrao o realce e branco e o resultado e o da referencia (contorno /
+// pilula brancos); com "Cor de destaque" ou os temas dinamicos o contorno e a
+// pilula seguem a cor. Forcar branco aqui apagava o realce de todas as telas.
+void gfx_vidro_foco(GfxRect r, float raio, float foco, float a) {
+  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco), cr, cg, cb;
+  if (f <= 0.01f || a <= 0.001f) return;
+  ajustes_acento(&cr, &cg, &cb);
+  gfx_cor(r, raio, cr, cg, cb, 0.09f * f * a);
+  gfx_anel(r, raio, 2.0f, cr, cg, cb, 0.96f * f * a);
+}
+void gfx_vidro_cartao(GfxRect r, float raio, float foco, float a) {
+  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco), cr, cg, cb;
+  if (f <= 0.01f || a <= 0.001f) return;
+  ajustes_acento(&cr, &cg, &cb);
+  gfx_anel_fora(r, raio, 2.0f, 3.0f, cr, cg, cb, 0.96f * f * a);
+}
+void gfx_vidro_pilula_cheia(GfxRect r, float raio, float foco, float a) {
+  float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco), cr, cg, cb;
+  if (f <= 0.01f || a <= 0.001f) return;
+  ajustes_acento(&cr, &cg, &cb);
+  gfx_cor(r, raio, cr, cg, cb, f * a);
+}
+// Texto sobre a pilula cheia: a tinta que contrasta com o realce (escura sobre
+// realce claro, branca sobre escuro); fora do foco, o cinza claro de sempre.
+int gfx_vidro_tinta(float foco) {
+  if (foco < 0.5f) return 235;
+  return ajustes_acento_tinta(NULL, NULL, NULL) < 0.5f ? 20 : 255;
+}
+// Superficie de um painel/pilula NA COR DO REALCE (acao principal em repouso):
+// o vidro comum com uma lavagem do realce e aro na cor dele. Sem realce
+// (tema branco) fica um degrau mais claro que o vidro, sem cor nenhuma.
+void gfx_vidro_painel_acento(GfxRect r, float raio, float fundo, float a) {
+  float cr, cg, cb;
+  if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
+  ajustes_acento(&cr, &cg, &cb);
+  gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, fundo * a);
+  gfx_cor(r, raio, cr, cg, cb, 0.20f * a);
+  gfx_anel(r, raio, 1.5f, cr, cg, cb, 0.55f * a);
 }
 void gfx_luz_canto(GfxRect r, float raio, float cx, float cy, float alcance,
                    float cr, float cg, float cb, float ca) {

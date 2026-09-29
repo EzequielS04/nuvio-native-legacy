@@ -128,6 +128,8 @@ static void corFocoMenu(float *r, float *g, float *b) {
 static void focoMenu(GfxRect pill, float f, float alpha) {
   float cr, cg, cb;
   if (f <= 0.01f || alpha <= 0.01f) return;
+  // Vidro: so a pilula cheia no realce (branca no padrao), sem luz atras.
+  if (ajustes_vidro()) { gfx_vidro_pilula_cheia(pill, NV_MENU_RAIO_PILL, f, alpha); return; }
   ajustes_acento_tinta(&cr, &cg, &cb);
   botao_luz(pill, f, alpha);
   // SOME POR OPACIDADE, e nao por cor (25/09, C9: "no settings e muito mais
@@ -167,6 +169,12 @@ static void alvosDasLinhas(float x, float w) {
 
 static void desenhaRailFixa(void) {
   GfxRect painel = { 0, 0, NV_LEGACY_RAIL_W, NV_TELA_H };
+  int vidro = ajustes_vidro();
+  // Vidro: a rail e so um fio a direita sobre um veu fino, nao um bloco cheio.
+  if (vidro) {
+    gfx_cor(painel, 0.0f, 0.055f, 0.058f, 0.064f, 0.72f);
+    gfx_cor((GfxRect){ NV_LEGACY_RAIL_W - 1.5f, 0, 1.5f, NV_TELA_H }, 0.0f, 1, 1, 1, 0.10f);
+  } else
   gfx_cor(painel, 0.0f, 0.055f, 0.058f, 0.064f, 1.0f);
   float sr, sg, sb;
   corFocoMenu(&sr, &sg, &sb);
@@ -182,6 +190,8 @@ static void desenhaRailFixa(void) {
       // A tela ativa precisa continuar legivel quando a rail esta recolhida:
       // o realce e o mesmo acento usado pelo foco expandido e pelos demais
       // controles, em vez de uma pilula cinza que parece inerte.
+      if (vidro) gfx_vidro_painel_acento(marca, NV_MENU_RAIO_PILL, 0.55f, 1.0f);
+      else
       gfx_cor(marca, NV_MENU_RAIO_PILL, sr, sg, sb, 0.92f);
     }
     icone(i, NV_MENU_ICONE_CX, y + NV_MENU_LINHA_H * 0.5f,
@@ -416,6 +426,12 @@ void menu_desenhar(Uint32 agora) {
     ponteiro_alvo(painel.x, painel.y, painel.w, painel.h, NULL, NULL, 0, 0);
     alvosDasLinhas(px, w);
   }
+  if (ajustes_vidro()) {
+    // Painel de vidro: cinza-frio translucido e um fio de 1,5 px, como o
+    // menu de contexto; o veu de tras fica mais leve para a home aparecer.
+    gfx_cor(painel, 28.0f / painel.h, 0.075f, 0.078f, 0.09f, 0.86f * entrada);
+    gfx_anel(painel, 28.0f / painel.h, 1.5f, 1, 1, 1, 0.14f * entrada);
+  } else
   gfx_cor(painel, 28.0f / painel.h, 0.055f, 0.058f, 0.068f, 0.965f * entrada);
 
   // Tudo daqui para baixo fica preso ao painel. Sem o recorte, o rotulo — que e

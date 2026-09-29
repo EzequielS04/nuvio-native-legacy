@@ -12,16 +12,22 @@
 // 0 = portugues, o padrao — e o idioma em que as asserçoes deste arquivo
 // escreveram os rotulos esperados.
 int ajustes_idioma_ingles(void) { return 0; }
+int ajustes_idioma(void) { return 0; }
 // Integracao TMDB ligada por padrao — ver a nota igual em tests/colfileiras.c.
 int ajustes_tmdb_ligado(void) { return 1; }
 const char *ajustes_tmdb_idioma(void) { return "pt-BR"; }
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 // Ramo de fonte nao-addon (issue #44) e refazer da fileira CW (#38): nao sao
 // o que este teste mede, mas fioVerTudo/fioContinuar referenciam os simbolos.
 const char *nuvem_trakt_cliente(void) { return ""; }
 char *rede_baixar_com(const char *u, int t, const char *const *c) {
   (void)c; return rede_baixar(u, t); }
 int trakt_enfeitar_lote(CatItem *s, int n) { (void)s; (void)n; return 0; }
+// Origem do item (CatItem.origem): sem addons neste teste, a origem fica vazia.
+int addons_n(void) { return 0; }
+const char *addons_base(int i) { (void)i; return ""; }
+const char *addons_id_manifesto(int i) { (void)i; return ""; }
 void cat_trocar_continuar(const CatItem *l, int q) { (void)l; (void)q; }
 static int calls;
 static pthread_mutex_t fakeLock=PTHREAD_MUTEX_INITIALIZER;

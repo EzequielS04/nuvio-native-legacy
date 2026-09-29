@@ -3,6 +3,8 @@
 #include "rede.h"
 #include "dados.h"
 #include "ajustes.h"
+#include "idiomacod.h"
+#include "idioma.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +20,11 @@
 
 typedef struct {
   char imdb[40];
+  // A LINGUA faz parte da chave: a busca e o arquivo de disco ja eram por
+  // idioma, mas a memoria nao — trocar de idioma com a Agenda aberta
+  // continuava mostrando as manchetes do anterior por ate 6 h (captura -fx-ru,
+  // 29/09/2026: citacao em portugues numa tela em russo).
+  int  lg;
   int  n, respondeu, emVoo;
   long quando;                 // epoch da resposta
   Noticia itens[NOT_MAX];
@@ -27,11 +34,12 @@ static Entrada ent[NOT_ENTRADAS];
 static int nEnt;
 static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 
-static Entrada *achar(const char *imdb) {
+static Entrada *acharLg(const char *imdb, int lg) {
   int i;
-  for (i = 0; i < nEnt; i++) if (!strcmp(ent[i].imdb, imdb)) return &ent[i];
+  for (i = 0; i < nEnt; i++) if (ent[i].lg == lg && !strcmp(ent[i].imdb, imdb)) return &ent[i];
   return NULL;
 }
+static Entrada *achar(const char *imdb) { return acharLg(imdb, ajustes_idioma()); }
 static Entrada *reservar(const char *imdb) {
   Entrada *e = achar(imdb);
   if (e) return e;
@@ -46,6 +54,7 @@ static Entrada *reservar(const char *imdb) {
   }
   memset(e, 0, sizeof *e);
   snprintf(e->imdb, sizeof e->imdb, "%s", imdb);
+  e->lg = ajustes_idioma();
   return e;
 }
 
@@ -114,10 +123,92 @@ static const char *campo(const char *de, const char *fim, const char *tag, char 
   return b;
 }
 
-// "Sat, 20 Sep 2026 12:00:00 GMT" -> "20 Sep" / "20 set".
+// O QUE MUDA POR IDIOMA na busca de manchetes, indexado por IDIOMA_*: o sufixo
+// do arquivo de cache (uma lista por idioma, para trocar de idioma nao mostrar
+// a do anterior), a palavra de apoio da busca ("Silo" serie acha a serie) e o
+// trio hl/gl/ceid do Google News. As palavras sao as que o jornalismo local usa,
+// nao traducao literal do menu.
+static const struct { const char *cod, *serie, *filme, *hl, *gl, *ceid; } PAR[IDIOMA_N] = {
+  { "pt", "s\xc3\xa9rie",                       "filme",                        "pt-BR", "BR", "BR:pt-419" },
+  { "en", "series",                              "movie",                        "en-US", "US", "US:en" },
+  { "ro", "serial",                              "film",                         "ro",    "RO", "RO:ro" },
+  { "uk", "серіал", "фільм", "uk", "UA", "UA:uk" },
+  { "ru", "сериал", "фильм", "ru", "RU", "RU:ru" },
+  { "fr", "s\xc3\xa9rie",                       "film",                         "fr",    "FR", "FR:fr" },
+  { "de", "Serie",                               "Film",                         "de",    "DE", "DE:de" },
+  { "es", "serie",                               "película",                     "es",    "ES", "ES:es" },
+  // Os 22 de 2026-09. hl/gl/ceid conferidos contra news.google.com em 29/09/2026
+  // (RSS com itens = ok). DUAS edicoes NAO EXISTEM: dinamarques e bosnio
+  // respondem 302 para a edicao en-US, e a noticia vem em ingles (o titulo entre
+  // aspas continua achando a serie); ficam com o trio certo para o dia em que o
+  // Google as abrir. A edicao servia (RS:sr) devolve manchetes em CIRILICO.
+  { "it", "serie tv", "film", "it", "IT", "IT:it" },
+  { "nl", "serie", "film", "nl", "NL", "NL:nl" },
+  { "pl", "serial", "film", "pl", "PL", "PL:pl" },
+  { "tr", "dizi", "film", "tr", "TR", "TR:tr" },
+  { "ptpt", "s\xc3\xa9rie", "filme", "pt-PT", "PT", "PT:pt-150" },
+  { "sv", "serie", "film", "sv", "SE", "SE:sv" },
+  { "da", "serie", "film", "da", "DK", "DK:da" },
+  { "no", "serie", "film", "no", "NO", "NO:no" },
+  { "cs", "seri\xc3\xa1l", "film", "cs", "CZ", "CZ:cs" },
+  { "sk", "seri\xc3\xa1l", "film", "sk", "SK", "SK:sk" },
+  { "sl", "serija", "film", "sl", "SI", "SI:sl" },
+  { "hu", "sorozat", "film", "hu", "HU", "HU:hu" },
+  { "lt", "serialas", "filmas", "lt", "LT", "LT:lt" },
+  { "bs", "serija", "film", "bs", "BA", "BA:bs" },
+  { "sr", "serija", "film", "sr", "RS", "RS:sr" },
+  { "bg", "сериал", "филм", "bg", "BG", "BG:bg" },
+  { "el", "σειρά", "ταινία", "el", "GR", "GR:el" },
+  { "id", "serial", "film", "id", "ID", "ID:id" },
+  { "vi", "phim truyền hình", "phim", "vi", "VN", "VN:vi" },
+  { "ja", "ドラマ", "映画", "ja", "JP", "JP:ja" },
+  { "zhcn", "剧集", "电影", "zh-CN", "CN", "CN:zh-Hans" },
+  { "zhtw", "影集", "電影", "zh-TW", "TW", "TW:zh-Hant" },
+};
+_Static_assert(sizeof PAR / sizeof *PAR == IDIOMA_N, "noticias.c: uma linha de PAR por IDIOMA_* (idiomacod.h)");
+
+// Epoch UTC de "Sat, 20 Sep 2026 12:00:00 GMT". Conta civil (dias desde
+// 1970), nao timegm: timegm nao existe em toda libc das TVs, e mktime usaria o
+// fuso do aparelho.
+static long long epochRfc(const char *rfc) {
+  static const char *EN[] = { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" };
+  int d = 0, a = 0, h = 0, mi = 0, se = 0, m = -1, i;
+  char mes[8] = "";
+  long long y, era, yoe, doy, doe, dias;
+  if (sscanf(rfc, "%*[^,], %d %7s %d %d:%d:%d", &d, mes, &a, &h, &mi, &se) < 3) return 0;
+  for (i = 0; i < 12; i++) if (!strncmp(mes, EN[i], 3)) m = i + 1;
+  if (m < 1 || a < 1970 || d < 1) return 0;
+  // days_from_civil (Howard Hinnant).
+  y = a - (m <= 2);
+  era = (y >= 0 ? y : y - 399) / 400;
+  yoe = y - era * 400;
+  doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  dias = era * 146097 + doe - 719468;
+  return dias * 86400LL + h * 3600LL + mi * 60LL + se;
+}
+
+void noticias_quando(const Noticia *nt, long long agora, char *dst, int tam) {
+  long long s;
+  if (!dst || tam <= 0) return;
+  dst[0] = 0;
+  if (!nt) return;
+  s = nt->quando > 0 ? agora - nt->quando : -1;
+  // Relogio da TV atrasado (s < 0) ou pubDate ausente: a data curta, que nao
+  // depende do relogio.
+  if (s < 0 || s >= 7LL * 86400) { snprintf(dst, (size_t)tam, "%s", nt->data); return; }
+  if (s < 3600) {
+    int m = (int)(s / 60);
+    if (m < 2) snprintf(dst, (size_t)tam, "%s", i18n("agora mesmo"));
+    else snprintf(dst, (size_t)tam, i18n("há %d min"), m);
+  } else if (s < 86400) snprintf(dst, (size_t)tam, i18n("há %d h"), (int)(s / 3600));
+  else if (s < 2 * 86400) snprintf(dst, (size_t)tam, "%s", i18n("ontem"));
+  else snprintf(dst, (size_t)tam, i18n("há %d dias"), (int)(s / 86400));
+}
+
+// "Sat, 20 Sep 2026 12:00:00 GMT" -> "20 Sep" / "20 set" / "20 вер".
 static long dataCurta(const char *rfc, char *dst, size_t cap) {
   static const char *EN[] = { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" };
-  static const char *PT[] = { "jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez" };
   int d = 0, m = -1, i, ano = 0;
   char mes[8] = "";
   dst[0] = 0;
@@ -128,10 +219,8 @@ static long dataCurta(const char *rfc, char *dst, size_t cap) {
   // que uma e velha sem gastar a largura da linha nas novas.
   { time_t agora = time(NULL); struct tm *tmp = gmtime(&agora);
     int anoAtual = tmp ? tmp->tm_year + 1900 : 0;
-    if (ano && ano != anoAtual)
-      snprintf(dst, cap, "%d %s %d", d, ajustes_idioma_ingles() ? EN[m] : PT[m], ano);
-    else
-      snprintf(dst, cap, "%d %s", d, ajustes_idioma_ingles() ? EN[m] : PT[m]); }
+    idioma_data_curta(ajustes_idioma(), d, idioma_mes_curto(ajustes_idioma(), m),
+                      ano && ano != anoAtual ? ano : 0, dst, cap); }
   return (long)ano * 10000L + (long)(m + 1) * 100L + d;
 }
 
@@ -158,7 +247,17 @@ static void interpretar(Entrada *e, const char *xml) {
             !strncmp(nt->titulo + lt - lf - 3, " - ", 3))
           nt->titulo[lt - lf - 3] = 0; }
     }
-    if (campo(p, fim, "pubDate", buf, sizeof buf)) nt->chave = dataCurta(buf, nt->data, sizeof nt->data);
+    if (campo(p, fim, "pubDate", buf, sizeof buf)) {
+      nt->chave = dataCurta(buf, nt->data, sizeof nt->data);
+      nt->quando = epochRfc(buf);
+    }
+    // O LINK, so http(s): e o que noticia.c vai buscar, e uma TV nao abre
+    // javascript: nem file: de um XML de fora.
+    if (campo(p, fim, "link", buf, sizeof buf)) {
+      desentidar(buf);
+      if (!strncmp(buf, "https://", 8) || !strncmp(buf, "http://", 7))
+        snprintf(nt->link, sizeof nt->link, "%s", buf);
+    }
     if (nt->titulo[0]) e->n++;
     p = fim + 7;
   }
@@ -166,33 +265,41 @@ static void interpretar(Entrada *e, const char *xml) {
   // linha da Agenda mostra so a primeira: tem de ser a ultima noticia.
   { int i, j;
     for (i = 1; i < e->n; i++)
-      for (j = i; j > 0 && e->itens[j].chave > e->itens[j - 1].chave; j--) {
+      for (j = i; j > 0 && (e->itens[j].chave > e->itens[j - 1].chave ||
+                            (e->itens[j].chave == e->itens[j - 1].chave &&
+                             e->itens[j].quando > e->itens[j - 1].quando)); j--) {
         Noticia t = e->itens[j]; e->itens[j] = e->itens[j - 1]; e->itens[j - 1] = t;
       } }
 }
 
 // --- disco -------------------------------------------------------------------
 
-static void nomeDisco(const char *imdb, char *dst, size_t cap) {
-  snprintf(dst, cap, "noticias-%s-%s.txt", imdb, ajustes_idioma_ingles() ? "en" : "pt");
+static void nomeDisco(const char *imdb, int lg, char *dst, size_t cap) {
+  // "noticias2-": o formato ganhou link e instante (dois campos no FIM da
+  // linha). Nome novo e nao o mesmo arquivo, porque a versao anterior le o
+  // ultimo campo como manchete ate o fim da linha — um downgrade desenharia
+  // o link colado ao titulo.
+  snprintf(dst, cap, "noticias2-%s-%s.txt", imdb, PAR[lg >= 0 && lg < IDIOMA_N ? lg : 0].cod);
 }
 static void gravar(const Entrada *e) {
   char nome[80], *txt;
-  size_t cap = 64 + (size_t)e->n * (sizeof(Noticia) + 8), k = 0;
+  size_t cap = 64 + (size_t)e->n * (sizeof(Noticia) + 32), k = 0;
   int i;
   txt = malloc(cap);
   if (!txt) return;
   k += (size_t)snprintf(txt + k, cap - k, "%ld\n", e->quando);
   for (i = 0; i < e->n && k < cap; i++)
-    k += (size_t)snprintf(txt + k, cap - k, "%ld\t%s\t%s\t%s\n", e->itens[i].chave, e->itens[i].data, e->itens[i].fonte, e->itens[i].titulo);
-  nomeDisco(e->imdb, nome, sizeof nome);
+    k += (size_t)snprintf(txt + k, cap - k, "%ld\t%s\t%s\t%s\t%lld\t%s\n", e->itens[i].chave,
+                          e->itens[i].data, e->itens[i].fonte, e->itens[i].titulo,
+                          e->itens[i].quando, e->itens[i].link);
+  nomeDisco(e->imdb, e->lg, nome, sizeof nome);
   dados_gravar_leve(nome, txt);
   free(txt);
 }
 static int lerDisco(Entrada *e) {
   char nome[80], *txt, *l, *prox;
   long q;
-  nomeDisco(e->imdb, nome, sizeof nome);
+  nomeDisco(e->imdb, e->lg, nome, sizeof nome);
   txt = dados_ler(nome);
   if (!txt) return 0;
   q = atol(txt);
@@ -202,6 +309,7 @@ static int lerDisco(Entrada *e) {
   while (l && *++l && e->n < NOT_MAX) {
     Noticia *nt = &e->itens[e->n];
     char *t0, *t1, *t2;
+    memset(nt, 0, sizeof *nt);
     prox = strchr(l, '\n'); if (prox) *prox = 0;
     t0 = strchr(l, '\t'); if (!t0) { l = prox; continue; }
     *t0++ = 0;
@@ -212,6 +320,11 @@ static int lerDisco(Entrada *e) {
     nt->chave = atol(l);
     snprintf(nt->data, sizeof nt->data, "%s", t0);
     snprintf(nt->fonte, sizeof nt->fonte, "%s", t1);
+    { char *t3 = strchr(t2, '\t'), *t4 = NULL;
+      if (t3) { *t3++ = 0; t4 = strchr(t3, '\t'); if (t4) *t4++ = 0;
+                nt->quando = atoll(t3);
+                if (t4 && (!strncmp(t4, "https://", 8) || !strncmp(t4, "http://", 7)))
+                  snprintf(nt->link, sizeof nt->link, "%s", t4); } }
     snprintf(nt->titulo, sizeof nt->titulo, "%s", t2);
     e->n++;
     l = prox;
@@ -222,39 +335,39 @@ static int lerDisco(Entrada *e) {
 
 // --- rede --------------------------------------------------------------------
 
-typedef struct { char imdb[40]; char titulo[200]; char rede[64]; int serie; } Pedido;
+typedef struct { char imdb[40]; char titulo[200]; char rede[64]; int serie, lg; } Pedido;
 
 static void *buscar(void *arg) {
   Pedido *p = arg;
   char q[700], url[900], *xml;
   Entrada *e;
-  int en = ajustes_idioma_ingles();
+  int lg = p->lg;
   // Titulo entre aspas mais a palavra de apoio: "Silo" serie acha a serie e
   // nao o armazem.
   // A REDE entra entre aspas quando se sabe ("Foundation" "Apple TV+"): sem
   // ela a busca por "Foundation" trazia a Wikimedia Foundation.
   if (p->rede[0]) snprintf(q, sizeof q, "\"%s\" \"%s\"", p->titulo, p->rede);
   else snprintf(q, sizeof q, "\"%s\" %s", p->titulo,
-                p->serie ? (en ? "series" : "s\xc3\xa9rie") : (en ? "movie" : "filme"));
+                p->serie ? PAR[lg].serie : PAR[lg].filme);
   { char qc[900]; codificar(q, qc, sizeof qc);
 #if defined(__EMSCRIPTEN__)
     // SAMSUNG: o Google News nao manda CORS e o fetch do wgt morre (12 de 12
     // "rede falhou" no registro de 21/09/2026). O servico de recomendacoes
     // repassa o mesmo RSS com CORS (rota /v1/noticias, sem sessao). Sem
     // NV_REC_URL na build nao ha por onde: fica sem noticias, sem erro.
-    if (!NV_REC_URL[0]) { pthread_mutex_lock(&trava); e = achar(p->imdb);
+    if (!NV_REC_URL[0]) { pthread_mutex_lock(&trava); e = acharLg(p->imdb, p->lg);
       if (e) { e->n = 0; e->quando = (long)time(NULL); e->respondeu = 1; e->emVoo = 0; }
       pthread_mutex_unlock(&trava); free(p); return NULL; }
     snprintf(url, sizeof url, "%s/v1/noticias?q=%s&hl=%s&gl=%s&ceid=%s", NV_REC_URL,
-             qc, en ? "en-US" : "pt-BR", en ? "US" : "BR", en ? "US:en" : "BR:pt-419");
+             qc, PAR[lg].hl, PAR[lg].gl, PAR[lg].ceid);
 #else
     snprintf(url, sizeof url, "https://news.google.com/rss/search?q=%s&hl=%s&gl=%s&ceid=%s",
-             qc, en ? "en-US" : "pt-BR", en ? "US" : "BR", en ? "US:en" : "BR:pt-419");
+             qc, PAR[lg].hl, PAR[lg].gl, PAR[lg].ceid);
 #endif
   }
   xml = rede_baixar(url, 12);
   pthread_mutex_lock(&trava);
-  e = achar(p->imdb);
+  e = acharLg(p->imdb, p->lg);
   if (e) {
     e->n = 0;
     if (xml) interpretar(e, xml);
@@ -287,6 +400,7 @@ void noticias_pedir(const char *imdb, const char *titulo, const char *rede, int 
   snprintf(p->titulo, sizeof p->titulo, "%s", titulo);
   snprintf(p->rede, sizeof p->rede, "%s", rede ? rede : "");
   p->serie = serie;
+  p->lg = e->lg;
   if (pthread_create(&f, NULL, buscar, p) == 0) pthread_detach(f);
   else { free(p); pthread_mutex_lock(&trava); e->emVoo = 0; pthread_mutex_unlock(&trava); }
 }

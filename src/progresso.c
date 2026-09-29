@@ -1,4 +1,5 @@
 #include "progresso.h"
+#include "idbase.h"
 #include "dados.h"
 #include "perfis.h"
 #include <pthread.h>
@@ -35,27 +36,24 @@ void prog_invalidar(void) { TRANCAR(); carregado = 0; nRegs = 0; DESTRANCAR(); }
 // ------------------------------------------------------------ identidade (sem estado)
 
 void prog_content_id(char *dst, unsigned n, const char *imdb, int *temporada, int *episodio) {
-  const char *dp;
+  size_t L;
   if (!dst || !n) return;
   dst[0] = 0;
   if (!imdb) return;
-  dp = strchr(imdb, ':');
-  if (dp) {
-    unsigned L = (unsigned)(dp - imdb);
-    if (L >= n) L = n - 1;
-    memcpy(dst, imdb, L);
-    dst[L] = 0;
-    if (temporada && episodio) {
-      int t = 0, e = 0;
-      if (sscanf(dp + 1, "%d:%d", &t, &e) == 2 && t >= 0 && e > 0) { *temporada = t; *episodio = e; }
-    }
-  } else {
-    snprintf(dst, n, "%s", imdb);
+  // idbase_len, e nao o corte no primeiro ':': "kitsu:41370" virava "kitsu", a
+  // mesma chave de progresso para todo anime do addon (idbase.h).
+  L = idbase_len(imdb);
+  if (L >= n) L = n - 1;
+  memcpy(dst, imdb, L);
+  dst[L] = 0;
+  if (temporada && episodio && imdb[idbase_len(imdb)] == ':') {
+    int t = 0, e = 0;
+    if (sscanf(imdb + idbase_len(imdb) + 1, "%d:%d", &t, &e) == 2 && t >= 0 && e > 0) { *temporada = t; *episodio = e; }
   }
 }
 
 void prog_chave(char *dst, unsigned n, const char *contentId, int temporada, int episodio) {
-  char id[24];
+  char id[64];
   if (!dst || !n) return;
   prog_content_id(id, sizeof id, contentId, NULL, NULL);
   if (id[0] && temporada >= 0 && episodio > 0)

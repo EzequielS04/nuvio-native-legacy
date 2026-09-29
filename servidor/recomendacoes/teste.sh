@@ -163,7 +163,11 @@ curl -s -o /dev/null -X POST "${C[@]}" -d '{"descobrivel":0}' "$BASE/v1/descobri
 checa "E aceita aparecer" 1 "$(curl -s -X POST "${E[@]}" -d '{"descobrivel":1}' \
   "$BASE/v1/descobrivel" | grep -c '"descobrivel":1')"
 sug_c=$(curl -s -X POST "${C[@]}" -d '{}' "$BASE/v1/sugestoes")
-checa "E aparece como amigo de amigo" 1 "$(printf '%s' "$sug_c" | grep -c 'nuvio:eee')"
+checa "E aparece como amigo de amigo" 1 "$(printf '%s' "$sug_c" | grep -c '"nome":"Elisa"')"
+# O ID DA CONTA NAO SAI PARA QUEM SO E AMIGO DE UM AMIGO: a lista traz um handle
+# opaco ("pub:...") no lugar de nuvio:<uuid>.
+checa "a sugestao nao entrega o id da conta" 0 "$(printf '%s' "$sug_c" | grep -c 'nuvio:eee')"
+checa "e entrega um handle opaco" 1 "$(printf '%s' "$sug_c" | grep -c '"id":"pub:[a-z0-9]\{10\}"')"
 checa "a sugestao diz por onde chegou" 1 "$(printf '%s' "$sug_c" | grep -c '"origem":"amigo"')"
 # O NOME DO INTERMEDIARIO E O QUE A TV ESCREVE na linha ("amigo de Daniel"). Sem
 # ele a sugestao seria um nome solto, que e o que faz alguem recusar.
@@ -200,9 +204,9 @@ checa "id fora das sugestoes e recusado" 403 \
 # lugar nenhum: a consulta le a coluna a cada pedido.
 curl -s -o /dev/null -X POST "${E[@]}" -d '{"descobrivel":0}' "$BASE/v1/descobrivel"
 checa "revogar tira das sugestoes" 0 \
-  "$(curl -s -X POST "${C[@]}" -d '{}' "$BASE/v1/sugestoes" | grep -c 'nuvio:eee')"
+  "$(curl -s -X POST "${C[@]}" -d '{}' "$BASE/v1/sugestoes" | grep -c '"nome":"Elisa"')"
 checa "e tambem das de D, que era o contato em comum" 0 \
-  "$(curl -s -X POST "${D[@]}" -d '{}' "$BASE/v1/sugestoes" | grep -c 'nuvio:eee')"
+  "$(curl -s -X POST "${D[@]}" -d '{}' "$BASE/v1/sugestoes" | grep -c '"nome":"Elisa"')"
 # QUEM REVOGA NAO PERDE CONTATO NENHUM. O sinalizador governa aparecer na
 # sugestao dos outros, e mais nada — desligar nao pode desfazer um vinculo que
 # as duas pessoas ja aceitaram.

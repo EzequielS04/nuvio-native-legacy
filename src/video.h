@@ -78,6 +78,10 @@ int  video_recorte_fonte(void);
 // o trailer (trailer.c): o pipeline prende o plano em mais de um ponto depois
 // do load e pode engolir um recorte pedido cedo.
 void video_recorte_reaplicar(void);
+// Tamanho da superficie (drawable) em que o destino do plano de video e lido; o
+// layout e 1920x1080 e o retangulo e escalado por isso (issue #176). Chamar uma
+// vez, depois de criar a janela. Ver video_escala.h.
+void video_escala_definir(int sw, int sh);
 
 // URL da reproducao corrente ("" quando nao ha). Existe para a folha de
 // faixas mandar o mkvass.c ler a legenda ASS de dentro do MESMO arquivo que
@@ -128,6 +132,16 @@ int    video_tocando(void);
 int    video_pronto(void);   // 1 depois do loadCompleted
 int    video_ativo(void);    // 1 assim que ha mediaId — e o que abre o furo
 int    video_falhou(void);   // 1 depois de um errorText real na fonte atual
+// O ULTIMO ERRO REAL do pipeline na fonte atual, como o pipeline o disse
+// ("40403 server error:40403", "100 Playing error"); "" sem erro. Existe para
+// o cartao de erro do canal dizer o que o servidor respondeu em vez do
+// generico (#158). Vale ate o proximo video_tocar/video_parar.
+const char *video_erro_texto(void);
+// 1 depois que o decoder se anunciou (videoInfo do uMS) na fonte atual. Existe
+// para o watchdog de canal separar "abre devagar" de "chega dado e o decoder
+// nunca comeca" — o sintoma do #158, com bufferRange subindo e nenhum
+// videoInfo. Onde a plataforma nao da o sinal (Tizen), 1: nao afirma nada.
+int video_decoder_anunciou(void);
 int    video_audio_nao_suportado(void);  // uMS errorCode 200: video segue sem som
 int    video_terminou(void); // 1 depois do fim de fluxo (endOfStream) da fonte atual
 

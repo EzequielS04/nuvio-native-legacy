@@ -58,8 +58,29 @@ nao existe: o pacote sairia sem servidor e sem login).
    latest (o app e o Homebrew Channel leem `releases/latest`). Sem os `.so`
    anexados, os `.tpk` instalados nao se atualizam sozinhos.
 5. **Notas** em ingles, `## Added` / `## Fixed` / `## Notes`, balas curtas (o
-   app mostra 3 linhas por bala). Na secao Samsung, a tabela "qual arquivo
-   para qual TV" acima, e que o nativo e opt-in (quem prefere segue no `.wgt`).
+   app mostra 3 linhas por bala). Toda release termina com a TABELA "Which file
+   do I need?" (pedido do dono, 29/09/2026), LG e Samsung juntas, com o nome
+   EXATO de cada anexo. Ela vai DEPOIS de `## Notes`: o cartao de atualizacao
+   (atualizacao.c) para de ler em "Notes", entao os `|` da tabela nunca chegam
+   a tela da TV. Diga que o nativo Samsung e opt-in (quem prefere segue no
+   `.wgt`). Modelo (troque X.Y.Z):
+
+   ```markdown
+   ## Which file do I need?
+
+   | TV | System | File |
+   |---|---|---|
+   | LG 2016 and newer | webOS 3 or newer | `space.nuvio.native.legacy_X.Y.Z_arm.ipk` |
+   | LG with 2 GB of RAM or more | webOS 3 or newer | `space.nuvio.native.legacy_X.Y.Z_arm-highcache.ipk` (bigger image cache) |
+   | Samsung 2018–2020 | Tizen 4.0 / 5.0 / 5.5 | `Nuvio-X.Y.Z-NuvioTpk40.tpk` (native) |
+   | Samsung 2021 | Tizen 6.0 | `Nuvio-X.Y.Z-NuvioTpk60.tpk` (native) |
+   | Samsung 2022–2023 | Tizen 6.5 / 7.0 | `Nuvio-X.Y.Z-NuvioTpk65.tpk` (native) |
+   | Samsung 2024 and newer | Tizen 8.0 / 9.0 | `Nuvio-X.Y.Z-NuvioTpk.tpk` (native) |
+   | Samsung 2020 and newer | Tizen 5.5 or newer | `NuvioTV-X.Y.Z-tizen.wgt` (web version) |
+
+   You don't need `libnuvio-*.so`, `repo.json`, `webosbrew.manifest.json` or
+   `SHA256SUMS`: they're for self-update, the Homebrew Channel and checksums.
+   ```
 6. **Avisar**: issues curtas em ingles, so dizer "fixed" com a release no ar.
    `avisos.json` no master (`plataforma` `tizen` alcanca `.wgt` e `.tpk`;
    `tizen-tpk` so o `.tpk`; ids com `tpk-preview` sao ignorados pelo `.tpk`).

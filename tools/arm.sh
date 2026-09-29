@@ -138,9 +138,15 @@ rm -f ./*.ipk
 #
 # ajustes.txt sai pelo mesmo motivo, com dano menor: e a preferencia de LAYOUT
 # de quem montou, e ela chegaria como se fosse a de quem instalou.
+#
+# debrid.txt e a CHAVE de debrid digitada na TV do dono (Ajustes > Integracoes >
+# Debrid): "alldebrid=<chave>", "torbox=<chave>"... Credencial de conta paga —
+# quem instalasse tocaria torrent na assinatura do dono. fanart.txt (chave
+# pessoal) e p2p.txt (IP da rede do dono) tinham a mesma sina e tambem nao
+# estavam na lista.
 ARQ_DE_PESSOA="trakt.txt addons.txt tmdb.txt mdblist.txt ajustes.txt
                progresso.txt nuvem.txt sessao.txt perfil.txt cliente.txt
-               listas.txt guia-fav.txt"
+               listas.txt guia-fav.txt debrid.txt fanart.txt p2p.txt"
 
 # UM POR PERFIL, entao o nome nao e fixo: stalker-p1.txt, stalker-p2.txt...
 # Estes guardam o MAC do portal IPTV, que autentica a assinatura de quem

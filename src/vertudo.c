@@ -1,4 +1,5 @@
 #include "vertudo.h"
+#include "posterprov.h"
 #include "idioma.h"
 #include "badges.h"
 #include "descoberta.h"
@@ -410,7 +411,7 @@ static void themeBackground(float a) {
         gfx_tex_aspect_atual=0;
       }
     } else {
-      const char *art=collection->hero[0]?collection->hero:collection->cover;
+      const char *art=col_banner(collection);
       GLuint tex=art[0]?tex_obter_hero(art):0;
       if(tex) {
         gfx_tex_aspect_atual=tex_aspecto(art);
@@ -551,6 +552,7 @@ void vertudo_desenhar(Uint32 agora) {
     float cy = VT_TOPO + (float)(i / VT_COLS) * (VT_CARD_H + VT_GAP_Y) - scrollY;
     CatItem it;
     GLuint t;
+    const char *arteCard;
     // MESMO raio dos cartazes da home: `posterCardCornerRadiusDp` (12dp x 2 =
     // 24px), fracao do MENOR lado porque o SDF do shader e normalizado. O
     // NV_RAIO_CARD fixo que estava aqui dava um canto diferente do resto do
@@ -565,10 +567,11 @@ void vertudo_desenhar(Uint32 agora) {
         GfxRect anel = { cx - 4, cy - 4, VT_CARD_W + 8, VT_CARD_H + 8 };
         gfx_cor(anel, ajustes_raio_poster_px() / (VT_CARD_W + 8.0f), 1, 1, 1, a);
       }
-      t = it.poster[0] ? tex_obter_larg(it.poster, VT_CARD_W)
-        : (it.backdrop[0] ? tex_obter_larg(it.backdrop, VT_CARD_W) : 0);
+      { const char *pp = posterprov_card(it.imdb, it.tmdb, it.tipo, it.poster);
+        arteCard = pp[0] ? pp : it.backdrop; }
+      t = arteCard[0] ? tex_obter_larg(arteCard, VT_CARD_W) : 0;
       if (t) {
-        gfx_tex_aspect_atual = tex_aspecto(it.poster[0] ? it.poster : it.backdrop);
+        gfx_tex_aspect_atual = tex_aspecto(arteCard);
         gfx_rect(r, t, GFX_CARD, sel ? 1.0f : 0.0f, 0, 0, raio, 0, 0, 0, a);
         gfx_tex_aspect_atual = 0.0f;
       } else {

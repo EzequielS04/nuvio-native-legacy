@@ -25,7 +25,9 @@ int arte_reserva_episodios(const char *imdb, const char *corpo) { (void)imdb; (v
 
 // --- DUBLES: so fazem descoberta.c linkar (o conjunto de tests/cateps.c) -----
 int         ajustes_idioma_ingles(void) { return 0; }
+int ajustes_idioma(void) { return 0; }
 const char *i18n(const char *s)         { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 const char *dados_dir(void)             { return ""; }
 const char *sessao_usuario(void)        { return ""; }
 int         perfis_ativo(void)          { return 1; }
@@ -37,6 +39,9 @@ static int fonteTeste;          // 0 = AJ_CWF_AMBAS, 2 = so o Trakt
 int   ajustes_cw_fonte(void)               { return fonteTeste; }
 int   ajustes_tmdb_ligado(void)            { return 0; }
 int   ajustes_tmdb_basico(void)            { return 0; }
+int   ajustes_meta_externo(void)           { return 0; }
+int   ajustes_meta_so_cinemeta(void)        { return 0; }
+int   addons_aceita_id(int i, const char *t, const char *id) { (void)i; (void)t; (void)id; return -1; }
 int   ajustes_tmdb_arte(void)              { return 0; }
 int   ajustes_tmdb_elenco(void)            { return 0; }
 int   ajustes_tmdb_cw(void)                { return 0; }
@@ -49,6 +54,8 @@ int   fil_podar_catalogos(const char *const *ids, const char *const *bases, int 
 int   fil_addon_novo(const char *id, const char *base) { (void)id; (void)base; return 0; }
 int   addons_perfil_da_lista(void)         { return 0; }
 int   addons_ativo(int i)                  { (void)i; return 1; }
+int   addons_fornece(int i, int oque)     { (void)i; (void)oque; return 0; }
+int   addons_sondado(int i)              { (void)i; return 0; }
 int   fil_limite(void)                     { return 16; }
 int   fil_oculta(const char *c)            { (void)c; return 0; }
 // Dubles da escolha da cota (#126): nada escolhido na TV, e o registro dos
@@ -76,6 +83,8 @@ int   simkl_plantowatch(CatItem *s, int m) { (void)s; (void)m; return 0; }
 int   ajustes_salvos_no_simkl(void)        { return 0; }
 int   trakt_enfeitar_lote(CatItem *s, int n) { (void)s; return n; }
 int   trakt_lista(const char *q, CatItem *s, int m) { (void)q; (void)s; (void)m; return 0; }
+// O servico social proprio (recomenda.c) fica fora deste teste: a uniao e so o que o Trakt trouxe.
+int   recomenda_social_mesclar(CatItem *i, int nTrakt, int max) { (void)i; (void)max; return nTrakt; }
 int   trakt_social(CatItem *s, int m)      { (void)s; (void)m; return 0; }
 const char *nuvem_trakt_cliente(void)      { return ""; }
 int   addons_n(void)                       { return 0; }

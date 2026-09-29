@@ -149,14 +149,22 @@ static void ajustarBase(const float bruto[3], float saida[3]) {
 // A LUZ DE UMA REGIAO (imersiva): a media da regiao, com o croma realcado e a
 // luminosidade numa faixa de "luz de ambiente" — escura o bastante para o
 // texto branco por cima continuar lendo, clara o bastante para se ver que e
-// luz. O shader a pinta com alfa <= 0,5, entao o que chega a tela e metade.
+// luz. O shader a pinta com alfa <= 0,72 (gfx.c, GFX_AMBIENTE).
+//
+// MAIS COR (dono, 28/09/2026: "hoje nao muda tanto, quero a cor fazendo mais"):
+// era croma x1,6 com teto 0,16 e alfa <= 0,5, e a media de um terco da arte
+// ja sai mais cinza que a arte — toda luz virava um tom sujo parecido com a
+// outra. Agora a media pesa mais quem tem cor (MEDIA_REGIAO, na extracao), o
+// croma sobe x2,3 com teto 0,21 e a luminosidade vai a 0,60. O texto branco
+// segue lendo: a luz mais clara (L 0,60) a alfa 0,72 sobre #0D0D0D fica em L
+// ~0,43, e a maior parte do texto esta em cartao e nao sobre a luz.
 static void ajustarRegiao(const float bruto[3], float saida[3]) {
   float L, C, h;
   lchDe(bruto, &L, &C, &h);
-  if (L < 0.34f) L = 0.34f;
-  if (L > 0.58f) L = 0.58f;
-  C *= 1.6f;
-  if (C > 0.16f) C = 0.16f;
+  if (L < 0.36f) L = 0.36f;
+  if (L > 0.60f) L = 0.60f;
+  C *= 2.3f;
+  if (C > 0.21f) C = 0.21f;
   lchParaSrgb(L, C, h, saida);
 }
 
@@ -215,8 +223,7 @@ static int distMatiz(int a, int b) {
 int corviva_extrair(const unsigned char *px, int w, int h, int pitch,
                     CorvivaPaleta *p) {
   Celula cel[CV_NC];
-  float reg[4][3];
-  int regN[4];
+  float reg[4][3], regN[4];
   int gx, gy, i, j, total = 0, transp = 0, crom = 0, pele = 0;
   float matizW[CV_NB], matizWc[CV_NB];
   if (!p) return 0;
@@ -242,13 +249,18 @@ int corviva_extrair(const unsigned char *px, int w, int h, int pitch,
       // Regioes da luz ambiente: tercos da esquerda, direita, topo e base.
       // Toda amostra opaca conta, cinza inclusive — a luz de um ceu cinza e
       // cinza, e inventar cor ali seria mentir sobre a arte.
-      if (i * 3 < gx)      { reg[0][0] += r; reg[0][1] += g; reg[0][2] += b; regN[0]++; }
-      if (i * 3 >= 2 * gx) { reg[1][0] += r; reg[1][1] += g; reg[1][2] += b; regN[1]++; }
-      if (j * 3 < gy)      { reg[2][0] += r; reg[2][1] += g; reg[2][2] += b; regN[2]++; }
-      if (j * 3 >= 2 * gy) { reg[3][0] += r; reg[3][1] += g; reg[3][2] += b; regN[3]++; }
       mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
       mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
       c = mx - mn; v = mx;
+      // MEDIA_REGIAO: cada amostra pesa 0,25 + 8 x croma^2, e nao 1. A media
+      // simples de um terco da arte puxa para o cinza (o vermelho do vestido
+      // dilui no fundo escuro); com o peso, quem tem cor manda na luz, e uma
+      // regiao sem cor nenhuma continua cinza — o peso base garante isso.
+      { float wr = 0.25f + 8.0f * c * c;
+        if (i * 3 < gx)      { reg[0][0] += r * wr; reg[0][1] += g * wr; reg[0][2] += b * wr; regN[0] += wr; }
+        if (i * 3 >= 2 * gx) { reg[1][0] += r * wr; reg[1][1] += g * wr; reg[1][2] += b * wr; regN[1] += wr; }
+        if (j * 3 < gy)      { reg[2][0] += r * wr; reg[2][1] += g * wr; reg[2][2] += b * wr; regN[2] += wr; }
+        if (j * 3 >= 2 * gy) { reg[3][0] += r * wr; reg[3][1] += g * wr; reg[3][2] += b * wr; regN[3] += wr; } }
       if (v < 0.14f || c < 0.10f) continue;
       if (mx == r)      hue = (g - b) / c;
       else if (mx == g) hue = (b - r) / c + 2.0f;
@@ -281,7 +293,7 @@ int corviva_extrair(const unsigned char *px, int w, int h, int pitch,
   // Regioes (valem mesmo sem cor: o cinza vira luz cinza e fraca).
   for (i = 0; i < 4; i++) {
     float m[3] = { 0.051f, 0.051f, 0.051f };
-    if (regN[i]) { m[0] = reg[i][0] / regN[i]; m[1] = reg[i][1] / regN[i]; m[2] = reg[i][2] / regN[i]; }
+    if (regN[i] > 0.0f) { m[0] = reg[i][0] / regN[i]; m[1] = reg[i][1] / regN[i]; m[2] = reg[i][2] / regN[i]; }
     ajustarRegiao(m, p->regiao[i]);
   }
   if (crom * 25 < total) return 0;   // < 4% cromatico: P&B

@@ -429,6 +429,8 @@ EM_JS(int, nv_http_contar, (const char *url, const char *cabs, double ini,
   return s.length;
 });
 
+void rede_vazao_espera(unsigned long ms) { (void)ms; }
+
 int rede_medir_vazao(const char *url, const char *const *cab, int segundos,
                      long inicio, long long maxBytes, volatile int *cancelado,
                      int *kbps, int nMax, RedeVazao *res,
@@ -1366,11 +1368,14 @@ char *rede_postar_st(const char *url, int segundos, const char *const *cab,
 // todo corte (soltarHandleR com r != 0) — a conexao abortada no meio de um
 // corpo de gigabytes nunca e reaproveitada.
 #define VAZ_SEG_BALDES 64
+#define VAZ_ESPERA_PADRAO_MS 8000UL
+static unsigned long vazEsperaMs = VAZ_ESPERA_PADRAO_MS;
+void rede_vazao_espera(unsigned long ms) { vazEsperaMs = ms ? ms : VAZ_ESPERA_PADRAO_MS; }
 typedef struct {
-  unsigned long pedido, t0, janelaMs, ultimo;
+  unsigned long pedido, t0, janelaMs, espera, ultimo;
   long long bytes, maxBytes;
   long long balde[VAZ_SEG_BALDES];
-  int status, porJanela, porTeto, cancelou;
+  int status, porJanela, porTeto, cancelou, porEspera;
   volatile int *cancel;
 } Contador;
 
@@ -1410,6 +1415,8 @@ static int contadorVigia(void *u, long long dt, long long dn, long long ut, long
   (void)dt; (void)dn; (void)ut; (void)un;
   if (c->cancel && *c->cancel) { c->cancelou = 1; return 1; }
   if (c->t0 && redeAgoraMs() - c->t0 >= c->janelaMs) { c->porJanela = 1; return 1; }
+  // Nenhum byte de corpo dentro do prazo: fonte parada, desiste.
+  if (!c->t0 && c->espera && redeAgoraMs() - c->pedido >= c->espera) { c->porEspera = 1; return 1; }
   return 0;
 }
 
@@ -1431,6 +1438,7 @@ int rede_medir_vazao(const char *url, const char *const *cab, int segundos,
   ct.maxBytes = maxBytes;
   ct.cancel = cancelado;
   ct.pedido = redeAgoraMs();
+  ct.espera = vazEsperaMs;
   c = pegarHandle(url);
   if (!c) { if (res) res->erro = 2; return 0; }
   curl_setopt(c, OPT_URL, url);
@@ -1439,9 +1447,9 @@ int rede_medir_vazao(const char *url, const char *const *cab, int segundos,
   curl_setopt(c, OPT_HEADERFUNCTION, contadorCab);
   curl_setopt(c, OPT_HEADERDATA, &ct);
   curl_setopt(c, OPT_FOLLOWLOCATION, (long)1);
-  // Prazo: a janela mais 8 s para DNS, TLS, redirecionamentos e o primeiro
+  // Prazo: a janela mais o prazo do 1o byte (8 s, ou o de rede_vazao_espera) para DNS, TLS, redirecionamentos e o primeiro
   // byte. O conexaoMs de opcoesComuns fica no teto de 5 s.
-  opcoesComuns(c, ct.janelaMs + 8000UL);
+  opcoesComuns(c, ct.janelaMs + vazEsperaMs);
   curl_setopt(c, OPT_XFERINFOFUNCTION, contadorVigia);
   curl_setopt(c, OPT_XFERINFODATA, &ct);
   curl_setopt(c, OPT_NOPROGRESS, (long)0);

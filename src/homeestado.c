@@ -180,7 +180,7 @@ void homeestado_contexto(HomeContexto *c) {
   // impede aceitar snapshot de outra conta mesmo em caso de colisao do hash.
   snprintf(c->identidade, sizeof c->identidade, "owner=%zu:%s|p=%d|l=%d",
            u ? strlen(u) : 0, u ? u : "", c->perfil = perfis_ativo(),
-           ajustes_idioma_ingles());
+           ajustes_idioma());
   c->addons = hashAddons();
   c->ajustes = hashAjustes();
   c->fileiras = hashFileiras();
