@@ -201,6 +201,7 @@ static float  trailerFade = 0.0f;
 // (o trailer continua); Voltar fecha o trailer sem sair da pagina.
 static float  trailerCopy = 0.0f;      // 0 = bloco no lugar, 1 = so o logo embaixo
 static int    trailerCopyOculta = 0;   // a intencao; trailerCopy e a mola
+static int    trailerTocavaAntes = 0;  // borda de subida do "tocando" (modo cinema)
 // A FONTE do trailer `k` desta pagina, no formato que trailer_abrir espera:
 // URL (Apple HLS nos dois alvos, MP4 do IMDb na LG) ou id do YouTube (Samsung,
 // lista do TMDB). NULL quando ainda nao ha — ou quando nao vai haver, e ai
@@ -939,11 +940,41 @@ void detail_abrir(const HomeItem *it) {
   aberto = 1; saindo = 0; nivel = 0; botao = 0;
   t = 0.0f; pg = 0.0f; scrollY = 0.0f; velY = 0.0f; abaInfo = 0; pessoaAberta = 0;
   relFoco = 0; pedAbrir = -1; ratTemp = 0; ratSinc = 0;
-  trailer_fechar(); trailerDesde = 0; trailerTentado = 0; trailerFade = 0.0f;
+  trailerDesde = 0; trailerTentado = 0; trailerFade = 0.0f;
   trailerEtapa = 0; trailerPrazo = 0;
   trailerSemFonteLogado = 0;
   trailerCopy = 0.0f; trailerCopyOculta = 0;
   idx = it->indice;
+  // O TRAILER DO CARTAZ CONTINUA AQUI, COM SOM (pedido do rawldon, canario
+  // tpk-janela; so o .tpk, NV_TRAILER_CONTINUA_DETALHE em trailerfonte.h).
+  // Se o destaque da home esta tocando o trailer DESTE titulo, a pagina o
+  // adota: mesmo player, sem reabrir, tela inteira e som. Respeita "Trailer
+  // automatico" (desligado = fecha, como antes). Qualquer outro caso fecha,
+  // como sempre. O botao Trailer (tela cheia) nao muda.
+  { int adotou = 0;
+#if NV_TRAILER_CONTINUA_DETALHE
+    const CatItem *ciA = cat_item(idx);
+    if (trailer_aberto() && !trailer_cheia() && trailer_tocando() &&
+        trailer_dono() == TRAILER_DONO_HOME && ciA && ciA->imdb[0] &&
+        !strcmp(trailer_dono_imdb(), ciA->imdb)) {
+      if (!ajustes_trailer_auto()) {
+        printf("[trailer] detalhe: trailer do cartaz nao continua (Trailer automatico desligado)\n");
+        fflush(stdout);
+      } else {
+        GfxRect telaA = { 0, 0, NV_TELA_W, NV_TELA_H };
+        adotou = trailer_continuar(telaA, 1);
+        if (adotou) {
+          trailer_marcar_dono(TRAILER_DONO_DETALHE, ciA->imdb);
+          // Ja tocando: sem esperar a arte apagar, e sem o modo cinema de
+          // cara (a pessoa abriu para LER a pagina; o trailer segue atras).
+          trailerTentado = 1; trailerFade = 1.0f; trailerTocavaAntes = 1;
+          printf("[trailer] detalhe: continua o trailer do cartaz com som (%s)\n", ciA->imdb);
+          fflush(stdout);
+        }
+      }
+    }
+#endif
+    if (!adotou) trailer_fechar(); }
   revistaVista = cat_revisao();
   // Guarda identidade e copia ANTES de qualquer republicacao. Ver revalidarIdx.
   arteFixa[0] = logoFixo[0] = logoCatalogoFixo[0] = 0;
@@ -2191,12 +2222,11 @@ void detail_atualizar(float dt, Uint32 agora) {
     // trailer_mostra_video: no .tpk a arte fica ate o recorte do zoom
     // assentar (#178); na LG e no .wgt e sempre 1.
     { float alvo = (trailer_aberto() && trailer_tocando() && trailer_mostra_video()) ? 1.0f : 0.0f;
-      static int tocavaAntes;
       int toca = alvo > 0.5f && !trailer_cheia();
       // Borda de subida: o trailer COMECOU a tocar -> esconde o bloco.
-      if (toca && !tocavaAntes) trailerCopyOculta = 1;
+      if (toca && !trailerTocavaAntes) trailerCopyOculta = 1;
       if (!toca) trailerCopyOculta = 0;
-      tocavaAntes = toca;
+      trailerTocavaAntes = toca;
       trailerFade = anim_mola(trailerFade, alvo, dt, NV_MOLA_SCROLL);
       trailerCopy = anim_mola(trailerCopy, trailerCopyOculta ? 1.0f : 0.0f, dt, NV_MOLA_SCROLL); }
   }

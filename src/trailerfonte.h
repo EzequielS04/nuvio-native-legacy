@@ -78,6 +78,28 @@ TrailerDecisao trailerfonte_escolher_cheia(int ajuste, int tizen, int som,
 int  trailerfonte_imdb_primeiro_cheia(void);
 void trailerfonte_definir_imdb_primeiro_cheia(int sim);
 
+// O TRAILER DO CARTAZ QUE CONTINUA COM SOM NA PAGINA DO TITULO (pedido do
+// rawldon, canario tpk-janela, 29/09/2026): o trailer mudo do destaque/cartaz
+// da home segue tocando, no MESMO player, quando OK abre a pagina daquele
+// titulo, e la ganha som (detail.c, detail_abrir). No .tpk a Apple toca a
+// variante SO VIDEO (ver acima): tirar o mudo dela nao da som nenhum. Por
+// isso, com NV_TRAILER_CONTINUA_DETALHE, o destaque em Automatico tenta o
+// IMDb (MP4 com audio) antes da Apple — so o destaque; a pagina do titulo e
+// a tela cheia seguem as regras de cima. 0 desliga as duas coisas juntas.
+// .wgt e LG: 0, nada muda.
+#ifndef NV_TRAILER_CONTINUA_DETALHE
+#ifdef NV_TPK
+#define NV_TRAILER_CONTINUA_DETALHE 1
+#else
+#define NV_TRAILER_CONTINUA_DETALHE 0
+#endif
+#endif
+int  trailerfonte_ordem_destaque(int ajuste, int tizen, int ordem[3]);
+TrailerDecisao trailerfonte_escolher_destaque(int ajuste, int tizen, const TrailerCandidatos *c,
+                                              const char **url, int *qual);
+int  trailerfonte_imdb_primeiro_destaque(void);
+void trailerfonte_definir_imdb_primeiro_destaque(int sim);
+
 // 1 quando o IMDb toca na Samsung: a build tem o servico de recomendacoes, por
 // onde passa a pergunta que exige Referer (#136). O definir e para os testes.
 int  trailerfonte_imdb_tizen(void);

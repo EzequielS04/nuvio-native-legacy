@@ -17,6 +17,8 @@ static int    falhouUltima;
 static GfxRect rect;
 static char   fonteAtual[1024];
 static Uint32 abertoEm;   // SDL_GetTicks da abertura da fonte atual, para o log
+static int    dono;       // TRAILER_DONO_* (trailer.h)
+static char   donoImdb[32];
 
 #ifdef __EMSCRIPTEN__
 // O iframe fica ATRAS do canvas (z-index 0 contra 1 do canvas), no mesmo
@@ -343,6 +345,27 @@ void trailer_fechar(void) {
   video_parar();
 #endif
   aberto = 0; cheia = 0; fonteAtual[0] = 0;
+  dono = TRAILER_DONO_NENHUM; donoImdb[0] = 0;
+}
+
+void trailer_marcar_dono(int d, const char *imdb) {
+  if (!aberto) return;
+  dono = d;
+  snprintf(donoImdb, sizeof donoImdb, "%s", imdb ? imdb : "");
+}
+int trailer_dono(void) { return aberto ? dono : TRAILER_DONO_NENHUM; }
+const char *trailer_dono_imdb(void) { return aberto ? donoImdb : ""; }
+
+int trailer_continuar(GfxRect r, int som) {
+  char f[sizeof fonteAtual];
+  if (!aberto || cheia || !fonteAtual[0]) return 0;
+  // Copia: trailer_abrir le `fonte` e grava fonteAtual. Mesma fonte = nao e
+  // "nova": so o volume e o retangulo (com o recorte do zoom) mudam.
+  snprintf(f, sizeof f, "%s", fonteAtual);
+  trailer_abrir(f, r, som, 0);
+  printf("[trailer] continua %.60s %s\n", f, comSom ? "com som" : "mudo");
+  fflush(stdout);
+  return 1;
 }
 
 int trailer_aberto(void)  { return aberto; }

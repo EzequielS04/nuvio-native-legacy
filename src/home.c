@@ -3089,7 +3089,10 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
     // Hero deixou de estar pronto (foco saiu, transicao da arte, detalhe por
     // cima): fecha. E o outro caminho de fechamento que o prazo nao ve —
     // o emulador mostrou "estado -1 -> -2 +8613ms" sem mais nada.
-    if (heroTrailerItem >= 0 && trailer_aberto() && !trailer_cheia()) {
+    // Adotado pela pagina do titulo (trailer.h, TRAILER_DONO_DETALHE): o
+    // trailer continua la, e nao e mais desta tela fechar.
+    if (heroTrailerItem >= 0 && trailer_aberto() && !trailer_cheia() &&
+        trailer_dono() != TRAILER_DONO_DETALHE) {
       printf("[trailer] hero: saiu de cena, fecha o trailer %s (estado %d, +%u ms)\n",
              trailer_tocando() ? "tocando" : "sem playing", trailer_estado(),
              heroTrailerDesde ? (unsigned)(agora - heroTrailerDesde) : 0u);
@@ -3106,7 +3109,7 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
     // titulo no mesmo quadro — o fechamento acontece AQUI, nao no ramo do
     // prazo abaixo. Sem esta linha o registro so mostrava o elemento sumir
     // (emulador, 22/09/2026: "estado -1 -> -2 +5157ms" e nada mais).
-    if (trailer_aberto() && !trailer_cheia()) {
+    if (trailer_aberto() && !trailer_cheia() && trailer_dono() != TRAILER_DONO_DETALHE) {
       printf("[trailer] hero: troca de titulo fecha o trailer %s (estado %d, +%u ms)\n",
              trailer_tocando() ? "tocando" : "sem playing", trailer_estado(),
              heroTrailerDesde ? (unsigned)(agora - heroTrailerDesde) : 0u);
@@ -3219,7 +3222,10 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
 #else
     c.youtubeRespondeu = venceu;
 #endif
-    d = trailerfonte_escolher(trailerfonte_ajuste(), trailerfonte_tizen(), &c, &u, &qual);
+    // _destaque: igual a trailerfonte_escolher, salvo no .tpk com
+    // NV_TRAILER_CONTINUA_DETALHE (IMDb antes da Apple, para o trailer poder
+    // continuar COM SOM na pagina do titulo; ver trailerfonte.h).
+    d = trailerfonte_escolher_destaque(trailerfonte_ajuste(), trailerfonte_tizen(), &c, &u, &qual);
     if (d == TRF_ESPERA && !venceu) goto trailer_hero_fim;
     if (d == TRF_ABRE && u) {
       // 1 = Apple (erro dela libera UMA tentativa da proxima fonte), 2 = a
@@ -3231,6 +3237,7 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
       heroTrailerQual = qual;
       heroTrailerPreparandoAte = heroTrailerPrazoPreparacao(agora);
       trailer_abrir(u, heroArteRect, 0, 0);
+      trailer_marcar_dono(TRAILER_DONO_HOME, ci->imdb);
       // trailer_abrir e void por compatibilidade com o player nativo; no
       // browser ainda pode recusar a criacao (canvas ausente). Tratar isso
       // como erro da fonte evita deixar a tentativa marcada para sempre.

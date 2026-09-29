@@ -50,17 +50,34 @@ static int imdbPrimeiroCheia = 0;
 int  trailerfonte_imdb_primeiro_cheia(void) { return imdbPrimeiroCheia; }
 void trailerfonte_definir_imdb_primeiro_cheia(int sim) { imdbPrimeiroCheia = sim ? 1 : 0; }
 
-int trailerfonte_ordem_cheia(int ajuste, int tizen, int som, int ordem[3]) {
-  int n = trailerfonte_ordem(ajuste, tizen, ordem), i, j;
-  int automatico = !(ajuste == TRF_APPLE || ajuste == TRF_IMDB || ajuste == TRF_YOUTUBE);
-  if (!som || !automatico || !imdbPrimeiroCheia) return n;
-  // O IMDb sobe para a frente; o resto mantem a ordem relativa.
+// O IMDb sobe para a frente; o resto mantem a ordem relativa. So em
+// Automatico: uma fonte escolhida no ajuste e respeitada.
+static void imdbNaFrente(int ajuste, int *ordem, int n) {
+  int i, j;
+  if (ajuste == TRF_APPLE || ajuste == TRF_IMDB || ajuste == TRF_YOUTUBE) return;
   for (i = 1; i < n; i++)
     if (ordem[i] == TRF_IMDB) {
       for (j = i; j > 0; j--) ordem[j] = ordem[j - 1];
       ordem[0] = TRF_IMDB;
       break;
     }
+}
+
+int trailerfonte_ordem_cheia(int ajuste, int tizen, int som, int ordem[3]) {
+  int n = trailerfonte_ordem(ajuste, tizen, ordem);
+  if (som && imdbPrimeiroCheia) imdbNaFrente(ajuste, ordem, n);
+  return n;
+}
+
+// Destaque/cartaz da home que pode CONTINUAR com som na pagina do titulo
+// (ver trailerfonte.h). 1 so no .tpk com NV_TRAILER_CONTINUA_DETALHE.
+static int imdbPrimeiroDestaque = NV_TRAILER_CONTINUA_DETALHE;
+int  trailerfonte_imdb_primeiro_destaque(void) { return imdbPrimeiroDestaque; }
+void trailerfonte_definir_imdb_primeiro_destaque(int sim) { imdbPrimeiroDestaque = sim ? 1 : 0; }
+
+int trailerfonte_ordem_destaque(int ajuste, int tizen, int ordem[3]) {
+  int n = trailerfonte_ordem(ajuste, tizen, ordem);
+  if (imdbPrimeiroDestaque) imdbNaFrente(ajuste, ordem, n);
   return n;
 }
 
@@ -100,6 +117,12 @@ TrailerDecisao trailerfonte_escolher_cheia(int ajuste, int tizen, int som,
                                            const TrailerCandidatos *c,
                                            const char **url, int *qual) {
   int ordem[3], n = trailerfonte_ordem_cheia(ajuste, tizen, som, ordem);
+  return escolherNaOrdem(ordem, n, c, url, qual);
+}
+
+TrailerDecisao trailerfonte_escolher_destaque(int ajuste, int tizen, const TrailerCandidatos *c,
+                                              const char **url, int *qual) {
+  int ordem[3], n = trailerfonte_ordem_destaque(ajuste, tizen, ordem);
   return escolherNaOrdem(ordem, n, c, url, qual);
 }
 

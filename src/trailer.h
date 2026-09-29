@@ -58,6 +58,19 @@ int  trailer_falhou(void);
 int  trailer_estado(void);
 // Retangulo atual, para quem desenha o furo.
 GfxRect trailer_retangulo(void);
+// QUEM ABRIU o trailer aberto, e de qual titulo (imdb). O destaque da home
+// marca TRAILER_DONO_HOME logo depois de abrir; a pagina do titulo, quando
+// ADOTA esse trailer (trailerfonte.h, NV_TRAILER_CONTINUA_DETALHE), passa
+// para TRAILER_DONO_DETALHE — e a home deixa de fechar o que nao e mais dela.
+// trailer_fechar zera. Sem marca (qualquer outro chamador) e NENHUM, como
+// antes.
+enum { TRAILER_DONO_NENHUM = 0, TRAILER_DONO_HOME = 1, TRAILER_DONO_DETALHE = 2 };
+void        trailer_marcar_dono(int dono, const char *imdb);
+int         trailer_dono(void);
+const char *trailer_dono_imdb(void);
+// Leva o trailer aberto (fora da tela cheia) para `r` com `som`, SEM trocar
+// de fonte nem reabrir o player. 0 quando nao ha o que levar.
+int  trailer_continuar(GfxRect r, int som);
 // Teclado do modo de tela cheia. 1 quando consumiu.
 int  trailer_evento(const SDL_Event *e);
 void trailer_atualizar(Uint32 agora);

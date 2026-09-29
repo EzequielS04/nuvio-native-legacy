@@ -216,6 +216,47 @@ int main(void) {
   trailerfonte_definir_imdb_tizen(0);
   trailerfonte_definir_imdb_primeiro_cheia(0);
 
+  // --- DESTAQUE QUE CONTINUA COM SOM NA PAGINA (canario tpk-janela). So com
+  // NV_TPK o desvio nasce ligado; .wgt e LG escolhem como sempre.
+#ifdef NV_TPK
+  confere("build NV_TPK: IMDb-primeiro do destaque ligado por padrao", trailerfonte_imdb_primeiro_destaque() == 1);
+#else
+  confere("sem NV_TPK: IMDb-primeiro do destaque desligado por padrao", trailerfonte_imdb_primeiro_destaque() == 0);
+#endif
+  trailerfonte_definir_imdb_primeiro_destaque(0);
+  for (tz = 0; tz <= 1; tz++) {
+    int aj, a[3], b[3], na, nb, k, igual;
+    char nome[120];
+    for (aj = TRF_AUTO; aj <= TRF_YOUTUBE; aj++) {
+      na = trailerfonte_ordem(aj, tz, a);
+      nb = trailerfonte_ordem_destaque(aj, tz, b);
+      igual = na == nb;
+      for (k = 0; igual && k < na; k++) igual = a[k] == b[k];
+      snprintf(nome, sizeof nome, "%s ajuste %d desligado: destaque na ordem de sempre", tz ? "Samsung wgt" : "LG", aj);
+      confere(nome, igual);
+    }
+  }
+  trailerfonte_definir_imdb_primeiro_destaque(1);
+  n = trailerfonte_ordem_destaque(TRF_AUTO, 0, o);
+  confere(".tpk destaque automatico: IMDb -> Apple", n == 2 && o[0] == TRF_IMDB && o[1] == TRF_APPLE);
+  n = trailerfonte_ordem(TRF_AUTO, 0, o);
+  confere(".tpk pagina do titulo (fundo) continua Apple -> IMDb", n == 2 && o[0] == TRF_APPLE);
+  c = todas();
+  confere(".tpk destaque com as duas: IMDb (tem audio para continuar com som)",
+          trailerfonte_escolher_destaque(TRF_AUTO, 0, &c, &u, &n) == TRF_ABRE && n == TRF_IMDB);
+  c = todas(); c.imdb = NULL;
+  confere(".tpk destaque sem IMDb: cai na Apple",
+          trailerfonte_escolher_destaque(TRF_AUTO, 0, &c, &u, &n) == TRF_ABRE && n == TRF_APPLE);
+  c = todas(); c.imdb = NULL; c.imdbRespondeu = 0;
+  confere(".tpk destaque: IMDb sem resposta segura a Apple",
+          trailerfonte_escolher_destaque(TRF_AUTO, 0, &c, &u, &n) == TRF_ESPERA);
+  c = todas();
+  confere(".tpk destaque com Apple fixa: Apple, respeitada",
+          trailerfonte_escolher_destaque(TRF_APPLE, 0, &c, &u, &n) == TRF_ABRE && n == TRF_APPLE);
+  n = trailerfonte_ordem_destaque(TRF_AUTO, 1, o);
+  confere("wgt com o desvio ligado: sem IMDb la, Apple -> YouTube", n == 2 && o[0] == TRF_APPLE && o[1] == TRF_YOUTUBE);
+  trailerfonte_definir_imdb_primeiro_destaque(0);
+
   // Atalho do build: le o ajuste gravado.
   ajusteTeste = TRF_YOUTUBE;
   confere("trailerfonte_ajuste le o ajuste", trailerfonte_ajuste() == TRF_YOUTUBE);
