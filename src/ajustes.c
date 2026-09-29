@@ -6363,9 +6363,13 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
     float ry = y + 18.0f + heroH + row * 45.0f;
     // Dinamica: a primeira fileira e a de destaques grandes (dois cartoes largos).
     int grande = lay == HOME_LAYOUT_DINAMICA && row == 0;
+    // Padrao: o cartaz em pe e 260 e nao 212 (home.c, escalaCartazPadrao) —
+    // cabem cinco na miniatura, nao seis.
+    int emPe = lay == HOME_LAYOUT_PADRAO ? 5 : 6;
     float cardW = grande ? (cw - 6.0f) / 2.0f
-                : landscape ? (cw - 36.0f) / 4.0f : (cw - 60.0f) / 6.0f;
-    int count = grande ? 2 : landscape ? 4 : 6;
+                : landscape ? (cw - 36.0f) / 4.0f
+                : (cw - 6.0f * (float)(emPe - 1) * 2.0f) / (float)emPe;
+    int count = grande ? 2 : landscape ? 4 : emPe;
     // A fileira que o foco altera fica em destaque. Campos próprios mostram
     // somente seções que de fato estão ligadas/desligadas.
     int isTargetRow = (op >= AJ_FIL_LIMITE && op <= AJ_PS_FUNDO) ||

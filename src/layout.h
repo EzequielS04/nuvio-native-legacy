@@ -252,6 +252,13 @@
 #define NV_PAD_LOGO_MAX_W 380.0f
 #define NV_PAD_SIN_W      760.0f
 #define NV_PAD_FILEIRA_GAP 80.0f  // vao entre fileiras (a home original respira mais)
+// Cartaz em pe do Padrao: 260x390 (2:3), o tamanho da referencia (a home
+// original do Nuvio), no lugar dos 212x322 da Moderna. E o tamanho de FABRICA:
+// "Largura do item" continua valendo como fator sobre ele (home.c,
+// escalaCartazPadrao), com teto para a fileira em foco caber inteira na tela.
+#define NV_PAD_CARTAZ_W   260.0f
+#define NV_PAD_CARTAZ_H   390.0f
+#define NV_PAD_CARTAZ_FOLGA 40.0f  // da base do cartaz em foco ate a base da tela
 //
 // DINAMICA — o destaque ocupa 0..780 e ROLA com a pagina: com o foco no
 // destaque a primeira fileira espia por baixo (titulo em 800); descendo, o

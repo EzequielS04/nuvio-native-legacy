@@ -212,7 +212,8 @@ typedef enum {
   //   uCor.rgb = tinta do tema (so entra com uPar.x > 0); uCor.a = alfa
   //   uPar.x   = quanto a tinta do tema puxa a cor, 0 a 1
   //   uFoco    = brilho geral
-  //   uBanda / uBandaX = as prateleiras das fileiras (gfx_fundo_din_prateleiras)
+  //   uBanda / uBandaX = as prateleiras das fileiras (gfx_fundo_din_prateleiras);
+  //                      so a em foco se ve, uma faixa quase transparente
   GFX_FUNDO_DIN = 35,
   GFX_NMODOS = 36
 } GfxModo;

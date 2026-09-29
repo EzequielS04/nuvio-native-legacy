@@ -910,13 +910,22 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // onde moram as fileiras, e o texto branco e o cartaz precisam de chao mais
   // escuro; o topo, que a arte do destaque cobre, pode ser claro.
   //
-  // AS PRATELEIRAS DE VIDRO SAO ASSADAS AQUI, e nao em quadros por cima. Cada
-  // fileira e um retangulo arredondado que escurece/clareia o fundo e ganha um
-  // aro de fio de cabelo: como retangulos separados eram ~0,25 de tela EM
-  // MISTURA por fileira (quatro por quadro), e MEDIDO na C9 uma unica camada de
-  // tela cheia misturada ja custa 12 fps. Aqui o fundo e OPACO e sem mistura, e a
-  // conta das prateleiras entra no MESMO fragmento — so onde o fragmento cai
-  // dentro de uma faixa (o `if` por faixa evita o SDF nos outros 60%).
+  // A PRATELEIRA E ASSADA AQUI, e nao em quadros por cima: como retangulos
+  // separados eram ~0,25 de tela EM MISTURA por fileira, e MEDIDO na C9 uma
+  // unica camada de tela cheia misturada ja custa 12 fps. Aqui o fundo e OPACO
+  // e sem mistura, e a conta entra no MESMO fragmento.
+  //
+  // SO A FILEIRA EM FOCO, E QUASE NADA (decisao do dono, 29/09: os paineis de
+  // vidro em toda fileira eram "demais"). Em repouso nao ha painel: a arte
+  // desfocada e que da o clima, como na Apple TV. A fileira em foco ganha uma
+  // faixa de canto 36 que clareia 5,5% (vidro) ou escurece 16% (sem vidro) —
+  // sem aro de fio de cabelo, sem brilho no topo. Comparado nas capturas contra
+  // (a) os paineis de antes com a opacidade cortada a um terco, sem aro — ainda
+  // le como caixas empilhadas — e (b) uma "poca" de luz sem forma, bordas
+  // esfumadas de 40 px — some a ponto de nao dizer nada. Esta e a que marca
+  // "voce esta aqui" sem desenhar moldura. Custa MENOS que antes: o `if` com
+  // foco x alfa deixa o SDF so na faixa em foco (antes, em toda fileira
+  // visivel, ~60% da tela).
   //   uBanda[i] = (y de cima, y de baixo, foco 0..1, alfa do grupo); alfa 0 = vazia
   //   uBandaX   = (x da borda esquerda, 1 = vidro | 0 = veu escuro)
   "uniform vec4 uBanda[6];\n"
@@ -933,25 +942,14 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float aa = 1080.0 / uAlt;\n"
   "  for (int i = 0; i < 6; i++) {\n"
   "    vec4 b = uBanda[i];\n"
-  "    if (b.w > 0.003 && px.y > b.x - 2.0 && px.y < b.y + 2.0 && px.x > uBandaX.x - 2.0) {\n"
+  "    float ff = b.w * b.z;\n"
+  "    if (ff > 0.003 && px.y > b.x - 2.0 && px.y < b.y + 2.0 && px.x > uBandaX.x - 2.0) {\n"
   "      vec2 ce = vec2((uBandaX.x + 2000.0) * 0.5, (b.x + b.y) * 0.5);\n"
   "      vec2 he = vec2((2000.0 - uBandaX.x) * 0.5, (b.y - b.x) * 0.5);\n"
   "      vec2 q = abs(px - ce) - (he - 36.0);\n"
   "      float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 36.0;\n"
-  "      float ga = b.w * clamp(0.5 - d / aa, 0.0, 1.0);\n"
-  "      if (ga > 0.001) {\n"
-  "        float f = b.z;\n"
-  "        float aro = clamp(0.5 + (d + 1.5) / aa, 0.0, 1.0);\n"
-  "        if (uBandaX.y > 0.5) {\n"
-  "          float topo = (0.06 + 0.04 * f) * (1.0 - smoothstep(0.0, 0.36, (px.y - b.x) / (b.y - b.x)));\n"
-  "          c = mix(c, vec3(0.06, 0.07, 0.09), (0.34 - 0.06 * f) * ga);\n"
-  "          c = mix(c, vec3(1.0), (0.06 + 0.05 * f + topo) * ga);\n"
-  "          c = mix(c, vec3(1.0), (0.14 + 0.12 * f) * aro * ga);\n"
-  "        } else {\n"
-  "          c = mix(c, vec3(0.0), (0.30 - 0.10 * f) * ga);\n"
-  "          c = mix(c, vec3(1.0), (0.035 + 0.05 * f) * aro * ga);\n"
-  "        }\n"
-  "      }\n"
+  "      float ga = ff * clamp(0.5 - d / aa, 0.0, 1.0);\n"
+  "      c = uBandaX.y > 0.5 ? mix(c, vec3(1.0), 0.055 * ga) : c * (1.0 - 0.16 * ga);\n"
   "    }\n"
   "  }\n"
   "  gl_FragColor = nv_dither(c, uCor.a);\n"

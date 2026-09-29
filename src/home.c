@@ -476,6 +476,26 @@ static float xOffTipo(TipoFileira t) {
   return t == FILEIRA_TOP10_NUM ? NV_TOP10_NUM_FAIXA : 0.0f;
 }
 
+// O CARTAZ EM PE DO PADRAO (decisao do dono, 29/09): 260x390 no padrao de
+// fabrica, o tamanho da home original do Nuvio. "Largura do item" segue sendo
+// um FATOR relativo aos 126 dp de fabrica, como nos outros layouts — so a base
+// muda. Assim a escolha da pessoa nunca inverte (subir o numero sempre aumenta
+// o cartaz) e ninguem que ja mexeu perde o ajuste: 150 dp continuam ~19% maior
+// que o de fabrica, so que o de fabrica aqui e 260.
+// TETO: a fileira em foco se ancora em topoFileiras(); o cartaz nunca passa da
+// altura que cabe entre o titulo dela e a base da tela, com 40 px de folga
+// (destaque ligado: 450 px de altura, alcancado em ~145 dp). Acima disso o
+// ajuste para de crescer no Padrao, em vez de cortar o cartaz em foco na borda.
+static int cartazPadrao(void) {
+  return layoutHome() == HOME_LAYOUT_PADRAO && !ajustes_posteres_deitados();
+}
+static float escalaCartazPadrao(void) {
+  float teto = (NV_TELA_H - topoFileiras() - NV_LEGACY_ROW_HEAD_H - NV_PAD_CARTAZ_FOLGA)
+             / NV_PAD_CARTAZ_H;
+  float e = escalaDoAjuste();
+  return e < teto ? e : teto;
+}
+
 static float larguraDe(TipoFileira t) {
   switch (t) {
     case FILEIRA_CONTINUE: return NV_DESTAQUE_W;
@@ -492,7 +512,9 @@ static float larguraDe(TipoFileira t) {
     case FILEIRA_TOP10: return 212.0f;
     case FILEIRA_RETORNO: return 680.0f;
     case FILEIRA_CATALOGOS: return 360.0f;
-    default:               return escalaDoAjuste() *
+    default:               if (cartazPadrao())
+                             return escalaCartazPadrao() * NV_PAD_CARTAZ_W;
+                           return escalaDoAjuste() *
                              (ajustes_posteres_deitados() ? NV_CARD_LAND_W
                                                           : NV_CARD_W);
   }
@@ -862,7 +884,9 @@ static float alturaDe(TipoFileira t) {
     case FILEIRA_RETORNO: return 178.0f;
     case FILEIRA_TOP10: return 320.0f;
     case FILEIRA_CATALOGOS: return 203.0f;
-    default:               return escalaDoAjuste() *
+    default:               if (cartazPadrao())
+                             return escalaCartazPadrao() * NV_PAD_CARTAZ_H;
+                           return escalaDoAjuste() *
                              (ajustes_posteres_deitados() ? NV_CARD_LAND_H
                                                           : NV_CARD_H);
   }
@@ -1630,10 +1654,12 @@ static int assinaturaPrefs(void) {
 //      (cartoes grandes 16:9, com logo) — a vitrine;
 //   2. "Continuar assistindo" continua deitado (419x236), e colecoes, servicos,
 //      "Entre amigos" e atalhos ficam como estao: ja sao cartoes largos;
-//   3. catalogo cujo NOME diz ranking — Top 10/100 (que ja vinha como pilha),
-//      "Em alta", "Popular", "Tendencias", "Mais vistos" — vira TOP 10: numeral
-//      grande ao lado de cada cartaz, no maximo 10 itens e so em DUAS fileiras
-//      (um ranking atras do outro deixa de ser destaque);
+//   3. o PRIMEIRO catalogo cujo NOME diz ranking — Top 10/100 (que ja vinha
+//      como pilha), "Em alta", "Popular", "Tendencias", "Mais vistos" — vira
+//      TOP 10: numeral grande ao lado de cada cartaz, no maximo 10 itens. So
+//      UM por home, decisao do dono (29/09): os rankings seguintes ("Em alta"
+//      depois de "Top 10", "Trending"...) voltam ao cartaz em pe de sempre —
+//      dois numerados na mesma tela disputam, e o segundo le como repeticao;
 //   4. o resto alterna cartaz em pe / faixa deitada, comecando por cartaz. E o
 //      padrao FIXO para quando nao ha sinal nenhum: a home nunca fica com duas
 //      fileiras iguais coladas.
@@ -1668,12 +1694,20 @@ static void dinAtribuirTipos(int total) {
     Fileira *f = &fileiras[i];
     if (f->n < 1 || fil_tipo(f->chave) != FIL_TIPO_AUTO) continue;
     if (f->tipo == FILEIRA_TOP10 && f->base[0] && f->catId[0]) {
-      f->tipo = FILEIRA_TOP10_NUM; ranking++;
+      // A pilha do Top 10 so tem sentido como ranking; sem a vaga, e uma
+      // fileira de cartazes como outra qualquer (a pilha de um card so da
+      // Moderna nao e forma da Dinamica).
+      if (ranking < 1) { f->tipo = FILEIRA_TOP10_NUM; ranking++; }
+      else { f->tipo = FILEIRA_NORMAL; planas = 1; }
     } else if (f->tipo == FILEIRA_NORMAL) {
       if (!strcmp(f->chave, "continue_watching") || !strcmp(f->chave, "upcoming_section"))
         continue;
-      if (f->base[0] && f->catId[0] && ranking < 2 && f->n >= 5 && sinalRanking(f)) {
+      if (f->base[0] && f->catId[0] && ranking < 1 && f->n >= 5 && sinalRanking(f)) {
         f->tipo = FILEIRA_TOP10_NUM; ranking++;
+      } else if (ranking && f->base[0] && f->catId[0] && sinalRanking(f)) {
+        // Ranking sem vaga: cartaz em pe, como pedido — e a alternancia segue
+        // dele, para a proxima fileira sem sinal virar a faixa deitada.
+        planas = 1;
       } else {
         f->tipo = (planas++ & 1) ? FILEIRA_LARGA : FILEIRA_NORMAL;
       }
@@ -2385,7 +2419,8 @@ void home_atualizar(float dt, Uint32 agora) {
 // ---------- Fundo de vidro da Dinamica ------------------------------------------
 //
 // A arte do titulo NO AR, desfocada (gfx_fundo_din, 160x90), ocupa a tela atras
-// de tudo; o destaque e as fileiras ficam por cima. Dois slots: a troca de
+// de tudo; o destaque e as fileiras ficam por cima. Com o destaque desligado, a
+// arte e a do primeiro cartao da fileira em foco (dinFundoDaFileira). Dois slots: a troca de
 // titulo dissolve de um para o outro em NV ms em vez de cortar. A copia nova e
 // PEDIDA aqui e assada no comeco do quadro seguinte (gfx_ambiente_preparar) —
 // por isso o dissolver so comeca quando a chave do outro slot ja e a do titulo.
@@ -2409,9 +2444,41 @@ static void dinFundoAlvo(GLuint tex, const char *arte) {
     gfx_fundo_din_pedir(o, tex, tex_aspecto(arte), ch);
   }
 }
-// AS PRATELEIRAS DE VIDRO: uma por fileira visivel, com a mesma conta de y do
-// laco de home_desenhar (topo + soma das alturas - rolagem + descida). Vao para
-// o shader do fundo e nao para retangulos por cima — ver GFX_FUNDO_DIN em gfx.c.
+// DESTAQUE DESLIGADO: nao ha titulo no ar para o fundo seguir, e ele ficava no
+// cinza liso — a Dinamica sem o que a define. Decisao do dono (29/09): o fundo
+// passa a ser a arte do PRIMEIRO cartao da fileira EM FOCO, e troca so quando a
+// FILEIRA muda. Andar pelos cartoes nao mexe nele: o fundo e o clima da
+// prateleira, nao um segundo foco correndo atras do primeiro.
+// A arte e a MESMA textura que o cartao ja desenha (tex_obter_larg_qualquer na
+// largura dele), entao a troca nao decodifica nada novo; a copia desfocada sai
+// do mesmo assado de 160x90 e dissolve pelos mesmos DIN_TROCA_S (0,45 s), ou
+// corta seco com animacoes reduzidas — tudo dentro de dinFundoAlvo.
+// Fileira sem titulo de catalogo (Entre amigos, grupos de colecao) mantem o
+// fundo que estava: trocar por nada seria um piscar sem motivo.
+static void dinFundoDaFileira(void) {
+  const Fileira *f;
+  const char *arte;
+  GLuint tex;
+  int idx, deitado;
+  if (foco.fileira < 0 || foco.fileira >= nFileiras) return;
+  f = &fileiras[foco.fileira];
+  if (f->tipo == FILEIRA_SOCIAL || f->tipo == FILEIRA_CATALOGOS) return;
+  idx = fileiraItemIndice(f, 0);
+  if (idx < 0) return;
+  // O mesmo formato que o cartao 0 pede em home_desenhar (fechado).
+  deitado = editorial(f->tipo) || f->tipo == FILEIRA_LARGA ||
+            f->tipo == FILEIRA_CONTINUE || f->tipo == FILEIRA_RETORNO ||
+            ajustes_posteres_deitados();
+  arte = arte_por_identidade(idx, deitado);
+  tex = arte ? tex_obter_larg_qualquer(arte, larguraFil(foco.fileira)) : 0;
+  if (tex) dinFundoAlvo(tex, arte);
+}
+// AS PRATELEIRAS: uma faixa por fileira visivel, com a mesma conta de y do laco
+// de home_desenhar (topo + soma das alturas - rolagem + descida). Vao para o
+// shader do fundo e nao para retangulos por cima — ver GFX_FUNDO_DIN em gfx.c.
+// So a da fileira EM FOCO aparece (o shader pesa cada uma pelo foco, painelF):
+// as outras vao para o shader so para a faixa acender/apagar pela mola quando
+// o foco chega ou sai.
 // A prateleira cobre o titulo, os cartazes e o rotulo, com 16 px de folga em
 // cima e 20 embaixo (o vao entre fileiras e 48, sobram 12 de respiro).
 static float dinBordaPrateleira(void) { return ajustes_conteudo_x() - 32.0f; }
@@ -2439,6 +2506,7 @@ static void dinPrateleiras(void) {
 static void desenhaFundoDin(Uint32 agora) {
   float dt = dinUlt ? (float)(agora - dinUlt) / 1000.0f : 0.0f;
   float ar = 1, ag = 1, ab = 1, tinta;
+  if (!ajustes_hero_ligado()) dinFundoDaFileira();
   dinPrateleiras();
   if (dt > 0.1f) dt = 0.1f;
   dinUlt = agora ? agora : 1u;
@@ -3686,9 +3754,11 @@ void home_desenhar(Uint32 agora) {
   // nao passa por cima do vidro ate a beira da tela — o cartao de 720 da
   // vitrine rola ja no terceiro item, e atravessava a curva da prateleira. O
   // corte cai no trecho reto da borda (os cartazes comecam 46 px abaixo do
-  // topo da prateleira, e o canto e de 36). Sem arte no fundo (destaque
-  // desligado, nada assado ainda) nao ha prateleira, e o cartao volta a correr
-  // ate a beira da tela como nos outros layouts.
+  // topo da prateleira, e o canto e de 36). A borda vale para TODA fileira,
+  // mesmo sem faixa visivel (so a em foco tem): e a margem comum de onde os
+  // cartoes saem, e a fileira que ganha o foco nao muda de corte. Sem arte no
+  // fundo (nada assado ainda) nao ha prateleira, e o cartao volta a correr ate
+  // a beira da tela como nos outros layouts.
   { float cx0 = layoutHome() == HOME_LAYOUT_DINAMICA && gfx_fundo_din_chave(dinSlot)
               ? dinBordaPrateleira() : 0.0f;
     gfx_recorte(cx0, corte, NV_TELA_W - cx0, NV_TELA_H - corte); }
