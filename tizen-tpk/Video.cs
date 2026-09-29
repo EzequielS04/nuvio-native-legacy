@@ -124,7 +124,7 @@ namespace NuvioTpk
         }
 
         // App foi para segundo plano: o player pausa (e o C fica sabendo).
-        public void PausarPeloSistema() { Pausar(true); }
+        public void PausarPeloSistema() { SoltaPrimer(); Pausar(true); }
 
         // Relogio do host, no fio principal.
         public void Tique()
@@ -193,8 +193,71 @@ namespace NuvioTpk
             }
         }
 
+        // CANARIO (#137, Samsung TV Plus tocando por baixo do Nuvio). O relato:
+        // o som do canal so para quando um filme comeca, isto e, quando um
+        // Player deste arquivo prepara e toca. A aposta (NAO provada) e que e o
+        // gerenciador de recursos da TV que tira o decodificador/saida de audio
+        // do TV Plus nesse momento. Entao, logo que a janela sobe, o host 6+
+        // toca pelo MESMO caminho do filme (Player + Display da janela NUI) um
+        // clipe de 2 s preto e mudo (res/silencio.mp4, H.264 Main + AAC-LC) por
+        // ~1 s e solta tudo (Stop/Unprepare/Dispose), como ao fim de um filme.
+        // Nada fica preso: o filme de verdade e a saida seguem como hoje. So o
+        // host 6+ (Program.cs) chama isto; no 4/5 `primer` e sempre null e os
+        // SoltaPrimer() de Parar/PausarPeloSistema nao fazem nada.
+        Player primer;
+        int primerGen;
+
+        public async void PrimeAudio(string arquivo)
+        {
+            int minha = ++primerGen;
+            Log("[audio] prime begin " + Path.GetFileName(arquivo));
+            try
+            {
+                if (!File.Exists(arquivo)) { Log("[audio] prime fail sem arquivo " + arquivo); return; }
+                if (player != null) { Log("[audio] prime skip: player do app ja aberto"); return; }
+                var p = new Player();
+                primer = p;
+                p.ErrorOccurred += (s, e) => Log("[audio] prime erro do player " + e.Error);
+                p.PlaybackInterrupted += (s, e) => Log("[audio] prime interrompido " + e.Reason);
+                p.SetSource(new MediaUriSource(arquivo));
+                p.Display = fazDisplay();
+                p.DisplaySettings.Mode = PlayerDisplayMode.LetterBox;
+                var prep = p.PrepareAsync();
+                // Excecao de um prepare abandonado (timeout) nao pode sobrar solta.
+                _ = prep.ContinueWith(t => { var _e = t.Exception; }, System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+                if (await System.Threading.Tasks.Task.WhenAny(prep, System.Threading.Tasks.Task.Delay(8000)) != prep)
+                {
+                    Log("[audio] prime fail prepare demorou mais de 8 s");
+                    return;
+                }
+                await prep;
+                if (minha != primerGen) { Log("[audio] prime cancelado (filme/saida antes de preparar)"); return; }
+                Log("[audio] prime prepared");
+                p.Start();
+                Log("[audio] prime started");
+                await System.Threading.Tasks.Task.Delay(1200);
+                if (minha != primerGen) { Log("[audio] prime cancelado (filme/saida durante o clipe)"); return; }
+                Log("[audio] prime ok");
+            }
+            catch (Exception e) { Log("[audio] prime fail " + e.GetType().Name + ": " + e.Message); }
+            finally { if (minha == primerGen) SoltaPrimer(); }
+        }
+
+        void SoltaPrimer()
+        {
+            primerGen++;
+            var p = primer;
+            primer = null;
+            if (p == null) return;
+            try { if (p.State == PlayerState.Playing || p.State == PlayerState.Paused) p.Stop(); } catch (Exception e) { Log("[audio] prime stop: " + e.Message); }
+            try { if (p.State != PlayerState.Idle) p.Unprepare(); } catch (Exception e) { Log("[audio] prime unprepare: " + e.Message); }
+            try { p.Dispose(); } catch (Exception e) { Log("[audio] prime dispose: " + e.Message); }
+            Log("[audio] prime released");
+        }
+
         public void Parar()
         {
+            SoltaPrimer();
             sessao++;
             var p = player;
             player = null;

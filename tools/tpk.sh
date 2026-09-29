@@ -90,6 +90,8 @@ for p in NuvioTpk40 NuvioTpk60 NuvioTpk65 NuvioTpk; do
   cp "$SAIDA/libnuvio.so" "$H/lib/"
   cp -R "$ARTE" "$H/res/art"
   cp -R deploy/app/fonts "$H/res/fonts"
+  # Clipe mudo do canario de audio (#137, Video.PrimeAudio); so o host 6+ usa.
+  [ "$p" = NuvioTpk40 ] || cp tizen-tpk/silencio.mp4 "$H/res/"
   cp deploy/app/tizen/icon.png "$H/shared/res/$p.png"
   sed -i '' "s/ version=\"[^\"]*\">/ version=\"$VER\">/" "$H/tizen-manifest.xml"
   dotnet build "$H/$p.csproj" -c Release -nologo -v q
