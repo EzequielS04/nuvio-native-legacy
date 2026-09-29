@@ -2026,7 +2026,7 @@ static void desenharFontes(GfxRect r, float ar, float ag, float ab) {
 // dono (velocidade, otimo, maximo, dica), a direita de onde veio (tempo de
 // cada addon e vazao de cada fonte).
 
-static char sepDecimal(void) { return ajustes_idioma_ingles() ? '.' : ','; }
+static char sepDecimal(void) { return idioma_ponto_decimal(ajustes_idioma()) ? '.' : ','; }
 
 static const char *textoFalhaVazao(VazResultado r, const char **detalhe) {
   *detalhe = NULL;

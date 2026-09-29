@@ -1438,7 +1438,7 @@
   T("Ocultar", "Sembunyikan"),
   T("Ocultar não lançados", "Sembunyikan yang belum rilis"),
   T("Ocupado", "Sedang dipakai"),
-  T("Olá · Ação", "Olá · Ação"),
+  T("Olá · Ação", "Halo · Aksi"),
   T("Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.", "Di mana layar Jelajahi berada: di samping Cari, sebagai item bilah samping tersendiri, atau tidak sama sekali."),
   T("Onde o + deve salvar?", "Ke mana + harus menyimpan?"),
   T("Onde o + salva", "Ke mana + menyimpan"),

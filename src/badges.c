@@ -138,7 +138,7 @@ float badge_desenhar(float x, float y, const char *texto, BadgeEstilo estilo, fl
 static void notaTexto(char *dst, size_t n, int nota) {
   // Separador decimal pelo idioma: "8,4" em portugues, "8.4" em ingles — em
   // ingles a virgula le como milhar interrompido (ver recomenda.c).
-  snprintf(dst, n, ajustes_idioma_ingles() ? "%d.%d" : "%d,%d", nota / 10, nota % 10);
+  snprintf(dst, n, idioma_ponto_decimal(ajustes_idioma()) ? "%d.%d" : "%d,%d", nota / 10, nota % 10);
 }
 float badge_imdb_largura(int nota) {
   char t[8]; TxtLinha l;

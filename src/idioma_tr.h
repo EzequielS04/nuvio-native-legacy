@@ -1438,7 +1438,7 @@
   T("Ocultar", "Gizle"),
   T("Ocultar não lançados", "Yayınlanmamışları gizle"),
   T("Ocupado", "Kullanımda"),
-  T("Olá · Ação", "Olá · Ação"),
+  T("Olá · Ação", "Merhaba · Aksiyon"),
   T("Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.", "Keşfet ekranının yeri: Arama'nın yanında, kenar çubuğunda kendi öğesi olarak ya da hiçbir yerde."),
   T("Onde o + deve salvar?", "+ nereye kaydetsin?"),
   T("Onde o + salva", "+ nereye kaydeder"),

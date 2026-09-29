@@ -1438,7 +1438,7 @@
   T("Ocultar", "Nascondi"),
   T("Ocultar não lançados", "Nascondi non usciti"),
   T("Ocupado", "In uso"),
-  T("Olá · Ação", "Olá · Ação"),
+  T("Olá · Ação", "Ciao · Azione"),
   T("Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.", "Dove si trova la schermata Scopri: accanto a Cerca, come voce a sé nella barra laterale, o da nessuna parte."),
   T("Onde o + deve salvar?", "Dove deve salvare +?"),
   T("Onde o + salva", "Dove salva +"),

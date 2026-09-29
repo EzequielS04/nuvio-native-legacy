@@ -3413,7 +3413,7 @@ static void heroWeb(float a, float desloc) {
       const char *k = desc_status_chave(raw, 1);
       if(!k) k = desc_status_chave(extras_agenda_status(), 1);
       if(k && strcmp(k, "Piloto") && strcmp(k, "Em breve") && strcmp(k, "Planejado")) {
-        idioma_maiusc(statusTxt, sizeof statusTxt, i18n(k));
+        idioma_maiusc_em(ajustes_idioma(), statusTxt, sizeof statusTxt, i18n(k));
         status = statusTxt;
       }
     }
@@ -3692,7 +3692,7 @@ static float desenhaNotaEpisodio(float x, float y, const char *fonte,
   GfxRect selo;
   float ponto = 6.0f, pad = 10.0f, gap = 7.0f;
   if (nota <= 0) return 0.0f;
-  snprintf(valor, sizeof valor, ajustes_idioma_ingles() ? "%d.%d" : "%d,%d",
+  snprintf(valor, sizeof valor, idioma_ponto_decimal(ajustes_idioma()) ? "%d.%d" : "%d,%d",
            nota / 10, nota % 10);
   lf = txt_linha(TXT_MINI, fonte, 154, 159, 172, 255);
   lv = txt_linha(TXT_CAPTION2, valor, 242, 245, 250, 255);

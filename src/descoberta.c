@@ -45,6 +45,12 @@ void desc_data_extenso(const char *iso, char *dst, size_t tam) {
     int mes = (iso[5] - '0') * 10 + (iso[6] - '0');
     int dia = (iso[8] - '0') * 10 + (iso[9] - '0');
     if (mes >= 1 && mes <= 12) {
+      // Ano primeiro (japones, chines, hungaro, lituano): o modelo traduzido
+      // tem os argumentos na ordem do portugues e nao alcanca esses quatro.
+      { const char ano[5] = { iso[0], iso[1], iso[2], iso[3], 0 };
+        if (idioma_data_extenso_especial(ajustes_idioma(), dia, mes,
+                                         idioma_mes_data(mes, MES[mes - 1]), ano, dst, tam))
+          return; }
       snprintf(dst, tam, i18n("%d de %s de %c%c%c%c"),
                dia, idioma_mes_data(mes, MES[mes - 1]), iso[0], iso[1], iso[2], iso[3]);
       return;

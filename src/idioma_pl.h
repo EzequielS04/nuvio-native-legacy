@@ -1438,7 +1438,7 @@
   T("Ocultar", "Ukryj"),
   T("Ocultar não lançados", "Ukryj niewydane"),
   T("Ocupado", "W użyciu"),
-  T("Olá · Ação", "Olá · Ação"),
+  T("Olá · Ação", "Cześć · Akcja"),
   T("Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.", "Gdzie mieszka ekran Odkrywaj: obok Wyszukiwania, jako osobna pozycja paska bocznego albo nigdzie."),
   T("Onde o + deve salvar?", "Gdzie ma zapisywać +?"),
   T("Onde o + salva", "Gdzie zapisuje +"),

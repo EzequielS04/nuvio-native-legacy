@@ -1438,7 +1438,7 @@
   T("Ocultar", "Skryť"),
   T("Ocultar não lançados", "Skryť nevydané"),
   T("Ocupado", "Používa sa"),
-  T("Olá · Ação", "Olá · Ação"),
+  T("Olá · Ação", "Ahoj · Akčný"),
   T("Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.", "Kde bude Objavovanie: vedľa Hľadania, ako vlastná položka bočného panela, alebo nikde."),
   T("Onde o + deve salvar?", "Kam má + ukladať?"),
   T("Onde o + salva", "Kam + ukladá"),

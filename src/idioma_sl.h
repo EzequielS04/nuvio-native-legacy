@@ -1438,7 +1438,7 @@
   T("Ocultar", "Skrij"),
   T("Ocultar não lançados", "Skrij neizdano"),
   T("Ocupado", "V uporabi"),
-  T("Olá · Ação", "Olá · Ação"),
+  T("Olá · Ação", "Živjo · Akcijski"),
   T("Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.", "Kje živi Odkrivanje: ob Iskanju, kot samostojen element stranske vrstice ali nikjer."),
   T("Onde o + deve salvar?", "Kam naj + shrani?"),
   T("Onde o + salva", "Kam + shrani"),

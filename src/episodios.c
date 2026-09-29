@@ -765,7 +765,7 @@ void episodios_desenhar(void) {
       // de episodio da pagina de detalhe usa para Trakt e TMDB.
       if(ep->nota>0){
         char valor[32];
-        snprintf(valor,sizeof valor,ajustes_idioma_ingles()?"TMDB %d.%d":"TMDB %d,%d",ep->nota/10,ep->nota%10);
+        snprintf(valor,sizeof valor,idioma_ponto_decimal(ajustes_idioma())?"TMDB %d.%d":"TMDB %d,%d",ep->nota/10,ep->nota%10);
         TxtLinha ln=txt_linha(TXT_PG_FIM,valor,229,231,236,255);
         GfxRect selo={tx+le.w+10,y+45,ln.w+14,26};
         if (vid) gfx_vidro_painel(selo,.18f,.55f,anim);

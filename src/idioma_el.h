@@ -1438,7 +1438,7 @@
   T("Ocultar", "Απόκρυψη"),
   T("Ocultar não lançados", "Απόκρυψη όσων δεν έχουν κυκλοφορήσει"),
   T("Ocupado", "Σε χρήση"),
-  T("Olá · Ação", "Olá · Ação"),
+  T("Olá · Ação", "Γεια σου · Δράση"),
   T("Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.", "Πού βρίσκεται η οθόνη Ανακάλυψη: δίπλα στην Αναζήτηση, ως ξεχωριστό στοιχείο της πλαϊνής μπάρας ή πουθενά."),
   T("Onde o + deve salvar?", "Πού να αποθηκεύει το +;"),
   T("Onde o + salva", "Πού αποθηκεύει το +"),

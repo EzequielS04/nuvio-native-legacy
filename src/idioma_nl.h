@@ -1438,7 +1438,7 @@
   T("Ocultar", "Verbergen"),
   T("Ocultar não lançados", "Onuitgebracht verbergen"),
   T("Ocupado", "In gebruik"),
-  T("Olá · Ação", "Olá · Ação"),
+  T("Olá · Ação", "Hallo · Actie"),
   T("Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.", "Waar het Ontdekken-scherm zit: naast Zoeken, als eigen item in de zijbalk, of nergens."),
   T("Onde o + deve salvar?", "Waar moet + opslaan?"),
   T("Onde o + salva", "Waar + opslaat"),

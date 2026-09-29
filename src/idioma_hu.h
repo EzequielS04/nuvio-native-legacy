@@ -1438,7 +1438,7 @@
   T("Ocultar", "Elrejtés"),
   T("Ocultar não lançados", "Meg nem jelentek elrejtése"),
   T("Ocupado", "Használatban"),
-  T("Olá · Ação", "Olá · Ação"),
+  T("Olá · Ação", "Szia · Akció"),
   T("Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.", "Hol legyen a Felfedezés: a Keresés mellett, saját oldalsáv-elemként, vagy sehol."),
   T("Onde o + deve salvar?", "Hova mentsen a +?"),
   T("Onde o + salva", "Hova ment a +"),

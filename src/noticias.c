@@ -129,7 +129,35 @@ static const struct { const char *cod, *serie, *filme, *hl, *gl, *ceid; } PAR[ID
   { "fr", "s\xc3\xa9rie",                       "film",                         "fr",    "FR", "FR:fr" },
   { "de", "Serie",                               "Film",                         "de",    "DE", "DE:de" },
   { "es", "serie",                               "película",                     "es",    "ES", "ES:es" },
+  // Os 22 de 2026-09. hl/gl/ceid conferidos contra news.google.com em 29/09/2026
+  // (RSS com itens = ok). DUAS edicoes NAO EXISTEM: dinamarques e bosnio
+  // respondem 302 para a edicao en-US, e a noticia vem em ingles (o titulo entre
+  // aspas continua achando a serie); ficam com o trio certo para o dia em que o
+  // Google as abrir. A edicao servia (RS:sr) devolve manchetes em CIRILICO.
+  { "it", "serie tv", "film", "it", "IT", "IT:it" },
+  { "nl", "serie", "film", "nl", "NL", "NL:nl" },
+  { "pl", "serial", "film", "pl", "PL", "PL:pl" },
+  { "tr", "dizi", "film", "tr", "TR", "TR:tr" },
+  { "ptpt", "s\xc3\xa9rie", "filme", "pt-PT", "PT", "PT:pt-150" },
+  { "sv", "serie", "film", "sv", "SE", "SE:sv" },
+  { "da", "serie", "film", "da", "DK", "DK:da" },
+  { "no", "serie", "film", "no", "NO", "NO:no" },
+  { "cs", "seri\xc3\xa1l", "film", "cs", "CZ", "CZ:cs" },
+  { "sk", "seri\xc3\xa1l", "film", "sk", "SK", "SK:sk" },
+  { "sl", "serija", "film", "sl", "SI", "SI:sl" },
+  { "hu", "sorozat", "film", "hu", "HU", "HU:hu" },
+  { "lt", "serialas", "filmas", "lt", "LT", "LT:lt" },
+  { "bs", "serija", "film", "bs", "BA", "BA:bs" },
+  { "sr", "serija", "film", "sr", "RS", "RS:sr" },
+  { "bg", "сериал", "филм", "bg", "BG", "BG:bg" },
+  { "el", "σειρά", "ταινία", "el", "GR", "GR:el" },
+  { "id", "serial", "film", "id", "ID", "ID:id" },
+  { "vi", "phim truyền hình", "phim", "vi", "VN", "VN:vi" },
+  { "ja", "ドラマ", "映画", "ja", "JP", "JP:ja" },
+  { "zhcn", "剧集", "电影", "zh-CN", "CN", "CN:zh-Hans" },
+  { "zhtw", "影集", "電影", "zh-TW", "TW", "TW:zh-Hant" },
 };
+_Static_assert(sizeof PAR / sizeof *PAR == IDIOMA_N, "noticias.c: uma linha de PAR por IDIOMA_* (idiomacod.h)");
 
 // "Sat, 20 Sep 2026 12:00:00 GMT" -> "20 Sep" / "20 set" / "20 вер".
 static long dataCurta(const char *rfc, char *dst, size_t cap) {
@@ -144,10 +172,8 @@ static long dataCurta(const char *rfc, char *dst, size_t cap) {
   // que uma e velha sem gastar a largura da linha nas novas.
   { time_t agora = time(NULL); struct tm *tmp = gmtime(&agora);
     int anoAtual = tmp ? tmp->tm_year + 1900 : 0;
-    if (ano && ano != anoAtual)
-      snprintf(dst, cap, "%d %s %d", d, idioma_mes_curto(ajustes_idioma(), m), ano);
-    else
-      snprintf(dst, cap, "%d %s", d, idioma_mes_curto(ajustes_idioma(), m)); }
+    idioma_data_curta(ajustes_idioma(), d, idioma_mes_curto(ajustes_idioma(), m),
+                      ano && ano != anoAtual ? ano : 0, dst, cap); }
   return (long)ano * 10000L + (long)(m + 1) * 100L + d;
 }
 

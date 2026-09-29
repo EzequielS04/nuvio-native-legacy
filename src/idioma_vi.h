@@ -1438,7 +1438,7 @@
   T("Ocultar", "Ẩn"),
   T("Ocultar não lançados", "Ẩn nội dung chưa phát hành"),
   T("Ocupado", "Đang dùng"),
-  T("Olá · Ação", "Olá · Ação"),
+  T("Olá · Ação", "Xin chào · Hành động"),
   T("Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.", "Màn hình Khám phá nằm ở đâu: cạnh Tìm kiếm, như một mục riêng trên thanh bên, hoặc không hiện."),
   T("Onde o + deve salvar?", "+ nên lưu vào đâu?"),
   T("Onde o + salva", "+ lưu vào đâu"),
