@@ -12,7 +12,11 @@
 #define NV_PERFILTV_H
 #include <stddef.h>
 
-typedef enum { PTV_LG = 0, PTV_TIZEN = 1 } PtvPlataforma;
+// PTV_TPK = o .tpk NATIVO da Samsung (NV_TPK). Nao e o PTV_TIZEN: la o app
+// vive no heap fixo de 256 MiB do WASM e as texturas no processo de GPU do
+// navegador; aqui e um processo nativo como o da LG, com fios de rede proprios
+// (curl) e as texturas no driver da TV. Tabela propria em perfiltv.c.
+typedef enum { PTV_LG = 0, PTV_TIZEN = 1, PTV_TPK = 2 } PtvPlataforma;
 typedef enum { PTV_QUALIDADE = 0, PTV_DESEMPENHO = 1 } PtvModo;
 
 typedef struct {
@@ -21,8 +25,16 @@ typedef struct {
   int heroiLarg;  // teto de decodificacao da arte de tela cheia, px
 } PtvPerfil;
 
-// Plataforma do build (Tizen = __EMSCRIPTEN__).
+// Plataforma do build (Tizen = __EMSCRIPTEN__, TPK = NV_TPK).
 PtvPlataforma ptv_plataforma(void);
+
+// GPU FRACA, pelo GL_RENDERER (so vale para PTV_TPK). 1 = Mali de geracao
+// antiga (Utgard "Mali-4xx", Midgard "Mali-T...", inclusive o "Mali-TDVX" das
+// Samsung 2019 — registro 8825: 22-29 fps na home com a CPU ociosa). Aritmetica
+// de texto, sem GL: gpunivel.c le a string e passa por ptv_definir_gpu_fraca.
+int  ptv_gpu_fraca(const char *renderer);
+void ptv_definir_gpu_fraca(int fraca);
+int  ptv_gpu_fraca_atual(void);
 
 // Orcamento automatico pela RAM (MemTotal na LG, deviceMemory no Tizen). 0 =
 // RAM desconhecida.

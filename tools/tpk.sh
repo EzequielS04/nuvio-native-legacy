@@ -16,6 +16,16 @@
 # --hash-style=both, e o script FALHA se ela sair com PT_TLS, relocacao de TLS
 # ou sem DT_HASH (#137, #180). A .so dos hosts Tizen 6+ e a de sempre.
 #
+# NIVEL DE GPU FORCADO (canario de comparacao, src/gpunivel.h):
+#
+#   NV_TPK_NIVEL=1 bash tools/tpk.sh   # efeitos leves, 1080p nativo
+#   NV_TPK_NIVEL=2 bash tools/tpk.sh   # efeitos leves + desenho interno 720p
+#
+# vira -DNV_TPK_NIVEL_FORCADO=N nas duas .so (4/5 e 6+) e, alem de build/tpk/,
+# os .tpk sao copiados para build/tpk/canary-gpu-<efeitos|720p>/ com o sufixo
+# -canary-gpu-<efeitos|720p>. Sem a variavel e o caminho da release: nivel
+# ADAPTATIVO (mede a home e desce sozinho so se a GPU nao der conta).
+#
 # Primeira vez: dependencias estaticas (SDL2 com video dummy, SDL2_image com
 # stb, SDL2_ttf com freetype embutido) em ~/.cache/nuvio-tpk/prefix, feitas por
 # tools/tpk/deps.sh na imagem tools/tpk/Dockerfile.
@@ -25,6 +35,17 @@ RAIZ="$PWD"
 CACHE="${NUVIO_TPK_CACHE:-$HOME/.cache/nuvio-tpk}"
 SAIDA="build/tpk"
 mkdir -p "$SAIDA" "$CACHE"
+CANARIO=""
+case "${NV_TPK_NIVEL:-}" in
+  "") ;;
+  1) CANARIO=canary-gpu-efeitos ;;
+  2) CANARIO=canary-gpu-720p ;;
+  *) echo "NV_TPK_NIVEL=$NV_TPK_NIVEL: use 1 (efeitos leves) ou 2 (720p)" >&2; exit 1 ;;
+esac
+if [ -n "$CANARIO" ]; then
+  NUVIO_EXTRA_CFLAGS="${NUVIO_EXTRA_CFLAGS:-} -DNV_TPK_NIVEL_FORCADO=$NV_TPK_NIVEL"
+  echo "[canario] nivel de GPU forcado em $NV_TPK_NIVEL ($CANARIO)"
+fi
 
 docker info >/dev/null 2>&1 || { echo "Docker parado: abra o Docker/OrbStack" >&2; exit 1; }
 docker image inspect nuvio-tpk-sdk >/dev/null 2>&1 ||
@@ -153,3 +174,11 @@ for T in "$SAIDA"/*.tpk; do
   esac
 done
 echo "  NuvioTpk40 leva a libnuvio-tpk40.so; os outros a libnuvio.so comum"
+if [ -n "$CANARIO" ]; then
+  mkdir -p "$SAIDA/$CANARIO"
+  rm -f "$SAIDA/$CANARIO"/*.tpk
+  for T in "$SAIDA"/*.tpk; do
+    cp "$T" "$SAIDA/$CANARIO/$(basename "$T" .tpk)-$CANARIO.tpk"
+  done
+  ls -la "$SAIDA/$CANARIO"
+fi

@@ -54,15 +54,64 @@
 #include <stdlib.h>
 #include <string.h>
 
+// A TABELA DO .tpk NATIVO (PTV_TPK, 29/09/2026). Ate aqui o .tpk caia no ramo
+// da LG (ptv_plataforma so conhecia __EMSCRIPTEN__), entao uma Samsung 2019 de
+// 1108 MB recebia a faixa "LG < 1,2 GB": 48 MB de textura, 2 fios, heroi 1280.
+// Aquela faixa desceu por OOM do webOS (registros 1720-1774), que NINGUEM
+// mediu na Samsung nativa. O que foi medido nela (registro D1 8825, Tizen 5.0,
+// Mali-TDVX, 1108 MB): textura em 47,6 de 48 MB com ate ~150 despejos por
+// janela de 3 s — o cache gira o tempo todo.
+//
+//   aparelho (MemTotal)   textura  teto   fios rede  heroi
+//   tpk sem MemTotal        96      96       4       1280
+//   tpk  < 1,2 GB           64      96       2       1280
+//   tpk  < 2,5 GB           96     160       4       1280 (1920 com >= 2 GB e GPU nao fraca)
+//   tpk >= 2,5 GB          128     256       4       1920 (1280 com GPU fraca)
+//
+// - textura < 1,2 GB: 64, um degrau acima dos 48 que despejavam ~150 por
+//   janela, e o mesmo numero que o .wgt ja usa na Samsung de 1 GB. NAO e
+//   medido que 64 cabe sem o sistema matar o app: e o palpite conservador, e
+//   o `rss=` do relatorio de FPS e quem confirma na TV.
+// - fios: o .tpk cria 4 (NV_TEX_FIOS_REDE nativo, curl proprio como na LG);
+//   abaixo de 1,2 GB ficam 2 pelo mesmo motivo de memoria da LG (cada fio
+//   segura um corpo baixado ate o decode).
+// - heroi: GPU fraca fica em 1280 em qualquer RAM. A arte de tela cheia e o
+//   maior desenho da home; 1280 e 3,7 MB contra 8,3 MB de 1920, e numa GPU
+//   presa em preenchimento cada byte lido por quadro conta.
+static int gpuFraca = 0;
+void ptv_definir_gpu_fraca(int f) { gpuFraca = f ? 1 : 0; }
+int  ptv_gpu_fraca_atual(void) { return gpuFraca; }
+
+int ptv_gpu_fraca(const char *r) {
+  const char *m;
+  if (!r) return 0;
+  m = strstr(r, "Mali-");
+  if (!m) return 0;
+  m += 5;
+  // Utgard (Mali-400/450/470): so GLES2, o mais fraco de todos.
+  if (m[0] == '4' && m[1] >= '0' && m[1] <= '9') return 1;
+  // Midgard (Mali-T6xx/T7xx/T8xx) e o "Mali-TDVX" que a Samsung rebatiza.
+  if (m[0] == 'T') return 1;
+  return 0;
+}
+
 PtvPlataforma ptv_plataforma(void) {
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__)
   return PTV_TIZEN;
+#elif defined(NV_TPK)
+  return PTV_TPK;
 #else
   return PTV_LG;
 #endif
 }
 
 int ptv_tex_auto_mb(PtvPlataforma p, long mem) {
+  if (p == PTV_TPK) {
+    if (!mem) return NV_TEX_ORCAMENTO_MB;
+    if (mem < 1200) return 64;
+    if (mem < 2500) return 96;
+    return 128;
+  }
   if (p == PTV_TIZEN) {
     if (!mem) return NV_TEX_ORCAMENTO_MB;
     if (mem <= 1024) return 64;
@@ -77,6 +126,11 @@ int ptv_tex_auto_mb(PtvPlataforma p, long mem) {
 
 int ptv_tex_teto_mb(PtvPlataforma p, long mem) {
   if (p == PTV_TIZEN) return ptv_tex_auto_mb(p, mem);
+  if (p == PTV_TPK) {
+    if (!mem || mem < 1200) return 96;
+    if (mem < 2500) return 160;
+    return 256;
+  }
   if (!mem) return 160;
   if (mem < 1200) return 64;
   if (mem < 2000) return 160;
@@ -92,7 +146,7 @@ int ptv_fios_rede_max(PtvPlataforma p) { return p == PTV_TIZEN ? 2 : 4; }
 // (4), e LGs de 658 MB aprovaram 64 MB com 4 fios (diagnostico de campo,
 // pessoas 80cd1a98 e f9f204be) — os 4 corpos em voo que a tabela evita.
 static int fiosTeto(PtvPlataforma p, long mem) {
-  if (p == PTV_LG && mem && mem < 1200) return 2;
+  if ((p == PTV_LG || p == PTV_TPK) && mem && mem < 1200) return 2;
   return ptv_fios_rede_max(p);
 }
 
@@ -100,6 +154,7 @@ static int fiosTeto(PtvPlataforma p, long mem) {
 // (a mesma linha de tetoDoHeroi); abaixo disso, 1280 sempre.
 int ptv_heroi_max(PtvPlataforma p, long mem) {
   if (p == PTV_TIZEN) return mem >= 2000 ? 1920 : 1280;
+  if (p == PTV_TPK && !mem) return 1280;
   if (mem && mem < 1200) return 1280;
   return 1920;
 }
@@ -111,6 +166,8 @@ void ptv_padrao(PtvPlataforma p, long mem, PtvPerfil *out) {
   // Padrao do Tizen e 1280 mesmo com 2 GB: 1920 la e escolha de quem pos a
   // qualidade em Alta, nunca o padrao (ver a tabela no topo).
   out->heroiLarg = p == PTV_TIZEN ? 1280 : ptv_heroi_max(p, mem);
+  // .tpk: 1920 so com 2 GB ou mais E GPU que nao e das fracas (tabela acima).
+  if (p == PTV_TPK && (gpuFraca || mem < 2000)) out->heroiLarg = 1280;
 }
 
 // QUALIDADE = o teto que a RAM permite em tudo. DESEMPENHO = menos pressao:

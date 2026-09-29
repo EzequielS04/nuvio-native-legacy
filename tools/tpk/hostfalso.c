@@ -56,7 +56,9 @@ int main(int argc, char **argv) {
   for (i = 0; trocas < quadros; i++) {
     int r = quadro();
     if (r < 0) { printf("host: app pediu para sair no quadro %d\n", i); break; }
-    if (r == 0) { pulos++; if (i > quadros * 50) break; usleep(16000); continue; }
+    // Folga larga: no qemu+llvmpipe um quadro do app com o alvo de 720p e a
+    // ampliacao chega a 2,5 s, e 50 chamadas por quadro pedido desistiam antes.
+    if (r == 0) { pulos++; if (i > quadros * 500) break; usleep(16000); continue; }
     trocas++;
     if (trocas == quadros / 2) { tecla("Down", 1); tecla("Down", 0); }
     if (trocas == quadros - 3) salvar();

@@ -23,6 +23,9 @@ typedef struct {
   EGLContext (*CreateContext)(EGLDisplay, EGLConfig, EGLContext, const EGLint *);
   EGLBoolean (*SwapInterval)(EGLDisplay, EGLint);
   EGLBoolean (*SwapBuffers)(EGLDisplay, EGLSurface);
+  // Para as funcoes de GLES3/extensao que a libGLESv2 do link nao declara
+  // (glInvalidateFramebuffer, glDiscardFramebufferEXT): gpunivel.c.
+  void      *(*GetProcAddress)(const char *);
 } TpkEgl;
 extern TpkEgl tpkEgl;
 int tpk_egl_carregar(void);   // 0 = ok

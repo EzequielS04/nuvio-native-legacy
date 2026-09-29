@@ -2602,7 +2602,8 @@ static int orcamentoMB(void) {
   // variante promete "cache grande para TV com RAM sobrando", nao "300 em
   // qualquer TV". O teto e o mesmo que Ajustes usa (tetoPermitidoMB): 64 abaixo
   // de 1,2 GB, 160 abaixo de 2 GB, 300 abaixo de 3 GB, 512 acima.
-  { int teto = ptv_tex_teto_mb(PTV_LG, mem);
+  // (ptv_plataforma: na LG e o PTV_LG de sempre; no .tpk, a tabela PTV_TPK.)
+  { int teto = ptv_tex_teto_mb(ptv_plataforma(), mem);
     if (mb > teto) {
       printf("[tex] NV_TEX_MB_FIXO=%d acima do que %ld MB de RAM permitem: fica em %d MB\n", mb, mem, teto);
       mb = teto; porque = "NV_TEX_MB_FIXO limitado pela RAM";
