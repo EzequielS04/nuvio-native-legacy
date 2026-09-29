@@ -269,6 +269,9 @@ IGNORAR = {
     # Nome NATIVO de um idioma no seletor (ajustes.c, V_IDIOMA): sem i18n de
     # proposito, quem trocou para uma lingua que nao le precisa achar a sua.
     "Türkçe",
+    # "Ola" escrito em cada idioma (novidades160.c, OLA): a cena dos idiomas
+    # mostra cada lingua nela mesma, sem traducao de proposito.
+    "Olá", "Xin chào",
     # #158: dados, nao rotulo. A tabela de letras modificadoras (U+1D2C..)
     # da normalizacao de nome de canal (epg.c) e uma palavra procurada no nome
     # de categoria do Xtream para achar o pais da grade (guia.c).

@@ -64,7 +64,7 @@
 #include "novidades1312.h"
 #include "novidades142.h"
 #include "novidades148.h"
-#include "novidades151.h"
+#include "novidades160.h"
 #include "telemetria.h"
 #include "avisos.h"
 #include "recintro.h"
@@ -995,6 +995,7 @@ int app_iniciar(const char *dirArte) {
   diagnostico_recuperar_checkpoint();
   homePronta = home_iniciar(dirArte);
   novidades148_dir(dirArte);
+  novidades160_dir(dirArte);
   if (!homePronta)
     printf("[app] sem arte no pacote: a home so aparece depois do primeiro sync\n");
   menu_iniciar();
@@ -1192,13 +1193,18 @@ void app_evento(const SDL_Event *e) {
     }
     return;
   }
-  if (novidades151_aberto()) {
-    novidades151_evento(e);
-    if (novidades151_pedido() == N151_PEDIU_AJUSTES) {
-      ajustes_abrir_na_fonte();
-      trocarTela(TELA_AJUSTES);
-      menu_definir_destino(MENU_AJUSTES);
+  // O DA 1.6.0 (no lugar do da 1.5.2): "Escolher o layout" abre Ajustes na
+  // linha do layout da home, "Experimentar o vidro" na da Interface de vidro.
+  // Aqui, no mesmo evento, pelo mesmo motivo do da 1.4.2 acima.
+  if (novidades160_aberto()) {
+    novidades160_evento(e);
+    switch (novidades160_pedido()) {
+      case N160_PEDIU_LAYOUT: ajustes_abrir_no_layout(); break;
+      case N160_PEDIU_VIDRO:  ajustes_abrir_no_vidro(); break;
+      default: return;
     }
+    trocarTela(TELA_AJUSTES);
+    menu_definir_destino(MENU_AJUSTES);
     return;
   }
   if (novidades1312_aberto()) { novidades1312_evento(e); return; }
@@ -1548,7 +1554,7 @@ void app_atualizar(float dt, Uint32 agora) {
   //
   // Chamar em todo quadro nao custa: a decisao acontece uma vez e o modulo a
   // guarda — a leitura do arquivo de bandeira nao se repete.
-  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() && !novidades151_aberto()) {
+  if (tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() && !novidades160_aberto()) {
     // Esta e a primeira explicacao da versao: aparece antes dos demais
     // cartoes de onboarding. Depois de OK, o bloco abaixo continua a fila
     // antiga no quadro seguinte.
@@ -1622,32 +1628,33 @@ void app_atualizar(float dt, Uint32 agora) {
         !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() &&
         !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() &&
         !novidades134_aberto() && !novidades139_aberto() && !novidades142_aberto() &&
-        !novidades148_aberto() && !novidades151_aberto() && !pipintro_aberto())
+        !novidades148_aberto() && !novidades160_aberto() && !pipintro_aberto())
       novidades148_primeira_vez();
-    // Fontes e ajuda visual: uma apresentação por aparelho, depois da cor viva.
+    // A 1.6.0 no lugar da 1.5.2: uma apresentacao por aparelho, depois da cor
+    // viva. Quem nao viu a da 1.5.2 nao a recebe mais; a desta versao cobre.
     if (!registro_aberto() && !sintro_aberto() && !novidades_aberto() &&
         !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() &&
         !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() &&
         !novidades134_aberto() && !novidades139_aberto() && !novidades142_aberto() &&
-        !novidades148_aberto() && !novidades151_aberto() && !pipintro_aberto())
-      novidades151_primeira_vez();
+        !novidades148_aberto() && !novidades160_aberto() && !pipintro_aberto())
+      novidades160_primeira_vez();
     if (!registro_aberto() && !sintro_aberto() && !novidades_aberto() &&
         !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() &&
         !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() &&
-        !novidades134_aberto() && !novidades139_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades151_aberto() &&
+        !novidades134_aberto() && !novidades139_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades160_aberto() &&
         !novidades1312_aberto() && !pipintro_aberto())
       novidades1312_primeira_vez();
     if (!registro_aberto() && !sintro_aberto() && !novidades_aberto() &&
         !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() &&
         !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() &&
-        !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades151_aberto() && !telemetria_aberto() && !pipintro_aberto())
+        !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades160_aberto() && !telemetria_aberto() && !pipintro_aberto())
       telemetria_primeira_vez();
     // AVISO DE VERSAO NOVA: a consulta ao GitHub so parte quando a home esta
     // de pe (nao disputa a rede com o catalogo), e o cartao so abre quando
     // nenhum outro cartao de primeira vez esta aberto.
     atualizacao_verificar();
     if (!registro_aberto() && !sintro_aberto() && !novidades_aberto() &&
-        !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades151_aberto() && !pipintro_aberto())
+        !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades160_aberto() && !pipintro_aberto())
       atualizacao_mostrar_se_houver();
     // RECOMENDACAO DE UM AMIGO: a sondagem parte daqui pelo mesmo motivo que a
     // do GitHub — com a home de pe ela nao disputa a rede com o catalogo. Sem
@@ -1658,7 +1665,7 @@ void app_atualizar(float dt, Uint32 agora) {
     recomenda_verificar();
 #endif
     if (!registro_aberto() && !sintro_aberto() && !novidades_aberto() &&
-        !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades151_aberto() && !telemetria_aberto() && !pipintro_aberto() && !atualizacao_aberta())
+        !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades160_aberto() && !telemetria_aberto() && !pipintro_aberto() && !atualizacao_aberta())
       recomenda_mostrar_se_houver();
     // EXPLICADOR DAS TELAS SOCIAIS: mesmas guardas de todos os outros, mais
     // a do cartao de recomendacao recebida — dois cartoes ao mesmo tempo
@@ -1666,7 +1673,7 @@ void app_atualizar(float dt, Uint32 agora) {
     // NUVIO_REC_URL (recomenda_ativo), e por isso nao ha guarda aqui: um
     // anuncio de recurso que nao esta no pacote e pior que silencio.
     if (!registro_aberto() && !sintro_aberto() && !novidades_aberto() &&
-        !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades151_aberto() && !telemetria_aberto() && !pipintro_aberto() && !atualizacao_aberta() &&
+        !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades160_aberto() && !telemetria_aberto() && !pipintro_aberto() && !atualizacao_aberta() &&
         !recomenda_aberta())
       recintro_primeira_vez();
     // LEMBRETE VENCIDO: o unico aviso que esta TV consegue dar. Ultimo da fila
@@ -1674,13 +1681,13 @@ void app_atualizar(float dt, Uint32 agora) {
     // cima do outro —, e sem consulta de rede nenhuma: o que ele mostra ja
     // esta em disco desde que o dono apertou "Lembrar-me".
     if (!registro_aberto() && !sintro_aberto() && !novidades_aberto() &&
-        !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades151_aberto() && !telemetria_aberto() && !pipintro_aberto() && !atualizacao_aberta() &&
+        !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades160_aberto() && !telemetria_aberto() && !pipintro_aberto() && !atualizacao_aberta() &&
         !recomenda_aberta() && !recintro_aberto())
       agendaviso_mostrar_se_houver();
     // O CARTAO DO CRASH, depois do lembrete e pelas mesmas regras: um cartao
     // por vez, com a home de pe.
     if (!registro_aberto() && !sintro_aberto() && !novidades_aberto() &&
-        !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades151_aberto() && !telemetria_aberto() && !pipintro_aberto() && !atualizacao_aberta() &&
+        !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades160_aberto() && !telemetria_aberto() && !pipintro_aberto() && !atualizacao_aberta() &&
         !recomenda_aberta() && !recintro_aberto() && !agendaviso_aberto())
       avisos_mostrar_se_houver();
     }
@@ -2687,7 +2694,7 @@ void app_atualizar(float dt, Uint32 agora) {
                      !avisos_cartao_aberto() && !sintro_aberto() && !pipintro_aberto() &&
                      !novidades_aberto() && !novidades11_aberto() && !novidades12_aberto() &&
                      !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() &&
-                     !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades151_aberto() && !telemetria_aberto() &&
+                     !novidades133_aberto() && !novidades134_aberto() && !novidades139_aberto() && !novidades1312_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades160_aberto() && !telemetria_aberto() &&
                      !recintro_aberto() && !atualizacao_aberta() && !agendaviso_aberto() &&
                      !recomenda_aberta() && !recenviar_aberto() && !faixas_aberta() &&
                      !episodios_aberto() && !stream_folha_aberta() && !guia_overlay_aberta() &&
@@ -2711,7 +2718,7 @@ void app_atualizar(float dt, Uint32 agora) {
   novidades1312_atualizar(dt, agora);
   novidades142_atualizar(dt, agora);
   novidades148_atualizar(dt, agora);
-  novidades151_atualizar(dt, agora);
+  novidades160_atualizar(dt, agora);
   telemetria_atualizar(dt, agora);
   recintro_atualizar(dt, agora);
   atualizacao_atualizar(dt, agora);
@@ -2927,8 +2934,8 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto()) novidades142_desenhar(agora);
   CAMADA_SE(novidades148_aberto());
   if (!registro_aberto()) novidades148_desenhar(agora);
-  CAMADA_SE(novidades151_aberto());
-  if (!registro_aberto()) novidades151_desenhar(agora);
+  CAMADA_SE(novidades160_aberto());
+  if (!registro_aberto()) novidades160_desenhar(agora);
   CAMADA_SE(telemetria_aberto());
   if (!registro_aberto()) telemetria_desenhar(agora);
   CAMADA_SE(recintro_aberto());
