@@ -29,6 +29,19 @@ int   tpk_gl_atributo(SDL_GLattr a, int *v);
 #define SDL_GL_GetAttribute(a, v)          tpk_gl_atributo((a), (v))
 #define SDL_GL_GetDrawableSize(w, a, b)    ((void)(w), tpk_tamanho((a), (b)))
 #define SDL_GL_GetCurrentWindow()          ((SDL_Window *)NULL)
+
+// NV_TPK40: SO a libnuvio.so do pacote Tizen 4/5 (NuvioTpk40), que tools/tpk.sh
+// compila a parte, sem _Thread_local (rede.c) e com DT_HASH, porque o host
+// dessas TVs pode carrega-la por um carregador de ELF proprio (Program40.cs).
+// A libnuvio.so dos hosts Tizen 6+ NAO tem esta macro e nao muda.
+#ifdef NV_TPK40
+// Rastro de etapas em data/tpk-etapas.txt (#180): uma linha "begin X" /
+// "ok X ..." / "fail X ..." / "note ...", com open/write/close e O_APPEND, sem
+// buffer e sem handler de sinal. O host .NET escreve no MESMO arquivo, e no
+// arranque seguinte mostra na tela a etapa que ficou sem "ok". Antes de
+// nv_tpk_iniciar nao ha caminho: a chamada e ignorada.
+void nv_tpk40_etapa(const char *linha);
+#endif
 #endif
 
 #endif

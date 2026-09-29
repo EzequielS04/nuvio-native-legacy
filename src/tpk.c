@@ -24,8 +24,49 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef NV_TPK40
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 int main(int argc, char **argv);
+
+#ifdef NV_TPK40
+// ---------------------------------------------------------------- RASTRO 4/5
+// Ver tpk.h. Caminho definido em nv_tpk_iniciar (data/tpk-etapas.txt); o host
+// .NET escreve no mesmo arquivo com O_APPEND, e cada linha e UM write, entao
+// as duas fontes nao se misturam. Sem stdio: se o processo morrer logo depois,
+// a linha ja esta no disco. Tambem vai para o nuvio.log (printf), que e o que
+// o envio automatico sobe quando o login funcionar.
+static char etapasArq[600], etapasAnt[600];
+void nv_tpk40_etapa(const char *linha) {
+  char buf[700];
+  int fd, n;
+  if (!etapasArq[0] || !linha) return;
+  n = snprintf(buf, sizeof buf, "native %s\n", linha);
+  if (n <= 0) return;
+  if ((size_t)n >= sizeof buf) n = (int)sizeof buf - 1;
+  fd = open(etapasArq, O_WRONLY | O_CREAT | O_APPEND, 0644);
+  if (fd >= 0) { (void)!write(fd, buf, (size_t)n); close(fd); }
+  printf("[etapa] %s", buf);
+  fflush(stdout);
+}
+// O rastro do arranque ANTERIOR (renomeado pelo host) entra no nuvio.log desta
+// execucao, para subir com o envio automatico. Chamado do fio do app depois
+// que o main() ja redirecionou o stdout para o log.
+static void etapasAnteriorParaLog(void) {
+  static int feito;
+  FILE *f;
+  char l[400];
+  if (feito || !etapasAnt[0]) return;
+  feito = 1;
+  f = fopen(etapasAnt, "r");
+  if (!f) return;
+  while (fgets(l, sizeof l, f)) printf("[etapa-anterior] %s", l);
+  fclose(f);
+  fflush(stdout);
+}
+#endif
 
 TpkEgl tpkEgl;
 int tpk_egl_carregar(void) {
@@ -85,6 +126,9 @@ static void *fioApp(void *arg) {
   char *argv[] = { "nuvio", dirArte, NULL };
   int r;
   (void)arg;
+#ifdef NV_TPK40
+  nv_tpk40_etapa("note app-main started");
+#endif
   r = main(2, argv);
   printf("[tpk] main devolveu %d\n", r);
   fflush(stdout);
@@ -116,6 +160,11 @@ int nv_tpk_iniciar(const char *arte, const char *dados, int w, int h) {
     setenv("NUVIO_LOG_ANTERIOR", ant, 1); }
   setenv("NUVIO_DADOS", dados, 1);
   setenv("NUVIO_LOG", log, 1);
+#ifdef NV_TPK40
+  snprintf(etapasArq, sizeof etapasArq, "%s/tpk-etapas.txt", dados);
+  snprintf(etapasAnt, sizeof etapasAnt, "%s/tpk-etapas-anterior.txt", dados);
+  nv_tpk40_etapa("note nv_tpk_iniciar reached native");
+#endif
   setenv("HOME", dados, 1);
   setenv("SDL_VIDEODRIVER", "dummy", 1);
   pthread_attr_init(&at);
@@ -223,6 +272,9 @@ int nv_tpk_quadro(void) {
 }
 
 void *tpk_gl_criar(void) {
+#ifdef NV_TPK40
+  etapasAnteriorParaLog();   // o main() ja abriu o nuvio.log a esta altura
+#endif
   appEsperaVez(0);
   if (!eglMakeCurrent(dpy, sup, sup, ctx)) {
     printf("[tpk] eglMakeCurrent no fio do app falhou: 0x%x\n", eglGetError());

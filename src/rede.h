@@ -89,7 +89,16 @@ int rede_resto_recusado(void);
 
 // Teto de bytes da transferencia corrente (0 = sem teto). E interno ao modulo;
 // esta exposto so porque rede_baixar_trecho o usa. Nao mexer de fora.
-#if defined(__GNUC__)
+//
+// NV_TPK40 (libnuvio do pacote Tizen 4/5, tools/tpk.sh): SEM _Thread_local.
+// Nessas TVs a .so pode entrar pelo carregador de ELF proprio do host
+// (Program40.cs), que nao monta TLS de compilador — o primeiro acesso a uma
+// variavel _Thread_local seria o fim do processo. O estado por fio vive numa
+// struct por pthread_key (rede.c); o nome continua um lvalue por macro.
+#if defined(NV_TPK40)
+long *rede_teto_ptr(void);
+#define rede_teto (*rede_teto_ptr())
+#elif defined(__GNUC__)
 extern _Thread_local long rede_teto;
 #else
 extern long rede_teto;

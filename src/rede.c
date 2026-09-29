@@ -8,6 +8,73 @@
 #include <dlfcn.h>
 #include <time.h>
 
+#if defined(NV_TPK40) && defined(__EMSCRIPTEN__)
+#error "NV_TPK40 e so da libnuvio.so do Tizen 4/5; nunca junto com Emscripten"
+#endif
+
+#ifdef NV_TPK40
+// ESTADO POR FIO SEM _Thread_local (Tizen 4/5, #137/#180).
+//
+// A libnuvio.so dessas TVs pode entrar pelo carregador de ELF proprio do host
+// (tizen-tpk/NuvioTpk40/Program40.cs), quando a UEP recusa o dlopen por memfd.
+// Esse carregador nao monta TLS de compilador: um `_Thread_local` vira um
+// PT_TLS e relocacoes R_ARM_TLS_DTPMOD32 que ele nao sabe aplicar, e o
+// primeiro acesso — que e a primeira requisicao HTTPS, num fio novo — derruba
+// o processo. Era a unica TLS de compilador de toda a lib (este modulo).
+//
+// Aqui o mesmo estado vive numa struct por fio, criada no primeiro uso via
+// pthread_key (o proprio pegarHandle ja usa a mesma tecnica) e liberada pelo
+// destrutor da chave quando o fio morre. Cada nome antigo vira uma macro que
+// e um lvalue, entao o resto do arquivo nao muda: `rede_teto = x`,
+// `sizeof usoHost` e `&redeCancelLocal` continuam validos. Fora do NV_TPK40
+// (LG, Mac, testes, Tizen 6+) o codigo e o de sempre, com _Thread_local.
+#define REDE_HOSTS_POR_FIO 16
+typedef struct { char h[96]; unsigned long ms; } UsoHost;
+typedef struct {
+  long limiteLocal;
+  volatile int *cancelLocal;
+  int limitouLocal;
+  int cancelouLocal;
+  long bytesLocal;
+  int curlLocal;
+  char *finalDst;
+  unsigned finalTam;
+  int parcialOk;
+  UsoHost usoHost[REDE_HOSTS_POR_FIO];
+  long teto;
+  int restoRecusado;
+} RedeFio;
+static pthread_key_t fioChave;
+static pthread_once_t fioUma = PTHREAD_ONCE_INIT;
+// Se o calloc falhar (sem memoria), o fio usa esta reserva PARTILHADA em vez
+// de desreferenciar NULL: degrada a medicao daquele pedido, nao derruba o app.
+static RedeFio fioReserva;
+static void fioSoltar(void *p) { if (p != &fioReserva) free(p); }
+static void fioCriarChave(void) { pthread_key_create(&fioChave, fioSoltar); }
+static RedeFio *redeFio(void) {
+  RedeFio *f;
+  pthread_once(&fioUma, fioCriarChave);
+  f = (RedeFio *)pthread_getspecific(fioChave);
+  if (!f) {
+    f = (RedeFio *)calloc(1, sizeof *f);
+    if (!f) return &fioReserva;
+    pthread_setspecific(fioChave, f);
+  }
+  return f;
+}
+long *rede_teto_ptr(void) { return &redeFio()->teto; }
+#define redeLimiteLocal   (redeFio()->limiteLocal)
+#define redeCancelLocal   (redeFio()->cancelLocal)
+#define redeLimitouLocal  (redeFio()->limitouLocal)
+#define redeCancelouLocal (redeFio()->cancelouLocal)
+#define redeBytesLocal    (redeFio()->bytesLocal)
+#define redeCurlLocal     (redeFio()->curlLocal)
+#define redeFinalDst      (redeFio()->finalDst)
+#define redeFinalTam      (redeFio()->finalTam)
+#define redeParcialOk     (redeFio()->parcialOk)
+#define usoHost           (redeFio()->usoHost)
+#define redeRestoRecusado (redeFio()->restoRecusado)
+#else
 /* Controle local da requisicao corrente. O estado nunca e compartilhado
  * entre sondagens: cada fio recebe seu teto e seu cancel token. */
 static _Thread_local long redeLimiteLocal;
@@ -15,6 +82,7 @@ static _Thread_local volatile int *redeCancelLocal;
 static _Thread_local int redeLimitouLocal;
 static _Thread_local int redeCancelouLocal;
 static _Thread_local long redeBytesLocal;
+#endif
 static unsigned long redeAgoraMs(void);
 
 static long redeLimiteAtual(void) {
@@ -419,6 +487,7 @@ int rede_medir_vazao(const char *url, const char *const *cab, int segundos,
 
 #else
 
+#ifndef NV_TPK40   // no NV_TPK40 estes nomes sao macros da struct por fio (topo)
 // Codigo da libcurl do ultimo pedido DESTE fio (0 = transporte ok). So o
 // rede_baixar_trecho_st le: o resto do modulo segue devolvendo NULL e logando.
 static _Thread_local int redeCurlLocal;
@@ -428,6 +497,7 @@ static _Thread_local unsigned redeFinalTam;
 // 1 = o pedido corrente aceita corpo CORTADO (206 que fechou antes do fim):
 // so trechoUmaVez liga. Ver a nota la.
 static _Thread_local int redeParcialOk;
+#endif
 
 // Constantes da libcurl escritas a mao: nao ha curl.h no SDK do aparelho, e
 // puxar o header inteiro so por meia duzia de numeros nao se paga. Os valores
@@ -545,9 +615,11 @@ static void handleCriarChave(void) { pthread_key_create(&handleChave, handleSolt
 // NUVIO_REDE_OCIOSO_MS muda o limite (0 = sem limite, como antes).
 #define REDE_OCIOSO_PADRAO_MS 20000UL
 static unsigned long ociosoMaxMs = REDE_OCIOSO_PADRAO_MS;
+#ifndef NV_TPK40   // no NV_TPK40 o vetor mora na struct por fio (topo)
 #define REDE_HOSTS_POR_FIO 16
 typedef struct { char h[96]; unsigned long ms; } UsoHost;
 static _Thread_local UsoHost usoHost[REDE_HOSTS_POR_FIO];
+#endif
 
 // "https://a.b:443" de "https://a.b:443/x?y". Sem esquema = vazio.
 static void hostDaUrl(const char *u, char *h, size_t n) {
@@ -742,7 +814,9 @@ static size_t receberCab(void *dados, size_t tam, size_t qtd, void *u) {
 // Teto opcional de bytes para a proxima transferencia; 0 = sem teto. Existe
 // porque servidor que IGNORA o cabecalho Range responde 200 com o arquivo
 // inteiro, e nesse caso o cabecalho pedido nao limita nada.
+#ifndef NV_TPK40   // no NV_TPK40 e rede_teto_ptr() (rede.h)
 _Thread_local long rede_teto = 0;
+#endif
 
 static size_t receber(void *dados, size_t tam, size_t qtd, void *u) {
   Balde *b = (Balde *)u;
@@ -871,8 +945,19 @@ static int abrir(void) {
   pthread_mutex_lock(&abrirTrava);
   if (pronto == 1 || pronto == -1) { r = pronto > 0; pthread_mutex_unlock(&abrirTrava); return r; }
   pronto = -2;
+#ifdef NV_TPK40
+  // Rastro do Tizen 4/5 (#180): qual soname abriu, ou o erro. Ver tpk.c.
+  nv_tpk40_etapa("begin libcurl-dlopen");
+  h = dlopen("libcurl.so.5", RTLD_NOW);
+  if (h) nv_tpk40_etapa("ok libcurl-dlopen libcurl.so.5");
+  if (!h) { h = dlopen("libcurl.so.4", RTLD_NOW); if (h) nv_tpk40_etapa("ok libcurl-dlopen libcurl.so.4"); }
+  if (!h) { char m[300]; const char *e = dlerror();
+            snprintf(m, sizeof m, "fail libcurl-dlopen %s", e ? e : "sem mensagem");
+            nv_tpk40_etapa(m); }
+#else
   h = dlopen("libcurl.so.5", RTLD_NOW);
   if (!h) h = dlopen("libcurl.so.4", RTLD_NOW);
+#endif
   if (!h) h = dlopen("libcurl.4.dylib", RTLD_NOW);   // Mac
   if (!h) h = dlopen("libcurl.dylib", RTLD_NOW);
   if (!h) { printf("[rede] sem libcurl: %s\n", dlerror());
@@ -1042,7 +1127,23 @@ static char *rede_baixar_interno2(const char *url, int segundos, long *tam,
       for (k = 0; cab[k]; k++) lista = slist_append(lista, cab[k]);
       if (lista) curl_setopt(c, OPT_HTTPHEADER, lista);
     }
+#ifdef NV_TPK40
+    // Rastro do Tizen 4/5 (#180): a PRIMEIRA requisicao do processo, antes e
+    // depois do curl_easy_perform — e onde a TV 2018-2020 morria. So o host
+    // vai para o arquivo (rede_url_publica), nunca o caminho.
+    { static int primeira = 1;
+      if (primeira) { char seg[120], m[200];
+        primeira = 0;
+        snprintf(m, sizeof m, "begin https-1 %s", rede_url_publica(url, seg, sizeof seg));
+        nv_tpk40_etapa(m);
+        r = curl_perform(c);
+        { long http = 0; if (curl_getinfo) curl_getinfo(c, INFO_RESPONSE_CODE, &http);
+          snprintf(m, sizeof m, "ok https-1 curl=%d http=%ld", r, http); }
+        nv_tpk40_etapa(m);
+      } else r = curl_perform(c); }
+#else
     r = curl_perform(c);
+#endif
     { long novas = -1;
       if (curl_getinfo) curl_getinfo(c, INFO_NUM_CONNECTS, &novas);
       reusada = novas == 0; }
@@ -1426,7 +1527,9 @@ static unsigned long redeAgoraMs(void) {
 // pedido do resto volta com ZERO bytes em ~140 ms, toda vez, e as tentativas
 // de 2 s e 5 s so repetem a recusa. Quem chama le isto logo depois de
 // rede_baixar_trecho_st, NO MESMO FIO, para recuar de verdade.
+#ifndef NV_TPK40   // no NV_TPK40 e campo da struct por fio (topo)
 static _Thread_local int redeRestoRecusado;
+#endif
 int rede_resto_recusado(void) { return redeRestoRecusado; }
 
 typedef struct { char h[96]; long teto; } CorteHost;

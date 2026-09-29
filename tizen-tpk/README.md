@@ -35,6 +35,29 @@ propria foi recusada com certificado Public (spike.2, #137, cara de UEP); o
 manifesto declara um privilegio Partner para o Apps2Samsung assinar como
 Partner. Se ainda assim a TV recusar, a tela mostra o erro do `dlopen`.
 
+### Tizen 4/5: `.so` propria, sem TLS, e rastro de etapas (#137, #180)
+
+O `NuvioTpk40` carrega a `libnuvio.so` por memfd (`syscall 385` +
+`dlopen("/proc/self/fd/N")`) ou, se a UEP barrar, por um carregador de ELF
+proprio em memoria anonima (`NuvioTpk40/Program40.cs`). Esse carregador nao
+monta TLS de compilador, e a TV 2018-2020 fechava na primeira requisicao HTTPS
+(o primeiro acesso a um `_Thread_local` de `src/rede.c`). Por isso:
+
+- `tools/tpk.sh` compila uma **segunda** `.so` so para este pacote
+  (`build/tpk/libnuvio-tpk40.so`, `-DNV_TPK40`): `rede.c` guarda o estado por
+  fio em `pthread_key` em vez de `_Thread_local`, e o link leva
+  `--hash-style=both`. O script falha se ela sair com `PT_TLS`, relocacao
+  `R_ARM_TLS_*` ou sem `DT_HASH`; `tests/tpk40_tls.sh` confere de novo. A
+  `.so` dos pacotes 6+ e a de sempre.
+- O carregador de ELF **recusa** (com a frase na tela, em ingles) `PT_TLS`,
+  relocacao que nao sabe aplicar, falta de `DT_HASH` e simbolo indefinido
+  nao-fraco que o `dlsym` nao acha — antes pulava tudo isso em silencio.
+- `data/tpk-etapas.txt` recebe `begin X` / `ok X` / `fail X` / `note ...` do
+  host e do C (`nv_tpk40_etapa`, `open`+`write` com `O_APPEND`, sem handler de
+  sinal). No arranque seguinte ele vira `tpk-etapas-anterior.txt`, entra no
+  `nuvio.log` e, se acabou numa etapa sem `ok`, a tela mostra
+  "Previous launch stopped at: ..." por 30 s para fotografar.
+
 ## O que falta
 
 - cabecalhos de addon alem de `User-Agent` e `Cookie` (o player da Samsung
