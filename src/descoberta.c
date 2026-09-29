@@ -5136,7 +5136,7 @@ static void fichaDe(CatItem *d, const char *corpo, int soVazios) {
     }
   }
   { char lista[160];
-    generosDe(corpo, lista, sizeof lista);
+    generosDe(corpo, lista, sizeof lista, strcmp(d->tipo, "movie") ? "series" : "movie");
     // O genero que o catalogo trouxe ("Programa de TV") e o rotulo do tipo, nao
     // um genero: so vale como "ja tem" se veio de uma ficha.
     if (lista[0] && (!soVazios || !d->genero[0])) snprintf(d->genero, sizeof d->genero, "%s", lista); }

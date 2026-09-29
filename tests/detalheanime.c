@@ -799,7 +799,9 @@ int main(void) {
       assert(cat_n_episodios(0) == 3);           // o 3o nao tinha "season"
       assert(!strcmp(ci->imdb, "kitsu:41370"));  // o id do catalogo fica
       assert(!strcmp(ci->sinopse, "Sinopse do Kitsu."));
-      assert(!strcmp(ci->genero, "Anime \xc2\xb7 Fantasia"));
+      // Formato de generosDe desde fix/detalhe-traducao: o tipo vem primeiro
+      // (as telas descartam o 1o trecho) e o separador e "  ·  ".
+      assert(strstr(ci->genero, "Anime") && strstr(ci->genero, "Fantasia"));
       assert(ci->nTemporadas == 1 && ci->temporadas[0] == 1); }
     // 21) O id de VIDEO do addon e preservado; e ele que vai a busca de fontes.
     assert(!strcmp(cat_episodio(0, 0)->vid, "kitsu:41370:1"));
@@ -852,7 +854,7 @@ int main(void) {
       assert(pediu("xp.test/SEGREDO/meta/series/tt13293588.json"));
       assert(pediu("cinemeta"));                 // complemento
       assert(!strcmp(ci->sinopse, "Sinopse do Xperience."));
-      assert(!strcmp(ci->genero, "Aventura"));   // generos da base, nao os do Cinemeta
+      assert(strstr(ci->genero, "Aventura") && !strstr(ci->genero, "Drama"));   // generos da base, nao os do Cinemeta
       assert(ci->nElenco == 3);                  // elenco vazio na base: do Cinemeta
       assert(cat_n_episodios(0) == 3);           // base sem lista: a do Cinemeta
       assert(!strcmp(cat_episodio(0, 0)->vid, "tt13293588:1:1")); }
