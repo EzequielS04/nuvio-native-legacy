@@ -49,6 +49,11 @@ typedef struct {
   // verificacao, por debrid_resolver.
   char infoHash[48];
   int  fileIdx;         // -1 quando o addon nao disse
+  // "sources" do stream (Stremio): trackers e nos DHT do torrent, UMA entrada
+  // por linha ("tracker:udp://...", "dht:<hash>"). So serve ao P2P
+  // experimental (p2p.c), que os repassa ao servidor de streaming. 640 cobre
+  // uma dezena de trackers; o excedente e cortado numa entrada inteira.
+  char fontes[640];
   // CABECALHOS QUE O ADDON EXIGE, de behaviorHints.proxyHeaders.request, uma
   // linha "Nome: valor" por cabecalho (o mesmo formato que rede.h aceita).
   //
@@ -167,7 +172,13 @@ int  stream_cabe_no_teto(const Stream *s);
 //   1  -> `url` pronta (e gravada na linha, para a proxima vez)
 //   2  -> DEBRID_BAIXANDO: `servico` e `pct` dizem quem baixa e quanto falta
 //   0  -> nao deu; -1 -> lista trocada
+//   3  -> STREAM_P2P_FALHOU: o debrid nao resolveu (ou nao ha) e o servidor
+//         P2P experimental (p2p.h) tambem nao; o motivo esta em p2p_ultimo_erro()
+#define STREAM_P2P_FALHOU 3
 unsigned stream_lista_geracao(void);
+// Quantos torrents SEM url (so infoHash) ha na lista: os que so o P2P ou o
+// debrid tocam. Serve ao cartao "nenhuma fonte serve" dizer que ha P2P.
+int  stream_qtd_torrents(void);
 int  stream_resolver_escolhida(int i, unsigned geracao, char *url, unsigned nu,
                                char *servico, unsigned ns, int *pct);
 

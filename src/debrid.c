@@ -154,6 +154,7 @@ int debrid_sem_plano_novo(void) {
   return m;
 }
 void debrid_definir_episodio(int t, int e) { alvoT = t; alvoE = e; }
+void debrid_episodio(int *t, int *e) { if (t) *t = alvoT; if (e) *e = alvoE; }
 
 // ---------------------------------------------------------------- http
 

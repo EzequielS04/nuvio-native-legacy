@@ -75,6 +75,7 @@
 #include "anim.h"
 #include "diagnostico.h"
 #include "debrid.h"
+#include "p2p.h"
 #include "player.h"
 #include "streams.h"
 #include "stalker.h"
@@ -651,6 +652,11 @@ static void erroSemFonte(void) {
     // manda. Sem esta frase a pessoa lia "nenhuma fonte" numa lista cheia.
     player_erro_fonte_motivo(i18n("As fontes torrent desta lista não estão no cache do debrid"),
         i18n("Abra Fontes e escolha uma: o serviço começa a baixar."));
+  } else if (!canal && p2p_ativo() && !debrid_ativo() && stream_qtd_torrents() > 0) {
+    // So ha torrent na lista e o automatico nao toca P2P (sem peers a TV
+    // ficaria parada). A folha toca.
+    player_erro_fonte_motivo(i18n("As fontes desta lista são P2P (torrent)"),
+        i18n("Abra Fontes e escolha uma: ela toca pelo servidor P2P."));
   } else if (addons_motivo_vazio(motivo, sizeof motivo))
     player_erro_fonte_motivo(motivo, canal
         ? i18n("Escolha outro canal no guia ou tente de novo mais tarde.")
@@ -726,7 +732,12 @@ static void pedirTorrentEscolhido(int indice) {
     player_erro_fonte();
     return;
   }
-  player_toast(i18n("Pedindo o torrent ao serviço de debrid…"), 5000);
+  // Sem debrid, quem responde e o servidor P2P, que espera peers: dizer que
+  // pode levar meio minuto evita a pessoa achar que travou.
+  if (!debrid_ativo() && p2p_ativo())
+    player_toast(i18n("Pedindo o torrent ao servidor P2P… pode levar até um minuto"), 30000);
+  else
+    player_toast(i18n("Pedindo o torrent ao serviço de debrid…"), 5000);
 }
 static void processarTorrentJob(void) {
   TorrentJob *j = &torrentJob;
@@ -755,6 +766,31 @@ static void processarTorrentJob(void) {
         snprintf(titulo, sizeof titulo, i18n("O %s está baixando este torrent"), serv);
       player_erro_fonte_motivo(titulo,
           i18n("Ele fica na sua conta: escolha esta fonte de novo em alguns minutos."));
+    } else if (j->resultado == STREAM_P2P_FALHOU) {
+      // O SERVIDOR P2P respondeu por ultimo (o debrid nao resolveu ou nao
+      // existe), entao o motivo que a pessoa precisa e o dele: cada um tem um
+      // conserto diferente (endereco, torrent sem peers, arquivo errado).
+      switch (p2p_ultimo_erro()) {
+        case P2P_ERR_SERVIDOR:
+          player_erro_fonte_motivo(i18n("Servidor P2P sem resposta"),
+              i18n("Confira o endereço e se o servidor está ligado, em Ajustes > Avançado."));
+          break;
+        case P2P_ERR_NAO_STREMIO:
+          player_erro_fonte_motivo(i18n("O endereço respondeu, mas não é um servidor Stremio"),
+              i18n("Confira o endereço e a porta (11470) em Ajustes > Avançado."));
+          break;
+        case P2P_ERR_SEM_PEERS:
+          player_erro_fonte_motivo(i18n("Este torrent não tem peers agora"),
+              i18n("Os dados não chegaram a tempo. Escolha outra fonte ou tente mais tarde."));
+          break;
+        case P2P_ERR_SEM_VIDEO:
+          player_erro_fonte_motivo(i18n("Este torrent não tem arquivo de vídeo"),
+              i18n("Abra Fontes para escolher outra opção."));
+          break;
+        default:
+          player_erro_fonte_motivo(i18n("O servidor P2P não abriu este torrent"),
+              i18n("Abra Fontes para escolher outra opção."));
+      }
     } else if (j->resultado == 0 && debrid_sem_plano()) {
       player_erro_fonte_motivo(i18n(debrid_sem_plano_frase(debrid_sem_plano())),
           i18n("Abra Fontes para escolher uma fonte direta."));
