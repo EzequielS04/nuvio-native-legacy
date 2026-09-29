@@ -1,4 +1,4 @@
-// Host .NET do Nuvio .tpk no Tizen 6+. Nao tem tela propria: abre um GLWindow
+// Host .NET do Nuvio .tpk no Tizen 6+.  (API11: GLView na janela principal, ver API11_GLVIEW.) Nao tem tela propria: abre um GLWindow
 // de tela cheia e, a cada quadro, entrega o contexto GL ao C (libnuvio.so,
 // src/tpk.c), que roda o app inteiro num fio seu. Teclas do controle vao pelo
 // nome (XF86Back, Up, ...) e o C traduz para SDL. O player esta em Video.cs.
@@ -34,6 +34,9 @@ using NuiRect = Tizen.NUI.Rectangle;
 using NuiColor = Tizen.NUI.Color;
 using NuiTimer = Tizen.NUI.Timer;
 using NuiLabel = Tizen.NUI.BaseComponents.TextLabel;
+#if NV_API11
+using GLView = Tizen.NUI.BaseComponents.GLView;
+#endif
 
 namespace NuvioTpk
 {
@@ -128,12 +131,33 @@ namespace NuvioTpk
         const bool JANELA_SAIDA_LIMPA = true;
         const int JANELA_SAIDA_PRAZO_MS = 4000;
 
+        // ================= CANARIO GLVIEW (API11, #137, #170) =================
+        // Evidencia (D1 9050/9051/9054, UN75CU7700, Tizen 9, aberto pelo menu):
+        // gl-window visivel, 1o quadro, gl-window com foco, 2,96 s PAUSE do app,
+        // ~10 s a TV fecha. Pelo sdb (Apps2Samsung) o mesmo build roda a 55-60
+        // fps. Hipotese NAO provada: no Tizen 9 o ciclo de vida do app segue a
+        // janela PRINCIPAL, e um GLWindow de tela cheia por cima a faz parecer
+        // coberta. API11_GLVIEW = true: NADA de segunda janela; o desenho vai
+        // num GLView (widget GL da arvore NUI, TizenFX API10+) de tela cheia
+        // dentro da janela principal, o modelo do spike de setembro que passou
+        // nas tres TVs Tizen 9 (tizen-tpk-spike/dotnet/NvSpikeNui/Program.cs,
+        // AdicionaGLView). false = volta ao GLWindow. So existe na API11; 6.0 e
+        // 6.5 seguem com GLWindow, sem mudanca.
+#if NV_API11
+        const bool API11_GLVIEW = true;
+#else
+        const bool API11_GLVIEW = false;
+#endif
+
         // O modo da principal so pode ser escolhido no construtor. ("", Opaque)
         // e exatamente o NUIApplication() de antes (NUICoreBackend: stylesheet
         // "" e Opaque por padrao, conferido na API8 e na API11 do TizenFX).
         Program() : base("", JANELA_PRINCIPAL_TRANSPARENTE ? WindowMode.Transparent : WindowMode.Opaque) { }
 
         GLWindow gl;
+#if NV_API11
+        GLView glView;
+#endif
         volatile bool fim;
         NuiTimer vigia, prime;
         Video video;
@@ -253,6 +277,18 @@ namespace NuvioTpk
         bool tvLogada;
         int tiques;
 
+        // Janela de desenho no ar (GLWindow ou GLView), para o vigia e a saida.
+        bool DesenhoPronto()
+        {
+#if NV_API11
+            if (glView != null) return true;
+#endif
+            return gl != null;
+        }
+
+        // true = so a janela principal (GLView); nunca true fora da API11.
+        static bool JanelaUnica { get { return API11_GLVIEW; } }
+
         static string Tv()
         {
             string versao = null, modelo = null;
@@ -279,6 +315,49 @@ namespace NuvioTpk
         }
 
         void CriaJanelaGL()
+        {
+#if NV_API11
+            if (API11_GLVIEW) CriaGlView(); else
+#endif
+            CriaGlWindow();
+            IniciaVigia();
+        }
+
+#if NV_API11
+        // GLView de tela cheia na janela principal (a do video). Modelo do
+        // spike (AdicionaGLView): new GLView(RGBA8888), RegisterGLCallbacks
+        // (init, quadro -> int, terminate), RenderingMode Continuous, Add na
+        // janela. Alem do spike: SetGraphicsConfig (sem depth/stencil/msaa, GLES
+        // 2.0) e a superficie RGBA8888 -> alfa 8 bits, o que gfx_furo (alfa 0)
+        // precisa para o video aparecer por baixo (ver o cabecalho do nv_tpk_quadro).
+        void CriaGlView()
+        {
+            Janela("glview: janela unica (sem GLWindow); nao sobe gl no appcontrol, gl opaco n/a");
+            glView = new GLView(GLView.ColorFormat.RGBA8888)
+            {
+                Name = "nuvio-glview",
+                Position2D = new Position2D(0, 0),
+                Size2D = new Size2D(W, H),
+                BackgroundColor = NuiColor.Transparent,
+            };
+            // Interlocked: o vigia conta "parado" a partir daqui.
+            Interlocked.Exchange(ref ultimaChamadaMs, relogio.ElapsedMilliseconds);
+            try { glView.SetGraphicsConfig(false, false, 0, GLESVersion.Version20); Janela("glview SetGraphicsConfig(depth=0 stencil=0 msaa=0 GLES2) ok"); }
+            catch (Exception e) { Janela("glview SetGraphicsConfig falhou " + e.GetType().Name + ": " + e.Message + " (segue com o padrao do GLView)"); }
+            // init/terminate rodam no fio de desenho do GLView, nao no principal.
+            glView.RegisterGLCallbacks(
+                () => Etapa("note glview init callback" + Contagem()),
+                () => Quadro(),
+                () => Etapa("note glview terminate callback" + Contagem()));
+            glView.RenderingMode = GLRenderingMode.Continuous;
+            NuiWindow.Instance.KeyEvent += (s, e) => Tecla(e.Key, "main");
+            NuiWindow.Instance.Add(glView);
+            Etapa("note glview created size=" + W + "x" + H + " format=RGBA8888 mode=Continuous" + Contagem());
+            Janela("glview criado " + W + "x" + H + " RGBA8888 Continuous, na janela principal");
+        }
+#endif
+
+        void CriaGlWindow()
         {
             gl = new GLWindow("nuvio", new NuiRect(0, 0, W, H), true);
             // O vigia conta "parado" a partir daqui ate a primeira chamada.
@@ -312,6 +391,10 @@ namespace NuvioTpk
                 catch (Exception e) { Janela("gl SetOpaqueState falhou " + e.GetType().Name + ": " + e.Message); }
             }
             else Janela("gl SetOpaqueState: desligado (translucido, como antes)");
+        }
+
+        void IniciaVigia()
+        {
             // O canario de audio (PRIME_AUDIO) nao depende de nenhuma chave de
             // janela; se a principal opaca ja pausar o TV Plus sozinha, o clipe
             // so fica redundante. A linha diz o que estava ligado junto.
@@ -377,7 +460,7 @@ namespace NuvioTpk
         // cima (tecla Home), as duas ficam invisiveis e o app nao se intromete.
         void SobeGl(string porque)
         {
-            if (gl == null || erroNaTela || saindo) return;
+            if (gl == null || erroNaTela || saindo) return;   // GLView: gl == null, nada a subir
             subidas++;
             Etapa("note raise gl-window #" + subidas + " (" + porque + ")" + Contagem() + " mainVisible=" + principalVisivel + " glVisible=" + glVisivel);
             try { gl.Show(); gl.Raise(); } catch (Exception e) { Etapa("note raise failed " + e.GetType().Name + ": " + e.Message); }
@@ -388,7 +471,7 @@ namespace NuvioTpk
 #if NV_API8
             // Tizen 6.0 funciona hoje: so registra.
 #else
-            if (gl == null || pausado || subidasFoco >= 5) return;
+            if (gl == null || pausado || subidasFoco >= 5) return;   // GLView: gl == null
             if (!glVisivel || (trocados > 0 && ParadoMs() > 1000)) { subidasFoco++; SobeGl(porque); }
 #endif
         }
@@ -405,7 +488,7 @@ namespace NuvioTpk
         // houve (com os numeros) para uma foto.
         void Vigia()
         {
-            if (gl == null || erroNaTela || saindo) return;
+            if (!DesenhoPronto() || erroNaTela || saindo) return;
             long parado = ParadoMs();
             if (parado < 1500 || pausado || !principalVisivel)
             {
@@ -424,7 +507,7 @@ namespace NuvioTpk
                 Etapa("note frames stalled" + Contagem() + " mainVisible=" + principalVisivel + " glVisible=" + glVisivel);
             }
             long ha = relogio.ElapsedMilliseconds - paradoDesdeMs;
-            if (subidas < 3 && ha >= subidas * 1000L) { SobeGl("frames stalled " + parado + " ms"); return; }
+            if (!JanelaUnica && subidas < 3 && ha >= subidas * 1000L) { SobeGl("frames stalled " + parado + " ms"); return; }
             if (telaParado == null && ha >= 4000 && trocados < 30) MostraTelaParado(parado);
         }
 
@@ -472,6 +555,9 @@ namespace NuvioTpk
             erroNaTela = true;
             Etapa("note error screen: " + titulo + " " + detalhe);
             if (gl != null) { try { gl.Hide(); } catch { } }
+#if NV_API11
+            if (glView != null) { try { glView.Hide(); } catch { } }
+#endif
             try
             {
                 var w = NuiWindow.Instance;
@@ -567,12 +653,28 @@ namespace NuvioTpk
         // Aviso NAO fatal do arranque anterior: faixa preta no topo, numa janela
         // propria por cima do GLWindow, por 30 s ou ate a primeira tecla.
         NuiWindow janelaAviso;
+        NuiLabel avisoRotulo;   // GLView: o aviso e um rotulo na janela principal, sem janela nova
 
         void Aviso(string texto)
         {
             try
             {
                 Etapa("note showing notice: " + texto);
+                if (JanelaUnica)
+                {
+                    var r = new NuiLabel
+                    {
+                        Text = texto + "\nPlease photograph this and post it in GitHub issue #170 (iqui27/nuvio-native-legacy). Any key hides it.",
+                        MultiLine = true, TextColor = NuiColor.White, PointSize = 16, BackgroundColor = NuiColor.Black,
+                        Size2D = new Size2D(W, 240), Position2D = new Position2D(0, 0), Padding = new Extents(40, 40, 10, 10),
+                    };
+                    avisoRotulo = r;
+                    NuiWindow.Instance.Add(r);
+                    var t1 = new NuiTimer(30000);
+                    t1.Tick += (s, e) => { FechaAviso(); return false; };
+                    t1.Start();
+                    return;
+                }
                 janelaAviso = new NuiWindow("NuvioAviso", new NuiRect(0, 0, W, 240), false);
                 janelaAviso.BackgroundColor = NuiColor.Black;
                 janelaAviso.Add(new NuiLabel
@@ -592,6 +694,13 @@ namespace NuvioTpk
 
         void FechaAviso()
         {
+            var r = avisoRotulo;
+            if (r != null)
+            {
+                avisoRotulo = null;
+                try { NuiWindow.Instance.Remove(r); r.Dispose(); } catch { }
+                return;
+            }
             var j = janelaAviso;
             janelaAviso = null;
             if (j == null) return;
@@ -610,6 +719,7 @@ namespace NuvioTpk
                 primeiraTecla = true;
                 Etapa("ok first-key " + k.KeyPressedName + " via " + janela + Contagem());
             }
+            if (avisoRotulo != null && k.State == Key.StateType.Down) FechaAviso();
             if (telaParado != null && k.State == Key.StateType.Down && (k.KeyPressedName == "XF86Back" || k.KeyPressedName == "Escape")) { Sair("stalled screen back"); return; }
             nv_tpk_tecla(k.KeyPressedName, k.State == Key.StateType.Down ? 1 : 0);
         }
@@ -638,7 +748,7 @@ namespace NuvioTpk
         protected override void OnPause()
         {
             pausado = true;
-            Etapa("note pause" + Contagem());
+            Etapa("note pause" + Contagem() + " mainVisible=" + principalVisivel + (JanelaUnica ? " (glview)" : " glVisible=" + glVisivel));
             video?.PausarPeloSistema();
             base.OnPause();
         }
@@ -646,7 +756,7 @@ namespace NuvioTpk
         protected override void OnResume()
         {
             pausado = false;
-            Etapa("note resume" + Contagem());
+            Etapa("note resume" + Contagem() + " mainVisible=" + principalVisivel + (JanelaUnica ? " (glview)" : " glVisible=" + glVisivel));
             base.OnResume();
         }
 
@@ -664,6 +774,7 @@ namespace NuvioTpk
             try { op = e?.ReceivedAppControl?.Operation ?? "?"; } catch { }
             Etapa("note appcontrol op=" + op + Contagem() + " mainVisible=" + principalVisivel + " glVisible=" + glVisivel);
             try { base.OnAppControlReceived(e); } catch (Exception x) { Etapa("note appcontrol base threw " + x.GetType().Name + ": " + x.Message); }
+            if (JanelaUnica) { Janela("appcontrol: janela unica (GLView), nada a subir"); return; }
             if (!JANELA_SOBE_GL_APPCONTROL || gl == null) return;
             try
             {
@@ -701,6 +812,9 @@ namespace NuvioTpk
             if (soltou) return;
             soltou = true;
             try { video?.Encerrar(); Janela("saida: player solto (" + porque + ")"); } catch (Exception e) { Janela("saida: player falhou " + e.GetType().Name + ": " + e.Message); }
+#if NV_API11
+            try { glView?.Hide(); } catch { }
+#endif
             try { gl?.Hide(); Janela("saida: gl escondido"); } catch (Exception e) { Janela("saida: gl.Hide falhou " + e.GetType().Name + ": " + e.Message); }
             try { NuiWindow.Instance.Hide(); Janela("saida: principal escondida"); } catch (Exception e) { Janela("saida: principal.Hide falhou " + e.GetType().Name + ": " + e.Message); }
         }
