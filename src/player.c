@@ -3242,13 +3242,20 @@ void player_desenhar(Uint32 agora) {
   // faixa estereo. Selo que mente e pior que selo ausente, porque e nele que o
   // dono confia para saber se pegou a versao boa.
   {
-    // Cada selo e uma MARCA de formato (badges.h), nao a palavra. So o "HD"
-    // fica em texto: a largura >= 1920 tanto pode ser 1080p quanto 1440p, e
-    // nao existe marca que nao afirme mais do que se mediu.
+    // Cada selo e uma MARCA de formato (badges.h), nao a palavra — a mesma
+    // familia do guia e do player ao vivo (marca_resolucao). A classe sai da
+    // LARGURA primeiro: filme 2.39:1 em 1080p chega como 1920x800, e pela
+    // altura viraria 720p. A altura so desempata quando a largura e estranha.
+    // A faixa do 1440p (2560) fica SEM selo: 4K afirmaria mais do que se
+    // mediu e 1080p menos — ausente e mais honesto que errado.
     FormatoMarca selos[3];
     int nSelos = 0;
-    if (video_largura() >= 3840)      selos[nSelos++] = FMT_4K;
-    else if (video_largura() >= 1920) selos[nSelos++] = FMT_N;
+    { int w = video_largura(), h = video_altura();
+      if (w >= 3200 || h >= 1800)       selos[nSelos++] = FMT_4K;
+      else if (w >= 2400)               { /* 1440p: sem selo */ }
+      else if (w >= 1800 || h >= 1000)  selos[nSelos++] = FMT_1080;
+      else if (w >= 1200 || h >= 700)   selos[nSelos++] = FMT_720;
+      else if (w > 0)                   selos[nSelos++] = FMT_SD; }
     // MEDIDO nesta TV, linha do proprio log durante a reproducao de um MKV que
     // o addon anunciava como Dolby Vision:
     //   [video] HDR do pipeline: HDR10 (fonte afirmava DV=1)
@@ -3322,12 +3329,7 @@ void player_desenhar(Uint32 agora) {
         // Caixa de 44 px por selo: a marca de duas linhas do Dolby precisa dela
         // para o "VISION"/"ATMOS" ler a 3 m; o "HDR10" segue uma faixa fina.
         const float mh = 44.0f;
-        if (selos[i] == FMT_N) {           // "HD", a unica palavra que sobra
-          TxtLinha l = txt_linha(TXT_MINI, "HD", 236, 237, 242, 255);
-          if (e > 0.004f)
-            txt_desenhar_alpha(l, NV_TELA_W - PLR_PAD_X - l.w,
-                               sy + (mh - l.h) * 0.5f + (1.0f - e) * 10.0f, ac * 0.85f * e);
-        } else if (e > 0.004f) {
+        if (e > 0.004f) {
           float mw = marca_formato_largura(selos[i], mh);
           marca_formato(selos[i], NV_TELA_W - PLR_PAD_X - mw, sy + (1.0f - e) * 10.0f, mh,
                         0.93f, 0.93f, 0.95f, ac * 0.92f * e);
