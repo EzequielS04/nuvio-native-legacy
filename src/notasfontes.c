@@ -127,7 +127,7 @@ void nf_cor_metacritic(int s, float *r, float *g, float *b) {
 int nf_cor_episodio(int dec, float *r, float *g, float *b) {
   float t;
   if (dec <= 0) return 0;
-  t = (float)(dec - 40) / 60.0f;
+  t = (float)(dec - 50) / 50.0f;
   nf_viridis(t, r, g, b);
   return 1;
 }

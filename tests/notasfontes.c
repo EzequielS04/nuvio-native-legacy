@@ -105,7 +105,7 @@ int main(void) {
     // episodio
     assert(nf_cor_episodio(0, &r, &g, &b) == 0);
     assert(nf_cor_episodio(85, &r, &g, &b) == 1);
-    nf_cor_episodio(30, &r, &g, &b); nf_cor_episodio(40, &r2, &g2, &b2);
+    nf_cor_episodio(30, &r, &g, &b); nf_cor_episodio(50, &r2, &g2, &b2);
     assert(r == r2 && g == g2 && b == b2);
   }
 

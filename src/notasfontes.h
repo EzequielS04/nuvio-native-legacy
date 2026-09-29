@@ -75,8 +75,8 @@ void nf_cor_nota(int norm100, int piso, float *r, float *g, float *b, float *tin
 // 61+, amarelo 40-60, vermelho abaixo).
 void nf_cor_metacritic(int score, float *r, float *g, float *b);
 // Celula da grade de episodios: nota em DECIMOS (72 = 7.2), 0 = sem nota
-// (devolve 0 e nao pinta). Faixa 4.0..10.0 — o piso de 4 e onde episodio
-// de serie "ruim" ja mora.
+// (devolve 0 e nao pinta). Faixa 5.0..10.0: episodio de serie quase nunca fica
+// abaixo de 5, e uma faixa mais larga gastaria metade da rampa onde nada mora.
 int  nf_cor_episodio(int decimos, float *r, float *g, float *b);
 
 // --- resumo -------------------------------------------------------------------
