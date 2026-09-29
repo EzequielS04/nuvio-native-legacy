@@ -46,6 +46,9 @@ typedef enum {
   TXT_LEG_90, TXT_LEG_100, TXT_LEG_110, TXT_LEG_120,
   TXT_LEG_130, TXT_LEG_140, TXT_LEG_150, TXT_LEG_160,
   TXT_LEG_170, TXT_LEG_180, TXT_LEG_190, TXT_LEG_200,
+  // Numeral do Top 10 da home Dinamica (NV_TOP10_NUM_CORPO). No FIM, depois das
+  // legendas: TXT_LEG_* e contado por aritmetica a partir de TXT_LEG_50.
+  TXT_RANK_GRANDE,
   TXT_NFONTES
 } TxtEstilo;
 
