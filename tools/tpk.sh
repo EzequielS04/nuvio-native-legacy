@@ -89,6 +89,9 @@ for p in NuvioTpk40 NuvioTpk60 NuvioTpk65 NuvioTpk; do
   mkdir -p "$H/lib" "$H/res" "$H/shared/res"
   cp "$SAIDA/libnuvio.so" "$H/lib/"
   cp -R "$ARTE" "$H/res/art"
+  # Versao EMPACOTADA para a auto-atualizacao (tizen-tpk/Carga.cs): o host so
+  # aplica uma libnuvio.so encenada em data/ se ela for mais nova que isto.
+  printf '%s' "$VER" > "$H/res/versao.txt"
   cp -R deploy/app/fonts "$H/res/fonts"
   cp deploy/app/tizen/icon.png "$H/shared/res/$p.png"
   sed -i '' "s/ version=\"[^\"]*\">/ version=\"$VER\">/" "$H/tizen-manifest.xml"
@@ -105,3 +108,10 @@ for T in "$SAIDA"/*.tpk; do
   grep -qE " res/art/" <<<"$L" || { echo "$T sem res/art" >&2; exit 1; }
   echo "  $T ($(du -h "$T" | cut -f1))"
 done
+
+# ANEXO DA AUTO-ATUALIZACAO. A release publica ESTA .so (mesma dos quatro
+# pacotes) com o sufixo que src/atualizacao.c (acharSo) procura; o GitHub anexa
+# o `digest` sha256, que e a barreira de seguranca do staging. Sem este anexo na
+# release, o app simplesmente nao oferece a auto-atualizacao (cai na pagina).
+cp "$SAIDA/libnuvio.so" "$SAIDA/libnuvio-$VER-tpk-arm.so"
+echo "  $SAIDA/libnuvio-$VER-tpk-arm.so (anexo de auto-atualizacao; suba na release)"
