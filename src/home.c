@@ -3258,7 +3258,8 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
   }
 trailer_hero_fim:
   { float alvo = (heroTrailerItem >= 0 && heroTrailerItem == heroAtual &&
-                  trailer_aberto() && !trailer_cheia() && trailer_tocando()) ? 1.0f : 0.0f;
+                  trailer_aberto() && !trailer_cheia() && trailer_tocando() &&
+                  trailer_mostra_video()) ? 1.0f : 0.0f;   // .tpk: ate o recorte assentar (#178)
     heroTrailerFade = anim_mola(heroTrailerFade, alvo, dt, NV_MOLA_SCROLL); }
 }
 

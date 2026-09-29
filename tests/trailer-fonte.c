@@ -8,6 +8,9 @@
 //   - cada valor de "Fonte do trailer" tenta SO a fonte dele;
 //   - Automatico mantem a ordem de hoje, Apple -> IMDb -> YouTube, esperando a
 //     Apple responder antes de passar a vez.
+// E a do #178 (29/09/2026): no .tpk o botao Trailer (tela cheia, com som) em
+// Automatico tenta o IMDb antes da Apple, que la toca so video; o fundo e o
+// .wgt/LG nao mudam.
 #include "../src/trailerfonte.h"
 #include <stdio.h>
 #include <string.h>
@@ -142,6 +145,76 @@ int main(void) {
   c = todas();
   confere("Samsung com servico: IMDb fixo toca", escolhe(TRF_IMDB, 1, &c, &u) == TRF_IMDB);
   trailerfonte_definir_imdb_tizen(0);
+
+  // --- TELA CHEIA COM SOM (#178). Sem NV_TPK no teste o desvio fica
+  // desligado: .wgt e LG escolhem na tela cheia exatamente como no fundo.
+#ifdef NV_TPK
+  confere("build NV_TPK: IMDb-primeiro da tela cheia ligado por padrao", trailerfonte_imdb_primeiro_cheia() == 1);
+#else
+  confere("sem NV_TPK: IMDb-primeiro da tela cheia desligado por padrao", trailerfonte_imdb_primeiro_cheia() == 0);
+#endif
+  trailerfonte_definir_imdb_primeiro_cheia(0);   // o que o .wgt e a LG compilam
+  for (tz = 0; tz <= 1; tz++) {
+    int aj, a[3], b[3], na, nb, k, igual;
+    char nome[120];
+    for (aj = TRF_AUTO; aj <= TRF_YOUTUBE; aj++) {
+      na = trailerfonte_ordem(aj, tz, a);
+      nb = trailerfonte_ordem_cheia(aj, tz, trailerfonte_com_som(tz), b);
+      igual = na == nb;
+      for (k = 0; igual && k < na; k++) igual = a[k] == b[k];
+      snprintf(nome, sizeof nome, "%s ajuste %d: tela cheia na mesma ordem do fundo", tz ? "Samsung wgt" : "LG", aj);
+      confere(nome, igual);
+    }
+    c = todas();
+    snprintf(nome, sizeof nome, "%s tela cheia automatico: Apple primeiro, como hoje", tz ? "Samsung wgt" : "LG");
+    confere(nome, trailerfonte_escolher_cheia(TRF_AUTO, tz, trailerfonte_com_som(tz), &c, &u, &n) == TRF_ABRE && n == TRF_APPLE);
+  }
+
+  // .tpk (NV_TPK): trailerfonte_tizen() == 0 la, entao a plataforma e a da
+  // LG (Apple -> IMDb, sem YouTube) e a tela cheia tem som.
+  trailerfonte_definir_imdb_primeiro_cheia(1);
+  confere(".tpk: tela cheia tem som", trailerfonte_com_som(0) == 1);
+  n = trailerfonte_ordem_cheia(TRF_AUTO, 0, 1, o);
+  confere(".tpk tela cheia automatico: IMDb -> Apple", n == 2 && o[0] == TRF_IMDB && o[1] == TRF_APPLE);
+  n = trailerfonte_ordem_cheia(99, 0, 1, o);
+  confere(".tpk tela cheia valor desconhecido: le como automatico, IMDb primeiro", n == 2 && o[0] == TRF_IMDB);
+  n = trailerfonte_ordem(TRF_AUTO, 0, o);
+  confere(".tpk fundo/destaque (mudo) continua Apple -> IMDb", n == 2 && o[0] == TRF_APPLE && o[1] == TRF_IMDB);
+  n = trailerfonte_ordem_cheia(TRF_AUTO, 0, 0, o);
+  confere(".tpk tela cheia SEM som: Apple primeiro (nada ganha com o IMDb)", n == 2 && o[0] == TRF_APPLE);
+  c = todas();
+  confere(".tpk tela cheia com as duas: abre o IMDb (tem audio)",
+          trailerfonte_escolher_cheia(TRF_AUTO, 0, 1, &c, &u, &n) == TRF_ABRE && n == TRF_IMDB && !strcmp(u, c.imdb));
+  confere(".tpk fundo com as duas: abre a Apple (melhor imagem, mudo)", escolhe(TRF_AUTO, 0, &c, &u) == TRF_APPLE);
+  c = todas(); c.imdb = NULL;
+  confere(".tpk tela cheia sem IMDb: cai na Apple (sem som, como hoje)",
+          trailerfonte_escolher_cheia(TRF_AUTO, 0, 1, &c, &u, &n) == TRF_ABRE && n == TRF_APPLE);
+  c = todas(); c.imdb = NULL; c.imdbRespondeu = 0;
+  confere(".tpk tela cheia: IMDb ainda sem resposta segura a Apple",
+          trailerfonte_escolher_cheia(TRF_AUTO, 0, 1, &c, &u, &n) == TRF_ESPERA);
+  c = todas(); c.apple = NULL; c.appleRespondeu = 0;
+  confere(".tpk tela cheia: IMDb pronto nao espera a Apple",
+          trailerfonte_escolher_cheia(TRF_AUTO, 0, 1, &c, &u, &n) == TRF_ABRE && n == TRF_IMDB);
+  c = todas();
+  confere(".tpk tela cheia com Apple fixa: Apple, respeitada",
+          trailerfonte_escolher_cheia(TRF_APPLE, 0, 1, &c, &u, &n) == TRF_ABRE && n == TRF_APPLE);
+  n = trailerfonte_ordem_cheia(TRF_APPLE, 0, 1, o);
+  confere(".tpk tela cheia com Apple fixa: so a Apple", n == 1 && o[0] == TRF_APPLE);
+  c = todas(); c.apple = NULL;
+  confere(".tpk tela cheia com IMDb fixo: IMDb",
+          trailerfonte_escolher_cheia(TRF_IMDB, 0, 1, &c, &u, &n) == TRF_ABRE && n == TRF_IMDB);
+  n = trailerfonte_ordem_cheia(TRF_YOUTUBE, 0, 1, o);
+  confere(".tpk tela cheia com YouTube fixo: nada (nao toca nesta TV)", n == 0);
+  // Mesmo com o desvio ligado, o .wgt nao muda: la a tela cheia e muda.
+  n = trailerfonte_ordem_cheia(TRF_AUTO, 1, trailerfonte_com_som(1), o);
+  confere("wgt com o desvio ligado continua Apple -> YouTube", n == 2 && o[0] == TRF_APPLE && o[1] == TRF_YOUTUBE);
+  // Onde houvesse som E YouTube (hipotetico): IMDb -> Apple -> YouTube.
+  trailerfonte_definir_imdb_tizen(1);
+  n = trailerfonte_ordem_cheia(TRF_AUTO, 1, 1, o);
+  confere("com som, IMDb e YouTube: IMDb -> Apple -> YouTube",
+          n == 3 && o[0] == TRF_IMDB && o[1] == TRF_APPLE && o[2] == TRF_YOUTUBE);
+  trailerfonte_definir_imdb_tizen(0);
+  trailerfonte_definir_imdb_primeiro_cheia(0);
 
   // Atalho do build: le o ajuste gravado.
   ajusteTeste = TRF_YOUTUBE;
