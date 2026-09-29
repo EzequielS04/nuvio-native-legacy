@@ -143,6 +143,15 @@
 #include "catalogo.h"
 #include "badges.h"
 #include "descoberta.h"
+#include "noticia.h"
+#include "leitura.h"
+#include "qr.h"
+#include "visto.h"
+#include "vistoep.h"
+#include "textogate.h"
+#include "layout.h"
+#include <stdlib.h>
+#include <time.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -252,7 +261,10 @@
 // mesmo x em todas — a disciplina de calendario desta tela. 120 cabe o disco
 // de 60 com folga e a legenda em duas linhas (ver desenhaConteudo).
 #define AG_SINO         60.0f
-#define AG_SINO_COL    120.0f
+// 148 e nao 120: "Напоминание" (ru) mede ~136 em CAPTION2 e na coluna de 120
+// saia "Напомина…" (captura -fx-ru-foco1, 29/09/2026). A palavra inteira cabe
+// agora; a mais longa que sobra e cortada com "…" dentro da coluna.
+#define AG_SINO_COL    148.0f
 
 void agendaui_cor_lembrete(int ligado, int sobreClaro,
                            float *r, float *g, float *b) {
@@ -344,6 +356,7 @@ static int agQuebraCru(TxtEstilo estilo, const char *s, float larg, int max,
                        int r, int g, int b) {
   const char *p = s;
   int n = 0;
+  (void)r; (void)g; (void)b;   // a medida e por txt_largura, que nao tem cor
   *resto = "";
   if (!s || !s[0] || larg <= 0.0f || max <= 0) return 0;
   while (*p && n < max - 1) {
@@ -366,8 +379,18 @@ static int agQuebraCru(TxtEstilo estilo, const char *s, float larg, int max,
       // A MEDIDA E A MESMA QUE VAI DESENHAR. Estimar por largura media de glifo
       // erra em nome proprio e em maiuscula, e o erro aparece como uma linha
       // estourando a coluna — que e o defeito que este corte existe para evitar.
-      if ((float)txt_linha(estilo, tent, r, g, b, 255).w > larg && l[0]) {
-        p = ini;
+      // txt_largura e nao txt_linha: mede pela mesma fonte SEM rasterizar cada
+      // prefixo (so a linha final vira textura, no desenho).
+      if ((float)txt_largura(estilo, tent) > larg) {
+        if (l[0]) { p = ini; break; }
+        // UMA PALAVRA SO MAIS LARGA QUE A COLUNA. Era aceita inteira e a linha
+        // estourava o componente: "Напоминание" (ru) mede ~140 em CAPTION2 e a
+        // coluna do sino tem 120; composto alemao na citacao faz o mesmo. Agora
+        // a palavra fica sozinha na linha e o desenho (agendaui_sinopse e a
+        // legenda do sino, ambos por txt_linha_corta) fecha com "…" dentro da
+        // largura — a linha seguinte continua com o resto da frase.
+        memcpy(l, tent, nl + np + 1);
+        while (*p == ' ' || *p == '\n') p++;
         break;
       }
       memcpy(l, tent, nl + np + 1);
@@ -401,7 +424,9 @@ int agendaui_sinopse(TxtEstilo estilo, const char *s, float x, float y,
   if (maxLinhas > AG_SIN_MAX) maxLinhas = AG_SIN_MAX;
   n = agQuebra(estilo, s, larg, maxLinhas, linhas, &resto, r, g, b);
   for (i = 0; i < n; i++) {
-    TxtLinha l = txt_linha(estilo, linhas[i], r, g, b, 255);
+    // corta e nao txt_linha: a linha cheia ja cabe (e corta devolve a mesma
+    // textura), mas a linha de UMA palavra larga demais so cabe cortada.
+    TxtLinha l = txt_linha_corta(estilo, linhas[i], r, g, b, 255, larg);
     txt_desenhar_alpha(l, x, y + leading * (float)i, alpha);
   }
   if (resto[0]) {
@@ -426,13 +451,23 @@ static float scrollY;
 // aqui partia na velocidade maxima e o primeiro quadro ja saltava 12%.
 static float velY;
 static int   sair;
-// MENU DE CONTEXTO (segurar OK numa linha): abrir o titulo, ver as ultimas
-// noticias, ligar/desligar o lembrete. Toque curto continua sendo o lembrete,
-// que e a acao da tela. `ctxAberto` 1 = menu, 2 = painel de noticias.
+// O MODAL DA LINHA (qualquer OK numa linha, ver agendaui_evento). `ctxAberto`
+// 1 = modal da serie (acoes + historico), 2 = manchetes, 3 = a noticia aberta.
 static int    ctxAberto, ctxFoco, ctxItem, notFoco;
+// O painel que estava aberto por ultimo: com ctxAberto ja 0, o esvanecimento
+// de saida ainda desenha ELE, e nao o modal da serie por cima.
+static int    ctxUltimo;
 static float  ctxA;
-static Uint32 okDesde;
 static char   pediuAbrir[40];
+// Manchetes e noticia: quando o foco parou na linha (o trecho so e pedido
+// depois de AGN_ESPERA_MS), a rolagem do texto e os portoes de texto.
+static Uint32 notDesde;
+static float  notRol, notRolAlvo, notRolMax, notVel;
+static TextoGate notGate, notTrechoGate;
+static float  notGateA, notTrechoA;
+// A altura do painel da noticia anda por mola ate o alvo do estado (900 com
+// texto ou carregando, AGL_H_FALHA no fallback). 0 = encaixa no primeiro quadro.
+static float  notH, notHAlvo = 900.0f;
 
 // Onde a lista comeca a rolar, e onde ela termina. O cabecalho ocupa o topo e
 // nao rola junto: numa TV perder o titulo da tela ao descer uma linha faz a
@@ -516,7 +551,8 @@ int agendaui_iniciar(void) {
   sair = 0;
   foco = 0;
   scrollY = 0.0f; velY = 0.0f;
-  ctxAberto = 0; ctxFoco = 0; ctxA = 0.0f; okDesde = 0; notFoco = 0;
+  ctxAberto = 0; ctxUltimo = 0; ctxFoco = 0; ctxA = 0.0f; notFoco = 0;
+  notRol = notRolAlvo = notRolMax = notVel = 0.0f;
   for (i = 0; i < AG_MAX; i++) animFoco[i] = 0.0f;
   agenda_iniciar();
   agenda_montar();
@@ -548,57 +584,199 @@ static void alternarLembrete(void) {
   }
 }
 
-#define CTX_N 3
-static int ctxOpcoes(const AgItem *it) { return (it && agenda_pode_lembrar(it->imdb)) ? CTX_N : CTX_N - 1; }
+// --- O MODAL DA LINHA -----------------------------------------------------------
+//
+// PEDIDO DO DONO (29/09/2026): "deixar sempre o modal contextual quando clicar".
+// Ate aqui o OK curto ligava/desligava o lembrete e so SEGURAR OK (NV_HOLD_MS)
+// abria o menu — duas acoes no mesmo botao, e a que abre o que a linha tem para
+// dizer era a escondida. Agora QUALQUER OK abre o modal, e o lembrete e uma das
+// acoes dele. Segurar continua abrindo o mesmo modal: quem aprendeu o gesto
+// antigo nao cai num lugar diferente.
+//
+// O modal responde a pergunta que a linha nao cabe: "o que saiu desde que eu
+// liguei o lembrete, e o que disso eu vi?". As acoes sao montadas a partir do
+// que e VERDADE agora (montaAcoes), e nao de uma lista fixa:
+//   Assistir T<n>E<n>        o primeiro lancado e NAO visto da janela
+//   Abrir o titulo
+//   Ultimas noticias
+//   Marcar ... como assistido os lancados que o mapa ainda nao tem como vistos
+//   Lembrar-me / Desligar      so quando da para ligar, ou quando esta ligado
+//                              (um lembrete de data vencida tem de poder sair)
+enum { AC_ASSISTIR, AC_ABRIR, AC_NOTICIAS, AC_VISTOS, AC_LEMBRETE, AC_N };
+
+#define AG_HIST_VIS 6
+
+// A janela do historico e as acoes do modal, num lugar so: o desenho e o
+// evento chamam a MESMA conta, entao o foco nunca aponta para uma acao que o
+// desenho nao mostrou.
+typedef struct {
+  AgEp eps[AG_HIST_VIS];
+  int  n, estado, proximo;   // proximo = indice em eps, -1 = nada a assistir
+  int  naoVistos;            // lancados com visto != 1
+  int  ac[AC_N], nAc;
+} AgModal;
+
+static void montaModal(const AgItem *it, AgModal *m) {
+  memset(m, 0, sizeof *m);
+  m->proximo = -1;
+  if (!it) return;
+  m->n = agenda_historico(it->imdb, m->eps, AG_HIST_VIS, &m->estado);
+  if (m->n > 0) {
+    int i;
+    m->proximo = agenda_historico_proximo(m->eps, m->n);
+    for (i = 0; i < m->n; i++) if (m->eps[i].visto != 1) m->naoVistos++;
+  }
+  if (m->proximo >= 0) m->ac[m->nAc++] = AC_ASSISTIR;
+  m->ac[m->nAc++] = AC_ABRIR;
+  m->ac[m->nAc++] = AC_NOTICIAS;
+  if (m->naoVistos > 0) m->ac[m->nAc++] = AC_VISTOS;
+  if (it->lembrete || agenda_pode_lembrar(it->imdb)) m->ac[m->nAc++] = AC_LEMBRETE;
+}
+
+static char pediuTocarId[40];
+static int  pediuTocarT, pediuTocarE;
+
+static void abrirModal(int i) {
+  const AgItem *it = agenda_lista(i);
+  if (!it) return;
+  ctxAberto = 1; ctxFoco = 0; ctxItem = i;
+  // Os dois pedidos de rede do modal saem AQUI e so aqui: a grade de episodios
+  // (um GET ao Cinemeta, 30 min de memoria) e as manchetes (cache de 6 h, na
+  // pratica ja pedidas ao abrir a tela).
+  agenda_historico_pedir(it->imdb);
+  noticias_pedir(it->imdb, it->titulo, it->rede, 1);
+}
+
+// MARCAR COMO ASSISTIDO: os lancados da janela que o mapa nao tem como vistos.
+// Local primeiro (a lista redesenha no mesmo quadro) e depois os destinos
+// vinculados em fio, pelo mesmo visto_episodios da lista de episodios do
+// detalhe — Trakt, Simkl e conta, cada um se estiver ligado.
+static void marcarVistos(const AgItem *it, const AgModal *m) {
+  VistoPar pares[AG_HIST_VIS];
+  int i, n = 0;
+  for (i = 0; i < m->n; i++)
+    if (m->eps[i].visto != 1) {
+      pares[n].temporada = (short)m->eps[i].temporada;
+      pares[n].episodio  = (short)m->eps[i].episodio;
+      n++;
+    }
+  if (!n) return;
+  vistoep_marcar_lote(it->imdb, pares, n, 1);
+  visto_episodios(it->imdb, "series", pares, n, 1, visto_destinos());
+}
+
+static void acaoModal(int ac) {
+  const AgItem *it = agenda_lista(ctxItem);
+  AgModal m;
+  if (!it) return;
+  montaModal(it, &m);
+  switch (ac) {
+    case AC_ASSISTIR:
+      if (m.proximo >= 0) {
+        snprintf(pediuTocarId, sizeof pediuTocarId, "%s", it->imdb);
+        pediuTocarT = m.eps[m.proximo].temporada;
+        pediuTocarE = m.eps[m.proximo].episodio;
+        ctxAberto = 0;
+      }
+      break;
+    case AC_ABRIR:
+      snprintf(pediuAbrir, sizeof pediuAbrir, "%s", it->imdb);
+      ctxAberto = 0;
+      break;
+    case AC_NOTICIAS:
+      ctxAberto = 2; notFoco = 0; notDesde = SDL_GetTicks();
+      break;
+    case AC_VISTOS:
+      marcarVistos(it, &m);
+      break;
+    case AC_LEMBRETE:
+      // O modal FICA aberto: o titulo do historico ("Lancados desde o
+      // lembrete" / "Ultimos episodios") e a linha do lembrete mudam na frente
+      // de quem apertou, que e a confirmacao que o gesto precisa.
+      foco = ctxItem;
+      alternarLembrete();
+      break;
+  }
+}
 
 void agendaui_evento(const SDL_Event *e) {
   SDL_Keycode k;
   int n = agenda_n();
-  int volta = 0;
+  int volta = 0, ok;
   k = e->key.keysym.sym;
   volta = (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE || k == SDLK_DELETE);
-  // SEGURAR OK abre o menu de contexto; o toque curto e decidido no KEYUP,
-  // como na home (NV_HOLD_MS): so ali se sabe quanto durou.
-  if (e->type == SDL_KEYUP && (k == SDLK_RETURN || k == SDLK_KP_ENTER)) {
-    Uint32 dur = okDesde ? SDL_GetTicks() - okDesde : 0;
-    int era = okDesde != 0;
-    okDesde = 0;
-    if (!era || ctxAberto) return;
-    if (dur >= NV_HOLD_MS) {
-      const AgItem *it = agenda_lista(foco);
-      if (!it) return;
-      ctxAberto = 1; ctxFoco = 0; ctxItem = foco;
-      noticias_pedir(it->imdb, it->titulo, it->rede, 1);
-    } else alternarLembrete();
+  ok = (k == SDLK_RETURN || k == SDLK_KP_ENTER);
+  if (e->type != SDL_KEYDOWN) return;
+
+  if (ctxAberto == 3) {           // a noticia aberta
+    if (volta || k == SDLK_LEFT) { ctxAberto = 2; return; }
+    if (k == SDLK_DOWN) notRolAlvo += 132.0f;
+    else if (k == SDLK_UP) { notRolAlvo -= 132.0f; if (notRolAlvo < 0.0f) notRolAlvo = 0.0f; }
     return;
   }
-  if (e->type != SDL_KEYDOWN) return;
-  if (ctxAberto == 2) {
-    int nn = noticias_n(agenda_lista(ctxItem) ? agenda_lista(ctxItem)->imdb : "");
+  if (ctxAberto == 2) {           // a lista de manchetes
+    const AgItem *it = agenda_lista(ctxItem);
+    int nn = noticias_n(it ? it->imdb : "");
     if (volta) { ctxAberto = 1; return; }
-    if (k == SDLK_DOWN && notFoco < nn - 1) notFoco++;
-    else if (k == SDLK_UP && notFoco > 0) notFoco--;
+    if ((k == SDLK_DOWN && notFoco < nn - 1) || (k == SDLK_UP && notFoco > 0)) {
+      notFoco += k == SDLK_DOWN ? 1 : -1;
+      notDesde = SDL_GetTicks();
+      textogate_reiniciar(&notTrechoGate); notTrechoA = 0.0f;
+    }
+    else if (ok && !e->key.repeat && it) {
+      const Noticia *nt = noticias_item(it->imdb, notFoco);
+      if (nt) {
+        ctxAberto = 3;
+        notRol = notRolAlvo = 0.0f;
+        notH = 0.0f;
+        textogate_reiniciar(&notGate);
+        if (nt->link[0]) noticia_pedir(nt->link);
+      }
+    }
     return;
   }
   if (ctxAberto == 1) {
     const AgItem *it = agenda_lista(ctxItem);
-    int no = ctxOpcoes(it);
+    AgModal m;
+    montaModal(it, &m);
     if (volta) { ctxAberto = 0; return; }
-    if (k == SDLK_DOWN && ctxFoco < no - 1) ctxFoco++;
+    if (k == SDLK_DOWN && ctxFoco < m.nAc - 1) ctxFoco++;
     else if (k == SDLK_UP && ctxFoco > 0) ctxFoco--;
-    else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
-      if (e->key.repeat) return;
-      if (ctxFoco == 0 && it) { snprintf(pediuAbrir, sizeof pediuAbrir, "%s", it->imdb); ctxAberto = 0; }
-      else if (ctxFoco == 1) { ctxAberto = 2; notFoco = 0; }
-      else { foco = ctxItem; alternarLembrete(); ctxAberto = 0; }
+    else if (ok && !e->key.repeat && ctxFoco < m.nAc) {
+      int ac = m.ac[ctxFoco], j;
+      acaoModal(ac);
+      // O FOCO SEGUE A ACAO, nao o indice. "Marcar como assistido" some da
+      // lista quando nao sobra nada a marcar, e "Assistir" pode sumir junto: o
+      // indice antigo caia em "Desligar o lembrete" — um OK a mais desligava o
+      // lembrete sem a pessoa ter ido ate ele (captura -fx-modal-vistos).
+      // A mesma acao se ainda existe; senao, a primeira.
+      if (ctxAberto == 1) {
+        montaModal(agenda_lista(ctxItem), &m);
+        ctxFoco = 0;
+        for (j = 0; j < m.nAc; j++) if (m.ac[j] == ac) { ctxFoco = j; break; }
+      }
     }
     return;
   }
   if (volta || k == SDLK_LEFT) { sair = 1; return; }
   if (k == SDLK_DOWN && foco < n - 1) foco++;
   else if (k == SDLK_UP && foco > 0)  foco--;
-  else if ((k == SDLK_RETURN || k == SDLK_KP_ENTER) && !e->key.repeat) okDesde = SDL_GetTicks();
+  // NO KEYDOWN, e nao no KEYUP como o gesto de segurar pedia: sem duas acoes
+  // no mesmo botao nao ha duracao a medir, e o modal aparece no instante do
+  // aperto. O KEYUP que vem depois cai no `return` do topo (so KEYDOWN passa),
+  // e a repeticao do OK segurado e ignorada tanto aqui quanto nas acoes.
+  else if (ok && !e->key.repeat) abrirModal(foco);
   // ESQUERDA cai fora daqui e chega ao menu lateral, como nas outras telas.
+}
+
+const char *agendaui_pediu_tocar(int *temporada, int *episodio) {
+  static char s[40];
+  if (!pediuTocarId[0]) return NULL;
+  snprintf(s, sizeof s, "%s", pediuTocarId);
+  if (temporada) *temporada = pediuTocarT;
+  if (episodio) *episodio = pediuTocarE;
+  pediuTocarId[0] = 0;
+  return s;
 }
 
 const char *agendaui_pediu_abrir(void) {
@@ -637,6 +815,13 @@ void agendaui_atualizar(float dt, Uint32 agora) {
   // ajuste pediu para nao deslizar.
   int reduz = ajustes_animacoes_reduzidas();
   ctxA = reduz ? (ctxAberto ? 1.0f : 0.0f) : anim_mola(ctxA, ctxAberto ? 1.0f : 0.0f, dt, 18.0f);
+  if (ctxAberto) ctxUltimo = ctxAberto;
+  // A rolagem da noticia: o alvo anda 132 px por tecla e para no fim do texto
+  // (notRolMax, medido no desenho); a mesma mola 2 da lista.
+  if (notRolAlvo > notRolMax) notRolAlvo = notRolMax;
+  if (notRolAlvo < 0.0f) notRolAlvo = 0.0f;
+  notRol = anim_mola2_reduzida(&notVel, notRol, notRolAlvo, dt, NV_MOLA2_SCROLL, reduz);
+  notH = (reduz || notH <= 0.0f) ? notHAlvo : anim_mola(notH, notHAlvo, dt, 18.0f);
   if (foco >= n) foco = n > 0 ? n - 1 : 0;
   for (i = 0; i < n && i < AG_MAX; i++) {
     float a = (i == foco) ? 1.0f : 0.0f;
@@ -1021,6 +1206,14 @@ static AgMedidas medidasDaTela(void) {
 // sinopse. Medido com a MESMA largura e cor que o desenho usa, para que a
 // entrada do agQuebra seja a mesma (uma medida em cor diferente rasterizaria
 // uma segunda copia de cada prefixo — ver a nota de agQuebra).
+// ALTURA DA CAIXA DE LINHA de um estilo, medida na fonte ativa. "Hg" tem
+// ascendente e descendente, o mesmo truque de desenhaEstacao; a cor e a de quem
+// desenha, para cair na mesma entrada do cache de txt_linha.
+static float altLinha(TxtEstilo e, int c) {
+  float h = (float)txt_linha(e, "Hg", c, c, c, 255).h;
+  return h > 0.0f ? h : 28.0f;
+}
+
 static float alturaExtra(const AgItem *it) {
   char extra[300];
   int noticia, n;
@@ -1033,8 +1226,14 @@ static float alturaExtra(const AgItem *it) {
   // 12 de vao acima, as linhas em passo AG_SIN_LD, 8 ate a dica (so com
   // noticia), 16 de respiro ate a borda do cartao — menos os 20 que a quarta
   // linha ja ganha ao comecar acima da base dos 177 (ver desenhaConteudo).
-  return 12.0f + AG_SIN_LD * (float)(n - 1) + 26.0f
-       + (noticia ? 8.0f + 26.0f : 0.0f) + 16.0f - AG_EXTRA_SOBE;
+  //
+  // A ALTURA DA ULTIMA LINHA E MEDIDA, e nao o 26 cravado que estava aqui. A
+  // caixa de linha do TXT_CAPTION da Inter e 27-28 px, a do CAPTION2 a mesma
+  // coisa, e cada linha "26" roubava 1-2 px da borda: com citacao de duas
+  // linhas mais a dica, a dica encostava no fim do cartao (e em fonte de
+  // interface mais alta, Atkinson ou Montserrat, passava dele).
+  return 12.0f + AG_SIN_LD * (float)(n - 1) + altLinha(TXT_CAPTION, qc)
+       + (noticia ? 8.0f + altLinha(TXT_CAPTION2, qc) : 0.0f) + 16.0f - AG_EXTRA_SOBE;
 }
 
 // --- O SINO -------------------------------------------------------------------
@@ -1182,16 +1381,31 @@ static void desenhaConteudo(const AgItem *it, float xCont, float xDir,
   }
 
   // --- A QUARTA LINHA, so em foco ------------------------------------------
+  //
+  // RECORTADA PELO CARTAO. A linha entra quando f passa de 0,5, mas o cartao
+  // so chega a altura cheia quando a mola termina (alturaLinha e AG_LINHA_H +
+  // animFoco * extra): nos quadros entre um e outro a citacao e a dica eram
+  // desenhadas INTEIRAS abaixo da borda do cartao ainda baixo — era o "texto
+  // sai para fora do componente quando estamos focados" que o dono via a cada
+  // passo do D-pad. Com a tesoura no retangulo do cartao (interseccao com a
+  // area da lista, que e o recorte vigente) o texto e revelado junto com a
+  // borda e nunca passa dela, em nenhum quadro nem em nenhuma fonte.
   temExtra = emFoco && linhaExtra(it, extra, sizeof extra, &noticia);
   if (temExtra) {
     int qc = ajustes_tinta_foco2();
     float yq = y + AG_LINHA_H - AG_EXTRA_SOBE + 12.0f;
-    int n = agendaui_sinopse(TXT_CAPTION, extra, tx, yq, textW, AG_SIN_LD,
-                             AG_CIT_MAX, qc, qc, qc, f);
+    float y0 = card.y > listaTopo() ? card.y : listaTopo();
+    float y1 = card.y + card.h < listaBase() ? card.y + card.h : listaBase();
+    int n;
+    gfx_recorte(card.x, y0, card.w, y1 - y0);
+    n = agendaui_sinopse(TXT_CAPTION, extra, tx, yq, textW, AG_SIN_LD,
+                         AG_CIT_MAX, qc, qc, qc, f);
     if (noticia) {
-      TxtLinha dica = txt_linha(TXT_CAPTION2, i18n("Segure OK para ler mais"), qc, qc, qc, 255);
-      txt_desenhar_alpha(dica, tx, yq + AG_SIN_LD * (float)(n - 1) + 26.0f + 8.0f, f);
+      // Cortada na coluna: em alemao e russo a dica passa de 500 px.
+      TxtLinha dica = txt_linha_corta(TXT_CAPTION2, i18n("OK para ler mais"), qc, qc, qc, 255, textW);
+      txt_desenhar_alpha(dica, tx, yq + AG_SIN_LD * (float)(n - 1) + altLinha(TXT_CAPTION, qc) + 8.0f, f);
     }
+    gfx_recorte(0, listaTopo(), NV_TELA_W, listaBase() - listaTopo());
   }
 
   // --- A COLUNA DO SINO -------------------------------------------------------
@@ -1221,9 +1435,9 @@ static void desenhaConteudo(const AgItem *it, float xCont, float xDir,
       desenhaSino(m.xSino, yl + AG_SINO * 0.5f, it->lembrete, emFoco, 1.0f);
       yl += AG_SINO + 8.0f;
       for (k = 0; k < nl; k++) {
-        TxtLinha l = (k < nl - 1 || !resto[0])
-                   ? txt_linha(TXT_CAPTION2, lin[k], cl, cl, cl, 255)
-                   : txt_linha_corta(TXT_CAPTION2, resto, cl, cl, cl, 255, AG_SINO_COL);
+        TxtLinha l = txt_linha_corta(TXT_CAPTION2,
+                                     (k < nl - 1 || !resto[0]) ? lin[k] : resto,
+                                     cl, cl, cl, 255, AG_SINO_COL);
         txt_desenhar_alpha(l, m.xSino - (float)l.w * 0.5f, yl + 24.0f * (float)k, f);
       }
     } }
@@ -1325,104 +1539,666 @@ static void desenhaEixo(float xEixo, float y0, float y1, int tracejado) {
     } }
 }
 
-// --- menu de contexto e noticias ----------------------------------------------
-//
-// Cartao central com tres linhas (abrir o titulo / ultimas noticias / lembrete)
-// e, atras dele, um painel de manchetes do Google News (noticias.h): so
-// manchete, veiculo e dia — a TV nao abre link, entao e leitura, nao indice.
+// --- os paineis flutuantes: o modal da linha, as manchetes, a noticia ------------
 //
 // NA LINGUAGEM DOS PAINEIS FLUTUANTES (menu.c, 21/09/2026): superficie
 // 0.055/0.058/0.068 quase opaca com canto de 28, a luz na cor de realce
 // entrando pelo topo (gfx_luz_canto, recortada pelo proprio canto) e a linha
 // em foco como PILULA de realce com a mancha difusa atras (GFX_SOMBRA 0,35).
-// Antes era uma laje 0.075 chapada com uma pilula sem luz — o unico painel do
-// app que ainda nao falava a lingua do menu.
-#define AGC_W     760.0f
-#define AGC_LINHA  84.0f
-#define AGN_W    1180.0f
-#define AGN_LINHA 108.0f
+//
+// COM A INTERFACE DE VIDRO (ajustes_vidro), o MESMO desenho do menu com vidro:
+// o painel e gfx_vidro_painel (translucido, fio de 1,5 px) e a linha em foco e
+// a pilula cheia de gfx_vidro_pilula_cheia — o realce continua sendo o do tema,
+// e a tinta vem de gfx_vidro_tinta. Nenhuma superficie ganha degrade.
+#define AGC_W      1560.0f
+#define AGC_PAD      56.0f
+#define AGC_ACAO_W  540.0f
+#define AGC_LINHA    76.0f
+#define AGC_HIST_L   60.0f
+#define AGN_W      1240.0f
+#define AGN_LINHA    96.0f
+#define AGN_FOCO    236.0f
+#define AGL_W      1640.0f
+#define AGL_H       900.0f
+// Sem texto (o fallback do QR), o painel encolhe para o que tem: manchete de
+// ate tres linhas, a frase e o QR. Com 900 fixos sobrava meia tela vazia
+// abaixo do QR (captura -fx-noticia-qr, 29/09/2026).
+#define AGL_H_FALHA 660.0f
+#define AGL_IMG_W   560.0f
+#define AGL_QR      176.0f
+
 static void painelFlutuante(GfxRect r, float ar, float ag, float ab, float a) {
-  gfx_cor(r, 28.0f / r.h, 0.055f, 0.058f, 0.068f, 0.96f * a);
+  // Vidro a 0,92 e nao aos 0,78 dos paineis sobre arte: aqui atras ha TEXTO
+  // (as linhas da Agenda), e texto atras de texto le como sujeira — captura
+  // -fx-modal-vidro, 29/09/2026. O fio de cabelo e o canto continuam os do
+  // vidro; o veu de desenhaContexto tambem escurece mais com ele ligado.
+  if (ajustes_vidro()) {
+    // Um apoio ESCURO por baixo do vidro: o miolo translucido deixava as
+    // linhas da Agenda (texto) aparecerem nitidas atras das acoes, mesmo com o
+    // veu (captura -fx-modal-vidro, 2a rodada). O vidro continua sendo o
+    // desenho da superficie (miolo mais claro, fio de 1,5 px); so nao e mais
+    // uma janela para texto concorrente.
+    gfx_cor(r, 28.0f / r.h, 0.05f, 0.052f, 0.06f, 0.94f * a);
+    gfx_vidro_painel(r, 28.0f / r.h, 0.92f, a);
+    return;
+  }
+  // 0,99 e nao 0,96: nos paineis grandes (a noticia ocupa 1640x900) os 4% de
+  // transparencia deixavam as linhas da Agenda aparecerem atras do texto
+  // (captura -fx-noticia-qr). A luz de canto e o que da a profundidade.
+  gfx_cor(r, 28.0f / r.h, 0.055f, 0.058f, 0.068f, 0.99f * a);
   gfx_luz_canto(r, 28.0f / r.h, r.w * 0.5f, 0.0f, r.w * 0.9f, ar, ag, ab, 0.22f * a);
 }
-// A pilula de foco das linhas dos dois paineis: luz atras, pilula na cor de
-// realce por cima. O raio e 16 px sobre a altura da linha, como era.
+// A pilula de foco das linhas dos paineis: luz atras, pilula na cor de realce
+// por cima. O raio e 16 px sobre a altura da linha, como era.
 static void pilulaFoco(GfxRect lr, float ar, float ag, float ab, float a) {
-  GfxRect luz = { lr.x - lr.h * 0.9f, lr.y - lr.h * 0.9f, lr.w + lr.h * 1.8f, lr.h * 2.8f };
-  gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * a);
+  if (ajustes_vidro()) { gfx_vidro_pilula_cheia(lr, 16.0f / lr.h, 1.0f, a); return; }
+  { GfxRect luz = { lr.x - lr.h * 0.9f, lr.y - lr.h * 0.9f, lr.w + lr.h * 1.8f, lr.h * 2.8f };
+    // Luz mais contida em linha larga (DESIGN.md secao 4): a mancha de uma
+    // pilula de 1100 px com a folga do menu viraria meia tela.
+    if (lr.w > 800.0f) { luz.x = lr.x - lr.h * 0.5f; luz.w = lr.w + lr.h; }
+    gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * a); }
   gfx_cor(lr, 16.0f / lr.h, ar, ag, ab, a);
 }
+// Tinta sobre a pilula de foco (principal e secundaria).
+static int tintaF(void)  { return ajustes_vidro() ? gfx_vidro_tinta(1.0f) : ajustes_tinta_foco(); }
+static int tintaF2(void) {
+  if (ajustes_vidro()) { int t = gfx_vidro_tinta(1.0f); return t > 128 ? 205 : 70; }
+  return ajustes_tinta_foco2();
+}
+
+// "12 set" / "12 Sep" / "12 вер" de uma data ISO. "" quando nao e data.
+static void dataCurtaIso(const char *iso, char *dst, size_t tam) {
+  int d = agenda_dia(iso), m = agenda_mes(iso), a = agenda_ano(iso);
+  dst[0] = 0;
+  if (d < 1 || m < 1) return;
+  // O ANO so quando nao e o de hoje, a mesma regra das datas de noticias.c.
+  if (a && a != agenda_ano(agenda_hoje()))
+    snprintf(dst, tam, "%d %s %d", d, idioma_mes_curto(ajustes_idioma(), m - 1), a);
+  else
+    snprintf(dst, tam, "%d %s", d, idioma_mes_curto(ajustes_idioma(), m - 1));
+}
+
+// Altura de uma pilha de texto medida, nao cravada: "Hg" da a caixa inteira.
+static float hEstilo(TxtEstilo e) { return altLinha(e, 238); }
+
+// Titulo e subtitulo de painel EMPILHADOS PELA ALTURA MEDIDA. O painel de
+// manchetes punha o subtitulo em +58 fixos debaixo de um TXT_TITULO2 de ~68 de
+// caixa: "Ultimas noticias" encostava no pe do titulo (captura -ctx-noticias,
+// antes desta revisao). Devolve o y logo abaixo do subtitulo.
+static float cabecalho(float x, float y, float w, const char *titulo,
+                       const char *sub, float a) {
+  TxtLinha t = txt_linha_corta(TXT_TITULO3, titulo, 246, 247, 250, 255, w);
+  txt_desenhar_alpha(t, x, y, a);
+  y += (float)t.h + 4.0f;
+  if (sub && sub[0]) {
+    TxtLinha s = txt_linha_corta(TXT_CAPTION, sub, 150, 153, 162, 255, w);
+    txt_desenhar_alpha(s, x, y, a);
+    y += (float)s.h;
+  }
+  return y;
+}
+
+static const char *rotuloAcao(const AgItem *it, const AgModal *m, int ac,
+                              char *buf, size_t tam) {
+  switch (ac) {
+    case AC_ASSISTIR:
+      snprintf(buf, tam, i18n("Assistir T%dE%d"), m->eps[m->proximo].temporada,
+               m->eps[m->proximo].episodio);
+      return buf;
+    case AC_ABRIR:    return i18n("Abrir o título");
+    case AC_NOTICIAS: return i18n("Últimas notícias");
+    case AC_VISTOS:
+      if (m->naoVistos == 1) {
+        int i;
+        for (i = 0; i < m->n; i++)
+          if (m->eps[i].visto != 1) {
+            snprintf(buf, tam, i18n("Marcar T%dE%d como assistido"),
+                     m->eps[i].temporada, m->eps[i].episodio);
+            return buf;
+          }
+      }
+      snprintf(buf, tam, i18n("Marcar %d episódios como assistidos"), m->naoVistos);
+      return buf;
+    case AC_LEMBRETE:
+      return it->lembrete ? i18n("Desligar o lembrete") : i18n("Lembrar-me");
+  }
+  return "";
+}
+
+// A COLUNA DO HISTORICO: cabecalho em caps espacadas (a voz dos rotulos de mes
+// da linha do tempo), uma linha por episodio — codigo, nome, dia, estado — e
+// os estados vazios ditos em uma frase, nunca uma lista em branco.
+//
+// O ESTADO NAO E SO COR: assistido leva o check e a palavra, nao assistido o
+// ponto no realce e a palavra, desconhecido so a palavra, mais apagada. Quem
+// nao distingue a cor le a forma, como no sino da linha.
+static void desenhaHistorico(const AgItem *it, const AgModal *m, float x, float y,
+                             float w, float a) {
+  char rot[160], resumo[64];
+  const char *desde = agenda_lembrete_desde(it->imdb);
+  float ar, ag, ab;
+  int i;
+  ajustes_acento(&ar, &ag, &ab);
+  if (it->lembrete && desde[0]) {
+    char d[32];
+    dataCurtaIso(desde, d, sizeof d);
+    snprintf(rot, sizeof rot, i18n("Lançados desde o lembrete · %s"), d);
+  } else snprintf(rot, sizeof rot, "%s", i18n("Últimos episódios"));
+  { char caps[200];
+    idioma_maiusc(caps, sizeof caps, rot);
+    txt_tracking(TXT_CAPTION2, caps, 132, 134, 142, x, y, a, 2.0f); }
+  // "2 de 3 assistidos" a direita do cabecalho, so quando o mapa sabe de todos.
+  resumo[0] = 0;
+  if (m->estado == AG_HIST_PRONTO && m->n > 0) {
+    int vistos = 0, sabidos = 0;
+    for (i = 0; i < m->n; i++) { if (m->eps[i].visto >= 0) sabidos++; if (m->eps[i].visto == 1) vistos++; }
+    if (sabidos == m->n) snprintf(resumo, sizeof resumo, i18n("%d de %d assistidos"), vistos, m->n);
+  }
+  if (resumo[0]) {
+    TxtLinha l = txt_linha(TXT_CAPTION2, resumo, 150, 153, 162, 255);
+    txt_desenhar_alpha(l, x + w - (float)l.w, y, a);
+  }
+  y += hEstilo(TXT_CAPTION2) + 14.0f;
+  regua(x, x + w, y, 0.62f, 0.12f * a);
+  y += 10.0f;
+
+  if (m->estado != AG_HIST_PRONTO) {
+    const char *msg = m->estado == AG_HIST_FALHOU ? i18n("Não foi possível carregar os episódios.")
+                                                  : i18n("Carregando episódios…");
+    TxtLinha l = txt_linha_corta(TXT_CALLOUT, msg, 170, 174, 184, 255, w);
+    txt_desenhar_alpha(l, x, y + (AGC_HIST_L - (float)l.h) * 0.5f, a);
+    if (m->estado != AG_HIST_FALHOU) {
+      // O ESQUELETO de tres linhas no lugar onde a lista vai entrar: diz o
+      // formato do que esta vindo, e a lista entra inteira de uma vez.
+      int k;
+      for (k = 1; k <= 3; k++) {
+        GfxRect sk = { x, y + AGC_HIST_L * (float)k + 20.0f, w * (k == 2 ? 0.62f : 0.78f), 18.0f };
+        gfx_esqueleto(sk, 0.5f, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
+      }
+    }
+    return;
+  }
+  if (m->n == 0) {
+    const char *msg = it->lembrete ? i18n("Nada foi lançado desde o lembrete.")
+                                   : i18n("Nenhum episódio lançado ainda.");
+    TxtLinha l = txt_linha_corta(TXT_CALLOUT, msg, 170, 174, 184, 255, w);
+    txt_desenhar_alpha(l, x, y + (AGC_HIST_L - (float)l.h) * 0.5f, a);
+    return;
+  }
+  // Colunas FIXAS em toda linha (codigo 92, estado 196, dia 104): e o que
+  // alinha os dias numa reta e deixa o nome com a sobra, cortado com "…".
+  // A coluna de ESTADO na largura do maior rotulo DO IDIOMA ATIVO: com 196
+  // cravados, "Не просмотрено" (ru) saia "Не…" (captura -fx-ru-modal).
+  { const float wCod = 92.0f, wDia = 104.0f;
+    float wEst = 0.0f, wNome;
+    { const char *R[3] = { i18n("Assistido"), i18n("Não assistido"), i18n("Desconhecido") };
+      int k;
+      for (k = 0; k < 3; k++) { float lw = (float)txt_largura(TXT_CAPTION2, R[k]); if (lw > wEst) wEst = lw; }
+      wEst += 44.0f + 12.0f;
+      if (wEst < 196.0f) wEst = 196.0f;
+      if (wEst > w * 0.34f) wEst = w * 0.34f; }
+    wNome = w - wCod - wEst - wDia - 24.0f;
+    for (i = 0; i < m->n; i++) {
+      const AgEp *e = &m->eps[i];
+      float ly = y + AGC_HIST_L * (float)i, cy = ly + AGC_HIST_L * 0.5f;
+      char cod[24], dia[32];
+      const char *est;
+      int c = e->visto == 1 ? 150 : 236;
+      TxtLinha l;
+      snprintf(cod, sizeof cod, i18n("T%dE%d"), e->temporada, e->episodio);
+      l = txt_linha_corta(TXT_CAPTION2, cod, 132, 134, 142, 255, wCod - 8.0f);
+      txt_desenhar_alpha(l, x, cy - (float)l.h * 0.5f, a);
+      l = txt_linha_corta(TXT_CALLOUT, e->nome[0] ? e->nome : cod, c, c, c + 4 > 255 ? 255 : c + 4, 255, wNome);
+      txt_desenhar_alpha(l, x + wCod, cy - (float)l.h * 0.5f, a);
+      dataCurtaIso(e->data, dia, sizeof dia);
+      l = txt_linha_corta(TXT_CAPTION2, dia, 150, 153, 162, 255, wDia);
+      txt_desenhar_alpha(l, x + w - wEst - (float)l.w - 12.0f, cy - (float)l.h * 0.5f, a);
+      { float xe = x + w - wEst + 12.0f;
+        if (e->visto == 1) {
+          GfxRect ic = { xe, cy - 11.0f, 22.0f, 22.0f };
+          gfx_icone(ic, "check", 0.72f, 0.73f, 0.76f, a);
+          est = i18n("Assistido");
+          l = txt_linha_corta(TXT_CAPTION2, est, 170, 172, 180, 255, wEst - 44.0f);
+          txt_desenhar_alpha(l, xe + 32.0f, cy - (float)l.h * 0.5f, a);
+        } else if (e->visto == 0) {
+          GfxRect pt = { xe + 5.0f, cy - 6.0f, 12.0f, 12.0f };
+          gfx_cor(pt, 0.5f, ar, ag, ab, a);
+          est = i18n("Não assistido");
+          l = txt_linha_corta(TXT_CAPTION2, est, 238, 240, 244, 255, wEst - 44.0f);
+          txt_desenhar_alpha(l, xe + 32.0f, cy - (float)l.h * 0.5f, a);
+        } else {
+          est = i18n("Desconhecido");
+          // No piso de 150 (DESIGN.md): apagado, mas legivel a 3 m.
+          l = txt_linha_corta(TXT_CAPTION2, est, 150, 152, 160, 255, wEst - 44.0f);
+          txt_desenhar_alpha(l, xe + 32.0f, cy - (float)l.h * 0.5f, a);
+        } }
+    } }
+}
+
+static void desenhaModalSerie(const AgItem *it, float a) {
+  float ar, ag, ab;
+  AgModal m;
+  float h, x, y, xTxt, wTxt, yCorpo, xHist, wHist;
+  GfxRect r;
+  int i, tf = tintaF();
+  ajustes_acento(&ar, &ag, &ab);
+  montaModal(it, &m);
+  if (ctxFoco >= m.nAc) ctxFoco = m.nAc > 0 ? m.nAc - 1 : 0;
+  // Altura: cabecalho do cartaz (153) + respiro + o MAIOR dos dois blocos de
+  // baixo. Fixa pela lista cheia (AG_HIST_VIS linhas) e nao pelo que chegou,
+  // para o painel nao crescer diante da pessoa quando o Cinemeta responde.
+  { float hAc = (float)m.nAc * AGC_LINHA;
+    float hHist = hEstilo(TXT_CAPTION2) + 24.0f + AGC_HIST_L * (float)AG_HIST_VIS;
+    h = AGC_PAD + AG_CARTAZ_H + 44.0f + (hAc > hHist ? hAc : hHist) + AGC_PAD; }
+  if (h > NV_TELA_H - 2.0f * NV_MARGEM_Y) h = NV_TELA_H - 2.0f * NV_MARGEM_Y;
+  r = (GfxRect){ (NV_TELA_W - AGC_W) * 0.5f, (NV_TELA_H - h) * 0.5f + (1.0f - a) * 24.0f, AGC_W, h };
+  painelFlutuante(r, ar, ag, ab, a);
+  x = r.x + AGC_PAD; y = r.y + AGC_PAD;
+
+  // --- cabecalho: cartaz, titulo, episodio, lembrete -------------------------
+  // O cartaz na MESMA largura da linha (AG_CARTAZ_W): e a mesma textura, sem
+  // segunda decodificacao (ver a medida de tex_obter_larg no topo).
+  { GfxRect cz = { x, y, AG_CARTAZ_W, AG_CARTAZ_H };
+    GLuint tex = it->poster[0] ? tex_obter_larg(it->poster, AG_CARTAZ_W) : 0;
+    if (tex) {
+      gfx_tex_aspect_atual = AG_CARTAZ_W / AG_CARTAZ_H;
+      gfx_rect(cz, tex, GFX_CARD, 0, 0, 0, AG_CARTAZ_RAIO, 0, 0, 0, a);
+      gfx_tex_aspect_atual = 0.0f;
+    } else gfx_cor(cz, AG_CARTAZ_RAIO, 0.18f, 0.19f, 0.21f, a); }
+  xTxt = x + AG_CARTAZ_W + 32.0f;
+  wTxt = r.x + r.w - AGC_PAD - xTxt;
+  { char ep[220], linha[300], falta[64];
+    float yt = y + 6.0f;
+    TxtLinha t = txt_linha_corta(TXT_TITULO3, it->titulo[0] ? it->titulo : i18n("Série"),
+                                 246, 247, 250, 255, wTxt);
+    txt_desenhar_alpha(t, xTxt, yt, a);
+    yt += (float)t.h + 6.0f;
+    linhaEpisodio(it, ep, sizeof ep);
+    falta[0] = 0;
+    if (temData(it)) agenda_falta(it->dataProx, falta, sizeof falta);
+    if (ep[0] && falta[0]) snprintf(linha, sizeof linha, "%s \xc2\xb7 %s", ep, falta);
+    else snprintf(linha, sizeof linha, "%s", ep[0] ? ep : falta);
+    if (linha[0]) {
+      TxtLinha l = txt_linha_corta(TXT_CALLOUT, linha, 206, 208, 214, 255, wTxt);
+      txt_desenhar_alpha(l, xTxt, yt, a);
+      yt += (float)l.h + 10.0f;
+    }
+    // O LEMBRETE em uma linha: o sino e a frase. "Sem lembrete" so quando da
+    // para ligar — serie encerrada nao tem lembrete a oferecer, e a frase seria
+    // ruido.
+    if (it->lembrete || agenda_pode_lembrar(it->imdb)) {
+      char lb[120];
+      const char *desde = agenda_lembrete_desde(it->imdb);
+      int c = it->lembrete ? 236 : 150;
+      GfxRect ic = { xTxt, yt + 1.0f, 26.0f, 26.0f };
+      TxtLinha l;
+      if (it->lembrete && desde[0]) {
+        char d[32]; dataCurtaIso(desde, d, sizeof d);
+        snprintf(lb, sizeof lb, i18n("Lembrete ativo desde %s"), d);
+      } else snprintf(lb, sizeof lb, "%s", it->lembrete ? i18n("Lembrete ativo") : i18n("Sem lembrete"));
+      agendaui_despertador(ic, it->lembrete, (float)c / 255.0f, (float)c / 255.0f,
+                           (float)c / 255.0f, a, relogio, trocaEm);
+      l = txt_linha_corta(TXT_CAPTION, lb, c, c, c + 4 > 255 ? 255 : c + 4, 255, wTxt - 40.0f);
+      txt_desenhar_alpha(l, xTxt + 38.0f, yt + 14.0f - (float)l.h * 0.5f, a);
+    } }
+
+  // --- corpo: acoes a esquerda, historico a direita -------------------------
+  yCorpo = y + AG_CARTAZ_H + 44.0f;
+  for (i = 0; i < m.nAc; i++) {
+    char buf[160];
+    int f = (i == ctxFoco);
+    GfxRect lr = { x - 20.0f, yCorpo + (float)i * AGC_LINHA, AGC_ACAO_W, AGC_LINHA - 12.0f };
+    const char *rot = rotuloAcao(it, &m, m.ac[i], buf, sizeof buf);
+    TxtLinha t;
+    if (f) pilulaFoco(lr, ar, ag, ab, a);
+    t = txt_linha_corta(TXT_CALLOUT, rot, f ? tf : 238, f ? tf : 240, f ? tf : 244, 255,
+                        lr.w - 48.0f);
+    txt_desenhar_alpha(t, lr.x + 24.0f, lr.y + (lr.h - (float)t.h) * 0.5f, a);
+  }
+  xHist = x + AGC_ACAO_W + 40.0f;
+  wHist = r.x + r.w - AGC_PAD - xHist;
+  desenhaHistorico(it, &m, xHist, yCorpo + 4.0f, wHist, a);
+}
+
+// --- AS MANCHETES ------------------------------------------------------------------
+//
+// PEDIDO DO DONO (29/09/2026): "quando estamos focados, vamos melhorar o
+// layout, deixar mais bonito, com o header e o texto". A linha em foco virou
+// um CARTAO DE LEITURA: a manchete como cabecalho (TXT_HEADLINE, ate duas
+// linhas), veiculo e quando ("IMDb · há 3 h") e um trecho do texto em duas
+// linhas. As outras linhas continuam uma manchete e o veiculo, em 96 px.
+//
+// O TRECHO E DA PAGINA DO VEICULO, e por isso chega depois: o RSS do Google so
+// traz a manchete de novo na <description>. Pedir a pagina de cada manchete ao
+// abrir o painel seria uma dezena de downloads de 500 KB; entao o trecho e
+// pedido (noticia_pedir) quando o foco PARA 350 ms numa linha — a mesma
+// pagina que o OK vai abrir, entao nada e baixado a toa. Enquanto nao chega,
+// o cartao ja tem a altura final e o lugar do trecho e um esqueleto de duas
+// linhas; o texto entra INTEIRO de uma vez (portao de texto, textogate.h).
+// Pagina que nao deu texto: o cartao fica com manchete e veiculo, sem trecho.
+#define AGN_ESPERA_MS 350u
+
+static int alturaManchete(int f) { return f ? (int)AGN_FOCO : (int)AGN_LINHA; }
+
+static void desenhaManchetes(const AgItem *it, float a) {
+  float ar, ag, ab;
+  int n = noticias_n(it->imdb), i, resp = noticias_respondeu(it->imdb);
+  int tf = tintaF(), tf2 = tintaF2();
+  float h = 160.0f + (float)(n > 0 ? (n - 1) * AGN_LINHA + AGN_FOCO : AGN_LINHA) + 40.0f;
+  float maxH = NV_TELA_H - 2.0f * NV_MARGEM_Y, y, yFim;
+  long long agora = (long long)time(NULL);
+  GfxRect r;
+  ajustes_acento(&ar, &ag, &ab);
+  if (h > maxH) h = maxH;
+  r = (GfxRect){ (NV_TELA_W - AGN_W) * 0.5f, (NV_TELA_H - h) * 0.5f + (1.0f - a) * 24.0f, AGN_W, h };
+  painelFlutuante(r, ar, ag, ab, a);
+  y = cabecalho(r.x + 48.0f, r.y + 40.0f, AGN_W - 96.0f, it->titulo,
+                i18n("Últimas notícias · Google News"), a) + 40.0f;
+  if (!resp || n == 0) {
+    TxtLinha t = txt_linha_corta(TXT_BODY, !resp ? i18n("Procurando…")
+                                 : i18n("Nada publicado recentemente sobre este título."),
+                                 170, 174, 184, 255, AGN_W - 96.0f);
+    txt_desenhar_alpha(t, r.x + 48.0f, y + 20.0f, a);
+    return;
+  }
+  if (notFoco >= n) notFoco = n - 1;
+  yFim = r.y + r.h - 24.0f;
+  // A PRIMEIRA LINHA VISIVEL: a menor que ainda deixa a focada inteira dentro
+  // do painel, somando as alturas de verdade (a focada e mais alta).
+  { int ini = notFoco;
+    float soma = (float)alturaManchete(1);
+    while (ini > 0 && soma + (float)alturaManchete(0) <= yFim - y) { ini--; soma += (float)alturaManchete(0); }
+    gfx_recorte(r.x, y, r.w, yFim - y);
+    for (i = ini; i < n && y < yFim; i++) {
+      const Noticia *nt = noticias_item(it->imdb, i);
+      int f = (i == notFoco);
+      float lh = (float)alturaManchete(f);
+      // SO LINHA INTEIRA: a que nao cabe ate o pe do painel fica para a
+      // rolagem, em vez de sair cortada no meio das letras.
+      if (y + lh - 12.0f > yFim) break;
+      GfxRect lr = { r.x + 28.0f, y, r.w - 56.0f, lh - 12.0f };
+      char sub[160], quando[48];
+      float tx = lr.x + 24.0f, tw = lr.w - 48.0f, ty;
+      if (!nt) { y += lh; continue; }
+      noticias_quando(nt, agora, quando, sizeof quando);
+      if (quando[0] && nt->fonte[0]) snprintf(sub, sizeof sub, "%s \xc2\xb7 %s", nt->fonte, quando);
+      else snprintf(sub, sizeof sub, "%s%s", nt->fonte, quando);
+      if (!f) {
+        TxtLinha t = txt_linha_corta(TXT_CALLOUT, nt->titulo, 238, 240, 244, 255, tw);
+        txt_desenhar_alpha(t, tx, y + 14.0f, a);
+        t = txt_linha_corta(TXT_CAPTION, sub, 150, 153, 162, 255, tw);
+        txt_desenhar_alpha(t, tx, y + 14.0f + 40.0f, a);
+        y += lh;
+        continue;
+      }
+      pilulaFoco(lr, ar, ag, ab, a);
+      // O trecho e pedido quando o foco para aqui (ver a nota acima).
+      if (nt->link[0] && SDL_GetTicks() - notDesde >= AGN_ESPERA_MS) noticia_pedir(nt->link);
+      ty = y + 22.0f;
+      { int nl = agendaui_sinopse(TXT_HEADLINE, nt->titulo, tx, ty, tw, 40.0f, 2, tf, tf, tf, a);
+        ty += 40.0f * (float)(nl > 0 ? nl - 1 : 0) + hEstilo(TXT_HEADLINE) + 6.0f; }
+      { TxtLinha s = txt_linha_corta(TXT_CAPTION, sub, tf2, tf2, tf2, 255, tw);
+        txt_desenhar_alpha(s, tx, ty, a);
+        ty += (float)s.h + 12.0f; }
+      { int est = NTC_NADA;
+        const NoticiaTexto *nx = nt->link[0] ? noticia_texto(nt->link, &est) : NULL;
+        const char *trecho = NULL;
+        if (nx && est == NTC_PRONTA) trecho = nx->l.resumo[0] ? nx->l.resumo : (nx->l.n ? nx->l.par[0] : NULL);
+        if (trecho && trecho[0]) {
+          int antes = txt_pendentes;
+          float ga = f ? a * notTrechoA : 0.0f;
+          // O ultimo quadro do portao ja desenhou com opacidade quase nula;
+          // o bloco aparece junto (NV_TXTGATE_AQUECER enquanto fecha).
+          agendaui_sinopse(TXT_CAPTION, trecho, tx, ty, tw, AG_SIN_LD, 2, tf2, tf2, tf2,
+                           ga > NV_TXTGATE_AQUECER ? ga : NV_TXTGATE_AQUECER);
+          notTrechoA = textogate_passo(&notTrechoGate, txt_pendentes - antes, SDL_GetTicks());
+        } else if (nt->link[0] && (est == NTC_BUSCANDO ||
+                                   (est == NTC_NADA && SDL_GetTicks() - notDesde < AGN_ESPERA_MS + 50u))) {
+          int k;
+          textogate_reiniciar(&notTrechoGate); notTrechoA = 0.0f;
+          for (k = 0; k < 2; k++) {
+            GfxRect sk = { tx, ty + AG_SIN_LD * (float)k + 6.0f, tw * (k ? 0.58f : 0.86f), 16.0f };
+            // Esqueleto em cima do realce: a propria tinta secundaria a 22%.
+            gfx_esqueleto(sk, 0.5f, (float)tf2 / 255.0f, (float)tf2 / 255.0f,
+                          (float)tf2 / 255.0f, 0.22f * a);
+          }
+        } else { textogate_reiniciar(&notTrechoGate); notTrechoA = 0.0f; } }
+      y += lh;
+    }
+    gfx_sem_recorte(); }
+}
+
+// --- A NOTICIA -------------------------------------------------------------------
+//
+// O MODAL DE LEITURA: a capa (og:image) e o veiculo a esquerda, o texto a
+// direita. A capa passa por tex_obter_larg NA LARGURA DESENHADA (560), a mesma
+// regra de todo cartaz do app: a decodificacao para no tamanho da tela.
+//
+// TRES ESTADOS, e nenhum finge:
+//   BUSCANDO  manchete do RSS + esqueleto de paragrafos; o texto entra inteiro
+//             pelo portao de texto quando chega.
+//   PRONTA    resumo (og:description) em destaque e ate seis paragrafos,
+//             rolados por CIMA/BAIXO dentro da coluna (recorte, sem degrade).
+//   FALHOU    a manchete, uma frase dizendo que a pagina nao deixou ler, e o QR
+//             "Abrir no celular" grande — o caminho que sobra de verdade.
+// O QR aparece nos dois ultimos estados sempre que a URL cabe nele (sem a
+// query, ate 134 bytes: leitura_url_qr); sem URL, "Leia em <veiculo>".
+static GLuint texQrNot;
+static char   qrNotDe[160];
+
+static GLuint qrTextura(const char *texto) {
+  Qr q; int lado, xq, yq; unsigned char *px;
+  if (!texto || !texto[0]) return 0;
+  if (!strcmp(qrNotDe, texto) && texQrNot) return texQrNot;
+  if (!qr_gerar(&q, texto)) return 0;
+  lado = q.lado + 8;                    // 4 modulos de silencio por lado
+  px = (unsigned char *)malloc((size_t)lado * lado * 3);
+  if (!px) return 0;
+  memset(px, 255, (size_t)lado * lado * 3);
+  for (yq = 0; yq < q.lado; yq++)
+    for (xq = 0; xq < q.lado; xq++)
+      if (qr_modulo(&q, xq, yq)) {
+        size_t k = ((size_t)(yq + 4) * lado + (xq + 4)) * 3;
+        px[k] = px[k + 1] = px[k + 2] = 0;
+      }
+  if (!texQrNot) glGenTextures(1, &texQrNot);
+  glBindTexture(GL_TEXTURE_2D, texQrNot);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, lado, lado, 0, GL_RGB, GL_UNSIGNED_BYTE, px);
+  // NEAREST: um modulo borrado com o vizinho e ilegivel para a camera.
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  gfx_tex_esquecer(0);   // o bind acima foi por fora do gfx_rect
+  free(px);
+  snprintf(qrNotDe, sizeof qrNotDe, "%s", texto);
+  return texQrNot;
+}
+
+static void desenhaNoticia(const AgItem *it, float a) {
+  const Noticia *nt = noticias_item(it->imdb, notFoco);
+  float ar, ag, ab, xL, xR, wR, y, yTopo, yFim;
+  int est = NTC_NADA;
+  const NoticiaTexto *nx;
+  GfxRect r;
+  char qrUrl[160] = "", host[120] = "", quando[48] = "";
+  int semCapa = 0;
+  if (!nt) return;
+  ajustes_acento(&ar, &ag, &ab);
+  nx = nt->link[0] ? noticia_texto(nt->link, &est) : NULL;
+  if (!nt->link[0]) est = NTC_FALHOU;
+  notHAlvo = est == NTC_FALHOU ? AGL_H_FALHA : AGL_H;
+  { float h = notH > 0.0f ? notH : notHAlvo;
+    r = (GfxRect){ (NV_TELA_W - AGL_W) * 0.5f, (NV_TELA_H - h) * 0.5f + (1.0f - a) * 24.0f, AGL_W, h }; }
+  painelFlutuante(r, ar, ag, ab, a);
+  xL = r.x + 56.0f;
+  xR = xL + AGL_IMG_W + 56.0f;
+  wR = r.x + r.w - 64.0f - xR;
+  yTopo = r.y + 56.0f;
+  yFim = r.y + r.h - 56.0f;
+  noticias_quando(nt, (long long)time(NULL), quando, sizeof quando);
+  if (nx && nx->url[0]) { leitura_url_qr(nx->url, qrUrl, sizeof qrUrl); leitura_host(nx->url, host, sizeof host); }
+
+  // --- coluna da esquerda: capa, veiculo, QR -----------------------------------
+  y = yTopo;
+  { const char *img = nx ? nx->l.imagem : "";
+    GfxRect cap = { xL, y, AGL_IMG_W, AGL_IMG_W * 9.0f / 16.0f };
+    GLuint tex = img[0] ? tex_obter_larg(img, AGL_IMG_W) : 0;
+    if (tex) {
+      gfx_tex_aspect_atual = 16.0f / 9.0f;
+      gfx_rect(cap, tex, GFX_CARD, 0, 0, 0, 20.0f / cap.h, 0, 0, 0, a);
+      gfx_tex_aspect_atual = 0.0f;
+      y += cap.h + 28.0f;
+    } else if (est == NTC_BUSCANDO || (img[0] && !tex_falhou(img))) {
+      // A capa ainda vindo: o lugar dela ja esta la.
+      gfx_esqueleto(cap, 20.0f / cap.h, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
+      y += cap.h + 28.0f;
+    } else {
+      semCapa = 1;
+      // SEM CAPA (pagina sem og:image, ou que nem deixou ler): o nome do
+      // veiculo como MANCHETE DE JORNAL no lugar da foto, na superficie
+      // neutra dos cartoes. A coluna nao fica um vao com duas palavras no
+      // topo, e nada ali finge ser a imagem da materia.
+      const char *fonte = (nx && nx->l.site[0]) ? nx->l.site : nt->fonte;
+      TxtLinha t = txt_linha_corta(TXT_TITULO2, fonte, 214, 216, 222, 255, cap.w - 64.0f);
+      gfx_cor(cap, 20.0f / cap.h, 0.10f, 0.11f, 0.13f, a);
+      // O "quando" vai junto, logo abaixo do nome: sozinho embaixo do cartao
+      // ele ficava orfao, uma palavra solta a 100 px de tudo.
+      { TxtLinha q = txt_linha_corta(TXT_CAPTION, quando, 150, 153, 162, 255, cap.w - 64.0f);
+        float hb = (float)t.h + (quando[0] ? 6.0f + (float)q.h : 0.0f);
+        float yb = cap.y + (cap.h - hb) * 0.5f;
+        txt_desenhar_alpha(t, cap.x + (cap.w - (float)t.w) * 0.5f, yb, a);
+        if (quando[0]) txt_desenhar_alpha(q, cap.x + (cap.w - (float)q.w) * 0.5f, yb + (float)t.h + 6.0f, a); }
+      y += cap.h + 28.0f;
+    } }
+  { const char *fonte = (nx && nx->l.site[0]) ? nx->l.site : nt->fonte;
+    TxtLinha t = txt_linha_corta(TXT_CALLOUT, fonte, 238, 240, 244, 255, AGL_IMG_W);
+    // Com a capa de MANCHETE (sem og:image) o veiculo ja esta escrito nela:
+    // repetir embaixo seria o mesmo nome duas vezes a 300 px.
+    if (semCapa) t.w = t.h = 0;
+    else txt_desenhar_alpha(t, xL, y, a);
+    y += (float)t.h + 4.0f;
+    if (quando[0] && !semCapa) {
+      t = txt_linha_corta(TXT_CAPTION, quando, 150, 153, 162, 255, AGL_IMG_W);
+      txt_desenhar_alpha(t, xL, y, a);
+      y += (float)t.h;
+    } }
+  if (est == NTC_PRONTA) {
+    GLuint q = qrUrl[0] ? qrTextura(qrUrl) : 0;
+    float lado = AGL_QR;
+    float yq = yFim - lado;
+    if (q && yq > y + 24.0f) {
+      GfxRect rq = { xL, yq, lado, lado };
+      TxtLinha t;
+      gfx_rect(rq, q, GFX_SNAP, 0, 0.0f, 0.0f, 0.0f, 0, 0, 0, a);
+      t = txt_linha_corta(TXT_CALLOUT, i18n("Abrir no celular"), 238, 240, 244, 255, AGL_IMG_W - lado - 28.0f);
+      txt_desenhar_alpha(t, xL + lado + 28.0f, yq + lado * 0.5f - (float)t.h, a);
+      if (host[0]) {
+        t = txt_linha_corta(TXT_CAPTION, host, 150, 153, 162, 255, AGL_IMG_W - lado - 28.0f);
+        txt_desenhar_alpha(t, xL + lado + 28.0f, yq + lado * 0.5f + 4.0f, a);
+      }
+    } else if (host[0] || nt->fonte[0]) {
+      char leia[200];
+      TxtLinha t;
+      snprintf(leia, sizeof leia, i18n("Leia em %s"), host[0] ? host : nt->fonte);
+      t = txt_linha_corta(TXT_CAPTION, leia, 150, 153, 162, 255, AGL_IMG_W);
+      txt_desenhar_alpha(t, xL, yFim - (float)t.h, a);
+    }
+  }
+
+  // --- coluna da direita: manchete, resumo, paragrafos -------------------------
+  gfx_recorte(xR, yTopo - 4.0f, wR + 24.0f, yFim - yTopo + 8.0f);
+  { float yy = yTopo - notRol;
+    int antes = txt_pendentes;
+    float ga = est == NTC_PRONTA ? notGateA : 1.0f;
+    const char *titulo = (nx && nx->l.titulo[0]) ? nx->l.titulo : nt->titulo;
+    float gAlpha = a * (ga > NV_TXTGATE_AQUECER ? ga : NV_TXTGATE_AQUECER);
+    // A manchete do RSS primeiro (ja esta na mao); com a pagina pronta, o
+    // og:title — que vem sem o " - Veiculo" e as vezes mais completo.
+    yy += txt_bloco_corta(TXT_TITULO3, est == NTC_PRONTA ? titulo : nt->titulo,
+                          246, 247, 250, xR, yy, wR, 58.0f, est == NTC_PRONTA ? gAlpha : a, 3);
+    yy += 22.0f;
+    if (est == NTC_PRONTA && nx) {
+      int k;
+      if (nx->l.resumo[0]) {
+        yy += txt_bloco_corta(TXT_CALLOUT, nx->l.resumo, 214, 216, 222, xR, yy, wR, 38.0f, gAlpha, 4);
+        yy += 26.0f;
+      }
+      for (k = 0; k < nx->l.n; k++) {
+        yy += txt_bloco_corta(TXT_BODY, nx->l.par[k], 196, 198, 206, xR, yy, wR, 36.0f, gAlpha, 0);
+        yy += 22.0f;
+      }
+      notGateA = textogate_passo(&notGate, txt_pendentes - antes, SDL_GetTicks());
+      // O teto da rolagem: o fim do texto encosta no pe da coluna.
+      { float total = yy + notRol - yTopo, cabe = yFim - yTopo;
+        notRolMax = total > cabe ? total - cabe : 0.0f; }
+    } else if (est == NTC_BUSCANDO || est == NTC_NADA) {
+      int k;
+      TxtLinha t = txt_linha_corta(TXT_CAPTION, i18n("Carregando a notícia…"), 150, 153, 162, 255, wR);
+      txt_desenhar_alpha(t, xR, yy, a);
+      yy += (float)t.h + 22.0f;
+      for (k = 0; k < 7; k++) {
+        GfxRect sk = { xR, yy + 40.0f * (float)k, wR * (k % 3 == 2 ? 0.64f : 0.94f), 20.0f };
+        gfx_esqueleto(sk, 0.5f, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
+      }
+      notRolMax = 0.0f;
+    } else {
+      // O FALLBACK: a frase, e o QR GRANDE logo abaixo dela, na coluna do
+      // texto — e o caminho que sobra para ler a materia, entao e ele que
+      // ocupa o lugar do texto. Sem URL que caiba no QR, "Leia em <veiculo>".
+      GLuint q = qrUrl[0] ? qrTextura(qrUrl) : 0;
+      yy += txt_bloco_corta(TXT_CALLOUT, i18n("Não deu para trazer o texto desta página."),
+                            214, 216, 222, xR, yy, wR, 38.0f, a, 2);
+      yy += 36.0f;
+      if (q) {
+        float lado = AGL_QR + 64.0f, xq = xR + lado + 40.0f, wq = wR - lado - 40.0f;
+        GfxRect rq = { xR, yy, lado, lado };
+        TxtLinha t;
+        gfx_rect(rq, q, GFX_SNAP, 0, 0.0f, 0.0f, 0.0f, 0, 0, 0, a);
+        t = txt_linha_corta(TXT_HEADLINE, i18n("Abrir no celular"), 238, 240, 244, 255, wq);
+        txt_desenhar_alpha(t, xq, yy + 20.0f, a);
+        { float hb = txt_bloco_corta(TXT_CAPTION, i18n("Aponte a câmera do celular para ler a matéria completa."),
+                                     150, 153, 162, xq, yy + 20.0f + (float)t.h + 10.0f, wq, 32.0f, a, 3);
+          if (host[0]) {
+            TxtLinha hl = txt_linha_corta(TXT_CAPTION, host, 150, 153, 162, 255, wq);
+            txt_desenhar_alpha(hl, xq, yy + 20.0f + (float)t.h + 10.0f + hb + 8.0f, a);
+          } }
+      } else if (host[0] || nt->fonte[0]) {
+        char leia[200];
+        TxtLinha t;
+        snprintf(leia, sizeof leia, i18n("Leia em %s"), host[0] ? host : nt->fonte);
+        t = txt_linha_corta(TXT_CALLOUT, leia, 170, 174, 184, 255, wR);
+        txt_desenhar_alpha(t, xR, yy, a);
+      }
+      notRolMax = 0.0f;
+    } }
+  gfx_sem_recorte();
+  // O FIO DE ROLAGEM: so quando ha o que rolar, fino e neutro, na borda da
+  // coluna — diz "tem mais" sem degrade por cima do texto.
+  if (notRolMax > 1.0f) {
+    float trilho = yFim - yTopo, fr = trilho / (trilho + notRolMax);
+    GfxRect tr = { r.x + r.w - 36.0f, yTopo, 4.0f, trilho };
+    GfxRect ba = { tr.x, yTopo + (trilho - trilho * fr) * (notRol / notRolMax), 4.0f, trilho * fr };
+    // O raio e FRACAO DA ALTURA: 0,5 num trilho de 4 x 700 virava uma lente
+    // afilada nas pontas (trilho sumido, barra em dois gomos). 2 px / h e o
+    // meio da largura — a capsula de 4 px que se queria.
+    gfx_cor(tr, 2.0f / tr.h, 1.0f, 1.0f, 1.0f, 0.14f * a);
+    gfx_cor(ba, 2.0f / ba.h, 0.59f, 0.59f, 0.59f, a);
+  }
+}
+
 static void desenhaContexto(float a) {
   const AgItem *it = agenda_lista(ctxItem);
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  float ar, ag, ab, tinta = ajustes_acento_tinta(&ar, &ag, &ab);
-  int tf = ajustes_tinta_foco(), tf2 = ajustes_tinta_foco2();
   if (!it) return;
-  gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 0.62f * a);
-  if (ctxAberto == 2) {
-    int n = noticias_n(it->imdb), i;
-    int resp = noticias_respondeu(it->imdb);
-    float h = 150.0f + (float)(n > 0 ? n : 1) * AGN_LINHA + 40.0f;
-    float maxH = NV_TELA_H - 2.0f * NV_MARGEM_Y;
-    GfxRect r;
-    TxtLinha t;
-    float y;
-    if (h > maxH) h = maxH;
-    r = (GfxRect){ (NV_TELA_W - AGN_W) * 0.5f, (NV_TELA_H - h) * 0.5f + (1.0f - a) * 24.0f, AGN_W, h };
-    painelFlutuante(r, ar, ag, ab, a);
-    t = txt_linha_corta(TXT_TITULO2, it->titulo, 246, 247, 250, 255, AGN_W - 96.0f);
-    txt_desenhar_alpha(t, r.x + 48.0f, r.y + 40.0f, a);
-    t = txt_linha(TXT_CAPTION, i18n("Últimas notícias · Google News"), 150, 153, 162, 255);
-    txt_desenhar_alpha(t, r.x + 48.0f, r.y + 40.0f + 58.0f, a);
-    y = r.y + 150.0f;
-    if (!resp) {
-      t = txt_linha(TXT_BODY, i18n("Procurando…"), 170, 174, 184, 255);
-      txt_desenhar_alpha(t, r.x + 48.0f, y + 30.0f, a);
-    } else if (n == 0) {
-      t = txt_linha(TXT_BODY, i18n("Nada publicado recentemente sobre este título."), 170, 174, 184, 255);
-      txt_desenhar_alpha(t, r.x + 48.0f, y + 30.0f, a);
-    }
-    gfx_recorte(r.x, y, r.w, r.y + r.h - 24.0f - y);
-    { int vis = (int)((r.y + r.h - 24.0f - y) / AGN_LINHA);
-      int ini = notFoco - vis + 1; if (ini < 0) ini = 0;
-      for (i = ini; i < n; i++) {
-        const Noticia *nt = noticias_item(it->imdb, i);
-        float ly = y + (float)(i - ini) * AGN_LINHA;
-        int f = (i == notFoco);
-        GfxRect lr = { r.x + 32.0f, ly, r.w - 64.0f, AGN_LINHA - 10.0f };
-        if (!nt) continue;
-        if (ly > r.y + r.h) break;
-        if (f) pilulaFoco(lr, ar, ag, ab, a);
-        t = txt_linha_corta(TXT_CALLOUT, nt->titulo, f ? tf : 238, f ? tf : 240, f ? tf : 244, 255, lr.w - 40.0f);
-        txt_desenhar_alpha(t, lr.x + 20.0f, ly + 14.0f, a);
-        { char sub[140];
-          if (nt->data[0] && nt->fonte[0]) snprintf(sub, sizeof sub, "%s · %s", nt->data, nt->fonte);
-          else snprintf(sub, sizeof sub, "%s%s", nt->data, nt->fonte);
-          t = txt_linha_corta(TXT_CAPTION, sub, f ? tf2 : 150, f ? tf2 : 153, f ? tf2 : 162, 255, lr.w - 40.0f);
-          txt_desenhar_alpha(t, lr.x + 20.0f, ly + 14.0f + 40.0f, a); }
-      } }
-    gfx_sem_recorte();
-    (void)tinta;
-    return;
-  }
-  { int no = ctxOpcoes(it), i;
-    const char *rot[CTX_N];
-    float h = 118.0f + (float)no * AGC_LINHA + 24.0f;
-    GfxRect r = { (NV_TELA_W - AGC_W) * 0.5f, (NV_TELA_H - h) * 0.5f + (1.0f - a) * 24.0f, AGC_W, h };
-    TxtLinha t;
-    rot[0] = i18n("Abrir o título");
-    rot[1] = i18n("Últimas notícias");
-    rot[2] = it->lembrete ? i18n("Desligar o lembrete") : i18n("Lembrar-me");
-    painelFlutuante(r, ar, ag, ab, a);
-    t = txt_linha_corta(TXT_TITULO3, it->titulo, 246, 247, 250, 255, AGC_W - 96.0f);
-    txt_desenhar_alpha(t, r.x + 48.0f, r.y + 36.0f, a);
-    for (i = 0; i < no; i++) {
-      int f = (i == ctxFoco);
-      GfxRect lr = { r.x + 24.0f, r.y + 118.0f + (float)i * AGC_LINHA, r.w - 48.0f, AGC_LINHA - 10.0f };
-      if (f) pilulaFoco(lr, ar, ag, ab, a);
-      t = txt_linha(TXT_CALLOUT, rot[i], f ? tf : 238, f ? tf : 240, f ? tf : 244, 255);
-      txt_desenhar_alpha(t, lr.x + 28.0f, lr.y + (lr.h - t.h) * 0.5f, a);
-    } }
+  // O veu subiu de 0,62 para 0,74: com o modal aberto, o "Agenda" e as linhas
+  // atras ainda liam como texto concorrente nas bordas do painel (critica de
+  // 29/09/2026). Com vidro, mais ainda: o painel deixa passar o fundo.
+  gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, (ajustes_vidro() ? 0.82f : 0.74f) * a);
+  if (ctxAberto == 3 || (ctxAberto == 0 && ctxUltimo == 3)) { desenhaNoticia(it, a); return; }
+  if (ctxAberto == 2 || (ctxAberto == 0 && ctxUltimo == 2)) { desenhaManchetes(it, a); return; }
+  desenhaModalSerie(it, a);
 }
 
 void agendaui_desenhar(Uint32 agora) {
@@ -1487,9 +2263,10 @@ void agendaui_desenhar(Uint32 agora) {
       txt_desenhar(l, x, yc);
       yc += (float)l.h + 12.0f; } }
 
-  { TxtLinha l = txt_linha(TXT_CAPTION,
-                           i18n("OK marca o lembrete. A TV não avisa sozinha: o aviso aparece quando você abrir o app no dia."),
-                           120, 122, 130, 255);
+  // Cortada na largura da tela: em alemao e russo a frase passa de 1400 px.
+  { TxtLinha l = txt_linha_corta(TXT_CAPTION,
+                           i18n("OK abre as opções. A TV não avisa sozinha: o aviso aparece quando você abrir o app no dia."),
+                           120, 122, 130, 255, xDir - x);
     txt_desenhar(l, x, yc);
     yc += (float)l.h + 8.0f; }
 

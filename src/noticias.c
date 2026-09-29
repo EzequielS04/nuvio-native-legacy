@@ -4,6 +4,7 @@
 #include "dados.h"
 #include "ajustes.h"
 #include "idiomacod.h"
+#include "idioma.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,11 @@
 
 typedef struct {
   char imdb[40];
+  // A LINGUA faz parte da chave: a busca e o arquivo de disco ja eram por
+  // idioma, mas a memoria nao — trocar de idioma com a Agenda aberta
+  // continuava mostrando as manchetes do anterior por ate 6 h (captura -fx-ru,
+  // 29/09/2026: citacao em portugues numa tela em russo).
+  int  lg;
   int  n, respondeu, emVoo;
   long quando;                 // epoch da resposta
   Noticia itens[NOT_MAX];
@@ -28,11 +34,12 @@ static Entrada ent[NOT_ENTRADAS];
 static int nEnt;
 static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 
-static Entrada *achar(const char *imdb) {
+static Entrada *acharLg(const char *imdb, int lg) {
   int i;
-  for (i = 0; i < nEnt; i++) if (!strcmp(ent[i].imdb, imdb)) return &ent[i];
+  for (i = 0; i < nEnt; i++) if (ent[i].lg == lg && !strcmp(ent[i].imdb, imdb)) return &ent[i];
   return NULL;
 }
+static Entrada *achar(const char *imdb) { return acharLg(imdb, ajustes_idioma()); }
 static Entrada *reservar(const char *imdb) {
   Entrada *e = achar(imdb);
   if (e) return e;
@@ -47,6 +54,7 @@ static Entrada *reservar(const char *imdb) {
   }
   memset(e, 0, sizeof *e);
   snprintf(e->imdb, sizeof e->imdb, "%s", imdb);
+  e->lg = ajustes_idioma();
   return e;
 }
 
@@ -159,6 +167,45 @@ static const struct { const char *cod, *serie, *filme, *hl, *gl, *ceid; } PAR[ID
 };
 _Static_assert(sizeof PAR / sizeof *PAR == IDIOMA_N, "noticias.c: uma linha de PAR por IDIOMA_* (idiomacod.h)");
 
+// Epoch UTC de "Sat, 20 Sep 2026 12:00:00 GMT". Conta civil (dias desde
+// 1970), nao timegm: timegm nao existe em toda libc das TVs, e mktime usaria o
+// fuso do aparelho.
+static long long epochRfc(const char *rfc) {
+  static const char *EN[] = { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" };
+  int d = 0, a = 0, h = 0, mi = 0, se = 0, m = -1, i;
+  char mes[8] = "";
+  long long y, era, yoe, doy, doe, dias;
+  if (sscanf(rfc, "%*[^,], %d %7s %d %d:%d:%d", &d, mes, &a, &h, &mi, &se) < 3) return 0;
+  for (i = 0; i < 12; i++) if (!strncmp(mes, EN[i], 3)) m = i + 1;
+  if (m < 1 || a < 1970 || d < 1) return 0;
+  // days_from_civil (Howard Hinnant).
+  y = a - (m <= 2);
+  era = (y >= 0 ? y : y - 399) / 400;
+  yoe = y - era * 400;
+  doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  dias = era * 146097 + doe - 719468;
+  return dias * 86400LL + h * 3600LL + mi * 60LL + se;
+}
+
+void noticias_quando(const Noticia *nt, long long agora, char *dst, int tam) {
+  long long s;
+  if (!dst || tam <= 0) return;
+  dst[0] = 0;
+  if (!nt) return;
+  s = nt->quando > 0 ? agora - nt->quando : -1;
+  // Relogio da TV atrasado (s < 0) ou pubDate ausente: a data curta, que nao
+  // depende do relogio.
+  if (s < 0 || s >= 7LL * 86400) { snprintf(dst, (size_t)tam, "%s", nt->data); return; }
+  if (s < 3600) {
+    int m = (int)(s / 60);
+    if (m < 2) snprintf(dst, (size_t)tam, "%s", i18n("agora mesmo"));
+    else snprintf(dst, (size_t)tam, i18n("há %d min"), m);
+  } else if (s < 86400) snprintf(dst, (size_t)tam, i18n("há %d h"), (int)(s / 3600));
+  else if (s < 2 * 86400) snprintf(dst, (size_t)tam, "%s", i18n("ontem"));
+  else snprintf(dst, (size_t)tam, i18n("há %d dias"), (int)(s / 86400));
+}
+
 // "Sat, 20 Sep 2026 12:00:00 GMT" -> "20 Sep" / "20 set" / "20 вер".
 static long dataCurta(const char *rfc, char *dst, size_t cap) {
   static const char *EN[] = { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" };
@@ -200,7 +247,17 @@ static void interpretar(Entrada *e, const char *xml) {
             !strncmp(nt->titulo + lt - lf - 3, " - ", 3))
           nt->titulo[lt - lf - 3] = 0; }
     }
-    if (campo(p, fim, "pubDate", buf, sizeof buf)) nt->chave = dataCurta(buf, nt->data, sizeof nt->data);
+    if (campo(p, fim, "pubDate", buf, sizeof buf)) {
+      nt->chave = dataCurta(buf, nt->data, sizeof nt->data);
+      nt->quando = epochRfc(buf);
+    }
+    // O LINK, so http(s): e o que noticia.c vai buscar, e uma TV nao abre
+    // javascript: nem file: de um XML de fora.
+    if (campo(p, fim, "link", buf, sizeof buf)) {
+      desentidar(buf);
+      if (!strncmp(buf, "https://", 8) || !strncmp(buf, "http://", 7))
+        snprintf(nt->link, sizeof nt->link, "%s", buf);
+    }
     if (nt->titulo[0]) e->n++;
     p = fim + 7;
   }
@@ -208,33 +265,41 @@ static void interpretar(Entrada *e, const char *xml) {
   // linha da Agenda mostra so a primeira: tem de ser a ultima noticia.
   { int i, j;
     for (i = 1; i < e->n; i++)
-      for (j = i; j > 0 && e->itens[j].chave > e->itens[j - 1].chave; j--) {
+      for (j = i; j > 0 && (e->itens[j].chave > e->itens[j - 1].chave ||
+                            (e->itens[j].chave == e->itens[j - 1].chave &&
+                             e->itens[j].quando > e->itens[j - 1].quando)); j--) {
         Noticia t = e->itens[j]; e->itens[j] = e->itens[j - 1]; e->itens[j - 1] = t;
       } }
 }
 
 // --- disco -------------------------------------------------------------------
 
-static void nomeDisco(const char *imdb, char *dst, size_t cap) {
-  snprintf(dst, cap, "noticias-%s-%s.txt", imdb, PAR[ajustes_idioma()].cod);
+static void nomeDisco(const char *imdb, int lg, char *dst, size_t cap) {
+  // "noticias2-": o formato ganhou link e instante (dois campos no FIM da
+  // linha). Nome novo e nao o mesmo arquivo, porque a versao anterior le o
+  // ultimo campo como manchete ate o fim da linha — um downgrade desenharia
+  // o link colado ao titulo.
+  snprintf(dst, cap, "noticias2-%s-%s.txt", imdb, PAR[lg >= 0 && lg < IDIOMA_N ? lg : 0].cod);
 }
 static void gravar(const Entrada *e) {
   char nome[80], *txt;
-  size_t cap = 64 + (size_t)e->n * (sizeof(Noticia) + 8), k = 0;
+  size_t cap = 64 + (size_t)e->n * (sizeof(Noticia) + 32), k = 0;
   int i;
   txt = malloc(cap);
   if (!txt) return;
   k += (size_t)snprintf(txt + k, cap - k, "%ld\n", e->quando);
   for (i = 0; i < e->n && k < cap; i++)
-    k += (size_t)snprintf(txt + k, cap - k, "%ld\t%s\t%s\t%s\n", e->itens[i].chave, e->itens[i].data, e->itens[i].fonte, e->itens[i].titulo);
-  nomeDisco(e->imdb, nome, sizeof nome);
+    k += (size_t)snprintf(txt + k, cap - k, "%ld\t%s\t%s\t%s\t%lld\t%s\n", e->itens[i].chave,
+                          e->itens[i].data, e->itens[i].fonte, e->itens[i].titulo,
+                          e->itens[i].quando, e->itens[i].link);
+  nomeDisco(e->imdb, e->lg, nome, sizeof nome);
   dados_gravar_leve(nome, txt);
   free(txt);
 }
 static int lerDisco(Entrada *e) {
   char nome[80], *txt, *l, *prox;
   long q;
-  nomeDisco(e->imdb, nome, sizeof nome);
+  nomeDisco(e->imdb, e->lg, nome, sizeof nome);
   txt = dados_ler(nome);
   if (!txt) return 0;
   q = atol(txt);
@@ -244,6 +309,7 @@ static int lerDisco(Entrada *e) {
   while (l && *++l && e->n < NOT_MAX) {
     Noticia *nt = &e->itens[e->n];
     char *t0, *t1, *t2;
+    memset(nt, 0, sizeof *nt);
     prox = strchr(l, '\n'); if (prox) *prox = 0;
     t0 = strchr(l, '\t'); if (!t0) { l = prox; continue; }
     *t0++ = 0;
@@ -254,6 +320,11 @@ static int lerDisco(Entrada *e) {
     nt->chave = atol(l);
     snprintf(nt->data, sizeof nt->data, "%s", t0);
     snprintf(nt->fonte, sizeof nt->fonte, "%s", t1);
+    { char *t3 = strchr(t2, '\t'), *t4 = NULL;
+      if (t3) { *t3++ = 0; t4 = strchr(t3, '\t'); if (t4) *t4++ = 0;
+                nt->quando = atoll(t3);
+                if (t4 && (!strncmp(t4, "https://", 8) || !strncmp(t4, "http://", 7)))
+                  snprintf(nt->link, sizeof nt->link, "%s", t4); } }
     snprintf(nt->titulo, sizeof nt->titulo, "%s", t2);
     e->n++;
     l = prox;
@@ -264,13 +335,13 @@ static int lerDisco(Entrada *e) {
 
 // --- rede --------------------------------------------------------------------
 
-typedef struct { char imdb[40]; char titulo[200]; char rede[64]; int serie; } Pedido;
+typedef struct { char imdb[40]; char titulo[200]; char rede[64]; int serie, lg; } Pedido;
 
 static void *buscar(void *arg) {
   Pedido *p = arg;
   char q[700], url[900], *xml;
   Entrada *e;
-  int lg = ajustes_idioma();
+  int lg = p->lg;
   // Titulo entre aspas mais a palavra de apoio: "Silo" serie acha a serie e
   // nao o armazem.
   // A REDE entra entre aspas quando se sabe ("Foundation" "Apple TV+"): sem
@@ -284,7 +355,7 @@ static void *buscar(void *arg) {
     // "rede falhou" no registro de 21/09/2026). O servico de recomendacoes
     // repassa o mesmo RSS com CORS (rota /v1/noticias, sem sessao). Sem
     // NV_REC_URL na build nao ha por onde: fica sem noticias, sem erro.
-    if (!NV_REC_URL[0]) { pthread_mutex_lock(&trava); e = achar(p->imdb);
+    if (!NV_REC_URL[0]) { pthread_mutex_lock(&trava); e = acharLg(p->imdb, p->lg);
       if (e) { e->n = 0; e->quando = (long)time(NULL); e->respondeu = 1; e->emVoo = 0; }
       pthread_mutex_unlock(&trava); free(p); return NULL; }
     snprintf(url, sizeof url, "%s/v1/noticias?q=%s&hl=%s&gl=%s&ceid=%s", NV_REC_URL,
@@ -296,7 +367,7 @@ static void *buscar(void *arg) {
   }
   xml = rede_baixar(url, 12);
   pthread_mutex_lock(&trava);
-  e = achar(p->imdb);
+  e = acharLg(p->imdb, p->lg);
   if (e) {
     e->n = 0;
     if (xml) interpretar(e, xml);
@@ -329,6 +400,7 @@ void noticias_pedir(const char *imdb, const char *titulo, const char *rede, int 
   snprintf(p->titulo, sizeof p->titulo, "%s", titulo);
   snprintf(p->rede, sizeof p->rede, "%s", rede ? rede : "");
   p->serie = serie;
+  p->lg = e->lg;
   if (pthread_create(&f, NULL, buscar, p) == 0) pthread_detach(f);
   else { free(p); pthread_mutex_lock(&trava); e->emVoo = 0; pthread_mutex_unlock(&trava); }
 }

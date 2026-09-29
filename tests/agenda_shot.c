@@ -38,6 +38,13 @@
 //                   confirmada" na serie que nenhuma fonte datou;
 //   -tmdbdesligado  o mesmo com a chave no pacote e o ajuste TMDB desligado:
 //                   o aviso passa a apontar Ajustes > Integracoes > TMDB;
+//   -fx-*           SEM REDE NENHUMA (fixtures): a linha focada com a citacao,
+//                   o MODAL que o OK abre (acoes + historico de lancamentos
+//                   desde o lembrete, com assistido / nao assistido /
+//                   desconhecido), o cartao de leitura da manchete em foco, a
+//                   noticia aberta com capa e o fallback com QR; e as mesmas
+//                   linhas em alemao e russo com textos longos (-fx-de-*,
+//                   -fx-ru-*), que e onde o texto estourava o cartao;
 //   -lembrete-*     os quatro estados do botao circular do lembrete no hero:
 //                   desligado/ligado, em repouso/em foco. O ligado em repouso e
 //                   o circulo ESMERALDA; o focado e a superficie clara com o
@@ -64,6 +71,10 @@
 #include "text.h"
 #include "tex_cache.h"
 #include "descoberta.h"
+#include "noticia.h"
+#include "leitura.h"
+#include "vistoep.h"
+#include <time.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -239,6 +250,132 @@ static char *cinemetaFalso(const char *url, int segundos, const char *const *cab
   return NULL;
 }
 
+// --- AS FIXTURES DO MODAL E DAS NOTICIAS ------------------------------------
+//
+// A grade do Cinemeta da serie da captura: T3E5..T3E9, com o lembrete ligado em
+// 20/08 (lembretes-p4.txt) e "hoje" em 16/09 — cinco episodios na janela.
+static char *cinemetaModal(const char *url, int segundos, const char *const *cab, int *st) {
+  (void)segundos; (void)cab;
+  *st = 404;
+  if (!strstr(url, "v3-cinemeta.strem.io/meta/series/tt777000")) return NULL;
+  *st = 200;
+  // A serie ALEMA tem grade propria (T2), com nomes de episodio compostos e
+  // longos: e o que testa o corte da coluna de nome no historico.
+  if (strstr(url, "tt7770002"))
+    return strdup("{\"meta\":{\"name\":\"Die Schule\",\"videos\":["
+      "{\"season\":2,\"episode\":5,\"name\":\"Weltraumbahnhofsicherheitsbeauftragtenversammlung\",\"released\":\"2026-09-04T07:00:00.000Z\"},"
+      "{\"season\":2,\"episode\":6,\"name\":\"Die Rückkehr der Donaudampfschifffahrtsgesellschaftskapitänswitwe\",\"released\":\"2026-09-11T07:00:00.000Z\"},"
+      "{\"season\":2,\"episode\":7,\"name\":\"Donaudampfschifffahrtsgesellschaftskapitänswitwe\",\"released\":\"2026-09-18T07:00:00.000Z\"}]}}");
+  return strdup("{\"meta\":{\"name\":\"Foundation\",\"videos\":["
+    "{\"season\":3,\"episode\":5,\"name\":\"The Pleasure of Your Company\",\"released\":\"2026-08-22T07:00:00.000Z\"},"
+    "{\"season\":3,\"episode\":6,\"name\":\"Shadows in the Math\",\"released\":\"2026-08-29T07:00:00.000Z\"},"
+    "{\"season\":3,\"episode\":7,\"name\":\"A Song for the End of Everything\",\"released\":\"2026-09-05T07:00:00.000Z\"},"
+    "{\"season\":3,\"episode\":8,\"name\":\"The Paths That Choose Us\",\"released\":\"2026-09-12T07:00:00.000Z\"},"
+    "{\"season\":3,\"episode\":9,\"name\":\"The Last Empress\",\"released\":\"2026-09-16T07:00:00.000Z\"},"
+    "{\"season\":3,\"episode\":10,\"name\":\"Sem dia\"}]}}");
+}
+
+static char *lerTudo(const char *nome) {
+  FILE *f = fopen(nome, "rb"); long n; char *b;
+  if (!f) return NULL;
+  fseek(f, 0, SEEK_END); n = ftell(f); fseek(f, 0, SEEK_SET);
+  b = malloc((size_t)n + 1);
+  if (b) { size_t k = fread(b, 1, (size_t)n, f); b[k] = 0; }
+  fclose(f);
+  return b;
+}
+
+// Uma string para JSON (aspas e barras escapadas; o resto passa em UTF-8).
+static void jsonStr(char *dst, size_t tam, const char *s) {
+  size_t n = 0;
+  if (n + 1 < tam) dst[n++] = '"';
+  for (; *s && n + 3 < tam; s++) {
+    if (*s == '"' || *s == '\\') dst[n++] = '\\';
+    dst[n++] = *s;
+  }
+  if (n + 1 < tam) dst[n++] = '"';
+  dst[n] = 0;
+}
+
+// A REDE DA NOTICIA, falsa. "https://worker.test/arc" e o caminho da Samsung (JSON do
+// worker, o mesmo parse de noticia.c) montado com o que o EXTRATOR tirou da
+// fixture real tests/fixtures/noticia-arc.html — so a capa troca por uma arte
+// local, porque a captura nao tem rede nem cache de disco de imagem. O IMDb
+// devolve 202 vazio, que e o que ele devolve de verdade a um cliente sem
+// JavaScript (medido 29/09/2026): e o fallback com QR.
+static char *noticiaFalsa(const char *url, const char *corpo, int *st) {
+  (void)corpo;
+  *st = 404;
+  if (strstr(url, "/v1/noticia?u=")) {
+    static char js[16384];
+    char *html = lerTudo("tests/fixtures/noticia-arc.html");
+    Leitura L;
+    char t[1400];
+    size_t n = 0;
+    int i;
+    if (!html) return NULL;
+    leitura_extrair(html, "https://www.estadao.com.br/minha-serie/play/233083-foundation-2-temporada/", &L);
+    free(html);
+    n += (size_t)snprintf(js + n, sizeof js - n, "{\"url\":\"https://www.estadao.com.br/minha-serie/play/233083-foundation-2-temporada/\",");
+    jsonStr(t, sizeof t, L.titulo); n += (size_t)snprintf(js + n, sizeof js - n, "\"titulo\":%s,", t);
+    jsonStr(t, sizeof t, L.resumo); n += (size_t)snprintf(js + n, sizeof js - n, "\"resumo\":%s,", t);
+    n += (size_t)snprintf(js + n, sizeof js - n, "\"imagem\":\"deploy/app/art/12.jpg\",");
+    jsonStr(t, sizeof t, L.site); n += (size_t)snprintf(js + n, sizeof js - n, "\"site\":%s,\"paragrafos\":[", t);
+    for (i = 0; i < L.n; i++) {
+      jsonStr(t, sizeof t, L.par[i]);
+      n += (size_t)snprintf(js + n, sizeof js - n, "%s%s", i ? "," : "", t);
+    }
+    snprintf(js + n, sizeof js - n, "]}");
+    *st = 200;
+    return strdup(js);
+  }
+  if (strstr(url, "imdb.com")) { *st = 202; return strdup(""); }
+  return NULL;
+}
+
+// As manchetes da serie da captura, pelo DISCO (noticias2-<imdb>-<lingua>.txt,
+// o formato que noticias.c grava): "agora" no topo para a validade de 6 h
+// valer, e os instantes relativos a agora para "há 3 h", "ontem", "há 4 dias".
+static void noticiasFixture(const char *imdb, const char *lingua, const char *const *manch, int nm) {
+  static const char *const FONTE[] = { "Estadão", "IMDb", "Omelete", "Variety", "Collider" };
+  static const int HORAS[] = { 3, 26, 96, 150, 400 };
+  static const char *const LINK[] = { "https://worker.test/arc", "https://www.imdb.com/pt/news/ni64147012/",
+                                      "https://worker.test/arc", "https://worker.test/arc", "https://worker.test/arc" };
+  char nome[120], txt[8192];
+  size_t n = 0;
+  long long agora = (long long)time(NULL);
+  int i;
+  n += (size_t)snprintf(txt + n, sizeof txt - n, "%lld\n", agora);
+  for (i = 0; i < nm && i < 5; i++)
+    n += (size_t)snprintf(txt + n, sizeof txt - n, "%ld\t%s\t%s\t%s\t%lld\t%s\n",
+                          20260916L - i, i == 4 ? "30 ago" : "16 set", FONTE[i], manch[i],
+                          agora - (long long)HORAS[i] * 3600LL, LINK[i]);
+  snprintf(nome, sizeof nome, "noticias2-%s-%s.txt", imdb, lingua);
+  dados_gravar_leve(nome, txt);
+}
+
+static void idiomaDeTeste(int idioma) {
+  char caminho[600];
+  FILE *f;
+  snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dados_dir());
+  f = fopen(caminho, "w");
+  if (!f) return;
+  fprintf(f, "idioma %d\nanimacoes 0\n", idioma);
+  fclose(f);
+  ajustes_dir(dados_dir());
+}
+
+static void esperaHistorico(const char *imdb) {
+  AgEp h[8];
+  int k, est = AG_HIST_BUSCANDO;
+  for (k = 0; k < 300; k++) {
+    agenda_historico(imdb, h, 8, &est);
+    if (est == AG_HIST_PRONTO || est == AG_HIST_FALHOU) break;
+    SDL_Delay(10);
+  }
+  printf("historico de %s: estado %d\n", imdb, est);
+}
+
 // Espera o fio da agenda e deixa a tela remontar (agendaui_atualizar remonta
 // na borda 1 -> 0 de agenda_atualizando).
 static void esperaFio(void) {
@@ -386,6 +523,7 @@ int main(int argc, char **argv) {
   printf("noticias Foundation: %d manchete(s)\n", noticias_n("tt10255564"));
   snprintf(nome, sizeof nome, "%s-noticia.bmp", saida);
   captura(nome, w);
+  // SEGURAR continua abrindo o MESMO modal que o toque curto abre agora.
   segurarOk();
   snprintf(nome, sizeof nome, "%s-ctx.bmp", saida);
   captura(nome, w);
@@ -535,6 +673,171 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-tmdbdesligado.bmp", saida);
   captura(nome, w);
   agenda_rede_teste(NULL);
+
+  // --- 13. O MODAL, AS MANCHETES E A NOTICIA, SEM REDE ------------------------
+  //
+  // Perfil 4, cache e lembretes pelo disco. As tres series tem IMDb proprio
+  // (tt777000*) para as manchetes virem do arquivo de fixture e nao da busca
+  // de verdade que a captura -noticia ja fez para tt10255564.
+  agenda_rede_teste(cinemetaModal);
+  noticia_rede_teste(noticiaFalsa);
+  perfis_definir_ativo(4);
+  idiomaDeTeste(0);
+  cache[0] = 0;
+  poeLinha(cache, sizeof cache, "tt7770001", "Foundation", "deploy/app/art/00.jpg",
+           AG_VOLTANDO, 3, 9, "The Last Empress", "2026-09-16", "2026-09-12",
+           "Gaal and Salvor reach Trantor on the day the Empire announces the end of the genetic dynasty.",
+           "finale", "Apple TV+", 58, 3);
+  poeLinha(cache, sizeof cache, "tt7770002", "Die Schule der magischen Tiere: Weltraumabenteuer",
+           "deploy/app/art/03.jpg", AG_VOLTANDO, 2, 7,
+           "Donaudampfschifffahrtsgesellschaftskapitänswitwe", "2026-09-18", "2026-09-11",
+           "Eine Donaudampfschifffahrtsgesellschaftskapitänswitwe erbt überraschend eine Raumstation.",
+           "mid_season", "ZDFneo Fernsehproduktionsgesellschaft", 52, 2);
+  poeLinha(cache, sizeof cache, "tt7770003", "Достопримечательности Санкт-Петербурга",
+           "deploy/app/art/05.jpg", AG_VOLTANDO, 1, 4, "Высокопревосходительство",
+           "2026-09-21", "2026-09-14", "", "premiere", "Кинопоиск", 47, 1);
+  dados_gravar("agenda-p4.txt", cache);
+  dados_gravar("lembretes-p4.txt", "tt7770001\t2026-09-16\t0\t2026-08-20\n"
+                                   "tt7770002\t2026-09-18\t0\t2026-09-01\n");
+  { static const char *const PT[] = {
+      "Foundation: 2ª temporada da série do Apple TV+ ganha primeiras imagens e novos nomes no elenco",
+      "Asimov's daughter on what her father would have thought of Apple's adaptation",
+      "Fundação: o que esperar do episódio final da terceira temporada",
+      "Apple TV renova Foundation para a quarta temporada",
+      "Os bastidores das filmagens em Praga" };
+    static const char *const DE[] = {
+      "Foundation: Donaudampfschifffahrtsgesellschaftskapitänswitwe erklärt die Staffelfinalvorbereitungen",
+      "Asimovs Tochter über die Serienadaption",
+      "Foundation: Was das Staffelfinale bringt",
+      "Apple verlängert Foundation um eine vierte Staffel",
+      "Hinter den Kulissen in Prag" };
+    static const char *const RU[] = {
+      "«Основание»: высокопревосходительство и достопримечательности финального сезона раскрыты",
+      "Дочь Азимова о сериале",
+      "«Основание»: чего ждать от финала",
+      "Apple продлила «Основание» на четвёртый сезон",
+      "Съёмки в Праге" };
+    noticiasFixture("tt7770001", "pt", PT, 5);
+    noticiasFixture("tt7770001", "de", DE, 5);
+    noticiasFixture("tt7770001", "ru", RU, 5);
+    noticiasFixture("tt7770002", "de", DE, 5);
+    noticiasFixture("tt7770003", "ru", RU, 5); }
+  // O MAPA DE VISTOS de tt7770001: T3E5 e T3E6 assistidos, T3E7 nao, e o resto
+  // o mapa nao sabe — os tres estados que o modal escreve.
+  vistoep_esquecer();
+  vistoep_definir("tt7770001", 3, 5, 1);
+  vistoep_definir("tt7770001", 3, 6, 1);
+  vistoep_definir("tt7770001", 3, 7, 0);
+  // A alema: os tres estados com os rotulos alemaes ("Nicht gesehen" e o
+  // mais longo da coluna de estado).
+  vistoep_definir("tt7770002", 2, 5, 1);
+  vistoep_definir("tt7770002", 2, 6, 0);
+  { CatItem ci[3];
+    static const char *ID[3] = { "tt7770001", "tt7770002", "tt7770003" };
+    int i;
+    memset(ci, 0, sizeof ci);
+    for (i = 0; i < 3; i++) {
+      snprintf(ci[i].imdb, sizeof ci[i].imdb, "%s", ID[i]);
+      snprintf(ci[i].tipo, sizeof ci[i].tipo, "%s", "series");
+      snprintf(ci[i].genero, sizeof ci[i].genero, "%s",
+               "Programa de TV \xc2\xb7 Science-Fiction-Abenteuer");
+      snprintf(ci[i].meta, sizeof ci[i].meta, "%s", "2026 · 3 temporadas");
+      ci[i].nota = 84 - i * 3;
+      ci[i].naLista = 1;
+      ci[i].nTemporadas = 3;
+    }
+    snprintf(ci[0].titulo, sizeof ci[0].titulo, "%s", "Foundation");
+    snprintf(ci[1].titulo, sizeof ci[1].titulo, "%s", "Die Schule der magischen Tiere: Weltraumabenteuer");
+    snprintf(ci[2].titulo, sizeof ci[2].titulo, "%s", "Достопримечательности Санкт-Петербурга");
+    snprintf(ci[0].poster, sizeof ci[0].poster, "%s", "deploy/app/art/00.jpg");
+    snprintf(ci[1].poster, sizeof ci[1].poster, "%s", "deploy/app/art/03.jpg");
+    snprintf(ci[2].poster, sizeof ci[2].poster, "%s", "deploy/app/art/05.jpg");
+    cat_definir_tudo(ci, 3, NULL, 0); }
+  agenda_iniciar();
+  oQue = DES_AGENDA;
+  agendaui_iniciar();
+  snprintf(nome, sizeof nome, "%s-fx-foco.bmp", saida);
+  captura(nome, w);
+  // O OK (toque curto) ABRE O MODAL.
+  tecla(SDLK_RETURN);
+  esperaHistorico("tt7770001");
+  snprintf(nome, sizeof nome, "%s-fx-modal.bmp", saida);
+  captura(nome, w);
+  // Acoes: Assistir T3E7, Abrir o titulo, Ultimas noticias, Marcar 3, Desligar.
+  tecla(SDLK_DOWN); tecla(SDLK_DOWN);
+  snprintf(nome, sizeof nome, "%s-fx-modal-foco.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_RETURN);
+  // A manchete em foco pede o trecho depois de 350 ms parada.
+  SDL_Delay(420);
+  snprintf(nome, sizeof nome, "%s-aquece.bmp", saida);
+  captura(nome, w);
+  SDL_Delay(100);
+  snprintf(nome, sizeof nome, "%s-fx-manchetes.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_RETURN);
+  SDL_Delay(150);
+  snprintf(nome, sizeof nome, "%s-fx-noticia.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_DOWN); tecla(SDLK_DOWN); tecla(SDLK_DOWN);
+  snprintf(nome, sizeof nome, "%s-fx-noticia-rolada.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_ESCAPE);
+  tecla(SDLK_DOWN);
+  tecla(SDLK_RETURN);
+  SDL_Delay(150);
+  snprintf(nome, sizeof nome, "%s-fx-noticia-qr.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_ESCAPE); tecla(SDLK_ESCAPE);
+  // Marcar os lancados como assistidos: o historico muda no mesmo quadro.
+  tecla(SDLK_DOWN);
+  tecla(SDLK_RETURN);
+  snprintf(nome, sizeof nome, "%s-fx-modal-vistos.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_ESCAPE);
+  // VIDRO: o mesmo modal na interface de vidro.
+  ajustes_definir_vidro(1);
+  vistoep_definir("tt7770001", 3, 7, 0);
+  tecla(SDLK_RETURN);
+  snprintf(nome, sizeof nome, "%s-fx-modal-vidro.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_ESCAPE);
+  ajustes_definir_vidro(0);
+
+  // ALEMAO E RUSSO: o titulo, o episodio, a rede e a citacao longos, e a
+  // legenda do sino ("Erinnerung aktiv", "Напоминание включено") na coluna
+  // de 120 px. Foco na segunda linha (a alema) e na terceira (a russa).
+  idiomaDeTeste(6);
+  agendaui_iniciar();
+  tecla(SDLK_DOWN);
+  snprintf(nome, sizeof nome, "%s-fx-de-foco.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_RETURN);
+  esperaHistorico("tt7770002");
+  snprintf(nome, sizeof nome, "%s-fx-de-modal.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_ESCAPE);
+  idiomaDeTeste(4);
+  agendaui_iniciar();
+  tecla(SDLK_DOWN); tecla(SDLK_DOWN);
+  snprintf(nome, sizeof nome, "%s-fx-ru-foco.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_UP); tecla(SDLK_UP);
+  snprintf(nome, sizeof nome, "%s-fx-ru-foco1.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_RETURN);
+  esperaHistorico("tt7770001");
+  snprintf(nome, sizeof nome, "%s-fx-ru-modal.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_DOWN); tecla(SDLK_DOWN); tecla(SDLK_RETURN);
+  SDL_Delay(420);
+  snprintf(nome, sizeof nome, "%s-aquece.bmp", saida);
+  captura(nome, w);
+  snprintf(nome, sizeof nome, "%s-fx-ru-manchetes.bmp", saida);
+  captura(nome, w);
+  idiomaDeTeste(0);
+  agenda_rede_teste(NULL);
+  noticia_rede_teste(NULL);
 
   tex_encerrar();
   txt_encerrar();

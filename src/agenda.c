@@ -8,6 +8,7 @@
 #include "rede.h"
 #include "js.h"
 #include "trakt.h"
+#include "vistoep.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,7 +62,13 @@ static int   cacheSujo;
 // TMDB adia o episodio, o lembrete continua valendo e o "avisado" e zerado
 // porque a data mudou. Sem ela, um adiamento avisaria no dia velho e nunca
 // mais.
-typedef struct { char imdb[24]; char data[12]; int avisado; } AgLembrete;
+//
+// `desde` (4o campo, entrou com o historico de lancamentos do modal) e o DIA em
+// que o dono ligou o lembrete — o comeco da janela "lancados desde o lembrete".
+// Nao e `data`: essa acompanha os adiamentos e ja nao diz quando o pedido foi
+// feito. Arquivo antigo, sem o campo: o historico usa `data` no lugar, que e o
+// primeiro episodio que o lembrete podia ter anunciado.
+typedef struct { char imdb[24]; char data[12]; int avisado; char desde[12]; } AgLembrete;
 #define AG_LEMB_MAX 120
 static AgLembrete lembretes[AG_LEMB_MAX];
 static int nLembretes;
@@ -421,14 +428,14 @@ static void lerCache(void) {
 }
 
 static void gravarLembretes(void) {
-  char txt[AG_LEMB_MAX * 48 + 8];
+  char txt[AG_LEMB_MAX * 64 + 8];
   size_t usado = 0;
   int i;
   txt[0] = 0;
   for (i = 0; i < nLembretes; i++)
-    usado += (size_t)snprintf(txt + usado, sizeof txt - usado, "%s\t%s\t%d\n",
+    usado += (size_t)snprintf(txt + usado, sizeof txt - usado, "%s\t%s\t%d\t%s\n",
                               lembretes[i].imdb, lembretes[i].data,
-                              lembretes[i].avisado);
+                              lembretes[i].avisado, lembretes[i].desde);
   dados_gravar(arquivo("lembretes"), txt);
 }
 
@@ -445,7 +452,9 @@ static void lerLembretes(void) {
     memset(&l, 0, sizeof l);
     q = campo(q, l.imdb, sizeof l.imdb);
     q = campo(q, l.data, sizeof l.data);
-    if (q) { campo(q, n, sizeof n); l.avisado = atoi(n); }
+    if (q) { q = campo(q, n, sizeof n); l.avisado = atoi(n); }
+    if (q) campo(q, l.desde, sizeof l.desde);
+    if (!ehIso(l.desde)) l.desde[0] = 0;
     if (l.imdb[0]) lembretes[nLembretes++] = l;
     while (*p && *p != '\n') p++;
     if (*p == '\n') p++;
@@ -693,9 +702,12 @@ int agenda_alternar_lembrete(const char *imdb) {
   char id[24];
   int i, achou = -1, novo = 0;
   const AgItem *r;
+  char hoje[12];
   serieDe(id, sizeof id, imdb);
   if (!id[0]) return 0;
   r = agenda_registro(imdb);
+  // Fora da trava: agenda_hoje() reescreve um buffer proprio do fio principal.
+  snprintf(hoje, sizeof hoje, "%s", agenda_hoje());
   pthread_mutex_lock(&trava);
   for (i = 0; i < nLembretes; i++)
     if (!strcmp(lembretes[i].imdb, id)) { achou = i; break; }
@@ -707,6 +719,7 @@ int agenda_alternar_lembrete(const char *imdb) {
     memset(l, 0, sizeof *l);
     snprintf(l->imdb, sizeof l->imdb, "%s", id);
     snprintf(l->data, sizeof l->data, "%s", r->dataProx);
+    snprintf(l->desde, sizeof l->desde, "%s", hoje);
     novo = 1;
   }
   gravarLembretes();
@@ -1405,4 +1418,224 @@ int agenda_atualizando(void) {
   v = fioVivo;
   pthread_mutex_unlock(&trava);
   return v;
+}
+
+// ---------------------------------------------------------------------------
+// HISTORICO DE LANCAMENTOS (modal da Agenda)
+//
+// O que o modal responde: "desde que eu liguei o lembrete, o que saiu, e o que
+// disso eu ja vi?". Nenhuma das tres fontes do fio acima guarda a grade: o
+// registro so tem o proximo e o ultimo episodio. A grade inteira vem de UM
+// pedido ao Cinemeta (/meta/series/<id>.json, o mesmo host e o mesmo corpo de
+// cinemetaBuscar, CORS aberto na Samsung, sem chave), feito quando o modal
+// ABRE — nunca por linha da lista. A resposta fica em memoria por 30 min para
+// a mesma serie: abrir e fechar o modal nao repete o pedido.
+//
+// O "visto" NAO e guardado aqui: sai de vistoep_estado a cada leitura, que e o
+// mapa que o Trakt (/sync/watched/shows) e a conta preenchem. Assim marcar
+// como assistido no proprio modal aparece no mesmo quadro, e o -1 ("nao se
+// sabe") continua -1 quando nenhuma fonte falou desta serie — a tela escreve
+// "desconhecido" em vez de supor que nao foi visto.
+// ---------------------------------------------------------------------------
+
+#define AG_EPS_MAX 400
+#define AG_HIST_VALIDADE_S (30 * 60)
+#define AG_HIST_ULTIMOS 6
+
+static AgEp   histTodos[AG_EPS_MAX];
+static int    histN, histEstado;
+static char   histImdb[24];
+static long   histQuando;
+static int    histVoo;
+
+// Todos os episodios com data (temporada > 0, como em cinemetaLer: especial de
+// bastidor nao e episodio de ninguem), em ordem de data, depois temporada e
+// episodio. `visto` sai -1; quem le preenche.
+static int lerVideos(const char *corpo, AgEp *saida, int max) {
+  const char *m = corpo ? strstr(corpo, "\"meta\"") : NULL;
+  const char *fim, *v;
+  int n = 0, i, j;
+  if (!m || !(m = strchr(m, '{'))) return 0;
+  fim = js_fim(m);
+  for (v = js_array(m, fim, "videos"); v && v < fim && n < max; ) {
+    const char *vf = js_fim(v);
+    char rel[40] = "";
+    AgEp e;
+    memset(&e, 0, sizeof e);
+    e.temporada = (int)js_num(v, vf, "season", 0.0);
+    e.episodio  = (int)js_num(v, vf, "episode", 0.0);
+    js_texto_raiz_em(v, vf, "released", rel, sizeof rel);
+    // O DIA do `released`, e nao o instante convertido: ver a nota de
+    // cinemetaLer — o horario do Cinemeta e fixo por serie e nao e a exibicao.
+    if (e.temporada > 0 && e.episodio > 0 && ehIso(rel)) {
+      snprintf(e.data, sizeof e.data, "%.10s", rel);
+      if (!js_texto_raiz_em(v, vf, "name", e.nome, sizeof e.nome) || !e.nome[0])
+        js_texto_raiz_em(v, vf, "title", e.nome, sizeof e.nome);
+      e.visto = -1;
+      saida[n++] = e;
+    }
+    v = js_prox(vf);
+  }
+  // Insercao: sao centenas no maximo, e a grade do Cinemeta ja vem quase em
+  // ordem (por temporada) — a insercao fica perto de linear.
+  for (i = 1; i < n; i++) {
+    AgEp t = saida[i];
+    for (j = i; j > 0; j--) {
+      const AgEp *a = &saida[j - 1];
+      int c = strcmp(a->data, t.data);
+      if (c < 0 || (c == 0 && (a->temporada < t.temporada ||
+                               (a->temporada == t.temporada && a->episodio <= t.episodio))))
+        break;
+      saida[j] = saida[j - 1];
+    }
+    saida[j] = t;
+  }
+  return n;
+}
+
+// A JANELA. Com `desde`: tudo que foi ao ar de `desde` ate `hoje`, inclusive
+// os dois dias. Sem `desde` (serie sem lembrete, ou encerrada): os ultimos
+// AG_HIST_ULTIMOS que ja foram ao ar — o modal continua dizendo algo util sobre
+// uma serie que o dono so acompanha. Passando de `max`, ficam os MAIS NOVOS:
+// quem ligou o lembrete ha um ano quer ver o que saiu agora, nao o primeiro
+// episodio da janela.
+static int janela(const AgEp *todos, int n, const char *desde, const char *hoje,
+                  AgEp *saida, int max) {
+  int i, ini = -1, fimJ = -1, k = 0;
+  if (max <= 0 || !ehIso(hoje)) return 0;
+  for (i = 0; i < n; i++) {
+    if (strcmp(todos[i].data, hoje) > 0) break;
+    if (ehIso(desde) && strcmp(todos[i].data, desde) < 0) continue;
+    if (ini < 0) ini = i;
+    fimJ = i;
+  }
+  if (ini < 0) return 0;
+  if (!ehIso(desde) && fimJ - ini + 1 > AG_HIST_ULTIMOS) ini = fimJ - AG_HIST_ULTIMOS + 1;
+  if (fimJ - ini + 1 > max) ini = fimJ - max + 1;
+  for (i = ini; i <= fimJ; i++) saida[k++] = todos[i];
+  return k;
+}
+
+int agenda_historico_ler(const char *corpo, const char *desde, const char *hoje,
+                         AgEp *saida, int max) {
+  static AgEp todos[AG_EPS_MAX];   // estatico: 400 x ~150 B nao vai para a pilha
+  int n = lerVideos(corpo, todos, AG_EPS_MAX);
+  return janela(todos, n, desde, hoje, saida, max);
+}
+
+const char *agenda_lembrete_desde(const char *imdb) {
+  static char d[12];
+  char id[24];
+  int i;
+  d[0] = 0;
+  serieDe(id, sizeof id, imdb);
+  pthread_mutex_lock(&trava);
+  for (i = 0; i < nLembretes; i++)
+    if (!strcmp(lembretes[i].imdb, id)) {
+      snprintf(d, sizeof d, "%s", lembretes[i].desde[0] ? lembretes[i].desde : lembretes[i].data);
+      break;
+    }
+  pthread_mutex_unlock(&trava);
+  return d;
+}
+
+typedef struct { char imdb[24]; } HistPedido;
+
+static void *fioHistorico(void *arg) {
+  HistPedido *p = arg;
+  static AgEp tmp[AG_EPS_MAX];
+  for (;;) {
+    char url[160];
+    char *corpo;
+    char feito[24];
+    int n = 0, outra;
+    snprintf(feito, sizeof feito, "%s", p->imdb);
+    snprintf(url, sizeof url, "https://v3-cinemeta.strem.io/meta/series/%s.json", p->imdb);
+    corpo = baixar(url, NULL, NULL);
+    if (corpo) n = lerVideos(corpo, tmp, AG_EPS_MAX);
+    pthread_mutex_lock(&trava);
+    outra = strcmp(histImdb, p->imdb) != 0;
+    if (!outra) {
+      memcpy(histTodos, tmp, sizeof(AgEp) * (size_t)n);
+      histN = n;
+      histEstado = corpo ? AG_HIST_PRONTO : AG_HIST_FALHOU;
+      histQuando = (long)time(NULL);
+      histVoo = 0;
+    } else {
+      // O ALVO MUDOU com este fio em voo (o modal fechou e abriu em outra
+      // linha): agenda_historico_pedir so trocou histImdb e confiou neste fio
+      // para buscar a nova. Sem o laco, a segunda serie ficava em BUSCANDO
+      // para sempre — ninguem mais disparava o pedido.
+      snprintf(p->imdb, sizeof p->imdb, "%s", histImdb);
+    }
+    pthread_mutex_unlock(&trava);
+    printf("[agenda] historico %s: %d episodio(s)%s%s\n", feito, n, corpo ? "" : " (rede falhou)",
+           outra ? " (descartado: outra serie pedida)" : "");
+    fflush(stdout);
+    free(corpo);
+    if (!outra) break;
+  }
+  free(p);
+  return NULL;
+}
+
+void agenda_historico_pedir(const char *imdb) {
+  char id[24];
+  HistPedido *p;
+  pthread_t f;
+  serieDe(id, sizeof id, imdb);
+  if (!id[0]) return;
+  pthread_mutex_lock(&trava);
+  if (!strcmp(histImdb, id) &&
+      (histVoo || (histEstado == AG_HIST_PRONTO &&
+                   (long)time(NULL) - histQuando < AG_HIST_VALIDADE_S))) {
+    pthread_mutex_unlock(&trava);
+    return;
+  }
+  // Um fio por vez: um segundo pedido com o primeiro em voo so troca o alvo, e
+  // o fio antigo descarta o resultado ao ver que histImdb mudou.
+  snprintf(histImdb, sizeof histImdb, "%s", id);
+  histN = 0; histEstado = AG_HIST_BUSCANDO;
+  if (histVoo) { pthread_mutex_unlock(&trava); return; }
+  histVoo = 1;
+  pthread_mutex_unlock(&trava);
+  p = calloc(1, sizeof *p);
+  if (!p) { pthread_mutex_lock(&trava); histVoo = 0; histEstado = AG_HIST_FALHOU; pthread_mutex_unlock(&trava); return; }
+  snprintf(p->imdb, sizeof p->imdb, "%s", id);
+  if (pthread_create(&f, NULL, fioHistorico, p) != 0) {
+    free(p);
+    pthread_mutex_lock(&trava); histVoo = 0; histEstado = AG_HIST_FALHOU; pthread_mutex_unlock(&trava);
+    return;
+  }
+  pthread_detach(f);
+}
+
+int agenda_historico(const char *imdb, AgEp *saida, int max, int *estado) {
+  char id[24], desde[12], hoje[12];
+  int n = 0, i, est;
+  serieDe(id, sizeof id, imdb);
+  snprintf(desde, sizeof desde, "%s", agenda_lembrete_desde(id));
+  snprintf(hoje, sizeof hoje, "%s", agenda_hoje());
+  pthread_mutex_lock(&trava);
+  est = strcmp(histImdb, id) ? AG_HIST_NADA : histEstado;
+  // Com o fio em voo para OUTRA serie (troca rapida de linha), o antigo ja nao
+  // conta; a espera e da serie pedida.
+  if (est == AG_HIST_PRONTO) n = janela(histTodos, histN, desde, hoje, saida, max);
+  pthread_mutex_unlock(&trava);
+  for (i = 0; i < n; i++)
+    saida[i].visto = vistoep_estado(id, saida[i].temporada, saida[i].episodio);
+  if (estado) *estado = est;
+  return n;
+}
+
+int agenda_historico_proximo(const AgEp *eps, int n) {
+  int i, desconhecido = -1;
+  for (i = 0; i < n; i++) {
+    if (eps[i].visto == 0) return i;
+    if (eps[i].visto < 0 && desconhecido < 0) desconhecido = i;
+  }
+  // Nenhum "nao visto" CONFIRMADO: sem mapa nenhum para a serie, o primeiro
+  // da janela e o melhor palpite honesto (o modal diz "desconhecido" ao lado).
+  // Com todos vistos, nao ha o que assistir e o modal nao oferece a acao.
+  return desconhecido;
 }

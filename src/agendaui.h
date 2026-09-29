@@ -1,10 +1,8 @@
 // Tela AGENDA: a LINHA DO TEMPO das series que o dono acompanha.
 //
 // Uma coluna, um eixo vertical, uma estacao por serie, ordenada pela data do
-// proximo episodio. O D-pad so sobe e desce; OK liga ou desliga o lembrete
-// daquela serie. Nao ha segundo nivel de navegacao de proposito: a tela responde
-// a uma pergunta so ("o que sai, e quando"), e abrir o titulo daqui e o que a
-// Biblioteca ja faz.
+// proximo episodio. O D-pad so sobe e desce; OK abre o MODAL da linha (acoes,
+// historico de lancamentos desde o lembrete, noticias). Ver agendaui.c.
 //
 // Os dados vem inteiros de agenda.c — esta tela nao sabe de rede, de TMDB nem
 // de arquivo. Ela pede agenda_montar() ao abrir e desenha o que voltar.
@@ -23,6 +21,10 @@ int  agendaui_quer_sair(void);   // 1 quando o Back deve fechar a tela
 // NULL. Consumido uma vez — o mesmo contrato de avisos_pediu_abrir.
 const char *agendaui_pediu_abrir(void);
 int  agendaui_menu_aberto(void);
+// "Assistir T<n>E<n>" do modal: o IMDb da serie e o episodio a tocar, ou NULL.
+// Consumido uma vez. Quem abre o titulo e pede a reproducao e o roteador
+// (app.c), pelo mesmo caminho do cartao de Continuar assistindo.
+const char *agendaui_pediu_tocar(int *temporada, int *episodio);
 
 // O DESPERTADOR, desenhado em qualquer tela que fale de lembrete (a estacao da
 // agenda, o botao do hero, o cartao de abertura). Mora aqui porque as tres
