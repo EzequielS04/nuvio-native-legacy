@@ -23,6 +23,8 @@
 #define K_RD "CHAVE-RD-SEGREDO-1"
 #define K_TB "CHAVE-TB-SEGREDO-2"
 #define K_PM "CHAVE-PM-SEGREDO-3"
+#define K_AD "CHAVE-AD-SEGREDO-4"
+#define K_AD_LOCAL "CHAVE-AD-LOCAL-5"
 
 #define OK(s) fprintf(stderr, "ok  %s\n", s)
 
@@ -49,6 +51,83 @@ static int   tbSoCache = -1, tbBaixando;
 
 static char *dup2s(const char *s) { return strdup(s); }
 
+// --- AllDebrid. Modos: o que o upload responde, a sequencia de statusCode que o
+// status devolve, e o que cada rota recebeu (para provar a ORDEM e a auth).
+static int  adUploadModo;       // 0 pronto, 1 fora de cache, 2 AUTH_BAD_APIKEY,
+                                // 3 MUST_BE_PREMIUM, 4 TOO_MANY_ACTIVE, 5 magnet invalido
+static int  adSeqStatus[8], adNSeq, adIdxStatus;   // statusCode em cada olhada
+static int  bateuAD[8];         // upload, status, files, unlock, delete, user, delayed
+static char adAuthVisto[200], adUrlVista[400], adCorpoUnlock[900];
+static int  adUserPremium = 1, adUserRuim;
+static int  adOrdem[16], adNOrdem;
+static void adRegistra(int rota) { if (adNOrdem < 16) adOrdem[adNOrdem++] = rota; bateuAD[rota]++; }
+static char *adResp(const char *url, const char *const *cab, const char *corpo, int *st) {
+  int k;
+  *st = 200;
+  snprintf(adUrlVista, sizeof adUrlVista, "%s", url);
+  for (k = 0; cab && cab[k]; k++)
+    if (!strncmp(cab[k], "Authorization:", 14)) snprintf(adAuthVisto, sizeof adAuthVisto, "%s", cab[k]);
+  assert(strstr(url, "agent=nuvio"));
+  assert(!strstr(url, "CHAVE-AD"));               // a chave nunca vai na URL
+  if (strstr(url, "/v4/magnet/upload")) {
+    adRegistra(0);
+    assert(corpo && strstr(corpo, "magnets%5B%5D=magnet%3A%3Fxt%3Durn%3Abtih%3Adeadbeef"));
+    if (adUploadModo == 2) {
+      // a API real nao ecoa a chave; se ecoasse (esta), o log a cortaria
+      char b[400];
+      snprintf(b, sizeof b, "{\"status\":\"error\",\"error\":{\"code\":\"AUTH_BAD_APIKEY\","
+               "\"message\":\"The auth apikey is invalid %s\"}}", adAuthVisto + 22);
+      return dup2s(b);
+    }
+    if (adUploadModo == 3) return dup2s("{\"status\":\"success\",\"data\":{\"magnets\":[{\"magnet\":\"x\","
+                                        "\"error\":{\"code\":\"MAGNET_MUST_BE_PREMIUM\",\"message\":\"Premium required\"}}]}}");
+    if (adUploadModo == 4) return dup2s("{\"status\":\"error\",\"error\":{\"code\":\"MAGNET_TOO_MANY_ACTIVE\","
+                                        "\"message\":\"Too many active magnets\"}}");
+    if (adUploadModo == 5) return dup2s("{\"status\":\"success\",\"data\":{\"magnets\":[{\"magnet\":\"x\","
+                                        "\"error\":{\"code\":\"MAGNET_INVALID_URI\",\"message\":\"Magnet is not valid\"}}]}}");
+    return dup2s(adUploadModo == 1
+      ? "{\"status\":\"success\",\"data\":{\"magnets\":[{\"magnet\":\"x\",\"hash\":\"deadbeef\",\"name\":\"Show S02\",\"size\":1000,\"ready\":false,\"id\":555}]}}"
+      : "{\"status\":\"success\",\"data\":{\"magnets\":[{\"magnet\":\"x\",\"hash\":\"deadbeef\",\"name\":\"Show S02\",\"size\":3900000000,\"ready\":true,\"id\":555}]}}");
+  }
+  if (strstr(url, "/v4.1/magnet/status")) {
+    int sc = adSeqStatus[adIdxStatus < adNSeq ? adIdxStatus : adNSeq - 1];
+    adRegistra(1); adIdxStatus++;
+    assert(strstr(corpo, "id=555"));
+    { char b[300];
+      snprintf(b, sizeof b, "{\"status\":\"success\",\"data\":{\"magnets\":[{\"id\":555,\"filename\":\"Show S02\","
+               "\"size\":1000,\"status\":\"x\",\"statusCode\":%d,\"downloaded\":%d,\"seeders\":3}]}}", sc, sc == 4 ? 1000 : sc == 0 ? 0 : 370);
+      return dup2s(b); }
+  }
+  if (strstr(url, "/v4/magnet/files")) {
+    adRegistra(2);
+    assert(strstr(corpo, "id%5B%5D=555"));
+    return dup2s("{\"status\":\"success\",\"data\":{\"magnets\":[{\"id\":\"555\",\"files\":["
+      "{\"n\":\"Show.S02\",\"e\":["
+        "{\"n\":\"Show.S02E04.1080p.mkv\",\"s\":2000000000,\"l\":\"https:\\/\\/alldebrid.com\\/f\\/AAA\"},"
+        "{\"n\":\"Show.S02E05.1080p.mkv\",\"s\":1900000000,\"l\":\"https:\\/\\/alldebrid.com\\/f\\/BBB\"},"
+        "{\"n\":\"sample.txt\",\"s\":10,\"l\":\"https:\\/\\/alldebrid.com\\/f\\/CCC\"}]}]}]}}");
+  }
+  if (strstr(url, "/v4/link/unlock")) {
+    adRegistra(3);
+    snprintf(adCorpoUnlock, sizeof adCorpoUnlock, "%s", corpo);
+    if (strstr(corpo, "%2Ff%2FBBB"))
+      return dup2s("{\"status\":\"success\",\"data\":{\"link\":\"https:\\/\\/s1.debrid.it\\/dl\\/UNL5\\/Show.S02E05.mkv\","
+                   "\"filename\":\"Show.S02E05.1080p.mkv\",\"host\":\"magnet\",\"filesize\":1900000000}}");
+    return dup2s("{\"status\":\"success\",\"data\":{\"link\":\"https:\\/\\/s1.debrid.it\\/dl\\/UNL4\\/Show.S02E04.mkv\"}}");
+  }
+  if (strstr(url, "/v4/magnet/delete")) { adRegistra(4); return dup2s("{\"status\":\"success\",\"data\":{}}"); }
+  if (strstr(url, "/v4/user")) {
+    adRegistra(5);
+    if (adUserRuim) return dup2s("{\"status\":\"error\",\"error\":{\"code\":\"AUTH_BAD_APIKEY\",\"message\":\"bad\"}}");
+    return dup2s(adUserPremium
+      ? "{\"status\":\"success\",\"data\":{\"user\":{\"username\":\"fulano-segredo\",\"email\":\"f@x.com\","
+        "\"isPremium\":true,\"premiumUntil\":1798761600}}}"
+      : "{\"status\":\"success\",\"data\":{\"user\":{\"username\":\"fulano-segredo\",\"isPremium\":false,\"premiumUntil\":0}}}");
+  }
+  return dup2s("{}");
+}
+
+
 char *rede_postar_st(const char *url, int s, const char *const *cab,
                      const char *corpo, int *st) {
   int k;
@@ -56,6 +135,12 @@ char *rede_postar_st(const char *url, int s, const char *const *cab,
   (void)s;
   for (k = 0; cab && cab[k]; k++)
     if (!strncmp(cab[k], "Content-Type:", 13)) snprintf(ct, sizeof ct, "%s", cab[k]);
+
+  // --- AllDebrid
+  if (strstr(url, "api.alldebrid.com")) {
+    assert(strstr(ct, "x-www-form-urlencoded"));
+    return adResp(url, cab, corpo, st);
+  }
 
   // --- Real-Debrid
   if (strstr(url, "real-debrid.com")) {
@@ -122,8 +207,9 @@ char *rede_postar_st(const char *url, int s, const char *const *cab,
 }
 
 char *rede_baixar_st(const char *url, int s, const char *const *cab, int *st) {
-  (void)s; (void)cab; *st = 200;
+  (void)s; *st = 200;
 
+  if (strstr(url, "api.alldebrid.com")) return adResp(url, cab, NULL, st);
   if (strstr(url, "real-debrid.com")) {
     assert(strstr(url, "torrents/info/ABC123"));
     return dup2s("{\"id\":\"ABC123\",\"status\":\"downloaded\",\"files\":["
@@ -449,6 +535,190 @@ static void premiumize(void) {
   pmEmCache = 1;
 }
 
+
+static void adZera(int modo, int a, int b, int c) {
+  memset(bateuAD, 0, sizeof bateuAD);
+  memset(adSeqStatus, 0, sizeof adSeqStatus);
+  adUploadModo = modo; adIdxStatus = 0; adNSeq = 0; adNOrdem = 0;
+  if (a >= 0) adSeqStatus[adNSeq++] = a;
+  if (b >= 0) adSeqStatus[adNSeq++] = b;
+  if (c >= 0) adSeqStatus[adNSeq++] = c;
+}
+
+static void alldebrid(void) {
+  char url[4096] = "", serv[32]; int pct = 0, r;
+  debrid_esquecer();
+  debrid_definir_chave("alldebrid", K_AD);
+  assert(debrid_ativo() && debrid_origem("alldebrid") == 1);
+
+  // em cache: upload -> status -> files -> unlock, nessa ordem, episodio S02E05
+  adZera(0, 4, -1, -1);
+  debrid_definir_episodio(2, 5);
+  assert(debrid_resolver("DEADBEEF", -1, url, sizeof url));
+  assert(!strcmp(url, "https://s1.debrid.it/dl/UNL5/Show.S02E05.mkv"));
+  assert(adNOrdem == 4 && adOrdem[0] == 0 && adOrdem[1] == 1 && adOrdem[2] == 2 && adOrdem[3] == 3);
+  assert(!strcmp(adAuthVisto, "Authorization: Bearer " K_AD));     // chave no cabecalho
+  // o link do arquivo (\/ do JSON ja desfeito) vai urlencoded ao unlock
+  assert(strstr(adCorpoUnlock, "link=https%3A%2F%2Falldebrid.com%2Ff%2FBBB"));
+  OK("AllDebrid: upload -> status -> files (arvore) -> unlock, S02E05, chave so no cabecalho");
+
+  // filme: maior video, sample.txt fora
+  adZera(0, 4, -1, -1); url[0] = 0; debrid_definir_episodio(0, 0);
+  assert(debrid_resolver("deadbeef", -1, url, sizeof url));
+  assert(strstr(url, "UNL4"));
+  OK("AllDebrid: filme escolhe o maior video");
+
+  // fileIdx do addon (indice 1 na lista plana = E05) vence o maior
+  adZera(0, 4, -1, -1); url[0] = 0;
+  assert(debrid_resolver("deadbeef", 1, url, sizeof url));
+  assert(strstr(url, "UNL5"));
+  OK("AllDebrid: fileIdx escolhe o arquivo");
+
+  // status em processamento e depois pronto (ready no upload, status 2 -> 4):
+  // uma espera de 1 s e segue
+  adZera(0, 2, 4, -1); url[0] = 0; debrid_definir_episodio(2, 5);
+  assert(debrid_resolver("deadbeef", -1, url, sizeof url));
+  assert(bateuAD[1] == 2 && strstr(url, "UNL5"));
+  OK("AllDebrid: polling do status ate statusCode 4");
+
+  // AUTOMATICO: fora de cache nao espera, apaga o que acabou de criar (fila,
+  // 0 bytes) e marca fora de cache
+  adZera(1, 0, -1, -1); url[0] = 0;
+  debrid_nova_busca();
+  assert(!debrid_resolver("deadbeef", -1, url, sizeof url));
+  assert(bateuAD[0] == 1 && bateuAD[1] == 1 && bateuAD[4] == 1 && bateuAD[2] == 0 && bateuAD[3] == 0);
+  assert(debrid_fora_de_cache() == 1);
+  OK("AllDebrid: fora de cache no automatico -> FORA, magnet novo descartado, contado");
+
+  // ...mas um magnet que ja andava (370 bytes) NAO e apagado
+  adZera(1, 1, -1, -1); url[0] = 0;
+  assert(!debrid_resolver("deadbeef", -1, url, sizeof url));
+  assert(bateuAD[4] == 0);
+  OK("AllDebrid: magnet que ja estava baixando nao e apagado");
+
+  // 'ready' mas o status nunca chega a 4 no prazo: automatico nao toca
+  adZera(0, 1, 1, 1); url[0] = 0;
+  assert(!debrid_resolver("deadbeef", -1, url, sizeof url));
+  assert(bateuAD[1] == 3 && bateuAD[2] == 0);
+  OK("AllDebrid: timeout do polling no automatico -> nao toca");
+
+  // ESCOLHA MANUAL fora de cache: deixa baixar e diz o progresso
+  adZera(1, 1, 1, 1); url[0] = 0; serv[0] = 0;
+  r = debrid_resolver_escolhido("deadbeef", -1, url, sizeof url, serv, sizeof serv, &pct);
+  assert(r == DEBRID_BAIXANDO && !strcmp(serv, "AllDebrid") && pct == 37);
+  assert(bateuAD[4] == 0);                        // nada apagado: a pessoa escolheu
+  OK("AllDebrid: escolha manual fora de cache -> baixando 37%, fica na conta");
+
+  // manual e depois pronto
+  adZera(1, 1, 4, -1); url[0] = 0; serv[0] = 0; debrid_definir_episodio(2, 5);
+  r = debrid_resolver_escolhido("deadbeef", -1, url, sizeof url, serv, sizeof serv, &pct);
+  assert(r == 1 && strstr(url, "UNL5"));
+  OK("AllDebrid: escolha manual que termina durante a espera toca");
+
+  // statusCode de erro do servico (7 = 20 min sem baixar)
+  adZera(0, 7, -1, -1); url[0] = 0;
+  assert(!debrid_resolver("deadbeef", -1, url, sizeof url));
+  assert(bateuAD[2] == 0 && debrid_ativo());     // erro do torrent, nao da conta
+  OK("AllDebrid: statusCode de erro -> nao toca, servico segue valendo");
+
+  // magnet invalido (erro por magnet): do torrent, nao da conta
+  adZera(5, -1, -1, -1); url[0] = 0;
+  assert(!debrid_resolver("deadbeef", -1, url, sizeof url));
+  assert(debrid_ativo() && !debrid_sem_plano());
+  {char rec[64]; assert(!debrid_recusa(rec, sizeof rec));}
+  OK("AllDebrid: MAGNET_INVALID_URI e do torrent");
+
+  // limite de magnets ativos: recusa da conta NESTA busca ("AllDebrid 429")
+  adZera(4, -1, -1, -1); url[0] = 0;
+  debrid_nova_busca();
+  assert(!debrid_resolver("deadbeef", -1, url, sizeof url));
+  { char rec[64]; assert(debrid_recusa(rec, sizeof rec) && !strcmp(rec, "AllDebrid 429")); }
+  assert(!debrid_resolver("deadbeef", -1, url, sizeof url));
+  assert(bateuAD[0] == 1);                        // a segunda nem tenta
+  debrid_nova_busca();
+  OK("AllDebrid: MAGNET_TOO_MANY_ACTIVE recusa a conta so nesta busca");
+
+  // nao premium: fora pela sessao, com a frase
+  adZera(3, -1, -1, -1); url[0] = 0;
+  assert(!debrid_resolver("deadbeef", -1, url, sizeof url));
+  assert(debrid_sem_plano() == 8 && !debrid_ativo());
+  assert(strstr(debrid_sem_plano_frase(8), "AllDebrid não é premium"));
+  assert(!debrid_resolver("deadbeef", -1, url, sizeof url) && bateuAD[0] == 1);
+  OK("AllDebrid: MAGNET_MUST_BE_PREMIUM -> conta sem plano, fora pela sessao");
+
+  // chave invalida: sessao inteira, frase propria, log sem a chave que o corpo ecoou
+  debrid_definir_chave("alldebrid", K_AD "2");
+  assert(!debrid_sem_plano());
+  debrid_nova_busca();
+  adZera(2, -1, -1, -1); url[0] = 0;
+  assert(!debrid_resolver("deadbeef", -1, url, sizeof url));
+  assert(debrid_sem_plano() == 8 && !debrid_ativo());
+  assert(strstr(debrid_sem_plano_frase(8), "chave do AllDebrid foi recusada"));
+  { char rec[64]; assert(debrid_recusa(rec, sizeof rec)); }
+  OK("AllDebrid: AUTH_BAD_APIKEY -> chave recusada, fora pela sessao");
+}
+
+static void alldebridLocal(void) {
+  char url[4096] = "", m[32];
+  debrid_esquecer();
+  debrid_definir_chave("alldebrid", K_AD);
+  assert(debrid_origem("alldebrid") == 1);
+  debrid_chave_mascarada("alldebrid", m, sizeof m);
+  assert(!strncmp(m, "····", 4));
+  assert(!strstr(m, "CHAVE") && strlen(m) < 16);
+
+  // a local vence a da conta
+  debrid_definir_chave_local("alldebrid", K_AD_LOCAL);
+  assert(debrid_origem("alldebrid") == 2);
+  adZera(0, 4, -1, -1); debrid_definir_episodio(0, 0);
+  assert(debrid_resolver("deadbeef", -1, url, sizeof url));
+  assert(!strcmp(adAuthVisto, "Authorization: Bearer " K_AD_LOCAL));
+  OK("chave local vence a da conta");
+
+  // logout tira a da conta e MANTEM a local
+  debrid_esquecer();
+  assert(debrid_origem("alldebrid") == 2 && debrid_ativo());
+  OK("logout mantem a chave local");
+
+  // apagar a local sem conta = sem chave; com conta volta a conta
+  debrid_definir_chave_local("alldebrid", "");
+  assert(debrid_origem("alldebrid") == 0 && !debrid_ativo());
+  debrid_definir_chave("alldebrid", K_AD);
+  debrid_definir_chave_local("alldebrid", K_AD_LOCAL);
+  debrid_definir_chave_local("alldebrid", "");
+  assert(debrid_origem("alldebrid") == 1);
+  OK("apagar a local devolve a da conta");
+
+  // outros servicos aceitam chave local pelo mesmo caminho
+  debrid_definir_chave_local("torbox", K_TB);
+  assert(debrid_origem("torbox") == 2 && debrid_ativo());
+  debrid_definir_chave_local("torbox", "");
+  debrid_esquecer();
+  debrid_definir_chave_local("alldebrid", "");
+  assert(!debrid_ativo());
+  OK("chave local dos outros servicos");
+}
+
+static void alldebridTeste(void) {
+  char msg[64], data[16];
+  debrid_esquecer();
+  assert(!debrid_testar_alldebrid(msg, sizeof msg, data, sizeof data) && !strcmp(msg, "sem chave"));
+  debrid_definir_chave_local("alldebrid", K_AD_LOCAL);
+  adZera(0, 4, -1, -1); adUserPremium = 1; adUserRuim = 0;
+  assert(debrid_testar_alldebrid(msg, sizeof msg, data, sizeof data));
+  assert(!strcmp(msg, "premium") && data[2] == '/' && data[5] == '/' && strlen(data) == 10);
+  assert(!strstr(msg, "fulano") && !strstr(data, "fulano"));
+  assert(strstr(adUrlVista, "/v4/user") && !strcmp(adAuthVisto, "Authorization: Bearer " K_AD_LOCAL));
+  adUserPremium = 0;
+  assert(!debrid_testar_alldebrid(msg, sizeof msg, data, sizeof data) && !strcmp(msg, "conta sem premium"));
+  adUserPremium = 1; adUserRuim = 1;
+  assert(!debrid_testar_alldebrid(msg, sizeof msg, data, sizeof data) && !strcmp(msg, "chave recusada"));
+  adUserRuim = 0;
+  debrid_definir_chave_local("alldebrid", "");
+  debrid_esquecer();
+  OK("Testar chave: premium ate a data, sem premium, chave recusada; sem usuario/e-mail");
+}
+
 static void ordem(void) {
   char url[4096] = "";
   // Com TorBox e Premiumize os dois em cache, ganha o TorBox: a ordem e fixa
@@ -527,6 +797,9 @@ int main(void) {
   torboxP2P();
   semPlano();
   premiumize();
+  alldebrid();
+  alldebridLocal();
+  alldebridTeste();
   ordem();
   parser();
 
@@ -547,6 +820,8 @@ int main(void) {
   assert(!strstr(capt, K_RD));
   assert(!strstr(capt, K_TB));
   assert(!strstr(capt, K_PM));
+  assert(!strstr(capt, "CHAVE-AD"));               // AllDebrid: conta, "2" e local
+  assert(!strstr(capt, "fulano-segredo"));         // nem o usuario da conta
   assert(!strstr(capt, "token="));
   assert(strstr(urlRequestdl, "token=" K_TB));   // o teste de fato passou por la
   // nem o caminho das URLs resolvidas dos tres servicos
@@ -555,6 +830,15 @@ int main(void) {
   assert(!strstr(capt, "/dl/BBB"));
   // mas o host fica, que e o que diagnostica qual servico respondeu
   assert(strstr(capt, "store-1.torbox.app"));
+  // AllDebrid: o caminho do link desbloqueado fica de fora, o host fica; e o
+  // corpo de erro que ecoou a chave foi cortado
+  assert(!strstr(capt, "/dl/UNL"));
+  assert(strstr(capt, "s1.debrid.it"));
+  assert(strstr(capt, "[debrid] AllDebrid upload: HTTP 200 sem o esperado; error=AUTH_BAD_APIKEY"));
+  assert(strstr(capt, "[debrid] AllDebrid: chave recusada; fora pelo resto da sessao"));
+  assert(strstr(capt, "[debrid] AllDebrid: recusa da conta (HTTP 401)"));
+  assert(strstr(capt, "[debrid] AllDebrid: conta sem plano para a API"));
+  assert(strstr(capt, "[debrid] chave local do AllDebrid definida"));
   assert(strstr(capt, "a.pm.me"));
   OK("nenhuma chave e nenhum caminho de link sai no stdout do app");
 
