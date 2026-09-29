@@ -11,6 +11,7 @@
 
 import { rotaXtream } from "./xtream.js";
 import { rotaTrailerImdb, rotaTrailerYoutube } from "./trailer.js";
+import { rotaAmigos, limpezaAmigos, despublicar, garantirPerfil, avatarPublico } from "./amigos.js";
 
 const DIA = 86400;
 const RETENCAO = 90 * DIA;
@@ -197,6 +198,10 @@ async function registrar(env, quem) {
   return { id: quem.id, nome: quem.nome, codigo, avatar, descobrivel: 0 };
 }
 
+const bloqueadoPar = (db, a, b) =>
+  db.prepare("SELECT 1 FROM bloqueio WHERE (quem = ? AND alvo = ?) OR (quem = ? AND alvo = ?)")
+    .bind(a, b, b, a).first();
+
 const saoContatos = (db, a, b) =>
   db.prepare("SELECT 1 FROM contato WHERE a = ? AND b = ?").bind(a, b).first();
 
@@ -224,6 +229,9 @@ async function rotaContatosVincular(env, quem, corpo) {
     .bind(codigo).first();
   if (!outro) return erro("codigo nao encontrado", 404);
   if (outro.id === quem.id) return erro("esse codigo e seu", 400);
+  // BLOQUEIO VALE PARA O CODIGO TAMBEM, nos dois sentidos, e responde IGUAL a
+  // "codigo inexistente": quem foi bloqueado nao pode descobrir isso tentando.
+  if (await bloqueadoPar(env.DB, quem.id, outro.id)) return erro("codigo nao encontrado", 404);
   const t = agora();
   await env.DB.batch([
     env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado) VALUES (?, ?, ?)")
@@ -256,7 +264,10 @@ async function rotaContatosTrakt(env, quem, corpo) {
     .filter((s) => s.length > 6 && s !== quem.id);
   if (!ids.length) return json({ vinculados: 0 });
   const marcas = ids.map(() => "?").join(",");
-  const r = await env.DB.prepare(`SELECT id FROM pessoa WHERE id IN (${marcas})`).bind(...ids).all();
+  const r = await env.DB.prepare(
+    `SELECT id FROM pessoa WHERE id IN (${marcas}) ` +
+    `AND NOT EXISTS (SELECT 1 FROM bloqueio b WHERE (b.quem = ? AND b.alvo = pessoa.id) OR (b.quem = pessoa.id AND b.alvo = ?))`
+  ).bind(...ids, quem.id, quem.id).all();
   const t = agora();
   const cmds = [];
   for (const x of r.results || []) {
@@ -285,8 +296,15 @@ async function rotaContatosTrakt(env, quem, corpo) {
 // envelhecer.
 async function rotaDescobrivel(env, quem, corpo) {
   const v = corpo?.descobrivel ? 1 : 0;
-  await env.DB.prepare("UPDATE pessoa SET descobrivel = ? WHERE id = ?")
-    .bind(v, quem.id).run();
+  // DESLIGAR = DESPUBLICAR DE VERDADE. Antes desta rota so mexer na coluna
+  // bastava; agora ha um perfil publico (apelido, bio, foto) e deixa-lo gravado
+  // com o sinalizador em 0 seria uma copia esquecida. `despublicar` limpa tudo
+  // e sorteia o handle de novo.
+  if (!v) await despublicar(env, quem.id);
+  else {
+    await env.DB.prepare("UPDATE pessoa SET descobrivel = 1 WHERE id = ?").bind(quem.id).run();
+    await garantirPerfil(env, quem.id);
+  }
   return json({ ok: 1, descobrivel: v });
 }
 
@@ -319,6 +337,32 @@ async function rotaDescobrivel(env, quem, corpo) {
 async function sugestoesDe(env, quem, corpo) {
   const vistos = new Set([quem.id]);
   const saida = [];
+  // O QUE SAI PARA FORA DESTA LISTA, e o que nao. O `id` interno (`_id`) so
+  // serve ao servidor; quem recebe a lista ve `id` = handle opaco
+  // ("pub:<handle>") quando a conta e do Nuvio, porque `nuvio:<uuid>` e o
+  // identificador da conta e nao se entrega a quem so e amigo de um amigo. Ids
+  // do Trakt continuam como eram: o slug ja e publico no proprio Trakt. O nome
+  // e o APELIDO que a pessoa escolheu, quando ha; a foto so sai se ela
+  // marcou "mostrar minha foto" e a URL e de um host sem hash de e-mail.
+  const empurra = async (x, origem, viaNome) => {
+    if (vistos.has(x.id) || saida.length >= SUG_MAX) return;
+    vistos.add(x.id);
+    let id = x.id;
+    if (!id.startsWith("trakt:")) {
+      const f = x.pub ? { pub: x.pub } : await garantirPerfil(env, x.id);
+      id = `pub:${f.pub}`;
+    }
+    saida.push({
+      _id: x.id, id,
+      nome: x.apelido || x.nome || "",
+      avatar: x.comAvatar ? avatarPublico(x.avatar) : "",
+      origem, viaNome: viaNome || "",
+    });
+  };
+  const SEL = "p.id AS id, p.nome AS nome, p.avatar AS avatar, f.pub AS pub, f.apelido AS apelido, " +
+              "COALESCE(f.com_avatar, 0) AS comAvatar";
+  const SEM_BLOQUEIO = (col) =>
+    `AND NOT EXISTS (SELECT 1 FROM bloqueio bq WHERE (bq.quem = ? AND bq.alvo = ${col}) OR (bq.quem = ${col} AND bq.alvo = ?)) `;
 
   const slugs = Array.isArray(corpo?.slugs) ? corpo.slugs.slice(0, 200) : [];
   const ids = [...new Set(
@@ -328,50 +372,43 @@ async function sugestoesDe(env, quem, corpo) {
   if (ids.length) {
     const marcas = ids.map(() => "?").join(",");
     const r = await env.DB.prepare(
-      `SELECT p.id AS id, p.nome AS nome, p.avatar AS avatar FROM pessoa p ` +
+      `SELECT ${SEL} FROM pessoa p LEFT JOIN perfil f ON f.pessoa = p.id ` +
       `WHERE p.id IN (${marcas}) AND p.descobrivel = 1 ` +
       // JA E CONTATO NAO E SUGESTAO. Sem este NOT EXISTS a aba abriria pedindo
       // para adicionar quem ja esta na lista de contatos logo acima.
       `AND NOT EXISTS (SELECT 1 FROM contato c WHERE c.a = ? AND c.b = p.id) ` +
+      SEM_BLOQUEIO("p.id") +
       `ORDER BY p.nome LIMIT ?`
-    ).bind(...ids, quem.id, SUG_MAX).all();
-    for (const x of r.results || []) {
-      if (vistos.has(x.id)) continue;
-      vistos.add(x.id);
-      saida.push({ id: x.id, nome: x.nome || "", avatar: x.avatar || "",
-                   origem: "trakt", viaNome: "" });
-    }
+    ).bind(...ids, quem.id, quem.id, quem.id, SUG_MAX).all();
+    for (const x of r.results || []) await empurra(x, "trakt", "");
   }
 
   const r2 = await env.DB.prepare(
-    `SELECT p.id AS id, p.nome AS nome, p.avatar AS avatar, ` +
+    `SELECT ${SEL}, ` +
     // O NOME DO INTERMEDIARIO, e so ele: e o que a linha da TV mostra ("amigo
     // de Gustavo"). MIN() porque o GROUP BY colapsa varios caminhos ate a mesma
     // pessoa num so, e mostrar "amigo de Gustavo, Marina e mais 3" contaria a
     // quem recebe quantos contatos em comum existem — que e informacao sobre os
     // OUTROS dois, nao sobre ela. COALESCE/NULLIF porque quem nunca preencheu o
     // nome no Trakt tem `nome` vazio e "amigo de" sozinho nao diz nada.
-    `MIN(COALESCE(NULLIF(v.nome, ''), v.id)) AS viaNome ` +
+    `MIN(COALESCE(NULLIF(vf.apelido, ''), NULLIF(v.nome, ''), v.id)) AS viaNome ` +
     `FROM contato c1 ` +
     `JOIN contato c2 ON c2.a = c1.b ` +
     `JOIN pessoa  p  ON p.id = c2.b ` +
+    `LEFT JOIN perfil f  ON f.pessoa = p.id ` +
     `JOIN pessoa  v  ON v.id = c1.b ` +
+    `LEFT JOIN perfil vf ON vf.pessoa = v.id ` +
     `WHERE c1.a = ? AND c2.b <> ? AND p.descobrivel = 1 ` +
     `AND NOT EXISTS (SELECT 1 FROM contato x WHERE x.a = ? AND x.b = p.id) ` +
-    `GROUP BY p.id, p.nome, p.avatar ORDER BY p.nome LIMIT ?`
-  ).bind(quem.id, quem.id, quem.id, SUG_MAX).all();
-  for (const x of r2.results || []) {
-    if (vistos.has(x.id)) continue;
-    if (saida.length >= SUG_MAX) break;
-    vistos.add(x.id);
-    saida.push({ id: x.id, nome: x.nome || "", avatar: x.avatar || "",
-                 origem: "amigo", viaNome: x.viaNome || "" });
-  }
+    SEM_BLOQUEIO("p.id") +
+    `GROUP BY p.id, p.nome, p.avatar, f.pub, f.apelido, f.com_avatar ORDER BY p.nome LIMIT ?`
+  ).bind(quem.id, quem.id, quem.id, quem.id, quem.id, SUG_MAX).all();
+  for (const x of r2.results || []) await empurra(x, "amigo", x.viaNome);
   return saida.slice(0, SUG_MAX);
 }
 
 const rotaSugestoes = async (env, quem, corpo) =>
-  json({ sugestoes: await sugestoesDe(env, quem, corpo) });
+  json({ sugestoes: (await sugestoesDe(env, quem, corpo)).map(({ _id, ...pub }) => pub) });
 
 // Adiciona UMA sugestao como contato.
 //
@@ -390,10 +427,11 @@ async function rotaContatoSugerido(env, quem, corpo) {
   const t = agora();
   await env.DB.batch([
     env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado) VALUES (?, ?, ?)")
-      .bind(quem.id, alvo, t),
+      .bind(quem.id, achado._id, t),
     env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado) VALUES (?, ?, ?)")
-      .bind(alvo, quem.id, t),
+      .bind(achado._id, quem.id, t),
   ]);
+  // A resposta devolve o handle, nao o id da conta: e o que o cliente ja tinha.
   return json({ ok: 1, contato: { id: alvo, nome: achado.nome } });
 }
 
@@ -621,6 +659,11 @@ export default {
     if (rota === "/v1/rec/apagar" && req.method === "POST") return rotaApagar(env, quem, corpo);
     if (rota === "/v1/registro" && req.method === "POST")   return rotaRegistro(env, quem, corpo);
 
+    // Perfil publico, busca, pedidos, bloqueio e atividade (amigos.js).
+    const amigos = await rotaAmigos(rota, req.method, env, quem, corpo,
+                                    { json, erro, agora, limparTexto, limpar });
+    if (amigos) return amigos;
+
     return erro("rota desconhecida", 404);
   },
 
@@ -630,6 +673,7 @@ export default {
       env.DB.prepare("DELETE FROM rec WHERE criado < ?").bind(t - RETENCAO),
       env.DB.prepare("DELETE FROM sessao WHERE expira < ?").bind(t),
       env.DB.prepare("DELETE FROM registro WHERE criado < ?").bind(t - REGISTRO_RETENCAO),
+      ...limpezaAmigos(env, t),
     ]);
   },
 };

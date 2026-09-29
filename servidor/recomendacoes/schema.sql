@@ -67,3 +67,6 @@ CREATE TABLE IF NOT EXISTS sessao (
 );
 
 -- Ver migracao-003-registro.sql (registro de sessao que morreu).
+-- Ver migracao-005-amigos.sql (perfil publico, pedidos, bloqueio, atividade):
+-- as tabelas dela sao todas CREATE IF NOT EXISTS e tambem valem para um banco
+-- novo, entao `preparar-local.sh` aplica o arquivo inteiro apos este esquema.

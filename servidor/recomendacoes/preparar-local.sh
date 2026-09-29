@@ -45,6 +45,10 @@ done
 #   tok-b -> nuvio:bbb  Gustavo     tok-e -> nuvio:eee  Elisa
 #   tok-c -> nuvio:ccc  Carolina    tok-t -> trakt:pedrinho  Pedrinho
 #
+# tok-f/g/h (nuvio:fff/ggg/hhh) sao das rotas de perfil publico (teste-amigos.sh).
+# O `nome` delas e de PROPOSITO um nome completo: o teste prova que ele nunca
+# sai para estranhos — so o apelido escolhido.
+#
 # A SEXTA E DE TRAKT, e a diferenca nao e cosmetica: a primeira fonte de
 # sugestao so olha ids que comecam com "trakt:" (e o que um slug do Trakt vira),
 # entao sem uma identidade dessas esse ramo inteiro ficaria sem teste. O hash
@@ -59,7 +63,10 @@ INSERT INTO sessao (hash, id, nome, expira) VALUES
  ('95f2937f171b75f0d1591ff4458254979b8b59b982d61595b86862dbe9cbffa0','nuvio:ccc','Carolina',9999999999),
  ('7e4ba5a52843391d31227f027f5313a438abef42894010aa09f2a1a9372fe351','nuvio:ddd','Daniel',9999999999),
  ('8e25cb48137fb326f871eee317e055db8e5e07d62ea06dbbe11c7446d260fc64','nuvio:eee','Elisa',9999999999),
- ('a8cbd03defa6a0b09930e16fb608647fc347f04ede826c7e1ab8a1ac60a22a60','trakt:pedrinho','Pedrinho',9999999999);
+ ('a8cbd03defa6a0b09930e16fb608647fc347f04ede826c7e1ab8a1ac60a22a60','trakt:pedrinho','Pedrinho',9999999999),
+ ('4b14dd47bfefcfc135ac4a76b5c1248c961334a8f8475fcd83346ec6909704dd','nuvio:fff','Fabiana Souza Real',9999999999),
+ ('fa7e46d1dac26998ba498e3f3302d3cba2a80b4f0f6bcc40926f091169a92f8a','nuvio:ggg','Guilherme Nome Real',9999999999),
+ ('e610ecd6709ee64a815912c1f19c1134bdd6a4bd61eeb0284028ea0f07f21ad9','nuvio:hhh','Helena Nome Real',9999999999);
 " || { tail -20 /tmp/nv-d1.log; exit 1; }
 
 # ESTADO LIMPO A CADA RODADA. teste.sh conta recomendacoes ("B recebe 1") e
@@ -67,7 +74,7 @@ INSERT INTO sessao (hash, id, nome, expira) VALUES
 # faria a segunda falhar por um limite que esta CERTO, e um teste que so passa
 # na primeira execucao e um teste que ninguem roda.
 echo "== zerando dados de teste"
-exec_sql "DELETE FROM rec; DELETE FROM contato; DELETE FROM pessoa;" \
+exec_sql "DELETE FROM rec; DELETE FROM contato; DELETE FROM pessoa; DELETE FROM perfil; DELETE FROM pedido; DELETE FROM bloqueio; DELETE FROM atividade; DELETE FROM limite;" \
   || { tail -20 /tmp/nv-d1.log; exit 1; }
 
 echo "pronto."
