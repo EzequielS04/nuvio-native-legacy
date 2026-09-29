@@ -272,7 +272,14 @@ static const char *V_TRAILFONTE[] = { "Automático", "Apple TV", "IMDb", "YouTub
 // INDICE DESTA LISTA (0 = automatico, 1 + IDIOMA_* = escolha manual), e o que
 // vai para o disco e outra coisa (ver "IDIOMA AUTOMATICO" mais abaixo).
 static const char *V_IDIOMA[]    = { "Automático", "Português", "English", "Română", "Українська", "Русский",
-                                     "Français", "Deutsch", "Español" };
+                                     "Français", "Deutsch", "Español",
+                                     // Os 22 de 2026-09, na ordem de IDIOMA_IT... IDIOMA_ZHTW. Os tres
+                                     // ultimos (日本語, 简体中文, 繁體中文) so desenham porque text.c manda
+                                     // a linha para a fonte de reserva CJK (ver fonteDe).
+                                     "Italiano", "Nederlands", "Polski", "Türkçe", "Português (Portugal)",
+                                     "Svenska", "Dansk", "Norsk", "Čeština", "Slovenčina", "Slovenščina",
+                                     "Magyar", "Lietuvių", "Bosanski", "Srpski", "Български", "Ελληνικά",
+                                     "Bahasa Indonesia", "Tiếng Việt", "日本語", "简体中文", "繁體中文" };
 static const char *V_ANIM[]      = { "Completas", "Reduzidas" };
 static const char *V_FONTE_UI[]  = { "Inter", "LG Display", "Droid Sans",
                                      "Montserrat", "Roboto",
@@ -366,10 +373,15 @@ static const char *V_EPG_PAIS[]  = {
 static const char *V_TMDB_LING[] = {
   "Da interface", "Português (Brasil)", "English", "Español", "Français",
   "Deutsch", "Italiano", "Português (Portugal)", "日本語", "한국어", "中文",
-  "Română", "Українська", "Русский"
+  "Română", "Українська", "Русский",
+  // Acrescentados com os 22 idiomas da interface (o indice gravado dos 14
+  // primeiros nao muda). "中文" acima e o simplificado; o tradicional vem no fim.
+  "Nederlands", "Polski", "Türkçe", "Svenska", "Dansk", "Norsk", "Čeština",
+  "Slovenčina", "Slovenščina", "Magyar", "Lietuvių", "Bosanski", "Srpski",
+  "Български", "Ελληνικά", "Bahasa Indonesia", "Tiếng Việt", "繁體中文"
 };
-_Static_assert(sizeof V_TMDB_LING / sizeof *V_TMDB_LING == 14,
-               "V_TMDB_LING casa com ESC(..., 14), W_TMDB_LING e L[] de ajustes_tmdb_idioma");
+_Static_assert(sizeof V_TMDB_LING / sizeof *V_TMDB_LING == 32,
+               "V_TMDB_LING casa com ESC(..., 32), W_TMDB_LING e L[] de ajustes_tmdb_idioma");
 _Static_assert(sizeof V_IDIOMA / sizeof *V_IDIOMA == IDIOMA_N + 1,
                "V_IDIOMA: \"Automático\" e um rotulo por IDIOMA_* de idiomacod.h");
 // Preenchido em rotulosDeIdioma(), no arranque: os nomes saem de linguas.c em
@@ -655,7 +667,7 @@ static const Opcao OPCOES[AJ_N] = {
   // nativo sempre enriqueceu por ele — nascer desligado apagaria elenco com
   // foto, ficha e trailers de quem ja usa o app sem nunca ter visto o ajuste.
   ESC("TMDB",                       V_LIGA, 2),   // tmdb_enabled
-  ESC("Idioma dos metadados",       V_TMDB_LING, 14), // tmdb_language
+  ESC("Idioma dos metadados",       V_TMDB_LING, 32), // tmdb_language
   ESC("Arte localizada",            V_LIGA, 2),   // tmdb_use_artwork
   ESC("Título e sinopse",           V_LIGA, 2),   // tmdb_use_basic_info
   ESC("Ficha técnica",              V_LIGA, 2),   // tmdb_use_details
@@ -1633,7 +1645,10 @@ const char *ajustes_epg_pais(void) {
 const char *ajustes_tmdb_idioma(void) {
   static const char *L[] = {
     NULL, "pt-BR", "en-US", "es-ES", "fr-FR", "de-DE", "it-IT", "pt-PT",
-    "ja-JP", "ko-KR", "zh-CN", "ro-RO", "uk-UA", "ru-RU"
+    "ja-JP", "ko-KR", "zh-CN", "ro-RO", "uk-UA", "ru-RU",
+    "nl-NL", "pl-PL", "tr-TR", "sv-SE", "da-DK", "nb-NO", "cs-CZ", "sk-SK",
+    "sl-SI", "hu-HU", "lt-LT", "bs-BA", "sr-RS", "bg-BG", "el-GR", "id-ID",
+    "vi-VN", "zh-TW"
   };
   int v = valor[AJ_TMDB_IDIOMA];
   if (v < 0 || v >= (int)(sizeof L / sizeof *L)) v = 0;
@@ -1648,6 +1663,28 @@ const char *ajustes_tmdb_idioma(void) {
       case IDIOMA_FR: return "fr-FR";
       case IDIOMA_DE: return "de-DE";
       case IDIOMA_ES: return "es-ES";
+      case IDIOMA_IT: return "it-IT";
+      case IDIOMA_NL: return "nl-NL";
+      case IDIOMA_PL: return "pl-PL";
+      case IDIOMA_TR: return "tr-TR";
+      case IDIOMA_PTPT: return "pt-PT";
+      case IDIOMA_SV: return "sv-SE";
+      case IDIOMA_DA: return "da-DK";
+      case IDIOMA_NO: return "nb-NO";    // o TMDB chama o bokmal de "nb"
+      case IDIOMA_CS: return "cs-CZ";
+      case IDIOMA_SK: return "sk-SK";
+      case IDIOMA_SL: return "sl-SI";
+      case IDIOMA_HU: return "hu-HU";
+      case IDIOMA_LT: return "lt-LT";
+      case IDIOMA_BS: return "bs-BA";
+      case IDIOMA_SR: return "sr-RS";
+      case IDIOMA_BG: return "bg-BG";
+      case IDIOMA_EL: return "el-GR";
+      case IDIOMA_ID: return "id-ID";
+      case IDIOMA_VI: return "vi-VN";
+      case IDIOMA_JA: return "ja-JP";
+      case IDIOMA_ZHCN: return "zh-CN";
+      case IDIOMA_ZHTW: return "zh-TW";
       default:        return "pt-BR";
     }
   }
@@ -1705,7 +1742,9 @@ static const char *W_CW_ORDEM[]  = { "default", "streaming_style", "split_upcomi
 // valor atual em vez de inventar um.
 static const char *W_TMDB_LING[] = {
   "interface", "pt", "en", "es", "fr", "de", "it", "pt-pt", "ja", "ko", "zh",
-  "ro", "uk", "ru", NULL
+  "ro", "uk", "ru",
+  "nl", "pl", "tr", "sv", "da", "no", "cs", "sk", "sl", "hu", "lt", "bs", "sr",
+  "bg", "el", "id", "vi", "zh-tw", NULL
 };
 
 // `heroSectionEnabled` -> `hero_section_enabled`. Uma sequencia de maiusculas
@@ -7004,6 +7043,14 @@ int ajustes_teste_focar_opcao(int op) {
     return 1;
   }
   return 0;
+}
+
+// O numero da opcao pela chave do disco/da conta ("idioma", "tmdb_language"): as
+// capturas nao conhecem o enum, que mora aqui. -1 se nao existe.
+int ajustes_teste_op_por_chave(const char *chave) {
+  int i;
+  for (i = 0; i < AJ_N; i++) if (CHAVE[i] && !strcmp(CHAVE[i], chave)) return i;
+  return -1;
 }
 
 int ajustes_teste_familia_previa(int op) {

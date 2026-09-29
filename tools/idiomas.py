@@ -3,8 +3,10 @@
 
 ESTRUTURA. idioma_tab.h e a tabela mestra: { chave em portugues, ingles },
 ORDENADA por strcmp dos BYTES DECODIFICADOS (aspas = 0x22, \\n = 0x0A — nao o
-texto literal com a barra). idioma_ro.h, idioma_uk.h, idioma_ru.h, idioma_fr.h, idioma_de.h e idioma_es.h tem UMA
-linha por entrada da mestra, na MESMA ordem:  T("chave pt", "traducao").
+texto literal com a barra). As 28 irmas (idioma_ro.h, uk, ru, fr, de, es, it,
+nl, pl, tr, ptpt, sv, da, no, cs, sk, sl, hu, lt, bs, sr, bg, el, id, vi, ja,
+zhcn, zhtw) tem UMA linha por entrada da mestra, na MESMA ordem:
+T("chave pt", "traducao").
 O compilador descarta a chave (macro T); ela existe para o revisor humano ler
 a linha inteira e para este script conferir que o alinhamento nao escorregou.
 
@@ -20,13 +22,21 @@ O QUE CONFERE (sai com codigo 1 no primeiro defeito de qualquer idioma):
   7. o valor e UTF-8 valido e nao tem barra solta / aspa sem escape;
   8. mesmos espacos na borda que a chave (" carregados" e uma chave de
      verdade: o espaco da frente separa de um numero desenhado antes);
-  9. ucraniano e russo tem de conter cirilico, salvo o que e nome proprio,
-     sigla ou formato (VERBATIM abaixo) ou igual a chave/ao ingles — texto em
-     alfabeto latino ali e traducao que ficou por fazer;
- 10. fr, de e es (e ro) NAO podem ter cirilico, e so podem usar caracteres que
-     as fontes embarcadas (deploy/app/fonts) desenham: o cmap de cada TTF e lido
-     aqui mesmo (sem dependencia externa) e um caractere que falte em qualquer
-     uma das fontes de interface reprova. Cobertura medida, nao suposta.
+  9. as linguas de escrita NAO latina (uk, ru, bg: cirilico; el: grego; ja: kana
+     ou kanji; zhcn, zhtw: hanzi) tem de conter a propria escrita, salvo o que
+     e nome proprio, sigla ou formato (VERBATIM abaixo) ou igual a chave/ao
+     ingles — texto em alfabeto latino ali e traducao que ficou por fazer;
+ 10. as linguas latinas NAO podem ter cirilico, e TODA lingua so pode usar
+     caracteres que o app consegue desenhar. Cobertura medida no cmap dos TTF
+     embarcados (deploy/app/fonts, lido aqui mesmo, sem dependencia externa):
+       - a InterDisplay (Regular, Medium e Bold) e a fonte de ULTIMO RECURSO de
+         text.c em qualquer plataforma: latim estendido, vietnamita, grego e
+         cirilico TEM de estar nela;
+       - ja e zh: o que a Inter nao tem tem de estar na fonte CJK embarcada
+         (DroidSansFallback-Subset.ttf), a unica que existe no WASM da Samsung.
+     Um caractere sem nenhuma das duas reprova. `--cobertura` imprime, alem
+     disso, o que cada familia de interface (Montserrat, Roboto, Atkinson) nao
+     tem: ali text.c troca a linha para a Inter, e o relatorio diz quantas.
 
 Uso:
     python3 tools/idiomas.py                 # confere tudo
@@ -34,14 +44,28 @@ Uso:
                                              # da mestra (entrada nova = vazia,
                                              # que o passo 5 recusa)
     python3 tools/idiomas.py --revisao ro    # pt | en | ro lado a lado
+    python3 tools/idiomas.py --cobertura     # cobertura de glifos por fonte
 """
 import re, sys, pathlib
 
 RAIZ = pathlib.Path(__file__).resolve().parent.parent
 SRC = RAIZ / "src"
-IDIOMAS = ("ro", "uk", "ru", "fr", "de", "es")
-LATINOS = ("ro", "fr", "de", "es")
+# Na ordem de IDIOMA_* (idiomacod.h). O nome do arquivo e idioma_<cod>.h.
+IDIOMAS = ("ro", "uk", "ru", "fr", "de", "es", "it", "nl", "pl", "tr", "ptpt", "sv",
+           "da", "no", "cs", "sk", "sl", "hu", "lt", "bs", "sr", "bg", "el", "id",
+           "vi", "ja", "zhcn", "zhtw")
+CIRILICOS = ("uk", "ru", "bg")
+NAO_LATINOS = CIRILICOS + ("el", "ja", "zhcn", "zhtw")
+CJK = ("ja", "zhcn", "zhtw")
+# Escrita que cada lingua nao latina tem de mostrar em toda traducao "de verdade".
+ESCRITA = {
+    "uk": "[\u0400-\u04ff]", "ru": "[\u0400-\u04ff]", "bg": "[\u0400-\u04ff]",
+    "el": "[\u0370-\u03ff\u1f00-\u1fff]",
+    "ja": "[\u3040-\u30ff\u3400-\u9fff]",
+    "zhcn": "[\u3400-\u9fff]", "zhtw": "[\u3400-\u9fff]",
+}
 FONTES = RAIZ / "deploy" / "app" / "fonts"
+FONTE_CJK = "DroidSansFallback-Subset.ttf"
 
 LIT = r'"((?:[^"\\]|\\.)*)"'
 LINHA_MESTRA = re.compile(r'^\s*\{\s*' + LIT + r'\s*,\s*' + LIT + r'\s*\},?\s*$')
@@ -51,7 +75,11 @@ LINHA_IRMA = re.compile(r'^\s*T\(\s*' + LIT + r'\s*,\s*' + LIT + r'\s*\),?\s*$')
 # le assim (a chave e T%dE%d, do portugues).
 VERBATIM = {"Watchlist Trakt", "S%dE%d", "S%d:E%d", "%s S%dE%d", "%s — S%dE%d%s%s",
             "S%dE%d  ·  %s%s%.22s", "S%dE%d · %s", "S%dE%d%s%s", "Português (Brasil)",
-            "Português (Portugal)", "Français"}
+            "Português (Portugal)", "Français",
+            # Nome de produto, sigla ou formato que a lingua escreve em latim mesmo:
+            "Spotlight 4:3", "SF", "Logo",
+            # "X de Y" que o japones e o chines escrevem com barra ("3 / 8"):
+            "%.1f / %d MB · %d%%", "%d / %d", "%d / 8", "%s  ·  %d / %d"}
 SIMPLES = {"n": 10, "t": 9, "r": 13, "0": 0, '"': 34, "\\": 92, "'": 39}
 
 def decodificar(s):
@@ -186,16 +214,20 @@ def conferir():
             if (len(val) - len(val.lstrip()), len(val) - len(val.rstrip())) != \
                (len(pt) - len(pt.lstrip()), len(pt) - len(pt.rstrip())):
                 erro("%s:%d: espacos na borda diferem de %r: %r" % (arq, m, pt, val))
-            # 9. cirilico
-            if cod in ("uk", "ru") and not re.search("[\u0400-\u04ff]", val) \
+            # 9. a escrita propria (cirilico, grego, kana/hanzi)
+            if cod in ESCRITA and not re.search(ESCRITA[cod], val) \
                and val not in (pt, en) and val not in VERBATIM:
-                erro("%s:%d: sem cirilico e diferente da chave e do ingles: %r -> %r" % (arq, m, pt, val))
+                erro("%s:%d: sem a escrita da lingua e diferente da chave e do ingles: %r -> %r" % (arq, m, pt, val))
             # 6. quebras de linha
             if bk.count(b"\n") != bv.count(b"\n"):
                 erro("%s:%d: numero de \\n difere: %r -> %r" % (arq, m, pt, val))
-    # 10. cobertura de fonte dos idiomas latinos
+    # 10. cobertura de fonte: a Inter (3 pesos) e o ultimo recurso; ja/zh cai na CJK.
     fontes = {f.name: cmap_ttf(f) for f in sorted(FONTES.glob("*.ttf"))}
-    for cod in LATINOS:
+    inter = [fontes[n] for n in sorted(fontes) if n.startswith("InterDisplay-")]
+    cjk = fontes.get(FONTE_CJK)
+    if len(inter) != 3: erro("fonts: esperava os 3 pesos da InterDisplay, achei %d" % len(inter))
+    if cjk is None: erro("fonts: falta %s (fonte CJK embarcada, unica no WASM da Samsung)" % FONTE_CJK)
+    for cod in IDIOMAS:
         usados = {}
         for n, pt, val in ler_irma(cod):
             try: t = decodificar(val).decode("utf-8"); k = decodificar(pt).decode("utf-8")
@@ -205,19 +237,25 @@ def conferir():
             for ch in t:
                 if ch >= " " and ch not in k and ch not in usados: usados[ch] = n
         for ch, n in sorted(usados.items()):
-            if "\u0400" <= ch <= "\u04ff":
-                erro("idioma_%s.h:%d: cirilico (%r) numa tabela latina" % (cod, n, ch))
-            for nome, cps in fontes.items():
-                if ord(ch) not in cps:
-                    erro("idioma_%s.h:%d: U+%04X (%s) nao existe em %s" % (cod, n, ord(ch), ch, nome))
+            if "\u0400" <= ch <= "\u04ff" and cod not in CIRILICOS:
+                erro("idioma_%s.h:%d: cirilico (%r) numa tabela que nao e cirilica" % (cod, n, ch))
+            if all(ord(ch) in c for c in inter): continue
+            if cod in CJK and cjk is not None and ord(ch) in cjk: continue
+            erro("idioma_%s.h:%d: U+%04X (%s) nao existe na Inter%s" %
+                 (cod, n, ord(ch), ch, " nem em " + FONTE_CJK if cod in CJK else ""))
     return mestra, erros
 
 def sincronizar():
     mestra = ler_mestra()
     for cod in IDIOMAS:
         atual = {pt: val for _, pt, val in ler_irma(cod)}
-        linhas = ["// Traducao para %s. Uma linha por entrada de idioma_tab.h, na mesma ordem." % cod,
-                  "// Gerado por tools/idiomas.py --sincronizar; a chave e so para leitura (macro T)."]
+        # Cabecalho: preserva o que ja existe (nome da lingua e autoria); so a
+        # ordem das linhas vem da mestra.
+        caminho = SRC / ("idioma_%s.h" % cod)
+        cab = [l for l in caminho.read_text(encoding="utf-8").splitlines()
+               if l.lstrip().startswith("//")] if caminho.exists() else []
+        linhas = cab or ["// Traducao para %s. Uma linha por entrada de idioma_tab.h, na mesma ordem." % cod,
+                         "// Gerado por tools/idiomas.py --sincronizar; a chave e so para leitura (macro T)."]
         for _, pt, _en in mestra:
             linhas.append('  T("%s", "%s"),' % (pt, atual.get(pt, "")))
         (SRC / ("idioma_%s.h" % cod)).write_text("\n".join(linhas) + "\n", encoding="utf-8")
@@ -228,7 +266,23 @@ def revisao(cod):
     for (n, pt, en), (m, _k, val) in zip(mestra, irma):
         print("%s\n   en: %s\n   %s: %s" % (pt, en, cod, val))
 
+def cobertura():
+    """Por lingua e por familia: quantos caracteres da traducao a fonte nao tem."""
+    fontes = {f.name: cmap_ttf(f) for f in sorted(FONTES.glob("*.ttf"))}
+    regulares = [n for n in fontes if n.endswith("Regular.ttf") or n == FONTE_CJK]
+    print("%-6s %5s  %s" % ("lingua", "chars", "  ".join(n.split("-")[0][:12] for n in regulares)))
+    for cod in IDIOMAS:
+        usados = set()
+        for n, pt, val in ler_irma(cod):
+            try: t = decodificar(val).decode("utf-8"); k = decodificar(pt).decode("utf-8")
+            except Exception: continue
+            usados |= {ch for ch in t if ch >= " " and ch not in k}
+        print("%-6s %5d  %s" % (cod, len(usados), "  ".join(
+            "%*d" % (len(n.split("-")[0][:12]), sum(1 for ch in usados if ord(ch) not in fontes[n]))
+            for n in regulares)))
+
 if __name__ == "__main__":
+    if "--cobertura" in sys.argv: cobertura(); sys.exit(0)
     if "--sincronizar" in sys.argv: sincronizar(); sys.exit(0)
     if "--revisao" in sys.argv: revisao(sys.argv[sys.argv.index("--revisao") + 1]); sys.exit(0)
     mestra, erros = conferir()

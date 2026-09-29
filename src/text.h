@@ -3,6 +3,7 @@
 // rasterizacao de texto e cara e o conteudo aqui muda pouco.
 #ifndef NV_TEXT_H
 #define NV_TEXT_H
+#include <stddef.h>
 #include "gl_compat.h"
 
 // Escala do tvOS. Cada estilo carrega tamanho E peso: no aparelho a diferenca
@@ -70,6 +71,9 @@ extern const char *const TXT_FAMILIAS_PT[TXT_FAMILIA_N];
 // que o chamador escolheu para a legenda.
 void txt_definir_fonte_interface(TxtFamilia familia);
 TxtFamilia txt_fonte_interface(void);
+// Que fonte desenharia a linha `s` no estilo dado, em texto ("principal",
+// "inter", "reserva:CJK:/caminho"). Para teste e diagnostico; NULL = nenhuma.
+const char *txt_fonte_da_linha(TxtFamilia familia, TxtEstilo estilo, const char *s);
 
 // Instrumentacao: quantas linhas foram RASTERIZADAS (nao vieram do cache) no
 // quadro e quanto tempo isso custou. Rasterizar texto e a operacao mais cara
@@ -144,6 +148,14 @@ float txt_tracking(TxtEstilo estilo, const char *s, int r, int g, int b,
 // usada. Sem isso, qualquer texto de tamanho variavel (sinopse de episodio,
 // nome de titulo) vaza para a coluna vizinha — nao existe "escrever curto o
 // suficiente" quando o conteudo vem de fora.
+// Tamanho em bytes do proximo TOKEN de uma quebra de linha que comeca em `s` (0 se
+// `s` acaba, ou comeca em espaco ou \n): a palavra ate o espaco, ou UM caractere
+// CJK com a pontuacao que nao pode abrir linha. Quem quebra texto por conta
+// propria (agendaui.c) usa isto em vez de procurar o espaco, senao japones e
+// chines viram uma "palavra" so e estouram a coluna. Ao juntar tokens, so poe
+// espaco entre dois que vinham separados por espaco no texto.
+size_t txt_token_tam(const char *s);
+
 float txt_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
                 float x, float y, float larg, float leading, float alpha, int maxLinhas);
 

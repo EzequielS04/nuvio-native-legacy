@@ -5,7 +5,7 @@
 //   cc tests/idioma.c src/idioma.c -Isrc -I/opt/homebrew/include \
 //      -o /tmp/t-idioma && /tmp/t-idioma
 //
-// Cobre tambem os outros idiomas (ro, uk, ru, fr, de, es): toda chave de idioma_tab.h tem de
+// Cobre tambem os outros 29 idiomas (ro... zhtw, ver idiomacod.h): toda chave de idioma_tab.h tem de
 // voltar traduzida, nao vazia, com os MESMOS marcadores printf e os mesmos \n
 // que o portugues — o mesmo que tools/idiomas.py confere no texto, aqui pelo
 // caminho que o app usa (i18n), que e onde um desalinhamento de tabela aparece.
@@ -66,11 +66,10 @@ static void marcadores(const char *s, char *out, size_t cap) {
 static int quebras(const char *s) { int n = 0; for (; *s; s++) if (*s == '\n') n++; return n; }
 
 static void varredura(void) {
-  static const int LINGUAS[] = { IDIOMA_EN, IDIOMA_RO, IDIOMA_UK, IDIOMA_RU,
-                                 IDIOMA_FR, IDIOMA_DE, IDIOMA_ES };
   size_t i, k, n = sizeof CHAVES / sizeof *CHAVES;
-  for (k = 0; k < sizeof LINGUAS / sizeof *LINGUAS; k++) {
-    lg = LINGUAS[k];
+  // Todos menos o portugues (que devolve a propria chave): o ingles e os 28 de tabela.
+  for (k = 1; k < IDIOMA_N; k++) {
+    lg = (int)k;
     for (i = 0; i < n; i++) {
       const char *r = i18n(CHAVES[i].pt);
       char mk[128], mr[128];
@@ -175,6 +174,174 @@ int main(void) {
     idioma_maiusc(o, sizeof o, "a\xc3\x9f");          if (strcmp(o, "A\xc3\x9f"))    { printf("FALHOU: maiusc eszett\n"); falhas++; }
     idioma_maiusc(o, sizeof o, "se\xc3\xb1or");       if (strcmp(o, "SE\xc3\x91OR")) { printf("FALHOU: maiusc senor\n"); falhas++; } }
 
+  // OS 22 DE 2026-09: uma amostra por lingua, com a marca de cada uma — o
+  // diacritico que so ela tem, ou a escrita. "Ajustes" e a chave que qualquer
+  // desalinhamento de tabela derruba primeiro; "Quem esta assistindo?" leva o
+  // acento e a pontuacao propria (¿, ;, ？, ?).
+  { static const struct { int l; const char *ajustes, *quem, *status, *pais; } N[] = {
+      { IDIOMA_IT,   "Impostazioni", "Chi sta guardando?", "Terminata", "Stati Uniti" },
+      { IDIOMA_NL,   "Instellingen", "Wie kijkt er?", "Afgelopen", "Verenigde Staten" },
+      { IDIOMA_PL,   "Ustawienia", "Kto oglą" "da?", "Zakoń" "czony", "Stany Zjednoczone" },
+      { IDIOMA_TR,   "Ayarlar", "Kim izliyor?", "Sona erdi", "Amerika Birleş" "ik Devletleri" },
+      { IDIOMA_PTPT, "Definiçõ" "es", "Quem está a ver?", "Terminada", "Estados Unidos" },
+      { IDIOMA_SV,   "Inställningar", "Vem tittar?", "Avslutad", "USA" },
+      { IDIOMA_DA,   "Indstillinger", "Hvem ser med?", "Afsluttet", "USA" },
+      { IDIOMA_NO,   "Innstillinger", "Hvem ser på?", "Avsluttet", "USA" },
+      { IDIOMA_CS,   "Nastavení", "Kdo se dívá?", "Ukončeno", "Spojené státy" },
+      { IDIOMA_SK,   "Nastavenia", "Kto pozerá?", "Ukončené", "Spojené štáty" },
+      { IDIOMA_SL,   "Nastavitve", "Kdo gleda?", "Zaključeno", "Združ" "ene drž" "ave Amerike" },
+      { IDIOMA_HU,   "Beállítások", "Ki nézi?", "Befejezett", "Egyesült Államok" },
+      { IDIOMA_LT,   "Nustatymai", "Kas žiūri?", "Baigta", "Jungtinės Amerikos Valstijos" },
+      { IDIOMA_BS,   "Postavke", "Ko gleda?", "Završ" "eno", "Sjedinjene Američke Drž" "ave" },
+      { IDIOMA_SR,   "Podeš" "avanja", "Ko gleda?", "Završ" "eno", "Sjedinjene Američke Drž" "ave" },
+      { IDIOMA_BG,   "Настройки", "Кой гледа?", "Приключил", "Съединени щати" },
+      { IDIOMA_EL,   "Ρυθμίσεις", "Ποιος βλέπει;", "Ολοκληρώθηκε", "Ηνωμένες Πολιτείες" },
+      { IDIOMA_ID,   "Pengaturan", "Siapa yang menonton?", "Tamat", "Amerika Serikat" },
+      { IDIOMA_VI,   "Cài đặt", "Ai đang xem?", "Đã kết thúc", "Hoa Kỳ" },
+      { IDIOMA_JA,   "設定", "誰が見ていますか?", "完結", "アメリカ" },
+      { IDIOMA_ZHCN, "设置", "谁在观看？", "已完结", "美国" },
+      { IDIOMA_ZHTW, "設定", "誰在觀看？", "已完結", "美國" },
+    };
+    size_t i;
+    for (i = 0; i < sizeof N / sizeof *N; i++) {
+      lg = N[i].l;
+      confere("Ajustes", N[i].ajustes);
+      confere("Quem está assistindo?", N[i].quem);
+      confere("Finalizada", N[i].status);
+      confere("Estados Unidos", N[i].pais);
+      confere("Blade Runner 2049", "Blade Runner 2049");   /* titulo: nunca traduzido */
+    } }
+
+  // Duracao: a abreviatura de hora e a propria de cada lingua.
+  lg = IDIOMA_TR; confere("%dh %dmin", "%dsa %ddk");
+  lg = IDIOMA_DA; confere("%dh %dmin", "%dt %dmin");
+  lg = IDIOMA_NL; confere("%dh", "%d u");
+  lg = IDIOMA_JA; confere("%dmin", "%d 分");
+  lg = IDIOMA_ZHTW; confere("%dh", "%d 小時");
+
+  // MES POR EXTENSO no GENITIVO: pl, cs, sk, sl, lt, bs, sr, el declinam ("21
+  // września", "rugsėjo 21 d."); hu, tr, vi, bg, id e os demais usam a tabela
+  // (o bulgaro, o hungaro e o vietnamita nao declinam).
+  lg = IDIOMA_PL;   confere_mes(9, "setembro", "września");
+  lg = IDIOMA_CS;   confere_mes(9, "setembro", "září");
+  lg = IDIOMA_SK;   confere_mes(3, "março", "marca");
+  lg = IDIOMA_SL;   confere_mes(12, "dezembro", "decembra");
+  lg = IDIOMA_LT;   confere_mes(9, "setembro", "rugsėjo");
+  lg = IDIOMA_BS;   confere_mes(1, "janeiro", "januara");
+  lg = IDIOMA_SR;   confere_mes(8, "agosto", "avgusta");
+  lg = IDIOMA_EL;   confere_mes(9, "setembro", "Σεπτεμβρίου");
+  lg = IDIOMA_HU;   confere_mes(9, "setembro", "szeptember");
+  lg = IDIOMA_TR;   confere_mes(9, "setembro", "Eylül");
+  lg = IDIOMA_BG;   confere_mes(9, "setembro", "септември");
+  lg = IDIOMA_VI;   confere_mes(9, "setembro", "tháng 9");
+  lg = IDIOMA_IT;   confere_mes(9, "setembro", "settembre");
+
+  // Mes abreviado dos 22, e a ORDEM da data curta.
+  { char o[48];
+    static const struct { int l, m; const char *curto; } M[] = {
+      { IDIOMA_IT, 0, "gen" }, { IDIOMA_NL, 2, "mrt" }, { IDIOMA_PL, 8, "wrz" },
+      { IDIOMA_PL, 9, "paź" }, { IDIOMA_TR, 1, "Ş" "ub" }, { IDIOMA_PTPT, 8, "set" },
+      { IDIOMA_SV, 2, "mars" }, { IDIOMA_DA, 4, "maj" }, { IDIOMA_NO, 11, "des" },
+      { IDIOMA_CS, 8, "zář" }, { IDIOMA_SK, 5, "jún" }, { IDIOMA_SL, 7, "avg." },
+      { IDIOMA_HU, 8, "szept." }, { IDIOMA_LT, 8, "rugs." }, { IDIOMA_BS, 3, "apr" },
+      { IDIOMA_SR, 7, "avg" }, { IDIOMA_BG, 0, "яну" }, { IDIOMA_EL, 8, "Σεπ" },
+      { IDIOMA_ID, 7, "Agu" }, { IDIOMA_VI, 8, "thg 9" }, { IDIOMA_JA, 8, "9月" },
+      { IDIOMA_ZHCN, 11, "12月" }, { IDIOMA_ZHTW, 0, "1月" },
+    };
+    size_t i;
+    for (i = 0; i < sizeof M / sizeof *M; i++)
+      if (strcmp(idioma_mes_curto(M[i].l, M[i].m), M[i].curto)) {
+        printf("FALHOU: mes curto %d/%d -> \"%s\" (esperava \"%s\")\n", M[i].l, M[i].m,
+               idioma_mes_curto(M[i].l, M[i].m), M[i].curto);
+        falhas++; }
+    // Nenhum idioma tem mes vazio ou repetido.
+    { int l, m, n;
+      for (l = 0; l < IDIOMA_N; l++)
+        for (m = 0; m < 12; m++) {
+          if (!idioma_mes_curto(l, m)[0]) { printf("FALHOU: mes curto vazio %d/%d\n", l, m); falhas++; }
+          for (n = 0; n < m; n++)
+            if (!strcmp(idioma_mes_curto(l, m), idioma_mes_curto(l, n))) {
+              printf("FALHOU: mes curto repetido no idioma %d: %d e %d\n", l, n, m); falhas++; }
+        } }
+    idioma_data_curta(IDIOMA_PT, 21, idioma_mes_curto(IDIOMA_PT, 8), 0, o, sizeof o);
+    if (strcmp(o, "21 set")) { printf("FALHOU: data curta pt -> %s\n", o); falhas++; }
+    idioma_data_curta(IDIOMA_EN, 21, idioma_mes_curto(IDIOMA_EN, 8), 2025, o, sizeof o);
+    if (strcmp(o, "Sep 21, 2025")) { printf("FALHOU: data curta en -> %s\n", o); falhas++; }
+    idioma_data_curta(IDIOMA_JA, 21, idioma_mes_curto(IDIOMA_JA, 8), 2025, o, sizeof o);
+    if (strcmp(o, "2025年9月21日")) { printf("FALHOU: data curta ja -> %s\n", o); falhas++; }
+    idioma_data_curta(IDIOMA_ZHTW, 5, idioma_mes_curto(IDIOMA_ZHTW, 0), 0, o, sizeof o);
+    if (strcmp(o, "1月5日")) { printf("FALHOU: data curta zhtw -> %s\n", o); falhas++; }
+    idioma_data_curta(IDIOMA_HU, 21, idioma_mes_curto(IDIOMA_HU, 8), 2025, o, sizeof o);
+    if (strcmp(o, "2025. szept. 21.")) { printf("FALHOU: data curta hu -> %s\n", o); falhas++; }
+    idioma_data_curta(IDIOMA_LT, 21, idioma_mes_curto(IDIOMA_LT, 8), 0, o, sizeof o);
+    if (strcmp(o, "rugs. 21")) { printf("FALHOU: data curta lt -> %s\n", o); falhas++; }
+    idioma_data_curta(IDIOMA_PL, 3, idioma_mes_curto(IDIOMA_PL, 8), 2024, o, sizeof o);
+    if (strcmp(o, "3 wrz 2024")) { printf("FALHOU: data curta pl -> %s\n", o); falhas++; }
+    // Data por extenso com o ano na frente, e cabecalho do calendario.
+    if (!idioma_data_extenso_especial(IDIOMA_JA, 29, 7, "x", "2026", o, sizeof o) || strcmp(o, "2026年7月29日")) {
+      printf("FALHOU: data extenso ja -> %s\n", o); falhas++; }
+    if (!idioma_data_extenso_especial(IDIOMA_HU, 29, 7, "július", "2026", o, sizeof o) ||
+        strcmp(o, "2026. július 29.")) { printf("FALHOU: data extenso hu -> %s\n", o); falhas++; }
+    if (!idioma_data_extenso_especial(IDIOMA_LT, 29, 7, "liepos", "2026", o, sizeof o) ||
+        strcmp(o, "2026 m. liepos 29 d.")) { printf("FALHOU: data extenso lt -> %s\n", o); falhas++; }
+    if (idioma_data_extenso_especial(IDIOMA_PL, 29, 7, "lipca", "2026", o, sizeof o)) {
+      printf("FALHOU: data extenso pl nao devia ser especial\n"); falhas++; }
+    idioma_mes_ano(IDIOMA_ZHCN, "9月", 2026, o, sizeof o);
+    if (strcmp(o, "2026年9月")) { printf("FALHOU: mes ano zhcn -> %s\n", o); falhas++; }
+    idioma_mes_ano(IDIOMA_PT, "SETEMBRO", 2026, o, sizeof o);
+    if (strcmp(o, "SETEMBRO 2026")) { printf("FALHOU: mes ano pt -> %s\n", o); falhas++; } }
+
+  // CAIXA ALTA por escrita: turco (i -> İ, ı -> I), grego (sem acento, ς -> Σ),
+  // vietnamita (ơ ư đ e o bloco U+1EA0), Latin Estendido-A (pl, cs, sk, hu, lt,
+  // bs/sr) e o bulgaro (cirilico).
+  { char o[96];
+    static const struct { int l; const char *in, *out; } U[] = {
+      { IDIOMA_TR, "ocak nisan ışık ş" "ubat ğ çöü",
+                   "OCAK Nİ" "SAN IŞ" "IK Ş" "UBAT Ğ ÇÖÜ" },
+      { IDIOMA_PT, "ocak", "OCAK" },
+      { IDIOMA_EL, "Σεπτέμβριος Μάιος Ιούνιος", "ΣΕΠΤΕΜΒΡΙΟΣ ΜΑΙΟΣ ΙΟΥΝΙΟΣ" },
+      { IDIOMA_EL, "ΐ ϊ ΰ ς", "Ι Ι Υ Σ" },
+      { IDIOMA_VI, "tháng chín ơ ư đ ĩ ũ ạ ề ệ ỹ", "THÁNG CHÍN Ơ Ư Đ Ĩ Ũ Ạ Ề Ệ Ỹ" },
+      { IDIOMA_PL, "wrzesień łódź ą ę ź ż ń ś ć", "WRZESIEŃ ŁÓDŹ Ą Ę Ź Ż Ń Ś Ć" },
+      { IDIOMA_CS, "září říjen únor březen ď ť ň ě ů", "ZÁŘÍ ŘÍJEN ÚNOR BŘEZEN Ď Ť Ň Ě Ů" },
+      { IDIOMA_SK, "október ľ ĺ ŕ ô ä", "OKTÓBER Ľ Ĺ Ŕ Ô Ä" },
+      { IDIOMA_HU, "október ő ű ö ü", "OKTÓBER Ő Ű Ö Ü" },
+      { IDIOMA_LT, "rugsėjis ą č ę ė į š ų ū ž", "RUGSĖJIS Ą Č Ę Ė Į Š Ų Ū Ž" },
+      { IDIOMA_SR, "đ š ž č ć", "Đ Š Ž Č Ć" },
+      { IDIOMA_BG, "януари", "ЯНУАРИ" },
+      { IDIOMA_PT, "… abc ÿ œ", "… ABC Ÿ Œ" },  /* depois de um caractere de 3 bytes */
+    };
+    size_t i;
+    for (i = 0; i < sizeof U / sizeof *U; i++) {
+      idioma_maiusc_em(U[i].l, o, sizeof o, U[i].in);
+      if (strcmp(o, U[i].out)) {
+        printf("FALHOU: maiusc idioma %d \"%s\" -> \"%s\" (esperava \"%s\")\n", U[i].l, U[i].in, o, U[i].out);
+        falhas++; }
+    }
+    /* o turco aumenta a linha em bytes; o destino curto trunca sem estourar */
+    { char c[6]; size_t n = idioma_maiusc_em(IDIOMA_TR, c, sizeof c, "iiiii");
+      if (n >= sizeof c || strlen(c) != n) { printf("FALHOU: maiusc turco estourou o destino\n"); falhas++; } } }
+
+  // Separador decimal: ponto so em ingles, japones e chines.
+  { int l, ponto = 0;
+    for (l = 0; l < IDIOMA_N; l++) ponto += idioma_ponto_decimal(l);
+    if (ponto != 4 || !idioma_ponto_decimal(IDIOMA_EN) || !idioma_ponto_decimal(IDIOMA_JA) ||
+        !idioma_ponto_decimal(IDIOMA_ZHCN) || !idioma_ponto_decimal(IDIOMA_ZHTW) ||
+        idioma_ponto_decimal(IDIOMA_PT) || idioma_ponto_decimal(IDIOMA_TR) || idioma_ponto_decimal(IDIOMA_PTPT)) {
+      printf("FALHOU: idioma_ponto_decimal\n"); falhas++; } }
+
+  // GENEROS: desc_genero_pt manda o nome portugues pela tabela (descoberta.c). Toda
+  // chave que ele usa tem de existir na mestra, senao o genero sai em ingles.
+  { static const char *G[] = { "Ação", "Aventura", "Animação", "Biografia",
+      "Comé" "dia", "Crime", "Documentário", "Drama", "Família", "Fantasia", "Noir",
+      "Game show", "História", "Terror", "Música", "Musical", "Mistério", "Notícias",
+      "Reality", "Romance", "Ficção científica", "Curta", "Esporte", "Talk show",
+      "Suspense", "Guerra", "Faroeste", "Infantil", "Novela", "Adulto" };
+    size_t i, k, n = sizeof CHAVES / sizeof *CHAVES;
+    for (i = 0; i < sizeof G / sizeof *G; i++) {
+      for (k = 0; k < n && strcmp(CHAVES[k].pt, G[i]); k++) {}
+      if (k == n) { printf("FALHOU: genero \"%s\" nao esta na tabela\n", G[i]); falhas++; } } }
+
   // DETALHE DO TITULO: status, pais e duracao crus (fix/detalhe-traducao). As
   // chaves sao as que desc_status_chave / desc_pais_txt / desc_duracao_min usam.
   lg = IDIOMA_RU;
@@ -195,7 +362,10 @@ int main(void) {
   confere("Lan\xc3\xa7" "ado", "Released");
 
   // Codigo ISO do idioma da interface (compara com o `language` do Trakt).
-  { static const char *ISO[] = { "pt", "en", "ro", "uk", "ru", "fr", "de", "es" };
+  { static const char *ISO[] = { "pt", "en", "ro", "uk", "ru", "fr", "de", "es",
+      "it", "nl", "pl", "tr", "pt", "sv", "da", "no", "cs", "sk", "sl", "hu", "lt",
+      "bs", "sr", "bg", "el", "id", "vi", "ja", "zh", "zh" };
+    _Static_assert(sizeof ISO / sizeof *ISO == IDIOMA_N, "um ISO por IDIOMA_*");
     int i;
     for (i = 0; i < IDIOMA_N; i++)
       if (strcmp(idioma_iso(i), ISO[i])) { printf("FALHOU: idioma_iso(%d)\n", i); falhas++; } }

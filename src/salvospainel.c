@@ -993,7 +993,7 @@ static void badge_imdb_foco_transicao(float x, float y, int nota,
   TxtLinha repouso, foco, marca;
   GfxRect p;
   if (nota <= 0) return;
-  snprintf(texto, sizeof texto, ajustes_idioma_ingles() ? "%d.%d" : "%d,%d",
+  snprintf(texto, sizeof texto, idioma_ponto_decimal(ajustes_idioma()) ? "%d.%d" : "%d,%d",
            nota / 10, nota % 10);
   repouso = txt_linha(TXT_CAPTION2, texto, 235, 235, 235, 255);
   foco = txt_linha(TXT_CAPTION2, texto, tintaFoco, tintaFoco, tintaFoco, 255);

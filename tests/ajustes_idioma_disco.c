@@ -212,6 +212,53 @@ int main(void) {
   // "idioma" e local e nunca sobe.
   assert(somenteDesteAparelho(AJ_IDIOMA));
 
+  // (6) OS 22 DE 2026-09. O numero gravado no disco e o IDIOMA_* (os antigos
+  // nao mudam de lugar), e a escolha manual de qualquer um sobrevive ao reinicio.
+  escrever(caminho, "idioma 27\nidiomaAutoLocal 0\n");
+  reiniciarIdioma();
+  ajustes_dir(dir);
+  assert(valor[AJ_IDIOMA] == 1 + IDIOMA_JA && ajustes_idioma() == IDIOMA_JA);
+  escrever(caminho, "idioma 29\nidiomaAutoLocal 0\n");
+  reiniciarIdioma();
+  ajustes_dir(dir);
+  assert(ajustes_idioma() == IDIOMA_ZHTW);
+  escrever(caminho, "idioma 30\nidiomaAutoLocal 0\n");       // fora da faixa: nao inventa idioma
+  reiniciarIdioma();
+  ajustes_dir(dir);
+  assert(ajustes_idioma() == IDIOMA_EN);
+  // Automatico com a conta em portugues de Portugal, chines tradicional e norueguês.
+  escrever(caminho, "");
+  reiniciarIdioma();
+  ajustes_dir(dir);
+  strcpy(contaTmdbLing, "pt-PT");   idiomaResolver(0);   assert(ajustes_idioma() == IDIOMA_PTPT);
+  strcpy(contaTmdbLing, "zh-Hant"); idiomaResolver(0);   assert(ajustes_idioma() == IDIOMA_ZHTW);
+  strcpy(contaTmdbLing, "zh");      idiomaResolver(0);   assert(ajustes_idioma() == IDIOMA_ZHCN);
+  strcpy(contaTmdbLing, "nb");      idiomaResolver(0);   assert(ajustes_idioma() == IDIOMA_NO);
+  strcpy(contaTmdbLing, "");        strcpy(contaLegLing, "gre"); idiomaResolver(0);
+  assert(ajustes_idioma() == IDIOMA_EL);
+  // "Da interface" no idioma dos metadados: o codigo que o TMDB entende, um por
+  // idioma (o bokmal e "nb", nao "no"; o portugues do Brasil e o europeu diferem).
+  { static const char *const TMDB[IDIOMA_N] = {
+      "pt-BR", "en-US", "ro-RO", "uk-UA", "ru-RU", "fr-FR", "de-DE", "es-ES", "it-IT",
+      "nl-NL", "pl-PL", "tr-TR", "pt-PT", "sv-SE", "da-DK", "nb-NO", "cs-CZ", "sk-SK",
+      "sl-SI", "hu-HU", "lt-LT", "bs-BA", "sr-RS", "bg-BG", "el-GR", "id-ID", "vi-VN",
+      "ja-JP", "zh-CN", "zh-TW" };
+    int i;
+    valor[AJ_TMDB_IDIOMA] = 0;
+    for (i = 0; i < IDIOMA_N; i++) {
+      valor[AJ_IDIOMA] = 1 + i;
+      assert(ajustes_idioma() == i);
+      assert(!strcmp(ajustes_tmdb_idioma(), TMDB[i]));
+    } }
+  // A lista do "Idioma dos metadados" cresceu no fim: os 14 indices antigos
+  // continuam apontando para os mesmos codigos.
+  valor[AJ_IDIOMA] = 1 + IDIOMA_EN;
+  valor[AJ_TMDB_IDIOMA] = 1;  assert(!strcmp(ajustes_tmdb_idioma(), "pt-BR"));
+  valor[AJ_TMDB_IDIOMA] = 7;  assert(!strcmp(ajustes_tmdb_idioma(), "pt-PT"));
+  valor[AJ_TMDB_IDIOMA] = 13; assert(!strcmp(ajustes_tmdb_idioma(), "ru-RU"));
+  valor[AJ_TMDB_IDIOMA] = 31; assert(!strcmp(ajustes_tmdb_idioma(), "zh-TW"));
+  valor[AJ_TMDB_IDIOMA] = 0;
+
   unlink(caminho);
   { char tmp[700]; snprintf(tmp, sizeof tmp, "%s/ajustes.tmp", dir); unlink(tmp); }
   rmdir(dir);

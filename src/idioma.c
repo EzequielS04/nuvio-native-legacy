@@ -45,6 +45,72 @@ static const char *const TAB_DE[] = {
 static const char *const TAB_ES[] = {
 #include "idioma_es.h"
 };
+static const char *const TAB_IT[] = {
+#include "idioma_it.h"
+};
+static const char *const TAB_NL[] = {
+#include "idioma_nl.h"
+};
+static const char *const TAB_PL[] = {
+#include "idioma_pl.h"
+};
+static const char *const TAB_TR[] = {
+#include "idioma_tr.h"
+};
+static const char *const TAB_PTPT[] = {
+#include "idioma_ptpt.h"
+};
+static const char *const TAB_SV[] = {
+#include "idioma_sv.h"
+};
+static const char *const TAB_DA[] = {
+#include "idioma_da.h"
+};
+static const char *const TAB_NO[] = {
+#include "idioma_no.h"
+};
+static const char *const TAB_CS[] = {
+#include "idioma_cs.h"
+};
+static const char *const TAB_SK[] = {
+#include "idioma_sk.h"
+};
+static const char *const TAB_SL[] = {
+#include "idioma_sl.h"
+};
+static const char *const TAB_HU[] = {
+#include "idioma_hu.h"
+};
+static const char *const TAB_LT[] = {
+#include "idioma_lt.h"
+};
+static const char *const TAB_BS[] = {
+#include "idioma_bs.h"
+};
+static const char *const TAB_SR[] = {
+#include "idioma_sr.h"
+};
+static const char *const TAB_BG[] = {
+#include "idioma_bg.h"
+};
+static const char *const TAB_EL[] = {
+#include "idioma_el.h"
+};
+static const char *const TAB_ID[] = {
+#include "idioma_id.h"
+};
+static const char *const TAB_VI[] = {
+#include "idioma_vi.h"
+};
+static const char *const TAB_JA[] = {
+#include "idioma_ja.h"
+};
+static const char *const TAB_ZHCN[] = {
+#include "idioma_zhcn.h"
+};
+static const char *const TAB_ZHTW[] = {
+#include "idioma_zhtw.h"
+};
 #undef T
 // Uma tabela com o numero errado de linhas desalinharia TODAS as traducoes
 // depois dela — falha na compilacao, nao em silencio na tela.
@@ -60,6 +126,50 @@ _Static_assert(sizeof TAB_DE / sizeof *TAB_DE == sizeof TAB / sizeof *TAB,
                "idioma_de.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
 _Static_assert(sizeof TAB_ES / sizeof *TAB_ES == sizeof TAB / sizeof *TAB,
                "idioma_es.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_IT / sizeof *TAB_IT == sizeof TAB / sizeof *TAB,
+               "idioma_it.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_NL / sizeof *TAB_NL == sizeof TAB / sizeof *TAB,
+               "idioma_nl.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_PL / sizeof *TAB_PL == sizeof TAB / sizeof *TAB,
+               "idioma_pl.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_TR / sizeof *TAB_TR == sizeof TAB / sizeof *TAB,
+               "idioma_tr.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_PTPT / sizeof *TAB_PTPT == sizeof TAB / sizeof *TAB,
+               "idioma_ptpt.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_SV / sizeof *TAB_SV == sizeof TAB / sizeof *TAB,
+               "idioma_sv.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_DA / sizeof *TAB_DA == sizeof TAB / sizeof *TAB,
+               "idioma_da.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_NO / sizeof *TAB_NO == sizeof TAB / sizeof *TAB,
+               "idioma_no.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_CS / sizeof *TAB_CS == sizeof TAB / sizeof *TAB,
+               "idioma_cs.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_SK / sizeof *TAB_SK == sizeof TAB / sizeof *TAB,
+               "idioma_sk.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_SL / sizeof *TAB_SL == sizeof TAB / sizeof *TAB,
+               "idioma_sl.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_HU / sizeof *TAB_HU == sizeof TAB / sizeof *TAB,
+               "idioma_hu.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_LT / sizeof *TAB_LT == sizeof TAB / sizeof *TAB,
+               "idioma_lt.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_BS / sizeof *TAB_BS == sizeof TAB / sizeof *TAB,
+               "idioma_bs.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_SR / sizeof *TAB_SR == sizeof TAB / sizeof *TAB,
+               "idioma_sr.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_BG / sizeof *TAB_BG == sizeof TAB / sizeof *TAB,
+               "idioma_bg.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_EL / sizeof *TAB_EL == sizeof TAB / sizeof *TAB,
+               "idioma_el.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_ID / sizeof *TAB_ID == sizeof TAB / sizeof *TAB,
+               "idioma_id.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_VI / sizeof *TAB_VI == sizeof TAB / sizeof *TAB,
+               "idioma_vi.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_JA / sizeof *TAB_JA == sizeof TAB / sizeof *TAB,
+               "idioma_ja.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_ZHCN / sizeof *TAB_ZHCN == sizeof TAB / sizeof *TAB,
+               "idioma_zhcn.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_ZHTW / sizeof *TAB_ZHTW == sizeof TAB / sizeof *TAB,
+               "idioma_zhtw.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
 
 // A traducao da entrada `i` no idioma `lg` (nunca IDIOMA_PT). Valor vazio cai no
 // ingles: uma entrada nova ainda sem traducao aparece em ingles, nao em branco.
@@ -72,6 +182,28 @@ static const char *traduzida(int i, int lg) {
     case IDIOMA_FR: r = TAB_FR[i]; break;
     case IDIOMA_DE: r = TAB_DE[i]; break;
     case IDIOMA_ES: r = TAB_ES[i]; break;
+    case IDIOMA_IT: r = TAB_IT[i]; break;
+    case IDIOMA_NL: r = TAB_NL[i]; break;
+    case IDIOMA_PL: r = TAB_PL[i]; break;
+    case IDIOMA_TR: r = TAB_TR[i]; break;
+    case IDIOMA_PTPT: r = TAB_PTPT[i]; break;
+    case IDIOMA_SV: r = TAB_SV[i]; break;
+    case IDIOMA_DA: r = TAB_DA[i]; break;
+    case IDIOMA_NO: r = TAB_NO[i]; break;
+    case IDIOMA_CS: r = TAB_CS[i]; break;
+    case IDIOMA_SK: r = TAB_SK[i]; break;
+    case IDIOMA_SL: r = TAB_SL[i]; break;
+    case IDIOMA_HU: r = TAB_HU[i]; break;
+    case IDIOMA_LT: r = TAB_LT[i]; break;
+    case IDIOMA_BS: r = TAB_BS[i]; break;
+    case IDIOMA_SR: r = TAB_SR[i]; break;
+    case IDIOMA_BG: r = TAB_BG[i]; break;
+    case IDIOMA_EL: r = TAB_EL[i]; break;
+    case IDIOMA_ID: r = TAB_ID[i]; break;
+    case IDIOMA_VI: r = TAB_VI[i]; break;
+    case IDIOMA_JA: r = TAB_JA[i]; break;
+    case IDIOMA_ZHCN: r = TAB_ZHCN[i]; break;
+    case IDIOMA_ZHTW: r = TAB_ZHTW[i]; break;
     default: break;
   }
   return r && *r ? r : TAB[i].en;
@@ -115,10 +247,59 @@ const char *idioma_mes_data(int mes, const char *nomePt) {
     "января", "февраля", "марта", "апреля", "мая", "июня",
     "июля", "августа", "сентября", "октября", "ноября", "декабря"
   };
+  // GENITIVO nas linguas que declinam o mes na data por extenso: "21 września",
+  // "21. září", "rugsėjo 21 d.", "21 Σεπτεμβρίου". O calendario ("Wrzesień 2026")
+  // continua pedindo o nominativo, que e a traducao da chave.
+  // O bulgaro nao declina o mes ("21 септември"), o hungaro, o turco e o
+  // vietnamita tambem nao: ficam com a forma da tabela. Japones e chines nem
+  // passam por aqui (a data deles e numerica, ver idioma_data_asiatica).
+  static const char *PL[12] = {
+    "stycznia", "lutego", "marca", "kwietnia", "maja", "czerwca",
+    "lipca", "sierpnia", "września", "października", "listopada", "grudnia"
+  };
+  static const char *CS[12] = {
+    "ledna", "února", "března", "dubna", "května", "června",
+    "července", "srpna", "září", "října", "listopadu", "prosince"
+  };
+  static const char *SK[12] = {
+    "januára", "februára", "marca", "apríla", "mája", "júna",
+    "júla", "augusta", "septembra", "októbra", "novembra", "decembra"
+  };
+  static const char *SL[12] = {
+    "januarja", "februarja", "marca", "aprila", "maja", "junija",
+    "julija", "avgusta", "septembra", "oktobra", "novembra", "decembra"
+  };
+  static const char *LT[12] = {
+    "sausio", "vasario", "kovo", "balandžio", "gegužės", "birželio",
+    "liepos", "rugpjūčio", "rugsėjo", "spalio", "lapkričio", "gruodžio"
+  };
+  static const char *BS[12] = {
+    "januara", "februara", "marta", "aprila", "maja", "juna",
+    "jula", "augusta", "septembra", "oktobra", "novembra", "decembra"
+  };
+  static const char *SR[12] = {
+    "januara", "februara", "marta", "aprila", "maja", "juna",
+    "jula", "avgusta", "septembra", "oktobra", "novembra", "decembra"
+  };
+  static const char *EL[12] = {
+    "Ιανουαρίου", "Φεβρουαρίου", "Μαρτίου", "Απριλίου", "Μαΐου", "Ιουνίου",
+    "Ιουλίου", "Αυγούστου", "Σεπτεμβρίου", "Οκτωβρίου", "Νοεμβρίου", "Δεκεμβρίου"
+  };
   int lg = ajustes_idioma();
   if (mes >= 1 && mes <= 12) {
-    if (lg == IDIOMA_UK) return UK[mes - 1];
-    if (lg == IDIOMA_RU) return RU[mes - 1];
+    switch (lg) {
+      case IDIOMA_UK: return UK[mes - 1];
+      case IDIOMA_RU: return RU[mes - 1];
+      case IDIOMA_PL: return PL[mes - 1];
+      case IDIOMA_CS: return CS[mes - 1];
+      case IDIOMA_SK: return SK[mes - 1];
+      case IDIOMA_SL: return SL[mes - 1];
+      case IDIOMA_LT: return LT[mes - 1];
+      case IDIOMA_BS: return BS[mes - 1];
+      case IDIOMA_SR: return SR[mes - 1];
+      case IDIOMA_EL: return EL[mes - 1];
+      default: break;
+    }
   }
   return i18n(nomePt);
 }
