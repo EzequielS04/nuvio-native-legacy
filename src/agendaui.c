@@ -139,6 +139,7 @@
 #include "ajustes.h"
 #include "idioma.h"
 #include "noticias.h"
+#include "idiomacod.h"
 #include "catalogo.h"
 #include "badges.h"
 #include "descoberta.h"
@@ -662,25 +663,12 @@ void agendaui_atualizar(float dt, Uint32 agora) {
 // MAIUSCULA que nao quebra acento. O nome do mes vem em minusculas de
 // agenda.c (os MESMOS de desc_data_extenso) e o cabecalho do calendario quer
 // caixa alta; toupper() byte a byte transformaria o 0xC3 de "marco" em lixo.
-// A regra do bloco Latin-1 e uma so: 0xC3 0xAn/0xBn -> 0xC3 (0xAn - 0x20).
+// A regra do bloco Latin-1 e uma so: 0xC3 0xAn/0xBn -> 0xC3 (0xAn - 0x20);
+// romeno e cirilico entram pela mesma funcao (idiomacod.h).
 static void maiusc(char *dst, size_t tam, const char *s) {
-  size_t i = 0, o = 0;
-  if (!tam) return;
-  dst[0] = 0;
-  if (!s) return;
-  while (s[i] && o + 3 < tam) {
-    unsigned char c = (unsigned char)s[i];
-    if (c == 0xC3 && (unsigned char)s[i + 1] >= 0xA0 &&
-                     (unsigned char)s[i + 1] <= 0xBE) {
-      dst[o++] = (char)0xC3;
-      dst[o++] = (char)((unsigned char)s[i + 1] - 0x20);
-      i += 2;
-      continue;
-    }
-    dst[o++] = (c >= 'a' && c <= 'z') ? (char)(c - 32) : (char)c;
-    i++;
-  }
-  dst[o] = 0;
+  // Latin-1, romeno e cirilico (ver idioma_maiusc em idiomacod.h): o mes chega
+  // em qualquer dos cinco idiomas.
+  idioma_maiusc(dst, tam, s);
 }
 
 // "setembro de 2026" em caixa alta, pronto para o cabecalho.

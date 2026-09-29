@@ -3,6 +3,7 @@
 #include "rede.h"
 #include "dados.h"
 #include "ajustes.h"
+#include "idiomacod.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,10 +115,22 @@ static const char *campo(const char *de, const char *fim, const char *tag, char 
   return b;
 }
 
-// "Sat, 20 Sep 2026 12:00:00 GMT" -> "20 Sep" / "20 set".
+// O QUE MUDA POR IDIOMA na busca de manchetes, indexado por IDIOMA_*: o sufixo
+// do arquivo de cache (uma lista por idioma, para trocar de idioma nao mostrar
+// a do anterior), a palavra de apoio da busca ("Silo" serie acha a serie) e o
+// trio hl/gl/ceid do Google News. As palavras sao as que o jornalismo local usa,
+// nao traducao literal do menu.
+static const struct { const char *cod, *serie, *filme, *hl, *gl, *ceid; } PAR[IDIOMA_N] = {
+  { "pt", "s\xc3\xa9rie",                       "filme",                        "pt-BR", "BR", "BR:pt-419" },
+  { "en", "series",                              "movie",                        "en-US", "US", "US:en" },
+  { "ro", "serial",                              "film",                         "ro",    "RO", "RO:ro" },
+  { "uk", "серіал", "фільм", "uk", "UA", "UA:uk" },
+  { "ru", "сериал", "фильм", "ru", "RU", "RU:ru" },
+};
+
+// "Sat, 20 Sep 2026 12:00:00 GMT" -> "20 Sep" / "20 set" / "20 вер".
 static long dataCurta(const char *rfc, char *dst, size_t cap) {
   static const char *EN[] = { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" };
-  static const char *PT[] = { "jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez" };
   int d = 0, m = -1, i, ano = 0;
   char mes[8] = "";
   dst[0] = 0;
@@ -129,9 +142,9 @@ static long dataCurta(const char *rfc, char *dst, size_t cap) {
   { time_t agora = time(NULL); struct tm *tmp = gmtime(&agora);
     int anoAtual = tmp ? tmp->tm_year + 1900 : 0;
     if (ano && ano != anoAtual)
-      snprintf(dst, cap, "%d %s %d", d, ajustes_idioma_ingles() ? EN[m] : PT[m], ano);
+      snprintf(dst, cap, "%d %s %d", d, idioma_mes_curto(ajustes_idioma(), m), ano);
     else
-      snprintf(dst, cap, "%d %s", d, ajustes_idioma_ingles() ? EN[m] : PT[m]); }
+      snprintf(dst, cap, "%d %s", d, idioma_mes_curto(ajustes_idioma(), m)); }
   return (long)ano * 10000L + (long)(m + 1) * 100L + d;
 }
 
@@ -174,7 +187,7 @@ static void interpretar(Entrada *e, const char *xml) {
 // --- disco -------------------------------------------------------------------
 
 static void nomeDisco(const char *imdb, char *dst, size_t cap) {
-  snprintf(dst, cap, "noticias-%s-%s.txt", imdb, ajustes_idioma_ingles() ? "en" : "pt");
+  snprintf(dst, cap, "noticias-%s-%s.txt", imdb, PAR[ajustes_idioma()].cod);
 }
 static void gravar(const Entrada *e) {
   char nome[80], *txt;
@@ -228,14 +241,14 @@ static void *buscar(void *arg) {
   Pedido *p = arg;
   char q[700], url[900], *xml;
   Entrada *e;
-  int en = ajustes_idioma_ingles();
+  int lg = ajustes_idioma();
   // Titulo entre aspas mais a palavra de apoio: "Silo" serie acha a serie e
   // nao o armazem.
   // A REDE entra entre aspas quando se sabe ("Foundation" "Apple TV+"): sem
   // ela a busca por "Foundation" trazia a Wikimedia Foundation.
   if (p->rede[0]) snprintf(q, sizeof q, "\"%s\" \"%s\"", p->titulo, p->rede);
   else snprintf(q, sizeof q, "\"%s\" %s", p->titulo,
-                p->serie ? (en ? "series" : "s\xc3\xa9rie") : (en ? "movie" : "filme"));
+                p->serie ? PAR[lg].serie : PAR[lg].filme);
   { char qc[900]; codificar(q, qc, sizeof qc);
 #if defined(__EMSCRIPTEN__)
     // SAMSUNG: o Google News nao manda CORS e o fetch do wgt morre (12 de 12
@@ -246,10 +259,10 @@ static void *buscar(void *arg) {
       if (e) { e->n = 0; e->quando = (long)time(NULL); e->respondeu = 1; e->emVoo = 0; }
       pthread_mutex_unlock(&trava); free(p); return NULL; }
     snprintf(url, sizeof url, "%s/v1/noticias?q=%s&hl=%s&gl=%s&ceid=%s", NV_REC_URL,
-             qc, en ? "en-US" : "pt-BR", en ? "US" : "BR", en ? "US:en" : "BR:pt-419");
+             qc, PAR[lg].hl, PAR[lg].gl, PAR[lg].ceid);
 #else
     snprintf(url, sizeof url, "https://news.google.com/rss/search?q=%s&hl=%s&gl=%s&ceid=%s",
-             qc, en ? "en-US" : "pt-BR", en ? "US" : "BR", en ? "US:en" : "BR:pt-419");
+             qc, PAR[lg].hl, PAR[lg].gl, PAR[lg].ceid);
 #endif
   }
   xml = rede_baixar(url, 12);

@@ -21,10 +21,18 @@
 #ifndef NV_IDIOMA_H
 #define NV_IDIOMA_H
 
-// Devolve `s` traduzido quando o idioma e ingles e a chave existe; senao
-// devolve o proprio `s`. Nunca devolve NULL se `s` nao for NULL, e o ponteiro
+// Devolve `s` traduzido quando o idioma NAO e o portugues (ingles, romeno,
+// ucraniano ou russo — ver idiomacod.h) e a chave existe; senao devolve o
+// proprio `s`. Nunca devolve NULL se `s` nao for NULL, e o ponteiro
 // devolvido vive tanto quanto o programa (tabela estatica).
 const char *i18n(const char *s);
+
+// Nome do mes para uma DATA por extenso ("29 de julho de 2026"), mes = 1..12,
+// `nomePt` = o nome portugues que e a chave da tabela. Existe porque russo e
+// ucraniano declinam: "29 июля", nao "29 июль" — mas o cabecalho de mes do
+// calendario ("Julho 2026") pede a forma de dicionario, e a tabela tem UMA
+// traducao por chave. Nos demais idiomas e i18n(nomePt).
+const char *idioma_mes_data(int mes, const char *nomePt);
 
 // Levantamento das strings que REALMENTE chegam na tela, para montar a tabela
 // sem adivinhar. Ligado por ambiente:

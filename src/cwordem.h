@@ -102,7 +102,11 @@ unsigned cwo_revisao(void);
 // Esta e so a data: "21 out" (PT) / "Oct 21" (EN), com o ano quando nao e o
 // de `agoraMs` ("21 out 2027" / "Oct 21, 2027"); `maiusc` para o hero
 // ("21 OUT"). Dia pelo calendario UTC. Devolve 0, com dst vazio, sem data.
-int cwo_data_curta(long long estreiaMs, long long agoraMs, int ingles, int maiusc,
+//
+// `idioma` e um IDIOMA_* (idiomacod.h). 0 = pt e 1 = en, como o `ingles` que
+// este parametro era: quem passa 0/1 continua certo. Romeno, ucraniano e russo
+// escrevem "21 окт" (dia primeiro, como o portugues).
+int cwo_data_curta(long long estreiaMs, long long agoraMs, int idioma, int maiusc,
                    char *dst, size_t cap);
 
 #endif

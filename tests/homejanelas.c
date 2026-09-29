@@ -236,6 +236,7 @@ int   ajustes_itens_fileira(void)          { return 12; }   // padrao (#163)
 int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127)
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
 int   ajustes_idioma_ingles(void)          { return 0; }
+int ajustes_idioma(void) { return 0; }
 int   ajustes_tmdb_ligado(void)            { return 0; }
 int   ajustes_tmdb_basico(void)            { return 0; }
 int   trakt_e_a_seguir(const char *id)     { (void)id; return 0; }
@@ -270,6 +271,7 @@ int   fil_tem_ordem(void)                  { return 0; }
 int   fil_unir(const char *const *c, int n, int *s, int m) {
   int i; (void)c; for (i = 0; i < n && i < m; i++) s[i] = i; return i; }
 const char *i18n(const char *s)            { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 void  marco(const char *n)                 { (void)n; }
 void  prog_chave(char *d, unsigned n, const char *c, int t, int e) { (void)c; (void)t; (void)e; if (n) d[0] = 0; }
 void  prog_content_id(char *d, unsigned n, const char *i, int *t, int *e) { (void)i; (void)t; (void)e; if (n) d[0] = 0; }

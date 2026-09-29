@@ -51,6 +51,7 @@ static int catN;
 // que importa esta no i18n.sh, que varre as chaves; aqui so nao pode quebrar o
 // link.
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 
 int cat_n(void) { return catN; }
 

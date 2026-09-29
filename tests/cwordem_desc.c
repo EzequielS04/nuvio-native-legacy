@@ -25,7 +25,9 @@ int arte_reserva_episodios(const char *imdb, const char *corpo) { (void)imdb; (v
 
 // --- DUBLES: so fazem descoberta.c linkar (o conjunto de tests/cateps.c) -----
 int         ajustes_idioma_ingles(void) { return 0; }
+int ajustes_idioma(void) { return 0; }
 const char *i18n(const char *s)         { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 const char *dados_dir(void)             { return ""; }
 const char *sessao_usuario(void)        { return ""; }
 int         perfis_ativo(void)          { return 1; }

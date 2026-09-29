@@ -1,4 +1,5 @@
 #include "idioma.h"
+#include "idiomacod.h"
 #include "ajustes.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +17,47 @@ static const Par TAB[] = {
 #include "idioma_tab.h"
 };
 #define TAB_N ((int)(sizeof TAB / sizeof *TAB))
+
+// OS OUTROS IDIOMAS moram em tabelas PARALELAS, uma por idioma, com uma entrada
+// por linha de idioma_tab.h e na MESMA ordem. A busca binaria roda UMA vez, na
+// chave portuguesa, e devolve o indice; o indice serve a qualquer idioma. Por
+// isso o custo por linha desenhada e o de antes de haver 5 idiomas, e o cache
+// abaixo nao precisa saber qual idioma esta ligado (trocar de idioma nao o
+// invalida). Nos arquivos idioma_XX.h cada linha e T("chave pt", "traducao"):
+// a macro joga a chave fora — ela so existe para o revisor ler a linha inteira
+// e para tools/idiomas.py conferir que o alinhamento nao escorregou.
+#define T(chave, traducao) traducao
+static const char *const TAB_RO[] = {
+#include "idioma_ro.h"
+};
+static const char *const TAB_UK[] = {
+#include "idioma_uk.h"
+};
+static const char *const TAB_RU[] = {
+#include "idioma_ru.h"
+};
+#undef T
+// Uma tabela com o numero errado de linhas desalinharia TODAS as traducoes
+// depois dela — falha na compilacao, nao em silencio na tela.
+_Static_assert(sizeof TAB_RO / sizeof *TAB_RO == sizeof TAB / sizeof *TAB,
+               "idioma_ro.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_UK / sizeof *TAB_UK == sizeof TAB / sizeof *TAB,
+               "idioma_uk.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+_Static_assert(sizeof TAB_RU / sizeof *TAB_RU == sizeof TAB / sizeof *TAB,
+               "idioma_ru.h: uma linha por entrada de idioma_tab.h (tools/idiomas.py --sincronizar)");
+
+// A traducao da entrada `i` no idioma `lg` (nunca IDIOMA_PT). Valor vazio cai no
+// ingles: uma entrada nova ainda sem traducao aparece em ingles, nao em branco.
+static const char *traduzida(int i, int lg) {
+  const char *r = NULL;
+  switch (lg) {
+    case IDIOMA_RO: r = TAB_RO[i]; break;
+    case IDIOMA_UK: r = TAB_UK[i]; break;
+    case IDIOMA_RU: r = TAB_RU[i]; break;
+    default: break;
+  }
+  return r && *r ? r : TAB[i].en;
+}
 
 // ---------------------------------------------------------------- registro
 //
@@ -45,6 +87,23 @@ void idioma_registrar(const char *s) {
 }
 
 // ---------------------------------------------------------------- traducao
+
+const char *idioma_mes_data(int mes, const char *nomePt) {
+  static const char *UK[12] = {
+    "січня", "лютого", "березня", "квітня", "травня", "червня",
+    "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"
+  };
+  static const char *RU[12] = {
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря"
+  };
+  int lg = ajustes_idioma();
+  if (mes >= 1 && mes <= 12) {
+    if (lg == IDIOMA_UK) return UK[mes - 1];
+    if (lg == IDIOMA_RU) return RU[mes - 1];
+  }
+  return i18n(nomePt);
+}
 
 static int ordemOk = -1;
 static void conferirOrdem(void) {
@@ -80,18 +139,21 @@ const char *i18n(const char *s) {
   unsigned long long h = 1469598103934665603ull;
   unsigned n = 0, slot;
   const unsigned char *p;
+  int lg;
   idioma_registrar(s);
-  if (!s || !*s || !ajustes_idioma_ingles()) return s;
+  if (!s || !*s) return s;
+  lg = ajustes_idioma();
+  if (lg == IDIOMA_PT) return s;
   if (ordemOk < 0) conferirOrdem();
   if (!ordemOk) return s;
   for (p = (const unsigned char *)s; *p; p++, n++) { h ^= *p; h *= 1099511628211ull; }
   slot = (unsigned)(h % I18N_CACHE);
   if (cache[slot].h == h && cache[slot].n == n && (cache[slot].idx < 0 || !strcmp(s, TAB[cache[slot].idx].pt)))
-    return cache[slot].idx < 0 ? s : TAB[cache[slot].idx].en;
+    return cache[slot].idx < 0 ? s : traduzida(cache[slot].idx, lg);
   while (lo <= hi) {
     int m = (lo + hi) / 2;
     int c = strcmp(s, TAB[m].pt);
-    if (c == 0) { cache[slot].h = h; cache[slot].n = n; cache[slot].idx = m; return TAB[m].en; }
+    if (c == 0) { cache[slot].h = h; cache[slot].n = n; cache[slot].idx = m; return traduzida(m, lg); }
     if (c < 0) hi = m - 1; else lo = m + 1;
   }
   cache[slot].h = h; cache[slot].n = n; cache[slot].idx = -1;

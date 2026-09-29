@@ -32,6 +32,7 @@ void vertudo_abrir(const char *b, const char *t, const char *c, const char *ti) 
 }
 void vertudo_colecao(const ColFolder *f) { (void)f; }
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 int  tex_falhou(const char *u) { (void)u; return 0; }
 char *dados_ler(const char *nome) { (void)nome; return NULL; }
 void dados_marcar_sujo(int leve) { (void)leve; }

@@ -22,6 +22,7 @@ static int profile = 1, config = 1;
 const char *sessao_usuario(void) { return owner; }
 int perfis_ativo(void) { return profile; }
 int ajustes_idioma_ingles(void) { return 0; }
+int ajustes_idioma(void) { return 0; }
 int ajustes_cw_ligado(void) { return 1; }
 int ajustes_cw_estilo(void) { return 0; }
 int ajustes_posteres_deitados(void) { return 0; }

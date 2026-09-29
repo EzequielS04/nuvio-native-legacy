@@ -96,6 +96,7 @@ int  sync_empurrar_credencial(const char *p, const char *j) { (void)p; (void)j; 
 static int nRepetir;
 void desc_repetir(void)   { nRepetir++; }
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 
 // A rede: codigo de dispositivo, token do codigo e renovacao. `segurar` prende
 // a resposta ate o teste soltar — e assim que a troca de perfil acontece com o

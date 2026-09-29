@@ -59,6 +59,7 @@ void stream_definir_lista(const Stream *l, int n) { (void)l; (void)n; }
 void debrid_definir_episodio(int t, int e) { (void)t; (void)e; }
 void debrid_nova_busca(void) { nDebridNovaBusca++; }
 const char *i18n(const char *s) { return s; }
+const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 const char *rede_url_publica(const char *url, char *dst, unsigned tam) {
   snprintf(dst, tam, "%s", url ? url : ""); return dst; }
 void marco(const char *s) { (void)s; }

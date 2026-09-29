@@ -91,7 +91,7 @@ static void *buscar(void *arg) {
   if (!chave || !chave[0]) goto falha;
   codificar(f->nome, enc, sizeof enc);
   snprintf(url, sizeof url, "https://api.themoviedb.org/3/search/person?api_key=%s"
-           "&language=pt-BR&query=%s", chave, enc);
+           "&language=%s&query=%s", chave, desc_tmdb_idioma(), enc);
   corpo = rede_baixar(url, 15);
   if (!corpo) goto falha;
   { const char *r = js_array(corpo, NULL, "results");

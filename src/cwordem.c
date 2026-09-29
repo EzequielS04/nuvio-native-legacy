@@ -1,4 +1,5 @@
 #include "cwordem.h"
+#include "idiomacod.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
@@ -119,14 +120,13 @@ int cwo_e_futuro(const char *id) {
 }
 
 // --- Rotulo da estreia -------------------------------------------------------
-int cwo_data_curta(long long estreiaMs, long long agoraMs, int ingles, int maiusc,
+int cwo_data_curta(long long estreiaMs, long long agoraMs, int idioma, int maiusc,
                    char *dst, size_t cap) {
-  static const char *EN[] = { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" };
-  static const char *PT[] = { "jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez" };
   struct tm e, a;
   time_t te, ta;
-  char mes[4];
-  size_t i;
+  // 16: o mes em cirilico ocupa 2 bytes por letra, e a caixa alta mantem o tamanho.
+  char mes[16];
+  int ingles = idioma == IDIOMA_EN;
   if (!dst || cap < 1) return 0;
   dst[0] = 0;
   if (estreiaMs == CWO_SEM_DATA) return 0;
@@ -137,9 +137,8 @@ int cwo_data_curta(long long estreiaMs, long long agoraMs, int ingles, int maius
   ta = (time_t)(agoraMs / 1000LL);
   if (!gmtime_r(&te, &e) || !gmtime_r(&ta, &a)) return 0;
   if (e.tm_mon < 0 || e.tm_mon > 11) return 0;
-  snprintf(mes, sizeof mes, "%s", ingles ? EN[e.tm_mon] : PT[e.tm_mon]);
-  if (maiusc)
-    for (i = 0; mes[i]; i++) if (mes[i] >= 'a' && mes[i] <= 'z') mes[i] = (char)(mes[i] - 32);
+  snprintf(mes, sizeof mes, "%s", idioma_mes_curto(idioma, e.tm_mon));
+  if (maiusc) { char cx[16]; idioma_maiusc(cx, sizeof cx, mes); snprintf(mes, sizeof mes, "%s", cx); }
   // O ano so quando nao e o corrente, como as datas curtas de noticias.c.
   if (e.tm_year != a.tm_year) {
     if (ingles) snprintf(dst, cap, "%s %d, %d", mes, e.tm_mday, e.tm_year + 1900);

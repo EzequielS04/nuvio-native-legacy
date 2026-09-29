@@ -399,6 +399,16 @@ static Escrita escritaDe(Uint32 cp) {
 
 static int carregarFamilia(TxtFamilia familia);
 
+// A linha tem algum caractere do bloco cirilico (U+0400..U+04FF)? Em UTF-8 e o
+// byte de abertura 0xD0..0xD3.
+static int temCirilico(const char *s) {
+  for (; *s; s++) {
+    unsigned char c = (unsigned char)*s;
+    if (c >= 0xD0 && c <= 0xD3) return 1;
+  }
+  return 0;
+}
+
 // Fonte com que a linha `s` deve ser desenhada. Devolve a principal quando ela
 // da conta — que e o caso da esmagadora maioria das linhas.
 static TTF_Font *fonteDe(TxtFamilia familia, TxtEstilo estilo, const char *s) {
@@ -423,7 +433,17 @@ static TTF_Font *fonteDe(TxtFamilia familia, TxtEstilo estilo, const char *s) {
   if (!cp || cp >= 0x10000) return principal;
   // Acentos do portugues e do espanhol estao na Inter; so cai na reserva o que
   // ela realmente nao tem.
-  if (TTF_GlyphIsProvided(principal, (Uint16)cp)) return principal;
+  //
+  // CIRILICO (russo, ucraniano): a Inter, a Montserrat e a Roboto embarcadas
+  // TEM (medido pelo cmap dos TTF, ver tools/idiomas.py); a Atkinson NAO. Com a
+  // Atkinson a linha "OK · Открыть" comeca por um "·", que ela tem, e o teste do
+  // primeiro caractere a deixaria desenhar o resto como retangulo. Se a fonte
+  // principal nao tem o "а" cirilico e a linha traz cirilico em qualquer ponto,
+  // a linha inteira vai para a reserva, como se comecasse por ele.
+  if (TTF_GlyphIsProvided(principal, (Uint16)cp)) {
+    if (TTF_GlyphIsProvided(principal, 0x0430) || !temCirilico(s)) return principal;
+    cp = 0x0430;
+  }
   e = escritaDe(cp);
   if (!caminhoReserva[e][0]) return principal;
   if (!reservas[e][estilo])
