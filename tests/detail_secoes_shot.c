@@ -469,7 +469,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // NUVIO_SHOT_IDIOMA=N (0 pt, 1 en, 2 ro, 3 uk, 4 ru, 5 fr, 6 de, 7 es): a
+  // NUVIO_SHOT_IDIOMA=N (IDIOMA_* de idiomacod.h: 0 pt, 1 en ... 24 el, 27 ja, 28 zhcn): a
   // captura sai no idioma da interface, escrito onde o app o le (ajustes.txt).
   { const char *lg = getenv("NUVIO_SHOT_IDIOMA");
     if (lg && *lg) {
