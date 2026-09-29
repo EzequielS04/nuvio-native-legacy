@@ -34,9 +34,11 @@ arquivo de pessoa em qualquer pacote; `drminfo` no 4/5; lib do 4/5 com TLS;
 manifesto com outra versao; anexo `.so` diferente da `.so` do pacote. Sai em
 `build/release-<v>/` com `SHA256SUMS-samsung`. NAO publica.
 
-Numa worktree nova o `.wgt` para em "libass WASM ausente": copie
-`build/ass-wasm` do checkout principal (dependencia ja compilada, gitignorada)
-ou rode `tools/build-ass-wasm.sh` com o emsdk ativo.
+Numa worktree nova o `.wgt` para em "libass WASM ausente": faca
+`ln -s "<checkout principal>/build/ass-wasm" build/ass-wasm` (dependencia ja
+compilada, gitignorada; symlink e nao copia, porque o `tizen.sh` confere que o
+atalho temporario `$TMPDIR/nuvio-ass-wasm-root-<uid>` aponta para o mesmo
+lugar) ou rode `tools/build-ass-wasm.sh` com o emsdk ativo.
 
 `NUVIO_PROPERTIES` so e preciso fora do checkout principal (o `tools/env.sh`
 procura `../NuvioWeb-0.3.38-beta` dois niveis acima, e da worktree o caminho
