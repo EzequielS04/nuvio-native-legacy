@@ -4,6 +4,7 @@
 #include "gfx.h"
 #include "layout.h"
 #include "marco.h"
+#include "ajustes.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <string.h>
@@ -138,7 +139,20 @@ TxtFamilia txt_fonte_interface(void) { return fonteInterface; }
 static int rastNesteQuadro;
 static unsigned long quadroTxt = 1;
 
-void txt_novo_quadro(void) { rastNesteQuadro = 0; quadroTxt++; }
+// ENTRADA DO TEXTO (relato do #172: "o texto aparece uma palavra depois da
+// outra, nao e fluido"). Uma tela nova pede dezenas de linhas ineditas e so
+// TXT_POR_QUADRO saem por quadro; o resto entra nos quadros seguintes. Numa TV
+// lenta (o .wgt da Samsung roda o rasterizador em WebAssembly) isso e visivel
+// como linhas pipocando uma a uma. Cada linha agora ENTRA em esmaecimento a
+// partir do quadro em que foi rasterizada: as que chegam em quadros vizinhos
+// aparecem juntas, como um bloco, e nao como degraus.
+#define TXT_ENTRADA_MS 140u
+static unsigned agoraTxt;
+
+void txt_novo_quadro(void) {
+  rastNesteQuadro = 0; quadroTxt++;
+  agoraTxt = (unsigned)SDL_GetTicks();
+}
 static unsigned long relogio = 1;
 int    txt_rasterizadas = 0;
 // Quantas linhas foram DESPEJADAS para dar lugar a outras. Zero e o estado
@@ -611,7 +625,7 @@ void txt_encerrar(void) {
 // de quem rasterizou primeiro.
 static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
                              int b, int a, TxtFamilia familia, int enfase) {
-  TxtLinha vazia = {0, 0, 0};
+  TxtLinha vazia = {0, 0, 0, 0};
   char limpo[1024];
   if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N)
     familia = TXT_FAMILIA_INTER;
@@ -721,6 +735,7 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   cache[slot].linha.w = (int)(cv->w / escalaTxt + 0.5f);
   cache[slot].linha.h = (int)(cv->h / escalaTxt + 0.5f);
   txt_rasterizadas++;
+  cache[slot].linha.nasc = agoraTxt ? agoraTxt : 1u;
   txt_ms += (double)(SDL_GetPerformanceCounter() - t0) * 1000.0 / (double)SDL_GetPerformanceFrequency();
   cache[slot].uso = ++relogio;
   cache[slot].quadroUso = quadroTxt;
@@ -766,6 +781,13 @@ static float encaixa(float v) {
 
 void txt_desenhar_alpha(TxtLinha l, float x, float y, float alpha) {
   if (!l.tex) return;
+  if (l.nasc && agoraTxt && !ajustes_animacoes_reduzidas()) {
+    unsigned dt = agoraTxt - l.nasc;
+    if (dt < TXT_ENTRADA_MS) {
+      float u = (float)dt / (float)TXT_ENTRADA_MS;
+      alpha *= u * u * (3.0f - 2.0f * u);
+    }
+  }
   GfxRect r = { encaixa(x), encaixa(y), (float)l.w, (float)l.h };
   gfx_rect(r, l.tex, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, alpha);
 }
