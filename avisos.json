@@ -1,13 +1,13 @@
 [
   {
-    "id": "2026-09-27-samsung-tpk-preview",
-    "desde": "2026-09-27",
-    "ate": "2026-11-15",
+    "id": "2026-09-30-samsung-nativo-154",
+    "desde": "2026-09-30",
+    "ate": "2026-11-30",
     "plataforma": "tizen",
-    "titulo": "Native Nuvio for Samsung: preview build",
-    "titulo_en": "Native Nuvio for Samsung: preview build",
-    "texto": "You can now try Nuvio as a native Samsung app (.tpk): faster, with no browser underneath. It installs next to this one and doesn't replace it. Get it on GitHub: Releases › Samsung native app (.tpk) — preview, pick the file for your TV year and install with Apps2Samsung. It hasn't been tested on a real TV yet: tell us how it went at github.com/iqui27/nuvio-native-legacy/issues/137.",
-    "texto_en": "You can now try Nuvio as a native Samsung app (.tpk): faster, with no browser underneath. It installs next to this one and doesn't replace it. Get it on GitHub: Releases › Samsung native app (.tpk) — preview, pick the file for your TV year and install with Apps2Samsung. It hasn't been tested on a real TV yet: tell us how it went at github.com/iqui27/nuvio-native-legacy/issues/137."
+    "titulo": "Native Nuvio for Samsung is here",
+    "titulo_en": "Native Nuvio for Samsung is here",
+    "texto": "Nuvio 1.5.4 brings the native Samsung app to every TV from 2018 on (Tizen 4.0 to 9): faster, no browser underneath. Get it on GitHub › Releases › v1.5.4 and pick the .tpk for your TV (the table is in the notes). Install it once with Apps2Samsung — from then on the native app updates itself. Already on a native preview? Install 1.5.4 over it.",
+    "texto_en": "Nuvio 1.5.4 brings the native Samsung app to every TV from 2018 on (Tizen 4.0 to 9): faster, no browser underneath. Get it on GitHub › Releases › v1.5.4 and pick the .tpk for your TV (the table is in the notes). Install it once with Apps2Samsung — from then on the native app updates itself. Already on a native preview? Install 1.5.4 over it."
   },
   {
     "id": "2026-09-20-samsung-rc1",
