@@ -216,6 +216,30 @@ int desc_episodios_carregando(int indiceItem);
 // devolve quantos episodios mudaram.
 int  desc_tmdb_notas_temporada(const char *json, CatEp *eps, int n,
                                int temporada);
+// O mesmo, escolhendo o que entra alem da nota (#176): DESC_EPT_SINOPSE,
+// DESC_EPT_NOME (nome traduzido; o generico "Episodio 3" nunca entra) e
+// DESC_EPT_SO_VAZIO (so preenche o que esta vazio, para nao pisar num texto que
+// veio do addon de metadados quando a pessoa o prefere).
+#define DESC_EPT_SINOPSE  1
+#define DESC_EPT_NOME     2
+#define DESC_EPT_SO_VAZIO 4
+int  desc_tmdb_notas_temporada_ex(const char *json, CatEp *eps, int n,
+                                  int temporada, int textos);
+// 1 quando `nome` e o rotulo sem traducao do TMDB ("Episode 3"). Pura.
+int  desc_nome_episodio_generico(const char *nome, int episodio);
+// Junta duas listas de episodios ORDENADAS por (temporada, episodio): para cada
+// episodio de `base` que `outro` tambem tem, `modo` DESC_MESCLA_TEXTO troca
+// nome e sinopse pelos do outro quando ele os tem; DESC_MESCLA_VAZIOS so
+// preenche o que a base nao tem (nome, sinopse, thumb, duracao). Pura.
+#define DESC_MESCLA_TEXTO  1
+#define DESC_MESCLA_VAZIOS 2
+void desc_mesclar_episodios(CatEp *base, int nb, const CatEp *outro, int no,
+                            int modo);
+// Localiza (titulo e sinopse) os itens de catalogo de indices `idx`, em fio
+// proprio e sem bloquear: fonte e o addon de metadados quando a pessoa o
+// prefere, ou o TMDB no idioma configurado (#176). Chamada barata e repetivel:
+// o que ja foi resolvido vem do cache.
+void desc_localizar_indices(const int *idx, int n);
 // Casa o `cast` de /credits do TMDB com o elenco do item POR NOME (sem acento,
 // caixa nem pontuacao) e completa a lista com o resto do TMDB (#153). Pura;
 // devolve quantos nomes casaram.

@@ -40,6 +40,7 @@
 #include "catalogo.h"
 #include "descoberta.h"
 #include "buscasrec.h"
+#include "buscanorm.h"
 #include "botoes.h"
 #include <string.h>
 #include <stdio.h>
@@ -62,7 +63,9 @@
 #define BU_TECLA_W     74.0f
 #define BU_TECLA_GAP   13.0f
 #define BU_KB_COLS      6
-#define BU_KB_FILEIRAS  7            // 6 fileiras de A-Z/0-9 + 1 de espaco/apagar
+// FILEIRAS DE TECLAS DE LETRA, no maximo (o layout latino usa 6; o cirilico, 7)
+// mais a de baixo (espaco/apagar/limpar/layout). O numero vivo e kbFil.
+#define BU_KB_MAX_FIL   8
 #define BU_KB_PASSO   (BU_TECLA_W + BU_TECLA_GAP)
 #define BU_KB_W       (BU_KB_COLS * BU_TECLA_W + (BU_KB_COLS - 1) * BU_TECLA_GAP)
 #define BU_KB_Y       NV_BUSCA_VAZIO_Y   // 148: a faixa do estado vazio do web
@@ -122,7 +125,7 @@ static struct {
 static int nFil = 0;
 static int sair = 0;
 static int pedido = -1;             // indice de catalogo escolhido, -1 = nenhum
-static float animTecla[BU_KB_FILEIRAS][BU_KB_COLS];
+static float animTecla[BU_KB_MAX_FIL + 1][BU_KB_COLS];
 static float animRes[BU_MAX_FILEIRAS][BU_MAX_POR_FIL];
 // Arte chegando e luz do foco, as mesmas da home (revela.h).
 static RevelaArte  revRes[BU_MAX_FILEIRAS][BU_MAX_POR_FIL];
@@ -154,7 +157,6 @@ static int     nRecLayout = 0;
 static int     okPress = 0, okLongo = 0;
 static Uint32  okDesde = 0;
 
-static const int KB_COLUNAS[BU_KB_FILEIRAS] = { 6, 6, 6, 6, 6, 6, 3 };
 // Minusculas como no aparelho: o campo mostra o que foi digitado, e uma consulta
 // em caixa alta le como grito. A comparacao ignora caixa de qualquer forma.
 //
@@ -163,46 +165,65 @@ static const int KB_COLUNAS[BU_KB_FILEIRAS] = { 6, 6, 6, 6, 6, 6, 3 };
 // recomendacoes cita para dizer que o codigo de pareamento e `a-z0-9`
 // (servidor/recomendacoes/src/index.js) — com duas copias, a segunda a ganhar
 // uma letra deixaria um codigo indigitavel numa das duas telas.
-#define TECLAS (teclado_alfabeto())   // 36 = 6 fileiras x 6 colunas
 
-// --- Normalizacao ------------------------------------------------------------
-// Dobra uma letra latina acentuada (segundo byte de uma sequencia UTF-8 iniciada
-// por 0xC3) na letra ASCII correspondente. Sem isto, buscar "fundacao" nao acha
-// "Fundação" — o caso de uso mais obvio da tela, ja que ninguem digita cedilha
-// num teclado de D-pad.
-static char dobraLatina(unsigned char segundo) {
-  unsigned cp = (unsigned)segundo + 0x40u;
-  if (cp >= 0xC0 && cp <= 0xDE && cp != 0xD7) cp += 0x20;
-  if (cp >= 0xE0 && cp <= 0xE6) return 'a';
-  if (cp == 0xE7)               return 'c';
-  if (cp >= 0xE8 && cp <= 0xEB) return 'e';
-  if (cp >= 0xEC && cp <= 0xEF) return 'i';
-  if (cp == 0xF0)               return 'd';
-  if (cp == 0xF1)               return 'n';
-  if ((cp >= 0xF2 && cp <= 0xF6) || cp == 0xF8) return 'o';
-  if (cp >= 0xF9 && cp <= 0xFC) return 'u';
-  if (cp == 0xFD || cp == 0xFF) return 'y';
-  return ' ';
+// LAYOUTS DO TECLADO DA TELA. O latino (a-z0-9) e o de sempre; o cirilico
+// (russo + ucraniano) existe porque a pessoa que tem um addon de metadados em
+// russo ou ucraniano e um teclado so de a-z nao tinha como escrever o nome que
+// o addon conhece (#176: "para achar um filme romeno preciso do nome em
+// ingles"). A tecla de layout so aparece quando o idioma dos metadados e
+// cirilico. As teclas moram em kbTeclas como UTF-8, uma por casa.
+#define BU_KB_MAX_TECLAS (BU_KB_MAX_FIL * BU_KB_COLS)
+static const char LAYOUT_CIRILICO[] =
+  "\xd0\xb0" "\xd0\xb1" "\xd0\xb2" "\xd0\xb3" "\xd2\x91" "\xd0\xb4"   /* а б в г ґ д */
+  "\xd0\xb5" "\xd1\x94" "\xd0\xb6" "\xd0\xb7" "\xd0\xb8" "\xd1\x96"   /* е є ж з и і */
+  "\xd1\x97" "\xd0\xb9" "\xd0\xba" "\xd0\xbb" "\xd0\xbc" "\xd0\xbd"   /* ї й к л м н */
+  "\xd0\xbe" "\xd0\xbf" "\xd1\x80" "\xd1\x81" "\xd1\x82" "\xd1\x83"   /* о п р с т у */
+  "\xd1\x84" "\xd1\x85" "\xd1\x86" "\xd1\x87" "\xd1\x88" "\xd1\x89"   /* ф х ц ч ш щ */
+  "\xd1\x8c" "\xd1\x8e" "\xd1\x8f" "\xd1\x8b" "\xd1\x8d" "\xd1\x8a"   /* ь ю я ы э ъ */
+  "\xd1\x91";                                                              /* ё */
+static int  layoutCir = 0;                 // 0 latino, 1 cirilico
+static char kbTeclas[BU_KB_MAX_TECLAS][5];
+static int  kbN;                           // teclas de letra do layout ativo
+static int  kbFil = 6;                     // fileiras de letra do layout ativo
+static int  kbTemLayout;                   // a tecla de layout aparece?
+static int  KB_COLUNAS[BU_KB_MAX_FIL + 1] = { 6, 6, 6, 6, 6, 6, 3 };
+
+// O idioma dos metadados usa cirilico? (ru, uk, be, bg, sr, mk)
+static int idiomaCirilico(void) {
+  const char *l = desc_tmdb_idioma();
+  return l && (!strncmp(l, "ru", 2) || !strncmp(l, "uk", 2) || !strncmp(l, "be", 2) ||
+               !strncmp(l, "bg", 2) || !strncmp(l, "sr", 2) || !strncmp(l, "mk", 2));
 }
 
-static void normalizar(const char *s, char *destino, size_t tam) {
-  size_t k = 0;
-  const unsigned char *p = (const unsigned char *)s;
-  while (*p && k + 1 < tam) {
-    unsigned char c = *p++;
-    char saida;
-    if (c < 0x80) {
-      saida = (c >= 'A' && c <= 'Z') ? (char)(c + 32) : (char)c;
-    } else if (c == 0xC3 && *p) {
-      saida = dobraLatina(*p++);
-    } else {
-      while ((*p & 0xC0) == 0x80) p++;
-      saida = ' ';
-    }
-    destino[k++] = saida;
+// Separa `texto` (UTF-8) em teclas de uma casa cada.
+static void kbCarregar(const char *texto) {
+  const unsigned char *p = (const unsigned char *)texto;
+  kbN = 0;
+  while (*p && kbN < BU_KB_MAX_TECLAS) {
+    int len = *p < 0x80 ? 1 : (*p >= 0xF0 ? 4 : (*p >= 0xE0 ? 3 : 2)), i;
+    for (i = 0; i < len; i++) kbTeclas[kbN][i] = (char)p[i];
+    kbTeclas[kbN][len] = 0;
+    kbN++;
+    p += len;
   }
-  destino[k] = 0;
 }
+
+// Monta teclas e colunas do layout ativo. Sai da tecla de layout quando ela
+// deixa de existir (o idioma dos metadados mudou fora da tela).
+static void kbMontar(void) {
+  int r, resto;
+  kbTemLayout = idiomaCirilico();
+  if (!kbTemLayout) layoutCir = 0;
+  kbCarregar(layoutCir ? LAYOUT_CIRILICO : teclado_alfabeto());
+  kbFil = (kbN + BU_KB_COLS - 1) / BU_KB_COLS;
+  resto = kbN - (kbFil - 1) * BU_KB_COLS;
+  for (r = 0; r < kbFil; r++) KB_COLUNAS[r] = (r == kbFil - 1) ? resto : BU_KB_COLS;
+  KB_COLUNAS[kbFil] = kbTemLayout ? 4 : 3;
+}
+
+// --- Normalizacao -----------------------------------------------------------
+// Vive em buscanorm.c (testada sozinha). Aqui so o nome curto.
+#define normalizar busca_normalizar
 
 // --- Filtro ------------------------------------------------------------------
 // Uma fileira por CATALOGO, exatamente como o web monta `.search-results-row`.
@@ -222,14 +243,18 @@ static void refiltrar(void) {
   // caracteres"). Buscar com uma letra devolve o acervo inteiro e nao ajuda.
   // So derruba o painel de RESULTADOS: o de buscas recentes vive justamente
   // com o campo vazio.
-  if ((int)strlen(alvo) < 2) { if (painel == 1) painel = 0; return; }
+  if (busca_codepoints(alvo) < 2) { if (painel == 1) painel = 0; return; }
 
   // BUSCA NA REDE. A tela so filtrava o que ja estava em memoria — as ~12
   // primeiras linhas de cada catalogo da home — entao qualquer titulo fora
   // disso simplesmente nao existia para a busca. Dispara e volta na hora; o
   // resultado aparece sozinho quando chegar, porque refiltrar roda a cada
   // tecla e desc_busca_n so responde para o termo corrente.
-  desc_buscar(alvo);
+  // O TERMO QUE VAI AOS ADDONS E O QUE A PESSOA ESCREVEU (#176), nao o dobrado.
+  // `alvo` e a forma sem acento e sem caixa, boa para o filtro LOCAL; mandada a
+  // um addon localizado ela perde justamente o que ele indexa ("Ștefan",
+  // "Друзья"). O addon faz o seu proprio casamento.
+  desc_buscar(consulta);
 
   // UMA FILEIRA POR CATALOGO CONSULTADO, com a origem embaixo — igual ao web,
   // que monta uma `.search-results-row` por catalogo em vez de uma lista unica.
@@ -244,7 +269,7 @@ static void refiltrar(void) {
   // seria abrivel.
   { int alvoIdx, nAlvos = desc_busca_n_alvos();
     for (alvoIdx = 0; alvoIdx < nAlvos && nFil < BU_MAX_FILEIRAS; alvoIdx++) {
-      int nRem = desc_busca_alvo_n(alvoIdx, alvo), i;
+      int nRem = desc_busca_alvo_n(alvoIdx, consulta), i;
       // DOIS PASSOS, e a separacao e o conserto: primeiro junta os que ainda
       // NAO estao no catalogo, depois acrescenta TODOS numa troca de bloco so.
       //
@@ -414,18 +439,40 @@ static void recentesRemover(void) {
 }
 
 // --- Teclas ------------------------------------------------------------------
+// Acrescenta texto UTF-8 ao campo se couber inteiro (nunca meia sequencia).
+static void campoAcrescentar(const char *t) {
+  size_t n = strlen(t);
+  if ((size_t)nConsulta + n + 1 > BU_MAX_CONSULTA) return;
+  memcpy(consulta + nConsulta, t, n);
+  nConsulta += (int)n;
+  consulta[nConsulta] = 0;
+}
+
+static void campoApagar(void) {
+  nConsulta = (int)busca_apagar_ultimo(consulta, (size_t)nConsulta);
+}
+
 static void aplicarTecla(void) {
-  if (focoKb.fileira < BU_KB_FILEIRAS - 1) {
+  if (focoKb.fileira < kbFil) {
     int k = focoKb.fileira * BU_KB_COLS + focoKb.coluna;
-    if (nConsulta + 1 < BU_MAX_CONSULTA) consulta[nConsulta++] = TECLAS[k];
+    if (k < kbN) campoAcrescentar(kbTeclas[k]);
   } else if (focoKb.coluna == 0) {
     // espaco no comeco nao entra: nao muda o filtro e so acumula lixo no campo
-    if (nConsulta > 0 && nConsulta + 1 < BU_MAX_CONSULTA) consulta[nConsulta++] = ' ';
+    if (nConsulta > 0) campoAcrescentar(" ");
   } else if (focoKb.coluna == 1) {
-    if (nConsulta > 0) nConsulta--;
-  } else {
+    campoApagar();
+  } else if (focoKb.coluna == 2) {
     registrarConsulta();
     nConsulta = 0;
+  } else {
+    // Troca o layout e leva o foco a letra de cima da mesma coluna: a tecla de
+    // layout continua no mesmo lugar (ultima da fileira de baixo).
+    layoutCir = !layoutCir;
+    kbMontar();
+    focus_iniciar(&focoKb, kbFil + 1, KB_COLUNAS);
+    focoKb.fileira = kbFil; focoKb.coluna = 3;
+    memset(animTecla, 0, sizeof animTecla);
+    return;
   }
   consulta[nConsulta] = 0;
   refiltrar();
@@ -435,11 +482,12 @@ static GfxRect retanguloTecla(int fileira, int coluna) {
   GfxRect r;
   r.y = BU_KB_Y + fileira * (BU_TECLA_W + BU_TECLA_GAP);
   r.h = BU_TECLA_W;
-  if (fileira < BU_KB_FILEIRAS - 1) {
+  if (fileira < kbFil) {
     r.x = BU_KB_X + coluna * BU_KB_PASSO;
     r.w = BU_TECLA_W;
   } else {
-    r.w = (BU_KB_W - 2 * BU_TECLA_GAP) / 3;
+    int n = KB_COLUNAS[kbFil];
+    r.w = (BU_KB_W - (n - 1) * BU_TECLA_GAP) / (float)n;
     r.x = BU_KB_X + coluna * (r.w + BU_TECLA_GAP);
   }
   return r;
@@ -447,7 +495,9 @@ static GfxRect retanguloTecla(int fileira, int coluna) {
 
 // --- Ciclo de vida -----------------------------------------------------------
 int busca_iniciar(void) {
-  focus_iniciar(&focoKb, BU_KB_FILEIRAS, KB_COLUNAS);
+  layoutCir = 0;
+  kbMontar();
+  focus_iniciar(&focoKb, kbFil + 1, KB_COLUNAS);
   painel = 0; sair = 0; pedido = -1;
   nConsulta = 0; consulta[0] = 0;
   consultaFiltrada[0] = 0;
@@ -465,6 +515,7 @@ int busca_iniciar(void) {
 }
 
 void busca_encerrar(void) { temItemFoco = 0; }
+const char *busca_consulta(void) { return consulta; }
 int  busca_quer_sair(void) { return sair; }
 
 int busca_pediu_abrir(int *indiceCatalogo) {
@@ -482,6 +533,16 @@ int busca_item_focado(HomeItem *out) {
 
 void busca_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
+  // TEXTO DE TECLADO FISICO OU IME (#176): o que nao e ASCII (cirilico, ș, ț,
+  // ă...) chega como SDL_TEXTINPUT. O ASCII fica com o SDL_KEYDOWN abaixo — o
+  // mesmo caractere chega pelos dois, e entrar nos dois duplicaria a letra.
+  if (e->type == SDL_TEXTINPUT) {
+    if (painel == 0 && (unsigned char)e->text.text[0] >= 0x80) {
+      campoAcrescentar(e->text.text);
+      refiltrar();
+    }
+    return;
+  }
   SDL_Keycode k = e->key.keysym.sym;
 
   // OK NA PILULA DECIDE NA SOLTURA: so ali se sabe se foi toque ou pressao
@@ -505,7 +566,7 @@ void busca_evento(const SDL_Event *e) {
   if (e->type != SDL_KEYDOWN) return;
 
   if (k == SDLK_BACKSPACE && painel == 0) {
-    if (nConsulta > 0) { consulta[--nConsulta] = 0; refiltrar(); }
+    if (nConsulta > 0) { campoApagar(); refiltrar(); }
     return;
   }
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE) {
@@ -550,7 +611,8 @@ void busca_evento(const SDL_Event *e) {
     if (!(e->key.keysym.mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)) &&
         ((k >= SDLK_a && k <= SDLK_z) || (k >= SDLK_0 && k <= SDLK_9) || k == SDLK_SPACE)) {
       if (nConsulta + 1 < BU_MAX_CONSULTA && (k != SDLK_SPACE || nConsulta)) {
-        consulta[nConsulta++] = (char)k; consulta[nConsulta] = 0; refiltrar();
+        char um[2] = { (char)k, 0 };
+        campoAcrescentar(um); refiltrar();
       }
       return;
     }
@@ -619,13 +681,13 @@ void busca_atualizar(float dt, Uint32 agora) {
   { char alvo[BU_MAX_CONSULTA * 2];
     static int ultimoRemoto = -1;
     normalizar(consulta, alvo, sizeof alvo);
-    if ((int)strlen(alvo) >= 2) {
-      int n = desc_busca_n(alvo);
+    if (busca_codepoints(alvo) >= 2) {
+      int n = desc_busca_n(consulta);
       if (n != ultimoRemoto) { ultimoRemoto = n; refiltrar(); }
     } else {
       ultimoRemoto = -1;
     } }
-  for (int f = 0; f < BU_KB_FILEIRAS; f++)
+  for (int f = 0; f <= kbFil; f++)
     for (int c = 0; c < KB_COLUNAS[f]; c++) {
       float alvo = (painel == 0 && focus_indice(&focoKb, f, c)) ? 1.0f : 0.0f;
       animTecla[f][c] = anim_mola(animTecla[f][c], alvo, dt,
@@ -722,7 +784,7 @@ static void desenhaCabecalho(Uint32 agora) {
 
 static void desenhaTeclado(void) {
   char rotulo[8];
-  for (int f = 0; f < BU_KB_FILEIRAS; f++) {
+  for (int f = 0; f <= kbFil; f++) {
     for (int c = 0; c < KB_COLUNAS[f]; c++) {
       float k = animTecla[f][c];
       GfxRect base = retanguloTecla(f, c);
@@ -742,19 +804,20 @@ static void desenhaTeclado(void) {
           gfx_cor(t, BU_TECLA_RAIO, ar, ag, ab, k);
         } }
       const char *s;
-      if (f < BU_KB_FILEIRAS - 1) {
-        rotulo[0] = TECLAS[f * BU_KB_COLS + c]; rotulo[1] = 0;
+      if (f < kbFil) {
+        snprintf(rotulo, sizeof rotulo, "%s", kbTeclas[f * BU_KB_COLS + c]);
         s = rotulo;
-      } else s = (c == 0) ? i18n("espaço") : (c == 1 ? i18n("apagar") : i18n("limpar"));
+      } else s = (c == 0) ? i18n("espaço") : (c == 1 ? i18n("apagar")
+               : (c == 2 ? i18n("limpar") : (layoutCir ? "ABC" : "\xd0\x90\xd0\x91\xd0\x92")));
       int tom = (int)anim_mistura(224.0f, (float)ajustes_tinta_foco(), k);
-      TxtEstilo est = (f < BU_KB_FILEIRAS - 1) ? TXT_TITULO3 : TXT_HEADLINE;
+      TxtEstilo est = (f < kbFil) ? TXT_TITULO3 : TXT_HEADLINE;
       TxtLinha l = txt_linha(est, s, tom, tom, tom, 255);
       txt_desenhar(l, t.x + (t.w - l.w) * 0.5f, t.y + (t.h - l.h) * 0.5f);
     }
   }
   // Dicas do controle, uma por linha, no mesmo tom apagado das de Ajustes —
   // a linha unica com bolinhas competia com as teclas logo acima.
-  { float y = BU_KB_Y + BU_KB_FILEIRAS * BU_KB_PASSO + 28.0f;
+  { float y = BU_KB_Y + (kbFil + 1) * BU_KB_PASSO + 28.0f;
     const char *d1 = nFil ? i18n("→   Resultados")
                    : recentesVisiveis() ? i18n("→   Buscas recentes")
                    : i18n("OK   Digitar");

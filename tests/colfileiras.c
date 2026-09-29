@@ -121,6 +121,7 @@ int cat_gravar_cache_se_identidade(const char *d, const char *u, int p) {
 // Integracao TMDB ligada por padrao, como no app de verdade — o portao
 // desc_chave_tmdb consulta estes stubs pelo caminho inteiro.
 int   ajustes_tmdb_ligado(void)            { return 1; }
+int   ajustes_meta_externo(void)           { return 0; }
 const char *ajustes_tmdb_idioma(void)      { return "pt-BR"; }
 int   cat_acrescentar(const CatItem *i)    { (void)i; return -1; }
 void  cat_atualizar_item(int i, const CatItem *n) { (void)i; (void)n; }

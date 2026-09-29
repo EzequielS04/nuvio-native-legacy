@@ -295,7 +295,8 @@ static const char *V_SALVOS[]    = { "Lista do Nuvio", "Watchlist do Trakt",
 // interface esta em portugues, en-US em ingles.
 static const char *V_TMDB_LING[] = {
   "Da interface", "Português (Brasil)", "English", "Español", "Français",
-  "Deutsch", "Italiano", "Português (Portugal)", "日本語", "한국어", "中文"
+  "Deutsch", "Italiano", "Português (Portugal)", "日本語", "한국어", "中文",
+  "Română", "Українська", "Русский"
 };
 // Preenchido em rotulosDeIdioma(), no arranque: os nomes saem de linguas.c em
 // vez de serem uma segunda lista escrita a mao aqui. LING_MAX_OPC e folga: se
@@ -578,7 +579,7 @@ static const Opcao OPCOES[AJ_N] = {
   // nativo sempre enriqueceu por ele — nascer desligado apagaria elenco com
   // foto, ficha e trailers de quem ja usa o app sem nunca ter visto o ajuste.
   ESC("TMDB",                       V_LIGA, 2),   // tmdb_enabled
-  ESC("Idioma dos metadados",       V_TMDB_LING, 11), // tmdb_language
+  ESC("Idioma dos metadados",       V_TMDB_LING, 14), // tmdb_language
   ESC("Arte localizada",            V_LIGA, 2),   // tmdb_use_artwork
   ESC("Título e sinopse",           V_LIGA, 2),   // tmdb_use_basic_info
   ESC("Ficha técnica",              V_LIGA, 2),   // tmdb_use_details
@@ -1414,7 +1415,7 @@ int ajustes_tmdb_ligado(void)         { return lig(AJ_TMDB_LIGADO); }
 const char *ajustes_tmdb_idioma(void) {
   static const char *L[] = {
     NULL, "pt-BR", "en-US", "es-ES", "fr-FR", "de-DE", "it-IT", "pt-PT",
-    "ja-JP", "ko-KR", "zh-CN"
+    "ja-JP", "ko-KR", "zh-CN", "ro-RO", "uk-UA", "ru-RU"
   };
   int v = valor[AJ_TMDB_IDIOMA];
   if (v < 0 || v >= (int)(sizeof L / sizeof *L)) v = 0;
@@ -1475,7 +1476,7 @@ static const char *W_CW_ORDEM[]  = { "default", "streaming_style", "split_upcomi
 // valor atual em vez de inventar um.
 static const char *W_TMDB_LING[] = {
   "interface", "pt", "en", "es", "fr", "de", "it", "pt-pt", "ja", "ko", "zh",
-  NULL
+  "ro", "uk", "ru", NULL
 };
 
 // `heroSectionEnabled` -> `hero_section_enabled`. Uma sequencia de maiusculas

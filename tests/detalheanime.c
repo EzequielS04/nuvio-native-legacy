@@ -62,11 +62,14 @@ int prog_gravar_local(const char *imdb, int t, int e, double p, double d) {
 void  SDL_Delay(Uint32 ms)                 { usleep(ms * 1000); }
 int   ajustes_cw_fonte(void)               { return 0; }
 int   ajustes_tmdb_ligado(void)            { return 1; }
-int   ajustes_tmdb_basico(void)            { return 0; }
+static int fakeMetaExterno, fakeTmdbBasico;
+int   ajustes_meta_externo(void)           { return fakeMetaExterno; }
+int   ajustes_tmdb_basico(void)            { return fakeTmdbBasico; }
 int   ajustes_tmdb_arte(void)              { return 0; }
 int   ajustes_tmdb_elenco(void)            { return 0; }
 int   ajustes_tmdb_cw(void)                { return 0; }
-const char *ajustes_tmdb_idioma(void)      { return "pt-BR"; }
+static const char *fakeIdioma = "pt-BR";
+const char *ajustes_tmdb_idioma(void)      { return fakeIdioma; }
 const char *ajustes_tmdb_chave(void)       { return ""; }
 void  fil_gravar_registro(void)            { }
 int   fil_podar_catalogos(const char *const *ids, const char *const *bases, int n,
@@ -159,21 +162,32 @@ static const char *META_COMPLETO =
   "\"releaseInfo\":\"2019\",\"runtime\":\"2h 1min\",\"moviedb_id\":4242,"
   "\"imdbRating\":\"8.1\",\"genres\":[\"Drama\"],\"cast\":[\"Ator Um\"],\"videos\":[]}}";
 
-static char pedidos[16][600];
+// O que os addons/TMDB falsos respondem; cada caso liga o seu.
+static const char *addonResp, *addonTipo = "/series/";
+static const char *tmdbFind, *tmdbTemp1, *tmdbFilme, *cineSerie;
+static char pedidos[64][600];
 static int nPedidos;
 
 char *rede_baixar(const char *u, int t) {
   (void)t;
-  if (nPedidos < 16) snprintf(pedidos[nPedidos], sizeof pedidos[0], "%s", u);
+  if (nPedidos < 64) snprintf(pedidos[nPedidos], sizeof pedidos[0], "%s", u);
   nPedidos++;
   if (strstr(u, "cinemeta")) {
     if (strstr(u, "/meta/movie/tt13293588.json"))  return strdup(META_FILME_ERRADO);
-    if (strstr(u, "/meta/series/tt13293588.json")) return strdup(META_SERIE);
+    if (strstr(u, "/meta/series/tt13293588.json")) return strdup(cineSerie ? cineSerie : META_SERIE);
     if (strstr(u, "/meta/movie/tt0111161.json"))   return strdup(META_FILME_OK);
     if (strstr(u, "/meta/movie/tt0000176.json"))   return strdup(META_COMPLETO);
   }
-  if (strstr(u, "addon.test/SEGREDO/meta/series/tt13293588.json")) return strdup(META_SERIE_ADDON);
-  return NULL;   // TMDB, outros addons: fora do teste
+  // O addon de metadados responde o que o teste pos em `addonResp`, no tipo que
+  // o teste pos em `addonTipo` (o de serie e o padrao dos casos antigos).
+  if (strstr(u, "addon.test/SEGREDO/meta/") && addonResp &&
+      strstr(u, addonTipo)) return strdup(addonResp);
+  // TMDB (#176): so o que o teste liga em `tmdbResp*`.
+  if (strstr(u, "themoviedb.org/3/find/")) return tmdbFind ? strdup(tmdbFind) : NULL;
+  if (strstr(u, "themoviedb.org/3/tv/555/season/1?") && tmdbTemp1) return strdup(tmdbTemp1);
+  if (strstr(u, "themoviedb.org/3/tv/555/season/")) return strdup("{\"episodes\":[]}");
+  if (strstr(u, "themoviedb.org/3/movie/278?") && tmdbFilme) return strdup(tmdbFilme);
+  return NULL;   // outros addons: fora do teste
 }
 char *rede_baixar_com(const char *u, int t, const char *const *c) {
   (void)c; return rede_baixar(u, t); }
@@ -182,7 +196,7 @@ int arte_reserva_registrar(const char *url, const char *imdb, int poster) {
 
 static int pediu(const char *trecho) {
   int i;
-  for (i = 0; i < nPedidos && i < 16; i++) if (strstr(pedidos[i], trecho)) return 1;
+  for (i = 0; i < nPedidos && i < 64; i++) if (strstr(pedidos[i], trecho)) return 1;
   return 0;
 }
 int arte_reserva_episodios(const char *imdb, const char *corpo) { (void)imdb; (void)corpo; return 0; }
@@ -290,6 +304,7 @@ int main(void) {
   //    do Cinemeta fica.
   limparCacheMeta();
   addonMeta = 1;
+  addonResp = META_SERIE_ADDON;
   catalogoCom("tt13293588", "series", "Mushoku Tensei: Jobless Reincarnation");
   abrir();
   assert(pediu("addon.test/SEGREDO/meta/series/tt13293588.json"));
@@ -347,6 +362,255 @@ int main(void) {
   assert(!strcmp(cat_item(0)->sinopse, "Sinopse do catalogo."));
   assert(!strcmp(cat_item(0)->backdrop, "https://x.test/outro-fundo.jpg"));
   puts("ok  item completo nao e sobrescrito");
+
+  // ===========================================================================
+  // #176: CONTEUDO LOCALIZADO. O usuario tem um addon de metadados em ucraniano
+  // e via o titulo, os episodios e a sinopse em ingles do Cinemeta.
+  // ===========================================================================
+  { static const char *EN =
+      "{\"meta\":{\"id\":\"tt13293588\",\"type\":\"series\",\"name\":\"Jobless Reincarnation\","
+      "\"description\":\"A 34-year-old is reborn.\",\"genres\":[\"Animation\",\"Fantasy\"],"
+      "\"cast\":[\"Yumi Uchiyama\"],\"videos\":["
+      "{\"id\":\"tt13293588:1:1\",\"season\":1,\"episode\":1,\"name\":\"Jobless Reincarnation\","
+      "\"overview\":\"English 1\",\"thumbnail\":\"https://c/t1.jpg\"},"
+      "{\"id\":\"tt13293588:1:2\",\"season\":1,\"episode\":2,\"name\":\"Getting Ahead of Myself\","
+      "\"overview\":\"English 2\",\"thumbnail\":\"https://c/t2.jpg\"},"
+      "{\"id\":\"tt13293588:2:1\",\"season\":2,\"episode\":1,\"name\":\"The Brokenhearted Mage\","
+      "\"overview\":\"English 3\",\"thumbnail\":\"https://c/t3.jpg\"}]}}";
+    static const char *UK3 =
+      "{\"meta\":{\"id\":\"tt13293588\",\"type\":\"series\","
+      "\"name\":\"Реінкарнація безробітного\",\"description\":\"Тридцятичотирирічний чоловік renasce.\","
+      "\"genres\":[\"Анімація\",\"Фентезі\"],\"videos\":["
+      "{\"season\":1,\"episode\":1,\"name\":\"Перший епізод\",\"overview\":\"Опис 1\"},"
+      "{\"season\":1,\"episode\":2,\"name\":\"Другий епізод\",\"overview\":\"Опис 2\"},"
+      "{\"season\":2,\"episode\":1,\"name\":\"Третій епізод\",\"overview\":\"Опис 3\"}]}}";
+    static const char *UK2 =
+      "{\"meta\":{\"id\":\"tt13293588\",\"type\":\"series\",\"name\":\"Реінкарнація\","
+      "\"videos\":[{\"season\":1,\"episode\":1,\"name\":\"Перший епізод\",\"overview\":\"Опис 1\"},"
+      "{\"season\":1,\"episode\":2,\"name\":\"Другий епізод\",\"overview\":\"Опис 2\"}]}}";
+    const CatEp *e;
+    cineSerie = EN;
+    addonMeta = 1;
+    addonTipo = "/series/";
+    fakeIdioma = "en-US";
+
+    // 8) SEM a preferencia e em ingles: nada muda (o Cinemeta continua mandando).
+    limparCacheMeta();
+    fakeMetaExterno = 0;
+    addonResp = UK3;
+    catalogoCom("tt13293588", "series", "Jobless Reincarnation");
+    abrir();
+    assert(cat_n_episodios(0) == 3);
+    e = cat_episodio(0, 0);
+    assert(!strcmp(e->nome, "Jobless Reincarnation") && !strcmp(e->sinopse, "English 1"));
+    assert(!strcmp(cat_item(0)->titulo, "Jobless Reincarnation"));
+    puts("ok  #176: sem a preferencia e em ingles o Cinemeta segue mandando");
+
+    // 9) COM "Prefere a ficha do addon" (ajustes_meta_externo, que ninguem lia):
+    //    titulo, sinopse, generos, nome e sinopse dos episodios vem do addon; o
+    //    still que o addon nao tem vem do Cinemeta. A URL do addon nao vai ao log
+    //    (o teste so ve o nome, "addon").
+    limparCacheMeta();
+    fakeMetaExterno = 1;
+    catalogoCom("tt13293588", "series", "Jobless Reincarnation");
+    abrir();
+    assert(cat_n_episodios(0) == 3);
+    e = cat_episodio(0, 0);
+    assert(!strcmp(e->nome, "Перший епізод") && !strcmp(e->sinopse, "Опис 1"));
+    assert(!strcmp(e->thumb, "https://c/t1.jpg"));       /* preenchido do Cinemeta */
+    e = cat_episodio(0, 2);
+    assert(e->temporada == 2 && !strcmp(e->nome, "Третій епізод"));
+    assert(!strcmp(cat_item(0)->titulo, "Реінкарнація безробітного"));
+    assert(strstr(cat_item(0)->sinopse, "Тридцятичотирирічний"));
+    assert(strstr(cat_item(0)->genero, "Анімація"));
+    assert(cat_item(0)->nElenco == 1);                    /* elenco do Cinemeta fica */
+    assert(cat_item(0)->nTemporadas == 2);
+    puts("ok  #176: com a preferencia, titulo/sinopse/generos/episodios saem do addon");
+
+    // 10) Addon com MENOS episodios: a lista do Cinemeta fica (nao some episodio)
+    //     e leva nome/sinopse do addon nos que os dois tem; o 3o segue em ingles.
+    limparCacheMeta();
+    addonResp = UK2;
+    catalogoCom("tt13293588", "series", "Jobless Reincarnation");
+    abrir();
+    assert(cat_n_episodios(0) == 3);
+    assert(!strcmp(cat_episodio(0, 0)->nome, "Перший епізод"));
+    assert(!strcmp(cat_episodio(0, 1)->sinopse, "Опис 2"));
+    assert(!strcmp(cat_episodio(0, 2)->nome, "The Brokenhearted Mage"));
+    puts("ok  #176: addon com menos episodios: lista do Cinemeta com o texto do addon");
+
+    // 11) Addon sem resposta valida ("meta":null) nao apaga o texto do Cinemeta.
+    limparCacheMeta();
+    addonResp = "{\"meta\":null}";
+    catalogoCom("tt13293588", "series", "Jobless Reincarnation");
+    abrir();
+    assert(!strcmp(cat_item(0)->titulo, "Jobless Reincarnation"));
+    assert(!strcmp(cat_episodio(0, 0)->nome, "Jobless Reincarnation"));
+    puts("ok  #176: meta invalida do addon nao apaga nada");
+
+    // 12) SEM a preferencia, UI em ucraniano-like (idioma nao ingles) e TMDB
+    //     ligado: quem traduz e o TMDB. O addon NAO manda; o nome do episodio vem
+    //     do TMDB, e "Episodio 2" (sem traducao) nao entra.
+    limparCacheMeta();
+    fakeMetaExterno = 0;
+    fakeIdioma = "uk-UA";
+    fakeTmdbBasico = 1;
+    desc_tmdb_definir("0123456789abcdef0123456789abcdef");
+    addonResp = UK3;
+    tmdbFind = "{\"tv_results\":[{\"id\":555}]}";
+    tmdbTemp1 =
+      "{\"episodes\":["
+      "{\"episode_number\":1,\"name\":\"Безробітне переродження\",\"overview\":\"TMDB 1\",\"vote_average\":8.1},"
+      "{\"episode_number\":2,\"name\":\"Епізод 2\",\"overview\":\"\"}]}";
+    catalogoCom("tt13293588", "series", "Jobless Reincarnation");
+    abrir();
+    assert(pediu("themoviedb.org/3/tv/555/season/1?"));
+    assert(!strcmp(cat_item(0)->titulo, "Jobless Reincarnation"));    /* addon nao mandou */
+    e = cat_episodio(0, 0);
+    assert(!strcmp(e->nome, "Безробітне переродження") && !strcmp(e->sinopse, "TMDB 1"));
+    assert(e->nota == 81);
+    e = cat_episodio(0, 1);
+    assert(!strcmp(e->nome, "Getting Ahead of Myself"));              /* generico fica de fora */
+    assert(!strcmp(e->sinopse, "English 2"));
+    puts("ok  #176: com TMDB num idioma nao ingles o nome do episodio vem traduzido; generico nao entra");
+
+    // 13) COM a preferencia e o TMDB tambem ligado: o addon manda e o TMDB so
+    //     preenche o que ficou vazio (nao pisa no texto do addon).
+    limparCacheMeta();
+    fakeMetaExterno = 1;
+    catalogoCom("tt13293588", "series", "Jobless Reincarnation");
+    abrir();
+    assert(!strcmp(cat_episodio(0, 0)->nome, "Перший епізод"));
+    assert(!strcmp(cat_episodio(0, 0)->sinopse, "Опис 1"));
+    assert(cat_episodio(0, 0)->nota == 81);                           /* nota do TMDB entra */
+    assert(!strcmp(cat_item(0)->titulo, "Реінкарнація безробітного")); /* TMDB nao troca */
+    puts("ok  #176: addon preferido + TMDB: o texto do addon nao e pisado, a nota entra");
+
+    // 14) FILME com a preferencia: /meta/movie do addon manda no titulo/sinopse.
+    limparCacheMeta();
+    fakeTmdbBasico = 0;
+    tmdbFind = NULL; tmdbTemp1 = NULL;
+    addonTipo = "/movie/";
+    addonResp = "{\"meta\":{\"id\":\"tt0111161\",\"type\":\"movie\",\"name\":\"Втеча з Шоушенка\","
+                "\"description\":\"Опис фільму\",\"genres\":[\"Драма\"]}}";
+    catalogoCom("tt0111161", "movie", "The Shawshank Redemption");
+    abrir();
+    assert(!strcmp(cat_item(0)->titulo, "Втеча з Шоушенка"));
+    assert(!strcmp(cat_item(0)->sinopse, "Опис фільму"));
+    assert(!strcmp(cat_item(0)->genero, "Драма"));
+    assert(!strcmp(cat_item(0)->direcao, "Frank Darabont"));          /* resto do Cinemeta */
+    puts("ok  #176: filme com a preferencia: titulo/sinopse/generos do addon, resto do Cinemeta");
+
+    // 15) O NOME GENERICO (funcao pura).
+    assert(desc_nome_episodio_generico("Episode 3", 3));
+    assert(desc_nome_episodio_generico("Episódio 12", 12));
+    assert(desc_nome_episodio_generico("Серія 3", 3));
+    assert(desc_nome_episodio_generico("#3", 3));
+    assert(desc_nome_episodio_generico("", 3));
+    assert(!desc_nome_episodio_generico("Episode 3", 4));
+    assert(!desc_nome_episodio_generico("The Brokenhearted Mage", 1));
+    assert(!desc_nome_episodio_generico("Season Finale 3", 3));
+    assert(!desc_nome_episodio_generico("Apollo 13 Pt 2", 2));
+    puts("ok  #176: nome generico do TMDB reconhecido, titulo de verdade nao");
+
+    // 16) Mescla pura: modo TEXTO troca; modo VAZIOS so preenche.
+    { CatEp a[2], o[2];
+      memset(a, 0, sizeof a); memset(o, 0, sizeof o);
+      a[0].temporada = 1; a[0].episodio = 1; snprintf(a[0].nome, sizeof a[0].nome, "A");
+      a[1].temporada = 1; a[1].episodio = 2;
+      o[0].temporada = 1; o[0].episodio = 1; snprintf(o[0].nome, sizeof o[0].nome, "O");
+      snprintf(o[0].thumb, sizeof o[0].thumb, "t");
+      o[1].temporada = 1; o[1].episodio = 2; snprintf(o[1].nome, sizeof o[1].nome, "O2");
+      desc_mesclar_episodios(a, 2, o, 2, DESC_MESCLA_VAZIOS);
+      assert(!strcmp(a[0].nome, "A") && !strcmp(a[1].nome, "O2") && !strcmp(a[0].thumb, "t"));
+      desc_mesclar_episodios(a, 2, o, 2, DESC_MESCLA_TEXTO);
+      assert(!strcmp(a[0].nome, "O")); }
+    puts("ok  #176: mescla de episodios: texto sobrepoe, vazios so preenche");
+
+    // CW / SPOTLIGHT ----------------------------------------------------------
+    // 17) Texto localizado de um item do Continuar (titulo em ingles do Trakt):
+    //     pela FICHA DO ADDON quando preferida, com um pedido por titulo.
+    limparCacheMeta();
+    memset(locCache, 0, sizeof locCache);
+    fakeMetaExterno = 1;
+    { CatItem it[2];
+      memset(it, 0, sizeof it);
+      snprintf(it[0].imdb, sizeof it[0].imdb, "tt0111161");
+      snprintf(it[0].tipo, sizeof it[0].tipo, "movie");
+      snprintf(it[0].titulo, sizeof it[0].titulo, "The Shawshank Redemption");
+      snprintf(it[0].sinopse, sizeof it[0].sinopse, "English overview");
+      it[0].poster[0] = 'x';
+      snprintf(it[1].imdb, sizeof it[1].imdb, "cs:channel:abc");   /* canal: fora */
+      snprintf(it[1].tipo, sizeof it[1].tipo, "channel");
+      snprintf(it[1].titulo, sizeof it[1].titulo, "Canal");
+      cat_definir_tudo(it, 2, NULL, 0);
+      nPedidos = 0;
+      desc_localizar_indices((int[]){ 0, 1 }, 2);
+      while (locVivo) usleep(2000);
+      assert(!strcmp(cat_item(0)->titulo, "Втеча з Шоушенка"));
+      assert(!strcmp(cat_item(0)->sinopse, "Опис фільму"));
+      assert(!strcmp(cat_item(1)->titulo, "Canal"));
+      assert(nPedidos == 1);                                  /* canal nao pergunta */
+      /* de novo: cache, nenhum pedido */
+      nPedidos = 0;
+      desc_localizar_indices((int[]){ 0 }, 1);
+      while (locVivo) usleep(2000);
+      assert(nPedidos == 0);
+      /* refazer a fileira: o texto ja localizado entra sem rede */
+      { CatItem v[1];
+        memset(v, 0, sizeof v);
+        snprintf(v[0].imdb, sizeof v[0].imdb, "tt0111161:1:2");
+        snprintf(v[0].tipo, sizeof v[0].tipo, "movie");
+        snprintf(v[0].titulo, sizeof v[0].titulo, "The Shawshank Redemption");
+        assert(aplicarLocCache(v, 1) == 1);
+        assert(!strcmp(v[0].titulo, "Втеча з Шоушенка"));
+        assert(nPedidos == 0); } }
+    puts("ok  #176: Continuar/destaque: titulo e sinopse do addon, um pedido por titulo, cache, canal fora");
+
+    // 18) Sem addon e sem preferencia, o TMDB no idioma configurado traduz.
+    limparCacheMeta();
+    memset(locCache, 0, sizeof locCache);
+    fakeMetaExterno = 0;
+    addonMeta = 0;
+    fakeTmdbBasico = 1;
+    tmdbFind = "{\"movie_results\":[{\"id\":278}]}";
+    tmdbFilme = "{\"id\":278,\"title\":\"Втеча з Шоушенка (TMDB)\",\"overview\":\"Опис TMDB\","
+                "\"genres\":[{\"id\":18,\"name\":\"Драма\"}]}";
+    { CatItem it[1];
+      memset(it, 0, sizeof it);
+      snprintf(it[0].imdb, sizeof it[0].imdb, "tt0111161");
+      snprintf(it[0].tipo, sizeof it[0].tipo, "movie");
+      snprintf(it[0].titulo, sizeof it[0].titulo, "The Shawshank Redemption");
+      it[0].poster[0] = 'x';
+      cat_definir_tudo(it, 1, NULL, 0);
+      desc_localizar_indices((int[]){ 0 }, 1);
+      while (locVivo) usleep(2000);
+      assert(!strcmp(cat_item(0)->titulo, "Втеча з Шоушенка (TMDB)"));
+      assert(!strcmp(cat_item(0)->sinopse, "Опис TMDB")); }
+    puts("ok  #176: Continuar/destaque: sem addon, o TMDB no idioma configurado traduz");
+
+    // 19) Em ingles e sem a preferencia nao ha o que localizar: zero pedidos.
+    memset(locCache, 0, sizeof locCache);
+    fakeIdioma = "en-US";
+    nPedidos = 0;
+    { CatItem it[1];
+      memset(it, 0, sizeof it);
+      snprintf(it[0].imdb, sizeof it[0].imdb, "tt0111161");
+      snprintf(it[0].tipo, sizeof it[0].tipo, "movie");
+      snprintf(it[0].titulo, sizeof it[0].titulo, "The Shawshank Redemption");
+      it[0].poster[0] = 'x';
+      cat_definir_tudo(it, 1, NULL, 0);
+      desc_localizar_indices((int[]){ 0 }, 1);
+      assert(!locVivo);
+      assert(nPedidos == 0);
+      assert(!strcmp(cat_item(0)->titulo, "The Shawshank Redemption")); }
+    puts("ok  #176: em ingles e sem a preferencia nada e localizado (zero pedidos)");
+
+    tmdbFind = tmdbTemp1 = tmdbFilme = NULL;
+    cineSerie = NULL; addonResp = NULL; addonTipo = "/series/";
+    fakeMetaExterno = fakeTmdbBasico = 0; fakeIdioma = "pt-BR";
+    tmdbChave[0] = 0;
+  }
   puts("detalheanime: tudo ok");
   return 0;
 }
