@@ -726,10 +726,11 @@ void episodios_desenhar(void) {
     // agir sobre outra faria a linha nao mudar depois do gesto.
     const CatItem *cim=cat_item(titulo);
     int visto=cim?vistoep_estado(cim->imdb,ep->temporada,ep->episodio):-1;
-    char estado[96];
+    char estado[96], dur[32];
+    desc_duracao_txt(ep->duracao,dur,sizeof dur);   // "45 min" -> forma do idioma da UI
     if(atual) snprintf(estado,sizeof estado,"Reproduzindo agora");
-    else if(visto==1) snprintf(estado,sizeof estado,i18n("✓ Assistido%s%s"),ep->duracao[0]?" · ":"",ep->duracao);
-    else snprintf(estado,sizeof estado,"%s%s%s",ep->data,ep->data[0]&&ep->duracao[0]?" · ":"",ep->duracao);
+    else if(visto==1) snprintf(estado,sizeof estado,i18n("✓ Assistido%s%s"),dur[0]?" · ":"",dur);
+    else snprintf(estado,sizeof estado,"%s%s%s",ep->data,ep->data[0]&&dur[0]?" · ":"",dur);
     if (atual)
       gfx_cor((GfxRect){tx-18,y+25,8,8},.5f,ar,ag,ab,.95f*anim);
     { int er,eg,eb;

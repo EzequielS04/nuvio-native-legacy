@@ -23,6 +23,7 @@
 #include "episodios.h"
 #include "fontepref.h"
 #include "idioma.h"
+#include "idiomacod.h"
 #include "badges.h"
 #include "marco.h"
 #include "ajustes.h"
@@ -1184,10 +1185,7 @@ typedef struct { const char *chave; char valor[168]; } LinhaDet;
 
 // "111" -> "1h 51m"; "47" -> "47min". O TMDB manda minutos crus.
 static void duracaoTexto(int min, char *dst, size_t tam) {
-  if (min <= 0) { dst[0] = 0; return; }
-  if (min < 60) { snprintf(dst, tam, "%dmin", min); return; }
-  if (min % 60) snprintf(dst, tam, "%dh %dmin", min / 60, min % 60);
-  else          snprintf(dst, tam, "%dh", min / 60);
+  desc_duracao_min(min, dst, tam);   // as tres formas sao chaves da tabela
 }
 
 static int montarDetalhes(LinhaDet *o, int max) {
@@ -1202,7 +1200,11 @@ static int montarDetalhes(LinhaDet *o, int max) {
       n++;                                                     \
     } } while (0)
 
-  DET_POE("Status", extras_ficha_status());
+  // Status cru do TMDB/Trakt ("Released", "returning series") -> rotulo no
+  // idioma da interface; valor que a tabela nao conhece sai como veio.
+  { const char *st = extras_ficha_status();
+    const char *k = desc_status_chave(st, ehSerie());
+    DET_POE("Status", k ? i18n(k) : st); }
   { char dt[48]; desc_data_extenso(extras_ficha_lancamento(), dt, sizeof dt);
     DET_POE("Lançamento", dt); }
   { char d[32]; duracaoTexto(extras_ficha_duracao(), d, sizeof d);
@@ -1216,7 +1218,8 @@ static int montarDetalhes(LinhaDet *o, int max) {
   // Pais: a lista completa do TMDB quando ha; senao o unico que o Cinemeta da.
   v = extras_ficha_paises();
   if (!v || !v[0]) v = (ci && ci->pais[0]) ? ci->pais : NULL;
-  DET_POE("País de Origem", v);
+  { char pais[168]; desc_pais_txt(v, pais, sizeof pais);   // nomes em ingles -> idioma da UI
+    DET_POE("País de Origem", pais); }
   DET_POE("Direção", (ci && ci->direcao[0]) ? ci->direcao : NULL);
 
   #undef DET_POE
@@ -2890,6 +2893,8 @@ static void heroWeb(float a, float desloc) {
 
   char ano[32], dur[64];
   partirMeta(fichaDe(idx), ano, sizeof ano, dur, sizeof dur);
+  { char cru[64]; snprintf(cru, sizeof cru, "%s", dur);
+    desc_duracao_txt(cru, dur, sizeof dur); }   // "142 min" -> forma do idioma da UI
 
   // Em serie o web escreve "Roteirista:"/"Criador:"; em filme, "Diretor:".
   char sup[192] = "";
@@ -3395,12 +3400,20 @@ static void heroWeb(float a, float desloc) {
     float a = aHero * fMeta;
     float x = NV_DETW2_X, yc = yMeta2 + NV_DETW2_SELO_H * 0.5f;
     int algo = 0;
-    const char *status=NULL,*raw=extras_ficha_status();
+    // STATUS: o do Trakt (fichaStatus, so com conta) ou, na falta, o que o TMDB
+    // trouxe na agenda da serie — antes so a grafia minuscula do Trakt casava, e
+    // "Returning Series"/"Ended" do TMDB nunca virava selo. Traduz pela tabela e
+    // poe em MAIUSCULAS como o selo sempre foi.
+    char statusTxt[48] = "";
+    const char *status=NULL;
     if(ehSerie()) {
-      if(!strcmp(raw,"canceled")||!strcmp(raw,"Canceled"))status="CANCELADA";
-      else if(!strcmp(raw,"ended")||!strcmp(raw,"Ended"))status="FINALIZADA";
-      else if(!strcmp(raw,"returning series"))status="EM EXIBIÇÃO";
-      else if(!strcmp(raw,"renewed"))status="RENOVADA";
+      const char *raw = extras_ficha_status();
+      const char *k = desc_status_chave(raw, 1);
+      if(!k) k = desc_status_chave(extras_agenda_status(), 1);
+      if(k && strcmp(k, "Piloto") && strcmp(k, "Em breve") && strcmp(k, "Planejado")) {
+        idioma_maiusc(statusTxt, sizeof statusTxt, i18n(k));
+        status = statusTxt;
+      }
     }
     if ((ci && ci->classificacao[0]) || status) {
       x += desenhaSeloMeta(x, yMeta2, ci && ci->classificacao[0] ? ci->classificacao : status,
@@ -3417,7 +3430,9 @@ static void heroWeb(float a, float desloc) {
     if (ci && ci->pais[0]) {
       if (algo) { desenhaPonto(x + NV_DETW2_SEP, yc, 0.502f, a);
                   x += NV_DETW2_SEP * 2 + NV_DETW2_PONTO_D; }
-      TxtLinha lp = txt_linha(TXT_DET_META2, ci->pais, 255, 255, 255, 255);
+      char paisTxt[128];
+      desc_pais_txt(ci->pais, paisTxt, sizeof paisTxt);
+      TxtLinha lp = txt_linha(TXT_DET_META2, paisTxt, 255, 255, 255, 255);
       txt_desenhar_alpha(lp, x, yc - lp.h * 0.5f, a);
     }
   }
@@ -3788,7 +3803,9 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
   // indistinguivel de informacao real. Campo ausente agora fica ausente, e o
   // desenho abaixo ja omite cada pedaco que vier vazio.
   const char *epNome = (ep && ep->nome[0])    ? ep->nome    : NULL;
-  const char *epDur  = (ep && ep->duracao[0]) ? ep->duracao : NULL;
+  char epDurTxt[32] = "";
+  if (ep && ep->duracao[0]) desc_duracao_txt(ep->duracao, epDurTxt, sizeof epDurTxt);
+  const char *epDur  = epDurTxt[0] ? epDurTxt : NULL;
   const char *epData = (ep && ep->data[0])    ? ep->data    : NULL;
   const char *epSin  = (ep && ep->sinopse[0]) ? ep->sinopse : NULL;
   int epNum = ep ? ep->episodio : c + 1;
@@ -4722,11 +4739,29 @@ static void desenhaComentarios(float x, float y, float a) {
                                                      : COM_CARD_H),
               fr, fg, fb, a); }
 
+    // ETIQUETA DE IDIOMA ("EN") quando o comentario NAO esta no idioma da
+    // interface: o texto e de uma pessoa e nao se traduz, mas a pessoa fica
+    // sabendo por que ele esta em outra lingua. Os do idioma dela vem primeiro
+    // (extras.c) e nao levam etiqueta.
+    const char *lingCom = daSerie ? extras_comentario_lingua(i)
+                                  : extras_comentario_ep_lingua(i);
+    float larguraTag = 0.0f;
+    if (lingCom[0]) {
+      char tag[8]; size_t q;
+      for (q = 0; q < sizeof tag - 1 && lingCom[q]; q++)
+        tag[q] = (char)((lingCom[q] >= 'a' && lingCom[q] <= 'z') ? lingCom[q] - 32 : lingCom[q]);
+      tag[q] = 0;
+      { TxtLinha lt = txt_linha(TXT_CAPTION2, tag,
+                                foc ? (tintaEsc ? 88 : 215) : 132, foc ? (tintaEsc ? 90 : 216) : 138,
+                                foc ? (tintaEsc ? 96 : 222) : 150, 255);
+        txt_desenhar_alpha(lt, px + larg - lt.w, y + COM_PAD + 6.0f, a * 0.9f);
+        larguraTag = lt.w + 14.0f; }
+    }
     { TxtLinha lu = txt_linha_corta(TXT_ROW_TITULO,
                                     daSerie ? extras_comentario_usuario(i)
                                             : extras_comentario_ep_usuario(i),
                                     foc ? (tintaEsc ? 17 : 255) : 238, foc ? (tintaEsc ? 17 : 255) : 241,
-                                    foc ? (tintaEsc ? 20 : 255) : 248, 255, larg);
+                                    foc ? (tintaEsc ? 20 : 255) : 248, 255, larg - larguraTag);
       txt_desenhar_alpha(lu, px, y + COM_PAD, a); }
 
     // O texto para ANTES do rodape: sem o teto de linhas ele passava por cima

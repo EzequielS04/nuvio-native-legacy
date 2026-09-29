@@ -259,13 +259,13 @@ static void montarCatalogo(void) {
   snprintf(itens[1].titulo, sizeof itens[1].titulo, "Filme de Ensaio");
   snprintf(itens[1].imdb, sizeof itens[1].imdb, IMDB_FILME);
   snprintf(itens[1].tipo, sizeof itens[1].tipo, "movie");
-  snprintf(itens[1].genero, sizeof itens[1].genero, "Filme · Ficção científica");
-  snprintf(itens[1].meta, sizeof itens[1].meta, "1999 · 2 h 16 min");
+  snprintf(itens[1].genero, sizeof itens[1].genero, "Filme  \xc2\xb7  Ficção científica  \xc2\xb7  Ação");
+  snprintf(itens[1].meta, sizeof itens[1].meta, "1999  \xc2\xb7  136 min");   // Cinemeta: minutos em ingles
   snprintf(itens[1].sinopse, sizeof itens[1].sinopse,
            "Sinopse de enchimento do filme, comprida o bastante para o bloco de "
            "texto do heroi ficar com a altura que tem num titulo de verdade.");
   snprintf(itens[1].classificacao, sizeof itens[1].classificacao, "14");
-  snprintf(itens[1].pais, sizeof itens[1].pais, "Estados Unidos");
+  snprintf(itens[1].pais, sizeof itens[1].pais, "United States, Australia");   // Cinemeta: ingles
   snprintf(itens[1].backdrop, sizeof itens[1].backdrop, "deploy/app/art/07.jpg");
   itens[1].nota = 87;
   for (i = 0; i < 6; i++) {
@@ -447,7 +447,9 @@ int main(int argc, char **argv) {
     snprintf(cam, sizeof cam, "%s/ajustes.txt", dados_dir());
     f = fopen(cam, "w");
     assert(f);
-    fprintf(f, "idioma 0\n");
+    // NUVIO_SHOT_IDIOMA=N troca o idioma das capturas que nao sao as das notas
+    // da release (0 pt ... 7 es; ver idiomacod.h): serve a conferir traducao.
+    fprintf(f, "idioma %d\n", getenv("NUVIO_SHOT_IDIOMA") ? atoi(getenv("NUVIO_SHOT_IDIOMA")) : 0);
     fclose(f);
     ajustes_dir(dados_dir()); }
 
@@ -644,7 +646,7 @@ int main(int argc, char **argv) {
     { char cam[600]; FILE *f;
       snprintf(cam, sizeof cam, "%s/ajustes.txt", dados_dir());
       f = fopen(cam, "w"); assert(f);
-      fprintf(f, "idioma 0\nblurUnwatchedEpisodes 1\n"); fclose(f);
+      fprintf(f, "idioma %d\nblurUnwatchedEpisodes 1\n", getenv("NUVIO_SHOT_IDIOMA") ? atoi(getenv("NUVIO_SHOT_IDIOMA")) : 0); fclose(f);
       ajustes_dir(dados_dir()); }
     assert(!ajustes_desfocar_nao_assistidos());
     fxDesfN = fxDesfOk = 0;
@@ -657,7 +659,7 @@ int main(int argc, char **argv) {
     { char cam[600]; FILE *f;
       snprintf(cam, sizeof cam, "%s/ajustes.txt", dados_dir());
       f = fopen(cam, "w"); assert(f);
-      fprintf(f, "idioma 0\nblurUnwatchedEpisodes 0\n"); fclose(f);
+      fprintf(f, "idioma %d\nblurUnwatchedEpisodes 0\n", getenv("NUVIO_SHOT_IDIOMA") ? atoi(getenv("NUVIO_SHOT_IDIOMA")) : 0); fclose(f);
       ajustes_dir(dados_dir()); }
     assert(ajustes_desfocar_nao_assistidos());
     fxDesfN = fxDesfOk = 0;

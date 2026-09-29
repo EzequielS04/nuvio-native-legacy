@@ -647,29 +647,32 @@ static void *buscar(void *arg) {
     char v[300], u[120];
     pthread_mutex_lock(&trava);
     if (!strcmp(imdb, imdbPedido)) {
+      // Os ROTULOS entram em portugues (a chave) e nao traduzidos: o fato vai
+      // para o cache de 30 dias, e um rotulo ja em russo ficaria em russo depois
+      // de a pessoa trocar o idioma. Quem traduz e o desenho, a cada quadro.
       nFatos = 0;
       if (sparqlCampo(corpo, "o", v, sizeof v) &&
           sparqlCampo(corpo, "ou", u, sizeof u) && moeda(u)) {
         char d[80];
         dinheiro(d, sizeof d, atof(v), moeda(u));
-        addFato(i18n("Orçamento"), d);
+        addFato("Orçamento", d);
       }
       if (sparqlCampo(corpo, "b", v, sizeof v) &&
           sparqlCampo(corpo, "bu", u, sizeof u) && moeda(u)) {
         char d[80];
         dinheiro(d, sizeof d, atof(v), moeda(u));
-        addFato(i18n("Bilheteria"), d);
+        addFato("Bilheteria", d);
       }
       if (sparqlCampo(corpo, "loc", v, sizeof v)) {
         primeirosItens(v, 4);
-        addFato(i18n("Filmado em"), v);
+        addFato("Filmado em", v);
       }
-      if (sparqlCampo(corpo, "em", v, sizeof v)) addFato(i18n("Emissora"), v);
-      if (sparqlCampo(corpo, "ba", v, sizeof v)) addFato(i18n("Baseado em"), v);
+      if (sparqlCampo(corpo, "em", v, sizeof v)) addFato("Emissora", v);
+      if (sparqlCampo(corpo, "ba", v, sizeof v)) addFato("Baseado em", v);
       if (sparqlCampo(corpo, "n", v, sizeof v)) {
         char d[60];
         snprintf(d, sizeof d, i18n("%d episódios"), atoi(v));
-        addFato(i18n("Ao todo"), d);
+        addFato("Ao todo", d);
       }
       // OS PREMIOS SAO LISTADOS, NUNCA CONTADOS. MEDIDO: a consulta so enxerga
       // o premio que tem nome em portugues no Wikidata, entao "3" nos premios
@@ -678,7 +681,7 @@ static void *buscar(void *arg) {
       // prometeria.
       if (sparqlCampo(corpo, "pr", v, sizeof v)) {
         primeirosItens(v, 3);
-        addFato(i18n("Prêmios"), v);
+        addFato("Prêmios", v);
       }
       if (sparqlCampo(corpo, "qp", wqP, sizeof wqP)) { /* prefere o portugues */ }
       sparqlCampo(corpo, "qe", wqE, sizeof wqE);

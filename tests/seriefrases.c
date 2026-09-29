@@ -213,8 +213,10 @@ int main(void) {
   simularArranque();
   seriefrases_abrir("tt0468569");
   esperar();
-  // O ROTULO E CONFERIDO PELA MESMA i18n() QUE O ESCREVEU, nao pela palavra
-  // portuguesa crua. Motivo medido em 16/09/2026: o teste roda com
+  // O ROTULO FICA GUARDADO EM PORTUGUES (a chave da tabela) e quem traduz e o
+  // desenho: o fato vai para o cache de 30 dias, e um rotulo ja traduzido ficaria
+  // preso no idioma de quando foi buscado. Por isso o teste confere a palavra
+  // portuguesa crua, em qualquer idioma. Historico: motivo medido em 16/09/2026: o teste roda com
   // ajustes_idioma_ingles() = 1 (nada chamou ajustes_iniciar, entao o padrao
   // vale), e no dia em que a tabela de idioma ganhou { "Bilheteria", "Box
   // office" } este CONFERE passou a falhar sem que uma linha de seriefrases.c
@@ -223,8 +225,8 @@ int main(void) {
   // bilheteria em dolar aparece, o orcamento em moeda desconhecida some".
   { int i, temOrc = 0, temBil = 0;
     for (i = 0; i < seriefrases_n_fatos(); i++) {
-      if (!strcmp(seriefrases_fato_rotulo(i), i18n("Orçamento"))) temOrc = 1;
-      if (!strcmp(seriefrases_fato_rotulo(i), i18n("Bilheteria"))) temBil = 1;
+      if (!strcmp(seriefrases_fato_rotulo(i), "Orçamento")) temOrc = 1;
+      if (!strcmp(seriefrases_fato_rotulo(i), "Bilheteria")) temBil = 1;
     }
     CONFERE(!temOrc, "orcamento em moeda desconhecida foi mostrado");
     CONFERE(temBil, "bilheteria em dolar nao apareceu"); }
