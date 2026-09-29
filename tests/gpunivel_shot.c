@@ -1,4 +1,4 @@
-// CAPTURA DA HOME NOS TRES NIVEIS DE GPU (gpunivel.h), 29/09/2026.
+// CAPTURA DA HOME NOS QUATRO NIVEIS DE GPU (gpunivel.h), 29/09/2026.
 //
 // Pergunta do dono antes de levar os dois canarios a TV de 2019: "a cara nao
 // quebrou? o texto a 720p ainda fica legivel?". Esta captura desenha a MESMA
@@ -50,7 +50,7 @@ static const char *NOMES[GFX_NMODOS] = {
   "CARD", "SOMBRA", "COR", "HERO", "VEU", "TEXTO", "FUNDO", "VEU_TOPO", "SNAP", "PLAY",
   "BLUR", "DETALHE", "HERO_CHEIO", "ANEL", "OLHO", "FONTES", "MARCA", "VEU_BAIXO", "SOCIAL",
   "AVATAR", "RETRATO", "DISCO", "EDITORIAL", "VEU_CARD", "BRILHO_TOPO", "ARTE", "LUZ", "SINO",
-  "ESQUELETO", "LINHA", "CEU", "COR_GRAD", "ANEL_GRAD", "AMBIENTE", "COPIA",
+  "ESQUELETO", "LINHA", "CEU", "COR_GRAD", "ANEL_GRAD", "AMBIENTE", "VITRINE", "FUNDO_DIN", "COPIA",
 };
 
 static GLuint consulta;
@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
   // 12 s para as artes chegarem (metahub + decode).
   for (n = 0; n < 720; n++) quadro(w, 0);
 
-  for (k = 0; k < 3; k++) {
+  for (k = 0; k < 4; k++) {
     double soma = 0;
     int m;
     gpun_definir_nivel(k);

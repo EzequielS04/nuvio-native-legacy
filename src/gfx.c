@@ -1092,6 +1092,9 @@ double gfx_fill_modo[GFX_NMODOS];
 static int efeitosLeves = 0;
 void gfx_definir_efeitos_leves(int leves) { efeitosLeves = leves ? 1 : 0; }
 int  gfx_efeitos_leves(void) { return efeitosLeves; }
+static int efeitosMinimos = 0;
+void gfx_definir_efeitos_minimos(int m) { efeitosMinimos = m ? 1 : 0; }
+int  gfx_efeitos_minimos(void) { return efeitosMinimos; }
 static double gfxFreqMs = 0.0;
 static int desfGeradosQuadro = 0;   // ver gfx_desfocado
 void gfx_novo_quadro(void) {
@@ -1129,6 +1132,8 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   // luz de canto de painel) nao sao desenhados. Nenhum carrega informacao — o
   // foco continua marcado pelo anel e pelo especular do GFX_CARD.
   if (efeitosLeves && (modo == GFX_BRILHO_TOPO || modo == GFX_LUZ)) return;
+  // Efeitos minimos: sombra e halo tambem saem (o anel continua marcando o foco).
+  if (efeitosMinimos && modo == GFX_SOMBRA) return;
   if (gfxFreqMs == 0.0) gfxFreqMs = 1000.0 / (double)SDL_GetPerformanceFrequency();
   (void)gfxFreqMs;
 #ifdef NV_PERF_FINO
@@ -1299,14 +1304,15 @@ static void ambAssar(void) {
 }
 
 void gfx_ambiente_preparar(void) {
-  if (nv_ambiente_forca <= 0.003f || snapAtivo || !ambPreparar()) return;
+  if (nv_ambiente_forca <= 0.003f || efeitosMinimos || snapAtivo || !ambPreparar()) return;
   ambAssar();
 }
 
 void gfx_ambiente(float alfa) {
   float a = nv_ambiente_forca * alfa;
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  if (a <= 0.003f) return;
+  // Efeitos minimos: uma tela cheia a menos por quadro; o clear ja pinta o fundo.
+  if (a <= 0.003f || efeitosMinimos) return;
   // Dentro de um snapshot (outro FBO ativo) ou sem FBO: o caminho antigo.
   if (snapAtivo || !ambPreparar() || ambChave[0] < 0.0f) {
     gfx_rect(tela, 0, GFX_AMBIENTE, 0, 0, 0, 0, 1, 1, 1, a);

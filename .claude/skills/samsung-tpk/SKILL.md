@@ -56,10 +56,16 @@ software). NAO exercita o host .NET, o player, nem a janela: mudanca em
 - **Trailer**: no `.tpk` a Apple toca so variante de VIDEO (sem audio, o master
   travava o muse-server); a tela cheia e o cartao que continua no detalhe
   tentam o IMDb primeiro. O zoom esconde o plano ate o recorte assentar.
-- **Nivel de GPU** (`src/gpunivel.c`): adaptativo nos primeiros ~20 s de home;
-  desce no maximo ao nivel 1 (efeitos leves). O 720p (nivel 2) ficou borrado
-  demais nas 5.0 e so existe forcado. Ajuste "Efeitos visuais"
-  (Automatico/Completos/Leves) em Avancado, so no `.tpk`.
+- **Nivel de GPU** (`src/gpunivel.c`): adaptativo nos primeiros ~20 s de home.
+  0 cheios -> 1 efeitos leves -> 2 efeitos MINIMOS (sem luz de tela cheia do
+  tema imersivo, sem sombra/halo), sempre em 1080p; o 2 so quando o 1 ainda
+  fica abaixo de 25 fps (Mali-400 do registro 9859). O 720p (nivel 3) ficou
+  borrado demais nas 5.0 ("ninguem gostou", dono 29/09) e so existe forcado.
+  Ajuste "Efeitos visuais" (Automatico/Completos/Leves) em Avancado, so no `.tpk`.
+- **Locale**: o host .NET poe o processo no idioma da TV; com virgula decimal
+  o JSON com `%f` quebra (todo /scrobble do Trakt deu 500 na 1.5.4). `main()`
+  e `nv_tpk_iniciar` forcam `LC_NUMERIC=C` e a linha de FPS vigia. Log com
+  "FPS=51,2" (virgula) = regressao disso.
 - Selo HDR: so "Fonte HDR10/HDR10+/HDR" lido da fonte. Samsung nao tem Dolby
   Vision; nunca anunciar DV.
 

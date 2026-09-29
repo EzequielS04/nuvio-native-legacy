@@ -20,6 +20,8 @@ int  gpun_teste_decidido(void);
 float gfx_tex_aspect_atual, gfx_opacidade_grupo = 1.0f;
 static int leves = -1;
 void gfx_definir_efeitos_leves(int l) { leves = l; }
+static int minimos = -1;
+void gfx_definir_efeitos_minimos(int m) { minimos = m; }
 int  gfx_efeitos_leves(void) { return leves; }
 void gfx_tex_esquecer(GLuint t) { (void)t; }
 void gfx_tamanho_alvo(int w, int h) { (void)w; (void)h; }
@@ -51,8 +53,8 @@ int main(void) {
   puts("ok  60 fps: fica no nivel 0 e grava");
 
   // 2. O registro 8825: 25 fps, espera 34 ms contra 5 de CPU -> 1 e PARA.
-  //    O 720p (nivel 2) nunca e escolhido sozinho: no teste das duas Tizen 5.0
-  //    (#180) o texto ficou borrado demais; "efeitos" ganhou.
+  //    A 25 fps o 720p (nivel 2) nao e escolhido: no teste das duas Tizen 5.0
+  //    (#180) o texto ficou borrado demais; "efeitos" ganhou. So abaixo de 25.
   gpun_teste_reiniciar(); gravado[0] = 0;
   rodar(8, 40.0, 34.0, 5.0, 1, 1);          // aquece 3 s + janela de 4 s
   assert(gpun_nivel() == 1 && leves == 1 && !gpun_teste_decidido());
@@ -60,7 +62,7 @@ int main(void) {
   rodar(7, 40.0, 34.0, 5.0, 1, 1);          // assenta 2 s + janela de 4 s
   assert(gpun_nivel() == 1 && gpun_teste_decidido());
   assert(!strstr(gravado, "nivel=2"));
-  puts("ok  25 fps presos na GPU: desce 0 -> 1, grava e para (720p so forcado)");
+  puts("ok  25 fps presos na GPU: desce 0 -> 1, grava e para (25 fps nao vira 720p)");
 
   // 3. Desce ate onde o FPS fica bom e para ali.
   gpun_teste_reiniciar();
@@ -69,6 +71,18 @@ int main(void) {
   rodar(7, 16.7, 10.0, 4.0, 1, 1);
   assert(gpun_nivel() == 1 && gpun_teste_decidido());
   puts("ok  com o nivel 1 a 60 fps: fica no 1");
+
+  // 3b. Mali-400 do registro 9859 (UA40N5300, Tizen 4.0): mesmo com efeitos
+  //     leves fica em ~12 fps, espera dominando. Abaixo de 25 fps desce ao
+  //     2 (efeitos MINIMOS, em 1080p) e para: o 720p (3) nunca e automatico.
+  gpun_teste_reiniciar(); gravado[0] = 0;
+  rodar(8, 83.0, 76.0, 5.0, 1, 1);          // 12 fps: 0 -> 1
+  assert(gpun_nivel() == 1 && !gpun_teste_decidido());
+  rodar(7, 83.0, 76.0, 5.0, 1, 1);          // continua a 12 fps no 1: -> 2
+  assert(gpun_nivel() == 2 && minimos == 1 && strstr(gravado, "nivel=2"));
+  rodar(7, 40.0, 30.0, 5.0, 1, 1);          // no 2 a 25 fps: nao vai ao 3 (720p)
+  assert(gpun_nivel() == 2 && gpun_teste_decidido());
+  puts("ok  12 fps mesmo no nivel 1: desce ao 2 (efeitos minimos, 1080p) e para");
 
   // 4. Lento pela CPU (des domina): menos pixel nao ajuda -> nao desce.
   gpun_teste_reiniciar();

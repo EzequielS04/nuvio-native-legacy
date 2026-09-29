@@ -16,7 +16,7 @@
 #include "tpk_egl.h"
 #endif
 
-#define GPUN_NIVEL_AUTO_MAX 1   // adaptativo nunca passa daqui (720p so forcado)
+#define GPUN_NIVEL_AUTO_MAX 2   // efeitos minimos; o 3 (720p) so forcado, ver gpun_medir
 #define GPUN_ARQ "gpu-nivel.txt"
 // Regra do adaptativo (gpunivel.h). Os numeros:
 //  - 45 fps: abaixo disso o registro 8825 (22-29) e o jank visivel; a Tizen 6
@@ -27,6 +27,9 @@
 //    das primeiras artes e trabalho de CPU/upload, nao do regime) e 2 s depois
 //    de cada degrau; teto de 24 s de home medida por arranque.
 #define GPUN_FPS_BOM     45.0
+// Abaixo disto, JA com efeitos leves, a tela esta travada: tira mais efeitos
+// (registro 9859: Mali-400, Tizen 4.0, 10-21 fps no 1).
+#define GPUN_FPS_CRITICO 25.0
 #define GPUN_ESPERA_MIN   6.0
 #define GPUN_JANELA_MS 4000.0
 #define GPUN_AQUECE_MS 3000.0
@@ -38,7 +41,7 @@ static const char *origem = "padrao";
 static char renderer[160] = "?", versaoGl[160] = "?", modelo[96] = "?", tizen[32] = "?";
 static unsigned long chave;
 static int telaW = 1920, telaH = 1080;
-// Alvo interno do nivel 2.
+// Alvo interno do nivel 3 (720p).
 static GLuint intFbo, intTex;
 static int intW, intH, intFalhou, intLigado;
 // Descarte (glInvalidateFramebuffer ou glDiscardFramebufferEXT).
@@ -150,7 +153,7 @@ static void ler(void) {
   if ((p = strstr(t, "chave=")) != NULL) c = strtoul(p + 6, NULL, 16);
   if ((p = strstr(t, "nivel=")) != NULL) n = atoi(p + 6);
   free(t);
-  if (v != 1 || n < 0 || n > 2) { printf("[gpu-nivel] %s invalido: comeca do 0\n", GPUN_ARQ); return; }
+  if (v != 1 || n < 0 || n > 3) { printf("[gpu-nivel] %s invalido: comeca do 0\n", GPUN_ARQ); return; }
   if (c != chave) {
     printf("[gpu-nivel] %s de outra GPU/driver/firmware (chave %lx, agora %lx): mede de novo do 0\n",
            GPUN_ARQ, c, chave);
@@ -163,13 +166,14 @@ static void ler(void) {
 
 static void aplicar(int n, const char *porque) {
   if (n < 0) n = 0;
-  if (n > 2) n = 2;
+  if (n > 3) n = 3;
   // No arranque (porque vazio) so fala quando ha o que dizer: na LG e no .wgt
   // o nivel e sempre 0 e o log deles nao ganha linha nova.
   if (n != nivel || (!porque[0] && strcmp(origem, "padrao")))
     printf("[gpu-nivel] nivel %d -> %d (%s)\n", nivel, n, porque[0] ? porque : origem);
   nivel = n;
   gfx_definir_efeitos_leves(nivel >= 1);
+  gfx_definir_efeitos_minimos(nivel >= 2);
   fflush(stdout);
 }
 
@@ -256,8 +260,8 @@ void gpun_log_perfil(long memMB, int texMb, int fios, int heroi) {
   printf("[perfil] tpk mem=%ldMB gpu=\"%s\"%s tizen=%s modelo=%s -> tex=%dMB fios=%d heroi=%d"
          " escala=%s efeitos=%s nivel=%d (%s)\n",
          memMB, renderer, ptv_gpu_fraca_atual() ? " (fraca)" : "", tizen, modelo, texMb, fios, heroi,
-         nivel >= 2 ? "1280x720->1920x1080" : "1920x1080",
-         nivel >= 1 ? "leves" : "cheios", nivel, origem);
+         nivel >= 3 ? "1280x720->1920x1080" : "1920x1080",
+         nivel >= 2 ? "minimos" : nivel >= 1 ? "leves" : "cheios", nivel, origem);
   fflush(stdout);
 #else
   (void)memMB; (void)texMb; (void)fios; (void)heroi;
@@ -305,7 +309,7 @@ static int intPreparar(void) {
 
 void gpun_quadro_inicio(void) {
   intLigado = 0;
-  if (nivel < 2 || !intPreparar()) return;
+  if (nivel < 3 || !intPreparar()) return;
   glBindFramebuffer(GL_FRAMEBUFFER, intFbo);
   glViewport(0, 0, intW, intH);
   gfx_tamanho_alvo(intW, intH);
@@ -385,12 +389,15 @@ void gpun_medir(double dtms, double espera, double cpu, int naHome, int cheia) {
   janN = 0; janMs = janEsp = janCpu = 0;
   if (fps >= GPUN_FPS_BOM) { decidir("fps bom"); return; }
   if (e >= GPUN_ESPERA_MIN && e > c) {
-    // O adaptativo PARA no nivel 1. Teste nas duas Tizen 5.0 (#180, 29/09):
-    // "efeitos" ficou liso e bonito; o 720p ficou mais liso mas com o texto
-    // borrado demais. O nivel 2 continua existindo, so por NV_TPK_NIVEL_FORCADO
-    // ou NUVIO_GPU_NIVEL — nunca escolhido sozinho.
-    if (nivel < GPUN_NIVEL_AUTO_MAX) {
-      aplicar(nivel + 1, "GPU presa: efeitos leves");
+    // O adaptativo PARA no nivel 1 quando ele ja resolve. Teste nas duas
+    // Tizen 5.0 (#180, 29/09): "efeitos" ficou liso e bonito; o 720p ficou
+    // mais liso mas com o texto borrado demais — ninguem gostou, e por isso o
+    // 720p (nivel 3) so existe forcado. Quando o 1 AINDA fica abaixo de
+    // GPUN_FPS_CRITICO (a Mali-400 do registro 9859, UA40N5300, Tizen 4.0,
+    // 10-21 fps com efeitos leves), desce ao 2: efeitos MINIMOS, em 1080p.
+    if (nivel == 0 || (nivel == 1 && fps < GPUN_FPS_CRITICO)) {
+      aplicar(nivel + 1, nivel == 0 ? "GPU presa: efeitos leves"
+                                    : "GPU presa mesmo com efeitos leves: efeitos minimos");
       gravar();
       aquece = GPUN_ASSENTA_MS;
       if (totalMs >= GPUN_TETO_MS) decidir("teto de tempo de medida");

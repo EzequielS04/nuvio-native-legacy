@@ -9,14 +9,17 @@
 // janela. HIPOTESE, nao prova: a GPU nao termina o quadro anterior a tempo
 // (preenchimento/ALU por pixel). O mesmo app na Tizen 6 roda a 60 fps.
 //
-// TRES NIVEIS, um degrau por vez:
+// QUATRO NIVEIS, um degrau por vez:
 //   0 = como sempre (1080p nativo, efeitos cheios).
 //   1 = EFEITOS LEVES (gfx_definir_efeitos_leves): sem o dither highp dos
 //       degrades e sem os realces decorativos (brilho no alto do card, luz de
 //       canto). Resolucao nativa.
-//   2 = nivel 1 + DESENHO INTERNO EM 1280x720, ampliado para a janela numa
+//   2 = EFEITOS MINIMOS (gfx_definir_efeitos_minimos): nivel 1 + sem a luz de
+//       tela cheia do tema imersivo e sem sombra/halo. Resolucao nativa. So
+//       quando o 1 ainda fica abaixo de 25 fps (Mali-400, registro 9859).
+//   3 = nivel 2 + DESENHO INTERNO EM 1280x720, ampliado para a janela numa
 //       unica passada (GFX_COPIA, filtro linear). 2,25x menos pixels por
-//       quadro em tudo o que a tela desenha.
+//       quadro. SO FORCADO: nas Tizen 5.0 o texto ficou borrado demais.
 //
 // COMO O NIVEL E ESCOLHIDO (so no .tpk, NV_TPK):
 //   - -DNV_TPK_NIVEL_FORCADO=N (tools/tpk.sh com NV_TPK_NIVEL=N): fixo, sem

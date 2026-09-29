@@ -60,7 +60,7 @@ static const Fil FILS[] = {
 
 static SDL_Window *janela;
 static const char *dirDados;
-static double fillUlt, fillVisUlt; static int rectUlt;
+static double fillUlt, fillVisUlt, modoUlt[GFX_NMODOS]; static int rectUlt;
 
 static void gravar(const char *bmp) {
   unsigned char *pix = malloc(1920 * 1080 * 4);
@@ -91,7 +91,8 @@ static void quadros(int n, const char *bmp) {
     glClear(GL_COLOR_BUFFER_BIT);
     gfx_ambiente(1.0f);
     home_desenhar(agora);
-    if (i == n - 1) { fillUlt = gfx_fill; fillVisUlt = gfx_fill_vis; rectUlt = gfx_n_rect; }
+    if (i == n - 1) { fillUlt = gfx_fill; fillVisUlt = gfx_fill_vis; rectUlt = gfx_n_rect;
+                      memcpy(modoUlt, gfx_fill_modo, sizeof modoUlt); }
     if (bmp && i == n - 1) gravar(bmp);
     SDL_GL_SwapWindow(janela);
     SDL_Delay(8);
@@ -153,6 +154,12 @@ int main(int argc, char **argv) {
   glViewport(0, 0, 1920, 1080);
   gfx_tamanho_alvo(1920, 1080);
   assert(gfx_iniciar());
+  // NV_EFEITOS=1 leves, 2 minimos (os niveis de gpunivel.h sem o 720p).
+  if (getenv("NV_EFEITOS")) {
+    int e = atoi(getenv("NV_EFEITOS"));
+    gfx_definir_efeitos_leves(e >= 1);
+    gfx_definir_efeitos_minimos(e >= 2);
+  }
   assert(txt_iniciar("deploy/app", 1));
   tex_iniciar(192);
   gfx_borrao_iniciar(480, 270);
@@ -224,6 +231,10 @@ int main(int argc, char **argv) {
         snprintf(bmp, sizeof bmp, "%s-L%d-g%d-0-destaque.bmp", saida, layout, vidro);
         quadros(1, bmp);
         printf("[shot] L%d g%d destaque: fill=%.2f vis=%.2f rects=%d\n", layout, vidro, fillUlt, fillVisUlt, rectUlt);
+        if (getenv("NV_FILL_MODOS")) {   // quem preenche: modo=telas cheias
+          int m; printf("[shot]   modos:");
+          for (m = 0; m < GFX_NMODOS; m++) if (modoUlt[m] > 0.05) printf(" %d=%.2f", m, modoUlt[m]);
+          printf("\n"); }
         for (r = 0; r < 9; r++) {
           tecla(SDLK_DOWN);
           quadros(110, NULL);

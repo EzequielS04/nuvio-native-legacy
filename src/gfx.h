@@ -361,6 +361,11 @@ void gfx_novo_quadro(void);
 // compilacao inteira dos shaders (0,7-2 s numa TV fraca).
 void gfx_definir_efeitos_leves(int leves);
 int  gfx_efeitos_leves(void);
+// EFEITOS MINIMOS (nivel 2 de gpunivel.h), por cima dos leves: sem a luz de
+// tela cheia do tema imersivo (gfx_ambiente) e sem sombra/halo (GFX_SOMBRA).
+// Resolucao nativa: tira camadas que so enfeitam em vez de borrar o texto.
+void gfx_definir_efeitos_minimos(int minimos);
+int  gfx_efeitos_minimos(void);
 
 void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
               float parx, float pary, float raio,
