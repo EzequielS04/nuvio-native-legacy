@@ -483,7 +483,7 @@ async function rotaAtividadeEscrever(env, quem, corpo, h) {
   // CONSENTIMENTO CONFERIDO AQUI. Um cliente com o interruptor desligado que
   // mande atividade mesmo assim (versao antiga, erro, mao ma) nao grava nada.
   if (f.ativ < 1 && !f.recentes) return h.json({ ok: 1, guardado: 0 });
-  const agoraMesmo = corpo?.acao === "assistindo" && f.ativ >= 2 ? 1 : 0;
+  const agoraMesmo = (corpo?.agora === 1 || corpo?.agora === true) && f.ativ >= 2 ? 1 : 0;
   const nota = Number.isFinite(corpo?.nota) ? Math.round(corpo.nota) : 0;
   await env.DB.batch([
     env.DB.prepare(
@@ -506,14 +506,17 @@ async function rotaAtividadeAmigos(env, quem, h) {
   const r = await env.DB.prepare(
     "SELECT p.id AS de, COALESCE(NULLIF(f.apelido, ''), p.nome) AS deNome, p.avatar AS deAvatar, " +
     "a.imdb AS imdb, a.tipo AS tipo, a.titulo AS titulo, a.ano AS ano, a.nota AS nota, " +
-    "CASE WHEN a.acao = 1 AND a.criado > ? THEN 1 ELSE 0 END AS agora, a.criado AS criado " +
+    "a.acao AS agora, a.criado AS criado " +
     "FROM contato c JOIN perfil f ON f.pessoa = c.b AND f.ativ >= 1 " +
     "JOIN atividade a ON a.pessoa = c.b JOIN pessoa p ON p.id = c.b " +
-    "WHERE c.a = ? AND a.criado > ? " +
+    // "ASSISTINDO AGORA" VENCE EM 10 MIN e SOME (nao vira "assistiu"): quem
+    // largou o filme no meio nao assistiu nada, e dizer que sim a um amigo seria
+    // uma afirmacao falsa sobre ela.
+    "WHERE c.a = ? AND a.criado > ? AND (a.acao = 0 OR a.criado > ?) " +
     "AND EXISTS (SELECT 1 FROM contato v WHERE v.a = c.b AND v.b = c.a) " +          // os DOIS lados
     "AND NOT EXISTS (SELECT 1 FROM bloqueio b WHERE (b.quem = c.a AND b.alvo = c.b) OR (b.quem = c.b AND b.alvo = c.a)) " +
     "ORDER BY a.criado DESC LIMIT ?"
-  ).bind(t - AGORA_S, quem.id, t - RETENCAO_ATIV, FEED_MAX).all();
+  ).bind(quem.id, t - RETENCAO_ATIV, t - AGORA_S, FEED_MAX).all();
   return h.json({ itens: r.results || [] });
 }
 
@@ -554,6 +557,7 @@ export { garantirPerfil, bloqueado, avatarPublico, norm };
 export function limpezaAmigos(env, t) {
   return [
     env.DB.prepare("DELETE FROM atividade WHERE criado < ?").bind(t - RETENCAO_ATIV),
+    env.DB.prepare("DELETE FROM atividade WHERE acao = 1 AND criado < ?").bind(t - AGORA_S),
     env.DB.prepare("DELETE FROM pedido WHERE estado = 0 AND criado < ?").bind(t - RETENCAO_PEDIDO),
     env.DB.prepare("DELETE FROM pedido WHERE estado = 1 AND criado < ?").bind(t - RETENCAO_RECUSA),
     env.DB.prepare("DELETE FROM limite WHERE expira < ?").bind(t),

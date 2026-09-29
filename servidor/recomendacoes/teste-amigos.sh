@@ -132,7 +132,7 @@ r=$(api h POST /v1/pedidos/enviar "{\"pub\":\"$pub_g_h\"}")
 checa "pedidos cruzados viram amizade" 1 "$(tem "$r" '"estado":"amigo"')"
 
 # --- 7. ATIVIDADE: so amigo mutuo, so de quem ligou ----------------------------
-POST='{"imdb":"tt0111161","tipo":"movie","titulo":"Um Sonho de Liberdade","ano":"1994","nota":93,"poster":"http://espiao.exemplo/x.jpg","acao":"assistiu"}'
+POST='{"imdb":"tt0111161","tipo":"movie","titulo":"Um Sonho de Liberdade","ano":"1994","nota":93,"poster":"http://espiao.exemplo/x.jpg","agora":0}'
 checa "atividade desligada nao grava" 1 "$(tem "$(api f POST /v1/atividade "$POST")" '"guardado":0')"
 checa "e nao aparece para o amigo" 1 "$(tem "$(api h GET /v1/amigos/atividade)" '"itens":\[\]')"
 checa "imdb invalido e 400" 400 "$(cod f /v1/atividade '{"imdb":"xx"}')"
@@ -146,11 +146,15 @@ checa "sem poster guardado (capa e montada na TV de quem ve)" 0 "$(tem "$r" 'esp
 checa "quem nao e amigo nao ve" 1 "$(tem "$(api e GET /v1/amigos/atividade)" '"itens":\[\]')"
 checa "G (pediu mas nao e amigo de F) nao ve" 0 "$(tem "$(api g GET /v1/amigos/atividade)" 'Um Sonho')"
 checa "'assistindo agora' sem nivel 2 vira 'assistiu'" 1 \
-  "$(api f POST /v1/atividade '{"imdb":"tt0068646","titulo":"O Poderoso Chefao","acao":"assistindo"}' > /dev/null; tem "$(api h GET /v1/amigos/atividade)" '"agora":0')"
+  "$(api f POST /v1/atividade '{"imdb":"tt0068646","titulo":"O Poderoso Chefao","agora":1}' > /dev/null; tem "$(api h GET /v1/amigos/atividade)" '"agora":0')"
 checa "nao ha agora:1 no nivel 1" 0 "$(tem "$(api h GET /v1/amigos/atividade)" '"agora":1')"
 api f POST /v1/perfil/atividade '{"nivel":2}' > /dev/null
-api f POST /v1/atividade '{"imdb":"tt0468569","titulo":"Batman","acao":"assistindo"}' > /dev/null
+api f POST /v1/atividade '{"imdb":"tt0468569","titulo":"Batman","agora":1}' > /dev/null
 checa "nivel 2 mostra 'assistindo agora'" 1 "$(tem "$(api h GET /v1/amigos/atividade)" '"agora":1')"
+# "ASSISTINDO AGORA" VENCE EM 10 MIN E SOME. Nao vira "assistiu": quem largou o
+# filme no meio nao assistiu, e dizer que sim a um amigo seria falso.
+sql "UPDATE atividade SET criado = criado - 1200 WHERE imdb = 'tt0468569';"
+checa "'agora' vencido some do feed (e nao vira 'assistiu')" 0 "$(tem "$(api h GET /v1/amigos/atividade)" 'Batman')"
 # so um lado ligado nao e amizade: H NAO compartilha, F ve vazio
 checa "H nao ligou, F nao ve nada de H" 1 "$(tem "$(api f GET /v1/amigos/atividade)" '"itens":\[\]')"
 # desligar apaga o que estava guardado, na hora
@@ -163,7 +167,7 @@ checa "recentes desligado: cartao sem titulos" 1 \
   "$(tem "$(api e POST /v1/perfis/ver "{\"pub\":\"$pub_f\"}")" '"recentes":\[\]')"
 api f POST /v1/perfil '{"apelido":"Fabi Cine","bio":"fa de terror","generos":["terror"],"avatar":1,"recentes":1}' > /dev/null
 for t in tt0111161 tt0068646 tt0468569 tt1375666; do
-  api f POST /v1/atividade "{\"imdb\":\"$t\",\"titulo\":\"T $t\",\"acao\":\"assistiu\"}" > /dev/null; done
+  api f POST /v1/atividade "{\"imdb\":\"$t\",\"titulo\":\"T $t\",\"agora\":0}" > /dev/null; done
 checa "recentes ligado (sem atividade p/ amigos) grava" 4 "$(sql "SELECT COUNT(*) FROM atividade WHERE pessoa='nuvio:fff';")"
 checa "e o cartao publico mostra" 1 "$(tem "$(api g POST /v1/perfis/ver "{\"pub\":\"$pub_f\"}")" 'T tt0111161')"
 checa "mas o feed dos amigos continua vazio (ativ=0)" 1 "$(tem "$(api h GET /v1/amigos/atividade)" '"itens":\[\]')"
