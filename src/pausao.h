@@ -88,6 +88,12 @@ typedef struct { float pos, dur; float fr, fg, fb; } PausaoCena;
 // cena enquanto o painel esta de pe, ele nao precisa mais se esquivar deles.
 void pausao_desenhar(Uint32 agora, const PausaoCena *cena);
 
+// O selo "Pausado" do alto do painel, para quem mais mostra pausa (o OSD do
+// canal ao vivo). `direita` = 1 ancora pela borda direita em `x`. Devolve a
+// largura.
+#define PAUSAO_SELO_H 56.0f
+float pausao_selo(float x, float y, int direita, float a);
+
 // Fim da reproducao: zera o relogio e o painel. Sem isto o proximo filme
 // abriria com o cronometro do anterior ja meio andado.
 void pausao_fechar(void);
