@@ -561,35 +561,40 @@ static int resolverCanalXtream(void) {
 // 6314 nem isso ficava, porque o "voltou a entregar" tirava o cartao. A conta
 // (xtream_conta_ler, no fio do guia) explica os casos em que NENHUM canal
 // toca; o erro do pipeline, o deste canal.
-static void erroCanalXtream(void) {
+static void motivoCanalXtream(char *t, size_t nt, char *d, size_t nd) {
   XtreamConta c;
-  char t[160], d[160];
   const char *err = video_erro_texto();
   int aviso = xtream_conta(&c) ? xtream_conta_aviso(&c, (long long)time(NULL)) : XA_NADA;
   if (aviso == XA_EXPIRADA) {
-    player_erro_fonte_motivo(i18n("A assinatura Xtream venceu."),
-                             i18n("Renove com o seu provedor. Os canais voltam sozinhos depois disso."));
-    return;
-  }
-  if (aviso == XA_DESATIVADA || aviso == XA_RECUSOU) {
-    player_erro_fonte_motivo(i18n("O provedor desativou esta conta Xtream."),
-                             i18n("Fale com o seu provedor ou confira o cadastro em Ajustes."));
-    return;
-  }
-  if (aviso == XA_TELAS_CHEIAS) {
-    snprintf(t, sizeof t, i18n("Todas as telas da conta Xtream estão em uso (%d de %d)."),
+    snprintf(t, nt, "%s", i18n("A assinatura Xtream venceu."));
+    snprintf(d, nd, "%s", i18n("Renove com o seu provedor. Os canais voltam sozinhos depois disso."));
+  } else if (aviso == XA_DESATIVADA || aviso == XA_RECUSOU) {
+    snprintf(t, nt, "%s", i18n("O provedor desativou esta conta Xtream."));
+    snprintf(d, nd, "%s", i18n("Fale com o seu provedor ou confira o cadastro em Ajustes."));
+  } else if (aviso == XA_TELAS_CHEIAS) {
+    snprintf(t, nt, i18n("Todas as telas da conta Xtream estão em uso (%d de %d)."),
              c.conexoes, c.maxConexoes);
-    player_erro_fonte_motivo(t, i18n("Feche o Xtream em outro aparelho e tente de novo."));
-    return;
+    snprintf(d, nd, "%s", i18n("Feche o Xtream em outro aparelho e tente de novo."));
+  } else if (err && err[0]) {
+    snprintf(t, nt, "%s", i18n("O provedor não entregou este canal."));
+    snprintf(d, nd, i18n("Resposta do servidor: %s. HLS e TS foram tentados."), err);
+  } else {
+    snprintf(t, nt, "%s", i18n("O canal não abriu em HLS nem em TS."));
+    snprintf(d, nd, "%s", i18n("O vídeo chegou, mas a TV não começou a tocar. Envie o registro em Ajustes."));
   }
-  if (err && err[0]) {
-    snprintf(t, sizeof t, "%s", i18n("O provedor não entregou este canal."));
-    snprintf(d, sizeof d, i18n("Resposta do servidor: %s. HLS e TS foram tentados."), err);
-    player_erro_fonte_motivo(t, d);
-    return;
-  }
-  player_erro_fonte_motivo(i18n("O canal não abriu em HLS nem em TS."),
-                           i18n("O vídeo chegou, mas a TV não começou a tocar. Envie o registro em Ajustes."));
+}
+static void erroCanalXtream(void) {
+  char t[160], d[200];
+  motivoCanalXtream(t, sizeof t, d, sizeof d);
+  player_erro_fonte_motivo(t, d);
+}
+// No PREVIEW do guia a miniatura morre quieta (ver o watchdog); para o Xtream
+// sai ao menos a frase curta por cima do guia — no registro 6314 a pessoa
+// ficava olhando um preview preto sem saber por que.
+static void avisoCanalXtreamMini(void) {
+  char t[160], d[200];
+  motivoCanalXtream(t, sizeof t, d, sizeof d);
+  glem_aviso_curto(t);
 }
 
 // Um unico worker pode existir. O fio de desenho so junta depois de DONE;
@@ -2299,7 +2304,7 @@ void app_atualizar(float dt, Uint32 agora) {
         canalFonteIdx = -1;
         // Sem mais fonte na lista: na tela cheia vira o erro de sempre; no
         // PiP a miniatura morre quieta em vez de prender um quadro morto.
-        if (player_mini_ativo()) player_fechar_mini();
+        if (player_mini_ativo()) { if (xt) avisoCanalXtreamMini(); player_fechar_mini(); }
         else if (xt) erroCanalXtream();
         else player_erro_fonte();
       }

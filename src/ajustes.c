@@ -15,6 +15,7 @@
 #include "dados.h"
 #include "stalker.h"
 #include "xtream.h"
+#include "xtepg.h"
 #include "teclado.h"
 #include "descoberta.h"
 #include "extras.h"
@@ -3243,7 +3244,8 @@ void ajustes_evento(const SDL_Event *e) {
                             : (!sen && strcmp(xtream_usuario(), "-")) ? xtream_usuario() : NULL);
       return;
     }
-    if (focoOp == AJ_XTREAM_LIMPAR) { xtream_esquecer(); return; }
+    // A grade curta guardada era da conta que saiu (#158).
+    if (focoOp == AJ_XTREAM_LIMPAR) { xtream_esquecer(); xtepg_limpar(); return; }
     if (focoOp == AJ_FANART_CHAVE) {
       // A chave NUNCA volta para o campo (a modal fica na tela e a tela vira
       // foto); confirmar vazio esquece a que estava.
