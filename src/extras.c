@@ -7,6 +7,8 @@
 #include "descoberta.h"
 #include "ajustes.h"
 #include "agenda.h"
+#include "comentordem.h"
+#include "idiomacod.h"
 #include <pthread.h>
 #include <stdint.h>
 #include <string.h>
@@ -111,7 +113,7 @@ const char *extras_caminho_marca_nome(const char *nome) {
 // `nota` e o user_rating do Trakt (0..10); 0 quando quem comentou nao avaliou.
 // A referencia mostra "10/10  17 curtidas" no rodape do cartao, e sem a nota o
 // rodape ficava so com o numero de curtidas — metade da informacao.
-static struct { char user[40]; char texto[420]; int curtidas; int nota; } coment[EX_COMENT_MAX];
+static struct { char user[40]; char texto[420]; int curtidas; int nota; char lingua[4]; } coment[EX_COMENT_MAX];
 
 // COMENTARIOS DO EPISODIO, o outro lado do seletor "Série | Episódio" que a
 // referencia poe acima dos cartoes. Sao uma consulta DIFERENTE
@@ -121,7 +123,7 @@ static struct { char user[40]; char texto[420]; int curtidas; int nota; } coment
 //
 // Vem sob demanda — so quando o dono escolhe "Episódio" —, porque o custo e uma
 // viagem por episodio e a maioria das visitas nunca troca de aba.
-static struct { char user[40]; char texto[420]; int curtidas; int nota; } comentEp[EX_COMENT_MAX];
+static struct { char user[40]; char texto[420]; int curtidas; int nota; char lingua[4]; } comentEp[EX_COMENT_MAX];
 static int  nComentEp;
 static int  epTempAtual, epNumAtual;    // de que episodio a lista acima e
 static int  epFioVivo;
@@ -635,7 +637,7 @@ static void *buscar(void *arg) {
            EX_COMENT_MAX);
   corpo = rede_baixar_com(url, 12, cab);
   if (corpo) {
-    struct { char u[40]; char t[420]; int c; int nota; } achado[EX_COMENT_MAX];
+    ComentAchado achado[EX_COMENT_MAX];
     int n = 0;
     // p+1 e nao js_prox: js_prox recebe o FIM do elemento anterior, e aqui
     // ainda nao ha anterior. Com js_prox o primeiro item era pulado e, em
@@ -651,11 +653,23 @@ static void *buscar(void *arg) {
       js_texto(p, f, "username", achado[n].u, sizeof achado[n].u);
       achado[n].c = (int)js_num(p, f, "likes", 0.0);
       achado[n].nota = (int)js_num(p, f, "user_rating", 0.0);
+      // `language` do Trakt ("en", "pt"). Guardado em minusculo e so as duas
+      // primeiras letras: e o que coment_ordenar e a etiqueta do cartao usam.
+      achado[n].l[0] = 0;
+      { char lg[12] = "";
+        js_texto(p, f, "language", lg, sizeof lg);
+        if (lg[0] && lg[1]) {
+          achado[n].l[0] = (char)(lg[0] | 32); achado[n].l[1] = (char)(lg[1] | 32);
+          achado[n].l[2] = 0;
+        } }
       numaLinha(achado[n].t);
       if (achado[n].t[0]) n++;
       p = js_prox(f);
     }
     free(corpo);
+    // Os que estao no idioma da interface primeiro (comentordem.h). Sem pedido
+    // novo: e so a ordem das oito linhas que ja chegaram.
+    coment_ordenar(achado, n, idioma_iso(ajustes_idioma()));
     pthread_mutex_lock(&trava);
     if (!strcmp(id, idPedido)) {
       int k;
@@ -664,6 +678,7 @@ static void *buscar(void *arg) {
         snprintf(coment[k].texto, sizeof coment[k].texto, "%s", achado[k].t);
         coment[k].curtidas = achado[k].c;
         coment[k].nota = achado[k].nota;
+        snprintf(coment[k].lingua, sizeof coment[k].lingua, "%s", achado[k].l);
       }
       nComent = n;
     }
@@ -1394,7 +1409,7 @@ static void *buscarEpComent(void *arg) {
            show, t, e, EX_COMENT_MAX);
   corpo = rede_baixar_com(url, 12, cab);
   if (corpo) {
-    struct { char u[40]; char t[420]; int c; int nota; } achado[EX_COMENT_MAX];
+    ComentAchado achado[EX_COMENT_MAX];
     int n = 0;
     // p+1 e nao js_prox, pelo mesmo motivo da lista da serie: ainda nao ha
     // elemento anterior de onde partir.
@@ -1407,11 +1422,23 @@ static void *buscarEpComent(void *arg) {
       js_texto(p, f, "username", achado[n].u, sizeof achado[n].u);
       achado[n].c = (int)js_num(p, f, "likes", 0.0);
       achado[n].nota = (int)js_num(p, f, "user_rating", 0.0);
+      // `language` do Trakt ("en", "pt"). Guardado em minusculo e so as duas
+      // primeiras letras: e o que coment_ordenar e a etiqueta do cartao usam.
+      achado[n].l[0] = 0;
+      { char lg[12] = "";
+        js_texto(p, f, "language", lg, sizeof lg);
+        if (lg[0] && lg[1]) {
+          achado[n].l[0] = (char)(lg[0] | 32); achado[n].l[1] = (char)(lg[1] | 32);
+          achado[n].l[2] = 0;
+        } }
       numaLinha(achado[n].t);
       if (achado[n].t[0]) n++;
       p = js_prox(f);
     }
     free(corpo);
+    // Os que estao no idioma da interface primeiro (comentordem.h). Sem pedido
+    // novo: e so a ordem das oito linhas que ja chegaram.
+    coment_ordenar(achado, n, idioma_iso(ajustes_idioma()));
     pthread_mutex_lock(&trava);
     // So publica se o dono ainda esta no mesmo episodio: trocar de episodio
     // enquanto isto volta faria a lista antiga aparecer sob o rotulo novo.
@@ -1422,6 +1449,7 @@ static void *buscarEpComent(void *arg) {
         snprintf(comentEp[k].texto, sizeof comentEp[k].texto, "%s", achado[k].t);
         comentEp[k].curtidas = achado[k].c;
         comentEp[k].nota = achado[k].nota;
+        snprintf(comentEp[k].lingua, sizeof comentEp[k].lingua, "%s", achado[k].l);
       }
       nComentEp = n;
       epTempAtual = t; epNumAtual = e;
@@ -1495,6 +1523,16 @@ int extras_comentario_ep_nota(int i) {
   return (i >= 0 && i < nComentEp) ? comentEp[i].nota : 0;
 }
 
+// Idioma do comentario quando NAO e o da interface ("" quando e, ou quando o
+// Trakt nao disse): e o que a etiqueta "EN" do cartao pergunta.
+const char *extras_comentario_lingua(int i) {
+  return (i >= 0 && i < nComent && !coment_mesmo_idioma(coment[i].lingua,
+          idioma_iso(ajustes_idioma()))) ? coment[i].lingua : "";
+}
+const char *extras_comentario_ep_lingua(int i) {
+  return (i >= 0 && i < nComentEp && !coment_mesmo_idioma(comentEp[i].lingua,
+          idioma_iso(ajustes_idioma()))) ? comentEp[i].lingua : "";
+}
 int extras_comentario_nota(int i) {
   return (i >= 0 && i < nComent) ? coment[i].nota : 0;
 }

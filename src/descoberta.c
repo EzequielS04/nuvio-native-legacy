@@ -155,6 +155,149 @@ const char *desc_genero_pt(const char *g) {
   return g;
 }
 
+// --- VALORES CRUS DO TMDB/TRAKT/CINEMETA QUE VAO PARA A TELA ------------------
+//
+// Status ("Ended"), pais ("United States of America") e duracao ("2h 22min")
+// chegam em ingles de TODAS as fontes, qualquer que seja o `language=` do
+// pedido: o TMDB localiza titulo e sinopse, nunca esses enums. Como o genero
+// acima, a traducao mora aqui e nao no desenho, porque o valor entra em texto
+// montado (uma linha de tabela, o selo do hero) que nunca casaria com chave.
+// Valor fora da tabela sai como veio — melhor o ingles que um buraco.
+
+// Status da obra -> rotulo em portugues (a chave da tabela), ou NULL quando o
+// valor e desconhecido. Aceita as grafias do TMDB ("Returning Series"), do
+// Trakt ("returning series", "continuing") e de filme ("Post Production").
+// `serie` escolhe o genero da palavra: "Cancelada" / "Cancelado". A chave e
+// em caixa de frase; o selo do hero a poe em MAIUSCULAS depois de traduzir.
+const char *desc_status_chave(const char *raw, int serie) {
+  static const struct { const char *en, *pt; } T[] = {
+    { "Released", "Lançado" },           { "Post Production", "Em pós-produção" },
+    { "In Production", "Em produção" },  { "Planned", "Planejado" },
+    { "Rumored", "Rumor" },              { "Returning Series", "Em exibição" },
+    { "Continuing", "Em exibição" },     { "Ended", "Finalizada" },
+    { "Pilot", "Piloto" },               { "Renewed", "Renovada" },
+    { "Upcoming", "Em breve" },
+  };
+  size_t i;
+  if (!raw || !*raw) return NULL;
+  if (!strcasecmp(raw, "Canceled") || !strcasecmp(raw, "Cancelled"))
+    return serie ? "Cancelada" : "Cancelado";
+  for (i = 0; i < sizeof T / sizeof *T; i++)
+    if (!strcasecmp(raw, T[i].en)) return T[i].pt;
+  return NULL;
+}
+
+// Um nome de pais em ingles -> chave em portugues, ou NULL.
+static const char *paisChave(const char *en) {
+  static const struct { const char *en, *pt; } T[] = {
+    { "United States of America", "Estados Unidos" }, { "United States", "Estados Unidos" },
+    { "USA", "Estados Unidos" },   { "US", "Estados Unidos" },
+    { "United Kingdom", "Reino Unido" }, { "UK", "Reino Unido" },
+    { "Canada", "Canadá" },        { "France", "França" },
+    { "Germany", "Alemanha" },     { "Italy", "Itália" },
+    { "Spain", "Espanha" },        { "Japan", "Japão" },
+    { "South Korea", "Coreia do Sul" }, { "Korea, South", "Coreia do Sul" },
+    { "Republic of Korea", "Coreia do Sul" }, { "North Korea", "Coreia do Norte" },
+    { "China", "China" },          { "Hong Kong", "Hong Kong" },
+    { "Taiwan", "Taiwan" },        { "India", "Índia" },
+    { "Brazil", "Brasil" },        { "Mexico", "México" },
+    { "Argentina", "Argentina" },  { "Australia", "Austrália" },
+    { "New Zealand", "Nova Zelândia" },
+    { "Russia", "Rússia" },        { "Russian Federation", "Rússia" },
+    { "Ukraine", "Ucrânia" },      { "Poland", "Polônia" },
+    { "Sweden", "Suécia" },        { "Norway", "Noruega" },
+    { "Denmark", "Dinamarca" },    { "Finland", "Finlândia" },
+    { "Netherlands", "Países Baixos" }, { "Belgium", "Bélgica" },
+    { "Switzerland", "Suíça" },    { "Austria", "Áustria" },
+    { "Ireland", "Irlanda" },      { "Portugal", "Portugal" },
+    { "Turkey", "Turquia" },       { "Greece", "Grécia" },
+    { "Israel", "Israel" },        { "Egypt", "Egito" },
+    { "South Africa", "África do Sul" }, { "Thailand", "Tailândia" },
+    { "Indonesia", "Indonésia" },  { "Philippines", "Filipinas" },
+    { "Colombia", "Colômbia" },    { "Chile", "Chile" },
+    { "Peru", "Peru" },            { "Czech Republic", "República Tcheca" },
+    { "Czechia", "República Tcheca" }, { "Hungary", "Hungria" },
+    { "Romania", "Romênia" },      { "Bulgaria", "Bulgária" },
+    { "Iceland", "Islândia" },     { "Luxembourg", "Luxemburgo" },
+    { "Iran", "Irã" },             { "Saudi Arabia", "Arábia Saudita" },
+    { "United Arab Emirates", "Emirados Árabes Unidos" },
+    { "Nigeria", "Nigéria" },      { "Morocco", "Marrocos" },
+    { "Croatia", "Croácia" },      { "Serbia", "Sérvia" },
+    { "Cuba", "Cuba" },            { "Venezuela", "Venezuela" },
+    { "Uruguay", "Uruguai" },      { "Vietnam", "Vietnã" },
+    { "Malaysia", "Malásia" },     { "Singapore", "Singapura" },
+    { "Pakistan", "Paquistão" },   { "Lebanon", "Líbano" },
+    { "Slovakia", "Eslováquia" },  { "Slovenia", "Eslovênia" },
+    { "Estonia", "Estônia" },      { "Latvia", "Letônia" },
+    { "Lithuania", "Lituânia" },   { "Belarus", "Bielorrússia" },
+    { "Kazakhstan", "Cazaquistão" }, { "Soviet Union", "União Soviética" },
+    { "West Germany", "Alemanha Ocidental" }, { "East Germany", "Alemanha Oriental" },
+    { "Czechoslovakia", "Tchecoslováquia" }, { "Yugoslavia", "Iugoslávia" },
+  };
+  size_t i;
+  for (i = 0; i < sizeof T / sizeof *T; i++)
+    if (!strcasecmp(en, T[i].en)) return T[i].pt;
+  return NULL;
+}
+
+// "United States of America, Canada" -> "Estados Unidos, Canadá" no idioma da
+// interface. Separa por virgula, traduz cada nome e junta com ", ".
+void desc_pais_txt(const char *lista, char *dst, size_t tam) {
+  size_t o = 0;
+  const char *p = lista;
+  if (!dst || !tam) return;
+  dst[0] = 0;
+  while (p && *p) {
+    char nome[80];
+    const char *fim = strchr(p, ','), *t;
+    size_t n = fim ? (size_t)(fim - p) : strlen(p);
+    while (n && (*p == ' ')) { p++; n--; }
+    while (n && p[n - 1] == ' ') n--;
+    if (n && n < sizeof nome) {
+      memcpy(nome, p, n); nome[n] = 0;
+      t = paisChave(nome);
+      t = t ? i18n(t) : nome;
+      o += (size_t)snprintf(dst + o, tam - o, "%s%s", o ? ", " : "", t);
+      if (o >= tam) { dst[tam - 1] = 0; return; }
+    }
+    p = fim ? fim + 1 : NULL;
+  }
+}
+
+// Minutos -> "2h 22min" no idioma da interface (as tres formas sao chaves).
+void desc_duracao_min(int min, char *dst, size_t tam) {
+  if (!dst || !tam) return;
+  if (min <= 0) { dst[0] = 0; return; }
+  if (min < 60)      snprintf(dst, tam, i18n("%dmin"), min);
+  else if (min % 60) snprintf(dst, tam, i18n("%dh %dmin"), min / 60, min % 60);
+  else               snprintf(dst, tam, i18n("%dh"), min / 60);
+}
+
+// Duracao em TEXTO ("142 min", "2h 22min", "1 h 54 min", "142") -> a mesma
+// forma acima. O Cinemeta escreve "min" em ingles, e em russo/ucraniano a
+// abreviacao e outra. Texto que nao e so numero+unidade sai como veio.
+void desc_duracao_txt(const char *cru, char *dst, size_t tam) {
+  int total = 0, achou = 0;
+  const char *p = cru;
+  if (!dst || !tam) return;
+  dst[0] = 0;
+  if (!cru || !*cru) return;
+  while (*p) {
+    int v = 0;
+    if (*p == ' ') { p++; continue; }
+    if (*p < '0' || *p > '9') { snprintf(dst, tam, "%s", cru); return; }
+    while (*p >= '0' && *p <= '9') { v = v * 10 + (*p - '0'); p++; }
+    while (*p == ' ') p++;
+    if (*p == 'h' || *p == 'H') { total += v * 60; while (*p && *p != ' ' && !(*p >= '0' && *p <= '9')) p++; }
+    else if (*p == 'm' || *p == 'M') { total += v; while (*p && *p != ' ' && !(*p >= '0' && *p <= '9')) p++; }
+    else if (*p == 0) total += v;
+    else { snprintf(dst, tam, "%s", cru); return; }
+    achou = 1;
+  }
+  if (!achou) { snprintf(dst, tam, "%s", cru); return; }
+  desc_duracao_min(total, dst, tam);
+}
+
 static const char *ate(const char *ini, const char *fim, const char *agulha) {
   size_t n = strlen(agulha);
   for (; ini && ini + n <= fim; ini++)
@@ -202,7 +345,11 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
   char logoAntes[512];
   logoAntes[0] = 0;
   if (d->logo[0]) snprintf(logoAntes, sizeof logoAntes, "%s", d->logo);
-  if (!d->nElenco) return;
+  // SEM `if (!d->nElenco) return;`: esta funcao tambem traduz titulo e sinopse
+  // (mais abaixo), e um /meta do Cinemeta sem elenco — comum em anime, em
+  // titulo novo e em item raso — saia daqui antes de pedir o TMDB, deixando a
+  // sinopse em ingles num app em outro idioma. O elenco, que e o que precisa
+  // de nomes para casar, fica atras da propria guarda.
   chave = desc_chave_tmdb();            // "" com a integracao desligada
   if (!chave[0]) return;
   snprintf(url, sizeof url, "%s/find/%s?api_key=%s&external_source=imdb_id",
@@ -318,9 +465,11 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
 
   // Elenco com foto e `tmdb_use_credits`. O `free` mora DENTRO do if porque o
   // watch/providers logo abaixo nao depende dele.
-  if (ajustes_tmdb_elenco()) {
-    snprintf(url, sizeof url, "%s/%s/%ld/credits?api_key=%s",
-             TMDB, serie ? "tv" : "movie", idTmdb, chave);
+  if (ajustes_tmdb_elenco() && d->nElenco > 0) {
+    // language= tambem aqui: o nome do PERSONAGEM (`character`) vem localizado
+    // quando o TMDB tem (o mesmo pedido, so um parametro a mais).
+    snprintf(url, sizeof url, "%s/%s/%ld/credits?api_key=%s&language=%s",
+             TMDB, serie ? "tv" : "movie", idTmdb, chave, desc_tmdb_idioma());
     corpo = rede_baixar(url, 20);
     if (corpo) {
       desc_tmdb_elenco(corpo, d);
@@ -4489,23 +4638,34 @@ static int episodiosDoAddon(int alvoItem, const char *serie, const char *titulo,
 }
 
 // genres[] de um /meta -> "A · B · C" (o separador do web). Vazio sem generos.
-static void generosDe(const char *corpo, char *lista, size_t tam) {
+static void generosDe(const char *corpo, char *lista, size_t tam, const char *tipo) {
   const char *g = js_array(corpo, NULL, "genres");
   size_t n3 = 0;
+  int nGen = 0;
   lista[0] = 0;
+  // "Filme  ·  Drama  ·  Misterio", no formato que deMeta e o catalogo do pacote
+  // gravam: o PRIMEIRO trecho e o tipo, e as telas (hero do detalhe,
+  // compartilhaGenero) o descartam por ser o tipo. Sem ele o primeiro GENERO era
+  // descartado no lugar dele — "Action · Adventure" saia so "Adventure" — e o
+  // titulo de um genero so ("Drama") ficava sem genero nenhum na tela.
+  // Cada genero passa por desc_genero_pt: o Cinemeta os manda em ingles.
+  if (tipo) n3 = (size_t)snprintf(lista, tam, "%s", i18n(rotuloTipoSing(tipo)));
+  if (n3 >= tam) n3 = tam - 1;
   while (g && *g == '"' && n3 + 1 < tam) {
     const char *p2 = g + 1;
-    if (n3) { // separador do web: espaco, ponto medio, espaco
-      if (n3 + 4 >= tam) break;
-      lista[n3++] = ' '; lista[n3++] = '\xc2'; lista[n3++] = '\xb7'; lista[n3++] = ' ';
-    }
-    while (*p2 && *p2 != '"' && n3 + 1 < tam) lista[n3++] = *p2++;
-    lista[n3] = 0;
+    char nome[64]; size_t nn = 0;
+    while (*p2 && *p2 != '"' && nn + 1 < sizeof nome) nome[nn++] = *p2++;
+    nome[nn] = 0;
+    { const char *pt = desc_genero_pt(nome);
+      int w = snprintf(lista + n3, tam - n3, "%s%s", n3 ? "  \xc2\xb7  " : "", pt);
+      if (w < 0 || (size_t)w >= tam - n3) { lista[n3] = 0; break; }
+      n3 += (size_t)w; nGen++; }
     if (*p2 == '"') p2++;
     while (*p2 == ' ') p2++;
     g = (*p2 == ',') ? p2 + 1 : NULL;
     while (g && *g == ' ') g++;
   }
+  if (!nGen) lista[0] = 0;   // so o tipo nao e lista de generos: o chamador mantem o que tinha
 }
 
 // ITEM RASO (#176). Titulo aberto de "Salvos"/Biblioteca nao chega como o da
@@ -4673,7 +4833,7 @@ static void *buscarEps(void *u) {
     // esta funcao ja tem a resposta na mao — deixar de ler era desperdicio de uma
     // viagem que ja foi paga.
     { char lista[160];
-      generosDe(corpo, lista, sizeof lista);
+      generosDe(corpo, lista, sizeof lista, ehFilme ? "movie" : "series");
       if (lista[0]) snprintf(edit.genero, sizeof edit.genero, "%s", lista); }
     { double nota = js_num(corpo, NULL, "imdbRating", 0.0);
       // O campo vem como "8.1" (string ou numero); guardamos por 10 para caber
@@ -4728,7 +4888,7 @@ static void *buscarEps(void *u) {
           char lista[160];
           if (!c5) continue;
           if (metaTextos(c5, tA, sizeof tA, NULL, 0)) {
-            generosDe(c5, lista, sizeof lista);
+            generosDe(c5, lista, sizeof lista, tipoA);
             if (lista[0]) snprintf(edit.genero, sizeof edit.genero, "%s", lista);
             cA = c5;
           } else free(c5);
@@ -4754,10 +4914,9 @@ static void *buscarEps(void *u) {
 
     // NOTA POR EPISODIO (issue #87): o Cinemeta nao tem voto por episodio, o
     // TMDB tem — uma viagem por temporada presente na lista, nao uma por
-    // episodio. edit.tmdb ja foi resolvido por fotosDoElenco quando a serie
-    // tem elenco; sem elenco (fotosDoElenco sai mais cedo) resolve-se aqui
-    // pelo mesmo /find. "Titulo e sinopse" e a porta: quem desligou o TMDB
-    // nao quer este trafego. Republica so se alguma nota entrou.
+    // episodio. edit.tmdb ja foi resolvido por fotosDoElenco; se o /find dela
+    // falhou (rede), resolve-se aqui pelo mesmo /find. "Titulo e sinopse" e a
+    // porta: quem desligou o TMDB nao quer este trafego. Republica so se alguma nota entrou.
     if (!ehFilme && ajustes_tmdb_basico()) {
       const char *chave2 = desc_chave_tmdb();
       long tmdbId = edit.tmdb;

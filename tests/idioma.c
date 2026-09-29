@@ -13,6 +13,7 @@
 // evento; nada de SDL e chamado por este teste.
 #include "idioma.h"
 #include "idiomacod.h"
+#include "comentordem.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -173,6 +174,49 @@ int main(void) {
     idioma_maiusc(o, sizeof o, "c\xc5\x93ur");        if (strcmp(o, "C\xc5\x92UR"))  { printf("FALHOU: maiusc coeur\n"); falhas++; }
     idioma_maiusc(o, sizeof o, "a\xc3\x9f");          if (strcmp(o, "A\xc3\x9f"))    { printf("FALHOU: maiusc eszett\n"); falhas++; }
     idioma_maiusc(o, sizeof o, "se\xc3\xb1or");       if (strcmp(o, "SE\xc3\x91OR")) { printf("FALHOU: maiusc senor\n"); falhas++; } }
+
+  // DETALHE DO TITULO: status, pais e duracao crus (fix/detalhe-traducao). As
+  // chaves sao as que desc_status_chave / desc_pais_txt / desc_duracao_min usam.
+  lg = IDIOMA_RU;
+  confere("Estados Unidos", "\xd0\xa1\xd0\xa8\xd0\x90");
+  confere("Em exibi\xc3\xa7\xc3\xa3o", "\xd0\x92 \xd1\x8d\xd1\x84\xd0\xb8\xd1\x80\xd0\xb5");
+  confere("%dh %dmin", "%d \xd1\x87 %d \xd0\xbc\xd0\xb8\xd0\xbd");
+  lg = IDIOMA_FR;
+  confere("Reino Unido", "Royaume-Uni");
+  confere("Finalizada", "Termin\xc3\xa9" "e");
+  confere("%dh", "%d h");
+  lg = IDIOMA_DE;
+  confere("Coreia do Sul", "S\xc3\xbc" "dkorea");
+  confere("%dmin", "%d Min.");
+  lg = IDIOMA_ES;
+  confere("Pa\xc3\xad" "ses Baixos", "Pa\xc3\xad" "ses Bajos");
+  lg = IDIOMA_EN;
+  confere("Pa\xc3\xad" "ses Baixos", "Netherlands");
+  confere("Lan\xc3\xa7" "ado", "Released");
+
+  // Codigo ISO do idioma da interface (compara com o `language` do Trakt).
+  { static const char *ISO[] = { "pt", "en", "ro", "uk", "ru", "fr", "de", "es" };
+    int i;
+    for (i = 0; i < IDIOMA_N; i++)
+      if (strcmp(idioma_iso(i), ISO[i])) { printf("FALHOU: idioma_iso(%d)\n", i); falhas++; } }
+
+  // COMENTARIOS: os do idioma da interface primeiro, estavel; sem `language`
+  // conta como do idioma (nao rebaixa o que talvez seja legivel).
+  { ComentAchado v[5];
+    const char *L[5] = { "en", "pt", "", "es", "pt" };
+    int i, k;
+    memset(v, 0, sizeof v);
+    for (i = 0; i < 5; i++) { snprintf(v[i].u, sizeof v[i].u, "u%d", i); strcpy(v[i].l, L[i]); }
+    k = coment_ordenar(v, 5, "pt");
+    if (k != 3 || strcmp(v[0].u, "u1") || strcmp(v[1].u, "u2") || strcmp(v[2].u, "u4") ||
+        strcmp(v[3].u, "u0") || strcmp(v[4].u, "u3")) {
+      printf("FALHOU: coment_ordenar pt -> %s %s %s %s %s (k=%d)\n",
+             v[0].u, v[1].u, v[2].u, v[3].u, v[4].u, k);
+      falhas++; }
+    k = coment_ordenar(v, 5, "ru");      /* ninguem e russo: so os sem idioma vem na frente */
+    if (k != 1 || strcmp(v[0].u, "u2")) { printf("FALHOU: coment_ordenar ru\n"); falhas++; }
+    if (!coment_mesmo_idioma("pt-br", "pt") || coment_mesmo_idioma("en", "pt")) {
+      printf("FALHOU: coment_mesmo_idioma\n"); falhas++; } }
 
   // A tabela inteira, em cada idioma.
   varredura();

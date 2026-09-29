@@ -113,6 +113,12 @@ void desc_data_extenso(const char *iso, char *dst, size_t tam);
 // pacote guardam os generos em INGLES, e eles apareciam crus numa interface em
 // portugues. Genero fora da tabela sai como veio.
 const char *desc_genero_pt(const char *g);
+// Valores crus do TMDB/Trakt/Cinemeta que vao para a tela (ver descoberta.c).
+// desc_status_chave devolve a CHAVE em portugues (passe por i18n) ou NULL.
+const char *desc_status_chave(const char *raw, int serie);
+void desc_pais_txt(const char *lista, char *dst, size_t tam);
+void desc_duracao_min(int min, char *dst, size_t tam);
+void desc_duracao_txt(const char *cru, char *dst, size_t tam);
 
 // --- busca por titulo --------------------------------------------------------
 // Consulta o Cinemeta em filme e serie. NAO BLOQUEIA: dispara um fio e volta na

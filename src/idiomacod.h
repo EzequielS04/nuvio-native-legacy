@@ -14,6 +14,23 @@
 enum { IDIOMA_PT = 0, IDIOMA_EN = 1, IDIOMA_RO = 2, IDIOMA_UK = 3, IDIOMA_RU = 4,
        IDIOMA_FR = 5, IDIOMA_DE = 6, IDIOMA_ES = 7, IDIOMA_N = 8 };
 
+// Codigo ISO 639-1 do idioma da interface ("pt", "en", "ro", "uk", "ru", "fr",
+// "de", "es"). E o mesmo que o Trakt poe em `language` de um comentario, e o
+// prefixo de "pt-BR"/"ru-RU" que o TMDB recebe — por isso mora aqui, ao lado
+// dos codigos, e nao em cada consumidor.
+static inline const char *idioma_iso(int idioma) {
+  switch (idioma) {
+    case IDIOMA_EN: return "en";
+    case IDIOMA_RO: return "ro";
+    case IDIOMA_UK: return "uk";
+    case IDIOMA_RU: return "ru";
+    case IDIOMA_FR: return "fr";
+    case IDIOMA_DE: return "de";
+    case IDIOMA_ES: return "es";
+    default:        return "pt";
+  }
+}
+
 // Mes abreviado, minusculo, m0 = 0..11. Em ingles a capitalizacao e a do
 // idioma ("Sep"); nos demais e minuscula ("set", "sep", "вер"), como no uso
 // corrente de cada lingua.

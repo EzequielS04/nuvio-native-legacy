@@ -164,6 +164,12 @@ static const char *META_COMPLETO =
   "\"releaseInfo\":\"2019\",\"runtime\":\"2h 1min\",\"moviedb_id\":4242,"
   "\"imdbRating\":\"8.1\",\"genres\":[\"Drama\"],\"cast\":[\"Ator Um\"],\"videos\":[]}}";
 
+// Filme SEM elenco no Cinemeta, com sinopse em ingles: o caso em que
+// fotosDoElenco saia cedo e a sinopse ficava em ingles (fix/detalhe-traducao).
+static const char *META_SEM_ELENCO =
+  "{\"meta\":{\"id\":\"tt0000178\",\"type\":\"movie\",\"name\":\"Movie Without Cast\","
+  "\"poster\":\"https://p.test/sem-elenco.jpg\",\"description\":\"English plot.\",\"genres\":[\"Action\",\"Sci-Fi\"],\"cast\":[],\"videos\":[]}}";
+
 // O que os addons/TMDB falsos respondem; cada caso liga o seu.
 static const char *addonResp, *addonTipo = "/series/";
 static const char *tmdbFind, *tmdbTemp1, *tmdbFilme, *cineSerie;
@@ -179,6 +185,7 @@ char *rede_baixar(const char *u, int t) {
     if (strstr(u, "/meta/series/tt13293588.json")) return strdup(cineSerie ? cineSerie : META_SERIE);
     if (strstr(u, "/meta/movie/tt0111161.json"))   return strdup(META_FILME_OK);
     if (strstr(u, "/meta/movie/tt0000176.json"))   return strdup(META_COMPLETO);
+    if (strstr(u, "/meta/movie/tt0000178.json"))   return strdup(META_SEM_ELENCO);
   }
   // O addon de metadados responde o que o teste pos em `addonResp`, no tipo que
   // o teste pos em `addonTipo` (o de serie e o padrao dos casos antigos).
@@ -499,7 +506,7 @@ int main(void) {
     abrir();
     assert(!strcmp(cat_item(0)->titulo, "Втеча з Шоушенка"));
     assert(!strcmp(cat_item(0)->sinopse, "Опис фільму"));
-    assert(!strcmp(cat_item(0)->genero, "Драма"));
+    assert(!strcmp(cat_item(0)->genero, "Filme  \xc2\xb7  Драма"));   /* tipo + genero: o hero descarta o 1o trecho */
     assert(!strcmp(cat_item(0)->direcao, "Frank Darabont"));          /* resto do Cinemeta */
     puts("ok  #176: filme com a preferencia: titulo/sinopse/generos do addon, resto do Cinemeta");
 
@@ -607,6 +614,110 @@ int main(void) {
       assert(nPedidos == 0);
       assert(!strcmp(cat_item(0)->titulo, "The Shawshank Redemption")); }
     puts("ok  #176: em ingles e sem a preferencia nada e localizado (zero pedidos)");
+
+
+    // 20) SINOPSE NO IDIOMA DA INTERFACE, em todos os idiomas, inclusive num
+    //     filme SEM elenco no Cinemeta (antes fotosDoElenco saia cedo). O pedido
+    //     leva language=<idioma>; o vazio do TMDB (sem traducao) deixa o ingles.
+    { static const struct { const char *tag, *sin, *cast; } L[] = {
+        { "pt-BR", "Sinopse em portugu\xc3\xaas.",  "pt" },
+        { "fr-FR", "Synopsis en fran\xc3\xa7" "ais.", "fr" },
+        { "de-DE", "Handlung auf Deutsch.",          "de" },
+        { "es-ES", "Sinopsis en espa\xc3\xb1ol.",   "es" },
+        { "ro-RO", "Rezumat \xc3\xaen rom\xc3\xa2n\xc4\x83.", "ro" },
+        { "uk-UA", "\xd0\x9e\xd0\xbf\xd0\xb8\xd1\x81 \xd1\x83\xd0\xba\xd1\x80\xd0\xb0\xd1\x97\xd0\xbd\xd1\x81\xd1\x8c\xd0\xba\xd0\xbe\xd1\x8e.", "uk" },
+        { "ru-RU", "\xd0\x9e\xd0\xbf\xd0\xb8\xd1\x81\xd0\xb0\xd0\xbd\xd0\xb8\xd0\xb5 \xd0\xbf\xd0\xbe-\xd1\x80\xd1\x83\xd1\x81\xd1\x81\xd0\xba\xd0\xb8.", "ru" },
+      };
+      size_t li;
+      desc_tmdb_definir("0123456789abcdef0123456789abcdef");
+      fakeTmdbBasico = 1;
+      fakeMetaExterno = 0;
+      tmdbFind = "{\"movie_results\":[{\"id\":278}]}";
+      for (li = 0; li < sizeof L / sizeof *L; li++) {
+        char corpoTmdb[400], marca[32];
+        fakeIdioma = L[li].tag;
+        snprintf(corpoTmdb, sizeof corpoTmdb,
+                 "{\"id\":278,\"title\":\"T\",\"overview\":\"%s\",\"genres\":[]}", L[li].sin);
+        tmdbFilme = corpoTmdb;
+        limparCacheMeta();
+        catalogoCom("tt0000178", "movie", "Movie Without Cast");
+        abrir();
+        snprintf(marca, sizeof marca, "language=%s", L[li].tag);
+        assert(pediu(marca));
+        assert(cat_item(0)->nElenco == 0);
+        if (strcmp(cat_item(0)->sinopse, L[li].sin) != 0) {
+          printf("FALHOU %s: sinopse '%s'\n", L[li].tag, cat_item(0)->sinopse);
+          return 1;
+        }
+      }
+      /* GENEROS do Cinemeta (ingles) chegam com o tipo na frente e traduzidos:
+         o hero descarta o 1o trecho, entao sem o tipo "Action" sumia. */
+      assert(!strcmp(cat_item(0)->genero,
+                     "Filme  \xc2\xb7  A\xc3\xa7\xc3\xa3o  \xc2\xb7  Fic\xc3\xa7\xc3\xa3o cient\xc3\xad" "fica"));
+      /* TMDB sem traducao (overview vazio): fica a sinopse em ingles do Cinemeta. */
+      fakeIdioma = "ru-RU";
+      tmdbFilme = "{\"id\":278,\"title\":\"\",\"overview\":\"\",\"genres\":[]}";
+      limparCacheMeta();
+      catalogoCom("tt0000178", "movie", "Movie Without Cast");
+      abrir();
+      assert(!strcmp(cat_item(0)->sinopse, "English plot."));
+      /* TMDB desligado (sem chave/ajuste): nem /find. */
+      fakeTmdbBasico = 0;
+      limparCacheMeta();
+      catalogoCom("tt0000178", "movie", "Movie Without Cast");
+      abrir();
+      assert(!pediu("/movie/278?"));
+      assert(!strcmp(cat_item(0)->sinopse, "English plot.")); }
+    puts("ok  sinopse do TMDB no idioma da interface (pt fr de es ro uk ru), inclusive sem elenco; vazio mantem o ingles");
+
+    // 21) EPISODIOS: nome e sinopse traduzidos em qualquer idioma que nao seja o ingles.
+    { static const char *TAGS[] = { "pt-BR", "fr-FR", "de-DE", "es-ES", "ro-RO", "uk-UA", "ru-RU" };
+      size_t li;
+      for (li = 0; li < sizeof TAGS / sizeof *TAGS; li++) {
+        CatEp e[1];
+        memset(e, 0, sizeof e);
+        e[0].temporada = 1; e[0].episodio = 1;
+        snprintf(e[0].nome, sizeof e[0].nome, "English name");
+        snprintf(e[0].sinopse, sizeof e[0].sinopse, "English overview");
+        fakeIdioma = TAGS[li];
+        assert(idiomaNaoIngles());
+        assert(desc_tmdb_notas_temporada_ex(
+          "{\"episodes\":[{\"episode_number\":1,\"vote_average\":7.5,"
+          "\"name\":\"Nome local\",\"overview\":\"Resumo local\"}]}",
+          e, 1, 1, DESC_EPT_SINOPSE | DESC_EPT_NOME) == 1);
+        assert(!strcmp(e[0].nome, "Nome local") && !strcmp(e[0].sinopse, "Resumo local"));
+      }
+      fakeIdioma = "en-US";
+      assert(!idiomaNaoIngles()); }
+    puts("ok  nome/sinopse de episodio do TMDB valem em todos os idiomas (idiomaNaoIngles)");
+
+    // 22) Valores crus do TMDB/Trakt/Cinemeta: status, pais e duracao.
+    { char b[200];
+      assert(!strcmp(desc_status_chave("Returning Series", 1), "Em exibi\xc3\xa7\xc3\xa3o"));
+      assert(!strcmp(desc_status_chave("returning series", 1), "Em exibi\xc3\xa7\xc3\xa3o"));
+      assert(!strcmp(desc_status_chave("Ended", 1), "Finalizada"));
+      assert(!strcmp(desc_status_chave("Canceled", 1), "Cancelada"));
+      assert(!strcmp(desc_status_chave("Canceled", 0), "Cancelado"));
+      assert(!strcmp(desc_status_chave("Post Production", 0), "Em p\xc3\xb3s-produ\xc3\xa7\xc3\xa3o"));
+      assert(!strcmp(desc_status_chave("Released", 0), "Lan\xc3\xa7" "ado"));
+      assert(desc_status_chave("Algo Novo", 0) == NULL);
+      assert(desc_status_chave("", 0) == NULL);
+      desc_pais_txt("United States of America, Canada", b, sizeof b);
+      assert(!strcmp(b, "Estados Unidos, Canad\xc3\xa1"));
+      desc_pais_txt("Freedonia,  Japan ", b, sizeof b);     /* desconhecido passa cru */
+      assert(!strcmp(b, "Freedonia, Jap\xc3\xa3o"));
+      desc_pais_txt("", b, sizeof b);
+      assert(b[0] == 0);
+      desc_duracao_txt("142 min", b, sizeof b);   assert(!strcmp(b, "2h 22min"));
+      desc_duracao_txt("2h 22min", b, sizeof b);  assert(!strcmp(b, "2h 22min"));
+      desc_duracao_txt("1 h 54 min", b, sizeof b); assert(!strcmp(b, "1h 54min"));
+      desc_duracao_txt("45 min", b, sizeof b);    assert(!strcmp(b, "45min"));
+      desc_duracao_txt("2h", b, sizeof b);        assert(!strcmp(b, "2h"));
+      desc_duracao_txt("120", b, sizeof b);       assert(!strcmp(b, "2h"));
+      desc_duracao_txt("3 temporadas", b, sizeof b); assert(!strcmp(b, "3 temporadas"));
+      desc_duracao_txt("", b, sizeof b);          assert(b[0] == 0);
+      desc_duracao_min(0, b, sizeof b);           assert(b[0] == 0); }
+    puts("ok  status/pais/duracao crus viram chaves da tabela (desconhecido passa cru)");
 
     tmdbFind = tmdbTemp1 = tmdbFilme = NULL;
     cineSerie = NULL; addonResp = NULL; addonTipo = "/series/";

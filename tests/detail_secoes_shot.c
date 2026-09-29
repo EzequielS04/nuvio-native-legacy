@@ -75,6 +75,14 @@
 #define extras_estudio_logo     fx_estudio_logo
 #define extras_n_trailers       fx_n_trailers
 #define extras_nota_trakt       fx_nota_trakt
+#define extras_comentario_lingua fx_com_lingua
+// Ficha do TMDB do filme de ensaio: os valores CRUS (ingles) que a rede manda,
+// para a captura provar a traducao de status/pais/duracao (fix/detalhe-traducao).
+#define extras_ficha_status       fx_ficha_status
+#define extras_ficha_lancamento   fx_ficha_lancamento
+#define extras_ficha_duracao      fx_ficha_duracao
+#define extras_ficha_paises       fx_ficha_paises
+#define extras_ficha_classificacao fx_ficha_classificacao
 
 #include "../src/detail.c"
 
@@ -133,6 +141,13 @@ const char *fx_com_usuario(int i)  { return COM_USU[i]; }
 const char *fx_com_texto(int i)    { return COM_TXT[i]; }
 int fx_com_curtidas(int i)         { return COM_CUR[i]; }
 int fx_com_nota(int i)             { return COM_NOTA[i]; }
+// O 2o comentario esta em outro idioma que o da interface: leva a etiqueta.
+const char *fx_com_lingua(int i)   { return i == 1 ? "en" : ""; }
+const char *fx_ficha_status(void)        { return "Released"; }
+const char *fx_ficha_lancamento(void)    { return "1999-03-31"; }
+int         fx_ficha_duracao(void)       { return 136; }
+const char *fx_ficha_paises(void)        { return "United States of America, Australia"; }
+const char *fx_ficha_classificacao(void) { return "R"; }
 static int extrasCardsLigados;
 static const char *const REL_TIT[] = { "The Second Chapter", "Night Archive", "The Glass Shore" };
 static const char *const REL_ANO[] = { "2024", "2025", "2026" };
@@ -290,14 +305,14 @@ static void montarCatalogo(void) {
   snprintf(itens[1].titulo, sizeof itens[1].titulo, "Filme de Ensaio");
   snprintf(itens[1].imdb, sizeof itens[1].imdb, IMDB_FILME);
   snprintf(itens[1].tipo, sizeof itens[1].tipo, "movie");
-  snprintf(itens[1].genero, sizeof itens[1].genero, "Filme · Ficção científica");
-  snprintf(itens[1].meta, sizeof itens[1].meta, "1999 · 2 h 16 min");
+  snprintf(itens[1].genero, sizeof itens[1].genero, "Filme  \xc2\xb7  Ficção científica  \xc2\xb7  Ação");
+  snprintf(itens[1].meta, sizeof itens[1].meta, "1999  \xc2\xb7  136 min");   // Cinemeta: minutos em ingles
   snprintf(itens[1].sinopse, sizeof itens[1].sinopse,
            "Sinopse de enchimento do filme, tambem comprida o bastante para o "
            "bloco de texto do heroi ficar com a altura que tem num titulo de "
            "verdade.");
   snprintf(itens[1].classificacao, sizeof itens[1].classificacao, "14");
-  snprintf(itens[1].pais, sizeof itens[1].pais, "Estados Unidos");
+  snprintf(itens[1].pais, sizeof itens[1].pais, "United States, Australia");   // Cinemeta: ingles
   // Arte DIFERENTE da serie, de proposito: se as duas fossem a mesma, uma
   // captura trocada passaria despercebida.
   snprintf(itens[1].backdrop, sizeof itens[1].backdrop,
@@ -454,6 +469,16 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  // NUVIO_SHOT_IDIOMA=N (0 pt, 1 en, 2 ro, 3 uk, 4 ru, 5 fr, 6 de, 7 es): a
+  // captura sai no idioma da interface, escrito onde o app o le (ajustes.txt).
+  { const char *lg = getenv("NUVIO_SHOT_IDIOMA");
+    if (lg && *lg) {
+      char caminho[600]; FILE *f;
+      snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dd);
+      f = fopen(caminho, "w"); assert(f);
+      fprintf(f, "idioma %d\n", atoi(lg)); fclose(f);
+      ajustes_dir(dd); } }
+
   montarCatalogo();
 
   // --- 1. SERIE, foco nas ABAS: a banda de audiencia aparece logo abaixo e
@@ -576,7 +601,10 @@ int main(int argc, char **argv) {
   { char caminho[600]; FILE *f;
     snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dd);
     f = fopen(caminho, "w"); assert(f);
-    fputs("selected_theme 2\n", f); fclose(f);
+    fputs("selected_theme 2\n", f);
+    { const char *lg = getenv("NUVIO_SHOT_IDIOMA");
+      if (lg && *lg) fprintf(f, "idioma %d\n", atoi(lg)); }
+    fclose(f);
     ajustes_dir(dd); }
   extrasCardsLigados = 1;
   abrir(1, SEC_RELACIONADOS, 1);
@@ -602,6 +630,17 @@ int main(int argc, char **argv) {
   quadros(40);
   snprintf(nome, sizeof nome, "%s-16-filme-studios-repouso.png", saida);
   gravar(nome);
+
+  // --- 17. FILME, foco nos DETALHES (Status, Lancamento, Duracao, Classificacao,
+  //         Pais de origem, Direcao): os valores crus do TMDB em ingles tem de
+  //         sair no idioma da interface.
+  abrir(1, SEC_DETALHES, 0);
+  parado = 1;
+  scrollY = conteudoSec[SEC_DETALHES] - 300.0f;
+  quadros(40);
+  snprintf(nome, sizeof nome, "%s-17-filme-detalhes.png", saida);
+  gravar(nome);
+
 
   SDL_GL_DeleteContext(gl);
   SDL_DestroyWindow(janela);
