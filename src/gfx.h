@@ -210,6 +210,7 @@ typedef enum {
   //   uCor.rgb = tinta do tema (so entra com uPar.x > 0); uCor.a = alfa
   //   uPar.x   = quanto a tinta do tema puxa a cor, 0 a 1
   //   uFoco    = brilho geral
+  //   uBanda / uBandaX = as prateleiras das fileiras (gfx_fundo_din_prateleiras)
   GFX_FUNDO_DIN = 35,
   GFX_NMODOS = 36
 } GfxModo;
@@ -337,6 +338,10 @@ extern double gfx_ms_rect;  // ms de CPU dentro de gfx_rect
 extern int    gfx_n_outros;  // chamadas de recorte/FBO/desfoque
 extern double gfx_ms_outros; // ms de CPU nesses pontos de GL
 extern double gfx_fill;      // area submetida no quadro, em telas cheias
+// O mesmo, RECORTADO na tela: retangulo que sai pelas bordas (a prateleira que
+// sangra, o destaque rolado) so conta o que aparece. E o mais proximo do
+// preenchimento real que da para tirar sem GPU; nao enxerga a tesoura.
+extern double gfx_fill_vis;
 extern int    gfx_n_cheio;   // desenhos cobrindo >= 50% da tela
 void gfx_novo_quadro(void);
 
@@ -371,6 +376,12 @@ unsigned long gfx_fundo_din_chave(int slot);
 void          gfx_fundo_din_desenhar(int a, int b, float mistura,
                                      float tr, float tg, float tb,
                                      float tinta, float brilho);
+// AS PRATELEIRAS DE VIDRO das fileiras, assadas no proprio fundo (sem mistura,
+// sem quadro por cima). `b[i]` = { y de cima, y de baixo, foco 0..1, alfa do
+// grupo (0 = faixa vazia) }, no maximo 6; `x0` e a borda esquerda em layout
+// (a direita sangra para fora da tela); `vidro` escolhe o desenho (1 = vidro
+// com aro e brilho, 0 = veu escuro). Chamar ANTES de gfx_fundo_din_desenhar.
+void          gfx_fundo_din_prateleiras(const float b[][4], int n, float x0, int vidro);
 // Contorno de `esp` PIXELS por dentro de r: a borda de fora do anel e a borda
 // de r, entao anel e miolo no mesmo rect dao uma borda so. `raio` e o de r,
 // normalizado pela altura, como em gfx_cor.

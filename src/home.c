@@ -2395,9 +2395,36 @@ static void dinFundoAlvo(GLuint tex, const char *arte) {
     gfx_fundo_din_pedir(o, tex, tex_aspecto(arte), ch);
   }
 }
+// AS PRATELEIRAS DE VIDRO: uma por fileira visivel, com a mesma conta de y do
+// laco de home_desenhar (topo + soma das alturas - rolagem + descida). Vao para
+// o shader do fundo e nao para retangulos por cima — ver GFX_FUNDO_DIN em gfx.c.
+// A prateleira cobre o titulo, os cartazes e o rotulo, com 16 px de folga em
+// cima e 20 embaixo (o vao entre fileiras e 48, sobram 12 de respiro).
+static void dinPrateleiras(void) {
+  float b[6][4];
+  int nb = 0, r;
+  const float topoFil = topoFileiras();
+  const float cinema = trailercinema_t(&heroCinema);
+  float y = topoFil - scrollY + detail_progresso() * NV_TELA_H * 0.08f + cinema * NV_CINEMA_DESCE;
+  memset(b, 0, sizeof b);
+  for (r = 0; r < nFileiras && nb < 6 && cinema < 0.996f; r++) {
+    float h = NV_LEGACY_ROW_HEAD_H + alturaTotalFil(r);
+    if (y > NV_TELA_H + 40.0f) break;
+    if (y + h > -40.0f && fileiras[r].n > 0) {
+      float fade = anim_clamp((y - (topoFil - 80.0f)) / 80.0f, 0.0f, 1.0f);
+      b[nb][0] = y - 16.0f; b[nb][1] = y + h + 20.0f;
+      b[nb][2] = painelF[r];
+      b[nb][3] = fade * fade * (3.0f - 2.0f * fade) * (1.0f - cinema);
+      nb++;
+    }
+    y += h + fileiraGap();
+  }
+  gfx_fundo_din_prateleiras((const float (*)[4])b, nb, ajustes_conteudo_x() - 32.0f, ajustes_vidro());
+}
 static void desenhaFundoDin(Uint32 agora) {
   float dt = dinUlt ? (float)(agora - dinUlt) / 1000.0f : 0.0f;
   float ar = 1, ag = 1, ab = 1, tinta;
+  dinPrateleiras();
   if (dt > 0.1f) dt = 0.1f;
   dinUlt = agora ? agora : 1u;
   if (dinPara >= 0) {
@@ -2408,24 +2435,6 @@ static void desenhaFundoDin(Uint32 agora) {
   // da arte, e ela puxa o fundo. Com o realce branco (padrao) nao tinge.
   tinta = ajustes_acento_tinta(&ar, &ag, &ab) > 0.5f ? 0.30f : 0.0f;
   gfx_fundo_din_desenhar(dinSlot, dinPara, anim_suave(dinMist), ar, ag, ab, tinta, 1.0f);
-}
-
-// O PAINEL DE VIDRO de uma fileira da Dinamica: a "prateleira" da Apple TV,
-// translucida sobre o fundo desfocado. Um retangulo arredondado por fileira
-// (~0,15 tela) — a fileira em foco (`f`, 0..1) fica mais clara.
-//   vidro desligado: veu escuro e macio, sem aro (o texto le em qualquer arte)
-//   vidro ligado:    lavagem clara + aro de fio de cabelo + brilho no topo
-static void desenhaPainelFileira(GfxRect pn, float f) {
-  float raio = NV_DIN_PAINEL_RAIO / pn.h;
-  if (ajustes_vidro()) {
-    gfx_cor(pn, raio, 0.06f, 0.07f, 0.09f, 0.34f - 0.06f * f);
-    gfx_cor(pn, raio, 1.0f, 1.0f, 1.0f, 0.06f + 0.05f * f);
-    gfx_rect(pn, 0, GFX_BRILHO_TOPO, 0, 0.36f, 0, raio, 1, 1, 1, 0.06f + 0.04f * f);
-    gfx_anel(pn, raio, 1.5f, 1, 1, 1, 0.14f + 0.12f * f);
-  } else {
-    gfx_cor(pn, raio, 0.0f, 0.0f, 0.0f, 0.34f - 0.12f * f);
-    gfx_anel(pn, raio, 1.0f, 1, 1, 1, 0.035f + 0.05f * f);
-  }
 }
 
 // ---------- Hero do layout moderno legacy ----------------------------------
@@ -3687,15 +3696,6 @@ void home_desenhar(Uint32 agora) {
                   ((tipo != FILEIRA_CONTINUE) && ajustes_posteres_deitados());
     int rotuloFora = temRotulo(tipo);
     if (y < NV_TELA_H + 200 && y + NV_LEGACY_ROW_HEAD_H + lh > -200) {
-      // DINAMICA: a prateleira de vidro por baixo do titulo e dos cartazes. A
-      // borda esquerda fica 32 px antes do conteudo e a direita SANGRA para
-      // fora da tela: a prateleira continua alem do que se ve, como na Apple TV.
-      if (layoutHome() == HOME_LAYOUT_DINAMICA && fileiras[r].n > 0) {
-        float px0 = ajustes_conteudo_x() - 32.0f;
-        desenhaPainelFileira((GfxRect){ px0, y - 20.0f, NV_TELA_W - px0 + 80.0f,
-                                        20.0f + NV_LEGACY_ROW_HEAD_H + alturaTotalFil(r) + 24.0f },
-                             painelF[r]);
-      }
       // `catalogTypeSuffixEnabled`. formatCatalogRowTitle (homeUtils.js:62) faz
       // `if (!showTypeSuffix) return base;` — devolve o nome capitalizado e
       // pronto. Aqui o sufixo e tirado no DESENHO e nao na descoberta, senao a
@@ -3861,7 +3861,7 @@ void home_desenhar(Uint32 agora) {
             snprintf(rank, sizeof rank, "%d", c + 1);
             TxtLinha nu = txt_linha(TXT_RANK, rank, 246, 247, 250, 255);
             TxtLinha nd = txt_linha(TXT_RANK, rank, 4, 4, 6, 255);
-            float nx = px + 30.0f - (float)nu.w, ny = py + h - (float)nu.h * 0.90f;
+            float nx = px + 12.0f - (float)nu.w, ny = py + h - (float)nu.h * 0.90f;
             txt_desenhar_alpha(nd, nx + 5.0f, ny + 6.0f, 0.55f);
             txt_desenhar(nu, nx, ny);
           }
@@ -4114,7 +4114,10 @@ void home_desenhar(Uint32 agora) {
           // cobre 54% da altura, com 14 de recuo lateral e 12 da base
           // (.home-poster-landscape-copy). Card EM PE: vai ABAIXO do poster, num
           // bloco de 74 de altura com 8 de padding no topo (.home-poster-copy).
-          if (tipo != FILEIRA_CONTINUE && tipo != FILEIRA_RETORNO && !editorial(tipo) && ajustes_rotulos_poster() && cItem) {
+          // A faixa deitada da Dinamica SEMPRE leva o titulo dentro do cartao (a
+          // Apple TV nao deixa cartao sem nome), com o rotulo ligado ou nao.
+          if (tipo != FILEIRA_CONTINUE && tipo != FILEIRA_RETORNO && !editorial(tipo) &&
+              (ajustes_rotulos_poster() || tipo == FILEIRA_LARGA) && cItem) {
             const char *nome = cItem->titulo[0] ? cItem->titulo : NULL;
             const char *sub  = cItem->genero[0] ? cItem->genero : NULL;
             if (deitado && nome) {

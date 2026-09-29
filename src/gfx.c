@@ -18,9 +18,12 @@ typedef struct {
         grad0, grad1, grad2, tempo, reg0, reg1, reg2, reg3, vaza;
   GLint alt;     // uAlt: altura do rect em pixels do alvo (a rampa de 1 px do SDF)
   GLint margem;  // uMargem do VS: 1 px de folga no quad dos modos de SDF
+  GLint banda, bandaX;  // uBanda[6], uBandaX: so o GFX_FUNDO_DIN declara
   float altAtual, margemAtual;  // o ultimo valor enviado: so chama o GL se mudar
 } Programa;
 static Programa progs[GFX_NMODOS];
+// Prateleiras da home Dinamica, assadas no fundo (GFX_FUNDO_DIN).
+static float dinBanda[6][4], dinBandaX, dinBandaVidro;
 static int progAtual = -1;
 // Proporcao da textura corrente, para o "cover". Fica global porque o desenho e
 // imediato: quem chama define antes de cada rect com textura.
@@ -893,17 +896,55 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "}\n",
 
   // GFX_FUNDO_DIN — ver gfx.h. O alvo e um FBO (origem embaixo): o y inverte,
-  // como no GFX_FUNDO. O brilho cai de 0,66 no topo a 0,30 na base: a base e
-  // onde moram as fileiras, e o texto branco e o cartaz precisam de chao
+  // como no GFX_FUNDO. O brilho cai de 0,92 no topo a 0,46 na base: a base e
+  // onde moram as fileiras, e o texto branco e o cartaz precisam de chao mais
   // escuro; o topo, que a arte do destaque cobre, pode ser claro.
+  //
+  // AS PRATELEIRAS DE VIDRO SAO ASSADAS AQUI, e nao em quadros por cima. Cada
+  // fileira e um retangulo arredondado que escurece/clareia o fundo e ganha um
+  // aro de fio de cabelo: como retangulos separados eram ~0,25 de tela EM
+  // MISTURA por fileira (quatro por quadro), e MEDIDO na C9 uma unica camada de
+  // tela cheia misturada ja custa 12 fps. Aqui o fundo e OPACO e sem mistura, e a
+  // conta das prateleiras entra no MESMO fragmento — so onde o fragmento cai
+  // dentro de uma faixa (o `if` por faixa evita o SDF nos outros 60%).
+  //   uBanda[i] = (y de cima, y de baixo, foco 0..1, alfa do grupo); alfa 0 = vazia
+  //   uBandaX   = (x da borda esquerda, 1 = vidro | 0 = veu escuro)
+  "uniform vec4 uBanda[6];\n"
+  "uniform vec2 uBandaX;\n"
   "void main(){\n"
   "  vec3 cb = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y)).rgb;\n"
   "  float l = dot(cb, vec3(0.299, 0.587, 0.114));\n"
   "  cb = mix(vec3(l), cb, 1.35);\n"
   "  cb = mix(cb, uCor.rgb * (0.30 + l), uPar.x);\n"
-  "  float ky = mix(0.66, 0.30, smoothstep(0.0, 1.0, vUv.y));\n"
+  "  float ky = mix(0.92, 0.46, smoothstep(0.0, 1.0, vUv.y));\n"
   "  float vg = 1.0 - 0.35 * smoothstep(0.5, 0.0, min(vUv.x, 1.0 - vUv.x));\n"
-  "  gl_FragColor = nv_dither(clamp(cb * ky * vg * uFoco, 0.0, 1.0), uCor.a);\n"
+  "  vec3 c = clamp(cb * ky * vg * uFoco, 0.0, 1.0);\n"
+  "  vec2 px = vUv * vec2(1920.0, 1080.0);\n"
+  "  float aa = 1080.0 / uAlt;\n"
+  "  for (int i = 0; i < 6; i++) {\n"
+  "    vec4 b = uBanda[i];\n"
+  "    if (b.w > 0.003 && px.y > b.x - 2.0 && px.y < b.y + 2.0 && px.x > uBandaX.x - 2.0) {\n"
+  "      vec2 ce = vec2((uBandaX.x + 2000.0) * 0.5, (b.x + b.y) * 0.5);\n"
+  "      vec2 he = vec2((2000.0 - uBandaX.x) * 0.5, (b.y - b.x) * 0.5);\n"
+  "      vec2 q = abs(px - ce) - (he - 36.0);\n"
+  "      float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 36.0;\n"
+  "      float ga = b.w * clamp(0.5 - d / aa, 0.0, 1.0);\n"
+  "      if (ga > 0.001) {\n"
+  "        float f = b.z;\n"
+  "        float aro = clamp(0.5 + (d + 1.5) / aa, 0.0, 1.0);\n"
+  "        if (uBandaX.y > 0.5) {\n"
+  "          float topo = (0.06 + 0.04 * f) * (1.0 - smoothstep(0.0, 0.36, (px.y - b.x) / (b.y - b.x)));\n"
+  "          c = mix(c, vec3(0.06, 0.07, 0.09), (0.34 - 0.06 * f) * ga);\n"
+  "          c = mix(c, vec3(1.0), (0.06 + 0.05 * f + topo) * ga);\n"
+  "          c = mix(c, vec3(1.0), (0.14 + 0.12 * f) * aro * ga);\n"
+  "        } else {\n"
+  "          c = mix(c, vec3(0.0), (0.30 - 0.10 * f) * ga);\n"
+  "          c = mix(c, vec3(1.0), (0.035 + 0.05 * f) * aro * ga);\n"
+  "        }\n"
+  "      }\n"
+  "    }\n"
+  "  }\n"
+  "  gl_FragColor = nv_dither(c, uCor.a);\n"
   "}\n",
 };
 
@@ -985,6 +1026,8 @@ int gfx_iniciar(void) {
     progs[m].vaza   = glGetUniformLocation(p, "uVaza");
     progs[m].alt    = glGetUniformLocation(p, "uAlt");
     progs[m].margem = glGetUniformLocation(p, "uMargem");
+    progs[m].banda  = glGetUniformLocation(p, "uBanda");
+    progs[m].bandaX = glGetUniformLocation(p, "uBandaX");
     progs[m].altAtual = -1.0f;
     progs[m].margemAtual = 0.0f;   // o default de um uniform recem-linkado e 0
     glUseProgram(p);
@@ -1063,13 +1106,14 @@ double gfx_ms_rect = 0.0, gfx_ms_outros = 0.0;
 // Sem contar a area, "quantas camadas cheias tem esta tela" e chute — com o
 // contador e uma medida por quadro.
 double gfx_fill = 0.0;
+double gfx_fill_vis = 0.0;
 int    gfx_n_cheio = 0;   // desenhos que cobrem >= 50% da tela
 static double gfxFreqMs = 0.0;
 static int desfGeradosQuadro = 0;   // ver gfx_desfocado
 void gfx_novo_quadro(void) {
   gfx_n_rect = gfx_n_prog = gfx_n_bind = gfx_n_outros = 0;
   gfx_ms_rect = gfx_ms_outros = 0.0;
-  gfx_fill = 0.0; gfx_n_cheio = 0;
+  gfx_fill = 0.0; gfx_fill_vis = 0.0; gfx_n_cheio = 0;
   desfGeradosQuadro = 0;
 }
 // Relogio dos pontos de GL que NAO sao gfx_rect: recorte, FBO do snapshot e as
@@ -1104,6 +1148,10 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   gfx_n_rect++;
   { float area = (r.w * r.h) / (NV_TELA_W * NV_TELA_H);
     gfx_fill += area;
+    { float x0 = r.x < 0.0f ? 0.0f : r.x, y0 = r.y < 0.0f ? 0.0f : r.y;
+      float x1 = r.x + r.w > NV_TELA_W ? NV_TELA_W : r.x + r.w;
+      float y1 = r.y + r.h > NV_TELA_H ? NV_TELA_H : r.y + r.h;
+      if (x1 > x0 && y1 > y0) gfx_fill_vis += (double)((x1 - x0) * (y1 - y0)) / (NV_TELA_W * NV_TELA_H); }
     if (area >= 0.5f) gfx_n_cheio++; }
   Programa *P = &progs[modo];
   if (progAtual != (int)modo) { glUseProgram(P->prog); progAtual = (int)modo; gfx_n_prog++; }
@@ -1152,6 +1200,10 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     }
     if (P->alt >= 0 && alt != P->altAtual) { glUniform1f(P->alt, alt); P->altAtual = alt; }
     if (P->margem >= 0 && mg != P->margemAtual) { glUniform1f(P->margem, mg); P->margemAtual = mg; } }
+  if (P->banda >= 0) {   // prateleiras do GFX_FUNDO_DIN (gfx_fundo_din_prateleiras)
+    glUniform4fv(P->banda, 6, &dinBanda[0][0]);
+    glUniform2f(P->bandaX, dinBandaX, dinBandaVidro);
+  }
   if (P->cor >= 0)    glUniform4f(P->cor, cr, cg, cb, ca * gfx_opacidade_grupo);
   if (tex && tex != texAtual) {
     glActiveTexture(GL_TEXTURE0);
@@ -1337,6 +1389,13 @@ void gfx_fundo_din_pedir(int slot, GLuint tex, float aspecto, unsigned long chav
   if (dinChave[slot] == chave) return;
   dinPend[slot].ativo = 1; dinPend[slot].tex = tex;
   dinPend[slot].asp = aspecto; dinPend[slot].chave = chave;
+}
+
+void gfx_fundo_din_prateleiras(const float b[][4], int n, float x0, int vidro) {
+  int i;
+  memset(dinBanda, 0, sizeof dinBanda);
+  for (i = 0; i < n && i < 6; i++) memcpy(dinBanda[i], b[i], sizeof dinBanda[i]);
+  dinBandaX = x0; dinBandaVidro = vidro ? 1.0f : 0.0f;
 }
 
 unsigned long gfx_fundo_din_chave(int slot) {

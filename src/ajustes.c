@@ -5199,7 +5199,11 @@ static float previaReproducaoOpcao(int op, float x, float y, float w) {
 static float previaHomeOpcao(int op, float x, float y, float w) {
   float ar, ag, ab, h = 148.0f;
   int hero = valor[AJ_HERO] == 0;
-  int full = valor[AJ_HERO_CHEIO] == 0;
+  // O layout da home decide a forma do destaque: Padrao contido, Dinamica de
+  // ponta a ponta e mais alto; na Moderna vale "Fundo em tela cheia".
+  int lay = valor[AJ_HOME_LAYOUT];
+  int full = lay == HOME_LAYOUT_DINAMICA ? 1
+           : lay == HOME_LAYOUT_PADRAO ? 0 : valor[AJ_HERO_CHEIO] == 0;
   int landscape = valor[AJ_LANDSCAPE] == 0;
   ajustes_acento(&ar, &ag, &ab);
   ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
@@ -5220,7 +5224,7 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
       previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
   }
   float cx = x + rail + 18.0f, cw = w - rail - 28.0f;
-  float heroH = hero ? (full ? 60.0f : 42.0f) : 0.0f;
+  float heroH = hero ? (lay == HOME_LAYOUT_DINAMICA ? 66.0f : full ? 60.0f : 42.0f) : 0.0f;
   if (hero) {
     GfxRect hr = {cx, y + 10.0f, cw, heroH};
     gfx_cor(hr, 6.0f/heroH, 0.19f, 0.21f, 0.27f, 1.0f);
@@ -5240,8 +5244,11 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
   if (rows > 2) rows = 2;
   for (int row = 0; row < rows; row++) {
     float ry = y + 18.0f + heroH + row * 45.0f;
-    float cardW = landscape ? (cw - 36.0f) / 4.0f : (cw - 60.0f) / 6.0f;
-    int count = landscape ? 4 : 6;
+    // Dinamica: a primeira fileira e a de destaques grandes (dois cartoes largos).
+    int grande = lay == HOME_LAYOUT_DINAMICA && row == 0;
+    float cardW = grande ? (cw - 6.0f) / 2.0f
+                : landscape ? (cw - 36.0f) / 4.0f : (cw - 60.0f) / 6.0f;
+    int count = grande ? 2 : landscape ? 4 : 6;
     // A fileira que o foco altera fica em destaque. Campos próprios mostram
     // somente seções que de fato estão ligadas/desligadas.
     int isTargetRow = (op >= AJ_FIL_LIMITE && op <= AJ_PS_FUNDO) ||
@@ -5251,7 +5258,7 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
     if ((op == AJ_HERO || op == AJ_HERO_CATALOGOS) && !hero) continue;
     for (int k = 0; k < count; k++) {
       float bx = cx + k * (cardW + 6.0f);
-      float ch = landscape ? 20.0f : 31.0f;
+      float ch = grande ? 26.0f : landscape ? 20.0f : 31.0f;
       GfxRect card = {bx, ry, cardW, ch};
       int cardTarget = (op == AJ_LANDSCAPE) ||
         (op == AJ_ROTULOS && valor[op] == 0) ||

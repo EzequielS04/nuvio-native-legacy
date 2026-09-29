@@ -59,7 +59,7 @@ static const Fil FILS[] = {
 
 static SDL_Window *janela;
 static const char *dirDados;
-static double fillUlt; static int rectUlt;
+static double fillUlt, fillVisUlt; static int rectUlt;
 
 static void gravar(const char *bmp) {
   unsigned char *pix = malloc(1920 * 1080 * 4);
@@ -90,7 +90,7 @@ static void quadros(int n, const char *bmp) {
     glClear(GL_COLOR_BUFFER_BIT);
     gfx_ambiente(1.0f);
     home_desenhar(agora);
-    if (i == n - 1) { fillUlt = gfx_fill; rectUlt = gfx_n_rect; }
+    if (i == n - 1) { fillUlt = gfx_fill; fillVisUlt = gfx_fill_vis; rectUlt = gfx_n_rect; }
     if (bmp && i == n - 1) gravar(bmp);
     SDL_GL_SwapWindow(janela);
     SDL_Delay(8);
@@ -208,13 +208,13 @@ int main(int argc, char **argv) {
         quadros(120, NULL);
         snprintf(bmp, sizeof bmp, "%s-L%d-g%d-0-destaque.bmp", saida, layout, vidro);
         quadros(1, bmp);
-        printf("[shot] L%d g%d destaque: fill=%.2f rects=%d\n", layout, vidro, fillUlt, rectUlt);
+        printf("[shot] L%d g%d destaque: fill=%.2f vis=%.2f rects=%d\n", layout, vidro, fillUlt, fillVisUlt, rectUlt);
         for (r = 0; r < 9; r++) {
           tecla(SDLK_DOWN);
           quadros(110, NULL);
           snprintf(bmp, sizeof bmp, "%s-L%d-g%d-%d-fileira.bmp", saida, layout, vidro, r + 1);
           quadros(1, bmp);
-          printf("[shot] L%d g%d fileira %d: fill=%.2f rects=%d\n", layout, vidro, r + 1, fillUlt, rectUlt);
+          printf("[shot] L%d g%d fileira %d: fill=%.2f vis=%.2f rects=%d\n", layout, vidro, r + 1, fillUlt, fillVisUlt, rectUlt);
           if (r == 2) {   // um passo para o lado: rolagem horizontal + foco
             tecla(SDLK_RIGHT); tecla(SDLK_RIGHT);
             quadros(110, NULL);
