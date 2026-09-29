@@ -37,7 +37,7 @@ if [ -n "$(git status --porcelain)" ]; then
   git status --short >&2; exit 1
 fi
 VER=$(sed -n 's/.*"version": *"\([0-9.]*\)".*/\1/p' deploy/app/appinfo.json)
-VT=$(sed -n 's/.*version="\([0-9.]*\)".*/\1/p' tools/tizen-config.xml | head -1)
+VT=$(grep -v '<?xml' tools/tizen-config.xml | sed -n 's/.*[[:space:]]version="\([0-9.]*\)".*/\1/p' | head -1)
 [ -n "$VER" ] && [ "$VER" = "$VT" ] || { echo "release-samsung: appinfo.json ($VER) != tizen-config.xml ($VT)" >&2; exit 1; }
 OUT="build/release-$VER"; rm -rf "$OUT"; mkdir -p "$OUT"
 echo "== release-samsung $VER (commit $(git rev-parse --short HEAD)) -> $OUT"
