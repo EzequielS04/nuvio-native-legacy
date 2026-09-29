@@ -2,6 +2,7 @@
 // hero no topo, rail fixa à esquerda e fileiras horizontais de posters. A
 // infraestrutura nativa cuida de cache assíncrono, foco e transições.
 #include "home.h"
+#include "posterprov.h"
 #include "corviva.h"
 // NV_LEVE (tools/tizen.sh --leve): build de diagnostico sem a animacao do
 // cartaz em foco, um dos suspeitos do travamento de #72.
@@ -664,8 +665,11 @@ static const char *arte_por_formato(const CatItem *item, int deitado) {
                                             ajustes_hero_arte_diferente());
     return b ? b : (item->poster[0] ? item->poster : NULL);
   }
-  return item->poster[0] ? item->poster
-                         : (item->backdrop[0] ? item->backdrop : NULL);
+  // POSTER PERSONALIZADO (posterprov.h): so o cartaz retrato de card. Desligado
+  // (padrao) ou sem id que o provedor entenda, devolve item->poster como veio.
+  { const char *p = posterprov_card(item->imdb, item->tmdb, item->tipo, item->poster);
+    if (p && p[0]) return p; }
+  return item->backdrop[0] ? item->backdrop : NULL;
 }
 
 // ARTE DE TELA CHEIA, que e outra pergunta: o destaque desenha 1920 e por isso
@@ -1258,7 +1262,7 @@ static void homeAtualizarReferenciasArte(void) {
       int idx = fileiraItemIndice(&fileiras[r], i);
       const CatItem *it = cat_item(idx);
       if (!it) continue;
-      homeMarcarURL(it->poster, largura);
+      homeMarcarURL(posterprov_card(it->imdb, it->tmdb, it->tipo, it->poster), largura);
       homeMarcarURL(it->logo, largura * 0.65f);
       homeMarcarURL(it->backdrop, largura);
     }

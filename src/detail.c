@@ -20,6 +20,7 @@
 //   4. Ao rolar, a arte de fundo NAO desfoca: ela vai a 15% de opacidade em
 //      0.8s. O desfoque gaussiano era do app da Apple TV.
 #include "detail.h"
+#include "posterprov.h"
 #include "episodios.h"
 #include "fontepref.h"
 #include "idioma.h"
@@ -4343,7 +4344,11 @@ static void desenhaRelacionados(float x, float y, float a) {
     float cx = x + i * (REL_CARD_W + REL_CARD_GAP);
     GfxRect r = { cx, y, REL_CARD_W, REL_CARD_H };
     int aceso = naLista && i == foc;
-    const char *po = extras_relacionado_poster(i);
+    // POSTER PERSONALIZADO (posterprov.h): o relacionado so tem o id (tt ou
+    // tmdb:N); o tipo e o do titulo aberto (o Trakt e o TMDB devolvem o mesmo).
+    const char *po = posterprov_card(extras_relacionado_imdb(i), 0,
+                                     ehSerie() ? "series" : "movie",
+                                     extras_relacionado_poster(i));
     const char *ano = extras_relacionado_ano(i);
     GLuint t = po[0] ? tex_obter_larg(po, REL_CARD_W) : 0;
     float raio = raioCartaz(REL_CARD_W, REL_CARD_H);
