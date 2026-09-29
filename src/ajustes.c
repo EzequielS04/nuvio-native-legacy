@@ -1273,7 +1273,10 @@ int ajustes_animacoes_reduzidas(void) { return valor[AJ_ANIM] == 1; }
 // devolvem o valor seguro SEM tocar em valor[] nem no arquivo. Ler o valor por
 // cima em vez de sobrescreve-lo e o que garante que gravar() (que escreve valor[]
 // inteiro) e o blob da conta nunca levam o valor de emergencia para o disco.
-#define SEGURO seguro_perfil_ativo()
+// Uma variavel daqui (e nao seguro_perfil_ativo()) para os acessores nao puxarem
+// seguro.c: varios testes compilam ajustes.c com uma lista curta de fontes.
+static int perfilSeguro;
+#define SEGURO perfilSeguro
 int ajustes_4k(void)                  { return valor[AJ_RESOLUCAO] == 1 && !SEGURO; }
 int ajustes_dolby_vision(void)        { return lig(AJ_DV); }
 int ajustes_dolby_atmos(void)         { return lig(AJ_ATMOS); }
@@ -3505,6 +3508,7 @@ void ajustes_seguro_iniciar(int caiu) {
   const SegDecisao *d = seguro_iniciar(caiu, (long)time(NULL), riscoAplicar);
   char id[72], tit[80], txt[420];
   int i;
+  perfilSeguro = d->modo == SEG_PERFIL_SEGURO;
   for (i = 0; i < d->nRevertidas; i++) {
     const SegMud *m = &d->revertidas[i];
     int k;
