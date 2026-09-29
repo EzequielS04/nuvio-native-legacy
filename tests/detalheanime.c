@@ -66,6 +66,8 @@ int   ajustes_cw_fonte(void)               { return 0; }
 int   ajustes_tmdb_ligado(void)            { return 1; }
 static int fakeMetaExterno, fakeTmdbBasico;
 int   ajustes_meta_externo(void)           { return fakeMetaExterno; }
+static int fakeSoCinemeta;
+int   ajustes_meta_so_cinemeta(void)        { return fakeSoCinemeta; }
 int   ajustes_tmdb_basico(void)            { return fakeTmdbBasico; }
 int   ajustes_tmdb_arte(void)              { return 0; }
 int   ajustes_tmdb_elenco(void)            { return 0; }
@@ -121,12 +123,26 @@ int   trakt_social(CatItem *s, int m)      { (void)s; (void)m; return 0; }
 const char *nuvem_trakt_cliente(void)      { return ""; }
 // Um addon de metadados, ligado so no caso 7 (o resto do teste roda sem addon).
 static int addonMeta;
-int   addons_n(void)                       { return addonMeta ? 1 : 0; }
+// Varios addons de metadados para o catalogo primeiro (caso 20 em diante). Com
+// nFake > 0 mandam eles; com 0, vale o addon unico de antes.
+//   pref  : o idPrefix que o "manifesto" declara ("" = nao declara -> -1)
+//   nega  : 1 = o manifesto declara que este tipo/prefixo NAO e dele (-> 0)
+typedef struct { const char *nome, *base, *id, *pref; int nega; } FakeAddon;
+static FakeAddon fake[4];
+static int nFake;
+int   addons_n(void)                       { return nFake ? nFake : (addonMeta ? 1 : 0); }
 int   addons_sondado(int i)                { (void)i; return 1; }
 int   addons_fornece(int i, int oque)      { (void)i; return oque == ADD_META; }
-const char *addons_base(int i)             { (void)i; return addonMeta ? "https://addon.test/SEGREDO" : ""; }
-const char *addons_id_manifesto(int i)     { (void)i; return ""; }
-const char *addons_nome(int i)            { (void)i; return "addon"; }
+const char *addons_base(int i)             { return nFake ? fake[i].base : (addonMeta ? "https://addon.test/SEGREDO" : ""); }
+const char *addons_id_manifesto(int i)     { return nFake ? fake[i].id : ""; }
+const char *addons_nome(int i)            { return nFake ? fake[i].nome : "addon"; }
+int   addons_aceita_id(int i, const char *t, const char *id) {
+  (void)t;
+  if (!nFake) return -1;
+  if (fake[i].nega) return 0;
+  if (!fake[i].pref[0]) return -1;
+  return !strncmp(id, fake[i].pref, strlen(fake[i].pref)) ? 1 : 0;
+}
 unsigned addons_versao(void)             { return 1; }   // estatico no teste
 const char *addons_base_por_id(const char *id) { (void)id; return ""; }
 void  addons_manifesto_lido(int i, const char *corpo) { (void)i; (void)corpo; }
@@ -176,10 +192,21 @@ static const char *tmdbFind, *tmdbTemp1, *tmdbFilme, *cineSerie;
 static char pedidos[64][600];
 static int nPedidos;
 
+// Rotas do catalogo primeiro: o primeiro trecho que casa responde (resp NULL =
+// falha de rede). Vazio, tudo cai nas respostas fixas de antes.
+static struct { const char *trecho, *resp; } rotas[8];
+static int nRotas;
+static void rota(const char *trecho, const char *resp) {
+  rotas[nRotas].trecho = trecho; rotas[nRotas].resp = resp; nRotas++;
+}
+
 char *rede_baixar(const char *u, int t) {
+  int r;
   (void)t;
   if (nPedidos < 64) snprintf(pedidos[nPedidos], sizeof pedidos[0], "%s", u);
   nPedidos++;
+  for (r = 0; r < nRotas; r++)
+    if (strstr(u, rotas[r].trecho)) return rotas[r].resp ? strdup(rotas[r].resp) : NULL;
   if (strstr(u, "cinemeta")) {
     if (strstr(u, "/meta/movie/tt13293588.json"))  return strdup(META_FILME_ERRADO);
     if (strstr(u, "/meta/series/tt13293588.json")) return strdup(cineSerie ? cineSerie : META_SERIE);
@@ -213,6 +240,7 @@ int arte_reserva_episodios(const char *imdb, const char *corpo) { (void)imdb; (v
 static void limparCacheMeta(void) {
   int i;
   for (i = 0; i < META_CACHE_N; i++) { free(metaCache[i].corpo); metaCache[i].corpo = NULL; }
+  metaNegLimpar();
 }
 
 static void catalogoCom(const char *imdb, const char *tipo, const char *titulo) {
@@ -223,6 +251,18 @@ static void catalogoCom(const char *imdb, const char *tipo, const char *titulo) 
   snprintf(it.titulo, sizeof it.titulo, "%s", titulo);
   // Um tmdb qualquer, como o de um catalogo que o trouxesse com o tipo errado.
   it.tmdb = 94664;
+  cat_definir_tudo(&it, 1, NULL, 0);
+}
+
+// Um item de catalogo com id proprio de addon e a origem dele.
+static void catalogoDe(const char *imdb, const char *tipo, const char *titulo,
+                       const char *origem) {
+  CatItem it;
+  memset(&it, 0, sizeof it);
+  snprintf(it.imdb, sizeof it.imdb, "%s", imdb);
+  snprintf(it.tipo, sizeof it.tipo, "%s", tipo);
+  snprintf(it.titulo, sizeof it.titulo, "%s", titulo);
+  snprintf(it.origem, sizeof it.origem, "%s", origem);
   cat_definir_tudo(&it, 1, NULL, 0);
 }
 
@@ -723,6 +763,183 @@ int main(void) {
     cineSerie = NULL; addonResp = NULL; addonTipo = "/series/";
     fakeMetaExterno = fakeTmdbBasico = 0; fakeIdioma = "pt-BR";
     tmdbChave[0] = 0;
+  }
+
+  // ===========================================================================
+  // CATALOGO PRIMEIRO (metaCatalogo): anime e outros titulos de catalogo de addon
+  // com id proprio (kitsu:, mal:, xperience:...) abrem com a ficha e os episodios
+  // do addon que os publicou.
+  // ===========================================================================
+  { static const char *KITSU_META =
+      "{\"meta\":{\"id\":\"kitsu:41370\",\"type\":\"series\",\"name\":\"Mushoku Tensei\","
+      "\"description\":\"Sinopse do Kitsu.\",\"genres\":[\"Anime\",\"Fantasia\"],"
+      "\"videos\":["
+      "{\"id\":\"kitsu:41370:1\",\"title\":\"Desempregado\",\"season\":1,\"episode\":1,"
+      "\"thumbnail\":\"https://k.test/1.jpg\",\"released\":\"2021-01-11T00:00:00.000Z\"},"
+      "{\"id\":\"kitsu:41370:2\",\"title\":\"Segundo\",\"season\":1,\"episode\":2},"
+      "{\"id\":\"kitsu:41370:3\",\"title\":\"Terceiro\",\"episode\":3}]}}";
+    int i;
+    addonMeta = 0; addonResp = NULL; cineSerie = NULL;
+    fakeMetaExterno = fakeTmdbBasico = 0; fakeSoCinemeta = 0;
+    fakeIdioma = "en-US";
+
+    // 20) Id "kitsu:" de catalogo de anime: os episodios vem do PROPRIO addon,
+    //     com o id de video dele, e o Cinemeta nao e perguntado (nao ha "tt").
+    nFake = 2;
+    fake[0] = (FakeAddon){ "Outro", "https://outro.test/SEGREDO2", "org.outro", "mal:", 0 };
+    fake[1] = (FakeAddon){ "Anime Kitsu", "https://kitsu.test/SEGREDO", "org.kitsu", "kitsu:", 0 };
+    limparCacheMeta(); nRotas = 0;
+    rota("kitsu.test/SEGREDO/meta/series/kitsu:41370.json", KITSU_META);
+    catalogoDe("kitsu:41370", "series", "Mushoku Tensei", "org.kitsu");
+    abrir();
+    assert(pediu("kitsu.test/SEGREDO/meta/series/kitsu:41370.json"));
+    assert(!pediu("outro.test"));                 // prefixo "mal:" nao casa
+    assert(!pediu("cinemeta"));
+    { const CatItem *ci = cat_item(0);
+      assert(cat_n_episodios(0) == 3);           // o 3o nao tinha "season"
+      assert(!strcmp(ci->imdb, "kitsu:41370"));  // o id do catalogo fica
+      assert(!strcmp(ci->sinopse, "Sinopse do Kitsu."));
+      assert(!strcmp(ci->genero, "Anime \xc2\xb7 Fantasia"));
+      assert(ci->nTemporadas == 1 && ci->temporadas[0] == 1); }
+    // 21) O id de VIDEO do addon e preservado; e ele que vai a busca de fontes.
+    assert(!strcmp(cat_episodio(0, 0)->vid, "kitsu:41370:1"));
+    assert(!strcmp(cat_episodio(0, 0)->nome, "Desempregado"));   // "title" no lugar de "name"
+    assert(!strcmp(cat_episodio(0, 0)->thumb, "https://k.test/1.jpg"));
+    { char id[64];
+      assert(cat_id_stream(0, 1, 2, id, sizeof id) && !strcmp(id, "kitsu:41370:2"));
+      assert(cat_id_stream(0, 1, 9, id, sizeof id) && !strcmp(id, "kitsu:41370:9"));  // sem video: id:ep
+      assert(cat_id_stream(0, 0, 0, id, sizeof id) && !strcmp(id, "kitsu:41370")); }
+    puts("ok  catalogo primeiro: kitsu: abre com os episodios do addon, video ids preservados");
+
+    // 22) O item de tipo "anime" (do catalogo) pede /meta/anime/ e vira serie.
+    limparCacheMeta(); nRotas = 0;
+    rota("kitsu.test/SEGREDO/meta/anime/kitsu:41370.json", KITSU_META);
+    catalogoDe("kitsu:41370", "anime", "Mushoku Tensei", "org.kitsu");
+    abrir();
+    assert(pediu("/meta/anime/kitsu:41370.json"));
+    assert(cat_n_episodios(0) == 3 && !strcmp(cat_item(0)->tipo, "series"));
+    puts("ok  tipo \"anime\" do catalogo: pede /meta/anime/ e resolve como serie");
+
+    // 23) idPrefixes: sem origem conhecida, so o addon cujo prefixo casa e perguntado.
+    limparCacheMeta(); nRotas = 0;
+    rota("kitsu.test/SEGREDO/meta/series/kitsu:41370.json", KITSU_META);
+    catalogoDe("kitsu:41370", "series", "Mushoku Tensei", "");
+    abrir();
+    assert(pediu("kitsu.test") && !pediu("outro.test"));
+    assert(cat_n_episodios(0) == 3);
+    // origem que o manifesto diz NAO ser dela: nao perguntada
+    fake[1].nega = 1;
+    limparCacheMeta(); nRotas = 0;
+    catalogoDe("kitsu:41370", "series", "Mushoku Tensei", "org.kitsu");
+    abrir();
+    assert(!pediu("kitsu.test"));
+    assert(cat_n_episodios(0) == 0);
+    fake[1].nega = 0;
+    puts("ok  idPrefixes: so o addon que declara o prefixo e perguntado; recusa declarada vale");
+
+    // 24) MESCLA: a base e a ficha do addon (id do IMDb, addon que nao e o
+    //     Cinemeta); a ficha nao traz elenco nem lista -> o Cinemeta preenche o
+    //     vazio, mas nunca troca a sinopse/generos da base.
+    nFake = 1;
+    fake[0] = (FakeAddon){ "Xperience", "https://xp.test/SEGREDO", "org.xp", "tt", 0 };
+    limparCacheMeta(); nRotas = 0;
+    rota("xp.test/SEGREDO/meta/series/tt13293588.json",
+         "{\"meta\":{\"id\":\"tt13293588\",\"type\":\"series\",\"name\":\"Mushoku do Xperience\","
+         "\"description\":\"Sinopse do Xperience.\",\"genres\":[\"Aventura\"]}}");
+    catalogoDe("tt13293588", "series", "Mushoku Tensei", "org.xp");
+    abrir();
+    { const CatItem *ci = cat_item(0);
+      assert(pediu("xp.test/SEGREDO/meta/series/tt13293588.json"));
+      assert(pediu("cinemeta"));                 // complemento
+      assert(!strcmp(ci->sinopse, "Sinopse do Xperience."));
+      assert(!strcmp(ci->genero, "Aventura"));   // generos da base, nao os do Cinemeta
+      assert(ci->nElenco == 3);                  // elenco vazio na base: do Cinemeta
+      assert(cat_n_episodios(0) == 3);           // base sem lista: a do Cinemeta
+      assert(!strcmp(cat_episodio(0, 0)->vid, "tt13293588:1:1")); }
+    { char id[64];
+      assert(cat_id_stream(0, 1, 2, id, sizeof id) && !strcmp(id, "tt13293588:1:2")); }
+    puts("ok  mescla: a base manda; o Cinemeta so preenche elenco e episodios que faltavam");
+
+    // 25) Base COMPLETA com lista propria: a lista dela fica (2 episodios contra
+    //     3 do Cinemeta) e o Cinemeta so completa o campo vazio de cada um.
+    limparCacheMeta(); nRotas = 0;
+    rota("xp.test/SEGREDO/meta/series/tt13293588.json",
+         "{\"meta\":{\"id\":\"tt13293588\",\"type\":\"series\",\"name\":\"Mushoku do Xperience\","
+         "\"description\":\"Sinopse do Xperience.\",\"cast\":[\"Ator do Xperience\"],\"videos\":["
+         "{\"season\":1,\"episode\":1,\"name\":\"Nome do Xperience\"},"
+         "{\"season\":1,\"episode\":2,\"name\":\"Dois\",\"thumbnail\":\"https://xp/2.jpg\"}]}}");
+    catalogoDe("tt13293588", "series", "Mushoku Tensei", "org.xp");
+    abrir();
+    assert(cat_n_episodios(0) == 2);
+    assert(!strcmp(cat_episodio(0, 0)->nome, "Nome do Xperience"));
+    assert(cat_item(0)->nElenco == 1 && !strcmp(cat_item(0)->elenco[0].nome, "Ator do Xperience"));
+    puts("ok  mescla: lista e elenco da base ficam; Cinemeta so preenche campos vazios");
+
+    // 26) Item do Cinemeta (origem "cinemeta"): nada muda, a lista e a do Cinemeta.
+    limparCacheMeta(); nRotas = 0;
+    catalogoDe("tt13293588", "series", "Mushoku Tensei", "cinemeta");
+    abrir();
+    assert(pediu("cinemeta") && cat_n_episodios(0) == 3);
+    assert(!strcmp(cat_episodio(0, 0)->nome, "Jobless Reincarnation"));
+    puts("ok  item do Cinemeta: o caminho de sempre");
+
+    // 27) "Usar sempre o Cinemeta": o kitsu: nao vai a lugar nenhum e o item do
+    //     Xperience volta ao Cinemeta puro.
+    fakeSoCinemeta = 1;
+    limparCacheMeta(); nRotas = 0;
+    rota("xp.test/SEGREDO/meta/series/tt13293588.json",
+         "{\"meta\":{\"id\":\"tt13293588\",\"type\":\"series\",\"name\":\"Xperience\","
+         "\"description\":\"Sinopse do Xperience.\",\"videos\":[{\"season\":1,\"episode\":1,\"name\":\"X\"}]}}");
+    catalogoDe("tt13293588", "series", "Mushoku Tensei", "org.xp");
+    abrir();
+    assert(cat_n_episodios(0) == 3);
+    assert(!strcmp(cat_episodio(0, 0)->nome, "Jobless Reincarnation"));
+    nFake = 2;
+    fake[0] = (FakeAddon){ "Outro", "https://outro.test/SEGREDO2", "org.outro", "mal:", 0 };
+    fake[1] = (FakeAddon){ "Anime Kitsu", "https://kitsu.test/SEGREDO", "org.kitsu", "kitsu:", 0 };
+    limparCacheMeta(); nRotas = 0;
+    rota("kitsu.test/SEGREDO/meta/series/kitsu:41370.json", KITSU_META);
+    catalogoDe("kitsu:41370", "series", "Mushoku Tensei", "org.kitsu");
+    abrir();
+    assert(nPedidos == 0 && fioEpVivo == 0 && cat_n_episodios(0) == 0);
+    fakeSoCinemeta = 0;
+    puts("ok  opt-out \"Usar sempre o Cinemeta\": volta ao comportamento de antes");
+
+    // 28) A ficha do addon nao respondeu: o ARM (kitsu -> imdb) leva ao Cinemeta; o
+    //     item continua com o id do addon e os episodios trazem o video id do IMDb.
+    nFake = 1;
+    fake[0] = (FakeAddon){ "Anime Kitsu", "https://kitsu.test/SEGREDO", "org.kitsu", "kitsu:", 0 };
+    limparCacheMeta(); nRotas = 0;
+    rota("kitsu.test/SEGREDO/meta/", NULL);      // o addon nao respondeu
+    rota("arm.haglund.dev/api/v2/ids?source=kitsu&id=41370",
+         "{\"kitsu\":41370,\"imdb\":\"tt13293588\",\"themoviedb\":94664}");
+    catalogoDe("kitsu:41370", "series", "Mushoku Tensei", "org.kitsu");
+    abrir();
+    assert(pediu("arm.haglund.dev/api/v2/ids?source=kitsu&id=41370"));
+    assert(pediu("/meta/series/tt13293588.json"));
+    assert(!strcmp(cat_item(0)->imdb, "kitsu:41370"));
+    assert(cat_n_episodios(0) == 3);
+    { char id[64];
+      assert(cat_id_stream(0, 1, 1, id, sizeof id) && !strcmp(id, "tt13293588:1:1")); }
+    // a falha do addon foi lembrada: reabrir nao repete o pedido dele
+    nPedidos = 0; fioEpVivo = 1; buscarEps(NULL);
+    assert(!pediu("kitsu.test"));
+    puts("ok  ARM: kitsu -> imdb -> Cinemeta quando o addon nao serve; falha lembrada");
+
+    // 29) Um pedido por fonte e por abertura.
+    nFake = 2;
+    fake[0] = (FakeAddon){ "Outro", "https://outro.test/SEGREDO2", "org.outro", "mal:", 0 };
+    fake[1] = (FakeAddon){ "Anime Kitsu", "https://kitsu.test/SEGREDO", "org.kitsu", "kitsu:", 0 };
+    limparCacheMeta(); nRotas = 0;
+    rota("kitsu.test/SEGREDO/meta/series/kitsu:41370.json", KITSU_META);
+    catalogoDe("kitsu:41370", "series", "Mushoku Tensei", "org.kitsu");
+    abrir();
+    { int n1 = 0; for (i = 0; i < nPedidos && i < 64; i++) if (strstr(pedidos[i], "kitsu.test")) n1++;
+      assert(n1 == 1); }
+    puts("ok  um pedido so a fonte por abertura");
+
+    nFake = 0; nRotas = 0; addonMeta = 0;
+    limparCacheMeta();
   }
   puts("detalheanime: tudo ok");
   return 0;

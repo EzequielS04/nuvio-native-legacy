@@ -222,6 +222,50 @@ int main(void) {
     conferir("meta (nao declara)", addons_fornece(c, ADD_META), 0);
     conferir("legenda segue lida do manifesto", addons_fornece(b, ADD_LEGENDA), 1); }
 
+  // idPrefixes/types DO RESOURCE "meta" (addons_aceita_id). A raiz do manifesto
+  // e o resource declaram; o do resource vence; o "idPrefixes" de OUTRO resource
+  // (stream) ou de um catalogo nao pode vazar para o meta.
+  { int a = addons_n(), b, c, d, e, f;
+    addons_adicionar("Pref A", "https://pref-a.test/manifest.json");
+    addons_adicionar("Pref B", "https://pref-b.test/manifest.json");
+    addons_adicionar("Pref C", "https://pref-c.test/manifest.json");
+    addons_adicionar("Pref D", "https://pref-d.test/manifest.json");
+    addons_adicionar("Pref E", "https://pref-e.test/manifest.json");
+    addons_adicionar("Pref F", "https://pref-f.test/manifest.json");
+    b = a + 1; c = a + 2; d = a + 3; e = a + 4; f = a + 5;
+    // A: no resource, com tipos ("anime" e o do Kitsu)
+    addons_manifesto_lido(a, "{\"id\":\"p.a\",\"name\":\"Pref A\",\"types\":[\"movie\",\"series\"],"
+                             "\"resources\":[\"catalog\",{\"name\":\"stream\",\"types\":[\"series\"],\"idPrefixes\":[\"tt\"]},"
+                             "{\"name\":\"meta\",\"types\":[\"Anime\",\"series\"],\"idPrefixes\":[\"kitsu:\",\"mal:\"]}],"
+                             "\"catalogs\":[{\"type\":\"anime\",\"id\":\"k\",\"idPrefixes\":[\"zzz:\"]}]}");
+    conferir("prefixo do resource casa", addons_aceita_id(a, "series", "kitsu:41370"), 1);
+    conferir("segundo prefixo casa", addons_aceita_id(a, "anime", "mal:456"), 1);
+    conferir("tipo declarado sem caixa", addons_aceita_id(a, "ANIME", "kitsu:1"), 1);
+    conferir("prefixo do stream nao vaza para o meta", addons_aceita_id(a, "series", "tt0111161"), 0);
+    conferir("prefixo do catalogo nao vaza", addons_aceita_id(a, "series", "zzz:1"), 0);
+    conferir("tipo fora dos declarados", addons_aceita_id(a, "movie", "kitsu:41370"), 0);
+    // B: so na raiz
+    addons_manifesto_lido(b, "{\"id\":\"p.b\",\"name\":\"Pref B\",\"idPrefixes\":[\"tt\"],"
+                             "\"types\":[\"movie\",\"series\"],\"resources\":[\"catalog\",\"meta\",\"stream\"]}");
+    conferir("raiz: tt casa", addons_aceita_id(b, "movie", "tt0111161"), 1);
+    conferir("raiz: kitsu nao", addons_aceita_id(b, "series", "kitsu:1"), 0);
+    // C: o resource declara e vence o da raiz
+    addons_manifesto_lido(c, "{\"id\":\"p.c\",\"name\":\"Pref C\",\"idPrefixes\":[\"tt\"],"
+                             "\"resources\":[{\"name\":\"meta\",\"idPrefixes\":[\"xperience:\"]}]}");
+    conferir("resource vence a raiz", addons_aceita_id(c, "series", "xperience:abc"), 1);
+    conferir("a raiz nao vale onde o resource declarou", addons_aceita_id(c, "series", "tt1"), 0);
+    conferir("sem tipos declarados, qualquer tipo", addons_aceita_id(c, "anime", "xperience:abc"), 1);
+    // D: meta sem nenhum prefixo -> nao da para saber
+    addons_manifesto_lido(d, "{\"id\":\"p.d\",\"name\":\"Pref D\",\"resources\":[\"meta\"]}");
+    conferir("sem idPrefixes: desconhecido", addons_aceita_id(d, "series", "kitsu:1"), -1);
+    // E: nao tem meta
+    addons_manifesto_lido(e, "{\"id\":\"p.e\",\"name\":\"Pref E\",\"idPrefixes\":[\"kitsu:\"],\"resources\":[\"stream\"]}");
+    conferir("sem o resource meta: nao serve", addons_aceita_id(e, "series", "kitsu:1"), 0);
+    // F: manifesto nunca lido -> desconhecido; indice ruim -> 0
+    conferir("nao sondado: desconhecido", addons_aceita_id(f, "series", "kitsu:1"), -1);
+    conferir("indice invalido", addons_aceita_id(999, "series", "kitsu:1"), 0);
+    conferir("id vazio", addons_aceita_id(a, "series", ""), 0); }
+
   remove(caminho);
   rmdir(dir);
   if (falhas) { printf("%d falha(s)\n", falhas); return 1; }

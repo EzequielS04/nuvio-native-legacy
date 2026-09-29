@@ -20,6 +20,7 @@
 #include "progresso.h"
 #include "perfis.h"
 #include "artereserva.h"
+#include "idbase.h"
 #include <stdint.h>   /* uintptr_t: a geracao viaja no argumento do fio */
 #include <stdio.h>
 #include <string.h>
@@ -511,6 +512,63 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
 // porque a busca, logo abaixo, monta CatItem a partir da mesma resposta.
 static int deMeta(const char *ini, const char *fim, const char *tipo, CatItem *d);
 
+// --- DE QUAL ADDON VEIO O ITEM (CatItem.origem) ------------------------------
+//
+// O detalhe pergunta a ficha (/meta) primeiro a quem PUBLICOU o titulo, e para
+// isso o item precisa lembrar quem foi. Guarda-se o "id" do manifesto — nunca a
+// base: ela carrega credencial (o Xperience embute um JWT no caminho) e o
+// CatItem vai inteiro para o cache em disco. Enquanto o manifesto nao foi lido
+// (id vazio) vale "#<hash da base>", que tambem nao expoe nada.
+static unsigned hashBaseAddon(const char *b) {
+  unsigned h = 2166136261u;
+  for (; b && *b; b++) h = (h ^ (unsigned char)*b) * 16777619u;
+  return h;
+}
+
+// Cinemeta e "origem" tambem, mas nao e um addon da lista do usuario (ou e, com
+// outro nome): so o texto "cinemeta" na base o identifica.
+static int baseEhCinemeta(const char *base) {
+  return base && strstr(base, "cinemeta") != NULL;
+}
+
+static void origemDaBase(const char *base, char *dst, size_t n) {
+  int i, k;
+  if (!n) return;
+  dst[0] = 0;
+  if (!base || !base[0]) return;
+  if (baseEhCinemeta(base)) { snprintf(dst, n, "cinemeta"); return; }
+  k = addons_n();
+  for (i = 0; i < k; i++) {
+    const char *b = addons_base(i);
+    if (b && !strcmp(b, base)) {
+      const char *id = addons_id_manifesto(i);
+      if (id && id[0]) snprintf(dst, n, "%s", id);
+      else snprintf(dst, n, "#%08x", hashBaseAddon(base));
+      return;
+    }
+  }
+}
+
+// O addon da lista a que `origem` se refere, ou -1 (Cinemeta, vazia, addon que
+// saiu da lista).
+static int addonDaOrigem(const char *origem) {
+  int i, k;
+  if (!origem || !origem[0] || !strcmp(origem, "cinemeta")) return -1;
+  k = addons_n();
+  for (i = 0; i < k; i++) {
+    if (origem[0] == '#') {
+      const char *b = addons_base(i);
+      char h[16];
+      snprintf(h, sizeof h, "#%08x", hashBaseAddon(b));
+      if (b && b[0] && !strcmp(h, origem)) return i;
+    } else {
+      const char *id = addons_id_manifesto(i);
+      if (id && id[0] && !strcmp(id, origem)) return i;
+    }
+  }
+  return -1;
+}
+
 // --- BUSCA POR TITULO --------------------------------------------------------
 //
 // A tela de busca so filtrava o que ja estava em memoria (um strstr sobre as
@@ -661,11 +719,16 @@ static int consultarAlvo(const AlvoBusca *a, const char *termo,
   corpo = rede_baixar(url, 6);
   if (!corpo) return 0;
   p = js_array(corpo, NULL, "metas");
-  while (p && n < max) {
-    const char *f = js_fim(p);
-    if (deMeta(p, f, a->tipo, &saida[n])) n++;
-    p = js_prox(f);
-  }
+  { char orig[96];
+    origemDaBase(a->base, orig, sizeof orig);   // o resultado abre pelo addon que o achou
+    while (p && n < max) {
+      const char *f = js_fim(p);
+      if (deMeta(p, f, a->tipo, &saida[n])) {
+        snprintf(saida[n].origem, sizeof saida[n].origem, "%s", orig);
+        n++;
+      }
+      p = js_prox(f);
+    } }
   free(corpo);
   return n;
 }
@@ -1019,11 +1082,16 @@ static int lerCatalogo(const char *base, const char *tipo, const char *id,
   if (!corpo) return 0;
   if (respondeu) *respondeu = 1;
   p = js_array(corpo, NULL, "metas");
-  while (p && n < max && n < quantos) {
-    const char *f = js_fim(p);
-    if (deMeta(p, f, tipo, &saida[n])) n++;
-    p = js_prox(f);
-  }
+  { char orig[96];
+    origemDaBase(base, orig, sizeof orig);      // ver CatItem.origem
+    while (p && n < max && n < quantos) {
+      const char *f = js_fim(p);
+      if (deMeta(p, f, tipo, &saida[n])) {
+        snprintf(saida[n].origem, sizeof saida[n].origem, "%s", orig);
+        n++;
+      }
+      p = js_prox(f);
+    } }
   free(corpo);
   return n;
 }
@@ -2045,8 +2113,7 @@ static int continuarLocal(CatItem *saida, int max) {
     if (p < 0.01 || p >= 0.90) continue;
     // Uma serie com varios episodios gravados entra UMA vez, no mais recente.
     for (j = 0; j < n; j++) {
-      const char *dp = strchr(saida[j].imdb, ':');
-      size_t L = dp ? (size_t)(dp - saida[j].imdb) : strlen(saida[j].imdb);
+      size_t L = idbase_len(saida[j].imdb);   // "kitsu:41370" inteiro, nao "kitsu"
       if (L == strlen(r->contentId) && !strncmp(saida[j].imdb, r->contentId, L)) { repetido = 1; break; }
     }
     if (repetido) continue;
@@ -3976,8 +4043,14 @@ void desc_esquecer(void) {
 // Guardar apenas a ultima serie fazia voltar ao titulo anterior repetir a
 // transferencia inteira. Quatro respostas cobrem a navegacao normal de ida e
 // volta sem deixar o uso de memoria crescer sem limite.
-#define META_CACHE_N 4
-static struct { char id[40]; char *corpo; unsigned uso; } metaCache[META_CACHE_N];   // "series/tt..."
+//
+// 12 e nao 4 desde que a ficha "catalogo primeiro" (metaCatalogo) guarda ate
+// quatro respostas por titulo aberto (addon de origem, outro addon, Cinemeta,
+// ARM): com 4 lugares um titulo sozinho levava o cache inteiro. O id ficou em
+// 96 porque "xperience:<id longo>" passava dos 40 e dois ids com o mesmo comeco
+// dividiriam a chave.
+#define META_CACHE_N 12
+static struct { char id[96]; char *corpo; unsigned uso; } metaCache[META_CACHE_N];   // "series/tt..."
 static unsigned metaRelogio;
 static pthread_mutex_t metaTrava = PTHREAD_MUTEX_INITIALIZER;
 
@@ -4024,24 +4097,62 @@ static int idiomaNaoIngles(void) {
   return l && l[0] && strncmp(l, "en", 2) != 0;
 }
 
+// FALHA LEMBRADA. Um addon que nao respondeu (ou respondeu 404) a este /meta nao
+// e perguntado de novo por 5 min: a ficha do titulo consulta a mesma fonte em
+// mais de um lugar (texto, episodios, generos) e um addon lento custava o
+// timeout INTEIRO a cada vez — o detalhe parava de responder por ele.
+#define META_NEG_N 24
+static struct { char chave[96]; long quando; } metaNeg[META_NEG_N];
+static int metaNegProx;
+
+static int metaNegAtiva(const char *chave) {
+  int i, r = 0;
+  pthread_mutex_lock(&metaTrava);
+  for (i = 0; i < META_NEG_N; i++)
+    if (metaNeg[i].chave[0] && !strcmp(metaNeg[i].chave, chave) &&
+        time(NULL) - metaNeg[i].quando < 300) { r = 1; break; }
+  pthread_mutex_unlock(&metaTrava);
+  return r;
+}
+static void metaNegGuardar(const char *chave) {
+  pthread_mutex_lock(&metaTrava);
+  snprintf(metaNeg[metaNegProx].chave, sizeof metaNeg[0].chave, "%s", chave);
+  metaNeg[metaNegProx].quando = (long)time(NULL);
+  metaNegProx = (metaNegProx + 1) % META_NEG_N;
+  pthread_mutex_unlock(&metaTrava);
+}
+__attribute__((unused))   // so o teste limpa (tests/detalheanime.c)
+static void metaNegLimpar(void) {
+  pthread_mutex_lock(&metaTrava);
+  memset(metaNeg, 0, sizeof metaNeg);
+  pthread_mutex_unlock(&metaTrava);
+}
+
 // /meta/<tipo>/<id>.json do addon `i` (cache por addon+tipo+id), ou NULL quando
 // o addon nao serve (desligado, sem o recurso "meta", e o Cinemeta, que o
 // chamador ja tem) ou nao respondeu. A URL carrega credencial: nada aqui a loga.
-static char *metaDoAddon(int i, const char *tipo, const char *id) {
-  char url[700], chave[48], *c;
+// `prazo` em segundos: o texto localizado espera 15; a ficha do catalogo 8, para
+// um addon lento nao segurar a pagina.
+static char *metaDoAddonT(int i, const char *tipo, const char *id, int prazo) {
+  char url[700], chave[96], *c;
   const char *base;
-  unsigned h = 2166136261u;
+  unsigned h;
   if (!addons_ativo(i) || !addons_sondado(i) || !addons_fornece(i, ADD_META)) return NULL;
   base = addons_base(i);
   if (!base || !base[0] || strstr(base, "cinemeta")) return NULL;
-  for (const char *q = base; *q; q++) h = (h ^ (unsigned char)*q) * 16777619u;
+  h = hashBaseAddon(base);
   snprintf(chave, sizeof chave, "%08x/%s/%s", h, tipo, id);
   c = metaCacheObter(chave);
   if (c) return c;
+  if (metaNegAtiva(chave)) return NULL;
   snprintf(url, sizeof url, "%s/meta/%s/%s.json", base, tipo, id);
-  c = rede_baixar(url, 15);
+  c = rede_baixar(url, prazo);
   if (c) metaCacheGuardar(chave, c);
+  else metaNegGuardar(chave);
   return c;
+}
+static char *metaDoAddon(int i, const char *tipo, const char *id) {
+  return metaDoAddonT(i, tipo, id, 15);
 }
 
 // Nome e descricao da RAIZ do objeto "meta" (js_texto acharia o "name" de um
@@ -4480,12 +4591,22 @@ void desc_meta_chave(char *dst, size_t n, const char *tipo, const char *id) {
   snprintf(dst, n, "%s/%s", tipo ? tipo : "", id ? id : "");
 }
 
+// Temporada de um video. Addon de anime as vezes manda "episode" sem "season"
+// (o entry do Kitsu ja e a temporada); sem o campo o video era descartado e a
+// serie ficava sem episodio nenhum. Ausente com episodio > 0 conta como 1.
+// "season":0 (especiais) continua fora, como sempre foi.
+static int videoTemporada(const char *p, const char *f) {
+  int t = (int)js_num(p, f, "season", -1);
+  if (t < 0 && js_num(p, f, "episode", -1) > 0) t = 1;
+  return t;
+}
+
 // A resposta do /meta tem ao menos um video com temporada > 0?
 int desc_meta_tem_temporadas(const char *corpo) {
   const char *v = corpo ? js_array(corpo, NULL, "videos") : NULL;
   while (v) {
     const char *f = js_fim(v);
-    if ((int)js_num(v, f, "season", -1) > 0) return 1;
+    if (videoTemporada(v, f) > 0) return 1;
     v = js_prox(f);
   }
   return 0;
@@ -4497,7 +4618,7 @@ int desc_meta_n_episodios(const char *corpo) {
   int n = 0;
   while (v) {
     const char *f = js_fim(v);
-    if ((int)js_num(v, f, "season", -1) > 0) n++;
+    if (videoTemporada(v, f) > 0) n++;
     v = js_prox(f);
   }
   return n;
@@ -4514,7 +4635,7 @@ static int parsearEpisodios(const char *corpo, CatEp *eps, int max) {
   const char *p = js_array(corpo, NULL, "videos");
   while (p && n < max) {
     const char *f = js_fim(p);
-    int t = (int)js_num(p, f, "season", -1);
+    int t = videoTemporada(p, f);
     if (t > 0) {
       CatEp *e = &eps[n];
       char d[24] = "";
@@ -4522,7 +4643,13 @@ static int parsearEpisodios(const char *corpo, CatEp *eps, int max) {
       e->temporada = t;
       e->episodio = (int)js_num(p, f, "episode", 0);
       js_texto(p, f, "name", e->nome, sizeof e->nome);
+      // O id do video (cat_id_stream): e ele que se manda aos addons de fonte
+      // quando o titulo nao e do IMDb. Addon que usa "title" no lugar de "name"
+      // (o Kitsu) tambem tem o nome lido.
+      js_texto_raiz_em(p, f, "id", e->vid, sizeof e->vid);
+      if (!e->nome[0]) js_texto(p, f, "title", e->nome, sizeof e->nome);
       js_texto(p, f, "overview", e->sinopse, sizeof e->sinopse);
+      if (!e->sinopse[0]) js_texto(p, f, "description", e->sinopse, sizeof e->sinopse);
       js_texto(p, f, "thumbnail", e->thumb, sizeof e->thumb);
       js_texto(p, f, "released", d, sizeof d);
       desc_data_extenso(d, e->data, sizeof e->data);
@@ -4705,14 +4832,374 @@ static void completarRaso(CatItem *dst, const char *corpo, const char *tipo) {
   free(cheio);
 }
 
+// ============================================================================
+// FICHA DO TITULO: CATALOGO PRIMEIRO (metaCatalogo)
+// ============================================================================
+//
+// O PROBLEMA (relato do dono). Titulo de catalogo de addon de anime chega com id
+// PROPRIO — "kitsu:123", "mal:456", "anilist:789", "xperience:...", "tmdb:..." —
+// e abria sem episodio nem ficha: buscarEps so pedia /meta ao Cinemeta, que so
+// conhece "tt". Kitsu/AniList entravam so como fonte de ARTE (artefontes.c). Mas
+// o addon que PUBLICOU o item quase sempre serve /meta/<tipo>/<id>.json para os
+// ids dele, com titulo, sinopse e a lista de episodios (e o id de stream de cada
+// um).
+//
+// A ORDEM, e o porque de cada degrau:
+//   a) o addon de ORIGEM do item (CatItem.origem), se o manifesto nao declarou
+//      que esse tipo/prefixo nao e dele. E o dono do id: o unico que se sabe
+//      que o conhece.
+//   b) outros addons com "meta" ATIVOS, na ordem da lista do usuario, cujo
+//      idPrefixes casa com o id (addons_aceita_id == 1). Id do IMDb aceita
+//      tambem quem nao declarou prefixo (-1), porque "tt" e o id que todo mundo
+//      fala. So se ainda falta: uma fonte que ja entregou ficha completa
+//      (sinopse + episodios) encerra a busca.
+//   c) o Cinemeta, para id do IMDb — e para o "tt" que a propria ficha do addon
+//      revelou (imdb_id, imdbId, link do IMDb).
+//   d) id que nao e do IMDb, sem "tt" a vista e a ficha incompleta: a API ARM
+//      (arm.haglund.dev, publica, sem chave — conferido em 29/09/2026) converte
+//      kitsu/mal/anilist/anidb em imdb, e dai o Cinemeta entra como em (c).
+//
+// A REGRA DE MESCLA: a primeira fonte que responde uma ficha valida e a BASE
+// (titulo, sinopse, episodios, generos, elenco). As seguintes so preenchem o que
+// a base deixou VAZIO (elenco, direcao, nota, pais, generos, sinopse; e a lista
+// de episodios inteira quando a base nao tem nenhuma). Nunca sobrescrevem.
+// Episodio a episodio (still, data, duracao) so se mescla quando as duas listas
+// estao no MESMO espaco de ids — o Cinemeta e o IMDb; "kitsu:41370" e uma
+// temporada, e T2E5 do Cinemeta nao e o E5 dela.
+//
+// "Usar sempre o Cinemeta" (ajustes_meta_so_cinemeta) desliga tudo isto e o app
+// volta ao comportamento de antes.
+#define META_FONTES_MAX 4
+typedef struct {
+  char *corpo[META_FONTES_MAX];    // cada /meta, na ordem de prioridade
+  char  nome[META_FONTES_MAX][64];
+  int   cine[META_FONTES_MAX];     // 1 = veio do Cinemeta
+  int   n;
+  int   ehFilme;
+  char  tt[24];                    // IMDb conhecido do titulo ("" = nenhum)
+} MetaFontes;
+
+static void metaFontesLiberar(MetaFontes *mf) {
+  int i;
+  for (i = 0; i < mf->n; i++) { free(mf->corpo[i]); mf->corpo[i] = NULL; }
+  mf->n = 0;
+}
+
+static void metaFontesAdd(MetaFontes *mf, char *corpo, const char *nome, int cine) {
+  if (mf->n >= META_FONTES_MAX) { free(corpo); return; }
+  mf->corpo[mf->n] = corpo;
+  snprintf(mf->nome[mf->n], sizeof mf->nome[0], "%s", nome ? nome : "");
+  mf->cine[mf->n] = cine;
+  mf->n++;
+}
+
+// O objeto "meta" tem nome? (resposta de erro e "meta":null dao 0)
+static int metaValida(const char *corpo) {
+  char tit[160];
+  return metaTextos(corpo, tit, sizeof tit, NULL, 0);
+}
+
+// O tipo que a propria ficha diz ("movie"/"series"); "" se nao disse ou disse
+// outra coisa ("anime").
+static void metaTipoProprio(const char *corpo, char *dst, size_t n) {
+  const char *m = corpo ? strstr(corpo, "\"meta\"") : NULL;
+  char t[16] = "";
+  if (n) dst[0] = 0;
+  if (!m) return;
+  m += 6;
+  while (*m == ' ' || *m == ':' || *m == '\n' || *m == '\t' || *m == '\r') m++;
+  if (*m != '{') return;
+  if (js_texto_raiz_em(m, NULL, "type", t, sizeof t) &&
+      (!strcmp(t, "movie") || !strcmp(t, "series")))
+    snprintf(dst, n, "%s", t);
+}
+
+// A ficha ja diz tudo que o detalhe pede? Sinopse e, se e serie, episodios.
+// Quem esta completa dispensa perguntar a mais fontes.
+static int metaCompleta(const char *corpo) {
+  char tit[160], sin[900], tp[16];
+  if (!metaTextos(corpo, tit, sizeof tit, sin, sizeof sin) || !sin[0]) return 0;
+  metaTipoProprio(corpo, tp, sizeof tp);
+  if (!strcmp(tp, "movie")) return 1;
+  return desc_meta_n_episodios(corpo) > 0;
+}
+
+// O IMDb que a ficha revela: imdb_id / imdbId na raiz do "meta", o proprio id
+// se for "tt", ou um link imdb.com/title/tt... Vazio se nao ha.
+static void metaImdbDaFicha(const char *corpo, char *dst, size_t n) {
+  const char *m = corpo ? strstr(corpo, "\"meta\"") : NULL;
+  const char *lk;
+  char v[32] = "";
+  if (n) dst[0] = 0;
+  if (!m || n < 4) return;
+  m += 6;
+  while (*m == ' ' || *m == ':' || *m == '\n' || *m == '\t' || *m == '\r') m++;
+  if (*m == '{') {
+    if (!js_texto_raiz_em(m, NULL, "imdb_id", v, sizeof v) || strncmp(v, "tt", 2))
+      if (!js_texto_raiz_em(m, NULL, "imdbId", v, sizeof v) || strncmp(v, "tt", 2))
+        js_texto_raiz_em(m, NULL, "id", v, sizeof v);
+    if (!strncmp(v, "tt", 2) && strlen(v) >= 5) { snprintf(dst, n, "%s", v); return; }
+  }
+  lk = strstr(corpo, "imdb.com/title/tt");
+  if (lk) {
+    size_t k = 0;
+    lk = strstr(lk, "/tt") + 1;                 // o "tt..." que vem depois de /title/
+    while (lk[k] && lk[k] != '/' && lk[k] != '"' && lk[k] != '?' && k + 1 < n && k < 20) {
+      dst[k] = lk[k]; k++;
+    }
+    dst[k] = 0;
+    if (k < 5) dst[0] = 0;
+  }
+}
+
+// Cinemeta como fonte de complemento: /meta/<tipo>/<tt>.json, com a MESMA chave
+// de cache que o caminho antigo usa (o buscarEps de sempre reaproveita a
+// resposta se a ficha do catalogo nao servir). `tipoItem` incerto pergunta
+// serie e, sem temporada, filme (desc_meta_tipos).
+static char *cinemetaMeta(const char *tipoItem, const char *tt, int *ehFilme) {
+  const char *tipos[2];
+  int nTipos = desc_meta_tipos(tipoItem, tipos), ti;
+  char *corpo = NULL;
+  for (ti = 0; ti < nTipos; ti++) {
+    char chave[96], url[300];
+    int ultimo = ti == nTipos - 1;
+    free(corpo);
+    corpo = NULL;
+    desc_meta_chave(chave, sizeof chave, tipos[ti], tt);
+    corpo = metaCacheObter(chave);
+    if (!corpo) {
+      snprintf(url, sizeof url, "%s/meta/%s/%s.json", CINEMETA, tipos[ti], tt);
+      corpo = rede_baixar(url, 10);
+      if (!corpo) { if (ultimo) break; continue; }
+      metaCacheGuardar(chave, corpo);
+    }
+    if (ehFilme) *ehFilme = strcmp(tipos[ti], "series") != 0;
+    if (ultimo || desc_meta_tem_temporadas(corpo)) break;
+  }
+  if (corpo && !metaValida(corpo)) { free(corpo); corpo = NULL; }
+  return corpo;
+}
+
+// ARM (arm.haglund.dev): converte id de anime em IMDb. Publica e sem chave; o
+// unico dado enviado e o numero do id. "kitsu:41370" -> tt9335498. Cache no
+// mesmo metaCache (chave "arm/<id>"). Vazio quando nao ha mapeamento.
+static void armImdb(const char *id, char *dst, size_t n) {
+  static const struct { const char *pref, *fonte; } MAPA[] = {
+    { "kitsu:", "kitsu" }, { "mal:", "myanimelist" }, { "anilist:", "anilist" },
+    { "anidb:", "anidb" }, { "myanimelist:", "myanimelist" },
+  };
+  char chave[96], num[24], url[200], *c;
+  size_t k = 0, i;
+  const char *fonte = NULL;
+  if (n) dst[0] = 0;
+  for (i = 0; i < sizeof MAPA / sizeof *MAPA; i++)
+    if (!strncmp(id, MAPA[i].pref, strlen(MAPA[i].pref))) {
+      fonte = MAPA[i].fonte;
+      id += strlen(MAPA[i].pref);
+      break;
+    }
+  if (!fonte) return;
+  while (id[k] >= '0' && id[k] <= '9' && k + 1 < sizeof num) { num[k] = id[k]; k++; }
+  num[k] = 0;
+  if (!k) return;
+  snprintf(chave, sizeof chave, "arm/%s:%s", fonte, num);
+  c = metaCacheObter(chave);
+  if (!c) {
+    if (metaNegAtiva(chave)) return;
+    snprintf(url, sizeof url, "https://arm.haglund.dev/api/v2/ids?source=%s&id=%s", fonte, num);
+    c = rede_baixar(url, 8);
+    if (!c) { metaNegGuardar(chave); return; }
+    metaCacheGuardar(chave, c);
+  }
+  { char tt[32] = "";
+    if (js_texto_raiz(c, "imdb", tt, sizeof tt) && !strncmp(tt, "tt", 2))
+      snprintf(dst, n, "%s", tt); }
+  free(c);
+}
+
+// Tenta a ficha do addon `i`; guarda em `mf` se valida. Um pedido, no tipo
+// declarado (ou no do item).
+static int tentarFichaDoAddon(MetaFontes *mf, int i, const char *tipoItem, const char *id) {
+  const char *cand[3];
+  int nc = 0, k;
+  char *c = NULL;
+  if (tipoItem && tipoItem[0]) cand[nc++] = tipoItem;
+  if (!tipoItem || strcmp(tipoItem, "series")) cand[nc++] = "series";
+  if (!tipoItem || strcmp(tipoItem, "movie")) cand[nc++] = "movie";
+  // O primeiro tipo que o manifesto nao recusa. Sem nada declarado, o do item.
+  for (k = 0; k < nc; k++) if (addons_aceita_id(i, cand[k], id) != 0) break;
+  if (k >= nc) return 0;
+  c = metaDoAddonT(i, cand[k], id, 8);
+  if (!c) return 0;
+  if (!metaValida(c)) { free(c); return 0; }
+  printf("[desc] ficha do addon %s\n", addons_nome(i));
+  fflush(stdout);
+  metaFontesAdd(mf, c, addons_nome(i), 0);
+  return 1;
+}
+
+// Catalogo primeiro vale para este item? Nao para canal, nem com o ajuste
+// "Usar sempre o Cinemeta". Id do IMDb so quando o item veio de um addon que
+// nao e o Cinemeta (senao a origem JA e o Cinemeta e nada muda).
+static int catalogoPrimeiro(const CatItem *c) {
+  if (!c || !c->imdb[0] || ehCanal(c->tipo) || ajustes_meta_so_cinemeta()) return 0;
+  if (strncmp(c->imdb, "tt", 2)) return 1;
+  return addonDaOrigem(c->origem) >= 0;
+}
+
+// Resolve as fontes na ordem acima. Devolve 1 quando o detalhe deve seguir o
+// caminho do catalogo: ha ficha de um addon, ou (id que nao e do IMDb) ao menos
+// a do Cinemeta achada pelo mapeamento. 0 = nada util; quem chama segue o
+// caminho antigo (Cinemeta para "tt", nada para o resto).
+static int metaCatalogoResolver(const CatItem *orig, MetaFontes *mf) {
+  char id[64];
+  int origem = addonDaOrigem(orig->origem), i, n = addons_n(), extras = 0;
+  int ehImdb = !strncmp(orig->imdb, "tt", 2);
+  memset(mf, 0, sizeof *mf);
+  idbase_copiar(orig->imdb, id, sizeof id);
+  // a) quem publicou
+  if (origem >= 0) tentarFichaDoAddon(mf, origem, orig->tipo, id);
+  // b) outros addons de metadados, na ordem do usuario
+  for (i = 0; i < n && extras < 2 && (!mf->n || !metaCompleta(mf->corpo[0])); i++) {
+    int r;
+    if (i == origem) continue;
+    r = addons_aceita_id(i, orig->tipo, id);
+    if (r == 1 || (r == -1 && ehImdb && addons_sondado(i) && addons_fornece(i, ADD_META))) {
+      if (tentarFichaDoAddon(mf, i, orig->tipo, id)) extras++;
+    }
+  }
+  // O IMDb do titulo: o proprio id, ou o que a ficha revelou.
+  if (ehImdb) snprintf(mf->tt, sizeof mf->tt, "%s", id);
+  else for (i = 0; i < mf->n && !mf->tt[0]; i++) metaImdbDaFicha(mf->corpo[i], mf->tt, sizeof mf->tt);
+  // d) sem IMDb a vista e ficha incompleta: a API ARM
+  if (!mf->tt[0] && !ehImdb && (!mf->n || !metaCompleta(mf->corpo[0])))
+    armImdb(id, mf->tt, sizeof mf->tt);
+  // c) o Cinemeta completa o que faltar (ou e a base, se nenhum addon serviu)
+  if (mf->tt[0]) {
+    int fil = 1;
+    char tp[16] = "";
+    char *cm;
+    if (mf->n) metaTipoProprio(mf->corpo[0], tp, sizeof tp);
+    cm = cinemetaMeta(tp[0] ? tp : orig->tipo, mf->tt, &fil);
+    if (cm) {
+      printf("[desc] ficha do Cinemeta (%s)\n", mf->n ? "complemento" : "por mapeamento");
+      fflush(stdout);
+      metaFontesAdd(mf, cm, "Cinemeta", 1);
+      if (mf->n == 1) mf->ehFilme = fil;
+    }
+  }
+  if (!mf->n) return 0;
+  // Tipo da base. A ficha manda; depois o do item; por ultimo, ter episodios.
+  { char tp[16];
+    metaTipoProprio(mf->corpo[0], tp, sizeof tp);
+    if (tp[0]) mf->ehFilme = !strcmp(tp, "movie");
+    else if (!strcmp(orig->tipo, "movie")) mf->ehFilme = 1;
+    else if (!strcmp(orig->tipo, "series")) mf->ehFilme = 0;
+    else mf->ehFilme = !desc_meta_tem_temporadas(mf->corpo[0]);
+  }
+  // Id do IMDb so com Cinemeta na base nao muda o caminho antigo.
+  if (ehImdb && mf->cine[0]) return 0;
+  return 1;
+}
+
+// Elenco/direcao/generos/nota/pais a partir de uma ficha, so nos campos que
+// `d` ainda tem vazios (`soVazios`=1) ou todos os que a ficha traz (0).
+static void fichaDe(CatItem *d, const char *corpo, int soVazios) {
+  const char *c = js_array(corpo, NULL, "cast");
+  if (!soVazios || !d->nElenco) {
+    int k = 0;
+    while (c && k < CAT_ELENCO_MAX) {
+      size_t n2 = 0;
+      const char *p2 = c;
+      if (*p2 != '"') break;
+      p2++;
+      while (*p2 && *p2 != '"' && n2 + 1 < sizeof d->elenco[k].nome) d->elenco[k].nome[n2++] = *p2++;
+      d->elenco[k].nome[n2] = 0;
+      d->elenco[k].papel[0] = 0;
+      d->elenco[k].foto[0] = 0;
+      d->elenco[k].tmdb = 0;
+      k++;
+      p2++;
+      while (*p2 == ' ') p2++;
+      c = (*p2 == ',') ? p2 + 1 : NULL;
+      while (c && *c == ' ') c++;
+    }
+    if (k) d->nElenco = k;
+  }
+  if (!soVazios || !d->direcao[0]) {
+    const char *dr = js_array(corpo, NULL, "director");
+    if (dr && *dr == '"') {
+      size_t n2 = 0;
+      dr++;
+      while (*dr && *dr != '"' && n2 + 1 < sizeof d->direcao) d->direcao[n2++] = *dr++;
+      d->direcao[n2] = 0;
+    }
+  }
+  { char lista[160];
+    generosDe(corpo, lista, sizeof lista);
+    // O genero que o catalogo trouxe ("Programa de TV") e o rotulo do tipo, nao
+    // um genero: so vale como "ja tem" se veio de uma ficha.
+    if (lista[0] && (!soVazios || !d->genero[0])) snprintf(d->genero, sizeof d->genero, "%s", lista); }
+  if (!soVazios || d->nota <= 0) {
+    double nota = js_num(corpo, NULL, "imdbRating", 0.0);
+    if (nota > 0.0) {
+      int n10 = (int)(nota * 10.0 + 0.5);
+      if (n10 > 99) n10 /= 10;
+      d->nota = n10;
+    }
+  }
+  if (!soVazios || !d->pais[0]) js_texto(corpo, NULL, "country", d->pais, sizeof d->pais);
+}
+
+// As fontes de COMPLEMENTO (a partir da segunda) preenchem o que a base deixou
+// vazio: ficha e sinopse/fundo/logo (completarRaso, que so age em item sem sinopse).
+static void completarFicha(CatItem *d, const MetaFontes *mf, const char *tipo) {
+  int i;
+  for (i = 0; i < mf->n; i++) {
+    // A sinopse por si so: completarRaso exige poster na ficha (deMeta), e uma
+    // ficha de addon sem poster ainda tem a descricao.
+    if (!d->sinopse[0]) {
+      char tit[160], sin[900];
+      if (metaTextos(mf->corpo[i], tit, sizeof tit, sin, sizeof sin) && sin[0])
+        snprintf(d->sinopse, sizeof d->sinopse, "%s", sin);
+    }
+    if (!i) continue;                    // a base ja foi lida por buscarEps
+    fichaDe(d, mf->corpo[i], 1);
+    completarRaso(d, mf->corpo[i], tipo);
+  }
+}
+
+// Episodios do caminho do catalogo. A lista da BASE manda; sem nenhum episodio
+// nela, a da primeira fonte que tem. Mescla episodio a episodio (still, data,
+// duracao, so vazios) apenas quando as duas listas falam o mesmo id — IMDb.
+// Devolve 1 quando os episodios publicados sao de um addon (o TMDB, depois, so
+// preenche o que faltar neles).
+static int episodiosDoCatalogo(int alvoItem, const char *titulo, const char *serie,
+                               const MetaFontes *mf) {
+  int i, fonte = -1, outro = -1;
+  for (i = 0; i < mf->n; i++)
+    if (desc_meta_n_episodios(mf->corpo[i]) > 0) { if (fonte < 0) fonte = i; else if (outro < 0) outro = i; }
+  if (fonte < 0) return 0;
+  // Mesmo espaco de ids: a lista do IMDb (Cinemeta) sobre uma de addon so faz
+  // sentido quando o item tambem e do IMDb.
+  if (outro >= 0 && !(idbase_e_imdb(serie) && mf->cine[outro])) outro = -1;
+  publicarEpisodios(mf->corpo[fonte], alvoItem, titulo,
+                    outro >= 0 ? mf->corpo[outro] : NULL, DESC_MESCLA_VAZIOS);
+  arte_reserva_episodios(serie, mf->corpo[fonte]);
+  return !mf->cine[fonte];
+}
+
 static void *buscarEps(void *u) {
   int alvoItem = epItem;
   const CatItem *orig = cat_item(alvoItem);
   CatItem base;
   const CatItem *it;
   char url[600], *corpo = NULL;
-  char serie[24];
+  char serie[64];
+  MetaFontes mf;
+  int viaCatalogo = 0;
   (void)u;
+  memset(&mf, 0, sizeof mf);
   if (!orig || !orig->imdb[0]) { fioEpVivo = 0; return NULL; }
   // CANAL NAO PASSA AQUI. O Cinemeta so conhece filme/serie por id do IMDb
   // ("tt..."); id de canal e "cs:channel:<hash>". "ehFilme = tipo != series"
@@ -4730,7 +5217,16 @@ static void *buscarEps(void *u) {
   // O Cinemeta so conhece id do IMDb. "kitsu:123"/"mal:456" (addons de anime)
   // eram cortados no ':' e pedidos como /meta/movie/kitsu.json — e "kitsu"
   // virava a chave de cache de TODOS eles, o mesmo vazamento do #37.
-  if (strncmp(orig->imdb, "tt", 2)) { fioEpVivo = 0; return NULL; }
+  //
+  // CATALOGO PRIMEIRO (metaCatalogo, logo acima): a ficha do addon que PUBLICOU o
+  // item, e o Cinemeta so como complemento. Devolve 0 quando nao ha nada
+  // util — ai o caminho de sempre: Cinemeta para "tt", nada para o resto.
+  if (catalogoPrimeiro(orig)) viaCatalogo = metaCatalogoResolver(orig, &mf);
+  if (!viaCatalogo && strncmp(orig->imdb, "tt", 2)) {
+    metaFontesLiberar(&mf);
+    fioEpVivo = 0;
+    return NULL;
+  }
   // TIPO INCERTO ("anime" de catalogo do AIOMetadata, ou qualquer outro que
   // nao seja filme nem serie) NAO VIRA FILME POR PADRAO: pergunta como serie
   // e, sem temporada nenhuma, como filme. O que o /meta responder decide, e
@@ -4740,11 +5236,14 @@ static void *buscarEps(void *u) {
   int nTipos = desc_meta_tipos(orig->tipo, tipos), ti, ehFilme = 1;
   base = *orig;
   it = &base;
-  { const char *dp;
-    snprintf(serie, sizeof serie, "%s", it->imdb);
-    dp = strchr(serie, ':');
-    if (dp) *(char *)dp = 0; }
+  // idbase_copiar: "kitsu:41370" fica inteiro (cortar no primeiro ':' dava
+  // "kitsu"); para o IMDb e o mesmo corte de sempre.
+  idbase_copiar(it->imdb, serie, sizeof serie);
 
+  if (viaCatalogo) {
+    corpo = strdup(mf.corpo[0]);   // o resto do fio libera `corpo` como sempre
+    ehFilme = mf.ehFilme;
+  } else
   for (ti = 0; ti < nTipos; ti++) {
     char chave[40];
     int ultimo = ti == nTipos - 1;
@@ -4765,7 +5264,7 @@ static void *buscarEps(void *u) {
     ehFilme = strcmp(tipos[ti], "series") != 0;
     if (ultimo || desc_meta_tem_temporadas(corpo)) break;
   }
-  if (!corpo) { fioEpVivo = 0; return NULL; }
+  if (!corpo) { metaFontesLiberar(&mf); fioEpVivo = 0; return NULL; }
   if (nTipos > 1) {
     const char *resolvido = ehFilme ? "movie" : "series";
     printf("[desc] %s: tipo '%s' do catalogo resolvido como '%s' pelo /meta\n",
@@ -4782,9 +5281,12 @@ static void *buscarEps(void *u) {
   // ligado e sem a preferencia, e ele quem traduz (mais abaixo).
   int externo = ajustes_meta_externo();
   int tmdbTraduz = desc_chave_tmdb()[0] && ajustes_tmdb_basico();
-  int aplicar = externo || (idiomaNaoIngles() && !tmdbTraduz);
+  // Na ficha do catalogo o texto JA e o do addon; a preferencia nao tem o que trocar.
+  int aplicar = !viaCatalogo && (externo || (idiomaNaoIngles() && !tmdbTraduz));
   int epsDoAddon = 0;
-  if (!ehFilme) {
+  if (!ehFilme && viaCatalogo)
+    epsDoAddon = episodiosDoCatalogo(alvoItem, it->titulo, serie, &mf);
+  else if (!ehFilme) {
     int nCine = publicarEpisodios(corpo, alvoItem, it->titulo, NULL, 0);
     // Temporada e data de cada episodio para a reserva do still: quando o
     // TMDB divide a serie em outras temporadas (One Piece), e por elas que o
@@ -4851,7 +5353,7 @@ static void *buscarEps(void *u) {
       edit.nTemporadas = 0;
       while (v) {
         const char *fv = js_fim(v);
-        int t2 = (int)js_num(v, fv, "season", -1);
+        int t2 = videoTemporada(v, fv);
         if (t2 > 0) {
           int j, achou = 0;
           for (j = 0; j < edit.nTemporadas; j++)
@@ -4869,6 +5371,7 @@ static void *buscarEps(void *u) {
               edit.temporadas[j2] = tmp;
             } } }
     completarRaso(&edit, corpo, ehFilme ? "movie" : "series");
+    if (viaCatalogo) completarFicha(&edit, &mf, ehFilme ? "movie" : "series");
     // TITULO, SINOPSE E GENEROS DO ADDON DE METADADOS (#176). So campo que o
     // addon preencheu troca o do Cinemeta; o que ele nao tem fica como estava.
     if (aplicar) {
@@ -4908,7 +5411,12 @@ static void *buscarEps(void *u) {
       snprintf(idBase, sizeof idBase, "%s", it->imdb);
       dp = strchr(idBase, ':');
       if (dp) *(char *)dp = 0;
-      fotosDoElenco(&edit, idBase, !strcmp(it->tipo, "series"), manter); }
+      // O TMDB casa por IMDb. Id de outro espaco ("kitsu:41370") ficaria sem
+      // elenco de fotos, e de proposito nao usa o "tt" mapeado: o entry do Kitsu
+      // e UMA temporada, e o titulo/sinopse do TMDB da serie inteira
+      // sobrescreveriam os dela.
+      if (idbase_e_imdb(it->imdb))
+        fotosDoElenco(&edit, idBase, !strcmp(it->tipo, "series"), manter); }
     cat_atualizar_item(alvoItem, &edit);
     printf("[desc] %s: %d atores, dir='%s', %d temporadas\n",
            edit.titulo, edit.nElenco, edit.direcao, edit.nTemporadas);
@@ -4919,7 +5427,7 @@ static void *buscarEps(void *u) {
     // episodio. edit.tmdb ja foi resolvido por fotosDoElenco; se o /find dela
     // falhou (rede), resolve-se aqui pelo mesmo /find. "Titulo e sinopse" e a
     // porta: quem desligou o TMDB nao quer este trafego. Republica so se alguma nota entrou.
-    if (!ehFilme && ajustes_tmdb_basico()) {
+    if (!ehFilme && ajustes_tmdb_basico() && idbase_e_imdb(serie)) {
       const char *chave2 = desc_chave_tmdb();
       long tmdbId = edit.tmdb;
       if (chave2[0] && tmdbId <= 0) {
@@ -4980,6 +5488,7 @@ static void *buscarEps(void *u) {
   }
 
   free(corpo);
+  metaFontesLiberar(&mf);
   fioEpVivo = 0;
   return NULL;
 }
@@ -5293,6 +5802,7 @@ static void *fioVerTudo(void *u) {
     const char *f=js_fim(p);raw++;
     CatItem it;
     if (deMeta(p, f, type, &it)) {
+      origemDaBase(base, it.origem, sizeof it.origem);
       pthread_mutex_lock(&vtTrava);
       int duplicate=0;
       for(int i=0;i<vtN;i++)if(it.imdb[0]&&!strcmp(vtItens[i].imdb,it.imdb)&&!strcmp(vtItens[i].tipo,it.tipo)){duplicate=1;break;}

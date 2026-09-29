@@ -123,6 +123,8 @@ int cat_gravar_cache_se_identidade(const char *d, const char *u, int p) {
 // desc_chave_tmdb consulta estes stubs pelo caminho inteiro.
 int   ajustes_tmdb_ligado(void)            { return 1; }
 int   ajustes_meta_externo(void)           { return 0; }
+int   ajustes_meta_so_cinemeta(void)        { return 0; }
+int   addons_aceita_id(int i, const char *t, const char *id) { (void)i; (void)t; (void)id; return -1; }
 const char *ajustes_tmdb_idioma(void)      { return "pt-BR"; }
 int   cat_acrescentar(const CatItem *i)    { (void)i; return -1; }
 void  cat_atualizar_item(int i, const CatItem *n) { (void)i; (void)n; }

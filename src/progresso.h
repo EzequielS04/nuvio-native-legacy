@@ -34,7 +34,7 @@
 typedef struct {
   int  perfil;
   char chave[48];       // progress_key, igual ao web: "tt123_s4e9" ou "tt123"
-  char contentId[24];   // titulo puro, sem ":temp:ep"
+  char contentId[48];   // titulo puro, sem ":temp:ep" ("tt...", "kitsu:41370", "tmdb:t1399")
   char tipo[8];         // "movie" | "series"
   int  temporada, episodio;   // 0 quando filme
   double posSeg, durSeg;

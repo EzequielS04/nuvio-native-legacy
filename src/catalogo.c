@@ -1,4 +1,5 @@
 #include "catalogo.h"
+#include "idbase.h"
 #include "tendencia.h"
 #include "artereserva.h"
 // FRACO: os testes leves compilam catalogo.c sozinho (tests/catcache.sh e
@@ -1210,6 +1211,32 @@ const CatEp *cat_episodio(int indiceItem, int i) {
   indiceItem = ((indiceItem % m) + m) % m;
   if (i < 0 || i >= epQtd[indiceItem]) return NULL;
   return &eps[epIni[indiceItem] + i];
+}
+
+int cat_id_stream(int indiceItem, int t, int e, char *dst, unsigned tam) {
+  const CatItem *c = cat_item(indiceItem);
+  char base[96];
+  int i, n;
+  if (!dst || !tam) return 0;
+  dst[0] = 0;
+  if (!c || !c->imdb[0]) return 0;
+  idbase_copiar(c->imdb, base, sizeof base);
+  if (t <= 0 || e <= 0) { snprintf(dst, tam, "%s", c->imdb); return 1; }
+  if (!idbase_e_imdb(c->imdb)) {
+    n = cat_n_episodios(indiceItem);
+    for (i = 0; i < n; i++) {
+      const CatEp *ep = cat_episodio(indiceItem, i);
+      if (ep && ep->temporada == t && ep->episodio == e && ep->vid[0]) {
+        snprintf(dst, tam, "%s", ep->vid);
+        return 1;
+      }
+    }
+    // Sem o video: a convencao dos addons de anime e "<id>:<episodio>".
+    snprintf(dst, tam, "%s:%d", base, e);
+    return 1;
+  }
+  snprintf(dst, tam, "%s:%d:%d", base, t, e);
+  return 1;
 }
 
 int cat_n_fileiras(void) { return nFils; }

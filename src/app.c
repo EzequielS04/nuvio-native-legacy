@@ -427,7 +427,9 @@ static void idDoAlvo(const CatItem *ci, char *dst, size_t n) {
   int t = 0, e = 0;
   if (!ci) { if (n) dst[0] = 0; return; }
   if (!strcmp(ci->tipo, "series") && detail_ep_foco(&t, &e) && t > 0 && e > 0)
-    snprintf(dst, n, "%.*s:%d:%d", (int)strcspn(ci->imdb,":"),ci->imdb, t, e);
+    // cat_id_stream: "tt:T:E" no IMDb; o id do video do addon nos demais
+    // ("kitsu:41370:5"). Os dois callers passam o item do detalhe.
+    cat_id_stream(detail_indice(), t, e, dst, (unsigned)n);
   else
     snprintf(dst, n, "%s", ci->imdb);
 }
@@ -461,7 +463,7 @@ static void alvoPlayer(char *alvo, size_t tam) {
   // republicacao do catalogo ja pode ter apontado para outro item.
   if (player_id_canal()[0]) { snprintf(alvo,tam,"%s",player_id_canal()); return; }
   if (!c) { alvo[0] = 0; return; }
-  if (t > 0 && e > 0) snprintf(alvo,tam,"%.*s:%d:%d",(int)strcspn(c->imdb,":"),c->imdb,t,e);
+  if (t > 0 && e > 0) cat_id_stream(player_indice(), t, e, alvo, (unsigned)tam);
   else snprintf(alvo,tam,"%s",c->imdb);
 }
 static void buscarParaPlayer(void) {
@@ -1942,11 +1944,11 @@ void app_atualizar(float dt, Uint32 agora) {
     // titulo aberto 3 s depois do arranque consultava os 4 addons do pacote
     // ("total 0"), a lista da conta chegava aos 5 s com 12, e ninguem repetia
     // a consulta — a folha de fontes ficava vazia ate trocar de titulo.
-    { static char ultimoAlvo[32] = "";
+    { static char ultimoAlvo[64] = "";
       static unsigned ultimaVersao = 0;
       int i = detail_indice();
       const CatItem *ci = cat_item(i);
-      char alvo[32];
+      char alvo[64];
       idDoAlvo(ci, alvo, sizeof alvo);
       if (!player_aberto() && aguardandoFonte != 2 && ci && ci->imdb[0] &&
           (strcmp(alvo, ultimoAlvo) || (detail_aberto() && ultimaVersao != addons_versao()))) {
