@@ -41,6 +41,7 @@ static int arqDiscoTem(const char *dst);
 #include "artereserva.h"
 #include "artetamanho.h"
 #include "perfiltv.h"
+#include "posterprov.h"
 #include <stdint.h>
 #include "cachearte.h"
 #include <string.h>
@@ -1314,7 +1315,15 @@ void tex_cache_esperar_gravacoes(void) {
 // Baixa UMA url e devolve o corpo so se ele for imagem; NULL com a razao no
 // log. Separado de garantirLocal para a reserva do TMDB passar pelo mesmo
 // crivo (assinatura, tamanho) que a url original.
+// URL DE PROVEDOR DE POSTER NUNCA VAI PARA O LOG COM O QUE TEM DEPOIS DO HOST:
+// o token do SpatialPosters e a chave do RPDB moram na query/caminho
+// (posterprov.h). As demais URLs continuam como sempre foram.
+static const char *urlLog(const char *url, char *buf, size_t n) {
+  return posterprov_e_provedor(url) ? posterprov_redigir(url, buf, n) : url;
+}
+
 static char *baixarImagem(const char *url, long *n, TexFetchTrace *trace) {
+  char urlLogBuf[96];
   char *corpo;
   // URL VIRTUAL DE FONTE (artereserva.h): o fundo do TMDB/Trakt de um item que
   // so trouxe o do catalogo. Resolve aqui, no fio de rede, e baixa a real; o
@@ -1326,7 +1335,7 @@ static char *baixarImagem(const char *url, long *n, TexFetchTrace *trace) {
     r = arte_fonte_resolver(url, real, sizeof real);
     if (trace) trace->resolveMs += SDL_GetTicks() - t;
     if (r < 0) {
-      printf("[tex] fonte sem fundo para: %.70s\n", url);
+      printf("[tex] fonte sem fundo para: %.70s\n", urlLog(url, urlLogBuf, sizeof urlLogBuf));
       fflush(stdout);
       return NULL;
     }
@@ -1349,6 +1358,15 @@ static char *baixarImagem(const char *url, long *n, TexFetchTrace *trace) {
       corpo = rede_postar_bin(NV_REC_URL "/v1/xtream", 8, url, n);
     else
 #endif
+    if (posterprov_e_provedor(url)) {
+      // PROVEDOR DE POSTER (posterprov.h): no maximo PP_SIMULT juntos, e prazo
+      // de 20 s porque um cartaz frio e RENDERIZADO no servidor (medido: ~3 s
+      // na instancia publica, ate 30 s no limite dela). O portao fica so em
+      // volta do download; esperar vaga nao gasta o prazo.
+      posterprov_portao_entrar();
+      corpo = rede_baixar_bin(url, 20, n);
+      posterprov_portao_sair();
+    } else
     corpo = rede_baixar_bin(url, 8, n);
     if (trace) {
       trace->netMs += SDL_GetTicks() - t;
@@ -1366,8 +1384,8 @@ static char *baixarImagem(const char *url, long *n, TexFetchTrace *trace) {
     // downloads tentados, ZERO linha de log e zero textura — com o comentario
     // logo acima afirmando que este ramo ja nao era mudo. Como nada guarda a
     // falha, cada quadro pedia de novo as mesmas URLs, para sempre.
-    if (corpo) printf("[tex] corpo curto (%ld B): %.70s\n", *n, url);
-    else       printf("[tex] download falhou (sem corpo): %.70s\n", url);
+    if (corpo) printf("[tex] corpo curto (%ld B): %.70s\n", *n, urlLog(url, urlLogBuf, sizeof urlLogBuf));
+    else       printf("[tex] download falhou (sem corpo): %.70s\n", urlLog(url, urlLogBuf, sizeof urlLogBuf));
     fflush(stdout);
     free(corpo);
     return NULL;
@@ -1384,7 +1402,7 @@ static char *baixarImagem(const char *url, long *n, TexFetchTrace *trace) {
        (b0[0] == 'R'  && b0[1] == 'I'  && b0[2] == 'F'  && b0[3] == 'F' &&
         *n > 12 && b0[8] == 'W' && b0[9] == 'E' && b0[10] == 'B' && b0[11] == 'P'));
     if (!ok) {
-      printf("[tex] resposta nao e imagem (%ld B): %.70s\n", *n, url);
+      printf("[tex] resposta nao e imagem (%ld B): %.70s\n", *n, urlLog(url, urlLogBuf, sizeof urlLogBuf));
       fflush(stdout);
       free(corpo);
       return NULL;
@@ -1668,7 +1686,7 @@ static int baixarParaItem(int idx, const char *url, char *dst, size_t tam, int *
     SDL_LockMutex(mtx);
     if (!mesmoPedido(idx, pedido)) {
       SDL_UnlockMutex(mtx); free(corpo);
-      printf("[tex] bytes descartados: o slot virou outro pedido durante o download (%.60s)\n", pedido);
+      { char lb[96]; printf("[tex] bytes descartados: o slot virou outro pedido durante o download (%.60s)\n", urlLog(pedido, lb, sizeof lb)); }
       fflush(stdout);
       return -1;
     }
@@ -1728,7 +1746,7 @@ static int baixarParaItem(int idx, const char *url, char *dst, size_t tam, int *
     SDL_LockMutex(mtx);
     if (!mesmoPedido(idx, pedido)) {
       SDL_UnlockMutex(mtx); free(corpo);
-      printf("[tex] bytes descartados: o slot virou outro pedido durante o download (%.60s)\n", pedido);
+      { char lb[96]; printf("[tex] bytes descartados: o slot virou outro pedido durante o download (%.60s)\n", urlLog(pedido, lb, sizeof lb)); }
       fflush(stdout);
       return -1;
     }
@@ -2357,7 +2375,7 @@ static int threadDecode(void *arg) {
     // (mesmoPedido): nao sendo o mesmo caminho, a superficie vai para o lixo.
     if (strcmp(itens[idx].caminho, urlOrig)) {
       if (conv) SDL_FreeSurface(conv);
-      printf("[tex] decode descartado: o slot virou outro pedido (%.60s)\n", urlOrig);
+      { char lb[96]; printf("[tex] decode descartado: o slot virou outro pedido (%.60s)\n", urlLog(urlOrig, lb, sizeof lb)); }
       fflush(stdout);
       SDL_UnlockMutex(mtx);
       continue;
@@ -2435,8 +2453,9 @@ static int threadDecode(void *arg) {
         if (g) { fseek(g, 0, SEEK_END); tam = ftell(g); rewind(g);
                  if (fread(mag, 1, 4, g) != 4) { }
                  fclose(g); } }
+      { char lb[96];
       printf("[tex] decode falhou (%s) tam=%ld magica=%02x%02x%02x%02x: %.70s\n",
-             IMG_GetError(), tam, mag[0], mag[1], mag[2], mag[3], caminho);
+             IMG_GetError(), tam, mag[0], mag[1], mag[2], mag[3], urlLog(caminho, lb, sizeof lb)); }
       // GIF INTEIRO NAO E ARQUIVO ENVENENADO — E ARQUIVO DE OUTRO LEITOR.
       //
       // Issue #49, e as duas fotos do log do @rawldon fecham a cadeia: o
@@ -2783,8 +2802,16 @@ int tex_historico(long *saida, int max) {
   return n;
 }
 
+// O que o posterprov precisa saber de uma URL de provedor: -1 falhou (HTTP,
+// prazo, corpo que nao e imagem, decode), 1 ja tem textura, 0 ainda vai.
+static int estadoPoster(const char *url) {
+  if (tex_falhou(url)) return -1;
+  return tex_aspecto(url) > 0.0f ? 1 : 0;
+}
+
 int tex_iniciar(int max_itens) {
   int mb = orcamentoMB();
+  posterprov_hook_estado(estadoPoster);
   int fiosDecode = NV_TEX_FIOS, fiosRede = NV_TEX_FIOS_REDE;
   // Os outros dois padroes do aparelho (fios ativos e teto do heroi) saem da
   // MESMA tabela do orcamento. Ver perfiltv.c.

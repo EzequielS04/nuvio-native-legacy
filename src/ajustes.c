@@ -44,6 +44,8 @@
 #include "artereserva.h"
 #include "corviva.h"
 #include "p2p.h"
+#include "posterprov.h"
+#include "rede.h"
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -189,11 +191,17 @@ typedef enum {
   // P2P experimental (p2p.h). No fim pelo mesmo motivo: valor[] e CHAVE[] sao
   // posicionais.
   AJ_P2P_LIGADO, AJ_P2P_URL, AJ_P2P_TESTAR,
+  // Posteres personalizados (posterprov.h). No fim pelo mesmo motivo.
+  AJ_POSTER_PROV, AJ_POSTER_INST, AJ_POSTER_TOKEN, AJ_POSTER_EXTRA,
+  AJ_POSTER_CHAVE, AJ_POSTER_MODELO, AJ_POSTER_TESTAR,
   AJ_N
 } OpcaoId;
 
 static const char *V_QUALIDADE[] = { "Automática", "4K", "1080p", "720p" };
 static const char *V_LIGA[]      = { "Ligado", "Desligado" };
+// Provedor dos posteres personalizados. O INDICE e o gravado ("posterProvLocal")
+// e o PP_* de posterprov.h: so acrescentar no fim.
+static const char *V_POSTER_PROV[] = { "Desligado", "SpatialPosters", "RPDB", "Modelo próprio" };
 // "Fonte automatica" (issue #130). O INDICE e o gravado (fonteAutoLocal) e o
 // FONTEAUTO_* de fonteauto.h: 0 = a regra de pontuacao, 1 = a primeira da
 // lista do addon, e so ela — o "Auto-play first source" do Nuvio.
@@ -664,6 +672,15 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Servidor P2P (experimental)",     V_LIGA, 2),   // local: p2pLocal
   ACAO("Endereço do servidor P2P"),
   ACAO("Testar servidor P2P"),
+  // POSTERES PERSONALIZADOS (posterprov.h). Desligado de fabrica. LOCAL: o web
+  // nao tem esta escolha e o servico e por aparelho/rede.
+  ESC("Pôsteres personalizados",         V_POSTER_PROV, 4),   // local: posterProvLocal
+  ACAO("Endereço do SpatialPosters"),
+  ACAO("Token do SpatialPosters"),
+  ACAO("Parâmetros do SpatialPosters"),
+  ACAO("Chave do RPDB"),
+  ACAO("Modelo de URL dos pôsteres"),
+  ACAO("Testar pôsteres"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -780,6 +797,10 @@ static const char *CHAVE[] = {
   // Ligado: LOCAL e SEM o "-" (sobrevive ao fechamento). O endereco mora em
   // p2p.txt (dados), por aparelho; o teste e so uma acao.
   "p2pLocal", "-p2pEndereco", "-p2pTestar",
+  // Escolha LOCAL e sem "-". Os campos moram em posteres.txt (dados), por
+  // aparelho, e o teste e so uma acao.
+  "posterProvLocal", "-posterInst", "-posterToken", "-posterExtra",
+  "-posterChave", "-posterModelo", "-posterTestar",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -889,6 +910,10 @@ static const Item TELA[] = {
       OPC(AJ_PROF), OPC(AJ_PROF_BORDA), OPC(AJ_PROF_BRILHO),
       OPC(AJ_PROF_COBERTURA), OPC(AJ_PROF_POSTERS), OPC(AJ_PROF_CW),
       OPC(AJ_PROF_EPS), OPC(AJ_PROF_ELENCO), OPC(AJ_PROF_TRAILERS),
+    GRP("Pôsteres personalizados", "Cartazes prontos de um serviço externo, com notas e selos.", "aj_images"),
+      OPC(AJ_POSTER_PROV), OPC(AJ_POSTER_INST), OPC(AJ_POSTER_TOKEN),
+      OPC(AJ_POSTER_EXTRA), OPC(AJ_POSTER_CHAVE), OPC(AJ_POSTER_MODELO),
+      OPC(AJ_POSTER_TESTAR),
 
   // O "Content & Discovery" do web (addons e plugins). Os portais IPTV moram
   // aqui porque sao exatamente isto: mais uma fonte de conteudo, e nao dados
@@ -1013,6 +1038,13 @@ static int secFim(int s) { return s + 1 < nSecoes ? secIni[s + 1] : AJ_N_TELA; }
 static int  nValores(int op);
 // Definida junto da leitura do arquivo, bem abaixo; declarada aqui porque o
 // setter de "onde o + salva" grava na hora e vem antes dela.
+static int inativa(int op);
+static void pstAplicar(void);
+static void pstCarregar(void);
+static void pstDefinir(int op, const char *texto);
+static void pstAtivar(int op);
+static void pstTesteRecolher(void);
+static const char *pstTexto(int op);
 static void gravar(void);
 static void aplicarIdioma(int op);
 static int somenteDesteAparelho(int op);
@@ -1179,6 +1211,8 @@ static int valor[] = {
   1,                /* interface de vidro: DESLIGADA (V_LIGA: 1 = Desligado) */
   1,                /* servidor P2P: DESLIGADO (V_LIGA: 1 = Desligado) */
   0, 0,             /* endereco, testar: acoes */
+  0,                /* posteres personalizados: DESLIGADO (indice 0) */
+  0, 0, 0, 0, 0, 0,/* endereco, token, parametros, chave, modelo, testar: acoes */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1779,6 +1813,7 @@ void ajustes_dir(const char *dir) {
   snprintf(dirAjustes, sizeof dirAjustes, "%s", dir);
   fanartCarregar();
   p2pCarregar();
+  pstCarregar();
   // ANTES DO LACO, e nao so no fim (#129): limita() confere as duas linhas de
   // idioma contra nValores() -> nLingua, e quem preenche nLingua e esta
   // chamada. No arranque ela ainda nao tinha rodado: a lista tinha "1 valor",
@@ -1881,6 +1916,7 @@ void ajustes_dir(const char *dir) {
   // O teto de imagens escolhido vale desde o arranque, nao so quando a tela
   // de Ajustes e aberta. tex_iniciar ja rodou (main.c); isto so o corrige.
   if (valor[AJ_TEX_MB] > 0) tex_definir_orcamento_mb(ajustes_tex_mb());
+  pstAplicar();
 }
 
 static void gravar(void) {
@@ -1917,6 +1953,258 @@ static void gravar(void) {
   // OUTRO modulo pedisse — e num app que so navegou, ate o proximo arranque,
   // onde voltava ao padrao. Na LG o disco e real e nada disto acontecia.
   dados_marcar_sujo(0);
+  // Provedor de poster ou idioma da interface mudaram? So reconfigura se a
+  // configuracao final for outra (reconfigurar zera a memoria de falhas).
+  pstAplicar();
+}
+
+
+// POSTERES PERSONALIZADOS (posterprov.h). Os campos moram em posteres.txt
+// (chave=valor por linha) na pasta de dados: por aparelho, como fanart.txt e
+// p2p.txt. O provedor escolhido mora em ajustes.txt (posterProvLocal).
+//
+// NADA DISTO VAI PARA O LOG NEM PARA A TELA POR INTEIRO: o token e a chave
+// aparecem mascarados ("····abcd"), como a chave do fanart.tv.
+static char pstInst[PP_INSTANCIA_MAX], pstToken[PP_TOKEN_MAX + 1], pstExtra[PP_EXTRA_MAX + 1];
+static char pstChave[PP_CHAVE_MAX], pstModelo[PP_MODELO_MAX];
+// Ultima recusa de um campo digitado (0 = nenhuma); aparece na linha "Testar".
+enum { PST_OK = 0, PST_TOKEN_RUIM, PST_INST_RUIM, PST_EXTRA_RUIM, PST_CHAVE_RUIM, PST_MODELO_RUIM };
+static int pstAviso;
+
+static const char *pstCodigoLingua(void) {
+  static const char *L[] = { "pt", "en", "ro", "uk", "ru", "fr", "de", "es" };
+  int i = ajustes_idioma();
+  return (i >= 0 && i < 8) ? L[i] : "pt";
+}
+// Copia sem estourar `n` (e sem o aviso de truncamento do snprintf).
+static void pstCopia(char *dst, size_t n, const char *src) {
+  size_t k = src ? strlen(src) : 0;
+  if (k >= n) k = n - 1;
+  if (k) memcpy(dst, src, k);
+  dst[k] = 0;
+}
+static void pstAplicar(void) {
+  PosterProvCfg c;
+  memset(&c, 0, sizeof c);
+  c.prov = valor[AJ_POSTER_PROV];
+  pstCopia(c.instancia, sizeof c.instancia, pstInst);
+  pstCopia(c.token, sizeof c.token, pstToken);
+  pstCopia(c.extra, sizeof c.extra, pstExtra);
+  pstCopia(c.chave, sizeof c.chave, pstChave);
+  pstCopia(c.modelo, sizeof c.modelo, pstModelo);
+  pstCopia(c.lang, sizeof c.lang, pstCodigoLingua());
+  if (memcmp(&c, posterprov_cfg(), sizeof c)) posterprov_configurar(&c);
+}
+static void pstSalvar(void) {
+  char b[PP_INSTANCIA_MAX + PP_TOKEN_MAX + PP_EXTRA_MAX + PP_CHAVE_MAX + PP_MODELO_MAX + 64];
+  if (!pstInst[0] && !pstToken[0] && !pstExtra[0] && !pstChave[0] && !pstModelo[0]) {
+    dados_apagar("posteres.txt");
+    return;
+  }
+  snprintf(b, sizeof b, "inst=%s\ntoken=%s\nextra=%s\nchave=%s\nmodelo=%s\n",
+           pstInst, pstToken, pstExtra, pstChave, pstModelo);
+  dados_gravar("posteres.txt", b);
+}
+static void pstCarregar(void) {
+  char *t = dados_ler("posteres.txt"), *p, *fim;
+  char v[PP_MODELO_MAX + 8];
+  pstInst[0] = pstToken[0] = pstExtra[0] = pstChave[0] = pstModelo[0] = 0;
+  for (p = t; p && *p; p = fim ? fim + 1 : NULL) {
+    char *eq;
+    size_t n;
+    fim = strchr(p, '\n');
+    n = fim ? (size_t)(fim - p) : strlen(p);
+    eq = memchr(p, '=', n);
+    if (!eq) continue;
+    { size_t nv = n - (size_t)(eq + 1 - p);
+      if (nv >= sizeof v) continue;
+      memcpy(v, eq + 1, nv); v[nv] = 0;
+      if (nv && v[nv - 1] == '\r') v[nv - 1] = 0; }
+    // Reaplica as MESMAS validacoes de quando se digita: arquivo editado a mao
+    // ou de outra versao nao pode virar URL torta.
+    if (!strncmp(p, "inst=", 5)) { if (!posterprov_normalizar_instancia(v, pstInst, sizeof pstInst)) pstInst[0] = 0; }
+    else if (!strncmp(p, "token=", 6)) { if (!posterprov_extrair_token(v, pstToken, sizeof pstToken, NULL, 0)) pstToken[0] = 0; }
+    else if (!strncmp(p, "extra=", 6)) { if (!posterprov_extra_normalizar(v, pstExtra, sizeof pstExtra)) pstExtra[0] = 0; }
+    else if (!strncmp(p, "chave=", 6)) { pstCopia(pstChave, sizeof pstChave, v); }
+    else if (!strncmp(p, "modelo=", 7)) { if (posterprov_modelo_valido(v)) pstCopia(pstModelo, sizeof pstModelo, v); }
+  }
+  free(t);
+}
+// O que a pessoa digitou/colou num campo. Vazio apaga.
+static void pstDefinir(int op, const char *texto) {
+  char b[PP_MODELO_MAX + 8], inst[PP_INSTANCIA_MAX];
+  size_t i = 0, k;
+  pstAviso = PST_OK;
+  while (texto && (texto[i] == ' ' || texto[i] == '\t')) i++;
+  pstCopia(b, sizeof b, texto ? texto + i : "");
+  k = strlen(b);
+  while (k && (b[k - 1] == ' ' || b[k - 1] == '\t')) b[--k] = 0;
+  switch (op) {
+    case AJ_POSTER_INST:
+      if (!b[0]) pstInst[0] = 0;
+      else if (!posterprov_normalizar_instancia(b, pstInst, sizeof pstInst)) { pstAviso = PST_INST_RUIM; return; }
+      break;
+    case AJ_POSTER_TOKEN:
+      // Aceita o manifest colado inteiro: o host vira a instancia.
+      if (!posterprov_extrair_token(b, pstToken, sizeof pstToken, inst, sizeof inst)) { pstAviso = PST_TOKEN_RUIM; return; }
+      if (inst[0]) pstCopia(pstInst, sizeof pstInst, inst);
+      break;
+    case AJ_POSTER_EXTRA:
+      if (!posterprov_extra_normalizar(b, pstExtra, sizeof pstExtra)) { pstAviso = PST_EXTRA_RUIM; return; }
+      break;
+    case AJ_POSTER_CHAVE: {
+      PosterProvCfg c;
+      char u[PP_URL_MAX];
+      memset(&c, 0, sizeof c);
+      c.prov = PP_RPDB;
+      pstCopia(c.chave, sizeof c.chave, b);
+      if (b[0] && !posterprov_montar_url(&c, "tt0111161", 0, "movie", u, sizeof u)) { pstAviso = PST_CHAVE_RUIM; return; }
+      pstCopia(pstChave, sizeof pstChave, b);
+      break; }
+    case AJ_POSTER_MODELO:
+      if (b[0] && !posterprov_modelo_valido(b)) { pstAviso = PST_MODELO_RUIM; return; }
+      pstCopia(pstModelo, sizeof pstModelo, b);
+      break;
+  }
+  pstSalvar();
+  pstAplicar();
+}
+
+// "TESTAR POSTERES": baixa o cartaz de um filme conhecido. Um cartaz frio e
+// montado no servidor (medido ~3 s na instancia publica), entao o prazo e de
+// 20 s e a TV nao pode parar de desenhar: um fio por vez, recolhido em
+// ajustes_atualizar (mesmo desenho do teste do servidor P2P).
+static pthread_t pstFio;
+static int pstFioVivo;
+static _Atomic int pstTeste;            // 0 nunca, 1 testando, 2 pronto, 3 fio acabou
+enum { PST_T_OK = 0, PST_T_CONFIG, PST_T_SEM_RESPOSTA, PST_T_NAO_IMAGEM };
+static int pstTesteRes;
+static long pstTesteKB, pstTesteMs;
+static void *pstTesteFio(void *u) {
+  PosterProvCfg c = *posterprov_cfg();
+  char url[PP_URL_MAX];
+  long n = 0;
+  (void)u;
+  if (!posterprov_montar_url(&c, "tt0111161", 278, "movie", url, sizeof url)) {
+    pstTesteRes = PST_T_CONFIG;
+  } else {
+    Uint32 t0 = SDL_GetTicks();
+    char *r = rede_baixar_bin(url, 20, &n);
+    pstTesteMs = (long)(SDL_GetTicks() - t0);
+    pstTesteKB = (n + 512) / 1024;
+    if (!r || n <= 512) pstTesteRes = PST_T_SEM_RESPOSTA;
+    else {
+      const unsigned char *b0 = (const unsigned char *)r;
+      int img = (b0[0] == 0xFF && b0[1] == 0xD8) || (b0[0] == 0x89 && b0[1] == 'P') ||
+                (b0[0] == 'R' && b0[1] == 'I' && b0[2] == 'F' && b0[3] == 'F');
+      pstTesteRes = img ? PST_T_OK : PST_T_NAO_IMAGEM;
+    }
+    free(r);
+  }
+  atomic_store_explicit(&pstTeste, 3, memory_order_release);
+  return NULL;
+}
+static void pstTesteIniciar(void) {
+  if (pstFioVivo) return;
+  pstAviso = PST_OK;
+  pstAplicar();
+  atomic_store_explicit(&pstTeste, 1, memory_order_release);
+  if (pthread_create(&pstFio, NULL, pstTesteFio, NULL) != 0) {
+    pstTesteRes = PST_T_SEM_RESPOSTA;
+    atomic_store_explicit(&pstTeste, 2, memory_order_release);
+    return;
+  }
+  pstFioVivo = 1;
+}
+static void pstTesteRecolher(void) {
+  if (pstFioVivo && atomic_load_explicit(&pstTeste, memory_order_acquire) == 3) {
+    pthread_join(pstFio, NULL);
+    pstFioVivo = 0;
+    atomic_store_explicit(&pstTeste, 2, memory_order_release);
+  }
+}
+static const char *pstMascara(const char *seg) {
+  static char m[24];
+  size_t n = strlen(seg);
+  if (!n) return i18n("Não configurado");
+  snprintf(m, sizeof m, "····%s", n > 4 ? seg + n - 4 : "");
+  return m;
+}
+static const char *pstTexto(int op) {
+  static char buf[96];
+  switch (op) {
+    case AJ_POSTER_INST:
+      return pstInst[0] ? pstInst : i18n("Instância pública");
+    case AJ_POSTER_TOKEN:  return pstMascara(pstToken);
+    case AJ_POSTER_EXTRA:  return pstExtra[0] ? pstExtra : i18n("Nenhum");
+    case AJ_POSTER_CHAVE:  return pstMascara(pstChave);
+    case AJ_POSTER_MODELO:
+      if (!pstModelo[0]) return i18n("Não configurado");
+      return posterprov_redigir(pstModelo, buf, sizeof buf);   // so o host
+    default: break;
+  }
+  // AJ_POSTER_TESTAR
+  switch (pstAviso) {
+    case PST_TOKEN_RUIM:  return i18n("token inválido (até 400 letras, números e _ . ~ = -)");
+    case PST_INST_RUIM:   return i18n("endereço inválido");
+    case PST_EXTRA_RUIM:  return i18n("parâmetros inválidos (fmt, format, config e c não valem)");
+    case PST_CHAVE_RUIM:  return i18n("chave inválida");
+    case PST_MODELO_RUIM: return i18n("modelo inválido: use http(s):// e {imdb}, {tmdb}, {type} ou {tipo_tmdb}");
+    default: break;
+  }
+  { int e = atomic_load_explicit(&pstTeste, memory_order_acquire);
+    if (e == 0) return i18n("OK testa");
+    if (e == 1 || e == 3) return i18n("testando…");
+    switch (pstTesteRes) {
+      case PST_T_OK:
+        snprintf(buf, sizeof buf, i18n("funcionou · %ld KB em %ld ms"), pstTesteKB, pstTesteMs);
+        return buf;
+      case PST_T_CONFIG:       return i18n("configuração incompleta ou grande demais");
+      case PST_T_NAO_IMAGEM:   return i18n("respondeu, mas não é uma imagem");
+      default:                 return i18n("sem resposta do serviço");
+    } }
+}
+// Teclado de cada campo. O TOKEN e o MODELO sao longos: usam o teclado LONGO.
+static const char *PST_ALFA_INST   = "abcdefghijklmnopqrstuvwxyz0123456789.:-";
+static const char *PST_ALFA_TOKEN  =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.~=-:/";
+static const char *PST_ALFA_EXTRA  = "abcdefghijklmnopqrstuvwxyz0123456789=&_.,-%";
+static const char *PST_ALFA_CHAVE  =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
+static const char *PST_ALFA_MODELO = "abcdefghijklmnopqrstuvwxyz0123456789:/.-_?=&{}%";
+static void pstAtivar(int op) {
+  if (inativa(op)) return;
+  switch (op) {
+    case AJ_POSTER_INST:
+      stCampo = op;
+      teclado_abrir_com("Endereço do SpatialPosters", "Ex.: posters.meudominio.com ou 192.168.1.5:3000. Vazio usa a pública.",
+                        PP_INSTANCIA_MAX - 1, PST_ALFA_INST, pstInst[0] ? pstInst : NULL);
+      break;
+    case AJ_POSTER_TOKEN:
+      // O token NAO volta para o campo (a modal fica na tela e a tela vira foto).
+      stCampo = op;
+      teclado_abrir_com("Token do SpatialPosters", "Token ou endereço do manifest (…/c/TOKEN/manifest.json). Vazio apaga.",
+                        PP_TOKEN_MAX, PST_ALFA_TOKEN, NULL);
+      break;
+    case AJ_POSTER_EXTRA:
+      stCampo = op;
+      teclado_abrir_com("Parâmetros do SpatialPosters", "Ex.: bs=vetro&side=right. Vazio apaga.",
+                        PP_EXTRA_MAX, PST_ALFA_EXTRA, pstExtra[0] ? pstExtra : NULL);
+      break;
+    case AJ_POSTER_CHAVE:
+      stCampo = op;
+      teclado_abrir_com("Chave do RPDB", "Sua chave em ratingposterdb.com. Vazio apaga.",
+                        PP_CHAVE_MAX - 1, PST_ALFA_CHAVE, NULL);
+      break;
+    case AJ_POSTER_MODELO:
+      stCampo = op;
+      teclado_abrir_com("Modelo de URL dos pôsteres", "Ex.: https://meu.servidor/{type}/{imdb}.jpg. Vazio apaga.",
+                        PP_MODELO_MAX - 1, PST_ALFA_MODELO, pstModelo[0] ? pstModelo : NULL);
+      break;
+    case AJ_POSTER_TESTAR:
+      pstTesteIniciar();
+      break;
+  }
 }
 
 
@@ -2263,6 +2551,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
     case AJ_VIDRO:          /* visual desta TV: a GPU de cada uma aguenta diferente */
     case AJ_P2P_LIGADO:     /* o servidor P2P e um aparelho da rede desta casa */
+    case AJ_POSTER_PROV:    /* servico e rede desta casa: nao segue a conta */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
       return 1;
@@ -2567,6 +2856,7 @@ static const char *textoLeitura(int op) {
   if (op == AJ_FANART_CHAVE) return fanartMascarada();
   if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco : i18n("Não configurado");
   if (op == AJ_P2P_TESTAR) return p2pTesteTexto();
+  if (op >= AJ_POSTER_INST && op <= AJ_POSTER_TESTAR) return pstTexto(op);
   if (op == AJ_ENVIAR_LOG) {
     switch (avisos_envio_estado()) {
       case 1:  return i18n("enviando…");
@@ -2710,6 +3000,12 @@ static int inativa(int op) {
     case AJ_MDB_LETTER: case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA:
     case AJ_MDB_META: case AJ_MDB_MAL:
       return !ajustes_mdblist_ligado();
+    // Cada campo so vale para o provedor dele; o teste, para qualquer um ligado.
+    case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
+      return valor[AJ_POSTER_PROV] != PP_SPATIAL;
+    case AJ_POSTER_CHAVE:  return valor[AJ_POSTER_PROV] != PP_RPDB;
+    case AJ_POSTER_MODELO: return valor[AJ_POSTER_PROV] != PP_MODELO;
+    case AJ_POSTER_TESTAR: return valor[AJ_POSTER_PROV] == PP_DESLIGADO;
     default: return 0;
   }
 }
@@ -2910,6 +3206,13 @@ static const char *ajudaOpcao(int op) {
     case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
     case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
     case AJ_P2P_TESTAR: return "Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.";
+    case AJ_POSTER_PROV: return "Troca os cartazes retrato por um pronto de um serviço externo, com notas, selos 4K/HDR e faixa Top 10 no próprio cartaz. SpatialPosters (instância pública ou a sua), RPDB (com chave) ou um modelo de URL seu. Só cartazes de card: o destaque e os fundos não mudam. Se o serviço não responde, volta ao cartaz normal.";
+    case AJ_POSTER_INST: return "Endereço da instância do SpatialPosters. Vazio usa a pública (spatial-posters.vercel.app), que é gratuita e compartilhada; para muitos cartazes, rode a sua com Docker.";
+    case AJ_POSTER_TOKEN: return "Opcional. Token de configuração do SpatialPosters, ou o endereço do manifest colado inteiro. Um token completo costuma ter mais de 500 letras e não cabe aqui; prefira os parâmetros curtos ao lado ou os padrões da sua instância.";
+    case AJ_POSTER_EXTRA: return "Opcional. Ajustes curtos do cartaz, no formato do SpatialPosters, por exemplo bs=vetro&side=right (selo de vidro, faixa à direita). O idioma da interface já vai sozinho.";
+    case AJ_POSTER_CHAVE: return "Sua chave do RPDB (ratingposterdb.com). Fica só nesta TV e nunca aparece nos registros.";
+    case AJ_POSTER_MODELO: return "Endereço com {imdb}, {tmdb}, {type} (movie ou series) e {tipo_tmdb} (movie ou tv), por exemplo https://meu.servidor/{type}/{imdb}.jpg. Quem não tiver o dado que o modelo pede fica com o cartaz normal.";
+    case AJ_POSTER_TESTAR: return "Baixa o cartaz de um filme conhecido com a configuração atual e mostra se deu certo. O primeiro cartaz de cada título é montado no servidor e pode levar alguns segundos.";
     case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
@@ -3595,6 +3898,7 @@ void ajustes_evento(const SDL_Event *e) {
       return;
     }
     if (focoOp == AJ_P2P_TESTAR) { p2pTesteIniciar(); return; }
+    if (focoOp >= AJ_POSTER_INST && focoOp <= AJ_POSTER_TESTAR) { pstAtivar(focoOp); return; }
     if (focoOp == AJ_TRAKT) { traktauth_comecar(); return; }
     if (focoOp == AJ_SIMKL) { simklauth_comecar(); return; }
     if (focoOp == AJ_SAIR) {
@@ -3637,6 +3941,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   (void)agora;
   montarTela();
   p2pTesteRecolher();
+  pstTesteRecolher();
   if (teclado_aberto()) teclado_atualizar(dt, agora);
   // O resultado e CONSUMIDO NA LEITURA (ver teclado.h): ler duas vezes daria
   // TECLADO_NADA na segunda, e por isso a gravacao acontece aqui, uma vez.
@@ -3648,6 +3953,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       else if (stCampo == AJ_XTREAM_SENHA)    xtream_definir_senha(teclado_texto());
       else if (stCampo == AJ_FANART_CHAVE)    fanartDefinir(teclado_texto());
       else if (stCampo == AJ_P2P_URL)         ajustes_definir_p2p_url(teclado_texto());
+      else if (stCampo >= AJ_POSTER_INST && stCampo <= AJ_POSTER_MODELO) pstDefinir(stCampo, teclado_texto());
       else                           stalker_definir_portal(teclado_texto());
       stCampo = 0;
     } else if (r == TECLADO_CANCELOU) {
@@ -5274,6 +5580,8 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_XTREAM_CONTA:
     case AJ_DIAGNOSTICO: case AJ_VELOCIDADE:
     case AJ_P2P_URL: case AJ_P2P_TESTAR:
+    case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
+    case AJ_POSTER_CHAVE: case AJ_POSTER_MODELO: case AJ_POSTER_TESTAR:
       return AJPV_ACAO;
     default:
       return (AjPreview)-1;

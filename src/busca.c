@@ -27,6 +27,7 @@
 // letras e ~13 toques e o pior caso passa de 37. A grade 6x7 poe a mesma tecla a
 // no maximo 5+6 toques e ~5 em media.
 #include "busca.h"
+#include "posterprov.h"
 #include "idioma.h"
 #include "gfx.h"
 #include "text.h"
@@ -970,8 +971,8 @@ static void desenhaResultados(Uint32 agora) {
           gfx_anel_fora(poster, raio, 0.0f, 3.0f, ar, ag, ab, f);
         }
 
-        const char *arte = ci->poster[0] ? ci->poster
-                         : (ci->backdrop[0] ? ci->backdrop : NULL);
+        const char *arte = posterprov_card(ci->imdb, ci->tmdb, ci->tipo, ci->poster);
+        if (!arte[0]) arte = ci->backdrop[0] ? ci->backdrop : NULL;
         GLuint tex = arte ? tex_obter_larg(arte, poster.w) : 0;
         float aArte = revela_arte(&revRes[r][c], tex != 0, agora);
         if (tex) {
