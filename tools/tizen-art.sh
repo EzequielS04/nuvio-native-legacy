@@ -55,7 +55,7 @@ cp "$ORIGEM"/*.jpg "$DESTINO"/ 2>/dev/null || true
 # COMPILA a intencao e falha no meio do build do proprio SDL_image
 # ("webp/decode.h file not found"). E sem o formato o arquivo esta no pacote e
 # o app recusa em silencio, com o log dizendo "decode falhou (Unsupported image
-# format)" — nao "No such file". Sao os 41 selos de badges/ (p-netflix, r-4k,
+# format)" — nao "No such file". Sao os 42 selos de badges/ (p-netflix, r-4k,
 # a-dtshdma, co-x265...), ou seja, TODOS eles.
 #
 # Converter no estagio, e nao no repositorio: deploy/app/art continua como esta

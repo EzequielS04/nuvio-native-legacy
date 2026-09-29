@@ -10,6 +10,7 @@
 // de quem nunca abriu o app) e a captura nao mexe no fileirasui.txt de quem
 // roda o teste.
 #include "ajustes.h"
+#include "badges.h"
 #include "rail_shot.h"
 #include "fileiras.h"
 #include "gfx.h"
@@ -122,6 +123,7 @@ int main(int argc, char **argv) {
   assert(txt_iniciar("deploy/app", 1));
   tex_iniciar(64);
   gfx_icones_dir("deploy/app/art");
+  badges_carregar("deploy/app/art");   // marcas de formato (Dolby Vision, 4K...); no app quem faz e home_iniciar
 
   // FILEIRAS DE MENTIRA cobrindo as origens que a folha sabe distinguir: o
   // catalogo de addon (com nome de addon e tipo), o grupo de colecoes, e as
@@ -286,6 +288,15 @@ int main(int argc, char **argv) {
   tecla(SDLK_RETURN);
   snprintf(nome, sizeof nome, "%s-edicao.bmp", saida);
   captura(nome, w);
+  // O VALOR VIRA MARCA: um passo a direita e a qualidade maxima e "4K".
+  tecla(SDLK_RIGHT);
+  snprintf(nome, sizeof nome, "%s-edicao-4k.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_RETURN);                          // confirma e sai da edicao
+  snprintf(nome, sizeof nome, "%s-qualidade-4k.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_RETURN);                          // volta a editar para o passo seguinte
+  tecla(SDLK_LEFT);                            // devolve "Automatica", ainda em edicao
 
   // SAIR DA CONTA PEDE DOIS OK: o primeiro so arma. A captura para no armado.
   tecla(SDLK_ESCAPE); tecla(SDLK_ESCAPE);

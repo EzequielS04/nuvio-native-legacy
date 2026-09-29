@@ -9,5 +9,11 @@ int main(void){
   assert(m&bit("v-hdr10plus"));assert(!(m&bit("v-hdr10")));assert(m&bit("a-dtshdma"));assert(!(m&bit("a-dts")));
   assert(!badges_provedor("unknown"));assert(badges_provedor("Apple TV+")==bit("p-appletv"));
   assert(!(badges_detectar("Movie 1080p 4k")&bit("r-4k")));
+  m=badges_detectar("Movie 2160p HLG HEVC");
+  assert(m&bit("v-hlg"));assert(!(m&bit("v-hdr")));
+  assert(badges_detectar("Movie 2160p HDR")&bit("v-hdr"));
+  assert(badges_detectar("Movie.2160p.DolbyVision.mkv")&bit("v-dv"));
+  assert(badges_detectar("Movie.2160p.DV.DTS-HD.MA.mkv")&bit("v-dv"));
+  assert(badges_provedor("Netflix HLG")==bit("p-netflix"));
   puts("badges: PASS (metadata, combined Dolby, hierarchy, unknown omitted)");
 }

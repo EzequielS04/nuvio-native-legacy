@@ -3023,12 +3023,13 @@ void player_desenhar(Uint32 agora) {
   // faixa estereo. Selo que mente e pior que selo ausente, porque e nele que o
   // dono confia para saber se pegou a versao boa.
   {
-    const char *selos[3];
+    // Cada selo e uma MARCA de formato (badges.h), nao a palavra. So o "HD"
+    // fica em texto: a largura >= 1920 tanto pode ser 1080p quanto 1440p, e
+    // nao existe marca que nao afirme mais do que se mediu.
+    FormatoMarca selos[3];
     int nSelos = 0;
-    char res[16] = "";
-    if (video_largura() >= 3840)      snprintf(res, sizeof res, "4K");
-    else if (video_largura() >= 1920) snprintf(res, sizeof res, "HD");
-    if (res[0]) selos[nSelos++] = res;
+    if (video_largura() >= 3840)      selos[nSelos++] = FMT_4K;
+    else if (video_largura() >= 1920) selos[nSelos++] = FMT_N;
     // MEDIDO nesta TV, linha do proprio log durante a reproducao de um MKV que
     // o addon anunciava como Dolby Vision:
     //   [video] HDR do pipeline: HDR10 (fonte afirmava DV=1)
@@ -3040,17 +3041,17 @@ void player_desenhar(Uint32 agora) {
     // por cima de um fluxo HDR10, e o dono confia nele justamente para saber se
     // pegou a versao boa. Quando o pipeline diz HDR10, o selo diz HDR10 — calar
     // seria esconder metade da resposta.
-    if (video_tem_dolby_vision())                  selos[nSelos++] = "Dolby Vision";
-    else if (!strcasecmp(video_hdr(), "HDR10"))    selos[nSelos++] = "HDR10";
+    if (video_tem_dolby_vision())                  selos[nSelos++] = FMT_DV;
+    else if (!strcasecmp(video_hdr(), "HDR10"))    selos[nSelos++] = FMT_HDR10;
 #ifdef __EMSCRIPTEN__
     else {
       // AVPlay nao confirma HDR ativo. Identifica apenas a fonte selecionada.
       const Stream *fonte = stream_item(stream_atual());
-      const char *hdr = fonte ? badges_fonte_hdr(fonte->badges) : NULL;
-      if (hdr) selos[nSelos++] = hdr;
+      int hdr = fonte ? badges_fonte_hdr_marca(fonte->badges) : -1;
+      if (hdr >= 0) selos[nSelos++] = (FormatoMarca)hdr;
     }
 #endif
-    if (video_tem_atmos())        selos[nSelos++] = "Dolby Atmos";
+    if (video_tem_atmos())        selos[nSelos++] = FMT_ATMOS;
 
     // RELOGIO e "Termina as", que sao o que o web poe neste canto
     // (.player-controls-top, playerScreen.js:5846). Os selos de qualidade sao
@@ -3099,11 +3100,20 @@ void player_desenhar(Uint32 agora) {
       for (i = 0; i < nSelos; i++) {
         float ts = anim_clamp((t0 - i * 0.09f) / 0.26f, 0.0f, 1.0f);
         float e  = 1.0f - (1.0f - ts) * (1.0f - ts);   // desaceleracao
-        TxtLinha l = txt_linha(TXT_MINI, selos[i], 236, 237, 242, 255);
-        if (e > 0.004f)
-          txt_desenhar_alpha(l, NV_TELA_W - PLR_PAD_X - l.w,
-                             sy + (1.0f - e) * 10.0f, ac * 0.85f * e);
-        sy += l.h + 6.0f;
+        // Caixa de 44 px por selo: a marca de duas linhas do Dolby precisa dela
+        // para o "VISION"/"ATMOS" ler a 3 m; o "HDR10" segue uma faixa fina.
+        const float mh = 44.0f;
+        if (selos[i] == FMT_N) {           // "HD", a unica palavra que sobra
+          TxtLinha l = txt_linha(TXT_MINI, "HD", 236, 237, 242, 255);
+          if (e > 0.004f)
+            txt_desenhar_alpha(l, NV_TELA_W - PLR_PAD_X - l.w,
+                               sy + (mh - l.h) * 0.5f + (1.0f - e) * 10.0f, ac * 0.85f * e);
+        } else if (e > 0.004f) {
+          float mw = marca_formato_largura(selos[i], mh);
+          marca_formato(selos[i], NV_TELA_W - PLR_PAD_X - mw, sy + (1.0f - e) * 10.0f, mh,
+                        0.93f, 0.93f, 0.95f, ac * 0.92f * e);
+        }
+        sy += mh + 6.0f;
       } }
   }
 
