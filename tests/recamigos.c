@@ -212,7 +212,7 @@ int main(void) {
     CONFERE(nAtivFila == 1, "concluir e 'assistiu'");
     enviarAtividade(CAB);
     { const char *c = corpoDe("/v1/atividade");
-      CONFERE(strstr(c, "\"imdb\":\"tt0111161\"") && strstr(c, "\"acao\":\"assistiu\"") &&
+      CONFERE(strstr(c, "\"imdb\":\"tt0111161\"") && strstr(c, "\"agora\":0") &&
               strstr(c, "\"ano\":\"1994\""), "corpo da atividade: %s", c);
       CONFERE(!strstr(c, "poster") && !strstr(c, "url") && !strstr(c, "fonte") && !strstr(c, "pos"),
               "SEM poster, fonte nem posicao: %s", c); }
@@ -328,8 +328,9 @@ int main(void) {
     CONFERE(!strcmp(nu[1].tipo, "series") && !strcmp(nu[1].direcao, "Série") &&
             !strcmp(nu[1].socialAcao, "assistiu"), "serie: tipo/direcao/acao");
     CONFERE(nu[0].nota == 93 && nu[0].retomadoMs == 1790000000000LL, "nota e instante");
-    { char tit[3][160];
-      CONFERE(recomenda_amigo_atividades("nuvio:hhh", tit, 3) == 1 && !strcmp(tit[0], "Um Sonho de Liberdade"),
+    { RecAtivAmigo tit[3];
+      CONFERE(recomenda_amigo_atividades("nuvio:hhh", tit, 3) == 1 && !strcmp(tit[0].titulo, "Um Sonho de Liberdade") &&
+              tit[0].agora == 1 && !strcmp(tit[0].imdb, "tt0111161"),
               "o feed fica em memoria para 'Ver perfil' do amigo"); }
     // Trakt: 3 itens, um deles o MESMO titulo que o amigo Nuvio esta vendo.
     snprintf(tk[0].imdb, sizeof tk[0].imdb, "tt0111161"); snprintf(tk[0].socialNome, sizeof tk[0].socialNome, "TraktUser");

@@ -401,9 +401,10 @@ void recomenda_atividade_fim(const CatItem *ci, int concluiu);
 // servico, so amigos mutuos que ligaram a atividade) entram com o nome e a foto
 // do amigo, cada titulo aparece UMA vez (o mais recente) e as duas fontes se
 // alternam. Sincrona e de rede — so chamar de dentro do fio da descoberta.
-// Titulos que o amigo Nuvio `id` (o socialSlug do item) compartilhou, da ultima
+// Atividade que o amigo Nuvio `id` (o socialSlug do item) compartilhou, da ultima
 // leitura do feed — sem rede. Devolve quantos copiou em `titulos`.
-int  recomenda_amigo_atividades(const char *id, char titulos[][160], int max);
+typedef struct { char imdb[24]; char titulo[160]; char tipo[8]; int agora; long long criado; } RecAtivAmigo;
+int  recomenda_amigo_atividades(const char *id, RecAtivAmigo *saida, int max);
 int  recomenda_social_mesclar(CatItem *itens, int nTrakt, int max);
 // Funde `novos` (n) em `itens`(nTrakt) SEM rede: a regra de uniao, separada
 // para o teste. Devolve o novo total.

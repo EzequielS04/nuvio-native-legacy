@@ -1875,8 +1875,8 @@ static void enviarAtividade(const char **cab) {
     jsonEsc(an, sizeof an, ano);
     snprintf(corpo, sizeof corpo,
              "{\"imdb\":\"%s\",\"tipo\":\"%s\",\"titulo\":\"%s\",\"ano\":\"%s\","
-             "\"nota\":%d,\"acao\":\"%s\"}",
-             imdb, ti, t, an, nota, agora ? "assistindo" : "assistiu");
+             "\"nota\":%d,\"agora\":%d}",
+             imdb, ti, t, an, nota, agora ? 1 : 0);
     url("/v1/atividade");
     r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st);
     free(r);
@@ -2122,7 +2122,7 @@ static int lerFeedAmigos(CatItem *saida, int max) {
   char aut[3200], via[32], url_[300], *r;
   int st = 0, n;
   if (!identidadeEm(cab, aut, sizeof aut, via, sizeof via)) return 0;
-  snprintf(url_, sizeof url_, "%s/v1/amigos/atividade", NV_REC_URL);
+  snprintf(url_, sizeof url_, "%s%s", NV_REC_URL, "/v1/amigos/atividade");
   r = rede_baixar_st(url_, REC_TEMPO_REDE, cab, &st);
   if (!r || st < 200 || st >= 300) { free(r); return 0; }
   n = lerFeedCorpo(r, saida, max);
@@ -2176,12 +2176,19 @@ int recomenda_social_mesclar(CatItem *itens, int nTrakt, int max) {
   return n;
 }
 
-int recomenda_amigo_atividades(const char *id, char titulos[][160], int max) {
+int recomenda_amigo_atividades(const char *id, RecAtivAmigo *saida, int max) {
   int i, n = 0;
-  if (!recomenda_ativo() || !mtx || !id || !id[0]) return 0;
+  if (!recomenda_ativo() || !mtx || !id || !id[0] || !saida) return 0;
   SDL_LockMutex(mtx);
   for (i = 0; i < nFeed && n < max; i++)
-    if (!strcmp(feed[i].de, id)) snprintf(titulos[n++], 160, "%s", feed[i].titulo);
+    if (!strcmp(feed[i].de, id)) {
+      snprintf(saida[n].imdb, sizeof saida[n].imdb, "%s", feed[i].imdb);
+      snprintf(saida[n].titulo, sizeof saida[n].titulo, "%s", feed[i].titulo);
+      snprintf(saida[n].tipo, sizeof saida[n].tipo, "%s", feed[i].tipo);
+      saida[n].agora = feed[i].agora;
+      saida[n].criado = feed[i].criado;
+      n++;
+    }
   SDL_UnlockMutex(mtx);
   return n;
 }
@@ -2192,6 +2199,17 @@ static int ciclo(void) {
   const char *cab[3];
   int reg, querSug;
   if (!identidade(cab)) return 0;
+  // TROCOU DE IDENTIDADE NO MEIO DA SESSAO (ligou ou desligou o Trakt): tudo o
+  // que este aparelho guarda pertence a OUTRA pessoa para o servidor — o perfil
+  // publicado, os pedidos, os achados, a fila de atividade. Guardar seria
+  // mostrar/enviar a conta errada; a regra e a de sair da conta.
+  { static char viaVista[32];
+    if (viaVista[0] && strcmp(viaVista, fioVia)) {
+      snprintf(viaVista, sizeof viaVista, "%s", fioVia);
+      recomenda_esquecer();
+      return 1;
+    }
+    snprintf(viaVista, sizeof viaVista, "%s", fioVia); }
   SDL_LockMutex(mtx);
   reg = registrado;
   SDL_UnlockMutex(mtx);
