@@ -132,6 +132,11 @@ int    video_tocando(void);
 int    video_pronto(void);   // 1 depois do loadCompleted
 int    video_ativo(void);    // 1 assim que ha mediaId — e o que abre o furo
 int    video_falhou(void);   // 1 depois de um errorText real na fonte atual
+// O ULTIMO ERRO REAL do pipeline na fonte atual, como o pipeline o disse
+// ("40403 server error:40403", "100 Playing error"); "" sem erro. Existe para
+// o cartao de erro do canal dizer o que o servidor respondeu em vez do
+// generico (#158). Vale ate o proximo video_tocar/video_parar.
+const char *video_erro_texto(void);
 int    video_audio_nao_suportado(void);  // uMS errorCode 200: video segue sem som
 int    video_terminou(void); // 1 depois do fim de fluxo (endOfStream) da fonte atual
 

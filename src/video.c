@@ -8,6 +8,7 @@
 #include "mkvass.h"
 #include "js.h"
 #include "lsregistro.h"
+#include "rede.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -175,6 +176,7 @@ int  video_tocando(void) { return 0; }
 int  video_pronto(void) { return 0; }
 int  video_ativo(void) { return 0; }
 int  video_falhou(void) { return 0; }
+const char *video_erro_texto(void) { return ""; }
 int  video_audio_nao_suportado(void) { return 0; }
 int  video_terminou(void) { return 0; }
 unsigned video_bufferando_ms(void) { return 0; }
@@ -406,6 +408,9 @@ static int dvPedido;
 static char      midia[64];
 static double    posSeg, durSeg;
 static int       tocando, pronto, ligado, falhou, terminou;
+// Ver video_erro_texto. Escrito no fio do LS2, lido pelo de desenho: e so
+// texto curto e o pior caso de corrida e ler meia mensagem num quadro.
+static char      erroTexto[96];
 // errorCode 200 "Audio Codec Not Supported": o VIDEO segue tocando e so o
 // audio morre. Ver o tratamento em lerEvento.
 static int       audioNaoSup;
@@ -504,19 +509,33 @@ static void esperar(int ms) { struct timespec t; t.tv_sec = ms / 1000;
 // /etc/starfish-release da a linha "Rockhopper release 4.10.2-31 (...)" — o
 // numero depois de "release" e o que vale. Sem o arquivo, a ausencia da
 // libAcbAPI ja e prova de 5+, porque foi nela que a LG apagou a lib.
+// A LINHA INTEIRA vai ao log uma vez (#158). O "pronto (webOS 5, ...)" do
+// registro 6311 (LG C4 atualizada para webOS 11.2) era o chute "sem ACB => 5"
+// e nao a versao: a TV do relato e as que tocam saiam iguais no log, e a
+// unica diferenca conhecida — o firmware — nao aparecia em lugar nenhum.
+static char releaseLinha[128];
 static int webosMaior(void) {
-  static int v;
+  static int v, lido;
   if (v) return v;
   { FILE *f = fopen("/etc/starfish-release", "r");
     if (f) {
       char linha[256];
       while (fgets(linha, sizeof linha, f)) {
         const char *r = strstr(linha, "release ");
+        if (!releaseLinha[0]) {
+          size_t n = strcspn(linha, "\r\n");
+          snprintf(releaseLinha, sizeof releaseLinha, "%.*s", (int)n, linha);
+        }
         if (r && sscanf(r + 8, "%d", &v) == 1 && v > 0) break;
         v = 0;
       }
       fclose(f);
     } }
+  if (!lido) {
+    lido = 1;
+    printf("[video] starfish-release: %s\n", releaseLinha[0] ? releaseLinha : "(sem arquivo)");
+    fflush(stdout);
+  }
   if (!v) v = expWin[0] ? 5 : 4;
   return v;
 }
@@ -1032,6 +1051,19 @@ static int aoEvento(LSHandle *h, LSMessage *m, void *u) {
     snprintf(m, sizeof m, "pipeline erro: %.60s", q);
     { char *n2; for (n2 = m; *n2; n2++) if (*n2 == '\n' || *n2 == '\r') *n2 = ' '; }
     marco(m);
+    // Guardado para a tela (video_erro_texto): codigo e texto, sem o resto do
+    // JSON. "40403 server error:40403" e o que o registro 4958 (#158) trouxe
+    // no canal que o provedor dava como "Media Not Found".
+    { double cod = numeroDe(p, "\"errorCode\":");
+      const char *t = strstr(p, "errorText\":\"");
+      char txt[72] = "";
+      if (t) {
+        const char *f;
+        t += 12;
+        f = strchr(t, '"');
+        if (f && f - t < (int)sizeof txt) { memcpy(txt, t, (size_t)(f - t)); txt[f - t] = 0; }
+      }
+      snprintf(erroTexto, sizeof erroTexto, "%.0f %s", cod >= 0 ? cod : 0.0, txt); }
     // PIPELINE DESTRUIDO. Medido duas vezes na TV do dono: ~71 s depois de um
     // avanco, o uMS responde "com.webos.pipeline.<id> is not running" e o video
     // simplesmente para — o app nao fazia NADA, e era isso que ele descrevia
@@ -1800,7 +1832,46 @@ static int tocarInterno(const char *url, int comDV) {
       falhou = 1;
       return 0;
     } }
-  printf("[video] URL: %s\n", url); fflush(stdout);
+  // A URL INTEIRA NAO VAI AO LOG (#158). Ate a 1.5.3 esta linha imprimia a
+  // URL crua, e a do Xtream leva usuario e senha no caminho
+  // (<servidor>/live/U/P/<id>.m3u8): os registros 4958 e 6311 chegaram ao D1
+  // com a credencial do provedor da pessoa dentro. O host e a extensao bastam
+  // para a triagem ("qual servidor", "HLS ou TS").
+  { char pub[160], ext[12] = "";
+    const char *q = strchr(url, '?'), *b, *d;
+    size_t n = q ? (size_t)(q - url) : strlen(url);
+    for (b = url + n; b > url && b[-1] != '/'; b--) {}
+    for (d = url + n; d > b && d[-1] != '.'; d--) {}
+    if (d > b && (size_t)(url + n - d) < sizeof ext - 1) {
+      size_t k = (size_t)(url + n - d), i;
+      int ok = 1;
+      for (i = 0; i < k; i++) if (!isalnum((unsigned char)d[i])) ok = 0;
+      if (ok && k) { ext[0] = '.'; memcpy(ext + 1, d, k); ext[k + 1] = 0; }
+    }
+    printf("[video] URL: %s%s%s\n", rede_url_publica(url, pub, sizeof pub),
+           ext[0] ? " " : "", ext);
+    fflush(stdout); }
+  // JANELA EXPORTADA ANTES DO LOAD (#158) — DEFENSIVO, NAO PROVADO.
+  //
+  // O que o registro mostra (6311/6314, LG C4 em webOS 11.2, e 6362/6372,
+  // outra TV com PowerVR, outro provedor): o load volta errorCode 0, o
+  // resourceInfo reserva VDEC e ADEC, o bufferRange sobe (9 s numa, 36 s na
+  // outra) — e NUNCA chega videoInfo, sourceInfo nem loadCompleted, em
+  // NENHUMA fonte (Xtream, flixnest, sslip), ate o "Playing error" (100). Nas
+  // outras TVs com o mesmo caminho (c7ca4398, 7005) o videoInfo chega em ~3 s.
+  // Os dados chegam; o decoder nao se anuncia.
+  //
+  // O que muda aqui: ate agora o SetExportedWindow so era chamado DEPOIS do
+  // load (video_janela desiste sem mediaId, e o preview ja tinha gravado o
+  // retangulo antes — o "sem repetir" engolia a chamada seguinte). Na
+  // primeira reproducao de uma sessao a janela exportada ia ao pipeline sem
+  // nunca ter recebido quadro nem destino. A ordem do guia de midia do
+  // webosbrew e: cria a janela, SetExportedWindow, e so entao o load com o
+  // windowId. Se isto e o que o webOS 11 passou a exigir, nao sei: e a unica
+  // diferenca de protocolo que este lado controla, e custa uma chamada que o
+  // fluxo ja fazia (depois). A prova e o proximo registro dessa TV mostrar
+  // videoInfo.
+  if (expWin[0]) expJanelaAplicar();
   msDoLoad = agoraMs();
   chamarCtx("load", carga, aoCarregar, (void *)(uintptr_t)minhaSessao);
   return 1;
@@ -1822,6 +1893,7 @@ void video_parar(void) {
     chamar("unload", b, soLog);
   }
   midia[0] = 0; tocando = pronto = 0; falhou = 0; audioNaoSup = 0;
+  erroTexto[0] = 0;
 }
 
 void video_pausar(int pausado) {
@@ -2078,6 +2150,7 @@ int    video_ativo(void)    { return midia[0] != 0; }
 // sem a flag, um pipeline que carrega e morre em seguida nunca dispara a
 // proxima da lista.
 int    video_falhou(void)   { return falhou; }
+const char *video_erro_texto(void) { return erroTexto; }
 int    video_audio_nao_suportado(void) { return audioNaoSup; }
 int    video_terminou(void) { return terminou; }
 unsigned video_bufferando_ms(void) {
