@@ -32,7 +32,8 @@ spec = importlib.util.spec_from_file_location('v', 'tools/varredura-i18n.py')
 v = importlib.util.module_from_spec(spec); spec.loader.exec_module(v)
 chaves = v.chaves_da_tabela()
 # Iguais nos dois idiomas: unidade, sigla, nome proprio.
-IGUAIS = {"MB", "px", "TMDB", "Trakt", "Metahub", "Logo", "dev", "manifest.json"}
+IGUAIS = {"MB", "px", "%sDV", "%s%s GB",   # selos do ranking do ciclo: sigla e unidade
+           "TMDB", "Trakt", "Metahub", "Logo", "dev", "manifest.json"}
 faltam = []
 for arq in ("src/diagnostico.c", "src/perfiltv.c"):
     txt = open(arq, encoding="utf-8").read()
