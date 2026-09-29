@@ -137,8 +137,24 @@ TxtFamilia txt_fonte_interface(void) { return fonteInterface; }
 #define TXT_POR_QUADRO 4
 static int rastNesteQuadro;
 static unsigned long quadroTxt = 1;
+extern double txt_ms;
+static double msIniQuadro;
 
-void txt_novo_quadro(void) { rastNesteQuadro = 0; quadroTxt++; }
+// TEXTO DE UMA VEZ (#172: "o texto aparece aos poucos, nao e fluido"; dono,
+// 29/09/2026: "tem como carregar de uma vez?"). Com um teto fixo de 4 linhas por
+// quadro, uma tela nova mostrava o texto entrando em degraus por varios quadros.
+// Agora o teto de 4 e o PISO: depois dele o rasterizador continua enquanto o
+// quadro tiver gasto menos de TXT_MS_QUADRO em texto (e ate TXT_MAX_QUADRO
+// linhas). O preco e UM quadro mais longo no instante em que a tela abre —
+// coberto pela propria animacao de entrada — em troca de o texto inteiro
+// aparecer junto. Em regime nada muda: sem linha nova, nada e rasterizado.
+#define TXT_MS_QUADRO  24.0
+#define TXT_MAX_QUADRO 64
+
+void txt_novo_quadro(void) {
+  rastNesteQuadro = 0; quadroTxt++;
+  msIniQuadro = txt_ms;
+}
 static unsigned long relogio = 1;
 int    txt_rasterizadas = 0;
 // Quantas linhas foram DESPEJADAS para dar lugar a outras. Zero e o estado
@@ -662,7 +678,9 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
 
   // Orcamento estourado: devolve vazio e tenta de novo no proximo quadro. A
   // linha aparece com um quadro de atraso em vez de travar o atual.
-  if (rastNesteQuadro >= TXT_POR_QUADRO) return vazia;
+  if (rastNesteQuadro >= TXT_POR_QUADRO &&
+      (rastNesteQuadro >= TXT_MAX_QUADRO || txt_ms - msIniQuadro >= TXT_MS_QUADRO))
+    return vazia;
   rastNesteQuadro++;
   int slot = livre;
   if (slot < 0) {
