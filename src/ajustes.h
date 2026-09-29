@@ -219,6 +219,11 @@ int   ajustes_descobrir_na_busca(void); // searchDiscoverEnabled (derivado)
 // e a maioria ignora — a linha `janela=... drawable=...` do log diz o que ela
 // respondeu. Ver a nota em main.c.
 int   ajustes_4k(void);
+// MODO SEGURO (seguro.h). Chamar no arranque, DEPOIS de ajustes_dir e de
+// avisos_iniciar: `caiu` = a sessao anterior nao se despediu. Desfaz o ajuste
+// arriscado que estava em prova, liga o perfil seguro se as quedas se repetem e
+// avisa a pessoa. Sem efeito nas builds de teste (nada em prova, nada a avisar).
+void  ajustes_seguro_iniciar(int caiu);
 int   ajustes_cw_ligado(void);          // continueWatchingEnabled
 int   ajustes_cw_ok_toca(void);         // OK no card: 1 = toca direto (cwOkLocal)
 int   ajustes_cw_estilo(void);          // 0 card, 1 largo (wide), 2 poster

@@ -138,6 +138,13 @@ void        fil_definir_hero_fonte(const char *chave);
 
 // --- limite ------------------------------------------------------------------
 int  fil_limite(void);
+// O que esta GRAVADO, sem o teto do perfil seguro. fil_limite() e o que a home
+// usa; a tela de Ajustes mostra e edita este, senao editar durante o perfil
+// seguro gravaria o teto de emergencia por cima da escolha da pessoa.
+int  fil_limite_gravado(void);
+// Teto SO desta sessao (0 = sem teto). O perfil seguro (seguro.h) usa para a
+// home montar menos fileiras sem tocar em fileirasui-p<N>.txt.
+void fil_definir_teto_sessao(int teto);
 // Ao BAIXAR o limite, as ligadas que ficaram alem dele viram "fora da home"
 // (ocultas), nao fila. Decisao do dono; ver o comentario na definicao.
 void fil_definir_limite(int n);

@@ -4,6 +4,7 @@
 #include "js.h"
 #include "gfx.h"
 #include "botoes.h"
+#include "seguro.h"
 #include "text.h"
 #include "anim.h"
 #include "layout.h"
@@ -225,6 +226,16 @@ void avisos_idioma_definido(const char *codigo, const char *texto) {
   snprintf(id, sizeof id, "idioma:%s", codigo ? codigo : "");
   pthread_mutex_lock(&trava);
   novo = por(id, AV_CANAL, i18n("Idioma"), texto ? texto : "", NULL);
+  pthread_mutex_unlock(&trava);
+  toast(novo);
+}
+
+int avisos_sessao_anterior_caiu(void) { return crashDetectado; }
+
+void avisos_modo_seguro(const char *id, const char *titulo, const char *texto) {
+  int novo;
+  pthread_mutex_lock(&trava);
+  novo = por(id, AV_CANAL, titulo ? titulo : "", texto ? texto : "", NULL);
   pthread_mutex_unlock(&trava);
   toast(novo);
 }
@@ -697,6 +708,7 @@ void avisos_encerrar(void) {
   dados_despedida_fim();   // no Tizen: sincrono, vale mesmo se o apagar abaixo nao chegar ao disco
   dados_apagar(AV_MARCA_ARQ);
   vistosGravar();
+  seguro_encerrar();   // confirma o que estava em prova e fecha a sessao no diario
 }
 
 // Fontes que o app ja tem: um item por estado, atualizado a cada volta.

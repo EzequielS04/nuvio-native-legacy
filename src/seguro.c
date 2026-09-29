@@ -179,6 +179,20 @@ void seguro_mudou(const char *chave, int ant, int novo, long agora, unsigned upt
   fflush(stdout);
 }
 
+void seguro_ajustou(const char *chave, int novo, int arriscado) {
+  int i;
+  if (!iniciado || !chave) return;
+  for (i = 0; i < nMud; i++)
+    if (mud[i].estado == SEG_PROVISORIA && !strcmp(mud[i].chave, chave)) {
+      if (!arriscado || novo == mud[i].ant) {
+        memmove(&mud[i], &mud[i + 1], sizeof mud[0] * (size_t)(nMud - i - 1));
+        nMud--;
+      } else mud[i].novo = novo;
+      salvar(0);
+      return;
+    }
+}
+
 void seguro_batida(unsigned uptimeS) {
   int i, duravel = 0;
   if (!iniciado) return;

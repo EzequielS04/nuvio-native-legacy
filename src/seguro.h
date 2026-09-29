@@ -83,6 +83,12 @@ const SegDecisao *seguro_iniciar(int anteriorCaiu, long agora, SegAplicar aplica
 // da mesma chave, a entrada some (a pessoa desfez sozinha).
 void seguro_mudou(const char *chave, int ant, int novo, long agora, unsigned uptimeS);
 
+// O ajuste mudou SEM ficar mais arriscado (a pessoa baixou 30 para 20, ou voltou
+// ao valor de antes). Se ha uma mudanca em prova para a chave: `arriscado` = 0
+// (o valor novo ja e seguro) ou `novo` igual ao anterior original a encerra;
+// senao ela passa a valer `novo` (reverter 20 para o original, e nao 30).
+void seguro_ajustou(const char *chave, int novo, int arriscado);
+
 // Chamar por quadro (barato): a cada ~30 s de sessao grava o sinal leve; aos
 // 60 s marca a sessao estavel; confirma o que passou de 3 min.
 void seguro_batida(unsigned uptimeS);

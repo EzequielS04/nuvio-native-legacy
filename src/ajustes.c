@@ -39,6 +39,9 @@
 #include "qr.h"
 #include "atualizacao.h"
 #include "avisos.h"
+#include "seguro.h"
+#include "botoes.h"
+#include <time.h>
 #include "js.h"
 #include "artehero.h"
 #include "artereserva.h"
@@ -1266,7 +1269,12 @@ static int lig(int op)  { return valor[op] == 0; }
 int ajustes_animacoes_reduzidas(void) { return valor[AJ_ANIM] == 1; }
 // Lido UMA vez, na criacao da janela, antes de qualquer desenho: trocar isto
 // com o app aberto nao redimensiona a superficie. Ver main.c.
-int ajustes_4k(void)                  { return valor[AJ_RESOLUCAO] == 1; }
+// PERFIL SEGURO (seguro.h): quando ligado, os acessores dos ajustes que pesam
+// devolvem o valor seguro SEM tocar em valor[] nem no arquivo. Ler o valor por
+// cima em vez de sobrescreve-lo e o que garante que gravar() (que escreve valor[]
+// inteiro) e o blob da conta nunca levam o valor de emergencia para o disco.
+#define SEGURO seguro_perfil_ativo()
+int ajustes_4k(void)                  { return valor[AJ_RESOLUCAO] == 1 && !SEGURO; }
 int ajustes_dolby_vision(void)        { return lig(AJ_DV); }
 int ajustes_dolby_atmos(void)         { return lig(AJ_ATMOS); }
 int ajustes_pausa_overlay(void)       { return lig(AJ_PAUSA_OVERLAY); }
@@ -1319,6 +1327,7 @@ static int temaDinamico(void) {
   return valor[AJ_TEMA] >= AJ_TEMA_DINAMICA && valor[AJ_TEMA] < AJ_N_TEMAS_OPC;
 }
 int ajustes_cor_viva(void) {
+  if (SEGURO) return CORVIVA_DESLIGADA;   // qualquer tema dinamico: a cor viva anima a arte inteira
   return valor[AJ_TEMA] == AJ_TEMA_DINAMICA   ? CORVIVA_SIMPLES
        : valor[AJ_TEMA] == AJ_TEMA_ESTILIZADA ? CORVIVA_ESTILIZADA
        : valor[AJ_TEMA] == AJ_TEMA_GRADIENTE  ? CORVIVA_GRADIENTE
@@ -1332,11 +1341,12 @@ int ajustes_cor_logo(void) { return lig(AJ_COR_LOGO); }
 // So nas capturas (tests/vidro_shots.sh): liga o vidro sem passar pelo arquivo.
 int ajustes_vidro(void) { return 1; }
 #else
-int ajustes_vidro(void) { return lig(AJ_VIDRO); }
+int ajustes_vidro(void) { return lig(AJ_VIDRO) && !SEGURO; }
 #endif
-void ajustes_definir_vidro(int ligado) { valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); }
-int ajustes_p2p_ligado(void) { return lig(AJ_P2P_LIGADO); }
-void ajustes_definir_p2p_ligado(int ligado) { valor[AJ_P2P_LIGADO] = ligado ? 0 : 1; gravar(); }
+static void riscoNotar(int op, int antes);
+void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_VIDRO, a); }
+int ajustes_p2p_ligado(void) { return lig(AJ_P2P_LIGADO) && !SEGURO; }
+void ajustes_definir_p2p_ligado(int ligado) { int a = valor[AJ_P2P_LIGADO]; valor[AJ_P2P_LIGADO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_P2P_LIGADO, a); }
 
 // Cor do ANEL DE FOCO. Ver TEMA_ACENTO: um tema aqui e so isto.
 //
@@ -1345,7 +1355,8 @@ void ajustes_definir_p2p_ligado(int ligado) { valor[AJ_P2P_LIGADO] = ligado ? 0 
 // chamam esta funcao, varias vezes por quadro: nenhuma conta mora aqui.
 void ajustes_acento(float *r, float *g, float *b) {
   int i = valor[AJ_TEMA];
-  if (temaDinamico()) { corviva_acento(r, g, b); return; }
+  if (SEGURO && temaDinamico()) i = 0;    // sem cor viva, o realce fixo padrao
+  else if (temaDinamico()) { corviva_acento(r, g, b); return; }
   if (i < 0 || i >= AJ_N_TEMAS) i = 0;   // arquivo de outra versao: branco
   if (r) *r = TEMA_ACENTO[i].r;
   if (g) *g = TEMA_ACENTO[i].g;
@@ -1388,6 +1399,7 @@ int ajustes_hero_fonte(void) {
 int ajustes_ps_fundo_automatico(void) { return lig(AJ_PS_FUNDO); }
 int ajustes_tex_mb(void) {
   int i = valor[AJ_TEX_MB];
+  if (SEGURO && i >= 5) i = 0;            // 400/512 MB: volta ao automatico da RAM
   return (i >= 0 && i < 7) ? TEX_MB_DE[i] : 0;
 }
 int ajustes_posteres_deitados(void)   { return lig(AJ_LANDSCAPE); }
@@ -1418,7 +1430,7 @@ void ajustes_definir_salvos_no_trakt(int noTrakt) {
 int ajustes_data_completa(void)       { return lig(AJ_DET_DATA_CHEIA); }
 float ajustes_detalhe_veu(void)       { int v = valor[AJ_DET_VEU]; return (v < 0 ? 0 : v > 100 ? 100 : v) / 100.0f; }
 int   ajustes_trailer_auto(void)      { return lig(AJ_DET_TRAILER_AUTO); }
-int   ajustes_trailer_hero(void)      { return lig(AJ_HERO_TRAILER); }
+int   ajustes_trailer_hero(void)      { return lig(AJ_HERO_TRAILER) && !SEGURO; }
 float ajustes_trailer_zoom(void)      { static const float z[] = { 1.34f, 1.15f, 1.55f, 1.0f }; int v = valor[AJ_TRAILER_ASPECTO]; return (v >= 0 && v < 4) ? z[v] : 1.34f; }
 // Teto de definicao do trailer: 0 = a maior que houver.
 int   ajustes_trailer_qualidade(void) { static const int t[] = { 0, 1080, 720, 480 }; int v = valor[AJ_TRAILER_QUAL]; return (v >= 0 && v < 4) ? t[v] : 0; }
@@ -1432,13 +1444,13 @@ int  ajustes_menu_perfil(void)        { return lig(AJ_MENU_PERFIL); }
 int  ajustes_itens_fileira(void) {
   static const int N[] = { 12, 18, 24 };
   int i = valor[AJ_ITENS_FILEIRA];
-  if (i < 0 || i >= (int)(sizeof N / sizeof *N)) i = 0;
+  if (i < 0 || i >= (int)(sizeof N / sizeof *N) || SEGURO) i = 0;
   return N[i];
 }
 int  ajustes_trailer_cartaz(void) {
   // A MESMA dependencia de inativa(AJ_FOCO_TRAILER), escrita aqui porque
   // inativa() vem bem mais abaixo no arquivo.
-  return lig(AJ_FOCO_TRAILER) && (lig(AJ_EXPANDIR) || valor[AJ_LANDSCAPE] == 0);
+  return lig(AJ_FOCO_TRAILER) && !SEGURO && (lig(AJ_EXPANDIR) || valor[AJ_LANDSCAPE] == 0);
 }
 void ajustes_definir_envio_auto(int ligado) { valor[AJ_ENVIO_AUTO] = ligado ? 0 : 1; gravar(); }
 // ARTE DO DESTAQUE ESCOLHIDA PELO DIAGNOSTICO, e so depois de a pessoa ver a
@@ -1488,7 +1500,7 @@ int   ajustes_largura_poster_dp(void) { return valor[AJ_LARGURA_DP]; }
 int   ajustes_raio_poster_dp(void)    { return valor[AJ_RAIO_DP]; }
 // 0 baixa, 1 padrao, 2 alta. Quem consome sao tex_cache (teto de decodificacao)
 // e artehero (qual url pedir para a arte de tela cheia).
-int   ajustes_qualidade_imagem(void)  { return valor[AJ_QUALIDADE_IMG]; }
+int   ajustes_qualidade_imagem(void)  { return SEGURO && valor[AJ_QUALIDADE_IMG] == 2 ? 1 : valor[AJ_QUALIDADE_IMG]; }
 // dpToPx = 2 em buildModernHomeSizingStyle. 12dp -> 24px, que e o raio medido.
 float ajustes_raio_poster_px(void)    { return (float)valor[AJ_RAIO_DP] * 2.0f; }
 
@@ -1872,7 +1884,7 @@ void ajustes_dir(const char *dir) {
   // O limite mora em fileiras.c; esta linha e so o espelho dele. Ler daqui em
   // vez de gravar evita a divergencia: o arquivo de ajustes nao guarda o
   // numero, entao nao ha como os dois discordarem.
-  valor[AJ_FIL_LIMITE] = fil_limite();
+  valor[AJ_FIL_LIMITE] = fil_limite_gravado();
   // A escolha lida do disco so existe de verdade quando chega em linguas.c.
   rotulosDeIdioma();
   aplicarIdioma(AJ_LEG_LINGUA);
@@ -2511,7 +2523,7 @@ int ajustes_iniciar(void) {
   if (abrirNaFonte) { abrirNaFonte = 0; focarOpcao(AJ_FONTE_UI); }
   filAberta = 0; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
   emEdicao = 0;
-  valor[AJ_FIL_LIMITE] = fil_limite();
+  valor[AJ_FIL_LIMITE] = fil_limite_gravado();
   // Tambem aqui, e nao so em ajustes_dir: sem arquivo de ajustes aquele caminho
   // volta cedo e os rotulos ficariam vazios na primeira abertura da tela.
   rotulosDeIdioma();
@@ -2833,8 +2845,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_HERO_FUNDO: return "De onde vem a arte de fundo do destaque, da página do título e dos cards deitados: catálogo/Cinemeta, IMDb/Metahub, TMDB, Trakt, Apple TV, fanart.tv (com chave) ou Anime (Kitsu/AniList). Automático usa a do catálogo. MDBList fornece notas, não imagens.";
     case AJ_HERO_ARTE_DIF: return "Desligado: card, destaque e página do título mostram a mesma imagem. Ligado: o card fica com a arte do catálogo e o destaque usa outra foto — TMDB vira outro fundo do TMDB; em Automático, ou se a escolhida repetir o card, usa Apple TV, outro fundo do TMDB, fanart.tv, anime ou Trakt.";
     case AJ_HERO_TRAILER: return "Com o foco parado no destaque do topo, o trailer do título toca sem som no lugar da arte. Mover o foco volta para a arte.";
-    case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis.";
-    case AJ_ITENS_FILEIRA: return "Quantos títulos cada fileira da Home mostra antes do Ver tudo. Mais itens usam mais memória: em TV com 1 GB de memória a Home pode ficar mais lenta ou fechar. Aumentar vale na próxima vez que o app abrir.";
+    case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta, de 3 a 40. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis. Mais fileiras usam mais memória e rede: em TV com 1 GB de memória a Home pode ficar lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior.";
+    case AJ_ITENS_FILEIRA: return "Quantos títulos cada fileira da Home mostra antes do Ver tudo. Mais itens usam mais memória: em TV com 1 GB de memória a Home pode ficar mais lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior. Aumentar vale na próxima vez que o app abrir.";
     case AJ_FIL_ORDEM: return "Abre a lista de fileiras para reordenar, ligar, desligar e escolher o card de cada uma. É lá que dá para ver de onde cada fileira vem.";
     case AJ_RAIL: return "A barra de navegação da esquerda fica sempre aberta, ou recolhida até você ir até ela.";
     case AJ_RAIL_MODERNA: return "Troca a barra lateral pela versão nova, com ícones maiores. Ela ignora a escolha entre recolhida e fixa.";
@@ -3374,11 +3386,225 @@ static void eventoFileiras(SDL_Keycode k) {
   }
 }
 
+// --- MODO SEGURO: quais ajustes vigiar e como desfaze-los ---------------------
+// A regra geral e o cabecalho de seguro.h. Aqui mora o que so este arquivo sabe:
+// QUAIS ajustes pesam, o que e "mais arriscado" para cada um e como se restaura.
+//
+// SO ENTRA O QUE EXISTE E PESA (memoria de imagem, GPU, preenchimento, rede):
+//   fileirasLimite   Fileiras da home acima de 12 (era o teto de 16; agora 40)
+//   itensFileira     Itens por fileira acima de 12 (18, 24)
+//   resolucao4k      Resolucao da interface em 4K (experimental)
+//   vidro            Interface de vidro (paineis translucidos = mais preenchimento)
+//   temaImersivo     Cor de destaque "Dinamica imersiva" (arte vazando como luz)
+//   trailerDestaque  Trailer no destaque do topo (decodifica video na home)
+//   trailerCartaz    Trailer do cartaz em foco (idem, a cada foco parado)
+//   p2p              Servidor P2P (experimental)
+//   qualidadeImagem  Qualidade da imagem "Alta" (a versao grande de cada arte)
+//   memoriaImagens   Memoria para imagens de 400 ou 512 MB (alto-cache)
+// FORA, POR NAO EXISTIREM neste tree: capas GIF/WebP animadas (nao ha ajuste; o
+// GIF do foco e da build, NV_LEVE), posteres personalizados e layout "Dinamica".
+// O "alto cache" que o dono usa na C9 e uma FLAG DE BUILD (arm.sh --alto-cache),
+// nao um ajuste: o que ha no app e "Memoria para imagens", ja incluida.
+typedef struct {
+  int         op;
+  const char *chave;              // id estavel no diario; nunca traduzir
+  int       (*nivel)(int v);      // 0 = seguro; maior = mais arriscado
+} Risco;
+static int nvFileiras(int v) { return v > FIL_LIMITE_VIGIADO ? v : 0; }
+static int nvItens(int v)    { return v > 0 ? v : 0; }
+static int nvLigado(int v)   { return v == 0; }        // V_LIGA: 0 = Ligado
+static int nv4k(int v)       { return v == 1; }
+static int nvImersiva(int v) { return v == AJ_TEMA_IMERSIVA; }
+static int nvQualAlta(int v) { return v == 2; }
+static int nvTexAlto(int v)  { return v >= 5 ? v : 0; }   // 400 e 512 MB
+static const Risco RISCOS[] = {
+  { AJ_FIL_LIMITE,     "fileirasLimite",  nvFileiras },
+  { AJ_ITENS_FILEIRA,  "itensFileira",    nvItens },
+  { AJ_RESOLUCAO,      "resolucao4k",     nv4k },
+  { AJ_VIDRO,          "vidro",           nvLigado },
+  { AJ_TEMA,           "temaImersivo",    nvImersiva },
+  { AJ_HERO_TRAILER,   "trailerDestaque", nvLigado },
+  { AJ_FOCO_TRAILER,   "trailerCartaz",   nvLigado },
+  { AJ_P2P_LIGADO,     "p2p",             nvLigado },
+  { AJ_QUALIDADE_IMG,  "qualidadeImagem", nvQualAlta },
+  { AJ_TEX_MB,         "memoriaImagens",  nvTexAlto },
+};
+#define N_RISCOS ((int)(sizeof RISCOS / sizeof *RISCOS))
+// O valor DE VERDADE: as fileiras moram em fileiras.c e valor[] guarda so o
+// espelho; o resto e valor[]. Nunca o efetivo do perfil seguro.
+static int riscoAtual(int op) { return op == AJ_FIL_LIMITE ? fil_limite_gravado() : valor[op]; }
+static const Risco *riscoDe(int op) {
+  int i;
+  for (i = 0; i < N_RISCOS; i++) if (RISCOS[i].op == op) return &RISCOS[i];
+  return NULL;
+}
+// Chamar DEPOIS de mudar o ajuste `op`, com o valor que ele tinha ANTES.
+static void riscoNotar(int op, int antes) {
+  const Risco *r = riscoDe(op);
+  int depois;
+  if (!r) return;
+  depois = riscoAtual(op);
+  if (depois == antes) return;
+  if (r->nivel(depois) > r->nivel(antes))
+    seguro_mudou(r->chave, antes, depois, (long)time(NULL), SDL_GetTicks() / 1000);
+  else
+    seguro_ajustou(r->chave, depois, r->nivel(depois) > 0);
+}
+// O gancho de seguro_iniciar: devolve o ajuste ao valor de antes, SO se ele ainda
+// vale o que a mudanca deixou. Quem chama depois e ajustes_dir (segunda leitura,
+// de main.c) le o arquivo que gravar() acabou de escrever, entao os dois concordam.
+static int riscoAplicar(const char *chave, int novo, int ant) {
+  int i;
+  for (i = 0; i < N_RISCOS; i++) {
+    const Risco *r = &RISCOS[i];
+    if (strcmp(r->chave, chave)) continue;
+    if (riscoAtual(r->op) != novo) return 0;
+    if (r->op == AJ_FIL_LIMITE) {
+      fil_definir_limite(ant);
+      valor[AJ_FIL_LIMITE] = fil_limite_gravado();
+    } else valor[r->op] = ant;
+    gravar();
+    return 1;
+  }
+  return 0;   // chave de outra versao: nada a desfazer aqui
+}
+// Texto de um valor para os avisos: o mesmo rotulo que a linha mostra.
+static void riscoRotulo(int op, int v, char *dst, size_t tam) {
+  const Opcao *o = &OPCOES[op];
+  if (op == AJ_FIL_LIMITE) snprintf(dst, tam, "%d", v);
+  else if (o->tipo == OP_ESCOLHA && v >= 0 && v < o->n) snprintf(dst, tam, "%s", i18n(o->valores[v]));
+  else snprintf(dst, tam, "%d", v);
+}
+// Perfil seguro GRAVADO: a segunda queda rapida, ja no perfil seguro. Escreve no
+// arquivo os valores que o perfil seguro so simulava, para o proximo arranque nao
+// cair no mesmo laco. Fileiras e itens vao ao padrao de fabrica (7 e 12), abaixo
+// do teto de 12 do perfil de sessao — se 12 ja derrubou, 12 nao serve.
+static void riscoGravarSeguro(void) {
+  int i;
+  for (i = 0; i < N_RISCOS; i++) {
+    const Risco *r = &RISCOS[i];
+    int v = riscoAtual(r->op);
+    if (r->op == AJ_TEMA) { if (temaDinamico()) valor[AJ_TEMA] = 0; continue; }
+    if (r->nivel(v) <= 0) continue;
+    if (r->op == AJ_FIL_LIMITE) { fil_definir_limite(FIL_LIMITE_PADRAO); valor[AJ_FIL_LIMITE] = fil_limite_gravado(); }
+    else if (r->op == AJ_ITENS_FILEIRA || r->op == AJ_RESOLUCAO || r->op == AJ_TEX_MB) valor[r->op] = 0;
+    else if (r->op == AJ_QUALIDADE_IMG) valor[r->op] = 1;
+    else valor[r->op] = 1;   // interruptores V_LIGA: 1 = Desligado
+  }
+  gravar();
+}
+
+void ajustes_seguro_iniciar(int caiu) {
+  const SegDecisao *d = seguro_iniciar(caiu, (long)time(NULL), riscoAplicar);
+  char id[72], tit[80], txt[420];
+  int i;
+  for (i = 0; i < d->nRevertidas; i++) {
+    const SegMud *m = &d->revertidas[i];
+    int k;
+    for (k = 0; k < N_RISCOS; k++) if (!strcmp(RISCOS[k].chave, m->chave)) break;
+    if (k < N_RISCOS) {
+      char nome[80], novo[48], ant[48];
+      snprintf(nome, sizeof nome, "%s", i18n(OPCOES[RISCOS[k].op].rotulo));
+      riscoRotulo(RISCOS[k].op, m->novo, novo, sizeof novo);
+      riscoRotulo(RISCOS[k].op, m->ant, ant, sizeof ant);
+      snprintf(id, sizeof id, "seguro:%d:%s", d->sessao, m->chave);
+      snprintf(tit, sizeof tit, "%s", i18n("Ajuste desfeito"));
+      snprintf(txt, sizeof txt, i18n("O app fechou depois de mudar \"%s\" para %s. Voltei para %s para ele abrir de novo. Você pode tentar outra vez em Ajustes."),
+               nome, novo, ant);
+      avisos_modo_seguro(id, tit, txt);
+    }
+  }
+  if (d->modo == SEG_PERFIL_SEGURO) {
+    // Fileiras: teto de sessao em fileiras.c (nao mexe no arquivo); o resto sao
+    // os acessores acima, que leem seguro_perfil_ativo().
+    fil_definir_teto_sessao(FIL_LIMITE_VIGIADO);
+    snprintf(id, sizeof id, "seguro:%d:%s", d->sessao, "perfil");
+    snprintf(tit, sizeof tit, "%s", i18n("Modo seguro ligado"));
+    snprintf(txt, sizeof txt, "%s", i18n("O app fechou duas vezes seguidas logo depois de abrir. Nesta sessão ele roda sem vidro, 4K, tema imersivo e trailers, e com menos fileiras e itens. Seus ajustes salvos não mudaram."));
+    avisos_modo_seguro(id, tit, txt);
+  } else if (d->modo == SEG_PERSISTIR_SEGURO) {
+    riscoGravarSeguro();
+    snprintf(id, sizeof id, "seguro:%d:%s", d->sessao, "gravado");
+    snprintf(tit, sizeof tit, "%s", i18n("Ajustes seguros gravados"));
+    snprintf(txt, sizeof txt, "%s", i18n("O app continuou fechando mesmo no modo seguro. Gravei os ajustes seguros: sem vidro, 4K, tema imersivo e trailers, e com as fileiras e os itens de fábrica. Você pode mudar tudo de novo em Ajustes."));
+    avisos_modo_seguro(id, tit, txt);
+  }
+}
+
+// --- FOLHA DE CONFIRMACAO: mais fileiras / mais itens -------------------------
+// Primeira vez que a pessoa passa do que sempre coube, uma folha explica o preco.
+// Modal dentro desta tela (mesma razao da folha de fileiras: ajustes.c nao pede
+// nada a app.c). Depois de aceita uma vez, vale por aparelho (seguro.txt) e as
+// proximas mudancas nao perguntam — mas continuam vigiadas pelo diario.
+static int  riscoFolha;          // 0 fechada; senao SEG_AVISO_*
+static int  riscoFolhaOp, riscoFolhaDir;
+static int  riscoFolhaFoco;      // 0 = Continuar, 1 = Cancelar
+static void mudarValor(int op, int dir);
+// O valor a que `dir` levaria `op`, sem aplicar. Espelha mudarValor.
+static int passoAdiante(int op, int dir) {
+  const Opcao *o = &OPCOES[op];
+  if (o->tipo == OP_NUMERO) return limita(op, valor[op] + dir * o->passo);
+  { int n = nValores(op); return (valor[op] + (dir > 0 ? 1 : n - 1)) % n; }
+}
+// 1 quando a mudanca precisa da folha (e a abriu).
+static int riscoPedirConfirmacao(int op, int dir) {
+  int bit, de, para;
+  if (op == AJ_FIL_LIMITE) {
+    bit = SEG_AVISO_FILEIRAS;
+    de = riscoAtual(op); para = passoAdiante(op, dir);
+    if (!(para > FIL_LIMITE_SEGURO && para > de)) return 0;
+  } else if (op == AJ_ITENS_FILEIRA) {
+    bit = SEG_AVISO_ITENS;
+    de = valor[op]; para = passoAdiante(op, dir);
+    if (!(para > 0 && para > de)) return 0;
+  } else return 0;
+  if (seguro_aviso_visto(bit)) return 0;
+  riscoFolha = bit; riscoFolhaOp = op; riscoFolhaDir = dir; riscoFolhaFoco = 1;   // Cancelar de partida
+  return 1;
+}
+static const char *riscoFolhaTitulo(void) {
+  return riscoFolha == SEG_AVISO_FILEIRAS ? "Mais fileiras na Home" : "Mais itens por fileira";
+}
+static const char *riscoFolhaTexto(void) {
+  return riscoFolha == SEG_AVISO_FILEIRAS
+    ? "Mais fileiras usam mais memória e rede; em TVs com 1 GB a Home pode ficar lenta ou fechar. Se o app fechar, ele volta sozinho ao valor anterior."
+    : "Mais itens por fileira usam mais memória; em TVs com 1 GB a Home pode ficar lenta ou fechar. Se o app fechar, ele volta sozinho ao valor anterior.";
+}
+static void riscoFolhaEvento(SDL_Keycode k) {
+  if (k == SDLK_LEFT || k == SDLK_RIGHT) { riscoFolhaFoco = k == SDLK_LEFT ? 0 : 1; return; }
+  if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE || k == SDLK_DELETE) { riscoFolha = 0; return; }
+  if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
+    int bit = riscoFolha, op = riscoFolhaOp, dir = riscoFolhaDir, ok = riscoFolhaFoco == 0;
+    riscoFolha = 0;
+    if (!ok) return;
+    seguro_aviso_marcar(bit);
+    mudarValor(op, dir);   // agora vista: aplica de verdade
+  }
+}
+static void desenhaRiscoFolha(void) {
+  const float W = 980.0f, H = 380.0f;
+  float x = (NV_TELA_W - W) * 0.5f, y = (NV_TELA_H - H) * 0.5f, ar, ag, ab, bx, by;
+  TxtLinha t;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.78f);
+  gfx_cor((GfxRect){ x, y, W, H }, 28.0f / H, 0.055f, 0.058f, 0.068f, 0.97f);
+  gfx_luz_canto((GfxRect){ x, y, W, H }, 28.0f / H, W * 0.05f, -W * 0.15f, W * 0.5f, ar, ag, ab, 0.22f);
+  t = txt_linha(TXT_TITULO3, i18n(riscoFolhaTitulo()), 246, 247, 252, 255);
+  txt_desenhar(t, x + 56.0f, y + 48.0f);
+  txt_bloco(TXT_BODY, i18n(riscoFolhaTexto()), 200, 203, 210, x + 56.0f, y + 130.0f, W - 112.0f, 36.0f, 1.0f, 4);
+  bx = x + 56.0f; by = y + H - 48.0f - BOTAO_H_PRIMARIO;
+  { GfxRect r = { bx, by, botao_largura(i18n("Continuar"), NULL, 1), BOTAO_H_PRIMARIO };
+    botao_pilula(r, i18n("Continuar"), NULL, riscoFolhaFoco == 0 ? 1.0f : 0.0f, 1, 0, 1.0f);
+    bx += r.w + BOTAO_GAP; }
+  { GfxRect r = { bx, by + (BOTAO_H_PRIMARIO - BOTAO_H_SECUNDARIO), botao_largura(i18n("Cancelar"), NULL, 0), BOTAO_H_SECUNDARIO };
+    botao_pilula(r, i18n("Cancelar"), NULL, riscoFolhaFoco == 1 ? 1.0f : 0.0f, 0, 0, 1.0f); }
+}
+
 // UM PASSO NO VALOR DA OPCAO `op` (dir = +1 ou -1), com tudo o que a mudanca
 // tem de disparar, e a gravacao. Um lugar so para as setas do modo edicao e
 // para o OK do interruptor: dois caminhos para o mesmo valor eram duas listas
 // de efeitos colaterais para manter iguais.
-static void mudarValor(int op, int dir) {
+static void mudarValorDireto(int op, int dir) {
   const Opcao *o = &OPCOES[op];
   if (o->tipo == OP_NUMERO) {
     // Numero NAO circula: passar de 100% para 0% com um toque a mais e um
@@ -3389,7 +3615,7 @@ static void mudarValor(int op, int dir) {
     // fileiras.c. Sem esta linha o numero mudaria na tela e a home nao.
     if (op == AJ_FIL_LIMITE) {
       fil_definir_limite(valor[op]);
-      valor[op] = fil_limite();
+      valor[op] = fil_limite_gravado();
     }
   } else {
     // Escolha circula: a lista e curta e voltar do fim ao inicio poupa
@@ -3433,6 +3659,15 @@ static void mudarValor(int op, int dir) {
   sync_proteger_ajustes_locais();
 }
 
+// A porta de entrada: pede a folha de aviso quando a mudanca passa do que sempre
+// coube e, feita a mudanca, avisa o diario do modo seguro.
+static void mudarValor(int op, int dir) {
+  int antes = riscoDe(op) ? riscoAtual(op) : 0;
+  if (riscoPedirConfirmacao(op, dir)) return;
+  mudarValorDireto(op, dir);
+  riscoNotar(op, antes);
+}
+
 // Interruptor = escolha entre Ligado e Desligado. E o `renderToggleRow` do web:
 // OK troca, e o desenho e a pilula do guia, nao um valor em texto.
 static int ehInterruptor(int op) {
@@ -3466,6 +3701,8 @@ void ajustes_evento(const SDL_Event *e) {
       }
       return;
     } }
+  // A folha de aviso de memoria (mais fileiras/itens) e modal e vem antes de tudo.
+  if (riscoFolha) { riscoFolhaEvento(k); return; }
   // A folha de fileiras e modal, como a do vinculo acima.
   if (filAberta) { eventoFileiras(k); return; }
 
@@ -6158,6 +6395,7 @@ void ajustes_desenhar(Uint32 agora) {
   // A folha de fileiras cobre a lista; o vinculo cobre as duas, porque ele e a
   // unica coisa aqui com prazo (o codigo do dispositivo expira).
   if (filAberta) desenhaFileiras();
+  if (riscoFolha) desenhaRiscoFolha();
 
   // Por cima de tudo: enquanto um vinculo esta em andamento, ele e a pergunta
   // da tela.
