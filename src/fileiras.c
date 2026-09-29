@@ -644,10 +644,20 @@ static void registrar(const char *chave, const char *titulo,
         fflush(stdout);
         return;
       }
-      printf("[fileiras] tabela cheia (%d): \"%s\" saiu para \"%s\" entrar\n",
-             FIL_MAX, linhas[v].titulo[0] ? linhas[v].titulo : linhas[v].chave,
-             chave);
-      fflush(stdout);
+      // SO AS CINCO PRIMEIRAS, depois uma linha a cada 100. Um addon com mais
+      // de FIL_MAX catalogos (registros 9869/9879: com.aicat, ~300 despejos por
+      // arranque) enchia o log de linhas iguais, e o envio corta em 200 KB — o
+      // resto da sessao, que era o que interessava, nao chegava.
+      { static unsigned despejos;
+        despejos++;
+        if (despejos <= 5)
+          printf("[fileiras] tabela cheia (%d): \"%s\" saiu para \"%s\" entrar\n",
+                 FIL_MAX, linhas[v].titulo[0] ? linhas[v].titulo : linhas[v].chave,
+                 chave);
+        else if (despejos % 100 == 0)
+          printf("[fileiras] tabela cheia (%d): %u fileiras ja sairam para outras entrarem\n",
+                 FIL_MAX, despejos);
+        fflush(stdout); }
       if (v < nLinhas - 1)
         memmove(&linhas[v], &linhas[v + 1],
                 sizeof(Linha) * (size_t)(nLinhas - 1 - v));
