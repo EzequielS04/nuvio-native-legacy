@@ -187,7 +187,11 @@ static int provedorEntre(const char *ini, const char *fim, const char *chave,
 // Preenche foto e personagem do elenco. O Cinemeta da so o NOME; o personagem
 // e o retrato vem do TMDB, que precisa de duas viagens: achar o id dele pelo
 // id do IMDb e so entao pedir os creditos.
-static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie) {
+// `manter`: bits de DESC_MANTER_* dos textos que ja vieram do addon de
+// metadados (#176) e o TMDB nao pode trocar.
+#define DESC_MANTER_TITULO  1
+#define DESC_MANTER_SINOPSE 2
+static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int manter) {
   char url[400], *corpo;
   const char *chave;
   long idTmdb = 0;
@@ -255,9 +259,11 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie) {
                    "https://image.tmdb.org/t/p/w1280%s", fundo); }
       if (ajustes_tmdb_basico()) {
         char t[160], sin[900];
-        if (js_texto_raiz(corpo, serie ? "name" : "title", t, sizeof t) && t[0])
+        if (!(manter & DESC_MANTER_TITULO) &&
+            js_texto_raiz(corpo, serie ? "name" : "title", t, sizeof t) && t[0])
           snprintf(d->titulo, sizeof d->titulo, "%s", t);
-        if (js_texto_raiz(corpo, "overview", sin, sizeof sin) && sin[0])
+        if (!(manter & DESC_MANTER_SINOPSE) &&
+            js_texto_raiz(corpo, "overview", sin, sizeof sin) && sin[0])
           snprintf(d->sinopse, sizeof d->sinopse, "%s", sin);
       }
       if (ajustes_tmdb_arte()) {
@@ -476,6 +482,12 @@ void desc_alvo_busca(const char *base, const char *tipo, const char *id,
     snprintf(a->id,     sizeof a->id,     "%s", id ? id : "");
     snprintf(a->titulo, sizeof a->titulo, "%s", titulo ? titulo : "");
     snprintf(a->addon,  sizeof a->addon,  "%s", addon ? addon : "");
+  } else {
+    // Teto cheio: o alvo NAO sera consultado. Antes era em silencio, e quem
+    // tem addons demais via a busca "nao achar" o titulo local sem nenhuma
+    // pista do porque. So o nome do addon vai ao log (a URL leva credencial).
+    printf("[desc] busca: teto de %d alvos; \"%s\" (%s) fora da busca\n",
+           BUSCA_ALVOS, titulo ? titulo : "", addon ? addon : "");
   }
   pthread_mutex_unlock(&buscaTrava);
 }
@@ -1636,7 +1648,13 @@ static int lerManifesto(int iAddon, const char *base, Decl *saida, int max,
         // titulo e o pedido de stream ja sai com o tipo certo
         // (addons_buscar_streams preserva `tipo`), entao procurar "ESPN" e uma
         // pergunta que este app sabe responder.
-        if (strcmp(tipo, "movie") && strcmp(tipo, "series") && !ehCanal(tipo))
+        //
+        // "anime" TAMBEM (#176): o AIOMetadata e os addons localizados
+        // declaram a busca de anime no tipo proprio, e sem isto o nome local de
+        // um anime nunca era consultado. O item volta com tipo "anime" e abre
+        // pelo mesmo caminho de tipo incerto que as fileiras de anime da home.
+        if (strcmp(tipo, "movie") && strcmp(tipo, "series") && strcmp(tipo, "anime") &&
+            !ehCanal(tipo))
           d->buscavel = 0;
         // Registra AQUI, e nao depois varrendo o vetor de Decl.
         //
@@ -2028,6 +2046,11 @@ static int filtrarRemoto(CatItem *v, int n, int (*aSeguir)(const char *),
   return w;
 }
 
+// Texto localizado do Continuar assistindo (#176): o Trakt/Simkl/conta so tem o
+// titulo e a sinopse em ingles. Definidas junto do cache de /meta, mais abaixo.
+static int aplicarLocCache(CatItem *v, int n);
+static void localizarContinuarPublicado(void);
+
 static int montarContinuar(CatItem *saida, int max) {
   // static: dois lotes de 12 CatItem passam de 350 KB e montar() roda uma vez,
   // num fio so — a mesma razao do vetor de Decl mais abaixo.
@@ -2259,6 +2282,10 @@ static int montarContinuar(CatItem *saida, int max) {
              : doSimkl && juntos[i].item >= doSimkl && juntos[i].item < doSimkl + CONT_MAX ? "simkl"
              : "trakt");
   }
+  // O que ja foi localizado antes entra AQUI, sem rede: a fileira nao pisca em
+  // ingles a cada refazagem. O que falta e buscado depois de publicada
+  // (localizarContinuarPublicado), para o texto novo nunca atrasar a fileira.
+  aplicarLocCache(saida, nJ);
   printf("[desc] continuar assistindo: %d do Trakt, %d do Simkl (%d fora de 1-90%%), "
          "%d da conta, %d repetido(s); %d na fileira\n",
          nT, nS, fora, nL, repetidos, nJ);
@@ -2292,6 +2319,7 @@ static void *fioContinuar(void *u) {
   n = montarContinuar(lote, CONT_MAX);
   pthread_mutex_unlock(&contTrava);
   cat_trocar_continuar(lote, n);
+  localizarContinuarPublicado();
   cwVivo = 0;
   if (cwDeNovo) { cwDeNovo = 0; desc_refazer_continuar(); }
   return NULL;
@@ -3445,6 +3473,7 @@ static void *montar(void *u) {
       printf("[desc] catalogo montado com %d titulos, igual ao que esta na tela; mantido\n", n);
     }
     cat_cache_substituido();
+    localizarContinuarPublicado();
     if (!(mudou & HOMEESTADO_MUDOU_ESTRUTURA))
       homeestado_salvar_se_geracao(filsMontadas, nFileirasMontadas, estadoFim);
 
@@ -3826,6 +3855,272 @@ static void metaCacheGuardar(const char *id, const char *corpo) {
   pthread_mutex_unlock(&metaTrava);
 }
 
+// --- TEXTO LOCALIZADO (#176) ---------------------------------------------------
+//
+// O Cinemeta, o Trakt e o Simkl so falam ingles. Quem tem um addon de metadados
+// localizado e/ou o TMDB num idioma que nao e o ingles pedia texto localizado e
+// via ingles: o ajuste "Prefere a ficha do addon de metadados"
+// (ajustes_meta_externo) nao era lido por ninguem, e o Continuar assistindo
+// nunca perguntava a fonte nenhuma alem do Trakt.
+
+// O idioma do TMDB configurado nao e o ingles?
+static int idiomaNaoIngles(void) {
+  const char *l = desc_tmdb_idioma();
+  return l && l[0] && strncmp(l, "en", 2) != 0;
+}
+
+// /meta/<tipo>/<id>.json do addon `i` (cache por addon+tipo+id), ou NULL quando
+// o addon nao serve (desligado, sem o recurso "meta", e o Cinemeta, que o
+// chamador ja tem) ou nao respondeu. A URL carrega credencial: nada aqui a loga.
+static char *metaDoAddon(int i, const char *tipo, const char *id) {
+  char url[700], chave[48], *c;
+  const char *base;
+  unsigned h = 2166136261u;
+  if (!addons_ativo(i) || !addons_sondado(i) || !addons_fornece(i, ADD_META)) return NULL;
+  base = addons_base(i);
+  if (!base || !base[0] || strstr(base, "cinemeta")) return NULL;
+  for (const char *q = base; *q; q++) h = (h ^ (unsigned char)*q) * 16777619u;
+  snprintf(chave, sizeof chave, "%08x/%s/%s", h, tipo, id);
+  c = metaCacheObter(chave);
+  if (c) return c;
+  snprintf(url, sizeof url, "%s/meta/%s/%s.json", base, tipo, id);
+  c = rede_baixar(url, 15);
+  if (c) metaCacheGuardar(chave, c);
+  return c;
+}
+
+// Nome e descricao da RAIZ do objeto "meta" (js_texto acharia o "name" de um
+// video). 1 quando ha nome; "meta":null e resposta de erro dao 0.
+static int metaTextos(const char *corpo, char *tit, size_t nt, char *sin, size_t ns) {
+  const char *m = corpo ? strstr(corpo, "\"meta\"") : NULL;
+  if (tit && nt) tit[0] = 0;
+  if (sin && ns) sin[0] = 0;
+  if (!m) return 0;
+  m += 6;
+  while (*m == ' ' || *m == ':' || *m == '\n' || *m == '\t' || *m == '\r') m++;
+  if (*m != '{') return 0;
+  if (!js_texto_raiz_em(m, NULL, "name", tit, nt) || !tit[0]) return 0;
+  if (sin && ns) js_texto_raiz_em(m, NULL, "description", sin, ns);
+  return 1;
+}
+
+// Titulo e sinopse do primeiro addon de metadados ativo que conhece `id`.
+static int textoDoAddon(const char *tipo, const char *id, char *tit, size_t nt,
+                        char *sin, size_t ns, const char **nomeAddon) {
+  int i, n = addons_n();
+  for (i = 0; i < n; i++) {
+    char *c = metaDoAddon(i, tipo, id);
+    int ok;
+    if (!c) continue;
+    ok = metaTextos(c, tit, nt, sin, ns);
+    free(c);
+    if (ok) { if (nomeAddon) *nomeAddon = addons_nome(i); return 1; }
+  }
+  return 0;
+}
+
+// Titulo e sinopse do TMDB no idioma configurado: /find + /tv|movie/<id>.
+static int textoDoTmdb(const char *tipo, const char *id, char *tit, size_t nt,
+                       char *sin, size_t ns) {
+  const char *chave = desc_chave_tmdb();
+  int serie = !strcmp(tipo, "series");
+  char url[400], *c;
+  long idT = 0;
+  if (!chave[0] || !ajustes_tmdb_basico()) return 0;
+  snprintf(url, sizeof url, "%s/find/%s?api_key=%s&external_source=imdb_id",
+           TMDB, id, chave);
+  c = rede_baixar(url, 8);
+  if (!c) return 0;
+  { const char *p = js_array(c, NULL, serie ? "tv_results" : "movie_results");
+    if (p) idT = (long)js_num(p, js_fim(p), "id", 0.0); }
+  free(c);
+  if (idT <= 0) return 0;
+  snprintf(url, sizeof url, "%s/%s/%ld?api_key=%s&language=%s",
+           TMDB, serie ? "tv" : "movie", idT, chave, desc_tmdb_idioma());
+  c = rede_baixar(url, 8);
+  if (!c) return 0;
+  tit[0] = sin[0] = 0;
+  js_texto_raiz(c, serie ? "name" : "title", tit, nt);
+  js_texto_raiz(c, "overview", sin, ns);
+  free(c);
+  return tit[0] || sin[0];
+}
+
+// Cache do texto localizado: um pedido por titulo e por idioma, nao um por
+// refazagem da fileira. Resposta negativa vale 10 min (falha de rede nao vira
+// "sem traducao" para a sessao inteira).
+#define LOC_N 64
+static struct { char chave[64]; char titulo[160]; char sinopse[900]; int ok; long quando; }
+  locCache[LOC_N];
+static int locProx;
+static pthread_mutex_t locTrava = PTHREAD_MUTEX_INITIALIZER;
+
+static void locChave(char *dst, size_t n, const char *tipo, const char *id) {
+  snprintf(dst, n, "%s/%s/%s/%d", tipo, id, desc_tmdb_idioma(), ajustes_meta_externo());
+}
+
+// 1 = achou entrada valida; *ok diz se ha texto. Entrada negativa vencida = 0.
+static int locLer(const char *chave, char *tit, size_t nt, char *sin, size_t ns, int *ok) {
+  int i, achou = 0;
+  pthread_mutex_lock(&locTrava);
+  for (i = 0; i < LOC_N; i++) {
+    if (!locCache[i].chave[0] || strcmp(locCache[i].chave, chave)) continue;
+    if (!locCache[i].ok && time(NULL) - locCache[i].quando > 600) break;
+    *ok = locCache[i].ok;
+    if (*ok) {
+      snprintf(tit, nt, "%s", locCache[i].titulo);
+      snprintf(sin, ns, "%s", locCache[i].sinopse);
+    }
+    achou = 1;
+    break;
+  }
+  pthread_mutex_unlock(&locTrava);
+  return achou;
+}
+
+static void locGuardar(const char *chave, const char *tit, const char *sin, int ok) {
+  int i, vaga = -1;
+  pthread_mutex_lock(&locTrava);
+  for (i = 0; i < LOC_N; i++)
+    if (!strcmp(locCache[i].chave, chave)) { vaga = i; break; }
+  if (vaga < 0) { vaga = locProx; locProx = (locProx + 1) % LOC_N; }
+  snprintf(locCache[vaga].chave, sizeof locCache[vaga].chave, "%s", chave);
+  snprintf(locCache[vaga].titulo, sizeof locCache[vaga].titulo, "%s", ok ? tit : "");
+  snprintf(locCache[vaga].sinopse, sizeof locCache[vaga].sinopse, "%s", ok ? sin : "");
+  locCache[vaga].ok = ok;
+  locCache[vaga].quando = (long)time(NULL);
+  pthread_mutex_unlock(&locTrava);
+}
+
+// Id do titulo ("tt123" de "tt123:1:2") e tipo do meta ("movie"/"series") de um
+// item. 0 quando nao ha o que perguntar (canal, id que nao e do IMDb).
+static int locChaveDoItem(const CatItem *c, char *id, size_t nid, const char **tipo) {
+  const char *dp;
+  if (!c || strncmp(c->imdb, "tt", 2) || ehCanal(c->tipo)) return 0;
+  snprintf(id, nid, "%s", c->imdb);
+  dp = strchr(id, ':');
+  if (dp) *(char *)dp = 0;
+  *tipo = (!strcmp(c->tipo, "movie")) ? "movie" : "series";
+  return 1;
+}
+
+// Resolve (com rede) titulo e sinopse localizados. A ordem e a da preferencia:
+// com "Prefere a ficha do addon de metadados" o addon vem primeiro; sem ele, o
+// TMDB no idioma configurado, e o addon so quando o TMDB nao tem (ou esta
+// desligado). Em ingles e sem a preferencia nao ha nada a localizar.
+static int localizarTexto(const char *tipo, const char *id, char *tit, size_t nt,
+                          char *sin, size_t ns) {
+  char chave[64];
+  int ok = 0, externo = ajustes_meta_externo(), naoIng = idiomaNaoIngles(), lido;
+  if (!externo && !naoIng) return 0;
+  locChave(chave, sizeof chave, tipo, id);
+  if (locLer(chave, tit, nt, sin, ns, &lido)) return lido;
+  tit[0] = sin[0] = 0;
+  if (externo) {
+    ok = textoDoAddon(tipo, id, tit, nt, sin, ns, NULL);
+    if (!ok && naoIng) ok = textoDoTmdb(tipo, id, tit, nt, sin, ns);
+  } else {
+    ok = textoDoTmdb(tipo, id, tit, nt, sin, ns);
+    if (!ok) ok = textoDoAddon(tipo, id, tit, nt, sin, ns, NULL);
+  }
+  locGuardar(chave, tit, sin, ok);
+  return ok;
+}
+
+// Aplica ao item o que o cache ja sabe (sem rede). Campo vazio nao apaga.
+static int aplicarLocItem(CatItem *c) {
+  char id[24], tit[160], sin[900];
+  const char *tipo;
+  int ok = 0;
+  if (!locChaveDoItem(c, id, sizeof id, &tipo)) return 0;
+  { char chave[64];
+    locChave(chave, sizeof chave, tipo, id);
+    if (!locLer(chave, tit, sizeof tit, sin, sizeof sin, &ok) || !ok) return 0; }
+  if (tit[0] && strcmp(tit, c->titulo)) { snprintf(c->titulo, sizeof c->titulo, "%s", tit); ok = 2; }
+  if (sin[0] && strcmp(sin, c->sinopse)) { snprintf(c->sinopse, sizeof c->sinopse, "%s", sin); ok = 2; }
+  return ok == 2;
+}
+
+static int aplicarLocCache(CatItem *v, int n) {
+  int i, mudou = 0;
+  if (!ajustes_meta_externo() && !idiomaNaoIngles()) return 0;
+  for (i = 0; i < n; i++) mudou += aplicarLocItem(&v[i]);
+  return mudou;
+}
+
+// Um fio por vez; pedido que chega com o fio no ar troca a lista pendente e
+// ganha uma volta a mais (so o ultimo estado interessa, como no refazer do CW).
+#define LOC_LOTE 32
+static int locIdx[LOC_LOTE], locNIdx;
+static volatile int locVivo, locDeNovo;
+static pthread_mutex_t locFilaTrava = PTHREAD_MUTEX_INITIALIZER;
+
+static void *fioLocalizar(void *u) {
+  (void)u;
+  for (;;) {
+    int lista[LOC_LOTE], n, k;
+    pthread_mutex_lock(&locFilaTrava);
+    n = locNIdx;
+    memcpy(lista, locIdx, sizeof(int) * (size_t)n);
+    locDeNovo = 0;
+    pthread_mutex_unlock(&locFilaTrava);
+    for (k = 0; k < n; k++) {
+      const CatItem *o = lista[k] < cat_n() ? cat_item(lista[k]) : NULL;
+      char id[24], imdb[64], tit[160], sin[900];
+      const char *tipo;
+      if (!o || !locChaveDoItem(o, id, sizeof id, &tipo)) continue;
+      snprintf(imdb, sizeof imdb, "%s", o->imdb);
+      if (!localizarTexto(tipo, id, tit, sizeof tit, sin, sizeof sin)) continue;
+      // Reler: o item pode ter mudado de lugar ou de texto enquanto a rede
+      // respondia. So o titulo e a sinopse sao tocados.
+      o = lista[k] < cat_n() ? cat_item(lista[k]) : NULL;
+      if (o && !strcmp(o->imdb, imdb)) {
+        CatItem *e = malloc(sizeof *e);
+        if (e) {
+          *e = *o;
+          if (aplicarLocItem(e)) cat_atualizar_item(lista[k], e);
+          free(e);
+        }
+      }
+    }
+    pthread_mutex_lock(&locFilaTrava);
+    if (locDeNovo) { pthread_mutex_unlock(&locFilaTrava); continue; }
+    locVivo = 0;
+    pthread_mutex_unlock(&locFilaTrava);
+    return NULL;
+  }
+}
+
+void desc_localizar_indices(const int *idx, int n) {
+  pthread_t t;
+  if (!idx || n < 1) return;
+  if (!ajustes_meta_externo() && !idiomaNaoIngles()) return;
+  if (n > LOC_LOTE) n = LOC_LOTE;
+  pthread_mutex_lock(&locFilaTrava);
+  memcpy(locIdx, idx, sizeof(int) * (size_t)n);
+  locNIdx = n;
+  if (locVivo) { locDeNovo = 1; pthread_mutex_unlock(&locFilaTrava); return; }
+  locVivo = 1;
+  pthread_mutex_unlock(&locFilaTrava);
+  if (pthread_create(&t, NULL, fioLocalizar, NULL) != 0) locVivo = 0;
+  else pthread_detach(t);
+}
+
+// A fileira "Continuar assistindo" ja esta na tela: pede o texto localizado dos
+// cards. E isto que o destaque (hero) le quando o primeiro item do catalogo e o
+// Continuar.
+static void localizarContinuarPublicado(void) {
+  int r, nf = cat_n_fileiras(), idx[LOC_LOTE], k, n = 0;
+  if (!ajustes_meta_externo() && !idiomaNaoIngles()) return;
+  for (r = 0; r < nf; r++) {
+    const CatFileira *f = cat_fileira(r);
+    if (!f || strcmp(f->chave, "continue_watching")) continue;
+    for (k = 0; k < f->n && n < LOC_LOTE; k++) idx[n++] = f->ini + k;
+    break;
+  }
+  desc_localizar_indices(idx, n);
+}
+
 // Publica a parte critica antes de qualquer enriquecimento opcional. Assim a
 // fileira de episodios aparece depois da primeira resposta, sem esperar pelas
 // duas viagens ao TMDB usadas para foto e personagem do elenco.
@@ -3929,8 +4224,45 @@ int desc_tmdb_elenco(const char *json, CatItem *d) {
   return casados;
 }
 
+// O nome que o TMDB devolve quando NAO tem traducao e "Episodio 3" (ou o
+// equivalente no idioma pedido): pior que o titulo original. Generico = o
+// numero do episodio como palavra inteira e, tirado ele, sobra no maximo UMA
+// palavra ("Episode 3", "Серія 3", "Episodul 3", "#3 Episodio"). Titulo de
+// verdade com mais de uma palavra sobrando ("Season Finale 3") nao cai aqui.
+int desc_nome_episodio_generico(const char *nome, int episodio) {
+  char num[16];
+  const char *p = nome;
+  size_t nn;
+  int palavras = 0, achou = 0, emPalavra = 0;
+  if (!nome || !nome[0]) return 1;
+  snprintf(num, sizeof num, "%d", episodio);
+  nn = strlen(num);
+  for (; *p; p++) {
+    unsigned char c = (unsigned char)*p;
+    if (c >= '0' && c <= '9') {
+      const char *q = p;
+      while (*q >= '0' && *q <= '9') q++;
+      if ((size_t)(q - p) == nn && !strncmp(p, num, nn)) achou = 1;
+      else if (!emPalavra) { palavras++; emPalavra = 1; }
+      p = q - 1;
+      continue;
+    }
+    if (c == ' ' || c == '#' || c == '.' || c == ':' || c == '-' || c == ',') {
+      emPalavra = 0;
+      continue;
+    }
+    if (!emPalavra) { palavras++; emPalavra = 1; }
+  }
+  return achou && palavras <= 1;
+}
+
 int desc_tmdb_notas_temporada(const char *json, CatEp *eps, int n,
                               int temporada) {
+  return desc_tmdb_notas_temporada_ex(json, eps, n, temporada, DESC_EPT_SINOPSE);
+}
+
+int desc_tmdb_notas_temporada_ex(const char *json, CatEp *eps, int n,
+                                 int temporada, int textos) {
   const char *p;
   int feitos = 0, i;
   if (!json || !eps || n < 1) return 0;
@@ -3942,18 +4274,28 @@ int desc_tmdb_notas_temporada(const char *json, CatEp *eps, int n,
       for (i = 0; i < n; i++)
         if (eps[i].temporada == temporada && eps[i].episodio == num) {
           double v = js_num(p, f, "vote_average", 0.0);
-          char sin[sizeof eps[i].sinopse];
-          int mudou = 0;
+          char sin[sizeof eps[i].sinopse], nome[sizeof eps[i].nome];
+          int mudou = 0, soVazio = (textos & DESC_EPT_SO_VAZIO) != 0;
           if (v > 0.0) { eps[i].nota = (int)(v * 10.0 + 0.5); mudou = 1; }
           // SINOPSE NO IDIOMA ESCOLHIDO (#150). O pedido ja vai com
           // language=desc_tmdb_idioma(), e o `overview` vinha sendo jogado
           // fora: a sinopse da fileira era a do Cinemeta, sempre em ingles.
-          // Vazio (o TMDB sem traducao) deixa a que ja estava. O NOME do
-          // episodio fica de fora de proposito: sem traducao o TMDB devolve
-          // "Episódio 3", pior que o titulo original.
-          if (js_texto(p, f, "overview", sin, sizeof sin) && sin[0] &&
-              strcmp(sin, eps[i].sinopse)) {
+          // Vazio (o TMDB sem traducao) deixa a que ja estava.
+          if ((textos & DESC_EPT_SINOPSE) &&
+              js_texto(p, f, "overview", sin, sizeof sin) && sin[0] &&
+              strcmp(sin, eps[i].sinopse) && (!soVazio || !eps[i].sinopse[0])) {
             snprintf(eps[i].sinopse, sizeof eps[i].sinopse, "%s", sin);
+            mudou = 1;
+          }
+          // O NOME (#176: "os nomes dos episodios ficam em ingles"). Sem
+          // traducao o TMDB devolve "Episodio 3", pior que o titulo original —
+          // por isso o generico nao entra (desc_nome_episodio_generico), e o
+          // nome que ja estava fica.
+          if ((textos & DESC_EPT_NOME) &&
+              js_texto(p, f, "name", nome, sizeof nome) && nome[0] &&
+              !desc_nome_episodio_generico(nome, num) &&
+              strcmp(nome, eps[i].nome) && (!soVazio || !eps[i].nome[0])) {
+            snprintf(eps[i].nome, sizeof eps[i].nome, "%s", nome);
             mudou = 1;
           }
           feitos += mudou;
@@ -4006,15 +4348,16 @@ int desc_meta_n_episodios(const char *corpo) {
   return n;
 }
 
-static int publicarEpisodios(const char *corpo, int alvoItem, const char *titulo) {
 // Em par com CAT_EP_MAX (catalogo.c): um titulo que caiba no store nao pode
 // truncar no parse, e um que nao caiba trunca aqui em vez de zerar os outros.
 #define VIDEOS_MAX 1200
-  CatEp *eps = malloc(sizeof(CatEp) * VIDEOS_MAX);
+
+// videos[] de um /meta -> lista de CatEp ORDENADA por (temporada, episodio).
+// So entram videos com temporada > 0. Devolve quantos.
+static int parsearEpisodios(const char *corpo, CatEp *eps, int max) {
   int n = 0;
-  if (!eps) return 0;
   const char *p = js_array(corpo, NULL, "videos");
-  while (p && n < VIDEOS_MAX) {
+  while (p && n < max) {
     const char *f = js_fim(p);
     int t = (int)js_num(p, f, "season", -1);
     if (t > 0) {
@@ -4041,6 +4384,50 @@ static int publicarEpisodios(const char *corpo, int alvoItem, const char *titulo
       eps[j + 1] = eps[j];
     eps[j + 1] = k;
   }
+  return n;
+}
+
+void desc_mesclar_episodios(CatEp *base, int nb, const CatEp *outro, int no, int modo) {
+  int i = 0, j = 0;
+  while (i < nb && j < no) {
+    int c = base[i].temporada != outro[j].temporada
+          ? (base[i].temporada < outro[j].temporada ? -1 : 1)
+          : (base[i].episodio < outro[j].episodio ? -1
+             : base[i].episodio > outro[j].episodio ? 1 : 0);
+    if (c < 0) { i++; continue; }
+    if (c > 0) { j++; continue; }
+    if (modo == DESC_MESCLA_TEXTO) {
+      if (outro[j].nome[0])    snprintf(base[i].nome, sizeof base[i].nome, "%s", outro[j].nome);
+      if (outro[j].sinopse[0]) snprintf(base[i].sinopse, sizeof base[i].sinopse, "%s", outro[j].sinopse);
+    } else {
+      if (!base[i].nome[0])    snprintf(base[i].nome, sizeof base[i].nome, "%s", outro[j].nome);
+      if (!base[i].sinopse[0]) snprintf(base[i].sinopse, sizeof base[i].sinopse, "%s", outro[j].sinopse);
+    }
+    // O que o addon nao traz (still, duracao, data) vem da outra lista nos
+    // dois modos: uma lista sem imagem e pior que uma com imagem em ingles.
+    if (!base[i].thumb[0])   snprintf(base[i].thumb, sizeof base[i].thumb, "%s", outro[j].thumb);
+    if (!base[i].duracao[0]) snprintf(base[i].duracao, sizeof base[i].duracao, "%s", outro[j].duracao);
+    if (!base[i].data[0])    snprintf(base[i].data, sizeof base[i].data, "%s", outro[j].data);
+    i++; j++;
+  }
+}
+
+// `sobre` (opcional) e o /meta da OUTRA fonte, mesclado por `modo`
+// (desc_mesclar_episodios) antes de publicar.
+static int publicarEpisodios(const char *corpo, int alvoItem, const char *titulo,
+                             const char *sobre, int modo) {
+  CatEp *eps = malloc(sizeof(CatEp) * VIDEOS_MAX);
+  int n = 0;
+  if (!eps) return 0;
+  n = parsearEpisodios(corpo, eps, VIDEOS_MAX);
+  if (sobre && n) {
+    CatEp *o = malloc(sizeof(CatEp) * VIDEOS_MAX);
+    if (o) {
+      int no = parsearEpisodios(sobre, o, VIDEOS_MAX);
+      desc_mesclar_episodios(eps, n, o, no, modo);
+      free(o);
+    }
+  }
   if (n) cat_definir_episodios(alvoItem, eps, n);
   free(eps);
   marco("episodios na tela");
@@ -4056,41 +4443,65 @@ static int publicarEpisodios(const char *corpo, int alvoItem, const char *titulo
 // publica a lista dele no lugar. So troca por lista MAIOR: quem ja estava
 // completo continua como estava. A URL do addon carrega credencial, entao o
 // log diz so o nome.
-static void episodiosDoAddon(int alvoItem, const char *serie, const char *titulo,
-                             int nCine) {
+//
+// COM `aplicar` (#176: a ficha do addon preferida, ou idioma que nao e o
+// ingles sem TMDB para traduzir) o addon tambem manda no TEXTO: se a lista dele
+// nao e menor, vira a base (o Cinemeta completa still/duracao/data que faltem);
+// se e menor, a do Cinemeta fica e leva nome e sinopse do addon nos episodios
+// que os dois tem. Devolve 1 quando o texto do addon entrou.
+static int episodiosDoAddon(int alvoItem, const char *serie, const char *titulo,
+                            const char *corpoCine, int nCine, int aplicar) {
   char *melhorCorpo = NULL;
   const char *melhorNome = "";
-  int melhor = nCine, i, n = addons_n();
+  int melhor = 0, i, n = addons_n(), usouTexto = 0;
   for (i = 0; i < n; i++) {
-    char url[700], chave[40], *c2;
-    const char *base;
-    unsigned h = 2166136261u;
+    char *c2 = metaDoAddon(i, "series", serie);
     int n2;
-    if (!addons_ativo(i) || !addons_sondado(i) || !addons_fornece(i, ADD_META)) continue;
-    base = addons_base(i);
-    if (!base || !base[0] || strstr(base, "cinemeta")) continue;
-    for (const char *q = base; *q; q++) h = (h ^ (unsigned char)*q) * 16777619u;
-    snprintf(chave, sizeof chave, "%08x/%s", h, serie);
-    snprintf(url, sizeof url, "%s/meta/series/%s.json", base, serie);
-    c2 = metaCacheObter(chave);
-    if (!c2) {
-      c2 = rede_baixar(url, 15);
-      if (!c2) continue;
-      metaCacheGuardar(chave, c2);
-    }
+    if (!c2) continue;
     n2 = desc_meta_n_episodios(c2);
     if (n2 > melhor) {
       free(melhorCorpo);
       melhorCorpo = c2; melhor = n2; melhorNome = addons_nome(i);
     } else free(c2);
   }
-  if (!melhorCorpo) return;
-  printf("[desc] %s: %s tem %d episodios contra %d do Cinemeta; usando a lista do addon\n",
-         titulo, melhorNome, melhor, nCine);
-  fflush(stdout);
-  publicarEpisodios(melhorCorpo, alvoItem, titulo);
-  arte_reserva_episodios(serie, melhorCorpo);
+  if (!melhorCorpo) return 0;
+  if (melhor > nCine || (aplicar && melhor >= nCine)) {
+    printf("[desc] %s: %s tem %d episodios contra %d do Cinemeta; usando a lista do addon\n",
+           titulo, melhorNome, melhor, nCine);
+    fflush(stdout);
+    publicarEpisodios(melhorCorpo, alvoItem, titulo, aplicar ? corpoCine : NULL,
+                      DESC_MESCLA_VAZIOS);
+    arte_reserva_episodios(serie, melhorCorpo);
+    usouTexto = aplicar;
+  } else if (aplicar) {
+    printf("[desc] %s: %s tem %d episodios contra %d do Cinemeta; nome e sinopse do addon\n",
+           titulo, melhorNome, melhor, nCine);
+    fflush(stdout);
+    publicarEpisodios(corpoCine, alvoItem, titulo, melhorCorpo, DESC_MESCLA_TEXTO);
+    usouTexto = 1;
+  }
   free(melhorCorpo);
+  return usouTexto;
+}
+
+// genres[] de um /meta -> "A · B · C" (o separador do web). Vazio sem generos.
+static void generosDe(const char *corpo, char *lista, size_t tam) {
+  const char *g = js_array(corpo, NULL, "genres");
+  size_t n3 = 0;
+  lista[0] = 0;
+  while (g && *g == '"' && n3 + 1 < tam) {
+    const char *p2 = g + 1;
+    if (n3) { // separador do web: espaco, ponto medio, espaco
+      if (n3 + 4 >= tam) break;
+      lista[n3++] = ' '; lista[n3++] = '\xc2'; lista[n3++] = '\xb7'; lista[n3++] = ' ';
+    }
+    while (*p2 && *p2 != '"' && n3 + 1 < tam) lista[n3++] = *p2++;
+    lista[n3] = 0;
+    if (*p2 == '"') p2++;
+    while (*p2 == ' ') p2++;
+    g = (*p2 == ',') ? p2 + 1 : NULL;
+    while (g && *g == ' ') g++;
+  }
 }
 
 static void *buscarEps(void *u) {
@@ -4163,13 +4574,22 @@ static void *buscarEps(void *u) {
     // obras diferentes); o /find abaixo o resolve de novo pelo tipo novo.
     base.tmdb = 0;
   }
+  // QUEM MANDA NO TEXTO (#176). Com "Prefere a ficha do addon de metadados"
+  // (ajustes_meta_externo, que nenhum codigo lia) o addon manda; com o app num
+  // idioma que nao e o ingles e sem o TMDB para traduzir, o addon localizado
+  // tambem e a unica fonte que tem o texto na lingua da pessoa. Com o TMDB
+  // ligado e sem a preferencia, e ele quem traduz (mais abaixo).
+  int externo = ajustes_meta_externo();
+  int tmdbTraduz = desc_chave_tmdb()[0] && ajustes_tmdb_basico();
+  int aplicar = externo || (idiomaNaoIngles() && !tmdbTraduz);
+  int epsDoAddon = 0;
   if (!ehFilme) {
-    int nCine = publicarEpisodios(corpo, alvoItem, it->titulo);
+    int nCine = publicarEpisodios(corpo, alvoItem, it->titulo, NULL, 0);
     // Temporada e data de cada episodio para a reserva do still: quando o
     // TMDB divide a serie em outras temporadas (One Piece), e por elas que o
     // still do TMDB e achado (artereserva.h).
     arte_reserva_episodios(serie, corpo);
-    episodiosDoAddon(alvoItem, serie, it->titulo, nCine);
+    epsDoAddon = episodiosDoAddon(alvoItem, serie, it->titulo, corpo, nCine, aplicar);
   }
   // O MAPA DE EPISODIOS VISTOS NAO E PEDIDO AQUI, e essa linha existe para dizer
   // por que: extras.c JA baixa /shows/<id>/progress/watched ao abrir o titulo,
@@ -4180,6 +4600,7 @@ static void *buscarEps(void *u) {
   // novo para cada uma seria tres viagens ao mesmo lugar.
   {
     CatItem edit = *it;
+    int manter = 0;
     const char *c = js_array(corpo, NULL, "cast");
     int k = 0;
     while (c && k < CAT_ELENCO_MAX) {
@@ -4212,22 +4633,8 @@ static void *buscarEps(void *u) {
     // no lugar dos generos, sem selo do IMDb e sem pais. O /meta traz os tres, e
     // esta funcao ja tem a resposta na mao — deixar de ler era desperdicio de uma
     // viagem que ja foi paga.
-    { const char *g = js_array(corpo, NULL, "genres");
-      char lista[160]; size_t n3 = 0;
-      lista[0] = 0;
-      while (g && *g == '"' && n3 + 1 < sizeof lista) {
-        const char *p2 = g + 1;
-        if (n3) { // separador do web: espaco, ponto medio, espaco
-          if (n3 + 4 >= sizeof lista) break;
-          lista[n3++] = ' '; lista[n3++] = '\xc2'; lista[n3++] = '\xb7'; lista[n3++] = ' ';
-        }
-        while (*p2 && *p2 != '"' && n3 + 1 < sizeof lista) lista[n3++] = *p2++;
-        lista[n3] = 0;
-        if (*p2 == '"') p2++;
-        while (*p2 == ' ') p2++;
-        g = (*p2 == ',') ? p2 + 1 : NULL;
-        while (g && *g == ' ') g++;
-      }
+    { char lista[160];
+      generosDe(corpo, lista, sizeof lista);
       if (lista[0]) snprintf(edit.genero, sizeof edit.genero, "%s", lista); }
     { double nota = js_num(corpo, NULL, "imdbRating", 0.0);
       // O campo vem como "8.1" (string ou numero); guardamos por 10 para caber
@@ -4260,6 +4667,37 @@ static void *buscarEps(void *u) {
               edit.temporadas[i2] = edit.temporadas[j2];
               edit.temporadas[j2] = tmp;
             } } }
+    // TITULO, SINOPSE E GENEROS DO ADDON DE METADADOS (#176). So campo que o
+    // addon preencheu troca o do Cinemeta; o que ele nao tem fica como estava.
+    if (aplicar) {
+      char tA[160], sA[900];
+      const char *nomeA = "";
+      const char *tipoA = ehFilme ? "movie" : "series";
+      if (textoDoAddon(tipoA, serie, tA, sizeof tA, sA, sizeof sA, &nomeA)) {
+        char *cA = NULL;
+        int i3, n3 = addons_n();
+        snprintf(edit.titulo, sizeof edit.titulo, "%s", tA);
+        manter |= DESC_MANTER_TITULO;
+        if (sA[0]) {
+          snprintf(edit.sinopse, sizeof edit.sinopse, "%s", sA);
+          manter |= DESC_MANTER_SINOPSE;
+        }
+        // Generos do mesmo addon (o Cinemeta so tem em ingles).
+        for (i3 = 0; i3 < n3 && !cA; i3++) {
+          char *c5 = metaDoAddon(i3, tipoA, serie);
+          char lista[160];
+          if (!c5) continue;
+          if (metaTextos(c5, tA, sizeof tA, NULL, 0)) {
+            generosDe(c5, lista, sizeof lista);
+            if (lista[0]) snprintf(edit.genero, sizeof edit.genero, "%s", lista);
+            cA = c5;
+          } else free(c5);
+        }
+        free(cA);
+        printf("[desc] %s: texto do addon %s\n", edit.titulo, nomeA);
+        fflush(stdout);
+      }
+    }
     // Publica texto, generos e temporadas antes do enriquecimento de imagens.
     cat_atualizar_item(alvoItem, &edit);
     marco("detalhe: meta basico na tela");
@@ -4268,7 +4706,7 @@ static void *buscarEps(void *u) {
       snprintf(idBase, sizeof idBase, "%s", it->imdb);
       dp = strchr(idBase, ':');
       if (dp) *(char *)dp = 0;
-      fotosDoElenco(&edit, idBase, !strcmp(it->tipo, "series")); }
+      fotosDoElenco(&edit, idBase, !strcmp(it->tipo, "series"), manter); }
     cat_atualizar_item(alvoItem, &edit);
     printf("[desc] %s: %d atores, dir='%s', %d temporadas\n",
            edit.titulo, edit.nElenco, edit.direcao, edit.nTemporadas);
@@ -4302,6 +4740,11 @@ static void *buscarEps(void *u) {
           CatEp *tmp = malloc(sizeof(CatEp) * (size_t)neps);
           if (tmp) {
             int preenchidas = 0, i2;
+            // Sinopse sempre (#150). O NOME so num idioma que nao e o ingles
+            // (#176): em ingles o do Cinemeta ja e o do TMDB. Com o texto do
+            // addon na lista, o TMDB so preenche o que ficou vazio.
+            int textosEp = DESC_EPT_SINOPSE | (idiomaNaoIngles() ? DESC_EPT_NOME : 0) |
+                           (epsDoAddon ? DESC_EPT_SO_VAZIO : 0);
             for (i2 = 0; i2 < neps; i2++) {
               const CatEp *e0 = cat_episodio(alvoItem, i2);
               if (e0) tmp[i2] = *e0; else memset(&tmp[i2], 0, sizeof tmp[i2]);
@@ -4318,7 +4761,7 @@ static void *buscarEps(void *u) {
                          TMDB, tmdbId, s, chave2, desc_tmdb_idioma());
                 c4 = rede_baixar(u3, 15);
                 if (c4) {
-                  preenchidas += desc_tmdb_notas_temporada(c4, tmp, neps, s);
+                  preenchidas += desc_tmdb_notas_temporada_ex(c4, tmp, neps, s, textosEp);
                   free(c4);
                 } }
             }

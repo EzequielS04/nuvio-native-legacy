@@ -37,6 +37,7 @@ static int fonteTeste;          // 0 = AJ_CWF_AMBAS, 2 = so o Trakt
 int   ajustes_cw_fonte(void)               { return fonteTeste; }
 int   ajustes_tmdb_ligado(void)            { return 0; }
 int   ajustes_tmdb_basico(void)            { return 0; }
+int   ajustes_meta_externo(void)           { return 0; }
 int   ajustes_tmdb_arte(void)              { return 0; }
 int   ajustes_tmdb_elenco(void)            { return 0; }
 int   ajustes_tmdb_cw(void)                { return 0; }

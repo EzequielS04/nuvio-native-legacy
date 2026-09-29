@@ -238,6 +238,7 @@ int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
 int   ajustes_idioma_ingles(void)          { return 0; }
 int   ajustes_tmdb_ligado(void)            { return 0; }
 int   ajustes_tmdb_basico(void)            { return 0; }
+int   ajustes_meta_externo(void)           { return 0; }
 int   trakt_e_a_seguir(const char *id)     { (void)id; return 0; }
 const char *ajustes_tmdb_idioma(void)      { return "pt-BR"; }
 int   cat_acrescentar(const CatItem *i)    { (void)i; return -1; }
