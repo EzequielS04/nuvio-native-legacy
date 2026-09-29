@@ -188,11 +188,27 @@ typedef enum {
   // P2P experimental (p2p.h). No fim pelo mesmo motivo: valor[] e CHAVE[] sao
   // posicionais.
   AJ_P2P_LIGADO, AJ_P2P_URL, AJ_P2P_TESTAR,
+  // Layout da home (Moderna / Padrao / Dinamica). No fim pelo mesmo motivo.
+  AJ_HOME_LAYOUT,
   AJ_N
 } OpcaoId;
 
 static const char *V_QUALIDADE[] = { "Automática", "4K", "1080p", "720p" };
 static const char *V_LIGA[]      = { "Ligado", "Desligado" };
+// LAYOUT DA HOME. O INDICE e o gravado (homeLayoutLocal) e o HOME_LAYOUT_* de
+// ajustes.h: 0 = Moderna (a de sempre, e o padrao), 1 = Padrao, 2 = Dinamica.
+//
+// O app oficial tem `homeLayout` (layoutPreferences.js) com "modern", "grid" e
+// "classic", que a conta guarda como selected_layout = MODERN | GRID | CLASSIC.
+// Moderna = modern e Padrao = classic (destaque contido, fileiras num fundo
+// liso), mas a escolha e LOCAL: a Dinamica nao tem par na conta, e gravar
+// "DINAMICA" num enum que o app web valida faria os outros aparelhos cairem no
+// padrao. Ver somenteDesteAparelho.
+//
+// O rotulo da terceira leva "(Apple TV)" porque "Dinâmica" a secas e a chave da
+// traducao dos temas de cor ("Matching color"): o mesmo texto nas duas linhas
+// deixaria a home em ingles com o nome do tema.
+static const char *V_HOME_LAYOUT[] = { "Moderna", "Padrão", "Dinâmica (Apple TV)" };
 // "Fonte automatica" (issue #130). O INDICE e o gravado (fonteAutoLocal) e o
 // FONTEAUTO_* de fonteauto.h: 0 = a regra de pontuacao, 1 = a primeira da
 // lista do addon, e so ela — o "Auto-play first source" do Nuvio.
@@ -659,6 +675,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Servidor P2P (experimental)",     V_LIGA, 2),   // local: p2pLocal
   ACAO("Endereço do servidor P2P"),
   ACAO("Testar servidor P2P"),
+  ESC("Layout da home",             V_HOME_LAYOUT, 3), // local: ver V_HOME_LAYOUT
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -775,6 +792,8 @@ static const char *CHAVE[] = {
   // Ligado: LOCAL e SEM o "-" (sobrevive ao fechamento). O endereco mora em
   // p2p.txt (dados), por aparelho; o teste e so uma acao.
   "p2pLocal", "-p2pEndereco", "-p2pTestar",
+  // LOCAL e SEM o "-": a Dinamica nao existe na conta (ver V_HOME_LAYOUT).
+  "homeLayoutLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -858,7 +877,7 @@ static const Item TELA[] = {
 
   SEC("Layout", "Estrutura da página inicial e estilos de pôster", "aj_layout-dashboard"),
     GRP("Layout da Home", "Escolha a estrutura e a fonte do destaque.", "aj_panel-top"),
-      OPC(AJ_LANDSCAPE), OPC(AJ_HERO_CHEIO), OPC(AJ_HERO_FUNDO),
+      OPC(AJ_HOME_LAYOUT), OPC(AJ_LANDSCAPE), OPC(AJ_HERO_CHEIO), OPC(AJ_HERO_FUNDO),
       OPC(AJ_HERO_ARTE_DIF), OPC(AJ_HERO_TRAILER),
     GRP("Conteúdo da Home", "Controle o que aparece na home e na busca.", "aj_rows-3"),
       OPC(AJ_FIL_LIMITE), OPC(AJ_ITENS_FILEIRA), OPC(AJ_FIL_ORDEM),
@@ -1172,6 +1191,7 @@ static int valor[] = {
   1,                /* interface de vidro: DESLIGADA (V_LIGA: 1 = Desligado) */
   1,                /* servidor P2P: DESLIGADO (V_LIGA: 1 = Desligado) */
   0, 0,             /* endereco, testar: acoes */
+  0,                /* layout da home: Moderna (a de sempre) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1338,6 +1358,10 @@ int ajustes_rail_recolhida(void)      { return ajustes_rail_moderna() ? 0 : lig(
 int ajustes_rail_moderna_blur(void)   { return lig(AJ_RAIL_BLUR); }
 int ajustes_hero_ligado(void)         { return lig(AJ_HERO); }
 int ajustes_hero_cheio(void)          { return lig(AJ_HERO_CHEIO); }
+int ajustes_home_layout(void) {
+  int v = valor[AJ_HOME_LAYOUT];
+  return v >= 0 && v < HOME_LAYOUT_N ? v : HOME_LAYOUT_MODERNA;
+}
 int ajustes_hero_arte_diferente(void) { return lig(AJ_HERO_ARTE_DIF); }
 int ajustes_hero_fonte(void) {
   int v = valor[AJ_HERO_FUNDO];
@@ -2032,6 +2056,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_TRAILER_FONTE:
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
     case AJ_VIDRO:          /* visual desta TV: a GPU de cada uma aguenta diferente */
+    case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_P2P_LIGADO:     /* o servidor P2P e um aparelho da rede desta casa */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
@@ -2447,6 +2472,9 @@ static int inativa(int op) {
     case AJ_RAIL:         return ajustes_rail_moderna();
     case AJ_RAIL_BLUR:    return !ajustes_rail_moderna();
     case AJ_HERO_CATALOGOS: return !ajustes_hero_ligado();
+    // O fundo em tela cheia e da Moderna: no Padrao o destaque e um banner e na
+    // Dinamica ele e sempre de ponta a ponta e rola junto com as fileiras.
+    case AJ_HERO_CHEIO:   return ajustes_home_layout() != HOME_LAYOUT_MODERNA;
     // #162: o Descobrir do app web (navegar catalogos por tipo e genero) ainda
     // nao existe nesta TV — o "Explorar" daqui e outra tela. A escolha vem e
     // vai para a conta, mas aqui nao muda nada, e a linha tem de dizer isso.
@@ -2554,6 +2582,7 @@ static const char *ajudaOpcao(int op) {
     if (op == AJ_RAIL) return "Desative a barra lateral moderna para escolher entre recolhida e fixa.";
     if (op == AJ_RAIL_BLUR) return "Ative a barra lateral moderna para usar o desfoque.";
     if (op == AJ_HERO_CATALOGOS) return "Ative Mostrar destaque para exibir os catálogos no topo da Home.";
+    if (op == AJ_HERO_CHEIO) return "Só vale no layout Moderna. No Padrão o destaque é um banner, e na Dinâmica ele ocupa a largura toda e sobe junto com a rolagem.";
     if (op == AJ_DESCOBRIR) return "A tela Descobrir do app web ainda não existe nesta TV. A escolha fica guardada na conta.";
     if (op >= AJ_CW_OK && op <= AJ_CW_ORDEM)
       return op == AJ_CW_BLUR_PROX && ajustes_cw_ligado()
@@ -2680,6 +2709,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
     case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
     case AJ_P2P_TESTAR: return "Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.";
+    case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso, como nos apps de streaming clássicos. Dinâmica: estilo Apple TV, com o destaque que sobe e some ao descer, fileiras de tamanhos diferentes (destaques grandes, Top 10 com numerais, cartazes e faixas deitadas) sobre um fundo de vidro fosco tingido pela arte.";
     case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
@@ -4989,6 +5019,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR:
       return AJPV_REPRO;
+    case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
     case AJ_HERO_ARTE_DIF: case AJ_HERO_TRAILER: case AJ_FIL_LIMITE:
     case AJ_FIL_ORDEM: case AJ_RAIL: case AJ_RAIL_MODERNA:

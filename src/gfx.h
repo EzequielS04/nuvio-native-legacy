@@ -190,7 +190,28 @@ typedef enum {
   // macias (esquerda, direita, topo, base) com as cores de regiao da arte,
   // numa passada so de tela cheia, com dither contra faixas. Use gfx_ambiente.
   GFX_AMBIENTE = 33,
-  GFX_NMODOS = 34
+  // GFX_VITRINE — a arte do destaque nos layouts PADRAO e DINAMICA da home
+  // (ajustes_home_layout). Cover com ANCORAGEM vertical, cantos por SDF, o veu
+  // de leitura (esquerda e base) ASSADO na propria passada, e um esvanecer
+  // opcional da base em ALFA. Um modo so e nao arte + veu por cima, pelo mesmo
+  // motivo do GFX_DETALHE: o custo desta GPU e o de preenchimento, e cada
+  // camada extra de um destaque de ponta a ponta e uma tela cheia a mais.
+  //
+  //   uPar.x  = ancoragem vertical do recorte, 0 (topo) a 1 (base); 0,5 = centro
+  //   uPar.y  = 1 dissolve a base em alfa (o fundo desfocado atras aparece);
+  //             0 deixa a arte inteira, com cantos (o banner do Padrao)
+  //   uFoco   = forca do veu de leitura, 0 a 1 (0 = arte pura, sobre o trailer)
+  //   uRaio   = canto, como no GFX_CARD (fracao da altura)
+  //   uTexAsp = w/h da textura (gfx_tex_aspect_atual)
+  GFX_VITRINE = 34,
+  // GFX_FUNDO_DIN — o fundo da home DINAMICA: a arte desfocada (gfx_fundo_din_*,
+  // 160x90) esticada na tela toda, com um brilho que cai para baixo, vinheta
+  // lateral e um toque de cor a mais. UMA leitura de textura por pixel.
+  //   uCor.rgb = tinta do tema (so entra com uPar.x > 0); uCor.a = alfa
+  //   uPar.x   = quanto a tinta do tema puxa a cor, 0 a 1
+  //   uFoco    = brilho geral
+  GFX_FUNDO_DIN = 35,
+  GFX_NMODOS = 36
 } GfxModo;
 
 typedef struct {
@@ -331,6 +352,25 @@ void gfx_cor(GfxRect r, float raio, float cr, float cg, float cb, float ca);
 // Assa a luz imersiva no quadro pequeno. Chamar ANTES do clear da tela (ver gfx.c).
 void gfx_ambiente_preparar(void);
 void gfx_ambiente(float alfa);
+// --- FUNDO DA HOME DINAMICA (GFX_FUNDO_DIN) ---------------------------------
+// Duas copias DESFOCADAS e minusculas (160x90) de uma arte, uma por `slot`
+// (0/1), para a troca de titulo poder dissolver uma na outra. A copia NAO e
+// feita na hora: gfx_fundo_din_pedir so anota, e o trabalho (quatro passadas
+// num alvo de 160x90, centavos) roda em gfx_ambiente_preparar, ANTES do clear
+// da tela — trocar de alvo de render no meio do quadro, com a tela ja
+// desenhada, e o que a GPU de ladrilhos paga caro (ver a nota do ambiente).
+//
+// `chave` identifica a imagem (o hash do caminho da arte): a copia so e refeita
+// quando ela muda. gfx_fundo_din_chave devolve a que o slot guarda, e 0 se
+// ainda nao ha copia pronta — o chamador espera e nao desenha nada no lugar.
+void          gfx_fundo_din_pedir(int slot, GLuint tex, float aspecto, unsigned long chave);
+unsigned long gfx_fundo_din_chave(int slot);
+// Desenha o fundo: o slot `a` opaco, e por cima o `b` com `mistura` (0..1) de
+// alfa quando ha troca em andamento. Sem mistura e um quad opaco SEM blend, a
+// forma barata (mesma regra do ambiente).
+void          gfx_fundo_din_desenhar(int a, int b, float mistura,
+                                     float tr, float tg, float tb,
+                                     float tinta, float brilho);
 // Contorno de `esp` PIXELS por dentro de r: a borda de fora do anel e a borda
 // de r, entao anel e miolo no mesmo rect dao uma borda so. `raio` e o de r,
 // normalizado pela altura, como em gfx_cor.

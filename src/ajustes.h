@@ -137,6 +137,11 @@ int   ajustes_rail_moderna(void);       // modernSidebar
 int   ajustes_rail_moderna_blur(void);  // modernSidebarBlur
 int   ajustes_hero_ligado(void);        // heroSectionEnabled
 int   ajustes_hero_cheio(void);         // modernHeroFullScreenBackdropEnabled
+// LAYOUT DA HOME (local): a estrutura da tela inicial. Moderna e o desenho de
+// sempre; Padrao contem o destaque num banner; Dinamica e o estilo Apple TV.
+enum { HOME_LAYOUT_MODERNA = 0, HOME_LAYOUT_PADRAO = 1, HOME_LAYOUT_DINAMICA = 2,
+       HOME_LAYOUT_N = 3 };
+int   ajustes_home_layout(void);
 int   ajustes_hero_fonte(void);         // origem local da arte do hero (ARTEHERO_*)
 // 1 = destaque/detalhe com foto diferente da do card (regra em artehero.h).
 int   ajustes_hero_arte_diferente(void);
