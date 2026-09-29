@@ -81,6 +81,15 @@ int main(int argc, char **argv) {
   glViewport(0, 0, LW, LH); gfx_tamanho_alvo(LW, LH); assert(gfx_iniciar());
   assert(txt_iniciar("deploy/app", 1)); tex_iniciar(64);
   gfx_icones_dir("deploy/app/art");
+  // Idioma e acento pelo caminho de verdade, como em social_shot: portugues e
+  // OCEANO (2) por padrao; NUVIO_SHOT_EN=1 e NUVIO_SHOT_THEME=<n> trocam.
+  { char caminho[700]; FILE *f;
+    const char *en = getenv("NUVIO_SHOT_EN"), *tema = getenv("NUVIO_SHOT_THEME");
+    snprintf(caminho, sizeof caminho, "%s/ajustes.txt", getenv("NUVIO_DADOS"));
+    f = fopen(caminho, "w"); assert(f);
+    fprintf(f, "idioma %d\nselected_theme %d\n", en && *en == '1', tema && *tema ? atoi(tema) : 2);
+    fclose(f);
+    ajustes_dir(getenv("NUVIO_DADOS")); }
   ajustes_iniciar();
   if (getenv("NUVIO_SHOT_VIDRO")) ajustes_definir_vidro(1);
 

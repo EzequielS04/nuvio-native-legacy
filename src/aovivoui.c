@@ -1,22 +1,48 @@
 // Desenho do OSD do canal ao vivo, do banner do zapping e do cartao de erro.
 // Ver aovivo.h; separado da conta para ela ser testada sem GL.
+//
+// A MESMA CARA DO GUIA (revisao de 29/09/2026, pedido do dono: "ver se esta
+// bom e se esta seguindo nossa identidade e o estilo do guia de TV atual").
+// A primeira versao tinha vocabulario proprio para coisas que o guia ja
+// resolve, e cada uma virou a do guia:
+//   - marca do canal numa PLACA escura translucida -> guia_logo_desenhar, a
+//     regra do dono de 16/09 ("sem azulejo"; recortado vira branco);
+//   - numero numa pilula cinza e nome em 56 px, disputando com o titulo do
+//     programa -> numero cinza solto + nome em HEADLINE, como a linha do canal
+//     do heroi do guia; o degrau grande fica com o PROGRAMA (TITULO2);
+//   - AO VIVO com ponto, em TXT_MINI, ao lado do nome -> o selo do guia, na
+//     linha do horario do programa (e o programa que esta no ar);
+//   - "HD" num chip de texto -> a MARCA de formato (badges.h), como no resto
+//     do app; categoria como texto solto -> a etiqueta do guia;
+//   - "A SEGUIR" num bloco a direita, cortado em 520 px e sem alinhar com
+//     nada -> a linha unica do guia (rotulo, hora, titulo) na coluna do texto;
+//   - barra de 8 px na largura do bloco -> o trilho de 4 px do heroi do guia;
+//   - pilulas de botao com numeros proprios (68 px, texto de 20 px, repouso em
+//     branco a 14%) -> botao_pilula secundario de botoes.c, a tabela unica;
+//   - "Carregando o fluxo" em AMBAR cravado -> texto secundario neutro.
 #include "aovivo.h"
 #include "ajustes.h"
+#include "badges.h"
+#include "botoes.h"
+#include "guia.h"
 #include "gfx.h"
 #include "text.h"
-#include "tex_cache.h"
 #include "layout.h"
 #include "idioma.h"
 #include <stdio.h>
 #include <string.h>
 
 // --- desenho ---------------------------------------------------------------------
-#define AV_X        96.0f
+#define AV_X        96.0f    // PLR_MARGEM: o recuo do conteudo do player de filme
 #define AV_Y        56.0f
-#define AV_LOGO_W  188.0f
-#define AV_LOGO_H  108.0f
-#define AV_BTN_H    68.0f
-#define AV_BTN_GAP  12.0f
+#define AV_LOGO_W  150.0f    // caixa da marca no alto (a marca cabe dentro dela)
+#define AV_LOGO_H   84.0f
+#define AV_LOGO_TOM 0.965f   // G_LOGO_CLARO do guia: marca recortada em branco
+#define AV_TEXTO_W 1180.0f   // coluna do programa (meta, sinopse, a seguir)
+#define AV_TITULO_W 1480.0f  // o titulo do programa pode ir um pouco alem
+#define AV_TRILHO_W 560.0f   // a barra do programa: informa, nao e scrubber
+#define AV_BTN_H   BOTAO_H_SECUNDARIO
+#define AV_BASE     56.0f    // da fileira de botoes ate a borda de baixo
 
 static void hhmm(char *b, size_t n, time_t t) {
   struct tm lt;
@@ -24,39 +50,13 @@ static void hhmm(char *b, size_t n, time_t t) {
   strftime(b, n, "%H:%M", &lt);
 }
 
-// A marca do canal dentro de um cartao: escura e translucida atras, a marca
-// centrada por dentro, sem esticar. Sem marca, o nome numa pilula — o canal
-// nunca fica sem rosto.
-static void cartaoLogo(float x, float y, float w, float h, const char *logo,
-                       const char *nome, float a) {
-  GfxRect r = { x, y, w, h };
-  GLuint tex = (logo && logo[0]) ? tex_obter_larg_qualquer(logo, w) : 0;
-  if (ajustes_vidro()) gfx_vidro_painel(r, 0.16f, 0.62f, a);
-  else                 gfx_cor(r, 0.16f, 0.06f, 0.07f, 0.09f, 0.72f * a);
-  if (tex) {
-    float ar = tex_aspecto(logo), lw = w - 32.0f, lh = h - 28.0f;
-    if (ar > 0.0f) {
-      if (lw / ar > lh) lw = lh * ar; else lh = lw / ar;
-    }
-    gfx_rect((GfxRect){ x + (w - lw) * 0.5f, y + (h - lh) * 0.5f, lw, lh }, tex,
-             tex_marca_escura(logo) ? GFX_MARCA : GFX_TEXTO, 0, 0, 0, 0,
-             .95f, .95f, .97f, a);
-  } else {
-    TxtLinha t = txt_linha_corta(TXT_PLR_CORPO, nome && nome[0] ? nome : "TV", 240, 241, 245, 255, w - 24.0f);
-    txt_desenhar_alpha(t, x + (w - t.w) * 0.5f, y + (h - (float)t.h) * 0.5f, a);
-  }
-}
-
-// O selo AO VIVO: pilula vermelha com um ponto. Vermelho e a cor do assunto em
-// toda TV do mundo, e o unico lugar do player onde o acento do tema nao manda.
-static float seloAoVivo(float x, float y, float a) {
-  TxtLinha t = txt_linha(TXT_MINI, "AO VIVO", 255, 255, 255, 255);
-  float h = 34.0f, w = 20.0f + 12.0f + (float)t.w + 18.0f;
-  GfxRect r = { x, y, w, h };
-  gfx_cor(r, 0.5f, 0.86f, 0.13f, 0.16f, 0.94f * a);
-  gfx_cor((GfxRect){ x + 14.0f, y + h * 0.5f - 5.0f, 10.0f, 10.0f }, 0.5f, 1, 1, 1, 0.96f * a);
-  txt_desenhar_alpha(t, x + 32.0f, y + (h - (float)t.h) * 0.5f, a);
-  return w;
+// "4K", "1080p" (ou "HD"), "720p" -> a marca; -1 sem marca (SD vai em selo).
+static int marcaDaResolucao(const char *res) {
+  if (!res || !res[0]) return -1;
+  if (!strcmp(res, "4K")) return FMT_4K;
+  if (!strcmp(res, "1080p") || !strcmp(res, "HD")) return FMT_1080;
+  if (!strcmp(res, "720p")) return FMT_720;
+  return -1;
 }
 
 static const char *icone(int b) {
@@ -89,41 +89,59 @@ const char *aovivo_rotulo(int b) {
   }
 }
 
-static void pilulaBotao(const AoVivoOsd *o, int i, float *x, float y, float a) {
-  int b = o->botoes[i], foco = (o->foco == i);
-  const char *rot = b == AV_B_PAUSA ? (o->pausado ? "Continuar" : "Pausar")
-                  : (b == AV_B_FAV && o->favorito) ? "Nos favoritos" : aovivo_rotulo(b);
-  const char *ic = b == AV_B_PAUSA ? (o->pausado ? "play" : "pause") : icone(b);
-  TxtLinha t;
-  float w, ix, tint;
-  GfxRect r;
-  int tinta;
-  if (ajustes_vidro()) tinta = gfx_vidro_tinta(foco ? 1.0f : 0.0f);
-  else tinta = foco ? ajustes_tinta_foco() : 240;
-  t = txt_linha(TXT_PG_FIM, rot, tinta, tinta, tinta, 255);
-  w = (ic ? 30.0f + 12.0f : 0.0f) + (float)t.w + 44.0f;
-  r = (GfxRect){ *x, y, w, AV_BTN_H };
-  if (ajustes_vidro()) {
-    gfx_vidro_painel(r, 0.5f, 0.55f, a);
-    if (foco) gfx_vidro_pilula_cheia(r, 0.5f, 1.0f, a);
-  } else if (foco) {
-    gfx_cor(r, 0.5f, o->fr, o->fg, o->fb, 0.96f * a);
-  } else {
-    gfx_cor(r, 0.5f, 1, 1, 1, 0.14f * a);
+static const char *rotuloDe(const AoVivoOsd *o, int b) {
+  if (b == AV_B_PAUSA) return o->pausado ? "Continuar" : "Pausar";
+  if (b == AV_B_FAV && o->favorito) return "Nos favoritos";
+  return aovivo_rotulo(b);
+}
+static const char *iconeDe(const AoVivoOsd *o, int b) {
+  return b == AV_B_PAUSA ? (o->pausado ? "play" : "pause") : icone(b);
+}
+
+// A FILEIRA DE BOTOES. Pilulas secundarias da tabela unica (botoes.h): mesmo
+// corpo de texto, icone, repouso, foco no acento com tinta por contraste e o
+// vidro de sempre. A unica licenca e a FOLGA: sao ate dez botoes numa linha,
+// e com a folga de 28 px do secundario a fileira em portugues ja passava da
+// margem com "Nos favoritos" e o Pausar. Com 22 px e 12 px entre eles cabe.
+// Se ainda assim nao couber (alemao, russo), os botoes com icone e FORA do
+// foco viram pilula redonda so com o icone, e o rotulo fica no que tem foco,
+// como no player de filme. Nunca passa da margem.
+#define AV_BTN_PADX 22.0f
+#define AV_BTN_GAP  12.0f
+static float larguraBotao(const char *rot, const char *ic) {
+  return botao_largura(rot, ic, 0) - 2.0f * (BOTAO_PAD_X2 - AV_BTN_PADX);
+}
+static void fileiraBotoes(const AoVivoOsd *o, float y, float a) {
+  float larg[AV_B_N], total = 0.0f, x = AV_X, util = NV_TELA_W - 2.0f * AV_X;
+  int i, compacto;
+  for (i = 0; i < o->nBotoes; i++) {
+    int b = o->botoes[i];
+    larg[i] = larguraBotao(rotuloDe(o, b), iconeDe(o, b));
+    total += larg[i] + (i ? AV_BTN_GAP : 0.0f);
   }
-  tint = tinta / 255.0f;
-  ix = *x + 22.0f;
-  if (ic) {
-    gfx_icone((GfxRect){ ix, y + (AV_BTN_H - 30.0f) * 0.5f, 30.0f, 30.0f }, ic,
-              tint, tint, tint, 0.96f * a);
-    ix += 42.0f;
+  compacto = total > util;
+  for (i = 0; i < o->nBotoes; i++) {
+    int b = o->botoes[i], foco = (o->foco == i);
+    const char *ic = iconeDe(o, b);
+    if (compacto && ic && !foco) {
+      // A superficie de repouso da pilula vizinha (sem rotulo nem icone) e o
+      // icone no corpo dela (26 px), centrado e no cinza 235 de repouso.
+      GfxRect r = { x, y, AV_BTN_H, AV_BTN_H };
+      float c = 235.0f / 255.0f;
+      botao_pilula(r, "", NULL, 0.0f, 0, 0, a);
+      gfx_icone((GfxRect){ x + (AV_BTN_H - BOTAO_ICONE) * 0.5f, y + (AV_BTN_H - BOTAO_ICONE) * 0.5f,
+                           BOTAO_ICONE, BOTAO_ICONE }, ic, c, c, c, a);
+      x += AV_BTN_H + AV_BTN_GAP;
+    } else {
+      botao_pilula((GfxRect){ x, y, larg[i], AV_BTN_H }, rotuloDe(o, b), ic,
+                   foco ? 1.0f : 0.0f, 0, 0, a);
+      x += larg[i] + AV_BTN_GAP;
+    }
   }
-  txt_desenhar_alpha(t, ix, y + (AV_BTN_H - (float)t.h) * 0.5f, a);
-  *x += w + AV_BTN_GAP;
 }
 
 void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
-  float x, y, yTopo = AV_Y;
+  float y;
   int i;
   if (a <= 0.004f || !o) return;
 
@@ -132,40 +150,37 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
   gfx_rect((GfxRect){ 0, 0, NV_TELA_W, 320.0f }, 0, GFX_VEU_TOPO, 0, 0, 0, 0.0f, 0, 0, 0, 0.72f * a);
   gfx_rect((GfxRect){ 0, NV_TELA_H - 560.0f, NV_TELA_W, 560.0f }, 0, GFX_VEU_BAIXO, 0, 0, 0, 0.0f, 0, 0, 0, 0.90f * a);
 
-  // --- ALTO ESQUERDO: marca, numero, nome, categoria, AO VIVO ---------------------
-  cartaoLogo(AV_X, yTopo, AV_LOGO_W, AV_LOGO_H, o->logo, o->nome, a);
-  x = AV_X + AV_LOGO_W + 28.0f;
-  { float yl = yTopo + 2.0f;
-    TxtLinha nome = txt_linha_corta(TXT_PLR_TITULO, o->nome && o->nome[0] ? o->nome : "Canal",
-                                    255, 255, 255, 255, 1000.0f);
-    float xn = x;
+  // --- ALTO ESQUERDO: a linha do canal do guia ------------------------------------
+  // Marca solta (sem placa), numero em cinza, nome; embaixo a categoria como
+  // etiqueta, a marca do formato e a estrela do favorito.
+  { GfxRect lx = { AV_X, AV_Y, AV_LOGO_W, AV_LOGO_H };
+    float tx = AV_X + AV_LOGO_W + 28.0f, yl = AV_Y + 2.0f, xs;
+    TxtLinha nome, num;
+    int fm = marcaDaResolucao(o->res);
+    guia_logo_desenhar(o->logo, o->nome, lx, AV_LOGO_W, AV_LOGO_H - 8.0f, AV_LOGO_TOM, a);
+    nome = txt_linha_corta(TXT_HEADLINE, o->nome && o->nome[0] ? o->nome : "Canal",
+                           246, 247, 250, 255, 1000.0f);
     if (o->numero > 0) {
       char nb[16];
-      TxtLinha tn;
-      GfxRect chip;
       snprintf(nb, sizeof nb, "%d", o->numero);
-      tn = txt_linha(TXT_PLR_CORPO, nb, 255, 255, 255, 255);
-      chip = (GfxRect){ x, yl + ((float)nome.h - 48.0f) * 0.5f, (float)tn.w + 34.0f, 48.0f };
-      if (ajustes_vidro()) gfx_vidro_painel(chip, 0.5f, 0.55f, a);
-      else gfx_cor(chip, 0.5f, 1, 1, 1, 0.20f * a);
-      txt_desenhar_alpha(tn, chip.x + 17.0f, chip.y + (48.0f - (float)tn.h) * 0.5f, a);
-      xn = chip.x + chip.w + 16.0f;
+      num = txt_linha(TXT_DET_META2, nb, 150, 153, 162, 255);
+      txt_desenhar_alpha(num, tx, yl + (float)(nome.h - num.h) * 0.5f, a);
+      txt_desenhar_alpha(nome, tx + (float)num.w + 16.0f, yl, a);
+    } else {
+      txt_desenhar_alpha(nome, tx, yl, a);
     }
-    txt_desenhar_alpha(nome, xn, yl, a);
-    yl += nome.h + 12.0f;
-    { float xs = x, wsel = seloAoVivo(xs, yl, a);
-      xs += wsel + 16.0f;
-      if (o->categoria && o->categoria[0]) {
-        TxtLinha tc = txt_linha_corta(TXT_PG_FIM, o->categoria, 214, 216, 222, 255, 700.0f);
-        txt_desenhar_alpha(tc, xs, yl + (34.0f - (float)tc.h) * 0.5f, a * 0.85f);
-        xs += tc.w + 20.0f;
-      }
-      if (o->res[0]) {
-        TxtLinha tr = txt_linha(TXT_MINI, o->res, 236, 237, 242, 255);
-        GfxRect cr = { xs, yl, (float)tr.w + 24.0f, 34.0f };
-        gfx_cor(cr, 0.3f, 1, 1, 1, 0.16f * a);
-        txt_desenhar_alpha(tr, xs + 12.0f, yl + (34.0f - (float)tr.h) * 0.5f, a * 0.9f);
-      } } }
+    yl += (float)nome.h + 8.0f;
+    xs = tx;
+    if (o->categoria && o->categoria[0]) xs += guia_etiqueta(o->categoria, xs, yl, 420.0f, a) + 14.0f;
+    if (fm >= 0) {
+      xs += marca_formato((FormatoMarca)fm, xs, yl + 2.0f, 30.0f, 0.86f, 0.87f, 0.90f, a) + 14.0f;
+    } else if (o->res[0]) {
+      xs += badge_desenhar(xs, yl + 3.0f, o->res, BADGE_NEUTRO, a) + 14.0f;
+    }
+    if (o->favorito) {
+      TxtLinha s = txt_linha(TXT_DET_META2, "\xe2\x98\x85", 255, 214, 90, 255);
+      txt_desenhar_alpha(s, xs, yl + (34.0f - (float)s.h) * 0.5f, a);
+    } }
 
   // --- ALTO DIREITO: relogio e estado do fluxo --------------------------------------
   { time_t agoraT = time(NULL);
@@ -175,138 +190,161 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
     hhmm(hora, sizeof hora, agoraT);
     lh = txt_linha(TXT_PG_RELOGIO, hora, 255, 255, 255, 255);
     txt_desenhar_alpha(lh, NV_TELA_W - AV_X - lh.w, yr, a * 0.96f);
-    yr += lh.h + 10.0f;
-    if (o->bufferando) {
-      TxtLinha lb = txt_linha(TXT_PG_FIM, "Carregando o fluxo…", 255, 214, 120, 255);
-      txt_desenhar_alpha(lb, NV_TELA_W - AV_X - lb.w, yr, a * 0.95f);
-      yr += lb.h + 8.0f;
-    } else if (o->pausado) {
-      TxtLinha lb = txt_linha(TXT_PG_FIM, "Pausado", 236, 237, 242, 255);
-      txt_desenhar_alpha(lb, NV_TELA_W - AV_X - lb.w, yr, a * 0.9f);
-      yr += lb.h + 8.0f;
+    yr += lh.h + 6.0f;
+    if (o->bufferando || o->pausado) {
+      TxtLinha lb = txt_linha(TXT_DET_META2, o->bufferando ? "Carregando o fluxo…" : "Pausado",
+                              196, 198, 206, 255);
+      txt_desenhar_alpha(lb, NV_TELA_W - AV_X - lb.w, yr, a);
+      yr += lb.h + 6.0f;
     }
     if (o->infoAberta && o->nInfo > 0) {
-      float pw = 520.0f, ph = 28.0f + o->nInfo * 40.0f;
-      GfxRect p = { NV_TELA_W - AV_X - pw, yr + 8.0f, pw, ph };
-      if (ajustes_vidro()) gfx_vidro_painel(p, 0.06f, 0.72f, a);
-      else gfx_cor(p, 0.06f, 0.05f, 0.06f, 0.08f, 0.82f * a);
+      float pw = 600.0f, passo = 38.0f, ph = 40.0f + o->nInfo * passo;
+      GfxRect p = { NV_TELA_W - AV_X - pw, yr + 14.0f, pw, ph };
+      // Raio em fracao do menor lado: 20 px, o canto dos paineis do app.
+      if (ajustes_vidro()) gfx_vidro_painel(p, 20.0f / ph, 0.72f, a);
+      else gfx_cor(p, 20.0f / ph, 0.055f, 0.058f, 0.068f, 0.90f * a);
       for (i = 0; i < o->nInfo; i++) {
-        TxtLinha li = txt_linha_corta(TXT_PG_FIM, o->info[i], 232, 234, 240, 255, pw - 44.0f);
-        txt_desenhar_alpha(li, p.x + 22.0f, p.y + 16.0f + i * 40.0f, a * 0.92f);
+        TxtLinha li = txt_linha_corta(TXT_DET_META2, o->info[i], 222, 224, 230, 255, pw - 56.0f);
+        txt_desenhar_alpha(li, p.x + 28.0f, p.y + 20.0f + i * passo + (passo - (float)li.h) * 0.5f, a);
       }
     } }
 
-  // --- BAIXO: programacao (agora / a seguir) e a fileira de botoes ---------------------
-  y = NV_TELA_H - 56.0f - AV_BTN_H;   // topo da fileira de botoes
-  { float yb = y - 30.0f;             // base do bloco da programacao
+  // --- BAIXO: o heroi do guia, empilhado de baixo para cima -----------------------
+  // Ordem do heroi: titulo do programa, AO VIVO + horario + quanto falta, a
+  // barra, a descricao, e "A SEGUIR" na base. Aqui a base e a fileira de botoes.
+  y = NV_TELA_H - AV_BASE - AV_BTN_H;
+  { float yb = y - 40.0f;
     const AoVivoEpg *e = &o->epg;
-    float larg = 1180.0f;
-    if (o->desc && o->desc[0] && e->temAgora) {
-      float h = txt_bloco_corta(TXT_PG_FIM, o->desc, 200, 202, 208, -1.0f, 0.0f, larg, 32.0f, 0.0f, 2);
+    time_t agoraT = time(NULL);
+    if (e->temProx) {
+      char hp[8];
+      TxtLinha l = txt_linha(TXT_PG_ROTULO, "A SEGUIR", 140, 143, 152, 255), hr, tt;
+      float lx = AV_X;
+      hhmm(hp, sizeof hp, e->proxIni);
+      yb -= 30.0f;
+      txt_desenhar_alpha(l, lx, yb + (30.0f - (float)l.h) * 0.5f, a);
+      lx += (float)l.w + 20.0f;
+      hr = txt_linha(TXT_BODY, hp, 180, 183, 192, 255);
+      txt_desenhar_alpha(hr, lx, yb + (30.0f - (float)hr.h) * 0.5f, a);
+      lx += (float)hr.w + 14.0f;
+      tt = txt_linha_corta(TXT_BODY, e->proxTit, 230, 231, 236, 255, AV_X + AV_TEXTO_W - lx);
+      txt_desenhar_alpha(tt, lx, yb + (30.0f - (float)tt.h) * 0.5f, a);
+      yb -= 22.0f;
+    }
+    if (o->desc && o->desc[0]) {
+      float h = txt_bloco_corta(TXT_DET_SIN, o->desc, 172, 175, 184, -1.0f, 0.0f,
+                                AV_TEXTO_W, 34.0f, 0.0f, 2);
       yb -= h;
-      txt_bloco_corta(TXT_PG_FIM, o->desc, 200, 202, 208, AV_X, yb, larg, 32.0f, a * 0.75f, 2);
-      yb -= 18.0f;
+      txt_bloco_corta(TXT_DET_SIN, o->desc, 172, 175, 184, AV_X, yb, AV_TEXTO_W, 34.0f, a * 0.95f, 2);
+      yb -= 22.0f;
     }
     if (e->temAgora) {
-      char h1[8], h2[8], faixa[40], falta[48];
-      TxtLinha lt, lf, lk;
-      GfxRect tr, fe;
-      int min = (int)((e->agoraFim - time(NULL)) / 60);
-      hhmm(h1, sizeof h1, e->agoraIni); hhmm(h2, sizeof h2, e->agoraFim);
-      snprintf(faixa, sizeof faixa, "%s\xe2\x80\x93%s", h1, h2);
-      if (min < 0) min = 0;
-      if (min >= 60) snprintf(falta, sizeof falta, i18n("faltam %dh%02d"), min / 60, min % 60);
-      else snprintf(falta, sizeof falta, i18n("faltam %d min"), min);
-      // Barra do programa (nao do fluxo: ao vivo nao tem fim), na largura do bloco.
-      tr = (GfxRect){ AV_X, yb - 8.0f, larg, 8.0f };
-      yb = tr.y - 14.0f;
-      gfx_cor(tr, 0.5f, 1, 1, 1, 0.24f * a);
-      fe = tr; fe.w = larg * e->progresso;
-      if (fe.w > 1.0f) gfx_cor(fe, 0.5f, o->fr, o->fg, o->fb, a);
-      lf = txt_linha(TXT_PG_FIM, faixa, 214, 216, 222, 255);
-      yb -= lf.h;
-      txt_desenhar_alpha(lf, AV_X, yb, a * 0.85f);
-      lk = txt_linha(TXT_PG_FIM, falta, 168, 170, 178, 255);
-      txt_desenhar_alpha(lk, AV_X + lf.w + 24.0f, yb, a * 0.8f);
-      yb -= 8.0f;
-      lt = txt_linha_corta(TXT_TITULO3, e->agoraTit, 255, 255, 255, 255, larg);
-      yb -= lt.h;
-      txt_desenhar_alpha(lt, AV_X, yb, a);
-      yb -= 6.0f;
-      { TxtLinha ka = txt_linha(TXT_MINI, "AGORA", 214, 216, 222, 255);
-        yb -= ka.h;
-        txt_desenhar_alpha(ka, AV_X, yb, a * 0.62f); }
-    } else {
-      TxtLinha t = txt_linha(TXT_PLR_CORPO, "Sem programação disponível para este canal", 200, 202, 208, 255);
-      txt_desenhar_alpha(t, AV_X, yb - t.h, a * 0.75f);
+      GfxRect tr = { AV_X, yb - 4.0f, AV_TRILHO_W, 4.0f }, an;
+      float ar, ag, ab, f = e->progresso < 0.0f ? 0.0f : (e->progresso > 1.0f ? 1.0f : e->progresso);
+      ajustes_acento(&ar, &ag, &ab);
+      an = tr; an.w = tr.w * f;
+      gfx_cor(tr, 0.5f, 1, 1, 1, 0.14f * a);
+      if (an.w > 0.5f) gfx_cor(an, 0.5f, ar, ag, ab, a);
+      yb = tr.y - 18.0f;
     }
-    if (e->temProx) {
-      char hp[8], lin[220];
-      TxtLinha lp, ks;
-      float xr, w = 520.0f, yp = y - 30.0f;
-      hhmm(hp, sizeof hp, e->proxIni);
-      snprintf(lin, sizeof lin, "%s  \xc2\xb7  %s", hp, e->proxTit);
-      lp = txt_linha_corta(TXT_PLR_CORPO, lin, 236, 237, 242, 255, w);
-      ks = txt_linha(TXT_MINI, "A SEGUIR", 214, 216, 222, 255);
-      xr = NV_TELA_W - AV_X - w;
-      txt_desenhar_alpha(lp, xr, yp - lp.h, a * 0.9f);
-      txt_desenhar_alpha(ks, xr, yp - lp.h - 6.0f - ks.h, a * 0.62f);
+    // Linha de meta: o selo do guia e o horario, ou "sem grade" quando o canal
+    // nao casa com nenhuma grade (a maioria, no FrostView).
+    { char meta[160];
+      float mx;
+      yb -= 32.0f;
+      mx = AV_X + guia_selo_ao_vivo(AV_X, yb, a) + 16.0f;
+      if (e->temAgora) {
+        char h1[8], h2[8], resto[64];
+        int falta = (int)((e->agoraFim - agoraT + 59) / 60);
+        if (falta < 0) falta = 0;
+        hhmm(h1, sizeof h1, e->agoraIni); hhmm(h2, sizeof h2, e->agoraFim);
+        snprintf(resto, sizeof resto, i18n("%d min restantes"), falta);
+        snprintf(meta, sizeof meta, "%s \xe2\x80\x93 %s  \xc2\xb7  %s", h1, h2, resto);
+      } else {
+        snprintf(meta, sizeof meta, "%s", i18n("Sem grade de programação"));
+      }
+      { TxtLinha t = txt_linha_corta(TXT_DET_META, meta, 196, 198, 206, 255, AV_X + AV_TEXTO_W - mx);
+        txt_desenhar_alpha(t, mx, yb + (32.0f - (float)t.h) * 0.5f, a); }
+      yb -= 12.0f; }
+    if (e->temAgora) {
+      TxtLinha lt = txt_linha_corta(TXT_TITULO2, e->agoraTit, 246, 247, 250, 255, AV_TITULO_W);
+      yb -= (float)lt.h;
+      txt_desenhar_alpha(lt, AV_X, yb, a);
     } }
 
-  x = AV_X;
-  for (i = 0; i < o->nBotoes; i++) pilulaBotao(o, i, &x, y, a);
+  fileiraBotoes(o, y, a);
+}
+
+// Superficie dos cartoes flutuantes (banner, erro): o painel do app, um degrau
+// acima do fundo, ou o vidro. `raioPx` em pixels (a API quer fracao da altura).
+static void cartao(GfxRect r, float raioPx, float a) {
+  if (ajustes_vidro()) gfx_vidro_painel(r, raioPx / r.h, 0.72f, a);
+  else gfx_cor(r, raioPx / r.h, 0.055f, 0.058f, 0.068f, 0.92f * a);
 }
 
 void aovivo_banner_desenhar(const AoVivoBanner *b, float a) {
-  float w = 940.0f, h = 148.0f, x = AV_X, y = NV_TELA_H - 96.0f - h;
+  float w = 900.0f, h = 132.0f, x = AV_X, y = NV_TELA_H - 96.0f - h;
+  float tx0 = x + 24.0f + AV_LOGO_W + 24.0f, tx = tx0, dir = x + w - 28.0f, yl = y + 22.0f;
   GfxRect r = { x, y, w, h };
-  char nb[24];
-  TxtLinha nome, ag, sal;
+  TxtLinha nome, st, tn;
+  char s[64];
   if (a <= 0.004f || !b) return;
   gfx_rect((GfxRect){ 0, NV_TELA_H - 420.0f, NV_TELA_W, 420.0f }, 0, GFX_VEU_BAIXO, 0, 0, 0, 0.0f, 0, 0, 0, 0.80f * a);
-  if (ajustes_vidro()) gfx_vidro_painel(r, 0.14f, 0.72f, a);
-  else gfx_cor(r, 0.14f, 0.05f, 0.06f, 0.08f, 0.86f * a);
-  cartaoLogo(x + 16.0f, y + 16.0f, 180.0f, h - 32.0f, b->logo, b->nome, a);
-  snprintf(nb, sizeof nb, "%d", b->numero);
-  nome = txt_linha_corta(TXT_PLR_TITULO, b->nome && b->nome[0] ? b->nome : "Canal", 255, 255, 255, 255, w - 480.0f);
-  { float xt = x + 220.0f, yt = y + 22.0f;
-    if (b->numero > 0) {
-      TxtLinha tn = txt_linha(TXT_PLR_CORPO, nb, 255, 255, 255, 255);
-      GfxRect chip = { xt, yt + ((float)nome.h - 44.0f) * 0.5f, (float)tn.w + 30.0f, 44.0f };
-      gfx_cor(chip, 0.5f, 1, 1, 1, 0.20f * a);
-      txt_desenhar_alpha(tn, chip.x + 15.0f, chip.y + (44.0f - (float)tn.h) * 0.5f, a);
-      xt = chip.x + chip.w + 14.0f;
-    }
-    txt_desenhar_alpha(nome, xt, yt, a); }
-  if (b->agoraTit && b->agoraTit[0]) {
-    ag = txt_linha_corta(TXT_PLR_CORPO, b->agoraTit, 220, 222, 228, 255, w - 250.0f);
-    txt_desenhar_alpha(ag, x + 220.0f, y + 22.0f + nome.h + 10.0f, a * 0.85f);
+  cartao(r, 20.0f, a);
+  guia_logo_desenhar(b->logo, b->nome, (GfxRect){ x + 24.0f, y + 24.0f, AV_LOGO_W, h - 48.0f },
+                     AV_LOGO_W, h - 56.0f, AV_LOGO_TOM, a);
+  // Estado a direita, na altura do nome: quantos canais ja somou, ou so que a
+  // troca esta a caminho.
+  if (b->salto > 1 || b->salto < -1) snprintf(s, sizeof s, i18n("%+d canais"), b->salto);
+  else snprintf(s, sizeof s, "%s", i18n("Trocando de canal…"));
+  st = txt_linha(TXT_DET_META2, s, 150, 153, 162, 255);
+  if (b->numero > 0) {
+    char nb[24];
+    snprintf(nb, sizeof nb, "%d", b->numero);
+    tn = txt_linha(TXT_DET_META2, nb, 150, 153, 162, 255);
+    tx += (float)tn.w + 16.0f;
   }
-  { char s[64];
-    if (b->salto > 1 || b->salto < -1) snprintf(s, sizeof s, i18n("%+d canais"), b->salto);
-    else snprintf(s, sizeof s, "%s", i18n("Trocando de canal…"));
-    sal = txt_linha(TXT_MINI, s, 200, 202, 208, 255);
-    txt_desenhar_alpha(sal, x + w - 28.0f - sal.w, y + 30.0f, a * 0.7f); }
+  nome = txt_linha_corta(TXT_HEADLINE, b->nome && b->nome[0] ? b->nome : "Canal", 246, 247, 250, 255,
+                         dir - (float)st.w - 24.0f - tx);
+  if (b->numero > 0) txt_desenhar_alpha(tn, tx0, yl + (float)(nome.h - tn.h) * 0.5f, a);
+  txt_desenhar_alpha(nome, tx, yl, a);
+  txt_desenhar_alpha(st, dir - (float)st.w, yl + (float)(nome.h - st.h) * 0.5f, a);
+  if (b->agoraTit && b->agoraTit[0]) {
+    TxtLinha ag = txt_linha_corta(TXT_BODY, b->agoraTit, 196, 198, 206, 255, dir - tx0);
+    txt_desenhar_alpha(ag, tx0, yl + (float)nome.h + 10.0f, a);
+  }
 }
 
+// O CARTAO DE ERRO. So o que a pessoa precisa: de qual canal, o que houve e o
+// que fazer. A marca e o AO VIVO ja estao no alto do OSD; repetidos aqui eram
+// ruido (e um selo vermelho num cartao de erro le como alarme). O canal entra
+// como sobrelinha em cinza, para o cartao se explicar sozinho quando o OSD
+// recolhe.
 void aovivo_erro_desenhar(const char *nome, const char *logo, const char *titulo,
                           const char *dica, float a) {
-  float w = 1180.0f, h = 320.0f, x = (NV_TELA_W - w) * 0.5f, y = 230.0f;
-  GfxRect r = { x, y, w, h };
-  TxtLinha t, d, dc;
+  const float w = 1040.0f, pad = 48.0f, tw = w - 2.0f * pad;
+  const char *tit = titulo && titulo[0] ? titulo : "Não foi possível abrir a fonte";
+  const char *dc = dica && dica[0] ? dica : "Abra Fontes para escolher outra opção ou recarregar.";
+  const char *acao = "Use Fonte ou Recarregar aqui embaixo, ou CH+ e CH− para trocar de canal.";
+  float x = (NV_TELA_W - w) * 0.5f, y, h, hTit, hDica, yy;
+  TxtLinha k, ac;
+  (void)logo;
   if (a <= 0.004f) return;
+  k = txt_linha_corta(TXT_DET_META2, nome && nome[0] ? nome : "Canal", 150, 153, 162, 255, tw);
+  hTit = txt_bloco_corta(TXT_HEADLINE, tit, 246, 247, 250, -1.0f, 0.0f, tw, 46.0f, 0.0f, 2);
+  hDica = txt_bloco_corta(TXT_DET_META, dc, 196, 198, 206, -1.0f, 0.0f, tw, 34.0f, 0.0f, 2);
+  ac = txt_linha_corta(TXT_DET_META2, acao, 150, 153, 162, 255, tw);
+  h = pad + (float)k.h + 10.0f + hTit + 12.0f + hDica + 32.0f + (float)ac.h + pad - 8.0f;
+  // Centrado no vao entre a linha do canal (alto) e a programacao (baixo).
+  y = 420.0f - h * 0.5f;
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, 0.02f, 0.02f, 0.025f, 0.55f * a);
-  if (ajustes_vidro()) gfx_vidro_painel(r, 0.08f, 0.78f, a);
-  else gfx_cor(r, 0.08f, 0.07f, 0.08f, 0.10f, 0.90f * a);
-  cartaoLogo(x + 44.0f, y + 40.0f, 188.0f, 108.0f, logo, nome, a);
-  seloAoVivo(x + 44.0f, y + 164.0f, a);
-  t = txt_linha_corta(TXT_CALLOUT, titulo && titulo[0] ? titulo : "Não foi possível abrir a fonte",
-                      244, 245, 247, 255, w - 340.0f);
-  txt_desenhar_alpha(t, x + 268.0f, y + 44.0f, a);
-  d = txt_linha_corta(TXT_PG_FIM, dica && dica[0] ? dica : "Abra Fontes para escolher outra opção ou recarregar.",
-                      200, 202, 208, 255, w - 340.0f);
-  txt_desenhar_alpha(d, x + 268.0f, y + 44.0f + t.h + 14.0f, a * 0.9f);
-  dc = txt_linha_corta(TXT_PG_FIM, "Use Fonte ou Recarregar aqui embaixo, ou CH+ e CH− para trocar de canal.",
-                       170, 172, 180, 255, w - 88.0f);
-  txt_desenhar_alpha(dc, x + 44.0f, y + h - 30.0f - dc.h, a * 0.8f);
+  cartao((GfxRect){ x, y, w, h }, 24.0f, a);
+  yy = y + pad - 4.0f;
+  txt_desenhar_alpha(k, x + pad, yy, a);
+  yy += (float)k.h + 10.0f;
+  txt_bloco_corta(TXT_HEADLINE, tit, 246, 247, 250, x + pad, yy, tw, 46.0f, a, 2);
+  yy += hTit + 12.0f;
+  txt_bloco_corta(TXT_DET_META, dc, 196, 198, 206, x + pad, yy, tw, 34.0f, a, 2);
+  yy += hDica + 32.0f;
+  txt_desenhar_alpha(ac, x + pad, yy, a);
 }

@@ -23,7 +23,7 @@
 // segura o texto sao os degrades de cima e de baixo.
 #define PAUSAO_X          96.0f    // mesmo recuo do conteudo do player (PLR_MARGEM)
 #define PAUSAO_Y          64.0f    // topo do selo e do relogio
-#define PAUSAO_BASE       88.0f    // margem inferior da ficha (acima da barra)
+#define PAUSAO_BASE      124.0f    // margem inferior da ficha (acima da barra)
 #define PAUSAO_LARG     1480.0f    // largura util do texto da ficha
 // Passo entre linhas da sinopse. E PASSO, nao vao: txt_bloco desenha a linha i
 // em y + i*leading. O mesmo numero que a pagina de titulo usa neste estilo.
@@ -38,7 +38,12 @@
 #define PAUSAO_CHIP_H     44.0f
 #define PAUSAO_CHIP_PAD   18.0f
 #define PAUSAO_CHIP_GAP   10.0f
-#define PAUSAO_TRILHO_H    6.0f
+// A BARRA (29/09/2026): era um fio de 6 px colado na borda de baixo, de ponta a
+// ponta. Na borda ele cai na area de overscan de parte das TVs e some; e
+// sozinho la embaixo nao conversava com nada. Agora e o trilho de 4 px do heroi
+// do guia, na margem do conteudo, com o tempo na ponta direita da mesma linha.
+#define PAUSAO_TRILHO_H    4.0f
+#define PAUSAO_TRILHO_Y   (NV_TELA_H - 64.0f)   // centro da linha barra + tempo
 
 // Quantos nomes de elenco cabem. O web para em oito (:568); aqui o teto e o do
 // dado, nao o do layout: CatItem guarda seis.
@@ -203,7 +208,9 @@ void pausao_desenhar(Uint32 agora, const PausaoCena *cena) {
     }
   }
   if (meta[0]) {
-    lMeta = txt_linha_corta(TXT_PG_FIM, meta, 232, 234, 240, 255, larg);
+    // Meta no corpo da linha de meta do guia (25 px): em 20 px, a um metro e
+    // meio da tela, "2h 07min" nao se lia.
+    lMeta = txt_linha_corta(TXT_DET_META, meta, 214, 216, 222, 255, larg);
     temMeta = 1;
     alt += (float)lMeta.h + 6.0f;
   }
@@ -221,7 +228,9 @@ void pausao_desenhar(Uint32 agora, const PausaoCena *cena) {
   }
   temCast = c->nElenco > 0;
   if (temCast) {
-    lCast = txt_linha(TXT_MINI, "Elenco", 226, 228, 234, 255);
+    // Rotulo de secao no estilo do "A SEGUIR" do guia (22/500 em cinza), e nao
+    // o TXT_MINI de 15 px, que e o corpo de selo de classificacao.
+    lCast = txt_linha(TXT_PG_ROTULO, "Elenco", 150, 153, 162, 255);
     alt += (float)lCast.h + 8.0f + PAUSAO_CHIP_H;
   }
 
@@ -234,7 +243,7 @@ void pausao_desenhar(Uint32 agora, const PausaoCena *cena) {
   y += lKick.h + 10.0f;
   txt_desenhar_alpha(lTit, PAUSAO_X, y, a);
   y += lTit.h + 8.0f;
-  if (temMeta) { txt_desenhar_alpha(lMeta, PAUSAO_X, y, a * 0.72f); y += lMeta.h + 6.0f; }
+  if (temMeta) { txt_desenhar_alpha(lMeta, PAUSAO_X, y, a * 0.90f); y += lMeta.h + 6.0f; }
   if (temEp)   { txt_desenhar_alpha(lEp, PAUSAO_X, y, a * 0.90f);   y += lEp.h + 14.0f; }
   if (hSin > 0.0f) {
     // PASSO ENTRE LINHAS, nao vao entre elas (o "texto embolado" da foto, quando
@@ -249,10 +258,10 @@ void pausao_desenhar(Uint32 agora, const PausaoCena *cena) {
   // (:7480). No vidro a pastilha e o proprio vidro fosco do app.
   if (temCast) {
     float x = PAUSAO_X;
-    txt_desenhar_alpha(lCast, PAUSAO_X, y, a * 0.50f);
+    txt_desenhar_alpha(lCast, PAUSAO_X, y, a);
     y += lCast.h + 8.0f;
     for (i = 0; i < c->nElenco && i < PAUSAO_ELENCO_MAX; i++) {
-      TxtLinha l = txt_linha(TXT_MINI, c->elenco[i].nome, 240, 241, 246, 255);
+      TxtLinha l = txt_linha(TXT_CAPTION, c->elenco[i].nome, 236, 237, 242, 255);
       float w = (float)l.w + PAUSAO_CHIP_PAD * 2.0f;
       GfxRect chip;
       if (x + w > NV_TELA_W - PAUSAO_X) break;   // uma fileira so
@@ -266,23 +275,25 @@ void pausao_desenhar(Uint32 agora, const PausaoCena *cena) {
     }
   }
 
-  // --- BARRA: de onde o filme parou, colada na borda de baixo, de ponta a ponta --
+  // --- BARRA: de onde o filme parou, na margem do conteudo, com o tempo ---------
   if (cena && cena->dur > 0.0f) {
-    float f = cena->pos / cena->dur;
-    GfxRect trilho = { 0, NV_TELA_H - PAUSAO_TRILHO_H, NV_TELA_W, PAUSAO_TRILHO_H };
-    GfxRect feito;
+    float f = cena->pos / cena->dur, xFim;
+    GfxRect trilho, feito;
     char t1[24], t2[24], tudo[52];
     TxtLinha lt;
     if (f < 0.0f) f = 0.0f;
     if (f > 1.0f) f = 1.0f;
-    gfx_cor(trilho, 0.0f, 1, 1, 1, 0.24f * a);
-    feito = trilho; feito.w = NV_TELA_W * f;
-    if (feito.w > 0.5f) gfx_cor(feito, 0.0f, cena->fr, cena->fg, cena->fb, a);
     fmtT(t1, sizeof t1, cena->pos);
     fmtT(t2, sizeof t2, cena->dur);
     snprintf(tudo, sizeof tudo, "%s / %s", t1, t2);
     lt = txt_linha(TXT_PLR_CORPO, tudo, 255, 255, 255, 230);
+    xFim = NV_TELA_W - PAUSAO_X - (float)lt.w - 28.0f;
+    trilho = (GfxRect){ PAUSAO_X, PAUSAO_TRILHO_Y - PAUSAO_TRILHO_H * 0.5f,
+                        xFim - PAUSAO_X, PAUSAO_TRILHO_H };
+    gfx_cor(trilho, 0.5f, 1, 1, 1, 0.18f * a);
+    feito = trilho; feito.w = trilho.w * f;
+    if (feito.w > 0.5f) gfx_cor(feito, 0.5f, cena->fr, cena->fg, cena->fb, a);
     txt_desenhar_alpha(lt, NV_TELA_W - PAUSAO_X - lt.w,
-                       NV_TELA_H - PAUSAO_TRILHO_H - 22.0f - (float)lt.h, a * 0.88f);
+                       PAUSAO_TRILHO_Y - (float)lt.h * 0.5f, a * 0.88f);
   }
 }

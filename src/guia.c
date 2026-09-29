@@ -2321,11 +2321,13 @@ static void iniciaisDe(const char *nome, char *dst, size_t tam) {
 // SEM TEXTURA (baixando, ou o servidor de logo falhou: o log da C9 mostra
 // "corpo curto" do 24horas.cc e do imgur, e "sem corpo" do watchplay) o lugar
 // e um azulejo ESCURO discreto com as iniciais do canal. Nunca um bloco claro.
-static void logoNaCaixa(const GCanal *c, GfxRect cx, float maxW, float maxH,
-                        float tom, float a) {
+// PUBLICO (guia.h) desde 29/09/2026: o OSD do player ao vivo, o banner do
+// zapping e o cartao de erro desenham a marca do canal por AQUI, para o canal
+// ter a mesma cara no guia e no player (sem azulejo, branco quando recortado).
+void guia_logo_desenhar(const char *logo, const char *nome, GfxRect cx,
+                        float maxW, float maxH, float tom, float a) {
   GLuint t = 0;
   float ap = 0.0f, w, h, fr, fg, fb;
-  const char *logo = c ? c->logo : NULL;
   if (logo && logo[0]) {
     t = tex_obter_larg(logo, cx.w);
     ap = tex_aspecto(logo);
@@ -2336,7 +2338,7 @@ static void logoNaCaixa(const GCanal *c, GfxRect cx, float maxW, float maxH,
     GfxRect az = { cx.x + (cx.w - lado) * 0.5f, cx.y + (cx.h - lado) * 0.5f, lado, lado };
     int claro = tom < 0.5f;   // superficie clara (cartao em foco): azulejo claro
     TxtLinha l;
-    iniciaisDe(c ? c->nome : "", ini, sizeof ini);
+    iniciaisDe(nome ? nome : "", ini, sizeof ini);
     if (claro) gfx_cor(az, 0.22f, 0.0f, 0.0f, 0.0f, 0.10f * a);
     else       gfx_cor(az, 0.22f, 1.0f, 1.0f, 1.0f, 0.075f * a);
     if (ini[0]) {
@@ -2362,6 +2364,10 @@ static void logoNaCaixa(const GCanal *c, GfxRect cx, float maxW, float maxH,
     else
       gfx_rect(lr, t, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, a);
   }
+}
+static void logoNaCaixa(const GCanal *c, GfxRect cx, float maxW, float maxH,
+                        float tom, float a) {
+  guia_logo_desenhar(c ? c->logo : NULL, c ? c->nome : "", cx, maxW, maxH, tom, a);
 }
 
 static void desenharLogo(const GCanal *c, GfxRect cx, float lado, float tom,
@@ -2474,7 +2480,9 @@ static void desenharCard(GCanal *c, float x, float y, float foco, float a,
 // --- heroi "agora" ---------------------------------------------------------------
 // Selo AO VIVO: pilula vermelha, texto branco. Devolve a largura, para a linha
 // de meta continuar ao lado dele.
-static float seloAoVivo(float x, float y, float a) {
+// PUBLICO (guia.h) desde 29/09/2026, pelo mesmo motivo de guia_logo_desenhar:
+// o selo do OSD ao vivo e ESTE selo, e nao um parecido.
+float guia_selo_ao_vivo(float x, float y, float a) {
   TxtLinha t = txt_linha(TXT_PG_ROTULO, i18n("AO VIVO"), 255, 255, 255, 255);
   GfxRect r = { x, y, (float)t.w + 26.0f, 32.0f };
   gfx_cor(r, 0.5f, 0.84f, 0.15f, 0.19f, a);
@@ -2484,7 +2492,7 @@ static float seloAoVivo(float x, float y, float a) {
 
 // Etiqueta discreta (categoria): vidro translucido, texto secundario. A
 // categoria era texto AZUL solto embaixo do nome, e competia com o titulo.
-static float etiqueta(const char *s, float x, float y, float maxW, float a) {
+float guia_etiqueta(const char *s, float x, float y, float maxW, float a) {
   TxtLinha t;
   GfxRect r;
   if (!s || !s[0]) return 0.0f;
@@ -2613,7 +2621,7 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
     // Fio de 1,5 px: o video le como parte da interface, e nao como buraco.
     gfx_rect(pv, 0, GFX_ANEL, 0, 1.5f / pv.h, 0, raio, 1, 1, 1, 0.16f * a);
     // Selo sobre o video: GL opaco por cima do furo aparece por cima do plano.
-    { float sw = seloAoVivo(pv.x + 20.0f, pv.y + pv.h - 52.0f, a);
+    { float sw = guia_selo_ao_vivo(pv.x + 20.0f, pv.y + pv.h - 52.0f, a);
       if (pc != c) {
         TxtLinha t = txt_linha_corta(TXT_PG_ROTULO, pc->nome, 245, 246, 250, 255, pv.w - sw - 80.0f);
         GfxRect r = { pv.x + 20.0f + sw + 8.0f, pv.y + pv.h - 52.0f, (float)t.w + 24.0f, 32.0f };
@@ -2661,7 +2669,7 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
       txt_desenhar_alpha(n, tx, ey + (34.0f - (float)n.h) * 0.5f, ha);
       tx += (float)n.w + 16.0f;
     }
-    tx += etiqueta(cat, tx, ey, 320.0f, ha);
+    tx += guia_etiqueta(cat, tx, ey, 320.0f, ha);
     if (c->fav) {
       TxtLinha s = txt_linha(TXT_DET_META2, "\xe2\x98\x85", 255, 214, 90, 255);
       txt_desenhar_alpha(s, tx + 12.0f, ey + (34.0f - (float)s.h) * 0.5f, ha);
@@ -2696,7 +2704,7 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
     } else if (epg == -2) {
       snprintf(meta, sizeof meta, "%s", i18n("Sem grade de programação"));
     }
-    if (noAr || !tem) mx += seloAoVivo(x, y, ha) + 16.0f;
+    if (noAr || !tem) mx += guia_selo_ao_vivo(x, y, ha) + 16.0f;
     if (meta[0]) {
       TxtLinha t = txt_linha_corta(TXT_DET_META, meta, 196, 198, 206, 255, x + w - mx);
       txt_desenhar_alpha(t, mx, y + (32.0f - (float)t.h) * 0.5f, ha);

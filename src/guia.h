@@ -22,6 +22,7 @@
 #include <SDL2/SDL.h>
 #include "catalogo.h"
 #include "epg.h"
+#include "gfx.h"   /* GfxRect de guia_logo_desenhar */
 
 void guia_abrir(void);           // tela cheia
 void guia_overlay_abrir(void);   // por cima do player (video continua atras)
@@ -90,5 +91,18 @@ void guia_preview_rect(float *x, float *y, float *w, float *h);
 // O CatItem do canal de um lembrete (e a origem para a busca de fonte): o do
 // guia quando a lista esta carregada, senao so id + nome guardados. 0 sem id.
 int  guia_item_do_canal(const char *id, const char *nome, const char *base, CatItem *it);
+
+// --- A CARA DO CANAL FORA DO GUIA (29/09/2026) -------------------------------
+// O player ao vivo (aovivoui.c) desenha a marca, o selo AO VIVO e a etiqueta
+// de categoria com as MESMAS funcoes do heroi do guia: a regra do dono para o
+// logo (sem azulejo; recortado de um tom so vira branco, `tom` 0.965; com fundo
+// proprio, cantos arredondados; sem arquivo, iniciais num azulejo escuro) vive
+// num lugar so. `cx` e a caixa onde o logo fica centrado, cabendo em maxW x maxH.
+void  guia_logo_desenhar(const char *logo, const char *nome, GfxRect cx,
+                         float maxW, float maxH, float tom, float a);
+// Pilula vermelha "AO VIVO" de 32 px; devolve a largura.
+float guia_selo_ao_vivo(float x, float y, float a);
+// Etiqueta translucida de 34 px (categoria); devolve a largura (0 sem texto).
+float guia_etiqueta(const char *s, float x, float y, float maxW, float a);
 
 #endif
