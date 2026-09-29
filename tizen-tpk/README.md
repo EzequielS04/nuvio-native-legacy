@@ -44,8 +44,25 @@ Provado em TV real, nao afirmado:
 - **Tizen 6.0 (2021): FUNCIONA.** rawldon (AU7000) roda como app principal —
   video, audio, legenda, GIF e trailer. `Tpk60`/`Tpk65`/`Tpk` sao a rota boa
   para 6+.
-- **Tizen 9 (2024): sem confirmacao.** Hov1122 (QN90D) nao reabriu depois do
-  revert `fdc2d34`; falta relato.
+- **Tizen 9: abre pelo Apps2Samsung, NAO pelo menu da TV** (#170, #137).
+  pokazideia (UN75CU7700GXZD, Tizen 9) disse isso com todas as letras, e o D1
+  confirma: os logs "(anterior)" dessa TV (ids 4573, 6507, 8634, host api11,
+  `espera=50 swap0=1`) chegam a `[t] ... primeiro quadro na tela` e param ali,
+  sem mais nenhum quadro nem tecla, ate `DALI_FRAMEWORK_DESTROY`; o arranque
+  seguinte, pelo Apps2Samsung, roda normal. Hov1122 (QN90D) e base08 (S90C)
+  descrevem o mesmo pelo menu ("barra de carregamento e volta ao menu").
+  Suspeita, NAO provada: pelo menu, o lancador sobe a janela principal (opaca
+  para o gerenciador de janelas) por cima do GLWindow, que fica coberto e para
+  de desenhar. No spike o Hov1122 viu o quadrado do GLWindow "rapidamente" no
+  canto antes da tela do spike cobri-lo, o que casa com isso.
+- **Rastro + vigia no host 6+** (`Program.cs`): `data/tpk-etapas.txt` com
+  begin/ok/fail/note (dlopen-so, video-init, nv_tpk_iniciar, gl-window,
+  first-frame, steady-frames = 30 quadros, first-key) e notas de pausa,
+  retomada, visibilidade e foco das duas janelas. O arranque seguinte mostra
+  "Previous launch stopped at: ..." no topo por 30 s e poe o rastro no
+  nuvio.log (`[etapa-anterior]`). O vigia sobe o GLWindow (`Raise`) se as
+  chamadas de desenho pararem por 1,5 s com o app em primeiro plano e a janela
+  principal visivel; se em 4 s nao voltar, a tela explica, com os numeros.
 - **Tizen 4.0/5.0 (2018-2019): a `.so` de ARQUIVO e barrada pela UEP.**
   Medido no probe (optiman, QE55Q6FNA, Tizen 4.0): `dlopen` de `lib/` e de
   `data/` falham ("failed to map segment"), MAS memoria anonima executavel e
