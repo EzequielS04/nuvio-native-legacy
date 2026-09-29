@@ -1745,6 +1745,22 @@ void app_atualizar(float dt, Uint32 agora) {
     if (!alvo) alvo = recomenda_pediu_abrir();   // mesmo contrato, outra origem
     if (!alvo) alvo = avisos_pediu_abrir();
     if (!alvo && tela == TELA_AGENDA) alvo = agendaui_pediu_abrir();
+    // "ASSISTIR T<n>E<n>" DO MODAL DA AGENDA: abre o titulo e pede a
+    // reproducao do episodio no mesmo passe — o caminho do cartao de Continuar
+    // assistindo (issue #93): cwTocarT/E valem sobre o episodio que o detalhe
+    // adivinharia. Titulo fora do catalogo so abre (a descoberta o busca num
+    // fio e o episodio ja nao tem para onde ir); tocar la e um OK a mais.
+    if (!alvo && tela == TELA_AGENDA) {
+      int tt = 0, te = 0;
+      const char *tc = agendaui_pediu_tocar(&tt, &te);
+      if (tc && tc[0]) {
+        int k = cat_indice_por_imdb(tc);
+        if (k >= 0) {
+          abrirPorIndice(k);
+          if (detail_aberto()) { cwTocarT = tt; cwTocarE = te; detail_pedir_reproduzir(); }
+        } else desc_pedir_titulo(tc);
+      }
+    }
     if (!alvo && abrirTeste[0]) { alvo = abrirTeste; abrirTeste[0] = 0; }
     if (alvo && alvo[0]) {
       int k = cat_indice_por_imdb(alvo);
