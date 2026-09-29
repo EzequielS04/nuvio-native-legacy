@@ -59,8 +59,24 @@
 #include "trailer.h"
 #include "ponteiro.h"
 #include "gif.h"
+#include "idioma.h"
+#include "idiomaauto.h"
 #ifndef NV_SEM_WEBOS
 #include <dlfcn.h>
+
+// O idioma AUTOMATICO da interface mudou depois do arranque (a conta chegou, ou
+// a TV respondeu o locale). Titulos e generos das fileiras saem no idioma novo,
+// e a pessoa fica sabendo por que a tela trocou sozinha — uma vez por idioma
+// (o aviso tem um id por codigo e avisos-vistos.txt lembra). O texto ja sai no
+// idioma novo: i18n le ajustes_idioma().
+static void aoMudarIdiomaAuto(const char *codigo, int fonte, int notificar) {
+  desc_repetir();
+  if (!notificar) return;
+  avisos_idioma_definido(codigo,
+      fonte == IDA_SISTEMA
+        ? i18n("Idioma definido pelo sistema da TV · mudar em Ajustes")
+        : i18n("Idioma definido pela sua conta · mudar em Ajustes"));
+}
 
 static void aoSinalTerminar(int sig) {
   (void)sig;
@@ -763,6 +779,7 @@ int main(int argc, char **argv) {
   addons_carregar(dirArte);
   // Ajustes tambem sao do USUARIO, nao do pacote.
   ajustes_dir(dirDados);
+  ajustes_idioma_auto_iniciar(aoMudarIdiomaAuto);
   // A estrutura persistida só pode ser comparada após carregar a configuração.
   homeestado_iniciar();
   { // Nativo conserva arte comprimida na pasta gravavel, sujeita a poda LRU.
@@ -980,6 +997,7 @@ int main(int argc, char **argv) {
     // COR VIVA: UMA vez por quadro, antes do desenho. Consome o pedido que o
     // desenho do quadro anterior fez (corviva_definir) e anda a transicao; o
     // desenho deste quadro so le o resultado (ajustes_acento, NV_COR_FUNDO_*).
+    ajustes_idioma_auto_tick();   // locale da TV (webOS): chega de um fio
     corviva_quadro(dt, ajustes_cor_viva(), ajustes_cor_logo(),
                    ajustes_animacoes_reduzidas());
     fUpd = NV_DT(t0);

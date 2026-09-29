@@ -22,6 +22,7 @@
 #include "fileiras.h"
 #include "listas.h"
 #include "idioma.h"
+#include "idiomaauto.h"
 #include "linguas.h"
 #include "addons.h"
 #include "gfx.h"
@@ -230,7 +231,11 @@ static const char *V_ASPTRAIL[]  = { "Zoom cinema", "Zoom leve", "Zoom ultra", "
 static const char *V_TRAILFONTE[] = { "Automático", "Apple TV", "IMDb", "YouTube" };
 // Nomes NATIVOS, sem i18n: quem trocou para um idioma que nao le precisa achar o seu.
 // A ordem e a de IDIOMA_* (idiomacod.h) e a do valor gravado: so acrescentar no fim.
-static const char *V_IDIOMA[]    = { "Português", "English", "Română", "Українська", "Русский",
+// EXCECAO: o primeiro rotulo, "Automático", e o unico que passa por i18n (os
+// demais sao nativos de proposito). Ele nao e um idioma: valor[AJ_IDIOMA] e o
+// INDICE DESTA LISTA (0 = automatico, 1 + IDIOMA_* = escolha manual), e o que
+// vai para o disco e outra coisa (ver "IDIOMA AUTOMATICO" mais abaixo).
+static const char *V_IDIOMA[]    = { "Automático", "Português", "English", "Română", "Українська", "Русский",
                                      "Français", "Deutsch", "Español" };
 static const char *V_ANIM[]      = { "Completas", "Reduzidas" };
 static const char *V_FONTE_UI[]  = { "Inter", "LG Display", "Droid Sans",
@@ -329,8 +334,8 @@ static const char *V_TMDB_LING[] = {
 };
 _Static_assert(sizeof V_TMDB_LING / sizeof *V_TMDB_LING == 14,
                "V_TMDB_LING casa com ESC(..., 14), W_TMDB_LING e L[] de ajustes_tmdb_idioma");
-_Static_assert(sizeof V_IDIOMA / sizeof *V_IDIOMA == IDIOMA_N,
-               "V_IDIOMA: um rotulo por IDIOMA_* de idiomacod.h");
+_Static_assert(sizeof V_IDIOMA / sizeof *V_IDIOMA == IDIOMA_N + 1,
+               "V_IDIOMA: \"Automático\" e um rotulo por IDIOMA_* de idiomacod.h");
 // Preenchido em rotulosDeIdioma(), no arranque: os nomes saem de linguas.c em
 // vez de serem uma segunda lista escrita a mao aqui. LING_MAX_OPC e folga: se
 // linguas.c crescer, o excedente simplesmente nao aparece — melhor que ler
@@ -566,7 +571,7 @@ static const Opcao OPCOES[AJ_N] = {
   NUM("Arredondamento",             0, 40, 1, " dp"),   // posterCardCornerRadiusDp
   ESC("Qualidade da imagem",        V_QUALIMG, 3),
 
-  ESC("Idioma",                     V_IDIOMA, IDIOMA_N),
+  ESC("Idioma",                     V_IDIOMA, IDIOMA_N + 1),
   ESC("Animações",                  V_ANIM, 2),
   ESC("Resolução da interface",     V_RESOLUCAO, 2),
   ESC("Cor de destaque",            V_TEMA, AJ_N_TEMAS_OPC),  // selected_theme (+4 locais)
@@ -1110,11 +1115,13 @@ static int valor[] = {
   12,               /* arredondamento, dp */
   1,                /* qualidade da imagem: Padrão (0 Baixa, 1 Padrão, 2 Alta) */
 
-  // Idioma 1 = English. O padrao NAO e o do dono do pacote: quem instala vem
-  // do release publico, e ler uma interface em portugues sem ter escolhido e
-  // pior do que ler em ingles sem ter escolhido. Quem prefere portugues troca
-  // em Ajustes -> Interface, e a escolha fica gravada.
-  1, 0, 0,          /* idioma, animacoes, resolucao (0 = 1080p) */
+  // Idioma 0 = Automatico: a conta (tmdb_language, depois o idioma de legenda),
+  // depois o idioma da TV, depois English. O padrao NAO e o do dono do pacote:
+  // quem instala vem do release publico, e ler uma interface em portugues sem
+  // ter escolhido e pior do que ler em ingles sem ter escolhido — por isso o
+  // ultimo degrau e o ingles. Quem prefere outro troca em Ajustes -> Interface,
+  // e a escolha fica gravada (e desliga o automatico).
+  0, 0, 0,          /* idioma, animacoes, resolucao (0 = 1080p) */
   0,                /* tema (cor de destaque): o primeiro, o de sempre */
   0,                /* cor da logo (so com tema dinamico): ligada */
   // O COMENTARIO ANTIGO AQUI ESTAVA ERRADO, e o erro so nao machucou por sorte.
@@ -1269,9 +1276,41 @@ int ajustes_fonte_repor(void) {
   int v = valor[AJ_FONTE_REPOR];
   return v < 0 ? 0 : v > 3 ? 3 : v;     // arquivo editado a mao: dentro da tabela
 }
+// IDIOMA AUTOMATICO DA INTERFACE.
+//
+// ESTADO. valor[AJ_IDIOMA] e o INDICE DA LISTA da tela: 0 = "Automático", e
+// 1 + IDIOMA_* = a escolha manual. Assim a lista mostra "Automático" primeiro
+// sem que nenhum outro codigo do app mude de numero. Quem quer o idioma usa
+// ajustes_idioma(), que devolve sempre um IDIOMA_*: o RESOLVIDO no automatico,
+// o escolhido no manual.
+//
+// DISCO (ajustes.txt). O numero do idioma continua sendo o que sempre foi:
+//   idioma N           IDIOMA_* em vigor (no automatico, o ultimo resolvido:
+//                      e o que a TV mostra no arranque, antes da conta chegar)
+//   idiomaAutoLocal 1  automatico ligado. Ausente = escolha manual.
+//   idiomaFonteLocal N IDA_* de onde o automatico tirou o idioma. Serve so para
+//                      o arranque: um idioma que veio da CONTA nao e refeito com
+//                      o locale da TV (a conta ainda nao chegou e o idioma
+//                      piscaria em cada abertura); o que veio da TV ou do
+//                      padrao e refeito na hora.
+// QUEM JA TINHA O APP. Um ajustes.txt com "idioma" e sem "idiomaAutoLocal" veio
+// de antes desta chave (ou de alguem que escolheu): nao ha como distinguir, e
+// mudar a lingua de quem ja estava lendo em uma seria a pior surpresa possivel,
+// entao conta como MANUAL. So nasce automatico quem nunca gravou um "idioma".
+static int idiomaEfetivo = IDIOMA_EN;   // o resolvido; so vale com valor[AJ_IDIOMA] == 0
+static int idiomaPosArranque;           // 1 depois de ajustes_idioma_auto_iniciar
+static int idiomaUltimaFonte = -1;      // a ultima decisao logada (nao repetir a linha)
+static int idiomaFonteGravada = IDA_PADRAO;  // idiomaFonteLocal: de onde veio o gravado
+static void (*idiomaGancho)(const char *codigo, int fonte, int notificar);
+static int sistemaPendente;             // 1 = a TV ainda nao respondeu o locale (webOS)
+static char contaTmdbLing[24];      // tmdb_language cru do blob da conta
+static char contaLegLing[24];       // subtitle_preferred_language cru
+static char sistemaLoc[32];         // locale da TV ("pt-BR"), "" = desconhecido
+
 int ajustes_idioma(void) {
-  int v = valor[AJ_IDIOMA];
-  return v >= 0 && v < IDIOMA_N ? v : IDIOMA_PT;
+  if (valor[AJ_IDIOMA] == 0) return idiomaEfetivo;
+  { int v = valor[AJ_IDIOMA] - 1;
+    return v >= 0 && v < IDIOMA_N ? v : IDIOMA_PT; }
 }
 int ajustes_idioma_ingles(void)       { return ajustes_idioma() == IDIOMA_EN; }
 
@@ -1749,10 +1788,26 @@ void ajustes_dir(const char *dir) {
   rotulosDeIdioma();
   snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dirAjustes);
   f = fopen(caminho, "r");
-  if (!f) return;
+  if (!f) {
+    // Nunca gravou nada: o idioma nasce automatico (o padrao de valor[]).
+    valor[AJ_IDIOMA] = 0;
+    return;
+  }
+  { int viuIdioma = 0, viuAuto = 0, idiomaGravado = IDIOMA_EN, autoGravado = 0;
   while (fgets(linha, sizeof linha, f)) {
     char chave[64]; int v, i;
     if (sscanf(linha, "%63s %d", chave, &v) != 2) continue;
+    // O idioma nao passa pelo laco: o numero do disco e um IDIOMA_*, e o
+    // indice da lista da tela e outro (ver "IDIOMA AUTOMATICO").
+    if (!strcmp(chave, "idioma")) {
+      if (v >= 0 && v < IDIOMA_N) { idiomaGravado = v; viuIdioma = 1; }
+      continue;
+    }
+    if (!strcmp(chave, "idiomaAutoLocal")) { autoGravado = v == 1; viuAuto = 1; continue; }
+    if (!strcmp(chave, "idiomaFonteLocal")) {
+      if (v >= IDA_TMDB && v <= IDA_PADRAO) idiomaFonteGravada = v;
+      continue;
+    }
     for (i = 0; i < AJ_N; i++) {
       if (!CHAVE[i] || strcmp(CHAVE[i], chave)) continue;
       if (OPCOES[i].tipo == OP_LEITURA || OPCOES[i].tipo == OP_ACAO) continue;
@@ -1761,6 +1816,15 @@ void ajustes_dir(const char *dir) {
       valor[i] = limita(i, v);
       break;
     }
+  }
+  // Escolha manual: "idioma" gravado e SEM a marca de automatico (arquivo de
+  // antes da marca, ou de quem escolheu). Sem "idioma" nenhum, nunca houve
+  // escolha e o automatico vale.
+  if (viuIdioma && !(viuAuto && autoGravado)) valor[AJ_IDIOMA] = 1 + idiomaGravado;
+  else valor[AJ_IDIOMA] = 0;
+  // No automatico, o gravado e o ultimo resolvido: a TV abre nele e a conta,
+  // quando chegar, corrige.
+  if (valor[AJ_IDIOMA] == 0 && viuIdioma) idiomaEfetivo = idiomaGravado;
   }
   fclose(f);
   // MIGRACAO UNICA (1.5.1, #149): religa o envio automatico. Ate a 1.5.0 a
@@ -1834,6 +1898,13 @@ static void gravar(void) {
     // um "(null) 0" gravado assim que derrubou o app na leitura seguinte.
     if (!CHAVE[i] || CHAVE[i][0] == '-') continue;
     if (OPCOES[i].tipo == OP_LEITURA || OPCOES[i].tipo == OP_ACAO) continue;
+    if (i == AJ_IDIOMA) {
+      // O numero do disco e o IDIOMA_* em vigor; a marca diz se e automatico.
+      fprintf(f, "%s %d\n", CHAVE[i], ajustes_idioma());
+      fprintf(f, "idiomaAutoLocal %d\n", valor[i] == 0);
+      fprintf(f, "idiomaFonteLocal %d\n", idiomaFonteGravada);
+      continue;
+    }
     fprintf(f, "%s %d\n", CHAVE[i], valor[i]);
   }
   fclose(f);
@@ -1848,6 +1919,163 @@ static void gravar(void) {
   dados_marcar_sujo(0);
 }
 
+
+// IDIOMA AUTOMATICO — o resto (estado e regra: ver ajustes_idioma e idiomaauto.h).
+//
+// Aplica a regra sobre o que se sabe AGORA (conta, TV) e, se o idioma mudou,
+// grava, remonta as fileiras e avisa. `notificar` e 0 no arranque (a TV ainda
+// nem desenhou nada) e 1 depois; sem ajustes_idioma_auto_iniciar (os testes) a
+// remontagem e o aviso ficam de fora, porque descoberta e avisos nao existem.
+static void idiomaResolver(int notificar) {
+  int fonte, novo, mudou;
+  if (valor[AJ_IDIOMA] != 0) return;          // escolha manual: o automatico nao mexe
+  novo = idiomaauto_resolver(contaTmdbLing, contaLegLing, sistemaLoc, &fonte);
+  mudou = novo != idiomaEfetivo;
+  // Sem conta nem locale ainda (a TV responde depois): cair no ingles agora
+  // trocaria o idioma gravado por um que ja vai ser corrigido em instantes.
+  if (fonte == IDA_PADRAO && sistemaPendente) return;
+  if (!mudou && fonte == idiomaUltimaFonte) return;   // nada novo: sem linha repetida
+  idiomaUltimaFonte = fonte;
+  idiomaFonteGravada = fonte;
+  printf("[idioma] automatico: %s (fonte: %s)\n", idiomaauto_codigo(novo),
+         idiomaauto_fonte_nome(fonte));
+  fflush(stdout);
+  if (!mudou) { gravar(); return; }           // so a fonte mudou: fica gravada
+  idiomaEfetivo = novo;
+  gravar();
+  // Remontar as fileiras e avisar e do main.c (o gancho): estes dois modulos
+  // nao existem nos testes que incluem ajustes.c, e nem no arranque.
+  if (idiomaPosArranque && idiomaGancho)
+    idiomaGancho(idiomaauto_codigo(novo), fonte, notificar);
+}
+
+// A pessoa mexeu na linha de idioma (valor[AJ_IDIOMA] ja e o novo indice).
+// Voltar a "Automático" resolve de novo agora; qualquer outro valor e escolha
+// manual e o automatico nao toca mais no idioma.
+static void idiomaEscolhido(void) {
+  if (valor[AJ_IDIOMA] != 0) return;
+  idiomaUltimaFonte = -1;
+  // "O que estava na tela" era o idioma manual de que a pessoa acabou de sair;
+  // o resolvido pode coincidir com o guardado de antes e ainda assim precisa
+  // ser calculado de novo.
+  idiomaEfetivo = -1;
+  idiomaResolver(0);
+  if (idiomaEfetivo < 0) idiomaEfetivo = IDIOMA_EN;   // a TV ainda nao respondeu (webOS)
+}
+
+// O LOCALE DA TV.
+//   Tizen  navigator.language (segue a lingua da TV), lido na hora.
+//   Mac    NUVIO_LOCALE, LC_ALL / LC_MESSAGES / LANG; so para a previa.
+//   webOS  luna://com.webos.settingsservice/getSystemSettings localeInfo
+//          (locales.UI, "pt-BR"). Vai por luna-send como extras.c faz para o
+//          navegador, e num fio: o processo leva algumas centenas de ms na TV
+//          e o arranque nao espera por ele. O laco principal recolhe o
+//          resultado em ajustes_idioma_auto_tick.
+// NUNCA chamado por ajustes_dir: os testes que incluem ajustes.c nao dependem
+// do locale de quem os roda.
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+static void sistemaConsultar(void) {
+  EM_ASM({
+    try {
+      var b = new TextEncoder().encode(navigator.language || '');
+      var n = Math.min(b.length, $1 - 1);
+      HEAPU8.set(b.subarray(0, n), $0);
+      HEAPU8[$0 + n] = 0;
+    } catch (e) { HEAPU8[$0] = 0; }
+  }, sistemaLoc, (int)sizeof sistemaLoc);
+}
+static void sistemaRecolher(void) {}
+#elif defined(__APPLE__)
+static void sistemaConsultar(void) {
+  // NUVIO_LOCALE=ro-RO simula a TV em outra lingua na previa (e nos testes).
+  const char *v = getenv("NUVIO_LOCALE");
+  if (!v || !*v) v = getenv("LC_ALL");
+  if (!v || !*v) v = getenv("LC_MESSAGES");
+  if (!v || !*v) v = getenv("LANG");
+  snprintf(sistemaLoc, sizeof sistemaLoc, "%s", v ? v : "");
+}
+static void sistemaRecolher(void) {}
+#else
+#include <pthread.h>
+static char sistemaBruto[32];
+static volatile int sistemaPronto;             // 1 = o fio deixou o resultado
+static int sistemaIniciado;
+static void *sistemaFio(void *u) {
+  char buf[1024];
+  size_t n = 0;
+  FILE *p = popen("luna-send -n 1 -f luna://com.webos.settingsservice/getSystemSettings "
+                  "'{\"keys\":[\"localeInfo\"]}' 2>/dev/null", "r");
+  (void)u;
+  if (p) { n = fread(buf, 1, sizeof buf - 1, p); pclose(p); }
+  buf[n] = 0;
+  sistemaBruto[0] = 0;
+  js_texto(buf, buf + n, "UI", sistemaBruto, sizeof sistemaBruto);
+  sistemaPronto = 1;
+  return NULL;
+}
+static void sistemaConsultar(void) {
+  pthread_t t;
+  if (sistemaIniciado) return;
+  sistemaIniciado = 1;
+  sistemaPendente = 1;
+  if (pthread_create(&t, NULL, sistemaFio, NULL) == 0) pthread_detach(t);
+  else sistemaPronto = 1;
+}
+static void sistemaRecolher(void) {
+  if (!sistemaPronto) return;
+  sistemaPronto = 0;
+  snprintf(sistemaLoc, sizeof sistemaLoc, "%s", sistemaBruto);
+  sistemaPendente = 0;
+  printf("[idioma] locale da TV: \"%s\"\n", sistemaLoc);
+  fflush(stdout);
+  idiomaResolver(1);
+}
+#endif
+
+void ajustes_idioma_auto_iniciar(void (*aoMudar)(const char *codigo, int fonte, int notificar)) {
+  idiomaGancho = aoMudar;
+  if (valor[AJ_IDIOMA] == 0) {
+    sistemaConsultar();
+    if (sistemaLoc[0]) {
+      printf("[idioma] locale da TV: \"%s\"\n", sistemaLoc);
+      fflush(stdout);
+    }
+    if (idiomaFonteGravada == IDA_TMDB || idiomaFonteGravada == IDA_LEGENDA) {
+      // Veio da conta na ultima vez: fica assim ate o blob chegar.
+      idiomaUltimaFonte = idiomaFonteGravada;
+      printf("[idioma] automatico: %s (fonte: %s)\n", idiomaauto_codigo(idiomaEfetivo),
+             idiomaauto_fonte_nome(idiomaFonteGravada));
+      fflush(stdout);
+    } else idiomaResolver(0);
+  }
+  idiomaPosArranque = 1;
+}
+void ajustes_idioma_auto_tick(void) { sistemaRecolher(); }
+
+// tmdb_language / subtitle_preferred_language CRUS do blob (a conta manda
+// "pt-BR", "ro"...). O laco das opcoes guarda so o INDICE de V_TMDB_LING, que
+// perde a regiao e o que a lista nao tem; aqui interessa o codigo inteiro.
+static void idiomaContaDoBlob(const char *json, const char *fim) {
+  static const struct { const char *chave; char *dst; size_t tam; } M[] = {
+    { "tmdb_language",                contaTmdbLing, sizeof contaTmdbLing },
+    { "subtitle_preferred_language",  contaLegLing,  sizeof contaLegLing  },
+  };
+  size_t k;
+  for (k = 0; k < sizeof M / sizeof *M; k++) {
+    char bruto[80], texto[80];
+    size_t n;
+    if (!js_bruto(json, fim, M[k].chave, bruto, sizeof bruto)) continue;
+    if (bruto[0] == '{' &&
+        !js_bruto(bruto, bruto + strlen(bruto), "value", texto, sizeof texto))
+      continue;
+    if (bruto[0] != '{') snprintf(texto, sizeof texto, "%s", bruto);
+    n = strlen(texto);
+    if (n >= 2 && texto[0] == '"') { memmove(texto, texto + 1, n - 2); texto[n - 2] = 0; }
+    else if (!strcmp(texto, "null")) texto[0] = 0;
+    snprintf(M[k].dst, M[k].tam, "%s", texto);
+  }
+}
 
 // Idiomas de audio e legenda do blob. NAO passam pelo laco das opcoes abaixo
 // porque o valor deles nao e um indice de enum, e um codigo ISO ("en", "pt") —
@@ -1887,6 +2115,8 @@ int ajustes_aplicar_blob(const char *json) {
   if (!json || !*json) return 0;
   fim = json + strlen(json);
   idiomasDoBlob(json, fim);
+  idiomaContaDoBlob(json, fim);
+  idiomaResolver(1);
 
   for (i = 0; i < AJ_N; i++) {
     char snake[80], embrulho[400], bruto[160];
@@ -1895,7 +2125,7 @@ int ajustes_aplicar_blob(const char *json) {
     // (heroCatalogKeys, versao, espaco) e nao vem do blob.
     if (OPCOES[i].tipo == OP_LEITURA || OPCOES[i].tipo == OP_ACAO) continue;
     if (!CHAVE[i] || CHAVE[i][0] == '-') continue;
-    if (i == AJ_FONTE_UI) continue;
+    if (i == AJ_FONTE_UI || i == AJ_IDIOMA) continue;
     // MEDIDO na TV, com uma conta de verdade: o blob NAO e um mapa plano de
     // camelCase. Ele e
     //   {"version":1,"features":{"layout_settings":{
@@ -2674,7 +2904,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_QUALIDADE_IMG: return "Quanto de pixel a arte carrega. Alta pede a versão grande de cada imagem e gasta mais memória; Baixa pede a menor, carrega antes e cabe em TV com pouca RAM.";
 
     // --- Interface e conta
-    case AJ_IDIOMA: return "Idioma de toda a interface. Não muda o idioma das legendas nem do áudio.";
+    case AJ_IDIOMA: return "Idioma de toda a interface. Automático segue a sua conta e, sem ela, o idioma da TV. Não muda o idioma das legendas nem do áudio.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
     case AJ_TEMA: return "Cor do anel que marca onde está o foco. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena: estilizada também tinge o fundo, gradiente pinta os botões com as cores da arte e imersiva deixa a cor vazar pela tela como luz. Ficam só nesta TV.";
     case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
@@ -3172,7 +3402,7 @@ static void mudarValor(int op, int dir) {
     if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) aplicarIdioma(op);
     // O rotulo de tipo e os generos das fileiras sao montados na entrada do
     // catalogo, ja no idioma da interface; trocar o idioma remonta.
-    if (op == AJ_IDIOMA) desc_repetir();
+    if (op == AJ_IDIOMA) { idiomaEscolhido(); desc_repetir(); }
     if (op == AJ_FONTE_UI)
       txt_definir_fonte_interface((TxtFamilia)valor[op]);
     // A FONTE DO CONTINUAR tambem remonta, e por um motivo diferente do
@@ -5468,7 +5698,7 @@ static float previaInterfaceOpcao(int op, float x, float y, float w) {
     TxtLinha sample = txt_linha(TXT_HEADLINE,
            // pt, ro, uk e ru pela chave portuguesa (cada idioma a traduz);
            // ingles pela chave inglesa, que a tabela devolve como esta.
-           valor[op] == IDIOMA_EN ? i18n("Hello · Action") : i18n("Olá · Ação"),
+           ajustes_idioma() == IDIOMA_EN ? i18n("Hello · Action") : i18n("Olá · Ação"),
            235, 237, 241, 255);
     txt_desenhar(sample, x + 24.0f, y + 30.0f);
     previaRealce(x + 14.0f, y + 20.0f, w - 28.0f, 56.0f, ar, ag, ab);
