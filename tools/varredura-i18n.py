@@ -346,6 +346,9 @@ IGNORAR = {
     "faixa nao e ASS",
     "sem indice da faixa",
     "sem CueRelativePosition",
+    # Chave do JSON do worker (noticia.c, /v1/noticia) e fragmento de class
+    # HTML que o extrator descarta (leitura.c, "saiba-mais"): dado, nao rotulo.
+    '"titulo"', "saiba-mais",
 }
 
 def sem_corpo_em_js(txt):

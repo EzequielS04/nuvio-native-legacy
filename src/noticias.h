@@ -20,7 +20,17 @@ typedef struct {
   char fonte[80];     // veiculo
   char data[16];      // "20 set" / "20 Sep", pronta para desenhar
   long chave;         // AAAAMMDD, para ordenar da mais nova para a mais velha
+  // O <link> do item (news.google.com/rss/articles/...) e o instante do
+  // pubDate. Entraram com o modal de noticia (29/09/2026): o link e o que
+  // noticia.c resolve ate a pagina do veiculo, e o instante da a data relativa
+  // ("há 3 h") da linha em foco. Vazio/0 no cache de disco da versao anterior.
+  char link[400];
+  long long quando;   // epoch UTC do pubDate; 0 = nao veio
 } Noticia;
+
+// "há 3 h", "ontem", "há 5 dias"; passada uma semana, a data curta de sempre
+// (Noticia.data). `agora` e o epoch de quem desenha (time(NULL)).
+void noticias_quando(const Noticia *nt, long long agora, char *dst, int tam);
 
 // Dispara a busca (uma vez por imdb; repetir e gratis). `serie` so muda a
 // palavra de apoio na consulta ("serie"/"filme") para desambiguar titulos.
