@@ -205,7 +205,7 @@ static const char *FS_COVER =
   "}\n";
 
 static const char *FS_CORPO[GFX_NMODOS] = {
-  // GFX_CARD — arte com cantos, over-scan de parallax e especular no foco
+  // GFX_CARD — arte inteira com cantos e especular no foco (sem zoom nem corte)
   "void main(){\n"
   "  float d = sdf(vUv, uRaio, uAspect);\n"
   "  float m = borda(d);\n"
@@ -217,16 +217,20 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // a mesma do card vazio. Dentro de +/-25% de proporcao segue cover.
   "  float ra = uAspect / max(uTexAsp, 0.01);\n"
   "  float contem = (uForceCover < 0.5 && uTexAsp > 0.05 && (ra < 0.80 || ra > 1.25)) ? 1.0 : 0.0;\n"
-  "  vec2 uv = cover(vUv);\n"
+  "  vec2 uv0 = cover(vUv);\n"
   "  if (contem > 0.5) {\n"
-  "    uv = vUv;\n"
-  "    if (ra > 1.0) uv.x = (uv.x - 0.5) * ra + 0.5;\n"
-  "    else          uv.y = (uv.y - 0.5) / ra + 0.5;\n"
+  "    uv0 = vUv;\n"
+  "    if (ra > 1.0) uv0.x = (uv0.x - 0.5) * ra + 0.5;\n"
+  "    else          uv0.y = (uv0.y - 0.5) / ra + 0.5;\n"
   "  }\n"
-  // Over-scan de 3%: a Apple reserva essa margem em todas as bordas para que o
-  // parallax nunca revele borda vazia (diferenca entre "actual size" e "safe
-  // zone" nas tabelas do Top Shelf). Sem ela o clamp estica o pixel da borda.
-  "  uv = (uv - 0.5) * (0.94 - 0.05*uFoco) + 0.5 + uPar;\n"
+  // SEM OVER-SCAN E SEM ZOOM NO FOCO (issue #176). Havia aqui uma amostragem a
+  // 0.94 em repouso e 0.89 com foco (3% e ate 5,5% cortados de cada borda,
+  // "reserva de parallax" do Top Shelf da Apple) mais o deslocamento uPar. So
+  // que a arte que chega e o cartaz inteiro, e provedores como o TopPosters
+  // gravam a nota na BASE da imagem: o foco a cortava justo onde ela mora. Quem
+  // cresce no foco e o cartao inteiro (moldura + arte, home.c), nunca a arte
+  // por dentro. uPar segue so na luz, que nao corta nada.
+  "  vec2 uv = uv0;\n"
   "  vec3 cor = (contem > 0.5 && (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0))\n"
   "    ? vec3(0.173)\n"
   "    : texture2D(uTex, clamp(uv, 0.0, 1.0)).rgb;\n"

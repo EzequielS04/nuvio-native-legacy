@@ -292,7 +292,7 @@ void gfx_encerrar(void);
 void gfx_tex_esquecer(GLuint tex);
 
 // Desenha um retangulo. `foco` 0..1 controla especular/sombra; `parx/pary`
-// deslocam a arte dentro do card (parallax); `raio` em fracao do menor lado.
+// so deslocam a luz; a arte nunca e cortada nem deslocada (#176); `raio` em fracao do menor lado.
 // TELEMETRIA DE QUADRO. Zerados por gfx_novo_quadro, uma vez por quadro.
 //
 // O QUE ESTES NUMEROS JA RESPONDERAM (medido na TV, home rolando, 1920x1080):
