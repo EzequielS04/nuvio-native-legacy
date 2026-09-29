@@ -1651,7 +1651,12 @@ static void montarHttpHeader(char *dst, unsigned tam) {
     if (ck[0])  { u += snprintf(dst + u, tam - u, "%s\"cookies\":\"%s\"", algum++ ? "," : "", ck); }
     snprintf(dst + u, tam - u, "}},");
   }
-  printf("[video] httpHeader no load: %s\n", dst); fflush(stdout);
+  // O cookie do stream e credencial de terceiro (CloudFront assinado): o log
+  // vai para o D1, entao mostra so quais campos foram, nunca o valor.
+  printf("[video] httpHeader no load: referer=%s userAgent=%s cookies=%s\n",
+         ref[0] ? "sim" : "nao", ua[0] ? "sim" : "nao",
+         ck[0] ? "sim (omitido)" : "nao");
+  fflush(stdout);
 }
 
 static int tocarInterno(const char *url, int comDV) {
