@@ -95,6 +95,25 @@ namespace NuvioTpk
             catch (Exception e) { Erro("Nuvio could not open its window.", e.GetType().Name + ": " + e.Message); return; }
         }
 
+        bool tvLogada;
+        int tiques;
+
+        void LogaTv()
+        {
+            string versao = null, modelo = null;
+            try { Tizen.System.Information.TryGetValue<string>("http://tizen.org/feature/platform.version", out versao); } catch { }
+            try { Tizen.System.Information.TryGetValue<string>("http://tizen.org/system/model_name", out modelo); } catch { }
+#if NV_API8
+            const string host = "api8";
+#elif NV_API9
+            const string host = "api9";
+#else
+            const string host = "api11";
+#endif
+            video.Log("[tv] modelo=" + (modelo ?? "?") + " tizen=" + (versao ?? "?") + " host=" + host +
+                      " dotnet=" + RuntimeInformation.FrameworkDescription + " tela=" + W + "x" + H);
+        }
+
         void CriaJanelaGL()
         {
             gl = new GLWindow("nuvio", new NuiRect(0, 0, W, H), true);
@@ -122,6 +141,10 @@ namespace NuvioTpk
             {
                 if (fim) { video.Parar(); Exit(); return false; }
                 video.Tique();
+                // ~3 s depois de abrir, quando o main() do app ja redirecionou
+                // o stdout para o nuvio.log: uma linha dizendo que TV e esta,
+                // para o D1 separar os relatos por versao da Tizen.
+                if (!tvLogada && ++tiques >= 12) { tvLogada = true; LogaTv(); }
                 return true;
             };
             vigia.Start();
