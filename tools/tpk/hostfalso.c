@@ -4,6 +4,7 @@
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <dlfcn.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,6 +25,11 @@ int main(int argc, char **argv) {
   setvbuf(stdout, NULL, _IONBF, 0);
   const char *so = argc > 1 ? argv[1] : "./libnuvio.so";
   int quadros = argc > 2 ? atoi(argv[2]) : 600;
+  // O host .NET da TV poe o processo no locale do idioma da TV (registros
+  // 9866-9920: "FPS=51,2" num Tizen 9). NV_HOST_LOCALE=de_DE.UTF-8 imita isso.
+  if (getenv("NV_HOST_LOCALE"))
+    printf("host: setlocale(%s) -> %s\n", getenv("NV_HOST_LOCALE"),
+           setlocale(LC_ALL, getenv("NV_HOST_LOCALE")) ? "ok" : "falhou");
   void *h = dlopen(so, RTLD_NOW);
   if (!h) { printf("dlopen: %s\n", dlerror()); return 1; }
   int (*iniciar)(const char *, const char *, int, int) = dlsym(h, "nv_tpk_iniciar");

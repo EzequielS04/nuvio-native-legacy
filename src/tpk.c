@@ -22,6 +22,7 @@
 #include <dlfcn.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <locale.h>
 #include <stdlib.h>
 #include <string.h>
 #ifdef NV_TPK40
@@ -151,6 +152,9 @@ int nv_tpk_iniciar(const char *arte, const char *dados, int w, int h) {
   char log[600];
   if (iniciado) return 0;
   iniciado = 1;
+  // O locale do host (.NET, idioma da TV) chega aqui ja aplicado; o main()
+  // volta o numerico para o C, e isto cobre o que roda antes dele.
+  setlocale(LC_NUMERIC, "C");
   if (tpk_egl_carregar() != 0) { snprintf(erro, sizeof erro, "libEGL nao encontrada na TV"); return -1; }
   if (w > 0 && h > 0) { telaW = w; telaH = h; }
   snprintf(dirArte, sizeof dirArte, "%s", arte);

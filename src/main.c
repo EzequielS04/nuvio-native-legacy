@@ -16,6 +16,7 @@
 #define NV_SEM_WEBOS 1
 #endif
 #include <stdio.h>
+#include <locale.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -375,6 +376,13 @@ EM_ASYNC_JS(void, nv_ceder_quadro, (), {
 #endif
 
 int main(int argc, char **argv) {
+  // NUMERO COM PONTO, SEMPRE. O host .NET do .tpk poe o processo no locale do
+  // idioma da TV, e em alemao/portugues/russo o printf("%.2f") sai "0,50" e o
+  // strtod para na virgula. Os registros 9866-9920 (Tizen 9, "FPS=51,2")
+  // mostram o efeito: todo /scrobble do Trakt levou HTTP 500 porque o JSON
+  // saia com "progress":0,50. Nenhum texto do app depende do locale do C —
+  // o idioma da interface e o i18n proprio —, entao o numerico e o do C.
+  setlocale(LC_NUMERIC, "C");
   // Sem a identidade do app, o SDL do webOS registra a surface como "(null)" e
   // o compositor NAO exibe a janela — o app roda a 60fps desenhando para
   // ninguem. Medido: "Invalid appId specified OR Unsupported Application Type".
@@ -1130,6 +1138,13 @@ int main(int argc, char **argv) {
       // LG de 16/09 mostrava o cache de texturas encostado em 95.9 de 96 MB sem
       // dizer se ele girava. Se `tela` passa do orcamento, nenhum ajuste de
       // fila resolve — e o teto.
+      // Vigia do locale (ver o setlocale no comeco de main): se o host trocou
+      // o numerico depois, o JSON com decimal voltaria a sair com virgula.
+      { struct lconv *lc = localeconv();
+        if (lc && lc->decimal_point && strcmp(lc->decimal_point, ".")) {
+          printf("[locale] numerico trocado por fora (\"%s\"): de volta ao C\n", lc->decimal_point);
+          setlocale(LC_NUMERIC, "C");
+        } }
       printf("FPS=%.1f pior=%.1fms janks=%d | pior-quadro: texto %.1fms em %d linhas"
              " | gpu-cache=%d %.1fMB tela=%d/%.1fMB fila-tex=%d tex-despejos=%d(q=%d)"
              " | despejos=%d | cache-arte=%ld/%ldB hit=%ld miss=%ld grav=%ld err=%ld essenciais=%ld/%ld"
