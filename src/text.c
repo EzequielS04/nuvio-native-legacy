@@ -244,6 +244,7 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 56, PESO_REGULAR }, { 60, PESO_REGULAR }, { 64, PESO_REGULAR },
   { 68, PESO_REGULAR }, { 72, PESO_REGULAR }, { 76, PESO_REGULAR },
   { 80, PESO_REGULAR },
+  { NV_TOP10_NUM_CORPO, PESO_BOLD },   // numeral do Top 10 da Dinamica
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.

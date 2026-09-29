@@ -251,6 +251,7 @@
 #define NV_PAD_LOGO_H     116.0f
 #define NV_PAD_LOGO_MAX_W 380.0f
 #define NV_PAD_SIN_W      760.0f
+#define NV_PAD_FILEIRA_GAP 80.0f  // vao entre fileiras (a home original respira mais)
 //
 // DINAMICA — o destaque ocupa 0..780 e ROLA com a pagina: com o foco no
 // destaque a primeira fileira espia por baixo (titulo em 800); descendo, o
@@ -266,10 +267,21 @@
 #define NV_DIN_DEST_H     405.0f
 #define NV_DIN_LARGA_W    384.0f   // faixa deitada
 #define NV_DIN_LARGA_H    216.0f
+#define NV_DIN_LARGA_VEU  0.62f    // altura do veu da legenda na faixa deitada
+#define NV_DIN_LARGA_PAD  20.0f    // recuo da legenda dentro da faixa
 #define NV_DIN_PAINEL_RAIO 36.0f   // canto do painel de vidro de cada fileira
 // Faixa do numeral do Top 10: o numeral mora no vao a esquerda do cartaz e o
-// cobre por 22 px (a Apple faz assim), entao o passo da fileira cresce por ela.
+// cartaz cobre a ponta direita dele (a Apple faz assim), entao o passo da
+// fileira cresce por ela.
 #define NV_TOP10_NUM_FAIXA 138.0f
+// O numeral: corpo do TXT_RANK_GRANDE (os algarismos da Inter medem ~0,73 do
+// corpo, ~190 px contra o cartaz de 322 — perto de 60%, a proporcao da Apple),
+// quanto da largura dele fica POR BAIXO do cartaz, e a folga minima ate o
+// cartaz anterior (o "10" encolhe para caber, em vez de invadi-lo).
+#define NV_TOP10_NUM_CORPO 260
+#define NV_TOP10_NUM_SOB   0.20f
+#define NV_TOP10_NUM_FOLGA 14.0f
+#define NV_TOP10_NUM_BASE  0.80f   // linha de base / altura da linha (Inter: 0,969 de 1,211)
 
 // As quatro secoes visuais que a home do Apple TV usa, cada uma com proporcao
 // propria — OBSERVADO nas fotos de referencia:

@@ -698,7 +698,11 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float d = sdf(vUv, uRaio, uAspect);\n"
   "  float m = borda(d);\n"
   "  if (m <= 0.001) discard;\n"
-  "  float t = 1.0 - smoothstep(0.0, max(uPar.x, 0.001), vUv.y);\n"
+  // uPar.y > 0 VIRA A RAMPA DE BAIXO PARA CIMA (veu escuro sob a legenda do
+  // cartao deitado): cheia da base ate uPar.y e zero em uPar.x, medidos da
+  // base. Com uPar.y = 0 a conta e a de sempre, o realce do topo.
+  "  float yy = uPar.y > 0.0 ? 1.0 - vUv.y : vUv.y;\n"
+  "  float t = 1.0 - smoothstep(uPar.y, max(uPar.x, uPar.y + 0.001), yy);\n"
   "  gl_FragColor = nv_dither(uCor.rgb, uCor.a * t * t * m);\n"
   "}\n",
 

@@ -123,6 +123,8 @@ typedef enum {
   //
   // uPar.x = ate onde a rampa vai, em fracao da ALTURA DESTE retangulo. A cor
   // vem de uCor.rgb (branco para realce), o alfa de uCor.a.
+  // uPar.y > 0 inverte o sentido: cheia da BASE ate uPar.y, zero em uPar.x
+  // (medidos da base) — o veu escuro da legenda do cartao deitado.
   GFX_BRILHO_TOPO = 24,
   // GFX_ARTE — a imagem como ela e, so que com os CANTOS ARREDONDADOS.
   //
