@@ -17,7 +17,12 @@ int main(void) {
   assert(col_definir_json(web) == 1);
   const ColFolder *f = col_folder(0);
   assert(f && !strcmp(f->group, "Streaming") && !strcmp(f->groupId, "c1") && !strcmp(f->id, "f1"));
-  assert(!strcmp(f->hero, "https://img/bg.jpg") && !strcmp(f->cover, "https://img/nf.jpg") && f->hideTitle == 1);
+  assert(!strcmp(f->cover, "https://img/nf.jpg") && f->hideTitle == 1);
+  // BANNER na ordem do web: heroBackdropUrl > coverImageUrl > backdropImageUrl
+  // da colecao. A pasta nao trouxe heroBackdropUrl, entao o hero fica vazio e o
+  // backdrop da colecao e so o ultimo recurso.
+  assert(!f->hero[0] && !strcmp(f->groupBackdrop, "https://img/bg.jpg"));
+  assert(!strcmp(col_banner(f), "https://img/nf.jpg") && !strcmp(col_capa(f), "https://img/nf.jpg"));
   assert(f->nSources == 3);
   assert(!strcmp(f->sources[0].base, "https://addon/abc") && !strcmp(f->sources[0].catId, "nf_movies") && !f->sources[0].genre[0]);
   // A fonte tmdb ENTRA (issue #44): antes ela era descartada e uma pasta so
@@ -25,6 +30,19 @@ int main(void) {
   // nunca aparecia na TV.
   assert(!strcmp(f->sources[1].prov, "tmdb") && !strcmp(f->sources[1].tmdbTipo, "DISCOVER"));
   assert(!strcmp(f->sources[2].title, "Series") && !strcmp(f->sources[2].type, "series"));
+  // Cadeia de arte da pasta, na ordem do web, ate o ultimo campo.
+  assert(col_definir_json("{\"collections\":[{\"id\":\"cc\",\"title\":\"C\",\"backdropImageUrl\":\"https://img/grupo.jpg\",\"folders\":["
+    "{\"id\":\"a\",\"title\":\"So grupo\",\"sources\":[{\"addonId\":\"a\",\"type\":\"movie\",\"catalogId\":\"k\"}]},"
+    "{\"id\":\"b\",\"title\":\"Com hero\",\"heroBackdropUrl\":\"https://img/h.jpg\",\"coverImageUrl\":\"https://img/c.jpg\","
+      "\"sources\":[{\"addonId\":\"a\",\"type\":\"movie\",\"catalogId\":\"k\"}]},"
+    "{\"id\":\"n\",\"title\":\"Nada\",\"sources\":[{\"addonId\":\"a\",\"type\":\"movie\",\"catalogId\":\"k\"}]}]},"
+    "{\"id\":\"cd\",\"title\":\"D\",\"folders\":[{\"id\":\"z\",\"title\":\"Zero\","
+      "\"sources\":[{\"addonId\":\"a\",\"type\":\"movie\",\"catalogId\":\"k\"}]}]}]}") == 4);
+  assert(!strcmp(col_capa(col_folder(0)), "https://img/grupo.jpg") && !strcmp(col_banner(col_folder(0)), "https://img/grupo.jpg"));
+  assert(!strcmp(col_banner(col_folder(1)), "https://img/h.jpg") && !strcmp(col_capa(col_folder(1)), "https://img/c.jpg"));
+  assert(!col_banner(col_folder(3))[0] && !col_capa(col_folder(3))[0]);   // sem campo nenhum: nada inventado
+  puts("ok  banner: heroBackdropUrl > coverImageUrl > backdropImageUrl da colecao; capa: cover > backdrop; vazio fica vazio");
+  assert(col_definir_json(web) == 1);
   puts("ok  shape do web: linha da RPC, manifest.json cortado, fonte tmdb entra, genre None vazio");
 
   char chave[192];

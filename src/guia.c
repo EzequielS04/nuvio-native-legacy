@@ -3503,14 +3503,14 @@ static void desenharBanda(float a, Uint32 agora) {
   if (nLinhas() < 1 || !linhaItem(focoLin, focoCol)) return;
   ajustes_acento(&ar, &ag, &ab);
 
-  // Degrade: oito faixas sem sobreposicao, alfa subindo em curva. Meia tela
-  // de preenchimento uma vez so.
-  { float y = topo - 160.0f, hh = (NV_TELA_H - y) / 8.0f;
-    for (k = 0; k < 8; k++) {
-      float t = (float)(k + 1) / 8.0f;
-      gfx_cor((GfxRect){ 0.0f, y + hh * (float)k, NV_TELA_W, hh + 1.0f }, 0.0f,
-              0.02f, 0.02f, 0.025f, (0.10f + 0.84f * t * t) * a);
-    } }
+  // Uma rampa continua em vez de oito faixas de alfa constante: aquelas
+  // criavam emendas horizontais por definicao. GFX_VEU_BAIXO aplica nv_dither por
+  // fragmento; manter a mesma cor e o teto de alfa (0,94). O plano de video
+  // continua visivel no topo, e a base sustenta o texto da grade.
+  { float y = topo - 160.0f;
+    gfx_rect((GfxRect){ 0.0f, y, NV_TELA_W, NV_TELA_H - y }, 0,
+             GFX_VEU_BAIXO, 0, 0, 0, 0,
+             0.02f, 0.02f, 0.025f, 0.94f * a); }
 
   // Quem entra: sobe ate dois a partir do foco e completa descendo.
   { int l = focoLin, c = focoCol;

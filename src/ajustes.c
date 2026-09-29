@@ -6388,10 +6388,13 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
       previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
   }
   float cx = x + rail + 18.0f, cw = w - rail - 28.0f;
-  float heroH = hero ? (lay == HOME_LAYOUT_DINAMICA ? 66.0f : full ? 60.0f : 42.0f) : 0.0f;
+  // Padrao e Dinamica: destaque de borda a borda, do topo da miniatura e sem canto.
+  int sangra = lay != HOME_LAYOUT_MODERNA;
+  float heroH = hero ? (lay == HOME_LAYOUT_DINAMICA ? 66.0f : lay == HOME_LAYOUT_PADRAO ? 52.0f : full ? 60.0f : 42.0f) : 0.0f;
   if (hero) {
-    GfxRect hr = {cx, y + 10.0f, cw, heroH};
-    gfx_cor(hr, 6.0f/heroH, 0.19f, 0.21f, 0.27f, 1.0f);
+    GfxRect hr = sangra ? (GfxRect){x + rail, y, w - rail, heroH + 10.0f}
+                        : (GfxRect){cx, y + 10.0f, cw, heroH};
+    gfx_cor(hr, sangra ? 0.0f : 6.0f/heroH, 0.19f, 0.21f, 0.27f, 1.0f);
     gfx_cor((GfxRect){cx + 12.0f, hr.y + 12.0f, cw * 0.40f, 4.0f},
             0.5f, 0.70f, 0.72f, 0.76f, 0.9f);
     if (op == AJ_HERO || op == AJ_HERO_CHEIO || op == AJ_HERO_FUNDO ||

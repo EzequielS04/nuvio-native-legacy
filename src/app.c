@@ -156,8 +156,10 @@ static int stalkerRenovando;
 // ~20 s com candidatas mortas — medido no log: 4 delas estouraram o timeout e
 // o canal abriu depois de 19 s de "carregando". Para TV ao vivo a lista do
 // addon ja vem curada (FrostView manda FHD/HD/SD na ordem), entao o canal vai
-// DIRETO para a primeira fonte e este par vigia: nao abriu em ~12 s ou o
+// DIRETO para a primeira fonte e este par vigia: nao abriu em ~25 s ou o
 // player marcou erro, tenta a proxima da lista sem pedir nada ao dono.
+// Uma fonte classificada viva pode levar ~20 s ate o primeiro quadro; o watchdog
+// de abertura tem folga para esse caso, limitado pelo teto absoluto abaixo.
 // A folha foi aberta com um player ESPERANDO fonte (ajustes_fonte_manual).
 // Serve para uma pergunta so: se ela fechar sem escolha, quem avisa o player?
 // Sem isto, sair da folha com Voltar deixaria a tela em "carregando" para
@@ -176,19 +178,18 @@ static int    fonteVODAutomatica;
 static int    fonteVODTentativas;
 static Uint32 fonteVODDesde;
 static void limparFonteVOD(void);
-#define CANAL_FONTE_PRAZO_MS 12000
+#define CANAL_FONTE_PRAZO_MS 25000
 // PRAZO CURTO para fonte que JA PROVOU estar ruim. A conferencia de playlist
 // (stream_canal_primeira_viva) classifica cada candidata antes de tocar; quando
 // a escolhida e apenas "muda" — nao devolveu a playlist em 3 s — dar a ela os
-// mesmos 12 s de uma fonte sadia e somar espera sobre espera. MEDIDO na LG num
-// canal fora do ar: 3 s de conferencia + 12 s de watchdog POR FONTE.
-// Os 12 s continuam valendo para a fonte VIVA, que e onde eles existem para
-// servir: um canal 4K pesado legitimamente demora isso para abrir.
+// mesmos 25 s de uma fonte sadia e somar espera sobre espera. MEDIDO na LG num
+// canal fora do ar, antes do aumento: 3 s de conferencia + 12 s de watchdog
+// POR FONTE. A fonte VIVA recebe 25 s, pois pode levar ~20 s ate o quadro.
 #define CANAL_FONTE_PRAZO_MUDA_MS 4000
 // TRAVA DEPOIS DE ABRIR. Um canal ao vivo com 12 s de imagem congelada ja
 // perdeu — ao contrario de um filme, nao ha nada para recuperar esperando: o
-// que passou, passou. O numero e o mesmo do prazo de abertura de proposito, e
-// pelo mesmo motivo de escala: um pico de rede que enche o buffer de novo
+// que passou, passou. O prazo de trava continua em 12 s (independente dos
+// 25 s de abertura): um pico de rede que enche o buffer de novo
 // termina MUITO antes disso, entao o que sobrevive a 12 s nao e pico, e fonte
 // morta. Baixar mais arrisca trocar de fonte num engasgo que ia passar.
 #define CANAL_TRAVA_MS 12000
