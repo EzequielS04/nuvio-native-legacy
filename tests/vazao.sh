@@ -7,13 +7,14 @@
 #   /parado    64 KB e silencio com a conexao aberta
 #   /proibido  403 com pagina de erro
 #   /curto     200 KB inteiros, sem Range
-#   /addon/stream/movie/<id>.json  seis fontes (3 mediveis, 2 hosts: 127.0.0.1
-#              e localhost; torrent, aviso e fora de cache); /sem-fontes/ 404
+#   /addon/stream/movie/<id>.json  sete fontes (4 mediveis, 2 hosts: 127.0.0.1
+#              e localhost; torrent, aviso e fora de cache; uma mediavel leva
+#              chave e token no caminho, para o teste de censura); /sem-fontes/ 404
 # e depois o FLUXO da tela (tests/vazao_fluxo.c): botao, fio, resultado,
 # relatorio sem url/host e o Voltar no meio, com a janela encurtada para 2 s.
 # O Tizen (XHR em pedacos) nao roda aqui: precisa do navegador da TV.
 #   bash tests/vazao.sh
-set -eu
+set -euo pipefail
 cd "$(dirname "$0")/.."
 DIR=$(mktemp -d /tmp/nuvio-vazao.XXXXXX)
 SRV=
@@ -21,6 +22,11 @@ trap 'if [ -n "$SRV" ]; then kill $SRV 2>/dev/null || true; fi; rm -rf "$DIR"' E
 
 cc -Isrc tests/vazao.c src/vazao.c src/rede.c src/redeurl.c -lpthread \
   -o "$DIR/t" -O1 -g -Wall -Wextra
+
+# A regra do ciclo completo e do "por add-on" (selecao, agendador de uma fonte
+# por vez, ranking, censura de host), com rede FALSA: nada de servidor.
+cc -Isrc tests/vazao_ciclo.c src/vazao.c -o "$DIR/ciclo" -O1 -g -Wall -Wextra
+"$DIR/ciclo"
 
 python3 - "$DIR/porta" <<'PY' &
 import sys, time, re, http.server, socketserver
@@ -66,10 +72,11 @@ class H(http.server.BaseHTTPRequestHandler):
                      '{"name":"4K","title":"Filme 2160p","url":"%s/lento/a.mkv"},'
                      '{"name":"1080p","title":"Filme 1080p","url":"%s/lento/b.mkv"},'
                      '{"name":"720p","title":"Filme 720p","url":"%s/lento/c.mkv"},'
+                     '{"name":"480p","title":"Filme 480p 1.2 GB","url":"%s/lento/CHAVE-SECRETA-123/e.mkv?token=abc"},'
                      '{"name":"Torrent 4K","infoHash":"0123456789abcdef0123456789abcdef01234567"},'
                      '{"name":"4K DV","title":"aviso 2160p","url":"%s/x/slate.mp4"},'
                      '{"name":"\u23f3 4K","title":"fora 2160p","url":"%s/lento/d.mkv"}'
-                     ']}' % (a, b, a, a, a)).encode()
+                     ']}' % (a, b, a, a, a, a)).encode()
             self.send_response(200); self.send_header("Content-Length", str(len(corpo)))
             self.end_headers(); self.wfile.write(corpo); return
         if c.startswith("/redir"):
@@ -109,7 +116,7 @@ for source in src/*.c; do
   case "$source" in src/main.c|src/diagnostico.c) continue;; esac
   sources+=("$source")
 done
-cc "${sources[@]}" tests/vazao_fluxo.c -Isrc -o "$DIR/fluxo" -DVAZ_JANELA_S=2 \
+cc "${sources[@]}" tests/vazao_fluxo.c -Isrc -o "$DIR/fluxo" -DVAZ_JANELA_S=2 -DVAZ_CICLO_JANELA_S=1 \
   -O1 -g -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
   -L/opt/homebrew/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lz -framework OpenGL \
   -Wno-deprecated-declarations -Wno-macro-redefined

@@ -195,6 +195,12 @@ int rede_medir_vazao(const char *url, const char *const *cabecalhos, int segundo
                      long inicio, long long maxBytes, volatile int *cancelado,
                      int *kbpsPorSegundo, int nMax, RedeVazao *res,
                      char *final, unsigned tamFinal);
+// Prazo, em ms, para o PRIMEIRO byte do corpo (DNS, TLS, redirecionamentos e a
+// espera do servidor) nas proximas medidas; passado dele a medida desiste. 0
+// volta ao padrao (8 s). O ciclo completo baixa varias fontes em fila e uma
+// fonte parada nao pode segurar a fila inteira. So o libcurl honra (o XHR
+// sincrono do Tizen nao tem prazo).
+void rede_vazao_espera(unsigned long ms);
 
 // Registra quem OUVE os 401. Sem isto um token de sessao vencido era so uma
 // linha no log — o Trakt continuava "conectado" na tela enquanto toda
