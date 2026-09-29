@@ -117,6 +117,7 @@ static void ajusta(int layout, int vidro) {
   fprintf(a, "idioma 0\ntrailerHero 1\nhomeLayoutLocal %d\nvidroLocal %d\n"
              "modernLandscapePostersEnabled 1\nselected_theme %d\n",
           layout, vidro ? 0 : 1, getenv("NV_TEMA") ? atoi(getenv("NV_TEMA")) : 0);
+  if (getenv("NV_AJ")) fprintf(a, "%s\n", getenv("NV_AJ"));   // ex.: "heroSectionEnabled 1"
   fclose(a);
   ajustes_dir(dirDados);
 }
