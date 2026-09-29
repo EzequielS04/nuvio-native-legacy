@@ -49,7 +49,12 @@
 #define AV_MAX        40
 #define AV_VISTOS_ARQ "avisos-vistos.txt"
 #define AV_MARCA_ARQ  "sessao-viva.txt"
+#ifdef NV_TPK
+// No .tpk o /tmp nao e do app: o anterior fica na pasta de dados (tpk.c).
+#define AV_LOG_ANTERIOR (getenv("NUVIO_LOG_ANTERIOR"))
+#else
 #define AV_LOG_ANTERIOR "/tmp/nuvio-anterior.log"
+#endif
 #define AV_REGISTRO_MAX (200 * 1024)
 // 20 s, nao 6 (dono, 20/09/2026: "teria que ficar mais tempo"). Quem esta
 // olhando um card do outro lado da tela leva um tempo para notar o canto.
@@ -340,6 +345,8 @@ int avisos_enviar_diagnostico(const char *execucao_id, const char *relatorio,
            NV_VERSAO,
 #ifdef __EMSCRIPTEN__
            "tizen",
+#elif defined(NV_TPK)
+           "tizen-tpk",
 #elif defined(__APPLE__)
            "mac",
 #else
@@ -431,6 +438,8 @@ static void *enviarRegistro(void *u) {
              NV_VERSAO,
 #ifdef __EMSCRIPTEN__
              "tizen",
+#elif defined(NV_TPK)
+             "tizen-tpk",
 #elif defined(__APPLE__)
              "mac",
 #else
@@ -501,6 +510,12 @@ static void *fioCanalFn(void *u) {
       if (ateV[0] && versaoMaior(NV_VERSAO, ateV)) ok = 0;
 #ifdef __EMSCRIPTEN__
       if (plat[0] && strcmp(plat, "todas") && strcmp(plat, "tizen")) ok = 0;
+#elif defined(NV_TPK)
+      // O .tpk tambem e Samsung: vale o "tizen" de sempre, mais o "tizen-tpk"
+      // so dele. O anuncio do proprio preview (id com "tpk-preview") nao faz
+      // sentido dentro dele.
+      if (plat[0] && strcmp(plat, "todas") && strcmp(plat, "tizen") && strcmp(plat, "tizen-tpk")) ok = 0;
+      if (strstr(id, "tpk-preview")) ok = 0;
 #else
       if (plat[0] && strcmp(plat, "todas") && strcmp(plat, "lg")) ok = 0;
 #endif

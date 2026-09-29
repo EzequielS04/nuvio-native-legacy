@@ -12,6 +12,7 @@
 // (js/ui/screens/settings/settingsScreen.js), inclusive os rotulos em portugues
 // lidos da tela rodando.
 #include "ajustes.h"
+#include "trailerfonte.h"   // NV_TRAILER_CONTINUA_DETALHE, nas ajudas do trailer
 #include "dados.h"
 #include "stalker.h"
 #include "xtream.h"
@@ -1624,7 +1625,7 @@ void ajustes_dir(const char *dir) {
       if (m) { fputs("1\n", m); fclose(m); }
       gravar();
     } }
-#if defined(__EMSCRIPTEN__) && !defined(NV_TRAILER_AUTO_TIZEN)
+#if (defined(__EMSCRIPTEN__) || defined(NV_TPK)) && !defined(NV_TRAILER_AUTO_TIZEN)
   // MIGRACAO UNICA (1.3.10): o .wgt da 1.3.9 saiu de uma build com
   // NV_TRAILER_AUTO_TIZEN (a das fotos das notas), entao na Samsung o
   // autoplay do trailer nasceu LIGADO — e qualquer gravacao de ajustes
@@ -2447,7 +2448,13 @@ static const char *ajudaOpcao(int op) {
     case AJ_DET_META_EXT: return "Prefere a ficha do addon de metadados à do Cinemeta. Útil quando o seu addon tem sinopse e elenco melhores.";
     case AJ_DET_DATA_CHEIA: return "Escreve a data de estreia por extenso em vez de só o ano.";
     case AJ_DET_VEU: return "Quanto a vinheta escura cobre a arte na tela do título. Cem por cento é o padrão; zero mostra a arte limpa — o texto pode ficar difícil de ler sobre cenas claras.";
-    case AJ_DET_TRAILER_AUTO: return "Alguns segundos depois de abrir um título, o trailer toca sem som no lugar da arte de fundo. Rolar a página ou sair dela volta para a arte.";
+    case AJ_DET_TRAILER_AUTO:
+#if defined(NV_TPK) && NV_TRAILER_CONTINUA_DETALHE
+      // O trailer do cartaz continua na pagina, com som (detail_abrir).
+      return "Alguns segundos depois de abrir um título, o trailer toca sem som no lugar da arte de fundo. Se o trailer do cartaz já estava tocando, ele continua na página, com som. Rolar a página ou sair dela volta para a arte.";
+#else
+      return "Alguns segundos depois de abrir um título, o trailer toca sem som no lugar da arte de fundo. Rolar a página ou sair dela volta para a arte.";
+#endif
     case AJ_TRAILER_QUAL: return "Definição do vídeo do trailer. Máxima usa a maior que existir para o título; as outras são um teto, para conexões mais lentas.";
     case AJ_TRAILER_ASPECTO: return "Quanto o trailer é ampliado para encher a tela. Zoom cinema tira a tarja preta de um trailer de cinema; Original mostra o quadro inteiro, com tarja.";
     case AJ_TRAILER_FONTE:
@@ -2456,6 +2463,14 @@ static const char *ajudaOpcao(int op) {
       // defeito.
 #ifdef __EMSCRIPTEN__
       return "De onde vem o trailer da tela do título e do destaque. Automático tenta a Apple TV, depois o IMDb e, sem os dois, o YouTube (só na tela do título); uma fonte escolhida é a única tentada. Nesta TV o trailer toca sempre sem som.";
+#elif defined(NV_TPK)
+      // .tpk: a Apple toca sem audio (trailerapple.c, varianteMidia), entao o
+      // botao Trailer em Automatico prefere o IMDb (trailerfonte_ordem_cheia).
+#if NV_TRAILER_CONTINUA_DETALHE
+      return "De onde vem o trailer da tela do título e do destaque. Automático tenta a Apple TV e, sem ela, o IMDb; no destaque e no botão de trailer o IMDb vem primeiro, porque o da Apple toca sem som nesta TV. Uma fonte escolhida é a única tentada. O YouTube não toca nesta TV.";
+#else
+      return "De onde vem o trailer da tela do título e do destaque. Automático tenta a Apple TV e, sem ela, o IMDb; no botão de trailer, que toca com som, o IMDb vem primeiro, porque o da Apple toca sem som nesta TV. Uma fonte escolhida é a única tentada. O YouTube não toca nesta TV.";
+#endif
 #else
       return "De onde vem o trailer da tela do título e do destaque. Automático tenta a Apple TV e, sem ela, o IMDb; uma fonte escolhida é a única tentada. O YouTube não toca nesta TV.";
 #endif

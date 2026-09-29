@@ -12,7 +12,7 @@
 // o alvo Tizen (WASM) precisa pular exatamente os mesmos. Nomear a condicao
 // evita ter de lembrar de dois simbolos em cada ponto - sem isto o primeiro
 // build para o navegador ainda tentava abrir libwayland-client.so.0.
-#if defined(__APPLE__) || defined(__EMSCRIPTEN__)
+#if defined(__APPLE__) || defined(__EMSCRIPTEN__) || defined(NV_TPK)
 #define NV_SEM_WEBOS 1
 #endif
 #include <stdio.h>
@@ -390,7 +390,11 @@ int main(int argc, char **argv) {
     // 23/09: nenhuma linha de stderr sobrevivia no arquivo (o diagnostico do
     // libass, "[legenda] libass: ...", nunca aparecia) e sobravam ~1600 linhas
     // vazias — os restos dos textos sobrescritos.
+#ifdef NV_TPK
+    if (log) { rename(log, getenv("NUVIO_LOG_ANTERIOR"));
+#else
     if (log) { rename(log, "/tmp/nuvio-anterior.log");
+#endif
                if (freopen(log, "w", stdout)) { fflush(stderr); dup2(fileno(stdout), fileno(stderr)); } } }
   setvbuf(stdout, NULL, _IOLBF, 0);
   if (!getenv("XDG_RUNTIME_DIR")) setenv("XDG_RUNTIME_DIR", "/tmp/xdg", 1);
@@ -599,6 +603,11 @@ int main(int argc, char **argv) {
   }
 #endif
   SDL_GLContext ctx = SDL_GL_CreateContext(win);
+#ifdef NV_TPK
+  // Sem GL (Tizen 4/5 sem superficie) nao ha o que desenhar; sai e o host
+  // mostra o motivo (nv_tpk_erro).
+  if (!ctx) { printf("[tpk] sem contexto GL, saindo\n"); SDL_Quit(); return 2; }
+#endif
   // O cursor do Magic Remote e desenhado pelo app (ponteiro.c). Depois do
   // contexto: o log de arranque dele le a janela corrente.
   ponteiro_iniciar();

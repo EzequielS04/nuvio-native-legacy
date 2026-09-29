@@ -201,6 +201,7 @@ static float  trailerFade = 0.0f;
 // (o trailer continua); Voltar fecha o trailer sem sair da pagina.
 static float  trailerCopy = 0.0f;      // 0 = bloco no lugar, 1 = so o logo embaixo
 static int    trailerCopyOculta = 0;   // a intencao; trailerCopy e a mola
+static int    trailerTocavaAntes = 0;  // borda de subida do "tocando" (modo cinema)
 // A FONTE do trailer `k` desta pagina, no formato que trailer_abrir espera:
 // URL (Apple HLS nos dois alvos, MP4 do IMDb na LG) ou id do YouTube (Samsung,
 // lista do TMDB). NULL quando ainda nao ha — ou quando nao vai haver, e ai
@@ -216,8 +217,12 @@ static int    trailerCopyOculta = 0;   // a intencao; trailerCopy e a mola
 // Apple (so video, trailerapple.c varianteMidia) atras do som do YouTube; o
 // dono decidiu (22/09/2026) "trailer fica mudo": a tela cheia segue a mesma
 // ordem do fundo, e trailer.c forca o mudo nesse alvo.
+//
+// `cheia` 1 = o botao Trailer (tela cheia, com som onde ha): no .tpk, em
+// Automatico, o IMDb vem antes da Apple, porque la a Apple e so video
+// (trailerfonte_escolher_cheia, #178). O fundo passa 0 e nao muda.
 static int trailerSemFonteLogado = 0;
-static const char *trailerFonte(int k, int *qual) {
+static const char *trailerFonte(int k, int *qual, int cheia) {
   const CatItem *ci = cat_item(idx);
   TrailerCandidatos c;
   const char *u = NULL;
@@ -242,8 +247,15 @@ static const char *trailerFonte(int k, int *qual) {
   (void)k;
 #endif
   c.youtubeRespondeu = !extras_carregando();
-  d = trailerfonte_escolher(aj, tz, &c, &u, &q);
-  if (d == TRF_ABRE) { if (qual) *qual = q; return u; }
+  d = cheia ? trailerfonte_escolher_cheia(aj, tz, trailerfonte_com_som(tz), &c, &u, &q)
+            : trailerfonte_escolher(aj, tz, &c, &u, &q);
+  if (d == TRF_ABRE) {
+    if (qual) *qual = q;
+#ifdef NV_TPK
+    if (cheia) { printf("[trailer] detalhe: tela cheia pela fonte %s (ajuste %d)\n", trailerfonte_nome(q), aj); fflush(stdout); }
+#endif
+    return u;
+  }
   if (d == TRF_NENHUMA && !trailerSemFonteLogado) {
     trailerSemFonteLogado = 1;
     printf("[trailer] detalhe: sem trailer (ajuste %d, apple %s, imdb %s, youtube %s)\n", aj,
@@ -928,11 +940,41 @@ void detail_abrir(const HomeItem *it) {
   aberto = 1; saindo = 0; nivel = 0; botao = 0;
   t = 0.0f; pg = 0.0f; scrollY = 0.0f; velY = 0.0f; abaInfo = 0; pessoaAberta = 0;
   relFoco = 0; pedAbrir = -1; ratTemp = 0; ratSinc = 0;
-  trailer_fechar(); trailerDesde = 0; trailerTentado = 0; trailerFade = 0.0f;
+  trailerDesde = 0; trailerTentado = 0; trailerFade = 0.0f;
   trailerEtapa = 0; trailerPrazo = 0;
   trailerSemFonteLogado = 0;
   trailerCopy = 0.0f; trailerCopyOculta = 0;
   idx = it->indice;
+  // O TRAILER DO CARTAZ CONTINUA AQUI, COM SOM (pedido do rawldon, canario
+  // tpk-janela; so o .tpk, NV_TRAILER_CONTINUA_DETALHE em trailerfonte.h).
+  // Se o destaque da home esta tocando o trailer DESTE titulo, a pagina o
+  // adota: mesmo player, sem reabrir, tela inteira e som. Respeita "Trailer
+  // automatico" (desligado = fecha, como antes). Qualquer outro caso fecha,
+  // como sempre. O botao Trailer (tela cheia) nao muda.
+  { int adotou = 0;
+#if NV_TRAILER_CONTINUA_DETALHE
+    const CatItem *ciA = cat_item(idx);
+    if (trailer_aberto() && !trailer_cheia() && trailer_tocando() &&
+        trailer_dono() == TRAILER_DONO_HOME && ciA && ciA->imdb[0] &&
+        !strcmp(trailer_dono_imdb(), ciA->imdb)) {
+      if (!ajustes_trailer_auto()) {
+        printf("[trailer] detalhe: trailer do cartaz nao continua (Trailer automatico desligado)\n");
+        fflush(stdout);
+      } else {
+        GfxRect telaA = { 0, 0, NV_TELA_W, NV_TELA_H };
+        adotou = trailer_continuar(telaA, 1);
+        if (adotou) {
+          trailer_marcar_dono(TRAILER_DONO_DETALHE, ciA->imdb);
+          // Ja tocando: sem esperar a arte apagar, e sem o modo cinema de
+          // cara (a pessoa abriu para LER a pagina; o trailer segue atras).
+          trailerTentado = 1; trailerFade = 1.0f; trailerTocavaAntes = 1;
+          printf("[trailer] detalhe: continua o trailer do cartaz com som (%s)\n", ciA->imdb);
+          fflush(stdout);
+        }
+      }
+    }
+#endif
+    if (!adotou) trailer_fechar(); }
   revistaVista = cat_revisao();
   // Guarda identidade e copia ANTES de qualquer republicacao. Ver revalidarIdx.
   arteFixa[0] = logoFixo[0] = logoCatalogoFixo[0] = 0;
@@ -1779,7 +1821,9 @@ void detail_evento(const SDL_Event *e) {
       //
       // Som: so onde a fonte tem (LG). Na Samsung a tela cheia e muda — a
       // Apple la e so video e o dono nao quer troca para o YouTube por som.
-      const char *u = trailer_suportado() ? trailerFonte(foco.coluna, NULL) : NULL;
+      // No .tpk a tela cheia tem som, e por isso o IMDb (MP4 com audio) vem
+      // antes da Apple (so video) em Automatico — trailerFonte(..., 1), #178.
+      const char *u = trailer_suportado() ? trailerFonte(foco.coluna, NULL, 1) : NULL;
       if (u) {
         GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
         trailerEtapa = 0; trailerPrazo = 0;   // tela cheia: so o teclado fecha
@@ -2124,7 +2168,7 @@ void detail_atualizar(float dt, Uint32 agora) {
         agora - trailerDesde >= NV_TRAILER_ESPERA_MS &&
         ajustes_trailer_auto()) {
       int qual = 0;
-      const char *u = trailerFonte(0, &qual);
+      const char *u = trailerFonte(0, &qual, 0);
       if (u) {
         GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
         trailerTentado = 1;
@@ -2175,13 +2219,14 @@ void detail_atualizar(float dt, Uint32 agora) {
       }
     }
 #endif
-    { float alvo = (trailer_aberto() && trailer_tocando()) ? 1.0f : 0.0f;
-      static int tocavaAntes;
+    // trailer_mostra_video: no .tpk a arte fica ate o recorte do zoom
+    // assentar (#178); na LG e no .wgt e sempre 1.
+    { float alvo = (trailer_aberto() && trailer_tocando() && trailer_mostra_video()) ? 1.0f : 0.0f;
       int toca = alvo > 0.5f && !trailer_cheia();
       // Borda de subida: o trailer COMECOU a tocar -> esconde o bloco.
-      if (toca && !tocavaAntes) trailerCopyOculta = 1;
+      if (toca && !trailerTocavaAntes) trailerCopyOculta = 1;
       if (!toca) trailerCopyOculta = 0;
-      tocavaAntes = toca;
+      trailerTocavaAntes = toca;
       trailerFade = anim_mola(trailerFade, alvo, dt, NV_MOLA_SCROLL);
       trailerCopy = anim_mola(trailerCopy, trailerCopyOculta ? 1.0f : 0.0f, dt, NV_MOLA_SCROLL); }
   }
@@ -5064,9 +5109,13 @@ void detail_desenhar(Uint32 agora) {
   // clarao no meio da transicao.
   GfxRect alvo; float aEntrada;
   // TRAILER EM TELA CHEIA: a tela inteira e furo, nada da pagina por cima.
+  // No .tpk, ate o recorte do zoom assentar (trailer_mostra_video, #178),
+  // preto opaco no lugar do furo: o plano ja pode ter o quadro inteiro com
+  // tarja, e ele e que nao deve aparecer. Na LG e no .wgt, o furo de sempre.
   if (trailer_cheia()) {
     GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-    gfx_furo(tela);
+    if (trailer_mostra_video()) gfx_furo(tela);
+    else gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
     return;
   }
   backdropRect(&alvo, &aEntrada);

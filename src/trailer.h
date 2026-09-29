@@ -42,6 +42,13 @@ int  trailer_cheia(void);
 // 1 quando ha video de fato tocando: so ai a pagina abre o furo — antes
 // disso mostrar um buraco preto seria pior que a arte.
 int  trailer_tocando(void);
+// 1 quando o PLANO pode aparecer: quem desenha o furo (fundo, destaque, tela
+// cheia) pergunta isto alem de trailer_tocando. No .tpk (#178) o recorte do
+// zoom so e pedido ~800 ms depois de tocar; ate ele assentar o quadro inteiro
+// com tarja estaria na tela, e a pessoa via "tarja 1 s, depois zoom". Ate la
+// fica a arte (ou preto na tela cheia). Seguranca: 2 s depois de tocar mostra
+// de qualquer jeito, nunca prende o trailer. Na LG e no .wgt e sempre 1.
+int  trailer_mostra_video(void);
 // 1 quando o ultimo elemento fechado pelo atualizador terminou por erro.
 // Permite ao hero tentar a proxima fonte (Apple -> YouTube) uma unica vez,
 // sem confundir fechamento voluntario com falha de rede.
@@ -51,6 +58,19 @@ int  trailer_falhou(void);
 int  trailer_estado(void);
 // Retangulo atual, para quem desenha o furo.
 GfxRect trailer_retangulo(void);
+// QUEM ABRIU o trailer aberto, e de qual titulo (imdb). O destaque da home
+// marca TRAILER_DONO_HOME logo depois de abrir; a pagina do titulo, quando
+// ADOTA esse trailer (trailerfonte.h, NV_TRAILER_CONTINUA_DETALHE), passa
+// para TRAILER_DONO_DETALHE — e a home deixa de fechar o que nao e mais dela.
+// trailer_fechar zera. Sem marca (qualquer outro chamador) e NENHUM, como
+// antes.
+enum { TRAILER_DONO_NENHUM = 0, TRAILER_DONO_HOME = 1, TRAILER_DONO_DETALHE = 2 };
+void        trailer_marcar_dono(int dono, const char *imdb);
+int         trailer_dono(void);
+const char *trailer_dono_imdb(void);
+// Leva o trailer aberto (fora da tela cheia) para `r` com `som`, SEM trocar
+// de fonte nem reabrir o player. 0 quando nao ha o que levar.
+int  trailer_continuar(GfxRect r, int som);
 // Teclado do modo de tela cheia. 1 quando consumiu.
 int  trailer_evento(const SDL_Event *e);
 void trailer_atualizar(Uint32 agora);

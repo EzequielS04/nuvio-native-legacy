@@ -88,7 +88,7 @@ static char ipkHash[80];          // sha256 em hex; vazio quando a release nao d
 // tools/env.sh e tools/arm.sh), so por tests/atualizacao_shot.sh.
 #if defined(NV_AT_INSTALA)
 #define AT_INSTALA NV_AT_INSTALA
-#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__)
+#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__) && !defined(NV_TPK)
 #define AT_INSTALA 1
 #else
 #define AT_INSTALA 0

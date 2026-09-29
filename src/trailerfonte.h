@@ -55,7 +55,50 @@ const char *trailerfonte_nome(int qual);
 // dono, 22/09/2026, "trailer fica mudo"): a Apple la e uma variante so de
 // video (trailerapple.c, varianteMidia) e trocar para o YouTube so por causa
 // do som punha na tela o player que cai em "Video player configuration error".
+// "Samsung" aqui e o .wgt: o .tpk nativo le trailerfonte_tizen() == 0 (o
+// #ifdef e __EMSCRIPTEN__), tem som na tela cheia e usa as regras da LG, mais
+// o IMDb primeiro da tela cheia (trailerfonte_ordem_cheia).
 int  trailerfonte_com_som(int tizen);
+
+// A TELA CHEIA COM SOM (botao Trailer da pagina de titulo). Igual a
+// trailerfonte_ordem/_escolher, com UMA diferenca: em Automatico, com `som` 1
+// e trailerfonte_imdb_primeiro_cheia() ligado, o IMDb vem ANTES da Apple.
+// Por que (#178, .tpk nativo Samsung): la a Apple toca a variante de midia
+// SO VIDEO (trailerapple.c, varianteMidia — o master trava o muse-server e um
+// <audio> ao lado travou o video), e o MP4 do IMDb tem o audio junto. O
+// testador (Tizen 6.0) viu exatamente isso: "com som" so nos titulos que a
+// Apple nao tem e caem no IMDb. O fundo/destaque (mudo) segue Apple primeiro
+// (melhor imagem); fonte escolhida no ajuste e respeitada sem mudanca.
+int  trailerfonte_ordem_cheia(int ajuste, int tizen, int som, int ordem[3]);
+TrailerDecisao trailerfonte_escolher_cheia(int ajuste, int tizen, int som,
+                                           const TrailerCandidatos *c,
+                                           const char **url, int *qual);
+// 1 no .tpk (NV_TPK); 0 no .wgt e na LG, onde nada muda. O definir e para os
+// testes.
+int  trailerfonte_imdb_primeiro_cheia(void);
+void trailerfonte_definir_imdb_primeiro_cheia(int sim);
+
+// O TRAILER DO CARTAZ QUE CONTINUA COM SOM NA PAGINA DO TITULO (pedido do
+// rawldon, canario tpk-janela, 29/09/2026): o trailer mudo do destaque/cartaz
+// da home segue tocando, no MESMO player, quando OK abre a pagina daquele
+// titulo, e la ganha som (detail.c, detail_abrir). No .tpk a Apple toca a
+// variante SO VIDEO (ver acima): tirar o mudo dela nao da som nenhum. Por
+// isso, com NV_TRAILER_CONTINUA_DETALHE, o destaque em Automatico tenta o
+// IMDb (MP4 com audio) antes da Apple — so o destaque; a pagina do titulo e
+// a tela cheia seguem as regras de cima. 0 desliga as duas coisas juntas.
+// .wgt e LG: 0, nada muda.
+#ifndef NV_TRAILER_CONTINUA_DETALHE
+#ifdef NV_TPK
+#define NV_TRAILER_CONTINUA_DETALHE 1
+#else
+#define NV_TRAILER_CONTINUA_DETALHE 0
+#endif
+#endif
+int  trailerfonte_ordem_destaque(int ajuste, int tizen, int ordem[3]);
+TrailerDecisao trailerfonte_escolher_destaque(int ajuste, int tizen, const TrailerCandidatos *c,
+                                              const char **url, int *qual);
+int  trailerfonte_imdb_primeiro_destaque(void);
+void trailerfonte_definir_imdb_primeiro_destaque(int sim);
 
 // 1 quando o IMDb toca na Samsung: a build tem o servico de recomendacoes, por
 // onde passa a pergunta que exige Referer (#136). O definir e para os testes.
