@@ -3439,13 +3439,20 @@ static const Risco *riscoDe(int op) {
   return NULL;
 }
 // Chamar DEPOIS de mudar o ajuste `op`, com o valor que ele tinha ANTES.
+// "ANTES" DE UMA RAJADA. Subir as fileiras de 7 para 30 sao 23 toques (a seta
+// repete), e o valor "anterior" que a pessoa entende e o 7, nao o 12 em que o
+// contador cruzou o limiar do diario. Toques a menos de 2,5 s um do outro contam
+// como UMA edicao, e a origem dela e o valor do primeiro toque.
+#define RISCO_RAJADA_MS 2500
+static Uint32 riscoT[AJ_N];
+static int    riscoOrigem[AJ_N];
+static char   riscoTem[AJ_N];   // riscoT valido (SDL_GetTicks() pode ser 0 no comeco)
 static void riscoNotar(int op, int antes) {
   const Risco *r = riscoDe(op);
   int depois;
   if (!r) return;
   depois = riscoAtual(op);
-  if (depois == antes) return;
-  if (r->nivel(depois) > r->nivel(antes))
+  if (r->nivel(depois) > r->nivel(antes) && depois != antes)
     seguro_mudou(r->chave, antes, depois, (long)time(NULL), SDL_GetTicks() / 1000);
   else
     seguro_ajustou(r->chave, depois, r->nivel(depois) > 0);
@@ -3663,9 +3670,12 @@ static void mudarValorDireto(int op, int dir) {
 // coube e, feita a mudanca, avisa o diario do modo seguro.
 static void mudarValor(int op, int dir) {
   int antes = riscoDe(op) ? riscoAtual(op) : 0;
+  Uint32 agora = SDL_GetTicks();
   if (riscoPedirConfirmacao(op, dir)) return;
+  if (!riscoTem[op] || agora - riscoT[op] > RISCO_RAJADA_MS) riscoOrigem[op] = antes;
+  riscoT[op] = agora; riscoTem[op] = 1;
   mudarValorDireto(op, dir);
-  riscoNotar(op, antes);
+  riscoNotar(op, riscoOrigem[op]);
 }
 
 // Interruptor = escolha entre Ligado e Desligado. E o `renderToggleRow` do web:
