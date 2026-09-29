@@ -16,6 +16,7 @@
 #include "addons.h"
 #include "marco.h"
 #include "debrid.h"
+#include "p2p.h"
 #include "fonteauto.h"
 #include "video.h"
 #include "botoes.h"
@@ -111,7 +112,11 @@ static float velRol = 0.0f;
 // realce que diz "ainda e a mesma lista, voce so andou".
 
 
+static int soP2P(const Stream *s);
 static const char *containerDa(const Stream *s) {
+  // "P2P": torrent que so o servidor de streaming toca. Sigla igual nas duas
+  // linguas, como MP4/MKV.
+  if (soP2P(s)) return "P2P";
   if (s->mp4 || strstr(s->url, ".mp4") || strstr(s->rotulo, ".mp4")) return "MP4";
   if (strstr(s->url, ".mkv") || strstr(s->arquivo, ".mkv") || strstr(s->descricao, ".mkv")) return "MKV";
   if (strstr(s->url, ".m3u8") || strstr(s->rotulo, "HLS")) return "HLS";
@@ -122,6 +127,9 @@ static const char *containerDa(const Stream *s) {
   // apareceu na foto do album em ingles, com "ARQUIVO" no meio de "Sources",
   // "Reload" e "Automatic pick".
   return i18n("ARQUIVO");
+}
+static int soP2P(const Stream *s) {
+  return !s->url[0] && s->infoHash[0] && !debrid_ativo() && p2p_ativo();
 }
 
 static Uint32 recebidaEm;
@@ -140,9 +148,10 @@ void stream_definir_lista(const Stream *l, int qtd) {
   Stream *nova = l && qtd > 0 ? malloc(sizeof(Stream) * (size_t)qtd) : NULL;
   if (l && qtd > 0 && !nova) return;
   // Torrent sem url so fica se ha debrid para resolve-lo; senao seria uma linha
-  // que nunca toca (shouldListStream do web).
+  // que nunca toca (shouldListStream do web). O servidor P2P experimental
+  // (p2p.h) tambem o resolve, e so quando ligado.
   for (i = 0; i < qtd && nova; i++)
-    if (l[i].url[0] || debrid_ativo()) nova[k++] = l[i];
+    if (l[i].url[0] || debrid_ativo() || p2p_ativo()) nova[k++] = l[i];
   if (nova && qtd - k) printf("[fonte] %d torrents sem debrid descartados\n", qtd - k);
   descartadosSemDebrid = nova ? qtd - k : 0;
   pthread_mutex_lock(&verTrava);
@@ -262,6 +271,10 @@ static long pontos(const Stream *s) {
   // uma cacheada acima do teto ainda perde para uma fora de cache dentro dele,
   // como ja perdia para qualquer fonte dentro dele.
   if (s->foraCache) p -= 500000;
+  // P2P do servidor de streaming: o fim da fila. O automatico nem chega a
+  // toca-lo (nao ha debrid que o resolva), mas a ORDEM da folha tambem conta:
+  // link direto primeiro, torrent sem garantia de peers por ultimo.
+  if (soP2P(s)) p -= 600000;
   return p;
 }
 
@@ -434,6 +447,14 @@ static void falhouUma(int i, void *u) {
   if (!c->abortou) stream_automatico_excluir(i);
 }
 
+int stream_qtd_torrents(void) {
+  int i, q = 0;
+  pthread_mutex_lock(&verTrava);
+  for (i = 0; i < n; i++) if (!lista[i].url[0] && lista[i].infoHash[0]) q++;
+  pthread_mutex_unlock(&verTrava);
+  return q;
+}
+
 unsigned stream_lista_geracao(void) {
   unsigned g;
   pthread_mutex_lock(&verTrava);
@@ -444,7 +465,7 @@ unsigned stream_lista_geracao(void) {
 
 int stream_resolver_escolhida(int i, unsigned geracao, char *url, unsigned nu,
                               char *servico, unsigned ns, int *pct) {
-  char infoHash[48];
+  char infoHash[48], fontes[sizeof lista->fontes];
   int fileIdx, r;
   if (url && nu) url[0] = 0;
   if (!url || !nu) return 0;
@@ -461,11 +482,20 @@ int stream_resolver_escolhida(int i, unsigned geracao, char *url, unsigned nu,
     return 1;
   }
   snprintf(infoHash, sizeof infoHash, "%s", lista[i].infoHash);
+  snprintf(fontes, sizeof fontes, "%s", lista[i].fontes);
   fileIdx = lista[i].fileIdx;
   pthread_mutex_unlock(&verTrava);
   if (!infoHash[0]) return 0;
 
   r = debrid_resolver_escolhido(infoHash, fileIdx, url, nu, servico, ns, pct);
+  // SEM DEBRID QUE RESOLVA (sem chave, ou a conta recusou): o servidor P2P
+  // experimental, se a pessoa ligou. "Baixando" (2) NAO cai aqui: o debrid ja
+  // tem o torrent na conta e o certo e esperar por ele, nao abrir um segundo
+  // caminho para o mesmo arquivo.
+  if (r == 0 && p2p_ativo()) {
+    if (p2p_resolver(infoHash, fileIdx, fontes, url, nu) == P2P_OK) r = 1;
+    else { url[0] = 0; r = STREAM_P2P_FALHOU; }
+  }
   if (r == 1) {
     pthread_mutex_lock(&verTrava);
     if (listaGeracao == geracao && i < n)
@@ -473,6 +503,9 @@ int stream_resolver_escolhida(int i, unsigned geracao, char *url, unsigned nu,
     else r = -1;
     pthread_mutex_unlock(&verTrava);
     if (r < 0) url[0] = 0;
+  } else if (r == STREAM_P2P_FALHOU) {
+    printf("[fonte] %d torrent escolhido nao abriu no servidor P2P (erro %d)\n", i,
+           p2p_ultimo_erro());
   } else if (r == DEBRID_BAIXANDO) {
     printf("[fonte] %d torrent escolhido esta baixando no %s (%d%%)\n", i,
            servico && servico[0] ? servico : "debrid", pct ? *pct : -1);

@@ -42,6 +42,9 @@
 #include "artehero.h"
 #include "artereserva.h"
 #include "corviva.h"
+#include "p2p.h"
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -182,6 +185,9 @@ typedef enum {
   // Interface de vidro: visual translucido, so desta TV. No fim pelo mesmo
   // motivo dos outros: valor[] e CHAVE[] sao posicionais.
   AJ_VIDRO,
+  // P2P experimental (p2p.h). No fim pelo mesmo motivo: valor[] e CHAVE[] sao
+  // posicionais.
+  AJ_P2P_LIGADO, AJ_P2P_URL, AJ_P2P_TESTAR,
   AJ_N
 } OpcaoId;
 
@@ -648,6 +654,11 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Itens por fileira",               V_ITENS_FIL, 3), // local: itensFileiraLocal
   ESC("Fonte da interface", V_FONTE_UI, 6),
   ESC("Interface de vidro",              V_LIGA, 2),   // local: vidroLocal
+  // EXPERIMENTAL (p2p.h). Tocar torrent sem debrid, por um servidor de
+  // streaming do Stremio na rede local. LOCAL: o web nao tem esta escolha.
+  ESC("Servidor P2P (experimental)",     V_LIGA, 2),   // local: p2pLocal
+  ACAO("Endereço do servidor P2P"),
+  ACAO("Testar servidor P2P"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -761,6 +772,9 @@ static const char *CHAVE[] = {
   "fonteInterface",
   // LOCAL e SEM o "-": o web nao tem esta escolha e ela precisa sobreviver.
   "vidroLocal",
+  // Ligado: LOCAL e SEM o "-" (sobrevive ao fechamento). O endereco mora em
+  // p2p.txt (dados), por aparelho; o teste e so uma acao.
+  "p2pLocal", "-p2pEndereco", "-p2pTestar",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -927,6 +941,8 @@ static const Item TELA[] = {
     OPC(AJ_TEX_MB), OPC(AJ_ESPACO),
     ROT("Diagnóstico"),
       OPC(AJ_DIAGNOSTICO), OPC(AJ_VELOCIDADE),
+    ROT("Experimental"),
+      OPC(AJ_P2P_LIGADO), OPC(AJ_P2P_URL), OPC(AJ_P2P_TESTAR),
 
   SEC("Sobre", "Versão, atualizações e registros", "aj_info"),
     OPC(AJ_VERSAO_I), OPC(AJ_ATUALIZAR), OPC(AJ_ENVIAR_LOG), OPC(AJ_ENVIO_AUTO),
@@ -1154,6 +1170,8 @@ static int valor[] = {
   0,                /* itens por fileira: 12, como sempre foi (ver V_ITENS_FIL) */
   TXT_FAMILIA_INTER,/* fonte da interface: independente da legenda */
   1,                /* interface de vidro: DESLIGADA (V_LIGA: 1 = Desligado) */
+  1,                /* servidor P2P: DESLIGADO (V_LIGA: 1 = Desligado) */
+  0, 0,             /* endereco, testar: acoes */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1278,6 +1296,8 @@ int ajustes_vidro(void) { return 1; }
 int ajustes_vidro(void) { return lig(AJ_VIDRO); }
 #endif
 void ajustes_definir_vidro(int ligado) { valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); }
+int ajustes_p2p_ligado(void) { return lig(AJ_P2P_LIGADO); }
+void ajustes_definir_p2p_ligado(int ligado) { valor[AJ_P2P_LIGADO] = ligado ? 0 : 1; gravar(); }
 
 // Cor do ANEL DE FOCO. Ver TEMA_ACENTO: um tema aqui e so isto.
 //
@@ -1642,12 +1662,84 @@ static const char *fanartMascarada(void) {
   return m;
 }
 
+// ENDERECO DO SERVIDOR P2P (p2p.h). Mora em p2p.txt na pasta de dados, por
+// aparelho: e o IP de um PC/NAS da casa desta TV, sem sentido em outra.
+static char p2pEndereco[200];
+static void p2pCarregar(void) {
+  char *t = dados_ler("p2p.txt");
+  p2pEndereco[0] = 0;
+  // Reaplica a normalizacao: arquivo editado a mao ou de outra versao nao pode
+  // virar URL torta.
+  if (t && !p2p_normalizar_url(t, p2pEndereco, sizeof p2pEndereco)) p2pEndereco[0] = 0;
+  free(t);
+}
+const char *ajustes_p2p_url(void) { return p2pEndereco; }
+int ajustes_definir_p2p_url(const char *texto) {
+  char nova[200] = "";
+  size_t i = 0;
+  while (texto && (texto[i] == ' ' || texto[i] == '\t')) i++;
+  if (texto && texto[i] && !p2p_normalizar_url(texto, nova, sizeof nova)) return 0;
+  snprintf(p2pEndereco, sizeof p2pEndereco, "%s", nova);
+  if (nova[0]) dados_gravar("p2p.txt", nova);
+  else dados_apagar("p2p.txt");
+  return 1;
+}
+
+// "TESTAR SERVIDOR P2P": p2p_testar espera ate P2P_PRAZO_TESTE s pela rede, e a
+// TV nao pode parar de desenhar. Um fio por vez; ajustes_atualizar recolhe.
+static pthread_t p2pFio;
+static int p2pFioVivo;
+static _Atomic int p2pTeste;            // 0 nunca/livre, 1 testando, 2 pronto
+static int p2pTesteErro;
+static char p2pTesteVersao[32];
+static void *p2pTesteFio(void *u) {
+  char v[32];
+  int e = p2p_testar(v, sizeof v);
+  (void)u;
+  p2pTesteErro = e;
+  snprintf(p2pTesteVersao, sizeof p2pTesteVersao, "%s", v);
+  atomic_store_explicit(&p2pTeste, 3, memory_order_release);
+  return NULL;
+}
+static void p2pTesteIniciar(void) {
+  if (p2pFioVivo) return;
+  atomic_store_explicit(&p2pTeste, 1, memory_order_release);
+  if (pthread_create(&p2pFio, NULL, p2pTesteFio, NULL) != 0) {
+    p2pTesteErro = P2P_ERR_SERVIDOR;
+    atomic_store_explicit(&p2pTeste, 2, memory_order_release);
+    return;
+  }
+  p2pFioVivo = 1;
+}
+static void p2pTesteRecolher(void) {
+  if (p2pFioVivo && atomic_load_explicit(&p2pTeste, memory_order_acquire) == 3) {
+    pthread_join(p2pFio, NULL);
+    p2pFioVivo = 0;
+    atomic_store_explicit(&p2pTeste, 2, memory_order_release);
+  }
+}
+static const char *p2pTesteTexto(void) {
+  static char buf[64];
+  int e = atomic_load_explicit(&p2pTeste, memory_order_acquire);
+  if (e == 0) return i18n("OK testa");
+  if (e == 1 || e == 3) return i18n("testando…");
+  switch (p2pTesteErro) {
+    case P2P_OK:
+      snprintf(buf, sizeof buf, i18n("conectado · versão %s"), p2pTesteVersao);
+      return buf;
+    case P2P_ERR_DESLIGADO:   return i18n("informe o endereço primeiro");
+    case P2P_ERR_NAO_STREMIO: return i18n("respondeu, mas não é um servidor Stremio");
+    default:                  return i18n("sem resposta do servidor");
+  }
+}
+
 void ajustes_dir(const char *dir) {
   FILE *f;
   char caminho[600], linha[96];
   if (!dir || !*dir) return;
   snprintf(dirAjustes, sizeof dirAjustes, "%s", dir);
   fanartCarregar();
+  p2pCarregar();
   // ANTES DO LACO, e nao so no fim (#129): limita() confere as duas linhas de
   // idioma contra nValores() -> nLingua, e quem preenche nLingua e esta
   // chamada. No arranque ela ainda nao tinha rodado: a lista tinha "1 valor",
@@ -1940,6 +2032,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_TRAILER_FONTE:
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
     case AJ_VIDRO:          /* visual desta TV: a GPU de cada uma aguenta diferente */
+    case AJ_P2P_LIGADO:     /* o servidor P2P e um aparelho da rede desta casa */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
       return 1;
@@ -2242,6 +2335,8 @@ static const char *textoLeitura(int op) {
       return bufConta; }
   }
   if (op == AJ_FANART_CHAVE) return fanartMascarada();
+  if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco : i18n("Não configurado");
+  if (op == AJ_P2P_TESTAR) return p2pTesteTexto();
   if (op == AJ_ENVIAR_LOG) {
     switch (avisos_envio_estado()) {
       case 1:  return i18n("enviando…");
@@ -2582,6 +2677,9 @@ static const char *ajudaOpcao(int op) {
     case AJ_IDIOMA: return "Idioma de toda a interface. Não muda o idioma das legendas nem do áudio.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
     case AJ_TEMA: return "Cor do anel que marca onde está o foco. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena: estilizada também tinge o fundo, gradiente pinta os botões com as cores da arte e imersiva deixa a cor vazar pela tela como luz. Ficam só nesta TV.";
+    case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
+    case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
+    case AJ_P2P_TESTAR: return "Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.";
     case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
@@ -3258,6 +3356,15 @@ void ajustes_evento(const SDL_Event *e) {
                         40, "0123456789abcdef", NULL);
       return;
     }
+    if (focoOp == AJ_P2P_URL) {
+      stCampo = focoOp;
+      // O endereco volta para o campo: corrigir um digito do IP nao pode obrigar
+      // a redigitar tudo no D-pad. Vazio esquece.
+      teclado_abrir_com("Endereço do servidor P2P", "IP e porta do servidor Stremio: 192.168.1.5:11470. Vazio apaga.",
+                        64, ST_ALFA_PORTAL, p2pEndereco[0] ? p2pEndereco : NULL);
+      return;
+    }
+    if (focoOp == AJ_P2P_TESTAR) { p2pTesteIniciar(); return; }
     if (focoOp == AJ_TRAKT) { traktauth_comecar(); return; }
     if (focoOp == AJ_SIMKL) { simklauth_comecar(); return; }
     if (focoOp == AJ_SAIR) {
@@ -3299,6 +3406,7 @@ void ajustes_evento(const SDL_Event *e) {
 void ajustes_atualizar(float dt, Uint32 agora) {
   (void)agora;
   montarTela();
+  p2pTesteRecolher();
   if (teclado_aberto()) teclado_atualizar(dt, agora);
   // O resultado e CONSUMIDO NA LEITURA (ver teclado.h): ler duas vezes daria
   // TECLADO_NADA na segunda, e por isso a gravacao acontece aqui, uma vez.
@@ -3309,6 +3417,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       else if (stCampo == AJ_XTREAM_USUARIO)  xtream_definir_usuario(teclado_texto());
       else if (stCampo == AJ_XTREAM_SENHA)    xtream_definir_senha(teclado_texto());
       else if (stCampo == AJ_FANART_CHAVE)    fanartDefinir(teclado_texto());
+      else if (stCampo == AJ_P2P_URL)         ajustes_definir_p2p_url(teclado_texto());
       else                           stalker_definir_portal(teclado_texto());
       stCampo = 0;
     } else if (r == TECLADO_CANCELOU) {
@@ -4934,6 +5043,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_XTREAM_SENHA: case AJ_XTREAM_LIMPAR: case AJ_FANART_CHAVE:
     case AJ_XTREAM_CONTA:
     case AJ_DIAGNOSTICO: case AJ_VELOCIDADE:
+    case AJ_P2P_URL: case AJ_P2P_TESTAR:
       return AJPV_ACAO;
     default:
       return (AjPreview)-1;

@@ -108,6 +108,15 @@ int  ajustes_cor_logo(void);
 int  ajustes_vidro(void);
 // So para as capturas de teste e o atalho de quem ja sabe: grava como a tela.
 void ajustes_definir_vidro(int ligado);
+// P2P EXPERIMENTAL (p2p.h). Desligado de fabrica. O endereco (o servidor de
+// streaming do Stremio na rede local) e por aparelho, em p2p.txt.
+int  ajustes_p2p_ligado(void);
+void ajustes_definir_p2p_ligado(int ligado);
+// Endereco ja normalizado ("http://192.168.1.5:11470"); "" quando nao ha.
+const char *ajustes_p2p_url(void);
+// Normaliza e grava; texto vazio esquece. 0 se o texto nao e um endereco (nada
+// muda), 1 se gravou.
+int  ajustes_definir_p2p_url(const char *texto);
 // A MESMA cor mais a TINTA que contrasta com ela: devolve 0.067 (#111) sobre
 // realce claro e 1.0 (branco) sobre realce escuro, luminancia Rec.709 com o
 // degrau em 0,55. E a regra de FOCO de layout.h (preenchimento na cor de

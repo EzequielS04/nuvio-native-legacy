@@ -99,6 +99,44 @@ int stream_texto_fora_de_cache(const char *t) {
       || contem(t, " download]") || contem(t, "uncached");
 }
 
+// "sources": ["tracker:udp://...", "dht:<hash>"] de um stream de torrent, uma
+// entrada por linha em `dst`. So as que o servidor de streaming do Stremio
+// entende (prefixo tracker: ou dht:); uma URL solta de tracker ganha o prefixo.
+// A entrada que nao cabe inteira fica de fora (nunca cortada no meio: um
+// tracker pela metade e endereco torto). \/ vira / (JSON escapa a barra).
+static void lerFontesP2P(const char *ini, const char *fim, char *dst, unsigned tam) {
+  const char *q = strstr(ini, "\"sources\"");
+  unsigned u = 0;
+  dst[0] = 0;
+  if (!q || q >= fim) return;
+  q += 9;
+  while (q < fim && (*q == ' ' || *q == ':' || *q == '\n' || *q == '\t')) q++;
+  if (q >= fim || *q != '[') return;
+  q++;
+  while (q < fim && *q != ']') {
+    char e[300];
+    unsigned k = 0;
+    if (*q != '"') { q++; continue; }
+    q++;
+    while (q < fim && *q != '"' && k + 1 < sizeof e) {
+      if (*q == '\\' && q + 1 < fim) q++;      // \/ -> /
+      e[k++] = *q++;
+    }
+    e[k] = 0;
+    while (q < fim && *q != '"') q++;          // entrada maior que o buffer: pula o resto
+    if (q < fim) q++;
+    if (!strncmp(e, "tracker:", 8) || !strncmp(e, "dht:", 4) ||
+        !strncmp(e, "udp://", 6) || !strncmp(e, "http://", 7) || !strncmp(e, "https://", 8)) {
+      char ent[320];
+      int L = snprintf(ent, sizeof ent, "%s%s",
+                       strncmp(e, "tracker:", 8) && strncmp(e, "dht:", 4) ? "tracker:" : "", e);
+      if (L > 0 && u + (unsigned)L + 2 <= tam) {
+        u += (unsigned)snprintf(dst + u, tam - u, "%s%s", u ? "\n" : "", ent);
+      }
+    }
+  }
+}
+
 int stream_extrair(const char *json, const char *provedor, Stream **saida) {
   const char *p, *fim;
   int n = 0, cap = 0;
@@ -122,6 +160,7 @@ int stream_extrair(const char *json, const char *provedor, Stream **saida) {
       if (!js_texto(p, fim, "infoHash", s.infoHash, sizeof s.infoHash) && cr && cr < fim)
         js_texto(cr, fim, "infoHash", s.infoHash, sizeof s.infoHash);
       s.fileIdx = (int)js_num(p, fim, "fileIdx", -1);
+      if (s.infoHash[0]) lerFontesP2P(p, fim, s.fontes, sizeof s.fontes);
     }
     // Nao tocar URL cortada; sem url e sem hash nao ha o que tocar.
     if ((s.infoHash[0] || !strncmp(s.url, "http", 4)) &&
