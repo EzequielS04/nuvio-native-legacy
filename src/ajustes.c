@@ -7066,6 +7066,9 @@ int ajustes_teste_focar_opcao(int op) {
   return 0;
 }
 
+// O primeiro dos onze interruptores de "Notas no titulo" (consecutivos no enum).
+int ajustes_teste_primeira_nota_titulo(void) { return AJ_NT_IMDB; }
+
 int ajustes_teste_familia_previa(int op) {
   return (int)familiaPreviaOpcao(op);
 }
