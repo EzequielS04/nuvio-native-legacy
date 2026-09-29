@@ -25,6 +25,7 @@
 //      esta pausado. Pausado sem controles o usuario fica olhando um quadro
 //      congelado sem saber o que houve.
 #include "player.h"
+#include "idbase.h"
 #include "dados.h"
 #include "trailer.h"
 #include "linguas.h"
@@ -526,8 +527,7 @@ void player_definir_episodio(int t, int e) {
   // chega (player_atualizar), entao "sempre" seria a cada quadro.
   if (c->imdb[0]) {
     char alvo[64];
-    snprintf(alvo, sizeof alvo, "%.*s:%d:%d",
-             (int)strcspn(c->imdb, ":"), c->imdb, epT, epE);
+    cat_id_stream(idxAtual(), epT, epE, alvo, sizeof alvo);
     if (!abrindoSessao && stream_n() > 0 && !stream_lista_do_alvo(alvo))
       stream_invalidar("episode changed");
   }
@@ -1188,8 +1188,7 @@ float player_posicao_seg(void) { return posSeg; }
 // prefixo, entao o corte e no SEGUNDO ':' nesse caso.
 static void idTrakt(const CatItem *ci, char *dst, size_t n) {
   const char *base = ci->imdb;
-  size_t l = strcspn(base, ":");
-  if (!strncmp(base, "tmdb:", 5)) l += 1 + strcspn(base + l + 1, ":");
+  size_t l = idbase_len(base);   // "tmdb:t123", "kitsu:41370" guardam o ':' do prefixo
   if (epT > 0 && epE > 0) snprintf(dst, n, "%.*s:%d:%d", (int)l, base, epT, epE);
   else snprintf(dst, n, "%s", base);
 }

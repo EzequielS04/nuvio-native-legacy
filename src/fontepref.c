@@ -3,6 +3,7 @@
 // addon, depois provedor + trilha de audio), por que a chave nao pode ser a
 // url, e por que a preferencia vence.
 #include "fontepref.h"
+#include "idbase.h"
 #include "dados.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -185,7 +186,7 @@ void fontepref_id_base(const char *id, char *dst, unsigned tam) {
   if (!dst || !tam) return;
   dst[0] = 0;
   if (!id) return;
-  snprintf(dst, tam, "%.*s", (int)strcspn(id, ":"), id);
+  snprintf(dst, tam, "%.*s", (int)idbase_len(id), id);   // "kitsu:41370" inteiro (idbase.h)
 }
 
 static int achar(const char *base) {

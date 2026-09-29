@@ -132,6 +132,13 @@ int  addons_adicionar(const char *nome, const char *urlManifest);
 // otimista; addons_sondado() diz qual dos dois casos e.
 int  addons_fornece(int i, int oque);
 int  addons_sondado(int i);
+// O addon `i` serve /meta/<tipo>/<id>.json? Le o que o manifesto DECLARA no
+// resource "meta" (types e idPrefixes, do resource ou da raiz):
+//   1 = declara meta para esse tipo e esse prefixo de id;
+//   0 = nao serve (sem "meta", ou declarou tipos/prefixos e este nao esta);
+//  -1 = nao da para saber (manifesto nao lido, ou sem idPrefixes).
+// `tipo` vazio nao filtra por tipo.
+int  addons_aceita_id(int i, const char *tipo, const char *id);
 // Le o manifesto de cada addon num fio proprio, uma vez por lista.
 //
 // SO SERVE COMO RESERVA hoje, e a distincao importa: ela era chamada de um
