@@ -9,6 +9,7 @@
 #include "js.h"
 #include "nuvem.h"
 #include "cwordem.h"
+#include "scrobble.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1223,58 +1224,11 @@ int trakt_lista(const char *qual, CatItem *saida, int max) {
 
 // --- gravar progresso -------------------------------------------------------
 
-static char marcaId[64];
-static double marcaPos, marcaDur;
-static pthread_t fioMarca;
-static int fioMarcaVivo;
-
-static void *enviarMarca(void *u) {
-  const char *cab[4];
-  char aut[200], chave[140], corpo[400], *r;
-  char id[24];
-  int t = 0, e = 0;
-  const char *dp;
-  double pct;
-  (void)u;
-  snprintf(id, sizeof id, "%s", marcaId);
-  dp = strchr(id, ':');
-  if (dp) { sscanf(dp + 1, "%d:%d", &t, &e); *(char *)dp = 0; }
-  pct = 100.0 * marcaPos / marcaDur;
-  if (pct < 0.0) pct = 0.0;
-  if (pct > 100.0) pct = 100.0;
-
-  snprintf(aut, sizeof aut, "Authorization: Bearer %s", token);
-  snprintf(chave, sizeof chave, "trakt-api-key: %s", cliente);
-  cab[0] = aut; cab[1] = "trakt-api-version: 2"; cab[2] = chave; cab[3] = NULL;
-
-  // Pause preserva o ponto; stop registra a conclusao. Mantemos o limiar
-  // conservador de 90% deste cliente. Pause sozinho nunca conclui o episodio.
-  if (t > 0 && e > 0)
-    snprintf(corpo, sizeof corpo,
-             "{\"show\":{\"ids\":{\"imdb\":\"%s\"}},"
-             "\"episode\":{\"season\":%d,\"number\":%d},\"progress\":%.2f}",
-             id, t, e, pct);
-  else
-    snprintf(corpo, sizeof corpo,
-             "{\"movie\":{\"ids\":{\"imdb\":\"%s\"}},\"progress\":%.2f}",
-             id, pct);
-
-  r = rede_postar(pct >= 90 ? "https://api.trakt.tv/scrobble/stop" :
-                             "https://api.trakt.tv/scrobble/pause", 20, cab, corpo);
-  printf("[trakt] %s %s %.1f%% -> %s\n", pct>=90?"stop":"pause",marcaId,pct,r?"ok":"falhou");
-  fflush(stdout);
-  free(r);
-  fioMarcaVivo = 0;
-  return NULL;
-}
-
+// O envio mora em scrobble.c (fila + fio unico, start/pause/stop). Esta funcao
+// ficou como porta de saida do player: sai do titulo e pronto.
 void trakt_marcar(const char *imdb, double posSeg, double durSeg) {
-  if (!ligado || !imdb || !*imdb || durSeg <= 1.0 || fioMarcaVivo) return;
-  snprintf(marcaId, sizeof marcaId, "%s", imdb);
-  marcaPos = posSeg; marcaDur = durSeg;
-  fioMarcaVivo = 1;
-  if (pthread_create(&fioMarca, NULL, enviarMarca, NULL) != 0) fioMarcaVivo = 0;
-  else pthread_detach(fioMarca);
+  if (!ligado || !imdb || !*imdb || durSeg <= 1.0) return;
+  scrobble_sair(imdb, posSeg, durSeg);
 }
 
 // --- WATCHLIST: escrever e ler ------------------------------------------------
