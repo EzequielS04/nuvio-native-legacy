@@ -48,6 +48,7 @@
 #include "focus.h"
 #include "anim.h"
 #include "revela.h"
+#include "textogate.h"
 #include "layout.h"
 #include "corviva.h"
 #include "trocaarte.h"
@@ -62,6 +63,7 @@
 #include <math.h>
 #include "ponteiro.h"
 static void ponteiroDetalhe(int r, int c);   // ponteiro do Magic Remote (#99)
+static void heroReiniciar(void);
 
 // Teto de itens por secao. 24 e nao 8: uma temporada de "Silo" tem 10
 // episodios e o vetor de 8 escondia os dois ultimos — a lista parecia menor do
@@ -926,6 +928,7 @@ void detail_abrir(const HomeItem *it) {
   audAberta = 0; audTempAberta = -1; audTempVista = -1; frasesAberta = 0;
   item = *it;
   aberto = 1; saindo = 0; nivel = 0; botao = 0;
+  heroReiniciar();
   t = 0.0f; pg = 0.0f; scrollY = 0.0f; velY = 0.0f; abaInfo = 0; pessoaAberta = 0;
   relFoco = 0; pedAbrir = -1; ratTemp = 0; ratSinc = 0;
   trailer_fechar(); trailerDesde = 0; trailerTentado = 0; trailerFade = 0.0f;
@@ -2821,6 +2824,54 @@ static void logoCinema(float a) {
   }
 }
 
+// --- TEXTO INTEIRO NA ABERTURA (#172) ----------------------------------------
+//
+// COMO A PAGINA ABRIA: detail_abrir zera `t`; o fundo sobe com suave(t) e o
+// bloco de texto (heroWeb) com fase2() = suave((t-0.45)/0.55), ou seja, so a
+// partir da metade da animacao. So que heroWeb pedia as linhas AQUI, no quadro
+// em que ja eram desenhadas: o rasterizador (text.c) tem orcamento por quadro,
+// e o que estourava voltava vazio e entrava num quadro depois. Resultado: o
+// bloco subia com linhas faltando e o resto ia aparecendo palavra a palavra.
+//
+// Agora (a) o bloco e DESENHADO desde o primeiro quadro com opacidade quase nula,
+// o que rasteriza as linhas enquanto a animacao roda; (b) o portao (textogate.h)
+// so revela quando nenhuma linha do bloco ficou pendente — ou em 400 ms, o que
+// vier primeiro — e revela TUDO junto, num esvanecimento de 180 ms.
+static TextoGate gateHero;
+// Sinopse: o que foi desenhado por ultimo, para esvanecer entre o antigo e o
+// novo (ingles -> localizado, item raso -> completo) em vez de trocar de uma vez.
+static char   sinVisto[900], sinAnt[900];
+static int    sinVistoInit;
+static Uint32 sinTrocaDesde;
+static float  hSinVis;            // altura reservada, suavizada
+static int    hSinInit;
+static Uint32 hSinTick;
+static int    metaEsqVisto;       // o esqueleto da linha de meta foi mostrado
+static Uint32 metaChegouEm;
+
+static void heroReiniciar(void) {
+  textogate_reiniciar(&gateHero);
+  sinVisto[0] = sinAnt[0] = 0; sinVistoInit = 0; sinTrocaDesde = 0;
+  hSinVis = 0.0f; hSinInit = 0; hSinTick = 0;
+  metaEsqVisto = 0; metaChegouEm = 0;
+}
+
+#define DET_SIN_ESQ_LINHAS   3      // linhas que o esqueleto da sinopse reserva
+#define DET_TROCA_MS      200.0f
+// Barras arredondadas no lugar de um texto que ainda nao chegou. Tom discreto
+// (mesma familia do esqueleto das secoes) e o mesmo gfx_esqueleto do resto do
+// app, com a luz passando.
+static void esqueletoTexto(float x, float y, float larg, float h, float a) {
+  if (a <= 0.005f) return;
+  gfx_esqueleto((GfxRect){ x, y, larg, h }, 0.5f, 0.30f, 0.30f, 0.33f, 0.50f * a);
+}
+static void esqueletoSinopse(float x, float y, float a) {
+  static const float frac[DET_SIN_ESQ_LINHAS] = { 1.0f, 0.94f, 0.58f };
+  for (int i = 0; i < DET_SIN_ESQ_LINHAS; i++)
+    esqueletoTexto(x, y + i * NV_DETW2_LD_SIN + 8.0f,
+                   NV_DETW2_TEXTO_W * frac[i], 18.0f, a);
+}
+
 static void heroWeb(float a, float desloc) {
   if (a <= 0.005f) return;
   const CatItem *ci = cat_item(idx);
@@ -2883,6 +2934,41 @@ static void heroWeb(float a, float desloc) {
   if (sin) hSin = txt_bloco(TXT_DET_SIN, sin, 255, 255, 255, -1.0f, 0.0f,
                             NV_DETW2_TEXTO_W, NV_DETW2_LD_SIN, 0.0f,
                             NV_DETW2_SIN_LINHAS);
+  // DADO A CAMINHO: sinopse e meta chegam da rede depois que a pagina abre.
+  // Enquanto o pedido esta em voo desenha-se o ESQUELETO do texto no lugar e
+  // RESERVA-SE a altura dele; quando o texto chega ele esvanece por cima e a
+  // altura assenta suave — sem isso o logo e os botoes davam um salto do tamanho
+  // da sinopse. Teto de 6 s apos a revelacao: um pedido que nunca volta nao
+  // deixa a pagina pulsando para sempre.
+  Uint32 agoraH = SDL_GetTicks();
+  int gateAberto = textogate_aberto(&gateHero);
+  // (conta tambem com o portao fechado: a altura ja nasce reservada, senao ela
+  // cresceria de 0 durante a propria revelacao)
+  int chegando = (!gateAberto || (Uint32)(agoraH - gateHero.pronto) < 6000u) &&
+                 (desc_episodios_carregando(idx) || extras_carregando());
+  int esqSin = !sin && chegando;
+  { // troca de texto -> esvanece
+    const char *atual = sin ? sin : "";
+    if (sinVistoInit && strcmp(atual, sinVisto) != 0 && gateAberto &&
+        !anim_politica_reduzida) {
+      snprintf(sinAnt, sizeof sinAnt, "%s", sinVisto);
+      sinTrocaDesde = agoraH ? agoraH : 1u;
+    }
+    if (!sinVistoInit || strcmp(atual, sinVisto) != 0)
+      snprintf(sinVisto, sizeof sinVisto, "%s", atual);
+    sinVistoInit = 1;
+  }
+  { float alvo = sin ? hSin : (esqSin ? DET_SIN_ESQ_LINHAS * NV_DETW2_LD_SIN : 0.0f);
+    float dt = hSinTick ? (float)(Uint32)(agoraH - hSinTick) : 0.0f;
+    hSinTick = agoraH;
+    if (dt > 100.0f) dt = 100.0f;
+    if (!hSinInit || anim_politica_reduzida || !gateAberto) hSinVis = alvo;
+    else {
+      hSinVis += (alvo - hSinVis) * (1.0f - expf(-dt / 90.0f));
+      if (fabsf(alvo - hSinVis) < 0.5f) hSinVis = alvo;
+    }
+    hSinInit = 1;
+    hSin = hSinVis; }
   float yMeta2 = NV_DETW2_BASE - NV_DETW2_SELO_H;
   float yMeta1 = yMeta2 - NV_DETW2_META_GAP - NV_DETW2_M1_H;
   float ySin   = yMeta1 - NV_DETW2_GAP_SIN - hSin;
@@ -3122,8 +3208,22 @@ static void heroWeb(float a, float desloc) {
   }
 
   // --- sinopse --------------------------------------------------------------
-  if (sin) txt_bloco(TXT_DET_SIN, sin, 255, 255, 255, NV_DETW2_X, ySin,
-                     NV_DETW2_TEXTO_W, NV_DETW2_LD_SIN, a, NV_DETW2_SIN_LINHAS);
+  { float f = 1.0f;
+    if (sinTrocaDesde) {
+      f = (float)(Uint32)(agoraH - sinTrocaDesde) / DET_TROCA_MS;
+      if (f >= 1.0f) { f = 1.0f; sinTrocaDesde = 0; }
+      else f = revela_saida(f);
+    }
+    if (f < 1.0f) {   // o que saiu esvanece por baixo do que entra
+      if (sinAnt[0]) txt_bloco(TXT_DET_SIN, sinAnt, 255, 255, 255, NV_DETW2_X, ySin,
+                               NV_DETW2_TEXTO_W, NV_DETW2_LD_SIN, a * (1.0f - f),
+                               NV_DETW2_SIN_LINHAS);
+      else esqueletoSinopse(NV_DETW2_X, ySin, a * (1.0f - f));
+    }
+    if (sin) txt_bloco(TXT_DET_SIN, sin, 255, 255, 255, NV_DETW2_X, ySin,
+                       NV_DETW2_TEXTO_W, NV_DETW2_LD_SIN, a * f,
+                       NV_DETW2_SIN_LINHAS);
+    else if (esqSin) esqueletoSinopse(NV_DETW2_X, ySin, a * f); }
 
   // --- meta linha 1: generos • generos  ·  ano  ·  [IMDb] nota ---------------
   //
@@ -3134,7 +3234,29 @@ static void heroWeb(float a, float desloc) {
   //
   // Dois pontos separadores diferentes, e a diferenca de cor e o que agrupa a
   // linha — ver desenhaPonto.
+  const float aHero = a;
+  float fMeta = 1.0f;
+  { const char *g0 = generoDe(idx);
+    int vazia = !ano[0] && !(ci && ci->nota > 0) &&
+                !(g0 && strstr(g0, "\xc2\xb7"));
+    if (vazia && chegando && gateAberto) metaEsqVisto = 1;
+    if (!vazia && metaEsqVisto) { metaEsqVisto = 0; metaChegouEm = agoraH ? agoraH : 1u; }
+    if (metaChegouEm) {
+      fMeta = (float)(Uint32)(agoraH - metaChegouEm) / DET_TROCA_MS;
+      if (fMeta >= 1.0f || anim_politica_reduzida) { fMeta = 1.0f; metaChegouEm = 0; }
+      else fMeta = revela_saida(fMeta);
+    }
+    if (vazia && chegando) {
+      float yb = yMeta1 + (NV_DETW2_M1_H - 22.0f) * 0.5f;
+      esqueletoTexto(NV_DETW2_X, yb, 230.0f, 22.0f, aHero);
+      esqueletoTexto(NV_DETW2_X + 254.0f, yb, 96.0f, 22.0f, aHero);
+    } else if (fMeta < 1.0f) {
+      float yb = yMeta1 + (NV_DETW2_M1_H - 22.0f) * 0.5f;
+      esqueletoTexto(NV_DETW2_X, yb, 230.0f, 22.0f, aHero * (1.0f - fMeta));
+      esqueletoTexto(NV_DETW2_X + 254.0f, yb, 96.0f, 22.0f, aHero * (1.0f - fMeta));
+    } }
   {
+    float a = aHero * fMeta;   // o texto de meta entra esvanecendo quando chega
     float x = NV_DETW2_X, yc = yMeta1 + NV_DETW2_M1_H * 0.5f;
     const CatItem *badgeItem=cat_item(idx);
     if(badgeItem)x+=badges_desenhar(badges_provedor(badgeItem->provNome),x,yc-14,150,28,a);
@@ -3258,6 +3380,7 @@ static void heroWeb(float a, float desloc) {
   // desenha. Repetir a informacao aqui seria acrescentar o que o aparelho
   // tirou.
   {
+    float a = aHero * fMeta;
     float x = NV_DETW2_X, yc = yMeta2 + NV_DETW2_SELO_H * 0.5f;
     int algo = 0;
     const char *status=NULL,*raw=extras_ficha_status();
@@ -5111,7 +5234,19 @@ void detail_desenhar(Uint32 agora) {
     // Com "Trocar arte" aberta o texto da pagina sai e fica a arte: o que se
     // escolhe e o fundo, e ele precisa da tela (a tela desenha o logo).
     float ta = trocaarte_visivel();
-    heroWeb(a2 * (1.0f - c) * (1.0f - ta), -scrollY + (1.0f - a2) * NV_TELA_H * 0.05f + c * 220.0f);
+    // PORTAO (#172): ver gateHero. Ate revelar, o bloco e desenhado com opacidade
+    // ~0 so para rasterizar as linhas; `pend` diz quantas o orcamento recusou.
+    float gh = textogate_aberto(&gateHero) ? 1.0f : 0.0f;
+    { int pend0 = txt_pendentes;
+      float k = (1.0f - c) * (1.0f - ta);
+      if (gh > 0.0f) {
+        float f = textogate_passo(&gateHero, 0, SDL_GetTicks());
+        heroWeb(a2 * k * f, -scrollY + (1.0f - a2) * NV_TELA_H * 0.05f + c * 220.0f);
+      } else {
+        heroWeb(NV_TXTGATE_AQUECER, -scrollY + NV_TELA_H * 0.05f);
+        textogate_passo(&gateHero, txt_pendentes - pend0,
+                        SDL_GetTicks());
+      } }
     if (c > 0.005f) logoCinema(c * a2);
     if (ta > 0.005f) trocaarte_desenhar(logoDe(idx)); }
 

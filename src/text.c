@@ -163,6 +163,10 @@ int    txt_rasterizadas = 0;
 // reclamacao de quem esta olhando a tela.
 int    txt_despejos = 0;
 double txt_ms = 0.0;
+// Linhas RECUSADAS por falta de orcamento no quadro (voltam vazias e entram
+// num quadro seguinte). Quem quer mostrar uma tela inteira de uma vez le a
+// diferenca antes/depois de desenhar: zero = tudo o que foi pedido existe.
+int    txt_pendentes = 0;
 
 // Peso por estilo. Cada peso e um ARQUIVO de verdade da Inter Display
 // (Regular 400, Medium 500, Bold 700) — nao ha passada repetida nem
@@ -679,8 +683,10 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   // Orcamento estourado: devolve vazio e tenta de novo no proximo quadro. A
   // linha aparece com um quadro de atraso em vez de travar o atual.
   if (rastNesteQuadro >= TXT_POR_QUADRO &&
-      (rastNesteQuadro >= TXT_MAX_QUADRO || txt_ms - msIniQuadro >= TXT_MS_QUADRO))
+      (rastNesteQuadro >= TXT_MAX_QUADRO || txt_ms - msIniQuadro >= TXT_MS_QUADRO)) {
+    txt_pendentes++;
     return vazia;
+  }
   rastNesteQuadro++;
   int slot = livre;
   if (slot < 0) {
@@ -694,7 +700,7 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
         slot = i;
       }
   }
-  if (slot < 0) return vazia;
+  if (slot < 0) { txt_pendentes++; return vazia; }
   if (cache[slot].ocupado) txt_despejos++;
   if (cache[slot].ocupado && cache[slot].linha.tex) {
     // avisa o gfx: o nome pode ser reutilizado pelo glGenTextures logo abaixo
@@ -744,6 +750,51 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   cache[slot].quadroUso = quadroTxt;
   SDL_FreeSurface(cv);
   return cache[slot].linha;
+}
+
+// LARGURA SEM RASTERIZAR. A quebra de linha (txt_bloco) e o corte com
+// reticencias (txt_linha_corta) mediam cada tentativa com txt_linha, e txt_linha
+// RASTERIZA E GUARDA a linha: uma sinopse de 60 palavras rasterizava ~60
+// prefixos ("A", "A vida", "A vida de"...) so para descobrir onde quebrar, e
+// cada um custa ~2,4 ms na C9 (medido para uma linha). Alem de caro, enchia o
+// cache com linhas que ninguem desenha. Pior: estourado o orcamento do quadro
+// a medida voltava 0, o texto "cabia" em uma linha so e a quebra saia errada
+// ate o quadro em que tudo cabia — as palavras entravam aos poucos, que e o
+// defeito do #172. Aqui e so TTF_SizeUTF8: sem textura, sem orcamento.
+//
+// Devolve 0 onde linhaFamilia devolveria vazia (fonte ausente, string vazia).
+// HIPOTESE nao medida na TV: TTF_SizeUTF8 e a rotina que o TTF_RenderUTF8_Blended
+// usa para dimensionar a superficie, entao as larguras coincidem;
+// tests/text_largura.sh confere isso no Mac.
+static int larguraLinha(TxtEstilo estilo, const char *s, TxtFamilia familia,
+                        int enfase) {
+  char limpo[1024];
+  if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N)
+    familia = TXT_FAMILIA_INTER;
+  if (!s || !*s || estilo < 0 || estilo >= TXT_NFONTES ||
+      !fonteDe(familia, estilo, s)) return 0;
+  if (familia == TXT_FAMILIA_INTER) {
+    s = semDecorativoSemGlifo(fonteDe(familia, estilo, s), s, limpo, sizeof limpo);
+    if (!*s) return 0;
+  }
+  TTF_Font *fonte = fonteLegendaDe(estilo, s, familia);
+  if (!fonte) return 0;
+  int estiloAnt = TTF_GetFontStyle(fonte);
+  if (enfase) {
+    int novo = estiloAnt;
+    if (enfase & TXT_ENF_NEGRITO) novo |= TTF_STYLE_BOLD;
+    if (enfase & TXT_ENF_ITALICO) novo |= TTF_STYLE_ITALIC;
+    if (novo != estiloAnt) TTF_SetFontStyle(fonte, novo);
+  }
+  int w = 0, h = 0;
+  int ok = TTF_SizeUTF8(fonte, s, &w, &h);
+  if (enfase) TTF_SetFontStyle(fonte, estiloAnt);
+  if (ok != 0) return 0;
+  return (int)(w / escalaTxt + 0.5f);
+}
+
+int txt_largura(TxtEstilo estilo, const char *s) {
+  return larguraLinha(estilo, i18n(s), fonteInterface, 0);
 }
 
 TxtLinha txt_linha(TxtEstilo estilo, const char *s, int r, int g, int b, int a) {
@@ -826,10 +877,10 @@ static TxtLinha cortaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   // Traduzir ANTES de cortar: o corte mede a largura e insere as reticencias,
   // e medir o portugues para desenhar o ingles poe as reticencias no lugar
   // errado — ou corta um texto que caberia inteiro.
-  TxtLinha l;
   s = i18n(s);
-  l = linhaFamilia(estilo, s, r, g, b, a, familia, enfase);
-  if (!s || !*s || (float)l.w <= maxW) return l;
+  // Mede sem rasterizar: so a linha FINAL vira textura (ver larguraLinha).
+  if (!s || !*s || (float)larguraLinha(estilo, s, familia, enfase) <= maxW)
+    return linhaFamilia(estilo, s, r, g, b, a, familia, enfase);
   char buf[512];
   size_t n = strlen(s);
   if (n >= sizeof buf - 4) n = sizeof buf - 4;
@@ -847,8 +898,8 @@ static TxtLinha cortaFamilia(TxtEstilo estilo, const char *s, int r, int g,
     if (!n) break;
     char t[520];
     snprintf(t, sizeof t, "%s\xe2\x80\xa6", buf);
-    l = linhaFamilia(estilo, t, r, g, b, a, familia, enfase);
-    if ((float)l.w <= maxW) return l;
+    if ((float)larguraLinha(estilo, t, familia, enfase) <= maxW)
+      return linhaFamilia(estilo, t, r, g, b, a, familia, enfase);
   }
   return linhaFamilia(estilo, "\xe2\x80\xa6", r, g, b, a, familia, enfase);
 }
@@ -884,9 +935,8 @@ static void desenhaBlocoLinha(TxtEstilo estilo, const char *s, int r, int g, int
     for (;;) {
       char teste[512];
       snprintf(teste, sizeof teste, "%s\xe2\x80\xa6", fim);
-      TxtLinha l = txt_linha(estilo, teste, r, g, b, 255);
-      if (l.w <= larg) {
-        txt_desenhar_alpha(l, x, y, alpha);
+      if (txt_largura(estilo, teste) <= larg) {
+        txt_desenhar_alpha(txt_linha(estilo, teste, r, g, b, 255), x, y, alpha);
         return;
       }
       // Remove palavras completas primeiro; uma unica palavra longa cai para
@@ -950,8 +1000,8 @@ static float txt_bloco_impl(TxtEstilo estilo, const char *s, int r, int g, int b
     memcpy(tentativa + nl, ini, np);
     tentativa[nl + np] = 0;
 
-    TxtLinha m = txt_linha(estilo, tentativa, r, g, b, 255);
-    if (m.w > larg && linha[0]) {
+    int mw = txt_largura(estilo, tentativa);
+    if (mw > larg && linha[0]) {
       if (reticencias && maxLinhas > 0 && nLinhas + 1 >= maxLinhas) {
         desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
                           alpha, 1);
@@ -963,12 +1013,12 @@ static float txt_bloco_impl(TxtEstilo estilo, const char *s, int r, int g, int b
       usado += leading; nLinhas++;
       if (maxLinhas > 0 && nLinhas >= maxLinhas) return usado;
       memcpy(linha, ini, np); linha[np] = 0;
-      if (reticencias && txt_linha(estilo, linha, r, g, b, 255).w > larg) {
+      if (reticencias && txt_largura(estilo, linha) > larg) {
         desenhaBlocoLinha(estilo, linha, r, g, b, x, y + usado, larg,
                           alpha, 1);
         return usado + leading;
       }
-    } else if (m.w > larg && reticencias) {
+    } else if (mw > larg && reticencias) {
       // Uma palavra sem espacos pode ser maior que a coluna. O caminho normal
       // de txt_bloco preserva o comportamento antigo; esta variante sinaliza
       // o corte e limita o glifo por largura, inclusive em texto UTF-8 longo.
@@ -1059,8 +1109,8 @@ float txt_bloco_dir(TxtEstilo estilo, const char *s, int r, int g, int b,
     memcpy(tentativa + nl, ini, np);
     tentativa[nl + np] = 0;
 
-    TxtLinha m = txt_linha(estilo, tentativa, r, g, b, 255);
-    if (m.w > larg && linha[0]) {
+    int mw = txt_largura(estilo, tentativa);
+    if (mw > larg && linha[0]) {
       TxtLinha l = txt_linha(estilo, linha, r, g, b, 255);
       if (xDir >= 0.0f) txt_desenhar_alpha(l, xDir - l.w, y + usado, alpha);
       usado += leading; nLinhas++;
