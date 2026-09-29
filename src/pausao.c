@@ -120,6 +120,22 @@ int pausao_evento(const SDL_Event *e) {
   return PAUSAO_CONSUMIU;
 }
 
+// O SELO "Pausado" (pilula de 56 px com o icone). Publico desde 29/09/2026: o
+// OSD do canal ao vivo pausado usa este mesmo selo, e nao um parecido.
+float pausao_selo(float x, float y, int direita, float a) {
+  TxtLinha lp = txt_linha(TXT_PLR_CORPO, "Pausado", 246, 247, 250, 255);
+  float d = PAUSAO_SELO_H, pw = d + 18.0f + (float)lp.w + 26.0f;
+  GfxRect pil, ic;
+  if (direita) x -= pw;
+  pil = (GfxRect){ x, y, pw, d };
+  ic  = (GfxRect){ x + 8.0f, y + 8.0f, d - 16.0f, d - 16.0f };
+  if (ajustes_vidro()) gfx_vidro_painel(pil, 0.5f, 0.55f, a);
+  else                 gfx_cor(pil, 0.5f, 1, 1, 1, 0.16f * a);
+  gfx_icone(ic, "pause", 0.96f, 0.96f, 0.96f, 0.94f * a);
+  txt_desenhar_alpha(lp, x + d + 6.0f, y + (d - (float)lp.h) * 0.5f, a);
+  return pw;
+}
+
 static void fmtT(char *b, size_t n, float seg) {
   int t = (int)(seg < 0 ? 0 : seg + 0.5f);
   if (t >= 3600) snprintf(b, n, "%d:%02d:%02d", t / 3600, (t / 60) % 60, t % 60);
@@ -153,14 +169,7 @@ void pausao_desenhar(Uint32 agora, const PausaoCena *cena) {
     gfx_rect(base, 0, GFX_VEU_BAIXO, 0, 0, 0, 0.0f, 0, 0, 0, PAUSAO_VEU_BAIXO * a); }
 
   // --- ALTO: selo "Pausado" a esquerda, relogio (e fim) a direita ----------------
-  { TxtLinha lp = txt_linha(TXT_PLR_CORPO, "Pausado", 246, 247, 250, 255);
-    float d = 56.0f, pw = d + 18.0f + (float)lp.w + 26.0f;
-    GfxRect pil = { PAUSAO_X, PAUSAO_Y, pw, d };
-    GfxRect ic  = { PAUSAO_X + 8.0f, PAUSAO_Y + 8.0f, d - 16.0f, d - 16.0f };
-    if (vidro) gfx_vidro_painel(pil, 0.5f, 0.55f, a);
-    else       gfx_cor(pil, 0.5f, 1, 1, 1, 0.16f * a);
-    gfx_icone(ic, "pause", 0.96f, 0.96f, 0.96f, 0.94f * a);
-    txt_desenhar_alpha(lp, PAUSAO_X + d + 6.0f, PAUSAO_Y + (d - (float)lp.h) * 0.5f, a); }
+  pausao_selo(PAUSAO_X, PAUSAO_Y, 0, a);
   { time_t agoraT = time(NULL);
     struct tm lt;
     char hora[8];

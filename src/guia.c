@@ -40,6 +40,7 @@
 // `pendPronto` e o fio de desenho copia para os vetores publicados. Leitores
 // nunca tocam no staging — mesma disciplina do epg.c.
 #include "guia.h"
+#include "badges.h"   /* marcas de resolucao no heroi */
 #include "aovivo.h"
 #include "fontecache.h"
 #include "ajustes.h"   /* ajustes_acento: cor do anel de foco */
@@ -2749,13 +2750,16 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
     if (molde && (d.nq > 0 || d.fontes > 0)) {
       float bx = x;
       int k;
+      // QUALIDADES COMO MARCA (dono, 29/09/2026): eram caixas de texto com
+      // contorno ("4K", "FHD", "HD", "SD"); agora sao as marcas de resolucao
+      // do app (badges.h), as mesmas do OSD ao vivo e da folha de fontes.
+      // Nome que nao e resolucao conhecida vai no selo neutro da tabela unica.
       for (k = 0; k < d.nq; k++) {
-        TxtLinha t = txt_linha(TXT_PG_ROTULO, d.q[k], 222, 224, 230, 255);
-        GfxRect r = { bx, y, (float)t.w + 20.0f, 30.0f };
-        gfx_cor(r, 0.2f, 1, 1, 1, 0.06f * ha);
-        gfx_rect(r, 0, GFX_ANEL, 0, 1.5f / r.h, 0, 0.2f, 1, 1, 1, 0.32f * ha);
-        txt_desenhar_alpha(t, r.x + 10.0f, r.y + (r.h - (float)t.h) * 0.5f, ha);
-        bx += r.w + 8.0f;
+        int fm = marca_resolucao(d.q[k]);
+        if (fm >= 0)
+          bx += marca_formato((FormatoMarca)fm, bx, y + 2.0f, 26.0f, 0.86f, 0.87f, 0.90f, ha) + 18.0f;
+        else
+          bx += badge_desenhar(bx, y + 1.0f, d.q[k], BADGE_NEUTRO, ha) + BADGE_GAP;
       }
       if (d.fontes > 0) {
         char f[48];

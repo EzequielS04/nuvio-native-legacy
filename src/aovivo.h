@@ -53,7 +53,9 @@ int  aovivo_epg_montar(int epgIdx, const char *xtId, time_t t, AoVivoEpg *o);
 // Os botoes, na ordem em que aparecem. Quem monta a fileira decide quais
 // existem (Favorito some sem lista de guia; Pausa so quando o fluxo pausa).
 enum { AV_B_PAUSA, AV_B_GUIA, AV_B_ANT, AV_B_PROX, AV_B_FAV, AV_B_AUDIO,
-       AV_B_LEGENDA, AV_B_INFO, AV_B_RECARREGAR, AV_B_FONTE, AV_B_N };
+       AV_B_LEGENDA, AV_B_INFO, AV_B_RECARREGAR, AV_B_FONTE,
+       AV_B_AOVIVO,   // "Voltar ao vivo": so atras da transmissao (depois do Pausar)
+       AV_B_N };
 
 #define AV_INFO_LINHAS 7
 typedef struct {
@@ -63,6 +65,9 @@ typedef struct {
   int nBotoes, botoes[AV_B_N];       // ids AV_B_*, na ordem de desenho
   int foco;                          // indice em botoes[]; -1 = nenhum
   int favorito, pausado, bufferando;
+  // Canal com janela de tempo (DVR): quanto atras do ao vivo (s), ha quanto
+  // tempo pausado (s) e o tamanho da janela para voltar (s). 0 = nao se aplica.
+  int atrasoS, pausaS, janelaS;
   char res[16];                      // "4K", "1080p", "720p" (viram marca), "SD" ou ""
   int infoAberta, nInfo;
   char info[AV_INFO_LINHAS][72];

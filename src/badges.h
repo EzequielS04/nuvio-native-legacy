@@ -13,7 +13,9 @@ uint64_t badges_provedor(const char *name);
 typedef enum {
   FMT_4K = 0, FMT_1080, FMT_720, FMT_SDR, FMT_HDR, FMT_HDR10, FMT_HDR10P, FMT_HLG,
   FMT_DV, FMT_ATMOS, FMT_DTS, FMT_DTSX, FMT_DTSHD, FMT_TRUEHD, FMT_DD, FMT_DDP,
-  FMT_IMAX, FMT_IMAX_ENH, FMT_AV1, FMT_HEVC, FMT_AVC, FMT_REMUX, FMT_N
+  FMT_IMAX, FMT_IMAX_ENH, FMT_AV1, FMT_HEVC, FMT_AVC, FMT_REMUX,
+  FMT_SD,   // no fim, para nao deslocar as que ja existiam
+  FMT_N
 } FormatoMarca;
 // Desenha a marca com o TOPO em y e `altura` de caixa (a arte fica centrada na
 // caixa; centre a caixa na linha do texto vizinho: y = centroDoTexto - altura/2).
@@ -23,6 +25,10 @@ float marca_formato(FormatoMarca f, float x, float y, float altura,
                     float r, float g, float b, float a);
 float marca_formato_largura(FormatoMarca f, float altura);
 const char *marca_formato_nome(FormatoMarca f);
+// Nome de RESOLUCAO como os addons e o player escrevem -> a marca, ou -1:
+// "4K"/"UHD"/"2160p" -> 4K, "1080p"/"FHD" -> 1080p, "720p"/"HD" -> 720p (o
+// "HD" dos pacotes de IPTV, ao lado de FHD, e 720p) e "SD" -> SD. Sem caixa.
+int marca_resolucao(const char *nome);
 // Rotulo cuja palavra de formato vira a marca: "Sem HDR" -> "Sem" [HDR].
 // `rotulo` e a chave em portugues (traduzida aqui); `y` e o TOPO da linha de
 // texto e a marca fica centrada nela. Devolve a largura desenhada.
