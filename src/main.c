@@ -620,6 +620,9 @@ int main(int argc, char **argv) {
   SDL_GetWindowSize(win, &jw, &jh);
   printf("GPU: %s | %s\n", glGetString(GL_RENDERER), glGetString(GL_VERSION));
   printf("janela=%dx%d drawable=%dx%d\n", jw, jh, dw, dh);
+  // O plano de video e posicionado em pixels da superficie, o layout em 1920x1080
+  // (#176: com drawable 3840x2160 o video ocupava um quarto da tela).
+  video_escala_definir(dw, dh);
   // Pedir SDL_GL_ALPHA_SIZE nao garante receber: o EGL escolhe a config mais
   // proxima e pode entregar 0 bits de alpha em silencio. Com 0 aqui, o furo da
   // superficie e impossivel e o plano de video NUNCA vai aparecer, por mais

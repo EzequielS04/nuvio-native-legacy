@@ -78,6 +78,10 @@ int  video_recorte_fonte(void);
 // o trailer (trailer.c): o pipeline prende o plano em mais de um ponto depois
 // do load e pode engolir um recorte pedido cedo.
 void video_recorte_reaplicar(void);
+// Tamanho da superficie (drawable) em que o destino do plano de video e lido; o
+// layout e 1920x1080 e o retangulo e escalado por isso (issue #176). Chamar uma
+// vez, depois de criar a janela. Ver video_escala.h.
+void video_escala_definir(int sw, int sh);
 
 // URL da reproducao corrente ("" quando nao ha). Existe para a folha de
 // faixas mandar o mkvass.c ler a legenda ASS de dentro do MESMO arquivo que

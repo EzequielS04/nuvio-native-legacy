@@ -1189,6 +1189,9 @@ void video_parar(void) {
 // embed do YouTube); o volume fica por conta da TV.
 void video_volume(int pct) { (void)pct; }
 void video_recorte_reaplicar(void) {}
+// Tizen: o AVPlay recebe o retangulo em unidades de tela 1920x1080 do proprio
+// firmware, sem relacao com o drawable do GL; nada a escalar (#176 e so LG).
+void video_escala_definir(int sw, int sh) { (void)sw; (void)sh; }
 
 void video_pausar(int pausado) {
   if (!temAvplay || !ativo) return;

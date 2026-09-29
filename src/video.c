@@ -1,4 +1,5 @@
 #include "video.h"
+#include "video_escala.h"
 #include "idioma.h"
 #include "linguas.h"
 #include <SDL2/SDL.h>
@@ -161,6 +162,7 @@ void video_janela_fonte(int sx,int sy,int sw,int sh,int dx,int dy,int dw,int dh)
   (void)sx;(void)sy;(void)sw;(void)sh;(void)dx;(void)dy;(void)dw;(void)dh;
 }
 void video_recorte_reaplicar(void) {}
+void video_escala_definir(int sw, int sh) { (void)sw; (void)sh; }
 double video_pos(void) { return 0; }
 double video_duracao(void) { return 0; }
 // Sem pipeline nao ha arquivo para ler capitulos: no Mac o pos-reproducao cai
@@ -347,6 +349,18 @@ static long      acb;
 // Retangulo pedido pela UI. Guardado porque o ACB so aceita a janela depois do
 // loadCompleted, que chega muito depois de quem pediu.
 static int       janX, janY, janW = 1920, janH = 1080;
+// Tamanho da superficie (drawable) em que o retangulo de DESTINO do plano de
+// video e entendido; 1920x1080 ate o main dizer outra coisa. Ver video_escala.h.
+static int       escW = 1920, escH = 1080;
+// Destino em unidades de layout -> pixels da superficie. So o DESTINO escala: a
+// fonte (recorte) e o quadro `org` sao coordenadas do quadro decodificado.
+static SDL_Rect escDst(int x, int y, int w, int h) {
+  NvRetInt r = { x, y, w, h };
+  SDL_Rect o;
+  r = nv_video_escalar(r, 1920, 1080, escW, escH);
+  o.x = r.x; o.y = r.y; o.w = r.w; o.h = r.h;
+  return o;
+}
 // Ultimo par fonte/destino aplicado pelo setDisplayWindow do uMS, para nao
 // repetir a mesma chamada a cada quadro. fonX = -1 quer dizer "nada aplicado".
 static int       fonX = -1, fonY, fonW, fonH, dstX = -1, dstY, dstW, dstH;
@@ -631,12 +645,16 @@ static void *prenderPlano(void *u) {
   // COM RECORTE DE FONTE JA PEDIDO, prende o plano com o recorte — a janela
   // lisa aqui era o que desfazia o zoom do trailer (trailer.c pede o recorte
   // assim que o videoInfo chega, e este bind termina depois disso).
-  if (fonX >= 0 && acbJanelaCustom)
-    acbJanelaCustom(acb, fonX, fonY, fonW, fonH, dstX, dstY, dstW, dstH,
-                    (dstX == 0 && dstY == 0 && dstW == 1920 && dstH == 1080), &tarefa);
-  else
-    acbJanela(acb, janX, janY, janW, janH,
-              (janX == 0 && janY == 0 && janW == 1920 && janH == 1080), &tarefa);
+  { SDL_Rect d = escDst(fonX >= 0 ? dstX : janX, fonX >= 0 ? dstY : janY,
+                        fonX >= 0 ? dstW : janW, fonX >= 0 ? dstH : janH);
+    if (fonX >= 0 && acbJanelaCustom)
+      acbJanelaCustom(acb, fonX, fonY, fonW, fonH, d.x, d.y, d.w, d.h,
+                      (dstX == 0 && dstY == 0 && dstW == 1920 && dstH == 1080), &tarefa);
+    else {
+      d = escDst(janX, janY, janW, janH);
+      acbJanela(acb, d.x, d.y, d.w, d.h,
+                (janX == 0 && janY == 0 && janW == 1920 && janH == 1080), &tarefa);
+    } }
   acbEstado(acb, NV_ACB_FOREGROUND, estTocando, &tarefa);
   printf("[video] plano preso em %d,%d %dx%d%s\n", janX, janY, janW, janH,
          fonX >= 0 ? " (com recorte)" : "");
@@ -656,7 +674,7 @@ static void recorteNoPrimeiroQuadro(void) {
     int ok;
     org.x = 0; org.y = 0; org.w = vidW > 0 ? vidW : 1920; org.h = vidH > 0 ? vidH : 1080;
     src.x = fonX; src.y = fonY; src.w = fonW; src.h = fonH;
-    dst.x = dstX; dst.y = dstY; dst.w = dstW; dst.h = dstH;
+    dst = escDst(dstX, dstY, dstW, dstH);
     ok = sdlExpRecorte(expWin, &org, &src, &dst);
     printf("[video] recorte reaplicado no primeiro quadro (janela exportada) -> %d\n", ok);
     fflush(stdout);
@@ -978,11 +996,13 @@ static int aoEvento(LSHandle *h, LSMessage *m, void *u) {
       // (trailer.c) pedia o zoom antes do `playing`, esta linha desfazia, e a
       // tarja preta voltava (dono, 20/09/2026: "mas ta com a barra").
       if (fonX >= 0 && acbJanelaCustom) {
-        acbJanelaCustom(acb, fonX, fonY, fonW, fonH, dstX, dstY, dstW, dstH,
+        SDL_Rect d = escDst(dstX, dstY, dstW, dstH);
+        acbJanelaCustom(acb, fonX, fonY, fonW, fonH, d.x, d.y, d.w, d.h,
                         (dstX == 0 && dstY == 0 && dstW == 1920 && dstH == 1080), &tarefa);
         printf("[video] recorte reaplicado com o fluxo ja tocando\n");
       } else {
-        acbJanela(acb, janX, janY, janW, janH,
+        SDL_Rect d = escDst(janX, janY, janW, janH);
+        acbJanela(acb, d.x, d.y, d.w, d.h,
                   (janX == 0 && janY == 0 && janW == 1920 && janH == 1080), &tarefa);
         printf("[video] janela reaplicada com o fluxo ja tocando\n");
       }
@@ -1882,11 +1902,24 @@ static void expJanelaAplicar(void) {
   SDL_Rect src, dst;
   if (!expWin[0] || !sdlExpJanela || janW < 1 || janH < 1) return;
   src.x = 0; src.y = 0; src.w = vidW > 0 ? vidW : 1920; src.h = vidH > 0 ? vidH : 1080;
-  dst.x = janX; dst.y = janY; dst.w = janW; dst.h = janH;
+  dst = escDst(janX, janY, janW, janH);
   expSrcW = src.w; expSrcH = src.h;
   printf("[video] janela exportada (quadro %dx%d) -> %d\n", src.w, src.h,
          sdlExpJanela(expWin, &src, &dst));
   fflush(stdout);
+}
+
+// Chamada UMA vez pelo main, com o drawable que o SDL entregou. Fica em 1920x1080
+// (escala 1, o caminho da C9) se vier algo invalido.
+void video_escala_definir(int sw, int sh) {
+  if (sw < 1 || sh < 1) return;
+  escW = sw; escH = sh;
+  printf("[video] escala da janela %.3fx%.3f (superficie %dx%d, layout 1920x1080)%s\n",
+         (double)sw / 1920.0, (double)sh / 1080.0, sw, sh,
+         (sw == 1920 && sh == 1080) ? "" : " — HIPOTESE: destino lido no espaco da superficie (#176)");
+  fflush(stdout);
+  // Um retangulo ja guardado em pixels antigos nao existe: o cache de dedup e
+  // por unidades de layout, que nao mudaram, entao nada a invalidar.
 }
 
 void video_janela(int x, int y, int w, int h) {
@@ -1913,7 +1946,8 @@ void video_janela(int x, int y, int w, int h) {
     expJanelaAplicar();
     return;
   }
-  acbJanela(acb, x, y, w, h, cheia, &tarefa);
+  { SDL_Rect d = escDst(x, y, w, h);
+    acbJanela(acb, d.x, d.y, d.w, d.h, cheia, &tarefa); }
 }
 
 // A resposta do uMS ao setDisplayWindow, LOGADA — e AGIDA.
@@ -1940,7 +1974,7 @@ static int aoJanela(LSHandle *h, LSMessage *m, void *u) {
     printf("[video] uMS recusou o recorte de fonte; voltando a tela cheia pelo ACB\n");
     fflush(stdout);
     janX = janY = 0; janW = 1920; janH = 1080;
-    if (acb) acbJanela(acb, 0, 0, 1920, 1080, 1, &tarefa);
+    if (acb) acbJanela(acb, 0, 0, escW, escH, 1, &tarefa);
   }
   return 1;
 }
@@ -1957,10 +1991,12 @@ static int aoJanela(LSHandle *h, LSMessage *m, void *u) {
 // Mantem o acbJanela para o caso de tela cheia sem recorte, que ja funcionava.
 void video_recorte_reaplicar(void) {
   long tarefa = 0;
+  SDL_Rect d;
   if (fonX < 0 || !ligado || !midia[0] || !acb || !acbJanelaCustom) return;
+  d = escDst(dstX, dstY, dstW, dstH);
   printf("[video] recorte repetido: fonte %d,%d %dx%d -> destino %d,%d %dx%d -> %d\n",
          fonX, fonY, fonW, fonH, dstX, dstY, dstW, dstH,
-         acbJanelaCustom(acb, fonX, fonY, fonW, fonH, dstX, dstY, dstW, dstH,
+         acbJanelaCustom(acb, fonX, fonY, fonW, fonH, d.x, d.y, d.w, d.h,
                          (dstX == 0 && dstY == 0 && dstW == 1920 && dstH == 1080), &tarefa));
   fflush(stdout);
 }
@@ -2004,7 +2040,7 @@ void video_janela_fonte(int sx, int sy, int sw, int sh,
     SDL_Rect org, src, dst;
     org.x = 0;  org.y = 0;  org.w = vidW > 0 ? vidW : 1920; org.h = vidH > 0 ? vidH : 1080;
     src.x = sx; src.y = sy; src.w = sw; src.h = sh;
-    dst.x = dx; dst.y = dy; dst.w = dw; dst.h = dh;
+    dst = escDst(dx, dy, dw, dh);
     if (sdlExpRecorte && sdlExpRecorte(expWin, &org, &src, &dst)) return;
     // Recusou (ou nem existe): cair para tela cheia sem recorte pela mesma
     // regra do ACB — perde-se o zoom, nao a imagem.
@@ -2016,7 +2052,8 @@ void video_janela_fonte(int sx, int sy, int sw, int sh,
   // O caminho e o ACB, nao o luna direto: o hub recusa o app no tv.display.
   if (acbJanelaCustom && acb) {
     long tarefa = 0;
-    int r = acbJanelaCustom(acb, sx, sy, sw, sh, dx, dy, dw, dh, cheia, &tarefa);
+    SDL_Rect d = escDst(dx, dy, dw, dh);
+    int r = acbJanelaCustom(acb, sx, sy, sw, sh, d.x, d.y, d.w, d.h, cheia, &tarefa);
     printf("[video] acb janela custom -> %d\n", r); fflush(stdout);
     if (r) return;
     printf("[video] acb recusou o recorte; voltando a tela cheia\n"); fflush(stdout);
