@@ -1375,6 +1375,7 @@ int    video_ativo(void)      { return ativo; }
 // morta sem esperar o prazo. Sem esta definicao o alvo Tizen nem linkava.
 int    video_falhou(void)     { return houveErro; }
 const char *video_erro_texto(void) { return houveErro ? erroTexto : ""; }
+int    video_decoder_anunciou(void) { return 1; }
 // O AVPlay nao separa "audio nao suportado" de erro geral; sem sinal proprio.
 int    video_audio_nao_suportado(void) { return 0; }
 // O trailer deste alvo nao passa pelo AVPlay (ver trailer.c); nao ha fim a

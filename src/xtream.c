@@ -7,10 +7,13 @@
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <strings.h>
+#include <time.h>
 
 #define XT_ARQ_FMT   "xtream-p%d.txt"
 #define XT_MAX_CAT   256
 #define XT_PRAZO_S   20
+#define XT_PRAZO_LISTA_S 60
 
 #ifndef NV_REC_URL
 #define NV_REC_URL ""
@@ -199,8 +202,23 @@ static void urlenc(const char *s, char *dst, unsigned tam) {
 
 // Copia do cadastro sob a trava e a chamada fora dela: uma resposta de 2 MB
 // (servidor com 20 mil canais) nao pode segurar a tela de Ajustes.
-static char *chamar(const char *acao) {
+//
+// COM O STATUS HTTP (#158). A primeira versao devolvia so o corpo: 401, 403,
+// 458, 429, pagina HTML de Cloudflare e prazo estourado chegavam todos como
+// NULL, e o log dizia "nao respondeu" para qualquer um deles. Agora a chamada
+// devolve o corpo mesmo em 4xx/5xx e o codigo em *status (0 = nem houve
+// resposta); quem chama decide o que e erro.
+//
+// EM SERIE. Os paineis Xtream respondem 429 a rajadas (a pesquisa do #158
+// cita 7 chamadas paralelas derrubando um painel XUI), e agora ha dois fios
+// que falam com ele: o do guia (lista) e o da grade curta (xtream_epg_curto).
+// Uma trava so para a rede do Xtream faz os dois esperarem a vez.
+static pthread_mutex_t travaRede = PTHREAD_MUTEX_INITIALIZER;
+static char *chamarSt(const char *acao, int prazo, int *status) {
   char srv[256], u[300], s[300], url[1100];
+  char *r;
+  int st = 0;
+  if (status) *status = 0;
   pthread_mutex_lock(&trava);
   carregarTravado();
   snprintf(srv, sizeof srv, "%s", servidor);
@@ -208,8 +226,12 @@ static char *chamar(const char *acao) {
   urlenc(senha, s, sizeof s);
   pthread_mutex_unlock(&trava);
   if (!srv[0] || !u[0] || !s[0]) return NULL;
-  snprintf(url, sizeof url, "%s/player_api.php?username=%s&password=%s&action=%s",
-           srv, u, s, acao);
+  if (acao && acao[0])
+    snprintf(url, sizeof url, "%s/player_api.php?username=%s&password=%s&action=%s",
+             srv, u, s, acao);
+  else
+    snprintf(url, sizeof url, "%s/player_api.php?username=%s&password=%s", srv, u, s);
+  pthread_mutex_lock(&travaRede);
 #if XT_PROXY
   // SAMSUNG (#112): o Chromium do Tizen barra TODO `http://` que sai do app
   // (log D1 1647, 1.4.1: a lista morria aqui com o painel respondendo CORS),
@@ -226,17 +248,46 @@ static char *chamar(const char *acao) {
   if (NV_REC_URL[0] && !strncmp(srv, "http://", 7)) {
     static const char *const cab[] = { "Content-Type: text/plain", NULL };
     char via[300];
-    int st = 0;
-    char *r;
     snprintf(via, sizeof via, "%s/v1/xtream", NV_REC_URL);
-    r = rede_postar_st(via, XT_PRAZO_S, cab, url, &st);
-    // O mesmo contrato do GET direto: 4xx/5xx (do painel, repassado, ou do
-    // proprio worker) e "nao respondeu", NULL.
-    if (r && st >= 400) { free(r); r = NULL; }
+    r = rede_postar_st(via, prazo, cab, url, &st);
+    pthread_mutex_unlock(&travaRede);
+    if (status) *status = st;
     return r;
   }
 #endif
-  return rede_baixar(url, XT_PRAZO_S);
+  r = rede_baixar_st(url, prazo, NULL, &st);
+  pthread_mutex_unlock(&travaRede);
+  if (status) *status = st;
+  return r;
+}
+
+// O que veio no corpo, para o log e para a tela: JSON (comeca com { ou [),
+// pagina HTML (Cloudflare, painel de erro, portal cativo) ou nada.
+enum { XC_VAZIO, XC_JSON, XC_HTML, XC_OUTRO };
+static int classificar(const char *c) {
+  if (!c) return XC_VAZIO;
+  if ((unsigned char)c[0] == 0xEF && (unsigned char)c[1] == 0xBB && (unsigned char)c[2] == 0xBF) c += 3;
+  while (*c && (unsigned char)*c <= ' ') c++;
+  if (!*c) return XC_VAZIO;
+  if (*c == '{' || *c == '[') return XC_JSON;
+  if (*c == '<') return XC_HTML;
+  return XC_OUTRO;
+}
+static const char *nomeClasse(int k) {
+  return k == XC_JSON ? "JSON" : k == XC_HTML ? "pagina HTML" : k == XC_VAZIO ? "vazio" : "texto";
+}
+static const char *pulaBom(const char *c) {
+  if (c && (unsigned char)c[0] == 0xEF && (unsigned char)c[1] == 0xBB && (unsigned char)c[2] == 0xBF) c += 3;
+  while (c && *c && (unsigned char)*c <= ' ') c++;
+  return c;
+}
+
+// O contrato antigo (corpo so em 2xx), para quem nao precisa do codigo.
+static char *chamar(const char *acao) {
+  int st = 0;
+  char *r = chamarSt(acao, XT_PRAZO_S, &st);
+  if (r && st >= 400) { free(r); r = NULL; }
+  return r;
 }
 
 // --- canais -------------------------------------------------------------
@@ -284,34 +335,64 @@ static const char *nomeDaCategoria(const XtCat *cats, int n, const char *id) {
 
 // Escrito so pelo fio do guia (o unico que chama xtream_canais) e lido pelo
 // mesmo fio antes de publicar: nao precisa de trava.
-static int ultimaFalha = XT_OK;
+static int ultimaFalha = XT_OK, ultimoHttp;
 int xtream_ultima_falha(void) { return ultimaFalha; }
+int xtream_ultimo_http(void) { return ultimoHttp; }
 
 int xtream_canais(XtreamCanal *saida, int max) {
   static XtCat cats[XT_MAX_CAT];
-  int nCat, n = 0;
+  int nCat, n = 0, total = 0, st = 0, classe;
   char *corpo;
   const char *p;
-  ultimaFalha = XT_OK;
+  ultimaFalha = XT_OK; ultimoHttp = 0;
   if (!xtream_configurado() || !saida || max < 1) return 0;
+  // A conta ANTES da lista: e pequena, e o que ela diz (expirada, telas em
+  // uso, formatos) e o que a tela precisa quando a lista falha. Sem resposta
+  // aqui a lista ainda e tentada — o login pode ter caido por prazo.
+  { XtreamConta c; xtream_conta_ler(&c); }
   nCat = lerCategorias(cats, XT_MAX_CAT);
-  corpo = chamar("get_live_streams");
-  if (!corpo) {
+  // PRAZO MAIOR SO PARA A LISTA. get_live_streams de um provedor europeu passa
+  // de 7 MB (pesquisa do #158); 20 s num painel lento estoura antes do fim.
+  corpo = chamarSt("get_live_streams", XT_PRAZO_LISTA_S, &st);
+  ultimoHttp = st;
+  classe = classificar(corpo);
+  if (!corpo || st == 0) {
     printf("[xtream] servidor nao respondeu a lista de canais\n");
     ultimaFalha = XT_SEM_RESPOSTA;
+    free(corpo);
+    return 0;
+  }
+  if (st >= 400) {
+    // 401/403 com credencial certa e o provedor barrando (IP, UA, conta);
+    // 458 e o limite de telas; 429 e rajada. O numero vai para a tela.
+    printf("[xtream] lista de canais: HTTP %d (%s, %ld B)\n", st, nomeClasse(classe),
+           (long)strlen(corpo));
+    // 502/504 sao o gateway (o proxy do Tizen, ou o do painel) dizendo que o
+    // painel nao respondeu no prazo: para a pessoa, e "nao respondeu".
+    ultimaFalha = (strstr(corpo, "\"auth\":0") || st == 401) ? XT_RECUSOU
+                : (st == 502 || st == 504) ? XT_SEM_RESPOSTA : XT_HTTP;
+    free(corpo);
     return 0;
   }
   // Credencial errada nao e "[]": o servidor responde {"user_info":{"auth":0}}
-  // ou uma pagina de erro. Sem array na raiz, e isso.
-  p = strchr(corpo, '[');
-  if (!p || (corpo[0] != '[' && strstr(corpo, "\"auth\":0"))) {
-    printf("[xtream] servidor recusou a credencial (auth 0)\n");
-    ultimaFalha = XT_RECUSOU;
+  // ou uma pagina de erro. Sem array na raiz, e isso — e pagina HTML (WAF,
+  // Cloudflare, portal cativo) NAO e "senha errada": a primeira versao dizia
+  // "recusou a credencial" para qualquer resposta sem '['.
+  p = pulaBom(corpo);
+  if (*p != '[') {
+    if (strstr(corpo, "\"auth\":0")) {
+      printf("[xtream] servidor recusou a credencial (auth 0)\n");
+      ultimaFalha = XT_RECUSOU;
+    } else {
+      printf("[xtream] lista de canais: HTTP %d mas %s em vez da lista (%ld B)\n",
+             st, nomeClasse(classe), (long)strlen(corpo));
+      ultimaFalha = classe == XC_HTML ? XT_PAGINA : XT_SEM_RESPOSTA;
+    }
     free(corpo);
     return 0;
   }
   p++;
-  while (p && *p && n < max) {
+  while (p && *p) {
     const char *fim;
     char sid[24], cat[24];
     XtreamCanal c;
@@ -322,12 +403,15 @@ int xtream_canais(XtreamCanal *saida, int max) {
     memset(&c, 0, sizeof c);
     if (campoTextoOuNumero(p, fim, "stream_id", sid, sizeof sid) &&
         js_texto(p, fim, "name", c.nome, sizeof c.nome) && c.nome[0]) {
-      snprintf(c.id, sizeof c.id, "xtream:%s", sid);
-      js_texto(p, fim, "stream_icon", c.logo, sizeof c.logo);
-      js_texto(p, fim, "epg_channel_id", c.epgId, sizeof c.epgId);
-      if (!campoTextoOuNumero(p, fim, "category_id", cat, sizeof cat)) cat[0] = 0;
-      snprintf(c.categoria, sizeof c.categoria, "%s", nomeDaCategoria(cats, nCat, cat));
-      saida[n++] = c;
+      total++;
+      if (n < max) {
+        snprintf(c.id, sizeof c.id, "xtream:%s", sid);
+        js_texto(p, fim, "stream_icon", c.logo, sizeof c.logo);
+        js_texto(p, fim, "epg_channel_id", c.epgId, sizeof c.epgId);
+        if (!campoTextoOuNumero(p, fim, "category_id", cat, sizeof cat)) cat[0] = 0;
+        snprintf(c.categoria, sizeof c.categoria, "%s", nomeDaCategoria(cats, nCat, cat));
+        saida[n++] = c;
+      }
     }
     p = js_prox(fim);
   }
@@ -335,6 +419,14 @@ int xtream_canais(XtreamCanal *saida, int max) {
   // Contagem, e so: servidor, usuario e senha nao entram em log (registro.c
   // desenha o stdout na tela).
   printf("[xtream] %d canal(is) em %d categoria(s)\n", n, nCat);
+  // O CORTE AGORA SE ANUNCIA. O guia guarda no maximo `max` canais; um
+  // provedor europeu tem dezenas de milhares, e ate aqui os que passavam do
+  // teto sumiam sem uma linha no log.
+  if (total > n)
+    printf("[xtream] lista cortada: %d de %d canais cabem no guia\n", n, total);
+  { int comId = 0, i;
+    for (i = 0; i < n; i++) if (saida[i].epgId[0]) comId++;
+    printf("[xtream] %d de %d canais com epg_channel_id\n", comId, n); }
   return n;
 }
 
@@ -363,18 +455,233 @@ int xtream_url_xmltv(char *url, unsigned n) {
   return 1;
 }
 
-int xtream_url(const char *id, char *url, unsigned n) {
+// --- conta (#158) --------------------------------------------------------
+// player_api.php SEM action devolve user_info (auth, status, exp_date,
+// active_cons, max_connections, allowed_output_formats) e server_info. E o
+// que deixa a tela dizer "conta expirada", "2 de 2 telas em uso" ou "este
+// servidor so entrega .ts" em vez de "o canal nao abriu". Os paineis mandam
+// quase tudo como TEXTO ("active_cons":"2"), alguns como numero: le os dois.
+static XtreamConta conta;             // a ultima lida; sob `trava`
+
+static int intDe(const char *ini, const char *fim, const char *chave, int padrao) {
+  char b[32];
+  if (!campoTextoOuNumero(ini, fim, chave, b, sizeof b) || !b[0]) return padrao;
+  if (b[0] < '0' || b[0] > '9') return padrao;
+  return atoi(b);
+}
+
+int xtream_conta_parse(const char *json, XtreamConta *c) {
+  const char *u, *fim;
+  char b[32];
+  if (!c) return 0;
+  memset(c, 0, sizeof *c);
+  c->conexoes = c->maxConexoes = -1;
+  if (!json) return 0;
+  u = strstr(json, "\"user_info\"");
+  if (!u) return 0;
+  u = strchr(u, '{');
+  if (!u || !(fim = js_fim(u))) return 0;
+  c->valido = 1;
+  c->auth = intDe(u, fim, "auth", 0);
+  js_texto(u, fim, "status", c->status, sizeof c->status);
+  if (campoTextoOuNumero(u, fim, "exp_date", b, sizeof b) && b[0] >= '0' && b[0] <= '9')
+    c->expira = atoll(b);
+  c->conexoes = intDe(u, fim, "active_cons", -1);
+  c->maxConexoes = intDe(u, fim, "max_connections", -1);
+  c->teste = intDe(u, fim, "is_trial", 0);
+  { const char *f = strstr(u, "\"allowed_output_formats\"");
+    if (f && f < fim && (f = strchr(f, '[')) && f < fim) {
+      const char *g = strchr(f, ']');
+      if (g && g < fim) {
+        char lista[128];
+        size_t k = (size_t)(g - f);
+        if (k >= sizeof lista) k = sizeof lista - 1;
+        memcpy(lista, f, k); lista[k] = 0;
+        c->formatosDeclarados = 1;
+        c->temM3u8 = strstr(lista, "\"m3u8\"") != NULL;
+        c->temTs = strstr(lista, "\"ts\"") != NULL;
+      }
+    } }
+  return 1;
+}
+
+int xtream_conta_ler(XtreamConta *out) {
+  XtreamConta c;
+  int st = 0, classe;
+  char *corpo = chamarSt("", XT_PRAZO_S, &st);
+  classe = classificar(corpo);
+  if (!xtream_conta_parse(corpo, &c)) {
+    memset(&c, 0, sizeof c);
+    c.conexoes = c.maxConexoes = -1;
+  }
+  c.http = st;
+  // Uma linha, sem nada da pessoa: e a primeira coisa a olhar num registro de
+  // "nao toca" (conta vencida, telas cheias, so .ts).
+  if (c.valido)
+    printf("[xtream] conta: auth=%d status=%s vence=%lld telas=%d/%d formatos=%s%s%s\n",
+           c.auth, c.status[0] ? c.status : "?", c.expira, c.conexoes, c.maxConexoes,
+           !c.formatosDeclarados ? "?" : c.temM3u8 ? "m3u8" : "",
+           c.formatosDeclarados && c.temM3u8 && c.temTs ? "," : "",
+           c.formatosDeclarados && c.temTs ? "ts" : "");
+  else
+    printf("[xtream] conta: HTTP %d, %s sem user_info\n", st, nomeClasse(classe));
+  fflush(stdout);
+  free(corpo);
+  pthread_mutex_lock(&trava);
+  conta = c;
+  pthread_mutex_unlock(&trava);
+  if (out) *out = c;
+  return c.valido;
+}
+
+int xtream_conta(XtreamConta *out) {
+  int v;
+  pthread_mutex_lock(&trava);
+  if (out) *out = conta;
+  v = conta.valido;
+  pthread_mutex_unlock(&trava);
+  return v;
+}
+
+int xtream_conta_aviso(const XtreamConta *c, long long agora) {
+  if (!c || !c->valido) return XA_NADA;
+  if (!c->auth) return XA_RECUSOU;
+  if (!strcasecmp(c->status, "Expired") || (c->expira > 0 && c->expira < agora)) return XA_EXPIRADA;
+  if (!strcasecmp(c->status, "Banned") || !strcasecmp(c->status, "Disabled")) return XA_DESATIVADA;
+  if (c->maxConexoes > 0 && c->conexoes >= c->maxConexoes) return XA_TELAS_CHEIAS;
+  if (c->expira > 0 && c->expira - agora < 7LL * 86400) return XA_VENCE_LOGO;
+  return XA_NADA;
+}
+
+// --- formato do fluxo (#158) ------------------------------------------------
+// .m3u8 PRIMEIRO, .ts DEPOIS, e a lista de fontes do canal leva as duas: o
+// watchdog de canal (app.c) ja pula para a proxima fonte quando uma nao abre.
+// O que o servidor declara em allowed_output_formats manda: formato que ele
+// nao declara nao e tentado — a nao ser que ele nao declare nenhum dos dois
+// (painel antigo, ou so "rtmp"), e ai vao os dois.
+//
+// E o formato que tocou fica em memoria para os proximos canais da sessao: um
+// painel que so entrega .ts de verdade nao deve custar o prazo do .m3u8 a
+// cada troca de canal.
+static int formatoOk = -1;            // -1 nenhum, 0 m3u8, 1 ts
+
+int xtream_formatos(const char *ext[2]) {
+  XtreamConta c;
+  int m = 1, t = 1, n = 0;
+  xtream_conta(&c);
+  if (c.valido && c.formatosDeclarados && (c.temM3u8 || c.temTs)) { m = c.temM3u8; t = c.temTs; }
+  if (formatoOk == 1 && t) { ext[n++] = "ts"; if (m) ext[n++] = "m3u8"; }
+  else { if (m) ext[n++] = "m3u8"; if (t) ext[n++] = "ts"; }
+  return n;
+}
+
+void xtream_formato_funcionou(const char *url) {
+  const char *q;
+  size_t n;
+  if (!url) return;
+  q = strchr(url, '?');
+  n = q ? (size_t)(q - url) : strlen(url);
+  if (n > 3 && !strncmp(url + n - 3, ".ts", 3)) formatoOk = 1;
+  else if (n > 5 && !strncmp(url + n - 5, ".m3u8", 5)) formatoOk = 0;
+}
+
+int xtream_url_formato(const char *id, const char *ext, char *url, unsigned n) {
   char u[300], s[300];
-  if (!xtream_e_id(id) || !url || n < 2) return 0;
+  if (!xtream_e_id(id) || !url || n < 2 || !ext || !ext[0]) return 0;
   pthread_mutex_lock(&trava);
   carregarTravado();
   if (!servidor[0] || !usuario[0] || !senha[0]) { pthread_mutex_unlock(&trava); return 0; }
   urlenc(usuario, u, sizeof u);
   urlenc(senha, s, sizeof s);
-  // .m3u8 e nao .ts: o pipeline da LG toca HLS ao vivo bem (e o que os
-  // addons de canal entregam); o .ts cru e um fluxo sem indice, que o uMS
-  // aceita mas sem buffer previsivel.
-  snprintf(url, n, "%s/live/%s/%s/%s.m3u8", servidor, u, s, id + 7);
+  snprintf(url, n, "%s/live/%s/%s/%s.%s", servidor, u, s, id + 7, ext);
   pthread_mutex_unlock(&trava);
   return 1;
+}
+
+// --- grade curta por canal (#158) -------------------------------------------
+// get_short_epg devolve os proximos N programas de UM canal, sem baixar o
+// XMLTV inteiro do provedor — que no registro 6311 passou do teto de 32 MB e
+// foi ignorado ("grade do provedor: maior que o teto"). Titulo e descricao vem
+// em BASE64; o horario vale por start_timestamp/stop_timestamp (epoch UTC). O
+// "start":"2026-09-29 20:00:00" que vem junto e hora LOCAL do servidor e fica
+// de fora: sem o fuso do painel, ler aquilo seria errar a hora de todo mundo.
+static int b64v(int c) {
+  if (c >= 'A' && c <= 'Z') return c - 'A';
+  if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+  if (c >= '0' && c <= '9') return c - '0' + 52;
+  if (c == '+' || c == '-') return 62;
+  if (c == '/' || c == '_') return 63;
+  return -1;
+}
+static void b64dec(const char *s, char *dst, unsigned tam) {
+  unsigned k = 0, bits = 0, acc = 0;
+  if (!tam) return;
+  for (; *s && k + 1 < tam; s++) {
+    int v;
+    if (*s == '\\' && s[1] == '/') { s++; v = 63; }    // "\/" do json_encode
+    else v = b64v((unsigned char)*s);
+    if (v < 0) { if (*s == '=') break; continue; }
+    acc = (acc << 6) | (unsigned)v; bits += 6;
+    if (bits >= 8) { bits -= 8; dst[k++] = (char)((acc >> bits) & 0xFF); }
+  }
+  dst[k] = 0;
+  // Controle vira espaco: o titulo vai direto para o desenho de texto.
+  for (k = 0; dst[k]; k++) if ((unsigned char)dst[k] < ' ') dst[k] = ' ';
+}
+
+int xtream_epg_parse(const char *json, XtreamProg *out, int cap) {
+  const char *p, *lista;
+  int n = 0;
+  if (!json || !out || cap < 1) return 0;
+  lista = strstr(json, "\"epg_listings\"");
+  if (!lista) return 0;
+  p = strchr(lista, '[');
+  if (!p) return 0;
+  p++;
+  while (p && *p && n < cap) {
+    const char *fim;
+    char b[40], tit[400];
+    long long ini = 0, fimT = 0;
+    while (*p && (unsigned char)*p <= ' ') p++;
+    if (*p != '{') break;
+    fim = js_fim(p);
+    if (!fim) break;
+    if (campoTextoOuNumero(p, fim, "start_timestamp", b, sizeof b)) ini = atoll(b);
+    if (campoTextoOuNumero(p, fim, "stop_timestamp", b, sizeof b)) fimT = atoll(b);
+    else if (campoTextoOuNumero(p, fim, "end_timestamp", b, sizeof b)) fimT = atoll(b);
+    if (ini > 0 && fimT > ini && js_texto(p, fim, "title", tit, sizeof tit)) {
+      out[n].ini = (time_t)ini;
+      out[n].fim = (time_t)fimT;
+      b64dec(tit, out[n].titulo, sizeof out[n].titulo);
+      if (out[n].titulo[0]) n++;
+    }
+    p = js_prox(fim);
+  }
+  return n;
+}
+
+int xtream_epg_curto(const char *id, XtreamProg *out, int cap, int *status) {
+  char acao[96];
+  const char *d;
+  char *corpo;
+  int st = 0, n;
+  if (status) *status = 0;
+  if (!xtream_e_id(id) || !out || cap < 1) return -1;
+  // So digitos: o id vai direto para a query.
+  for (d = id + 7; *d; d++) if (*d < '0' || *d > '9') return -1;
+  if (!id[7]) return -1;
+  snprintf(acao, sizeof acao, "get_short_epg&stream_id=%s&limit=%d", id + 7, cap);
+  corpo = chamarSt(acao, XT_PRAZO_S, &st);
+  if (status) *status = st;
+  if (!corpo || st == 0 || st >= 400) { free(corpo); return -1; }
+  n = xtream_epg_parse(corpo, out, cap);
+  free(corpo);
+  return n;
+}
+
+int xtream_url(const char *id, char *url, unsigned n) {
+  const char *ext[2];
+  // O primeiro formato da ordem (ver xtream_formatos). Era sempre .m3u8.
+  int k = xtream_formatos(ext);
+  return xtream_url_formato(id, k > 0 ? ext[0] : "m3u8", url, n);
 }

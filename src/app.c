@@ -191,6 +191,16 @@ static void limparFonteVOD(void);
 // morta. Baixar mais arrisca trocar de fonte num engasgo que ia passar.
 #define CANAL_TRAVA_MS 12000
 #define CANAL_ABRE_TETO_MS 45000   // com buffer cheio e sem quadro; ver o watchdog
+// DADO CHEGANDO E DECODER MUDO, so no Xtream (#158). Nos registros 6311/6314
+// (LG C4, webOS 11.2) e 6362/6372 (outra TV, outro provedor) o bufferRange
+// subia (9 s, 36 s) sem NENHUM videoInfo, e o teto de 45 s acima era o unico
+// prazo: 45 s por formato antes de tentar o outro, e o cartao de erro saia e
+// era tirado de novo pelo "voltou a entregar". Nas TVs que tocam o mesmo tipo
+// de canal o videoInfo chega ~3 s depois do resourceInfo (registro 7005:
+// loadCompleted em 7,9 s). 15 s e o quintuplo disso. So Xtream: o caso
+// medido de "abre devagar" (Meu Futebol, 18/09, 20 s ate o quadro) e de
+// addon e fica com o teto longo de sempre.
+#define CANAL_SEM_DECODER_MS 15000
 
 static PerfilDados perfilPendente;
 static int perfilSucesso;
@@ -521,17 +531,65 @@ static int montarCanalStalker(const char *id, const char *url) {
 
 // Canal Xtream: a URL e estavel e nasce do cadastro (ver xtream.h). Nao vai a
 // rede; e o mesmo formato de lista de UMA fonte do portal Stalker.
+//
+// DUAS FONTES, .m3u8 e .ts (#158), na ordem de xtream_formatos: o que a conta
+// declara em allowed_output_formats e o que ja tocou nesta sessao. A troca
+// de uma para a outra e o watchdog de canal de sempre (fonte morta ->
+// proxima), sem caminho novo. Um painel que nao gera HLS para um canal
+// responde "Media Not Found" no .m3u8 e toca no .ts.
 static int resolverCanalXtream(void) {
-  Stream s;
-  char url[4096];
-  if (!xtream_url(player_id_canal(), url, sizeof url)) return -1;
-  memset(&s, 0, sizeof s);
-  snprintf(s.url, sizeof s.url, "%s", url);
-  snprintf(s.rotulo, sizeof s.rotulo, "%s", "Xtream");
-  snprintf(s.provedor, sizeof s.provedor, "%s", "xtream");
-  s.fileIdx = -1;
-  stream_definir_lista(&s, 1);
+  Stream s[2];
+  const char *ext[2];
+  int k = xtream_formatos(ext), i, n = 0;
+  memset(s, 0, sizeof s);
+  for (i = 0; i < k && n < 2; i++) {
+    char url[4096];
+    if (!xtream_url_formato(player_id_canal(), ext[i], url, sizeof url)) continue;
+    snprintf(s[n].url, sizeof s[n].url, "%s", url);
+    snprintf(s[n].rotulo, sizeof s[n].rotulo, "Xtream (%s)", !strcmp(ext[i], "ts") ? "TS" : "HLS");
+    snprintf(s[n].provedor, sizeof s[n].provedor, "%s", "xtream");
+    s[n].fileIdx = -1;
+    n++;
+  }
+  if (!n) return -1;
+  stream_definir_lista(s, n);
   return 0;
+}
+
+// O CARTAO DE ERRO DO CANAL XTREAM diz o que se sabe (#158). O generico
+// "nao foi possivel abrir a fonte" era tudo o que a pessoa via — e no registro
+// 6314 nem isso ficava, porque o "voltou a entregar" tirava o cartao. A conta
+// (xtream_conta_ler, no fio do guia) explica os casos em que NENHUM canal
+// toca; o erro do pipeline, o deste canal.
+static void erroCanalXtream(void) {
+  XtreamConta c;
+  char t[160], d[160];
+  const char *err = video_erro_texto();
+  int aviso = xtream_conta(&c) ? xtream_conta_aviso(&c, (long long)time(NULL)) : XA_NADA;
+  if (aviso == XA_EXPIRADA) {
+    player_erro_fonte_motivo(i18n("A assinatura Xtream venceu."),
+                             i18n("Renove com o seu provedor. Os canais voltam sozinhos depois disso."));
+    return;
+  }
+  if (aviso == XA_DESATIVADA || aviso == XA_RECUSOU) {
+    player_erro_fonte_motivo(i18n("O provedor desativou esta conta Xtream."),
+                             i18n("Fale com o seu provedor ou confira o cadastro em Ajustes."));
+    return;
+  }
+  if (aviso == XA_TELAS_CHEIAS) {
+    snprintf(t, sizeof t, i18n("Todas as telas da conta Xtream estão em uso (%d de %d)."),
+             c.conexoes, c.maxConexoes);
+    player_erro_fonte_motivo(t, i18n("Feche o Xtream em outro aparelho e tente de novo."));
+    return;
+  }
+  if (err && err[0]) {
+    snprintf(t, sizeof t, "%s", i18n("O provedor não entregou este canal."));
+    snprintf(d, sizeof d, i18n("Resposta do servidor: %s. HLS e TS foram tentados."), err);
+    player_erro_fonte_motivo(t, d);
+    return;
+  }
+  player_erro_fonte_motivo(i18n("O canal não abriu em HLS nem em TS."),
+                           i18n("O vídeo chegou, mas a TV não começou a tocar. Envie o registro em Ajustes."));
 }
 
 // Um unico worker pode existir. O fio de desenho so junta depois de DONE;
@@ -2122,8 +2180,14 @@ void app_atualizar(float dt, Uint32 agora) {
   // compartilhado (o trailer HLS do detalhe acabara de tocar), nao de fonte
   // nenhuma do player. Sem player_tem_video() a pessoa ficava numa tela preta
   // sem erro e sem fonte.
+  //
+  // E O PIPELINE TEM DE TER CARREGADO (#158). No registro 6314 esta linha saiu
+  // com "buffer 9.0s" numa fonte que nunca chegou ao loadCompleted: o buffer
+  // enchia, o decoder nao comecava, e o cartao era tirado para uma tela
+  // preta. O caso que motivou o conserto (18/09) tinha loadCompleted.
   if ((player_aberto() || player_mini_ativo()) && player_fonte_falhou() &&
-      player_tem_video() && video_buffer_fim() > 0.5 && !video_falhou()) {
+      player_tem_video() && video_buffer_fim() > 0.5 && !video_falhou() &&
+      video_pronto()) {
     printf("[player] a fonte voltou a entregar (buffer %.1fs): tirando o erro da tela\n",
            video_buffer_fim());
     fflush(stdout);
@@ -2153,11 +2217,28 @@ void app_atualizar(float dt, Uint32 agora) {
     // curto so vale enquanto nada chegou. Com dados e sem quadro, vale o teto
     // longo — o uMS que engole 39 s e nao toca em 45 s esta mesmo travado.
     Uint32 desde = SDL_GetTicks() - canalFonteDesde;
+    int xt = xtream_e_id(player_id_canal());
+    int semDecoder = xt && player_carregando() && desde > CANAL_SEM_DECODER_MS &&
+        video_buffer_fim() > 0.5 && !video_decoder_anunciou();
     int morta = player_fonte_falhou() || video_falhou() ||
         (player_carregando() && desde > canalFontePrazo && video_buffer_fim() <= 0.5) ||
         (player_carregando() && desde > CANAL_ABRE_TETO_MS) ||
-        video_bufferando_ms() > CANAL_TRAVA_MS;
+        video_bufferando_ms() > CANAL_TRAVA_MS || semDecoder;
+    // O formato que tocou vai na frente nos proximos canais (xtream.h).
+    { static char tocouUrl[64];
+      if (xt && video_pronto() && strncmp(tocouUrl, player_id_canal(), sizeof tocouUrl - 1)) {
+        snprintf(tocouUrl, sizeof tocouUrl, "%s", player_id_canal());
+        xtream_formato_funcionou(video_url_atual());
+      }
+      if (!video_pronto()) tocouUrl[0] = 0; }
     if (morta) {
+      // POR QUE MORREU, numa linha (#158): o registro so dizia "fonte 0 nao
+      // abriu", e a diferenca entre "erro do servidor", "sem dado" e "dado
+      // sem decoder" e o que decide o proximo conserto.
+      printf("[guia] fonte %d morta: falhou=%d erro='%s' buffer=%.1fs decoder=%d "
+             "carregando=%d %ums\n", canalFonteIdx, video_falhou(), video_erro_texto(),
+             video_buffer_fim(), video_decoder_anunciou(), player_carregando(), (unsigned)desde);
+      fflush(stdout);
       int prox = stream_canal_proxima(canalFonteIdx);
       const Stream *s;
       // PORTAL STALKER: nao existe "proxima fonte" — cada canal tem uma so, e
@@ -2219,6 +2300,7 @@ void app_atualizar(float dt, Uint32 agora) {
         // Sem mais fonte na lista: na tela cheia vira o erro de sempre; no
         // PiP a miniatura morre quieta em vez de prender um quadro morto.
         if (player_mini_ativo()) player_fechar_mini();
+        else if (xt) erroCanalXtream();
         else player_erro_fonte();
       }
     }

@@ -177,6 +177,7 @@ int  video_pronto(void) { return 0; }
 int  video_ativo(void) { return 0; }
 int  video_falhou(void) { return 0; }
 const char *video_erro_texto(void) { return ""; }
+int  video_decoder_anunciou(void) { return 1; }
 int  video_audio_nao_suportado(void) { return 0; }
 int  video_terminou(void) { return 0; }
 unsigned video_bufferando_ms(void) { return 0; }
@@ -2151,6 +2152,7 @@ int    video_ativo(void)    { return midia[0] != 0; }
 // proxima da lista.
 int    video_falhou(void)   { return falhou; }
 const char *video_erro_texto(void) { return erroTexto; }
+int    video_decoder_anunciou(void) { return viuVideo; }
 int    video_audio_nao_suportado(void) { return audioNaoSup; }
 int    video_terminou(void) { return terminou; }
 unsigned video_bufferando_ms(void) {

@@ -665,6 +665,13 @@ static int sFalhas, falhas;
 // canais" e a tela "619 canais". XT_OK / XT_SEM_RESPOSTA / XT_RECUSOU de
 // xtream.h; `s` e do fio, o outro e a copia publicada, como `falhas`.
 static int sXtFalha, xtFalha;
+// O codigo HTTP da lista quando xtFalha == XT_HTTP (#158): 403, 429, 458...
+static int sXtHttp, xtHttp;
+
+// Texto do cabecalho com o aviso da conta Xtream; 0 quando nao ha aviso.
+// Usa nCanais/nCats, entao so vale depois deles declarados — por isso o
+// prototipo aqui e a definicao perto do desenho.
+static int xtAviso(char *sub, size_t tam);
 
 static void sondaManifestos(void) {
   int a;
@@ -833,7 +840,7 @@ static void *fioGuia(void *u) {
   if (xtream_configurado()) {
     XtreamCanal *xt = malloc(sizeof *xt * G_MAX_CANAL);
     int n = xt ? xtream_canais(xt, G_MAX_CANAL) : 0, i;
-    if (xt) sXtFalha = xtream_ultima_falha();
+    if (xt) { sXtFalha = xtream_ultima_falha(); sXtHttp = xtream_ultimo_http(); }
     for (i = 0; i < n && sNCanais < G_MAX_CANAL; i++) {
       GCanal c;
       if (sCanalPorId(xt[i].id) >= 0) continue;
@@ -1041,7 +1048,7 @@ static void publicar(void) {
   // REDE VAZIA NAO APAGA A LISTA QUE HA: sem resposta nenhuma (todos os addons
   // fora), a lista de ontem continua valendo mais que uma tela vazia.
   if (sNCanais == 0 && nCanais > 0) {
-    falhas = sFalhas; xtFalha = sXtFalha;
+    falhas = sFalhas; xtFalha = sXtFalha; xtHttp = sXtHttp;
     memcpy(sabe, sSabe, sizeof sSabe); nSabe = sNSabe;
     printf("[guia] rede sem canal nenhum: fica a lista que estava\n");
     fflush(stdout);
@@ -1051,7 +1058,7 @@ static void publicar(void) {
     if (nCanais > 0 && nova == assinaturaPublicada) {
       memcpy(sabe, sSabe, sizeof sSabe); nSabe = sNSabe;
       memcpy(fontes, sFontes, sizeof sFontes); nFontes = sNFontes;
-      falhas = sFalhas; xtFalha = sXtFalha;
+      falhas = sFalhas; xtFalha = sXtFalha; xtHttp = sXtHttp;
       printf("[guia] lista da rede igual a da tela: nao republicada\n");
       fflush(stdout);
       marco("guia: rede igual ao cache");
@@ -1066,7 +1073,7 @@ static void publicar(void) {
   // contagem das fileiras apenas.
   memcpy(fontes, sFontes, sizeof sFontes);
   nFontes = sNFontes;
-  falhas = sFalhas; xtFalha = sXtFalha;
+  falhas = sFalhas; xtFalha = sXtFalha; xtHttp = sXtHttp;
   memcpy(sabe, sSabe, sizeof sSabe);
   nSabe = sNSabe;
   (void)w;
@@ -1843,6 +1850,32 @@ void guia_evento(const SDL_Event *e) {
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
     if (!okDesde) { okDesde = agora; okLongo = 0; }
     return;
+  }
+}
+
+// Ver o prototipo, junto de xtFalha.
+static int xtAviso(char *sub, size_t tam) {
+  XtreamConta c;
+  long long agora = (long long)time(NULL);
+  int a;
+  if (!xtream_conta(&c)) return 0;
+  a = xtream_conta_aviso(&c, agora);
+  switch (a) {
+    case XA_EXPIRADA:
+      snprintf(sub, tam, i18n("%d canais · %d categorias · assinatura Xtream vencida"), nCanais, nCats);
+      return 1;
+    case XA_DESATIVADA: case XA_RECUSOU:
+      snprintf(sub, tam, i18n("%d canais · %d categorias · conta Xtream desativada"), nCanais, nCats);
+      return 1;
+    case XA_TELAS_CHEIAS:
+      snprintf(sub, tam, i18n("%d canais · %d categorias · telas do Xtream em uso (%d de %d)"),
+               nCanais, nCats, c.conexoes, c.maxConexoes);
+      return 1;
+    case XA_VENCE_LOGO:
+      snprintf(sub, tam, i18n("%d canais · %d categorias · o Xtream vence em %d dia(s)"),
+               nCanais, nCats, (int)((c.expira - agora) / 86400) + 1);
+      return 1;
+    default: return 0;
   }
 }
 
@@ -3384,21 +3417,29 @@ void guia_desenhar(Uint32 agora) {
     else if (falhas && !nCanais)
       snprintf(sub, sizeof sub, "%s",
                i18n("Os addons de canais não responderam."));
+    else if (xtFalha == XT_HTTP && !nCanais)
+      snprintf(sub, sizeof sub, i18n("O Xtream respondeu com erro HTTP %d."), xtHttp);
     else if (xtFalha && !nCanais)
       snprintf(sub, sizeof sub, "%s", xtFalha == XT_RECUSOU
                ? i18n("O Xtream recusou o usuário e a senha.")
+               : xtFalha == XT_PAGINA
+               ? i18n("O Xtream devolveu uma página da web em vez da lista.")
                : i18n("A lista do Xtream não respondeu."));
     else if (estado == G_FALHOU || (fontesOk && !nFontes))
       snprintf(sub, sizeof sub, "%s",
                i18n("Nenhum canal: sem addon de canais e sem portal IPTV."));
     // A falha do Xtream toma o lugar da contagem simples, e so ela: os canais
     // dos addons continuam na tela e funcionam, o que falta e o portal.
-    else if (xtFalha == XT_SEM_RESPOSTA)
+    else if (xtFalha == XT_SEM_RESPOSTA || xtFalha == XT_PAGINA || xtFalha == XT_HTTP)
       snprintf(sub, sizeof sub, i18n("%d canais · %d categorias · a lista do Xtream não respondeu"),
                nCanais, nCats);
     else if (xtFalha == XT_RECUSOU)
       snprintf(sub, sizeof sub, i18n("%d canais · %d categorias · o Xtream recusou o usuário e a senha"),
                nCanais, nCats);
+    // A CONTA XTREAM, quando ha o que dizer (#158): vencida, desativada,
+    // telas cheias ou vencendo. E a causa de "nenhum canal toca" que se sabe
+    // ANTES de tentar um canal. Lido do que o fio do guia guardou, sem rede.
+    else if (xtream_configurado() && xtAviso(sub, sizeof sub)) { }
     else
       snprintf(sub, sizeof sub, i18n("%d canais · %d categorias · segure %s para pular seção"),
                nCanais, nCats, "\xe2\x86\x91\xe2\x86\x93");
@@ -3538,7 +3579,15 @@ void guia_desenhar(Uint32 agora) {
     // mesma tela, quem configurou um portal e nao viu canal nenhum leria uma
     // frase que fala de outra coisa — e quem nao tem addon nem sabe que a
     // segunda porta existe.
-    const char *msg = xtFalha == XT_SEM_RESPOSTA
+    char msgHttp[240];
+    const char *msg;
+    snprintf(msgHttp, sizeof msgHttp,
+             i18n("O servidor Xtream respondeu com erro HTTP %d. O guia tenta de novo a cada 10 segundos enquanto esta tela estiver aberta."),
+             xtHttp);
+    msg = xtFalha == XT_HTTP ? msgHttp
+      : xtFalha == XT_PAGINA
+      ? i18n("O servidor Xtream devolveu uma página da web em vez da lista de canais. Tente mais tarde; se continuar, fale com o provedor.")
+      : xtFalha == XT_SEM_RESPOSTA
       ? i18n("A lista de canais do Xtream não respondeu agora. O guia tenta de novo a cada 10 segundos enquanto esta tela estiver aberta.")
       : xtFalha == XT_RECUSOU
       ? i18n("O Xtream recusou o usuário e a senha. Confira o cadastro em Ajustes › Conta.")
