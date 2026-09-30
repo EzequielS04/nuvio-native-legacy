@@ -1785,6 +1785,11 @@ static unsigned versaoManifestos;
 // vetor de Decl (nao gastam cota), e a linha do log que os contava continua.
 static int nSoBuscaVolta;
 
+// Manifestos de addon LIGADO que nao responderam nesta volta. Com algum, o
+// snapshot nao e gravado: as chaves daquele addon nem existem nesta volta, e um
+// snapshot sem elas as poria atras de todas as outras dali em diante.
+static int nManiFalhouVolta;
+
 // `ativo` = 0 para addon DESLIGADO na conta: o manifesto e lido do mesmo jeito
 // (addons_manifesto_lido aprende o id — a poda de fileiras e as colecoes da
 // conta precisam dele) e os nomes dos catalogos ficam registrados, mas nenhum
@@ -1805,7 +1810,15 @@ static int lerManifesto(int iAddon, const char *base, Decl *saida, int max,
   // este addon nao estava na lista daquele instante.
   corpo = maniPegar(url);
   if (!corpo) corpo = rede_baixar(url, 20);
-  if (!corpo) return 0;
+  if (!corpo) {
+    // Sem esta linha o log dizia "0 catalogo(s) declarado(s)", igual a um
+    // addon que so tem stream.
+    if (ativo) {
+      nManiFalhouVolta++;
+      printf("[desc]   %s: manifesto sem resposta nesta volta\n", addons_nome(iAddon));
+    }
+    return 0;
+  }
   fim = corpo + strlen(corpo);
   // O MESMO CORPO SERVE AOS DOIS LEITORES. Ver addons_manifesto_lido: sem esta
   // linha o id e as capacidades do addon so eram aprendidos por quem abrisse a
@@ -2000,15 +2013,24 @@ static int fileiraPodeSerPreservada(const CatFileira *f) {
          homeestado_tem_fileira(f->chave);
 }
 
+// Posicao no snapshot; chave fora dele vai para o FIM, estavel. Com a regra
+// antiga (`anterior < 0 || (rank >= 0 && ...)`) uma chave sem posicao passava
+// na frente de todas as com posicao: o catalogo que entrou no lugar de um vazio
+// ia para o topo da home (#195, tests/snapshot_falha.sh).
+static int rankSnapshot(const char *chave) {
+  int r = homeestado_ordem_fileira(chave);
+  return r < 0 ? CAT_FIL_MAX + DECL_MAX : r;
+}
+
 static void ordenarPorSnapshot(CatFileira *fil, int n) {
   int i;
   if (!fil || n < 2 || !homeestado_contexto_valido()) return;
   for (i = 1; i < n; i++) {
     CatFileira atual = fil[i];
-    int rank = homeestado_ordem_fileira(atual.chave), j = i;
+    int rank = rankSnapshot(atual.chave), j = i;
     while (j > 0) {
-      int anterior = homeestado_ordem_fileira(fil[j - 1].chave);
-      if (anterior < 0 || (rank >= 0 && anterior <= rank)) break;
+      int anterior = rankSnapshot(fil[j - 1].chave);
+      if (anterior <= rank) break;
       fil[j] = fil[j - 1];
       j--;
     }
@@ -2026,8 +2048,13 @@ static void preservarFileirasAusentes(CatItem **lote, int *n, int *cap,
   // static pelo mesmo motivo do daLinhaAnterior de montar(): 24 CatItem sao
   // ~375 KB, e o fio que monta tem 2 MB de pilha no Tizen. Um fio so chama.
   static CatItem tmp[MAX_POR_FILEIRA];
+  // O TETO DE FILEIRAS VALE AQUI TAMBEM (#195). Linha que ficou de fora
+  // porque o limite encheu nao e linha ausente: sem isto o substituto de uma
+  // fileira que voltou a responder era reanexado e a home passava do limite.
+  int teto = fil_limite();
+  if (teto > CAT_FIL_MAX) teto = CAT_FIL_MAX;
   if (!lote || !*lote || !n || !cap || !fil || !nFil) return;
-  for (r = 0; r < cat_n_fileiras() && *nFil < CAT_FIL_MAX; r++) {
+  for (r = 0; r < cat_n_fileiras() && *nFil < teto; r++) {
     const CatFileira *old = cat_fileira(r);
     int got, need;
     if (!old || !old->chave[0] || fileiraMontada(fil, *nFil, old->chave)) continue;
@@ -2812,29 +2839,39 @@ static int ordenarCandidatos(Decl *decls, int nDecl, int *ordem, int nFixas,
 
   // Uma resposta nova de manifesto nao muda a estrutura que a pessoa ja
   // aceitou. Enquanto a assinatura owner/perfil/idioma/config continuar
-  // valida, pedimos apenas chaves presentes no snapshot; o usuario pode
+  // valida, as chaves do snapshot vem PRIMEIRO, na ordem dele; o usuario pode
   // acrescentar uma fileira explicitamente em Ajustes, o que invalida a
   // assinatura e libera a proxima montagem. Ainda registramos todas as
   // declaracoes em fileiras.c acima para permitir essa escolha depois.
+  //
+  // PRIORIDADE, NAO FILTRO (#195). O resto dos candidatos vai DEPOIS delas, e
+  // nao para fora: com o snapshot inteiro respondendo o teto enche antes de
+  // chegar neles (a mesma home de antes), mas chave do snapshot que falhou,
+  // veio vazia, foi engolida por colecao ou sumiu do manifesto nao deixa mais
+  // a vaga vazia para sempre. MEDIDO no .tpk 1.6.1 (@tonyh89): "0 pedido(s)
+  // ... 1 de 16 fileira(s)" com 16 catalogos na ordem, volta apos volta — as
+  // 6 chaves do snapshot tinham sido engolidas e as outras 9 nunca eram pedidas.
   if (homeestado_contexto_valido()) {
-    int w = 0;
+    int w = 0, resto[DECL_MAX], nResto = 0;
     for (k = 0; k < nOrdem; k++) {
       const Decl *d = &decls[ordem[k]];
       if (homeestado_tem_fileira(d->chave)) ordem[w++] = ordem[k];
+      else resto[nResto++] = ordem[k];
     }
     nOrdem = w;
     // O snapshot aceito define a ordem estável. O manifesto pode reordenar
     // suas declarações entre ciclos sem representar uma escolha do usuário.
     for (k = 1; k < nOrdem; k++) {
       int atual = ordem[k];
-      int rank = homeestado_ordem_fileira(decls[atual].chave), j = k;
+      int rank = rankSnapshot(decls[atual].chave), j = k;
       while (j > 0) {
-        int anterior = homeestado_ordem_fileira(decls[ordem[j - 1]].chave);
-        if (anterior < 0 || (rank >= 0 && anterior <= rank)) break;
+        int anterior = rankSnapshot(decls[ordem[j - 1]].chave);
+        if (anterior <= rank) break;
         ordem[j] = ordem[j - 1]; j--;
       }
       ordem[j] = atual;
     }
+    for (k = 0; k < nResto; k++) ordem[nOrdem++] = resto[k];
   }
   return nOrdem;
 }
@@ -2846,6 +2883,55 @@ static Decl declsMontagem[DECL_MAX];
 static int nDeclsMontagem;
 // 1 para cada declaracao que virou pedido de rede nesta volta.
 static char declPedida[DECL_MAX];
+
+// PEDIDOS QUE NAO VIRARAM FILEIRA, MAS CONTINUAM NA ESTRUTURA (#195).
+//
+// O snapshot do homeestado prioriza as chaves que ele guarda. Ate a 1.6.2 ele
+// FILTRAVA: so chave do snapshot era pedida. Um catalogo que falhou uma vez
+// (503 ou timeout sem lote anterior, ou resposta vazia) ficava de fora do
+// snapshot, o seguinte da ordem tomava a vaga, e dali em diante o que falhou
+// nunca mais era pedido — ate a pessoa mexer em algum ajuste. Medido: o Bharat
+// Binge responde 503 a rajada de pedidos e "Netflix India" vem vazio. Estes
+// entram no snapshot na posicao em que teriam ficado, para a proxima volta
+// pedir de novo antes do substituto. So o fio da descoberta mexe.
+typedef struct { char chave[192]; int pos; } PendSnap;
+static PendSnap pendSnap[CAT_FIL_MAX];
+static int nPendSnap;
+
+static void pendSnapGuardar(const char *chave, int pos) {
+  int k;
+  for (k = 0; k < nPendSnap; k++) if (!strcmp(pendSnap[k].chave, chave)) return;
+  if (nPendSnap >= CAT_FIL_MAX) return;
+  snprintf(pendSnap[nPendSnap].chave, sizeof pendSnap[0].chave, "%s", chave);
+  pendSnap[nPendSnap].pos = pos;
+  nPendSnap++;
+}
+
+// Grava o snapshot com as fileiras publicadas E os pendentes nas posicoes
+// deles. As chaves bastam ao homeestado; o resto da CatFileira fica zerado.
+static int salvarSnapshot(const CatFileira *fils, int n, unsigned geracao) {
+  static CatFileira todas[CAT_FIL_MAX];
+  int i, k, m = 0;
+  if (nManiFalhouVolta > 0) {
+    printf("[desc] snapshot da home nao gravado: %d manifesto(s) sem resposta "
+           "nesta volta\n", nManiFalhouVolta);
+    fflush(stdout);
+    return 0;
+  }
+  for (i = 0; i <= n && m < CAT_FIL_MAX; i++) {
+    for (k = 0; k < nPendSnap && m < CAT_FIL_MAX; k++)
+      if (pendSnap[k].pos == i || (i == n && pendSnap[k].pos > n)) {
+        int t, ja = 0;
+        for (t = 0; t < n && !ja; t++) if (!strcmp(fils[t].chave, pendSnap[k].chave)) ja = 1;
+        if (ja) continue;
+        memset(&todas[m], 0, sizeof todas[m]);
+        snprintf(todas[m].chave, sizeof todas[m].chave, "%s", pendSnap[k].chave);
+        m++;
+      }
+    if (i < n && m < CAT_FIL_MAX) todas[m++] = fils[i];
+  }
+  return homeestado_salvar_se_geracao(todas, m, geracao);
+}
 
 // A FONTE (dono, perfil, idioma, addons) continua a mesma de quando a volta
 // comecou? E so ela que torna o dado buscado imprestavel. homeestado_geracao
@@ -3063,6 +3149,7 @@ static void *montar(void *u) {
   // posicoes do catalogo nessa fileira, entao a ordem aqui e o que define o
   // que aparece la — e o historico tem de ganhar das recomendacoes.
   marco("montar: inicio");
+  nManiFalhouVolta = 0; nPendSnap = 0;     // ver salvarSnapshot
   // OS MANIFESTOS COMECAM A CHEGAR AGORA, nao daqui a seis segundos. Ver o
   // cabecalho de maniLargar: eles nao dependem do Trakt, e eram o bloco de 7 s
   // logo depois dele.
@@ -3525,10 +3612,15 @@ static void *montar(void *u) {
               // pede outro no lugar dele.
               vazios++;
               printf("[desc] catalogo vazio: %s\n", d->titulo);
-              // Vazio valido: conserva a chave da fileira na estrutura. A
-              // proxima fileira nao muda de identidade por causa de um feed
-              // que respondeu corretamente sem itens.
-              estadoLinha = 1;
+              // Vazio valido: a chave continua na ESTRUTURA (snapshot, via
+              // pendSnap), mas nao ocupa vaga na tela (#195). Desde 9b17d38
+              // ela virava fileira so com titulo, sem card, e contava no
+              // limite: no .tpk 1.6.1 do @tonyh89 os 6 catalogos pedidos
+              // vieram vazios e a home ficou com seis titulos sem nada; o
+              // Bharat Binge serve "Netflix India" vazio hoje. A rodada
+              // seguinte pede outro no lugar, como o laco foi desenhado.
+              pendSnapGuardar(d->chave, nFil);
+              continue;
             }
             if (!respondeu && !got) {
               // ISSUE #42(a): antes disto o log so tinha o resumo do fim da
@@ -3544,7 +3636,9 @@ static void *montar(void *u) {
               // arranque, sem snapshot, segue omitida de forma segura.
               got = linhaAnterior(d->chave, daLinhaAnterior, MAX_POR_FILEIRA, NULL);
               origem = daLinhaAnterior;
-              if (!got) continue;
+              // Sem lote anterior a vaga vai para o seguinte, mas a chave fica
+              // no snapshot: a proxima volta pede este de novo (#195).
+              if (!got) { pendSnapGuardar(d->chave, nFil); continue; }
             }
             GARANTE(MAX_POR_FILEIRA + 2);
             if (got > cap - n) got = cap - n;
@@ -3763,7 +3857,7 @@ static void *montar(void *u) {
     cat_cache_substituido();
     localizarContinuarPublicado();
     if (!(mudou & HOMEESTADO_MUDOU_ESTRUTURA))
-      homeestado_salvar_se_geracao(filsMontadas, nFileirasMontadas, estadoFim);
+      salvarSnapshot(filsMontadas, nFileirasMontadas, estadoFim);
 
     // A ULTIMA PALAVRA SOBRE AS COLECOES E AQUI. Issue #18, terceira tentativa,
     // e desta vez o problema nao era a REGRA e sim QUANDO ela roda.
@@ -3828,7 +3922,7 @@ static void *montar(void *u) {
         unsigned estadoSalvo = homeestado_geracao();
         homeestado_contexto(&ctxSalvo);
         if (!(homeestado_mudancas(&ctxIni, &ctxSalvo) & HOMEESTADO_MUDOU_FONTE))
-          homeestado_salvar_se_geracao(filsMontadas, nFileirasMontadas, estadoSalvo);
+          salvarSnapshot(filsMontadas, nFileirasMontadas, estadoSalvo);
       }
     }
     // Grava so o resultado COMPLETO, nao as publicacoes parciais: um cache
