@@ -218,6 +218,14 @@ enum { PLR_PLAY, PLR_ASPECTO, PLR_CC, PLR_AUDIO,
 // Avanco em curso: enquanto vale, posSeg e do DONO e nao do pipeline.
 static int    scrubbing, scrubPassos, scrubTocava;
 static Uint32 scrubUltimo;
+// BUSCA SUAVE: o que a BARRA mostra durante o avanco. posSeg anda em degraus
+// (10 s, 30 s, 60 s, 120 s por repeticao da tecla) e desenhar direto dele fazia
+// o preenchimento saltar aos trancos. posVis persegue posSeg por mola de
+// segunda ordem; so a barra le posVis. O TEMPO escrito e o seek continuam em
+// posSeg, o alvo exato. Fora do avanco (e depois de assentar) posVis = posSeg.
+static float  posVis, posVisV;
+static int    posVisSolto;   // 1 = ainda deslizando ate o alvo
+#define PLR_BUSCA_MOLA 18.0f // rad/s: assenta em ~300 ms depois da ultima tecla
 
 static int   aberto = 0, saindo = 0, pediuSair = 0;
 static int   idx = 0;
@@ -1047,6 +1055,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   // Titulo novo: um avanco em curso do anterior mandaria a posicao velha ao
   // pipeline novo assim que o silencio vencesse.
   scrubbing = 0; scrubPassos = 0; scrubTocava = 0;
+  posVis = 0.0f; posVisV = 0.0f; posVisSolto = 0;
   encolhe = 1.0f; encolheAlvo = 0.0f; encolheT = 0.0f; encolheEm = 0;
   posplay_fechar();   // titulo novo, painel do anterior nao vale mais
   pgDesde = 0;
@@ -2281,6 +2290,18 @@ void player_atualizar(float dt, Uint32 agora) {
     // derrubar o estado para pausado com a transmissao ainda no ar.
     if (posSeg >= duracaoSeg) { posSeg = duracaoSeg; if (!ehCanal()) tocando = 0; }
   }
+  // BUSCA SUAVE (ver posVis). Desliza enquanto o dono avanca e ate assentar
+  // depois de soltar; no resto do tempo e a posicao de verdade, sem atraso.
+  if (scrubbing) posVisSolto = 1;
+  if (posVisSolto) {
+    posVis = anim_mola2(&posVisV, posVis, posSeg, dt, PLR_BUSCA_MOLA);
+    // Assentou, ou o pipeline demorou a confirmar a posicao nova: o teto de
+    // 800 ms depois da ultima tecla impede a barra de ficar perseguindo um
+    // video_pos() velho.
+    if (!scrubbing && (fabsf(posVis - posSeg) < 0.25f || agora - scrubUltimo > 800))
+      posVisSolto = 0;
+  }
+  if (!posVisSolto) { posVis = posSeg; posVisV = 0.0f; }
 
   // TRAKT "NOW WATCHING" (#179). Ate a 1.5.3 o Trakt so ouvia pause/stop, ao
   // SAIR: nunca havia /scrobble/start, e sem ele o episodio nao aparece em
@@ -2310,6 +2331,30 @@ void player_atualizar(float dt, Uint32 agora) {
       }
       tocouS = 0.0f;
     } }
+
+  // "A SEGUIR" QUE SOME (#151). Aberto pelo Continuar assistindo, o episodio
+  // pode chegar ao player sem a lista de episodios da serie (o card do CW nao
+  // a tem, e o pedido do detalhe pode nem ter saido). Sem lista nao ha
+  // proximo: nem cartao A seguir, nem botao Proximo, nem autoplay. O player
+  // pede a lista ele mesmo, UMA vez por titulo, e so depois que qualquer
+  // carregamento em curso terminou vazio. desc_episodios dispara um fio e volta
+  // na hora; o quadro nao espera nada.
+  { static char epsPedidoDe[64];
+    const CatItem *ci = item();
+    if (!ehCanal() && epT > 0 && ci && ci->imdb[0] && strcmp(epsPedidoDe, ci->imdb)) {
+      int ix = idxAtual();
+      if (cat_n_episodios(ix) > 0) {
+        snprintf(epsPedidoDe, sizeof epsPedidoDe, "%s", ci->imdb);
+      } else if (!desc_episodios_carregando(ix)) {
+        snprintf(epsPedidoDe, sizeof epsPedidoDe, "%s", ci->imdb);
+        printf("[posplay] sem lista de episodios de %s no player: pedindo de novo\n", ci->imdb);
+        fflush(stdout);
+        desc_episodios(ix, epT);
+      }
+    }
+    // Um pedido que chegou com outro fio de episodios em voo fica guardado;
+    // com o detalhe fechado ninguem mais o soltaria.
+    desc_episodios_pendente(); }
 
   // PÓS-REPRODUÇÃO: o proximo episodio ou os relacionados, no fim do titulo.
   { const CatItem *ci = item();
@@ -3171,7 +3216,7 @@ void player_desenhar(Uint32 agora) {
   float cw = bw - PLR_MARGEM * 2.0f;
   float frac = ehCanal()
              ? fracCanal()
-             : (duracaoSeg > 0.0f ? anim_clamp(posSeg / duracaoSeg, 0.0f, 1.0f) : 0.0f);
+             : (duracaoSeg > 0.0f ? anim_clamp(posVis / duracaoSeg, 0.0f, 1.0f) : 0.0f);
   // Com foco o trilho engorda de 6 para 10 e clareia de 0.30 para 0.45, e ele
   // cresce para BAIXO a partir da mesma linha de base — subir moveria tambem a
   // meta e o titulo, que estao ancorados nela.
