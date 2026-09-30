@@ -265,6 +265,21 @@ int main(int argc, char **argv) {
           int m; printf("[shot]   modos:");
           for (m = 0; m < GFX_NMODOS; m++) if (modoUlt[m] > 0.05) printf(" %d=%.2f", m, modoUlt[m]);
           printf("\n"); }
+        // NV_TROCA=1: a troca do destaque pela seta (direita e depois esquerda),
+        // fotografada a cada 4 quadros para pegar o MEIO do deslize/esmaecer.
+        if (getenv("NV_TROCA") && !vidro) {
+          int q, lado;
+          for (lado = 0; lado < 2; lado++) {
+            tecla(lado ? SDLK_LEFT : SDLK_RIGHT);
+            for (q = 0; q < 10; q++) {
+              quadros(3, NULL);
+              snprintf(bmp, sizeof bmp, "%s-L%d-troca-%c-%02d.bmp", saida, layout,
+                       lado ? 'e' : 'd', q);
+              quadros(1, bmp);
+            }
+            quadros(60, NULL);
+          }
+        }
         for (r = 0; r < 9; r++) {
           tecla(SDLK_DOWN);
           quadros(110, NULL);

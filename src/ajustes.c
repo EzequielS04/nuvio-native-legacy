@@ -236,11 +236,18 @@ typedef enum {
   // Perfil que nao e o principal le os addons do principal (perfis_ativo_addons).
   // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_ADDONS_PRINCIPAL,
+  // Como o destaque troca de titulo: deslizando de lado ou esmaecendo
+  // (home.c, heroDesliza). No fim pelo mesmo motivo: valor[] e CHAVE[] sao
+  // posicionais.
+  AJ_HERO_TRANSICAO,
   AJ_N
 } OpcaoId;
 
 static const char *V_QUALIDADE[] = { "Automática", "4K", "1080p", "720p" };
 static const char *V_LIGA[]      = { "Ligado", "Desligado" };
+// Troca do destaque: 0 = a arte nova entra colada na velha, de lado; 1 = o
+// esvanecimento de antes.
+static const char *V_HERO_TRANSICAO[] = { "Deslizar", "Esmaecer" };
 // Provedor dos posteres personalizados. O INDICE e o gravado ("posterProvLocal")
 // e o PP_* de posterprov.h: so acrescentar no fim.
 static const char *V_POSTER_PROV[] = { "Desligado", "SpatialPosters", "RPDB", "Modelo próprio" };
@@ -785,6 +792,7 @@ static const Opcao OPCOES[AJ_N] = {
   // o web nao tem a escolha.
   NUM("Percentual assistido",            70, 98, 1, "%"),  // local: cwConcluidoLocal
   ESC("Usar os addons do perfil principal", V_LIGA, 2), // local: addonsPrincipalLocal
+  ESC("Transição do destaque",   V_HERO_TRANSICAO, 2), // local: heroTransicaoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -927,6 +935,8 @@ static const char *CHAVE[] = {
   // LOCAL e SEM o "-": escolha desta TV, somada a marca uses_primary_addons da
   // conta (ver perfis_ativo_addons).
   "addonsPrincipalLocal",
+  // LOCAL e SEM o "-": o web nao tem esta escolha.
+  "heroTransicaoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1014,7 +1024,7 @@ static const Item TELA[] = {
     GRP("Layout da Home", "Escolha a estrutura e a fonte do destaque.", "aj_panel-top"),
       OPC(AJ_HOME_LAYOUT), OPC(AJ_LANDSCAPE), OPC(AJ_HERO_CHEIO), OPC(AJ_HERO_FUNDO),
       OPC(AJ_HERO_ARTE_DIF), OPC(AJ_HERO_TRAILER), OPC(AJ_HERO_TRAILER_SOM),
-      OPC(AJ_HERO_TRAILER_ESPERA),
+      OPC(AJ_HERO_TRAILER_ESPERA), OPC(AJ_HERO_TRANSICAO),
     GRP("Conteúdo da Home", "Controle o que aparece na home e na busca.", "aj_rows-3"),
       OPC(AJ_FIL_LIMITE), OPC(AJ_ITENS_FILEIRA), OPC(AJ_FIL_ORDEM),
       OPC(AJ_RAIL), OPC(AJ_RAIL_MODERNA), OPC(AJ_RAIL_BLUR),
@@ -1368,6 +1378,7 @@ static int valor[] = {
   22,               /* espera do trailer no destaque: 2,2 s (em decimos de segundo) */
   90,               /* percentual assistido: 90%, o numero fixo de antes */
   0,                /* addons do perfil principal: LIGADO (V_LIGA: 0 = Ligado) */
+  0,                /* transicao do destaque: Deslizar */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1629,6 +1640,7 @@ float ajustes_detalhe_veu(void)       { int v = valor[AJ_DET_VEU]; return (v < 0
 int   ajustes_trailer_auto(void)      { return lig(AJ_DET_TRAILER_AUTO); }
 int   ajustes_trailer_hero(void)      { return lig(AJ_HERO_TRAILER) && !SEGURO; }
 int   ajustes_trailer_hero_som(void)  { return lig(AJ_HERO_TRAILER_SOM); }
+int   ajustes_hero_deslizar(void)     { return valor[AJ_HERO_TRANSICAO] == 0; }
 // valor[] guarda decimos de segundo, preso ao intervalo de OPCOES (o disco
 // pode trazer qualquer numero).
 Uint32 ajustes_trailer_hero_espera_ms(void) {
@@ -2917,6 +2929,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_VIDRO_CONTORNO:
     case AJ_CW_CONCLUIDO:   /* o web nao tem esta escolha */
     case AJ_ADDONS_PRINCIPAL: /* escolha desta TV; a conta tem uses_primary_addons */
+    case AJ_HERO_TRANSICAO: /* o web nao tem esta escolha */
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
     case AJ_PERFIL_EDITAR:
@@ -3628,6 +3641,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_HERO_TRAILER: return "Com o foco parado no destaque do topo, o trailer do título toca no lugar da arte, sem som a menos que Som do trailer no destaque esteja ligado. Mover o foco volta para a arte.";
     case AJ_HERO_TRAILER_SOM: return "Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.";
     case AJ_HERO_TRAILER_ESPERA: return "Quanto tempo o destaque fica parado num título antes de trocar a arte pelo trailer.";
+    case AJ_HERO_TRANSICAO: return "Deslizar: quando o destaque troca de título, a arte e o texto saem para o lado e o próximo entra colado, como num carrossel. Esmaecer: a arte apaga e a nova aparece no lugar. Com Animações reduzidas a troca é sempre sem movimento.";
     case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta, de 3 a 40. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis. Mais fileiras usam mais memória e rede: em TV com 1 GB de memória a Home pode ficar lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior.";
     case AJ_ITENS_FILEIRA: return "Quantos títulos cada fileira da Home mostra antes do Ver tudo. Mais itens usam mais memória: em TV com 1 GB de memória a Home pode ficar mais lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior. Aumentar vale na próxima vez que o app abrir.";
     case AJ_FIL_ORDEM: return "Abre a lista de fileiras para reordenar, ligar, desligar e escolher o card de cada uma. É lá que dá para ver de onde cada fileira vem.";
@@ -6367,7 +6381,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
     case AJ_HERO_ARTE_DIF: case AJ_HERO_TRAILER: case AJ_FIL_LIMITE:
-    case AJ_HERO_TRAILER_SOM: case AJ_HERO_TRAILER_ESPERA:
+    case AJ_HERO_TRAILER_SOM: case AJ_HERO_TRAILER_ESPERA: case AJ_HERO_TRANSICAO:
     case AJ_FIL_ORDEM: case AJ_RAIL: case AJ_RAIL_MODERNA:
     case AJ_RAIL_BLUR: case AJ_HERO: case AJ_HERO_CATALOGOS:
     case AJ_PS_FUNDO: case AJ_DESCOBRIR: case AJ_ROTULOS:
@@ -6591,6 +6605,7 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
     if (op == AJ_HERO || op == AJ_HERO_CHEIO || op == AJ_HERO_FUNDO ||
         op == AJ_HERO_ARTE_DIF || op == AJ_HERO_TRAILER ||
         op == AJ_HERO_TRAILER_SOM || op == AJ_HERO_TRAILER_ESPERA ||
+        op == AJ_HERO_TRANSICAO ||
         op == AJ_HERO_CATALOGOS || op == AJ_GRAD_CLASSICO)
       previaRealce(hr.x, hr.y, hr.w, hr.h, ar, ag, ab);
     if (valor[AJ_HERO_TRAILER] == 0) {

@@ -346,6 +346,20 @@ static Uint32 heroTrocaEm = 0;
 //             quadro em que a textura fica pronta E o esvanecimento acabou.
 static float heroSai   = 0.0f;
 static float heroEntra = 1.0f;
+// TROCA DESLIZADA (dono, 30/09: "a hero passando animado, tipo trocando a
+// imagem pro lado e a outra bem grudada nela"; ajuste "Transicao do destaque").
+// No lugar do esvanecimento, a arte e o texto do titulo que sai andam para um
+// lado e os do que entra vem colados atras, sem vao, como um carrossel.
+// `heroDesliza`    progresso 0..1 do deslize; 1 = parado (nada a mais em repouso).
+// `heroDeslizaDir` +1 = o proximo entra pela direita; -1 = o anterior, pela
+//                  esquerda.
+// `heroDirDesejado` a direcao que acompanha heroDesejado. So a seta no destaque
+//                  e o carrossel automatico dizem uma; o hero que segue o
+//                  cartaz das fileiras deixa 0 e troca como sempre trocou.
+// Cubica de saida (anim_saida), sem mola: nao ha repique a assentar.
+#define NV_HERO_DESLIZA_MS 520.0f
+static float heroDesliza = 1.0f;
+static int   heroDeslizaDir = 0, heroDirDesejado = 0;
 // TRAILER NO DESTAQUE (trailer.h; dono, 20/09/2026: "coloca para tocar no
 // hero tb"). Com o foco parado no hero e a arte assentada, espera o ajuste
 // "Espera do trailer no destaque" (heroTrailerEspera) e troca a arte pelo
@@ -722,8 +736,12 @@ static const char *arteDoItem(const CatItem *item, int *ehPoster) {
 static float vitVeu = 0.9f, vitAncora = 0.5f, vitDissolve = 0.0f, vitRaio = 0.0f;
 // Onde o veu de baixo comeca, 0..1 da altura da arte (0 = o padrao do shader).
 static float vitVeuIni = 0.0f;
+// `desl` = deslize de lado em fracao de r.w (troca deslizada); 0 = no lugar.
+// A arte de tela anda DENTRO do retangulo pelo shader, com as rampas paradas;
+// o poster (que nao preenche o retangulo) anda o rect inteiro, e quem chama
+// recorta em r.
 static int desenhaArteHero(GfxRect r, GfxModo modo, const CatItem *item,
-                           const char *path, float alpha) {
+                           const char *path, float alpha, float desl) {
   int ehPoster = 0;
   // O `path` GANHA (22/09). Aqui era `item ? arteDoItem(item) : path`, e o
   // arteDoItem devolve item->backdrop cru: o que arte_hero_do_item escolhia
@@ -745,11 +763,13 @@ static int desenhaArteHero(GfxRect r, GfxModo modo, const CatItem *item,
   tex = tex_obter_hero(arte);
   if (!tex) return 0;
   gfx_tex_aspect_atual = tex_aspecto(arte);
+  gfx_desliza_atual = ehPoster ? 0.0f : desl;
   if (!ehPoster && modo == GFX_VITRINE) {
     gfx_rect(r, tex, modo, vitVeu, vitAncora, vitDissolve, vitRaio, vitVeuIni, 0, 0, alpha);
   } else if (!ehPoster) {
     gfx_rect(r, tex, modo, 0, 0, 0, 0, 0, 0, 0, alpha);
   } else {
+    r.x += desl * r.w;
     float ap = gfx_tex_aspect_atual > 0.05f ? gfx_tex_aspect_atual : (2.0f / 3.0f);
     float h = r.h, w = h * ap, limite = r.w * 0.42f;
     if (w > limite) { w = limite; h = w / ap; }
@@ -757,6 +777,7 @@ static int desenhaArteHero(GfxRect r, GfxModo modo, const CatItem *item,
     gfx_rect(poster, tex, GFX_HERO, 0, 0, 0, 0, 0, 0, 0, alpha);
   }
   gfx_tex_aspect_atual = 0.0f;
+  gfx_desliza_atual = 0.0f;
   return 1;
 }
 
@@ -935,6 +956,7 @@ static void heroPasso(int d) {
   heroPendenteEm = SDL_GetTicks() - NV_HERO_REPOUSO_MS;
   if (heroDesejado != alvo) heroDesejadoEm = SDL_GetTicks();
   heroDesejado = alvo;
+  heroDirDesejado = d > 0 ? 1 : -1;
   // O carrossel automatico so volta a contar depois do intervalo inteiro: uma
   // troca sozinha logo depois do toque leria como "a TV ignorou o que eu fiz".
   heroTrocaEm = SDL_GetTicks() + NV_HERO_INTERVALO_MS;
@@ -2382,6 +2404,7 @@ void home_atualizar(float dt, Uint32 agora) {
     if (!heroOculto && focoHero && heroNLista() > 0 && heroPosDe(heroAtual) < 0) {
       int primeiro = heroIdxEm(0);
       if (primeiro >= 0) heroAtual = heroAnterior = heroPendente = primeiro;
+      heroDesliza = 1.0f;
     }
     if (heroAnterior < 0 || heroAnterior >= total) heroAnterior = heroAtual;
     if (heroPendente < 0 || heroPendente >= total) heroPendente = heroAtual;
@@ -2440,6 +2463,7 @@ void home_atualizar(float dt, Uint32 agora) {
       // da arte nova estiver pronta — ver heroDesejado.
       if (heroDesejado != heroPendente) heroDesejadoEm = agora;
       heroDesejado = heroPendente;
+      heroDirDesejado = 0;   // seguir o cartaz nao e carrossel: esvanece
     } else if (alvo < 0 && agora >= heroTrocaEm &&
                (!focoHero || agora - heroUltTecla >= HOME_HERO_OCIO_MS) &&
                !heroAutoDesligado &&
@@ -2465,6 +2489,7 @@ void home_atualizar(float dt, Uint32 agora) {
         if (quente) tex_arquivo(quente); }
       if (heroDesejado != proximo) heroDesejadoEm = agora;
       heroDesejado = proximo;
+      heroDirDesejado = 1;   // o carrossel sempre anda para o proximo
       heroTrocaEm = agora + NV_HERO_INTERVALO_MS;
     }
   }
@@ -2493,6 +2518,11 @@ void home_atualizar(float dt, Uint32 agora) {
     heroEntra = motionReduzido ? 1.0f : 1.0f - heroSai;
   } else {
     heroEntra = 1.0f;
+  }
+  if (heroDesliza < 1.0f) {
+    heroDesliza = motionReduzido ? 1.0f
+                : heroDesliza + dt * (1000.0f / NV_HERO_DESLIZA_MS);
+    if (heroDesliza > 1.0f) heroDesliza = 1.0f;
   }
 
   // O passeio automatico do foco era so para ver o protótipo se mexendo sem
@@ -2685,6 +2715,201 @@ void home_hero_rect(float *x, float *y, float *w, float *h) {
   if (layoutHome() == HOME_LAYOUT_DINAMICA && -dinHeroY() >= NV_DIN_ARTE_FADE_B - 60.0f && temItemFoco)
     r = itemFoco.rect;
   *x = r.x; *y = r.y; *w = r.w; *h = r.h;
+}
+
+// O BLOCO DE TEXTO DE UM TITULO do destaque (logo, meta, selos, sinopse),
+// ancorado pela base em `base` e a partir de `x`. Separado de desenhaHero para
+// a troca deslizada desenhar DOIS: o do titulo que sai e o do que entra, cada
+// um andando com a sua arte. `principal` 0 = o que sai: nao observa a selecao
+// de logo da sessao nem manda na cor viva.
+static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
+                             float base, int lay, int cheio, float logoH,
+                             float sinW, int sinLinhas, float aTexto,
+                             float aCopy, float cin) {
+  int contHero = (ci && ci->progresso > 0 && ci->restanteMin > 0);
+  int seguirHero = (ci && ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb)));
+
+  // Linha de meta. No web sao tokens juntados por "•"; ci->genero ja chega
+  // como "Filme · Terror", que e o par (tipo, primeiro genero) do web.
+  char metaLinha[288];
+  metaLinha[0] = 0;
+  // DOIS CASOS, DUAS FRASES (dono, 20/09/2026): "A SEGUIR" e o PROXIMO
+  // episodio, que so faz sentido quando o anterior terminou; quem parou no
+  // meio "continua de onde parou". Os dois dizem QUAL episodio — o item de
+  // "a seguir" ja carrega temporada/episodio do proximo (trakt.c) — e o nome
+  // dele quando o catalogo tem.
+  if ((contHero || seguirHero) && ci->temporada > 0) {
+    char cab[192];
+    snprintf(cab, sizeof cab, "S%d E%d%s%s", ci->temporada, ci->episodio,
+             ci->nomeEpisodio[0] ? "  \xc2\xb7  " : "", ci->nomeEpisodio);
+    snprintf(metaLinha, sizeof metaLinha, "%s%s%s", cab,
+             (ci->genero[0] ? "  \xc2\xb7  " : ""), ci->genero);
+  } else if (ci && ci->genero[0]) {
+    snprintf(metaLinha, sizeof metaLinha, "%s", ci->genero);
+  }
+  if (ci && ci->meta[0]) {
+    size_t n = strlen(metaLinha);
+    snprintf(metaLinha + n, sizeof metaLinha - n, "%s%s",
+             n ? "   \xe2\x80\xa2   " : "", ci->meta);
+  }
+
+  // Linha secundaria: destaque de progresso, selos e a nota do IMDb. O web so
+  // mostra o IMDb aqui quando ja existe destaque ou selo (showImdbSecondary);
+  // no outro caso ele vai para o fim da linha de meta.
+  char destaque[64];
+  destaque[0] = 0;
+  if (contHero) snprintf(destaque, sizeof destaque, i18n("CONTINUAR DE ONDE PAROU  \xc2\xb7  %d MIN"),
+                         ci->restanteMin);
+  else if (seguirHero) {
+    // O FUTURO DIZ QUANDO (issue #127): "ESTREIA 21 OUT", nao o "A SEGUIR" do
+    // episodio que ja pode tocar. Mesma decisao e mesma data do card
+    // (continuar.c), para os dois nao discordarem.
+    char quando[32];
+    if (cwo_e_futuro(ci->imdb) &&
+        cwo_data_curta(cwo_estreia(ci->imdb), (long long)time(NULL) * 1000LL,
+                       ajustes_idioma(), 1, quando, sizeof quando))
+      snprintf(destaque, sizeof destaque, i18n("ESTREIA %s"), quando);
+    else snprintf(destaque, sizeof destaque, "%s", i18n("A SEGUIR"));
+  }
+  const char *selo = (ci && ci->classificacao[0] && !contHero && !seguirHero) ? ci->classificacao : NULL;
+  char nota[8];
+  nota[0] = 0;
+  if (ci && ci->nota > 0) snprintf(nota, sizeof nota, "%.1f", ci->nota / 10.0f);
+  int temSec = (destaque[0] || selo || nota[0]);
+
+  const char *sinopse = (ci && ci->sinopse[0]) ? ci->sinopse : "";
+
+  float hSin = sinopse[0] ? txt_bloco(TXT_HERO_SIN, sinopse, 255, 255, 255, -1, 0,
+                                      sinW, NV_LD_HERO_SIN, 0.0f, sinLinhas)
+                          : 0.0f;
+  float ySin  = base - hSin;
+  float ySec  = temSec ? (ySin - (sinopse[0] ? NV_HERO_COPY_LINHA : 0.0f)
+                          - NV_LD_HERO_SEC) : ySin;
+  float yMeta = ySec - ((temSec || sinopse[0]) ? NV_HERO_COPY_LINHA : 0.0f)
+                - (metaLinha[0] ? NV_LD_HERO_META : 0.0f);
+  // O logo NAO desce com o bloco: ele faz o caminho ate o canto de baixo (abaixo).
+  float logoY = yMeta - NV_HERO_COPY_LINHA - logoH - cin * NV_CINEMA_DESCE;
+
+  // Logo do titulo, ou o nome em texto quando nao ha logo
+  // (.home-hero-title-text, 56/600 no modern — nao os 76 do TXT_TITULO1).
+  // O catalogo guarda o logo do TMDB em `original` (4127 px de largura medidos
+  // na C9, 1,3 a 1,6 s de decodificacao) e aqui ele nunca passa de
+  // NV_LOGO_HERO_CHEIO_MAX_W. A politica de tamanho e a mesma do fundo e mora
+  // em artehero.c; url que nao e do TMDB passa intacta.
+  // Só o logo do hero fixa a seleção da sessão. Os cards vizinhos consultam a
+  // seleção, mas não podem substituir a identidade que está na tela grande.
+  // Durante a abertura/saída do detalhe a Home ainda pode ser desenhada por
+  // baixo do backdrop. Nesse intervalo o item do hero pode ser A enquanto a
+  // sessão ativa já é B; observar A ali sobrescreveria o snapshot de B antes
+  // do primeiro frame do detalhe. A leitura simples mantém A no plano de
+  // fundo, e a observação volta a ser permitida quando a Home recupera o
+  // primeiro plano.
+  // O titulo que SAI deslizando so e lido: quem observa e o que fica.
+  const char *urlLogo = ci ? ((!principal || detail_aberto() || player_aberto())
+                              ? artehero_logo_sessao(ci)
+                              : artehero_logo_sessao_observar(ci)) : NULL;
+  float maxWLogo = cheio ? NV_LOGO_HERO_CHEIO_MAX_W : NV_LOGO_HERO_MAX_W;
+  if (lay == HOME_LAYOUT_PADRAO) maxWLogo = NV_PAD_LOGO_MAX_W;
+  else if (lay == HOME_LAYOUT_DINAMICA) maxWLogo = NV_DIN_LOGO_MAX_W;
+  // Durante a promoção para o hero, entregar a textura menor já pronta evita
+  // um quadro vazio; o cache continua reprocessando para o teto final.
+  GLuint tlogo = urlLogo ? tex_obter_larg_qualquer(urlLogo, maxWLogo) : 0;
+  // COR VIVA: o logo do mesmo titulo do destaque ("Cor da logo").
+  if (urlLogo && principal) corviva_definir_logo(urlLogo, CORVIVA_HOME);
+  // Igual ao detalhe: nome escrito so quando nao ha logo ou o cache ja falhou.
+  // Antes, qualquer decode pendente caia no ramo de texto — ao voltar do
+  // detalhe (catalogo com url nova do TMDB) parecia "sumiu a arte do titulo".
+  int mostraNomeLogo = !tlogo && (!urlLogo || tex_falhou(urlLogo));
+  if (tlogo) {
+    float ap = tex_aspecto(urlLogo);
+    if (ap <= 0.0f) ap = 4.0f;
+    float hTit = logoH, wTit = hTit * ap;
+    if (wTit > maxWLogo) { wTit = maxWLogo; hTit = wTit / ap; }
+    // object-position: left top — a arte encosta no TOPO da caixa.
+    GfxRect rl = { x, logoY, wTit, hTit };
+    // MODO CINEMA: o logo ENCOLHE e ANDA ate o canto inferior esquerdo (o do
+    // detalhe cruza-apaga, mas la o logo pequeno e outro desenho; aqui e o mesmo
+    // logo, entao o caminho e continuo). Mesmas medidas de trailercinema.h.
+    if (cin > 0.0f) {
+      float wc, hc, fim;
+      trailercinema_logo(ap, &wc, &hc);
+      fim = trailercinema_base();
+      rl.w = anim_mistura(wTit, wc, cin);
+      rl.h = anim_mistura(hTit, hc, cin);
+      rl.y = anim_mistura(logoY + hTit, fim, cin) - rl.h;
+    }
+    gfx_tex_aspect_atual = 0.0f;
+    // Logo escuro vira branco. Mesma regra da tela de detalhe: o TMDB nao marca
+    // claro/escuro, entao a decisao sai da luminancia MEDIDA (tex_luminancia).
+    // Logo claro ou colorido passa intacto; -1 (ainda carregando) nao tinge.
+    { GfxModo m = tex_marca_escura(urlLogo) ? GFX_MARCA : GFX_TEXTO;
+      // O LOGO DO TITULO acompanha a ARTE, nao o texto. MEDIDO: 205 ms depois
+      // da tecla a arte antiga ainda estava a 85% e o logo JA tinha sumido por
+      // inteiro; ele so reaparece no mesmo quadro em que a arte nova entra.
+      gfx_rect(rl, tlogo, m, 0, 0, 0, 0.0f, 1, 1, 1, aTexto * heroEntra); }
+  } else if (mostraNomeLogo) {
+    // .legacy-webos .home-hero-title-text: 76px (components.css:19164), nao os
+    // 56 do tema padrao.
+    // Sem titulo NAO se inventa titulo. Aqui havia uma lista de demonstracao
+    // ("Ruptura", "Silo", "Shrinking"...) que preenchia o hero com o nome de
+    // outra serie quando o item ainda nao tinha nome — indistinguivel de dado
+    // real para quem olha a tela. Mesma familia do elenco e da classificacao
+    // que ja sairam do detalhe. Sem nome, o hero fica so com a arte, que ja
+    // basta, e o texto aparece quando o dado chegar.
+    if (ci && ci->titulo[0]) {
+      TxtLinha tit = txt_linha(TXT_TITULO1, ci->titulo, 255, 255, 255, 255);
+      txt_desenhar_alpha(tit, x, logoY + logoH - (float)tit.h,
+                         aTexto * (1.0f - cin));
+      // Sem logo, o nome pequeno entra embaixo (o mesmo do detalhe).
+      if (cin > 0.005f) {
+        TxtLinha t2 = txt_linha_corta(TXT_TITULO2, ci->titulo, 255, 255, 255, 255,
+                                      NV_DETW_LOGO_MAXW * 0.5f);
+        txt_desenhar_alpha(t2, x, trailercinema_base() - t2.h, aTexto * cin);
+      }
+    }
+  }
+
+  if (metaLinha[0] && aCopy > 0.004f) {
+    float badgeW=ci?badges_desenhar(badges_provedor(ci->provNome),x,yMeta,150,24,aCopy):0;
+    TxtLinha lm = txt_linha_corta(TXT_HERO_META, metaLinha, 179, 179, 179, 255,
+                                  sinW-badgeW);
+    // META E SINOPSE TROCAM NA HORA, sem esvanecer com a arte. MEDIDO: no
+    // quadro a 205 ms, com a arte antiga ainda a 85%, a linha de meta e a
+    // sinopse ja eram as do titulo NOVO, com o texto opaco. Multiplicar por um
+    // alfa de troca aqui era invencao nossa — e, com o rasterizador fazendo 2
+    // linhas por quadro (text.c:40), esvanecer texto que ainda esta assentando
+    // e o pior caso possivel.
+    txt_desenhar_alpha(lm, x+badgeW, yMeta, aCopy);
+  }
+
+  if (temSec && aCopy > 0.004f) {
+    float cx = x;
+    float a = aCopy;
+    if (destaque[0]) {
+      // .home-modern-hero-highlight: branco cheio, peso 600, tracking 0.04em.
+      cx += txt_tracking(TXT_HERO_SEC, destaque, 255, 255, 255, cx, ySec, a,
+                         NV_FT_HERO_SEC * 0.04f);
+      cx += 14.0f;
+    }
+    if (selo) {
+      // O mesmo selo de 28 px da aba Salvos e do detalhe; classificacao nao
+      // ganha uma caixa vermelha propria em cada superficie.
+      float bw = badge_largura(selo);
+      if (cx + bw <= x + sinW)
+        cx += badge_desenhar(cx, ySec + (NV_LD_HERO_SEC - BADGE_H) * 0.5f,
+                             selo, BADGE_NEUTRO, a) + 14.0f;
+    }
+    if (nota[0] && ci && ci->nota > 0) {
+      float bw = badge_imdb_largura(ci->nota);
+      if (cx + bw <= x + sinW)
+        badge_imdb(cx, ySec + (NV_LD_HERO_SEC - BADGE_H) * 0.5f,
+                   ci->nota, 0, a);
+    }
+  }
+
+  if (sinopse[0] && aCopy > 0.004f)
+    txt_bloco(TXT_HERO_SIN, sinopse, 255, 255, 255, x, ySin, sinW,
+              NV_LD_HERO_SIN, aCopy, sinLinhas);
 }
 
 // `saida` = 0..1 de quanto o detalhe ja tomou a tela. So o TEXTO do hero sai
@@ -2951,7 +3176,10 @@ static void desenhaHero(Uint32 agora, float saida) {
   // arte e (o caminho sai do catalogo, com a pasta como reserva). Enquanto o
   // cache nao devolve textura, heroAtual nao muda e a tela segue com a arte que
   // ja estava — que e exatamente o que o dono pediu ao andar depressa.
-  if (heroDesejado >= 0 && heroDesejado != heroAtual) {
+  // Com um deslize em curso a troca seguinte espera ele assentar: comecar
+  // outro no meio faria o titulo que esta entrando saltar de volta ao lugar.
+  // A seta segurada nao acumula: vale o ultimo desejo.
+  if (heroDesejado >= 0 && heroDesejado != heroAtual && heroDesliza >= 1.0f) {
     const char *arteD = arte_por_identidade(heroDesejado, 2);
     // Ausencia de arte tambem e um estado pronto: o placeholder pertence ao
     // item e pode entrar sem apagar o hero anterior primeiro.
@@ -3008,12 +3236,28 @@ static void desenhaHero(Uint32 agora, float saida) {
       // Por isso o item que estourou continua sendo cronometrado DEPOIS da
       // troca, ate a textura existir de verdade (ver heroTardeItem abaixo).
       if (heroEstourou) { heroTardeItem = heroDesejado; heroTardeEm = heroDesejadoEm; }
+      // DESLIZA so com a arte nova JA pronta (ou sem arte nenhuma, o marcador):
+      // estourado o prazo, o lado que entra seria vazio passando pela tela, e
+      // ai vale o esvanecimento de sempre. Efeitos minimos (GPU fraca) tambem
+      // esvanecem: o deslize pinta duas artes de tela por quadro durante a
+      // troca. Animacoes reduzidas: troca seca, como antes.
+      int desliza = heroDirDesejado != 0 && !heroEstourou && !motionReduzido &&
+                    ajustes_hero_deslizar() && !gfx_efeitos_minimos();
       heroEstourou = 0;
       heroAnterior = heroAtual;
       heroAtual = heroDesejado;
       heroDesejado = -1;
-      heroSai = (motionReduzido || !arteD) ? 0.0f : 1.0f;
-      heroEntra = (motionReduzido || !arteD) ? 1.0f : 0.0f;
+      if (desliza) {
+        heroSai = 0.0f;
+        heroEntra = 1.0f;
+        heroDesliza = 0.0f;
+        heroDeslizaDir = heroDirDesejado;
+      } else {
+        heroDesliza = 1.0f;
+        heroSai = (motionReduzido || !arteD) ? 0.0f : 1.0f;
+        heroEntra = (motionReduzido || !arteD) ? 1.0f : 0.0f;
+      }
+      heroDirDesejado = 0;
       heroTrocaEm = SDL_GetTicks() + NV_HERO_INTERVALO_MS;
     }
   }
@@ -3032,7 +3276,15 @@ static void desenhaHero(Uint32 agora, float saida) {
   // cache ja o tinha despejado, o pedido o trazia de volta — uma textura de
   // 1920 (~8 MB) re-decodificada para NAO ser desenhada, empurrando os posteres
   // visiveis para fora do orcamento.
-  GLuint tAnt = (heroSai > 0.0f && arteB) ? tex_obter_hero(arteB) : 0;
+  // No deslize o anterior tambem e desenhado (sai pelo lado), e so enquanto
+  // ele dura: parado, nada a mais.
+  const int deslizando = heroDesliza < 1.0f;
+  const float pDesl = deslizando ? anim_saida(heroDesliza) : 1.0f;
+  // Em fracao da largura da arte. As duas bordas andam JUNTAS: o que sai
+  // termina onde o que entra comeca, sem vao nem sobreposicao.
+  const float dAnt = deslizando ? -(float)heroDeslizaDir * pDesl : 0.0f;
+  const float dAtu = deslizando ? (float)heroDeslizaDir * (1.0f - pDesl) : 0.0f;
+  GLuint tAnt = ((heroSai > 0.0f || deslizando) && arteB) ? tex_obter_hero(arteB) : 0;
   // Pedir a nova JA, durante o esvanecimento: e este pedido que enfileira o
   // decode, e e por isso que o vazio dura o tempo do carregamento e nao mais.
   GLuint tAtu = arteA ? tex_obter_hero(arteA) : 0;
@@ -3063,23 +3315,39 @@ static void desenhaHero(Uint32 agora, float saida) {
     gfx_furo(furo);
     aArte *= (1.0f - aTrailer);
   }
+  if (deslizando) {
+    // O que sai do retangulo da arte nao pinta: o shader corta a arte de tela,
+    // e o recorte aqui corta o poster e o marcador, que andam o rect inteiro.
+    float y0 = r.y < 0.0f ? 0.0f : r.y;
+    float y1 = r.y + r.h > NV_TELA_H ? NV_TELA_H : r.y + r.h;
+    GfxRect rAnt = r, rAtu = r;
+    rAnt.x += dAnt * r.w;
+    rAtu.x += dAtu * r.w;
+    gfx_recorte(r.x, y0, r.w, y1 - y0);
+    if (tAnt) (void)desenhaArteHero(r, modoHero, cAnt, arteB, aArte, dAnt);
+    else if (!arteB) desenhaPlaceholderHero(rAnt, cAnt, aArte, 0);
+    if (tAtu) (void)desenhaArteHero(r, modoHero, ci, arteA, aArte, dAtu);
+    else desenhaPlaceholderHero(rAtu, ci, aArte, arteA != NULL && arteA[0] != 0);
+    gfx_sem_recorte();
+  } else {
   if (tAnt) {
     // Esvanecimento com aceleracao e desaceleracao: o medido fica ~25% do
     // percurso quase parado no comeco, entao rampa reta le como corte na saida.
     (void)desenhaArteHero(r, modoHero, cAnt, arteB,
-                          anim_suave(heroSai) * aArte);
+                          anim_suave(heroSai) * aArte, 0.0f);
   } else if (heroSai > 0.0f) {
     desenhaPlaceholderHero(r, cAnt, anim_suave(heroSai) * aArte, 0);
   }
   if (tAtu && heroEntra > 0.0f) {
     (void)desenhaArteHero(r, modoHero, ci, arteA,
-                          anim_suave(heroEntra) * aArte);
+                          anim_suave(heroEntra) * aArte, 0.0f);
   } else if (!tAtu && aTrailer <= 0.0f) {
     // ESPERANDO quando ha caminho de arte e ela ainda nao decodificou; ausente
     // quando o titulo nao tem arte nenhuma para pedir.
     desenhaPlaceholderHero(r, ci,
                            aArte * (heroEntra > 0.0f ? 1.0f : heroEntra),
                            arteA != NULL && arteA[0] != 0);
+  }
   }
   // SEM VEU SOBRE O TRAILER (dono, 20/09/2026: "quando tocar o trailer do
   // hero tirar o overlay, so voltar quando tiver so a arte"): as rampas vao
@@ -3107,59 +3375,6 @@ static void desenhaHero(Uint32 agora, float saida) {
   //
   // O conteudo de cada linha vem de buildModernHeroPresentation
   // (homeScreen.js:2497), que separa o caso "continuar assistindo" do resto.
-  int contHero = (ci && ci->progresso > 0 && ci->restanteMin > 0);
-  int seguirHero = (ci && ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb)));
-
-  // Linha de meta. No web sao tokens juntados por "•"; ci->genero ja chega
-  // como "Filme · Terror", que e o par (tipo, primeiro genero) do web.
-  char metaLinha[288];
-  metaLinha[0] = 0;
-  // DOIS CASOS, DUAS FRASES (dono, 20/09/2026): "A SEGUIR" e o PROXIMO
-  // episodio, que so faz sentido quando o anterior terminou; quem parou no
-  // meio "continua de onde parou". Os dois dizem QUAL episodio — o item de
-  // "a seguir" ja carrega temporada/episodio do proximo (trakt.c) — e o nome
-  // dele quando o catalogo tem.
-  if ((contHero || seguirHero) && ci->temporada > 0) {
-    char cab[192];
-    snprintf(cab, sizeof cab, "S%d E%d%s%s", ci->temporada, ci->episodio,
-             ci->nomeEpisodio[0] ? "  \xc2\xb7  " : "", ci->nomeEpisodio);
-    snprintf(metaLinha, sizeof metaLinha, "%s%s%s", cab,
-             (ci->genero[0] ? "  \xc2\xb7  " : ""), ci->genero);
-  } else if (ci && ci->genero[0]) {
-    snprintf(metaLinha, sizeof metaLinha, "%s", ci->genero);
-  }
-  if (ci && ci->meta[0]) {
-    size_t n = strlen(metaLinha);
-    snprintf(metaLinha + n, sizeof metaLinha - n, "%s%s",
-             n ? "   \xe2\x80\xa2   " : "", ci->meta);
-  }
-
-  // Linha secundaria: destaque de progresso, selos e a nota do IMDb. O web so
-  // mostra o IMDb aqui quando ja existe destaque ou selo (showImdbSecondary);
-  // no outro caso ele vai para o fim da linha de meta.
-  char destaque[64];
-  destaque[0] = 0;
-  if (contHero) snprintf(destaque, sizeof destaque, i18n("CONTINUAR DE ONDE PAROU  \xc2\xb7  %d MIN"),
-                         ci->restanteMin);
-  else if (seguirHero) {
-    // O FUTURO DIZ QUANDO (issue #127): "ESTREIA 21 OUT", nao o "A SEGUIR" do
-    // episodio que ja pode tocar. Mesma decisao e mesma data do card
-    // (continuar.c), para os dois nao discordarem.
-    char quando[32];
-    if (cwo_e_futuro(ci->imdb) &&
-        cwo_data_curta(cwo_estreia(ci->imdb), (long long)time(NULL) * 1000LL,
-                       ajustes_idioma(), 1, quando, sizeof quando))
-      snprintf(destaque, sizeof destaque, i18n("ESTREIA %s"), quando);
-    else snprintf(destaque, sizeof destaque, "%s", i18n("A SEGUIR"));
-  }
-  const char *selo = (ci && ci->classificacao[0] && !contHero && !seguirHero) ? ci->classificacao : NULL;
-  char nota[8];
-  nota[0] = 0;
-  if (ci && ci->nota > 0) snprintf(nota, sizeof nota, "%.1f", ci->nota / 10.0f);
-  int temSec = (destaque[0] || selo || nota[0]);
-
-  const char *sinopse = (ci && ci->sinopse[0]) ? ci->sinopse : "";
-
   // --- empilhamento de baixo para cima, como o flex-end do CSS ---
   //
   // O BLOCO DESCE JUNTO COM AS FILEIRAS. Pedido do dono: "deixar as informacoes
@@ -3188,138 +3403,15 @@ static void desenhaHero(Uint32 agora, float saida) {
     aBotao = aVis;
     base = r.y + NV_DIN_HERO_H - 130.0f - btnH - btnGap + descidaCopy;
   }
-  float hSin = sinopse[0] ? txt_bloco(TXT_HERO_SIN, sinopse, 255, 255, 255, -1, 0,
-                                      sinW, NV_LD_HERO_SIN, 0.0f, sinLinhas)
-                          : 0.0f;
   base += bordaPag.x;   // retorno de borda do Cima no destaque
-  float ySin  = base - hSin;
-  float ySec  = temSec ? (ySin - (sinopse[0] ? NV_HERO_COPY_LINHA : 0.0f)
-                          - NV_LD_HERO_SEC) : ySin;
-  float yMeta = ySec - ((temSec || sinopse[0]) ? NV_HERO_COPY_LINHA : 0.0f)
-                - (metaLinha[0] ? NV_LD_HERO_META : 0.0f);
-  // O logo NAO desce com o bloco: ele faz o caminho ate o canto de baixo (abaixo).
-  float logoY = yMeta - NV_HERO_COPY_LINHA - logoH - cin * NV_CINEMA_DESCE;
   float x = ajustes_conteudo_x();
-
-  // Logo do titulo, ou o nome em texto quando nao ha logo
-  // (.home-hero-title-text, 56/600 no modern — nao os 76 do TXT_TITULO1).
-  // O catalogo guarda o logo do TMDB em `original` (4127 px de largura medidos
-  // na C9, 1,3 a 1,6 s de decodificacao) e aqui ele nunca passa de
-  // NV_LOGO_HERO_CHEIO_MAX_W. A politica de tamanho e a mesma do fundo e mora
-  // em artehero.c; url que nao e do TMDB passa intacta.
-  // Só o logo do hero fixa a seleção da sessão. Os cards vizinhos consultam a
-  // seleção, mas não podem substituir a identidade que está na tela grande.
-  // Durante a abertura/saída do detalhe a Home ainda pode ser desenhada por
-  // baixo do backdrop. Nesse intervalo o item do hero pode ser A enquanto a
-  // sessão ativa já é B; observar A ali sobrescreveria o snapshot de B antes
-  // do primeiro frame do detalhe. A leitura simples mantém A no plano de
-  // fundo, e a observação volta a ser permitida quando a Home recupera o
-  // primeiro plano.
-  const char *urlLogo = ci ? ((detail_aberto() || player_aberto())
-                              ? artehero_logo_sessao(ci)
-                              : artehero_logo_sessao_observar(ci)) : NULL;
-  float maxWLogo = cheio ? NV_LOGO_HERO_CHEIO_MAX_W : NV_LOGO_HERO_MAX_W;
-  if (lay == HOME_LAYOUT_PADRAO) maxWLogo = NV_PAD_LOGO_MAX_W;
-  else if (lay == HOME_LAYOUT_DINAMICA) maxWLogo = NV_DIN_LOGO_MAX_W;
-  // Durante a promoção para o hero, entregar a textura menor já pronta evita
-  // um quadro vazio; o cache continua reprocessando para o teto final.
-  GLuint tlogo = urlLogo ? tex_obter_larg_qualquer(urlLogo, maxWLogo) : 0;
-  // COR VIVA: o logo do mesmo titulo do destaque ("Cor da logo").
-  if (urlLogo) corviva_definir_logo(urlLogo, CORVIVA_HOME);
-  // Igual ao detalhe: nome escrito so quando nao ha logo ou o cache ja falhou.
-  // Antes, qualquer decode pendente caia no ramo de texto — ao voltar do
-  // detalhe (catalogo com url nova do TMDB) parecia "sumiu a arte do titulo".
-  int mostraNomeLogo = !tlogo && (!urlLogo || tex_falhou(urlLogo));
-  if (tlogo) {
-    float ap = tex_aspecto(urlLogo);
-    if (ap <= 0.0f) ap = 4.0f;
-    float hTit = logoH, wTit = hTit * ap;
-    if (wTit > maxWLogo) { wTit = maxWLogo; hTit = wTit / ap; }
-    // object-position: left top — a arte encosta no TOPO da caixa.
-    GfxRect rl = { x, logoY, wTit, hTit };
-    // MODO CINEMA: o logo ENCOLHE e ANDA ate o canto inferior esquerdo (o do
-    // detalhe cruza-apaga, mas la o logo pequeno e outro desenho; aqui e o mesmo
-    // logo, entao o caminho e continuo). Mesmas medidas de trailercinema.h.
-    if (cin > 0.0f) {
-      float wc, hc, fim;
-      trailercinema_logo(ap, &wc, &hc);
-      fim = trailercinema_base();
-      rl.w = anim_mistura(wTit, wc, cin);
-      rl.h = anim_mistura(hTit, hc, cin);
-      rl.y = anim_mistura(logoY + hTit, fim, cin) - rl.h;
-    }
-    gfx_tex_aspect_atual = 0.0f;
-    // Logo escuro vira branco. Mesma regra da tela de detalhe: o TMDB nao marca
-    // claro/escuro, entao a decisao sai da luminancia MEDIDA (tex_luminancia).
-    // Logo claro ou colorido passa intacto; -1 (ainda carregando) nao tinge.
-    { GfxModo m = tex_marca_escura(urlLogo) ? GFX_MARCA : GFX_TEXTO;
-      // O LOGO DO TITULO acompanha a ARTE, nao o texto. MEDIDO: 205 ms depois
-      // da tecla a arte antiga ainda estava a 85% e o logo JA tinha sumido por
-      // inteiro; ele so reaparece no mesmo quadro em que a arte nova entra.
-      gfx_rect(rl, tlogo, m, 0, 0, 0, 0.0f, 1, 1, 1, aTexto * heroEntra); }
-  } else if (mostraNomeLogo) {
-    // .legacy-webos .home-hero-title-text: 76px (components.css:19164), nao os
-    // 56 do tema padrao.
-    // Sem titulo NAO se inventa titulo. Aqui havia uma lista de demonstracao
-    // ("Ruptura", "Silo", "Shrinking"...) que preenchia o hero com o nome de
-    // outra serie quando o item ainda nao tinha nome — indistinguivel de dado
-    // real para quem olha a tela. Mesma familia do elenco e da classificacao
-    // que ja sairam do detalhe. Sem nome, o hero fica so com a arte, que ja
-    // basta, e o texto aparece quando o dado chegar.
-    if (ci && ci->titulo[0]) {
-      TxtLinha tit = txt_linha(TXT_TITULO1, ci->titulo, 255, 255, 255, 255);
-      txt_desenhar_alpha(tit, x, logoY + logoH - (float)tit.h,
-                         aTexto * (1.0f - cin));
-      // Sem logo, o nome pequeno entra embaixo (o mesmo do detalhe).
-      if (cin > 0.005f) {
-        TxtLinha t2 = txt_linha_corta(TXT_TITULO2, ci->titulo, 255, 255, 255, 255,
-                                      NV_DETW_LOGO_MAXW * 0.5f);
-        txt_desenhar_alpha(t2, x, trailercinema_base() - t2.h, aTexto * cin);
-      }
-    }
-  }
-
-  if (metaLinha[0] && aCopy > 0.004f) {
-    float badgeW=ci?badges_desenhar(badges_provedor(ci->provNome),x,yMeta,150,24,aCopy):0;
-    TxtLinha lm = txt_linha_corta(TXT_HERO_META, metaLinha, 179, 179, 179, 255,
-                                  sinW-badgeW);
-    // META E SINOPSE TROCAM NA HORA, sem esvanecer com a arte. MEDIDO: no
-    // quadro a 205 ms, com a arte antiga ainda a 85%, a linha de meta e a
-    // sinopse ja eram as do titulo NOVO, com o texto opaco. Multiplicar por um
-    // alfa de troca aqui era invencao nossa — e, com o rasterizador fazendo 2
-    // linhas por quadro (text.c:40), esvanecer texto que ainda esta assentando
-    // e o pior caso possivel.
-    txt_desenhar_alpha(lm, x+badgeW, yMeta, aCopy);
-  }
-
-  if (temSec && aCopy > 0.004f) {
-    float cx = x;
-    float a = aCopy;
-    if (destaque[0]) {
-      // .home-modern-hero-highlight: branco cheio, peso 600, tracking 0.04em.
-      cx += txt_tracking(TXT_HERO_SEC, destaque, 255, 255, 255, cx, ySec, a,
-                         NV_FT_HERO_SEC * 0.04f);
-      cx += 14.0f;
-    }
-    if (selo) {
-      // O mesmo selo de 28 px da aba Salvos e do detalhe; classificacao nao
-      // ganha uma caixa vermelha propria em cada superficie.
-      float bw = badge_largura(selo);
-      if (cx + bw <= x + sinW)
-        cx += badge_desenhar(cx, ySec + (NV_LD_HERO_SEC - BADGE_H) * 0.5f,
-                             selo, BADGE_NEUTRO, a) + 14.0f;
-    }
-    if (nota[0] && ci && ci->nota > 0) {
-      float bw = badge_imdb_largura(ci->nota);
-      if (cx + bw <= x + sinW)
-        badge_imdb(cx, ySec + (NV_LD_HERO_SEC - BADGE_H) * 0.5f,
-                   ci->nota, 0, a);
-    }
-  }
-
-  if (sinopse[0] && aCopy > 0.004f)
-    txt_bloco(TXT_HERO_SIN, sinopse, 255, 255, 255, x, ySin, sinW,
-              NV_LD_HERO_SIN, aCopy, sinLinhas);
+  // TROCA DESLIZADA: o bloco do titulo que sai anda junto com a arte dele, e o
+  // do que entra vem colado atras, na mesma distancia (a largura da arte).
+  if (deslizando && cAnt && cAnt != ci)
+    desenhaCopiaHero(cAnt, 0, x + dAnt * r.w, base, lay, cheio, logoH, sinW,
+                     sinLinhas, aTexto, aCopy, cin);
+  desenhaCopiaHero(ci, 1, x + dAtu * r.w, base, lay, cheio, logoH, sinW,
+                   sinLinhas, aTexto, aCopy, cin);
 
   // O BOTAO E A POSICAO, que so existem enquanto o destaque tem o foco.
   //
@@ -3662,6 +3754,7 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
     pronto = topo && (noHero || noCartaz); }
   pronto = pronto &&
            heroDesejado < 0 && heroAtual >= 0 && heroEntra >= 0.999f && heroSai <= 0.001f &&
+           heroDesliza >= 1.0f &&   // o trailer abre com a arte ja parada
            !(foco.fileira >= 0 && foco.fileira < nFileiras &&
              (fileiras[foco.fileira].tipo == FILEIRA_CATALOGOS ||
               fileiras[foco.fileira].tipo == FILEIRA_SOCIAL));
