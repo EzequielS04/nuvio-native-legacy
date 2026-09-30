@@ -74,6 +74,12 @@
 #define extras_colecao_titulo   fx_colecao_titulo
 #define extras_colecao_ano      fx_colecao_ano
 #define extras_colecao_tmdb     fx_colecao_tmdb
+#define extras_colecao_capa     fx_colecao_capa
+#define extras_colecao_fundo    fx_colecao_fundo
+#define extras_colecao_sinopse  fx_colecao_sinopse
+#define extras_colecao_poster   fx_colecao_poster
+#define extras_colecao_sinopse_parte fx_colecao_sinopse_parte
+#define extras_colecao_nota     fx_colecao_nota
 #define extras_n_estudios       fx_n_estudios
 #define extras_estudio_nome     fx_estudio_nome
 #define extras_estudio_logo     fx_estudio_logo
@@ -173,6 +179,33 @@ const char *fx_colecao_nome(void) { return colecaoLigada ? "The Matrix Collectio
 const char *fx_colecao_titulo(int i) { return COL_TIT[i]; }
 const char *fx_colecao_ano(int i) { return COL_ANO[i]; }
 long fx_colecao_tmdb(int i) { return 603 + i; }
+// Arte local (sem rede): backdrop 1280x720 e tres cartazes do pacote. A
+// sinopse da 3a parte e comprida de proposito, para estourar as tres linhas.
+// colecaoSemFundo = a reserva do card sem backdrop (so a escada de cartazes).
+static int colecaoSemFundo;
+static const char *const COL_PO[] = {
+  "deploy/app/art/poster/03.jpg", "deploy/app/art/poster/11.jpg",
+  "deploy/app/art/poster/15.jpg" };
+static const char *const COL_SIN[] = {
+  "Sinopse curta de enchimento da primeira parte.",
+  "Segunda parte, com uma sinopse de enchimento de duas linhas para ver a "
+  "quebra dentro da linha da lista sem encostar na borda da direita.",
+  "Terceira parte com uma sinopse de enchimento bem comprida, que passa das "
+  "tres linhas permitidas e por isso tem de terminar em reticencias em vez de "
+  "vazar para a linha de baixo ou sair do cartao, que e exatamente o caso que "
+  "esta frase existe para exercitar na captura." };
+static const int COL_NOTA[] = { 82, 70, 67 };
+const char *fx_colecao_capa(void) { return colecaoLigada ? "deploy/app/art/poster/03.jpg" : ""; }
+const char *fx_colecao_fundo(void) {
+  return colecaoLigada && !colecaoSemFundo ? "deploy/app/art/05.jpg" : "";
+}
+const char *fx_colecao_sinopse(void) {
+  return colecaoLigada ? "Sinopse de enchimento da colecao inteira, com o "
+                         "tamanho de um paragrafo do TMDB." : "";
+}
+const char *fx_colecao_poster(int i) { return COL_PO[i]; }
+const char *fx_colecao_sinopse_parte(int i) { return COL_SIN[i]; }
+int fx_colecao_nota(int i) { return COL_NOTA[i]; }
 int fx_n_estudios(void)       { return extrasCardsLigados ? 3 : 0; }
 const char *fx_estudio_nome(int i) { return EST_NOME[i]; }
 const char *fx_estudio_logo(int i) { (void)i; return ""; }
@@ -331,6 +364,7 @@ static void montarCatalogo(void) {
   snprintf(itens[1].backdrop, sizeof itens[1].backdrop,
            "deploy/app/art/07.jpg");
   itens[1].nota = 87;
+  itens[1].tmdb = 603;   // = a 1a parte da colecao de ensaio ("Você está aqui")
   for (i = 0; i < 6; i++) {
     snprintf(itens[1].elenco[i].nome, sizeof itens[1].elenco[i].nome,
              "Elenco de Ensaio %d", i + 1);
@@ -468,6 +502,9 @@ int main(int argc, char **argv) {
   glViewport(0, 0, 1920, 1080);
   gfx_tamanho_alvo(1920, 1080);
   assert(gfx_iniciar());
+  // Icones (a estrela da nota na lista da colecao): caminho ABSOLUTO, como o app.
+  { char ic[1024];
+    if (realpath("deploy/app/art", ic)) gfx_icones_dir(ic); }
   assert(txt_iniciar("deploy/app", 1));
   tex_iniciar(16);
   ajustes_iniciar();
@@ -658,16 +695,39 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-17-filme-detalhes.png", saida);
   gravar(nome);
 
-  // --- 18. FILME, foco na COLECAO (#194): a secao que o filme nao tinha — a
-  //         aba "Coleção" so existia na barra de abas, que e so da serie. A
-  //         segunda parte acesa, depois de um BAIXO dentro da lista.
+  // --- 18. FILME, foco na COLECAO (#194): o MINI CARD — backdrop da colecao,
+  //         nome, "3 filmes · 1999–2003" e a escada de cartazes, focado.
   colecaoLigada = 1;
   abrir(1, SEC_COLECAO, 0);
-  { SDL_Event ev; memset(&ev, 0, sizeof ev);
-    ev.type = SDL_KEYDOWN; ev.key.keysym.sym = SDLK_DOWN;
-    detail_evento(&ev); }
   quadros(60);
   snprintf(nome, sizeof nome, "%s-18-filme-colecao.png", saida);
+  gravar(nome);
+
+  // --- 19. A TELA DE LISTA: OK no card, depois um BAIXO — a 2a parte em foco
+  //         e a 1a (o titulo aberto) com "Você está aqui".
+  { SDL_Event ev; memset(&ev, 0, sizeof ev);
+    // O OK da pagina age no SOLTAR (desce + sobe), como na TV.
+    ev.type = SDL_KEYDOWN; ev.key.keysym.sym = SDLK_RETURN;
+    detail_evento(&ev);
+    ev.type = SDL_KEYUP;
+    detail_evento(&ev);
+    quadros(5);
+    ev.type = SDL_KEYDOWN; ev.key.keysym.sym = SDLK_DOWN;
+    detail_evento(&ev); }
+  quadros(90);
+  assert(colListaAberta && colListaFoco == 1);
+  snprintf(nome, sizeof nome, "%s-19-filme-colecao-lista.png", saida);
+  gravar(nome);
+
+  // --- 20. VOLTAR fecha a lista e devolve a pagina no mesmo card; e a
+  //         reserva SEM backdrop (so a escada sobre a superficie neutra).
+  { SDL_Event ev; memset(&ev, 0, sizeof ev);
+    ev.type = SDL_KEYDOWN; ev.key.keysym.sym = SDLK_ESCAPE;
+    detail_evento(&ev); }
+  assert(!colListaAberta && aberto && foco.fileira == SEC_COLECAO);
+  colecaoSemFundo = 1;
+  quadros(60);
+  snprintf(nome, sizeof nome, "%s-20-filme-colecao-sem-fundo.png", saida);
   gravar(nome);
 
 

@@ -153,6 +153,9 @@ static struct { int numero; int nEps; struct { int ep, nota; } eps[EX_EP_MAX]; }
             temps[EX_TEMP_MAX];
 static int  nTemps;
 static char colNome[80];
+// Arte propria da colecao (poster w342 e backdrop w780, URL absoluta) e a
+// sinopse dela: o mini card da pagina e a tela de lista da saga.
+static char colCapa[160], colFundo[160], colSinopse[600];
 // Ficha tecnica e trailers: mesma viagem /movie/<id> da colecao.
 static char fichaStatus[32], fichaPaises[160], fichaCert[12], fichaLanc[16];
 // IDIOMA ORIGINAL do titulo, do `original_language` do TMDB. Vem no MESMO
@@ -196,7 +199,8 @@ static pthread_mutex_t heroTrailerTrava = PTHREAD_MUTEX_INITIALIZER;
 // A mesma obra pode tentar de novo depois deste intervalo; resultado valido
 // continua sendo idempotente e nao repete a viagem.
 #define HERO_TRAILER_RETRY_S 30
-static struct { char titulo[120], ano[8]; long tmdb; } col[EX_COL_MAX];
+static struct { char titulo[120], ano[8], poster[160], sinopse[420]; long tmdb;
+                int nota; } col[EX_COL_MAX];
 static int  nCol;
 // PRODUTORAS E REDES, para a fileira de logos da pagina de detalhe. No web sao
 // duas secoes ("Production", "Network"); aqui viram uma so lista — a rede vem
@@ -1136,29 +1140,64 @@ static void *buscar(void *arg) {
                "https://api.themoviedb.org/3", idCol, chave, desc_tmdb_idioma());
       corpo = rede_baixar(url, 15);
       if (corpo) {
-        struct { char t[120], a[8]; long id; } ach[EX_COL_MAX];
+        struct ColAch { char t[120], a[8], d[16], po[160], sin[420]; long id; int nota; }
+            ach[EX_COL_MAX];
+        char capa[160] = "", fundo[160] = "", sinC[600] = "", cam[96];
         int nc = 0;
         const char *p = js_array(corpo, NULL, "parts");
+        // Chaves da RAIZ: "poster_path" e "overview" tambem existem dentro de
+        // cada parte, e js_texto pegaria a da primeira parte.
+        if (js_texto_raiz(corpo, "poster_path", cam, sizeof cam) && cam[0] == '/')
+          snprintf(capa, sizeof capa, "https://image.tmdb.org/t/p/w342%s", cam);
+        if (js_texto_raiz(corpo, "backdrop_path", cam, sizeof cam) && cam[0] == '/')
+          snprintf(fundo, sizeof fundo, "https://image.tmdb.org/t/p/w780%s", cam);
+        js_texto_raiz(corpo, "overview", sinC, sizeof sinC);
         while (p && nc < EX_COL_MAX) {
           const char *f = js_fim(p);
-          char data[16] = "";
-          ach[nc].t[0] = ach[nc].a[0] = 0;
+          ach[nc].t[0] = ach[nc].a[0] = ach[nc].d[0] = 0;
+          ach[nc].po[0] = ach[nc].sin[0] = 0;
           js_texto(p, f, "title", ach[nc].t, sizeof ach[nc].t);
-          js_texto(p, f, "release_date", data, sizeof data);
-          if (strlen(data) >= 4) { memcpy(ach[nc].a, data, 4); ach[nc].a[4] = 0; }
+          js_texto(p, f, "release_date", ach[nc].d, sizeof ach[nc].d);
+          if (strlen(ach[nc].d) >= 4) { memcpy(ach[nc].a, ach[nc].d, 4); ach[nc].a[4] = 0; }
           ach[nc].id = (long)js_num(p, f, "id", 0.0);
+          ach[nc].nota = (int)(js_num(p, f, "vote_average", 0.0) * 10.0 + 0.5);
+          cam[0] = 0;
+          js_texto(p, f, "poster_path", cam, sizeof cam);
+          if (cam[0] == '/')
+            snprintf(ach[nc].po, sizeof ach[nc].po, "https://image.tmdb.org/t/p/w342%s", cam);
+          js_texto(p, f, "overview", ach[nc].sin, sizeof ach[nc].sin);
           if (ach[nc].t[0] && ach[nc].id > 0) nc++;
           p = js_prox(f);
         }
         free(corpo);
+        // ORDEM DA SAGA = data de lancamento. O TMDB devolve `parts` na ordem
+        // em que as partes foram cadastradas, que nem sempre e a cronologica;
+        // parte sem data (anunciada) vai para o fim. Insercao estavel: sao 12.
+        { int i2, j2;
+          for (i2 = 1; i2 < nc; i2++) {
+            struct ColAch v = ach[i2];
+            for (j2 = i2; j2 > 0; j2--) {
+              const char *da = ach[j2 - 1].d, *db = v.d;
+              int depois = (!da[0] && db[0]) || (da[0] && db[0] && strcmp(da, db) > 0);
+              if (!depois) break;
+              ach[j2] = ach[j2 - 1];
+            }
+            ach[j2] = v;
+          } }
         pthread_mutex_lock(&trava);
         if (!strcmp(id, idPedido)) {
           int k;
           snprintf(colNome, sizeof colNome, "%s", nome);
+          snprintf(colCapa, sizeof colCapa, "%s", capa);
+          snprintf(colFundo, sizeof colFundo, "%s", fundo);
+          snprintf(colSinopse, sizeof colSinopse, "%s", sinC);
           for (k = 0; k < nc; k++) {
             snprintf(col[k].titulo, sizeof col[k].titulo, "%s", ach[k].t);
             snprintf(col[k].ano, sizeof col[k].ano, "%s", ach[k].a);
+            snprintf(col[k].poster, sizeof col[k].poster, "%s", ach[k].po);
+            snprintf(col[k].sinopse, sizeof col[k].sinopse, "%s", ach[k].sin);
             col[k].tmdb = ach[k].id;
+            col[k].nota = ach[k].nota;
           }
           nCol = nc;
         }
@@ -1305,7 +1344,7 @@ static void *lacoParte(void *arg) {
 // de buscar — e o que um pedido que NAO VAI BUSCAR tambem tem de fazer.
 static void zerarPublicado(void) {
   notaTrakt = votosTrakt = nComent = nRel = nTemps = nCol = 0;
-  colNome[0] = 0;
+  colNome[0] = colCapa[0] = colFundo[0] = colSinopse[0] = 0;
   nTrailer = fichaDur = nEstudio = 0;
   fichaStatus[0] = fichaPaises[0] = fichaCert[0] = fichaLanc[0] = 0;
   fichaIdiomaOrig[0] = 0;
@@ -1777,6 +1816,16 @@ const char *extras_colecao_ano(int i) {
   return (i >= 0 && i < nCol) ? col[i].ano : "";
 }
 long extras_colecao_tmdb(int i) { return (i >= 0 && i < nCol) ? col[i].tmdb : 0; }
+const char *extras_colecao_capa(void) { return colCapa; }
+const char *extras_colecao_fundo(void) { return colFundo; }
+const char *extras_colecao_sinopse(void) { return colSinopse; }
+const char *extras_colecao_poster(int i) {
+  return (i >= 0 && i < nCol) ? col[i].poster : "";
+}
+const char *extras_colecao_sinopse_parte(int i) {
+  return (i >= 0 && i < nCol) ? col[i].sinopse : "";
+}
+int extras_colecao_nota(int i) { return (i >= 0 && i < nCol) ? col[i].nota : 0; }
 
 // PRODUTORAS/REDES — ver a declaracao de `estudio` la em cima.
 int extras_n_estudios(void) { return nEstudio; }
