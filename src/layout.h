@@ -650,12 +650,13 @@ extern float nv_cor_fundo_viva[3];   // corviva.c
 // 1,1 a 3,2 s; o master inteiro levava 10,5 s. 8 s cobre o pior caso bom com
 // folga para a rede de uma TV sem esperar para sempre.
 #define NV_TRAILER_PREPARA_MS 8000
-// No destaque da home a Apple ganha uma janela curta antes do fallback do
-// YouTube. Esperar quatro segundos fazia o hero parecer parado na Samsung;
-// a janela total abaixo continua finita para que a rotacao nunca dependa da
-// rede.
-#define NV_TRAILER_HERO_ESPERA_MS 1200
-#define NV_TRAILER_HERO_MAX_ESPERA_MS 3200
+// No destaque da home a ESPERA antes de abrir e ajuste ("Espera do trailer no
+// destaque", ajustes_trailer_hero_espera_ms: 0,2 a 10 s, padrao 2,2 s; era
+// 1200 fixo). Vencida ela, a Apple ainda ganha esta janela curta antes do
+// fallback do YouTube, contada a partir da espera: esperar quatro segundos
+// fazia o hero parecer parado na Samsung, e a janela total continua finita
+// para que a rotacao nunca dependa da rede.
+#define NV_TRAILER_HERO_JANELA_MS 2000
 // Depois de criar o elemento, seguramos o card enquanto ele prepara. Se a
 // rede/browser nao produzir `playing` nesse prazo, a arte volta e o carrossel
 // pode seguir para o proximo titulo. 5000 e nao 3500: no emulador Tizen 10 a
@@ -663,10 +664,11 @@ extern float nv_cor_fundo_viva[3];   // corviva.c
 // 0,7 s depois (+4,0 s do trailer_abrir) — com 3,5 s o hero desistia da Apple
 // que ja estava chegando e caia no YouTube, que na TV falha (#82/#86).
 #define NV_TRAILER_HERO_PREPARA_MS 5000
-// Cada fonte recebe seu proprio prazo de preparacao. O teto e explicito:
-// resolucao (3,2 s) + Apple (5 s) + YouTube (5 s) = 13,2 s, mesmo que a
-// Apple falhe no ultimo instante da janela e o fallback precise preparar.
-#define NV_TRAILER_HERO_MAX_TOTAL_ESPERA_MS (NV_TRAILER_HERO_MAX_ESPERA_MS + 2 * NV_TRAILER_HERO_PREPARA_MS)
+// Cada fonte recebe seu proprio prazo de preparacao. O teto e explicito, alem
+// da espera do ajuste: resolucao (2 s) + Apple (5 s) + YouTube (5 s) = 12 s,
+// mesmo que a Apple falhe no ultimo instante da janela e o fallback precise
+// preparar.
+#define NV_TRAILER_HERO_MAX_TOTAL_ESPERA_MS (NV_TRAILER_HERO_JANELA_MS + 2 * NV_TRAILER_HERO_PREPARA_MS)
 // A ampliacao do trailer virou ajuste ("Proporção do trailer", ajustes_trailer_zoom).
 // Frequencia (rad/s) da mola de 2a ordem que rola as fileiras da home. Vale o
 // k da CAUDA medida no deslize da referencia (~12,5 /s); 11,5 e o valor que

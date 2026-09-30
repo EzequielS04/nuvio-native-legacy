@@ -25,14 +25,18 @@ const number = (name) => {
   return Number(m[1]);
 };
 
-const appleWait = number('NV_TRAILER_HERO_ESPERA_MS');
-const maxWait = number('NV_TRAILER_HERO_MAX_ESPERA_MS');
+// A espera antes de abrir e ajuste (0,2 a 10 s); a janela da Apple conta a
+// partir dela e e o que precisa ser curto e finito.
+const appleWindow = number('NV_TRAILER_HERO_JANELA_MS');
 const prepare = number('NV_TRAILER_HERO_PREPARA_MS');
-check('janela Apple curta e finita', appleWait > 0 && appleWait <= 1500 && maxWait > appleWait);
+check('janela Apple curta e finita', appleWindow > 0 && appleWindow <= 2500);
+check('espera do destaque vem do ajuste',
+  /heroTrailerEspera\(void\) \{ return ajustes_trailer_hero_espera_ms\(\); \}/.test(home) &&
+  /heroTrailerEspera\(\) \+ NV_TRAILER_HERO_JANELA_MS/.test(home));
 check('preparacao tem prazo finito', prepare > 0 && prepare <= 5000);
 check('teto total explicito para duas fontes',
   layout.includes('NV_TRAILER_HERO_MAX_TOTAL_ESPERA_MS') &&
-  layout.includes('NV_TRAILER_HERO_MAX_ESPERA_MS + 2 * NV_TRAILER_HERO_PREPARA_MS'));
+  layout.includes('NV_TRAILER_HERO_JANELA_MS + 2 * NV_TRAILER_HERO_PREPARA_MS'));
 
 // Extract the JavaScript between the real EM_JS markers. The delimiters are
 // intentionally explicit so this test fails if the bridge is moved or the
@@ -246,7 +250,7 @@ fechar();
 // deliberately small; the event behavior above is the executable evidence.
 check('hero reseta fade ao trocar ou desligar', /heroTrailerFade = 0\.0f/.test(home) && /!ajustes_trailer_hero\(\)/.test(home));
 check('hero atualiza fade mesmo aguardando fonte', home.includes('goto trailer_hero_fim;') && home.includes('trailer_hero_fim:'));
-check('preparo respeita orçamento total', /heroTrailerPrazoPreparacao/.test(home) && /NV_TRAILER_HERO_MAX_ESPERA_MS/.test(home));
+check('preparo respeita orçamento total', /heroTrailerPrazoPreparacao/.test(home) && /heroTrailerMaxEspera\(\)/.test(home));
 check('hero pede retry idempotente no mesmo titulo', /if \(!heroTrailerTentado\)[\s\S]*extras_hero_trailer_pedir/.test(home));
 check('worker nao usa metadata ampla', /\/videos\?api_key=/.test(extras) && !/lacoHeroTrailer[\s\S]*extras_pedir\(/.test(extras));
 check('retry vazio tem cooldown e nao bloqueio permanente', extras.includes('HERO_TRAILER_RETRY_S') && !/heroTrailerTentativas >= 2/.test(extras));
@@ -272,7 +276,7 @@ check('hero loga a desistencia de cada fonte', /\[trailer\] hero: sem playing em
 check('hero nao abre a proxima fonte antes de a Apple responder',
   /c\.appleRespondeu = trailerapple_respondeu\(ci->imdb\) \|\| venceu;/.test(home) &&
   /if \(d == TRF_ESPERA && !venceu\) goto trailer_hero_fim;/.test(home) &&
-  /venceu = decorrido >= NV_TRAILER_HERO_MAX_ESPERA_MS/.test(home));
+  /venceu = decorrido >= heroTrailerMaxEspera\(\)/.test(home));
 check('hero e detalhe escolhem pela regra do ajuste "Fonte do trailer"',
   // O destaque usa a variante _destaque (no .tpk o IMDb vem antes, para o
   // trailer continuar com som no detalhe; na LG e no .wgt e a mesma ordem) e o

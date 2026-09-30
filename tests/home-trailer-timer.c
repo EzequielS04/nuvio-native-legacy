@@ -15,6 +15,10 @@
 #define static
 #include "../src/home.c"
 #undef static
+// A espera virou ajuste (ajustes_trailer_hero_espera_ms); o stub devolve o
+// padrao de fabrica, 2,2 s, e a janela da Apple conta a partir dela.
+#define NV_TRAILER_HERO_ESPERA_MS 2200
+#define NV_TRAILER_HERO_MAX_ESPERA_MS (NV_TRAILER_HERO_ESPERA_MS + NV_TRAILER_HERO_JANELA_MS)
 
 static CatItem item;
 static int trailerSetting = 1;
@@ -38,6 +42,9 @@ const CatItem *cat_item(int i) { return i == 0 ? &item : NULL; }
 
 int ajustes_hero_ligado(void) { return 1; }
 int ajustes_trailer_hero(void) { return trailerSetting; }
+static int somSetting;
+int ajustes_trailer_hero_som(void) { return somSetting; }
+Uint32 ajustes_trailer_hero_espera_ms(void) { return NV_TRAILER_HERO_ESPERA_MS; }
 int ajustes_tmdb_trailers(void) { return 1; }
 int ajustes_home_layout(void) { return 0; }
 int ajustes_trailer_cartaz(void) { return 0; }
@@ -136,6 +143,7 @@ static void resetState(const char *id) {
   trailerSetting = 1;
   fonteSetting = TRF_AUTO;
   lastSom = -1;
+  somSetting = 0;
   appleReady = 0;
   appleOpenFails = 0;
   youtubeReady = 0;
@@ -346,6 +354,25 @@ int main(void) {
   home_trailer_passo(1, 0.016f, start);
   home_trailer_passo(1, 0.016f, start + NV_TRAILER_HERO_ESPERA_MS);
   rc |= check("Automatico: Apple primeiro", openedCount == 1 && strstr(lastSource, "apple"));
+
+  // Espera do ajuste: um quadro antes dela nada abre; nela, abre.
+  resetState("tt0000014");
+  appleReady = 1;
+  home_trailer_passo(1, 0.016f, start);
+  home_trailer_passo(1, 0.016f, start + NV_TRAILER_HERO_ESPERA_MS - 1);
+  rc |= check("antes da espera do ajuste nada abre", openedCount == 0 &&
+              heroTrailerSegurando(start + NV_TRAILER_HERO_ESPERA_MS - 1));
+  home_trailer_passo(1, 0.016f, start + NV_TRAILER_HERO_ESPERA_MS);
+  rc |= check("na espera do ajuste abre", openedCount == 1);
+
+  // "Som do trailer no destaque" ligado: o destaque pede som (quem tira o
+  // som na Samsung e trailer_abrir, fora deste stub).
+  resetState("tt0000015");
+  somSetting = 1;
+  appleReady = 1;
+  home_trailer_passo(1, 0.016f, start);
+  home_trailer_passo(1, 0.016f, start + NV_TRAILER_HERO_ESPERA_MS);
+  rc |= check("ajuste de som ligado: destaque pede som", openedCount == 1 && lastSom == 1);
 
   puts(rc ? "home-trailer-timer: FALHOU" : "home-trailer-timer: tudo ok");
   return rc ? 1 : 0;

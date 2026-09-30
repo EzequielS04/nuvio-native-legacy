@@ -214,7 +214,9 @@ int   ajustes_envio_auto(void);
 // Forca da vinheta do fundo do titulo, 0..1 (1 = a medida do web).
 float ajustes_detalhe_veu(void);
 int   ajustes_trailer_auto(void);      // trailer mudo no fundo da pagina de titulo
-int   ajustes_trailer_hero(void);      // trailer mudo no destaque da home
+int   ajustes_trailer_hero(void);      // trailer no destaque da home
+int   ajustes_trailer_hero_som(void);  // o do destaque com som (na Samsung .wgt sempre mudo)
+Uint32 ajustes_trailer_hero_espera_ms(void); // repouso no titulo antes do trailer do destaque
 int   ajustes_trailer_qualidade(void); // teto em linhas (1080/720/480); 0 = a maior
 int   ajustes_trailer_fonte(void);     // TRF_* de trailerfonte.h; 0 = automatico
 float ajustes_trailer_zoom(void);      // ampliacao do trailer (1.0 = quadro inteiro)
