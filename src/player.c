@@ -372,13 +372,42 @@ static const CatItem *item(void) {
 }
 // O indice CORRENTE do titulo aberto: re-resolvido pelo IMDb, porque o que foi
 // guardado em `idx` pode ter sido deslocado por uma republicacao. Cai em `idx`
-// quando o titulo nao esta mais no catalogo (ou nao tem IMDb). #151: fica em
-// `idx` enquanto ele for o mesmo titulo — a primeira copia pelo IMDb costuma
-// ser o card do CW, que nao tem a lista de episodios.
+// so sem IMDb (ou com o player fechado). #151: fica na copia de sempre
+// enquanto ela for o mesmo titulo — a primeira copia pelo IMDb costuma ser o
+// card do CW, que nao tem a lista de episodios.
+//
+// #190 (Owlphibia29, "Attack on Titan trocado por Knights of Guinevere na tela
+// de pausa e no menu de episodios"): o fio de "Continuar assistindo"
+// (cat_trocar_continuar) refaz a fileira COM O PLAYER ABERTO — o log dela
+// mostra "continuar assistindo refeita" logo depois do loadCompleted — e isso
+// reordena os primeiros itens e desliza o resto. A tela de pausa, a folha de
+// episodios e o cartao A seguir recebiam o `idx` cru e liam o vizinho.
+//
+// `idxVivo` guarda a ultima resolucao, para a busca partir dela e nao do
+// indice da abertura. E quando o titulo SAIU do catalogo (a fileira de onde
+// ele veio nao voltou), a copia da abertura entra de novo por cat_acrescentar,
+// a mesma saida de detail.c (revalidarIdx). Devolver `idx` nesse caso era
+// devolver outro titulo.
+static int idxVivo = -1;
 static int idxAtual(void) {
   if (temFixo && itemFixo.imdb[0]) {
-    int i = cat_indice_titulo(itemFixo.imdb, idx);
-    if (i >= 0) return i;
+    int i = cat_indice_titulo(itemFixo.imdb, idxVivo >= 0 ? idxVivo : idx);
+    if (i < 0 && (aberto || mini) && !canalSessao && cat_n() > 0) {
+      i = cat_acrescentar(&itemFixo);
+      if (i >= 0) {
+        printf("[player] %s saiu do catalogo com o player aberto: copia da abertura de volta em %d\n",
+               itemFixo.imdb, i);
+        fflush(stdout);
+      }
+    }
+    if (i >= 0) {
+      if (idxVivo >= 0 && i != idxVivo) {
+        printf("[player] catalogo remontou: %s saiu de %d para %d\n", itemFixo.imdb, idxVivo, i);
+        fflush(stdout);
+      }
+      idxVivo = i;
+      return i;
+    }
   }
   return idx;
 }
@@ -1051,6 +1080,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   int ficaMini = querMini; querMini = 0;
   int n = cat_n(); if (n < 1) n = 1;
   idx = ((indiceCatalogo % n) + n) % n;
+  idxVivo = idx;
   aberto = 1; saindo = 0; pediuSair = 0; barraFoco = 0;
   // Titulo novo: um avanco em curso do anterior mandaria a posicao velha ao
   // pipeline novo assim que o silencio vencesse.
@@ -2108,8 +2138,8 @@ void player_evento(const SDL_Event *e) {
         // Canal nao tem episodio nem "relacionados": o mesmo lugar vira a
         // porta do guia, que e a lista de escolha dele.
         if (ehCanal()) pedGuia = 1;
-        else if (epT > 0) episodios_abrir(idx, epT, epE);
-        else posplay_abrir_relacionados(idx);
+        else if (epT > 0) episodios_abrir(idxAtual(), epT, epE);
+        else posplay_abrir_relacionados(idxAtual());
         break;
       default:          pedFaixas = 1;     break;   // 1 = coluna do audio
     }
@@ -2350,8 +2380,16 @@ void player_atualizar(float dt, Uint32 agora) {
   // pede a lista ele mesmo, UMA vez por titulo, e so depois que qualquer
   // carregamento em curso terminou vazio. desc_episodios dispara um fio e volta
   // na hora; o quadro nao espera nada.
+  //
+  // #190: "uma vez por titulo" e por CATALOGO. Toda troca de bloco (a refacao
+  // de "Continuar assistindo" roda com o player aberto) zera as faixas de
+  // episodio de todos os titulos, e com a marca so por IMDb a lista que o
+  // player ja tinha pedido nao voltava mais: folha de episodios vazia e sem
+  // A seguir ate sair do player.
   { static char epsPedidoDe[64];
+    static unsigned epsPedidoRev;
     const CatItem *ci = item();
+    if (epsPedidoRev != cat_revisao()) { epsPedidoRev = cat_revisao(); epsPedidoDe[0] = 0; }
     if (!ehCanal() && epT > 0 && ci && ci->imdb[0] && strcmp(epsPedidoDe, ci->imdb)) {
       int ix = idxAtual();
       if (cat_n_episodios(ix) > 0) {
@@ -2374,7 +2412,7 @@ void player_atualizar(float dt, Uint32 agora) {
     // 90% em ~1h42 de exibicao e abriria o painel de relacionados no meio da
     // programacao.
     if (!ehCanal())
-      posplay_atualizar(dt, agora, posSeg, duracaoSeg, eSerie, idx,
+      posplay_atualizar(dt, agora, posSeg, duracaoSeg, eSerie, idxAtual(),
                         eSerie && ofertaProximo()); }
   // Com o painel no ar os controles nao somem: eles sao a saida do dono.
   if (posplay_visivel()) ultimoInput = agora;
@@ -2406,7 +2444,7 @@ void player_atualizar(float dt, Uint32 agora) {
                    !player_carregando() &&
                    !episodios_aberto() && !stream_folha_aberta() &&
                    !faixas_aberta() && !ofertaProximo() && !posplay_visivel(),
-                   idx, linhaEp);
+                   idxAtual(), item() ? item()->imdb : "", linhaEp);
   // Com o painel de pe os controles SAEM de cena. Este ponto ja foi das duas
   // formas: com os controles visiveis o dono achou pior e pediu de volta o
   // comportamento original, com o painel ocupando o rodape sozinho, so que

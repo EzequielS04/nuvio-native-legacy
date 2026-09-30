@@ -60,10 +60,12 @@ enum { PAUSAO_LIVRE = 0,     // nao consumiu: trate a tecla normalmente
 
 // Uma vez por quadro, ANTES do desenho. `podeSubir` e a traducao de
 // canShowPauseOverlay (:7299) e quem a monta e o player, que e o unico que sabe
-// quais folhas estao abertas. `idx` e o item do catalogo em reproducao e
-// `linhaEp` a linha "T1 · E4 · Nome" que o player ja monta (vazia num filme).
+// quais folhas estao abertas. `idx` e o item do catalogo em reproducao, `imdb`
+// o id DELE (#190: o desenho confere que o indice ainda e aquele titulo, porque
+// o catalogo pode ser trocado entre este quadro e o desenho) e `linhaEp` a
+// linha "T1 · E4 · Nome" que o player ja monta (vazia num filme).
 void pausao_atualizar(float dt, Uint32 agora, int podeSubir, int idx,
-                      const char *linhaEp);
+                      const char *imdb, const char *linhaEp);
 
 // 1 do quadro em que o painel aparece ate o quadro em que some por completo.
 int  pausao_visivel(void);
@@ -97,5 +99,8 @@ float pausao_selo(float x, float y, int direita, float a);
 // Fim da reproducao: zera o relogio e o painel. Sem isto o proximo filme
 // abriria com o cronometro do anterior ja meio andado.
 void pausao_fechar(void);
+// O item que o painel desenharia agora, ja conferido pelo titulo (-1 = nenhum).
+// Para teste (#190).
+int  pausao_indice(void);
 
 #endif

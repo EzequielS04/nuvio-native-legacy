@@ -61,6 +61,10 @@ static void corFocoPosplay(float *r, float *g, float *b) {
 }
 
 static int    visivel, serie, idx = -1, foco;
+// O titulo de `idx` (#190). O catalogo e refeito com o player aberto e a mesma
+// posicao passa a ser de outro titulo: sem o id, o cartao A seguir mostrava o
+// episodio de outra serie. Ver fixarTitulo.
+static char   idTitulo[64];
 // DURACAO ESTAVEL. O player passa o que tiver: a duracao do metadado, a
 // reserva de 114 min e, assim que o pipeline responde, a dele — e no primeiro
 // instante o pipeline pode informar uma duracao pequena e provisoria (o
@@ -124,9 +128,20 @@ int posplay_pediu_titulo(void) { int v = pedTitulo; pedTitulo = -1; return v; }
 // grudar: sem uma porta de volta, quem apertasse Voltar uma vez nao veria mais
 // os relacionados naquele filme. Limpa a dispensa de proposito — o pedido
 // explicito vale mais que a recusa anterior.
+// O indice que o player manda e o CORRENTE (idxAtual); guarda-se junto o id,
+// para o desenho conferir (cat_indice_vivo) se uma troca de bloco caiu entre
+// a atualizacao e ele.
+static void fixarTitulo(int idxCatalogo) {
+  const CatItem *ci = cat_item(idxCatalogo);
+  idx = idxCatalogo;
+  snprintf(idTitulo, sizeof idTitulo, "%s", ci ? ci->imdb : "");
+}
+
+int posplay_indice(void) { return cat_indice_vivo(idx, idTitulo); }
+
 int posplay_abrir_relacionados(int idxCatalogo) {
   if (extras_n_relacionados() <= 0) return 0;
-  idx = idxCatalogo;
+  fixarTitulo(idxCatalogo);
   serie = 0;
   foco = 0;
   fecharEm = 0;
@@ -220,6 +235,9 @@ void posplay_atualizar(float dt, Uint32 agora, double posSeg, double durSeg,
   double creditosSeg = video_creditos();
   if (creditosSeg <= 1.0) creditosSeg = intro_creditos_seg();
   anim = anim_mola(anim, visivel ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
+  // A CADA QUADRO, e nao so na abertura do painel (#190): com o cartao no ar o
+  // `idx` guardado envelhecia junto com o catalogo.
+  fixarTitulo(idxCatalogo);
   if (durSeg - durVista > 2.0 || durVista - durSeg > 2.0) {
     durVista = durSeg;
     durEstavel = 0.0;
@@ -256,7 +274,6 @@ void posplay_atualizar(float dt, Uint32 agora, double posSeg, double durSeg,
              credAceito(durSeg, creditosSeg) ? "marcador de creditos"
              : creditosSeg > 1.0 ? "estimativa, marcador recusado"
              : "estimativa, sem marcador");
-    idx = idxCatalogo;
     serie = ehSerie;
     foco = 0;
     proxT = proxE = 0; proxNome[0] = 0;
@@ -381,6 +398,9 @@ int posplay_desfocar_thumb(int idxCatalogo, int temporada, int episodio) {
 void posplay_desenhar(Uint32 agora, float baseY) {
   float a = anim, x = NV_DETP_X;
   if (a < 0.01f) return;
+  { int i = cat_indice_vivo(idx, idTitulo);
+    if (i < 0) return;
+    idx = i; }
 
   if (serie) {
     // CARTAO DE EPISODIO, e nao a caixa com texto solto da primeira versao. O

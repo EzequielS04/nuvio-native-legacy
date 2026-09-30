@@ -49,6 +49,8 @@ int  posplay_desfocar_thumb(int idxCatalogo, int temporada, int episodio);
 void posplay_desenhar(Uint32 agora, float baseY);
 // Fecha e zera. Chamado quando o player abre outra coisa.
 void posplay_fechar(void);
+// O titulo do cartao, ja conferido pelo id (-1 = nenhum). Para teste (#190).
+int  posplay_indice(void);
 
 // Pedidos para o roteador, consumidos uma vez:
 // proximo episodio (temporada/episodio) ou titulo relacionado (indice).
