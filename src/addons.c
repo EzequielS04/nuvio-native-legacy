@@ -454,15 +454,19 @@ const Legenda *addons_legenda(int i) {
 // legenda de outro idioma era descartada sem aviso — quem instala o pacote e
 // fala espanhol abria o player e nao achava legenda nenhuma.
 //
-// AGORA: os grupos vem da preferencia (Ajustes desta TV, senao a conta). SEM
-// preferencia nenhuma, ha UM grupo vazio, e grupo vazio casa com tudo: a lista
-// sai sem filtro. Ver linguas.h.
-static int gruposIdioma(const char *g[2]) {
+// AGORA: os grupos vem da preferencia (Ajustes desta TV, senao a conta) e o
+// INGLES entra sempre por ultimo. Sem preferencia a lista era sem filtro, e
+// doze resultados de idiomas aleatorios enchiam a folha; com preferencia o
+// ingles sumia — e ele e o que existe para quase todo titulo, o plano B de
+// quem nao acha o proprio idioma. O texto do ajuste diz isso (ajustes.c).
+static int gruposIdioma(const char *g[3]) {
   const char *a = ling_legenda(), *b = ling_legenda2();
   int n = 0;
   if (a[0] && strcasecmp(a, "none")) g[n++] = a;
-  if (b[0] && strcasecmp(b, "none") && !ling_casa(b, a)) g[n++] = b;
-  if (!n) { g[n++] = ""; }
+  if (b[0] && strcasecmp(b, "none") && !(n && ling_casa(b, a))) g[n++] = b;
+  { int i, tem = 0;
+    for (i = 0; i < n; i++) if (ling_casa("en", g[i])) tem = 1;
+    if (!tem) g[n++] = "en"; }
   return n;
 }
 
@@ -539,7 +543,7 @@ static void *buscarLegendas(void *u) {
       if (!corpo) continue;
       p = js_array(corpo, NULL, "subtitles");
       {
-        const char *grupos[2];
+        const char *grupos[3];
         int nGrupos = gruposIdioma(grupos), gi;
         // Uma passada por grupo garante a ordem preferido -> alternativo e
         // evita que doze resultados do primeiro idioma consumam a lista inteira
@@ -547,7 +551,7 @@ static void *buscarLegendas(void *u) {
         // D-pad — e vira a lista toda quando ha um grupo so.
         for (gi = 0; gi < nGrupos; gi++) {
           const char *grupo = grupos[gi];
-          int teto = nGrupos > 1 ? LEG_MAX / 2 : LEG_MAX;
+          int teto = LEG_MAX / nGrupos;
           const char *q = p;
           int noGrupo = 0, j;
           for (j = 0; j < nAchadas; j++)

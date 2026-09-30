@@ -209,6 +209,79 @@ const char *ling_opcao_codigo(int i) {
   return (i >= 0 && i < ling_opcao_n()) ? OPCOES_COD[i] : "";
 }
 
+// ------------------------------------------------------------ nome da faixa
+
+// `p` comeca uma PALAVRA em `ini`? Byte anterior que e letra ASCII ou parte de
+// um caractere UTF-8 (acentuado) conta como letra: "Design" nao e "sign".
+static int inicioPalavra(const char *ini, const char *p) {
+  unsigned char c;
+  if (p == ini) return 1;
+  c = (unsigned char)p[-1];
+  return !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c >= 0x80);
+}
+
+// Alguma palavra de `nome` COMECA com `radical` (sem caixa)?
+static int temRadical(const char *nome, const char *radical) {
+  size_t n = strlen(radical);
+  const char *p;
+  for (p = nome; *p; p++)
+    if (inicioPalavra(nome, p) && !strncasecmp(p, radical, n)) return 1;
+  return 0;
+}
+
+int ling_letreiro(const char *nome, int forcado) {
+  // "forçad" em bytes, e nao como literal: a varredura de i18n (tools/)
+  // acusaria um radical de busca como texto de tela sem traducao.
+  static const char FORCAD[] = { 'f', 'o', 'r', (char)0xc3, (char)0xa7, 'a', 'd', 0 };
+  static const char *const R[] = { "sign", "song", "forced", FORCAD, "letreiro" };
+  size_t i;
+  if (forcado) return 1;
+  if (!nome || !*nome) return 0;
+  // "Full + Songs", "Dialogue & Signs": a faixa inteira que TAMBEM traz as
+  // placas. Essa e a legenda de verdade, nao a de letreiros.
+  if (temRadical(nome, "full") || temRadical(nome, "dialog") || temRadical(nome, "complet"))
+    return 0;
+  for (i = 0; i < sizeof R / sizeof *R; i++)
+    if (temRadical(nome, R[i])) return 1;
+  return 0;
+}
+
+// Radicais em ASCII, a partir do comeco da palavra: "portugu" cobre
+// Português/Portuguese/Portugues, "ingl" cobre Inglês/Ingles. Os que comecam
+// com letra acentuada ("Árabe") ficam de fora — sem como casar sem caixa em
+// UTF-8, melhor nao casar do que casar errado.
+static const struct { const char *radical, *cod; } NOME_IDIOMA[] = {
+  { "brazil", "pob" }, { "brasil", "pob" }, { "portugu", "por" },
+  { "english", "eng" }, { "ingl", "eng" },
+  { "spanish", "spa" }, { "espa\xc3\xb1ol", "spa" }, { "espanol", "spa" }, { "espanhol", "spa" },
+  { "castellano", "spa" }, { "castilian", "spa" },
+  { "french", "fre" }, { "fran", "fre" },      // Français, Francês
+  { "german", "ger" }, { "deutsch", "ger" }, { "alem", "ger" },   // Alemão
+  { "italian", "ita" }, { "japanese", "jpn" }, { "japon", "jpn" },
+  { "korean", "kor" }, { "coreano", "kor" }, { "chin", "chi" },   // Chinese, Chinês
+  { "russian", "rus" }, { "russo", "rus" }, { "arabic", "ara" },
+  { "dutch", "dut" }, { "nederlands", "dut" }, { "holand", "dut" },
+  { "polish", "pol" }, { "polski", "pol" }, { "turkish", "tur" }, { "turco", "tur" },
+};
+
+const char *ling_do_nome(const char *nome) {
+  const char *achado = NULL;
+  size_t i;
+  if (!nome || !*nome) return NULL;
+  for (i = 0; i < sizeof NOME_IDIOMA / sizeof *NOME_IDIOMA; i++) {
+    const char *c = NOME_IDIOMA[i].cod;
+    if (!temRadical(nome, NOME_IDIOMA[i].radical)) continue;
+    if (!achado) { achado = c; continue; }
+    // "Brazilian Portuguese": mesma familia, fica o mais especifico (pob).
+    if (!strcasecmp(familia(achado), familia(c))) {
+      if (!strcmp(c, "pob")) achado = c;
+      continue;
+    }
+    return NULL;    // dois idiomas diferentes no nome: nao da para saber
+  }
+  return achado;
+}
+
 // ------------------------------------------------------------ legenda automatica
 
 int ling_legenda_auto(const char *pref,

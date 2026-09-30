@@ -1527,20 +1527,43 @@ static void *lerMkv(void *arg) {
       // TV nao trouxe idioma.
       snprintf(f->codec, sizeof f->codec, "%s", m->codec);
       f->ordinalMkv = ordinal;
-      if (jaTemIdioma) continue;
-      if (m->idioma[0] && strcmp(m->idioma, "und")) {
-        snprintf(f->idioma, sizeof f->idioma, "%s", m->idioma);
-        casou++;
+      { const char *peloNome = ling_do_nome(m->nome);
+        int letreiro = ling_letreiro(m->nome, m->forcado), corrigiu = 0;
+        char id[8];
+        snprintf(id, sizeof id, "%s", jaTemIdioma ? f->idioma
+                 : (m->idioma[0] && strcmp(m->idioma, "und")) ? m->idioma : "");
+        // O NOME DIZ OUTRO IDIOMA: "Português" etiquetado eng e comum em
+        // release remontado, e quem escolhe pela lista le o nome. So quando o
+        // nome cita UM idioma com todas as letras (ling_do_nome); fora disso
+        // fica a etiqueta do arquivo.
+        if (peloNome && (!id[0] || !ling_casa(peloNome, id))) {
+          printf("[mkv]   tv[%d]: nome \"%s\" diz %s, etiqueta diz %s: vale o nome\n", i,
+                 m->nome, peloNome, id[0] ? id : "-");
+          snprintf(id, sizeof id, "%s", peloNome);
+          corrigiu = 1;
+        }
+        f->letreiro = letreiro;
+        if (jaTemIdioma && !corrigiu && !letreiro) continue;
+        if (!jaTemIdioma && id[0]) casou++;
+        snprintf(f->idioma, sizeof f->idioma, "%s", id);
+        // LETREIROS: "Português  ·  Letreiros", seja o nome "Signs & Songs",
+        // "Forced" ou a flag do arquivo — a pessoa precisa saber que essa nao
+        // traduz o dialogo.
+        if (letreiro)
+          snprintf(f->rotulo, sizeof f->rotulo, "%s%s%s",
+                   f->idioma[0] ? i18n(ling_nome(f->idioma)) : "",
+                   f->idioma[0] ? "  \xc2\xb7  " : "", i18n("Letreiros"));
+        // O NOME da faixa ("SDH", "Full") e o que separa duas legendas do
+        // MESMO idioma. Sem ele o dono ve "Portugues" tres vezes e escolhe no
+        // escuro — e essa e justamente a lista que ele reclamou. Nome que e so
+        // o idioma ("Português", uma palavra) nao repete o que ja esta ali.
+        else if (m->nome[0] && !(peloNome && !strchr(m->nome, ' ')))
+          snprintf(f->rotulo, sizeof f->rotulo, "%s%s%s",
+                   f->idioma[0] ? i18n(ling_nome(f->idioma)) : "",
+                   f->idioma[0] ? "  \xc2\xb7  " : "", m->nome);
+        else if (f->idioma[0])
+          snprintf(f->rotulo, sizeof f->rotulo, "%s", i18n(ling_nome(f->idioma)));
       }
-      // O NOME da faixa ("Forced", "SDH", "Full") e o que separa duas legendas
-      // do MESMO idioma. Sem ele o dono ve "Portugues" tres vezes e escolhe no
-      // escuro — e essa e justamente a lista que ele reclamou.
-      if (m->nome[0])
-        snprintf(f->rotulo, sizeof f->rotulo, "%s%s%s",
-                 f->idioma[0] ? i18n(ling_nome(f->idioma)) : "",
-                 f->idioma[0] ? "  \xc2\xb7  " : "", m->nome);
-      else if (f->idioma[0])
-        snprintf(f->rotulo, sizeof f->rotulo, "%s", i18n(ling_nome(f->idioma)));
     }
     fflush(stdout); }
   { char m[64];

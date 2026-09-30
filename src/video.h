@@ -169,6 +169,9 @@ typedef struct {
   // cabecalho do MKV; vazio fora de MKV. A folha de faixas marca a legenda
   // ASS com isto (#92): e a faixa que o pipeline da TV desenha mal.
   char codec[24];
+  // Faixa so de LETREIROS ("Signs", "Songs", "Signs & Songs", FlagForced): nao
+  // traduz o dialogo. A folha rotula como tal e lista por ultimo.
+  int  letreiro;
 } VideoFaixa;
 
 int  video_n_audio(void);
