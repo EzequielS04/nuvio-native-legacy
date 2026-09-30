@@ -1235,7 +1235,18 @@ int main(int argc, char **argv) {
         unsigned long long m = 0; int n;
         if (fo) { while (fscanf(fo, "%d", &n) == 1) if (n >= 0 && n < GFX_NMODOS) m |= 1ull << n; fclose(fo); }
         if (m != gfx_modos_desligados) { printf("[gpu-modos] desligados=%llx\n", m); gfx_modos_desligados = m; }
-        if (fo || getenv("NUVIO_FILL_MODOS")) {
+        // NO CAMPO, SEM ARQUIVO: interface lenta (FPS < 50 com mais de 9
+        // texturas na tela) solta a mesma linha, no maximo uma vez a cada 30 s,
+        // com layout, tema e vidro. Registros 10063-10235 (LG webOS 5): 60 fps
+        // na 1.5.4 e 41 na 1.6.0 com a mesma configuracao, e o log nao dizia
+        // que desenho pesava.
+        static Uint32 ultModos;
+        double fpsAgora = quadros * 1000.0 / (double)(agora - ultRelato + 1);
+        int lenta = fpsAgora < 50.0 && quentes >= 10 && (Uint32)(agora - ultModos) >= 30000u;
+        if (lenta) { ultModos = agora;
+          printf("[gpu-modos] lento: fps=%.1f layout=%d cor-viva=%d vidro=%d\n",
+                 fpsAgora, ajustes_home_layout(), ajustes_cor_viva(), ajustes_vidro()); }
+        if (fo || lenta || getenv("NUVIO_FILL_MODOS")) {
           int k; printf("[gpu-modos] fill:");
           for (k = 0; k < GFX_NMODOS; k++) if (gfx_fill_modo_ult[k] > 0.02) printf(" %d=%.2f", k, gfx_fill_modo_ult[k]);
           printf("\n");
