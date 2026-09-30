@@ -119,7 +119,7 @@ static void heroReiniciar(void);
 #define FR_COL_W    1040.0f
 #define FR_COL_GAP    96.0f
 
-#define N_SECOES    15
+#define N_SECOES    16
 #define N_ELENCO    6
 
 static HomeItem item;
@@ -152,6 +152,8 @@ static int  pedAbrir = -1;
 // Foco DENTRO da aba "Mais como este", que e uma lista vertical propria e nao
 // uma das fileiras horizontais do focus.c.
 static int  relFoco;
+// Foco DENTRO da secao "Coleção" do filme, lista vertical como a aba da serie.
+static int  colFoco;
 // Temporada escolhida no painel de notas por episodio (indice em extras).
 static int  ratTemp;
 // 1 depois que ratTemp foi conciliado com a temporada da PAGINA usando a lista
@@ -405,7 +407,10 @@ typedef enum { SEC_TEMPORADAS, SEC_EPISODIOS, SEC_ABAS_INFO, SEC_ELENCO,
                // e o UNICO lugar em que as notas aparecem alem da linha do
                // titulo.
                SEC_NOTAS, SEC_NOTAS_EP,
-               SEC_TRAILERS, SEC_RELACIONADOS, SEC_COMENTARIOS,
+               SEC_TRAILERS, SEC_RELACIONADOS,
+               // COLECAO do filme (#194): logo abaixo das recomendacoes, as
+               // duas respondem "o que ver depois deste".
+               SEC_COLECAO, SEC_COMENTARIOS,
                SEC_ESTUDIOS, SEC_FRASES, SEC_DETALHES } TipoSecao;
 // Definida adiante, junto do resto das consultas ao catalogo; declarada aqui
 // porque recalcularLayout, cabecalhoDe e nAvaliaveis, todas acima dela,
@@ -511,6 +516,7 @@ static const char *cabecalhoDe(int r) {
     case SEC_ELENCO:   return "Elenco";
     case SEC_TRAILERS:     return "Trailers";
     case SEC_RELACIONADOS: return "Recomendações";
+    case SEC_COLECAO:      return "Coleção";
     // Sem cabecalho de secao: a propria secao ja abre com "trakt Comentários" e
     // o subtitulo "Avaliações do Trakt". Com os dois saiam DOIS titulos
     // empilhados dizendo a mesma coisa.
@@ -994,7 +1000,7 @@ void detail_abrir(const HomeItem *it) {
   aberto = 1; saindo = 0; nivel = 0; botao = 0;
   heroReiniciar();
   t = 0.0f; pg = 0.0f; scrollY = 0.0f; velY = 0.0f; abaInfo = 0; pessoaAberta = 0;
-  relFoco = 0; pedAbrir = -1; ratTemp = 0; ratSinc = 0;
+  relFoco = 0; colFoco = 0; pedAbrir = -1; ratTemp = 0; ratSinc = 0;
   trailerDesde = 0; trailerTentado = 0; trailerFade = 0.0f;
   trailerEtapa = 0; trailerPrazo = 0;
   trailerSemFonteLogado = 0;
@@ -1325,6 +1331,12 @@ static float alturaSecao(int r) {
     case SEC_ELENCO:     return NV_DETF_EL_ALT;
     case SEC_TRAILERS:     return NV_DETF_TR_ALT;
     case SEC_RELACIONADOS: return 318.0f + 46.0f;   // cartaz + titulo/ano
+    // Nome da colecao (~30 + 16) e 52 por parte, como desenhaColecao anda.
+    case SEC_COLECAO: {
+      int n = extras_n_colecao();
+      if (n > 7) n = 7;
+      return (extras_colecao_nome()[0] ? 46.0f : 0.0f) + (float)n * 52.0f;
+    }
     // + o cabecalho: sem ele a secao seguinte ("Detalhes do Filme") era
     // empilhada usando so a altura dos cartoes e saia POR CIMA deles.
     case SEC_COMENTARIOS:  return alturaCabComentarios() + COM_CARD_H;
@@ -1412,6 +1424,15 @@ static int secaoN(int r) {
       n = extras_n_relacionados();
       return n < N_ITENS ? n : N_ITENS;
     }
+    // A COLECAO DO FILME NAO TINHA ONDE APARECER (#194). belongs_to_collection
+    // so existe em filme, e a aba ABA_COLECAO so vive na barra de abas, que e
+    // so da serie (SEC_ABAS_INFO devolve 0 em filme): o pedido saia, o log dizia
+    // "colecao ... -> 3" e a pagina nao mostrava nada. Aqui ela e secao propria,
+    // como as recomendacoes. UMA coluna: e uma lista vertical com foco proprio
+    // (colFoco), a mesma regra das frases. "> 1" pela mesma razao da aba: a
+    // colecao inclui o proprio filme, e uma parte so seria ele mesmo.
+    case SEC_COLECAO:
+      return (!ehSerie() && extras_n_colecao() > 1) ? 1 : 0;
     // Comentario nao se escolhe um a um: UMA coluna, so para o foco pousar e a
     // pagina rolar ate os cartoes.
     // COMENTARIOS EXISTEM NOS DOIS. Na referencia a secao do Trakt fica
@@ -1762,6 +1783,16 @@ void detail_evento(const SDL_Event *e) {
   // NAS PONTAS O EVENTO PASSA ADIANTE e o foco sai da secao — a mesma regra da
   // colecao, e o que impede a ultima secao do documento de virar uma armadilha
   // de onde so se sai pelo Voltar.
+  // A COLECAO DO FILME anda igual: cima e baixo dentro da lista, e nas pontas o
+  // evento passa adiante e o foco sai da secao.
+  if (e->type == SDL_KEYDOWN && nivel >= 1 && foco.fileira == SEC_COLECAO &&
+      !pessoaAberta) {
+    int n = extras_n_colecao();
+    if (n > 7) n = 7;
+    if (e->key.keysym.sym == SDLK_DOWN && colFoco + 1 < n) { colFoco++; return; }
+    if (e->key.keysym.sym == SDLK_UP && colFoco > 0)       { colFoco--; return; }
+  }
+
   if (e->type == SDL_KEYDOWN && nivel >= 1 && foco.fileira == SEC_FRASES &&
       !pessoaAberta && seriefrases_n() > 0) {
     int i = seriefrases_selecionado(), n = seriefrases_n();
@@ -1843,6 +1874,10 @@ void detail_evento(const SDL_Event *e) {
         if (alvo >= 0) pedAbrir = alvo;
         else if (id[0]) desc_pedir_titulo(id);
       }
+    } else if (foco.fileira == SEC_COLECAO) {
+      // Mesmo destino da aba da serie: a parte traz so o id do TMDB.
+      long t = extras_colecao_tmdb(colFoco);
+      if (t > 0) desc_pedir_titulo_tmdb(t, "movie");
     } else if (foco.fileira == SEC_TEMPORADAS && dur >= NV_HOLD_MS) {
       // PRESSAO LONGA NA ABA: o menu da temporada (issue #108, "Pressing
       // 'Season' brings up option to mark all as watched"). O toque curto
@@ -2058,6 +2093,7 @@ static float larguraItem(int r, int c) {
     case SEC_AUD_DIGITAL:
     case SEC_NOTAS:
     case SEC_NOTAS_EP:
+    case SEC_COLECAO:
     case SEC_FRASES:      return NV_TELA_W - NV_DETP_X * 2;
     default:              return NV_DETP_EL_W;
   }
@@ -4585,7 +4621,8 @@ static void desenhaColecao(float x, float y, float a) {
   }
   for (i = 0; i < n && i < 7; i++) {
     float yl = y0 + i * 52.0f;
-    int aceso = (foco.fileira == SEC_ELENCO) && i == relFoco;
+    int aceso = (foco.fileira == SEC_ELENCO && i == relFoco) ||
+                (foco.fileira == SEC_COLECAO && i == colFoco);
     int c = aceso ? 255 : 225;
     if (aceso) {
       GfxRect faixa = { x - 16.0f, yl - 8.0f, 940.0f, 48.0f };
@@ -5149,6 +5186,9 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
           if (relacionadosCarregando()) desenhaEsqueletoRelacionados(y, a);
           else                          desenhaRelacionados(NV_DETP_X, y, a);
         }
+        break;
+      case SEC_COLECAO:
+        if (c == 0) desenhaColecao(NV_DETP_X, y, a);
         break;
       case SEC_COMENTARIOS:  desenhaComentarios(NV_DETP_X, y, a); break;
       // UMA VEZ SO, e nao uma por coluna: as colunas destas duas sao posicoes

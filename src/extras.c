@@ -843,7 +843,13 @@ static void *buscar(void *arg) {
         if (!serie) {
           const char *b = strstr(corpo, "\"belongs_to_collection\"");
           if (b) {
+            // Filme sem saga traz `"belongs_to_collection":null`, e a busca
+            // por '{' pulava para o objeto seguinte (o primeiro genero): o id
+            // do genero virava um /collection/<id> inutil. Mesma guarda do
+            // `null` da agenda acima.
             const char *o = strchr(b, '{');
+            const char *nulo = strstr(b, "null");
+            if (o && nulo && nulo < o) o = NULL;
             if (o) { const char *of = js_fim(o);
                      idCol = (long)js_num(o, of, "id", 0.0);
                      js_texto(o, of, "name", nome, sizeof nome); }

@@ -70,6 +70,10 @@
 #define extras_relacionado_ano    fx_relacionado_ano
 #define extras_relacionado_poster fx_relacionado_poster
 #define extras_n_colecao        fx_n_colecao
+#define extras_colecao_nome     fx_colecao_nome
+#define extras_colecao_titulo   fx_colecao_titulo
+#define extras_colecao_ano      fx_colecao_ano
+#define extras_colecao_tmdb     fx_colecao_tmdb
 #define extras_n_estudios       fx_n_estudios
 #define extras_estudio_nome     fx_estudio_nome
 #define extras_estudio_logo     fx_estudio_logo
@@ -159,7 +163,16 @@ int fx_n_relacionados(void)   { return extrasCardsLigados ? 3 : 0; }
 const char *fx_relacionado_titulo(int i) { return REL_TIT[i]; }
 const char *fx_relacionado_ano(int i) { return REL_ANO[i]; }
 const char *fx_relacionado_poster(int i) { return REL_PO[i]; }
-int fx_n_colecao(void)        { return 0; }
+// COLECAO DE ENSAIO (#194): so a captura 18 liga. Tres partes, o proprio
+// filme entre elas, como o TMDB devolve.
+static int colecaoLigada;
+static const char *const COL_TIT[] = { "The Matrix", "The Matrix Reloaded", "The Matrix Revolutions" };
+static const char *const COL_ANO[] = { "1999", "2003", "2003" };
+int fx_n_colecao(void)        { return colecaoLigada ? 3 : 0; }
+const char *fx_colecao_nome(void) { return colecaoLigada ? "The Matrix Collection" : ""; }
+const char *fx_colecao_titulo(int i) { return COL_TIT[i]; }
+const char *fx_colecao_ano(int i) { return COL_ANO[i]; }
+long fx_colecao_tmdb(int i) { return 603 + i; }
 int fx_n_estudios(void)       { return extrasCardsLigados ? 3 : 0; }
 const char *fx_estudio_nome(int i) { return EST_NOME[i]; }
 const char *fx_estudio_logo(int i) { (void)i; return ""; }
@@ -643,6 +656,18 @@ int main(int argc, char **argv) {
   scrollY = conteudoSec[SEC_DETALHES] - 300.0f;
   quadros(40);
   snprintf(nome, sizeof nome, "%s-17-filme-detalhes.png", saida);
+  gravar(nome);
+
+  // --- 18. FILME, foco na COLECAO (#194): a secao que o filme nao tinha — a
+  //         aba "Coleção" so existia na barra de abas, que e so da serie. A
+  //         segunda parte acesa, depois de um BAIXO dentro da lista.
+  colecaoLigada = 1;
+  abrir(1, SEC_COLECAO, 0);
+  { SDL_Event ev; memset(&ev, 0, sizeof ev);
+    ev.type = SDL_KEYDOWN; ev.key.keysym.sym = SDLK_DOWN;
+    detail_evento(&ev); }
+  quadros(60);
+  snprintf(nome, sizeof nome, "%s-18-filme-colecao.png", saida);
   gravar(nome);
 
 
