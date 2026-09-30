@@ -10,35 +10,59 @@
 #include "trakt.h"
 #include "simkl.h"
 #include "cwordem.h"
+#include "descoberta.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+
+// A lista de episodios do card terminado. O catalogo so recebe episodios
+// quando o titulo e ABERTO (app.c), entao o card do Continuar — uma copia sem
+// lista — ficava para sempre no episodio que acabou. So o card TERMINADO pede
+// (costuma ser um so), e no maximo uma vez a cada 30 s por titulo: sem meta a
+// resposta volta vazia, e pedir a cada quadro so disputaria o fio com o
+// detalhe.
+static void pedirEpisodios(int idx, const char *imdb) {
+  static char ultimo[64];
+  static time_t quando;
+  time_t agora = time(NULL);
+  desc_episodios_pendente();
+  if (desc_episodios_carregando(idx)) return;
+  if (!strcmp(ultimo, imdb) && agora - quando < 30) return;
+  snprintf(ultimo, sizeof ultimo, "%s", imdb);
+  quando = agora;
+  printf("[cw] %s terminado sem lista de episodios: pedindo para achar o proximo\n", imdb);
+  desc_episodios(idx, 0);
+}
 
 void continuar_desenhar(const CatItem *ci, GfxRect r, float raio) {
   CatItem copia;
   ProxSugestao prox;
   int idx;
   if (!ci) return;
-  // Episodio semeado ja terminado: o card passa a anunciar o PROXIMO, quando a
-  // regra portada do web deixa (ver proximo.h). A decisao mora aqui, e nao na
-  // home, porque so muda o que este card ESCREVE — nenhuma fileira nova, nenhum
-  // poster a mais para decodificar.
+  // Episodio ja terminado (ajuste Percentual assistido): o card passa a
+  // anunciar o PROXIMO (prox_seguinte, proximo.h). A decisao mora aqui, e nao
+  // na home, porque so muda o que este card ESCREVE — nenhuma fileira nova,
+  // nenhum poster a mais para decodificar.
   //
-  // O teto de PROX_MAX_BUSCAS nao precisa ser aplicado aqui: a fileira ja nasce
-  // com 8 itens (trakt_continuar, em descoberta.c), bem abaixo dele.
-  idx = cat_indice_por_imdb(ci->imdb);
-  if (idx >= 0 &&
-      prox_para_item(ci, cat_episodio(idx, 0), cat_n_episodios(idx),
-                     (long long)time(NULL) * 1000LL, &prox)) {
-    copia = *ci;
-    copia.temporada = prox.temporada;
-    copia.episodio  = prox.episodio;
-    snprintf(copia.nomeEpisodio, sizeof copia.nomeEpisodio, "%s", prox.nome);
-    // O selo de "restam N min" e da duracao do episodio ANTERIOR e a barra e do
-    // progresso dele; nenhum dos dois descreve um episodio que nao comecou.
-    copia.restanteMin = 0;
-    copia.progresso = 0;
-    ci = &copia;
+  // A copia COM episodios, quando ha (cat_indice_titulo): a do card costuma
+  // nao ter lista, e a do detalhe aberto antes tem.
+  idx = cat_indice_titulo(ci->imdb, cat_indice_por_imdb(ci->imdb));
+  if (idx >= 0 && !strcmp(ci->tipo, "series") && ci->temporada > 0 &&
+      ci->episodio > 0 && ci->progresso >= ajustes_cw_concluido()) {
+    if (cat_n_episodios(idx) <= 0) pedirEpisodios(idx, ci->imdb);
+    else if (prox_seguinte(ci, cat_episodio(idx, 0), cat_n_episodios(idx),
+                           ajustes_cw_concluido(),
+                           (long long)time(NULL) * 1000LL, &prox)) {
+      copia = *ci;
+      copia.temporada = prox.temporada;
+      copia.episodio  = prox.episodio;
+      snprintf(copia.nomeEpisodio, sizeof copia.nomeEpisodio, "%s", prox.nome);
+      // O selo de "restam N min" e da duracao do episodio ANTERIOR e a barra e
+      // do progresso dele; nenhum dos dois descreve um episodio que nao comecou.
+      copia.restanteMin = 0;
+      copia.progresso = 0;
+      ci = &copia;
+    }
   }
 
   {

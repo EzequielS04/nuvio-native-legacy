@@ -131,6 +131,31 @@ int main(void) {
     assert(!prox_para_item(&c, NULL, 0, AGORA, &s));
   }
 
+  // --- prox_seguinte: o card do Continuar cujo episodio TERMINOU ----------
+  {
+    CatEp v[3] = { ep(1,1,"a","1 de janeiro de 2010"), ep(1,2,"b","8 de janeiro de 2010"),
+                   ep(1,3,"c","2099-01-01") };
+    CatEp w[2] = { ep(1,1,"a",""), ep(1,2,"b","") };
+    CatItem c = serie(1, 1, 92);
+    memset(&s, 0, sizeof s);
+    // Acervo (lancado ha anos): prox_para_item nao passa, prox_seguinte passa.
+    assert(!prox_para_item(&c, v, 3, AGORA, &s));
+    assert(prox_seguinte(&c, v, 3, 90, AGORA, &s));
+    assert(s.temporada == 1 && s.episodio == 2 && !strcmp(s.nome, "b"));
+    // O limiar e o do ajuste: 92% ainda nao acabou com 95.
+    assert(!prox_seguinte(&c, v, 3, 95, AGORA, &s));
+    // O seguinte ainda nao foi ao ar: nada muda.
+    c = serie(1, 2, 100);
+    assert(!prox_seguinte(&c, v, 3, 90, AGORA, &s));
+    // Sem data legivel: a lista do addon diz que existe, entao oferece.
+    c = serie(1, 1, 100);
+    assert(prox_seguinte(&c, w, 2, 90, AGORA, &s) && s.episodio == 2);
+    // Fim da serie e lista vazia.
+    c = serie(1, 2, 100);
+    assert(!prox_seguinte(&c, w, 2, 90, AGORA, &s));
+    assert(!prox_seguinte(&c, NULL, 0, 90, AGORA, &s));
+  }
+
   puts("proximo: PASS (ancora absoluta, janela de novidade, virada de temporada,"
        " fim da serie, sem progresso)");
   return 0;

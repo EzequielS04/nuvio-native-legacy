@@ -124,3 +124,27 @@ int prox_para_item(const CatItem *ci, const CatEp *eps, int n,
   // Acabou a lista: a ultima temporada terminou e nao ha proximo.
   return 0;
 }
+
+int prox_seguinte(const CatItem *ci, const CatEp *eps, int n, int limiarPct,
+                  long long agoraMs, ProxSugestao *saida) {
+  int ancora, i;
+  if (!ci || !saida) return 0;
+  if (strcmp(ci->tipo, "series")) return 0;
+  if (ci->temporada <= 0 || ci->episodio <= 0) return 0;
+  if (ci->progresso < limiarPct) return 0;
+  if (!eps || n <= 0) return 0;
+  ancora = prox_ancora(eps, n, ci->temporada, ci->episodio, 0);
+  if (ancora < 0) return 0;
+  for (i = ancora + 1; i < n; i++) {
+    long long quando;
+    if (!valido(&eps[i])) continue;
+    quando = prox_data_ms(eps[i].data);
+    if (quando != PROX_SEM_DATA && quando > agoraMs) return 0;   // nao foi ao ar
+    saida->temporada = eps[i].temporada;
+    saida->episodio  = eps[i].episodio;
+    snprintf(saida->nome, sizeof saida->nome, "%s", eps[i].nome);
+    snprintf(saida->data, sizeof saida->data, "%s", eps[i].data);
+    return 1;
+  }
+  return 0;
+}

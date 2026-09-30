@@ -226,6 +226,10 @@ typedef enum {
   // Fio dos cartoes e linhas em repouso no vidro (gfx_vidro_aro). No fim pelo
   // mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_VIDRO_CONTORNO,
+  // A partir de quantos por cento o episodio conta como ASSISTIDO e o
+  // Continuar assistindo passa ao proximo. No fim pelo mesmo motivo: valor[] e
+  // CHAVE[] sao posicionais.
+  AJ_CW_CONCLUIDO,
   AJ_N
 } OpcaoId;
 
@@ -768,6 +772,9 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Perfil pesquisável",              V_LIGA, 2),
   ACAO("Meu perfil público"),
   ESC("Contorno do vidro",               V_LIGA, 2),   // local: vidroContornoLocal
+  // Era o 90 fixo de montarContinuar/home_registrar_retorno/proximo.h. Local:
+  // o web nao tem a escolha.
+  NUM("Percentual assistido",            70, 98, 1, "%"),  // local: cwConcluidoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -903,6 +910,8 @@ static const char *CHAVE[] = {
   "-perfilPesquisavel", "-perfilEditar",
   // LOCAL e SEM o "-": visual desta TV, como a propria Interface de vidro.
   "vidroContornoLocal",
+  // LOCAL e SEM o "-": o web nao tem esta escolha e ela precisa sobreviver.
+  "cwConcluidoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1001,7 +1010,7 @@ static const Item TELA[] = {
     GRP("Continuar assistindo", "Configure os próximos episódios e a ordem.", "aj_rotate-ccw-clock"),
       OPC(AJ_CW_LIGADO), OPC(AJ_CW_OK), OPC(AJ_CW_FONTE), OPC(AJ_CW_ESTILO),
       OPC(AJ_CW_THUMB), OPC(AJ_CW_BLUR_PROX), OPC(AJ_CW_FURTHEST),
-      OPC(AJ_CW_NAO_EXIBIDOS), OPC(AJ_CW_ORDEM),
+      OPC(AJ_CW_NAO_EXIBIDOS), OPC(AJ_CW_ORDEM), OPC(AJ_CW_CONCLUIDO),
     GRP("Página de detalhes", "Personalize as telas de títulos e episódios.", "aj_file-text"),
       OPC(AJ_DET_BLUR_NAO_VISTOS), OPC(AJ_DET_TRAILER), OPC(AJ_DET_META_EXT),
       OPC(AJ_DET_SO_CINEMETA),
@@ -1338,6 +1347,7 @@ static int valor[] = {
   1,                /* perfil pesquisavel: DESLIGADO (V_LIGA: 1 = Desligado). Padrao de todo mundo. */
   0,                /* meu perfil publico: acao */
   0,                /* contorno do vidro: LIGADO (V_LIGA: 0 = Ligado), o visual de antes */
+  90,               /* percentual assistido: 90%, o numero fixo de antes */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1643,6 +1653,10 @@ int ajustes_cw_desfocar_proximo(void) { return lig(AJ_CW_BLUR_PROX); }
 int ajustes_cw_do_episodio_mais_alto(void) { return lig(AJ_CW_FURTHEST); }
 int ajustes_cw_mostrar_nao_exibidos(void)  { return lig(AJ_CW_NAO_EXIBIDOS); }
 int ajustes_cw_ordem(void)            { return valor[AJ_CW_ORDEM]; }
+int ajustes_cw_concluido(void) {
+  int v = valor[AJ_CW_CONCLUIDO];
+  return v < 70 ? 70 : v > 98 ? 98 : v;   // a faixa do NUM, se o arquivo vier torto
+}
 
 int ajustes_desfocar_nao_assistidos(void) { return lig(AJ_DET_BLUR_NAO_VISTOS); }
 int ajustes_botao_trailer(void)       { return lig(AJ_DET_TRAILER); }
@@ -2869,6 +2883,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
     case AJ_VIDRO:          /* visual desta TV: a GPU de cada uma aguenta diferente */
     case AJ_VIDRO_CONTORNO:
+    case AJ_CW_CONCLUIDO:   /* o web nao tem esta escolha */
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
     case AJ_PERFIL_EDITAR:
@@ -3315,7 +3330,7 @@ static int inativa(int op) {
     case AJ_DESCOBRIR:    return 1;
     case AJ_CW_OK: case AJ_CW_FONTE:
     case AJ_CW_ESTILO: case AJ_CW_THUMB: case AJ_CW_FURTHEST:
-    case AJ_CW_NAO_EXIBIDOS: case AJ_CW_ORDEM:
+    case AJ_CW_NAO_EXIBIDOS: case AJ_CW_ORDEM: case AJ_CW_CONCLUIDO:
       return !ajustes_cw_ligado();
     case AJ_CW_BLUR_PROX: return !ajustes_cw_ligado() || !ajustes_cw_thumb_episodio();
     case AJ_EXPANDIR_ATRASO: return !ajustes_expandir_poster();
@@ -3441,7 +3456,7 @@ static const char *ajudaOpcao(int op) {
     if (op == AJ_HERO_CATALOGOS) return "Ative Mostrar destaque para exibir os catálogos no topo da Home.";
     if (op == AJ_HERO_CHEIO) return "Só vale no layout Moderna. No Padrão o destaque é um banner, e na Dinâmica ele ocupa a largura toda e sobe junto com a rolagem.";
     if (op == AJ_DESCOBRIR) return "A tela Descobrir do app web ainda não existe nesta TV. A escolha fica guardada na conta.";
-    if (op >= AJ_CW_OK && op <= AJ_CW_ORDEM)
+    if ((op >= AJ_CW_OK && op <= AJ_CW_ORDEM) || op == AJ_CW_CONCLUIDO)
       return op == AJ_CW_BLUR_PROX && ajustes_cw_ligado()
         ? "Ative Miniatura do episódio para desfocar a imagem do próximo episódio."
         : "Ative Continuar assistindo para ajustar os cards de retomada.";
@@ -3520,6 +3535,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_CW_FURTHEST: return "Escolhe o próximo episódio a partir do mais avançado marcado como assistido.";
     case AJ_CW_NAO_EXIBIDOS: return "A retomada mostra o próximo episódio antes de ir ao ar.";
     case AJ_CW_ORDEM: return "Como a retomada se ordena: pelo mais recente, no estilo dos streamings, ou com os episódios futuros num bloco separado.";
+    case AJ_CW_CONCLUIDO: return "A partir de quanto do episódio ele conta como assistido e a retomada passa ao próximo.";
 
     // --- Pagina de detalhe
     case AJ_DET_TRAILER:
@@ -4337,6 +4353,8 @@ static void mudarValorDireto(int op, int dir) {
     // montarContinuar; aqui basta refazer so a retomada, sem o ciclo
     // inteiro — o conjunto de itens e o mesmo, muda a ordem e quem fica.
     if (op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS) desc_refazer_continuar();
+    // O PERCENTUAL ASSISTIDO decide quem entra em montarContinuar (1% ate ele).
+    if (op == AJ_CW_CONCLUIDO) desc_refazer_continuar();
     // O DESTINO DO "+" tambem: com "Plan to Watch do Simkl" o Plan to Watch
     // entra nos Salvos pela descoberta (descoberta.c), e sem o ciclo ele so
     // apareceria no proximo sync.

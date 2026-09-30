@@ -1079,7 +1079,7 @@ void detail_abrir(const HomeItem *it) {
   comEpT = comEpE = 0;
   { const CatItem *ci0 = cat_item(idx);
     int t = 0, e = 0, achou = 0;
-    if (ci0 && ci0->progresso > 0 && ci0->progresso < 90 &&
+    if (ci0 && ci0->progresso > 0 && ci0->progresso < ajustes_cw_concluido() &&
         ci0->temporada > 0 && ci0->episodio > 0) {
       t = ci0->temporada; e = ci0->episodio; achou = 1;
     } else {
@@ -1158,7 +1158,7 @@ static int episodioAlvo(int *temp, int *epis, int *origem) {
     return 1;
   }
   // Em andamento: o item do "Continuar assistindo" traz temporada e episodio.
-  if (ci && ci->progresso > 0 && ci->progresso < 90 && ci->temporada > 0 && ci->episodio > 0 &&
+  if (ci && ci->progresso > 0 && ci->progresso < ajustes_cw_concluido() && ci->temporada > 0 && ci->episodio > 0 &&
       !extras_ep_visto(ci->temporada, ci->episodio)) {
     if (temp) *temp = ci->temporada;
     if (epis) *epis = ci->episodio;
@@ -1520,10 +1520,10 @@ static int temInicio(void) {
   const CatItem *ci = cat_item(idx);
   if (!ci) return 0;
   // O MESMO criterio do player (player.c: retomarPct): progresso guardado
-  // abaixo de 90. Em serie, so quando o episodio-alvo e o "Retomar" — com um
+  // abaixo do Percentual assistido (ajustes_cw_concluido, 90 de fabrica). Em serie, so quando o episodio-alvo e o "Retomar" — com um
   // episodio em foco na fileira (origem 1) o primario toca AQUELE episodio e
   // nao ha retomada a desfazer.
-  if (!ehSerie()) return ci->progresso > 0 && ci->progresso < 90;
+  if (!ehSerie()) return ci->progresso > 0 && ci->progresso < ajustes_cw_concluido();
   { int t0 = 0, e0 = 0, de = 0;
     return episodioAlvo(&t0, &e0, &de) && de == 2; }
 }
