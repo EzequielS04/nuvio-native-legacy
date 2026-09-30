@@ -3602,7 +3602,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_POSTER_TESTAR: return "Baixa o cartaz de um filme conhecido com a configuração atual e mostra se deu certo. O primeiro cartaz de cada título é montado no servidor e pode levar alguns segundos.";
     case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso, como nos apps de streaming clássicos. Dinâmica: estilo Apple TV, com o destaque que sobe e some ao descer, fileiras de tamanhos diferentes (destaques grandes, Top 10 com numerais, cartazes e faixas deitadas) sobre um fundo de vidro fosco tingido pela arte.";
     case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
-    case AJ_VIDRO_CONTORNO: return "O fio fino em volta dos cartões e das linhas em repouso. Desligado, o vidro fica só no fundo translúcido; o foco continua marcado.";
+    case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
     case AJ_RESOLUCAO: return "Desenha a interface em 4K nas TVs que permitem. Muitas ignoram o pedido e continuam em 1080p — o log diz qual é o caso. Vale reiniciar o app depois de mudar. O vídeo já é 4K nos dois casos.";

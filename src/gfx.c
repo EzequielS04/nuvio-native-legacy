@@ -1452,6 +1452,16 @@ void gfx_vidro_foco(GfxRect r, float raio, float foco, float a) {
   float f = foco < 0.0f ? 0.0f : (foco > 1.0f ? 1.0f : foco), cr, cg, cb;
   if (f <= 0.01f || a <= 0.001f) return;
   ajustes_acento(&cr, &cg, &cb);
+  // "Contorno do vidro" DESLIGADO (pedido do dono, 30/09: "o contorno que eu
+  // queria desligar e esse quando ta em foco, mais minimalista"): sem anel,
+  // o foco e so o fundo — um degrau claro e a lavagem do realce, fortes o
+  // bastante para ler a 3 m. Cartaz (gfx_vidro_cartao) nao passa por aqui:
+  // sem superficie propria, sem anel ele ficaria sem foco nenhum.
+  if (!ajustes_vidro_contorno()) {
+    gfx_cor(r, raio, 1, 1, 1, 0.07f * f * a);
+    gfx_cor(r, raio, cr, cg, cb, 0.20f * f * a);
+    return;
+  }
   gfx_cor(r, raio, cr, cg, cb, 0.09f * f * a);
   gfx_anel(r, raio, 2.0f, cr, cg, cb, 0.96f * f * a);
 }
