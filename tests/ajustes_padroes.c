@@ -23,7 +23,9 @@ int main(void) {
   assert(!strcmp(CHAVE[AJ_HERO_TRAILER_ESPERA], "trailerDestaqueEsperaLocal"));
   assert(somenteDesteAparelho(AJ_HERO_TRAILER_SOM));
   assert(somenteDesteAparelho(AJ_HERO_TRAILER_ESPERA));
-  assert(!strcmp(textoValor(AJ_HERO_TRAILER_ESPERA), "2,2 s"));
+  // Separador decimal do idioma da interface: "2,2 s" ou "2.2 s".
+  assert(!strcmp(textoValor(AJ_HERO_TRAILER_ESPERA), "2,2 s") ||
+         !strcmp(textoValor(AJ_HERO_TRAILER_ESPERA), "2.2 s"));
   // A faixa que andava uma casa.
   assert(valor[AJ_RAIL] == 0);                // recolhida
   assert(valor[AJ_RAIL_MODERNA] == 1);        // desligada
