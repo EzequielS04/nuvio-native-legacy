@@ -777,7 +777,10 @@ static int abaDisponivel(int id) {
     case ABA_ELENCO:       return 1;
     // Basta UMA das notas para a aba valer a pena; o cartao que faltar mostra
     // "-", que e o que o web faz.
-    case ABA_AVALIACOES:   return notaDe(idx) > 0 || extras_nota_trakt() > 0;
+    // Saiu em 30/09 a pedido do dono ("tirar a aba avaliacoes que ja temos o
+    // componente novo"): as notas por temporada vivem na secao NOTAS, empilhada
+    // logo abaixo da audiencia, e a aba repetia o mesmo numero num segundo lugar.
+    case ABA_AVALIACOES:   return 0;
     case ABA_RELACIONADOS: return extras_n_relacionados() > 0;
     case ABA_COLECAO:      return extras_n_colecao() > 1;
     // Sem aba de comentarios: na referencia eles sao uma SECAO empilhada, e as

@@ -61,6 +61,7 @@
 #include "text.h"
 #include "layout.h"
 #include "idioma.h"
+#include "ajustes.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -930,9 +931,27 @@ static void tracejada(float x, float y, float w, float r, float g, float b,
 // detail.c ja tirou o veu de tela cheia e a arte esta a 15%, entao aqui embaixo
 // sobra orcamento. Se um dia faltar, o lugar de cortar e a largura do reforco:
 // ele so precisa cobrir de r.x a r.x+r.w, e nao a tela toda.
-static void chao(float topo, float alt, float plotoTopo, float plotoAlt) {
+// VIDRO: com a interface de vidro ligada o painel vira uma FOLHA (a mesma do
+// menu e das fontes) do tamanho do grafico, e nao um veu de tela inteira. O
+// envelope passa ~110 px acima e abaixo do conteudo; a folha fica 36 px para
+// fora dele. Sobre a area de plotagem vai um reforco leve, porque a folha
+// sozinha (0,78) ja segura a curva mas o rosto claro da arte ainda aparece.
+static void chaoVidro(GfxRect c, float topo, float alt, float plotoTopo, float plotoAlt) {
+  GfxRect f = { c.x - 36.0f, c.y - 36.0f, c.w + 72.0f, alt - 220.0f + 52.0f };
+  float raio;
+  (void)topo;
+  if (f.h <= 2.0f) return;
+  raio = raioPx(f.w, f.h, 28.0f);
+  gfx_vidro_folha(f, raio, 1.0f);
+  if (plotoAlt > 2.0f) {
+    GfxRect pm = { c.x - 12.0f, plotoTopo - 8.0f, c.w + 24.0f, plotoAlt + 16.0f };
+    gfx_cor(pm, raioPx(pm.w, pm.h, 14.0f), 0.0f, 0.0f, 0.0f, 0.22f);
+  }
+}
+static void chao(GfxRect c, float topo, float alt, float plotoTopo, float plotoAlt) {
   float r = SA_CHAO_RAMPA, pr = SA_CHAO_PRAMPA;
   if (alt <= 2.0f) return;
+  if (ajustes_vidro()) { chaoVidro(c, topo, alt, plotoTopo, plotoAlt); return; }
   if (alt < r * 2.0f + 2.0f) r = (alt - 2.0f) * 0.5f;
   { GfxRect cima  = { 0.0f, topo, NV_TELA_W, r };
     GfxRect meio  = { 0.0f, topo + r, NV_TELA_W, alt - r * 2.0f };
@@ -1118,7 +1137,7 @@ float serieaud_arco(GfxRect r) {
   // O CHAO VEM PRIMEIRO, e antes ate do caminho vazio: um painel que diz
   // "sem dados desta temporada" tambem esta sobre a arte da pagina e tambem
   // precisa de chao para ser lido.
-  chao(r.y - 110.0f, (py - r.y) + gh + 280.0f, py, gh);
+  chao(r, r.y - 110.0f, (py - r.y) + gh + 280.0f, py, gh);
   cabecalho(r, "Arco de qualidade", "Nota do Trakt por episódio — não é o IMDb");
   if (n < 2 || gw < 120.0f) return vazio(r, y);
 
@@ -1376,7 +1395,7 @@ float serieaud_radar(GfxRect r) {
   for (i = 0; i < nEps; i++) { fora[i] = 0; if (serieaud_retencao(i) >= 0) n++; }
 
   // O chao antes de tudo. Ver a nota de `cabecalho`.
-  chao(r.y - 110.0f, (py - r.y) + gh + 330.0f, py, gh);
+  chao(r, r.y - 110.0f, (py - r.y) + gh + 330.0f, py, gh);
   cabecalho(r, "Radar de desistência",
             "Quem marcou o episódio no Trakt, sobre quem marcou o E1 — não é a audiência geral");
   if (n < 2 || gw < 120.0f) return vazio(r, y);
@@ -1756,7 +1775,7 @@ float serieaud_digital(GfxRect r) {
     if (algum) n++;
   }
   // O chao antes de tudo. Ver a nota de `cabecalho`.
-  chao(r.y - 110.0f, (py - r.y) + gh + 350.0f, py, gh);
+  chao(r, r.y - 110.0f, (py - r.y) + gh + 350.0f, py, gh);
   cabecalho(r, "Impressão digital do episódio",
             "Nota, retenção, reproduções por pessoa e comentários+votos — tudo do Trakt, relativo à temporada");
   if (n < 1 || gw < 260.0f) return vazio(r, y);

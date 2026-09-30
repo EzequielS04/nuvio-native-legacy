@@ -471,12 +471,16 @@ int main(int argc, char **argv) {
 
   // NUVIO_SHOT_IDIOMA=N (IDIOMA_* de idiomacod.h: 0 pt, 1 en ... 24 el, 27 ja, 28 zhcn): a
   // captura sai no idioma da interface, escrito onde o app o le (ajustes.txt).
+  // NUVIO_SHOT_VIDRO=1: Interface de vidro ligada (V_LIGA: 0 = Ligado).
   { const char *lg = getenv("NUVIO_SHOT_IDIOMA");
-    if (lg && *lg) {
+    const int vidro = getenv("NUVIO_SHOT_VIDRO") != NULL;
+    if ((lg && *lg) || vidro) {
       char caminho[600]; FILE *f;
       snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dd);
       f = fopen(caminho, "w"); assert(f);
-      fprintf(f, "idioma %d\n", atoi(lg)); fclose(f);
+      if (lg && *lg) fprintf(f, "idioma %d\n", atoi(lg));
+      if (vidro) fprintf(f, "vidroLocal 0\n");
+      fclose(f);
       ajustes_dir(dd); } }
 
   montarCatalogo();
