@@ -496,6 +496,25 @@ namespace NuvioTpk
             if (gl == null || erroNaTela || saindo) return;   // GLView: gl == null, nada a subir
             subidas++;
             Etapa("note raise gl-window #" + subidas + " (" + porque + ")" + Contagem() + " mainVisible=" + principalVisivel + " glVisible=" + glVisivel);
+            // A JANELA PRINCIPAL PRIMEIRO (#188, #195). O video e desenhado nela
+            // (Video.cs: new Display(NuiWindow.Instance)). Ao sair pela tecla
+            // Home ela fica invisivel, e reabrir pelo menu da TV (AppControl)
+            // subia SO o GLWindow: a principal nunca voltava, o plano de video
+            // ficava escondido e o furo do GL mostrava a tela inicial da
+            // Samsung. Medido na QE55QN95B (Tizen 6.5, api9), 1.6.1: todas as
+            // sessoes terminam com "principal visivel=False" depois de
+            // "appcontrol: sobe o gl". Sobe a principal e so entao o GL por cima.
+            if (!principalVisivel)
+            {
+                try
+                {
+                    var w = NuiWindow.Instance;
+                    w.Show();
+                    w.Raise();
+                    Janela("principal reaberta (" + porque + ")");
+                }
+                catch (Exception e) { Janela("principal nao reabriu " + e.GetType().Name + ": " + e.Message); }
+            }
             try { gl.Show(); gl.Raise(); } catch (Exception e) { Etapa("note raise failed " + e.GetType().Name + ": " + e.Message); }
         }
 
