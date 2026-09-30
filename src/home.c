@@ -3321,11 +3321,26 @@ static void desenhaHero(Uint32 agora, float saida) {
     GfxRect rAnt = r, rAtu = r;
     rAnt.x += dAnt * r.w;
     rAtu.x += dAtu * r.w;
-    gfx_recorte(r.x, y0, r.w, y1 - y0);
-    if (tAnt) (void)desenhaArteHero(r, modoHero, cAnt, arteB, aArte, dAnt);
-    else if (!arteB) desenhaPlaceholderHero(rAnt, cAnt, aArte, 0);
-    if (tAtu) (void)desenhaArteHero(r, modoHero, ci, arteA, aArte, dAtu);
-    else desenhaPlaceholderHero(rAtu, ci, aArte, arteA != NULL && arteA[0] != 0);
+    // RECORTE POR LADO. A arte que sai so existe em [r.x + dAnt*w, r.x + w +
+    // dAnt*w] e a que entra em [r.x + dAtu*w, ...]: fora disso o shader ja
+    // devolvia alfa 0 (`dentro`), mas cada fragmento era executado e
+    // misturado — duas telas cheias por quadro durante o deslize, numa GPU
+    // presa em preenchimento. Com a tesoura em cada lado, a soma dos dois e
+    // UMA tela, e o pixel e o mesmo (o que a tesoura tira era transparente).
+    { float ax0 = r.x + (dAnt < 0.0f ? 0.0f : dAnt) * r.w;
+      float ax1 = r.x + (1.0f + (dAnt > 0.0f ? 0.0f : dAnt)) * r.w;
+      float bx0 = r.x + (dAtu < 0.0f ? 0.0f : dAtu) * r.w;
+      float bx1 = r.x + (1.0f + (dAtu > 0.0f ? 0.0f : dAtu)) * r.w;
+      if (ax1 > ax0) {
+        gfx_recorte(ax0, y0, ax1 - ax0, y1 - y0);
+        if (tAnt) (void)desenhaArteHero(r, modoHero, cAnt, arteB, aArte, dAnt);
+        else if (!arteB) desenhaPlaceholderHero(rAnt, cAnt, aArte, 0);
+      }
+      if (bx1 > bx0) {
+        gfx_recorte(bx0, y0, bx1 - bx0, y1 - y0);
+        if (tAtu) (void)desenhaArteHero(r, modoHero, ci, arteA, aArte, dAtu);
+        else desenhaPlaceholderHero(rAtu, ci, aArte, arteA != NULL && arteA[0] != 0);
+      } }
     gfx_sem_recorte();
   } else {
   if (tAnt) {

@@ -10,6 +10,15 @@
 #include "gpunivel.h"
 #include "ajustes.h"
 
+// A MISTURA, com o estado lembrado. gfx_rect desliga a mistura num desenho
+// opaco e a devolve ao que estava — nao a "ligada" — porque quem gera o
+// desfoque e a luz assada ja a desligou em volta de varios desenhos.
+static int blendLigado = 1;
+static void gfxBlend(int on) {
+  if (on) glEnable(GL_BLEND); else glDisable(GL_BLEND);
+  blendLigado = on ? 1 : 0;
+}
+
 // Um programa por modo, e os uniforms de cada um: as posicoes NAO coincidem
 // entre programas, entao guardar um conjunto so devolveria lixo no segundo
 // shader que usasse a mesma variavel.
@@ -1078,7 +1087,7 @@ int gfx_iniciar(void) {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, (const void *)0);
   }
-  glEnable(GL_BLEND);
+  gfxBlend(1);
   // Blend SEPARADO para cor e alpha, e o GL_ONE do alpha nao e detalhe.
   //
   // Com GL_SRC_ALPHA nos dois canais, cada desenho translucido computa
@@ -1224,7 +1233,7 @@ void gfx_ambiente_descarregar(void) {
 void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
               float parx, float pary, float raio,
               float cr, float cg, float cb, float ca) {
-  int comAmb = 0, opaco = 0;
+  int comAmb = 0, opaco = 0, cheia, clearCor;
   if ((int)modo < 0 || (int)modo >= GFX_NMODOS) return;
   // A COR DO DESTAQUE E A ASSINATURA. Com o degrade ligado, todo retangulo ou
   // anel pintado EXATAMENTE com o destaque vivo (os tres floats que
@@ -1260,10 +1269,21 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
            nv_ambiente_forca <= 0.001f && parx <= 0.5f &&
            ca * gfx_opacidade_grupo >= 0.999f && gfx_desliza_atual == 0.0f)
     opaco = 1;
+  // Modos cujo alfa de saida e o proprio uCor.a (ou 1): com alfa 1 a mistura
+  // tambem era um no-op com leitura da tela. Fundo social, ceu da Explorar,
+  // snapshot/luz assada e a arte desfocada do fundo.
+  else if ((modo == GFX_SOCIAL || modo == GFX_CEU || modo == GFX_SNAP || modo == GFX_FUNDO) &&
+           ca * gfx_opacidade_grupo >= 0.999f)
+    opaco = 1;
+  cheia = r.x <= 0.0f && r.y <= 0.0f && r.x + r.w >= NV_TELA_W && r.y + r.h >= NV_TELA_H;
+  // COR CHAPADA DE TELA CHEIA, canto vivo e alfa 1 (o fundo opaco que varias
+  // telas pintam por cima do clear): e um glClear com essa cor — o mesmo
+  // pixel (a mistura de alfa 1 devolve a cor e alfa 1), sem passar dois
+  // milhoes de fragmentos pelo pipeline. Respeita a tesoura, como o quad.
+  clearCor = modo == GFX_COR && cheia && raio <= 0.0f && ca * gfx_opacidade_grupo >= 0.999f;
   if (ambPendente) {
     // Tela cheia e opaco: a luz por baixo nao apareceria. Senao, ela primeiro.
-    int cheia = r.x <= 0.0f && r.y <= 0.0f && r.x + r.w >= NV_TELA_W && r.y + r.h >= NV_TELA_H;
-    if (cheia && (comAmb || modo == GFX_FUNDO_DIN)) ambPendente = 0;
+    if (cheia && (comAmb || clearCor || opaco || modo == GFX_FUNDO_DIN)) ambPendente = 0;
     else gfx_ambiente_descarregar();
   }
   if (gfxFreqMs == 0.0) gfxFreqMs = 1000.0 / (double)SDL_GetPerformanceFrequency();
@@ -1281,9 +1301,17 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
       if (x1 > x0 && y1 > y0) gfx_fill_vis += (double)((x1 - x0) * (y1 - y0)) / (NV_TELA_W * NV_TELA_H); }
     if (area >= 0.5f) { gfx_n_cheio++;
 #ifdef NV_FLUIDEZ_PERF
-      if (!comAmb && !opaco && glIsEnabled(GL_BLEND)) gfx_n_cheio_mistura++;
+      if (!comAmb && !opaco && !clearCor && glIsEnabled(GL_BLEND)) gfx_n_cheio_mistura++;
 #endif
     } }
+  if (clearCor) {
+    GFX_OUTRO_INI();
+    glClearColor(cr, cg, cb, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    GFX_OUTRO_FIM();
+    ambIntacta = 0;
+    return;
+  }
   Programa *P = &progs[modo];
   if (progAtual != (int)modo) { glUseProgram(P->prog); progAtual = (int)modo; gfx_n_prog++; }
   // Uniform que o shader do modo nao declara volta como -1 do link; passar -1
@@ -1352,9 +1380,10 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     texAtual = tex;
     gfx_n_bind++;
   }
-  if (comAmb || opaco) glDisable(GL_BLEND);
-  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-  if (comAmb || opaco) glEnable(GL_BLEND);
+  { int semMistura = (comAmb || opaco) && blendLigado;
+    if (semMistura) glDisable(GL_BLEND);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    if (semMistura) glEnable(GL_BLEND); }
   if (comAmb) {
     // Solta a luz da unidade 1: ela volta a ser ALVO em gfx_ambiente_preparar,
     // e alvo ligado a uma unidade e o laco que o GLES deixa indefinido.
@@ -1496,9 +1525,9 @@ static void ambPintar(float alfa) {
   // bastante para a home parada cair de 60 para 48 fps.
   if (alfa >= 0.999f && gfx_opacidade_grupo >= 0.999f) {
     int intacta = ambIntacta;
-    glDisable(GL_BLEND);
+    gfxBlend(0);
     gfx_rect(tela, ambTex, GFX_SNAP, 0, 0.0f, 1.0f, 0.0f, 0, 0, 0, 1.0f);
-    glEnable(GL_BLEND);
+    gfxBlend(1);
     // A luz pintada sobre o clear continua sendo "so a luz": o destaque que
     // vier depois ainda pode misturar com ela pelo uAmb.
     ambIntacta = intacta;
@@ -1517,9 +1546,9 @@ static void ambPintar(float alfa) {
 void gfx_fundo_din_desenhar(const float topo[3], float queda) {
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
   gfx_tex_aspect_atual = 0.0f;
-  glDisable(GL_BLEND);   // substitui o clear: a GPU nao le a tela para misturar
+  gfxBlend(0);   // substitui o clear: a GPU nao le a tela para misturar
   gfx_rect(tela, 0, GFX_FUNDO_DIN, queda, 0, 0, 0.0f, topo[0], topo[1], topo[2], 1.0f);
-  glEnable(GL_BLEND);
+  gfxBlend(1);
 }
 
 void gfx_anel(GfxRect r, float raio, float esp,
@@ -1661,14 +1690,46 @@ void gfx_luz_canto(GfxRect r, float raio, float cx, float cy, float alcance,
 // superficie segue opaca e o video permanece invisivel, sem nenhum erro. E o
 // alpha aqui e o canal de composicao da janela, entao isto so tem efeito com
 // SDL_GL_ALPHA_SIZE 8 pedido antes de criar a janela.
+// O FURO RETO E UM CLEAR COM TESOURA, nao um quad. O quad opaco de tela cheia
+// (o plano de video no player, o trailer no destaque cheio) passava pelo
+// pipeline inteiro so para escrever (0,0,0,0); numa GPU de ladrilhos o clear
+// de um retangulo e o caminho barato para o mesmo resultado. A tesoura cobre
+// exatamente os pixels que o quad cobriria (centro do pixel dentro do rect:
+// de round(x0) a round(x1)), e o recorte que estava ativo volta depois.
+static int recorteAtivo;
+static GLint recorteBox[4];
 void gfx_furo(GfxRect r) {
-  gfx_furo_raio(r, 0.0f);
+  float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
+  int x0, x1, y0, y1, cheia;
+  if (r.w <= 0.0f || r.h <= 0.0f) return;
+  if (gfx_modos_desligados && ((gfx_modos_desligados >> (unsigned)GFX_COR) & 1ull)) return;
+  cheia = r.x <= 0.0f && r.y <= 0.0f && r.x + r.w >= NV_TELA_W && r.y + r.h >= NV_TELA_H;
+  // A luz pendente ficaria por cima do furo se saisse depois dele; sob um
+  // furo de tela cheia ela nao apareceria em pixel nenhum.
+  if (ambPendente) { if (cheia) ambPendente = 0; else gfx_ambiente_descarregar(); }
+  ambIntacta = 0;
+  gfx_n_rect++;
+  { float area = (r.w * r.h) / (NV_TELA_W * NV_TELA_H);
+    gfx_fill += area; gfx_fill_modo[GFX_COR] += area;
+    if (area >= 0.5f) gfx_n_cheio++; }
+  x0 = (int)floorf(r.x * ex + 0.5f); x1 = (int)floorf((r.x + r.w) * ex + 0.5f);
+  y0 = (int)floorf((NV_TELA_H - (r.y + r.h)) * ey + 0.5f);
+  y1 = (int)floorf((NV_TELA_H - r.y) * ey + 0.5f);
+  if (x1 <= x0 || y1 <= y0) return;
+  GFX_OUTRO_INI();
+  glEnable(GL_SCISSOR_TEST);
+  glScissor(x0, y0, x1 - x0, y1 - y0);
+  glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  if (recorteAtivo) glScissor(recorteBox[0], recorteBox[1], recorteBox[2], recorteBox[3]);
+  else glDisable(GL_SCISSOR_TEST);
+  GFX_OUTRO_FIM();
 }
 
 void gfx_furo_raio(GfxRect r, float raio) {
-  glDisable(GL_BLEND);
+  gfxBlend(0);
   gfx_rect(r, 0, GFX_COR, 0, 0, 0, raio, 0, 0, 0, 0);
-  glEnable(GL_BLEND);
+  gfxBlend(1);
 }
 
 void gfx_esqueleto(GfxRect r, float raio, float cr, float cg, float cb, float ca) {
@@ -1779,6 +1840,7 @@ void gfx_icone(GfxRect r, const char *nome, float cr, float cg, float cb, float 
 void gfx_recorte(float x, float y, float w, float h) {
   GFX_OUTRO_INI();
   if (w <= 0.0f || h <= 0.0f) { glEnable(GL_SCISSOR_TEST); glScissor(0, 0, 0, 0);
+                                recorteAtivo = 1; memset(recorteBox, 0, sizeof recorteBox);
                                 GFX_OUTRO_FIM(); return; }
   // Duas conversoes acontecem aqui, e em nenhum outro lugar do app:
   //
@@ -1792,9 +1854,12 @@ void gfx_recorte(float x, float y, float w, float h) {
   int yy = (int)((NV_TELA_H - (y + h)) * ey);
   glEnable(GL_SCISSOR_TEST);
   glScissor((int)(x * ex), yy, (int)(w * ex), (int)(h * ey));
+  recorteAtivo = 1;
+  recorteBox[0] = (int)(x * ex); recorteBox[1] = yy;
+  recorteBox[2] = (int)(w * ex); recorteBox[3] = (int)(h * ey);
   GFX_OUTRO_FIM();
 }
-void gfx_sem_recorte(void) { glDisable(GL_SCISSOR_TEST); }
+void gfx_sem_recorte(void) { glDisable(GL_SCISSOR_TEST); recorteAtivo = 0; }
 
 static int criaAlvo(int i, int w, int h) {
   glGenTextures(1, &borTex[i]);
@@ -1836,7 +1901,7 @@ void gfx_borrao_gerar(int via, unsigned int tex, float texAspecto) {
   GFX_OUTRO_INI();
   GLint fboAnt = fboLigado(), vpAnt[4];
   glGetIntegerv(GL_VIEWPORT, vpAnt);
-  glDisable(GL_BLEND);
+  gfxBlend(0);
   glViewport(0, 0, borW, borH);
 
   glBindFramebuffer(GL_FRAMEBUFFER, borFbo[a0]);
@@ -1857,7 +1922,7 @@ void gfx_borrao_gerar(int via, unsigned int tex, float texAspecto) {
   gpun_descartar_cor(0);
   gfx_rect(cheio, borTex[a1], GFX_BLUR, 0, 0.0f, py, 0.0f, 0, 0, 0, 1.0f);
 
-  glEnable(GL_BLEND);
+  gfxBlend(1);
   // Volta ao alvo de ANTES (a janela, ou o alvo interno do nivel 2), e nao ao 0.
   glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
   glViewport(vpAnt[0], vpAnt[1], vpAnt[2], vpAnt[3]);
@@ -1995,7 +2060,7 @@ GLuint gfx_desfocado(GLuint src, const char *chave) {
     dst = desf[vago].tex;
     GFX_OUTRO_INI();
     glDisable(GL_SCISSOR_TEST);
-    glDisable(GL_BLEND);
+    gfxBlend(0);
     glViewport(0, 0, NV_DESF_W, NV_DESF_H);
     gfx_tex_aspect_atual = 0.0f;   // a arte INTEIRA, esticada; o card recorta depois
     // Passada 1: horizontal, lendo a arte original e ja reduzindo. Escrever
@@ -2014,7 +2079,7 @@ GLuint gfx_desfocado(GLuint src, const char *chave) {
     gfx_tex_aspect_atual = aspAnt;
     glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
     glViewport(vp[0], vp[1], vp[2], vp[3]);
-    if (mistura) glEnable(GL_BLEND);
+    gfxBlend(mistura);
     if (tesoura) glEnable(GL_SCISSOR_TEST);
     GFX_OUTRO_FIM();
   }
