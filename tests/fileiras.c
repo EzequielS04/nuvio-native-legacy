@@ -764,6 +764,68 @@ int main(void) {
   usaArquivo = 0;
   puts("ok  fileirasui.txt antigo semeia so o perfil 1");
 
+  // ISSUE #197 (UA55TU8200, Tizen 5.5): segurar a seta no "limite de
+  // fileiras" passava por cada valor, e CADA passo para baixo mandava para
+  // "Fora da Home" o que ficou alem dele. Log 12448: limite 15 -> 3 -> 20 e a
+  // home ficou com "2 fileiras na tela (limite 20, 16 fileira(s) no
+  // catalogo)". Agora a rajada so vale no fim da edicao, e so o valor final.
+  fil_esquecer();
+  fil_definir_limite(10);
+  { int j, ocultas;
+    char n[12][8];
+    for (j = 0; j < 12; j++) { snprintf(n[j], sizeof n[j], "r%d", j); fil_registrar(n[j], n[j], "X", "movie", 1); }
+    for (j = 10; j >= 3; j--) fil_ajustar_limite(j);    // desce ate 3...
+    for (j = 4; j <= 20; j++) fil_ajustar_limite(j);    // ...e sobe ate 20
+    fil_confirmar_limite();
+    for (ocultas = 0, j = 0; j < fil_n(); j++) if (fil_linha_oculta(j)) ocultas++;
+    assert(ocultas == 0 && fil_limite() == 20 && fil_n_na_home() == 12);
+    // Rajada que TERMINA mais baixa: vale a decisao do dono, fora da home.
+    for (j = 19; j >= 5; j--) fil_ajustar_limite(j);
+    assert(fil_n_na_home() == 5 && fil_n_fila() == 7);   // antes de confirmar: nada escondido
+    fil_confirmar_limite();
+    for (ocultas = 0, j = 0; j < fil_n(); j++) if (fil_linha_oculta(j)) ocultas++;
+    assert(ocultas == 7 && fil_n_fila() == 0);
+    fil_confirmar_limite();                              // sem rajada: nada
+    for (ocultas = 0, j = 0; j < fil_n(); j++) if (fil_linha_oculta(j)) ocultas++;
+    assert(ocultas == 7); }
+  puts("ok  #197: rajada no limite so esconde pelo valor final");
+
+  // ISSUE #197, a outra metade: catalogo que a cota deixou de fora entra na
+  // lista para ESCOLHA (fil_registrar_se_couber) e entrava LIGADO. Com vagas
+  // sobrando na home (a rajada acima as abria), ele ficava dentro do limite,
+  // fil_escolhida o dava como escolhido na TV e a volta seguinte o pedia: as
+  // fileiras de ator do Xperience em ordem de manifesto (Mahershala Ali,
+  // Matthew McConaughey...) apareceram na home sem ninguem as escolher.
+  fil_esquecer();
+  fil_definir_limite(20);
+  { int j, est = -1, pf = -1;
+    fil_registrar("cw", "Continuar", "", "", 3);
+    fil_registrar("cand", "Trending", "Xperience", "movie", 12);
+    fil_registrar_se_couber("fora_a", "Mahershala Ali", "Xperience", "movie");
+    fil_registrar_se_couber("fora_b", "Matthew McConaughey", "Xperience", "movie");
+    assert(fil_escolhida("fora_a") < 0 && fil_escolhida("fora_b") < 0);
+    assert(fil_escolhida("cand") == 1);
+    for (j = 0; j < fil_n(); j++) {
+      if (!strcmp(fil_chave(j), "fora_a")) { assert(fil_estado(j) == FIL_FORA); pf = j; }
+      if (!strcmp(fil_chave(j), "fora_b")) assert(fil_estado(j) == FIL_FORA);
+    }
+    // Nao e escolha da pessoa: a cota nao o trata como desligado (a ordem da
+    // conta ainda pode pedi-lo) e ele nao ocupa vaga nem fila.
+    assert(!fil_oculta("fora_a"));
+    assert(fil_n_na_home() == 2 && fil_n_fila() == 0);
+    // Quando a descoberta o pede (vira candidato), ele passa a ser ligado.
+    fil_registrar("fora_b", "Matthew McConaughey", "Xperience", "movie", 12);
+    for (j = 0; j < fil_n(); j++) if (!strcmp(fil_chave(j), "fora_b")) assert(fil_estado(j) == FIL_NA_HOME);
+    // A pessoa ADICIONA pela aba "Fora": entra na home, que tem vaga.
+    for (j = 0; j < fil_n(); j++) if (!strcmp(fil_chave(j), "fora_a")) pf = j;
+    fil_adicionar(pf, &est);
+    assert(est == FIL_NA_HOME && fil_escolhida("fora_a") >= 0);
+    // E se ela a REMOVE, e escolha: fil_oculta passa a valer.
+    for (j = 0; j < fil_n(); j++) if (!strcmp(fil_chave(j), "fora_a")) pf = j;
+    fil_remover(pf);
+    assert(fil_oculta("fora_a")); }
+  puts("ok  #197: fora da cota entra fora da home, sem tomar vaga");
+
   puts("fileiras: tudo ok");
   return 0;
 }

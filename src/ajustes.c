@@ -3270,6 +3270,7 @@ int ajustes_iniciar(void) {
   if (abrirNoVidro) { abrirNoVidro = 0; focarOpcao(AJ_VIDRO); }
   filAberta = 0; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
   emEdicao = 0;
+  fil_confirmar_limite();   // rajada de uma visita anterior que nao fechou
   valor[AJ_FIL_LIMITE] = fil_limite_gravado();
   // Tambem aqui, e nao so em ajustes_dir: sem arquivo de ajustes aquele caminho
   // volta cedo e os rotulos ficariam vazios na primeira abertura da tela.
@@ -4459,8 +4460,11 @@ static void mudarValorDireto(int op, int dir) {
     valor[op] = limita(op, v);
     // O limite de fileiras nao vive em valor[]: quem grava e consulta e
     // fileiras.c. Sem esta linha o numero mudaria na tela e a home nao.
+    // E um PASSO de rajada: quem ficou alem do limite so vai para "Fora da
+    // Home" quando a edicao termina, pelo valor final (issue #197; ver
+    // fil_ajustar_limite e o fim de ajustes_evento).
     if (op == AJ_FIL_LIMITE) {
-      fil_definir_limite(valor[op]);
+      fil_ajustar_limite(valor[op]);
       valor[op] = fil_limite_gravado();
     }
   } else {
@@ -4528,7 +4532,16 @@ static int ehInterruptor(int op) {
   return op >= 0 && OPCOES[op].tipo == OP_ESCOLHA && OPCOES[op].valores == V_LIGA;
 }
 
+static void eventoTela(const SDL_Event *e);
 void ajustes_evento(const SDL_Event *e) {
+  eventoTela(e);
+  // FIM DA EDICAO DO LIMITE (issue #197): qualquer tecla que solte a linha
+  // (OK, Voltar, cima/baixo, sair da tela) confirma a rajada. Sem rajada em
+  // curso e um no-op.
+  if (!(emEdicao && focoOp == AJ_FIL_LIMITE) || sair) fil_confirmar_limite();
+}
+
+static void eventoTela(const SDL_Event *e) {
   // A MODAL DE DIGITACAO VEM ANTES DE TUDO, como em biblioteca.c e recenviar.c:
   // enquanto ela esta em pe, nenhuma tecla pertence a lista de opcoes atras.
   // Sem esta linha, o D-pad moveria o foco da lista por baixo da modal.
