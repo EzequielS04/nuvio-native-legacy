@@ -71,7 +71,7 @@
 #define NV_DIAG_AUTO_OPT 1
 #endif
 
-#define DIAG_MAX_ADDONS 16
+#define DIAG_MAX_ADDONS 32
 #define DIAG_MAX_ASSETS 12
 #define DIAG_TIMEOUT_S  6
 #define DIAG_SESSAO_MS (8u * 60u * 1000u)

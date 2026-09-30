@@ -37,7 +37,7 @@
 #include <string.h>
 #include <pthread.h>
 
-#define SY_ADD_MAX   16
+#define SY_ADD_MAX   32   // o mesmo teto de ADD_MAX (addons.c)
 
 static pthread_t fio;
 static int fioVivo, fioPronto;

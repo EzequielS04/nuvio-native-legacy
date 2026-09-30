@@ -25,7 +25,9 @@
 // doze addons via os ultimos sumirem sem nenhuma explicacao, que e exatamente o
 // "some addons were missing (i dont know the reason)" do #42. Os dois tetos
 // agora sao o mesmo numero, e o corte, se um dia voltar a acontecer, e dito.
-#define ADD_MAX 16
+// 32 e nao 16 (30/09): o app oficial passou a 32, e quem tem muitos addons
+// perdia justamente os de legenda, que costumam ser os ultimos da lista.
+#define ADD_MAX 32
 #define ADD_PREF_MAX 8
 #define ADD_PREF_TAM 24
 
