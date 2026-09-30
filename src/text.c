@@ -468,7 +468,18 @@ static TTF_Font *reservaDe(Escrita e, TxtEstilo estilo, const char *s) {
 // pelo hash do texto, como a do i18n. ASCII puro nem entra: sai na varredura.
 #define FD_MEM 512
 static struct { unsigned long long h; unsigned n; unsigned char fam, estilo, var; TTF_Font *f; } fdMem[FD_MEM];
-static void fdEsquecer(void) { memset(fdMem, 0, sizeof fdMem); }
+// LARGURA MEDIDA, GUARDADA (#191). larguraLinha (abaixo) e TTF_SizeUTF8, que
+// passa o texto inteiro pelo HarfBuzz; txt_bloco mede CADA prefixo de CADA
+// paragrafo e txt_linha_corta mede cada corte, e isso a cada quadro. Nativo
+// custa pouco; no WASM da Samsung era o quadro inteiro: perfil do Chrome (4x
+// mais lento) na tela de login com o painel de novidades, 88% do tempo em
+// larguraLinha -> hb_shape, c-max 20 ms contra 3 ms da 1.5.3 (que media pela
+// linha rasterizada e guardada). Na TV (QE65Q80A, registro 11855) c-max 300 ms
+// e 3-5 FPS. A resposta so muda com o texto, a fonte e a variante CJK, e a
+// tabela e esquecida junto com a de fonteDe.
+#define LG_MEM 4096
+static struct { unsigned long long h; unsigned n; unsigned char fam, estilo, enf, var, ok; int w; } lgMem[LG_MEM];
+static void fdEsquecer(void) { memset(fdMem, 0, sizeof fdMem); memset(lgMem, 0, sizeof lgMem); }
 
 // Fonte com que a linha `s` deve ser desenhada. Devolve a principal quando ela
 // da conta — que e o caso da esmagadora maioria das linhas.
@@ -935,13 +946,36 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
 // HIPOTESE nao medida na TV: TTF_SizeUTF8 e a rotina que o TTF_RenderUTF8_Blended
 // usa para dimensionar a superficie, entao as larguras coincidem;
 // tests/text_largura.sh confere isso no Mac.
+static int larguraLinhaMedir(TxtEstilo estilo, const char *s, TxtFamilia familia,
+                             int enfase);
 static int larguraLinha(TxtEstilo estilo, const char *s, TxtFamilia familia,
                         int enfase) {
-  char limpo[1024];
+  unsigned long long h = 1469598103934665603ull;
+  unsigned n = 0, slot;
+  unsigned char var;
+  int w;
   if (familia < TXT_FAMILIA_INTER || familia >= TXT_FAMILIA_N)
     familia = TXT_FAMILIA_INTER;
-  if (!s || !*s || estilo < 0 || estilo >= TXT_NFONTES ||
-      !fonteDe(familia, estilo, s)) return 0;
+  if (!s || !*s || estilo < 0 || estilo >= TXT_NFONTES) return 0;
+  { const unsigned char *p = (const unsigned char *)s;
+    for (; *p; p++, n++) { h ^= *p; h *= 1099511628211ull; } }
+  slot = (unsigned)(h % LG_MEM);
+  var = (unsigned char)variacaoCjk();
+  if (lgMem[slot].ok && lgMem[slot].h == h && lgMem[slot].n == n &&
+      lgMem[slot].fam == familia && lgMem[slot].estilo == estilo &&
+      lgMem[slot].enf == (unsigned char)enfase && lgMem[slot].var == var)
+    return lgMem[slot].w;
+  w = larguraLinhaMedir(estilo, s, familia, enfase);
+  lgMem[slot].h = h; lgMem[slot].n = n; lgMem[slot].fam = (unsigned char)familia;
+  lgMem[slot].estilo = (unsigned char)estilo; lgMem[slot].enf = (unsigned char)enfase;
+  lgMem[slot].var = var; lgMem[slot].w = w; lgMem[slot].ok = 1;
+  return w;
+}
+
+static int larguraLinhaMedir(TxtEstilo estilo, const char *s, TxtFamilia familia,
+                             int enfase) {
+  char limpo[1024];
+  if (!fonteDe(familia, estilo, s)) return 0;
   {
     s = semDecorativoSemGlifo(fonteDe(familia, estilo, s), s, limpo, sizeof limpo);
     if (!*s) return 0;
