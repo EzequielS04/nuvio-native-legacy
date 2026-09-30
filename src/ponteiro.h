@@ -30,8 +30,9 @@
 //     barra de tempo do player, o fundo que fecha uma folha) chama ele em vez
 //     do OK.
 //   - RODINHA vira seta: cima/baixo, e esquerda/direita na rodinha lateral.
-//   - SETA DO CONTROLE esconde o cursor; ele volta no proximo movimento. Parado
-//     alguns segundos ele some sozinho.
+//   - SETA DO CONTROLE esconde o cursor; ele volta com um movimento de
+//     verdade (janela curta e limiar de distancia: o tremor de quem aperta a
+//     seta nao conta). Parado alguns segundos ele some sozinho.
 //
 // CUSTO ZERO SEM PONTEIRO: com o cursor escondido ponteiro_alvo() retorna na
 // primeira linha e nada e desenhado. Quem nunca pega o Magic Remote paga uma

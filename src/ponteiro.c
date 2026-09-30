@@ -16,8 +16,10 @@
 #define PONT_SC_CURSOR_HIDE 485
 
 #define PONT_MAX_ALVOS   512
-// Parado este tempo, o cursor some. O do sistema no webOS dorme sozinho
-// tambem (SDL_WEBOS_CURSOR_SLEEP_TIME); este e o do app.
+// Parado este tempo, o cursor some — no webOS o do sistema junto, pedido por
+// SDL_webOSCursorVisibility (ver ponteiro_quadro). O SDL_webOS.h tambem tem o
+// hint SDL_WEBOS_CURSOR_SLEEP_TIME, mas sem unidade documentada e sem medida
+// na TV; nao e usado.
 #define PONT_DORME_MS    4000
 // Janela em que um OK de tecla e um clique sao O MESMO aperto. Nao esta
 // provado se o webOS manda os dois quando o cursor esta na tela; se mandar,
@@ -27,6 +29,16 @@
 // o foco. Ver `conteudoMexeuEm`.
 #define PONT_ASSENTA_MS  150
 #define PONT_RODA_MS      70
+// DEPOIS DE UMA SETA o cursor so volta com um gesto de verdade. Apertar a seta
+// balanca o Magic Remote; esse tremor chegava como movimento, reacendia o
+// cursor e o hover refocava o alvo sob ele (no player, o de tela cheia, que
+// reabre a barra). Movimento nos primeiros PONT_SETA_JANELA_MS e ignorado; depois
+// dele o cursor precisa se afastar PONT_SETA_LIMIAR px (logicos, em linha reta)
+// do ponto onde a mao voltou a mexer. Uma pausa maior que PONT_SETA_PAUSA_MS
+// recomeca a conta: tremor esparso nao soma.
+#define PONT_SETA_JANELA_MS 350
+#define PONT_SETA_LIMIAR    32.0f
+#define PONT_SETA_PAUSA_MS  300
 
 static PonteiroAlvo lista[2][PONT_MAX_ALVOS];
 static int nLista[2];
@@ -59,6 +71,14 @@ static int engolirCliqueSolto = 0, engolirOkSolto = 0;
 static Uint32 rodaEm = 0;
 
 static int logouTipo[8];
+
+// Escondido por uma seta: o movimento tem de vencer a janela e o limiar.
+static int escondidoSeta = 0;
+static Uint32 setaEm = 0, setaMovEm = 0;
+static float setaAx, setaAy;
+static int setaAncora = 0;
+// Nos que pedimos ao compositor para esconder a seta dele (webOS).
+static int sistemaEscondido = 0;
 
 #ifdef NV_PONT_WEBOS
 static SDL_bool (*cursorSistema)(SDL_bool) = NULL;
@@ -147,6 +167,7 @@ void ponteiro_diag(const SDL_Event *e) {
 void ponteiro_iniciar(void) {
   nLista[0] = nLista[1] = 0;
   visivel = 0;
+  escondidoSeta = 0; sistemaEscondido = 0;
   memset(&hover, 0, sizeof hover);
   { SDL_Window *w = SDL_GL_GetCurrentWindow();
     int ww = 0, wh = 0, dw = 0, dh = 0;
@@ -178,8 +199,34 @@ static void esconder(const char *porque) {
   (void)porque;
 #ifdef NV_PONT_WEBOS
   // Mesmo gesto do RetroArch: seta apertada, cursor do sistema fora tambem.
-  if (cursorSistema) cursorSistema(SDL_FALSE);
+  // Vale para o "parado" tambem: sem isto a seta do sistema ficaria na tela
+  // com o hover ja desligado.
+  if (cursorSistema) { cursorSistema(SDL_FALSE); sistemaEscondido = 1; }
 #endif
+}
+
+// O cursor volta (movimento que venceu o limiar, clique, 484 legitimo).
+static void reaparecer(void) {
+  escondidoSeta = 0;
+  if (!visivel) { visivel = 1; hover.ok = 0; }
+#ifdef NV_PONT_WEBOS
+  // Fomos nos que escondemos a seta do sistema: devolve-la. (Se o compositor ja
+  // a mostrou sozinho, pedir de novo nao muda nada.)
+  if (sistemaEscondido && cursorSistema) cursorSistema(SDL_TRUE);
+#endif
+  sistemaEscondido = 0;
+}
+
+// Movimento enquanto escondido pela seta: ainda e tremor?
+static int tremorDaSeta(Uint32 agora) {
+  if (!escondidoSeta) return 0;
+  if (agora - setaEm < PONT_SETA_JANELA_MS) return 1;
+  if (!setaAncora || agora - setaMovEm > PONT_SETA_PAUSA_MS) {
+    setaAncora = 1; setaAx = px; setaAy = py;
+  }
+  setaMovEm = agora;
+  { float dx = px - setaAx, dy = py - setaAy;
+    return dx * dx + dy * dy < PONT_SETA_LIMIAR * PONT_SETA_LIMIAR; }
 }
 
 static void primeiro(int tipo, const char *nome, int x, int y) {
@@ -260,8 +307,9 @@ int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
       if (e->motion.which == SDL_TOUCH_MOUSEID) return 0;
       converter(e->motion.windowID, e->motion.x, e->motion.y);
       primeiro(0, "movimento", e->motion.x, e->motion.y);
+      if (tremorDaSeta(agora)) return 1;
       ultimoMov = agora;
-      if (!visivel) { visivel = 1; hover.ok = 0; }
+      reaparecer();
       mover();
       return 1;
 
@@ -270,7 +318,7 @@ int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
       converter(e->button.windowID, e->button.x, e->button.y);
       primeiro(1, "clique", e->button.x, e->button.y);
       ultimoMov = agora;
-      visivel = 1;
+      reaparecer();
       if (e->button.button == SDL_BUTTON_RIGHT) {
         // Nao ha botao direito no Magic Remote; no Mac ele e o Voltar, que e
         // o que falta para testar sem teclado.
@@ -346,8 +394,18 @@ int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
           primeiro(sc == PONT_SC_CURSOR_SHOW ? 3 : 4,
                    sc == PONT_SC_CURSOR_SHOW ? "cursor-mostrou" : "cursor-escondeu",
                    sc, 0);
-          if (sc == PONT_SC_CURSOR_HIDE) { visivel = 1; esconder("sistema"); }
-          else { visivel = 1; ultimoMov = agora; hover.ok = 0; }
+          if (sc == PONT_SC_CURSOR_HIDE) {
+            visivel = 1; esconder("sistema");
+            // O sistema ja escondeu a dele: nada a devolver depois.
+            sistemaEscondido = 0;
+          } else if (escondidoSeta) {
+            // O compositor reacendeu a seta dele com o tremor de quem apertou
+            // a seta: continua escondido do nosso lado e pede para apagar a dele
+            // de novo. O movimento que vencer o limiar a devolve.
+#ifdef NV_PONT_WEBOS
+            if (cursorSistema) { cursorSistema(SDL_FALSE); sistemaEscondido = 1; }
+#endif
+          } else { reaparecer(); ultimoMov = agora; hover.ok = 0; }
         }
         return 1;
       }
@@ -364,8 +422,12 @@ int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
         return 0;
       }
       if (e->type == SDL_KEYDOWN &&
-          (k == SDLK_UP || k == SDLK_DOWN || k == SDLK_LEFT || k == SDLK_RIGHT))
+          (k == SDLK_UP || k == SDLK_DOWN || k == SDLK_LEFT || k == SDLK_RIGHT)) {
+        // Toda seta rearma a janela, mesmo com o cursor ja escondido: quem
+        // navega de seta em seta nao pode ver o cursor voltar entre elas.
         esconder("seta");
+        escondidoSeta = 1; setaEm = agora; setaAncora = 0;
+      }
       return 0;
     }
     default:
@@ -375,13 +437,14 @@ int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
 
 void ponteiro_quadro(Uint32 agora) {
   nLista[escreve] = 0;
-#ifndef NV_PONT_WEBOS
-  // No webOS quem faz o cursor dormir e o sistema, e ele avisa com o 485; um
-  // relogio proprio aqui desligaria o hover com a seta ainda na tela.
-  if (visivel && agora - ultimoMov > PONT_DORME_MS && !okPendente) esconder("parado");
-#else
-  (void)agora;
+  // No webOS o relogio proprio so vale com SDL_webOSCursorVisibility: e ela
+  // que apaga a seta do sistema junto (esconder). Sem ela, desligar o hover
+  // aqui deixaria a seta na tela sem funcionar; ai fica o sono do sistema,
+  // que avisa com o 485.
+#ifdef NV_PONT_WEBOS
+  if (!cursorSistema) return;
 #endif
+  if (visivel && agora - ultimoMov > PONT_DORME_MS && !okPendente) esconder("parado");
 }
 
 // Fecha o quadro: a lista que o desenho acabou de montar passa a ser a que os

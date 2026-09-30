@@ -232,8 +232,41 @@ int main(void) {
   CONFERE(!ponteiro_ativo(), "seta esconde o cursor");
   quadro(home);
   zerar();
+
+  // --- depois da seta, tremor nao traz o cursor de volta ------------------
+  // Mao em 110,110 (card 0,0 focado antes); o foco foi para outro lugar pela
+  // seta. Movimento pequeno nao pode reacender nem refocar.
+  nFocar = 0;
+  relogio += 50;
+  mover(400, 400);                      // dentro da janela: ignorado mesmo longe
+  CONFERE(!ponteiro_ativo() && nFocar == 0, "movimento colado na seta e ignorado");
+  relogio += 400;
+  mover(110, 110);                      // ancora
+  relogio += 16; mover(125, 118);
+  relogio += 16; mover(112, 104);
+  CONFERE(!ponteiro_ativo() && nFocar == 0, "tremor abaixo do limiar nao reacende");
   CONFERE(tecla(SDL_KEYDOWN, 0, 484) == 1, "484 (cursor mostrou) e consumido");
-  CONFERE(ponteiro_ativo(), "484 mostra");
+  CONFERE(!ponteiro_ativo(), "484 do tremor da seta nao reacende");
+  relogio += 400; mover(130, 110);      // pausa longa: nova ancora
+  relogio += 16;  mover(110, 110);
+  CONFERE(!ponteiro_ativo(), "tremor esparso nao soma");
+  relogio += 16; mover(150, 140);
+  CONFERE(ponteiro_ativo(), "gesto de verdade reacende");
+  quadro(home); quadro(home);
+  relogio += 200;
+  mover(340, 230);
+  CONFERE(focoA == 1 && focoB == 1, "reaceso, o hover volta a focar");
+  // Clique depois da seta vale na hora.
+  CONFERE(tecla(SDL_KEYDOWN, SDLK_LEFT, 0) == 0, "seta de novo");
+  quadro(home); zerar();
+  relogio += 50;
+  botao(SDL_MOUSEBUTTONDOWN, 340, 230, SDL_BUTTON_LEFT);
+  botao(SDL_MOUSEBUTTONUP, 340, 230, SDL_BUTTON_LEFT);
+  CONFERE(ponteiro_ativo(), "clique depois da seta reacende");
+  zerar();
+  CONFERE(tecla(SDL_KEYDOWN, 0, 485) == 1, "485 esconde");
+  CONFERE(tecla(SDL_KEYDOWN, 0, 484) == 1, "484 (cursor mostrou) e consumido");
+  CONFERE(ponteiro_ativo(), "484 fora da seta mostra");
   CONFERE(tecla(SDL_KEYUP, 0, 484) == 1, "KEYUP do 484 tambem");
   CONFERE(tecla(SDL_KEYDOWN, 0, 485) == 1, "485 (cursor escondeu) e consumido");
   CONFERE(!ponteiro_ativo(), "485 esconde");
