@@ -422,7 +422,7 @@ static void captura(const char *nome,SDL_Window *win,int painel) {
       for(int k=0;k<3;k++) {
         GfxRect r={180+k*470.f,360,440,248};
         gfx_cor(r,.045f,.18f+.05f*k,.24f,.30f,1);
-        continuar_desenhar(&c,r);
+        continuar_desenhar(&c,r,.045f);
       }
       menu_atualizar(1.f/60,SDL_GetTicks());menu_desenhar(SDL_GetTicks());
     }

@@ -14,7 +14,7 @@
 #include <string.h>
 #include <time.h>
 
-void continuar_desenhar(const CatItem *ci, GfxRect r) {
+void continuar_desenhar(const CatItem *ci, GfxRect r, float raio) {
   CatItem copia;
   ProxSugestao prox;
   int idx;
@@ -46,7 +46,12 @@ void continuar_desenhar(const CatItem *ci, GfxRect r) {
   float pad = NV_CW_PAD * esc, largura = r.w - pad * 2;
   // Veu so na base (gfx.h, gfx_veu_base): o nome e o episodio ficam embaixo;
   // o selo de cima tem o proprio fundo.
-  gfx_veu_base(r, NV_RAIO_CARD, 0.66f, .88f);
+  //
+  // O RAIO E O DA ARTE (#144). Era NV_RAIO_CARD fixo (~13 px neste cartao),
+  // enquanto a arte usa o raio de Ajustes: com raio maior os cantos do veu
+  // passavam por fora da curva da arte e apareciam como cantos escuros e
+  // "cortados" na base do cartao.
+  gfx_veu_base(r, raio, 0.66f, .88f);
 
   // Um retangulo compacto, nao uma pilula. Nunca inventar status de estreia.
   if (ci->restanteMin > 0 || (ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb)))) {

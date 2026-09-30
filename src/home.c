@@ -4395,9 +4395,9 @@ void home_desenhar(Uint32 agora) {
           }
 
           if (tipo == FILEIRA_CONTINUE)
-            continuar_desenhar(cItem, (GfxRect){px, py, w, h});
+            continuar_desenhar(cItem, (GfxRect){px, py, w, h}, raio);
           if (tipo == FILEIRA_RETORNO)
-            continuar_desenhar(cItem, (GfxRect){px, py, w, h});
+            continuar_desenhar(cItem, (GfxRect){px, py, w, h}, raio);
 
           // 4. DESTAQUE: titulo e metadados DENTRO da arte, sobre um veu
           // escuro na base — como o Apple TV faz. O titulo faz o papel do logo
