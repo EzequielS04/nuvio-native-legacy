@@ -53,6 +53,7 @@ static int    visivel;
 static float  anim;            // 0..1, a entrada por mola
 static Uint32 desdeQuando;     // quando a condicao passou a valer; 0 = nao vale
 static int    idxItem = -1;
+static char   idItem[64];      // o titulo de idxItem (#190; ver pausao.h)
 static char   epLinha[220];
 
 void pausao_fechar(void) {
@@ -60,12 +61,16 @@ void pausao_fechar(void) {
   anim = 0.0f;
   desdeQuando = 0;
   idxItem = -1;
+  idItem[0] = 0;
   epLinha[0] = 0;
 }
 
+int pausao_indice(void) { return cat_indice_vivo(idxItem, idItem); }
+
 void pausao_atualizar(float dt, Uint32 agora, int podeSubir, int idx,
-                      const char *linhaEp) {
+                      const char *imdb, const char *linhaEp) {
   idxItem = idx;
+  snprintf(idItem, sizeof idItem, "%s", imdb ? imdb : "");
   snprintf(epLinha, sizeof epLinha, "%s", linhaEp ? linhaEp : "");
 
   // O ajuste e consultado AQUI e nao na abertura: desligar a opcao com o painel
@@ -152,6 +157,11 @@ void pausao_desenhar(Uint32 agora, const PausaoCena *cena) {
   (void)agora;
 
   if (a <= 0.004f) return;
+  // PELO TITULO, e nao so pelo indice (#190): uma troca de bloco entre o
+  // pausao_atualizar e este desenho poe outro titulo na mesma posicao.
+  { int i = cat_indice_vivo(idxItem, idItem);
+    if (i < 0) return;
+    idxItem = i; }
   c = cat_item(idxItem);
   if (!c) return;
   vidro = ajustes_vidro();

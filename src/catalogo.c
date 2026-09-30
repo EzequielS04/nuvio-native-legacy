@@ -954,6 +954,14 @@ int cat_indice_titulo(const char *imdb, int preferido) {
   return prefOk ? preferido : primeiro;
 }
 
+int cat_indice_vivo(int indice, const char *imdb) {
+  const CatItem *c;
+  if (!imdb || !imdb[0]) return indice;
+  if (indice >= 0 && indice < cat_n() && (c = cat_item(indice)) && !strcmp(c->imdb, imdb))
+    return indice;
+  return cat_indice_titulo(imdb, indice);
+}
+
 static int normalizarIndice(int indice) {
   int i = cat_n();
   if (i < 1) return -1;

@@ -83,6 +83,22 @@ static int vmFeito, vmFeitoN, vmFeitoVisto; static Uint32 vmFeitoAte;
 // menu passa a servir tambem a pagina de detalhe, onde a folha nem esta aberta.
 static int  vmIdx = -1, vmT, vmE;
 static char vmNome[96];
+// O TITULO, e nao so a posicao (#190). `titulo` e `vmIdx` sao indices no
+// catalogo, e o catalogo e refeito com a folha aberta — a refacao de
+// "Continuar assistindo" roda com o player tocando. A mesma posicao passava a
+// ser de outra serie, e a folha listava os episodios dela ("Attack on Titan
+// trocado por Knights of Guinevere no menu de episodios"). Guardado na
+// abertura e conferido por revalidar() antes de cada uso.
+static char idTitulo[64], vmId[64];
+static void guardarId(char *dst, size_t tam, int idx) {
+  const CatItem *ci = cat_item(idx);
+  snprintf(dst, tam, "%s", ci ? ci->imdb : "");
+}
+static void revalidar(void) {
+  int i;
+  if (idTitulo[0] && (i = cat_indice_vivo(titulo, idTitulo)) >= 0) titulo = i;
+  if (vmId[0] && (i = cat_indice_vivo(vmIdx, vmId)) >= 0) vmIdx = i;
+}
 // A MINIATURA DO EPISODIO, resolvida UMA vez na abertura. O cartao mostra a
 // arte do episodio de que ele fala — sem ela o menu e quatro linhas de texto
 // que poderiam ser de qualquer titulo. Procurar no catalogo a cada quadro
@@ -100,6 +116,7 @@ static void menuAbrir(int idx, int t, int e, const char *nome, int so) {
   const CatItem *ci = cat_item(idx);
   if (!ci || !ci->imdb[0]) return;
   vmIdx = idx; vmT = t; vmE = e; vmSo = so; vmModoTemp = 0;
+  guardarId(vmId, sizeof vmId, idx);
   snprintf(vmNome, sizeof vmNome, "%s", nome ? nome : "");
   vmThumb[0] = 0;
   { int i;
@@ -234,6 +251,7 @@ static void menuAbrirTemporada(int idx, int t, int so) {
 
 void episodios_abrir(int idx, int t, int e) {
   titulo = idx; atualT = t; atualE = e; aberto = 1;
+  guardarId(idTitulo, sizeof idTitulo, idx);
   temporada = foco = 0; grupo = 1; pedidoE = 0; scroll = 0;
   vmAberto = 0; vmSegurando = 0; vmConsumir = 0;
   localizarAtual = 1; alvoE = e; semMolaScroll = 1;
@@ -245,6 +263,7 @@ int episodios_aberto(void) { return aberto; }
 int   episodios_foco_linha(void) { return foco; }
 float episodios_rolagem(void) { return scroll; }
 void episodios_fechar(void) { aberto = 0; }
+int  episodios_titulo(void) { revalidar(); return titulo; }
 int episodios_escolheu(int *t, int *e) {
   if (!pedidoE) return 0;
   *t = pedidoT; *e = pedidoE; pedidoE = 0; return 1;
@@ -457,6 +476,7 @@ static void menuEvento(const SDL_Event *ev) {
 
 void episodios_evento(const SDL_Event *ev) {
   if (!aberto) return;
+  revalidar();
   { SDL_Keycode ko = ev->key.keysym.sym;
     int ehOk = (ko == SDLK_RETURN || ko == SDLK_KP_ENTER || ko == SDLK_SPACE);
 
@@ -570,6 +590,7 @@ void episodios_evento(const SDL_Event *ev) {
 void episodios_atualizar(float dt) {
   anim = anim_mola(anim, aberto ? 1 : 0, dt, NV_MOLA_TELA);
   if(!aberto && anim<.005f) return;
+  revalidar();
   desc_episodios_pendente();
   int n = nLinhas();
   // A LISTA SUMIU: NAO E "VOLTE PARA O COMECO", E "ESPERE" — issue #102.
@@ -618,6 +639,7 @@ static void ponteiroEpTemporada(int i, int b) {
 
 void episodios_desenhar(void) {
   if (anim < .005f) return;
+  revalidar();
   float x = NV_TELA_W - EP_W + (1 - anim) * EP_W;
   float ar, ag, ab;
   float tinta = ajustes_acento_tinta(&ar, &ag, &ab);
@@ -821,9 +843,10 @@ int  episodios_menu_modo_temporada(void) { return vmAberto && vmModoTemp; }
 int  episodios_menu_aberto(void) { return vmAberto && vmSo; }
 int  episodios_menu_aberto_qualquer(void) { return vmAberto; }
 void episodios_menu_evento(const SDL_Event *e) {
-  if (vmAberto && vmSo) menuEvento(e);
+  if (vmAberto && vmSo) { revalidar(); menuEvento(e); }
 }
 void episodios_menu_desenhar(void) {
+  if (vmAberto && vmSo) revalidar();
   if (vmAberto && vmSo) menuDesenhar(0.0f, (float)NV_TELA_W, 1.0f);
 }
 int  episodios_menu_pediu_fontes(void) { int v = vmFontesPed; vmFontesPed = 0; return v; }

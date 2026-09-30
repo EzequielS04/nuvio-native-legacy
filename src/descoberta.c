@@ -4762,6 +4762,23 @@ void desc_mesclar_episodios(CatEp *base, int nb, const CatEp *outro, int no, int
 
 // `sobre` (opcional) e o /meta da OUTRA fonte, mesclado por `modo`
 // (desc_mesclar_episodios) antes de publicar.
+// O TITULO DO FIO DE EPISODIOS (#190). buscarEps guarda o INDICE e depois
+// passa segundos na rede; se o catalogo for refeito nesse meio (a refacao de
+// "Continuar assistindo" roda com o player aberto), cat_definir_episodios e
+// cat_atualizar_item escreviam na posicao velha — a lista e a ficha de um
+// titulo iam parar em outro. epAlvo re-resolve pelo id antes de cada escrita;
+// -1 = o titulo saiu do catalogo e nada e escrito. Um fio por vez (fioEpVivo).
+static char epAlvoId[64];
+static int epAlvo(int alvoItem) {
+  int i = cat_indice_vivo(alvoItem, epAlvoId);
+  if (i != alvoItem) {
+    printf("[desc] episodios de %s: catalogo remontou no meio do pedido (%d -> %d)\n",
+           epAlvoId, alvoItem, i);
+    fflush(stdout);
+  }
+  return i;
+}
+
 static int publicarEpisodios(const char *corpo, int alvoItem, const char *titulo,
                              const char *sobre, int modo) {
   CatEp *eps = malloc(sizeof(CatEp) * VIDEOS_MAX);
@@ -4776,7 +4793,7 @@ static int publicarEpisodios(const char *corpo, int alvoItem, const char *titulo
       free(o);
     }
   }
-  if (n) cat_definir_episodios(alvoItem, eps, n);
+  if (n && (alvoItem = epAlvo(alvoItem)) >= 0) cat_definir_episodios(alvoItem, eps, n);
   free(eps);
   marco("episodios na tela");
   printf("[desc] %s: %d episodios publicados antes dos extras\n", titulo, n);
@@ -5267,6 +5284,11 @@ static void *buscarEps(void *u) {
   (void)u;
   memset(&mf, 0, sizeof mf);
   if (!orig || !orig->imdb[0]) { fioEpVivo = 0; return NULL; }
+  snprintf(epAlvoId, sizeof epAlvoId, "%s", orig->imdb);
+  // COPIA AGORA (#190): o ponteiro de cat_item so vale ate o fim do quadro, e
+  // este fio vai para a rede antes de ler o resto dele.
+  base = *orig;
+  orig = &base;
   // CANAL NAO PASSA AQUI. O Cinemeta so conhece filme/serie por id do IMDb
   // ("tt..."); id de canal e "cs:channel:<hash>". "ehFilme = tipo != series"
   // tratava canal como filme, pedia /meta/movie/<id> com um id que o
@@ -5470,7 +5492,7 @@ static void *buscarEps(void *u) {
       }
     }
     // Publica texto, generos e temporadas antes do enriquecimento de imagens.
-    cat_atualizar_item(alvoItem, &edit);
+    if ((alvoItem = epAlvo(alvoItem)) >= 0) cat_atualizar_item(alvoItem, &edit);
     marco("detalhe: meta basico na tela");
     { char idBase[24];
       const char *dp;
@@ -5483,7 +5505,7 @@ static void *buscarEps(void *u) {
       // sobrescreveriam os dela.
       if (idbase_e_imdb(it->imdb))
         fotosDoElenco(&edit, idBase, !strcmp(it->tipo, "series"), manter); }
-    cat_atualizar_item(alvoItem, &edit);
+    if (alvoItem >= 0 && (alvoItem = epAlvo(alvoItem)) >= 0) cat_atualizar_item(alvoItem, &edit);
     printf("[desc] %s: %d atores, dir='%s', %d temporadas\n",
            edit.titulo, edit.nElenco, edit.direcao, edit.nTemporadas);
     fflush(stdout);
@@ -5509,7 +5531,7 @@ static void *buscarEps(void *u) {
           free(c3);
         }
       }
-      if (chave2[0] && tmdbId > 0) {
+      if (chave2[0] && tmdbId > 0 && alvoItem >= 0 && (alvoItem = epAlvo(alvoItem)) >= 0) {
         int neps = cat_n_episodios(alvoItem);
         if (neps > 0) {
           CatEp *tmp = malloc(sizeof(CatEp) * (size_t)neps);
@@ -5540,7 +5562,8 @@ static void *buscarEps(void *u) {
                   free(c4);
                 } }
             }
-            if (preenchidas > 0) {
+            if (preenchidas > 0 && (alvoItem = epAlvo(alvoItem)) >= 0 &&
+                cat_n_episodios(alvoItem) == neps) {
               cat_definir_episodios(alvoItem, tmp, neps);
               printf("[desc] %s: nota/sinopse TMDB em %d episodios\n",
                      edit.titulo, preenchidas);

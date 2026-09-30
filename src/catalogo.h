@@ -263,6 +263,11 @@ int cat_indice_por_imdb(const char *imdb);
 // Como cat_indice_por_imdb, mas fica em `preferido` enquanto ele for o mesmo
 // titulo e prefere uma copia COM episodios (#151; ver catalogo.c).
 int cat_indice_titulo(const char *imdb, int preferido);
+// O indice de quem GUARDOU `indice` junto com o id do titulo (#190): o
+// proprio `indice` enquanto ele ainda for aquele titulo (id identico, custo de
+// um strcmp), senao cat_indice_titulo. -1 se o titulo nao esta mais no
+// catalogo. Sem id, devolve `indice` como antes.
+int cat_indice_vivo(int indice, const char *imdb);
 
 // Acrescenta um titulo ao FIM e devolve o indice, ou -1. Para o titulo que veio
 // de fora do catalogo (filmografia de ator, "Mais como este"). Ver a nota sobre
