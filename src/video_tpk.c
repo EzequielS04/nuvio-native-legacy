@@ -42,6 +42,7 @@ static Uint32 legAte;
 static char urlAtual[4096];
 static char cabecalhos[2048];
 static volatile int ativo, pronto, falhou, terminou, tocando, largura, altura;
+static volatile int conflito;   // ver video_tpk_log_host
 static volatile int durMs, bufferando;
 static volatile Uint32 bufferDesde;
 static unsigned sessao;
@@ -246,6 +247,22 @@ int  video_ativo(void) { return ativo; }
 int  video_falhou(void) { return falhou; }
 int  video_audio_nao_suportado(void) { return 0; }
 int  video_terminou(void) { return terminou; }
+int  video_conflito_recurso(void) { return conflito; }
+
+// OUTRO APP COM O VIDEO DA TV (#178, rawldon AU7000 e mais 2 TVs nos registros
+// 10257-10419). O host avisa a interrupcao so como EV_PAUSADO; aqui isso so
+// zerava `tocando`, `pronto` seguia 1 e o trailer continuava "tocando" com o
+// furo aberto — e o que aparecia no furo era o video do YouTube, dono do plano.
+// A razao so chega pela linha de log do host (Video.cs: "interrompido: " +
+// Reason); o clipe mudo do arranque loga "prime interrompido ..." e fica de
+// fora de proposito. Conflito = a fonte falhou: o trailer fecha e volta a
+// arte, o player do filme cai no caminho de erro de sempre.
+void video_tpk_log_host(const char *linha) {
+  if (!linha || !strstr(linha, "interrompido: ResourceConflict")) return;
+  falhou = 1; tocando = 0;
+  if (!conflito) { printf("[video] tpk: outro app tomou o video da TV; trailers automaticos desligados nesta sessao\n"); fflush(stdout); }
+  conflito = 1;
+}
 int  video_n_audio(void) { return nAudio; }
 int  video_n_legenda(void) { return nLeg; }
 const VideoFaixa *video_audio(int i) { return (i >= 0 && i < nAudio) ? &faixaAudio[i] : 0; }

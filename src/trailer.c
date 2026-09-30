@@ -222,6 +222,11 @@ int trailer_suportado(void) {
   // 15 s pela sessao inteira — 1327 recusas de PERMISSION, que nao muda
   // sozinha. O play continua tentando (video_iniciar, pedido da pessoa).
   static int sabe = 0;
+#ifdef NV_TPK
+  // Outro app ja tomou o video da TV nesta sessao (#178): abrir trailer de
+  // novo so abriria o furo em cima do video DELE. Fica a arte.
+  if (video_conflito_recurso()) return 0;
+#endif
   if (sabe) return 1;
   if (video_iniciar_auto()) sabe = 1;
   return sabe;

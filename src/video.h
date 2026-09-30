@@ -144,6 +144,12 @@ const char *video_erro_texto(void);
 int video_decoder_anunciou(void);
 int    video_audio_nao_suportado(void);  // uMS errorCode 200: video segue sem som
 int    video_terminou(void); // 1 depois do fim de fluxo (endOfStream) da fonte atual
+// 1 depois que OUTRO app tomou o video da TV nesta sessao (so o .tpk sabe:
+// "interrompido: ResourceConflict" do host). Pegajoso ate o fim da sessao.
+int    video_conflito_recurso(void);
+#ifdef NV_TPK
+void   video_tpk_log_host(const char *linha);   // tpk.c repassa cada linha do host
+#endif
 
 // --- faixas -----------------------------------------------------------------
 // Tudo isto sai do evento sourceInfo da assinatura do uMS: o addon nao informa

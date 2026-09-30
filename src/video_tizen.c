@@ -1381,6 +1381,7 @@ int    video_audio_nao_suportado(void) { return 0; }
 // O trailer deste alvo nao passa pelo AVPlay (ver trailer.c); nao ha fim a
 // contar aqui.
 int    video_terminou(void)   { return 0; }
+int    video_conflito_recurso(void) { return 0; }
 
 double video_creditos(void) {
   double dur;

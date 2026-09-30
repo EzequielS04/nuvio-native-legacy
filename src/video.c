@@ -182,6 +182,7 @@ const char *video_erro_texto(void) { return ""; }
 int  video_decoder_anunciou(void) { return 1; }
 int  video_audio_nao_suportado(void) { return 0; }
 int  video_terminou(void) { return 0; }
+int  video_conflito_recurso(void) { return 0; }
 unsigned video_bufferando_ms(void) { return 0; }
 int  video_n_audio(void) { return 0; }
 int  video_n_legenda(void) { return 0; }
@@ -2158,6 +2159,7 @@ const char *video_erro_texto(void) { return erroTexto; }
 int    video_decoder_anunciou(void) { return viuVideo; }
 int    video_audio_nao_suportado(void) { return audioNaoSup; }
 int    video_terminou(void) { return terminou; }
+int    video_conflito_recurso(void) { return 0; }
 unsigned video_bufferando_ms(void) {
   Uint32 d = bufferandoDesde;
   if (!d) return 0;

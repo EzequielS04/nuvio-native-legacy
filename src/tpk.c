@@ -23,6 +23,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <locale.h>
+#include "video.h"
 #include <stdlib.h>
 #include <string.h>
 #ifdef NV_TPK40
@@ -185,6 +186,7 @@ int nv_tpk_iniciar(const char *arte, const char *dados, int w, int h) {
 __attribute__((visibility("default")))
 void nv_tpk_log(const char *linha) {
   printf("[host] %s\n", linha ? linha : "");
+  video_tpk_log_host(linha);
   fflush(stdout);
 }
 
