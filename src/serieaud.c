@@ -931,27 +931,24 @@ static void tracejada(float x, float y, float w, float r, float g, float b,
 // detail.c ja tirou o veu de tela cheia e a arte esta a 15%, entao aqui embaixo
 // sobra orcamento. Se um dia faltar, o lugar de cortar e a largura do reforco:
 // ele so precisa cobrir de r.x a r.x+r.w, e nao a tela toda.
-// VIDRO: com a interface de vidro ligada o painel vira uma FOLHA (a mesma do
-// menu e das fontes) do tamanho do grafico, e nao um veu de tela inteira. O
-// envelope passa ~110 px acima e abaixo do conteudo; a folha fica 36 px para
-// fora dele. Sobre a area de plotagem vai um reforco leve, porque a folha
-// sozinha (0,78) ja segura a curva mas o rosto claro da arte ainda aparece.
-static void chaoVidro(GfxRect c, float topo, float alt, float plotoTopo, float plotoAlt) {
-  GfxRect f = { c.x - 36.0f, c.y - 36.0f, c.w + 72.0f, alt - 220.0f + 52.0f };
-  float raio;
-  (void)topo;
-  if (f.h <= 2.0f) return;
-  raio = raioPx(f.w, f.h, 28.0f);
-  gfx_vidro_folha(f, raio, 1.0f);
-  if (plotoAlt > 2.0f) {
-    GfxRect pm = { c.x - 12.0f, plotoTopo - 8.0f, c.w + 24.0f, plotoAlt + 16.0f };
-    gfx_cor(pm, raioPx(pm.w, pm.h, 14.0f), 0.0f, 0.0f, 0.0f, 0.22f);
-  }
+// VIDRO: com a interface de vidro ligada o grafico vira um CARTAO so da area
+// de plotagem, o mesmo gfx_vidro_painel dos cartoes de "Notas" logo abaixo, e
+// o titulo, a procedencia e o rodape ficam soltos na pagina como os de qualquer
+// outra secao. A primeira tentativa (30/09) pos o painel inteiro numa folha
+// escura com um reforco preto sobre o plot; o dono achou "pesado e feio" perto
+// dos outros componentes. Aqui embaixo a arte da pagina ja esta apagada, entao
+// o veu de legibilidade nao faz falta.
+// `baixo`: o que o cartao desce abaixo do plot — o arco e a impressao digital
+// tem a fileira de episodios ali, o radar vai direto ao rodape.
+static void chaoVidro(GfxRect c, float plotoTopo, float plotoAlt, float baixo) {
+  GfxRect p = { c.x - 24.0f, plotoTopo - 26.0f, c.w + 48.0f, plotoAlt + 26.0f + baixo };
+  if (plotoAlt <= 2.0f) return;
+  gfx_vidro_painel(p, raioPx(p.w, p.h, 20.0f), 0.5f, 1.0f);
 }
-static void chao(GfxRect c, float topo, float alt, float plotoTopo, float plotoAlt) {
+static void chao(GfxRect c, float baixo, float topo, float alt, float plotoTopo, float plotoAlt) {
   float r = SA_CHAO_RAMPA, pr = SA_CHAO_PRAMPA;
   if (alt <= 2.0f) return;
-  if (ajustes_vidro()) { chaoVidro(c, topo, alt, plotoTopo, plotoAlt); return; }
+  if (ajustes_vidro()) { chaoVidro(c, plotoTopo, plotoAlt, baixo); return; }
   if (alt < r * 2.0f + 2.0f) r = (alt - 2.0f) * 0.5f;
   { GfxRect cima  = { 0.0f, topo, NV_TELA_W, r };
     GfxRect meio  = { 0.0f, topo + r, NV_TELA_W, alt - r * 2.0f };
@@ -977,7 +974,9 @@ static void chao(GfxRect c, float topo, float alt, float plotoTopo, float plotoA
 // area de plotagem, nas calhas, onde so o envelope mais fraco alcanca. Tres
 // desenhos por painel compram a garantia de que eles nunca dependem da obra.
 static void chapaTexto(float x, float y, float w, float h) {
-  GfxRect c = { x - 12.0f, y - 4.0f, w + 24.0f, h + 8.0f };
+  GfxRect c;
+  if (ajustes_vidro()) return;   // no vidro o rotulo ja esta sobre o cartao
+  c = (GfxRect){ x - 12.0f, y - 4.0f, w + 24.0f, h + 8.0f };
   gfx_cor(c, raioPx(c.w, c.h, c.h * 0.5f), 0.0f, 0.0f, 0.0f, 0.42f);
 }
 
@@ -1137,7 +1136,7 @@ float serieaud_arco(GfxRect r) {
   // O CHAO VEM PRIMEIRO, e antes ate do caminho vazio: um painel que diz
   // "sem dados desta temporada" tambem esta sobre a arte da pagina e tambem
   // precisa de chao para ser lido.
-  chao(r, r.y - 110.0f, (py - r.y) + gh + 280.0f, py, gh);
+  chao(r, 62.0f, r.y - 110.0f, (py - r.y) + gh + 280.0f, py, gh);
   cabecalho(r, "Arco de qualidade", "Nota do Trakt por episódio — não é o IMDb");
   if (n < 2 || gw < 120.0f) return vazio(r, y);
 
@@ -1395,7 +1394,7 @@ float serieaud_radar(GfxRect r) {
   for (i = 0; i < nEps; i++) { fora[i] = 0; if (serieaud_retencao(i) >= 0) n++; }
 
   // O chao antes de tudo. Ver a nota de `cabecalho`.
-  chao(r, r.y - 110.0f, (py - r.y) + gh + 330.0f, py, gh);
+  chao(r, 20.0f, r.y - 110.0f, (py - r.y) + gh + 330.0f, py, gh);
   cabecalho(r, "Radar de desistência",
             "Quem marcou o episódio no Trakt, sobre quem marcou o E1 — não é a audiência geral");
   if (n < 2 || gw < 120.0f) return vazio(r, y);
@@ -1560,7 +1559,9 @@ float serieaud_radar(GfxRect r) {
             // AFUNDA a regiao em vez de cobri-la, e a arte continua visivel
             // atraves dele, so que mais escura. E a semantica bate — o que
             // esta ali e a plateia que apagou.
-            banda(x0, dx, na, y100,  1, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.34f);
+            // No vidro a massa e um veu claro: preto sobre o cartao virava um buraco.
+            if (ajustes_vidro()) banda(x0, dx, na, y100, 1, 3.0f, 0.0f, 1.0f, 1.0f, 1.0f, 0.06f);
+            else banda(x0, dx, na, y100,  1, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.34f);
             // A EXCECAO continua em cor, e e a unica cor desta caixa: verde,
             // o mesmo de "melhor episodio" no arco, porque quer dizer a mesma
             // coisa nos dois — este ponto esta acima da referencia.
@@ -1775,7 +1776,7 @@ float serieaud_digital(GfxRect r) {
     if (algum) n++;
   }
   // O chao antes de tudo. Ver a nota de `cabecalho`.
-  chao(r, r.y - 110.0f, (py - r.y) + gh + 350.0f, py, gh);
+  chao(r, 62.0f, r.y - 110.0f, (py - r.y) + gh + 350.0f, py, gh);
   cabecalho(r, "Impressão digital do episódio",
             "Nota, retenção, reproduções por pessoa e comentários+votos — tudo do Trakt, relativo à temporada");
   if (n < 1 || gw < 260.0f) return vazio(r, y);
