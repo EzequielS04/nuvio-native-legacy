@@ -1170,14 +1170,12 @@ static void desenhaProfundidade(GfxRect card, float raio, int ligadaAqui) {
   // a faixa passava reta por cima do canto.
   if (borda > 0.001f) {
     float alcance = (12.0f + 18.0f * cobertura) / (card.h > 1.0f ? card.h : 1.0f);
-    gfx_rect(card, 0, GFX_BRILHO_TOPO, 0, alcance, 0, raio,
-             1.0f, 1.0f, 1.0f, borda * 0.55f);
+    gfx_brilho_topo(card, raio, alcance, 1.0f, 1.0f, 1.0f, borda * 0.55f);
   }
   if (brilho > 0.001f) {
     // O reflexo vai mais fundo e mais fraco: e o `--card-depth-sheen`, uma
     // claridade que desce pela parte alta, nao uma segunda borda.
-    gfx_rect(card, 0, GFX_BRILHO_TOPO, 0, 0.34f, 0, raio,
-             1.0f, 1.0f, 1.0f, brilho * 0.18f);
+    gfx_brilho_topo(card, raio, 0.34f, 1.0f, 1.0f, 1.0f, brilho * 0.18f);
   }
 }
 // ZERO. MEDIDO no app web (sessao logada, perfil do dono): o card em foco tem

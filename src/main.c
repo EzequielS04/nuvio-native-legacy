@@ -1079,6 +1079,7 @@ int main(int argc, char **argv) {
     // GIF QUE NINGUEM DESENHOU ha 1,5 s sai da memoria (tela de perfis
     // fechada, foco fora do cartaz). Ver gif_ocioso em gif.h.
     gif_ocioso();
+    gfx_ambiente_descarregar();   // quadro sem desenho por cima: a luz ainda sai
     gpun_quadro_fim();
     fDes = NV_DT(t0);
     fGfxMs = gfx_ms_rect; fTexMs = tex_ms_busca;
