@@ -1269,7 +1269,7 @@ static void *trabalhar(void *arg) {
     free(novo.s); free(novo.c); }
 
   free(cache.s); free(cache.c);
-  printf("[mapa] %d sementes cruzadas, %d creditos\n", n, nCred); fflush(stdout);
+  printf("[mapa] %d sementes cruzadas, %d creditos (tmdb language=%s)\n", n, nCred, idiomaTmdb); fflush(stdout);
   pthread_mutex_lock(&trava);
   fioVivo = 0;
   pthread_mutex_unlock(&trava);

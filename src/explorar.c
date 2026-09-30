@@ -867,6 +867,9 @@ void explorar_evento(const SDL_Event *e) {
   if (k == SDLK_UP)    v = vizinho(0, -1);
   if (k == SDLK_DOWN)  v = vizinho(0, 1);
   if (v >= 0) { foco = v; abrindo = 0; return; }
+  // OK segurado repete o KEYDOWN: cada repeticao reabria a obra e o painel
+  // piscava "Abrindo..." sem fim (#187). So o primeiro toque vale.
+  if ((k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) && e->key.repeat) return;
   if ((k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) && foco >= 0 && foco < nNos) {
     const ExNo *n = &nos[foco];
     if (n->tipo == NO_SORTE) girar();

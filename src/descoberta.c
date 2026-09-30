@@ -5963,7 +5963,10 @@ static void *buscarTitulo(void *arg) {
   // combined_credits nao traz imdb_id. `external_ids` faz a traducao, e e uma
   // chamada so, feita apenas quando o dono abre o credito.
   if (sobTmdb > 0) {
-    const char *chave = desc_chave_tmdb();
+    // TRADUCAO DE ID NAO E INTEGRACAO (#187), a mesma regra da reserva de arte:
+    // com o ajuste TMDB desligado a chave era "" e toda estrela do Explorar
+    // (o mapa monta com a reserva) morria em "sem imdb" sem pedido nenhum.
+    const char *chave = desc_chave_tmdb()[0] ? desc_chave_tmdb() : desc_chave_tmdb_reserva();
     id[0] = 0;
     if (chave && chave[0]) {
       snprintf(url, sizeof url, "%s/%s/%ld/external_ids?api_key=%s", TMDB,
