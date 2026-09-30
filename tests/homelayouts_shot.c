@@ -22,6 +22,7 @@
 #include "catalogo.h"
 #include "colecoes.h"
 #include "corviva.h"
+#include "ctxmenu.h"
 #include "dados.h"
 #include "gfx.h"
 #include "home.h"
@@ -91,12 +92,35 @@ static void quadros(int n, const char *bmp) {
     glClear(GL_COLOR_BUFFER_BIT);
     gfx_ambiente(1.0f);
     home_desenhar(agora);
+    ctx_atualizar(1.0f / 60.0f, agora);
+    ctx_desenhar(agora);
     if (i == n - 1) { fillUlt = gfx_fill; fillVisUlt = gfx_fill_vis; rectUlt = gfx_n_rect;
                       memcpy(modoUlt, gfx_fill_modo, sizeof modoUlt); }
     if (bmp && i == n - 1) gravar(bmp);
     SDL_GL_SwapWindow(janela);
     SDL_Delay(8);
   }
+}
+
+// SEGURAR OK de verdade: KEYDOWN, quadros ate passar NV_HOLD_MS (o relogio e o
+// SDL_GetTicks real), KEYUP. E o caminho da home que abre o menu do cartaz.
+static void segurarOk(void) {
+  SDL_Event e;
+  Uint32 ini = SDL_GetTicks();
+  memset(&e, 0, sizeof e);
+  e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_RETURN;
+  home_evento(&e);
+  while (SDL_GetTicks() - ini < NV_HOLD_MS + 150) quadros(1, NULL);
+  e.type = SDL_KEYUP;
+  if (ctx_aberto()) ctx_evento(&e); else home_evento(&e);
+}
+static void teclaCtx(SDL_Keycode k) {
+  SDL_Event e;
+  memset(&e, 0, sizeof e);
+  e.type = SDL_KEYDOWN; e.key.keysym.sym = k;
+  ctx_evento(&e);
+  e.type = SDL_KEYUP;
+  ctx_evento(&e);
 }
 
 static void tecla(SDL_Keycode k) {
@@ -205,8 +229,14 @@ int main(int argc, char **argv) {
     total = ini;
   }
   if (getenv("NV_COL")) {   // NV_COL=1: um grupo de colecao no fim, com as quatro cadeias de arte
-    const char *fonte = "\"sources\":[{\"addonBaseUrl\":\"https://addon.invalid/x\",\"type\":\"movie\",\"catalogId\":\"k\"}]";
-    char js[4000];
+    // NV_COL_FORMA=POSTER|LANDSCAPE|SQUARE: o tileShape das quatro pastas
+    // (ausente = sem o campo, que o web le como quadrado).
+    char fonte[400];
+    char js[4600];
+    snprintf(fonte, sizeof fonte, "%s%s%s\"sources\":[{\"addonBaseUrl\":\"https://addon.invalid/x\",\"type\":\"movie\",\"catalogId\":\"k\"}]",
+             getenv("NV_COL_FORMA") ? "\"tileShape\":\"" : "",
+             getenv("NV_COL_FORMA") ? getenv("NV_COL_FORMA") : "",
+             getenv("NV_COL_FORMA") ? "\"," : "");
     snprintf(js, sizeof js,
       "{\"collections\":[{\"id\":\"cs\",\"title\":\"Streaming\",\"backdropImageUrl\":\"deploy/app/art/07.jpg\",\"folders\":["
       "{\"id\":\"a\",\"title\":\"Com hero e capa\",\"heroBackdropUrl\":\"deploy/app/art/03.jpg\",\"coverImageUrl\":\"deploy/app/art/poster/12.jpg\",%s},"
@@ -259,6 +289,38 @@ int main(int argc, char **argv) {
         quadros(1, bmp);
       }
     } }
+
+  // NV_CTX=<n>: menu do cartaz SEGURANDO OK na fileira n (contada do destaque
+  // para baixo), a pagina de estilos, a escolha e a home depois dela.
+  if (getenv("NV_CTX")) {
+    int r, alvo = atoi(getenv("NV_CTX"));
+    ajusta(camadas[0] - '0', 0);
+    for (r = 0; r < 14; r++) tecla(SDLK_UP);
+    quadros(60, NULL);
+    for (r = 0; r < alvo; r++) { tecla(SDLK_DOWN); quadros(40, NULL); }
+    quadros(80, NULL);
+    snprintf(bmp, sizeof bmp, "%s-ctx-0-antes.bmp", saida); quadros(1, bmp);
+    segurarOk();
+    quadros(60, NULL);
+    snprintf(bmp, sizeof bmp, "%s-ctx-1-menu.bmp", saida); quadros(1, bmp);
+    printf("[shot] ctx aberto=%d\n", ctx_aberto());
+    // Ja na pagina de estilos (colecao) o OK escolhe; no titulo, desce ate
+    // "Estilo da fileira" (a ultima) e entra.
+    if (!getenv("NV_CTX_COL")) {
+      for (r = 0; r < 8; r++) teclaCtx(SDLK_DOWN);
+      teclaCtx(SDLK_RETURN);
+      quadros(40, NULL);
+      snprintf(bmp, sizeof bmp, "%s-ctx-2-estilos.bmp", saida); quadros(1, bmp);
+    }
+    // Uma forma abaixo da atual e OK.
+    teclaCtx(SDLK_DOWN);
+    quadros(20, NULL);
+    snprintf(bmp, sizeof bmp, "%s-ctx-3-escolha.bmp", saida); quadros(1, bmp);
+    teclaCtx(SDLK_RETURN);
+    quadros(120, NULL);
+    printf("[shot] ctx depois da escolha aberto=%d\n", ctx_aberto());
+    snprintf(bmp, sizeof bmp, "%s-ctx-4-depois.bmp", saida); quadros(1, bmp);
+  }
 
   tex_encerrar();
   txt_encerrar();

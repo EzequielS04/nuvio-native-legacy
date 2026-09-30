@@ -48,6 +48,8 @@ static int trAberto, trTocando;
 int  trailer_aberto(void) { return trAberto; }
 int  trailer_tocando(void) { return trAberto && trTocando; }
 void ctx_abrir(int indice) { (void)indice; }
+void ctx_fileira(const char *c, const char *t) { (void)c; (void)t; }
+void ctx_abrir_fileira(const char *c, const char *t) { (void)c; (void)t; }
 void vertudo_abrir(const char *b, const char *t, const char *c, const char *ti) {
   (void)b; (void)t; (void)c; (void)ti;
 }

@@ -40,8 +40,24 @@ typedef struct {
      reconstrucao sem duplicar. */
   int extra;
   int frames, hideTitle, nSources;
+  /* FORMA DO CARTAO da pasta (COL_FORMA_*): o `tileShape` que o editor de
+     colecoes do app web grava por pasta. Ver col_forma_texto. */
+  int forma;
   ColSource sources[COL_SOURCE_MAX];
 } ColFolder;
+/* As tres formas do app web (collectionsStore.js, normalizePosterShape:
+   POSTER, LANDSCAPE/WIDE, SQUARE). PAISAGEM e o zero de proposito: e como o
+   nativo sempre desenhou, e o que fica para a pasta do pacote (collections.json
+   nao traz o campo) e para toda pasta montada com memset. */
+enum { COL_FORMA_PAISAGEM = 0, COL_FORMA_QUADRADO, COL_FORMA_POSTER, COL_FORMA_N };
+/* Texto do JSON -> COL_FORMA_*, na regra do web: "POSTER" e pôster,
+   "LANDSCAPE" ou "WIDE" e paisagem, e QUALQUER OUTRA COISA (inclusive ausente)
+   e quadrado — e o que o web desenha para uma pasta da conta sem o campo. */
+int col_forma_texto(const char *s);
+/* A forma da FILEIRA de um grupo. O web desenha cartao por cartao; a fileira
+   nativa tem um passo so, entao vale a forma da maioria das pastas do grupo
+   (empate: a da primeira). COL_FORMA_PAISAGEM quando o grupo nao existe. */
+int col_grupo_forma(const char *nome);
 int col_carregar(const char *dir);
 /* Pastas que o PROPRIO APP acrescenta (hoje: as listas do Trakt que a
    Biblioteca levou para a Home — ver src/listas.c).

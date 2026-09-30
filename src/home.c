@@ -121,6 +121,11 @@ typedef struct {
   // como 1.0 — e o caso da tabela de reserva abaixo e das fileiras montadas com
   // `Fileira v={0}`.
   float escala;
+  // FORMA DO CARTAO numa fileira de colecao (COL_FORMA_*, colecoes.h): a do
+  // grupo na conta (tileShape), ou a que a pessoa escolheu por cima. So vale
+  // com tipo == FILEIRA_CATALOGOS; o tipo continua sendo o que diz "isto e um
+  // grupo de atalhos" para o resto da home.
+  int forma;
 } Fileira;
 
 static int fileiraItemIndice(const Fileira *f, int coluna) {
@@ -536,6 +541,24 @@ static float escalaCartazPadrao(void) {
   return e < teto ? e : teto;
 }
 
+// AS TRES FORMAS DA PASTA, nas medidas do web (components.css,
+// .home-collection-card): PAISAGEM e a deitada compacta que o nativo sempre
+// desenhou; QUADRADO tem o lado da altura do cartaz (`flex-basis:
+// var(--home-poster-height)`); POSTER e o cartaz em pe das fileiras de
+// catalogo. Cartaz sempre 2:3, mesmo com "posteres deitados": a pasta pediu
+// pôster.
+static void medidaColecao(int forma, float *w, float *h) {
+  float pw = cartazPadrao() ? escalaCartazPadrao() * NV_PAD_CARTAZ_W
+                            : escalaDoAjuste() * NV_CARD_W;
+  float ph = cartazPadrao() ? escalaCartazPadrao() * NV_PAD_CARTAZ_H
+                            : escalaDoAjuste() * NV_CARD_H;
+  switch (forma) {
+    case COL_FORMA_QUADRADO: *w = ph;  *h = ph;  break;
+    case COL_FORMA_POSTER:   *w = pw;  *h = ph;  break;
+    default:                 *w = 360.0f; *h = 203.0f; break;
+  }
+}
+
 static float larguraDe(TipoFileira t) {
   switch (t) {
     case FILEIRA_CONTINUE: return NV_DESTAQUE_W;
@@ -907,14 +930,34 @@ static void heroPasso(int d) {
     if (quente) tex_arquivo(quente); }
 }
 
+// SEGURAR OK NUM CARTAO: o menu do titulo, e a fileira dele para o "Estilo da
+// fileira". Continuar assistindo, o Top 10 (pilha ou numeral) e o destaque
+// ficam com o visual proprio — nao passam chave, e o menu nao oferece forma.
+// Pasta de colecao nao tem titulo: abre o menu so da fileira.
+static void abrirMenuCartaz(void) {
+  const Fileira *s;
+  if (focoHero || foco.fileira < 0 || foco.fileira >= nFileiras) {
+    ctx_fileira(NULL, NULL);
+    ctx_abrir(heroAtual);
+    return;
+  }
+  s = &fileiras[foco.fileira];
+  if (s->tipo == FILEIRA_CATALOGOS) { ctx_abrir_fileira(s->chave, s->titulo); return; }
+  if (s->tipo == FILEIRA_CONTINUE || s->tipo == FILEIRA_TOP10 ||
+      s->tipo == FILEIRA_TOP10_NUM || !strcmp(s->chave, "continue_watching"))
+    ctx_fileira(NULL, NULL);
+  else ctx_fileira(s->chave, s->titulo);
+  ctx_abrir(fileiraItemIndice(s, foco.coluna));
+}
+
 static int foco_pode_pressao_longa(void) {
   // No destaque ha sempre um titulo do catalogo por tras, entao o menu do
   // cartaz vale ali como vale num card.
   if (focoHero) return cat_n() > 0;
   if (foco.fileira < 0 || foco.fileira >= nFileiras) return 0;
   const Fileira *s = &fileiras[foco.fileira];
-  if (s->tipo == FILEIRA_CATALOGOS || s->tipo == FILEIRA_SOCIAL ||
-      s->tipo == FILEIRA_TOP10) return 0;
+  // Pasta de colecao: o menu e so o do estilo da fileira (ctx_abrir_fileira).
+  if (s->tipo == FILEIRA_SOCIAL || s->tipo == FILEIRA_TOP10) return 0;
   if (s->verTudo && foco.coluna == s->n) return 0;
   return foco.coluna >= 0 && foco.coluna < s->n;
 }
@@ -1144,9 +1187,14 @@ static float larguraFil(int r) {
   // lugares que mediam a fileira e agora esta num.
   float w = (r >= 0 && r < MAX_FIL && fileiras[r].stackN)
           ? 680.0f : larguraDe(fileiras[r].tipo);
+  if (fileiras[r].tipo == FILEIRA_CATALOGOS) { float h; medidaColecao(fileiras[r].forma, &w, &h); }
   return w * escalaFil(r);
 }
-static float alturaFil(int r)      { return alturaDe(fileiras[r].tipo) * escalaFil(r); }
+static float alturaFil(int r) {
+  float h = alturaDe(fileiras[r].tipo);
+  if (fileiras[r].tipo == FILEIRA_CATALOGOS) { float w; medidaColecao(fileiras[r].forma, &w, &h); }
+  return h * escalaFil(r);
+}
 // Altura TOTAL que a fileira ocupa: a arte mais o bloco de rotulo, quando ele
 // existe. Sem somar o rotulo aqui, a fileira seguinte sobe por cima do texto —
 // foi o mesmo defeito que o titulo de fileira ja tinha tido sobre os cards.
@@ -1525,7 +1573,7 @@ void home_evento(const SDL_Event *e) {
       // do titulo; segurar abre o menu do cartaz, como em qualquer card.
       if (focoHero) {
         okDesde = 0; okPressionando = 0; okLongDisparado = 0; okHold = 0.0f;
-        if (dur >= NV_HOLD_MS) ctx_abrir(heroAtual);
+        if (dur >= NV_HOLD_MS) abrirMenuCartaz();
         else pedidoAbrir = 1;
         return;
       }
@@ -1553,7 +1601,8 @@ void home_evento(const SDL_Event *e) {
         if(ci){pessoaSocial=*ci;pedidoPessoaSocial=1;}return;
       }
       if (fileiras[foco.fileira].tipo == FILEIRA_CATALOGOS) {
-        if (foco.coluna >= 0 && foco.coluna < fileiras[foco.fileira].n) {
+        if (dur >= NV_HOLD_MS) abrirMenuCartaz();
+        else if (foco.coluna >= 0 && foco.coluna < fileiras[foco.fileira].n) {
           vertudo_colecao(col_folder(fileiras[foco.fileira].folders[foco.coluna]));
         }
       } else if (noVerTudo) {
@@ -1564,7 +1613,7 @@ void home_evento(const SDL_Event *e) {
                         fileiras[foco.fileira].catId, fileiras[foco.fileira].titulo);
         }
       } else if (dur >= NV_HOLD_MS) {
-        ctx_abrir(fileiraItemIndice(&fileiras[foco.fileira], foco.coluna));
+        abrirMenuCartaz();
       } else if (fileiraEhCanal(&fileiras[foco.fileira])) {
         // OK num cartao de canal abre o guia focado nele — o canal nao tem
         // pagina de detalhe que ajude: nao ha episodios, elenco ou "sobre".
@@ -1975,6 +2024,7 @@ static void sincronizarFileiras(void) {
         v.n=col_grupo(folder->group,v.folders,MAX_CARDS);
         if(!v.n)continue;
         v.tipo=FILEIRA_CATALOGOS;
+        v.forma=col_grupo_forma(folder->group);
         col_chave_grupo(folder->group,v.chave,sizeof v.chave);
         snprintf(v.titulo,sizeof v.titulo,"%s",folder->group);
         fileiras[destino++]=v;
@@ -1989,7 +2039,14 @@ static void sincronizarFileiras(void) {
   for(int i=0;i<destino;i++) {
     int t = fil_tipo(fileiras[i].chave);
     fileiras[i].escala = fil_escala(fileiras[i].chave);
-    if (t != FIL_TIPO_AUTO) fileiras[i].tipo = tipoDaEscolha(t);
+    // Grupo de colecao: a escolha troca a FORMA da pasta e o tipo fica — e ele
+    // que faz a fileira abrir colecoes em vez de titulos. Os numeros sao os de
+    // fil_estilos (fileiras.c).
+    if (fileiras[i].tipo == FILEIRA_CATALOGOS) {
+      if (t == FIL_TIPO_COLECAO) fileiras[i].forma = COL_FORMA_PAISAGEM;
+      else if (t == FIL_TIPO_DESTAQUE_QUADRADO) fileiras[i].forma = COL_FORMA_QUADRADO;
+      else if (t == FIL_TIPO_CARTAZ) fileiras[i].forma = COL_FORMA_POSTER;
+    } else if (t != FIL_TIPO_AUTO) fileiras[i].tipo = tipoDaEscolha(t);
   }
   if (ajustes_home_layout() == HOME_LAYOUT_DINAMICA) dinAtribuirTipos(destino);
   for(int i=0;i<destino;i++) {
@@ -2262,7 +2319,7 @@ void home_atualizar(float dt, Uint32 agora) {
     okDesde = 0;
     // O menu contextual continua sendo o dono das acoes e da UI. A home so
     // dispara uma vez no limiar e consome o KEYUP seguinte.
-    ctx_abrir(focoHero ? heroAtual : fileiraItemIndice(&fileiras[foco.fileira], foco.coluna));
+    abrirMenuCartaz();
   }
 
   // O catalogo pode encolher entre duas respostas. Normalizar os indices do

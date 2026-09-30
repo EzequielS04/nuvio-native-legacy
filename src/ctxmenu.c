@@ -19,6 +19,7 @@
 #include "botoes.h"
 #include "badges.h"
 #include "idioma.h"
+#include "fileiras.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -160,12 +161,31 @@ static int observarHold(void *u, SDL_Event *e) {
 // lugar so, entao uma sexta opcao deixa de aparecer em vez de corromper
 // memoria — mas "deixa de aparecer" tambem e defeito, e por isso o numero sobe
 // aqui e nao em silencio.
-#define CTX_MAX 5
+// SETE desde "Estilo da fileira": seis no cartaz (as cinco + a entrada do
+// estilo) e, na pagina de estilos, ate cinco formas. O contrato conta as linhas
+// de juntar(), e a pagina de estilos e a sexta e setima delas.
+#define CTX_MAX 7
 static struct { const char *rot; int acao; } ops[CTX_MAX];
 static int nOps;
 static float focoAnim[CTX_MAX];
 static int holdObservador;
-enum { OP_DETALHES, OP_LISTA, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR };
+enum { OP_DETALHES, OP_LISTA, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR,
+       OP_ESTILO,
+       // Uma forma da pagina de estilos: OP_ESTILO_0 + posicao em estiloTipos.
+       OP_ESTILO_0 = 100 };
+
+// --- ESTILO DA FILEIRA -------------------------------------------------------
+//
+// A home diz de que FILEIRA e o cartao (ctx_fileira) antes de abrir o menu, e
+// o menu oferece a forma dela. Quem grava e fileiras.c, no mesmo campo da tela
+// Ajustes > Fileiras da Home: as duas telas mostram sempre a mesma escolha.
+//
+// Duas paginas: 0 e o menu do titulo (com a entrada "Estilo da fileira"), 1 e
+// a lista de formas. Um grupo de colecao nao tem titulo por tras — o cartao e
+// uma pasta — e abre direto na pagina 1 (soFileira).
+static char filChave[192], filTitulo[96];
+static int  pagina, soFileira;
+static int  estiloTipos[CTX_MAX], nEstilos;
 
 // --- RECOMENDAR: O FLUXO NAO MORA MAIS AQUI ---------------------------------
 //
@@ -228,6 +248,16 @@ static void montar(void) {
   int i = indiceAtual();
   const CatItem *ci = itemAtual();
   nOps = 0;
+  if (pagina == 1) {
+    const char *rots[CTX_MAX];
+    int k, atual = fil_tipo(filChave);
+    nEstilos = fil_estilos(filChave, estiloTipos, rots, CTX_MAX);
+    for (k = 0; k < nEstilos; k++) juntar(rots[k], OP_ESTILO_0 + k);
+    // O foco nasce na forma que vale agora.
+    if (foco < 0 || foco >= nOps)
+      for (foco = 0, k = 0; k < nEstilos; k++) if (estiloTipos[k] == atual) foco = k;
+    return;
+  }
   if (!ci) return;
   // "Mais informações" no painel, que e o nome que o dono deu ao pedir; o
   // efeito e o mesmo "Ver detalhes" do cartaz (a pagina do titulo).
@@ -283,6 +313,11 @@ static void montar(void) {
       (!strcmp(ci->tipo, "movie") || !strcmp(ci->tipo, "series"))) {
     juntar("Recomendar a um amigo", OP_RECOMENDAR);
   }
+  // Por ULTIMO: e da fileira, nao do titulo. So quando a home disse qual e a
+  // fileira e ela tem forma para escolher (Continuar assistindo, Top 10 e o
+  // destaque ficam com o visual deles — a home nem passa a chave).
+  if (!doPainel && filChave[0] && fil_estilos(filChave, NULL, NULL, CTX_MAX) > 0)
+    juntar("Estilo da fileira", OP_ESTILO);
   // O FOCO TEM DE CABER NA LISTA QUE ACABOU DE SER MONTADA.
   //
   // montar() roda de novo a cada confirmacao, e a lista ENCOLHE em casos
@@ -302,9 +337,28 @@ void ctx_abrir(int indice) {
     holdPronto = 0;
     return;
   }
-  if (indice < 0 || indice >= cat_n() || !cat_item(indice)) return;
+  if (indice < 0 || indice >= cat_n() || !cat_item(indice)) { filChave[0] = 0; return; }
   doPainel = 0;
+  soFileira = 0;
   abrirComum(indice);
+}
+
+void ctx_fileira(const char *chave, const char *titulo) {
+  snprintf(filChave, sizeof filChave, "%s", chave ? chave : "");
+  snprintf(filTitulo, sizeof filTitulo, "%s", titulo ? titulo : "");
+}
+
+void ctx_abrir_fileira(const char *chave, const char *titulo) {
+  if (holdCancelado) {
+    holdCancelado = 0;
+    holdPronto = 0;
+    return;
+  }
+  ctx_fileira(chave, titulo);
+  if (fil_estilos(filChave, NULL, NULL, CTX_MAX) < 1) { filChave[0] = 0; return; }
+  doPainel = 0;
+  soFileira = 1;
+  abrirComum(-1);
 }
 
 // O que as duas portas fazem igual. Separado para o modo painel nao ser uma
@@ -315,6 +369,8 @@ static void abrirComum(int indice) {
   holdPronto = 0;
   esperandoSoltura = 1;   // o OK que abriu ainda esta afundado; ver a nota acima
   idx = indice; foco = 0; aberto = 1; pedDetalhes = -1;
+  pagina = soFileira ? 1 : 0;
+  if (soFileira) foco = -1;   // montar() poe o foco na forma atual
   pedDetalhesImdb[0] = 0;
   fecharAoConfirmar = 0;
   operacao = CTX_OP_NENHUMA; intencao = 0; estadoOperacao = 0;
@@ -331,6 +387,8 @@ void ctx_abrir_salvo(const CatItem *titulo) {
     return;
   }
   if (!titulo || !titulo->imdb[0]) return;
+  filChave[0] = 0;   // o painel de Salvos nao e fileira da home
+  soFileira = 0;
   copiaPainel = *titulo;
   // O ID DO TITULO, nunca o do episodio: e o que a lista local, a watchlist e
   // a conta guardam (salvos.h), e o que o Trakt recebe no DELETE.
@@ -390,8 +448,18 @@ static void aplicar(void) {
   int atual = indiceAtual();
   const CatItem *ci = itemAtual();
   int acao;
-  if (!ci || foco < 0 || foco >= nOps) return;
+  if (foco < 0 || foco >= nOps) return;
   acao = ops[foco].acao;
+  if (acao >= OP_ESTILO_0) {
+    int k = acao - OP_ESTILO_0;
+    // Grava e sai: a home remonta pela revisao de fileiras.c e a pessoa ve a
+    // forma nova no lugar, sem o veu do menu por cima.
+    if (k < nEstilos) fil_definir_tipo(filChave, estiloTipos[k]);
+    aberto = 0;
+    return;
+  }
+  if (acao == OP_ESTILO) { pagina = 1; foco = -1; montar(); return; }
+  if (!ci) return;
   // SO A ESPERA BLOQUEIA, e nao "ja houve uma operacao".
   //
   // A guarda antiga era `operacao != CTX_OP_NENHUMA && estado != FALHA`, e
@@ -567,7 +635,17 @@ void ctx_evento(const SDL_Event *e) {
   if (e->key.repeat && teclaOk(k)) return;
   if (esperandoSoltura && teclaOk(k)) return;
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
-      e->key.keysym.scancode == NV_SCANCODE_BACK) { aberto = 0; return; }
+      e->key.keysym.scancode == NV_SCANCODE_BACK) {
+    // Da pagina de estilos, Voltar volta ao menu do titulo — com o foco na
+    // entrada de onde a pessoa veio. Sem titulo por tras (colecao), fecha.
+    if (pagina == 1 && !soFileira) {
+      pagina = 0; montar();
+      for (foco = 0; foco < nOps && ops[foco].acao != OP_ESTILO; foco++) {}
+      if (foco >= nOps) foco = 0;
+      return;
+    }
+    aberto = 0; return;
+  }
   // Enquanto a requisicao esta no ar, OK nao repete a escrita. O foco continua
   // sendo o do modal e Voltar sempre pode cancelar a espera visual.
   //
@@ -600,7 +678,7 @@ void ctx_atualizar(float dt, Uint32 agora) {
                   dt, NV_MOLA_FOCO);
 
   atual = indiceAtual();
-  if (aberto && !itemAtual()) { aberto = 0; return; }
+  if (aberto && !soFileira && !itemAtual()) { aberto = 0; return; }
 
   if (operacao != CTX_OP_NENHUMA && estadoOperacao == CTX_PENDENTE) {
     int novo = opSimkl ? simkl_lista_estado() : trakt_operacao_estado(operacao);
@@ -678,7 +756,7 @@ void ctx_desenhar(Uint32 agora) {
   }
   if (a < 0.01f) return;
   ci = itemAtual();
-  if (!ci) return;
+  if (!ci && !soFileira) return;
   if (estadoOperacao == CTX_PENDENTE)
     mensagem = operacao == CTX_OP_LISTA ? "Atualizando biblioteca..."
                                         : (intencao ? "Marcando como assistido..."
@@ -692,8 +770,10 @@ void ctx_desenhar(Uint32 agora) {
   if (estadoOperacao == CTX_CONFIRMADA && operacao == CTX_OP_LISTA && avisoOp)
     mensagem = avisoOp;
 
-  estados[0] = tituloSalvo(ci) ? "Na biblioteca" : "Fora da biblioteca";
-  if (!strcmp(ci->tipo, "movie") || !strcmp(ci->tipo, "series")) {
+  estados[0] = ci && tituloSalvo(ci) ? "Na biblioteca" : "Fora da biblioteca";
+  // Pagina de estilos: o assunto e a fileira, e os selos do titulo sairiam.
+  if (pagina == 1) nEstados = 0;
+  else if (!strcmp(ci->tipo, "movie") || !strcmp(ci->tipo, "series")) {
     { int historico = historicoDe(ci);
       estados[1] = historico == 1 ? "Assistido"
                    : historico == 0 ? "Não assistido"
@@ -732,12 +812,15 @@ void ctx_desenhar(Uint32 agora) {
     gfx_cor(p, raio, 0.055f, 0.058f, 0.068f, 0.94f * a);
     gfx_luz_canto(p, raio, CTX_W * 0.1f, -CTX_W * 0.1f, CTX_W * 0.65f, ar_, ag_, ab_, 0.22f * a); } }
 
-  { TxtLinha t = txt_linha(TXT_CAPTION2, "TÍTULO SELECIONADO", 174, 178, 188, 255);
+  { TxtLinha t = txt_linha(TXT_CAPTION2, pagina == 1 ? "FILEIRA SELECIONADA"
+                                                    : "TÍTULO SELECIONADO",
+                           174, 178, 188, 255);
     txt_desenhar_alpha(t, x + CTX_PAD, y + CTX_PAD, a * 0.95f); }
-  { TxtLinha t = txt_linha_corta(TXT_HEADLINE, ci->titulo, 245, 248, 255, 255,
-                                 CTX_W - CTX_PAD * 2.0f);
+  { TxtLinha t = txt_linha_corta(TXT_HEADLINE, pagina == 1 ? filTitulo : ci->titulo,
+                                 245, 248, 255, 255, CTX_W - CTX_PAD * 2.0f);
     txt_desenhar_alpha(t, x + CTX_PAD, y + CTX_PAD + 28.0f, a); }
-  { const char *subtitulo = mensagem ? mensagem : "Opções do título";
+  { const char *subtitulo = pagina == 1 ? "Estilo da fileira"
+                          : mensagem ? mensagem : "Opções do título";
     TxtLinha t = txt_linha(TXT_DET_META2, subtitulo, 150, 154, 163, 255);
     txt_desenhar_alpha(t, x + CTX_PAD, y + CTX_PAD + 70.0f, a * 0.9f); }
 
@@ -748,7 +831,7 @@ void ctx_desenhar(Uint32 agora) {
   // iguais e a pessoa tinha de LER para saber se o titulo ja era dela.
   { float sx = x + CTX_PAD;
     float sy = y + CTX_PAD + 106.0f;
-    int historico = historicoDe(ci);
+    int historico = ci ? historicoDe(ci) : -1;
     for (i = 0; i < nEstados; i++) {
       int positivo = i == 0 ? tituloSalvo(ci) : historico == 1;
       // "Progresso salvo" e o unico estado nem positivo nem negativo: neutro.
@@ -774,12 +857,17 @@ void ctx_desenhar(Uint32 agora) {
     // olho riscado/aberto = historico, oculto = tirar da fileira, aviao =
     // recomendar.
     const char *icone = "avancar";
-    switch (ops[i].acao) {
+    if (ops[i].acao >= OP_ESTILO_0) {
+      // A forma que vale agora leva o visto; as outras, nada.
+      int k = ops[i].acao - OP_ESTILO_0;
+      icone = k < nEstilos && estiloTipos[k] == fil_tipo(filChave) ? "check" : "";
+    } else switch (ops[i].acao) {
       case OP_LISTA:     icone = tituloSalvo(ci) ? "visto" : "mais"; break;
       case OP_ASSISTIDO: icone = historicoDe(ci) == 1
                                  ? "naovisto" : "visto"; break;
       case OP_TIRAR_CONTINUAR: icone = "oculto"; break;
       case OP_RECOMENDAR: icone = "recomendar"; break;
+      case OP_ESTILO:     icone = "aspecto"; break;
       default: break;
     }
     botao_pilula(r, ops[i].rot, icone, f, 1, 1, a);

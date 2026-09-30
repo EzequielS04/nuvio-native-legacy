@@ -92,6 +92,26 @@ int col_grupo_addon(const char *name, char *dst, unsigned n) {
   return 1;
 }
 
+int col_forma_texto(const char *s) {
+  if (s && !strcasecmp(s, "POSTER")) return COL_FORMA_POSTER;
+  if (s && (!strcasecmp(s, "LANDSCAPE") || !strcasecmp(s, "WIDE"))) return COL_FORMA_PAISAGEM;
+  return COL_FORMA_QUADRADO;
+}
+
+int col_grupo_forma(const char *name) {
+  int conta[COL_FORMA_N] = {0}, primeira = -1, melhor, i;
+  for (i = 0; i < count; i++) {
+    int f = folders[i].forma;
+    if (strcasecmp(name, folders[i].group) || f < 0 || f >= COL_FORMA_N) continue;
+    if (primeira < 0) primeira = f;
+    conta[f]++;
+  }
+  if (primeira < 0) return COL_FORMA_PAISAGEM;
+  melhor = primeira;
+  for (i = 0; i < COL_FORMA_N; i++) if (conta[i] > conta[melhor]) melhor = i;
+  return melhor;
+}
+
 int col_grupo(const char *name,int *indices,int max) {
   int n=0;for(int i=0;i<count&&n<max;i++) if(!strcasecmp(name,folders[i].group)) indices[n++]=i;return n;
 }
@@ -269,6 +289,9 @@ int col_carregar(const char *dir) {
       localiza(v->cover,sizeof v->cover,dir);localiza(v->hero,sizeof v->hero,dir);localiza(v->logo,sizeof v->logo,dir);
       v->hideTitle=js_num(p,pe,"hideTitle",0);v->frames=js_num(p,pe,"frames",0);
       if(v->frames<0||v->frames>90)v->frames=0;
+      /* O pacote nao traz tileShape: sem ele fica PAISAGEM (o zero), que e o
+         desenho para o qual a arte curada dele foi feita. */
+      { char forma[16]=""; if(js_texto(p,pe,"tileShape",forma,sizeof forma)) v->forma=col_forma_texto(forma); }
       snprintf(v->frameDir,sizeof v->frameDir,"%s/collections/%s",dir,v->id);
       /* Local paired artwork survives catalog imports. Activate only a complete pair. */
       char editorial[512];
@@ -365,6 +388,13 @@ static void lerColecaoWeb(const char *c, const char *ce) {
     if (strlen(v->focusGif) >= sizeof v->focusGif - 1) { v->focusGif[0] = 0; fGifCortado++; }
     if (strlen(v->cover) >= sizeof v->cover - 1) { v->cover[0] = 0; fGifCortado++; }
     { char b[8]; v->hideTitle = js_bruto(p, pe, "hideTitle", b, sizeof b) && strstr(b, "true") ? 1 : 0; }
+    // FORMA DO CARTAO: tileShape, e posterShape como o web aceita
+    // (homeScreen.js le `item.tileShape || item.posterShape`). Ausente vira
+    // quadrado, que e o que o web desenha para a mesma pasta.
+    { char forma[16] = "";
+      if (!js_texto(p, pe, "tileShape", forma, sizeof forma))
+        js_texto(p, pe, "posterShape", forma, sizeof forma);
+      v->forma = col_forma_texto(forma); }
     { char b[8];
       if (js_bruto(p, pe, "focusGifEnabled", b, sizeof b) && strstr(b, "false")) v->focusGif[0] = 0; }
     const char *src = js_array(p, pe, "sources");
@@ -492,6 +522,9 @@ int col_definir_json(const char *json) {
       snprintf(v.group, sizeof v.group, "%s", folders[i].group);
       snprintf(v.groupId, sizeof v.groupId, "%s", folders[i].groupId);
       snprintf(v.title, sizeof v.title, "%s", folders[i].title);
+      // A FORMA E DA CONTA: e escolha feita no editor do web, e o pacote nem
+      // tem o campo.
+      v.forma = folders[i].forma;
       // O GIF DA CONTA SO ENTRA ONDE NAO HA SEQUENCIA LOCAL, e isso nao abre
       // excecao na regra acima: a versao local nao tem GIF nenhum para perder.
       // col_carregar nunca preenche focusGif — no pacote o GIF ja virou

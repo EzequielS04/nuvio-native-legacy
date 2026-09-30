@@ -145,8 +145,45 @@ int main(void) {
   //    duas listas de chaves: quem acrescentar uma chave sintetica nova teria
   //    de lembrar das duas.
   for (i = 0; i < fil_n(); i++)
-    assert(fil_aceita_tipo(i) == (fil_linha_origem(i) == FIL_ORIGEM_CATALOGO));
-  puts("ok  so catalogo de addon escolhe a forma do card");
+    assert(fil_aceita_tipo(i) == (fil_linha_origem(i) != FIL_ORIGEM_APP));
+  puts("ok  catalogo e colecao escolhem a forma do card; fileira do app nao");
+
+  // 6b. ESTILO PELO MENU DO CARTAZ. O menu grava o MESMO `tipo` da tela de
+  //     Ajustes; colecao so aceita as formas dela, e o ciclo dos Ajustes pula
+  //     o resto.
+  { int tipos[8], n, k, col = -1, cat = -1; const char *rot[8];
+    fil_registrar("collection_formas", "Formas", "", "", 3);
+    fil_registrar("addon_movie_formas", "Formas cat", "Addon", "movie", 3);
+    n = fil_estilos("addon_movie_formas", tipos, rot, 8);
+    assert(n == 5 && tipos[0] == FIL_TIPO_AUTO && tipos[1] == FIL_TIPO_CARTAZ &&
+           tipos[2] == FIL_TIPO_SERVICO && tipos[3] == FIL_TIPO_COLECAO &&
+           tipos[4] == FIL_TIPO_DESTAQUE && !strcmp(rot[2], "Paisagem pequena"));
+    n = fil_estilos("collection_formas", tipos, rot, 8);
+    assert(n == 4 && tipos[1] == FIL_TIPO_COLECAO &&
+           tipos[2] == FIL_TIPO_DESTAQUE_QUADRADO && tipos[3] == FIL_TIPO_CARTAZ);
+    assert(fil_estilos("continue_watching", tipos, rot, 8) == 0);
+    assert(!fil_definir_tipo("continue_watching", FIL_TIPO_CARTAZ));
+    assert(!fil_definir_tipo("collection_formas", FIL_TIPO_TOP10));   // nao e forma de colecao
+    assert(fil_definir_tipo("collection_formas", FIL_TIPO_CARTAZ));
+    assert(fil_tipo("collection_formas") == FIL_TIPO_CARTAZ);
+    assert(!strcmp(fil_estilo_rotulo("collection_formas", FIL_TIPO_CARTAZ), "Pôster"));
+    assert(fil_definir_tipo("addon_movie_formas", FIL_TIPO_SERVICO));
+    assert(fil_tipo("addon_movie_formas") == FIL_TIPO_SERVICO);
+    for (k = 0; k < fil_n(); k++) {
+      if (!strcmp(fil_chave(k), "collection_formas")) col = k;
+      if (!strcmp(fil_chave(k), "addon_movie_formas")) cat = k;
+    }
+    assert(col >= 0 && cat >= 0);
+    assert(!strcmp(fil_linha_tipo_rotulo(col), "Pôster"));
+    assert(!strcmp(fil_linha_tipo_rotulo(cat), fil_tipo_rotulo(FIL_TIPO_SERVICO)));
+    // Ciclo dos Ajustes numa colecao: Poster -> Automatico -> Paisagem -> Quadrado.
+    fil_ciclar_tipo(col); assert(fil_linha_tipo(col) == FIL_TIPO_AUTO);
+    fil_ciclar_tipo(col); assert(fil_linha_tipo(col) == FIL_TIPO_COLECAO);
+    fil_ciclar_tipo(col); assert(fil_linha_tipo(col) == FIL_TIPO_DESTAQUE_QUADRADO);
+    fil_ciclar_tipo(col); assert(fil_linha_tipo(col) == FIL_TIPO_CARTAZ);
+    fil_definir_tipo("collection_formas", FIL_TIPO_AUTO);
+    fil_definir_tipo("addon_movie_formas", FIL_TIPO_AUTO); }
+  puts("ok  estilo da fileira: menu e Ajustes gravam o mesmo tipo");
 
   // 7. O QUE ACOMPANHA A ORIGEM. Addon e tipo: o PRIMEIRO que souber preenche,
   //    porque sao dois registradores (descoberta e home) e so um conhece o
