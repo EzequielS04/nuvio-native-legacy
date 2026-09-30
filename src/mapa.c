@@ -1017,6 +1017,12 @@ static void cacheLer(Cache *c) {
   c->n = c->nc = 0;
   if (!txt) return;
   if (strncmp(txt, "NVMAPA 1\n", 9)) { free(txt); return; }
+  // O IDIOMA DO TMDB e parte do cache (#187): titulos, sinopses e cartazes vem
+  // no idioma pedido, e trocar o idioma dos metadados deixava a semana inteira
+  // de mapa na lingua antiga. Cache sem a linha L (anterior a isto) cai tambem.
+  { char esperado[40];
+    snprintf(esperado, sizeof esperado, "L\t%s\n", desc_tmdb_idioma());
+    if (strncmp(txt + 9, esperado, strlen(esperado))) { free(txt); return; } }
   for (linha = txt + 9; linha && *linha; linha = prox) {
     char *p;
     prox = strchr(linha, '\n');
@@ -1079,7 +1085,7 @@ static void cacheGravar(const Cache *c) {
   char *b = malloc(cap);
   int i, j;
   if (!b) return;
-  k += (size_t)snprintf(b + k, cap - k, "NVMAPA 1\n");
+  k += (size_t)snprintf(b + k, cap - k, "NVMAPA 1\nL\t%s\n", desc_tmdb_idioma());
 #define ESPACO (k + 2048 < cap)
   for (i = 0; i < c->n && ESPACO; i++) {
     const MapaSemente *s = &c->s[i];
