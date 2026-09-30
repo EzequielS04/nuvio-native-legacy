@@ -337,4 +337,11 @@ int  fil_unir(const char *const *chaves, int n, int *saida, int max);
 // conta de quem saiu.
 void fil_esquecer(void);
 
+// LIMPEZA UNICA DO #197 (ver a definicao): desfaz, so no arquivo com o padrao
+// exato do defeito, a rajada do limite e os catalogos fora da cota que entraram
+// ligados. `contaLigadas` sao as chaves que a ordem da CONTA tem e nao desligou.
+// Roda uma vez por arquivo de perfil (marca "migracao 197"); devolve quantas
+// linhas mudaram.
+int fil_migrar_197(const char *const *contaLigadas, int n);
+
 #endif
