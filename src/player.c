@@ -2755,7 +2755,19 @@ void player_desenhar(Uint32 agora) {
     // o furo mostrava o nada atras do plano em vez de mostrar o plano.
     PlrRect r = destinoComRecuo(aspectoVisivel(aspecto));
     GfxRect furo;
-    furo.x = r.x; furo.y = r.y; furo.w = r.w; furo.h = r.h;
+    // OS MESMOS PIXELS INTEIROS QUE FORAM AO PLANO (video_janela arredonda com
+    // +0,5). Furo fracionario e plano inteiro discordam em ate 1 px, e esse px
+    // fica transparente SEM video por baixo: aparece o que esta atras do app —
+    // a tela da Samsung numa linha fina colorida na faixa preta (#185, S90D,
+    // modo Original em todo conteudo com barra). Fora da tela cheia o furo
+    // ainda encolhe 1 px por lado: o preto cobre a borda do video em vez de
+    // deixar vao.
+    { float x0 = (float)(int)(r.x + 0.5f), y0 = (float)(int)(r.y + 0.5f);
+      float w0 = (float)(int)(r.w + 0.5f), h0 = (float)(int)(r.h + 0.5f);
+      furo.x = x0; furo.y = y0; furo.w = w0; furo.h = h0;
+      if (w0 < NV_TELA_W - 0.5f || h0 < NV_TELA_H - 0.5f) {
+        furo.x += 1.0f; furo.y += 1.0f; furo.w -= 2.0f; furo.h -= 2.0f;
+      } }
     // Fora do furo fica PRETO, e nao a arte-chave: e o que a TV mostra ao lado
     // do plano de video, e pintar outra coisa ali criaria uma borda que nao
     // existe no aparelho.
