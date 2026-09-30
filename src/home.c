@@ -237,6 +237,13 @@ static float velX[MAX_FIL];
 // comentario no corte, em remontar().
 static int   cortadasPeloLimite;
 static float velY = 0.0f;
+// RETORNO DE FIM DE FILEIRA (anim.h: AnimBorda). Um deslocamento em x por
+// fileira e um em y para a pagina, somados so no DESENHO: nao tocam scrollX,
+// scrollY nem o foco, e em repouso valem zero.
+#define NV_BORDA_AMP 20.0f
+static AnimBorda bordaFil[MAX_FIL];
+static AnimBorda bordaPag;
+static float bordaX(int r) { return (r >= 0 && r < MAX_FIL) ? bordaFil[r].x : 0.0f; }
 static int sair = 0, pedidoAbrir = 0, pedidoTocar = 0, pedidoMenu = 0;
 // VOLTAR NA HOME PEDE CONFIRMACAO. Ver home_evento; o aviso e desenhado em
 // home_desenhar enquanto a janela esta aberta.
@@ -1654,7 +1661,8 @@ void home_evento(const SDL_Event *e) {
       heroPasso(-1); return;
     }
     if (k == SDLK_DOWN) { focoHero = 0; return; }
-    if (k == SDLK_UP) return;
+    // Cima no destaque: nao ha para onde ir. A pagina sobe um pouco e volta.
+    if (k == SDLK_UP) { anim_borda_bater(&bordaPag, -NV_BORDA_AMP); return; }
   } else if (k == SDLK_UP && foco.fileira == 0) {
     focoHero = 1;
     return;
@@ -1664,15 +1672,19 @@ void home_evento(const SDL_Event *e) {
     // `if (fileira == 0 && !focus_mover(...))`, o focus_mover so era chamado
     // NO HERO — em qualquer outra fileira a seta direita nao movia nada. Mover
     // primeiro, decidir depois.
-    (void)focus_mover(&foco, 1, 0);
+    // Sem mover (ultimo cartao, ou o "Ver tudo"), a fileira bate na borda.
+    if (!focus_mover(&foco, 1, 0) && foco.fileira < MAX_FIL)
+      anim_borda_bater(&bordaFil[foco.fileira], NV_BORDA_AMP);
   } else if (k == SDLK_LEFT) {
   // Esquerda na primeira coluna chama o menu lateral, em QUALQUER fileira —
     // inclusive no hero. Antes o hero era excecao e usava a esquerda para
     // voltar um titulo no carrossel: quem chegava ali (voltando de outra tela,
     // por exemplo) nao tinha como abrir o menu sem antes descer. O carrossel
     // continua acessivel pela direita e pela troca automatica.
+    // Por isso a esquerda nunca bate na borda: a coluna 0 e a porta do menu.
     if (foco.coluna == 0) { pedidoMenu = 1; return; }
-    focus_mover(&foco, -1, 0);
+    if (!focus_mover(&foco, -1, 0) && foco.fileira < MAX_FIL)
+      anim_borda_bater(&bordaFil[foco.fileira], -NV_BORDA_AMP);
   }
   else if (k == SDLK_DOWN)  focus_mover(&foco, 0, 1);
   else if (k == SDLK_UP)    focus_mover(&foco, 0, -1);
@@ -2179,6 +2191,7 @@ static void sincronizarFileiras(void) {
   memset(revArte, 0, sizeof revArte);
   memset(velX, 0, sizeof velX);
   memset(scrollX, 0, sizeof scrollX);
+  memset(bordaFil, 0, sizeof bordaFil);
   for (r = 0; r < nFileiras; r++)
     for (int a = 0; a < nAntigas; a++)
       if (!strcmp(fileiras[r].chave, antigas[a].chave)) {
@@ -2461,6 +2474,9 @@ void home_atualizar(float dt, Uint32 agora) {
   }
   scrollY = anim_mola2_reduzida(&velY, scrollY, alvoY, dt,
                                 NV_MOLA2_SCROLL, motionReduzido);
+  for (int r = 0; r < nFileiras && r < MAX_FIL; r++)
+    (void)anim_borda_passo(&bordaFil[r], dt, motionReduzido);
+  (void)anim_borda_passo(&bordaPag, dt, motionReduzido);
 
   // Mantem um snapshot vivo para a proxima publicacao incremental. O
   // sincronizador ainda usa posCapturar como fallback nos testes/caminhos que
@@ -3090,6 +3106,7 @@ static void desenhaHero(Uint32 agora, float saida) {
   float hSin = sinopse[0] ? txt_bloco(TXT_HERO_SIN, sinopse, 255, 255, 255, -1, 0,
                                       sinW, NV_LD_HERO_SIN, 0.0f, sinLinhas)
                           : 0.0f;
+  base += bordaPag.x;   // retorno de borda do Cima no destaque
   float ySin  = base - hSin;
   float ySec  = temSec ? (ySin - (sinopse[0] ? NV_HERO_COPY_LINHA : 0.0f)
                           - NV_LD_HERO_SEC) : ySin;
@@ -3343,7 +3360,7 @@ static void desenhaAtalhos(int r, float y) {
   // o cache nos ~4 quadros de tela que cabem entre dois passos de 67 ms.
   static int seqIndice=-1;static GLuint seqTex;
   for (int c = 0; c < fileiras[r].n; c++) {
-    float x = ajustes_conteudo_x() + c * passoFil(r) - scrollX[r];
+    float x = ajustes_conteudo_x() + c * passoFil(r) - scrollX[r] + bordaX(r);
     if (x + w < 0 || x > NV_TELA_W) continue;
     float f = animFoco[r][c], raio = raioDe(w, h);
     GfxRect card = {x, y, w, h};
@@ -3841,7 +3858,7 @@ void home_desenhar(Uint32 agora) {
   // direto sobre o fundo e o cartao rola ate a beira da tela, como nos outros.
   gfx_recorte(0.0f, corte, NV_TELA_W, NV_TELA_H - corte);
   const float topoFil = topoFileiras();
-  float y = topoFil - scrollY + descida;
+  float y = topoFil - scrollY + descida + bordaPag.x;
   // NENHUMA FILEIRA. Nao e o arranque (ali a home mostra o catalogo do pacote
   // ou o do cache): e o caso de a pessoa ter desligado todas em Ajustes. Sem
   // texto, o hero sozinho com o resto da tela vazia le como travamento — e ela
@@ -3969,7 +3986,7 @@ void home_desenhar(Uint32 agora) {
         float esc = 1.0f + escalaDe(tipo) * f;
         float w = lw * esc, h = artH * esc;
         float cx = ajustes_conteudo_x() + c * passo - scrollX[r] + lw * 0.5f
-                 + xOffTipo(tipo);
+                 + xOffTipo(tipo) + bordaX(r);
         float cy = cardY + artH * 0.5f;
         if (cx > -lw * 1.5f && cx < NV_TELA_W + lw) {
           float px = cx - w * 0.5f, py = cy - h * 0.5f;
@@ -4035,7 +4052,7 @@ void home_desenhar(Uint32 agora) {
           }
           if (abre > 0.0f) w = lw * esc + (larguraAberta - lw * esc) * abre;
           float cx = ajustes_conteudo_x() + c * passo - scrollX[r] + lw * 0.5f
-                   + empurra + (w - lw * esc) * 0.5f + xOffTipo(tipo);
+                   + empurra + (w - lw * esc) * 0.5f + xOffTipo(tipo) + bordaX(r);
           // Sem levantamento: no web o card focado nao sai do lugar. O que
           // desloca aqui e so a cascata de entrada, e so enquanto ela dura.
           float cy = cardY + artH * 0.5f + (1.0f - entra) * NV_ENTRA_DY;
