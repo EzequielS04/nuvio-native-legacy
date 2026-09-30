@@ -148,6 +148,11 @@ void fil_definir_teto_sessao(int teto);
 // Ao BAIXAR o limite, as ligadas que ficaram alem dele viram "fora da home"
 // (ocultas), nao fila. Decisao do dono; ver o comentario na definicao.
 void fil_definir_limite(int n);
+// A SETA DA TELA DE AJUSTES (issue #197): cada passo so muda o numero; quem
+// ficou alem do valor FINAL vira "fora" em fil_confirmar_limite, chamado quando
+// a edicao da linha termina. Sem rajada em curso, confirmar nao faz nada.
+void fil_ajustar_limite(int n);
+void fil_confirmar_limite(void);
 
 // --- na home, na fila, fora --------------------------------------------------
 // A ORDEM E A FILA. As primeiras `limite` linhas ligadas, na ordem local, sao
