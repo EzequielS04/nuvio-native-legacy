@@ -257,9 +257,20 @@ int  video_conflito_recurso(void) { return conflito; }
 // Reason); o clipe mudo do arranque loga "prime interrompido ..." e fica de
 // fora de proposito. Conflito = a fonte falhou: o trailer fecha e volta a
 // arte, o player do filme cai no caminho de erro de sempre.
+// So conta com o Nuvio NA FRENTE. Nos logs da 1.6.0 metade dos ResourceConflict
+// vem logo depois de "[janela] principal visivel=False": a pessoa saiu do app
+// no meio do filme e a TV tomou o video, o que e so uma pausa. E o player
+// PRINCIPAL nunca e marcado como falho aqui — isso faria o automatico trocar de
+// fonte ao voltar; quem le `conflito` e so o trailer.
+static volatile int janelaVisivel = 1;
 void video_tpk_log_host(const char *linha) {
-  if (!linha || !strstr(linha, "interrompido: ResourceConflict")) return;
-  falhou = 1; tocando = 0;
+  if (!linha) return;
+  if (strstr(linha, "[janela] principal visivel=")) {
+    janelaVisivel = strstr(linha, "visivel=True") != NULL;
+    return;
+  }
+  if (!strstr(linha, "interrompido: ResourceConflict") || !janelaVisivel) return;
+  tocando = 0;
   if (!conflito) { printf("[video] tpk: outro app tomou o video da TV; trailers automaticos desligados nesta sessao\n"); fflush(stdout); }
   conflito = 1;
 }

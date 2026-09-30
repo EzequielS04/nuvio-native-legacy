@@ -381,7 +381,8 @@ int trailer_tocando(void) {
   int e = aberto ? trailer_js_estado() : -2;
   return e == 1 || e == 3;
 #else
-  return aberto && video_pronto() && !video_falhou() && !video_terminou();
+  return aberto && video_pronto() && !video_falhou() && !video_terminou() &&
+         !video_conflito_recurso();
 #endif
 }
 int trailer_mostra_video(void) {
@@ -460,8 +461,9 @@ void trailer_atualizar(Uint32 agora) {
   video_bombear();
   nativoAplicar();
   // Acabou ou a fonte falhou: fecha e a pagina volta a arte.
-  if (video_terminou() || video_falhou()) {
-    falhouUltima = video_falhou() ? 1 : 0;
+  // conflito: outro app (YouTube) tomou o plano de video — fecha, fica a arte.
+  if (video_terminou() || video_falhou() || video_conflito_recurso()) {
+    falhouUltima = video_falhou() || video_conflito_recurso() ? 1 : 0;
     trailer_fechar();
   }
 #endif
