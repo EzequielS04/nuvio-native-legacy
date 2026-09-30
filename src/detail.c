@@ -4059,7 +4059,11 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
     if (prog > 2 && prog < 98) {
       GfxRect tr = { tx, r.y + NV_DETP_EP_BARRA_Y, NV_DETP_EP_TEXTO_W,
                      NV_DETP_EP_BARRA_H };
-      GfxRect at = { tr.x, tr.y, tr.w * (prog / 100.0f), tr.h };
+      // Anda do valor que esta tela mostrava ate o novo (revela.h): na volta
+      // do player a barra do episodio cresce ate onde a pessoa parou.
+      float mostra = revela_progresso(ci->imdb, ep->temporada, ep->episodio,
+                                      (float)prog, SDL_GetTicks());
+      GfxRect at = { tr.x, tr.y, tr.w * (mostra / 100.0f), tr.h };
       gfx_cor(tr, 0.5f, 0, 0, 0, 0.45f * a);
       gfx_cor(at, 0.5f, 0.62f, 0.62f, 0.62f, a);
     } }

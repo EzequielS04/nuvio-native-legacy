@@ -269,6 +269,12 @@ static float animPick[3];
 static float animFoco[BIB_MAX_LINHAS][NV_BIB_COLUNAS];
 // Arte chegando, a mesma da home (revela.h): um registro por celula da grade.
 static RevelaArte revArte[BIB_MAX_LINHAS][NV_BIB_COLUNAS];
+// A ONDA da grade (revela.h): armada quando a grade e refeita do zero
+// (remapear sem preservar: entrar, trocar modo/filtro/ordem) e disparada no
+// primeiro quadro com celulas. Pagina que chega pela rede preserva o foco e
+// nao reacende a onda; rolar tambem nao.
+static Uint32 ondaEm;
+static int ondaArmada;
 static float scrollY = 0.0f;
 // Velocidade da mola de 2a ordem da rolagem (anim_mola2): partida macia e
 // cauda exponencial, a MESMA curva que a home mede. A de 1a ordem que estava
@@ -454,6 +460,7 @@ static void remapear(int preservar) {
   }
   scrollY = 0.0f; velY = 0.0f;
   memset(animFoco, 0, sizeof animFoco); memset(revArte, 0, sizeof revArte);
+  ondaArmada = 1; ondaEm = 0;
 }
 
 // O item de uma posicao de `filtro`. Salvo local fora do catalogo vira um
@@ -1807,7 +1814,6 @@ void biblioteca_desenhar(Uint32 agora) {
   // ligado aqui e DEVOLVIDO no fim, porque a variavel e global e as outras
   // telas desenham card tambem.
   gfx_borda_foco_atual = ajustes_borda_foco() ? 1.0f : 0.0f;
-  (void)agora;
   // A tela ja foi limpa com a cor de fundo por glClearColor/glClear em main.c
   // antes de app_desenhar. Pintar por cima era uma camada de tela cheia jogada
   // fora por quadro — e o custo dominante nesta GPU e fill rate (gfx.c registra
@@ -1831,6 +1837,9 @@ void biblioteca_desenhar(Uint32 agora) {
   linhas = nLinhas();
   if (linhas > BIB_MAX_LINHAS) linhas = BIB_MAX_LINHAS;
   passoC = passoColuna(); passoL = passoLinha(); gy = gradeY();
+  if (ondaArmada) { ondaEm = agora ? agora : 1u; ondaArmada = 0; }
+  if (ondaEm && revela_onda_fim(ondaEm, agora)) ondaEm = 0;
+  { int lin0 = passoL > 0.0f ? (int)(scrollY / passoL) : 0;
 
   // Dois passes: o item focado escala 2% e precisa ser desenhado por ULTIMO,
   // senao o vizinho da direita corta a borda dele.
@@ -1851,29 +1860,36 @@ void biblioteca_desenhar(Uint32 agora) {
 
       for (c = 0; c < nc; c++) {
         int i = r * nc + c;
-        float f;
+        float f, entra, ac, ty;
         if (i >= nCelulas) break;
         f = (c < NV_BIB_COLUNAS) ? animFoco[r][c] : 0.0f;
         if ((passe == 0) == (f > 0.01f)) continue;
+        // ONDA: atraso pela coluna e pela fileira visiveis (revela.h).
+        entra = ondaEm ? revela_entra(ondaEm, revela_onda_atraso(c, r - lin0), agora)
+                       : 1.0f;
+        ac = a * entra;
+        if (ac <= 0.005f) continue;
+        ty = topo + (1.0f - entra) * NV_ENTRA_DY;
 
         if (estado() == EST_LISTAS) {
           const LstLista *l = lst_lista(i);
-          if (exibicao == VIS_LISTA) desenhaLinhaLista(l, topo, f, a);
-          else desenhaCartaoLista(l, (GfxRect){ bibX() + c * passoC, topo,
-                                                larguraCartaoLista(), BIB_LC_H }, f, a);
+          if (exibicao == VIS_LISTA) desenhaLinhaLista(l, ty, f, ac);
+          else desenhaCartaoLista(l, (GfxRect){ bibX() + c * passoC, ty,
+                                                larguraCartaoLista(), BIB_LC_H }, f, ac);
           continue;
         }
         { CatItem tmp;
           const CatItem *ci;
           if (estado() == EST_ITENS) ci = lst_item(i, &tmp) ? &tmp : NULL;
           else                       ci = itemFiltro(filtro[i], &tmp);
-          if (exibicao == VIS_LISTA) desenhaLinhaTitulo(ci, topo, f, a);
-          else desenhaCartaz(ci, (GfxRect){ bibX() + c * passoC, topo,
-                                            NV_BIB_CARD_W, NV_BIB_POSTER_H }, f, a,
+          if (exibicao == VIS_LISTA) desenhaLinhaTitulo(ci, ty, f, ac);
+          else desenhaCartaz(ci, (GfxRect){ bibX() + c * passoC, ty,
+                                            NV_BIB_CARD_W, NV_BIB_POSTER_H }, f, ac,
                              (r < BIB_MAX_LINHAS && c < NV_BIB_COLUNAS)
                                ? &revArte[r][c] : NULL, agora); }
       }
     }
+  }
   if (teclado_aberto()) teclado_desenhar(agora);
   gfx_borda_foco_atual = 1.0f;
 }
