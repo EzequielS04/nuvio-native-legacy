@@ -191,6 +191,13 @@ enum { AT_PARADO = 0, AT_BAIXANDO, AT_INSTALANDO, AT_PRONTO, AT_FALHOU };
 static float instPct;
 static char  instPasso[48];
 static int estado;
+// .so nova ENCENADA nesta sessao (so NV_TPK). O host escolhe a lib no arranque
+// de um processo NOVO, e na Samsung "sair" nem sempre acaba o processo: a TV o
+// guarda e a reabertura retoma o antigo (#184, S90D Tizen 9: cinco arranques
+// seguidos na 1.5.4 com a 1.6.0 ja encenada). Por isso o cartao oferece
+// "Reiniciar agora", que encerra o app de verdade (SDL_QUIT -> fim do main ->
+// o host sai e a vigia dele forca o _exit).
+static int soEncenada;
 static int foco;                  // 0 = "Atualizar agora", 1 = "Depois"
 // ROLAGEM DAS NOTAS. Relato de mackojanko (Samsung Tizen 6.0, 1.4.5): "quando
 // o aviso aparece nao consigo descer e nao vejo o botao de atualizar". As
@@ -642,7 +649,7 @@ static int fioBaixarSo(void *arg) {
   { char linha[48]; snprintf(linha, sizeof linha, "%s\n", verLocal); dados_gravar("libnuvio.staged.ver", linha); (void)vr; }
   printf("[atualizacao] libnuvio.so %s encenada; aplica no proximo arranque\n", verLocal);
   fflush(stdout);
-  SDL_LockMutex(mtx); estado = AT_PRONTO; SDL_UnlockMutex(mtx);
+  SDL_LockMutex(mtx); estado = AT_PRONTO; soEncenada = 1; SDL_UnlockMutex(mtx);
   return 0;
 }
 
@@ -728,6 +735,17 @@ void atualizacao_evento(const SDL_Event *e) {
     return;
   }
   if (estado == AT_INSTALANDO) return;
+  if (estado == AT_PRONTO && soEncenada &&
+      (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE)) {
+    SDL_Event q;
+    printf("[atualizacao] reiniciar agora: encerrando para o host carregar a lib nova\n");
+    fflush(stdout);
+    memset(&q, 0, sizeof q);
+    q.type = SDL_QUIT;
+    SDL_PushEvent(&q);
+    fechar();
+    return;
+  }
   if (podeAgir() && (k == SDLK_LEFT || k == SDLK_RIGHT)) {
     foco = k == SDLK_LEFT ? 0 : 1;
     return;
@@ -862,7 +880,14 @@ void atualizacao_desenhar(Uint32 agora) {
   // abaixo da janela das notas: por mais longas que elas sejam, o botao esta
   // sempre na tela.
   y = AT_Y + dy + AT_H - 96.0f;
-  if (estado == AT_INSTALANDO || estado == AT_PRONTO) {
+  if (estado == AT_PRONTO && soEncenada) {
+    const char *rot = i18n("Reiniciar agora");
+    TxtLinha t = txt_linha(TXT_CALLOUT, i18n("Pronto. Reinicie o Nuvio para usar a versão nova."),
+                           232, 236, 246, 255);
+    txt_desenhar_alpha(t, x, y - 58.0f, a);
+    { GfxRect b = { x, y, botao_largura(rot, NULL, 1), BOTAO_H_PRIMARIO };
+      botao_pilula(b, rot, NULL, 1.0f, 1, 0, a); }
+  } else if (estado == AT_INSTALANDO || estado == AT_PRONTO) {
     // BARRA E PORCENTAGEM, e nao uma frase parada. O numero e o passo vem do
     // proprio instalador (progress/statusText); enquanto ele nao disse nada a
     // barra fica vazia em vez de inventar movimento.
