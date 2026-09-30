@@ -1242,7 +1242,10 @@ int main(int argc, char **argv) {
         // que desenho pesava.
         static Uint32 ultModos;
         double fpsAgora = quadros * 1000.0 / (double)(agora - ultRelato + 1);
-        int lenta = fpsAgora < 50.0 && quentes >= 10 && (Uint32)(agora - ultModos) >= 30000u;
+        // 45 e nao 50: TV Samsung roda a 50 Hz e o .tpk marca 49,9 fps em
+        // repouso; com 50 a linha saia para 12 de 12 pessoas na 1.6.1 e
+        // afogava os casos lentos de verdade.
+        int lenta = fpsAgora < 45.0 && quentes >= 10 && (Uint32)(agora - ultModos) >= 30000u;
         if (lenta) { ultModos = agora;
           printf("[gpu-modos] lento: fps=%.1f layout=%d cor-viva=%d vidro=%d\n",
                  fpsAgora, ajustes_home_layout(), ajustes_cor_viva(), ajustes_vidro()); }
