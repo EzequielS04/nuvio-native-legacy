@@ -104,8 +104,17 @@ namespace NuvioTpk
         // e coberto, e o video, na principal, tambem nao. Desligada na API11,
         // onde a principal e transparente de proposito (subindo por cima do
         // GLWindow, opaca, voltaria a cobri-lo: o (4) de novo).
+        //
+        // CANARIO (#188, #195, #185): com API11_GLVIEW nao ha GLWindow para
+        // cobrir, e o motivo acima deixa de valer. Sem o estado opaco, a
+        // principal transparente nao cobre a janela de baixo, e no Tizen 9 a
+        // tela inicial da Samsung aparece em todo pixel de alfa 0 sem video
+        // (a linha de 1 px da #185 na S90D; o destaque inteiro na #195). Com
+        // ele, o gerenciador trata a janela de baixo como coberta. NAO PROVADO
+        // em TV: sai como canario. So muda o calculo de visibilidade, nao o
+        // alfa da janela (o furo continua chegando ao video).
 #if NV_API11
-        const bool JANELA_PRINCIPAL_OPACA = false;
+        const bool JANELA_PRINCIPAL_OPACA = API11_GLVIEW;
 #else
         const bool JANELA_PRINCIPAL_OPACA = true;
 #endif
