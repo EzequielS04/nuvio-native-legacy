@@ -233,8 +233,11 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { NV_FT_PG_FIM,     PESO_REGULAR },  // .player-ends-at (20/400)
   { NV_FT_PG_ROTULO,  PESO_MEDIUM  },  // .player-parental-label (22/600)
   { NV_FT_PG_GRAV,    PESO_REGULAR },  // .player-parental-severity (22/400)
-  { 36, PESO_REGULAR },             // cabecalhos dos paineis do player oficial
-  { 24, PESO_BOLD },                // episodio/fonte dentro da lista
+  // ESCALA DOS PAINEIS (30/09, revisao de proporcao): titulo 34, item 26,
+  // apoio 22 (NV_FT_PG_FIM). Eram 36 Regular / 24 Bold / 20: o item em Bold
+  // pesava mais que o titulo, e o apoio ficava abaixo do piso de leitura.
+  { 34, PESO_MEDIUM },              // cabecalhos dos paineis (Fontes, Legendas, Episodios)
+  { 26, PESO_MEDIUM },              // episodio/fonte/faixa dentro da lista
   { 28, PESO_MEDIUM },              // titulo no card Continuar assistindo
   { 23, PESO_REGULAR },             // temporada e nome do episodio
   { 20, PESO_MEDIUM },              // tempo restante no badge do card

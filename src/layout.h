@@ -515,7 +515,7 @@
 // (components.css:15282), ja convertidos para o canvas de 1920; o guia
 // parental nao e refeito la e fica com os 22 da regra base.
 #define NV_FT_PG_RELOGIO 26   // .player-clock
-#define NV_FT_PG_FIM     20   // .player-ends-at
+#define NV_FT_PG_FIM     22   // .player-ends-at
 #define NV_FT_PG_ROTULO  22   // .player-parental-label
 #define NV_FT_PG_GRAV    22   // .player-parental-severity
 // Entrelinha (leading) OFICIAL de cada estilo. Usar a altura que o SDL_ttf
@@ -560,6 +560,17 @@
 #define NV_COR_FOCO_B     0.188f
 
 // Raios, em fracao do menor lado (o shader usa SDF normalizado)
+// ESCALA DE PAINEL (revisao de proporcao, 30/09). Toda folha lateral e todo
+// painel sobre o player usam os mesmos numeros: margem da tela, recuo interno,
+// altura de controle (pilula/aba), vao entre controles e entre linhas, raio de
+// linha em PIXEIS (converter para fracao da altura no desenho).
+#define NV_FOLHA_MARGEM   24.0f   // da folha ate as bordas da tela, nos tres lados
+#define NV_FOLHA_PAD      40.0f   // recuo do conteudo dentro da folha
+#define NV_FOLHA_RAIO     28.0f
+#define NV_CTRL_H         56.0f   // pilula de acao e aba de filtro
+#define NV_CTRL_VAO       12.0f   // entre pilulas/abas vizinhas
+#define NV_LINHA_VAO      12.0f   // entre linhas/cartoes de uma lista
+#define NV_LINHA_RAIO_PX  18.0f
 #define NV_RAIO_CARD     0.055f
 #define NV_RAIO_PILL     0.5f
 #define NV_RAIO_BADGE    0.18f

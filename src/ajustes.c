@@ -7015,7 +7015,7 @@ void ajustes_desenhar(Uint32 agora) {
   desenhaIndice();
 
   float hx = AJ_LISTA_X + AJ_LISTA_W + 52.0f;
-  float hw = NV_TELA_W - NV_MARGEM_X - hx;
+  float hw = NV_TELA_W - NV_LEGACY_CONTENT_RIGHT - hx;   // mesma margem direita de Perfil e da home (era 80)
   if (hw > 240.0f) {
     // O icone de categoria reaparece enquanto se personaliza uma opcao, ligando
     // o contexto da coluna esquerda ao painel de ajuda. No indice, o cabecalho

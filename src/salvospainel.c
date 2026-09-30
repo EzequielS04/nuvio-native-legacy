@@ -43,7 +43,7 @@
 #define SP_W           776.0f
 #define SP_Y            24.0f
 #define SP_H          1032.0f
-#define SP_PAD          44.0f
+#define SP_PAD          NV_FOLHA_PAD
 #define SP_INTERNO    (SP_W - SP_PAD * 2.0f)
 // ABAS. Elas so existem quando o servico de recomendacoes foi compilado
 // (recomenda_ativo); sem ele o painel e exatamente o que era, sem uma linha a
@@ -53,8 +53,8 @@
 // logo acima gastaria 76px de altura para dizer duas vezes a mesma coisa, e a
 // lista comecaria mais embaixo em todo pacote com o servico ligado.
 #define SP_ABAS_Y      (SP_Y + 56.0f)
-#define SP_ABAS_H        52.0f
-#define SP_ABA_GAP       14.0f
+#define SP_ABAS_H        NV_CTRL_H
+#define SP_ABA_GAP       NV_CTRL_VAO
 // 176, e nao 200: a secao ganhou 24 px de ar proprio acima do rotulo (ver
 // SP_SECAO_H), entao a lista sobe para o primeiro rotulo nao ficar a 90 px
 // das abas.
@@ -64,7 +64,9 @@
 #define SP_POSTER_H    138.0f
 // 12 px entre linhas (dono, 21/09/2026); a pilula de foco tem 6 px de folga
 // vertical, entao duas pilulas vizinhas se tocariam sem se sobrepor.
-#define SP_PASSO       150.0f
+// 162 = cartao de 150 (cartaz 138 + 6 de cada lado) + NV_LINHA_VAO. Era 150:
+// o cartao tinha a altura do passo e dois focos vizinhos encostavam.
+#define SP_PASSO       162.0f
 #define SP_FOCO_PADY     6.0f
 // ROTULO DE SECAO: 24 px de ar acima, o texto (26), 8 px, uma linha de 1 px a
 // 8 % de branco e 13 px ate a primeira linha. O ar maior em cima e o que
@@ -999,8 +1001,8 @@ static float badge_foco_transicao(float x, float y, const char *texto,
   GfxRect p;
   // Selo interno e uma peca neutra, opaca; nao repete o accent do cartao nem
   // depende de transparencia para separar metadado do fundo.
-  repouso = txt_linha(TXT_CAPTION2, texto, 235, 235, 235, 255);
-  foco = txt_linha(TXT_CAPTION2, texto, 226, 226, 226, 255);
+  repouso = txt_linha(TXT_CAPTION, texto, 235, 235, 235, 255);
+  foco = txt_linha(TXT_CAPTION, texto, 226, 226, 226, 255);
   p.x = x; p.y = y; p.w = (float)repouso.w + BADGE_PADX * 2.0f; p.h = BADGE_H;
   if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, 0.10f * a);   /* selo de vidro */
   else gfx_cor(p, 0.5f, .095f, .102f, .116f, a);
@@ -1017,8 +1019,8 @@ static void badge_imdb_foco_transicao(float x, float y, int nota,
   if (nota <= 0) return;
   snprintf(texto, sizeof texto, idioma_ponto_decimal(ajustes_idioma()) ? "%d.%d" : "%d,%d",
            nota / 10, nota % 10);
-  repouso = txt_linha(TXT_CAPTION2, texto, 235, 235, 235, 255);
-  foco = txt_linha(TXT_CAPTION2, texto, tintaFoco, tintaFoco, tintaFoco, 255);
+  repouso = txt_linha(TXT_CAPTION, texto, 235, 235, 235, 255);
+  foco = txt_linha(TXT_CAPTION, texto, tintaFoco, tintaFoco, tintaFoco, 255);
   p.x = x; p.y = y; p.w = BADGE_IMDB_W; p.h = BADGE_H;
   // A marca amarela nao troca de estado; somente a nota acompanha o texto da
   // linha. Assim nao ha um segundo amarelo semitransparente sobre o primeiro.
@@ -1038,7 +1040,7 @@ static void badge_imdb_foco_transicao(float x, float y, int nota,
 // dono, 21/09/2026) lia como parte do titulo. `y` e o topo do bloco de
 // SP_SECAO_H que a proxima linha vai ocupar.
 static void desenhaSecao(float x, float y, const char *rotulo, float a) {
-  TxtLinha t = txt_linha(TXT_CAPTION2, rotulo, 165, 168, 178, 255);
+  TxtLinha t = txt_linha(TXT_CAPTION, rotulo, 165, 168, 178, 255);
   float ty = y + SP_SECAO_AR;
   txt_desenhar_alpha(t, x, ty, a * 0.95f);
   gfx_cor((GfxRect){ x, ty + (float)t.h + 8.0f, SP_INTERNO, 1.0f }, 0.0f,
@@ -1062,11 +1064,11 @@ static void desenhaLinha(int i, float dx, float y, float a) {
   if (f > 0.01f) {
     GfxRect r = { px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
                   SP_POSTER_H + SP_FOCO_PADY * 2.0f };
-    superficieItem(r, 14.0f / r.h, f, a);
+    superficieItem(r, NV_LINHA_RAIO_PX / r.h, f, a);
   } else {
     GfxRect r = { px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
                   SP_POSTER_H + SP_FOCO_PADY * 2.0f };
-    superficieItem(r, 14.0f / r.h, 0.0f, a);
+    superficieItem(r, NV_LINHA_RAIO_PX / r.h, 0.0f, a);
   }
 
   // PELA LARGURA DE DESENHO (92), e nao tex_obter: este decodificava cada
@@ -1154,9 +1156,9 @@ static void desenhaLinha(int i, float dx, float y, float a) {
                                         SP_TEXTO_W - SP_BARRA_W - SP_BARRA_LABEL_GAP);
         txt_foco_transicao(repouso, foco, labelX,
                            y + 90.0f + (SP_BARRA_H - (float)repouso.h) * 0.5f, v, a); }
-      { TxtLinha repouso = txt_linha(TXT_CAPTION2, l->txtVisto, c2Repouso, c2Repouso + 4,
+      { TxtLinha repouso = txt_linha(TXT_CAPTION, l->txtVisto, c2Repouso, c2Repouso + 4,
                                      c2Repouso + 14, 255);
-        TxtLinha foco = txt_linha(TXT_CAPTION2, l->txtVisto, tintaFoco2,
+        TxtLinha foco = txt_linha(TXT_CAPTION, l->txtVisto, tintaFoco2,
                                   tintaFoco2, tintaFoco2, 255);
         txt_foco_transicao(repouso, foco, tx, y + 108.0f, v, a * 0.95f); } }
   } else {
@@ -1282,7 +1284,7 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a) {
     { GfxRect av = { tx, y + SPR_Y_NOME, SPR_AVATAR, SPR_AVATAR };
       rec_avatar(av, r->deAvatar, r->deNome, r->de, a); }
     { float nx = tx + SPR_AVATAR + SPR_AV_GAP;
-      TxtLinha t = txt_linha_corta(TXT_CAPTION2, buf, c2, c2 + 4, c2 + 14, 255,
+      TxtLinha t = txt_linha_corta(TXT_CAPTION, buf, c2, c2 + 4, c2 + 14, 255,
                                    SP_TEXTO_W - (SPR_AVATAR + SPR_AV_GAP));
       txt_desenhar_alpha(t, nx, y + SPR_Y_NOME + (SPR_AVATAR - t.h) * 0.5f,
                          a * 0.95f); }
@@ -1403,7 +1405,7 @@ static void desenhaSocialVazio(float dx, float y0, float a) {
     // O CODIGO TAMBEM AQUI, e nao so na tela de amigos: este e o painel que o
     // dono abre com uma tecla, e ditar seis caracteres ao telefone e a acao que
     // resolve uma lista vazia sem depender de ninguem ter aceitado aparecer.
-    TxtLinha r = txt_linha(TXT_CAPTION2, "Seu código", 160, 164, 175, 255);
+    TxtLinha r = txt_linha(TXT_CAPTION, "Seu código", 160, 164, 175, 255);
     TxtLinha c = txt_linha(TXT_TITULO2, cod, 246, 248, 255, 255);
     txt_desenhar_alpha(r, x, y, a * 0.88f);
     y += r.h + 6.0f;
@@ -1660,7 +1662,7 @@ static void desenhaSugLinha(int i, int idx, float dx, float y, float a) {
     // lado dela: sem isso, "Carolina Menezes" passava por baixo de "Adicionar"
     // e as duas ficavam ilegiveis na captura.
     int tinta = esc ? ajustes_tinta_foco() : 222;
-    TxtLinha acao = txt_linha(TXT_CAPTION2, "Adicionar", tinta, tinta, tinta, 255);
+    TxtLinha acao = txt_linha(TXT_CAPTION, "Adicionar", tinta, tinta, tinta, 255);
     float pw = acao.w + SPS_SUG_PADX * 2.0f;
     float larg = SP_INTERNO - (SPS_SUG_AV + SPS_SUG_GAP) - pw - 20.0f;
     int c1 = esc ? ajustes_tinta_foco() : 245;
@@ -1668,7 +1670,7 @@ static void desenhaSugLinha(int i, int idx, float dx, float y, float a) {
     { TxtLinha t = txt_linha_corta(TXT_CALLOUT, s->nome, c1, c1, c1, 255,
                                    larg);
       txt_desenhar_alpha(t, tx, y + 26.0f, a); }
-    { TxtLinha t = txt_linha_corta(TXT_CAPTION2, origem, c2, c2 + 4, c2 + 14,
+    { TxtLinha t = txt_linha_corta(TXT_CAPTION, origem, c2, c2 + 4, c2 + 14,
                                    255, larg);
       txt_desenhar_alpha(t, tx, y + 62.0f, a * 0.95f); }
     // A acao e um botao quieto opaco, sem contorno; fica legivel sobre a linha
@@ -1733,9 +1735,9 @@ static void desenhaAmigoLinha(int i, int idx, float dx, float y, float a) {
     // visivel quando o branco do foco precisava virar quase preto.
     { TxtLinha repouso = txt_linha_corta(TXT_BODY, c->nome, 245, 245, 245, 255, larg);
       TxtLinha foco = txt_linha_corta(TXT_BODY, c->nome, tf, tf, tf, 255, larg);
-      TxtLinha subRepouso = txt_linha_corta(TXT_CAPTION2, linha2,
+      TxtLinha subRepouso = txt_linha_corta(TXT_CAPTION, linha2,
                                             168, 172, 182, 255, larg);
-      TxtLinha subFoco = txt_linha_corta(TXT_CAPTION2, linha2,
+      TxtLinha subFoco = txt_linha_corta(TXT_CAPTION, linha2,
                                          tf2, tf2, tf2, 255, larg);
       float bloco = (float)repouso.h + 6.0f + (float)subRepouso.h;
       float ty = y + (SPS_H_AMIGO - bloco) * 0.5f;
@@ -1886,7 +1888,7 @@ void spainel_desenhar(Uint32 agora) {
   { // Nunca por cima das abas: o que nao cabe entre a faixa e a borda sai
     // com reticencias, em vez de a contagem colar no selo (foto de 20/09).
     float sobra = SP_W - 2.0f * SP_PAD - (temAbas() ? abasLargura() + 24.0f : 0.0f);
-    TxtLinha t = txt_linha(TXT_CAPTION2, buf, 160, 164, 175, 255);
+    TxtLinha t = txt_linha(TXT_CAPTION, buf, 160, 164, 175, 255);
     // Com tres abas nao sobra lugar para a contagem na mesma linha: ela
     // SOME em vez de sair cortada ("124 titles · 2 to…" nao diz nada). A
     // informacao continua na propria lista.

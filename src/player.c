@@ -141,14 +141,19 @@ static void avisarCascaAberto(int v) { (void)v; }
 //   .player-controls-row    margin-top 32
 //   .player-control-icon    48
 //   gradientes              300 (topo) / 400 (base)
-#define PLR_PAD_X         64.0f
+// 96 e nao 64 (revisao de proporcao, 30/09): o relogio, os selos e o guia
+// parental ficavam a 64 da borda enquanto titulo, botoes e tempo ficam a 96 —
+// duas margens no mesmo quadro. Agora e uma so, a de PLR_MARGEM.
+#define PLR_PAD_X         96.0f
 #define PLR_PAD_Y         48.0f
 // Margem lateral do CONTEUDO do rodape (titulo, botoes, relogio). O trilho da
 // barra continua em 0..largura; so o conteudo recua, para nao cair na zona que
 // a TV corta por overscan. Mesmo valor do gutter da pagina de titulo.
 #define PLR_MARGEM        96.0f
 #define PLR_BTN_D         76.0f
-#define PLR_BTN_GAP        8.0f
+// 12 e nao 8: com 8 os circulos de 76 ficavam mais juntos que a meta da barra
+// (12), e a fileira lia como uma peca so.
+#define PLR_BTN_GAP       12.0f
 // 12px em repouso, 20px com foco — as duas do bloco ATV. A barra PASSOU a receber
 // foco (CIMA a partir da fileira de botoes); antes so os botoes recebiam, e por
 // isso nao havia como procurar no filme pela barra.

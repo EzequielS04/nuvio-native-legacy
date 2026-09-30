@@ -20,7 +20,6 @@
 // 1400 e nao 1180: com a terceira coluna, "Muito pequena" e "Escuro 100%" nao
 // cabiam no espaco do valor e saiam cortados. A folha de AUDIO, que tem uma
 // coluna so, usa uma fracao disto — ver faixas_desenhar.
-#define FX_LARG   1400.0f
 #define FX_LINHA   106.0f
 
 
@@ -692,15 +691,18 @@ static void coluna_desenhar(int col, float x, float larg, float y0, float a) {
     // translucida, entao o texto NAO inverte (inv = a linha e cheia e clara).
     const int vid=ajustes_vidro(), inv=sel && !vid;
     if(vid) {
-      GfxRect lr={x-20,y-14,larg+20,92};
-      gfx_cor(lr,0.18f,1,1,1,.035f*a); gfx_vidro_aro(lr,0.18f,1.0f,1,1,1,.09f*a);
-      if(sel) gfx_vidro_foco(lr,0.18f,1.0f,a);
-    } else if(sel) superficieFocoFaixa((GfxRect){x-20,y-14,larg+20,92},a);
+      // Linha de 94 com recuo de 24 (a escala dos paineis); vao de 12 ate a
+      // proxima (FX_LINHA 106).
+      GfxRect lr={x-24,y-15,larg+24,FX_LINHA-NV_LINHA_VAO};
+      float rr=NV_LINHA_RAIO_PX/lr.h;
+      gfx_cor(lr,rr,1,1,1,.035f*a); gfx_vidro_aro(lr,rr,1.0f,1,1,1,.09f*a);
+      if(sel) gfx_vidro_foco(lr,rr,1.0f,a);
+    } else if(sel) superficieFocoFaixa((GfxRect){x-24,y-15,larg+24,FX_LINHA-NV_LINHA_VAO},a);
     int c=inv?ajustes_tinta_foco():230, sub=inv?ajustes_tinta_foco2():174;
     if(col==FX_COL_ESTILO && estiloPreservadoAss(i)) { c=inv?c:128; sub=inv?sub:112; }
     txt_desenhar_alpha(txt_linha_corta(TXT_PAINEL_ITEM,rot,c,c,c,255,larg-72),x,y,a);
     if(marca && *marca)
-      txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,marca,sub,sub,sub,255,larg-72),x,y+34,a);
+      txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,marca,sub,sub,sub,255,larg-72),x,y+36,a);
     int ativo=col==0?i==video_audio_atual():
       col==1?i-1==legendaAtiva():0;
     if(ativo) {
@@ -716,7 +718,7 @@ static void coluna_desenhar(int col, float x, float larg, float y0, float a) {
   if(!n) txt_bloco(TXT_PG_FIM,"Nenhuma faixa disponível nesta fonte.",178,180,186,x,y0+68,larg,28,a,2);
   if(n>visiveis) {
     char num[48]; snprintf(num,sizeof num,i18n("%d de %d"),foco[col]+1,n);
-    txt_desenhar_alpha(txt_linha(TXT_MINI,num,174,176,182,255),x,y0+64+visiveis*FX_LINHA,a);
+    txt_desenhar_alpha(txt_linha(TXT_CAPTION,num,174,176,182,255),x,y0+64+visiveis*FX_LINHA,a);
   }
 }
 
@@ -725,13 +727,18 @@ void faixas_desenhar(Uint32 agora) {
   if(anim<.01f) return;
   float a=anim;
   gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,.025f,.025f,.03f,(ajustes_vidro()?.80f:.88f)*a);
-  txt_desenhar_alpha(txt_linha(TXT_PAINEL_TITULO,modo?"Legendas":"Áudio",242,243,245,255),56,48,a);
-  txt_desenhar_alpha(txt_linha(TXT_PG_FIM,"Voltar para fechar",180,182,188,255),NV_TELA_W-250,60,a);
+  // MARGEM DO PLAYER (96, PLR_MARGEM) nos dois lados: o titulo e as bordas
+  // das linhas caem na mesma coluna, o texto 24 para dentro, e a dica de
+  // fechar termina na mesma margem da direita, medida e nao cravada em x.
+  { TxtLinha lt=txt_linha(TXT_PAINEL_TITULO,modo?"Legendas":"Áudio",242,243,245,255);
+    TxtLinha lh=txt_linha(TXT_PG_FIM,"Voltar para fechar",180,182,188,255);
+    txt_desenhar_alpha(lt,96,NV_MARGEM_Y,a);
+    txt_desenhar_alpha(lh,NV_TELA_W-96-lh.w,NV_MARGEM_Y+(lt.h-lh.h)*.5f,a); }
   visiveis=7;
   ajustarRolagem();
-  if(!modo) coluna_desenhar(0,76,720,138,a);
+  if(!modo) coluna_desenhar(0,120,720,150,a);
   else {
-    coluna_desenhar(1,76,990,138,a);
-    coluna_desenhar(FX_COL_ESTILO,1190,650,138,a);
+    coluna_desenhar(1,120,950,150,a);
+    coluna_desenhar(FX_COL_ESTILO,1142,682,150,a);
   }
 }

@@ -776,7 +776,7 @@ void episodios_desenhar(void) {
         txt_desenhar_alpha(ln,selo.x+7,y+48,anim);
       } }
     txt_bloco(TXT_PG_FIM,ep->sinopse,inv?focoTxt*.78f:186,inv?focoTxt*.80f:188,
-             inv?focoTxt*.84f:194,tx,y+78,w,25,anim,3);
+             inv?focoTxt*.84f:194,tx,y+78,w,28,anim,2);   // 22 px pede entrelinha 28; 3 linhas nao cabiam mais na linha de 172
   }
   if(!n) txt_bloco(TXT_PG_FIM,desc_episodios_carregando(titulo)?
     "Carregando episódios…":"Episódios indisponíveis. Selecione a temporada e pressione OK para tentar novamente.",

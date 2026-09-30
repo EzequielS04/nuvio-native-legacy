@@ -23,8 +23,8 @@
 #include "ponteiro.h"
 
 #define FOLHA_W       720.0f
-#define FOLHA_LINHA   228.0f
-#define FOLHA_TOPO    298.0f
+#define FOLHA_LINHA   236.0f
+#define FOLHA_TOPO    300.0f
 #define FOLHA_AUDIO_W  88.0f
 #define FOLHA_AUDIO_N   8
 #define FOLHA_AUDIO_BAR 6.0f
@@ -1072,7 +1072,9 @@ static void ponteiroFolhaFora(int a, int b) { (void)a; (void)b; aberta = 0; }
 void stream_folha_desenhar(Uint32 agora) {
   (void)agora;
   if(anim<.005f) return;
-  float x=NV_TELA_W-FOLHA_W+(1-anim)*FOLHA_W;
+  // A folha fica a NV_FOLHA_MARGEM das tres bordas, como a de Salvos: colada
+  // na borda direita ela parecia cortada pela tela.
+  float x=NV_TELA_W-FOLHA_W-NV_FOLHA_MARGEM+(1-anim)*(FOLHA_W+NV_FOLHA_MARGEM);
   // O foco tem fill solido; o painel permanece neutro e so o alvo recebe halo.
   const int vid = ajustes_vidro();
   gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,.02f,.02f,.025f,.35f*anim);
@@ -1080,10 +1082,10 @@ void stream_folha_desenhar(Uint32 agora) {
   // veu e da superficie, nao de uma luz decorativa presa ao canto.
   if (vid) {   // vidro SEM aro (dono, 29/09): a borda vem so do contraste do
     // miolo translucido e de um brilho largo no topo, nao de um fio desenhado.
-    gfx_vidro_folha((GfxRect){x,24,FOLHA_W,NV_TELA_H-48},28.0f/FOLHA_W,anim);
+    gfx_vidro_folha((GfxRect){x,NV_FOLHA_MARGEM,FOLHA_W,NV_TELA_H-2*NV_FOLHA_MARGEM},NV_FOLHA_RAIO/FOLHA_W,anim);
   } else
-  gfx_cor((GfxRect){x,24,FOLHA_W,NV_TELA_H-48},28.0f/FOLHA_W,.055f,.058f,.068f,.965f*anim);
-  txt_desenhar_alpha(txt_linha(TXT_PAINEL_TITULO,"Fontes",240,241,243,255),x+40,44,anim);
+  gfx_cor((GfxRect){x,NV_FOLHA_MARGEM,FOLHA_W,NV_TELA_H-2*NV_FOLHA_MARGEM},NV_FOLHA_RAIO/FOLHA_W,.055f,.058f,.068f,.965f*anim);
+  txt_desenhar_alpha(txt_linha(TXT_PAINEL_TITULO,"Fontes",240,241,243,255),x+NV_FOLHA_PAD,44,anim);
   int ptr = aberta && anim > .5f && ponteiro_ativo();
   if (ptr) {
     ponteiro_alvo(0, 0, x, NV_TELA_H, NULL, ponteiroFolhaFora, 0, 0);
@@ -1094,27 +1096,27 @@ void stream_folha_desenhar(Uint32 agora) {
   // OS BOTOES TEM LINHA PROPRIA, abaixo do titulo, a esquerda e na largura do
   // rotulo. Ancorados a direita na linha do titulo, quatro pilulas de 120 px
   // (Recarregar, Sem HDR, MP4, Fechar) encostavam no "Fontes" e na borda.
-  { float bx=x+40;
+  { float bx=x+NV_FOLHA_PAD;
     for(int i=0;i<nbt;i++) {
       int b=botaoDe(i), sel=grupo==-1 && foco==i;
       float tw=b==BT_SEM_HDR?marca_rotulo_largura(TXT_PG_FIM,"Sem HDR",FMT_HDR,30.0f)
                             :(float)txt_largura(TXT_PG_FIM,rotuloBotao(b));
       float bw=tw+44.0f;
       if(bw<104.0f) bw=104.0f;
-      GfxRect br={bx,100,bw,50};
+      GfxRect br={bx,100,bw,NV_CTRL_H};
       // Acoes seguem o accent solido e a tinta calculada pelo tema.
-      if (ptr) ponteiro_alvo(bx, 100, bw, 50, ponteiroFolhaBotao, NULL, i, 0);
+      if (ptr) ponteiro_alvo(bx, 100, bw, NV_CTRL_H, ponteiroFolhaBotao, NULL, i, 0);
       if(sel) focoFontePilula(br,vid?.5f:.3f,anim);
       else if(vid) gfx_cor(br,.5f,1,1,1,.07f*anim);   // pilula sem aro
       else    gfx_cor(br,.3f,.075f,.079f,.092f,anim);
       int c=sel?ajustes_tinta_foco():224;
       // "Sem" + a marca HDR no lugar da palavra (traduzido antes de trocar).
-      if(b==BT_SEM_HDR) marca_rotulo(TXT_PG_FIM,"Sem HDR",FMT_HDR,bx+(bw-tw)*.5f,114,30.0f,c,anim);
+      if(b==BT_SEM_HDR) marca_rotulo(TXT_PG_FIM,"Sem HDR",FMT_HDR,bx+(bw-tw)*.5f,100+(NV_CTRL_H-30.0f)*.5f,30.0f,c,anim);
       else {
         TxtLinha l=txt_linha(TXT_PG_FIM,rotuloBotao(b),c,c,c,255);
-        txt_desenhar_alpha(l,bx+(bw-l.w)*.5f,114,anim);
+        txt_desenhar_alpha(l,bx+(bw-l.w)*.5f,100+(NV_CTRL_H-l.h)*.5f,anim);
       }
-      bx+=bw+10.0f;
+      bx+=bw+NV_CTRL_VAO;
     } }
   // A LINHA DE CONTEXTO EXPLICA O BOTAO EM FOCO. "Sem HDR" nao se explica pelo
   // rotulo, e o rotulo nao pode crescer sem estourar a pilula de 120 px.
@@ -1127,10 +1129,10 @@ void stream_folha_desenhar(Uint32 agora) {
       ajuda=soMp4
         ? "Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro."
         : "Filtra a lista para fontes em MP4. OK liga o filtro.";
-    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,184,187,193,255,FOLHA_W-80),x+40,168,anim); }
-  gfx_recorte(x+40,206,FOLHA_W-80,62);
+    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,184,187,193,255,FOLHA_W-2*NV_FOLHA_PAD),x+NV_FOLHA_PAD,172,anim); }
+  gfx_recorte(x+NV_FOLHA_PAD,214,FOLHA_W-2*NV_FOLHA_PAD,62);
   int ini=filtro>1?filtro-1:0;
-  float tx=x+40;
+  float tx=x+NV_FOLHA_PAD;
   // ABAS NA LARGURA DO NOME, e tantas quanto couberem: a largura fixa de 232
   // cortava "Debridio - Scraper AD" e "AIOStreams | ..." em reticencias com
   // espaco sobrando no fim da fileira.
@@ -1139,24 +1141,24 @@ void stream_folha_desenhar(Uint32 agora) {
     float w=tw+48.0f;
     if(w<108.0f) w=108.0f;
     if(w>300.0f) w=300.0f;
-    if(i>ini && tx+w>x+FOLHA_W-40) break;
+    if(i>ini && tx+w>x+FOLHA_W-NV_FOLHA_PAD) break;
     int sel=i==filtro;
     int c=sel&&grupo==0?ajustes_tinta_foco():sel?245:190;
-    if (ptr) ponteiro_alvo(tx, 208, w, 50, NULL, ponteiroFolhaFiltro, i, 0);
-    if(sel && grupo==0) focoFontePilula((GfxRect){tx,208,w,50},.5f,anim);
-    else if(vid) { if(sel) gfx_cor((GfxRect){tx,208,w,50},.5f,1,1,1,.08f*anim); }   // so o filtro escolhido leva superficie, sem aro
-    else gfx_cor((GfxRect){tx,208,w,50},.5f,
+    if (ptr) ponteiro_alvo(tx, 216, w, NV_CTRL_H, NULL, ponteiroFolhaFiltro, i, 0);
+    if(sel && grupo==0) focoFontePilula((GfxRect){tx,216,w,NV_CTRL_H},.5f,anim);
+    else if(vid) { if(sel) gfx_cor((GfxRect){tx,216,w,NV_CTRL_H},.5f,1,1,1,.08f*anim); }   // so o filtro escolhido leva superficie, sem aro
+    else gfx_cor((GfxRect){tx,216,w,NV_CTRL_H},.5f,
                  sel?.092f:.075f,sel?.096f:.079f,sel?.110f:.092f,anim);
     TxtLinha l=txt_linha_corta(TXT_PG_FIM,provedores[i],c,c,c,255,w-24);
-    txt_desenhar_alpha(l,tx+(w-l.w)*.5f,222,anim);
+    txt_desenhar_alpha(l,tx+(w-l.w)*.5f,216+(NV_CTRL_H-l.h)*.5f,anim);
     if(sel && grupo!=0) {
       float cr,cg,cb; ajustes_acento(&cr,&cg,&cb);
-      gfx_cor((GfxRect){tx+16,263,w-32,2},1,cr,cg,cb,anim);
+      gfx_cor((GfxRect){tx+18,216+NV_CTRL_H-6,w-36,2},1,cr,cg,cb,anim);
     }
-    tx+=w+12;
+    tx+=w+NV_CTRL_VAO;
   }
   gfx_sem_recorte();
-  gfx_recorte(x+36,FOLHA_TOPO,FOLHA_W-72,NV_TELA_H-FOLHA_TOPO-32);
+  gfx_recorte(x+NV_FOLHA_PAD,FOLHA_TOPO,FOLHA_W-2*NV_FOLHA_PAD,NV_TELA_H-FOLHA_TOPO-NV_FOLHA_MARGEM-16);
   int nf=nFiltrados();
   // A FONTE QUE O AUTOMATICO ESCOLHERIA, marcada. E a resposta a "se eu nao
   // escolher nada, o que toca?" — que ate aqui a folha nao dava: a pessoa via
@@ -1170,12 +1172,12 @@ void stream_folha_desenhar(Uint32 agora) {
                      ? preferida : stream_automatico();
   for(int row=0;row<nf;row++) {
     float y=FOLHA_TOPO+row*FOLHA_LINHA-rolagem;
-    if(y+FOLHA_LINHA<FOLHA_TOPO || y>NV_TELA_H-32) continue;
+    if(y+FOLHA_LINHA<FOLHA_TOPO || y>NV_TELA_H-NV_FOLHA_MARGEM) continue;
     int i=filtrado(row),sel=grupo==1 && foco==row;
     int corTitulo,corProv,corDesc,corMeta;
     const Stream *s=&lista[i];
     // Cartao cheio e silencioso; o foco solido usa tinta calculada no accent.
-    GfxRect r={x+40,y,FOLHA_W-80,FOLHA_LINHA-14};
+    GfxRect r={x+NV_FOLHA_PAD,y,FOLHA_W-2*NV_FOLHA_PAD,FOLHA_LINHA-NV_LINHA_VAO};
     if (ptr) {
       // So o que o recorte da lista deixa ver.
       float t = y < FOLHA_TOPO ? FOLHA_TOPO : y;
@@ -1186,23 +1188,24 @@ void stream_folha_desenhar(Uint32 agora) {
     // e as marcas ficam nas cores de repouso.
     const int inv = sel && !vid;
     if(vid) {   // vidro: em repouso so um veu claro, sem contorno; o foco soma o aro
-      gfx_vidro_superficie(r,.10f,anim);
-      if(sel) focoFonte(r,.10f,anim);
+      gfx_vidro_superficie(r,NV_LINHA_RAIO_PX/r.h,anim);
+      if(sel) focoFonte(r,NV_LINHA_RAIO_PX/r.h,anim);
     }
-    else if(sel) focoFonte(r,.10f,anim);
-    else gfx_cor(r,.10f,.062f,.066f,.079f,.92f*anim);
+    else if(sel) focoFonte(r,NV_LINHA_RAIO_PX/r.h,anim);
+    else gfx_cor(r,NV_LINHA_RAIO_PX/r.h,.062f,.066f,.079f,.92f*anim);
     // O proprio material colorido identifica o foco; nao sobrepor outro ponto.
     { int tinta=ajustes_tinta_foco(), tinta2=ajustes_tinta_foco2();
       int c1=inv?tinta:240, c2=inv?tinta2:175;
       int c3=inv?tinta2:194, c4=inv?tinta2:224;
       corTitulo=c1; corProv=c2; corDesc=c3; corMeta=c4; }
-    float lx=x+62,w=FOLHA_W-124;
+    // Recuo do texto no cartao = 24, o mesmo passo da escala (era 22).
+    float lx=r.x+24,w=r.w-48;
     // Texto de addon LIMPO uma vez por lista (limpo(), abaixo), nao por quadro:
     // emoji, bandeira, versalete e tracos de caixa saem, e a quebra de linha da
     // descricao vira separador (#144).
     const char *nome,*descricao;
     limpo(i,&nome,&descricao);
-    txt_desenhar_alpha(txt_linha_corta(TXT_PAINEL_ITEM,nome,corTitulo,C8(corTitulo+1),C8(corTitulo+3),255,w),lx,y+16,anim);
+    txt_desenhar_alpha(txt_linha_corta(TXT_PAINEL_ITEM,nome,corTitulo,C8(corTitulo+1),C8(corTitulo+3),255,w),lx,y+18,anim);
     // A FONTE LEMBRADA, MARCADA. Sem a marca, quem abre a folha para conferir
     // continua procurando a propria fonte entre dezenas de linhas — que e a
     // queixa literal do issue #56 ("search through many links to find the same
@@ -1228,7 +1231,7 @@ void stream_folha_desenhar(Uint32 agora) {
     // CHEIA, so troca figura e fundo (fundo escuro, texto claro); um contorno
     // escuro traria de volta justamente o contorno que o dono tirou do app no
     // dia 16/09, e a 3 m um traco de 2 px perde para uma forma cheia.
-    float wProv = w;
+    float wProv = w, pilW = 0.0f;
     if (i != atual && (i == automatica || i == preferida)) {
       float ar, ag, ab;
       TxtLinha m;
@@ -1241,25 +1244,26 @@ void stream_folha_desenhar(Uint32 agora) {
       // (.135,.135,.14) com o texto claro das demais linhas nao selecionadas.
       if (inv) { ar = .135f; ag = .135f; ab = .14f; }
       // Vidro: lavagem e aro do realce, texto claro (sem pilula cheia).
-      m = txt_linha(TXT_MINI, rot, inv ? 234 : vid ? 235 : ajustes_tinta_foco(), inv ? 236 : vid ? 235 : ajustes_tinta_foco(), inv ? 242 : vid ? 238 : ajustes_tinta_foco(), 255);
-      pil = (GfxRect){ lx + w - (float)m.w - 24.0f, y + 44.0f, (float)m.w + 24.0f, (float)m.h + 10.0f };
+      m = txt_linha(TXT_CAPTION, rot, inv ? 234 : vid ? 235 : ajustes_tinta_foco(), inv ? 236 : vid ? 235 : ajustes_tinta_foco(), inv ? 242 : vid ? 238 : ajustes_tinta_foco(), 255);
+      // NA LINHA DO FORMATO, a direita (30/09): na do provedor, em 22 px, ela
+      // cortava o nome do addon; a do formato e curta e sobra lugar.
+      pil = (GfxRect){ lx + w - (float)m.w - 24.0f, y + 150.0f, (float)m.w + 24.0f, (float)m.h + 6.0f };
       if (vid) gfx_vidro_painel_acento(pil, NV_RAIO_PILL, 0.4f, anim);
       else gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, anim);
-      txt_desenhar_alpha(m, pil.x + 12.0f, pil.y + 5.0f, anim);
+      txt_desenhar_alpha(m, pil.x + 12.0f, pil.y + 3.0f, anim);
       // 40 px E NAO 24 DE FOLGA. Com 24 o nome de um addon longo era cortado a
       // 23 px da pilula — dois blocos de texto encostados que o olho le como
       // um so. Relato do dono (16/09): "deixa a badge menos colado no texto".
-      wProv = w - pil.w - 40.0f;
-      if (wProv < 120.0f) wProv = 120.0f;
+      pilW = pil.w + 24.0f;
     }
     // A fonte ativa ganha um respiro para o equalizador. O rotulo continua
     // sendo texto, entao a traducao de "Reproduzindo agora" permanece na
     // camada de idioma e nao vira uma badge diferente em cada tela.
     if (i == atual) wProv -= FOLHA_AUDIO_W + 14.0f;
     if (wProv < 120.0f) wProv = 120.0f;
-    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,i==atual?"Reproduzindo agora":s->provedor,corProv,C8(corProv+3),C8(corProv+10),255,wProv),lx,y+46,anim);
+    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,i==atual?"Reproduzindo agora":s->provedor,corProv,C8(corProv+3),C8(corProv+10),255,wProv),lx,y+52,anim);
     if (i == atual)
-      desenharAudioBars(lx + w - FOLHA_AUDIO_W, y + 40.0f, anim, inv, agora);
+      desenharAudioBars(lx + w - FOLHA_AUDIO_W, y + 46.0f, anim, inv, agora);
     // AS TRES LINHAS DE BAIXO DESCEM 10 px, EM BLOCO. A pilula acaba em y+69 e
     // a descricao comecava em y+76: 8 px de tinta a tinta, que a 3 m viram
     // zero. Os 10 px saem da sobra do RODAPE da linha (as badges acabavam em
@@ -1268,7 +1272,7 @@ void stream_folha_desenhar(Uint32 agora) {
     // tiraria do centro da linha do provedor, que e onde ela esta ancorada.
     // txt_bloco_corta: o que passa das duas linhas termina em reticencias na
     // ULTIMA linha visivel, e nao some sem aviso no meio de uma frase.
-    txt_bloco_corta(TXT_PG_FIM,descricao,corDesc,C8(corDesc+3),C8(corDesc+8),lx,y+86,w,25,anim,2);
+    txt_bloco_corta(TXT_PG_FIM,descricao,corDesc,C8(corDesc+3),C8(corDesc+8),lx,y+90,w,28,anim,2);
     char meta[192],qual[24]="";
     float mx = lx;
     const char *cont = containerDa(s);
@@ -1283,11 +1287,11 @@ void stream_folha_desenhar(Uint32 agora) {
       GfxRect pil;
       ajustes_acento(&ar, &ag, &ab);
       if (inv) { ar = .135f; ag = .135f; ab = .14f; }
-      m = txt_linha(TXT_MINI, "MP4", inv ? 234 : vid ? 235 : ajustes_tinta_foco(), inv ? 236 : vid ? 235 : ajustes_tinta_foco(), inv ? 242 : vid ? 238 : ajustes_tinta_foco(), 255);
-      pil = (GfxRect){ lx, y + 146.0f, (float)m.w + 20.0f, (float)m.h + 8.0f };
+      m = txt_linha(TXT_CAPTION, "MP4", inv ? 234 : vid ? 235 : ajustes_tinta_foco(), inv ? 236 : vid ? 235 : ajustes_tinta_foco(), inv ? 242 : vid ? 238 : ajustes_tinta_foco(), 255);
+      pil = (GfxRect){ lx, y + 150.0f, (float)m.w + 20.0f, (float)m.h + 6.0f };
       if (vid) gfx_vidro_painel_acento(pil, NV_RAIO_PILL, 0.4f, anim);
       else gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, anim);
-      txt_desenhar_alpha(m, pil.x + 10.0f, pil.y + 4.0f, anim);
+      txt_desenhar_alpha(m, pil.x + 10.0f, pil.y + 3.0f, anim);
       mx = lx + pil.w + 10.0f;
     }
     // DV e Atmos NAO entram mais como palavra: a fileira de marcas logo
@@ -1299,10 +1303,10 @@ void stream_folha_desenhar(Uint32 agora) {
       // A sigla ja esta na pilula: o texto comeca depois dela e do " · " (4
       // bytes: espaco, U+00B7 em dois bytes, espaco).
       if (ehMp4) { texto += 3; if (!strncmp(texto, " \xc2\xb7 ", 4)) texto += 4; }
-      txt_desenhar_alpha(txt_linha_corta(TXT_MINI,texto,corMeta,C8(corMeta+2),C8(corMeta+8),255,w-(mx-lx)),mx,y+150,anim); }
+      txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION,texto,corMeta,C8(corMeta+2),C8(corMeta+8),255,w-(mx-lx)-pilW),mx,y+153,anim); }
     // O foco conserva cartao escuro em qualquer tema; as logos claras ficam
     // no tratamento padrao e nao trocam para tinta escura no acento branco.
-    badges_desenhar(s->badges,lx,y+181,w,26,anim);
+    badges_desenhar(s->badges,lx,y+188,w,26,anim);
   }
   if(!nf) {
     // A FOLHA VAZIA DIZ A CAUSA (B6/#107, D5). So quando a lista esta vazia
