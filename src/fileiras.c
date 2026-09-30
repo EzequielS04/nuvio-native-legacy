@@ -150,8 +150,41 @@ const char *fil_origem_ajuda(int o) {
 // desta tela. Ver o cabecalho de fil_aceita_tipo em fileiras.h. E a mesma
 // pergunta que fil_origem_de responde, e por isso nao ha uma segunda lista de
 // chaves aqui: duas listas divergem no dia em que uma chave nova nascer.
+//
+// GRUPO DE COLECAO ESCOLHE FORMA desde o menu do cartaz: o web deixa cada pasta
+// ser paisagem, quadrado ou pôster (tileShape), e a TV passou a desenhar as tres.
+// So as fileiras do app ficam de fora.
 static int formaFixa(const char *chave) {
-  return fil_origem_de(chave) != FIL_ORIGEM_CATALOGO;
+  return fil_origem_de(chave) == FIL_ORIGEM_APP;
+}
+
+// AS FORMAS QUE CADA ORIGEM ACEITA, na ordem em que o menu do cartaz e a tela
+// de Ajustes as oferecem. O NUMERO GRAVADO E O MESMO FilTipo de sempre, e numa
+// colecao ele quer dizer a forma equivalente do grupo:
+//   FIL_TIPO_COLECAO           -> paisagem (a deitada intermediaria)
+//   FIL_TIPO_DESTAQUE_QUADRADO -> quadrado
+//   FIL_TIPO_CARTAZ            -> pôster
+// Reaproveitar os numeros, e nao criar tres novos, mantem fileirasui.txt no
+// formato de sempre e deixa a traducao para a medida num lugar so (home.c).
+static const int ESTILOS_CAT[] = { FIL_TIPO_AUTO, FIL_TIPO_CARTAZ, FIL_TIPO_SERVICO,
+                                   FIL_TIPO_COLECAO, FIL_TIPO_DESTAQUE };
+static const char *ESTILOS_CAT_ROT[] = { "Automático", "Pôsteres", "Paisagem pequena",
+                                         "Paisagem média", "Paisagem grande" };
+static const int ESTILOS_COL[] = { FIL_TIPO_AUTO, FIL_TIPO_COLECAO,
+                                   FIL_TIPO_DESTAQUE_QUADRADO, FIL_TIPO_CARTAZ };
+static const char *ESTILOS_COL_ROT[] = { "Automático", "Paisagem", "Quadrado", "Pôster" };
+#define N_ESTILOS_CAT (int)(sizeof ESTILOS_CAT / sizeof *ESTILOS_CAT)
+#define N_ESTILOS_COL (int)(sizeof ESTILOS_COL / sizeof *ESTILOS_COL)
+
+// A forma `t` vale para esta chave? Catalogo aceita todo FilTipo (a tela de
+// Ajustes oferece tambem Top 10 e 4:3); colecao so as quatro de ESTILOS_COL.
+static int tipoValido(const char *chave, int t) {
+  int o = fil_origem_de(chave), k;
+  if (t == FIL_TIPO_AUTO) return 1;
+  if (o == FIL_ORIGEM_CATALOGO) return t > 0 && t < FIL_TIPO_N;
+  if (o != FIL_ORIGEM_COLECAO) return 0;
+  for (k = 0; k < N_ESTILOS_COL; k++) if (ESTILOS_COL[k] == t) return 1;
+  return 0;
 }
 
 static int limita(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -268,7 +301,8 @@ static void carregar(void) {
       linhas[nLinhas].oculta = atoi(campo[1]) ? 1 : 0;
       linhas[nLinhas].tipo   = limita(atoi(campo[2]), 0, FIL_TIPO_N - 1);
       linhas[nLinhas].tam    = limita(atoi(campo[3]), 0, FIL_TAM_N - 1);
-      if (formaFixa(linhas[nLinhas].chave)) linhas[nLinhas].tipo = FIL_TIPO_AUTO;
+      if (!tipoValido(linhas[nLinhas].chave, linhas[nLinhas].tipo))
+        linhas[nLinhas].tipo = FIL_TIPO_AUTO;
       linhas[nLinhas].doDisco = 1;
       nLinhas++;
     }
@@ -787,10 +821,56 @@ void fil_alternar(int i) {
 void fil_ciclar_tipo(int i) {
   pthread_mutex_lock(&trava);
   if (i >= 0 && i < nLinhas && !formaFixa(linhas[i].chave)) {
-    linhas[i].tipo = (linhas[i].tipo + 1) % FIL_TIPO_N;
+    int t = linhas[i].tipo, k;
+    // Numa colecao o ciclo e o das quatro formas dela, na ordem do menu.
+    if (fil_origem_de(linhas[i].chave) == FIL_ORIGEM_COLECAO) {
+      for (k = 0; k < N_ESTILOS_COL && ESTILOS_COL[k] != t; k++) {}
+      t = ESTILOS_COL[(k + 1) % N_ESTILOS_COL];
+    } else t = (t + 1) % FIL_TIPO_N;
+    linhas[i].tipo = t;
     gravar();
   }
   pthread_mutex_unlock(&trava);
+}
+
+int fil_estilos(const char *chave, int *tipos, const char **rotulos, int max) {
+  int o = fil_origem_de(chave), n = 0, k, total;
+  const int *v; const char **r;
+  if (o == FIL_ORIGEM_CATALOGO) { v = ESTILOS_CAT; r = ESTILOS_CAT_ROT; total = N_ESTILOS_CAT; }
+  else if (o == FIL_ORIGEM_COLECAO) { v = ESTILOS_COL; r = ESTILOS_COL_ROT; total = N_ESTILOS_COL; }
+  else return 0;
+  for (k = 0; k < total && n < max; k++, n++) {
+    if (tipos) tipos[n] = v[k];
+    if (rotulos) rotulos[n] = r[k];
+  }
+  return n;
+}
+
+const char *fil_estilo_rotulo(const char *chave, int t) {
+  int o = fil_origem_de(chave), k;
+  if (o == FIL_ORIGEM_COLECAO)
+    for (k = 0; k < N_ESTILOS_COL; k++) if (ESTILOS_COL[k] == t) return ESTILOS_COL_ROT[k];
+  return fil_tipo_rotulo(t);
+}
+
+const char *fil_linha_tipo_rotulo(int i) {
+  if (i < 0 || i >= nLinhas) return fil_tipo_rotulo(FIL_TIPO_AUTO);
+  return fil_estilo_rotulo(linhas[i].chave, linhas[i].tipo);
+}
+
+int fil_definir_tipo(const char *chave, int t) {
+  int i, ok = 0;
+  if (!chave || !chave[0] || formaFixa(chave) || !tipoValido(chave, t)) return 0;
+  pthread_mutex_lock(&trava);
+  garantir();
+  i = achar(chave);
+  if (i >= 0) {
+    ok = 1;
+    // Mesma forma: nao reescreve o arquivo nem remonta a home por nada.
+    if (linhas[i].tipo != t) { linhas[i].tipo = t; gravar(); }
+  }
+  pthread_mutex_unlock(&trava);
+  return ok;
 }
 
 void fil_ciclar_tam(int i) {

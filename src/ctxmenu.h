@@ -38,6 +38,13 @@ void ctx_abrir_salvo(const CatItem *titulo);
 int  ctx_do_painel(void);
 // IMDb do "Mais informações" pedido no modo painel, ou NULL. Consumido uma vez.
 const char *ctx_pediu_detalhes_imdb(void);
+// ESTILO DA FILEIRA. A home diz de qual fileira e o cartao ANTES de ctx_abrir;
+// com uma chave que aceita forma (fil_estilos), o menu ganha "Estilo da
+// fileira". NULL/"" = sem a opcao (destaque, Continuar assistindo, Top 10).
+void ctx_fileira(const char *chave, const char *titulo);
+// Menu SO da fileira, para o cartao que nao e titulo (pasta de colecao): abre
+// direto na lista de formas. Nao abre nada se a chave nao aceita forma.
+void ctx_abrir_fileira(const char *chave, const char *titulo);
 // Centro horizontal da barra "Segure OK para opções"; negativo = centro da tela.
 void ctx_centro_dica(float cx);
 #endif

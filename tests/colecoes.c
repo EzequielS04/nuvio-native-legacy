@@ -155,6 +155,26 @@ int main(void) {
     assert(col_diagnostico("", "movie", "top", g, sizeof g) == 0);
     puts("ok  col_diagnostico separa os quatro motivos de nao engolir"); }
 
+  // FORMA DA PASTA (tileShape do web): POSTER, LANDSCAPE/WIDE, e o resto —
+  // inclusive ausente — quadrado. A fileira usa a da maioria.
+  { const char *f = "\"sources\":[{\"addonBaseUrl\":\"https://a/x\",\"type\":\"movie\",\"catalogId\":\"k\"}]";
+    char js[2000];
+    snprintf(js, sizeof js,
+      "{\"collections\":[{\"id\":\"cf\",\"title\":\"Formas\",\"folders\":["
+      "{\"id\":\"p\",\"title\":\"P\",\"tileShape\":\"POSTER\",%s},"
+      "{\"id\":\"w\",\"title\":\"W\",\"tileShape\":\"wide\",%s},"
+      "{\"id\":\"l\",\"title\":\"L\",\"posterShape\":\"LANDSCAPE\",%s},"
+      "{\"id\":\"s\",\"title\":\"S\",%s}]}]}", f, f, f, f);
+    assert(col_definir_json(js) == 4);
+    assert(col_folder(0)->forma == COL_FORMA_POSTER);
+    assert(col_folder(1)->forma == COL_FORMA_PAISAGEM);
+    assert(col_folder(2)->forma == COL_FORMA_PAISAGEM);
+    assert(col_folder(3)->forma == COL_FORMA_QUADRADO);
+    assert(col_grupo_forma("Formas") == COL_FORMA_PAISAGEM);
+    assert(col_grupo_forma("nao existe") == COL_FORMA_PAISAGEM);
+    assert(col_forma_texto("square") == COL_FORMA_QUADRADO);
+    puts("ok  tileShape da pasta vira a forma do cartao, na regra do web"); }
+
   puts("colecoes: tudo ok");
   return 0;
 }

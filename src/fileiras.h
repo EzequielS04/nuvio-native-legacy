@@ -257,14 +257,33 @@ int         fil_linha_itens(int i);
 int         fil_linha_na_home(int i);
 int         fil_linha_vista(int i);
 // 0 quando a forma do card NAO e escolha desta fileira: "Continuar assistindo"
-// tira a forma de `continueWatchingCardStyle`, o feed dos amigos precisa do
-// card com autoria e um grupo de colecao desenha atalhos, nao titulos. Oferecer
-// os cinco tipos nelas seria oferecer um ajuste sem efeito.
+// tira a forma de `continueWatchingCardStyle` e o feed dos amigos precisa do
+// card com autoria. Um grupo de colecao ACEITA, mas so as formas dele
+// (paisagem, quadrado, pôster — ver fil_estilos).
 int         fil_aceita_tipo(int i);
 
 // --- mutacao (tela de Ajustes) ----------------------------------------------
 void fil_alternar(int i);
+// Numa colecao o ciclo e so o das formas dela (fil_estilos).
 void fil_ciclar_tipo(int i);
+
+// --- ESTILO DA FILEIRA pelo menu do cartaz (ctxmenu.c) ----------------------
+// O mesmo `tipo` que a tela de Ajustes grava, no mesmo fileirasui-p<N>.txt: as
+// duas telas leem e escrevem o mesmo campo, entao nunca discordam.
+//
+// As opcoes do menu para esta chave, na ordem de exibicao, com o rotulo em pt
+// (passa por i18n no desenho). Catalogo: Automatico, Posteres, Paisagem
+// pequena/media/grande (FIL_TIPO_CARTAZ/SERVICO/COLECAO/DESTAQUE). Colecao:
+// Automatico (a forma que a conta mandou), Paisagem, Quadrado, Poster
+// (FIL_TIPO_COLECAO/DESTAQUE_QUADRADO/CARTAZ). Fileira do app: 0 opcoes.
+int  fil_estilos(const char *chave, int *tipos, const char **rotulos, int max);
+// Rotulo do tipo `t` PARA ESTA CHAVE: numa colecao o numero quer dizer outra
+// palavra (FIL_TIPO_CARTAZ e "Pôster", nao "Cartaz em pé").
+const char *fil_estilo_rotulo(const char *chave, int t);
+const char *fil_linha_tipo_rotulo(int i);
+// Grava a forma da fileira. 0 quando a chave nao e conhecida, e fixa, ou o
+// tipo nao vale para ela.
+int  fil_definir_tipo(const char *chave, int t);
 void fil_ciclar_tam(int i);
 // Troca a linha com a vizinha e devolve o novo indice dela (o mesmo, se nao deu
 // para mover). E o gesto de "pegar e mover" da tela de reordenar.

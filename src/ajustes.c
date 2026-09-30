@@ -5191,8 +5191,6 @@ static const char *motivoFormaFixa(const char *chave) {
     return "A forma desta fileira vem de Estilo do \"Continuar assistindo\".";
   if (!strcmp(chave, "social_activity"))
     return "O feed dos amigos usa o card com o nome de quem assistiu.";
-  if (!strncmp(chave, "collection_", 11))
-    return "Um grupo de coleções mostra atalhos para catálogos, não títulos.";
   return "A forma desta fileira não é escolhida aqui.";
 }
 
@@ -5465,7 +5463,7 @@ static void desenhaFileiras(void) {
         l = txt_linha_corta(TXT_CALLOUT, est, er, eg, eb, 255, AJ_FIL_COL[1].w);
         txt_desenhar_alpha(l, cx + AJ_FIL_COL[1].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, 1.0f); }
       { int aceita = fil_aceita_tipo(idx);
-        const char *rot = aceita ? fil_tipo_rotulo(fil_linha_tipo(idx)) : "Fixo";
+        const char *rot = aceita ? fil_linha_tipo_rotulo(idx) : "Fixo";
         int cc = aceita ? 220 : 150;
         l = txt_linha_corta(TXT_CALLOUT, rot, cc, cc, cc, 255, AJ_FIL_COL[2].w);
         txt_desenhar_alpha(l, cx + AJ_FIL_COL[2].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, aTexto); }
@@ -5560,7 +5558,9 @@ static void desenhaFileiras(void) {
     { const char *frase = fil_origem_ajuda(orig);
       if (filAba == 0 && !filPegou) {
         if (filCampo == 2)
-          frase = fil_aceita_tipo(idx)
+          frase = orig == FIL_ORIGEM_COLECAO
+                ? "Forma das pastas: Automático segue a que a coleção tem na conta."
+                : fil_aceita_tipo(idx)
                 ? aj_fil_forma_ajuda(fil_linha_tipo(idx))
                 : "Esta fileira tem forma própria: ver a frase abaixo do nome.";
         else if (filCampo == 3)
@@ -5577,7 +5577,8 @@ static void desenhaFileiras(void) {
   // proposito: desenhar sempre alguma coisa ali ensinaria a ignorar o canto.
   if (filAba == 0 && !filPegou && !filNaBarra &&
       filFoco >= 0 && filFoco < n && filLista[filFoco] >= 0 &&
-      (filCampo == 2 || filCampo == 3)) {
+      (filCampo == 3 || (filCampo == 2 &&
+                         fil_linha_origem(filLista[filFoco]) != FIL_ORIGEM_COLECAO))) {
     int idx = filLista[filFoco];
     int aceita = fil_aceita_tipo(idx);
     int tipo = aceita ? fil_linha_tipo(idx) : FIL_TIPO_AUTO;
