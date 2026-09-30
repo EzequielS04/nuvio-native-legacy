@@ -104,5 +104,9 @@ void  guia_logo_desenhar(const char *logo, const char *nome, GfxRect cx,
 float guia_selo_ao_vivo(float x, float y, float a);
 // Etiqueta translucida de 34 px (categoria); devolve a largura (0 sem texto).
 float guia_etiqueta(const char *s, float x, float y, float maxW, float a);
+// Descricao do canal SEM o molde do addon ("Categoria: X Qualidades: FHD, HD
+// N fonte(s)"): devolve o texto que sobra fora dele, ou a descricao inteira
+// quando ela nao e o molde. Pode devolver "" (so havia o molde).
+const char *guia_desc_livre(const char *desc, char *buf, size_t n);
 
 #endif

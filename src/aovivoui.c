@@ -151,7 +151,7 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
   // Pausado ou atras do ao vivo, o alto leva mais tres linhas a direita: o
   // mesmo degrade, mais comprido (nenhuma camada a mais por quadro).
   gfx_rect((GfxRect){ 0, 0, NV_TELA_W, (o->pausado || o->atrasoS > 0) ? 460.0f : 320.0f }, 0,
-           GFX_VEU_TOPO, 0, 0, 0, 0.0f, 0, 0, 0, 0.72f * a);
+           GFX_VEU_TOPO, 0, 0, 0, 0.0f, 0, 0, 0, 0.86f * a);   // mais fundo: a marca d'agua do canal fica atras do nome
   gfx_rect((GfxRect){ 0, NV_TELA_H - 560.0f, NV_TELA_W, 560.0f }, 0, GFX_VEU_BAIXO, 0, 0, 0, 0.0f, 0, 0, 0, 0.90f * a);
 
   // --- ALTO ESQUERDO: a linha do canal do guia ------------------------------------
@@ -164,26 +164,29 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
     guia_logo_desenhar(o->logo, o->nome, lx, AV_LOGO_W, AV_LOGO_H - 8.0f, AV_LOGO_TOM, a);
     nome = txt_linha_corta(TXT_HEADLINE, o->nome && o->nome[0] ? o->nome : "Canal",
                            246, 247, 250, 255, 1000.0f);
+    // UMA COISA POR LINHA (dono, 30/09: "muito poluido"): o nome sozinho em
+    // cima; numero, formato e favorito pequenos embaixo. O numero antes do nome
+    // disputava a mesma linha com ele e com a marca d'agua do proprio canal.
+    txt_desenhar_alpha(nome, tx, yl, a);
+    yl += (float)nome.h + 8.0f;
+    xs = tx;
     if (o->numero > 0) {
       char nb[16];
       snprintf(nb, sizeof nb, "%d", o->numero);
       num = txt_linha(TXT_DET_META2, nb, 150, 153, 162, 255);
-      txt_desenhar_alpha(num, tx, yl + (float)(nome.h - num.h) * 0.5f, a);
-      txt_desenhar_alpha(nome, tx + (float)num.w + 16.0f, yl, a);
-    } else {
-      txt_desenhar_alpha(nome, tx, yl, a);
+      txt_desenhar_alpha(num, xs, yl + (34.0f - (float)num.h) * 0.5f, a);
+      xs += (float)num.w + 14.0f;
     }
-    yl += (float)nome.h + 8.0f;
-    xs = tx;
     if (fm >= 0) {
       xs += marca_formato((FormatoMarca)fm, xs, yl + 2.0f, 30.0f, 0.86f, 0.87f, 0.90f, a) + 14.0f;
     } else if (o->res[0]) {
       xs += badge_desenhar(xs, yl + 3.0f, o->res, BADGE_NEUTRO, a) + 14.0f;
     }
-    if (o->favorito) {
-      TxtLinha s = txt_linha(TXT_DET_META2, "\xe2\x98\x85", 255, 214, 90, 255);
-      txt_desenhar_alpha(s, xs, yl + (34.0f - (float)s.h) * 0.5f, a);
-    } }
+    // Icone e nao o glifo U+2605: a fonte desta linha nao tem a estrela e ela
+    // saia como um retangulo amarelo vazio.
+    if (o->favorito)
+      gfx_icone((GfxRect){ xs, yl + 5.0f, 24.0f, 24.0f }, "aj_star", 1.0f, 0.84f, 0.35f, a);
+    }
 
   // --- ALTO DIREITO: relogio e estado do fluxo --------------------------------------
   { time_t agoraT = time(NULL);
@@ -271,11 +274,16 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
       txt_desenhar_alpha(tt, lx, yb + (30.0f - (float)tt.h) * 0.5f, a);
       yb -= 22.0f;
     }
-    if (o->desc && o->desc[0]) {
-      float h = txt_bloco_corta(TXT_DET_SIN, o->desc, 172, 175, 184, -1.0f, 0.0f,
+    // SEM O MOLDE DO ADDON (dono, 30/09: "tirar a informacao categoria"): o
+    // "Categoria: HBO Qualidades: FHD, HD, SD 4 fonte(s)" era metadado de
+    // catalogo, nao descricao do programa. So o texto livre, quando houver.
+    char descBuf[600];
+    const char *descLivre = guia_desc_livre(o->desc, descBuf, sizeof descBuf);
+    if (descLivre[0]) {
+      float h = txt_bloco_corta(TXT_DET_SIN, descLivre, 172, 175, 184, -1.0f, 0.0f,
                                 AV_TEXTO_W, 34.0f, 0.0f, 2);
       yb -= h;
-      txt_bloco_corta(TXT_DET_SIN, o->desc, 172, 175, 184, AV_X, yb, AV_TEXTO_W, 34.0f, a * 0.95f, 2);
+      txt_bloco_corta(TXT_DET_SIN, descLivre, 172, 175, 184, AV_X, yb, AV_TEXTO_W, 34.0f, a * 0.95f, 2);
       yb -= 22.0f;
     }
     if (e->temAgora) {

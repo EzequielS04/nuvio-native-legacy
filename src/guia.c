@@ -2574,6 +2574,14 @@ static int descMolde(const char *d, GDesc *o) {
   return 1;
 }
 
+const char *guia_desc_livre(const char *desc, char *buf, size_t n) {
+  GDesc d;
+  if (!desc || !desc[0] || !buf || !n) return "";
+  if (!descMolde(desc, &d)) return desc;
+  snprintf(buf, n, "%s", d.resto);
+  return buf;
+}
+
 // O HEROI: a ficha do canal focado a esquerda e o preview 16:9 a direita.
 //
 // `tFoco` e o instante que o foco aponta: agora, ou o comeco da janela quando
