@@ -253,6 +253,7 @@ void  cat_cache_substituido(void)          { }
 void  cat_definir_episodios(int i, const CatEp *l, int n) { (void)i; (void)l; (void)n; }
 int   cat_gravar_cache(const char *d)      { (void)d; return 0; }
 int   cat_indice_por_imdb(const char *s)   { (void)s; return -1; }
+int   cat_indice_vivo(int i, const char *s) { (void)s; return i; }
 const CatItem *cat_item(int i)             { return (i >= 0 && i < nPub) ? &pub[i] : NULL; }
 int   cat_n_episodios(int i)               { (void)i; return 0; }
 void  fil_gravar_registro(void)            { }
