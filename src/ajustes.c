@@ -3461,7 +3461,7 @@ static const char *ajudaOpcao(int op) {
     // --- Reproducao
     case AJ_QUALIDADE: return "Define a preferência de resolução. A disponibilidade depende das fontes do addon.";
     case AJ_DV: case AJ_ATMOS: return "Preferência para fontes compatíveis. O formato disponível também depende do arquivo e da TV.";
-    case AJ_LEG_LINGUA: return "Idioma procurado primeiro nas legendas de cada título, e ligado sozinho quando o vídeo começa. \"Da conta\" segue o que está no seu perfil.";
+    case AJ_LEG_LINGUA: return "Idioma ligado sozinho quando o vídeo começa. Legendas dos addons aparecem em inglês e no idioma escolhido aqui. \"Da conta\" segue o que está no seu perfil.";
     case AJ_AUD_LINGUA: return "Faixa de áudio escolhida quando o arquivo tem mais de uma. Se o idioma não existir no arquivo, o player usa a primeira.";
     case AJ_PAUSA_OVERLAY: return "Ao pausar, sobe uma ficha com a sinopse e os dados do que você está vendo.";
     case AJ_STALKER_PORTAL: return "Os canais do portal entram no Guia de TV, junto com os dos addons. Endereço sem http:// e sem barra no fim: meu-portal.exemplo.tv:8080";

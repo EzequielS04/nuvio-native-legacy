@@ -19,13 +19,25 @@
 //   3. NADA. E aqui esta a regra que importa: sem preferencia, NAO SE FILTRA.
 //      Mostrar tudo e a resposta honesta para "nao sei o que voce quer"; um
 //      filtro chutado esconde a legenda que a pessoa procurava e ela nao tem
-//      como saber que houve filtro.
+//      como saber que houve filtro. (Vale para ling_casa. A lista de legendas
+//      dos ADDONS e outra regra: idioma escolhido + ingles, ver addons.c.)
 #ifndef NV_LINGUAS_H
 #define NV_LINGUAS_H
 
 // Nome para a tela ("pob" -> "Português (BR)"). Sem correspondencia, devolve o
 // codigo em MAIUSCULAS, que ao menos identifica.
 const char *ling_nome(const char *codigo);
+
+// FAIXA SO DE LETREIROS: "Signs", "Songs", "Signs & Songs", "Forced" no nome,
+// ou a FlagForced do Matroska. Ela traduz placas e musicas, nao o dialogo — e
+// escolhida por engano parece "a legenda some no meio da cena".
+int ling_letreiro(const char *nome, int forcado);
+
+// Idioma que o NOME da faixa diz com todas as letras ("Português", "English",
+// "Español", "Brazilian Portuguese"). NULL quando o nome nao cita idioma, ou
+// cita dois de familias diferentes — ai nao ha como saber qual vale, e
+// inventar e pior que ficar com a etiqueta do arquivo.
+const char *ling_do_nome(const char *nome);
 
 // O codigo casa com a preferencia? Tolera variante e as duas familias ISO:
 // pedir "pt" aceita "por", "pob", "pt-BR", "ptb". Preferencia vazia casa com

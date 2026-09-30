@@ -2601,15 +2601,30 @@ static void desenharLegendaExterna(void){
     cues[0].ordem = 0;
     n = 1;
   }
+  // PREVIA DA BARRA DE ESTILO (faixas.c): sem fala neste instante, uma linha
+  // de exemplo com o estilo da pessoa, para tamanho, cor e posicao terem o que
+  // mostrar. So quando e o app que desenha (no ASS o lugar e do arquivo).
+  if (n <= 0 && faixas_estilo_topo()) {
+    memset(&cues[0], 0, sizeof cues[0]);
+    snprintf(cues[0].texto, sizeof cues[0].texto, "%s", i18n("Assim a legenda vai aparecer"));
+    cues[0].cor = -1; cues[0].posX = cues[0].posY = -1.f;
+    n = 1;
+  }
   if (n <= 0) return;
   int pct=legEstilo.tamanho;if(pct<50)pct=50;if(pct>200)pct=200;pct=(pct/10)*10;
   TxtEstilo est=(TxtEstilo)(TXT_LEG_50+(pct-50)/10);corLegenda(legEstilo.cor,&r,&g,&b);
   float alpha=(legEstilo.opacidade==3?.25f:legEstilo.opacidade==2?.5f:legEstilo.opacidade==1?.75f:1.f)*entrada;
   // A pilha "normal" (sem \pos e sem \an, ou \an 2): empilha de baixo para
   // cima a partir da base da folha, como o SRT sempre fez.
-  float base=visivel?760.f:1000.f;
+  // Com a barra de estilo no topo a base e a da reproducao sem controles: a
+  // previa mostra onde a legenda vai tocar, nao onde ela fica com a barra.
+  float base=visivel && !faixas_estilo_topo()?760.f:1000.f;
   if(ofertaProximo())base=690.f;
-  base-=(legEstilo.posicao-3)*48.f;
+  // Abaixo do padrao (3) o passo e de 20 e nao de 48: com 48 as posicoes 1 e 2
+  // punham a base em 1144 e 1096, fora da tela de 1080 — a legenda sumia, e a
+  // previa da barra de estilo mostrou isso na primeira captura.
+  if(legEstilo.posicao>=3) base-=(legEstilo.posicao-3)*48.f;
+  else base+=(3-legEstilo.posicao)*20.f;
   float baseTopo = 80.f;             // pilha do \an8 (letreiros), de cima para baixo
   float baseMeio = NV_TELA_H * .5f;
   for (i = 0; i < n; i++) {

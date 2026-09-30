@@ -21,6 +21,10 @@ void faixas_abrir(void);
 // botao.
 void faixas_abrir_em(int col);
 int  faixas_aberta(void);
+// A folha de legenda esta como BARRA DE ESTILO no topo (foco na coluna
+// Estilo): o player desenha a legenda onde ela vai tocar, com uma linha de
+// previa quando nao ha fala naquele momento.
+int  faixas_estilo_topo(void);
 // Abertura animada da folha (0..1): o player apaga o OSD por baixo dela.
 float faixas_anim(void);
 void faixas_evento(const SDL_Event *e);

@@ -26,6 +26,7 @@ typedef struct {
   char idioma[8];     // "por", "eng"... vazio quando o arquivo nao etiqueta
   char nome[48];      // Name, quando existe ("Forced", "SDH", "Full")
   char codec[24];     // CodecID ("S_TEXT/UTF8", "S_HDMV/PGS")
+  int  forcado;       // FlagForced: so letreiros/falas em lingua estrangeira
 } MkvFaixa;
 
 #define MKV_MAX_CAPS 64

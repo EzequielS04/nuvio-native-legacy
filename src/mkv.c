@@ -94,6 +94,7 @@ static void lerTexto(const unsigned char *p, long n, char *dst, size_t tam) {
 #define ID_LANG_BCP47  0x22B59DUL     // LanguageBCP47 ("pt-BR"), mais novo
 #define ID_NAME        0x536EUL
 #define ID_CODECID     0x86UL
+#define ID_FLAGFORCED  0x55AAUL      // FlagForced: faixa so de letreiros/falas estrangeiras
 
 // Le os TrackEntry de dentro de um Tracks ja localizado.
 static int lerTracks(const unsigned char *p, long n, MkvFaixa *saida, int max) {
@@ -131,7 +132,8 @@ static int lerTracks(const unsigned char *p, long n, MkvFaixa *saida, int max) {
               lerTexto(v, ftam, f.idioma, sizeof f.idioma);
           }
           else if (fid == ID_NAME)    lerTexto(v, ftam, f.nome,  sizeof f.nome);
-          else if (fid == ID_CODECID) lerTexto(v, ftam, f.codec, sizeof f.codec); }
+          else if (fid == ID_CODECID) lerTexto(v, ftam, f.codec, sizeof f.codec);
+          else if (fid == ID_FLAGFORCED) f.forcado = lerUint(v, ftam) != 0; }
         q += ftam;
       }
       if (f.numero > 0) saida[achou++] = f;

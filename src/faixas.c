@@ -37,6 +37,9 @@ static int rolagem[3];
 static int visiveis = 8;
 static void ajustarRolagem(void);
 static float anim;
+// 0..1: a folha de legenda virando a BARRA DE ESTILO no topo (barra_desenhar).
+static float animTopo;
+#define FX_BARRA_COLS 5
 
 static void corFocoFaixa(float *r, float *g, float *b) {
   float ar, ag, ab, lum, k = 0.74f;
@@ -187,6 +190,7 @@ static int modo;
 #define FX_N_ESTILO   10
 
 static int nLinhas(int col);
+static int linhaDaLeg(int i);
 
 void faixas_abrir(void) { faixas_abrir_em(0); }
 
@@ -204,7 +208,7 @@ void faixas_abrir_em(int col) {
   foco[0] = video_audio_atual();
   // A legenda pode estar desligada (-1); a primeira linha da coluna e sempre
   // "Desativada", entao o indice da lista e deslocado em um.
-  foco[1] = legendaAtiva() + 1;
+  foco[1] = linhaDaLeg(legendaAtiva()) + 1;
   // Abriu a folha de LEGENDAS: e agora que idioma, codec e ordinal importam.
   // A sonda esperava 20 s de buffer (video.c) — numa fonte lenta a folha
   // abria com "Legenda 1..N" e sem selo ASS, e a escolha ia a TV.
@@ -221,11 +225,35 @@ void faixas_abrir_em(int col) {
 }
 
 int faixas_aberta(void) { return aberta; }
+int faixas_estilo_topo(void) { return aberta && modo && coluna == FX_COL_ESTILO; }
 float faixas_anim(void) { return anim; }
 
 static int nLegendas(void) {
   int n = video_n_legenda() + addons_n_legendas();
   return n;
+}
+
+// ORDEM DA LISTA: as embutidas de dialogo, depois as de LETREIROS ("Signs &
+// Songs", forced), depois as dos addons. A faixa de letreiros so traduz placas
+// e musicas; no topo da lista ela era a primeira "Português" que a pessoa
+// escolhia, e a legenda parecia sumir no meio da conversa. `k` e a posicao na
+// lista mostrada (sem a linha "Nenhuma"); devolve o indice combinado.
+static int legDaLinha(int k) {
+  int emb = video_n_legenda(), passo, i, n = 0;
+  if (k < 0 || k >= emb) return k;
+  for (passo = 0; passo < 2; passo++)
+    for (i = 0; i < emb; i++) {
+      const VideoFaixa *f = video_legenda(i);
+      if ((f && f->letreiro) != passo) continue;
+      if (n++ == k) return i;
+    }
+  return k;
+}
+static int linhaDaLeg(int i) {
+  int emb = video_n_legenda(), k;
+  if (i < 0 || i >= emb) return i;
+  for (k = 0; k < emb; k++) if (legDaLinha(k) == i) return k;
+  return i;
 }
 
 static int nLinhas(int col) {
@@ -434,7 +462,7 @@ static void aplicar(void) {
     // A pessoa escolheu: a automatica nao mexe mais nesta sessao, nem se a
     // escolha foi "Desativada".
     legAuto = 0;
-    escolherLegenda(foco[1] - 1);
+    escolherLegenda(legDaLinha(foco[1] - 1));
   }
 }
 
@@ -461,7 +489,13 @@ static void legendaAutomatica(Uint32 agora) {
   if (!video_n_audio() && !video_n_legenda() && passou < 8000u) return;
   nEmb = video_n_legenda();
   if (nEmb > NV_FAIXA_MAX) nEmb = NV_FAIXA_MAX;
-  for (i = 0; i < nEmb; i++) { const VideoFaixa *f = video_legenda(i); emb[i] = f ? f->idioma : ""; }
+  // Faixa de LETREIROS nunca liga sozinha: nao traduz o dialogo, e ligada
+  // pela preferencia parece legenda quebrada. Sem idioma, ling_legenda_auto
+  // passa por ela.
+  for (i = 0; i < nEmb; i++) {
+    const VideoFaixa *f = video_legenda(i);
+    emb[i] = f && !f->letreiro ? f->idioma : "";
+  }
   embFechado = video_mkv_sondado() != 0 || passou >= FX_AUTO_EMB_MS;
   // So confia na lista dos addons quando ela e DESTE titulo: sem imdb o app
   // nao pede legenda nenhuma (app.c), e o que estiver em memoria e do anterior.
@@ -505,6 +539,15 @@ void faixas_evento(const SDL_Event *e) {
   // Na de audio nao ha para onde ir — antes elas pulavam para a coluna de
   // legenda, que e justamente o que fazia os dois botoes do player parecerem o
   // mesmo botao.
+  // NA BARRA DE ESTILO (grade de FX_BARRA_COLS x 2) as quatro setas andam na
+  // grade; a esquerda da primeira coluna volta para a lista de legendas.
+  if (coluna == FX_COL_ESTILO) {
+    int *f = &foco[FX_COL_ESTILO];
+    if (k == SDLK_LEFT)  { if (*f % FX_BARRA_COLS) (*f)--; else coluna = 1; return; }
+    if (k == SDLK_RIGHT) { if (*f % FX_BARRA_COLS < FX_BARRA_COLS - 1 && *f + 1 < FX_N_ESTILO) (*f)++; return; }
+    if (k == SDLK_UP)    { if (*f >= FX_BARRA_COLS) *f -= FX_BARRA_COLS; return; }
+    if (k == SDLK_DOWN)  { if (*f + FX_BARRA_COLS < FX_N_ESTILO) *f += FX_BARRA_COLS; return; }
+  }
   if (k == SDLK_LEFT)  { if (modo && coluna == FX_COL_ESTILO) coluna = 1; return; }
   if (k == SDLK_RIGHT) { if (modo && coluna == 1) coluna = FX_COL_ESTILO; return; }
   if (k == SDLK_UP)    { if (foco[coluna] > 0) foco[coluna]--; ajustarRolagem(); return; }
@@ -549,6 +592,9 @@ static void avisarQueda(int e) {
 
 void faixas_atualizar(float dt, Uint32 agora) {
   anim = anim_mola(anim, aberta ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
+  // Fechando a partir da barra, ela sai como barra: sem isto a folha inteira
+  // piscaria no caminho de volta.
+  if (aberta || anim < .01f) animTopo = anim_mola(animTopo, faixas_estilo_topo() ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
   legendaAutomatica(agora);
   // Recuo vencido: a MESMA faixa de novo. O overlay nao foi desligado — o que
   // ja estava colhido continua na tela, e o fio novo retoma do sidecar parcial.
@@ -666,55 +712,58 @@ static void ajustarRolagem(void) {
   if (*r < 0) *r = 0;
 }
 
+// Uma linha (ou celula) da folha: texto em (x, y), superficie de x-24 ate
+// x+larg, 94 de altura. A coluna e a barra de estilo desenham por aqui.
+static void linha_desenhar(int col, int i, float x, float y, float larg, float a) {
+  int sel=col==coluna && i==foco[col];
+  const char *marca=NULL,*rot;
+  char valor[48];
+  if(col==FX_COL_ESTILO) {
+    valorEstilo(i,valor,sizeof valor); rot=EST_ROT[i]; marca=valor;
+  } else if(!col) {
+    const VideoFaixa *f=video_audio(i);
+    rot=f?f->rotulo:""; marca=f?f->idioma:NULL;
+  } else {
+    rot=i==0?"Nenhuma":rotuloLegenda(legDaLinha(i-1),&marca);
+    if(i && !marca) marca=i18n("Incorporada");
+  }
+  float fr, fg, fb;
+  corFocoFaixa(&fr, &fg, &fb);
+  // Vidro: a linha em foco e so contorno na cor do realce sobre superficie
+  // translucida, entao o texto NAO inverte (inv = a linha e cheia e clara).
+  const int vid=ajustes_vidro(), inv=sel && !vid;
+  if(vid) {
+    // Linha de 94 com recuo de 24 (a escala dos paineis); vao de 12 ate a
+    // proxima (FX_LINHA 106).
+    GfxRect lr={x-24,y-15,larg+24,FX_LINHA-NV_LINHA_VAO};
+    float rr=NV_LINHA_RAIO_PX/lr.h;
+    gfx_cor(lr,rr,1,1,1,.035f*a); gfx_vidro_aro(lr,rr,1.0f,1,1,1,.09f*a);
+    if(sel) gfx_vidro_foco(lr,rr,1.0f,a);
+  } else if(sel) superficieFocoFaixa((GfxRect){x-24,y-15,larg+24,FX_LINHA-NV_LINHA_VAO},a);
+  int c=inv?ajustes_tinta_foco():230, sub=inv?ajustes_tinta_foco2():174;
+  if(col==FX_COL_ESTILO && estiloPreservadoAss(i)) { c=inv?c:128; sub=inv?sub:112; }
+  txt_desenhar_alpha(txt_linha_corta(TXT_PAINEL_ITEM,rot,c,c,c,255,larg-72),x,y,a);
+  if(marca && *marca)
+    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,marca,sub,sub,sub,255,larg-72),x,y+36,a);
+  int ativo=col==0?i==video_audio_atual():
+    col==1?legDaLinha(i-1)==legendaAtiva():0;
+  if(ativo) {
+    int cr = inv ? c : (int)(fr * 255.0f + 0.5f);
+    int cg = inv ? c : (int)(fg * 255.0f + 0.5f);
+    int cb = inv ? c : (int)(fb * 255.0f + 0.5f);
+    // Icone e nao o caractere ✓ (#186): so a Inter tem esse glifo, e com
+    // outra fonte da interface a marca saia como um quadrado vazio.
+    GfxRect ic = { x+larg-46.0f, y+12.0f, 28.0f, 28.0f };
+    gfx_icone(ic, "check", cr/255.0f, cg/255.0f, cb/255.0f, a);
+  }
+}
+
 static void coluna_desenhar(int col, float x, float larg, float y0, float a) {
   const char *titulo=col==FX_COL_ESTILO?"Estilo":col?"Legendas":"Faixas de áudio";
   txt_desenhar_alpha(txt_linha(TXT_PG_ROTULO,titulo,188,190,196,255),x,y0,a);
   int n=nLinhas(col), r=rolagem[col], fim=r+visiveis;
   if(fim>n) fim=n;
-  for(int i=r;i<fim;i++) {
-    float y=y0+64+(i-r)*FX_LINHA;
-    int sel=col==coluna && i==foco[col];
-    const char *marca=NULL,*rot;
-    char valor[48];
-    if(col==FX_COL_ESTILO) {
-      valorEstilo(i,valor,sizeof valor); rot=EST_ROT[i]; marca=valor;
-    } else if(!col) {
-      const VideoFaixa *f=video_audio(i);
-      rot=f?f->rotulo:""; marca=f?f->idioma:NULL;
-    } else {
-      rot=i==0?"Nenhuma":rotuloLegenda(i-1,&marca);
-      if(i && !marca) marca=i18n("Incorporada");
-    }
-    float fr, fg, fb;
-    corFocoFaixa(&fr, &fg, &fb);
-    // Vidro: a linha em foco e so contorno na cor do realce sobre superficie
-    // translucida, entao o texto NAO inverte (inv = a linha e cheia e clara).
-    const int vid=ajustes_vidro(), inv=sel && !vid;
-    if(vid) {
-      // Linha de 94 com recuo de 24 (a escala dos paineis); vao de 12 ate a
-      // proxima (FX_LINHA 106).
-      GfxRect lr={x-24,y-15,larg+24,FX_LINHA-NV_LINHA_VAO};
-      float rr=NV_LINHA_RAIO_PX/lr.h;
-      gfx_cor(lr,rr,1,1,1,.035f*a); gfx_vidro_aro(lr,rr,1.0f,1,1,1,.09f*a);
-      if(sel) gfx_vidro_foco(lr,rr,1.0f,a);
-    } else if(sel) superficieFocoFaixa((GfxRect){x-24,y-15,larg+24,FX_LINHA-NV_LINHA_VAO},a);
-    int c=inv?ajustes_tinta_foco():230, sub=inv?ajustes_tinta_foco2():174;
-    if(col==FX_COL_ESTILO && estiloPreservadoAss(i)) { c=inv?c:128; sub=inv?sub:112; }
-    txt_desenhar_alpha(txt_linha_corta(TXT_PAINEL_ITEM,rot,c,c,c,255,larg-72),x,y,a);
-    if(marca && *marca)
-      txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,marca,sub,sub,sub,255,larg-72),x,y+36,a);
-    int ativo=col==0?i==video_audio_atual():
-      col==1?i-1==legendaAtiva():0;
-    if(ativo) {
-      int cr = inv ? c : (int)(fr * 255.0f + 0.5f);
-      int cg = inv ? c : (int)(fg * 255.0f + 0.5f);
-      int cb = inv ? c : (int)(fb * 255.0f + 0.5f);
-      // Icone e nao o caractere ✓ (#186): so a Inter tem esse glifo, e com
-      // outra fonte da interface a marca saia como um quadrado vazio.
-      GfxRect ic = { x+larg-46.0f, y+12.0f, 28.0f, 28.0f };
-      gfx_icone(ic, "check", cr/255.0f, cg/255.0f, cb/255.0f, a);
-    }
-  }
+  for(int i=r;i<fim;i++) linha_desenhar(col,i,x,y0+64+(i-r)*FX_LINHA,larg,a);
   if(!n) txt_bloco(TXT_PG_FIM,"Nenhuma faixa disponível nesta fonte.",178,180,186,x,y0+68,larg,28,a,2);
   if(n>visiveis) {
     char num[48]; snprintf(num,sizeof num,i18n("%d de %d"),foco[col]+1,n);
@@ -722,10 +771,48 @@ static void coluna_desenhar(int col, float x, float larg, float y0, float a) {
   }
 }
 
+// BARRA DE ESTILO NO TOPO. Com o foco no Estilo a folha inteira escondia a
+// legenda atras do veu, e mudar tamanho, cor ou posicao era no escuro. Aqui a
+// folha vira uma faixa no alto, sem veu no resto: a legenda (ou a linha de
+// previa que o player desenha quando nao ha fala, player.c) aparece embaixo,
+// no lugar em que vai tocar, e cada OK na "Posição" a move.
+//
+// Grade de FX_BARRA_COLS x 2 celulas de 94 com vao de 12, entre as margens de
+// 96 do player: dez linhas de uma coluna ocupariam a tela ate o rodape, que e
+// justamente onde a legenda fica.
+static float barra_altura(void) {
+  return NV_MARGEM_Y + 64 + 2 * FX_LINHA + 12;
+}
+static void barra_desenhar(float a) {
+  const float x0 = 96, larg = NV_TELA_W - 192;
+  const float w = (larg - (FX_BARRA_COLS - 1) * NV_LINHA_VAO) / FX_BARRA_COLS;
+  const float y0 = NV_MARGEM_Y + 64, h = barra_altura();
+  int i;
+  gfx_cor((GfxRect){0,0,NV_TELA_W,h},0,.025f,.025f,.03f,(ajustes_vidro()?.80f:.88f)*a);
+  // Borda de baixo em degrade: um corte seco a 360 px lia como uma placa
+  // colada sobre o video.
+  gfx_rect((GfxRect){0,h,NV_TELA_W,72},0,GFX_VEU_TOPO,0,0,0,0.0f,0,0,0,(ajustes_vidro()?.80f:.88f)*a);
+  { TxtLinha lt=txt_linha(TXT_PAINEL_TITULO,"Legendas",242,243,245,255);
+    TxtLinha le=txt_linha(TXT_PG_ROTULO,"Estilo",188,190,196,255);
+    TxtLinha lh=txt_linha(TXT_PG_FIM,"Voltar para fechar",180,182,188,255);
+    txt_desenhar_alpha(lt,x0,NV_MARGEM_Y,a);
+    txt_desenhar_alpha(le,x0+lt.w+24,NV_MARGEM_Y+(lt.h-le.h)*.5f,a);
+    txt_desenhar_alpha(lh,NV_TELA_W-96-lh.w,NV_MARGEM_Y+(lt.h-lh.h)*.5f,a); }
+  for (i = 0; i < FX_N_ESTILO; i++) {
+    float cx = x0 + (i % FX_BARRA_COLS) * (w + NV_LINHA_VAO);
+    float cy = y0 + (i / FX_BARRA_COLS) * FX_LINHA;
+    linha_desenhar(FX_COL_ESTILO, i, cx + 24, cy + 15, w - 24, a);
+  }
+}
+
 void faixas_desenhar(Uint32 agora) {
   (void)agora;
   if(anim<.01f) return;
-  float a=anim;
+  // Folha e barra se cruzam: `animTopo` 0 = folha inteira, 1 = barra no topo.
+  float t=anim_clamp(animTopo,0.0f,1.0f);
+  if(t>.01f) barra_desenhar(anim*t);
+  if(t>.99f) { visiveis=7; ajustarRolagem(); return; }
+  float a=anim*(1.0f-t);
   gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,.025f,.025f,.03f,(ajustes_vidro()?.80f:.88f)*a);
   // MARGEM DO PLAYER (96, PLR_MARGEM) nos dois lados: o titulo e as bordas
   // das linhas caem na mesma coluna, o texto 24 para dentro, e a dica de
