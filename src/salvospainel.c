@@ -958,8 +958,17 @@ static float focoVisual(float f) {
 
 // Uma unica receita para a lateral: neutro em repouso; no foco, fill accent
 // solido, tinta por contraste e halo curto para destacar sem aureola excessiva.
+// No VIDRO o texto do foco nao inverte: a linha segue translucida (aro na cor do
+// realce, gfx_vidro_foco) e o texto fica nas cores de repouso.
+static float focoTexto(float f) { return ajustes_vidro() ? 0.0f : focoVisual(f); }
+
 static void superficieItem(GfxRect r, float raio, float f, float a) {
   float cr, cg, cb, v = focoVisual(f);
+  if (ajustes_vidro()) {
+    gfx_vidro_superficie(r, raio, a);
+    if (v > .001f) gfx_vidro_foco(r, raio, v, a);
+    return;
+  }
   ajustes_acento(&cr, &cg, &cb);
   gfx_cor(r, raio, .062f, .066f, .079f, .92f * a);
   if (v > .001f) {
@@ -993,7 +1002,8 @@ static float badge_foco_transicao(float x, float y, const char *texto,
   repouso = txt_linha(TXT_CAPTION2, texto, 235, 235, 235, 255);
   foco = txt_linha(TXT_CAPTION2, texto, 226, 226, 226, 255);
   p.x = x; p.y = y; p.w = (float)repouso.w + BADGE_PADX * 2.0f; p.h = BADGE_H;
-  gfx_cor(p, 0.5f, .095f, .102f, .116f, a);
+  if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, 0.10f * a);   /* selo de vidro */
+  else gfx_cor(p, 0.5f, .095f, .102f, .116f, a);
   txt_foco_transicao(repouso, foco, x + BADGE_PADX,
                      y + (BADGE_H - (float)repouso.h) * 0.5f, f, a);
   return p.w;
@@ -1045,7 +1055,7 @@ static void desenhaLinha(int i, float dx, float y, float a) {
   float px = SP_X + dx + SP_PAD, tx = SP_X + dx + SP_TEXTO_X;
   char buf[192];
   GfxRect poster = { px, y, SP_POSTER_W, SP_POSTER_H };
-  float v = focoVisual(f);
+  float v = focoTexto(f);   // cor do texto e dos selos no foco (vidro: nao inverte)
   int tintaFoco = ajustes_tinta_foco();
   int tintaFoco2 = ajustes_tinta_foco2();
 
@@ -1231,7 +1241,7 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a) {
     GfxRect barra = { px - 24.0f, y, SPR_BARRA_W, SP_POSTER_H };
     ajustes_acento(&ar, &ag, &ab);
     { float ti = anim_mistura(ar, ajustes_acento_tinta(NULL, NULL, NULL),
-                              focoVisual(f));
+                              focoTexto(f));
       ar = ag = ab = ti; }
     gfx_cor(barra, SPR_BARRA_W * 0.5f / SP_POSTER_H, ar, ag, ab, a);
   }
@@ -1252,7 +1262,7 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a) {
                                      ajustes_tinta_foco(),
                                      ajustes_tinta_foco(),
                                      ajustes_tinta_foco(), 255, SP_TEXTO_W);
-    txt_foco_transicao(repouso, foco, tx, y + 2.0f, focoVisual(f), a); }
+    txt_foco_transicao(repouso, foco, tx, y + 2.0f, focoTexto(f), a); }
 
   // "Gustavo · há 2 h" — as PARTES passam por i18n e a juncao nao, pela mesma
   // razao de metaTexto: a chave da tabela e uma string inteira, e a frase
@@ -1450,7 +1460,7 @@ static void desenhaBotaoLinha(int i, float dx, float y, float alt, float a,
                               const char *titulo, const char *sub,
                               const char *icone, int primario) {
   float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f;
-  float v = focoVisual(f), tinta = ajustes_acento_tinta(NULL, NULL, NULL);
+  float v = focoTexto(f), tinta = ajustes_acento_tinta(NULL, NULL, NULL);
   int tintaFoco = ajustes_tinta_foco();
   float h = primario ? BOTAO_H_PRIMARIO : BOTAO_H_SECUNDARIO;
   float w = botao_largura(titulo, icone, primario);
@@ -1665,7 +1675,8 @@ static void desenhaSugLinha(int i, int idx, float dx, float y, float a) {
     // neutra e tambem sobre o accent solido quando o cartao recebe foco.
     { GfxRect p = { px + SP_INTERNO - pw, y + (SPS_H_SUG - 36.0f) * 0.5f,
                     pw, 36.0f };
-      gfx_cor(p, 0.5f, .095f, .102f, .116f, a);
+      if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, 0.10f * a);   /* selo de vidro */
+  else gfx_cor(p, 0.5f, .095f, .102f, .116f, a);
       txt_desenhar_alpha(acao, p.x + SPS_SUG_PADX,
                          p.y + (36.0f - acao.h) * 0.5f, a); } }
 }
@@ -1676,7 +1687,7 @@ static void desenhaSugLinha(int i, int idx, float dx, float y, float a) {
 static void desenhaAmigoLinha(int i, int idx, float dx, float y, float a) {
   const RecContato *c = &ctts[idx];
   float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f;
-  float v = focoVisual(f);
+  float v = focoTexto(f);   // cor do texto e dos selos no foco (vidro: nao inverte)
   float px = SP_X + dx + SP_PAD;
   { GfxRect p = { px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
                   SPS_H_AMIGO + SP_FOCO_PADY * 2.0f };
@@ -1840,7 +1851,9 @@ void spainel_desenhar(Uint32 agora) {
   // Painel flutuante escuro e neutro; o veu separa a camada do conteudo sem
   // uma luz decorativa colorida competindo com posters e selos.
   { GfxRect p = { SP_X + x, SP_Y, SP_W, SP_H };
-    gfx_cor(p, 28.0f / SP_W, 0.055f, 0.058f, 0.068f, 0.94f * a);
+    // Vidro: folha translucida sem contorno, como o menu e Fontes (dono, 30/09).
+    if (ajustes_vidro()) gfx_vidro_folha(p, 28.0f / SP_W, a);
+    else gfx_cor(p, 28.0f / SP_W, 0.055f, 0.058f, 0.068f, 0.94f * a);
   }
 
   // Tudo daqui para baixo fica preso ao painel: sem o recorte, a lista rolada

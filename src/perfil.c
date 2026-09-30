@@ -142,6 +142,13 @@ static void brilhoFoco(GfxRect r, float f, float a) {
 // telas legadas e, em foco, parecia um botao sem estado intermediario.
 static int superficieLinha(GfxRect r, float raio, float f, float a) {
   float ar, ag, ab;
+  // Vidro (dono, 30/09: "Perfil e Stats nao esta aplicando o glass"): veu
+  // claro sem aro em repouso, aro na cor do realce no foco, texto sem inverter.
+  if (ajustes_vidro()) {
+    gfx_vidro_superficie(r, raio, a);
+    if (f > 0.01f) gfx_vidro_foco(r, raio, f, a);
+    return PF_FORTE;
+  }
   ajustes_acento(&ar, &ag, &ab);
   brilhoFoco(r, f, a);
   if (f > 0.01f) gfx_cor(r, raio, ar, ag, ab, f * a);
@@ -451,7 +458,8 @@ static void desenharAtividade(float a) {
   tituloSecao("Ritmo de atividade", PF_X, a);
   // A grade e uma superficie de leitura, nao um painel cinza legado. O
   // contraste vem das celulas e do foco, por isso a base fica fria e baixa.
-  gfx_cor(painel,NV_RAIO_CARD,0.10f,0.11f,0.13f,.96f*a);
+  if (ajustes_vidro()) gfx_vidro_superficie(painel,NV_RAIO_CARD,a);
+  else gfx_cor(painel,NV_RAIO_CARD,0.10f,0.11f,0.13f,.96f*a);
   for(int c=0;c<7;c++) {
     TxtLinha l=txt_linha(TXT_CAPTION,diasSem[c],PF_FRACO,PF_FRACO,PF_FRACO,255);
     txt_desenhar_alpha(l,x0+c*(PF_CEL+PF_CEL_GAP)+(PF_CEL-l.w)*.5f,
@@ -537,7 +545,7 @@ static void desenharDestaques(float a) {
     // cinza antigo. A tinta acompanha a mola para nunca piscar claro sobre
     // claro no meio da transicao.
     int tintaTitulo = superficieLinha(r,NV_RAIO_CARD,f,a);
-    int tintaMeta = f > 0.5f ? ajustes_tinta_foco2() : PF_FRACO;
+    int tintaMeta = (f > 0.5f && !ajustes_vidro()) ? ajustes_tinta_foco2() : PF_FRACO;
     if(tex){gfx_tex_aspect_atual=tex_aspecto(art);
             gfx_rect(mini,tex,GFX_CARD,f,0,0,NV_RAIO_CARD,1,1,1,a);
             gfx_tex_aspect_atual=0;}
@@ -595,7 +603,8 @@ void perfil_desenhar(Uint32 agora) {
   } else if(carregando)aviso="Atualizando histórico sem interromper o conteúdo anterior…";
   else aviso=dados.aviso[0]?dados.aviso:dados.parcial?"Histórico parcial: os totais consideram somente os registros carregados.":NULL;
   if(aviso){
-    gfx_cor((GfxRect){PF_X,PF_AVISO_Y,PF_W,PF_AVISO_H},NV_RAIO_PILL,
+    if (ajustes_vidro()) gfx_vidro_superficie((GfxRect){PF_X,PF_AVISO_Y,PF_W,PF_AVISO_H},NV_RAIO_PILL,a);
+    else gfx_cor((GfxRect){PF_X,PF_AVISO_Y,PF_W,PF_AVISO_H},NV_RAIO_PILL,
             0.10f,0.11f,0.13f,.96f*a);
     TxtLinha l=txt_linha_corta(TXT_CAPTION,aviso,PF_MEDIO,PF_MEDIO,PF_MEDIO,255,PF_W-40);
     txt_desenhar_alpha(l,PF_X+20,PF_AVISO_Y+(PF_AVISO_H-l.h)*.5f,a);

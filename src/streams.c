@@ -1047,9 +1047,7 @@ void stream_folha_desenhar(Uint32 agora) {
   // veu e da superficie, nao de uma luz decorativa presa ao canto.
   if (vid) {   // vidro SEM aro (dono, 29/09): a borda vem so do contraste do
     // miolo translucido e de um brilho largo no topo, nao de um fio desenhado.
-    GfxRect pn = {x,24,FOLHA_W,NV_TELA_H-48};
-    gfx_cor(pn,28.0f/FOLHA_W,.085f,.088f,.10f,.78f*anim);
-    gfx_rect(pn,0,GFX_BRILHO_TOPO,0,0.38f,0,28.0f/FOLHA_W,.88f,.92f,1.0f,.06f*anim);
+    gfx_vidro_folha((GfxRect){x,24,FOLHA_W,NV_TELA_H-48},28.0f/FOLHA_W,anim);
   } else
   gfx_cor((GfxRect){x,24,FOLHA_W,NV_TELA_H-48},28.0f/FOLHA_W,.055f,.058f,.068f,.965f*anim);
   txt_desenhar_alpha(txt_linha(TXT_PAINEL_TITULO,"Fontes",240,241,243,255),x+40,44,anim);
@@ -1145,7 +1143,7 @@ void stream_folha_desenhar(Uint32 agora) {
     // e as marcas ficam nas cores de repouso.
     const int inv = sel && !vid;
     if(vid) {   // vidro: em repouso so um veu claro, sem contorno; o foco soma o aro
-      gfx_cor(r,.10f,1,1,1,.05f*anim);
+      gfx_vidro_superficie(r,.10f,anim);
       if(sel) focoFonte(r,.10f,anim);
     }
     else if(sel) focoFonte(r,.10f,anim);

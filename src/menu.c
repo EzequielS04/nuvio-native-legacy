@@ -170,10 +170,9 @@ static void alvosDasLinhas(float x, float w) {
 static void desenhaRailFixa(void) {
   GfxRect painel = { 0, 0, NV_LEGACY_RAIL_W, NV_TELA_H };
   int vidro = ajustes_vidro();
-  // Vidro: a rail e so um fio a direita sobre um veu fino, nao um bloco cheio.
+  // Vidro: a rail e so um veu fino, sem o fio da direita (nada de contorno).
   if (vidro) {
     gfx_cor(painel, 0.0f, 0.055f, 0.058f, 0.064f, 0.72f);
-    gfx_cor((GfxRect){ NV_LEGACY_RAIL_W - 1.5f, 0, 1.5f, NV_TELA_H }, 0.0f, 1, 1, 1, 0.10f);
   } else
   gfx_cor(painel, 0.0f, 0.055f, 0.058f, 0.064f, 1.0f);
   float sr, sg, sb;
@@ -427,10 +426,9 @@ void menu_desenhar(Uint32 agora) {
     alvosDasLinhas(px, w);
   }
   if (ajustes_vidro()) {
-    // Painel de vidro: cinza-frio translucido e um fio de 1,5 px, como o
-    // menu de contexto; o veu de tras fica mais leve para a home aparecer.
-    gfx_cor(painel, 28.0f / painel.h, 0.075f, 0.078f, 0.09f, 0.86f * entrada);
-    gfx_anel(painel, 28.0f / painel.h, 1.5f, 1, 1, 1, 0.14f * entrada);
+    // Folha de vidro sem contorno (gfx_vidro_folha); o veu de tras fica mais
+    // leve para a home aparecer.
+    gfx_vidro_folha(painel, 28.0f / painel.h, entrada);
   } else
   gfx_cor(painel, 28.0f / painel.h, 0.055f, 0.058f, 0.068f, 0.965f * entrada);
 

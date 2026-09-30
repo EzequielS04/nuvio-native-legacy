@@ -1420,10 +1420,24 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
 // Cor do miolo do vidro: 0,16 e um degrau ACIMA do fundo escuro da pagina, e
 // nao um preto — sobre #0D0D0D um miolo preto some e so o aro sobra.
 #define VIDRO_MIOLO 0.16f
+// VIDRO SEM CONTORNO (dono, 29-30/09: "tirar o contorno", "bem glass mesmo").
+// O fio de 1,5 px fazia cada componente ler como caixa desenhada; a separacao
+// vem do miolo translucido e, no foco, do aro na cor do realce.
 void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a) {
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
   gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, fundo * a);
-  gfx_anel(r, raio, 1.5f, 1, 1, 1, 0.14f * a);
+}
+// Painel lateral/flutuante (menu, Fontes, Salvos): miolo frio translucido e um
+// brilho largo no alto, sem aro.
+void gfx_vidro_folha(GfxRect r, float raio, float a) {
+  if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
+  gfx_cor(r, raio, 0.085f, 0.088f, 0.10f, 0.78f * a);
+  gfx_rect(r, 0, GFX_BRILHO_TOPO, 0, 0.38f, 0, raio, 0.88f, 0.92f, 1.0f, 0.06f * a);
+}
+// Cartao/linha em repouso dentro de uma folha de vidro: um veu claro, sem aro.
+void gfx_vidro_superficie(GfxRect r, float raio, float a) {
+  if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
+  gfx_cor(r, raio, 1, 1, 1, 0.05f * a);
 }
 // A COR DO FOCO NO VIDRO E O REALCE ESCOLHIDO. O vidro muda a SUPERFICIE (fina,
 // translucida, sem brilho nem sombra), nao a cor de quem esta selecionado: com

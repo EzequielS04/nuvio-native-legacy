@@ -428,6 +428,8 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
 // escura; ~0,78 num painel flutuante sobre arte, onde o texto precisa de
 // contraste). Em repouso 0,16 x 0,55 sobre o fundo #0D0D0D da 0,11 — o cinza
 // das pilulas do video de referencia.
+void gfx_vidro_folha(GfxRect r, float raio, float a);
+void gfx_vidro_superficie(GfxRect r, float raio, float a);
 void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a);
 // FOCO de uma pilula/linha JA desenhada com gfx_vidro_painel: o miolo clareia
 // (branco a 9 %) e o contorno de 2 px em branco acende com a mola `foco`.

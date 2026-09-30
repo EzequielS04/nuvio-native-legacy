@@ -726,10 +726,8 @@ void ctx_desenhar(Uint32 agora) {
   { GfxRect p = { x, y, CTX_W, alt };
     float menor = alt < CTX_W ? alt : CTX_W, raio = 28.0f / menor;
     if (ajustes_vidro()) {
-      // Painel de vidro: cinza-frio escuro, translucido (a home aparece por
-      // tras do veu), fio de 1,5 px e nenhuma luz colorida.
-      gfx_cor(p, raio, 0.075f, 0.078f, 0.09f, 0.86f * a);
-      gfx_anel(p, raio, 1.5f, 1, 1, 1, 0.14f * a);
+      // Folha de vidro sem contorno (gfx_vidro_folha), sem luz colorida.
+      gfx_vidro_folha(p, raio, a);
     } else {
     gfx_cor(p, raio, 0.055f, 0.058f, 0.068f, 0.94f * a);
     gfx_luz_canto(p, raio, CTX_W * 0.1f, -CTX_W * 0.1f, CTX_W * 0.65f, ar_, ag_, ab_, 0.22f * a); } }
