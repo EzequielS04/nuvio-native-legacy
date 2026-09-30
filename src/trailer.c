@@ -210,6 +210,18 @@ static int quadroInteiroEnviado;
 #define NV_TRAILER_TPK_SEM_TOCAR_MS   6000
 static Uint32 recorteEnviadoEm;
 static int    mostraLogado;
+// O FURO SO COM IMAGEM (#188, #195). O host manda `pronto` e `tocando` logo
+// depois do prepare e do Start, antes do primeiro quadro; um furo aberto ai
+// mostra o que esta atras do app (no Tizen 9, a tela inicial da Samsung) ate a
+// imagem chegar. A posicao do player (Video.cs, Tique: so le com o estado
+// Playing) andar e o sinal de que ha quadro no plano. Pegajoso por fonte: a
+// pausa do trailer em tela cheia nao fecha o furo.
+#define NV_TRAILER_TPK_POS_MIN 0.25
+// A posicao nao andou (host que nao le a posicao): abre neste prazo de
+// `tocando`, como antes.
+#define NV_TRAILER_TPK_POS_PRAZO_MS 4000u
+static int    imagemVista;
+static Uint32 tocandoVisto;
 #endif
 int trailer_suportado(void) {
 #if defined(__APPLE__)
@@ -312,7 +324,7 @@ void trailer_abrir(const char *fonte, GfxRect r, int som, int modoCheia) {
     volumePendente = 1; recortePendente = 1; pausado = 0; reaplicarAte = 0;
     tocandoDesde = 0; quadroInteiroEnviado = 0;
 #ifdef NV_TPK
-    recorteEnviadoEm = 0; mostraLogado = 0;
+    recorteEnviadoEm = 0; mostraLogado = 0; imagemVista = 0; tocandoVisto = 0;
 #endif
   } else if (comSom != som) volumePendente = 1;
   video_janela((int)r.x, (int)r.y, (int)r.w, (int)r.h);
@@ -390,15 +402,22 @@ int trailer_mostra_video(void) {
   Uint32 t = SDL_GetTicks();
   const char *porque = NULL;
   if (!aberto) return 0;
-  // "Original": nada a recortar, o LetterBox de sempre ja e a imagem certa.
-  if (ajustes_trailer_zoom() <= 1.001f) return 1;
-  if (recorteEnviadoEm && t - recorteEnviadoEm >= NV_TRAILER_TPK_ROI_ASSENTA_MS) porque = "recorte assentou";
+  if (!imagemVista) {
+    if (video_tocando() && !tocandoVisto) tocandoVisto = t | 1;
+    if (video_pos() < NV_TRAILER_TPK_POS_MIN &&
+        !(tocandoVisto && t - tocandoVisto >= NV_TRAILER_TPK_POS_PRAZO_MS)) return 0;
+    imagemVista = 1;
+  }
+  // "Original", ou o alvo sem recorte (video_tpk.c, o padrao desde #188): nada
+  // a esperar, o LetterBox de sempre ja e a imagem certa.
+  if (ajustes_trailer_zoom() <= 1.001f || !video_recorte_fonte()) porque = "sem recorte";
+  else if (recorteEnviadoEm && t - recorteEnviadoEm >= NV_TRAILER_TPK_ROI_ASSENTA_MS) porque = "recorte assentou";
   else if (tocandoDesde && t - tocandoDesde >= NV_TRAILER_TPK_ROI_PRAZO_MS) porque = "sem recorte em 2 s, mostra assim";
   else if (!tocandoDesde && abertoEm && t - abertoEm >= NV_TRAILER_TPK_SEM_TOCAR_MS) porque = "sem tocando, mostra assim";
   if (!porque) return 0;
   if (!mostraLogado) {
     mostraLogado = 1;
-    printf("[trailer] tpk: plano visivel +%ums (%s)\n", (unsigned)(t - abertoEm), porque);
+    printf("[trailer] tpk: plano visivel +%ums (%s, posicao %.2fs)\n", (unsigned)(t - abertoEm), porque, video_pos());
     fflush(stdout);
   }
   return 1;

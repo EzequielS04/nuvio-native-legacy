@@ -2864,7 +2864,29 @@ void player_desenhar(Uint32 agora) {
   // raio 0 e o quad de tela inteira: o recorte (cover) do shader e o que impede
   // a arte 16:9 de esticar quando a tela nao for exatamente 16:9.
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  if (player_com_video()) {
+  int furar = player_com_video();
+#ifdef NV_TPK
+  // O FURO SO COM IMAGEM (#188). O host manda `pronto` ANTES do Start (Video.cs,
+  // Abrir), e o primeiro quadro so vem depois do buffer: furo aberto nesse vao
+  // mostra o que esta atras do app, que no Tizen 9 e a tela inicial da
+  // Samsung (#185 viu o mesmo numa linha de 1 px). Espera a posicao andar; se
+  // ela nao andar (ao vivo sem posicao, host que nao le), abre em
+  // NV_PLR_TPK_FURO_PRAZO_MS de `tocando`, como antes. A janela que cresce do
+  // guia ja vem com video tocando e fica de fora.
+#define NV_PLR_TPK_FURO_PRAZO_MS 3000u
+  { static int vista; static Uint32 tocandoEm;
+    if (!furar) { vista = 0; tocandoEm = 0; }
+    else if (!vista && !janAtiva) {
+      if (video_tocando() && !tocandoEm) tocandoEm = SDL_GetTicks() | 1;
+      if (video_pos() >= 0.25 ||
+          (tocandoEm && SDL_GetTicks() - tocandoEm >= NV_PLR_TPK_FURO_PRAZO_MS)) {
+        vista = 1;
+        printf("[player] tpk: furo aberto (posicao %.2fs)\n", video_pos());
+        fflush(stdout);
+      } else furar = 0;
+    } }
+#endif
+  if (furar) {
     // O furo acompanha o MESMO retangulo que foi ao plano de hardware, cortado
     // na tela. Furar sempre a tela inteira, como antes, deixava faixa preta nos
     // modos que nao ocupam tudo ("Original" num 2.39:1 entregue como 2.39:1):

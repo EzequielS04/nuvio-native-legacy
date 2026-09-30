@@ -279,11 +279,30 @@ void video_janela(int x, int y, int w, int h) { if (hJanela) hJanela(x, y, w, h)
 // O que sobra para fora da tela e o que o recorte descartaria. O ROI resultante
 // pode ser MAIOR que a tela e ter origem NEGATIVA — e Video.cs.Janela deixa
 // esse retangulo passar cru ao SetRoi (so cai em LetterBox no quadro cheio sem
-// zoom). NAO VERIFICADO numa TV Samsung se o firmware honra ROI fora da tela;
-// por isso esta build sai como canario. Se o firmware grampear, o zoom nao
-// acontece, mas a imagem continua na tela — a causa fica do lado do firmware e
-// o log abaixo mostra o retangulo pedido.
+// zoom).
+//
+// ROI FORA DA TELA NAO SAI MAIS (#188, #195). Desde este zoom (1.6.x), todo
+// trailer do destaque manda um ROI assim (o zoom padrao do trailer e 1,34) e
+// as S90C/S90D/QN90D (Tizen 9) mostram a tela inicial da Samsung no lugar do
+// video, com o som tocando. A imagem do que esta atras do app aparecendo onde
+// o furo nao tem video ja foi vista na S90D (#185). NAO PROVADO que o firmware
+// apaga o plano com ROI fora do painel, mas e o que o webOS faz (player.c,
+// aplicarAspecto: "retangulo fora do painel nao e recorte, e retangulo
+// invalido: o plano apaga") e o zoom nunca foi visto funcionando numa Samsung.
+// Por isso o padrao volta a ser o de antes do zoom: video_recorte_fonte() = 0
+// (o player fica nos modos sem recorte, o trailer sem zoom) e, se alguem
+// chamar isto mesmo assim, um ROI que sai da tela vira o destino cru.
+// NV_TPK_ZOOM_ROI=1 liga o zoom de novo, so para canario.
+#ifndef NV_TPK_ZOOM_ROI
+#define NV_TPK_ZOOM_ROI 0
+#endif
+#define TPK_TELA_W 1920   // o host (Program.cs) usa 1920x1080 e o layout tambem
+#define TPK_TELA_H 1080
 static int ultRoiX, ultRoiY, ultRoiW, ultRoiH, temRoi;
+static unsigned roiForaLogado;
+static int roiNaTela(int x, int y, int w, int h) {
+  return w > 0 && h > 0 && x >= 0 && y >= 0 && x + w <= TPK_TELA_W && y + h <= TPK_TELA_H;
+}
 void video_janela_fonte(int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh) {
   double qw = largura, qh = altura, ex, ey;
   int X, Y, W, H;
@@ -304,10 +323,22 @@ void video_janela_fonte(int sx, int sy, int sw, int sh, int dx, int dy, int dw, 
          sx, sy, sw, sh, qw, qh, X, Y, W, H);
   fflush(stdout);
 
+  if (!NV_TPK_ZOOM_ROI && !roiNaTela(X, Y, W, H)) {
+    if (roiForaLogado != sessao) {
+      roiForaLogado = sessao;
+      printf("[video] tpk: roi fora da tela nao vai ao plano, fica o destino %d,%d %dx%d (sem zoom)\n",
+             dx, dy, dw, dh);
+      fflush(stdout);
+    }
+    temRoi = 0;
+    video_janela(dx, dy, dw, dh);
+    return;
+  }
+
   ultRoiX = X; ultRoiY = Y; ultRoiW = W; ultRoiH = H; temRoi = 1;
   video_janela(X, Y, W, H);
 }
-int  video_recorte_fonte(void) { return 1; }
+int  video_recorte_fonte(void) { return NV_TPK_ZOOM_ROI; }
 // O host prende o plano em mais de um ponto depois do prepare; um ROI pedido
 // cedo pode ser engolido. trailer.c/player.c repetem o pedido nos primeiros
 // segundos por aqui — reenvia o ultimo ROI calculado, sem recalcular.
