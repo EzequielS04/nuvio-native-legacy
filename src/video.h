@@ -128,6 +128,14 @@ void video_definir_cabecalhos(const char *cabs);
 // transmitindo, e num MP4 ela e trabalho garantidamente perdido — o proprio
 // log dizia "nenhuma faixa lida" toda vez.
 void video_definir_mp4(int ehMp4);
+// RECONEXAO quando a rede cai no meio da reproducao (video_reconexao.h). Chamar
+// ANTES de video_tocar, como video_definir_dv; vale so para a proxima fonte
+// (video_tocar consome). Quem nao pede — trailer, canal ao vivo, que tem o
+// watchdog proprio em app.c — segue caindo em video_falhou na hora.
+void video_definir_reconexao(int sim);
+// Numero da tentativa (1..3) enquanto uma queda esta em curso, esperando ou
+// recarregando; 0 fora disso. Enquanto nao e 0, video_falhou fica em 0.
+int    video_reconectando(void);
 int    video_tocando(void);
 int    video_pronto(void);   // 1 depois do loadCompleted
 int    video_ativo(void);    // 1 assim que ha mediaId — e o que abre o furo

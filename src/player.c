@@ -1101,6 +1101,8 @@ void player_abrir(int indiceCatalogo, const char *url) {
   prefsLer();
   toastAte = 0; toastTexto[0] = 0; avisouAudio = 0;
   prebuscaUrl[0] = 0;
+  // Reconexao so no filme/episodio: canal ao vivo tem o watchdog de app.c.
+  video_definir_reconexao(!ehCanal());
   comVideo = (url && *url && video_tocar(url));
   mkvass_video_aberto(comVideo);
   aplicarAspecto();
@@ -1173,6 +1175,7 @@ static int prebuscaCabe(const char *url) {
 #endif
 
 static void tocarFonte(const char *url) {
+  video_definir_reconexao(!ehCanal());
   comVideo = video_tocar(url);
   mkvass_video_aberto(comVideo);
   if (!comVideo) erroSemVideo();
@@ -2167,6 +2170,14 @@ void player_atualizar(float dt, Uint32 agora) {
              i18n("Esta TV não toca o áudio desta fonte. Troque a fonte ou o áudio."));
     toastAte = agora + 6000;
   }
+  // REDE CAIU no meio do video (video_reconexao.h): um aviso por tentativa.
+  { static int reconVisto;
+    int t = comVideo ? video_reconectando() : 0;
+    if (t && t != reconVisto) {
+      snprintf(toastTexto, sizeof toastTexto, "%s", i18n("Conexão caiu, reconectando…"));
+      toastAte = agora + 5000;
+    }
+    reconVisto = t; }
   janelaPasso(agora);
   if (!aberto) {
     prebuscaUrl[0] = 0;

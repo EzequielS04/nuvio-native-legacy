@@ -12,6 +12,7 @@
 // EXTERNA (OpenSubtitles/addon) nem passa por aqui: legenda.c baixa e desenha.
 #ifdef NV_TPK
 #include "video.h"
+#include "video_reconexao.h"
 #include "idioma.h"
 #include "linguas.h"
 #include <SDL2/SDL.h>
@@ -46,6 +47,18 @@ static volatile int conflito;   // ver video_tpk_log_host
 static volatile int durMs, bufferando;
 static volatile Uint32 bufferDesde;
 static unsigned sessao;
+
+// RECONEXAO (video_reconexao.h). O evento 5 chega de qualquer fio e so ANOTA;
+// a decisao e o recarregar sao do video_bombear. A classe do erro sai do
+// codigo do evento ou da linha "erro ConnectionFailed" que o host loga logo
+// antes dele (Video.cs, ErrorOccurred).
+static NvReconexao recon;
+static int reconProxima, reconPermitida, reconIniciou;
+static volatile int reconErroPend, reconErroCod, reconLinhaRede;
+// Escolhas no instante da queda, e o que falta devolver ao recarregar que abriu.
+static int reconAudio = -1, reconLeg = -1;
+static volatile int reconFaixasPend;
+static int reconBuscarMs = -1;
 
 __attribute__((visibility("default")))
 void nv_tpk_video_registrar(FnAbrir abrir, FnSemArg parar, FnInt pausar, FnInt buscar,
@@ -111,6 +124,18 @@ void nv_tpk_video_faixas_fim(int selAudio, int selLeg) {
   nNovasA = nNovasL = 0;
   printf("[video] faixas: %d audio, %d legenda\n", nAudio, nLeg);
   fflush(stdout);
+  // Recarregar de reconexao: as faixas que a pessoa tinha, e nao a preferencia.
+  // Sem audio ainda (o host rele em 2 s, #165), o audio fica para a releitura.
+  if (reconFaixasPend) {
+    if (!releitura && reconLeg >= 0 && reconLeg < nLeg) video_escolher_legenda(reconLeg);
+    if (nAudio > 0) {
+      reconFaixasPend = 0;
+      if (reconAudio > 0 && reconAudio < nAudio) video_escolher_audio(reconAudio);
+    }
+    printf("[video] reconexao: faixas devolvidas (audio %d, legenda %d)\n", reconAudio, reconLeg);
+    fflush(stdout);
+    return;
+  }
   escolherAudioPreferido();
 }
 
@@ -134,7 +159,8 @@ void nv_tpk_video_evento(int tipo, int a, int b) {
     case EV_TOCANDO: tocando = 1; bufferando = 0; break;
     case EV_PAUSADO: tocando = 0; break;
     case EV_FIM:     terminou = 1; tocando = 0; break;
-    case EV_ERRO:    falhou = 1; tocando = 0;
+    // Sem `falhou` aqui: o video_bombear decide entre reconectar e desistir.
+    case EV_ERRO:    reconErroCod = a; reconErroPend = 1; tocando = 0;
                      printf("[video] tpk: erro do player 0x%x (%d)\n", a, b); break;
     case EV_TAMANHO: largura = a; altura = b; break;
     case EV_BUFFER:
@@ -150,8 +176,8 @@ int  video_iniciar(void) { if (!travaLeg) travaLeg = SDL_CreateMutex(); return h
 int  video_iniciar_auto(void) { return hAbrir != NULL; }
 int  video_registro_negado(void) { return 0; }
 
-int video_tocar(const char *u) {
-  snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : "");
+// Abre urlAtual no host. Serve a fonte nova e ao recarregar da reconexao.
+static int abrirSessao(void) {
   ativo = 1; pronto = falhou = terminou = tocando = 0;
   largura = altura = durMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
   nAudio = nLeg = 0; audioAtual = 0; legAtual = -1; legAte = 0;
@@ -162,8 +188,62 @@ int video_tocar(const char *u) {
   return 1;
 }
 
-void video_bombear(void) {}
+int video_tocar(const char *u) {
+  snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : "");
+  nv_recon_zerar(&recon);
+  reconPermitida = reconProxima; reconProxima = 0;
+  reconIniciou = 0; reconErroPend = 0; reconLinhaRede = 0;
+  reconAudio = reconLeg = -1; reconFaixasPend = 0; reconBuscarMs = -1;
+  return abrirSessao();
+}
+
+void video_definir_reconexao(int sim) { reconProxima = sim ? 1 : 0; }
+int  video_reconectando(void) {
+  return nv_recon_ativa(&recon) && (recon.pendente || !pronto) ? recon.tentativa : 0;
+}
+
+void video_bombear(void) {
+  double pos = video_pos();
+  if (pronto && pos > 0.5) reconIniciou = 1;
+  if (pronto && reconBuscarMs < 0) nv_recon_progresso(&recon, pos);
+  // O seek do recarregar sai com o player ja tocando: o host da Start logo
+  // depois do prepare, e um seek no meio disso concorre com ele.
+  if (reconBuscarMs >= 0 && pronto && tocando) {
+    if (hBuscar) hBuscar(reconBuscarMs);
+    printf("[video] reconexao: retomado em %ds\n", reconBuscarMs / 1000);
+    fflush(stdout);
+    reconBuscarMs = -1;
+  }
+  if (reconErroPend) {
+    int antes = recon.tentativa;
+    int rede = nv_recon_rede_tpk(reconErroCod, NULL) || reconLinhaRede;
+    reconErroPend = 0; reconLinhaRede = 0;
+    if (reconPermitida && urlAtual[0] && (reconIniciou || recon.tentativa) &&
+        nv_recon_erro(&recon, rede, SDL_GetTicks(), pos)) {
+      if (!antes) { reconAudio = audioAtual; reconLeg = legAtual; }
+      if (recon.tentativa != antes) {
+        printf("[video] conexao caiu (0x%x): tentativa %d/%d, espera %us\n",
+               (unsigned)reconErroCod, recon.tentativa, NV_RECON_MAX,
+               nv_recon_espera_ms(recon.tentativa) / 1000u);
+        fflush(stdout);
+      }
+      bufferando = 0;
+    } else {
+      if (recon.esgotou) { printf("[video] reconexao: desistiu depois de %d tentativas\n", NV_RECON_MAX); fflush(stdout); }
+      falhou = 1;
+    }
+  }
+  if (nv_recon_vencida(&recon, SDL_GetTicks())) {
+    printf("[video] reconectando: alvo %.0fs, tentativa %d\n", recon.alvo, recon.tentativa);
+    fflush(stdout);
+    reconFaixasPend = 1;
+    reconBuscarMs = recon.alvo > 1.0 ? (int)(recon.alvo * 1000.0) : -1;
+    if (!abrirSessao()) { reconErroCod = -1; reconErroPend = 1; }
+  }
+}
 void video_parar(void) {
+  nv_recon_zerar(&recon);
+  reconErroPend = 0; reconFaixasPend = 0; reconBuscarMs = -1;
   if (ativo && hParar) hParar();
   ativo = pronto = tocando = 0;
 }
@@ -237,7 +317,11 @@ double video_pos(void) { return (hPos && pronto) ? hPos() / 1000.0 : 0; }
 double video_duracao(void) { return durMs / 1000.0; }
 double video_creditos(void) { return 0.0; }
 double video_buffer_fim(void) { return 0; }
-unsigned video_bufferando_ms(void) { return bufferando ? SDL_GetTicks() - bufferDesde : 0; }
+unsigned video_bufferando_ms(void) {
+  // Esperando para reconectar: o watchdog (app.c) nao troca de fonte.
+  if (nv_recon_ativa(&recon)) return 0;
+  return bufferando ? SDL_GetTicks() - bufferDesde : 0;
+}
 void video_definir_dv(int dv) { (void)dv; }
 void video_definir_cabecalhos(const char *c) { snprintf(cabecalhos, sizeof cabecalhos, "%s", c ? c : ""); }
 void video_definir_mp4(int m) { (void)m; }
@@ -265,6 +349,8 @@ int  video_conflito_recurso(void) { return conflito; }
 static volatile int janelaVisivel = 1;
 void video_tpk_log_host(const char *linha) {
   if (!linha) return;
+  // "erro ConnectionFailed" vem logo antes do evento 5 (Video.cs).
+  if (!strncmp(linha, "erro ", 5) && nv_recon_rede_tpk(0, linha)) reconLinhaRede = 1;
   if (strstr(linha, "[janela] principal visivel=")) {
     janelaVisivel = strstr(linha, "visivel=True") != NULL;
     return;

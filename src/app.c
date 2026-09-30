@@ -902,6 +902,9 @@ static void tentarProximaFonteVOD(void) {
   int atual, motivo = 0;
   if (!fonteVODAutomatica || player_id_canal()[0] || !player_aberto() ||
       player_quer_sair() || aguardandoFonte != 0 || !fonteVODDesde) return;
+  // Rede caiu com o video andando: a mesma fonte esta sendo recarregada
+  // (video_reconexao.h). So vira troca de fonte quando ela desistir (falhou).
+  if (video_reconectando()) return;
   desde = SDL_GetTicks() - fonteVODDesde;
   if (video_falhou() || player_fonte_falhou()) motivo = 1;
   else if (player_carregando() && desde > VOD_FONTE_PRAZO_MS) motivo = 2;

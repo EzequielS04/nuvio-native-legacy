@@ -1,5 +1,6 @@
 #include "video.h"
 #include "video_escala.h"
+#include "video_reconexao.h"
 #include "idioma.h"
 #include "linguas.h"
 #include <SDL2/SDL.h>
@@ -199,6 +200,8 @@ int  video_legenda_nativa(char *d, int t) { (void)t; if (d) d[0] = 0; return 0; 
 void video_legenda_externa(const char *u) { (void)u; }
 void video_legenda_estilo(const VideoLegendaEstilo *e) { (void)e; }
 void video_definir_mp4(int m) { (void)m; }
+void video_definir_reconexao(int sim) { (void)sim; }
+int  video_reconectando(void) { return 0; }
 // No Mac quem toca e o pipeline do sistema por outro caminho; os cabecalhos do
 // addon so tem efeito no payload do load da webOS. Stub para o alvo linkar.
 void video_definir_cabecalhos(const char *cabs) { (void)cabs; }
@@ -419,6 +422,17 @@ static char      erroTexto[96];
 // errorCode 200 "Audio Codec Not Supported": o VIDEO segue tocando e so o
 // audio morre. Ver o tratamento em lerEvento.
 static int       audioNaoSup;
+// RECONEXAO (video_reconexao.h). O erro chega no fio do LS2 e so ANOTA
+// (reconErroPend); a decisao e o recarregar sao do video_bombear, no fio
+// principal, como o `recuperando`.
+static NvReconexao recon;
+static int reconProxima, reconPermitida, reconIniciou;
+static volatile int reconErroPend, reconErroRede;
+// Escolhas da pessoa no instante da queda. Guardadas a parte porque cada
+// tentativa passa por tocarInterno, que zera audioAtual/legAtual/legUrlAtual:
+// uma segunda tentativa leria o estado do recarregar que nao abriu.
+static int  reconAudio = -1, reconLeg = -1;
+static char reconLegUrl[1024];
 
 // PLAYER_TYPE_MSE. O ACB usa isto para saber que a fonte e um pipeline de
 // midia e nao um sintonizador.
@@ -1097,6 +1111,11 @@ static int aoEvento(LSHandle *h, LSMessage *m, void *u) {
       legAoCarregar   = legAtual;
       snprintf(legUrlAoCarregar, sizeof legUrlAoCarregar, "%s", legUrlAtual);
       marco("pipeline morreu: recarregando");
+    } else if (!recuperando) {
+      // Qualquer outro erro: pode ser a rede caindo com o episodio andando.
+      // Quem decide entre reconectar e `falhou` e o video_bombear.
+      reconErroRede = nv_recon_rede_ums(numeroDe(p, "\"errorCode\":"));
+      reconErroPend = 1;
     } else falhou = 1;
   }
   { double v = numeroDe(p, "\"currentTime\":");
@@ -1584,9 +1603,40 @@ static long agoraMs(void) {
 }
 
 static int tocarInterno(const char *url, int comDV);
+static void pararSessao(void);
+
+// Recarrega a fonte corrente e, quando o load terminar, devolve faixas e
+// posicao (o loadCompleted aplica: faixas primeiro, posicao depois). Serve a
+// morte de pipeline e a reconexao.
+//
+// As escolhas vao para os campos *AoCarregar DEPOIS do tocarInterno: ele passa
+// por pararSessao, que os zera. Antes o `recuperando` gravava faixas e legenda
+// externa no fio do LS2 e o tocarInterno as apagava em seguida, entao o video
+// voltava sempre com a faixa 0 e sem legenda.
+static int recarregarMesmaFonte(double alvo, int aud, int leg, const char *legUrl) {
+  char lu[sizeof legUrlAoCarregar];
+  snprintf(lu, sizeof lu, "%s", legUrl ? legUrl : "");
+  if (!tocarInterno(urlAtual, !semDVForcado)) return 0;
+  audioAoCarregar = aud;
+  legAoCarregar   = leg;
+  snprintf(legUrlAoCarregar, sizeof legUrlAoCarregar, "%s", lu);
+  // O seek so vale depois do load; guardar o alvo e deixar o loadCompleted
+  // aplica-lo evita mandar posicao para um pipeline que ainda nao existe.
+  if (alvo > 1.0) posAoCarregar = alvo;
+  return 1;
+}
+
+void video_definir_reconexao(int sim) { reconProxima = sim ? 1 : 0; }
+int  video_reconectando(void) {
+  return nv_recon_ativa(&recon) && (recon.pendente || !pronto) ? recon.tentativa : 0;
+}
 
 int video_tocar(const char *url) {
   dvRecuado = 0;
+  nv_recon_zerar(&recon);
+  reconPermitida = reconProxima; reconProxima = 0;
+  reconIniciou = 0; reconErroPend = 0;
+  reconAudio = reconLeg = -1; reconLegUrl[0] = 0;
   falhou = 0; terminou = 0; audioNaoSup = 0;
   // FONTE NOVA, decisao nova: o "sem HDR" era sobre o arquivo anterior.
   semDVForcado = 0;
@@ -1634,11 +1684,40 @@ void video_bombear(void) {
     double alvo = retomarEm;
     recuperando = 0;
     marco("recarregando a fonte");
-    if (tocarInterno(urlAtual, !semDVForcado) && alvo > 1.0) {
-      // O seek so vale depois do load; guardar o alvo e deixar o
-      // loadCompleted aplica-lo evita mandar posicao para um pipeline que
-      // ainda nao existe.
-      posAoCarregar = alvo;
+    recarregarMesmaFonte(alvo, audioAoCarregar, legAoCarregar, legUrlAoCarregar);
+  }
+  // RECONEXAO: ver video_reconexao.h.
+  if (pronto && posSeg > 0.5) reconIniciou = 1;
+  if (pronto) nv_recon_progresso(&recon, posSeg);
+  if (reconErroPend) {
+    int antes = recon.tentativa;
+    reconErroPend = 0;
+    if (reconPermitida && urlAtual[0] && (reconIniciou || recon.tentativa) &&
+        nv_recon_erro(&recon, reconErroRede, SDL_GetTicks(), posSeg)) {
+      if (!antes) {
+        reconAudio = audioAtual; reconLeg = legAtual;
+        snprintf(reconLegUrl, sizeof reconLegUrl, "%s", legUrlAtual);
+      }
+      if (recon.tentativa != antes) {
+        char m[96];
+        snprintf(m, sizeof m, "conexao caiu (%.40s): tentativa %d/%d, espera %us",
+                 erroTexto, recon.tentativa, NV_RECON_MAX,
+                 nv_recon_espera_ms(recon.tentativa) / 1000u);
+        marco(m);
+      }
+      bufferandoDesde = 0;
+    } else {
+      if (recon.esgotou) marco("reconexao: desistiu depois de 3 tentativas");
+      falhou = 1;
+    }
+  }
+  if (nv_recon_vencida(&recon, SDL_GetTicks())) {
+    char m[64];
+    snprintf(m, sizeof m, "reconectando: alvo %.0fs, tentativa %d", recon.alvo, recon.tentativa);
+    marco(m);
+    // Load que nem sai daqui conta como a proxima tentativa.
+    if (!recarregarMesmaFonte(recon.alvo, reconAudio, reconLeg, reconLegUrl)) {
+      reconErroRede = 1; reconErroPend = 1;
     }
   }
   // O recuo por prazo foi REMOVIDO por nao funcionar: o gatilho era "o pipeline
@@ -1749,7 +1828,7 @@ static int tocarInterno(const char *url, int comDV) {
   char carga[8192];
   unsigned minhaSessao;
   if (!ligado && !video_iniciar()) return 0;
-  video_parar();
+  pararSessao();
   minhaSessao = ++sessao;
   viuVideo = 0;
   // O retangulo aplicado e da SESSAO: sem zerar, uma sessao nova que calcule o
@@ -1905,7 +1984,15 @@ static int tocarInterno(const char *url, int comDV) {
   return 1;
 }
 
+// Sair do video (ou trocar de fonte) cancela a queda em curso: sem isto o
+// video_bombear recarregaria a fonte velha depois de a tela ja ter fechado.
 void video_parar(void) {
+  nv_recon_zerar(&recon);
+  reconErroPend = 0;
+  pararSessao();
+}
+
+static void pararSessao(void) {
   char b[128];
   // Invalida tambem a sessao que ainda esta esperando o retorno de load. Esse
   // era o caso abrir -> sair -> abrir que travava: nao havia mediaId para
@@ -2185,7 +2272,9 @@ int    video_terminou(void) { return terminou; }
 int    video_conflito_recurso(void) { return 0; }
 unsigned video_bufferando_ms(void) {
   Uint32 d = bufferandoDesde;
-  if (!d) return 0;
+  // Esperando para reconectar nao e "fonte que morreu sem dizer": o watchdog
+  // (app.c) nao pode trocar de fonte enquanto a maquina de reconexao decide.
+  if (!d || nv_recon_ativa(&recon)) return 0;
   // 1 e nao 0 quando o carimbo acabou de sair: 0 e a resposta reservada para
   // "nao esta bufferizando", e devolve-lo no primeiro milissegundo diria o
   // contrario do que aconteceu.

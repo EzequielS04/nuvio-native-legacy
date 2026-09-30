@@ -81,6 +81,7 @@
 #ifdef __EMSCRIPTEN__
 
 #include "video.h"
+#include "video_reconexao.h"
 #include "linguas.h"
 #include "idioma.h"
 #include "marco.h"
@@ -797,6 +798,17 @@ static char   urlAtual[1024];
 static int    fonteMp4;
 static int    dvPedido;      // afirmacao do addon; sem uso no AVPlay (ver hdr)
 
+// RECONEXAO (video_reconexao.h). O onerror so e lido aqui, no video_bombear,
+// entao a maquina roda inteira no fio principal.
+static NvReconexao recon;
+static int    reconProxima, reconPermitida, reconIniciou;
+static int    reconAudio = -1, reconLeg = -1, reconFaixasPend;
+static double reconBuscar = -1.0;
+// As listas como estavam na queda. O AVPlay nao da idioma: o rotulo veio da
+// sonda do MKV (aplicarIdiomasDoMkv), e o recarregar releria "Audio 1".
+static VideoFaixa reconFxA[NV_FAIXA_MAX], reconFxL[NV_FAIXA_MAX];
+static int    reconNA, reconNL;
+
 // URLs de addons podem conter credenciais, tokens ou assinaturas na query.
 // O diagnóstico precisa correlacionar duas operações sem despejar a fonte no
 // log, então usa somente um identificador FNV-1a estável e não reversível na
@@ -868,6 +880,9 @@ int video_tocar(const char *url) {
   // capitulos herdaria os creditos do filme de antes.
   creditosNomeado = creditosUltimo = 0.0;
   snprintf(urlAtual, sizeof urlAtual, "%s", url);
+  nv_recon_zerar(&recon);
+  reconPermitida = reconProxima; reconProxima = 0; reconIniciou = 0;
+  reconAudio = reconLeg = -1; reconFaixasPend = 0; reconBuscar = -1.0;
   nAudio = nLeg = 0; audioAtual = 0; legAtual = -1; faixasLidas = 0;
   posSeg = durSeg = 0; vidW = vidH = 0; houveErro = 0; erroTexto[0] = 0;
   seekEm = 0;
@@ -1096,6 +1111,18 @@ static void lerFaixas(void) {
   }
   printf("[video] faixas: %d audio, %d legenda\n", nAudio, nLeg);
   fflush(stdout);
+  // Recarregar de reconexao: o MESMO arquivo, entao as listas guardadas valem
+  // quando a contagem bate; e as faixas que a pessoa tinha, nao a preferencia.
+  if (reconFaixasPend) {
+    reconFaixasPend = 0;
+    if (nAudio == reconNA) memcpy(faixaAudio, reconFxA, sizeof faixaAudio);
+    if (nLeg == reconNL)   memcpy(faixaLeg, reconFxL, sizeof faixaLeg);
+    if (reconAudio > 0 && reconAudio < nAudio) video_escolher_audio(reconAudio);
+    if (reconLeg >= 0 && reconLeg < nLeg) video_escolher_legenda(reconLeg);
+    printf("[video] reconexao: faixas devolvidas (audio %d, legenda %d)\n", reconAudio, reconLeg);
+    fflush(stdout);
+    return;
+  }
   escolherAudioPreferido();
 }
 
@@ -1136,6 +1163,22 @@ void video_bombear(void) {
     { char m[48]; snprintf(m, sizeof m, "seek para %ds", (int)seekAlvo); marco(m); }
   }
 
+  // RECONEXAO: a espera venceu, abre a MESMA fonte. `ativo` fica em 1 mesmo
+  // se o open recusar: e assim que o erro dele chega ao ramo abaixo e conta
+  // como a tentativa seguinte.
+  if (temAvplay && nv_recon_vencida(&recon, SDL_GetTicks())) {
+    char m[64];
+    snprintf(m, sizeof m, "reconectando: alvo %.0fs, tentativa %d", recon.alvo, recon.tentativa);
+    marco(m);
+    pronto = tocando = 0; estavaPronto = 0; faixasLidas = 0;
+    nAudio = nLeg = 0; audioAtual = 0; legAtual = -1; posSeg = 0; seekEm = 0;
+    reconFaixasPend = 1;
+    reconBuscar = recon.alvo;
+    AVS("abrir", urlAtual);
+    ativo = 1;
+    avChamar("rect", NULL, janX, janY, janW, janH, NULL, 0);
+  }
+
   if (!temAvplay || !ativo) return;
 
   memset(est, 0, sizeof est);
@@ -1146,10 +1189,31 @@ void video_bombear(void) {
   pronto   = est[EST_PRONTO]  != 0;
   if (est[EST_LARG] > 0) vidW = (int)est[EST_LARG];
   if (est[EST_ALT]  > 0) vidH = (int)est[EST_ALT];
-  if (est[EST_ERRO] != 0 && !houveErro) {
-    houveErro = 1;
-    marco("avplay: onerror");
+  if (pronto && posSeg > 0.5) reconIniciou = 1;
+  if (pronto && reconBuscar < 0) nv_recon_progresso(&recon, posSeg);
+  // Esperando a reconexao, o erro da sessao morta segue no estado ate o
+  // proximo open: nao e erro novo.
+  if (est[EST_ERRO] != 0 && !houveErro && !recon.pendente) {
+    int antes = recon.tentativa;
     logarErro("onerror");
+    if (reconPermitida && urlAtual[0] && (reconIniciou || recon.tentativa) &&
+        nv_recon_erro(&recon, nv_recon_rede_avplay(erroTexto), SDL_GetTicks(), posSeg)) {
+      char m[96];
+      if (!antes) {
+        reconAudio = audioAtual; reconLeg = legAtual;
+        memcpy(reconFxA, faixaAudio, sizeof reconFxA); reconNA = nAudio;
+        memcpy(reconFxL, faixaLeg, sizeof reconFxL);   reconNL = nLeg;
+      }
+      snprintf(m, sizeof m, "conexao caiu (%.40s): tentativa %d/%d, espera %us",
+               erroTexto, recon.tentativa, NV_RECON_MAX,
+               nv_recon_espera_ms(recon.tentativa) / 1000u);
+      marco(m);
+      tocando = 0;
+    } else {
+      if (recon.esgotou) marco("reconexao: desistiu depois de 3 tentativas");
+      houveErro = 1;
+      marco("avplay: onerror");
+    }
   }
 
   if (pronto && !estavaPronto) {
@@ -1158,6 +1222,11 @@ void video_bombear(void) {
     lerInfoFluxo();
   }
   if (pronto && !faixasLidas) lerFaixas();
+  // A posicao da queda, depois das faixas (trocar faixa pode reiniciar o decode).
+  if (reconBuscar >= 0.0 && pronto) {
+    if (reconBuscar > 1.0) video_buscar(reconBuscar);
+    reconBuscar = -1.0;
+  }
 
   // SONDA DE MKV. Gatilho diferente do da LG e explicado no bloco de
   // `mkvPendente`: sem bufferRange, o sinal de que ha banda sobrando e o tempo
@@ -1181,6 +1250,8 @@ void video_sondar_mkv_agora(void) {
 }
 
 void video_parar(void) {
+  nv_recon_zerar(&recon);
+  reconFaixasPend = 0; reconBuscar = -1.0;
   seekEm = 0; mkvPendente = 0;
   if (temAvplay) AV0("parar");
   ativo = tocando = pronto = 0;
@@ -1367,6 +1438,10 @@ double video_duracao(void)    { return durSeg; }
 double video_buffer_fim(void) { return 0; }
 // O AVPlay nao expoe o par bufferingStart/End; sem sinal, nunca afirma travo.
 unsigned video_bufferando_ms(void) { return 0; }
+void video_definir_reconexao(int sim) { reconProxima = sim ? 1 : 0; }
+int  video_reconectando(void) {
+  return nv_recon_ativa(&recon) && (recon.pendente || !pronto) ? recon.tentativa : 0;
+}
 int    video_tocando(void)    { return tocando; }
 int    video_pronto(void)     { return pronto; }
 int    video_ativo(void)      { return ativo; }
