@@ -222,6 +222,7 @@ void faixas_abrir_em(int col) {
 }
 
 int faixas_aberta(void) { return aberta; }
+float faixas_anim(void) { return anim; }
 
 static int nLegendas(void) {
   int n = video_n_legenda() + addons_n_legendas();

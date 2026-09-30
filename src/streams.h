@@ -81,6 +81,8 @@ void stream_definir_atual(int indice);
 int stream_atual(void);
 void stream_folha_contexto(const char *texto);
 int stream_folha_recarregar(void);
+// Abertura animada da folha (0..1): o player apaga o OSD por baixo dela.
+float stream_folha_anim(void);
 
 // Substitui a lista do titulo corrente. Chamar quando os addons responderem.
 void stream_definir_lista(const Stream *lista, int n);

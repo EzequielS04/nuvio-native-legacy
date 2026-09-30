@@ -21,6 +21,8 @@ void faixas_abrir(void);
 // botao.
 void faixas_abrir_em(int col);
 int  faixas_aberta(void);
+// Abertura animada da folha (0..1): o player apaga o OSD por baixo dela.
+float faixas_anim(void);
 void faixas_evento(const SDL_Event *e);
 void faixas_atualizar(float dt, Uint32 agora);
 void faixas_desenhar(Uint32 agora);

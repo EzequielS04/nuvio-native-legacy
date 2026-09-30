@@ -3041,6 +3041,12 @@ void player_desenhar(Uint32 agora) {
   }
 
   float a = anim * entrada;
+  // FOLHA ABERTA, OSD APAGADO. A folha de Fontes e a de Legendas sao vidro
+  // translucido: o relogio, os selos 4K/HDR e o tempo do player apareciam
+  // atraves dela, encavalados nos botoes da folha (foto do dono, 30/09).
+  { float fa = stream_folha_anim(), fx = faixas_anim();
+    float cob = fa > fx ? fa : fx;
+    a *= 1.0f - anim_clamp(cob, 0.0f, 1.0f); }
   // O que NAO e barra nem tempo (titulo, meta, botoes, relogio, selos, veu de
   // cima) segue `ac`: some na busca so com a barra (#128).
   float ac = a * cheio;

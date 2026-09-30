@@ -24,7 +24,7 @@
 
 #define FOLHA_W       720.0f
 #define FOLHA_LINHA   228.0f
-#define FOLHA_TOPO    272.0f
+#define FOLHA_TOPO    298.0f
 #define FOLHA_AUDIO_W  88.0f
 #define FOLHA_AUDIO_N   8
 #define FOLHA_AUDIO_BAR 6.0f
@@ -997,6 +997,7 @@ void stream_folha_abrir(void) {
   fflush(stdout);
 }
 int stream_folha_aberta(void) { return aberta; }
+float stream_folha_anim(void) { return anim; }
 int stream_folha_n(void) { return nFiltrados(); }
 void stream_folha_evento(const SDL_Event *e) {
   if(!aberta || e->type!=SDL_KEYDOWN) return;
@@ -1038,11 +1039,17 @@ void stream_folha_atualizar(float dt, Uint32 agora) {
   atualizarProvedores();
   int nf=nFiltrados();
   if(grupo==1 && foco>=nf) foco=nf>0?nf-1:0;
+  // ROLAGEM EM DEGRAU DE CARTAO. Centrar o foco deixava sempre um cartao
+  // cortado debaixo das abas (so a fileira de marcas dele aparecia, foto de
+  // 30/09). Agora o topo da lista e sempre o topo de um cartao: o focado fica
+  // na segunda posicao, e no fim da lista o ultimo desce ate a terceira.
   float area=NV_TELA_H-FOLHA_TOPO-32;
-  float max=nf*FOLHA_LINHA-area;
-  float alvo=foco*FOLHA_LINHA-(area-FOLHA_LINHA)*.5f;
-  if(alvo>max) alvo=max;
-  if(alvo<0) alvo=0;
+  int cabem=(int)(area/FOLHA_LINHA);
+  int topo=foco>0?foco-1:0;
+  if(cabem<1) cabem=1;
+  if(topo>nf-cabem) topo=nf-cabem;
+  if(topo<0) topo=0;
+  float alvo=topo*FOLHA_LINHA;
   rolagem=anim_mola2(&velRol,rolagem,alvo,dt,NV_MOLA2_SCROLL);
 }
 int stream_folha_escolheu(int *out) {
@@ -1084,29 +1091,31 @@ void stream_folha_desenhar(Uint32 agora) {
     ponteiro_alvo(x, 0, FOLHA_W, NV_TELA_H, NULL, NULL, 0, 0);
   }
   int nbt=nBotoes();
-  for(int i=0;i<nbt;i++) {
-    // Ancorado a DIREITA: com dois ou tres botoes a fileira termina sempre no
-    // mesmo ponto, 36 px antes da borda do painel.
-    float bx=x+FOLHA_W-36-(nbt-i)*128+8;
-    int sel=grupo==-1 && foco==i;
-    // Acoes seguem o accent solido e a tinta calculada pelo tema.
-    if (ptr) ponteiro_alvo(bx, 44, 120, 50, ponteiroFolhaBotao, NULL, i, 0);
-    if(sel) focoFontePilula((GfxRect){bx,44,120,50},vid?.5f:.3f,anim);
-    else if(vid) gfx_cor((GfxRect){bx,44,120,50},.5f,1,1,1,.07f*anim);   // pilula sem aro
-    else    gfx_cor((GfxRect){bx,44,120,50},.3f,.075f,.079f,.092f,anim);
-    int c=sel?ajustes_tinta_foco():224;
-    if(botaoDe(i)==BT_SEM_HDR) {
+  // OS BOTOES TEM LINHA PROPRIA, abaixo do titulo, a esquerda e na largura do
+  // rotulo. Ancorados a direita na linha do titulo, quatro pilulas de 120 px
+  // (Recarregar, Sem HDR, MP4, Fechar) encostavam no "Fontes" e na borda.
+  { float bx=x+40;
+    for(int i=0;i<nbt;i++) {
+      int b=botaoDe(i), sel=grupo==-1 && foco==i;
+      float tw=b==BT_SEM_HDR?marca_rotulo_largura(TXT_PG_FIM,"Sem HDR",FMT_HDR,30.0f)
+                            :(float)txt_largura(TXT_PG_FIM,rotuloBotao(b));
+      float bw=tw+44.0f;
+      if(bw<104.0f) bw=104.0f;
+      GfxRect br={bx,100,bw,50};
+      // Acoes seguem o accent solido e a tinta calculada pelo tema.
+      if (ptr) ponteiro_alvo(bx, 100, bw, 50, ponteiroFolhaBotao, NULL, i, 0);
+      if(sel) focoFontePilula(br,vid?.5f:.3f,anim);
+      else if(vid) gfx_cor(br,.5f,1,1,1,.07f*anim);   // pilula sem aro
+      else    gfx_cor(br,.3f,.075f,.079f,.092f,anim);
+      int c=sel?ajustes_tinta_foco():224;
       // "Sem" + a marca HDR no lugar da palavra (traduzido antes de trocar).
-      // Caixa de 30 px centrada na linha do texto.
-      float tw=marca_rotulo_largura(TXT_PG_FIM,"Sem HDR",FMT_HDR,30.0f);
-      if(tw<=112.0f) {
-        marca_rotulo(TXT_PG_FIM,"Sem HDR",FMT_HDR,bx+(120-tw)*.5f,58,30.0f,c,anim);
-        continue;
+      if(b==BT_SEM_HDR) marca_rotulo(TXT_PG_FIM,"Sem HDR",FMT_HDR,bx+(bw-tw)*.5f,114,30.0f,c,anim);
+      else {
+        TxtLinha l=txt_linha(TXT_PG_FIM,rotuloBotao(b),c,c,c,255);
+        txt_desenhar_alpha(l,bx+(bw-l.w)*.5f,114,anim);
       }
-    }
-    TxtLinha l=txt_linha(TXT_PG_FIM,rotuloBotao(botaoDe(i)),c,c,c,255);
-    txt_desenhar_alpha(l,bx+(120-l.w)*.5f,58,anim);
-  }
+      bx+=bw+10.0f;
+    } }
   // A LINHA DE CONTEXTO EXPLICA O BOTAO EM FOCO. "Sem HDR" nao se explica pelo
   // rotulo, e o rotulo nao pode crescer sem estourar a pilula de 120 px.
   { const char *ajuda=contexto;
@@ -1118,23 +1127,31 @@ void stream_folha_desenhar(Uint32 agora) {
       ajuda=soMp4
         ? "Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro."
         : "Filtra a lista para fontes em MP4. OK liga o filtro.";
-    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,184,187,193,255,FOLHA_W-80),x+40,126,anim); }
-  gfx_recorte(x+40,180,FOLHA_W-80,62);
+    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,184,187,193,255,FOLHA_W-80),x+40,168,anim); }
+  gfx_recorte(x+40,206,FOLHA_W-80,62);
   int ini=filtro>1?filtro-1:0;
   float tx=x+40;
-  for(int i=ini;i<nProvedores && i<ini+3;i++) {
-    float w=i?232:108;int sel=i==filtro;
+  // ABAS NA LARGURA DO NOME, e tantas quanto couberem: a largura fixa de 232
+  // cortava "Debridio - Scraper AD" e "AIOStreams | ..." em reticencias com
+  // espaco sobrando no fim da fileira.
+  for(int i=ini;i<nProvedores;i++) {
+    int tw=txt_largura(TXT_PG_FIM,provedores[i]);
+    float w=tw+48.0f;
+    if(w<108.0f) w=108.0f;
+    if(w>300.0f) w=300.0f;
+    if(i>ini && tx+w>x+FOLHA_W-40) break;
+    int sel=i==filtro;
     int c=sel&&grupo==0?ajustes_tinta_foco():sel?245:190;
-    if (ptr) ponteiro_alvo(tx, 182, w, 50, NULL, ponteiroFolhaFiltro, i, 0);
-    if(sel && grupo==0) focoFontePilula((GfxRect){tx,182,w,50},.5f,anim);
-    else if(vid) { if(sel) gfx_cor((GfxRect){tx,182,w,50},.5f,1,1,1,.08f*anim); }   // so o filtro escolhido leva superficie, sem aro
-    else gfx_cor((GfxRect){tx,182,w,50},.5f,
+    if (ptr) ponteiro_alvo(tx, 208, w, 50, NULL, ponteiroFolhaFiltro, i, 0);
+    if(sel && grupo==0) focoFontePilula((GfxRect){tx,208,w,50},.5f,anim);
+    else if(vid) { if(sel) gfx_cor((GfxRect){tx,208,w,50},.5f,1,1,1,.08f*anim); }   // so o filtro escolhido leva superficie, sem aro
+    else gfx_cor((GfxRect){tx,208,w,50},.5f,
                  sel?.092f:.075f,sel?.096f:.079f,sel?.110f:.092f,anim);
     TxtLinha l=txt_linha_corta(TXT_PG_FIM,provedores[i],c,c,c,255,w-24);
-    txt_desenhar_alpha(l,tx+(w-l.w)*.5f,196,anim);
+    txt_desenhar_alpha(l,tx+(w-l.w)*.5f,222,anim);
     if(sel && grupo!=0) {
       float cr,cg,cb; ajustes_acento(&cr,&cg,&cb);
-      gfx_cor((GfxRect){tx+16,237,w-32,2},1,cr,cg,cb,anim);
+      gfx_cor((GfxRect){tx+16,263,w-32,2},1,cr,cg,cb,anim);
     }
     tx+=w+12;
   }
