@@ -65,7 +65,10 @@ int main(void) {
 
   // Classe do erro.
   assert(!nv_recon_rede_ums(200) && !nv_recon_rede_ums(203) && !nv_recon_rede_ums(210));
-  assert(nv_recon_rede_ums(100) && nv_recon_rede_ums(40403) && nv_recon_rede_ums(-1));
+  // Medidos nos logs da LG: 300 Network Error e 4xxxx server error sao rede.
+  assert(nv_recon_rede_ums(300) && nv_recon_rede_ums(40400) && nv_recon_rede_ums(40403));
+  assert(!nv_recon_rede_ums(100) && !nv_recon_rede_ums(204) && !nv_recon_rede_ums(700) &&
+         !nv_recon_rede_ums(600) && !nv_recon_rede_ums(-1) && !nv_recon_rede_ums(0));
   assert(nv_recon_rede_tpk((int)0xFE6C0026u, NULL));
   assert(nv_recon_rede_tpk(0, "erro ConnectionFailed"));
   assert(!nv_recon_rede_tpk(-1, "erro NotSupportedFile"));

@@ -106,8 +106,14 @@ static inline int nv_recon_tem(const char *t, const char *agulha) {
 // o que o proprio ARQUIVO decide (200 audio, 201/203 codec e formato, 210
 // legenda) e recarregar so repete a recusa; o resto, com a reproducao ja
 // andando, e tratado como fonte que parou de entregar.
+// SO OS CODIGOS MEDIDOS (logs da LG, 30/09, ~22 mil eventos de erro): 300
+// "Network Error" e a familia 4xxxx "server error:40400/40403" do servidor
+// de midia. Todo o resto (100 "Playing error", 203 "AV Type Not Founded",
+// 204 "Fail To Demultiplex", 700 "seek Failure", 600...) e defeito da FONTE ou
+// do pipeline: recarregar a mesma URL tres vezes so atrasaria em ~38 s a troca
+// de fonte do automatico. A primeira versao contava todo codigo fora de 2xx.
 static inline int nv_recon_rede_ums(double codigo) {
-  return !(codigo >= 200 && codigo < 300);
+  return codigo == 300 || (codigo >= 40000 && codigo < 50000);
 }
 
 // .tpk (Tizen.Multimedia.Player do host .NET). O host loga "erro " + e.Error
