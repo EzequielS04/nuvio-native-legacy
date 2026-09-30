@@ -125,6 +125,11 @@ static float muralLuzTempo;
 
 static int foco;
 static int concluido, sair, repetir;
+// PREPARANDO A HOME DO PERFIL ESCOLHIDO. A escolha ja foi feita (concluido), mas
+// a tela fica de pe com o indicador girando no cartao escolhido enquanto app.c
+// monta a home nova por tras. Ver perfilsel_preparar.
+static int preparando;
+static Uint32 preparandoDesde;
 static float animFoco[CONTA_PERFIL_MAX];
 static float animEntrada;        // 0..1: a tela sobe e aparece uma vez so
 static float animPin;            // 0..1: o veu e o teclado do PIN
@@ -499,6 +504,7 @@ static float vaoDe(int m, float d) {
 void perfilsel_iniciar(void) {
   int i;
   concluido = sair = repetir = 0;
+  preparando = 0;
   pinDe = -1;
   pin[0] = 0;
   pinFoco = PS_PIN_OK;
@@ -609,6 +615,9 @@ void perfilsel_evento(const SDL_Event *e) {
   SDL_Keycode k;
   int m = perfis_n();
   if (e->type != SDL_KEYDOWN) return;
+  // A escolha ja foi feita: tecla nenhuma muda o cartao enquanto a home do
+  // perfil e preparada. O teto de tempo em app.c garante que isto acaba.
+  if (preparando) return;
   k = e->key.keysym.sym;
   if (pinDe >= 0) { eventoPin(k); return; }
 
@@ -760,6 +769,12 @@ void perfilsel_atualizar(float dt, Uint32 agora) {
   if (sync_estado() == SYNC_PRONTO && perfis_sem_escolha() && pinDe < 0) concluido = 1;
 }
 
+void perfilsel_preparar(int ligado, Uint32 agora) {
+  preparando = ligado;
+  preparandoDesde = agora;
+}
+int perfilsel_preparando(void) { return preparando; }
+
 int perfilsel_quer_sair(void) { int v=sair; sair=0; return v; }
 int perfilsel_pediu_repetir(void) { int v=repetir; repetir=0; return v; }
 void perfilsel_continuar_ativo(void) {
@@ -852,6 +867,30 @@ static void halo(GfxRect a, const ContaPerfil *p, float f) {
   }
 }
 
+// O INDICADOR DE CARREGAMENTO sobre o avatar escolhido: o mesmo anel de doze
+// pontos do player (anelCarregando), num veu escuro para ler sobre qualquer
+// foto. Com animacoes reduzidas os pontos ficam parados e so o brilho pulsa —
+// continua dizendo "esperando" sem movimento de giro.
+static void giro(GfxRect av, Uint32 agora, float alfa, int reduzida) {
+  float cx = av.x + av.w * 0.5f, cy = av.y + av.h * 0.5f;
+  float raio = av.w * 0.24f, ponto = av.w * 0.05f;
+  float t = (float)(agora - preparandoDesde);
+  float giroAng = reduzida ? 0.0f : t * 0.006f;
+  float pulso = reduzida ? 0.75f + 0.25f * sinf(t * 0.004f) : 1.0f;
+  float ar, ag, ab;
+  int k;
+  if (ponto < 6.0f) ponto = 6.0f;
+  gfx_rect(av, 0, GFX_DISCO, 0, 0, 0, 0, 0.0f, 0.0f, 0.0f, 0.70f * alfa);
+  ajustes_acento(&ar, &ag, &ab);
+  for (k = 0; k < 12; k++) {
+    float ang = k * 6.2831853f / 12.0f + giroAng;
+    float br = .18f + .82f * k / 11.0f;
+    GfxRect pt = { cx + cosf(ang) * raio - ponto * 0.5f,
+                   cy + sinf(ang) * raio - ponto * 0.5f, ponto, ponto };
+    gfx_cor(pt, .5f, ar, ag, ab, br * pulso * alfa);
+  }
+}
+
 static void desenhaFundo(void) {
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
   // Esta tela usa preto real em todos os estados. O mural e o unico fundo;
@@ -935,7 +974,6 @@ void perfilsel_desenhar(Uint32 agora) {
   int i, m = perfis_n();
   float d, vao, largura, x, subida, a;
   int reduzida = ajustes_animacoes_reduzidas();
-  (void)agora;
 
   desenhaFundo();
 
@@ -1005,6 +1043,7 @@ void perfilsel_desenhar(Uint32 agora) {
     // So anima o avatar em foco, e nao quando o teclado do PIN esta por cima:
     // gif.c segura uma animacao por vez e os dois discos disputariam a textura.
     disco(av, p, f, a, i == foco && pinDe < 0);
+    if (preparando && i == foco) giro(av, agora, a, reduzida);
 
     // 176 e nao 140 no estado sem foco: a nota de contraste vale a 3 m, e
     // cinza-escuro sobre quase-preto e ilegivel do sofa.
@@ -1041,7 +1080,9 @@ void perfilsel_desenhar(Uint32 agora) {
   { char dica[160];
     const ContaPerfil *at = perfis_item_ativo();
     TxtLinha l;
-    if (perfis_pode_dispensar() && at && at->nome[0])
+    if (preparando)
+      snprintf(dica, sizeof dica, "%s", i18n("Preparando o perfil…"));
+    else if (perfis_pode_dispensar() && at && at->nome[0])
       snprintf(dica, sizeof dica,
                i18n("Setas: mover  ·  OK: entrar  ·  Voltar: seguir como %s"), at->nome);
     else

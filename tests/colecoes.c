@@ -155,6 +155,35 @@ int main(void) {
     assert(col_diagnostico("", "movie", "top", g, sizeof g) == 0);
     puts("ok  col_diagnostico separa os quatro motivos de nao engolir"); }
 
+  // TROCA DE PERFIL. O pacote tem a pasta f1 com arte curada. Sem troca, conta
+  // vazia mantem o pacote (regra antiga). Depois de col_esquecer_perfil, conta
+  // vazia deixa a home SEM colecoes (nao as do perfil anterior, nem as do
+  // pacote), e conta com f1 traz a f1 com a arte do pacote de volta.
+  { char dir[] = "/tmp/nuvio-col-perfil-XXXXXX", arq[700];
+    FILE *f;
+    int i, achou = 0;
+    assert(mkdtemp(dir));
+    snprintf(arq, sizeof arq, "%s/collections.json", dir);
+    f = fopen(arq, "w"); assert(f);
+    fputs("{\"groups\":[{\"title\":\"G\",\"id\":\"g1\",\"folders\":[{\"id\":\"f1\",\"title\":\"Netflix\","
+          "\"cover\":\"c.jpg\",\"sources\":[{\"base\":\"https://a\",\"type\":\"movie\",\"catId\":\"m\"}]}]}]}", f);
+    fclose(f);
+    assert(col_carregar(dir) == 1);
+    assert(col_definir_json("[{\"collections_json\":[]}]") == 0 && col_n() == 1);
+    col_esquecer_perfil();
+    assert(col_n() == 0);
+    assert(col_definir_json("[{\"collections_json\":[]}]") == 0 && col_n() == 0);
+    assert(col_definir_json("[{\"collections_json\":{\"collections\":[]}}]") == 0 && col_n() == 0);
+    assert(col_definir_json(web) == 1);
+    for (i = 0; i < col_n(); i++)
+      if (!strcmp(col_folder(i)->id, "f1")) {
+        achou = 1;
+        assert(col_folder(i)->local == 1 && strstr(col_folder(i)->cover, "/c.jpg"));
+      }
+    assert(achou);
+    unlink(arq); rmdir(dir);
+    puts("ok  troca de perfil: colecoes do anterior saem, arte do pacote volta"); }
+
   puts("colecoes: tudo ok");
   return 0;
 }

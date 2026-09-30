@@ -2569,6 +2569,13 @@ void desc_refazer_continuar(void) {
 // cat_trocar_continuar concorrente ou ja enxergar o carimbo (e podar) ou
 // publicar antes da remocao (e ser corrigida por ela). Os DELETE remotos sao
 // de quem chama. Devolve quantos cards sairam.
+// Leitura sem trava, como desc_repetir ja faz com `buscando`: um quadro de
+// atraso na resposta nao muda nada para quem pergunta (app.c, uma vez por
+// quadro, com teto de tempo).
+int desc_montando(void) {
+  return buscando || repetirAoFim || cwVivo || cwDeNovo;
+}
+
 int desc_tirar_continuar(const char *imdb, int temporada, int episodio) {
   char chave[192];
   if (!imdb || !imdb[0]) return 0;

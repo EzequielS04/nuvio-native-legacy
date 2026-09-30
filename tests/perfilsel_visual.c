@@ -308,6 +308,23 @@ int main(void) {
     assert(e.burst_desenhado == 0); }
   ajustesDeTeste(0);
 
+  // TROCA DE PERFIL: escolhido o Alvaro, a tela fica com o indicador no cartao
+  // dele enquanto a home e preparada, e as setas nao mexem mais no foco.
+  perfis_esquecer(); dados_iniciar(NULL);
+  escreverCache("1\t0\t1\t0\t#1E88E5\tHenrique\t"
+                "deploy/app/art/poster/00.jpg\tdeploy/app/art/03.jpg\n"
+                "2\t0\t0\t1\t#E53935\tÁlvaro\t\t\n"
+                "3\t1\t0\t0\t#43A047\tInfantil\t\tdeploy/app/art/07.jpg\n", 1);
+  perfis_carregar_ativo();
+  perfilsel_iniciar();
+  tecla(SDLK_RIGHT);
+  perfilsel_preparar(1, SDL_GetTicks());
+  assert(perfilsel_preparando());
+  tecla(SDLK_RIGHT);
+  captura("/tmp/nuvio-perfilsel-preparando.bmp");
+  perfilsel_iniciar();
+  assert(!perfilsel_preparando());
+
   tex_encerrar(); txt_encerrar(); gfx_encerrar();
   SDL_GL_DeleteContext(gl); SDL_DestroyWindow(win); SDL_Quit();
   puts("PASS: capturas em /tmp/nuvio-perfilsel-*.bmp (dados de teste, sem conta real).");

@@ -12,6 +12,9 @@
 void fontepref_definir_perfil(int perfil);
 // Mesma razao (arteescolha.h nao puxa SDL, mas fica no mesmo molde).
 void arteesc_definir_perfil(int perfil);
+// Mesma razao: ajustes.h puxa SDL. O ajuste "Usar os addons do perfil
+// principal" (Ajustes > Conta), ver perfis_ativo_addons.
+int ajustes_addons_do_principal(void);
 #include "js.h"
 #include "jsw.h"
 #include <stdio.h>
@@ -324,10 +327,18 @@ int           perfis_ativo(void)     { return ativo > 0 ? ativo : 1; }
 // O nativo ignorava isso e pedia sempre profile_id=<indice>, entao um perfil
 // com a marca voltava com ZERO addons — o relato "os perfis nao sincronizam os
 // addons". O perfil 1 nunca e redirecionado: ele E a origem.
+//
+// O AJUSTE LOCAL "Usar os addons do perfil principal" (padrao LIGADO) soma com a
+// marca da conta, nao a substitui. Sem o campo no servidor a marca ficava 0 e o
+// perfil 2 abria sem addon nenhum; com o ajuste ligado ele le os do principal
+// mesmo assim. Desligado, vale so o que a conta diz: `uses_primary_addons=true`
+// continua sendo respeitado, porque foi a pessoa que marcou isso no app web, e
+// um ajuste desta TV nao deve desfazer a escolha da conta.
 int perfis_ativo_addons(void) {
   const ContaPerfil *p = perfis_item_ativo();
   int a = perfis_ativo();
-  return (p && p->usaAddonsDoPrimario && a != 1) ? 1 : a;
+  if (a == 1) return 1;
+  return ((p && p->usaAddonsDoPrimario) || ajustes_addons_do_principal()) ? 1 : a;
 }
 
 void perfis_carregar_ativo(void) {

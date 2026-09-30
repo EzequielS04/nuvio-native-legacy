@@ -108,6 +108,24 @@ void sync_esquecer_usuario(void);
 // resto da sessao.
 void sync_reaplicar_ajustes(void);
 
+// TROCA DE PERFIL: o sync_reaplicar_ajustes da troca, mais os ajustes POR
+// PERFIL desta TV. Chamar com o perfil ativo JA trocado e `antes` = o anterior.
+//   - guarda os ajustes do perfil que sai (ajustes_perfil_guardar) e se ele
+//     tinha mudanca local pendente (ajustes-locais-p<N>.txt);
+//   - o que entra volta aos ajustes que tinha nesta TV; na primeira visita,
+//     parte dos do perfil principal (se o principal ja foi usado aqui);
+//   - o blob da conta do perfil que entra, quando existir, vem por cima como
+//     sempre, a nao ser que ele tenha mudanca local pendente — ai a mudanca
+//     local fica e sobe no proximo ciclo, costurada no blob dele.
+// Nada disto sobe sozinho: sem blob da conta para costurar, nada e enviado
+// (ver empurrarAjustes), entao um perfil sem ajustes na conta nunca recebe um
+// blob montado do zero.
+void sync_trocar_perfil(int antes);
+
+// 1 quando o ultimo ciclo terminado e aplicado e do perfil ativo e nao ha
+// ciclo no ar. E a metade "conta" de "a home do perfil novo esta pronta".
+int  sync_perfil_pronto(void);
+
 // A pessoa mudou um ajuste NESTA TV. Faz duas coisas, e as duas de proposito:
 //
 //   1. MARCA PARA SUBIR. O proximo ciclo costura os valores locais no blob da

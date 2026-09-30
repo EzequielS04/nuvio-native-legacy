@@ -226,6 +226,9 @@ typedef enum {
   // Fio dos cartoes e linhas em repouso no vidro (gfx_vidro_aro). No fim pelo
   // mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_VIDRO_CONTORNO,
+  // Perfil que nao e o principal le os addons do principal (perfis_ativo_addons).
+  // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_ADDONS_PRINCIPAL,
   AJ_N
 } OpcaoId;
 
@@ -768,6 +771,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Perfil pesquisável",              V_LIGA, 2),
   ACAO("Meu perfil público"),
   ESC("Contorno do vidro",               V_LIGA, 2),   // local: vidroContornoLocal
+  ESC("Usar os addons do perfil principal", V_LIGA, 2), // local: addonsPrincipalLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -903,6 +907,9 @@ static const char *CHAVE[] = {
   "-perfilPesquisavel", "-perfilEditar",
   // LOCAL e SEM o "-": visual desta TV, como a propria Interface de vidro.
   "vidroContornoLocal",
+  // LOCAL e SEM o "-": escolha desta TV, somada a marca uses_primary_addons da
+  // conta (ver perfis_ativo_addons).
+  "addonsPrincipalLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -976,7 +983,8 @@ typedef struct {
 // se repete entre categorias.
 static const Item TELA[] = {
   SEC("Conta", "Conta e status de sincronização", "aj_user-round"),
-    OPC(AJ_PERFIL_ATIVO), OPC(AJ_SYNC), OPC(AJ_PERFIL_PESQ), OPC(AJ_PERFIL_EDITAR),
+    OPC(AJ_PERFIL_ATIVO), OPC(AJ_SYNC), OPC(AJ_ADDONS_PRINCIPAL),
+    OPC(AJ_PERFIL_PESQ), OPC(AJ_PERFIL_EDITAR),
     OPC(AJ_SAIR),
 
   // "Cor da logo" logo abaixo da cor: so vale com um tema dinamico, e e a
@@ -1338,6 +1346,7 @@ static int valor[] = {
   1,                /* perfil pesquisavel: DESLIGADO (V_LIGA: 1 = Desligado). Padrao de todo mundo. */
   0,                /* meu perfil publico: acao */
   0,                /* contorno do vidro: LIGADO (V_LIGA: 0 = Ligado), o visual de antes */
+  0,                /* addons do perfil principal: LIGADO (V_LIGA: 0 = Ligado) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1504,6 +1513,7 @@ int ajustes_vidro(void) { return 1; }
 #else
 int ajustes_vidro(void) { return lig(AJ_VIDRO) && !SEGURO; }
 int ajustes_vidro_contorno(void) { return lig(AJ_VIDRO_CONTORNO); }
+int ajustes_addons_do_principal(void) { return lig(AJ_ADDONS_PRINCIPAL); }
 #endif
 static void riscoNotar(int op, int antes);
 void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_VIDRO, a); }
@@ -2869,6 +2879,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
     case AJ_VIDRO:          /* visual desta TV: a GPU de cada uma aguenta diferente */
     case AJ_VIDRO_CONTORNO:
+    case AJ_ADDONS_PRINCIPAL: /* escolha desta TV; a conta tem uses_primary_addons */
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
     case AJ_PERFIL_EDITAR:
@@ -2886,6 +2897,83 @@ static int somenteDesteAparelho(int op) {
     default:
       return 0;
   }
+}
+
+// AJUSTES POR PERFIL NESTA TV. ajustes.txt e um so por aparelho; a conta guarda
+// um blob por perfil, mas um perfil que nunca salvou ajustes na conta nao tem
+// blob — e ai a troca de perfil nao trazia nada, ficava o que o perfil anterior
+// deixou, e o que a pessoa mudava na TV para esse perfil era sobrescrito pelo
+// blob do outro na troca seguinte e nunca mais voltava.
+//
+// A copia por perfil guarda SO o que e do perfil: o que a conta tambem guarda
+// (o mesmo conjunto que ajustes_mesclar_blob considera). O que descreve esta
+// TV (somenteDesteAparelho, idioma, fonte da interface) nao muda com o perfil.
+static int dePerfil(int i) {
+  if (OPCOES[i].tipo == OP_LEITURA || OPCOES[i].tipo == OP_ACAO) return 0;
+  if (!CHAVE[i] || CHAVE[i][0] == '-') return 0;
+  if (i == AJ_FONTE_UI || i == AJ_IDIOMA) return 0;
+  return !somenteDesteAparelho(i);
+}
+
+static void nomePerfil(char *dst, size_t tam, int perfil) {
+  snprintf(dst, tam, "ajustes-p%d.txt", perfil);
+}
+
+void ajustes_perfil_guardar(int perfil) {
+  char nome[32], buf[AJ_N * 56];
+  size_t p = 0;
+  int i;
+  if (perfil <= 0) return;
+  buf[0] = 0;
+  for (i = 0; i < AJ_N; i++) {
+    int k;
+    if (!dePerfil(i)) continue;
+    k = snprintf(buf + p, sizeof buf - p, "%s %d\n", CHAVE[i], valor[i]);
+    if (k < 0 || (size_t)k >= sizeof buf - p) return;   // nunca um arquivo pela metade
+    p += (size_t)k;
+  }
+  nomePerfil(nome, sizeof nome, perfil);
+  dados_gravar(nome, buf);
+}
+
+int ajustes_perfil_restaurar(int perfil) {
+  char nome[32], *t, *l;
+  int mudou = 0;
+  if (perfil <= 0) return 0;
+  nomePerfil(nome, sizeof nome, perfil);
+  t = dados_ler(nome);
+  if (!t) return 0;
+  for (l = t; l && *l; ) {
+    char chave[64], *fim = strchr(l, '\n');
+    int v, i;
+    if (fim) *fim = 0;
+    if (sscanf(l, "%63s %d", chave, &v) == 2)
+      for (i = 0; i < AJ_N; i++) {
+        if (!dePerfil(i) || strcmp(CHAVE[i], chave)) continue;
+        v = limita(i, v);
+        if (v != valor[i]) { valor[i] = v; mudou++; }
+        break;
+      }
+    l = fim ? fim + 1 : NULL;
+  }
+  free(t);
+  if (mudou) {
+    gravar();
+    aplicarIdioma(AJ_LEG_LINGUA);
+    aplicarIdioma(AJ_AUD_LINGUA);
+  }
+  printf("[ajustes] ajustes do perfil %d restaurados desta TV (%d mudaram)\n",
+         perfil, mudou);
+  fflush(stdout);
+  return 1;
+}
+
+void ajustes_perfil_esquecer(void) {
+  char nome[32];
+  int i;
+  // Os indices de perfil da conta sao pequenos (CONTA_PERFIL_MAX perfis); 32
+  // cobre com folga. Apagar arquivo que nao existe nao custa nada.
+  for (i = 1; i <= 32; i++) { nomePerfil(nome, sizeof nome, i); dados_apagar(nome); }
 }
 
 // Onde esta o valor de `chave` dentro de [ini,fim): *vi aponta o primeiro
@@ -3602,6 +3690,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_POSTER_TESTAR: return "Baixa o cartaz de um filme conhecido com a configuração atual e mostra se deu certo. O primeiro cartaz de cada título é montado no servidor e pode levar alguns segundos.";
     case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso, como nos apps de streaming clássicos. Dinâmica: estilo Apple TV, com o destaque que sobe e some ao descer, fileiras de tamanhos diferentes (destaques grandes, Top 10 com numerais, cartazes e faixas deitadas) sobre um fundo de vidro fosco tingido pela arte.";
     case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
+    case AJ_ADDONS_PRINCIPAL: return "Os outros perfis desta conta usam os addons do perfil principal. Desligado, cada perfil usa os seus — a não ser que a conta já diga para usar os do principal.";
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
@@ -4344,6 +4433,9 @@ static void mudarValorDireto(int op, int dir) {
     // O teto de imagens vale NA HORA: subir e so deixar entrar mais; descer
     // despeja pelo LRU de sempre no proximo quadro.
     if (op == AJ_TEX_MB) tex_definir_orcamento_mb(ajustes_tex_mb());
+    // DE ONDE VEM A LISTA DE ADDONS mudou: so um ciclo novo le a do perfil
+    // certo. Com um ciclo no ar, a lista nova chega no proximo.
+    if (op == AJ_ADDONS_PRINCIPAL) sync_iniciar();
   }
   gravar();   // grava a cada mudanca: nao ha botao de "salvar" nesta tela
   // #85 (resto): a TV le o blob de layout da conta mas nao o escreve. Sem
@@ -6246,7 +6338,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
-    case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR:
+    case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL:
       return AJPV_CONTA;
     case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL:
       return AJPV_RASTREIO;

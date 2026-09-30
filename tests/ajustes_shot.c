@@ -302,7 +302,8 @@ int main(int argc, char **argv) {
   tecla(SDLK_ESCAPE); tecla(SDLK_ESCAPE);
   for (i = 0; i < 12; i++) tecla(SDLK_UP);     // Conta
   tecla(SDLK_RETURN);
-  tecla(SDLK_DOWN); tecla(SDLK_DOWN);
+  // Perfil, Sincronizacao, Usar os addons do perfil principal, Sair.
+  tecla(SDLK_DOWN); tecla(SDLK_DOWN); tecla(SDLK_DOWN);
   tecla(SDLK_RETURN);
   snprintf(nome, sizeof nome, "%s-sair-armado.bmp", saida);
   captura(nome, w);

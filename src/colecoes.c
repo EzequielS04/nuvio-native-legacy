@@ -11,6 +11,12 @@ static ColFolder folders[COL_MAX];
 static int count;
 static ColFolder extras[COL_EXTRA_MAX];
 static int nExtras;
+// TROCA DE PERFIL (col_esquecer_perfil). A pasta do pacote fica guardada para a
+// arte curada voltar quando a conta mandar as colecoes do perfil novo; semConta
+// diz que folders[] foi esvaziado e que, se a conta nao mandar nada, deve
+// continuar vazio — mostrar o pacote ali seria mostrar as colecoes de outro.
+static char dirPacote[600];
+static int semConta;
 static void localiza(char *value,size_t cap,const char *dir) {
   if(!value[0]||strstr(value,"://")||value[0]=='/')return;
   char rel[600];snprintf(rel,sizeof rel,"%s",value);snprintf(value,cap,"%s/%s",dir,rel);
@@ -253,6 +259,8 @@ static int arteEditorial(char *saida,size_t n,const char *dir,const char *sub,
 
 int col_carregar(const char *dir) {
   revisao++;
+  semConta = 0;
+  if (dir && dir != dirPacote) snprintf(dirPacote, sizeof dirPacote, "%s", dir);
   char path[700];snprintf(path,sizeof path,"%s/collections.json",dir);
   FILE *f=fopen(path,"rb");if(!f)return 0;
   fseek(f,0,SEEK_END);long size=ftell(f);rewind(f);
@@ -438,7 +446,7 @@ int col_definir_json(const char *json) {
   char *solto = NULL;
   int fundosXp = 0;
   const char *arr, *fim;
-  int antes = count, novas;
+  int antes, novas, recarregou = 0;
   if (!json || !*json) return 0;
   // Linha da RPC: [{collections_json: ...}] ou {collections_json: ...}.
   { const char *linha = *json == '[' ? js_raiz_array(json) : json;
@@ -459,6 +467,16 @@ int col_definir_json(const char *json) {
   // js_raiz_array pula o '[' e para no primeiro elemento, como js_array faz.
   arr = *json == '[' ? js_raiz_array(json) : js_array(json, fim, "collections");
   if (!arr) { free(solto); return 0; }
+  // Depois de uma troca de perfil folders[] esta vazio: recarrega o pacote para
+  // o casamento de arte abaixo ter com quem casar. A revisao volta ao que era —
+  // quem decide se a home remonta e o resultado, nao esta recarga.
+  if (semConta && dirPacote[0]) {
+    unsigned rev = revisao;
+    col_carregar(dirPacote);
+    revisao = rev;
+    recarregou = 1;
+  }
+  antes = count;
   // A conta manda o CONJUNTO e a ordem. Mas o pacote traz as mesmas pastas
   // (mesmo id: o collections.json e gerado do perfil do dono) com arte editorial,
   // quadros de animacao e ajustes curados que a conta nao tem — a versao local
@@ -527,7 +545,14 @@ int col_definir_json(const char *json) {
            casadas, fundosXp);
   }
   free(antigas);
-  if (!novas) {
+  if (!novas && recarregou) {
+    // O perfil novo nao tem colecao nenhuma na conta: fica sem, e nao com as do
+    // pacote que so foram carregadas para o casamento de arte.
+    count = 0;
+    semConta = 1;
+    printf("[colecoes] conta veio vazia depois da troca de perfil: sem colecoes\n");
+  }
+  else if (!novas) {
     count = antes;
     printf("[colecoes] conta veio vazia; mantendo as locais (%d) | %u bytes, comeca \"%.60s\", arr=%s\n",
            antes, (unsigned)strlen(json), json, arr ? "sim" : "nao");
@@ -556,6 +581,14 @@ int col_definir_json(const char *json) {
   aplicarExtras();
   free(solto);
   return novas;
+}
+
+void col_esquecer_perfil(void) {
+  count = 0;
+  semConta = 1;
+  aplicarExtras();
+  revisao++;
+  printf("[colecoes] troca de perfil: colecoes do perfil anterior fora da tela\n");
 }
 
 void col_chave_grupo(const char *group, char *dst, unsigned n) {

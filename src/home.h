@@ -47,6 +47,9 @@ const char *home_arte(int i);
 const char *home_backdrop(int i);   // arte do titulo i do catalogo
 void home_evento(const SDL_Event *e);
 void home_atualizar(float dt, Uint32 agora);
+// Poe a home no topo (destaque, fileira 0, sem rolagem) e esquece a posicao
+// lembrada da sessao. Usado ao entrar num perfil novo.
+void home_ir_topo(void);
 // Trailer no destaque: `topo` = 1 quando a home e o que esta na frente (sem
 // detalhe, player, painel, menu ou cartao por cima). app.c chama por quadro.
 void home_trailer_passo(int topo, float dt, Uint32 agora);

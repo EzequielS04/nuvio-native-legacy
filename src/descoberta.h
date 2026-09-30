@@ -60,6 +60,10 @@ void desc_repetir_addons(void);
 // #38). Fio proprio: remontar a fileira faz rede. Pedido repetido enquanto um
 // fio ja roda vira UMA rodada a mais no fim, nao uma fila.
 void desc_refazer_continuar(void);
+// 1 enquanto a home ainda esta sendo montada: a volta de catalogos no ar (ou
+// uma pedida para o fim dela) ou o "Continuar assistindo" sendo refeito. E o
+// que a troca de perfil espera antes de mostrar a home (app.c).
+int  desc_montando(void);
 // A metade LOCAL de "Tirar de Continuar assistindo": progresso, carimbo de
 // remocao e o card fora da fileira no mesmo quadro. Sem rede. Ver descoberta.c.
 int desc_tirar_continuar(const char *imdb, int temporada, int episodio);

@@ -57,6 +57,9 @@ void fil_definir_perfil(int p) { (void)p; }
 void fontepref_definir_perfil(int p) { (void)p; }
 // arteescolha.c idem (#142): a arte escolhida a mao e por perfil.
 void arteesc_definir_perfil(int p) { (void)p; }
+// O ajuste "Usar os addons do perfil principal" (ajustes.c): o teste escolhe.
+static int addonsDoPrincipal = 1;
+int ajustes_addons_do_principal(void) { return addonsDoPrincipal; }
 int dados_apagar(const char *nome) {
   char c[512]; caminho(c, sizeof c, nome); return remove(c) == 0;
 }
@@ -216,6 +219,19 @@ static void etapaUm(void) {
   assert(perfis_sem_escolha() == 0);      // a lista nao mudou
   assert(perfis_pode_dispensar() == 1);
   assert(perfis_indice_sugerido() == 1);
+
+  // G2) ADDONS DO PRINCIPAL. O perfil 2 tem a marca da conta: le os do 1 com o
+  //     ajuste local ligado ou desligado. O perfil 3 NAO tem a marca: so o
+  //     ajuste local (padrao ligado) o manda para o 1; desligado, e o dele.
+  addonsDoPrincipal = 0;
+  assert(perfis_ativo_addons() == 1);
+  perfis_definir_ativo(3);
+  assert(perfis_ativo_addons() == 3);
+  addonsDoPrincipal = 1;
+  assert(perfis_ativo_addons() == 1);
+  perfis_definir_ativo(1);
+  assert(perfis_ativo_addons() == 1);
+  perfis_definir_ativo(2);
 
   // H) O cache nao pode guardar segredo. Ele existe para desenhar a tela, e o
   //    PIN nunca chega a este modulo em texto — muito menos ao disco.

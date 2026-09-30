@@ -33,6 +33,11 @@ int  perfilsel_concluido(void);
 void perfilsel_continuar_ativo(void);
 int  perfilsel_quer_sair(void);
 int  perfilsel_pediu_repetir(void);
+// TROCA DE PERFIL: com `ligado`, a tela continua de pe depois da escolha, com
+// um indicador girando no cartao escolhido e as teclas ignoradas, enquanto
+// app.c prepara a home do perfil novo. perfilsel_iniciar desliga.
+void perfilsel_preparar(int ligado, Uint32 agora);
+int  perfilsel_preparando(void);
 
 #ifdef NV_PERFILSEL_TEST
 typedef struct {
