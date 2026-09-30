@@ -118,4 +118,20 @@ int prox_mostrar_nao_acompanhada(long long semeadoEmMs, long long lancamentoMs,
 int prox_para_item(const CatItem *ci, const CatEp *eps, int n,
                    long long agoraMs, ProxSugestao *saida);
 
+// O CARD DE "CONTINUAR ASSISTINDO" cujo episodio a pessoa TERMINOU. Mesma
+// varredura de prox_para_item (ancora e o episodio valido seguinte), com duas
+// diferencas, as duas pelo mesmo motivo — este item nao e semente de
+// historico, e o episodio que ela acabou de ver:
+//   - o limiar de "acabou" e o ajuste Percentual assistido (`limiarPct`), e
+//     nao PROX_CONCLUIDO;
+//   - a politica de serie nao acompanhada (janela de 60 dias) NAO vale: quem
+//     esta maratonando uma serie antiga tem o proximo episodio lancado ha anos,
+//     e a janela deixava o card preso no episodio terminado. So nao se oferece
+//     episodio que ainda nao foi ao ar (data legivel no futuro); sem data
+//     legivel, oferece — a lista do addon ja diz que o episodio existe.
+// Devolve 0 quando nada muda: em andamento, sem lista, fim da serie, ou o
+// proximo ainda nao estreou.
+int prox_seguinte(const CatItem *ci, const CatEp *eps, int n, int limiarPct,
+                  long long agoraMs, ProxSugestao *saida);
+
 #endif

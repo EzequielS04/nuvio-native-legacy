@@ -2104,10 +2104,15 @@ static void *fioCatalogo(void *u) {
 // formato que trakt_continuar devolve: imdb (composto em serie), tipo,
 // porcentagem, temporada/episodio — e o resto vem do Cinemeta pelo mesmo
 // enfeite. Mais recente primeiro (prog_ler ja ordena). Entra o que esta entre
-// 1% e 90%, os mesmos limites de home_registrar_retorno; titulo terminado nao
-// e "continuar". O proximo episodio de uma serie terminada fica para depois.
+// 1% e o Percentual assistido (ajustes_cw_concluido, 90 de fabrica), os mesmos
+// limites de home_registrar_retorno; titulo terminado nao e "continuar". O proximo episodio de uma serie terminada fica para depois.
+// Os registros do disco para montarContinuar, UM buffer para continuarLocal e
+// filtrarRemoto: sao ~77 KB, e na Samsung (teto do WebAssembly) nao se paga
+// isso duas vezes em BSS. Os dois so rodam sob contTrava, um de cada vez.
+static ProgRegistro contRegs[PROG_MAX];
+
 static int continuarLocal(CatItem *saida, int max) {
-  static ProgRegistro regs[PROG_MAX];
+  ProgRegistro *regs = contRegs;
   int k, i, n = 0;
   k = prog_ler(regs, PROG_MAX);
   for (i = 0; i < k && n < max; i++) {
@@ -2117,7 +2122,7 @@ static int continuarLocal(CatItem *saida, int max) {
     int j, repetido = 0;
     if (r->durSeg < 60.0) continue;
     p = r->posSeg / r->durSeg;
-    if (p < 0.01 || p >= 0.90) continue;
+    if (p < 0.01 || p * 100.0 >= ajustes_cw_concluido()) continue;
     // Uma serie com varios episodios gravados entra UMA vez, no mais recente.
     for (j = 0; j < n; j++) {
       size_t L = idbase_len(saida[j].imdb);   // "kitsu:41370" inteiro, nao "kitsu"
@@ -2185,9 +2190,10 @@ static int continuarLocal(CatItem *saida, int max) {
 #define CONT_MAX 12
 
 // Os limites que o caminho local sempre teve e o do Trakt nao: os mesmos de
-// home_registrar_retorno. Abaixo de 1% nao se comecou, de 90% em diante
-// acabou — e "continuar" nao e nem uma coisa nem a outra.
-static int emAndamento(int pct) { return pct >= 1 && pct < 90; }
+// home_registrar_retorno. Abaixo de 1% nao se comecou, do Percentual assistido
+// (90% de fabrica) em diante acabou — e "continuar" nao e nem uma coisa nem a
+// outra.
+static int emAndamento(int pct) { return pct >= 1 && pct < ajustes_cw_concluido(); }
 
 // QUANDO este item foi visto por ultimo, em ms. 0 = nao se sabe.
 //
@@ -2239,7 +2245,7 @@ static pthread_mutex_t contTrava = PTHREAD_MUTEX_INITIALIZER;
 // ficaram. `aSeguir` diz quais itens sao "a seguir" (entram com 0%).
 static int filtrarRemoto(CatItem *v, int n, int (*aSeguir)(const char *),
                          int *fora) {
-  int i, w;
+  int i, w, k = prog_ler(contRegs, PROG_MAX);
   for (i = 0, w = 0; i < n; i++) {
     // "A SEGUIR" (issue #66) entra com 0%: e o proximo episodio de uma serie
     // cujo ultimo terminou. Nao e "pausado", mas e "continuar".
@@ -2268,6 +2274,46 @@ static int filtrarRemoto(CatItem *v, int n, int (*aSeguir)(const char *),
         else if (!emAndamento(pct)) { (*fora)++; continue; }
         v[i].progresso = pct;
       } }
+    // O EPISODIO VELHO DO REMOTO NAO VOLTA POR CIMA DO QUE ESTA TV VIU DEPOIS.
+    // O cruzamento acima e por CHAVE (o mesmo episodio). Com outro episodio da
+    // mesma serie mais novo no disco — o S1E5 terminado aqui ontem, quando o
+    // /sync/playback ainda guarda o S1E3 pausado ha um mes — a conta nao
+    // disputava nada (continuarLocal tira o terminado) e o S1E3 voltava a
+    // fileira. Agora o item passa a falar do registro mais novo da obra: em
+    // andamento, e ele que aparece (e a conta, se tambem o trouxe, fica com o
+    // lugar pelo desempate de sempre); terminado, e a semente do card, que
+    // passa ao proximo episodio (continuar_desenhar). Remoto que esta ADIANTE
+    // na serie nao e episodio antigo e fica como veio. O instante decide, como
+    // no resto desta funcao: registro mais VELHO que o paused_at nao manda.
+    if (v[i].temporada > 0 && v[i].episodio > 0) {
+      size_t L = idbase_len(v[i].imdb);
+      const ProgRegistro *r = NULL;
+      int j;
+      for (j = 0; j < k && !r; j++)
+        if (contRegs[j].episodio > 0 && strlen(contRegs[j].contentId) == L &&
+            !strncmp(contRegs[j].contentId, v[i].imdb, L)) r = &contRegs[j];
+      if (r && r->durSeg > 1.0 && r->lastWatchedMs > v[i].retomadoMs &&
+          !(r->temporada == v[i].temporada && r->episodio == v[i].episodio) &&
+          !(v[i].temporada > r->temporada ||
+            (v[i].temporada == r->temporada && v[i].episodio > r->episodio))) {
+        int pct = (int)(100.0 * r->posSeg / r->durSeg);
+        if (pct >= 1) {
+          if (pct > 100) pct = 100;
+          printf("[desc] continuar assistindo: %s T%dE%d do remoto e mais velho que "
+                 "T%dE%d visto aqui (%d%%); fica o daqui\n", r->contentId,
+                 v[i].temporada, v[i].episodio, r->temporada, r->episodio, pct);
+          snprintf(v[i].imdb, sizeof v[i].imdb, "%s:%d:%d", r->contentId,
+                   r->temporada ? r->temporada : 1, r->episodio);
+          v[i].temporada = r->temporada;
+          v[i].episodio = r->episodio;
+          v[i].progresso = pct;
+          v[i].retomadoMs = r->lastWatchedMs;
+          v[i].restanteMin = (int)((r->durSeg - r->posSeg) / 60.0 + 0.5);
+          if (v[i].restanteMin < 0) v[i].restanteMin = 0;
+          v[i].nomeEpisodio[0] = 0;
+        }
+      }
+    }
     if (w != i) v[w] = v[i];
     w++;
   }

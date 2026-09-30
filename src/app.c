@@ -126,6 +126,14 @@ static int aguardandoFonte;
 // instante ainda nao tem a lista de episodios nem o "proximo" que
 // continuar_desenhar calculou para desenhar o card.
 static int cwTocarT, cwTocarE;
+// O MESMO OK num card cujo episodio TERMINOU e cuja lista de episodios ainda
+// nao chegou: a pagina abre e o toque fica esperando a lista para achar o
+// proximo, em vez de recomecar o terminado. `cwEsperaItem` e uma copia: a
+// fileira pode ser refeita enquanto a lista chega.
+static int cwEspera;
+static CatItem cwEsperaItem;
+static Uint32 cwEsperaDesde;
+#define CW_ESPERA_MS 15000u
 static pthread_t fioFonte;
 static int fioFonteVivo;                  // 0 = canal escolheu sem o fio
 static _Atomic int fonteEscolhida = -2;   // release/acquire entre verificacao e UI
@@ -1932,22 +1940,44 @@ void app_atualizar(float dt, Uint32 agora) {
       if (home_item_focado(&it)) {
         // O episodio a tocar e o que o CARD mostrava, nao o que o detalhe
         // adivinharia: para serie o card pode anunciar o PROXIMO episodio
-        // (continuar_desenhar troca T/E pelo prox_para_item quando o semeado
+        // (continuar_desenhar troca T/E pelo prox_seguinte quando o semeado
         // ja terminou), e episodioAlvo chegaria a outro numero — ou a nenhum,
         // porque a lista de episodios ainda nao chegou da rede.
         const CatItem *cw = cat_item(it.indice);
+        int tocar = 1;
         cwTocarT = cwTocarE = 0;
+        cwEspera = 0;
         if (cw && !strcmp(cw->tipo, "series")) {
-          ProxSugestao prox;
           cwTocarT = cw->temporada; cwTocarE = cw->episodio;
-          if (prox_para_item(cw, cat_episodio(it.indice, 0),
-                             cat_n_episodios(it.indice),
-                             (long long)time(NULL) * 1000LL, &prox)) {
-            cwTocarT = prox.temporada; cwTocarE = prox.episodio;
+          // EPISODIO TERMINADO NUNCA TOCA DE NOVO DO COMECO. O card ja anuncia
+          // o proximo quando a lista existe; sem lista (a copia do card nao
+          // tem), a pagina abre e o toque espera a lista (cwEsperarProximo).
+          // Sem proximo — fim da serie, ou o seguinte ainda nao foi ao ar —,
+          // so a pagina abre.
+          if (cw->progresso >= ajustes_cw_concluido() && cw->temporada > 0 &&
+              cw->episodio > 0) {
+            int k = cat_indice_titulo(cw->imdb, it.indice);
+            ProxSugestao prox;
+            tocar = 0;
+            cwTocarT = cwTocarE = 0;
+            if (k >= 0 && cat_n_episodios(k) > 0) {
+              if (prox_seguinte(cw, cat_episodio(k, 0), cat_n_episodios(k),
+                                ajustes_cw_concluido(),
+                                (long long)time(NULL) * 1000LL, &prox)) {
+                cwTocarT = prox.temporada; cwTocarE = prox.episodio;
+                tocar = 1;
+              } else
+                printf("[cw] %s terminado e sem proximo: abrindo so a pagina\n", cw->imdb);
+            } else {
+              cwEsperaItem = *cw;
+              cwEsperaDesde = SDL_GetTicks();
+              cwEspera = 1;
+              printf("[cw] %s terminado, lista a caminho: o toque espera o proximo\n", cw->imdb);
+            }
           }
         }
         abrirTitulo(&it);
-        detail_pedir_reproduzir();
+        if (tocar) detail_pedir_reproduzir();
       }
     } else if (tela == TELA_BUSCA && busca_pediu_abrir(&idx)) {
       if (busca_item_focado(&it)) abrirTitulo(&it); else abrirPorIndice(idx);
@@ -1964,6 +1994,29 @@ void app_atualizar(float dt, Uint32 agora) {
       if (social_item_selecionado(&s) && s.imdb[0]) {
         idx=cat_indice_por_imdb(s.imdb);
         if(idx>=0)abrirPorIndice(idx); else desc_pedir_titulo(s.imdb);
+      }
+    }
+  }
+
+  // A ESPERA DO PROXIMO (cwEspera, acima). Pagina fechada, player aberto ou
+  // prazo vencido desistem: a pagina fica aberta e nada toca.
+  if (cwEspera) {
+    if (!detail_aberto() || player_aberto() ||
+        SDL_GetTicks() - cwEsperaDesde > CW_ESPERA_MS) {
+      printf("[cw] %s: lista nao chegou a tempo; fica so a pagina\n", cwEsperaItem.imdb);
+      cwEspera = 0; cwTocarT = cwTocarE = 0;
+    } else {
+      int k = cat_indice_titulo(cwEsperaItem.imdb, detail_indice());
+      if (k >= 0 && cat_n_episodios(k) > 0) {
+        ProxSugestao prox;
+        cwEspera = 0; cwTocarT = cwTocarE = 0;
+        if (prox_seguinte(&cwEsperaItem, cat_episodio(k, 0), cat_n_episodios(k),
+                          ajustes_cw_concluido(),
+                          (long long)time(NULL) * 1000LL, &prox)) {
+          cwTocarT = prox.temporada; cwTocarE = prox.episodio;
+          detail_pedir_reproduzir();
+        } else
+          printf("[cw] %s terminado e sem proximo: abrindo so a pagina\n", cwEsperaItem.imdb);
       }
     }
   }

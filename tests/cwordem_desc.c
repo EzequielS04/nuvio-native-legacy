@@ -102,6 +102,8 @@ int   arte_reserva_registrar(const char *url, const char *imdb, int poster) {
 
 static int modoTeste = CWO_PADRAO, naoExibidosTeste = 1;
 int ajustes_cw_ordem(void)                { return modoTeste; }
+static int concluidoTeste = 90;         // Percentual assistido; 90 de fabrica
+int   ajustes_cw_concluido(void)           { return concluidoTeste; }
 int ajustes_cw_mostrar_nao_exibidos(void) { return naoExibidosTeste; }
 
 // --- O "TRAKT" FALSO ---------------------------------------------------------
@@ -156,8 +158,9 @@ int trakt_continuar(CatItem *s, int m) {
     const Falso *f = &tabela[i];
     memset(&s[i], 0, sizeof s[i]);
     snprintf(s[i].imdb, sizeof s[i].imdb, "%s", f->id);
-    snprintf(s[i].tipo, sizeof s[i].tipo, "%s", f->seguir ? "series" : "movie");
-    if (f->seguir) sscanf(strchr(f->id, ':') + 1, "%d:%d", &s[i].temporada, &s[i].episodio);
+    // Id composto e episodio de serie, "a seguir" ou pausado.
+    snprintf(s[i].tipo, sizeof s[i].tipo, "%s", strchr(f->id, ':') ? "series" : "movie");
+    if (strchr(f->id, ':')) sscanf(strchr(f->id, ':') + 1, "%d:%d", &s[i].temporada, &s[i].episodio);
     s[i].progresso = f->prog;
     s[i].retomadoMs = f->quando;
     // O que trakt.c faz no enfeite, com o `released` do Cinemeta.
@@ -307,6 +310,57 @@ int main(void) {
     assert(nc == 0);
     puts("ok  trakt respondeu vazio: a fileira esvazia");
     fonteTeste = 0; }
+
+  // PAUSADO VELHO DO TRAKT x EPISODIO MAIS NOVO VISTO AQUI. ttP: o Trakt ainda
+  // tem o S1E3 pausado (40%), mas esta TV terminou o S1E5 depois: o item vira
+  // a semente S1E5 terminada (o card passa ao proximo), e o S1E3 nao volta.
+  // ttQ: o Trakt esta ADIANTE (S2E1) do S1E9 visto aqui: fica como veio.
+  { static const Falso NOVO[] = {
+      { "ttP:1:3", 0, 40, 700000, 0 },
+      { "ttQ:2:1", 0, 30, 690000, 0 },
+    };
+    CatItem lote[CONT_MAX];
+    ProgRegistro r;
+    int nc;
+    memset(&r, 0, sizeof r);
+    snprintf(r.contentId, sizeof r.contentId, "ttP");
+    r.temporada = 1; r.episodio = 5; r.posSeg = 3000; r.durSeg = 3000;
+    r.lastWatchedMs = 950000;
+    assert(prog_aplicar_remoto(&r));
+    snprintf(r.contentId, sizeof r.contentId, "ttQ");
+    r.temporada = 1; r.episodio = 9; r.lastWatchedMs = 940000;
+    assert(prog_aplicar_remoto(&r));
+    tabela = NOVO;
+    nTabela = 2;
+    fonteTeste = 2;
+    modoTeste = CWO_PADRAO;
+    nc = montarContinuar(lote, CONT_MAX);
+    assert(nc == 2);
+    assert(!strcmp(lote[0].imdb, "ttP:1:5") && lote[0].temporada == 1 &&
+           lote[0].episodio == 5 && lote[0].progresso == 100);
+    assert(!strcmp(lote[1].imdb, "ttQ:2:1") && lote[1].progresso == 30);
+    puts("ok  trakt velho: S1E3 nao volta por cima do S1E5 visto aqui; o adiante fica");
+    fonteTeste = 0; nTabela = 0; }
+
+  // PERCENTUAL ASSISTIDO: 92% conta como assistido com o padrao (90) e como em
+  // andamento com 95.
+  { CatItem lote[CONT_MAX];
+    ProgRegistro r;
+    int nc, k, achou;
+    memset(&r, 0, sizeof r);
+    snprintf(r.contentId, sizeof r.contentId, "ttR");
+    r.temporada = 1; r.episodio = 1; r.posSeg = 2760; r.durSeg = 3000;  // 92%
+    r.lastWatchedMs = 960000;
+    assert(prog_aplicar_remoto(&r));
+    fonteTeste = 1;
+    nc = montarContinuar(lote, CONT_MAX);
+    for (k = 0, achou = 0; k < nc; k++) if (!strncmp(lote[k].imdb, "ttR", 3)) achou = 1;
+    assert(!achou);
+    concluidoTeste = 95;
+    nc = montarContinuar(lote, CONT_MAX);
+    assert(nc > 0 && !strcmp(lote[0].imdb, "ttR:1:1") && lote[0].progresso == 92);
+    puts("ok  percentual assistido: 92% sai com 90 e fica com 95");
+    concluidoTeste = 90; fonteTeste = 0; }
   puts("cwordem_desc: tudo ok");
   return 0;
 }

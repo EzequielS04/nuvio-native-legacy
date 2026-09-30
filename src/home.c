@@ -4709,7 +4709,7 @@ void home_registrar_retorno(int indice, double posSeg, double durSeg) {
   int novo = -1;
   if (indice >= 0 && durSeg > 1.0) {
     double p = posSeg / durSeg;
-    if (p >= 0.01 && p < 0.90) novo = indice;
+    if (p >= 0.01 && p * 100.0 < ajustes_cw_concluido()) novo = indice;
   }
   if (novo != retomarIndice) { retomarIndice = novo; retomarRev++; }
   else if (novo >= 0) retomarRev++; // atualiza barra/tempo da mesma sessao

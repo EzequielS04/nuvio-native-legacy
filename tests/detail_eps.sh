@@ -45,7 +45,7 @@ rg -q 'const CatEp \*ep = cat_episodio\(idx, epAbsoluto\(c\)\);' src/detail.c
 # da temporada em PROGRESSO (S2E2 numa serie de 4 temporadas, por exemplo), e
 # nao a do primeiro episodio da serie (S1E1). Sem isto detail_abrir escolhia
 # sempre a temporada de cat_episodio(idx, 0) e ignorava ci->temporada.
-if ! rg -q 'ci0->progresso > 0 && ci0->progresso < 90 &&' src/detail.c; then
+if ! rg -q 'ci0->progresso > 0 && ci0->progresso < ajustes_cw_concluido\(\) &&' src/detail.c; then
   echo 'detail: temporada inicial ignora o progresso de Continuar assistindo' >&2
   exit 1
 fi
