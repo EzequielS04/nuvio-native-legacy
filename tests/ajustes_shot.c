@@ -379,7 +379,7 @@ int main(int argc, char **argv) {
   // cada grupo — espelho de TELA[] em ajustes.c.
   { static const int LINHAS[9] = { 3, 5, 6, 8, 3, 9, 3, 7, 4 };
     static const int GRUPOS[9][6] = {
-      [2] = { 5, 15, 9, 9, 3, 11 },            // Layout
+      [2] = { 8, 15, 9, 9, 3, 11 },            // Layout
       [4] = { 14, 10, 1 },                     // Integracoes
     };
     int c, g, p, k;

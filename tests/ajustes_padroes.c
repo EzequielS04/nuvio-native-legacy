@@ -14,7 +14,16 @@ int main(void) {
   // Home: layout e arte do destaque.
   assert(valor[AJ_HERO_FUNDO] == 0);          // Automatico
   assert(valor[AJ_HERO_ARTE_DIF] == 1);       // Desligado: mesma foto do card
-  assert(valor[AJ_HERO_TRAILER] == 0);
+  assert(valor[AJ_HERO_TRAILER] == 1);        // Desligado de fabrica (30/09)
+  // Som e espera do trailer do destaque: mudo, 2,2 s (decimos), deste aparelho.
+  assert(valor[AJ_HERO_TRAILER_SOM] == 1);
+  assert(valor[AJ_HERO_TRAILER_ESPERA] == 22);
+  assert(ajustes_trailer_hero_espera_ms() == 2200);
+  assert(!strcmp(CHAVE[AJ_HERO_TRAILER_SOM], "trailerDestaqueSomLocal"));
+  assert(!strcmp(CHAVE[AJ_HERO_TRAILER_ESPERA], "trailerDestaqueEsperaLocal"));
+  assert(somenteDesteAparelho(AJ_HERO_TRAILER_SOM));
+  assert(somenteDesteAparelho(AJ_HERO_TRAILER_ESPERA));
+  assert(!strcmp(textoValor(AJ_HERO_TRAILER_ESPERA), "2,2 s"));
   // A faixa que andava uma casa.
   assert(valor[AJ_RAIL] == 0);                // recolhida
   assert(valor[AJ_RAIL_MODERNA] == 1);        // desligada

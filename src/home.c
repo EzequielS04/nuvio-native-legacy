@@ -335,9 +335,10 @@ static Uint32 heroTrocaEm = 0;
 static float heroSai   = 0.0f;
 static float heroEntra = 1.0f;
 // TRAILER NO DESTAQUE (trailer.h; dono, 20/09/2026: "coloca para tocar no
-// hero tb"). Com o foco parado no hero e a arte assentada, espera
-// NV_TRAILER_HERO_ESPERA_MS e troca a arte pelo trailer mudo do titulo, no
-// mesmo retangulo. Mover o foco, sair da home ou abrir qualquer coisa por
+// hero tb"). Com o foco parado no hero e a arte assentada, espera o ajuste
+// "Espera do trailer no destaque" (heroTrailerEspera) e troca a arte pelo
+// trailer do titulo, mudo salvo com "Som do trailer no destaque", no mesmo
+// retangulo. Mover o foco, sair da home ou abrir qualquer coisa por
 // cima (app.c diz, por `topo`) volta para a arte. Uma tentativa por titulo
 // por parada de foco: o trailer que acabou nao recomeca.
 static Uint32 heroTrailerDesde = 0;
@@ -403,9 +404,13 @@ static void heroTrailerMarcarTocou(const char *imdb) {
 static int heroAutoDesligado;
 static char   heroTrailerYoutubeId[16];
 static int heroTrailerSegurando(Uint32 agora);
+// A espera e ajuste; a janela da Apple (NV_TRAILER_HERO_JANELA_MS) conta a
+// partir dela, senao uma espera longa venceria a janela antes de abrir.
+static Uint32 heroTrailerEspera(void) { return ajustes_trailer_hero_espera_ms(); }
+static Uint32 heroTrailerMaxEspera(void) { return heroTrailerEspera() + NV_TRAILER_HERO_JANELA_MS; }
 
 static Uint32 heroTrailerPrazoPreparacao(Uint32 agora) {
-  // O limite de 3200 ms resolve a primeira fonte; depois de escolher Apple ou
+  // A janela de heroTrailerMaxEspera resolve a primeira fonte; depois de escolher Apple ou
   // YouTube, cada elemento precisa de sua propria janela para produzir
   // `playing`. Isso evita abrir o fallback ja vencido quando a Apple chega no
   // ultimo instante da janela de resolucao. Com no maximo duas fontes, o teto
@@ -3535,7 +3540,7 @@ static int heroTrailerSegurando(Uint32 agora) {
   // Titulo que ja tocou nao vai abrir de novo: nao ha o que esperar.
   if (heroTrailerJaTocou(heroTrailerImdb)) return 0;
   return !heroTrailerTentado && heroTrailerDesde &&
-         agora - heroTrailerDesde <= NV_TRAILER_HERO_MAX_ESPERA_MS;
+         agora - heroTrailerDesde <= heroTrailerMaxEspera();
 }
 
 void home_trailer_passo(int topo, float dt, Uint32 agora) {
@@ -3665,12 +3670,12 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
   if (pronto && ci && ci->imdb[0] && heroTrailerItem == heroAtual &&
       !trailer_aberto() && !heroTrailerTentado && !heroTrailerMemoriaFalhou &&
       !heroTrailerJaTocou(ci->imdb) &&
-      agora - heroTrailerDesde >= NV_TRAILER_HERO_ESPERA_MS) {
+      agora - heroTrailerDesde >= heroTrailerEspera()) {
     // A ORDEM e a do ajuste "Fonte do trailer" (trailerfonte.h). Automatico:
     // Apple (HLS matted) antes do IMDb (MP4 com tarja, LG) ou do YouTube (id
     // da busca enxuta do TMDB, Samsung); uma fonte fixa e a unica tentada.
     //
-    // A APPLE TEM A JANELA INTEIRA (ate NV_TRAILER_HERO_MAX_ESPERA_MS) antes
+    // A APPLE TEM A JANELA INTEIRA (ate heroTrailerMaxEspera) antes
     // da seguinte, tambem na Samsung. Antes, com um id do YouTube em maos, o
     // hero o abria ja aos 1,2 s se a Apple ainda nao tinha respondido — e a
     // resposta da Apple agora inclui baixar o master para escolher a variante
@@ -3683,7 +3688,7 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
     TrailerCandidatos c;
     TrailerDecisao d;
     const char *u = NULL;
-    int qual = 0, venceu = decorrido >= NV_TRAILER_HERO_MAX_ESPERA_MS;
+    int qual = 0, venceu = decorrido >= heroTrailerMaxEspera();
     memset(&c, 0, sizeof c);
     c.apple = trailerapple_url(ci->imdb);
     c.appleRespondeu = trailerapple_respondeu(ci->imdb) || venceu;
@@ -3720,7 +3725,9 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
       heroTrailerFonte = ultima ? 2 : 1;
       heroTrailerQual = qual;
       heroTrailerPreparandoAte = heroTrailerPrazoPreparacao(agora);
-      trailer_abrir(u, heroArteRect, 0, 0);
+      // SOM: so no destaque (o do cartaz em foco segue mudo) e so com o
+      // ajuste. Na Samsung (.wgt) trailer_abrir forca mudo de qualquer jeito.
+      trailer_abrir(u, heroArteRect, focoHero && ajustes_trailer_hero_som(), 0);
       trailer_marcar_dono(TRAILER_DONO_HOME, ci->imdb);
       // trailer_abrir e void por compatibilidade com o player nativo; no
       // browser ainda pode recusar a criacao (canvas ausente). Tratar isso

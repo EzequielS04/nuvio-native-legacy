@@ -226,6 +226,9 @@ typedef enum {
   // Fio dos cartoes e linhas em repouso no vidro (gfx_vidro_aro). No fim pelo
   // mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_VIDRO_CONTORNO,
+  // Som e espera do trailer no destaque da home (home_trailer_passo). No fim
+  // pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_HERO_TRAILER_SOM, AJ_HERO_TRAILER_ESPERA,
   AJ_N
 } OpcaoId;
 
@@ -768,6 +771,9 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Perfil pesquisável",              V_LIGA, 2),
   ACAO("Meu perfil público"),
   ESC("Contorno do vidro",               V_LIGA, 2),   // local: vidroContornoLocal
+  ESC("Som do trailer no destaque",      V_LIGA, 2),   // local: trailerDestaqueSomLocal
+  // Em DECIMOS de segundo (0,2 s a 10 s): textoValor escreve "2,2 s".
+  NUM("Espera do trailer no destaque",   2, 100, 2, " s"), // local: trailerDestaqueEsperaLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -903,6 +909,8 @@ static const char *CHAVE[] = {
   "-perfilPesquisavel", "-perfilEditar",
   // LOCAL e SEM o "-": visual desta TV, como a propria Interface de vidro.
   "vidroContornoLocal",
+  // Locais: o app oficial nao tem estas duas escolhas.
+  "trailerDestaqueSomLocal", "trailerDestaqueEsperaLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -988,7 +996,8 @@ static const Item TELA[] = {
   SEC("Layout", "Estrutura da página inicial e estilos de pôster", "aj_layout-dashboard"),
     GRP("Layout da Home", "Escolha a estrutura e a fonte do destaque.", "aj_panel-top"),
       OPC(AJ_HOME_LAYOUT), OPC(AJ_LANDSCAPE), OPC(AJ_HERO_CHEIO), OPC(AJ_HERO_FUNDO),
-      OPC(AJ_HERO_ARTE_DIF), OPC(AJ_HERO_TRAILER),
+      OPC(AJ_HERO_ARTE_DIF), OPC(AJ_HERO_TRAILER), OPC(AJ_HERO_TRAILER_SOM),
+      OPC(AJ_HERO_TRAILER_ESPERA),
     GRP("Conteúdo da Home", "Controle o que aparece na home e na busca.", "aj_rows-3"),
       OPC(AJ_FIL_LIMITE), OPC(AJ_ITENS_FILEIRA), OPC(AJ_FIL_ORDEM),
       OPC(AJ_RAIL), OPC(AJ_RAIL_MODERNA), OPC(AJ_RAIL_BLUR),
@@ -1195,7 +1204,7 @@ static int valor[] = {
   0,                /* fundo em tela cheia: LIGADO (perfil; fabrica: desligado) */
   0,                /* background do hero: seleção automática */
   1,                /* destaque com outra arte: DESLIGADO (mesma foto do card, 19/09) */
-  0,                /* trailer no destaque: ligado */
+  1,                /* trailer no destaque: DESLIGADO (V_LIGA: 1 = Desligado) */
 
   FIL_LIMITE_PADRAO,/* limite de fileiras: 7, o pedido do dono (espelho de fileiras.c) */
   0,                /* ordenar fileiras: acao */
@@ -1338,6 +1347,8 @@ static int valor[] = {
   1,                /* perfil pesquisavel: DESLIGADO (V_LIGA: 1 = Desligado). Padrao de todo mundo. */
   0,                /* meu perfil publico: acao */
   0,                /* contorno do vidro: LIGADO (V_LIGA: 0 = Ligado), o visual de antes */
+  1,                /* som do trailer no destaque: DESLIGADO (V_LIGA: 1 = Desligado) */
+  22,               /* espera do trailer no destaque: 2,2 s (em decimos de segundo) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1597,6 +1608,16 @@ int ajustes_data_completa(void)       { return lig(AJ_DET_DATA_CHEIA); }
 float ajustes_detalhe_veu(void)       { int v = valor[AJ_DET_VEU]; return (v < 0 ? 0 : v > 100 ? 100 : v) / 100.0f; }
 int   ajustes_trailer_auto(void)      { return lig(AJ_DET_TRAILER_AUTO); }
 int   ajustes_trailer_hero(void)      { return lig(AJ_HERO_TRAILER) && !SEGURO; }
+int   ajustes_trailer_hero_som(void)  { return lig(AJ_HERO_TRAILER_SOM); }
+// valor[] guarda decimos de segundo, preso ao intervalo de OPCOES (o disco
+// pode trazer qualquer numero).
+Uint32 ajustes_trailer_hero_espera_ms(void) {
+  const Opcao *o = &OPCOES[AJ_HERO_TRAILER_ESPERA];
+  int v = valor[AJ_HERO_TRAILER_ESPERA];
+  if (v < o->min) v = o->min;
+  if (v > o->max) v = o->max;
+  return (Uint32)v * 100u;
+}
 float ajustes_trailer_zoom(void)      { static const float z[] = { 1.34f, 1.15f, 1.55f, 1.0f }; int v = valor[AJ_TRAILER_ASPECTO]; return (v >= 0 && v < 4) ? z[v] : 1.34f; }
 // Teto de definicao do trailer: 0 = a maior que houver.
 int   ajustes_trailer_qualidade(void) { static const int t[] = { 0, 1080, 720, 480 }; int v = valor[AJ_TRAILER_QUAL]; return (v >= 0 && v < 4) ? t[v] : 0; }
@@ -2866,6 +2887,7 @@ static int somenteDesteAparelho(int op) {
     // IMDb da Samsung depende do servico de recomendacoes), entao a escolha e
     // deste aparelho.
     case AJ_TRAILER_FONTE:
+    case AJ_HERO_TRAILER_SOM: case AJ_HERO_TRAILER_ESPERA: /* o web nao tem */
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
     case AJ_VIDRO:          /* visual desta TV: a GPU de cada uma aguenta diferente */
     case AJ_VIDRO_CONTORNO:
@@ -3319,6 +3341,10 @@ static int inativa(int op) {
       return !ajustes_cw_ligado();
     case AJ_CW_BLUR_PROX: return !ajustes_cw_ligado() || !ajustes_cw_thumb_episodio();
     case AJ_EXPANDIR_ATRASO: return !ajustes_expandir_poster();
+    // Som: na Samsung (.wgt) o trailer e sempre mudo (trailerfonte_com_som).
+    case AJ_HERO_TRAILER_SOM:
+      return !lig(AJ_HERO_TRAILER) || !trailerfonte_com_som(trailerfonte_tizen());
+    case AJ_HERO_TRAILER_ESPERA: return !lig(AJ_HERO_TRAILER);
     // Como no web (getFocusedPosterFlowConfig): o trailer do cartaz so existe
     // com o cartaz expandindo ou com cartazes deitados.
     case AJ_FOCO_TRAILER: return !ajustes_expandir_poster() && valor[AJ_LANDSCAPE] != 0;
@@ -3446,6 +3472,10 @@ static const char *ajudaOpcao(int op) {
         ? "Ative Miniatura do episódio para desfocar a imagem do próximo episódio."
         : "Ative Continuar assistindo para ajustar os cards de retomada.";
     if (op == AJ_EXPANDIR_ATRASO) return "Ative Expandir pôster ao focar para ajustar o tempo de espera.";
+    if (op == AJ_HERO_TRAILER_SOM && lig(AJ_HERO_TRAILER))
+      return "Nesta TV o trailer do destaque toca sempre sem som.";
+    if (op == AJ_HERO_TRAILER_SOM || op == AJ_HERO_TRAILER_ESPERA)
+      return "Ative Trailer no destaque para ajustar o trailer do topo da Home.";
     if (op == AJ_FOCO_TRAILER) return "Ative Expandir pôster ao focar, ou Pôsteres horizontais, para usar o trailer do cartaz em foco.";
     if (op > AJ_TMDB_LIGADO && op <= AJ_TMDB_CW)
       return "Ative TMDB para ajustar o que ele enriquece.";
@@ -3492,7 +3522,9 @@ static const char *ajudaOpcao(int op) {
     case AJ_HERO_CHEIO: return "O destaque do topo ocupa a tela inteira atrás das fileiras, em vez de ficar num bloco.";
     case AJ_HERO_FUNDO: return "De onde vem a arte de fundo do destaque, da página do título e dos cards deitados: catálogo/Cinemeta, IMDb/Metahub, TMDB, Trakt, Apple TV, fanart.tv (com chave) ou Anime (Kitsu/AniList). Automático usa a do catálogo. MDBList fornece notas, não imagens.";
     case AJ_HERO_ARTE_DIF: return "Desligado: card, destaque e página do título mostram a mesma imagem. Ligado: o card fica com a arte do catálogo e o destaque usa outra foto — TMDB vira outro fundo do TMDB; em Automático, ou se a escolhida repetir o card, usa Apple TV, outro fundo do TMDB, fanart.tv, anime ou Trakt.";
-    case AJ_HERO_TRAILER: return "Com o foco parado no destaque do topo, o trailer do título toca sem som no lugar da arte. Mover o foco volta para a arte.";
+    case AJ_HERO_TRAILER: return "Com o foco parado no destaque do topo, o trailer do título toca no lugar da arte, sem som a menos que Som do trailer no destaque esteja ligado. Mover o foco volta para a arte.";
+    case AJ_HERO_TRAILER_SOM: return "Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.";
+    case AJ_HERO_TRAILER_ESPERA: return "Quanto tempo o destaque fica parado num título antes de trocar a arte pelo trailer.";
     case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta, de 3 a 40. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis. Mais fileiras usam mais memória e rede: em TV com 1 GB de memória a Home pode ficar lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior.";
     case AJ_ITENS_FILEIRA: return "Quantos títulos cada fileira da Home mostra antes do Ver tudo. Mais itens usam mais memória: em TV com 1 GB de memória a Home pode ficar mais lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior. Aumentar vale na próxima vez que o app abrir.";
     case AJ_FIL_ORDEM: return "Abre a lista de fileiras para reordenar, ligar, desligar e escolher o card de cada uma. É lá que dá para ver de onde cada fileira vem.";
@@ -4700,6 +4732,12 @@ static const char *textoValor(int op) {
   static char buf[48];
   const Opcao *o = &OPCOES[op];
   if (o->tipo == OP_LEITURA || o->tipo == OP_ACAO) return textoLeitura(op);
+  if (op == AJ_HERO_TRAILER_ESPERA) {
+    // Decimos de segundo: 22 le "2,2 s".
+    int v = valor[op];
+    snprintf(buf, sizeof buf, i18n("%d,%d s"), v / 10, v % 10);
+    return buf;
+  }
   if (o->tipo == OP_NUMERO) {
     snprintf(buf, sizeof buf, "%d%s", valor[op], o->sufixo ? o->sufixo : "");
     return buf;
@@ -6218,6 +6256,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
     case AJ_HERO_ARTE_DIF: case AJ_HERO_TRAILER: case AJ_FIL_LIMITE:
+    case AJ_HERO_TRAILER_SOM: case AJ_HERO_TRAILER_ESPERA:
     case AJ_FIL_ORDEM: case AJ_RAIL: case AJ_RAIL_MODERNA:
     case AJ_RAIL_BLUR: case AJ_HERO: case AJ_HERO_CATALOGOS:
     case AJ_PS_FUNDO: case AJ_DESCOBRIR: case AJ_ROTULOS:
@@ -6440,6 +6479,7 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
             0.5f, 0.70f, 0.72f, 0.76f, 0.9f);
     if (op == AJ_HERO || op == AJ_HERO_CHEIO || op == AJ_HERO_FUNDO ||
         op == AJ_HERO_ARTE_DIF || op == AJ_HERO_TRAILER ||
+        op == AJ_HERO_TRAILER_SOM || op == AJ_HERO_TRAILER_ESPERA ||
         op == AJ_HERO_CATALOGOS || op == AJ_GRAD_CLASSICO)
       previaRealce(hr.x, hr.y, hr.w, hr.h, ar, ag, ab);
     if (valor[AJ_HERO_TRAILER] == 0) {
