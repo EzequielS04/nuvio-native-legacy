@@ -92,6 +92,15 @@ static inline float anim_suave(float t) {
   return t * t * (3.0f - 2.0f * t);
 }
 
+// Parte rapido e assenta devagar, sem passar do alvo (cubica de saida). Para
+// deslocamentos com relogio proprio que tem de chegar num tempo certo, como a
+// troca deslizada do destaque: sem repique, que num carrossel le como erro.
+static inline float anim_saida(float t) {
+  t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+  t = 1.0f - t;
+  return 1.0f - t * t * t;
+}
+
 // Progresso 0..1 com RELOGIO PROPRIO: anda `dt` segundos em direcao a `alvo`
 // gastando `ms` no percurso inteiro. Usada onde o tempo precisa bater com uma
 // medida (o veu do menu), e nao apenas "assentar rapido".

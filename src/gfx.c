@@ -15,7 +15,7 @@
 // shader que usasse a mesma variavel.
 typedef struct {
   GLuint prog;
-  GLint rect, tela, tex, foco, par, raio, cor, asp, texAsp, forcarCover, borda, varre, fundo,
+  GLint rect, tela, tex, foco, par, raio, cor, asp, texAsp, forcarCover, borda, varre, desl, fundo,
         grad0, grad1, grad2, tempo, reg0, reg1, reg2, reg3, vaza;
   GLint alt;     // uAlt: altura do rect em pixels do alvo (a rampa de 1 px do SDF)
   GLint margem;  // uMargem do VS: 1 px de folga no quad dos modos de SDF
@@ -36,6 +36,11 @@ float gfx_borda_foco_atual = 1.0f;
 // Deslocamento da faixa especular do cartaz em foco (revela.h): 0 = no lugar
 // de repouso. Mesmo regime do rebordo: global, e quem mexe devolve a 0.
 float gfx_varre_atual = 0.0f;
+// Deslize horizontal da ARTE dentro do retangulo do destaque (GFX_HERO,
+// GFX_HERO_CHEIO, GFX_VITRINE), em fracao da largura dele: a imagem anda e as
+// rampas/veu ficam paradas; o que sai do retangulo nao pinta. 0 = no lugar.
+// Mesmo regime do rebordo: global, e quem mexe devolve a 0.
+float gfx_desliza_atual = 0.0f;
 float gfx_opacidade_grupo = 1.0f;
 // Tamanho real do alvo da tela (em retina, maior que 1920x1080). Guardado aqui
 // porque toda volta de FBO precisa restaurar o viewport com ele.
@@ -101,6 +106,7 @@ static const char *FS_CABECA =
   "uniform float uFoco;\n"
   "uniform float uBorda;\n"
   "uniform float uVarre;\n"
+  "uniform float uDesliza;\n"
   "uniform vec2  uPar;\n"
   "uniform float uRaio;\n"
   "uniform vec4  uCor;\n"
@@ -295,7 +301,9 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // (c*0.35) em vez de fundir no fundo — o que deixava a borda dura visivel em
   // vez de dissolver.
   "void main(){\n"
-  "  vec3 c = texture2D(uTex, clamp(cover(vUv), 0.0, 1.0)).rgb;\n"
+  "  float xd = vUv.x - uDesliza;\n"
+  "  float dentro = step(0.0, xd) * step(xd, 1.0);\n"
+  "  vec3 c = texture2D(uTex, clamp(cover(vec2(xd, vUv.y)), 0.0, 1.0)).rgb;\n"
   "  vec3 bg = uFundo;\n"   // #0d0d0d fora do estilizado
   "  float y = vUv.y;\n"
   "  float av = clamp((y-0.820)/0.072,0.0,1.0)*0.25\n"
@@ -311,9 +319,9 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // toca atras do canvas no lugar da arte (trailer.h). Mesma regra do
   // GFX_DETALHE.
   "  if (uPar.x > 0.5) { gl_FragColor = nv_dither(bg, clamp(ah + av - ah*av, 0.0, 1.0) * uCor.a); return; }\n"
-  "  if (uVaza > 0.5) { gl_FragColor = nv_dither(c, uCor.a * (1.0 - clamp(ah + av - ah*av, 0.0, 1.0))); return; }\n"
+  "  if (uVaza > 0.5) { gl_FragColor = nv_dither(c, uCor.a * dentro * (1.0 - clamp(ah + av - ah*av, 0.0, 1.0))); return; }\n"
   "  c = mix(c, bg, clamp(ah + av - ah*av, 0.0, 1.0));\n"
-  "  gl_FragColor = nv_dither(c, uCor.a);\n"
+  "  gl_FragColor = nv_dither(c, uCor.a * dentro);\n"
   "}\n",
 
   // GFX_VEU — escurece a base E a esquerda, onde fica o texto sobreposto
@@ -451,7 +459,9 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // cobertura (65% da largura em vez de 45%) e a profundidade. Faz sentido: com
   // a arte ocupando a tela toda, o texto precisa de mais fundo escuro sob ele.
   "void main(){\n"
-  "  vec3 c = texture2D(uTex, clamp(cover(vUv), 0.0, 1.0)).rgb;\n"
+  "  float xd = vUv.x - uDesliza;\n"
+  "  float dentro = step(0.0, xd) * step(xd, 1.0);\n"
+  "  vec3 c = texture2D(uTex, clamp(cover(vec2(xd, vUv.y)), 0.0, 1.0)).rgb;\n"
   "  vec3 bg = uFundo;\n"
   "  float y = vUv.y;\n"
   "  float av = clamp((y-0.640)/0.108,0.0,1.0)*0.35\n"
@@ -464,9 +474,9 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "                 - clamp((t-0.76)/0.24,0.0,1.0)*0.42;\n"
   "  ah *= step(vUv.x, 0.65);\n"
   "  if (uPar.x > 0.5) { gl_FragColor = nv_dither(bg, clamp(ah + av - ah*av, 0.0, 1.0) * uCor.a); return; }\n"
-  "  if (uVaza > 0.5) { gl_FragColor = nv_dither(c, uCor.a * (1.0 - clamp(ah + av - ah*av, 0.0, 1.0))); return; }\n"
+  "  if (uVaza > 0.5) { gl_FragColor = nv_dither(c, uCor.a * dentro * (1.0 - clamp(ah + av - ah*av, 0.0, 1.0))); return; }\n"
   "  c = mix(c, bg, clamp(ah + av - ah*av, 0.0, 1.0));\n"
-  "  gl_FragColor = nv_dither(c, uCor.a);\n"
+  "  gl_FragColor = nv_dither(c, uCor.a * dentro);\n"
   "}\n",
 
   // GFX_ANEL — contorno, cheio ou tracejado, sem miolo.
@@ -895,7 +905,8 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "void main(){\n"
   "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
   "  if (m <= 0.001) discard;\n"
-  "  vec2 uv = vUv;\n"
+  "  vec2 uv = vec2(vUv.x - uDesliza, vUv.y);\n"
+  "  float dentro = step(0.0, uv.x) * step(uv.x, 1.0);\n"
   "  float ra = uAspect / max(uTexAsp, 0.01);\n"
   "  if (uTexAsp > 0.0) {\n"
   "    if (ra > 1.0) uv.y = uv.y / ra + uPar.x * (1.0 - 1.0 / ra);\n"
@@ -906,7 +917,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float gb = smoothstep(uCor.r > 0.0 ? uCor.r : 0.38, 1.0, vUv.y) * 0.72 * uFoco;\n"
   "  c *= 1.0 - clamp(ge + gb - ge * gb, 0.0, 1.0);\n"
   "  float d = smoothstep(0.66, 1.0, vUv.y);\n"
-  "  gl_FragColor = nv_dither(c, uCor.a * m * (1.0 - uPar.y * d * d));\n"
+  "  gl_FragColor = nv_dither(c, uCor.a * m * dentro * (1.0 - uPar.y * d * d));\n"
   "}\n",
 
   // GFX_FUNDO_DIN — ver gfx.h. SO COR: um degrade vertical de uma cor so. O
@@ -994,6 +1005,7 @@ int gfx_iniciar(void) {
     progs[m].forcarCover = glGetUniformLocation(p, "uForceCover");
     progs[m].borda  = glGetUniformLocation(p, "uBorda");
     progs[m].varre  = glGetUniformLocation(p, "uVarre");
+    progs[m].desl   = glGetUniformLocation(p, "uDesliza");
     progs[m].fundo  = glGetUniformLocation(p, "uFundo");
     progs[m].grad0  = glGetUniformLocation(p, "uGrad0");
     progs[m].grad1  = glGetUniformLocation(p, "uGrad1");
@@ -1178,6 +1190,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   if (P->forcarCover >= 0) glUniform1f(P->forcarCover, gfx_card_forcar_cover_atual);
   if (P->borda >= 0)  glUniform1f(P->borda, gfx_borda_foco_atual);
   if (P->varre >= 0)  glUniform1f(P->varre, gfx_varre_atual);
+  if (P->desl >= 0)   glUniform1f(P->desl, gfx_desliza_atual);
   // So os tres modos de rampa declaram uFundo: e uma chamada por destaque ou
   // fundo de detalhe desenhado, nao por retangulo.
   if (P->fundo >= 0)  glUniform3f(P->fundo, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B);

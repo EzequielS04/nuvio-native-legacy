@@ -228,6 +228,9 @@ typedef struct {
 // Proporcao (w/h) da textura a desenhar. 0 = mapeia direto (texto, veu).
 // Definir ANTES de gfx_rect para que a arte seja recortada, nunca esticada.
 extern float gfx_tex_aspect_atual;
+// Deslize da arte do destaque dentro do proprio retangulo, em fracao da largura
+// (so GFX_HERO, GFX_HERO_CHEIO e GFX_VITRINE). Quem define devolve a 0.
+extern float gfx_desliza_atual;
 // 1 = o GFX_CARD deve sempre preencher a moldura com cover. Usado pela forma
 // editorial 4:3, que nao pode cair no contain quando recebe arte 16:9.
 extern float gfx_card_forcar_cover_atual;
