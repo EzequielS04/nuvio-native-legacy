@@ -22,6 +22,7 @@
 // Compartilhado pelos quatro pacotes (NuvioTpk, 60, 65 e 40).
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
@@ -103,9 +104,12 @@ namespace NuvioTpk
         }
 
         // memfd_create(385) + dlopen(/proc/self/fd/N) RTLD_GLOBAL: a .so entra no
-        // link map do loader com o soname libnuvio.so, entao os DllImport-por-soname
-        // (Program.cs e Video.cs) passam a resolver NELA — sem mais nenhuma
-        // mudanca de chamada. Confere o ponto de entrada antes de dar por boa.
+        // link map do loader com o soname libnuvio.so. ISSO NAO BASTA para os
+        // DllImport (#184): o runtime procura "libnuvio.so" por CAMINHO nas
+        // pastas nativas do app antes do nome nu, acha lib/libnuvio.so (outro
+        // inode) e carrega a EMPACOTADA ao lado. Quem chama isto no 6+ tem de
+        // chamar RotearDllImport com o handle devolvido. Confere o ponto de
+        // entrada antes de dar por boa.
         public static IntPtr MemfdDlopen(byte[] elf, out string falha)
         {
             falha = null;
@@ -136,6 +140,63 @@ namespace NuvioTpk
             if (dlsym(h, "nv_tpk_iniciar") == IntPtr.Zero) { falha = "carregou mas nv_tpk_iniciar faltou"; return IntPtr.Zero; }
             memfdFd = fd;   // segura o fd viva a vida toda
             return h;
+        }
+
+        // ROTA DOS DllImport PARA A .so ENCENADA (#184). MEDIDO na S90D (Tizen 9)
+        // e na UE75U8072F: o rastro do arranque diz "loaded staged lib by memfd" e
+        // o C do MESMO processo imprime "instalada 1.6.1" (a empacotada), sessao
+        // apos sessao — os DllImport("libnuvio.so") nao caiam na memfd. Com um
+        // resolvedor por assembly, "libnuvio.so" devolve o handle da memfd antes
+        // de qualquer busca do runtime. Por reflexao: NativeLibrary existe no
+        // runtime das TVs 6+ (.NET Core 3.1 / .NET 6), mas nao na superficie de
+        // tizen80/tizen90 para que estes pacotes compilam.
+        static IntPtr rotaHandle;
+        public static int RotaUsos;
+
+        static MethodInfo MetodoRota(out Type tipo)
+        {
+            Assembly core = typeof(Marshal).Assembly;
+            tipo = core.GetType("System.Runtime.InteropServices.DllImportResolver");
+            Type nl = core.GetType("System.Runtime.InteropServices.NativeLibrary");
+            return tipo == null || nl == null ? null : nl.GetMethod("SetDllImportResolver", BindingFlags.Public | BindingFlags.Static);
+        }
+
+        // true quando o runtime sabe rotear DllImport. Sem isso a encenada seria
+        // carregada a toa (o app rodaria a empacotada), entao nem se tenta.
+        public static bool PodeRotear()
+        {
+            try { return MetodoRota(out _) != null; } catch { return false; }
+        }
+
+        // Liga "libnuvio.so" dos DllImport de `asm` ao `handle`. Uma vez por
+        // assembly (o runtime recusa a segunda). Antes do primeiro DllImport.
+        public static bool RotearDllImport(Assembly asm, IntPtr handle, out string falha)
+        {
+            falha = null;
+            try
+            {
+                MethodInfo set = MetodoRota(out Type tipo);
+                if (set == null) { falha = "runtime sem NativeLibrary.SetDllImportResolver"; return false; }
+                MethodInfo m = typeof(NvCarga).GetMethod(nameof(Resolver), BindingFlags.NonPublic | BindingFlags.Static);
+                rotaHandle = handle;
+                set.Invoke(null, new object[] { asm, Delegate.CreateDelegate(tipo, m) });
+                return true;
+            }
+            catch (Exception e)
+            {
+                rotaHandle = IntPtr.Zero;
+                var ie = e is TargetInvocationException && e.InnerException != null ? e.InnerException : e;
+                falha = ie.GetType().Name + ": " + ie.Message;
+                return false;
+            }
+        }
+
+        // Nada de log aqui dentro: nv_tpk_log e ele mesmo um DllImport.
+        static IntPtr Resolver(string nome, Assembly asm, DllImportSearchPath? caminho)
+        {
+            if (rotaHandle == IntPtr.Zero || nome != "libnuvio.so") return IntPtr.Zero;
+            System.Threading.Interlocked.Increment(ref RotaUsos);
+            return rotaHandle;
         }
 
         public static void ApagarStaged(string dados)

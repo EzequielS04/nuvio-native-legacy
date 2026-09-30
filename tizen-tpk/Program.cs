@@ -224,8 +224,10 @@ namespace NuvioTpk
 
             // AUTO-ATUALIZACAO (opt-in por staging verificado): SO quando ha uma
             // libnuvio.so encenada e VERIFICADA mais nova que a empacotada, ela e
-            // memfd-carregada aqui (RTLD_GLOBAL -> os DllImport-por-soname passam a
-            // resolver nela). SEM staging, este 6+ nao usa memfd nenhum: cai no
+            // memfd-carregada aqui e os DllImport deste assembly sao ROTEADOS para
+            // ela (NvCarga.RotearDllImport). So o RTLD_GLOBAL nao bastava (#184):
+            // o runtime achava lib/libnuvio.so por caminho e o app seguia na
+            // empacotada. SEM staging, este 6+ nao usa memfd nenhum: cai no
             // dlopen simples de sempre, byte a byte igual ao anterior. Qualquer
             // falha no staging apaga o staging e volta para a empacotada — a
             // tentativa de atualizar nunca impede o app de abrir.
@@ -234,11 +236,15 @@ namespace NuvioTpk
             try
             {
                 string staged = NvCarga.DecidirStaged(dados, NvCarga.VersaoEmpacotada(DirectoryInfo.Resource), out string _);
-                if (staged != null)
+                if (staged != null && !NvCarga.PodeRotear())
+                    Etapa("note staged lib skipped: runtime cannot route DllImport");
+                else if (staged != null)
                 {
                     IntPtr h = NvCarga.MemfdDlopen(File.ReadAllBytes(staged), out string _);
-                    if (h != IntPtr.Zero) { carregou = true; Etapa("note loaded staged lib by memfd"); }
-                    else { Etapa("note staged lib failed, using the bundled one"); NvCarga.ApagarStaged(dados); }
+                    if (h == IntPtr.Zero) { Etapa("note staged lib failed, using the bundled one"); NvCarga.ApagarStaged(dados); }
+                    else if (NvCarga.RotearDllImport(typeof(Program).Assembly, h, out string falhaRota))
+                    { carregou = true; Etapa("note loaded staged lib by memfd, DllImport routed to it"); }
+                    else { Etapa("note staged lib loaded but DllImport routing failed (" + falhaRota + "), using the bundled one"); NvCarga.ApagarStaged(dados); }
                 }
             }
             catch { try { NvCarga.ApagarStaged(dados); } catch { } carregou = false; }
@@ -294,6 +300,10 @@ namespace NuvioTpk
                 return;
             }
             Etapa("ok nv_tpk_iniciar");
+            // Prova no log (#184): >0 = os DllImport passaram pelo resolvedor e
+            // cairam na encenada; o "[atualizacao] instalada X" do C deve dizer
+            // a versao dela.
+            if (carregou) Etapa("note staged lib routes=" + NvCarga.RotaUsos);
 
             Etapa("begin gl-window");
             try
