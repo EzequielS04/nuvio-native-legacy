@@ -1081,7 +1081,10 @@ static void desenhaFaixaAberta(const CatItem *ci, int r, float px, float py,
     float fx = px + pad, fw = w - pad * 2, fy = py + h - 12.0f * esc, fh = 4.0f;
     float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
     gfx_cor((GfxRect){ fx, fy, fw, fh }, 0.5f, 1, 1, 1, 0.22f * a);
-    gfx_cor((GfxRect){ fx, fy, fw * (float)ci->progresso / 100.0f, fh }, 0.5f, ar, ag, ab, a);
+    // Anda do valor anterior ate o novo, como no Continuar (revela.h).
+    float prog = revela_progresso(ci->imdb, ci->temporada, ci->episodio,
+                                  (float)ci->progresso, SDL_GetTicks());
+    gfx_cor((GfxRect){ fx, fy, fw * prog / 100.0f, fh }, 0.5f, ar, ag, ab, a);
   }
 }
 

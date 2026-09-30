@@ -131,6 +131,13 @@ static float animRes[BU_MAX_FILEIRAS][BU_MAX_POR_FIL];
 // Arte chegando e luz do foco, as mesmas da home (revela.h).
 static RevelaArte  revRes[BU_MAX_FILEIRAS][BU_MAX_POR_FIL];
 static RevelaVarre revVarre = { -1, 0, 0 };
+// ONDA das fileiras de resultado (revela.h). Uma fileira entra UMA vez, na
+// primeira vez que aparece para a consulta: a identidade e titulo + origem,
+// entao a letra digitada que so refina uma fileira que ja estava na tela nao a
+// faz entrar de novo — so a fileira nova (um addon que respondeu agora) entra.
+static char   filChave[BU_MAX_FILEIRAS][96];
+static int    filNova[BU_MAX_FILEIRAS];
+static Uint32 filEntraEm[BU_MAX_FILEIRAS];
 static float scrollY = 0.0f, scrollAlvo = 0.0f;
 static float scrollX[BU_MAX_FILEIRAS];
 // Velocidade da mola de 2a ordem da rolagem (anim_mola2): partida macia e
@@ -342,6 +349,25 @@ static void refiltrar(void) {
     fil[nFil].n = achou;
     nFil++;
   }
+
+  // Quem ja estava na tela herda o estado da onda; quem nao estava e nova.
+  { char chaveAntes[BU_MAX_FILEIRAS][96];
+    Uint32 entraAntes[BU_MAX_FILEIRAS];
+    int novaAntes[BU_MAX_FILEIRAS];
+    memcpy(chaveAntes, filChave, sizeof chaveAntes);
+    memcpy(entraAntes, filEntraEm, sizeof entraAntes);
+    memcpy(novaAntes, filNova, sizeof novaAntes);
+    for (int r = 0; r < BU_MAX_FILEIRAS; r++) {
+      filChave[r][0] = 0; filNova[r] = 0; filEntraEm[r] = 0;
+      if (r >= nFil) continue;
+      snprintf(filChave[r], sizeof filChave[r], "%s|%s",
+               fil[r].titulo ? fil[r].titulo : "", fil[r].origem ? fil[r].origem : "");
+      filNova[r] = 1;
+      for (int k = 0; k < BU_MAX_FILEIRAS; k++)
+        if (chaveAntes[k][0] && !strcmp(chaveAntes[k], filChave[r])) {
+          filNova[r] = novaAntes[k]; filEntraEm[r] = entraAntes[k]; break;
+        }
+    } }
 
   int cols[BU_MAX_FILEIRAS];
   for (int i = 0; i < nFil; i++) cols[i] = fil[i].n;
@@ -916,9 +942,23 @@ static void desenhaResultados(Uint32 agora) {
   gfx_recorte(BU_RES_X - 8.0f, BU_RES_Y - 30.0f,
               (BU_DIR - BU_RES_X) + 16.0f, BU_RES_AREA_H + 30.0f);
 
+  const float grupo = gfx_opacidade_grupo;
+  int ordemFil = 0;
   for (int r = 0; r < nFil; r++) {
     float ry = BU_RES_Y + r * NV_BUSCA_ROW_PASSO - scrollY;
-    if (ry > NV_TELA_H + 100.0f || ry + NV_BUSCA_ROW_PASSO < -100.0f) continue;
+    if (ry > NV_TELA_H + 100.0f || ry + NV_BUSCA_ROW_PASSO < -100.0f) {
+      filNova[r] = 0; filEntraEm[r] = 0;   // assenta fora da tela
+      continue;
+    }
+    // A fileira nova entra com a onda, uma fileira visivel depois da outra.
+    if (filNova[r]) {
+      filEntraEm[r] = anim_politica_reduzida ? 0u
+                    : (agora ? agora : 1u) + (Uint32)(ordemFil * NV_ENTRA_FIL_MS);
+      filNova[r] = 0;
+    }
+    if (filEntraEm[r]) ordemFil++;
+    if (filEntraEm[r] && revela_onda_fim(filEntraEm[r], agora)) filEntraEm[r] = 0;
+    gfx_opacidade_grupo = grupo * revela_entra(filEntraEm[r], 0.0f, agora);
 
     // Titulo do catalogo 48/600 e a origem 20/400 logo abaixo (margin-top 4).
     TxtLinha tt = txt_linha_corta(TXT_TITULO3, fil[r].titulo, 255, 255, 255, 255,
@@ -932,7 +972,9 @@ static void desenhaResultados(Uint32 agora) {
       txt_desenhar_alpha(ts, BU_RES_X, ry + NV_BUSCA_ROW_SUB, 0.95f);
     }
 
+    gfx_opacidade_grupo = grupo;
     float cardY = ry + NV_BUSCA_ROW_TRILHO;
+    int c0 = (int)(scrollX[r] / NV_BUSCA_CARD_PASSO);
     // Dois passes: o item em foco tem de ficar POR CIMA dos vizinhos, senao a
     // borda do poster ao lado corta o anel de foco.
     for (int passe = 0; passe < 2; passe++)
@@ -947,8 +989,14 @@ static void desenhaResultados(Uint32 agora) {
         float escala = 1.0f + 0.055f * f;
         float pw = NV_BUSCA_CARD_W * escala;
         float ph = NV_BUSCA_POSTER_H * escala;
+        // ONDA: atraso pela coluna visivel (revela.h); o card sobe e acende.
+        float entra = filEntraEm[r]
+                    ? revela_entra(filEntraEm[r], revela_onda_atraso(c - c0, 0), agora)
+                    : 1.0f;
+        gfx_opacidade_grupo = grupo * entra;
         GfxRect poster = { px - (pw - NV_BUSCA_CARD_W) * 0.5f,
-                           cardY - (ph - NV_BUSCA_POSTER_H) * 0.5f - 5.0f * f,
+                           cardY - (ph - NV_BUSCA_POSTER_H) * 0.5f - 5.0f * f
+                             + (1.0f - entra) * NV_ENTRA_DY,
                            pw, ph };
         float ar, ag, ab;
         // O foco e uma aproximacao curta, nao um salto de tamanho: o poster
@@ -1020,7 +1068,9 @@ static void desenhaResultados(Uint32 agora) {
           temItemFoco = 1;
         }
       }
+    gfx_opacidade_grupo = grupo;
   }
+  gfx_opacidade_grupo = grupo;
   gfx_sem_recorte();
 }
 

@@ -9,6 +9,7 @@
 #include "tex_cache.h"
 #include "layout.h"
 #include "anim.h"
+#include "revela.h"
 #include "ajustes.h"
 #include "diretor.h"
 #include "addons.h"
@@ -47,6 +48,17 @@ static int source, tabFocus, tabCursor, timeline, ranked;
 static float tabAnim[COL_SOURCE_MAX];
 static int order[VT_MAX], orderN=-1;
 static char catalogId[96];
+// MICRO-ANIMACOES (revela.h): a arte chegando por cartaz e a onda da grade.
+// A onda e ARMADA quando uma grade nova e pedida (abrir, trocar de fonte) e
+// dispara no primeiro quadro que tem itens — rolar ou voltar do detalhe nao
+// a repete.
+static RevelaArte revArte[VT_MAX];
+static Uint32 ondaEm;
+static int ondaArmada;
+static void armarOnda(void) {
+  ondaArmada = 1; ondaEm = 0;
+  memset(revArte, 0, sizeof revArte);
+}
 // A fonte escolhida NAO TEM ENDERECO ainda: o addon dela nao esta instalado
 // nesta TV, ou a sonda de manifesto ainda nao respondeu. Ver openSource.
 static int semFonte;
@@ -129,7 +141,7 @@ static void openSource(void) {
   const char *base=baseDaFonte(s);
   snprintf(catalogId,sizeof catalogId,"%s",s->catId);
   ranked=strstr(s->catId,"top100")||strstr(s->catId,"top250")||strstr(s->catId,"top10");
-  foco=0;scrollY=velY=0;orderN=-1;
+  foco=0;scrollY=velY=0;orderN=-1;armarOnda();
   // FONTE NAO-ADDON (issue #44): "tmdb"/"trakt" vinda do site. Nao tem base
   // de catalogo — o conteudo e pedido direto ao servico pelo
   // desc_vertudo_fonte. "Sem fonte" aqui quer dizer servico nao configurado
@@ -194,6 +206,7 @@ void vertudo_abrir(const char *base, const char *tipo, const char *catId,
   }
   snprintf(catalogId,sizeof catalogId,"%s",catId);
   ranked=strstr(catId,"top100")||strstr(catId,"top250")||strstr(catId,"top10");
+  armarOnda();
   desc_vertudo_abrir(base, tipo, catId);
 }
 
@@ -533,9 +546,13 @@ static void timelineCard(int i,float cy,float a,float x0) {
 
 void vertudo_desenhar(Uint32 agora) {
   float a = anim, x0 = ajustes_conteudo_x();
-  int n = nItens(), i;
-  (void)agora;
+  int n = nItens(), i, lin0;
   if (a < 0.01f) return;
+  if (ondaArmada && n > 0) { ondaEm = agora ? agora : 1u; ondaArmada = 0; }
+  if (ondaEm && revela_onda_fim(ondaEm, agora)) ondaEm = 0;
+  // A onda conta a fileira VISIVEL: a grade que abre rolada (a volta de uma
+  // colecao) entra pela primeira fileira da tela, nao pela zero.
+  lin0 = (int)(scrollY / (VT_CARD_H + VT_GAP_Y));
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a); }
   themeBackground(a);
@@ -560,35 +577,45 @@ void vertudo_desenhar(Uint32 agora) {
     float raio = ajustes_raio_poster_px() / VT_CARD_W;
     int sel = (i == foco);
     if (cy > NV_TELA_H || cy + VT_CARD_H + 40.0f < VT_TOPO - 12.0f) continue;
-    if(timeline){timelineCard(i,cy,a,x0);continue;}
+    // ONDA: cada cartaz sobe alguns pixels e ganha opacidade com atraso pela
+    // coluna e pela fileira visiveis (revela.h). So na primeira aparicao.
+    float entra = ondaEm ? revela_entra(ondaEm, revela_onda_atraso(i % VT_COLS,
+                                         i / VT_COLS - lin0), agora) : 1.0f;
+    float ac = a * entra;
+    if (ac < 0.005f) continue;
+    cy += (1.0f - entra) * NV_ENTRA_DY;
+    if(timeline){timelineCard(i,cy,ac,x0);continue;}
     if (!viewItem(i, &it)) continue;
     { GfxRect r = { cx, cy, VT_CARD_W, VT_CARD_H };
+      float aArte;
       if (sel && !tabFocus) {
         GfxRect anel = { cx - 4, cy - 4, VT_CARD_W + 8, VT_CARD_H + 8 };
-        gfx_cor(anel, ajustes_raio_poster_px() / (VT_CARD_W + 8.0f), 1, 1, 1, a);
+        gfx_cor(anel, ajustes_raio_poster_px() / (VT_CARD_W + 8.0f), 1, 1, 1, ac);
       }
       { const char *pp = posterprov_card(it.imdb, it.tmdb, it.tipo, it.poster);
         arteCard = pp[0] ? pp : it.backdrop; }
       t = arteCard[0] ? tex_obter_larg(arteCard, VT_CARD_W) : 0;
-      if (t) {
-        gfx_tex_aspect_atual = tex_aspecto(arteCard);
-        gfx_rect(r, t, GFX_CARD, sel ? 1.0f : 0.0f, 0, 0, raio, 0, 0, 0, a);
-        gfx_tex_aspect_atual = 0.0f;
-      } else {
+      // Arte chegando esvanece sobre o esqueleto (revela.h), como na home.
+      aArte = i < VT_MAX ? revela_arte(&revArte[i], t != 0, agora) : 1.0f;
+      if (!t || aArte < 0.999f)
         // Esqueleto enquanto a arte nao chega — a mesma cor do resto do app.
         gfx_cor(r, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G,
-                NV_COR_ESQUELETO_B, a);
+                NV_COR_ESQUELETO_B, ac);
+      if (t) {
+        gfx_tex_aspect_atual = tex_aspecto(arteCard);
+        gfx_rect(r, t, GFX_CARD, sel ? 1.0f : 0.0f, 0, 0, raio, 0, 0, 0, ac * aArte);
+        gfx_tex_aspect_atual = 0.0f;
       } }
     { int c = sel ? 255 : 214;
       TxtLinha l = txt_linha_corta(TXT_DET_META2, it.titulo, c, c, c, 255,
                                    VT_CARD_W);
-      txt_desenhar_alpha(l, cx, cy + VT_CARD_H + 10.0f, a * (sel ? 1.0f : 0.86f)); }
+      txt_desenhar_alpha(l, cx, cy + VT_CARD_H + 10.0f, ac * (sel ? 1.0f : 0.86f)); }
     if(ranked) {
       char rank[8];snprintf(rank,sizeof rank,"%d",i+1);
       TxtLinha edge=txt_linha(TXT_RANK,rank,234,236,241,255),ink=txt_linha(TXT_RANK,rank,17,18,22,255);
       float x=cx-10,y=cy+VT_CARD_H-edge.h;
-      for(int dx=-2;dx<=2;dx+=2)for(int dy=-2;dy<=2;dy+=2)txt_desenhar_alpha(edge,x+dx,y+dy,a);
-      txt_desenhar_alpha(ink,x,y,a);
+      for(int dx=-2;dx<=2;dx+=2)for(int dy=-2;dy<=2;dy+=2)txt_desenhar_alpha(edge,x+dx,y+dy,ac);
+      txt_desenhar_alpha(ink,x,y,ac);
     }
   }
   if(!n&&desc_vertudo_carregando())for(int i=0;i<5;i++)

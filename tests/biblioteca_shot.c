@@ -77,7 +77,11 @@ static void captura(const char *nome) {
   SDL_Surface *s;
   int y;
   rail_shot_aplicar();
-  quadros(50);
+  // 50 quadros E pelo menos 0,9 s: a onda da grade (revela.h) dura ~0,6 s de
+  // relogio, e sem o piso a foto saia com a segunda fileira ainda entrando.
+  { Uint32 t0 = SDL_GetTicks();
+    quadros(50);
+    while (SDL_GetTicks() - t0 < 900u) quadros(1); }
   SDL_PumpEvents();
   txt_novo_quadro();
   tex_novo_quadro();

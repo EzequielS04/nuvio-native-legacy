@@ -20,7 +20,14 @@
 //   revela_entra  a FILEIRA CHEGANDO. Cada card sobe alguns pixels e ganha
 //                 opacidade com um atraso proporcional a coluna VISIVEL (o
 //                 "stagger"). Nao ha passada extra: e o mesmo desenho com a
-//                 opacidade de grupo e o y deslocados.
+//                 opacidade de grupo e o y deslocados. Nas GRADES (Ver
+//                 tudo, Biblioteca, Busca) o atraso soma coluna e fileira
+//                 visiveis (revela_onda_atraso): a "onda" da primeira vez.
+//
+//   revela_progresso  a BARRA ANDANDO. A barra de progresso (Continuar
+//                 assistindo, episodio no detalhe) cresce do valor que ja
+//                 mostrava ate o novo, em vez de saltar. Um valor visto pela
+//                 primeira vez na sessao nasce parado.
 #ifndef NV_REVELA_H
 #define NV_REVELA_H
 #include "anim.h"
@@ -95,6 +102,94 @@ static inline float revela_entra(Uint32 inicio, float atrasoMs, Uint32 agora) {
   float t = ((float)(Sint32)(agora - inicio) - atrasoMs) / NV_ENTRA_MS;
   if (t <= 0.0f) return 0.0f;
   return revela_saida(t);
+}
+
+// ONDA DE GRADE: atraso de um card pela coluna e pela fileira VISIVEIS.
+// As duas param de crescer (NV_ENTRA_MAX_COL, NV_ONDA_MAX_FIL) para a onda
+// nunca demorar mais que ~0,8 s, mesmo numa grade de 5x4.
+#define NV_ONDA_MAX_FIL 4
+static inline float revela_onda_atraso(int coluna, int fileira) {
+  if (coluna < 0) coluna = 0;
+  if (coluna > NV_ENTRA_MAX_COL) coluna = NV_ENTRA_MAX_COL;
+  if (fileira < 0) fileira = 0;
+  if (fileira > NV_ONDA_MAX_FIL) fileira = NV_ONDA_MAX_FIL;
+  return coluna * NV_ENTRA_PASSO_MS + fileira * NV_ENTRA_FIL_MS;
+}
+// A onda que comecou em `inicio` ja assentou (todo card, ate o ultimo
+// atrasado)? Quem chama zera o inicio e os cards passam a perguntar de graca.
+static inline int revela_onda_fim(Uint32 inicio, Uint32 agora) {
+  return !inicio || anim_politica_reduzida ||
+         (Sint32)(agora - inicio) >
+           (Sint32)(NV_ENTRA_MS + revela_onda_atraso(NV_ENTRA_MAX_COL, NV_ONDA_MAX_FIL) + 40.0f);
+}
+
+// --- BARRA DE PROGRESSO ANIMADA ----------------------------------------------
+//
+// Uma tabela pequena por arquivo (a funcao e static inline, entao cada tela
+// guarda o que ELA mostrou): chave imdb+temporada+episodio, o valor de onde a
+// barra partiu, o alvo e quando comecou. A chave que nao esta na tabela entra
+// ja assentada — o primeiro desenho da sessao nao anima; e o valor que MUDA
+// (a volta do player) que anda. Cheia, a tabela despeja o menos usado.
+#define NV_PROGRESSO_MS  520.0f
+#define NV_PROGRESSO_N       48
+
+typedef struct {
+  char chave[48];
+  float de, para;          // em 0..100, como CatItem.progresso
+  Uint32 desde;            // 0 = assentada em `para`
+  Uint32 uso;
+} RevelaProgresso;
+
+// Valor exibido de uma entrada ao instante `agora` (pura; testada sozinha).
+static inline float revela_progresso_valor(const RevelaProgresso *p, Uint32 agora) {
+  if (!p->desde || anim_politica_reduzida) return p->para;
+  float t = (float)(Sint32)(agora - p->desde) / NV_PROGRESSO_MS;
+  if (t >= 1.0f) return p->para;
+  if (t <= 0.0f) return p->de;
+  return p->de + (p->para - p->de) * revela_saida(t);
+}
+
+// Passo sobre uma tabela dada: devolve o valor a desenhar para `alvo`.
+static inline float revela_progresso_em(RevelaProgresso *tab, int n,
+                                        const char *imdb, int temporada,
+                                        int episodio, float alvo, Uint32 agora) {
+  char chave[48];
+  int i, livre = 0;
+  if (!imdb || !imdb[0]) return alvo;
+  SDL_snprintf(chave, sizeof chave, "%s:%d:%d", imdb, temporada, episodio);
+  for (i = 0; i < n; i++) {
+    RevelaProgresso *p = &tab[i];
+    if (p->chave[0] && !SDL_strcmp(p->chave, chave)) {
+      p->uso = agora ? agora : 1u;
+      if (alvo != p->para) {
+        // Parte de onde a barra ESTA, e nao do alvo velho: um valor novo no
+        // meio da animacao continua sem salto.
+        p->de = revela_progresso_valor(p, agora);
+        p->para = alvo;
+        p->desde = anim_politica_reduzida ? 0u : (agora ? agora : 1u);
+      }
+      if (p->desde && (anim_politica_reduzida ||
+                       (float)(Sint32)(agora - p->desde) >= NV_PROGRESSO_MS))
+        p->desde = 0;
+      return revela_progresso_valor(p, agora);
+    }
+    if (!p->chave[0]) livre = i;
+    else if (tab[livre].chave[0] && p->uso < tab[livre].uso) livre = i;
+  }
+  // Primeira vez: entra assentada, sem animar.
+  SDL_snprintf(tab[livre].chave, sizeof tab[livre].chave, "%s", chave);
+  tab[livre].de = tab[livre].para = alvo;
+  tab[livre].desde = 0;
+  tab[livre].uso = agora ? agora : 1u;
+  return alvo;
+}
+
+// A tabela desta tela (uma por arquivo que inclui o cabecalho).
+static inline float revela_progresso(const char *imdb, int temporada, int episodio,
+                                     float alvo, Uint32 agora) {
+  static RevelaProgresso tab[NV_PROGRESSO_N];
+  return revela_progresso_em(tab, NV_PROGRESSO_N, imdb, temporada, episodio,
+                             alvo, agora);
 }
 
 #endif

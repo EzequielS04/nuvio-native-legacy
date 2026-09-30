@@ -6,6 +6,7 @@
 #include "badges.h"
 #include "text.h"
 #include "anim.h"
+#include "revela.h"
 #include "proximo.h"
 #include "trakt.h"
 #include "simkl.h"
@@ -121,9 +122,15 @@ void continuar_desenhar(const CatItem *ci, GfxRect r, float raio) {
   }
 
   // Linha fina, recuada da moldura. A parte vazia nao vira uma faixa cinza.
+  // A barra ANDA do valor que mostrava ate o novo (revela.h): na volta do
+  // player o card cresce ate onde a pessoa parou, em vez de saltar.
+  // O zero tambem e registrado: o "a seguir" que comeca a ser visto cresce
+  // do nada ate o valor novo.
+  float prog = revela_progresso(ci->imdb, ci->temporada, ci->episodio,
+                                (float)ci->progresso, SDL_GetTicks());
   if (ci->progresso > 0) {
     float h = NV_CW_BAR_H * esc;
-    float preenchido = largura * anim_clamp(ci->progresso / 100.f, 0, 1);
+    float preenchido = largura * anim_clamp(prog / 100.f, 0, 1);
     if (preenchido < h) preenchido = h;
     GfxRect barra = {r.x + pad, r.y + r.h - NV_CW_BAR_BOTTOM*esc - h, preenchido, h};
     gfx_cor(barra, .5f, .96f, .965f, .98f, .98f);

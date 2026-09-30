@@ -11,6 +11,7 @@
 #include "gfx.h"
 #include "text.h"
 #include "tex_cache.h"
+#include "catalogo.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -42,13 +43,16 @@ static void quadro(void) {
   SDL_GL_SwapWindow(janela);
 }
 
-static void captura(const char *nome) {
+// `ms` > 0: grava depois de tantos milissegundos de quadros, e nao depois de
+// 45 quadros — para fotografar uma animacao no meio (a onda dos resultados).
+static void capturaEm(const char *nome, Uint32 ms) {
   unsigned char *pix = malloc(1920 * 1080 * 4);
   SDL_Surface *s;
   int i, y;
   assert(pix);
   rail_shot_aplicar();
-  for (i = 0; i < 45; i++) quadro();
+  if (ms) { Uint32 t0 = SDL_GetTicks(); while (SDL_GetTicks() - t0 < ms) quadro(); }
+  else for (i = 0; i < 45; i++) quadro();
   quadro();
   glReadPixels(0, 0, 1920, 1080, GL_RGBA, GL_UNSIGNED_BYTE, pix);
   s = SDL_CreateRGBSurfaceWithFormat(0, 1920, 1080, 32, SDL_PIXELFORMAT_RGBA32);
@@ -61,6 +65,7 @@ static void captura(const char *nome) {
   free(pix);
   printf("captura: %s\n", nome);
 }
+static void captura(const char *nome) { capturaEm(nome, 0); }
 
 int main(int argc, char **argv) {
   const char *saida = argc > 1 ? argv[1] : "/tmp/nuvio-busca";
@@ -159,6 +164,28 @@ int main(int argc, char **argv) {
     assert(!strcmp(busca_consulta(), "\xd0\xb0\xd0\xb1"));
     snprintf(nome, sizeof nome, "%s-cirilico-digitado.bmp", saida);
     captura(nome); }
+  // RESULTADOS E A ONDA (revela.h): o catalogo do pacote filtrado por duas
+  // letras. A primeira foto sai no meio da entrada (os cards da direita ainda
+  // subindo), a segunda com tudo assentado.
+  ajustes_aplicar_blob("{\"tmdb_language\":\"en\"}");
+  cat_carregar("deploy/app/art");
+  { static CatFileira fl[2];
+    int n = cat_n();
+    snprintf(fl[0].chave, sizeof fl[0].chave, "shot.a");
+    snprintf(fl[0].titulo, sizeof fl[0].titulo, "Popular");
+    snprintf(fl[0].tipo, sizeof fl[0].tipo, "movie");
+    fl[0].ini = 0; fl[0].n = n / 2;
+    fl[1] = fl[0];
+    snprintf(fl[1].chave, sizeof fl[1].chave, "shot.b");
+    snprintf(fl[1].titulo, sizeof fl[1].titulo, "Trending");
+    fl[1].ini = n / 2; fl[1].n = n - n / 2;
+    cat_republicar_fileiras(fl, 2); }
+  busca_iniciar();
+  tecla(SDLK_e); tecla(SDLK_r);
+  snprintf(nome, sizeof nome, "%s-resultados-onda.bmp", saida);
+  capturaEm(nome, 170);
+  snprintf(nome, sizeof nome, "%s-resultados.bmp", saida);
+  capturaEm(nome, 1200);
   puts("PASS: capturas da Busca gravadas.");
   return 0;
 }
