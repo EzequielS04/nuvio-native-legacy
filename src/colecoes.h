@@ -78,6 +78,10 @@ int col_extra_definir(const ColFolder *v, int n);
 // da RPC ({collections_json}) e collections_json como STRING escapada. Vazio
 // nao apaga as locais (mesma regra dos addons). Devolve quantas pastas entraram.
 int col_definir_json(const char *json);
+// TROCA DE PERFIL: tira da tela as colecoes do perfil anterior (as da conta e
+// as do pacote). As do perfil novo entram quando o sync as trouxer; se ele nao
+// tiver nenhuma, a home fica sem colecoes. As extras (listas fixadas) ficam.
+void col_esquecer_perfil(void);
 // Chave de fileira de um grupo: collection_<id da colecao> quando a colecao
 // tem id (web e catordem usam o id), senao collection_<titulo do grupo>.
 void col_chave_grupo(const char *group, char *dst, unsigned n);

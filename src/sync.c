@@ -120,6 +120,9 @@ static int catordemCachePerfil = -1;
 // De qual perfil e o ciclo no ar, e o que ele deixou pendente. Ver
 // sync_iniciar (pedido com o fio vivo) e sync_passo (repeticao ao terminar).
 static int perfilDoCiclo, cicloInterrompido, pedidoComFioVivo;
+// De qual perfil e o ultimo ciclo COMPLETO aplicado em sync_passo (0 = nenhum
+// desde a ultima troca). Ver sync_perfil_pronto.
+static int perfilAplicado;
 static char *colBlob;       // sync_pull_collections, lido por colecoes.c no fio principal
 static int   temColBlob;
 // sync_pull_library e sync_pull_watched_items, crus, lidos por contalib.c no
@@ -970,6 +973,7 @@ void sync_passo(unsigned agoraMs) {
   // em "Continuar assistindo" no proximo ciclo de descoberta (issue #38).
   if (syncprog_aplicar(NULL) > 0) desc_refazer_continuar();
   if (estado == SYNC_PRONTO) ultimoOk = agoraMs;
+  if (!cicloInterrompido) perfilAplicado = perfilDoCiclo;
   // A VOLTA QUE FOI PEDIDA COM O FIO VIVO. So quando ela serve para algo: o
   // ciclo que acabou parou na pergunta de perfil (e a pergunta ja foi
   // respondida) ou puxou para um perfil que nao e mais o ativo. Quando a
@@ -1057,6 +1061,67 @@ void sync_reaplicar_ajustes(void) {
   temAjustesBlob = 0;
 }
 
+// A pendencia local de um perfil que nao esta ativo. So o perfil ativo usa
+// SY_AJUSTES_LOCAIS; os outros guardam a marca deles aqui ate voltarem.
+static void nomeLocaisPerfil(char *dst, size_t tam, int perfil) {
+  snprintf(dst, tam, "ajustes-locais-p%d.txt", perfil);
+}
+
+static int perfilPrincipal(void) {
+  int i;
+  for (i = 0; i < perfis_n(); i++) {
+    const ContaPerfil *p = perfis_item(i);
+    if (p && p->primario) return p->indice;
+  }
+  return 1;
+}
+
+void sync_trocar_perfil(int antes) {
+  int depois = perfis_ativo();
+  char nome[40], *t;
+  int pendente;
+  if (antes <= 0 || antes == depois) { sync_reaplicar_ajustes(); return; }
+  // 1. O QUE SAI. Os valores na memoria ainda sao os dele: a troca acabou de
+  //    acontecer e nada foi aplicado desde entao.
+  ajustes_perfil_guardar(antes);
+  nomeLocaisPerfil(nome, sizeof nome, antes);
+  t = dados_ler(SY_AJUSTES_LOCAIS);
+  pendente = (t && t[0] == '1') || sujoAjustes;
+  free(t);
+  if (pendente) dados_gravar(nome, "1\n");
+  else dados_apagar(nome);
+  // 2. O QUE ENTRA. Primeira visita nesta TV: parte do perfil principal. Quando
+  //    o principal e quem acabou de sair, os valores na memoria ja sao os dele;
+  //    quando ele nunca foi usado aqui, nao ha de onde partir e fica o que esta.
+  if (!ajustes_perfil_restaurar(depois)) {
+    int principal = perfilPrincipal();
+    if (principal != depois && principal != antes) ajustes_perfil_restaurar(principal);
+  }
+  // 3. A conta manda de novo (blob do perfil novo), e a base e a pendencia do
+  //    perfil anterior caem — ver sync_reaplicar_ajustes.
+  sync_reaplicar_ajustes();
+  // 4. ...A NAO SER QUE ESTE PERFIL TENHA MUDANCA LOCAL QUE NUNCA SUBIU. Ela
+  //    volta a valer como se a pessoa nunca tivesse trocado: o blob da conta
+  //    nao e aplicado por cima, e a mudanca sobe no proximo ciclo costurada no
+  //    blob DESTE perfil (sem blob, nada sobe — empurrarAjustes).
+  nomeLocaisPerfil(nome, sizeof nome, depois);
+  t = dados_ler(nome);
+  if (t && t[0] == '1') {
+    aplicarAjustes = 0;
+    dados_gravar(SY_AJUSTES_LOCAIS, "1\n");
+    sujoAjustes = 1;
+    printf("[sync] perfil %d tinha ajustes desta TV sem subir: mantidos\n", depois);
+    fflush(stdout);
+  }
+  free(t);
+  dados_apagar(nome);
+  perfilAplicado = 0;
+}
+
+int sync_perfil_pronto(void) {
+  return !fioVivo && perfilAplicado == perfis_ativo();
+}
+
 void sync_proteger_ajustes_locais(void) {
   aplicarAjustes = 0;
   dados_gravar(SY_AJUSTES_LOCAIS, "1\n");
@@ -1141,6 +1206,12 @@ void sync_esquecer_usuario(void) {
   stalker_esquecer();
   xtream_esquecer();   // mesma razao: usuario e senha sao a assinatura de quem saiu
   trakt_esquecer();
+  // Os ajustes por perfil guardados nesta TV (e as pendencias deles) sao da
+  // conta que saiu: a proxima conta nao parte deles.
+  ajustes_perfil_esquecer();
+  { char nome[40]; int i;
+    for (i = 1; i <= 32; i++) { nomeLocaisPerfil(nome, sizeof nome, i); dados_apagar(nome); } }
+  perfilAplicado = 0;
   perfis_esquecer();
   prog_esquecer_tudo();
   syncprog_esquecer();

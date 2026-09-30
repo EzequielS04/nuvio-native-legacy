@@ -2295,6 +2295,26 @@ static void sincronizarFileiras(void) {
 
 int home_tem_fileiras(void) { return nFileiras > 0; }
 
+// A HOME DE OUTRO PERFIL ABRE NO TOPO, como no arranque: destaque em foco,
+// fileira 0 no primeiro cartaz, sem rolagem, e a memoria de posicao da sessao
+// esquecida — ela e das fileiras do perfil anterior, e a proxima remontagem a
+// reaplicaria por chave (Continuar assistindo, Em alta...) no perfil novo.
+void home_ir_topo(void) {
+  int r;
+  focoHero = 1;
+  foco.fileira = 0;
+  foco.coluna = 0;
+  memset(foco.colunaLembrada, 0, sizeof foco.colunaLembrada);
+  for (r = 0; r < MAX_FIL; r++) { scrollX[r] = 0.0f; velX[r] = 0.0f; }
+  scrollY = 0.0f;
+  velY = 0.0f;
+  nPosViva = 0;
+  posVivaFoco[0] = 0;
+  posVivaCol = 0;
+  sairPerguntadoEm = 0;
+  heroUltTecla = SDL_GetTicks();
+}
+
 void home_atualizar(float dt, Uint32 agora) {
   sincronizarFileiras();
   // Primeira batida da home viva: ancora o ocio do carrossel no "agora", nao

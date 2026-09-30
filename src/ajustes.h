@@ -125,6 +125,9 @@ int  ajustes_cor_logo(void);
 int  ajustes_vidro(void);
 // "Contorno do vidro": 1 = o fio fino dos cartoes/linhas em repouso aparece.
 int  ajustes_vidro_contorno(void);
+// Ajustes > Conta, "Usar os addons do perfil principal" (padrao ligado): o
+// perfil que nao e o principal le os addons do principal. Ver perfis_ativo_addons.
+int  ajustes_addons_do_principal(void);
 // So para as capturas de teste e o atalho de quem ja sabe: grava como a tela.
 void ajustes_definir_vidro(int ligado);
 // P2P EXPERIMENTAL (p2p.h). Desligado de fabrica. O endereco (o servidor de
@@ -346,6 +349,15 @@ int         ajustes_nota_titulo(int fonte);
 // reconhece tambem nao: trocar por um padrao seria inventar uma escolha que o
 // usuario nunca fez.
 int ajustes_aplicar_blob(const char *json);
+
+// AJUSTES POR PERFIL NESTA TV (ajustes-p<N>.txt). _guardar grava os ajustes que
+// sao do perfil (os mesmos que a conta guarda; nunca os deste aparelho).
+// _restaurar os traz de volta e devolve 1 quando havia copia, 0 quando o perfil
+// nunca foi usado nesta TV. _esquecer apaga todas as copias (logout). Quem
+// decide quando cada uma roda e sync_trocar_perfil.
+void ajustes_perfil_guardar(int perfil);
+int  ajustes_perfil_restaurar(int perfil);
+void ajustes_perfil_esquecer(void);
 
 // O CAMINHO DE VOLTA (#85): devolve em *saida uma copia do blob `base` (o mesmo
 // objeto `settings_json` que ajustes_aplicar_blob le) com os valores DESTA TV

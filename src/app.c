@@ -86,6 +86,7 @@
 #include "addons.h"
 #include "idioma.h"
 #include "descoberta.h"
+#include "colecoes.h"
 #include "proximo.h"
 #include "trakt.h"
 #include "visto.h"
@@ -378,6 +379,11 @@ static int sidebar_permitida(void) {
 // requisicoes) num perfil que nao mudou seria pagar o preco da troca em toda
 // abertura do app.
 static int perfilAntes = 1;
+// Quando a troca de perfil comecou a preparar a home nova. Ver o teto abaixo.
+static Uint32 trocaPerfilDesde;
+// Teto da espera pela home do perfil novo. A rede lenta nunca prende a pessoa
+// na tela de escolha mais do que isto; passado ele, a home abre como estiver.
+#define TROCA_PERFIL_TETO_MS 6000
 
 // O detalhe precisa do retangulo REAL de onde o card saiu para o voo comecar
 // dali. Cada tela que abre um titulo entrega o seu; quando nenhuma entrega
@@ -1486,7 +1492,29 @@ void app_atualizar(float dt, Uint32 agora) {
       }
       return;
     }
+    if (perfilsel_concluido() && perfilsel_preparando()) {
+      // A HOME DO PERFIL NOVO SE MONTA AQUI ATRAS, e so aparece pronta. Antes a
+      // home abria no instante da escolha e se reconstruia duas ou tres vezes
+      // na frente da pessoa: a do perfil anterior, depois a dos addons novos,
+      // depois a do Continuar e das colecoes do perfil. Pronta = o ciclo de
+      // sync DESTE perfil aplicado e nenhuma montagem no ar (catalogos ou
+      // Continuar). O teto existe para uma rede lenta nunca prender a pessoa
+      // na tela de escolha: passado ele, a home abre como estiver e termina de
+      // se montar ali, como antes.
+      if ((sync_perfil_pronto() && !desc_montando()) ||
+          agora - trocaPerfilDesde >= TROCA_PERFIL_TETO_MS) {
+        printf("[perfis] home do perfil %d %s em %u ms\n", perfis_ativo(),
+               (sync_perfil_pronto() && !desc_montando()) ? "pronta" : "aberta pelo teto",
+               (unsigned)(agora - trocaPerfilDesde));
+        fflush(stdout);
+        perfilsel_preparar(0, agora);
+        home_ir_topo();
+        tela = TELA_HOME;
+      }
+      return;
+    }
     if (perfilsel_concluido()) {
+      int trocou = perfis_ativo() != perfilAntes;
       // O perfil mudou o destino do sync: rodar de novo traz os addons e o
       // progresso DESTE perfil, e nao os do perfil anterior que o primeiro
       // ciclo pegou. So quando MUDOU: confirmar o mesmo perfil e o caso comum
@@ -1508,9 +1536,15 @@ void app_atualizar(float dt, Uint32 agora) {
       // O que continua condicionado a troca e so o CARO: invalidarPerfil()
       // joga fora o que ja foi carregado, e reaplicar ajustes so faz sentido
       // quando o destino mudou.
-      if (perfis_ativo() != perfilAntes) {
+      if (trocou) {
         invalidarPerfil();
-        sync_reaplicar_ajustes();
+        // Os ajustes DESTE perfil nesta TV (ou os do principal, na primeira
+        // visita), e o blob da conta dele por cima. Ver sync_trocar_perfil.
+        sync_trocar_perfil(perfilAntes);
+        // AS COLECOES DO PERFIL ANTERIOR SAEM JA. col_definir_json so roda
+        // quando a conta manda linhas, entao um perfil sem colecoes ficava
+        // com as do anterior para sempre.
+        col_esquecer_perfil();
         // E A FILEIRA DE CONTINUAR, que invalidarPerfil() nao alcanca.
         //
         // invalidarPerfil() so zera a tela de Perfil/Stats. Quem refaz o
@@ -1547,6 +1581,15 @@ void app_atualizar(float dt, Uint32 agora) {
         if (sk) simkl_esquecer();
         if (tk || sk) desc_repetir(); }
       sync_iniciar();
+      if (trocou) {
+        // Fica nesta tela, com o indicador no cartao, ate a home estar pronta
+        // (bloco acima). Confirmar o mesmo perfil nao espera nada: a home ja e
+        // a dele.
+        perfilAntes = perfis_ativo();
+        trocaPerfilDesde = agora;
+        perfilsel_preparar(1, agora);
+        return;
+      }
       tela = TELA_HOME;
     }
     return;

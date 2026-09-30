@@ -24,6 +24,7 @@
 #include "catordem.h"
 #include "catordemcache.h"
 #include "traktauth.h"
+#include "perfis.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,6 +83,14 @@ int  perfis_n(void)              { return 2; }
 int  perfis_precisa_escolher(void) { return !escolhido; }
 const char *perfis_dono(void)    { return "dono-a"; }
 void perfis_esquecer(void)       { ativo = 1; escolhido = 0; }
+// Sem lista de verdade: sync_trocar_perfil cai no perfil 1 como principal.
+const ContaPerfil *perfis_item(int i) { (void)i; return NULL; }
+// Ajustes por perfil (ajustes.c) e a arte escolhida (arteescolha.c) nao entram
+// neste teste; o sync so os chama.
+void ajustes_perfil_guardar(int perfil) { (void)perfil; }
+int  ajustes_perfil_restaurar(int perfil) { (void)perfil; return 0; }
+void ajustes_perfil_esquecer(void) { }
+void arteesc_esquecer(void) { }
 static void carregarAtivo(void) {
   char *b = dados_ler("perfil.txt");
   if (b) { if (atoi(b) > 0) ativo = atoi(b); free(b); }
@@ -298,7 +307,14 @@ int main(int argc, char **argv) {
     pthread_mutex_lock(&trava);
     while (!puxandoCol) pthread_cond_wait(&sinal, &trava);
     pthread_mutex_unlock(&trava);
+    // Uma mudanca de ajuste feita NESTA TV no perfil 1, ainda sem subir.
+    sync_proteger_ajustes_locais();
     escolher(2);
+    sync_trocar_perfil(1);             // app.c, ramo da escolha
+    { char *p1 = dados_ler("ajustes-locais-p1.txt"), *g = dados_ler("ajustes-locais.txt");
+      confere("pendencia do perfil 1 guardada com ele, fora do 2", p1 && p1[0] == '1' && !g);
+      free(p1); free(g); }
+    confere("home do 2 ainda nao pronta com o ciclo do 1 no ar", !sync_perfil_pronto());
     sync_iniciar();                    // app.c, ramo da escolha: fio vivo
     pthread_mutex_lock(&trava);
     segurarCol = 0;
@@ -309,6 +325,14 @@ int main(int argc, char **argv) {
     confere("colecoes do perfil 1 nao aplicadas no 2", colDoOutro == 0);
     confere("ciclo do perfil 2 rodou e aplicou as dele", colDoCerto > 0);
     confere("ordem final e a do perfil 2", !strcmp(catordem_chave(0), "xperience_movie_foryou"));
+    confere("ciclo do 2 aplicado: home do 2 pronta", sync_perfil_pronto());
+    // Volta ao 1: a pendencia dele volta a valer (e sai do arquivo do perfil).
+    escolher(1);
+    sync_trocar_perfil(2);
+    { char *p1 = dados_ler("ajustes-locais-p1.txt"), *g = dados_ler("ajustes-locais.txt");
+      confere("de volta ao 1: a mudanca local dele continua protegida", g && g[0] == '1' && !p1);
+      free(p1); free(g); }
+    confere("perfil trocado de novo: nao pronta ate o ciclo do 1", !sync_perfil_pronto());
     printf("%s\n", falhas ? "FALHOU" : "PASSOU");
     return falhas ? 1 : 0;
   }
