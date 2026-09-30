@@ -62,6 +62,10 @@ static const char *arquivoDoPerfil(void) {
 }
 static int   ordemLocal;      // 1 = a pessoa MOVEU algo; ver fil_tem_ordem
 static int   carregado;
+// LIMPEZA DO #197 JA FEITA NESTE ARQUIVO (linha "migracao 197"). Arquivo que
+// nasce nesta versao ja nasce limpo; so o que veio de antes passa por ela, e
+// uma vez so. Ver fil_migrar_197.
+static int   migrado197;
 static int   registroSujo;   // ver fil_gravar_registro
 // FONTE DO DESTAQUE. "" = automatico (os primeiros titulos do catalogo, que e
 // o que a home sempre fez), "*" = sorteio do catalogo, qualquer outra coisa = a
@@ -230,6 +234,8 @@ static void gravar(void) {
         "# Fileiras da Home, escolha DESTE aparelho. Nunca e enviada para\n"
         "# a conta: ver o cabecalho de src/fileiras.h.\n"
         "limite %d\nordem %d\n", limite, ordemLocal);
+  if (migrado197 && k < cap)
+    k += (size_t)snprintf(txt + k, cap - k, "migracao 197\n");
   // Linha propria e com prefixo, como `limite` e `ordem`: o leitor ignora
   // prefixo que nao conhece, entao um arquivo escrito por esta versao continua
   // valendo numa anterior (ela so nao ve o destaque) e vice-versa.
@@ -271,7 +277,9 @@ static void carregar(void) {
   // fileiras do 1". Os outros perfis comecam do padrao (ordem automatica).
   if (!f && perfil == 1 && dados_caminho(caminho, sizeof caminho, "fileirasui.txt"))
     f = fopen(caminho, "r");
-  if (!f) return;
+  // Sem arquivo: nada de antes para limpar.
+  if (!f) { migrado197 = 1; return; }
+  migrado197 = 0;
   while (fgets(buf, sizeof buf, f)) {
     char *fim = buf + strlen(buf);
     while (fim > buf && (fim[-1] == '\n' || fim[-1] == '\r')) *--fim = 0;
@@ -280,6 +288,8 @@ static void carregar(void) {
       limite = limita(atoi(buf + 7), FIL_LIMITE_MIN, FIL_LIMITE_MAX);
     } else if (!strncmp(buf, "ordem ", 6)) {
       ordemLocal = atoi(buf + 6) ? 1 : 0;
+    } else if (!strcmp(buf, "migracao 197")) {
+      migrado197 = 1;
     } else if (!strncmp(buf, "hero ", 5)) {
       snprintf(heroFonte, sizeof heroFonte, "%s", buf + 5);
     } else if (!strncmp(buf, "linha ", 6) && nLinhas < FIL_MAX) {
@@ -626,6 +636,7 @@ void fil_definir_perfil(int p) {
     nLinhas = 0; ordemLocal = 0; limite = FIL_LIMITE_PADRAO; limiteOrigem = 0;
     memset(linhas, 0, sizeof linhas);
     carregado = 0;
+    migrado197 = 0;
     revisao++;
   }
   pthread_mutex_unlock(&trava);
@@ -1274,6 +1285,7 @@ void fil_esquecer(void) {
   limite = FIL_LIMITE_PADRAO;
   limiteOrigem = 0;
   carregado = 1;   // nao reler o arquivo de quem saiu
+  migrado197 = 1;  // lista vazia: nada a limpar
   memset(linhas, 0, sizeof linhas);
   gravar();
   pthread_mutex_unlock(&trava);
@@ -1330,4 +1342,85 @@ void fil_ordenar_por_addon(void) {
   ordemLocal = 1;
   gravar();
   pthread_mutex_unlock(&trava);
+}
+
+// LIMPEZA UNICA DO #197, para quem ja tem o arquivo estragado pelos dois
+// defeitos que b98ae90 fechou: (a) a rajada da seta no limite escondeu as
+// fileiras que a pessoa tinha e (b) catalogos fora da cota entraram LIGADOS e
+// tomaram as vagas (as fileiras de ator do Xperience do relator).
+//
+// O ARQUIVO NAO GUARDA O PORQUE DE UMA LINHA ESTAR OCULTA OU LIGADA: escondida
+// pela rajada e escondida pela pessoa sao o mesmo "1"; ligada pelo registro
+// automatico e adicionada pela pessoa sao o mesmo "0". Entao a regra nao
+// adivinha linha a linha — ela so age quando o arquivo tem o PADRAO do defeito,
+// e usa como prova de escolha a unica coisa que a pessoa disse fora deste
+// arquivo: a ordem de catalogos DA CONTA (`contaLigadas`, as chaves que a conta
+// tem na ordem e nao desligou).
+//
+//   padrao: tabela grande (>= 256 linhas: so addon com centenas de catalogos
+//           produz o registro em massa), ocultas >= 2 x limite, pelo menos uma
+//           oculta que a conta tem ligada E pelo menos um intruso.
+//   (a)     oculta pela pessoa, sem fila, catalogo, LIGADO NA CONTA -> volta a
+//           ligar, no lugar em que estava (a rajada nao movia ninguem).
+//   (b)     intruso: ligado, catalogo, sem fila, forma e tamanho padrao, que a
+//           conta NAO tem na ordem, de um addon com >= 100 linhas na tabela ->
+//           vira sugestao (aba "Fora da Home", um OK o traz de volta).
+//
+// Fora do padrao nao mexe em nada. Com ou sem limpeza, grava a marca e nao
+// roda de novo neste perfil. Devolve quantas linhas mudaram.
+#define MIGRA_MIN_LINHAS 256
+#define MIGRA_MIN_ADDON  100
+static int naLista(const char *chave, const char *const *l, int n) {
+  int k;
+  for (k = 0; k < n; k++) if (l[k] && !strcmp(l[k], chave)) return 1;
+  return 0;
+}
+static int linhasDoPrefixo(const char *chave) {
+  const char *u = strchr(chave, '_');
+  size_t t = u ? (size_t)(u - chave) : strlen(chave);
+  int i, c = 0;
+  for (i = 0; i < nLinhas; i++)
+    if (!strncmp(linhas[i].chave, chave, t) && linhas[i].chave[t] == '_') c++;
+  return c;
+}
+static int intruso(int i, const char *const *conta, int n) {
+  const Linha *l = &linhas[i];
+  return !l->oculta && !l->fila && l->tipo == FIL_TIPO_AUTO &&
+         l->tam == FIL_TAM_PADRAO &&
+         fil_origem_de(l->chave) == FIL_ORIGEM_CATALOGO &&
+         !naLista(l->chave, conta, n) && linhasDoPrefixo(l->chave) >= MIGRA_MIN_ADDON;
+}
+static int restauravel(int i, const char *const *conta, int n) {
+  const Linha *l = &linhas[i];
+  return l->oculta == OC_PESSOA && !l->fila &&
+         fil_origem_de(l->chave) == FIL_ORIGEM_CATALOGO && naLista(l->chave, conta, n);
+}
+int fil_migrar_197(const char *const *contaLigadas, int n) {
+  int i, ocultas = 0, volta = 0, saem = 0, feito = 0;
+  pthread_mutex_lock(&trava);
+  garantir();
+  if (migrado197) { pthread_mutex_unlock(&trava); return 0; }
+  for (i = 0; i < nLinhas; i++) {
+    if (linhas[i].oculta) ocultas++;
+    if (restauravel(i, contaLigadas, n)) volta++;
+    else if (intruso(i, contaLigadas, n)) saem++;
+  }
+  if (nLinhas >= MIGRA_MIN_LINHAS && ocultas >= 2 * limite && volta > 0 && saem > 0) {
+    for (i = 0; i < nLinhas; i++) {
+      if (restauravel(i, contaLigadas, n)) { linhas[i].oculta = 0; feito++; }
+      else if (intruso(i, contaLigadas, n)) { linhas[i].oculta = OC_SUGESTAO; feito++; }
+    }
+    printf("[fileiras] limpeza #197: %d fileira(s) da conta voltaram para a home, "
+           "%d catalogo(s) fora da cota foram para Fora da Home (%d linhas, %d ocultas, limite %d)\n",
+           volta, saem, nLinhas, ocultas, limite);
+  } else {
+    printf("[fileiras] limpeza #197: arquivo sem o padrao do defeito, nada mudou "
+           "(%d linhas, %d ocultas, limite %d, %d da conta ocultas, %d intrusos)\n",
+           nLinhas, ocultas, limite, volta, saem);
+  }
+  fflush(stdout);
+  migrado197 = 1;
+  gravar();
+  pthread_mutex_unlock(&trava);
+  return feito;
 }

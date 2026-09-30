@@ -222,6 +222,7 @@ int   addons_perfil_da_lista(void)         { return 0; }
 int   fil_limite(void)                     { return 3; }
 // Dubles da escolha da cota (#126), como em homejanelas.c.
 int fil_escolhida(const char *c) { (void)c; return -1; }
+int fil_migrar_197(const char *const *c, int n) { (void)c; (void)n; return 0; }
 void fil_registrar_se_couber(const char *c, const char *t, const char *a,
                              const char *tp) { (void)c; (void)t; (void)a; (void)tp; }
 const char *fil_hero_fonte(void)           { return "auto"; }

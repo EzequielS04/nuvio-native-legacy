@@ -3150,6 +3150,23 @@ static void *montar(void *u) {
   // que aparece la — e o historico tem de ganhar das recomendacoes.
   marco("montar: inicio");
   nManiFalhouVolta = 0; nPendSnap = 0;     // ver salvarSnapshot
+  // LIMPEZA UNICA DO #197 (fileiras.c, fil_migrar_197). So com a ordem da conta
+  // na mao: ela e a prova de escolha que a limpeza usa; sem ela, fica para a
+  // volta em que a ordem chegar. Depois da primeira vez e um teste de inteiro.
+  { int nc = catordem_n();
+    if (nc > 0) {
+      const char **lig = (const char **)malloc(sizeof *lig * (size_t)nc);
+      int q, m = 0;
+      if (lig) {
+        for (q = 0; q < nc; q++) {
+          const char *ch = catordem_chave(q);
+          if (ch[0] && !catordem_oculta(ch, ch)) lig[m++] = ch;
+        }
+        // Mudou algo: gravar() sobe fil_revisao e a home remonta sozinha.
+        fil_migrar_197(lig, m);
+        free(lig);
+      }
+    } }
   // OS MANIFESTOS COMECAM A CHEGAR AGORA, nao daqui a seis segundos. Ver o
   // cabecalho de maniLargar: eles nao dependem do Trakt, e eram o bloco de 7 s
   // logo depois dele.
