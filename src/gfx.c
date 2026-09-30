@@ -1434,6 +1434,10 @@ void gfx_vidro_folha(GfxRect r, float raio, float a) {
   gfx_cor(r, raio, 0.085f, 0.088f, 0.10f, 0.78f * a);
   gfx_rect(r, 0, GFX_BRILHO_TOPO, 0, 0.38f, 0, raio, 0.88f, 0.92f, 1.0f, 0.06f * a);
 }
+void gfx_vidro_aro(GfxRect r, float raio, float esp, float cr, float cg, float cb, float ca) {
+  if (!ajustes_vidro_contorno()) return;
+  gfx_anel(r, raio, esp, cr, cg, cb, ca);
+}
 // Cartao/linha em repouso dentro de uma folha de vidro: um veu claro, sem aro.
 void gfx_vidro_superficie(GfxRect r, float raio, float a) {
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
@@ -1478,7 +1482,7 @@ void gfx_vidro_painel_acento(GfxRect r, float raio, float fundo, float a) {
   ajustes_acento(&cr, &cg, &cb);
   gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, fundo * a);
   gfx_cor(r, raio, cr, cg, cb, 0.20f * a);
-  gfx_anel(r, raio, 1.5f, cr, cg, cb, 0.55f * a);
+  gfx_vidro_aro(r, raio, 1.5f, cr, cg, cb, 0.55f * a);
 }
 void gfx_luz_canto(GfxRect r, float raio, float cx, float cy, float alcance,
                    float cr, float cg, float cb, float ca) {

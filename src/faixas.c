@@ -185,7 +185,7 @@ static int legendaAtiva(void) {
 static int modo;
 // Coluna dentro da folha de LEGENDA: 0 = lista, 1 = estilo.
 #define FX_COL_ESTILO 2
-#define FX_N_ESTILO   9
+#define FX_N_ESTILO   10
 
 static int nLinhas(int col);
 
@@ -241,7 +241,7 @@ static int nLinhas(int col) {
 // linha restaura o conjunto inteiro sem exigir dezenas de toques no controle.
 static const char *const EST_ROT[FX_N_ESTILO] = {
   "Tamanho", "Fonte OpenSubtitles", "Cor", "Opacidade", "Fundo", "Posição", "Borda", "Atraso",
-  "Restaurar padrão"
+  "Negrito", "Restaurar padrão"
 };
 static const char *const EST_FUNDO[5] = { "Nenhum", "Escuro 25%", "Escuro 50%",
                                           "Escuro 75%", "Escuro 100%" };
@@ -255,7 +255,7 @@ static const char *const EST_OPAC[4]  = { "100%", "75%", "50%", "25%" };
  * valem igual. */
 static int estiloPreservadoAss(int linha) {
   return assrender_ativo() && (linha == 1 || linha == 2 || linha == 4 ||
-                               linha == 5 || linha == 6);
+                               linha == 5 || linha == 6 || linha == 8);
 }
 
 static void valorEstilo(int linha, char *dst, size_t tam) {
@@ -284,6 +284,9 @@ static void valorEstilo(int linha, char *dst, size_t tam) {
       if (!a) snprintf(dst, tam, "0 s");
       else    snprintf(dst, tam, "%+.2f s", a / 1000.0f);
       break; }
+    // Negrito vale para o que o app desenha (OpenSubtitles e legenda externa);
+    // a faixa que o player da TV desenha segue o peso do aparelho.
+    case 8: snprintf(dst, tam, "%s", i18n(e->negrito ? "Ligado" : "Desligado")); break;
     default: snprintf(dst, tam, "Aplicar"); break;
   }
 }
@@ -307,6 +310,7 @@ static void ciclarEstilo(int linha) {
       e->atrasoMs += 250;
       if (e->atrasoMs > 5000) e->atrasoMs = -5000;
       break;
+    case 8: e->negrito = !e->negrito; break;
     default:
       *e = (VideoLegendaEstilo){ 120, 0, 0, 3, 1, 0, 0, TXT_FAMILIA_INTER };
       // Restaurar e voltar ao normal do app, e o normal e respeitar o arquivo.
@@ -688,7 +692,7 @@ static void coluna_desenhar(int col, float x, float larg, float y0, float a) {
     const int vid=ajustes_vidro(), inv=sel && !vid;
     if(vid) {
       GfxRect lr={x-20,y-14,larg+20,92};
-      gfx_cor(lr,0.18f,1,1,1,.035f*a); gfx_anel(lr,0.18f,1.0f,1,1,1,.09f*a);
+      gfx_cor(lr,0.18f,1,1,1,.035f*a); gfx_vidro_aro(lr,0.18f,1.0f,1,1,1,.09f*a);
       if(sel) gfx_vidro_foco(lr,0.18f,1.0f,a);
     } else if(sel) superficieFocoFaixa((GfxRect){x-20,y-14,larg+20,92},a);
     int c=inv?ajustes_tinta_foco():230, sub=inv?ajustes_tinta_foco2():174;

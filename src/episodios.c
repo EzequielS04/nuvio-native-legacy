@@ -308,7 +308,7 @@ static void menuDesenhar(float x, float larg, float anim) {
     // atravessando o painel e tingindo a arte atras.
     if (ajustes_vidro()) {   // vidro: translucido com fio, a arte de tras aparece
       gfx_cor(m,.05f,.075f,.078f,.09f,.92f*anim);
-      gfx_anel(m,.05f,1.5f,1,1,1,.14f*anim);
+      gfx_vidro_aro(m,.05f,1.5f,1,1,1,.14f*anim);
     } else
     gfx_cor(m,.05f,.052f,.055f,.068f,.99f*anim);
 
@@ -627,7 +627,7 @@ void episodios_desenhar(void) {
   if (vid) {   // vidro: painel translucido e um fio, sem bloco cheio
     GfxRect pn = {x,0,EP_W,NV_TELA_H};
     gfx_cor(pn,.025f,.075f,.078f,.09f,.86f*anim);
-    gfx_anel(pn,.025f,1.5f,1,1,1,.12f*anim);
+    gfx_vidro_aro(pn,.025f,1.5f,1,1,1,.12f*anim);
   } else
   gfx_cor((GfxRect){x,0,EP_W,NV_TELA_H},.025f,.038f,.041f,.052f,anim);
   // A hierarquia vem de tipografia e superfícies, nao de um halo no topo:
@@ -688,7 +688,7 @@ void episodios_desenhar(void) {
     // empilhar bordas nem deixar o acento rosa dominar a folha.
     if (vid) {   // superficie de fio; o foco soma o contorno na cor do realce
       gfx_cor(row,.12f,1,1,1,.035f*anim);
-      gfx_anel(row,.12f,1.0f,1,1,1,.09f*anim);
+      gfx_vidro_aro(row,.12f,1.0f,1,1,1,.09f*anim);
       if (sel) gfx_vidro_foco(row,.12f,1.0f,anim);
     } else if (sel) {
       if (tinta < .5f) {

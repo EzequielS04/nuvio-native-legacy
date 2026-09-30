@@ -224,6 +224,7 @@ typedef struct {
   int atrasoMs;   // negativo adianta
   int opacidade;  // 0..3 = texto 100/75/50/25%
   int familia;    // TxtFamilia; aplicada ao overlay externo (OpenSubtitles)
+  int negrito;    // 1 = peso negrito no overlay (so o que o app desenha)
 } VideoLegendaEstilo;
 
 #define VIDEO_LEG_NCORES 6

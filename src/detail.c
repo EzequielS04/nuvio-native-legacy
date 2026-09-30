@@ -3858,7 +3858,7 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
     gfx_esqueleto(th, raioTh, 0.133f, 0.133f, 0.133f, a);
   else gfx_cor(th, raioTh, 0.133f, 0.133f, 0.133f, a);
   veuEpisodio(th, a);
-  if (ajustes_vidro()) gfx_anel(th, raioTh, 1.5f, 1, 1, 1, 0.14f * a);   // vidro: aro fino na miniatura
+  if (ajustes_vidro()) gfx_vidro_aro(th, raioTh, 1.5f, 1, 1, 1, 0.14f * a);   // vidro: aro fino na miniatura
 
   // EPISODIO JA ASSISTIDO, segundo o Trakt: mascara escura sobre a miniatura e
   // um check no canto. Pedido do dono, e resolve uma pergunta que a lista nao

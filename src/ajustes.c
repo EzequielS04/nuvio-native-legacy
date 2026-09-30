@@ -223,6 +223,9 @@ typedef enum {
   // Entre amigos alem do Trakt (pessoas.h): "Perfil pesquisavel" e o editor do
   // perfil publico. No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_PERFIL_PESQ, AJ_PERFIL_EDITAR,
+  // Fio dos cartoes e linhas em repouso no vidro (gfx_vidro_aro). No fim pelo
+  // mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_VIDRO_CONTORNO,
   AJ_N
 } OpcaoId;
 
@@ -764,6 +767,7 @@ static const Opcao OPCOES[AJ_N] = {
   // escondida estando visivel.
   ESC("Perfil pesquisável",              V_LIGA, 2),
   ACAO("Meu perfil público"),
+  ESC("Contorno do vidro",               V_LIGA, 2),   // local: vidroContornoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -897,6 +901,8 @@ static const char *CHAVE[] = {
   "notaTituloMal", "notaTituloEbert", "notaTituloScore",
   // Sem gravar: o estado vive em recomendacoes-perfil.txt (recomenda.c), por conta.
   "-perfilPesquisavel", "-perfilEditar",
+  // LOCAL e SEM o "-": visual desta TV, como a propria Interface de vidro.
+  "vidroContornoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -976,7 +982,7 @@ static const Item TELA[] = {
   // "Cor da logo" logo abaixo da cor: so vale com um tema dinamico, e e a
   // mesma decisao (de onde sai o destaque).
   SEC("Aparência", "Cor de destaque, idioma e animações", "aj_palette"),
-    OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_IDIOMA), OPC(AJ_ANIM),
+    OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_VIDRO_CONTORNO), OPC(AJ_IDIOMA), OPC(AJ_ANIM),
     OPC(AJ_FONTE_UI),
 
   SEC("Layout", "Estrutura da página inicial e estilos de pôster", "aj_layout-dashboard"),
@@ -1331,6 +1337,7 @@ static int valor[] = {
   0, 1, 1, 1, 1, 1,/* trakt, tmdb, letterboxd, mal, ebert, nota do mdblist */
   1,                /* perfil pesquisavel: DESLIGADO (V_LIGA: 1 = Desligado). Padrao de todo mundo. */
   0,                /* meu perfil publico: acao */
+  0,                /* contorno do vidro: LIGADO (V_LIGA: 0 = Ligado), o visual de antes */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1496,6 +1503,7 @@ int ajustes_cor_logo(void) { return lig(AJ_COR_LOGO); }
 int ajustes_vidro(void) { return 1; }
 #else
 int ajustes_vidro(void) { return lig(AJ_VIDRO) && !SEGURO; }
+int ajustes_vidro_contorno(void) { return lig(AJ_VIDRO_CONTORNO); }
 #endif
 static void riscoNotar(int op, int antes);
 void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_VIDRO, a); }
@@ -2860,6 +2868,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_TRAILER_FONTE:
     case AJ_COR_LOGO:       /* so existe com os temas dinamicos, que sao locais */
     case AJ_VIDRO:          /* visual desta TV: a GPU de cada uma aguenta diferente */
+    case AJ_VIDRO_CONTORNO:
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
     case AJ_PERFIL_EDITAR:
@@ -3369,6 +3378,9 @@ static int visivel(int i) {
       (TELA[i].op == AJ_PERFIL_PESQ || TELA[i].op == AJ_PERFIL_EDITAR) &&
       !recomenda_ativo())
     return 0;
+  // Contorno do vidro so tem o que mudar com o vidro ligado.
+  if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_VIDRO_CONTORNO && !lig(AJ_VIDRO))
+    return 0;
   return g < 0 || grupoAberto[secDoItem[i]] == g;
 }
 static int focavel(int i) {
@@ -3590,6 +3602,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_POSTER_TESTAR: return "Baixa o cartaz de um filme conhecido com a configuração atual e mostra se deu certo. O primeiro cartaz de cada título é montado no servidor e pode levar alguns segundos.";
     case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso, como nos apps de streaming clássicos. Dinâmica: estilo Apple TV, com o destaque que sobe e some ao descer, fileiras de tamanhos diferentes (destaques grandes, Top 10 com numerais, cartazes e faixas deitadas) sobre um fundo de vidro fosco tingido pela arte.";
     case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
+    case AJ_VIDRO_CONTORNO: return "O fio fino em volta dos cartões e das linhas em repouso. Desligado, o vidro fica só no fundo translúcido; o foco continua marcado.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
     case AJ_RESOLUCAO: return "Desenha a interface em 4K nas TVs que permitem. Muitas ignoram o pedido e continuam em 1080p — o log diz qual é o caso. Vale reiniciar o app depois de mudar. O vídeo já é 4K nos dois casos.";
@@ -6230,7 +6243,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_LARGURA_DP: case AJ_RAIO_DP:
       return AJPV_CARTAZ;
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
-    case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO:
+    case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR:

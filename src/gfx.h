@@ -430,6 +430,9 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
 // das pilulas do video de referencia.
 void gfx_vidro_folha(GfxRect r, float raio, float a);
 void gfx_vidro_superficie(GfxRect r, float raio, float a);
+// Fio de REPOUSO de um cartao/painel de vidro. Obedece a "Contorno do vidro";
+// o anel de FOCO (gfx_vidro_foco) nunca passa por aqui.
+void gfx_vidro_aro(GfxRect r, float raio, float esp, float cr, float cg, float cb, float ca);
 void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a);
 // FOCO de uma pilula/linha JA desenhada com gfx_vidro_painel: o miolo clareia
 // (branco a 9 %) e o contorno de 2 px em branco acende com a mola `foco`.

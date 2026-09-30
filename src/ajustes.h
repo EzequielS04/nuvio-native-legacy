@@ -123,6 +123,8 @@ int  ajustes_cor_logo(void);
 // com borda fina e foco em contorno branco. Cada tela decide o seu desenho;
 // o miolo comum esta em gfx_vidro_* (gfx.h).
 int  ajustes_vidro(void);
+// "Contorno do vidro": 1 = o fio fino dos cartoes/linhas em repouso aparece.
+int  ajustes_vidro_contorno(void);
 // So para as capturas de teste e o atalho de quem ja sabe: grava como a tela.
 void ajustes_definir_vidro(int ligado);
 // P2P EXPERIMENTAL (p2p.h). Desligado de fabrica. O endereco (o servidor de

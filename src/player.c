@@ -722,6 +722,7 @@ static void prefsLer(void) {
     else if (!strcmp(chave, "leg_atraso")  && v > -10000 && v < 10000) legEstilo.atrasoMs = v;
     else if (!strcmp(chave, "leg_opacidade") && v >= 0 && v <= 3) legEstilo.opacidade = v;
     else if (!strcmp(chave, "leg_familia") && v >= 0 && v < TXT_FAMILIA_N) legEstilo.familia = v;
+    else if (!strcmp(chave, "leg_negrito") && (v == 0 || v == 1)) legEstilo.negrito = v;
     else if (!strcmp(chave, "leg_tocado")  && v >= 0) legTocado = v;
   }
   fclose(f);
@@ -739,6 +740,7 @@ static void prefsGravar(void) {
   fprintf(f, "leg_atraso %d\n",  legEstilo.atrasoMs);
   fprintf(f, "leg_opacidade %d\n", legEstilo.opacidade);
   fprintf(f, "leg_familia %d\n", legEstilo.familia);
+  fprintf(f, "leg_negrito %d\n", legEstilo.negrito);
   fprintf(f, "leg_tocado %d\n", legTocado);
   fclose(f);
   dados_marcar_sujo(0);   // IDBFS (Samsung): ver o gravador de ajustes.c
@@ -2457,7 +2459,7 @@ static void blocoLinha(LegBloco *bl, TxtEstilo est, const char *linha, int r, in
 static void montarBloco(const LegendaCue *c, TxtEstilo est, int r, int g, int b, LegBloco *bl) {
   char texto[768], *linha, *salva;
   TxtFamilia fam = (TxtFamilia)legEstilo.familia;
-  int enf = (c->negrito ? TXT_ENF_NEGRITO : 0) | (c->italico ? TXT_ENF_ITALICO : 0);
+  int enf = (c->negrito || legEstilo.negrito ? TXT_ENF_NEGRITO : 0) | (c->italico ? TXT_ENF_ITALICO : 0);
   bl->n = 0; bl->w = 0; bl->h = 0;
   snprintf(texto, sizeof texto, "%s", c->texto);
   linha = strtok_r(texto, "\n", &salva);
