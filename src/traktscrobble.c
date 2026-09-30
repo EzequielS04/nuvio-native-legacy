@@ -2,6 +2,12 @@
 #include <stdio.h>
 #include <string.h>
 
+// O QUE O TRAKT ACEITA NUM PAUSE (respostas 422 dos registros 10162-10172):
+// "Progress should be at least 1.0% to pause" e, a partir de 80%, "Use stop to
+// scrobble". O stop a partir de 80% marcaria como assistido; este cliente so
+// marca a partir de 90% (o player decide), entao entre 80 e 90 nao manda nada.
+static int pausaAceita(double pct) { return pct >= 1.0 && pct < 80.0; }
+
 int scrobble_decidir(ScrobbleEstado *s, int evento, const char *id, double pct) {
   int mesmo;
   if (!id || !*id) return SCR_NADA;
@@ -15,12 +21,13 @@ int scrobble_decidir(ScrobbleEstado *s, int evento, const char *id, double pct) 
   if (evento == SCR_EV_PAUSOU) {
     if (!s->ativo || !mesmo) return SCR_NADA;
     s->ativo = 0;
-    return SCR_PAUSE;
+    return pausaAceita(pct) ? SCR_PAUSE : SCR_NADA;
   }
   if (evento == SCR_EV_SAIU) {
     snprintf(s->id, sizeof s->id, "%s", id);
     s->ativo = 0;
-    return pct >= 90.0 ? SCR_STOP : SCR_PAUSE;
+    if (pct >= 90.0) return SCR_STOP;
+    return pausaAceita(pct) ? SCR_PAUSE : SCR_NADA;
   }
   return SCR_NADA;
 }
