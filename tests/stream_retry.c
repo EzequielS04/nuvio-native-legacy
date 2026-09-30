@@ -57,5 +57,32 @@ int main(void) {
                                      serv, sizeof serv, &pct) == -1);
   }
   puts("stream_retry: escolha manual com url pronta nao vai ao debrid; lista trocada nao grava");
+
+  // IRMAS (logs 10384/10414 do .tpk 1.6.0): tres links "4KHDHub 4K" do mesmo
+  // addon e um de outro. Falhou o primeiro: as irmas saem juntas e a proxima
+  // tentativa vai ao outro addon, nao a um link que falha igual.
+  { Stream l[4];
+    fonte(&l[0], "https://a.invalid/1", 2160, 1);
+    fonte(&l[1], "https://b.invalid/2", 2160, 1);
+    fonte(&l[2], "https://c.invalid/3", 2160, 1);
+    fonte(&l[3], "https://d.invalid/4", 1080, 1);
+    for (int i = 0; i < 3; i++) {
+      snprintf(l[i].rotulo, sizeof l[i].rotulo, "4KHDHub 4K");
+      snprintf(l[i].provedor, sizeof l[i].provedor, "Nuvio Streams");
+    }
+    snprintf(l[3].provedor, sizeof l[3].provedor, "Outro");
+    stream_definir_lista(l, 4);
+    assert(stream_automatico_excluir(0) == 1);
+    assert(stream_automatico_excluir_irmas(0) == 2);
+    assert(stream_automatico() == 3);
+    // Addon so, todos com o mesmo nome: as irmas FICAM, uma de cada vez.
+    snprintf(l[3].provedor, sizeof l[3].provedor, "Nuvio Streams");
+    snprintf(l[3].rotulo, sizeof l[3].rotulo, "4KHDHub 4K");
+    stream_definir_lista(l, 4);
+    assert(stream_automatico_excluir(0) == 1);
+    assert(stream_automatico_excluir_irmas(0) == 0);
+    assert(stream_automatico() >= 1);
+  }
+  puts("stream_retry: player nao conectou num link, as irmas do mesmo addon saem junto");
   return 0;
 }

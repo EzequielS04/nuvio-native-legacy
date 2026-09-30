@@ -97,6 +97,32 @@ int stream_automatico_excluir(int indice) {
   pthread_mutex_unlock(&autoExclTrava);
   return resultado;
 }
+// IRMAS DE UMA FONTE QUE O PLAYER NAO CONSEGUIU ABRIR. Nos logs do .tpk 1.6.0
+// (10384, 10406, 10414, 10417) o automatico escolhia "4KHDHub 4K", o player
+// dava ConnectionFailed, e as duas tentativas seguintes eram OUTROS links
+// "4KHDHub 4K" do mesmo addon — que falhavam igual, e as tres vagas acabavam
+// sem nunca chegar a outro provedor. Irma = mesmo addon e mesmo rotulo.
+//
+// SO EXCLUI SE SOBRAR OUTRA CANDIDATA. Com um addon so (Torrentio + debrid,
+// onde todo link tem o mesmo nome) tirar as irmas zeraria a fila na primeira
+// falha; ai fica o comportamento antigo, uma de cada vez.
+// Devolve quantas sairam alem da propria.
+static int irma(int i, int indice) {
+  return i != indice && !strcmp(lista[i].provedor, lista[indice].provedor) &&
+         !strcmp(lista[i].rotulo, lista[indice].rotulo);
+}
+int stream_automatico_excluir_irmas(int indice) {
+  int i, k = 0, sobra = 0;
+  pthread_mutex_lock(&verTrava);
+  if (indice < 0 || indice >= n) { pthread_mutex_unlock(&verTrava); return 0; }
+  for (i = 0; i < n && !sobra; i++)
+    if (i != indice && !irma(i, indice) && !automaticaExcluida(i)) sobra = 1;
+  if (sobra)
+    for (i = 0; i < n; i++)
+      if (irma(i, indice) && stream_automatico_excluir(i)) k++;
+  pthread_mutex_unlock(&verTrava);
+  return k;
+}
 void stream_folha_contexto(const char *s) { snprintf(contexto, sizeof contexto, "%s", s ? s : ""); }
 int stream_folha_recarregar(void) { int r = recarregar; recarregar = 0; return r; }
 

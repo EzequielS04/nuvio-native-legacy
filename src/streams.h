@@ -114,6 +114,10 @@ int  stream_automatico(void);
 // Exclui uma candidata que ja foi entregue ao player e travou no pipeline.
 // A exclusao vale so para a lista atual; uma resposta nova limpa a memoria.
 int  stream_automatico_excluir(int indice);
+// Exclui tambem as IRMAS da candidata (mesmo addon e mesmo rotulo), mas so
+// quando sobra outra candidata: quando o player nao conectou numa, as outras
+// costumam falhar igual.
+int  stream_automatico_excluir_irmas(int indice);
 
 // A FONTE LEMBRADA DESTE TITULO, quando ela existe nesta lista. Quem decide
 // qual e (provedor + trilha de audio) e fontepref.c; aqui ela e um indice que

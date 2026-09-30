@@ -910,6 +910,12 @@ static void tentarProximaFonteVOD(void) {
 
   atual = stream_atual();
   if (atual >= 0) stream_automatico_excluir(atual);
+  // Erro do PLAYER (nao prazo nem buffer): as irmas desta fonte saem junto,
+  // senao as vagas que sobram vao todas para links que falham igual.
+  if (atual >= 0 && motivo == 1) {
+    int k = stream_automatico_excluir_irmas(atual);
+    if (k) printf("[fonte] automatico VOD pulou %d link(s) irmao(s) de %d\n", k, atual);
+  }
   if (fonteVODTentativas >= VOD_FONTE_MAX_TENTATIVAS ||
       stream_automatico() < 0) {
     printf("[fonte] automatico VOD sem proxima candidata (motivo=%d, %d de %d)\n",
