@@ -702,7 +702,10 @@ static void coluna_desenhar(int col, float x, float larg, float y0, float a) {
       int cr = inv ? c : (int)(fr * 255.0f + 0.5f);
       int cg = inv ? c : (int)(fg * 255.0f + 0.5f);
       int cb = inv ? c : (int)(fb * 255.0f + 0.5f);
-      txt_desenhar_alpha(txt_linha(TXT_BODY,"✓",cr,cg,cb,255),x+larg-44,y+12,a);
+      // Icone e nao o caractere ✓ (#186): so a Inter tem esse glifo, e com
+      // outra fonte da interface a marca saia como um quadrado vazio.
+      GfxRect ic = { x+larg-46.0f, y+12.0f, 28.0f, 28.0f };
+      gfx_icone(ic, "check", cr/255.0f, cg/255.0f, cb/255.0f, a);
     }
   }
   if(!n) txt_bloco(TXT_PG_FIM,"Nenhuma faixa disponível nesta fonte.",178,180,186,x,y0+68,larg,28,a,2);

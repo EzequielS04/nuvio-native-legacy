@@ -802,9 +802,11 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   // ANTES DA CHAVE do cache, para que a linha limpa seja a linha guardada: duas
   // entradas que diferem so por um emoji que ninguem desenha passam a ser a
   // mesma, o que tambem alivia a tabela na tela de fontes.
-  // A limpeza continua restrita à Inter legada. As outras famílias e legendas
-  // preservam símbolos que a própria face sabe desenhar.
-  if (familia == TXT_FAMILIA_INTER) {
+  // Vale para TODA familia da interface (#186): a limpeza decide por glifo, entao
+  // o simbolo que a face sabe desenhar fica; so o que viraria quadrado sai. Ela
+  // era so da Inter, e com "LG Display" ou "Droid Sans" o ⚡ dos nomes de fonte
+  // de addon aparecia como caixa.
+  {
     s = semDecorativoSemGlifo(fonteDe(familia, estilo, s), s, limpo, sizeof limpo);
     if (!*s) return vazia;
   }
@@ -937,7 +939,7 @@ static int larguraLinha(TxtEstilo estilo, const char *s, TxtFamilia familia,
     familia = TXT_FAMILIA_INTER;
   if (!s || !*s || estilo < 0 || estilo >= TXT_NFONTES ||
       !fonteDe(familia, estilo, s)) return 0;
-  if (familia == TXT_FAMILIA_INTER) {
+  {
     s = semDecorativoSemGlifo(fonteDe(familia, estilo, s), s, limpo, sizeof limpo);
     if (!*s) return 0;
   }
