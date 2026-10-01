@@ -1305,8 +1305,10 @@ static void relacionadosEPublicar(const char *id, int serie, int temTrakt) {
     for (k = 0; k < EX_NFONTES; k++) if (notas[k]) q++;
     printf("[extras] %s -> notas=%d/%d coment=%d rel=%d temps=%d\n", id, q,
            EX_NFONTES, nComent, nRel, nTemps); }
-  printf("[extras] colecao \"%s\" -> %d | rel[0] poster=%s\n", colNome, nCol,
-         nRel ? rel[0].poster : "(sem)"); fflush(stdout);
+  { char lb[160];   // o poster vem do addon de meta: pode levar a config dele
+    printf("[extras] colecao \"%s\" -> %d | rel[0] poster=%s\n", colNome, nCol,
+           nRel ? rede_url_log(rel[0].poster, lb, sizeof lb) : "(sem)"); }
+  fflush(stdout);
   fflush(stdout);
   marco("extras: publicados");
 }

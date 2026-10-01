@@ -419,8 +419,9 @@ static void escolher(void) {
   const TaCand *c = &cand[aba][foco[aba]];
   int m = aba == 0 ? arteesc_definir_fundo(chave, c->url)
                    : arteesc_definir_logo(chave, c->url);
-  printf("[arte] %s de %s: %s\n", aba == 0 ? "fundo" : "logo", chave,
-         c->url[0] ? c->url : "automatico");
+  { char lb[160];
+    printf("[arte] %s de %s: %s\n", aba == 0 ? "fundo" : "logo", chave,
+           c->url[0] ? rede_url_log(c->url, lb, sizeof lb) : "automatico"); }
   fflush(stdout);
   if (m) mudou = 1;
   trocaarte_fechar();

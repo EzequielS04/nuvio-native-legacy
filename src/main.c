@@ -305,7 +305,7 @@ static void videoSeSolicitado(void) {
   if (fgets(url, sizeof url, f)) {
     char *fim = url + strlen(url);
     while (fim > url && (fim[-1] == '\n' || fim[-1] == '\r')) *--fim = 0;
-    printf("[video] pedido: %s\n", url);
+    { char pub[120]; printf("[video] pedido: %s\n", rede_url_publica(url, pub, sizeof pub)); }
     fflush(stdout);
     if (url[0] == '-') video_parar();
     else { video_tocar(url); video_janela(0, 0, 1920, 1080); }

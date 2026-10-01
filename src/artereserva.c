@@ -1014,7 +1014,7 @@ int arte_fonte_resolver(const char *url, char *saida, size_t tam) {
     // A tmdb ja grava as duas celulas (padrao e outro) por conta propria.
     if (strcmp(p.fonte, "tmdb") && strcmp(p.fonte, "tmdbalt")) arfGravar(chave, r > 0 ? valor : NULL);
     if (r < 0) return -1;
-    printf("[tex] fundo %s de %s: %.90s\n", p.fonte, p.id, valor);
+    { char lb[160]; printf("[tex] fundo %s de %s: %s\n", p.fonte, p.id, rede_url_log(valor, lb, sizeof lb)); }
     fflush(stdout);
   }
   return montarFinal(&p, valor, saida, tam) ? 1 : -1;
