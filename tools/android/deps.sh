@@ -68,6 +68,18 @@ for abi in "${ABIS[@]}"; do
   P="$PREFIX/$abi"; mkdir -p "$P/lib" "$P/include"
   [ -n "${FORCAR:-}" ] && rm -f "$P/lib/libcurl.so" "$P/lib/libjpeg.so" "$P/lib/libwebp.so" "$P/lib/libmbedtls.a"
 
+  # O nucleo faz TLS em 4 fios ao mesmo tempo (tex_cache, descoberta, sync).
+  # Sem MBEDTLS_THREADING_C o estado global do PSA (TLS 1.3 do mbedTLS 3.6) e
+  # disputado e o Scudo do Android 11+ derruba o app com "race on chunk header"
+  # dentro da libcurl (TCL Smart TV Pro, 30/09/2026, 3 quedas). Liga no proprio
+  # mbedtls_config.h, e nao por -D, para curl e mbedTLS verem as MESMAS structs.
+  CFG="$SRC/mbedtls-$MBEDTLS_V/include/mbedtls/mbedtls_config.h"
+  if grep -q '^//#define MBEDTLS_THREADING_C' "$CFG"; then
+    sed -i '' -e 's|^//#define MBEDTLS_THREADING_C$|#define MBEDTLS_THREADING_C|' \
+              -e 's|^//#define MBEDTLS_THREADING_PTHREAD$|#define MBEDTLS_THREADING_PTHREAD|' "$CFG"
+    rm -f "$PREFIX"/*/lib/libmbedtls.a "$PREFIX"/*/lib/libcurl.so
+  fi
+
   if [ ! -f "$P/lib/libmbedtls.a" ]; then
     echo "== mbedtls $MBEDTLS_V $abi"
     cmk "$abi" "$SRC/mbedtls-$MBEDTLS_V" "$BUILD/mbedtls-$abi" "" \
