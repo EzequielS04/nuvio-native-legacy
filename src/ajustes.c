@@ -246,6 +246,9 @@ typedef enum {
   // visual de sempre. No fim pelo mesmo motivo: valor[] e CHAVE[] sao
   // posicionais.
   AJ_ADDON_POSTER, AJ_ADDON_FUNDO, AJ_ADDON_LOGO, AJ_COL_ARTE_CONTA,
+  // Selos coloridos na folha de fontes (#198, badges_desenhar_selos). No fim
+  // pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_SELOS_CORES,
   AJ_N
 } OpcaoId;
 
@@ -803,6 +806,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Fundo do destaque do addon",      V_LIGA, 2),   // local: fundoAddonLocal
   ESC("Logo do addon",                   V_LIGA, 2),   // local: logoAddonLocal
   ESC("Arte das pastas da conta",        V_LIGA, 2),   // local: colArteContaLocal
+  ESC("Selos coloridos",                 V_LIGA, 2),   // local: selosColoridosLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -949,6 +953,8 @@ static const char *CHAVE[] = {
   "heroTransicaoLocal",
   // LOCAIS e SEM o "-": o web nao tem estas escolhas e elas precisam sobreviver.
   "posterAddonLocal", "fundoAddonLocal", "logoAddonLocal", "colArteContaLocal",
+  // LOCAL e SEM o "-": o web nao tem esta escolha (la a cor vem do pacote).
+  "selosColoridosLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1112,6 +1118,7 @@ static const Item TELA[] = {
     OPC(AJ_PAUSA_OVERLAY),
     ROT("Player e seleção de fontes"),
       OPC(AJ_FONTE_MANUAL), OPC(AJ_FONTE_AUTO), OPC(AJ_FONTE_REPOR),
+      OPC(AJ_SELOS_CORES),
     ROT("Áudio e vídeo"),
       OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS),
     ROT("Idiomas"),
@@ -1396,6 +1403,9 @@ static int valor[] = {
   0,                /* transicao do destaque: Deslizar */
   // Arte do addon: todas DESLIGADAS (V_LIGA: 1 = Desligado) — o visual de antes.
   1, 1, 1, 1,       /* posteres, fundo, logo do addon; arte das pastas da conta */
+  // LIGADO: e o que o oficial mostra com o pacote de selos da wiki importado,
+  // e o pedido do #198. Quem prefere a fileira branca de antes desliga.
+  0,                /* selos coloridos: LIGADO (V_LIGA: 0 = Ligado) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1662,6 +1672,7 @@ int   ajustes_poster_addon(void)      { return lig(AJ_ADDON_POSTER); }
 int   ajustes_fundo_addon(void)       { return lig(AJ_ADDON_FUNDO); }
 int   ajustes_logo_addon(void)        { return lig(AJ_ADDON_LOGO); }
 int   ajustes_col_arte_conta(void)    { return lig(AJ_COL_ARTE_CONTA); }
+int   ajustes_selos_coloridos(void)   { return lig(AJ_SELOS_CORES); }
 // valor[] guarda decimos de segundo, preso ao intervalo de OPCOES (o disco
 // pode trazer qualquer numero).
 Uint32 ajustes_trailer_hero_espera_ms(void) {
@@ -2953,6 +2964,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_HERO_TRANSICAO: /* o web nao tem esta escolha */
     case AJ_ADDON_POSTER: case AJ_ADDON_FUNDO: case AJ_ADDON_LOGO:
     case AJ_COL_ARTE_CONTA: /* arte do addon: o web nao tem estas escolhas */
+    case AJ_SELOS_CORES:    /* no web a cor vem do pacote de selos importado */
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
     case AJ_PERFIL_EDITAR:
@@ -3676,6 +3688,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_ADDON_POSTER: return "Com um serviço de pôsteres ligado, o título que veio de um catálogo de addon fica com o pôster que o próprio addon manda, e o serviço só entra nos outros (Continuar assistindo, listas do Trakt, pôster genérico do Cinemeta). Sem o serviço, o pôster já é o do addon.";
     case AJ_ADDON_FUNDO: return "O card deitado, o destaque e a página do título usam o fundo que o addon manda no catálogo, mesmo com outro Background do hero ou com Destaque com outra arte. O addon que não manda fundo cai na fonte escolhida. A arte escolhida à mão em Trocar arte continua valendo mais.";
     case AJ_ADDON_LOGO: return "O logo do título que o addon manda não é trocado pelo logo traduzido do TMDB (Arte localizada) ao abrir o título. O addon que não manda logo continua recebendo o do TMDB.";
+    case AJ_SELOS_CORES: return "Na lista de fontes, cada selo (4K, HDR, Dolby, codec, serviço) ganha a cor do seu tipo, como no pacote de selos do Nuvio. Desligado, os selos ficam brancos.";
     case AJ_COL_ARTE_CONTA: return "As pastas de coleção que o app já traz com arte própria passam a usar a capa, o fundo e o logo que estão na sua conta (editor de coleções do site). O que a conta não tiver continua com a arte do app.";
     case AJ_HERO_TRANSICAO: return "Deslizar: quando o destaque troca de título, a arte e o texto saem para o lado e o próximo entra colado, como num carrossel. Esmaecer: a arte apaga e a nova aparece no lugar. Com Animações reduzidas a troca é sempre sem movimento.";
     case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta, de 3 a 40. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis. Mais fileiras usam mais memória e rede: em TV com 1 GB de memória a Home pode ficar lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior.";
@@ -6424,7 +6437,7 @@ static AjPreview familiaPreviaOpcao(int op) {
   switch (op) {
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA:
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
-    case AJ_FONTE_AUTO: case AJ_FONTE_REPOR:
+    case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_SELOS_CORES:
       return AJPV_REPRO;
     case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
