@@ -139,11 +139,12 @@ namespace NuvioTpk
         // JANELA_SOBE_GL_APPCONTROL: a cada AppControl (e como o menu da TV
         // abre/reabre o app), sobe o GLWindow 300 ms depois. Alvo: (4). Na
         // API8 so registra (6.0 funciona).
-#if NV_API8
-        const bool JANELA_SOBE_GL_APPCONTROL = false;
-#else
+        // CANARIO 8 (#195): ligado tambem na API8. Com o canario 7 (video no GL,
+        // GL opaco) a QN85Q70A (6.0) saiu pela Home e, reaberta pelo menu, recebeu
+        // 30 AppControl sem OnResume e sem janela visivel (D1 15660/15664): o app
+        // so voltava reiniciando a TV. Na API8 so sobe se alguma janela esta
+        // escondida, para nao mexer na primeira abertura.
         const bool JANELA_SOBE_GL_APPCONTROL = true;
-#endif
         // JANELA_SAIDA_LIMPA: ao sair, solta o player (Stop/Unprepare/Display
         // nenhum/Dispose), esconde as janelas e so entao Exit(); se o processo
         // ainda estiver vivo JANELA_SAIDA_PRAZO_MS depois, _exit(0). Alvo: (2):
@@ -920,7 +921,7 @@ namespace NuvioTpk
         protected override void OnPause()
         {
             pausado = true;
-            if (!jaPausou) { jaPausou = true; Janela("primeira pausa (canario 7: video no gl, gl opaco, sem prime; ela ainda vem?)"); }
+            if (!jaPausou) { jaPausou = true; Janela("primeira pausa (canario 8: video no gl, gl opaco, sem prime, sobe no appcontrol; ela ainda vem?)"); }
             Etapa("note pause" + Contagem() + " mainVisible=" + principalVisivel + (JanelaUnica ? " (glview)" : " glVisible=" + glVisivel));
             video?.PausarPeloSistema();
             base.OnPause();
@@ -949,6 +950,9 @@ namespace NuvioTpk
             try { base.OnAppControlReceived(e); } catch (Exception x) { Etapa("note appcontrol base threw " + x.GetType().Name + ": " + x.Message); }
             if (JanelaUnica) { Janela("appcontrol: janela unica (GLView), nada a subir"); return; }
             if (!JANELA_SOBE_GL_APPCONTROL || gl == null) return;
+#if NV_API8
+            if (principalVisivel && glVisivel) { Janela("appcontrol: janelas visiveis, nada a subir"); return; }
+#endif
             try
             {
                 var t = new NuiTimer(300);
