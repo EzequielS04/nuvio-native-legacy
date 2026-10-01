@@ -6,10 +6,13 @@ import android.os.Bundle
 import android.os.Process
 import android.system.Os
 import android.view.KeyEvent
+import android.view.SurfaceHolder
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import org.libsdl.app.SDLActivity
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 // Ponte entre o Android e o nucleo C (libmain.so): prepara ambiente e arquivos
 // ANTES do SDL subir, traduz teclas de controle remoto e poe a camada de video
@@ -37,6 +40,55 @@ class NuvioActivity : SDLActivity() {
         mSurface.setZOrderMediaOverlay(true)
         mSurface.holder.setFormat(PixelFormat.TRANSLUCENT)
         NvPlayer.iniciar(this, camada)
+    }
+
+    // Chamado pelo C (android_pedir_superficie), do fio do SDL, antes de criar a
+    // janela: fixa o buffer da SDLSurface em w x h e espera a superficie nova
+    // chegar (ate 2 s). Devolve true se ela veio nesse tamanho.
+    fun pedirSuperficie(w: Int, h: Int): Boolean {
+        val chegou = CountDownLatch(1)
+        var ok = false
+        runOnUiThread {
+            val holder = mSurface.holder
+            val atual = holder.surfaceFrame
+            if (atual.width() == w && atual.height() == h) { ok = true; chegou.countDown(); return@runOnUiThread }
+            holder.addCallback(object : SurfaceHolder.Callback {
+                override fun surfaceCreated(hd: SurfaceHolder) {}
+                override fun surfaceDestroyed(hd: SurfaceHolder) {}
+                override fun surfaceChanged(hd: SurfaceHolder, f: Int, ww: Int, hh: Int) {
+                    if (ww == w && hh == h) { ok = true; hd.removeCallback(this); chegou.countDown() }
+                }
+            })
+            holder.setFixedSize(w, h)
+        }
+        chegou.await(2, TimeUnit.SECONDS)
+        return ok
+    }
+
+    // DESPEDIDA (dados_despedida_ler, dados.c). Escondido, o app pode ser morto
+    // pelo Android sem saida limpa; o arquivo diz ao proximo arranque que isso
+    // nao foi queda, e o modo seguro nao desfaz ajustes por causa dela.
+    private fun despedida() = File(filesDir, "dados/despedida.txt")
+
+    // So apaga ao VOLTAR com o processo vivo: no primeiro onStart quem le (e
+    // apaga) a despedida da sessao anterior e o C, no arranque.
+    private var jaComecou = false
+
+    override fun onStart() {
+        super.onStart()
+        if (jaComecou) {
+            val f = despedida()
+            if (f.exists() && f.readText().startsWith("oculto")) f.delete()
+        }
+        jaComecou = true
+    }
+
+    override fun onStop() {
+        try {
+            val f = despedida()
+            if (!(f.exists() && f.readText().startsWith("fim"))) f.writeText("oculto\n")
+        } catch (_: Exception) {}
+        super.onStop()
     }
 
     override fun onPause() {

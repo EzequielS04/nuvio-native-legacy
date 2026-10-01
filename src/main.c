@@ -591,6 +591,11 @@ int main(int argc, char **argv) {
     if (quer4k) { printf("[4k] pedindo %dx%d — a linha `janela=` abaixo diz o "
                          "que a TV concedeu\n", pedeW, pedeH); fflush(stdout); } }
   SDL_Window *win;
+#ifdef NV_ANDROID
+  // No Android a janela do SDL tem o tamanho da SUPERFICIE: pedir 3840x2160 ao
+  // SDL_CreateWindow nao muda nada. Ver android_pedir_superficie.
+  if (pedeW > (int)NV_TELA_W) android_pedir_superficie(pedeW, pedeH);
+#endif
   win = SDL_CreateWindow("Nuvio", SDL_WINDOWPOS_CENTERED,
                                      SDL_WINDOWPOS_CENTERED,
                                      pedeW, pedeH, flags);

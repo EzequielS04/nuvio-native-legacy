@@ -21,6 +21,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
@@ -181,7 +182,10 @@ object NvPlayer {
             http.setDefaultRequestProperties(props)
 
             val p = ExoPlayer.Builder(act)
-                .setMediaSourceFactory(DefaultMediaSourceFactory(act).setDataSourceFactory(http))
+                .setMediaSourceFactory(DefaultMediaSourceFactory(act)
+                    // DefaultDataSource e nao so http: o trailer da Apple chega como
+                    // file:// (master reduzido a uma variante em dados/trailer, trailerapple.c).
+                    .setDataSourceFactory(DefaultDataSource.Factory(act, http)))
                 .build()
             player = p
             // Foco de audio GAIN; perder o foco pausa (o C ve o evento 3).

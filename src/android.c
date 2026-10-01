@@ -3,6 +3,7 @@
 #include "android.h"
 #include <SDL2/SDL.h>
 #include <android/log.h>
+#include <jni.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -81,4 +82,32 @@ void android_iniciar(void) {
   espelharNoLogcat();
   logaTv();
 }
+
+// SUPERFICIE 4K. A TCL Smart TV Pro (Android 14) tem painel 3840x2160 mas poe
+// os apps numa tela LOGICA de 1920x1080 (`wm size` override): a interface de
+// todo app e desenhada em 1080p e ampliada. O plano de video nao passa por isso
+// (o 4K do filme sai nitido). Uma superficie com buffer fixo de 3840x2160 e
+// composta pelo SurfaceFlinger no espaco FISICO; se o plano de graficos da TV
+// aceitar, a UI sai em 4K de verdade. O que a TV concedeu aparece na linha
+// `janela=... drawable=...` do main.c.
+int android_pedir_superficie(int w, int h) {
+  JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+  jobject act = (jobject)SDL_AndroidGetActivity();
+  jclass cls;
+  jmethodID m;
+  int ok = 0;
+  if (!env || !act) return 0;
+  // Classe pela propria Activity: FindClass deste fio (o do SDL) usa o
+  // carregador do sistema e nao acha classe do app.
+  cls = (*env)->GetObjectClass(env, act);
+  m = cls ? (*env)->GetMethodID(env, cls, "pedirSuperficie", "(II)Z") : NULL;
+  if (m) ok = (*env)->CallBooleanMethod(env, act, m, (jint)w, (jint)h) ? 1 : 0;
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); ok = 0; }
+  if (cls) (*env)->DeleteLocalRef(env, cls);
+  (*env)->DeleteLocalRef(env, act);
+  printf("[4k] android: superficie %dx%d %s\n", w, h, ok ? "concedida" : "NAO veio (segue o tamanho da tela)");
+  fflush(stdout);
+  return ok;
+}
+
 #endif
