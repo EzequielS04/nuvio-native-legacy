@@ -329,11 +329,17 @@ int main(int argc, char **argv) {
     tecla(SDLK_RIGHT);
     for (q = 0; q < 5; q++) { quadros(4, NULL); FOTO("andando2"); }
     quadros(90, NULL); FOTO("titulo3");
-    // PAGINA: baixo estica o cartao ate a pagina cheia.
+    // TELA CHEIA: a primeira seta para baixo so estica o cartao (o texto
+    // fica onde estava); a segunda desce para a pagina.
     tecla(SDLK_DOWN);
     for (q = 0; q < 6; q++) { quadros(3, NULL); FOTO("esticando"); }
+    quadros(90, NULL); FOTO("tela-cheia");
+    tecla(SDLK_DOWN);
+    for (q = 0; q < 3; q++) { quadros(4, NULL); FOTO("descendo"); }
     quadros(90, NULL); FOTO("pagina");
-    // VOLTAR: pagina -> cartao -> fileira.
+    // VOLTAR: pagina -> tela cheia no topo -> cartao -> fileira.
+    tecla(SDLK_AC_BACK);
+    quadros(90, NULL); FOTO("tela-cheia-de-novo");
     tecla(SDLK_AC_BACK);
     for (q = 0; q < 3; q++) { quadros(5, NULL); FOTO("voltando-cartao"); }
     quadros(90, NULL); FOTO("cartao-de-novo");

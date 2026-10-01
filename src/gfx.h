@@ -231,6 +231,8 @@ typedef enum {
   // uPar.x (mistura com o fundo, opaco); uPar.y escolhe o veu: 0 = so o canto
   // de baixo a esquerda (cartao), 1 = a vinheta da pagina — no cartao do tamanho da tela os
   // dois modos dao o mesmo pixel, e a troca entre eles nao se ve.
+  // Cor com r < 0.5 = SO O VEU (cor do fundo com alpha, sem a arte): por cima
+  // do furo do trailer que toca no cartao.
   GFX_JANELA = 39,
   GFX_NMODOS = 40
 } GfxModo;

@@ -275,6 +275,14 @@ static int   carFocou;              // a home ja recebeu o titulo da volta
 static int   carEsperaRect;         // quadros de home desenhada para ler o cartaz
 static float carOff, carVel;        // posicao da tira, em titulos
 static float cartao = 1.0f, cartaoVel;  // 1 = cartao, 0 = pagina cheia
+// TELA CHEIA NO TOPO (dono, 01/10): a PRIMEIRA seta para baixo so estica o
+// cartao ate a tela inteira — a arte (ou o trailer) toma a tela e o texto fica
+// onde estava, sem rolar; a SEGUNDA desce para a pagina (nivel 1). Voltar
+// desfaz na ordem inversa: pagina -> tela cheia no topo -> cartao -> fileira.
+// `carTxt` e a mola do texto: 1 na posicao do cartao, 0 na da pagina; ela so
+// vai a 0 com a pagina rolada (nivel >= 1).
+static int   carCheia;
+static float carTxt = 1.0f, carTxtVel;
 static GfxRect carOrigem;           // cartaz da fileira (abrir e fechar)
 static float heroDx;                // deslocamento horizontal do bloco do heroi
 // MODO CINEMA DO TRAILER (dono, 21/09/2026, com a foto do outro app: "quando
@@ -1207,6 +1215,7 @@ void detail_abrir(const HomeItem *it) {
   if (n > 0 && pos >= 0 && carIdx[pos] == it->indice) {
     carro = 1; carN = n; carPos = carAplicado = pos; carBotaoFim = 0; carFocou = 0; carEsperaRect = 0;
     carOff = (float)pos; carVel = 0.0f; cartao = 1.0f; cartaoVel = 0.0f;
+    carCheia = 0; carTxt = 1.0f; carTxtVel = 0.0f;
     carOrigem = it->rect;
     if (carOrigem.w < 8.0f || carOrigem.h < 8.0f)
       carOrigem = (GfxRect){ NV_TELA_W * 0.5f - 124.0f, NV_TELA_H * 0.5f - 186.0f, 248.0f, 372.0f };
@@ -1243,6 +1252,11 @@ static void carPasso(int d) {
   if (novo < 0 || novo >= carN) return;
   carPos = novo;
   carBotaoFim = d > 0;
+  // O TRAILER DO CARTAO PARA NA HORA: nada de plano preso atras da tira de
+  // filme. O titulo novo espera o seu tempo de novo (abrirInterno zera a
+  // tentativa quando a tira chega).
+  if (trailer_aberto() && !trailer_cheia()) trailer_fechar();
+  trailerDesde = 0; trailerTentado = 0; trailerFade = 0.0f;
 }
 
 // A janela do cartao em cena NESTE quadro: cartao <-> tela cheia (cartao) e
@@ -2171,10 +2185,14 @@ void detail_evento(const SDL_Event *e) {
 
   if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE ||
       k == SDLK_DELETE) {
-    if (nivel > 0) nivel = 0; else saindo = 1;
+    if (nivel > 0) nivel = 0;
+    else if (carro && carCheia) carCheia = 0;   // tela cheia no topo -> cartao
+    else saindo = 1;
     return;
   }
   if (nivel == 0) {
+    // CARROSSEL: a primeira seta para baixo so estica o cartao (ver carCheia).
+    if (k == SDLK_DOWN && carro && !carCheia) { carCheia = 1; return; }
     if (k == SDLK_DOWN) {
       // Descer do hero cai na primeira fileira FOCAVEL. Num filme nao ha
       // temporadas nem episodios, e parar numa fileira vazia deixava o D-pad
@@ -2432,9 +2450,15 @@ void detail_atualizar(float dt, Uint32 agora) {
                !trocaarte_aberto() &&
                !pedReproduzir && !pedFontes && !player_aberto() &&
                pg < 0.05f && scrollY < 1.0f &&
-               // Cartao do carrossel: sem trailer automatico. O video e um
-               // plano de tela cheia atras do canvas e o cartao nao o recorta.
-               !(carro && cartao > 0.01f);
+               // CARROSSEL (dono, 01/10: "coloque pra tocar dentro do card"):
+               // o trailer toca no cartao, mas so com a tira parada no titulo
+               // montado e a abertura assentada. O plano e de TELA CHEIA, como
+               // a arte (GFX_JANELA: a arte nunca escala, o cartao e uma janela
+               // sobre ela); o cartao e o furo arredondado (carFundo). Esticar
+               // para a tela cheia so aumenta o furo: o plano nao se move.
+               !(carro && (carAplicado != carPos || fabsf(carOff - (float)carPos) > 0.02f)) &&
+               // Animacoes reduzidas: o cartao fica com a arte (sem video).
+               !(carro && cartao > 0.01f && ajustes_animacoes_reduzidas());
     if (!detail_assentado() || !topo) { if (!trailer_cheia()) trailerDesde = 0; }
     else if (!trailerDesde) trailerDesde = agora;
     if (trailer_aberto() && !trailer_cheia() && !topo) trailer_fechar();
@@ -2497,7 +2521,8 @@ void detail_atualizar(float dt, Uint32 agora) {
     // trailer_mostra_video: no .tpk a arte fica ate o recorte do zoom
     // assentar (#178); na LG e no .wgt e sempre 1.
     { float alvo = (trailer_aberto() && trailer_tocando() && trailer_mostra_video()) ? 1.0f : 0.0f;
-      int toca = alvo > 0.5f && !trailer_cheia();
+      // No cartao o bloco de texto fica: o modo cinema e da tela cheia.
+      int toca = alvo > 0.5f && !trailer_cheia() && !(carro && cartao > 0.01f);
       trailerFade = anim_mola(trailerFade, alvo, dt, NV_MOLA_SCROLL);
       trailercinema_passo(&trailerCinema, toca, dt, ajustes_animacoes_reduzidas()); }
   }
@@ -2662,7 +2687,9 @@ void detail_atualizar(float dt, Uint32 agora) {
   if (carro) {
     int k;
     carOff = anim_mola2(&carVel, carOff, (float)carPos, dt, CAR_MOLA);
-    cartao = anim_mola2(&cartaoVel, cartao, nivel >= 1 ? 0.0f : 1.0f, dt, CAR_MOLA_PAG);
+    cartao = anim_mola2(&cartaoVel, cartao, (nivel >= 1 || carCheia) ? 0.0f : 1.0f, dt, CAR_MOLA_PAG);
+    carTxt = anim_mola2(&carTxtVel, carTxt, nivel >= 1 ? 0.0f : 1.0f, dt, CAR_MOLA_PAG);
+    if (ajustes_animacoes_reduzidas()) { carTxt = nivel >= 1 ? 0.0f : 1.0f; carTxtVel = 0.0f; }
     // Monta a pagina do titulo novo quando a tira esta chegando: o texto dele
     // entra enquanto o cartao assenta, e nao depois.
     if (carAplicado != carPos && fabsf(carOff - (float)carPos) < 0.25f && !saindo)
@@ -5818,6 +5845,17 @@ static void carFundo(void) {
     // home meio apagada, um cartao grande a meia forca le como borrao.
     { float ak = k == carAplicado ? a : anim_clamp((s - 0.55f) * 2.2f, 0.0f, 1.0f);
       if (ak <= 0.004f) continue;
+      // TRAILER NO CARTAO: furo com os cantos do cartao (fora dele a folha
+      // opaca fica), a arte apaga por cima com trailerFade quando o primeiro
+      // quadro chega, e o veu sozinho (cor r=0) segue por cima do video.
+      if (k == carAplicado && trailerFade > 0.005f && trailer_aberto() && !trailer_cheia()) {
+        gfx_furo_raio(r, raio / r.h);
+        gfx_tex_aspect_atual = tex ? tex_aspecto(arte) : 0.0f;
+        if (tex && trailerFade < 0.995f)
+          gfx_rect(r, tex, GFX_JANELA, veu, 0.85f * pg, 1.0f - cartao, raio / r.h, 1, 1, 1, ak * (1.0f - trailerFade));
+        gfx_rect(r, 0, GFX_JANELA, veu, 0.85f * pg, 1.0f - cartao, raio / r.h, 0, 0, 0, ak * trailerFade);
+        continue;
+      }
       if (!tex) { gfx_cor(r, raio / r.h, 0.16f, 0.17f, 0.19f, ak); continue; }
       gfx_tex_aspect_atual = tex_aspecto(arte);
       gfx_rect(r, tex, GFX_JANELA, veu, 0.85f * pg, 1.0f - cartao, raio / r.h, 1, 1, 1, ak); }
@@ -5937,9 +5975,12 @@ void detail_desenhar(Uint32 agora) {
           float raio, passo;
           GfxRect hb = carBuraco(&raio);
           passo = hb.w + CAR_VAO;
-          heroDx = hb.x + ((float)carAplicado - carOff) * passo +
-                   (96.0f + (CAR_TEXTO_PAD - 96.0f) * cartao) - 96.0f;
-          dyCar = -CAR_TEXTO_SOBE * cartao;
+          // hb.x - CAR_X*cartao e so o voo da abertura (0 assentado); o lugar
+          // do texto segue carTxt, e nao o tamanho do cartao: esticado para a
+          // tela cheia ele nao se mexe.
+          heroDx = (hb.x - CAR_X * cartao) + ((float)carAplicado - carOff) * passo +
+                   (CAR_X + CAR_TEXTO_PAD - 96.0f) * carTxt;
+          dyCar = -CAR_TEXTO_SOBE * carTxt;
           aCar = anim_clamp(1.0f - fabsf(carOff - (float)carAplicado) * 4.0f, 0.0f, 1.0f);
         }
         heroWeb(a2 * k * f * aCar, -scrollY + (1.0f - a2) * NV_TELA_H * 0.05f + c * NV_CINEMA_DESCE + dyCar);
