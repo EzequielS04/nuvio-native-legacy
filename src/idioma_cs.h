@@ -497,7 +497,6 @@
   T("Buscando fontes nos addons…", "Hledají se zdroje ve vašich doplňcích…"),
   T("Buscando mais artes…", "Hledá se další artwork…"),
   T("Buscando seus addons e o que você estava assistindo.", "Načítají se vaše doplňky a to, co jste sledovali."),
-  T("Buscar", "Hledat"),
   T("Buscar filmes e séries", "Hledat filmy a seriály"),
   T("Buscar pessoas", "Hledat lidi"),
   T("Buscar por apelido ou código", "Hledat podle přezdívky nebo kódu"),

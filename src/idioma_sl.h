@@ -497,7 +497,6 @@
   T("Buscando fontes nos addons…", "Iskanje virov v vaših dodatkih …"),
   T("Buscando mais artes…", "Iskanje dodatnih ilustracij …"),
   T("Buscando seus addons e o que você estava assistindo.", "Nalaganje vaših dodatkov in tega, kar ste gledali."),
-  T("Buscar", "Iskanje"),
   T("Buscar filmes e séries", "Iskanje filmov in serij"),
   T("Buscar pessoas", "Poišči ljudi"),
   T("Buscar por apelido ou código", "Iskanje po vzdevku ali kodi"),

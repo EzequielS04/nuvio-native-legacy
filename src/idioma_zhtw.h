@@ -497,7 +497,6 @@
   T("Buscando fontes nos addons…", "正在你的附加元件中尋找片源…"),
   T("Buscando mais artes…", "正在尋找更多圖片…"),
   T("Buscando seus addons e o que você estava assistindo.", "正在取得你的附加元件和你在看的內容。"),
-  T("Buscar", "搜尋"),
   T("Buscar filmes e séries", "搜尋電影和劇集"),
   T("Buscar pessoas", "尋找使用者"),
   T("Buscar por apelido ou código", "依暱稱或代碼搜尋"),

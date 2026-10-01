@@ -497,7 +497,6 @@
   T("Buscando fontes nos addons…", "アドオンでソースを探しています…"),
   T("Buscando mais artes…", "アートワークをさらに探しています…"),
   T("Buscando seus addons e o que você estava assistindo.", "アドオンと視聴中の作品を読み込んでいます。"),
-  T("Buscar", "検索"),
   T("Buscar filmes e séries", "映画や番組を検索"),
   T("Buscar pessoas", "ユーザーを探す"),
   T("Buscar por apelido ou código", "ニックネームまたはコードで検索"),

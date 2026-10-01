@@ -109,9 +109,9 @@ int main(int argc, char **argv) {
   menu_abrir();
   snprintf(nome, sizeof nome, "%s-2-abrindo.bmp", saida); quadros(5, nome);
   snprintf(nome, sizeof nome, "%s-3-aberta-inicio.bmp", saida); quadros(60, nome);
-  tecla(SDLK_UP);
-  snprintf(nome, sizeof nome, "%s-4-foco-buscar.bmp", saida); quadros(30, nome);
-  tecla(SDLK_UP);
+  tecla(SDLK_DOWN);   // ordem do original: Inicio, Busca, Explorar...
+  snprintf(nome, sizeof nome, "%s-4-foco-busca.bmp", saida); quadros(30, nome);
+  tecla(SDLK_UP); tecla(SDLK_UP);
   snprintf(nome, sizeof nome, "%s-5-foco-perfil.bmp", saida); quadros(30, nome);
   for (i = 0; i < 12; i++) tecla(SDLK_DOWN);
   snprintf(nome, sizeof nome, "%s-6-foco-ajustes.bmp", saida); quadros(30, nome);

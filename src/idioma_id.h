@@ -497,7 +497,6 @@
   T("Buscando fontes nos addons…", "Mencari sumber di addon-mu…"),
   T("Buscando mais artes…", "Mencari gambar lainnya…"),
   T("Buscando seus addons e o que você estava assistindo.", "Memuat addon dan yang tadi kamu tonton."),
-  T("Buscar", "Cari"),
   T("Buscar filmes e séries", "Cari film dan serial TV"),
   T("Buscar pessoas", "Cari orang"),
   T("Buscar por apelido ou código", "Cari dengan nama panggilan atau kode"),

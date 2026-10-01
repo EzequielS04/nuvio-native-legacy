@@ -497,7 +497,6 @@
   T("Buscando fontes nos addons…", "Đang tìm nguồn trong các tiện ích của bạn…"),
   T("Buscando mais artes…", "Đang tìm thêm hình ảnh…"),
   T("Buscando seus addons e o que você estava assistindo.", "Đang tải các tiện ích và những gì bạn đang xem."),
-  T("Buscar", "Tìm kiếm"),
   T("Buscar filmes e séries", "Tìm phim và phim bộ"),
   T("Buscar pessoas", "Tìm người"),
   T("Buscar por apelido ou código", "Tìm theo biệt danh hoặc mã"),

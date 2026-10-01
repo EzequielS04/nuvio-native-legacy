@@ -497,7 +497,6 @@
   T("Buscando fontes nos addons…", "Források keresése a bővítményeidben…"),
   T("Buscando mais artes…", "További grafika keresése…"),
   T("Buscando seus addons e o que você estava assistindo.", "A bővítményeid és az eddig nézett tartalmak betöltése."),
-  T("Buscar", "Keresés"),
   T("Buscar filmes e séries", "Filmek és sorozatok keresése"),
   T("Buscar pessoas", "Emberek keresése"),
   T("Buscar por apelido ou código", "Keresés becenév vagy kód alapján"),

@@ -539,18 +539,31 @@ void menu_desenhar(Uint32 agora) {
 #include <time.h>
 #include <ctype.h>
 
-#define TV_PAINEL_X     40.0f
-#define TV_PAINEL_Y     40.0f
-#define TV_PAINEL_W    452.0f
-#define TV_RAIO         44.0f
-#define TV_CAB_H       120.0f    // cabecalho: avatar, nome, relogio
-#define TV_LINHA_H      80.0f
-#define TV_PAD_X        14.0f    // pilula da linha por dentro do painel
-#define TV_PAD_BASE     16.0f
-#define TV_CIRC         54.0f    // circulo do icone
+// MEDIDAS DO ORIGINAL (print do app oficial no layout Apple TV, medido pelo
+// coordenador em 2000 px e convertido x0,96 para 1920; dono, 01/10: "muito
+// pesada", "a letra ta grande demais"):
+//   painel x 38, topo 38, ~355 de largura, raio ~40, vidro escuro translucido
+//   com aro fino; avatar 44, nome 26 Medium, relogio ~24 Regular; itens sem
+//   circulo atras do icone (icone de linha 28 a 85%), rotulo 25 Regular,
+//   passo 79, foco = pilula BRANCA cheia de 74; "Streaming" 22 cinza medio;
+//   logo da pasta em circulo de 48.
+#define TV_PAINEL_X     38.0f
+#define TV_PAINEL_Y     38.0f
+#define TV_PAINEL_W    355.0f
+#define TV_RAIO         40.0f
+#define TV_CAB_H        96.0f    // cabecalho: avatar, nome, relogio
+#define TV_LINHA_H      79.0f
+#define TV_PILULA_H     74.0f
+#define TV_PAD_X        10.0f    // pilula da linha por dentro do painel
+#define TV_PAD_BASE     14.0f
 #define TV_ICONE        28.0f
-#define TV_AVATAR       58.0f
-#define TV_ROTULO_H     60.0f    // rotulo da secao "Streaming"
+#define TV_COL_CX       32.0f    // centro da coluna de icones, a partir da pilula
+#define TV_ROT_X        66.0f    // x do rotulo, a partir da pilula
+#define TV_LOGO         48.0f    // circulo da pasta de Streaming
+#define TV_AVATAR       44.0f
+#define TV_ROTULO_H     48.0f    // rotulo da secao "Streaming"
+// Pilula fechada: mais baixa e com a letra do item (25), nao a de titulo.
+#define TV_PIL_CIRC     46.0f
 #define TV_ALTURA_MAX  (NV_TELA_H - 2.0f * TV_PAINEL_Y)
 #define TV_MOLA_ROLAR   14.0f
 // Molas (anim_mola2, rad/s): abrir um pouco mais lento que fechar, como a
@@ -565,15 +578,12 @@ static float tvPilAlfa = 1.0f, tvPilAlvo = 1.0f;
 
 static int tvAtivo(void) { return ajustes_home_layout() == HOME_LAYOUT_DINAMICA; }
 
-// Ordem da Apple TV: Buscar antes de Inicio. O resto segue a ordem do app.
+// Ordem do original: Inicio, Busca, Explorar... (o resto segue a ordem do app).
 static const int TV_ORDEM[MENU_N] = {
-  MENU_BUSCAR, MENU_INICIO, MENU_EXPLORAR, MENU_GUIA, MENU_AGENDA,
+  MENU_INICIO, MENU_BUSCAR, MENU_EXPLORAR, MENU_GUIA, MENU_AGENDA,
   MENU_BIBLIOTECA, MENU_PERFIL, MENU_AJUSTES
 };
-static const char *tvRotulo(int d) {
-  // "Buscar" como na referencia; a rail classica continua "Busca".
-  return d == MENU_BUSCAR ? "Buscar" : menu_rotulo(d);
-}
+static const char *tvRotulo(int d) { return menu_rotulo(d); }
 // Focos na ordem de navegacao: cabecalho (trocar de usuario) e os visiveis.
 // PASTAS DE STREAMING (home_streaming_barra): a fileira "Streaming" que o
 // layout Dinamica tira da home. Indices de col_folder, na ordem da fileira.
@@ -623,7 +633,7 @@ static GfxRect tvPainel(void) {
 
 // A PILULA FECHADA: "‹" + circulo + rotulo da secao atual.
 static float tvPilulaLargura(void) {
-  return 7.0f + TV_CIRC + 16.0f + (float)txt_largura(TXT_ROW_TITULO, tvRotulo(destino)) + 30.0f;
+  return 7.0f + TV_PIL_CIRC + 14.0f + (float)txt_largura(TXT_BODY, tvRotulo(destino)) + 24.0f;
 }
 static GfxRect tvPilula(void) {
   GfxRect r = { NV_MENU_PILULA_X + NV_MENU_PILULA_SETA, NV_MENU_PILULA_Y,
@@ -716,22 +726,17 @@ static void tvRelogio(char *buf, size_t tam) {
   snprintf(buf, tam, "%02d:%02d", tmv.tm_hour, tmv.tm_min);
 }
 
-// Circulo do icone + icone. `foco` 0..1 troca o circulo claro pelo da tinta.
-static void tvCirculoIcone(int d, float cx, float cy, float foco, int atual,
-                           float tinta, float alfa) {
-  GfxRect c = { cx - TV_CIRC * 0.5f, cy - TV_CIRC * 0.5f, TV_CIRC, TV_CIRC };
-  float base = atual ? 0.24f : 0.14f;
-  float lum = anim_mistura(0.96f, tinta, foco > 0.5f ? 1.0f : 0.0f);
-  // Sobre a pilula de foco o circulo e da cor da tinta, bem leve.
-  if (foco > 0.5f) gfx_cor(c, 0.5f, tinta, tinta, tinta, 0.10f * alfa);
-  else             gfx_cor(c, 0.5f, 1.0f, 1.0f, 1.0f, base * alfa);
-  icone(d, cx, cy, TV_ICONE, lum, lum, lum, alfa);
+// Icone de linha, sem bolha atras: branco a 85% em repouso, a tinta escura
+// sobre a pilula branca do foco.
+static void tvIcone(int d, float cx, float cy, float foco, float alfa) {
+  float lum = foco > 0.5f ? 0.08f : 1.0f;
+  icone(d, cx, cy, TV_ICONE, lum, lum, lum, alfa * (foco > 0.5f ? 1.0f : 0.85f));
 }
 
 // Circulo da PASTA de Streaming: a capa dela recortada em circulo (cover).
 // Sem capa ainda (rede), a cor da pasta com a inicial do nome.
 static void tvCirculoPasta(const ColFolder *pf, float cx, float cy, float alfa) {
-  GfxRect c = { cx - TV_CIRC * 0.5f, cy - TV_CIRC * 0.5f, TV_CIRC, TV_CIRC };
+  GfxRect c = { cx - TV_LOGO * 0.5f, cy - TV_LOGO * 0.5f, TV_LOGO, TV_LOGO };
   const char *capa = pf ? col_capa(pf) : NULL;
   GLuint tex = (capa && capa[0]) ? tex_obter(capa) : 0;
   if (tex) {
@@ -746,7 +751,7 @@ static void tvCirculoPasta(const ColFolder *pf, float cx, float cy, float alfa) 
     if (pf) col_cor(pf, &r, &g, &b);
     gfx_cor(c, 0.5f, r, g, b, alfa);
     inicialDe(pf ? pf->title : NULL, ini, sizeof ini);
-    { TxtLinha l = txt_linha(TXT_BODY, ini, 255, 255, 255, 255);
+    { TxtLinha l = txt_linha(TXT_CAPTION, ini, 255, 255, 255, 255);
       txt_desenhar_alpha(l, c.x + (c.w - l.w) * 0.5f, c.y + (c.h - l.h) * 0.5f, alfa); }
   }
 }
@@ -763,24 +768,28 @@ static void tvAvatar(GfxRect av, float alfa) {
     corAvatar(p ? p->corHex : NULL, &cr, &cg, &cb);
     gfx_cor(av, 0.5f, cr, cg, cb, alfa);
     tvIniciais(p ? p->nome : NULL, ini, sizeof ini);
-    { TxtLinha l = txt_linha(TXT_BODY, ini, 255, 255, 255, 255);
+    { TxtLinha l = txt_linha(TXT_CAPTION2, ini, 255, 255, 255, 255);
       txt_desenhar_alpha(l, av.x + (av.w - l.w) * 0.5f, av.y + (av.h - l.h) * 0.5f, alfa); }
   }
 }
 
-// Escurece SO o lado esquerdo, numa sombra radial com o centro fora da tela.
-// Meia tela de preenchimento, e nao o veu de tela cheia da rail classica. Com
-// efeitos leves (GFX_LUZ desligado) cai em tres faixas de cor chapada.
+// Escurece SO o lado esquerdo: faixas verticais de cor chapada com o alfa
+// caindo em degraus pequenos ate sumir em x ~ 900. Cada pixel e pintado UMA
+// vez e pelo shader mais barato (GFX_COR). MEDIDO na C9 (01/10): com uma
+// sombra radial (GFX_LUZ, 1000x1080) + aro no painel a barra aberta ficava em
+// 47-49 fps contra 60 fechada.
 static void tvSombra(float a) {
+  int i;
+  float x = 0.0f;
   if (a <= 0.01f) return;
-  if (gfx_efeitos_leves()) {
-    gfx_cor((GfxRect){ 0, 0, 520, NV_TELA_H }, 0.0f, 0, 0, 0, 0.34f * a);
-    gfx_cor((GfxRect){ 520, 0, 140, NV_TELA_H }, 0.0f, 0, 0, 0, 0.20f * a);
-    gfx_cor((GfxRect){ 660, 0, 120, NV_TELA_H }, 0.0f, 0, 0, 0, 0.09f * a);
-    return;
-  }
-  gfx_luz_canto((GfxRect){ 0, 0, 1000, NV_TELA_H }, 0.0f, -220.0f, NV_TELA_H * 0.5f,
-                1320.0f, 0, 0, 0, 0.80f * a);
+  // Veu SUAVE atras do painel (o original nao escurece a tela): 0,22 ate o
+  // fim do painel e caindo a zero em ~300 px.
+  // Degraus de 20 px e ~0,014 de alfa: com 50 px os degraus apareciam como
+  // faixas verticais sobre ceu claro (captura no Mac).
+  gfx_cor((GfxRect){ 0, 0, 400, NV_TELA_H }, 0.0f, 0, 0, 0, 0.22f * a);
+  x = 400.0f;
+  for (i = 1; i <= 15; i++, x += 20.0f)
+    gfx_cor((GfxRect){ x, 0, 20, NV_TELA_H }, 0.0f, 0, 0, 0, 0.22f * a * (1.0f - i / 16.0f));
 }
 
 static void tvPonteiroPilula(int a, int b) { (void)a; (void)b; menu_abrir(); }
@@ -789,7 +798,7 @@ static void tvDesenhar(void) {
   float s = tvAbre < 0.0f ? 0.0f : (tvAbre > 1.0f ? 1.0f : tvAbre);
   GfxRect P = tvPilula(), Q = tvPainel(), R;
   float pa = tvPilAlfa;
-  float A, raioPx, tinta = ajustes_acento_tinta(NULL, NULL, NULL);
+  float A, raioPx;
   float ar, ag, ab;
   ajustes_acento(&ar, &ag, &ab);
 
@@ -824,27 +833,31 @@ static void tvDesenhar(void) {
     ponteiro_alvo(Q.x, Q.y, Q.w, Q.h, NULL, NULL, 0, 0);
   }
 
-  // Superficie de vidro: cinza frio translucido, aro de fio de cabelo.
-  gfx_cor(R, raioPx / R.h, 0.200f, 0.207f, 0.226f, 0.84f * A);
-  gfx_anel(R, raioPx / R.h, 1.5f, 1.0f, 1.0f, 1.0f, 0.10f * A);
+  // Superficie de vidro: escuro translucido, tingido de leve pela cor de
+  // realce (a arte aparece por tras), com aro fino e claro bem sutil.
+  // Alfa 0,82: a 0,72 os titulos das fileiras da home atravessavam o painel e
+  // disputavam com os rotulos (captura da C9, 01/10).
+  { float vr = 0.100f + ar * 0.05f, vg = 0.104f + ag * 0.05f, vb = 0.118f + ab * 0.05f;
+    gfx_cor(R, raioPx / R.h, vr, vg, vb, 0.82f * A);
+    gfx_anel(R, raioPx / R.h, 1.2f, 1.0f, 1.0f, 1.0f, 0.12f * A); }
 
   // Conteudo da pilula fechada: some no comeco da abertura.
   { float ap = A * (1.0f - s * 3.0f);
     if (ap > 0.01f) {
       // A seta "‹" fica solta sobre a arte: uma sombra escura de 1 px a
       // mantem legivel quando o fundo e claro (ceu, neve).
-      TxtLinha seta = txt_linha(TXT_TITULO3, "\xE2\x80\xB9", 245, 245, 248, 255);
-      TxtLinha sombra = txt_linha(TXT_TITULO3, "\xE2\x80\xB9", 0, 0, 0, 255);
+      TxtLinha seta = txt_linha(TXT_HEADLINE, "\xE2\x80\xB9", 245, 245, 248, 255);
+      TxtLinha sombra = txt_linha(TXT_HEADLINE, "\xE2\x80\xB9", 0, 0, 0, 255);
       float cy = P.y + P.h * 0.5f;
       float sx = NV_MENU_PILULA_X + (NV_MENU_PILULA_SETA - seta.w) * 0.5f - 3.0f;
-      float sy = cy - seta.h * 0.5f - 3.0f;
+      float sy = cy - seta.h * 0.5f - 2.0f;
       txt_desenhar_alpha(sombra, sx + 1.0f, sy + 2.0f, ap * 0.35f);
-      txt_desenhar_alpha(seta, sx, sy, ap * 0.95f);
-      { GfxRect c = { P.x + 7.0f, cy - TV_CIRC * 0.5f, TV_CIRC, TV_CIRC };
-        gfx_cor(c, 0.5f, 1.0f, 1.0f, 1.0f, 0.28f * ap);
-        icone(destino, c.x + TV_CIRC * 0.5f, cy, TV_ICONE, 0.97f, 0.97f, 0.98f, ap); }
-      { TxtLinha l = txt_linha(TXT_ROW_TITULO, tvRotulo(destino), 245, 245, 248, 255);
-        txt_desenhar_alpha(l, P.x + 7.0f + TV_CIRC + 16.0f, cy - l.h * 0.5f, ap); }
+      txt_desenhar_alpha(seta, sx, sy, ap * 0.90f);
+      { GfxRect c = { P.x + 7.0f, cy - TV_PIL_CIRC * 0.5f, TV_PIL_CIRC, TV_PIL_CIRC };
+        gfx_cor(c, 0.5f, 1.0f, 1.0f, 1.0f, 0.22f * ap);
+        icone(destino, c.x + TV_PIL_CIRC * 0.5f, cy, 24.0f, 0.97f, 0.97f, 0.98f, ap); }
+      { TxtLinha l = txt_linha(TXT_BODY, tvRotulo(destino), 245, 245, 248, 255);
+        txt_desenhar_alpha(l, P.x + 7.0f + TV_PIL_CIRC + 14.0f, cy - l.h * 0.5f, ap); }
     } }
 
   // Conteudo do painel aberto, preso ao retangulo que cresce e deslocado pela
@@ -853,41 +866,47 @@ static void tvDesenhar(void) {
     float ys[NV_MENU_FOCOS_TV], yRot, f, topo;
     const int *pastas;
     int i, np = tvPastas(&pastas);
+    // Foco: pilula BRANCA cheia, texto e icone escuros (como o original).
+    const float FR = 0.95f, FG = 0.95f, FB = 0.96f;
+    const int TINTA_FOCO = 22;
     if (ac <= 0.01f) return;
     if (ac > 1.0f) ac = 1.0f;
     tvLayout(ys, &yRot);
     topo = Q.y - tvRolar;
     gfx_recorte(R.x, R.y, R.w, R.h);
 
-    // Cabecalho: avatar, nome e relogio. Focavel: e o "trocar de usuario".
-    { float cyCab = topo + 56.0f;
-      int emFoco, c;
+    // Cabecalho: avatar 44, nome 26 Medium, relogio 23 Regular cinza claro.
+    // Focavel: e o "trocar de usuario".
+    { float cyCab = topo + 50.0f;
+      int emFoco, c, cRel;
       const ContaPerfil *p = perfis_item_ativo();
       char hora[8];
-      GfxRect av = { Q.x + 26.0f, cyCab - TV_AVATAR * 0.5f, TV_AVATAR, TV_AVATAR };
+      GfxRect av = { Q.x + TV_PAD_X + TV_COL_CX - TV_AVATAR * 0.5f, cyCab - TV_AVATAR * 0.5f,
+                     TV_AVATAR, TV_AVATAR };
       TxtLinha rel, nome;
       f = animFoco[MENU_RODAPE];
       if (f > 0.01f) {
-        GfxRect pill = { Q.x + TV_PAD_X, cyCab - 40.0f, Q.w - TV_PAD_X * 2.0f, 80.0f };
-        gfx_cor(pill, 0.5f, ar, ag, ab, f * ac);
+        GfxRect pill = { Q.x + TV_PAD_X, cyCab - TV_PILULA_H * 0.5f, Q.w - TV_PAD_X * 2.0f, TV_PILULA_H };
+        gfx_cor(pill, 0.5f, FR, FG, FB, f * ac);
       }
       emFoco = f > 0.5f;
-      c = emFoco ? (int)(tinta * 255.0f + 0.5f) : 245;
+      c = emFoco ? TINTA_FOCO : 240;
+      cRel = emFoco ? 70 : 200;
       tvAvatar(av, ac);
       tvRelogio(hora, sizeof hora);
-      rel = txt_linha(TXT_PG_RELOGIO, hora, c, c, c, 255);
-      nome = txt_linha_corta(TXT_ROW_TITULO, p ? p->nome : "Sua conta", c, c, c, 255,
-                             Q.w - (av.x - Q.x) - TV_AVATAR - 18.0f - rel.w - 40.0f);
-      txt_desenhar_alpha(nome, av.x + TV_AVATAR + 18.0f, cyCab - nome.h * 0.5f, ac);
-      txt_desenhar_alpha(rel, Q.x + Q.w - 30.0f - rel.w, cyCab - rel.h * 0.5f, ac * 0.92f);
-      if (aberto && ponteiro_ativo() && cyCab - 40.0f >= Q.y - 1.0f)
-        ponteiro_alvo(Q.x, cyCab - 40.0f, Q.w, 80.0f, ponteiroLinha, NULL, MENU_RODAPE, 0); }
+      rel = txt_linha(TXT_DET_META2, hora, cRel, cRel, cRel, 255);
+      nome = txt_linha_corta(TXT_PG_RELOGIO, p ? p->nome : "Sua conta", c, c, c, 255,
+                             Q.x + Q.w - 24.0f - rel.w - 16.0f - (Q.x + TV_PAD_X + TV_ROT_X));
+      txt_desenhar_alpha(nome, Q.x + TV_PAD_X + TV_ROT_X, cyCab - nome.h * 0.5f, ac);
+      txt_desenhar_alpha(rel, Q.x + Q.w - 24.0f - rel.w, cyCab - rel.h * 0.5f, ac);
+      if (aberto && ponteiro_ativo() && cyCab - TV_PILULA_H * 0.5f >= Q.y - 1.0f)
+        ponteiro_alvo(Q.x, cyCab - TV_PILULA_H * 0.5f, Q.w, TV_PILULA_H, ponteiroLinha, NULL, MENU_RODAPE, 0); }
 
-    // Rotulo da secao de Streaming: pequeno, na cor de realce, como na foto.
+    // Rotulo da secao de Streaming: 22 Regular, cinza medio, no recuo do icone.
     if (np && yRot >= 0.0f) {
-      TxtLinha l = txt_linha(TXT_CALLOUT, "Streaming", (int)(ar * 255.0f), (int)(ag * 255.0f),
-                             (int)(ab * 255.0f), 255);
-      txt_desenhar_alpha(l, Q.x + TV_PAD_X + 16.0f, topo + yRot + TV_ROTULO_H - l.h - 8.0f, ac);
+      TxtLinha l = txt_linha(TXT_CAPTION, "Streaming", 150, 152, 160, 255);
+      txt_desenhar_alpha(l, Q.x + TV_PAD_X + TV_COL_CX - TV_ICONE * 0.5f,
+                         topo + yRot + TV_ROTULO_H - l.h - 6.0f, ac);
     }
 
     for (i = 0; i < MENU_N + np; i++) {
@@ -899,27 +918,26 @@ static void tvDesenhar(void) {
       y = topo + ys[d];
       if (y + TV_LINHA_H < Q.y || y > Q.y + Q.h) continue;
       cy = y + TV_LINHA_H * 0.5f;
-      pill = (GfxRect){ Q.x + TV_PAD_X, y + 5.0f, Q.w - TV_PAD_X * 2.0f, TV_LINHA_H - 10.0f };
+      pill = (GfxRect){ Q.x + TV_PAD_X, cy - TV_PILULA_H * 0.5f, Q.w - TV_PAD_X * 2.0f, TV_PILULA_H };
       f = animFoco[d];
-      // ATUAL: pilula cinza translucida, que some sob a do foco.
-      if (atual && f < 0.99f) gfx_cor(pill, 0.5f, 1.0f, 1.0f, 1.0f, 0.17f * (1.0f - f) * ac);
-      // EM FOCO: pilula na cor de realce (branca no padrao), sem brilho atras.
-      if (f > 0.01f) gfx_cor(pill, 0.5f, ar, ag, ab, f * ac);
+      // ATUAL sem foco: so um veu claro bem leve, nada de pilula pesada.
+      if (atual && f < 0.99f) gfx_cor(pill, 0.5f, 1.0f, 1.0f, 1.0f, 0.09f * (1.0f - f) * ac);
+      if (f > 0.01f) gfx_cor(pill, 0.5f, FR, FG, FB, f * ac);
       { int emFoco = f > 0.5f;
-        int c = emFoco ? (int)(tinta * 255.0f + 0.5f) : (atual ? 248 : 232);
+        int c = emFoco ? TINTA_FOCO : 235;
         const char *rot;
-        float ccx = pill.x + 8.0f + TV_CIRC * 0.5f;
+        float ccx = pill.x + TV_COL_CX;
         if (d < MENU_ST0) {
-          tvCirculoIcone(d, ccx, cy, f, atual, tinta, ac);
+          tvIcone(d, ccx, cy, f, ac);
           rot = tvRotulo(d);
         } else {
           const ColFolder *pf = col_folder(pastas[d - MENU_ST0]);
           tvCirculoPasta(pf, ccx, cy, ac);
           rot = pf ? pf->title : "";
         }
-        { TxtLinha l = txt_linha_corta(TXT_ROW_TITULO, rot, c, c, c, 255,
-                                       pill.w - TV_CIRC - 44.0f);
-          txt_desenhar_alpha(l, pill.x + 8.0f + TV_CIRC + 18.0f, cy - l.h * 0.5f, ac); } }
+        { TxtLinha l = txt_linha_corta(TXT_DET_META, rot, c, c, c, 255,
+                                       pill.w - TV_ROT_X - 16.0f);
+          txt_desenhar_alpha(l, pill.x + TV_ROT_X, cy - l.h * 0.5f, ac); } }
       if (aberto && ponteiro_ativo() && y >= Q.y - 1.0f && y + TV_LINHA_H <= Q.y + Q.h + 1.0f)
         ponteiro_alvo(Q.x, y, Q.w, TV_LINHA_H, ponteiroLinha, NULL, d, 0);
     }

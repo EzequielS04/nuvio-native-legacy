@@ -3080,7 +3080,8 @@ static void desenharAtrasDoPainel(void *ctx) {
     // home some com a pagina rolada. Telas fora do menu (Addons, Social,
     // diagnosticos) tem titulo proprio nesse canto: la ela some na hora, e a
     // barra abre pelo ESQUERDA na borda e pela faixa do ponteiro.
-    menu_pilula_mostrar(tela == TELA_HOME ? home_topo_fracao()
+    menu_pilula_mostrar(vertudo_aberta() ? -1.0f   // "Ver tudo"/colecao tem cabecalho proprio
+                        : tela == TELA_HOME ? home_topo_fracao()
                         : (tela == TELA_EXPLORAR || tela == TELA_BUSCA ||
                            tela == TELA_BIBLIOTECA || tela == TELA_AGENDA ||
                            tela == TELA_PERFIL || tela == TELA_AJUSTES) ? 1.0f : -1.0f);

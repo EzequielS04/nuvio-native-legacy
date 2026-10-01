@@ -497,7 +497,6 @@
   T("Buscando fontes nos addons…", "Αναζήτηση πηγών στα πρόσθετά σου…"),
   T("Buscando mais artes…", "Αναζήτηση περισσότερων εικαστικών…"),
   T("Buscando seus addons e o que você estava assistindo.", "Φόρτωση των πρόσθετων και όσων έβλεπες."),
-  T("Buscar", "Αναζήτηση"),
   T("Buscar filmes e séries", "Αναζήτηση ταινιών και σειρών"),
   T("Buscar pessoas", "Βρες άτομα"),
   T("Buscar por apelido ou código", "Αναζήτηση με ψευδώνυμο ή κωδικό"),

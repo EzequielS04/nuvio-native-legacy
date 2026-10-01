@@ -496,7 +496,6 @@
   T("Buscando fontes nos addons…", "Se caută surse în addon-uri…"),
   T("Buscando mais artes…", "Se caută mai multe imagini…"),
   T("Buscando seus addons e o que você estava assistindo.", "Se preiau addon-urile și ce te uitai."),
-  T("Buscar", "Căutare"),
   T("Buscar filmes e séries", "Caută filme și seriale"),
   T("Buscar pessoas", "Caută persoane"),
   T("Buscar por apelido ou código", "Caută după poreclă sau cod"),

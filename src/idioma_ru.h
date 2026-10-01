@@ -496,7 +496,6 @@
   T("Buscando fontes nos addons…", "Поиск источников в аддонах…"),
   T("Buscando mais artes…", "Поиск дополнительных изображений…"),
   T("Buscando seus addons e o que você estava assistindo.", "Загрузка ваших аддонов и того, что вы смотрели."),
-  T("Buscar", "Поиск"),
   T("Buscar filmes e séries", "Искать фильмы и сериалы"),
   T("Buscar pessoas", "Поиск людей"),
   T("Buscar por apelido ou código", "Поиск по псевдониму или коду"),

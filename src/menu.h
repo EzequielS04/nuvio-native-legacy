@@ -88,9 +88,9 @@ int  menu_pediu_colecao(void);
 //     (0..1; negativo = some na hora); a barra anima ate la. app.c chama a cada quadro: so na HOME, e
 //     so com ela no topo (home_topo_fracao); 0 nas outras telas, que tem o
 //     proprio titulo nesse canto. Ou seja: fora da home o canto esta livre.
-#define NV_MENU_PILULA_X     48.0f
-#define NV_MENU_PILULA_Y     48.0f
-#define NV_MENU_PILULA_H     68.0f
+#define NV_MENU_PILULA_X     40.0f
+#define NV_MENU_PILULA_Y     44.0f
+#define NV_MENU_PILULA_H     60.0f
 #define NV_MENU_PILULA_SETA  26.0f   // largura da seta antes da pilula
 #define NV_MENU_PILULA_VAO   16.0f
 int   menu_pilula_rect(float *x, float *y, float *w, float *h);

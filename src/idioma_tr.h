@@ -497,7 +497,6 @@
   T("Buscando fontes nos addons…", "Eklentilerinde kaynak aranıyor…"),
   T("Buscando mais artes…", "Daha fazla görsel aranıyor…"),
   T("Buscando seus addons e o que você estava assistindo.", "Eklentilerin ve izlediklerin getiriliyor."),
-  T("Buscar", "Ara"),
   T("Buscar filmes e séries", "Film ve dizi ara"),
   T("Buscar pessoas", "Kişi ara"),
   T("Buscar por apelido ou código", "Takma ad veya kodla ara"),

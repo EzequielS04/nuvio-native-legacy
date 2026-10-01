@@ -496,7 +496,6 @@
   { "Buscando fontes nos addons…", "Looking for sources in your addons…" },
   { "Buscando mais artes…", "Finding more artwork…" },
   { "Buscando seus addons e o que você estava assistindo.", "Fetching your add-ons and what you were watching." },
-  { "Buscar", "Search" },
   { "Buscar filmes e séries", "Search movies and TV shows" },
   { "Buscar pessoas", "Find people" },
   { "Buscar por apelido ou código", "Search by nickname or code" },

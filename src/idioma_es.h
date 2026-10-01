@@ -496,7 +496,6 @@
   T("Buscando fontes nos addons…", "Buscando fuentes en los addons…"),
   T("Buscando mais artes…", "Buscando más imágenes…"),
   T("Buscando seus addons e o que você estava assistindo.", "Buscando tus addons y lo que estabas viendo."),
-  T("Buscar", "Búsqueda"),
   T("Buscar filmes e séries", "Buscar películas y series"),
   T("Buscar pessoas", "Buscar personas"),
   T("Buscar por apelido ou código", "Buscar por apodo o código"),

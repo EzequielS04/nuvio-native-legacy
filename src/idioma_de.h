@@ -496,7 +496,6 @@
   T("Buscando fontes nos addons…", "Quellen werden in deinen Addons gesucht…"),
   T("Buscando mais artes…", "Weitere Bilder werden gesucht…"),
   T("Buscando seus addons e o que você estava assistindo.", "Deine Addons und was du zuletzt geschaut hast werden geladen."),
-  T("Buscar", "Suche"),
   T("Buscar filmes e séries", "Filme und Serien suchen"),
   T("Buscar pessoas", "Personen suchen"),
   T("Buscar por apelido ou código", "Nach Spitzname oder Code suchen"),

@@ -497,7 +497,6 @@
   T("Buscando fontes nos addons…", "Ieškoma šaltinių jūsų papildiniuose…"),
   T("Buscando mais artes…", "Ieškoma daugiau vaizdų…"),
   T("Buscando seus addons e o que você estava assistindo.", "Gaunami jūsų papildiniai ir tai, ką žiūrėjote."),
-  T("Buscar", "Paieška"),
   T("Buscar filmes e séries", "Ieškoti filmų ir serialų"),
   T("Buscar pessoas", "Ieškoti žmonių"),
   T("Buscar por apelido ou código", "Ieškoti pagal slapyvardį ar kodą"),
