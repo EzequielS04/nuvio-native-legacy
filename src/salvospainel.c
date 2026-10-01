@@ -686,13 +686,13 @@ static int nVisiveis(void) {
 }
 
 // A BARRA DE OPCOES (Ordenar, Agrupar, Estilo, categorias) mora entre as abas
-// e a lista, e empurra a lista SP_BARRA_EXTRA para baixo so quando existe.
+// e a lista, e empurra a lista SP_OPC_EXTRA para baixo so quando existe.
 #define SP_FOCO_BARRA  (-2)
-#define SP_BARRA_Y     (SP_ABAS_Y + SP_ABAS_H + 12.0f)
-#define SP_BARRA_H      60.0f
-#define SP_BARRA_EXTRA (SP_BARRA_Y + SP_BARRA_H + 4.0f - SP_LISTA_Y)
+#define SP_OPC_Y     (SP_ABAS_Y + SP_ABAS_H + 12.0f)
+#define SP_OPC_H      60.0f
+#define SP_OPC_EXTRA (SP_OPC_Y + SP_OPC_H + 4.0f - SP_LISTA_Y)
 static int temBarra(void);
-static float listaTopo(void) { return SP_LISTA_Y + (temBarra() ? SP_BARRA_EXTRA : 0.0f); }
+static float listaTopo(void) { return SP_LISTA_Y + (temBarra() ? SP_OPC_EXTRA : 0.0f); }
 
 // 1 enquanto a pergunta de primeira entrada esta na tela.
 static int consentindo(void) {
@@ -2166,22 +2166,26 @@ static void desenhaBarra(float dx, float a) {
       if ((float)cr.w > w) w = (float)cr.w;
     }
     w += 40.0f + (icone ? 30.0f : 0.0f);
-    r = (GfxRect){ x, SP_BARRA_Y, w, SP_BARRA_H };
-    superficieItem(r, 18.0f / SP_BARRA_H, f, a);
+    r = (GfxRect){ x, SP_OPC_Y, w, SP_OPC_H };
+    // Em repouso a pilula precisa existir: a superficie neutra das linhas
+    // some sobre o painel escuro, e uma opcao invisivel nao se le como botao.
+    superficieItem(r, 18.0f / SP_OPC_H, f, a);
+    if (!ajustes_vidro())
+      gfx_cor(r, 18.0f / SP_OPC_H, 1.0f, 1.0f, 1.0f, 0.07f * (1.0f - focoVisual(f)) * a);
     ix = x + 20.0f;
     if (icone) {
       float ic = anim_mistura(220.0f / 255.0f, tinta, v);
-      gfx_icone((GfxRect){ ix, SP_BARRA_Y + (SP_BARRA_H - 22.0f) * 0.5f, 22.0f, 22.0f },
+      gfx_icone((GfxRect){ ix, SP_OPC_Y + (SP_OPC_H - 22.0f) * 0.5f, 22.0f, 22.0f },
                 icone, ic, ic, ic, a);
       ix += 30.0f;
     }
     if (cap) {
       float bloco = (float)cr.h + 2.0f + (float)vr.h;
-      float ty = SP_BARRA_Y + (SP_BARRA_H - bloco) * 0.5f;
+      float ty = SP_OPC_Y + (SP_OPC_H - bloco) * 0.5f;
       txt_foco_transicao(cr, cf, ix, ty, v, a * 0.95f);
       txt_foco_transicao(vr, vf, ix, ty + (float)cr.h + 2.0f, v, a);
     } else {
-      txt_foco_transicao(vr, vf, ix, SP_BARRA_Y + (SP_BARRA_H - (float)vr.h) * 0.5f, v, a);
+      txt_foco_transicao(vr, vf, ix, SP_OPC_Y + (SP_OPC_H - (float)vr.h) * 0.5f, v, a);
     }
     x += w + NV_CTRL_VAO;
   }

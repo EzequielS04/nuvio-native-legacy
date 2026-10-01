@@ -1115,6 +1115,7 @@ void ctx_desenhar(Uint32 agora) {
       case OP_TIRAR_CONTINUAR: icone = "oculto"; break;
       case OP_RECOMENDAR: icone = "recomendar"; break;
       case OP_ESTILO:     icone = "aspecto"; break;
+      case OP_CATEGORIA:  icone = "aj_folders"; break;
       default: break;
     }
     botao_pilula(r, ops[i].rot, icone, f, 1, 1, a);
