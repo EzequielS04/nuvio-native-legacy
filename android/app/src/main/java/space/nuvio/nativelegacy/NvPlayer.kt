@@ -319,7 +319,19 @@ object NvPlayer {
         lp.gravity = Gravity.TOP or Gravity.START
         lp.leftMargin = x0
         lp.topMargin = y0
+        val antes = sv.layoutParams as? FrameLayout.LayoutParams
+        val mudou = antes == null || antes.width != lp.width || antes.height != lp.height ||
+            antes.leftMargin != lp.leftMargin || antes.topMargin != lp.topMargin
         sv.layoutParams = lp
+        // A TCL PRENDE A GEOMETRIA DO PLANO DE VIDEO: aplica o primeiro tamanho
+        // e posicao da superficie e ignora as mudancas seguintes (o dono: "entra
+        // recortado e nao sai; entra no esticar e fica esticado"). Recriar a
+        // Surface (GONE -> VISIBLE) faz o compositor montar camada nova com a
+        // geometria nova; o ExoPlayer troca a saida do decoder sem recarregar.
+        if (mudou && player != null && sv.visibility == View.VISIBLE && sv.holder.surface?.isValid == true) {
+            sv.visibility = View.GONE
+            principal.post { if (player != null) sv.visibility = View.VISIBLE }
+        }
     }
 
     // --- escolha de faixa ----------------------------------------------------
