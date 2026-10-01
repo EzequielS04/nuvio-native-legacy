@@ -22,6 +22,9 @@ typedef struct {
   int videoPid;       // primeiro ES de video, -1 = nenhum
   int perfil, nivel;  // do SPS (H.264: profile_idc/level_idc; HEVC: general_profile_idc/level), -1
   int hevc;
+  int pcrPid;          // da PMT; -1 = nao vista
+  int pcrVistos;       // pacotes com PCR no campo de adaptacao
+  int pesInicios[8];   // inicios de PES (00 00 01) por ES da PMT
 } TsSonda;
 
 static inline const char *ts_tipo_nome(int t, int desc) {
@@ -64,7 +67,7 @@ static inline void ts_sondar(const unsigned char *b, long n, TsSonda *s) {
   int nPes = 0;
   long i, ini = -1;
   memset(s, 0, sizeof *s);
-  s->deslocamento = -1; s->pmtPid = -1; s->videoPid = -1; s->perfil = s->nivel = -1;
+  s->deslocamento = -1; s->pmtPid = -1; s->videoPid = -1; s->perfil = s->nivel = -1; s->pcrPid = -1;
   if (!b || n < 188 * 3) return;
   for (i = 0; i + 188 * 2 < n && i < 188 * 4; i++)
     if (b[i] == 0x47 && b[i + 188] == 0x47 && b[i + 376] == 0x47) { ini = i; break; }
@@ -80,6 +83,12 @@ static inline void ts_sondar(const unsigned char *b, long n, TsSonda *s) {
     if ((k[3] >> 6) & 3) s->embaralhados++;
     af = (k[3] >> 4) & 3;
     off = 4;
+    if ((af == 2 || af == 3) && k[4] > 0 && (k[5] & 0x10)) s->pcrVistos++;
+    if (pusi && af != 2) {
+      int o = af == 3 ? 5 + k[4] : 4, e;
+      if (o + 3 < 188 && !k[o] && !k[o + 1] && k[o + 2] == 1)
+        for (e = 0; e < s->nEs; e++) if (s->es[e].pid == pid) s->pesInicios[e]++;
+    }
     if (af == 2 || af == 0) continue;
     if (af == 3) off += 1 + k[4];
     if (off >= 188) continue;
@@ -99,6 +108,7 @@ static inline void ts_sondar(const unsigned char *b, long n, TsSonda *s) {
       sl = ((k[p + 1] & 0x0F) << 8) | k[p + 2];
       fim = p + 3 + sl - 4; if (fim > 188) fim = 188;
       pil = ((k[p + 10] & 0x0F) << 8) | k[p + 11];
+      s->pcrPid = ((k[p + 8] & 0x1F) << 8) | k[p + 9];
       for (j = p + 12 + pil; j + 5 <= fim && s->nEs < 8; ) {
         int t = k[j], epid = ((k[j + 1] & 0x1F) << 8) | k[j + 2];
         int il = ((k[j + 3] & 0x0F) << 8) | k[j + 4], d = j + 5, desc = 0;
@@ -126,8 +136,10 @@ static inline void ts_resumo(const TsSonda *s, char *d, size_t n) {
   u = (size_t)snprintf(d, n, "%d pacotes, embaralhados=%d, pmt=%s", s->pacotes, s->embaralhados,
                        s->pmtPid < 0 ? "sem PAT" : s->nEs ? "ok" : "nao vista");
   for (i = 0; i < s->nEs && u < n; i++)
-    u += (size_t)snprintf(d + u, n - u, " | pid %d 0x%02x %s", s->es[i].pid, s->es[i].tipo,
-                          ts_tipo_nome(s->es[i].tipo, s->es[i].desc));
+    u += (size_t)snprintf(d + u, n - u, " | pid %d 0x%02x %s pes=%d", s->es[i].pid, s->es[i].tipo,
+                          ts_tipo_nome(s->es[i].tipo, s->es[i].desc), s->pesInicios[i]);
+  if (u < n && s->nEs)
+    u += (size_t)snprintf(d + u, n - u, " | pcr pid %d (%d vistos)", s->pcrPid, s->pcrVistos);
   if (u < n && s->videoPid >= 0)
     snprintf(d + u, n - u, " | sps perfil=%d nivel=%d%s", s->perfil, s->nivel,
              s->perfil < 0 ? " (SPS nao achado)" :

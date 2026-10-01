@@ -79,7 +79,10 @@ typedef struct {
   // A/B/C ate um tocar; o resultado de cada um fica para o registro e a
   // recomendacao. modoOk = o que tocou, -1 nenhum.
   int  modoFeito, modoOk;
-  int  modoFalha[3], modoQuadroMs[3];
+  int  corpoM3u;          // o .ts respondeu uma playlist (registro 14565)
+  char resumo[300];       // ts_resumo do trecho lido
+  char segUrl[4096];      // HLS: o primeiro segmento (modo D toca so ele)
+  int  modoFalha[4], modoQuadroMs[4];
 } LtdFormato;
 
 typedef struct {
@@ -101,7 +104,7 @@ static struct {
   int pfFormato, pfModo, pfVivo;
   Uint32 pfDesde, pfTocouEm, pausaAte;
   LtdRecomendacao rec;
-  int recModo, tocouModo[3];   // modo do load que mais tocou; -1 = nenhum
+  int recModo, tocouModo[4];   // modo do load que mais tocou; -1 = nenhum
   int aplicado, enviou;
   _Atomic int fioOcupado;
   volatile int cancelado;
@@ -172,6 +175,7 @@ static int sondarTrecho(LtdFormato *f, const char *url, const char *const *cabs)
                        strstr(b, "<!DOCTYPE")) ? "html" : (b[0] == '{' || b[0] == '[') ? "json" : "outro";
     long imprim = 0, k;
     for (k = 0; k < n; k++) if ((b[k] >= 32 && b[k] < 127) || b[k] == '\n' || b[k] == '\r') imprim++;
+    f->corpoM3u = strstr(b, "#EXTM3U") != NULL;
     printf("[livetv-diag] corpo curto: %ld B, %s, %ld%% texto, 0x47 no inicio=%d, tem http=%d\n", n, tipo,
            imprim * 100 / n, (unsigned char)b[0] == 0x47, strstr(b, "http") != NULL);
   }
@@ -179,6 +183,7 @@ static int sondarTrecho(LtdFormato *f, const char *url, const char *const *cabs)
     TsSonda t;
     ts_sondar((const unsigned char *)b, n, &t);
     codecDe(&t, f);
+    ts_resumo(&t, f->resumo, sizeof f->resumo);
     if (f->ms > 0) f->kbps = (int)((double)n * 8.0 / (double)f->ms);
     f->servido = f->ehTs;
   }
@@ -225,6 +230,34 @@ static void sondarHls(LtdFormato *f, const char *url, const char *const *cabs) {
       snprintf(rel, sizeof rel, "%.*s", (int)(k < sizeof rel ? k : sizeof rel - 1), escolhida);
       juntarUrl(atual, rel, prox, sizeof prox); }
     { int mestre = strstr(b, "#EXT-X-STREAM-INF") != NULL;
+      if (!mestre) {
+        // A PLAYLIST DE MIDIA, resumida sem URL (#158): o que o motor HLS do
+        // uMS le e o hls.js do navegador tambem.
+        int segs = 0, disc = 0, chave = 0, mapa = 0, pdt = 0, td = -1, outroHost = 0, extTs = 0;
+        double soma = 0.0;
+        const char *h0 = strstr(atual, "://"), *l2;
+        size_t hn = h0 ? strcspn(h0 + 3, "/") : 0;
+        for (l2 = b; l2 && *l2; l2 = strchr(l2, '\n') ? strchr(l2, '\n') + 1 : NULL) {
+          if (!strncmp(l2, "#EXTINF:", 8)) { segs++; soma += atof(l2 + 8); }
+          else if (!strncmp(l2, "#EXT-X-DISCONTINUITY", 20)) disc++;
+          else if (!strncmp(l2, "#EXT-X-KEY", 10) && !strstr(l2, "METHOD=NONE")) chave++;
+          else if (!strncmp(l2, "#EXT-X-MAP", 10)) mapa++;
+          else if (!strncmp(l2, "#EXT-X-PROGRAM-DATE-TIME", 24)) pdt++;
+          else if (!strncmp(l2, "#EXT-X-TARGETDURATION:", 22)) td = atoi(l2 + 22);
+          else if (*l2 != '#' && *l2 != '\n' && *l2 != '\r') {
+            size_t k = strcspn(l2, "\r\n?");
+            if (k > 3 && !strncmp(l2 + k - 3, ".ts", 3)) extTs++;
+            if (!strncmp(l2, "http", 4) && h0) {
+              const char *h1 = strstr(l2, "://");
+              if (h1 && (strcspn(h1 + 3, "/") != hn || strncmp(h1 + 3, h0 + 3, hn))) outroHost++;
+            }
+          }
+        }
+        printf("[livetv-diag] playlist: %d segmento(s) somando %.1f s, alvo %d s, .ts=%d, outro host=%d, "
+               "discontinuity=%d, chave=%d, map=%d, program-date-time=%d, endlist=%d\n", segs, soma, td,
+               extTs, outroHost, disc, chave, mapa, pdt, strstr(b, "#EXT-X-ENDLIST") != NULL);
+        snprintf(f->segUrl, sizeof f->segUrl, "%s", prox);
+      }
       free(b);
       if (mestre) { snprintf(atual, sizeof atual, "%s", prox); continue; } }
     { int http = f->http;
@@ -298,6 +331,13 @@ static void *fioRede(void *u) {
     if (!x->tentado) continue;
     if (f == F_HLS) sondarHls(x, x->url, cabs);
     else sondarTrecho(x, x->url, cabs);
+    // O .ts QUE E PLAYLIST (registro 14565: 663 B de #EXTM3U no endpoint .ts
+    // do provedor): o player recebe HLS nos dois formatos. Resume a playlist.
+    if (f == F_TS && x->corpoM3u && !L.cancelado) {
+      int http = x->http;
+      sondarHls(x, x->url, cabs);
+      x->http = http;
+    }
     // O MESMO .ts COM USER-AGENT DE PLAYER: o provedor pode entregar outra
     // coisa ao "Nuvio/1.0" do curl e ao player (hipotese 3 do #158).
     if (f == F_TS && x->tentado && !x->servido && !L.cancelado) {
@@ -322,6 +362,7 @@ static void *fioRede(void *u) {
            it->nome, f == F_HLS ? "HLS" : "TS", x->http, x->curl, x->bytes, x->ms, x->kbps,
            x->servido ? "video TS" : (f == F_HLS && x->http >= 200 && x->http < 300) ? "playlist sem video" : "sem video",
            x->codec[0] ? " | " : "", x->codec, x->dezBits ? " | 10 bits" : "");
+    if (x->resumo[0]) printf("[livetv-diag] ts %s %s: %s\n", it->nome, f == F_HLS ? "HLS" : "TS", x->resumo);
     fflush(stdout);
   }
   // VELOCIDADE: 6 s de um canal que respondeu, uma vez (o primeiro).
@@ -374,11 +415,16 @@ static GfxRect quadroPlayer;   // onde o video aparece; o desenho atualiza
 // Quantos modos cada formato tenta: o HLS (que a rede provou ser video) os
 // tres; o TS os tres nos dois primeiros canais e so o padrao nos outros —
 // para o teste caber em poucos minutos.
+// MODO D (so no diagnostico, so HLS, so os dois primeiros canais): o uMS
+// recebe o PRIMEIRO SEGMENTO como arquivo .ts, sem o motor HLS. Tocar ali e
+// nao tocar no HLS separa "o TS do provedor nao decodifica nesta TV" de "o
+// motor HLS do uMS nao lida com esta playlist".
 static int nModos(int f) {
   if (!LTD_TEM_PLAYER) return 1;
-  return f == F_HLS || L.atual < 2 ? 3 : 1;
+  if (f == F_HLS) return L.atual < 2 && L.it[L.atual].f[F_HLS].segUrl[0] ? 4 : 3;
+  return L.atual < 2 ? 3 : 1;
 }
-static const char *letraModo(int m) { return m == 1 ? "B" : m == 2 ? "C" : "A"; }
+static const char *letraModo(int m) { return m == 1 ? "B" : m == 2 ? "C" : m == 3 ? "D" : "A"; }
 
 static void iniciarPlayer(int f) {
   LtdItem *it = &L.it[L.atual];
@@ -386,13 +432,13 @@ static void iniciarPlayer(int f) {
   if (!x->modoFeito) x->modoOk = -1;
   L.pfFormato = f;
   L.pfModo = x->modoFeito;
-  video_definir_modo_live(L.pfModo);
+  video_definir_modo_live(L.pfModo == 3 ? 0 : L.pfModo);
   L.pfDesde = SDL_GetTicks();
   L.pfTocouEm = 0;
   L.estado = E_PLAYER;
   video_definir_reconexao(0);
   video_definir_cabecalhos(it->cabs);
-  L.pfVivo = video_tocar(x->url);
+  L.pfVivo = video_tocar(L.pfModo == 3 ? x->segUrl : x->url);
   // O QUADRO do painel "No player agora" desde o load: sem isto o primeiro
   // quadro sairia em tela cheia por cima da tela ate o desenho seguinte.
   if (L.pfVivo && quadroPlayer.w > 1.0f)
@@ -460,7 +506,7 @@ static void passoPlayer(Uint32 agora) {
   }
   if (!acabou) return;
   if (L.pfVivo || x->falha != LTD_SEM_TESTE) logPlayer(it, x, L.pfFormato);
-  if (L.pfModo < 3) {
+  if (L.pfModo < 4) {
     x->modoFalha[L.pfModo] = x->modoOk == L.pfModo ? LTD_OK : x->falha;
     x->modoQuadroMs[L.pfModo] = x->modoOk == L.pfModo ? x->quadroMs : 0;
   }
