@@ -124,6 +124,9 @@ const char *guia_desc_livre(const char *desc, char *buf, size_t n);
 // `max`. 0 com a lista ainda nao carregada. Os ponteiros de guia_canal_campos
 // valem ate a proxima republicacao da lista (so o fio de desenho chama).
 int  guia_buscar_canais(const char *alvoNorm, int *indices, int max);
+// Le a lista do cache do guia (a ultima publicada) se a sessao ainda nao tem
+// lista. Nao vai a rede. O Spotlight chama ao abrir.
+void guia_preparar_busca(void);
 int  guia_canal_campos(int i, const char **id, const char **nome, const char **logo,
                        const char **cat, const char **base);
 

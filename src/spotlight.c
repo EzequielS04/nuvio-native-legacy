@@ -627,6 +627,7 @@ static void ditar(void) {
 // --- Ciclo de vida -------------------------------------------------------------------
 void spot_abrir(int voz) {
   kbMontar();
+  guia_preparar_busca();
   aberto = 1;
   painel = 0; kbF = 0; kbC = 0;
   nConsulta = 0; consulta[0] = 0; montada[0] = 0;
