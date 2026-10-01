@@ -1740,7 +1740,7 @@ float ajustes_trailer_zoom(void)      { static const float z[] = { 1.34f, 1.15f,
 // Teto de definicao do trailer: 0 = a maior que houver.
 int   ajustes_trailer_qualidade(void) { static const int t[] = { 0, 1080, 720, 480 }; int v = valor[AJ_TRAILER_QUAL]; return (v >= 0 && v < 4) ? t[v] : 0; }
 // Fonte do trailer: o TRF_* de trailerfonte.h. Fora da lista le Automatico.
-int   ajustes_trailer_fonte(void)     { int v = valor[AJ_TRAILER_FONTE]; return (v >= 0 && v < 4) ? v : 0; }
+int   ajustes_trailer_fonte(void)     { int v = valor[AJ_TRAILER_FONTE]; return (v >= 0 && v < nValores(AJ_TRAILER_FONTE)) ? v : 0; }
 int  ajustes_envio_auto(void)         { return lig(AJ_ENVIO_AUTO); }
 int  ajustes_menu_explorar(void)      { return lig(AJ_MENU_EXPLORAR); }
 int  ajustes_menu_guia(void)          { return lig(AJ_MENU_GUIA); }
@@ -5054,6 +5054,14 @@ static void aplicarIdioma(int op) {
 // const e foi escrita antes de linguas.c existir.
 static int nValores(int op) {
   if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) return nLingua > 0 ? nLingua : 1;
+#ifndef __EMSCRIPTEN__
+  // "YouTube" (o 4o valor) so toca no .wgt da Samsung (trailerfonte.c, existe).
+  // Aqui ele era escolhivel e deixava a TV sem trailer nenhum: sem trailer no
+  // destaque e sem botao Trailer na pagina (#204, log da 1.6.5: "detalhe: sem
+  // trailer (ajuste 3, apple tem, imdb tem, youtube n/a)"). Fora da lista, o 3
+  // ja gravado le como fora da faixa e fica o padrao, Automatico (limita).
+  if (op == AJ_TRAILER_FONTE) return 3;
+#endif
   return OPCOES[op].n;
 }
 

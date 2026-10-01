@@ -93,5 +93,7 @@ int  ponteiro_achar(const PonteiroAlvo *v, int n, float x, float y);
 void ponteiro_teste_relogio(Uint32 (*fn)(void));
 // Tamanho da janela para a conversao janela -> logico (0 = SDL_GetWindowSize).
 void ponteiro_teste_janela(int w, int h);
+// SDL_webOSCursorVisibility de mentira (so com -DNV_PONT_WEBOS_TESTE).
+void ponteiro_teste_cursor_sistema(SDL_bool (*fn)(SDL_bool));
 
 #endif
