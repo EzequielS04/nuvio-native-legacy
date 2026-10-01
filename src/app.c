@@ -31,6 +31,7 @@
 #include "vertudo.h"
 #include "guia.h"
 #include "livetvdiag.h"
+#include "proxyts.h"
 #include "livetv_regras.h"
 #include "guialembrete.h"   /* aviso do lembrete de programa do guia */
 #include "epg.h"
@@ -573,7 +574,7 @@ static int montarCanalStalker(const char *id, const char *url) {
 // e as variantes ficam de reserva.
 #define XT_VARIANTES_MAX 3
 static int resolverCanalXtream(void) {
-  static Stream s[2 * XT_VARIANTES_MAX];
+  static Stream s[3 * XT_VARIANTES_MAX];
   GuiaVariante v[XT_VARIANTES_MAX], ord[XT_VARIANTES_MAX];
   const char *ext[2];
   int k = xtream_formatos(ext), i, j, n = 0, nv, no = 0;
@@ -591,6 +592,20 @@ static int resolverCanalXtream(void) {
       char url[4096];
       const char *f = !strcmp(ext[i], "ts") ? "TS" : "HLS";
       if (!xtream_url_formato(ord[j].id, ext[i], url, sizeof url)) continue;
+      // PROXY DE TS (#158, proxyts.h): a primeira fonte de cada variante vai
+      // pelo proxy local — HLS (ou .ts que o painel responde com playlist) vira
+      // TS continuo; o que ja e TS continuo o proxy redireciona direto. As
+      // fontes diretas ficam atras, de reserva.
+      if (!i && ajustes_livetv_proxy() && proxyts_disponivel() && n < (int)(sizeof s / sizeof *s) - 1) {
+        snprintf(s[n].url, sizeof s[n].url, "%s%s", PROXYTS_PREFIXO, url);
+        if (strcmp(ord[j].id, player_id_canal()) && ord[j].nome[0])
+          snprintf(s[n].rotulo, sizeof s[n].rotulo, "Xtream (%s, proxy) · %s", f, ord[j].nome);
+        else snprintf(s[n].rotulo, sizeof s[n].rotulo, "Xtream (%s, proxy)", f);
+        snprintf(s[n].provedor, sizeof s[n].provedor, "%s", "xtream");
+        s[n].altura = ord[j].altura;
+        s[n].fileIdx = -1;
+        n++;
+      }
       snprintf(s[n].url, sizeof s[n].url, "%s", url);
       if (strcmp(ord[j].id, player_id_canal()) && ord[j].nome[0])
         snprintf(s[n].rotulo, sizeof s[n].rotulo, "Xtream (%s) · %s", f, ord[j].nome);

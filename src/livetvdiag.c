@@ -33,6 +33,7 @@
 #include "idioma.h"
 #include "layout.h"
 #include "player.h"
+#include "proxyts.h"
 #include "rede.h"
 #include "streams.h"
 #include "text.h"
@@ -82,7 +83,7 @@ typedef struct {
   int  corpoM3u;          // o .ts respondeu uma playlist (registro 14565)
   char resumo[300];       // ts_resumo do trecho lido
   char segUrl[4096];      // HLS: o primeiro segmento (modo D toca so ele)
-  int  modoFalha[4], modoQuadroMs[4];
+  int  modoFalha[5], modoQuadroMs[5];
 } LtdFormato;
 
 typedef struct {
@@ -104,7 +105,7 @@ static struct {
   int pfFormato, pfModo, pfVivo;
   Uint32 pfDesde, pfTocouEm, pausaAte;
   LtdRecomendacao rec;
-  int recModo, tocouModo[4];   // modo do load que mais tocou; -1 = nenhum
+  int recModo, tocouModo[5];   // modo do load que mais tocou; -1 = nenhum
   int aplicado, enviou;
   _Atomic int fioOcupado;
   volatile int cancelado;
@@ -419,26 +420,46 @@ static GfxRect quadroPlayer;   // onde o video aparece; o desenho atualiza
 // recebe o PRIMEIRO SEGMENTO como arquivo .ts, sem o motor HLS. Tocar ali e
 // nao tocar no HLS separa "o TS do provedor nao decodifica nesta TV" de "o
 // motor HLS do uMS nao lida com esta playlist".
-static int nModos(int f) {
-  if (!LTD_TEM_PLAYER) return 1;
-  if (f == F_HLS) return L.atual < 2 && L.it[L.atual].f[F_HLS].segUrl[0] ? 4 : 3;
-  return L.atual < 2 ? 3 : 1;
+// MODO P = o PROXY DE TS (proxyts.h): o HLS vai ao uMS como TS continuo. Vem
+// primeiro no HLS (e no .ts que o painel responde com playlist), porque e o
+// conserto medido na C9; os modos do load ficam depois, para comparacao.
+enum { M_A, M_B, M_C, M_D, M_P, M_N };
+static int ordemModos(int f, int *m) {
+  int n = 0;
+  const LtdFormato *x = &L.it[L.atual].f[f];
+  if (!LTD_TEM_PLAYER) { m[n++] = M_A; return n; }
+  if (f == F_HLS || x->corpoM3u) {
+    if (proxyts_disponivel()) m[n++] = M_P;
+    m[n++] = M_A;
+    if (f == F_HLS && L.atual < 2) { m[n++] = M_B; m[n++] = M_C; if (x->segUrl[0]) m[n++] = M_D; }
+    return n;
+  }
+  m[n++] = M_A;
+  if (L.atual < 2) { m[n++] = M_B; m[n++] = M_C; }
+  return n;
 }
-static const char *letraModo(int m) { return m == 1 ? "B" : m == 2 ? "C" : m == 3 ? "D" : "A"; }
+static int nModos(int f) { int m[M_N]; return ordemModos(f, m); }
+static int modoDoPasso(int f, int k) { int m[M_N], n = ordemModos(f, m); return k < n ? m[k] : M_A; }
+static const char *letraModo(int m) {
+  return m == M_B ? "B" : m == M_C ? "C" : m == M_D ? "D" : m == M_P ? "P" : "A";
+}
 
 static void iniciarPlayer(int f) {
   LtdItem *it = &L.it[L.atual];
   LtdFormato *x = &it->f[f];
   if (!x->modoFeito) x->modoOk = -1;
   L.pfFormato = f;
-  L.pfModo = x->modoFeito;
-  video_definir_modo_live(L.pfModo == 3 ? 0 : L.pfModo);
+  L.pfModo = modoDoPasso(f, x->modoFeito);
+  video_definir_modo_live(L.pfModo <= M_C ? L.pfModo : 0);
   L.pfDesde = SDL_GetTicks();
   L.pfTocouEm = 0;
   L.estado = E_PLAYER;
   video_definir_reconexao(0);
   video_definir_cabecalhos(it->cabs);
-  L.pfVivo = video_tocar(L.pfModo == 3 ? x->segUrl : x->url);
+  { char px[96], marcada[4200];
+    snprintf(marcada, sizeof marcada, "%s%s", PROXYTS_PREFIXO, x->url);
+    L.pfVivo = video_tocar(L.pfModo == M_D ? x->segUrl
+                           : proxyts_resolver(L.pfModo == M_P ? marcada : x->url, px, sizeof px)); }
   // O QUADRO do painel "No player agora" desde o load: sem isto o primeiro
   // quadro sairia em tela cheia por cima da tela ate o desenho seguinte.
   if (L.pfVivo && quadroPlayer.w > 1.0f)
@@ -506,7 +527,7 @@ static void passoPlayer(Uint32 agora) {
   }
   if (!acabou) return;
   if (L.pfVivo || x->falha != LTD_SEM_TESTE) logPlayer(it, x, L.pfFormato);
-  if (L.pfModo < 4) {
+  if (L.pfModo < 5) {
     x->modoFalha[L.pfModo] = x->modoOk == L.pfModo ? LTD_OK : x->falha;
     x->modoQuadroMs[L.pfModo] = x->modoOk == L.pfModo ? x->quadroMs : 0;
   }
@@ -548,7 +569,7 @@ static void recomendar(void) {
   memset(L.tocouModo, 0, sizeof L.tocouModo);
   for (i = 0; i < L.n; i++)
     for (f = 0; f < 2; f++)
-      if (L.it[i].f[f].tocou && L.it[i].f[f].modoOk >= 0 && L.it[i].f[f].modoOk < 3)
+      if (L.it[i].f[f].tocou && L.it[i].f[f].modoOk >= 0 && L.it[i].f[f].modoOk < M_N)
         L.tocouModo[L.it[i].f[f].modoOk]++;
   L.recModo = -1;
   for (f = 0; f < 3; f++) if (L.tocouModo[f] && (L.recModo < 0 || L.tocouModo[f] > L.tocouModo[L.recModo])) L.recModo = f;
@@ -558,10 +579,10 @@ static void recomendar(void) {
   }
   L.rec.latenciaMs = L.latenciaMs;
   printf("[livetv-diag] recomenda: formato=%d resolucao=%d espera=%d | tocaram HLS %d/%d TS %d/%d | "
-         "sem decoder %d | 10 bits %d | %d kbps | tocaram por modo A %d B %d C %d -> modo %d\n",
+         "sem decoder %d | 10 bits %d | %d kbps | tocaram por modo A %d B %d C %d D %d proxy %d -> modo %d\n",
          L.rec.formato, L.rec.resolucao, L.rec.espera,
          L.rec.tocaram[0], L.rec.tentados[0], L.rec.tocaram[1], L.rec.tentados[1], L.rec.semDecoder,
-         L.rec.dezBits, L.rec.kbpsMediana, L.tocouModo[0], L.tocouModo[1], L.tocouModo[2], L.recModo);
+         L.rec.dezBits, L.rec.kbpsMediana, L.tocouModo[0], L.tocouModo[1], L.tocouModo[2], L.tocouModo[3], L.tocouModo[4], L.recModo);
   fflush(stdout);
 }
 
@@ -647,7 +668,7 @@ enum { B_APLICAR, B_ENVIAR, B_DENOVO, B_N };
 static int botoes(int *lista) {
   int n = 0;
   if (L.estado != E_PRONTO) return 0;
-  if (L.rec.confianca > 0 || L.redeMedida || L.recModo >= 0) lista[n++] = B_APLICAR;
+  if (L.rec.confianca > 0 || L.redeMedida || L.recModo >= 0 || L.tocouModo[M_P]) lista[n++] = B_APLICAR;
   lista[n++] = B_ENVIAR;
   lista[n++] = B_DENOVO;
   return n;
@@ -674,6 +695,7 @@ void livetvdiag_evento(const SDL_Event *e) {
     if (b == B_APLICAR) {
       ajustes_livetv_aplicar(L.rec.resolucao, L.rec.formato, L.rec.espera);
       if (L.recModo >= 0) ajustes_livetv_aplicar_modo(L.recModo);
+      if (L.tocouModo[M_P]) ajustes_livetv_aplicar_proxy(1);
       L.aplicado = 1;
       printf("[livetv-diag] aplicado: resolucao=%d formato=%d espera=%d\n", L.rec.resolucao,
              L.rec.formato, L.rec.espera);
@@ -945,6 +967,8 @@ static void desenharRecomendacoes(GfxRect r, float ar, float ag, float ab) {
     linhaRec(r, &y, i18n("Há canal em 10 bits: muitas TVs não decodificam esse vídeo. Prefira a versão HD ou SD dele."), 244, 196, 150);
   if (L.xtConfig && L.conta.valido && L.conta.maxConexoes > 0 && L.conta.conexoes >= L.conta.maxConexoes)
     linhaRec(r, &y, i18n("Todas as telas da conta estão em uso: feche o Xtream em outro aparelho."), 244, 196, 150);
+  if (L.tocouModo[M_P] && !L.tocouModo[M_A])
+    linhaRec(r, &y, i18n("Os canais HLS só abriram pelo proxy de TS: ele fica ligado para a Live TV."), (int)(ar * 255), (int)(ag * 255), (int)(ab * 255));
   if (L.recModo > 0) {
     snprintf(a, sizeof a, i18n("Os canais abriram no modo %s do player e não no padrão: Aplicar passa a usá-lo nos canais."),
              letraModo(L.recModo));

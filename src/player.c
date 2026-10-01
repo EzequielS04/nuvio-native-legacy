@@ -81,6 +81,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "xtream.h"
 #include "xtepg.h"   /* grade curta do Xtream quando a XMLTV nao casa (#158) */
 #include "ajustes.h"
+#include "proxyts.h"
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -1134,7 +1135,8 @@ void player_abrir(int indiceCatalogo, const char *url) {
   // Reconexao so no filme/episodio: canal ao vivo tem o watchdog de app.c.
   video_definir_reconexao(!ehCanal());
   video_definir_modo_live(ehCanal() ? ajustes_livetv_modo() : 0);
-  comVideo = (url && *url && video_tocar(url));
+  { char px[96];
+    comVideo = (url && *url && video_tocar(proxyts_resolver(url, px, sizeof px))); }
   mkvass_video_aberto(comVideo);
   aplicarAspecto();
 
@@ -1208,7 +1210,8 @@ static int prebuscaCabe(const char *url) {
 static void tocarFonte(const char *url) {
   video_definir_reconexao(!ehCanal());
   video_definir_modo_live(ehCanal() ? ajustes_livetv_modo() : 0);
-  comVideo = video_tocar(url);
+  { char px[96];
+    comVideo = video_tocar(proxyts_resolver(url, px, sizeof px)); }
   mkvass_video_aberto(comVideo);
   if (!comVideo) erroSemVideo();
   // No PiP a fonte nova retoca o mesmo canto — o destino de tela cheia do

@@ -34,6 +34,12 @@ class H(http.server.BaseHTTPRequestHandler):
             self.wfile.write(corpo); return
         time.sleep(0.15)   # latencia do provedor
         if p.endswith('/101.ts'): return mandar(self, os.path.join(DIR, 'h264.ts'), 'video/mp2t')
+        if p.endswith('/105.ts'):
+            # 105: o .ts que o painel responde com uma playlist AO VIVO (sem
+            # ENDLIST), como o TNT Sports 1 HD na C9 (proxyts.c).
+            corpo = open(os.path.join(DIR, 'hls/media.m3u8'), 'rb').read().replace(b'seg', b'/hls/seg').replace(b'#EXT-X-ENDLIST', b'')
+            self.send_response(200); self.send_header('Content-Type', 'application/vnd.apple.mpegurl'); self.end_headers()
+            self.wfile.write(corpo); return
         if p.endswith('/104.ts'):
             # 104: como o provedor do pasha (registro 14520): 663 B ao curl
             # do app, video ao User-Agent de player.

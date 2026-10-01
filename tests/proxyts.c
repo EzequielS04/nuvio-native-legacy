@@ -1,0 +1,59 @@
+// tests/proxyts.sh: o proxy de TS da Live TV contra o servidor falso.
+#include "../src/proxyts.c"
+#include <assert.h>
+static int falhas;
+#define OK(c, m) do { if (c) printf("ok  %s\n", m); else { printf("FALHOU %s\n", m); falhas++; } } while (0)
+static long baixar(const char *url, int segundos, unsigned char **out, char *cab, size_t ncab) {
+  char cmd[600];
+  FILE *f;
+  long n = 0;
+  unsigned char *b = malloc(64 << 20);
+  snprintf(cmd, sizeof cmd, "curl -s -D /tmp/nuvio-proxyts-cab --max-time %d '%s'", segundos, url);
+  f = popen(cmd, "r");
+  while (f && n < (64 << 20)) { size_t r = fread(b + n, 1, 65536, f); if (!r) break; n += (long)r; }
+  if (f) pclose(f);
+  { FILE *c = fopen("/tmp/nuvio-proxyts-cab", "r"); size_t r = c ? fread(cab, 1, ncab - 1, c) : 0; cab[r] = 0; if (c) fclose(c); }
+  *out = b;
+  return n;
+}
+int main(void) {
+  char url[200], cab[2048];
+  unsigned char *b;
+  long n;
+  PxLista l;
+  char j[300];
+  // juntar e ler playlist
+  pxJuntar("http://h:1/live/u/p/9.m3u8?tok=1/2", "seg1.ts", j, sizeof j);
+  OK(!strcmp(j, "http://h:1/live/u/p/seg1.ts"), "segmento relativo ao diretorio da playlist (query fora)");
+  pxJuntar("http://h:1/a/b.m3u8", "/hls/s.ts", j, sizeof j);
+  OK(!strcmp(j, "http://h:1/hls/s.ts"), "segmento absoluto no host");
+  OK(pxLer("#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:120\n#EXTINF:4,\na.ts\n#EXTINF:4,\nb.ts\n", "http://h/x/l.m3u8", &l)
+     && l.alvo == 4 && l.seq0 == 120 && l.n == 2 && !strcmp(l.uri[1], "http://h/x/b.ts"), "playlist de midia");
+  OK(pxLer("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv1/i.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2\nv2/i.m3u8\n", "http://h/m.m3u8", &l)
+     && l.mestre && !strcmp(l.uri[0], "http://h/v1/i.m3u8"), "master: primeira variante");
+
+  // HLS ao vivo (o .ts que vira playlist): fluxo TS continuo, com PAT no comeco
+  assert(proxyts_url("http://127.0.0.1:8765/live/u/p/105.ts", url, sizeof url));
+  OK(proxyts_e_url(url), "URL local do proxy");
+  n = baixar(url, 6, &b, cab, sizeof cab);
+  OK(strstr(cab, "200 OK") && strstr(cab, "video/mp2t") && !strstr(cab, "Content-Length"), "200 video/mp2t sem Content-Length");
+  OK(n > 4000000 && b[0] == 0x47 && b[188] == 0x47 && pxPid(b) == 0, "fluxo TS comeca pelo PAT");
+  { long i, bons = 0; for (i = 0; i + 188 <= n; i += 188) if (b[i] == 0x47) bons++;
+    OK(bons == n / 188, "todo pacote alinhado em 188"); }
+  free(b);
+  // TS continuo: 302 para a fonte
+  assert(proxyts_url("http://127.0.0.1:8765/live/u/p/101.ts", url, sizeof url));
+  { char cmd[300]; FILE *f; char r[512] = "";
+    snprintf(cmd, sizeof cmd, "curl -s -o /dev/null -w '%%{http_code} %%{redirect_url}' --max-time 5 '%s'", url);
+    f = popen(cmd, "r"); if (f) { fgets(r, sizeof r, f); pclose(f); }
+    OK(!strncmp(r, "302 http://127.0.0.1:8765/live/u/p/101.ts", 41), "TS continuo: 302 para a fonte"); }
+  // sessao velha: 404
+  { char velha[200]; snprintf(velha, sizeof velha, "%s", url);
+    assert(proxyts_url("http://127.0.0.1:8765/live/u/p/105.ts", url, sizeof url));
+    n = baixar(velha, 3, &b, cab, sizeof cab); free(b);
+    OK(strstr(cab, "404"), "sessao trocada: a URL antiga da 404"); }
+  proxyts_parar();
+  if (falhas) return 1;
+  printf("proxyts: tudo ok\n");
+  return 0;
+}

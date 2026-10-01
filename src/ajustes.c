@@ -264,6 +264,8 @@ typedef enum {
   // Modo do load do player nos canais (video_definir_modo_live, #158). No fim
   // pelo mesmo motivo.
   AJ_LIVETV_MODO,
+  // Proxy de TS da Live TV (proxyts.c, #158). No fim pelo mesmo motivo.
+  AJ_LIVETV_PROXY,
   AJ_N
 } OpcaoId;
 
@@ -832,6 +834,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Espera para abrir o canal",       V_LIVETV_ESPERA, 3), // local: liveTvEsperaLocal
   ACAO("Diagnóstico da Live TV"),
   ESC("Modo do player da Live TV",       V_LIVETV_MODO, 3),   // local: liveTvModoLocal
+  ESC("Proxy de TS da Live TV",          V_LIGA, 2),          // local: liveTvProxyLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -986,6 +989,7 @@ static const char *CHAVE[] = {
   "liveTvResolucaoLocal", "xtreamFormatoLocal", "liveTvEsperaLocal",
   "-liveTvDiag",
   "liveTvModoLocal",
+  "liveTvProxyLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1179,7 +1183,7 @@ static const Item TELA[] = {
     ROT("Diagnóstico"),
       OPC(AJ_DIAGNOSTICO), OPC(AJ_VELOCIDADE),
     ROT("Experimental"),
-      OPC(AJ_LIVETV_MODO),
+      OPC(AJ_LIVETV_PROXY), OPC(AJ_LIVETV_MODO),
       OPC(AJ_P2P_LIGADO), OPC(AJ_P2P_URL), OPC(AJ_P2P_TESTAR),
 
   SEC("Sobre", "Versão, atualizações e registros", "aj_info"),
@@ -1446,6 +1450,7 @@ static int valor[] = {
   0, 0, 0,          /* Live TV: resolucao, formato do Xtream e espera automaticos */
   0,                /* diagnostico da Live TV: acao */
   0,                /* modo do player da Live TV: A, o load de sempre */
+  0,                /* proxy de TS da Live TV: LIGADO (V_LIGA: 0 = Ligado) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1727,6 +1732,8 @@ int   ajustes_selos_coloridos(void)   { return lig(AJ_SELOS_CORES); }
 int   ajustes_livetv_resolucao(void)  { return valor[AJ_LIVETV_RES]; }
 int   ajustes_livetv_formato(void)    { return valor[AJ_LIVETV_FORMATO]; }
 int   ajustes_livetv_modo(void)       { return valor[AJ_LIVETV_MODO]; }
+int   ajustes_livetv_proxy(void)      { return lig(AJ_LIVETV_PROXY); }
+void  ajustes_livetv_aplicar_proxy(int l) { valor[AJ_LIVETV_PROXY] = l ? 0 : 1; gravar(); }
 void  ajustes_livetv_aplicar_modo(int m) { if (m >= 0 && m < 3) { valor[AJ_LIVETV_MODO] = m; gravar(); } }
 unsigned ajustes_livetv_espera_ms(void) {
   return valor[AJ_LIVETV_ESPERA] == 1 ? 25000u : valor[AJ_LIVETV_ESPERA] == 2 ? 45000u : 0u;
@@ -3052,7 +3059,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_COL_ARTE_CONTA: /* arte do addon: o web nao tem estas escolhas */
     case AJ_SELOS_CORES:    /* no web a cor vem do pacote de selos importado */
     case AJ_LIVETV_RES: case AJ_LIVETV_FORMATO: case AJ_LIVETV_ESPERA:
-    case AJ_LIVETV_DIAG: case AJ_LIVETV_MODO: /* rede e provedor desta casa: o web nao tem */
+    case AJ_LIVETV_DIAG: case AJ_LIVETV_MODO: case AJ_LIVETV_PROXY: /* rede e provedor desta casa: o web nao tem */
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
     case AJ_PERFIL_EDITAR:
@@ -3799,6 +3806,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_LIVETV_RES: return "Quando o canal tem várias fontes (FHD, HD, SD ou as versões do mesmo canal no Xtream), a desta resolução entra primeiro. Se ela não abrir, entra a próxima.";
     case AJ_LIVETV_FORMATO: return "Automático usa o formato que a conta Xtream declara e lembra o que tocou. HLS ou TS pede esse formato primeiro, mesmo quando a conta só declara o outro.";
     case AJ_LIVETV_ESPERA: return "Quanto tempo o canal tem para mostrar a imagem antes de o app passar para a próxima fonte ou mostrar o erro. Automática espera 15 s no Xtream e 25 s nos addons.";
+    case AJ_LIVETV_PROXY: return "Nos canais Xtream que chegam como HLS, o app junta os segmentos num fluxo TS contínuo e entrega à TV, que toca TS contínuo e não toca o HLS desses canais. Canal que já é TS contínuo vai direto. Desligado, a TV recebe o HLS do provedor.";
     case AJ_LIVETV_MODO: return "Teste para TVs em que o canal chega mas não aparece. A é o modo de sempre; B não escolhe a faixa de vídeo antes de o canal abrir; C também manda o pedido no formato de transmissão ao vivo. O diagnóstico da Live TV testa os três.";
     case AJ_LIVETV_DIAG: return "Mede a rede até o provedor, lê a conta Xtream e testa vários canais: se tocam, em que formato, com que resolução e em quanto tempo. No fim sugere ajustes da Live TV e pode aplicá-los.";
     case AJ_SELOS_CORES: return "Na lista de fontes, cada selo (4K, HDR, Dolby, codec, serviço) ganha a cor do seu tipo, como no pacote de selos do Nuvio. Desligado, os selos ficam brancos.";
