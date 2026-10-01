@@ -1297,6 +1297,7 @@
   T("Marcar %d episódios como assistidos", "Отметить %d эпизодов как просмотренные"),
   T("Marcar T%dE%d como assistido", "Отметить S%dE%d как просмотренный"),
   T("Marcar como assistido", "Отметить как просмотренное"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "Отметить этот эпизод"),
   T("Marcar temporada como assistida (%d)", "Отметить сезон как просмотренный (%d)"),
   T("Marrocos", "Марокко"),

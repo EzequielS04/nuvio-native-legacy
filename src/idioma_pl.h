@@ -1298,6 +1298,7 @@
   T("Marcar %d episódios como assistidos", "Oznacz %d odcinków jako obejrzane"),
   T("Marcar T%dE%d como assistido", "Oznacz S%dE%d jako obejrzany"),
   T("Marcar como assistido", "Oznacz jako obejrzane"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "Oznacz ten odcinek"),
   T("Marcar temporada como assistida (%d)", "Oznacz sezon jako obejrzany (%d)"),
   T("Marrocos", "Maroko"),

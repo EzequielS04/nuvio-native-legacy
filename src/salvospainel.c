@@ -590,8 +590,29 @@ static void trocarAba(int nova) {
   }
 }
 
+// Nascer da ilha (salvospainel.h). `origem` e fixa durante a abertura; o
+// destino da volta e renovado por quadro, porque a pilula pode ter mudado de
+// largura (o cartao alternou) enquanto o painel estava aberto.
+static int deIlha, destinoOk;
+static GfxRect origem, destino;
+
+void spainel_abrir_de(float x, float y, float w, float h) {
+  if (aberto) return;
+  spainel_abrir();
+  deIlha = 1;
+  origem = (GfxRect){ x, y, w, h };
+}
+
+void spainel_recolher_para(int ok, float x, float y, float w, float h) {
+  destinoOk = ok;
+  if (ok) destino = (GfxRect){ x, y, w, h };
+}
+
+int spainel_da_ilha(void) { return deIlha && spainel_visivel(); }
+
 void spainel_abrir(void) {
   if (aberto) return;
+  deIlha = 0;
   aberto = 1;
   foco = 0;
   okDesde = 0;
@@ -826,6 +847,7 @@ void spainel_atualizar(float dt, Uint32 agora) {
   if (!aberto) okDesde = 0;
   if (!aberto && entrada < 0.002f) {
     if (entrada != 0.0f) entrada = 0.0f;
+    deIlha = 0;
     return;
   }
   // O catalogo pode ter sido republicado com o painel aberto (a descoberta faz
@@ -1841,16 +1863,62 @@ void spainel_fundo(int podeParar, unsigned rev, void (*fundo)(void *), void *ctx
   }
 }
 
+// O RECORTE DO MORPH. Nascendo da ilha, o painel e um retangulo que cresce da
+// pilula ate SP_X/SP_W; o conteudo fica no lugar FINAL e aparece por dentro do
+// retangulo, sem ser escalado (nenhuma textura nova, nenhum FBO: o mesmo
+// desenho de sempre com um recorte). Todo recorte de dentro do painel passa
+// por aqui para nao vazar do retangulo enquanto ele cresce.
+static int morfOn;
+static GfxRect morfR;
+static void spRecorte(float x, float y, float w, float h) {
+  if (morfOn) {
+    float x1 = x + w, y1 = y + h, mx1 = morfR.x + morfR.w, my1 = morfR.y + morfR.h;
+    if (x < morfR.x) x = morfR.x;
+    if (y < morfR.y) y = morfR.y;
+    if (x1 > mx1) x1 = mx1;
+    if (y1 > my1) y1 = my1;
+    w = x1 - x; h = y1 - y;
+  }
+  gfx_recorte(x, y, w, h);
+}
+#define gfx_recorte spRecorte
+
+// Saida com repique curto (o "pulo" da pilula da ilha), so na forma.
+static float voltaSuave(float t) {
+  const float c1 = 1.25f, c3 = c1 + 1.0f;
+  float u = t - 1.0f;
+  return 1.0f + c3 * u * u * u + c1 * u * u;
+}
+
 void spainel_desenhar(Uint32 agora) {
   float a = anim_suave(entrada), x, y;
   int i;
   char buf[160];
+  GfxRect forma = { SP_X, SP_Y, SP_W, SP_H };
+  float raioForma = 28.0f / SP_W;
   (void)agora;
+  morfOn = 0;
   if (entrada < 0.002f) return;
 
   // Entra deslizando da BORDA DIREITA. `x` e o deslocamento: em a=0 o painel
   // esta inteiro fora da tela.
   x = (1.0f - a) * (NV_TELA_W - SP_X);
+  // ...ou NASCE DA ILHA: o retangulo vai da pilula (origem) ate o painel, o
+  // raio em pixels de meia altura da pilula ate o do painel, e o conteudo
+  // entra na segunda metade. Animacoes reduzidas: entrada ja e 0 ou 1 (anim.h).
+  if (deIlha) {
+    GfxRect o = (aberto || !destinoOk) ? origem : destino;
+    float e = aberto ? voltaSuave(entrada) : anim_suave(entrada);
+    float rFim = raioForma * SP_H, rIni = o.h * 0.5f, ec = e > 1.0f ? 1.0f : e;
+    forma.x = o.x + (SP_X - o.x) * e;  forma.y = o.y + (SP_Y - o.y) * e;
+    forma.w = o.w + (SP_W - o.w) * e;  forma.h = o.h + (SP_H - o.h) * e;
+    raioForma = (rIni + (rFim - rIni) * ec) / (forma.h > 1.0f ? forma.h : 1.0f);
+    x = 0.0f;
+    a = (entrada - 0.45f) / 0.55f;
+    a = a < 0.0f ? 0.0f : a > 1.0f ? 1.0f : a;
+    morfOn = entrada < 0.999f;
+    morfR = forma;
+  }
   // Com o fundo parado o veu ja esta na copia (spainel_fundo).
   //
   // O VEU CONTINUA INTEIRO, e nao so em volta do painel. Tentei faixas em volta
@@ -1864,9 +1932,11 @@ void spainel_desenhar(Uint32 agora) {
   // Painel flutuante escuro e neutro; o veu separa a camada do conteudo sem
   // uma luz decorativa colorida competindo com posters e selos.
   { GfxRect p = { SP_X + x, SP_Y, SP_W, SP_H };
+    float as = a;
+    if (deIlha) { p = forma; as = entrada > 0.08f ? 1.0f : entrada / 0.08f; }
     // Vidro: folha translucida sem contorno, como o menu e Fontes (dono, 30/09).
-    if (ajustes_vidro()) gfx_vidro_folha(p, 28.0f / SP_W, a);
-    else gfx_cor(p, 28.0f / SP_W, 0.055f, 0.058f, 0.068f, 0.94f * a);
+    if (ajustes_vidro()) gfx_vidro_folha(p, raioForma, as);
+    else gfx_cor(p, raioForma, 0.055f, 0.058f, 0.068f, 0.94f * as);
   }
 
   // Tudo daqui para baixo fica preso ao painel: sem o recorte, a lista rolada

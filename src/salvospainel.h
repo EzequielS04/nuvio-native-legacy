@@ -17,6 +17,15 @@
 
 void spainel_abrir(void);
 void spainel_fechar(void);
+// NASCER DA ILHA (ilha.h, com o relogio na tela): o painel abre crescendo do
+// retangulo (x, y, w, h) — a pilula, ou o modal dela — ate a forma dele, em vez
+// de deslizar da borda. `spainel_recolher_para` e chamado por quadro com o
+// retangulo atual da pilula (ok = 0 quando ela nao esta na tela): e para la
+// que ele encolhe ao fechar. Sem ilha, o painel e o de sempre.
+void spainel_abrir_de(float x, float y, float w, float h);
+void spainel_recolher_para(int ok, float x, float y, float w, float h);
+// 1 enquanto o painel visivel nasceu da ilha (a pilula fica coberta por ele).
+int  spainel_da_ilha(void);
 // 1 enquanto a camada e dona do D-pad. Cai para 0 no instante da escolha, com a
 // animacao de saida ainda rodando — e esse o sinal para o conteudo voltar a
 // responder as teclas, senao o D-pad fica morto durante o recolhimento (a mesma

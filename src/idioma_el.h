@@ -1298,6 +1298,7 @@
   T("Marcar %d episódios como assistidos", "Σήμανση %d επεισοδίων ως προβεβλημένων"),
   T("Marcar T%dE%d como assistido", "Σήμανση του S%dE%d ως προβεβλημένου"),
   T("Marcar como assistido", "Σήμανση ως προβλημένο"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "Σήμανση αυτού του επεισοδίου"),
   T("Marcar temporada como assistida (%d)", "Σήμανση σεζόν ως προβλημένης (%d)"),
   T("Marrocos", "Μαρόκο"),

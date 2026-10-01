@@ -1298,6 +1298,7 @@
   T("Marcar %d episódios como assistidos", "%d epizód megjelölése megnézettként"),
   T("Marcar T%dE%d como assistido", "T%dE%d megjelölése megnézettként"),
   T("Marcar como assistido", "Megjelölés megnézettként"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "Ennek az epizódnak a jelölése"),
   T("Marcar temporada como assistida (%d)", "Évad megjelölése megnézettként (%d)"),
   T("Marrocos", "Marokkó"),

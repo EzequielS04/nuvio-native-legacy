@@ -105,4 +105,10 @@ void  avisos_lista_desenhar(float x, float y, float w, float a, int focoLinha);
 int   avisos_lista_ok(int linha);
 void  avisos_marcar_lidos(void);
 
+// A ilha (ilhacart.c): o episodio novo (AV_AGENDA) ainda nao lido mais
+// recente — o id do item e o imdb da serie — e marcar UM item como lido.
+#include <stddef.h>
+int  avisos_estreia_pendente(char *id, size_t tamId, char *imdb, size_t tamImdb);
+void avisos_marcar_visto(const char *id);
+
 #endif

@@ -1298,6 +1298,7 @@
   T("Marcar %d episódios como assistidos", "Označiť %d epizód ako pozreté"),
   T("Marcar T%dE%d como assistido", "Označiť S%dE%d ako pozreté"),
   T("Marcar como assistido", "Označiť ako pozreté"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "Označiť túto epizódu"),
   T("Marcar temporada como assistida (%d)", "Označiť sériu ako pozretú (%d)"),
   T("Marrocos", "Maroko"),

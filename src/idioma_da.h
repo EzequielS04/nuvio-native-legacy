@@ -1298,6 +1298,7 @@
   T("Marcar %d episódios como assistidos", "Marker %d afsnit som set"),
   T("Marcar T%dE%d como assistido", "Marker S%dE%d som set"),
   T("Marcar como assistido", "Markér som set"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "Markér dette afsnit"),
   T("Marcar temporada como assistida (%d)", "Markér sæsonen som set (%d)"),
   T("Marrocos", "Marokko"),

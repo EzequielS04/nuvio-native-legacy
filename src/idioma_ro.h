@@ -1297,6 +1297,7 @@
   T("Marcar %d episódios como assistidos", "Marchează %d episoade ca vizionate"),
   T("Marcar T%dE%d como assistido", "Marchează S%dE%d ca vizionat"),
   T("Marcar como assistido", "Marchează ca vizionat"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "Marchează acest episod"),
   T("Marcar temporada como assistida (%d)", "Marchează sezonul ca vizionat (%d)"),
   T("Marrocos", "Maroc"),

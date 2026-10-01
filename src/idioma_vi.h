@@ -1298,6 +1298,7 @@
   T("Marcar %d episódios como assistidos", "Đánh dấu %d tập là đã xem"),
   T("Marcar T%dE%d como assistido", "Đánh dấu S%dE%d là đã xem"),
   T("Marcar como assistido", "Đánh dấu đã xem"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "Đánh dấu tập này"),
   T("Marcar temporada como assistida (%d)", "Đánh dấu mùa đã xem (%d)"),
   T("Marrocos", "Ma-rốc"),

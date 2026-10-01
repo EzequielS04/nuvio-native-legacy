@@ -1298,6 +1298,7 @@
   T("Marcar %d episódios como assistidos", "%d 話を視聴済みにする"),
   T("Marcar T%dE%d como assistido", "S%dE%d を視聴済みにする"),
   T("Marcar como assistido", "視聴済みにする"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "このエピソードを視聴済みにする"),
   T("Marcar temporada como assistida (%d)", "シーズンを視聴済みにする (%d)"),
   T("Marrocos", "モロッコ"),

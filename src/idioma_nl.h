@@ -1298,6 +1298,7 @@
   T("Marcar %d episódios como assistidos", "%d afleveringen als bekeken markeren"),
   T("Marcar T%dE%d como assistido", "S%dE%d als bekeken markeren"),
   T("Marcar como assistido", "Markeren als gezien"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "Deze aflevering markeren"),
   T("Marcar temporada como assistida (%d)", "Seizoen als gezien markeren (%d)"),
   T("Marrocos", "Marokko"),
