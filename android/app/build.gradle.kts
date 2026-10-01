@@ -1,0 +1,98 @@
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+// Tudo que vem de fora do projeto entra por propriedade (-P) que o
+// tools/android.sh passa; os padroes servem para abrir no Android Studio.
+val raiz = rootProject.projectDir.parentFile                         // raiz do repo
+val cache = file(System.getProperty("user.home") + "/.cache/nuvio-android")
+val sdlSrc = (findProperty("nuvio.sdlSrc") as String?) ?: "$cache/src"
+val estagio = (findProperty("nuvio.estagio") as String?) ?: "${raiz}/build/android"
+
+// Versao: fonte unica e deploy/app/appinfo.json (mesma do env.sh).
+val versao = Regex("\"version\"\\s*:\\s*\"([^\"]+)\"")
+    .find(File(raiz, "deploy/app/appinfo.json").readText())!!.groupValues[1]
+val (vx, vy, vz) = versao.split(".").map { it.toInt() }
+
+android {
+    namespace = "space.nuvio.nativelegacy"
+    compileSdk = 35
+    ndkVersion = "27.2.12479018"
+
+    defaultConfig {
+        applicationId = "space.nuvio.nativelegacy"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = vx * 10000 + vy * 100 + vz
+        versionName = versao
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        externalNativeBuild {
+            cmake {
+                arguments += listOf(
+                    "-DANDROID_STL=c++_static",  // hidapi do SDL (hid.cpp) e C++
+                    "-DNUVIO_RAIZ=$raiz",
+                    "-DNUVIO_SDL_SRC=$sdlSrc",
+                    "-DNUVIO_ENV_CMAKE=$estagio/nuvio-env.cmake",
+                )
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
+    // Assinatura de release so existe com keystore no ambiente; sem ela o
+    // assembleRelease nem e chamado (tools/android.sh).
+    val ks = System.getenv("NUVIO_KEYSTORE")
+    signingConfigs {
+        if (ks != null) create("release") {
+            storeFile = file(ks)
+            storePassword = System.getenv("NUVIO_KEYSTORE_PASS")
+            keyAlias = System.getenv("NUVIO_KEY_ALIAS")
+            keyPassword = System.getenv("NUVIO_KEY_PASS")
+        }
+    }
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            if (ks != null) signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+    // O nucleo abre libcurl.so/libjpeg.so por dlopen: precisam estar em
+    // lib/<abi>/ ja extraidas (extractNativeLibs), nao dentro do APK.
+    packaging { jniLibs { useLegacyPackaging = true } }
+    // Arte e fontes ja vem comprimidas/pequenas; sem recompressao de png/ttf.
+    androidResources { noCompress += listOf("png", "jpg", "webp", "ttf", "json") }
+
+    sourceSets["main"].apply {
+        java.srcDir("build/sdl-java")                 // classes org.libsdl.app copiadas do SDL
+        assets.srcDir("$estagio/assets")              // art/ e fonts/ (tools/android.sh)
+        jniLibs.srcDir("$estagio/jnilibs")            // libcurl.so/libjpeg.so, se existirem
+    }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = "17" }
+}
+
+// Copia as classes Java do SDL no build (nada de copia grande no git).
+val copiaSdlJava = tasks.register<Copy>("copiaSdlJava") {
+    from("$sdlSrc/SDL2-2.30.9/android-project/app/src/main/java/org/libsdl/app")
+    into("build/sdl-java/org/libsdl/app")
+}
+tasks.named("preBuild") { dependsOn(copiaSdlJava) }
+
+dependencies {
+    // Video (NvPlayer.kt, de outro agente): Media3 ExoPlayer.
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
+    implementation("androidx.media3:media3-exoplayer-dash:1.4.1")
+    implementation("androidx.core:core-ktx:1.13.1")
+}

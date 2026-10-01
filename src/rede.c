@@ -957,6 +957,12 @@ static int abrir(void) {
             snprintf(m, sizeof m, "fail libcurl-dlopen %s", e ? e : "sem mensagem");
             nv_tpk40_etapa(m); }
 #else
+#ifdef NV_ANDROID
+  // Android: o sistema nao oferece libcurl a apps; ela vai no APK (jniLibs) com
+  // o nome "libcurl.so", e o dlopen por nome acha na pasta nativa do app.
+  h = dlopen("libcurl.so", RTLD_NOW);
+  if (!h)
+#endif
   h = dlopen("libcurl.so.5", RTLD_NOW);
   if (!h) h = dlopen("libcurl.so.4", RTLD_NOW);
 #endif
@@ -995,7 +1001,9 @@ static int abrir(void) {
   if (curl_global) curl_global(3 /* CURL_GLOBAL_DEFAULT */);
   // DEPOIS do global_init e ANTES de soltar a trava: a partir daqui qualquer fio
   // pode entrar em curl_easy_perform, e e la que o OpenSSL comeca a ser usado.
+#ifndef NV_ANDROID   // libcurl do APK nao usa libcrypto 1.0 (e dlopen de libcrypto.so seria do sistema)
   prepararOpenSSL();
+#endif
   pronto = 1;
   pthread_mutex_unlock(&abrirTrava);
   return 1;

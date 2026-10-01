@@ -1,3 +1,6 @@
+#ifdef NV_ANDROID
+#include <unistd.h>   // access (fontes de /system/fonts)
+#endif
 #include "text.h"
 #include "dobra.h"
 #include "idioma.h"
@@ -282,7 +285,7 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
 // dos hanzi simplificados, entao um titulo chines saia em quadradinhos com a
 // DroidSansFallback (que os tem) logo ali ao lado.
 typedef enum { ESC_CJK, ESC_CJK_SC, ESC_CJK_TC, ESC_ARABE, ESC_CIRILICO_ETC, ESC_N } Escrita;
-#define RES_CAND 7
+#define RES_CAND 9
 static TTF_Font *reservas[ESC_N][RES_CAND][TXT_NFONTES];
 static unsigned char reservaFalhou[ESC_N][RES_CAND][TXT_NFONTES];
 static char caminhoReserva[ESC_N][RES_CAND][512];
@@ -586,7 +589,11 @@ static TTF_Font *fonteLegendaDe(TxtEstilo estilo, const char *s,
     int i = estilo - TXT_LEG_50;
     if (!fontesLegendaLG[i] && !tentouLegendaLG[i]) {
       tentouLegendaLG[i] = 1;
+#ifdef NV_ANDROID
+      fontesLegendaLG[i] = TTF_OpenFont("/system/fonts/Roboto-Regular.ttf",
+#else
       fontesLegendaLG[i] = TTF_OpenFont("/usr/share/fonts/LG_Display-Regular.ttf",
+#endif
           (int)(ESTILOS[estilo].corpo * escalaTxt + 0.5f));
       if (!fontesLegendaLG[i] && !avisoFallback[TXT_FAMILIA_LG]) {
         printf("fonte de legenda LG Display indisponivel; usando fallback\n");
@@ -691,11 +698,23 @@ int txt_iniciar(const char *dirRecursos, float escala) {
   snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][0], 512, "%sfonts/AtkinsonHyperlegibleNext-Regular.ttf", base);
   snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][1], 512, "%sfonts/AtkinsonHyperlegibleNext-Medium.ttf", base);
   snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][2], 512, "%sfonts/AtkinsonHyperlegibleNext-Bold.ttf", base);
+#ifdef NV_ANDROID
+  // Android: nao ha LG_Display nem /usr/share/fonts. A "LG" vira Roboto do
+  // sistema e a "Droid" a DroidSans (so nas versoes antigas) ou Roboto.
+  snprintf(caminhoPeso[TXT_FAMILIA_LG][0], 512, "%s", "/system/fonts/Roboto-Light.ttf");
+  snprintf(caminhoPeso[TXT_FAMILIA_LG][1], 512, "%s", "/system/fonts/Roboto-Regular.ttf");
+  snprintf(caminhoPeso[TXT_FAMILIA_LG][2], 512, "%s", "/system/fonts/Roboto-Regular.ttf");
+  for (int p = 0; p < 3; p++)
+    snprintf(caminhoPeso[TXT_FAMILIA_DROID][p], 512, "%s",
+             access("/system/fonts/DroidSans.ttf", R_OK) == 0 ? "/system/fonts/DroidSans.ttf"
+                                                              : "/system/fonts/Roboto-Regular.ttf");
+#else
   snprintf(caminhoPeso[TXT_FAMILIA_LG][0], 512, "%s", "/usr/share/fonts/LG_Display-Light.ttf");
   snprintf(caminhoPeso[TXT_FAMILIA_LG][1], 512, "%s", "/usr/share/fonts/LG_Display-Regular.ttf");
   snprintf(caminhoPeso[TXT_FAMILIA_LG][2], 512, "%s", "/usr/share/fonts/LG_Display-Regular.ttf");
   for (int p = 0; p < 3; p++)
     snprintf(caminhoPeso[TXT_FAMILIA_DROID][p], 512, "%s", "/usr/share/fonts/DroidSans.ttf");
+#endif
 
   // Fontes de RESERVA (ver Escrita), em ordem de preferencia por escrita. Na TV
   // sao as de sistema (LG e Droid, medidas no cmap de uma C9); no Mac, as do
@@ -713,26 +732,36 @@ int txt_iniciar(const char *dirRecursos, float escala) {
                                  "/usr/share/fonts/LG_Display-Regular.ttf",
                                  "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
                                  "/System/Library/Fonts/Hiragino Sans GB.ttc",
+                                 "/system/fonts/NotoSansCJK-Regular.ttc",
+                                 "/system/fonts/NotoSansCJKjp-Regular.otf",
                                  cjkEmbarcada, NULL },
       /* ESC_CJK_SC (zh-CN) */ { "/usr/share/fonts/DroidSansFallback.ttf",
                                  "/usr/share/fonts/LG_Display-Regular.ttf",
                                  "/System/Library/Fonts/Hiragino Sans GB.ttc",
                                  "/System/Library/Fonts/STHeiti Light.ttc",
                                  "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+                                 "/system/fonts/NotoSansCJK-Regular.ttc",
+                                 "/system/fonts/NotoSansSC-Regular.otf",
                                  cjkEmbarcada, NULL },
       /* ESC_CJK_TC (zh-TW) */ { "/usr/share/fonts/LG_Display_HK-Regular.ttf",
                                  "/usr/share/fonts/DroidSansFallback.ttf",
                                  "/usr/share/fonts/LG_Display-Regular.ttf",
                                  "/System/Library/Fonts/STHeiti Light.ttc",
                                  "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+                                 "/system/fonts/NotoSansCJK-Regular.ttc",
+                                 "/system/fonts/NotoSansTC-Regular.otf",
                                  cjkEmbarcada, NULL },
       /* ESC_ARABE          */ { "/usr/share/fonts/DroidNaskh-Regular.ttf",
                                  "/usr/share/fonts/LG_Display_Urdu.ttf",
                                  "/System/Library/Fonts/Supplemental/GeezaPro.ttc",
-                                 "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", NULL },
+                                 "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+                                 "/system/fonts/NotoNaskhArabic-Regular.ttf",
+                                 "/system/fonts/NotoSansArabic-Regular.ttf", NULL },
       /* ESC_CIRILICO_ETC   */ { "/usr/share/fonts/DroidSansFallback.ttf",
                                  "/usr/share/fonts/DroidSans.ttf",
-                                 "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", NULL },
+                                 "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+                                 "/system/fonts/NotoSansCJK-Regular.ttc",
+                                 "/system/fonts/Roboto-Regular.ttf", NULL },
     };
     const char *nomeEsc[ESC_N] = { "CJK", "CJK-sc", "CJK-tc", "arabe", "resto" };
     // NUVIO_SEM_RESERVA_DE_SISTEMA=1 finge o WASM da Samsung, onde so existe o

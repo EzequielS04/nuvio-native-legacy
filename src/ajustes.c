@@ -2649,7 +2649,9 @@ static void sistemaConsultar(void) {
   }, sistemaLoc, (int)sizeof sistemaLoc);
 }
 static void sistemaRecolher(void) {}
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) || defined(NV_ANDROID)
+// Android: sem luna-send. O NuvioActivity pode exportar NUVIO_LOCALE (ex.
+// Locale.getDefault().toLanguageTag()); sem ela o idioma cai no automatico.
 static void sistemaConsultar(void) {
   // NUVIO_LOCALE=ro-RO simula a TV em outra lingua na previa (e nos testes).
   const char *v = getenv("NUVIO_LOCALE");

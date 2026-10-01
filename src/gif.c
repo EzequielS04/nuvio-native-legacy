@@ -16,10 +16,10 @@
 #endif
 // .tpk da Samsung: o mesmo decodificador C do Tizen web (1.4.7), sem o
 // navegador — relogio por clock_gettime e RAM pelo /proc/meminfo.
-#if defined(__EMSCRIPTEN__) || defined(NV_TPK)
+#if defined(__EMSCRIPTEN__) || defined(NV_TPK) || defined(NV_ANDROID)
 #define NV_GIF_ANIMA 1
 #endif
-#ifdef NV_TPK
+#if defined(NV_TPK) || defined(NV_ANDROID)
 static double emscripten_get_now(void) {
   struct timespec t;
   clock_gettime(CLOCK_MONOTONIC, &t);

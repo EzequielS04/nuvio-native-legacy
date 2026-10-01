@@ -12,8 +12,11 @@
 // o alvo Tizen (WASM) precisa pular exatamente os mesmos. Nomear a condicao
 // evita ter de lembrar de dois simbolos em cada ponto - sem isto o primeiro
 // build para o navegador ainda tentava abrir libwayland-client.so.0.
-#if defined(__APPLE__) || defined(__EMSCRIPTEN__) || defined(NV_TPK)
+#if defined(__APPLE__) || defined(__EMSCRIPTEN__) || defined(NV_TPK) || defined(NV_ANDROID)
 #define NV_SEM_WEBOS 1
+#endif
+#ifdef NV_ANDROID
+#include "android.h"
 #endif
 #include <stdio.h>
 #include <locale.h>
@@ -416,13 +419,16 @@ int main(int argc, char **argv) {
     // 23/09: nenhuma linha de stderr sobrevivia no arquivo (o diagnostico do
     // libass, "[legenda] libass: ...", nunca aparecia) e sobravam ~1600 linhas
     // vazias — os restos dos textos sobrescritos.
-#ifdef NV_TPK
+#if defined(NV_TPK) || defined(NV_ANDROID)
     if (log) { rename(log, getenv("NUVIO_LOG_ANTERIOR"));
 #else
     if (log) { rename(log, "/tmp/nuvio-anterior.log");
 #endif
                if (freopen(log, "w", stdout)) { fflush(stderr); dup2(fileno(stdout), fileno(stderr)); } } }
   setvbuf(stdout, NULL, _IOLBF, 0);
+#ifdef NV_ANDROID
+  android_iniciar();   // [tv] no log + espelho no logcat (android.c)
+#endif
   if (!getenv("XDG_RUNTIME_DIR")) setenv("XDG_RUNTIME_DIR", "/tmp/xdg", 1);
 
   // O SAM lanca o app passando o JSON de launch como argv[1], entao so tratamos
@@ -430,6 +436,10 @@ int main(int argc, char **argv) {
   char dirBuf[512];
   const char *dirArte = NULL;
   if (argc > 1 && argv[1][0] != '{') dirArte = argv[1];
+#ifdef NV_ANDROID
+  // Sem argv util no Android: o NuvioActivity exporta NUVIO_ARTE antes do SDL.
+  if (!dirArte && getenv("NUVIO_ARTE") && getenv("NUVIO_ARTE")[0]) dirArte = getenv("NUVIO_ARTE");
+#endif
   if (!dirArte) {
     char *base = SDL_GetBasePath();
     if (base) { snprintf(dirBuf, sizeof dirBuf, "%sart", base); SDL_free(base); dirArte = dirBuf; }
@@ -639,6 +649,9 @@ int main(int argc, char **argv) {
   // Sem GL (Tizen 4/5 sem superficie) nao ha o que desenhar; sai e o host
   // mostra o motivo (nv_tpk_erro).
   if (!ctx) { printf("[tpk] sem contexto GL, saindo\n"); SDL_Quit(); return 2; }
+#endif
+#ifdef NV_ANDROID
+  if (!ctx) { printf("[android] sem contexto GL: %s\n", SDL_GetError()); SDL_Quit(); return 2; }
 #endif
   // O cursor do Magic Remote e desenhado pelo app (ponteiro.c). Depois do
   // contexto: o log de arranque dele le a janela corrente.

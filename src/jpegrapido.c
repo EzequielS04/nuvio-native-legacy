@@ -228,6 +228,8 @@ static int abrir(void) {
     static const char *NOMES[] = {
 #ifdef __APPLE__
       "/opt/homebrew/lib/libjpeg.8.dylib", "libjpeg.8.dylib", "libjpeg.dylib",
+#elif defined(NV_ANDROID)
+      "libjpeg.so",   // embarcada no APK (jniLibs); sem ela cai no IMG_Load
 #else
       "libjpeg.so.62", "/usr/lib/libjpeg.so.62",
 #endif

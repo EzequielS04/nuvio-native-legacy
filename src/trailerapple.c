@@ -6,6 +6,12 @@
 #if defined(__EMSCRIPTEN__) || defined(NV_TPK)
 #define NV_TRAILER_SAMSUNG 1
 #endif
+// ANDROID: NV_TRAILER_SAMSUNG fica DESLIGADO de proposito. O ExoPlayer toca HLS
+// master, mas o ramo da LG (reduzido de UMA variante em <dados>/trailer, entregue
+// como file://) nao depende de nada do webOS: so de dados_caminho e de
+// rede_baixar_com. E o que se quer aqui: variante fixa, sem ABR trocando o
+// tamanho do quadro no meio e invalidando o recorte. NAO PROVADO no aparelho
+// (o video_android precisa aceitar file:// de HLS).
 #include "rede.h"
 #include "js.h"
 #include "dados.h"

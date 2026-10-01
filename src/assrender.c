@@ -269,12 +269,31 @@ static void ass_iniciar_locked(void) {
       snprintf(fontDir, sizeof fontDir, "%s", "deploy/app/fonts");
     if (access(fallbackFont, R_OK) != 0)
       snprintf(fallbackFont, sizeof fallbackFont, "%s", "deploy/app/fonts/InterDisplay-Regular.ttf");
+#ifdef NV_ANDROID
+    /* Android: a pasta de fontes e a que o NuvioActivity extraiu (<arte>/../fonts,
+     * ja achada acima). Nao ha /usr/share/fonts; o sistema entra so como
+     * ultimo recurso para a fonte de reserva. */
+    {
+      const char *env = getenv("NUVIO_ARTE");
+      if (env && env[0]) {
+        char r[512];
+        snprintf(r, sizeof r, "%s/../fonts", env);
+        if (access(r, R_OK) == 0) {
+          snprintf(fontDir, sizeof fontDir, "%s", r);
+          snprintf(fallbackFont, sizeof fallbackFont, "%s/InterDisplay-Regular.ttf", r);
+        }
+      }
+    }
+    if (access(fallbackFont, R_OK) != 0 && access("/system/fonts/Roboto-Regular.ttf", R_OK) == 0)
+      snprintf(fallbackFont, sizeof fallbackFont, "%s", "/system/fonts/Roboto-Regular.ttf");
+#else
     if (access("/usr/share/fonts", R_OK) == 0)
       snprintf(fontDir, sizeof fontDir, "%s", "/usr/share/fonts");
     if (access(fallbackFont, R_OK) != 0 && access("/usr/share/fonts/LG_Display-Regular.ttf", R_OK) == 0)
       snprintf(fallbackFont, sizeof fallbackFont, "%s", "/usr/share/fonts/LG_Display-Regular.ttf");
     if (access(fallbackFont, R_OK) != 0 && access("/usr/share/fonts/DroidSans.ttf", R_OK) == 0)
       snprintf(fallbackFont, sizeof fallbackFont, "%s", "/usr/share/fonts/DroidSans.ttf");
+#endif
   }
 #endif
   snprintf(assPastaFontes, sizeof assPastaFontes, "%s", fontDir);

@@ -50,8 +50,8 @@
 #define AV_MAX        40
 #define AV_VISTOS_ARQ "avisos-vistos.txt"
 #define AV_MARCA_ARQ  "sessao-viva.txt"
-#ifdef NV_TPK
-// No .tpk o /tmp nao e do app: o anterior fica na pasta de dados (tpk.c).
+#if defined(NV_TPK) || defined(NV_ANDROID)
+// No .tpk (e no Android) o /tmp nao e do app: o anterior fica na pasta de dados (tpk.c).
 #define AV_LOG_ANTERIOR (getenv("NUVIO_LOG_ANTERIOR"))
 #else
 #define AV_LOG_ANTERIOR "/tmp/nuvio-anterior.log"
@@ -368,6 +368,8 @@ int avisos_enviar_diagnostico(const char *execucao_id, const char *relatorio,
            "tizen",
 #elif defined(NV_TPK)
            "tizen-tpk",
+#elif defined(NV_ANDROID)
+           "android",
 #elif defined(__APPLE__)
            "mac",
 #else
@@ -461,6 +463,8 @@ static void *enviarRegistro(void *u) {
              "tizen",
 #elif defined(NV_TPK)
              "tizen-tpk",
+#elif defined(NV_ANDROID)
+             "android",
 #elif defined(__APPLE__)
              "mac",
 #else
@@ -540,6 +544,8 @@ static void *fioCanalFn(void *u) {
       // sentido dentro dele.
       if (plat[0] && strcmp(plat, "todas") && strcmp(plat, "tizen") && strcmp(plat, "tizen-tpk")) ok = 0;
       if (strstr(id, "tpk-preview")) ok = 0;
+#elif defined(NV_ANDROID)
+      if (plat[0] && strcmp(plat, "todas") && strcmp(plat, "android")) ok = 0;
 #else
       if (plat[0] && strcmp(plat, "todas") && strcmp(plat, "lg")) ok = 0;
 #endif

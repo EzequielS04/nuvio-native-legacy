@@ -115,6 +115,10 @@ const char *registro_arquivo(void) {
     // o jeito normal de trabalhar aqui. Para exercitar o painel na previa:
     //     NUVIO_LOG=/tmp/nuvio.log bash tools/mac.sh
     else caminho[0] = 0;
+#elif defined(NV_ANDROID)
+    // Sem /tmp: o NuvioActivity ja exporta NUVIO_LOG; isto e so rede de seguranca.
+    else snprintf(caminho, sizeof caminho, "%s/nuvio.log",
+                  getenv("NUVIO_DADOS") ? getenv("NUVIO_DADOS") : ".");
 #else
     else snprintf(caminho, sizeof caminho, "/tmp/nuvio.log");
 #endif

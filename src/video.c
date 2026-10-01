@@ -98,7 +98,7 @@ static void aplicarEstilo(void);
 // Mesmo limite de Stream.url: o pipeline recebe a URL original, e cortar a
 // copia faria somente a sonda MKV/ASS falhar (inclusive apos tentar de novo).
 static char  urlAtual[4096];
-#ifndef NV_TPK
+#if !defined(NV_TPK) && !defined(NV_ANDROID)   // .tpk e Android: video_url_atual vem do video_*.c do alvo
 const char *video_url_atual(void) { return urlAtual; }
 #endif
 // Recuperacao de pipeline destruido: pedida pelo fio de resposta do luna e
@@ -217,7 +217,7 @@ int  video_recorte_fonte(void) { return 1; }
 void video_forcar_sdr(void) {}
 void video_encerrar(void) {}
 // .tpk da Samsung: o player e o do host .NET, em video_tpk.c.
-#elif !defined(NV_TPK)
+#elif !defined(NV_TPK) && !defined(NV_ANDROID)   // ramo luna (webOS): Android usa video_android.c
 #include <dlfcn.h>
 
 typedef struct LSHandle LSHandle;

@@ -177,7 +177,7 @@ static char soVer[32];
 // tools/env.sh e tools/arm.sh), so por tests/atualizacao_shot.sh.
 #if defined(NV_AT_INSTALA)
 #define AT_INSTALA NV_AT_INSTALA
-#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__) && !defined(NV_TPK)
+#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__) && !defined(NV_TPK) && !defined(NV_ANDROID)
 #define AT_INSTALA 1
 #else
 #define AT_INSTALA 0
