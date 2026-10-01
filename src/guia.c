@@ -911,7 +911,10 @@ static void empacotar(void) {
     { int inv[G_MAX_CAT];
       for (a = 0; a < nCats; a++) inv[mapa[a]] = a;
       for (i = 0; i < nCanais; i++) if (canais[i].cat >= 0) canais[i].cat = inv[canais[i].cat]; } }
-  { GCanal tmp[G_MAX_CANAL];
+  // `tmp` e estatico: sao ~2 MB (900 canais x ~2,4 KB). Na pilha estourava o
+  // fio do SDL no Android (1 MB por padrao) e e grande demais para qualquer
+  // pilha. So o fio principal chama empacotar().
+  { static GCanal tmp[G_MAX_CANAL];
     int pos[G_MAX_CAT];
     for (i = 0; i < nCats; i++) catN[i] = 0;
     for (i = 0; i < nCanais; i++) if (canais[i].cat >= 0) catN[canais[i].cat]++;
@@ -3535,7 +3538,12 @@ static void desenharBanda(float a, Uint32 agora) {
 
   { TxtLinha t = txt_linha(TXT_PG_ROTULO, i18n("Guia de canais"), 200, 202, 210, 255);
     TxtLinha d = txt_linha(TXT_CAPTION,
-        i18n("OK troca de canal  ·  Azul: guia completo  ·  Voltar fecha"), 150, 153, 162, 255);
+#ifdef NV_ANDROID
+        i18n("OK troca de canal  ·  CH+: guia completo  ·  Voltar fecha")
+#else
+        i18n("OK troca de canal  ·  Azul: guia completo  ·  Voltar fecha")
+#endif
+        , 150, 153, 162, 255);
     txt_desenhar_alpha(t, G_AREA_X, topo + 6.0f, a);
     txt_desenhar_alpha(d, G_AREA_DIR - (float)d.w, topo + 6.0f, a); }
   desenharReguaEm(a, ini, yR);
@@ -3811,12 +3819,19 @@ void guia_desenhar(Uint32 agora) {
   // No modo lista ESQUERDA/DIREITA ganharam funcao (a janela de tempo) e a
   // barra tem de dizer. O amarelo nao aparece aqui de proposito: o controle
   // segmentado do cabecalho e o caminho que se ve, e a barra ja esta longa.
+#ifdef NV_ANDROID
+#define GUIA_FECHA_L i18n("OK troca de canal  ·  segure OK = favorito  ·  \xe2\x86\x90\xe2\x86\x92 adianta a grade  ·  segure \xe2\x86\x91\xe2\x86\x93 pula seção  ·  Voltar ou CH+ fecha")
+#define GUIA_FECHA_G i18n("OK troca de canal  ·  segure OK = favorito  ·  segure \xe2\x86\x91\xe2\x86\x93 pula seção  ·  Voltar ou CH+ fecha")
+#else
+#define GUIA_FECHA_L i18n("OK troca de canal  ·  segure OK = favorito  ·  \xe2\x86\x90\xe2\x86\x92 adianta a grade  ·  segure \xe2\x86\x91\xe2\x86\x93 pula seção  ·  Voltar ou Azul fecha")
+#define GUIA_FECHA_G i18n("OK troca de canal  ·  segure OK = favorito  ·  segure \xe2\x86\x91\xe2\x86\x93 pula seção  ·  Voltar ou Azul fecha")
+#endif
   { const char *dica = modoLista
       ? (overlay
-         ? i18n("OK troca de canal  ·  segure OK = favorito  ·  \xe2\x86\x90\xe2\x86\x92 adianta a grade  ·  segure \xe2\x86\x91\xe2\x86\x93 pula seção  ·  Voltar ou Azul fecha")
+         ? GUIA_FECHA_L
          : i18n("OK assiste  ·  segure OK = favorito  ·  \xe2\x86\x90\xe2\x86\x92 adianta a grade  ·  segure \xe2\x86\x91\xe2\x86\x93 pula seção  ·  Voltar sai"))
       : (overlay
-         ? i18n("OK troca de canal  ·  segure OK = favorito  ·  segure \xe2\x86\x91\xe2\x86\x93 pula seção  ·  Voltar ou Azul fecha")
+         ? GUIA_FECHA_G
          : i18n("OK assiste  ·  segure OK = favorito  ·  segure \xe2\x86\x91\xe2\x86\x93 pula seção  ·  Voltar sai"));
     TxtLinha t = txt_linha_corta(TXT_CAPTION, dica, 128, 130, 138, 255,
                                  G_AREA_W);

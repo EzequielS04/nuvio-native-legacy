@@ -1599,7 +1599,12 @@ void player_mini_desenhar(Uint32 agora) {
   // home se perdia no fundo, e "flutuava" quando a miniatura cobria outra
   // tela.
   { TxtLinha l = txt_linha(TXT_MINI,
-        i18n("Azul: tela cheia · Voltar: fechar"), 205, 208, 216, 255);
+#ifdef NV_ANDROID
+        i18n("CH+: tela cheia · Voltar: fechar")
+#else
+        i18n("Azul: tela cheia · Voltar: fechar")
+#endif
+        , 205, 208, 216, 255);
     gfx_cor((GfxRect){ f.x, PLR_PIP_Y + PLR_PIP_H + 10.0f,
                        l.w + 30.0f, l.h + 14.0f },
             0.14f, 0.02f, 0.02f, 0.03f, 0.72f);

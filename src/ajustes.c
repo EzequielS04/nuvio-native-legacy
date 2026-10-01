@@ -1476,7 +1476,15 @@ int ajustes_animacoes_reduzidas(void) { return valor[AJ_ANIM] == 1; }
 // seguro.c: varios testes compilam ajustes.c com uma lista curta de fontes.
 static int perfilSeguro;
 #define SEGURO perfilSeguro
+#ifdef NV_ANDROID
+// ANDROID: sem interface 4K. A TCL Smart TV Pro concede a superficie de
+// 3840x2160 (android_pedir_superficie), mas a Mali-G52 caiu de 60 para 13-48
+// fps e o dono nao viu diferenca na tela (30/09/2026). A linha some de Ajustes
+// (visivel) e um valor 1 antigo no arquivo nao vale.
+int ajustes_4k(void)                  { return 0; }
+#else
 int ajustes_4k(void)                  { return valor[AJ_RESOLUCAO] == 1 && !SEGURO; }
+#endif
 int ajustes_dolby_vision(void)        { return lig(AJ_DV); }
 int ajustes_dolby_atmos(void)         { return lig(AJ_ATMOS); }
 int ajustes_pausa_overlay(void)       { return lig(AJ_PAUSA_OVERLAY); }
@@ -3522,6 +3530,9 @@ static int visivel(int i) {
       (TELA[i].op == AJ_PERFIL_PESQ || TELA[i].op == AJ_PERFIL_EDITAR) &&
       !recomenda_ativo())
     return 0;
+#ifdef NV_ANDROID
+  if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_RESOLUCAO) return 0;   // ver ajustes_4k
+#endif
   // Contorno do vidro so tem o que mudar com o vidro ligado.
   if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_VIDRO_CONTORNO && !lig(AJ_VIDRO))
     return 0;

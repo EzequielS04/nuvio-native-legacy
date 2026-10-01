@@ -455,7 +455,9 @@ static void desenhaAviso(void) {
   y += l.h + 22.0f;
 
   y += txt_bloco(TXT_BODY,
-#ifdef __EMSCRIPTEN__
+#if defined(NV_ANDROID)
+                 "Aperte CH- no controle para abrir e fechar o registro.",
+#elif defined(__EMSCRIPTEN__)
                  "Aperte o botão vermelho do controle para abrir e fechar o "
                  "registro. Nos controles Samsung novos o vermelho não é um "
                  "botão: aperte (ou segure) o botão de números e cores, abaixo "
@@ -469,7 +471,10 @@ static void desenhaAviso(void) {
   y += 16.0f;
 
   y += txt_bloco(TXT_CAPTION2,
-#ifdef __EMSCRIPTEN__
+#if defined(NV_ANDROID)
+                 "Abre o painel de log por cima de qualquer tela. É dali que sai "
+                 "o print quando alguma coisa dá errado.",
+#elif defined(__EMSCRIPTEN__)
                  "Na TV da LG é o botão vermelho do controle. Se a tela "
                  "congelar e o vermelho não responder, o botão verde mostra o "
                  "painel de arranque.",

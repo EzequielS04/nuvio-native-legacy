@@ -86,6 +86,14 @@ android {
 val copiaSdlJava = tasks.register<Copy>("copiaSdlJava") {
     from("$sdlSrc/SDL2-2.30.9/android-project/app/src/main/java/org/libsdl/app")
     into("build/sdl-java/org/libsdl/app")
+    // PILHA DE 16 MB PARA O main() DO NUCLEO. O SDL cria o SDLThread com a
+    // pilha padrao da JVM (~1 MB); o nucleo foi escrito para os 8 MB do fio
+    // principal da LG e do .tpk (tpk.c), e o guia estourou a pilha com 900
+    // canais numa copia local (SIGSEGV em guia.c, TCL, 30/09/2026).
+    filter { linha: String ->
+        linha.replace("new Thread(new SDLMain(), \"SDLThread\")",
+                      "new Thread(null, new SDLMain(), \"SDLThread\", 16L * 1024 * 1024)")
+    }
 }
 tasks.named("preBuild") { dependsOn(copiaSdlJava) }
 

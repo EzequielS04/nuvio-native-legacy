@@ -168,7 +168,18 @@ void sintro_atualizar(float dt, Uint32 agora) {
 // retangular. Desenhar um circulo azul para quem tem um One Remote seria
 // mandar a pessoa procurar o que nao existe no controle dela.
 void sintro_tecla_atalho(float x, float y, float lado, float a) {
-#ifdef __EMSCRIPTEN__
+#if defined(NV_ANDROID)
+  // Android TV: sem teclas coloridas; o atalho e o CH+ do controle. Mesma
+  // pastilha da LG, mas neutra, com o rotulo "CH+" no lugar da cor.
+  float h = lado * 0.56f;
+  GfxRect corpo = { x, y + (lado - h) * 0.5f, lado, h };
+  GfxRect tecla = { corpo.x + 3.0f, corpo.y + 3.0f, corpo.w - 6.0f, corpo.h - 6.0f };
+  gfx_cor(corpo, 0.42f, 0.16f, 0.17f, 0.20f, a);
+  gfx_cor(tecla, 0.40f, 0.26f, 0.32f, 0.33f, a);
+  { TxtLinha t = txt_linha(TXT_MINI, "CH+", 240, 242, 248, 255);
+    txt_desenhar_alpha(t, tecla.x + (tecla.w - (float)t.w) * 0.5f,
+                       tecla.y + (tecla.h - (float)t.h) * 0.5f, a); }
+#elif defined(__EMSCRIPTEN__)
   // Rocker de canal: retangulo alto, com o "+" em cima e "CH" embaixo — que e
   // a leitura de cima para baixo do proprio botao.
   GfxRect k = { x, y, lado * 0.78f, lado };
@@ -296,7 +307,9 @@ void sintro_desenhar(Uint32 agora) {
     float alturaTexto;
     sintro_tecla_atalho(x, y - 2.0f, lado, a);
     alturaTexto = txt_bloco(TXT_CAPTION,
-#ifdef __EMSCRIPTEN__
+#if defined(NV_ANDROID)
+          "Depois, o CH+ abre sua lista quando quiser.",
+#elif defined(__EMSCRIPTEN__)
           "Depois, o botão CANAL + abre sua lista quando quiser.",
 #else
           "Depois, o botão AZUL abre sua lista quando quiser.",

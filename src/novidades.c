@@ -188,8 +188,13 @@ void novidades_desenhar(Uint32 agora) {
         "o FrostView e os próximos também.", a);
   y += desenhaFeature(ND_TXT_X, y, ND_TXT_W, "play",
         "Trocar sem sair do vídeo",
+#ifdef NV_ANDROID
+        "OK toca na hora. Com o canal no ar, BAIXO ou o CH+ abrem o guia por "
+        "cima do vídeo.", a);
+#else
         "OK toca na hora. Com o canal no ar, BAIXO ou o botão AZUL abrem o "
         "guia por cima do vídeo; CH+ e CH− zapeiam.", a);
+#endif
   y += desenhaFeature(ND_TXT_X, y, ND_TXT_W, "avancar",
         "Navegar rápido",
         "Segure ↑ ou ↓ no guia para pular de categoria; OK segurado marca "

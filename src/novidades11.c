@@ -943,13 +943,24 @@ void novidades11_desenhar(Uint32 agora) {
         // tecla esta ligada, mas sem confirmacao") e disse que era coisa de
         // amador. Grau de evidencia e problema meu, nao de quem esta no sofa.
         y += feature(fx, y, fw, "menu_settings",
+#ifdef NV_ANDROID
+              "CH- · o registro",
+#else
               "VERMELHO · o registro",
+#endif
               "Abre o painel de log por cima de qualquer tela. É dali que sai "
               "o print quando alguma coisa dá errado.", ap);
+#ifdef NV_ANDROID
+        y += feature(fx, y, fw, "menu_library",
+              "CH+ · Salvos e o guia",
+              "Abre Salvos, abre o guia com um canal no ar e volta do vídeo "
+              "pequeno.", ap);
+#else
         y += feature(fx, y, fw, "menu_library",
               "AZUL · Salvos e o guia",
               "Na LG abre Salvos, abre o guia com um canal no ar e volta do "
               "vídeo pequeno. No Samsung isso é o CANAL +.", ap);
+#endif
         y += feature(fx, y, fw, "addon",
               "VERDE · só no Samsung",
               "Traz de volta o painel de diagnóstico do navegador, que fica "

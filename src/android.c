@@ -76,6 +76,8 @@ static void espelharNoLogcat(void) {
 }
 
 void android_iniciar(void) {
+  // Mesma pilha para os fios criados pelo SDL (SDL_CreateThread).
+  SDL_SetHint(SDL_HINT_THREAD_STACK_SIZE, "8388608");
   __android_log_write(ANDROID_LOG_INFO, AND_TAG, "nucleo C iniciando");
   // O Voltar chega como SDLK_AC_BACK ao app; sem isto o SDL fecha a Activity.
   SDL_SetHint("SDL_ANDROID_TRAP_BACK_BUTTON", "1");
@@ -108,6 +110,26 @@ int android_pedir_superficie(int w, int h) {
   printf("[4k] android: superficie %dx%d %s\n", w, h, ok ? "concedida" : "NAO veio (segue o tamanho da tela)");
   fflush(stdout);
   return ok;
+}
+
+
+// PILHA DOS FIOS. O bionic da ~1 MB a um pthread criado sem atributo; o glibc
+// da LG e do Tizen da 8 MB, e o nucleo foi escrito contando com isso (vetores
+// de CatItem, DiagAddon, VazCand... na pilha dos fios de descoberta e
+// diagnostico). O CMake liga com --wrap=pthread_create: so as chamadas desta
+// biblioteca passam por aqui. Quem ja pede tamanho (descoberta.c, mapa.c) fica
+// como esta.
+#define AND_PILHA_FIO (8u << 20)
+int __real_pthread_create(pthread_t *t, const pthread_attr_t *a, void *(*f)(void *), void *arg);
+int __wrap_pthread_create(pthread_t *t, const pthread_attr_t *a, void *(*f)(void *), void *arg) {
+  pthread_attr_t at;
+  int r;
+  if (a) return __real_pthread_create(t, a, f, arg);
+  pthread_attr_init(&at);
+  pthread_attr_setstacksize(&at, AND_PILHA_FIO);
+  r = __real_pthread_create(t, &at, f, arg);
+  pthread_attr_destroy(&at);
+  return r;
 }
 
 #endif
