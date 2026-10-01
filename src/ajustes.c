@@ -3408,7 +3408,9 @@ static const char *textoLeitura(int op) {
   }
   if (op == AJ_FANART_CHAVE) return fanartMascarada();
   if (op == AJ_PERFIL_EDITAR) {
-    RecPerfil pf;
+    // static: o texto devolvido e lido DEPOIS do return (era endereco de
+    // variavel local, -Wreturn-stack-address).
+    static RecPerfil pf;
     recomenda_perfil(&pf);
     return pf.apelido[0] ? pf.apelido : i18n("Não configurado");
   }
