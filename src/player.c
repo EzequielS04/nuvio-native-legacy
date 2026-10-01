@@ -443,7 +443,7 @@ static int epT, epE, pedFontes, erroFonte, pedProxT, pedProxE;
 // Dentro de player_abrir: o episodio ainda e o do progresso, nao o que vai
 // tocar. Ver a nota la — segura a invalidacao da lista de fontes (#101).
 static int abrindoSessao;
-static int pedGuia, pedZap;   // pedidos de canal: overlay do guia / CH+/-
+static int pedGuia, pedZap, pedGuiaCheio;   // pedidos de canal: overlay do guia / CH+/-
 // OSD PROPRIO DO CANAL AO VIVO (aovivo.h). O zapping acumula toques e so pede a
 // troca depois do debounce; `pedZap` passa a ser um DESLOCAMENTO (pode ser 3 ou
 // -2), 0 = nenhum. `pedRecarregar` refaz a busca de fonte do mesmo canal.
@@ -478,6 +478,7 @@ static int semRetomada;
 int player_indice(void) { return idxAtual(); }
 const char *player_linha_episodio(void) { return linhaEp; }
 int  player_pediu_guia(void) { int v = pedGuia; pedGuia = 0; return v; }
+int  player_pediu_guia_cheio(void) { int v = pedGuiaCheio; pedGuiaCheio = 0; return v; }
 int  player_pediu_zap(void)  { int v = pedZap;  pedZap  = 0; return v; }
 int  player_pediu_recarregar(void) { int v = pedRecarregar; pedRecarregar = 0; return v; }
 void player_episodio_atual(int *t, int *e) { *t = epT; *e = epE; }
@@ -1116,7 +1117,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   tocando = 1; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f;
   pedFontes = erroFonte = pedFaixas = pedProxT = pedProxE = 0; inicioImagem = 0;
   erroTitulo[0] = erroDica[0] = 0;
-  pedGuia = pedZap = 0;
+  pedGuia = pedZap = pedGuiaCheio = 0;
   memset(&zapEst, 0, sizeof zapEst); bannerAV = 0.0f; botaoAV = 0; infoAV = 0; pedRecarregar = 0;
   avLat0 = -1.0; avAtraso = 0.0; avPausaDesde = 0;
   retomadaAplicada=0; semRetomada=0;
@@ -1847,6 +1848,7 @@ static int avBotoes(int *ids) {
   ids[n++] = AV_B_ANT;
   ids[n++] = AV_B_PROX;
   if (guia_info_canal(player_id_canal(), NULL, NULL, NULL, 0)) ids[n++] = AV_B_FAV;
+  ids[n++] = AV_B_ASPECTO;
   ids[n++] = AV_B_AUDIO;
   ids[n++] = AV_B_LEGENDA;
   ids[n++] = AV_B_INFO;
@@ -1863,7 +1865,12 @@ static void avAtivar(int b) {
   switch (b) {
     case AV_B_PAUSA: alternarTocando(); break;
     case AV_B_AOVIVO: avVoltarAoVivo(); break;
-    case AV_B_GUIA: pedGuia = 1; break;
+    // O GUIA COMPLETO com o canal no preview (dono, 01/10: "nao ta subindo o
+    // guia da TV"): o botao abria a FAIXA de zapping, a mesma do BAIXO; quem
+    // aperta "Guia" espera a grade inteira por cima, com o canal tocando no
+    // canto — o caminho do Voltar, que o registro mostra funcionando.
+    case AV_B_GUIA: pedGuiaCheio = 1; break;
+    case AV_B_ASPECTO: player_aspecto_ciclar(); break;
     case AV_B_ANT: avZap(-1); break;
     case AV_B_PROX: avZap(1); break;
     case AV_B_FAV: guia_alternar_favorito(player_id_canal()); break;
@@ -1911,6 +1918,7 @@ static void avMontarOsd(AoVivoOsd *o) {
   // RESOLUCAO pela ALTURA medida, e so onde a marca nao afirma mais do que se
   // mediu (a mesma regra dos selos do filme): 1440p nao e 1080p nem 4K, e fica
   // sem marca.
+  o->aspecto = player_aspecto_rotulo(aspecto);
   if (h >= 2160) snprintf(o->res, sizeof o->res, "4K");
   else if (h >= 1440) o->res[0] = 0;
   else if (h >= 1080) snprintf(o->res, sizeof o->res, "1080p");

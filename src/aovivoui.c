@@ -69,6 +69,7 @@ static const char *icone(int b) {
     case AV_B_RECARREGAR: return "aj_rotate-ccw-clock";
     case AV_B_FONTE: return "fontes";
     case AV_B_AOVIVO: return "avancar";
+    case AV_B_ASPECTO: return "aspecto";
     default: return NULL;
   }
 }
@@ -86,6 +87,7 @@ const char *aovivo_rotulo(int b) {
     case AV_B_RECARREGAR: return "Recarregar";
     case AV_B_FONTE: return "Fonte";
     case AV_B_AOVIVO: return "Voltar ao vivo";
+    case AV_B_ASPECTO: return "Proporção";
     default: return "";
   }
 }
@@ -93,6 +95,9 @@ const char *aovivo_rotulo(int b) {
 static const char *rotuloDe(const AoVivoOsd *o, int b) {
   if (b == AV_B_PAUSA) return o->pausado ? "Continuar" : "Pausar";
   if (b == AV_B_FAV && o->favorito) return "Nos favoritos";
+  // O modo em vigor no proprio botao (Original, Zoom cinema...): o OK cicla,
+  // e a pessoa ve para onde foi sem toast.
+  if (b == AV_B_ASPECTO && o->aspecto && o->aspecto[0]) return o->aspecto;
   return aovivo_rotulo(b);
 }
 static const char *iconeDe(const AoVivoOsd *o, int b) {
@@ -150,9 +155,18 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
   // relogio; o de baixo, a programacao e os botoes. Acompanham a entrada.
   // Pausado ou atras do ao vivo, o alto leva mais tres linhas a direita: o
   // mesmo degrade, mais comprido (nenhuma camada a mais por quadro).
-  gfx_rect((GfxRect){ 0, 0, NV_TELA_W, (o->pausado || o->atrasoS > 0) ? 460.0f : 320.0f }, 0,
-           GFX_VEU_TOPO, 0, 0, 0, 0.0f, 0, 0, 0, 0.86f * a);   // mais fundo: a marca d'agua do canal fica atras do nome
-  gfx_rect((GfxRect){ 0, NV_TELA_H - 560.0f, NV_TELA_W, 560.0f }, 0, GFX_VEU_BAIXO, 0, 0, 0, 0.0f, 0, 0, 0, 0.90f * a);
+  gfx_rect((GfxRect){ 0, 0, NV_TELA_W, (o->pausado || o->atrasoS > 0) ? 480.0f : 380.0f }, 0,
+           GFX_VEU_TOPO, 0, 0, 0, 0.0f, 0, 0, 0, 0.92f * a);   // mais fundo: a marca d'agua do canal fica atras do nome
+  // LEITURA SOBRE CENA CLARA (dono, 01/10/2026, foto da C9 com corrida de
+  // moto em pista clara: titulo, horario e A SEGUIR sem contraste). O veu de
+  // baixo e smoothstep AO QUADRADO (gfx.h): com 560 px o titulo, a ~360 px da
+  // base, caia no trecho quase transparente da rampa. Agora a rampa comeca mais
+  // alto (900 px) e uma segunda camada (580 px) firma o bloco de texto e os
+  // botoes. (O GFX_VEU do heroi, que escurece tambem a esquerda, deixava uma
+  // borda reta na altura em que comecava: testado e descartado.) Duas camadas de tela inteira na base, nenhuma a mais
+  // no alto — o mesmo custo de antes mais um retangulo.
+  gfx_rect((GfxRect){ 0, NV_TELA_H - 900.0f, NV_TELA_W, 900.0f }, 0, GFX_VEU_BAIXO, 0, 0, 0, 0.0f, 0, 0, 0, 0.96f * a);
+  gfx_rect((GfxRect){ 0, NV_TELA_H - 580.0f, NV_TELA_W, 580.0f }, 0, GFX_VEU_BAIXO, 0, 0, 0, 0.0f, 0, 0, 0, 0.80f * a);
 
   // --- ALTO ESQUERDO: a linha do canal do guia ------------------------------------
   // Marca solta (sem placa), numero em cinza, nome; embaixo a categoria como

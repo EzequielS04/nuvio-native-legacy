@@ -45,13 +45,15 @@ static void salvar(const char *nome) {
 typedef void (*Desenho)(void *);
 // Fundo de "cena" (a arte do pacote) + o desenho, por N quadros para o raster
 // de texto e de textura assentar.
+static int cenaClara;   // fundo claro e liso: a cena da foto da C9 (pista clara)
 static void foto(const char *nome, Desenho d, void *u) {
   int i;
   for (i = 0; i < 30; i++) {
     SDL_PumpEvents(); txt_novo_quadro(); tex_novo_quadro(); tex_bombear(6);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo); glViewport(0, 0, LW, LH);
     glClearColor(.16f, .19f, .24f, 1); glClear(GL_COLOR_BUFFER_BIT);
-    { GLuint bg = tex_obter_larg_qualquer("deploy/app/art/19.jpg", 1920);
+    if (cenaClara) { glClearColor(.86f, .84f, .80f, 1); glClear(GL_COLOR_BUFFER_BIT); }
+    else { GLuint bg = tex_obter_larg_qualquer("deploy/app/art/19.jpg", 1920);
       if (bg) gfx_rect((GfxRect){0, 0, 1920, 1080}, bg, GFX_TEXTO, 0, 0, 0, 0, 1, 1, 1, 1); }
     d(u);
     SDL_Delay(2);
@@ -69,8 +71,9 @@ static AoVivoOsd base(void) {
   o.epg.agoraIni = t - 47 * 60; o.epg.agoraFim = t + 73 * 60; o.epg.progresso = 47.0f / 120.0f;
   o.epg.temProx = 1; snprintf(o.epg.proxTit, sizeof o.epg.proxTit, "Bate-bola: Os melhores momentos");
   o.epg.proxIni = o.epg.agoraFim;
-  { int b[] = { AV_B_GUIA, AV_B_ANT, AV_B_PROX, AV_B_FAV, AV_B_AUDIO, AV_B_LEGENDA, AV_B_INFO, AV_B_RECARREGAR, AV_B_FONTE };
-    o.nBotoes = 9; memcpy(o.botoes, b, sizeof b); }
+  { int b[] = { AV_B_GUIA, AV_B_ANT, AV_B_PROX, AV_B_FAV, AV_B_ASPECTO, AV_B_AUDIO, AV_B_LEGENDA, AV_B_INFO, AV_B_RECARREGAR, AV_B_FONTE };
+    o.nBotoes = 10; memcpy(o.botoes, b, sizeof b); }
+  o.aspecto = "Original";
   o.foco = 0; snprintf(o.res, sizeof o.res, "1080p");
   return o;
 }
@@ -118,6 +121,11 @@ int main(int argc, char **argv) {
 
   { AoVivoOsd o = base();
     snprintf(nome, sizeof nome, "%s-osd.bmp", saida); foto(nome, dOsd, &o);
+    // A CENA CLARA da foto do dono (01/10): o veu de baixo tem de sustentar
+    // titulo, horario, A SEGUIR e botoes sobre fundo quase branco.
+    cenaClara = 1;
+    snprintf(nome, sizeof nome, "%s-osd-cena-clara.bmp", saida); foto(nome, dOsd, &o);
+    cenaClara = 0;
     o.foco = 4; o.favorito = 1;   // foco no Favorito, ja favoritado
     snprintf(nome, sizeof nome, "%s-osd-foco-favorito.bmp", saida); foto(nome, dOsd, &o);
     o.foco = 6; o.infoAberta = 1; o.nInfo = 5; o.bufferando = 1;

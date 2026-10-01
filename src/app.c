@@ -2712,6 +2712,9 @@ void app_atualizar(float dt, Uint32 agora) {
   }
   // Azul na faixa do mini guia: o guia completo, com o canal no preview.
   if (guia_pediu_guia_cheio() && player_aberto() && player_id_canal()[0]) guiaComCanalNoAr();
+  // O botao "Guia" do OSD do canal: o mesmo guia completo, com o canal no
+  // preview e tocando.
+  if (player_pediu_guia_cheio() && player_aberto() && player_id_canal()[0]) guiaComCanalNoAr();
   // Sessao do preview sem guia na tela (saiu por um caminho que nao passou
   // pelo sair() do guia): nao fica tocando escondida.
   if (player_mini_no_guia_ativo() && !player_janela_animando(NULL, NULL, NULL, NULL) &&

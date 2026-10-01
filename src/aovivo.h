@@ -55,6 +55,7 @@ int  aovivo_epg_montar(int epgIdx, const char *xtId, time_t t, AoVivoEpg *o);
 enum { AV_B_PAUSA, AV_B_GUIA, AV_B_ANT, AV_B_PROX, AV_B_FAV, AV_B_AUDIO,
        AV_B_LEGENDA, AV_B_INFO, AV_B_RECARREGAR, AV_B_FONTE,
        AV_B_AOVIVO,   // "Voltar ao vivo": so atras da transmissao (depois do Pausar)
+       AV_B_ASPECTO,  // proporcao/zoom, os modos do player de filme
        AV_B_N };
 
 #define AV_INFO_LINHAS 7
@@ -69,6 +70,7 @@ typedef struct {
   // tempo pausado (s) e o tamanho da janela para voltar (s). 0 = nao se aplica.
   int atrasoS, pausaS, janelaS;
   char res[16];                      // "4K", "1080p", "720p" (viram marca), "SD" ou ""
+  const char *aspecto;               // rotulo do modo de proporcao em vigor
   int infoAberta, nInfo;
   char info[AV_INFO_LINHAS][72];
 } AoVivoOsd;
