@@ -26,6 +26,7 @@
 #include "catordem.h"
 #include "catordemcache.h"
 #include "descoberta.h"
+#include "simkl.h"
 #include "homeestado.h"
 #include "cachearte.h"
 #include "extras.h"
@@ -423,6 +424,43 @@ static int puxarBiblioteca(int perfil, char **destino) {
   return total;
 }
 
+// OS VISTOS DA CONTA, todas as paginas (ate CONTALIB_VISTO_PAGINAS), coladas
+// num array so — o mesmo caminho de puxarBiblioteca. Pagina 2 em diante que
+// falha nao derruba a primeira: fica o que veio, e o log diz.
+static int puxarVistos(int perfil, char **destino) {
+  char corpo[160];
+  char *acum = NULL, *pag = NULL;
+  int pagina, total = 0, c;
+  for (pagina = 1; pagina <= CONTALIB_VISTO_PAGINAS; pagina++) {
+    snprintf(corpo, sizeof corpo,
+             "{\"p_profile_id\":%d,\"p_page\":%d,\"p_page_size\":%d}",
+             perfil, pagina, CONTALIB_VISTO_PAGINA);
+    c = puxarBlob("sync_pull_watched_items", corpo, pagina > 1 ? &pag : &acum);
+    if (c < 0) {
+      if (pagina == 1) return -1;
+      printf("[sync] vistos: pagina %d falhou; ficando com %d linhas\n", pagina, total);
+      break;
+    }
+    if (pagina > 1 && pag) {
+      if (!colarArray(&acum, pag)) {
+        printf("[sync] vistos: pagina %d nao colou; ficando com %d linhas\n", pagina, total);
+        free(pag); pag = NULL;
+        break;
+      }
+      free(pag); pag = NULL;
+    }
+    total += c;
+    if (c < CONTALIB_VISTO_PAGINA) break;
+    if (pagina == CONTALIB_VISTO_PAGINAS)
+      printf("[sync] vistos: %d linhas baixadas e a conta tem mais; o resto nao "
+             "foi pedido\n", total);
+  }
+  free(pag);
+  if (destino) { free(*destino); *destino = acum; }
+  else free(acum);
+  return total;
+}
+
 // O blob de ajustes NAO e contado, e lido: ele e o layout da pessoa. Ate agora
 // esta RPC so alimentava um numero no resumo, e as ~40 preferencias vinham dos
 // padroes transcritos a mao do perfil de quem montou o pacote.
@@ -610,10 +648,8 @@ static void puxarSoLeitura(void) {
   // MEDIDO: `p_page` comeca em 1. Com 0 o servidor responde 400 "OFFSET must
   // not be negative" — a conta dele e (p_page - 1) * p_page_size.
   // 900 e o tamanho de pagina do web (WATCHED_ITEMS_PAGE_SIZE), nao um numero
-  // escolhido aqui.
-  snprintf(corpo, sizeof corpo,
-           "{\"p_profile_id\":%d,\"p_page\":1,\"p_page_size\":900}", perfil);
-  cVistos = puxarBlob("sync_pull_watched_items", corpo, &vistosBlob);
+  // escolhido aqui. Todas as paginas, como o web (puxarVistos, issue #199).
+  cVistos = puxarVistos(perfil, &vistosBlob);
   if (cVistos >= 0) temVistosBlob = 1;
 
   snprintf(corpo, sizeof corpo,
@@ -947,9 +983,15 @@ void sync_passo(unsigned agoraMs) {
   // Sem Trakt, esta e a UNICA fonte de "assistido" que o app tem, e ate agora
   // ela nao existia: era a mesma queixa do issue por outro angulo.
   if (temVistosBlob && vistosBlob) {
+    unsigned rev = contalib_vistos_revisao();
     if (contalib_ler_vistos(vistosBlob) > 0 && !trakt_ativo())
       contalib_aplicar_vistos();
     free(vistosBlob); vistosBlob = NULL; temVistosBlob = 0;
+    // O "a seguir" da conta (issue #199) sai destes vistos. Vistos novos e
+    // sem Trakt/Simkl no ar: a fileira e refeita, senao so o ciclo seguinte
+    // (10 min) os veria.
+    if (rev != contalib_vistos_revisao() && !trakt_ativo() && !simkl_ativo())
+      desc_refazer_continuar();
   }
   // Rede so quando muda o que buscar. Quando as duas coisas mudam no mesmo
   // ciclo, o ciclo de rede ja remonta as fileiras no fim — nao ha o que somar.
@@ -966,6 +1008,13 @@ void sync_passo(unsigned agoraMs) {
     temAjustesBlob = 0;
     aplicarAjustes = 0;   // daqui para frente, o que a pessoa mudar na TV fica
   }
+  // #187: uma linha por blob novo (aplicado ou protegido) dizendo qual idioma
+  // a TV pede ao TMDB e o que a conta guarda. O ponteiro muda a cada pull.
+  { static const char *relatado;
+    if (ajustesBlob && ajustesBlob != relatado) {
+      relatado = ajustesBlob;
+      ajustes_tmdb_idioma_relatar(ajustesBlob);
+    } }
   // Progresso da conta: progresso.c decide linha a linha (pendente local vence,
   // senao o mais novo), guarda ate o que nao tem titulo no catalogo ainda, e
   // o catalogo recebe so o que foi aceito.

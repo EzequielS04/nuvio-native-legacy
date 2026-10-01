@@ -101,6 +101,11 @@ int main(int argc, char **argv) {
       snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dir);
       f = fopen(caminho, "w"); assert(f);
       fprintf(f, "idioma 0\nselected_theme %d\n", tema);
+      // NUVIO_SHOT_VIDRO=1: a mesma folha na Interface de vidro (#198: os
+      // selos coloridos tem de sair iguais nos dois materiais).
+      if (getenv("NUVIO_SHOT_VIDRO") && atoi(getenv("NUVIO_SHOT_VIDRO"))) fprintf(f, "vidroLocal 0\n");
+      // NUVIO_SHOT_SELOS=0: a fileira branca de antes (Selos coloridos desligado).
+      if (getenv("NUVIO_SHOT_SELOS") && !atoi(getenv("NUVIO_SHOT_SELOS"))) fprintf(f, "selosColoridosLocal 1\n");
       fclose(f);
       ajustes_dir(dir);
     } }

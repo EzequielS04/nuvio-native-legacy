@@ -301,6 +301,70 @@ int main(void) {
   }
   contalib_esquecer();
 
+  // #199: AS SEMENTES DO "A SEGUIR" DA CONTA. Os vistos chegam fora de ordem,
+  // misturando series, filme e linha de titulo inteiro.
+  {
+    static const char *VISTOS =
+      "["
+      "{\"content_id\":\"ttTED\",\"content_type\":\"series\",\"season\":4,\"episode\":8,\"watched_at\":3000},"
+      "{\"content_id\":\"ttTED\",\"content_type\":\"series\",\"season\":4,\"episode\":9,\"watched_at\":5000},"
+      "{\"content_id\":\"ttTED\",\"content_type\":\"series\",\"season\":1,\"episode\":1,\"watched_at\":9000},"
+      "{\"content_id\":\"ttAHS\",\"content_type\":\"series\",\"season\":13,\"episode\":3,\"watched_at\":4000},"
+      "{\"content_id\":\"ttAHS\",\"content_type\":\"series\",\"season\":13,\"episode\":5,\"watched_at\":4500},"
+      "{\"content_id\":\"ttAHS\",\"content_type\":\"series\",\"season\":13,\"episode\":1,\"watched_at\":4600},"
+      "{\"content_id\":\"ttMOB\",\"content_type\":\"tv\",\"season\":1,\"episode\":3,\"watched_at\":2000},"
+      "{\"content_id\":\"ttFILME\",\"content_type\":\"movie\",\"season\":null,\"episode\":null,\"watched_at\":9999},"
+      "{\"content_id\":\"ttINTEIRA\",\"content_type\":\"series\",\"season\":null,\"episode\":null,\"watched_at\":9998}"
+      "]";
+    ContaSemente s[8];
+    unsigned rev = contalib_vistos_revisao();
+    int n;
+    confere("vistos lidos", contalib_ler_vistos(VISTOS), 9);
+    confere("revisao subiu com vistos novos", contalib_vistos_revisao() != rev, 1);
+    rev = contalib_vistos_revisao();
+    contalib_ler_vistos(VISTOS);
+    confere("os mesmos vistos de novo nao sobem a revisao", contalib_vistos_revisao() == rev, 1);
+
+    // Do episodio mais alto (o padrao): TED pelo S4E9, AHS pelo S13E5.
+    n = contalib_sementes_a_seguir(s, 8, 1);
+    confere("tres series, filme e titulo inteiro fora", n, 3);
+    // Mais recente primeiro, pelo instante do episodio-ancora.
+    confereTexto("1a: TED (S4E9 visto em 5000)", s[0].id, "ttTED");
+    confere("TED sugere S4", s[0].temporada, 4);
+    confere("TED sugere E10", s[0].episodio, 10);
+    confereTexto("2a: AHS (S13E5 visto em 4500)", s[1].id, "ttAHS");
+    confere("AHS sugere E6", s[1].episodio, 6);
+    confereTexto("3a: MOB (content_type tv)", s[2].id, "ttMOB");
+    confere("MOB sugere E4", s[2].episodio, 4);
+    confere("teto respeitado", contalib_sementes_a_seguir(s, 2, 1), 2);
+
+    // Do mais recente: TED pelo S1E1 (9000) — o S1E2 nao foi visto, entao e
+    // ele; AHS pelo S13E1 (4600), e o E2 sugerido.
+    n = contalib_sementes_a_seguir(s, 8, 0);
+    confere("mais recente: tres series", n, 3);
+    confereTexto("TED primeiro (9000)", s[0].id, "ttTED");
+    confere("TED S1", s[0].temporada, 1);
+    confere("TED E2", s[0].episodio, 2);
+    confere("AHS E2", s[1].episodio, 2);
+  }
+  // Episodio seguinte ja visto e pulado: S2E3 ancora (mais recente), E4 e E5
+  // vistos antes -> sugere E6.
+  {
+    static const char *VISTOS =
+      "["
+      "{\"content_id\":\"ttP\",\"content_type\":\"series\",\"season\":2,\"episode\":4,\"watched_at\":100},"
+      "{\"content_id\":\"ttP\",\"content_type\":\"series\",\"season\":2,\"episode\":5,\"watched_at\":200},"
+      "{\"content_id\":\"ttP\",\"content_type\":\"series\",\"season\":2,\"episode\":3,\"watched_at\":300}"
+      "]";
+    ContaSemente s[2];
+    contalib_ler_vistos(VISTOS);
+    confere("pula vistos: uma semente", contalib_sementes_a_seguir(s, 2, 0), 1);
+    confere("pula E4 e E5 ja vistos: sugere E6", s[0].episodio, 6);
+  }
+  contalib_esquecer();
+  { ContaSemente s[1];
+    confere("sem conta, sem sementes", contalib_sementes_a_seguir(s, 1, 1), 0); }
+
   printf("\n%s\n", falhas ? "FALHOU" : "PASSOU");
   return falhas ? 1 : 0;
 }

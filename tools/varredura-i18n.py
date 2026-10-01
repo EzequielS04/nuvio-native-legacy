@@ -247,6 +247,15 @@ def contexto(txt, i):
 # "nao sei o que e": sem esta lista a ferramenta nao pode virar teste, e sem
 # virar teste ela nao impede a proxima regressao.
 IGNORAR = {
+    # Hosts de provedor de poster/meta que levam a config no caminho
+    # (redeurl.c, rede_url_log): dado de comparacao, nunca tela. "com" casou
+    # com a lista de palavras de portugues.
+    "elfhosted.com", "ratingposterdb.com", "top-poster", "top-posters.com",
+    "toposters.com",
+    # Pedaco do printf "[tmdb] idioma dos metadados" (ajustes.c,
+    # ajustes_tmdb_idioma_relatar): o ternario fica numa linha sem o printf,
+    # entao NAO_E_TELA nao o ve. So log.
+    "da interface",
     # Palavras que o nome PUBLICO do catalogo tem quando ele e um ranking; sao
     # dado de comparacao de home.c (sinalRanking, layout Dinamica), nunca texto
     # desenhado. "top", "popular" e "trending" ja nao acusam por serem ASCII.

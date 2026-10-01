@@ -208,6 +208,7 @@ void lembrete_esquecer_todos(void) {}
 int  ajustes_aplicar_blob(const char *j) { (void)j; return 0; }
 void ajustes_definir_ocultar_nao_lancados(int l) { (void)l; }
 int  ajustes_mesclar_blob(const char *b, char **s) { (void)b; *s = NULL; return 0; }
+void ajustes_tmdb_idioma_relatar(const char *b) { (void)b; }
 void buscasrec_esquecer(void) {}
 void cachearte_limpar_referencias(void) {}
 int  cat_apagar_cache(void) { return 0; }
@@ -222,6 +223,8 @@ int  contalib_aplicar_vistos(void) { return 0; }
 void contalib_esquecer(void) {}
 int  contalib_ler_biblioteca(const char *j) { (void)j; return 0; }
 int  contalib_ler_vistos(const char *j) { (void)j; return 0; }
+unsigned contalib_vistos_revisao(void) { return 0; }   // #199
+int  simkl_ativo(void) { return 0; }
 void contalib_reconciliar(void) {}
 void debrid_definir_chave(const char *s, const char *c) { (void)s; (void)c; }
 void debrid_esquecer(void) {}

@@ -229,6 +229,8 @@ int   ajustes_poster_addon(void);
 int   ajustes_fundo_addon(void);
 int   ajustes_logo_addon(void);
 int   ajustes_col_arte_conta(void);
+// Selos da folha de fontes em peca colorida por tipo (#198). Padrao ligado.
+int   ajustes_selos_coloridos(void);
 int   ajustes_trailer_detalhe_som(void); // o de fundo da pagina do titulo com som (Samsung .wgt sempre mudo)
 int   ajustes_trailer_hero_som(void);  // o do destaque com som (na Samsung .wgt sempre mudo)
 Uint32 ajustes_trailer_hero_espera_ms(void); // repouso no titulo antes do trailer do destaque
@@ -387,5 +389,8 @@ void ajustes_perfil_esquecer(void);
 // manual, destino dos salvos): eles descrevem esta TV, nao o gosto da pessoa, e
 // a conta e uma so para a TV da sala e a do quarto. Ver somenteDesteAparelho.
 int ajustes_mesclar_blob(const char *base, char **saida);
+// #187: uma linha "[tmdb] idioma dos metadados: ..." com o que a TV pede ao
+// TMDB, de onde vem (ajuste desta TV) e o tmdb_language cru da conta.
+void ajustes_tmdb_idioma_relatar(const char *blob);
 
 #endif

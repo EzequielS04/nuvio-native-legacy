@@ -105,6 +105,11 @@ int   trakt_lista(const char *q, CatItem *s, int m) { (void)q; (void)s; (void)m;
 int   recomenda_social_mesclar(CatItem *i, int nTrakt, int max) { (void)i; (void)max; return nTrakt; }
 int   trakt_social(CatItem *s, int m)      { (void)s; (void)m; return 0; }
 int   trakt_e_a_seguir(const char *id)     { (void)id; return 0; }
+// "A seguir" da conta (#199): sem vistos aqui, e com o Trakt "no ar" o caminho
+// nem roda. So para linkar.
+int   trakt_ativo(void)                    { return 1; }
+int   ajustes_cw_do_episodio_mais_alto(void) { return 1; }
+int   contalib_sementes_a_seguir(ContaSemente *s, int m, int a) { (void)s; (void)m; (void)a; return 0; }
 const char *nuvem_trakt_cliente(void)      { return ""; }
 int   addons_n(void)                       { return 0; }
 const char *addons_base(int i)             { (void)i; return ""; }

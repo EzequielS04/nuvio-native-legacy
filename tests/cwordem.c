@@ -97,6 +97,27 @@ int main(void) {
     assert(cwo_data_curta(1792539000000LL, agora, 0, 0, b, sizeof b) && !strcmp(b, "20 out"));
     assert(!cwo_data_curta(CWO_SEM_DATA, agora, 0, 0, b, sizeof b) && !b[0]); }
   puts("ok  rotulo do futuro: 21 out / Oct 21, ano so quando outro, UTC");
+
+  // #199: temporada nova da conta so com data e ate 7 dias a frente.
+  { const long long meiaNoite = AGORA - (AGORA % DIA);
+    assert(!cwo_virada_aceita(CWO_SEM_DATA, AGORA));
+    assert(cwo_virada_aceita(AGORA - DIA, AGORA));
+    assert(cwo_virada_aceita(AGORA, AGORA));
+    assert(cwo_virada_aceita(meiaNoite + 7 * DIA + DIA - 1, AGORA));   // fim do 7o dia
+    assert(!cwo_virada_aceita(meiaNoite + 8 * DIA, AGORA));
+    assert(!cwo_virada_aceita(AGORA + 300 * DIA, AGORA)); }
+  puts("ok  #199 virada de temporada: sem data fora, ate 7 dias dentro");
+
+  // #199: ids do "a seguir" da conta, trocados inteiros e na virada.
+  { const char *ids[] = { "tt1:4:10", "tt2:1:4" };
+    cwo_conta_definir(ids, 2);
+    assert(cwo_conta_a_seguir("tt1:4:10") && cwo_conta_a_seguir("tt2:1:4"));
+    assert(!cwo_conta_a_seguir("tt1") && !cwo_conta_a_seguir("tt3:1:1"));
+    cwo_conta_trocar("tt2:1:4", "tt2:2:1");
+    assert(!cwo_conta_a_seguir("tt2:1:4") && cwo_conta_a_seguir("tt2:2:1"));
+    cwo_conta_definir(NULL, 0);
+    assert(!cwo_conta_a_seguir("tt1:4:10")); }
+  puts("ok  #199 ids do a seguir da conta");
   puts("cwordem: tudo ok");
   return 0;
 }

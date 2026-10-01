@@ -240,4 +240,16 @@ void rede_preparar(void);
 // "://" e copiado como esta (nao e URL, nao ha caminho a esconder).
 const char *rede_url_publica(const char *url, char *dst, unsigned tam);
 
+// URL DE IMAGEM/META PARA LOG, mais util que rede_url_publica mas igualmente
+// segura: mantem esquema, host e os segmentos do caminho que nao podem ser
+// credencial (ex.: /t/p/w500/abc.jpg do TMDB), e troca por <redigido> todo
+// segmento suspeito (>= 24 chars, uuid, JWT, config serializada) e a query.
+// Hosts que levam a config/chave da pessoa NO CAMINHO (btttr.cc do
+// BetterPosters/PostersPlus, AioMetadata, *.elfhosted, RPDB, top-posters)
+// ficam so com o host e, no fim, o id do titulo. Regra em redeurl.c; teste em
+// tests/redeurl_log.sh.
+const char *rede_url_log(const char *url, char *dst, unsigned tam);
+// O criterio de "segmento suspeito" acima, exposto para o teste.
+int rede_segmento_suspeito(const char *s, unsigned n);
+
 #endif

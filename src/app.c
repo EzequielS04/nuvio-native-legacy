@@ -585,6 +585,11 @@ static void motivoCanalXtream(char *t, size_t nt, char *d, size_t nd) {
   XtreamConta c;
   const char *err = video_erro_texto();
   int aviso = xtream_conta(&c) ? xtream_conta_aviso(&c, (long long)time(NULL)) : XA_NADA;
+  // SO UM FORMATO TENTADO (#158, registro 13776): a conta declara
+  // allowed_output_formats=["ts"], a lista do canal tem uma fonte so, e o
+  // cartao dizia "nao abriu em HLS nem em TS" sem HLS nenhum ter sido pedido.
+  const char *ext[2], *umFormato = NULL;
+  if (xtream_formatos(ext) == 1) umFormato = !strcmp(ext[0], "ts") ? "TS" : "HLS";
   if (aviso == XA_EXPIRADA) {
     snprintf(t, nt, "%s", i18n("A assinatura Xtream venceu."));
     snprintf(d, nd, "%s", i18n("Renove com o seu provedor. Os canais voltam sozinhos depois disso."));
@@ -597,9 +602,11 @@ static void motivoCanalXtream(char *t, size_t nt, char *d, size_t nd) {
     snprintf(d, nd, "%s", i18n("Feche o Xtream em outro aparelho e tente de novo."));
   } else if (err && err[0]) {
     snprintf(t, nt, "%s", i18n("O provedor não entregou este canal."));
-    snprintf(d, nd, i18n("Resposta do servidor: %s. HLS e TS foram tentados."), err);
+    if (umFormato) snprintf(d, nd, i18n("Resposta do servidor: %s. A conta só permite %s."), err, umFormato);
+    else snprintf(d, nd, i18n("Resposta do servidor: %s. HLS e TS foram tentados."), err);
   } else {
-    snprintf(t, nt, "%s", i18n("O canal não abriu em HLS nem em TS."));
+    if (umFormato) snprintf(t, nt, i18n("O canal não abriu em %s."), umFormato);
+    else snprintf(t, nt, "%s", i18n("O canal não abriu em HLS nem em TS."));
     snprintf(d, nd, "%s", i18n("O vídeo chegou, mas a TV não começou a tocar. Envie o registro em Ajustes."));
   }
 }

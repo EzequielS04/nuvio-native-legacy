@@ -246,6 +246,9 @@ typedef enum {
   // visual de sempre. No fim pelo mesmo motivo: valor[] e CHAVE[] sao
   // posicionais.
   AJ_ADDON_POSTER, AJ_ADDON_FUNDO, AJ_ADDON_LOGO, AJ_COL_ARTE_CONTA,
+  // Selos coloridos na folha de fontes (#198, badges_desenhar_selos). No fim
+  // pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_SELOS_CORES,
   // Som do trailer automatico da pagina do titulo (detail.c). No fim pelo mesmo
   // motivo: valor[] e CHAVE[] sao posicionais.
   AJ_DET_TRAILER_SOM,
@@ -806,6 +809,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Fundo do destaque do addon",      V_LIGA, 2),   // local: fundoAddonLocal
   ESC("Logo do addon",                   V_LIGA, 2),   // local: logoAddonLocal
   ESC("Arte das pastas da conta",        V_LIGA, 2),   // local: colArteContaLocal
+  ESC("Selos coloridos",                 V_LIGA, 2),   // local: selosColoridosLocal
   ESC("Som do trailer na página do título", V_LIGA, 2), // local: trailerDetalheSomLocal
 };
 
@@ -953,6 +957,8 @@ static const char *CHAVE[] = {
   "heroTransicaoLocal",
   // LOCAIS e SEM o "-": o web nao tem estas escolhas e elas precisam sobreviver.
   "posterAddonLocal", "fundoAddonLocal", "logoAddonLocal", "colArteContaLocal",
+  // LOCAL e SEM o "-": o web nao tem esta escolha (la a cor vem do pacote).
+  "selosColoridosLocal",
   // LOCAL e SEM o "-": o web nao tem esta escolha.
   "trailerDetalheSomLocal",
 };
@@ -1119,6 +1125,7 @@ static const Item TELA[] = {
     OPC(AJ_PAUSA_OVERLAY),
     ROT("Player e seleção de fontes"),
       OPC(AJ_FONTE_MANUAL), OPC(AJ_FONTE_AUTO), OPC(AJ_FONTE_REPOR),
+      OPC(AJ_SELOS_CORES),
     ROT("Áudio e vídeo"),
       OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS),
     ROT("Idiomas"),
@@ -1403,6 +1410,9 @@ static int valor[] = {
   0,                /* transicao do destaque: Deslizar */
   // Arte do addon: todas DESLIGADAS (V_LIGA: 1 = Desligado) — o visual de antes.
   1, 1, 1, 1,       /* posteres, fundo, logo do addon; arte das pastas da conta */
+  // LIGADO: e o que o oficial mostra com o pacote de selos da wiki importado,
+  // e o pedido do #198. Quem prefere a fileira branca de antes desliga.
+  0,                /* selos coloridos: LIGADO (V_LIGA: 0 = Ligado) */
   1,                /* som do trailer na pagina do titulo: DESLIGADO (V_LIGA: 1 = Desligado) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
@@ -1679,6 +1689,7 @@ int   ajustes_poster_addon(void)      { return lig(AJ_ADDON_POSTER); }
 int   ajustes_fundo_addon(void)       { return lig(AJ_ADDON_FUNDO); }
 int   ajustes_logo_addon(void)        { return lig(AJ_ADDON_LOGO); }
 int   ajustes_col_arte_conta(void)    { return lig(AJ_COL_ARTE_CONTA); }
+int   ajustes_selos_coloridos(void)   { return lig(AJ_SELOS_CORES); }
 // valor[] guarda decimos de segundo, preso ao intervalo de OPCOES (o disco
 // pode trazer qualquer numero).
 Uint32 ajustes_trailer_hero_espera_ms(void) {
@@ -2759,25 +2770,44 @@ void ajustes_idioma_auto_tick(void) { sistemaRecolher(); }
 // tmdb_language / subtitle_preferred_language CRUS do blob (a conta manda
 // "pt-BR", "ro"...). O laco das opcoes guarda so o INDICE de V_TMDB_LING, que
 // perde a regiao e o que a lista nao tem; aqui interessa o codigo inteiro.
+// O texto cru de `chave` no blob, desembrulhado de {"type":...,"value":X} e
+// sem aspas; "" para null. 0 se a chave nao existe (dst intocado).
+static int textoCruDoBlob(const char *json, const char *fim, const char *chave,
+                          char *dst, size_t tam) {
+  char bruto[80], texto[80];
+  size_t n;
+  if (!js_bruto(json, fim, chave, bruto, sizeof bruto)) return 0;
+  if (bruto[0] == '{' &&
+      !js_bruto(bruto, bruto + strlen(bruto), "value", texto, sizeof texto))
+    return 0;
+  if (bruto[0] != '{') snprintf(texto, sizeof texto, "%s", bruto);
+  n = strlen(texto);
+  if (n >= 2 && texto[0] == '"') { memmove(texto, texto + 1, n - 2); texto[n - 2] = 0; }
+  else if (!strcmp(texto, "null")) texto[0] = 0;
+  snprintf(dst, tam, "%s", texto);
+  return 1;
+}
+
 static void idiomaContaDoBlob(const char *json, const char *fim) {
-  static const struct { const char *chave; char *dst; size_t tam; } M[] = {
-    { "tmdb_language",                contaTmdbLing, sizeof contaTmdbLing },
-    { "subtitle_preferred_language",  contaLegLing,  sizeof contaLegLing  },
-  };
-  size_t k;
-  for (k = 0; k < sizeof M / sizeof *M; k++) {
-    char bruto[80], texto[80];
-    size_t n;
-    if (!js_bruto(json, fim, M[k].chave, bruto, sizeof bruto)) continue;
-    if (bruto[0] == '{' &&
-        !js_bruto(bruto, bruto + strlen(bruto), "value", texto, sizeof texto))
-      continue;
-    if (bruto[0] != '{') snprintf(texto, sizeof texto, "%s", bruto);
-    n = strlen(texto);
-    if (n >= 2 && texto[0] == '"') { memmove(texto, texto + 1, n - 2); texto[n - 2] = 0; }
-    else if (!strcmp(texto, "null")) texto[0] = 0;
-    snprintf(M[k].dst, M[k].tam, "%s", texto);
-  }
+  textoCruDoBlob(json, fim, "tmdb_language", contaTmdbLing, sizeof contaTmdbLing);
+  textoCruDoBlob(json, fim, "subtitle_preferred_language", contaLegLing, sizeof contaLegLing);
+}
+
+// #187: o registro dizia so "tmdb language=ko-KR" no Guia, e nada dizia DE
+// ONDE. Com os ajustes protegidos (ajustes-locais.txt) a conta nao reaplica e
+// a escolha desta TV vale sozinha — esta linha poe as duas lado a lado a cada
+// blob que chega, aplicado ou nao. So leitura e printf.
+void ajustes_tmdb_idioma_relatar(const char *blob) {
+  char conta[24] = "?";
+  int v = valor[AJ_TMDB_IDIOMA];
+  if (!blob) return;
+  textoCruDoBlob(blob, blob + strlen(blob), "tmdb_language", conta, sizeof conta);
+  printf("[tmdb] idioma dos metadados: %s (ajuste desta TV: %s); conta: tmdb_language=\"%s\"\n",
+         ajustes_tmdb_idioma(),
+         v <= 0 || v >= (int)(sizeof W_TMDB_LING / sizeof *W_TMDB_LING) - 1
+           ? "da interface" : W_TMDB_LING[v],
+         conta);
+  fflush(stdout);
 }
 
 // Idiomas de audio e legenda do blob. NAO passam pelo laco das opcoes abaixo
@@ -2973,6 +3003,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_ADDON_POSTER: case AJ_ADDON_FUNDO: case AJ_ADDON_LOGO:
     case AJ_DET_TRAILER_SOM: /* o web nao tem */
     case AJ_COL_ARTE_CONTA: /* arte do addon: o web nao tem estas escolhas */
+    case AJ_SELOS_CORES:    /* no web a cor vem do pacote de selos importado */
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
     case AJ_PERFIL_EDITAR:
@@ -3120,6 +3151,14 @@ static int textoDoValor(int op, const char *vi, const char *vf,
     int k, maiuscula = 0, temBaixa = 0;
     size_t i;
     if (!lit) return 0;
+    // "DA INTERFACE" NAO SOBE (#187). O indice 0 de W_TMDB_LING e um
+    // sentinela desta TV ("interface"), nao um idioma: o web nao o conhece. A
+    // 1.5.3 nao sabia ler "ru" e ficava no 0 — e a costura seguinte escrevia
+    // "interface" por cima do "ru" da conta (medido no registro da issue: "ru
+    // nao reconhecido; mantido" e, no mesmo arranque, "1 ajuste(s) desta TV
+    // entram no blob"). A conta perdia o idioma que a pessoa escolheu e nunca
+    // mais o devolvia. Sem forma fiel, a chave nao e tocada.
+    if (op == AJ_TMDB_IDIOMA && valor[op] == 0) return 0;
     for (k = 0; k <= valor[op]; k++) if (!lit[k]) return 0;   // fora da lista
     // A CAIXA DO SERVIDOR, e nao a do codigo JS. MEDIDO na TV: a conta guarda
     // estes enums em MAIUSCULA ("IN_SEARCH", "CARD") enquanto o web os escreve
@@ -3706,6 +3745,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_ADDON_POSTER: return "Com um serviço de pôsteres ligado, o título que veio de um catálogo de addon fica com o pôster que o próprio addon manda, e o serviço só entra nos outros (Continuar assistindo, listas do Trakt, pôster genérico do Cinemeta). Sem o serviço, o pôster já é o do addon.";
     case AJ_ADDON_FUNDO: return "O card deitado, o destaque e a página do título usam o fundo que o addon manda no catálogo, mesmo com outro Background do hero ou com Destaque com outra arte. O addon que não manda fundo cai na fonte escolhida. A arte escolhida à mão em Trocar arte continua valendo mais.";
     case AJ_ADDON_LOGO: return "O logo do título que o addon manda não é trocado pelo logo traduzido do TMDB (Arte localizada) ao abrir o título. O addon que não manda logo continua recebendo o do TMDB.";
+    case AJ_SELOS_CORES: return "Na lista de fontes, cada selo (4K, HDR, Dolby, codec, serviço) ganha a cor do seu tipo, como no pacote de selos do Nuvio. Desligado, os selos ficam brancos.";
     case AJ_COL_ARTE_CONTA: return "As pastas de coleção que o app já traz com arte própria passam a usar a capa, o fundo e o logo que estão na sua conta (editor de coleções do site). O que a conta não tiver continua com a arte do app.";
     case AJ_HERO_TRANSICAO: return "Deslizar: quando o destaque troca de título, a arte e o texto saem para o lado e o próximo entra colado, como num carrossel. Esmaecer: a arte apaga e a nova aparece no lugar. Com Animações reduzidas a troca é sempre sem movimento.";
     case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta, de 3 a 40. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis. Mais fileiras usam mais memória e rede: em TV com 1 GB de memória a Home pode ficar lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior.";
@@ -6454,7 +6494,7 @@ static AjPreview familiaPreviaOpcao(int op) {
   switch (op) {
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA:
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
-    case AJ_FONTE_AUTO: case AJ_FONTE_REPOR:
+    case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_SELOS_CORES:
       return AJPV_REPRO;
     case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:

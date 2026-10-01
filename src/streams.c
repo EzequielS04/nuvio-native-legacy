@@ -1306,7 +1306,10 @@ void stream_folha_desenhar(Uint32 agora) {
       txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION,texto,corMeta,C8(corMeta+2),C8(corMeta+8),255,w-(mx-lx)-pilW),mx,y+153,anim); }
     // O foco conserva cartao escuro em qualquer tema; as logos claras ficam
     // no tratamento padrao e nao trocam para tinta escura no acento branco.
-    badges_desenhar(s->badges,lx,y+188,w,26,anim);
+    // Selos coloridos (#198, padrao ligado): cada marca na sua peca. A peca
+    // tem base escura propria, entao vale igual na linha em foco e no vidro.
+    if (ajustes_selos_coloridos()) badges_desenhar_selos(s->badges,lx,y+188,w,26,anim);
+    else badges_desenhar(s->badges,lx,y+188,w,26,anim);
   }
   if(!nf) {
     // A FOLHA VAZIA DIZ A CAUSA (B6/#107, D5). So quando a lista esta vazia

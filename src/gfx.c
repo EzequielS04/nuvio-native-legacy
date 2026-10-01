@@ -1684,6 +1684,16 @@ void gfx_ambiente(float alfa) {
 }
 static void ambPintar(float alfa) {
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  // O ESTADO DO DESENHO DE QUEM CHAMOU VOLTA COMO ESTAVA. Com a luz pendente
+  // (gfx_ambiente_descarregar), este quad e pintado DE DENTRO do gfx_rect do
+  // primeiro desenho do quadro — o destaque do Padrao (GFX_VITRINE), que ja
+  // tinha posto a proporcao da textura em gfx_tex_aspect_atual. Zerar aqui
+  // sem devolver mandava uTexAsp = 0 para a arte: sem cover, a imagem
+  // inteira esticada na faixa 1920x528 (dono, 01/10/2026, C9 com a
+  // "Dinamica imersiva"; circulos viravam elipses no tests/homelayouts_shot).
+  float aspAnt = gfx_tex_aspect_atual, deslAnt = gfx_desliza_atual,
+        coverAnt = gfx_card_forcar_cover_atual;
+  gfx_desliza_atual = 0.0f; gfx_card_forcar_cover_atual = 0.0f;
   // O assado mora em gfx_ambiente_preparar, ANTES do clear da tela: trocar de
   // alvo com a tela ja limpa obriga a GPU de ladrilhos a gravar e reler a tela.
   // (Medido na C9: nao era isso que custava — era a mistura, abaixo — mas o
@@ -1704,6 +1714,8 @@ static void ambPintar(float alfa) {
   } else {
     gfx_rect(tela, ambTex, GFX_SNAP, 0, 0.0f, 1.0f, 0.0f, 0, 0, 0, alfa);
   }
+  gfx_tex_aspect_atual = aspAnt; gfx_desliza_atual = deslAnt;
+  gfx_card_forcar_cover_atual = coverAnt;
 }
 // --- FUNDO DA HOME DINAMICA ---------------------------------------------------
 //

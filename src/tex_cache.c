@@ -1317,13 +1317,17 @@ void tex_cache_esperar_gravacoes(void) {
 // crivo (assinatura, tamanho) que a url original.
 // URL DE PROVEDOR DE POSTER NUNCA VAI PARA O LOG COM O QUE TEM DEPOIS DO HOST:
 // o token do SpatialPosters e a chave do RPDB moram na query/caminho
-// (posterprov.h). As demais URLs continuam como sempre foram.
+// (posterprov.h). As DEMAIS tambem passam por redacao (rede_url_log): o cartaz
+// que um addon de meta devolve (btttr.cc do BetterPosters/PostersPlus,
+// AioMetadata, RPDB, top-posters) leva a config da pessoa no CAMINHO, e ate a
+// 1.6.4 ia inteiro para o log em "[tex] corpo curto"/"download falhou".
 static const char *urlLog(const char *url, char *buf, size_t n) {
-  return posterprov_e_provedor(url) ? posterprov_redigir(url, buf, n) : url;
+  return posterprov_e_provedor(url) ? posterprov_redigir(url, buf, n)
+                                    : rede_url_log(url, buf, (unsigned)n);
 }
 
 static char *baixarImagem(const char *url, long *n, TexFetchTrace *trace) {
-  char urlLogBuf[96];
+  char urlLogBuf[160];
   char *corpo;
   // URL VIRTUAL DE FONTE (artereserva.h): o fundo do TMDB/Trakt de um item que
   // so trouxe o do catalogo. Resolve aqui, no fio de rede, e baixa a real; o
@@ -1335,7 +1339,7 @@ static char *baixarImagem(const char *url, long *n, TexFetchTrace *trace) {
     r = arte_fonte_resolver(url, real, sizeof real);
     if (trace) trace->resolveMs += SDL_GetTicks() - t;
     if (r < 0) {
-      printf("[tex] fonte sem fundo para: %.70s\n", urlLog(url, urlLogBuf, sizeof urlLogBuf));
+      printf("[tex] fonte sem fundo para: %s\n", urlLog(url, urlLogBuf, sizeof urlLogBuf));
       fflush(stdout);
       return NULL;
     }
@@ -1384,8 +1388,8 @@ static char *baixarImagem(const char *url, long *n, TexFetchTrace *trace) {
     // downloads tentados, ZERO linha de log e zero textura — com o comentario
     // logo acima afirmando que este ramo ja nao era mudo. Como nada guarda a
     // falha, cada quadro pedia de novo as mesmas URLs, para sempre.
-    if (corpo) printf("[tex] corpo curto (%ld B): %.70s\n", *n, urlLog(url, urlLogBuf, sizeof urlLogBuf));
-    else       printf("[tex] download falhou (sem corpo): %.70s\n", urlLog(url, urlLogBuf, sizeof urlLogBuf));
+    if (corpo) printf("[tex] corpo curto (%ld B): %s\n", *n, urlLog(url, urlLogBuf, sizeof urlLogBuf));
+    else       printf("[tex] download falhou (sem corpo): %s\n", urlLog(url, urlLogBuf, sizeof urlLogBuf));
     fflush(stdout);
     free(corpo);
     return NULL;
@@ -1402,7 +1406,7 @@ static char *baixarImagem(const char *url, long *n, TexFetchTrace *trace) {
        (b0[0] == 'R'  && b0[1] == 'I'  && b0[2] == 'F'  && b0[3] == 'F' &&
         *n > 12 && b0[8] == 'W' && b0[9] == 'E' && b0[10] == 'B' && b0[11] == 'P'));
     if (!ok) {
-      printf("[tex] resposta nao e imagem (%ld B): %.70s\n", *n, urlLog(url, urlLogBuf, sizeof urlLogBuf));
+      printf("[tex] resposta nao e imagem (%ld B): %s\n", *n, urlLog(url, urlLogBuf, sizeof urlLogBuf));
       fflush(stdout);
       free(corpo);
       return NULL;
@@ -1686,7 +1690,7 @@ static int baixarParaItem(int idx, const char *url, char *dst, size_t tam, int *
     SDL_LockMutex(mtx);
     if (!mesmoPedido(idx, pedido)) {
       SDL_UnlockMutex(mtx); free(corpo);
-      { char lb[96]; printf("[tex] bytes descartados: o slot virou outro pedido durante o download (%.60s)\n", urlLog(pedido, lb, sizeof lb)); }
+      { char lb[160]; printf("[tex] bytes descartados: o slot virou outro pedido durante o download (%s)\n", urlLog(pedido, lb, sizeof lb)); }
       fflush(stdout);
       return -1;
     }
@@ -1746,7 +1750,7 @@ static int baixarParaItem(int idx, const char *url, char *dst, size_t tam, int *
     SDL_LockMutex(mtx);
     if (!mesmoPedido(idx, pedido)) {
       SDL_UnlockMutex(mtx); free(corpo);
-      { char lb[96]; printf("[tex] bytes descartados: o slot virou outro pedido durante o download (%.60s)\n", urlLog(pedido, lb, sizeof lb)); }
+      { char lb[160]; printf("[tex] bytes descartados: o slot virou outro pedido durante o download (%s)\n", urlLog(pedido, lb, sizeof lb)); }
       fflush(stdout);
       return -1;
     }
@@ -2265,9 +2269,10 @@ static int threadDecode(void *arg) {
         // Em duas partes: ler o arquivo (IMG_Load) e reduzir (tex_reduzir +
         // conversao). E o que separa "a libjpeg e lenta" de "a media de area
         // e lenta" — duas respostas com consertos opostos.
-        printf("[tex] decode lento: %u ms (ler %u, reduzir %u) para %dx%d (saiu %dx%d) %s\n",
-               (unsigned)dt, (unsigned)(tLoad - t0), (unsigned)(SDL_GetTicks() - tLoad),
-               srcW, srcH, conv->w, conv->h, urlOrig);
+        { char lb[160];
+          printf("[tex] decode lento: %u ms (ler %u, reduzir %u) para %dx%d (saiu %dx%d) %s\n",
+                 (unsigned)dt, (unsigned)(tLoad - t0), (unsigned)(SDL_GetTicks() - tLoad),
+                 srcW, srcH, conv->w, conv->h, urlLog(urlOrig, lb, sizeof lb)); }
         if (limTam > 0) printf("[tex] (variante do tamanho, teto %d)\n", limTam);
         printf("[tex-trace] decode hash=%08lx kind=%s queue=%u total=%u load=%u reduce=%u src=%dx%d out=%dx%d\n",
                hashCaminho(urlOrig), localDireto ? "local" : "remote",
@@ -2276,8 +2281,9 @@ static int threadDecode(void *arg) {
         fflush(stdout);
       } }
     if (getenv("NUVIO_TEX_LOG") && conv)
-      printf("[tex-nitidez] fonte=%dx%d teto=%d final=%dx%d %s\n",
-             srcW, srcH, limite, conv->w, conv->h, urlOrig);
+      { char lb[160];
+        printf("[tex-nitidez] fonte=%dx%d teto=%d final=%dx%d %s\n",
+               srcW, srcH, limite, conv->w, conv->h, urlLog(urlOrig, lb, sizeof lb)); }
 
     // MEDIDA DE LUMINANCIA, aqui e nao no desenho: esta thread ja tem os pixels
     // na mao e roda em prioridade baixa. Amostra de 4 em 4 nos dois eixos —
@@ -2375,7 +2381,7 @@ static int threadDecode(void *arg) {
     // (mesmoPedido): nao sendo o mesmo caminho, a superficie vai para o lixo.
     if (strcmp(itens[idx].caminho, urlOrig)) {
       if (conv) SDL_FreeSurface(conv);
-      { char lb[96]; printf("[tex] decode descartado: o slot virou outro pedido (%.60s)\n", urlLog(urlOrig, lb, sizeof lb)); }
+      { char lb[160]; printf("[tex] decode descartado: o slot virou outro pedido (%s)\n", urlLog(urlOrig, lb, sizeof lb)); }
       fflush(stdout);
       SDL_UnlockMutex(mtx);
       continue;
@@ -2453,7 +2459,7 @@ static int threadDecode(void *arg) {
         if (g) { fseek(g, 0, SEEK_END); tam = ftell(g); rewind(g);
                  if (fread(mag, 1, 4, g) != 4) { }
                  fclose(g); } }
-      { char lb[96];
+      { char lb[160];
       printf("[tex] decode falhou (%s) tam=%ld magica=%02x%02x%02x%02x: %.70s\n",
              IMG_GetError(), tam, mag[0], mag[1], mag[2], mag[3], urlLog(caminho, lb, sizeof lb)); }
       // GIF INTEIRO NAO E ARQUIVO ENVENENADO — E ARQUIVO DE OUTRO LEITOR.

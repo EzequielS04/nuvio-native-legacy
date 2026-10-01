@@ -262,6 +262,11 @@ const char *ajustes_tmdb_chave(void)       { return ""; }
 const char *i18n(const char *s)            { return s; }
 const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 int   simkl_ativo(void)                    { return 0; }
+
+// "A seguir" da conta (#199): so para linkar; sem vistos, nada semeia.
+int   trakt_ativo(void)                    { return 1; }
+int   ajustes_cw_do_episodio_mais_alto(void) { return 1; }
+int   contalib_sementes_a_seguir(ContaSemente *s, int m, int a) { (void)s; (void)m; (void)a; return 0; }
 int   simkl_continuar(CatItem *s, int m)   { (void)s; (void)m; return 0; }
 int   simkl_e_a_seguir(const char *id)     { (void)id; return 0; }
 int   simkl_plantowatch(CatItem *s, int m) { (void)s; (void)m; return 0; }

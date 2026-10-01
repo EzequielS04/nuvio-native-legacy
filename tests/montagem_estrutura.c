@@ -221,6 +221,7 @@ const char *ajustes_tmdb_chave(void)       { return ""; }
 const char *i18n(const char *s)            { return s; }
 const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
 int   simkl_ativo(void)                    { return 1; }
+int   trakt_ativo(void)                    { return 1; }   // #199, so para linkar
 int   simkl_continuar(CatItem *s, int m)   { (void)s; (void)m; return 0; }
 int   simkl_e_a_seguir(const char *id)     { (void)id; return 0; }
 int   ajustes_salvos_no_simkl(void)        { return 1; }   // para simkl_plantowatch rodar
