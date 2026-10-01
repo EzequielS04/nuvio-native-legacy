@@ -1347,6 +1347,7 @@ static TipoFileira tipoDaEscolha(int t) {
     case FIL_TIPO_DESTAQUE_QUADRADO: return FILEIRA_DESTAQUE_QUADRADO;
     case FIL_TIPO_COLECAO:  return FILEIRA_COLECAO;
     case FIL_TIPO_SERVICO:  return FILEIRA_SERVICO;
+    case FIL_TIPO_RANKING:  return FILEIRA_TOP10_NUM;
     default:                return FILEIRA_TOP10;
   }
 }
@@ -1662,7 +1663,7 @@ void home_evento(const SDL_Event *e) {
       if (foco.fileira < 0 || foco.fileira >= nFileiras) return;
       if(fileiras[foco.fileira].tipo==FILEIRA_TOP10 && fileiras[foco.fileira].stackN) {
         Fileira *s=&fileiras[foco.fileira];
-        s->n=s->stackN<10?s->stackN:10;
+        s->n=s->stackN;   // a fileira inteira, nao 10 (issue #201)
         s->stackN=0;s->verTudo=1;
         foco.coluna=0;foco.colunaLembrada[foco.fileira]=0;
         foco.nColunas[foco.fileira]=s->n+1;
@@ -1841,7 +1842,9 @@ static int assinaturaPrefs(void) {
 //      "Entre amigos" e atalhos ficam como estao: ja sao cartoes largos;
 //   3. o PRIMEIRO catalogo cujo NOME diz ranking — Top 10/100 (que ja vinha
 //      como pilha), "Em alta", "Popular", "Tendencias", "Mais vistos" — vira
-//      TOP 10: numeral grande ao lado de cada cartaz, no maximo 10 itens. So
+//      TOP 10: numeral grande ao lado de cada cartaz, com TODOS os itens da
+//      fileira (o "Itens por fileira" de Ajustes, 12/18/24 — issue #201; ate
+//      a 1.6.5 cortava em 10 e o resto do catalogo sumia da home). So
 //      UM por home, decisao do dono (29/09): os rankings seguintes ("Em alta"
 //      depois de "Top 10", "Trending"...) voltam ao cartaz em pe de sempre —
 //      dois numerados na mesma tela disputam, e o segundo le como repeticao;
@@ -1897,7 +1900,6 @@ static void dinAtribuirTipos(int total) {
         f->tipo = (planas++ & 1) ? FILEIRA_LARGA : FILEIRA_NORMAL;
       }
     }
-    if (f->tipo == FILEIRA_TOP10_NUM && f->n > 10) f->n = 10;
   }
 }
 
@@ -2322,7 +2324,7 @@ static void sincronizarFileiras(void) {
       if (!strcmp(fileiras[r].chave, antigas[a].chave)) {
         if(fileiras[r].tipo==FILEIRA_TOP10 && antigas[a].tipo==FILEIRA_TOP10 &&
            !antigas[a].stackN && antigas[a].verTudo && fileiras[r].stackN) {
-          fileiras[r].n=fileiras[r].stackN<10?fileiras[r].stackN:10;
+          fileiras[r].n=fileiras[r].stackN;
           fileiras[r].stackN=0;fileiras[r].verTudo=1;
         }
         break;
@@ -4051,7 +4053,7 @@ static float numeraisAlfa(int r, Uint32 agora) {
     int c, falta = 0;
     char rank[8];
     if (!numPedidoEm[r]) numPedidoEm[r] = agora ? agora : 1u;
-    for (c = 0; c < fileiras[r].n && c < 10; c++) {
+    for (c = 0; c < fileiras[r].n; c++) {
       snprintf(rank, sizeof rank, "%d", c + 1);
       if (!txt_linha(TXT_RANK_GRANDE, rank, NUM_COR).tex) falta = 1;
     }
@@ -4364,7 +4366,11 @@ void home_desenhar(Uint32 agora) {
               if(tx){gfx_tex_aspect_atual=tex_aspecto(pa);gfx_rect(pr,tx,GFX_CARD,0,0,0,.055f,1,1,1,1);gfx_tex_aspect_atual=0;}
               else desenhaArteAusente(pr,.055f,it,1);
             }
-            txt_desenhar(txt_linha(TXT_CAPTION,"TOP 100   ·   Explorar primeiros 10",242,235,248,255),px+24,py+h-42);
+            // O numero e o da fileira (issue #201): "primeiros 10" mentia
+            // quando o Itens por fileira era 12, 18 ou 24.
+            { char rot[96];
+              snprintf(rot,sizeof rot,i18n("Ranking   ·   Explorar os %d primeiros"),fileiras[r].stackN);
+              txt_desenhar(txt_linha(TXT_CAPTION,rot,242,235,248,255),px+24,py+h-42); }
             if(foco.fileira==r)temItemFoco=0;
             continue;
           }

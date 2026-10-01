@@ -80,6 +80,10 @@ typedef enum {
   FIL_TIPO_TOP10,      // FILEIRA_TOP10    — ranking
   // Fica no fim para nao alterar os numeros ja gravados para os tipos acima.
   FIL_TIPO_DESTAQUE_QUADRADO, // FILEIRA_DESTAQUE_QUADRADO — 4:3 maior
+  // Issue #201: o ranking de numeral grande que a Dinamica so dava ao primeiro
+  // catalogo "Top"/"Em alta" em Automatico, agora escolhivel em qualquer
+  // fileira de catalogo e em qualquer layout. No fim pelo mesmo motivo.
+  FIL_TIPO_RANKING,           // FILEIRA_TOP10_NUM — numeral grande ao lado do cartaz
   FIL_TIPO_N
 } FilTipo;
 

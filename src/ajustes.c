@@ -5498,6 +5498,7 @@ static const struct { float w, h; } AJ_FIL_FORMA[FIL_TIPO_N] = {
   { 360.0f, 203.0f },   // SERVICO
   { 212.0f, 320.0f },   // TOP10
   { NV_DESTAQUE_QUADRADO_W, NV_DESTAQUE_QUADRADO_H }, // DESTAQUE 4:3
+  { 212.0f, 322.0f },   // RANKING  — cartaz NV_CARD_W x NV_CARD_H, numeral no vao
 };
 
 // Uma frase por forma. Diz o que a forma E e para que serve, nao como se chama.
@@ -5507,7 +5508,8 @@ static const char *aj_fil_forma_ajuda(int t) {
     case FIL_TIPO_DESTAQUE: return i18n("Arte deitada panorâmica 16:9, como a faixa Destaques.");
     case FIL_TIPO_COLECAO:  return i18n("Arte deitada média: cabe mais que a grande e ainda mostra o cenário.");
     case FIL_TIPO_SERVICO:  return i18n("Arte deitada compacta: a que cabe mais títulos por fileira.");
-    case FIL_TIPO_TOP10:    return i18n("Cartaz com o número do ranking ao lado, como no Top 10.");
+    case FIL_TIPO_TOP10:    return i18n("Os cartazes empilhados num card só; OK abre a fileira com o número do ranking sobre cada cartaz.");
+    case FIL_TIPO_RANKING:  return i18n("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.");
     case FIL_TIPO_DESTAQUE_QUADRADO:
       return i18n("Arte maior em 4:3: recorta a capa para preencher todo o card.");
     default:                return i18n("O app escolhe pela fileira: retomada e coleções já têm forma própria.");
@@ -5534,7 +5536,7 @@ static void desenhaForma(float x, float yBase, int tipo, float esc, int aceso,
   }
   gfx_cor(r, raio / h, aceso ? ar : 0.55f, aceso ? ag : 0.57f, aceso ? ab : 0.63f,
           aceso ? 1.0f : 0.55f);
-  if (tipo == FIL_TIPO_TOP10) {
+  if (tipo == FIL_TIPO_TOP10 || tipo == FIL_TIPO_RANKING) {
     // O numeral E a forma: o Top 10 desenha o cartaz deslocado com o numero
     // atras. Sem ele a previa do Top 10 e igual a do cartaz.
     TxtLinha num = txt_linha(TXT_TITULO1, "1", aceso ? 250 : 170,
@@ -5874,7 +5876,7 @@ static void desenhaFileiras(void) {
     // comprida termina a 788px da borda esquerda do cartao. MEDIDO na captura,
     // nao estimado — foi assim que as duas primeiras tentativas sairam por
     // cima do texto.
-    float px = cx + 850.0f, base = cartao.y + AJ_FIL_H - 24.0f;
+    float px = cx + 832.0f, base = cartao.y + AJ_FIL_H - 24.0f;
     float esc = 0.19f;   // 322 (o card mais alto) x 0,19 = 61px
     int t;
     // SO A ESCOLHIDA E NOMEADA. Seis rotulos lado a lado nao cabem sem
@@ -5890,7 +5892,9 @@ static void desenhaFileiras(void) {
           txt_desenhar(rot, x + (w - rot.w) * 0.5f,
                        base - AJ_FIL_FORMA[t].h * esc - rot.h - 6.0f);
         }
-        x += w + 22.0f;
+        // 14 e nao 22: com o Ranking numerado (#201) sao oito formas, e a 22
+        // a ultima saia pela borda direita do cartao (MEDIDO na captura).
+        x += w + 14.0f;
       }
     } else {
       // TAMANHO: a MESMA forma tres vezes, nos tres fatores. O que muda e o

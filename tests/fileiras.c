@@ -155,9 +155,15 @@ int main(void) {
     fil_registrar("collection_formas", "Formas", "", "", 3);
     fil_registrar("addon_movie_formas", "Formas cat", "Addon", "movie", 3);
     n = fil_estilos("addon_movie_formas", tipos, rot, 8);
-    assert(n == 5 && tipos[0] == FIL_TIPO_AUTO && tipos[1] == FIL_TIPO_CARTAZ &&
+    assert(n == 7 && tipos[0] == FIL_TIPO_AUTO && tipos[1] == FIL_TIPO_CARTAZ &&
            tipos[2] == FIL_TIPO_SERVICO && tipos[3] == FIL_TIPO_COLECAO &&
            tipos[4] == FIL_TIPO_DESTAQUE && !strcmp(rot[2], "Paisagem pequena"));
+    // Issue #201: os dois rankings no menu, o numerado (Dinamica) primeiro.
+    assert(tipos[5] == FIL_TIPO_RANKING && tipos[6] == FIL_TIPO_TOP10 &&
+           !strcmp(rot[5], "Ranking numerado"));
+    assert(fil_definir_tipo("addon_movie_formas", FIL_TIPO_RANKING));
+    assert(fil_tipo("addon_movie_formas") == FIL_TIPO_RANKING);
+    assert(!fil_definir_tipo("collection_formas", FIL_TIPO_RANKING));   // colecao nao
     n = fil_estilos("collection_formas", tipos, rot, 8);
     assert(n == 4 && tipos[1] == FIL_TIPO_COLECAO &&
            tipos[2] == FIL_TIPO_DESTAQUE_QUADRADO && tipos[3] == FIL_TIPO_CARTAZ);
