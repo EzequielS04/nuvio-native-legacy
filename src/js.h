@@ -24,6 +24,10 @@ int js_tem(const char *ini, const char *fim, const char *chave);
 int js_texto(const char *ini, const char *fim, const char *chave,
              char *dst, size_t tam);
 
+// O mesmo decodificador para uma string JSON ja na mao: `p` aponta para a aspa
+// de abertura (elemento de array, sem chave para js_texto achar).
+int js_cadeia(const char *p, char *dst, size_t tam);
+
 // Numero de "chave". Exige que o caractere apos a chave seja digito/sinal, o
 // que evita casar com um OBJETO de mesmo nome — o caso real e
 // {"currentTime":{"currentTime":8580}}, onde a primeira ocorrencia da 0.

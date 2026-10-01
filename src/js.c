@@ -139,6 +139,13 @@ static int lerTextoEm(const char *p, const char *fim, char *dst, size_t tam) {
   return k > 0;
 }
 
+// Elemento de texto que ja se tem na mao (p na aspa de abertura), sem chave
+// para procurar: "genre":["Not\u00edcias"]. Mesmo decodificador do js_texto.
+int js_cadeia(const char *p, char *dst, size_t tam) {
+  if (!p || tam == 0) return 0;
+  return lerTextoEm(p, p + strlen(p), dst, tam);
+}
+
 int js_texto(const char *ini, const char *fim, const char *chave,
              char *dst, size_t tam) {
   const char *p;
