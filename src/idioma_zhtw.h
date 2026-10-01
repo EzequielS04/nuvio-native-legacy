@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "詢問伺服器是否有回應以及執行的版本。即使 P2P 已關閉也能使用，方便你在開啟前檢查位址。"),
   T("Pergunta as fontes de novo a todos os addons.", "重新向所有附加元件詢問片源。"),
   T("Perguntando as fontes a cada add-on", "正在向每個附加元件詢問片源"),
+  T("Permita instalar apps do Nuvio e tente de novo", "請允許 Nuvio 安裝應用程式，然後重試"),
   T("Personalizar", "自訂"),
   T("Personalize as telas de títulos e episódios.", "自訂作品頁和集數畫面。"),
   T("Peru", "秘魯"),

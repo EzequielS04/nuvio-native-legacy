@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Megkérdezi a szervert, válaszol-e, és melyik verziót futtatja. P2P kikapcsolva is működik, hogy bekapcsolás előtt ellenőrizhesd a címet."),
   T("Pergunta as fontes de novo a todos os addons.", "Újra megkérdez minden bővítményt a forrásokról."),
   T("Perguntando as fontes a cada add-on", "Minden bővítmény megkérdezése a forrásokról"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Engedélyezze a Nuviónak az alkalmazások telepítését, majd próbálja újra"),
   T("Personalizar", "Testreszabás"),
   T("Personalize as telas de títulos e episódios.", "Szabd testre a cím- és epizódképernyőket."),
   T("Peru", "Peru"),

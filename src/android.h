@@ -12,5 +12,9 @@ void android_iniciar(void);
 // tem o tamanho da superficie, nao o pedido. Usado pelo ajuste 4K. Devolve 1
 // se a superficie veio nesse tamanho.
 int android_pedir_superficie(int w, int h);
+// Entrega o APK em `caminho` ao instalador do sistema (NuvioActivity.instalarApk,
+// FileProvider). 1 = instalador aberto, 2 = falta a permissao de instalar apps
+// desta fonte (a tela dela foi aberta), 0 = falhou. Chamar do fio do SDL.
+int android_instalar_apk(const char *caminho);
 #endif
 #endif

@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Sunucunun yanıt verip vermediğini ve hangi sürümü çalıştırdığını sorar. P2P kapalıyken de çalışır; açmadan önce adresi kontrol etmek için."),
   T("Pergunta as fontes de novo a todos os addons.", "Her eklentiden kaynakları yeniden ister."),
   T("Perguntando as fontes a cada add-on", "Her eklentiden kaynaklar isteniyor"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Nuvio'nun uygulama yüklemesine izin verin ve tekrar deneyin"),
   T("Personalizar", "Özelleştir"),
   T("Personalize as telas de títulos e episódios.", "Başlık ve bölüm ekranlarını özelleştir."),
   T("Peru", "Peru"),

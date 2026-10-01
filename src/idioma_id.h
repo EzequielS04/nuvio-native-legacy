@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Menanyakan ke server apakah ia merespons dan versi apa yang berjalan. Berfungsi walau P2P mati, untuk memeriksa alamat sebelum menyalakannya."),
   T("Pergunta as fontes de novo a todos os addons.", "Meminta sumber lagi dari setiap addon."),
   T("Perguntando as fontes a cada add-on", "Meminta sumber dari setiap addon"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Izinkan Nuvio memasang aplikasi, lalu coba lagi"),
   T("Personalizar", "Sesuaikan"),
   T("Personalize as telas de títulos e episódios.", "Sesuaikan layar judul dan episode."),
   T("Peru", "Peru"),

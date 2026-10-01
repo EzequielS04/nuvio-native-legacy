@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Pita server da li odgovara i koju verziju koristi. Radi čak i kad je P2P isključen, da biste proverili adresu pre uključivanja."),
   T("Pergunta as fontes de novo a todos os addons.", "Ponovo traži izvore od svakog dodatka."),
   T("Perguntando as fontes a cada add-on", "Traže se izvori od svakog dodatka"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Dozvolite Nuviju instaliranje aplikacija i pokušajte ponovo"),
   T("Personalizar", "Prilagodi"),
   T("Personalize as telas de títulos e episódios.", "Prilagodite ekrane naslova i epizoda."),
   T("Peru", "Peru"),

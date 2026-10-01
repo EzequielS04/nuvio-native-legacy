@@ -26,6 +26,10 @@
 #include "layout.h"
 #include "idioma.h"
 #include "ajustes.h"
+#ifdef NV_ANDROID
+#include "android.h"
+#include <sys/stat.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,7 +52,8 @@
 // ipkHash da LG. Nunca carregamos em processo aqui: so encenamos; quem carrega
 // e o host, no proximo arranque, e so depois de reconferir o hash do arquivo
 // encenado. Em QUALQUER duvida o host apaga o staging e volta para a empacotada.
-#ifdef NV_TPK
+// No Android o mesmo SHA-256 confere o APK baixado (auto-atualizacao do .apk).
+#if defined(NV_TPK) || defined(NV_ANDROID)
 #include <stdint.h>
 #include <unistd.h>
 #include <strings.h>
@@ -161,6 +166,15 @@ static char ipkHash[80];          // sha256 em hex; vazio quando a release nao d
 static char soUrl[512];
 static char soHash[80];
 static char soVer[32];
+#endif
+#ifdef NV_ANDROID
+// Anexo "Nuvio-<versao>-android.apk" da release (auto-atualizacao no Android).
+// apkPerm: o sistema pediu a permissao de instalar apps desta fonte; o cartao
+// avisa e deixa tentar de novo.
+static char apkUrl[512];
+static char apkHash[80];
+static char apkVer[32];
+static int  apkPerm;
 #endif
 
 // INSTALAR DE DENTRO DO APP so existe no webOS, e a razao e de plataforma:
@@ -352,6 +366,48 @@ static int acharIpk(const char *corpo, char *dst, size_t tam,
   return 0;
 }
 
+#if defined(NV_TPK) || defined(NV_ANDROID)
+// Anexo cujo nome termina em `sufixo` (casamento EXATO, sem o AT_SUFIXO2 do
+// .ipk) e o sha256 do MESMO anexo (hashAntesDe). Sem digest ignora o anexo: sem
+// hash nao ha como confiar em codigo remoto. Serve ao .so do .tpk e ao .apk.
+static int acharAnexo(const char *corpo, char *dst, size_t tam, char *hash, size_t tamHash,
+                      const char *sufixo) {
+  const char *p = corpo;
+  const char *chave = "\"browser_download_url\":";
+  size_t k = strlen(sufixo);
+  dst[0] = 0;
+  if (hash && tamHash) hash[0] = 0;
+  while ((p = strstr(p, chave)) != NULL) {
+    const char *ini;
+    size_t n;
+    p += strlen(chave);
+    while (*p == ' ') p++;
+    if (*p != '"') continue;
+    ini = ++p;
+    while (*p && *p != '"') p++;
+    n = (size_t)(p - ini);
+    if (n > k && n < tam && !strncmp(ini + n - k, sufixo, k)) {
+      char h[80] = "";
+      hashAntesDe(corpo, ini, h, sizeof h);
+      if (!h[0]) continue;                 // sem digest: nao confiar
+      memcpy(dst, ini, n); dst[n] = 0;
+      snprintf(hash, tamHash, "%s", h);
+      return 1;
+    }
+  }
+  return 0;
+}
+#endif
+
+#ifdef NV_ANDROID
+// Contrato do anexo: "Nuvio-<versao>-android.apk". "-android-debug.apk" e
+// "-android-preview.N.apk" NAO terminam em "-android.apk", entao nao casam.
+#define AT_APK_SUFIXO "-android.apk"
+static int acharApk(const char *corpo, char *dst, size_t tam, char *hash, size_t tamHash) {
+  return acharAnexo(corpo, dst, tam, hash, tamHash, AT_APK_SUFIXO);
+}
+#endif
+
 #ifdef NV_TPK
 // O anexo da libnuvio.so DESTA ABI e o seu sha256. Uma release do .tpk anexa UMA
 // libnuvio.so (a build de tpk.sh e unica, ARMv7 softfp, compartilhada pelos
@@ -367,30 +423,7 @@ static int acharIpk(const char *corpo, char *dst, size_t tam,
 #define AT_SO_SUFIXO "-tpk-arm.so"
 #endif
 static int acharSo(const char *corpo, char *dst, size_t tam, char *hash, size_t tamHash) {
-  const char *p = corpo;
-  const char *chave = "\"browser_download_url\":";
-  size_t k = strlen(AT_SO_SUFIXO);
-  dst[0] = 0;
-  if (hash && tamHash) hash[0] = 0;
-  while ((p = strstr(p, chave)) != NULL) {
-    const char *ini;
-    size_t n;
-    p += strlen(chave);
-    while (*p == ' ') p++;
-    if (*p != '"') continue;
-    ini = ++p;
-    while (*p && *p != '"') p++;
-    n = (size_t)(p - ini);
-    if (n > k && n < tam && !strncmp(ini + n - k, AT_SO_SUFIXO, k)) {
-      char h[80] = "";
-      hashAntesDe(corpo, ini, h, sizeof h);
-      if (!h[0]) continue;                 // sem digest: nao confiar
-      memcpy(dst, ini, n); dst[n] = 0;
-      snprintf(hash, tamHash, "%s", h);
-      return 1;
-    }
-  }
-  return 0;
+  return acharAnexo(corpo, dst, tam, hash, tamHash, AT_SO_SUFIXO);
 }
 #endif
 
@@ -454,6 +487,9 @@ static int fioConsulta(void *arg) {
     // Anexo libnuvio.so para a auto-atualizacao do .tpk (staging por hash).
     acharSo(corpo, soUrl, sizeof soUrl, soHash, sizeof soHash);
 #endif
+#ifdef NV_ANDROID
+    acharApk(corpo, apkUrl, sizeof apkUrl, apkHash, sizeof apkHash);
+#endif
     free(corpo);
   }
   SDL_LockMutex(mtx);
@@ -466,6 +502,9 @@ static int fioConsulta(void *arg) {
       // So a versao mais nova entra: soVer marca a .so encenada e o host a
       // compara com a versao empacotada antes de aplicar.
       snprintf(soVer, sizeof soVer, "%s", v);
+#endif
+#ifdef NV_ANDROID
+      snprintf(apkVer, sizeof apkVer, "%s", v);
 #endif
     }
     printf("[atualizacao] instalada %s, no GitHub %s%s\n", NV_VERSAO, v,
@@ -661,8 +700,104 @@ static int podeAtualizarTpk(void) {
 static int podeAtualizarTpk(void) { return 0; }
 #endif
 
+#ifdef NV_ANDROID
+// BAIXA O APK para <dados>/atualizacao/Nuvio-<v>.apk, CONFERE o sha256 contra o
+// digest da release (HTTPS) e entrega ao instalador do sistema (NuvioActivity).
+// Hash errado ou download parcial: apaga e nao instala nada. Se o arquivo ja
+// esta la com o hash certo (a pessoa foi conceder a permissao e voltou), nao
+// baixa de novo. Termina em AT_PARADO quando o instalador abriu (se ela cancelar,
+// o cartao deixa tentar outra vez; se confirmar, o sistema mata o app).
+static void apkFalhou(void) {
+  SDL_LockMutex(mtx); estado = AT_FALHOU; SDL_UnlockMutex(mtx);
+}
+
+static int fioInstalarApk(void *arg) {
+  char dir[600] = "", nome[96], rel[128], arq[600] = "", hex[65] = "", ver[32], hash[80];
+  char *buf = NULL;
+  long n = 0;
+  int ok = 0, r;
+  FILE *f;
+  (void)arg;
+  SDL_LockMutex(mtx);
+  snprintf(ver, sizeof ver, "%s", apkVer);
+  snprintf(hash, sizeof hash, "%s", apkHash);
+  apkPerm = 0;
+  SDL_UnlockMutex(mtx);
+  snprintf(nome, sizeof nome, "Nuvio-%s.apk", ver);
+  snprintf(rel, sizeof rel, "atualizacao/%s", nome);
+  if (!dados_caminho(dir, sizeof dir, "atualizacao") || !dados_caminho(arq, sizeof arq, rel)) {
+    printf("[atualizacao] sem pasta de dados para o APK\n"); fflush(stdout);
+    apkFalhou(); return 0;
+  }
+  mkdir(dir, 0755);
+  // Ja baixado e conferido numa tentativa anterior?
+  f = fopen(arq, "rb");
+  if (f) {
+    long t;
+    fseek(f, 0, SEEK_END); t = ftell(f); fseek(f, 0, SEEK_SET);
+    if (t > 0 && (buf = malloc((size_t)t)) != NULL) {
+      if (fread(buf, 1, (size_t)t, f) == (size_t)t) {
+        at_sha256_hex((const unsigned char *)buf, (size_t)t, hex);
+        ok = strcasecmp(hex, hash) == 0;
+      }
+      free(buf); buf = NULL;
+    }
+    fclose(f);
+    if (!ok) unlink(arq);
+  }
+  if (!ok) {
+    printf("[atualizacao] baixando o APK (%s)\n", apkUrl); fflush(stdout);
+    buf = rede_baixar_bin(apkUrl, 600, &n);
+    if (!buf || n <= 0) {
+      printf("[atualizacao] download do APK falhou\n"); fflush(stdout);
+      free(buf); apkFalhou(); return 0;
+    }
+    SDL_LockMutex(mtx); snprintf(instPasso, sizeof instPasso, "Verificando"); SDL_UnlockMutex(mtx);
+    at_sha256_hex((const unsigned char *)buf, (size_t)n, hex);
+    if (strcasecmp(hex, hash) != 0) {
+      printf("[atualizacao] sha256 do APK NAO confere: baixado %.12s... esperado %.12s...\n", hex, hash);
+      fflush(stdout);
+      free(buf); apkFalhou(); return 0;
+    }
+    f = fopen(arq, "wb");
+    ok = 0;
+    if (f) {
+      ok = fwrite(buf, 1, (size_t)n, f) == (size_t)n;
+      if (fflush(f) != 0) ok = 0;
+      fclose(f);
+    }
+    free(buf);
+    if (!ok) {
+      printf("[atualizacao] nao consegui gravar %s\n", arq); fflush(stdout);
+      unlink(arq); apkFalhou(); return 0;
+    }
+  }
+  SDL_LockMutex(mtx); snprintf(instPasso, sizeof instPasso, "Install"); SDL_UnlockMutex(mtx);
+  // A troca de pacote mata o processo sem saida limpa: grava a despedida "fim"
+  // ANTES, para o modo seguro nao contar a atualizacao como queda. A Activity
+  // a desfaz se o instalador for cancelado e o app continuar vivo.
+  dados_despedida_fim();
+  r = android_instalar_apk(arq);
+  SDL_LockMutex(mtx);
+  if (r == 0) estado = AT_FALHOU;
+  else { estado = AT_PARADO; apkPerm = (r == 2); }
+  SDL_UnlockMutex(mtx);
+  if (r == 2) {   // so a tela de permissao abriu: nada foi instalado, desfaz a despedida
+    char d[600];
+    if (dados_caminho(d, sizeof d, "despedida.txt")) unlink(d);
+  }
+  return 0;
+}
+
+static int podeAtualizarApk(void) {
+  return apkUrl[0] && apkHash[0] && apkVer[0] && estado == AT_PARADO;
+}
+#else
+static int podeAtualizarApk(void) { return 0; }
+#endif
+
 // Ha um botao de acao (instalar .ipk na LG, ou encenar .so nova no .tpk)?
-static int podeAgir(void) { return podeInstalar() || podeAtualizarTpk(); }
+static int podeAgir(void) { return podeInstalar() || podeAtualizarTpk() || podeAtualizarApk(); }
 
 // Quanto da para rolar: o que sobra das notas alem da janela. 0 = cabe tudo.
 static float rolarMax(void) {
@@ -765,6 +900,16 @@ void atualizacao_evento(const SDL_Event *e) {
       SDL_Thread *t;
       SDL_LockMutex(mtx); estado = AT_INSTALANDO; SDL_UnlockMutex(mtx);
       t = SDL_CreateThread(fioBaixarSo, "nv-baixar-so", NULL);
+      if (t) { SDL_DetachThread(t); fioInst = t; }
+      else { SDL_LockMutex(mtx); estado = AT_FALHOU; SDL_UnlockMutex(mtx); }
+      return;
+    }
+#endif
+#ifdef NV_ANDROID
+    if (podeAtualizarApk() && foco == 0) {
+      SDL_Thread *t;
+      SDL_LockMutex(mtx); estado = AT_INSTALANDO; instPct = 0.0f; instPasso[0] = 0; SDL_UnlockMutex(mtx);
+      t = SDL_CreateThread(fioInstalarApk, "nv-instalar-apk", NULL);
       if (t) { SDL_DetachThread(t); fioInst = t; }
       else { SDL_LockMutex(mtx); estado = AT_FALHOU; SDL_UnlockMutex(mtx); }
       return;
@@ -925,6 +1070,13 @@ void atualizacao_desenhar(Uint32 agora) {
     int i;
     rot[0] = i18n("Atualizar agora");
     rot[1] = i18n("Depois");
+#ifdef NV_ANDROID
+    if (apkPerm) {
+      TxtLinha t = txt_linha(TXT_CALLOUT, i18n("Permita instalar apps do Nuvio e tente de novo"),
+                             232, 236, 246, 255);
+      txt_desenhar_alpha(t, x, y - 58.0f, a);
+    }
+#endif
     // A PILULA DA TABELA (botoes.h): "Atualizar agora" e o primario (72 px,
     // cheio), "Depois" o secundario (56 px, contorno), alinhados pela base.
     for (i = 0; i < 2; i++) {

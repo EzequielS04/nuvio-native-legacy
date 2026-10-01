@@ -1755,6 +1755,7 @@
   { "Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Asks the server whether it answers and which version it runs. Works even with P2P off, to check the address before turning it on." },
   { "Pergunta as fontes de novo a todos os addons.", "Asks every addon for sources again." },
   { "Perguntando as fontes a cada add-on", "Asking each add-on for sources" },
+  { "Permita instalar apps do Nuvio e tente de novo", "Allow installing apps from Nuvio, then try again" },
   { "Personalizar", "Customise" },
   { "Personalize as telas de títulos e episódios.", "Customise the title and episode screens." },
   { "Peru", "Peru" },

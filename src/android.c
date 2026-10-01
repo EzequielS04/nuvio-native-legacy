@@ -112,6 +112,26 @@ int android_pedir_superficie(int w, int h) {
   return ok;
 }
 
+int android_instalar_apk(const char *caminho) {
+  JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+  jobject act = (jobject)SDL_AndroidGetActivity();
+  jclass cls;
+  jmethodID m;
+  jstring js;
+  int r = 0;
+  if (!env || !act || !caminho) return 0;
+  cls = (*env)->GetObjectClass(env, act);
+  m = cls ? (*env)->GetMethodID(env, cls, "instalarApk", "(Ljava/lang/String;)I") : NULL;
+  js = (*env)->NewStringUTF(env, caminho);
+  if (m && js) r = (int)(*env)->CallIntMethod(env, act, m, js);
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); r = 0; }
+  if (js) (*env)->DeleteLocalRef(env, js);
+  if (cls) (*env)->DeleteLocalRef(env, cls);
+  (*env)->DeleteLocalRef(env, act);
+  printf("[atualizacao] android: instalador %s\n", r == 1 ? "aberto" : r == 2 ? "pede permissao" : "falhou");
+  fflush(stdout);
+  return r;
+}
 
 // PILHA DOS FIOS. O bionic da ~1 MB a um pthread criado sem atributo; o glibc
 // da LG e do Tizen da 8 MB, e o nucleo foi escrito contando com isso (vetores

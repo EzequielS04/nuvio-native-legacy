@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "サーバーが応答するかどうかと、そのバージョンを確認します。P2P がオフでも使えるので、オンにする前にアドレスを確認できます。"),
   T("Pergunta as fontes de novo a todos os addons.", "すべてのアドオンにもう一度ソースを問い合わせます。"),
   T("Perguntando as fontes a cada add-on", "各アドオンにソースを問い合わせています"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Nuvio にアプリのインストールを許可してから、もう一度お試しください"),
   T("Personalizar", "カスタマイズ"),
   T("Personalize as telas de títulos e episódios.", "作品ページとエピソード画面をカスタマイズします。"),
   T("Peru", "ペルー"),

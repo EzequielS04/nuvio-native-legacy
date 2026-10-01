@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Spørger serveren, om den svarer, og hvilken version den kører. Virker selv med P2P slået fra, så du kan tjekke adressen, før du tænder det."),
   T("Pergunta as fontes de novo a todos os addons.", "Spørger alle add-ons om kilder igen."),
   T("Perguntando as fontes a cada add-on", "Spørger hvert add-on om kilder"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Tillad, at Nuvio installerer apps, og prøv igen"),
   T("Personalizar", "Tilpas"),
   T("Personalize as telas de títulos e episódios.", "Tilpas skærmene for titler og afsnit."),
   T("Peru", "Peru"),

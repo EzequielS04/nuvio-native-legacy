@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Hỏi máy chủ xem nó có phản hồi không và chạy phiên bản nào. Hoạt động cả khi P2P tắt, để kiểm tra địa chỉ trước khi bật."),
   T("Pergunta as fontes de novo a todos os addons.", "Yêu cầu lại nguồn từ mọi tiện ích."),
   T("Perguntando as fontes a cada add-on", "Đang yêu cầu nguồn từ từng tiện ích"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Cho phép Nuvio cài đặt ứng dụng rồi thử lại"),
   T("Personalizar", "Tùy chỉnh"),
   T("Personalize as telas de títulos e episódios.", "Tùy chỉnh các màn hình tựa phim và tập."),
   T("Peru", "Peru"),

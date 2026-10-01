@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Ρωτάει τον διακομιστή αν απαντά και ποια έκδοση τρέχει. Λειτουργεί ακόμα και με το P2P απενεργοποιημένο, για να ελέγξεις τη διεύθυνση πριν το ενεργοποιήσεις."),
   T("Pergunta as fontes de novo a todos os addons.", "Ζητά ξανά πηγές από κάθε πρόσθετο."),
   T("Perguntando as fontes a cada add-on", "Αίτημα πηγών από κάθε πρόσθετο"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Επιτρέψτε στο Nuvio να εγκαθιστά εφαρμογές και δοκιμάστε ξανά"),
   T("Personalizar", "Προσαρμογή"),
   T("Personalize as telas de títulos e episódios.", "Προσάρμοσε τις οθόνες του τίτλου και των επεισοδίων."),
   T("Peru", "Περού"),

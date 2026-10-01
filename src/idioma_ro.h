@@ -1755,6 +1755,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Întreabă serverul dacă răspunde și ce versiune rulează. Funcționează chiar și cu P2P oprit, ca să verifici adresa înainte de a-l porni."),
   T("Pergunta as fontes de novo a todos os addons.", "Cere din nou surse tuturor addon-urilor."),
   T("Perguntando as fontes a cada add-on", "Se cer sursele fiecărui addon"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Permite instalarea de aplicații din Nuvio și încearcă din nou"),
   T("Personalizar", "Personalizează"),
   T("Personalize as telas de títulos e episódios.", "Personalizează ecranele titlurilor și ale episoadelor."),
   T("Peru", "Peru"),

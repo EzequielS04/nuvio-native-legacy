@@ -489,8 +489,11 @@ object NvPlayer {
             initializedTimestampMs: Long, initializationDurationMs: Long
         ) {
             if (minha != sessao) return
-            // DV so conta com decoder DV de verdade (OMX.dolby.* / c2.dolby.*).
-            decoderDv = decoderName.lowercase().contains("dolby")
+            // DV so conta com decoder DV de verdade: OMX.dolby.* / c2.dolby.* e,
+            // na MediaTek, c2.mtk.dvhe.* / c2.mtk.dvav.* (TCL Smart TV Pro: o
+            // painel engatou Dolby Vision e o selo dizia HDR10, 30/09/2026).
+            val n = decoderName.lowercase()
+            decoderDv = n.contains("dolby") || Regex("""\.dv(he|h1|av|a1)""").containsMatchIn(n)
             player?.let { publicarHdr(it.currentTracks) }
         }
     }

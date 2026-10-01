@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Opýta sa servera, či odpovedá a akú verziu používa. Funguje aj pri vypnutom P2P, aby ste mohli adresu overiť pred zapnutím."),
   T("Pergunta as fontes de novo a todos os addons.", "Znova sa opýta každého doplnku na zdroje."),
   T("Perguntando as fontes a cada add-on", "Pýtame sa každého doplnku na zdroje"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Povoľte Nuviu inštalovať aplikácie a skúste to znova"),
   T("Personalizar", "Prispôsobiť"),
   T("Personalize as telas de títulos e episódios.", "Prispôsobte obrazovky titulu a epizódy."),
   T("Peru", "Peru"),

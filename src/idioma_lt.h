@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Paklausia serverio, ar jis atsako ir kokią versiją naudoja. Veikia net išjungus P2P, kad galėtumėte patikrinti adresą prieš įjungdami."),
   T("Pergunta as fontes de novo a todos os addons.", "Dar kartą prašo šaltinių iš kiekvieno papildinio."),
   T("Perguntando as fontes a cada add-on", "Prašoma šaltinių iš kiekvieno papildinio"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Leiskite Nuvio diegti programas ir bandykite dar kartą"),
   T("Personalizar", "Tinkinti"),
   T("Personalize as telas de títulos e episódios.", "Tinkinkite pavadinimo ir epizodų ekranus."),
   T("Peru", "Peru"),

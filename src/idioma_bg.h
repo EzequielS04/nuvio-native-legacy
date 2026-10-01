@@ -1756,6 +1756,7 @@
   T("Pergunta ao servidor se ele responde e qual a versão. Funciona mesmo com o P2P desligado, para conferir o endereço antes de ligar.", "Пита сървъра дали отговаря и коя версия работи. Действа и при изключен P2P, за да проверите адреса, преди да го включите."),
   T("Pergunta as fontes de novo a todos os addons.", "Пита всяка добавка за източници отново."),
   T("Perguntando as fontes a cada add-on", "Питат се всички добавки за източници"),
+  T("Permita instalar apps do Nuvio e tente de novo", "Разрешете на Nuvio да инсталира приложения и опитайте отново"),
   T("Personalizar", "Персонализирай"),
   T("Personalize as telas de títulos e episódios.", "Персонализирайте екраните на заглавието и епизодите."),
   T("Peru", "Перу"),

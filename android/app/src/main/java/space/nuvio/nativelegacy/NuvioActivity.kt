@@ -1,14 +1,18 @@
 package space.nuvio.nativelegacy
 
+import android.content.Intent
 import android.graphics.PixelFormat
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
+import android.provider.Settings
 import android.system.Os
 import android.view.KeyEvent
 import android.view.SurfaceHolder
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.core.content.FileProvider
 import org.libsdl.app.SDLActivity
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -70,6 +74,36 @@ class NuvioActivity : SDLActivity() {
     // nao foi queda, e o modo seguro nao desfaz ajustes por causa dela.
     private fun despedida() = File(filesDir, "dados/despedida.txt")
 
+    private var instalando = false
+
+    // Chamado pelo C (android_instalar_apk, atualizacao.c), do fio do SDL.
+    // 1 = instalador aberto, 2 = falta a permissao "instalar apps desta fonte"
+    // (abre a tela dela), 0 = falhou. Nao bloqueia: o resultado e do sistema.
+    fun instalarApk(caminho: String): Int {
+        return try {
+            val arq = File(caminho)
+            if (!arq.isFile) return 0
+            if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+                return 2
+            }
+            val uri = FileProvider.getUriForFile(this, "space.nuvio.nativelegacy.atualizacao", arq)
+            instalando = true
+            startActivity(
+                Intent(Intent.ACTION_VIEW)
+                    .setDataAndType(uri, "application/vnd.android.package-archive")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            1
+        } catch (e: Exception) {
+            instalando = false
+            0
+        }
+    }
+
     // So apaga ao VOLTAR com o processo vivo: no primeiro onStart quem le (e
     // apaga) a despedida da sessao anterior e o C, no arranque.
     private var jaComecou = false
@@ -78,7 +112,14 @@ class NuvioActivity : SDLActivity() {
         super.onStart()
         if (jaComecou) {
             val f = despedida()
-            if (f.exists() && f.readText().startsWith("oculto")) f.delete()
+            if (f.exists()) {
+                val t = f.readText()
+                // "fim" so sobra aqui se o instalador foi cancelado (o C a grava
+                // antes de entregar o APK): desfaz, senao uma queda futura
+                // pareceria saida limpa.
+                if (t.startsWith("oculto") || (instalando && t.startsWith("fim"))) f.delete()
+            }
+            instalando = false
         }
         jaComecou = true
     }
