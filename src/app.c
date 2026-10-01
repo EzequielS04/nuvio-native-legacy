@@ -30,6 +30,8 @@
 #include "arteescolha.h"
 #include "vertudo.h"
 #include "guia.h"
+#include "livetvdiag.h"
+#include "livetv_regras.h"
 #include "guialembrete.h"   /* aviso do lembrete de programa do guia */
 #include "epg.h"
 #include "posplay.h"
@@ -81,6 +83,9 @@
 #include "streams.h"
 #include "stalker.h"
 #include "xtream.h"
+#include "rede.h"
+#include "ts_sonda.h"
+#include <unistd.h>
 #include "fontepref.h"
 #include "video.h"
 #include "addons.h"
@@ -453,9 +458,11 @@ static void idDoAlvo(const CatItem *ci, char *dst, size_t n) {
 
 // A tela de Diagnostico foi aberta pelo cartao da 1.4.2, nao por Ajustes.
 static int diagDaHome;
+static int ltdDoGuia;
 
 static void trocarTela(Tela nova) {
   if (nova == tela) return;
+  if (tela == TELA_LIVETV_DIAG) livetvdiag_encerrar();
   tela = nova;
   // Cada tela zera o proprio estado ao ser aberta: voltar para a busca com o
   // texto de duas navegacoes atras seria lixo, nao memoria util.
@@ -468,6 +475,7 @@ static void trocarTela(Tela nova) {
     case TELA_PERFIL:     perfil_abrir(); pedirPerfil(); break;
     case TELA_AJUSTES:    ajustes_iniciar();    break;
     case TELA_DIAGNOSTICO: diagnostico_iniciar(); break;
+    case TELA_LIVETV_DIAG: livetvdiag_iniciar(); break;
     default: break;
   }
 }
@@ -557,21 +565,45 @@ static int montarCanalStalker(const char *id, const char *url) {
 // de uma para a outra e o watchdog de canal de sempre (fonte morta ->
 // proxima), sem caminho novo. Um painel que nao gera HLS para um canal
 // responde "Media Not Found" no .m3u8 e toca no .ts.
+// AS FONTES DE UM CANAL XTREAM: o mesmo canal em cada formato que a conta
+// aceita (xtream_formatos) e, com a Live TV > Resolucao principal, as OUTRAS
+// RESOLUCOES do mesmo canal na lista ("CINEMAX FHD" / "CINEMAX HD", ver
+// guia_variantes). A da resolucao escolhida vai primeiro; se nao abrir, o
+// watchdog passa para a seguinte. Em Automatica o canal escolhido vai primeiro
+// e as variantes ficam de reserva.
+#define XT_VARIANTES_MAX 3
 static int resolverCanalXtream(void) {
-  Stream s[2];
+  static Stream s[2 * XT_VARIANTES_MAX];
+  GuiaVariante v[XT_VARIANTES_MAX], ord[XT_VARIANTES_MAX];
   const char *ext[2];
-  int k = xtream_formatos(ext), i, n = 0;
+  int k = xtream_formatos(ext), i, j, n = 0, nv, no = 0;
+  int alvo = nv_res_opcao_altura(ajustes_livetv_resolucao());
   memset(s, 0, sizeof s);
-  for (i = 0; i < k && n < 2; i++) {
-    char url[4096];
-    if (!xtream_url_formato(player_id_canal(), ext[i], url, sizeof url)) continue;
-    snprintf(s[n].url, sizeof s[n].url, "%s", url);
-    snprintf(s[n].rotulo, sizeof s[n].rotulo, "Xtream (%s)", !strcmp(ext[i], "ts") ? "TS" : "HLS");
-    snprintf(s[n].provedor, sizeof s[n].provedor, "%s", "xtream");
-    s[n].fileIdx = -1;
-    n++;
+  nv = guia_variantes(player_id_canal(), v, XT_VARIANTES_MAX);
+  if (nv < 1) {
+    snprintf(v[0].id, sizeof v[0].id, "%s", player_id_canal());
+    v[0].nome[0] = 0; v[0].altura = 0; nv = 1;
   }
+  for (j = 0; j < nv; j++) if (nv_res_preferida(v[j].altura, alvo)) ord[no++] = v[j];
+  for (j = 0; j < nv; j++) if (!nv_res_preferida(v[j].altura, alvo)) ord[no++] = v[j];
+  for (j = 0; j < no; j++)
+    for (i = 0; i < k && n < (int)(sizeof s / sizeof *s); i++) {
+      char url[4096];
+      const char *f = !strcmp(ext[i], "ts") ? "TS" : "HLS";
+      if (!xtream_url_formato(ord[j].id, ext[i], url, sizeof url)) continue;
+      snprintf(s[n].url, sizeof s[n].url, "%s", url);
+      if (strcmp(ord[j].id, player_id_canal()) && ord[j].nome[0])
+        snprintf(s[n].rotulo, sizeof s[n].rotulo, "Xtream (%s) · %s", f, ord[j].nome);
+      else snprintf(s[n].rotulo, sizeof s[n].rotulo, "Xtream (%s)", f);
+      snprintf(s[n].provedor, sizeof s[n].provedor, "%s", "xtream");
+      s[n].altura = ord[j].altura;
+      s[n].fileIdx = -1;
+      n++;
+    }
   if (!n) return -1;
+  if (nv > 1 || alvo)
+    printf("[livetv] xtream: %d variante(s) do canal, %d fonte(s); resolucao principal %dp, primeira %s\n",
+           nv, n, alvo, s[0].rotulo);
   stream_definir_lista(s, n);
   return 0;
 }
@@ -614,6 +646,65 @@ static void erroCanalXtream(void) {
   char t[160], d[200];
   motivoCanalXtream(t, sizeof t, d, sizeof d);
   player_erro_fonte_motivo(t, d);
+}
+// O QUE O PROVEDOR MANDA DE VERDADE (#158). Quando o canal Xtream morre por
+// "dado chegando e decoder mudo" e nao ha outra fonte, o pipeline e fechado e
+// um fio le o comeco do mesmo .ts e a playlist .m3u8 do mesmo canal, e escreve
+// no registro: e TS? que codecs a PMT declara? o SPS e 10 bits? a .m3u8 existe
+// mesmo com allowed_output_formats=ts? Na C4 do pasha o uMS fica 45 s com 36 s
+// de buffer sem nunca dizer o que recebeu (registro 14195), e outro app na
+// mesma TV toca o canal — sem isto nao ha como saber o que muda. So diagnostico:
+// nada aqui decide reproducao. Uma vez por canal; o pipeline fecha antes porque
+// a conta tem 1 tela so (telas=0/1) e uma segunda conexao seria recusada.
+static void *sondarCanalXtreamFio(void *u) {
+  char *id = u, url[4096], fin[4096], r[600];
+  long n = 0;
+  int st = 0, er = 0;
+  char *b;
+  sleep(1);
+  if (xtream_url_formato(id, "ts", url, sizeof url)) {
+    fin[0] = 0;
+    b = rede_baixar_trecho_st(url, 8, 0, 786431, &n, &st, &er, fin, sizeof fin);
+    if (b && n > 0) {
+      TsSonda ts;
+      ts_sondar((const unsigned char *)b, n, &ts);
+      ts_resumo(&ts, r, sizeof r);
+    } else memcpy(r, "-", 2);
+    printf("[xtream] sonda ts: HTTP %d curl=%d %ld B%s | %s\n", st, er, n,
+           fin[0] && strcmp(fin, url) ? " (redirecionado)" : "", r);
+    free(b);
+  }
+  if (xtream_url_formato(id, "m3u8", url, sizeof url)) {
+    int linhas = 0, ts = 0;
+    n = 0; st = 0; er = 0;
+    b = rede_baixar_trecho_st(url, 6, 0, 65535, &n, &st, &er, NULL, 0);
+    if (b && n > 0) {
+      const char *q;
+      for (q = b; q && *q; q = strchr(q, '\n')) {
+        if (*q == '\n') q++;
+        if (!*q) break;
+        if (*q != '#') { linhas++; if (strstr(q, ".ts")) ts++; }
+      }
+    }
+    printf("[xtream] sonda m3u8: HTTP %d curl=%d %ld B, %s, %d entrada(s) (%d .ts)\n", st, er, n,
+           b && n >= 7 && !strncmp(b, "#EXTM3U", 7) ? "comeca com #EXTM3U" : "NAO e playlist",
+           linhas, ts);
+    free(b);
+  }
+  fflush(stdout);
+  free(id);
+  return NULL;
+}
+static void sondarCanalXtream(const char *id) {
+  static char ultimo[80];
+  pthread_t t;
+  char *c;
+  if (!id || !id[0] || !strcmp(ultimo, id)) return;
+  snprintf(ultimo, sizeof ultimo, "%s", id);
+  c = strdup(id);
+  if (!c) return;
+  if (pthread_create(&t, NULL, sondarCanalXtreamFio, c) == 0) pthread_detach(t);
+  else free(c);
 }
 // No PREVIEW do guia a miniatura morre quieta (ver o watchdog); para o Xtream
 // sai ao menos a frase curta por cima do guia — no registro 6314 a pessoa
@@ -1339,6 +1430,7 @@ void app_evento(const SDL_Event *e) {
     case TELA_ADDONS:     addonsui_evento(e);   break;
     case TELA_AJUSTES:    ajustes_evento(e);    break;
     case TELA_DIAGNOSTICO: diagnostico_evento(e); break;
+    case TELA_LIVETV_DIAG: livetvdiag_evento(e); break;
     default:              home_evento(e);       break;
   }
 
@@ -1900,6 +1992,20 @@ void app_atualizar(float dt, Uint32 agora) {
   // diagnostico): a mesma tela, ja no teste, sem apresentacao nem objetivo. O
   // pedido vai ANTES da troca porque e diagnostico_iniciar quem o le. O Voltar
   // do resultado sai da tela, e diagDaHome = 0 devolve a Ajustes.
+  // DIAGNOSTICO DA LIVE TV: de Ajustes (Conteudo > Live TV) ou do VERDE no
+  // guia. O Voltar devolve a quem abriu.
+  if (tela == TELA_AJUSTES && ajustes_pediu_livetv_diag()) {
+    ltdDoGuia = 0;
+    trocarTela(TELA_LIVETV_DIAG);
+  }
+  if (tela == TELA_GUIA && guia_pediu_livetv_diag()) {
+    ltdDoGuia = 1;
+    trocarTela(TELA_LIVETV_DIAG);
+  }
+  if (tela == TELA_LIVETV_DIAG && livetvdiag_quer_sair()) {
+    trocarTela(ltdDoGuia ? TELA_GUIA : TELA_AJUSTES);
+    menu_definir_destino(ltdDoGuia ? MENU_GUIA : MENU_AJUSTES);
+  }
   if (tela == TELA_AJUSTES && ajustes_pediu_velocidade()) {
     diagDaHome = 0;
     diagnostico_abrir_velocidade();
@@ -2413,11 +2519,19 @@ void app_atualizar(float dt, Uint32 agora) {
     // longo — o uMS que engole 39 s e nao toca em 45 s esta mesmo travado.
     Uint32 desde = SDL_GetTicks() - canalFonteDesde;
     int xt = xtream_e_id(player_id_canal());
-    int semDecoder = xt && player_carregando() && desde > CANAL_SEM_DECODER_MS &&
+    // ESPERA DE AJUSTES (Live TV > Espera para abrir o canal, ou o "Aplicar"
+    // do diagnostico da Live TV): 25 ou 45 s no lugar dos 15 s do Xtream sem
+    // decoder e dos 25 s da fonte viva sem dado. O prazo curto da fonte MUDA
+    // (4 s) fica: ela ja provou que nao responde.
+    Uint32 espera = ajustes_livetv_espera_ms();
+    Uint32 semDecMs = espera ? espera : CANAL_SEM_DECODER_MS;
+    Uint32 prazo = (espera && canalFontePrazo == CANAL_FONTE_PRAZO_MS) ? espera : canalFontePrazo;
+    Uint32 teto = espera > CANAL_ABRE_TETO_MS ? espera : CANAL_ABRE_TETO_MS;
+    int semDecoder = xt && player_carregando() && desde > semDecMs &&
         video_buffer_fim() > 0.5 && !video_decoder_anunciou();
     int morta = player_fonte_falhou() || video_falhou() ||
-        (player_carregando() && desde > canalFontePrazo && video_buffer_fim() <= 0.5) ||
-        (player_carregando() && desde > CANAL_ABRE_TETO_MS) ||
+        (player_carregando() && desde > prazo && video_buffer_fim() <= 0.5) ||
+        (player_carregando() && desde > teto) ||
         video_bufferando_ms() > CANAL_TRAVA_MS || semDecoder;
     // O formato que tocou vai na frente nos proximos canais (xtream.h).
     { static char tocouUrl[64];
@@ -2497,6 +2611,7 @@ void app_atualizar(float dt, Uint32 agora) {
         if (player_mini_ativo()) { if (xt) avisoCanalXtreamMini(); player_fechar_mini(); }
         else if (xt) erroCanalXtream();
         else player_erro_fonte();
+        if (semDecoder) { video_parar(); sondarCanalXtream(player_id_canal()); }
       }
     }
   }
@@ -2828,6 +2943,7 @@ void app_atualizar(float dt, Uint32 agora) {
     case TELA_PERFIL:     break;
     case TELA_AJUSTES:    ajustes_atualizar(dt, agora);    break;
     case TELA_DIAGNOSTICO: diagnostico_atualizar(dt, agora); break;
+    case TELA_LIVETV_DIAG: livetvdiag_atualizar(dt, agora); break;
     default:              home_atualizar(dt, agora);       break;
   }
   // TRAILER NO DESTAQUE: so com a home na frente de tudo. A lista e a mesma
@@ -2919,6 +3035,7 @@ static void desenharAtrasDoPainel(void *ctx) {
       case TELA_ADDONS:     addonsui_desenhar(agora);   break;
       case TELA_AJUSTES:    ajustes_desenhar(agora);    break;
       case TELA_DIAGNOSTICO: diagnostico_desenhar(agora); break;
+      case TELA_LIVETV_DIAG: livetvdiag_desenhar(agora); break;
       default:              home_desenhar(agora);       break;
     }
   }
@@ -3145,6 +3262,7 @@ void app_encerrar(void) {
   video_encerrar();    // solta o nome LS2 antes do processo sumir (deploy mata sem aviso)
   ajustes_encerrar();
   diagnostico_encerrar();
+  livetvdiag_encerrar();
   biblioteca_encerrar();
   explorar_encerrar();
   perfil_encerrar();

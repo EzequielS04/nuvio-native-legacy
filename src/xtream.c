@@ -1,4 +1,5 @@
 #include "xtream.h"
+int ajustes_livetv_formato(void);  // ajustes.h puxa SDL; o teste do xtream nao
 #include "rede.h"
 #include "js.h"
 #include "dados.h"
@@ -570,6 +571,13 @@ int xtream_formatos(const char *ext[2]) {
   int m = 1, t = 1, n = 0;
   xtream_conta(&c);
   if (c.valido && c.formatosDeclarados && (c.temM3u8 || c.temTs)) { m = c.temM3u8; t = c.temTs; }
+  // ESCOLHA DE AJUSTES (Live TV > Formato do Xtream). Pedir um formato poe ele
+  // na frente MESMO que a conta so declare o outro: muitos paineis servem
+  // .m3u8 com allowed_output_formats=["ts"] (#158, hipotese a medir no
+  // diagnostico da Live TV). O declarado continua como segunda fonte.
+  { int pref = ajustes_livetv_formato();
+    if (pref == 1) { ext[n++] = "m3u8"; if (t) ext[n++] = "ts"; return n; }
+    if (pref == 2) { ext[n++] = "ts"; if (m) ext[n++] = "m3u8"; return n; } }
   if (formatoOk == 1 && t) { ext[n++] = "ts"; if (m) ext[n++] = "m3u8"; }
   else { if (m) ext[n++] = "m3u8"; if (t) ext[n++] = "ts"; }
   return n;

@@ -90,6 +90,13 @@ void guia_adotar_canal(const char *id);
 void guia_preview_rect(float *x, float *y, float *w, float *h);
 // O CatItem do canal de um lembrete (e a origem para a busca de fonte): o do
 // guia quando a lista esta carregada, senao so id + nome guardados. 0 sem id.
+typedef struct { char id[80]; char nome[140]; int altura; } GuiaVariante;
+// O canal e as outras resolucoes dele na lista Xtream (ver guia.c); 0 = nao e Xtream.
+int  guia_variantes(const char *id, GuiaVariante *out, int max);
+// Canais da fileira em foco para o diagnostico da Live TV; `bases` (opcional)
+// recebe o addon de cada um, `grupo` o nome da fileira.
+int  guia_canais_para_teste(GuiaVariante *out, char bases[][600], int max, char *grupo, size_t ng);
+int  guia_pediu_livetv_diag(void);   // VERDE no guia completo
 int  guia_item_do_canal(const char *id, const char *nome, const char *base, CatItem *it);
 
 // --- A CARA DO CANAL FORA DO GUIA (29/09/2026) -------------------------------

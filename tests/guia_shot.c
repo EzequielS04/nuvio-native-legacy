@@ -324,6 +324,11 @@ int main(int argc, char **argv) {
   modoLista = 0; focoLin = 0; focoCol = 0; focoAnelOk = 0;
   snprintf(nome, sizeof nome, "%s-tela.bmp", saida);
   capturaTela(nome, w, 1);
+  // A DICA DE PRIMEIRA VEZ da ESQUERDA (dicaTalvez), por cima da mesma tela.
+  dicaDesde = SDL_GetTicks() - 1000u;
+  snprintf(nome, sizeof nome, "%s-tela-dica.bmp", saida);
+  capturaTela(nome, w, 1);
+  dicaDesde = 0;
 
   // O CARTAO DO LEMBRETE por cima da tela (o que aparece em qualquer lugar
   // do app quando o programa comeca), e o aviso curto de quem ja esta no

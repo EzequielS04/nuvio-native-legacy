@@ -15,6 +15,8 @@ char *dados_ler(const char *nome) { (void)nome; return temDisco ? strdup(disco) 
 int dados_gravar(const char *nome, const char *c) { (void)nome; snprintf(disco, sizeof disco, "%s", c); temDisco = 1; return 1; }
 int dados_apagar(const char *nome) { (void)nome; temDisco = 0; disco[0] = 0; return 1; }
 int perfis_ativo(void) { return 1; }
+static int prefFormato;
+int ajustes_livetv_formato(void) { return prefFormato; }
 
 static const char *respCats =
   "[{\"category_id\":\"5\",\"category_name\":\"Esportes\",\"parent_id\":0},"
@@ -207,8 +209,16 @@ int main(void) {
     xtream_formato_funcionou("http://h/live/u/p/7.m3u8");
     k = xtream_formatos(ext);
     assert(!strcmp(ext[0], "m3u8"));
+    // Ajustes > Formato do Xtream: HLS pedido com a conta declarando so .ts
+    // vem na frente, e o .ts declarado fica de segunda fonte (#158).
+    soTs = 1; xtream_conta_ler(NULL); soTs = 0;
+    prefFormato = 1; k = xtream_formatos(ext);
+    assert(k == 2 && !strcmp(ext[0], "m3u8") && !strcmp(ext[1], "ts"));
+    prefFormato = 2; k = xtream_formatos(ext);
+    assert(k == 1 && !strcmp(ext[0], "ts"));
+    prefFormato = 0;
     xtream_conta_ler(NULL); }
-  puts("ok  formato: allowed_output_formats manda, o que tocou vai na frente");
+  puts("ok  formato: allowed_output_formats manda, o que tocou vai na frente, Ajustes pode pedir HLS");
 
   { XtreamProg pr[8]; int st = 0, k;
     k = xtream_epg_curto("xtream:101", pr, 8, &st);
