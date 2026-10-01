@@ -95,6 +95,8 @@ static void lerTexto(const unsigned char *p, long n, char *dst, size_t tam) {
 #define ID_NAME        0x536EUL
 #define ID_CODECID     0x86UL
 #define ID_FLAGFORCED  0x55AAUL      // FlagForced: faixa so de letreiros/falas estrangeiras
+#define ID_AUDIO       0xE1UL        // Audio (mestre dentro da TrackEntry)
+#define ID_CHANNELS    0x9FUL        // Audio > Channels
 
 // Le os TrackEntry de dentro de um Tracks ja localizado.
 static int lerTracks(const unsigned char *p, long n, MkvFaixa *saida, int max) {
@@ -133,7 +135,23 @@ static int lerTracks(const unsigned char *p, long n, MkvFaixa *saida, int max) {
           }
           else if (fid == ID_NAME)    lerTexto(v, ftam, f.nome,  sizeof f.nome);
           else if (fid == ID_CODECID) lerTexto(v, ftam, f.codec, sizeof f.codec);
-          else if (fid == ID_FLAGFORCED) f.forcado = lerUint(v, ftam) != 0; }
+          else if (fid == ID_FLAGFORCED) f.forcado = lerUint(v, ftam) != 0;
+          // Channels mora um nivel abaixo, em Audio. O .tpk nao tem outra
+          // fonte para "5.1" (o Tizen.Multimedia.Player so da o idioma, #206).
+          else if (fid == ID_AUDIO) {
+            long r = 0;
+            while (r < ftam) {
+              int ai = 0, at = 0;
+              unsigned long aid = lerId(v + r, ftam - r, &ai);
+              long atam;
+              if (!aid) break;
+              atam = lerTam(v + r + ai, ftam - r - ai, &at);
+              if (atam < 0 || r + ai + at + atam > ftam) break;
+              r += ai + at;
+              if (aid == ID_CHANNELS) f.canais = (int)lerUint(v + r, atam);
+              r += atam;
+            }
+          } }
         q += ftam;
       }
       if (f.numero > 0) saida[achou++] = f;
