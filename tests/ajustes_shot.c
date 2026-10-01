@@ -58,6 +58,7 @@ static const char *const AJ_IDS[] = {
 extern int ajustes_teste_focar_opcao(int op);
 extern int ajustes_teste_familia_previa(int op);
 extern void ajustes_teste_fonte_interface(int familia);
+extern void ajustes_teste_tema(int tema, int vidro);
 static int quadrosCaptura = 60;
 
 static void tecla(SDL_Keycode k) {
@@ -151,6 +152,11 @@ int main(int argc, char **argv) {
   fil_remover(12);  // Animes
 
   ajustes_iniciar();
+  // NUVIO_SHOT_TEMA=<indice> (0 branco, 12 Dinamica) e NUVIO_SHOT_VIDRO=1: o
+  // foco no acento claro com e sem vidro (#202).
+  if (getenv("NUVIO_SHOT_TEMA") || getenv("NUVIO_SHOT_VIDRO"))
+    ajustes_teste_tema(getenv("NUVIO_SHOT_TEMA") ? atoi(getenv("NUVIO_SHOT_TEMA")) : -1,
+                       getenv("NUVIO_SHOT_VIDRO") && atoi(getenv("NUVIO_SHOT_VIDRO")));
 
   if (getenv("NUVIO_AJUSTES_OPCOES")) {
     static const char *const FAMILIAS[] = {

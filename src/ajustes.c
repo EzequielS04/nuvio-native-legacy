@@ -80,6 +80,11 @@
 // fica claro seja qual for o realce.
 static int tintaFoco(void) { return ajustes_vidro() || ajustes_acento_tinta(NULL, NULL, NULL) > 0.5f ? 255 : 20; }
 static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foco e clara?
+// PILULA SOLIDA NO ACENTO (coluna de categorias, abas e botoes da folha de
+// fileiras): ela e opaca COM e SEM vidro, entao o atalho do vidro acima nao
+// vale — com acento branco/Dinamica (que nasce branco) e vidro ligado, o texto
+// saia branco sobre branco (#202). Aqui manda so a tinta por contraste.
+#define AJ_TEXTO_SOLIDO  (ajustes_tinta_foco())
 #define AJ_LINHA_H       88.0f
 #define AJ_LINHA_GAP      8.0f
 // Cabecalho da categoria no topo da lista: titulo + subtitulo, o
@@ -5408,8 +5413,8 @@ static void desenhaIndice(void) {
     GfxRect r = { AJ_IDX_X, y, AJ_IDX_W, AJ_IDX_H };
     int atual = (s == secAtual);
     int emFoco = (atual && focoIndice);
-    int c = emFoco ? AJ_TEXTO_ESCURO : (atual ? 240 : 168);
-    float ci = emFoco ? (focoEscuro() ? 0.10f : 1.0f) : (atual ? 0.94f : 0.62f);
+    int c = emFoco ? AJ_TEXTO_SOLIDO : (atual ? 240 : 168);
+    float ci = emFoco ? (AJ_TEXTO_SOLIDO < 128 ? 0.10f : 1.0f) : (atual ? 0.94f : 0.62f);
     GfxRect ic = { AJ_IDX_X + 20.0f, y + (AJ_IDX_H - AJ_IDX_ICONE) * 0.5f,
                    AJ_IDX_ICONE, AJ_IDX_ICONE };
     float tx = ic.x + AJ_IDX_ICONE + 16.0f;
@@ -5590,7 +5595,7 @@ static void desenhaFileiras(void) {
         if (t == 0) snprintf(buf, sizeof buf, i18n("Na Home  %d de %d"), fil_n_na_home(), lim);
         else        snprintf(buf, sizeof buf, i18n("Fora da Home  %d"), fil_n() - fil_n_na_home() - fil_n_fila());
         { int emFoco = (filNaBarra && ativa);
-          int ct = emFoco ? AJ_TEXTO_ESCURO : (ativa ? 255 : 170);
+          int ct = emFoco ? AJ_TEXTO_SOLIDO : (ativa ? 255 : 170);
           l = txt_linha(TXT_CALLOUT, buf, ct, emFoco || ativa ? ct : 173,
                         emFoco || ativa ? ct : 182, 255);
           GfxRect pil = { bx, hy, l.w + 44.0f, bh };
@@ -5803,7 +5808,7 @@ static void desenhaFileiras(void) {
       // Botao em foco: preenchido com a cor de realce, texto escuro, sem anel.
       if (foco) gfx_cor(btn, 26.0f / cada, ar, ag, ab, 1.0f);
       else gfx_cor(btn, 26.0f / cada, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B, 0.30f);
-      { int ct = foco ? AJ_TEXTO_ESCURO : 220;
+      { int ct = foco ? AJ_TEXTO_SOLIDO : 220;
         l = txt_linha(TXT_CALLOUT, rot, ct, ct, ct, 255); }
       txt_desenhar(l, btn.x + (btn.w - l.w) * 0.5f, btn.y + (btn.h - l.h) * 0.5f);
     } }
@@ -7554,6 +7559,12 @@ int ajustes_teste_primeira_nota_titulo(void) { return AJ_NT_IMDB; }
 
 int ajustes_teste_familia_previa(int op) {
   return (int)familiaPreviaOpcao(op);
+}
+
+// As capturas do #202 escolhem tema e vidro sem arquivo de ajustes.
+void ajustes_teste_tema(int tema, int vidro) {
+  if (tema >= 0 && tema < AJ_N_TEMAS_OPC) valor[AJ_TEMA] = tema;
+  valor[AJ_VIDRO] = vidro ? 0 : 1;
 }
 
 void ajustes_teste_fonte_interface(int familia) {
