@@ -272,6 +272,7 @@ static int   carPos;                // titulo pedido pelo D-pad
 static int   carAplicado;           // titulo cuja pagina esta montada (= idx)
 static int   carBotaoFim;           // chegou pela direita: foco no ultimo botao
 static int   carFocou;              // a home ja recebeu o titulo da volta
+static int   carEsperaRect;         // quadros de home desenhada para ler o cartaz
 static float carOff, carVel;        // posicao da tira, em titulos
 static float cartao = 1.0f, cartaoVel;  // 1 = cartao, 0 = pagina cheia
 static GfxRect carOrigem;           // cartaz da fileira (abrir e fechar)
@@ -1204,7 +1205,7 @@ void detail_abrir(const HomeItem *it) {
   if (!(aberto && !saindo) && it && ajustes_home_layout() == HOME_LAYOUT_DINAMICA)
     n = home_fileira_titulos(carIdx, CAR_MAX, &pos);
   if (n > 0 && pos >= 0 && carIdx[pos] == it->indice) {
-    carro = 1; carN = n; carPos = carAplicado = pos; carBotaoFim = 0; carFocou = 0;
+    carro = 1; carN = n; carPos = carAplicado = pos; carBotaoFim = 0; carFocou = 0; carEsperaRect = 0;
     carOff = (float)pos; carVel = 0.0f; cartao = 1.0f; cartaoVel = 0.0f;
     carOrigem = it->rect;
     if (carOrigem.w < 8.0f || carOrigem.h < 8.0f)
@@ -1409,10 +1410,11 @@ int detail_cobre_tela(void) {
   // isto e uma medida de cobertura e nao um limiar novo em `t`.
   if (!aberto) return 0;
   // Carrossel: a folha opaca cobre a tela inteira (ver carFolha). Na SAIDA a
-  // home volta a ser desenhada desde o primeiro quadro, mesmo sob a folha: e o
-  // desenho dela que diz onde o cartaz do titulo em cena ficou (home_item_
-  // focado), e o cartao encolhe ate ele.
-  if (carro) return !saindo && carFolha() >= 0.999f;
+  // home e desenhada sob a folha so nos primeiros quadros: e o desenho dela que
+  // diz onde o cartaz do titulo em cena ficou (home_item_focado), e o cartao
+  // encolhe ate ele. Desenha-la a saida inteira custava 40-58 ms por quadro na
+  // C9 (medido, 01/10): home + folha misturada + cartao.
+  if (carro) return !(saindo && carEsperaRect > 0) && carFolha() >= 0.999f;
   { GfxRect r; float opac;
     backdropRect(&r, &opac);
     if (opac < 0.999f) return 0;
@@ -2675,7 +2677,8 @@ void detail_atualizar(float dt, Uint32 agora) {
     // dele, que a home volta a desenhar (detail_cobre_tela = 0 saindo).
     if (saindo) {
       HomeItem hi;
-      if (!carFocou) { home_focar_titulo(carIdx[carPos]); carFocou = 1; }
+      if (!carFocou) { home_focar_titulo(carIdx[carPos]); carFocou = 1; carEsperaRect = 3; }
+      else if (carEsperaRect > 0) carEsperaRect--;
       if (home_item_focado(&hi) && hi.rect.w > 8.0f && hi.rect.h > 8.0f) carOrigem = hi.rect;
     }
   }

@@ -5141,6 +5141,11 @@ void home_focar_titulo(int indice) {
     if (fileiraItemIndice(fl, c) == indice) {
       foco.coluna = c;
       foco.colunaLembrada[foco.fileira] = c;
+      // A FILEIRA JA FICA NO LUGAR FINAL: o cartao do carrossel encolhe ate o
+      // cartaz, e o detalhe le onde ele esta num quadro so (ver detail.c,
+      // carEsperaRect) — com a rolagem ainda andando o alvo fugiria.
+      scrollX[foco.fileira] = alvoScrollFil(foco.fileira, c, scrollX[foco.fileira], 0.0f);
+      velX[foco.fileira] = 0.0f;
       return;
     }
 }
