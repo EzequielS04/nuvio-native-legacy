@@ -101,16 +101,36 @@ class ParaleloDataSource(
     private var unicaIn: InputStream? = null
     private var aberto = false
 
-    private fun conectar(u: URL, ini: Long, ultimo: Long): HttpURLConnection {
+    private fun conectar1(u: URL, ini: Long, ultimo: Long): HttpURLConnection {
         val c = u.openConnection() as HttpURLConnection
         c.connectTimeout = 15000
         c.readTimeout = 20000
-        c.instanceFollowRedirects = true
+        // Redirecionamento seguido A MAO (conectar): o HttpURLConnection nao
+        // segue troca de protocolo (https -> http), e o AIOStreams/ElfHosted faz
+        // exatamente isso — a fonte ficava em "Opening source" com um 302.
+        c.instanceFollowRedirects = false
         if (ua != null) c.setRequestProperty("User-Agent", ua)
         for ((k, v) in props) c.setRequestProperty(k, v)
         c.setRequestProperty("Accept-Encoding", "identity")
         c.setRequestProperty("Range", if (ultimo >= 0) "bytes=$ini-$ultimo" else "bytes=$ini-")
         return c
+    }
+
+    private fun conectar(u0: URL, ini: Long, ultimo: Long): HttpURLConnection {
+        var u = u0
+        repeat(10) {
+            val c = conectar1(u, ini, ultimo)
+            val code = c.responseCode
+            if (code in 300..399 && code != 304) {
+                val loc = c.getHeaderField("Location")
+                c.disconnect()
+                if (loc.isNullOrEmpty()) throw IOException("HTTP $code sem Location")
+                u = URL(u, loc)
+                return@repeat
+            }
+            return c
+        }
+        throw IOException("redirecionamentos demais")
     }
 
     override fun open(dataSpec: DataSpec): Long {

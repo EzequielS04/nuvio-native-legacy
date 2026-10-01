@@ -99,8 +99,14 @@ tasks.named("preBuild") { dependsOn(copiaSdlJava) }
 
 dependencies {
     // Video (NvPlayer.kt, de outro agente): Media3 ExoPlayer.
-    implementation("androidx.media3:media3-exoplayer:1.4.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
-    implementation("androidx.media3:media3-exoplayer-dash:1.4.1")
+    implementation("androidx.media3:media3-exoplayer:1.8.0")
+    implementation("androidx.media3:media3-exoplayer-hls:1.8.0")
+    implementation("androidx.media3:media3-exoplayer-dash:1.8.0")
+    // Decodificador de AUDIO por FFmpeg (DTS, DTS-HD, TrueHD, E-AC-3...) para
+    // quando a TV nao tem o decodificador nem passa o bitstream adiante: sem
+    // ele a fonte toca muda (evento 9). Compilado e publicado pela Jellyfin no
+    // Maven Central, na mesma versao do Media3. So entra quando a plataforma
+    // nao serve (EXTENSION_RENDERER_MODE_ON no NvPlayer).
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.8.0+1")
     implementation("androidx.core:core-ktx:1.13.1")
 }

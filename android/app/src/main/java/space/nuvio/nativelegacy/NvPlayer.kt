@@ -187,7 +187,12 @@ object NvPlayer {
             // o Android limita a janela TCP de cada uma); HLS/DASH seguem na unica.
             val rede = ParaleloDataSource.Factory(ua, props, http)
 
-            val p = ExoPlayer.Builder(act)
+            // ON (e nao PREFER): o decodificador da plataforma e o passthrough
+            // continuam primeiro; o FFmpeg so entra no codec que a TV nao tem.
+            val renderizadores = androidx.media3.exoplayer.DefaultRenderersFactory(act)
+                .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+                .setEnableDecoderFallback(true)
+            val p = ExoPlayer.Builder(act, renderizadores)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(act)
                     // DefaultDataSource e nao so http: o trailer da Apple chega como
                     // file:// (master reduzido a uma variante em dados/trailer, trailerapple.c).
