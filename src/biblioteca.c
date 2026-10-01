@@ -1279,7 +1279,7 @@ static void desenhaCartaz(const CatItem *ci, GfxRect base, float f, float a,
   // 0,0896 da ALTURA, ou seja 36 px: meia vez mais redondo do que o medido, e
   // diferente do canto de toda peca vizinha. Ver raioPx.
   float raio = raioPx(24.0f, base.w, base.h);
-  const char *arte = ci ? posterprov_card(ci->imdb, ci->tmdb, ci->tipo, ci->poster) : NULL;
+  const char *arte = ci ? posterprov_card_addon(ci->origem, ci->imdb, ci->tmdb, ci->tipo, ci->poster) : NULL;
   if (arte && !arte[0]) arte = NULL;
   GLuint tex = arte ? tex_obter_larg(arte, NV_BIB_CARD_W) : 0;
   // Arte chegando esvanece sobre o esqueleto (revela.h), como na home.
@@ -1526,7 +1526,7 @@ static void desenhaLinhaTitulo(const CatItem *ci, float y, float f, float a) {
   float xProgDir = xNotaIni - BIB_COL_PROG_GAP;
   GfxRect mini = { r.x + BIB_LIN_PAD, y + (BIB_LIN_H - BIB_LIN_MINI_H) * 0.5f,
                    BIB_LIN_MINI_W, BIB_LIN_MINI_H };
-  const char *arte = ci ? posterprov_card(ci->imdb, ci->tmdb, ci->tipo, ci->poster) : NULL;
+  const char *arte = ci ? posterprov_card_addon(ci->origem, ci->imdb, ci->tmdb, ci->tipo, ci->poster) : NULL;
   if (arte && !arte[0]) arte = NULL;
   GLuint tex = arte ? tex_obter_larg(arte, BIB_LIN_MINI_W) : 0;
   float raioMini = raioPx(8.0f, mini.w, mini.h);

@@ -407,6 +407,19 @@ static void falhou_poe(uint32_t k) {
 #define PP_SEGUIDAS_MAX 6
 #define PP_DISJUNTOR_S  300
 
+// "POSTERES DO ADDON" (Ajustes, desligado de fabrica). Ver posterprov.h.
+static int preferirAddon;
+void posterprov_preferir_addon(int sim) { preferirAddon = sim ? 1 : 0; }
+int posterprov_addon_vence(const char *origem, const char *orig) {
+  return preferirAddon && origem && origem[0] && orig && orig[0] &&
+         !strstr(orig, "images.metahub.space/");
+}
+const char *posterprov_card_addon(const char *origem, const char *imdb, long tmdb,
+                                  const char *tipo, const char *orig) {
+  if (posterprov_addon_vence(origem, orig)) return orig;
+  return posterprov_card(imdb, tmdb, tipo, orig);
+}
+
 const char *posterprov_card(const char *imdb, long tmdb, const char *tipo,
                             const char *orig) {
   uint32_t k;

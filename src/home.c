@@ -871,7 +871,7 @@ static const char *arte_por_formato(const CatItem *item, int deitado) {
   }
   // POSTER PERSONALIZADO (posterprov.h): so o cartaz retrato de card. Desligado
   // (padrao) ou sem id que o provedor entenda, devolve item->poster como veio.
-  { const char *p = posterprov_card(item->imdb, item->tmdb, item->tipo, item->poster);
+  { const char *p = posterprov_card_addon(item->origem, item->imdb, item->tmdb, item->tipo, item->poster);
     if (p && p[0]) return p; }
   return item->backdrop[0] ? item->backdrop : NULL;
 }
@@ -1507,7 +1507,7 @@ static void homeAtualizarReferenciasArte(void) {
       int idx = fileiraItemIndice(&fileiras[r], i);
       const CatItem *it = cat_item(idx);
       if (!it) continue;
-      homeMarcarURL(posterprov_card(it->imdb, it->tmdb, it->tipo, it->poster), largura);
+      homeMarcarURL(posterprov_card_addon(it->origem, it->imdb, it->tmdb, it->tipo, it->poster), largura);
       homeMarcarURL(it->logo, largura * 0.65f);
       homeMarcarURL(it->backdrop, largura);
     }
