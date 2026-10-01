@@ -1421,7 +1421,16 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   // Efeitos leves: os dois realces que so enfeitam (brilho no alto do card,
   // luz de canto de painel) nao sao desenhados. Nenhum carrega informacao — o
   // foco continua marcado pelo anel e pelo especular do GFX_CARD.
-  if (efeitosLeves && (modo == GFX_BRILHO_TOPO || modo == GFX_LUZ)) return;
+  //
+  // SO O REALCE CLARO SAI. O GFX_BRILHO_TOPO tambem desenha VEU ESCURO
+  // (gfx_veu_base, os veus da previa em novidades160.c): a mesma rampa em
+  // preto, atras de texto. Esse carrega informacao — sem ele o "Temporada 1 ·
+  // Episodio 2" do Continuar assistindo some na arte clara. MEDIDO na TCL
+  // Smart TV Pro (Android 14, Mali-G52, D1 14886: "[gpu-nivel] nivel 1 -> 1
+  // (salvo)"): no nivel 1 o card do CW saia sem veu. Os realces sao brancos
+  // (soma >= 2,6); os veus, quase pretos.
+  if (efeitosLeves && (modo == GFX_LUZ ||
+      (modo == GFX_BRILHO_TOPO && cr + cg + cb > 1.5f))) return;
   // Efeitos minimos: sombra e halo tambem saem (o anel continua marcando o foco).
   if (efeitosMinimos && modo == GFX_SOMBRA) return;
   if (gfx_modos_desligados && ((gfx_modos_desligados >> (unsigned)modo) & 1ull)) return;
