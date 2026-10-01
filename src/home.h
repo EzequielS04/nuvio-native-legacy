@@ -80,3 +80,8 @@ int  home_pediu_guia(char *id, int tam);
 int home_previa_fileira(const char *chave, int filTipo, GfxRect area, float alfa);
 #endif
 const char *home_rastro_foco(void);
+// CARROSSEL DA DINAMICA: titulos (indices do catalogo) da fileira em foco e a
+// posicao do focado; 0 fora da Dinamica ou numa fileira que nao e de titulos.
+int  home_fileira_titulos(int *out, int max, int *pos);
+// Poe o foco da fileira atual no titulo `indice` (a volta do carrossel).
+void home_focar_titulo(int indice);

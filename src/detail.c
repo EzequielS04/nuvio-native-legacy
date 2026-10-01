@@ -229,6 +229,54 @@ static int    trailerEtapa = 0;
 static Uint32 trailerPrazo = 0;
 static int    pediuMenu = 0;   // ESQUERDA na borda: fechar E abrir a barra (ver app.c)
 static float  trailerFade = 0.0f;
+
+// --- CARROSSEL DA DINAMICA (layout "Dinâmica (Apple TV)" da home) ----------
+//
+// Na Dinamica o titulo aberto de uma fileira vira um CARTAO grande, quase da
+// tela, com a borda dos vizinhos da mesma fileira espiando dos dois lados; a
+// esquerda/direita na ponta da linha de botoes anda pelos titulos da fileira,
+// baixo estica o cartao ate a pagina cheia e Voltar devolve a fileira no
+// titulo em cena. Referencia: o app de TV da Apple, em video do dono.
+//
+// O MODELO E ABERTURA, e foi o que o app tvOS do dono provou: a arte NUNCA
+// escala. Ela e desenhada em "cover" no quadro da tela cheia e o cartao e
+// uma janela arredondada sobre ela (GFX_JANELA); esticar o cartao so aumenta
+// a janela. Trocar de titulo e TIRA DE FILME: cada titulo e a mesma janela
+// deslocada de (largura + vao), cada um com a sua arte e os seus cantos, e o
+// vao passa entre eles. A folha cinza por baixo e um clear de tela cheia (o
+// caminho rapido de gfx_cor), e os cartoes sao quads opacos por cima: nada
+// de camada de tela cheia misturada no estado de repouso.
+//
+// Fora da Dinamica, ou aberto de outro lugar que nao uma fileira de titulos,
+// `carro` fica 0 e a pagina e a de sempre, byte a byte.
+#define CAR_MAX        96
+#define CAR_X         130.0f   // margem lateral do cartao (medida no video: ~6,8%)
+#define CAR_Y          26.0f
+#define CAR_BAIXO      26.0f
+#define CAR_VAO        34.0f   // entre um cartao e o vizinho
+#define CAR_RAIO       40.0f   // canto do cartao, em pixels
+#define CAR_RAIO_HOME  22.0f   // canto do cartaz da fileira, de onde ele abre
+#define CAR_TEXTO_PAD  72.0f   // borda do cartao -> coluna do texto
+#define CAR_TEXTO_SOBE 64.0f   // o bloco de texto sobe para dentro do cartao
+#define CAR_VEU         0.86f  // veu do canto de baixo a esquerda, sob o texto
+// Tira de filme: ~0,78 s ate assentar (1-(1+wt)e^-wt chega a 99% em wt ~ 6,6).
+#define CAR_MOLA        8.5f
+#define CAR_MOLA_PAG    9.0f   // cartao -> pagina cheia e a volta
+// A folha: cinza escuro frio, o da Apple TV atras do cartao.
+#define CAR_FOLHA_R     0.105f
+#define CAR_FOLHA_G     0.110f
+#define CAR_FOLHA_B     0.125f
+static int   carro;                 // 1 = esta abertura e o carrossel
+static int   carN, carIdx[CAR_MAX];  // titulos da fileira (indices do catalogo)
+static int   carPos;                // titulo pedido pelo D-pad
+static int   carAplicado;           // titulo cuja pagina esta montada (= idx)
+static int   carBotaoFim;           // chegou pela direita: foco no ultimo botao
+static int   carFocou;              // a home ja recebeu o titulo da volta
+static int   carEsperaRect;         // quadros de home desenhada para ler o cartaz
+static float carOff, carVel;        // posicao da tira, em titulos
+static float cartao = 1.0f, cartaoVel;  // 1 = cartao, 0 = pagina cheia
+static GfxRect carOrigem;           // cartaz da fileira (abrir e fechar)
+static float heroDx;                // deslocamento horizontal do bloco do heroi
 // MODO CINEMA DO TRAILER (dono, 21/09/2026, com a foto do outro app: "quando
 // comecar a tocar o trailer descer a arte do titulo e deixar assim"). Com o
 // trailer tocando, o bloco de texto do heroi desce e apaga e so o logo fica,
@@ -1011,7 +1059,7 @@ static void txt_peso(TxtLinha l, float x, float y, float a, float grossura) {
   if (grossura > 0.9f)  txt_desenhar_alpha(l, x + grossura, y, a);
 }
 
-void detail_abrir(const HomeItem *it) {
+static void abrirInterno(const HomeItem *it) {
   pediuMenu = 0;
   marco("detail_abrir");
   // O TITULO ANTERIOR PODE TER DEIXADO FIO NO AR. Trocar de titulo por dentro
@@ -1148,13 +1196,89 @@ void detail_abrir(const HomeItem *it) {
   memset(revEp, 0, sizeof revEp); memset(revRel, 0, sizeof revRel);
 }
 
+void detail_abrir(const HomeItem *it) {
+  int pos = -1, n = 0;
+  // CARROSSEL: so quando a pagina NASCE de um cartaz de fileira da Dinamica
+  // (o item aberto e o focado na home). Trocar de titulo por dentro (credito,
+  // "Mais como este") e os outros caminhos de abertura seguem como sempre.
+  carro = 0;
+  if (!(aberto && !saindo) && it && ajustes_home_layout() == HOME_LAYOUT_DINAMICA)
+    n = home_fileira_titulos(carIdx, CAR_MAX, &pos);
+  if (n > 0 && pos >= 0 && carIdx[pos] == it->indice) {
+    carro = 1; carN = n; carPos = carAplicado = pos; carBotaoFim = 0; carFocou = 0; carEsperaRect = 0;
+    carOff = (float)pos; carVel = 0.0f; cartao = 1.0f; cartaoVel = 0.0f;
+    carOrigem = it->rect;
+    if (carOrigem.w < 8.0f || carOrigem.h < 8.0f)
+      carOrigem = (GfxRect){ NV_TELA_W * 0.5f - 124.0f, NV_TELA_H * 0.5f - 186.0f, 248.0f, 372.0f };
+    printf("[carrossel] abre %d/%d da fileira\n", pos + 1, n); fflush(stdout);
+  }
+  abrirInterno(it);
+}
+
+// Monta a pagina do titulo que a tira deixou em cena. Adiada ate a tira
+// quase assentar (ver detail_atualizar): segurar a seta atravessa a fileira
+// sem pedir extras, trailer e logo de cada titulo do caminho.
+static int nBotoes(void);
+static void carAplicar(void) {
+  const CatItem *ci;
+  HomeItem it;
+  float t0 = t;
+  if (!carro || carAplicado == carPos) return;
+  ci = cat_item(carIdx[carPos]);
+  if (!ci) { carPos = carAplicado; return; }
+  memset(&it, 0, sizeof it);
+  it.indice = carIdx[carPos];
+  it.rect = carOrigem;
+  it.arte = ci->poster[0] ? ci->poster : ci->backdrop;
+  it.titulo = ci->titulo; it.genero = ci->genero; it.meta = ci->meta;
+  abrirInterno(&it);
+  t = t0;                       // a pagina ja esta aberta: nao reabre
+  carAplicado = carPos;
+  botao = carBotaoFim ? nBotoes() - 1 : 0;
+  if (botao < 0) botao = 0;
+  printf("[carrossel] titulo %d/%d: %s\n", carPos + 1, carN, ci->titulo); fflush(stdout);
+}
+static void carPasso(int d) {
+  int novo = carPos + d;
+  if (novo < 0 || novo >= carN) return;
+  carPos = novo;
+  carBotaoFim = d > 0;
+}
+
+// A janela do cartao em cena NESTE quadro: cartao <-> tela cheia (cartao) e
+// cartaz da fileira <-> cartao (abrir/fechar, t).
+static GfxRect carBuraco(float *raioPx) {
+  GfxRect c = { CAR_X, CAR_Y, NV_TELA_W - 2.0f * CAR_X, NV_TELA_H - CAR_Y - CAR_BAIXO };
+  float k = cartao, s = suave(t), r;
+  GfxRect h = { c.x * k, c.y * k, NV_TELA_W + (c.w - NV_TELA_W) * k, NV_TELA_H + (c.h - NV_TELA_H) * k };
+  r = CAR_RAIO * k;
+  if (s < 0.9999f) {
+    h.x = carOrigem.x + (h.x - carOrigem.x) * s;
+    h.y = carOrigem.y + (h.y - carOrigem.y) * s;
+    h.w = carOrigem.w + (h.w - carOrigem.w) * s;
+    h.h = carOrigem.h + (h.h - carOrigem.h) * s;
+    r = CAR_RAIO_HOME + (r - CAR_RAIO_HOME) * s;
+  }
+  if (raioPx) *raioPx = r;
+  return h;
+}
+// O carrossel desenha o fundo neste quadro (folha + cartoes)? Na pagina cheia
+// assentada volta o desenho de sempre (desenhaArteDetalhe), que e o mesmo
+// pixel com a janela do tamanho da tela.
+static float carFolha(void) { return anim_clamp(suave(t) * 3.0f, 0.0f, 1.0f); }
+static int carDesenhaFundo(void) {
+  return carro && (cartao > 0.002f || suave(t) < 0.999f || saindo);
+}
+
 int detail_aberto(void) { return aberto; }
 
 // 0..1 de quanto o detalhe ja tomou a tela. A home le isto para DESCER as
 // fileiras enquanto ele entra: e o movimento que o dono descreve como "so os
 // posters descem". Fica aqui e nao numa variavel compartilhada porque a mola
 // que o produz e a mesma do desenho — dois relogios diferentes descasariam.
-float detail_progresso(void) { return aberto ? suave(t) : 0.0f; }
+// No carrossel a home NAO desce: o cartaz abre por cima dela, que fica parada
+// por baixo da folha ate ser coberta.
+float detail_progresso(void) { return aberto && !carro ? suave(t) : 0.0f; }
 
 // Temporada e episodio EM FOCO, para quem for pedir fonte.
 //
@@ -1285,6 +1409,12 @@ int detail_cobre_tela(void) {
   // busca), a conta responde `nao` e a home continua desenhada: e por isso que
   // isto e uma medida de cobertura e nao um limiar novo em `t`.
   if (!aberto) return 0;
+  // Carrossel: a folha opaca cobre a tela inteira (ver carFolha). Na SAIDA a
+  // home e desenhada sob a folha so nos primeiros quadros: e o desenho dela que
+  // diz onde o cartaz do titulo em cena ficou (home_item_focado), e o cartao
+  // encolhe ate ele. Desenha-la a saida inteira custava 40-58 ms por quadro na
+  // C9 (medido, 01/10): home + folha misturada + cartao.
+  if (carro) return !(saindo && carEsperaRect > 0) && carFolha() >= 0.999f;
   { GfxRect r; float opac;
     backdropRect(&r, &opac);
     if (opac < 0.999f) return 0;
@@ -1666,6 +1796,17 @@ static int acaoEm(int n) {
 
 void detail_evento(const SDL_Event *e) {
   if (saindo) return;
+  // CARROSSEL ANDANDO: as setas laterais continuam andando pela fileira (a
+  // pagina do titulo do meio do caminho nem chegou a ser montada); qualquer
+  // outra tecla monta a pagina do titulo em cena antes de agir nela.
+  if (carro && carAplicado != carPos && e->type == SDL_KEYDOWN && nivel == 0) {
+    SDL_Keycode kc = e->key.keysym.sym;
+    if (kc == SDLK_RIGHT) { carPasso(1); return; }
+    if (kc == SDLK_LEFT)  { carPasso(-1); return; }
+    if (!(kc == SDLK_ESCAPE || kc == SDLK_AC_BACK || kc == SDLK_BACKSPACE ||
+          kc == SDLK_DELETE || e->key.keysym.scancode == NV_SCANCODE_BACK))
+      carAplicar();
+  }
   // TRAILER EM TELA CHEIA come o teclado: OK pausa, Voltar fecha. O autoplay
   // no fundo nao passa por aqui — ele nao tem teclado, a pagina continua a
   // dela, e qualquer coisa que tire a pagina do topo o fecha (detail_atualizar).
@@ -2054,11 +2195,18 @@ void detail_evento(const SDL_Event *e) {
           break;
         }
     }
-    else if (k == SDLK_RIGHT) { if (botao < nBotoes() - 1) botao++; }
+    else if (k == SDLK_RIGHT) {
+      // Carrossel: mais um direita na ponta da linha de botoes e o PROXIMO
+      // titulo da fileira (o mesmo gesto do app da Apple).
+      if (botao < nBotoes() - 1) botao++;
+      else if (carro) carPasso(1);
+    }
     else if (k == SDLK_LEFT)  {
       // ESQUERDA no primeiro botao fecha a pagina e pede a barra lateral
-      // (app.c abre quando a mola de saida terminar). Um toque so.
+      // (app.c abre quando a mola de saida terminar). Um toque so. No
+      // carrossel ela e o titulo ANTERIOR; so no primeiro da fileira fecha.
       if (botao > 0) botao--;
+      else if (carro && carPos > 0) carPasso(-1);
       else { saindo = 1; pediuMenu = 1; }
     }
     return;
@@ -2283,7 +2431,10 @@ void detail_atualizar(float dt, Uint32 agora) {
     int topo = !saindo && nivel == 0 && !pessoaAberta && !episodios_menu_aberto() &&
                !trocaarte_aberto() &&
                !pedReproduzir && !pedFontes && !player_aberto() &&
-               pg < 0.05f && scrollY < 1.0f;
+               pg < 0.05f && scrollY < 1.0f &&
+               // Cartao do carrossel: sem trailer automatico. O video e um
+               // plano de tela cheia atras do canvas e o cartao nao o recorta.
+               !(carro && cartao > 0.01f);
     if (!detail_assentado() || !topo) { if (!trailer_cheia()) trailerDesde = 0; }
     else if (!trailerDesde) trailerDesde = agora;
     if (trailer_aberto() && !trailer_cheia() && !topo) trailer_fechar();
@@ -2508,6 +2659,29 @@ void detail_atualizar(float dt, Uint32 agora) {
   // Rigidez propria: o web leva 0.8s para apagar o backdrop (cubic-bezier
   // .4,0,.2,1), e a mola de NV_MOLA_TELA assenta em ~330ms.
   pg = anim_mola(pg, nivel >= 1 ? 1.0f : 0.0f, dt, NV_MOLA_PAGINA);
+  if (carro) {
+    int k;
+    carOff = anim_mola2(&carVel, carOff, (float)carPos, dt, CAR_MOLA);
+    cartao = anim_mola2(&cartaoVel, cartao, nivel >= 1 ? 0.0f : 1.0f, dt, CAR_MOLA_PAG);
+    // Monta a pagina do titulo novo quando a tira esta chegando: o texto dele
+    // entra enquanto o cartao assenta, e nao depois.
+    if (carAplicado != carPos && fabsf(carOff - (float)carPos) < 0.25f && !saindo)
+      carAplicar();
+    // ARTE DOS VIZINHOS PRE-CARREGADA: dois para cada lado, para o passo
+    // seguinte ja encontrar a foto na tira.
+    for (k = carPos - 2; k <= carPos + 2; k++) {
+      const char *a = (k >= 0 && k < carN) ? arteDe(carIdx[k]) : NULL;
+      if (a) (void)tex_obter_hero(a);
+    }
+    // VOLTA: a fileira recebe o titulo em cena e o cartao encolhe ate o cartaz
+    // dele, que a home volta a desenhar (detail_cobre_tela = 0 saindo).
+    if (saindo) {
+      HomeItem hi;
+      if (!carFocou) { home_focar_titulo(carIdx[carPos]); carFocou = 1; carEsperaRect = 3; }
+      else if (carEsperaRect > 0) carEsperaRect--;
+      if (home_item_focado(&hi) && hi.rect.w > 8.0f && hi.rect.h > 8.0f) carOrigem = hi.rect;
+    }
+  }
   if (saindo && t < 0.02f) {
     // O fio do TMDB pode trocar ou limpar o logo no catalogo enquanto o detalhe
     // mostra logoFixo; ao voltar, o hero lia o catalogo novo (vazio ou FALHOU)
@@ -2528,7 +2702,7 @@ void detail_atualizar(float dt, Uint32 agora) {
         }
       }
     }
-    aberto = 0; saindo = 0; t = 0.0f; trailer_fechar(); return;
+    aberto = 0; saindo = 0; t = 0.0f; carro = 0; trailer_fechar(); return;
   }
 
   for (int r = 0; r < N_SECOES; r++)
@@ -3046,6 +3220,12 @@ static void esqueletoSinopse(float x, float y, float a) {
                    NV_DETW2_TEXTO_W * frac[i], 18.0f, a);
 }
 
+// O bloco do heroi anda junto com o cartao do carrossel (heroDx; 0 fora dele).
+// Todo x do bloco nasce de NV_DETW2_X, entao deslocar a coluna e deslocar o
+// bloco inteiro — sem tocar nas medidas do resto da pagina.
+#pragma push_macro("NV_DETW2_X")
+#undef NV_DETW2_X
+#define NV_DETW2_X (96.0f + heroDx)
 static void heroWeb(float a, float desloc) {
   if (a <= 0.005f) return;
   const CatItem *ci = cat_item(idx);
@@ -3582,6 +3762,7 @@ static void heroWeb(float a, float desloc) {
     }
   }
 }
+#pragma pop_macro("NV_DETW2_X")
 
 // ---------------------------------------------------------------------------
 // PAGINA: temporadas, episodios, abas de informacao, elenco
@@ -5607,6 +5788,45 @@ static void desenhaPessoa(float a) {
 }
 
 
+// FOLHA + TIRA DE CARTOES do carrossel. A folha e um gfx_cor opaco de tela
+// cheia, que gfx_rect transforma em glClear; cada cartao e UM quad opaco
+// (GFX_JANELA) com os cantos no SDF. Na abertura a folha sobe sobre a home e
+// a janela cresce do cartaz da fileira ate o cartao.
+static void carFundo(void) {
+  float s = suave(t), raio, passo, veuPag, veu, a;
+  GfxRect h = carBuraco(&raio), tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  int k;
+  // A FOLHA FECHA EM UM TERCO DA ABERTURA (e abre so no ultimo terco da
+  // volta): e quando ela fica opaca que a home deixa de ser desenhada, e home +
+  // folha misturada + cartoes no mesmo quadro passava de 40 ms na C9 (medido,
+  // 01/10). O video da Apple faz o mesmo: a home some em dois quadros.
+  gfx_cor(tela, 0.0f, CAR_FOLHA_R, CAR_FOLHA_G, CAR_FOLHA_B, carFolha());
+  passo = h.w + CAR_VAO;
+  veuPag = (1.0f - pg) * ajustes_detalhe_veu();
+  veu = veuPag + (CAR_VEU - veuPag) * cartao;
+  a = anim_clamp(s * 3.0f, 0.0f, 1.0f);
+  gfx_janela_atual[0] = h.x / NV_TELA_W; gfx_janela_atual[1] = h.y / NV_TELA_H;
+  gfx_janela_atual[2] = h.w / NV_TELA_W; gfx_janela_atual[3] = h.h / NV_TELA_H;
+  for (k = 0; k < carN; k++) {
+    GfxRect r = { h.x + ((float)k - carOff) * passo, h.y, h.w, h.h };
+    const char *arte;
+    GLuint tex;
+    if (r.x >= NV_TELA_W || r.x + r.w <= 0.0f) continue;
+    arte = arteDe(carIdx[k]);
+    tex = arte ? tex_obter_hero(arte) : 0;
+    // Os VIZINHOS entram tarde na abertura e saem cedo na volta: por cima da
+    // home meio apagada, um cartao grande a meia forca le como borrao.
+    { float ak = k == carAplicado ? a : anim_clamp((s - 0.55f) * 2.2f, 0.0f, 1.0f);
+      if (ak <= 0.004f) continue;
+      if (!tex) { gfx_cor(r, raio / r.h, 0.16f, 0.17f, 0.19f, ak); continue; }
+      gfx_tex_aspect_atual = tex_aspecto(arte);
+      gfx_rect(r, tex, GFX_JANELA, veu, 0.85f * pg, 1.0f - cartao, raio / r.h, 1, 1, 1, ak); }
+  }
+  gfx_tex_aspect_atual = 0.0f;
+  gfx_janela_atual[0] = gfx_janela_atual[1] = 0.0f;
+  gfx_janela_atual[2] = gfx_janela_atual[3] = 1.0f;
+}
+
 void detail_desenhar(Uint32 agora) {
   if (!aberto) return;
   // COR VIVA: a pagina do titulo manda na cor, acima da home que pode estar
@@ -5617,7 +5837,7 @@ void detail_desenhar(Uint32 agora) {
     if (lg) corviva_definir_logo(lg, CORVIVA_DETALHE); }
   float s = suave(t), a2 = fase2();
 
-  if (!detail_cobre_tela()) {
+  if (!detail_cobre_tela() && !carDesenhaFundo()) {
     GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, s);   // #0d0d0d, o fundo do web
     // Imersiva: a MESMA luz que main.c pinta depois do clear, subindo junto
@@ -5660,6 +5880,8 @@ void detail_desenhar(Uint32 agora) {
   }
   backdropRect(&alvo, &aEntrada);
   const char *arte = arteDe(idx);
+  if (carDesenhaFundo()) carFundo();
+  else {
   int artePoster = arteDetalheEhPoster(idx);
   // Backdrop em tela cheia: pede o teto de 1920. Com o teto comum de 960 a arte
   // era decodificada com metade da resolucao e ampliada ao dobro na tela.
@@ -5686,6 +5908,7 @@ void detail_desenhar(Uint32 agora) {
   // ao mesmo tempo. Poster reserva usa composição contida, sem crop de capa.
   desenhaArteDetalhe(alvo, tex, arte, artePoster,
                      tex ? aEntrada * (1.0f - 0.85f * pg) : 1.0f, pg);
+  }
 
 
   // O hero ROLA com o documento: ele nao some nem e substituido por um
@@ -5707,7 +5930,20 @@ void detail_desenhar(Uint32 agora) {
       float k = (1.0f - c) * (1.0f - ta);
       if (gh > 0.0f) {
         float f = textogate_passo(&gateHero, 0, SDL_GetTicks());
-        heroWeb(a2 * k * f, -scrollY + (1.0f - a2) * NV_TELA_H * 0.05f + c * NV_CINEMA_DESCE);
+        float aCar = 1.0f, dyCar = 0.0f;
+        if (carro) {
+          // O texto e do titulo MONTADO e anda com o cartao dele na tira:
+          // apaga conforme se afasta do centro e entra quando o novo assenta.
+          float raio, passo;
+          GfxRect hb = carBuraco(&raio);
+          passo = hb.w + CAR_VAO;
+          heroDx = hb.x + ((float)carAplicado - carOff) * passo +
+                   (96.0f + (CAR_TEXTO_PAD - 96.0f) * cartao) - 96.0f;
+          dyCar = -CAR_TEXTO_SOBE * cartao;
+          aCar = anim_clamp(1.0f - fabsf(carOff - (float)carAplicado) * 4.0f, 0.0f, 1.0f);
+        }
+        heroWeb(a2 * k * f * aCar, -scrollY + (1.0f - a2) * NV_TELA_H * 0.05f + c * NV_CINEMA_DESCE + dyCar);
+        heroDx = 0.0f;
       } else {
         heroWeb(NV_TXTGATE_AQUECER, -scrollY + NV_TELA_H * 0.05f);
         textogate_passo(&gateHero, txt_pendentes - pend0,

@@ -222,7 +222,17 @@ typedef enum {
   // (o crossfade). So por gfx_hero_camadas.
   GFX_HERO_CAM = 37,
   GFX_HERO_CHEIO_CAM = 38,
-  GFX_NMODOS = 39
+  // GFX_JANELA — o CARTAO DO CARROSSEL da Dinamica (detail.c): a arte em
+  // "cover" na TELA CHEIA, vista por uma janela arredondada. A arte nunca
+  // escala: o rect e a abertura, e gfx_janela_atual diz onde ela fica no
+  // quadro da arte (x, y, w, h em fracao da tela). Esticar o cartao so
+  // aumenta a abertura. Leva a vinheta do GFX_DETALHE (mesma curva, medida no
+  // quadro da arte) com forca em uFoco, e o apagar da pagina rolada em
+  // uPar.x (mistura com o fundo, opaco); uPar.y escolhe o veu: 0 = so o canto
+  // de baixo a esquerda (cartao), 1 = a vinheta da pagina — no cartao do tamanho da tela os
+  // dois modos dao o mesmo pixel, e a troca entre eles nao se ve.
+  GFX_JANELA = 39,
+  GFX_NMODOS = 40
 } GfxModo;
 
 typedef struct {
@@ -257,6 +267,9 @@ int  gfx_veu_card_por(float fracao, float alfa);
 void gfx_veu_card_limpar(void);
 // Opacidade de grupo: deve voltar a 1 ao terminar o grupo.
 extern float gfx_opacidade_grupo;
+// Janela do GFX_JANELA: x, y, w, h do rect no quadro da arte em tela cheia,
+// em fracao (0..1). Quem desenha devolve a {0,0,1,1}.
+extern float gfx_janela_atual[4];
 
 // Snapshot: renderiza uma tela inteira para textura, para poder redesenha-la
 // como um unico quad. Existe porque a home continua visivel pela moldura da

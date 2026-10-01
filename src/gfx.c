@@ -30,6 +30,7 @@ typedef struct {
   GLint texB, texAspB, alfaB;   // camadas do destaque (gfx_hero_camadas)
   GLint alt;     // uAlt: altura do rect em pixels do alvo (a rampa de 1 px do SDF)
   GLint margem;  // uMargem do VS: 1 px de folga no quad dos modos de SDF
+  GLint jan;     // uJan: janela do GFX_JANELA
   GLint leve;    // uLeve: 1 = efeitos leves (sem dither), ver gfx_definir_efeitos_leves
   float altAtual, margemAtual, leveAtual;  // o ultimo valor enviado: so chama o GL se mudar
 } Programa;
@@ -38,6 +39,7 @@ static int progAtual = -1;
 // Proporcao da textura corrente, para o "cover". Fica global porque o desenho e
 // imediato: quem chama define antes de cada rect com textura.
 float gfx_tex_aspect_atual = 0.0f;
+float gfx_janela_atual[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
 float gfx_card_forcar_cover_atual = 0.0f;
 // Camadas do destaque (gfx_hero_camadas): a camada B e o fundo, lidos por
 // gfx_rect no desenho imediato que a funcao dispara.
@@ -143,6 +145,7 @@ static const char *FS_CABECA =
   "uniform float uAspect;\n"
   "uniform float uTexAsp;   // w/h da TEXTURA; 0 = nao ajustar\n"
   "uniform float uForceCover;\n"
+  "uniform vec4  uJan;\n"
   // A COR DO FUNDO DA PAGINA, para as rampas que dissolvem a arte nela
   // (destaque, destaque cheio, detalhe). Era vec3(0.051) cravado em cada uma;
   // com o tema dinamico estilizado o fundo e tingido (layout.h,
@@ -1082,6 +1085,27 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  dst = mix(dst, dA.rgb, dA.a);\n"
   "  gl_FragColor = vec4(dst, 1.0);\n"
   "}\n",
+  // GFX_JANELA — o cartao do carrossel. Ver a nota em gfx.h.
+  // uFoco = forca do veu, uPar.x = apagar da pagina rolada, uPar.y = qual veu.
+  "void main(){\n"
+  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  if (m <= 0.001) discard;\n"
+  "  vec2 u = uJan.xy + vUv * uJan.zw;\n"
+  "  vec2 uv = u;\n"
+  "  if (uTexAsp > 0.0) { float ra = 1.7777778 / uTexAsp;\n"
+  "    if (ra > 1.0) uv.y = (uv.y - 0.5) / ra + 0.5; else uv.x = (uv.x - 0.5) * ra + 0.5; }\n"
+  "  vec3 c = texture2D(uTex, clamp(uv, 0.0, 1.0)).rgb;\n"
+  "  float a = 1.0 - smoothstep(0.0, 0.82, u.x);\n"
+  "  float ab = smoothstep(0.70, 1.0, u.y) * 0.92;\n"
+  "  a = 1.0 - (1.0 - a) * (1.0 - ab);\n"
+  // No estado de CARTAO o veu e so o canto de baixo a esquerda, sob o texto
+  // (uPar.y = 0); na pagina cheia, a vinheta do GFX_DETALHE (uPar.y = 1).
+  "  float ac = (1.0 - smoothstep(0.0, 0.66, u.x)) * smoothstep(0.22, 0.92, u.y);\n"
+  "  a = mix(ac, a, uPar.y);\n"
+  "  c = mix(c, uFundo, clamp(a, 0.0, 1.0) * uFoco);\n"
+  "  c = mix(c, uFundo, uPar.x);\n"
+  "  gl_FragColor = nv_dither(c, uCor.a * m);\n"
+  "}\n",
 };
 
 // Cada corpo declara o que usa; montar so o necessario mantem o shader enxuto.
@@ -1113,7 +1137,8 @@ static const struct { int sdf, cover; } PRECISA[GFX_NMODOS] = {
   {0,0},   /* GFX_FUNDO_DIN — procedural, so cor, tela cheia */
   {0,0},   /* GFX_COPIA — so a leitura da textura */
   {0,1},   /* GFX_HERO_CAM */
-  {0,1}    /* GFX_HERO_CHEIO_CAM */
+  {0,1},   /* GFX_HERO_CHEIO_CAM */
+  {1,0}    /* GFX_JANELA — SDF da abertura; o cover e o do quadro da tela */
 };
 
 static GLuint compila(GLenum tipo, const char *src) {
@@ -1173,6 +1198,7 @@ int gfx_iniciar(void) {
     progs[m].alt    = glGetUniformLocation(p, "uAlt");
     progs[m].margem = glGetUniformLocation(p, "uMargem");
     progs[m].leve   = glGetUniformLocation(p, "uLeve");
+    progs[m].jan    = glGetUniformLocation(p, "uJan");
     progs[m].altAtual = -1.0f;
     progs[m].margemAtual = 0.0f;   // o default de um uniform recem-linkado e 0
     progs[m].leveAtual = 0.0f;
@@ -1420,7 +1446,8 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   // Modos cujo alfa de saida e o proprio uCor.a (ou 1): com alfa 1 a mistura
   // tambem era um no-op com leitura da tela. Fundo social, ceu da Explorar,
   // snapshot/luz assada e a arte desfocada do fundo.
-  else if ((modo == GFX_SOCIAL || modo == GFX_CEU || modo == GFX_SNAP || modo == GFX_FUNDO) &&
+  else if ((modo == GFX_SOCIAL || modo == GFX_CEU || modo == GFX_SNAP || modo == GFX_FUNDO ||
+            (modo == GFX_JANELA && raio <= 0.0f)) &&
            ca * gfx_opacidade_grupo >= 0.999f)
     opaco = 1;
   // CAMADAS DO DESTAQUE (gfx_hero_camadas): a passada e opaca e o fragmento
@@ -1482,6 +1509,8 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   if (P->raio >= 0)   glUniform1f(P->raio, raio);
   if (P->asp >= 0)    glUniform1f(P->asp, r.h > 0 ? r.w / r.h : 1.0f);
   if (P->texAsp >= 0) glUniform1f(P->texAsp, gfx_tex_aspect_atual);
+  if (P->jan >= 0)    glUniform4f(P->jan, gfx_janela_atual[0], gfx_janela_atual[1],
+                                  gfx_janela_atual[2], gfx_janela_atual[3]);
   if (P->forcarCover >= 0) glUniform1f(P->forcarCover, gfx_card_forcar_cover_atual);
   if (P->borda >= 0)  glUniform1f(P->borda, gfx_borda_foco_atual);
   if (P->varre >= 0)  glUniform1f(P->varre, gfx_varre_atual);
