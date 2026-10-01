@@ -386,5 +386,8 @@ void ajustes_perfil_esquecer(void);
 // manual, destino dos salvos): eles descrevem esta TV, nao o gosto da pessoa, e
 // a conta e uma so para a TV da sala e a do quarto. Ver somenteDesteAparelho.
 int ajustes_mesclar_blob(const char *base, char **saida);
+// #187: uma linha "[tmdb] idioma dos metadados: ..." com o que a TV pede ao
+// TMDB, de onde vem (ajuste desta TV) e o tmdb_language cru da conta.
+void ajustes_tmdb_idioma_relatar(const char *blob);
 
 #endif

@@ -2740,25 +2740,44 @@ void ajustes_idioma_auto_tick(void) { sistemaRecolher(); }
 // tmdb_language / subtitle_preferred_language CRUS do blob (a conta manda
 // "pt-BR", "ro"...). O laco das opcoes guarda so o INDICE de V_TMDB_LING, que
 // perde a regiao e o que a lista nao tem; aqui interessa o codigo inteiro.
+// O texto cru de `chave` no blob, desembrulhado de {"type":...,"value":X} e
+// sem aspas; "" para null. 0 se a chave nao existe (dst intocado).
+static int textoCruDoBlob(const char *json, const char *fim, const char *chave,
+                          char *dst, size_t tam) {
+  char bruto[80], texto[80];
+  size_t n;
+  if (!js_bruto(json, fim, chave, bruto, sizeof bruto)) return 0;
+  if (bruto[0] == '{' &&
+      !js_bruto(bruto, bruto + strlen(bruto), "value", texto, sizeof texto))
+    return 0;
+  if (bruto[0] != '{') snprintf(texto, sizeof texto, "%s", bruto);
+  n = strlen(texto);
+  if (n >= 2 && texto[0] == '"') { memmove(texto, texto + 1, n - 2); texto[n - 2] = 0; }
+  else if (!strcmp(texto, "null")) texto[0] = 0;
+  snprintf(dst, tam, "%s", texto);
+  return 1;
+}
+
 static void idiomaContaDoBlob(const char *json, const char *fim) {
-  static const struct { const char *chave; char *dst; size_t tam; } M[] = {
-    { "tmdb_language",                contaTmdbLing, sizeof contaTmdbLing },
-    { "subtitle_preferred_language",  contaLegLing,  sizeof contaLegLing  },
-  };
-  size_t k;
-  for (k = 0; k < sizeof M / sizeof *M; k++) {
-    char bruto[80], texto[80];
-    size_t n;
-    if (!js_bruto(json, fim, M[k].chave, bruto, sizeof bruto)) continue;
-    if (bruto[0] == '{' &&
-        !js_bruto(bruto, bruto + strlen(bruto), "value", texto, sizeof texto))
-      continue;
-    if (bruto[0] != '{') snprintf(texto, sizeof texto, "%s", bruto);
-    n = strlen(texto);
-    if (n >= 2 && texto[0] == '"') { memmove(texto, texto + 1, n - 2); texto[n - 2] = 0; }
-    else if (!strcmp(texto, "null")) texto[0] = 0;
-    snprintf(M[k].dst, M[k].tam, "%s", texto);
-  }
+  textoCruDoBlob(json, fim, "tmdb_language", contaTmdbLing, sizeof contaTmdbLing);
+  textoCruDoBlob(json, fim, "subtitle_preferred_language", contaLegLing, sizeof contaLegLing);
+}
+
+// #187: o registro dizia so "tmdb language=ko-KR" no Guia, e nada dizia DE
+// ONDE. Com os ajustes protegidos (ajustes-locais.txt) a conta nao reaplica e
+// a escolha desta TV vale sozinha — esta linha poe as duas lado a lado a cada
+// blob que chega, aplicado ou nao. So leitura e printf.
+void ajustes_tmdb_idioma_relatar(const char *blob) {
+  char conta[24] = "?";
+  int v = valor[AJ_TMDB_IDIOMA];
+  if (!blob) return;
+  textoCruDoBlob(blob, blob + strlen(blob), "tmdb_language", conta, sizeof conta);
+  printf("[tmdb] idioma dos metadados: %s (ajuste desta TV: %s); conta: tmdb_language=\"%s\"\n",
+         ajustes_tmdb_idioma(),
+         v <= 0 || v >= (int)(sizeof W_TMDB_LING / sizeof *W_TMDB_LING) - 1
+           ? "da interface" : W_TMDB_LING[v],
+         conta);
+  fflush(stdout);
 }
 
 // Idiomas de audio e legenda do blob. NAO passam pelo laco das opcoes abaixo
@@ -3100,6 +3119,14 @@ static int textoDoValor(int op, const char *vi, const char *vf,
     int k, maiuscula = 0, temBaixa = 0;
     size_t i;
     if (!lit) return 0;
+    // "DA INTERFACE" NAO SOBE (#187). O indice 0 de W_TMDB_LING e um
+    // sentinela desta TV ("interface"), nao um idioma: o web nao o conhece. A
+    // 1.5.3 nao sabia ler "ru" e ficava no 0 — e a costura seguinte escrevia
+    // "interface" por cima do "ru" da conta (medido no registro da issue: "ru
+    // nao reconhecido; mantido" e, no mesmo arranque, "1 ajuste(s) desta TV
+    // entram no blob"). A conta perdia o idioma que a pessoa escolheu e nunca
+    // mais o devolvia. Sem forma fiel, a chave nao e tocada.
+    if (op == AJ_TMDB_IDIOMA && valor[op] == 0) return 0;
     for (k = 0; k <= valor[op]; k++) if (!lit[k]) return 0;   // fora da lista
     // A CAIXA DO SERVIDOR, e nao a do codigo JS. MEDIDO na TV: a conta guarda
     // estes enums em MAIUSCULA ("IN_SEARCH", "CARD") enquanto o web os escreve

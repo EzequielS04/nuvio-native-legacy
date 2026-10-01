@@ -966,6 +966,13 @@ void sync_passo(unsigned agoraMs) {
     temAjustesBlob = 0;
     aplicarAjustes = 0;   // daqui para frente, o que a pessoa mudar na TV fica
   }
+  // #187: uma linha por blob novo (aplicado ou protegido) dizendo qual idioma
+  // a TV pede ao TMDB e o que a conta guarda. O ponteiro muda a cada pull.
+  { static const char *relatado;
+    if (ajustesBlob && ajustesBlob != relatado) {
+      relatado = ajustesBlob;
+      ajustes_tmdb_idioma_relatar(ajustesBlob);
+    } }
   // Progresso da conta: progresso.c decide linha a linha (pendente local vence,
   // senao o mais novo), guarda ate o que nao tem titulo no catalogo ainda, e
   // o catalogo recebe so o que foi aceito.
