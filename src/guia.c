@@ -4243,11 +4243,23 @@ void guia_desenhar(Uint32 agora) {
 // isto. Sem cache de nome normalizado: com 900 canais sao 900 normalizacoes de
 // ~20 bytes por letra digitada, a mesma ordem de custo do refiltrar da busca
 // (o catalogo inteiro por letra).
+// A LISTA DE ONTEM SEM IR A REDE. O Spotlight so via canal com o guia
+// carregado NESTA sessao (estado G_PRONTO): quem abria o app e buscava um
+// canal sem ter passado pelo guia nao achava nenhum, e com a lista do cache na
+// tela e a rede atras (G_BAIXANDO) tambem nao. O cache e o mesmo que o guia
+// mostra NA HORA ao abrir (cacheLer); ler aqui nao dispara carga nem EPG.
+void guia_preparar_busca(void) {
+  if (!favLido) favLer();   // como guia_carregar: empacotar monta os favoritos
+  if (!cacheLido) { cacheLido = 1; if (estado == G_PARADO && nCanais == 0) cacheLer(); }
+}
+
 int guia_buscar_canais(const char *alvoNorm, int *indices, int max) {
   int i, n = 0;
   char nome[300];
   if (!alvoNorm || !alvoNorm[0] || !indices || max <= 0) return 0;
-  if (estado != G_PRONTO || nCanais < 1) return 0;
+  // `canais` e a lista PUBLICADA (so o fio de desenho escreve, em publicar e
+  // cacheLer); o fio de carga mexe em sCanais. Ter canal basta.
+  if (nCanais < 1) return 0;
   for (i = 0; i < nCanais && n < max; i++) {
     busca_normalizar(canais[i].nome, nome, sizeof nome);
     if (strstr(nome, alvoNorm)) indices[n++] = i;

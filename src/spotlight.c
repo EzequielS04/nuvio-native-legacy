@@ -14,10 +14,12 @@
 //   - titulos: o catalogo em memoria (as fileiras da home) + desc_buscar, a
 //     mesma busca nos addons da tela de Busca;
 //   - pessoas: o ELENCO dos titulos ja carregados (CatItem.elenco), com o id do
-//     TMDB que abre a filmografia. Quem nunca abriu um titulo com aquela pessoa
-//     nao a acha aqui — buscar pessoa no TMDB seria uma viagem por letra;
+//     TMDB que abre a filmografia, e depois o /search/person do TMDB
+//     (spotpessoa.h) — com debounce, um pedido quando o texto para, nunca um
+//     por letra. A do elenco vem antes: e da biblioteca do dono;
 //   - colecoes (pastas), canais da Live TV (lista publicada do guia),
 //     catalogos (titulos das fileiras) e addons instalados.
+//   Fora isso so a busca nos addons (desc_buscar) e a de pessoas vao a rede.
 //
 // CUSTO (60 fps na C9): remontar so roda quando o texto muda ou a resposta da
 // rede chega, nunca por quadro. O desenho e um veu, um painel e no maximo
@@ -30,6 +32,7 @@
 #include "descoberta.h"
 #include "colecoes.h"
 #include "guia.h"
+#include "spotpessoa.h"
 #include "addons.h"
 #include "teclado.h"
 #include "gfx.h"
@@ -93,6 +96,8 @@ typedef struct {
   int  ref;          // indice de catalogo / pasta / canal / fileira / addon / termo
   int  ref2;         // pessoa: indice do titulo de onde ela veio
   long tmdb;
+  long tituloTmdb;   // pessoa do TMDB: o titulo pelo qual a filmografia abre
+  char tituloTipo[8];
   char t1[160];
   char t2[200];
   char arte[1024];
@@ -117,6 +122,7 @@ static char  consulta[SP_MAX_TXT];
 static int   nConsulta;
 static char  montada[SP_MAX_TXT];  // consulta da ultima remontagem
 static int   ultimoRemoto = -1, ultimoBuscando = -1, ultimaGeracao = -1;
+static unsigned ultimaGerPessoa;
 static float scrollY, scrollAlvo, velY;
 static float animTecla[SP_KB_MAX_FIL + 1][SP_KB_COLS];
 static float animCampo;
@@ -346,7 +352,7 @@ static void montarTitulos(const char *alvo) {
 }
 
 static void montarPessoas(const char *alvo) {
-  long vistos[8];
+  long vistos[SPP_MAX + 4];
   int nv = 0, i, j, n = cat_n(), cab = 0;
   char nome[160];
   for (i = 0; i < n && nv < 4; i++) {
@@ -371,6 +377,28 @@ static void montarPessoas(const char *alvo) {
       snprintf(l->chave, sizeof l->chave, "p|%ld", l->tmdb);
     }
   }
+  // O TMDB completa ate SPP_MAX, na ordem de popularidade dele. Sem resposta
+  // ainda (debounce, rede) a lista fica com as do elenco e remonta quando a
+  // resposta chega (spot_atualizar).
+  { int nt = spotpessoa_n(consulta);
+    for (i = 0; i < nt && nv < SPP_MAX; i++) {
+      SpotPessoa sp;
+      int k, dup = 0;
+      Linha *l;
+      if (!spotpessoa_item(consulta, i, &sp)) break;
+      for (k = 0; k < nv; k++) if (vistos[k] == sp.tmdb) { dup = 1; break; }
+      if (dup) continue;
+      if (!cab) { cabecalho(i18n("Pessoas")); cab = 1; }
+      if (!(l = nova(L_PESSOA))) return;
+      vistos[nv++] = sp.tmdb;
+      l->tmdb = sp.tmdb;
+      l->tituloTmdb = sp.tituloTmdb;
+      snprintf(l->tituloTipo, sizeof l->tituloTipo, "%s", sp.tituloTipo);
+      snprintf(l->t1, sizeof l->t1, "%s", sp.nome);
+      if (sp.conhecido[0]) snprintf(l->t2, sizeof l->t2, i18n("Conhecido por  %s"), sp.conhecido);
+      snprintf(l->arte, sizeof l->arte, "%s", sp.foto);
+      snprintf(l->chave, sizeof l->chave, "p|%ld", l->tmdb);
+    } }
 }
 
 static void montarColecoes(const char *alvo) {
@@ -406,7 +434,10 @@ static void montarCanais(const char *alvo) {
     l->ref = idx[i];
     snprintf(l->id, sizeof l->id, "%s", id);
     snprintf(l->t1, sizeof l->t1, "%s", nome);
-    snprintf(l->t2, sizeof l->t2, "%s%s%s", i18n("Canal"), cat[0] ? "  \xc2\xb7  " : "", cat);
+    // A categoria passa por i18n como no guia (linhaNome): as secoes de
+    // categoriaPorNome sao chaves da tabela; genero do addon volta como veio.
+    snprintf(l->t2, sizeof l->t2, "%s%s%s", i18n("Canal"), cat[0] ? "  \xc2\xb7  " : "",
+             cat[0] ? i18n(cat) : "");
     snprintf(l->arte, sizeof l->arte, "%s", logo);
     snprintf(l->base, sizeof l->base, "%s", base);
     snprintf(l->chave, sizeof l->chave, "k|%.90s", id);
@@ -497,6 +528,9 @@ static void remontar(void) {
   snprintf(montada, sizeof montada, "%s", consulta);
   nLin = 0;
   busca_normalizar(consulta, alvo, sizeof alvo);
+  // Sempre, inclusive com o campo vazio: o debounce precisa saber que o
+  // texto mudou para nao disparar um termo que ja nao esta no campo.
+  spotpessoa_pedir(consulta, SDL_GetTicks());
   if (busca_codepoints(alvo) < 2) montarVazio();
   else {
     desc_buscar(consulta);
@@ -536,6 +570,7 @@ static void remontar(void) {
   ultimoRemoto = busca_codepoints(alvo) >= 2 ? remotoTotal() : -1;
   ultimoBuscando = desc_buscando();
   ultimaGeracao = desc_busca_geracao();
+  ultimaGerPessoa = spotpessoa_geracao();
 }
 
 static int temResultados(void) {
@@ -595,6 +630,7 @@ static void ditar(void) {
 // --- Ciclo de vida -------------------------------------------------------------------
 void spot_abrir(int voz) {
   kbMontar();
+  guia_preparar_busca();
   aberto = 1;
   painel = 0; kbF = 0; kbC = 0;
   nConsulta = 0; consulta[0] = 0; montada[0] = 0;
@@ -606,6 +642,19 @@ void spot_abrir(int voz) {
   memset(entraLin, 0, sizeof entraLin);
   remontar();
   printf("[spotlight] aberto (%s)\n", voz ? "voz" : "tecla");
+#if defined(__linux__) && !defined(NV_TPK) && !defined(NV_ANDROID) && !defined(__EMSCRIPTEN__)
+  // LG: o teclado do SISTEMA por SDL_StartTextInput nao esta ligado (ver
+  // spotlight.h, "LG E O TECLADO DO SISTEMA"). Uma linha por sessao para o
+  // D1 dizer o que o SDL do aparelho responde, sem chamar nada que mude a tela.
+  { static int dito;
+    if (!dito) {
+      SDL_version v;
+      dito = 1;
+      SDL_GetVersion(&v);
+      printf("[spotlight] lg sdl %d.%d.%d osk=%d textinput=%d\n", v.major, v.minor, v.patch,
+             (int)SDL_HasScreenKeyboardSupport(), (int)SDL_IsTextInputActive());
+    } }
+#endif
   fflush(stdout);
   if (voz && ditadoDisponivel()) ditar();
 }
@@ -657,6 +706,8 @@ static void acionar(int i) {
       pedido.tipo = SPOT_TITULO; pedido.indice = l->ref; break;
     case L_PESSOA:
       pedido.tipo = SPOT_PESSOA; pedido.indice = l->ref2; pedido.tmdb = l->tmdb;
+      pedido.tituloTmdb = l->tituloTmdb;
+      snprintf(pedido.tituloTipo, sizeof pedido.tituloTipo, "%s", l->tituloTipo);
       snprintf(pedido.nome, sizeof pedido.nome, "%s", l->t1);
       snprintf(pedido.arte, sizeof pedido.arte, "%s", l->arte);
       break;
@@ -851,10 +902,12 @@ void spot_atualizar(float dt, Uint32 agora) {
 #endif
   // A RESPOSTA DA REDE CHEGA DEPOIS DA TECLA: remonta quando a contagem do termo
   // corrente muda ou quando a busca termina (o aviso "Buscando..." sai).
+  spotpessoa_atualizar(agora);
   if (strcmp(montada, consulta)) remontar();
   else if (nConsulta >= 2) {
     int n = remotoTotal(), b = desc_buscando(), g = desc_busca_geracao();
-    if (n != ultimoRemoto || b != ultimoBuscando || g != ultimaGeracao) remontar();
+    if (n != ultimoRemoto || b != ultimoBuscando || g != ultimaGeracao ||
+        spotpessoa_geracao() != ultimaGerPessoa) remontar();
   }
   for (f = 0; f <= kbFil && f <= SP_KB_MAX_FIL; f++)
     for (c = 0; c < SP_KB_COLS; c++) {

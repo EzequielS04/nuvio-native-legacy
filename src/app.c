@@ -1222,6 +1222,11 @@ static void spotAbrir(int voz) {
   if (ctx_aberto()) return;
   spot_abrir(voz);
 }
+// Pessoa do TMDB esperando a pagina do titulo dela chegar (ver SPOT_PESSOA).
+// Vale SPOT_PESSOA_PRAZO_MS: um titulo que chegue depois disso e outro pedido.
+#define SPOT_PESSOA_PRAZO_MS 20000u
+static SpotPedido spotPessoaDepois;
+static Uint32 spotPessoaDesde;
 // O que a pessoa escolheu no Spotlight, ja com a caixa fechada.
 static void spotAtender(void) {
   SpotPedido p;
@@ -1232,8 +1237,26 @@ static void spotAtender(void) {
       break;
     case SPOT_PESSOA:
       // A pagina do titulo de onde a pessoa veio, com a filmografia por cima.
-      abrirPorIndice(p.indice);
-      detail_mostrar_pessoa(p.tmdb, p.nome, p.arte);
+      if (p.indice >= 0) {
+        abrirPorIndice(p.indice);
+        detail_mostrar_pessoa(p.tmdb, p.nome, p.arte);
+        break;
+      }
+      // Pessoa do TMDB (spotpessoa.h): a filmografia mora na pagina de um
+      // titulo, entao abre a do primeiro titulo pelo qual ela e conhecida.
+      // No catalogo ja abre agora; fora dele a descoberta busca o meta e
+      // trocaDeTituloSeSolicitada mostra a pessoa quando a pagina abrir.
+      { int i, idx = -1;
+        for (i = 0; i < cat_n() && idx < 0; i++) {
+          const CatItem *ci = cat_item(i);
+          if (ci && ci->tmdb == p.tituloTmdb && strcmp(ci->tipo, "channel")) idx = i;
+        }
+        if (idx >= 0) { abrirPorIndice(idx); detail_mostrar_pessoa(p.tmdb, p.nome, p.arte); }
+        else if (p.tituloTmdb > 0) {
+          spotPessoaDepois = p;
+          spotPessoaDesde = SDL_GetTicks();
+          desc_pedir_titulo_tmdb(p.tituloTmdb, p.tituloTipo);
+        } }
       break;
     case SPOT_COLECAO: {
       const ColFolder *f = col_folder(p.indice);
@@ -1608,7 +1631,15 @@ static void trocaDeTituloSeSolicitada(void) {
     // detalhe abria por baixo do video e ninguem via — "clico e nao faz nada".
     // O caminho do titulo que JA esta no catalogo (posplay_pediu_titulo)
     // encerra o player antes; este faz o mesmo.
-    if (novo >= 0) { if (player_aberto()) player_encerrar(); abrirPorIndice(novo); } }
+    if (novo >= 0) {
+      if (player_aberto()) player_encerrar();
+      abrirPorIndice(novo);
+      if (spotPessoaDepois.tmdb > 0) {
+        if (SDL_GetTicks() - spotPessoaDesde < SPOT_PESSOA_PRAZO_MS)
+          detail_mostrar_pessoa(spotPessoaDepois.tmdb, spotPessoaDepois.nome, spotPessoaDepois.arte);
+        spotPessoaDepois.tmdb = 0;
+      }
+    } }
 }
 
 void app_atualizar(float dt, Uint32 agora) {
