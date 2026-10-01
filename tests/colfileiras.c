@@ -305,6 +305,18 @@ int main(void) {
   assert(temFileira("solto_a") && temFileira("solto_b"));
   puts("ok  #18: colecao que chega tarde nao deixa a home abaixo do limite");
 
+  // NOME DO CATALOGO PARA A ABA DA COLECAO (01/10, pasta Netflix): a base da
+  // fonte da conta nao era a do addon instalado byte a byte e a aba mostrava
+  // o id cru. Sem a base exata, (tipo, id) decide quando so ha um nome.
+  registrarNomeCatalogo("https://instalado/cfg1", "movie", "streaming_netflix_movies", "Netflix");
+  assert(!strcmp(desc_nome_catalogo("https://instalado/cfg1", "movie", "streaming_netflix_movies"), "Netflix"));
+  assert(!strcmp(desc_nome_catalogo("https://da-conta/cfg2", "movie", "streaming_netflix_movies"), "Netflix"));
+  assert(!desc_nome_catalogo("https://da-conta/cfg2", "series", "streaming_netflix_movies")[0]);
+  registrarNomeCatalogo("https://outro", "movie", "streaming_netflix_movies", "Outro nome");
+  assert(!desc_nome_catalogo("https://da-conta/cfg2", "movie", "streaming_netflix_movies")[0]);   // dois nomes: nao escolhe
+  assert(!strcmp(desc_nome_catalogo("https://outro", "movie", "streaming_netflix_movies"), "Outro nome"));
+  puts("ok  nome do catalogo da aba: base exata, senao (tipo, id) com nome unico");
+
   puts("colfileiras: tudo ok");
   return 0;
 }

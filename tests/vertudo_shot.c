@@ -111,6 +111,19 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-abas-fim.bmp", saida);
   captura(nome, w);
 
+  // PASTA NETFLIX DA CONTA SEM TITULO NAS FONTES (01/10): colecoes.c copia o
+  // catId para o titulo e o manifesto nao casou pela base — a aba mostrava
+  // "streaming_netflix_movies · Movies". Agora: so o tipo.
+  memset(pasta.sources, 0, sizeof pasta.sources);
+  fonte(0, "streaming_netflix_movies", "movie");
+  fonte(1, "streaming_netflix_series", "series");
+  snprintf(pasta.sources[0].catId, sizeof pasta.sources[0].catId, "streaming_netflix_movies");
+  snprintf(pasta.sources[1].catId, sizeof pasta.sources[1].catId, "streaming_netflix_series");
+  pasta.nSources = 2;
+  tabFocus = 1; tabCursor = 0;
+  snprintf(nome, sizeof nome, "%s-abas-idcru.bmp", saida);
+  captura(nome, w);
+
   tex_encerrar();
   txt_encerrar();
   SDL_GL_DeleteContext(gl);

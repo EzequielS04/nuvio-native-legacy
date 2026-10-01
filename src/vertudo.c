@@ -16,6 +16,7 @@
 #include "nuvem.h"
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -480,17 +481,25 @@ static void themeHeader(float a,float x0) {
     float larg[COL_SOURCE_MAX],pos[COL_SOURCE_MAX],px=0;
     static char rot[COL_SOURCE_MAX][180];
     int nAbas=collection->nSources;
+    // NOME DA ABA (01/10, pasta Netflix mostrava "streaming_netflix_movies ·
+    // Movies"): o nome legivel da fonte (titulo da conta, senao o do
+    // manifesto — #76) e NUNCA o id cru. Sem nome, ou com o mesmo nome da
+    // pasta ("Netflix" na pasta Netflix), so o tipo: "Filmes" / "Séries". O
+    // tipo so acompanha o nome quando duas abas teriam o mesmo texto.
+    static char nomeAba[COL_SOURCE_MAX][128];
     for(int i=0;i<nAbas;i++) {
       const ColSource *s=&collection->sources[i];
-      const char *nome=s->title;
-      // SEM TITULO NA CONTA, o nome vem do manifesto (#76): colecoes.c deixa o
-      // catId no lugar do titulo quando o export nao trouxe um, e "mdblist.13914"
-      // nao e nome de aba. Se o manifesto ainda nao passou, fica o id.
-      if(!nome[0]||!strcmp(nome,s->catId)) {
-        const char *m=desc_nome_catalogo(baseDaFonte(s),s->type,s->catId);
-        if(m[0]) nome=m;
-      }
-      snprintf(rot[i],sizeof rot[i],"%s · %s",nome,i18n(!strcmp(s->type,"series")?"Séries":"Filmes"));
+      col_nome_fonte(s,desc_nome_catalogo(baseDaFonte(s),s->type,s->catId),nomeAba[i],sizeof nomeAba[i]);
+      if(!strcasecmp(nomeAba[i],collection->title))nomeAba[i][0]=0;
+    }
+    for(int i=0;i<nAbas;i++) {
+      const ColSource *s=&collection->sources[i];
+      const char *tipo=i18n(!strcmp(s->type,"series")?"Séries":"Filmes");
+      int repete=0;
+      for(int j=0;j<nAbas&&nomeAba[i][0];j++) if(j!=i&&!strcmp(nomeAba[i],nomeAba[j]))repete=1;
+      if(!nomeAba[i][0])snprintf(rot[i],sizeof rot[i],"%s",tipo);
+      else if(repete)snprintf(rot[i],sizeof rot[i],"%s · %s",nomeAba[i],tipo);
+      else snprintf(rot[i],sizeof rot[i],"%s",nomeAba[i]);
       // Medida com a cor de repouso; a cor certa e reaplicada no desenho (o
       // cache de linhas guarda as duas).
       larg[i]=txt_linha_corta(TXT_HERO_META,rot[i],176,176,176,255,420).w+PAD*2;pos[i]=px;px+=larg[i]+GAP;

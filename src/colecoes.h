@@ -119,4 +119,10 @@ int col_diagnostico(const char *base, const char *type, const char *id,
 const char *col_banner(const ColFolder *f);
 const char *col_capa(const ColFolder *f);
 void col_cor(const ColFolder *f, float *r, float *g, float *b);
+// NOME LEGIVEL DE UMA FONTE, para a aba da pagina da colecao: o titulo que a
+// conta deu a fonte, senao o nome do catalogo no manifesto (`manifesto`, pode
+// ser NULL/""). Vazio quando nenhum dos dois serve — igual ao catId, ou com
+// cara de id ("streaming_netflix_movies": underscore e nenhum espaco). Quem
+// chama poe so o tipo (Filmes/Series) no lugar.
+void col_nome_fonte(const ColSource *s, const char *manifesto, char *dst, unsigned n);
 #endif

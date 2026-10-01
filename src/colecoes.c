@@ -687,3 +687,19 @@ void col_chave_grupo(const char *group, char *dst, unsigned n) {
       snprintf(dst, n, "collection_%s", folders[i].groupId); return; }
   snprintf(dst, n, "collection_%s", group);
 }
+
+// Ver colecoes.h. "Cara de id": tem '_' e nenhum espaco — o id cru do
+// catalogo que a aba mostrava ("streaming_netflix_movies · Movies", pasta
+// Netflix, 01/10). Nome de verdade com underscore e sem espaco nao foi visto.
+static int caraDeId(const char *s, const char *catId) {
+  if (!s || !s[0]) return 1;
+  if (catId && !strcmp(s, catId)) return 1;
+  return strchr(s, '_') && !strchr(s, ' ');
+}
+void col_nome_fonte(const ColSource *s, const char *manifesto, char *dst, unsigned n) {
+  const char *nome = "";
+  if (!dst || !n) return;
+  if (s && !caraDeId(s->title, s->catId)) nome = s->title;
+  else if (s && !caraDeId(manifesto, s->catId)) nome = manifesto;
+  snprintf(dst, n, "%s", nome);
+}
