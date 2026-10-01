@@ -15,6 +15,7 @@
 //
 // Sem rolagem nao ha PF_DOC_H, scroll, velScroll, SECAO_Y nem visivel(): todas
 // as coordenadas daqui sao a posicao final na tela de 1080.
+#include "menu.h"
 #include "perfil.h"
 #include "idioma.h"
 #include "anim.h"
@@ -326,7 +327,7 @@ static void tituloSecao(const char *s, float x, float a) {
 
 static void tituloPagina(float a) {
   TxtLinha t = txt_linha(TXT_TITULO1, "Perfil e Stats", PF_FORTE, PF_FORTE, PF_FORTE, 255);
-  txt_desenhar_alpha(t, PF_X, NV_MARGEM_Y, a);
+  if (!menu_pilula_titulo()) txt_desenhar_alpha(t, PF_X, NV_MARGEM_Y, a);   // Dinamica: na pilula
   // O periodo fica AO LADO do titulo, alinhado pela base, como a linha de
   // contexto dos Ajustes: e rotulo do recorte, nao um dado a mais.
   if (dados.periodo[0]) {

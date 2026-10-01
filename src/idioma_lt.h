@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "Tikrinami manifestai, katalogai ir šaltiniai"),
   T("Sorte guiada", "Kryptinga laimė"),
   T("Status", "Būsena"),
+  T("Streaming", "Streaming"),
   T("Sua atividade", "Jūsų veikla"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "Jūsų AllDebrid API raktas (alldebrid.com/apikeys). Su juo šaltinių torrentai leidžiami per AllDebrid, kuriam reikia premium paskyros. Lieka tik šiame televizoriuje, rodomas užmaskuotas ir galioja vietoj rakto iš Nuvio paskyros."),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "Jūsų AllDebrid raktas atmestas — patikrinkite jį skiltyje Nustatymai > Integracijos > Debrid"),

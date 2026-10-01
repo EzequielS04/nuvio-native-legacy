@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "Manifestolar, kataloglar ve kaynaklar yoklanıyor"),
   T("Sorte guiada", "Yönlendirilmiş şans"),
   T("Status", "Durum"),
+  T("Streaming", "Streaming"),
   T("Sua atividade", "Etkinliğin"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "AllDebrid API anahtarınız (alldebrid.com/apikeys). Onunla kaynaklardaki torrent'ler, premium hesap gerektiren AllDebrid üzerinden oynatılır. Sadece bu TV'de kalır, maskeli gösterilir ve Nuvio hesabından gelen anahtarın yerine geçer."),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "AllDebrid anahtarınız reddedildi — Ayarlar > Entegrasyonlar > Debrid bölümünden kontrol edin"),

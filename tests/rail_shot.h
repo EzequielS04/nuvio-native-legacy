@@ -7,6 +7,7 @@
 //   NUVIO_RAIL=fixa       collapseSidebar Fixa, barra moderna desligada
 //   NUVIO_RAIL=moderna    barra moderna ligada (desliga o recolhimento)
 //   NUVIO_RAIL=recolhida  o padrao de fabrica do perfil: rail nenhuma
+//   NUVIO_RAIL=dinamica   layout Dinamica: so a pilula da barra no topo
 //
 // Sem a variavel, nada muda: o teste continua o de antes. O modo entra pelo
 // caminho real (um ajustes.txt lido por ajustes_dir), numa pasta PROPRIA, e
@@ -49,6 +50,9 @@ static void rail_shot_aplicar(void) {
           strcmp(m, "recolhida") ? 1 : 0, strcmp(m, "moderna") ? 1 : 0);
   // NUVIO_RAIL_OCULTOS=1 (#162): Guia e Agenda escondidos, para ver a barra
   // com menos itens.
+  // NUVIO_RAIL=dinamica: layout Dinamica da home, onde a barra e a pilula da
+  // Apple TV no topo esquerdo (menu.c) e nao ha rail fixa.
+  if (!strcmp(m, "dinamica")) fputs("homeLayoutLocal 2\n", f);
   { const char *o = getenv("NUVIO_RAIL_OCULTOS");
     if (o && *o == '1') fputs("menuGuiaLocal 1\nmenuAgendaLocal 1\n", f); }
   fclose(f);

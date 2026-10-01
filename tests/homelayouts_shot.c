@@ -28,6 +28,7 @@
 #include "gfx.h"
 #include "home.h"
 #include "layout.h"
+#include "menu.h"
 #include "tex_cache.h"
 #include "text.h"
 #include <SDL2/SDL.h>
@@ -97,6 +98,12 @@ static void quadros(int n, const char *bmp) {
     home_desenhar(agora);
     ctx_atualizar(1.0f / 60.0f, agora);
     ctx_desenhar(agora);
+    // NV_MENU=1: a barra por cima, como app.c (no Dinamica, a pilula do topo).
+    if (getenv("NV_MENU")) {
+      menu_pilula_mostrar(home_topo_fracao());
+      menu_atualizar(1.0f / 60.0f, agora);
+      menu_desenhar(agora);
+    }
     if (i == n - 1) { fillUlt = gfx_fill; fillVisUlt = gfx_fill_vis; rectUlt = gfx_n_rect;
                       memcpy(modoUlt, gfx_fill_modo, sizeof modoUlt); }
     if (bmp && i == n - 1) gravar(bmp);
@@ -314,6 +321,25 @@ int main(int argc, char **argv) {
         snprintf(bmp, sizeof bmp, "%s-L%d-g%d-0-destaque.bmp", saida, layout, vidro);
         quadros(1, bmp);
         printf("[shot] L%d g%d destaque: fill=%.2f vis=%.2f rects=%d\n", layout, vidro, fillUlt, fillVisUlt, rectUlt);
+        // NV_MENU_ABRIR=1 (com NV_MENU): a barra aberta sobre o destaque e,
+        // descendo ate o fim, a secao de Streaming (NV_COL) rolada.
+        if (getenv("NV_MENU_ABRIR") && getenv("NV_MENU")) {
+          SDL_Event me;
+          int d;
+          menu_abrir();
+          snprintf(bmp, sizeof bmp, "%s-L%d-g%d-0-menu-aberto.bmp", saida, layout, vidro);
+          quadros(60, bmp);
+          memset(&me, 0, sizeof me);
+          me.type = SDL_KEYDOWN; me.key.keysym.sym = SDLK_DOWN;
+          for (d = 0; d < 10; d++) menu_evento(&me);
+          snprintf(bmp, sizeof bmp, "%s-L%d-g%d-0-menu-streaming.bmp", saida, layout, vidro);
+          quadros(60, bmp);
+          for (d = 0; d < 10; d++) menu_evento(&me);
+          snprintf(bmp, sizeof bmp, "%s-L%d-g%d-0-menu-fim.bmp", saida, layout, vidro);
+          quadros(60, bmp);
+          menu_fechar();
+          quadros(40, NULL);
+        }
         if (getenv("NV_FILL_MODOS")) {   // quem preenche: modo=telas cheias
           int m; printf("[shot]   modos:");
           for (m = 0; m < GFX_NMODOS; m++) if (modoUlt[m] > 0.05) printf(" %d=%.2f", m, modoUlt[m]);

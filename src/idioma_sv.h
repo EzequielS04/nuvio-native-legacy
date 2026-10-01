@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "Undersöker manifest, kataloger och källor"),
   T("Sorte guiada", "Guidad lycka"),
   T("Status", "Status"),
+  T("Streaming", "Streaming"),
   T("Sua atividade", "Din aktivitet"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "Din API-nyckel för AllDebrid (alldebrid.com/apikeys). Med den spelas källornas torrents via AllDebrid, som kräver premiumkonto. Finns bara på den här TV:n, visas maskerad och gäller i stället för nyckeln från Nuvio-kontot."),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "Din AllDebrid-nyckel nekades — kontrollera den under Inställningar > Integrationer > Debrid"),

@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "Đang thăm dò manifest, danh mục và nguồn"),
   T("Sorte guiada", "May mắn có định hướng"),
   T("Status", "Trạng thái"),
+  T("Streaming", "Streaming"),
   T("Sua atividade", "Hoạt động của bạn"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "Khóa API AllDebrid của bạn (alldebrid.com/apikeys). Với khóa này, torrent từ các nguồn được phát qua AllDebrid, dịch vụ cần tài khoản premium. Chỉ lưu trên TV này, được hiển thị dạng che và được ưu tiên hơn khóa đến từ tài khoản Nuvio."),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "Khóa AllDebrid của bạn bị từ chối — hãy kiểm tra trong Cài đặt > Tích hợp > Debrid"),

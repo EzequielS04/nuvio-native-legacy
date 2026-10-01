@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "Sondowanie manifestów, katalogów i źródeł"),
   T("Sorte guiada", "Kierowany przypadek"),
   T("Status", "Stan"),
+  T("Streaming", "Streaming"),
   T("Sua atividade", "Twoja aktywność"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "Twój klucz API AllDebrid (alldebrid.com/apikeys). Dzięki niemu torrenty ze źródeł są odtwarzane przez AllDebrid, który wymaga konta premium. Zostaje tylko na tym telewizorze, jest wyświetlany w postaci zamaskowanej i ma pierwszeństwo przed kluczem z konta Nuvio."),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "Twój klucz AllDebrid został odrzucony — sprawdź go w Ustawienia > Integracje > Debrid"),

@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "Memeriksa manifest, katalog, dan sumber"),
   T("Sorte guiada", "Keberuntungan terarah"),
   T("Status", "Status"),
+  T("Streaming", "Streaming"),
   T("Sua atividade", "Aktivitasmu"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "Kunci API AllDebrid Anda (alldebrid.com/apikeys). Dengannya torrent dari sumber diputar lewat AllDebrid, yang butuh akun premium. Hanya tersimpan di TV ini, ditampilkan tersamar, dan berlaku menggantikan kunci dari akun Nuvio."),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "Kunci AllDebrid Anda ditolak — periksa di Pengaturan > Integrasi > Debrid"),

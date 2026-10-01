@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "Skúmajú sa manifesty, katalógy a zdroje"),
   T("Sorte guiada", "Riadené šťastie"),
   T("Status", "Stav"),
+  T("Streaming", "Streaming"),
   T("Sua atividade", "Vaša aktivita"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "Váš kľúč API AllDebrid (alldebrid.com/apikeys). S ním sa torrenty zo zdrojov prehrávajú cez AllDebrid, ktorý vyžaduje účet premium. Zostáva len v tomto televízore, zobrazuje sa maskovaný a platí namiesto kľúča z účtu Nuvio."),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "Váš kľúč AllDebrid bol odmietnutý — skontrolujte ho v Nastavenia > Integrácie > Debrid"),

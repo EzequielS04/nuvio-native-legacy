@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "マニフェスト、カタログ、ソースを調査しています"),
   T("Sorte guiada", "導かれる偶然"),
   T("Status", "ステータス"),
+  T("Streaming", "ストリーミング"),
   T("Sua atividade", "あなたのアクティビティ"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "AllDebrid の API キー (alldebrid.com/apikeys)。設定すると、ソースのトレントがプレミアムアカウントの必要な AllDebrid 経由で再生されます。このテレビにのみ保存され、伏せ字で表示され、Nuvio アカウントのキーより優先されます。"),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "AllDebrid のキーが拒否されました。設定 > 連携 > Debrid で確認してください"),

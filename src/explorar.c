@@ -19,6 +19,7 @@
 // CUSTO, medido pelo contador de gfx: um ceu procedural de tela cheia (que ja
 // e o fundo, nao uma camada a mais), linhas partidas em pedacos de 120 px para
 // o envelope do GFX_LINHA nao virar area cheia, e nenhuma alocacao por quadro.
+#include "menu.h"
 #include "explorar.h"
 #include "mapa.h"
 #include "catalogo.h"
@@ -812,7 +813,8 @@ static void curiosidade(char *dst, size_t n) {
 static void desenharCabecalho(void) {
   TxtLinha t = txt_linha(TXT_TITULO2, i18n("Explorar"), 246, 246, 248, 255);
   float x = ajustes_conteudo_x();
-  txt_desenhar(t, x, 54.0f);
+  // Layout Dinamica: o nome da tela esta na pilula da barra (menu.h).
+  if (!menu_pilula_titulo()) txt_desenhar(t, x, 54.0f);
   { TxtLinha s = txt_linha(TXT_BODY, i18n("O que você viu, ligado pelo que as histórias têm em comum"),
                            180, 184, 198, 255);
     txt_desenhar(s, x, 128.0f); }

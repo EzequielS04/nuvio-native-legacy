@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "Έλεγχος manifests, καταλόγων και πηγών"),
   T("Sorte guiada", "Κατευθυνόμενη τύχη"),
   T("Status", "Κατάσταση"),
+  T("Streaming", "Streaming"),
   T("Sua atividade", "Η δραστηριότητά σου"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "Το κλειδί API σας για το AllDebrid (alldebrid.com/apikeys). Με αυτό, τα torrent των πηγών παίζουν μέσω AllDebrid, που απαιτεί premium λογαριασμό. Μένει μόνο σε αυτή την τηλεόραση, εμφανίζεται συγκαλυμμένο και ισχύει αντί για αυτό που έρχεται από τον λογαριασμό Nuvio."),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "Το κλειδί σας για το AllDebrid απορρίφθηκε — ελέγξτε το στις Ρυθμίσεις > Ενσωματώσεις > Debrid"),

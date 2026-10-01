@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "正在探测清单、片库和片源"),
   T("Sorte guiada", "被引导的好运"),
   T("Status", "状态"),
+  T("Streaming", "流媒体"),
   T("Sua atividade", "你的活动"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "您的 AllDebrid API 密钥 (alldebrid.com/apikeys)。有了它，片源里的种子会通过需要高级会员账号的 AllDebrid 播放。只保存在这台电视上，以遮盖形式显示，并优先于 Nuvio 账号提供的密钥。"),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "您的 AllDebrid 密钥被拒绝——请在设置 > 集成 > Debrid 中检查"),

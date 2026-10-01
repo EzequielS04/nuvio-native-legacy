@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "Manifesztek, katalógusok és források vizsgálata"),
   T("Sorte guiada", "Irányított szerencse"),
   T("Status", "Állapot"),
+  T("Streaming", "Streaming"),
   T("Sua atividade", "Az aktivitásod"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "Az AllDebrid API-kulcsod (alldebrid.com/apikeys). Vele a források torrentjei az AllDebriden keresztül játszódnak le, amelyhez prémium fiók kell. Csak ezen a tévén marad, elrejtve jelenik meg, és a Nuvio-fiókból érkező kulcs helyett érvényes."),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "Az AllDebrid-kulcsodat elutasították — ellenőrizd a Beállítások > Integrációk > Debrid alatt"),

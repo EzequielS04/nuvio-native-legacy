@@ -2209,6 +2209,7 @@
   T("Sondando manifestos, catálogos e fontes", "Se sondează manifestele, cataloagele și sursele"),
   T("Sorte guiada", "Noroc ghidat"),
   T("Status", "Stare"),
+  T("Streaming", "Streaming"),
   T("Sua atividade", "Activitatea ta"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "Cheia ta API AllDebrid (alldebrid.com/apikeys). Cu ea, sursele torrent se redau prin AllDebrid, care necesită cont premium. Rămâne doar pe acest televizor, apare mascată și are prioritate față de cea din contul Nuvio."),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "Cheia ta AllDebrid a fost respinsă — verific-o în Setări > Integrări > Debrid"),

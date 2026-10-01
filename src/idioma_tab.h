@@ -2209,6 +2209,7 @@
   { "Sondando manifestos, catálogos e fontes", "Probing manifests, catalogs and sources" },
   { "Sorte guiada", "Guided luck" },
   { "Status", "Status" },
+  { "Streaming", "Streaming" },
   { "Sua atividade", "Your activity" },
   { "Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "Your AllDebrid API key (alldebrid.com/apikeys). With it, torrent sources play through AllDebrid, which needs a premium account. It stays on this TV only, is shown masked and takes the place of any key that comes from the Nuvio account." },
   { "Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "Your AllDebrid key was rejected — check it in Settings > Integrations > Debrid" },

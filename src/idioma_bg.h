@@ -2210,6 +2210,7 @@
   T("Sondando manifestos, catálogos e fontes", "Изследват се манифести, каталози и източници"),
   T("Sorte guiada", "Насочен шанс"),
   T("Status", "Състояние"),
+  T("Streaming", "Стрийминг"),
   T("Sua atividade", "Вашата активност"),
   T("Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.", "Вашият API ключ на AllDebrid (alldebrid.com/apikeys). С него торентите от източниците се пускат през AllDebrid, който изисква premium акаунт. Остава само на този телевизор, показва се маскиран и важи вместо ключа от акаунта в Nuvio."),
   T("Sua chave do AllDebrid foi recusada — confira em Ajustes > Integrações > Debrid", "Вашият ключ на AllDebrid беше отхвърлен — проверете го в Настройки > Интеграции > Debrid"),
