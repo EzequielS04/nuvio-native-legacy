@@ -263,6 +263,25 @@ int main(void) {
     assert(posterprov_e_provedor(posterprov_card("tt0108052", 0, "movie", "n"))); }
   ok("card: cartaz normal quando falha/nao entende, lembra a falha, config zera");
 
+  // ---------------------------------------------------------- poster do addon
+  // Desligado (padrao): o provedor vence, com ou sem origem. Ligado: o cartaz
+  // proprio de um item de catalogo de addon vence; sem origem (Trakt, Salvos)
+  // ou com o poster generico do metahub, o provedor continua.
+  estadoFalso = 1;
+  { const char *prov = "https://p.exemplo.com/api/poster/movie/tt0111161?fmt=jpeg&config=TOK";
+    posterprov_preferir_addon(0);
+    IGUAL(posterprov_card_addon("aiometadata", "tt0111161", 0, "movie", "https://addon/p.jpg"), prov);
+    posterprov_preferir_addon(1);
+    IGUAL(posterprov_card_addon("aiometadata", "tt0111161", 0, "movie", "https://addon/p.jpg"), "https://addon/p.jpg");
+    IGUAL(posterprov_card_addon("", "tt0111161", 0, "movie", "https://addon/p.jpg"), prov);
+    IGUAL(posterprov_card_addon(NULL, "tt0111161", 0, "movie", "https://addon/p.jpg"), prov);
+    IGUAL(posterprov_card_addon("cinemeta", "tt0111161", 0, "movie",
+          "https://images.metahub.space/poster/medium/tt0111161/img"), prov);
+    // addon sem poster: o provedor, que e melhor que nada
+    IGUAL(posterprov_card_addon("aiometadata", "tt0111161", 0, "movie", ""), prov);
+    posterprov_preferir_addon(0); }
+  ok("poster do addon: desligado o provedor; ligado o do addon, menos metahub e sem origem");
+
   // ---------------------------------------------------------- desligado
   memset(&c, 0, sizeof c);
   posterprov_configurar(&c);

@@ -68,6 +68,8 @@ static int fakeMetaExterno, fakeTmdbBasico;
 int   ajustes_meta_externo(void)           { return fakeMetaExterno; }
 static int fakeSoCinemeta;
 int   ajustes_meta_so_cinemeta(void)        { return fakeSoCinemeta; }
+int   ajustes_fundo_addon(void)            { return 0; }
+int   ajustes_logo_addon(void)             { return 0; }
 int   ajustes_tmdb_basico(void)            { return fakeTmdbBasico; }
 int   ajustes_tmdb_arte(void)              { return 0; }
 int   ajustes_tmdb_elenco(void)            { return 0; }

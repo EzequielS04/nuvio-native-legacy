@@ -111,6 +111,17 @@ void posterprov_hook_relogio(long (*fn)(void));
 // bastante para "pedir a textura e o aspecto no mesmo trecho".
 const char *posterprov_card(const char *imdb, long tmdb, const char *tipo,
                             const char *orig);
+// PRECEDENCIA COM A ARTE DO ADDON (ajuste "Pôsteres do addon", desligado de
+// fabrica). Ligado, o cartaz que o proprio addon mandou vence o provedor:
+// `origem` e o CatItem.origem (vazio = nao veio de catalogo de addon: Trakt,
+// Salvos, progresso) e `orig` o poster do item. O poster generico do Cinemeta
+// (images.metahub.space, o mesmo para todo addon que so repassa o IMDb) NAO
+// conta como arte do addon — ali o provedor continua. Nos outros casos, ou com
+// o ajuste desligado, e posterprov_card() sem mudanca nenhuma.
+void posterprov_preferir_addon(int sim);
+int  posterprov_addon_vence(const char *origem, const char *orig);
+const char *posterprov_card_addon(const char *origem, const char *imdb, long tmdb,
+                                  const char *tipo, const char *orig);
 
 // 1 quando `url` e uma URL montada pelo provedor ativo (para o portao de
 // concorrencia e para redigir o log).

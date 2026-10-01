@@ -32,6 +32,8 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include "gl_compat.h"
+#include "posterprov.h"
+#include <unistd.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -146,6 +148,10 @@ static void ajusta(int layout, int vidro) {
   if (getenv("NV_AJ")) fprintf(a, "%s\n", getenv("NV_AJ"));   // ex.: "heroSectionEnabled 1"
   fclose(a);
   ajustes_dir(dirDados);
+  // O roteamento de app.c (app_atualizar), que este teste nao roda.
+  artehero_fundo_addon(ajustes_fundo_addon());
+  posterprov_preferir_addon(ajustes_poster_addon());
+  col_arte_conta(ajustes_col_arte_conta());
 }
 
 int main(int argc, char **argv) {
@@ -222,6 +228,14 @@ int main(int argc, char **argv) {
       snprintf(c->backdropCatalogo, sizeof c->backdropCatalogo, "%s", c->backdrop);
       snprintf(c->poster, sizeof c->poster, "deploy/app/art/poster/%02d.jpg", a);
       if (a < 10) snprintf(c->logo, sizeof c->logo, "deploy/app/art/logo/%02d.png", a);
+      // NV_ARTE_ADDON=1: todo item vem de um addon (origem; inclusive o da
+      // primeira fileira, que abre o destaque) e tambem traz um fundo "do
+      // TMDB" — outra foto, local —, para a captura separar "Background do
+      // hero" = TMDB de "Fundo do destaque do addon".
+      if (getenv("NV_ARTE_ADDON")) {
+        snprintf(c->origem, sizeof c->origem, "%s", "xperience");
+        snprintf(c->backdropTmdb, sizeof c->backdropTmdb, "deploy/app/art/%02d.jpg", (a + 17) % NA);
+      }
       c->nota = 68 + (ini + i) % 25;
       if (k == 0) { c->progresso = 20 + i * 12; c->restanteMin = 90 - i * 10; }
     }
@@ -244,6 +258,24 @@ int main(int argc, char **argv) {
       "{\"id\":\"c\",\"title\":\"So fundo da colecao\",%s},"
       "{\"id\":\"d\",\"title\":\"Com hero sem capa\",\"heroBackdropUrl\":\"deploy/app/art/09.jpg\",%s}]}]}",
       fonte, fonte, fonte, fonte);
+    // NV_COL_PACOTE=1: o pacote traz as pastas "a" e "b" com arte PROPRIA
+    // (caminho absoluto: localiza nao mexe), para a captura de "Arte das
+    // pastas da conta". Desligado vence o pacote; ligado, a conta.
+    if (getenv("NV_COL_PACOTE")) {
+      char cam[800], cwd[500], pk[2400];
+      FILE *f;
+      assert(getcwd(cwd, sizeof cwd));
+      snprintf(pk, sizeof pk,
+        "{\"groups\":[{\"id\":\"cs\",\"title\":\"Streaming\",\"folders\":["
+        "{\"id\":\"a\",\"title\":\"Com hero e capa\",\"cover\":\"%s/deploy/app/art/poster/30.jpg\",\"hero\":\"%s/deploy/app/art/21.jpg\","
+          "\"sources\":[{\"title\":\"M\",\"base\":\"https://addon.invalid/x\",\"type\":\"movie\",\"catId\":\"k\"}]},"
+        "{\"id\":\"b\",\"title\":\"So capa\",\"cover\":\"%s/deploy/app/art/25.jpg\","
+          "\"sources\":[{\"title\":\"M\",\"base\":\"https://addon.invalid/x\",\"type\":\"movie\",\"catId\":\"k\"}]}]}]}",
+        cwd, cwd, cwd);
+      snprintf(cam, sizeof cam, "%s/collections.json", dirDados);
+      f = fopen(cam, "w"); assert(f); fputs(pk, f); fclose(f);
+      assert(col_carregar(dirDados) == 2);
+    }
     assert(col_definir_json(js) == 4);
   }
   cat_definir_tudo(itens, total, fils, NF);

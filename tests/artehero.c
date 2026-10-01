@@ -15,6 +15,9 @@ __attribute__((unused)) static int igualDuble(const char *a, const char *b) {
   return igualA && a && b && ((!strcmp(a, igualA) && !strcmp(b, igualB)) ||
                               (!strcmp(a, igualB) && !strcmp(b, igualA)));
 }
+__attribute__((unused)) static int falhouFundoAddon(const char *u) {
+  return u && strstr(u, "addon.example/bg.jpg") != NULL;
+}
 __attribute__((unused)) static int falhouLogoAntiga(const char *u) {
   return u && strstr(u, "logo-old.png") != NULL;
 }
@@ -411,6 +414,36 @@ int main(void) {
     artehero_definir_falhou(NULL);
   }
   puts("ok  logo: vazio/enriquecimento/identidade/falha definitiva");
+
+  // "FUNDO DO DESTAQUE DO ADDON": desligado nada muda; ligado, o background do
+  // catalogo do addon vence a fonte e o "outra arte" no card e no destaque.
+  // Sem origem, sem fundo proprio (o poster copiado) ou falhado: a regra acima.
+  { CatItem c = item("https://addon.example/bg.jpg", "https://addon.example/p.jpg", "tt0111161");
+    const char *alt = "https://nuvio.invalid/arte/tmdbalt/w1280/tt0111161";
+    const char *tm = "https://nuvio.invalid/arte/tmdb/w1280/tt0111161";
+    snprintf(c.backdropCatalogo, sizeof c.backdropCatalogo, "%s", c.backdrop);
+    snprintf(c.origem, sizeof c.origem, "%s", "xperience");
+    snprintf(c.tipo, sizeof c.tipo, "%s", "movie");
+    artehero_qualidade(1);
+    artehero_fundo_addon(0);
+    assert(!strcmp(artehero_url_destaque(&c, ARTEHERO_TMDB, 0), tm));
+    assert(!strcmp(artehero_url_destaque(&c, ARTEHERO_AUTO, 1), alt));
+    assert(!strcmp(artehero_url_card_fonte(&c, ARTEHERO_TMDB, 0), tm));
+    artehero_fundo_addon(1);
+    assert(!strcmp(artehero_url_destaque(&c, ARTEHERO_TMDB, 0), "https://addon.example/bg.jpg"));
+    assert(!strcmp(artehero_url_destaque(&c, ARTEHERO_AUTO, 1), "https://addon.example/bg.jpg"));
+    assert(!strcmp(artehero_url_card_fonte(&c, ARTEHERO_TMDB, 0), "https://addon.example/bg.jpg"));
+    { CatItem s = c; s.origem[0] = 0;                        // Trakt/Salvos: sem origem
+      assert(!strcmp(artehero_url_destaque(&s, ARTEHERO_TMDB, 0), tm)); }
+    { CatItem s = c;                                         // addon sem fundo: poster copiado
+      snprintf(s.backdropCatalogo, sizeof s.backdropCatalogo, "%s", s.poster);
+      snprintf(s.backdrop, sizeof s.backdrop, "%s", s.poster);
+      assert(!strcmp(artehero_url_destaque(&s, ARTEHERO_TMDB, 0), tm)); }
+    artehero_definir_falhou(falhouFundoAddon);               // fundo do addon falhou
+    assert(!strcmp(artehero_url_destaque(&c, ARTEHERO_TMDB, 0), tm));
+    artehero_definir_falhou(NULL);
+    artehero_fundo_addon(0); }
+  puts("ok  fundo do addon: desligado nada muda; ligado vence fonte e outra arte, com reserva");
 
   puts("artehero: tudo ok");
   return 0;

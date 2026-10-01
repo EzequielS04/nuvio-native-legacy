@@ -209,6 +209,8 @@ int   ajustes_cw_fonte(void)               { return 0; }
 int   ajustes_tmdb_ligado(void)            { return 0; }
 int   ajustes_tmdb_basico(void)            { return 0; }
 int   ajustes_meta_externo(void)           { return 0; }
+int   ajustes_fundo_addon(void)            { return 0; }
+int   ajustes_logo_addon(void)             { return 0; }
 int   ajustes_meta_so_cinemeta(void)        { return 0; }
 int   addons_aceita_id(int i, const char *t, const char *id) { (void)i; (void)t; (void)id; return -1; }
 int   ajustes_tmdb_arte(void)              { return 0; }

@@ -472,12 +472,27 @@ static int xperienceEstilo(const char *url) {
   return strncmp(c, "/covers/default/", 16) != 0;
 }
 
+// "ARTE DAS PASTAS DA CONTA" (Ajustes, desligado de fabrica). Desligado, a
+// pasta da conta que casa com uma do pacote fica com a arte curada do pacote
+// (a regra de sempre, logo abaixo). Ligado, a capa, o fundo e o logo que a
+// conta manda vencem — o que a conta nao tem continua o do pacote.
+//
+// Trocar o ajuste refaz o casamento na hora (col_arte_conta): folders[] ja tem
+// a arte da regra anterior, entao o pacote e relido e a ultima resposta da
+// conta, guardada aqui, e aplicada de novo.
+static int arteConta;
+static char *ultimoJson;
+static int ultimoComConta;
+
 int col_definir_json(const char *json) {
   char *solto = NULL;
-  int fundosXp = 0;
+  int fundosXp = 0, arteDaConta = 0;
   const char *arr, *fim;
   int antes, novas, recarregou = 0;
   if (!json || !*json) return 0;
+  { char *copia = strdup(json);
+    free(ultimoJson);
+    ultimoJson = copia; }
   // Linha da RPC: [{collections_json: ...}] ou {collections_json: ...}.
   { const char *linha = *json == '[' ? js_raiz_array(json) : json;
     const char *cj = linha ? strstr(linha, "\"collections_json\"") : NULL;
@@ -572,10 +587,33 @@ int col_definir_json(const char *json) {
         v.detailHero[0] = 0;
         fundosXp++;
       }
+      // ARTE DA CONTA LIGADA: campo a campo, so o que a conta mandou. A capa
+      // da conta leva junto o GIF dela (a sequencia do pacote e da capa do
+      // pacote); o fundo da conta desliga o modo editorial, como o Xperience.
+      if (arteConta) {
+        int trocou = 0;
+        if (folders[i].cover[0]) {
+          snprintf(v.cover, sizeof v.cover, "%s", folders[i].cover);
+          snprintf(v.focusGif, sizeof v.focusGif, "%s", folders[i].focusGif);
+          v.frames = 0;
+          trocou = 1;
+        }
+        if (folders[i].hero[0]) {
+          snprintf(v.hero, sizeof v.hero, "%s", folders[i].hero);
+          v.editorial = 0;
+          v.detailHero[0] = 0;
+          trocou = 1;
+        }
+        if (folders[i].logo[0]) {
+          snprintf(v.logo, sizeof v.logo, "%s", folders[i].logo);
+          trocou = 1;
+        }
+        arteDaConta += trocou;
+      }
       folders[i] = v; casadas++; break;
     }
-    printf("[colecoes] %d pastas da conta casaram com a arte do pacote, %d com fundo escolhido no Xperience\n",
-           casadas, fundosXp);
+    printf("[colecoes] %d pastas da conta casaram com a arte do pacote, %d com fundo escolhido no Xperience, %d com a arte da conta\n",
+           casadas, fundosXp, arteDaConta);
   }
   free(antigas);
   if (!novas && recarregou) {
@@ -612,11 +650,30 @@ int col_definir_json(const char *json) {
         printf("[colecoes] %d URL(s) de capa/GIF passavam de 511 bytes e foram descartadas\n", fGifCortado); }
   }
   aplicarExtras();
+  ultimoComConta = novas > 0;
   free(solto);
   return novas;
 }
 
+void col_arte_conta(int sim) {
+  char *j;
+  sim = sim ? 1 : 0;
+  if (sim == arteConta) return;
+  arteConta = sim;
+  // Sem resposta da conta (ou sem pacote) nao ha casamento a refazer: o proximo
+  // col_definir_json ja le o valor novo.
+  if (!ultimoJson || !ultimoComConta || !dirPacote[0]) return;
+  j = strdup(ultimoJson);
+  if (!j) return;
+  col_carregar(dirPacote);
+  col_definir_json(j);
+  free(j);
+}
+
 void col_esquecer_perfil(void) {
+  free(ultimoJson);
+  ultimoJson = NULL;
+  ultimoComConta = 0;
   count = 0;
   semConta = 1;
   aplicarExtras();

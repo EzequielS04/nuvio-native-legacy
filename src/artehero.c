@@ -532,10 +532,27 @@ static int mesmaFoto(const char *a, const char *b) {
   return mesmaImagem && mesmaImagem(a, b);
 }
 
+// "FUNDO DO DESTAQUE DO ADDON" (ajuste local, desligado de fabrica). Ligado,
+// o `background` que o addon mandou no catalogo vence a fonte escolhida e o
+// "outra arte" — so a escolha a mao (#142) vem antes. Conta como fundo do
+// addon: item com origem (veio de um catalogo de addon) e backdropCatalogo que
+// nao e o proprio poster (deMeta copia o poster quando o addon nao manda
+// fundo). Sem isso, ou se ja falhou, NULL e vale a politica de sempre.
+static int fundoAddon;
+void artehero_fundo_addon(int sim) { fundoAddon = sim ? 1 : 0; }
+static const char *urlAddon(const CatItem *item, int grande, char *tmp, size_t tam) {
+  const char *u;
+  if (!fundoAddon || !item || !item->origem[0] || !item->backdropCatalogo[0] ||
+      !strcmp(item->backdropCatalogo, item->poster)) return NULL;
+  u = urlDaFonte(item, ARTEHERO_CATALOGO, grande, tmp, tam);
+  return (u && !falhou(u)) ? u : NULL;
+}
+
 const char *artehero_url_card_fonte(const CatItem *item, int fonte, int diferente) {
   char tmp[512];
   const char *u;
   if (!item) return NULL;
+  if ((u = urlAddon(item, 0, tmp, sizeof tmp)) != NULL) return fixar(u, tmp);
   // Diferente LIGADO: o card fica com a arte do catalogo, sempre; a fonte
   // escolhida vai so para o destaque e o detalhe (regra no .h).
   if (diferente || fonte <= ARTEHERO_AUTO) return artehero_url_card(item);
@@ -566,6 +583,7 @@ const char *artehero_url_destaque(const CatItem *item, int fonte, int diferente)
   if (!item) return NULL;
   // A escolha a mao vence a fonte dos Ajustes e o "outra arte" (#142).
   if ((u = artehero_url_escolhida(item)) != NULL) return u;
+  if ((u = urlAddon(item, 1, tmp, sizeof tmp)) != NULL) return fixar(u, tmp);
   if (!diferente) {
     // PADRAO: a mesma imagem do card (19/09), agora com a fonte escolhida
     // valendo para os dois. Sem a fonte, a arte automatica.

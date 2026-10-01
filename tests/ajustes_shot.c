@@ -378,9 +378,9 @@ int main(int argc, char **argv) {
   // grupos). Paginas de 6 passos. `LINHAS` e quantos itens com foco a
   // categoria tem no nivel de cima (grupos contam um); `GRUPOS`, as linhas de
   // cada grupo — espelho de TELA[] em ajustes.c.
-  { static const int LINHAS[9] = { 3, 5, 6, 8, 3, 9, 3, 7, 4 };
-    static const int GRUPOS[9][6] = {
-      [2] = { 8, 15, 10, 9, 3, 11 },           // Layout (trailer: 8; Continuar: 10)
+  { static const int LINHAS[9] = { 3, 5, 8, 8, 3, 9, 3, 7, 4 };
+    static const int GRUPOS[9][8] = {
+      [2] = { 8, 15, 10, 9, 3, 11, 7, 4 },     // Layout (trailer: 8; Continuar: 10; posteres; arte do addon)
       [4] = { 14, 10, 1 },                     // Integracoes
     };
     int c, g, p, k;
@@ -403,7 +403,7 @@ int main(int argc, char **argv) {
         snprintf(nome, sizeof nome, "%s-todas-c%d-fim.bmp", saida, c);
         captura(nome, w);
       }
-      for (g = 0; g < 6 && GRUPOS[c][g]; g++) {
+      for (g = 0; g < 8 && GRUPOS[c][g]; g++) {
         for (i = 0; i < 12; i++) tecla(SDLK_UP);
         for (i = 0; i < g; i++) tecla(SDLK_DOWN);
         tecla(SDLK_RETURN);                    // abre o grupo g
