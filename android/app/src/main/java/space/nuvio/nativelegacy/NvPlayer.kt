@@ -152,7 +152,7 @@ object NvPlayer {
     @JvmStatic fun pausar(p: Int) { principal.post { player?.playWhenReady = (p == 0) } }
     @JvmStatic fun buscar(ms: Int) { principal.post { player?.seekTo(ms.toLong()) } }
     @JvmStatic fun volume(pct: Int) { principal.post { player?.volume = pct.coerceIn(0, 100) / 100f } }
-    @JvmStatic fun janela(x: Int, y: Int, w: Int, h: Int) { principal.post { definirJanela(x, y, w, h) } }
+    @JvmStatic fun janela(x: Int, y: Int, w: Int, h: Int, encaixa: Int) { principal.post { definirJanela(x, y, w, h, encaixa != 0) } }
     @JvmStatic fun escolher(tipo: Int, idx: Int) { principal.post { escolherMain(tipo, idx) } }
 
     // --- abrir / liberar ------------------------------------------------------
@@ -256,10 +256,30 @@ object NvPlayer {
 
     // Retangulo em coordenadas de layout 1920x1080; aceita origem NEGATIVA e
     // tamanho maior que a tela (zoom): a camada recorta o excedente.
-    private fun definirJanela(x: Int, y: Int, w: Int, h: Int) {
+    // `encaixa`: janela LISA do nucleo — o quadro encaixa no retangulo com
+    // tarja, como o plano da LG e o LetterBox da Samsung. Sem isso o trailer
+    // em "Original" (Apple 2,4:1) saia esticado em 16:9. Recorte (encaixa =
+    // false) ja vem com a proporcao certa e e aplicado exato.
+    private var pedX = 0; private var pedY = 0; private var pedW = 0; private var pedH = 0
+    private var pedEncaixa = true
+
+    private fun definirJanela(x: Int, y: Int, w: Int, h: Int, encaixa: Boolean) {
         if (player == null) return   // como o Video.cs: o C repete depois do videoInfo
-        jx = x; jy = y; jw = w; jh = h
+        pedX = x; pedY = y; pedW = w; pedH = h; pedEncaixa = encaixa
         temJanela = true
+        calcularJanela()
+    }
+
+    private fun calcularJanela() {
+        if (pedEncaixa && videoW > 0 && videoH > 0 && pedW > 0 && pedH > 0) {
+            val esc = minOf(pedW.toFloat() / videoW, pedH.toFloat() / videoH)
+            jw = (videoW * esc + 0.5f).toInt()
+            jh = (videoH * esc + 0.5f).toInt()
+            jx = pedX + (pedW - jw) / 2
+            jy = pedY + (pedH - jh) / 2
+        } else {
+            jx = pedX; jy = pedY; jw = pedW; jh = pedH
+        }
         aplicarJanela()
     }
 
@@ -373,7 +393,7 @@ object NvPlayer {
             videoW = (v.width * v.pixelWidthHeightRatio + 0.5f).toInt()
             videoH = v.height
             ev(EV_TAMANHO, videoW, videoH)
-            aplicarEncaixe()
+            if (temJanela) calcularJanela() else aplicarEncaixe()
         }
 
         override fun onTracksChanged(tracks: Tracks) {

@@ -47,7 +47,7 @@ static int resolverMetodos(JNIEnv *env) {
   mPausar   = (*env)->GetStaticMethodID(env, gCls, "pausar", "(I)V");
   mBuscar   = (*env)->GetStaticMethodID(env, gCls, "buscar", "(I)V");
   mVolume   = (*env)->GetStaticMethodID(env, gCls, "volume", "(I)V");
-  mJanela   = (*env)->GetStaticMethodID(env, gCls, "janela", "(IIII)V");
+  mJanela   = (*env)->GetStaticMethodID(env, gCls, "janela", "(IIIII)V");
   mEscolher = (*env)->GetStaticMethodID(env, gCls, "escolher", "(II)V");
   if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); return 0; }
   return mAbrir && mParar && mPausar && mBuscar && mVolume && mJanela && mEscolher;
@@ -424,12 +424,17 @@ void video_buscar(double s) {
   kInt(mBuscar, posMs);
   terminou = 0;
 }
-void video_janela(int x, int y, int w, int h) {
+// `encaixa` = 1: o quadro ENCAIXA no retangulo mantendo a proporcao (tarja),
+// que e o que o plano de video da LG e o LetterBox da Samsung fazem com uma
+// janela lisa — o nucleo conta com isso (trailer "Original", janela antes do
+// videoInfo). 0: o retangulo e exato, ja calculado com a proporcao (recorte).
+static void janelaKt(int x, int y, int w, int h, int encaixa) {
   JNIEnv *env = ambiente();
   if (!env) return;
-  (*env)->CallStaticVoidMethod(env, gCls, mJanela, (jint)x, (jint)y, (jint)w, (jint)h);
+  (*env)->CallStaticVoidMethod(env, gCls, mJanela, (jint)x, (jint)y, (jint)w, (jint)h, (jint)encaixa);
   fimChamada(env);
 }
+void video_janela(int x, int y, int w, int h) { janelaKt(x, y, w, h, 1); }
 
 // RECORTE DE FONTE PELO RETANGULO DE DESTINO AMPLIADO. Mesma conta do ROI do
 // .tpk (video_tpk.c, #178): desenhar o recorte (sx,sy,sw,sh) dentro de
@@ -459,10 +464,10 @@ void video_janela_fonte(int sx, int sy, int sw, int sh, int dx, int dy, int dw, 
          sx, sy, sw, sh, qw, qh, X, Y, W, H);
   fflush(stdout);
   ultX = X; ultY = Y; ultW = W; ultH = H; temUlt = 1;
-  video_janela(X, Y, W, H);
+  janelaKt(X, Y, W, H, 0);
 }
 int  video_recorte_fonte(void) { return 1; }
-void video_recorte_reaplicar(void) { if (temUlt) video_janela(ultX, ultY, ultW, ultH); }
+void video_recorte_reaplicar(void) { if (temUlt) janelaKt(ultX, ultY, ultW, ultH, 0); }
 // O Kotlin escala 1920x1080 de layout para a camada real; nada a fazer aqui.
 void video_escala_definir(int sw, int sh) { (void)sw; (void)sh; }
 
