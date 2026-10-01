@@ -81,6 +81,9 @@
 #include "streams.h"
 #include "stalker.h"
 #include "xtream.h"
+#include "rede.h"
+#include "ts_sonda.h"
+#include <unistd.h>
 #include "fontepref.h"
 #include "video.h"
 #include "addons.h"
@@ -614,6 +617,65 @@ static void erroCanalXtream(void) {
   char t[160], d[200];
   motivoCanalXtream(t, sizeof t, d, sizeof d);
   player_erro_fonte_motivo(t, d);
+}
+// O QUE O PROVEDOR MANDA DE VERDADE (#158). Quando o canal Xtream morre por
+// "dado chegando e decoder mudo" e nao ha outra fonte, o pipeline e fechado e
+// um fio le o comeco do mesmo .ts e a playlist .m3u8 do mesmo canal, e escreve
+// no registro: e TS? que codecs a PMT declara? o SPS e 10 bits? a .m3u8 existe
+// mesmo com allowed_output_formats=ts? Na C4 do pasha o uMS fica 45 s com 36 s
+// de buffer sem nunca dizer o que recebeu (registro 14195), e outro app na
+// mesma TV toca o canal — sem isto nao ha como saber o que muda. So diagnostico:
+// nada aqui decide reproducao. Uma vez por canal; o pipeline fecha antes porque
+// a conta tem 1 tela so (telas=0/1) e uma segunda conexao seria recusada.
+static void *sondarCanalXtreamFio(void *u) {
+  char *id = u, url[4096], fin[4096], r[600];
+  long n = 0;
+  int st = 0, er = 0;
+  char *b;
+  sleep(1);
+  if (xtream_url_formato(id, "ts", url, sizeof url)) {
+    fin[0] = 0;
+    b = rede_baixar_trecho_st(url, 8, 0, 786431, &n, &st, &er, fin, sizeof fin);
+    if (b && n > 0) {
+      TsSonda ts;
+      ts_sondar((const unsigned char *)b, n, &ts);
+      ts_resumo(&ts, r, sizeof r);
+    } else memcpy(r, "-", 2);
+    printf("[xtream] sonda ts: HTTP %d curl=%d %ld B%s | %s\n", st, er, n,
+           fin[0] && strcmp(fin, url) ? " (redirecionado)" : "", r);
+    free(b);
+  }
+  if (xtream_url_formato(id, "m3u8", url, sizeof url)) {
+    int linhas = 0, ts = 0;
+    n = 0; st = 0; er = 0;
+    b = rede_baixar_trecho_st(url, 6, 0, 65535, &n, &st, &er, NULL, 0);
+    if (b && n > 0) {
+      const char *q;
+      for (q = b; q && *q; q = strchr(q, '\n')) {
+        if (*q == '\n') q++;
+        if (!*q) break;
+        if (*q != '#') { linhas++; if (strstr(q, ".ts")) ts++; }
+      }
+    }
+    printf("[xtream] sonda m3u8: HTTP %d curl=%d %ld B, %s, %d entrada(s) (%d .ts)\n", st, er, n,
+           b && n >= 7 && !strncmp(b, "#EXTM3U", 7) ? "comeca com #EXTM3U" : "NAO e playlist",
+           linhas, ts);
+    free(b);
+  }
+  fflush(stdout);
+  free(id);
+  return NULL;
+}
+static void sondarCanalXtream(const char *id) {
+  static char ultimo[80];
+  pthread_t t;
+  char *c;
+  if (!id || !id[0] || !strcmp(ultimo, id)) return;
+  snprintf(ultimo, sizeof ultimo, "%s", id);
+  c = strdup(id);
+  if (!c) return;
+  if (pthread_create(&t, NULL, sondarCanalXtreamFio, c) == 0) pthread_detach(t);
+  else free(c);
 }
 // No PREVIEW do guia a miniatura morre quieta (ver o watchdog); para o Xtream
 // sai ao menos a frase curta por cima do guia — no registro 6314 a pessoa
@@ -2497,6 +2559,7 @@ void app_atualizar(float dt, Uint32 agora) {
         if (player_mini_ativo()) { if (xt) avisoCanalXtreamMini(); player_fechar_mini(); }
         else if (xt) erroCanalXtream();
         else player_erro_fonte();
+        if (semDecoder) { video_parar(); sondarCanalXtream(player_id_canal()); }
       }
     }
   }
