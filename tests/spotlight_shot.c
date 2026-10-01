@@ -41,6 +41,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 // Tipos de linha de spotlight.c (enum interno L_*).
 enum { T_AVISO = 1, T_TOPO = 2, T_PESSOA = 4, T_COLECAO = 5, T_RECENTE = 9 };
@@ -336,10 +337,12 @@ int main(int argc, char **argv) {
   if (getenv("NUVIO_TMDB_DIR") && *getenv("NUVIO_TMDB_DIR")) {
     Uint32 t0;
     desc_tmdb(getenv("NUVIO_TMDB_DIR"));
+    { char cd[700]; snprintf(cd, sizeof cd, "%s/img", dir); mkdir(cd, 0755); tex_cache_dir(cd); }
     spot_abrir(0);
     digitar("pedro pascal");
     t0 = SDL_GetTicks();
     while (SDL_GetTicks() - t0 < 10000 && spotpessoa_n("pedro pascal") < 0) quadro();
+    quadro();   // a remontagem e no spot_atualizar seguinte
     printf("tmdb vivo: %d pessoas\n", spotpessoa_n("pedro pascal"));
     assert(spotpessoa_n("pedro pascal") > 0);
     assert(achar(T_PESSOA, "Pedro Pascal") >= 0);
