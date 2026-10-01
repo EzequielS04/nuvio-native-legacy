@@ -54,6 +54,9 @@ void guia_alternar_favorito(const char *id);
 int  guia_programa_agora(const char *id, time_t t, EpgProg *p);
 
 void guia_evento(const SDL_Event *e);
+// 1 enquanto a recarga pedida pelo painel de addons de canais ainda corre com
+// o painel ja fechado (a ilha mostra "Atualizando a lista de canais…").
+int  guia_atualizando_lista(void);
 void guia_atualizar(float dt, Uint32 agora);
 void guia_desenhar(Uint32 agora);
 

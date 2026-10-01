@@ -591,6 +591,15 @@
 #define NV_RAIO_PILL     0.5f
 #define NV_RAIO_BADGE    0.18f
 
+// ILHA DO RELOGIO (ilha.h). Topo a 36 px: dentro da area segura de acao das
+// TVs (5 % de 1080 = 54 px para o TEXTO; a pilula comeca antes, o texto dela
+// fica em ~50). Fechada ela mede 52 de altura; aberta para um aviso, 64.
+#define NV_ILHA_Y          36.0f
+#define NV_ILHA_H          52.0f
+#define NV_ILHA_H_ABERTA   64.0f
+#define NV_ILHA_MARGEM_D   64.0f   // da borda direita, quando ancorada a direita
+#define NV_ILHA_TEXTO_MAX 760.0f   // frase do aviso: mais que isto, reticencias
+
 // Fundo: #0D0D0D. Aqui estava #252629, com a justificativa de que "o
 // quase-preto fazia os cards flutuarem no vazio" — mas a referencia E
 // quase-preta: MEDIDO #0D0D0D na home da TCL e #020202 na home rolada, e

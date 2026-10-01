@@ -71,6 +71,7 @@
 #include "novidades160.h"
 #include "telemetria.h"
 #include "avisos.h"
+#include "ilha.h"
 #include "recintro.h"
 #include "atualizacao.h"
 #include "pipintro.h"
@@ -3172,6 +3173,27 @@ static void desenharTelas(Uint32 agora) {
   faixas_desenhar(agora);
 }
 
+// ONDE O RELOGIO DA ILHA CABE (ilha.h). So na home, que tem o topo esquerdo
+// vazio acima da rail e do destaque; Ajustes, Explorar, Guia e Biblioteca poem
+// o titulo ali. E nunca com uma camada de tela cheia na frente (explicadores,
+// cartoes de atualizacao/crash/lembrete, menu aberto, detalhe, "Ver tudo"):
+// a pilula ficaria boiando sobre o veu de outra coisa. Os AVISOS da ilha nao
+// passam por aqui — eles aparecem em qualquer tela fora do player.
+static int relogioCabe(void) {
+  if (tela != TELA_HOME || !homePronta) return 0;
+  if (detail_aberto() || vertudo_aberta() || menu_aberto() || ctx_aberto()) return 0;
+  if (sintro_aberto() || novidades_aberto() || novidades11_aberto() || novidades12_aberto() ||
+      novidades13_aberto() || novidades131_aberto() || novidades132_aberto() ||
+      novidades133_aberto() || novidades134_aberto() || novidades139_aberto() ||
+      novidades1312_aberto() || novidades142_aberto() || novidades148_aberto() ||
+      novidades160_aberto() || telemetria_aberto() || recintro_aberto() ||
+      atualizacao_aberta() || agendaviso_aberto() || avisos_cartao_aberto() ||
+      glem_cartao_aberto() || recenviar_aberto() || pessoas_aberto() ||
+      recomenda_aberta() || pipintro_aberto() || diagnostico_intro_aberto())
+    return 0;
+  return 1;
+}
+
 void app_desenhar(Uint32 agora) {
   // COM O PAINEL DE LOG ABERTO A INTERFACE NAO E PINTADA.
   //
@@ -3235,6 +3257,16 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto() && !player_aberto() && sessao_logada() &&
       tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL)
     avisos_desenhar(agora);
+  // A ILHA DO RELOGIO (ilha.h): mesmas guardas da central — com a pessoa
+  // dentro do app e nunca sobre o player. No Guia ela vai para o topo direito
+  // (o titulo do guia ocupa o esquerdo), o mesmo canto do toast de antes.
+  if (guia_atualizando_lista()) ilha_atividade(i18n("Atualizando a lista de canais…"), -1.0f);
+  if (!registro_aberto() && !player_aberto() && sessao_logada() &&
+      tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL) {
+    ilha_relogio_visivel(relogioCabe());
+    if (tela == TELA_GUIA) ilha_ancorar(NV_TELA_W - NV_ILHA_MARGEM_D, NV_ILHA_Y, 1);
+    ilha_desenhar(agora);
+  }
   // O cartao do lembrete fica acima do player e da tela: e um aviso com hora.
   CAMADA_SE(glem_cartao_aberto());
   if (!registro_aberto() && sessao_logada() && tela != TELA_LOGIN &&

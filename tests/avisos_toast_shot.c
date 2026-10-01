@@ -76,6 +76,7 @@ int main(int argc, char **argv) {
     glClearColor(0.025f, 0.025f, 0.03f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     avisos_desenhar(agora);
+    ilha_desenhar(agora);   /* o toast mora na ilha do relogio desde 01/10 */
     if (i == 49) captura(saida, w);
     else SDL_GL_SwapWindow(w);
   }

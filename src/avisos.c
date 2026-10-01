@@ -1,4 +1,6 @@
 #include "avisos.h"
+#include "ilha.h"
+#define AV_ILHA_CHAVE "avisos"   // o toast da central na ilha (toastNaIlha)
 #include "dados.h"
 #include "rede.h"
 #include "js.h"
@@ -792,7 +794,7 @@ void avisos_atualizar(float dt, Uint32 agora) {
 }
 
 int  avisos_aberto(void) { return aberto; }
-void avisos_abrir(void)  { aberto = 1; foco = 0; rol = 0.0f; toastAte = 0.0f; toastN = 0; }
+void avisos_abrir(void)  { aberto = 1; foco = 0; rol = 0.0f; toastAte = 0.0f; toastN = 0; ilha_retirar(AV_ILHA_CHAVE); }
 const char *avisos_pediu_abrir(void) {
   static char saida[24];
   if (!pediuAbrir[0]) return NULL;
@@ -851,63 +853,16 @@ static const char *icone(int tipo) {
   }
 }
 
-static void desenharToast(Uint32 agora) {
-  // AVISO COM HIERARQUIA: icone + contexto + contagem + acao. A versao de uma
-  // linha era funcional, mas parecia uma legenda pequena perdida no canto da
-  // TV. O bloco agora tem uma leitura em dois tempos: "Central de avisos" como
-  // contexto, depois a contagem em corpo maior, e por fim a tecla desenhada.
-  // A tecla continua sendo o disco azul da LG ou o rocker CH+ da Samsung, nao
-  // texto — "AZUL" e uma cor a procurar entre quatro.
-  //
-  // PULSA na cor de acento (dono: "meio que piscar com a cor pra chamar
-  // atencao"): a luz difusa e o ponto respiram a ~1 Hz. Sem piscar de verdade
-  // — ligar/desligar num canto de TV le como defeito; a respiracao le como
-  // "tem algo aqui".
+// O TOAST MORA NA ILHA (01/10/2026, pedido do dono): o bloco proprio no canto
+// superior direito (sino que respirava + "Central de avisos" + contagem + a
+// tecla) virou um aviso da ilha do relogio — o mesmo sino na cor de realce, a
+// contagem e a tecla com "abre". A regra de tempo continua toda aqui (toastAte,
+// toastA para o AZUL/CH+ em avisos_evento); a ilha so desenha. Mesma chave
+// enquanto o toast vive: um aviso novo no meio troca a contagem no lugar.
+static void toastNaIlha(void) {
   char txt[120];
-  TxtLinha cab, t1, t2;
-  float w, h = 104.0f, x, y, ar, ag, ab, pulso, lado = 42.0f;
-  float tinta;
-  GfxRect bloco;
-  if (toastA < 0.01f) return;
-  tinta = ajustes_acento_tinta(&ar, &ag, &ab);
-  pulso = ajustes_animacoes_reduzidas() ? 0.5f :
-          0.5f + 0.5f * sinf((float)agora * (2.0f * 3.14159265f / 1100.0f));
   snprintf(txt, sizeof txt, toastN == 1 ? i18n("%d aviso novo") : i18n("%d avisos novos"), toastN);
-  cab = txt_linha(TXT_CAPTION2, i18n("Central de avisos"), 156, 160, 172, 255);
-  t1 = txt_linha(TXT_BODY, txt, (int)(tinta * 255.0f + 0.5f),
-                 (int)(tinta * 255.0f + 0.5f), (int)(tinta * 255.0f + 0.5f), 255);
-  t2 = txt_linha(TXT_CAPTION2, i18n("abre"), 178, 181, 190, 255);
-  w = 24.0f + 56.0f + 18.0f + (cab.w > t1.w ? cab.w : t1.w) +
-      30.0f + lado + 10.0f + t2.w + 24.0f;
-  // CANTO SUPERIOR DIREITO: o aviso sai da cena e nao compete com as fileiras
-  // de conteudo. A entrada vem de cima, com distancia suficiente para ser lida
-  // como um componente e nao como texto que piscou no canto.
-  x = NV_TELA_W - 64.0f - w;
-  y = 40.0f - (1.0f - toastA) * 32.0f;
-  bloco = (GfxRect){ x, y, w, h };
-  // Luz difusa de acento respirando POR TRAS da pilula, no lugar do anel de
-  // 2 px: a linguagem nova do app nao tem aneis (dono, 21/09/2026), e uma
-  // mancha que cresce e apaga chama tanto quanto o anel sem desenhar borda.
-  gfx_rect((GfxRect){ x - h * 0.7f, y - h * 0.7f, w + h * 1.4f, h * 2.4f }, 0, GFX_SOMBRA,
-           1.0f, 0, 0, 0.5f, ar, ag, ab, (0.07f + 0.13f * pulso) * toastA);
-  gfx_cor(bloco, 28.0f / h, 0.055f, 0.058f, 0.068f, 0.98f * toastA);
-  // Icone de notificacao: SO O SINO, sem disco (dono, 23/09/2026: "deixar so
-  // o sininho sem fundo"). O sino leva a cor de realce e cresce para ocupar o
-  // lugar do disco; o ponto que pulsa acompanha na mesma cor.
-  { GfxRect ic = { x + 24.0f, y + 24.0f, 56.0f, 56.0f };
-    float d = 5.0f + 3.0f * pulso;
-    // (23/09) Sino PREENCHIDO do Phosphor (bell-fill, MIT) em art/icones/
-    // sino.png, no lugar do GFX_SINO de contorno fino — o dono pediu "tirar o
-    // contorno do sino e usar um sino mais bonito".
-    gfx_icone((GfxRect){ ic.x + 6.0f, ic.y + 6.0f, 44.0f, 44.0f }, "sino",
-              ar, ag, ab, toastA);
-    gfx_cor((GfxRect){ ic.x + ic.w - d - 1.0f, ic.y - d * 0.5f, d, d },
-            0.5f, ar, ag, ab, 0.90f * toastA); }
-  txt_desenhar_alpha(cab, x + 98.0f, y + 18.0f, toastA);
-  txt_desenhar_alpha(t1, x + 98.0f, y + 48.0f, toastA);
-  { float ax = x + w - 24.0f - lado - 10.0f - t2.w;
-    sintro_tecla_atalho(ax, y + 25.0f, lado, toastA);
-    txt_desenhar_alpha(t2, ax + lado + 10.0f, y + 25.0f + (lado - t2.h) * 0.5f, toastA); }
+  ilha_avisar(AV_ILHA_CHAVE, ILHA_ACENTO, "sino", txt, AV_TOAST_MS, 1);
 }
 
 // A LISTA, desenhada dentro de qualquer caixa: o painel proprio usa, e a aba
@@ -1042,8 +997,10 @@ void avisos_marcar_lidos(void) {
 
 void avisos_desenhar(Uint32 agora) {
   float a = anim_clamp(entrada, 0.0f, 1.0f), dx;
-  if (toastPendente && !aberto && !cartao) { toastPendente = 0; toastAte = (float)agora + AV_TOAST_MS; }
-  if (!cartao) desenharToast(agora);
+  if (toastPendente && !aberto && !cartao) {
+    toastPendente = 0; toastAte = (float)agora + AV_TOAST_MS;
+    toastNaIlha();
+  }
   if (a < 0.01f) { cartaoDesenhar(); return; }
   dx = (1.0f - a) * 80.0f;
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.45f * a);

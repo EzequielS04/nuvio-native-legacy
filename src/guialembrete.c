@@ -1,5 +1,6 @@
 // O aviso do lembrete de programa — ver guialembrete.h.
 #include "guialembrete.h"
+#include "ilha.h"
 #include "lembrete.h"
 #include "perfis.h"
 #include "player.h"
@@ -131,7 +132,14 @@ void glem_desenhar(Uint32 agora) {
   if (a < 0.01f) return;
   ajustes_acento(&ar, &ag, &ab);
   if ((modo ? modo : ultimoModo) == 2) {
-    // AVISO CURTO: uma pilula no alto, sino + frase.
+    // AVISO CURTO: uma pilula no alto, sino + frase. Fora do player ele sai
+    // pela ILHA do relogio (ilha.h); com o player na frente fica esta pilula
+    // propria, discreta, porque a ilha nao se desenha sobre o video.
+    if (modo == 2 && !player_aberto()) {
+      ilha_avisar("lembrete-curto", ILHA_ACENTO, "sino", aTexto, GLEM_CURTO_MS, 0);
+      modo = 0; anim = 0.0f; ultimoModo = 0;
+      return;
+    }
     TxtLinha t = txt_linha_corta(TXT_BODY, aTexto, 240, 241, 246, 255, 900.0f);
     float w = (float)t.w + 96.0f, h = 60.0f;
     GfxRect r = { NV_TELA_W - NV_MARGEM_X - w, 44.0f - 16.0f * (1.0f - a), w, h };

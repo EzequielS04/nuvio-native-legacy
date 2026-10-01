@@ -262,7 +262,10 @@ int badges_cor_selo(const char *id, float *r, float *g, float *b) {
 // branco ate chegar la (~3:1, o minimo de contorno de componente); a tinta
 // segue a cor da marca. A legibilidade e da arte branca sobre a base escura.
 float badges_desenhar_selos(uint64_t mask, float x, float y, float maxW, float h, float a) {
-  const float padX = 8.0f, sobra = 3.0f, ch = h + sobra * 2.0f, raio = 6.0f / ch;
+  // Miolo de 6 px dos lados e 3 em cima/baixo, canto de 6 px. Borda de 1,5 px
+  // a 60 % e tinta a 16 % (01/10, folha "muito bruta"): o selo continua
+  // colorido, so deixa de gritar mais alto que o nome da fonte.
+  const float padX = 6.0f, sobra = 3.0f, ch = h + sobra * 2.0f, raio = 6.0f / ch;
   float start = x;
   size_t i;
   for (i = 0; i < NB; i++) if ((mask & (UINT64_C(1) << i)) && art[i].image[0]) {
@@ -291,17 +294,17 @@ float badges_desenhar_selos(uint64_t mask, float x, float y, float maxW, float h
       }
     }
     p = (GfxRect){ x, y - sobra, w + padX * 2.0f, ch };
-    gfx_cor(p, raio, 0.10f, 0.11f, 0.13f, 0.92f * a);
-    gfx_cor(p, raio, r, g, b, 0.20f * a);
-    gfx_anel(p, raio, 2.0f, br, bg, bb, 0.95f * a);
+    gfx_cor(p, raio, 0.10f, 0.11f, 0.13f, 0.88f * a);
+    gfx_cor(p, raio, r, g, b, 0.16f * a);
+    gfx_anel(p, raio, 1.5f, br, bg, bb, 0.60f * a);
     if (temArte) {
       float height = w / aspect;
       gfx_rect((GfxRect){ x + padX, y + (h - height) * 0.5f, w, height }, t, GFX_TEXTO,
                0, 0, 0, 0, 1, 1, 1, a);
     } else txt_desenhar_alpha(nome, x + padX, y + (h - (float)nome.h) * 0.5f, a);
-    x += p.w + 10.0f;
+    x += p.w + 8.0f;
   }
-  return x > start ? x - start - 10.0f : 0.0f;
+  return x > start ? x - start - 8.0f : 0.0f;
 }
 
 // ROTULO COM A PALAVRA DO FORMATO TROCADA PELA MARCA ("Sem HDR" -> "Sem" +

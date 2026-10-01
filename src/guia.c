@@ -1776,8 +1776,12 @@ static void painelAplicar(int i) {
 // e o overhead que o dono viu no log como "recarrega tudo de novo, inclusive
 // os desativados"). Roda uma vez por visita, nao por tecla: o guia ja se
 // atualizou a cada tecla em painelAplicar.
+static int recargaDoPainel;   // ver guia_atualizando_lista
 static void painelFechar(void) {
   painel = 0;
+  // A recarga que o painel pediu continua depois que ele fecha: quem diz
+  // "Atualizando a lista de canais…" passa a ser a ilha (app.c).
+  if (paMexeu && (fioVivo || recarregarPend)) recargaDoPainel = 1;
   if (!paMexeu) return;
   paMexeu = 0;
   if (paLigou) {
@@ -2224,8 +2228,13 @@ static float paItemY(int i) {
 }
 #define G_PA_LISTA_Y 200.0f
 
+int guia_atualizando_lista(void) {
+  return recargaDoPainel && !painel && (fioVivo || recarregarPend);
+}
+
 void guia_atualizar(float dt, Uint32 agora) {
   entrada = anim_mola(entrada, guia_visivel() ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
+  if (recargaDoPainel && !fioVivo && !recarregarPend && !pendPronto) recargaDoPainel = 0;
   if (pendPronto) {
     publicar(); estado = G_PRONTO; pendPronto = 0; fioVivo = 0; focoValido();
     if (painel) painelMontar();   // sabe[] mudou: quem nao fornece canal sai

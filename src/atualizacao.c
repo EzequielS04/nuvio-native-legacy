@@ -17,6 +17,7 @@
 //
 // O irmao e novidades.c: mesmo cartao central, mesma regra de fechamento.
 #include "atualizacao.h"
+#include "ilha.h"
 #include "dados.h"
 #include "rede.h"
 #include "gfx.h"
@@ -1088,6 +1089,18 @@ void atualizacao_evento(const SDL_Event *e) {
 
 void atualizacao_atualizar(float dt, Uint32 agora) {
   (void)agora;
+  // VOLTAR FECHA O CARTAO NO MEIO DO DOWNLOAD (ver atualizacao_evento) e o
+  // fio segue: sem isto a pessoa ficava sem saber se ainda baixava. A barra
+  // passa para a ilha do relogio enquanto o cartao estiver fechado; pronto,
+  // vira um aviso curto.
+  { static int estAnt;
+    int est; float pct;
+    SDL_LockMutex(mtx); est = estado; pct = instPct; SDL_UnlockMutex(mtx);
+    if (!aberto && est == AT_INSTALANDO)
+      ilha_atividade(i18n("Baixando a atualização..."), pct < 0.0f ? -1.0f : pct / 100.0f);
+    if (!aberto && estAnt == AT_INSTALANDO && est == AT_PRONTO)
+      ilha_avisar("atualizacao", ILHA_OK, NULL, i18n("Atualizado. Feche e abra o app para usar."), 7000u, 0);
+    estAnt = est; }
   if (!aberto && entrada < 0.002f) { entrada = 0.0f; return; }
   entrada = anim_rampa(entrada, aberto ? 1.0f : 0.0f, dt,
                        aberto ? AT_ABRIR_MS : AT_FECHAR_MS);
