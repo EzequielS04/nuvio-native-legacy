@@ -86,8 +86,8 @@ static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 // Rotulos em portugues. Passam por i18n em text.c como todo texto de tela; os
 // pares en estao em idioma_tab.h.
 static const char *TIPO_ROT[FIL_TIPO_N] = {
-  "Automático", "Cartaz em pé", "Destaque largo", "Coleção", "Serviço", "Top 10",
-  "Destaque 4:3"
+  "Automático", "Cartaz em pé", "Destaque largo", "Coleção", "Serviço", "Ranking empilhado",
+  "Destaque 4:3", "Ranking numerado"
 };
 static const char *TAM_ROT[FIL_TAM_N] = { "Compacto", "Padrão", "Grande" };
 // 0,85 e 1,2 e nao 0,5 e 2,0: o card do web mede 212x322 e o passo da fileira
@@ -180,10 +180,15 @@ static int formaFixa(const char *chave) {
 //   FIL_TIPO_CARTAZ            -> pôster
 // Reaproveitar os numeros, e nao criar tres novos, mantem fileirasui.txt no
 // formato de sempre e deixa a traducao para a medida num lugar so (home.c).
+// Os dois rankings entram no fim (issue #201): o numeral grande da Dinamica e
+// o "Top 10" de numero pequeno sobre o cartaz, que antes so a tela de Ajustes
+// oferecia.
 static const int ESTILOS_CAT[] = { FIL_TIPO_AUTO, FIL_TIPO_CARTAZ, FIL_TIPO_SERVICO,
-                                   FIL_TIPO_COLECAO, FIL_TIPO_DESTAQUE };
+                                   FIL_TIPO_COLECAO, FIL_TIPO_DESTAQUE,
+                                   FIL_TIPO_RANKING, FIL_TIPO_TOP10 };
 static const char *ESTILOS_CAT_ROT[] = { "Automático", "Pôsteres", "Paisagem pequena",
-                                         "Paisagem média", "Paisagem grande" };
+                                         "Paisagem média", "Paisagem grande",
+                                         "Ranking numerado", "Ranking empilhado" };
 static const int ESTILOS_COL[] = { FIL_TIPO_AUTO, FIL_TIPO_COLECAO,
                                    FIL_TIPO_DESTAQUE_QUADRADO, FIL_TIPO_CARTAZ };
 static const char *ESTILOS_COL_ROT[] = { "Automático", "Paisagem", "Quadrado", "Pôster" };

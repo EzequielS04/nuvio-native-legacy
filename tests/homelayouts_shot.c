@@ -24,6 +24,7 @@
 #include "corviva.h"
 #include "ctxmenu.h"
 #include "dados.h"
+#include "fileiras.h"
 #include "gfx.h"
 #include "home.h"
 #include "layout.h"
@@ -157,7 +158,7 @@ static void ajusta(int layout, int vidro) {
 int main(int argc, char **argv) {
   const char *saida = argc > 1 ? argv[1] : "/tmp/nv-home-layouts-shots/h";
   const char *camadas = argc > 2 ? argv[2] : "012";
-  static CatItem itens[80];
+  static CatItem itens[200];
   static CatFileira fils[8];
   SDL_GLContext gl;
   char bmp[800], cache[700];
@@ -211,8 +212,13 @@ int main(int argc, char **argv) {
       snprintf(f->base, sizeof f->base, "https://addon.invalid/x");
       snprintf(f->catId, sizeof f->catId, "%s", FILS[k].chave);
     }
-    f->ini = ini; f->n = FILS[k].n;
-    for (i = 0; i < FILS[k].n; i++) {
+    // NV_FIL_N=<n>: cada CATALOGO com n itens (o "Itens por fileira" 12/18/24
+    // da issue #201); sem ele, o n da tabela.
+    { int nk = FILS[k].n;
+      if (FILS[k].catalogo && getenv("NV_FIL_N")) nk = atoi(getenv("NV_FIL_N"));
+      if (nk > 24) nk = 24;
+      f->ini = ini; f->n = nk; }
+    for (i = 0; i < f->n; i++) {
       CatItem *c = &itens[ini + i];
       int a = (ini + i) % NA;
       snprintf(c->imdb, sizeof c->imdb, "tt90%05d", ini + i);
@@ -239,7 +245,7 @@ int main(int argc, char **argv) {
       c->nota = 68 + (ini + i) % 25;
       if (k == 0) { c->progresso = 20 + i * 12; c->restanteMin = 90 - i * 10; }
     }
-    ini += FILS[k].n;
+    ini += f->n;
     total = ini;
   }
   if (getenv("NV_COL")) {   // NV_COL=1: um grupo de colecao no fim, com as quatro cadeias de arte
@@ -280,6 +286,19 @@ int main(int argc, char **argv) {
   }
   cat_definir_tudo(itens, total, fils, NF);
   quadros(60, NULL);
+  // NV_TIPOS="chave=tipo,chave=tipo": a forma escolhida em "Estilo da fileira"
+  // (o numero FilTipo de fileiras.h), como se a pessoa tivesse escolhido.
+  if (getenv("NV_TIPOS")) {
+    char buf[400], *p, *sv = NULL;
+    snprintf(buf, sizeof buf, "%s", getenv("NV_TIPOS"));
+    for (p = strtok_r(buf, ",", &sv); p; p = strtok_r(NULL, ",", &sv)) {
+      char *ig = strchr(p, '=');
+      if (!ig) continue;
+      *ig = 0;
+      printf("[shot] tipo %s=%s ok=%d\n", p, ig + 1, fil_definir_tipo(p, atoi(ig + 1)));
+    }
+    quadros(60, NULL);
+  }
 
   { const char *L;
     for (L = camadas; *L; L++) {
@@ -322,8 +341,16 @@ int main(int argc, char **argv) {
             int m; printf("[shot]   modos:");
             for (m = 0; m < GFX_NMODOS; m++) if (modoUlt[m] > 0.02) printf(" %d=%.2f", m, modoUlt[m]);
             printf("\n"); }
-          if (r == 2) {   // um passo para o lado: rolagem horizontal + foco
-            tecla(SDLK_RIGHT); tecla(SDLK_RIGHT);
+          // NV_OK_FIL=<r>: OK na fileira r (abre a pilha do Top 10) antes do
+          // passo para o lado.
+          if (getenv("NV_OK_FIL") && r == atoi(getenv("NV_OK_FIL"))) {
+            tecla(SDLK_RETURN); quadros(60, NULL); }
+          // Um passo para o lado: rolagem horizontal + foco. NV_LADO_FIL=<r>
+          // escolhe a fileira (0 = a primeira abaixo do destaque).
+          if (r == (getenv("NV_LADO_FIL") ? atoi(getenv("NV_LADO_FIL")) : 2)) {
+            // NV_LADO=<n>: n passos em vez de dois (o "11", "24" do ranking).
+            int d = getenv("NV_LADO") ? atoi(getenv("NV_LADO")) : 2, q;
+            for (q = 0; q < d; q++) { tecla(SDLK_RIGHT); quadros(8, NULL); }
             quadros(110, NULL);
             snprintf(bmp, sizeof bmp, "%s-L%d-g%d-%d-fileira-lado.bmp", saida, layout, vidro, r + 1);
             quadros(1, bmp);
@@ -359,8 +386,9 @@ int main(int argc, char **argv) {
       quadros(40, NULL);
       snprintf(bmp, sizeof bmp, "%s-ctx-2-estilos.bmp", saida); quadros(1, bmp);
     }
-    // Uma forma abaixo da atual e OK.
-    teclaCtx(SDLK_DOWN);
+    // Uma forma abaixo da atual e OK (NV_CTX_DESCE=<n>: n formas abaixo).
+    { int d = getenv("NV_CTX_DESCE") ? atoi(getenv("NV_CTX_DESCE")) : 1;
+      for (r = 0; r < d; r++) teclaCtx(SDLK_DOWN); }
     quadros(20, NULL);
     snprintf(bmp, sizeof bmp, "%s-ctx-3-escolha.bmp", saida); quadros(1, bmp);
     teclaCtx(SDLK_RETURN);
