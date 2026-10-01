@@ -90,6 +90,43 @@ static inline void nv_nome_base(const char *nome, char *dst, size_t n) {
   dst[u] = 0;
 }
 
+// --- busca do guia ---------------------------------------------------------------
+// Minusculas sem acento (Latin-1 em UTF-8: a acentuacao de pt/es/fr/ro/de),
+// para "sportv" achar "SporTV" e "romania" achar "România". O resto passa como
+// veio (cirilico, CJK): casa por igualdade de bytes.
+static inline void nv_dobrar(const char *s, char *d, size_t n) {
+  static const char *const MAPA_C3 =
+    "aaaaaaaceeeeiiii" "dnooooo*ouuuuyts"   /* C3 80..9F (maiusculas) */
+    "aaaaaaaceeeeiiii" "dnooooo/ouuuuyty";  /* C3 A0..BF (minusculas) */
+  size_t u = 0;
+  const unsigned char *p = (const unsigned char *)(s ? s : "");
+  if (!n) return;
+  while (*p && u + 1 < n) {
+    if (p[0] == 0xC3 && p[1] >= 0x80 && p[1] <= 0xBF) { d[u++] = MAPA_C3[p[1] - 0x80]; p += 2; continue; }
+    if (p[0] == 0xC4 || p[0] == 0xC5) {        // ă â ș ț ł ő...: a letra-base
+      // U+0100..U+017F, a letra-base de cada um (gerado de NFD).
+      static const char *const C4 = "aaaaaaccccccccddddeeeeeeeeeegggggggghhhhiiiiiiiiiiiijjkkklllllll";
+      static const char *const C5 = "lllnnnnnnnnnoooooooorrrrrrssssssssttttttuuuuuuuuuuuuwwyyyzzzzzzs";
+      int i = p[1] - 0x80;
+      const char *m = p[0] == 0xC4 ? C4 : C5;
+      d[u++] = (i >= 0 && i < 64) ? m[i] : '?';
+      p += 2; continue;
+    }
+    if (*p == 0xC8 && (p[1] == 0x98 || p[1] == 0x99)) { d[u++] = 's'; p += 2; continue; }  // Ș ș
+    if (*p == 0xC8 && (p[1] == 0x9A || p[1] == 0x9B)) { d[u++] = 't'; p += 2; continue; }  // Ț ț
+    d[u++] = (char)tolower(*p);
+    p++;
+  }
+  d[u] = 0;
+}
+// `agulha` (ja dobrada) aparece em `palheiro` (crua)?
+static inline int nv_contem_dobrado(const char *palheiro, const char *agulha) {
+  char a[512];
+  if (!agulha || !agulha[0]) return 0;
+  nv_dobrar(palheiro, a, sizeof a);
+  return strstr(a, agulha) != NULL;
+}
+
 // --- recomendacoes do diagnostico -------------------------------------------
 // O que deu cada canal testado. `formato`: 0 HLS, 1 TS. Tempos em ms, -1 =
 // nao medido. `kbpsFluxo` e a vazao medida no proprio canal (rede ate o

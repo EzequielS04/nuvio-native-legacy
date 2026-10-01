@@ -68,6 +68,7 @@
 #include "guialembrete.h"
 #include "streams.h"    /* Stream: url do preview vinda do fio */
 #include "livetv_regras.h" /* variantes FHD/HD/SD do mesmo canal */
+#include "teclado.h"       /* a busca do guia */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -177,7 +178,7 @@
 #define G_CHIP_PAD   20.0f
 // CATEGORIAS e o primeiro chip: a porta VISIVEL do painel de categorias,
 // que antes so abria segurando a seta (ninguem descobre gesto que nao se ve).
-enum { G_TOPO_CATEGORIAS = 0, G_TOPO_CARTOES, G_TOPO_LISTA, G_TOPO_ADDONS,
+enum { G_TOPO_BUSCAR = 0, G_TOPO_CATEGORIAS, G_TOPO_CARTOES, G_TOPO_LISTA, G_TOPO_ADDONS,
        G_TOPO_PREVIEW, G_TOPO_N };
 
 // --- painel de addons ---------------------------------------------------------
@@ -1158,6 +1159,12 @@ static int   pediuCanal; static CatItem pedido;
 // "Categorias" (fica aberto, OK entra, Voltar fecha). catFoco e a linha em
 // foco DENTRO do painel — o guia so muda de secao ao confirmar.
 static int    catAberto, catFoco;
+// A LISTA DE CATEGORIAS FICA (dono, 01/10/2026): aberta por segurar a seta
+// (modo 1), ao soltar ela vira a lista navegavel (modo 2) em vez de entrar
+// sozinha. Cima/baixo andam, OK ou direita entram, esquerda/Voltar fecham;
+// sem tecla por G_CAT_OCIOSO_MS ela fecha sem mudar nada.
+#define G_CAT_OCIOSO_MS 8000u
+static Uint32 catUlt;
 static float  catAnim, catRol, catVelRol;
 static int    dirSeg;                 // SDLK_UP/DOWN segurado, 0 = solto
 static Uint32 dirDesde, dirTick, ultNavCat;
@@ -1495,6 +1502,10 @@ static time_t instanteFoco(time_t agoraT);
 static int epgDo(GCanal *c);
 static int gAgora(GCanal *c, time_t t, EpgProg *p);   // ver a definicao (#158)
 static void pedirCanal(GCanal *c);
+static void buscaAbrir(void);
+static int buscaEvento(const SDL_Event *e);
+static void buscaAtualizar(float dt, Uint32 agora);
+static void buscaFechar(void);
 
 // O instante que o foco aponta, na grade cheia ou na faixa do mini guia.
 static time_t tFocoAgora(void) {
@@ -1649,6 +1660,7 @@ static void catAbrir(int modo, int dir) {
   if (nLinhas() < 1) return;
   if (!catAberto) catFoco = focoLin;
   catAberto = modo;
+  catUlt = SDL_GetTicks();
   if (dir) {
     catFoco += dir;
     if (catFoco < 0) catFoco = 0;
@@ -1843,13 +1855,14 @@ static void sair(void) {
 
 void guia_evento(const SDL_Event *e) {
   if (!guia_visivel()) return;
+  if (buscaEvento(e)) return;
 
   if (e->type == SDL_KEYUP) {
     SDL_Keycode k = e->key.keysym.sym;
     if (k == SDLK_UP || k == SDLK_DOWN) {
       dirSeg = 0;
-      // Soltou a seta que abriu o painel: entra onde o foco dele parou.
-      if (catAberto == 1) catConfirmar();
+      // Soltou a seta que abriu o painel: a lista fica, com o foco onde parou.
+      if (catAberto == 1) { catAberto = 2; catUlt = SDL_GetTicks(); }
     }
     if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
       if (okDesde && !okLongo) acaoOk();
@@ -1904,6 +1917,7 @@ void guia_evento(const SDL_Event *e) {
 
   // O painel de categorias captura as setas e o OK enquanto aberto.
   if (catAberto) {
+    catUlt = agora;
     if (k == SDLK_UP || k == SDLK_DOWN) {
       int dir = k == SDLK_DOWN ? 1 : -1;
       if (catAberto == 1) {
@@ -1952,7 +1966,8 @@ void guia_evento(const SDL_Event *e) {
     if (k == SDLK_RIGHT) { if (topoCol + 1 < G_TOPO_N) topoCol++; return; }
     if (k == SDLK_DOWN)  { focoTopo = 0; return; }
     if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
-      if (topoCol == G_TOPO_CATEGORIAS) catAbrir(2, 0);
+      if (topoCol == G_TOPO_BUSCAR) buscaAbrir();
+      else if (topoCol == G_TOPO_CATEGORIAS) catAbrir(2, 0);
       else if (topoCol == G_TOPO_ADDONS) painelAbrir();
       else if (topoCol == G_TOPO_PREVIEW) {
         previewLigado = !previewLigado;
@@ -2233,7 +2248,8 @@ void guia_atualizar(float dt, Uint32 agora) {
     previewUltLin = focoLin; previewUltCol = focoCol;
     if (c && c->id[0] && strcmp(c->id, previewId)) previewPedir(c);
   }
-  if (!guia_visivel()) return;
+  if (!guia_visivel()) { buscaFechar(); return; }
+  buscaAtualizar(dt, agora);
 
   for (int i = 0; i < G_TOPO_N; i++)
     animTopo[i] = anim_mola(animTopo[i], focoTopo && topoCol == i ? 1.0f : 0.0f,
@@ -2303,7 +2319,8 @@ void guia_atualizar(float dt, Uint32 agora) {
   if (dirSeg && agora - dirTick > G_REP_MS) dirSeg = 0;
   // O firmware nao garante KEYUP: silencio de G_REP_MS na seta que abriu o
   // painel por segurar vale como soltura.
-  if (catAberto == 1 && !dirSeg) catConfirmar();
+  if (catAberto == 1 && !dirSeg) { catAberto = 2; catUlt = agora; }
+  if (catAberto == 2 && catUlt && agora - catUlt > G_CAT_OCIOSO_MS) catFechar();
   catAnim = anim_mola(catAnim, catAberto ? 1.0f : 0.0f, dt, 12.0f);
   if (catAberto || catAnim > 0.01f) {
     float areaH = G_CAT_BASE - G_CAT_TOPO;
@@ -3113,6 +3130,7 @@ static float desenharTopo(float a) {
   const char *rot[G_TOPO_N];
   float w[G_TOPO_N], xs[G_TOPO_N], x, ar, ag, ab, seg0;
   int i;
+  rot[G_TOPO_BUSCAR] = i18n("Buscar");
   rot[G_TOPO_CATEGORIAS] = i18n("Categorias");
   rot[G_TOPO_CARTOES] = i18n("Cartões");
   rot[G_TOPO_LISTA]   = i18n("Lista");
@@ -3122,7 +3140,7 @@ static float desenharTopo(float a) {
   for (i = 0; i < G_TOPO_N; i++)
     w[i] = (float)txt_linha(TXT_PG_ROTULO, rot[i], 255, 255, 255, 255).w
            + 2.0f * G_CHIP_PAD
-           + (i == G_TOPO_PREVIEW ? 20.0f : i == G_TOPO_CATEGORIAS ? 26.0f : 0.0f);
+           + (i == G_TOPO_PREVIEW ? 20.0f : (i == G_TOPO_CATEGORIAS || i == G_TOPO_BUSCAR) ? 26.0f : 0.0f);
 
   // Relogio na margem direita, na altura dos chips.
   { time_t tt = time(NULL); struct tm lt; char hora[8];
@@ -3173,6 +3191,12 @@ static float desenharTopo(float a) {
         if (previewLigado) gfx_cor(d, 0.5f, 0.30f, 0.84f, 0.46f, a);
         else               gfx_cor(d, 0.5f, 0.42f, 0.43f, 0.47f, a);
         tx = d.x + 20.0f;
+      } else if (i == G_TOPO_BUSCAR) {
+        // A lupa do menu lateral: o chip se le como busca antes do texto.
+        float c = (float)ct / 255.0f;
+        gfx_icone((GfxRect){ r.x + G_CHIP_PAD - 2.0f, r.y + (r.h - 20.0f) * 0.5f, 20.0f, 20.0f },
+                  "menu_search", c, c, c, a);
+        tx = r.x + G_CHIP_PAD + 26.0f;
       } else if (i == G_TOPO_CATEGORIAS) {
         // Tres tracos de "lista": o chip se le como menu antes do texto.
         float c = (float)ct / 255.0f, gx = r.x + G_CHIP_PAD, gy = r.y + (r.h - 14.0f) * 0.5f;
@@ -3199,7 +3223,7 @@ static float desenharTopo(float a) {
   // cima do preview e dos cartoes.
   dicaDir = xs[G_TOPO_PREVIEW] + w[G_TOPO_PREVIEW];
   dicaA = a;
-  return xs[G_TOPO_CATEGORIAS];
+  return xs[G_TOPO_BUSCAR];
 }
 
 // --- modo lista ---------------------------------------------------------------------
@@ -3703,6 +3727,228 @@ static void desenharBanda(float a, Uint32 agora) {
   }
 }
 
+// --- BUSCA DO GUIA ------------------------------------------------------------------
+// Pedido do dono (01/10/2026): "Buscar" na barra de cima. O teclado do app
+// (teclado.h, com espaco) colhe o texto; a busca procura CANAL pelo nome (sem
+// acento nem caixa, livetv_regras.h) ou pelo numero, e PROGRAMA na grade de
+// agora ate G_BUSCA_HORAS a frente. O resultado e uma lista com duas secoes:
+//   Canais    — OK abre o canal;
+//   Programas — OK no que esta no ar abre o canal; no futuro, leva o guia ao
+//               canal com a grade naquela hora (modo lista), onde o OK marca o
+//               lembrete como em qualquer celula do futuro.
+#define G_BUSCA_CANAIS   24
+#define G_BUSCA_PROGS    40
+#define G_BUSCA_HORAS     6
+#define G_BUSCA_ROW      76.0f
+#define G_BUSCA_W       1180.0f
+static int buscaEstado;        // 0 fechada, 1 teclado, 2 resultado
+static char buscaTexto[TECLADO_MAX + 1];
+static int buscaNC, buscaNP, buscaFoco;
+static int buscaCanal[G_BUSCA_CANAIS];
+static struct { int canal; time_t ini, fim; char titulo[112]; } buscaProg[G_BUSCA_PROGS];
+static float buscaRol, buscaAnim;
+
+static void buscaAbrir(void) {
+  buscaEstado = 1;
+  teclado_abrir_com("Buscar no guia", "Nome ou número do canal, ou o nome de um programa",
+                    TECLADO_MAX, "abcdefghijklmnopqrstuvwxyz0123456789 ", buscaTexto);
+}
+static int buscaN(void) { return buscaNC + buscaNP; }
+
+static void buscaFazer(const char *q) {
+  char agulha[TECLADO_MAX + 1];
+  int i, numero = 0, soDigito = 1;
+  time_t agoraT = time(NULL);
+  const char *p;
+  snprintf(buscaTexto, sizeof buscaTexto, "%s", q ? q : "");
+  nv_dobrar(buscaTexto, agulha, sizeof agulha);
+  // Espacos das pontas fora.
+  { size_t n = strlen(agulha), k = 0;
+    while (n && agulha[n - 1] == ' ') agulha[--n] = 0;
+    while (agulha[k] == ' ') k++;
+    if (k) memmove(agulha, agulha + k, strlen(agulha + k) + 1); }
+  buscaNC = buscaNP = 0; buscaFoco = 0; buscaRol = 0.0f;
+  if (!agulha[0]) return;
+  for (p = agulha; *p; p++) if (*p < '0' || *p > '9') soDigito = 0;
+  if (soDigito) numero = atoi(agulha);
+  for (i = 0; i < nCanais && buscaNC < G_BUSCA_CANAIS; i++)
+    if ((numero && i + 1 == numero) || nv_contem_dobrado(canais[i].nome, agulha))
+      buscaCanal[buscaNC++] = i;
+  // PROGRAMAS: a grade de cada canal entre agora e G_BUSCA_HORAS a frente. Os
+  // que estao no ar primeiro; depois por horario.
+  if (!soDigito || strlen(agulha) > 3)
+    for (i = 0; i < nCanais && buscaNP < G_BUSCA_PROGS; i++) {
+      EpgProg ps[24];
+      int n = gFaixa(&canais[i], agoraT, agoraT + G_BUSCA_HORAS * 3600, ps, 24), k;
+      for (k = 0; k < n && buscaNP < G_BUSCA_PROGS; k++) {
+        if (!ps[k].titulo || !nv_contem_dobrado(ps[k].titulo, agulha)) continue;
+        buscaProg[buscaNP].canal = i;
+        buscaProg[buscaNP].ini = ps[k].ini; buscaProg[buscaNP].fim = ps[k].fim;
+        snprintf(buscaProg[buscaNP].titulo, sizeof buscaProg[buscaNP].titulo, "%s", ps[k].titulo);
+        buscaNP++;
+      }
+    }
+  { int a, b;   // ordem: no ar antes, depois o que comeca primeiro
+    for (a = 1; a < buscaNP; a++)
+      for (b = a; b > 0; b--) {
+        int vivoA = buscaProg[b - 1].ini <= agoraT, vivoB = buscaProg[b].ini <= agoraT;
+        if (vivoA > vivoB || (vivoA == vivoB && buscaProg[b - 1].ini <= buscaProg[b].ini)) break;
+        { __typeof__(buscaProg[0]) t = buscaProg[b]; buscaProg[b] = buscaProg[b - 1]; buscaProg[b - 1] = t; }
+      } }
+  printf("[guia] busca: %d canal(is), %d programa(s)\n", buscaNC, buscaNP);
+  fflush(stdout);
+}
+
+static void buscaFechar(void) { buscaEstado = 0; }
+
+// OK num resultado.
+static void buscaAgir(void) {
+  if (buscaFoco < buscaNC) {
+    GCanal *c = &canais[buscaCanal[buscaFoco]];
+    buscaFechar();
+    guia_focar_id(c->id);
+    pedirCanal(c);
+    return;
+  }
+  if (buscaFoco - buscaNC < buscaNP) {
+    int k = buscaFoco - buscaNC;
+    GCanal *c = &canais[buscaProg[k].canal];
+    time_t agoraT = time(NULL);
+    buscaFechar();
+    guia_focar_id(c->id);
+    if (buscaProg[k].ini <= agoraT) { pedirCanal(c); return; }
+    // FUTURO: a grade em lista, adiantada ate a meia hora do programa.
+    { long min = (long)(buscaProg[k].ini - (agoraT / 1800) * 1800) / 60;
+      int passo = (int)(min / G_L_PASSO_MIN) * G_L_PASSO_MIN;
+      if (!modoLista) alternarModo();
+      janelaDesl = passo < 0 ? 0 : passo > G_L_DESL_MAX ? G_L_DESL_MAX : passo; }
+  }
+}
+
+// 1 = a tecla era da busca.
+static int buscaEvento(const SDL_Event *e) {
+  SDL_Keycode k;
+  if (buscaEstado == 1) { teclado_evento(e); return 1; }
+  if (buscaEstado != 2) return 0;
+  if (e->type != SDL_KEYDOWN) return 1;
+  k = e->key.keysym.sym;
+  if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
+      e->key.keysym.scancode == NV_SCANCODE_BACK) { buscaFechar(); return 1; }
+  if (k == SDLK_UP) { if (buscaFoco > -1) buscaFoco--; return 1; }
+  if (k == SDLK_DOWN) { if (buscaFoco + 1 < buscaN()) buscaFoco++; return 1; }
+  if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
+    if (buscaFoco < 0) buscaAbrir();      // a linha "Nova busca"
+    else buscaAgir();
+    return 1;
+  }
+  return 1;
+}
+
+static void buscaAtualizar(float dt, Uint32 agora) {
+  buscaAnim = anim_mola(buscaAnim, buscaEstado == 2 ? 1.0f : 0.0f, dt, 12.0f);
+  if (buscaEstado == 1) {
+    int r;
+    teclado_atualizar(dt, agora);
+    r = teclado_resultado();
+    if (r == TECLADO_PRONTO) { buscaFazer(teclado_texto()); buscaEstado = 2; }
+    else if (r == TECLADO_CANCELOU) buscaEstado = buscaN() ? 2 : 0;
+  }
+  if (buscaEstado == 2) {
+    // A linha em foco fica a vista: a lista rola por ela.
+    float y = (float)(buscaFoco + 1) * G_BUSCA_ROW + (buscaFoco >= buscaNC ? 56.0f : 0.0f);
+    float area = NV_TELA_H - 300.0f;
+    float alvo = y - area * 0.5f;
+    if (alvo < 0.0f) alvo = 0.0f;
+    buscaRol += (alvo - buscaRol) * (dt * 12.0f > 1.0f ? 1.0f : dt * 12.0f);
+  }
+}
+
+static void buscaDesenhar(Uint32 agora) {
+  float ea = buscaAnim, ar, ag, ab, x0 = (NV_TELA_W - G_BUSCA_W) * 0.5f, y;
+  int i, tf = ajustes_tinta_foco();
+  time_t agoraT = time(NULL);
+  char b[200];
+  (void)tf;
+  if (buscaEstado == 1) teclado_desenhar(agora);
+  if (ea < 0.01f) return;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.80f * ea);
+  { GfxRect p = { x0 - 40.0f, 40.0f, G_BUSCA_W + 80.0f, NV_TELA_H - 80.0f };
+    gfx_cor(p, 28.0f / p.h, 0.070f, 0.072f, 0.080f, ea);
+    gfx_luz_canto(p, 28.0f / p.h, p.w * 0.30f, -p.w * 0.25f, p.w * 1.45f, ar, ag, ab, 0.06f * ea); }
+  snprintf(b, sizeof b, i18n("Busca: “%s”"), buscaTexto);
+  txt_desenhar_alpha(txt_linha_corta(TXT_HEADLINE, b, 242, 243, 247, 255, G_BUSCA_W), x0, 72.0f, ea);
+  if (!buscaN())
+    txt_desenhar_alpha(txt_linha_corta(TXT_BODY, i18n("Nada encontrado nos canais nem na grade das próximas horas."),
+                                       180, 184, 194, 255, G_BUSCA_W), x0, 136.0f, ea);
+  gfx_recorte(x0 - 20.0f, 130.0f, G_BUSCA_W + 40.0f, NV_TELA_H - 230.0f);
+  y = 140.0f - buscaRol;
+  // "Nova busca": foco -1.
+  { GfxRect r = { x0, y, G_BUSCA_W, G_BUSCA_ROW - 10.0f };
+    int foc = buscaFoco == -1;
+    if (foc) gfx_cor(r, 14.0f / r.h, ar, ag, ab, ea);
+    gfx_icone((GfxRect){ r.x + 20.0f, r.y + (r.h - 26.0f) * 0.5f, 26.0f, 26.0f }, "menu_search",
+              foc ? 0.06f : 0.9f, foc ? 0.07f : 0.9f, foc ? 0.08f : 0.92f, ea);
+    txt_desenhar_alpha(txt_linha(TXT_BODY, i18n("Nova busca"), foc ? 16 : 232, foc ? 18 : 236, foc ? 22 : 244, 255),
+                       r.x + 62.0f, r.y + 18.0f, ea);
+    y += G_BUSCA_ROW; }
+  for (i = 0; i < buscaN(); i++) {
+    int foc = buscaFoco == i;
+    GfxRect r;
+    if (i == 0 && buscaNC) {
+      snprintf(b, sizeof b, i18n("Canais · %d"), buscaNC);
+      txt_desenhar_alpha(txt_linha(TXT_CAPTION, b, 150, 154, 164, 255), x0, y + 20.0f, ea);
+      y += 56.0f;
+    }
+    if (i == buscaNC && buscaNP) {
+      snprintf(b, sizeof b, i18n("Programas · %d"), buscaNP);
+      txt_desenhar_alpha(txt_linha(TXT_CAPTION, b, 150, 154, 164, 255), x0, y + 20.0f, ea);
+      y += 56.0f;
+    }
+    r = (GfxRect){ x0, y, G_BUSCA_W, G_BUSCA_ROW - 10.0f };
+    if (r.y > NV_TELA_H || r.y + r.h < 120.0f) { y += G_BUSCA_ROW; continue; }
+    if (foc) gfx_cor(r, 14.0f / r.h, ar, ag, ab, ea);
+    else gfx_cor(r, 14.0f / r.h, 1, 1, 1, 0.04f * ea);
+    if (i < buscaNC) {
+      const GCanal *c = &canais[buscaCanal[i]];
+      char n[16];
+      guia_logo_desenhar(c->logo, c->nome, (GfxRect){ r.x + 14.0f, r.y + 6.0f, 92.0f, r.h - 12.0f },
+                         92.0f, r.h - 16.0f, 0.965f, ea);
+      snprintf(n, sizeof n, "%d", buscaCanal[i] + 1);
+      txt_desenhar_alpha(txt_linha(TXT_CAPTION, n, foc ? 30 : 150, foc ? 32 : 153, foc ? 38 : 162, 255),
+                         r.x + 124.0f, r.y + 22.0f, ea);
+      txt_desenhar_alpha(txt_linha_corta(TXT_BODY, c->nome, foc ? 16 : 236, foc ? 18 : 238, foc ? 22 : 244, 255,
+                                         G_BUSCA_W - 260.0f), r.x + 190.0f, r.y + 16.0f, ea);
+    } else {
+      int k = i - buscaNC, vivo = buscaProg[k].ini <= agoraT;
+      const GCanal *c = &canais[buscaProg[k].canal];
+      char h1[8], h2[8], quando[64];
+      struct tm lt;
+      localtime_r(&buscaProg[k].ini, &lt); strftime(h1, sizeof h1, "%H:%M", &lt);
+      localtime_r(&buscaProg[k].fim, &lt); strftime(h2, sizeof h2, "%H:%M", &lt);
+      if (vivo) snprintf(quando, sizeof quando, "%s", i18n("Ao vivo"));
+      else {
+        long m = (long)(buscaProg[k].ini - agoraT) / 60;
+        if (m < 60) snprintf(quando, sizeof quando, i18n("daqui a %ld min"), m);
+        else snprintf(quando, sizeof quando, i18n("daqui a %ld h %02ld"), m / 60, m % 60);
+      }
+      txt_desenhar_alpha(txt_linha_corta(TXT_BODY, buscaProg[k].titulo, foc ? 16 : 236, foc ? 18 : 238,
+                                         foc ? 22 : 244, 255, G_BUSCA_W - 360.0f), r.x + 24.0f, r.y + 8.0f, ea);
+      snprintf(b, sizeof b, "%s · %s–%s", c->nome, h1, h2);
+      txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION, b, foc ? 40 : 150, foc ? 42 : 154, foc ? 48 : 164, 255,
+                                         G_BUSCA_W - 360.0f), r.x + 24.0f, r.y + 40.0f, ea);
+      { TxtLinha q = vivo ? txt_linha(TXT_CAPTION, quando, 200, 30, 40, 255)
+                          : txt_linha(TXT_CAPTION, quando, foc ? 30 : 190, foc ? 32 : 196, foc ? 38 : 206, 255);
+        if (vivo && !foc) guia_selo_ao_vivo(r.x + r.w - 24.0f - 120.0f, r.y + (r.h - 32.0f) * 0.5f, ea);
+        else txt_desenhar_alpha(q, r.x + r.w - 24.0f - (float)q.w, r.y + (r.h - (float)q.h) * 0.5f, ea); }
+    }
+    y += G_BUSCA_ROW;
+  }
+  gfx_sem_recorte();
+  txt_desenhar_alpha(txt_linha(TXT_CAPTION, i18n("OK abre  ·  ↑↓ escolhe  ·  Voltar fecha"), 128, 130, 138, 255),
+                     x0, NV_TELA_H - 84.0f, ea);
+}
+
 void guia_desenhar(Uint32 agora) {
   time_t agoraT = time(NULL);
   time_t tFoco = instanteFoco(agoraT);
@@ -3964,6 +4210,7 @@ void guia_desenhar(Uint32 agora) {
 
   desenharDica();
   desenharPainelCategorias(a);
+  buscaDesenhar(agora);
   if (painel) desenharPainelAddons(a);
   // O CANAL NO AR ENCOLHENDO para o preview: o furo segue o degrau da janela
   // do player por cima de tudo, e o video "pousa" no preview.

@@ -41,6 +41,11 @@ int main(void) {
     ltd_recomendar(c, 1, &r);
     OK(r.formato == 0 && r.resolucao == 1 && r.espera == 0, "sem player (Mac): formato automatico, 4K pela vazao");
   }
+  { char d[64];
+    nv_dobrar("România Ș Ţ ÇÃO", d, sizeof d);
+    OK(!strcmp(d, "romania s t cao"), "dobrar: acento e caixa saem");
+    OK(nv_contem_dobrado("RO| PRO TV România", "romania"), "busca sem acento acha com acento");
+    OK(nv_contem_dobrado("SporTV 2", "sportv") && !nv_contem_dobrado("ESPN", "sportv"), "busca sem caixa"); }
   if (falhas) return 1;
   printf("livetv_regras: tudo ok\n");
   return 0;

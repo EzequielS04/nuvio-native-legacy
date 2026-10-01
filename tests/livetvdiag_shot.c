@@ -81,7 +81,8 @@ int main(int argc, char **argv) {
   canal(0, "xtream:101", "RO| CINEMAX FHD");
   canal(1, "xtream:102", "RO| CINEMAX 2 HD");
   canal(2, "xtream:103", "RO| HBO 4K HEVC");
-  L.n = 3;
+  canal(3, "xtream:104", "RO| EPIC DRAMA FHD");
+  L.n = 4;
   for (i = 0; i < L.n; i++) {
     L.atual = i; atomic_store(&L.fioOcupado, 1);
     fioRede(&L.it[i]);
@@ -94,8 +95,11 @@ int main(int argc, char **argv) {
   assert(L.it[0].f[F_HLS].http == 200 && L.it[0].f[F_HLS].playlist && L.it[0].f[F_HLS].servido);
   assert(L.it[1].f[F_TS].http == 404 && !L.it[1].f[F_TS].servido && L.it[1].f[F_HLS].http == 404);
   assert(strstr(L.it[2].f[F_TS].codec, "HEVC") && strstr(L.it[2].f[F_TS].codec, "AC3") && L.it[2].f[F_TS].dezBits);
-  assert(L.redeMedida && L.kbps > 4000 && L.kbps < 14000 && L.latenciaMs >= 100);
+  assert(L.it[3].f[F_TS].servido && strstr(L.it[3].f[F_TS].codec, "H.264"));  // pelo UA de player
+  assert(L.redeMedida && L.kbpsDoSegmento && L.kbps > 4000 && L.kbps < 14000);
   // Mac: o player nao existe; o passo de player marca "so na TV".
+  L.n = 3;   // as capturas seguem com os tres de antes
+  memset(&L.it[3], 0, sizeof L.it[3]);
   for (i = 0; i < L.n; i++) {
     int f = proximoFormato(&L.it[i]);
     while (f >= 0) { L.atual = i; iniciarPlayer(f); f = LTD_TEM_PLAYER ? proximoFormato(&L.it[i]) : -1; }

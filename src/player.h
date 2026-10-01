@@ -89,6 +89,8 @@ int  player_aberto(void);   // 1 enquanto a tela existe, inclusive durante o fad
 // `player_pediu_zap` — CH+/CH- (NV_SCANCODE_CH_UP/DOWN), PgUp/PgDn e os botoes
 //   do OSD, somados por um debounce de 600 ms (aovivo.h): o deslocamento total.
 int  player_pediu_guia(void);
+// O botao "Guia" do OSD do canal: o guia COMPLETO com o canal no preview.
+int  player_pediu_guia_cheio(void);
 int  player_pediu_zap(void);        // deslocamento em canais (+3, -1...), 0 = nenhum
 int  player_pediu_recarregar(void);  // "Recarregar" do OSD: refaz a fonte do mesmo canal
 // Identidade do canal congelada na abertura: o indice do catalogo pode ser
