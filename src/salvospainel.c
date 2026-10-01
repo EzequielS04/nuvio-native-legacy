@@ -15,6 +15,8 @@
 // liga, que e justamente quando alguem aperta.
 #include "salvospainel.h"
 #include "salvos.h"
+#include "salvosorg.h"
+#include "teclado.h"
 #include "simkl.h"
 #include "recomenda.h"
 #include "avisos.h"
@@ -34,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 
 // Mesma pegada do painel "Sua atividade" que ele substitui (perfil.c desenhava
@@ -151,7 +154,21 @@ typedef struct {
   // da C9 dizia "texto 0.0ms em 0 linhas" com o painel aberto —; isto poupa
   // os snprintf e as buscas de i18n de cada linha visivel.
   char  txtRestante[96], txtVisto[96];
+  // ORGANIZACAO (salvosorg.h). `fundo` e a arte 16:9 do catalogo, para o
+  // estilo paisagem; vazio cai no cartaz. `tipoG` e o grupo de tipo (SPT_*),
+  // `cat` a categoria da pessoa (0 = nenhuma), `orig` a posicao na ordem de
+  // sempre — o desempate de toda ordenacao, para a lista nunca dancar.
+  char  fundo[512];
+  int   ano, tipoG, cat, orig;
+  // ONDE A CELULA MORA, relativo ao topo do conteudo e a esquerda da coluna.
+  // Calculado na reconstrucao (montarLayout), nunca por quadro: o desenho, a
+  // rolagem e o D-pad perguntam ao mesmo lugar. `fila` e a linha visual —
+  // na grade varias celulas dividem a mesma.
+  float lx, ly, lw, lh;
+  int   fila;
 } SPLinha;
+// Tipos para "Agrupar por tipo", na ordem das secoes.
+enum { SPT_FILME = 0, SPT_SERIE, SPT_COLECAO, SPT_CANAL, SPT_N };
 
 static SPLinha *linhas;
 static int nLinhas, capLinhas;
@@ -291,6 +308,9 @@ static Uint32 okDesde;
 // (a linha local sai antes, a copia do catalogo so no 2xx) apontaria para
 // outra coisa no meio do caminho.
 static char   menuId[24], menuProximo[24];
+// O FOCO SEGUE O TITULO MOVIDO. Mover para uma categoria (com a lista agrupada
+// por categoria) muda a posicao dele; o foco vai junto, na reconstrucao.
+static char   seguirId[24];
 
 int spainel_aberto(void)  { return aberto; }
 int spainel_visivel(void) { return aberto || entrada > 0.002f; }
@@ -314,12 +334,13 @@ static int ehSerie(const char *tipo, int nTemporadas) {
 // reconstrucao andava pelo catalogo inteiro. Com as revisoes a pergunta por
 // quadro e comparar dois inteiros, e a reconstrucao so acontece quando ha o
 // que mostrar de diferente (tests/salvospainel.sh conta quantas vezes).
-static unsigned marcaRevCat, marcaRevSalvos;
+static unsigned marcaRevCat, marcaRevSalvos, marcaRevOrg;
 static int reconstrucoes, fundosPintados;
 int spainel_n_reconstrucoes(void) { return reconstrucoes; }
 int spainel_n_fundos(void) { return fundosPintados; }
 static int listaVelha(void) {
-  return marcaCatN < 0 || cat_revisao_itens() != marcaRevCat ||
+  sorg_carregar();   // troca de perfil sobe a revisao da organizacao
+  return marcaCatN < 0 || sorg_revisao() != marcaRevOrg || cat_revisao_itens() != marcaRevCat ||
          salvos_revisao() != marcaRevSalvos || cat_n() != marcaCatN;
 }
 
@@ -338,6 +359,9 @@ static int listaVelha(void) {
 // copia entrava de novo por conta propria. salvos_uniao compara por titulo, e e
 // a mesma regra que tests/salvos.sh cobra.
 static void legendasDaBarra(SPLinha *l);
+static int tipoGrupo(const char *tipo, const char *id, int serie);
+static int anoDe(const char *meta);
+static void organizar(void);
 static void reconstruir(void) {
   static SalvosEntrada *uniao;
   static int capUniao;
@@ -392,21 +416,20 @@ static void reconstruir(void) {
       if (c->poster[0]) snprintf(l->poster, sizeof l->poster, "%s", c->poster);
       if (c->meta[0])   snprintf(l->meta, sizeof l->meta, "%s", c->meta);
       if (ehSerie(c->tipo, c->nTemporadas)) l->serie = 1;
+      if (c->backdrop[0]) snprintf(l->fundo, sizeof l->fundo, "%s", c->backdrop);
     }
+    l->tipoG = tipoGrupo(s ? s->tipo : c->tipo, l->id, l->serie);
+    l->ano = anoDe(l->meta);
+    l->cat = sorg_categoria_de(l->id);
   }
-  for (i = 0; i < nLinhas; i++) legendasDaBarra(&linhas[i]);
-  // Estavel: percorre uma vez e move para a frente quem tem progresso.
-  for (i = 0; i < nLinhas; i++) {
-    if (linhas[i].progresso <= 0) continue;
-    if (i != escrita) {
-      SPLinha t = linhas[i];
-      memmove(&linhas[escrita + 1], &linhas[escrita],
-              sizeof(SPLinha) * (size_t)(i - escrita));
-      linhas[escrita] = t;
-    }
-    escrita++;
-  }
+  for (i = 0; i < nLinhas; i++) { legendasDaBarra(&linhas[i]); linhas[i].orig = i; }
+  // A ORDEM DE SEMPRE era: a uniao na ordem acima e, por cima, quem tem
+  // progresso subindo para "Continuar". Agora a ordem e o agrupamento sao da
+  // pessoa (salvosorg.h) — e o padrao dos dois reproduz exatamente aquilo.
+  for (i = 0; i < nLinhas; i++) if (linhas[i].progresso > 0) escrita++;
   nCont = escrita;
+  organizar();
+  marcaRevOrg = sorg_revisao();
   marcaCatN = catN;
   marcaRevCat = revCat;
   marcaRevSalvos = revSalvos;
@@ -426,7 +449,212 @@ static void reconstruir(void) {
     if (achou >= 0) foco = achou;
     else if (prox >= 0) foco = prox;
   }
+  if (seguirId[0] && foco >= 0) {
+    for (i = 0; i < nLinhas; i++)
+      if (salvos_mesmo_titulo(linhas[i].id, seguirId)) { foco = i; break; }
+    seguirId[0] = 0;
+  }
   if (foco >= 0 && foco >= nLinhas) foco = nLinhas > 0 ? nLinhas - 1 : 0;
+}
+
+// --- ORGANIZAR: grupos, ordem e o lugar de cada celula ------------------------
+//
+// Tudo isto roda NA RECONSTRUCAO, e so nela: a lista muda quando o catalogo, a
+// lista local ou a organizacao mudam (as tres revisoes de listaVelha), e entre
+// uma mudanca e outra o quadro so le `ly`/`lh` prontos. Com 300 salvos a conta
+// inteira e uma ordenacao de 300 indices — nada que apareca num quadro.
+
+// Secoes da lista montada: o rotulo e onde ele mora. `vazia` = categoria sem
+// titulo nenhum, que ainda assim aparece (com uma dica no lugar das celulas):
+// quem acabou de criar "Kids" tem de ver "Kids" na tela.
+#define SP_SECOES_MAX (SORG_CAT_MAX + 8)
+typedef struct { float y; char rot[SORG_NOME_MAX + 8]; int vazia; } SPSecao;
+static SPSecao secoes[SP_SECOES_MAX];
+static int nSecoes;
+static float alturaConteudo;
+
+// As medidas dos tres estilos. A coluna util e SP_INTERNO (696).
+//   LISTA     a de sempre: cartaz 92x138 e texto ao lado, passo SP_PASSO.
+//   GRADE     4 cartazes por fila, 159x238, titulo embaixo. 4 e nao 5: a 3 m,
+//             um cartaz de 130 px ja nao deixa ler o titulo de baixo.
+//   PAISAGEM  2 cartoes 16:9 por fila, 338x190, titulo e linha de apoio.
+#define SPG_COLS        4
+#define SPG_VAO        20.0f
+#define SPG_W         ((SP_INTERNO - SPG_VAO * (SPG_COLS - 1)) / SPG_COLS)
+#define SPG_POSTER_H  (SPG_W * 1.5f)
+#define SPG_H         (SPG_POSTER_H + 48.0f)
+#define SPG_PASSO     (SPG_H + 24.0f)
+#define SPP_COLS        2
+#define SPP_VAO        20.0f
+#define SPP_W         ((SP_INTERNO - SPP_VAO * (SPP_COLS - 1)) / SPP_COLS)
+#define SPP_IMG_H     (SPP_W * 9.0f / 16.0f)
+#define SPP_H         (SPP_IMG_H + 82.0f)
+#define SPP_PASSO     (SPP_H + 24.0f)
+// Altura da dica de uma categoria vazia, abaixo do rotulo.
+#define SP_VAZIA_H     64.0f
+
+// O que o tipo do catalogo diz, reduzido aos quatro grupos que a pessoa ve.
+// Canal: os addons de TV declaram "tv" ou "channel", e o id de canal do app e
+// "cs:channel:..." (ver idbase.h). Colecao: o tipo pode chegar cortado em 8
+// bytes ("collect"), entao basta o prefixo.
+static int tipoGrupo(const char *tipo, const char *id, int serie) {
+  if (tipo && (!strcmp(tipo, "tv") || !strcmp(tipo, "channel"))) return SPT_CANAL;
+  if (id && !strncmp(id, "cs:", 3)) return SPT_CANAL;
+  if (tipo && !strncmp(tipo, "coll", 4)) return SPT_COLECAO;
+  if (serie) return SPT_SERIE;
+  return SPT_FILME;
+}
+
+// O ano da meta ("2002", "2022 · 3 temporadas"): o primeiro numero de quatro
+// digitos entre 1900 e 2099. 0 quando a meta nao traz ano.
+static int anoDe(const char *meta) {
+  const char *p;
+  if (!meta) return 0;
+  for (p = meta; *p; p++) {
+    if (p[0] >= '0' && p[0] <= '9' && p[1] >= '0' && p[1] <= '9' &&
+        p[2] >= '0' && p[2] <= '9' && p[3] >= '0' && p[3] <= '9' &&
+        !(p[4] >= '0' && p[4] <= '9') && (p == meta || !(p[-1] >= '0' && p[-1] <= '9'))) {
+      int a = (p[0] - '0') * 1000 + (p[1] - '0') * 100 + (p[2] - '0') * 10 + (p[3] - '0');
+      if (a >= 1900 && a <= 2099) return a;
+    }
+  }
+  return 0;
+}
+
+// Em que secao a linha cai, no agrupamento atual. Numero menor = mais acima.
+static int grupoDe(const SPLinha *l, int g) {
+  if (g == SORG_GRUPO_PROGRESSO) return l->progresso > 0 ? 0 : 1;
+  if (g == SORG_GRUPO_TIPO) return l->tipoG;
+  if (g == SORG_GRUPO_CATEGORIA) {
+    int k = l->cat ? sorg_categoria_indice(l->cat) : -1;
+    return k >= 0 ? k : SORG_CAT_MAX;   // "Sem categoria" fecha a lista
+  }
+  return 0;
+}
+
+// Quanto falta, para "Menos tempo restante": o minuto quando ha, senao o
+// percentual que falta (escala alta, para cair depois de quem tem minuto).
+static int restanteDe(const SPLinha *l) {
+  if (l->progresso <= 0) return 1 << 30;
+  if (l->restanteMin > 0) return l->restanteMin;
+  return 100000 + (100 - l->progresso);
+}
+
+static int ordemAtual, grupoAtual;
+static int compara(const void *pa, const void *pb) {
+  const SPLinha *a = &linhas[*(const int *)pa], *b = &linhas[*(const int *)pb];
+  int ga = grupoDe(a, grupoAtual), gb = grupoDe(b, grupoAtual), d = 0;
+  if (ga != gb) return ga - gb;
+  switch (ordemAtual) {
+    case SORG_ORDEM_RECENTES:
+      // Do Trakt ou da conta nao sabemos quando entrou (quandoS 0): depois.
+      d = (b->quandoS > a->quandoS) - (b->quandoS < a->quandoS);
+      break;
+    case SORG_ORDEM_NOME: d = strcasecmp(a->titulo, b->titulo); break;
+    case SORG_ORDEM_ANO:  d = b->ano - a->ano; break;
+    case SORG_ORDEM_NOTA: d = b->nota - a->nota; break;
+    case SORG_ORDEM_RESTANTE: {
+      int ra = restanteDe(a), rb = restanteDe(b);
+      d = (ra > rb) - (ra < rb);
+      break; }
+    default: break;
+  }
+  // O DESEMPATE E A ORDEM DE SEMPRE: qsort nao e estavel, e sem isto dois
+  // titulos sem ano trocariam de lugar a cada reconstrucao.
+  return d ? d : a->orig - b->orig;
+}
+
+// Rotulo da secao `g` no agrupamento atual. Passa por i18n no desenho
+// (txt_linha), exceto o nome de categoria, que e da pessoa.
+static void rotuloGrupo(int g, char *dst, size_t tam) {
+  static const char *tipos[SPT_N] = { "Filmes", "Séries", "Coleções", "Canais" };
+  if (grupoAtual == SORG_GRUPO_PROGRESSO)
+    snprintf(dst, tam, "%s", g == 0 ? "Continuar" : (nCont > 0 ? "Não começados" : "Sua lista"));
+  else if (grupoAtual == SORG_GRUPO_TIPO)
+    snprintf(dst, tam, "%s", g >= 0 && g < SPT_N ? tipos[g] : "Sua lista");
+  else if (grupoAtual == SORG_GRUPO_CATEGORIA) {
+    const char *n = g < SORG_CAT_MAX ? sorg_categoria_nome_id(sorg_categoria_id(g)) : NULL;
+    snprintf(dst, tam, "%s", n ? n : (sorg_n_categorias() > 0 ? "Sem categoria" : "Sua lista"));
+  } else snprintf(dst, tam, "%s", "Sua lista");
+}
+
+static int novaSecao(float y, int g, int vazia) {
+  SPSecao *sc;
+  if (nSecoes >= SP_SECOES_MAX) return 0;
+  sc = &secoes[nSecoes++];
+  sc->y = y;
+  sc->vazia = vazia;
+  rotuloGrupo(g, sc->rot, sizeof sc->rot);
+  return 1;
+}
+
+// Poe cada linha no lugar: secoes, filas, colunas.
+static void montarLayout(void) {
+  int estilo = sorg_estilo(), cols = 1, i, col = 0, fila = -1, gAnt = -999;
+  int catVazias = grupoAtual == SORG_GRUPO_CATEGORIA;
+  int proximaCat = 0;   // categorias vazias entram na ordem, entre as cheias
+  float w = SP_INTERNO, h = SP_POSTER_H, passo = SP_PASSO, vao = 0.0f, y = 0.0f;
+  if (estilo == SORG_ESTILO_GRADE) { cols = SPG_COLS; w = SPG_W; h = SPG_H; passo = SPG_PASSO; vao = SPG_VAO; }
+  else if (estilo == SORG_ESTILO_PAISAGEM) { cols = SPP_COLS; w = SPP_W; h = SPP_H; passo = SPP_PASSO; vao = SPP_VAO; }
+  nSecoes = 0;
+  for (i = 0; i < nLinhas; i++) {
+    SPLinha *l = &linhas[i];
+    int g = grupoDe(l, grupoAtual);
+    if (g != gAnt) {
+      if (col > 0) { y += passo; col = 0; }
+      // As categorias criadas e ainda vazias que vem antes desta secao.
+      if (catVazias)
+        for (; proximaCat < sorg_n_categorias() && proximaCat < g; proximaCat++) {
+          novaSecao(y, proximaCat, 1);
+          y += SP_SECAO_H + SP_VAZIA_H;
+        }
+      if (catVazias && g < SORG_CAT_MAX) proximaCat = g + 1;
+      novaSecao(y, g, 0);
+      y += SP_SECAO_H;
+      gAnt = g;
+    }
+    if (col == 0) fila++;
+    l->lx = (float)col * (w + vao);
+    l->ly = y;
+    l->lw = w;
+    l->lh = h;
+    l->fila = fila;
+    if (++col >= cols) { col = 0; y += passo; }
+  }
+  if (col > 0) y += passo;
+  if (catVazias)
+    for (; proximaCat < sorg_n_categorias(); proximaCat++) {
+      novaSecao(y, proximaCat, 1);
+      y += SP_SECAO_H + SP_VAZIA_H;
+    }
+  alturaConteudo = y;
+}
+
+static void organizar(void) {
+  static int *idx;
+  static int capIdx;
+  SPLinha *tmp;
+  int i;
+  ordemAtual = sorg_ordem();
+  grupoAtual = sorg_grupo();
+  // "Por categoria" sem nenhuma categoria criada e o mesmo que nenhum grupo:
+  // uma secao "Sem categoria" sozinha nao diz nada.
+  if (grupoAtual == SORG_GRUPO_CATEGORIA && sorg_n_categorias() < 1) grupoAtual = SORG_GRUPO_NENHUM;
+  if (nLinhas > 1 && (ordemAtual != SORG_ORDEM_SALVOU || grupoAtual != SORG_GRUPO_NENHUM)) {
+    if (nLinhas > capIdx) {
+      int *n = (int *)realloc(idx, sizeof *idx * (size_t)nLinhas);
+      if (n) { idx = n; capIdx = nLinhas; }
+    }
+    tmp = nLinhas <= capIdx ? (SPLinha *)malloc(sizeof *tmp * (size_t)nLinhas) : NULL;
+    if (tmp) {
+      for (i = 0; i < nLinhas; i++) idx[i] = i;
+      qsort(idx, (size_t)nLinhas, sizeof *idx, compara);
+      for (i = 0; i < nLinhas; i++) tmp[i] = linhas[idx[i]];
+      memcpy(linhas, tmp, sizeof *tmp * (size_t)nLinhas);
+      free(tmp);
+    }
+  }
+  montarLayout();
 }
 
 // 1 quando o pacote tem o servico de recomendacoes. Com 0 nao ha aba, nao ha
@@ -457,7 +685,14 @@ static int nVisiveis(void) {
   return nLinhas;
 }
 
-static float listaTopo(void) { return SP_LISTA_Y; }
+// A BARRA DE OPCOES (Ordenar, Agrupar, Estilo, categorias) mora entre as abas
+// e a lista, e empurra a lista SP_OPC_EXTRA para baixo so quando existe.
+#define SP_FOCO_BARRA  (-2)
+#define SP_OPC_Y     (SP_ABAS_Y + SP_ABAS_H + 12.0f)
+#define SP_OPC_H      60.0f
+#define SP_OPC_EXTRA (SP_OPC_Y + SP_OPC_H + 4.0f - SP_LISTA_Y)
+static int temBarra(void);
+static float listaTopo(void) { return SP_LISTA_Y + (temBarra() ? SP_OPC_EXTRA : 0.0f); }
 
 // 1 enquanto a pergunta de primeira entrada esta na tela.
 static int consentindo(void) {
@@ -487,6 +722,12 @@ static float socialAlt(int i) {
 // mudo com o cabecalho das sugestoes por cima seria pior que vao nenhum.
 static float socialAntes(int i) {
   if (i < 0 || i >= nSocial) return 0.0f;
+  // POR PESSOA: um rotulo com o nome de quem mandou antes da primeira
+  // recomendacao de cada pessoa.
+  if (social[i].tipo == SPS_REC && sorg_social() == SORG_SOCIAL_PESSOA) {
+    if (i == 0 || social[i - 1].tipo != SPS_REC) return SP_SECAO_H;
+    return strcmp(recs[social[i].idx].de, recs[social[i - 1].idx].de) ? SP_SECAO_H : 0.0f;
+  }
   if (social[i].tipo == SPS_APARECER) return SPS_SEP_APARECER;
   if (social[i].tipo != SPS_SUG && social[i].tipo != SPS_AMIGO) return 0.0f;
   return (i == 0 || social[i - 1].tipo != social[i].tipo) ? SP_SECAO_H : 0.0f;
@@ -530,6 +771,22 @@ static void reconstruirSocial(void) {
   for (i = 0; i < REC_MAX && nRecs < REC_MAX; i++)
     if (recomenda_item(i, &recs[nRecs])) nRecs++;
     else break;
+  // POR PESSOA (salvosorg.h): as recomendacoes de cada um juntas, as pessoas
+  // em ordem de nome e, dentro de cada uma, a ordem de chegada de sempre.
+  // Insercao estavel: sao no maximo REC_MAX (60) linhas.
+  if (sorg_social() == SORG_SOCIAL_PESSOA) {
+    int j;
+    for (i = 1; i < nRecs; i++) {
+      RecItem t = recs[i];
+      for (j = i; j > 0; j--) {
+        int d = strcasecmp(recs[j - 1].deNome, t.deNome);
+        if (!d) d = strcmp(recs[j - 1].de, t.de);
+        if (d <= 0) break;
+        recs[j] = recs[j - 1];
+      }
+      recs[j] = t;
+    }
+  }
   for (i = 0; i < REC_SUGESTOES_MAX && nSugs < REC_SUGESTOES_MAX; i++)
     if (recomenda_sugestao(i, &sugs[nSugs])) nSugs++;
     else break;
@@ -590,6 +847,300 @@ static void trocarAba(int nova) {
   }
 }
 
+// --- BARRA DE OPCOES, ESCOLHAS E CATEGORIAS -------------------------------
+//
+// O CONTROLE REMOTO DECIDE O DESENHO. Quatro pilulas numa fila so, cada uma
+// dizendo o que vale agora ("Ordenar / Recentes"): o D-pad chega nelas subindo
+// da lista, e o OK abre uma escolha curta por cima do painel — a lista de
+// opcoes com a atual marcada. Nada de menu dentro de menu para ordenar: duas
+// teclas e o efeito ja esta na lista, embaixo.
+//
+// A ESCOLHA ("pop") E UMA SO, para tudo: ordenar, agrupar, estilo, a lista de
+// categorias, o que fazer com uma, a confirmacao de excluir e o "Mover para"
+// que vem do menu do cartaz. Uma maquina so para sete usos, pela mesma razao
+// do teclado.h: duas que fazem a mesma coisa divergem na primeira correcao.
+enum { SPB_ORDEM = 0, SPB_GRUPO, SPB_ESTILO, SPB_CATEG, SPB_N };
+static int   barraFoco;
+static float animBarra[SPB_N];
+
+static const char *ORDEM_CURTO[SORG_ORDEM_N] = {
+  "Mais antigos", "Recentes", "Nome", "Ano", "Nota", "Restante" };
+static const char *ORDEM_LONGO[SORG_ORDEM_N] = {
+  "Salvos mais antigos primeiro", "Salvos mais recentes primeiro", "Nome (A–Z)",
+  "Ano (mais novo primeiro)", "Nota do IMDb", "Menos tempo restante" };
+static const char *GRUPO_CURTO[SORG_GRUPO_N] = {
+  "Progresso", "Tipo", "Categoria", "Nenhum" };
+static const char *GRUPO_LONGO[SORG_GRUPO_N] = {
+  "Continuar e não começados", "Tipo: filmes, séries, coleções, canais",
+  "Minhas categorias", "Sem agrupar" };
+static const char *ESTILO_CURTO[SORG_ESTILO_N] = { "Lista", "Grade", "Paisagem" };
+static const char *ESTILO_LONGO[SORG_ESTILO_N] = {
+  "Lista com capa", "Grade de pôsteres", "Cartões paisagem" };
+static const char *ESTILO_ICONE[SORG_ESTILO_N] = {
+  "aj_rows-3", "aj_layout-dashboard", "aj_images" };
+static const char *SOCIAL_CURTO[SORG_SOCIAL_N] = { "Recentes", "Por pessoa" };
+static const char *SOCIAL_LONGO[SORG_SOCIAL_N] = {
+  "Mais recentes primeiro", "Agrupar por pessoa" };
+
+static int temBarra(void) {
+  if (aba == SP_ABA_SALVOS) return nLinhas > 0;
+  if (aba == SP_ABA_SOCIAL) return !consentindo() && nRecs >= 2;
+  return 0;
+}
+static int nChips(void) { return aba == SP_ABA_SALVOS ? SPB_N : 1; }
+
+enum { POP_NADA = 0, POP_ORDEM, POP_GRUPO, POP_ESTILO, POP_SOCIAL, POP_CATS,
+       POP_CAT_ACOES, POP_EXCLUIR, POP_MOVER };
+#define POP_MAX (SORG_CAT_MAX + 4)
+#define POP_LINHA_H   64.0f
+#define POP_LINHA_VAO  8.0f
+#define POP_VISIVEIS   8
+typedef struct {
+  char rot[SORG_NOME_MAX + 40];
+  const char *icone;
+  int  valor, marcado;
+} PopLinha;
+static PopLinha popL[POP_MAX];
+static int   pop, popN, popFoco, popCat;
+static float popEntrada, popRol, popAnim[POP_MAX];
+static char  popTitulo[200], popSub[200], popItem[24];
+
+// O TECLADO DO APP (teclado.h) para nome de categoria: letras, numeros,
+// espaco e hifen. A primeira letra sai maiuscula (sorg_nome_limpo).
+enum { TK_NADA = 0, TK_CRIAR, TK_MOVER, TK_RENOMEAR };
+static int tecladoPara;
+static const char *ALFA_NOME = "abcdefghijklmnopqrstuvwxyz0123456789 -";
+#define SP_NOME_LETRAS 24
+
+static void popLinha(const char *rot, const char *icone, int valor, int marcado) {
+  PopLinha *l;
+  if (popN >= POP_MAX) return;
+  l = &popL[popN++];
+  snprintf(l->rot, sizeof l->rot, "%s", rot);
+  l->icone = icone;
+  l->valor = valor;
+  l->marcado = marcado;
+}
+
+// Quantos titulos da lista montada estao na categoria `id`.
+static int contaNaCategoria(int id) {
+  int i, n = 0;
+  for (i = 0; i < nLinhas; i++) if (linhas[i].cat == id) n++;
+  return n;
+}
+
+static void popAbrir(int tipo) {
+  int i, k;
+  char b[SORG_NOME_MAX + 40];
+  pop = tipo;
+  popN = 0;
+  popTitulo[0] = popSub[0] = 0;
+  switch (tipo) {
+    case POP_ORDEM:
+      snprintf(popTitulo, sizeof popTitulo, "%s", "Ordenar por");
+      for (i = 0; i < SORG_ORDEM_N; i++) popLinha(ORDEM_LONGO[i], NULL, i, i == sorg_ordem());
+      break;
+    case POP_GRUPO:
+      snprintf(popTitulo, sizeof popTitulo, "%s", "Agrupar por");
+      for (i = 0; i < SORG_GRUPO_N; i++) popLinha(GRUPO_LONGO[i], NULL, i, i == sorg_grupo());
+      break;
+    case POP_ESTILO:
+      snprintf(popTitulo, sizeof popTitulo, "%s", "Estilo de exibição");
+      for (i = 0; i < SORG_ESTILO_N; i++)
+        popLinha(ESTILO_LONGO[i], ESTILO_ICONE[i], i, i == sorg_estilo());
+      break;
+    case POP_SOCIAL:
+      snprintf(popTitulo, sizeof popTitulo, "%s", "Organizar recomendações");
+      for (i = 0; i < SORG_SOCIAL_N; i++) popLinha(SOCIAL_LONGO[i], NULL, i, i == sorg_social());
+      break;
+    case POP_CATS:
+      snprintf(popTitulo, sizeof popTitulo, "%s", "Categorias");
+      snprintf(popSub, sizeof popSub, "%s", "Segure OK num título para mover para uma categoria.");
+      popLinha("Nova categoria", "mais", -1, 0);
+      for (i = 0; i < sorg_n_categorias(); i++) {
+        int id = sorg_categoria_id(i), n = contaNaCategoria(id);
+        const char *nome = sorg_categoria_nome_id(id);
+        snprintf(b, sizeof b, "%s  ·  %d", nome ? nome : "", n);
+        popLinha(b, "aj_folders", id, 0);
+      }
+      break;
+    case POP_CAT_ACOES:
+      { const char *nome = sorg_categoria_nome_id(popCat);
+        snprintf(popTitulo, sizeof popTitulo, "%s", nome ? nome : ""); }
+      popLinha("Renomear", "aj_keyboard", 1, 0);
+      popLinha("Excluir categoria", NULL, 2, 0);
+      break;
+    case POP_EXCLUIR:
+      { const char *nome = sorg_categoria_nome_id(popCat);
+        snprintf(popTitulo, sizeof popTitulo, i18n("Excluir \xe2\x80\x9c%s\xe2\x80\x9d?"), nome ? nome : ""); }
+      snprintf(popSub, sizeof popSub, "%s", "Os títulos continuam nos Salvos, só saem da categoria.");
+      popLinha("Cancelar", NULL, 0, 0);
+      popLinha("Excluir", NULL, 1, 0);
+      break;
+    case POP_MOVER: {
+      int atual = sorg_categoria_de(popItem);
+      const char *tit = "";
+      for (i = 0; i < nLinhas; i++)
+        if (salvos_mesmo_titulo(linhas[i].id, popItem)) { tit = linhas[i].titulo; break; }
+      snprintf(popTitulo, sizeof popTitulo, "%s", "Mover para categoria");
+      snprintf(popSub, sizeof popSub, "%s", tit);
+      for (i = 0; i < sorg_n_categorias(); i++) {
+        int id = sorg_categoria_id(i);
+        const char *nome = sorg_categoria_nome_id(id);
+        popLinha(nome ? nome : "", "aj_folders", id, id == atual);
+      }
+      popLinha("Sem categoria", NULL, 0, atual == 0);
+      popLinha("Nova categoria", "mais", -1, 0);
+      break; }
+    default: pop = POP_NADA; return;
+  }
+  // O foco nasce na opcao que vale agora; sem nenhuma marcada, na primeira.
+  popFoco = 0;
+  for (k = 0; k < popN; k++) if (popL[k].marcado) { popFoco = k; break; }
+  // "Excluir" nunca nasce com o foco: OK duas vezes sem ler cancela.
+  if (tipo == POP_EXCLUIR) popFoco = 0;
+  popRol = 0.0f;
+  popEntrada = 0.0f;
+  memset(popAnim, 0, sizeof popAnim);
+}
+
+static void tecladoNome(int para, const char *inicial) {
+  tecladoPara = para;
+  pop = POP_NADA;
+  teclado_abrir_com(para == TK_RENOMEAR ? "Renomear categoria" : "Nova categoria",
+                    "Ex.: Fim de semana, Kids. Até 24 letras.",
+                    SP_NOME_LETRAS, ALFA_NOME, inicial);
+}
+
+// OK numa opcao da escolha aberta.
+static void popOk(void) {
+  int v;
+  if (popFoco < 0 || popFoco >= popN) return;
+  v = popL[popFoco].valor;
+  switch (pop) {
+    case POP_ORDEM:  sorg_definir_ordem(v);  pop = POP_NADA; break;
+    case POP_GRUPO:  sorg_definir_grupo(v);  pop = POP_NADA; break;
+    case POP_ESTILO:
+      sorg_definir_estilo(v);
+      pop = POP_NADA;
+      // A lista trocou de forma: a rolagem recomeca de onde o foco esta.
+      memset(animFoco, 0, sizeof animFoco);
+      break;
+    case POP_SOCIAL:
+      sorg_definir_social(v);
+      pop = POP_NADA;
+      reconstruirSocial();
+      break;
+    case POP_CATS:
+      if (v < 0) tecladoNome(TK_CRIAR, NULL);
+      else { popCat = v; popAbrir(POP_CAT_ACOES); }
+      break;
+    case POP_CAT_ACOES:
+      if (v == 1) tecladoNome(TK_RENOMEAR, sorg_categoria_nome_id(popCat));
+      else popAbrir(POP_EXCLUIR);
+      break;
+    case POP_EXCLUIR:
+      if (v == 1) { sorg_excluir_categoria(popCat); pop = POP_NADA; }
+      else popAbrir(POP_CATS);
+      break;
+    case POP_MOVER:
+      if (v < 0) { tecladoNome(TK_MOVER, NULL); break; }
+      sorg_mover(popItem, v);
+      snprintf(seguirId, sizeof seguirId, "%s", popItem);
+      pop = POP_NADA;
+      break;
+    default: pop = POP_NADA; break;
+  }
+}
+
+static void popVoltar(void) {
+  if (pop == POP_CAT_ACOES || pop == POP_EXCLUIR) popAbrir(POP_CATS);
+  else pop = POP_NADA;
+}
+
+static void popEvento(const SDL_Event *e) {
+  SDL_Keycode k;
+  if (e->type != SDL_KEYDOWN) return;
+  k = e->key.keysym.sym;
+  if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
+      k == SDLK_DELETE || k == SDLK_LEFT || e->key.keysym.scancode == NV_SCANCODE_BACK) {
+    popVoltar(); return;
+  }
+  if (k == SDLK_DOWN) { if (popFoco + 1 < popN) popFoco++; return; }
+  if (k == SDLK_UP)   { if (popFoco > 0) popFoco--; return; }
+  if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
+    if (!e->key.repeat) popOk();
+    return;
+  }
+}
+
+// OK numa pilula da barra.
+static void chipOk(void) {
+  if (aba == SP_ABA_SOCIAL) { popAbrir(POP_SOCIAL); return; }
+  switch (barraFoco) {
+    case SPB_ORDEM:  popAbrir(POP_ORDEM);  break;
+    case SPB_GRUPO:  popAbrir(POP_GRUPO);  break;
+    case SPB_ESTILO: popAbrir(POP_ESTILO); break;
+    default:
+      // Sem nenhuma categoria a lista de categorias so teria "Nova": vai
+      // direto ao teclado.
+      if (sorg_n_categorias() < 1) tecladoNome(TK_CRIAR, NULL);
+      else popAbrir(POP_CATS);
+      break;
+  }
+}
+
+// O que o teclado devolveu. Chamado por quadro enquanto ha pedido pendente.
+static void tecladoResultado(void) {
+  int r, id;
+  const char *t;
+  if (!tecladoPara || teclado_aberto()) return;
+  r = teclado_resultado();
+  if (r == TECLADO_NADA) return;
+  t = teclado_texto();
+  if (r == TECLADO_PRONTO && t && t[0]) {
+    if (tecladoPara == TK_RENOMEAR) sorg_renomear_categoria(popCat, t);
+    else if ((id = sorg_criar_categoria(t)) != 0) {
+      if (tecladoPara == TK_MOVER) {
+        sorg_mover(popItem, id);
+        snprintf(seguirId, sizeof seguirId, "%s", popItem);
+      }
+      // QUEM CRIA A CATEGORIA PELA BARRA QUER VE-LA: a lista passa a ser
+      // agrupada por categoria, e "Kids" aparece vazia, com a dica de como
+      // por algo nela. Mover pelo menu do cartaz nao troca o agrupamento —
+      // a linha ganha o selo da categoria, que basta como resposta.
+      else sorg_definir_grupo(SORG_GRUPO_CATEGORIA);
+    }
+  }
+  tecladoPara = TK_NADA;
+}
+
+// A celula da fila de cima ou de baixo mais perto, na horizontal, da focada.
+// Na lista e a vizinha; na grade e a da mesma coluna (ou a ultima da fila,
+// quando a fila de baixo e mais curta).
+static int celulaVizinha(int de, int dir) {
+  int i, melhor = -1, alvo;
+  float cx, md = 1e9f;
+  if (de < 0 || de >= nLinhas) return -1;
+  alvo = linhas[de].fila + dir;
+  cx = linhas[de].lx + linhas[de].lw * 0.5f;
+  for (i = de + dir; i >= 0 && i < nLinhas; i += dir) {
+    float d;
+    if (dir > 0 ? linhas[i].fila > alvo : linhas[i].fila < alvo) break;
+    if (linhas[i].fila != alvo) continue;
+    d = linhas[i].lx + linhas[i].lw * 0.5f - cx;
+    if (d < 0) d = -d;
+    if (d < md) { md = d; melhor = i; }
+  }
+  return melhor;
+}
+
+// Pedido de "Mover para categoria" vindo do menu do cartaz.
+static void popAbrirMover(const char *imdb) {
+  snprintf(popItem, sizeof popItem, "%s", imdb);
+  popAbrir(POP_MOVER);
+}
+
 // Nascer da ilha (salvospainel.h). `origem` e fixa durante a abertura; o
 // destino da volta e renovado por quadro, porque a pilula pode ter mudado de
 // largura (o cartao alternou) enquanto o painel estava aberto.
@@ -617,6 +1168,10 @@ void spainel_abrir(void) {
   foco = 0;
   okDesde = 0;
   menuId[0] = menuProximo[0] = 0;
+  seguirId[0] = 0;
+  pop = POP_NADA;
+  barraFoco = 0;
+  memset(animBarra, 0, sizeof animBarra);
   aba = SP_ABA_SALVOS;
   scrollY = 0.0f; velY = 0.0f;
   memset(animFoco, 0, sizeof animFoco);
@@ -631,6 +1186,7 @@ void spainel_abrir(void) {
 
 void spainel_fechar(void) {
   if (aberto && aba == SP_ABA_AVISOS) avisos_marcar_lidos();
+  pop = POP_NADA;
   aberto = 0;
 }
 
@@ -655,9 +1211,8 @@ static float topoDe(int i) {
   // Rotulo da primeira secao, sempre; mais o de "Não começados" para quem vem
   // depois dele. Com nCont == 0 nao existe segunda secao — a unica que aparece
   // e "Sua lista", e o segundo termo tem de ser zero para todo mundo.
-  y = SP_SECAO_H + (float)i * SP_PASSO;
-  if (nCont > 0 && i >= nCont) y += SP_SECAO_H;
-  return y;
+  // Salvos: o lugar que montarLayout ja calculou (secoes, filas da grade).
+  return (i >= 0 && i < nLinhas) ? linhas[i].ly : 0.0f;
 }
 
 // Uma linha de Salvos em foco, ou seja, algo que o OK longo pode segurar.
@@ -709,6 +1264,9 @@ static int teclaOk(SDL_Keycode k) {
 void spainel_evento(const SDL_Event *e) {
   SDL_Keycode k;
   if (!aberto) return;
+  // O teclado e a escolha aberta ficam POR CIMA da lista: a tecla e deles.
+  if (teclado_aberto()) { teclado_evento(e); return; }
+  if (pop) { popEvento(e); return; }
   // A SOLTURA DO OK numa linha de Salvos: curto abre o titulo, longo abre o
   // menu (se spainel_atualizar ainda nao o abriu no limiar — um quadro lento
   // ou um teste sem quadro). Soltura sem o KEYDOWN daqui nao e clique: e o OK
@@ -740,25 +1298,52 @@ void spainel_evento(const SDL_Event *e) {
     if (temAbas() && foco == SP_FOCO_ABAS && aba != SP_ABA_SALVOS) {
       trocarAba(proximaAba(aba, -1)); return;
     }
+    // Na barra e na grade a esquerda anda; so na primeira coluna ela sai.
+    if (foco == SP_FOCO_BARRA && barraFoco > 0) { barraFoco--; return; }
+    if (aba == SP_ABA_SALVOS && foco > 0 && foco < nLinhas &&
+        linhas[foco - 1].fila == linhas[foco].fila) { foco--; return; }
     spainel_fechar(); return;
   }
   if (k == SDLK_RIGHT) {
     if (temAbas() && foco == SP_FOCO_ABAS) trocarAba(proximaAba(aba, 1));
+    else if (foco == SP_FOCO_BARRA) { if (barraFoco + 1 < nChips()) barraFoco++; }
+    else if (aba == SP_ABA_SALVOS && foco >= 0 && foco + 1 < nLinhas &&
+             linhas[foco + 1].fila == linhas[foco].fila) foco++;
     return;
   }
   if (k == SDLK_DOWN) {
-    if (foco == SP_FOCO_ABAS) { if (nVisiveis() > 0) foco = 0; return; }
+    if (foco == SP_FOCO_ABAS) {
+      if (temBarra()) { foco = SP_FOCO_BARRA; if (barraFoco >= nChips()) barraFoco = 0; }
+      else if (nVisiveis() > 0) foco = 0;
+      return;
+    }
+    if (foco == SP_FOCO_BARRA) { if (nVisiveis() > 0) foco = 0; return; }
+    if (aba == SP_ABA_SALVOS) {
+      int v = celulaVizinha(foco, 1);
+      if (v >= 0) foco = v;
+      return;
+    }
     if (foco + 1 < nVisiveis()) foco++;
     return;
   }
   if (k == SDLK_UP) {
-    // DE CIMA DA LISTA SOBE PARA AS ABAS, e nao para lugar nenhum. Sem isto a
-    // unica forma de trocar de aba seria fechar e reabrir o painel.
-    if (foco == 0 && temAbas()) { foco = SP_FOCO_ABAS; return; }
+    // DE CIMA DA LISTA SOBE PARA A BARRA (se ha) E DAI PARA AS ABAS, e nao
+    // para lugar nenhum. Sem isto a unica forma de trocar de aba seria fechar
+    // e reabrir o painel.
+    if (foco == SP_FOCO_BARRA) { foco = SP_FOCO_ABAS; return; }
+    if (foco == SP_FOCO_ABAS) return;
+    if (aba == SP_ABA_SALVOS && foco < nLinhas) {
+      int v = celulaVizinha(foco, -1);
+      if (v >= 0) { foco = v; return; }
+      foco = temBarra() ? SP_FOCO_BARRA : SP_FOCO_ABAS;
+      return;
+    }
+    if (foco == 0 && temAbas()) { foco = temBarra() ? SP_FOCO_BARRA : SP_FOCO_ABAS; return; }
     if (foco > 0) foco--;
     return;
   }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
+    if (foco == SP_FOCO_BARRA) { if (!e->key.repeat) chipOk(); return; }
     if (foco == SP_FOCO_ABAS) {
       // OK na linha de abas alterna, para quem nao descobriu a seta.
       { int p = proximaAba(aba, 1); trocarAba(p == aba ? SP_ABA_SALVOS : p); }
@@ -840,7 +1425,6 @@ void spainel_evento(const SDL_Event *e) {
 void spainel_atualizar(float dt, Uint32 agora) {
   int i;
   float alvo, topo, base;
-  (void)agora;
   // A barra de "Segure OK" do menu do cartaz, centrada no painel enquanto ele e
   // dono do D-pad; fora dele, no centro da tela como sempre.
   ctx_centro_dica(aberto && aba == SP_ABA_SALVOS ? SP_X + SP_W * 0.5f : -1.0f);
@@ -855,6 +1439,17 @@ void spainel_atualizar(float dt, Uint32 agora) {
   // reconstruir, a lista continuaria a do instante da abertura. Ver listaVelha:
   // a pergunta por quadro sao duas revisoes, e nao um retrato do catalogo.
   if (aberto && listaVelha()) reconstruir();
+  // O teclado de nome de categoria e o que ele devolveu.
+  if (tecladoPara) { teclado_atualizar(dt, agora); tecladoResultado(); }
+  // "Mover para categoria" no menu do cartaz: a escolha abre aqui, por cima
+  // do painel, com as categorias da pessoa.
+  { const char *id = ctx_pediu_categoria();
+    if (id && aberto) popAbrirMover(id); }
+  // A barra some quando deixa de fazer sentido (a lista esvaziou, a Social
+  // ficou com uma recomendacao so): o foco nao pode ficar num lugar que nao
+  // e mais desenhado.
+  if (foco == SP_FOCO_BARRA && !temBarra()) foco = SP_FOCO_ABAS;
+  if (barraFoco >= nChips()) barraFoco = nChips() - 1;
   // O LIMIAR DO OK LONGO, com o dedo ainda no botao (ver okDesde).
   if (aberto && okDesde && SDL_GetTicks() - okDesde >= NV_HOLD_MS) {
     okDesde = 0;
@@ -907,18 +1502,38 @@ void spainel_atualizar(float dt, Uint32 agora) {
     if (animSw < 0.0f) animSw = alvoSw;   // primeira leitura: assenta sem deslizar
     animSw = ajustes_animacoes_reduzidas()
            ? alvoSw : anim_mola(animSw, alvoSw, dt, NV_MOLA_FOCO); }
+  for (i = 0; i < SPB_N; i++) {
+    float a = (aberto && foco == SP_FOCO_BARRA && i == barraFoco && !pop) ? 1.0f : 0.0f;
+    animBarra[i] = ajustes_animacoes_reduzidas() ? a
+      : anim_mola(animBarra[i], a, dt, a > animBarra[i] ? NV_MOLA_FOCO : SP_MOLA_DESFOCO);
+  }
+  // A ESCOLHA: entra em 140 ms, o foco na mola de sempre, e a lista dela rola
+  // o minimo para a opcao focada caber (sete categorias ja passam da janela).
+  if (pop) {
+    float alvoR = popRol, topoR = (float)popFoco * (POP_LINHA_H + POP_LINHA_VAO);
+    float janela = (float)POP_VISIVEIS * (POP_LINHA_H + POP_LINHA_VAO);
+    popEntrada = anim_rampa(popEntrada, 1.0f, dt, 140.0f);
+    for (i = 0; i < popN && i < POP_MAX; i++) {
+      float a = i == popFoco ? 1.0f : 0.0f;
+      popAnim[i] = ajustes_animacoes_reduzidas() ? a
+        : anim_mola(popAnim[i], a, dt, a > popAnim[i] ? NV_MOLA_FOCO : SP_MOLA_DESFOCO);
+    }
+    if (topoR + POP_LINHA_H - alvoR > janela) alvoR = topoR + POP_LINHA_H - janela;
+    if (topoR < alvoR) alvoR = topoR;
+    popRol = ajustes_animacoes_reduzidas() ? alvoR : anim_mola(popRol, alvoR, dt, NV_MOLA_FOCO);
+  }
   // Rola o MINIMO para a linha focada caber inteira, como a grade da
   // Biblioteca. Alinhar a focada ao topo joga o cabecalho para fora na primeira
   // descida e a pessoa perde de vista em que painel esta.
   alvo = scrollY;
-  if (foco == SP_FOCO_ABAS) alvo = 0.0f;
+  if (foco == SP_FOCO_ABAS || foco == SP_FOCO_BARRA) alvo = 0.0f;
   else if (nVisiveis() > 0 && foco >= 0 && foco < nVisiveis()) {
     float janela = SP_LISTA_BASE - listaTopo();
     topo = topoDe(foco);
     // A ALTURA DA LINHA FOCADA, e nao SP_POSTER_H sempre: na aba Social a linha
     // pode ter 84, 112 ou 138px, e usar a maior empurraria a rolagem 54px alem
     // do necessario num interruptor de 104.
-    base = topo + (aba == SP_ABA_SOCIAL ? socialAlt(foco) : aba == SP_ABA_AVISOS ? avisos_lista_altura_linha(foco, foco) - 10.0f : SP_POSTER_H);
+    base = topo + (aba == SP_ABA_SOCIAL ? socialAlt(foco) : aba == SP_ABA_AVISOS ? avisos_lista_altura_linha(foco, foco) - 10.0f : linhas[foco].lh);
     // O ar do foco nas duas pontas: o conteudo ja nasce SP_FOCO_AR abaixo do
     // recorte (ver SP_FOCO_AR), entao em cima basta `topo` e embaixo sao dois.
     if (base + 2.0f * SP_FOCO_AR - alvo > janela) alvo = base + 2.0f * SP_FOCO_AR - janela;
@@ -1084,6 +1699,90 @@ static void desenhaSecao(float x, float y, const char *rotulo, float a) {
 // linhas sao desenhadas em coordenada absoluta, e sem somar o mesmo `dx` do
 // painel elas ficariam paradas no lugar final enquanto a moldura ainda desliza
 // — o conteudo apareceria antes da caixa que o contem.
+static const char *tipoRotulo(const SPLinha *l) {
+  switch (l->tipoG) {
+    case SPT_CANAL:   return "Canal";
+    case SPT_COLECAO: return "Coleção";
+    case SPT_SERIE:   return "Série";
+    default:          return "Filme";
+  }
+}
+
+// A barra fina de progresso POR CIMA da arte (grade e paisagem): a mesma
+// leitura da home, trilho escuro e preenchimento na cor de realce.
+static void barraSobreArte(GfxRect arte, int progresso, float a) {
+  float p = anim_clamp(progresso / 100.0f, 0.0f, 1.0f), pr, pg, pb;
+  GfxRect t = { arte.x + 10.0f, arte.y + arte.h - 14.0f, arte.w - 20.0f, 5.0f };
+  GfxRect c = t;
+  if (progresso <= 0) return;
+  ajustes_acento(&pr, &pg, &pb);
+  c.w = t.w * p;
+  gfx_cor(t, 0.5f, 0.0f, 0.0f, 0.0f, 0.55f * a);
+  if (c.w > t.h) gfx_cor(c, 0.5f, pr, pg, pb, a);
+}
+
+// A arte de uma celula: textura pela largura de desenho (tex_obter_larg, a
+// nota longa em desenhaLinha), recortada em `cover`, ou o esqueleto.
+static void arteCelula(GfxRect r, const char *url, float raio, float a) {
+  GLuint tex = url && url[0] ? tex_obter_larg(url, (int)r.w) : 0;
+  if (tex) {
+    gfx_tex_aspect_atual = tex_aspecto(url);
+    gfx_card_forcar_cover_atual = 1.0f;
+    gfx_rect(r, tex, GFX_CARD, 0.0f, 0.0f, 0.0f, raio, 0, 0, 0, a);
+    gfx_card_forcar_cover_atual = 0.0f;
+    gfx_tex_aspect_atual = 0.0f;
+  } else {
+    gfx_cor(r, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
+  }
+}
+
+// GRADE DE POSTERES: o cartaz e o titulo embaixo. A superficie so existe no
+// foco — em repouso a grade e so arte, que e o ponto do estilo.
+static void desenhaCelulaGrade(int i, float dx, float y, float a) {
+  const SPLinha *l = &linhas[i];
+  float f = animFoco[i], v = focoTexto(f);
+  float x = SP_X + dx + SP_PAD + l->lx;
+  int tf = ajustes_tinta_foco(), tf2 = ajustes_tinta_foco2();
+  GfxRect poster = { x, y, l->lw, SPG_POSTER_H };
+  if (f > 0.01f) {
+    GfxRect r = { x - 10.0f, y - 10.0f, l->lw + 20.0f, l->lh + 14.0f };
+    superficieItem(r, NV_LINHA_RAIO_PX / r.h, f, a);
+  }
+  arteCelula(poster, l->poster, 0.06f, a);
+  barraSobreArte(poster, l->progresso, a);
+  { TxtLinha r = txt_linha_corta(TXT_CAPTION, l->titulo, 240, 240, 240, 255, l->lw);
+    TxtLinha fo = txt_linha_corta(TXT_CAPTION, l->titulo, tf, tf, tf, 255, l->lw);
+    txt_foco_transicao(r, fo, x, y + SPG_POSTER_H + 10.0f, v, a); }
+  (void)tf2;
+}
+
+// CARTOES PAISAGEM: a arte 16:9 do catalogo (o cartaz recortado quando ela
+// nao veio), o titulo e uma linha de apoio — o que falta, quando ha progresso;
+// senao tipo e ano.
+static void desenhaCelulaPaisagem(int i, float dx, float y, float a) {
+  const SPLinha *l = &linhas[i];
+  float f = animFoco[i], v = focoTexto(f);
+  float x = SP_X + dx + SP_PAD + l->lx;
+  int tf = ajustes_tinta_foco(), tf2 = ajustes_tinta_foco2();
+  char apoio[192];
+  GfxRect img = { x, y, l->lw, SPP_IMG_H };
+  if (f > 0.01f) {
+    GfxRect r = { x - 10.0f, y - 10.0f, l->lw + 20.0f, l->lh + 14.0f };
+    superficieItem(r, NV_LINHA_RAIO_PX / r.h, f, a);
+  }
+  arteCelula(img, l->fundo[0] ? l->fundo : l->poster, 0.07f, a);
+  barraSobreArte(img, l->progresso, a);
+  if (l->progresso > 0 && l->txtRestante[0]) snprintf(apoio, sizeof apoio, "%s", l->txtRestante);
+  else if (l->ano > 0) snprintf(apoio, sizeof apoio, "%s · %d", i18n(tipoRotulo(l)), l->ano);
+  else snprintf(apoio, sizeof apoio, "%s", i18n(tipoRotulo(l)));
+  { TxtLinha r = txt_linha_corta(TXT_BODY, l->titulo, 245, 245, 245, 255, l->lw);
+    TxtLinha fo = txt_linha_corta(TXT_BODY, l->titulo, tf, tf, tf, 255, l->lw);
+    txt_foco_transicao(r, fo, x, y + SPP_IMG_H + 12.0f, v, a); }
+  { TxtLinha r = txt_linha_corta(TXT_CAPTION, apoio, 168, 172, 183, 255, l->lw);
+    TxtLinha fo = txt_linha_corta(TXT_CAPTION, apoio, tf2, tf2, tf2, 255, l->lw);
+    txt_foco_transicao(r, fo, x, y + SPP_IMG_H + 48.0f, v, a * 0.95f); }
+}
+
 static void desenhaLinha(int i, float dx, float y, float a) {
   const SPLinha *l = &linhas[i];
   float f = animFoco[i];
@@ -1139,14 +1838,24 @@ static void desenhaLinha(int i, float dx, float y, float a) {
     // quando a marca era desenhada ao lado.
     { float bx = tx, by = y + 42.0f;
       float w;
-      w = badge_foco_transicao(bx, by, i18n(l->serie ? "Série" : "Filme"), v, a);
+      w = badge_foco_transicao(bx, by, i18n(tipoRotulo(l)), v, a);
       bx += w + BADGE_GAP;
       if (l->meta[0]) {
         w = badge_foco_transicao(bx, by, l->meta, v, a);
         bx += w + BADGE_GAP;
       }
-      if (l->nota > 0 && bx + badge_imdb_largura(l->nota) <= tx + SP_TEXTO_W)
-        badge_imdb_foco_transicao(bx, by, l->nota, v, a, tintaFoco); } }
+      if (l->nota > 0 && bx + badge_imdb_largura(l->nota) <= tx + SP_TEXTO_W) {
+        badge_imdb_foco_transicao(bx, by, l->nota, v, a, tintaFoco);
+        bx += badge_imdb_largura(l->nota) + BADGE_GAP;
+      }
+      // A CATEGORIA DA PESSOA, quando a lista nao esta agrupada por ela: e a
+      // resposta visivel do "Mover para categoria" — sem o selo, mover com a
+      // lista agrupada por progresso nao mudaria nada na tela.
+      if (l->cat && grupoAtual != SORG_GRUPO_CATEGORIA) {
+        const char *nome = sorg_categoria_nome_id(l->cat);
+        if (nome && bx + txt_largura(TXT_CAPTION, nome) + BADGE_PADX * 2.0f <= tx + SP_TEXTO_W)
+          badge_foco_transicao(bx, by, nome, v, a);
+      } } }
 
   if (l->progresso > 0) {
     float p = anim_clamp(l->progresso / 100.0f, 0.0f, 1.0f);
@@ -1411,6 +2120,134 @@ static void desenhaAbas(float dx, float a) {
     }
     x += p.w + SP_ABA_GAP;
   }
+}
+
+// A BARRA DE OPCOES. Cada pilula diz O QUE ela muda (rotulo pequeno em cima)
+// e O QUE VALE AGORA (embaixo, na tinta principal): "Ordenar / Recentes". A
+// ultima e a porta das categorias. Mesma superficie e mesmo foco das linhas,
+// e por isso o mesmo vidro quando o vidro esta ligado.
+static void chipTextos(int k, const char **cap, const char **val, const char **icone,
+                       char *buf, size_t tam) {
+  *cap = NULL; *val = NULL; *icone = NULL;
+  if (aba == SP_ABA_SOCIAL) { *cap = "Organizar"; *val = SOCIAL_CURTO[sorg_social()]; return; }
+  switch (k) {
+    case SPB_ORDEM:  *cap = "Ordenar"; *val = ORDEM_CURTO[sorg_ordem()]; break;
+    case SPB_GRUPO:  *cap = "Agrupar"; *val = GRUPO_CURTO[sorg_grupo()]; break;
+    case SPB_ESTILO: *cap = "Estilo";  *val = ESTILO_CURTO[sorg_estilo()];
+                     *icone = ESTILO_ICONE[sorg_estilo()]; break;
+    default:
+      if (sorg_n_categorias() < 1) { *val = "Nova categoria"; *icone = "mais"; }
+      else {
+        *cap = "Categorias";
+        snprintf(buf, tam, "%d", sorg_n_categorias());
+        *val = buf; *icone = "aj_folders";
+      }
+      break;
+  }
+}
+
+static void desenhaBarra(float dx, float a) {
+  float x = SP_X + dx + SP_PAD;
+  int k, n = nChips(), tf = ajustes_tinta_foco(), tf2 = ajustes_tinta_foco2();
+  float tinta = ajustes_acento_tinta(NULL, NULL, NULL);
+  for (k = 0; k < n; k++) {
+    const char *cap, *val, *icone;
+    char buf[24];
+    float f = animBarra[k], v = focoTexto(f), w, ix;
+    TxtLinha vr, vf, cr, cf;
+    GfxRect r;
+    chipTextos(k, &cap, &val, &icone, buf, sizeof buf);
+    vr = txt_linha(TXT_CAPTION, val, 240, 240, 244, 255);
+    vf = txt_linha(TXT_CAPTION, val, tf, tf, tf, 255);
+    w = (float)vr.w;
+    if (cap) {
+      cr = txt_linha(TXT_MINI, cap, 150, 154, 166, 255);
+      cf = txt_linha(TXT_MINI, cap, tf2, tf2, tf2, 255);
+      if ((float)cr.w > w) w = (float)cr.w;
+    }
+    w += 40.0f + (icone ? 30.0f : 0.0f);
+    r = (GfxRect){ x, SP_OPC_Y, w, SP_OPC_H };
+    // Em repouso a pilula precisa existir: a superficie neutra das linhas
+    // some sobre o painel escuro, e uma opcao invisivel nao se le como botao.
+    superficieItem(r, 18.0f / SP_OPC_H, f, a);
+    if (!ajustes_vidro())
+      gfx_cor(r, 18.0f / SP_OPC_H, 1.0f, 1.0f, 1.0f, 0.07f * (1.0f - focoVisual(f)) * a);
+    ix = x + 20.0f;
+    if (icone) {
+      float ic = anim_mistura(220.0f / 255.0f, tinta, v);
+      gfx_icone((GfxRect){ ix, SP_OPC_Y + (SP_OPC_H - 22.0f) * 0.5f, 22.0f, 22.0f },
+                icone, ic, ic, ic, a);
+      ix += 30.0f;
+    }
+    if (cap) {
+      float bloco = (float)cr.h + 2.0f + (float)vr.h;
+      float ty = SP_OPC_Y + (SP_OPC_H - bloco) * 0.5f;
+      txt_foco_transicao(cr, cf, ix, ty, v, a * 0.95f);
+      txt_foco_transicao(vr, vf, ix, ty + (float)cr.h + 2.0f, v, a);
+    } else {
+      txt_foco_transicao(vr, vf, ix, SP_OPC_Y + (SP_OPC_H - (float)vr.h) * 0.5f, v, a);
+    }
+    x += w + NV_CTRL_VAO;
+  }
+}
+
+// A ESCOLHA por cima do painel: um veu sobre a lista, a folha no centro do
+// painel com o titulo, a frase de apoio e as opcoes. A atual leva o "check".
+static void desenhaPop(float a) {
+  float e, h, w, x, y, topoL, janela;
+  int i, vis, algumIcone;
+  if (!pop) return;
+  e = anim_suave(popEntrada) * a;
+  vis = popN < POP_VISIVEIS ? popN : POP_VISIVEIS;
+  janela = (float)vis * (POP_LINHA_H + POP_LINHA_VAO) - POP_LINHA_VAO;
+  topoL = popSub[0] ? 118.0f : 84.0f;
+  w = SP_W - 80.0f;
+  h = topoL + janela + 28.0f;
+  x = SP_X + 40.0f;
+  y = SP_Y + (SP_H - h) * 0.42f + (1.0f - e) * 18.0f;
+  gfx_cor((GfxRect){ SP_X, SP_Y, SP_W, SP_H }, 28.0f / SP_H, 0.0f, 0.0f, 0.0f, 0.50f * e);
+  { GfxRect r = { x, y, w, h };
+    if (ajustes_vidro()) gfx_vidro_folha(r, 26.0f / h, e);
+    else {
+      gfx_cor(r, 26.0f / h, 0.085f, 0.089f, 0.104f, e);
+      gfx_cor((GfxRect){ x, y, w, 1.0f }, 0.0f, 1, 1, 1, 0.06f * e);
+    } }
+  { TxtLinha t = txt_linha_corta(TXT_CALLOUT, popTitulo, 246, 247, 252, 255, w - 64.0f);
+    txt_desenhar_alpha(t, x + 32.0f, y + 26.0f, e); }
+  if (popSub[0]) {
+    TxtLinha t = txt_linha_corta(TXT_CAPTION, popSub, 168, 172, 183, 255, w - 64.0f);
+    txt_desenhar_alpha(t, x + 32.0f, y + 72.0f, e * 0.95f);
+  }
+  // Com icone em alguma opcao, todas reservam a coluna dele: texto alinhado
+  // numa coluna so, como num menu, e nao em degraus.
+  { int k; algumIcone = 0; for (k = 0; k < popN; k++) if (popL[k].icone) algumIcone = 1; }
+  gfx_recorte(x, y + topoL - 8.0f, w, janela + 16.0f);
+  for (i = 0; i < popN; i++) {
+    float ry = y + topoL + (float)i * (POP_LINHA_H + POP_LINHA_VAO) - popRol;
+    float f = popAnim[i], v = focoTexto(f), tx = x + 44.0f;
+    int tf = ajustes_tinta_foco();
+    float tinta = ajustes_acento_tinta(NULL, NULL, NULL);
+    GfxRect r = { x + 20.0f, ry, w - 40.0f, POP_LINHA_H };
+    if (ry + POP_LINHA_H < y + topoL - 8.0f || ry > y + topoL + janela + 8.0f) continue;
+    if (f > 0.01f) superficieItem(r, 16.0f / POP_LINHA_H, f, e);
+    if (popL[i].icone) {
+      float ic = anim_mistura(200.0f / 255.0f, tinta, v);
+      gfx_icone((GfxRect){ tx, ry + (POP_LINHA_H - 24.0f) * 0.5f, 24.0f, 24.0f },
+                popL[i].icone, ic, ic, ic, e);
+    }
+    if (algumIcone) tx += 38.0f;
+    { TxtLinha rp = txt_linha_corta(TXT_CALLOUT, popL[i].rot, 236, 237, 242, 255, w - 160.0f);
+      TxtLinha fo = txt_linha_corta(TXT_CALLOUT, popL[i].rot, tf, tf, tf, 255, w - 160.0f);
+      txt_foco_transicao(rp, fo, tx, ry + (POP_LINHA_H - (float)rp.h) * 0.5f, v, e); }
+    if (popL[i].marcado) {
+      float ar, ag, ab;
+      ajustes_acento(&ar, &ag, &ab);
+      if (v > 0.5f) ar = ag = ab = tinta;
+      gfx_icone((GfxRect){ r.x + r.w - 52.0f, ry + (POP_LINHA_H - 26.0f) * 0.5f, 26.0f, 26.0f },
+                "check", ar, ag, ab, e);
+    }
+  }
+  gfx_sem_recorte();
 }
 
 // O ESTADO VAZIO DIZ POR QUE ESTA VAZIO, e nao so que esta.
@@ -1890,7 +2727,16 @@ static float voltaSuave(float t) {
   return 1.0f + c3 * u * u * u + c1 * u * u;
 }
 
+static void desenharPainel(Uint32 agora);
 void spainel_desenhar(Uint32 agora) {
+  desenharPainel(agora);
+  if (entrada < 0.002f) return;
+  // POR CIMA DE TUDO DO PAINEL: a escolha aberta e o teclado de nome.
+  desenhaPop(anim_suave(entrada));
+  if (tecladoPara) teclado_desenhar(agora);
+}
+
+static void desenharPainel(Uint32 agora) {
   float a = anim_suave(entrada), x, y;
   int i;
   char buf[160];
@@ -1981,7 +2827,8 @@ void spainel_desenhar(Uint32 agora) {
     else
       txt_desenhar_alpha(t, SP_X + x + SP_PAD, SP_Y + 38.0f, a * 0.95f); }
   if (temAbas()) desenhaAbas(x, a);
-  else {
+  if (temBarra()) desenhaBarra(x, a);
+  if (!temAbas()) {
     TxtLinha t = txt_linha(TXT_TITULO2, "Salvos", 246, 247, 252, 255);
     txt_desenhar_alpha(t, SP_X + x + SP_PAD, SP_Y + 74.0f, a);
   }
@@ -2013,6 +2860,10 @@ void spainel_desenhar(Uint32 agora) {
                        social[i].tipo == SPS_SUG ? "Pessoas que você talvez conheça"
                                                  : "Seus amigos", a);
         }
+        // Por pessoa: o nome de quem mandou abre o grupo dele.
+        if (social[i].tipo == SPS_REC && y + cab >= listaTopo() && y <= SP_LISTA_BASE)
+          desenhaSecao(SP_X + x + SP_PAD, y + cab - SP_SECAO_H,
+                       recs[social[i].idx].deNome, a);
         y += cab;
       }
       // Fora da janela nao custa texto nem textura — mesma razao da lista de
@@ -2061,21 +2912,31 @@ void spainel_desenhar(Uint32 agora) {
   gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
   y = listaTopo() + SP_FOCO_AR - scrollY;
 
-  desenhaSecao(SP_X + x + SP_PAD, y, nCont > 0 ? "Continuar" : "Sua lista", a);
-  y += SP_SECAO_H;
-
-  for (i = 0; i < nLinhas; i++) {
-    if (i == nCont && nCont > 0) {
-      desenhaSecao(SP_X + x + SP_PAD, y, "Não começados", a);
-      y += SP_SECAO_H;
+  // OS ROTULOS DAS SECOES, onde montarLayout os pos. A categoria vazia leva
+  // a dica de como por algo nela, no lugar das celulas que ainda nao tem.
+  for (i = 0; i < nSecoes; i++) {
+    float sy = y + secoes[i].y;
+    float sh = SP_SECAO_H + (secoes[i].vazia ? SP_VAZIA_H : 0.0f);
+    if (sy + sh < listaTopo() || sy > SP_LISTA_BASE) continue;
+    desenhaSecao(SP_X + x + SP_PAD, sy, secoes[i].rot, a);
+    if (secoes[i].vazia) {
+      TxtLinha t = txt_linha_corta(TXT_CAPTION,
+          "Vazia. Segure OK num título e escolha \xe2\x80\x9cMover para categoria\xe2\x80\x9d.",
+          150, 154, 166, 255, SP_INTERNO);
+      txt_desenhar_alpha(t, SP_X + x + SP_PAD, sy + SP_SECAO_H + 6.0f, a * 0.9f);
     }
-    // Fora da janela nao custa texto nem textura: numa lista de 200 titulos
-    // rasterizar as 195 invisiveis estouraria o orcamento de linhas por quadro
-    // de text.c e as visiveis sairiam EM BRANCO (ver a nota em ctxmenu.c).
-    if (y + SP_POSTER_H >= listaTopo() && y <= SP_LISTA_BASE)
-      desenhaLinha(i, x, y, a);
-    y += SP_PASSO;
   }
+  { int estilo = sorg_estilo();
+    for (i = 0; i < nLinhas; i++) {
+      float cy = y + linhas[i].ly;
+      // Fora da janela nao custa texto nem textura: numa lista de 200 titulos
+      // rasterizar as 195 invisiveis estouraria o orcamento de linhas por
+      // quadro de text.c e as visiveis sairiam EM BRANCO (ver ctxmenu.c).
+      if (cy + linhas[i].lh < listaTopo() || cy > SP_LISTA_BASE) continue;
+      if (estilo == SORG_ESTILO_GRADE) desenhaCelulaGrade(i, x, cy, a);
+      else if (estilo == SORG_ESTILO_PAISAGEM) desenhaCelulaPaisagem(i, x, cy, a);
+      else desenhaLinha(i, x, cy, a);
+    } }
 
   gfx_sem_recorte();
 }

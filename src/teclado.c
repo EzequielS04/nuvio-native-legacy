@@ -369,7 +369,10 @@ void teclado_desenhar(Uint32 agora) {
       // esta em ctxmenu.c). O degrau cai em k=0,5, onde o fundo esta a 0,55 de
       // luminancia e as duas cores ainda sao legiveis.
       tom = k >= 0.5f ? 26 : 236;
-      { TxtLinha l = txt_linha(f < nFileiras - 1 ? TXT_TITULO3 : TXT_BODY,
+      // "espaco" no corpo de uma letra (TITULO3) passava das bordas da tecla
+      // de 74 px e cobria a vizinha; a palavra vai no corpo de legenda.
+      { TxtLinha l = txt_linha(f >= nFileiras - 1 ? TXT_BODY
+                               : (s != ch ? TXT_CAPTION2 : TXT_TITULO3),
                                s, tom, tom, tom, 255);
         txt_desenhar_alpha(l, t.x + (t.w - l.w) * 0.5f,
                            t.y + (t.h - l.h) * 0.5f, a); }

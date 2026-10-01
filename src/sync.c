@@ -11,6 +11,7 @@
 #include "xtream.h"
 #include "colecoes.h"
 #include "contalib.h"
+#include "salvosorg.h"
 #include "salvos.h"
 #include "mapa.h"
 #include "recomenda.h"
@@ -1214,6 +1215,8 @@ void sync_esquecer_usuario(void) {
   // sobreviveria ao logout em disco e a proxima pessoa abriria o painel da tecla
   // AZUL com os filmes de quem saiu.
   salvos_esquecer();
+  // As categorias e o jeito de ver os Salvos (salvosorg.h) vao junto.
+  sorg_esquecer();
   // O mapa do gosto da Explorar e derivado do historico de quem saiu.
   mapa_esquecer();
   // E A AGENDA: o calendario e os lembretes sao a lista de series de quem

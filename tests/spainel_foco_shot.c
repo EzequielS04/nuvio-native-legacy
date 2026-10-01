@@ -187,6 +187,7 @@ int main(int argc, char **argv) {
     // SOCIAL: foco na primeira recomendacao — a foto do dono
     tecla(SDLK_UP); { int k; for (k = 0; k < 10; k++) tecla(SDLK_UP); }
     tecla(SDLK_RIGHT);
+    tecla(SDLK_DOWN);   // a barra "Organizar" da Social
     tecla(SDLK_DOWN);
     snprintf(nome, sizeof nome, "%s-%s-social-1a.bmp", saida, v);
     captura(nome, w);
