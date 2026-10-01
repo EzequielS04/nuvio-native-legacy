@@ -2217,7 +2217,9 @@ static void sincronizarFileiras(void) {
   // desaparece quando nao existe sessao incompleta. Nao duplica dados nem faz
   // rede; aponta para o item que o player acabou de atualizar em memoria.
   if (retomarId[0]) retomarIndice = cat_indice_por_imdb(retomarId);
-  if (retomarIndice >= 0 && destino < MAX_FIL) {
+  // Com o relogio ligado a ilha mostra a mesma sessao (ilhacart.c, mesmo
+  // criterio home_retorno_vale): a faixa repetiria o cartao, entao sai.
+  if (retomarIndice >= 0 && destino < MAX_FIL && !ajustes_relogio_ligado()) {
     memmove(fileiras + 1, fileiras, sizeof(Fileira) * (size_t)destino);
     memset(&fileiras[0], 0, sizeof fileiras[0]);
     snprintf(fileiras[0].titulo, sizeof fileiras[0].titulo, "Retomar agora");
