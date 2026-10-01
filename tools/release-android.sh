@@ -46,7 +46,9 @@ OUT="build/release-$VER"; mkdir -p "$OUT"
 rm -f "$OUT"/Nuvio-*-android*.apk "$OUT/SHA256SUMS-android"
 echo "== release-android $VER (commit $(git rev-parse --short HEAD)) -> $OUT"
 
-bash tools/android.sh
+# Release sem conta/sync instala e so mostra "0 addons" na TV (01/10/2026,
+# worktree em /private/tmp sem o local.properties do caminho padrao).
+NUVIO_REQUIRE_CORE=1 bash tools/android.sh
 A="build/android/Nuvio-$VER-android.apk"
 [ -f "$A" ] || { echo "release-android: faltou $A (o android.sh nao gerou o release)" >&2; exit 1; }
 
