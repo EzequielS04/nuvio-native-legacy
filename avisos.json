@@ -1,5 +1,15 @@
 [
   {
+    "id": "2026-10-01-teste-android",
+    "desde": "2026-10-01",
+    "ate": "2026-10-01",
+    "plataforma": "android",
+    "titulo": "Teste de aviso",
+    "titulo_en": "Notice test",
+    "texto": "Este é um aviso de teste do Nuvio. Pode ignorar.",
+    "texto_en": "This is a test notice from Nuvio. You can ignore it."
+  },
+  {
     "id": "2026-09-30-samsung-nativo-154",
     "desde": "2026-09-30",
     "ate": "2026-11-30",
