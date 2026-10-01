@@ -986,13 +986,65 @@ void cat_apontar_episodio(int indice, int temporada, int episodio) {
   }
 }
 
-void cat_aplicar_progresso(int indice, double posSeg, double durSeg, int temporada, int episodio) {
-  indice = normalizarIndice(indice);
-  if (indice < 0 || durSeg <= 1.0) return;
+static void aplicarUm(int indice, double posSeg, double durSeg, int temporada, int episodio) {
   itens[indice].progresso = (int)(100.0 * posSeg / durSeg);
   itens[indice].restanteMin = (int)((durSeg - posSeg) / 60.0 + 0.5);
   cat_apontar_episodio(indice, temporada, episodio);
+}
+
+// AS COPIAS DA MESMA OBRA (issue #208). O mesmo filme costuma estar em
+// "Continuar assistindo" E numa fileira de catalogo, e cada copia e um CatItem
+// com o seu `progresso` — e e o da copia ABERTA que o botao do detalhe
+// ("Retomar"/"Reproduzir") e o player (retomarPct) leem. Quem gravava so
+// numa copia (o player na que tocou, o sync em cat_indice_por_imdb = a
+// primeira, o disco na primeira que casava) deixava o tile da outra fileira
+// em "Reproduzir", comecando do zero. Medido em tests/retomar_copias.sh: CW a
+// 40%, tile da fileira de catalogo a 0.
+static int mesmaCopia(int a, int b) {
+  if (a == b || !itens[a].imdb[0] || !itens[b].imdb[0]) return 0;
+  if (itens[a].tipo[0] && itens[b].tipo[0] && strcmp(itens[a].tipo, itens[b].tipo)) return 0;
+  return mesmoTitulo(itens[a].imdb, itens[b].imdb);
+}
+
+void cat_aplicar_progresso(int indice, double posSeg, double durSeg, int temporada, int episodio) {
+  int j;
+  indice = normalizarIndice(indice);
+  if (indice < 0 || durSeg <= 1.0) return;
+  aplicarUm(indice, posSeg, durSeg, temporada, episodio);
+  for (j = 0; j < n; j++)
+    if (mesmaCopia(indice, j)) {
+      aplicarUm(j, posSeg, durSeg, temporada, episodio);
+      itens[j].retomadoMs = itens[indice].retomadoMs;
+    }
   mudou();
+}
+
+// Depois do disco: a copia que ficou sem progresso herda o da copia que tem
+// (a do CW, montada do Trakt/conta sem registro local, ou a que o disco nao
+// tocou por ser mais nova). Entre varias, a de instante mais novo.
+// As fontes sao poucas (o que tem barra), entao o laco interno e sobre elas e
+// nao sobre o catalogo inteiro — milhares de itens ao quadrado na TV, nao.
+static void espalharProgresso(void) {
+  int i, j, k, nf = 0, *fontes;
+  for (i = 0; i < n; i++) if (itens[i].progresso > 0 && itens[i].imdb[0]) nf++;
+  if (!nf || !(fontes = malloc(sizeof(int) * (size_t)nf))) return;
+  for (i = 0, k = 0; i < n && k < nf; i++)
+    if (itens[i].progresso > 0 && itens[i].imdb[0]) fontes[k++] = i;
+  for (j = 0; j < n; j++) {
+    int melhor = -1;
+    if (itens[j].progresso > 0 || !itens[j].imdb[0]) continue;
+    for (k = 0; k < nf; k++) {
+      i = fontes[k];
+      if (!mesmaCopia(i, j)) continue;
+      if (melhor < 0 || itens[i].retomadoMs > itens[melhor].retomadoMs) melhor = i;
+    }
+    if (melhor < 0) continue;
+    itens[j].progresso   = itens[melhor].progresso;
+    itens[j].restanteMin = itens[melhor].restanteMin;
+    itens[j].retomadoMs  = itens[melhor].retomadoMs;
+    cat_apontar_episodio(j, itens[melhor].temporada, itens[melhor].episodio);
+  }
+  free(fontes);
 }
 
 // Reaplica o que esta em progresso.c sobre itens[]. Os registros vem do mais
@@ -1005,27 +1057,38 @@ static int aplicarProgressoDoDisco(void) {
   int k, i, m = cat_n(), aplicados = 0;
   if (m < 1) return 0;
   k = prog_ler(regs, PROG_MAX);
-  if (k < 1) return 0;
+  if (k < 1) { espalharProgresso(); return 0; }
   tocado = calloc((size_t)m, 1);
   if (!tocado) return 0;
   for (i = 0; i < k; i++) {
-    int j;
+    int j, maisNova = 0;
+    // O instante decide pela OBRA, nao por copia: se alguma copia (o card do
+    // Trakt) e mais nova que este registro, nenhuma copia recebe o registro —
+    // espalharProgresso, no fim, da a todas o estado da mais nova.
+    for (j = 0; j < m; j++)
+      if (itens[j].imdb[0] && mesmoTitulo(itens[j].imdb, regs[i].contentId) &&
+          itens[j].retomadoMs > 0 && itens[j].retomadoMs > regs[i].lastWatchedMs) maisNova = 1;
     for (j = 0; j < m; j++) {
       if (tocado[j] || !itens[j].imdb[0] || !mesmoTitulo(itens[j].imdb, regs[i].contentId)) continue;
+      if (maisNova) { tocado[j] = 1; continue; }
       // O ITEM QUE JA E MAIS NOVO QUE O DISCO NAO VOLTA NO TEMPO. O item do
       // Trakt (pausado ou "a seguir", issue #66) traz o instante em
       // retomadoMs; um registro local mais velho — o S1E1 a 3% de 8/9 quando
       // o Trakt diz "viu o S1E1 inteiro em 19/9, a seguir o S1E2" — punha o
       // episodio ja visto de volta no card, com o selo do outro. Mesma regra
       // de montarContinuar: o instante decide.
-      if (itens[j].retomadoMs > 0 && itens[j].retomadoMs > regs[i].lastWatchedMs) { tocado[j] = 1; continue; }
-      cat_aplicar_progresso(j, regs[i].posSeg, regs[i].durSeg, regs[i].temporada, regs[i].episodio);
+      // TODAS as copias, e nao so a primeira (#208): o `break` daqui dava o
+      // registro so ao card do CW, que vem antes da fileira de catalogo.
+      if (regs[i].durSeg > 1.0) {
+        aplicarUm(j, regs[i].posSeg, regs[i].durSeg, regs[i].temporada, regs[i].episodio);
+        aplicados++;
+      }
       tocado[j] = 1;
-      aplicados++;
-      break;
     }
   }
   free(tocado);
+  espalharProgresso();
+  if (aplicados) mudou();
   return aplicados;
 }
 
@@ -1174,8 +1237,17 @@ int cat_tirar_continuar(const char *imdb) {
   return k;
 }
 
+static void zerarUm(int indice);
 void cat_zerar_progresso(int indice) {
+  int j;
   if (indice < 0 || indice >= n) return;
+  // Todas as copias da obra (#208): "Assistir do comeco"/"Tirar" numa copia
+  // deixava a do outro card retomando um registro que ja foi apagado.
+  for (j = 0; j < n; j++) if (mesmaCopia(indice, j)) zerarUm(j);
+  zerarUm(indice);
+  mudou();
+}
+static void zerarUm(int indice) {
   // Os quatro campos que a home le para decidir se o card entra em "Continuar
   // assistindo" e o que escrever na legenda dele. Zerar so `progresso` deixaria
   // a linha "T1, E8 · 16 min" desenhada sobre um card sem barra.
