@@ -52,12 +52,16 @@ nao existe: o pacote sairia sem servidor e sem login).
 2. **LG**: receita da LG (`arm.sh --ipk`, as duas variantes `_arm.ipk` e
    `_arm-highcache.ipk`, `hb-repo.sh` -> `repo.json` + `webosbrew.manifest.json`).
 3. **Samsung**: `tools/release-samsung.sh` (acima).
-4. **Publicar TUDO no mesmo `gh release create vX.Y.Z`**: `.ipk` x2, `repo.json`,
-   `webosbrew.manifest.json`, `.wgt`, os 4 `.tpk`, os 2 `libnuvio-*.so`, e o
-   `SHA256SUMS` unindo o da LG com `SHA256SUMS-samsung`. Release normal vira
+4. **Android**: `tools/release-android.sh` na mesma worktree (skill
+   `android-release`). Sai `Nuvio-<v>-android.apk` + `SHA256SUMS-android` em
+   `build/release-<v>/`. Precisa da chave de release em `~/.nuvio-android/`.
+5. **Publicar TUDO no mesmo `gh release create vX.Y.Z`**: `.ipk` x2, `repo.json`,
+   `webosbrew.manifest.json`, `.wgt`, os 4 `.tpk`, os 2 `libnuvio-*.so`, o
+   `Nuvio-<v>-android.apk`, e o `SHA256SUMS` unindo LG + `SHA256SUMS-samsung` +
+   `SHA256SUMS-android`. Release normal vira
    latest (o app e o Homebrew Channel leem `releases/latest`). Sem os `.so`
    anexados, os `.tpk` instalados nao se atualizam sozinhos.
-5. **Notas** em ingles, `## Added` / `## Fixed` / `## Notes`, balas curtas (o
+6. **Notas** em ingles, `## Added` / `## Fixed` / `## Notes`, balas curtas (o
    app mostra 3 linhas por bala). Toda release termina com a TABELA "Which file
    do I need?" (pedido do dono, 29/09/2026), LG e Samsung juntas, com o nome
    EXATO de cada anexo. Ela vai DEPOIS de `## Notes`: o cartao de atualizacao
@@ -81,7 +85,10 @@ nao existe: o pacote sairia sem servidor e sem login).
    You don't need `libnuvio-*.so`, `repo.json`, `webosbrew.manifest.json` or
    `SHA256SUMS`: they're for self-update, the Homebrew Channel and checksums.
    ```
-6. **Avisar**: issues curtas em ingles, so dizer "fixed" com a release no ar.
+   ANDROID AINDA E SEGREDO (dono, 30/09/2026): o `.apk` vai como anexo, mas sem
+   linha na tabela e sem mencao nas notas ate o dono liberar (skill
+   `android-release`).
+7. **Avisar**: issues curtas em ingles, so dizer "fixed" com a release no ar.
    `avisos.json` no master (`plataforma` `tizen` alcanca `.wgt` e `.tpk`;
    `tizen-tpk` so o `.tpk`; ids com `tpk-preview` sao ignorados pelo `.tpk`).
 
