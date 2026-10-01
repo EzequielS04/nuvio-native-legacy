@@ -187,6 +187,16 @@ network threads and image sizes for another TV model.
 
 ---
 
+## Support development
+
+This project grew out of wanting a smooth, beautiful Nuvio experience on my LG C9. It now reaches more TVs, with help from people testing builds and sharing feedback.
+
+If you’d like to support the time and care behind it, visit [CraaazyDevs on Patreon](https://www.patreon.com/cw/CraaazyDevs). Support is entirely optional. Bug reports, testing, and helping other users matter too.
+
+This is an independent, unofficial project, not affiliated with NuvioMedia. Credit for Nuvio goes to its original creators.
+
+---
+
 ## Reporting a problem
 
 1. Right after the problem happens, send the log from the app: **Settings ›
