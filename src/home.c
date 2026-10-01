@@ -5268,6 +5268,14 @@ int home_fileira_titulos(int *out, int max, int *pos) {
   fl = &fileiras[foco.fileira];
   if (fl->tipo == FILEIRA_CATALOGOS || fileiraEhCanal(fl)) return 0;
   if (fl->tipo == FILEIRA_TOP10 && fl->stackN) return 0;
+  // CONTINUAR ASSISTINDO NAO ABRE O CARROSSEL (pedido do dono, 01/10): OK no
+  // CW faz o que fazia antes dele — toca direto ou abre o detalhe direto,
+  // conforme Ajustes > Continuar. Vale para a "Retomar agora" e para o CW no
+  // estilo poster (FILEIRA_NORMAL, identificado pela chave), e para os
+  // "Proximos episodios", que tambem nao sao fileira de catalogo.
+  if (fl->tipo == FILEIRA_CONTINUE || fl->tipo == FILEIRA_RETORNO ||
+      !strcmp(fl->chave, "continue_watching") || !strcmp(fl->chave, "upcoming_section"))
+    return 0;
   if (foco.coluna < 0 || foco.coluna >= fl->n) return 0;
   for (c = 0; c < fl->n && n < max; c++) {
     int i = fileiraItemIndice(fl, c);

@@ -244,6 +244,21 @@ int main(void) {
     unlink(arq); rmdir(dir);
     puts("ok  troca de perfil: colecoes do anterior saem, arte do pacote volta"); }
 
+  { ColSource s; char n[128];
+    memset(&s, 0, sizeof s);
+    snprintf(s.catId, sizeof s.catId, "streaming_netflix_movies");
+    snprintf(s.title, sizeof s.title, "streaming_netflix_movies");   // conta sem titulo: colecoes.c copia o catId
+    col_nome_fonte(&s, "", n, sizeof n); assert(!n[0]);
+    col_nome_fonte(&s, NULL, n, sizeof n); assert(!n[0]);
+    col_nome_fonte(&s, "streaming_netflix_movies", n, sizeof n); assert(!n[0]);
+    col_nome_fonte(&s, "outro_id_cru", n, sizeof n); assert(!n[0]);
+    col_nome_fonte(&s, "Netflix", n, sizeof n); assert(!strcmp(n, "Netflix"));
+    snprintf(s.title, sizeof s.title, "Originais");
+    col_nome_fonte(&s, "Netflix", n, sizeof n); assert(!strcmp(n, "Originais"));
+    snprintf(s.title, sizeof s.title, "mdblist.13914"); snprintf(s.catId, sizeof s.catId, "mdblist.13914");
+    col_nome_fonte(&s, "Top 2024", n, sizeof n); assert(!strcmp(n, "Top 2024"));
+    puts("ok  nome da aba: titulo da conta, senao manifesto, nunca id cru"); }
+
   puts("colecoes: tudo ok");
   return 0;
 }

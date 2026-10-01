@@ -1678,6 +1678,22 @@ const char *desc_nome_catalogo(const char *base, const char *tipo, const char *i
   for (i = 0; i < nNomeCat; i++)
     if (!strcmp(nomeCat[i].base, base) && !strcmp(nomeCat[i].tipo, tipo) && !strcmp(nomeCat[i].id, id)) {
       snprintf(saida, sizeof saida, "%s", nomeCat[i].nome); break; }
+  // SEM A BASE EXATA (pasta Netflix, 01/10: a aba mostrava
+  // "streaming_netflix_movies"): a base que a conta grava na fonte pode nao ser
+  // a do addon instalado byte a byte — outra configuracao no caminho, barra no
+  // fim. O log de 1.6.5 mostra exatamente isso: o catalogo
+  // streaming_netflix_movies do addon instalado nao casa com a fonte da pasta
+  // (col_diagnostico nivel 1/2, nunca 3). Cai para (tipo, id): vale so quando
+  // TODOS os addons que declaram esse par dao o mesmo nome — dois nomes
+  // diferentes e nao ha como escolher, fica vazio.
+  if (!saida[0]) {
+    int achou = 0;
+    for (i = 0; i < nNomeCat; i++)
+      if (!strcmp(nomeCat[i].tipo, tipo) && !strcmp(nomeCat[i].id, id) && nomeCat[i].nome[0]) {
+        if (!achou) { snprintf(saida, sizeof saida, "%s", nomeCat[i].nome); achou = 1; }
+        else if (strcmp(saida, nomeCat[i].nome)) { saida[0] = 0; break; }
+      }
+  }
   pthread_mutex_unlock(&nomeCatTrava);
   return saida;
 }
