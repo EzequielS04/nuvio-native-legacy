@@ -84,6 +84,10 @@ typedef enum {
   // catalogo "Top"/"Em alta" em Automatico, agora escolhivel em qualquer
   // fileira de catalogo e em qualquer layout. No fim pelo mesmo motivo.
   FIL_TIPO_RANKING,           // FILEIRA_TOP10_NUM — numeral grande ao lado do cartaz
+  // A faixa deitada com o titulo dentro que a Dinamica alterna com o cartaz em
+  // Automatico. Desenhada em qualquer layout (home.c nao a prende a Dinamica);
+  // so nao tinha numero para ser escolhida. No fim pelo mesmo motivo.
+  FIL_TIPO_LARGA,             // FILEIRA_LARGA — 16:9 com o nome dentro do cartao
   FIL_TIPO_N
 } FilTipo;
 
@@ -281,14 +285,18 @@ void fil_ciclar_tipo(int i);
 // duas telas leem e escrevem o mesmo campo, entao nunca discordam.
 //
 // As opcoes do menu para esta chave, na ordem de exibicao, com o rotulo em pt
-// (passa por i18n no desenho). Catalogo: Automatico, Posteres, Paisagem
-// pequena/media/grande (FIL_TIPO_CARTAZ/SERVICO/COLECAO/DESTAQUE). Colecao:
+// (passa por i18n no desenho). Catalogo: TODAS as formas de FilTipo —
+// Automatico, Posteres, Paisagem pequena, Faixa com titulo, Paisagem media e
+// grande, Destaque 4:3, Ranking numerado e empilhado. Colecao:
 // Automatico (a forma que a conta mandou), Paisagem, Quadrado, Poster
 // (FIL_TIPO_COLECAO/DESTAQUE_QUADRADO/CARTAZ). Fileira do app: 0 opcoes.
 int  fil_estilos(const char *chave, int *tipos, const char **rotulos, int max);
 // Rotulo do tipo `t` PARA ESTA CHAVE: numa colecao o numero quer dizer outra
 // palavra (FIL_TIPO_CARTAZ e "Pôster", nao "Cartaz em pé").
 const char *fil_estilo_rotulo(const char *chave, int t);
+// Uma frase, em pt, que diz o que a forma `t` e NESTA chave (passa por i18n no
+// desenho). E a legenda da previa do modal de estilo (ctxmenu.c).
+const char *fil_estilo_ajuda(const char *chave, int t);
 const char *fil_linha_tipo_rotulo(int i);
 // Grava a forma da fileira. 0 quando a chave nao e conhecida, e fixa, ou o
 // tipo nao vale para ela.

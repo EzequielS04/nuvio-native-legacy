@@ -87,7 +87,7 @@ static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 // pares en estao em idioma_tab.h.
 static const char *TIPO_ROT[FIL_TIPO_N] = {
   "Automático", "Cartaz em pé", "Destaque largo", "Coleção", "Serviço", "Ranking empilhado",
-  "Destaque 4:3", "Ranking numerado"
+  "Destaque 4:3", "Ranking numerado", "Faixa com título"
 };
 static const char *TAM_ROT[FIL_TAM_N] = { "Compacto", "Padrão", "Grande" };
 // 0,85 e 1,2 e nao 0,5 e 2,0: o card do web mede 212x322 e o passo da fileira
@@ -183,11 +183,18 @@ static int formaFixa(const char *chave) {
 // Os dois rankings entram no fim (issue #201): o numeral grande da Dinamica e
 // o "Top 10" de numero pequeno sobre o cartaz, que antes so a tela de Ajustes
 // oferecia.
+//
+// TODAS AS FORMAS QUE O DESENHO SABE FAZER desde o modal de estilo: o menu
+// antigo parava em sete linhas (CTX_MAX de ctxmenu.c), e por isso o Destaque
+// 4:3 — que a tela de Ajustes ja oferecia — e a faixa com titulo da Dinamica
+// (FIL_TIPO_LARGA) nao cabiam. Ordem: do menor ao maior, depois os rankings.
 static const int ESTILOS_CAT[] = { FIL_TIPO_AUTO, FIL_TIPO_CARTAZ, FIL_TIPO_SERVICO,
-                                   FIL_TIPO_COLECAO, FIL_TIPO_DESTAQUE,
+                                   FIL_TIPO_LARGA, FIL_TIPO_COLECAO, FIL_TIPO_DESTAQUE,
+                                   FIL_TIPO_DESTAQUE_QUADRADO,
                                    FIL_TIPO_RANKING, FIL_TIPO_TOP10 };
 static const char *ESTILOS_CAT_ROT[] = { "Automático", "Pôsteres", "Paisagem pequena",
-                                         "Paisagem média", "Paisagem grande",
+                                         "Faixa com título", "Paisagem média",
+                                         "Paisagem grande", "Destaque 4:3",
                                          "Ranking numerado", "Ranking empilhado" };
 static const int ESTILOS_COL[] = { FIL_TIPO_AUTO, FIL_TIPO_COLECAO,
                                    FIL_TIPO_DESTAQUE_QUADRADO, FIL_TIPO_CARTAZ };
@@ -921,6 +928,31 @@ const char *fil_estilo_rotulo(const char *chave, int t) {
   if (o == FIL_ORIGEM_COLECAO)
     for (k = 0; k < N_ESTILOS_COL; k++) if (ESTILOS_COL[k] == t) return ESTILOS_COL_ROT[k];
   return fil_tipo_rotulo(t);
+}
+
+const char *fil_estilo_ajuda(const char *chave, int t) {
+  if (fil_origem_de(chave) == FIL_ORIGEM_COLECAO) {
+    switch (t) {
+      case FIL_TIPO_COLECAO:           return "Pasta deitada, com a capa da coleção.";
+      case FIL_TIPO_DESTAQUE_QUADRADO: return "Pasta quadrada, da altura do cartaz.";
+      case FIL_TIPO_CARTAZ:            return "Pasta em pé, do tamanho do cartaz.";
+      default:                         return "A forma que a coleção tem na sua conta.";
+    }
+  }
+  // As frases das formas sao as da tela de Ajustes (aj_fil_forma_ajuda): as
+  // mesmas chaves, ja traduzidas nos 28 idiomas.
+  switch (t) {
+    case FIL_TIPO_CARTAZ:   return "Cartaz em pé 2:3, o mesmo das fileiras de catálogo.";
+    case FIL_TIPO_DESTAQUE: return "Arte deitada panorâmica 16:9, como a faixa Destaques.";
+    case FIL_TIPO_COLECAO:  return "Arte deitada média: cabe mais que a grande e ainda mostra o cenário.";
+    case FIL_TIPO_SERVICO:  return "Arte deitada compacta: a que cabe mais títulos por fileira.";
+    case FIL_TIPO_TOP10:    return "Os cartazes empilhados num card só; OK abre a fileira com o número do ranking sobre cada cartaz.";
+    case FIL_TIPO_RANKING:  return "Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.";
+    case FIL_TIPO_DESTAQUE_QUADRADO:
+      return "Arte maior em 4:3: recorta a capa para preencher todo o card.";
+    case FIL_TIPO_LARGA:    return "Arte deitada 16:9 com o nome do título dentro do card.";
+    default:                return "O app escolhe a forma pelo nome do catálogo e pelo layout da Home.";
+  }
 }
 
 const char *fil_linha_tipo_rotulo(int i) {

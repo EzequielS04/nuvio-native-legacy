@@ -73,5 +73,10 @@ int home_pediu_pessoa_social(CatItem *saida);
 // recebe o id para o guia ja abrir focado nele). `id` pode ser NULL.
 int  home_pediu_guia(char *id, int tam);
 
+// PREVIA DO ESTILO DA FILEIRA, para o modal do cartaz (ctxmenu.c): a fileira
+// `chave` na forma `filTipo` (FilTipo, fileiras.h), com as artes dela e o
+// desenho real dos cartoes, dentro de `area`. 0 quando a fileira nao esta na
+// Home montada. So desenha; nao muda nada da fileira.
+int home_previa_fileira(const char *chave, int filTipo, GfxRect area, float alfa);
 #endif
 const char *home_rastro_foco(void);

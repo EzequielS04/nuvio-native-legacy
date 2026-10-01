@@ -5547,6 +5547,7 @@ static const struct { float w, h; } AJ_FIL_FORMA[FIL_TIPO_N] = {
   { 212.0f, 320.0f },   // TOP10
   { NV_DESTAQUE_QUADRADO_W, NV_DESTAQUE_QUADRADO_H }, // DESTAQUE 4:3
   { 212.0f, 322.0f },   // RANKING  — cartaz NV_CARD_W x NV_CARD_H, numeral no vao
+  { NV_DIN_LARGA_W, NV_DIN_LARGA_H }, // LARGA — faixa 16:9 com o nome dentro
 };
 
 // Uma frase por forma. Diz o que a forma E e para que serve, nao como se chama.
@@ -5560,6 +5561,7 @@ static const char *aj_fil_forma_ajuda(int t) {
     case FIL_TIPO_RANKING:  return i18n("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.");
     case FIL_TIPO_DESTAQUE_QUADRADO:
       return i18n("Arte maior em 4:3: recorta a capa para preencher todo o card.");
+    case FIL_TIPO_LARGA:    return i18n("Arte deitada 16:9 com o nome do título dentro do card.");
     default:                return i18n("O app escolhe pela fileira: retomada e coleções já têm forma própria.");
   }
 }
@@ -5925,7 +5927,9 @@ static void desenhaFileiras(void) {
     // nao estimado — foi assim que as duas primeiras tentativas sairam por
     // cima do texto.
     float px = cx + 832.0f, base = cartao.y + AJ_FIL_H - 24.0f;
-    float esc = 0.19f;   // 322 (o card mais alto) x 0,19 = 61px
+    // 0,175 e nao 0,19 desde a faixa com titulo: sao nove formas e a 0,19 a
+    // ultima passava da borda direita do cartao (AJ_FIL_W).
+    float esc = 0.175f;  // 322 (o card mais alto) x 0,175 = 56px
     int t;
     // SO A ESCOLHIDA E NOMEADA. Seis rotulos lado a lado nao cabem sem
     // reticencia, e reticencia em rotulo de 9 caracteres nao ensina nada — as
@@ -5942,7 +5946,7 @@ static void desenhaFileiras(void) {
         }
         // 14 e nao 22: com o Ranking numerado (#201) sao oito formas, e a 22
         // a ultima saia pela borda direita do cartao (MEDIDO na captura).
-        x += w + 14.0f;
+        x += w + 10.0f;
       }
     } else {
       // TAMANHO: a MESMA forma tres vezes, nos tres fatores. O que muda e o

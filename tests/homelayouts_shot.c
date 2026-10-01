@@ -300,7 +300,9 @@ int main(int argc, char **argv) {
     quadros(60, NULL);
   }
 
-  { const char *L;
+  // NV_SO_CTX=1: pula a volta pelos layouts e vai direto ao menu do cartaz
+  // (NV_CTX), no layout do primeiro digito de `camadas`.
+  if (!getenv("NV_SO_CTX")) { const char *L;
     for (L = camadas; *L; L++) {
       int layout = *L - '0', vidro;
       for (vidro = 0; vidro < 2; vidro++) {
