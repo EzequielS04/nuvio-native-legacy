@@ -2284,6 +2284,23 @@ typedef struct { CatItem *item; long long ms; int ord; } Cand;
 // montadores ao mesmo tempo, entao a trava cobre os DOIS usos em montar().
 static pthread_mutex_t contTrava = PTHREAD_MUTEX_INITIALIZER;
 
+// QUAL "CONTINUAR" E O MAIS NOVO (issue #205). montar() calcula a fileira no
+// COMECO da volta e so a publica no fim, segundos depois (manifestos e
+// catalogos no meio). Nesse meio o sync chega, os vistos da conta entram e
+// desc_refazer_continuar publica a lista certa — e a publicacao do fim de
+// montar() a cobria com a velha. MEDIDO no log da Q80A (1.6.5): 1 item as
+// 1,6 s (antes dos vistos), refeita com 5 as 2,9 s, "catalogo montado com 73
+// titulos" as 4,7 s = 72 do catalogo + 1 — os 4 "a seguir" da conta sumiam ate
+// a proxima refacao (sair do player, ou mudar a Fonte do Continuar, que e o
+// "volta quando eu mudo o ajuste" do relato).
+//
+// Cada montarContinuar leva um numero; o fio da refacao diz qual publicou. Os
+// dois sob contTrava, e quem publica tambem: assim nenhuma publicacao cai
+// entre a copia e a reaplicacao em cwAntesDePublicar/cwDepoisDePublicar.
+static unsigned cwGer;          // ++ a cada montarContinuar
+static unsigned cwGerNaTela;    // a do ultimo fioContinuar que publicou
+static unsigned cwGerMontar;    // a que esta no lote de montar() (um montar por vez)
+
 // Aplica a um lote REMOTO (Trakt ou Simkl) os limites de 1% a 90% e o
 // cruzamento com o registro local mais novo. Compacta no lugar; devolve quantos
 // ficaram. `aSeguir` diz quais itens sao "a seguir" (entram com 0%).
@@ -2483,6 +2500,7 @@ static int montarContinuar(CatItem *saida, int max) {
   int querSimkl = (fonte == AJ_CWF_AMBAS || fonte == AJ_CWF_SIMKL) && simkl_ativo();
 
   if (max > CONT_MAX) max = CONT_MAX;
+  cwGer++;
   nT = querTrakt ? trakt_continuar(doTrakt, CONT_MAX) : 0;
   // Os limites AGORA valem para todas as fontes. Sem isto, o /sync/playback
   // devolve o que qualquer cliente pausou uma vez — inclusive titulos em 0% e
@@ -2723,8 +2741,10 @@ static void *fioContinuar(void *u) {
   (void)u;
   pthread_mutex_lock(&contTrava);
   n = montarContinuar(lote, CONT_MAX);
-  pthread_mutex_unlock(&contTrava);
+  // Publica AINDA sob a trava: ver cwGer.
   cat_trocar_continuar(lote, n);
+  cwGerNaTela = cwGer;
+  pthread_mutex_unlock(&contTrava);
   localizarContinuarPublicado();
   cwVivo = 0;
   if (cwDeNovo) { cwDeNovo = 0; desc_refazer_continuar(); }
@@ -2737,6 +2757,38 @@ void desc_refazer_continuar(void) {
   cwVivo = 1;
   if (pthread_create(&t, NULL, fioContinuar, NULL) != 0) cwVivo = 0;
   else pthread_detach(t);
+}
+
+// AS DUAS METADES DE UMA PUBLICACAO DE montar() (ver cwGer). A primeira toma
+// contTrava e, se uma refacao publicou depois de montar() calcular a fileira,
+// copia a janela da tela; a segunda, depois de publicar, devolve essa janela
+// por cima (cat_trocar_continuar: as outras fileiras so andam o `ini`) e solta
+// a trava. Sem refacao no meio: nada copiado, nada reaplicado.
+static CatItem *cwAntesDePublicar(int *k) {
+  CatItem *c = NULL;
+  *k = 0;
+  pthread_mutex_lock(&contTrava);
+  if (cwGerNaTela > cwGerMontar && (c = malloc(sizeof(CatItem) * CONT_MAX)))
+    *k = cat_copiar_fileira("continue_watching", c, CONT_MAX, NULL);
+  return c;
+}
+static void cwDepoisDePublicar(CatItem *c, int k) {
+  if (c) {
+    printf("[desc] continuar assistindo: a refacao feita durante a montagem fica "
+           "(%d item(ns))\n", k);
+    // cwGerMontar NAO anda: o lote de montar() segue com a janela velha, e
+    // cada publicacao seguinte dele precisa da mesma reaplicacao.
+    cat_trocar_continuar(c, k);
+    free(c);
+  }
+  pthread_mutex_unlock(&contTrava);
+}
+// Toda publicacao de montar() passa por aqui (em partes e a do fim).
+static void publicarMontagem(const CatItem *lote, int n, const CatFileira *fils, int nf) {
+  int k;
+  CatItem *cw = cwAntesDePublicar(&k);
+  cat_definir_tudo(lote, n, fils, nf);
+  cwDepoisDePublicar(cw, k);
 }
 
 // A METADE LOCAL DE "TIRAR DE CONTINUAR ASSISTINDO", toda no fio de quem
@@ -3205,7 +3257,7 @@ static void publicarParcial(CatItem **lote, int *cap, int n,
       marco("listas do trakt na tela");
     }
   }
-  cat_definir_tudo(*lote, n + extra, fils, nf);
+  publicarMontagem(*lote, n + extra, fils, nf);
   parcialNaTela = 1;
 }
 
@@ -3311,6 +3363,7 @@ static void *montar(void *u) {
   // chega do celular do dono.
   pthread_mutex_lock(&contTrava);
   nContinuar = montarContinuar(lote, CONT_MAX);
+  cwGerMontar = cwGer;
   n += nContinuar;
   marco("trakt continuar assistindo");
   if (CONDENADA("depois do continuar assistindo")) {
@@ -3969,7 +4022,7 @@ static void *montar(void *u) {
     nFileirasMontadas = nFilsLote;
     memcpy(filsMontadas, filsLote, sizeof(CatFileira) * (size_t)nFilsLote);
     if (depois != antes || cat_do_cache()) {
-      cat_definir_tudo(lote, n, filsMontadas, nFileirasMontadas);
+      publicarMontagem(lote, n, filsMontadas, nFileirasMontadas);
       marco("catalogo da rede publicado");
       printf("[desc] catalogo montado com %d titulos\n", n);
     } else {
