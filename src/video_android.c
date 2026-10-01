@@ -448,10 +448,12 @@ void video_janela_fonte(int sx, int sy, int sw, int sh, int dx, int dy, int dw, 
   double qw = largura, qh = altura, ex, ey;
   int X, Y, W, H;
 
-  // Sem as dimensoes do quadro, ou sem recorte de verdade, o destino cru serve.
+  // Sem as dimensoes do quadro nao ha recorte a calcular: janela lisa (encaixa).
   if (qw < 2.0 || qh < 2.0 || sw <= 0 || sh <= 0) { temUlt = 0; video_janela(dx, dy, dw, dh); return; }
-  // Recorte que cobre o quadro inteiro E o caso sem zoom: mesma coisa.
-  if (sx <= 0 && sy <= 0 && sw >= (int)qw && sh >= (int)qh) { temUlt = 0; video_janela(dx, dy, dw, dh); return; }
+  // Quadro INTEIRO num destino que o chamador ja calculou (Original encaixado,
+  // Esticar, Encaixar altura): o destino e EXATO, nao se encaixa de novo —
+  // senao Esticar virava Original.
+  if (sx <= 0 && sy <= 0 && sw >= (int)qw && sh >= (int)qh) { temUlt = 0; janelaKt(dx, dy, dw, dh, 0); return; }
 
   ex = (double)dw / (double)sw;
   ey = (double)dh / (double)sh;

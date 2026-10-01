@@ -271,7 +271,20 @@ static void nativoAplicar(void) {
     // recortar as LATERAIS ate 16:9, sem o zoom fixo. Quadro 16:9 (IMDb, com
     // a tarja dentro da imagem) leva o zoom do ajuste. "Original" (1.0) nao
     // recorta nada em nenhum dos dois.
-    if (z <= 1.001f) { sw = vw; sh = vh; }
+    if (z <= 1.001f) {
+      // ORIGINAL: o quadro inteiro ENCAIXADO no retangulo, com tarja. O
+      // destino vai calculado aqui, e nao deixado para o plano de video: no
+      // Android (video_android.c) o destino de video_janela_fonte e exato e o
+      // quadro 2,4:1 da Apple esticava em 16:9.
+      float esc = rect.w / (float)vw < rect.h / (float)vh ? rect.w / (float)vw : rect.h / (float)vh;
+      int fw = (int)(vw * esc + 0.5f), fh = (int)(vh * esc + 0.5f);
+      if (video_recorte_fonte())
+        video_janela_fonte(0, 0, vw, vh, (int)(rect.x + (rect.w - fw) * 0.5f),
+                           (int)(rect.y + (rect.h - fh) * 0.5f), fw, fh);
+      recortePendente = 0;
+      if (!reaplicarAte) { reaplicarAte = SDL_GetTicks() + 6000; reaplicarEm = SDL_GetTicks() + 1500; }
+      return;
+    }
     else if ((float)vw / (float)vh > 1.85f) { sh = vh; sw = (int)(vh * 16.0f / 9.0f); if (sw > vw) sw = vw; }
     else { sw = (int)(vw / z); sh = (int)(vh / z); }
     // PAR, como o player faz (player.c, aplicarAspecto): o escalonador
