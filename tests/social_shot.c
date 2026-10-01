@@ -395,6 +395,7 @@ int main(int argc, char **argv) {
   // REC_APARECER_NAO_PERGUNTADO porque nao ha `recomendacoes-aparecer.txt` em
   // NUVIO_DADOS. Esta captura e a prova de que a pergunta chega antes de
   // qualquer coisa — inclusive antes das quatro recomendacoes ja semeadas.
+  tecla(SDLK_UP);             // lista -> barra de opcoes
   tecla(SDLK_UP);
   tecla(SDLK_RIGHT);
   printf("consentimento na tela: %d (aparecer=%d)\n",
@@ -437,12 +438,14 @@ int main(int argc, char **argv) {
 
   spainel_fechar();
   spainel_abrir();
+  tecla(SDLK_UP);             // lista -> barra de opcoes
   tecla(SDLK_UP);
   tecla(SDLK_RIGHT);
   snprintf(nome, sizeof nome, "%s-social.bmp", saida);
   captura(nome, w);
 
   // E com o foco JA na lista, que e o estado em que a pessoa passa mais tempo.
+  tecla(SDLK_DOWN);           // a barra "Organizar" da Social
   tecla(SDLK_DOWN);
   tecla(SDLK_DOWN);
   snprintf(nome, sizeof nome, "%s-social-foco.bmp", saida);
@@ -489,7 +492,8 @@ int main(int argc, char **argv) {
       aparecer = lig ? REC_APARECER_SIM : REC_APARECER_NAO;
       spainel_fechar();
       spainel_abrir();
-      tecla(SDLK_UP); tecla(SDLK_RIGHT);
+      tecla(SDLK_UP); tecla(SDLK_UP); tecla(SDLK_RIGHT);
+      tecla(SDLK_DOWN);       // a barra "Organizar" da Social
       // Cinco descidas: tres recomendacoes, "Adicionar um amigo" e o
       // interruptor. A primeira leva o foco da linha de abas para a linha 0.
       tecla(SDLK_DOWN); tecla(SDLK_DOWN); tecla(SDLK_DOWN);
@@ -525,7 +529,8 @@ int main(int argc, char **argv) {
   aparecer = REC_APARECER_SIM;
   spainel_fechar();
   spainel_abrir();
-  tecla(SDLK_UP); tecla(SDLK_RIGHT);
+  tecla(SDLK_UP); tecla(SDLK_UP); tecla(SDLK_RIGHT);
+  tecla(SDLK_DOWN);           // a barra "Organizar" da Social
   tecla(SDLK_DOWN); tecla(SDLK_DOWN); tecla(SDLK_DOWN);
   tecla(SDLK_DOWN); tecla(SDLK_DOWN);
   snprintf(nome, sizeof nome, "%s-sw-reduzida.bmp", saida);
@@ -693,7 +698,7 @@ int main(int argc, char **argv) {
   // a linha "Adicionar um amigo" SEM foco por causa disso.
   spainel_fechar();
   spainel_abrir();
-  tecla(SDLK_UP); tecla(SDLK_RIGHT);
+  tecla(SDLK_UP); tecla(SDLK_UP); tecla(SDLK_RIGHT);   // lista -> barra -> abas
   tecla(SDLK_DOWN);           // foco na linha "Adicionar um amigo"
   snprintf(nome, sizeof nome, "%s-social-vazio.bmp", saida);
   captura(nome, w);

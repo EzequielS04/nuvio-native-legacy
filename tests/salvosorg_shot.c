@@ -470,7 +470,7 @@ int main(int argc, char **argv) {
   foto("27b-selo-da-categoria.png");
 
   printf("\nsocial por pessoa:\n");
-  toques(SDLK_UP, 3);
+  toques(SDLK_UP, 8);
   toque(SDLK_RIGHT);                      // Social
   toque(SDLK_DOWN);                       // barra da Social
   foto("28-social-barra.png");
