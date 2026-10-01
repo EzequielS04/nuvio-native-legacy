@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "τελευταία 2 λεπτά · η κλίμακα είναι το ανώτατο όριο"),
   T("“%s” volta em %d das suas histórias.", "Το “%s” επανέρχεται σε %d από τις ιστορίες σου."),
   T("← Voltar", "← Πίσω"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← ή Πίσω   Κατηγορίες"),
   T("← →   Alterar o valor", "← →   Αλλαγή τιμής"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Πλοήγηση   ·   ↑ ↓   Φάκελος   ·   OK   Άνοιγμα"),

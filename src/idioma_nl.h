@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "laatste 2 min · de schaal is het plafond"),
   T("“%s” volta em %d das suas histórias.", "“%s” komt terug in %d van je verhalen."),
   T("← Voltar", "← Terug"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← of Terug   Categorieën"),
   T("← →   Alterar o valor", "← →   Waarde wijzigen"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Navigeren   ·   ↑ ↓   Dossier   ·   OK   Openen"),

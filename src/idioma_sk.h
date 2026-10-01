@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "posledné 2 min · stupnica je strop"),
   T("“%s” volta em %d das suas histórias.", "„%s“ sa vracia v %d vašich príbehoch."),
   T("← Voltar", "← Späť"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← alebo Späť   Kategórie"),
   T("← →   Alterar o valor", "← →   Zmeniť hodnotu"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Navigácia   ·   ↑ ↓   Spis   ·   OK   Otvoriť"),

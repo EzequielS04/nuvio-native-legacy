@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "2 menit terakhir · skala adalah batas atasnya"),
   T("“%s” volta em %d das suas histórias.", "“%s” muncul kembali di %d dari ceritamu."),
   T("← Voltar", "← Kembali"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← atau Kembali   Kategori"),
   T("← →   Alterar o valor", "← →   Ubah nilai"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Navigasi   ·   ↑ ↓   Dosier   ·   OK   Buka"),

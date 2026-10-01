@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "paskutinės 2 min. · skalė yra riba"),
   T("“%s” volta em %d das suas histórias.", "„%s“ kartojasi %d jūsų istorijų."),
   T("← Voltar", "← Atgal"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← arba Atgal   Kategorijos"),
   T("← →   Alterar o valor", "← →   Keisti reikšmę"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Naršyti   ·   ↑ ↓   Byla   ·   OK   Atidaryti"),

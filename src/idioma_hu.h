@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "az utolsó 2 perc · a skála a felső korlát"),
   T("“%s” volta em %d das suas histórias.", "A(z) „%s” %d történetedben tér vissza."),
   T("← Voltar", "← Vissza"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← vagy Vissza   Kategóriák"),
   T("← →   Alterar o valor", "← →   Érték módosítása"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Navigáció   ·   ↑ ↓   Dosszié   ·   OK   Megnyitás"),

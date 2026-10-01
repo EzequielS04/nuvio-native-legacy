@@ -2714,6 +2714,7 @@
   T("últimos 2 min · escala do teto", "últimos 2 min · la escala es el tope"),
   T("“%s” volta em %d das suas histórias.", "“%s” vuelve en %d de tus historias."),
   T("← Voltar", "← Atrás"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← o Atrás   Categorías"),
   T("← →   Alterar o valor", "← →   Cambiar el valor"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Navegar   ·   ↑ ↓   Dosier   ·   OK   Abrir"),

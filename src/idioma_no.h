@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "siste 2 min · skalaen er taket"),
   T("“%s” volta em %d das suas histórias.", "“%s” kommer tilbake i %d av historiene dine."),
   T("← Voltar", "← Tilbake"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← eller Tilbake   Kategorier"),
   T("← →   Alterar o valor", "← →   Endre verdien"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Naviger   ·   ↑ ↓   Dossier   ·   OK   Åpne"),

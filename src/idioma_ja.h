@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "直近 2 分 · スケールは上限"),
   T("“%s” volta em %d das suas histórias.", "「%s」は、あなたの物語 %d 本で再び登場します。"),
   T("← Voltar", "← 戻る"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← または戻る   カテゴリ"),
   T("← →   Alterar o valor", "← →   値を変更"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   移動   ·   ↑ ↓   資料   ·   OK   開く"),

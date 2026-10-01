@@ -2714,6 +2714,7 @@
   T("últimos 2 min · escala do teto", "последние 2 мин · шкала — это потолок"),
   T("“%s” volta em %d das suas histórias.", "«%s» возвращается в %d ваших историях."),
   T("← Voltar", "← Назад"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← или Назад   Категории"),
   T("← →   Alterar o valor", "← →   Изменить значение"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Навигация   ·   ↑ ↓   Досье   ·   OK   Открыть"),

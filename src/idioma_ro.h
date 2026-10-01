@@ -2714,6 +2714,7 @@
   T("últimos 2 min · escala do teto", "ultimele 2 min · scara este plafonul"),
   T("“%s” volta em %d das suas histórias.", "„%s” revine în %d dintre poveștile tale."),
   T("← Voltar", "← Înapoi"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← sau Înapoi   Categorii"),
   T("← →   Alterar o valor", "← →   Schimbă valoarea"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Navighează   ·   ↑ ↓   Dosar   ·   OK   Deschide"),

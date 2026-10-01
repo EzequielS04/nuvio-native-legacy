@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "2 phút gần nhất · thang đo là mức trần"),
   T("“%s” volta em %d das suas histórias.", "“%s” quay lại trong %d câu chuyện của bạn."),
   T("← Voltar", "← Quay lại"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← hoặc Quay lại   Danh mục"),
   T("← →   Alterar o valor", "← →   Đổi giá trị"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Điều hướng   ·   ↑ ↓   Hồ sơ chi tiết   ·   OK   Mở"),

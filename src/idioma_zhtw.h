@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "最近 2 分鐘 · 刻度為上限"),
   T("“%s” volta em %d das suas histórias.", "「%s」在你的 %d 個故事中再次出現。"),
   T("← Voltar", "← 返回"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← 或返回   分類"),
   T("← →   Alterar o valor", "← →   變更數值"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   導覽   ·   ↑ ↓   檔案   ·   OK   開啟"),

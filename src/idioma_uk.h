@@ -2714,6 +2714,7 @@
   T("últimos 2 min · escala do teto", "останні 2 хв · шкала — це стеля"),
   T("“%s” volta em %d das suas histórias.", "«%s» повертається у %d ваших історіях."),
   T("← Voltar", "← Назад"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← або Назад   Категорії"),
   T("← →   Alterar o valor", "← →   Змінити значення"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Навігація   ·   ↑ ↓   Досьє   ·   OK   Відкрити"),

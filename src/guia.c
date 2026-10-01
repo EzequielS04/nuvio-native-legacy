@@ -1350,6 +1350,48 @@ static void previewParar(void) {
   pedPararPreview = 1;
 }
 
+// DICA DE PRIMEIRA VEZ: ESQUERDA LEVA AS OPCOES DO GUIA. Pedido do dono: a
+// barra de cima (Categorias, Cartoes/Lista, Addons, Preview) so e alcancada
+// por ESQUERDA no primeiro canal da fileira (no modo lista, com a grade no
+// "agora") ou por CIMA na primeira fileira, e ninguem descobre isso sozinho.
+// Uma pilula discreta sob a barra, nas primeiras G_DICA_VEZES aberturas do guia
+// completo ou ate a pessoa usar a ESQUERDA para subir uma vez; some em
+// G_DICA_MS ou na primeira tecla. A contagem fica em guia-dica.txt ("N" ou
+// "usou"), nesta TV.
+#define G_DICA_ARQ   "guia-dica.txt"
+#define G_DICA_VEZES 3
+#define G_DICA_MS    4000u
+static Uint32 dicaDesde;      // 0 = fora da tela
+static float  dicaAlfa, dicaDir, dicaA;
+static void desenharDica(void) {
+  float ar, ag, ab, da = dicaAlfa * dicaA;
+  TxtLinha t;
+  GfxRect p;
+  if (da <= 0.01f || focoTopo || overlay) return;
+  ajustes_acento(&ar, &ag, &ab);
+  t = txt_linha(TXT_CAPTION, i18n("← no primeiro canal: opções do guia"), 236, 238, 244, 255);
+  p = (GfxRect){ dicaDir - (float)t.w - 40.0f, G_TOPO_Y + G_TOPO_H + 16.0f, (float)t.w + 40.0f, 44.0f };
+  gfx_cor(p, 0.5f, 0.13f, 0.14f, 0.18f, 0.97f * da);
+  gfx_anel_fora(p, 0.5f, 0.0f, 2.0f, ar, ag, ab, 0.85f * da);
+  txt_desenhar_alpha(t, p.x + 20.0f, p.y + (p.h - (float)t.h) * 0.5f, da);
+}
+static void dicaGravar(const char *v) { dados_gravar(G_DICA_ARQ, v); }
+static void dicaUsou(void) {
+  if (dicaDesde) dicaDesde = 0;
+  dicaGravar("usou\n");
+}
+static void dicaTalvez(void) {
+  char *t = dados_ler(G_DICA_ARQ), buf[16];
+  int n = 0;
+  if (t && !strncmp(t, "usou", 4)) { free(t); return; }
+  if (t) { n = atoi(t); free(t); }
+  if (n >= G_DICA_VEZES) return;
+  snprintf(buf, sizeof buf, "%d\n", n + 1);
+  dicaGravar(buf);
+  dicaDesde = SDL_GetTicks();
+  if (!dicaDesde) dicaDesde = 1;
+}
+
 void guia_abrir(void) {
   guia_carregar();
   if (!previewLido) previewLer();
@@ -1358,6 +1400,8 @@ void guia_abrir(void) {
   previewPreso = 0; previewId[0] = 0;
   previewUltLin = previewUltCol = -1; previewFocoMudou = SDL_GetTicks();
   focoValido();
+  dicaAlfa = 0.0f;
+  dicaTalvez();
 }
 
 // O CANAL NO AR VEM PARA O GUIA. O app ja mandou o player encolher para o
@@ -1813,6 +1857,8 @@ void guia_evento(const SDL_Event *e) {
   if (e->type != SDL_KEYDOWN) return;
   SDL_Keycode k = e->key.keysym.sym;
   Uint32 agora = SDL_GetTicks();
+  // A dica sai na primeira tecla; a tecla segue valendo.
+  dicaDesde = 0;
 
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
       k == SDLK_DELETE || e->key.keysym.scancode == NV_SCANCODE_BACK) {
@@ -1953,11 +1999,11 @@ void guia_evento(const SDL_Event *e) {
   // toda". BAIXO no cabecalho volta para a linha em que estava.
   if (modoLista) {
     if (k == SDLK_LEFT)  { if (janelaDesl > 0) janelaDesl -= G_L_PASSO_MIN;
-                           else { focoTopo = 1; topoCol = G_TOPO_LISTA; } return; }
+                           else { focoTopo = 1; topoCol = G_TOPO_LISTA; dicaUsou(); } return; }
     if (k == SDLK_RIGHT) { if (janelaDesl < G_L_DESL_MAX) janelaDesl += G_L_PASSO_MIN; return; }
   } else {
     if (k == SDLK_LEFT)  { if (focoCol > 0) focoCol--;
-                           else { focoTopo = 1; topoCol = G_TOPO_CARTOES; } return; }
+                           else { focoTopo = 1; topoCol = G_TOPO_CARTOES; dicaUsou(); } return; }
     if (k == SDLK_RIGHT) { if (focoCol + 1 < linhaN(focoLin)) focoCol++; return; }
   }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
@@ -3134,6 +3180,22 @@ static float desenharTopo(float a) {
       }
       txt_desenhar_alpha(t, tx, r.y + (r.h - (float)t.h) * 0.5f, a); }
   }
+  // A DICA DA ESQUERDA (ver dicaTalvez): pilula sob a barra, alinhada pela
+  // direita com o ultimo chip, com um bico apontando para ela. Entra e sai em
+  // 250 ms; com Animacoes reduzidas, aparece e some sem esmaecer.
+  if (dicaDesde) {
+    Uint32 d = SDL_GetTicks() - dicaDesde;
+    float alvo = d < G_DICA_MS ? 1.0f : 0.0f;
+    if (d >= G_DICA_MS + 250u) dicaDesde = 0;
+    if (ajustes_animacoes_reduzidas()) dicaAlfa = alvo;
+    else dicaAlfa = d < 250u ? (float)d / 250.0f
+                  : d < G_DICA_MS ? 1.0f : 1.0f - (float)(d - G_DICA_MS) / 250.0f;
+    if (dicaAlfa < 0.0f) dicaAlfa = 0.0f;
+  } else dicaAlfa = 0.0f;
+  // So a geometria aqui; o desenho e o ultimo do guia (desenharDica), por
+  // cima do preview e dos cartoes.
+  dicaDir = xs[G_TOPO_PREVIEW] + w[G_TOPO_PREVIEW];
+  dicaA = a;
   return xs[G_TOPO_CATEGORIAS];
 }
 
@@ -3885,6 +3947,7 @@ void guia_desenhar(Uint32 agora) {
         txt_desenhar_alpha(v, G_AREA_X + G_AREA_W - (float)v.w, NV_TELA_H - 48.0f, a);
     } }
 
+  desenharDica();
   desenharPainelCategorias(a);
   if (painel) desenharPainelAddons(a);
   // O CANAL NO AR ENCOLHENDO para o preview: o furo segue o degrau da janela

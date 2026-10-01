@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "zadnji 2 min · lestvica je zgornja meja"),
   T("“%s” volta em %d das suas histórias.", "„%s“ se vrača v %d vaših zgodbah."),
   T("← Voltar", "← Nazaj"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← ali Nazaj   Kategorije"),
   T("← →   Alterar o valor", "← →   Spremeni vrednost"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Krmarjenje   ·   ↑ ↓   Dosje   ·   OK   Odpri"),

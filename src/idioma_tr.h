@@ -2715,6 +2715,7 @@
   T("últimos 2 min · escala do teto", "son 2 dk · ölçek üst sınırdır"),
   T("“%s” volta em %d das suas histórias.", "“%s”, hikâyelerinin %d tanesinde geri dönüyor."),
   T("← Voltar", "← Geri"),
+  T("← no primeiro canal: opções do guia", "← on the first channel: guide options"),
   T("← ou Voltar   Categorias", "← veya Geri   Kategoriler"),
   T("← →   Alterar o valor", "← →   Değeri değiştir"),
   T("← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Gezin   ·   ↑ ↓   Dosya   ·   OK   Aç"),

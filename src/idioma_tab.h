@@ -2714,6 +2714,7 @@
   { "últimos 2 min · escala do teto", "last 2 min · scale is the ceiling" },
   { "“%s” volta em %d das suas histórias.", "“%s” comes back in %d of your stories." },
   { "← Voltar", "← Back" },
+  { "← no primeiro canal: opções do guia", "← on the first channel: guide options" },
   { "← ou Voltar   Categorias", "← or Back   Categories" },
   { "← →   Alterar o valor", "← →   Change the value" },
   { "← →   Navegar   ·   ↑ ↓   Dossiê   ·   OK   Abrir", "← →   Navigate   ·   ↑ ↓   Dossier   ·   OK   Open" },
