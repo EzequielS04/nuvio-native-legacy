@@ -286,8 +286,13 @@ int ilha_ocupada(void) { return temCur || atividadeViva(SDL_GetTicks()); }
 // MOLA SUBAMORTECIDA (zeta 0,68): passa um pouco do alvo e volta, que e o
 // "pulo" da Dynamic Island. As molas de anim.h sao criticas de proposito (sem
 // repique) — aqui o repique E o efeito, e so na forma, nunca no texto.
-static float molaIlha(float *v, float x, float alvo, float dt) {
-  const float w = 15.0f, z = 0.68f;
+// w mais baixo = mais devagar. Pilula ~0,45 s ate assentar; modal ~0,7 s
+// (o dono achou 15 rad/s rapido demais: "ta abrindo muito rapido a ilha").
+#define ILHA_MOLA_W   10.0f
+#define ILHA_MOLA_Z   0.72f
+#define MODAL_MOLA_W  7.5f
+#define MODAL_MOLA_Z  0.80f
+static float molaIlhaWZ(float *v, float x, float alvo, float dt, float w, float z) {
   int k;
   if (anim_politica_reduzida || ajustes_animacoes_reduzidas()) { *v = 0.0f; return alvo; }
   if (dt > 0.05f) dt = 0.05f;
@@ -297,6 +302,9 @@ static float molaIlha(float *v, float x, float alvo, float dt) {
     x += *v * h;
   }
   return x;
+}
+static float molaIlha(float *v, float x, float alvo, float dt) {
+  return molaIlhaWZ(v, x, alvo, dt, ILHA_MOLA_W, ILHA_MOLA_Z);
 }
 
 static void corDoTipo(int tipo, float *r, float *g, float *b) {
@@ -650,12 +658,12 @@ void ilha_desenhar(Uint32 agora) {
   if (W <= 0.0f) { W = NV_ILHA_H * 0.6f; H = W; }
   W = molaIlha(&vW, W, alvoW, dt);
   H = molaIlha(&vH, H, alvoH, dt);
-  A = anim_mola(A, vis ? 1.0f : 0.0f, dt, vis ? 14.0f : 18.0f);
+  A = anim_mola(A, vis ? 1.0f : 0.0f, dt, vis ? 9.0f : 12.0f);
   if (mostra == alvo && vis) {
     float perto = fabsf(W - alvoW) < 0.18f * alvoW ? 1.0f : 0.0f;
-    conteudoA = anim_mola(conteudoA, perto, dt, 16.0f);
+    conteudoA = anim_mola(conteudoA, perto, dt, 10.0f);
   }
-  modalT = molaIlha(&modalV, modalT, modalAberto ? 1.0f : 0.0f, dt);
+  modalT = molaIlhaWZ(&modalV, modalT, modalAberto ? 1.0f : 0.0f, dt, MODAL_MOLA_W, MODAL_MOLA_Z);
   if (!modalAberto && modalT < 0.01f) { modalT = 0.0f; modalV = 0.0f; }
   for (int i = 0; i < 3; i++)
     modalFocoA[i] = anim_mola(modalFocoA[i], modalAberto && i == modalFoco ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
