@@ -2652,6 +2652,7 @@
   T("episódios", "επεισόδια"),
   T("escolhido em Ajustes", "επιλέχθηκε στις Ρυθμίσεις"),
   T("espaço", "διάστημα"),
+  T("espaço sideral", "διάστημα"),
   T("esperança", "ελπίδα"),
   T("espionagem", "κατασκοπεία"),
   T("espiões", "κατάσκοπος"),

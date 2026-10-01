@@ -2652,6 +2652,7 @@
   T("episódios", "episódios"),
   T("escolhido em Ajustes", "escolhido em Definições"),
   T("espaço", "espaço"),
+  T("espaço sideral", "espaço"),
   T("esperança", "esperança"),
   T("espionagem", "espionagem"),
   T("espiões", "espiões"),
