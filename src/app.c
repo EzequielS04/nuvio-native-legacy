@@ -3111,6 +3111,10 @@ void app_desenhar(Uint32 agora) {
 }
 
 int app_quer_sair(void) { return sair; }
+int app_zap_ativo(void) {
+  if (tela == TELA_GUIA) return 1;
+  return (tela == TELA_PLAYER || player_mini_ativo()) && player_id_canal()[0];
+}
 
 void app_encerrar(void) {
   avisos_encerrar();   // saida limpa: apaga a marca de sessao viva

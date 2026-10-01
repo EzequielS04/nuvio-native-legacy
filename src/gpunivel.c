@@ -142,7 +142,7 @@ static void gravar(void) {
   if (!dados_gravar(GPUN_ARQ, buf)) printf("[gpu-nivel] nao gravou %s\n", GPUN_ARQ);
 }
 
-#if defined(NV_TPK) && !defined(NV_TPK_NIVEL_FORCADO)
+#if (defined(NV_TPK) || defined(NV_ANDROID)) && !defined(NV_TPK_NIVEL_FORCADO)
 static void ler(void) {
   char *t = dados_ler(GPUN_ARQ);
   unsigned long c = 0;
@@ -220,7 +220,9 @@ void gpun_iniciar(int w, int h) {
 #if defined(NV_TPK_NIVEL_FORCADO)
   nivel = NV_TPK_NIVEL_FORCADO;
   origem = "forcado na build (NV_TPK_NIVEL_FORCADO)";
-#elif defined(NV_TPK)
+#elif defined(NV_TPK) || defined(NV_ANDROID)
+  // ANDROID tambem mede: TV box e Google TV vao de Mali-G52 a GPUs bem mais
+  // fortes. Na TCL Smart TV Pro o vidro + cor viva dava 29 fps sustentado.
   adaptativo = 1;
   origem = "adaptativo";
   ler();
@@ -241,7 +243,7 @@ void gpun_iniciar(int w, int h) {
 // a partir do que esta gravado (ou do 0). Build com NV_TPK_NIVEL_FORCADO
 // ignora: o canario de teste manda.
 void gpun_preferencia(int p) {
-#if defined(NV_TPK) && !defined(NV_TPK_NIVEL_FORCADO)
+#if (defined(NV_TPK) || defined(NV_ANDROID)) && !defined(NV_TPK_NIVEL_FORCADO)
   if (p == 1) { adaptativo = 0; aplicar(0, "ajuste: efeitos completos"); return; }
   if (p == 2) { adaptativo = 0; aplicar(1, "ajuste: efeitos leves"); return; }
   adaptativo = 1; decidido = 0; origem = "adaptativo"; nivel = 0;

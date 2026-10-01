@@ -2296,7 +2296,7 @@ void detail_atualizar(float dt, Uint32 agora) {
       if (u) {
         GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
         trailerTentado = 1;
-        trailer_abrir(u, tela, 0, 0);
+        trailer_abrir(u, tela, ajustes_trailer_detalhe_som(), 0);
 #ifdef __EMSCRIPTEN__
         // A etapa e a FONTE aberta (TRF_*), para o prazo saber qual e a
         // proxima na ordem do ajuste (trailerfonte_depois).
@@ -2334,7 +2334,7 @@ void detail_atualizar(float dt, Uint32 agora) {
         if (trailer_aberto()) trailer_fechar();
         if (seg) {
           GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-          trailer_abrir(seg, tela, 0, 0);
+          trailer_abrir(seg, tela, ajustes_trailer_detalhe_som(), 0);
           trailerEtapa = prox;
           trailerPrazo = agora + NV_TRAILER_PREPARA_MS;
         } else { trailerEtapa = -1; trailerPrazo = 0; }

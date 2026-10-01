@@ -948,6 +948,24 @@ int main(int argc, char **argv) {
       if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)
         e.key.keysym.sym = SDLK_AC_BACK;
 #endif
+#ifdef NV_ANDROID
+      // CH+/CH- NO ANDROID. O NuvioActivity entrega CH+ como F7 e CH- como F8.
+      // Com canal na tela (guia, canal ao vivo, canal no canto) sao CH+/CH- de
+      // verdade, com os scancodes do webOS que guia.c, player.c e app.c ja
+      // tratam. Fora disso fazem o papel das teclas que o controle Android nao
+      // tem: CH+ = AZUL (Salvos), CH- = VERMELHA (registro).
+      if ((e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) &&
+          (e.key.keysym.sym == SDLK_F7 || e.key.keysym.sym == SDLK_F8)) {
+        int sobe = e.key.keysym.sym == SDLK_F7;
+        if (app_zap_ativo()) {
+          e.key.keysym.scancode = (SDL_Scancode)(sobe ? NV_SCANCODE_CH_UP : NV_SCANCODE_CH_DOWN);
+          e.key.keysym.sym = sobe ? SDLK_PAGEUP : SDLK_PAGEDOWN;
+        } else {
+          e.key.keysym.scancode = sobe ? SDL_SCANCODE_S : SDL_SCANCODE_F9;
+          e.key.keysym.sym = sobe ? SDLK_s : SDLK_F9;
+        }
+      }
+#endif
       // TECLA DESCONHECIDA, UMA LINHA CADA, UMA VEZ SO.
       //
       // Este app aprendeu na mao qual scancode e cada tecla do controle: o Back
@@ -1040,7 +1058,7 @@ int main(int argc, char **argv) {
       for (k = 0; k < GFX_NMODOS; k++) if (gfx_fill_modo[k] > 0.02) printf(" %d=%.2f", k, gfx_fill_modo[k]);
       printf("\n");
     }
-#ifdef NV_TPK
+#if defined(NV_TPK) || defined(NV_ANDROID)
     // NIVEL DE GPU ADAPTATIVO (gpunivel.h): o quadro que acabou, repartido em
     // ESPERA (clr + swap: o driver devolvendo buffer, a GPU atrasada) e CPU.
     // "Cheia" = artes na tela (o conjunto quente do cache), conferido a cada

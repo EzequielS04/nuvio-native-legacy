@@ -246,6 +246,9 @@ typedef enum {
   // visual de sempre. No fim pelo mesmo motivo: valor[] e CHAVE[] sao
   // posicionais.
   AJ_ADDON_POSTER, AJ_ADDON_FUNDO, AJ_ADDON_LOGO, AJ_COL_ARTE_CONTA,
+  // Som do trailer automatico da pagina do titulo (detail.c). No fim pelo mesmo
+  // motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_DET_TRAILER_SOM,
   AJ_N
 } OpcaoId;
 
@@ -803,6 +806,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Fundo do destaque do addon",      V_LIGA, 2),   // local: fundoAddonLocal
   ESC("Logo do addon",                   V_LIGA, 2),   // local: logoAddonLocal
   ESC("Arte das pastas da conta",        V_LIGA, 2),   // local: colArteContaLocal
+  ESC("Som do trailer na página do título", V_LIGA, 2), // local: trailerDetalheSomLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -949,6 +953,8 @@ static const char *CHAVE[] = {
   "heroTransicaoLocal",
   // LOCAIS e SEM o "-": o web nao tem estas escolhas e elas precisam sobreviver.
   "posterAddonLocal", "fundoAddonLocal", "logoAddonLocal", "colArteContaLocal",
+  // LOCAL e SEM o "-": o web nao tem esta escolha.
+  "trailerDetalheSomLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1054,6 +1060,7 @@ static const Item TELA[] = {
       OPC(AJ_DET_BLUR_NAO_VISTOS), OPC(AJ_DET_TRAILER), OPC(AJ_DET_META_EXT),
       OPC(AJ_DET_SO_CINEMETA),
       OPC(AJ_DET_DATA_CHEIA), OPC(AJ_DET_VEU), OPC(AJ_DET_TRAILER_AUTO),
+      OPC(AJ_DET_TRAILER_SOM),
       OPC(AJ_TRAILER_QUAL), OPC(AJ_TRAILER_ASPECTO), OPC(AJ_TRAILER_FONTE),
     GRP("Foco no pôster", "Defina o comportamento ao selecionar um título.", "aj_scan"),
       OPC(AJ_EXPANDIR), OPC(AJ_EXPANDIR_ATRASO), OPC(AJ_FOCO_TRAILER), OPC(AJ_BORDA_FOCO),
@@ -1130,7 +1137,7 @@ static const Item TELA[] = {
   // "o que ha de errado com esta TV".
   SEC("Avançado", "Desempenho, navegação, cache e diagnósticos", "aj_monitor-cog"),
     OPC(AJ_NAV_RAPIDA), OPC(AJ_RESOLUCAO), OPC(AJ_QUALIDADE_IMG),
-#ifdef NV_TPK
+#if defined(NV_TPK) || defined(NV_ANDROID)
     OPC(AJ_GPU_EFEITOS),
 #endif
     OPC(AJ_TEX_MB), OPC(AJ_ESPACO),
@@ -1396,6 +1403,7 @@ static int valor[] = {
   0,                /* transicao do destaque: Deslizar */
   // Arte do addon: todas DESLIGADAS (V_LIGA: 1 = Desligado) — o visual de antes.
   1, 1, 1, 1,       /* posteres, fundo, logo do addon; arte das pastas da conta */
+  1,                /* som do trailer na pagina do titulo: DESLIGADO (V_LIGA: 1 = Desligado) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1665,6 +1673,7 @@ float ajustes_detalhe_veu(void)       { int v = valor[AJ_DET_VEU]; return (v < 0
 int   ajustes_trailer_auto(void)      { return lig(AJ_DET_TRAILER_AUTO); }
 int   ajustes_trailer_hero(void)      { return lig(AJ_HERO_TRAILER) && !SEGURO; }
 int   ajustes_trailer_hero_som(void)  { return lig(AJ_HERO_TRAILER_SOM); }
+int   ajustes_trailer_detalhe_som(void) { return lig(AJ_DET_TRAILER_SOM); }
 int   ajustes_hero_deslizar(void)     { return valor[AJ_HERO_TRANSICAO] == 0; }
 int   ajustes_poster_addon(void)      { return lig(AJ_ADDON_POSTER); }
 int   ajustes_fundo_addon(void)       { return lig(AJ_ADDON_FUNDO); }
@@ -2962,6 +2971,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_ADDONS_PRINCIPAL: /* escolha desta TV; a conta tem uses_primary_addons */
     case AJ_HERO_TRANSICAO: /* o web nao tem esta escolha */
     case AJ_ADDON_POSTER: case AJ_ADDON_FUNDO: case AJ_ADDON_LOGO:
+    case AJ_DET_TRAILER_SOM: /* o web nao tem */
     case AJ_COL_ARTE_CONTA: /* arte do addon: o web nao tem estas escolhas */
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
@@ -3494,6 +3504,8 @@ static int inativa(int op) {
     // Som: na Samsung (.wgt) o trailer e sempre mudo (trailerfonte_com_som).
     case AJ_HERO_TRAILER_SOM:
       return !lig(AJ_HERO_TRAILER) || !trailerfonte_com_som(trailerfonte_tizen());
+    case AJ_DET_TRAILER_SOM:
+      return !lig(AJ_DET_TRAILER_AUTO) || !trailerfonte_com_som(trailerfonte_tizen());
     case AJ_HERO_TRAILER_ESPERA: return !lig(AJ_HERO_TRAILER);
     // Como no web (getFocusedPosterFlowConfig): o trailer do cartaz so existe
     // com o cartaz expandindo ou com cartazes deitados.
@@ -3631,6 +3643,10 @@ static const char *ajudaOpcao(int op) {
     if (op == AJ_EXPANDIR_ATRASO) return "Ative Expandir pôster ao focar para ajustar o tempo de espera.";
     if (op == AJ_HERO_TRAILER_SOM && lig(AJ_HERO_TRAILER))
       return "Nesta TV o trailer do destaque toca sempre sem som.";
+    if (op == AJ_DET_TRAILER_SOM && lig(AJ_DET_TRAILER_AUTO))
+      return "Nesta TV o trailer da página do título toca sempre sem som.";
+    if (op == AJ_DET_TRAILER_SOM)
+      return "Ative o trailer automático da página do título para ajustar o som.";
     if (op == AJ_HERO_TRAILER_SOM || op == AJ_HERO_TRAILER_ESPERA)
       return "Ative Trailer no destaque para ajustar o trailer do topo da Home.";
     if (op == AJ_FOCO_TRAILER) return "Ative Expandir pôster ao focar, ou Pôsteres horizontais, para usar o trailer do cartaz em foco.";
@@ -3685,6 +3701,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_HERO_ARTE_DIF: return "Desligado: card, destaque e página do título mostram a mesma imagem. Ligado: o card fica com a arte do catálogo e o destaque usa outra foto — TMDB vira outro fundo do TMDB; em Automático, ou se a escolhida repetir o card, usa Apple TV, outro fundo do TMDB, fanart.tv, anime ou Trakt.";
     case AJ_HERO_TRAILER: return "Com o foco parado no destaque do topo, o trailer do título toca no lugar da arte, sem som a menos que Som do trailer no destaque esteja ligado. Mover o foco volta para a arte.";
     case AJ_HERO_TRAILER_SOM: return "Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.";
+    case AJ_DET_TRAILER_SOM: return "Ligado: o trailer que toca sozinho na página do título sai com som. Desligado: toca sem som; OK abre em tela cheia com som.";
     case AJ_HERO_TRAILER_ESPERA: return "Quanto tempo o destaque fica parado num título antes de trocar a arte pelo trailer.";
     case AJ_ADDON_POSTER: return "Com um serviço de pôsteres ligado, o título que veio de um catálogo de addon fica com o pôster que o próprio addon manda, e o serviço só entra nos outros (Continuar assistindo, listas do Trakt, pôster genérico do Cinemeta). Sem o serviço, o pôster já é o do addon.";
     case AJ_ADDON_FUNDO: return "O card deitado, o destaque e a página do título usam o fundo que o addon manda no catálogo, mesmo com outro Background do hero ou com Destaque com outra arte. O addon que não manda fundo cai na fonte escolhida. A arte escolhida à mão em Trocar arte continua valendo mais.";
@@ -6457,6 +6474,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_DET_BLUR_NAO_VISTOS: case AJ_DET_TRAILER: case AJ_DET_META_EXT:
     case AJ_DET_SO_CINEMETA:
     case AJ_DET_DATA_CHEIA: case AJ_DET_VEU: case AJ_DET_TRAILER_AUTO:
+    case AJ_DET_TRAILER_SOM:
     case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO: case AJ_TRAILER_FONTE:
       return AJPV_DETALHE;
     case AJ_EXPANDIR: case AJ_EXPANDIR_ATRASO: case AJ_NAV_RAPIDA:
@@ -6797,6 +6815,7 @@ static float previaDetalheOpcao(int op, float x, float y, float w) {
       if (i == 1) previaRealce(bx, r.y, r.w, r.h, ar, ag, ab);
     }
   } else if (op == AJ_DET_TRAILER || op == AJ_DET_TRAILER_AUTO ||
+             op == AJ_DET_TRAILER_SOM ||
              op == AJ_TRAILER_QUAL || op == AJ_TRAILER_ASPECTO ||
              op == AJ_TRAILER_FONTE) {
     GfxRect video = {x + 98.0f, y + 68.0f, w - 116.0f, 62.0f};

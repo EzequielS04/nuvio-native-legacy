@@ -136,6 +136,13 @@ static int montarReduzido(const char *imdb, int teto, char *saida, unsigned tam)
   char melhorInf[2048] = "", melhorUri[1024] = "", melhorAudio[128] = "";
   int melhorW = 0, melhorAvc = 0;
   FILE *f, *g;
+#ifdef NV_ANDROID
+  // ANDROID: "Máxima" vira 1080p. Na TCL Smart TV Pro (Mali-G52) a variante
+  // 3840px hvc1 travou a interface 8 s e depois 20 s ao abrir o trailer de
+  // fundo (log de 30/09: clr=19535 ms). O trailer toca atras do texto da
+  // pagina; 1080p ja enche a tela.
+  if (!teto || teto > 1080) teto = 1080;
+#endif
   caminhoMaster(imdb, cm, sizeof cm, ".m3u8");
   caminhoMaster(imdb, cr, sizeof cr, "-play.m3u8");
   if (!cm[0] || !(f = fopen(cm, "r"))) return 0;

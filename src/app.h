@@ -29,6 +29,10 @@ void app_evento(const SDL_Event *e);
 void app_atualizar(float dt, Uint32 agora);
 void app_desenhar(Uint32 agora);
 int  app_quer_sair(void);
+// 1 quando CH+/CH- trocam de canal: guia aberto, ou um canal tocando (tela
+// cheia ou no canto). Fora disso, no Android, CH+ e CH- fazem o papel das
+// teclas AZUL e VERMELHA, que o controle nao tem (main.c).
+int  app_zap_ativo(void);
 void app_encerrar(void);
 
 // 1 = a home e o que esta na frente (sem detalhe, player, login ou escolha de
