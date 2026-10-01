@@ -113,7 +113,10 @@ class NuvioActivity : SDLActivity() {
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_MEDIA_NEXT -> KeyEvent.KEYCODE_DPAD_RIGHT
             KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> KeyEvent.KEYCODE_DPAD_LEFT
             KeyEvent.KEYCODE_PROG_BLUE, KeyEvent.KEYCODE_CHANNEL_UP -> KeyEvent.KEYCODE_S
-            KeyEvent.KEYCODE_PROG_RED, KeyEvent.KEYCODE_PROG_GREEN -> KeyEvent.KEYCODE_F9
+            // CH- abre o painel de registro: a TCL e a maioria dos controles
+            // Android TV nao tem as teclas coloridas (pedido do dono, 30/09).
+            KeyEvent.KEYCODE_PROG_RED, KeyEvent.KEYCODE_PROG_GREEN,
+            KeyEvent.KEYCODE_CHANNEL_DOWN -> KeyEvent.KEYCODE_F9
             else -> return super.dispatchKeyEvent(ev)
         }
         return super.dispatchKeyEvent(
