@@ -151,16 +151,27 @@ int main(void) {
   // 6b. ESTILO PELO MENU DO CARTAZ. O menu grava o MESMO `tipo` da tela de
   //     Ajustes; colecao so aceita as formas dela, e o ciclo dos Ajustes pula
   //     o resto.
-  { int tipos[8], n, k, col = -1, cat = -1; const char *rot[8];
+  { int tipos[FIL_TIPO_N], n, k, col = -1, cat = -1; const char *rot[FIL_TIPO_N];
     fil_registrar("collection_formas", "Formas", "", "", 3);
     fil_registrar("addon_movie_formas", "Formas cat", "Addon", "movie", 3);
-    n = fil_estilos("addon_movie_formas", tipos, rot, 8);
-    assert(n == 7 && tipos[0] == FIL_TIPO_AUTO && tipos[1] == FIL_TIPO_CARTAZ &&
-           tipos[2] == FIL_TIPO_SERVICO && tipos[3] == FIL_TIPO_COLECAO &&
-           tipos[4] == FIL_TIPO_DESTAQUE && !strcmp(rot[2], "Paisagem pequena"));
+    n = fil_estilos("addon_movie_formas", tipos, rot, FIL_TIPO_N);
+    // TODAS as formas de FilTipo, cada uma uma vez (o modal de estilo nao tem
+    // mais o teto de sete linhas do menu que deixava o 4:3 e a faixa de fora).
+    assert(n == FIL_TIPO_N && tipos[0] == FIL_TIPO_AUTO && tipos[1] == FIL_TIPO_CARTAZ &&
+           tipos[2] == FIL_TIPO_SERVICO && tipos[3] == FIL_TIPO_LARGA &&
+           tipos[4] == FIL_TIPO_COLECAO && tipos[5] == FIL_TIPO_DESTAQUE &&
+           tipos[6] == FIL_TIPO_DESTAQUE_QUADRADO && !strcmp(rot[2], "Paisagem pequena"));
+    { int visto[FIL_TIPO_N] = {0}, k;
+      for (k = 0; k < n; k++) { assert(!visto[tipos[k]]); visto[tipos[k]] = 1; } }
     // Issue #201: os dois rankings no menu, o numerado (Dinamica) primeiro.
-    assert(tipos[5] == FIL_TIPO_RANKING && tipos[6] == FIL_TIPO_TOP10 &&
-           !strcmp(rot[5], "Ranking numerado"));
+    assert(tipos[7] == FIL_TIPO_RANKING && tipos[8] == FIL_TIPO_TOP10 &&
+           !strcmp(rot[7], "Ranking numerado"));
+    assert(fil_definir_tipo("addon_movie_formas", FIL_TIPO_LARGA));
+    assert(fil_tipo("addon_movie_formas") == FIL_TIPO_LARGA);
+    assert(!fil_definir_tipo("collection_formas", FIL_TIPO_LARGA));   // colecao nao
+    assert(fil_estilo_ajuda("addon_movie_formas", FIL_TIPO_LARGA)[0]);
+    assert(strcmp(fil_estilo_ajuda("collection_formas", FIL_TIPO_CARTAZ),
+                  fil_estilo_ajuda("addon_movie_formas", FIL_TIPO_CARTAZ)));
     assert(fil_definir_tipo("addon_movie_formas", FIL_TIPO_RANKING));
     assert(fil_tipo("addon_movie_formas") == FIL_TIPO_RANKING);
     assert(!fil_definir_tipo("collection_formas", FIL_TIPO_RANKING));   // colecao nao
