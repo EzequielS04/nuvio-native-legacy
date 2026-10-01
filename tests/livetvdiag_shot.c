@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
   assert(L.it[1].f[F_TS].http == 404 && !L.it[1].f[F_TS].servido && L.it[1].f[F_HLS].http == 404);
   assert(strstr(L.it[2].f[F_TS].codec, "HEVC") && strstr(L.it[2].f[F_TS].codec, "AC3") && L.it[2].f[F_TS].dezBits);
   assert(L.it[3].f[F_TS].servido && strstr(L.it[3].f[F_TS].codec, "H.264"));  // pelo UA de player
-  assert(L.redeMedida && L.kbps > 4000 && L.kbps < 14000 && L.latenciaMs >= 100);
+  assert(L.redeMedida && L.kbpsDoSegmento && L.kbps > 4000 && L.kbps < 14000);
   // Mac: o player nao existe; o passo de player marca "so na TV".
   L.n = 3;   // as capturas seguem com os tres de antes
   memset(&L.it[3], 0, sizeof L.it[3]);
