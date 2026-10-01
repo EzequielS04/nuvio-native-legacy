@@ -69,6 +69,7 @@
 #include "streams.h"    /* Stream: url do preview vinda do fio */
 #include "livetv_regras.h" /* variantes FHD/HD/SD do mesmo canal */
 #include "teclado.h"       /* a busca do guia */
+#include "buscanorm.h"     /* guia_buscar_canais (Spotlight) */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -4235,4 +4236,32 @@ void guia_desenhar(Uint32 agora) {
   { float x, y, w, h;
     if (aberta && player_janela_animando(&x, &y, &w, &h))
       gfx_furo_raio((GfxRect){ x, y, w, h }, G_PREVIEW_RAIO / (h > 1.0f ? h : 1.0f)); }
+}
+
+// --- Spotlight (spotlight.c) ---------------------------------------------------
+// Varre a lista PUBLICADA, que so o fio de desenho le — o mesmo fio que chama
+// isto. Sem cache de nome normalizado: com 900 canais sao 900 normalizacoes de
+// ~20 bytes por letra digitada, a mesma ordem de custo do refiltrar da busca
+// (o catalogo inteiro por letra).
+int guia_buscar_canais(const char *alvoNorm, int *indices, int max) {
+  int i, n = 0;
+  char nome[300];
+  if (!alvoNorm || !alvoNorm[0] || !indices || max <= 0) return 0;
+  if (estado != G_PRONTO || nCanais < 1) return 0;
+  for (i = 0; i < nCanais && n < max; i++) {
+    busca_normalizar(canais[i].nome, nome, sizeof nome);
+    if (strstr(nome, alvoNorm)) indices[n++] = i;
+  }
+  return n;
+}
+
+int guia_canal_campos(int i, const char **id, const char **nome, const char **logo,
+                      const char **cat, const char **base) {
+  if (i < 0 || i >= nCanais) return 0;
+  if (id) *id = canais[i].id;
+  if (nome) *nome = canais[i].nome;
+  if (logo) *logo = canais[i].logo;
+  if (cat) *cat = canais[i].cat >= 0 ? cats[canais[i].cat] : "";
+  if (base) *base = canais[i].base;
+  return 1;
 }

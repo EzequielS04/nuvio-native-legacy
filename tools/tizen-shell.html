@@ -478,7 +478,7 @@
       // que e onde ela funciona bem.
       ["MediaPlay", "MediaPause", "MediaPlayPause", "MediaStop",
        "MediaRewind", "MediaFastForward", "ChannelUp",
-       "ColorF0Red", "ColorF1Green", "ColorF2Yellow", "ColorF3Blue"]
+       "ColorF0Red", "ColorF1Green", "ColorF2Yellow", "ColorF3Blue", "Search"]
         .forEach(function (k) {
           try { tizen.tvinputdevice.registerKey(k); } catch (e) {}
         });
@@ -688,6 +688,39 @@
       }));
     });
   }, true);
+
+  // SPOTLIGHT (src/spotlight.h). A tecla "Search" (10225, controles Samsung de
+  // botao de busca) vira F6 = abrir pela voz; a AMARELA (405) vira F5 = abrir.
+  // Os dois keyCodes nao existem na tabela do SDL e morreriam aqui, como o
+  // 10009 do Return. A tecla de MICROFONE do Smart Remote nao esta entre as
+  // registraveis do tizen.tvinputdevice: se ela chegar, a linha abaixo conta.
+  window.addEventListener("keydown", function (ev) {
+    if (!ev.isTrusted) return;
+    var f = ev.keyCode === 10225 ? "F6" : ev.keyCode === 405 ? "F5" : null;
+    if (!f) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    var alvo = document.getElementById("canvas") || window;
+    ["keydown", "keyup"].forEach(function (t) {
+      alvo.dispatchEvent(new KeyboardEvent(t, {
+        key: f, code: f, keyCode: f === "F6" ? 117 : 116, which: f === "F6" ? 117 : 116,
+        bubbles: true, cancelable: true
+      }));
+    });
+  }, true);
+  // TECLA QUE O SDL NAO CONHECE, uma linha por keyCode por sessao, como o
+  // "[tecla] scancode=" do C: e assim que se descobre o que o controle da
+  // pessoa manda (o microfone, por exemplo) sem build instrumentada.
+  (function () {
+    var vistos = {};
+    window.addEventListener("keydown", function (ev) {
+      if (!ev.isTrusted || ev.keyCode < 300 || vistos[ev.keyCode]) return;
+      vistos[ev.keyCode] = 1;
+      var t = "[tecla] wgt keyCode=" + ev.keyCode + " key=" + ev.key;
+      console.log(t);
+      if (window.__nvDiag) window.__nvDiag(t);
+    }, true);
+  })();
 
   // O SDL le o teclado do elemento com foco. Sem isto o app abre e nao responde
   // ao controle, o que parece travamento e nao falta de foco.

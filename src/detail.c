@@ -1204,6 +1204,21 @@ static void abrirInterno(const HomeItem *it) {
   memset(revEp, 0, sizeof revEp); memset(revRel, 0, sizeof revRel);
 }
 
+void detail_fechar(void) {
+  if (!aberto || saindo) return;
+  pessoaAberta = 0;
+  nivel = 0;
+  saindo = 1;
+}
+
+void detail_mostrar_pessoa(long tmdb, const char *nome, const char *foto) {
+  if (!aberto || tmdb <= 0) return;
+  pessoa_pedir(tmdb, nome ? nome : "", foto ? foto : "");
+  pessoaAberta = 1;
+  pessoaFoco = 0;
+  pessoaLinha = 0;
+}
+
 void detail_abrir(const HomeItem *it) {
   int pos = -1, n = 0;
   // CARROSSEL: so quando a pagina NASCE de um cartaz de fileira da Dinamica

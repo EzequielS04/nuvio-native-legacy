@@ -73,6 +73,8 @@ int  menu_pediu_trocar(void);
 // barra (a fileira "Streaming" mora la nesse layout), uma vez; -1 sem pedido.
 // Quem le abre a colecao (vertudo_colecao), como OK na pasta da home.
 int  menu_pediu_colecao(void);
+// OK SEGURADO em "Buscar": abrir o Spotlight. Consome a flag.
+int  menu_pediu_spotlight(void);
 
 // --- PILULA DO LAYOUT DINAMICA (barra estilo Apple TV) ----------------------
 // No layout Dinamica da home nao ha rail: fechada, a barra e uma pilula

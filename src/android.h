@@ -3,6 +3,7 @@
 #ifndef NV_ANDROID_H
 #define NV_ANDROID_H
 #ifdef NV_ANDROID
+#include <stddef.h>
 // Escreve a linha "[tv] ..." no log (mesmo formato do host .tpk, LogaTv),
 // espelha stdout/stderr no logcat (tag "nuvio") sem tirar nada do arquivo, e
 // pede ao SDL que o Voltar chegue ao app em vez de fechar a Activity.
@@ -16,5 +17,10 @@ int android_pedir_superficie(int w, int h);
 // FileProvider). 1 = instalador aberto, 2 = falta a permissao de instalar apps
 // desta fonte (a tela dela foi aberta), 0 = falhou. Chamar do fio do SDL.
 int android_instalar_apk(const char *caminho);
+// Ditado do Spotlight: abre a tela de voz do sistema (RecognizerIntent). 1 se
+// abriu, 0 se o aparelho nao tem reconhecedor. Depois, a cada quadro,
+// android_ditado_ler: -1 ainda ouvindo, 0 voltou sem texto, 1 texto em dst.
+int android_ditado_iniciar(void);
+int android_ditado_ler(char *dst, size_t n);
 #endif
 #endif

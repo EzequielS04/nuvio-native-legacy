@@ -6,6 +6,14 @@
     <!-- Para a auto-atualizacao instalar o APK baixado (fase seguinte). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Android 11+: sem isto resolveActivity nao enxerga a tela de voz do
+         sistema e o ditado do Spotlight diria "sem reconhecedor" em toda TV. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
+
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:glEsVersion="0x00020000" android:required="true" />

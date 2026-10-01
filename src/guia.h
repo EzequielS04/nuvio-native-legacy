@@ -119,4 +119,12 @@ float guia_etiqueta(const char *s, float x, float y, float maxW, float a);
 // quando ela nao e o molde. Pode devolver "" (so havia o molde).
 const char *guia_desc_livre(const char *desc, char *buf, size_t n);
 
+// BUSCA DE CANAIS PARA O SPOTLIGHT (spotlight.c): os canais publicados cujo
+// nome normalizado (buscanorm.h) contem `alvoNorm`, na ordem do guia, ate
+// `max`. 0 com a lista ainda nao carregada. Os ponteiros de guia_canal_campos
+// valem ate a proxima republicacao da lista (so o fio de desenho chama).
+int  guia_buscar_canais(const char *alvoNorm, int *indices, int max);
+int  guia_canal_campos(int i, const char **id, const char **nome, const char **logo,
+                       const char **cat, const char **base);
+
 #endif

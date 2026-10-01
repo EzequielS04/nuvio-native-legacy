@@ -85,6 +85,9 @@
 // SDL_scancode.h padrao, por isso vem como numero.
 #define NV_SCANCODE_BACK 482
 #define NV_SCANCODE_BLUE 489 // SDL_webOS.h: SDL_WEBOS_SCANCODE_BLUE
+// AMARELA: abre o Spotlight (spotlight.h) fora do Guia, que a usa para alternar
+// a vista. 488 MEDIDO no D1: "[tecla] scancode=488" em 34 envios de log webOS.
+#define NV_SCANCODE_YELLOW 488 // SDL_WEBOS_SCANCODE_YELLOW
 // CH+/CH- do controle da LG. Existiam no SDL_webOS.h do sysroot e nao tinham
 // consumidor — agora trocam de canal no player quando um canal esta no ar.
 #define NV_SCANCODE_CH_UP   480 // SDL_WEBOS_SCANCODE_CH_UP
