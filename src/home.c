@@ -1054,6 +1054,9 @@ static float fileiraGap(void) {
   // base dos cartoes ao titulo seguinte na captura do dono); o fundo e liso, e
   // e o vazio que separa uma fileira da outra.
   if (layoutHome() == HOME_LAYOUT_PADRAO) return NV_PAD_FILEIRA_GAP;
+  // Dinamica: um vao so, mais justo, para caber mais fileiras em volta da do
+  // meio (layout.h, NV_DIN_FILEIRA_GAP).
+  if (layoutHome() == HOME_LAYOUT_DINAMICA) return NV_DIN_FILEIRA_GAP;
   return ajustes_posteres_deitados() ? NV_FILEIRA_GAP_LAND : NV_FILEIRA_GAP;
 }
 // Raio do card, em fracao do menor lado (o SDF do shader e normalizado). Este e
@@ -1252,6 +1255,28 @@ static float alturaTotalFil(int r) {
   return alturaFil(r) + (temRotulo(fileiras[r].tipo) ? NV_POSTER_COPY_H : 0.0f);
 }
 static float passoFil(int r)       { return larguraFil(r) + gapDe(fileiras[r].tipo); }
+
+// ROLAGEM CENTRADA DA DINAMICA (dono, 01/10: "o foco fica na fileira do meio e
+// a lista rola por baixo, como o Apple TV"). `off` e a soma das fileiras acima
+// da `r` — a rolagem que a ancoraria em NV_DIN_TOPO_FIL, como era. Daqui sai a
+// rolagem que poe o CENTRO dela (titulo + cartoes) em NV_DIN_CENTRO_FIL, presa
+// nos extremos: nunca abaixo de zero (a primeira fileira nao desce do topo, nao
+// sobra vao em cima) e nunca alem do ponto em que a ultima fica a
+// NV_DIN_FOLGA_BASE da base (nao sobra vao embaixo; a folga e a do aviso de
+// "cabem mais fileiras"). Lista curta que cabe inteira: fica em zero.
+static float dinRolagemCentrada(int r, float off) {
+  float total = 0.0f, s, sMax;
+  int i;
+  if (r < 0 || r >= nFileiras) return off;
+  for (i = 0; i < nFileiras; i++)
+    total += NV_LEGACY_ROW_HEAD_H + alturaTotalFil(i) + (i ? fileiraGap() : 0.0f);
+  s = NV_DIN_TOPO_FIL + off + 0.5f * (NV_LEGACY_ROW_HEAD_H + alturaTotalFil(r))
+    - NV_DIN_CENTRO_FIL;
+  sMax = NV_DIN_TOPO_FIL + total - (NV_TELA_H - NV_DIN_FOLGA_BASE);
+  if (s > sMax) s = sMax;
+  if (s < 0.0f) s = 0.0f;
+  return s;
+}
 
 // QUANTO O CARD EM FOCO PASSA DA CAIXA EM REPOUSO, pela DIREITA (#103).
 //
@@ -2599,6 +2624,7 @@ void home_atualizar(float dt, Uint32 agora) {
     int r = foco.fileira;
     for (int i = 0; i < r && i < nFileiras; i++)
       alvoY += NV_LEGACY_ROW_HEAD_H + alturaTotalFil(i) + fileiraGap();
+    if (layoutHome() == HOME_LAYOUT_DINAMICA) alvoY = dinRolagemCentrada(r, alvoY);
   }
   scrollY = anim_mola2_reduzida(&velY, scrollY, alvoY, dt,
                                 NV_MOLA2_SCROLL, motionReduzido);
@@ -4110,6 +4136,13 @@ void home_desenhar(Uint32 agora) {
   for (int r = 0; r < (fileirasOcultas ? 0 : nFileiras); r++) {
     TipoFileira tipo = fileiras[r].tipo;
     float fade=anim_clamp((y-(topoFil-80))/80,0,1);
+    // Dinamica: as fileiras de cima do foco FICAM (rolagem centrada); so a que
+    // sai pela borda de cima apaga, e pela metade dela, nao pelo titulo — senao
+    // cartoes ainda na tela sumiriam junto com o titulo cortado.
+    if (layoutHome() == HOME_LAYOUT_DINAMICA) {
+      float meia = 0.5f * (NV_LEGACY_ROW_HEAD_H + alturaTotalFil(r));
+      fade = anim_clamp((y + meia) / meia, 0, 1);
+    }
     gfx_opacidade_grupo=fade*fade*(3-2*fade)*(1.0f-cinema);
     const float grupoFil = gfx_opacidade_grupo;
     { int n = fileiras[r].n;
