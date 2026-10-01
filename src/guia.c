@@ -178,7 +178,7 @@
 #define G_CHIP_PAD   20.0f
 // CATEGORIAS e o primeiro chip: a porta VISIVEL do painel de categorias,
 // que antes so abria segurando a seta (ninguem descobre gesto que nao se ve).
-enum { G_TOPO_BUSCAR = 0, G_TOPO_CATEGORIAS, G_TOPO_CARTOES, G_TOPO_LISTA, G_TOPO_ADDONS,
+enum { G_TOPO_BUSCAR = 0, G_TOPO_CATEGORIAS, G_TOPO_CARTOES, G_TOPO_LISTA, G_TOPO_ADDONS, G_TOPO_DIAG,
        G_TOPO_PREVIEW, G_TOPO_N };
 
 // --- painel de addons ---------------------------------------------------------
@@ -1969,6 +1969,7 @@ void guia_evento(const SDL_Event *e) {
       if (topoCol == G_TOPO_BUSCAR) buscaAbrir();
       else if (topoCol == G_TOPO_CATEGORIAS) catAbrir(2, 0);
       else if (topoCol == G_TOPO_ADDONS) painelAbrir();
+      else if (topoCol == G_TOPO_DIAG) pedLivetvDiag = 1;
       else if (topoCol == G_TOPO_PREVIEW) {
         previewLigado = !previewLigado;
         previewGravar();
@@ -3135,6 +3136,9 @@ static float desenharTopo(float a) {
   rot[G_TOPO_CARTOES] = i18n("Cartões");
   rot[G_TOPO_LISTA]   = i18n("Lista");
   rot[G_TOPO_ADDONS]  = i18n("Addons");
+  // DIAGNOSTICO na barra (dono, 01/10: o controle do Android nao tem a tecla
+  // VERDE). O verde continua como atalho onde existe.
+  rot[G_TOPO_DIAG]    = i18n("Diagnóstico");
   rot[G_TOPO_PREVIEW] = previewLigado ? i18n("Preview: sim") : i18n("Preview: não");
   ajustes_acento(&ar, &ag, &ab);
   for (i = 0; i < G_TOPO_N; i++)
@@ -4201,12 +4205,17 @@ void guia_desenhar(Uint32 agora) {
     TxtLinha t = txt_linha_corta(TXT_CAPTION, dica, 128, 130, 138, 255,
                                  G_AREA_W);
     txt_desenhar_alpha(t, G_AREA_X, NV_TELA_H - 48.0f, a);
-    // O VERDE do diagnostico da Live TV, na ponta direita quando cabe.
+    // O VERDE do diagnostico da Live TV, na ponta direita quando cabe — so na
+    // LG, que tem a tecla. No Android e no navegador o caminho e o botao
+    // Diagnostico da barra de cima.
+#if !defined(NV_ANDROID) && !defined(__EMSCRIPTEN__) && !defined(NV_TPK)
     if (!overlay) {
       TxtLinha v = txt_linha(TXT_CAPTION, i18n("Verde: diagnóstico da Live TV"), 128, 130, 138, 255);
       if ((float)t.w + 48.0f + (float)v.w <= G_AREA_W)
         txt_desenhar_alpha(v, G_AREA_X + G_AREA_W - (float)v.w, NV_TELA_H - 48.0f, a);
-    } }
+    }
+#endif
+    }
 
   desenharDica();
   desenharPainelCategorias(a);

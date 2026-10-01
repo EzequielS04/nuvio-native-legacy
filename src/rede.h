@@ -140,6 +140,10 @@ char *rede_postar_st(const char *url, int segundos, const char *const *cabecalho
 // O corpo de erro e justamente o que o chamador quer ler.
 char *rede_baixar_st(const char *url, int segundos, const char *const *cabecalhos,
                      int *status);
+// O mesmo, e o Retry-After da resposta em segundos (0 = nao veio, ou veio como
+// data). Para o 429 do painel Xtream (xtepg.c).
+char *rede_baixar_st_retry(const char *url, int segundos, const char *const *cabecalhos,
+                           int *status, int *retryAfter);
 
 // GET com medicao por requisicao. Nao partilha teto, estado ou acumuladores
 // com outros pedidos; a sonda de diagnostico pode chamar isto em serie ou em

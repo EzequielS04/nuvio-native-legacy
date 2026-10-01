@@ -301,6 +301,11 @@ char *rede_baixar_st(const char *url, int segundos, const char *const *cab,
   (void)segundos;
   return pedir("GET", url, cab, NULL, NULL, NULL, status);
 }
+char *rede_baixar_st_retry(const char *url, int segundos, const char *const *cab,
+                           int *status, int *retryAfter) {
+  if (retryAfter) *retryAfter = 0;   // o XHR do navegador: sem o cabecalho
+  return rede_baixar_st(url, segundos, cab, status);
+}
 
 // UM pedido de Range (o laco em pedacos e rede_baixar_trecho_st, no fim do
 // arquivo). XHR nao entrega corpo cortado: uma conexao que fecha antes do
@@ -790,9 +795,12 @@ static char *rede_baixar_interno(const char *url, int segundos, long *tam,
 static char *rede_baixar_interno2(const char *url, int segundos, long *tam,
                                   const char *const *cab, int *status,
                                   char *etag, unsigned tamEtag);
+static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
+                                  const char *const *cab, int *status,
+                                  char *etag, unsigned tamEtag, int *retry);
 
 // Onde o ETag da resposta e anotado, quando alguem o pediu.
-typedef struct { char *dst; unsigned tam; } CacaCab;
+typedef struct { char *dst; unsigned tam; int *retry; } CacaCab;
 
 // A libcurl entrega UMA linha de cabecalho por chamada, com o CRLF no fim. So
 // o ETag interessa; devolver menos bytes do que recebeu abortaria a
@@ -801,6 +809,12 @@ static size_t receberCab(void *dados, size_t tam, size_t qtd, void *u) {
   CacaCab *c = (CacaCab *)u;
   const char *s = (const char *)dados;
   size_t bytes = tam * qtd, n;
+  // RETRY-AFTER (o 429 do painel Xtream, xtepg.c): segundos, ou 0 se vier a
+  // forma de data — quem pediu usa o backoff dele.
+  if (c && c->retry && bytes > 12 && !strncasecmp(s, "retry-after:", 12)) {
+    int v = atoi(s + 12);
+    *c->retry = v > 0 ? v : 0;
+  }
   if (c && c->dst && c->tam > 1 && bytes > 5 && !strncasecmp(s, "etag:", 5)) {
     s += 5; bytes -= 5;
     while (bytes && (*s == ' ' || *s == '\t')) { s++; bytes--; }
@@ -1072,6 +1086,10 @@ char *rede_baixar_st(const char *url, int segundos, const char *const *cab,
                      int *status) {
   return rede_baixar_interno2(url, segundos, NULL, cab, status, NULL, 0);
 }
+char *rede_baixar_st_retry(const char *url, int segundos, const char *const *cab,
+                           int *status, int *retryAfter) {
+  return rede_baixar_interno3(url, segundos, NULL, cab, status, NULL, 0, retryAfter);
+}
 
 char *rede_baixar_etag(const char *url, int segundos, const char *const *cab,
                        int *status, char *etag, unsigned tamEtag) {
@@ -1100,6 +1118,11 @@ static int valeRepetir(int r, const Vigia *v, size_t bytes) {
 static char *rede_baixar_interno2(const char *url, int segundos, long *tam,
                                   const char *const *cab, int *status,
                                   char *etag, unsigned tamEtag) {
+  return rede_baixar_interno3(url, segundos, tam, cab, status, etag, tamEtag, NULL);
+}
+static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
+                                  const char *const *cab, int *status,
+                                  char *etag, unsigned tamEtag, int *retry) {
   Balde b = { NULL, 0 };
   CacaCab caca;
   Vigia vigia;
@@ -1108,6 +1131,8 @@ static char *rede_baixar_interno2(const char *url, int segundos, long *tam,
   unsigned long inicio, prazoMs, gasto = 0;
   caca.dst = (etag && tamEtag > 1) ? etag : NULL;
   caca.tam = tamEtag;
+  caca.retry = retry;
+  if (retry) *retry = 0;
   if (etag && tamEtag) etag[0] = 0;
   if (status) *status = 0;
   if (!url || !*url || !abrir()) return NULL;
@@ -1122,7 +1147,7 @@ static char *rede_baixar_interno2(const char *url, int segundos, long *tam,
     // curl_easy_reset limpa as opcoes entre pedidos, entao deixar o recebedor
     // instalado aqui nao respinga no pedido seguinte do mesmo fio — mas tambem
     // nao ha por que pagar uma chamada por cabecalho em todo download de imagem.
-    if (caca.dst) {
+    if (caca.dst || caca.retry) {
       curl_setopt(c, OPT_HEADERFUNCTION, receberCab);
       curl_setopt(c, OPT_HEADERDATA, &caca);
     }

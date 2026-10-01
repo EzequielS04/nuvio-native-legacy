@@ -215,6 +215,9 @@ static void urlenc(const char *s, char *dst, unsigned tam) {
 // que falam com ele: o do guia (lista) e o da grade curta (xtream_epg_curto).
 // Uma trava so para a rede do Xtream faz os dois esperarem a vez.
 static pthread_mutex_t travaRede = PTHREAD_MUTEX_INITIALIZER;
+// Retry-After do ultimo pedido ao painel (s; 0 = nao veio). xtepg.c le depois
+// de um 429.
+static int retryAfterUltimo;
 static char *chamarSt(const char *acao, int prazo, int *status) {
   char srv[256], u[300], s[300], url[1100];
   char *r;
@@ -256,11 +259,12 @@ static char *chamarSt(const char *acao, int prazo, int *status) {
     return r;
   }
 #endif
-  r = rede_baixar_st(url, prazo, NULL, &st);
+  r = rede_baixar_st_retry(url, prazo, NULL, &st, &retryAfterUltimo);
   pthread_mutex_unlock(&travaRede);
   if (status) *status = st;
   return r;
 }
+int xtream_ultimo_retry_after(void) { return retryAfterUltimo; }
 
 // O que veio no corpo, para o log e para a tela: JSON (comeca com { ou [),
 // pagina HTML (Cloudflare, painel de erro, portal cativo) ou nada.

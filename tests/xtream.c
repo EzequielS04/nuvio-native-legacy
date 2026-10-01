@@ -46,6 +46,10 @@ char *rede_baixar_st(const char *url, int segundos, const char *const *cab, int 
   if (status) *status = mudo ? 0 : statusHttp;
   return responder(url);
 }
+char *rede_baixar_st_retry(const char *url, int segundos, const char *const *cab, int *status, int *ra) {
+  if (ra) *ra = 0;
+  return rede_baixar_st(url, segundos, cab, status);
+}
 char *rede_postar_st(const char *url, int segundos, const char *const *cab,
                      const char *corpo, int *status) {
   (void)segundos;

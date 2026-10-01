@@ -110,6 +110,8 @@ void xtream_formato_funcionou(const char *url);
 // ou -1 em falha (status HTTP em *status, 0 = sem resposta).
 typedef struct { time_t ini, fim; char titulo[112]; } XtreamProg;
 int xtream_epg_curto(const char *id, XtreamProg *out, int cap, int *status);
+// Retry-After (s) da ultima resposta do painel; 0 = nao veio.
+int xtream_ultimo_retry_after(void);
 int xtream_epg_parse(const char *json, XtreamProg *out, int cap);
 // A grade XMLTV do proprio provedor (<servidor>/xmltv.php), que e onde o
 // epg_channel_id de cada canal existe (#158). Leva a credencial: nunca em log.

@@ -12,6 +12,17 @@
 #define XE_FILA   24      // pedidos em espera
 #define XE_VALE_S (30 * 60)
 #define XE_FALHA_S (10 * 60)
+// RITMO DOS PEDIDOS (dono, 01/10/2026, TCL: "50 pedido(s), 7 com programa, 37
+// sem, 6 falha(s) (ultimo HTTP 429)"). Um pedido por vez (o fio e um so), com
+// XE_GAP_MS entre eles; um 429 devolve o canal para o FIM da fila (os visiveis,
+// pedidos por ultimo, saem antes — a fila e uma pilha) e para o fio pelo
+// Retry-After do painel ou, sem ele, 2, 4, 8... ate XE_RECUO_MAX_S. O
+// espacamento dobra a cada 429 e volta ao normal depois de XE_CALMA pedidos
+// bons seguidos.
+#define XE_GAP_MS      400
+#define XE_GAP_MAX_MS  3000
+#define XE_RECUO_MAX_S 60
+#define XE_CALMA       10
 
 enum { XE_VAZIO, XE_PEDIDO, XE_OK, XE_FALHOU };
 
@@ -42,8 +53,10 @@ static unsigned geracao;              // xtepg_limpar invalida o que esta em voo
 
 // Resumo no log a cada tanto, sem nada da pessoa (so contagens e HTTP).
 static int logPedidos, logComGrade, logSem, logFalhas, logUltimoHttp;
+static int log429;   // so o fio escreve; o passo le para o resumo
 
 static void *fio(void *u) {
+  int gap = XE_GAP_MS, seguidos429 = 0, bons = 0;
   (void)u;
   for (;;) {
     char id[24];
@@ -69,13 +82,35 @@ static void *fio(void *u) {
     memset(&r, 0, sizeof r);
     snprintf(r.id, sizeof r.id, "%s", id);
     r.n = xtream_epg_curto(id, r.p, XE_PROG, &r.st);
+    if (r.st == 429) {
+      // O PAINEL PEDIU CALMA: o canal volta para o fundo da fila (nao vira
+      // falha), e o fio espera o que o painel disse ou o recuo exponencial.
+      int ra = xtream_ultimo_retry_after(), espera;
+      seguidos429++; bons = 0; log429++;
+      espera = ra > 0 ? (ra > 120 ? 120 : ra)
+                      : (1 << (seguidos429 < 6 ? seguidos429 : 6));
+      if (espera > XE_RECUO_MAX_S && ra <= 0) espera = XE_RECUO_MAX_S;
+      gap = gap * 2 > XE_GAP_MAX_MS ? XE_GAP_MAX_MS : gap * 2;
+      pthread_mutex_lock(&trava);
+      if (g == geracao && nFila < XE_FILA) {
+        memmove(fila[1], fila[0], sizeof fila[0] * (size_t)nFila);
+        snprintf(fila[0], sizeof fila[0], "%s", id);
+        nFila++;
+      }
+      pthread_mutex_unlock(&trava);
+      printf("[xtepg] HTTP 429 do painel: pausa de %d s%s, intervalo %d ms\n", espera,
+             ra > 0 ? " (Retry-After)" : "", gap);
+      fflush(stdout);
+      sleep((unsigned)espera);
+      continue;
+    }
+    seguidos429 = 0;
+    if (++bons >= XE_CALMA && gap > XE_GAP_MS) { gap = gap / 2 < XE_GAP_MS ? XE_GAP_MS : gap / 2; bons = 0; }
     pthread_mutex_lock(&trava);
     if (g == geracao && nProntos < (int)(sizeof prontos / sizeof prontos[0]))
       prontos[nProntos++] = r;
     pthread_mutex_unlock(&trava);
-    // 429 e o painel pedindo calma: espera antes do proximo. Senao, uma
-    // folga curta entre pedidos (o mesmo painel serve o video).
-    usleep(r.st == 429 ? 3000000 : 150000);
+    usleep((useconds_t)gap * 1000);
   }
   return NULL;
 }
@@ -138,7 +173,7 @@ void xtepg_passo(void) {
     if (agora != ultimaVarredura) {
       ultimaVarredura = agora;
       for (i = 0; i < XE_N; i++)
-        if (ent[i].estado == XE_PEDIDO && agora - ent[i].quando > 120) {
+        if (ent[i].estado == XE_PEDIDO && agora - ent[i].quando > 300) {
           ent[i].estado = XE_FALHOU; ent[i].quando = agora - XE_FALHA_S; }
     } }
   pthread_mutex_lock(&trava);
@@ -160,8 +195,8 @@ void xtepg_passo(void) {
     e->quando = agora;
   }
   if (n && (logPedidos == 1 || logPedidos % 25 == 0)) {
-    printf("[xtepg] grade curta: %d pedido(s), %d com programa, %d sem, %d falha(s)%s",
-           logPedidos, logComGrade, logSem, logFalhas, logFalhas ? "" : "\n");
+    printf("[xtepg] grade curta: %d pedido(s), %d com programa, %d sem, %d falha(s), %d 429 recolocado(s)%s",
+           logPedidos, logComGrade, logSem, logFalhas, log429, logFalhas ? "" : "\n");
     if (logFalhas) printf(" (ultimo HTTP %d)\n", logUltimoHttp);
     fflush(stdout);
   }
