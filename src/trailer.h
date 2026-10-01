@@ -36,6 +36,13 @@ int  trailer_suportado(void);
 // cheia com teclado proprio.
 void trailer_abrir(const char *fonte, GfxRect r, int som, int cheia);
 void trailer_rect(GfxRect r);
+// O recorte da FONTE (sx,sy,sw,sh) que o plano de video recebe para um
+// quadro vw x vh com o zoom `z` do ajuste, num destino dw x dh: o zoom e a
+// tarja de sempre e depois o "cover" na proporcao do destino, pelo centro.
+// Sem ele o plano esticava a fonte no destino (o banner 1920x528 do Padrao
+// achatava o trailer pela metade). Pura conta: os testes chamam direto.
+void trailer_recorte(int vw, int vh, float z, float dw, float dh,
+                     int *sx, int *sy, int *sw, int *sh);
 void trailer_fechar(void);
 int  trailer_aberto(void);
 int  trailer_cheia(void);
