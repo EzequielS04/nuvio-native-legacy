@@ -16,6 +16,8 @@
 //   -vidro       a mesma busca com a Interface de vidro ligada;
 //   -pessoa-tmdb "keanu": pessoas do /search/person do TMDB (resposta de
 //                tests/fixtures, sem rede) com "Conhecido por";
+//   -canal       "brasil": dois canais da Live TV de um guia carregado de um
+//                addon falso local (tests/spotlight_canais_servidor.py);
 //   -pessoa-tmdb-vivo  so com NUVIO_TMDB_DIR (pasta com tmdb.txt): o mesmo
 //                pedido no TMDB de verdade, com as fotos de perfil.
 // E confere, sem olho: digitar filtra, OK no titulo pede SPOT_TITULO com o
@@ -33,6 +35,8 @@
 #include "catalogo.h"
 #include "colecoes.h"
 #include "spotpessoa.h"
+#include "guia.h"
+#include "addons.h"
 #include "descoberta.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
@@ -332,6 +336,42 @@ int main(int argc, char **argv) {
     assert(p.tipo == SPOT_PESSOA && p.indice < 0 && p.tmdb == 6384);
     assert(p.tituloTmdb == 603 && !strcmp(p.tituloTipo, "movie"));
     spotpessoa_teste(NULL); }
+
+  // Canais: o guia carregado do addon falso (o .sh sobe o servidor).
+  if (getenv("SPOT_CANAIS_BASE") && *getenv("SPOT_CANAIS_BASE")) {
+    const char *b = getenv("SPOT_CANAIS_BASE");
+    static CatFileira fl[3];
+    char man[700];
+    int idx[4], k;
+    Uint32 t0;
+    snprintf(man, sizeof man, "%s/manifest.json", b);
+    addons_adicionar("Canais Teste", man);
+    for (k = 0; k < cat_n_fileiras() && k < 2; k++) fl[k] = *cat_fileira(k);
+    memset(&fl[2], 0, sizeof fl[2]);
+    snprintf(fl[2].chave, sizeof fl[2].chave, "shot.canais");
+    snprintf(fl[2].titulo, sizeof fl[2].titulo, "Canais");
+    snprintf(fl[2].tipo, sizeof fl[2].tipo, "tv");
+    snprintf(fl[2].base, sizeof fl[2].base, "%s", b);
+    snprintf(fl[2].catId, sizeof fl[2].catId, "canais");
+    cat_republicar_fileiras(fl, 3);
+    guia_carregar();
+    t0 = SDL_GetTicks();
+    while (SDL_GetTicks() - t0 < 15000 && guia_buscar_canais("brasil", idx, 4) < 2) {
+      guia_atualizar(0.016f, SDL_GetTicks());
+      SDL_Delay(16);
+    }
+    assert(guia_buscar_canais("brasil", idx, 4) == 2);
+    spot_abrir(0);
+    digitar("brasil");
+    { int alvo = achar(6 /* L_CANAL */, "ESPN Brasil");
+      assert(alvo >= 0);
+      paraLista();
+      for (k = 0; k < 30 && spot_linha_focada() != alvo; k++) tecla(SDLK_DOWN);
+      assert(spot_linha_focada() == alvo); }
+    captura(saida, "canal");
+    tecla(SDLK_RETURN);
+    assert(spot_pediu(&p) && p.tipo == SPOT_CANAL && !strcmp(p.id, "teste:espn"));
+  }
 
   // O TMDB de verdade, so quando pedido (NUVIO_TMDB_DIR com tmdb.txt).
   if (getenv("NUVIO_TMDB_DIR") && *getenv("NUVIO_TMDB_DIR")) {

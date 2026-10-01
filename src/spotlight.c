@@ -434,7 +434,10 @@ static void montarCanais(const char *alvo) {
     l->ref = idx[i];
     snprintf(l->id, sizeof l->id, "%s", id);
     snprintf(l->t1, sizeof l->t1, "%s", nome);
-    snprintf(l->t2, sizeof l->t2, "%s%s%s", i18n("Canal"), cat[0] ? "  \xc2\xb7  " : "", cat);
+    // A categoria passa por i18n como no guia (linhaNome): as secoes de
+    // categoriaPorNome sao chaves da tabela; genero do addon volta como veio.
+    snprintf(l->t2, sizeof l->t2, "%s%s%s", i18n("Canal"), cat[0] ? "  \xc2\xb7  " : "",
+             cat[0] ? i18n(cat) : "");
     snprintf(l->arte, sizeof l->arte, "%s", logo);
     snprintf(l->base, sizeof l->base, "%s", base);
     snprintf(l->chave, sizeof l->chave, "k|%.90s", id);
