@@ -54,6 +54,9 @@ int main(void) {
   assert(tipoDaEscolha(FIL_TIPO_DESTAQUE) == FILEIRA_DESTAQUE);
   assert(tipoDaEscolha(FIL_TIPO_DESTAQUE_QUADRADO) == FILEIRA_DESTAQUE_QUADRADO);
   assert(!strcmp(fil_tipo_rotulo(FIL_TIPO_DESTAQUE_QUADRADO), "Destaque 4:3"));
+  // Os 4:3 maiores sao a mesma forma; o tamanho vem do fator (fil_escala).
+  assert(tipoDaEscolha(FIL_TIPO_DESTAQUE_QUADRADO_M) == FILEIRA_DESTAQUE_QUADRADO);
+  assert(tipoDaEscolha(FIL_TIPO_DESTAQUE_QUADRADO_G) == FILEIRA_DESTAQUE_QUADRADO);
   assert(gapDe(FILEIRA_DESTAQUE) == NV_CARD_GAP_GRANDE);
   assert(gapDe(FILEIRA_DESTAQUE_QUADRADO) == NV_CARD_GAP_GRANDE);
   assert(gapDe(FILEIRA_NORMAL) == NV_CARD_GAP);

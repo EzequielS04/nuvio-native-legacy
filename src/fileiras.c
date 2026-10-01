@@ -87,7 +87,8 @@ static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 // pares en estao em idioma_tab.h.
 static const char *TIPO_ROT[FIL_TIPO_N] = {
   "Automático", "Cartaz em pé", "Destaque largo", "Coleção", "Serviço", "Ranking empilhado",
-  "Destaque 4:3", "Ranking numerado", "Faixa com título"
+  "Destaque 4:3", "Ranking numerado", "Faixa com título",
+  "Destaque 4:3 médio", "Destaque 4:3 grande"
 };
 static const char *TAM_ROT[FIL_TAM_N] = { "Compacto", "Padrão", "Grande" };
 // 0,85 e 1,2 e nao 0,5 e 2,0: o card do web mede 212x322 e o passo da fileira
@@ -103,6 +104,17 @@ const char *fil_tam_rotulo(int t) {
 }
 float fil_tam_escala(int t) {
   return (t >= 0 && t < FIL_TAM_N) ? TAM_ESC[t] : 1.0f;
+}
+// 1,25 e 1,5 sobre os 540x405 do 4:3: 675x506 e 810x608. O maior MEDIDO na
+// foto da Apple TV que o dono mandou (01/10): o card ocupa 42% da largura da
+// tela, 595 de 1404 px na foto, que em 1920 sao ~810 — dois cards e um pedaco
+// do terceiro por tela. O medio fica no meio do caminho.
+#define FATOR_4_3_M 1.25f
+#define FATOR_4_3_G 1.5f
+float fil_tipo_fator(int t) {
+  if (t == FIL_TIPO_DESTAQUE_QUADRADO_M) return FATOR_4_3_M;
+  if (t == FIL_TIPO_DESTAQUE_QUADRADO_G) return FATOR_4_3_G;
+  return 1.0f;
 }
 
 // ------------------------------------------------------------------ origem
@@ -188,18 +200,27 @@ static int formaFixa(const char *chave) {
 // antigo parava em sete linhas (CTX_MAX de ctxmenu.c), e por isso o Destaque
 // 4:3 — que a tela de Ajustes ja oferecia — e a faixa com titulo da Dinamica
 // (FIL_TIPO_LARGA) nao cabiam. Ordem: do menor ao maior, depois os rankings.
-static const int ESTILOS_CAT[] = { FIL_TIPO_AUTO, FIL_TIPO_CARTAZ, FIL_TIPO_SERVICO,
-                                   FIL_TIPO_LARGA, FIL_TIPO_COLECAO, FIL_TIPO_DESTAQUE,
-                                   FIL_TIPO_DESTAQUE_QUADRADO,
-                                   FIL_TIPO_RANKING, FIL_TIPO_TOP10 };
-static const char *ESTILOS_CAT_ROT[] = { "Automático", "Pôsteres", "Paisagem pequena",
-                                         "Faixa com título", "Paisagem média",
-                                         "Paisagem grande", "Destaque 4:3",
-                                         "Ranking numerado", "Ranking empilhado" };
+//
+// UMA LINHA POR FORMA desde 01/10: as tres paisagens (compacta, media e
+// grande) e os tres Destaques 4:3 sao a MESMA forma em tamanhos diferentes, e
+// cada uma ocupando uma linha fazia a lista crescer sem dizer isso. A lista
+// achatada (fil_estilos) sai desta, na mesma ordem.
+static const FilEstiloLinha LINHAS_CAT[] = {
+  { "Automático", 1, { FIL_TIPO_AUTO }, { "Automático" } },
+  { "Pôsteres",   1, { FIL_TIPO_CARTAZ }, { "Pôsteres" } },
+  { "Paisagem",   3, { FIL_TIPO_SERVICO, FIL_TIPO_COLECAO, FIL_TIPO_DESTAQUE },
+                     { "Paisagem pequena", "Paisagem média", "Paisagem grande" } },
+  { "Faixa com título", 1, { FIL_TIPO_LARGA }, { "Faixa com título" } },
+  { "Destaque 4:3", 3, { FIL_TIPO_DESTAQUE_QUADRADO, FIL_TIPO_DESTAQUE_QUADRADO_M,
+                         FIL_TIPO_DESTAQUE_QUADRADO_G },
+                       { "Destaque 4:3", "Destaque 4:3 médio", "Destaque 4:3 grande" } },
+  { "Ranking numerado",  1, { FIL_TIPO_RANKING }, { "Ranking numerado" } },
+  { "Ranking empilhado", 1, { FIL_TIPO_TOP10 }, { "Ranking empilhado" } },
+};
+#define N_LINHAS_CAT (int)(sizeof LINHAS_CAT / sizeof *LINHAS_CAT)
 static const int ESTILOS_COL[] = { FIL_TIPO_AUTO, FIL_TIPO_COLECAO,
                                    FIL_TIPO_DESTAQUE_QUADRADO, FIL_TIPO_CARTAZ };
 static const char *ESTILOS_COL_ROT[] = { "Automático", "Paisagem", "Quadrado", "Pôster" };
-#define N_ESTILOS_CAT (int)(sizeof ESTILOS_CAT / sizeof *ESTILOS_CAT)
 #define N_ESTILOS_COL (int)(sizeof ESTILOS_COL / sizeof *ESTILOS_COL)
 
 // A forma `t` vale para esta chave? Catalogo aceita todo FilTipo (a tela de
@@ -910,17 +931,34 @@ void fil_ciclar_tipo(int i) {
   pthread_mutex_unlock(&trava);
 }
 
-int fil_estilos(const char *chave, int *tipos, const char **rotulos, int max) {
-  int o = fil_origem_de(chave), n = 0, k, total;
-  const int *v; const char **r;
-  if (o == FIL_ORIGEM_CATALOGO) { v = ESTILOS_CAT; r = ESTILOS_CAT_ROT; total = N_ESTILOS_CAT; }
-  else if (o == FIL_ORIGEM_COLECAO) { v = ESTILOS_COL; r = ESTILOS_COL_ROT; total = N_ESTILOS_COL; }
-  else return 0;
-  for (k = 0; k < total && n < max; k++, n++) {
-    if (tipos) tipos[n] = v[k];
-    if (rotulos) rotulos[n] = r[k];
+int fil_estilo_linhas(const char *chave, FilEstiloLinha *l, int max) {
+  int o = fil_origem_de(chave), n = 0, k;
+  if (o == FIL_ORIGEM_CATALOGO) {
+    for (k = 0; k < N_LINHAS_CAT && n < max; k++, n++) if (l) l[n] = LINHAS_CAT[k];
+  } else if (o == FIL_ORIGEM_COLECAO) {
+    for (k = 0; k < N_ESTILOS_COL && n < max; k++, n++) if (l) {
+      memset(&l[n], 0, sizeof l[n]);
+      l[n].rotulo = l[n].nomes[0] = ESTILOS_COL_ROT[k];
+      l[n].n = 1; l[n].tipos[0] = ESTILOS_COL[k];
+    }
   }
   return n;
+}
+
+int fil_estilos(const char *chave, int *tipos, const char **rotulos, int max) {
+  FilEstiloLinha l[FIL_TIPO_N];
+  int nl = fil_estilo_linhas(chave, l, FIL_TIPO_N), n = 0, k, j;
+  for (k = 0; k < nl; k++)
+    for (j = 0; j < l[k].n && n < max; j++, n++) {
+      if (tipos) tipos[n] = l[k].tipos[j];
+      if (rotulos) rotulos[n] = l[k].nomes[j];
+    }
+  return n;
+}
+
+static const char *TAM_PALAVRA[FIL_ESTILO_TAMS] = { "Pequeno", "Médio", "Grande" };
+const char *fil_estilo_tam_palavra(int k) {
+  return TAM_PALAVRA[k >= 0 && k < FIL_ESTILO_TAMS ? k : 0];
 }
 
 const char *fil_estilo_rotulo(const char *chave, int t) {
@@ -950,6 +988,10 @@ const char *fil_estilo_ajuda(const char *chave, int t) {
     case FIL_TIPO_RANKING:  return "Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.";
     case FIL_TIPO_DESTAQUE_QUADRADO:
       return "Arte maior em 4:3: recorta a capa para preencher todo o card.";
+    case FIL_TIPO_DESTAQUE_QUADRADO_M:
+      return "Arte em 4:3 ainda maior: cabem dois cards e meio por tela.";
+    case FIL_TIPO_DESTAQUE_QUADRADO_G:
+      return "A maior arte em 4:3: dois cards e um pedaço do próximo por tela.";
     case FIL_TIPO_LARGA:    return "Arte deitada 16:9 com o nome do título dentro do card.";
     default:                return "O app escolhe a forma pelo nome do catálogo e pelo layout da Home.";
   }
@@ -1261,6 +1303,14 @@ int fil_tipo(const char *chave) {
   return v;
 }
 
+// O Tamanho da fileira vezes o fator da forma. Com teto no fator do maior 4:3:
+// "Grande" (1,2) sobre o 4:3 grande daria 972x729, e a fileira sozinha passaria
+// de dois tercos da tela — o maior ja e o do tamanho pedido.
+static float escalaCom(int tam, int t) {
+  float f = fil_tipo_fator(t), v = fil_tam_escala(tam) * f;
+  if (f > 1.0f && v > FATOR_4_3_G) v = FATOR_4_3_G;
+  return v;
+}
 float fil_escala(const char *chave) {
   int i;
   float v = 1.0f;
@@ -1268,9 +1318,20 @@ float fil_escala(const char *chave) {
   pthread_mutex_lock(&trava);
   garantir();
   i = achar(chave);
-  if (i >= 0) v = fil_tam_escala(linhas[i].tam);
+  if (i >= 0) v = escalaCom(linhas[i].tam, linhas[i].tipo);
   pthread_mutex_unlock(&trava);
   return v;
+}
+float fil_escala_tipo(const char *chave, int t) {
+  int i, tam = FIL_TAM_PADRAO;
+  if (chave && chave[0]) {
+    pthread_mutex_lock(&trava);
+    garantir();
+    i = achar(chave);
+    if (i >= 0) tam = linhas[i].tam;
+    pthread_mutex_unlock(&trava);
+  }
+  return escalaCom(tam, t);
 }
 
 unsigned fil_revisao(void) {

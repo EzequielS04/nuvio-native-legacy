@@ -264,6 +264,13 @@ int main(int argc, char **argv) {
   tecla(SDLK_RIGHT);
   snprintf(nome, sizeof nome, "%s-fileiras-catalogo.bmp", saida);
   captura(nome, w);
+  // NV_FIL_CICLOS=<n>: n OKs na coluna do card (cicla a forma), e a captura.
+  if (getenv("NV_FIL_CICLOS")) {
+    if (getenv("NV_FIL_DESCE")) for (i = 0; i < atoi(getenv("NV_FIL_DESCE")); i++) tecla(SDLK_DOWN);
+    for (i = 0; i < atoi(getenv("NV_FIL_CICLOS")); i++) tecla(SDLK_RETURN);
+    snprintf(nome, sizeof nome, "%s-fileiras-catalogo-ciclo.bmp", saida);
+    captura(nome, w);
+  }
 
   // A FILA: desce ate depois do separador.
   for (i = 0; i < 7; i++) tecla(SDLK_DOWN);

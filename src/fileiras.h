@@ -88,6 +88,12 @@ typedef enum {
   // Automatico. Desenhada em qualquer layout (home.c nao a prende a Dinamica);
   // so nao tinha numero para ser escolhida. No fim pelo mesmo motivo.
   FIL_TIPO_LARGA,             // FILEIRA_LARGA — 16:9 com o nome dentro do cartao
+  // Os dois tamanhos MAIORES do Destaque 4:3 (dono, 01/10: "o maior do tamanho
+  // dos cards da Apple TV"). A mesma forma (FILEIRA_DESTAQUE_QUADRADO), so mais
+  // larga e mais alta: o fator mora em fil_tipo_fator. No fim pelo mesmo
+  // motivo dos outros — o 6 gravado continua sendo o 4:3 de sempre.
+  FIL_TIPO_DESTAQUE_QUADRADO_M, // 4:3 x1,25 — dois cards e meio por tela
+  FIL_TIPO_DESTAQUE_QUADRADO_G, // 4:3 x1,5  — dois cards e um pedaco
   FIL_TIPO_N
 } FilTipo;
 
@@ -101,6 +107,9 @@ typedef enum {
 const char *fil_tipo_rotulo(int t);
 const char *fil_tam_rotulo(int t);
 float       fil_tam_escala(int t);
+// Fator de TAMANHO que a propria forma carrega: 1 em todas, menos nos dois
+// Destaques 4:3 maiores. Multiplica o fator de Tamanho da fileira (fil_escala).
+float       fil_tipo_fator(int t);
 
 // DE ONDE A FILEIRA VEIO. Sem isto a tela de Ajustes lista quinze nomes soltos
 // e nao ha como saber que "A24" e um grupo de colecoes, que "Popular" e um
@@ -286,11 +295,29 @@ void fil_ciclar_tipo(int i);
 //
 // As opcoes do menu para esta chave, na ordem de exibicao, com o rotulo em pt
 // (passa por i18n no desenho). Catalogo: TODAS as formas de FilTipo —
-// Automatico, Posteres, Paisagem pequena, Faixa com titulo, Paisagem media e
-// grande, Destaque 4:3, Ranking numerado e empilhado. Colecao:
+// Automatico, Posteres, Paisagem pequena, media e grande, Faixa com titulo,
+// Destaque 4:3 (e o medio e o grande), Ranking numerado e empilhado. Colecao:
 // Automatico (a forma que a conta mandou), Paisagem, Quadrado, Poster
 // (FIL_TIPO_COLECAO/DESTAQUE_QUADRADO/CARTAZ). Fileira do app: 0 opcoes.
 int  fil_estilos(const char *chave, int *tipos, const char **rotulos, int max);
+
+// AS LINHAS DO MODAL DE ESTILO. Formas que so diferem em TAMANHO dividem uma
+// linha so (dono, 01/10: "Paisagem pequena/media/grande vira UM item"): a linha
+// diz o nome da forma e os tamanhos dela, do menor ao maior, e o modal escolhe
+// o tamanho com esquerda/direita. `nomes` e o nome inteiro de cada tamanho
+// ("Paisagem grande"), em pt — e o titulo da previa. fil_estilos e esta mesma
+// lista achatada, na mesma ordem.
+#define FIL_ESTILO_TAMS 3
+typedef struct {
+  const char *rotulo;
+  int n;
+  int tipos[FIL_ESTILO_TAMS];
+  const char *nomes[FIL_ESTILO_TAMS];
+} FilEstiloLinha;
+int  fil_estilo_linhas(const char *chave, FilEstiloLinha *linhas, int max);
+// Palavra do tamanho k (0 pequeno, 1 medio, 2 grande) em pt. O modal desenha
+// so a PRIMEIRA LETRA da traducao (P M G, S M L, K M G...).
+const char *fil_estilo_tam_palavra(int k);
 // Rotulo do tipo `t` PARA ESTA CHAVE: numa colecao o numero quer dizer outra
 // palavra (FIL_TIPO_CARTAZ e "Pôster", nao "Cartaz em pé").
 const char *fil_estilo_rotulo(const char *chave, int t);
@@ -328,6 +355,10 @@ void fil_ordenar_por_addon(void);
 int   fil_oculta(const char *chave);
 int   fil_tipo(const char *chave);    // FIL_TIPO_AUTO quando nao foi escolhido
 float fil_escala(const char *chave);  // 1.0 quando nao foi escolhido
+// O fator que a fileira teria COM a forma `t`: o Tamanho dela vezes o fator da
+// forma (fil_tipo_fator). E o que a previa do modal precisa — a forma em foco
+// ainda nao foi gravada. fil_escala(chave) == fil_escala_tipo(chave, tipo dela).
+float fil_escala_tipo(const char *chave, int t);
 
 // 1 quando existe ordem LOCAL gravada. Sem ela, fil_unir e a identidade e a
 // ordem da conta (catordem.c) continua valendo sozinha.

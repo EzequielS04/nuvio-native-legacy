@@ -5575,6 +5575,9 @@ static const struct { float w, h; } AJ_FIL_FORMA[FIL_TIPO_N] = {
   { NV_DESTAQUE_QUADRADO_W, NV_DESTAQUE_QUADRADO_H }, // DESTAQUE 4:3
   { 212.0f, 322.0f },   // RANKING  — cartaz NV_CARD_W x NV_CARD_H, numeral no vao
   { NV_DIN_LARGA_W, NV_DIN_LARGA_H }, // LARGA — faixa 16:9 com o nome dentro
+  // Os dois 4:3 maiores: o fator de fil_tipo_fator (fileiras.c) sobre o 4:3.
+  { NV_DESTAQUE_QUADRADO_W * 1.25f, NV_DESTAQUE_QUADRADO_H * 1.25f }, // 4:3 MEDIO
+  { NV_DESTAQUE_QUADRADO_W * 1.5f,  NV_DESTAQUE_QUADRADO_H * 1.5f },  // 4:3 GRANDE
 };
 
 // Uma frase por forma. Diz o que a forma E e para que serve, nao como se chama.
@@ -5588,6 +5591,10 @@ static const char *aj_fil_forma_ajuda(int t) {
     case FIL_TIPO_RANKING:  return i18n("Número grande ao lado de cada cartaz, como o Top 10 da Dinâmica. Mostra todos os itens da fileira.");
     case FIL_TIPO_DESTAQUE_QUADRADO:
       return i18n("Arte maior em 4:3: recorta a capa para preencher todo o card.");
+    case FIL_TIPO_DESTAQUE_QUADRADO_M:
+      return i18n("Arte em 4:3 ainda maior: cabem dois cards e meio por tela.");
+    case FIL_TIPO_DESTAQUE_QUADRADO_G:
+      return i18n("A maior arte em 4:3: dois cards e um pedaço do próximo por tela.");
     case FIL_TIPO_LARGA:    return i18n("Arte deitada 16:9 com o nome do título dentro do card.");
     default:                return i18n("O app escolhe pela fileira: retomada e coleções já têm forma própria.");
   }
@@ -5964,10 +5971,16 @@ static void desenhaFileiras(void) {
     if (filCampo == 2) {
       float x = px;
       for (t = 0; t < FIL_TIPO_N; t++) {
+        // Os 4:3 medio e grande NAO ganham silhueta propria: sao o 4:3 em outro
+        // tamanho, e duas silhuetas a mais (118 e 142 px) passavam da borda
+        // direita do cartao. O 4:3 acende por eles e leva o nome do escolhido.
+        int quad = t == FIL_TIPO_DESTAQUE_QUADRADO &&
+                   (tipo == FIL_TIPO_DESTAQUE_QUADRADO_M || tipo == FIL_TIPO_DESTAQUE_QUADRADO_G);
         float w = AJ_FIL_FORMA[t].w * esc;
-        desenhaForma(x, base, t, esc, t == tipo, ar, ag, ab);
-        if (t == tipo) {
-          TxtLinha rot = txt_linha(TXT_MINI, fil_tipo_rotulo(t), 236, 238, 243, 255);
+        if (t == FIL_TIPO_DESTAQUE_QUADRADO_M || t == FIL_TIPO_DESTAQUE_QUADRADO_G) continue;
+        desenhaForma(x, base, t, esc, t == tipo || quad, ar, ag, ab);
+        if (t == tipo || quad) {
+          TxtLinha rot = txt_linha(TXT_MINI, fil_tipo_rotulo(tipo), 236, 238, 243, 255);
           txt_desenhar(rot, x + (w - rot.w) * 0.5f,
                        base - AJ_FIL_FORMA[t].h * esc - rot.h - 6.0f);
         }
@@ -5981,8 +5994,13 @@ static void desenhaFileiras(void) {
       float x = px;
       int formaBase = (aceita && tipo != FIL_TIPO_AUTO) ? tipo : FIL_TIPO_CARTAZ;
       for (t = 0; t < FIL_TAM_N; t++) {
-        float e = esc * fil_tam_escala(t);
-        float w = AJ_FIL_FORMA[formaBase].w * e;
+        // Nos 4:3 maiores o produto Tamanho x forma tem o teto do 4:3 grande
+        // (escalaCom, fileiras.c): o desenho mostra o que a Home vai medir.
+        float f = fil_tipo_fator(formaBase), v = fil_tam_escala(t) * f;
+        float e, w, teto = fil_tipo_fator(FIL_TIPO_DESTAQUE_QUADRADO_G);
+        if (f > 1.0f && v > teto) v = teto;
+        e = esc * v / f;
+        w = AJ_FIL_FORMA[formaBase].w * e;
         desenhaForma(x, base, formaBase, e, t == tam, ar, ag, ab);
         if (t == tam) {
           char rot[48];
