@@ -127,10 +127,11 @@ int   arte_reserva_registrar(const char *url, const char *imdb, int poster) {
 // --- O "TRAKT" FALSO ---------------------------------------------------------
 // /sync/playback: tres filmes pausados. O teste mexe no paused_at de tt2.
 static long long pausadoTt2 = 900000;
+static int nFalsos = 3;   // o 6. teste (#205) acrescenta tt4 no meio de uma montagem
 int trakt_continuar(CatItem *s, int m) {
-  static const char *ids[3] = { "tt1", "tt2", "tt3" };
+  static const char *ids[4] = { "tt1", "tt2", "tt3", "tt4" };
   int i;
-  for (i = 0; i < 3 && i < m; i++) {
+  for (i = 0; i < nFalsos && i < m; i++) {
     memset(&s[i], 0, sizeof s[i]);
     snprintf(s[i].imdb, sizeof s[i].imdb, "%s", ids[i]);
     snprintf(s[i].titulo, sizeof s[i].titulo, "Filme %s", ids[i]);
@@ -276,6 +277,41 @@ int main(void) {
   assert(naContinuar("tt3"));
   conferirLista();
   puts("ok  registro local mais novo que a remocao traz de volta");
+
+  // 6. A REFACAO DO MEIO DA MONTAGEM FICA (#205). montar() calcula a fileira
+  //    no comeco e publica segundos depois; no meio, o sync trouxe tt4 e a
+  //    refacao o publicou. A publicacao de montar() nao pode devolver a
+  //    lista velha (na Q80A: 5 "a seguir" viravam 1 ate a refacao seguinte).
+  { CatItem lote[CONT_MAX + 2]; CatFileira fs[2]; int nc;
+    agora = 1003000;
+    nc = montarContinuar(lote, CONT_MAX);   // como montar(): o lote velho
+    cwGerMontar = cwGer;
+    assert(nc == 3);
+    memset(&lote[nc], 0, sizeof lote[0] * 2);
+    snprintf(lote[nc].imdb, sizeof lote[nc].imdb, "tt90");
+    snprintf(lote[nc + 1].imdb, sizeof lote[nc + 1].imdb, "tt91");
+    memset(fs, 0, sizeof fs);
+    snprintf(fs[0].chave, sizeof fs[0].chave, "continue_watching"); fs[0].n = nc;
+    snprintf(fs[1].chave, sizeof fs[1].chave, "lista"); fs[1].ini = nc; fs[1].n = 2;
+    nFalsos = 4;
+    fioContinuar(NULL);                     // a refacao do meio
+    assert(nContinuar() == 4 && naContinuar("tt4"));
+    publicarMontagem(lote, nc + 2, fs, 2);  // o fim de montar(), lote velho
+    assert(nContinuar() == 4 && naContinuar("tt4"));
+    conferirLista();
+    // E SEM REFACAO NO MEIO a lista de montar() vale: o ciclo novo calculou
+    // depois da ultima refacao, entao ele e o mais novo.
+    nFalsos = 3;
+    nc = montarContinuar(lote, CONT_MAX);
+    cwGerMontar = cwGer;
+    memset(&lote[nc], 0, sizeof lote[0] * 2);
+    snprintf(lote[nc].imdb, sizeof lote[nc].imdb, "tt90");
+    snprintf(lote[nc + 1].imdb, sizeof lote[nc + 1].imdb, "tt91");
+    fs[0].n = nc; fs[1].ini = nc;
+    publicarMontagem(lote, nc + 2, fs, 2);
+    assert(nContinuar() == 3 && !naContinuar("tt4"));
+    conferirLista(); }
+  puts("ok  refacao feita no meio da montagem nao e coberta pela publicacao do fim");
 
   puts("cwremover: tudo ok");
   return 0;
