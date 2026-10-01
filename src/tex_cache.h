@@ -12,6 +12,14 @@
 #define NV_TEX_CACHE_H
 #include "gl_compat.h"
 
+// TETO DA URL DE ARTE (#200). 512 cortava calado a URL de cartaz que o
+// AIOMetadata monta para o PostersPlus: o modelo da pessoa tem ~690 bytes e,
+// com as chaves do TMDB e do MDBList preenchidas, ~720 — o `logo_language=ru`
+// estava no byte ~517 e caia fora, e o servico, sem idioma, desenhava o cartaz
+// em ingles (MEDIDO: a mesma URL sem o parametro devolve o cartaz ingles). O
+// CatItem.poster usa o mesmo teto (catalogo.h).
+#define NV_TEX_URL_MAX 1024
+
 int  tex_iniciar(int max_itens);
 
 // Pasta onde as imagens vindas de URL sao guardadas em disco. Sem ela,

@@ -35,7 +35,10 @@ typedef struct {
   char backdropCatalogo[512]; // background vindo do addon/Cinemeta
   char backdropTmdb[512];     // backdrop vindo do TMDB
   char backdropTrakt[512];    // fanart vindo do Trakt
-  char poster[512];
+  // 1024 e nao 512 (#200): a URL de cartaz que o AIOMetadata monta para o
+  // PostersPlus passa de 700 bytes e o corte calado levava o idioma embora.
+  // Mesmo teto do cache de textura (NV_TEX_URL_MAX, tex_cache.h).
+  char poster[1024];
   char logo[512];      // vazio quando o titulo nao tem logo
   char titulo[160];
   char genero[160];    // "Programa de TV · Drama · Misterio"
