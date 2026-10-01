@@ -266,6 +266,9 @@ typedef enum {
   AJ_LIVETV_MODO,
   // Proxy de TS da Live TV (proxyts.c, #158). No fim pelo mesmo motivo.
   AJ_LIVETV_PROXY,
+  // Ilha do relogio (ilha.h): mostrar a pilula do relogio em repouso e em que
+  // canto. LOCAIS. No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_RELOGIO, AJ_RELOGIO_POS,
   AJ_N
 } OpcaoId;
 
@@ -274,6 +277,10 @@ static const char *V_LIGA[]      = { "Ligado", "Desligado" };
 static const char *V_LIVETV_RES[] = { "Automática", "4K", "1080p", "720p", "SD" };
 static const char *V_LIVETV_FMT[] = { "Automático", "HLS (.m3u8)", "TS (.ts)" };
 static const char *V_LIVETV_ESPERA[] = { "Automática", "25 s", "45 s" };
+// Canto do relogio. 0 = Automatica (o de sempre: esquerda, e direita no layout
+// Dinamica, onde a pilula da barra lateral ocupa o canto esquerdo). 1 e 2 sao
+// escolha explicita; Esquerda no layout Dinamica fica AO LADO da pilula.
+static const char *V_RELOGIO_POS[] = { "Automática", "Esquerda", "Direita" };
 static const char *V_LIVETV_MODO[] = { "A (padrão)", "B (sem seleção de faixa)", "C (payload de live)" };
 // Troca do destaque: 0 = a arte nova entra colada na velha, de lado; 1 = o
 // esvanecimento de antes.
@@ -838,6 +845,8 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Diagnóstico da Live TV"),
   ESC("Modo do player da Live TV",       V_LIVETV_MODO, 3),   // local: liveTvModoLocal
   ESC("Proxy de TS da Live TV",          V_LIGA, 2),          // local: liveTvProxyLocal
+  ESC("Relógio na tela",                 V_LIGA, 2),          // local: relogioTelaLocal
+  ESC("Posição do relógio",              V_RELOGIO_POS, 3),   // local: relogioPosLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -993,6 +1002,8 @@ static const char *CHAVE[] = {
   "-liveTvDiag",
   "liveTvModoLocal",
   "liveTvProxyLocal",
+  "relogioTelaLocal",
+  "relogioPosLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1074,7 +1085,7 @@ static const Item TELA[] = {
   // mesma decisao (de onde sai o destaque).
   SEC("Aparência", "Cor de destaque, idioma e animações", "aj_palette"),
     OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_VIDRO_CONTORNO), OPC(AJ_IDIOMA), OPC(AJ_ANIM),
-    OPC(AJ_FONTE_UI),
+    OPC(AJ_FONTE_UI), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS),
 
   SEC("Layout", "Estrutura da página inicial e estilos de pôster", "aj_layout-dashboard"),
     GRP("Layout da Home", "Escolha a estrutura e a fonte do destaque.", "aj_panel-top"),
@@ -1454,6 +1465,8 @@ static int valor[] = {
   0,                /* diagnostico da Live TV: acao */
   0,                /* modo do player da Live TV: A, o load de sempre */
   0,                /* proxy de TS da Live TV: LIGADO (V_LIGA: 0 = Ligado) */
+  0,                /* relogio na tela: LIGADO (V_LIGA: 0 = Ligado), o de sempre */
+  0,                /* posicao do relogio: Automatica, a de sempre */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1625,6 +1638,8 @@ int ajustes_vidro(void) { return lig(AJ_VIDRO) && !SEGURO; }
 int ajustes_vidro_contorno(void) { return lig(AJ_VIDRO_CONTORNO); }
 int ajustes_addons_do_principal(void) { return lig(AJ_ADDONS_PRINCIPAL); }
 #endif
+int ajustes_relogio_ligado(void) { return lig(AJ_RELOGIO); }
+int ajustes_relogio_pos(void) { return valor[AJ_RELOGIO_POS]; }
 static void riscoNotar(int op, int antes);
 void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_VIDRO, a); }
 int ajustes_p2p_ligado(void) { return lig(AJ_P2P_LIGADO) && !SEGURO; }
@@ -3066,6 +3081,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_DET_SO_CINEMETA: /* o web nao tem esta escolha */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
+    case AJ_RELOGIO: case AJ_RELOGIO_POS: /* o web nao tem a ilha */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
     // Linha do titulo: o web nao tem, e nenhuma conta pode desliga-las aqui.
     case AJ_NT_IMDB: case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
@@ -3940,6 +3956,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_ADDONS_PRINCIPAL: return "Os outros perfis desta conta usam os addons do perfil principal. Desligado, cada perfil usa os seus — a não ser que a conta já diga para usar os do principal.";
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
+    case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
+    case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
     case AJ_RESOLUCAO: return "4K desenha a interface em 4K nas TVs que permitem; muitas ignoram o pedido e continuam em 1080p. 720p desenha em 1280x720 e amplia para a tela: mais leve em TV fraca, com texto um pouco mais suave. Reinicie o app depois de mudar. O vídeo não muda: segue a qualidade da fonte.";
     case AJ_PERFIL_ATIVO: return "Perfil em uso nesta TV. Trocar de perfil é feito na tela de perfis, ao abrir o app.";
@@ -6665,6 +6683,7 @@ static AjPreview familiaPreviaOpcao(int op) {
       return AJPV_CARTAZ;
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
+    case AJ_RELOGIO: case AJ_RELOGIO_POS:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL:
@@ -7147,6 +7166,16 @@ static float previaInterfaceOpcao(int op, float x, float y, float w) {
            235, 237, 241, 255);
     txt_desenhar(sample, x + 24.0f, y + 30.0f);
     previaRealce(x + 14.0f, y + 20.0f, w - 28.0f, 56.0f, ar, ag, ab);
+  } else if (op == AJ_RELOGIO || op == AJ_RELOGIO_POS) {
+    // Tela em miniatura com a pilula no canto escolhido (ou sem ela).
+    GfxRect tela = {x + 28.0f, y + 16.0f, w - 56.0f, 100.0f};
+    int pos = valor[AJ_RELOGIO_POS], dir = pos == 2 || (pos == 0 && ajustes_home_layout() == HOME_LAYOUT_DINAMICA);
+    float pw = 58.0f;
+    gfx_cor(tela, 6.0f/100.0f, 0.06f, 0.07f, 0.09f, 1.0f);
+    if (lig(AJ_RELOGIO))
+      gfx_cor((GfxRect){ dir ? tela.x + tela.w - pw - 10.0f : tela.x + 10.0f, tela.y + 10.0f, pw, 18.0f },
+              0.5f, ar, ag, ab, 0.9f);
+    previaRealce(tela.x, tela.y, tela.w, tela.h, ar, ag, ab);
   } else if (op == AJ_ANIM) {
     int reduzida = valor[op] != 0;
     for (int i = 0; i < 3; i++) {

@@ -267,6 +267,10 @@ int   ajustes_descobrir_na_busca(void); // searchDiscoverEnabled (derivado)
 int   ajustes_4k(void);
 // 1 = desenhar a interface em 1280x720 e ampliar para a janela (gpun_forcar_720).
 int   ajustes_720p(void);
+// Ilha do relogio (ilha.h). _ligado: 0 = sem pilula em repouso (os avisos
+// continuam saindo dela). _pos: 0 automatica, 1 esquerda, 2 direita.
+int   ajustes_relogio_ligado(void);
+int   ajustes_relogio_pos(void);
 // MODO SEGURO (seguro.h). Chamar no arranque, DEPOIS de ajustes_dir e de
 // avisos_iniciar: `caiu` = a sessao anterior nao se despediu. Desfaz o ajuste
 // arriscado que estava em prova, liga o perfil seguro se as quedas se repetem e

@@ -3276,8 +3276,8 @@ void app_desenhar(Uint32 agora) {
   if (guia_atualizando_lista()) ilha_atividade(i18n("Atualizando a lista de canais…"), -1.0f);
   if (!registro_aberto() && !player_aberto() && sessao_logada() &&
       tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL) {
-    ilha_relogio_visivel(relogioCabe());
-    if (tela == TELA_GUIA) ilha_ancorar(NV_TELA_W - NV_ILHA_MARGEM_D, NV_ILHA_Y, 1);
+    ilha_relogio_visivel(relogioCabe() && ajustes_relogio_ligado());
+    ilha_posicionar(tela == TELA_GUIA);
     ilha_desenhar(agora);
   }
   // O cartao do lembrete fica acima do player e da tela: e um aviso com hora.

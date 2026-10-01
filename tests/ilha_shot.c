@@ -54,8 +54,9 @@ static void quadros(int n, const char *nome, int direita) {
     fundo = tex_obter("deploy/app/art/00.jpg");
     if (fundo) gfx_rect((GfxRect){ 0, 0, 1920, 1080 }, fundo, GFX_SNAP, 0, 0, 0, 0, 1, 1, 1, 1);
     avisos_desenhar(agora);
-    ilha_relogio_visivel(1);
-    if (direita) ilha_ancorar(1920 - 64, 36, 1);
+    ilha_relogio_visivel(ajustes_relogio_ligado());
+    if (direita == 2) ilha_posicionar(0);   // escolha de Ajustes (relogio na tela / posicao)
+    else if (direita) ilha_ancorar(1920 - 64, 36, 1);
     ilha_desenhar(agora);
     if (i == n - 1 && nome) captura(nome);
     SDL_GL_SwapWindow(win);
@@ -109,6 +110,25 @@ int main(int argc, char **argv) {
   quadros(60, NULL, 0);
   ilha_avisar("ok", ILHA_OK, NULL, "Atualizado. Feche e abra o app para usar.", 4000, 0);
   quadros(60, "6-direita", 1);
+
+  // AJUSTES > Aparencia: Relogio na tela / Posicao do relogio. Rele o arquivo
+  // (como o main) com cada combinacao; V_LIGA: 0 = Ligado, 1 = Desligado.
+  ilha_retirar("ok");
+  { const struct { int lig, pos; const char *nome; } c[] = {
+      { 0, 1, "7-pos-esquerda" }, { 0, 2, "8-pos-direita" }, { 1, 1, "9-desligado-repouso" } };
+    int i;
+    for (i = 0; i < 3; i++) {
+      f = fopen(ajustes, "w"); assert(f);
+      fprintf(f, "idioma 0\nselected_theme 2\nrelogioTelaLocal %d\nrelogioPosLocal %d\n", c[i].lig, c[i].pos);
+      fclose(f);
+      ajustes_dir(dir);
+      assert(ajustes_relogio_ligado() == !c[i].lig && ajustes_relogio_pos() == c[i].pos);
+      quadros(80, c[i].nome, 2);
+    }
+    // Desligado, o AVISO ainda sai da pilula e some depois.
+    ilha_avisar("ok2", ILHA_OK, NULL, "Atualizado. Feche e abra o app para usar.", 1500, 0);
+    quadros(60, "10-desligado-com-aviso", 2);
+    quadros(120, "11-desligado-aviso-passou", 2); }
 
   tex_encerrar(); txt_encerrar(); gfx_encerrar();
   SDL_GL_DeleteContext(gl); SDL_DestroyWindow(win); SDL_Quit();

@@ -57,6 +57,7 @@ int main(void) {
   valor[AJ_RESOLUCAO] = 1; assert(ajustes_4k() && !ajustes_720p());    // 4K: valor 1, como sempre
   valor[AJ_RESOLUCAO] = 2; assert(!ajustes_4k() && ajustes_720p());    // 720p: valor novo no fim
   valor[AJ_RESOLUCAO] = 0;
+  assert(ajustes_relogio_ligado() && ajustes_relogio_pos() == 0);   // relogio: ligado, automatico
   assert(valor[AJ_TEMA] == 0);
   // O "+" salva no Trakt. Este assert passava POR ACASO de 22/09 ate o #149:
   // o vetor estava sete casas curto (as linhas do Stalker e do Xtream), e o 1

@@ -52,6 +52,10 @@ void ilha_relogio_visivel(int visivel);
 // para a esquerda. Vale para um quadro.
 void ilha_ancorar(float x, float y, int daDireita);
 
+// Aplica a escolha de Ajustes (Posicao do relogio) ao quadro: chamar antes de
+// ilha_desenhar. `guia` = 1 na tela do Guia (titulo a esquerda: vai a direita).
+void ilha_posicionar(int guia);
+
 void ilha_desenhar(Uint32 agora);
 // 1 quando ha aviso ou atividade aberta (o relogio sozinho nao conta).
 int  ilha_ocupada(void);

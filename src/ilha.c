@@ -10,6 +10,7 @@
 #include "anim.h"
 #include "gfx.h"
 #include "layout.h"
+#include "menu.h"
 #include "salvosintro.h"
 #include "text.h"
 #include "idioma.h"
@@ -118,6 +119,21 @@ void ilha_relogio_visivel(int visivel) { relogioQuer = visivel; }
 
 void ilha_ancorar(float x, float y, int daDireita) {
   ancDef = 1; ancX = x; ancY = y; ancDir = daDireita;
+}
+
+// Canto escolhido em Ajustes > Aparencia > Posicao do relogio. O Guia tem o
+// titulo a esquerda e fica sempre a direita. Fora dele: 2 = Direita; 1 =
+// Esquerda, que no layout Dinamica vai AO LADO da pilula da barra (o canto
+// dela); 0 = Automatica, o padrao de sempre (ver ilha_desenhar).
+void ilha_posicionar(int guia) {
+  int pos = ajustes_relogio_pos();
+  if (guia || pos == 2) ilha_ancorar(NV_TELA_W - NV_ILHA_MARGEM_D, NV_ILHA_Y, 1);
+  else if (pos == 1 && ajustes_home_layout() == HOME_LAYOUT_DINAMICA) {
+    float px, py, pw, ph;
+    if (menu_pilula_rect(&px, &py, &pw, &ph))
+      ilha_ancorar(px + pw + NV_MENU_PILULA_VAO, py + (ph - NV_ILHA_H) * 0.5f, 0);
+    else ilha_ancorar(ajustes_conteudo_x(), NV_ILHA_Y, 0);   // sem pilula na tela: canto livre
+  } else if (pos == 1) ilha_ancorar(ajustes_conteudo_x(), NV_ILHA_Y, 0);
 }
 
 static int atividadeViva(Uint32 agora) {
