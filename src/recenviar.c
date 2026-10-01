@@ -17,7 +17,7 @@
 #include "ajustes.h"
 #include "idioma.h"
 #include "tex_cache.h"
-#include "artehero.h"
+#include "logotitulo.h"
 #include "botoes.h"
 #include <stdio.h>
 #include <string.h>
@@ -347,8 +347,9 @@ static const char *urlLogoTitulo(void) {
   static char url[512];
   const char *u;
   size_t n;
-  if (!temItem || !item.logo[0] || pagina == RE_PAG_AMIGOS) return NULL;
-  u = artehero_url_logo_larg(item.logo, RE_LOGO_W);
+  if (!temItem || pagina == RE_PAG_AMIGOS) return NULL;
+  // O MESMO logo do hero/detalhe (escolha a mao e sessao primeiro).
+  u = logotitulo_url(&item, RE_LOGO_W);
   if (!u || !u[0]) return NULL;
   n = strlen(u);
   if (n >= sizeof url) return NULL;
@@ -356,24 +357,12 @@ static const char *urlLogoTitulo(void) {
   return url;
 }
 
-static void desenhaLogo(const char *url, GLuint tex, float x, float y,
-                        const char *fallback, float a) {
-  float asp = tex ? tex_aspecto(url) : 0.0f;
-  if (!tex || asp <= 0.01f) {
-    TxtLinha t = txt_linha_corta(TXT_HEADLINE, fallback, 245, 248, 255, 255,
-                                 RE_LOGO_W);
-    txt_desenhar_alpha(t, x, y + (RE_LOGO_H - t.h) * 0.5f, a);
-    return;
-  }
-  { float w = RE_LOGO_W, h = w / asp;
-    GfxRect r;
-    GfxModo modo;
-    if (h > RE_LOGO_H) { h = RE_LOGO_H; w = h * asp; }
-    r = (GfxRect){ x + (RE_LOGO_W - w) * 0.5f,
-                   y + (RE_LOGO_H - h) * 0.5f, w, h };
-    modo = tex_marca_escura(url) ? GFX_MARCA : GFX_TEXTO;
-    gfx_rect(r, tex, modo, 0, 0, 0, 0, 0.96f, 0.97f, 0.99f, a);
-  }
+// O logo ENCOSTA A ESQUERDA, na coluna do texto (era centrado na caixa de
+// 280 e deixava um vao antes da arte). Desenho comum a todas as modais com o
+// titulo no cabecalho: logotitulo.h.
+static void desenhaLogo(float x, float y, const char *fallback, float a) {
+  logotitulo_desenhar(&item, fallback, TXT_HEADLINE, x, y, RE_LOGO_W,
+                      RE_LOGO_H, RE_INTERNO, a);
 }
 
 // As seis caixas do codigo. Centradas em `larg` a partir de `x`.
@@ -444,7 +433,6 @@ static void desenhaLinha(float x, float y, const char *rot, float f,
 void recenviar_desenhar(Uint32 agora) {
   float a = anim_suave(anim), alt, x, y, cab, cabTopo, hx, hy, hw;
   int i, n, vis;
-  GLuint logoTex;
   const char *titulo, *chapeu, *pergunta, *rodape, *logo;
   (void)agora;
   if (anim < 0.01f) return;
@@ -453,7 +441,6 @@ void recenviar_desenhar(Uint32 agora) {
   vis = n < RE_JANELA ? n : RE_JANELA;
   if (vis < 1) vis = 1;
   logo = urlLogoTitulo();
-  logoTex = logo ? tex_obter_larg(logo, RE_LOGO_W) : 0;
 
   // ALTURA DO CABECALHO, por pagina. A de amigos carrega as seis caixas do
   // codigo e duas linhas de explicacao; as outras duas carregam so o titulo e
@@ -523,7 +510,7 @@ void recenviar_desenhar(Uint32 agora) {
   }
 
   if (logo && pagina == RE_PAG_CONTATOS) {
-    desenhaLogo(logo, logoTex, hx, hy, item.titulo, a);
+    desenhaLogo(hx, hy, item.titulo, a);
     hy += RE_LOGO_H + 8.0f;
     if (item.meta[0]) {
       TxtLinha t = txt_linha_corta(TXT_DET_META2, item.meta, 190, 192, 200,
@@ -537,7 +524,7 @@ void recenviar_desenhar(Uint32 agora) {
     hy += txt_bloco(TXT_HEADLINE, titulo, 245, 248, 255, hx, hy, hw, 46.0f,
                     a, 2) + 6.0f;
     if (logo) {
-      desenhaLogo(logo, logoTex, hx, hy, item.titulo, a);
+      desenhaLogo(hx, hy, item.titulo, a);
       hy += RE_LOGO_H + 6.0f;
     }
     // Na tela de AMIGOS nao ha subtitulo: o nome da obra ali nao responde a

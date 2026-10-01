@@ -356,6 +356,21 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-cartao.bmp", saida);
   captura(nome, w);
 
+  // O MESMO CARTAO COM O TITULO NO CATALOGO E COM LOGO: o nome vira o logo
+  // (logotitulo.h). A captura de cima e a reserva — titulo fora do catalogo,
+  // logo do metahub sem rede — com o nome na mesma caixa.
+  { CatItem c[2];
+    memset(c, 0, sizeof c);
+    c[0] = *cat_item(0);
+    snprintf(c[1].imdb, sizeof c[1].imdb, "%s", "tt0111161");
+    snprintf(c[1].tipo, sizeof c[1].tipo, "%s", "movie");
+    snprintf(c[1].titulo, sizeof c[1].titulo, "%s", "Um Sonho de Liberdade");
+    snprintf(c[1].logo, sizeof c[1].logo, "%s", "deploy/app/art/logo/00.png");
+    cat_definir_tudo(c, 2, NULL, 0);
+    snprintf(nome, sizeof nome, "%s-cartao-logo.bmp", saida);
+    captura(nome, w);
+    cat_definir_tudo(c, 1, NULL, 0); }
+
   // O MESMO CARTAO COM UM AMIGO SEM FOTO. `cartaoItem` e trocado por dentro
   // (este teste inclui recomenda.c inteiro) porque mostrar_se_houver escolhe
   // sempre a mais NOVA nao lida, e a mais nova e justamente a que tem foto — o
@@ -580,6 +595,30 @@ int main(int argc, char **argv) {
   teclaCtx(SDLK_DOWN); teclaCtx(SDLK_DOWN); teclaCtx(SDLK_DOWN);
   snprintf(nome, sizeof nome, "%s-ctx-opcoes.bmp", saida);
   captura(nome, w);
+
+  // O LOGO NO LUGAR DO NOME (logotitulo.h). A captura de cima e o caso SEM
+  // logo (o nome escrito na caixa reservada); estas duas sao com logo claro e
+  // com logo ESCURO, que tem de virar branco (tex_marca_escura).
+  { CatItem c = *cat_item(0);
+    char u[64];
+    int k, escuro = -1;
+    snprintf(c.logo, sizeof c.logo, "%s", "deploy/app/art/logo/00.png");
+    cat_definir_tudo(&c, 1, NULL, 0);
+    snprintf(nome, sizeof nome, "%s-ctx-logo.bmp", saida);
+    captura(nome, w);
+    for (k = 0; k < 40 && escuro < 0; k++) {
+      snprintf(u, sizeof u, "deploy/app/art/logo/%02d.png", k);
+      tex_obter_larg(u, 420.0f);
+      bombear(40);
+      if (tex_marca_escura(u) == 1) escuro = k;
+    }
+    printf("logo escuro do pacote: %d\n", escuro);
+    if (escuro >= 0) {
+      snprintf(c.logo, sizeof c.logo, "deploy/app/art/logo/%02d.png", escuro);
+      cat_definir_tudo(&c, 1, NULL, 0);
+      snprintf(nome, sizeof nome, "%s-ctx-logo-escuro.bmp", saida);
+      captura(nome, w);
+    } }
 
   // OK em "Recomendar a um amigo" FECHA o menu e abre a modal compartilhada
   // (recenviar.c). Daqui para baixo as teclas vao para ela — e e exatamente

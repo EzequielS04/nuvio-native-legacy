@@ -153,6 +153,20 @@ int main(int argc, char **argv) {
   captura(nome, w);   // a confirmacao expirou: o desenho fecha o menu
   if (episodios_menu_aberto_qualquer()) { puts("FALHOU: a confirmacao nao fechou sozinha"); return 1; }
 
+  // O MENU DA TEMPORADA: a linha grande e a SERIE, e ela vira o logo
+  // (logotitulo.h). Primeiro sem logo (o nome na caixa reservada), depois com.
+  episodios_menu_temporada(0, 1);
+  snprintf(nome, sizeof nome, "%s-menu-temporada.bmp", saida);
+  captura(nome, w);
+  tecla(SDLK_ESCAPE, SDL_KEYDOWN, 0);
+  tecla(SDLK_ESCAPE, SDL_KEYUP, 0);
+  snprintf(c.logo, sizeof c.logo, "%s", "deploy/app/art/logo/07.png");
+  cat_definir(&c, 1);
+  cat_definir_episodios(0, eps, 8);
+  episodios_menu_temporada(0, 1);
+  snprintf(nome, sizeof nome, "%s-menu-temporada-logo.bmp", saida);
+  captura(nome, w);
+
   tex_encerrar(); txt_encerrar(); gfx_encerrar();
   SDL_GL_DeleteContext(gl); SDL_DestroyWindow(w); SDL_Quit();
   puts("PASS: capturas da folha de episodios gravadas.");

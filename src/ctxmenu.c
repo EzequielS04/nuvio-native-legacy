@@ -1,5 +1,6 @@
 #include "ctxmenu.h"
 #include "catalogo.h"
+#include "logotitulo.h"
 #include "descoberta.h"
 #include "syncprog.h"
 #include "visto.h"
@@ -44,7 +45,13 @@ enum { CTX_PENDENTE = 1, CTX_CONFIRMADA = 2, CTX_FALHA = 3 };
 #define CTX_PAD     44.0f
 #define CTX_LINHA   BOTAO_H_PRIMARIO // mesma altura do botao primario do detalhe
 #define CTX_GAP     BOTAO_GAP         // o mesmo ritmo entre acoes do app
-#define CTX_CAB    158.0f     // titulo, estados e rotulo do grupo
+// O NOME VIROU A CAIXA DO LOGO (logotitulo.h): 76 px de altura, ~2 linhas do
+// TXT_HEADLINE, reservados com ou sem logo para o cartao nao pular quando o
+// arquivo chega. O cabecalho cresceu 38 px (era 158) por isso.
+#define CTX_LOGO_Y  32.0f
+#define CTX_LOGO_H  76.0f
+#define CTX_LOGO_W 420.0f
+#define CTX_CAB    196.0f     // titulo, estados e rotulo do grupo
 #define CTX_RODAPE  70.0f
 
 // SALVO E UM FATO DO TITULO, NAO DO CARTAO. Segurar OK num cartao do
@@ -954,12 +961,14 @@ void ctx_desenhar(Uint32 agora) {
   { TxtLinha t = txt_linha(TXT_CAPTION2, "TÍTULO SELECIONADO",
                            174, 178, 188, 255);
     txt_desenhar_alpha(t, x + CTX_PAD, y + CTX_PAD, a * 0.95f); }
-  { TxtLinha t = txt_linha_corta(TXT_HEADLINE, ci->titulo,
-                                 245, 248, 255, 255, CTX_W - CTX_PAD * 2.0f);
-    txt_desenhar_alpha(t, x + CTX_PAD, y + CTX_PAD + 28.0f, a); }
+  // O LOGO DO TITULO no lugar do nome (pedido do dono, 01/10): o mesmo do
+  // destaque e do detalhe. Sem logo, o nome escrito na mesma caixa.
+  logotitulo_desenhar(ci, ci->titulo, TXT_HEADLINE, x + CTX_PAD,
+                      y + CTX_PAD + CTX_LOGO_Y, CTX_LOGO_W, CTX_LOGO_H,
+                      CTX_W - CTX_PAD * 2.0f, a);
   { const char *subtitulo = mensagem ? mensagem : "Opções do título";
     TxtLinha t = txt_linha(TXT_DET_META2, subtitulo, 150, 154, 163, 255);
-    txt_desenhar_alpha(t, x + CTX_PAD, y + CTX_PAD + 70.0f, a * 0.9f); }
+    txt_desenhar_alpha(t, x + CTX_PAD, y + CTX_PAD + CTX_LOGO_Y + CTX_LOGO_H, a * 0.9f); }
 
   // OS SELOS DE ESTADO SAO DA TABELA (badges.h) e TEM HIERARQUIA: o estado
   // POSITIVO ("Na biblioteca", "Assistido") acende em realce a 18 %; o
@@ -967,7 +976,7 @@ void ctx_desenhar(Uint32 agora) {
   // consultado") e cinza com texto apagado. Antes eram duas pilulas cinza
   // iguais e a pessoa tinha de LER para saber se o titulo ja era dela.
   { float sx = x + CTX_PAD;
-    float sy = y + CTX_PAD + 106.0f;
+    float sy = y + CTX_PAD + CTX_LOGO_Y + CTX_LOGO_H + 38.0f;
     int historico = ci ? historicoDe(ci) : -1;
     for (i = 0; i < nEstados; i++) {
       int positivo = i == 0 ? tituloSalvo(ci) : historico == 1;

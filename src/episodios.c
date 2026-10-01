@@ -1,3 +1,4 @@
+#include "logotitulo.h"
 #include "episodios.h"
 #include "ajustes.h"   /* ajustes_acento: a cor do check da confirmacao */
 #include "idioma.h"
@@ -364,6 +365,13 @@ static void menuDesenhar(float x, float larg, float anim) {
           174,178,188,255),tx,m.y+PAD+6.0f,anim);
       snprintf(cab,sizeof cab,i18n("T%dE%d · %s"),vmT,vmE,vmNome);
       }
+      // Na temporada a linha grande e a SERIE: vai o logo dela (logotitulo.h),
+      // na caixa que vai da linha do nome ate o pe da miniatura; sem logo, o
+      // nome escrito na mesma caixa.
+      if (vmModoTemp)
+        logotitulo_desenhar(cat_item(vmIdx),cab,TXT_HEADLINE,tx,m.y+PAD+34.0f,
+                            tw<360.0f?tw:360.0f,TH_H-34.0f,tw,anim);
+      else
       txt_desenhar_alpha(txt_linha_corta(TXT_HEADLINE,cab,245,248,255,255,tw),
                          tx,m.y+PAD+36.0f,anim);
       (void)tw; }

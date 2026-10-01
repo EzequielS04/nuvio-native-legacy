@@ -26,6 +26,8 @@
 #include "idioma.h"
 #include "ajustes.h"
 #include "progresso.h"
+#include "logotitulo.h"
+#include "artemetahub.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,6 +77,8 @@
 // Disco da foto de quem mandou, no cartao. 56 e o menor em que a INICIAL ainda
 // se le a 3 m — a mesma conta que PS_AV_MIN faz em perfilsel.c, so que ali o
 // disco e a tela inteira e aqui ele divide a linha com o nome.
+#define RC_LOGO_W    520.0f
+#define RC_LOGO_H     96.0f
 #define RC_AVATAR     56.0f
 #define RC_AVATAR_GAP 18.0f
 
@@ -2533,6 +2537,28 @@ float rec_selo_imdb(float x, float y, int nota, int escuro, float alfa) {
   return badge_imdb(x, y, nota, escuro, alfa);
 }
 
+// O titulo do cartao como CatItem, para o logo: o item do catalogo quando o
+// titulo esta nele (logo do addon/TMDB, escolha a mao); senao uma copia so com
+// o logo do metahub pelo IMDb, refeita quando o cartao troca de recomendacao.
+static const CatItem *cartaoLogoItem(void) {
+  static CatItem ci;
+  static long long deId = -1;
+  static char deImdb[24];
+  int i = cartaoItem.imdb[0] ? cat_indice_por_imdb(cartaoItem.imdb) : -1;
+  const CatItem *c = i >= 0 ? cat_item(i) : NULL;
+  if (c) return c;
+  if (deId != cartaoItem.id || strcmp(deImdb, cartaoItem.imdb)) {
+    deId = cartaoItem.id;
+    snprintf(deImdb, sizeof deImdb, "%s", cartaoItem.imdb);
+    memset(&ci, 0, sizeof ci);
+    snprintf(ci.imdb, sizeof ci.imdb, "%s", cartaoItem.imdb);
+    snprintf(ci.tipo, sizeof ci.tipo, "%s", cartaoItem.tipo);
+    snprintf(ci.titulo, sizeof ci.titulo, "%s", cartaoItem.titulo);
+    arte_metahub_preencher(&ci);
+  }
+  return &ci;
+}
+
 void recomenda_desenhar(Uint32 agora) {
   float a, dy, x, y;
   char buf[320];
@@ -2578,9 +2604,11 @@ void recomenda_desenhar(Uint32 agora) {
                                    RC_W - (tx2 - RC_X) - RC_PAD);
       txt_desenhar_alpha(t, tx2, y + (RC_AVATAR - t.h) * 0.5f, a * 0.95f); }
     y += RC_AVATAR + 14.0f; }
-  { TxtLinha t = txt_linha_corta(TXT_TITULO2, cartaoItem.titulo, 246, 247, 252,
-                                 255, RC_W - (x - RC_X) - RC_PAD);
-    txt_desenhar_alpha(t, x, y, a); y += t.h + 16.0f; }
+  // O LOGO DO TITULO no lugar do nome (logotitulo.h), numa caixa reservada:
+  // sem logo, o nome escrito ocupa a mesma altura e o cartao nao pula.
+  logotitulo_desenhar(cartaoLogoItem(), cartaoItem.titulo, TXT_TITULO2, x, y,
+                      RC_LOGO_W, RC_LOGO_H, RC_W - (x - RC_X) - RC_PAD, a);
+  y += RC_LOGO_H + 12.0f;
   { const char *frase = rec_frase(&cartaoItem);
     if (frase[0]) {
       snprintf(buf, sizeof buf, "\xe2\x80\x9c%s\xe2\x80\x9d", frase);
