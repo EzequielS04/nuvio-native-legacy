@@ -44,6 +44,13 @@
 #include "dados.h"
 #include "tendencia.h"
 #include <strings.h>
+// Os veus da base de cada forma de card (gfx_veu_base): a fracao da altura que
+// o degrade cobre e o alfa na base. Nomeados porque o laco da fileira os poe
+// DENTRO da arte (veusDoCard) e quem desenha a legenda tem de pedir o mesmo.
+#define NV_EDITORIAL_VEU_F 0.62f
+#define NV_EDITORIAL_VEU_A 0.90f
+#define NV_ABERTA_VEU_F    0.55f
+#define NV_ABERTA_VEU_A    0.72f
 // Declarado a mao em vez de incluir detail.h: aquele header inclui ESTE (por
 // causa do HomeItem), e o ciclo so nao explode por causa das guardas. Uma
 // funcao de uma linha nao vale amarrar os dois arquivos.
@@ -1116,7 +1123,13 @@ static void desenhaFaixaAberta(const CatItem *ci, int r, float px, float py,
   // so por ficar parada nele (29/09, clr=33 ms = GPU presa). Mesmo veu da
   // legenda do cartaz deitado: zero no topo do retangulo, raio convertido para
   // a altura dele.
-  gfx_veu_base((GfxRect){ px, py, w, h }, NV_RAIO_CARD, 0.55f, 0.72f * abre);
+  //
+  // O RAIO E O DO CARD (raioDe), nao NV_RAIO_CARD: 0,055 da altura sao 19 px
+  // no card aberto e o cartaz tem 24, entao os cantos de baixo do veu
+  // passavam por fora da curva (MEDIDO em homelayouts_shot, 01/10/2026: ~50
+  // px escurecidos fora do card). E o mesmo defeito do #144 no Continuar.
+  gfx_veu_base((GfxRect){ px, py, w, h }, raioDe(w, h), NV_ABERTA_VEU_F,
+               NV_ABERTA_VEU_A * abre);
   temTend = (r >= 0 && r < nFileiras)
           ? tend_delta(fileiras[r].chave, ci->imdb, &delta, &novo) : 0;
 
@@ -4182,6 +4195,38 @@ static void desenhaArteCard(GfxRect card, TipoFileira tipo, const char *caminho,
   }
 }
 
+// O veu da legenda do cartaz DEITADO: 1 e a fracao em `fVeu` se este card leva
+// (as mesmas condicoes de desenhaRotuloCard, que o desenha). Separado para o
+// laco da fileira saber o veu ANTES da arte (veusDoCard).
+static int veuRotulo(const CatItem *cItem, TipoFileira tipo, int deitado, float *fVeu) {
+  if (tipo == FILEIRA_CONTINUE || tipo == FILEIRA_RETORNO || editorial(tipo) ||
+      !(ajustes_rotulos_poster() || tipo == FILEIRA_LARGA) || !cItem ||
+      !deitado || !cItem->titulo[0]) return 0;
+  *fVeu = tipo == FILEIRA_LARGA ? NV_DIN_LARGA_VEU : NV_LAND_VEU;
+  return 1;
+}
+#define NV_ROTULO_VEU_A 0.86f
+
+// OS VEUS DA BASE VAO DENTRO DA ARTE (gfx.h, gfx_veu_card_atual). Fotos do dono
+// (01/10/2026): "o card da fileira ta com o overlay sobrando um pouco na borda
+// inferior". MEDIDO em homelayouts_shot: a arte e o veu, cada um com a sua
+// cobertura de borda, no pixel da borda deixavam a arte com menos da metade
+// do veu — a ultima linha do card saia MAIS CLARA que a de cima (45 contra 37
+// num card aberto sobre fundo 6), um fio da arte por baixo do veu, que na TV
+// (720p esticada para o painel) vira traco. Com o veu no mesmo fragmento a
+// arte e escurecida inteira e so depois a borda recorta. As condicoes sao as
+// de quem desenha cada legenda; gfx_veu_base pula so o veu que estiver aqui.
+// `comCw`: o card leva o conteudo de continuar_desenhar (so o laco da home).
+static void veusDoCard(const CatItem *cItem, TipoFileira tipo, int deitado, float abre,
+                       int comCw) {
+  float fVeu;
+  if (veuRotulo(cItem, tipo, deitado, &fVeu)) gfx_veu_card_por(fVeu, NV_ROTULO_VEU_A);
+  if (comCw && (tipo == FILEIRA_CONTINUE || tipo == FILEIRA_RETORNO) && cItem)
+    gfx_veu_card_por(NV_CW_VEU_F, NV_CW_VEU_A);
+  if (abre > 0.01f && cItem) gfx_veu_card_por(NV_ABERTA_VEU_F, NV_ABERTA_VEU_A * abre);
+  if (editorial(tipo)) gfx_veu_card_por(NV_EDITORIAL_VEU_F, NV_EDITORIAL_VEU_A);
+}
+
 // A legenda do cartaz (dentro do deitado, abaixo do cartaz em pe).
 static void desenhaRotuloCard(const CatItem *cItem, TipoFileira tipo, int deitado,
                               int rotuloFora, float px, float py, float w, float h,
@@ -4199,11 +4244,11 @@ static void desenhaRotuloCard(const CatItem *cItem, TipoFileira tipo, int deitad
       // pela altura), senao o canto de baixo do veu fica mais fechado
       // que o do cartaz e o escuro vaza pela curva. Mesmo retangulo,
       // mesmo fill de antes.
+      // gfx_veu_base e o mesmo retangulo, o mesmo raio e o mesmo fill; com a
+      // arte na tela ele ja saiu dentro dela (veusDoCard) e aqui nao repete.
       const int larga = tipo == FILEIRA_LARGA;
       const float fVeu = larga ? NV_DIN_LARGA_VEU : NV_LAND_VEU;
-      GfxRect veu = { px, py + h * (1.0f - fVeu), w, h * fVeu };
-      gfx_rect(veu, 0, GFX_BRILHO_TOPO, 0, 1.0f, 0.42f, raio / fVeu,
-               0.02f, 0.02f, 0.03f, 0.86f);
+      gfx_veu_base((GfxRect){ px, py, w, h }, raio, fVeu, NV_ROTULO_VEU_A);
       float maxW = w * NV_LAND_COPY_MAXW;
       float bx = px + (larga ? NV_DIN_LARGA_PAD : NV_LAND_COPY_PAD);
       float base = larga ? NV_DIN_LARGA_PAD - 4.0f : NV_LAND_COPY_BASE;
@@ -4255,7 +4300,7 @@ static void desenhaEditorialCard(const CatItem *cItem, TipoFileira tipo, float p
   // Base e nao cartao inteiro: logo, nome e genero moram no terco de
   // baixo. O GFX_VEU inteiro era 1,18 tela na "AI for you" e a C9
   // parada nela ficava a 48 fps; sem ele, 60 (29/09).
-  gfx_veu_base((GfxRect){ px, py, w, h }, raio, 0.62f, 0.90f);
+  gfx_veu_base((GfxRect){ px, py, w, h }, raio, NV_EDITORIAL_VEU_F, NV_EDITORIAL_VEU_A);
 
 
   // Logo do titulo, como no aparelho: cada producao tem tipografia
@@ -4419,10 +4464,14 @@ int home_previa_fileira(const char *chave, int filTipo, GfxRect area, float alfa
         GLuint t = cam ? tex_obter_larg(cam, w) : 0;
         if (tipo == FILEIRA_TOP10_NUM)
           desenhaNumeral(c + 1, px, y0, h, passo - w - NV_TOP10_NUM_FOLGA * s, 1.0f);
+        gfx_veu_card_limpar();
+        if (t) veusDoCard(ci, tipo, deitado, 0.0f, 0);
         desenhaArteCard(card, tipo, cam, t, ci, 0.0f, raio, 1.0f, 0.0f);
+        if (t) gfx_veu_na_arte = 1; else gfx_veu_card_limpar();
         desenhaProfundidade(card, raio, ajustes_profundidade_posters());
         desenhaRotuloCard(ci, tipo, deitado, rotuloFora, px, y0, w, h, raio);
-        if (editorial(tipo)) desenhaEditorialCard(ci, tipo, px, y0, w, h, raio); }
+        if (editorial(tipo)) desenhaEditorialCard(ci, tipo, px, y0, w, h, raio);
+        gfx_veu_card_limpar(); }
     }
   }
   gfx_sem_recorte();
@@ -4855,8 +4904,11 @@ void home_desenhar(Uint32 agora) {
           // de (1,2,0), contraste 1,0:1. Era literalmente invisivel, e foi a
           // origem da queixa "nao aparecem todos os posteres": eles apareciam,
           // do tom exato do fundo. A referencia desenha #2C2C2C na caixa exata.
+          gfx_veu_card_limpar();
+          if (t) veusDoCard(cItem, tipo, deitado, abre, 1);
           desenhaArteCard(card, tipo, caminho, t, cItem, f, raio, aArte,
                           (!focoHero && focus_indice(&foco, r, c)) ? varreFoco : 0.0f);
+          if (t) gfx_veu_na_arte = 1; else gfx_veu_card_limpar();
           // SELO DE ASSISTIDO: disco branco com um "v" escuro, no canto
           // superior direito do poster. A referencia o tem e nos nao tinhamos
           // indicador nenhum na home — sem ele nao da para varrer uma fileira e
@@ -4978,6 +5030,7 @@ void home_desenhar(Uint32 agora) {
           }
 
           if (editorial(tipo)) desenhaEditorialCard(cItem, tipo, px, py, w, h, raio);
+          gfx_veu_card_limpar();
 
           // Feedback progressivo do gesto, sem duplicar o menu contextual. A
           // barra aparece somente enquanto o mesmo item esta sob pressao;

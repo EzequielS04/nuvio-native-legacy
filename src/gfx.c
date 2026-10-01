@@ -24,7 +24,7 @@ static void gfxBlend(int on) {
 // shader que usasse a mesma variavel.
 typedef struct {
   GLuint prog;
-  GLint rect, tela, tex, foco, par, raio, cor, asp, texAsp, forcarCover, borda, varre, desl, fundo,
+  GLint rect, tela, tex, foco, par, raio, cor, asp, texAsp, forcarCover, borda, varre, veu, desl, fundo,
         grad0, grad1, grad2, tempo, reg0, reg1, reg2, reg3, vaza;
   GLint amb, ambOn;         // uAmb/uAmbOn: so os tres modos de arte com rampa
   GLint texB, texAspB, alfaB;   // camadas do destaque (gfx_hero_camadas)
@@ -51,6 +51,9 @@ float gfx_borda_foco_atual = 1.0f;
 // Deslocamento da faixa especular do cartaz em foco (revela.h): 0 = no lugar
 // de repouso. Mesmo regime do rebordo: global, e quem mexe devolve a 0.
 float gfx_varre_atual = 0.0f;
+// O VEU DA BASE DENTRO DA ARTE (gfx.h, gfx_veu_card_atual).
+float gfx_veu_card_atual[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+int gfx_veu_na_arte = 0;
 // Deslize horizontal da ARTE dentro do retangulo do destaque (GFX_HERO,
 // GFX_HERO_CHEIO, GFX_VITRINE), em fracao da largura dele: a imagem anda e as
 // rampas/veu ficam paradas; o que sai do retangulo nao pinta. 0 = no lugar.
@@ -132,6 +135,7 @@ static const char *FS_CABECA =
   "uniform float uFoco;\n"
   "uniform float uBorda;\n"
   "uniform float uVarre;\n"
+  "uniform vec4  uVeu;     // GFX_CARD: dois veus da base (fracao, alfa)\n"
   "uniform float uDesliza;\n"
   "uniform vec2  uPar;\n"
   "uniform float uRaio;\n"
@@ -326,6 +330,20 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // especular, entao desligar a borda nao deixa o foco invisivel.
   "    cor += smoothstep(0.010,0.0,abs(d)) * uFoco * 0.35 * uBorda;\n"
   "  } else cor *= 0.80;\n"
+  // O VEU DA BASE NO MESMO FRAGMENTO DA ARTE (gfx_veu_card_atual). Desenhado
+  // como passada separada, ele e a arte dividiam a MESMA cobertura de borda:
+  // no pixel da borda a arte entra com m e o veu escurece so m dela, entao
+  // ali sobra arte quase sem veu — um fio claro na base e na curva de baixo
+  // do card (fotos do dono, 01/10/2026). Aqui o veu escurece a arte inteira
+  // e so depois a borda recorta. Mesma rampa do GFX_BRILHO_TOPO com
+  // uPar = (1, 0.42) sobre um retangulo de `fracao` da altura.
+  "  if (uVeu.y > 0.0 || uVeu.w > 0.0) {\n"
+  "    float yb = 1.0 - vUv.y;\n"
+  "    float t1 = 1.0 - smoothstep(0.42, 1.0, yb / max(uVeu.x, 0.001));\n"
+  "    float t2 = 1.0 - smoothstep(0.42, 1.0, yb / max(uVeu.z, 0.001));\n"
+  "    float v = 1.0 - (1.0 - uVeu.y * t1 * t1) * (1.0 - uVeu.w * t2 * t2);\n"
+  "    cor = mix(cor, vec3(0.02, 0.02, 0.03), v);\n"
+  "  }\n"
   "  gl_FragColor = vec4(cor, m * uCor.a);\n"
   "}\n",
 
@@ -1135,6 +1153,7 @@ int gfx_iniciar(void) {
     progs[m].forcarCover = glGetUniformLocation(p, "uForceCover");
     progs[m].borda  = glGetUniformLocation(p, "uBorda");
     progs[m].varre  = glGetUniformLocation(p, "uVarre");
+    progs[m].veu    = glGetUniformLocation(p, "uVeu");
     progs[m].desl   = glGetUniformLocation(p, "uDesliza");
     progs[m].fundo  = glGetUniformLocation(p, "uFundo");
     progs[m].grad0  = glGetUniformLocation(p, "uGrad0");
@@ -1247,10 +1266,32 @@ double gfx_fill_modo_ult[GFX_NMODOS];   // o do quadro anterior (o log le este)
 static int efeitosLeves = 0;
 void gfx_definir_efeitos_leves(int leves) { efeitosLeves = leves ? 1 : 0; }
 int  gfx_efeitos_leves(void) { return efeitosLeves; }
+int gfx_veu_card_por(float fracao, float alfa) {
+  int i;
+  if (fracao <= 0.0f || alfa <= 0.001f) return 0;
+  if (fracao > 1.0f) fracao = 1.0f;
+  for (i = 0; i < 4; i += 2)
+    if (gfx_veu_card_atual[i + 1] <= 0.0f) {
+      gfx_veu_card_atual[i] = fracao; gfx_veu_card_atual[i + 1] = alfa; return 1; }
+  return 0;
+}
+void gfx_veu_card_limpar(void) {
+  memset(gfx_veu_card_atual, 0, sizeof gfx_veu_card_atual);
+  gfx_veu_na_arte = 0;
+}
 void gfx_veu_base(GfxRect card, float raio, float fracao, float alfa) {
   GfxRect v;
   if (fracao <= 0.0f || alfa <= 0.001f) return;
   if (fracao > 1.0f) fracao = 1.0f;
+  // Ja foi junto da arte (gfx_veu_na_arte): so o veu que ESTA na lista sai;
+  // um pedido que nao foi previsto continua desenhado como antes.
+  if (gfx_veu_na_arte) {
+    int i;
+    for (i = 0; i < 4; i += 2)
+      if (gfx_veu_card_atual[i + 1] > 0.0f &&
+          fabsf(gfx_veu_card_atual[i] - fracao) < 1e-4f &&
+          fabsf(gfx_veu_card_atual[i + 1] - alfa) < 1e-4f) return;
+  }
   v = (GfxRect){ card.x, card.y + card.h * (1.0f - fracao), card.w, card.h * fracao };
   // GFX_BRILHO_TOPO com uPar.y > 0: cheio da BASE ate 42% e zero no topo do
   // retangulo. O raio vira fracao da altura DESTE retangulo (o shader mede
@@ -1444,6 +1485,12 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   if (P->forcarCover >= 0) glUniform1f(P->forcarCover, gfx_card_forcar_cover_atual);
   if (P->borda >= 0)  glUniform1f(P->borda, gfx_borda_foco_atual);
   if (P->varre >= 0)  glUniform1f(P->varre, gfx_varre_atual);
+  // Depois da arte (gfx_veu_na_arte) a lista so serve para gfx_veu_base pular
+  // os mesmos veus: nenhum outro GFX_CARD do card (miniatura) ganha veu.
+  if (P->veu >= 0) {
+    static const float zero[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    glUniform4fv(P->veu, 1, gfx_veu_na_arte ? zero : gfx_veu_card_atual);
+  }
   if (P->desl >= 0)   glUniform1f(P->desl, gfx_desliza_atual);
   // So os tres modos de rampa declaram uFundo: e uma chamada por destaque ou
   // fundo de detalhe desenhado, nao por retangulo.

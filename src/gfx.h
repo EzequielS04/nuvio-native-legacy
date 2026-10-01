@@ -245,6 +245,16 @@ extern float gfx_borda_foco_atual;
 // Deslocamento da luz do foco no GFX_CARD (revela.h, revela_varre): 0 = faixa
 // especular no repouso. Quem define para um card devolve a 0 logo depois.
 extern float gfx_varre_atual;
+// O VEU DA BASE DENTRO DA ARTE DO CARD. {fracao1, alfa1, fracao2, alfa2}: os
+// veus de gfx_veu_base que o PROXIMO GFX_CARD ja aplica no proprio fragmento.
+// Como passada separada o veu dividia com a arte a cobertura da borda e, no
+// pixel da borda, deixava arte quase sem veu: um fio claro na base do card.
+// Quem chama: limpa, poe os veus (gfx_veu_card_por), desenha a arte, liga
+// gfx_veu_na_arte (gfx_veu_base passa a pular os mesmos veus) e limpa no fim.
+extern float gfx_veu_card_atual[4];
+extern int gfx_veu_na_arte;
+int  gfx_veu_card_por(float fracao, float alfa);
+void gfx_veu_card_limpar(void);
 // Opacidade de grupo: deve voltar a 1 ao terminar o grupo.
 extern float gfx_opacidade_grupo;
 

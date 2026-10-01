@@ -76,7 +76,7 @@ void continuar_desenhar(const CatItem *ci, GfxRect r, float raio) {
   // enquanto a arte usa o raio de Ajustes: com raio maior os cantos do veu
   // passavam por fora da curva da arte e apareciam como cantos escuros e
   // "cortados" na base do cartao.
-  gfx_veu_base(r, raio, 0.66f, .88f);
+  gfx_veu_base(r, raio, NV_CW_VEU_F, NV_CW_VEU_A);
 
   // Um retangulo compacto, nao uma pilula. Nunca inventar status de estreia.
   if (ci->restanteMin > 0 || (ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb) || cwo_conta_a_seguir(ci->imdb)))) {
