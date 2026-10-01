@@ -41,6 +41,14 @@ float badges_desenhar(uint64_t mask,float x,float y,float maxW,float height,floa
 // A MESMA fileira em tinta ESCURA, para desenhar SOBRE superficie clara
 // (linha selecionada). Ver a nota em badges.c.
 float badges_desenhar_escura(uint64_t mask,float x,float y,float maxW,float height,float alpha);
+// SELOS COLORIDOS (#198): a mesma fileira, cada marca numa peca com base
+// escura, tinta do grupo a 20 % e borda na cor do grupo (paleta do pacote
+// inicial da wiki do Nuvio; ver badges.c). `height` e a caixa da ARTE, como
+// em badges_desenhar; a peca passa 3 px para cima e para baixo. Igual sobre
+// linha escura, linha em foco e vidro.
+float badges_desenhar_selos(uint64_t mask,float x,float y,float maxW,float height,float alpha);
+// Cor do grupo do selo `id` ("r-4k", "p-netflix"...), 0..1. 0 = id desconhecido.
+int badges_cor_selo(const char *id,float *r,float *g,float *b);
 
 // --- SELOS DE TEXTO (a TABELA UNICA de badges, 21/09/2026) -------------------
 //

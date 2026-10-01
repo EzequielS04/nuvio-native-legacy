@@ -200,6 +200,110 @@ float badges_desenhar_escura(uint64_t mask,float x,float y,float maxW,float h,fl
   return fileira(mask,x,y,maxW,h,a,1);
 }
 
+// --- SELOS COLORIDOS (#198, 01/10/2026) --------------------------------------
+//
+// Pedido da issue: "colorido como no Nuvio oficial". O oficial NAO tem cor
+// propria: NuvioTV (StreamBadgeChips.kt) e NuvioTVSmart
+// (streamScreenHelpers-03-render-image-badge-chip.js) desenham a imagem do
+// pacote de selos que a pessoa importa, com tagColor/borderColor do proprio
+// pacote; sem pacote nao ha selo nenhum (rules.imports = [] de fabrica). O
+// colorido que a pessoa ve la vem do pacote.
+//
+// A PALETA E A DO PACOTE INICIAL DA WIKI DO NUVIO (NuvioBadgeEditor.vue,
+// starterBadge): uma cor por GRUPO, preenchimento da cor a 20 % (#33) e borda
+// na cor cheia, arte branca. Os grupos que o pacote inicial nao tem saem do
+// NardBadges v3.5 (o pacote completo que a wiki usa de base de imagens):
+// codec no roxo dele e cada servico na cor da marca.
+//
+//   resolucao  #FFBE01   origem   #27C04F   video (HDR/DV/IMAX)  #FF6B6B
+//   audio      #45B7D1   canais   #FFD700   codec                #9C27B0
+//
+// "Atmos + Vision" e afins ficam no grupo de VIDEO (como no NardBadges): o DV
+// e o que pesa na escolha.
+static void corSelo(size_t i, float *r, float *g, float *b) {
+  static const struct { const char *id; unsigned cor; } MARCAS[] = {
+    {"p-netflix",0xE50914},{"p-prime",0x00A8E1},{"p-appletv",0xA2AAAD},
+    {"p-disney",0x113CCF},{"p-max",0xB100FF},{"p-hulu",0x1CE783},
+    {"p-peacock",0xFFC72C},{"p-paramount",0x0064FF},{"p-crunchyroll",0xF47521},
+  };
+  const char *id = ids[i];
+  unsigned c = 0x858283;   // neutro do NardBadges (p-crave nao esta no pacote)
+  size_t k;
+  if (!strncmp(id, "r-", 2)) c = 0xFFBE01;
+  else if (!strncmp(id, "q-", 2)) c = 0x27C04F;
+  else if (!strncmp(id, "v-", 2)) c = 0xFF6B6B;
+  else if (!strncmp(id, "a-", 2)) c = strstr(id, "-dv") ? 0xFF6B6B : 0x45B7D1;
+  else if (!strncmp(id, "c-", 2)) c = 0xFFD700;
+  else if (!strncmp(id, "co-", 3)) c = 0x9C27B0;
+  else for (k = 0; k < sizeof MARCAS / sizeof *MARCAS; k++)
+    if (!strcmp(id, MARCAS[k].id)) { c = MARCAS[k].cor; break; }
+  *r = (float)((c >> 16) & 255) / 255.0f;
+  *g = (float)((c >> 8) & 255) / 255.0f;
+  *b = (float)(c & 255) / 255.0f;
+}
+// Luminancia relativa (WCAG) sem a curva exata: o quadrado basta para decidir
+// se a borda some no fundo escuro.
+static float luz(float r, float g, float b) {
+  return 0.2126f * r * r + 0.7152f * g * g + 0.0722f * b * b;
+}
+int badges_cor_selo(const char *id, float *r, float *g, float *b) {
+  size_t i;
+  for (i = 0; i < NB; i++) if (!strcmp(ids[i], id)) { corSelo(i, r, g, b); return 1; }
+  return 0;
+}
+// CADA SELO E UMA PECA: base escura, tinta do grupo a 20 % por cima, borda de
+// 2 px na cor do grupo e a arte branca dentro. A BASE ESCURA e o que faz o
+// selo ser o MESMO em todo lugar — linha em repouso, linha em foco (que e
+// clara: cor de realce cheia) e vidro (veu translucido): a tinta nunca cai
+// direto sobre o fundo, entao 20 % de amarelo nao vira bege na linha branca.
+//
+// BORDA COM PISO DE LUZ: azul do Disney (#113CCF) sobre a base escura da
+// 2:1 e some a 3 m. Abaixo de ~0,12 de luminancia a borda clareia para o
+// branco ate chegar la (~3:1, o minimo de contorno de componente); a tinta
+// segue a cor da marca. A legibilidade e da arte branca sobre a base escura.
+float badges_desenhar_selos(uint64_t mask, float x, float y, float maxW, float h, float a) {
+  const float padX = 8.0f, sobra = 3.0f, ch = h + sobra * 2.0f, raio = 6.0f / ch;
+  float start = x;
+  size_t i;
+  for (i = 0; i < NB; i++) if ((mask & (UINT64_C(1) << i)) && art[i].image[0]) {
+    GLuint t = tex_obter_larg(art[i].image, 128);
+    float aspect = tex_aspecto(art[i].image), w = aspect > 0 ? h * aspect : 80;
+    float r, g, b, br, bg, bb, l;
+    GfxRect p;
+    TxtLinha nome = { 0 };
+    int temArte = t && aspect > 0;
+    if (w > 144) w = 144;
+    if (!temArte) {
+      nome = txt_linha_corta(TXT_MINI, art[i].name, 235, 235, 238, 255, 144);
+      w = (float)nome.w;
+    }
+    if (x + w + padX * 2.0f > start + maxW) break;
+    corSelo(i, &r, &g, &b);
+    br = r; bg = g; bb = b;
+    l = luz(r, g, b);
+    if (l < 0.12f) {
+      // Mistura com o branco ate o piso: resolve k em luz(c + (1-c)k) ~ 0,12
+      // por passos curtos (sao no maximo uns 8 por selo e so os escuros).
+      float k = 0.0f;
+      while (k < 1.0f && luz(br, bg, bb) < 0.12f) {
+        k += 0.08f;
+        br = r + (1.0f - r) * k; bg = g + (1.0f - g) * k; bb = b + (1.0f - b) * k;
+      }
+    }
+    p = (GfxRect){ x, y - sobra, w + padX * 2.0f, ch };
+    gfx_cor(p, raio, 0.10f, 0.11f, 0.13f, 0.92f * a);
+    gfx_cor(p, raio, r, g, b, 0.20f * a);
+    gfx_anel(p, raio, 2.0f, br, bg, bb, 0.95f * a);
+    if (temArte) {
+      float height = w / aspect;
+      gfx_rect((GfxRect){ x + padX, y + (h - height) * 0.5f, w, height }, t, GFX_TEXTO,
+               0, 0, 0, 0, 1, 1, 1, a);
+    } else txt_desenhar_alpha(nome, x + padX, y + (h - (float)nome.h) * 0.5f, a);
+    x += p.w + 10.0f;
+  }
+  return x > start ? x - start - 10.0f : 0.0f;
+}
+
 // ROTULO COM A PALAVRA DO FORMATO TROCADA PELA MARCA ("Sem HDR" -> "Sem" +
 // logo). O rotulo e traduzido ANTES de procurar a palavra: "Ohne HDR", "Без HDR"
 // e "No HDR" saem do mesmo caminho, sem cravar a lingua. Sem a palavra na
