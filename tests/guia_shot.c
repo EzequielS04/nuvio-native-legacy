@@ -329,6 +329,16 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-tela-dica.bmp", saida);
   capturaTela(nome, w, 1);
   dicaDesde = 0;
+  // A BUSCA DO GUIA: canais pelo nome e programas pela grade.
+  buscaFazer("sport");
+  buscaEstado = 2; buscaAnim = 1.0f; buscaFoco = 1;
+  snprintf(nome, sizeof nome, "%s-busca.bmp", saida);
+  capturaTela(nome, w, 1);
+  buscaFazer("jornal");
+  buscaFoco = 0;
+  snprintf(nome, sizeof nome, "%s-busca-programa.bmp", saida);
+  capturaTela(nome, w, 1);
+  buscaEstado = 0; buscaAnim = 0.0f;
 
   // O CARTAO DO LEMBRETE por cima da tela (o que aparece em qualquer lugar
   // do app quando o programa comeca), e o aviso curto de quem ja esta no

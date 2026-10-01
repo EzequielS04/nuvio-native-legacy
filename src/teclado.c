@@ -357,6 +357,9 @@ void teclado_desenhar(Uint32 agora) {
       if (f < nFileiras - 1) {
         ch[0] = alfa()[f * nCols + c]; ch[1] = 0;
         s = ch;
+        // A TECLA DE ESPACO (busca do guia) diz o que e: uma tecla vazia
+        // pareceria quebrada. "␣" nao existe na fonte da interface.
+        if (ch[0] == ' ') s = i18n("espaço");
       } else {
         s = rotuloExtra(c);
       }
