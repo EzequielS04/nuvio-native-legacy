@@ -58,11 +58,14 @@ VN=$("$BT/aapt2" dump badging "$A" 2>/dev/null | sed -n "s/.*versionName='\([^']
 [ "$VN" = "$VER" ] || { echo "release-android: versionName $VN != $VER" >&2; exit 1; }
 
 SEGREDO='(^|/)(trakt|addons|tmdb|mdblist|sessao|simkl[^/]*|fanart|diag-token)\.txt$|collections\.json$|catalogo-rede\.bin|local\.properties|\.env$|(^|/)(trakt|stalker|xtream|listas)-p[0-9]|\.jks$|\.keystore$'
-n=$(unzip -Z1 "$A" | grep -c -E "$SEGREDO" || true)
-[ "$n" = "0" ] || { echo "release-android: $A leva $n arquivo(s) de pessoa:" >&2; unzip -Z1 "$A" | grep -E "$SEGREDO" >&2; exit 1; }
+# A lista uma vez so: `unzip | grep -q` com pipefail falha quando o grep fecha
+# o pipe antes de o unzip terminar.
+LISTA=$(unzip -Z1 "$A")
+n=$(printf '%s\n' "$LISTA" | grep -c -E "$SEGREDO" || true)
+[ "$n" = "0" ] || { echo "release-android: $A leva $n arquivo(s) de pessoa:" >&2; printf '%s\n' "$LISTA" | grep -E "$SEGREDO" >&2; exit 1; }
 for abi in arm64-v8a armeabi-v7a; do
   for so in libmain.so libSDL2.so libcurl.so libjpeg.so libwebp.so libffmpegJNI.so; do
-    unzip -Z1 "$A" | grep -qx "lib/$abi/$so" || { echo "release-android: faltou lib/$abi/$so" >&2; exit 1; }
+    case $'\n'"$LISTA"$'\n' in *$'\n'"lib/$abi/$so"$'\n'*) ;; *) echo "release-android: faltou lib/$abi/$so" >&2; exit 1;; esac
   done
 done
 
