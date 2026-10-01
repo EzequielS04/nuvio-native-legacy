@@ -1091,10 +1091,6 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
   "  if (m <= 0.001) discard;\n"
   "  vec2 u = uJan.xy + vUv * uJan.zw;\n"
-  "  vec2 uv = u;\n"
-  "  if (uTexAsp > 0.0) { float ra = 1.7777778 / uTexAsp;\n"
-  "    if (ra > 1.0) uv.y = (uv.y - 0.5) / ra + 0.5; else uv.x = (uv.x - 0.5) * ra + 0.5; }\n"
-  "  vec3 c = texture2D(uTex, clamp(uv, 0.0, 1.0)).rgb;\n"
   "  float a = 1.0 - smoothstep(0.0, 0.82, u.x);\n"
   "  float ab = smoothstep(0.70, 1.0, u.y) * 0.92;\n"
   "  a = 1.0 - (1.0 - a) * (1.0 - ab);\n"
@@ -1102,6 +1098,15 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // (uPar.y = 0); na pagina cheia, a vinheta do GFX_DETALHE (uPar.y = 1).
   "  float ac = (1.0 - smoothstep(0.0, 0.66, u.x)) * smoothstep(0.22, 0.92, u.y);\n"
   "  a = mix(ac, a, uPar.y);\n"
+  // SO O VEU (uCor.r < 0.5): o trailer toca no cartao, atras do canvas, pelo
+  // furo; o veu fica por cima com alpha, para o texto seguir no mesmo escuro.
+  "  if (uCor.r < 0.5) { float va = clamp(a, 0.0, 1.0) * uFoco;\n"
+  "    va = 1.0 - (1.0 - va) * (1.0 - uPar.x);\n"
+  "    gl_FragColor = vec4(uFundo, va * uCor.a * m); return; }\n"
+  "  vec2 uv = u;\n"
+  "  if (uTexAsp > 0.0) { float ra = 1.7777778 / uTexAsp;\n"
+  "    if (ra > 1.0) uv.y = (uv.y - 0.5) / ra + 0.5; else uv.x = (uv.x - 0.5) * ra + 0.5; }\n"
+  "  vec3 c = texture2D(uTex, clamp(uv, 0.0, 1.0)).rgb;\n"
   "  c = mix(c, uFundo, clamp(a, 0.0, 1.0) * uFoco);\n"
   "  c = mix(c, uFundo, uPar.x);\n"
   "  gl_FragColor = nv_dither(c, uCor.a * m);\n"
@@ -1456,7 +1461,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   // tambem era um no-op com leitura da tela. Fundo social, ceu da Explorar,
   // snapshot/luz assada e a arte desfocada do fundo.
   else if ((modo == GFX_SOCIAL || modo == GFX_CEU || modo == GFX_SNAP || modo == GFX_FUNDO ||
-            (modo == GFX_JANELA && raio <= 0.0f)) &&
+            (modo == GFX_JANELA && raio <= 0.0f && cr > 0.5f)) &&
            ca * gfx_opacidade_grupo >= 0.999f)
     opaco = 1;
   // CAMADAS DO DESTAQUE (gfx_hero_camadas): a passada e opaca e o fragmento
