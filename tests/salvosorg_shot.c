@@ -461,6 +461,13 @@ int main(int argc, char **argv) {
   confere("os titulos continuam salvos", salvos_n() == 9);
   foto("27-depois-de-excluir.png");
   confere("salvos.txt continua no formato v1", arquivoTem("salvos.txt", "# nuvio salvos v1\n"));
+  // AGRUPADO POR PROGRESSO, a categoria vira selo na linha.
+  toques(SDLK_UP, 3); toque(SDLK_DOWN);   // barra (Categorias)
+  toques(SDLK_LEFT, 2); toque(SDLK_RETURN);
+  toque(SDLK_UP); toque(SDLK_UP); toque(SDLK_RETURN);   // Progresso
+  confere("de volta ao agrupamento por progresso", sorg_grupo() == SORG_GRUPO_PROGRESSO);
+  toques(SDLK_DOWN, 4);
+  foto("27b-selo-da-categoria.png");
 
   printf("\nsocial por pessoa:\n");
   toques(SDLK_UP, 3);

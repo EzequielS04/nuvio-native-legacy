@@ -864,9 +864,9 @@ static int   barraFoco;
 static float animBarra[SPB_N];
 
 static const char *ORDEM_CURTO[SORG_ORDEM_N] = {
-  "Ordem salva", "Recentes", "Nome", "Ano", "Nota", "Restante" };
+  "Mais antigos", "Recentes", "Nome", "Ano", "Nota", "Restante" };
 static const char *ORDEM_LONGO[SORG_ORDEM_N] = {
-  "Ordem em que salvou", "Salvos mais recentes", "Nome (A–Z)",
+  "Salvos mais antigos primeiro", "Salvos mais recentes primeiro", "Nome (A–Z)",
   "Ano (mais novo primeiro)", "Nota do IMDb", "Menos tempo restante" };
 static const char *GRUPO_CURTO[SORG_GRUPO_N] = {
   "Progresso", "Tipo", "Categoria", "Nenhum" };
@@ -972,7 +972,7 @@ static void popAbrir(int tipo) {
       break;
     case POP_EXCLUIR:
       { const char *nome = sorg_categoria_nome_id(popCat);
-        snprintf(popTitulo, sizeof popTitulo, i18n("Excluir \"%s\"?"), nome ? nome : ""); }
+        snprintf(popTitulo, sizeof popTitulo, i18n("Excluir \xe2\x80\x9c%s\xe2\x80\x9d?"), nome ? nome : ""); }
       snprintf(popSub, sizeof popSub, "%s", "Os títulos continuam nos Salvos, só saem da categoria.");
       popLinha("Cancelar", NULL, 0, 0);
       popLinha("Excluir", NULL, 1, 0);
@@ -2195,7 +2195,7 @@ static void desenhaBarra(float dx, float a) {
 // painel com o titulo, a frase de apoio e as opcoes. A atual leva o "check".
 static void desenhaPop(float a) {
   float e, h, w, x, y, topoL, janela;
-  int i, vis;
+  int i, vis, algumIcone;
   if (!pop) return;
   e = anim_suave(popEntrada) * a;
   vis = popN < POP_VISIVEIS ? popN : POP_VISIVEIS;
@@ -2209,7 +2209,7 @@ static void desenhaPop(float a) {
   { GfxRect r = { x, y, w, h };
     if (ajustes_vidro()) gfx_vidro_folha(r, 26.0f / h, e);
     else {
-      gfx_cor(r, 26.0f / h, 0.085f, 0.089f, 0.104f, 0.985f * e);
+      gfx_cor(r, 26.0f / h, 0.085f, 0.089f, 0.104f, e);
       gfx_cor((GfxRect){ x, y, w, 1.0f }, 0.0f, 1, 1, 1, 0.06f * e);
     } }
   { TxtLinha t = txt_linha_corta(TXT_CALLOUT, popTitulo, 246, 247, 252, 255, w - 64.0f);
@@ -2218,6 +2218,9 @@ static void desenhaPop(float a) {
     TxtLinha t = txt_linha_corta(TXT_CAPTION, popSub, 168, 172, 183, 255, w - 64.0f);
     txt_desenhar_alpha(t, x + 32.0f, y + 72.0f, e * 0.95f);
   }
+  // Com icone em alguma opcao, todas reservam a coluna dele: texto alinhado
+  // numa coluna so, como num menu, e nao em degraus.
+  { int k; algumIcone = 0; for (k = 0; k < popN; k++) if (popL[k].icone) algumIcone = 1; }
   gfx_recorte(x, y + topoL - 8.0f, w, janela + 16.0f);
   for (i = 0; i < popN; i++) {
     float ry = y + topoL + (float)i * (POP_LINHA_H + POP_LINHA_VAO) - popRol;
@@ -2231,8 +2234,8 @@ static void desenhaPop(float a) {
       float ic = anim_mistura(200.0f / 255.0f, tinta, v);
       gfx_icone((GfxRect){ tx, ry + (POP_LINHA_H - 24.0f) * 0.5f, 24.0f, 24.0f },
                 popL[i].icone, ic, ic, ic, e);
-      tx += 38.0f;
     }
+    if (algumIcone) tx += 38.0f;
     { TxtLinha rp = txt_linha_corta(TXT_CALLOUT, popL[i].rot, 236, 237, 242, 255, w - 160.0f);
       TxtLinha fo = txt_linha_corta(TXT_CALLOUT, popL[i].rot, tf, tf, tf, 255, w - 160.0f);
       txt_foco_transicao(rp, fo, tx, ry + (POP_LINHA_H - (float)rp.h) * 0.5f, v, e); }
@@ -2918,7 +2921,7 @@ static void desenharPainel(Uint32 agora) {
     desenhaSecao(SP_X + x + SP_PAD, sy, secoes[i].rot, a);
     if (secoes[i].vazia) {
       TxtLinha t = txt_linha_corta(TXT_CAPTION,
-          "Vazia. Segure OK num título e escolha \"Mover para categoria\".",
+          "Vazia. Segure OK num título e escolha \xe2\x80\x9cMover para categoria\xe2\x80\x9d.",
           150, 154, 166, 255, SP_INTERNO);
       txt_desenhar_alpha(t, SP_X + x + SP_PAD, sy + SP_SECAO_H + 6.0f, a * 0.9f);
     }
