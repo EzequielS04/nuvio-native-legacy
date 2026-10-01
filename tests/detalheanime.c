@@ -542,7 +542,7 @@ int main(void) {
     assert(!strcmp(cat_episodio(0, 0)->nome, "Перший епізод"));
     assert(!strcmp(cat_episodio(0, 0)->sinopse, "Опис 1"));
     assert(cat_episodio(0, 0)->nota == 81);                           /* nota do TMDB entra */
-    assert(!strcmp(cat_item(0)->titulo, "Реінкарнація безробітного")); /* TMDB nao troca */
+    assert(!strcmp(cat_item(0)->titulo, "Реінкарнація безробітного")); /* sem /tv/555 aqui: o caso #209 (30) cobre o TMDB por cima */
     puts("ok  #176: addon preferido + TMDB: o texto do addon nao e pisado, a nota entra");
 
     // 14) FILME com a preferencia: /meta/movie do addon manda no titulo/sinopse.
@@ -949,6 +949,86 @@ int main(void) {
     { int n1 = 0; for (i = 0; i < nPedidos && i < 64; i++) if (strstr(pedidos[i], "kitsu.test")) n1++;
       assert(n1 == 1); }
     puts("ok  um pedido so a fonte por abertura");
+
+    // 30) ISSUE #209 (LG 50NANO75SPA, 1.6.5): app e TMDB em portugues, titulo e
+    //     sinopse da SERIE em ingles. "Prefere a ficha do addon de metadados" e
+    //     LIGADO de fabrica (e preferExternalMetaAddonDetail=true no web, que a
+    //     conta sincroniza), e textoDoAddon pega o PRIMEIRO addon que declara
+    //     "meta" — no registro de uma TV pt-BR da 1.6.5: "Reacher: texto do addon
+    //     Ultra MAX"; noutra, "Tensei Shitara Slime Datta Ken: texto do addon
+    //     Bingecat AI Assistant". O texto em ingles desse addon travava o TMDB
+    //     (DESC_MANTER_*). No web (metaDetailsScreen.js) o TMDB com "Titulo e
+    //     sinopse" ligado vence a ficha de QUALQUER addon: aqui tambem, quando o
+    //     idioma nao e o ingles. Vazio do TMDB (sem traducao) deixa o do addon.
+    nFake = 0; nRotas = 0; addonMeta = 1;
+    addonTipo = "/series/";
+    cineSerie = NULL;
+    fakeMetaExterno = 1;
+    fakeSoCinemeta = 0;
+    fakeIdioma = "pt-BR";
+    fakeTmdbBasico = 1;
+    desc_tmdb_definir("0123456789abcdef0123456789abcdef");
+    tmdbFind = "{\"tv_results\":[{\"id\":555}]}";
+    tmdbTemp1 = NULL;
+    addonResp = "{\"meta\":{\"id\":\"tt13293588\",\"type\":\"series\","
+                "\"name\":\"Mushoku Tensei: Jobless Reincarnation\","
+                "\"description\":\"A 34-year-old NEET is reincarnated.\",\"videos\":[]}}";
+    limparCacheMeta();
+    rota("themoviedb.org/3/tv/555?",
+         "{\"id\":555,\"genres\":[{\"id\":16,\"name\":\"Anima\xc3\xa7\xc3\xa3o\"}],"
+         "\"name\":\"Mushoku Tensei: Uma Segunda Chance\","
+         "\"overview\":\"Um homem de 34 anos renasce em outro mundo.\"}");
+    catalogoCom("tt13293588", "series", "Mushoku Tensei: Jobless Reincarnation");
+    abrir();
+    assert(pediu("themoviedb.org/3/tv/555?") && pediu("language=pt-BR"));
+    if (strcmp(cat_item(0)->titulo, "Mushoku Tensei: Uma Segunda Chance") ||
+        strcmp(cat_item(0)->sinopse, "Um homem de 34 anos renasce em outro mundo.")) {
+      printf("FALHOU #209: titulo '%s' sinopse '%s'\n", cat_item(0)->titulo, cat_item(0)->sinopse);
+      return 1;
+    }
+    puts("ok  #209: addon de meta em ingles + TMDB pt-BR: titulo e sinopse do TMDB");
+
+    // 30b) Sem traducao no TMDB (name/overview vazios): o texto do addon fica.
+    limparCacheMeta(); nRotas = 0;
+    rota("themoviedb.org/3/tv/555?", "{\"id\":555,\"name\":\"\",\"overview\":\"\"}");
+    catalogoCom("tt13293588", "series", "Mushoku Tensei: Jobless Reincarnation");
+    abrir();
+    assert(!strcmp(cat_item(0)->sinopse, "A 34-year-old NEET is reincarnated."));
+    puts("ok  #209: TMDB sem traducao nao apaga o texto do addon");
+
+    // 30c) Em ingles com a preferencia: o addon continua mandando (nada mudou).
+    limparCacheMeta(); nRotas = 0;
+    fakeIdioma = "en-US";
+    rota("themoviedb.org/3/tv/555?", "{\"id\":555,\"name\":\"TMDB Name\",\"overview\":\"TMDB overview\"}");
+    catalogoCom("tt13293588", "series", "Mushoku Tensei");
+    abrir();
+    assert(!strcmp(cat_item(0)->titulo, "Mushoku Tensei: Jobless Reincarnation"));
+    assert(!strcmp(cat_item(0)->sinopse, "A 34-year-old NEET is reincarnated."));
+    puts("ok  #209: em ingles a ficha do addon preferida segue mandando");
+
+    // 30d) Continuar/destaque (localizarTexto): mesma regra. pt-BR, preferencia
+    //      ligada, addon em ingles: o TMDB vem primeiro.
+    limparCacheMeta(); nRotas = 0;
+    memset(locCache, 0, sizeof locCache);
+    fakeIdioma = "pt-BR";
+    rota("themoviedb.org/3/tv/555?",
+         "{\"id\":555,\"name\":\"Mushoku Tensei: Uma Segunda Chance\",\"overview\":\"Sinopse pt.\"}");
+    { CatItem it[1];
+      memset(it, 0, sizeof it);
+      snprintf(it[0].imdb, sizeof it[0].imdb, "tt13293588");
+      snprintf(it[0].tipo, sizeof it[0].tipo, "series");
+      snprintf(it[0].titulo, sizeof it[0].titulo, "Mushoku Tensei: Jobless Reincarnation");
+      it[0].poster[0] = 'x';
+      cat_definir_tudo(it, 1, NULL, 0);
+      desc_localizar_indices((int[]){ 0 }, 1);
+      while (locVivo) usleep(2000);
+      if (strcmp(cat_item(0)->titulo, "Mushoku Tensei: Uma Segunda Chance")) {
+        printf("FALHOU #209 CW: titulo '%s'\n", cat_item(0)->titulo);
+        return 1;
+      }
+      assert(!strcmp(cat_item(0)->sinopse, "Sinopse pt.")); }
+    puts("ok  #209: Continuar/destaque em pt-BR: TMDB antes da ficha do addon");
+    tmdbFind = NULL; fakeTmdbBasico = 0; addonResp = NULL;
 
     nFake = 0; nRotas = 0; addonMeta = 0;
     limparCacheMeta();

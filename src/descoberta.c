@@ -4621,7 +4621,9 @@ static int locChaveDoItem(const CatItem *c, char *id, size_t nid, const char **t
   return 1;
 }
 
-// Resolve (com rede) titulo e sinopse localizados. A ordem e a da preferencia:
+// Resolve (com rede) titulo e sinopse localizados. Num idioma que nao e o
+// ingles, o TMDB primeiro e o addon quando ele nao tem (#209). Em ingles, a
+// ordem e a da preferencia:
 // com "Prefere a ficha do addon de metadados" o addon vem primeiro; sem ele, o
 // TMDB no idioma configurado, e o addon so quando o TMDB nao tem (ou esta
 // desligado). Em ingles e sem a preferencia nao ha nada a localizar.
@@ -4633,9 +4635,10 @@ static int localizarTexto(const char *tipo, const char *id, char *tit, size_t nt
   locChave(chave, sizeof chave, tipo, id);
   if (locLer(chave, tit, nt, sin, ns, &lido)) return lido;
   tit[0] = sin[0] = 0;
-  if (externo) {
+  // Com a preferencia o addon vem primeiro SO em ingles (#209): num idioma
+  // que nao e o ingles o TMDB traduz antes, como na ficha do titulo.
+  if (externo && !naoIng) {
     ok = textoDoAddon(tipo, id, tit, nt, sin, ns, NULL);
-    if (!ok && naoIng) ok = textoDoTmdb(tipo, id, tit, nt, sin, ns);
   } else {
     ok = textoDoTmdb(tipo, id, tit, nt, sin, ns);
     if (!ok) ok = textoDoAddon(tipo, id, tit, nt, sin, ns, NULL);
@@ -5759,11 +5762,19 @@ static void *buscarEps(void *u) {
       if (textoDoAddon(tipoA, serie, tA, sizeof tA, sA, sizeof sA, &nomeA)) {
         char *cA = NULL;
         int i3, n3 = addons_n();
+        // O TMDB NUM IDIOMA QUE NAO E O INGLES AINDA TRADUZ POR CIMA (#209). A
+        // preferencia e ligada de fabrica (e preferExternalMetaAddonDetail=true
+        // no web), e o addon aqui e o PRIMEIRO que declara "meta" — Ultra MAX,
+        // Bingecat, que falam ingles. Travar o TMDB deixava a serie em ingles
+        // num app e num TMDB em portugues. No web (metaDetailsScreen.js) o
+        // "Titulo e sinopse" do TMDB vence a ficha de qualquer addon; o vazio
+        // do TMDB (sem traducao) continua deixando o texto do addon.
+        int tmdbPorCima = tmdbTraduz && idiomaNaoIngles();
         snprintf(edit.titulo, sizeof edit.titulo, "%s", tA);
-        manter |= DESC_MANTER_TITULO;
+        if (!tmdbPorCima) manter |= DESC_MANTER_TITULO;
         if (sA[0]) {
           snprintf(edit.sinopse, sizeof edit.sinopse, "%s", sA);
-          manter |= DESC_MANTER_SINOPSE;
+          if (!tmdbPorCima) manter |= DESC_MANTER_SINOPSE;
         }
         // Generos do mesmo addon (o Cinemeta so tem em ingles).
         for (i3 = 0; i3 < n3 && !cA; i3++) {
