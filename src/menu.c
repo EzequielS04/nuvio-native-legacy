@@ -334,8 +334,13 @@ void menu_atualizar(float dt, Uint32 agora) {
   if (!aberto) buscaOk = buscaLongo = 0;
   if (tvAtivo()) { tvAtualizar(dt); return; }
   // Recolhido e assentado nao custa nada: nem mola, nem laco pelos destinos.
+  // `expande` anda 1.6x mais devagar que `desliza`: quando `desliza` chega a
+  // 0 ele ainda vale ~0,37. Zerar so "se desliza != 0" falhava sempre que a
+  // rampa passava do alvo e cravava 0 exato (FPS variando na TV), e o resto
+  // de `expande` deixava o nome do perfil e "Trocar de usuário" apagados ao
+  // lado do avatar da rail fixa (#210). Zera os dois, sempre.
   if (!aberto && desliza < 0.002f) {
-    if (desliza != 0.0f) { desliza = 0.0f; expande = 0.0f; }
+    desliza = 0.0f; expande = 0.0f;
     return;
   }
   float alvo = aberto ? 1.0f : 0.0f;
