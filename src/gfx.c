@@ -26,7 +26,8 @@ typedef struct {
   GLuint prog;
   GLint rect, tela, tex, foco, par, raio, cor, asp, texAsp, forcarCover, borda, varre, desl, fundo,
         grad0, grad1, grad2, tempo, reg0, reg1, reg2, reg3, vaza;
-  GLint amb, ambOn, alvo;   // uAmb/uAmbOn/uAlvo: so os tres modos de arte com rampa
+  GLint amb, ambOn;         // uAmb/uAmbOn: so os tres modos de arte com rampa
+  GLint texB, texAspB, alfaB;   // camadas do destaque (gfx_hero_camadas)
   GLint alt;     // uAlt: altura do rect em pixels do alvo (a rampa de 1 px do SDF)
   GLint margem;  // uMargem do VS: 1 px de folga no quad dos modos de SDF
   GLint leve;    // uLeve: 1 = efeitos leves (sem dither), ver gfx_definir_efeitos_leves
@@ -38,6 +39,10 @@ static int progAtual = -1;
 // imediato: quem chama define antes de cada rect com textura.
 float gfx_tex_aspect_atual = 0.0f;
 float gfx_card_forcar_cover_atual = 0.0f;
+// Camadas do destaque (gfx_hero_camadas): a camada B e o fundo, lidos por
+// gfx_rect no desenho imediato que a funcao dispara.
+static GLuint camTexB;
+static float  camAspB, camAlfaB;
 // 1 = desenhar o rebordo claro que marca o cartaz em foco; 0 = nao desenhar.
 // Vive aqui, e nao num parametro de gfx_rect, pela mesma razao do aspecto da
 // textura: sao dezenas de chamadas e a resposta e a mesma para todas dentro do
@@ -90,10 +95,19 @@ static const char *VS =
   // Rect vazio ou invertido nao cresce: a divisao abaixo nao pode ver zero.
   "uniform float uMargem;\n"
   "varying highp vec2 vUv;\n"
+  // vAmb: a posicao do fragmento NA TELA, em 0..1 (x da esquerda, y de
+  // baixo — a orientacao de gl_FragCoord), para ler a luz ambiente assada.
+  // E o mesmo numero que gl_FragCoord.xy dividido pelo tamanho do alvo dava,
+  // so que interpolado do vertice. MEDIDO na C9 (Mali-G71): a coordenada de
+  // textura derivada de gl_FragCoord no fragmento custava ~15 ms por passada
+  // de tela cheia (home nas fileiras a 45 fps; 60 so com esta troca);
+  // interpolada, nada. Nos centros de pixel os dois numeros sao iguais.
+  "varying highp vec2 vAmb;\n"
   "void main(){\n"
   "  vec2 e = (aPos * 2.0 - 1.0) * uMargem * step(0.5, min(uRect.z, uRect.w));\n"
   "  vUv = aPos + e / max(uRect.zw, vec2(0.5));\n"
   "  vec2 p = uRect.xy + aPos * uRect.zw + e;\n"
+  "  vAmb = vec2(p.x/uTela.x, 1.0-p.y/uTela.y);\n"
   "  gl_Position = vec4(p.x/uTela.x*2.0-1.0, 1.0-p.y/uTela.y*2.0, 0.0, 1.0);\n"
   "}\n";
 
@@ -109,8 +123,10 @@ static const char *FS_CABECA =
   NV_GLSL_PREFIXO
   "#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
   "varying highp vec2 vUv;\n"
+  "varying highp vec2 vAmb;\n"
   "#else\n"
   "varying mediump vec2 vUv;\n"
+  "varying mediump vec2 vAmb;\n"
   "#endif\n"
   "uniform sampler2D uTex;\n"
   "uniform float uFoco;\n"
@@ -152,11 +168,23 @@ static const char *FS_CABECA =
   // fragmento: mix(c, amb, rampa) e exatamente c*a + amb*(1-a) com
   // a = 1 - rampa, o mesmo pixel do blend, so que OPACO e sem a leitura da
   // tela. O quad da luz por baixo deixa de ser pintado (gfx_ambiente
-  // "pendente", ver gfx_rect). uAmbOn liga o caminho; uAlvo e o tamanho do
-  // alvo em pixels, para gl_FragCoord virar UV da textura da luz.
+  // "pendente", ver gfx_rect). uAmbOn liga o caminho; a UV da luz e vAmb, a
+  // posicao na tela vinda do vertex shader — nao gl_FragCoord (ver o VS).
   "uniform sampler2D uAmb;\n"
   "uniform float uAmbOn;\n"
-  "uniform vec2  uAlvo;\n"
+  // CAMADAS DO DESTAQUE NUMA PASSADA SO (gfx_hero_camadas, GFX_*_CAM). Durante o
+  // crossfade a arte que sai e a que entra eram DUAS passadas de tela cheia
+  // misturadas sobre a luz pintada antes: tres
+  // telas, duas delas lendo a tela. MEDIDO na C9 (Mali-G71): 42 ms por quadro
+  // enquanto durava, em toda troca de destaque da navegacao; a mesma passada
+  // opaca, ~4 ms. Aqui o fragmento faz a conta que o blend fazia, na ordem:
+  // fundo (luz assada ou cor do fundo), depois a camada B
+  // (uTexB/uAlfaB, a arte que sai), depois a camada A (uTex/uCor.a). Cada
+  // camada passa pelo mesmo nv_dither que passava sozinha, entao o pixel e o
+  // do blend a menos do arredondamento do mixer de 8 bits.
+  "uniform sampler2D uTexB;\n"
+  "uniform float uTexAspB;\n"
+  "uniform float uAlfaB;\n"
   // DITHER DOS DEGRADES (25/09/2026, foto do dono: "o gradiente fica duro").
   //
   // MEDIDO na captura do framebuffer da C9 (Mali-G71, R8G8B8A8): a luz do
@@ -207,7 +235,17 @@ static const char *FS_CABECA =
   "#define NV_HP highp\n"
   "#else\n"
   "#define NV_HP mediump\n"
-  "#endif\n";
+  "#endif\n"
+  // O fundo social (GFX_SOCIAL), como funcao da posicao na tela (y para
+  // baixo), para o modo SOCIAL e para servir de fundo em gfx_hero_camadas.
+  "vec3 nv_social(vec2 p){\n"
+  "  float glow = 1.0-smoothstep(0.0,0.95,length((p-vec2(0.88,0.18))*vec2(1.0,1.25)));\n"
+  "  float ribbon = 1.0-smoothstep(0.04,0.40,abs(p.y-0.12-p.x*0.44));\n"
+  "  vec3 c = mix(vec3(0.105,0.065,0.095),vec3(0.40,0.14,0.18),glow);\n"
+  "  c += vec3(0.065,0.028,0.020)*ribbon*glow;\n"
+  "  c = mix(c,vec3(0.047,0.045,0.055),smoothstep(0.44,1.0,p.y));\n"
+  "  return c;\n"
+  "}\n";
 
 // SDF de retangulo arredondado, corrigido pela proporcao — sem a correcao o
 // canto de um card landscape sai oval.
@@ -236,13 +274,15 @@ static const char *FS_SDF =
 
 // "cover": recorta o excedente em vez de deformar a arte.
 static const char *FS_COVER =
-  "vec2 cover(vec2 uv){\n"
-  "  if (uTexAsp <= 0.0) return uv;\n"
-  "  float ra = uAspect / uTexAsp;\n"
+  "vec2 coverAsp(vec2 uv, float asp){\n"
+  "  if (asp <= 0.0) return uv;\n"
+  "  float ra = uAspect / asp;\n"
   "  if (ra > 1.0) uv.y = (uv.y - 0.5) / ra + 0.5;\n"
   "  else          uv.x = (uv.x - 0.5) * ra + 0.5;\n"
   "  return uv;\n"
-  "}\n";
+  "}\n"
+  "vec2 cover(vec2 uv){ return coverAsp(uv, uTexAsp); }\n"
+  "";
 
 static const char *FS_CORPO[GFX_NMODOS] = {
   // GFX_CARD — arte inteira com cantos e especular no foco (sem zoom nem corte)
@@ -345,7 +385,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // toca atras do canvas no lugar da arte (trailer.h). Mesma regra do
   // GFX_DETALHE.
   "  if (uPar.x > 0.5) { gl_FragColor = nv_dither(bg, clamp(ah + av - ah*av, 0.0, 1.0) * uCor.a); return; }\n"
-  "  if (uAmbOn > 0.5) { vec3 amb = texture2D(uAmb, gl_FragCoord.xy / uAlvo).rgb;\n"
+  "  if (uAmbOn > 0.5) { vec3 amb = texture2D(uAmb, vAmb).rgb;\n"
   "    gl_FragColor = nv_dither(mix(c, amb, clamp(ah + av - ah*av, 0.0, 1.0)), 1.0); return; }\n"
   "  if (uVaza > 0.5) { gl_FragColor = nv_dither(c, uCor.a * dentro * (1.0 - clamp(ah + av - ah*av, 0.0, 1.0))); return; }\n"
   "  c = mix(c, bg, clamp(ah + av - ah*av, 0.0, 1.0));\n"
@@ -468,7 +508,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // do canvas, visto por um furo, e o texto do titulo precisa do mesmo
   // escuro a esquerda que teria sobre a arte. Mesmo perfil, mesma uFoco.
   "  if (uPar.x > 0.5) { gl_FragColor = nv_dither(bg, clamp(a,0.0,1.0) * uFoco * uCor.a); return; }\n"
-  "  if (uAmbOn > 0.5) { vec3 amb = texture2D(uAmb, gl_FragCoord.xy / uAlvo).rgb;\n"
+  "  if (uAmbOn > 0.5) { vec3 amb = texture2D(uAmb, vAmb).rgb;\n"
   "    gl_FragColor = nv_dither(mix(c, amb, clamp(a,0.0,1.0) * uFoco), 1.0); return; }\n"
   "  if (uVaza > 0.5) { gl_FragColor = nv_dither(c, uCor.a * (1.0 - clamp(a,0.0,1.0) * uFoco)); return; }\n"
   "  c = mix(c, bg, clamp(a,0.0,1.0) * uFoco);\n"
@@ -504,7 +544,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "                 - clamp((t-0.76)/0.24,0.0,1.0)*0.42;\n"
   "  ah *= step(vUv.x, 0.65);\n"
   "  if (uPar.x > 0.5) { gl_FragColor = nv_dither(bg, clamp(ah + av - ah*av, 0.0, 1.0) * uCor.a); return; }\n"
-  "  if (uAmbOn > 0.5) { vec3 amb = texture2D(uAmb, gl_FragCoord.xy / uAlvo).rgb;\n"
+  "  if (uAmbOn > 0.5) { vec3 amb = texture2D(uAmb, vAmb).rgb;\n"
   "    gl_FragColor = nv_dither(mix(c, amb, clamp(ah + av - ah*av, 0.0, 1.0)), 1.0); return; }\n"
   "  if (uVaza > 0.5) { gl_FragColor = nv_dither(c, uCor.a * dentro * (1.0 - clamp(ah + av - ah*av, 0.0, 1.0))); return; }\n"
   "  c = mix(c, bg, clamp(ah + av - ah*av, 0.0, 1.0));\n"
@@ -635,13 +675,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "}\n",
   // GFX_SOCIAL: broad off-centre light, quiet left side for copy.
   "void main(){\n"
-  "  vec2 p = vUv;\n"
-  "  float glow = 1.0-smoothstep(0.0,0.95,length((p-vec2(0.88,0.18))*vec2(1.0,1.25)));\n"
-  "  float ribbon = 1.0-smoothstep(0.04,0.40,abs(p.y-0.12-p.x*0.44));\n"
-  "  vec3 c = mix(vec3(0.105,0.065,0.095),vec3(0.40,0.14,0.18),glow);\n"
-  "  c += vec3(0.065,0.028,0.020)*ribbon*glow;\n"
-  "  c = mix(c,vec3(0.047,0.045,0.055),smoothstep(0.44,1.0,p.y));\n"
-  "  gl_FragColor = nv_dither(c,uCor.a);\n"
+  "  gl_FragColor = nv_dither(nv_social(vUv),uCor.a);\n"
   "}\n",
 
   // GFX_AVATAR: mascara radial exata. O GFX_CARD usa o SDF de retangulo
@@ -968,6 +1002,68 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  vec2 uv = (uPar.y > 0.5) ? vec2(vUv.x, 1.0 - vUv.y) : vUv;\n"
   "  gl_FragColor = texture2D(uTex, uv);\n"
   "}\n",
+
+  // GFX_HERO_CAM / GFX_HERO_CHEIO_CAM — AS CAMADAS DO DESTAQUE NUMA PASSADA
+  // (gfx_hero_camadas). Programas PROPRIOS, e nao um ramo nos shaders do
+  // destaque: a GPU reserva registradores pelo pior caminho do programa, e
+  // com o ramo dentro deles a passada comum do destaque tambem ficou mais
+  // lenta (MEDIDO na C9: fileira parada 60 -> 49 fps; a social, 30).
+  //
+  // O fragmento faz a conta que o blend fazia, na ordem: fundo (luz assada
+  // em uAmb ou a cor do fundo), a camada B (uTexB/uAlfaB, a
+  // arte que sai) e a camada A (uTex/uCor.a). Cada camada passa pelo mesmo
+  // nv_dither e pela mesma rampa que passava sozinha, entao o pixel e o do
+  // blend a menos do arredondamento do mixer de 8 bits. As rampas sao as do
+  // GFX_HERO e do GFX_HERO_CHEIO, copiadas.
+  "void main(){\n"
+  "  float xd = vUv.x - uDesliza;\n"
+  "  float dentro = step(0.0, xd) * step(xd, 1.0);\n"
+  "  vec3 c = texture2D(uTex, clamp(cover(vec2(xd, vUv.y)), 0.0, 1.0)).rgb;\n"
+  "  vec3 bg = uFundo;\n"
+  "  float y = vUv.y;\n"
+  "  float av = clamp((y-0.820)/0.072,0.0,1.0)*0.25\n"
+  "           + clamp((y-0.892)/0.063,0.0,1.0)*0.40\n"
+  "           + clamp((y-0.955)/0.045,0.0,1.0)*0.35;\n"
+  "  float t = vUv.x/0.45;\n"
+  "  float ah = 1.0 - clamp(t/0.22,0.0,1.0)*0.14\n"
+  "                 - clamp((t-0.22)/0.24,0.0,1.0)*0.30\n"
+  "                 - clamp((t-0.46)/0.30,0.0,1.0)*0.40\n"
+  "                 - clamp((t-0.76)/0.24,0.0,1.0)*0.16;\n"
+  "  ah *= step(vUv.x, 0.45);\n"
+  "  float rampa = clamp(ah + av - ah*av, 0.0, 1.0);\n"
+  "  vec3 dst = (uAmbOn > 0.5) ? texture2D(uAmb, vAmb).rgb : bg;\n"
+  "  vec3 cB = texture2D(uTexB, clamp(coverAsp(vec2(xd, vUv.y), uTexAspB), 0.0, 1.0)).rgb;\n"
+  "  vec4 dB = (uVaza > 0.5) ? nv_dither(cB, uAlfaB * dentro * (1.0 - rampa)) : nv_dither(mix(cB, bg, rampa), uAlfaB * dentro);\n"
+  "  vec4 dA = (uVaza > 0.5) ? nv_dither(c, uCor.a * dentro * (1.0 - rampa)) : nv_dither(mix(c, bg, rampa), uCor.a * dentro);\n"
+  "  dst = mix(dst, dB.rgb, dB.a);\n"
+  "  dst = mix(dst, dA.rgb, dA.a);\n"
+  "  gl_FragColor = vec4(dst, 1.0);\n"
+  "}\n",
+
+  "void main(){\n"
+  "  float xd = vUv.x - uDesliza;\n"
+  "  float dentro = step(0.0, xd) * step(xd, 1.0);\n"
+  "  vec3 c = texture2D(uTex, clamp(cover(vec2(xd, vUv.y)), 0.0, 1.0)).rgb;\n"
+  "  vec3 bg = uFundo;\n"
+  "  float y = vUv.y;\n"
+  "  float av = clamp((y-0.640)/0.108,0.0,1.0)*0.35\n"
+  "           + clamp((y-0.748)/0.108,0.0,1.0)*0.40\n"
+  "           + clamp((y-0.856)/0.144,0.0,1.0)*0.25;\n"
+  "  float t = vUv.x/0.65;\n"
+  "  float ah = 1.0 - clamp(t/0.22,0.0,1.0)*0.10\n"
+  "                 - clamp((t-0.22)/0.24,0.0,1.0)*0.10\n"
+  "                 - clamp((t-0.46)/0.30,0.0,1.0)*0.38\n"
+  "                 - clamp((t-0.76)/0.24,0.0,1.0)*0.42;\n"
+  "  ah *= step(vUv.x, 0.65);\n"
+  "  float rampa = clamp(ah + av - ah*av, 0.0, 1.0);\n"
+  "  vec3 dst = (uAmbOn > 0.5) ? texture2D(uAmb, vAmb).rgb : bg;\n"
+  "  vec3 cB = texture2D(uTexB, clamp(coverAsp(vec2(xd, vUv.y), uTexAspB), 0.0, 1.0)).rgb;\n"
+  "  vec4 dB = (uVaza > 0.5) ? nv_dither(cB, uAlfaB * dentro * (1.0 - rampa)) : nv_dither(mix(cB, bg, rampa), uAlfaB * dentro);\n"
+  "  vec4 dA = (uVaza > 0.5) ? nv_dither(c, uCor.a * dentro * (1.0 - rampa)) : nv_dither(mix(c, bg, rampa), uCor.a * dentro);\n"
+  "  dst = mix(dst, dB.rgb, dB.a);\n"
+  "  dst = mix(dst, dA.rgb, dA.a);\n"
+  "  gl_FragColor = vec4(dst, 1.0);\n"
+  "}\n",
 };
 
 // Cada corpo declara o que usa; montar so o necessario mantem o shader enxuto.
@@ -997,7 +1093,9 @@ static const struct { int sdf, cover; } PRECISA[GFX_NMODOS] = {
   {0,0},   /* GFX_AMBIENTE — procedural, tela cheia */
   {1,0},   /* GFX_VITRINE — SDF para os cantos; o cover e proprio (ancoragem) */
   {0,0},   /* GFX_FUNDO_DIN — procedural, so cor, tela cheia */
-  {0,0}    /* GFX_COPIA — so a leitura da textura */
+  {0,0},   /* GFX_COPIA — so a leitura da textura */
+  {0,1},   /* GFX_HERO_CAM */
+  {0,1}    /* GFX_HERO_CHEIO_CAM */
 };
 
 static GLuint compila(GLenum tipo, const char *src) {
@@ -1011,7 +1109,7 @@ static GLuint compila(GLenum tipo, const char *src) {
 
 int gfx_iniciar(void) {
   GLuint vs = compila(GL_VERTEX_SHADER, VS);
-  char fonte[6000];
+  char fonte[12000];   // cabeca + sdf/cover + corpo; o maior (camadas) passa de 6000
   for (int m = 0; m < GFX_NMODOS; m++) {
     snprintf(fonte, sizeof fonte, "%s%s%s%s", FS_CABECA,
              PRECISA[m].sdf ? FS_SDF : "", PRECISA[m].cover ? FS_COVER : "",
@@ -1050,7 +1148,9 @@ int gfx_iniciar(void) {
     progs[m].vaza   = glGetUniformLocation(p, "uVaza");
     progs[m].amb    = glGetUniformLocation(p, "uAmb");
     progs[m].ambOn  = glGetUniformLocation(p, "uAmbOn");
-    progs[m].alvo   = glGetUniformLocation(p, "uAlvo");
+    progs[m].texB   = glGetUniformLocation(p, "uTexB");
+    progs[m].texAspB = glGetUniformLocation(p, "uTexAspB");
+    progs[m].alfaB  = glGetUniformLocation(p, "uAlfaB");
     progs[m].alt    = glGetUniformLocation(p, "uAlt");
     progs[m].margem = glGetUniformLocation(p, "uMargem");
     progs[m].leve   = glGetUniformLocation(p, "uLeve");
@@ -1061,6 +1161,7 @@ int gfx_iniciar(void) {
     glUniform2f(progs[m].tela, NV_TELA_W, NV_TELA_H);
     glUniform1i(progs[m].tex, 0);
     if (progs[m].amb >= 0) glUniform1i(progs[m].amb, 1);
+    if (progs[m].texB >= 0) glUniform1i(progs[m].texB, 2);
   }
   glUseProgram(progs[GFX_CARD].prog);
   progAtual = GFX_CARD;
@@ -1141,6 +1242,7 @@ int    gfx_n_cheio = 0;   // desenhos que cobrem >= 50% da tela
 // desenhados COM mistura, que e a leitura da tela que a Mali paga a mais.
 int    gfx_n_cheio_mistura = 0;
 double gfx_fill_modo[GFX_NMODOS];
+int gfx_rastro_grandes;
 double gfx_fill_modo_ult[GFX_NMODOS];   // o do quadro anterior (o log le este)
 static int efeitosLeves = 0;
 void gfx_definir_efeitos_leves(int leves) { efeitosLeves = leves ? 1 : 0; }
@@ -1186,7 +1288,11 @@ int  gfx_efeitos_minimos(void) { return efeitosMinimos; }
 static double gfxFreqMs = 0.0;
 static int desfGeradosQuadro = 0;   // ver gfx_desfocado
 // Estado da luz ambiente (ver a nota "A LUZ AMBIENTE PENDENTE", em gfx_rect).
-static GLuint ambTex;
+static GLuint ambTex;          // a que se LE neste quadro (ambTexPar[ambLado])
+#define AMB_N 4
+static GLuint ambTexPar[AMB_N], ambFboPar[AMB_N];
+static int ambLado;
+int gfx_n_assados;
 static float ambChave[20];
 static int ambPendente, ambIntacta;
 void gfx_novo_quadro(void) {
@@ -1197,6 +1303,7 @@ void gfx_novo_quadro(void) {
   memset(gfx_fill_modo, 0, sizeof gfx_fill_modo);
   desfGeradosQuadro = 0;
   ambPendente = 0; ambIntacta = 0;
+  gfx_n_assados = 0;
 }
 // Relogio dos pontos de GL que NAO sao gfx_rect: recorte, FBO do snapshot e as
 // tres passadas do desfoque. Numa GPU de ladrilhos trocar de alvo de render no
@@ -1233,7 +1340,7 @@ void gfx_ambiente_descarregar(void) {
 void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
               float parx, float pary, float raio,
               float cr, float cg, float cb, float ca) {
-  int comAmb = 0, opaco = 0, cheia, clearCor;
+  int comAmb = 0, opaco = 0, cheia, clearCor, duplo = 0;
   if ((int)modo < 0 || (int)modo >= GFX_NMODOS) return;
   // A COR DO DESTAQUE E A ASSINATURA. Com o degrade ligado, todo retangulo ou
   // anel pintado EXATAMENTE com o destaque vivo (os tres floats que
@@ -1275,6 +1382,13 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   else if ((modo == GFX_SOCIAL || modo == GFX_CEU || modo == GFX_SNAP || modo == GFX_FUNDO) &&
            ca * gfx_opacidade_grupo >= 0.999f)
     opaco = 1;
+  // CAMADAS DO DESTAQUE (gfx_hero_camadas): a passada e opaca e o fragmento
+  // compoe fundo + B + A. A luz entra como uAmb quando e ela o fundo (as
+  // condicoes ja foram conferidas em gfx_hero_camadas).
+  if (modo == GFX_HERO_CAM || modo == GFX_HERO_CHEIO_CAM) {
+    duplo = 1; opaco = 1;
+    comAmb = nv_ambiente_forca > 0.001f;
+  }
   cheia = r.x <= 0.0f && r.y <= 0.0f && r.x + r.w >= NV_TELA_W && r.y + r.h >= NV_TELA_H;
   // COR CHAPADA DE TELA CHEIA, canto vivo e alfa 1 (o fundo opaco que varias
   // telas pintam por cima do clear): e um glClear com essa cor — o mesmo
@@ -1293,6 +1407,9 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
 #endif
   gfx_n_rect++;
   { float area = (r.w * r.h) / (NV_TELA_W * NV_TELA_H);
+    if (gfx_rastro_grandes && (area >= 0.12f || (modo == GFX_COR && area >= 0.01f)))
+      printf("[qd-rect] modo=%d %.0fx%.0f@%.0f,%.0f a=%.2f raio=%.0f tex=%u\n", (int)modo, r.w, r.h, r.x, r.y,
+             ca * gfx_opacidade_grupo, raio, (unsigned)tex);
     gfx_fill += area;
     gfx_fill_modo[modo] += area;
     { float x0 = r.x < 0.0f ? 0.0f : r.x, y0 = r.y < 0.0f ? 0.0f : r.y;
@@ -1345,10 +1462,16 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     glUniform3fv(P->reg3, 1, nv_ambiente_viva[3]);
   }
   if (P->vaza >= 0)   glUniform1f(P->vaza, nv_ambiente_forca > 0.001f ? 1.0f : 0.0f);
+  if (duplo) {
+    glUniform1f(P->texAspB, camAspB);
+    glUniform1f(P->alfaB, camAlfaB * gfx_opacidade_grupo);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, camTexB);
+    glActiveTexture(GL_TEXTURE0);
+  }
   if (P->ambOn >= 0) {
     glUniform1f(P->ambOn, comAmb ? 1.0f : 0.0f);
     if (comAmb) {
-      glUniform2f(P->alvo, (float)telaW, (float)telaH);
       glActiveTexture(GL_TEXTURE1);
       glBindTexture(GL_TEXTURE_2D, ambTex);
       glActiveTexture(GL_TEXTURE0);
@@ -1400,6 +1523,43 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
 void gfx_cor(GfxRect r, float raio, float cr, float cg, float cb, float ca) {
   gfx_rect(r, 0, GFX_COR, 0, 0, 0, raio, cr, cg, cb, ca);
 }
+// AS CAMADAS DO DESTAQUE NUMA PASSADA (GFX_HERO_CAM / GFX_HERO_CHEIO_CAM). Devolve 0
+// quando nao pode garantir o mesmo pixel do caminho em duas passadas — e
+// nesse caso NAO desenha nada; quem chama segue pelo caminho de sempre.
+//   texA/aspA/alfaA: a arte que entra (ou a unica); texB/aspB/alfaB: a que
+//   sai (texB 0 = so uma camada). O fundo e a luz ambiente assada (imersiva)
+//   ou a cor do fundo. (Um fundo social por baixo foi tentado e MEDIDO na C9:
+//   a passada ficou mais lenta que o fundo pintado + arte misturada, 30 fps
+//   contra 38-45; a fileira social segue pelo caminho de sempre.)
+int gfx_hero_camadas(GfxRect r, GfxModo modo, GLuint texA, float aspA, float alfaA,
+                     GLuint texB, float aspB, float alfaB) {
+  GfxModo cam;
+  if (modo == GFX_HERO) cam = GFX_HERO_CAM;
+  else if (modo == GFX_HERO_CHEIO) cam = GFX_HERO_CHEIO_CAM;
+  else return 0;
+  if (!texA && !texB) return 0;
+  if (efeitosMinimos || snapAtivo || gfx_desliza_atual != 0.0f || progs[cam].texB < 0) return 0;
+  if (gfx_modos_desligados && ((gfx_modos_desligados >> (unsigned)modo) & 1ull)) return 0;
+  // Com a luz imersiva o fundo e a luz assada: ela precisa existir e estar
+  // intacta (nada desenhado por cima ainda neste quadro).
+  if (nv_ambiente_forca > 0.001f &&
+      !(ambIntacta && (ambPendente || ambTex) && ambChave[0] >= 0.0f && progs[cam].ambOn >= 0))
+    return 0;
+  if (!texA) { texA = texB; aspA = aspB; alfaA = alfaB; texB = 0; }
+  camTexB = texB ? texB : texA;
+  camAspB = texB ? aspB : aspA;
+  camAlfaB = texB ? alfaB : 0.0f;
+  gfx_tex_aspect_atual = aspA;
+  gfx_rect(r, texA, cam, 0, 0, 0, 0, 0, 0, 0, alfaA);
+  gfx_tex_aspect_atual = 0.0f;
+  // Solta a camada B da unidade 2: a textura pode ser a de um cartao que vem
+  // logo abaixo, e um objeto ligado em duas unidades ao mesmo tempo nao e
+  // garantido igual em todo driver.
+  glActiveTexture(GL_TEXTURE2);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glActiveTexture(GL_TEXTURE0);
+  return 1;
+}
 // A LUZ DA "DINAMICA IMERSIVA" E ASSADA NUM QUADRO PEQUENO. MEDIDO na C9 do
 // dono em 26/09/2026: com o tema ligado a home parada caia para 34 fps, pior
 // quadro 50 ms — o GFX_AMBIENTE rodava quatro smoothstep, um hash e highp em
@@ -1433,23 +1593,28 @@ static int ambPreparar(void) {
   GLenum st;
   if (ambFbo) return 1;
   if (ambFalhou) return 0;
-  glGenTextures(1, &ambTex);
-  glBindTexture(GL_TEXTURE_2D, ambTex);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, AMB_W, AMB_H, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  gfx_tex_esquecer(0);  // o bind acima foi por fora do gfx_rect
-  glGenFramebuffers(1, &ambFbo);
-  { GLint ant = fboLigado();
-    glBindFramebuffer(GL_FRAMEBUFFER, ambFbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ambTex, 0);
-    st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+  // DOIS QUADROS PEQUENOS, alternados: o assado de um quadro escreve no que
+  // NAO foi lido no quadro anterior (ver ambAssar).
+  { int k; GLint ant = fboLigado(); st = GL_FRAMEBUFFER_COMPLETE;
+    for (k = 0; k < AMB_N; k++) {
+      glGenTextures(1, &ambTexPar[k]);
+      glBindTexture(GL_TEXTURE_2D, ambTexPar[k]);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, AMB_W, AMB_H, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      glGenFramebuffers(1, &ambFboPar[k]);
+      glBindFramebuffer(GL_FRAMEBUFFER, ambFboPar[k]);
+      glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ambTexPar[k], 0);
+      if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) st = 0;
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant); }
+  gfx_tex_esquecer(0);  // os binds acima foram por fora do gfx_rect
+  ambLado = 0; ambTex = ambTexPar[0]; ambFbo = ambFboPar[0];
   if (st != GL_FRAMEBUFFER_COMPLETE) {
-    printf("[cor] luz imersiva sem quadro pequeno (fbo 0x%x): desenho direto\n", st);
-    glDeleteFramebuffers(1, &ambFbo); glDeleteTextures(1, &ambTex);
+    printf("[cor] luz imersiva sem quadro pequeno (fbo incompleto): desenho direto\n");
+    glDeleteFramebuffers(AMB_N, ambFboPar); glDeleteTextures(AMB_N, ambTexPar);
     ambFbo = ambTex = 0; ambFalhou = 1;
     return 0;
   }
@@ -1470,6 +1635,11 @@ static void ambAssar(void) {
   for (i = 0; i < 4; i++) for (j = 0; j < 3; j++) k[n++] = nv_ambiente_viva[i][j];
   if (!memcmp(k, ambChave, sizeof(float) * (size_t)n)) return;
   memcpy(ambChave, k, sizeof(float) * (size_t)n);
+  // ALTERNA O ALVO: a GPU pode ainda estar lendo o assado do quadro anterior
+  // (a arte por cima dele) quando este novo comeca; escrever no MESMO alvo
+  // obriga o driver a esperar aquele desenho terminar antes de assar.
+  ambLado = (ambLado + 1) % AMB_N; ambTex = ambTexPar[ambLado]; ambFbo = ambFboPar[ambLado];
+  gfx_n_assados++;
   {
     GFX_OUTRO_INI();
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fboAnt);
@@ -1710,6 +1880,7 @@ void gfx_furo(GfxRect r) {
   ambIntacta = 0;
   gfx_n_rect++;
   { float area = (r.w * r.h) / (NV_TELA_W * NV_TELA_H);
+    if (gfx_rastro_grandes) printf("[qd-rect] furo %.0fx%.0f@%.0f,%.0f\n", r.w, r.h, r.x, r.y);
     gfx_fill += area; gfx_fill_modo[GFX_COR] += area;
     if (area >= 0.5f) gfx_n_cheio++; }
   x0 = (int)floorf(r.x * ex + 0.5f); x1 = (int)floorf((r.x + r.w) * ex + 0.5f);
