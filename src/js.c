@@ -250,7 +250,12 @@ int js_texto_raiz_em(const char *ini, const char *fim, const char *chave,
       const char *ini2 = p + 1;
       const char *q = ini2;
       while (*q && *q != '"') q += (*q == '\\' && q[1]) ? 2 : 1;
-      if (prof == 1 && (size_t)(q - ini2) == nChave &&
+      // So CHAVE casa: um VALOR com o mesmo texto ("posterShape":"poster",
+      // no AIOMetadata, #200) nao e seguido de ':' e devolvia 0 antes de a
+      // chave de verdade aparecer.
+      const char *dp = *q ? q + 1 : q;
+      while (*dp == ' ' || *dp == '\n' || *dp == '\t' || *dp == '\r') dp++;
+      if (prof == 1 && *dp == ':' && (size_t)(q - ini2) == nChave &&
           !strncmp(ini2, chave, nChave)) {
         const char *v = q + 1;
         while (*v == ' ' || *v == ':' || *v == '\n' || *v == '\t' || *v == '\r') v++;

@@ -937,14 +937,25 @@ static int deMeta(const char *ini, const char *fim, const char *tipo, CatItem *d
   memset(d, 0, sizeof *d);
   if (!js_texto(ini, fim, "name", d->titulo, sizeof d->titulo)) return 0;
   // O poster e o unico obrigatorio: sem ele o card fica um retangulo cinza.
-  if (!js_texto(ini, fim, "poster", d->poster, sizeof d->poster)) return 0;
-  js_texto(ini, fim, "background", d->backdrop, sizeof d->backdrop);
+  //
+  // ARTE DA RAIZ DO ITEM (#200). O AIOMetadata manda, no meta que sai do cache
+  // dele, `_providerArt: {poster, background, logo}` (a arte do TMDB no idioma
+  // configurado) ANTES do `poster` da raiz — que e o ja trocado pela URL de
+  // cartaz personalizada (BetterPosters, PostersPlus). js_texto acha a
+  // primeira chave de qualquer nivel: o card mostrava o cartaz do TMDB, sem a
+  // nota, so nos titulos que vinham do cache dele. A raiz manda; o aninhado so
+  // entra quando a raiz nao tem o campo (era o comportamento de antes).
+  if (!js_texto_raiz_em(ini, fim, "poster", d->poster, sizeof d->poster) &&
+      !js_texto(ini, fim, "poster", d->poster, sizeof d->poster)) return 0;
+  if (!js_texto_raiz_em(ini, fim, "background", d->backdrop, sizeof d->backdrop))
+    js_texto(ini, fim, "background", d->backdrop, sizeof d->backdrop);
   snprintf(d->backdropCatalogo, sizeof d->backdropCatalogo, "%s", d->backdrop);
   if (strstr(d->backdrop, "image.tmdb.org/t/p/"))
     snprintf(d->backdropTmdb, sizeof d->backdropTmdb, "%s", d->backdrop);
   if (strstr(d->backdrop, "media.trakt.tv/"))
     snprintf(d->backdropTrakt, sizeof d->backdropTrakt, "%s", d->backdrop);
-  js_texto(ini, fim, "logo", d->logo, sizeof d->logo);
+  if (!js_texto_raiz_em(ini, fim, "logo", d->logo, sizeof d->logo))
+    js_texto(ini, fim, "logo", d->logo, sizeof d->logo);
   // LOGO IGUAL AO POSTER NAO E LOGO. MEDIDO no catalogo gravado da C9 em 18/09:
   // o Xperience manda, para "O Fim da Rua", o MESMO arquivo do TMDB
   // (4kfDP13cYwCx55YP2gLGtcUFZlC.jpg) em `poster` e em `logo` — e um addon
