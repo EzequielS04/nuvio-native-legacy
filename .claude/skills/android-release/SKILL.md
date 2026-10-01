@@ -5,6 +5,8 @@ description: Gerar, testar na TV e publicar o Nuvio nativo para Android TV / Goo
 
 # Android TV (.apk)
 
+Passagem para quem faz a release: `docs/android/RELEASE.md`.
+
 Mesmo nucleo C da LG e da Samsung; so a camada de plataforma muda:
 
 | Peca | Onde |
