@@ -79,7 +79,7 @@ void continuar_desenhar(const CatItem *ci, GfxRect r, float raio) {
   gfx_veu_base(r, raio, 0.66f, .88f);
 
   // Um retangulo compacto, nao uma pilula. Nunca inventar status de estreia.
-  if (ci->restanteMin > 0 || (ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb)))) {
+  if (ci->restanteMin > 0 || (ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb) || cwo_conta_a_seguir(ci->imdb)))) {
     char selo[48];
     int h = ci->restanteMin / 60, m = ci->restanteMin % 60;
     // "A SEGUIR" e nao "53min Restantes": o item de progresso 0 e o proximo
@@ -94,7 +94,7 @@ void continuar_desenhar(const CatItem *ci, GfxRect r, float raio) {
         cwo_data_curta(cwo_estreia(ci->imdb), (long long)time(NULL) * 1000LL,
                        ajustes_idioma(), 0, quando, sizeof quando))
       snprintf(selo, sizeof selo, i18n("Estreia %s"), quando);
-    else if (ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb)))
+    else if (ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb) || cwo_conta_a_seguir(ci->imdb)))
       snprintf(selo, sizeof selo, "%s", i18n("A seguir"));
     else if (h && m) snprintf(selo, sizeof selo, i18n("%dh %dmin Restantes"), h, m);
     else if (h) snprintf(selo, sizeof selo, i18n("%dh Restantes"), h);

@@ -144,3 +144,47 @@ int cwo_data_curta(long long estreiaMs, long long agoraMs, int idioma, int maius
                     e.tm_year != a.tm_year ? e.tm_year + 1900 : 0, dst, cap);
   return 1;
 }
+
+// --- "A seguir" da conta -----------------------------------------------------
+// PROX_MAX_BUSCAS (24) e o teto de sementes por rodada; 32 da folga.
+#define CWO_CONTA_MAX 32
+static char conta[CWO_CONTA_MAX][40];
+static int nConta;
+static pthread_mutex_t contaTrava = PTHREAD_MUTEX_INITIALIZER;
+
+void cwo_conta_definir(const char *const *ids, int n) {
+  int i;
+  pthread_mutex_lock(&contaTrava);
+  nConta = 0;
+  for (i = 0; ids && i < n && nConta < CWO_CONTA_MAX; i++)
+    if (ids[i] && ids[i][0]) snprintf(conta[nConta++], sizeof conta[0], "%s", ids[i]);
+  pthread_mutex_unlock(&contaTrava);
+}
+
+int cwo_conta_a_seguir(const char *id) {
+  int i, sim = 0;
+  if (!id || !id[0]) return 0;
+  pthread_mutex_lock(&contaTrava);
+  for (i = 0; i < nConta && !sim; i++) sim = !strcmp(conta[i], id);
+  pthread_mutex_unlock(&contaTrava);
+  return sim;
+}
+
+void cwo_conta_trocar(const char *velho, const char *novo) {
+  int i;
+  if (!velho || !novo || !novo[0]) return;
+  pthread_mutex_lock(&contaTrava);
+  for (i = 0; i < nConta; i++)
+    if (!strcmp(conta[i], velho)) { snprintf(conta[i], sizeof conta[0], "%s", novo); break; }
+  pthread_mutex_unlock(&contaTrava);
+}
+
+int cwo_virada_aceita(long long estreiaMs, long long agoraMs) {
+  const long long DIA = 24LL * 60LL * 60LL * 1000LL;
+  long long hoje;
+  if (estreiaMs == CWO_SEM_DATA) return 0;
+  if (estreiaMs <= agoraMs) return 1;
+  // Dia da estreia menos o dia de hoje, os dois no calendario UTC.
+  hoje = agoraMs - (agoraMs % DIA);
+  return (estreiaMs - hoje) / DIA <= 7;
+}

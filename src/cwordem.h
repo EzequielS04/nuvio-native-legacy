@@ -109,4 +109,26 @@ unsigned cwo_revisao(void);
 int cwo_data_curta(long long estreiaMs, long long agoraMs, int idioma, int maiusc,
                    char *dst, size_t cap);
 
+// --- "A seguir" DA CONTA NUVIO (issue #199) ----------------------------------
+// Sem Trakt e sem Simkl, o "a seguir" sai dos vistos da conta (watched_items),
+// como no web com a fonte Nuvio Sync (getContinueWatchingNextUpSeedOptions,
+// homeScreen.js:2202 — includeWatchedItemSeeds). Antes a fonte "conta" so dava
+// os pausados: 804 episodios vistos na conta e nenhum "a seguir" na fileira
+// (log da C9 do issue, 01/10). Os ids ("tt:S:E") moram aqui, ao lado das
+// estreias, porque trakt.c (que confere no Cinemeta que o episodio existe) e a
+// home (que escreve "A seguir"/"Estreia") os leem, e os dois ja linkam este
+// arquivo. Trocado inteiro de uma vez, sob trava: nada de janela vazia.
+void cwo_conta_definir(const char *const *ids, int n);
+int  cwo_conta_a_seguir(const char *id);
+// A virada de temporada do enfeite (S3E10 nao existe, vira S4E1) muda o id.
+void cwo_conta_trocar(const char *velho, const char *novo);
+
+// O "a seguir" que VIROU DE TEMPORADA so entra quando a estreia ja passou ou
+// esta a ate 7 dias; sem data nao entra. shouldShowNextUpEpisodeForContinue
+// Watching (homeScreen.js:1845, CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS):
+// sem isto, toda serie terminada com a temporada seguinte anunciada no
+// Cinemeta (sem data, ou para daqui a um ano) viraria um card "a seguir".
+// Dias contados pelo calendario UTC, como cwo_data_curta.
+int cwo_virada_aceita(long long estreiaMs, long long agoraMs);
+
 #endif

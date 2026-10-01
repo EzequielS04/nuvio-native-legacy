@@ -2740,7 +2740,7 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
                              float sinW, int sinLinhas, float aTexto,
                              float aCopy, float cin) {
   int contHero = (ci && ci->progresso > 0 && ci->restanteMin > 0);
-  int seguirHero = (ci && ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb)));
+  int seguirHero = (ci && ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb) || cwo_conta_a_seguir(ci->imdb)));
 
   // Linha de meta. No web sao tokens juntados por "•"; ci->genero ja chega
   // como "Filme · Terror", que e o par (tipo, primeiro genero) do web.

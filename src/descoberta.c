@@ -19,6 +19,8 @@
 #include "trakt.h"
 #include "simkl.h"
 #include "progresso.h"
+#include "contalib.h"
+#include "proximo.h"
 #include "perfis.h"
 #include "artereserva.h"
 #include "idbase.h"
@@ -2356,6 +2358,89 @@ static int filtrarRemoto(CatItem *v, int n, int (*aSeguir)(const char *),
 static int aplicarLocCache(CatItem *v, int n);
 static void localizarContinuarPublicado(void);
 
+// "A SEGUIR" DA CONTA NUVIO (issue #199). LG C9, 1.6.4, sem Trakt e sem
+// Simkl: a conta tinha 804 episodios vistos e a fileira so mostrava os 5
+// pausados ("0 do Trakt, 0 do Simkl, 5 da conta"), enquanto o app da Shield,
+// na mesma conta, mostrava Ted Lasso "Airs in 6 days", American Horror Story
+// "Airs tomorrow" e outros "Next up". O web semeia o "a seguir" dos vistos da
+// conta quando a fonte e o Nuvio Sync (getContinueWatchingNextUpSeedOptions,
+// homeScreen.js:2202); aqui so o Trakt (historico) e o Simkl (next_to_watch)
+// semeavam, e a fonte "conta" nunca teve "a seguir".
+//
+// As sementes saem de contalib (uma por serie, o episodio depois do ultimo
+// visto). Serie ja pausada na conta fica fora — o card dela e o do episodio em
+// andamento, como o inProgressSeriesIds do web. O enfeite (trakt.c) confere no
+// Cinemeta que o episodio existe, vira a temporada quando preciso, descarta a
+// serie que acabou e anota a estreia; o filtro de "nao exibidos" e a Ordenacao
+// mais abaixo tratam o futuro igual ao do Trakt. Junta com os pausados pelo
+// instante (o do episodio-ancora) e devolve quantos ficaram em `lista`.
+//
+// So sem Trakt e sem Simkl no ar: e quando o web le os vistos da conta
+// (shouldUseSupabaseWatchProgressSync) e quando sync.c os aplica. Com um deles
+// vinculado, o "a seguir" ja vem dele.
+static int contaASeguir(CatItem *lista, int n, int max) {
+  static ContaSemente sem[PROX_MAX_BUSCAS];
+  static const char *ids[PROX_MAX_BUSCAS];
+  static char idsTxt[PROX_MAX_BUSCAS][sizeof(((CatItem *)0)->imdb)];
+  CatItem *lote;
+  int nSem, nLote = 0, i, j, confirmados, entraram = 0;
+  nSem = contalib_sementes_a_seguir(sem, PROX_MAX_BUSCAS,
+                                    ajustes_cw_do_episodio_mais_alto());
+  if (nSem < 1) { cwo_conta_definir(NULL, 0); return n; }
+  lote = (CatItem *)malloc(sizeof(CatItem) * PROX_MAX_BUSCAS);
+  if (!lote) { cwo_conta_definir(NULL, 0); return n; }
+  for (i = 0; i < nSem; i++) {
+    CatItem *d = &lote[nLote];
+    int ja = 0;
+    memset(d, 0, sizeof *d);
+    snprintf(d->imdb, sizeof d->imdb, "%s:%d:%d", sem[i].id, sem[i].temporada,
+             sem[i].episodio);
+    for (j = 0; j < n && !ja; j++) ja = mesmaObra(&lista[j], d);
+    if (ja) continue;
+    snprintf(d->tipo, sizeof d->tipo, "series");
+    d->temporada = sem[i].temporada;
+    d->episodio = sem[i].episodio;
+    d->progresso = 0;
+    d->retomadoMs = sem[i].vistoMs;
+    snprintf(idsTxt[nLote], sizeof idsTxt[0], "%s", d->imdb);
+    ids[nLote] = idsTxt[nLote];
+    nLote++;
+  }
+  // Publicado ANTES do enfeite: e por ele que trakt.c sabe que tem de conferir.
+  cwo_conta_definir(ids, nLote);
+  confirmados = nLote ? trakt_enfeitar_lote(lote, nLote) : 0;
+  // Junta pelo instante, mais recente primeiro; o lote ja vem assim. Com
+  // "Mostrar nao exibidos" desligado o futuro nem disputa lugar: o filtro mais
+  // abaixo o tiraria, e o pausado que ele empurrou para fora nao voltaria.
+  for (i = 0; i < confirmados; i++) {
+    int alvo;
+    CwoItem x;
+    x.aSeguir = 1;
+    x.estreiaMs = cwo_estreia(lote[i].imdb);
+    if (!ajustes_cw_mostrar_nao_exibidos() &&
+        cwo_futuro(&x, (long long)time(NULL) * 1000LL)) continue;
+    if (n < max) alvo = n++;
+    else {
+      int vel = 0;
+      for (j = 1; j < n; j++) if (lista[j].retomadoMs < lista[vel].retomadoMs) vel = j;
+      if (lista[vel].retomadoMs >= lote[i].retomadoMs) continue;
+      alvo = vel;
+    }
+    lista[alvo] = lote[i];
+    entraram++;
+  }
+  { int a, b;
+    for (a = 1; a < n; a++) {
+      CatItem t = lista[a];
+      for (b = a - 1; b >= 0 && lista[b].retomadoMs < t.retomadoMs; b--) lista[b + 1] = lista[b];
+      lista[b + 1] = t;
+    } }
+  printf("[desc] continuar assistindo: a seguir da conta: %d semente(s), %d consultada(s), "
+         "%d confirmada(s), %d na lista\n", nSem, nLote, confirmados, entraram);
+  free(lote);
+  return n;
+}
+
 static int montarContinuar(CatItem *saida, int max) {
   // static: dois lotes de 12 CatItem passam de 350 KB e montar() roda uma vez,
   // num fio so — a mesma razao do vetor de Decl mais abaixo.
@@ -2416,6 +2501,10 @@ static int montarContinuar(CatItem *saida, int max) {
       remotos[achou] = &doSimkl[i];
   }
   nL = querConta ? continuarLocal(daConta, CONT_MAX) : 0;
+  if (querConta && !trakt_ativo() && !simkl_ativo())
+    nL = contaASeguir(daConta, nL, CONT_MAX);
+  else
+    cwo_conta_definir(NULL, 0);
 
   // A CONTA ENTRA PRIMEIRO porque ela e a fonte DATADA (lastWatchedMs, que o
   // syncprog ja reconciliou entre celular e TV). O item remoto que fala da
@@ -2501,7 +2590,8 @@ static int montarContinuar(CatItem *saida, int max) {
       const CatItem *c = juntos[i].item;
       CwoItem x;
       x.aSeguir = c->progresso == 0 &&
-                  (trakt_e_a_seguir(c->imdb) || simkl_e_a_seguir(c->imdb));
+                  (trakt_e_a_seguir(c->imdb) || simkl_e_a_seguir(c->imdb) ||
+                   cwo_conta_a_seguir(c->imdb));
       x.estreiaMs = x.aSeguir ? cwo_estreia(c->imdb) : CWO_SEM_DATA;
       // POR ITEM, para o log de campo dizer POR QUE um "a seguir" nao virou
       // futuro: sem data ele conta como exibido (como o `hasAired !== false`

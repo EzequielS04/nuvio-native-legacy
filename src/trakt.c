@@ -302,7 +302,7 @@ static int enfeitar(CatItem *d, const char *tipo) {
   char url[300], *corpo;
   char serie[24];
   const char *dp;
-  int precisaCinemeta;
+  int precisaCinemeta, proximo, daConta, virou = 0;
   // Arte PRIMEIRO, sem rede: mesma URL que trakt_lista ja monta. Antes cada
   // item do historico/local fazia GET ao Cinemeta so para ler poster/logo —
   // medido 2,1 s no Mac com paralelismo, e pior: se o Cinemeta falhava o
@@ -317,7 +317,11 @@ static int enfeitar(CatItem *d, const char *tipo) {
   if (dp) *(char *)dp = 0;
   // Cinemeta so para o que o metahub nao tem: validar "a seguir", sinopse,
   // runtime/meta e nota. Arte ja esta; falha la NAO apaga o item.
-  precisaCinemeta = ehProximo(d->imdb) || !d->sinopse[0] ||
+  // "A seguir" e o do Trakt (historico) ou o da CONTA (vistos, issue #199):
+  // os dois sao sugestao de episodio que ninguem confirmou que existe.
+  daConta = cwo_conta_a_seguir(d->imdb);
+  proximo = ehProximo(d->imdb) || daConta;
+  precisaCinemeta = proximo || !d->sinopse[0] ||
                     !d->meta[0] || d->nota <= 0;
   if (!precisaCinemeta)
     return d->poster[0] != 0;
@@ -328,17 +332,23 @@ static int enfeitar(CatItem *d, const char *tipo) {
   corpo = rede_baixar(url, 8);
   if (!corpo) {
     // "A seguir" sem meta: nao da para confirmar que o episodio existe.
-    if (ehProximo(d->imdb)) return 0;
+    if (proximo) return 0;
     return d->poster[0] != 0;
   }
   // "A SEGUIR" SO ENTRA SE O EPISODIO EXISTE. Depois do ultimo da temporada o
   // proximo e o primeiro da seguinte; depois do ultimo da serie nao ha
   // proximo, e a serie nao entra — nao e "continuar", e "acabou".
-  if (ehProximo(d->imdb)) {
+  if (proximo) {
     if (!episodioExiste(corpo, serie, d->temporada, d->episodio)) {
       if (episodioExiste(corpo, serie, d->temporada + 1, 1)) {
+        char velho[sizeof d->imdb];
+        snprintf(velho, sizeof velho, "%s", d->imdb);
         d->temporada++; d->episodio = 1;
         snprintf(d->imdb, sizeof d->imdb, "%s:%d:%d", serie, d->temporada, d->episodio);
+        // So o da conta acompanha o id novo. O do Trakt continua como era
+        // (ehProximo do id novo da 0); mexer nele nao e deste conserto.
+        if (daConta) cwo_conta_trocar(velho, d->imdb);
+        virou = 1;
       } else { free(corpo); return 0; }
     }
     // O nome do episodio, para a legenda do card.
@@ -370,8 +380,19 @@ static int enfeitar(CatItem *d, const char *tipo) {
       if (ms <= 0)
         printf("[trakt] estreia: %s sem released/firstAired no Cinemeta (\"%s\")\n",
                d->imdb, quando);
+      // TEMPORADA NOVA DA CONTA: so com data, e ate 7 dias a frente
+      // (cwo_virada_aceita). Serie terminada com a temporada seguinte so
+      // anunciada nao vira "a seguir".
+      if (daConta && virou &&
+          !cwo_virada_aceita(ms > 0 ? ms : CWO_SEM_DATA, (long long)time(NULL) * 1000LL)) {
+        printf("[trakt] a seguir da conta %s: temporada nova sem data ou a mais de 7 dias; fora\n",
+               d->imdb);
+        free(corpo);
+        return 0;
+      }
     } else {
       printf("[trakt] estreia: %s fora do videos[] do Cinemeta; sem data\n", d->imdb);
+      if (daConta && virou) { free(corpo); return 0; }
     }
   }
   // So completa buracos: nao trocar metahub por vazio se o Cinemeta omitir.

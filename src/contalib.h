@@ -62,7 +62,13 @@
 #define CONTALIB_PAGINA     500
 #define CONTALIB_PAGINAS    4
 // Vistos custam 48 bytes cada; o teto aqui pode ser folgado.
-#define CONTALIB_VISTO_MAX  2000
+#define CONTALIB_VISTO_MAX  2700
+// Paginacao de `sync_pull_watched_items`, como o web (pullRemoteWatchedItems,
+// watchedItemsSyncService.js:146): paginas de 900 ate uma vir incompleta. Era
+// SO a primeira: a conta do issue #199 respondeu exatamente 900 linhas, uma
+// pagina cheia — o resto nunca era pedido. Tres paginas cabem no teto acima.
+#define CONTALIB_VISTO_PAGINA   900
+#define CONTALIB_VISTO_PAGINAS  3
 
 typedef struct {
   char id[24];        // content_id, "tt0111161"
@@ -138,5 +144,34 @@ void contalib_reconciliar(void);
 int contalib_aplicar_vistos(void);
 
 void contalib_esquecer(void);
+
+// --- SEMENTES DO "A SEGUIR" DA CONTA (issue #199) ----------------------------
+// Uma por serie dos vistos da conta: o proximo episodio depois do visto que
+// ancora (o mais alto, ou o mais recente com `doMaisAlto` 0 — o ajuste
+// nextUpFromFurthestEpisode). Episodios seguintes que a conta JA marcou como
+// vistos sao pulados (resolveNextUpEpisode, homeScreen.js:11973). Mais recente
+// primeiro, ate `max`. E selectNextUpProgressCandidates com
+// includeWatchedItemSeeds (homeScreen.js:11786), sem o corte de 60 dias, que o
+// web so aplica com a fonte Trakt.
+//
+// O episodio sugerido aqui pode nao existir (fim da temporada, fim da serie):
+// quem confere e o enfeite (trakt.c), no meta do Cinemeta.
+//
+// Pode ser chamada de QUALQUER fio: copia sob a trava que contalib_ler_vistos
+// e contalib_esquecer tambem tomam para trocar o vetor.
+typedef struct {
+  char id[24];
+  int  temporada, episodio;   // o episodio SUGERIDO, nao o visto
+  long long vistoMs;          // quando o episodio-ancora foi visto
+} ContaSemente;
+int contalib_sementes_a_seguir(ContaSemente *saida, int max, int doMaisAlto);
+// Sobe quando contalib_ler_vistos trouxe vistos DIFERENTES dos guardados. O
+// sync refaz o "Continuar assistindo" so entao: o "a seguir" da conta depende
+// deles, e os vistos costumam chegar depois da primeira montagem da fileira.
+unsigned contalib_vistos_revisao(void);
+
+// A regra acima sobre um vetor qualquer, sem trava — para o teste.
+int contalib_sementes_de(const ContaVisto *v, int n, ContaSemente *saida, int max,
+                         int doMaisAlto);
 
 #endif

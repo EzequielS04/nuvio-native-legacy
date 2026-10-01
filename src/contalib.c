@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 // Nao esta em catalogo.h — ctxmenu.c e trakt.c ja a declaram assim. Repetir a
 // declaracao em vez de mexer no cabecalho mantem a mudanca dentro dos arquivos
@@ -16,6 +17,10 @@ static ContaLibItem *itens;
 static int nItens;
 static ContaVisto *vistos;
 static int nVistos;
+// So a TROCA do vetor de vistos e a copia das sementes (fio da descoberta)
+// passam por aqui. O resto deste modulo e do fio principal.
+static pthread_mutex_t vistosTrava = PTHREAD_MUTEX_INITIALIZER;
+static unsigned vistosRev;
 static int temConta;
 
 // Marca de reconciliacao. `marcaCatN` comeca em -1 de proposito: catalogo com
@@ -255,9 +260,13 @@ int contalib_ler_vistos(const char *json) {
     k++;
   }
   if (k < 1) { free(novo); return nVistos > 0 ? -1 : 0; }
+  pthread_mutex_lock(&vistosTrava);
+  if (k != nVistos || !vistos || memcmp(novo, vistos, sizeof *novo * (size_t)k))
+    vistosRev++;
   free(vistos);
   vistos = novo;
   nVistos = k;
+  pthread_mutex_unlock(&vistosTrava);
   printf("[contalib] vistos da conta: %d linhas\n", k);
   return k;
 }
@@ -267,6 +276,7 @@ const ContaLibItem *contalib_item(int i) {
   return (i >= 0 && i < nItens) ? &itens[i] : NULL;
 }
 int contalib_n_vistos(void) { return nVistos; }
+unsigned contalib_vistos_revisao(void) { return vistosRev; }
 const ContaVisto *contalib_visto(int i) {
   return (i >= 0 && i < nVistos) ? &vistos[i] : NULL;
 }
@@ -399,12 +409,82 @@ void contalib_esquecer(void) {
   free(itens);
   itens = NULL;
   nItens = 0;
+  pthread_mutex_lock(&vistosTrava);
   free(vistos);
   vistos = NULL;
   nVistos = 0;
+  pthread_mutex_unlock(&vistosTrava);
   temConta = 0;
   aplicado = 0;
   marcaIdx = -1;
   marcaCatN = -1;
   marcaId[0] = 0;
+}
+
+// ------------------------------------------------- sementes do "a seguir"
+
+static int porSerieEpisodio(const void *a, const void *b) {
+  const ContaVisto *x = a, *y = b;
+  int c = strcmp(x->id, y->id);
+  if (c) return c;
+  if (x->temporada != y->temporada) return x->temporada < y->temporada ? -1 : 1;
+  if (x->episodio != y->episodio) return x->episodio < y->episodio ? -1 : 1;
+  return 0;
+}
+
+static int maisRecente(const void *a, const void *b) {
+  const ContaSemente *x = a, *y = b;
+  if (x->vistoMs != y->vistoMs) return x->vistoMs > y->vistoMs ? -1 : 1;
+  return strcmp(x->id, y->id);
+}
+
+int contalib_sementes_de(const ContaVisto *v, int n, ContaSemente *saida, int max,
+                         int doMaisAlto) {
+  ContaVisto *ep;
+  ContaSemente *todas;
+  int i, nEp = 0, nS = 0;
+  if (!v || n < 1 || !saida || max < 1) return 0;
+  ep = (ContaVisto *)malloc(sizeof *ep * (size_t)n);
+  todas = (ContaSemente *)malloc(sizeof *todas * (size_t)n);
+  if (!ep || !todas) { free(ep); free(todas); return 0; }
+  // So linhas de EPISODIO. A de titulo inteiro (temporada/episodio 0) diz "a
+  // obra foi vista", nao onde a pessoa parou. O content_type nao entra: linha
+  // com temporada e episodio e episodio, venha rotulada como vier.
+  for (i = 0; i < n; i++)
+    if (v[i].id[0] && v[i].temporada > 0 && v[i].episodio > 0)
+      ep[nEp++] = v[i];
+  qsort(ep, (size_t)nEp, sizeof *ep, porSerieEpisodio);
+  for (i = 0; i < nEp; ) {
+    int j = i, a, prox, k;
+    while (j < nEp && !strcmp(ep[j].id, ep[i].id)) j++;
+    // [i, j) e uma serie, em ordem de temporada/episodio. A ancora: o mais
+    // alto (o ultimo do grupo), ou o visto mais recente — empate, o mais alto.
+    a = j - 1;
+    if (!doMaisAlto)
+      for (k = i; k < j; k++) if (ep[k].vistoMs >= ep[a].vistoMs) a = k;
+    prox = ep[a].episodio + 1;
+    // Pula o que ja foi visto na mesma temporada, depois da ancora.
+    for (k = a + 1; k < j && ep[k].temporada == ep[a].temporada; k++)
+      if (ep[k].episodio == prox) prox++;
+    snprintf(todas[nS].id, sizeof todas[nS].id, "%s", ep[a].id);
+    todas[nS].temporada = ep[a].temporada;
+    todas[nS].episodio = prox;
+    todas[nS].vistoMs = ep[a].vistoMs;
+    nS++;
+    i = j;
+  }
+  qsort(todas, (size_t)nS, sizeof *todas, maisRecente);
+  if (nS > max) nS = max;
+  memcpy(saida, todas, sizeof *todas * (size_t)nS);
+  free(ep);
+  free(todas);
+  return nS;
+}
+
+int contalib_sementes_a_seguir(ContaSemente *saida, int max, int doMaisAlto) {
+  int n;
+  pthread_mutex_lock(&vistosTrava);
+  n = contalib_sementes_de(vistos, nVistos, saida, max, doMaisAlto);
+  pthread_mutex_unlock(&vistosTrava);
+  return n;
 }
