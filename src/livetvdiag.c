@@ -100,7 +100,7 @@ static struct {
   char grupo[64];
   int xtConfig, contaLida;
   XtreamConta conta;
-  int kbps, kbpsPior, latenciaMs, redeMedida;
+  int kbps, kbpsPior, latenciaMs, redeMedida, kbpsDoSegmento;
   // player em curso
   int pfFormato, pfModo, pfVivo;
   Uint32 pfDesde, pfTocouEm, pausaAte;
@@ -366,13 +366,18 @@ static void *fioRede(void *u) {
     if (x->resumo[0]) printf("[livetv-diag] ts %s %s: %s\n", it->nome, f == F_HLS ? "HLS" : "TS", x->resumo);
     fflush(stdout);
   }
-  // VELOCIDADE: 6 s de um canal que respondeu, uma vez (o primeiro).
-  if (!L.redeMedida && !L.cancelado) {
-    int g = it->f[F_TS].servido ? F_TS : it->f[F_HLS].servido ? F_HLS : -1;
-    if (g == F_TS) medirVelocidade(it->f[F_TS].url, cabs);
-    // HLS: a playlist nao serve para medir; o segmento ja deu a vazao dele.
-    else if (g == F_HLS && it->f[F_HLS].kbps > 0) {
-      L.kbps = it->f[F_HLS].kbps; L.latenciaMs = -1; L.redeMedida = 1;
+  // VELOCIDADE. MEDIDO na C9 (01/10): o .ts CONTINUO chega na taxa do proprio
+  // canal (2 Mbps num HD) e nao na da rede — a recomendacao saia "SD" numa
+  // rede que baixa segmento HLS a 7 Mbps. A vazao boa e a do SEGMENTO HLS, que
+  // vem de uma vez: fica a maior entre os canais. Sem HLS, o .ts continuo so
+  // da a latencia, e a resolucao nao e recomendada pela rede.
+  if (!L.cancelado) {
+    if (it->f[F_HLS].servido && it->f[F_HLS].kbps > L.kbps) {
+      L.kbps = it->f[F_HLS].kbps; L.redeMedida = 1; L.kbpsDoSegmento = 1;
+      printf("[livetv-diag] rede ate o provedor: %d kbps (segmento HLS de %s)\n", L.kbps, it->nome);
+    } else if (!L.redeMedida && it->f[F_TS].servido) {
+      medirVelocidade(it->f[F_TS].url, cabs);
+      L.kbpsDoSegmento = 0;
     }
   }
   fflush(stdout);
@@ -573,10 +578,10 @@ static void recomendar(void) {
         L.tocouModo[L.it[i].f[f].modoOk]++;
   L.recModo = -1;
   for (f = 0; f < 3; f++) if (L.tocouModo[f] && (L.recModo < 0 || L.tocouModo[f] > L.tocouModo[L.recModo])) L.recModo = f;
-  if (L.redeMedida && L.kbps > 0) {
+  if (L.redeMedida && L.kbps > 0 && L.kbpsDoSegmento) {
     L.rec.kbpsMediana = L.kbps;
-    L.rec.resolucao = ltd_resolucao_pela_vazao(L.kbpsPior > 0 && L.kbpsPior < L.kbps ? (L.kbps + L.kbpsPior) / 2 : L.kbps);
-  }
+    L.rec.resolucao = ltd_resolucao_pela_vazao(L.kbps);
+  } else if (!L.kbpsDoSegmento) L.rec.resolucao = 0;   // .ts continuo: taxa do canal, nao da rede
   L.rec.latenciaMs = L.latenciaMs;
   printf("[livetv-diag] recomenda: formato=%d resolucao=%d espera=%d | tocaram HLS %d/%d TS %d/%d | "
          "sem decoder %d | 10 bits %d | %d kbps | tocaram por modo A %d B %d C %d D %d proxy %d -> modo %d\n",
@@ -594,7 +599,7 @@ static void comecar(void) {
   L.cancelado = 0;
   juntarFio();
   memset(L.it, 0, sizeof L.it);
-  L.kbps = L.kbpsPior = 0; L.latenciaMs = -1; L.redeMedida = 0;
+  L.kbps = L.kbpsPior = 0; L.latenciaMs = -1; L.redeMedida = 0; L.kbpsDoSegmento = 0;
   L.aplicado = 0; L.enviou = 0; L.contaLida = 0;
   memset(&L.conta, 0, sizeof L.conta);
   memset(&L.rec, 0, sizeof L.rec);
