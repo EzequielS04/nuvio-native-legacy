@@ -2767,6 +2767,15 @@ static void desenhaFundoDin(Uint32 agora) {
 // comecar o backdrop dela EXATAMENTE onde a arte ja estava, em vez de aparecer
 // do nada: o fundo e o mesmo do titulo, entao ele nao deve piscar nem crescer.
 static GfxRect heroArteRect = { 0, 0, NV_TELA_W, NV_TELA_H };
+// A pilula da barra (layout Dinamica, menu.c) so aparece com a pagina no
+// topo: 1 com o destaque inteiro na tela, 0 depois de ~140 px de rolagem.
+float home_topo_fracao(void) {
+  float f;
+  if (layoutHome() != HOME_LAYOUT_DINAMICA) return 1.0f;
+  f = 1.0f + dinHeroY() / 140.0f;
+  return f < 0.0f ? 0.0f : (f > 1.0f ? 1.0f : f);
+}
+
 void home_hero_rect(float *x, float *y, float *w, float *h) {
   GfxRect r = heroArteRect;
   // Dinamica com o destaque ja rolado para fora: a pagina do titulo cresce a

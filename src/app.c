@@ -3072,6 +3072,12 @@ static void desenharAtrasDoPainel(void *ctx) {
   // Guarda repetida em dois lugares para a mesma regra: no de dentro ela
   // significa "nao pinte a faixa", no de fora significava "nao exista".
   if (menu_visivel() && sidebar_permitida() && !detail_aberto()) {
+    // Layout Dinamica: a pilula da barra so existe na HOME, e some com ela
+    // rolada para baixo. As outras telas tem o proprio titulo nesse canto
+    // (Biblioteca, Ajustes, Explorar, o campo da Busca) — medido nas capturas
+    // com NUVIO_RAIL=dinamica: a pilula cobria o titulo. La a barra abre pelo
+    // ESQUERDA na borda, como sempre, e pela faixa do ponteiro na borda.
+    menu_pilula_mostrar(tela == TELA_HOME ? home_topo_fracao() : -1.0f);
     CAMADA_SE(menu_aberto());
     menu_desenhar(agora);
   }

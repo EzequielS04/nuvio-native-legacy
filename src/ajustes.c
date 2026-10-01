@@ -1825,6 +1825,8 @@ float ajustes_conteudo_x(void) {
 // pinta os mesmos 144 de desenhaRailFixa. Por isso um numero so para os dois
 // modos — conferido nas capturas de tests/*_shot.sh com NUVIO_RAIL=moderna.
 float ajustes_rail_largura_fixa(void) {
+  // Layout Dinamica: a barra e a pilula da Apple TV (menu.c), sem rail fixa.
+  if (ajustes_home_layout() == HOME_LAYOUT_DINAMICA) return 0.0f;
   return ajustes_rail_recolhida() ? 0.0f : NV_LEGACY_RAIL_W;
 }
 void ajustes_area_conteudo(float padEsq, float padDir, float *x, float *w) {

@@ -70,6 +70,29 @@ const char *menu_rotulo(int destino);
 // pessoa a tela de escolha.
 int  menu_pediu_trocar(void);
 
+// --- PILULA DO LAYOUT DINAMICA (barra estilo Apple TV) ----------------------
+// No layout Dinamica da home nao ha rail: fechada, a barra e uma pilula
+// "‹ (icone) Secao" no topo esquerdo, por cima do conteudo. Este canto e DELA.
+// Quem quiser algo no topo (ex.: a pilula de relogio/avisos) se posiciona AO
+// LADO (x >= x+w+NV_MENU_PILULA_VAO, mesmo y/h) ou ABAIXO (y >= y+h+vao).
+//   - menu_pilula_rect: 1 e o retangulo atual (inclui a seta "‹"; a largura
+//     muda com o rotulo da secao) quando o layout e Dinamica; 0 e tudo zero nos
+//     outros layouts (la o topo esquerdo esta livre).
+//   - menu_pilula_alfa: opacidade com que ela esta na tela neste quadro (0 com
+//     a pagina rolada para baixo ou enquanto o painel aberto a substitui).
+//   - menu_pilula_mostrar: quem e dono da tela diz se a pilula deve aparecer
+//     (0..1; negativo = some na hora); a barra anima ate la. app.c chama a cada quadro: so na HOME, e
+//     so com ela no topo (home_topo_fracao); 0 nas outras telas, que tem o
+//     proprio titulo nesse canto. Ou seja: fora da home o canto esta livre.
+#define NV_MENU_PILULA_X     48.0f
+#define NV_MENU_PILULA_Y     48.0f
+#define NV_MENU_PILULA_H     68.0f
+#define NV_MENU_PILULA_SETA  26.0f   // largura da seta antes da pilula
+#define NV_MENU_PILULA_VAO   16.0f
+int   menu_pilula_rect(float *x, float *y, float *w, float *h);
+float menu_pilula_alfa(void);
+void  menu_pilula_mostrar(float alvo);
+
 void menu_evento(const SDL_Event *e);
 void menu_atualizar(float dt, Uint32 agora);
 // Desenhe por ULTIMO: o menu escurece e cobre tudo que veio antes.

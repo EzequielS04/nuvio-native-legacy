@@ -28,6 +28,7 @@
 #include "gfx.h"
 #include "home.h"
 #include "layout.h"
+#include "menu.h"
 #include "tex_cache.h"
 #include "text.h"
 #include <SDL2/SDL.h>
@@ -97,6 +98,12 @@ static void quadros(int n, const char *bmp) {
     home_desenhar(agora);
     ctx_atualizar(1.0f / 60.0f, agora);
     ctx_desenhar(agora);
+    // NV_MENU=1: a barra por cima, como app.c (no Dinamica, a pilula do topo).
+    if (getenv("NV_MENU")) {
+      menu_pilula_mostrar(home_topo_fracao());
+      menu_atualizar(1.0f / 60.0f, agora);
+      menu_desenhar(agora);
+    }
     if (i == n - 1) { fillUlt = gfx_fill; fillVisUlt = gfx_fill_vis; rectUlt = gfx_n_rect;
                       memcpy(modoUlt, gfx_fill_modo, sizeof modoUlt); }
     if (bmp && i == n - 1) gravar(bmp);

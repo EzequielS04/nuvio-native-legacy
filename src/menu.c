@@ -107,6 +107,11 @@ static float desliza = 0.0f;
 static float expande = 0.0f;
 static float animFoco[NV_MENU_FOCOS];
 static void icone(int d, float cx, float cy, float s, float r, float g, float b, float a);
+static void corAvatar(const char *hex, float *r, float *g, float *b);
+static int  tvAtivo(void);
+static int  tvOrdem(int *lista);
+static void tvAtualizar(float dt);
+static void tvDesenhar(void);
 // Tinta de texto e icone sobre o accent vem da mesma regra dos botoes.
 static void desenhaRodape(float px, float w, float alpha, float foco);
 
@@ -256,6 +261,14 @@ void menu_evento(const SDL_Event *e) {
       k == SDLK_DELETE) { menu_fechar(); return; }
 
   if (k == SDLK_RIGHT || k == SDLK_RETURN || k == SDLK_KP_ENTER) { escolher(); return; }
+  if (tvAtivo()) {
+    // Ordem da barra da Apple TV: cabecalho (perfil), Buscar, Inicio, ...
+    int lista[NV_MENU_FOCOS], n = tvOrdem(lista), p = 0, i;
+    for (i = 0; i < n; i++) if (lista[i] == linha) p = i;
+    if (k == SDLK_DOWN && p + 1 < n) linha = lista[p + 1];
+    else if (k == SDLK_UP && p > 0) linha = lista[p - 1];
+    return;
+  }
   // Sem rotacao nas pontas: a barra e curta e o usuario ve as quatro linhas de
   // uma vez, entao dar a volta no fim da lista le como falha, nao como atalho.
   if (k == SDLK_DOWN) {
@@ -272,6 +285,7 @@ void menu_evento(const SDL_Event *e) {
 
 void menu_atualizar(float dt, Uint32 agora) {
   (void)agora;
+  if (tvAtivo()) { tvAtualizar(dt); return; }
   // Recolhido e assentado nao custa nada: nem mola, nem laco pelos destinos.
   if (!aberto && desliza < 0.002f) {
     if (desliza != 0.0f) { desliza = 0.0f; expande = 0.0f; }
@@ -387,6 +401,7 @@ static void desenhaRodape(float px, float w, float alpha, float foco) {
 
 void menu_desenhar(Uint32 agora) {
   (void)agora;
+  if (tvAtivo()) { tvDesenhar(); return; }
   // Rail fixa sempre presente, como no shell legacy. O overlay expandido só
   // entra em cena quando o menu foi solicitado.
   // `collapseSidebar`: com a barra RECOLHIDA o web nao desenha rail nenhuma —
@@ -485,4 +500,315 @@ void menu_desenhar(Uint32 agora) {
   desenhaRodape(px, w, entrada, animFoco[MENU_RODAPE]);
 
   gfx_sem_recorte();
+}
+
+// ===========================================================================
+// BARRA DA APPLE TV (so no layout Dinamica da home; os outros layouts usam a
+// rail de cima, sem mudanca nenhuma).
+//
+// Referencia: fotos do app Apple TV (tvOS 26) na TV do dono, 01/10/2026.
+//   FECHADA: nao ha barra lateral. No topo esquerdo, por cima do conteudo, so
+//   uma pilula de vidro "‹ (icone) Inicio" com a secao atual.
+//   ABERTA: a pilula CRESCE ate virar um painel flutuante arredondado, com
+//   margem da borda e altura so ate o ultimo item. Cabecalho com o avatar, o
+//   nome e o relogio; itens com o icone num circulo; o item ATUAL tem pilula
+//   cinza translucida e o item EM FOCO pilula clara com texto escuro (aqui: a
+//   cor de realce, com a tinta por contraste dela — branca no padrao).
+//   O conteudo atras escurece so do lado esquerdo, sem desfoque.
+//
+// Custo: fechada, 3 quads SDF e 2 glifos; aberta, 1 quad de sombra radial
+// (meia tela, nenhum veu de tela cheia), 1 painel e ~2 quads por item.
+// ===========================================================================
+#include <time.h>
+#include <ctype.h>
+
+#define TV_PAINEL_X     40.0f
+#define TV_PAINEL_Y     40.0f
+#define TV_PAINEL_W    452.0f
+#define TV_RAIO         44.0f
+#define TV_CAB_H       120.0f    // cabecalho: avatar, nome, relogio
+#define TV_LINHA_H      80.0f
+#define TV_PAD_X        14.0f    // pilula da linha por dentro do painel
+#define TV_PAD_BASE     16.0f
+#define TV_CIRC         54.0f    // circulo do icone
+#define TV_ICONE        28.0f
+#define TV_AVATAR       58.0f
+// Molas (anim_mola2, rad/s): abrir um pouco mais lento que fechar, como a
+// barra do aparelho; com Animacoes reduzidas vai direto ao alvo.
+#define TV_MOLA_ABRE    13.0f
+#define TV_MOLA_FECHA   17.0f
+#define TV_MOLA_PILULA  10.0f
+
+static float tvAbre = 0.0f, tvAbreV = 0.0f;
+static float tvPilAlfa = 1.0f, tvPilAlvo = 1.0f;
+
+static int tvAtivo(void) { return ajustes_home_layout() == HOME_LAYOUT_DINAMICA; }
+
+// Ordem da Apple TV: Buscar antes de Inicio. O resto segue a ordem do app.
+static const int TV_ORDEM[MENU_N] = {
+  MENU_BUSCAR, MENU_INICIO, MENU_EXPLORAR, MENU_GUIA, MENU_AGENDA,
+  MENU_BIBLIOTECA, MENU_PERFIL, MENU_AJUSTES
+};
+static const char *tvRotulo(int d) {
+  // "Buscar" como na referencia; a rail classica continua "Busca".
+  return d == MENU_BUSCAR ? "Buscar" : menu_rotulo(d);
+}
+// Focos na ordem de navegacao: cabecalho (trocar de usuario) e os visiveis.
+static int tvOrdem(int *lista) {
+  int n = 0, i;
+  lista[n++] = MENU_RODAPE;
+  for (i = 0; i < MENU_N; i++) if (mostra(TV_ORDEM[i])) lista[n++] = TV_ORDEM[i];
+  return n;
+}
+static int tvItensVisiveis(void) {
+  int n = 0, i;
+  for (i = 0; i < MENU_N; i++) n += mostra(i);
+  return n;
+}
+static GfxRect tvPainel(void) {
+  GfxRect r = { TV_PAINEL_X, TV_PAINEL_Y, TV_PAINEL_W,
+                TV_CAB_H + tvItensVisiveis() * TV_LINHA_H + TV_PAD_BASE };
+  return r;
+}
+
+// A PILULA FECHADA: "‹" + circulo + rotulo da secao atual.
+static float tvPilulaLargura(void) {
+  return 7.0f + TV_CIRC + 16.0f + (float)txt_largura(TXT_ROW_TITULO, tvRotulo(destino)) + 30.0f;
+}
+static GfxRect tvPilula(void) {
+  GfxRect r = { NV_MENU_PILULA_X + NV_MENU_PILULA_SETA, NV_MENU_PILULA_Y,
+                tvPilulaLargura(), NV_MENU_PILULA_H };
+  return r;
+}
+
+int menu_pilula_rect(float *x, float *y, float *w, float *h) {
+  GfxRect r;
+  if (!tvAtivo()) { if (x) *x = 0; if (y) *y = 0; if (w) *w = 0; if (h) *h = 0; return 0; }
+  r = tvPilula();
+  // O retangulo devolvido INCLUI a seta, que fica a esquerda da pilula.
+  if (x) *x = NV_MENU_PILULA_X;
+  if (y) *y = r.y;
+  if (w) *w = r.x + r.w - NV_MENU_PILULA_X;
+  if (h) *h = r.h;
+  return 1;
+}
+float menu_pilula_alfa(void) {
+  if (!tvAtivo()) return 0.0f;
+  { float a = tvPilAlfa * (1.0f - tvAbre); return a < 0.0f ? 0.0f : a; }
+}
+void menu_pilula_mostrar(float alvo) {
+  // Negativo = some JA, sem mola: ao trocar para uma tela com titulo no canto
+  // a pilula nao pode ficar 300 ms por cima dele.
+  if (alvo < 0.0f) { tvPilAlvo = tvPilAlfa = 0.0f; return; }
+  tvPilAlvo = alvo > 1.0f ? 1.0f : alvo;
+}
+
+static void tvAtualizar(float dt) {
+  int i;
+  float alvo = aberto ? 1.0f : 0.0f;
+  desliza = 0.0f; expande = 0.0f;
+  tvPilAlfa = anim_mola(tvPilAlfa, tvPilAlvo, dt, TV_MOLA_PILULA);
+  if (!aberto && tvAbre < 0.002f && tvAbreV == 0.0f) { tvAbre = 0.0f; return; }
+  tvAbre = anim_mola2(&tvAbreV, tvAbre, alvo, dt, aberto ? TV_MOLA_ABRE : TV_MOLA_FECHA);
+  if (!aberto && tvAbre < 0.002f) { tvAbre = 0.0f; tvAbreV = 0.0f; }
+  for (i = 0; i < NV_MENU_FOCOS; i++) {
+    float a = (aberto && i == linha) ? 1.0f : 0.0f;
+    animFoco[i] = anim_mola(animFoco[i], a, dt,
+                            a > animFoco[i] ? NV_MOLA_FOCO : NV_MOLA_MENU_DESFOCO);
+  }
+}
+
+// Iniciais como na referencia ("HR"): a primeira letra das duas primeiras
+// palavras do nome, respeitando UTF-8. Nome de uma palavra so: uma letra.
+static void tvIniciais(const char *nome, char *dst, size_t tam) {
+  size_t n = 0;
+  int palavras = 0;
+  const char *p = nome && nome[0] ? nome : "?";
+  while (*p && palavras < 2 && n + 5 < tam) {
+    while (*p == ' ') p++;
+    if (!*p) break;
+    { size_t len = 1;
+      unsigned char c = (unsigned char)*p;
+      if (c >= 0xF0) len = 4; else if (c >= 0xE0) len = 3; else if (c >= 0xC0) len = 2;
+      if (len == 1) dst[n++] = (char)toupper(c);
+      else { size_t k; for (k = 0; k < len && p[k]; k++) dst[n++] = p[k]; } }
+    palavras++;
+    while (*p && *p != ' ') p++;
+  }
+  dst[n] = 0;
+}
+
+static void tvRelogio(char *buf, size_t tam) {
+  time_t t = time(NULL);
+  struct tm tmv;
+#ifdef _WIN32
+  localtime_s(&tmv, &t);
+#else
+  localtime_r(&t, &tmv);
+#endif
+  snprintf(buf, tam, "%02d:%02d", tmv.tm_hour, tmv.tm_min);
+}
+
+// Circulo do icone + icone. `foco` 0..1 troca o circulo claro pelo da tinta.
+static void tvCirculoIcone(int d, float cx, float cy, float foco, int atual,
+                           float tinta, float alfa) {
+  GfxRect c = { cx - TV_CIRC * 0.5f, cy - TV_CIRC * 0.5f, TV_CIRC, TV_CIRC };
+  float base = atual ? 0.24f : 0.14f;
+  float lum = anim_mistura(0.96f, tinta, foco > 0.5f ? 1.0f : 0.0f);
+  // Sobre a pilula de foco o circulo e da cor da tinta, bem leve.
+  if (foco > 0.5f) gfx_cor(c, 0.5f, tinta, tinta, tinta, 0.10f * alfa);
+  else             gfx_cor(c, 0.5f, 1.0f, 1.0f, 1.0f, base * alfa);
+  icone(d, cx, cy, TV_ICONE, lum, lum, lum, alfa);
+}
+
+static void tvAvatar(GfxRect av, float alfa) {
+  const ContaPerfil *p = perfis_item_ativo();
+  GLuint tex = (p && p->avatarUrl[0]) ? tex_obter(p->avatarUrl) : 0;
+  if (tex) {
+    gfx_tex_aspect_atual = 1.0f;
+    gfx_rect(av, tex, GFX_CARD, 0, 0, 0, 0.5f, 0, 0, 0, alfa);
+  } else {
+    float cr, cg, cb;
+    char ini[16];
+    corAvatar(p ? p->corHex : NULL, &cr, &cg, &cb);
+    gfx_cor(av, 0.5f, cr, cg, cb, alfa);
+    tvIniciais(p ? p->nome : NULL, ini, sizeof ini);
+    { TxtLinha l = txt_linha(TXT_BODY, ini, 255, 255, 255, 255);
+      txt_desenhar_alpha(l, av.x + (av.w - l.w) * 0.5f, av.y + (av.h - l.h) * 0.5f, alfa); }
+  }
+}
+
+// Escurece SO o lado esquerdo, numa sombra radial com o centro fora da tela.
+// Meia tela de preenchimento, e nao o veu de tela cheia da rail classica. Com
+// efeitos leves (GFX_LUZ desligado) cai em tres faixas de cor chapada.
+static void tvSombra(float a) {
+  if (a <= 0.01f) return;
+  if (gfx_efeitos_leves()) {
+    gfx_cor((GfxRect){ 0, 0, 520, NV_TELA_H }, 0.0f, 0, 0, 0, 0.34f * a);
+    gfx_cor((GfxRect){ 520, 0, 140, NV_TELA_H }, 0.0f, 0, 0, 0, 0.20f * a);
+    gfx_cor((GfxRect){ 660, 0, 120, NV_TELA_H }, 0.0f, 0, 0, 0, 0.09f * a);
+    return;
+  }
+  gfx_luz_canto((GfxRect){ 0, 0, 1000, NV_TELA_H }, 0.0f, -220.0f, NV_TELA_H * 0.5f,
+                1320.0f, 0, 0, 0, 0.80f * a);
+}
+
+static void tvPonteiroPilula(int a, int b) { (void)a; (void)b; menu_abrir(); }
+
+static void tvDesenhar(void) {
+  float s = tvAbre < 0.0f ? 0.0f : (tvAbre > 1.0f ? 1.0f : tvAbre);
+  GfxRect P = tvPilula(), Q = tvPainel(), R;
+  float pa = tvPilAlfa;
+  float A, raioPx, tinta = ajustes_acento_tinta(NULL, NULL, NULL);
+  float ar, ag, ab;
+  ajustes_acento(&ar, &ag, &ab);
+
+  // Fechada e com a pilula escondida (pagina rolada): nada na tela. O clique
+  // na area da pilula continua abrindo, como o ESQUERDA na primeira coluna.
+  if (s <= 0.001f) {
+    // Pilula visivel: clicar nela abre. Escondida, o alvo dela cobriria o que
+    // a tela tem no canto (o campo da Busca); fica so a faixa da borda, que
+    // abre ao passar, como a rail recolhida.
+    if (ponteiro_ativo()) {
+      if (pa > 0.5f)
+        ponteiro_alvo(NV_MENU_PILULA_X, P.y, P.x + P.w - NV_MENU_PILULA_X, P.h,
+                      NULL, tvPonteiroPilula, 0, 0);
+      else
+        ponteiro_alvo(0, 0, 28.0f, NV_TELA_H, tvPonteiroPilula, NULL, 0, 0);
+    }
+    if (pa <= 0.01f) return;
+  }
+
+  tvSombra(s);
+
+  // O painel NASCE da pilula: o retangulo e o raio vao de um ao outro na mola.
+  R.x = anim_mistura(P.x, Q.x, s);
+  R.y = anim_mistura(P.y, Q.y, s);
+  R.w = anim_mistura(P.w, Q.w, s);
+  R.h = anim_mistura(P.h, Q.h, s);
+  raioPx = anim_mistura(P.h * 0.5f, TV_RAIO, s);
+  A = pa + (1.0f - pa) * (s * 3.0f > 1.0f ? 1.0f : s * 3.0f);
+
+  if (aberto) {
+    ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, ponteiroFora, 0, 0);
+    ponteiro_alvo(Q.x, Q.y, Q.w, Q.h, NULL, NULL, 0, 0);
+  }
+
+  // Superficie de vidro: cinza frio translucido, aro de fio de cabelo.
+  gfx_cor(R, raioPx / R.h, 0.200f, 0.207f, 0.226f, 0.84f * A);
+  gfx_anel(R, raioPx / R.h, 1.5f, 1.0f, 1.0f, 1.0f, 0.10f * A);
+
+  // Conteudo da pilula fechada: some no comeco da abertura.
+  { float ap = A * (1.0f - s * 3.0f);
+    if (ap > 0.01f) {
+      // A seta "‹" fica solta sobre a arte: uma sombra escura de 1 px a
+      // mantem legivel quando o fundo e claro (ceu, neve).
+      TxtLinha seta = txt_linha(TXT_TITULO3, "\xE2\x80\xB9", 245, 245, 248, 255);
+      TxtLinha sombra = txt_linha(TXT_TITULO3, "\xE2\x80\xB9", 0, 0, 0, 255);
+      float cy = P.y + P.h * 0.5f;
+      float sx = NV_MENU_PILULA_X + (NV_MENU_PILULA_SETA - seta.w) * 0.5f - 3.0f;
+      float sy = cy - seta.h * 0.5f - 3.0f;
+      txt_desenhar_alpha(sombra, sx + 1.0f, sy + 2.0f, ap * 0.35f);
+      txt_desenhar_alpha(seta, sx, sy, ap * 0.95f);
+      { GfxRect c = { P.x + 7.0f, cy - TV_CIRC * 0.5f, TV_CIRC, TV_CIRC };
+        gfx_cor(c, 0.5f, 1.0f, 1.0f, 1.0f, 0.28f * ap);
+        icone(destino, c.x + TV_CIRC * 0.5f, cy, TV_ICONE, 0.97f, 0.97f, 0.98f, ap); }
+      { TxtLinha l = txt_linha(TXT_ROW_TITULO, tvRotulo(destino), 245, 245, 248, 255);
+        txt_desenhar_alpha(l, P.x + 7.0f + TV_CIRC + 16.0f, cy - l.h * 0.5f, ap); }
+    } }
+
+  // Conteudo do painel aberto, preso ao retangulo que cresce.
+  { float ac = (s - 0.22f) / 0.70f;
+    float y, cyCab, f;
+    int i;
+    if (ac <= 0.01f) return;
+    if (ac > 1.0f) ac = 1.0f;
+    gfx_recorte(R.x, R.y, R.w, R.h);
+
+    // Cabecalho: avatar, nome e relogio. Focavel: e o "trocar de usuario".
+    cyCab = Q.y + 56.0f;
+    f = animFoco[MENU_RODAPE];
+    if (f > 0.01f) {
+      GfxRect pill = { Q.x + TV_PAD_X, cyCab - 40.0f, Q.w - TV_PAD_X * 2.0f, 80.0f };
+      gfx_cor(pill, 0.5f, ar, ag, ab, f * ac);
+    }
+    { int emFoco = f > 0.5f;
+      int c = emFoco ? (int)(tinta * 255.0f + 0.5f) : 245;
+      const ContaPerfil *p = perfis_item_ativo();
+      char hora[8];
+      GfxRect av = { Q.x + 26.0f, cyCab - TV_AVATAR * 0.5f, TV_AVATAR, TV_AVATAR };
+      TxtLinha rel, nome;
+      tvAvatar(av, ac);
+      tvRelogio(hora, sizeof hora);
+      rel = txt_linha(TXT_PG_RELOGIO, hora, c, c, c, 255);
+      nome = txt_linha_corta(TXT_ROW_TITULO, p ? p->nome : "Sua conta", c, c, c, 255,
+                             Q.w - (av.x - Q.x) - TV_AVATAR - 18.0f - rel.w - 40.0f);
+      txt_desenhar_alpha(nome, av.x + TV_AVATAR + 18.0f, cyCab - nome.h * 0.5f, ac);
+      txt_desenhar_alpha(rel, Q.x + Q.w - 30.0f - rel.w, cyCab - rel.h * 0.5f, ac * 0.92f);
+      if (aberto && ponteiro_ativo())
+        ponteiro_alvo(Q.x, cyCab - 40.0f, Q.w, 80.0f, ponteiroLinha, NULL, MENU_RODAPE, 0); }
+
+    y = Q.y + TV_CAB_H;
+    for (i = 0; i < MENU_N; i++) {
+      int d = TV_ORDEM[i], atual = (d == destino);
+      float cy = y + TV_LINHA_H * 0.5f;
+      GfxRect pill = { Q.x + TV_PAD_X, y + 5.0f, Q.w - TV_PAD_X * 2.0f, TV_LINHA_H - 10.0f };
+      if (!mostra(d)) continue;
+      f = animFoco[d];
+      // ATUAL: pilula cinza translucida, que some sob a do foco.
+      if (atual && f < 0.99f) gfx_cor(pill, 0.5f, 1.0f, 1.0f, 1.0f, 0.17f * (1.0f - f) * ac);
+      // EM FOCO: pilula na cor de realce (branca no padrao), sem brilho atras.
+      if (f > 0.01f) gfx_cor(pill, 0.5f, ar, ag, ab, f * ac);
+      tvCirculoIcone(d, pill.x + 8.0f + TV_CIRC * 0.5f, cy, f, atual, tinta, ac);
+      { int emFoco = f > 0.5f;
+        int c = emFoco ? (int)(tinta * 255.0f + 0.5f) : (atual ? 248 : 232);
+        TxtLinha l = txt_linha_corta(TXT_ROW_TITULO, tvRotulo(d), c, c, c, 255,
+                                     pill.w - TV_CIRC - 44.0f);
+        txt_desenhar_alpha(l, pill.x + 8.0f + TV_CIRC + 18.0f, cy - l.h * 0.5f, ac); }
+      if (aberto && ponteiro_ativo())
+        ponteiro_alvo(Q.x, y, Q.w, TV_LINHA_H, ponteiroLinha, NULL, d, 0);
+      y += TV_LINHA_H;
+    }
+    gfx_sem_recorte();
+  }
 }
