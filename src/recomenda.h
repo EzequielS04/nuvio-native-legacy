@@ -346,9 +346,16 @@ typedef struct {
   unsigned generos;
   char relacao[12];           // "" | "amigo" | "enviado" | "recebido"
   int  emComum;               // titulos em comum (so nas sugestoes de gosto)
+  // Ultimo dos "vistos recentemente" PUBLICOS (so na lista da comunidade, e so
+  // de quem ligou "Mostrar o que assisti recentemente"). Nunca "assistindo
+  // agora": isso e so para amigo.
+  char vendo[80];
 } RecPessoa;
 
 #define REC_BUSCA_MAX    10
+// A lista da comunidade vem em paginas de 20 (servidor); o aparelho guarda ate
+// duas paginas e oferece "Ver mais" enquanto o servidor disser que ha.
+#define REC_COMUNIDADE_MAX 40
 #define REC_PEDIDOS_MAX  20
 #define REC_BLOQ_MAX     20
 
@@ -363,6 +370,13 @@ enum { REC_SOC_NADA = 0, REC_SOC_INDO, REC_SOC_OK,
 // devolvem 1 quando entraram na fila e o resultado sai em recomenda_soc_estado().
 int  recomenda_buscar(const char *texto);        // apelido (3+) ou codigo de 6
 int  recomenda_sugeridos_gosto(void);            // ver nota em recomenda.c
+// COMUNIDADE NUVIO NATIVE: todo mundo que publicou o perfil (servidor:
+// POST /v1/perfis/comunidade). `pagina` 0 recomeca a lista; as seguintes
+// acrescentam ao fim. So responde algo para quem tambem e pesquisavel.
+int  recomenda_comunidade(int pagina);
+int  recomenda_comunidade_mais(void);            // 1 = o servidor tem mais pessoas
+int  recomenda_comunidade_pagina(void);          // ultima pagina lida
+int  recomenda_comunidade_fechada(void);         // 1 = servidor disse "ligue o perfil"
 int  recomenda_ver_perfil(const char *pub);
 int  recomenda_pedir_amizade(const char *pub);
 int  recomenda_aceitar(const char *pub);
@@ -377,7 +391,8 @@ void recomenda_soc_limpar(void);
 
 int  recomenda_n_achados(void);
 int  recomenda_achado(int i, RecPessoa *saida);
-// 1 = veio de uma busca, 2 = das sugestoes de gosto. Serve para o titulo da lista.
+// 1 = veio de uma busca, 2 = das sugestoes de gosto, 3 = da comunidade. Serve
+// para o titulo da lista.
 int  recomenda_achados_origem(void);
 int  recomenda_cartao(RecPessoa *saida);         // o ultimo perfil aberto
 // Titulos "vistos recentemente" do cartao aberto (so vem se a pessoa ligou).

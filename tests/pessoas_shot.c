@@ -123,6 +123,30 @@ int main(int argc, char **argv) {
   irPara(PG_PEDIDOS);
   snprintf(nome, sizeof nome, "%s/pessoas-pedidos.bmp", saida); captura(nome, w);
 
+  /* COMUNIDADE NUVIO NATIVE: 12 perfis publicados, com e sem "vistos
+     recentemente" publico, uma relacao de cada tipo e o servidor dizendo que
+     ha mais (a ultima linha e "Ver mais pessoas"). */
+  { static const char *ap[12] = { "fabi cine", "gui nerd", "helena tv", "marcos 4k",
+      "ana series", "joao terror", "bia anime", "leo docs", "carla k drama",
+      "rafa maratona", "nina classicos", "tito sci fi" };
+    static const char *vi[12] = { "Silo", "", "Duna: Parte Dois", "Project Hail Mary", "",
+      "Hereditario", "Frieren", "", "Pousando no Amor", "Ruptura", "", "Andor" };
+    static const char *rel[12] = { "", "amigo", "", "enviado", "", "recebido", "", "", "", "", "", "" };
+    int k;
+    for (k = 0; k < 12; k++) {
+      char pub[12];
+      snprintf(pub, sizeof pub, "c%09d", k);
+      pessoa(&achados[k], pub, ap[k], k == 7 ? "so documentario" : "", 0, rel[k], 0);
+      snprintf(achados[k].vendo, sizeof achados[k].vendo, "%s", vi[k]);
+    }
+    nAchados = 12; achadosOrigem = 3; comMais = 1; comPagina = 0; }
+  irPara(PG_MENU); foco = 1;
+  snprintf(nome, sizeof nome, "%s/pessoas-menu-comunidade.bmp", saida); captura(nome, w);
+  irPara(PG_LISTA);
+  snprintf(nome, sizeof nome, "%s/pessoas-comunidade.bmp", saida); captura(nome, w);
+  foco = 12;
+  snprintf(nome, sizeof nome, "%s/pessoas-comunidade-mais.bmp", saida); captura(nome, w);
+
   rasc = perfil; rascVivo = 1;
   irPara(PG_PERFIL);
   snprintf(nome, sizeof nome, "%s/pessoas-meu-perfil.bmp", saida); captura(nome, w);

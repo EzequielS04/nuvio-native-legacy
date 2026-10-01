@@ -57,6 +57,12 @@ curl -s -X POST "${B[@]}" -d "{\"codigo\":\"$COD\"}" "$BASE/v1/contatos" > /dev/
 curl -s -X POST "${B[@]}" -d '{"para":"nuvio:e2e","imdb":"tt0111161","tipo":"movie","titulo":"Um Sonho de Liberdade","poster":"https://exemplo/p.jpg","ano":"1994","modelo":2,"nota":88}' \
   "$BASE/v1/rec" > /dev/null
 
+# A COMUNIDADE: os dois publicam o perfil (a lista e reciproca) e o amigo liga
+# "vistos recentemente" com um titulo, que tem de chegar como `vendo`.
+curl -s -X POST "${A[@]}" -d '{"apelido":"Teste E2E"}' "$BASE/v1/perfil" > /dev/null
+curl -s -X POST "${B[@]}" -d '{"apelido":"Amigo E2E","recentes":1}' "$BASE/v1/perfil" > /dev/null
+curl -s -X POST "${B[@]}" -d '{"imdb":"tt0111161","titulo":"Um Sonho de Liberdade","agora":0}' "$BASE/v1/atividade" > /dev/null
+
 sources=()
 for source in src/*.c; do
   case "$source" in src/main.c|src/recomenda.c) continue;; esac

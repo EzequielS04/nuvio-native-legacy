@@ -331,6 +331,60 @@ async function rotaSugeridos(env, quem, corpo, h) {
   });
 }
 
+// COMUNIDADE NUVIO NATIVE: a lista de TODOS os perfis publicados, em paginas.
+//
+// QUEM ENTRA: so quem esta publicado (descobrivel = 1 E apelido escolhido) —
+// exatamente o mesmo conjunto que a busca por apelido ja acha. Quem ligou so o
+// antigo "aparecer para outras pessoas" sem escolher apelido NAO entra: o unico
+// nome que haveria para mostrar e o da conta, e esse ninguem escolheu mostrar.
+// Desligar tira da lista na hora (toda consulta le as colunas; nao ha copia).
+//
+// O QUE SAI: o mesmo cartao da busca, mais `vendo` = o ultimo titulo dos
+// "vistos recentemente" SO de quem ligou esse interruptor (o cartao publico ja
+// mostra esses mesmos titulos). "Assistindo agora" e coisa so de amigo e nunca
+// sai aqui. Nenhum horario sai: a ordem usa a atividade publica, mas o numero
+// fica no servidor.
+//
+// ORDEM: o mais recente entre "publicou/mexeu no perfil" e "ultimo visto
+// recente publico". `pessoa.visto` (ultima vez que a TV falou com o servidor)
+// NAO entra: e presenca, e presenca nunca foi publica.
+//
+// RECIPROCO, como o gosto parecido: quem nao se mostra nao ganha uma janela
+// para ver todo mundo. Paginado (20 por vez, ate 50 paginas) e com limite por
+// hora, para a lista nao virar um jeito barato de copiar o diretorio inteiro.
+const COMUNIDADE_PAG = 20;
+const COMUNIDADE_PAGS = 50;
+
+async function rotaComunidade(env, quem, corpo, h) {
+  if (!(await limitar(env, `comunidade:${quem.id}`, 60, 3600, h.agora()))) return h.erro("limite", 429);
+  const eu = await env.DB.prepare("SELECT descobrivel FROM pessoa WHERE id = ?").bind(quem.id).first();
+  if (!eu?.descobrivel) return h.json({ pessoas: [], mais: 0, fechado: 1 });
+  const pag = Number.isInteger(corpo?.pagina) ? Math.max(0, Math.min(COMUNIDADE_PAGS - 1, corpo.pagina)) : 0;
+  const PUBLICO = "a.pessoa = f.pessoa AND a.acao = 0 AND f.recentes = 1";
+  const r = await env.DB.prepare(
+    "SELECT f.pub AS pub, f.apelido AS apelido, f.bio AS bio, f.generos AS generos, " +
+    "f.com_avatar AS comAvatar, p.avatar AS avatar, p.descobrivel AS descobrivel, " +
+    `(SELECT a.titulo FROM atividade a WHERE ${PUBLICO} ORDER BY a.criado DESC LIMIT 1) AS vendo, ` +
+    `MAX(f.atualizado, COALESCE((SELECT MAX(a.criado) FROM atividade a WHERE ${PUBLICO}), 0)) AS ativo, ` +
+    "CASE WHEN EXISTS (SELECT 1 FROM contato c WHERE c.a = ?1 AND c.b = f.pessoa) THEN 'amigo' " +
+    "     WHEN EXISTS (SELECT 1 FROM pedido q WHERE q.de = ?1 AND q.para = f.pessoa) THEN 'enviado' " +
+    "     WHEN EXISTS (SELECT 1 FROM pedido q WHERE q.de = f.pessoa AND q.para = ?1 AND q.estado = 0) THEN 'recebido' " +
+    "     ELSE '' END AS relacao " +
+    "FROM perfil f JOIN pessoa p ON p.id = f.pessoa " +
+    "WHERE p.descobrivel = 1 AND f.apelido <> '' AND f.pessoa <> ?1 " +
+    "AND NOT EXISTS (SELECT 1 FROM bloqueio b WHERE (b.quem = ?1 AND b.alvo = f.pessoa) OR (b.quem = f.pessoa AND b.alvo = ?1)) " +
+    "ORDER BY ativo DESC, f.pub LIMIT ?2 OFFSET ?3"
+  ).bind(quem.id, COMUNIDADE_PAG + 1, pag * COMUNIDADE_PAG).all();
+  const linhas = r.results || [];
+  return h.json({
+    pessoas: linhas.slice(0, COMUNIDADE_PAG).map((x) => ({
+      ...cartao({ ...x, nome: "" }, x.relacao || ""), vendo: x.vendo || "",
+    })),
+    pagina: pag,
+    mais: linhas.length > COMUNIDADE_PAG && pag + 1 < COMUNIDADE_PAGS ? 1 : 0,
+  });
+}
+
 // --- pedidos de amizade -----------------------------------------------------------------
 
 async function vincular(env, a, b) {
@@ -539,6 +593,7 @@ export async function rotaAmigos(rota, metodo, env, quem, corpo, h) {
     case "/v1/perfis/buscar": return rotaBuscar(env, quem, corpo, h);
     case "/v1/perfis/ver": return rotaVer(env, quem, corpo, h);
     case "/v1/perfis/sugeridos": return rotaSugeridos(env, quem, corpo, h);
+    case "/v1/perfis/comunidade": return rotaComunidade(env, quem, corpo, h);
     case "/v1/pedidos/enviar": return rotaPedidoEnviar(env, quem, corpo, h);
     case "/v1/pedidos/aceitar": return rotaPedidoAceitar(env, quem, corpo, h);
     case "/v1/pedidos/recusar": return rotaPedidoRecusar(env, quem, corpo, h);

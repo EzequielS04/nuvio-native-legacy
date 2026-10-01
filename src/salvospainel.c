@@ -60,6 +60,15 @@
 // das abas.
 #define SP_LISTA_Y     176.0f
 #define SP_LISTA_BASE (SP_Y + SP_H - 24.0f)
+// AR DO FOCO entre o recorte da lista e a primeira linha. A superficie da linha
+// focada nasce SP_FOCO_PADY ACIMA do `y` da linha (e o vidro poe o aro por
+// cima disso), e a lista comecava exatamente no topo do recorte: a primeira
+// linha em foco — e qualquer linha que a rolagem alinhava ao topo — saia com
+// a borda de cima reta, sem os cantos (foto do dono, 01/10, aba Social com
+// vidro; medido no tests/spainel_foco_shot: superficie cortada em y=176, o
+// topo do recorte). O conteudo comeca SP_FOCO_AR abaixo do recorte e a
+// rolagem guarda o mesmo ar em cima e embaixo da linha focada.
+#define SP_FOCO_AR      14.0f
 #define SP_POSTER_W     92.0f
 #define SP_POSTER_H    138.0f
 // 12 px entre linhas (dono, 21/09/2026); a pilula de foco tem 6 px de folga
@@ -888,7 +897,9 @@ void spainel_atualizar(float dt, Uint32 agora) {
     // pode ter 84, 112 ou 138px, e usar a maior empurraria a rolagem 54px alem
     // do necessario num interruptor de 104.
     base = topo + (aba == SP_ABA_SOCIAL ? socialAlt(foco) : aba == SP_ABA_AVISOS ? avisos_lista_altura_linha(foco, foco) - 10.0f : SP_POSTER_H);
-    if (base - alvo > janela) alvo = base - janela;
+    // O ar do foco nas duas pontas: o conteudo ja nasce SP_FOCO_AR abaixo do
+    // recorte (ver SP_FOCO_AR), entao em cima basta `topo` e embaixo sao dois.
+    if (base + 2.0f * SP_FOCO_AR - alvo > janela) alvo = base + 2.0f * SP_FOCO_AR - janela;
     if (topo - alvo < 0.0f) alvo = topo;
   }
   if (alvo < 0.0f) alvo = 0.0f;
@@ -1907,14 +1918,14 @@ void spainel_desenhar(Uint32 agora) {
 
   if (aba == SP_ABA_AVISOS) {
     gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
-    avisos_lista_desenhar(SP_X + x + SP_PAD, listaTopo() - scrollY, SP_INTERNO, a, foco);
+    avisos_lista_desenhar(SP_X + x + SP_PAD, listaTopo() + SP_FOCO_AR - scrollY, SP_INTERNO, a, foco);
     gfx_sem_recorte();
     return;
   }
 
   if (aba == SP_ABA_SOCIAL) {
     gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
-    y = listaTopo() - scrollY;
+    y = listaTopo() + SP_FOCO_AR - scrollY;
     // O BLOCO DE TEXTO ROLA COM A LISTA, e nao fica preso no topo: ele explica
     // a lista que vem logo abaixo, e um texto fixo com linhas passando por
     // baixo dele leria como duas telas empilhadas.
@@ -1978,7 +1989,7 @@ void spainel_desenhar(Uint32 agora) {
   // A lista rola dentro da propria janela, com um segundo recorte: o cabecalho
   // fica de fora dele e por isso nunca e coberto por um card subindo.
   gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
-  y = listaTopo() - scrollY;
+  y = listaTopo() + SP_FOCO_AR - scrollY;
 
   desenhaSecao(SP_X + x + SP_PAD, y, nCont > 0 ? "Continuar" : "Sua lista", a);
   y += SP_SECAO_H;

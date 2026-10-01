@@ -214,13 +214,15 @@ static int       apagarPendente;
 // A OPERACAO SOCIAL EM CURSO. Uma por vez, como vincular/remover: e sempre um
 // OK numa tela que espera a resposta.
 enum { SOC_BUSCAR = 1, SOC_GOSTO, SOC_VER, SOC_PEDIR, SOC_ACEITAR, SOC_RECUSAR,
-       SOC_CANCELAR, SOC_BLOQUEAR, SOC_DESBLOQ, SOC_PEDIDOS, SOC_BLOQUEADOS };
+       SOC_CANCELAR, SOC_BLOQUEAR, SOC_DESBLOQ, SOC_PEDIDOS, SOC_BLOQUEADOS,
+       SOC_COMUNIDADE };
 static int  socOp;
 static char socArg[400];
 static int  socEstado;
 
-static RecPessoa achados[REC_BUSCA_MAX];
+static RecPessoa achados[REC_COMUNIDADE_MAX];   // busca/gosto usam so REC_BUSCA_MAX
 static int       nAchados, achadosOrigem;
+static int       comMais, comPagina, comFechada;
 static RecPessoa cartaoP;
 static int       temCartao;
 static char      cartaoRec[6][72];
@@ -894,6 +896,15 @@ int recomenda_buscar(const char *texto) {
   return socIniciar(SOC_BUSCAR, q);
 }
 int recomenda_sugeridos_gosto(void)   { return socIniciar(SOC_GOSTO, ""); }
+int recomenda_comunidade(int pagina) {
+  char arg[16];
+  if (pagina < 0) pagina = 0;
+  snprintf(arg, sizeof arg, "%d", pagina);
+  return socIniciar(SOC_COMUNIDADE, arg);
+}
+int recomenda_comunidade_mais(void)    { return comMais; }
+int recomenda_comunidade_pagina(void)  { return comPagina; }
+int recomenda_comunidade_fechada(void) { return comFechada; }
 int recomenda_ver_perfil(const char *pub)     { return pubValido(pub) && socIniciar(SOC_VER, pub); }
 int recomenda_pedir_amizade(const char *pub)  { return pubValido(pub) && socIniciar(SOC_PEDIR, pub); }
 int recomenda_aceitar(const char *pub)        { return pubValido(pub) && socIniciar(SOC_ACEITAR, pub); }
@@ -1088,6 +1099,7 @@ void recomenda_esquecer(void) {
   perfilPendente = 0; ativPendente = -1; apagarPendente = 0;
   socOp = 0; socArg[0] = 0; socEstado = REC_SOC_NADA;
   nAchados = 0; achadosOrigem = 0; temCartao = 0; nCartaoRec = 0;
+  comMais = comPagina = comFechada = 0;
   nPedidos = 0; nBloq = 0;
   nAtivFila = 0; ativUltimo[0] = 0; ativUltimoAgora = 0;
   nFeed = 0;
@@ -1747,6 +1759,8 @@ static int lerPessoa(const char *p, const char *f, RecPessoa *x) {
   js_texto(p, f, "avatar",  x->avatar,  sizeof x->avatar);
   js_texto(p, f, "bio",     x->bio,     sizeof x->bio);
   js_texto(p, f, "relacao", x->relacao, sizeof x->relacao);
+  js_texto(p, f, "vendo",   x->vendo,   sizeof x->vendo);
+  semTab(x->vendo);
   x->emComum = (int)js_num(p, f, "emComum", 0.0);
   x->generos = mascaraGeneros(p, f);
   semTab(x->apelido); semTab(x->bio); semTab(x->avatar);
@@ -1965,6 +1979,9 @@ static void tratarSocial(const char **cab) {
     case SOC_GOSTO:
       corpoGosto(corpo, sizeof corpo);
       url("/v1/perfis/sugeridos"); r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st); break;
+    case SOC_COMUNIDADE:
+      snprintf(corpo, sizeof corpo, "{\"pagina\":%d}", atoi(arg));
+      url("/v1/perfis/comunidade"); r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st); break;
     case SOC_VER:
       snprintf(corpo, sizeof corpo, "{\"pub\":\"%s\"}", esc);
       url("/v1/perfis/ver"); r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st); break;
@@ -2001,6 +2018,25 @@ static void tratarSocial(const char **cab) {
       }
       nAchados = n;
       achadosOrigem = op == SOC_BUSCAR ? 1 : 2;
+    } else if (op == SOC_COMUNIDADE) {
+      // Pagina 0 recomeca; as outras ACRESCENTAM, sem repetir quem ja esta (a
+      // ordem e por atividade e pode ter mudado entre uma pagina e outra).
+      const char *p = js_array(r, NULL, "pessoas");
+      int pag = atoi(arg), n = (pag == 0 || achadosOrigem != 3) ? 0 : nAchados;
+      while (p && *p == '{' && n < REC_COMUNIDADE_MAX) {
+        const char *f = js_fim(p);
+        if (lerPessoa(p, f, &achados[n])) {
+          int j, dup = 0;
+          for (j = 0; j < n; j++) if (!strcmp(achados[j].pub, achados[n].pub)) dup = 1;
+          if (!dup) n++;
+        }
+        p = js_prox(f);
+      }
+      nAchados = n;
+      achadosOrigem = 3;
+      comPagina = pag;
+      comFechada = (int)js_num(r, fim, "fechado", 0.0) ? 1 : 0;
+      comMais = (int)js_num(r, fim, "mais", 0.0) && n < REC_COMUNIDADE_MAX ? 1 : 0;
     } else if (op == SOC_VER) {
       if (lerPessoa(r, fim, &cartaoP)) {
         const char *p = js_array(r, NULL, "recentes");
@@ -2030,6 +2066,16 @@ static void tratarSocial(const char **cab) {
       for (i = 0; i < nPedidos; i++)
         if (strcmp(pedidosRec[i].pub, arg)) pedidosRec[k++] = pedidosRec[i];
       nPedidos = k;
+    } else if (op == SOC_PEDIR || op == SOC_CANCELAR || op == SOC_ACEITAR) {
+      // A LISTA DE ONDE O CARTAO VEIO tambem fica sabendo: voltar do cartao
+      // para a comunidade e ver "Pedir" de novo ao lado de quem ja recebeu o
+      // pedido leria como se o OK nao tivesse feito nada.
+      char est[12] = "";
+      int i;
+      if (op == SOC_PEDIR) js_texto(r, fim, "estado", est, sizeof est);
+      else if (op == SOC_ACEITAR) snprintf(est, sizeof est, "%s", "amigo");
+      for (i = 0; i < nAchados; i++)
+        if (!strcmp(achados[i].pub, arg)) snprintf(achados[i].relacao, sizeof achados[i].relacao, "%s", est);
     } else if (op == SOC_BLOQUEAR) {
       // A amizade (se havia) caiu no servidor: a lista de contatos e relida.
       contatosMs = SDL_GetTicks() - 1;

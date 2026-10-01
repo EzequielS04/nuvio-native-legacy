@@ -24,8 +24,14 @@
 #define PE_GAP      BOTAO_GAP
 #define PE_RODAPE    70.0f
 #define PE_JANELA     5
+// O MENU MOSTRA AS SEIS de uma vez: com "Comunidade Nuvio Native" ele passou a
+// ter seis linhas, e a sexta ("Pessoas bloqueadas") so apareceria rolando — num
+// menu de seis itens isso le como se ela nao existisse. Cabe: 892 px de altura.
+#define PE_JANELA_MENU 6
+static int pagina;
+static int janela(void) { return pagina == 0 ? PE_JANELA_MENU : PE_JANELA; }
 #define PE_INTERNO  (PE_W - PE_PAD * 2.0f)
-#define PE_MAXL      24
+#define PE_MAXL      48   // a comunidade: REC_COMUNIDADE_MAX pessoas + "Ver mais"
 #define PE_AV_CARTAO 112.0f
 #define PE_SW_W       72.0f
 #define PE_SW_H       36.0f
@@ -35,6 +41,7 @@ enum { PG_MENU = 0, PG_LISTA, PG_CARTAO, PG_PEDIDOS, PG_BLOQ, PG_PERFIL, PG_GEN 
 // O que cada linha faz ao OK.
 enum { A_NADA = 0,
        A_BUSCAR, A_GOSTO, A_PEDIDOS, A_PERFIL, A_BLOQUEADOS,
+       A_COMUNIDADE, A_MAIS,           // a lista da comunidade e "Ver mais"
        A_PESSOA,                       // abre o cartao de quem esta na linha
        A_PEDIR, A_CANCELAR, A_ACEITAR, A_RECUSAR, A_BLOQUEAR, A_DESBLOQ,
        A_P_PESQ, A_P_APELIDO, A_P_BIO, A_P_GEN, A_P_FOTO, A_P_REC, A_P_ATIV,
@@ -51,7 +58,7 @@ typedef struct {
   char pub[16];            // alvo de A_DESBLOQ
 } Linha;
 
-static int   aberto, pagina, foco, topo;
+static int   aberto, foco, topo;
 static float anim;
 static Linha linhas[PE_MAXL];
 static int   nL;
@@ -65,6 +72,7 @@ static int   rascVivo;
 static char  cartaoPub[16];
 static int   voltaPara = -1;      // pagina de onde o cartao veio
 static int   tecladoPara;         // 0 nada, A_BUSCAR, A_P_APELIDO, A_P_BIO
+static int   focoVolta = -1;      // linha da lista de onde o cartao foi aberto
 
 static const char *ALFA_TEXTO = "abcdefghijklmnopqrstuvwxyz0123456789-";
 
@@ -171,6 +179,7 @@ static void rotuloRelacao(char *dst, size_t tam, const RecPessoa *p) {
   else if (!strcmp(p->relacao, "enviado")) snprintf(dst, tam, "%s", i18n("Pedido enviado"));
   else if (!strcmp(p->relacao, "recebido")) snprintf(dst, tam, "%s", i18n("Quer ser seu amigo"));
   else if (p->emComum > 0) snprintf(dst, tam, i18n("%d títulos em comum"), p->emComum);
+  else if (p->vendo[0]) snprintf(dst, tam, i18n("Assistiu recentemente: %s"), p->vendo);
   else snprintf(dst, tam, "%s", p->bio);
 }
 
@@ -193,6 +202,7 @@ static void montar(void) {
   nL = 0;
   if (pagina == PG_MENU) {
     nova(A_BUSCAR, "Buscar por apelido ou código");
+    nova(A_COMUNIDADE, "Comunidade Nuvio Native");
     nova(A_GOSTO, "Pessoas com gosto parecido");
     if (np > 0) { snprintf(b, sizeof b, i18n("Pedidos de amizade (%d)"), np); nova(A_PEDIDOS, b); }
     else nova(A_PEDIDOS, "Pedidos de amizade");
@@ -201,6 +211,8 @@ static void montar(void) {
   } else if (pagina == PG_LISTA) {
     int n = recomenda_n_achados();
     for (i = 0; i < n; i++) { RecPessoa p; if (recomenda_achado(i, &p)) pessoaLinha(A_PESSOA, &p, 1); }
+    if (recomenda_achados_origem() == 3 && recomenda_comunidade_mais())
+      nova(A_MAIS, opAtual == A_MAIS ? "Aguarde..." : "Ver mais pessoas");
   } else if (pagina == PG_PEDIDOS) {
     for (i = 0; i < np; i++) { RecPessoa p; if (recomenda_pedido(i, &p)) pessoaLinha(A_PESSOA, &p, 1); }
   } else if (pagina == PG_BLOQ) {
@@ -251,7 +263,7 @@ static void montar(void) {
   }
   if (foco >= nL) foco = nL > 0 ? nL - 1 : 0;
   if (foco < topo) topo = foco;
-  if (foco >= topo + PE_JANELA) topo = foco - PE_JANELA + 1;
+  if (foco >= topo + janela()) topo = foco - janela() + 1;
   if (topo < 0) topo = 0;
 }
 
@@ -279,6 +291,19 @@ static void aplicar(void) {
   l = &linhas[foco];
   switch (l->acao) {
     case A_BUSCAR: abrirTeclado(A_BUSCAR); return;
+    case A_COMUNIDADE:
+      // RECIPROCO, como o gosto parecido (e o servidor confere de novo): quem
+      // nao se mostra nao ganha uma janela para ver todo mundo.
+      if (!recomenda_pesquisavel()) {
+        dizer(i18n("Ligue o Perfil pesquisável em Meu perfil para ver a comunidade."), agora, 4500);
+        return;
+      }
+      if (recomenda_comunidade(0)) { opAtual = A_COMUNIDADE; dizer(i18n("Procurando..."), agora, 0); }
+      return;
+    case A_MAIS:
+      if (opAtual) return;
+      if (recomenda_comunidade(recomenda_comunidade_pagina() + 1)) opAtual = A_MAIS;
+      return;
     case A_GOSTO:
       if (!recomenda_pesquisavel()) {
         dizer(i18n("Ligue o Perfil pesquisável em Meu perfil para ver pessoas com gosto parecido."), agora, 4500);
@@ -298,6 +323,7 @@ static void aplicar(void) {
     case A_PESSOA:
       if (!l->temPessoa) return;
       voltaPara = pagina;
+      focoVolta = foco;
       snprintf(cartaoPub, sizeof cartaoPub, "%s", l->p.pub);
       if (recomenda_ver_perfil(cartaoPub)) { opAtual = A_PESSOA; dizer(i18n("Abrindo..."), agora, 0); }
       return;
@@ -372,7 +398,15 @@ void pessoas_evento(const SDL_Event *e) {
       e->key.keysym.scancode == NV_SCANCODE_BACK) {
     if (confirmando >= 0) { confirmando = -1; return; }
     if (pagina == PG_GEN) { irPara(PG_PERFIL); return; }
-    if (pagina == PG_CARTAO) { int volta = voltaPara; irPara(volta >= 0 ? volta : PG_MENU); return; }
+    if (pagina == PG_CARTAO) {
+      int volta = voltaPara;
+      irPara(volta >= 0 ? volta : PG_MENU);
+      // Volta para a MESMA pessoa da lista: numa comunidade de 40 nomes,
+      // recomecar do primeiro a cada cartao fechado seria andar tudo de novo.
+      if (volta >= 0 && focoVolta >= 0) { foco = focoVolta; montar(); }
+      focoVolta = -1;
+      return;
+    }
     if (pagina != PG_MENU) { irPara(PG_MENU); return; }
     aberto = 0;
     return;
@@ -407,6 +441,17 @@ static void concluiu(int est, Uint32 agora) {
     case A_BUSCAR:
       irPara(PG_LISTA);
       dizer(recomenda_n_achados() ? "" : i18n("Ninguém encontrado com esse apelido ou código."), agora, 4000);
+      break;
+    case A_COMUNIDADE:
+      irPara(PG_LISTA);
+      dizer(recomenda_comunidade_fechada()
+              ? i18n("Ligue o Perfil pesquisável em Meu perfil para ver a comunidade.")
+              : recomenda_n_achados() ? "" : i18n("Ninguém na comunidade por enquanto."), agora, 4000);
+      break;
+    case A_MAIS:
+      // Fica onde esta: o foco ja estava em "Ver mais", que agora e a primeira
+      // pessoa nova (ou a ultima, se nao veio ninguem).
+      aviso[0] = 0;
       break;
     case A_GOSTO:
       irPara(PG_LISTA);
@@ -581,7 +626,7 @@ void pessoas_desenhar(Uint32 agora) {
     case PG_GEN:    cab = 150.0f; break;
     default:        cab = 190.0f; break;   // subtitulo de ate 2 linhas (pt e mais longo que en)
   }
-  vis = nL < PE_JANELA ? nL : PE_JANELA;
+  vis = nL < janela() ? nL : janela();
   if (vis < 1) vis = 1;
   alt = PE_PAD * 2.0f + cab + (float)vis * (PE_LINHA + PE_GAP) - PE_GAP + PE_RODAPE;
   x = (NV_TELA_W - PE_W) * 0.5f;
@@ -598,8 +643,11 @@ void pessoas_desenhar(Uint32 agora) {
   switch (pagina) {
     case PG_MENU:    titulo = "Encontrar pessoas";
                      sub = "Procure por apelido, ou pelo código de 6 letras que seu amigo te passou. Só aparece quem ligou o Perfil pesquisável."; break;
-    case PG_LISTA:   titulo = recomenda_achados_origem() == 2 ? "Gosto parecido" : "Resultados da busca";
-                     sub = recomenda_achados_origem() == 2
+    case PG_LISTA:   titulo = recomenda_achados_origem() == 3 ? "Comunidade Nuvio Native"
+                           : recomenda_achados_origem() == 2 ? "Gosto parecido" : "Resultados da busca";
+                     sub = recomenda_achados_origem() == 3
+                           ? "Todo mundo que ligou o Perfil pesquisável, com atividade mais recente primeiro. Abra um perfil para pedir amizade."
+                           : recomenda_achados_origem() == 2
                            ? "Pessoas que também assistiram a vários dos seus títulos. Só entra quem publicou os vistos recentemente."
                            : "Abra um perfil para ver o que a pessoa escolheu mostrar."; break;
     case PG_PEDIDOS: titulo = "Pedidos de amizade";
@@ -660,7 +708,7 @@ void pessoas_desenhar(Uint32 agora) {
     if (sub[0]) txt_bloco(TXT_DET_META2, sub, 170, 174, 185, hx, hy, hw, 30.0f, a * 0.92f, 3);
   }
 
-  for (i = topo; i < nL && i - topo < PE_JANELA; i++) {
+  for (i = topo; i < nL && i - topo < janela(); i++) {
     float by = y + PE_PAD + cab + (float)(i - topo) * (PE_LINHA + PE_GAP);
     desenhaLinha(x + PE_PAD, by, &linhas[i], focoAnim[i], a);
   }
