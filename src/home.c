@@ -3471,7 +3471,7 @@ static void desenhaHero(Uint32 agora, float saida) {
     base = r.y + r.h - NV_PAD_TEXTO_BASE - btnH - btnGap + descidaCopy;
   } else if (lay == HOME_LAYOUT_DINAMICA) {
     aBotao = aVis;
-    base = r.y + NV_DIN_HERO_H - 130.0f - btnH - btnGap + descidaCopy;
+    base = r.y + NV_DIN_HERO_H - NV_DIN_TEXTO_BASE - btnH - btnGap + descidaCopy;
   }
   base += bordaPag.x;   // retorno de borda do Cima no destaque
   float x = ajustes_conteudo_x();

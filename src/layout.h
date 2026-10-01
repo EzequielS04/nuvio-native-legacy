@@ -267,17 +267,21 @@
 //
 // HERO QUASE CHEIO E ROLAGEM CENTRADA (dono, 01/10: "como o Apple TV"). Com o
 // foco no destaque so o titulo de "Continuar assistindo" e a beirada dos
-// cartoes espiam na base (titulo em 950, cartoes de 996 a 1080). Descendo, a
+// cartoes espiam na base (titulo em 980, dentro da margem segura de 54 px da
+// TV; cartoes de 1026 a 1080), e o bloco do destaque (logo, meta, sinopse,
+// botao) desce junto: o botao termina NV_DIN_TEXTO_BASE acima do fim da zona
+// do texto, ~76 px acima do titulo da fileira, como o Apple TV. Descendo, a
 // fileira em foco fica no MEIO da tela (o centro dela em NV_DIN_CENTRO_FIL) e
 // a lista rola por baixo; as de cima continuam a vista ate sairem pela borda.
 // Nos extremos a rolagem para: a primeira fileira nao desce de
 // NV_DIN_TOPO_FIL e a ultima nao sobe alem de NV_DIN_FOLGA_BASE da base (sem
 // buraco em cima nem embaixo).
-#define NV_DIN_HERO_H     930.0f   // zona do TEXTO do destaque (a arte e maior)
+#define NV_DIN_HERO_H     960.0f   // zona do TEXTO do destaque (a arte e maior)
+#define NV_DIN_TEXTO_BASE  56.0f   // do fim do botao ate o fim da zona do texto
 #define NV_DIN_ARTE_H    1080.0f   // a ARTE e a tela inteira, de borda a borda
 #define NV_DIN_ARTE_FADE_A  80.0f  // rolagem em que a arte comeca a apagar
 #define NV_DIN_ARTE_FADE_B 560.0f  // ...e em que ja sumiu
-#define NV_DIN_REPOUSO_FIL 950.0f  // titulo da 1a fileira com o destaque em foco
+#define NV_DIN_REPOUSO_FIL 980.0f  // titulo da 1a fileira com o destaque em foco
 #define NV_DIN_TOPO_FIL   150.0f   // titulo da 1a fileira, com o foco nela
 #define NV_DIN_CENTRO_FIL 540.0f   // centro da fileira em foco (titulo + cartoes)
 #define NV_DIN_FOLGA_BASE  96.0f   // da base da ultima fileira a base da tela
