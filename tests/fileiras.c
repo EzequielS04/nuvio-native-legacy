@@ -764,6 +764,160 @@ int main(void) {
   usaArquivo = 0;
   puts("ok  fileirasui.txt antigo semeia so o perfil 1");
 
+  // ISSUE #197 (UA55TU8200, Tizen 5.5): segurar a seta no "limite de
+  // fileiras" passava por cada valor, e CADA passo para baixo mandava para
+  // "Fora da Home" o que ficou alem dele. Log 12448: limite 15 -> 3 -> 20 e a
+  // home ficou com "2 fileiras na tela (limite 20, 16 fileira(s) no
+  // catalogo)". Agora a rajada so vale no fim da edicao, e so o valor final.
+  fil_esquecer();
+  fil_definir_limite(10);
+  { int j, ocultas;
+    char n[12][8];
+    for (j = 0; j < 12; j++) { snprintf(n[j], sizeof n[j], "r%d", j); fil_registrar(n[j], n[j], "X", "movie", 1); }
+    for (j = 10; j >= 3; j--) fil_ajustar_limite(j);    // desce ate 3...
+    for (j = 4; j <= 20; j++) fil_ajustar_limite(j);    // ...e sobe ate 20
+    fil_confirmar_limite();
+    for (ocultas = 0, j = 0; j < fil_n(); j++) if (fil_linha_oculta(j)) ocultas++;
+    assert(ocultas == 0 && fil_limite() == 20 && fil_n_na_home() == 12);
+    // Rajada que TERMINA mais baixa: vale a decisao do dono, fora da home.
+    for (j = 19; j >= 5; j--) fil_ajustar_limite(j);
+    assert(fil_n_na_home() == 5 && fil_n_fila() == 7);   // antes de confirmar: nada escondido
+    fil_confirmar_limite();
+    for (ocultas = 0, j = 0; j < fil_n(); j++) if (fil_linha_oculta(j)) ocultas++;
+    assert(ocultas == 7 && fil_n_fila() == 0);
+    fil_confirmar_limite();                              // sem rajada: nada
+    for (ocultas = 0, j = 0; j < fil_n(); j++) if (fil_linha_oculta(j)) ocultas++;
+    assert(ocultas == 7); }
+  puts("ok  #197: rajada no limite so esconde pelo valor final");
+
+  // ISSUE #197, a outra metade: catalogo que a cota deixou de fora entra na
+  // lista para ESCOLHA (fil_registrar_se_couber) e entrava LIGADO. Com vagas
+  // sobrando na home (a rajada acima as abria), ele ficava dentro do limite,
+  // fil_escolhida o dava como escolhido na TV e a volta seguinte o pedia: as
+  // fileiras de ator do Xperience em ordem de manifesto (Mahershala Ali,
+  // Matthew McConaughey...) apareceram na home sem ninguem as escolher.
+  fil_esquecer();
+  fil_definir_limite(20);
+  { int j, est = -1, pf = -1;
+    fil_registrar("cw", "Continuar", "", "", 3);
+    fil_registrar("cand", "Trending", "Xperience", "movie", 12);
+    fil_registrar_se_couber("fora_a", "Mahershala Ali", "Xperience", "movie");
+    fil_registrar_se_couber("fora_b", "Matthew McConaughey", "Xperience", "movie");
+    assert(fil_escolhida("fora_a") < 0 && fil_escolhida("fora_b") < 0);
+    assert(fil_escolhida("cand") == 1);
+    for (j = 0; j < fil_n(); j++) {
+      if (!strcmp(fil_chave(j), "fora_a")) { assert(fil_estado(j) == FIL_FORA); pf = j; }
+      if (!strcmp(fil_chave(j), "fora_b")) assert(fil_estado(j) == FIL_FORA);
+    }
+    // Nao e escolha da pessoa: a cota nao o trata como desligado (a ordem da
+    // conta ainda pode pedi-lo) e ele nao ocupa vaga nem fila.
+    assert(!fil_oculta("fora_a"));
+    assert(fil_n_na_home() == 2 && fil_n_fila() == 0);
+    // Quando a descoberta o pede (vira candidato), ele passa a ser ligado.
+    fil_registrar("fora_b", "Matthew McConaughey", "Xperience", "movie", 12);
+    for (j = 0; j < fil_n(); j++) if (!strcmp(fil_chave(j), "fora_b")) assert(fil_estado(j) == FIL_NA_HOME);
+    // A pessoa ADICIONA pela aba "Fora": entra na home, que tem vaga.
+    for (j = 0; j < fil_n(); j++) if (!strcmp(fil_chave(j), "fora_a")) pf = j;
+    fil_adicionar(pf, &est);
+    assert(est == FIL_NA_HOME && fil_escolhida("fora_a") >= 0);
+    // E se ela a REMOVE, e escolha: fil_oculta passa a valer.
+    for (j = 0; j < fil_n(); j++) if (!strcmp(fil_chave(j), "fora_a")) pf = j;
+    fil_remover(pf);
+    assert(fil_oculta("fora_a")); }
+  puts("ok  #197: fora da cota entra fora da home, sem tomar vaga");
+
+  // LIMPEZA UNICA DO #197 sobre um arquivo NO FORMATO DO RELATOR, reconstruido
+  // dos logs 12448/12454/12489 (UA55TU8200): limite 12, ordem propria, 768
+  // linhas; as fileiras que a home tinha antes da rajada (Movies, Series, AI for
+  // you, IMDb Top 100...) ocultas; as de ator do Xperience em ordem de manifesto
+  // (Mahershala Ali ... Paul Rudd) ligadas; o resto do Xperience oculto pela
+  // normalizacao; um catalogo que a pessoa adicionou na TV (PenguPlay) e um que
+  // ela tirou (HdHub) — esses dois nao podem mudar.
+  { static const char *XP = "app.xperience.7d740fc3-61dd-4b90-8bd6-6eded683626e";
+    static const char *BC = "com.aicat.4shiv27.nuvio";
+    static const char *ATORES[] = { "mahershala_ali", "matthew_mcconaughey", "melissa_mccarthy",
+      "meryl_streep", "michael_b_jordan", "michael_herbig", "michelle_yeoh", "mila_kunis",
+      "millie_bobby_brown", "natalie_portman", "nicolas_cage", "nicole_kidman", "oscar_isaac",
+      "owen_wilson", "pascal", "paul_mescal", "paul_rudd" };
+    #define N_ATORES 17
+    char conta[9][160];
+    const char *contaP[9];
+    int j, total = 0, restantes;
+    FILE *f;
+    snprintf(conta[0], 160, "%s_movie_trending_movies", XP);
+    snprintf(conta[1], 160, "%s_movie_bw_spiderman", XP);
+    snprintf(conta[2], 160, "%s_movie_movies", XP);
+    snprintf(conta[3], 160, "%s_series_series", XP);
+    snprintf(conta[4], 160, "%s_series_bw_safed_sagar", XP);
+    snprintf(conta[5], 160, "%s_movie_actor_ana_de_armas_movies", XP);
+    snprintf(conta[6], 160, "%s_movie_ai_for_you", BC);
+    snprintf(conta[7], 160, "%s_series_ai_for_you", BC);
+    snprintf(conta[8], 160, "%s_movie_imdb_top_100", XP);
+    for (j = 0; j < 9; j++) contaP[j] = conta[j];
+    fil_esquecer();
+    usaArquivo = 1;
+    f = fopen("/tmp/fileirasui.txt", "w");
+    assert(f);
+    fputs("# Fileiras da Home\nlimite 12\nordem 1\n", f);
+    fputs("linha continue_watching\t0\t0\t1\t0\tContinuar assistindo\n", f); total++;
+    fputs("linha social_activity\t0\t0\t1\t0\tEntre amigos\n", f); total++;
+    fprintf(f, "linha %s\t0\t0\t1\t0\tTrending - Movie\n", conta[0]); total++;
+    fprintf(f, "linha %s\t0\t0\t1\t0\tBecause you watched Spider-Man\n", conta[1]); total++;
+    for (j = 2; j < 9; j++) { fprintf(f, "linha %s\t1\t0\t1\t0\tDa conta %d\n", conta[j], j); total++; }
+    fputs("linha com.penguplay_movie_top\t0\t0\t1\t0\tPenguPlay Top\n", f); total++;
+    fputs("linha com.stremio.HdHub_movie_latest\t1\t0\t1\t0\tHdHub Latest\n", f); total++;
+    fputs("linha collection_streaming\t0\t0\t1\t0\tStreaming\n", f); total++;
+    for (j = 0; j < N_ATORES; j++) { fprintf(f, "linha %s_movie_actor_%s_movies\t0\t0\t1\t0\tAtor %d - Movie\n", XP, ATORES[j], j); total++; }
+    for (j = 0; total < FIL_MAX; j++, total++)
+      fprintf(f, "linha %s_movie_outro_%d\t1\t0\t1\t0\tOutro %d\n", XP, j, j);
+    fclose(f);
+    fil_teste_recarregar();
+    assert(fil_n() == FIL_MAX && fil_limite() == 12);
+    assert(fil_migrar_197(contaP, 9) == 7 + N_ATORES);
+    for (j = 2; j < 9; j++) assert(!fil_oculta(conta[j]));                 // (a) voltaram
+    for (j = 0; j < fil_n(); j++) {
+      const char *k = fil_chave(j);
+      if (strstr(k, "_movie_actor_") && strstr(k, XP) && !strstr(k, "ana_de_armas"))
+        assert(fil_estado(j) == FIL_FORA && !fil_oculta(k));              // (b) sugestao
+      if (!strcmp(k, "com.penguplay_movie_top")) assert(fil_estado(j) != FIL_FORA);
+      if (!strcmp(k, "com.stremio.HdHub_movie_latest")) assert(fil_oculta(k));
+      if (strstr(k, "_movie_outro_")) assert(fil_oculta(k));
+    }
+    assert(fil_escolhida(conta[2]) >= 0 && fil_escolhida(conta[8]) >= 0);
+    assert(fil_n_na_home() == 12);   // cw, amigos, 9 da conta, PenguPlay...
+    // UMA VEZ SO: a marca foi gravada no arquivo, e na memoria ja nao roda.
+    { static char buf[300000]; size_t n; FILE *g = fopen("/tmp/fileirasui.txt", "r");
+      assert(g); n = fread(buf, 1, sizeof buf - 1, g); buf[n] = 0; fclose(g);
+      assert(strstr(buf, "\nmigracao 197\n")); }
+    assert(fil_migrar_197(contaP, 9) == 0); }
+  puts("ok  #197 limpeza: arquivo do relator volta a home dele, uma vez so");
+
+  // A marca vale no disco: um arquivo com "migracao 197" nao e tocado, e um
+  // arquivo SEM o padrao do defeito so ganha a marca.
+  { FILE *f;
+    const char *conta[] = { "xp_movie_a" };
+    int j;
+    fil_esquecer();
+    f = fopen("/tmp/fileirasui.txt", "w");
+    fputs("limite 7\nordem 1\nmigracao 197\nlinha xp_movie_a\t1\t0\t1\t0\tA\n", f);
+    for (j = 0; j < 300; j++) fprintf(f, "linha xp_movie_i%d\t%d\t0\t1\t0\tI%d\n", j, j < 150, j);
+    fclose(f);
+    fil_teste_recarregar();
+    assert(fil_migrar_197(conta, 1) == 0 && fil_oculta("xp_movie_a"));
+    fil_esquecer();
+    f = fopen("/tmp/fileirasui.txt", "w");
+    fputs("limite 7\nordem 1\nlinha xp_movie_a\t1\t0\t1\t0\tA\nlinha xp_movie_b\t0\t0\t1\t0\tB\n", f);
+    fclose(f);
+    fil_teste_recarregar();
+    assert(fil_migrar_197(conta, 1) == 0 && fil_oculta("xp_movie_a"));   // pequeno: fora do padrao
+    { char buf[256]; size_t n; f = fopen("/tmp/fileirasui.txt", "r"); n = fread(buf, 1, sizeof buf - 1, f); buf[n] = 0; fclose(f);
+      assert(strstr(buf, "migracao 197")); }
+    assert(fil_migrar_197(conta, 1) == 0);
+    fil_esquecer();
+    remove("/tmp/fileirasui.txt");
+    usaArquivo = 0; }
+  puts("ok  #197 limpeza: marca no arquivo; fora do padrao nao mexe");
+
   puts("fileiras: tudo ok");
   return 0;
 }

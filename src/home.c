@@ -786,6 +786,21 @@ static int desenhaArteHero(GfxRect r, GfxModo modo, const CatItem *item,
 // arte esta A CAMINHO — dizer "Arte indisponível" ali seria trocar uma mentira
 // (a arte do titulo anterior) por outra (a arte nao existe). Sem o teto so
 // havia o caso de arte que de fato nao existe, e por isso a frase era uma so.
+// A arte de um item e PLANA (nao poster), para gfx_hero_camadas — a mesma
+// decisao de desenhaArteHero. Devolve a proporcao da textura em *asp. NAO
+// pede a textura ao cache (quem chama ja a tem): um pedido a mais por quadro
+// mudava a ordem do cache e, por ela, em que quadro cada arte chega.
+static int heroArtePlana(const CatItem *item, const char *path, float *asp) {
+  int ehPoster = 0;
+  const char *arte = (path && path[0]) ? path
+                   : item ? arteDoItem(item, &ehPoster) : NULL;
+  if (item && path && path[0] && item->poster[0] && !strcmp(path, item->poster))
+    ehPoster = 1;
+  if (!arte || !arte[0] || ehPoster) return 0;
+  *asp = tex_aspecto(arte);
+  return 1;
+}
+
 static void desenhaPlaceholderHero(GfxRect r, const CatItem *item, float alpha,
                                    int esperando) {
   GfxRect bloco = { r.x + r.w * 0.58f, r.y + 32.0f,
@@ -871,7 +886,7 @@ static const char *arte_por_formato(const CatItem *item, int deitado) {
   }
   // POSTER PERSONALIZADO (posterprov.h): so o cartaz retrato de card. Desligado
   // (padrao) ou sem id que o provedor entenda, devolve item->poster como veio.
-  { const char *p = posterprov_card(item->imdb, item->tmdb, item->tipo, item->poster);
+  { const char *p = posterprov_card_addon(item->origem, item->imdb, item->tmdb, item->tipo, item->poster);
     if (p && p[0]) return p; }
   return item->backdrop[0] ? item->backdrop : NULL;
 }
@@ -1170,14 +1185,12 @@ static void desenhaProfundidade(GfxRect card, float raio, int ligadaAqui) {
   // a faixa passava reta por cima do canto.
   if (borda > 0.001f) {
     float alcance = (12.0f + 18.0f * cobertura) / (card.h > 1.0f ? card.h : 1.0f);
-    gfx_rect(card, 0, GFX_BRILHO_TOPO, 0, alcance, 0, raio,
-             1.0f, 1.0f, 1.0f, borda * 0.55f);
+    gfx_brilho_topo(card, raio, alcance, 1.0f, 1.0f, 1.0f, borda * 0.55f);
   }
   if (brilho > 0.001f) {
     // O reflexo vai mais fundo e mais fraco: e o `--card-depth-sheen`, uma
     // claridade que desce pela parte alta, nao uma segunda borda.
-    gfx_rect(card, 0, GFX_BRILHO_TOPO, 0, 0.34f, 0, raio,
-             1.0f, 1.0f, 1.0f, brilho * 0.18f);
+    gfx_brilho_topo(card, raio, 0.34f, 1.0f, 1.0f, 1.0f, brilho * 0.18f);
   }
 }
 // ZERO. MEDIDO no app web (sessao logada, perfil do dono): o card em foco tem
@@ -1509,7 +1522,7 @@ static void homeAtualizarReferenciasArte(void) {
       int idx = fileiraItemIndice(&fileiras[r], i);
       const CatItem *it = cat_item(idx);
       if (!it) continue;
-      homeMarcarURL(posterprov_card(it->imdb, it->tmdb, it->tipo, it->poster), largura);
+      homeMarcarURL(posterprov_card_addon(it->origem, it->imdb, it->tmdb, it->tipo, it->poster), largura);
       homeMarcarURL(it->logo, largura * 0.65f);
       homeMarcarURL(it->backdrop, largura);
     }
@@ -2982,6 +2995,8 @@ static void desenhaHero(Uint32 agora, float saida) {
     // O fundo social so onde a arte NAO cobre. Com a arte do titulo opaca por
     // cima (tela cheia), ele era uma tela inteira pintada e escondida: a C9
     // parada na fileira "Entre amigos" ficava a 34 fps (29/09).
+    // (Compor fundo e arte numa passada so, gfx_hero_camadas, foi MEDIDO na
+    // C9 em 30/09 e saiu PIOR: 30 fps contra 38-45 deste caminho.)
     if (!ta || aArte < 0.999f || r.w < NV_TELA_W || r.h < NV_TELA_H ||
         nv_ambiente_forca > 0.001f)   // imersivo: o hero deixa o fundo vazar (uVaza)
       gfx_rect((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,GFX_SOCIAL,0,0,0,0,1,1,1,1);
@@ -3323,14 +3338,42 @@ static void desenhaHero(Uint32 agora, float saida) {
     GfxRect rAnt = r, rAtu = r;
     rAnt.x += dAnt * r.w;
     rAtu.x += dAtu * r.w;
-    gfx_recorte(r.x, y0, r.w, y1 - y0);
-    if (tAnt) (void)desenhaArteHero(r, modoHero, cAnt, arteB, aArte, dAnt);
-    else if (!arteB) desenhaPlaceholderHero(rAnt, cAnt, aArte, 0);
-    if (tAtu) (void)desenhaArteHero(r, modoHero, ci, arteA, aArte, dAtu);
-    else desenhaPlaceholderHero(rAtu, ci, aArte, arteA != NULL && arteA[0] != 0);
+    // RECORTE POR LADO. A arte que sai so existe em [r.x + dAnt*w, r.x + w +
+    // dAnt*w] e a que entra em [r.x + dAtu*w, ...]: fora disso o shader ja
+    // devolvia alfa 0 (`dentro`), mas cada fragmento era executado e
+    // misturado — duas telas cheias por quadro durante o deslize, numa GPU
+    // presa em preenchimento. Com a tesoura em cada lado, a soma dos dois e
+    // UMA tela, e o pixel e o mesmo (o que a tesoura tira era transparente).
+    { float ax0 = r.x + (dAnt < 0.0f ? 0.0f : dAnt) * r.w;
+      float ax1 = r.x + (1.0f + (dAnt > 0.0f ? 0.0f : dAnt)) * r.w;
+      float bx0 = r.x + (dAtu < 0.0f ? 0.0f : dAtu) * r.w;
+      float bx1 = r.x + (1.0f + (dAtu > 0.0f ? 0.0f : dAtu)) * r.w;
+      if (ax1 > ax0) {
+        gfx_recorte(ax0, y0, ax1 - ax0, y1 - y0);
+        if (tAnt) (void)desenhaArteHero(r, modoHero, cAnt, arteB, aArte, dAnt);
+        else if (!arteB) desenhaPlaceholderHero(rAnt, cAnt, aArte, 0);
+      }
+      if (bx1 > bx0) {
+        gfx_recorte(bx0, y0, bx1 - bx0, y1 - y0);
+        if (tAtu) (void)desenhaArteHero(r, modoHero, ci, arteA, aArte, dAtu);
+        else desenhaPlaceholderHero(rAtu, ci, aArte, arteA != NULL && arteA[0] != 0);
+      } }
     gfx_sem_recorte();
   } else {
-  if (tAnt) {
+  // CROSSFADE NUMA PASSADA: a arte que sai e a que entra compostas no
+  // fragmento sobre a luz (gfx_hero_camadas) — eram tres telas cheias por
+  // quadro, duas misturadas, e a C9 caia a 42 ms em toda troca de destaque.
+  // Cai no caminho de sempre quando uma das artes e poster ou o modo nao e
+  // o do destaque.
+  int camadas = 0;
+  if (tAnt && tAtu && heroSai > 0.004f && heroEntra > 0.0f && aArte > 0.004f) {
+    float aspA = 0.0f, aspB = 0.0f;
+    if (heroArtePlana(ci, arteA, &aspA) && heroArtePlana(cAnt, arteB, &aspB))
+      camadas = gfx_hero_camadas(r, modoHero, tAtu, aspA, anim_suave(heroEntra) * aArte,
+                                 tAnt, aspB, anim_suave(heroSai) * aArte);
+  }
+  if (camadas) {
+  } else if (tAnt) {
     // Esvanecimento com aceleracao e desaceleracao: o medido fica ~25% do
     // percurso quase parado no comeco, entao rampa reta le como corte na saida.
     (void)desenhaArteHero(r, modoHero, cAnt, arteB,
@@ -3338,7 +3381,8 @@ static void desenhaHero(Uint32 agora, float saida) {
   } else if (heroSai > 0.0f) {
     desenhaPlaceholderHero(r, cAnt, anim_suave(heroSai) * aArte, 0);
   }
-  if (tAtu && heroEntra > 0.0f) {
+  if (camadas) {
+  } else if (tAtu && heroEntra > 0.0f) {
     (void)desenhaArteHero(r, modoHero, ci, arteA,
                           anim_suave(heroEntra) * aArte, 0.0f);
   } else if (!tAtu && aTrailer <= 0.0f) {
@@ -4818,6 +4862,16 @@ void home_desenhar(Uint32 agora) {
 // caso em que a pessoa moveu o foco e saiu antes de completar o repouso.
 // Nada a gravar (#95): a posicao na home vive so enquanto o app esta aberto.
 void home_encerrar(void) { }
+// Rastro de desempenho (main.c, [qd]): onde o foco esta neste quadro.
+const char *home_rastro_foco(void) {
+  static char b[160];
+  if (focoHero) snprintf(b, sizeof b, "hero");
+  else if (foco.fileira >= 0 && foco.fileira < nFileiras)
+    snprintf(b, sizeof b, "f%d/%d tipo=%d col=%d \"%.40s\"", foco.fileira, nFileiras,
+             (int)fileiras[foco.fileira].tipo, foco.coluna, fileiras[foco.fileira].titulo);
+  else snprintf(b, sizeof b, "f%d", foco.fileira);
+  return b;
+}
 void home_registrar_retorno(int indice, double posSeg, double durSeg) {
   int novo = -1;
   if (indice >= 0 && durSeg > 1.0) {

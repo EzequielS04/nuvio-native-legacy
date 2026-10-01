@@ -860,6 +860,8 @@ int main(int argc, char **argv) {
 
   Uint32 ultRelato = SDL_GetTicks();
   double txtMsQuadro = 0, piorTxtMs = 0;
+  static int rastroQuadros;
+  double fPrep = 0, fGlClr = 0;
   int    txtNQuadro = 0, piorTxtN = 0;
   int quadros = 0, janks = 0; double pior = 0;
 
@@ -1024,6 +1026,20 @@ int main(int argc, char **argv) {
                          pNBind=fNBind; pNBusca=fNBusca; pOutMs=fOutMs; pNOut=fNOut; pFill=fFill; pNCheio=fNCheio; }
       if (dtms > 33.0) janks++;
     }
+    // RASTRO POR QUADRO, so com /tmp/nuvio-quadros presente (conferido no
+    // relatorio de 3 s): cada quadro acima de 25 ms sai com a reparticao, os
+    // uploads e o texto rasterizado. O [quadro] de 3 s mostra UM pior por
+    // janela; para achar o que causa cada tranco da navegacao e preciso ver
+    // todos, na ordem, ao lado das teclas.
+    if (rastroQuadros && dtms > 25.0)
+      printf("[qd] %.1fms ev=%.1f bomb=%.1f(%d tex %.1fMB) upd=%.1f clr=%.1f des=%.1f aux=%.1f swap=%.1f"
+             " [prep=%.1f glclear=%.1f] txt=%.1fms/%d rects=%d fill=%.2f assados=%d %s\n", dtms, fEv, fBomb, fUplN, fUplB / 1048576.0,
+             fUpd, fClr, fDes, fAux, fSwap, fPrep, fGlClr, txtMsQuadro, txtNQuadro, fNRect, fFill, gfx_n_assados, home_rastro_foco());
+    if (rastroQuadros && dtms > 25.0) {
+      int k; printf("[qd-fill]");
+      for (k = 0; k < GFX_NMODOS; k++) if (gfx_fill_modo[k] > 0.02) printf(" %d=%.2f", k, gfx_fill_modo[k]);
+      printf("\n");
+    }
 #ifdef NV_TPK
     // NIVEL DE GPU ADAPTATIVO (gpunivel.h): o quadro que acabou, repartido em
     // ESPERA (clr + swap: o driver devolvendo buffer, a GPU atrasada) e CPU.
@@ -1073,16 +1089,23 @@ int main(int argc, char **argv) {
     // com conteudo velho, dificil de atribuir a causa. Uma chamada por quadro.
     t0 = NV_T0();
     gfx_novo_quadro();
+    // Amostra: os desenhos grandes de UM quadro a cada 30 (meio segundo).
+    gfx_rastro_grandes = rastroQuadros && (quadros % 30) == 0;
+    if (gfx_rastro_grandes) printf("[qd-rect] --- quadro\n");
     tex_novo_quadro();
     gfx_sem_recorte();
+    fPrep = NV_DT(t0);
     gfx_ambiente_preparar();
+    fPrep = NV_DT(t0) - fPrep;
     // Nivel 2: o quadro inteiro vai para o alvo interno de 1280x720 (o clear
     // abaixo ja limpa ele); gpun_quadro_fim amplia para a janela.
     // Mudou "Efeitos visuais" nos Ajustes: aplica no proximo quadro.
     if (ajustes_gpu_efeitos() != gpuPref) { gpuPref = ajustes_gpu_efeitos(); gpun_preferencia(gpuPref); }
     gpun_quadro_inicio();
     glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+    fGlClr = NV_DT(t0);
     glClear(GL_COLOR_BUFFER_BIT);
+    fGlClr = NV_DT(t0) - fGlClr;
     // "Dinâmica imersiva": a luz da arte POR BAIXO de toda tela, logo depois do
     // clear — e o que as rampas do destaque e do detalhe deixam aparecer quando
     // se apagam em alfa (uVaza). Uma passada de tela cheia com 4 luzes; nos
@@ -1097,6 +1120,7 @@ int main(int argc, char **argv) {
     // GIF QUE NINGUEM DESENHOU ha 1,5 s sai da memoria (tela de perfis
     // fechada, foco fora do cartaz). Ver gif_ocioso em gif.h.
     gif_ocioso();
+    gfx_ambiente_descarregar();   // quadro sem desenho por cima: a luz ainda sai
     gpun_quadro_fim();
     fDes = NV_DT(t0);
     fGfxMs = gfx_ms_rect; fTexMs = tex_ms_busca;
@@ -1249,6 +1273,7 @@ int main(int argc, char **argv) {
       // Instrumento de campo (gfx.h, gfx_modos_desligados): a lista em
       // /tmp/nuvio-gfx-off desliga modos de desenho; e o preenchimento do
       // ultimo quadro por modo, para saber quem pesa sem recompilar.
+      { FILE *fq = fopen("/tmp/nuvio-quadros", "r"); rastroQuadros = fq != NULL; if (fq) fclose(fq); }
       { FILE *fo = fopen("/tmp/nuvio-gfx-off", "r");
         unsigned long long m = 0; int n;
         if (fo) { while (fscanf(fo, "%d", &n) == 1) if (n >= 0 && n < GFX_NMODOS) m |= 1ull << n; fclose(fo); }
@@ -1268,7 +1293,7 @@ int main(int argc, char **argv) {
           printf("[gpu-modos] lento: fps=%.1f layout=%d cor-viva=%d vidro=%d\n",
                  fpsAgora, ajustes_home_layout(), ajustes_cor_viva(), ajustes_vidro()); }
         if (fo || lenta || getenv("NUVIO_FILL_MODOS")) {
-          int k; printf("[gpu-modos] fill:");
+          int k; printf("[gpu-modos] fill: forca=%.2f |", nv_ambiente_forca);
           for (k = 0; k < GFX_NMODOS; k++) if (gfx_fill_modo_ult[k] > 0.02) printf(" %d=%.2f", k, gfx_fill_modo_ult[k]);
           printf("\n");
         } }

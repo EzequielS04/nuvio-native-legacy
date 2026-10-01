@@ -148,6 +148,11 @@ void fil_definir_teto_sessao(int teto);
 // Ao BAIXAR o limite, as ligadas que ficaram alem dele viram "fora da home"
 // (ocultas), nao fila. Decisao do dono; ver o comentario na definicao.
 void fil_definir_limite(int n);
+// A SETA DA TELA DE AJUSTES (issue #197): cada passo so muda o numero; quem
+// ficou alem do valor FINAL vira "fora" em fil_confirmar_limite, chamado quando
+// a edicao da linha termina. Sem rajada em curso, confirmar nao faz nada.
+void fil_ajustar_limite(int n);
+void fil_confirmar_limite(void);
 
 // --- na home, na fila, fora --------------------------------------------------
 // A ORDEM E A FILA. As primeiras `limite` linhas ligadas, na ordem local, sao
@@ -331,5 +336,12 @@ int  fil_unir(const char *const *chaves, int n, int *saida, int max);
 // Esquece a escolha e o registro. Chamar no logout junto do resto: a home e da
 // conta de quem saiu.
 void fil_esquecer(void);
+
+// LIMPEZA UNICA DO #197 (ver a definicao): desfaz, so no arquivo com o padrao
+// exato do defeito, a rajada do limite e os catalogos fora da cota que entraram
+// ligados. `contaLigadas` sao as chaves que a ordem da CONTA tem e nao desligou.
+// Roda uma vez por arquivo de perfil (marca "migracao 197"); devolve quantas
+// linhas mudaram.
+int fil_migrar_197(const char *const *contaLigadas, int n);
 
 #endif

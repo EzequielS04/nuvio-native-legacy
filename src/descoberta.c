@@ -453,8 +453,12 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
           }
           p = js_prox(f);
         }
+        // "LOGO DO ADDON" (Ajustes, desligado de fabrica): o logo que o addon
+        // mandou no catalogo fica; o do TMDB so entra em quem nao tinha.
+        int manterAddon = ajustes_logo_addon() && d->origem[0] && logoAntes[0] &&
+                          !ehSvg(logoAntes) && strcmp(logoAntes, d->poster);
         { const char *esc = local[0] ? local : neutro[0] ? neutro : en;
-          if (esc[0])
+          if (esc[0] && !manterAddon)
             snprintf(d->logo, sizeof d->logo,
                      "https://image.tmdb.org/t/p/w500%s", esc); }
         // LIMPA O QUE JA ESTAVA ENVENENADO: item do cache do catalogo pode ter
@@ -3150,6 +3154,23 @@ static void *montar(void *u) {
   // que aparece la — e o historico tem de ganhar das recomendacoes.
   marco("montar: inicio");
   nManiFalhouVolta = 0; nPendSnap = 0;     // ver salvarSnapshot
+  // LIMPEZA UNICA DO #197 (fileiras.c, fil_migrar_197). So com a ordem da conta
+  // na mao: ela e a prova de escolha que a limpeza usa; sem ela, fica para a
+  // volta em que a ordem chegar. Depois da primeira vez e um teste de inteiro.
+  { int nc = catordem_n();
+    if (nc > 0) {
+      const char **lig = (const char **)malloc(sizeof *lig * (size_t)nc);
+      int q, m = 0;
+      if (lig) {
+        for (q = 0; q < nc; q++) {
+          const char *ch = catordem_chave(q);
+          if (ch[0] && !catordem_oculta(ch, ch)) lig[m++] = ch;
+        }
+        // Mudou algo: gravar() sobe fil_revisao e a home remonta sozinha.
+        fil_migrar_197(lig, m);
+        free(lig);
+      }
+    } }
   // OS MANIFESTOS COMECAM A CHEGAR AGORA, nao daqui a seis segundos. Ver o
   // cabecalho de maniLargar: eles nao dependem do Trakt, e eram o bloco de 7 s
   // logo depois dele.
@@ -4997,13 +5018,18 @@ static void completarRaso(CatItem *dst, const char *corpo, const char *tipo) {
     if (cheio->tmdb > 0 && dst->tmdb <= 0) dst->tmdb = cheio->tmdb;
     // Fundo e logo do /meta MANDAM, inclusive o logo vazio: o do metahub que
     // o item raso montou pode nem existir, e a busca desenharia o nome.
-    if (cheio->backdrop[0]) {
+    // Com a arte do addon ligada (Ajustes), o fundo e o logo que o catalogo do
+    // addon ja trouxe ficam: o /meta so preenche o que falta.
+    int fundoAddon = ajustes_fundo_addon() && dst->origem[0] &&
+                     dst->backdropCatalogo[0] && strcmp(dst->backdropCatalogo, dst->poster);
+    int logoAddon = ajustes_logo_addon() && dst->origem[0] && dst->logo[0];
+    if (cheio->backdrop[0] && !fundoAddon) {
       snprintf(dst->backdrop, sizeof dst->backdrop, "%s", cheio->backdrop);
       snprintf(dst->backdropCatalogo, sizeof dst->backdropCatalogo, "%s", cheio->backdropCatalogo);
       snprintf(dst->backdropTmdb, sizeof dst->backdropTmdb, "%s", cheio->backdropTmdb);
       snprintf(dst->backdropTrakt, sizeof dst->backdropTrakt, "%s", cheio->backdropTrakt);
     }
-    snprintf(dst->logo, sizeof dst->logo, "%s", cheio->logo);
+    if (!logoAddon) snprintf(dst->logo, sizeof dst->logo, "%s", cheio->logo);
     if (!strcmp(dst->classificacao, "14")) dst->classificacao[0] = 0;
   }
   free(cheio);

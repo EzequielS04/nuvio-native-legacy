@@ -218,7 +218,11 @@ typedef enum {
   //   uCor.rgb = cor do topo; uCor.a = alfa
   //   uFoco    = quanto da cor sobra na base (0..1)
   GFX_FUNDO_DIN = 35,
-  GFX_NMODOS = 37
+  // GFX_HERO_CAM / GFX_HERO_CHEIO_CAM — as camadas do destaque numa passada
+  // (o crossfade). So por gfx_hero_camadas.
+  GFX_HERO_CAM = 37,
+  GFX_HERO_CHEIO_CAM = 38,
+  GFX_NMODOS = 39
 } GfxModo;
 
 typedef struct {
@@ -352,9 +356,12 @@ extern double gfx_fill;      // area submetida no quadro, em telas cheias
 // preenchimento real que da para tirar sem GPU; nao enxerga a tesoura.
 extern double gfx_fill_vis;
 extern int    gfx_n_cheio;   // desenhos cobrindo >= 50% da tela
+extern int    gfx_n_cheio_mistura;   // desses, com mistura (so -DNV_FLUIDEZ_PERF)
 // O mesmo gfx_fill repartido por modo (programa): diz QUAL shader cobre a
 // tela, que e a pergunta de uma GPU presa em preenchimento (gpunivel.h).
 extern double gfx_fill_modo[GFX_NMODOS];
+extern int gfx_n_assados;
+extern int gfx_rastro_grandes;   // rastro: imprime todo desenho >= 12% da tela
 // INSTRUMENTO DE CAMPO: bit N ligado = o modo N nao e desenhado. main.c le a
 // lista de /tmp/nuvio-gfx-off a cada 3 s (numeros separados por espaco). Serve
 // para medir na TV quanto fps cada tipo de desenho custa, sem recompilar.
@@ -372,6 +379,12 @@ void gfx_novo_quadro(void);
 // (fracao da altura DELE). Substitui o GFX_VEU de cartao inteiro, que cobria
 // arte onde nao ha texto e custava fps na C9 (29/09: 48 -> 60 sem ele).
 void gfx_veu_base(GfxRect card, float raio, float fracao, float alfa);
+// REALCE CLARO NO TOPO de um cartao (GFX_BRILHO_TOPO): rampa de `alcance`
+// (fracao da altura) a partir do topo, com os cantos do cartao. Desenha so a
+// faixa da rampa: o mesmo pixel de pedir o cartao inteiro, com ~90% menos
+// preenchimento (ver gfx.c).
+void gfx_brilho_topo(GfxRect r, float raio, float alcance,
+                     float cr, float cg, float cb, float ca);
 void gfx_definir_efeitos_leves(int leves);
 int  gfx_efeitos_leves(void);
 // EFEITOS MINIMOS (nivel 2 de gpunivel.h), por cima dos leves: sem a luz de
@@ -386,12 +399,19 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
 
 // Atalhos legiveis para os casos comuns.
 void gfx_cor(GfxRect r, float raio, float cr, float cg, float cb, float ca);
+// Destaque em camadas numa passada so (o crossfade): devolve 0 sem desenhar
+// se nao puder garantir o mesmo pixel do caminho em duas passadas.
+int gfx_hero_camadas(GfxRect r, GfxModo modo, GLuint texA, float aspA, float alfaA,
+                     GLuint texB, float aspB, float alfaB);
 // A luz ambiente do tema "Dinâmica imersiva", tela cheia, com `alfa` a mais
 // por cima da forca que corviva ja anima. Nao desenha nada fora dele: o custo
 // e zero nos outros temas. main.c chama logo depois do glClear.
 // Assa a luz imersiva no quadro pequeno. Chamar ANTES do clear da tela (ver gfx.c).
 void gfx_ambiente_preparar(void);
 void gfx_ambiente(float alfa);
+// Pinta a luz que gfx_ambiente deixou pendente, se ainda houver (ver a nota
+// em gfx.c). main.c chama no fim do desenho do quadro; e inofensivo repetir.
+void gfx_ambiente_descarregar(void);
 // --- FUNDO DA HOME DINAMICA (GFX_FUNDO_DIN) ---------------------------------
 // Um quad de tela cheia, OPACO e sem mistura, com um degrade vertical de uma
 // cor: `topo` no alto e topo*`queda` na base. E o unico custo do fundo — nada

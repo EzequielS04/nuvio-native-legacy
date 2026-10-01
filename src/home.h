@@ -74,3 +74,4 @@ int home_pediu_pessoa_social(CatItem *saida);
 int  home_pediu_guia(char *id, int tam);
 
 #endif
+const char *home_rastro_foco(void);

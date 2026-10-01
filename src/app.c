@@ -87,6 +87,7 @@
 #include "idioma.h"
 #include "descoberta.h"
 #include "colecoes.h"
+#include "posterprov.h"
 #include "proximo.h"
 #include "trakt.h"
 #include "visto.h"
@@ -1423,6 +1424,12 @@ void app_atualizar(float dt, Uint32 agora) {
       tex_qualidade(q);
       artehero_qualidade(q);
     } }
+  // ARTE DO ADDON (Ajustes > Layout > Arte do addon): o mesmo roteamento, pelo
+  // mesmo motivo — artehero, posterprov e colecoes nao incluem ajustes.h. O
+  // logo e lido direto por descoberta.c, que ja depende dos Ajustes.
+  artehero_fundo_addon(ajustes_fundo_addon());
+  posterprov_preferir_addon(ajustes_poster_addon());
+  col_arte_conta(ajustes_col_arte_conta());
   // O backend precisa progredir mesmo no login, perfis e transicoes que
   // retornam cedo: seek pendente no Tizen e prazo de recuo DV no webOS.
   video_bombear();

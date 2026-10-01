@@ -273,6 +273,7 @@ IGNORAR = {
     "NV_TPK40 e so da libnuvio.so do Tizen 4/5; nunca junto com Emscripten",
     "libEGL nao encontrada na TV", "libnuvio.staged.ver",
     "sem recorte em 2 s, mostra assim", "sem tocando, mostra assim",
+    "sem recorte",
     "eglMakeCurrent no fio do app falhou: 0x%x",
     "crédit", "crédito",            # palavra procurada no capitulo do MKV
     "episodio", "episódio",         # palavra procurada no nome do video TMDB (extras.c)

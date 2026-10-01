@@ -240,6 +240,12 @@ typedef enum {
   // (home.c, heroDesliza). No fim pelo mesmo motivo: valor[] e CHAVE[] sao
   // posicionais.
   AJ_HERO_TRANSICAO,
+  // ARTE DO ADDON (grupo "Arte do addon" no Layout): usar a imagem que o
+  // proprio addon manda no meta (poster, background, logo) e a arte das pastas
+  // da conta, antes das substituicoes do app. Todas desligadas de fabrica = o
+  // visual de sempre. No fim pelo mesmo motivo: valor[] e CHAVE[] sao
+  // posicionais.
+  AJ_ADDON_POSTER, AJ_ADDON_FUNDO, AJ_ADDON_LOGO, AJ_COL_ARTE_CONTA,
   AJ_N
 } OpcaoId;
 
@@ -793,6 +799,10 @@ static const Opcao OPCOES[AJ_N] = {
   NUM("Percentual assistido",            70, 98, 1, "%"),  // local: cwConcluidoLocal
   ESC("Usar os addons do perfil principal", V_LIGA, 2), // local: addonsPrincipalLocal
   ESC("Transição do destaque",   V_HERO_TRANSICAO, 2), // local: heroTransicaoLocal
+  ESC("Pôsteres do addon",               V_LIGA, 2),   // local: posterAddonLocal
+  ESC("Fundo do destaque do addon",      V_LIGA, 2),   // local: fundoAddonLocal
+  ESC("Logo do addon",                   V_LIGA, 2),   // local: logoAddonLocal
+  ESC("Arte das pastas da conta",        V_LIGA, 2),   // local: colArteContaLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -937,6 +947,8 @@ static const char *CHAVE[] = {
   "addonsPrincipalLocal",
   // LOCAL e SEM o "-": o web nao tem esta escolha.
   "heroTransicaoLocal",
+  // LOCAIS e SEM o "-": o web nao tem estas escolhas e elas precisam sobreviver.
+  "posterAddonLocal", "fundoAddonLocal", "logoAddonLocal", "colArteContaLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1054,6 +1066,9 @@ static const Item TELA[] = {
       OPC(AJ_POSTER_PROV), OPC(AJ_POSTER_INST), OPC(AJ_POSTER_TOKEN),
       OPC(AJ_POSTER_EXTRA), OPC(AJ_POSTER_CHAVE), OPC(AJ_POSTER_MODELO),
       OPC(AJ_POSTER_TESTAR),
+    GRP("Arte do addon", "Pôster, fundo e logo que o próprio addon manda.", "aj_folders"),
+      OPC(AJ_ADDON_POSTER), OPC(AJ_ADDON_FUNDO), OPC(AJ_ADDON_LOGO),
+      OPC(AJ_COL_ARTE_CONTA),
 
   // O "Content & Discovery" do web (addons e plugins). Os portais IPTV moram
   // aqui porque sao exatamente isto: mais uma fonte de conteudo, e nao dados
@@ -1379,6 +1394,8 @@ static int valor[] = {
   90,               /* percentual assistido: 90%, o numero fixo de antes */
   0,                /* addons do perfil principal: LIGADO (V_LIGA: 0 = Ligado) */
   0,                /* transicao do destaque: Deslizar */
+  // Arte do addon: todas DESLIGADAS (V_LIGA: 1 = Desligado) — o visual de antes.
+  1, 1, 1, 1,       /* posteres, fundo, logo do addon; arte das pastas da conta */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1649,6 +1666,10 @@ int   ajustes_trailer_auto(void)      { return lig(AJ_DET_TRAILER_AUTO); }
 int   ajustes_trailer_hero(void)      { return lig(AJ_HERO_TRAILER) && !SEGURO; }
 int   ajustes_trailer_hero_som(void)  { return lig(AJ_HERO_TRAILER_SOM); }
 int   ajustes_hero_deslizar(void)     { return valor[AJ_HERO_TRANSICAO] == 0; }
+int   ajustes_poster_addon(void)      { return lig(AJ_ADDON_POSTER); }
+int   ajustes_fundo_addon(void)       { return lig(AJ_ADDON_FUNDO); }
+int   ajustes_logo_addon(void)        { return lig(AJ_ADDON_LOGO); }
+int   ajustes_col_arte_conta(void)    { return lig(AJ_COL_ARTE_CONTA); }
 // valor[] guarda decimos de segundo, preso ao intervalo de OPCOES (o disco
 // pode trazer qualquer numero).
 Uint32 ajustes_trailer_hero_espera_ms(void) {
@@ -2940,6 +2961,8 @@ static int somenteDesteAparelho(int op) {
     case AJ_CW_CONCLUIDO:   /* o web nao tem esta escolha */
     case AJ_ADDONS_PRINCIPAL: /* escolha desta TV; a conta tem uses_primary_addons */
     case AJ_HERO_TRANSICAO: /* o web nao tem esta escolha */
+    case AJ_ADDON_POSTER: case AJ_ADDON_FUNDO: case AJ_ADDON_LOGO:
+    case AJ_COL_ARTE_CONTA: /* arte do addon: o web nao tem estas escolhas */
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
     case AJ_PERFIL_EDITAR:
@@ -3280,6 +3303,7 @@ int ajustes_iniciar(void) {
   if (abrirNoVidro) { abrirNoVidro = 0; focarOpcao(AJ_VIDRO); }
   filAberta = 0; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
   emEdicao = 0;
+  fil_confirmar_limite();   // rajada de uma visita anterior que nao fechou
   valor[AJ_FIL_LIMITE] = fil_limite_gravado();
   // Tambem aqui, e nao so em ajustes_dir: sem arquivo de ajustes aquele caminho
   // volta cedo e os rotulos ficariam vazios na primeira abertura da tela.
@@ -3507,6 +3531,10 @@ static int inativa(int op) {
     case AJ_POSTER_CHAVE:  return valor[AJ_POSTER_PROV] != PP_RPDB;
     case AJ_POSTER_MODELO: return valor[AJ_POSTER_PROV] != PP_MODELO;
     case AJ_POSTER_TESTAR: return valor[AJ_POSTER_PROV] == PP_DESLIGADO;
+    // Sem servico de posteres o cartaz ja e o do addon: nao ha o que escolher.
+    case AJ_ADDON_POSTER:  return valor[AJ_POSTER_PROV] == PP_DESLIGADO;
+    // A unica troca do logo do addon e a "Arte localizada" do TMDB.
+    case AJ_ADDON_LOGO:    return !ajustes_tmdb_ligado() || !ajustes_tmdb_arte();
     default: return 0;
   }
 }
@@ -3614,6 +3642,10 @@ static const char *ajudaOpcao(int op) {
       return extras_mdblist_tem_chave()
         ? "Ative MDBList para mostrar esta nota."
         : "Esta nota vem do MDBList e precisa da chave dele na sua conta Nuvio.";
+    if (op == AJ_ADDON_POSTER)
+      return "Sem Pôsteres personalizados ligado o pôster já é o que o addon manda. Escolha um serviço para decidir quem vence.";
+    if (op == AJ_ADDON_LOGO)
+      return "O logo do addon só é trocado pela Arte localizada do TMDB. Ative TMDB e Arte localizada para escolher.";
     return "Ative Efeito de profundidade para personalizar este detalhe.";
   }
   switch (op) {
@@ -3654,6 +3686,10 @@ static const char *ajudaOpcao(int op) {
     case AJ_HERO_TRAILER: return "Com o foco parado no destaque do topo, o trailer do título toca no lugar da arte, sem som a menos que Som do trailer no destaque esteja ligado. Mover o foco volta para a arte.";
     case AJ_HERO_TRAILER_SOM: return "Ligado: o trailer do destaque do topo toca com som. Desligado: toca sem som.";
     case AJ_HERO_TRAILER_ESPERA: return "Quanto tempo o destaque fica parado num título antes de trocar a arte pelo trailer.";
+    case AJ_ADDON_POSTER: return "Com um serviço de pôsteres ligado, o título que veio de um catálogo de addon fica com o pôster que o próprio addon manda, e o serviço só entra nos outros (Continuar assistindo, listas do Trakt, pôster genérico do Cinemeta). Sem o serviço, o pôster já é o do addon.";
+    case AJ_ADDON_FUNDO: return "O card deitado, o destaque e a página do título usam o fundo que o addon manda no catálogo, mesmo com outro Background do hero ou com Destaque com outra arte. O addon que não manda fundo cai na fonte escolhida. A arte escolhida à mão em Trocar arte continua valendo mais.";
+    case AJ_ADDON_LOGO: return "O logo do título que o addon manda não é trocado pelo logo traduzido do TMDB (Arte localizada) ao abrir o título. O addon que não manda logo continua recebendo o do TMDB.";
+    case AJ_COL_ARTE_CONTA: return "As pastas de coleção que o app já traz com arte própria passam a usar a capa, o fundo e o logo que estão na sua conta (editor de coleções do site). O que a conta não tiver continua com a arte do app.";
     case AJ_HERO_TRANSICAO: return "Deslizar: quando o destaque troca de título, a arte e o texto saem para o lado e o próximo entra colado, como num carrossel. Esmaecer: a arte apaga e a nova aparece no lugar. Com Animações reduzidas a troca é sempre sem movimento.";
     case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta, de 3 a 40. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis. Mais fileiras usam mais memória e rede: em TV com 1 GB de memória a Home pode ficar lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior.";
     case AJ_ITENS_FILEIRA: return "Quantos títulos cada fileira da Home mostra antes do Ver tudo. Mais itens usam mais memória: em TV com 1 GB de memória a Home pode ficar mais lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior. Aumentar vale na próxima vez que o app abrir.";
@@ -4472,8 +4508,11 @@ static void mudarValorDireto(int op, int dir) {
     valor[op] = limita(op, v);
     // O limite de fileiras nao vive em valor[]: quem grava e consulta e
     // fileiras.c. Sem esta linha o numero mudaria na tela e a home nao.
+    // E um PASSO de rajada: quem ficou alem do limite so vai para "Fora da
+    // Home" quando a edicao termina, pelo valor final (issue #197; ver
+    // fil_ajustar_limite e o fim de ajustes_evento).
     if (op == AJ_FIL_LIMITE) {
-      fil_definir_limite(valor[op]);
+      fil_ajustar_limite(valor[op]);
       valor[op] = fil_limite_gravado();
     }
   } else {
@@ -4541,7 +4580,16 @@ static int ehInterruptor(int op) {
   return op >= 0 && OPCOES[op].tipo == OP_ESCOLHA && OPCOES[op].valores == V_LIGA;
 }
 
+static void eventoTela(const SDL_Event *e);
 void ajustes_evento(const SDL_Event *e) {
+  eventoTela(e);
+  // FIM DA EDICAO DO LIMITE (issue #197): qualquer tecla que solte a linha
+  // (OK, Voltar, cima/baixo, sair da tela) confirma a rajada. Sem rajada em
+  // curso e um no-op.
+  if (!(emEdicao && focoOp == AJ_FIL_LIMITE) || sair) fil_confirmar_limite();
+}
+
+static void eventoTela(const SDL_Event *e) {
   // A MODAL DE DIGITACAO VEM ANTES DE TUDO, como em biblioteca.c e recenviar.c:
   // enquanto ela esta em pe, nenhuma tecla pertence a lista de opcoes atras.
   // Sem esta linha, o D-pad moveria o foco da lista por baixo da modal.
@@ -6395,6 +6443,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
     case AJ_HERO_ARTE_DIF: case AJ_HERO_TRAILER: case AJ_FIL_LIMITE:
     case AJ_HERO_TRAILER_SOM: case AJ_HERO_TRAILER_ESPERA: case AJ_HERO_TRANSICAO:
+    case AJ_ADDON_FUNDO: case AJ_ADDON_LOGO:
     case AJ_FIL_ORDEM: case AJ_RAIL: case AJ_RAIL_MODERNA:
     case AJ_RAIL_BLUR: case AJ_HERO: case AJ_HERO_CATALOGOS:
     case AJ_PS_FUNDO: case AJ_DESCOBRIR: case AJ_ROTULOS:
@@ -6619,6 +6668,7 @@ static float previaHomeOpcao(int op, float x, float y, float w) {
         op == AJ_HERO_ARTE_DIF || op == AJ_HERO_TRAILER ||
         op == AJ_HERO_TRAILER_SOM || op == AJ_HERO_TRAILER_ESPERA ||
         op == AJ_HERO_TRANSICAO ||
+        op == AJ_ADDON_FUNDO || op == AJ_ADDON_LOGO ||
         op == AJ_HERO_CATALOGOS || op == AJ_GRAD_CLASSICO)
       previaRealce(hr.x, hr.y, hr.w, hr.h, ar, ag, ab);
     if (valor[AJ_HERO_TRAILER] == 0) {

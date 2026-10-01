@@ -104,6 +104,47 @@ int main(void) {
     assert(!strcmp(col_folder(0)->group, "Streaming Renomeado") && !strcmp(col_folder(0)->sources[0].base, "https://addon/abc"));
     assert(!strcmp(col_folder(1)->cover, "https://cdn/n.webp") && !col_folder(1)->local);
     puts("ok  pasta do pacote guarda arte e quadros; a conta da grupo, titulo e pastas novas"); }
+  // "ARTE DAS PASTAS DA CONTA": desligado e o pacote (acima); ligado, capa,
+  // fundo e logo da conta vencem campo a campo, e desligar de novo devolve a
+  // arte curada na hora (o casamento e refeito com a ultima resposta).
+  { char dir[] = "/tmp/nuvio-colarte-XXXXXX"; char caminho[300]; FILE *f;
+    const char *conta =
+      "{\"collections\":[{\"id\":\"c1\",\"title\":\"S\",\"folders\":["
+      "{\"id\":\"f1\",\"title\":\"Netflix\",\"coverImageUrl\":\"https://cdn/nf.webp\","
+        "\"heroBackdropUrl\":\"https://cdn/nf-hero.jpg\",\"titleLogoUrl\":\"https://cdn/nf-logo.png\","
+        "\"focusGifUrl\":\"https://cdn/nf.gif\","
+        "\"sources\":[{\"addonId\":\"x\",\"type\":\"movie\",\"catalogId\":\"k\"}]},"
+      "{\"id\":\"f2\",\"title\":\"Prime\",\"titleLogoUrl\":\"https://cdn/pv-logo.png\","
+        "\"sources\":[{\"addonId\":\"x\",\"type\":\"movie\",\"catalogId\":\"k\"}]}]}]}";
+    assert(mkdtemp(dir));
+    snprintf(caminho, sizeof caminho, "%s/collections.json", dir); f = fopen(caminho, "w");
+    fputs("{\"groups\":[{\"id\":\"c1\",\"title\":\"S\",\"folders\":["
+          "{\"id\":\"f1\",\"title\":\"Netflix\",\"cover\":\"c/f1.jpg\",\"hero\":\"c/f1h.jpg\",\"logo\":\"c/f1l.png\",\"frames\":12,"
+            "\"sources\":[{\"title\":\"M\",\"base\":\"https://a\",\"type\":\"movie\",\"catId\":\"k\"}]},"
+          "{\"id\":\"f2\",\"title\":\"Prime\",\"cover\":\"c/f2.jpg\",\"hero\":\"c/f2h.jpg\",\"logo\":\"c/f2l.png\","
+            "\"sources\":[{\"title\":\"M\",\"base\":\"https://a\",\"type\":\"movie\",\"catId\":\"k\"}]}]}]}", f);
+    fclose(f);
+    col_arte_conta(0);
+    assert(col_carregar(dir) == 2);
+    assert(col_definir_json(conta) == 2);
+    assert(strstr(col_folder(0)->cover, "c/f1.jpg") && col_folder(0)->frames == 12);
+    assert(strstr(col_folder(1)->logo, "c/f2l.png"));
+    col_arte_conta(1);   // refaz na hora, sem nova resposta da conta
+    assert(col_n() == 2 && col_folder(0)->local && col_folder(1)->local);
+    assert(!strcmp(col_folder(0)->cover, "https://cdn/nf.webp") && col_folder(0)->frames == 0 &&
+           !strcmp(col_folder(0)->focusGif, "https://cdn/nf.gif"));
+    assert(!strcmp(col_folder(0)->hero, "https://cdn/nf-hero.jpg") && !col_folder(0)->editorial);
+    assert(!strcmp(col_folder(0)->logo, "https://cdn/nf-logo.png"));
+    // So o logo na conta: capa e fundo continuam os do pacote.
+    assert(strstr(col_folder(1)->cover, "c/f2.jpg") && strstr(col_folder(1)->hero, "c/f2h.jpg") &&
+           !strcmp(col_folder(1)->logo, "https://cdn/pv-logo.png"));
+    assert(col_definir_json(conta) == 2);   // ciclo de sync com o ajuste ligado: estavel
+    assert(!strcmp(col_folder(0)->cover, "https://cdn/nf.webp"));
+    col_arte_conta(0);   // desligar devolve a arte curada
+    assert(strstr(col_folder(0)->cover, "c/f1.jpg") && col_folder(0)->frames == 12 &&
+           strstr(col_folder(0)->hero, "c/f1h.jpg") && strstr(col_folder(1)->logo, "c/f2l.png"));
+    remove(caminho); rmdir(dir);
+    puts("ok  arte das pastas da conta: desligado o pacote, ligado a conta campo a campo, volta na hora"); }
   // O GIF DA CONTA CONTRA A ARTE DO PACOTE. A regra e "a versao local fica
   // inteira", e o GIF nao a contradiz: o pacote nao TEM focusGif para perder.
   //   frames > 0  — ja anima pela sequencia curada; a URL da conta e ignorada.

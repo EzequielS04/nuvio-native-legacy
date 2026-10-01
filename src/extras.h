@@ -128,6 +128,16 @@ int  extras_n_colecao(void);
 const char *extras_colecao_titulo(int i);
 const char *extras_colecao_ano(int i);
 long extras_colecao_tmdb(int i);
+// Arte e texto da colecao, para o mini card da pagina e a lista da saga. As
+// partes ja vem na ORDEM DA SAGA (data de lancamento; sem data no fim). URLs
+// absolutas do image.tmdb.org (poster w342, fundo w780), "" quando nao ha.
+// Nota da parte em DECIMOS (71 = 7.1), 0 = sem nota.
+const char *extras_colecao_capa(void);
+const char *extras_colecao_fundo(void);
+const char *extras_colecao_sinopse(void);
+const char *extras_colecao_poster(int i);
+const char *extras_colecao_sinopse_parte(int i);
+int  extras_colecao_nota(int i);
 
 // PRODUTORAS E REDES, para a fileira de logos da pagina de detalhe — no web e
 // o renderCompanySections ("Production"/"Network"). Vem do corpo principal

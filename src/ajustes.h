@@ -219,6 +219,16 @@ float ajustes_detalhe_veu(void);
 int   ajustes_trailer_auto(void);      // trailer mudo no fundo da pagina de titulo
 int   ajustes_trailer_hero(void);      // trailer no destaque da home
 int   ajustes_hero_deslizar(void);     // troca do destaque desliza de lado (senao esmaece)
+// ARTE DO ADDON (locais, desligadas de fabrica). 1 = a imagem que o addon
+// mandou no meta vence a substituicao do app; sem ela, a fonte de sempre.
+//   poster:  vence o provedor de posteres (posterprov_card_addon)
+//   fundo:   vence "Background do hero" e "Destaque com outra arte" (artehero)
+//   logo:    nao e trocado pelo logo do TMDB ao abrir o titulo (descoberta.c)
+//   colecao: pasta do pacote usa capa/fundo/logo da conta (col_arte_conta)
+int   ajustes_poster_addon(void);
+int   ajustes_fundo_addon(void);
+int   ajustes_logo_addon(void);
+int   ajustes_col_arte_conta(void);
 int   ajustes_trailer_hero_som(void);  // o do destaque com som (na Samsung .wgt sempre mudo)
 Uint32 ajustes_trailer_hero_espera_ms(void); // repouso no titulo antes do trailer do destaque
 int   ajustes_trailer_qualidade(void); // teto em linhas (1080/720/480); 0 = a maior

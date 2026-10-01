@@ -90,6 +90,28 @@ static void heroReiniciar(void);
 #define REL_CARD_H   318.0f
 #define REL_CARD_GAP  32.0f
 
+// MINI CARD DA COLECAO (#194, 2a volta). Um cartao UNICO deitado, e nao uma
+// fileira de cartazes: o dono viu a lista de nomes e pediu algo que "nao fique
+// igual a fileira de recomendados". Largura entre a miniatura de trailer (520)
+// e o card de episodio (640x414) da mesma pagina, canto do trailer.
+#define COL_CARD_W   760.0f
+#define COL_CARD_H   300.0f
+#define COL_CARD_RAIO 24.0f
+#define COL_CARD_PAD  36.0f
+// Cartazes em escada no lado direito do card: o da frente e o primeiro da
+// saga, os de tras menores e deslocados para a esquerda.
+#define COL_CAPA_H   228.0f
+#define COL_CAPA_W   152.0f
+#define COL_CAPA_DX   72.0f
+// Tela de lista: coluna da colecao a esquerda, partes a direita.
+#define COLL_TOPO    120.0f
+#define COLL_ESQ_W   420.0f
+#define COLL_X       620.0f
+#define COLL_LIN_H   236.0f
+#define COLL_LIN_GAP  18.0f
+#define COLL_PO_W    140.0f
+#define COLL_PO_H    210.0f
+
 // Cartao de produtora/rede: o dobro aproximado do `.detail-company-card` do web
 // (180x70 em px de CSS) — na TV 1080p os cards medem em torno disto.
 #define EST_CARD_W   240.0f
@@ -152,8 +174,14 @@ static int  pedAbrir = -1;
 // Foco DENTRO da aba "Mais como este", que e uma lista vertical propria e nao
 // uma das fileiras horizontais do focus.c.
 static int  relFoco;
-// Foco DENTRO da secao "Coleção" do filme, lista vertical como a aba da serie.
-static int  colFoco;
+// TELA DE LISTA DA COLECAO: o OK no mini card abre, por cima da pagina, a saga
+// inteira em ordem, uma parte por linha. Mesmo papel da ficha da pessoa: outra
+// tela, que come os eventos enquanto esta aberta e sai inteira no Voltar.
+static int   colListaAberta, colListaFoco;
+static float colListaScroll, colListaVel;
+static void abrirListaColecao(void);
+static void eventoListaColecao(const SDL_Event *e);
+static void desenhaListaColecao(float a);
 // Temporada escolhida no painel de notas por episodio (indice em extras).
 static int  ratTemp;
 // 1 depois que ratTemp foi conciliado com a temporada da PAGINA usando a lista
@@ -1000,7 +1028,8 @@ void detail_abrir(const HomeItem *it) {
   aberto = 1; saindo = 0; nivel = 0; botao = 0;
   heroReiniciar();
   t = 0.0f; pg = 0.0f; scrollY = 0.0f; velY = 0.0f; abaInfo = 0; pessoaAberta = 0;
-  relFoco = 0; colFoco = 0; pedAbrir = -1; ratTemp = 0; ratSinc = 0;
+  relFoco = 0; colListaAberta = 0; colListaFoco = 0;
+  colListaScroll = colListaVel = 0.0f; pedAbrir = -1; ratTemp = 0; ratSinc = 0;
   trailerDesde = 0; trailerTentado = 0; trailerFade = 0.0f;
   trailerEtapa = 0; trailerPrazo = 0;
   trailerSemFonteLogado = 0;
@@ -1331,12 +1360,8 @@ static float alturaSecao(int r) {
     case SEC_ELENCO:     return NV_DETF_EL_ALT;
     case SEC_TRAILERS:     return NV_DETF_TR_ALT;
     case SEC_RELACIONADOS: return 318.0f + 46.0f;   // cartaz + titulo/ano
-    // Nome da colecao (~30 + 16) e 52 por parte, como desenhaColecao anda.
-    case SEC_COLECAO: {
-      int n = extras_n_colecao();
-      if (n > 7) n = 7;
-      return (extras_colecao_nome()[0] ? 46.0f : 0.0f) + (float)n * 52.0f;
-    }
+    // Um mini card so, qualquer que seja o tamanho da saga.
+    case SEC_COLECAO:      return COL_CARD_H;
     // + o cabecalho: sem ele a secao seguinte ("Detalhes do Filme") era
     // empilhada usando so a altura dos cartoes e saia POR CIMA deles.
     case SEC_COMENTARIOS:  return alturaCabComentarios() + COM_CARD_H;
@@ -1400,7 +1425,8 @@ static int secaoN(int r) {
       switch (abaIdDe(abaInfo)) {
         case ABA_AVALIACOES:   n = nAvaliaveis();           break;
         case ABA_RELACIONADOS: n = extras_n_relacionados(); break;
-        case ABA_COLECAO:      n = extras_n_colecao();      break;
+        // O mesmo mini card do filme: uma coluna so, o OK abre a lista.
+        case ABA_COLECAO:      n = extras_n_colecao() > 1 ? 1 : 0; break;
         // O cartao de comentario nao se escolhe um a um; o que RECEBE foco sao
         // as duas pilulas do seletor "Série | Episódio". Em filme nao ha
         // episodio: sobra uma coluna so, para o foco poder pousar na fileira e
@@ -1428,8 +1454,8 @@ static int secaoN(int r) {
     // so existe em filme, e a aba ABA_COLECAO so vive na barra de abas, que e
     // so da serie (SEC_ABAS_INFO devolve 0 em filme): o pedido saia, o log dizia
     // "colecao ... -> 3" e a pagina nao mostrava nada. Aqui ela e secao propria,
-    // como as recomendacoes. UMA coluna: e uma lista vertical com foco proprio
-    // (colFoco), a mesma regra das frases. "> 1" pela mesma razao da aba: a
+    // como as recomendacoes. UMA coluna: e um mini card so, e o OK abre a
+    // lista da saga (desenhaListaColecao). "> 1" pela mesma razao da aba: a
     // colecao inclui o proprio filme, e uma parte so seria ele mesmo.
     case SEC_COLECAO:
       return (!ehSerie() && extras_n_colecao() > 1) ? 1 : 0;
@@ -1677,6 +1703,7 @@ void detail_evento(const SDL_Event *e) {
   // dentro de `if (pessoaAberta)` exigindo `!pessoaAberta`, ou seja, nunca
   // rodavam. Era por isso que nao dava para andar nem abrir nada nas
   // recomendacoes: o codigo estava escrito e era inalcancavel.
+  if (colListaAberta) { eventoListaColecao(e); return; }
   if (pessoaAberta) {
     if (e->type != SDL_KEYDOWN) return;
     { int n = pessoa_n_creditos();
@@ -1735,26 +1762,20 @@ void detail_evento(const SDL_Event *e) {
     if (e->key.keysym.sym == SDLK_LEFT  && ratTemp > 0)      { ratTemp--; if (audAberta) abrirAudiencia(); return; }
   }
 
-  // "Mais como este" e "Colecao" sao a MESMA lista vertical, so muda a fonte.
+  // "Colecao" na serie: o MESMO mini card do filme, e o OK abre a lista.
+  // "Mais como este" continua a fileira horizontal de cartazes.
   if (e->type == SDL_KEYDOWN && foco.fileira == SEC_ELENCO && !pessoaAberta &&
       (abaIdDe(abaInfo) == ABA_RELACIONADOS || abaIdDe(abaInfo) == ABA_COLECAO)) {
     int col = (abaIdDe(abaInfo) == ABA_COLECAO);
-    int n = col ? extras_n_colecao() : extras_n_relacionados();
+    int n = col ? 1 : extras_n_relacionados();
     if (n > 7) n = 7;
     switch (e->key.keysym.sym) {
-      // "Mais como este" e uma fileira de cartazes: anda na HORIZONTAL. A
-      // colecao continua em lista vertical.
       case SDLK_RIGHT: if (!col && relFoco + 1 < n) { relFoco++; return; } break;
       case SDLK_LEFT:  if (!col && relFoco > 0)     { relFoco--; return; } break;
-      case SDLK_DOWN: if (col && relFoco + 1 < n) { relFoco++; return; } break;
-      case SDLK_UP:   if (col && relFoco > 0)     { relFoco--; return; } break;
       case SDLK_RETURN:
       case SDLK_KP_ENTER: {
         if (col) {
-          // A parte da colecao traz so o id do TMDB; o caminho e o mesmo do
-          // credito de um ator.
-          long t = extras_colecao_tmdb(relFoco);
-          if (t > 0) desc_pedir_titulo_tmdb(t, "movie");
+          abrirListaColecao();
         } else {
           const char *id = extras_relacionado_imdb(relFoco);
           // "tmdb:<id>" = recomendacao do TMDB (tmdb_use_more_like_this): nao
@@ -1783,15 +1804,6 @@ void detail_evento(const SDL_Event *e) {
   // NAS PONTAS O EVENTO PASSA ADIANTE e o foco sai da secao — a mesma regra da
   // colecao, e o que impede a ultima secao do documento de virar uma armadilha
   // de onde so se sai pelo Voltar.
-  // A COLECAO DO FILME anda igual: cima e baixo dentro da lista, e nas pontas o
-  // evento passa adiante e o foco sai da secao.
-  if (e->type == SDL_KEYDOWN && nivel >= 1 && foco.fileira == SEC_COLECAO &&
-      !pessoaAberta) {
-    int n = extras_n_colecao();
-    if (n > 7) n = 7;
-    if (e->key.keysym.sym == SDLK_DOWN && colFoco + 1 < n) { colFoco++; return; }
-    if (e->key.keysym.sym == SDLK_UP && colFoco > 0)       { colFoco--; return; }
-  }
 
   if (e->type == SDL_KEYDOWN && nivel >= 1 && foco.fileira == SEC_FRASES &&
       !pessoaAberta && seriefrases_n() > 0) {
@@ -1875,9 +1887,8 @@ void detail_evento(const SDL_Event *e) {
         else if (id[0]) desc_pedir_titulo(id);
       }
     } else if (foco.fileira == SEC_COLECAO) {
-      // Mesmo destino da aba da serie: a parte traz so o id do TMDB.
-      long t = extras_colecao_tmdb(colFoco);
-      if (t > 0) desc_pedir_titulo_tmdb(t, "movie");
+      // O mini card abre a LISTA da saga; e la que se escolhe a parte.
+      abrirListaColecao();
     } else if (foco.fileira == SEC_TEMPORADAS && dur >= NV_HOLD_MS) {
       // PRESSAO LONGA NA ABA: o menu da temporada (issue #108, "Pressing
       // 'Season' brings up option to mark all as watched"). O toque curto
@@ -2093,8 +2104,8 @@ static float larguraItem(int r, int c) {
     case SEC_AUD_DIGITAL:
     case SEC_NOTAS:
     case SEC_NOTAS_EP:
-    case SEC_COLECAO:
     case SEC_FRASES:      return NV_TELA_W - NV_DETP_X * 2;
+    case SEC_COLECAO:     return COL_CARD_W;
     default:              return NV_DETP_EL_W;
   }
 }
@@ -2241,6 +2252,17 @@ void detail_atualizar(float dt, Uint32 agora) {
   // `saindo` tambem e ligado por caminhos que nao passam pelo Voltar, como o
   // OK num estudio, que abre o vertudo e deixa esta tela para tras.
   if (saindo) { serieaud_fechar(); seriefrases_fechar(); trocaarte_fechar(); }
+  if (colListaAberta) {
+    // A linha em foco mira ~35% da altura, como o resto do app rola.
+    float passo = COLL_LIN_H + COLL_LIN_GAP;
+    int n = extras_n_colecao();
+    float alvo = (float)colListaFoco * passo - (NV_TELA_H * 0.35f - COLL_TOPO);
+    float maxY = (float)n * passo - (NV_TELA_H - COLL_TOPO - 60.0f);
+    if (maxY < 0.0f) maxY = 0.0f;
+    if (alvo > maxY) alvo = maxY;
+    if (alvo < 0.0f) alvo = 0.0f;
+    colListaScroll = anim_mola2(&colListaVel, colListaScroll, alvo, dt, NV_MOLA2_SCROLL);
+  }
   revalidarIdx();
   trocaarte_atualizar(dt);
   // OK NA TELA DE ESCOLHA: a arte congelada na abertura (arteFixa/logoFixo)
@@ -4607,35 +4629,242 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
   }
 }
 
-// Aba da COLECAO: as partes da franquia, na ordem que o TMDB devolve. Mesma
-// lista vertical de "Mais como este" — o que muda e a fonte e o cabecalho com
-// o nome da colecao.
-static void desenhaColecao(float x, float y, float a) {
-  int n = extras_n_colecao(), i;
-  float y0 = y;
-  if (extras_colecao_nome()[0]) {
-    TxtLinha ln = txt_linha_corta(TXT_DET_META2, extras_colecao_nome(),
-                                  150, 154, 163, 255, 900.0f);
-    txt_desenhar_alpha(ln, x, y0, a * 0.9f);
-    y0 += ln.h + 16.0f;
+// "1999–2003" (ou so "1999") a partir dos anos das partes; "" sem ano nenhum.
+static void anosColecao(char *buf, size_t tam) {
+  int n = extras_n_colecao(), i, lo = 0, hi = 0;
+  for (i = 0; i < n; i++) {
+    int v = atoi(extras_colecao_ano(i));
+    if (v <= 0) continue;
+    if (!lo || v < lo) lo = v;
+    if (v > hi) hi = v;
   }
-  for (i = 0; i < n && i < 7; i++) {
-    float yl = y0 + i * 52.0f;
-    int aceso = (foco.fileira == SEC_ELENCO && i == relFoco) ||
-                (foco.fileira == SEC_COLECAO && i == colFoco);
-    int c = aceso ? 255 : 225;
-    if (aceso) {
-      GfxRect faixa = { x - 16.0f, yl - 8.0f, 940.0f, 48.0f };
-      gfx_cor(faixa, 10.0f / 48.0f, 1, 1, 1, 0.12f * a);
+  if (!lo) buf[0] = 0;
+  else if (lo == hi) snprintf(buf, tam, "%d", lo);
+  else snprintf(buf, tam, "%d\xe2\x80\x93%d", lo, hi);
+}
+
+// "3 filmes  ·  1999–2003". "filmes" ja existe na tabela de idiomas.
+static void metaColecao(char *buf, size_t tam) {
+  char anos[16];
+  anosColecao(anos, sizeof anos);
+  snprintf(buf, tam, "%d %s%s%s", extras_n_colecao(), i18n("filmes"),
+           anos[0] ? "  \xc2\xb7  " : "", anos);
+}
+
+// Parte da colecao que e o titulo aberto, ou -1.
+static int parteAtualColecao(void) {
+  const CatItem *ci = cat_item(idx);
+  int n = extras_n_colecao(), i;
+  if (!ci || ci->tmdb <= 0) return -1;
+  for (i = 0; i < n; i++)
+    if (extras_colecao_tmdb(i) == ci->tmdb) return i;
+  return -1;
+}
+
+// Cartaz com canto do app, esqueleto enquanto baixa e placa neutra sem arte.
+static void cartazColecao(GfxRect r, const char *po, float a) {
+  GLuint t = po[0] ? tex_obter_larg(po, r.w) : 0;
+  float raio = raioCartaz(r.w, r.h);
+  if (t) {
+    gfx_tex_aspect_atual = tex_aspecto(po);
+    gfx_rect(r, t, GFX_CARD, 1.0f, 0, 0, raio, 0, 0, 0, a);
+    gfx_tex_aspect_atual = 0.0f;
+  } else if (po[0] && !tex_falhou(po)) {
+    gfx_esqueleto(r, raio, 0.133f, 0.133f, 0.133f, a);
+  } else {
+    gfx_cor(r, raio, 0.133f, 0.133f, 0.133f, a);
+  }
+}
+
+// MINI CARD DA COLECAO (#194, 2a volta). Era uma lista de nomes soltos; o dono
+// pediu "em forma de mini card com artwork", diferente da fileira de
+// recomendados. Um cartao so: o BACKDROP da colecao no fundo (veu de leitura a
+// esquerda assado no GFX_VITRINE), o nome e "N filmes · anos" a esquerda e os
+// cartazes das primeiras partes em ESCADA a direita. Sem backdrop, a escada
+// sozinha sobre a superficie neutra ja diz "isto e uma saga". O foco e o da
+// miniatura de trailer (anel na cor de realce) ou o contorno do vidro.
+static void desenhaColecao(float x, float y, float f, float a) {
+  GfxRect r = { x, y, COL_CARD_W, COL_CARD_H };
+  float raio = COL_CARD_RAIO / COL_CARD_H;
+  const char *fundo = extras_colecao_fundo();
+  GLuint t = fundo[0] ? tex_obter_larg(fundo, COL_CARD_W) : 0;
+  int n = extras_n_colecao(), k, nCapas;
+  float capaX = x + COL_CARD_W - COL_CARD_PAD - COL_CAPA_W, textoW;
+
+  if (f > 0.01f && !ajustes_vidro()) {
+    GfxRect anel = { r.x - NV_DETP_ANEL, r.y - NV_DETP_ANEL,
+                     r.w + NV_DETP_ANEL * 2, r.h + NV_DETP_ANEL * 2 };
+    float ar, ag, ab;
+    ajustes_acento(&ar, &ag, &ab);
+    gfx_cor(anel, (COL_CARD_RAIO + NV_DETP_ANEL) / anel.h, ar, ag, ab, f * a);
+  }
+  if (t) {
+    gfx_tex_aspect_atual = tex_aspecto(fundo);
+    gfx_rect(r, t, GFX_VITRINE, 1.0f, 0.5f, 0.0f, raio, 0.30f, 0, 0, a);
+    gfx_tex_aspect_atual = 0.0f;
+  } else {
+    moldura(r, COL_CARD_RAIO, a);
+    if (fundo[0] && !tex_falhou(fundo)) gfx_esqueleto(r, raio, 0.12f, 0.12f, 0.13f, a * 0.6f);
+  }
+  if (f > 0.01f && ajustes_vidro()) gfx_vidro_cartao(r, raio, f, a);
+
+  // Escada: de tras para a frente, para a primeira parte ficar por cima.
+  nCapas = n < 3 ? n : 3;
+  for (k = nCapas - 1; k >= 0; k--) {
+    float esc = 1.0f - 0.10f * (float)k;
+    float w = COL_CAPA_W * esc, h = COL_CAPA_H * esc;
+    GfxRect c = { capaX - COL_CAPA_DX * (float)k + (COL_CAPA_W - w),
+                  y + (COL_CARD_H - h) * 0.5f, w, h };
+    GfxRect sombra = { c.x - 3.0f, c.y - 3.0f, c.w + 6.0f, c.h + 6.0f };
+    gfx_cor(sombra, raioCartaz(sombra.w, sombra.h), 0, 0, 0, a * 0.45f);
+    cartazColecao(c, extras_colecao_poster(k), a * (1.0f - 0.18f * (float)k));
+  }
+
+  // Texto a esquerda, centrado na vertical do cartao.
+  textoW = capaX - COL_CAPA_DX * (float)(nCapas > 1 ? nCapas - 1 : 0)
+         - 28.0f - (x + COL_CARD_PAD);
+  { char meta[64];
+    TxtLinha lm;
+    float yt = y + COL_CARD_PAD + 34.0f;
+    metaColecao(meta, sizeof meta);
+    lm = txt_linha_corta(TXT_DET_META2, meta, 205, 210, 220, 255, textoW);
+    { float h = txt_bloco_corta(TXT_TITULO3, extras_colecao_nome(),
+                                250, 251, 255, x + COL_CARD_PAD, yt, textoW,
+                                52.0f, a, 3);
+      txt_desenhar_alpha(lm, x + COL_CARD_PAD, yt + h + 14.0f, a * 0.95f); } }
+}
+
+// TELA DE LISTA DA COLECAO. A saga inteira, na ordem de lancamento (extras ja
+// ordena), uma parte por linha: cartaz, titulo, ano e nota, e a sinopse curta.
+// A parte que e o titulo aberto leva "Você está aqui". Fundo = o backdrop da
+// colecao dissolvido no fundo da pagina (o mesmo GFX_VITRINE do destaque da
+// home, numa passada so), a coluna da esquerda apresenta a colecao.
+static void abrirListaColecao(void) {
+  int atual = parteAtualColecao();
+  if (extras_n_colecao() < 1) return;
+  colListaAberta = 1;
+  colListaFoco = atual >= 0 ? atual : 0;
+  { float passo = COLL_LIN_H + COLL_LIN_GAP;
+    float alvo = (float)colListaFoco * passo - (NV_TELA_H * 0.35f - COLL_TOPO);
+    colListaScroll = alvo > 0.0f ? alvo : 0.0f;
+    colListaVel = 0.0f; }
+}
+
+static void eventoListaColecao(const SDL_Event *e) {
+  int n = extras_n_colecao(), k;
+  if (e->type != SDL_KEYDOWN) return;
+  k = e->key.keysym.sym;
+  if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
+      e->key.keysym.scancode == NV_SCANCODE_BACK) { colListaAberta = 0; return; }
+  if (k == SDLK_DOWN && colListaFoco + 1 < n) colListaFoco++;
+  else if (k == SDLK_UP && colListaFoco > 0) colListaFoco--;
+  else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
+    // A parte traz so o id do TMDB: o caminho e o mesmo do credito de um ator.
+    // OK na parte que ja esta aberta so fecha a lista.
+    long t = extras_colecao_tmdb(colListaFoco);
+    if (colListaFoco != parteAtualColecao() && t > 0)
+      desc_pedir_titulo_tmdb(t, "movie");
+    colListaAberta = 0;
+  }
+}
+
+static void desenhaListaColecao(float a) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  const char *fundo = extras_colecao_fundo();
+  GLuint tf = fundo[0] ? tex_obter(fundo) : 0;
+  int n = extras_n_colecao(), atual = parteAtualColecao(), i;
+  float lx = COLL_X, lw = NV_TELA_W - NV_DETP_X - COLL_X;
+  float passo = COLL_LIN_H + COLL_LIN_GAP;
+
+  gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a);
+  if (tf) {
+    gfx_tex_aspect_atual = tex_aspecto(fundo);
+    gfx_rect(tela, tf, GFX_VITRINE, 1.0f, 0.3f, 1.0f, 0.0f, 0.0f, 0, 0, a * 0.55f);
+    gfx_tex_aspect_atual = 0.0f;
+  }
+
+  // --- coluna da colecao --------------------------------------------------
+  { const char *capa = extras_colecao_capa();
+    GfxRect rc = { NV_DETP_X, COLL_TOPO, 240.0f, 360.0f };
+    float y;
+    char meta[64];
+    if (!capa[0]) capa = extras_colecao_poster(0);
+    cartazColecao(rc, capa, a);
+    y = rc.y + rc.h + 30.0f;
+    y += txt_bloco_corta(TXT_TITULO3, extras_colecao_nome(), 250, 251, 255,
+                         NV_DETP_X, y, COLL_ESQ_W, 56.0f, a, 3) + 10.0f;
+    metaColecao(meta, sizeof meta);
+    { TxtLinha lm = txt_linha_corta(TXT_DET_META2, meta, 175, 180, 190, 255, COLL_ESQ_W);
+      txt_desenhar_alpha(lm, NV_DETP_X, y, a);
+      y += lm.h + 20.0f; }
+    if (extras_colecao_sinopse()[0])
+      txt_bloco_corta(TXT_DET_META2, extras_colecao_sinopse(), 190, 195, 205,
+                      NV_DETP_X, y, COLL_ESQ_W, 32.0f, a * 0.9f, 7);
+  }
+
+  // --- partes -----------------------------------------------------------
+  for (i = 0; i < n; i++) {
+    float ly = COLL_TOPO + (float)i * passo - colListaScroll;
+    GfxRect lin = { lx, ly, lw, COLL_LIN_H };
+    int foc = (i == colListaFoco);
+    float tx = lx + 13.0f + COLL_PO_W + 32.0f, tw = lx + lw - 32.0f - tx, ty;
+    if (ly + COLL_LIN_H < 0.0f || ly > NV_TELA_H) continue;
+    if (foc) {
+      float ar, ag, ab;
+      ajustes_acento(&ar, &ag, &ab);
+      gfx_cartao_foco_vidro(lin, 20.0f / lin.h, 1.0f, a, ar, ag, ab);
+    } else {
+      moldura(lin, 20.0f, a * 0.55f);
     }
-    { TxtLinha lt = txt_linha_corta(TXT_DET_META, extras_colecao_titulo(i),
-                                    c, c, c, 255, 900.0f);
-      txt_desenhar_alpha(lt, x, yl, a);
-      { const char *ano = extras_colecao_ano(i);
-        if (ano[0]) {
-          TxtLinha la = txt_linha(TXT_DET_META2, ano, 150, 154, 163, 255);
-          txt_desenhar_alpha(la, x + lt.w + 18.0f, yl + 2.0f, a * 0.9f);
-        } } }
+    { GfxRect rp = { lx + 13.0f, ly + (COLL_LIN_H - COLL_PO_H) * 0.5f,
+                     COLL_PO_W, COLL_PO_H };
+      cartazColecao(rp, extras_colecao_poster(i), a); }
+    ty = ly + 30.0f;
+    { int c = foc ? 255 : 232;
+      float wSelo = 0.0f;
+      TxtLinha lsel = { 0 };
+      if (i == atual) {
+        lsel = txt_linha(TXT_CAPTION2, "Você está aqui", 0, 0, 0, 255);
+        wSelo = lsel.w + 28.0f + 16.0f;
+      }
+      { TxtLinha lt = txt_linha_corta(TXT_ROW_TITULO, extras_colecao_titulo(i),
+                                      c, c, c, 255, tw - wSelo);
+        txt_desenhar_alpha(lt, tx, ty, a);
+        if (i == atual) {
+          float ar, ag, ab;
+          int tin;
+          GfxRect pil = { tx + lt.w + 16.0f, ty + (lt.h - 36.0f) * 0.5f,
+                          lsel.w + 28.0f, 36.0f };
+          ajustes_acento(&ar, &ag, &ab);
+          tin = ajustes_tinta_foco();
+          gfx_cor(pil, 0.5f, ar, ag, ab, a);
+          lsel = txt_linha(TXT_CAPTION2, "Você está aqui", tin, tin, tin, 255);
+          txt_desenhar_alpha(lsel, pil.x + 14.0f, pil.y + (pil.h - lsel.h) * 0.5f, a);
+        }
+        ty += lt.h + 12.0f; } }
+    // Ano e nota do TMDB na mesma linha, a estrela no amarelo das notas.
+    { const char *ano = extras_colecao_ano(i);
+      int nota = extras_colecao_nota(i);
+      float mx = tx;
+      if (ano[0]) {
+        TxtLinha la = txt_linha(TXT_DET_META2, ano, 175, 180, 190, 255);
+        txt_desenhar_alpha(la, mx, ty, a);
+        mx += la.w + 22.0f;
+      }
+      if (nota > 0) {
+        char nb[8];
+        GfxRect ic = { mx, ty + 3.0f, 22.0f, 22.0f };
+        TxtLinha ln;
+        snprintf(nb, sizeof nb, "%d.%d", nota / 10, nota % 10);
+        ln = txt_linha(TXT_DET_META2, nb, 175, 180, 190, 255);
+        gfx_icone(ic, "aj_star", 0.96f, 0.77f, 0.09f, a);
+        txt_desenhar_alpha(ln, mx + 30.0f, ty, a);
+      }
+      ty += 40.0f; }
+    if (extras_colecao_sinopse_parte(i)[0])
+      txt_bloco_corta(TXT_DET_META2, extras_colecao_sinopse_parte(i),
+                      foc ? 205 : 170, foc ? 210 : 175, foc ? 220 : 185,
+                      tx, ty, tw, 31.0f, a, 3);
   }
 }
 
@@ -4683,11 +4912,8 @@ static float baseDaAbaAtiva(void) {
       if (ehSerie() && extras_n_temporadas() > 0)
         return NV_DETP_EL_Y + 40.0f + RAT_TEMP_H + 18.0f + RAT_PIL_H;
       return NV_DETP_EL_Y + 40.0f + AVAL_CARD_H;
-    case ABA_COLECAO: {
-      int n = extras_n_colecao();
-      if (n > 7) n = 7;
-      return NV_DETP_EL_Y + 40.0f + 30.0f + (float)n * 52.0f;
-    }
+    case ABA_COLECAO:
+      return NV_DETP_EL_Y + 40.0f + COL_CARD_H;
     default:
       return NV_DETP_EL_Y + NV_DETP_EL_AVATAR + NV_DETP_EL_NOME_DY
            + NV_DETP_EL_PAPEL_DY + NV_DETP_EL_LINHA * 2.0f;
@@ -5053,6 +5279,7 @@ static float alturaAlvo(int r) {
     case SEC_ABAS_INFO:  return NV_DETP_ABA_H;
     case SEC_TRAILERS:   return NV_DETF_TR_VIDEO_H;
     case SEC_ESTUDIOS:   return EST_CARD_H;
+    case SEC_COLECAO:    return COL_CARD_H;
     case SEC_ELENCO:     return NV_DETP_EL_AVATAR + 90.0f;
     default:             return 0.0f;
   }
@@ -5082,7 +5309,9 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
       desenhaRelacionados(NV_DETP_X, yAba, a); return;
     }
     if (r == SEC_ELENCO && aba == ABA_COLECAO) {
-      desenhaColecao(NV_DETP_X, yAba, a); return;
+      desenhaColecao(NV_DETP_X, yAba,
+                     foco.fileira == SEC_ELENCO ? animFoco[SEC_ELENCO][0] : 0.0f, a);
+      return;
     }
     if (r == SEC_ELENCO && aba == ABA_COMENTARIOS) {
       desenhaComentarios(NV_DETP_X, yAba, a); return;
@@ -5188,7 +5417,7 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
         }
         break;
       case SEC_COLECAO:
-        if (c == 0) desenhaColecao(NV_DETP_X, y, a);
+        if (c == 0) desenhaColecao(x, y, f, a);
         break;
       case SEC_COMENTARIOS:  desenhaComentarios(NV_DETP_X, y, a); break;
       // UMA VEZ SO, e nao uma por coluna: as colunas destas duas sao posicoes
@@ -5490,6 +5719,7 @@ void detail_desenhar(Uint32 agora) {
 
   if (pg <= 0.01f && scrollY < 1.0f) {
     if (pessoaAberta) { ponteiro_camada(); desenhaPessoa(s); }
+    if (colListaAberta) { ponteiro_camada(); desenhaListaColecao(s); }
     if (episodios_menu_aberto()) ponteiro_camada();
     return;
   }
@@ -5499,6 +5729,7 @@ void detail_desenhar(Uint32 agora) {
   // POR CIMA de tudo: a ficha e outra tela, nao uma secao desta.
   // O ponteiro (#99) nao alcanca a pagina por baixo de nenhuma das duas.
   if (pessoaAberta) { ponteiro_camada(); desenhaPessoa(s); }
+  if (colListaAberta) { ponteiro_camada(); desenhaListaColecao(s); }
   // E o menu de visto por cima da ficha tambem: ele e o ultimo a abrir.
   if (episodios_menu_aberto()) ponteiro_camada();
   episodios_menu_desenhar();

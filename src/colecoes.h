@@ -82,6 +82,12 @@ int col_definir_json(const char *json);
 // as do pacote). As do perfil novo entram quando o sync as trouxer; se ele nao
 // tiver nenhuma, a home fica sem colecoes. As extras (listas fixadas) ficam.
 void col_esquecer_perfil(void);
+/* "Arte das pastas da conta" (Ajustes, desligado de fabrica): 1 = a pasta da
+   conta que casa com uma do pacote usa a capa/fundo/logo da conta onde a conta
+   os tem (a capa leva o GIF da conta; o fundo desliga o modo editorial). 0 = a
+   arte curada do pacote, como sempre. Trocar refaz o casamento com a ultima
+   resposta da conta, na hora (a revisao muda e a home remonta). */
+void col_arte_conta(int sim);
 // Chave de fileira de um grupo: collection_<id da colecao> quando a colecao
 // tem id (web e catordem usam o id), senao collection_<titulo do grupo>.
 void col_chave_grupo(const char *group, char *dst, unsigned n);

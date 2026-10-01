@@ -9,10 +9,20 @@
 // de posicao porque um numero de ordem gravado ao lado do indice sempre acaba
 // discordando dele — foi o que o formato moderno do blob da conta precisou
 // resolver com um sort, e aqui basta mover o elemento.
+// DOIS JEITOS DE ESTAR FORA DA HOME (issue #197). 1 e a PESSOA dizendo "nao
+// quero" (removeu, ou baixou o limite); 2 e o catalogo que a cota por addon
+// deixou de fora e so esta na lista para PODER ser escolhido
+// (fil_registrar_se_couber). Os dois aparecem na aba "Fora da Home"; so o 1 e
+// escolha — so ele desliga o catalogo para a descoberta (fil_oculta), protege
+// da poda e do despejo. O 2 nao ocupa vaga nem fila, e vira ligado quando a
+// descoberta passa a pedi-lo. No arquivo e o mesmo campo: versao anterior le 2
+// como oculta, que e o mesmo lugar da tela.
+#define OC_PESSOA   1
+#define OC_SUGESTAO 2
 typedef struct {
   char chave[FIL_CHAVE];
   char titulo[FIL_TITULO];
-  int  oculta;
+  int  oculta;   // 0, OC_PESSOA ou OC_SUGESTAO
   int  tipo;    // FilTipo
   int  tam;     // FilTam
   // NA FILA POR ESCOLHA. So quem foi ADICIONADO com a home cheia fica ligado
@@ -52,6 +62,10 @@ static const char *arquivoDoPerfil(void) {
 }
 static int   ordemLocal;      // 1 = a pessoa MOVEU algo; ver fil_tem_ordem
 static int   carregado;
+// LIMPEZA DO #197 JA FEITA NESTE ARQUIVO (linha "migracao 197"). Arquivo que
+// nasce nesta versao ja nasce limpo; so o que veio de antes passa por ela, e
+// uma vez so. Ver fil_migrar_197.
+static int   migrado197;
 static int   registroSujo;   // ver fil_gravar_registro
 // FONTE DO DESTAQUE. "" = automatico (os primeiros titulos do catalogo, que e
 // o que a home sempre fez), "*" = sorteio do catalogo, qualquer outra coisa = a
@@ -220,6 +234,8 @@ static void gravar(void) {
         "# Fileiras da Home, escolha DESTE aparelho. Nunca e enviada para\n"
         "# a conta: ver o cabecalho de src/fileiras.h.\n"
         "limite %d\nordem %d\n", limite, ordemLocal);
+  if (migrado197 && k < cap)
+    k += (size_t)snprintf(txt + k, cap - k, "migracao 197\n");
   // Linha propria e com prefixo, como `limite` e `ordem`: o leitor ignora
   // prefixo que nao conhece, entao um arquivo escrito por esta versao continua
   // valendo numa anterior (ela so nao ve o destaque) e vice-versa.
@@ -261,7 +277,9 @@ static void carregar(void) {
   // fileiras do 1". Os outros perfis comecam do padrao (ordem automatica).
   if (!f && perfil == 1 && dados_caminho(caminho, sizeof caminho, "fileirasui.txt"))
     f = fopen(caminho, "r");
-  if (!f) return;
+  // Sem arquivo: nada de antes para limpar.
+  if (!f) { migrado197 = 1; return; }
+  migrado197 = 0;
   while (fgets(buf, sizeof buf, f)) {
     char *fim = buf + strlen(buf);
     while (fim > buf && (fim[-1] == '\n' || fim[-1] == '\r')) *--fim = 0;
@@ -270,6 +288,8 @@ static void carregar(void) {
       limite = limita(atoi(buf + 7), FIL_LIMITE_MIN, FIL_LIMITE_MAX);
     } else if (!strncmp(buf, "ordem ", 6)) {
       ordemLocal = atoi(buf + 6) ? 1 : 0;
+    } else if (!strcmp(buf, "migracao 197")) {
+      migrado197 = 1;
     } else if (!strncmp(buf, "hero ", 5)) {
       snprintf(heroFonte, sizeof heroFonte, "%s", buf + 5);
     } else if (!strncmp(buf, "linha ", 6) && nLinhas < FIL_MAX) {
@@ -298,7 +318,7 @@ static void carregar(void) {
       linhas[nLinhas].itens = -1;
       snprintf(linhas[nLinhas].chave,  FIL_CHAVE,  "%s", campo[0]);
       snprintf(linhas[nLinhas].titulo, FIL_TITULO, "%s", p);
-      linhas[nLinhas].oculta = atoi(campo[1]) ? 1 : 0;
+      linhas[nLinhas].oculta = limita(atoi(campo[1]), 0, OC_SUGESTAO);
       linhas[nLinhas].tipo   = limita(atoi(campo[2]), 0, FIL_TIPO_N - 1);
       linhas[nLinhas].tam    = limita(atoi(campo[3]), 0, FIL_TAM_N - 1);
       if (!tipoValido(linhas[nLinhas].chave, linhas[nLinhas].tipo))
@@ -374,24 +394,55 @@ static int posicaoLigada(int i) {
   return p;
 }
 
+// LIMITE MENOR: quem ficou de fora VIRA "fora da home", e nao fila. Decisao
+// do dono ("viram fora da home"): a fila e para quem a pessoa ACABOU de
+// pedir e nao coube; quem foi empurrado por um limite menor nao pediu
+// nada, e re-entrar sozinho depois seria a home mudando por conta propria.
+static void ocultarAlem(int n) {
+  int i, p = 0;
+  for (i = 0; i < nLinhas; i++) {
+    if (linhas[i].oculta) continue;
+    if (p >= n) { linhas[i].oculta = OC_PESSOA; linhas[i].fila = 0; }
+    p++;
+  }
+}
+
+// Limite no inicio da rajada de fil_ajustar_limite; 0 = nenhuma em curso.
+static int limiteOrigem;
+
 void fil_definir_limite(int n) {
   pthread_mutex_lock(&trava);
   garantir();
+  limiteOrigem = 0;
   n = limita(n, FIL_LIMITE_MIN, FIL_LIMITE_MAX);
   if (n != limite) {
-    // LIMITE MENOR: quem ficou de fora VIRA "fora da home", e nao fila. Decisao
-    // do dono ("viram fora da home"): a fila e para quem a pessoa ACABOU de
-    // pedir e nao coube; quem foi empurrado por um limite menor nao pediu
-    // nada, e re-entrar sozinho depois seria a home mudando por conta propria.
-    if (n < limite) {
-      int i, p = 0;
-      for (i = 0; i < nLinhas; i++) {
-        if (linhas[i].oculta) continue;
-        if (p >= n) { linhas[i].oculta = 1; linhas[i].fila = 0; }
-        p++;
-      }
-    }
+    if (n < limite) ocultarAlem(n);
     limite = n; gravar();
+  }
+  pthread_mutex_unlock(&trava);
+}
+
+// A RAJADA DA SETA (issue #197). Na tela de Ajustes o limite muda um passo por
+// toque e a seta segurada repete: ir de 15 a 20 passando por 3 escondia, no
+// caminho, tudo depois da terceira ligada — e subir de volta nao desfazia.
+// Medido no log do relator (UA55TU8200): "limite 15" -> "limite 3" -> "2
+// fileiras na tela (limite 20, 16 fileira(s) no catalogo)". Agora os passos so
+// mudam o numero (a home ja segue o valor da vez) e a decisao do dono vale UMA
+// vez, no fim da edicao, comparando o valor final com o de partida.
+void fil_ajustar_limite(int n) {
+  pthread_mutex_lock(&trava);
+  garantir();
+  if (!limiteOrigem) limiteOrigem = limite;
+  n = limita(n, FIL_LIMITE_MIN, FIL_LIMITE_MAX);
+  if (n != limite) { limite = n; gravar(); }
+  pthread_mutex_unlock(&trava);
+}
+
+void fil_confirmar_limite(void) {
+  pthread_mutex_lock(&trava);
+  if (limiteOrigem) {
+    if (limite < limiteOrigem) { ocultarAlem(limite); gravar(); }
+    limiteOrigem = 0;
   }
   pthread_mutex_unlock(&trava);
 }
@@ -468,7 +519,7 @@ void fil_normalizar(void) {
   for (i = 0; i < nLinhas; i++) {
     if (linhas[i].oculta) continue;
     if (p < limite) { if (linhas[i].fila) { linhas[i].fila = 0; mudou = 1; } }
-    else if (!linhas[i].fila && !linhas[i].naHome) { linhas[i].oculta = 1; mudou = 1; continue; }
+    else if (!linhas[i].fila && !linhas[i].naHome) { linhas[i].oculta = OC_PESSOA; mudou = 1; continue; }
     p++;
   }
   if (mudou) gravar();
@@ -480,7 +531,7 @@ void fil_normalizar(void) {
 void fil_remover(int i) {
   pthread_mutex_lock(&trava);
   garantir();
-  if (i >= 0 && i < nLinhas && !linhas[i].oculta) { linhas[i].oculta = 1; linhas[i].fila = 0; gravar(); }
+  if (i >= 0 && i < nLinhas && linhas[i].oculta != OC_PESSOA) { linhas[i].oculta = OC_PESSOA; linhas[i].fila = 0; gravar(); }
   pthread_mutex_unlock(&trava);
 }
 
@@ -523,7 +574,7 @@ static int doAddon(const char *chave, const char *id, const char *base) {
 }
 
 static int temEscolha(const Linha *l) {
-  return l->oculta || l->fila || l->tipo != FIL_TIPO_AUTO ||
+  return l->oculta == OC_PESSOA || l->fila || l->tipo != FIL_TIPO_AUTO ||
          l->tam != FIL_TAM_PADRAO || (heroFonte[0] && !strcmp(heroFonte, l->chave));
 }
 
@@ -582,9 +633,10 @@ void fil_definir_perfil(int p) {
   if (p < 0) p = 0;
   if (p != perfil) {
     perfil = p;
-    nLinhas = 0; ordemLocal = 0; limite = FIL_LIMITE_PADRAO;
+    nLinhas = 0; ordemLocal = 0; limite = FIL_LIMITE_PADRAO; limiteOrigem = 0;
     memset(linhas, 0, sizeof linhas);
     carregado = 0;
+    migrado197 = 0;
     revisao++;
   }
   pthread_mutex_unlock(&trava);
@@ -663,6 +715,10 @@ static void registrar(const char *chave, const char *titulo,
         topo[k] = !linhas[k].oculta && ligadas < limite;
         if (!linhas[k].oculta) ligadas++;
       }
+      // Antes de tudo sai uma SUGESTAO (catalogo fora da cota, ninguem pediu):
+      // ela volta sozinha na proxima volta se ainda couber.
+      for (k = nLinhas - 1; k >= 0 && v < 0; k--)
+        if (linhas[k].oculta == OC_SUGESTAO && !linhas[k].naHome) v = k;
       for (passo = 0; passo < 3 && v < 0; passo++)
         for (k = nLinhas - 1; k >= 0 && v < 0; k--)
           if (!linhas[k].naHome && (passo == 2 || !linhas[k].vista) &&
@@ -702,6 +758,15 @@ static void registrar(const char *chave, const char *titulo,
     snprintf(linhas[i].chave, FIL_CHAVE, "%s", chave);
     linhas[i].tam = FIL_TAM_PADRAO;
     linhas[i].itens = -1;
+    // Fora da cota entra FORA DA HOME (issue #197). Ligado, ele caia na
+    // primeira vaga livre do limite e fil_escolhida o dava como escolhido na
+    // TV: a volta seguinte o pedia e ele aparecia na home sem ninguem pedir.
+    if (!podeDespejar) linhas[i].oculta = OC_SUGESTAO;
+    grava = 1;
+  } else if (podeDespejar && linhas[i].oculta == OC_SUGESTAO) {
+    // A descoberta passou a pedi-lo (ordem da conta, cota maior): deixa de ser
+    // sugestao e fica como todo candidato novo, ligado.
+    linhas[i].oculta = 0;
     grava = 1;
   }
   linhas[i].vista = 1;
@@ -781,7 +846,7 @@ const char *fil_titulo(int i) {
   if (i < 0 || i >= nLinhas) return "";
   return linhas[i].titulo[0] ? linhas[i].titulo : linhas[i].chave;
 }
-int fil_linha_oculta(int i) { return (i >= 0 && i < nLinhas) ? linhas[i].oculta : 0; }
+int fil_linha_oculta(int i) { return (i >= 0 && i < nLinhas && linhas[i].oculta) ? 1 : 0; }
 int fil_linha_tipo(int i)   { return (i >= 0 && i < nLinhas) ? linhas[i].tipo : FIL_TIPO_AUTO; }
 int fil_linha_tam(int i)    { return (i >= 0 && i < nLinhas) ? linhas[i].tam : FIL_TAM_PADRAO; }
 
@@ -814,7 +879,7 @@ int fil_aceita_tipo(int i)  { return (i >= 0 && i < nLinhas) && !formaFixa(linha
 
 void fil_alternar(int i) {
   pthread_mutex_lock(&trava);
-  if (i >= 0 && i < nLinhas) { linhas[i].oculta = !linhas[i].oculta; gravar(); }
+  if (i >= 0 && i < nLinhas) { linhas[i].oculta = linhas[i].oculta ? 0 : OC_PESSOA; gravar(); }
   pthread_mutex_unlock(&trava);
 }
 
@@ -952,8 +1017,9 @@ void fil_espelhar_ordem(const char *const *chaves,
       // tarde tem vista=1 e naHome=0 nesta volta — sem o !vista o resgate
       // roubava o registro dela na primeira publicacao parcial da home.
       for (v = 0; v < nLinhas; v++)
-        if (!usado[v] && !linhas[v].vista && !linhas[v].oculta &&
-            linhas[v].tipo == FIL_TIPO_AUTO && linhas[v].tam == FIL_TAM_PADRAO)
+        if (!usado[v] && (linhas[v].oculta == OC_SUGESTAO ||
+            (!linhas[v].vista && !linhas[v].oculta &&
+             linhas[v].tipo == FIL_TIPO_AUTO && linhas[v].tam == FIL_TAM_PADRAO)))
           break;
       if (v >= nLinhas) continue;
       memmove(linhas + v, linhas + v + 1,
@@ -1140,7 +1206,9 @@ int fil_oculta(const char *chave) {
   pthread_mutex_lock(&trava);
   garantir();
   i = achar(chave);
-  if (i >= 0) v = linhas[i].oculta;
+  // So a escolha da pessoa desliga: sugestao (OC_SUGESTAO) nao e "nao quero",
+  // e a ordem da conta ainda pode pedir o catalogo.
+  if (i >= 0) v = linhas[i].oculta == OC_PESSOA;
   pthread_mutex_unlock(&trava);
   return v;
 }
@@ -1215,7 +1283,9 @@ void fil_esquecer(void) {
   nLinhas = 0;
   ordemLocal = 0;
   limite = FIL_LIMITE_PADRAO;
+  limiteOrigem = 0;
   carregado = 1;   // nao reler o arquivo de quem saiu
+  migrado197 = 1;  // lista vazia: nada a limpar
   memset(linhas, 0, sizeof linhas);
   gravar();
   pthread_mutex_unlock(&trava);
@@ -1272,4 +1342,85 @@ void fil_ordenar_por_addon(void) {
   ordemLocal = 1;
   gravar();
   pthread_mutex_unlock(&trava);
+}
+
+// LIMPEZA UNICA DO #197, para quem ja tem o arquivo estragado pelos dois
+// defeitos que b98ae90 fechou: (a) a rajada da seta no limite escondeu as
+// fileiras que a pessoa tinha e (b) catalogos fora da cota entraram LIGADOS e
+// tomaram as vagas (as fileiras de ator do Xperience do relator).
+//
+// O ARQUIVO NAO GUARDA O PORQUE DE UMA LINHA ESTAR OCULTA OU LIGADA: escondida
+// pela rajada e escondida pela pessoa sao o mesmo "1"; ligada pelo registro
+// automatico e adicionada pela pessoa sao o mesmo "0". Entao a regra nao
+// adivinha linha a linha — ela so age quando o arquivo tem o PADRAO do defeito,
+// e usa como prova de escolha a unica coisa que a pessoa disse fora deste
+// arquivo: a ordem de catalogos DA CONTA (`contaLigadas`, as chaves que a conta
+// tem na ordem e nao desligou).
+//
+//   padrao: tabela grande (>= 256 linhas: so addon com centenas de catalogos
+//           produz o registro em massa), ocultas >= 2 x limite, pelo menos uma
+//           oculta que a conta tem ligada E pelo menos um intruso.
+//   (a)     oculta pela pessoa, sem fila, catalogo, LIGADO NA CONTA -> volta a
+//           ligar, no lugar em que estava (a rajada nao movia ninguem).
+//   (b)     intruso: ligado, catalogo, sem fila, forma e tamanho padrao, que a
+//           conta NAO tem na ordem, de um addon com >= 100 linhas na tabela ->
+//           vira sugestao (aba "Fora da Home", um OK o traz de volta).
+//
+// Fora do padrao nao mexe em nada. Com ou sem limpeza, grava a marca e nao
+// roda de novo neste perfil. Devolve quantas linhas mudaram.
+#define MIGRA_MIN_LINHAS 256
+#define MIGRA_MIN_ADDON  100
+static int naLista(const char *chave, const char *const *l, int n) {
+  int k;
+  for (k = 0; k < n; k++) if (l[k] && !strcmp(l[k], chave)) return 1;
+  return 0;
+}
+static int linhasDoPrefixo(const char *chave) {
+  const char *u = strchr(chave, '_');
+  size_t t = u ? (size_t)(u - chave) : strlen(chave);
+  int i, c = 0;
+  for (i = 0; i < nLinhas; i++)
+    if (!strncmp(linhas[i].chave, chave, t) && linhas[i].chave[t] == '_') c++;
+  return c;
+}
+static int intruso(int i, const char *const *conta, int n) {
+  const Linha *l = &linhas[i];
+  return !l->oculta && !l->fila && l->tipo == FIL_TIPO_AUTO &&
+         l->tam == FIL_TAM_PADRAO &&
+         fil_origem_de(l->chave) == FIL_ORIGEM_CATALOGO &&
+         !naLista(l->chave, conta, n) && linhasDoPrefixo(l->chave) >= MIGRA_MIN_ADDON;
+}
+static int restauravel(int i, const char *const *conta, int n) {
+  const Linha *l = &linhas[i];
+  return l->oculta == OC_PESSOA && !l->fila &&
+         fil_origem_de(l->chave) == FIL_ORIGEM_CATALOGO && naLista(l->chave, conta, n);
+}
+int fil_migrar_197(const char *const *contaLigadas, int n) {
+  int i, ocultas = 0, volta = 0, saem = 0, feito = 0;
+  pthread_mutex_lock(&trava);
+  garantir();
+  if (migrado197) { pthread_mutex_unlock(&trava); return 0; }
+  for (i = 0; i < nLinhas; i++) {
+    if (linhas[i].oculta) ocultas++;
+    if (restauravel(i, contaLigadas, n)) volta++;
+    else if (intruso(i, contaLigadas, n)) saem++;
+  }
+  if (nLinhas >= MIGRA_MIN_LINHAS && ocultas >= 2 * limite && volta > 0 && saem > 0) {
+    for (i = 0; i < nLinhas; i++) {
+      if (restauravel(i, contaLigadas, n)) { linhas[i].oculta = 0; feito++; }
+      else if (intruso(i, contaLigadas, n)) { linhas[i].oculta = OC_SUGESTAO; feito++; }
+    }
+    printf("[fileiras] limpeza #197: %d fileira(s) da conta voltaram para a home, "
+           "%d catalogo(s) fora da cota foram para Fora da Home (%d linhas, %d ocultas, limite %d)\n",
+           volta, saem, nLinhas, ocultas, limite);
+  } else {
+    printf("[fileiras] limpeza #197: arquivo sem o padrao do defeito, nada mudou "
+           "(%d linhas, %d ocultas, limite %d, %d da conta ocultas, %d intrusos)\n",
+           nLinhas, ocultas, limite, volta, saem);
+  }
+  fflush(stdout);
+  migrado197 = 1;
+  gravar();
+  pthread_mutex_unlock(&trava);
+  return feito;
 }

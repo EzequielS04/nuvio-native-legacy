@@ -592,7 +592,7 @@ void vertudo_desenhar(Uint32 agora) {
         GfxRect anel = { cx - 4, cy - 4, VT_CARD_W + 8, VT_CARD_H + 8 };
         gfx_cor(anel, ajustes_raio_poster_px() / (VT_CARD_W + 8.0f), 1, 1, 1, ac);
       }
-      { const char *pp = posterprov_card(it.imdb, it.tmdb, it.tipo, it.poster);
+      { const char *pp = posterprov_card_addon(it.origem, it.imdb, it.tmdb, it.tipo, it.poster);
         arteCard = pp[0] ? pp : it.backdrop; }
       t = arteCard[0] ? tex_obter_larg(arteCard, VT_CARD_W) : 0;
       // Arte chegando esvanece sobre o esqueleto (revela.h), como na home.

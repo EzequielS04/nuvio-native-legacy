@@ -49,6 +49,10 @@ namespace NuvioTpk
         [DllImport("libnuvio.so")] static extern void nv_tpk_log(string linha);
         [DllImport("libdl.so.2")] static extern IntPtr dlopen(string path, int flags);
         [DllImport("libdl.so.2")] static extern IntPtr dlerror();
+        // Reserva de teclas de midia (#196), ver ReservaTeclasMidia. Assinaturas
+        // do Ecore_Wl2.h/Ecore_Wayland2.h do rootstrap tizen-9.0-device.core.
+        [DllImport("libecore_wl2.so.1")] static extern IntPtr ecore_wl2_window_find(uint id);
+        [DllImport("libecore_wl2.so.1")] static extern byte ecore_wl2_window_keygrab_set(IntPtr win, string key, int mod, int notMod, int priority, int modo);
 
         const int W = 1920, H = 1080;
 #if NV_API8
@@ -220,8 +224,10 @@ namespace NuvioTpk
 
             // AUTO-ATUALIZACAO (opt-in por staging verificado): SO quando ha uma
             // libnuvio.so encenada e VERIFICADA mais nova que a empacotada, ela e
-            // memfd-carregada aqui (RTLD_GLOBAL -> os DllImport-por-soname passam a
-            // resolver nela). SEM staging, este 6+ nao usa memfd nenhum: cai no
+            // memfd-carregada aqui e os DllImport deste assembly sao ROTEADOS para
+            // ela (NvCarga.RotearDllImport). So o RTLD_GLOBAL nao bastava (#184):
+            // o runtime achava lib/libnuvio.so por caminho e o app seguia na
+            // empacotada. SEM staging, este 6+ nao usa memfd nenhum: cai no
             // dlopen simples de sempre, byte a byte igual ao anterior. Qualquer
             // falha no staging apaga o staging e volta para a empacotada — a
             // tentativa de atualizar nunca impede o app de abrir.
@@ -230,11 +236,15 @@ namespace NuvioTpk
             try
             {
                 string staged = NvCarga.DecidirStaged(dados, NvCarga.VersaoEmpacotada(DirectoryInfo.Resource), out string _);
-                if (staged != null)
+                if (staged != null && !NvCarga.PodeRotear())
+                    Etapa("note staged lib skipped: runtime cannot route DllImport");
+                else if (staged != null)
                 {
                     IntPtr h = NvCarga.MemfdDlopen(File.ReadAllBytes(staged), out string _);
-                    if (h != IntPtr.Zero) { carregou = true; Etapa("note loaded staged lib by memfd"); }
-                    else { Etapa("note staged lib failed, using the bundled one"); NvCarga.ApagarStaged(dados); }
+                    if (h == IntPtr.Zero) { Etapa("note staged lib failed, using the bundled one"); NvCarga.ApagarStaged(dados); }
+                    else if (NvCarga.RotearDllImport(typeof(Program).Assembly, h, out string falhaRota))
+                    { carregou = true; Etapa("note loaded staged lib by memfd, DllImport routed to it"); }
+                    else { Etapa("note staged lib loaded but DllImport routing failed (" + falhaRota + "), using the bundled one"); NvCarga.ApagarStaged(dados); }
                 }
             }
             catch { try { NvCarga.ApagarStaged(dados); } catch { } carregou = false; }
@@ -290,6 +300,10 @@ namespace NuvioTpk
                 return;
             }
             Etapa("ok nv_tpk_iniciar");
+            // Prova no log (#184): >0 = os DllImport passaram pelo resolvedor e
+            // cairam na encenada; o "[atualizacao] instalada X" do C deve dizer
+            // a versao dela.
+            if (carregou) Etapa("note staged lib routes=" + NvCarga.RotaUsos);
 
             Etapa("begin gl-window");
             try
@@ -303,6 +317,7 @@ namespace NuvioTpk
                 return;
             }
             Etapa("ok gl-window");
+            ReservaTeclasMidia();
             Etapa("begin first-frame");
             if (etapaAnterior != null) Aviso("Previous launch stopped at: " + etapaAnterior);
         }
@@ -496,6 +511,25 @@ namespace NuvioTpk
             if (gl == null || erroNaTela || saindo) return;   // GLView: gl == null, nada a subir
             subidas++;
             Etapa("note raise gl-window #" + subidas + " (" + porque + ")" + Contagem() + " mainVisible=" + principalVisivel + " glVisible=" + glVisivel);
+            // A JANELA PRINCIPAL PRIMEIRO (#188, #195). O video e desenhado nela
+            // (Video.cs: new Display(NuiWindow.Instance)). Ao sair pela tecla
+            // Home ela fica invisivel, e reabrir pelo menu da TV (AppControl)
+            // subia SO o GLWindow: a principal nunca voltava, o plano de video
+            // ficava escondido e o furo do GL mostrava a tela inicial da
+            // Samsung. Medido na QE55QN95B (Tizen 6.5, api9), 1.6.1: todas as
+            // sessoes terminam com "principal visivel=False" depois de
+            // "appcontrol: sobe o gl". Sobe a principal e so entao o GL por cima.
+            if (!principalVisivel)
+            {
+                try
+                {
+                    var w = NuiWindow.Instance;
+                    w.Show();
+                    w.Raise();
+                    Janela("principal reaberta (" + porque + ")");
+                }
+                catch (Exception e) { Janela("principal nao reabriu " + e.GetType().Name + ": " + e.Message); }
+            }
             try { gl.Show(); gl.Raise(); } catch (Exception e) { Etapa("note raise failed " + e.GetType().Name + ": " + e.Message); }
         }
 
@@ -882,10 +916,82 @@ namespace NuvioTpk
         // ficam guardadas e saem logo depois da linha [tv].
         readonly List<string> janelaFila = new List<string>();
 
+        // TECLAS DE MIDIA (#196). Sem reserva, o play/pause do controle chega ao
+        // app E ao sistema, e a TV mostra "Not Available" por cima do player (o
+        // flutter-tizen viu o mesmo toast, issue 319, e resolveu no engine #234
+        // com ecore_wl2_window_keygrab_set TOPMOST). TOPMOST: a janela so recebe
+        // a tecla com exclusividade quando esta no topo; e o unico modo de app
+        // de terceiro e dispensa o privilegio keygrab (Ecore_Wayland2.h).
+        // tv.inputdevice e privilegio so de web (privilege-wrt.properties do
+        // tizen-6.0/tv): o manifesto nativo fica como esta.
+        //
+        // Por nome e nao pelo Window.GrabKey(int) do NUI: o GrabKey traduz o
+        // codigo DALi por uma tabela (key-mapping-ecore-wl.cpp) que nao tem o
+        // XF86PlayBack do Smart Remote 2021+, e o GLWindow nem tem GrabKey. O
+        // GLWindow nao expoe o Ecore_Wl2_Window, entao varre os ids das janelas
+        // wl2 deste processo (ecore_wl2_window_find) e reserva em todas: com
+        // TOPMOST so a que estiver no topo recebe. O GrabKey do NUI fica de
+        // reserva se a libecore_wl2 nao responder. Nada aqui derruba o app.
+        static readonly string[] TeclasMidia = {
+            "XF86AudioPlay", "XF86AudioPause", "XF86AudioPlayPause", "XF86PlayBack",
+            "XF86AudioStop", "XF86AudioRewind", "XF86AudioForward",
+            "XF86AudioNext", "XF86AudioPrev", "XF86NextChapter", "XF86PreviousChapter",
+        };
+
+        void ReservaTeclasMidia()
+        {
+            const int TOPMOST = 2; // ECORE_WL2_WINDOW_KEYGRAB_TOPMOST
+            try
+            {
+                var janelas = new List<IntPtr>();
+                for (uint id = 0; id < 64; id++)
+                {
+                    IntPtr w = ecore_wl2_window_find(id);
+                    if (w != IntPtr.Zero && !janelas.Contains(w)) janelas.Add(w);
+                }
+                if (janelas.Count == 0) throw new Exception("nenhuma janela wl2 achada");
+                var ok = new List<string>();
+                var falhou = new List<string>();
+                foreach (var k in TeclasMidia)
+                {
+                    int n = 0;
+                    foreach (var w in janelas) { try { if (ecore_wl2_window_keygrab_set(w, k, 0, 0, 0, TOPMOST) != 0) n++; } catch { } }
+                    if (n > 0) ok.Add(k + "(" + n + ")"); else falhou.Add(k);
+                }
+                LogHost("teclas de midia reservadas: " + (ok.Count > 0 ? string.Join(" ", ok) : "nenhuma") +
+                        " | janelas wl2=" + janelas.Count + " modo=topmost" +
+                        (falhou.Count > 0 ? " | recusadas: " + string.Join(" ", falhou) : ""));
+            }
+            catch (Exception e)
+            {
+                // Reserva: o GrabKey do NUI, codigos DALi (key.h do dali-adaptor)
+                // PLAY_CD 172, STOP_CD 173, PAUSE_CD 174, NEXT_SONG 175,
+                // PREVIOUS_SONG 176, REWIND 177, FASTFORWARD 178, PLAY_PAUSE 180.
+                // Nao o DALI_KEY_PAUSE (170): na tabela ele e o XF86Standby.
+                var ok = new List<string>();
+                foreach (int c in new[] { 172, 173, 174, 175, 176, 177, 178, 180 })
+                {
+                    try { if (NuiWindow.Instance.GrabKey(c, NuiWindow.KeyGrabMode.Topmost)) ok.Add(c.ToString()); } catch { }
+                }
+                LogHost("teclas de midia reservadas: ecore_wl2 falhou (" + e.GetType().Name + ": " + e.Message +
+                        "); NUI GrabKey topmost na principal, codigos DALi: " + (ok.Count > 0 ? string.Join(" ", ok) : "nenhum"));
+            }
+        }
+
+        void LogHost(string linha)
+        {
+            Etapa("note " + linha);
+            Fila("[host] " + linha);
+        }
+
         void Janela(string linha, bool rastro = true)
         {
             if (rastro) Etapa("note janela " + linha);
-            string l = "[janela] " + linha + " t=" + (relogio.ElapsedMilliseconds / 1000.0).ToString("0.0") + "s";
+            Fila("[janela] " + linha + " t=" + (relogio.ElapsedMilliseconds / 1000.0).ToString("0.0") + "s");
+        }
+
+        void Fila(string l)
+        {
             if (tvLogada && video != null) { video.Log(l); return; }
             lock (janelaFila) { if (janelaFila.Count < 60) janelaFila.Add(l); }
         }
