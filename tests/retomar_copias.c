@@ -59,12 +59,15 @@ static void item(int i, const char *imdb, const char *tipo, const char *titulo) 
   snprintf(lote[i].titulo, sizeof lote[i].titulo, "%s", titulo);
 }
 
+static int cwProg; static long long cwMs;
 static void publicar(void) {
   memset(lote, 0, sizeof lote);
   memset(fil, 0, sizeof fil);
   // fileira 0: Continuar assistindo
   item(0, "tt0111161", "movie", "Um Sonho de Liberdade");
   item(1, "tt0903747", "series", "Breaking Bad");
+  lote[0].progresso = cwProg; lote[0].retomadoMs = cwMs;
+  if (cwProg) lote[0].restanteMin = 30;
   // fileira 1: catalogo comum, com as MESMAS obras
   item(2, "tt0068646", "movie", "O Poderoso Chefao");
   item(3, "tt0111161", "movie", "Um Sonho de Liberdade");
@@ -101,6 +104,22 @@ int main(void) {
   assert(cat_item(0)->progresso == 0);
   assert(cat_item(3)->progresso == 0);
   printf("ok  zerar uma copia zera as outras\n");
+
+  // Card do CW montado do Trakt/conta, SEM registro local (visto no celular):
+  // o tile herda o progresso dele.
+  nRegs = 0; cwProg = 55; cwMs = 5000;
+  publicar();
+  printf("cw=%d tile=%d (so remoto)\n", cat_item(0)->progresso, cat_item(3)->progresso);
+  assert(cat_item(3)->progresso == 55 && cat_item(3)->restanteMin == 30);
+  printf("ok  sem registro local o tile herda o card remoto do CW\n");
+
+  // Card do Trakt MAIS NOVO que o registro do disco: nenhuma copia volta no
+  // tempo, o tile fica com o do Trakt e nao com o 40%% velho do disco.
+  nRegs = 2; cwProg = 60; cwMs = 5000;
+  publicar();
+  printf("cw=%d tile=%d (trakt mais novo)\n", cat_item(0)->progresso, cat_item(3)->progresso);
+  assert(cat_item(0)->progresso == 60 && cat_item(3)->progresso == 60);
+  printf("ok  o instante decide pela obra: o tile segue o card mais novo\n");
 
   printf("retomar_copias: tudo ok\n");
   return 0;
