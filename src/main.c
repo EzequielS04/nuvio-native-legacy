@@ -140,6 +140,9 @@ static SDL_Keycode codigoDaTecla(const char *nome) {
   // "guia" abre o Guia de TV de qualquer lugar (F10, roteado em app.c). Ver la
   // por que uma porta direta vale mais que navegar ate ele por setas.
   if (!strcmp(nome, "guia"))  return SDLK_F10;
+  // "verde" abre o diagnostico da Live TV no guia: o `d` e o equivalente de
+  // teclado do VERDE (G_SCANCODE_GREEN em guia.c).
+  if (!strcmp(nome, "verde")) return SDLK_d;
   return 0;
 }
 
