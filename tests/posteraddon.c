@@ -19,6 +19,7 @@
 // aninhado (o comportamento antigo), em vez de sumir da fileira.
 //
 //   bash tests/posterprov.sh   (roda este tambem)
+#include "tex_cache.h"
 #define main detalheanime_main
 #include "detalheanime.c"
 #undef main
@@ -69,6 +70,38 @@ int main(void) {
     assert(deMeta(m, NULL, "series", &d));
     assert(!strcmp(d.poster, "https://btttr.cc/K/p.jpg")); }
   puts("ok  /meta do addon: mesma regra");
+
+  // 5) URL LONGA DO POSTERSPLUS (#200, segunda parte). O modelo da pessoa,
+  // preenchido pelo AIOMetadata com as chaves do TMDB (32) e do MDBList,
+  // passa de 700 bytes; o `logo_language=ru` fica depois do byte 512. Com o
+  // poster[512] de antes a URL era cortada calada ali e o PostersPlus, sem
+  // idioma, desenhava o cartaz em ingles. As chaves aqui sao de mentira.
+  { char url[900], js[1400];
+    snprintf(url, sizeof url,
+      "https://postersplus.slokker.cc/poster?tmdb_id=1396&imdb_id=tt0903747"
+      "&stremio_id=tt0903747&type=series&primary_client=stremio_tv_nuvio"
+      "&tmdb_key=%s&mdblist_key=%s&top_gradient=off&bottom_gradient=low"
+      "&vignette_poster_color_bottom=true&vignette_color_blur=0.50"
+      "&vignette_color_local=false&vignette_color_style=muted&sash_mode=notch"
+      "&fallback_to_imdb=true&tmdb_rating_source=direct&score_color_mode=0"
+      "&movie_weights=imdb%%3A1.00&tv_weights=imdb%%3A1.00&use_original_art=true"
+      "&logo_language=ru&logo_priority=native%%2Cenglish%%2Coriginal%%2Cneutral%%2Ctext"
+      "&fallback_bg_style=photoreal&meta_order=rating%%2Cyear%%2Cgenre"
+      "&sash_badge_size_w=1.40&sash_badge_size_h=1.20&badge_display_mode=0",
+      "00000000000000000000000000000000", "xxxxxxxxxxxxxxxxxxxxxxxx");
+    assert(strlen(url) > 700);
+    assert(strstr(url, "logo_language=ru") - url > 512);
+    snprintf(js, sizeof js,
+      "{\"id\":\"tt0903747\",\"name\":\"BB\",\"type\":\"series\","
+      "\"_providerArt\":{\"poster\":\"https://image.tmdb.org/t/p/w500/ru.jpg\"},"
+      "\"poster\":\"%s\"}", url);
+    assert(deMeta(js, js + strlen(js), "series", &d));
+    assert(!strcmp(d.poster, url));
+    assert(strstr(d.poster, "&logo_language=ru&"));
+    // O cache de textura guarda o caminho com o mesmo teto: cortar la seria
+    // o mesmo defeito um passo adiante.
+    assert(NV_TEX_URL_MAX >= sizeof d.poster); }
+  puts("ok  URL de ~720 bytes do PostersPlus chega inteira (logo_language=ru)");
 
   puts("posteraddon: tudo ok");
   return 0;

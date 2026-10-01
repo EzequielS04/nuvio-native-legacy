@@ -82,7 +82,7 @@ typedef struct {
 typedef enum { VAZIO=0, PENDENTE, DECODIFICADO, PRONTO, FALHOU } Estado;
 
 typedef struct {
-  char caminho[512];
+  char caminho[NV_TEX_URL_MAX];
   unsigned long hash;  // FNV-1a do caminho, para pular o strcmp na busca
   Estado estado;
   SDL_Surface *sup;   // preenchida pela thread; consumida no bombear
@@ -181,7 +181,7 @@ typedef struct {
   unsigned char *bruto;
   long nBruto;
   int varianteCache;
-  char urlCache[512];
+  char urlCache[NV_TEX_URL_MAX];
   // OS 4 PRIMEIROS BYTES do que a rede entregou (#141), e se ja se sabe.
   // Quem pergunta e o cartaz de colecao: "a capa e um GIF?" (para animar a
   // capa quando a conta nao mandou focusGifUrl) e "o GIF de foco veio GIF
@@ -1333,7 +1333,7 @@ static char *baixarImagem(const char *url, long *n, TexFetchTrace *trace) {
   // so trouxe o do catalogo. Resolve aqui, no fio de rede, e baixa a real; o
   // chamador continua gravando sob a virtual, entao a consulta nao se repete.
   // -1 = nao ha essa arte: falha como um 404, e quem desenha cai na seguinte.
-  { char real[512];
+  { char real[NV_TEX_URL_MAX];
     int r;
     Uint32 t = SDL_GetTicks();
     r = arte_fonte_resolver(url, real, sizeof real);
@@ -1614,7 +1614,7 @@ static int mesmoPedido(int idx, const char *pedido) {
 static int baixarParaItem(int idx, const char *url, char *dst, size_t tam, int *foiRede,
                           TexFetchTrace *trace) {
   const char *pedido = url;   // o caminho do item; `url` pode virar a variante
-  char certo[600];
+  char certo[NV_TEX_URL_MAX];
   int limitePedido;
   SDL_LockMutex(mtx); limitePedido = itens[idx].limite; SDL_UnlockMutex(mtx);
 #ifdef __EMSCRIPTEN__
@@ -1771,7 +1771,7 @@ static int threadRede(void *arg) {
   int meu = (int)(intptr_t)arg;
   for (;;) {
     int idx;
-    char caminho[512], local[600];
+    char caminho[NV_TEX_URL_MAX], local[600];
     Uint32 filaEm = 0, filaWait = 0;
     int urgente = 0;
     SDL_LockMutex(mtx);
@@ -2076,13 +2076,13 @@ static int threadDecode(void *arg) {
       SDL_UnlockMutex(mtx);
       continue;
     }
-    char caminho[512];
+    char caminho[NV_TEX_URL_MAX];
     int limite;
     Uint32 filaEm = 0, filaWait = 0;
     int localDireto = 0;
     strncpy(caminho, itens[idx].caminho, sizeof caminho - 1);
     caminho[sizeof caminho - 1] = 0;
-    char urlOrig[512];
+    char urlOrig[NV_TEX_URL_MAX];
     strncpy(urlOrig, caminho, sizeof urlOrig - 1);
     urlOrig[sizeof urlOrig - 1] = 0;
     // Copiado SOB O MUTEX: o item pode ser promovido a hero enquanto este fio
@@ -2103,7 +2103,7 @@ static int threadDecode(void *arg) {
     int daMemoria = bruto != NULL;
 #ifdef __EMSCRIPTEN__
     int varianteCache = itens[idx].varianteCache;
-    char urlCache[512];
+    char urlCache[NV_TEX_URL_MAX];
     snprintf(urlCache, sizeof urlCache, "%s", itens[idx].urlCache);
 #endif
     itens[idx].bruto = NULL; itens[idx].nBruto = 0;
@@ -2142,7 +2142,7 @@ static int threadDecode(void *arg) {
     // O download JA ACONTECEU no fio de rede; aqui garantirLocal so traduz a
     // URL para o caminho do cache, sem tocar a rede.
     // Com variante (limiteTamanho), o arquivo no disco e o dela.
-    { char local[600], certo[600];
+    { char local[600], certo[NV_TEX_URL_MAX];
       const char *fonte = caminho;
       if (limTam > 0 && arte_tamanho_url(caminho, limTam, certo, sizeof certo)) fonte = certo;
       if (garantirLocal(fonte, local, sizeof local, NULL, NULL))
@@ -3130,7 +3130,7 @@ static int capDeLargura(float largLayout) {
 
 void tex_cache_marcar_larg(int grupo, const char *url, float largLayout,
                            int essencial, int emUso) {
-  char urlReal[600];
+  char urlReal[NV_TEX_URL_MAX];
   int cap = largLayout <= 1.0f ? NV_TEX_LARG_MAX : capDeLargura(largLayout);
   int variante = NV_CACHE_ARTE_MEDIUM;
   if (!url || !*url) return;
