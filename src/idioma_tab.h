@@ -220,7 +220,6 @@
   { "Abre a lista de fileiras para reordenar, ligar, desligar e escolher o card de cada uma. A escolha vale só nesta TV.", "Opens the row list to reorder, enable, disable and pick each one's card. The choice applies to this TV only." },
   { "Abre a lista de fileiras para reordenar, ligar, desligar e escolher o card de cada uma. É lá que dá para ver de onde cada fileira vem.", "Opens the row list to reorder, enable, disable and pick each row's card. It is also where you can see where each row comes from." },
   { "Abre o cartão da versão nova, com o que mudou e o botão de instalar.", "Opens the new version's card, with what changed and the install button." },
-  { "Abre o cartão da versão nova, com o que mudou e o botão de instalar. Fica apagado quando não há versão nova.", "Opens the new version card, with what changed and the install button. Dimmed when there is no new version." },
   { "Abre o painel de log por cima de qualquer tela. É dali que sai o print quando alguma coisa dá errado.", "Opens the log panel over any screen. That is where the screenshot comes from when something goes wrong." },
   { "Abre uma tela", "Opens a screen" },
   { "Abril", "April" },
