@@ -353,7 +353,10 @@ static const char *V_FONTE_UI[]  = { "Inter", "LG Display", "Droid Sans",
 // posicional), e o padrao tem de ser 1080p. Numa TV que NAO concede a
 // superficie 4K a escolha nao faz nada, e numa que concede ela quadruplica o
 // preenchimento — nao e coisa para ligar sozinha em aparelho nenhum.
-static const char *V_RESOLUCAO[] = { "1080p", "4K (experimental)" };
+// 720p entra no FIM (valor 2) para nao mexer no que ja esta gravado: 0 = 1080p e
+// 1 = 4K continuam como eram. 720p = alvo de desenho interno 1280x720 ampliado
+// para a janela (o nivel 3 de gpunivel.h), em qualquer plataforma.
+static const char *V_RESOLUCAO[] = { "1080p", "4K (experimental)", "720p (leve)" };
 // `collapseSidebar`: recolhida = a rail some e o conteudo comeca em 104.
 static const char *V_RAIL[]      = { "Recolhida", "Fixa" };
 // `continueWatchingCardStyle`, validado em layoutPreferences.js contra
@@ -687,7 +690,7 @@ static const Opcao OPCOES[AJ_N] = {
 
   ESC("Idioma",                     V_IDIOMA, IDIOMA_N + 1),
   ESC("Animações",                  V_ANIM, 2),
-  ESC("Resolução da interface",     V_RESOLUCAO, 2),
+  ESC("Resolução da interface",     V_RESOLUCAO, 3),
   ESC("Cor de destaque",            V_TEMA, AJ_N_TEMAS_OPC),  // selected_theme (+4 locais)
   // So vale com um tema dinamico: o destaque sai do LOGO do titulo em vez da
   // arte de fundo (dono, 25/09/2026: "matching color da logo tambem como
@@ -1550,15 +1553,8 @@ int ajustes_animacoes_reduzidas(void) { return valor[AJ_ANIM] == 1; }
 // seguro.c: varios testes compilam ajustes.c com uma lista curta de fontes.
 static int perfilSeguro;
 #define SEGURO perfilSeguro
-#ifdef NV_ANDROID
-// ANDROID: sem interface 4K. A TCL Smart TV Pro concede a superficie de
-// 3840x2160 (android_pedir_superficie), mas a Mali-G52 caiu de 60 para 13-48
-// fps e o dono nao viu diferenca na tela (30/09/2026). A linha some de Ajustes
-// (visivel) e um valor 1 antigo no arquivo nao vale.
-int ajustes_4k(void)                  { return 0; }
-#else
 int ajustes_4k(void)                  { return valor[AJ_RESOLUCAO] == 1 && !SEGURO; }
-#endif
+int ajustes_720p(void)                { return valor[AJ_RESOLUCAO] == 2 && !SEGURO; }
 int ajustes_dolby_vision(void)        { return lig(AJ_DV); }
 int ajustes_dolby_atmos(void)         { return lig(AJ_ATMOS); }
 int ajustes_pausa_overlay(void)       { return lig(AJ_PAUSA_OVERLAY); }
@@ -3689,9 +3685,6 @@ static int visivel(int i) {
       (TELA[i].op == AJ_PERFIL_PESQ || TELA[i].op == AJ_PERFIL_EDITAR) &&
       !recomenda_ativo())
     return 0;
-#ifdef NV_ANDROID
-  if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_RESOLUCAO) return 0;   // ver ajustes_4k
-#endif
   // Contorno do vidro so tem o que mudar com o vidro ligado.
   if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_VIDRO_CONTORNO && !lig(AJ_VIDRO))
     return 0;
@@ -3948,7 +3941,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
-    case AJ_RESOLUCAO: return "Desenha a interface em 4K nas TVs que permitem. Muitas ignoram o pedido e continuam em 1080p — o log diz qual é o caso. Vale reiniciar o app depois de mudar. O vídeo já é 4K nos dois casos.";
+    case AJ_RESOLUCAO: return "4K desenha a interface em 4K nas TVs que permitem; muitas ignoram o pedido e continuam em 1080p. 720p desenha em 1280x720 e amplia para a tela: mais leve em TV fraca, com texto um pouco mais suave. Reinicie o app depois de mudar. O vídeo não muda: segue a qualidade da fonte.";
     case AJ_PERFIL_ATIVO: return "Perfil em uso nesta TV. Trocar de perfil é feito na tela de perfis, ao abrir o app.";
     case AJ_SYNC: return "Estado da última troca de dados com a sua conta: addons, progresso, coleções e preferências.";
     case AJ_ADDONS: return "Abre a lista de addons da sua conta, para ligar e desligar cada um nesta TV.";
@@ -7332,7 +7325,7 @@ static float previaTvOpcao(int op, float x, float y, float w) {
   gfx_cor((GfxRect){screen.x + 12.0f, screen.y + 12.0f, screen.w - 24.0f, 4.0f},
           0.5f, 0.34f, 0.36f, 0.41f, 0.9f);
   if (op == AJ_RESOLUCAO) {
-    float mult = valor[op] == 1 ? 0.66f : 0.34f;
+    float mult = valor[op] == 1 ? 0.66f : valor[op] == 2 ? 0.22f : 0.34f;
     gfx_cor((GfxRect){screen.x + screen.w * 0.14f, screen.y + 30.0f,
                       screen.w * mult, 25.0f}, 4.0f/25.0f, ar, ag, ab, 0.85f);
   } else if (op == AJ_QUALIDADE_IMG) {

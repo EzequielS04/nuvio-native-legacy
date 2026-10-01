@@ -731,6 +731,7 @@ int main(int argc, char **argv) {
   gpun_iniciar(dw, dh);
   int gpuPref = ajustes_gpu_efeitos();
   if (gpuPref) gpun_preferencia(gpuPref);
+  if (ajustes_720p()) gpun_forcar_720();
   printf("[arranque] gfx_iniciar (compila os shaders)\n"); fflush(stdout);
   marco("gfx_iniciar");
   if (!gfx_iniciar()) { printf("[arranque] gfx_iniciar FALHOU\n"); fflush(stdout); return 1; }

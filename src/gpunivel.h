@@ -60,6 +60,10 @@ void gpun_definir_nivel(int n);
 // Ajuste "Efeitos visuais" do .tpk: 0 automatico, 1 completos, 2 leves.
 void gpun_preferencia(int p);
 
+// Ajuste "Resolucao da interface = 720p": fixa o nivel 3 (desenho interno em
+// 1280x720) e desliga a medida e o "Efeitos visuais" ate o fim da sessao.
+void gpun_forcar_720(void);
+
 // Laco de quadro: _inicio ANTES do glClear da tela (liga o alvo interno no
 // nivel 2), _fim depois do ultimo desenho e antes do swap (amplia e descarta).
 void gpun_quadro_inicio(void);

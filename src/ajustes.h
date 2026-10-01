@@ -265,6 +265,8 @@ int   ajustes_descobrir_na_busca(void); // searchDiscoverEnabled (derivado)
 // e a maioria ignora — a linha `janela=... drawable=...` do log diz o que ela
 // respondeu. Ver a nota em main.c.
 int   ajustes_4k(void);
+// 1 = desenhar a interface em 1280x720 e ampliar para a janela (gpun_forcar_720).
+int   ajustes_720p(void);
 // MODO SEGURO (seguro.h). Chamar no arranque, DEPOIS de ajustes_dir e de
 // avisos_iniciar: `caiu` = a sessao anterior nao se despediu. Desfaz o ajuste
 // arriscado que estava em prova, liga o perfil seguro se as quedas se repetem e

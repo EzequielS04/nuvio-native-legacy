@@ -242,7 +242,14 @@ void gpun_iniciar(int w, int h) {
 // Completos/Leves fixam o nivel e desligam a medida; Automatico volta a medir
 // a partir do que esta gravado (ou do 0). Build com NV_TPK_NIVEL_FORCADO
 // ignora: o canario de teste manda.
+static int forca720;
+void gpun_forcar_720(void) {
+  forca720 = 1; adaptativo = 0; decidido = 1;
+  aplicar(3, "ajuste: interface 720p");
+}
+
 void gpun_preferencia(int p) {
+  if (forca720) return;
 #if (defined(NV_TPK) || defined(NV_ANDROID)) && !defined(NV_TPK_NIVEL_FORCADO)
   if (p == 1) { adaptativo = 0; aplicar(0, "ajuste: efeitos completos"); return; }
   if (p == 2) { adaptativo = 0; aplicar(1, "ajuste: efeitos leves"); return; }
