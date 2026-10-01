@@ -23,6 +23,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Reflection;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -68,7 +69,14 @@ namespace NuvioTpk
         // baixo (ver Video.PrimeAudio). false = desliga, o host volta a ser o de
         // antes. Espera PRIME_ESPERA_MS depois do gl.Show() para nao disputar
         // com a abertura.
+        // CANARIO 7 (#195): desligado no 6.0/6.5. Suspeita (nao provada): o
+        // segundo Player com Display aos 1,5 s coincide com a pausa de ~2 s de
+        // todo arranque no 6.5.
+#if NV_API11
         const bool PRIME_AUDIO = true;
+#else
+        const bool PRIME_AUDIO = false;
+#endif
         const int PRIME_ESPERA_MS = 1500;
 
         // ================= CANARIO DE JANELA (#137, #170) =================
@@ -266,7 +274,7 @@ namespace NuvioTpk
             Etapa("begin video-init");
             try
             {
-                video = new Video(() => new Display(NuiWindow.Instance),
+                video = new Video(DisplayDoVideo,
                                   a => { if (principal != null) principal.Post(_ => a(), null); else a(); },
                                   dados, W, H);
             }
@@ -405,6 +413,102 @@ namespace NuvioTpk
         }
 #endif
 
+        // ================= CANARIO 7 (#195, #203): VIDEO NO PROPRIO GLWindow =================
+        // Toda implementacao de referencia (DALi VideoView underlay,
+        // dali-extension tizen-video-player-ecore-wl2.cpp; flutter-tizen
+        // video_player_videohole; JuvoPlayer; TizenFX Display.cs) usa UMA
+        // janela: a que desenha a UI com o furo e dona do player (display
+        // OVERLAY na Ecore_Wl2_Window dela) e esta OPACA para o compositor
+        // (ecore_wl2_window_alpha_set(win, false)). Aqui o video era da
+        // principal e o furo num GLWindow translucido por cima; medido na
+        // QA55LS03B (6.5): com a janela do video visivel (canario 5, D1 14876+)
+        // o furo ainda mostra a tela da TV, ou seja, nada opaco nosso cobre o
+        // lancador por baixo do GL. Aqui: (1) o Player liga no Ecore_Wl2_Window
+        // do GLWindow (EcoreDisplaySetter interno do TizenFX por reflexao, num
+        // Display criado normal); (2) o GLWindow continua ARGB no EGL (o furo
+        // precisa do alfa) mas fica opaco para o compositor. NAO PROVADO em TV;
+        // cada passo escreve "[janela] video7: ...". So api8 e api9.
+#if NV_API8 || NV_API9
+        const bool VIDEO_NO_GL = true;
+#else
+        const bool VIDEO_NO_GL = false;
+#endif
+        [DllImport("libecore_wl2.so.1")] static extern void ecore_wl2_window_alpha_set(IntPtr win, byte alpha);
+        [DllImport("libecore_wl2.so.1")] static extern byte ecore_wl2_window_alpha_get(IntPtr win);
+        IntPtr glEcore = IntPtr.Zero;
+        bool jaPausou;
+        int displaysGl;
+
+        void PrendeVideoNoGl()
+        {
+            if (!VIDEO_NO_GL) return;
+            try
+            {
+                int idPrincipal = -1;
+                try { idPrincipal = NuiWindow.Instance.GetNativeId(); } catch (Exception e) { Janela("video7: GetNativeId da principal falhou " + e.GetType().Name); }
+                IntPtr pPrincipal = idPrincipal >= 0 ? ecore_wl2_window_find((uint)idPrincipal) : IntPtr.Zero;
+                var outras = new List<string>();
+                IntPtr achada = IntPtr.Zero; int idAchada = -1, n = 0;
+                for (uint id = 0; id < 256; id++)
+                {
+                    IntPtr w = ecore_wl2_window_find(id);
+                    if (w == IntPtr.Zero || w == pPrincipal) continue;
+                    n++; outras.Add(id.ToString());
+                    achada = w; idAchada = (int)id;   // a de id maior: o GL nasce depois da principal
+                }
+                Janela("video7: principal id=" + idPrincipal + " achada=" + (pPrincipal != IntPtr.Zero) + "; outras janelas wl2: " + n + " (ids " + string.Join(",", outras) + ")");
+                if (achada == IntPtr.Zero) { Janela("video7: janela do gl NAO achada, video fica na principal"); return; }
+                glEcore = achada;
+                Janela("video7: janela do gl = wl2 id " + idAchada);
+                try
+                {
+                    byte antes = ecore_wl2_window_alpha_get(glEcore);
+                    ecore_wl2_window_alpha_set(glEcore, 0);
+                    byte depois = ecore_wl2_window_alpha_get(glEcore);
+                    Janela("video7: gl alpha_set(false): alpha " + antes + " -> " + depois);
+                    if (depois != 0) PlanoBOpaco("alpha_get ainda 1");
+                }
+                catch (Exception e) { Janela("video7: alpha_set falhou " + e.GetType().Name + ": " + e.Message); PlanoBOpaco("alpha_set falhou"); }
+                // Confere ja: um Display de teste com o setter trocado.
+                var d = DisplayDoVideo();
+                Janela("video7: display de teste " + (d != null ? "ok" : "nulo"));
+            }
+            catch (Exception e) { Janela("video7: falhou " + e.GetType().Name + ": " + e.Message + " (video fica na principal)"); glEcore = IntPtr.Zero; }
+        }
+
+        void PlanoBOpaco(string porque)
+        {
+            try { gl.SetOpaqueState(true); Janela("video7: plano B gl SetOpaqueState(true) (" + porque + ") -> " + gl.IsOpaqueState()); }
+            catch (Exception e) { Janela("video7: plano B falhou " + e.GetType().Name + ": " + e.Message); }
+        }
+
+        // Display para cada Player (um Display so serve a um dono). Com a janela
+        // do gl achada: Display(principal) com o setter interno trocado por um
+        // EcoreDisplaySetter(janela do gl). Qualquer falha: o de sempre.
+        Display DisplayDoVideo()
+        {
+            var d = new Display(NuiWindow.Instance);
+            if (glEcore == IntPtr.Zero) return d;
+            try
+            {
+                var asm = typeof(Display).Assembly;
+                var tSetter = asm.GetType("Tizen.Multimedia.EcoreDisplaySetter", true);
+                var setter = Activator.CreateInstance(tSetter, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public, null, new object[] { glEcore }, null);
+                FieldInfo campo = null;
+                foreach (var f in typeof(Display).GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public))
+                    if (f.FieldType.Name == "IDisplaySetter" || f.FieldType.IsAssignableFrom(tSetter) && f.FieldType != typeof(object)) { campo = f; break; }
+                if (campo == null) throw new Exception("campo IDisplaySetter nao achado no Display");
+                campo.SetValue(d, setter);
+                if (displaysGl++ < 3) Janela("video7: display preso na janela do gl (campo " + campo.Name + ")");
+            }
+            catch (Exception e)
+            {
+                if (displaysGl++ < 3) Janela("video7: setter falhou " + e.GetType().Name + ": " + e.Message + " (este player fica na principal)");
+                return new Display(NuiWindow.Instance);
+            }
+            return d;
+        }
+
         void CriaGlWindow()
         {
             gl = new GLWindow("nuvio", new NuiRect(0, 0, W, H), true);
@@ -439,6 +543,7 @@ namespace NuvioTpk
                 catch (Exception e) { Janela("gl SetOpaqueState falhou " + e.GetType().Name + ": " + e.Message); }
             }
             else Janela("gl SetOpaqueState: desligado (translucido, como antes)");
+            PrendeVideoNoGl();
         }
 
         void IniciaVigia()
@@ -815,6 +920,7 @@ namespace NuvioTpk
         protected override void OnPause()
         {
             pausado = true;
+            if (!jaPausou) { jaPausou = true; Janela("primeira pausa (canario 7: video no gl, gl opaco, sem prime; ela ainda vem?)"); }
             Etapa("note pause" + Contagem() + " mainVisible=" + principalVisivel + (JanelaUnica ? " (glview)" : " glVisible=" + glVisivel));
             video?.PausarPeloSistema();
             base.OnPause();
