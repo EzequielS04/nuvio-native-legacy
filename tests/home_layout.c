@@ -172,9 +172,12 @@ int main(void) {
   // amigos" em segundo, grupos de colecao no FIM, na ordem declarada.
   assert(nFileiras>=11);
   assert(fileiras[1].tipo==FILEIRA_SOCIAL);
-  // O primeiro catalogo com conteudo vira o destaque; o resto segue a ordem.
-  assert(fileiras[0].tipo==FILEIRA_DESTAQUE);
-  assert(!strcmp(fileiras[0].chave,"catalogo_1"));
+  // O primeiro catalogo com conteudo vira o destaque (destaque desligado, ver
+  // homeCom); o resto segue a ordem. "Continuar assistindo" fica em [0] e
+  // "Entre amigos" em [1], entao o destaque e o [2] — a assercao antiga pedia
+  // o [0] e abortava aqui antes do #201 tambem.
+  assert(fileiras[2].tipo==FILEIRA_DESTAQUE);
+  assert(!strcmp(fileiras[2].chave,"catalogo_1"));
   assert(fileiras[nFileiras-2].tipo==FILEIRA_CATALOGOS);
   assert(!strcmp(fileiras[nFileiras-2].titulo,"Streaming"));
   assert(!strcmp(col_folder(fileiras[nFileiras-2].folders[0])->title,"Netflix"));
