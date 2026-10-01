@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
 import android.view.SurfaceView
+import android.view.TextureView
 import android.view.View
 import android.widget.FrameLayout
 import androidx.media3.common.AudioAttributes
@@ -67,6 +68,15 @@ object NvPlayer {
     private var activity: Activity? = null
     private var camada: FrameLayout? = null
     private var superficie: SurfaceView? = null
+    // RECORTE PELA GPU. O plano de video de hardware da TCL Smart TV Pro (e,
+    // pelo mesmo motivo, o do Tizen 9, #188/#195) IGNORA o sourceCrop: o
+    // SurfaceFlinger manda "este pedaco do quadro na tela inteira" (medido no
+    // dumpsys) e a TV mostra o quadro inteiro esticado — todo modo de zoom
+    // ficava igual. Quando a janela pedida TRANSBORDA a tela (= ha recorte), o
+    // video passa para uma TextureView, que a GPU compoe e recorta certo em
+    // qualquer TV. Sem recorte volta a SurfaceView (plano de hardware, HDR).
+    private var textura: TextureView? = null
+    private var naTextura = false
 
     // Tudo abaixo so no fio principal.
     private var player: ExoPlayer? = null
@@ -118,6 +128,10 @@ object NvPlayer {
         sv.visibility = View.GONE
         camada.addView(sv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         superficie = sv
+        val tv = TextureView(activity)
+        tv.visibility = View.GONE
+        camada.addView(tv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        textura = tv
         // A camada so tem tamanho depois do layout: reaplica a janela quando mudar.
         camada.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or2, ob ->
             if (r - l != or2 - ol || b - t != ob - ot) aplicarJanela()
@@ -141,6 +155,8 @@ object NvPlayer {
         val sv = superficie
         if (sv != null) (sv.parent as? FrameLayout)?.removeView(sv)
         superficie = null
+        textura?.let { (it.parent as? FrameLayout)?.removeView(it) }
+        textura = null
         camada = null
         activity = null
     }
@@ -202,6 +218,8 @@ object NvPlayer {
                 sv.visibility = View.VISIBLE
                 p.setVideoSurfaceView(sv)
             }
+            naTextura = false
+            textura?.visibility = View.GONE
             temJanela = false
             aplicarEncaixe()
 
@@ -240,6 +258,8 @@ object NvPlayer {
             try { p.release() } catch (e: Exception) { Log.w(TAG, "release: $e") }
         }
         superficie?.visibility = View.GONE
+        textura?.visibility = View.GONE
+        naTextura = false
     }
 
     // Tique de 250 ms: a posicao que o C le sem esperar ninguem.
@@ -301,6 +321,7 @@ object NvPlayer {
     private fun aplicarJanela() {
         val c = camada ?: return
         val sv = superficie ?: return
+        val tv = textura
         var cw = c.width
         var ch = c.height
         if (cw < 1 || ch < 1) {
@@ -319,7 +340,23 @@ object NvPlayer {
         lp.gravity = Gravity.TOP or Gravity.START
         lp.leftMargin = x0
         lp.topMargin = y0
-        sv.layoutParams = lp
+        // Transborda (com 2 px de folga do arredondamento) = ha recorte.
+        val recorta = x0 < -2 || y0 < -2 || x1 > cw + 2 || y1 > ch + 2
+        val p = player
+        if (tv != null && p != null && recorta != naTextura) {
+            naTextura = recorta
+            if (recorta) {
+                tv.visibility = View.VISIBLE
+                p.setVideoTextureView(tv)
+                sv.visibility = View.GONE
+            } else {
+                sv.visibility = View.VISIBLE
+                p.setVideoSurfaceView(sv)
+                tv.visibility = View.GONE
+            }
+            Log.i(TAG, if (recorta) "recorte pela GPU (TextureView)" else "plano de video (SurfaceView)")
+        }
+        if (naTextura && tv != null) tv.layoutParams = lp else sv.layoutParams = lp
     }
 
     // --- escolha de faixa ----------------------------------------------------
