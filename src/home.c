@@ -241,6 +241,8 @@ static int         filNAntes[MAX_FIL];
 static Uint32      fileirasVistasEm;
 static float scrollX[MAX_FIL];
 static float scrollY = 0.0f;
+// Pastas da fileira "Streaming" que o layout Dinamica levou para a barra.
+static int streamBarra[MAX_CARDS], nStreamBarra;
 // Velocidades das molas de 2a ordem do deslize. Ficam ao lado da posicao
 // porque anim_mola2() precisa das duas. Ver anim.h.
 static float velX[MAX_FIL];
@@ -2300,6 +2302,26 @@ static void sincronizarFileiras(void) {
     memcpy(fileiras, arranjo, sizeof(Fileira) * (size_t)w);
     destino = w;
   }
+  // STREAMING NA BARRA (so no layout Dinamica; dono, 01/10/2026, foto do app
+  // da Apple TV): a fileira de colecao do grupo "Streaming" (Netflix, Prime
+  // Video...) sai da home e as pastas dela viram uma secao da barra aberta
+  // (menu.c). Depois do corte acima de proposito: fileira que a pessoa
+  // desligou em Ajustes nao reaparece na barra. Ordem = a da fileira.
+  nStreamBarra = 0;
+  if (layoutHome() == HOME_LAYOUT_DINAMICA) {
+    int q;
+    for (q = 0; q < destino; q++) {
+      if (fileiras[q].tipo != FILEIRA_CATALOGOS ||
+          strncmp(fileiras[q].chave, "collection_", 11) ||
+          strcasecmp(fileiras[q].titulo, "Streaming")) continue;
+      nStreamBarra = fileiras[q].n < MAX_CARDS ? fileiras[q].n : MAX_CARDS;
+      memcpy(streamBarra, fileiras[q].folders, sizeof(int) * (size_t)nStreamBarra);
+      memmove(fileiras + q, fileiras + q + 1, sizeof(Fileira) * (size_t)(destino - q - 1));
+      destino--;
+      printf("[home] Streaming na barra (Dinamica): %d pastas\n", nStreamBarra);
+      break;
+    }
+  }
   // "PROXIMOS EPISODIOS" LOGO ABAIXO DA RETOMADA (issue #127) — e onde o web
   // poe a `upcoming_section`. Mesma forma, tamanho e tipo da retomada (a copia
   // leva o que fil_tipo/fil_escala decidiram para ela). Retomada escondida pela
@@ -2767,6 +2789,11 @@ static void desenhaFundoDin(Uint32 agora) {
 // comecar o backdrop dela EXATAMENTE onde a arte ja estava, em vez de aparecer
 // do nada: o fundo e o mesmo do titulo, entao ele nao deve piscar nem crescer.
 static GfxRect heroArteRect = { 0, 0, NV_TELA_W, NV_TELA_H };
+int home_streaming_barra(const int **pastas) {
+  if (pastas) *pastas = streamBarra;
+  return layoutHome() == HOME_LAYOUT_DINAMICA ? nStreamBarra : 0;
+}
+
 // A pilula da barra (layout Dinamica, menu.c) so aparece com a pagina no
 // topo: 1 com o destaque inteiro na tela, 0 depois de ~140 px de rolagem.
 float home_topo_fracao(void) {

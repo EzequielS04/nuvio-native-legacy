@@ -21,6 +21,8 @@
 #include "ajustes.h"
 #include "botoes.h"
 #include "ponteiro.h"
+#include "home.h"
+#include "colecoes.h"
 
 // Larguras: a recolhida cabe so o icone; a aberta e a da barra do tvOS, larga o
 // bastante para o rotulo mais comprido ("Biblioteca") nao encostar na borda.
@@ -97,6 +99,11 @@ static float topoLinhas(void) {
 #define NV_MENU_AVATAR      56.0f
 #define NV_MENU_FOCOS      (MENU_N + 1)
 #define MENU_RODAPE         MENU_N
+// Layout Dinamica: as pastas de Streaming entram como focos depois do rodape
+// (MENU_ST0 + k). So a barra da Apple TV usa; a rail classica nao as conhece.
+#define NV_MENU_ST_MAX      24
+#define MENU_ST0            NV_MENU_FOCOS
+#define NV_MENU_FOCOS_TV   (NV_MENU_FOCOS + NV_MENU_ST_MAX)
 
 static int   pediuTrocar = 0;
 static int   aberto  = 0;
@@ -105,7 +112,8 @@ static int   linha   = MENU_INICIO;   // destaque; so vira destino ao escolher
 static int   mudou   = 0;
 static float desliza = 0.0f;
 static float expande = 0.0f;
-static float animFoco[NV_MENU_FOCOS];
+static float animFoco[NV_MENU_FOCOS_TV];
+static int   pediuColecao = -1;   // col_folder da pasta escolhida na barra
 static void icone(int d, float cx, float cy, float s, float r, float g, float b, float a);
 static void corAvatar(const char *hex, float *r, float *g, float *b);
 static int  tvAtivo(void);
@@ -155,7 +163,7 @@ static void focoMenu(GfxRect pill, float f, float alpha) {
 // Voltar.
 static void ponteiroLinha(int i, int b) {
   (void)b;
-  if (i < 0 || i >= NV_MENU_FOCOS) return;
+  if (i < 0 || i >= NV_MENU_FOCOS_TV) return;
   if (!aberto) menu_abrir();
   linha = i;
 }
@@ -237,7 +245,15 @@ const char *menu_rotulo(int d) {
 // Confirma o destaque e recolhe. DIREITA tambem passa por aqui: no aparelho a
 // barra nao "cancela" ao sair pela direita — o item destacado e o que o usuario
 // esta olhando, e desfazer a escolha no caminho de volta seria surpresa.
+static int tvPastaDoFoco(int foco);
 static void escolher(void) {
+  if (linha >= MENU_ST0) {
+    // Pasta de Streaming (layout Dinamica): abre a colecao, sem trocar de aba.
+    pediuColecao = tvPastaDoFoco(linha);
+    aberto = 0;
+    linha = destino;
+    return;
+  }
   if (linha == MENU_RODAPE) {
     // O rodape nao troca de destino: ele pede a tela de escolha de perfil.
     pediuTrocar = 1;
@@ -250,6 +266,7 @@ static void escolher(void) {
 }
 
 int menu_pediu_trocar(void) { int p = pediuTrocar; pediuTrocar = 0; return p; }
+int menu_pediu_colecao(void) { int c = pediuColecao; pediuColecao = -1; return c; }
 
 void menu_evento(const SDL_Event *e) {
   if (!aberto || e->type != SDL_KEYDOWN) return;
@@ -263,7 +280,7 @@ void menu_evento(const SDL_Event *e) {
   if (k == SDLK_RIGHT || k == SDLK_RETURN || k == SDLK_KP_ENTER) { escolher(); return; }
   if (tvAtivo()) {
     // Ordem da barra da Apple TV: cabecalho (perfil), Buscar, Inicio, ...
-    int lista[NV_MENU_FOCOS], n = tvOrdem(lista), p = 0, i;
+    int lista[NV_MENU_FOCOS_TV], n = tvOrdem(lista), p = 0, i;
     for (i = 0; i < n; i++) if (lista[i] == linha) p = i;
     if (k == SDLK_DOWN && p + 1 < n) linha = lista[p + 1];
     else if (k == SDLK_UP && p > 0) linha = lista[p - 1];
@@ -533,6 +550,9 @@ void menu_desenhar(Uint32 agora) {
 #define TV_CIRC         54.0f    // circulo do icone
 #define TV_ICONE        28.0f
 #define TV_AVATAR       58.0f
+#define TV_ROTULO_H     60.0f    // rotulo da secao "Streaming"
+#define TV_ALTURA_MAX  (NV_TELA_H - 2.0f * TV_PAINEL_Y)
+#define TV_MOLA_ROLAR   14.0f
 // Molas (anim_mola2, rad/s): abrir um pouco mais lento que fechar, como a
 // barra do aparelho; com Animacoes reduzidas vai direto ao alvo.
 #define TV_MOLA_ABRE    13.0f
@@ -540,6 +560,7 @@ void menu_desenhar(Uint32 agora) {
 #define TV_MOLA_PILULA  10.0f
 
 static float tvAbre = 0.0f, tvAbreV = 0.0f;
+static float tvRolar = 0.0f, tvRolarV = 0.0f;
 static float tvPilAlfa = 1.0f, tvPilAlvo = 1.0f;
 
 static int tvAtivo(void) { return ajustes_home_layout() == HOME_LAYOUT_DINAMICA; }
@@ -554,20 +575,49 @@ static const char *tvRotulo(int d) {
   return d == MENU_BUSCAR ? "Buscar" : menu_rotulo(d);
 }
 // Focos na ordem de navegacao: cabecalho (trocar de usuario) e os visiveis.
+// PASTAS DE STREAMING (home_streaming_barra): a fileira "Streaming" que o
+// layout Dinamica tira da home. Indices de col_folder, na ordem da fileira.
+static int tvPastas(const int **v) {
+  int n = home_streaming_barra(v);
+  return n > NV_MENU_ST_MAX ? NV_MENU_ST_MAX : (n < 0 ? 0 : n);
+}
+static int tvPastaDoFoco(int foco) {
+  const int *v;
+  int n = tvPastas(&v), k = foco - MENU_ST0;
+  return (k >= 0 && k < n) ? v[k] : -1;
+}
 static int tvOrdem(int *lista) {
-  int n = 0, i;
+  const int *v;
+  int n = 0, i, np = tvPastas(&v);
   lista[n++] = MENU_RODAPE;
   for (i = 0; i < MENU_N; i++) if (mostra(TV_ORDEM[i])) lista[n++] = TV_ORDEM[i];
+  for (i = 0; i < np; i++) lista[n++] = MENU_ST0 + i;
   return n;
 }
-static int tvItensVisiveis(void) {
-  int n = 0, i;
-  for (i = 0; i < MENU_N; i++) n += mostra(i);
-  return n;
+// O conteudo do painel em coordenadas PROPRIAS (0 = topo do painel, antes da
+// rolagem): `ys[foco]` e o topo de cada linha (-1 = nao esta na barra).
+// Devolve a altura total; `yRotulo` recebe o topo do rotulo "Streaming".
+static float tvLayout(float *ys, float *yRotulo) {
+  const int *v;
+  int i, np = tvPastas(&v);
+  float y = TV_CAB_H;
+  for (i = 0; i < NV_MENU_FOCOS_TV; i++) ys[i] = -1.0f;
+  ys[MENU_RODAPE] = 0.0f;
+  for (i = 0; i < MENU_N; i++)
+    if (mostra(TV_ORDEM[i])) { ys[TV_ORDEM[i]] = y; y += TV_LINHA_H; }
+  if (yRotulo) *yRotulo = -1.0f;
+  if (np) {
+    if (yRotulo) *yRotulo = y;
+    y += TV_ROTULO_H;
+    for (i = 0; i < np; i++) { ys[MENU_ST0 + i] = y; y += TV_LINHA_H; }
+  }
+  return y + TV_PAD_BASE;
 }
+// Altura na tela: ate o ultimo item, no maximo a tela menos as margens (dai
+// para baixo a barra ROLA, com o foco sempre visivel).
 static GfxRect tvPainel(void) {
-  GfxRect r = { TV_PAINEL_X, TV_PAINEL_Y, TV_PAINEL_W,
-                TV_CAB_H + tvItensVisiveis() * TV_LINHA_H + TV_PAD_BASE };
+  float ys[NV_MENU_FOCOS_TV], h = tvLayout(ys, NULL);
+  GfxRect r = { TV_PAINEL_X, TV_PAINEL_Y, TV_PAINEL_W, h < TV_ALTURA_MAX ? h : TV_ALTURA_MAX };
   return r;
 }
 
@@ -592,6 +642,7 @@ int menu_pilula_rect(float *x, float *y, float *w, float *h) {
   if (h) *h = r.h;
   return 1;
 }
+int menu_pilula_titulo(void) { return tvAtivo(); }
 float menu_pilula_alfa(void) {
   if (!tvAtivo()) return 0.0f;
   { float a = tvPilAlfa * (1.0f - tvAbre); return a < 0.0f ? 0.0f : a; }
@@ -608,10 +659,26 @@ static void tvAtualizar(float dt) {
   float alvo = aberto ? 1.0f : 0.0f;
   desliza = 0.0f; expande = 0.0f;
   tvPilAlfa = anim_mola(tvPilAlfa, tvPilAlvo, dt, TV_MOLA_PILULA);
-  if (!aberto && tvAbre < 0.002f && tvAbreV == 0.0f) { tvAbre = 0.0f; return; }
+  if (!aberto && tvAbre < 0.002f && tvAbreV == 0.0f) {
+    tvAbre = 0.0f; tvRolar = 0.0f; tvRolarV = 0.0f; return;
+  }
   tvAbre = anim_mola2(&tvAbreV, tvAbre, alvo, dt, aberto ? TV_MOLA_ABRE : TV_MOLA_FECHA);
   if (!aberto && tvAbre < 0.002f) { tvAbre = 0.0f; tvAbreV = 0.0f; }
-  for (i = 0; i < NV_MENU_FOCOS; i++) {
+  // ROLAGEM: a linha em foco fica inteira dentro do painel, com folga de meia
+  // linha (a seguinte aparece cortada, que e o aviso de que ha mais).
+  { float ys[NV_MENU_FOCOS_TV], total = tvLayout(ys, NULL), alvoR = tvRolar;
+    float vis = total < TV_ALTURA_MAX ? total : TV_ALTURA_MAX;
+    float y0 = (linha >= 0 && linha < NV_MENU_FOCOS_TV) ? ys[linha] : 0.0f;
+    float h0 = linha == MENU_RODAPE ? TV_CAB_H : TV_LINHA_H, folga = TV_LINHA_H * 0.5f;
+    if (y0 >= 0.0f) {
+      if (y0 - folga < alvoR) alvoR = y0 - folga;
+      if (y0 + h0 + folga > alvoR + vis) alvoR = y0 + h0 + folga - vis;
+    }
+    if (alvoR > total - vis) alvoR = total - vis;
+    if (alvoR < 0.0f) alvoR = 0.0f;
+    if (!aberto && tvAbre <= 0.002f) { tvRolar = 0.0f; tvRolarV = 0.0f; }
+    else tvRolar = anim_mola2(&tvRolarV, tvRolar, alvoR, dt, TV_MOLA_ROLAR); }
+  for (i = 0; i < NV_MENU_FOCOS_TV; i++) {
     float a = (aberto && i == linha) ? 1.0f : 0.0f;
     animFoco[i] = anim_mola(animFoco[i], a, dt,
                             a > animFoco[i] ? NV_MOLA_FOCO : NV_MOLA_MENU_DESFOCO);
@@ -659,6 +726,29 @@ static void tvCirculoIcone(int d, float cx, float cy, float foco, int atual,
   if (foco > 0.5f) gfx_cor(c, 0.5f, tinta, tinta, tinta, 0.10f * alfa);
   else             gfx_cor(c, 0.5f, 1.0f, 1.0f, 1.0f, base * alfa);
   icone(d, cx, cy, TV_ICONE, lum, lum, lum, alfa);
+}
+
+// Circulo da PASTA de Streaming: a capa dela recortada em circulo (cover).
+// Sem capa ainda (rede), a cor da pasta com a inicial do nome.
+static void tvCirculoPasta(const ColFolder *pf, float cx, float cy, float alfa) {
+  GfxRect c = { cx - TV_CIRC * 0.5f, cy - TV_CIRC * 0.5f, TV_CIRC, TV_CIRC };
+  const char *capa = pf ? col_capa(pf) : NULL;
+  GLuint tex = (capa && capa[0]) ? tex_obter(capa) : 0;
+  if (tex) {
+    float asp = tex_aspecto(capa);
+    gfx_tex_aspect_atual = asp > 0.0f ? asp : 1.0f;
+    gfx_card_forcar_cover_atual = 1.0f;
+    gfx_rect(c, tex, GFX_CARD, 0, 0, 0, 0.5f, 0, 0, 0, alfa);
+    gfx_card_forcar_cover_atual = 0.0f;
+  } else {
+    float r = 0.3f, g = 0.3f, b = 0.34f;
+    char ini[8];
+    if (pf) col_cor(pf, &r, &g, &b);
+    gfx_cor(c, 0.5f, r, g, b, alfa);
+    inicialDe(pf ? pf->title : NULL, ini, sizeof ini);
+    { TxtLinha l = txt_linha(TXT_BODY, ini, 255, 255, 255, 255);
+      txt_desenhar_alpha(l, c.x + (c.w - l.w) * 0.5f, c.y + (c.h - l.h) * 0.5f, alfa); }
+  }
 }
 
 static void tvAvatar(GfxRect av, float alfa) {
@@ -757,27 +847,32 @@ static void tvDesenhar(void) {
         txt_desenhar_alpha(l, P.x + 7.0f + TV_CIRC + 16.0f, cy - l.h * 0.5f, ap); }
     } }
 
-  // Conteudo do painel aberto, preso ao retangulo que cresce.
+  // Conteudo do painel aberto, preso ao retangulo que cresce e deslocado pela
+  // rolagem (tvRolar). Linha fora do painel nao desenha nem vira alvo.
   { float ac = (s - 0.22f) / 0.70f;
-    float y, cyCab, f;
-    int i;
+    float ys[NV_MENU_FOCOS_TV], yRot, f, topo;
+    const int *pastas;
+    int i, np = tvPastas(&pastas);
     if (ac <= 0.01f) return;
     if (ac > 1.0f) ac = 1.0f;
+    tvLayout(ys, &yRot);
+    topo = Q.y - tvRolar;
     gfx_recorte(R.x, R.y, R.w, R.h);
 
     // Cabecalho: avatar, nome e relogio. Focavel: e o "trocar de usuario".
-    cyCab = Q.y + 56.0f;
-    f = animFoco[MENU_RODAPE];
-    if (f > 0.01f) {
-      GfxRect pill = { Q.x + TV_PAD_X, cyCab - 40.0f, Q.w - TV_PAD_X * 2.0f, 80.0f };
-      gfx_cor(pill, 0.5f, ar, ag, ab, f * ac);
-    }
-    { int emFoco = f > 0.5f;
-      int c = emFoco ? (int)(tinta * 255.0f + 0.5f) : 245;
+    { float cyCab = topo + 56.0f;
+      int emFoco, c;
       const ContaPerfil *p = perfis_item_ativo();
       char hora[8];
       GfxRect av = { Q.x + 26.0f, cyCab - TV_AVATAR * 0.5f, TV_AVATAR, TV_AVATAR };
       TxtLinha rel, nome;
+      f = animFoco[MENU_RODAPE];
+      if (f > 0.01f) {
+        GfxRect pill = { Q.x + TV_PAD_X, cyCab - 40.0f, Q.w - TV_PAD_X * 2.0f, 80.0f };
+        gfx_cor(pill, 0.5f, ar, ag, ab, f * ac);
+      }
+      emFoco = f > 0.5f;
+      c = emFoco ? (int)(tinta * 255.0f + 0.5f) : 245;
       tvAvatar(av, ac);
       tvRelogio(hora, sizeof hora);
       rel = txt_linha(TXT_PG_RELOGIO, hora, c, c, c, 255);
@@ -785,29 +880,48 @@ static void tvDesenhar(void) {
                              Q.w - (av.x - Q.x) - TV_AVATAR - 18.0f - rel.w - 40.0f);
       txt_desenhar_alpha(nome, av.x + TV_AVATAR + 18.0f, cyCab - nome.h * 0.5f, ac);
       txt_desenhar_alpha(rel, Q.x + Q.w - 30.0f - rel.w, cyCab - rel.h * 0.5f, ac * 0.92f);
-      if (aberto && ponteiro_ativo())
+      if (aberto && ponteiro_ativo() && cyCab - 40.0f >= Q.y - 1.0f)
         ponteiro_alvo(Q.x, cyCab - 40.0f, Q.w, 80.0f, ponteiroLinha, NULL, MENU_RODAPE, 0); }
 
-    y = Q.y + TV_CAB_H;
-    for (i = 0; i < MENU_N; i++) {
-      int d = TV_ORDEM[i], atual = (d == destino);
-      float cy = y + TV_LINHA_H * 0.5f;
-      GfxRect pill = { Q.x + TV_PAD_X, y + 5.0f, Q.w - TV_PAD_X * 2.0f, TV_LINHA_H - 10.0f };
-      if (!mostra(d)) continue;
+    // Rotulo da secao de Streaming: pequeno, na cor de realce, como na foto.
+    if (np && yRot >= 0.0f) {
+      TxtLinha l = txt_linha(TXT_CALLOUT, "Streaming", (int)(ar * 255.0f), (int)(ag * 255.0f),
+                             (int)(ab * 255.0f), 255);
+      txt_desenhar_alpha(l, Q.x + TV_PAD_X + 16.0f, topo + yRot + TV_ROTULO_H - l.h - 8.0f, ac);
+    }
+
+    for (i = 0; i < MENU_N + np; i++) {
+      int d = i < MENU_N ? TV_ORDEM[i] : MENU_ST0 + (i - MENU_N);
+      int atual = (d == destino);
+      float y, cy;
+      GfxRect pill;
+      if (ys[d] < 0.0f) continue;
+      y = topo + ys[d];
+      if (y + TV_LINHA_H < Q.y || y > Q.y + Q.h) continue;
+      cy = y + TV_LINHA_H * 0.5f;
+      pill = (GfxRect){ Q.x + TV_PAD_X, y + 5.0f, Q.w - TV_PAD_X * 2.0f, TV_LINHA_H - 10.0f };
       f = animFoco[d];
       // ATUAL: pilula cinza translucida, que some sob a do foco.
       if (atual && f < 0.99f) gfx_cor(pill, 0.5f, 1.0f, 1.0f, 1.0f, 0.17f * (1.0f - f) * ac);
       // EM FOCO: pilula na cor de realce (branca no padrao), sem brilho atras.
       if (f > 0.01f) gfx_cor(pill, 0.5f, ar, ag, ab, f * ac);
-      tvCirculoIcone(d, pill.x + 8.0f + TV_CIRC * 0.5f, cy, f, atual, tinta, ac);
       { int emFoco = f > 0.5f;
         int c = emFoco ? (int)(tinta * 255.0f + 0.5f) : (atual ? 248 : 232);
-        TxtLinha l = txt_linha_corta(TXT_ROW_TITULO, tvRotulo(d), c, c, c, 255,
-                                     pill.w - TV_CIRC - 44.0f);
-        txt_desenhar_alpha(l, pill.x + 8.0f + TV_CIRC + 18.0f, cy - l.h * 0.5f, ac); }
-      if (aberto && ponteiro_ativo())
+        const char *rot;
+        float ccx = pill.x + 8.0f + TV_CIRC * 0.5f;
+        if (d < MENU_ST0) {
+          tvCirculoIcone(d, ccx, cy, f, atual, tinta, ac);
+          rot = tvRotulo(d);
+        } else {
+          const ColFolder *pf = col_folder(pastas[d - MENU_ST0]);
+          tvCirculoPasta(pf, ccx, cy, ac);
+          rot = pf ? pf->title : "";
+        }
+        { TxtLinha l = txt_linha_corta(TXT_ROW_TITULO, rot, c, c, c, 255,
+                                       pill.w - TV_CIRC - 44.0f);
+          txt_desenhar_alpha(l, pill.x + 8.0f + TV_CIRC + 18.0f, cy - l.h * 0.5f, ac); } }
+      if (aberto && ponteiro_ativo() && y >= Q.y - 1.0f && y + TV_LINHA_H <= Q.y + Q.h + 1.0f)
         ponteiro_alvo(Q.x, y, Q.w, TV_LINHA_H, ponteiroLinha, NULL, d, 0);
-      y += TV_LINHA_H;
     }
     gfx_sem_recorte();
   }

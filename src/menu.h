@@ -69,6 +69,10 @@ const char *menu_rotulo(int destino);
 // proposito: trocar de perfil nao e uma aba do app, e uma acao que devolve a
 // pessoa a tela de escolha.
 int  menu_pediu_trocar(void);
+// Layout Dinamica: indice de col_folder da pasta de Streaming escolhida na
+// barra (a fileira "Streaming" mora la nesse layout), uma vez; -1 sem pedido.
+// Quem le abre a colecao (vertudo_colecao), como OK na pasta da home.
+int  menu_pediu_colecao(void);
 
 // --- PILULA DO LAYOUT DINAMICA (barra estilo Apple TV) ----------------------
 // No layout Dinamica da home nao ha rail: fechada, a barra e uma pilula
@@ -90,6 +94,10 @@ int  menu_pediu_trocar(void);
 #define NV_MENU_PILULA_SETA  26.0f   // largura da seta antes da pilula
 #define NV_MENU_PILULA_VAO   16.0f
 int   menu_pilula_rect(float *x, float *y, float *w, float *h);
+// 1 no layout Dinamica: a pilula diz o nome da secao, entao as telas do menu
+// (Explorar, Busca, Biblioteca, Agenda, Perfil, Ajustes) NAO desenham o
+// proprio titulo grande — ele ficaria duplicado atras dela.
+int   menu_pilula_titulo(void);
 float menu_pilula_alfa(void);
 void  menu_pilula_mostrar(float alvo);
 

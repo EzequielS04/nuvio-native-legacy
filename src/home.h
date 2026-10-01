@@ -61,6 +61,10 @@ void home_desenhar(Uint32 agora);
 void home_hero_rect(float *x, float *y, float *w, float *h);
 // 1 com a pagina no topo (layout Dinamica), caindo a 0 ao rolar; 1 nos outros.
 float home_topo_fracao(void);
+// Layout Dinamica: as pastas (indices de col_folder) da fileira de colecao
+// "Streaming", que sai da home e vai para a barra aberta. 0 sem a fileira ou
+// nos outros layouts.
+int home_streaming_barra(const int **pastas);
 void home_encerrar(void);
 // Registra o titulo interrompido para a faixa contextual "Retomar agora".
 // A faixa so existe enquanto o progresso fizer sentido (nem inicio nem fim).

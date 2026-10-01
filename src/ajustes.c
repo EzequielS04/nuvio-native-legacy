@@ -7392,7 +7392,8 @@ void ajustes_desenhar(Uint32 agora) {
   // acrescentava uma contagem que ninguem usa para decidir nada; foi o
   // primeiro texto que o olho encontrava na tela, antes das categorias.
   TxtLinha tit = txt_linha(TXT_TITULO1, "Ajustes", 255, 255, 255, 255);
-  txt_desenhar(tit, AJ_IDX_X, NV_MARGEM_Y);
+  // Layout Dinamica: "Ajustes" esta na pilula da barra (menu_pilula_titulo).
+  if (ajustes_home_layout() != HOME_LAYOUT_DINAMICA) txt_desenhar(tit, AJ_IDX_X, NV_MARGEM_Y);
 
   int sec = secAtual;
   const Item *itSec = &TELA[secIni[sec]];

@@ -61,6 +61,7 @@
 //      escolha separado do foco, o usuario perde de vista onde esta.
 //   2. A rolagem move o MINIMO para a linha focada caber. Alinhar a linha focada
 //      ao topo empurra o cabecalho para fora da tela na primeira descida.
+#include "menu.h"
 #include "biblioteca.h"
 #include "posterprov.h"
 #include "contalib.h"
@@ -1705,9 +1706,21 @@ static void desenhaCabecalho(void) {
     snprintf(caminho, sizeof caminho, "%s  ›  %s", i18n("Listas"), aberta.titulo);
     tit = caminho;
   }
-  { TxtLinha t = txt_linha_corta(TXT_TITULO2, tit,
-                                 255, 255, 255, 255, bibW() - 320.0f);
-    txt_desenhar(t, bibX(), NV_BIB_Y); }
+  // Layout Dinamica: "Biblioteca" esta na pilula da barra. Com uma lista
+  // aberta sobra o nome dela, ao lado da pilula e centrado nela.
+  { float px, py, pw, ph;
+    if (menu_pilula_rect(&px, &py, &pw, &ph)) {
+      if (temAberta) {
+        float x0 = px + pw + NV_MENU_PILULA_VAO;
+        TxtLinha t = txt_linha_corta(TXT_HEADLINE, aberta.titulo, 255, 255, 255, 255,
+                                     bibX() + bibW() - 320.0f - x0);
+        txt_desenhar(t, x0, py + (ph - t.h) * 0.5f);
+      }
+    } else {
+      TxtLinha t = txt_linha_corta(TXT_TITULO2, tit,
+                                   255, 255, 255, 255, bibW() - 320.0f);
+      txt_desenhar(t, bibX(), NV_BIB_Y);
+    } }
 
   // Selo de origem, alinhado a direita da area util. Espacado de proposito: no
   // web ele tem letter-spacing 4 e le como etiqueta, nao como palavra.

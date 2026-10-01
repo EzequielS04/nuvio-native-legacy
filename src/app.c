@@ -2066,6 +2066,9 @@ void app_atualizar(float dt, Uint32 agora) {
     return;
   }
 
+  { int c = menu_pediu_colecao();
+    const ColFolder *pf = c >= 0 ? col_folder(c) : NULL;
+    if (pf) vertudo_colecao(pf); }
   if (menu_mudou_destino()) {
     switch (menu_destino()) {
       case MENU_GUIA:
@@ -3072,12 +3075,15 @@ static void desenharAtrasDoPainel(void *ctx) {
   // Guarda repetida em dois lugares para a mesma regra: no de dentro ela
   // significa "nao pinte a faixa", no de fora significava "nao exista".
   if (menu_visivel() && sidebar_permitida() && !detail_aberto()) {
-    // Layout Dinamica: a pilula da barra so existe na HOME, e some com ela
-    // rolada para baixo. As outras telas tem o proprio titulo nesse canto
-    // (Biblioteca, Ajustes, Explorar, o campo da Busca) — medido nas capturas
-    // com NUVIO_RAIL=dinamica: a pilula cobria o titulo. La a barra abre pelo
-    // ESQUERDA na borda, como sempre, e pela faixa do ponteiro na borda.
-    menu_pilula_mostrar(tela == TELA_HOME ? home_topo_fracao() : -1.0f);
+    // Layout Dinamica: a pilula da barra fica no canto das telas do menu, no
+    // lugar do titulo delas (que nao e desenhado: menu_pilula_titulo). Na
+    // home some com a pagina rolada. Telas fora do menu (Addons, Social,
+    // diagnosticos) tem titulo proprio nesse canto: la ela some na hora, e a
+    // barra abre pelo ESQUERDA na borda e pela faixa do ponteiro.
+    menu_pilula_mostrar(tela == TELA_HOME ? home_topo_fracao()
+                        : (tela == TELA_EXPLORAR || tela == TELA_BUSCA ||
+                           tela == TELA_BIBLIOTECA || tela == TELA_AGENDA ||
+                           tela == TELA_PERFIL || tela == TELA_AJUSTES) ? 1.0f : -1.0f);
     CAMADA_SE(menu_aberto());
     menu_desenhar(agora);
   }

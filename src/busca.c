@@ -26,6 +26,7 @@
 // D-pad: sao 38 teclas em UMA dimensao, entao a distancia media entre duas
 // letras e ~13 toques e o pior caso passa de 37. A grade 6x7 poe a mesma tecla a
 // no maximo 5+6 toques e ~5 em media.
+#include "menu.h"
 #include "busca.h"
 #include "posterprov.h"
 #include "idioma.h"
@@ -770,6 +771,14 @@ static void desenhaCabecalho(Uint32 agora) {
   float x = BU_KB_X;
   float raio = 0.5f;
   GfxRect campo = { x, BU_HEAD_Y, BU_DIR - x, BU_HEAD_H };
+  // Layout Dinamica: a pilula da barra fica no canto; o campo comeca depois
+  // dela, centrado na mesma linha.
+  { float px, py, pw, ph;
+    if (menu_pilula_rect(&px, &py, &pw, &ph)) {
+      campo.x = px + pw + NV_MENU_PILULA_VAO;
+      campo.w = BU_DIR - campo.x;
+      campo.y = py + (ph - campo.h) * 0.5f;
+    } }
   float ar, ag, ab;
   ajustes_acento(&ar, &ag, &ab);
   // O campo e uma unica superficie baixa, nao uma caixa que compete com os

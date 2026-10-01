@@ -129,6 +129,7 @@
 // SEM DATA nao vira data. As series encerradas, canceladas ou sem anuncio caem
 // depois de um separador, com o eixo TRACEJADO e a situacao no lugar do
 // numeral. "A definir" escrito onde deveria haver um dia e metadado inventado.
+#include "menu.h"
 #include "agendaui.h"
 #include "agenda.h"
 #include "gfx.h"
@@ -2216,7 +2217,7 @@ void agendaui_desenhar(Uint32 agora) {
   // TXT_TITULO1 tem caixa alta e o "48 + 74" que estava aqui punha o subtitulo
   // POR CIMA do "g" de "Agenda". Um deslocamento fixo so acerta numa fonte.
   { TxtLinha t = txt_linha(TXT_TITULO1, i18n("Agenda"), 255, 255, 255, 255);
-    txt_desenhar(t, x, yc);
+    if (!menu_pilula_titulo()) txt_desenhar(t, x, yc);   // Dinamica: na pilula
     // A DATA DE HOJE no canto superior direito, com a base alinhada a do
     // titulo. O quadrante era vazio desde sempre, e a data por extenso e a
     // unica peca de calendario que a estacao nao da: "em 6 dias" nao diz em
