@@ -63,7 +63,8 @@ void spot_veu(void);
 enum {
   SPOT_NADA = 0,
   SPOT_TITULO,      // indice = indice no catalogo
-  SPOT_PESSOA,      // indice = titulo de onde a pessoa veio; tmdb/nome/arte
+  SPOT_PESSOA,      // indice = titulo de onde a pessoa veio (-1 = veio do
+                    // TMDB: abre por tituloTmdb/tituloTipo); tmdb/nome/arte
   SPOT_COLECAO,     // indice = col_folder(indice)
   SPOT_CANAL,       // id/nome/base do canal (guia_item_do_canal)
   SPOT_CATALOGO,    // indice = cat_fileira(indice)
@@ -73,6 +74,8 @@ typedef struct {
   int  tipo;
   int  indice;
   long tmdb;
+  long tituloTmdb;
+  char tituloTipo[8];
   char id[80];
   char nome[140];
   char arte[512];
