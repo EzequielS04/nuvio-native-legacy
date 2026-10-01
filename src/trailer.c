@@ -20,6 +20,49 @@ static Uint32 abertoEm;   // SDL_GetTicks da abertura da fonte atual, para o log
 static int    dono;       // TRAILER_DONO_* (trailer.h)
 static char   donoImdb[32];
 
+void trailer_recorte(int vw, int vh, float z, float dw, float dh,
+                     int *sx, int *sy, int *sw, int *sh) {
+  int w, h;
+  // QUADRO MATTED (Apple: 1920x804, 3836x1606) nao tem tarja embutida — a
+  // tarja e o proprio plano encaixando 2.39 em 16:9. Encher a tela e
+  // recortar as LATERAIS ate 16:9, sem o zoom fixo. Quadro 16:9 (IMDb, com
+  // a tarja dentro da imagem) leva o zoom do ajuste. "Original" (1.0) nao
+  // tira zoom nenhum em nenhum dos dois.
+  if (z <= 1.001f) { w = vw; h = vh; }
+  else if ((float)vw / (float)vh > 1.85f) { h = vh; w = (int)(vh * 16.0f / 9.0f); if (w > vw) w = vw; }
+  else { w = (int)(vw / z); h = (int)(vh / z); }
+  // E DEPOIS O "COVER" NO DESTINO. O plano estica a fonte no retangulo de
+  // destino, sem guardar proporcao: a conta acima so servia a um destino
+  // 16:9. O banner do layout Padrao e 1920x528 (3,6:1) e MEDIDO no log da C9
+  // do dono (01/10/2026, 1.6.4): "fonte 244,138 1432x804 -> destino 0,0
+  // 1920x528" — o trailer achatado pela metade na altura, a foto dele de
+  // "so a imagem espremida". Corta-se a fonte na proporcao do destino, pelo
+  // centro, como a arte do destaque faz (cover).
+  //
+  // Destino MAIS LARGO que o recorte do zoom: a largura volta a crescer ate
+  // o quadro inteiro antes de se cortar altura. O zoom existe para tirar a
+  // tarja de CIMA e de BAIXO; as laterais que ele cortava eram so para manter
+  // 16:9. No banner a altura que sobra (528 de 1920) ja cai dentro da imagem,
+  // sem tarja, e o trailer sai sem zoom a mais.
+  if (dw > 1.0f && dh > 1.0f && w > 0 && h > 0) {
+    float ad = dw / dh, af = (float)w / (float)h;
+    if (af < ad * 0.995f) {
+      float qw = (float)h * ad;
+      if (qw > (float)vw) qw = (float)vw;
+      w = (int)qw;
+      h = (int)(qw / ad);
+    } else if (af > ad * 1.005f) {
+      w = (int)((float)h * ad);
+    }
+  }
+  // PAR, como o player faz (player.c, aplicarAspecto): o escalonador
+  // trabalha em 4:2:0 e origem ou tamanho impar da meio pixel de croma na
+  // borda — e 803 de altura era o que saia daqui.
+  w &= ~1; h &= ~1;
+  *sw = w; *sh = h;
+  *sx = ((vw - w) / 2) & ~1; *sy = ((vh - h) / 2) & ~1;
+}
+
 #ifdef __EMSCRIPTEN__
 // O iframe fica ATRAS do canvas (z-index 0 contra 1 do canvas), no mesmo
 // enquadramento 16:9 que a folha de estilo da ao canvas — por isso as
@@ -263,22 +306,9 @@ static void nativoAplicar(void) {
   if (recortePendente && video_tocando() && !tocandoDesde) tocandoDesde = SDL_GetTicks();
   if (recortePendente && video_pronto() && video_largura() > 0 && video_altura() > 0 &&
       tocandoDesde && SDL_GetTicks() - tocandoDesde >= 800) {
-    int vw = video_largura(), vh = video_altura();
-    float z = ajustes_trailer_zoom();
     int sw, sh, sx, sy;
-    // QUADRO MATTED (Apple: 1920x804, 3836x1606) nao tem tarja embutida — a
-    // tarja e o proprio plano encaixando 2.39 em 16:9. Encher a tela e
-    // recortar as LATERAIS ate 16:9, sem o zoom fixo. Quadro 16:9 (IMDb, com
-    // a tarja dentro da imagem) leva o zoom do ajuste. "Original" (1.0) nao
-    // recorta nada em nenhum dos dois.
-    if (z <= 1.001f) { sw = vw; sh = vh; }
-    else if ((float)vw / (float)vh > 1.85f) { sh = vh; sw = (int)(vh * 16.0f / 9.0f); if (sw > vw) sw = vw; }
-    else { sw = (int)(vw / z); sh = (int)(vh / z); }
-    // PAR, como o player faz (player.c, aplicarAspecto): o escalonador
-    // trabalha em 4:2:0 e origem ou tamanho impar da meio pixel de croma na
-    // borda — e 803 de altura era o que saia daqui.
-    sw &= ~1; sh &= ~1;
-    sx = ((vw - sw) / 2) & ~1; sy = ((vh - sh) / 2) & ~1;
+    trailer_recorte(video_largura(), video_altura(), ajustes_trailer_zoom(),
+                    rect.w, rect.h, &sx, &sy, &sw, &sh);
     if (video_recorte_fonte())
       video_janela_fonte(sx, sy, sw, sh,
                          (int)rect.x, (int)rect.y, (int)rect.w, (int)rect.h);
@@ -410,7 +440,15 @@ int trailer_mostra_video(void) {
   }
   // "Original", ou o alvo sem recorte (video_tpk.c, o padrao desde #188): nada
   // a esperar, o LetterBox de sempre ja e a imagem certa.
-  if (ajustes_trailer_zoom() <= 1.001f || !video_recorte_fonte()) porque = "sem recorte";
+  // "Original" so dispensa a espera quando o destino tambem nao pede corte
+  // (o cover de trailer_recorte num destino que nao e da proporcao do video).
+  int semCorte = !video_recorte_fonte();
+  if (!semCorte && ajustes_trailer_zoom() <= 1.001f && video_largura() > 0 && video_altura() > 0) {
+    int sx, sy, sw, sh;
+    trailer_recorte(video_largura(), video_altura(), 1.0f, rect.w, rect.h, &sx, &sy, &sw, &sh);
+    semCorte = sw >= (video_largura() & ~1) && sh >= (video_altura() & ~1);
+  }
+  if (semCorte) porque = "sem recorte";
   else if (recorteEnviadoEm && t - recorteEnviadoEm >= NV_TRAILER_TPK_ROI_ASSENTA_MS) porque = "recorte assentou";
   else if (tocandoDesde && t - tocandoDesde >= NV_TRAILER_TPK_ROI_PRAZO_MS) porque = "sem recorte em 2 s, mostra assim";
   else if (!tocandoDesde && abertoEm && t - abertoEm >= NV_TRAILER_TPK_SEM_TOCAR_MS) porque = "sem tocando, mostra assim";
