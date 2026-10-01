@@ -786,6 +786,21 @@ static int desenhaArteHero(GfxRect r, GfxModo modo, const CatItem *item,
 // arte esta A CAMINHO — dizer "Arte indisponível" ali seria trocar uma mentira
 // (a arte do titulo anterior) por outra (a arte nao existe). Sem o teto so
 // havia o caso de arte que de fato nao existe, e por isso a frase era uma so.
+// A arte de um item e PLANA (nao poster), para gfx_hero_camadas — a mesma
+// decisao de desenhaArteHero. Devolve a proporcao da textura em *asp. NAO
+// pede a textura ao cache (quem chama ja a tem): um pedido a mais por quadro
+// mudava a ordem do cache e, por ela, em que quadro cada arte chega.
+static int heroArtePlana(const CatItem *item, const char *path, float *asp) {
+  int ehPoster = 0;
+  const char *arte = (path && path[0]) ? path
+                   : item ? arteDoItem(item, &ehPoster) : NULL;
+  if (item && path && path[0] && item->poster[0] && !strcmp(path, item->poster))
+    ehPoster = 1;
+  if (!arte || !arte[0] || ehPoster) return 0;
+  *asp = tex_aspecto(arte);
+  return 1;
+}
+
 static void desenhaPlaceholderHero(GfxRect r, const CatItem *item, float alpha,
                                    int esperando) {
   GfxRect bloco = { r.x + r.w * 0.58f, r.y + 32.0f,
@@ -2980,6 +2995,8 @@ static void desenhaHero(Uint32 agora, float saida) {
     // O fundo social so onde a arte NAO cobre. Com a arte do titulo opaca por
     // cima (tela cheia), ele era uma tela inteira pintada e escondida: a C9
     // parada na fileira "Entre amigos" ficava a 34 fps (29/09).
+    // (Compor fundo e arte numa passada so, gfx_hero_camadas, foi MEDIDO na
+    // C9 em 30/09 e saiu PIOR: 30 fps contra 38-45 deste caminho.)
     if (!ta || aArte < 0.999f || r.w < NV_TELA_W || r.h < NV_TELA_H ||
         nv_ambiente_forca > 0.001f)   // imersivo: o hero deixa o fundo vazar (uVaza)
       gfx_rect((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,GFX_SOCIAL,0,0,0,0,1,1,1,1);
@@ -3343,7 +3360,20 @@ static void desenhaHero(Uint32 agora, float saida) {
       } }
     gfx_sem_recorte();
   } else {
-  if (tAnt) {
+  // CROSSFADE NUMA PASSADA: a arte que sai e a que entra compostas no
+  // fragmento sobre a luz (gfx_hero_camadas) — eram tres telas cheias por
+  // quadro, duas misturadas, e a C9 caia a 42 ms em toda troca de destaque.
+  // Cai no caminho de sempre quando uma das artes e poster ou o modo nao e
+  // o do destaque.
+  int camadas = 0;
+  if (tAnt && tAtu && heroSai > 0.004f && heroEntra > 0.0f && aArte > 0.004f) {
+    float aspA = 0.0f, aspB = 0.0f;
+    if (heroArtePlana(ci, arteA, &aspA) && heroArtePlana(cAnt, arteB, &aspB))
+      camadas = gfx_hero_camadas(r, modoHero, tAtu, aspA, anim_suave(heroEntra) * aArte,
+                                 tAnt, aspB, anim_suave(heroSai) * aArte);
+  }
+  if (camadas) {
+  } else if (tAnt) {
     // Esvanecimento com aceleracao e desaceleracao: o medido fica ~25% do
     // percurso quase parado no comeco, entao rampa reta le como corte na saida.
     (void)desenhaArteHero(r, modoHero, cAnt, arteB,
@@ -3351,7 +3381,8 @@ static void desenhaHero(Uint32 agora, float saida) {
   } else if (heroSai > 0.0f) {
     desenhaPlaceholderHero(r, cAnt, anim_suave(heroSai) * aArte, 0);
   }
-  if (tAtu && heroEntra > 0.0f) {
+  if (camadas) {
+  } else if (tAtu && heroEntra > 0.0f) {
     (void)desenhaArteHero(r, modoHero, ci, arteA,
                           anim_suave(heroEntra) * aArte, 0.0f);
   } else if (!tAtu && aTrailer <= 0.0f) {
@@ -4831,6 +4862,16 @@ void home_desenhar(Uint32 agora) {
 // caso em que a pessoa moveu o foco e saiu antes de completar o repouso.
 // Nada a gravar (#95): a posicao na home vive so enquanto o app esta aberto.
 void home_encerrar(void) { }
+// Rastro de desempenho (main.c, [qd]): onde o foco esta neste quadro.
+const char *home_rastro_foco(void) {
+  static char b[160];
+  if (focoHero) snprintf(b, sizeof b, "hero");
+  else if (foco.fileira >= 0 && foco.fileira < nFileiras)
+    snprintf(b, sizeof b, "f%d/%d tipo=%d col=%d \"%.40s\"", foco.fileira, nFileiras,
+             (int)fileiras[foco.fileira].tipo, foco.coluna, fileiras[foco.fileira].titulo);
+  else snprintf(b, sizeof b, "f%d", foco.fileira);
+  return b;
+}
 void home_registrar_retorno(int indice, double posSeg, double durSeg) {
   int novo = -1;
   if (indice >= 0 && durSeg > 1.0) {

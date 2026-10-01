@@ -218,6 +218,22 @@ static void cenario(SDL_Window *w, const char *cen) {
   for (i = 0; i < n; i++) { quadro(w, &qs[i], t); t += 16; }
   relatar(cen, "parada", qs, n);
   if (getenv("PERF_BMP")) { char b[800]; snprintf(b, sizeof b, "%s-%s-parada.bmp", getenv("PERF_BMP"), cen); guardar(b); }
+  // CROSSFADE DO DESTAQUE, no meio: um passo a direita (a arte nova sobe e o
+  // esvanecimento corre ate o fim), volta a esquerda (arte ja em cache, o
+  // esvanecimento comeca na hora) e captura no 4o e no 8o quadro da volta.
+  // E a mesma sequencia nas duas arvores; a captura compara a composicao em
+  // camadas (gfx_hero_camadas) com as duas passadas misturadas.
+  if (getenv("PERF_BMP")) {
+    char b[800];
+    tecla(SDLK_RIGHT);
+    for (i = 0; i < 90; i++) { quadro(w, NULL, t); t += 16; }
+    tecla(SDLK_LEFT);
+    for (i = 0; i < 4; i++) { quadro(w, NULL, t); t += 16; }
+    snprintf(b, sizeof b, "%s-%s-xfade4.bmp", getenv("PERF_BMP"), cen); guardar(b);
+    for (i = 0; i < 4; i++) { quadro(w, NULL, t); t += 16; }
+    snprintf(b, sizeof b, "%s-%s-xfade8.bmp", getenv("PERF_BMP"), cen); guardar(b);
+    for (i = 0; i < 90; i++) { quadro(w, NULL, t); t += 16; }
+  }
   for (i = 0; i < n; i++) {
     if (i % 12 == 0) tecla(i < n / 2 ? SDLK_RIGHT : SDLK_LEFT);
     quadro(w, &qs[i], t); t += 16;
