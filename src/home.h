@@ -83,7 +83,10 @@ int  home_pediu_guia(char *id, int tam);
 // `chave` na forma `filTipo` (FilTipo, fileiras.h), com as artes dela e o
 // desenho real dos cartoes, dentro de `area`. 0 quando a fileira nao esta na
 // Home montada. So desenha; nao muda nada da fileira.
-int home_previa_fileira(const char *chave, int filTipo, GfxRect area, float alfa);
+// `refTipo` decide a REDUCAO (a forma que enche o palco); a previa desenha
+// `filTipo` nessa mesma reducao. Igual a `filTipo` = a forma enche sozinha.
+int home_previa_fileira(const char *chave, int filTipo, int refTipo, GfxRect area,
+                        float alfa);
 #endif
 const char *home_rastro_foco(void);
 // CARROSSEL DA DINAMICA: titulos (indices do catalogo) da fileira em foco e a

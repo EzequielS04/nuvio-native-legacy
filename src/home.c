@@ -128,6 +128,10 @@ typedef struct {
   // como 1.0 — e o caso da tabela de reserva abaixo e das fileiras montadas com
   // `Fileira v={0}`.
   float escala;
+  // O fator que a FORMA trouxe para dentro de `escala` (fil_tipo_fator): 1 em
+  // tudo, 1,25/1,5 nos Destaques 4:3 maiores. Guardado a parte porque so ele
+  // tem teto por layout (limita43) — o Tamanho de sempre nao muda de medida.
+  float fator;
   // FORMA DO CARTAO numa fileira de colecao (COL_FORMA_*, colecoes.h): a do
   // grupo na conta (tileShape), ou a que a pessoa escolheu por cima. So vale
   // com tipo == FILEIRA_CATALOGOS; o tipo continua sendo o que diz "isto e um
@@ -1260,9 +1264,34 @@ static float escalaDe(TipoFileira t) {
 // O gap NAO entra na escala de proposito. Ele foi dimensionado para caber o
 // crescimento do foco (a nota em gapDe), e um respiro que encolhe junto com o
 // card faz dois cards grandes se encostarem exatamente quando um deles cresce.
+// O TETO DOS 4:3 MAIORES POR LAYOUT. Na Moderna e no Padrao com destaque a
+// fileira em foco fica SEMPRE no mesmo Y (a nota em alvoY), embaixo do
+// destaque: o 4:3 grande (608 px) MEDIDO na captura saia ~110 px pela base da
+// tela, com o foco nele. Ali o maior vira o que cabe ate a base, e o medio fica
+// no meio do caminho — os tres continuam diferentes. A Dinamica centra a
+// fileira em foco e o grande cabe inteiro (captura), sem teto. O 4:3 de sempre
+// (fator 1) nunca passa por aqui.
+#define NV_43_FOLGA_BASE 24.0f
+static float limita43(float fator, float e) {
+  float hMax, eMax, teto;
+  if (fator <= 1.0f || layoutHome() == HOME_LAYOUT_DINAMICA) return e;
+  hMax = NV_TELA_H - (topoFileiras() + NV_LEGACY_ROW_HEAD_H) - NV_43_FOLGA_BASE;
+  // O foco cresce para BAIXO no 4:3 (cardY), e o anel fica por fora.
+  hMax = hMax / (1.0f + escalaDe(FILEIRA_DESTAQUE_QUADRADO))
+       - (ajustes_borda_foco() ? NV_ANEL_FOCO : 0.0f);
+  eMax = hMax / NV_DESTAQUE_QUADRADO_H;
+  if (eMax < 1.0f) eMax = 1.0f;
+  teto = fator >= fil_tipo_fator(FIL_TIPO_DESTAQUE_QUADRADO_G)
+       ? eMax : 1.0f + (eMax - 1.0f) * 0.5f;
+  return e > teto ? teto : e;
+}
 static float escalaFil(int r) {
   float e = (r >= 0 && r < MAX_FIL) ? fileiras[r].escala : 0.0f;
-  return e > 0.05f ? e : 1.0f;
+  e = e > 0.05f ? e : 1.0f;
+  if (r >= 0 && r < MAX_FIL && fileiras[r].fator > 1.0f &&
+      fileiras[r].tipo == FILEIRA_DESTAQUE_QUADRADO)
+    e = limita43(fileiras[r].fator, e);
+  return e;
 }
 static float larguraFil(int r) {
   // 680 e a largura da PILHA do Top 10, que nao sai de larguraDe: ela e uma
@@ -1374,7 +1403,10 @@ static TipoFileira tipoDaEscolha(int t) {
   switch (t) {
     case FIL_TIPO_CARTAZ:   return FILEIRA_NORMAL;
     case FIL_TIPO_DESTAQUE: return FILEIRA_DESTAQUE;
-    case FIL_TIPO_DESTAQUE_QUADRADO: return FILEIRA_DESTAQUE_QUADRADO;
+    // Os tres tamanhos sao a MESMA forma; o fator vem por fil_escala.
+    case FIL_TIPO_DESTAQUE_QUADRADO:
+    case FIL_TIPO_DESTAQUE_QUADRADO_M:
+    case FIL_TIPO_DESTAQUE_QUADRADO_G: return FILEIRA_DESTAQUE_QUADRADO;
     case FIL_TIPO_COLECAO:  return FILEIRA_COLECAO;
     case FIL_TIPO_SERVICO:  return FILEIRA_SERVICO;
     case FIL_TIPO_RANKING:  return FILEIRA_TOP10_NUM;
@@ -2152,6 +2184,7 @@ static void sincronizarFileiras(void) {
   for(int i=0;i<destino;i++) {
     int t = fil_tipo(fileiras[i].chave);
     fileiras[i].escala = fil_escala(fileiras[i].chave);
+    fileiras[i].fator = fil_tipo_fator(t);
     fileiras[i].tipoAuto = fileiras[i].tipo;
     fileiras[i].formaAuto = fileiras[i].forma;
     // Grupo de colecao: a escolha troca a FORMA da pasta e o tipo fica — e ele
@@ -4426,46 +4459,74 @@ static void desenhaEditorialCard(const CatItem *cItem, TipoFileira tipo, float p
 // Sem foco, sem expansao, sem cascata: e a fileira em repouso, que e o que a
 // pessoa vai ver ao voltar para a Home. 0 quando a fileira nao esta na Home
 // montada (nada a mostrar).
-int home_previa_fileira(const char *chave, int filTipo, GfxRect area, float alfa) {
-  const Fileira *fl = NULL;
+// A forma desenhada para `filTipo` nesta fileira e a medida dela, ja com o
+// fator de tamanho. Separada porque o modal pede DUAS: a da forma em foco e a
+// de referencia, que decide a reducao (ver home_previa_fileira).
+static TipoFileira previaMedida(const Fileira *fl, const char *chave, int filTipo,
+                                int *forma, int *pilha, float *lw, float *lh) {
   TipoFileira tipo;
-  int r, c, nItens, forma, pilha, deitado, rotuloFora;
-  float e, lw, lh, gap, xoff, rotH, s, w, h, passo, raio, x0, y0, og;
-  if (!chave || !chave[0] || alfa < 0.01f) return 0;
-  for (r = 0; r < nFileiras; r++)
-    if (!strcmp(fileiras[r].chave, chave)) { fl = &fileiras[r]; break; }
-  if (!fl) return 0;
-  nItens = fl->stackN ? fl->stackN : fl->n;
-  if (nItens < 1) return 0;
-  forma = fl->forma;
+  float e;
+  *forma = fl->forma;
   if (fl->tipo == FILEIRA_CATALOGOS) {
     // Os numeros de fil_estilos para colecao (fileiras.c), como em
     // sincronizarFileiras.
     tipo = FILEIRA_CATALOGOS;
-    if (filTipo == FIL_TIPO_COLECAO) forma = COL_FORMA_PAISAGEM;
-    else if (filTipo == FIL_TIPO_DESTAQUE_QUADRADO) forma = COL_FORMA_QUADRADO;
-    else if (filTipo == FIL_TIPO_CARTAZ) forma = COL_FORMA_POSTER;
-    else forma = fl->formaAuto;
+    if (filTipo == FIL_TIPO_COLECAO) *forma = COL_FORMA_PAISAGEM;
+    else if (filTipo == FIL_TIPO_DESTAQUE_QUADRADO) *forma = COL_FORMA_QUADRADO;
+    else if (filTipo == FIL_TIPO_CARTAZ) *forma = COL_FORMA_POSTER;
+    else *forma = fl->formaAuto;
   } else if (filTipo == FIL_TIPO_AUTO) {
     // Em Automatico agora: a forma desenhada E a automatica (com a da
     // Dinamica). Com outra escolha, a de antes dela.
     tipo = fil_tipo(chave) == FIL_TIPO_AUTO ? fl->tipo : fl->tipoAuto;
   } else tipo = tipoDaEscolha(filTipo);
   // A mesma condicao de sincronizarFileiras para a pilha virar um card so.
-  pilha = tipo == FILEIRA_TOP10 && fl->base[0] && fl->catId[0];
-  e = fl->escala > 0.05f ? fl->escala : 1.0f;
-  if (pilha) { lw = 680.0f; lh = alturaDe(FILEIRA_TOP10); }
-  else if (tipo == FILEIRA_CATALOGOS) medidaColecao(forma, &lw, &lh);
-  else { lw = larguraDe(tipo); lh = alturaDe(tipo); }
-  lw *= e; lh *= e;
+  *pilha = tipo == FILEIRA_TOP10 && fl->base[0] && fl->catId[0];
+  // O fator da forma EM FOCO, e nao o da gravada (fl->escala): o 4:3 grande
+  // ainda nao foi escolhido quando a previa o mostra, e o Automatico de uma
+  // fileira gravada no 4:3 grande nao herda o 1,5 dele.
+  e = fil_escala_tipo(chave, filTipo);
+  if (tipo == FILEIRA_DESTAQUE_QUADRADO) e = limita43(fil_tipo_fator(filTipo), e);
+  if (*pilha) { *lw = 680.0f; *lh = alturaDe(FILEIRA_TOP10); }
+  else if (tipo == FILEIRA_CATALOGOS) medidaColecao(*forma, lw, lh);
+  else { *lw = larguraDe(tipo); *lh = alturaDe(tipo); }
+  *lw *= e; *lh *= e;
+  return tipo;
+}
+
+int home_previa_fileira(const char *chave, int filTipo, int refTipo, GfxRect area,
+                        float alfa) {
+  const Fileira *fl = NULL;
+  TipoFileira tipo;
+  int r, c, nItens, forma, pilha, deitado, rotuloFora;
+  float lw, lh, gap, xoff, rotH, s, w, h, passo, raio, x0, y0, og;
+  if (!chave || !chave[0] || alfa < 0.01f) return 0;
+  for (r = 0; r < nFileiras; r++)
+    if (!strcmp(fileiras[r].chave, chave)) { fl = &fileiras[r]; break; }
+  if (!fl) return 0;
+  nItens = fl->stackN ? fl->stackN : fl->n;
+  if (nItens < 1) return 0;
+  tipo = previaMedida(fl, chave, filTipo, &forma, &pilha, &lw, &lh);
   gap = gapDe(tipo); xoff = xOffTipo(tipo);
   deitado = editorial(tipo) || tipo == FILEIRA_LARGA ||
             ((tipo != FILEIRA_CONTINUE) && ajustes_posteres_deitados());
   rotuloFora = temRotulo(tipo);
   rotH = rotuloFora ? NV_POSTER_COPY_H : 0.0f;
-  s = area.w / (xoff + (pilha ? 1.0f : 2.6f) * (lw + gap));
-  if (s > 1.0f) s = 1.0f;
-  if ((lh + rotH) * s > area.h) s = area.h / (lh + rotH);
+  // A REDUCAO SAI DA FORMA DE REFERENCIA. Sozinha, cada forma era reduzida
+  // para caber 2,6 cards — e as tres paisagens, ou os tres 4:3, saiam do MESMO
+  // tamanho na previa, que e justamente a diferenca que a pessoa esta
+  // escolhendo. Com `refTipo` = o maior tamanho da linha, ele enche o palco
+  // como antes e os menores aparecem menores, na proporcao de verdade.
+  { int fR, pR; float lwR = lw, lhR = lh, gapR = gap, xoffR = xoff, rotR = rotH;
+    if (refTipo != filTipo && refTipo >= 0 && refTipo < FIL_TIPO_N) {
+      TipoFileira tR = previaMedida(fl, chave, refTipo, &fR, &pR, &lwR, &lhR);
+      gapR = gapDe(tR); xoffR = xOffTipo(tR);
+      rotR = temRotulo(tR) ? NV_POSTER_COPY_H : 0.0f;
+    } else pR = pilha;
+    s = area.w / (xoffR + (pR ? 1.0f : 2.6f) * (lwR + gapR));
+    if (s > 1.0f) s = 1.0f;
+    if ((lhR + rotR) * s > area.h) s = area.h / (lhR + rotR);
+    if ((lh + rotH) * s > area.h) s = area.h / (lh + rotH); }
   w = lw * s; h = lh * s; passo = (lw + gap) * s; raio = raioDe(w, h);
   x0 = area.x + xoff * s;
   // Rente ao topo, como a fileira fica sob o titulo dela na Home.

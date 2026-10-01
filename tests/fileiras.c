@@ -157,15 +157,52 @@ int main(void) {
     n = fil_estilos("addon_movie_formas", tipos, rot, FIL_TIPO_N);
     // TODAS as formas de FilTipo, cada uma uma vez (o modal de estilo nao tem
     // mais o teto de sete linhas do menu que deixava o 4:3 e a faixa de fora).
+    // Ordem das LINHAS do modal achatada: as tres paisagens juntas (a linha
+    // "Paisagem"), a faixa, os tres 4:3 juntos, os rankings.
     assert(n == FIL_TIPO_N && tipos[0] == FIL_TIPO_AUTO && tipos[1] == FIL_TIPO_CARTAZ &&
-           tipos[2] == FIL_TIPO_SERVICO && tipos[3] == FIL_TIPO_LARGA &&
-           tipos[4] == FIL_TIPO_COLECAO && tipos[5] == FIL_TIPO_DESTAQUE &&
-           tipos[6] == FIL_TIPO_DESTAQUE_QUADRADO && !strcmp(rot[2], "Paisagem pequena"));
+           tipos[2] == FIL_TIPO_SERVICO && tipos[3] == FIL_TIPO_COLECAO &&
+           tipos[4] == FIL_TIPO_DESTAQUE && tipos[5] == FIL_TIPO_LARGA &&
+           tipos[6] == FIL_TIPO_DESTAQUE_QUADRADO &&
+           tipos[7] == FIL_TIPO_DESTAQUE_QUADRADO_M &&
+           tipos[8] == FIL_TIPO_DESTAQUE_QUADRADO_G && !strcmp(rot[2], "Paisagem pequena"));
     { int visto[FIL_TIPO_N] = {0}, k;
       for (k = 0; k < n; k++) { assert(!visto[tipos[k]]); visto[tipos[k]] = 1; } }
     // Issue #201: os dois rankings no menu, o numerado (Dinamica) primeiro.
-    assert(tipos[7] == FIL_TIPO_RANKING && tipos[8] == FIL_TIPO_TOP10 &&
-           !strcmp(rot[7], "Ranking numerado"));
+    assert(tipos[9] == FIL_TIPO_RANKING && tipos[10] == FIL_TIPO_TOP10 &&
+           !strcmp(rot[9], "Ranking numerado"));
+    // AS LINHAS: o que so muda de tamanho divide uma linha so.
+    { FilEstiloLinha l[FIL_TIPO_N];
+      int nl = fil_estilo_linhas("addon_movie_formas", l, FIL_TIPO_N);
+      assert(nl == 7);
+      assert(!strcmp(l[2].rotulo, "Paisagem") && l[2].n == 3 &&
+             l[2].tipos[0] == FIL_TIPO_SERVICO && l[2].tipos[2] == FIL_TIPO_DESTAQUE &&
+             !strcmp(l[2].nomes[2], "Paisagem grande"));
+      assert(!strcmp(l[4].rotulo, "Destaque 4:3") && l[4].n == 3 &&
+             l[4].tipos[0] == FIL_TIPO_DESTAQUE_QUADRADO &&
+             l[4].tipos[2] == FIL_TIPO_DESTAQUE_QUADRADO_G);
+      for (k = 0; k < nl; k++) if (k != 2 && k != 4) assert(l[k].n == 1);
+      assert(fil_estilo_linhas("collection_formas", l, FIL_TIPO_N) == 4 && l[1].n == 1);
+      assert(fil_estilo_linhas("continue_watching", l, FIL_TIPO_N) == 0); }
+    // OS 4:3 MAIORES: a mesma forma, com fator. O 6 gravado de antes continua
+    // sendo o 4:3 de sempre (fator 1), e o Tamanho Grande nao passa do teto.
+    assert(fil_definir_tipo("addon_movie_formas", FIL_TIPO_DESTAQUE_QUADRADO));
+    assert(fil_escala("addon_movie_formas") == 1.0f);
+    assert(fil_definir_tipo("addon_movie_formas", FIL_TIPO_DESTAQUE_QUADRADO_G));
+    assert(fil_tipo("addon_movie_formas") == FIL_TIPO_DESTAQUE_QUADRADO_G);
+    assert(fil_escala("addon_movie_formas") == 1.5f);
+    assert(fil_escala_tipo("addon_movie_formas", FIL_TIPO_DESTAQUE_QUADRADO_M) == 1.25f);
+    assert(fil_escala_tipo("addon_movie_formas", FIL_TIPO_CARTAZ) == 1.0f);
+    assert(!fil_definir_tipo("collection_formas", FIL_TIPO_DESTAQUE_QUADRADO_M));
+    assert(fil_estilo_ajuda("addon_movie_formas", FIL_TIPO_DESTAQUE_QUADRADO_G)[0]);
+    assert(!strcmp(fil_tipo_rotulo(FIL_TIPO_DESTAQUE_QUADRADO_G), "Destaque 4:3 grande"));
+    for (k = 0; k < fil_n(); k++)
+      if (!strcmp(fil_chave(k), "addon_movie_formas")) {
+        while (fil_linha_tam(k) != FIL_TAM_GRANDE) fil_ciclar_tam(k);
+        assert(fil_escala("addon_movie_formas") == 1.5f);              // teto
+        assert(fil_escala_tipo("addon_movie_formas", FIL_TIPO_DESTAQUE_QUADRADO_M) == 1.5f);
+        assert(fil_escala_tipo("addon_movie_formas", FIL_TIPO_DESTAQUE_QUADRADO) == 1.2f);
+        while (fil_linha_tam(k) != FIL_TAM_PADRAO) fil_ciclar_tam(k);
+      }
     assert(fil_definir_tipo("addon_movie_formas", FIL_TIPO_LARGA));
     assert(fil_tipo("addon_movie_formas") == FIL_TIPO_LARGA);
     assert(!fil_definir_tipo("collection_formas", FIL_TIPO_LARGA));   // colecao nao

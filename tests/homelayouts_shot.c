@@ -417,6 +417,9 @@ int main(int argc, char **argv) {
     // Uma forma abaixo da atual e OK (NV_CTX_DESCE=<n>: n formas abaixo).
     { int d = getenv("NV_CTX_DESCE") ? atoi(getenv("NV_CTX_DESCE")) : 1;
       for (r = 0; r < d; r++) teclaCtx(SDLK_DOWN); }
+    // NV_CTX_LADO=<n>: n vezes a direita na linha (o tamanho P M G).
+    { int d = getenv("NV_CTX_LADO") ? atoi(getenv("NV_CTX_LADO")) : 0;
+      for (r = 0; r < d; r++) teclaCtx(SDLK_RIGHT); }
     quadros(20, NULL);
     snprintf(bmp, sizeof bmp, "%s-ctx-3-escolha.bmp", saida); quadros(1, bmp);
     teclaCtx(SDLK_RETURN);

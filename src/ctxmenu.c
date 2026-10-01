@@ -175,7 +175,7 @@ static int observarHold(void *u, SDL_Event *e) {
 // SEIS desde o modal de estilo: as formas sairam de ops[]. O laco que as
 // juntava contava UMA linha para o contrato e escrevia sete — e o teto de sete
 // era exatamente o que deixava o Destaque 4:3 e a faixa com titulo de fora do
-// menu. Agora elas moram em estiloTipos[FIL_TIPO_N], do tamanho do enum.
+// menu. Agora elas moram em estLin[FIL_TIPO_N], do tamanho do enum.
 #define CTX_MAX 6
 static struct { const char *rot; int acao; } ops[CTX_MAX];
 static int nOps;
@@ -201,11 +201,19 @@ static int  pagina, soFileira;
 // forma em foco com as artes dela (home_previa_fileira). As formas nao passam
 // por ops[]: o vetor e do tamanho do enum, entao toda forma que fil_estilos
 // devolve aparece.
-static int   estiloTipos[FIL_TIPO_N], nEstilos, estFoco;
-static const char *estiloRot[FIL_TIPO_N];
+//
+// UMA LINHA POR FORMA (dono, 01/10): as que so diferem em tamanho — as tres
+// paisagens, os tres 4:3 — dividem a linha, e o tamanho e um segmentado P M G
+// DENTRO dela, que esquerda/direita trocam. Cima/baixo continuam sendo "outra
+// forma"; a previa mostra sempre o tamanho em foco. Sub-lista foi descartada:
+// um segundo nivel com Voltar proprio no D-pad esconde os tamanhos atras de um
+// OK, e o segmentado os mostra o tempo todo.
+static FilEstiloLinha estLin[FIL_TIPO_N];
+static int   nEstilos, estFoco, estTam[FIL_TIPO_N];
 static float estAnim[FIL_TIPO_N];
 // A previa troca com a mola: a forma de antes sai enquanto a nova entra.
-static int   prevAtual = -1, prevAnt = -1;
+// `prevRef*` e a forma que decide a reducao de cada uma (home_previa_fileira).
+static int   prevAtual = -1, prevAnt = -1, prevRefAtual = -1, prevRefAnt = -1;
 static float prevT = 1.0f;
 
 // --- RECOMENDAR: O FLUXO NAO MORA MAIS AQUI ---------------------------------
@@ -270,11 +278,16 @@ static void montar(void) {
   const CatItem *ci = itemAtual();
   nOps = 0;
   if (pagina == 1) {
-    int k, atual = fil_tipo(filChave);
-    nEstilos = fil_estilos(filChave, estiloTipos, estiloRot, FIL_TIPO_N);
-    // O foco nasce na forma que vale agora.
+    int k, j, atual = fil_tipo(filChave);
+    nEstilos = fil_estilo_linhas(filChave, estLin, FIL_TIPO_N);
+    // O foco nasce na forma que vale agora, no TAMANHO que vale agora; as
+    // outras linhas de tamanho nascem no menor (o de sempre).
     if (estFoco < 0 || estFoco >= nEstilos)
-      for (estFoco = 0, k = 0; k < nEstilos; k++) if (estiloTipos[k] == atual) estFoco = k;
+      for (estFoco = 0, k = 0; k < nEstilos; k++) {
+        estTam[k] = 0;
+        for (j = 0; j < estLin[k].n; j++)
+          if (estLin[k].tipos[j] == atual) { estFoco = k; estTam[k] = j; }
+      }
     return;
   }
   if (!ci) return;
@@ -390,7 +403,7 @@ static void abrirComum(int indice) {
   idx = indice; foco = 0; aberto = 1; pedDetalhes = -1;
   pagina = soFileira ? 1 : 0;
   estFoco = -1;               // montar() poe o foco na forma atual
-  prevAtual = prevAnt = -1; prevT = 1.0f;
+  prevAtual = prevAnt = prevRefAtual = prevRefAnt = -1; prevT = 1.0f;
   memset(estAnim, 0, sizeof estAnim);
   pedDetalhesImdb[0] = 0;
   fecharAoConfirmar = 0;
@@ -467,8 +480,21 @@ static void espelharAssistido(int atual, const CatItem *ci, int intencao) {
 
 // OK na pagina de estilos. Grava e sai: a home remonta pela revisao de
 // fileiras.c e a pessoa ve a forma nova no lugar, sem o veu do menu por cima.
+// A forma da linha `i` no tamanho escolhido nela, e a maior da linha (a que
+// decide a reducao da previa).
+static int estTipo(int i) {
+  int j;
+  if (i < 0 || i >= nEstilos) return -1;
+  j = estTam[i];
+  if (j < 0 || j >= estLin[i].n) j = 0;
+  return estLin[i].tipos[j];
+}
+static int estRef(int i) {
+  return (i >= 0 && i < nEstilos) ? estLin[i].tipos[estLin[i].n - 1] : -1;
+}
+
 static void aplicarEstilo(void) {
-  if (estFoco >= 0 && estFoco < nEstilos) fil_definir_tipo(filChave, estiloTipos[estFoco]);
+  if (estFoco >= 0 && estFoco < nEstilos) fil_definir_tipo(filChave, estTipo(estFoco));
   aberto = 0;
 }
 
@@ -479,7 +505,7 @@ static void aplicar(void) {
   if (foco < 0 || foco >= nOps) return;
   acao = ops[foco].acao;
   if (acao == OP_ESTILO) {
-    pagina = 1; estFoco = -1; prevAtual = prevAnt = -1; prevT = 1.0f;
+    pagina = 1; estFoco = -1; prevAtual = prevAnt = prevRefAtual = prevRefAnt = -1; prevT = 1.0f;
     memset(estAnim, 0, sizeof estAnim);
     montar(); return;
   }
@@ -671,10 +697,15 @@ void ctx_evento(const SDL_Event *e) {
     }
     aberto = 0; return;
   }
-  // Pagina de estilos: cima/baixo so movem a previa; OK grava a forma.
+  // Pagina de estilos: cima/baixo trocam a forma, esquerda/direita o tamanho
+  // (so nas linhas que tem tamanhos); nada disso grava. OK grava.
   if (pagina == 1) {
     if (k == SDLK_UP)   { if (estFoco > 0) estFoco--; return; }
     if (k == SDLK_DOWN) { if (estFoco + 1 < nEstilos) estFoco++; return; }
+    if (estFoco >= 0 && estFoco < nEstilos && estLin[estFoco].n > 1) {
+      if (k == SDLK_LEFT)  { if (estTam[estFoco] > 0) estTam[estFoco]--; return; }
+      if (k == SDLK_RIGHT) { if (estTam[estFoco] + 1 < estLin[estFoco].n) estTam[estFoco]++; return; }
+    }
     if (teclaOk(k)) aplicarEstilo();
     return;
   }
@@ -715,10 +746,10 @@ void ctx_atualizar(float dt, Uint32 agora) {
       estAnim[i] = ajustes_animacoes_reduzidas()
         ? (estFoco == i ? 1.0f : 0.0f)
         : anim_mola(estAnim[i], estFoco == i ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
-    if (estFoco >= 0 && estFoco < nEstilos && estiloTipos[estFoco] != prevAtual) {
+    if (estFoco >= 0 && estFoco < nEstilos && estTipo(estFoco) != prevAtual) {
       // A primeira forma entra com o proprio modal; as seguintes, com a mola.
-      prevAnt = prevAtual;
-      prevAtual = estiloTipos[estFoco];
+      prevAnt = prevAtual; prevRefAnt = prevRefAtual;
+      prevAtual = estTipo(estFoco); prevRefAtual = estRef(estFoco);
       prevT = prevAnt < 0 ? 1.0f : 0.0f;
     }
     prevT = ajustes_animacoes_reduzidas() ? 1.0f : anim_mola(prevT, 1.0f, dt, NV_MOLA_FOCO);
@@ -770,8 +801,17 @@ void ctx_atualizar(float dt, Uint32 agora) {
 // cima/baixo); o clique e o OK. Clicar fora do cartao fecha, como o Voltar.
 static void ponteiroCtxOpcao(int i, int b) { (void)b; if (i >= 0 && i < nOps) foco = i; }
 static void ponteiroCtxFora(int a, int b) { (void)a; (void)b; aberto = 0; }
-static void ponteiroEstFoco(int i, int b) { (void)b; if (i >= 0 && i < nEstilos) estFoco = i; }
-static void ponteiroEstOk(int i, int b) { (void)b; if (i >= 0 && i < nEstilos) { estFoco = i; aplicarEstilo(); } }
+// `b` > 0 e o segmento de tamanho b-1 da linha (o alvo menor, por cima dela).
+static void ponteiroEstFoco(int i, int b) {
+  if (i < 0 || i >= nEstilos) return;
+  estFoco = i;
+  if (b > 0 && b - 1 < estLin[i].n) estTam[i] = b - 1;
+}
+static void ponteiroEstOk(int i, int b) {
+  if (i < 0 || i >= nEstilos) return;
+  ponteiroEstFoco(i, b);
+  aplicarEstilo();
+}
 
 // --- O MODAL DE ESTILO ------------------------------------------------------
 //
@@ -786,6 +826,47 @@ static void ponteiroEstOk(int i, int b) { (void)b; if (i >= 0 && i < nEstilos) {
 #define EST_COL_GAP   48.0f
 #define EST_PALCO_H  520.0f   // altura minima do palco da previa
 #define EST_PALCO_Y  140.0f   // do topo da coluna ao palco: nome + frase
+
+// O SEGMENTADO DE TAMANHO, na ponta direita da pilula da linha `i`: uma letra
+// por tamanho (a primeira da palavra traduzida — P M G, S M L), o escolhido
+// cheio na cor do texto da pilula e o gravado com um anel. Na tinta da pilula:
+// escura quando ela esta acesa (branca), clara em repouso.
+#define EST_SEG_W   46.0f
+#define EST_SEG_H   40.0f
+#define EST_SEG_GAP  6.0f
+static void desenhaTamanhos(GfxRect r, int i, int atual, float a) {
+  float fr, fg, fb, ti = botao_cor_foco(&fr, &fg, &fb);
+  int aceso = estAnim[i] >= 0.5f, j, n = estLin[i].n;
+  // A tinta e a do rotulo da pilula (botao_pilula): a de botao_cor_foco acesa,
+  // clara em repouso. A letra escolhida vai no fundo da pilula — o realce
+  // aceso, o escuro do cartao em repouso — sobre um disco na tinta.
+  float tinta = aceso ? ti : 0.93f;
+  float lr = aceso ? fr : 0.08f, lg = aceso ? fg : 0.085f, lb = aceso ? fb : 0.1f;
+  float x0 = r.x + r.w - 10.0f - (float)n * EST_SEG_W - (float)(n - 1) * EST_SEG_GAP;
+  float y0 = r.y + (r.h - EST_SEG_H) * 0.5f;
+  for (j = 0; j < n; j++) {
+    GfxRect c = { x0 + (float)j * (EST_SEG_W + EST_SEG_GAP), y0, EST_SEG_W, EST_SEG_H };
+    const char *pal = i18n(fil_estilo_tam_palavra(j));
+    char letra[8];
+    int k = 0, esc = j == estTam[i], t8 = (int)(tinta * 255.0f + 0.5f);
+    TxtLinha l;
+    // A primeira letra, inteira: um caractere UTF-8 e o lider mais as
+    // continuacoes (10xxxxxx).
+    if (pal[0]) { letra[k++] = pal[0];
+      while (k < 6 && ((unsigned char)pal[k] & 0xC0) == 0x80) { letra[k] = pal[k]; k++; } }
+    letra[k] = 0;
+    if (aberto && a > 0.5f)
+      ponteiro_alvo(c.x, c.y, c.w, c.h, ponteiroEstFoco, ponteiroEstOk, i, j + 1);
+    if (esc) gfx_cor(c, 0.5f, tinta, tinta, tinta, 0.95f * a);
+    else if (estLin[i].tipos[j] == atual)
+      gfx_anel(c, 0.5f, 1.5f, tinta, tinta, tinta, 0.6f * a);
+    l = esc ? txt_linha(TXT_DET_BOTAO, letra, (int)(lr * 255.0f + 0.5f),
+                        (int)(lg * 255.0f + 0.5f), (int)(lb * 255.0f + 0.5f), 255)
+            : txt_linha(TXT_DET_BOTAO, letra, t8, t8, t8, 255);
+    txt_desenhar_alpha(l, c.x + (c.w - (float)l.w) * 0.5f, c.y + (c.h - (float)l.h) * 0.5f,
+                       (esc ? 1.0f : 0.72f) * a);
+  }
+}
 
 static void desenhaEstilos(float a) {
   float lista = (float)nEstilos * (EST_LINHA + EST_GAP) - EST_GAP;
@@ -822,10 +903,12 @@ static void desenhaEstilos(float a) {
   // A LISTA. O visto marca a forma que vale agora; o foco e so a previa.
   for (i = 0; i < nEstilos; i++) {
     GfxRect r = { x + CTX_PAD, topo + (float)i * (EST_LINHA + EST_GAP), EST_LISTA_W, EST_LINHA };
+    int j, temAtual = 0;
+    for (j = 0; j < estLin[i].n; j++) if (estLin[i].tipos[j] == atual) temAtual = 1;
     if (aberto && a > 0.5f)
       ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroEstFoco, ponteiroEstOk, i, 0);
-    botao_pilula(r, estiloRot[i], estiloTipos[i] == atual ? "check" : "",
-                 estAnim[i], 1, 1, a);
+    botao_pilula(r, estLin[i].rotulo, temAtual ? "check" : "", estAnim[i], 1, 1, a);
+    if (estLin[i].n > 1) desenhaTamanhos(r, i, atual, a);
   }
 
   // A DIREITA: o nome da forma em foco, a frase dela e o palco.
@@ -833,13 +916,14 @@ static void desenhaEstilos(float a) {
   dw = x + EST_W - CTX_PAD - dx;
   if (estFoco >= 0 && estFoco < nEstilos) {
     float ty = topo;
-    TxtLinha nome = txt_linha(TXT_TITULO3, estiloRot[estFoco], 245, 248, 255, 255);
+    int jt = estTam[estFoco] >= 0 && estTam[estFoco] < estLin[estFoco].n ? estTam[estFoco] : 0;
+    TxtLinha nome = txt_linha(TXT_TITULO3, estLin[estFoco].nomes[jt], 245, 248, 255, 255);
     txt_desenhar_alpha(nome, dx, ty, a);
-    if (estiloTipos[estFoco] == atual)
+    if (estTipo(estFoco) == atual)
       badge_desenhar(dx + nome.w + 18.0f, ty + (nome.h - BADGE_H) * 0.5f, "Atual",
                      BADGE_REALCE, a);
     ty += nome.h + 8.0f;
-    txt_bloco_corta(TXT_CAPTION2, i18n(fil_estilo_ajuda(filChave, estiloTipos[estFoco])),
+    txt_bloco_corta(TXT_CAPTION2, i18n(fil_estilo_ajuda(filChave, estTipo(estFoco))),
                     170, 174, 184, dx, ty, dw, 30.0f, a * 0.92f, 2);
   }
   // O palco comeca abaixo das duas linhas da frase e vai ate a base da lista.
@@ -856,17 +940,21 @@ static void desenhaEstilos(float a) {
     // direita. 24 px: o bastante para ler "trocou", pouco para competir.
     if (prevAnt >= 0 && prevT < 0.995f) {
       GfxRect s = area; s.x -= 24.0f * prevT;
-      home_previa_fileira(filChave, prevAnt, s, a * (1.0f - prevT));
+      home_previa_fileira(filChave, prevAnt, prevRefAnt, s, a * (1.0f - prevT));
     }
     if (prevAtual >= 0) {
       GfxRect e = area; e.x += 24.0f * (1.0f - prevT);
       // O recorte acompanha a area deslocada; sem o corte de volta a direita
       // a arte que entra passaria da borda do palco.
       if (e.x + e.w > palco.x + palco.w) e.w = palco.x + palco.w - e.x;
-      home_previa_fileira(filChave, prevAtual, e, a * prevT);
+      home_previa_fileira(filChave, prevAtual, prevRefAtual, e, a * prevT);
     } }
 
-  { TxtLinha t = txt_linha(TXT_CAPTION2, "↑ ↓ Escolher   ·   OK Aplicar   ·   Voltar Cancelar",
+  // O gesto de tamanho so aparece no rodape quando a linha em foco tem um.
+  { int comTam = estFoco >= 0 && estFoco < nEstilos && estLin[estFoco].n > 1;
+    TxtLinha t = txt_linha(TXT_CAPTION2, comTam
+                   ? "↑ ↓ Escolher   ·   ← → Tamanho   ·   OK Aplicar   ·   Voltar Cancelar"
+                   : "↑ ↓ Escolher   ·   OK Aplicar   ·   Voltar Cancelar",
                            155, 159, 169, 255);
     txt_desenhar_alpha(t, x + CTX_PAD, y + alt - CTX_PAD - t.h, a * 0.86f); }
 }
