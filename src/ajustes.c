@@ -3404,6 +3404,14 @@ int ajustes_quer_sair(void) { return sair; }
 // Valor das linhas so de leitura. O espaco em disco NAO e um numero inventado:
 // vem do cache de texturas, que e exatamente o que "imagens" consome no
 // aparelho — um numero fixo aqui seria mentira e nunca mudaria.
+// O ROTULO DA LINHA. Quase todos sao fixos (OPCOES[]); AJ_ATUALIZAR muda com
+// o que se sabe: com versao nova e "Atualizar o aplicativo" (abre o cartao),
+// sem ela e "Procurar atualização" (consulta agora).
+static const char *rotuloOpcao(int op) {
+  if (op == AJ_ATUALIZAR && !atualizacao_nova()[0]) return "Procurar atualização";
+  return OPCOES[op].rotulo;
+}
+
 static const char *textoLeitura(int op) {
   static char buf[64];
   // MASCARADO, sempre. Esta tela e fotografada e colada em issue — foi assim
@@ -3464,6 +3472,20 @@ static const char *textoLeitura(int op) {
       case 2:  return i18n("enviado. Obrigado.");
       case 3:  return i18n("não foi possível enviar");
       default: return i18n("OK envia");
+    }
+  }
+  if (op == AJ_ATUALIZAR && !atualizacao_nova()[0]) {
+    // "Procurar atualização": a resposta da ultima consulta (a automatica
+    // tambem conta — ela e tao verdadeira quanto a pedida).
+    // CURTA aqui (a frase inteira nao cabe ao lado do rotulo); a frase
+    // completa vai na ajuda, em efeitoOpcao.
+    switch (atualizacao_busca()) {
+      case ATUALIZACAO_BUSCA_PROCURANDO: return i18n("Procurando…");
+      case ATUALIZACAO_BUSCA_EM_DIA:
+        snprintf(buf, sizeof buf, i18n("Em dia (%s)"), AJ_VERSAO);
+        return buf;
+      case ATUALIZACAO_BUSCA_ERRO: return i18n("Sem resposta");
+      default: return i18n("OK procura");
     }
   }
   if (op == AJ_VERSAO_I) {
@@ -3590,10 +3612,8 @@ static int inativa(int op) {
     // Como no web (getFocusedPosterFlowConfig): o trailer do cartaz so existe
     // com o cartaz expandindo ou com cartazes deitados.
     case AJ_FOCO_TRAILER: return !ajustes_expandir_poster() && valor[AJ_LANDSCAPE] != 0;
-    // Sem versao nova no GitHub nao ha o que atualizar: a linha continua
-    // visivel e APAGADA, em vez de sumir — sumir mudaria a contagem de linhas
-    // debaixo do dedo, que e a regra ja escrita para a tela de Layout.
-    case AJ_ATUALIZAR:    return !atualizacao_nova()[0];
+    // AJ_ATUALIZAR NAO APAGA MAIS (01/10/2026): sem versao nova conhecida
+    // ela vira "Procurar atualização" e consulta o GitHub na hora.
     case AJ_PROF_BORDA: case AJ_PROF_BRILHO: case AJ_PROF_COBERTURA:
     case AJ_PROF_POSTERS: case AJ_PROF_CW: case AJ_PROF_EPS:
     case AJ_PROF_ELENCO: case AJ_PROF_TRAILERS:
@@ -3917,7 +3937,10 @@ static const char *ajudaOpcao(int op) {
     case AJ_ESPACO: return "Uso atual de memória pelo cache de imagens, não espaço ocupado no armazenamento da TV.";
     case AJ_TEX_MB: return "Quanta memória o cache de imagens pode usar. Automático escolhe pela RAM da TV. Um valor acima do que esta TV suporta é reduzido ao máximo dela — o painel ao lado mostra o teto em vigor.";
     case AJ_VERSAO_I: return "Versão do aplicativo. Esta informação não pode ser alterada.";
-    case AJ_ATUALIZAR: return "Abre o cartão da versão nova, com o que mudou e o botão de instalar. Fica apagado quando não há versão nova.";
+    case AJ_ATUALIZAR:
+      return atualizacao_nova()[0]
+        ? "Abre o cartão da versão nova, com o que mudou e o botão de instalar."
+        : "Procura agora uma versão nova do Nuvio. Se houver, abre o cartão com o que mudou e o botão de instalar. O app também confere sozinho a cada 6 horas.";
     case AJ_ENVIAR_LOG: return "Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.";
     case AJ_ENVIO_AUTO: return "Ligado, o app manda o registro sozinho: o da sessão anterior ao abrir e o desta a cada minuto. Sem senhas nem chaves; serve para achar o que trava a Samsung. Desligue quando quiser.";
     case AJ_DIAGNOSTICO: return "Testa manifestos, fontes e artes dos addons, mede os tempos e aplica um perfil seguro de Qualidade ou Desempenho. O teste não marca títulos como assistidos.";
@@ -3963,6 +3986,19 @@ static const char *ajudaOpcao(int op) {
 // de rede, escopo (esta TV x a conta), e dependencia entre opcoes.
 static const char *efeitoOpcao(int op) {
   if (inativa(op)) return NULL;
+  // A RESPOSTA DE "Procurar atualização", por extenso (a linha so tem espaco
+  // para a versao curta).
+  if (op == AJ_ATUALIZAR && !atualizacao_nova()[0]) {
+    static char bufAt[192];   // traduzida (ru, uk, el) passa de 64 bytes
+    switch (atualizacao_busca()) {
+      case ATUALIZACAO_BUSCA_PROCURANDO: return i18n("Procurando…");
+      case ATUALIZACAO_BUSCA_EM_DIA:
+        snprintf(bufAt, sizeof bufAt, i18n("Você está na versão mais recente (%s)"), AJ_VERSAO);
+        return bufAt;
+      case ATUALIZACAO_BUSCA_ERRO: return i18n("Não deu para consultar agora");
+      default: return NULL;
+    }
+  }
   switch (op) {
     case AJ_FIL_LIMITE:
       return "Vale só nesta TV. Cada fileira a mais é um pedido a mais pela rede quando a Home monta.";
@@ -4791,7 +4827,11 @@ static void eventoTela(const SDL_Event *e) {
       emEdicao = 0;
       return;
     }
-    if (focoOp == AJ_ATUALIZAR) { atualizacao_abrir(); return; }
+    if (focoOp == AJ_ATUALIZAR) {
+      if (atualizacao_nova()[0]) atualizacao_abrir();
+      else if (atualizacao_busca() != ATUALIZACAO_BUSCA_PROCURANDO) atualizacao_procurar_agora();
+      return;
+    }
     if (focoOp == AJ_ENVIAR_LOG) { avisos_enviar_registro_atual(); return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
     if (focoOp == AJ_DIAGNOSTICO) { pediuDiagnostico = 1; return; }
@@ -4908,6 +4948,9 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   p2pTesteRecolher();
   pstTesteRecolher();
   adTesteRecolher();
+  // "Procurar atualização" achou versao nova: abre o cartao por cima dos
+  // Ajustes, como o OK em "Atualizar o aplicativo" ja fazia.
+  if (atualizacao_busca_achou() && !atualizacao_aberta()) atualizacao_abrir();
   if (teclado_aberto() && !pessoas_aberto()) teclado_atualizar(dt, agora);
   // O resultado e CONSUMIDO NA LEITURA (ver teclado.h): ler duas vezes daria
   // TECLADO_NADA na segunda, e por isso a gravacao acontece aqui, uma vez.
@@ -5231,7 +5274,7 @@ static void desenhaLinha(int item, float y, float f, float dx, float aPag) {
     }
   }
 
-  TxtLinha rot = txt_linha_corta(TXT_CALLOUT, OPCOES[op].rotulo, cr, cr, cr, 255,
+  TxtLinha rot = txt_linha_corta(TXT_CALLOUT, rotuloOpcao(op), cr, cr, cr, 255,
                                  linha.w - AJ_PAD * 2.0f - cauda - 28.0f);
   txt_desenhar_alpha(rot, linha.x + AJ_PAD, y + (AJ_LINHA_H - rot.h) * 0.5f, aTexto);
   // A MARCA AO LADO DO TITULO: "Dolby Vision" e "Dolby Atmos" mostram o logo
@@ -7373,7 +7416,7 @@ void ajustes_desenhar(Uint32 agora) {
       // PITCH 44 para o headline, o mesmo do painel do explorar: o `leading`
       // do txt_bloco e a distancia de uma linha a outra, e nao o vao.
       hy += txt_bloco(TXT_HEADLINE,
-                     noGrupo ? itFoco->titulo : OPCOES[focoOp].rotulo,
+                     noGrupo ? itFoco->titulo : rotuloOpcao(focoOp),
                      237, 238, 242, hx, hy, hw, 44, 1, 3);
       hy += 18.0f;
       hy += txt_bloco(TXT_CAPTION,
@@ -7558,6 +7601,7 @@ int ajustes_teste_op_por_chave(const char *chave) {
   for (i = 0; i < AJ_N; i++) if (CHAVE[i] && !strcmp(CHAVE[i], chave)) return i;
   return -1;
 }
+int ajustes_teste_op_atualizar(void) { return AJ_ATUALIZAR; }
 // O primeiro dos onze interruptores de "Notas no titulo" (consecutivos no enum).
 int ajustes_teste_primeira_nota_titulo(void) { return AJ_NT_IMDB; }
 

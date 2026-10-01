@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifndef NV_VERSAO
 #define NV_VERSAO "dev"
@@ -129,6 +130,14 @@ static void at_sha256_hex(const unsigned char *buf, size_t n, char *hex65) {
 #define AT_LOG_INST "/tmp/nuvio-instalar.log"
 #define AT_HB_DIR   "/media/developer/apps/usr/palm/applications/org.webosbrew.hbchannel"
 
+// AGENDA DA RECONSULTA (ver atualizacao_agenda_vence).
+#ifndef AT_INTERVALO_S
+#define AT_INTERVALO_S        (6L * 3600L)   // ~6 h entre consultas que responderam
+#endif
+#define AT_REPETIR_FALHA_S    (30L * 60L)    // sem resposta: tenta de novo em 30 min
+#define AT_MIN_ENTRE_MS       (10u * 60u * 1000u)  // nunca duas em menos de 10 min
+#define AT_ESPERA_RETOMAR_MS  (45u * 1000u)  // depois de voltar do segundo plano
+
 #define AT_W        1240.0f
 #define AT_H         760.0f
 #define AT_X        ((NV_TELA_W - AT_W) * 0.5f)
@@ -152,7 +161,31 @@ static void at_sha256_hex(const unsigned char *buf, size_t n, char *hex65) {
 
 static SDL_mutex *mtx;
 static SDL_Thread *fio;
-static int disparado, pronto, aberto, mostrado;
+static int pronto, aberto;
+// RECONSULTA (pedido do dono, 01/10/2026: "o aviso so aparece se fechar o app
+// totalmente"). Antes a consulta era UMA por processo (`disparado`), e webOS,
+// Tizen e Android guardam o app suspenso por dias: a release saia e a TV nunca
+// perguntava de novo. Agora atualizacao_verificar() e chamada a cada quadro da
+// home e quem decide se ja e hora e atualizacao_agenda_vence() (pura, testada
+// em tests/atualizacao_agenda.c).
+//
+// emCurso: um fio de consulta vivo (nunca dois). consultas: quantas terminaram.
+// ultRel/ultTk: relogio de parede (time) e SDL_GetTicks do INICIO da ultima.
+// O de parede e o que enxerga a TV dormindo (o monotonico pode parar no
+// suspend); o monotonico segura a rajada quando o de parede salta (NTP
+// acertando a hora logo depois do boot). naoAntesTk: depois de voltar do
+// segundo plano espera um pouco, para nao disputar a rede com o resto do app
+// que tambem acorda. ultFalhou: a ultima nao teve resposta (tenta mais cedo).
+static int emCurso, disparos, consultas, ultFalhou;
+static long ultRel;
+static Uint32 ultTk, naoAntesTk;
+// GERACAO: sobe a cada consulta que traz uma tag nova diferente da conhecida.
+// O cartao automatico abre uma vez por geracao (antes: `mostrado`, uma vez por
+// processo) e, dentro dela, a marca AT_ARQ continua dizendo "essa ja foi vista".
+static int geracao, geracaoVista = -1;
+// O botao dos Ajustes (atualizacao_procurar_agora): o que a ultima consulta
+// respondeu, e se a pessoa pediu para abrir o cartao quando ela chegar.
+static int busca = ATUALIZACAO_BUSCA_NADA, manualPendente, manualAchou;
 static float entrada;
 static char tagNova[32];          // "1.0.54", vazio se nao ha nada mais novo
 static char notas[6144];          // texto ja limpo, linhas separadas por \n
@@ -471,10 +504,22 @@ static void limparNotas(const char *md, char *dst, size_t tam) {
   dst[k] = 0;
 }
 
+// A CONSULTA. Com a reconsulta ela pode rodar com o app ja usando o que a
+// anterior achou, entao tudo e lido em variaveis LOCAIS e so copiado para as
+// globais sob o mutex, e so quando a release e mais nova que a instalada.
 static int fioConsulta(void *arg) {
   char *corpo;
-  char tag[48] = "", body[8192] = "";
+  static char body[8192];          // so um fio de consulta por vez (emCurso)
+  char tag[48] = "";
+  char lIpk[512] = "", lIpkH[80] = "";
+#ifdef NV_TPK
+  char lSo[512] = "", lSoH[80] = "";
+#endif
+#ifdef NV_ANDROID
+  char lApk[512] = "", lApkH[80] = "";
+#endif
   (void)arg;
+  body[0] = 0;
   corpo = rede_baixar(AT_URL, 12);
   if (!corpo) { printf("[atualizacao] sem resposta do GitHub\n"); fflush(stdout); }
   else {
@@ -482,13 +527,13 @@ static int fioConsulta(void *arg) {
     textoJson(corpo, "body", body, sizeof body);
     // Sem anexo da variante desta build, ipkUrl fica vazio e podeInstalar()
     // devolve 0: o cartao aparece so com a URL da pagina.
-    if (AT_INSTALA) acharIpk(corpo, ipkUrl, sizeof ipkUrl, ipkHash, sizeof ipkHash, AT_SUFIXO);
+    if (AT_INSTALA) acharIpk(corpo, lIpk, sizeof lIpk, lIpkH, sizeof lIpkH, AT_SUFIXO);
 #ifdef NV_TPK
     // Anexo libnuvio.so para a auto-atualizacao do .tpk (staging por hash).
-    acharSo(corpo, soUrl, sizeof soUrl, soHash, sizeof soHash);
+    acharSo(corpo, lSo, sizeof lSo, lSoH, sizeof lSoH);
 #endif
 #ifdef NV_ANDROID
-    acharApk(corpo, apkUrl, sizeof apkUrl, apkHash, sizeof apkHash);
+    acharApk(corpo, lApk, sizeof lApk, lApkH, sizeof lApkH);
 #endif
     free(corpo);
   }
@@ -496,22 +541,35 @@ static int fioConsulta(void *arg) {
   if (tag[0]) {
     const char *v = tag[0] == 'v' ? tag + 1 : tag;
     if (maisNova(v, NV_VERSAO)) {
+      if (strcmp(v, tagNova) != 0) geracao++;
       snprintf(tagNova, sizeof tagNova, "%s", v);
       limparNotas(body, notas, sizeof notas);
+      snprintf(ipkUrl, sizeof ipkUrl, "%s", lIpk);
+      snprintf(ipkHash, sizeof ipkHash, "%s", lIpkH);
 #ifdef NV_TPK
+      snprintf(soUrl, sizeof soUrl, "%s", lSo);
+      snprintf(soHash, sizeof soHash, "%s", lSoH);
       // So a versao mais nova entra: soVer marca a .so encenada e o host a
       // compara com a versao empacotada antes de aplicar.
       snprintf(soVer, sizeof soVer, "%s", v);
 #endif
 #ifdef NV_ANDROID
+      snprintf(apkUrl, sizeof apkUrl, "%s", lApk);
+      snprintf(apkHash, sizeof apkHash, "%s", lApkH);
       snprintf(apkVer, sizeof apkVer, "%s", v);
 #endif
     }
-    printf("[atualizacao] instalada %s, no GitHub %s%s\n", NV_VERSAO, v,
-           tagNova[0] ? " -- NOVA" : "");
+    printf("[atualizacao] instalada %s, no GitHub %s%s (consulta %d)\n", NV_VERSAO, v,
+           tagNova[0] ? " -- NOVA" : "", consultas + 1);
     fflush(stdout);
   }
+  ultFalhou = !tag[0];
+  busca = !tag[0] ? ATUALIZACAO_BUSCA_ERRO
+        : tagNova[0] ? ATUALIZACAO_BUSCA_NOVA : ATUALIZACAO_BUSCA_EM_DIA;
+  if (manualPendente) { manualPendente = 0; manualAchou = tagNova[0] != 0; }
+  consultas++;
   pronto = 1;
+  emCurso = 0;
   SDL_UnlockMutex(mtx);
   return 0;
 }
@@ -821,21 +879,120 @@ static void reiniciarVista(void) {
   rolar = rolarAlvo = 0.0f;
 }
 
-void atualizacao_verificar(void) {
-  if (disparado) return;
-  disparado = 1;
-  if (!mtx) mtx = SDL_CreateMutex();
-  fio = SDL_CreateThread(fioConsulta, "nv-atualizacao", NULL);
-  if (fio) SDL_DetachThread(fio);
+int atualizacao_agenda_vence(long rel, long relUlt, Uint32 tk, Uint32 tkUlt,
+                             Uint32 tkNaoAntes, int jaConsultou, int falhou) {
+  long intervaloS = falhou ? AT_REPETIR_FALHA_S : AT_INTERVALO_S;
+  Uint32 desdeTk = tk - tkUlt;
+  if (!jaConsultou) return 1;                        // a primeira, com a home de pe
+  if ((Sint32)(tk - tkNaoAntes) < 0) return 0;       // acabou de voltar do segundo plano
+  if (desdeTk < AT_MIN_ENTRE_MS) return 0;           // nunca em rajada
+  if (desdeTk >= (Uint32)intervaloS * 1000u) return 1;  // o app ficou aberto o tempo todo
+  // Relogio de parede: anda com a TV dormindo. Para tras = hora acertada
+  // depois da ultima consulta; nao da para saber quanto passou, entao consulta.
+  if (rel < relUlt || rel - relUlt >= intervaloS) return 1;
+  return 0;
 }
+
+// Dispara o fio. Chamar so com o mutex criado e nada em curso.
+static void disparar(void) {
+  SDL_Thread *t;
+  SDL_LockMutex(mtx);
+  if (emCurso) { SDL_UnlockMutex(mtx); return; }
+  emCurso = 1;
+  disparos++;
+  ultRel = (long)time(NULL);
+  ultTk = SDL_GetTicks();
+  if (busca != ATUALIZACAO_BUSCA_NOVA) busca = ATUALIZACAO_BUSCA_PROCURANDO;
+  SDL_UnlockMutex(mtx);
+  t = SDL_CreateThread(fioConsulta, "nv-atualizacao", NULL);
+  if (t) { SDL_DetachThread(t); fio = t; }
+  else {
+    SDL_LockMutex(mtx);
+    emCurso = 0; ultFalhou = 1; busca = ATUALIZACAO_BUSCA_ERRO;
+    if (manualPendente) { manualPendente = 0; manualAchou = 0; }
+    SDL_UnlockMutex(mtx);
+  }
+}
+
+// NAO RECONSULTA com o cartao aberto, instalando ou com a .so ja encenada: a
+// consulta reescreveria a URL/hash que o instalador esta usando.
+static int podeReconsultar(void) {
+  return !aberto && estado != AT_INSTALANDO && estado != AT_PRONTO && !soEncenada;
+}
+
+void atualizacao_verificar(void) {
+  static long ultChamada;
+  long rel = (long)time(NULL);
+  int vence;
+  if (!mtx) mtx = SDL_CreateMutex();
+  if (!mtx) return;
+  // VOLTA DO SEGUNDO PLANO SEM EVENTO. Nem toda plataforma avisa o C (o host
+  // .NET do .tpk nao repassa o OnResume; no webOS o relaunch nao e garantido
+  // como evento de janela). Um buraco de mais de 2 min no relogio de parede
+  // entre dois quadros da home e o mesmo sinal: a TV dormiu ou o app ficou
+  // fora da home. A consulta vencida espera um pouco do mesmo jeito.
+  if (ultChamada && (rel - ultChamada > 120 || rel < ultChamada)) atualizacao_retomou();
+  ultChamada = rel;
+  if (!podeReconsultar()) return;
+  SDL_LockMutex(mtx);
+  vence = !emCurso && atualizacao_agenda_vence(rel, ultRel, SDL_GetTicks(), ultTk,
+                                               naoAntesTk, disparos > 0, ultFalhou);
+  SDL_UnlockMutex(mtx);
+  if (vence) disparar();
+}
+
+void atualizacao_procurar_agora(void) {
+  if (!mtx) mtx = SDL_CreateMutex();
+  if (!mtx || !podeReconsultar()) return;
+  SDL_LockMutex(mtx);
+  manualPendente = 1; manualAchou = 0;
+  busca = ATUALIZACAO_BUSCA_PROCURANDO;
+  SDL_UnlockMutex(mtx);
+  disparar();
+}
+
+int atualizacao_busca(void) {
+  int b;
+  if (!mtx) return ATUALIZACAO_BUSCA_NADA;
+  SDL_LockMutex(mtx); b = busca; SDL_UnlockMutex(mtx);
+  return b;
+}
+
+int atualizacao_busca_achou(void) {
+  int r;
+  if (!mtx) return 0;
+  SDL_LockMutex(mtx); r = manualAchou; manualAchou = 0; SDL_UnlockMutex(mtx);
+  return r;
+}
+
+void atualizacao_retomou(void) {
+  if (!mtx) return;               // ainda nem consultou: a home faz a primeira
+  SDL_LockMutex(mtx);
+  naoAntesTk = SDL_GetTicks() + AT_ESPERA_RETOMAR_MS;
+  SDL_UnlockMutex(mtx);
+}
+
+#ifdef AJUSTES_TESTE
+// tests/ajustes_shot.c (NUVIO_AJUSTES_ATUALIZAR): fotografa a linha dos Ajustes
+// em cada resposta sem rede. `tag` "" = nenhuma versao nova conhecida.
+void atualizacao_teste_estado(int b, const char *tag) {
+  if (!mtx) mtx = SDL_CreateMutex();
+  SDL_LockMutex(mtx);
+  busca = b;
+  snprintf(tagNova, sizeof tagNova, "%s", tag ? tag : "");
+  SDL_UnlockMutex(mtx);
+}
+#endif
 
 void atualizacao_mostrar_se_houver(void) {
   char *visto;
-  if (mostrado || aberto) return;
+  int g;
+  if (aberto || !mtx) return;
   SDL_LockMutex(mtx);
-  if (!pronto || !tagNova[0]) { SDL_UnlockMutex(mtx); return; }
+  if (!pronto || !tagNova[0] || geracaoVista == geracao) { SDL_UnlockMutex(mtx); return; }
+  g = geracao;
   SDL_UnlockMutex(mtx);
-  mostrado = 1;
+  geracaoVista = g;
   visto = dados_ler(AT_ARQ);
   if (visto) {
     int igual = !strncmp(visto, tagNova, strlen(tagNova)) &&
@@ -858,7 +1015,7 @@ static void fechar(void) {
 void atualizacao_abrir(void) {
   if (!mtx) return;
   SDL_LockMutex(mtx);
-  if (tagNova[0]) { aberto = 1; mostrado = 1; reiniciarVista(); }
+  if (tagNova[0]) { aberto = 1; geracaoVista = geracao; reiniciarVista(); }
   SDL_UnlockMutex(mtx);
 }
 

@@ -1827,8 +1827,10 @@ void app_atualizar(float dt, Uint32 agora) {
       telemetria_primeira_vez();
     // AVISO DE VERSAO NOVA: a consulta ao GitHub so parte quando a home esta
     // de pe (nao disputa a rede com o catalogo), e o cartao so abre quando
-    // nenhum outro cartao de primeira vez esta aberto.
-    atualizacao_verificar();
+    // nenhum outro cartao de primeira vez esta aberto. Chamada a cada quadro:
+    // a agenda (atualizacao_agenda_vence) decide se ja e hora de reconsultar
+    // (~6 h), e nunca com o mini player tocando.
+    if (!player_mini_ativo()) atualizacao_verificar();
     if (!registro_aberto() && !sintro_aberto() && !novidades_aberto() &&
         !novidades11_aberto() && !novidades12_aberto() && !novidades13_aberto() && !novidades131_aberto() && !novidades132_aberto() && !novidades133_aberto() && !novidades142_aberto() && !novidades148_aberto() && !novidades160_aberto() && !pipintro_aberto())
       atualizacao_mostrar_se_houver();

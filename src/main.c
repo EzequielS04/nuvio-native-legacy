@@ -52,6 +52,7 @@
 #include "simklauth.h"
 #include "app.h"
 #include "registro.h"
+#include "atualizacao.h"
 #include "avisos.h"
 #include "seguro.h"
 #include "video.h"
@@ -927,8 +928,15 @@ int main(int argc, char **argv) {
           default: break;
         }
         if (ev) avisos_sinal(ev, (float)rssMB());
+        // VOLTOU DO SEGUNDO PLANO: a reconsulta de versao vencida espera uns
+        // segundos em vez de sair junto com tudo o que acorda (atualizacao.h).
+        if (e.window.event == SDL_WINDOWEVENT_SHOWN ||
+            e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED ||
+            e.window.event == SDL_WINDOWEVENT_RESTORED)
+          atualizacao_retomou();
         continue;
       }
+      if (e.type == SDL_APP_DIDENTERFOREGROUND) atualizacao_retomou();
       // PONTEIRO (Magic Remote, issue #99): mouse, rodinha e os avisos 484/485
       // de cursor do webOS ficam la; o que ele traduz em tecla chega a
       // app_evento como se viesse do D-pad.

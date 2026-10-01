@@ -10,6 +10,7 @@
 // de quem nunca abriu o app) e a captura nao mexe no fileirasui.txt de quem
 // roda o teste.
 #include "ajustes.h"
+#include "atualizacao.h"
 #include "badges.h"
 #include "rail_shot.h"
 #include "fileiras.h"
@@ -56,6 +57,8 @@ static const char *const AJ_IDS[] = {
 };
 
 extern int ajustes_teste_focar_opcao(int op);
+extern void atualizacao_teste_estado(int busca, const char *tag);
+extern int ajustes_teste_op_atualizar(void);
 extern int ajustes_teste_familia_previa(int op);
 extern void ajustes_teste_fonte_interface(int familia);
 extern void ajustes_teste_tema(int tema, int vidro);
@@ -157,6 +160,26 @@ int main(int argc, char **argv) {
   if (getenv("NUVIO_SHOT_TEMA") || getenv("NUVIO_SHOT_VIDRO"))
     ajustes_teste_tema(getenv("NUVIO_SHOT_TEMA") ? atoi(getenv("NUVIO_SHOT_TEMA")) : -1,
                        getenv("NUVIO_SHOT_VIDRO") && atoi(getenv("NUVIO_SHOT_VIDRO")));
+
+  // A LINHA "Procurar atualização" NOS ESTADOS (01/10/2026): sem versao nova
+  // (antes de procurar, procurando, em dia, sem rede) e com versao nova.
+  if (getenv("NUVIO_AJUSTES_ATUALIZAR")) {
+    static const struct { int busca; const char *tag; const char *nome; } est[] = {
+      { ATUALIZACAO_BUSCA_NADA, "", "nada" },
+      { ATUALIZACAO_BUSCA_PROCURANDO, "", "procurando" },
+      { ATUALIZACAO_BUSCA_EM_DIA, "", "em-dia" },
+      { ATUALIZACAO_BUSCA_ERRO, "", "erro" },
+      { ATUALIZACAO_BUSCA_NOVA, "9.9.9", "nova" },
+    };
+    int op = ajustes_teste_op_atualizar();
+    for (i = 0; i < (int)(sizeof est / sizeof *est); i++) {
+      atualizacao_teste_estado(est[i].busca, est[i].tag);
+      assert(ajustes_teste_focar_opcao(op));
+      snprintf(nome, sizeof nome, "%s-atualizar-%s.png", saida, est[i].nome);
+      captura(nome, w);
+    }
+    goto fim_capturas;
+  }
 
   if (getenv("NUVIO_AJUSTES_OPCOES")) {
     static const char *const FAMILIAS[] = {
