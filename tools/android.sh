@@ -69,6 +69,12 @@ done
 echo "[4/5] gradle"
 GR=(android/gradlew -p android --console=plain -Pnuvio.sdlSrc="$CACHE/src" -Pnuvio.estagio="$EST")
 TAREFAS=(assembleDebug)
+# Chave de release FIXA (o Android so atualiza por cima com a mesma
+# assinatura): ~/.nuvio-android/release.env, fora do repo, chmod 600. A copia
+# de seguranca e o item do Vaultwarden. Variaveis no ambiente ganham do arquivo.
+if [ -z "${NUVIO_KEYSTORE:-}" ] && [ -f "$HOME/.nuvio-android/release.env" ]; then
+  set -a; . "$HOME/.nuvio-android/release.env"; set +a
+fi
 [ -n "${NUVIO_KEYSTORE:-}" ] && TAREFAS+=(assembleRelease)
 "${GR[@]}" "${TAREFAS[@]}"
 

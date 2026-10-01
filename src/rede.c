@@ -1428,10 +1428,69 @@ static int contadorVigia(void *u, long long dt, long long dn, long long ut, long
   return 0;
 }
 
+#ifdef NV_ANDROID
+static int medirUma(const char *url, const char *const *cab, int segundos,
+                    long inicio, long long maxBytes, volatile int *cancelado,
+                    int *kbps, int nMax, RedeVazao *res,
+                    char *final, unsigned tamFinal);
+// ANDROID: o player baixa arquivo progressivo em VAZ_ANDROID_CONEXOES conexoes
+// ao mesmo tempo (ParaleloDataSource.kt), porque o Android limita a janela TCP
+// de cada uma (~20 Mbps a 250 ms do debrid na TCL Smart TV Pro, 30/09/2026).
+// A medida tem de ser do MESMO jeito, senao diz "ate 9 GB" para quem toca 40 GB
+// sem parar: as conexoes leem trechos distantes do mesmo arquivo e os baldes
+// por segundo somam. Resultado, status e URL final sao os da primeira.
+#define VAZ_ANDROID_CONEXOES 4
+#define VAZ_ANDROID_SALTO (256L * 1024L * 1024L)
+typedef struct {
+  const char *url; const char *const *cab; int segundos; long inicio;
+  long long maxBytes; volatile int *cancelado;
+  int kbps[VAZ_SEG_BALDES]; int n; RedeVazao res;
+} VazExtra;
+static void *vazExtraFio(void *a) {
+  VazExtra *x = (VazExtra *)a;
+  x->n = medirUma(x->url, x->cab, x->segundos, x->inicio, x->maxBytes, x->cancelado,
+                  x->kbps, VAZ_SEG_BALDES, &x->res, NULL, 0);
+  return NULL;
+}
 int rede_medir_vazao(const char *url, const char *const *cab, int segundos,
                      long inicio, long long maxBytes, volatile int *cancelado,
                      int *kbps, int nMax, RedeVazao *res,
                      char *final, unsigned tamFinal) {
+  VazExtra ex[VAZ_ANDROID_CONEXOES - 1];
+  pthread_t fio[VAZ_ANDROID_CONEXOES - 1];
+  int vivo[VAZ_ANDROID_CONEXOES - 1];
+  int k, i, n;
+  for (k = 0; k < VAZ_ANDROID_CONEXOES - 1; k++) {
+    memset(&ex[k], 0, sizeof ex[k]);
+    ex[k].url = url; ex[k].cab = cab; ex[k].segundos = segundos;
+    ex[k].inicio = inicio + (long)(k + 1) * VAZ_ANDROID_SALTO;
+    ex[k].maxBytes = maxBytes; ex[k].cancelado = cancelado;
+    vivo[k] = pthread_create(&fio[k], NULL, vazExtraFio, &ex[k]) == 0;
+  }
+  n = medirUma(url, cab, segundos, inicio, maxBytes, cancelado, kbps, nMax, res, final, tamFinal);
+  for (k = 0; k < VAZ_ANDROID_CONEXOES - 1; k++) {
+    if (!vivo[k]) continue;
+    pthread_join(fio[k], NULL);
+    // Arquivo menor que o salto (416) ou trecho que falhou: so nao soma.
+    if (ex[k].n <= 0 || !kbps) continue;
+    for (i = 0; i < ex[k].n && i < nMax; i++) {
+      kbps[i] += ex[k].kbps[i];
+      if (i >= n) n = i + 1;
+    }
+    if (res) res->bytes += ex[k].res.bytes;
+  }
+  return n;
+}
+static int medirUma(const char *url, const char *const *cab, int segundos,
+                    long inicio, long long maxBytes, volatile int *cancelado,
+                    int *kbps, int nMax, RedeVazao *res,
+                    char *final, unsigned tamFinal) {
+#else
+int rede_medir_vazao(const char *url, const char *const *cab, int segundos,
+                     long inicio, long long maxBytes, volatile int *cancelado,
+                     int *kbps, int nMax, RedeVazao *res,
+                     char *final, unsigned tamFinal) {
+#endif
   static const Contador vazio;
   Contador ct = vazio;
   char faixa[40];

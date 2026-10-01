@@ -160,6 +160,8 @@ object NvPlayer {
     private fun abrirMain(url: String, cabecalhos: String, reabrindo: Boolean) {
         val act = activity ?: return
         liberar()
+        hdrRecriado = false; quadroVisto = false
+        principal.removeCallbacks(recriar)
         val minha = sessao
         urlAtual = url
         cabAtual = cabecalhos
@@ -332,10 +334,34 @@ object NvPlayer {
         // recortado e nao sai; entra no esticar e fica esticado"). Recriar a
         // Surface (GONE -> VISIBLE) faz o compositor montar camada nova com a
         // geometria nova; o ExoPlayer troca a saida do decoder sem recarregar.
-        if (mudou && player != null && sv.visibility == View.VISIBLE && sv.holder.surface?.isValid == true) {
+        if (mudou) recriarSuperficie(RECRIA_ESPERA_MS)
+    }
+
+    // Recriar a Surface custa um quadro preto e, em rajada (aspecto apertado
+    // varias vezes), travava: as trocas JUNTAM numa so, RECRIA_ESPERA_MS depois
+    // da ultima. A mesma recriacao liga o HDR da TCL (ver onRenderedFirstFrame).
+    private const val RECRIA_ESPERA_MS = 350L
+    private var hdrRecriado = false
+    private var quadroVisto = false
+    private val recriar = Runnable {
+        val sv = superficie
+        if (player != null && sv != null && sv.visibility == View.VISIBLE && sv.holder.surface?.isValid == true) {
             sv.visibility = View.GONE
             principal.post { if (player != null) sv.visibility = View.VISIBLE }
         }
+    }
+    private fun recriarSuperficie(atrasoMs: Long) {
+        principal.removeCallbacks(recriar)
+        principal.postDelayed(recriar, atrasoMs)
+    }
+    // A TCL so liga o modo HDR do painel quando a Surface nasce com o decoder
+    // ja em HDR: na abertura ela nasceu antes (SDR) e o HDR so aparecia depois
+    // de trocar o aspecto (dono, 30/09). Uma recriacao no primeiro quadro HDR.
+    private fun hdrNaSuperficie() {
+        if (hdrRecriado || !quadroVisto || ultHdr.isEmpty() || ultHdr == "none") return
+        hdrRecriado = true
+        Log.i(TAG, "HDR ($ultHdr): recria a superficie para a TV ligar o modo HDR")
+        recriarSuperficie(200)
     }
 
     // --- escolha de faixa ----------------------------------------------------
@@ -401,6 +427,8 @@ object NvPlayer {
         override fun onRenderedFirstFrame() {
             if (minha != sessao) return
             ev(EV_PRIMEIRO_QUADRO)
+            quadroVisto = true
+            hdrNaSuperficie()
         }
 
         override fun onVideoSizeChanged(v: VideoSize) {
@@ -539,5 +567,6 @@ object NvPlayer {
         if (hdr == ultHdr && dv == ultDv && atmos == ultAtmos) return
         ultHdr = hdr; ultDv = dv; ultAtmos = atmos
         try { nativeHdr(hdr, dv, atmos) } catch (e: UnsatisfiedLinkError) { }
+        hdrNaSuperficie()
     }
 }

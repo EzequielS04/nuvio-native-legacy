@@ -116,6 +116,7 @@ class ParaleloDataSource(
     override fun open(dataSpec: DataSpec): Long {
         uri = dataSpec.uri
         transferInitializing(dataSpec)
+        Log.i(TAG, "abrindo ${dataSpec.uri.host} a partir de ${dataSpec.position}")
         pos = dataSpec.position
         // Primeiro pedaco pela URL original: segue os redirecionamentos do debrid
         // uma vez so; os pedacos seguintes vao direto ao endereco final.
@@ -126,6 +127,7 @@ class ParaleloDataSource(
             total = cr.substringAfter('/', "").trim().toLongOrNull() ?: C.LENGTH_UNSET.toLong()
         }
         if (code != 206 || total <= 0 || total - pos <= pedaco.toLong() * 2) {
+            Log.i(TAG, "conexao unica: HTTP $code, total=$total, pos=$pos (${dataSpec.uri.host})")
             // Sem Range (ou pequeno demais para valer a pena): conexao unica.
             if (code == 206 || code == 200) {
                 // 206 de um pedaco so: reabre sem teto para o arquivo inteiro.
