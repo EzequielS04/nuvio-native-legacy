@@ -35,6 +35,44 @@
 // reconhecido entra no campo como se tivesse sido digitado. Tambem no Android
 // a tecla "Teclado" chama o IME do sistema (SDL_StartTextInput), que nas TVs
 // com Gboard tem o proprio microfone.
+//
+// LG E O TECLADO DO SISTEMA (pesquisa de 01/10/2026, NAO ligado):
+//   O app usa o libSDL2 DO APARELHO (nenhum .so vai no .ipk). Na C9 (webOS
+//   4.5, firmware W19) ele e o 2.0.4: a lista de simbolos que o webosbrew
+//   extraiu (dev-toolbox-cli, common/data/05.40.20.01-HE_DTV_W19P_AFADATAA/
+//   libSDL2-2.0.so.0.4.1.json) tem SDL_StartTextInput e
+//   SDL_HasScreenKeyboardSupport, mas o Wayland e carregado por dlopen, entao
+//   a lista nao diz se o backend da LG liga o teclado. O compositor oferece o
+//   protocolo de texto: text_model_factory/text_model (show_input_panel,
+//   commit_string) em webosbrew/wayland-protocols protocols/merged/tv-4.x/
+//   text.xml, e text_model_interface em libwayland-webos-client de varios
+//   firmwares. O port do webosbrew (webosbrew/SDL-webOS, ramo webOS-2.30.x,
+//   src/video/wayland/SDL_waylandwebos_osk.c) implementa exatamente isso:
+//   SDL_StartTextInput -> text_model_activate, commit_string ->
+//   SDL_TEXTINPUT. SUSPEITO (nao medido) que o SDL de fabrica nao faca o
+//   mesmo; o caminho que funciona com certeza e embarcar o SDL-webOS no .ipk,
+//   uma troca grande (video exportado, teclas, cursor passam por ele).
+//   spot_abrir loga uma linha "[spotlight] lg sdl X.Y.Z osk=N textinput=N"
+//   por sessao: osk=1 diria que o SDL da TV afirma ter teclado de tela.
+//   Nada foi testado na TV.
+//
+// SAMSUNG .wgt E A VOZ (pesquisa de 01/10/2026, NAO adicionado):
+//   webapis.voiceinteraction exige o privilegio
+//   http://developer.samsung.com/privilege/voicecontrol, nivel Public, desde
+//   Tizen 6.0 (developer.samsung.com/smarttv/develop/api-references/
+//   samsung-product-api-references/voiceinteraction-api.html). O .wgt normal
+//   declara required_version 5.5 (tools/tizen-config.xml).
+//   INSTALACAO EM 4/5, pelo codigo aberto do verificador (git.tizen.org,
+//   platform/core/security/privilege-checker, capi/src/privilege_manager.c,
+//   ramos tizen_4.0, tizen_5.0, tizen_5.5 e tizen_6.0): privilegio que nao esta
+//   no banco da versao (ou emitido depois do required_version) volta como
+//   PRVMGR_ERR_NO_EXIST_PRIVILEGE e o laco de privilege_manager_verify_privilege
+//   SEGUE; so recusam a instalacao nome com "/internal/", privilegio da lista
+//   negra e nivel acima do certificado (MISMATCHED_PRIVILEGE_LEVEL, que nao e o
+//   caso: voicecontrol e Public). Ou seja: pelo Tizen aberto, NAO quebra. NAO
+//   MEDIDO numa Samsung 2018-2020: o firmware de produto e fechado e pode
+//   divergir. Mesmo instalando, em 4/5 webapis.voiceinteraction nao existe, e
+//   quem usar tem de testar a presenca antes. Nada foi adicionado.
 #ifndef NV_SPOTLIGHT_H
 #define NV_SPOTLIGHT_H
 #include <SDL2/SDL.h>

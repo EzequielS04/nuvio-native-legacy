@@ -642,6 +642,19 @@ void spot_abrir(int voz) {
   memset(entraLin, 0, sizeof entraLin);
   remontar();
   printf("[spotlight] aberto (%s)\n", voz ? "voz" : "tecla");
+#if defined(__linux__) && !defined(NV_TPK) && !defined(NV_ANDROID) && !defined(__EMSCRIPTEN__)
+  // LG: o teclado do SISTEMA por SDL_StartTextInput nao esta ligado (ver
+  // spotlight.h, "LG E O TECLADO DO SISTEMA"). Uma linha por sessao para o
+  // D1 dizer o que o SDL do aparelho responde, sem chamar nada que mude a tela.
+  { static int dito;
+    if (!dito) {
+      SDL_version v;
+      dito = 1;
+      SDL_GetVersion(&v);
+      printf("[spotlight] lg sdl %d.%d.%d osk=%d textinput=%d\n", v.major, v.minor, v.patch,
+             (int)SDL_HasScreenKeyboardSupport(), (int)SDL_IsTextInputActive());
+    } }
+#endif
   fflush(stdout);
   if (voz && ditadoDisponivel()) ditar();
 }
