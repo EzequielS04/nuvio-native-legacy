@@ -340,7 +340,10 @@ static const char *const TEMAS[][2] = {
   { "revenge", "vingança" }, { "robot", "robôs" }, { "romance", "romance" },
   { "sci-fi", "ficção científica" }, { "secret identity", "identidade secreta" },
   { "serial killer", "assassino em série" }, { "small town", "cidade pequena" },
-  { "space", "espaço" }, { "space travel", "viagem espacial" }, { "spy", "espiões" },
+  // "espaço sideral", e nao "espaço": essa e a chave de i18n do ROTULO da tecla
+  // de espaco (busca.c, spotlight.c, teclado.c), e com uma chave para os dois a
+  // tecla saia "Weltraum"/"космос" (tests/espaco.sh).
+  { "space", "espaço sideral" }, { "space travel", "viagem espacial" }, { "spy", "espiões" },
   { "superhero", "super-heróis" }, { "supernatural", "sobrenatural" },
   { "survival", "sobrevivência" }, { "teenager", "adolescência" },
   { "time loop", "loop temporal" }, { "time travel", "viagem no tempo" },

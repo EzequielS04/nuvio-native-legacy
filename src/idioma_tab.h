@@ -2651,6 +2651,7 @@
   { "episódios", "episodes" },
   { "escolhido em Ajustes", "chosen in Settings" },
   { "espaço", "space" },
+  { "espaço sideral", "space" },
   { "esperança", "hope" },
   { "espionagem", "espionage" },
   { "espiões", "spy" },

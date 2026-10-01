@@ -2652,6 +2652,7 @@
   T("episódios", "episodi"),
   T("escolhido em Ajustes", "scelto nelle Impostazioni"),
   T("espaço", "spazio"),
+  T("espaço sideral", "spazio"),
   T("esperança", "speranza"),
   T("espionagem", "spionaggio"),
   T("espiões", "spia"),

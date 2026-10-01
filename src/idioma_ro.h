@@ -2651,6 +2651,7 @@
   T("episódios", "episoade"),
   T("escolhido em Ajustes", "ales în Setări"),
   T("espaço", "spațiu"),
+  T("espaço sideral", "spațiu"),
   T("esperança", "speranță"),
   T("espionagem", "spionaj"),
   T("espiões", "spioni"),
