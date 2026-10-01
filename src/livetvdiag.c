@@ -52,7 +52,7 @@
 #endif
 
 #define LTD_MAX          6
-#define LTD_PLAYER_MS    20000u  // acima dos 15 s do Xtream: ve quem abre aos 14
+#define LTD_PLAYER_MS    18000u  // acima dos 15 s do Xtream: ve quem abre aos 14
 #define LTD_MOSTRA_MS    1500u   // o quadro fica na tela um instante depois de abrir
 #define LTD_PAUSA_MS     1000u   // o provedor solta a conexao entre um pedido e outro
 #define LTD_TRECHO_B     786431L
@@ -75,6 +75,11 @@ typedef struct {
   // player
   int  testou, tocou, decoder, quadroMs, largura, altura, falha;
   char erro[64];
+  // MODOS DO LOAD (video_definir_modo_live): cada formato passa pelos modos
+  // A/B/C ate um tocar; o resultado de cada um fica para o registro e a
+  // recomendacao. modoOk = o que tocou, -1 nenhum.
+  int  modoFeito, modoOk;
+  int  modoFalha[3], modoQuadroMs[3];
 } LtdFormato;
 
 typedef struct {
@@ -93,9 +98,10 @@ static struct {
   XtreamConta conta;
   int kbps, kbpsPior, latenciaMs, redeMedida;
   // player em curso
-  int pfFormato, pfVivo;
+  int pfFormato, pfModo, pfVivo;
   Uint32 pfDesde, pfTocouEm, pausaAte;
   LtdRecomendacao rec;
+  int recModo, tocouModo[3];   // modo do load que mais tocou; -1 = nenhum
   int aplicado, enviou;
   _Atomic int fioOcupado;
   volatile int cancelado;
@@ -158,6 +164,17 @@ static int sondarTrecho(LtdFormato *f, const char *url, const char *const *cabs)
   if (!f->http) f->http = st;
   f->curl = er;
   f->bytes = n;
+  if (b && n > 0 && n < 4096) {
+    // CORPO PEQUENO DEMAIS PARA SER VIDEO (#158, registro 14520: o .ts direto
+    // devolveu 663 B ao curl enquanto o uMS bufferizava). Diz o que e, sem
+    // imprimir o corpo (pode trazer URL com usuario e senha).
+    const char *tipo = strstr(b, "#EXTM3U") ? "playlist m3u" : (strstr(b, "<html") || strstr(b, "<HTML") ||
+                       strstr(b, "<!DOCTYPE")) ? "html" : (b[0] == '{' || b[0] == '[') ? "json" : "outro";
+    long imprim = 0, k;
+    for (k = 0; k < n; k++) if ((b[k] >= 32 && b[k] < 127) || b[k] == '\n' || b[k] == '\r') imprim++;
+    printf("[livetv-diag] corpo curto: %ld B, %s, %ld%% texto, 0x47 no inicio=%d, tem http=%d\n", n, tipo,
+           imprim * 100 / n, (unsigned char)b[0] == 0x47, strstr(b, "http") != NULL);
+  }
   if (b && n > 0) {
     TsSonda t;
     ts_sondar((const unsigned char *)b, n, &t);
@@ -281,6 +298,26 @@ static void *fioRede(void *u) {
     if (!x->tentado) continue;
     if (f == F_HLS) sondarHls(x, x->url, cabs);
     else sondarTrecho(x, x->url, cabs);
+    // O MESMO .ts COM USER-AGENT DE PLAYER: o provedor pode entregar outra
+    // coisa ao "Nuvio/1.0" do curl e ao player (hipotese 3 do #158).
+    if (f == F_TS && x->tentado && !x->servido && !L.cancelado) {
+      static const char *const ua[] = { "User-Agent: VLC/3.0.20 LibVLC/3.0.20", NULL };
+      RedeControle ctl = { LTD_TRECHO_B + 1, &L.cancelado };
+      RedeMedida md;
+      long n = 0;
+      char *b2;
+      memset(&md, 0, sizeof md);
+      b2 = rede_baixar_bin_medido_controle(x->url, 8, ua, &ctl, &n, &md);
+      { TsSonda t; char r[300] = "-";
+        if (b2 && n > 0) { ts_sondar((const unsigned char *)b2, n, &t); ts_resumo(&t, r, sizeof r); }
+        printf("[livetv-diag] rede %s TS com UA de player: HTTP %d %ld B em %lu ms | %s\n", it->nome,
+               md.status, n, md.ms, r);
+        if (b2 && n > 0 && t.deslocamento >= 0) {
+          codecDe(&t, x); x->servido = 1; x->bytes = n; x->ms = (int)md.ms;
+          if (md.ms) x->kbps = (int)((double)n * 8.0 / (double)md.ms);
+        } }
+      free(b2);
+    }
     printf("[livetv-diag] rede %s %s: HTTP %d curl=%d %ld B em %d ms (%d kbps) %s%s%s%s\n",
            it->nome, f == F_HLS ? "HLS" : "TS", x->http, x->curl, x->bytes, x->ms, x->kbps,
            x->servido ? "video TS" : (f == F_HLS && x->http >= 200 && x->http < 300) ? "playlist sem video" : "sem video",
@@ -334,11 +371,22 @@ static int proximoFormato(const LtdItem *it) {
 static int algumTocou(const LtdItem *it) { return it->f[0].tocou || it->f[1].tocou; }
 
 static GfxRect quadroPlayer;   // onde o video aparece; o desenho atualiza
+// Quantos modos cada formato tenta: o HLS (que a rede provou ser video) os
+// tres; o TS os tres nos dois primeiros canais e so o padrao nos outros —
+// para o teste caber em poucos minutos.
+static int nModos(int f) {
+  if (!LTD_TEM_PLAYER) return 1;
+  return f == F_HLS || L.atual < 2 ? 3 : 1;
+}
+static const char *letraModo(int m) { return m == 1 ? "B" : m == 2 ? "C" : "A"; }
+
 static void iniciarPlayer(int f) {
   LtdItem *it = &L.it[L.atual];
   LtdFormato *x = &it->f[f];
-  x->testou = 1;
+  if (!x->modoFeito) x->modoOk = -1;
   L.pfFormato = f;
+  L.pfModo = x->modoFeito;
+  video_definir_modo_live(L.pfModo);
   L.pfDesde = SDL_GetTicks();
   L.pfTocouEm = 0;
   L.estado = E_PLAYER;
@@ -350,7 +398,6 @@ static void iniciarPlayer(int f) {
   if (L.pfVivo && quadroPlayer.w > 1.0f)
     video_janela((int)quadroPlayer.x, (int)quadroPlayer.y, (int)quadroPlayer.w, (int)quadroPlayer.h);
   if (!L.pfVivo) {
-    x->testou = LTD_TEM_PLAYER;
     x->falha = LTD_TEM_PLAYER ? LTD_ERRO_PLAYER : LTD_SEM_TESTE;
     snprintf(x->erro, sizeof x->erro, "%s", LTD_TEM_PLAYER ? "load recusado" : "");
   }
@@ -363,12 +410,12 @@ static void fecharPlayer(void) {
 }
 
 static void logPlayer(const LtdItem *it, const LtdFormato *x, int f) {
-  if (x->tocou)
-    printf("[livetv-diag] player %s %s: tocou em %d ms, %dx%d\n", it->nome, f == F_HLS ? "HLS" : "TS",
-           x->quadroMs, x->largura, x->altura);
+  if (x->tocou && x->modoOk == L.pfModo)
+    printf("[livetv-diag] player %s %s modo %s: tocou em %d ms, %dx%d\n", it->nome, f == F_HLS ? "HLS" : "TS",
+           letraModo(L.pfModo), x->quadroMs, x->largura, x->altura);
   else
-    printf("[livetv-diag] player %s %s: nao tocou (%s%s%s) decoder=%d buffer=%.1fs\n", it->nome,
-           f == F_HLS ? "HLS" : "TS",
+    printf("[livetv-diag] player %s %s modo %s: nao tocou (%s%s%s) decoder=%d buffer=%.1fs\n", it->nome,
+           f == F_HLS ? "HLS" : "TS", letraModo(L.pfModo),
            x->falha == LTD_SEM_DECODER ? "dado chegou, decoder mudo" :
            x->falha == LTD_SEM_RESPOSTA ? "nada chegou" :
            x->falha == LTD_SEM_TESTE ? "sem pipeline nesta plataforma" : "erro",
@@ -399,6 +446,7 @@ static void passoPlayer(Uint32 agora) {
     acabou = 1;
   } else if (video_pos() > 0.05 || video_tocando()) {
     x->tocou = 1;
+    x->modoOk = L.pfModo;
     x->falha = LTD_OK;
     x->quadroMs = (int)d;
     x->decoder = 1;
@@ -412,6 +460,15 @@ static void passoPlayer(Uint32 agora) {
   }
   if (!acabou) return;
   if (L.pfVivo || x->falha != LTD_SEM_TESTE) logPlayer(it, x, L.pfFormato);
+  if (L.pfModo < 3) {
+    x->modoFalha[L.pfModo] = x->modoOk == L.pfModo ? LTD_OK : x->falha;
+    x->modoQuadroMs[L.pfModo] = x->modoOk == L.pfModo ? x->quadroMs : 0;
+  }
+  x->modoFeito++;
+  // O formato acaba quando tocou ou quando os modos dele acabaram; no Mac
+  // (sem pipeline) ele nem conta como testado.
+  if (LTD_TEM_PLAYER && (x->tocou || x->modoFeito >= nModos(L.pfFormato))) x->testou = 1;
+  if (!LTD_TEM_PLAYER) x->modoFeito = 99;
   fecharPlayer();
   // O OUTRO FORMATO so se este nao tocou: ve se o HLS abre onde o TS nao abre.
   if (!x->tocou && LTD_TEM_PLAYER) {
@@ -441,15 +498,24 @@ static void recomendar(void) {
       n++;
     }
   ltd_recomendar(c, n, &L.rec);
+  // MODO DO LOAD: o que mais tocou; empate fica com o menor (A, o de sempre).
+  memset(L.tocouModo, 0, sizeof L.tocouModo);
+  for (i = 0; i < L.n; i++)
+    for (f = 0; f < 2; f++)
+      if (L.it[i].f[f].tocou && L.it[i].f[f].modoOk >= 0 && L.it[i].f[f].modoOk < 3)
+        L.tocouModo[L.it[i].f[f].modoOk]++;
+  L.recModo = -1;
+  for (f = 0; f < 3; f++) if (L.tocouModo[f] && (L.recModo < 0 || L.tocouModo[f] > L.tocouModo[L.recModo])) L.recModo = f;
   if (L.redeMedida && L.kbps > 0) {
     L.rec.kbpsMediana = L.kbps;
     L.rec.resolucao = ltd_resolucao_pela_vazao(L.kbpsPior > 0 && L.kbpsPior < L.kbps ? (L.kbps + L.kbpsPior) / 2 : L.kbps);
   }
   L.rec.latenciaMs = L.latenciaMs;
   printf("[livetv-diag] recomenda: formato=%d resolucao=%d espera=%d | tocaram HLS %d/%d TS %d/%d | "
-         "sem decoder %d | 10 bits %d | %d kbps\n", L.rec.formato, L.rec.resolucao, L.rec.espera,
+         "sem decoder %d | 10 bits %d | %d kbps | tocaram por modo A %d B %d C %d -> modo %d\n",
+         L.rec.formato, L.rec.resolucao, L.rec.espera,
          L.rec.tocaram[0], L.rec.tentados[0], L.rec.tocaram[1], L.rec.tentados[1], L.rec.semDecoder,
-         L.rec.dezBits, L.rec.kbpsMediana);
+         L.rec.dezBits, L.rec.kbpsMediana, L.tocouModo[0], L.tocouModo[1], L.tocouModo[2], L.recModo);
   fflush(stdout);
 }
 
@@ -535,7 +601,7 @@ enum { B_APLICAR, B_ENVIAR, B_DENOVO, B_N };
 static int botoes(int *lista) {
   int n = 0;
   if (L.estado != E_PRONTO) return 0;
-  if (L.rec.confianca > 0 || L.redeMedida) lista[n++] = B_APLICAR;
+  if (L.rec.confianca > 0 || L.redeMedida || L.recModo >= 0) lista[n++] = B_APLICAR;
   lista[n++] = B_ENVIAR;
   lista[n++] = B_DENOVO;
   return n;
@@ -561,6 +627,7 @@ void livetvdiag_evento(const SDL_Event *e) {
     int b = lista[L.botao];
     if (b == B_APLICAR) {
       ajustes_livetv_aplicar(L.rec.resolucao, L.rec.formato, L.rec.espera);
+      if (L.recModo >= 0) ajustes_livetv_aplicar_modo(L.recModo);
       L.aplicado = 1;
       printf("[livetv-diag] aplicado: resolucao=%d formato=%d espera=%d\n", L.rec.resolucao,
              L.rec.formato, L.rec.espera);
@@ -685,7 +752,11 @@ static void textoResultado(const LtdItem *it, char *res, size_t nr, char *det, s
   if (!it->pronto) { snprintf(res, nr, "%s", i18n("Na fila")); *cor = 3; return; }
   if (ok) {
     segundos(t, sizeof t, ok->quadroMs);
-    snprintf(res, nr, i18n("Tocou em %s (%s)"), t, ok == &it->f[F_HLS] ? "HLS" : "TS");
+    { char fm[48];
+      if (ok->modoOk > 0) snprintf(fm, sizeof fm, i18n("%s · modo %s"), ok == &it->f[F_HLS] ? "HLS" : "TS",
+                                   letraModo(ok->modoOk));
+      else snprintf(fm, sizeof fm, "%s", ok == &it->f[F_HLS] ? "HLS" : "TS");
+      snprintf(res, nr, i18n("Tocou em %s (%s)"), t, fm); }
     *cor = 1;
   } else {
     // A falha mais informativa: a do player, senao a da rede.
@@ -771,13 +842,19 @@ static void desenharTeste(GfxRect r, float ar, float ag, float ab, Uint32 agora)
     snprintf(a, sizeof a, "%s  \xe2\x86\x92  %s", i18n(nomeEsperaOpcao(ec)), i18n(nomeEsperaOpcao(L.rec.espera)));
     metrica(r, r.y + 152.0f, "Espera para abrir o canal", a, ec == L.rec.espera ? 214 : (int)(ar * 255),
             ec == L.rec.espera ? 220 : (int)(ag * 255), ec == L.rec.espera ? 230 : (int)(ab * 255));
+    if (L.recModo >= 0) {
+      int mc = ajustes_livetv_modo();
+      snprintf(a, sizeof a, "%s  \xe2\x86\x92  %s", letraModo(mc), letraModo(L.recModo));
+      metrica(r, r.y + 192.0f, "Modo do player da Live TV", a, mc == L.recModo ? 214 : (int)(ar * 255),
+              mc == L.recModo ? 220 : (int)(ag * 255), mc == L.recModo ? 230 : (int)(ab * 255));
+    }
     txt_bloco(TXT_CAPTION, i18n("Ficam em Ajustes › Conteúdo › Live TV, e dá para mudar à mão depois."),
-              150, 160, 174, r.x + 28.0f, r.y + 206.0f, r.w - 56.0f, 30.0f, 1, 3);
+              150, 160, 174, r.x + 28.0f, r.y + 246.0f, r.w - 56.0f, 30.0f, 1, 3);
     return;
   }
   titulo(r, "No player agora", NULL);
   txt_bloco(TXT_CAPTION, i18n(L.estado == E_PRONTO ? "Teste concluído. O vídeo de cada canal aparece aqui enquanto ele é testado."
-                                                   : "Cada canal abre aqui por até 20 s, depois de a rede responder."),
+                                                   : "Cada canal abre aqui por até 18 s em cada modo do player, depois de a rede responder."),
             170, 178, 190, r.x + 28.0f, r.y + 76.0f, r.w - 56.0f, 30.0f, 1, 4);
 }
 
@@ -822,6 +899,11 @@ static void desenharRecomendacoes(GfxRect r, float ar, float ag, float ab) {
     linhaRec(r, &y, i18n("Há canal em 10 bits: muitas TVs não decodificam esse vídeo. Prefira a versão HD ou SD dele."), 244, 196, 150);
   if (L.xtConfig && L.conta.valido && L.conta.maxConexoes > 0 && L.conta.conexoes >= L.conta.maxConexoes)
     linhaRec(r, &y, i18n("Todas as telas da conta estão em uso: feche o Xtream em outro aparelho."), 244, 196, 150);
+  if (L.recModo > 0) {
+    snprintf(a, sizeof a, i18n("Os canais abriram no modo %s do player e não no padrão: Aplicar passa a usá-lo nos canais."),
+             letraModo(L.recModo));
+    linhaRec(r, &y, a, (int)(ar * 255), (int)(ag * 255), (int)(ab * 255));
+  }
   if (L.rec.formato == 1)
     linhaRec(r, &y, i18n("O HLS abriu mais canais que o TS nesta TV: o formato do Xtream passa a pedir HLS primeiro."), 214, 220, 230);
   else if (L.rec.formato == 2)

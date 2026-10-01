@@ -1201,6 +1201,7 @@ static void chamarEm(const char *servico, const char *metodo,
   lsChamar(uri, carga, cb, NULL, rot);
 }
 
+static int modoLoad;   // video_modo_live_consumir do load em curso
 static int aoCarregar(LSHandle *h, LSMessage *m, void *u) {
   const char *p = lsPayload(m), *q;
   char b[256];
@@ -1232,8 +1233,13 @@ static int aoCarregar(LSHandle *h, LSMessage *m, void *u) {
   chamar("notifyForeground", b, soLog);
   snprintf(b, sizeof b, "{\"mediaId\":\"%s\"}", midia);
   chamarCtx("subscribe", b, aoEvento, (void *)(uintptr_t)minhaSessao);
-  snprintf(b, sizeof b, "{\"mediaId\":\"%s\",\"type\":\"video\",\"index\":0}", midia);
-  chamar("selectTrack", b, soLog);
+  // MODO 1/2 (#158): sem selectTrack antes do sourceInfo — o pipeline de live
+  // ainda nao sabe que faixas tem, e e a unica chamada que este app manda que
+  // o navegador e o Kodi nao mandam no comeco.
+  if (!modoLoad) {
+    snprintf(b, sizeof b, "{\"mediaId\":\"%s\",\"type\":\"video\",\"index\":0}", midia);
+    chamar("selectTrack", b, soLog);
+  }
   snprintf(b, sizeof b, "{\"mediaId\":\"%s\"}", midia);
   chamar("play", b, soLog);
   return 1;
@@ -1633,6 +1639,8 @@ int  video_reconectando(void) {
 
 int video_tocar(const char *url) {
   dvRecuado = 0;
+  // O modo vale para esta fonte e para os recarregar dela (tocarInterno).
+  modoLoad = video_modo_live_consumir();
   nv_recon_zerar(&recon);
   reconPermitida = reconProxima; reconProxima = 0;
   reconIniciou = 0; reconErroPend = 0;
@@ -1919,6 +1927,21 @@ static int tocarInterno(const char *url, int comDV) {
   }
   { char hh[768];
     montarHttpHeader(hh, sizeof hh);
+  if (modoLoad == 2) {
+    // PAYLOAD ENXUTO DE LIVE (#158, modo 2): o que o load de um <video> HLS
+    // costuma mandar — transporte dito pelo nome, sem useSeekableRanges nem
+    // bufferControl (que sao de VOD). Experimental, atras de Ajustes.
+    int hls = strstr(url, ".m3u8") != NULL;
+    snprintf(carga, sizeof carga,
+        "{\"payload\":{\"option\":{"
+        "\"appId\":\"space.nuvio.native.legacy\","
+        "%s%s"
+        "\"mediaTransportType\":\"%s\","
+        "\"windowId\":\"%s\"}},"
+        "\"uri\":\"%s\",\"type\":\"media\"}",
+        dolby, hh, hls ? "HLS" : "URI",
+        expWin[0] ? expWin : "window_id_dummy", url);
+  } else
   snprintf(carga, sizeof carga,
       "{\"payload\":{\"option\":{\"useSeekableRanges\":true,"
       "\"appId\":\"space.nuvio.native.legacy\","
@@ -1979,6 +2002,7 @@ static int tocarInterno(const char *url, int comDV) {
   // fluxo ja fazia (depois). A prova e o proximo registro dessa TV mostrar
   // videoInfo.
   if (expWin[0]) expJanelaAplicar();
+  if (modoLoad) { printf("[video] modo do load: %d\n", modoLoad); fflush(stdout); }
   msDoLoad = agoraMs();
   chamarCtx("load", carga, aoCarregar, (void *)(uintptr_t)minhaSessao);
   return 1;
