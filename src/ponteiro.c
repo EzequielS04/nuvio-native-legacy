@@ -5,7 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#if !defined(__APPLE__) && !defined(__EMSCRIPTEN__) && !defined(NV_TPK) && !defined(NV_ANDROID)
+#if (!defined(__APPLE__) && !defined(__EMSCRIPTEN__) && !defined(NV_TPK) && !defined(NV_ANDROID)) || \
+    defined(NV_PONT_WEBOS_TESTE)
 #include <dlfcn.h>
 #define NV_PONT_WEBOS 1
 #endif
@@ -88,6 +89,9 @@ static Uint32 agoraMs(void) { return relogio ? relogio() : SDL_GetTicks(); }
 
 void ponteiro_teste_relogio(Uint32 (*fn)(void)) { relogio = fn; }
 void ponteiro_teste_janela(int w, int h) { janelaW = w; janelaH = h; }
+#ifdef NV_PONT_WEBOS
+void ponteiro_teste_cursor_sistema(SDL_bool (*fn)(SDL_bool)) { cursorSistema = fn; }
+#endif
 
 float ponteiro_x(void) { return px; }
 float ponteiro_y(void) { return py; }
@@ -398,13 +402,25 @@ int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
             visivel = 1; esconder("sistema");
             // O sistema ja escondeu a dele: nada a devolver depois.
             sistemaEscondido = 0;
-          } else if (escondidoSeta) {
+          } else if (escondidoSeta && agora - setaEm < PONT_SETA_JANELA_MS) {
             // O compositor reacendeu a seta dele com o tremor de quem apertou
             // a seta: continua escondido do nosso lado e pede para apagar a dele
             // de novo. O movimento que vencer o limiar a devolve.
 #ifdef NV_PONT_WEBOS
             if (cursorSistema) { cursorSistema(SDL_FALSE); sistemaEscondido = 1; }
 #endif
+          } else if (escondidoSeta) {
+            // 484 LONGE DA SETA (#204): a mao pegou o controle. Apagar a seta do
+            // sistema aqui travou o ponteiro na TV do relato (PowerVR BXE-4-32,
+            // 1,2 GB; log da 1.6.3 a 1.6.5): cada 484 era respondido com outro
+            // apagar (485 uns 40 ms depois), nenhum movimento chegava com ela
+            // apagada, o limiar nunca vencia — 12 tentativas numa sessao, 0
+            // cliques. Na 1.6.1 (sem este ramo) o 485 vinha 0,5 a 17 s depois.
+            // A seta do sistema fica; o nosso hover segue esperando o limiar.
+#ifdef NV_PONT_WEBOS
+            if (sistemaEscondido && cursorSistema) cursorSistema(SDL_TRUE);
+#endif
+            sistemaEscondido = 0;
           } else { reaparecer(); ultimoMov = agora; hover.ok = 0; }
         }
         return 1;
