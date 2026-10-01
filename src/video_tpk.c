@@ -15,7 +15,12 @@
 #include "video_reconexao.h"
 #include "idioma.h"
 #include "linguas.h"
+#include "mkv.h"
+#include "mkvass.h"
+#include "faixasmkv.h"
 #include <SDL2/SDL.h>
+#include <pthread.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -60,6 +65,20 @@ static int reconAudio = -1, reconLeg = -1;
 static volatile int reconFaixasPend;
 static int reconBuscarMs = -1;
 
+// CABECALHO DO MKV (#206). O player do host so da o idioma de cada faixa; o
+// Name ("Forced", "DD 5.1"), a FlagForced e os canais estao nas TrackEntry, e
+// o .wgt ja os mostra por isso. Fonte, nesta ordem: o trecho que a pre-busca
+// do mkvass ja leu (sem rede, e o caso comum: no log da 1.6.5 da QE65Q80A o
+// cabecalho chegou ANTES das faixas), senao um Range proprio num fio, so com o
+// video andando ha 5 s (mesmo gatilho do video_tizen.c). A RECONEXAO reabre o
+// MESMO arquivo: o que foi lido continua valendo.
+// mkvEstado: 0 nada a fazer, 1 procurando, 2 fio na rede, 3 lido (ou desistiu).
+static MkvFaixa mkvFx[MKV_MAX_FAIXAS];
+static volatile int mkvN, mkvEstado, faixasNovas;
+static unsigned mkvGeracao;
+static int fonteMp4;
+static Uint32 mkvOlhou;
+
 __attribute__((visibility("default")))
 void nv_tpk_video_registrar(FnAbrir abrir, FnSemArg parar, FnInt pausar, FnInt buscar,
                             FnInt volume, FnRet janela, FnPos pos) {
@@ -100,6 +119,7 @@ void nv_tpk_video_faixa(int tipo, int idx, const char *lingua) {
   if (tipo == 0) { if (nNovasA >= MAX_FAIXAS) return; f = &novasA[nNovasA++]; }
   else           { if (nNovasL >= MAX_FAIXAS) return; f = &novasL[nNovasL++]; }
   memset(f, 0, sizeof *f);
+  printf("[video] tpk faixa %s%d idioma=%s\n", tipo ? "L" : "A", idx, l[0] ? l : "-");
   f->numero = idx;
   f->ordinalMkv = tipo ? idx : -1;
   if (strcmp(l, "und") && strcmp(l, "unknown")) snprintf(f->idioma, sizeof f->idioma, "%s", l);
@@ -122,6 +142,7 @@ void nv_tpk_video_faixas_fim(int selAudio, int selLeg) {
   (void)selLeg;
   nAudio = nNovasA;
   nNovasA = nNovasL = 0;
+  faixasNovas = 1;   // video_bombear reaplica o cabecalho do MKV, se ja lido
   printf("[video] faixas: %d audio, %d legenda\n", nAudio, nLeg);
   fflush(stdout);
   // Recarregar de reconexao: as faixas que a pessoa tinha, e nao a preferencia.
@@ -190,6 +211,9 @@ static int abrirSessao(void) {
 
 int video_tocar(const char *u) {
   snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : "");
+  mkvGeracao++; mkvN = 0; faixasNovas = 0; mkvOlhou = 0;
+  // Um fio da fonte anterior ainda na rede ve a geracao mudada e descarta.
+  mkvEstado = urlAtual[0] ? 1 : 0;
   nv_recon_zerar(&recon);
   reconPermitida = reconProxima; reconProxima = 0;
   reconIniciou = 0; reconErroPend = 0; reconLinhaRede = 0;
@@ -202,8 +226,77 @@ int  video_reconectando(void) {
   return nv_recon_ativa(&recon) && (recon.pendente || !pronto) ? recon.tentativa : 0;
 }
 
+typedef struct { char url[sizeof urlAtual]; unsigned geracao; } PedidoMkv;
+
+static void guardarMkv(const MkvFaixa *fx, int n) {
+  int i;
+  memcpy(mkvFx, fx, sizeof mkvFx);
+  for (i = 0; i < n; i++)
+    printf("[mkv] faixa num=%d tipo=%d codec=%s idioma=%s nome=%s forcada=%d canais=%d\n",
+           fx[i].numero, fx[i].tipo, fx[i].codec, fx[i].idioma[0] ? fx[i].idioma : "-",
+           fx[i].nome[0] ? fx[i].nome : "-", fx[i].forcado, fx[i].canais);
+  fflush(stdout);
+  mkvN = n;
+  faixasNovas = 1;
+}
+
+static void *fioMkv(void *arg) {
+  PedidoMkv *p = arg;
+  MkvFaixa *fx = calloc(MKV_MAX_FAIXAS, sizeof *fx);
+  int n = fx ? mkv_faixas(p->url, fx, MKV_MAX_FAIXAS) : 0;
+  if (p->geracao == mkvGeracao) {
+    printf("[mkv] sonda pela rede: %d faixa(s)\n", n);
+    if (n > 0) guardarMkv(fx, n);
+    mkvEstado = 3;
+  }
+  free(fx); free(p);
+  return NULL;
+}
+
+// Fio do app. Procura o cabecalho e, quando ha faixas novas, reescreve os
+// rotulos. Sem mutex, como o resto deste arquivo: o rotulo sai de uma vez so.
+static void sondaMkv(double pos) {
+  Uint32 t = SDL_GetTicks();
+  if (mkvEstado == 1 && urlAtual[0] && t - mkvOlhou >= 500) {
+    unsigned char *cab = NULL; long cabN = 0;
+    mkvOlhou = t;
+    if (mkvass_cabecalho(urlAtual, NULL, NULL) && mkvass_cabecalho(urlAtual, &cab, &cabN)) {
+      MkvFaixa *fx = calloc(MKV_MAX_FAIXAS, sizeof *fx);
+      int n = fx ? mkv_faixas_do_trecho(cab, cabN, fx, MKV_MAX_FAIXAS, NULL, 0, NULL) : 0;
+      printf("[mkv] sonda pelo trecho da pre-busca (%ld bytes, sem rede): %d faixa(s)\n", cabN, n);
+      fflush(stdout);
+      if (n > 0) { guardarMkv(fx, n); mkvEstado = 3; }
+      free(fx); free(cab);
+    }
+    // Sem pre-busca (ou Tracks fora do trecho): Range proprio, com o video
+    // andando. MP4 nao tem TrackEntry: nao vale a descida.
+    if (mkvEstado == 1 && pronto && pos >= 5.0) {
+      PedidoMkv *p = fonteMp4 ? NULL : malloc(sizeof *p);
+      pthread_t fio;
+      mkvEstado = 3;
+      if (p) {
+        snprintf(p->url, sizeof p->url, "%s", urlAtual);
+        p->geracao = mkvGeracao;
+        mkvEstado = 2;
+        if (pthread_create(&fio, NULL, fioMkv, p) == 0) pthread_detach(fio);
+        else { free(p); mkvEstado = 3; }
+      }
+    }
+  }
+  if (faixasNovas && mkvN > 0 && (nAudio || nLeg)) {
+    int m;
+    faixasNovas = 0;
+    m = faixasmkv_aplicar(faixaAudio, nAudio, faixaLeg, nLeg, mkvFx, mkvN);
+    printf("[mkv] %d rotulo(s) de faixa vindos do cabecalho\n", m);
+    fflush(stdout);
+    // O idioma pode ter chegado so agora: a preferencia de audio vale de novo.
+    if (m && !reconFaixasPend) escolherAudioPreferido();
+  }
+}
+
 void video_bombear(void) {
   double pos = video_pos();
+  sondaMkv(pos);
   if (pronto && pos > 0.5) reconIniciou = 1;
   if (pronto && reconBuscarMs < 0) nv_recon_progresso(&recon, pos);
   // O seek do recarregar sai com o player ja tocando: o host da Start logo
@@ -355,7 +448,7 @@ unsigned video_bufferando_ms(void) {
 }
 void video_definir_dv(int dv) { (void)dv; }
 void video_definir_cabecalhos(const char *c) { snprintf(cabecalhos, sizeof cabecalhos, "%s", c ? c : ""); }
-void video_definir_mp4(int m) { (void)m; }
+void video_definir_mp4(int m) { fonteMp4 = m != 0; }
 int  video_tocando(void) { return tocando; }
 int  video_pronto(void) { return pronto; }
 int  video_ativo(void) { return ativo; }
