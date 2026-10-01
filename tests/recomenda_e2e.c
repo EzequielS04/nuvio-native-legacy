@@ -117,6 +117,26 @@ int main(void) {
     CONFERE(nItens == antes, "a segunda consulta nao mexeu na lista");
     CONFERE(cursor == cursorAntes, "a segunda consulta nao mexeu no cursor"); }
 
+  // COMUNIDADE NUVIO NATIVE (POST /v1/perfis/comunidade). O .sh publicou os
+  // dois perfis e um "visto recentemente" publico do amigo. A operacao entra
+  // por dentro (socOp), como as outras daqui: socIniciar subiria o fio de rede
+  // e ele correria contra esta chamada direta.
+  socOp = SOC_COMUNIDADE; snprintf(socArg, sizeof socArg, "0"); socEstado = REC_SOC_INDO;
+  tratarSocial(cab);
+  CONFERE(socEstado == REC_SOC_OK, "comunidade respondeu (estado %d)", socEstado);
+  CONFERE(achadosOrigem == 3, "a lista e da comunidade: %d", achadosOrigem);
+  CONFERE(!comFechada, "e nao veio fechada (o .sh publicou o perfil)");
+  { int i, achou = 0;
+    for (i = 0; i < nAchados; i++)
+      if (!strcmp(achados[i].apelido, "amigo e2e")) {
+        achou = 1;
+        CONFERE(!strcmp(achados[i].vendo, "Um Sonho de Liberdade"), "vendo: [%s]", achados[i].vendo);
+        CONFERE(!strcmp(achados[i].relacao, "amigo"), "relacao: [%s]", achados[i].relacao);
+        CONFERE(strlen(achados[i].pub) == 10, "handle: [%s]", achados[i].pub);
+      }
+    printf("comunidade: %d pessoas, mais=%d\n", nAchados, comMais);
+    CONFERE(achou, "o amigo publicado esta na comunidade"); }
+
   printf(falhas ? "recomenda_e2e: %d falhas\n" : "recomenda_e2e: ok\n", falhas);
   return falhas ? 1 : 0;
 }
