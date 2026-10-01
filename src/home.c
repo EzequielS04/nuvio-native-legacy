@@ -5218,12 +5218,14 @@ const char *home_rastro_foco(void) {
   else snprintf(b, sizeof b, "f%d", foco.fileira);
   return b;
 }
+int home_retorno_vale(int indice, double posSeg, double durSeg) {
+  double p;
+  if (indice < 0 || durSeg <= 1.0) return 0;
+  p = posSeg / durSeg;
+  return p >= 0.01 && p * 100.0 < ajustes_cw_concluido();
+}
 void home_registrar_retorno(int indice, double posSeg, double durSeg) {
-  int novo = -1;
-  if (indice >= 0 && durSeg > 1.0) {
-    double p = posSeg / durSeg;
-    if (p >= 0.01 && p * 100.0 < ajustes_cw_concluido()) novo = indice;
-  }
+  int novo = home_retorno_vale(indice, posSeg, durSeg) ? indice : -1;
   if (novo != retomarIndice) { retomarIndice = novo; retomarRev++; }
   else if (novo >= 0) retomarRev++; // atualiza barra/tempo da mesma sessao
   const CatItem *c = novo >= 0 ? cat_item_exato(novo) : NULL;

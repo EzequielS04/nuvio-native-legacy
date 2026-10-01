@@ -1312,6 +1312,7 @@
   T("Marcar %d episódios como assistidos", "%d bölümü izlendi olarak işaretle"),
   T("Marcar T%dE%d como assistido", "S%dB%d bölümünü izlendi olarak işaretle"),
   T("Marcar como assistido", "İzlendi olarak işaretle"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "Bu bölümü işaretle"),
   T("Marcar temporada como assistida (%d)", "Sezonu izlendi olarak işaretle (%d)"),
   T("Marrocos", "Fas"),

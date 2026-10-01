@@ -987,6 +987,31 @@ int avisos_lista_ok(int linha) {
   }
 }
 
+// A ESTREIA AINDA NAO LIDA mais recente (ilhacart.c poe na ilha). Os itens
+// entram no fim da lista, entao o mais novo e o de indice maior.
+int avisos_estreia_pendente(char *id, size_t tamId, char *imdb, size_t tamImdb) {
+  int i, achou = 0;
+  pthread_mutex_lock(&trava);
+  for (i = n - 1; i >= 0; i--)
+    if (itens[i].tipo == AV_AGENDA && !itens[i].visto && itens[i].alvo[0]) {
+      snprintf(id, tamId, "%s", itens[i].id);
+      snprintf(imdb, tamImdb, "%s", itens[i].alvo);
+      achou = 1;
+      break;
+    }
+  pthread_mutex_unlock(&trava);
+  return achou;
+}
+
+void avisos_marcar_visto(const char *id) {
+  int i;
+  if (!id || !id[0]) return;
+  pthread_mutex_lock(&trava);
+  for (i = 0; i < n; i++) if (!strcmp(itens[i].id, id)) itens[i].visto = 1;
+  marcarVisto(id);
+  pthread_mutex_unlock(&trava);
+}
+
 // Tudo lido: o hospedeiro chama ao fechar (o painel proprio e a aba).
 void avisos_marcar_lidos(void) {
   int i;

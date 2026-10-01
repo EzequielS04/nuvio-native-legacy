@@ -1312,6 +1312,7 @@
   T("Marcar %d episódios como assistidos", "将 %d 集标记为已看"),
   T("Marcar T%dE%d como assistido", "将 S%dE%d 标记为已看"),
   T("Marcar como assistido", "标记为已看"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "标记此集为已看"),
   T("Marcar temporada como assistida (%d)", "将本季标记为已看 (%d)"),
   T("Marrocos", "摩洛哥"),

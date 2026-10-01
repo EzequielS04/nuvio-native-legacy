@@ -72,6 +72,7 @@
 #include "telemetria.h"
 #include "avisos.h"
 #include "ilha.h"
+#include "ilhacart.h"
 #include "recintro.h"
 #include "atualizacao.h"
 #include "pipintro.h"
@@ -1201,6 +1202,9 @@ int app_na_home(void) {
 
 void app_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
+  // Qualquer gesto da pessoa: a atividade ao vivo da ilha conta 30 min daqui.
+  if (e->type == SDL_KEYDOWN || e->type == SDL_MOUSEBUTTONDOWN || e->type == SDL_MOUSEWHEEL)
+    ilhacart_tecla(SDL_GetTicks());
 
   // A explicacao de primeira abertura bloqueia o restante da interface ate
   // ser reconhecida ou fechada. Ela aparece na Home, mas pertence ao fluxo de
@@ -1219,6 +1223,8 @@ void app_evento(const SDL_Event *e) {
   // mais importa. Enquanto aberto ele engole todo o teclado, incluindo o KEYUP
   // do toque que o abriu ou fechou (ver a nota da armadilha em registro.c).
   if (registro_evento(e)) return;
+  // O MODAL DA ILHA (ilha.h) e uma camada: aberto, come o teclado todo.
+  if (ilha_evento(e)) return;
   // A CENTRAL DE AVISOS vem logo depois do painel de log: com o toast na tela
   // AZUL/CH+ abrem a lista, e com a lista aberta ela come o teclado. Fora
   // desses dois estados ela nao toca em nada (ver avisos.h).
@@ -1270,15 +1276,26 @@ void app_evento(const SDL_Event *e) {
   // 400 ms: acima do intervalo de repeticao de qualquer controle e bem abaixo
   // de dois toques deliberados. Vale para os dois sentidos (abrir e fechar),
   // porque o defeito nao distingue: o segundo evento e que sobra.
+  //
+  // COM O RELOGIO NA TELA a mesma tecla passa pela ilha (ilha.h, pedido do
+  // dono de 01/10): com um cartao na pilula (atividade ao vivo, estreia) ela
+  // abre o MODAL — e ai o CH+ tambem, como no toast da central —; sem cartao
+  // o painel NASCE da pilula (spainel_abrir_de) em vez de entrar pela borda.
+  // Relogio desligado: o de sempre.
   if(e->type==SDL_KEYDOWN && !e->key.repeat &&
-     (e->key.keysym.sym==SDLK_s || e->key.keysym.scancode==NV_SCANCODE_BLUE) &&
+     (e->key.keysym.sym==SDLK_s || e->key.keysym.scancode==NV_SCANCODE_BLUE ||
+      (ilha_cartao_na_tela() && !spainel_aberto() &&
+       (e->key.keysym.scancode==NV_SCANCODE_CH_UP || e->key.keysym.sym==SDLK_PAGEUP))) &&
      tela==TELA_HOME && !player_aberto() && !player_mini_ativo() &&
      !detail_aberto() && !vertudo_aberta() && !menu_aberto()) {
     static Uint32 ultimoToque;
     Uint32 agoraTecla = SDL_GetTicks();
+    float ix, iy, iw, ih;
     if (agoraTecla - ultimoToque < 400) return;   // repeticao do firmware
     ultimoToque = agoraTecla;
     if(spainel_aberto())spainel_fechar();
+    else if (ilha_cartao_na_tela() && ilha_modal_abrir()) {}
+    else if (ajustes_relogio_ligado() && ilha_rect(&ix, &iy, &iw, &ih)) spainel_abrir_de(ix, iy, iw, ih);
     else spainel_abrir();
     return;
   }
@@ -1949,6 +1966,35 @@ void app_atualizar(float dt, Uint32 agora) {
   { int c = avisos_pediu();
     if (c == AVISOS_ABRIR_SALVOS && !spainel_aberto()) spainel_abrir();
     else if (c == AVISOS_ABRIR_ATUALIZACAO) atualizacao_abrir(); }
+  // A ILHA: cartoes (ilhacart.c) e o que o modal pediu.
+  { const CatItem *ab = detail_aberto() ? cat_item(detail_indice()) : NULL;
+    IlhaCartao ic;
+    int qual = 0, o;
+    ilhacart_atualizar(agora, ab && ab->imdb[0] ? ab->imdb : NULL);
+    o = ilha_pediu(&ic, &qual);
+    if (o == ILHA_PEDIU_SALVOS) {
+      // O PAINEL NASCE DO MODAL: o retangulo de agora e o do modal, que some
+      // seco no mesmo quadro — o painel toma a forma dele e cresce.
+      float ix, iy, iw, ih;
+      if (!spainel_aberto()) {
+        if (ilha_rect(&ix, &iy, &iw, &ih)) spainel_abrir_de(ix, iy, iw, ih);
+        else spainel_abrir();
+      }
+      ilha_modal_fechar(1);
+    } else if ((o == ILHA_PEDIU_TOCAR || o == ILHA_PEDIU_DETALHES) && !player_aberto()) {
+      int idx = cat_indice_por_imdb(ic.imdb);
+      if (qual == ILHA_ESTREIA) avisos_marcar_visto(ic.avisoId);
+      if (idx >= 0) {
+        // O mesmo caminho do OK no card de "Continuar assistindo" com "OK no
+        // card" = Retomar: a pagina abre e a reproducao e pedida junto, no
+        // episodio que o cartao mostrava (cwTocarT/E, issue #93).
+        cwTocarT = cwTocarE = 0; cwEspera = 0;
+        if (o == ILHA_PEDIU_TOCAR && ic.serie && ic.t > 0 && ic.e > 0) { cwTocarT = ic.t; cwTocarE = ic.e; }
+        abrirPorIndice(idx);
+        if (o == ILHA_PEDIU_TOCAR) detail_pedir_reproduzir();
+      } else desc_pedir_titulo(ic.imdb);
+    } else if (o == ILHA_PEDIU_DISPENSAR) ilhacart_dispensar(qual);
+  }
   if (!detail_aberto() && !player_aberto()) {
     const char *alvo = spainel_pediu_abrir();
     if (!alvo) alvo = recomenda_pediu_abrir();   // mesmo contrato, outra origem
@@ -3284,6 +3330,12 @@ void app_desenhar(Uint32 agora) {
       tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL) {
     ilha_relogio_visivel(relogioCabe() && ajustes_relogio_ligado());
     ilha_posicionar(tela == TELA_GUIA);
+    // O painel de Salvos que nasceu da pilula recolhe para ela (o retangulo
+    // do quadro anterior) e, enquanto esta na tela, a cobre.
+    { float ix = 0, iy = 0, iw = 0, ih = 0;
+      int ok = ajustes_relogio_ligado() && ilha_rect(&ix, &iy, &iw, &ih);
+      spainel_recolher_para(ok, ix, iy, iw, ih); }
+    ilha_coberta(spainel_da_ilha());
     ilha_desenhar(agora);
   }
   // O cartao do lembrete fica acima do player e da tela: e um aviso com hora.

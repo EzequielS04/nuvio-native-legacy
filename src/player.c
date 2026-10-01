@@ -25,6 +25,7 @@
 //      esta pausado. Pausado sem controles o usuario fica olhando um quadro
 //      congelado sem saber o que houve.
 #include "player.h"
+#include "ilhacart.h"
 #include "idbase.h"
 #include "dados.h"
 #include "trailer.h"
@@ -1317,6 +1318,7 @@ void player_encerrar(void) {
     int ia = idxAtual();
     const CatItem *ci = item();
     home_registrar_retorno(ia, pos, duracaoSeg);
+    ilhacart_player_saiu(ia, pos, duracaoSeg, epT, epE);
     cat_salvar_progresso_ep(ia, pos, duracaoSeg,epT,epE);
     // E tambem para o Trakt, que e de onde o "continue assistindo" vem: gravar
     // so aqui deixaria este app discordando dos outros aparelhos do dono.

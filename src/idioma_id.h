@@ -1312,6 +1312,7 @@
   T("Marcar %d episódios como assistidos", "Tandai %d episode sudah ditonton"),
   T("Marcar T%dE%d como assistido", "Tandai S%dE%d sudah ditonton"),
   T("Marcar como assistido", "Tandai sudah ditonton"),
+  T("Marcar como visto", "Mark as seen"),
   T("Marcar este episódio", "Tandai episode ini"),
   T("Marcar temporada como assistida (%d)", "Tandai musim sudah ditonton (%d)"),
   T("Marrocos", "Maroko"),

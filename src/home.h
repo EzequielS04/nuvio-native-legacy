@@ -69,6 +69,9 @@ void home_encerrar(void);
 // Registra o titulo interrompido para a faixa contextual "Retomar agora".
 // A faixa so existe enquanto o progresso fizer sentido (nem inicio nem fim).
 void home_registrar_retorno(int indice, double posSeg, double durSeg);
+// O criterio da faixa, sozinho: entre 1% e o Percentual assistido. A ilha
+// (ilhacart.c) usa o mesmo, para a atividade ao vivo durar o mesmo que ela.
+int  home_retorno_vale(int indice, double posSeg, double durSeg);
 int  home_quer_sair(void);
 int  home_pediu_abrir(void);   // OK pressionado: consome o pedido
 int  home_pediu_tocar(void);   // OK num card de retomada com "OK no card" = Retomar

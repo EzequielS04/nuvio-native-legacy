@@ -1311,6 +1311,7 @@
   { "Marcar %d episódios como assistidos", "Mark %d episodes as watched" },
   { "Marcar T%dE%d como assistido", "Mark S%dE%d as watched" },
   { "Marcar como assistido", "Mark as watched" },
+  { "Marcar como visto", "Mark as seen" },
   { "Marcar este episódio", "Mark this episode" },
   { "Marcar temporada como assistida (%d)", "Mark season as watched (%d)" },
   { "Marrocos", "Morocco" },
