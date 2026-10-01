@@ -1264,6 +1264,7 @@ static GfxRect carBuraco(float *raioPx) {
 // O carrossel desenha o fundo neste quadro (folha + cartoes)? Na pagina cheia
 // assentada volta o desenho de sempre (desenhaArteDetalhe), que e o mesmo
 // pixel com a janela do tamanho da tela.
+static float carFolha(void) { return anim_clamp(suave(t) * 3.0f, 0.0f, 1.0f); }
 static int carDesenhaFundo(void) {
   return carro && (cartao > 0.002f || suave(t) < 0.999f || saindo);
 }
@@ -1407,9 +1408,11 @@ int detail_cobre_tela(void) {
   // busca), a conta responde `nao` e a home continua desenhada: e por isso que
   // isto e uma medida de cobertura e nao um limiar novo em `t`.
   if (!aberto) return 0;
-  // Carrossel: a folha e opaca de tela cheia assim que a abertura termina; na
-  // saida a home volta a ser desenhada, porque o cartao encolhe ate ela.
-  if (carro) return !saindo && suave(t) >= 0.999f;
+  // Carrossel: a folha opaca cobre a tela inteira (ver carFolha). Na SAIDA a
+  // home volta a ser desenhada desde o primeiro quadro, mesmo sob a folha: e o
+  // desenho dela que diz onde o cartaz do titulo em cena ficou (home_item_
+  // focado), e o cartao encolhe ate ele.
+  if (carro) return !saindo && carFolha() >= 0.999f;
   { GfxRect r; float opac;
     backdropRect(&r, &opac);
     if (opac < 0.999f) return 0;
@@ -5790,7 +5793,11 @@ static void carFundo(void) {
   float s = suave(t), raio, passo, veuPag, veu, a;
   GfxRect h = carBuraco(&raio), tela = { 0, 0, NV_TELA_W, NV_TELA_H };
   int k;
-  gfx_cor(tela, 0.0f, CAR_FOLHA_R, CAR_FOLHA_G, CAR_FOLHA_B, s);
+  // A FOLHA FECHA EM UM TERCO DA ABERTURA (e abre so no ultimo terco da
+  // volta): e quando ela fica opaca que a home deixa de ser desenhada, e home +
+  // folha misturada + cartoes no mesmo quadro passava de 40 ms na C9 (medido,
+  // 01/10). O video da Apple faz o mesmo: a home some em dois quadros.
+  gfx_cor(tela, 0.0f, CAR_FOLHA_R, CAR_FOLHA_G, CAR_FOLHA_B, carFolha());
   passo = h.w + CAR_VAO;
   veuPag = (1.0f - pg) * ajustes_detalhe_veu();
   veu = veuPag + (CAR_VEU - veuPag) * cartao;
