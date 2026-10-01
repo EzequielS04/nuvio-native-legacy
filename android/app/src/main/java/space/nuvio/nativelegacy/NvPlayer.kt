@@ -171,21 +171,25 @@ object NvPlayer {
                 .setConnectTimeoutMs(15000)
                 .setReadTimeoutMs(20000)
             val props = HashMap<String, String>()
+            var ua: String? = null
             for (linha in cabecalhos.split('\n')) {
                 val i = linha.indexOf(':')
                 if (i <= 0) continue
                 val nome = linha.substring(0, i).trim()
                 val valor = linha.substring(i + 1).trim()
                 if (nome.isEmpty()) continue
-                if (nome.equals("User-Agent", ignoreCase = true)) http.setUserAgent(valor) else props[nome] = valor
+                if (nome.equals("User-Agent", ignoreCase = true)) { http.setUserAgent(valor); ua = valor } else props[nome] = valor
             }
             http.setDefaultRequestProperties(props)
+            // Arquivo progressivo vem em varias conexoes (ParaleloDataSource.kt:
+            // o Android limita a janela TCP de cada uma); HLS/DASH seguem na unica.
+            val rede = ParaleloDataSource.Factory(ua, props, http)
 
             val p = ExoPlayer.Builder(act)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(act)
                     // DefaultDataSource e nao so http: o trailer da Apple chega como
                     // file:// (master reduzido a uma variante em dados/trailer, trailerapple.c).
-                    .setDataSourceFactory(DefaultDataSource.Factory(act, http)))
+                    .setDataSourceFactory(DefaultDataSource.Factory(act, rede)))
                 .build()
             player = p
             // Foco de audio GAIN; perder o foco pausa (o C ve o evento 3).
