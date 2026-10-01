@@ -5103,3 +5103,44 @@ int home_pediu_tocar(void) { int v = pedidoTocar; pedidoTocar = 0; return v; }
 
 // Consome o pedido de abrir o menu lateral: quem le, zera.
 int home_pediu_menu(void) { int v = pedidoMenu; pedidoMenu = 0; return v; }
+
+// CARROSSEL DA DINAMICA (detail.c): os titulos da fileira em foco, na ordem
+// da fileira, e a posicao do card focado entre eles. So nas fileiras de
+// TITULO: destaque, pilha do Top 10, colecoes (atalhos de pasta) e canais
+// devolvem 0 e a pagina abre como nos outros layouts. O "Ver tudo" nao e
+// titulo e nao entra.
+int home_fileira_titulos(int *out, int max, int *pos) {
+  const Fileira *fl;
+  int c, n = 0;
+  if (pos) *pos = -1;
+  if (layoutHome() != HOME_LAYOUT_DINAMICA || focoHero) return 0;
+  if (foco.fileira < 0 || foco.fileira >= nFileiras) return 0;
+  fl = &fileiras[foco.fileira];
+  if (fl->tipo == FILEIRA_CATALOGOS || fileiraEhCanal(fl)) return 0;
+  if (fl->tipo == FILEIRA_TOP10 && fl->stackN) return 0;
+  if (foco.coluna < 0 || foco.coluna >= fl->n) return 0;
+  for (c = 0; c < fl->n && n < max; c++) {
+    int i = fileiraItemIndice(fl, c);
+    if (i < 0 || !cat_item(i)) continue;
+    if (c == foco.coluna && pos) *pos = n;
+    out[n++] = i;
+  }
+  if (pos && *pos < 0) return 0;
+  return n;
+}
+
+// Leva o foco da fileira para o titulo `indice` do catalogo (o que o
+// carrossel deixou em cena), para o Voltar cair nele. A rolagem horizontal
+// segue o foco sozinha no proximo home_atualizar.
+void home_focar_titulo(int indice) {
+  const Fileira *fl;
+  int c;
+  if (focoHero || foco.fileira < 0 || foco.fileira >= nFileiras) return;
+  fl = &fileiras[foco.fileira];
+  for (c = 0; c < fl->n; c++)
+    if (fileiraItemIndice(fl, c) == indice) {
+      foco.coluna = c;
+      foco.colunaLembrada[foco.fileira] = c;
+      return;
+    }
+}
