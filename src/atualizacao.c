@@ -747,7 +747,17 @@ static int fioInstalarApk(void *arg) {
   }
   if (!ok) {
     printf("[atualizacao] baixando o APK (%s)\n", apkUrl); fflush(stdout);
-    buf = rede_baixar_bin(apkUrl, 600, &n);
+    // TRES TENTATIVAS. Logo depois de um anexo novo o GitHub respondeu 504 por
+    // uns minutos (medido em 01/10/2026 com a 1.6.5: o .ipk antigo baixava, o
+    // .apk recem-enviado dava 504, e a mesma URL serviu 30 s depois).
+    { int tent;
+      for (tent = 0; tent < 3; tent++) {
+        if (tent) { printf("[atualizacao] tentando de novo em %d s\n", 10 * tent); fflush(stdout); SDL_Delay(10000u * (unsigned)tent); }
+        n = 0;
+        buf = rede_baixar_bin(apkUrl, 600, &n);
+        if (buf && n > 0) break;
+        free(buf); buf = NULL;
+      } }
     if (!buf || n <= 0) {
       printf("[atualizacao] download do APK falhou\n"); fflush(stdout);
       free(buf); apkFalhou(); return 0;
