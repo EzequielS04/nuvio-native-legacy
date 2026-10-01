@@ -345,6 +345,11 @@ void nv_tpk_tecla(const char *nome, int apertou) {
     { "XF86RaiseChannel", SDLK_s }, { "XF86Blue", SDLK_s },
     { "XF86Red", SDLK_F9 }, { "XF86Green", SDLK_F9 },
     { "Minus", SDLK_MINUS },
+    // SPOTLIGHT (spotlight.h): o microfone do Smart Remote CHEGA como
+    // XF86BTVoice (MEDIDO no D1, 1.6.0 Tizen 6+, "tpk sem mapa: XF86BTVoice").
+    // F6 = abrir pela voz; amarela = F5 = so abrir. XF86Search (controles de
+    // botao "Search") e suposto pelo nome, nao visto no log.
+    { "XF86BTVoice", SDLK_F6 }, { "XF86Search", SDLK_F6 }, { "XF86Yellow", SDLK_F5 },
   };
   SDL_Event e;
   SDL_Keycode k = SDLK_UNKNOWN;

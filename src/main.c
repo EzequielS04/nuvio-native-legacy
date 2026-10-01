@@ -147,6 +147,10 @@ static SDL_Keycode codigoDaTecla(const char *nome) {
   // "verde" abre o diagnostico da Live TV no guia: o `d` e o equivalente de
   // teclado do VERDE (G_SCANCODE_GREEN em guia.c).
   if (!strcmp(nome, "verde")) return SDLK_d;
+  // "spotlight" abre a caixa de busca por cima da tela (a AMARELA), "voz" e o
+  // botao de microfone (F6: abre e, onde ha ditado, ja comeca). spotlight.h.
+  if (!strcmp(nome, "spotlight")) return SDLK_F5;
+  if (!strcmp(nome, "voz"))   return SDLK_F6;
   return 0;
 }
 
@@ -256,6 +260,19 @@ static void teclasInjetadas(void (*entregar)(const SDL_Event *)) {
     // "abrir:tt0121955" abre o titulo direto (app.c). Porta de teste, como
     // "guia".
     if (dp && !strncmp(linha, "abrir:", 6)) { app_abrir_titulo(dp + 1); continue; }
+    // "texto:matrix" digita letra por letra (a-z, 0-9; "_" e espaco), como o
+    // teclado fisico: e o que o Spotlight e a Busca aceitam fora da grade.
+    if (dp && !strncmp(linha, "texto:", 6)) {
+      const char *c;
+      for (c = dp + 1; *c; c++) {
+        SDL_Event t; SDL_zero(t);
+        if (!((*c >= 'a' && *c <= 'z') || (*c >= '0' && *c <= '9') || *c == '_')) continue;
+        t.type = SDL_KEYDOWN; t.key.keysym.sym = *c == '_' ? SDLK_SPACE : (SDL_Keycode)*c;
+        entregar(&t);
+        t.type = SDL_KEYUP; entregar(&t);
+      }
+      continue;
+    }
     // "mover:960,540" e "clicar:960,540" (e "clicar:960,540:hold") fazem o
     // papel do Magic Remote (issue #99), em coordenadas da janela — que na TV
     // sao as do layout. Passam por ponteiro_evento como um evento de mouse de

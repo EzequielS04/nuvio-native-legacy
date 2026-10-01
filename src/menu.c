@@ -114,6 +114,13 @@ static float desliza = 0.0f;
 static float expande = 0.0f;
 static float animFoco[NV_MENU_FOCOS_TV];
 static int   pediuColecao = -1;   // col_folder da pasta escolhida na barra
+// SEGURAR OK EM "BUSCAR" abre o Spotlight (spotlight.h). E o caminho da LG,
+// onde o microfone do Magic Remote e do sistema e nem todo controle tem a
+// amarela. Por isso o OK em Buscar decide na SOLTURA: toque curto = a tela de
+// Busca, como sempre; segurado NV_HOLD_MS = o Spotlight, com o dedo ainda no
+// botao (menu_atualizar), como o menu do cartaz.
+static int    buscaOk, buscaLongo, pediuSpot;
+static Uint32 buscaDesde;
 static void icone(int d, float cx, float cy, float s, float r, float g, float b, float a);
 static void corAvatar(const char *hex, float *r, float *g, float *b);
 static int  tvAtivo(void);
@@ -226,6 +233,7 @@ void menu_abrir(void) {
   // item faria o usuario ler que ja mudou de tela.
   linha = mostra(destino) ? destino : MENU_INICIO;
   aberto = 1;
+  buscaOk = buscaLongo = 0;
 }
 void menu_fechar(void) { aberto = 0; linha = destino; }
 
@@ -267,10 +275,26 @@ static void escolher(void) {
 
 int menu_pediu_trocar(void) { int p = pediuTrocar; pediuTrocar = 0; return p; }
 int menu_pediu_colecao(void) { int c = pediuColecao; pediuColecao = -1; return c; }
+int menu_pediu_spotlight(void) { int p = pediuSpot; pediuSpot = 0; return p; }
 
 void menu_evento(const SDL_Event *e) {
-  if (!aberto || e->type != SDL_KEYDOWN) return;
+  if (!aberto) return;
+  if (e->type == SDL_KEYUP && buscaOk &&
+      (e->key.keysym.sym == SDLK_RETURN || e->key.keysym.sym == SDLK_KP_ENTER)) {
+    int longo = buscaLongo;
+    buscaOk = buscaLongo = 0;
+    if (!longo && linha == MENU_BUSCAR) escolher();
+    return;
+  }
+  if (e->type != SDL_KEYDOWN) return;
   SDL_Keycode k = e->key.keysym.sym;
+  // OK em Buscar so arma; a repeticao do firmware (OK segurado manda KEYDOWNs
+  // separados) nao rearma.
+  if ((k == SDLK_RETURN || k == SDLK_KP_ENTER) && linha == MENU_BUSCAR) {
+    if (!buscaOk) { buscaOk = 1; buscaLongo = 0; buscaDesde = SDL_GetTicks(); }
+    return;
+  }
+  buscaOk = 0;
 
   // Mesmo conjunto de teclas de "voltar" que o detalhe aceita: no controle e o
   // Back, no teclado cada pessoa alcanca uma diferente.
@@ -301,7 +325,13 @@ void menu_evento(const SDL_Event *e) {
 }
 
 void menu_atualizar(float dt, Uint32 agora) {
-  (void)agora;
+  if (buscaOk && !buscaLongo && aberto && agora - buscaDesde >= NV_HOLD_MS) {
+    buscaLongo = 1;
+    pediuSpot = 1;
+    aberto = 0;
+    linha = destino;
+  }
+  if (!aberto) buscaOk = buscaLongo = 0;
   if (tvAtivo()) { tvAtualizar(dt); return; }
   // Recolhido e assentado nao custa nada: nem mola, nem laco pelos destinos.
   if (!aberto && desliza < 0.002f) {

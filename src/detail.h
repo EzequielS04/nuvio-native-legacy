@@ -10,7 +10,15 @@
 #include "home.h"
 
 void detail_abrir(const HomeItem *item);
+// Abre a FILMOGRAFIA de uma pessoa por cima da pagina ja aberta (o mesmo painel
+// do OK num rosto do elenco). Para o Spotlight: a pessoa achada no elenco de um
+// titulo abre a pagina dele e o painel dela na mesma tecla. Sem pagina aberta
+// nao faz nada; Voltar fecha o painel e deixa a pagina do titulo.
+void detail_mostrar_pessoa(long tmdb, const char *nome, const char *foto);
 int  detail_aberto(void);
+// Fecha a pagina pela mesma saida animada do Voltar (Spotlight: uma colecao ou
+// um catalogo escolhido com a pagina aberta abriria POR TRAS dela).
+void detail_fechar(void);
 int  detail_pediu_menu(void);   // ESQUERDA na borda fechou a pagina pedindo a barra
 // 0..1 de quanto o detalhe tomou a tela; a home usa para descer as fileiras.
 float detail_progresso(void);        // 1 enquanto a tela existe, inclusive saindo

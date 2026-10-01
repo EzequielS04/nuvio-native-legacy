@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
+import android.speech.RecognizerIntent
 import android.system.Os
 import android.view.KeyEvent
 import android.view.SurfaceHolder
@@ -196,6 +197,47 @@ class NuvioActivity : SDLActivity() {
         for (f in filhos) copiarAsset("$caminho/$f", File(destino, f))
     }
 
+    // DITADO DO SPOTLIGHT (android_ditado_iniciar/ler, src/android.c). A tela de
+    // voz e a do sistema (Google na maioria das TVs): quem grava e ela, entao o
+    // app nao pede RECORD_AUDIO. O resultado fica aqui ate o C ler.
+    @Volatile private var ditado: String? = null
+    private val PEDIDO_DITADO = 4711
+
+    // Chamado pelo C, do fio do SDL. false = nao ha reconhecedor de voz.
+    fun ditar(): Boolean {
+        val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        if (i.resolveActivity(packageManager) == null) return false
+        ditado = null
+        return try {
+            runOnUiThread {
+                @Suppress("DEPRECATION")
+                try { startActivityForResult(i, PEDIDO_DITADO) } catch (e: Exception) { ditado = "!" }
+            }
+            true
+        } catch (e: Exception) { false }
+    }
+
+    // "=texto", "!" (voltou sem nada) ou null (ainda ouvindo). Consome.
+    fun ditadoLer(): String? {
+        val d = ditado ?: return null
+        ditado = null
+        return d
+    }
+
+    @Deprecated("startActivityForResult e o que o SDLActivity (Activity) oferece")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == PEDIDO_DITADO) {
+            val t = if (resultCode == RESULT_OK)
+                data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() else null
+            ditado = if (t.isNullOrBlank()) "!" else "=$t"
+            return
+        }
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
     // Controle remoto: troca a tecla ANTES do SDL, para cair no SDLK que o app espera.
     override fun dispatchKeyEvent(ev: KeyEvent): Boolean {
         val novo = when (ev.keyCode) {
@@ -212,6 +254,13 @@ class NuvioActivity : SDLActivity() {
             // TCL e a maioria dos controles Android TV nao tem teclas coloridas.
             KeyEvent.KEYCODE_CHANNEL_UP -> KeyEvent.KEYCODE_F7
             KeyEvent.KEYCODE_CHANNEL_DOWN -> KeyEvent.KEYCODE_F8
+            // SPOTLIGHT (spotlight.h). O botao de microfone da maioria dos
+            // controles Android TV manda SEARCH, que o sistema entrega ao app:
+            // vira F6 (abrir + ditado). ASSIST e VOICE_ASSIST o sistema NAO
+            // entrega (KeyEvent: "not delivered to applications"). A amarela
+            // vira F5 (so abrir).
+            KeyEvent.KEYCODE_SEARCH -> KeyEvent.KEYCODE_F6
+            KeyEvent.KEYCODE_PROG_YELLOW -> KeyEvent.KEYCODE_F5
             else -> return super.dispatchKeyEvent(ev)
         }
         return super.dispatchKeyEvent(

@@ -44,6 +44,7 @@
 #include "detail.h"
 #include "menu.h"
 #include "busca.h"
+#include "spotlight.h"
 #include "biblioteca.h"
 #include "explorar.h"
 #include "agendaui.h"
@@ -1195,6 +1196,68 @@ int app_iniciar(const char *dirArte) {
   return 1;
 }
 
+// --- SPOTLIGHT (spotlight.h) ---------------------------------------------------
+// Atalho: F6 (microfone traduzido por plataforma), F5 (amarela traduzida) e a
+// AMARELA da LG direto — menos no Guia, onde ela alterna a vista. Nao abre por
+// cima do player em tela cheia nem do painel de Salvos (que tem fundo parado
+// proprio, no mesmo FBO).
+static int spotAtalho(const SDL_Event *e) {
+  SDL_Keycode k;
+  if (e->type != SDL_KEYDOWN) return 0;
+  k = e->key.keysym.sym;
+  if (k == SPOT_TECLA_VOZ || k == SPOT_TECLA_ABRIR) return 1;
+  return e->key.keysym.scancode == NV_SCANCODE_YELLOW && tela != TELA_GUIA;
+}
+static int spotPode(void) {
+  return tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL && !player_aberto() &&
+         !spainel_aberto() && !guia_overlay_aberta();
+}
+static void spotAbrir(int voz) {
+  static Uint32 ultimo;
+  Uint32 t = SDL_GetTicks();
+  // Segurar a tecla manda KEYDOWNs separados (ver a AZUL em app_evento): um so abre.
+  if (t - ultimo < 400) return;
+  ultimo = t;
+  if (menu_aberto()) menu_fechar();
+  if (ctx_aberto()) return;
+  spot_abrir(voz);
+}
+// O que a pessoa escolheu no Spotlight, ja com a caixa fechada.
+static void spotAtender(void) {
+  SpotPedido p;
+  if (!spot_pediu(&p)) return;
+  switch (p.tipo) {
+    case SPOT_TITULO:
+      abrirPorIndice(p.indice);
+      break;
+    case SPOT_PESSOA:
+      // A pagina do titulo de onde a pessoa veio, com a filmografia por cima.
+      abrirPorIndice(p.indice);
+      detail_mostrar_pessoa(p.tmdb, p.nome, p.arte);
+      break;
+    case SPOT_COLECAO: {
+      const ColFolder *f = col_folder(p.indice);
+      if (f) { detail_fechar(); vertudo_colecao(f); }
+      break; }
+    case SPOT_CATALOGO: {
+      const CatFileira *cf = cat_fileira(p.indice);
+      if (cf && cf->base[0]) { detail_fechar(); vertudo_abrir(cf->base, cf->tipo, cf->catId, cf->titulo); }
+      break; }
+    case SPOT_ADDONS:
+      detail_fechar();
+      addonsui_abrir();
+      trocarTela(TELA_ADDONS);
+      break;
+    case SPOT_CANAL: {
+      CatItem it;
+      if (aguardandoFonte != 2 && guia_item_do_canal(p.id, p.nome, p.base, &it)) tocarCanal(&it);
+      break; }
+    default: break;
+  }
+  printf("[spotlight] escolheu tipo=%d\n", p.tipo);
+  fflush(stdout);
+}
+
 int app_na_home(void) {
   return tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() &&
          !novidades166_aberto();
@@ -1254,6 +1317,10 @@ void app_evento(const SDL_Event *e) {
   // depois, porque e ela que define para QUEM o resto do app vai sincronizar.
   if (tela == TELA_LOGIN)          { login_evento(e);     return; }
   if (tela == TELA_ESCOLHA_PERFIL) { perfilsel_evento(e); return; }
+
+  // O SPOTLIGHT ABERTO e dono de todo o teclado: e uma caixa modal por cima da
+  // tela, e o que ele escolhe so e feito depois de ele fechar.
+  if (spot_aberto()) { spot_evento(e); spotAtender(); return; }
 
   // ALTERNA O PAINEL DE SALVOS, COM REPOUSO — e o repouso e o conserto.
   //
@@ -1442,6 +1509,7 @@ void app_evento(const SDL_Event *e) {
   // por essa tecla, a home volta JA com a barra aberta em vez de exigir um
   // segundo ESQUERDA. `saiuPorEsquerda` e o que o bloco de sair le.
   if (e->type == SDL_KEYDOWN) saiuPorEsquerda = (e->key.keysym.sym == SDLK_LEFT);
+  if (spotAtalho(e) && spotPode()) { spotAbrir(e->key.keysym.sym == SPOT_TECLA_VOZ); return; }
   if (player_aberto()) { player_evento(e); return; }
   if (detail_aberto()) { detail_evento(e); return; }
   // O MENU DO CARTAZ ABERTO PELO PAINEL (segurar OK numa linha de Salvos)
@@ -1548,6 +1616,11 @@ void app_atualizar(float dt, Uint32 agora) {
   // para as telas que lembravam de perguntar. Uma leitura por quadro.
   anim_politica_reduzida = ajustes_animacoes_reduzidas();
   diagnostico_intro_atualizar(dt, agora);
+  // Spotlight: a mola de entrada/saida e o ditado correm em qualquer tela; o
+  // OK segurado em "Buscar" (menu.c) abre por aqui, no quadro em que cruza.
+  spot_atualizar(dt, agora);
+  if (menu_pediu_spotlight() && spotPode()) spotAbrir(0);
+  if (spot_aberto() && !spotPode()) spot_fechar();
   cancelarFonteSeSaiu();
   processarFonteJob();
   // A QUALIDADE DA IMAGEM CHEGA AOS DOIS MODULOS QUE A CONSOMEM, e so quando
@@ -3244,6 +3317,7 @@ static void desenharTelas(Uint32 agora) {
 // cartoes de atualizacao/crash/lembrete, menu aberto, detalhe, "Ver tudo"):
 // a pilula ficaria boiando sobre o veu de outra coisa. Os AVISOS da ilha nao
 // passam por aqui — eles aparecem em qualquer tela fora do player.
+static int spotVeuPronto;   // o veu do Spotlight ja esta na copia congelada
 static int relogioCabe(void) {
   if (tela != TELA_HOME || !homePronta) return 0;
   if (detail_aberto() || vertudo_aberta() || menu_aberto() || ctx_aberto()) return 0;
@@ -3273,7 +3347,40 @@ void app_desenhar(Uint32 agora) {
   // de alpha que o revela, entao o plano de video fica coberto enquanto o
   // painel esta em pe — que e o comportamento desejado para quem parou o app
   // para LER o log.
-  if (!registro_aberto()) desenharTelas(agora);
+  // COM O SPOTLIGHT ASSENTADO O FUNDO CONGELA, como o do painel de Salvos
+  // (spainel_fundo): a tela de tras e o veu sao pintados UMA vez no FBO do
+  // snapshot e os quadros seguintes so copiam — uma camada de tela cheia a
+  // menos por quadro (o veu) e a tela de tras inteira a menos. A copia e
+  // refeita quando o catalogo muda e em 0,4 / 1,5 / 4 s, para a arte que
+  // ainda chegava aparecer. Nada de congelar com video no ar (o PiP pinta o
+  // furo) nem com o painel de Salvos, que usa o mesmo FBO.
+  { static int pronto, refeitas;
+    static unsigned revPronta;
+    static Uint32 desde;
+    static const Uint32 REFAZ[] = { 400, 1500, 4000 };
+    int parar = !registro_aberto() && spot_cheio() && gfx_snap_ok() &&
+                !player_mini_ativo() && !player_aberto() && !spainel_visivel();
+    spotVeuPronto = 0;
+    if (!parar) { pronto = 0; refeitas = 0; }
+    else if (revPronta != cat_revisao()) pronto = 0;
+    else if (pronto && refeitas < 3 && SDL_GetTicks() - desde >= REFAZ[refeitas]) {
+      pronto = 0; refeitas++;
+    }
+    if (parar && pronto) { gfx_snap_desenhar(); spotVeuPronto = 1; }
+    else if (parar) {
+      gfx_snap_comecar();
+      gfx_sem_recorte();
+      glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT);
+      desenharTelas(agora);
+      spot_veu();
+      gfx_sem_recorte();
+      gfx_snap_terminar();
+      gfx_snap_desenhar();
+      if (!refeitas) desde = SDL_GetTicks();
+      pronto = 1; revPronta = cat_revisao();
+      spotVeuPronto = 1;
+    } else if (!registro_aberto()) desenharTelas(agora); }
   // O explicador fica ACIMA de qualquer tela (menos do painel de log, que e
   // ferramenta de diagnostico): ele e a primeira coisa que a pessoa ve depois
   // desta atualizacao, e nada pode aparecer por cima dele.
@@ -3351,6 +3458,7 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto()) recomenda_desenhar(agora);
   CAMADA_SE(pipintro_aberto());
   if (!registro_aberto()) pipintro_desenhar(agora);
+  if (!registro_aberto()) spot_desenhar(agora, spotVeuPronto);
   CAMADA_SE(diagnostico_intro_aberto());
   if (!registro_aberto()) diagnostico_intro_desenhar(agora);
   CAMADA_SE(registro_aberto());
