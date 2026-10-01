@@ -48,7 +48,9 @@ cp deploy/app/fonts/* "$EST/assets/fonts/"
 
 echo "[3/5] chaves (-D) e libs nativas"
 ENVF="$(mktemp)"; trap 'rm -f "$ENVF"' EXIT
-tools/env.sh ${NUVIO_REQUIRE_CORE:+--require-core} --env-file "$ENVF"
+# env.sh le UMA opcao so: a checagem de configuracao vai numa chamada propria.
+[ -z "${NUVIO_REQUIRE_CORE:-}" ] || tools/env.sh --require-core >/dev/null
+tools/env.sh --env-file "$ENVF"
 # KEY=valor -> set(KEY "valor") com escape de \ " $ . Fora do git (build/).
 : > "$EST/nuvio-env.cmake"; chmod 600 "$EST/nuvio-env.cmake"
 while IFS= read -r l; do
