@@ -1889,7 +1889,26 @@ static int assinaturaPrefs(void) {
        | (ajustes_cw_ordem() << 5)
        // O layout muda a FORMA das fileiras (dinAtribuirTipos) e o tamanho do
        // destaque: escolher outro em Ajustes remonta a lista ao voltar.
-       | (ajustes_home_layout() << 8);
+       | (ajustes_home_layout() << 8)
+       // Ligar/desligar o destaque decide se a primeira fileira vira vitrine
+       // (vitrineNaPrimeira).
+       | (ajustes_hero_ligado() ? 1 << 12 : 0);
+}
+
+// A PRIMEIRA FILEIRA DE CATALOGO VIRA VITRINE (cartoes 16:9 grandes) so quando
+// ela e a vitrine da home: na Dinamica, onde a forma de cada fileira sai do que
+// ela e (dinAtribuirTipos), e com o destaque DESLIGADO, quando nada mais faz
+// esse papel.
+//
+// Na Moderna e no Padrao com o destaque ligado, nao (#201, mackojanko: "First
+// row after the Spotlight on top row automatic setting make it different
+// (landscape) from the next other rows"). Ali o destaque ja e a vitrine — e,
+// sem fonte escolhida, percorre OS MESMOS titulos dessa fileira (heroMontarSet
+// cai nos primeiros do catalogo) — entao a fileira repetia o destaque em
+// cartoes deitados e era a unica em Automatico que nao saia como as outras.
+// Quem quer a vitrine ali escolhe "Paisagem grande" no Estilo da fileira.
+static int vitrineNaPrimeira(void) {
+  return ajustes_home_layout() == HOME_LAYOUT_DINAMICA || !ajustes_hero_ligado();
 }
 
 // --- DINAMICA: A FORMA DE CADA FILEIRA SAI DO QUE ELA E ------------------------
@@ -2084,7 +2103,8 @@ static void sincronizarFileiras(void) {
                            ? FILEIRA_CONTINUE : perfilCatalogo(cf->titulo);
     if (!strcmp(cf->chave, "continue_watching")) {
       if (ajustes_cw_estilo() == 2) fileiras[destino].tipo = FILEIRA_NORMAL;
-    } else if (!temDestaque && cf->n > 0 && cf->base[0] && cf->catId[0]) {
+    } else if (!temDestaque && vitrineNaPrimeira() && cf->n > 0 && cf->base[0]
+               && cf->catId[0]) {
       fileiras[destino].tipo = FILEIRA_DESTAQUE;
       temDestaque = 1;
       destaqueIndice = destino;

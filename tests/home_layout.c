@@ -1,6 +1,9 @@
 // Sem janela, rede ou TV: valida composição editorial e foco sobre dados reais
 // de catálogo (fixtures), usando a implementação da Home e do catálogo.
 #include <assert.h>
+// Antes do home.c: os dois acessores viram os do teste (ver homeCom).
+#define ajustes_home_layout teste_home_layout
+#define ajustes_hero_ligado teste_hero_ligado
 #include "../src/home.c"
 
 void cachearte_marcar_grupo(int grupo, const char *url, int variante, int essencial, int emUso) {
@@ -33,7 +36,19 @@ int   perfis_ativo(void) { return 1; }
 const char *addons_base_por_id(const char *id) { (void)id; return ""; }
 const char *addons_nome_por_id(const char *id) { (void)id; return ""; }
 
+// LAYOUT E DESTAQUE DO TESTE. home.c le os dois por estes acessores; trocados
+// aqui por variaveis, sem arrastar o disco e os idiomas de ajustes.c para o
+// link. O padrao e o da TV que nunca mexeu: Moderna, destaque ligado.
+static int testeLayout = HOME_LAYOUT_MODERNA, testeHero = 1;
+int teste_home_layout(void) { return testeLayout; }
+int teste_hero_ligado(void) { return testeHero; }
+static void homeCom(int layout, int heroLigado) { testeLayout = layout; testeHero = heroLigado; }
+
 int main(void) {
+  // A composicao abaixo e a da home SEM o destaque no topo: e nela que a
+  // primeira fileira de catalogo vira a vitrine (vitrineNaPrimeira). O #201
+  // (com destaque) tem bloco proprio no fim.
+  homeCom(HOME_LAYOUT_MODERNA, 0);
   // O TETO DE FILEIRAS NO MAXIMO, porque este teste e sobre COMPOSICAO e FOCO.
   //
   // O limite legado é 16 linhas visíveis. O fixture valida a composição dentro
@@ -104,6 +119,27 @@ int main(void) {
     for (int r = 0; r < nFileiras; r++)
       if (!strcmp(fileiras[r].chave, fils[i].chave)) achou++;
     assert(achou == 1); // nenhum catálogo removido ou duplicado
+  }
+  // #201 (mackojanko): COM o destaque no topo, a primeira fileira de catalogo
+  // sai em Automatico como as outras — o destaque ja e a vitrine e percorre
+  // os mesmos titulos. Na Dinamica a vitrine continua (e regra dela).
+  { int lay, r, destaques;
+    for (lay = 0; lay < HOME_LAYOUT_N; lay++) {
+      homeCom(lay, 1);
+      sincronizarFileiras();
+      assert(!strcmp(fileiras[2].chave, "catalogo_1"));
+      for (r = 0, destaques = 0; r < nFileiras; r++)
+        destaques += fileiras[r].tipo == FILEIRA_DESTAQUE;
+      if (lay == HOME_LAYOUT_DINAMICA) {
+        assert(fileiras[2].tipo == FILEIRA_DESTAQUE && destaques == 1);
+      } else {
+        assert(fileiras[2].tipo == FILEIRA_NORMAL && destaques == 0);
+        assert(fileiras[2].tipo == fileiras[3].tipo);   // igual a seguinte
+      }
+    }
+    homeCom(HOME_LAYOUT_MODERNA, 0);
+    sincronizarFileiras();
+    assert(fileiras[2].tipo == FILEIRA_DESTAQUE);
   }
   foco.fileira = 0; foco.coluna = 0;
   for (int i = 0; i < 16; i++) assert(focus_mover(&foco, 0, 1));
