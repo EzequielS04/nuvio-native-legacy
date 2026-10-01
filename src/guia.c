@@ -67,6 +67,7 @@
 #include "lembrete.h"   /* lembrete de programa futuro */
 #include "guialembrete.h"
 #include "streams.h"    /* Stream: url do preview vinda do fio */
+#include "livetv_regras.h" /* variantes FHD/HD/SD do mesmo canal */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -143,6 +144,7 @@
 // Botao AMARELO do controle da LG. SUPOSTO (ver o cabecalho do arquivo):
 // SDL_webOS.h enumera RED, GREEN, YELLOW, BLUE em sequencia e BLUE e 489.
 #define G_SCANCODE_YELLOW 488
+#define G_SCANCODE_GREEN  487   // vermelho 486, verde 487, amarelo 488, azul 489
 
 // --- layout do MODO LISTA -----------------------------------------------------
 // Regua de horas em G_TOPO; as linhas comecam 42 px abaixo dela. Coluna de
@@ -1281,6 +1283,56 @@ static GCanal *canalPorId(const char *id) {
   for (i = 0; i < nCanais; i++) if (!strcmp(canais[i].id, id)) return &canais[i];
   return NULL;
 }
+// VARIANTES DO MESMO CANAL (Live TV > Resolucao principal). No Xtream cada
+// resolucao e um canal da lista ("RO| CINEMAX FHD", "RO| CINEMAX HD"); o
+// nome-base (livetv_regras.h) junta os que sao o mesmo canal. O proprio canal
+// vem primeiro; os outros, na ordem da lista. So Xtream: no addon as
+// resolucoes ja chegam como fontes do mesmo canal.
+int guia_variantes(const char *id, GuiaVariante *out, int max) {
+  GCanal *c = canalPorId(id);
+  char base[160], outra[160];
+  int i, n = 0;
+  if (!c || max < 1 || !xtream_e_id(c->id)) return 0;
+  nv_nome_base(c->nome, base, sizeof base);
+  snprintf(out[n].id, sizeof out[n].id, "%s", c->id);
+  snprintf(out[n].nome, sizeof out[n].nome, "%s", c->nome);
+  out[n].altura = nv_res_do_texto(c->nome);
+  n++;
+  if (!base[0]) return n;
+  for (i = 0; i < nCanais && n < max; i++) {
+    if (&canais[i] == c || !xtream_e_id(canais[i].id)) continue;
+    nv_nome_base(canais[i].nome, outra, sizeof outra);
+    if (strcmp(base, outra)) continue;
+    snprintf(out[n].id, sizeof out[n].id, "%s", canais[i].id);
+    snprintf(out[n].nome, sizeof out[n].nome, "%s", canais[i].nome);
+    out[n].altura = nv_res_do_texto(canais[i].nome);
+    n++;
+  }
+  return n;
+}
+
+// OS CANAIS DO TESTE do diagnostico da Live TV: a fileira em foco (que pode
+// ser a de Favoritos), a partir do canal focado; sem foco valido, a primeira.
+int guia_canais_para_teste(GuiaVariante *out, char bases[][600], int max, char *grupo, size_t ng) {
+  int l = focoLin, c0 = focoCol, n = 0, k, total;
+  if (l < 0 || l >= nLinhas()) l = 0;
+  total = linhaN(l);
+  if (c0 < 0 || c0 >= total) c0 = 0;
+  if (grupo && ng) snprintf(grupo, ng, "%s", nLinhas() ? linhaNome(l) : "");
+  for (k = 0; k < total && n < max; k++) {
+    GCanal *g = linhaItem(l, (c0 + k) % total);
+    if (!g) continue;
+    snprintf(out[n].id, sizeof out[n].id, "%s", g->id);
+    snprintf(out[n].nome, sizeof out[n].nome, "%s", g->nome);
+    out[n].altura = nv_res_do_texto(g->nome);
+    if (bases) snprintf(bases[n], 600, "%s", g->base);
+    n++;
+  }
+  return n;
+}
+static int pedLivetvDiag;
+int guia_pediu_livetv_diag(void) { int v = pedLivetvDiag; pedLivetvDiag = 0; return v; }
+
 static char pedidoBase[600];
 static void previewPedir(GCanal *c) {
   if (!c || !c->id[0]) return;
@@ -1818,6 +1870,11 @@ void guia_evento(const SDL_Event *e) {
     return;
   }
 
+  // VERDE abre o diagnostico da Live TV (`d` no teclado do Mac). Fora da
+  // faixa: por cima do video ela e o zapping, e a tela nova pararia o canal.
+  if (!overlay && (e->key.keysym.scancode == G_SCANCODE_GREEN || k == SDLK_d)) {
+    pedLivetvDiag = 1; return;
+  }
   // AMARELO alterna lista e cartoes de qualquer lugar. `l` no teclado do Mac
   // e o equivalente de bancada, como `s` e do azul.
   if (e->key.keysym.scancode == G_SCANCODE_YELLOW || k == SDLK_l) {
@@ -3820,7 +3877,13 @@ void guia_desenhar(Uint32 agora) {
          : i18n("OK assiste  ·  segure OK = favorito  ·  segure \xe2\x86\x91\xe2\x86\x93 pula seção  ·  Voltar sai"));
     TxtLinha t = txt_linha_corta(TXT_CAPTION, dica, 128, 130, 138, 255,
                                  G_AREA_W);
-    txt_desenhar_alpha(t, G_AREA_X, NV_TELA_H - 48.0f, a); }
+    txt_desenhar_alpha(t, G_AREA_X, NV_TELA_H - 48.0f, a);
+    // O VERDE do diagnostico da Live TV, na ponta direita quando cabe.
+    if (!overlay) {
+      TxtLinha v = txt_linha(TXT_CAPTION, i18n("Verde: diagnóstico da Live TV"), 128, 130, 138, 255);
+      if ((float)t.w + 48.0f + (float)v.w <= G_AREA_W)
+        txt_desenhar_alpha(v, G_AREA_X + G_AREA_W - (float)v.w, NV_TELA_H - 48.0f, a);
+    } }
 
   desenharPainelCategorias(a);
   if (painel) desenharPainelAddons(a);

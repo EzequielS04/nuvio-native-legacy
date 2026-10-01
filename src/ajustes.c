@@ -249,11 +249,18 @@ typedef enum {
   // Selos coloridos na folha de fontes (#198, badges_desenhar_selos). No fim
   // pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_SELOS_CORES,
+  // LIVE TV (grupo "Live TV" em Conteudo): resolucao preferida das fontes de
+  // canal, formato do Xtream, espera para abrir e o diagnostico da Live TV
+  // (livetvdiag.c). No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_LIVETV_RES, AJ_LIVETV_FORMATO, AJ_LIVETV_ESPERA, AJ_LIVETV_DIAG,
   AJ_N
 } OpcaoId;
 
 static const char *V_QUALIDADE[] = { "Automática", "4K", "1080p", "720p" };
 static const char *V_LIGA[]      = { "Ligado", "Desligado" };
+static const char *V_LIVETV_RES[] = { "Automática", "4K", "1080p", "720p", "SD" };
+static const char *V_LIVETV_FMT[] = { "Automático", "HLS (.m3u8)", "TS (.ts)" };
+static const char *V_LIVETV_ESPERA[] = { "Automática", "25 s", "45 s" };
 // Troca do destaque: 0 = a arte nova entra colada na velha, de lado; 1 = o
 // esvanecimento de antes.
 static const char *V_HERO_TRANSICAO[] = { "Deslizar", "Esmaecer" };
@@ -807,6 +814,10 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Logo do addon",                   V_LIGA, 2),   // local: logoAddonLocal
   ESC("Arte das pastas da conta",        V_LIGA, 2),   // local: colArteContaLocal
   ESC("Selos coloridos",                 V_LIGA, 2),   // local: selosColoridosLocal
+  ESC("Resolução principal",             V_LIVETV_RES, 5),    // local: liveTvResolucaoLocal
+  ESC("Formato do Xtream",               V_LIVETV_FMT, 3),    // local: xtreamFormatoLocal
+  ESC("Espera para abrir o canal",       V_LIVETV_ESPERA, 3), // local: liveTvEsperaLocal
+  ACAO("Diagnóstico da Live TV"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -955,6 +966,9 @@ static const char *CHAVE[] = {
   "posterAddonLocal", "fundoAddonLocal", "logoAddonLocal", "colArteContaLocal",
   // LOCAL e SEM o "-": o web nao tem esta escolha (la a cor vem do pacote).
   "selosColoridosLocal",
+  // LOCAIS e SEM o "-": a rede, o provedor e a TV sao desta casa.
+  "liveTvResolucaoLocal", "xtreamFormatoLocal", "liveTvEsperaLocal",
+  "-liveTvDiag",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1088,6 +1102,9 @@ static const Item TELA[] = {
       OPC(AJ_XTREAM_LIMPAR), OPC(AJ_XTREAM_CONTA),
     ROT("Guia TV"),
       OPC(AJ_EPG_PAIS),
+    ROT("Live TV"),
+      OPC(AJ_LIVETV_RES), OPC(AJ_LIVETV_FORMATO), OPC(AJ_LIVETV_ESPERA),
+      OPC(AJ_LIVETV_DIAG),
 
   SEC("Integrações", "Serviços de metadados e de notas", "aj_plug"),
     GRP("TMDB", "Metadados, arte, elenco e trailers vindos do TMDB.", "aj_database"),
@@ -1406,6 +1423,8 @@ static int valor[] = {
   // LIGADO: e o que o oficial mostra com o pacote de selos da wiki importado,
   // e o pedido do #198. Quem prefere a fileira branca de antes desliga.
   0,                /* selos coloridos: LIGADO (V_LIGA: 0 = Ligado) */
+  0, 0, 0,          /* Live TV: resolucao, formato do Xtream e espera automaticos */
+  0,                /* diagnostico da Live TV: acao */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1419,6 +1438,8 @@ static int pediuDiagnostico;
 int ajustes_pediu_diagnostico(void) { int v = pediuDiagnostico; pediuDiagnostico = 0; return v; }
 static int pediuVelocidade;
 int ajustes_pediu_velocidade(void) { int v = pediuVelocidade; pediuVelocidade = 0; return v; }
+static int pediuLivetvDiag;
+int ajustes_pediu_livetv_diag(void) { int v = pediuLivetvDiag; pediuLivetvDiag = 0; return v; }
 
 // O FOCO E UM ITEM DE TELA[], nao uma opcao: um grupo recolhivel tambem
 // recebe foco. `focoOp` e o derivado que o resto do arquivo le (ajuda, efeito,
@@ -1673,6 +1694,17 @@ int   ajustes_fundo_addon(void)       { return lig(AJ_ADDON_FUNDO); }
 int   ajustes_logo_addon(void)        { return lig(AJ_ADDON_LOGO); }
 int   ajustes_col_arte_conta(void)    { return lig(AJ_COL_ARTE_CONTA); }
 int   ajustes_selos_coloridos(void)   { return lig(AJ_SELOS_CORES); }
+int   ajustes_livetv_resolucao(void)  { return valor[AJ_LIVETV_RES]; }
+int   ajustes_livetv_formato(void)    { return valor[AJ_LIVETV_FORMATO]; }
+unsigned ajustes_livetv_espera_ms(void) {
+  return valor[AJ_LIVETV_ESPERA] == 1 ? 25000u : valor[AJ_LIVETV_ESPERA] == 2 ? 45000u : 0u;
+}
+void  ajustes_livetv_aplicar(int resolucao, int formato, int espera) {
+  if (resolucao >= 0 && resolucao < 5) valor[AJ_LIVETV_RES] = resolucao;
+  if (formato >= 0 && formato < 3) valor[AJ_LIVETV_FORMATO] = formato;
+  if (espera >= 0 && espera < 3) valor[AJ_LIVETV_ESPERA] = espera;
+  gravar();
+}
 // valor[] guarda decimos de segundo, preso ao intervalo de OPCOES (o disco
 // pode trazer qualquer numero).
 Uint32 ajustes_trailer_hero_espera_ms(void) {
@@ -2984,6 +3016,8 @@ static int somenteDesteAparelho(int op) {
     case AJ_ADDON_POSTER: case AJ_ADDON_FUNDO: case AJ_ADDON_LOGO:
     case AJ_COL_ARTE_CONTA: /* arte do addon: o web nao tem estas escolhas */
     case AJ_SELOS_CORES:    /* no web a cor vem do pacote de selos importado */
+    case AJ_LIVETV_RES: case AJ_LIVETV_FORMATO: case AJ_LIVETV_ESPERA:
+    case AJ_LIVETV_DIAG:    /* rede e provedor desta casa: o web nao tem */
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
     case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
     case AJ_PERFIL_EDITAR:
@@ -3715,6 +3749,10 @@ static const char *ajudaOpcao(int op) {
     case AJ_ADDON_POSTER: return "Com um serviço de pôsteres ligado, o título que veio de um catálogo de addon fica com o pôster que o próprio addon manda, e o serviço só entra nos outros (Continuar assistindo, listas do Trakt, pôster genérico do Cinemeta). Sem o serviço, o pôster já é o do addon.";
     case AJ_ADDON_FUNDO: return "O card deitado, o destaque e a página do título usam o fundo que o addon manda no catálogo, mesmo com outro Background do hero ou com Destaque com outra arte. O addon que não manda fundo cai na fonte escolhida. A arte escolhida à mão em Trocar arte continua valendo mais.";
     case AJ_ADDON_LOGO: return "O logo do título que o addon manda não é trocado pelo logo traduzido do TMDB (Arte localizada) ao abrir o título. O addon que não manda logo continua recebendo o do TMDB.";
+    case AJ_LIVETV_RES: return "Quando o canal tem várias fontes (FHD, HD, SD ou as versões do mesmo canal no Xtream), a desta resolução entra primeiro. Se ela não abrir, entra a próxima.";
+    case AJ_LIVETV_FORMATO: return "Automático usa o formato que a conta Xtream declara e lembra o que tocou. HLS ou TS pede esse formato primeiro, mesmo quando a conta só declara o outro.";
+    case AJ_LIVETV_ESPERA: return "Quanto tempo o canal tem para mostrar a imagem antes de o app passar para a próxima fonte ou mostrar o erro. Automática espera 15 s no Xtream e 25 s nos addons.";
+    case AJ_LIVETV_DIAG: return "Mede a rede até o provedor, lê a conta Xtream e testa vários canais: se tocam, em que formato, com que resolução e em quanto tempo. No fim sugere ajustes da Live TV e pode aplicá-los.";
     case AJ_SELOS_CORES: return "Na lista de fontes, cada selo (4K, HDR, Dolby, codec, serviço) ganha a cor do seu tipo, como no pacote de selos do Nuvio. Desligado, os selos ficam brancos.";
     case AJ_COL_ARTE_CONTA: return "As pastas de coleção que o app já traz com arte própria passam a usar a capa, o fundo e o logo que estão na sua conta (editor de coleções do site). O que a conta não tiver continua com a arte do app.";
     case AJ_HERO_TRANSICAO: return "Deslizar: quando o destaque troca de título, a arte e o texto saem para o lado e o próximo entra colado, como num carrossel. Esmaecer: a arte apaga e a nova aparece no lugar. Com Animações reduzidas a troca é sempre sem movimento.";
@@ -4722,6 +4760,7 @@ static void eventoTela(const SDL_Event *e) {
     if (focoOp == AJ_DIAGNOSTICO) { pediuDiagnostico = 1; return; }
     if (focoOp == AJ_HERO_CATALOGOS) { if (!inativa(focoOp)) heroFonteCiclar(+1); return; }
     if (focoOp == AJ_VELOCIDADE) { pediuVelocidade = 1; return; }
+    if (focoOp == AJ_LIVETV_DIAG) { pediuLivetvDiag = 1; return; }
     if (focoOp == AJ_STALKER_PORTAL || focoOp == AJ_STALKER_MAC) {
       int mac = focoOp == AJ_STALKER_MAC;
       stCampo = focoOp;
@@ -6527,7 +6566,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_STALKER_LIMPAR: case AJ_XTREAM_SERVIDOR: case AJ_XTREAM_USUARIO:
     case AJ_XTREAM_SENHA: case AJ_XTREAM_LIMPAR: case AJ_FANART_CHAVE:
     case AJ_XTREAM_CONTA:
-    case AJ_DIAGNOSTICO: case AJ_VELOCIDADE:
+    case AJ_DIAGNOSTICO: case AJ_VELOCIDADE: case AJ_LIVETV_DIAG:
     case AJ_P2P_URL: case AJ_P2P_TESTAR:
     case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
     case AJ_POSTER_CHAVE: case AJ_POSTER_MODELO: case AJ_POSTER_TESTAR:

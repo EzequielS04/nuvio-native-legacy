@@ -152,6 +152,15 @@ int   ajustes_tinta_foco2(void);
 // "Automática", "4K", "1080p" ou "720p" — o rotulo exibido, para quem seleciona
 // a fonte de video mostrar exatamente o que o usuario escolheu.
 const char *ajustes_qualidade(void);
+// LIVE TV. Resolucao principal: 0 Automatica, 1 4K, 2 1080p, 3 720p, 4 SD
+// (livetv_regras.h converte em altura). Formato do Xtream: 0 Automatico,
+// 1 HLS, 2 TS. Espera: 0 = a automatica de cada caminho, senao o prazo em ms.
+int   ajustes_livetv_resolucao(void);
+int   ajustes_livetv_formato(void);
+unsigned ajustes_livetv_espera_ms(void);
+// O botao "Aplicar" do diagnostico da Live TV; -1 deixa o valor como esta.
+void  ajustes_livetv_aplicar(int resolucao, int formato, int espera);
+int   ajustes_pediu_livetv_diag(void);
 
 // --- LAYOUT: estrutura da home ----------------------------------------------
 int   ajustes_rail_recolhida(void);     // collapseSidebar

@@ -1,4 +1,5 @@
 #include "streams.h"
+#include "livetv_regras.h"
 #include "idioma.h"
 #include "badges.h"
 #include "limpa.h"
@@ -725,6 +726,15 @@ static void *fioCanal(void *u) {
   }
 }
 
+// Altura de uma fonte de canal: a que o parser leu (2160/1080/720) ou a MARCA
+// do rotulo/descricao (FHD, HD, SD), que e como as listas de canal dizem.
+static int alturaCanal(const Stream *s) {
+  int a = s->altura;
+  if (!a) a = nv_res_do_texto(s->rotulo);
+  if (!a) a = nv_res_do_texto(s->descricao);
+  return a;
+}
+
 int stream_canal_primeira_viva(int tentativas) {
   int total = stream_n(), q, criados = 0, escolhida = -1;
   pthread_t fios[CANAL_FIOS];
@@ -750,16 +760,21 @@ int stream_canal_primeira_viva(int tentativas) {
   // do teto antes de acima dele), a morta por ultimo e, depois das conferidas,
   // as que ficaram fora da sonda na ordem do addon. A escolhida e a cabeca da
   // fila, se nao for morta.
+  // RESOLUCAO PRINCIPAL (Ajustes > Live TV): dentro de cada classe e de cada
+  // lado do teto, a fonte da resolucao escolhida vem antes das outras — a
+  // classe continua mandando (uma viva em HD ganha de uma muda em FHD).
   { static const unsigned char ordemClasse[] = { 1, 4, 3, 2 };
-    int c, t;
+    int c, t, pr, alvo = nv_res_opcao_altura(ajustes_livetv_resolucao());
     canalOrdemN = 0;
     for (c = 0; c < 4; c++)
       for (t = 1; t >= 0; t--)
-        for (q = 0; q < tentativas && canalOrdemN < CANAL_ORDEM_MAX; q++)
-          if (canalClasse[q] == ordemClasse[c] && cabeNoTeto(&lista[q]) == t) {
-            canalOrdemClasse[canalOrdemN] = canalClasse[q];
-            canalOrdem[canalOrdemN++] = q;
-          }
+        for (pr = 1; pr >= 0; pr--)
+          for (q = 0; q < tentativas && canalOrdemN < CANAL_ORDEM_MAX; q++)
+            if (canalClasse[q] == ordemClasse[c] && cabeNoTeto(&lista[q]) == t &&
+                nv_res_preferida(alturaCanal(&lista[q]), alvo) == pr) {
+              canalOrdemClasse[canalOrdemN] = canalClasse[q];
+              canalOrdem[canalOrdemN++] = q;
+            }
     for (q = tentativas; q < total && canalOrdemN < CANAL_ORDEM_MAX; q++) {
       canalOrdemClasse[canalOrdemN] = 0;
       canalOrdem[canalOrdemN++] = q;
