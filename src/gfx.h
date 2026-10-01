@@ -394,7 +394,8 @@ void gfx_novo_quadro(void);
 
 // EFEITOS LEVES (nivel 1 de gpunivel.h). 1 = sem o dither dos degrades (o
 // ruido highp por pixel em todo veu, rampa do destaque e luz) e sem os dois
-// realces puramente decorativos (GFX_BRILHO_TOPO, GFX_LUZ). E um uniform, e
+// realces puramente decorativos (GFX_BRILHO_TOPO CLARO, GFX_LUZ; o veu escuro
+// de gfx_veu_base fica, ele carrega o texto). E um uniform, e
 // nao outra compilacao: trocar de nivel no meio da sessao nao pode custar a
 // compilacao inteira dos shaders (0,7-2 s numa TV fraca).
 // VEU SO NA BASE de um card: degrade vertical que chega a zero em `fracao` da
