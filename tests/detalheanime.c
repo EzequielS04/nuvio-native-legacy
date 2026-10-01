@@ -542,7 +542,7 @@ int main(void) {
     assert(!strcmp(cat_episodio(0, 0)->nome, "Перший епізод"));
     assert(!strcmp(cat_episodio(0, 0)->sinopse, "Опис 1"));
     assert(cat_episodio(0, 0)->nota == 81);                           /* nota do TMDB entra */
-    assert(!strcmp(cat_item(0)->titulo, "Реінкарнація безробітного")); /* TMDB nao troca */
+    assert(!strcmp(cat_item(0)->titulo, "Реінкарнація безробітного")); /* sem /tv/555 aqui: o caso #209 (30) cobre o TMDB por cima */
     puts("ok  #176: addon preferido + TMDB: o texto do addon nao e pisado, a nota entra");
 
     // 14) FILME com a preferencia: /meta/movie do addon manda no titulo/sinopse.
