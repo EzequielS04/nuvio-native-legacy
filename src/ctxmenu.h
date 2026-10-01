@@ -38,6 +38,9 @@ void ctx_abrir_salvo(const CatItem *titulo);
 int  ctx_do_painel(void);
 // IMDb do "Mais informações" pedido no modo painel, ou NULL. Consumido uma vez.
 const char *ctx_pediu_detalhes_imdb(void);
+// IMDb do "Mover para categoria" pedido no modo painel, ou NULL. Consumido uma
+// vez; o painel de Salvos abre a escolha de categoria dele.
+const char *ctx_pediu_categoria(void);
 // ESTILO DA FILEIRA. A home diz de qual fileira e o cartao ANTES de ctx_abrir;
 // com uma chave que aceita forma (fil_estilos), o menu ganha "Estilo da
 // fileira". NULL/"" = sem a opcao (destaque, Continuar assistindo).

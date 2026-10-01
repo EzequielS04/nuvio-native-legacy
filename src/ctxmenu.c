@@ -182,7 +182,10 @@ static int nOps;
 static float focoAnim[CTX_MAX];
 static int holdObservador;
 enum { OP_DETALHES, OP_LISTA, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR,
-       OP_ESTILO };
+       OP_ESTILO, OP_CATEGORIA };
+// "Mover para categoria" pedido no modo painel: o IMDb do titulo, consumido
+// uma vez pelo painel (ctx_pediu_categoria), que abre a escolha dele.
+static char pedCategoriaImdb[24];
 
 // --- ESTILO DA FILEIRA -------------------------------------------------------
 //
@@ -307,6 +310,9 @@ static void montar(void) {
              : (tituloSalvo(ci) ? "Remover dos Salvos" : "Salvar"),
            OP_LISTA);
   }
+  // AS CATEGORIAS DA PESSOA (salvosorg.h) so existem no painel de Salvos: e
+  // la que o titulo esta salvo e e la que a escolha abre.
+  if (doPainel && ci->imdb[0]) juntar("Mover para categoria", OP_CATEGORIA);
   // O web so oferece "assistido" em filme e serie — nao em canal nem evento,
   // que sao tipos que os addons do dono tambem declaram.
   //
@@ -444,6 +450,13 @@ const char *ctx_pediu_detalhes_imdb(void) {
 }
 
 int ctx_aberto(void) { return aberto; }
+const char *ctx_pediu_categoria(void) {
+  static char s[24];
+  if (!pedCategoriaImdb[0]) return NULL;
+  snprintf(s, sizeof s, "%s", pedCategoriaImdb);
+  pedCategoriaImdb[0] = 0;
+  return s;
+}
 int ctx_pediu_detalhes(void) { int v = pedDetalhes; pedDetalhes = -1; return v; }
 
 // O ESPELHO LOCAL DE "ASSISTIDO", separado de quem confirma: com Trakt ele
@@ -612,6 +625,10 @@ static void aplicar(void) {
         desc_remontar_fileiras();
       }
       montar();
+      break;
+    case OP_CATEGORIA:
+      snprintf(pedCategoriaImdb, sizeof pedCategoriaImdb, "%s", ci->imdb);
+      aberto = 0;
       break;
     case OP_RECOMENDAR:
       // FECHA ESTE MODAL E ABRE O COMPARTILHADO. O menu do cartaz falou de um
