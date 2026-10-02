@@ -34,6 +34,14 @@
 #include <string.h>
 #include <time.h>
 
+// A API de mentira do alcance/nome (ver tests/socialv2_stub.h).
+static int stubAlcance = REC_ALCANCE_NAO_PERGUNTADO;
+int  recomenda_alcance(void) { return stubAlcance; }
+void recomenda_responder_alcance(int n) { stubAlcance = n; }
+const char *recomenda_meu_nome(void) { return "Henrique"; }
+const char *recomenda_minha_exibicao(void) { return ""; }
+int  recomenda_definir_nome(const char *nome) { (void)nome; return 1; }
+
 static SDL_Window *janela;
 static const char *dirDados;
 enum { D_HOME = 0, D_PAINEL, D_PERFIL };
@@ -244,7 +252,18 @@ int main(int argc, char **argv) {
   quadros(90, NULL);
   snprintf(bmp, sizeof bmp, "%s-painel-atividade.bmp", saida);
   quadros(1, bmp);
+  // A PERGUNTA DO NIVEL, que vem antes da lista enquanto nao respondida.
   spainel_ir_aba(2);
+  quadros(90, NULL);
+  snprintf(bmp, sizeof bmp, "%s-painel-alcance.bmp", saida);
+  quadros(1, bmp);
+  { SDL_Event e;
+    memset(&e, 0, sizeof e);
+    e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_DOWN;
+    spainel_evento(&e);
+    e.key.keysym.sym = SDLK_RETURN;
+    spainel_evento(&e); }               // "So meus amigos"
+  printf("alcance respondido: %d\n", stubAlcance);
   quadros(90, NULL);
   snprintf(bmp, sizeof bmp, "%s-painel-amigos.bmp", saida);
   quadros(1, bmp);
@@ -255,6 +274,14 @@ int main(int argc, char **argv) {
     for (k = 0; k < 2; k++) spainel_evento(&e); }
   quadros(90, NULL);
   snprintf(bmp, sizeof bmp, "%s-painel-amigos-foco.bmp", saida);
+  quadros(1, bmp);
+  { SDL_Event e;
+    int k;
+    memset(&e, 0, sizeof e);
+    e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_DOWN;
+    for (k = 0; k < 4; k++) spainel_evento(&e); }   // "Como voce aparece"
+  quadros(90, NULL);
+  snprintf(bmp, sizeof bmp, "%s-painel-amigos-nome.bmp", saida);
   quadros(1, bmp);
   spainel_fechar();
   quadros(30, NULL);

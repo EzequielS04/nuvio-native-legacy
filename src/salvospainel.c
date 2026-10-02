@@ -231,9 +231,20 @@ static int nRecs;
 //   SPS_AMIGO               um contato ja adicionado (foto + nome), sob o
 //                           cabecalho "Seus amigos" (dono, 20/09/2026)
 enum { SPS_CONSENT_NAO = 0, SPS_CONSENT_SIM, SPS_REC, SPS_SUG,
-       SPS_ADICIONAR, SPS_APARECER, SPS_AMIGO, SPS_ENCONTRAR };
+       SPS_ADICIONAR, SPS_APARECER, SPS_AMIGO, SPS_ENCONTRAR,
+       // QUEM VE O QUE EU ASSISTO (socialsrv, recomenda_alcance): as tres
+       // respostas da pergunta, a linha que reabre a pergunta e o nome.
+       SPS_ALC_0, SPS_ALC_1, SPS_ALC_2, SPS_ALCANCE, SPS_NOME };
+// A API do alcance e do nome so existe no socialsrv (branch agente/socialsrv).
+// Ate o merge as linhas ficam desligadas; NV_SOCIAL_V2_UI liga so a tela (o
+// teste de captura o usa com a API de mentira).
+#if defined(NV_SOCIAL_V2) || defined(NV_SOCIAL_V2_UI)
+#define SP_V2 1
+#else
+#define SP_V2 0
+#endif
 typedef struct { unsigned char tipo; short idx; } SPSocial;
-#define SP_SOCIAL_MAX (REC_MAX + REC_SUGESTOES_MAX + REC_CONTATOS_MAX + 4)
+#define SP_SOCIAL_MAX (REC_MAX + REC_SUGESTOES_MAX + REC_CONTATOS_MAX + 8)
 static SPSocial social[SP_SOCIAL_MAX];
 static int nSocial;
 static RecSugestao sugs[REC_SUGESTOES_MAX];
@@ -245,6 +256,11 @@ static int nCtts;
 // reconciliacao em recomenda.c), e sem esta marca a pergunta continuaria na
 // tela depois de ja ter sido respondida.
 static int consentEstado = -1;
+// O nivel na ultima reconstrucao, e 1 enquanto a pessoa reabriu a pergunta.
+#if SP_V2
+static int alcEstado = -2, escolhendoAlcance;
+#endif
+#define SPS_ALC_TOPO 262.0f
 
 // A LINHA DO AMIGO SABE O QUE ELE ESTA FAZENDO (tela A, 02/10/2026): o indice
 // dele no modelo do social (socialvis.h; -1 = sem atividade) e se ha uma
@@ -759,6 +775,10 @@ static float listaTopo(void) { return SP_LISTA_Y + (temBarra() ? SP_OPC_EXTRA : 
 static int consentindo(void) {
   return aba == SP_ABA_SOCIAL && nSocial > 0 && social[0].tipo == SPS_CONSENT_NAO;
 }
+// 1 enquanto a pergunta do nivel (alcance) esta na tela.
+static int perguntandoAlcance(void) {
+  return aba == SP_ABA_SOCIAL && nSocial > 0 && social[0].tipo == SPS_ALC_0;
+}
 
 static float socialAlt(int i) {
   if (i < 0 || i >= nSocial) return 0.0f;
@@ -771,6 +791,8 @@ static float socialAlt(int i) {
     case SPS_ADICIONAR: return SPS_H_ACAO;
     case SPS_ENCONTRAR: return SPS_H_ACAO;
     case SPS_APARECER:  return SPS_H_APARECER;
+    case SPS_ALCANCE:   return SPS_H_APARECER;
+    case SPS_NOME:      return SPS_H_APARECER;
     default:            return SPS_H_CONSENT;
   }
 }
@@ -792,6 +814,7 @@ static float socialAntes(int i) {
     return strcmp(recs[social[i].idx].de, recs[social[i - 1].idx].de) ? SP_SECAO_H : 0.0f;
   }
   if (social[i].tipo == SPS_APARECER) return SPS_SEP_APARECER;
+  if (social[i].tipo == SPS_NOME) return SPS_SEP_APARECER;
   if (social[i].tipo != SPS_SUG && social[i].tipo != SPS_AMIGO) return 0.0f;
   return (i == 0 || social[i - 1].tipo != social[i].tipo) ? SP_SECAO_H : 0.0f;
 }
@@ -800,6 +823,7 @@ static float socialAntes(int i) {
 static float socialTopo(void) {
   if (aba != SP_ABA_SOCIAL) return 0.0f;
   if (consentindo()) return SPS_CONSENT_TOPO;
+  if (perguntandoAlcance()) return SPS_ALC_TOPO;
   return nRecs == 0 ? SPS_VAZIO_TOPO : 0.0f;
 }
 
@@ -830,6 +854,19 @@ static void reconstruirSocial(void) {
     social[nSocial].tipo = SPS_CONSENT_SIM; social[nSocial].idx = 0; nSocial++;
     return;
   }
+#if SP_V2
+  // A SEGUNDA PERGUNTA, a do NIVEL: quem ve o que eu assisto. Nada sai da TV
+  // antes da resposta (recomenda.h, REC_ALCANCE_NAO_PERGUNTADO), entao ela vem
+  // antes da lista como a primeira — e o "Ninguem" e a primeira linha, pelo
+  // mesmo motivo do "Nao" de la.
+  alcEstado = recomenda_alcance();
+  if (alcEstado == REC_ALCANCE_NAO_PERGUNTADO || escolhendoAlcance) {
+    social[nSocial].tipo = SPS_ALC_0; social[nSocial].idx = 0; nSocial++;
+    social[nSocial].tipo = SPS_ALC_1; social[nSocial].idx = 0; nSocial++;
+    social[nSocial].tipo = SPS_ALC_2; social[nSocial].idx = 0; nSocial++;
+    return;
+  }
+#endif
 
   for (i = 0; i < REC_MAX && nRecs < REC_MAX; i++)
     if (recomenda_item(i, &recs[nRecs])) nRecs++;
@@ -884,6 +921,14 @@ static void reconstruirSocial(void) {
   // que so faz sentido olhando para esta lista ("quem me ve?"), e quem quiser
   // mudar de ideia vai procura-lo onde a pergunta foi feita. A alternativa em
   // Ajustes esta descrita no relatorio; as duas podem coexistir.
+#if SP_V2
+  // COMO EU APARECO e QUEM VE O QUE EU ASSISTO, juntos do interruptor de
+  // aparecer: sao as tres respostas sobre "eu para os outros".
+  if (nSocial + 2 < SP_SOCIAL_MAX) {
+    social[nSocial].tipo = SPS_NOME; social[nSocial].idx = 0; nSocial++;
+    social[nSocial].tipo = SPS_ALCANCE; social[nSocial].idx = 0; nSocial++;
+  }
+#endif
   if (nSocial < SP_SOCIAL_MAX) {
     social[nSocial].tipo = SPS_APARECER; social[nSocial].idx = 0; nSocial++;
   }
@@ -968,7 +1013,7 @@ static const char *SOCIAL_LONGO[SORG_SOCIAL_N] = {
 
 static int temBarra(void) {
   if (aba == SP_ABA_SALVOS) return nLinhas > 0;
-  if (aba == SP_ABA_SOCIAL) return !consentindo() && nRecs >= 2;
+  if (aba == SP_ABA_SOCIAL) return !consentindo() && !perguntandoAlcance() && nRecs >= 2;
   return 0;
 }
 static int nChips(void) { return aba == SP_ABA_SALVOS ? SPB_N : 1; }
@@ -991,7 +1036,7 @@ static char  popTitulo[200], popSub[200], popItem[24];
 
 // O TECLADO DO APP (teclado.h) para nome de categoria: letras, numeros,
 // espaco e hifen. A primeira letra sai maiuscula (sorg_nome_limpo).
-enum { TK_NADA = 0, TK_CRIAR, TK_MOVER, TK_RENOMEAR };
+enum { TK_NADA = 0, TK_CRIAR, TK_MOVER, TK_RENOMEAR, TK_NOME_SOCIAL };
 static int tecladoPara;
 static const char *ALFA_NOME = "abcdefghijklmnopqrstuvwxyz0123456789 -";
 #define SP_NOME_LETRAS 24
@@ -1182,6 +1227,14 @@ static void tecladoResultado(void) {
   r = teclado_resultado();
   if (r == TECLADO_NADA) return;
   t = teclado_texto();
+#if SP_V2
+  // O NOME PARA OS AMIGOS: vazio volta ao nome do perfil (recomenda.h).
+  if (tecladoPara == TK_NOME_SOCIAL) {
+    if (r == TECLADO_PRONTO && t) recomenda_definir_nome(t);
+    tecladoPara = TK_NADA;
+    return;
+  }
+#endif
   if (r == TECLADO_PRONTO && t && t[0]) {
     if (tecladoPara == TK_RENOMEAR) sorg_renomear_categoria(popCat, t);
     else if ((id = sorg_criar_categoria(t)) != 0) {
@@ -1494,6 +1547,37 @@ void spainel_evento(const SDL_Event *e) {
             aberto = 0;
           }
           return;
+#if SP_V2
+        case SPS_ALC_0:
+        case SPS_ALC_1:
+        case SPS_ALC_2:
+          recomenda_responder_alcance(social[foco].tipo - SPS_ALC_0);
+          escolhendoAlcance = 0;
+          reconstruirSocial();
+          foco = 0;
+          scrollY = 0.0f; velY = 0.0f;
+          memset(animFoco, 0, sizeof animFoco);
+          return;
+        case SPS_ALCANCE: {
+          // REABRE A PERGUNTA, com o foco na resposta de agora: trocar de nivel
+          // e escolher de novo, lendo as tres, e nao um OK que gira valores.
+          int n = recomenda_alcance();
+          escolhendoAlcance = 1;
+          reconstruirSocial();
+          foco = (n >= 0 && n <= 2) ? n : 0;
+          scrollY = 0.0f; velY = 0.0f;
+          memset(animFoco, 0, sizeof animFoco);
+          return; }
+        case SPS_NOME:
+          tecladoPara = TK_NOME_SOCIAL;
+          teclado_abrir_com("Como você aparece",
+                            "Seu nome para os amigos. Vazio usa o nome do perfil.",
+                            32, "abcdefghijklmnopqrstuvwxyz0123456789 -'", recomenda_minha_exibicao());
+          return;
+#else
+        case SPS_ALC_0: case SPS_ALC_1: case SPS_ALC_2: case SPS_ALCANCE: case SPS_NOME:
+          return;
+#endif
         case SPS_APARECER:
           // MUDAR DE IDEIA CUSTA UM OK, nos dois sentidos. Sem confirmacao de
           // proposito: desligar e a direcao segura, e pedir "tem certeza?" para
@@ -1583,7 +1667,11 @@ void spainel_atualizar(float dt, Uint32 agora) {
   }
   if (aberto && aba == SP_ABA_SOCIAL &&
       (nRecs != recomenda_n() || nSugs != recomenda_n_sugestoes() ||
-       consentEstado != recomenda_aparecer() || svRevSocial != socialvis_revisao())) {
+       consentEstado != recomenda_aparecer() || svRevSocial != socialvis_revisao()
+#if SP_V2
+       || (consentEstado != REC_APARECER_NAO_PERGUNTADO && alcEstado != recomenda_alcance())
+#endif
+       )) {
     reconstruirSocial();
     if (foco >= nVisiveis()) foco = nVisiveis() > 0 ? nVisiveis() - 1 : 0;
   }
@@ -2386,6 +2474,22 @@ static void desenhaPop(float a) {
 // diz a razao, mostra o codigo que ele precisa ditar e oferece a porta.
 // Devolve o y logo abaixo do texto, para a linha-botao nascer colada nele em
 // vez de boiar no fim do painel.
+// A PERGUNTA DO NIVEL (alcance), por extenso. Mesma forma da pergunta de
+// aparecer: o que cada resposta faz, sem sermao, e onde mudar depois.
+static void desenhaAlcancePergunta(float dx, float y0, float a) {
+  float x = SP_X + dx + SP_PAD, y = y0 + 8.0f;
+  { TxtLinha t = txt_linha(TXT_CALLOUT, "Quem vê o que você assiste?", 246, 247, 252, 255);
+    txt_desenhar_alpha(t, x, y, a); y += t.h + 18.0f; }
+  y += txt_bloco(TXT_CAPTION,
+      "Seus amigos podem ver o que você está assistindo, o que terminou e do que gostou. Nada sai desta TV antes de você escolher.",
+      214, 218, 228, x, y, SP_INTERNO, 30.0f, a * 0.95f, 4) + 14.0f;
+  y += txt_bloco(TXT_CAPTION,
+      "Amigos dos seus amigos veem só o título e a ação, sem a sua foto.",
+      190, 194, 204, x, y, SP_INTERNO, 30.0f, a * 0.9f, 2) + 14.0f;
+  txt_bloco(TXT_CAPTION, "Dá para mudar quando quiser, no fim desta aba.",
+            160, 164, 175, x, y, SP_INTERNO, 30.0f, a * 0.85f, 2);
+}
+
 static void desenhaSocialVazio(float dx, float y0, float a) {
   float x = SP_X + dx + SP_PAD;
   float y = y0 + 8.0f;
@@ -2631,6 +2735,40 @@ static void desenhaAparecer(int i, float dx, float y, float alt, float a) {
     else     { if (lig > 0.5f) br = bg = bb = ti; else br = bg = bb = 0.96f; }
     gfx_cor(sombra, 0.5f, 0.0f, 0.0f, 0.0f, 0.18f * a);
     gfx_cor(bola, 0.5f, br, bg, bb, a); }
+}
+
+// "COMO VOCE APARECE" e "QUEM VE O QUE VOCE ASSISTE": rotulo e o valor de
+// agora embaixo, na superficie das linhas. OK abre o teclado / reabre a
+// pergunta.
+static void desenhaAjusteSocial(int i, float dx, float y, float alt, float a) {
+  GfxRect r = { SP_X + dx + SP_PAD, y, SP_INTERNO, alt };
+  float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoTexto(f);
+  int tf = ajustes_tinta_foco(), tf2 = ajustes_tinta_foco2();
+  const char *titulo = "", *valor = "";
+  char buf[96];
+#if SP_V2
+  if (social[i].tipo == SPS_NOME) {
+    titulo = "Como você aparece";
+    snprintf(buf, sizeof buf, "%s", recomenda_meu_nome()[0] ? recomenda_meu_nome()
+                                                            : i18n("Nome do perfil"));
+    valor = buf;
+  } else {
+    int n = recomenda_alcance();
+    titulo = "Quem vê o que você assiste";
+    valor = n == REC_ALCANCE_AMIGOS ? i18n("Só meus amigos")
+          : n == REC_ALCANCE_AMIGOS2 ? i18n("Amigos e amigos deles") : i18n("Ninguém");
+  }
+#else
+  (void)buf;
+#endif
+  superficieItem(r, 14.0f / alt, f, a);
+  { TxtLinha t = txt_linha_corta(TXT_CALLOUT, titulo, 240, 240, 240, 255, SP_INTERNO - 64.0f);
+    TxtLinha tF = txt_linha_corta(TXT_CALLOUT, titulo, tf, tf, tf, 255, SP_INTERNO - 64.0f);
+    TxtLinha s2 = txt_linha_corta(TXT_CAPTION, valor, 168, 172, 182, 255, SP_INTERNO - 64.0f);
+    TxtLinha sF = txt_linha_corta(TXT_CAPTION, valor, tf2, tf2, tf2, 255, SP_INTERNO - 64.0f);
+    float h = t.h + 8.0f + s2.h;
+    txt_foco_transicao(t, tF, r.x + 32.0f, y + (alt - h) * 0.5f, v, a);
+    txt_foco_transicao(s2, sF, r.x + 32.0f, y + (alt - h) * 0.5f + t.h + 8.0f, v, a * 0.95f); }
 }
 
 // Uma sugestao: a cara, o nome, POR ONDE ela chegou, e a pilula que diz o que
@@ -3074,6 +3212,7 @@ static void desenharPainel(Uint32 agora) {
     // a lista que vem logo abaixo, e um texto fixo com linhas passando por
     // baixo dele leria como duas telas empilhadas.
     if (consentindo())    desenhaConsentimento(x, y, a);
+    else if (perguntandoAlcance()) desenhaAlcancePergunta(x, y, a);
     else if (nRecs == 0)  desenhaSocialVazio(x, y, a);
     y += socialTopo();
     for (i = 0; i < nSocial; i++) {
@@ -3120,6 +3259,19 @@ static void desenharPainel(Uint32 agora) {
             break;
           case SPS_CONSENT_SIM:
             desenhaBotaoLinha(i, x, y, alt, a, "Sim, pode me mostrar", NULL, NULL, 1);
+            break;
+          case SPS_ALC_0:
+            desenhaBotaoLinha(i, x, y, alt, a, "Ninguém", NULL, NULL, 0);
+            break;
+          case SPS_ALC_1:
+            desenhaBotaoLinha(i, x, y, alt, a, "Só meus amigos", NULL, NULL, 1);
+            break;
+          case SPS_ALC_2:
+            desenhaBotaoLinha(i, x, y, alt, a, "Amigos e amigos deles", NULL, NULL, 0);
+            break;
+          case SPS_ALCANCE:
+          case SPS_NOME:
+            desenhaAjusteSocial(i, x, y, alt, a);
             break;
           default:
             desenhaBotaoLinha(i, x, y, alt, a, "Não, não quero aparecer", NULL, NULL, 0);
