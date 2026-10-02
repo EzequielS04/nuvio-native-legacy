@@ -292,6 +292,26 @@ static void decodificador(void) {
   for (i = 0; i < 30 * 20; i++) idxDe[4][i] = (unsigned char)(i % 4);
   n = montarGif(W, H, 4, q, 5);
 
+  // Capas estaticas usam o mesmo decoder nas TVs sem GIF no SDL_image.
+  // O primeiro quadro precisa manter pixels, transparencia e proporcao.
+  { int w, h, ow, oh;
+    unsigned char *foto = gif_primeiro_rgba(grande, n, 0, &w, &h, &ow, &oh);
+    modelo(W, H, q, 5, 0, esperado);
+    assert(foto && w == W && h == H && ow == W && oh == H);
+    assert(!memcmp(foto, esperado, (size_t)W * H * 4));
+    free(foto);
+    foto = gif_primeiro_rgba(grande, n, 16, &w, &h, &ow, &oh);
+    assert(foto && w == 16 && h == 10 && ow == W && oh == H);
+    free(foto);
+    assert(!gif_primeiro_rgba(grande, 13, 0, &w, &h, &ow, &oh));
+    assert(w == 0 && h == 0 && ow == 0 && oh == 0);
+    { unsigned char salvo[4];
+      memcpy(salvo, grande + 6, 4);
+      memset(grande + 6, 255, 4);
+      assert(!gif_primeiro_rgba(grande, n, 16, &w, &h, &ow, &oh));
+      memcpy(grande + 6, salvo, 4); }
+    puts("ok  capa GIF: primeiro quadro exato, escala e limite de memoria"); }
+
   { GifDec *d;
     unsigned char *copia = (unsigned char *)malloc(n);
     int volta, y0, y1;
@@ -313,6 +333,23 @@ static void decodificador(void) {
       }
     gif_dec_fechar(d);
     puts("ok  decodificador: LZW, paleta local, entrelacado, transparencia e descartes 1/2/3 batem com o modelo"); }
+
+  { int w, h, ow, oh;
+    unsigned char *foto, *copia;
+    size_t corte;
+    q[0].transp = 3;
+    n = montarGif(W, H, 4, q, 1);
+    modelo(W, H, q, 1, 0, esperado);
+    foto = gif_primeiro_rgba(grande, n, 0, &w, &h, &ow, &oh);
+    assert(foto && !memcmp(foto, esperado, (size_t)W * H * 4));
+    free(foto);
+    copia = malloc(n); assert(copia); memcpy(copia, grande, n);
+    assert(!gif_dec_abrir(copia, n, W, H));
+    for (corte = 0; corte < n; corte++) {
+      foto = gif_primeiro_rgba(grande, corte, 16, &w, &h, &ow, &oh);
+      free(foto);
+    }
+    puts("ok  capa GIF unica transparente; animacao ainda exige dois quadros; truncamentos seguros"); }
 
   // TABELA CHEIA: 320x200 de ruido em 256 cores estoura os 4096 codigos
   // varias vezes (CLEAR no meio do quadro).

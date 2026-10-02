@@ -20,6 +20,9 @@ static void iniciarGravador(void);
 #ifdef NV_TEX_TEST_AFTER_POP
 extern void NV_TEX_TEST_AFTER_POP(void);
 #endif
+#ifdef NV_TEX_TEST_BEFORE_DISK_LOCK
+extern void NV_TEX_TEST_BEFORE_DISK_LOCK(void);
+#endif
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <pthread.h>
@@ -227,6 +230,12 @@ static int nMax = 64;
 static unsigned long relogio = 1;
 
 static SDL_mutex *mtx;
+#ifndef __EMSCRIPTEN__
+// O gravador de disco vive ate o processo sair. Seu callback de poda precisa
+// terminar antes de mtx/itens serem destruidos e observar a proxima
+// inicializacao completa. Ordem: vidaMtx, depois mtx; nunca o inverso.
+static pthread_mutex_t vidaMtx = PTHREAD_MUTEX_INITIALIZER;
+#endif
 static SDL_Thread *thr;
 static int rodando = 0;
 
@@ -252,8 +261,11 @@ static char dirCache[512];
 // comentario "So apaga o que esta no NOSSO cache". Eu escrevi duas remocoes
 // novas ao lado dela e nao a repeti.
 static int noCache(const char *caminho) {
-  return dirCache[0] && caminho &&
-         !strncmp(caminho, dirCache, strlen(dirCache));
+  size_t n = strlen(dirCache);
+  // /cache-pacote nao pertence a /cache: a limpeza de decode nao pode
+  // apagar arte local so porque o nome da pasta compartilha o prefixo.
+  return n && caminho && !strncmp(caminho, dirCache, n) &&
+         (dirCache[n - 1] == '/' || caminho[n] == '/');
 }
 // Bytes gravados no cache de disco. No alvo Tizen "disco" e MEMFS, ou seja RAM
 // (o log mostra idbfs=0/0.0ms), e nada nunca e apagado — cada arte baixada fica
@@ -1086,7 +1098,11 @@ static int discoProtegido(const char *caminho, void *ctx) {
   int i, protegido = 0;
   (void)ctx;
   if (cachearte_nativo_protegido(caminho)) return 1;
-  if (!mtx) return 0;
+  pthread_mutex_lock(&vidaMtx);
+  if (!mtx) { pthread_mutex_unlock(&vidaMtx); return 0; }
+#ifdef NV_TEX_TEST_BEFORE_DISK_LOCK
+  NV_TEX_TEST_BEFORE_DISK_LOCK();
+#endif
   SDL_LockMutex(mtx);
   for (i = 0; i < nMax; i++) {
     char local[600];
@@ -1095,6 +1111,7 @@ static int discoProtegido(const char *caminho, void *ctx) {
     if (!strcmp(local, caminho)) { protegido = 1; break; }
   }
   SDL_UnlockMutex(mtx);
+  pthread_mutex_unlock(&vidaMtx);
   return protegido;
 }
 static void publicarDiscoNativo(void) {
@@ -1176,7 +1193,7 @@ static int gravarArquivo(const char *dst, const char *sufixo,
  * (gravacaoPendente) e nao volta a rede. */
 #define NV_GRAV_MAX 32
 #define NV_GRAV_BYTES (24L * 1024L * 1024L)
-typedef struct { char dst[600]; unsigned char *b; long n; } Grav;
+typedef struct { char dst[600]; unsigned char *b; long n; int cancelada; } Grav;
 static pthread_mutex_t gravMtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t gravCond = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t gravVazia = PTHREAD_COND_INITIALIZER;
@@ -1202,6 +1219,7 @@ static void *fioGravador(void *arg) {
   cachearte_estatisticas_pedir();
   podarSePreciso(0, 0);
   for (;;) {
+    char descartar[600] = "";
     pthread_mutex_lock(&gravMtx);
     while (!gravN) { pthread_cond_broadcast(&gravVazia); pthread_cond_wait(&gravCond, &gravMtx); }
     gravAtual = filaGrav[gravIni];
@@ -1210,8 +1228,20 @@ static void *fioGravador(void *arg) {
     pthread_mutex_unlock(&gravMtx);
     if (gravAtual.b) gravarArquivo(gravAtual.dst, ".fila", gravAtual.b, gravAtual.n);
     pthread_mutex_lock(&gravMtx);
+    // O decode pode recusar o corpo enquanto fwrite ainda esta em curso.
+    // Nao libera o buffer do gravador; remove o arquivo depois do rename.
+    if (gravAtual.cancelada) {
+      snprintf(descartar, sizeof descartar, "%s", gravAtual.dst);
+      pthread_mutex_unlock(&gravMtx);
+      if (remove(descartar) == 0) {
+        cachearte_nativo_indice_remover(descartar);
+        publicarDiscoNativo();
+      }
+      pthread_mutex_lock(&gravMtx);
+    }
     gravBytes -= gravAtual.n;
     free(gravAtual.b); gravAtual.b = NULL; gravAtual.dst[0] = 0; gravAtual.n = 0;
+    gravAtual.cancelada = 0;
     pthread_mutex_unlock(&gravMtx);
   }
   return NULL;
@@ -1263,7 +1293,7 @@ static int enfileirarGravacao(const char *dst, const unsigned char *b, long n) {
     Grav *g = &filaGrav[(gravIni + gravN) % NV_GRAV_MAX];
     memcpy(copia, b, (size_t)n);
     snprintf(g->dst, sizeof g->dst, "%s", dst);
-    g->b = copia; g->n = n;
+    g->b = copia; g->n = n; g->cancelada = 0;
     gravN++; gravBytes += n; ok = 1;
     pthread_cond_signal(&gravCond);
   } else {
@@ -1281,7 +1311,8 @@ static int gravacaoPendente(const char *dst, unsigned char **b, long *n) {
   pthread_mutex_lock(&gravMtx);
   for (i = -1; i < gravN && !ok; i++) {
     Grav *g = i < 0 ? &gravAtual : &filaGrav[(gravIni + i) % NV_GRAV_MAX];
-    if (g->b && !strcmp(g->dst, dst) && (*b = (unsigned char *)malloc((size_t)g->n)) != NULL) {
+    if (g->b && !g->cancelada && !strcmp(g->dst, dst) &&
+        (*b = (unsigned char *)malloc((size_t)g->n)) != NULL) {
       memcpy(*b, g->b, (size_t)g->n); *n = g->n; ok = 1;
     }
   }
@@ -1292,6 +1323,7 @@ static int gravacaoPendente(const char *dst, unsigned char **b, long *n) {
 static void cancelarGravacao(const char *dst) {
   int i;
   pthread_mutex_lock(&gravMtx);
+  if (gravAtual.b && !strcmp(gravAtual.dst, dst)) gravAtual.cancelada = 1;
   for (i = 0; i < gravN; i++) {
     Grav *g = &filaGrav[(gravIni + i) % NV_GRAV_MAX];
     if (g->b && !strcmp(g->dst, dst)) { gravBytes -= g->n; free(g->b); g->b = NULL; g->n = 0; }
@@ -1757,6 +1789,7 @@ static int baixarParaItem(int idx, const char *url, char *dst, size_t tam, int *
     free(itens[idx].bruto);
     itens[idx].bruto = corpo;
     itens[idx].nBruto = n;
+    snprintf(itens[idx].urlCache, sizeof itens[idx].urlCache, "%s", url);
     SDL_UnlockMutex(mtx);
     return 1;
   }
@@ -2045,6 +2078,41 @@ SDL_Surface *tex_reduzir(SDL_Surface *src, int lw, int lh) {
   return dst;
 }
 
+#ifndef __EMSCRIPTEN__
+// Algumas SDL_image do webOS nao incluem GIF. A foto usa o decoder C ja
+// embarcado: um quadro, limitado, sem iniciar animacao nem fio adicional.
+static SDL_Surface *gifFotoMem(const unsigned char *b, size_t n, int limite,
+                              int *ow, int *oh) {
+  int w, h, y;
+  unsigned char *px = gif_primeiro_rgba(b, n, limite, &w, &h, ow, oh);
+  SDL_Surface *s;
+  if (!px) return NULL;
+  s = nv_superficie(0, w, h, 32, SDL_PIXELFORMAT_ABGR8888);
+  if (s)
+    for (y = 0; y < h; y++)
+      memcpy((char *)s->pixels + y * s->pitch, px + (size_t)y * w * 4, (size_t)w * 4);
+  free(px);
+  return s;
+}
+
+static SDL_Surface *gifFotoArquivo(const char *caminho, int limite, int *ow, int *oh) {
+  unsigned char magic[4], *b;
+  long n;
+  SDL_Surface *s = NULL;
+  FILE *f = fopen(caminho, "rb");
+  if (!f) return NULL;
+  if (fread(magic, 1, sizeof magic, f) != sizeof magic || memcmp(magic, "GIF8", 4) ||
+      fseek(f, 0, SEEK_END) != 0 || (n = ftell(f)) < 14 || n > 32L * 1024 * 1024 ||
+      fseek(f, 0, SEEK_SET) != 0) { fclose(f); return NULL; }
+  b = malloc((size_t)n);
+  if (b && fread(b, 1, (size_t)n, f) == (size_t)n)
+    s = gifFotoMem(b, (size_t)n, limite, ow, oh);
+  free(b);
+  fclose(f);
+  return s;
+}
+#endif
+
 static int threadDecode(void *arg) {
   (void)arg;
   // PRIORIDADE BAIXA, e isto nao e detalhe.
@@ -2103,9 +2171,9 @@ static int threadDecode(void *arg) {
     int daMemoria = bruto != NULL;
 #ifdef __EMSCRIPTEN__
     int varianteCache = itens[idx].varianteCache;
+#endif
     char urlCache[NV_TEX_URL_MAX];
     snprintf(urlCache, sizeof urlCache, "%s", itens[idx].urlCache);
-#endif
     itens[idx].bruto = NULL; itens[idx].nBruto = 0;
     itens[idx].urlCache[0] = 0;
     SDL_UnlockMutex(mtx);
@@ -2135,6 +2203,7 @@ static int threadDecode(void *arg) {
         bruta = rw ? IMG_Load_RW(rw, 1) : NULL;
       }
       if (!bruta) bruta = webp_carregar_larg_mem(bruto, (size_t)nBruto, limite, &srcW, &srcH);
+      if (!bruta) bruta = gifFotoMem(bruto, (size_t)nBruto, limite, &srcW, &srcH);
 #endif
       free(bruto);
     } else
@@ -2157,6 +2226,9 @@ static int threadDecode(void *arg) {
     // O SDL2_image desta TV nao le WebP; a libwebp do sistema le (webp.c),
     // e ja reduz ao limite — os fundos do Xperience sao 3840x2160.
     if (!bruta) bruta = webp_carregar_larg(caminho, limite, &srcW, &srcH);
+#ifndef __EMSCRIPTEN__
+    if (!bruta) bruta = gifFotoArquivo(caminho, limite, &srcW, &srcH);
+#endif
     }
     tLoad = SDL_GetTicks();
     if (bruta && !srcW) { srcW = bruta->w; srcH = bruta->h; }
@@ -2490,7 +2562,9 @@ static int threadDecode(void *arg) {
            * estar na fila de gravacao; nao deixa virar arquivo envenenado. */
           if (daMemoria) {
             char local[600];
-            nomeDeCache(urlOrig, local, sizeof local);
+            // A chave do item pode ser /original/, mas os bytes baixados e
+            // a gravacao pertencem a /w780/ ou /w1280/. Invalida essa URL.
+            nomeDeCache(urlCache[0] ? urlCache : urlOrig, local, sizeof local);
             cancelarGravacao(local);
             if (remove(local) == 0) { cachearte_nativo_indice_remover(local); publicarDiscoNativo(); }
           }
@@ -2850,11 +2924,17 @@ int tex_iniciar(int max_itens) {
   // esta e nao um numero maior cravado.
   { float e = escalaBuf > 0.1f ? escalaBuf : 1.0f;
     orcamento = (long)(mb * e * e) * 1024L * 1024L; }
+#ifndef __EMSCRIPTEN__
+  pthread_mutex_lock(&vidaMtx);
+#endif
   bytesUsados = 0;
   memset(itens, 0, sizeof itens);
   mtx = SDL_CreateMutex(); cond = SDL_CreateCond();
   condDec = SDL_CreateCond(); condLivre = SDL_CreateCond();
   rodando = 1;
+#ifndef __EMSCRIPTEN__
+  pthread_mutex_unlock(&vidaMtx);
+#endif
   // DOIS fios de decode, nao um. A fila e retirada sob o mutex e cada fio leva
   // um indice proprio, entao mais consumidores e seguro sem outra mudanca.
   //
@@ -2882,6 +2962,7 @@ int tex_iniciar(int max_itens) {
 }
 
 void tex_encerrar(void) {
+  if (!mtx) return;
   SDL_LockMutex(mtx); rodando = 0;
   SDL_CondBroadcast(cond); SDL_CondBroadcast(condDec);
   SDL_CondBroadcast(condLivre);
@@ -2894,11 +2975,25 @@ void tex_encerrar(void) {
     for (k = 0; k < NV_TEX_FIOS_REDE; k++)
       if (thrsRede[k]) { SDL_WaitThread(thrsRede[k], NULL); thrsRede[k] = NULL; }
     thr = NULL; }
+#ifndef __EMSCRIPTEN__
+  // Nenhum mutex SDL esta tomado aqui: o callback em curso pode termina-lo,
+  // e os seguintes so veem mtx NULL depois deste encerramento completo.
+  pthread_mutex_lock(&vidaMtx);
+#endif
   for (int i = 0; i < nMax; i++) {
     if (itens[i].tex) glDeleteTextures(1, &itens[i].tex);
     if (itens[i].sup) SDL_FreeSurface(itens[i].sup);
+    soltarBruto(&itens[i]);
   }
+  memset(itens, 0, sizeof itens);
+  filaIni = filaFim = decIni = decFim = 0;
+  bytesUsados = 0; fiosRedeCriados = 0;
+  SDL_DestroyCond(condLivre); SDL_DestroyCond(condDec);
   SDL_DestroyCond(cond); SDL_DestroyMutex(mtx);
+  condLivre = condDec = cond = NULL; mtx = NULL;
+#ifndef __EMSCRIPTEN__
+  pthread_mutex_unlock(&vidaMtx);
+#endif
 }
 
 // Ver tex_obter_larg_qualquer: 1 durante essa chamada, e a textura menor que

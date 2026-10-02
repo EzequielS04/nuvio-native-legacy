@@ -19,9 +19,15 @@
   #define glCheckFramebufferStatus glCheckFramebufferStatusEXT
   #define glDeleteFramebuffers     glDeleteFramebuffersEXT
   #define glGenerateMipmap         glGenerateMipmapEXT
-  #define GL_FRAMEBUFFER           GL_FRAMEBUFFER_EXT
-  #define GL_COLOR_ATTACHMENT0     GL_COLOR_ATTACHMENT0_EXT
-  #define GL_FRAMEBUFFER_COMPLETE  GL_FRAMEBUFFER_COMPLETE_EXT
+  #ifndef GL_FRAMEBUFFER
+    #define GL_FRAMEBUFFER           GL_FRAMEBUFFER_EXT
+  #endif
+  #ifndef GL_COLOR_ATTACHMENT0
+    #define GL_COLOR_ATTACHMENT0     GL_COLOR_ATTACHMENT0_EXT
+  #endif
+  #ifndef GL_FRAMEBUFFER_COMPLETE
+    #define GL_FRAMEBUFFER_COMPLETE  GL_FRAMEBUFFER_COMPLETE_EXT
+  #endif
   // GLSL 1.20 nao tem qualificadores de precisao; declara-los quebra a
   // compilacao, entao viram nada.
   #define NV_GLSL_PREFIXO \

@@ -569,7 +569,8 @@ static int webpProximo(GifDec *d, int *y0s, int *y1s) {
 int gif_webp_suportado(void) { return 0; }
 #endif
 
-GifDec *gif_dec_abrir(unsigned char *b, size_t n, int saidaW, int saidaH) {
+static GifDec *decAbrir(unsigned char *b, size_t n, int saidaW, int saidaH,
+                        int primeiro) {
   GifDec *d;
   GifQuadro *q;
   int nq, telaW, telaH, i, precisaSalvo = 0;
@@ -584,10 +585,10 @@ GifDec *gif_dec_abrir(unsigned char *b, size_t n, int saidaW, int saidaH) {
   // de 65535x65535 pediria 17 GB. Nenhuma capa ou avatar chega perto.
   if (telaW < 1 || telaH < 1 || (long)telaW * telaH > GIF_TELA_MAX ||
       saidaW < 1 || saidaH < 1 || saidaW > telaW || saidaH > telaH) { free(b); return NULL; }
-  q = (GifQuadro *)malloc(sizeof *q * NV_GIF_MAX_Q);
+  q = (GifQuadro *)malloc(sizeof *q * (primeiro ? 1 : NV_GIF_MAX_Q));
   if (!q) { free(b); return NULL; }
-  nq = gif_mapear(b, n, q, NV_GIF_MAX_Q);
-  if (nq < 2) { free(q); free(b); return NULL; }
+  nq = gif_mapear(b, n, q, primeiro ? 1 : NV_GIF_MAX_Q);
+  if (nq < (primeiro ? 1 : 2)) { free(q); free(b); return NULL; }
   { GifQuadro *menor = (GifQuadro *)realloc(q, sizeof *q * (size_t)nq); if (menor) q = menor; }
   d = (GifDec *)calloc(1, sizeof *d);
   if (!d) { free(q); free(b); return NULL; }
@@ -607,6 +608,43 @@ GifDec *gif_dec_abrir(unsigned char *b, size_t n, int saidaW, int saidaH) {
   for (i = 0; i <= saidaW; i++) d->colX[i] = (int)((long)i * telaW / saidaW);
   for (i = 0; i <= saidaH; i++) d->linY[i] = (int)((long)i * telaH / saidaH);
   return d;
+}
+
+GifDec *gif_dec_abrir(unsigned char *b, size_t n, int saidaW, int saidaH) {
+  return decAbrir(b, n, saidaW, saidaH, 0);
+}
+
+unsigned char *gif_primeiro_rgba(const unsigned char *b, size_t n, int largMax,
+                                 int *w, int *h, int *originalW, int *originalH) {
+  int ow, oh, sw, sh, y0, y1;
+  unsigned char *copia, *rgba = NULL;
+  GifDec *d;
+  if (w) *w = 0;
+  if (h) *h = 0;
+  if (originalW) *originalW = 0;
+  if (originalH) *originalH = 0;
+  if (!b || n < 14 || n > 32u * 1024u * 1024u || memcmp(b, "GIF8", 4)) return NULL;
+  ow = b[6] | (b[7] << 8); oh = b[8] | (b[9] << 8);
+  if (ow < 1 || oh < 1 || (long)ow * oh > GIF_TELA_MAX) return NULL;
+  gif_tamanho_saida(ow, oh, largMax > 0 ? largMax : ow, &sw, &sh);
+  copia = malloc(n);
+  if (!copia) return NULL;
+  memcpy(copia, b, n);
+  d = decAbrir(copia, n, sw, sh, 1);
+  if (!d) return NULL;
+  if (gif_dec_proximo(d, &y0, &y1) == 0) {
+    size_t bytes = (size_t)sw * sh * 4;
+    rgba = malloc(bytes);
+    if (rgba) {
+      memcpy(rgba, gif_dec_saida(d), bytes);
+      if (w) *w = sw;
+      if (h) *h = sh;
+      if (originalW) *originalW = ow;
+      if (originalH) *originalH = oh;
+    }
+  }
+  gif_dec_fechar(d);
+  return rgba;
 }
 
 int gif_dec_quadros(const GifDec *d) { return d ? d->nq : 0; }

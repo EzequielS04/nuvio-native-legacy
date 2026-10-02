@@ -98,6 +98,10 @@ void gif_tamanho_saida(int telaW, int telaH, int largAlvo, int *saidaW, int *sai
 // 2+ quadros ou a tela passa de GIF_TELA_MAX pixels.
 #define GIF_TELA_MAX (1280 * 1280)
 GifDec *gif_dec_abrir(unsigned char *b, size_t n, int saidaW, int saidaH);
+// Foto de um GIF, inclusive de um quadro, sem SDL_image nem animacao.
+// Retorna RGBA reduzido (free pelo chamador), ou NULL. Mantem GIF_TELA_MAX.
+unsigned char *gif_primeiro_rgba(const unsigned char *b, size_t n, int largMax,
+                                 int *w, int *h, int *originalW, int *originalH);
 int  gif_dec_quadros(const GifDec *d);
 void gif_dec_tela(const GifDec *d, int *w, int *h);
 // Decodifica o PROXIMO quadro (volta ao 0 no fim). Devolve o indice dele e as

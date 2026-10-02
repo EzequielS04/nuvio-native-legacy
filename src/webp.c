@@ -471,6 +471,7 @@ static void soltar(uint8_t *px) { free(px); }   // o _malloc do JS e este malloc
 #else
 // -------------------------------------------------------- webOS e Mac ------
 #include <dlfcn.h>
+#include <pthread.h>
 
 typedef int      (*FnInfo)(const uint8_t *, size_t, int *, int *);
 typedef uint8_t *(*FnRgba)(const uint8_t *, size_t, int *, int *);
@@ -519,7 +520,8 @@ typedef void (*FnFreeBuf)(WpBuffer *);
 
 static FnInfo pInfo; static FnRgba pRgba; static FnFree pFree;
 static FnCfgInit pCfgInit; static FnDecode pDecode; static FnFreeBuf pFreeBuf;
-static int tentado, escalaAvisada;
+static pthread_once_t abrirUmaVez = PTHREAD_ONCE_INIT;
+static int escalaAvisada;
 
 static void abrir(void) {
   static const char *nomes[] = {
@@ -528,7 +530,6 @@ static void abrir(void) {
 #endif
     "libwebp.so.7", "libwebp.so", "libwebp.7.dylib", "/opt/homebrew/lib/libwebp.7.dylib", NULL };
   void *h = NULL; int i;
-  tentado = 1;
   for (i = 0; nomes[i] && !h; i++) h = dlopen(nomes[i], RTLD_NOW);
   if (!h) { printf("[webp] libwebp ausente; .webp nao vai decodificar\n"); return; }
   pInfo = (FnInfo)dlsym(h, "WebPGetInfo");
@@ -555,8 +556,8 @@ static uint8_t *decodificarEscalado(const unsigned char *dados, size_t n, int w,
   if (!pCfgInit) return NULL;
   memset(&cfg, 0, sizeof cfg);
   if (!pCfgInit(&cfg, WP_ABI)) {
-    if (!escalaAvisada) { escalaAvisada = 1; printf("[webp] libwebp recusou o ABI %#x: sem escala no decoder\n", WP_ABI); }
-    pCfgInit = NULL;
+    if (__sync_bool_compare_and_swap(&escalaAvisada, 0, 1))
+      printf("[webp] libwebp recusou o ABI %#x: sem escala no decoder\n", WP_ABI);
     return NULL;
   }
   cfg.options.use_scaling   = 1;
@@ -667,7 +668,7 @@ static uint8_t *primeiroQuadro(const unsigned char *d, size_t n, int *lw, int *l
 static uint8_t *decodificar(const unsigned char *dados, size_t n, int largMax,
                             int *lw, int *lh, int *ow, int *oh) {
   int w = 0, h = 0; uint8_t *px;
-  if (!tentado) abrir();
+  pthread_once(&abrirUmaVez, abrir);
   if (pRgba && n >= 30 && !memcmp(dados + 12, "VP8X", 4) && (dados[20] & 0x02))
     return primeiroQuadro(dados, n, lw, lh, ow, oh);
   if (!pRgba || !pInfo(dados, n, &w, &h) || w < 1 || h < 1) return NULL;
