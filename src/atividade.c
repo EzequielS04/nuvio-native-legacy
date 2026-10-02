@@ -158,26 +158,17 @@ static void ler(void) {
 int atividade_permitido(void) { return permitido; }
 int atividade_envia(void) { return recomenda_ativo() && permitido > 0; }
 
-// Os dois cabecalhos do servico, pela mesma regra de recomenda.c (identidade):
-// Trakt quando ligado, senao a sessao do Nuvio. 0 = sem identidade ainda.
-static char fioAut[3200], fioVia[32], fioUrl[600];
+// Os cabecalhos sao os de recomenda.c (recomenda_cabecalhos): Authorization,
+// X-Nuvio-Auth e, num perfil que nao e o principal, X-Nuvio-Perfil — sem este o
+// evento cairia na pessoa do perfil principal. 0 = sem identidade ainda.
+static char fioAut[3200], fioVia[32], fioPerfil[48], fioUrl[600];
 static int identidade(const char **cab) {
-  const char *tcab[4];
-  char chave[160];
-  if (trakt_ativo() && trakt_cabecalhos(tcab, fioAut, sizeof fioAut, chave, sizeof chave)) {
-    snprintf(fioVia, sizeof fioVia, "X-Nuvio-Auth: trakt");
-  } else if (sessao_token()[0]) {
-    snprintf(fioAut, sizeof fioAut, "Authorization: Bearer %s", sessao_token());
-    snprintf(fioVia, sizeof fioVia, "X-Nuvio-Auth: nuvio");
-  } else {
-    return 0;
-  }
-  cab[0] = fioAut; cab[1] = fioVia; cab[2] = NULL;
-  return 1;
+  return recomenda_cabecalhos(cab, fioAut, sizeof fioAut, fioVia, sizeof fioVia,
+                              fioPerfil, sizeof fioPerfil);
 }
 
 static int fioEnviar(void *u) {
-  const char *cab[3];
+  const char *cab[4];
   static char corpo[sizeof fila[0]];   // so este fio usa; um fio vivo por vez
   (void)u;
   snprintf(fioUrl, sizeof fioUrl, "%s/v1/atividade", NV_REC_URL);

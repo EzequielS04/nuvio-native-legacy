@@ -69,6 +69,13 @@
 // SV_REFAZ_MS. O desenho le ponteiros const; nada aqui aloca por quadro.
 #ifndef NV_SOCIALVIS_H
 #define NV_SOCIALVIS_H
+
+// A PONTE COM O SERVIDOR NOVO (feed unido, perfil do amigo, alcance) ESTA
+// LIGADA desde o merge de agente/socialsrv. Um teste que nao linka recomenda.c
+// pode desligar com -DNV_SOCIAL_V1.
+#if !defined(NV_SOCIAL_V1) && !defined(NV_SOCIAL_V2)
+#define NV_SOCIAL_V2 1
+#endif
 #include <stddef.h>
 
 #define SV_AMIGOS_MAX   16

@@ -1176,6 +1176,9 @@ int app_iniciar(const char *dirArte) {
   // faz isso e recomenda_verificar, la embaixo, com a home ja de pe.
   recomenda_iniciar();
   atividade_iniciar();   // a fila de POST /v1/atividade que nao saiu (atividade.h)
+  // O envio da atividade segue o nivel de privacidade (alcance) do Social: a
+  // funcao e chamada agora e a cada mudanca; "nao perguntado" chega como 0.
+  recomenda_ao_mudar_alcance(atividade_definir_permitido);
   // Sem conta, o app abre no login. Com sessao gravada ele nem passa por ela —
   // pedir o codigo de novo a cada arranque seria o mesmo que nao ter gravado.
   if (sessao_logada()) {

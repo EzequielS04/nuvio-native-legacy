@@ -18,6 +18,9 @@
 #define rede_baixar_com   teste_rede_com
 #include "../src/recomenda.c"
 
+/* Com a chave "Amigo #%d" na tabela, o idioma do processo de teste pode
+   devolver a forma traduzida ("Friend #"): as duas sao o mesmo fallback. */
+#define SEM_NOME(x) (!strncmp((x), "Amigo #", 7) || !strncmp((x), "Friend #", 8))
 static const char *respCorpo = "{}";
 static int  respStatus = 200;
 static char respEtag[96];
@@ -96,9 +99,9 @@ int main(void) {
 
   // --- nome nunca UUID ---------------------------------------------------------
   rec_nome_exibicao(nome, sizeof nome, "", "nuvio:5269539e-1111-4222-8333-944455556666");
-  CONFERE(!strncmp(nome, "Amigo #", 7), "sem nome vira 'Amigo #n' (veio \"%s\")", nome);
+  CONFERE(SEM_NOME(nome), "sem nome vira 'Amigo #n' (veio \"%s\")", nome);
   CONFERE(!strstr(nome, "5269"), "e nunca o UUID (veio \"%s\")", nome);
-  CONFERE(strlen(nome) <= 10, "e curto (veio \"%s\")", nome);
+  CONFERE(strlen(nome) <= 12, "e curto (veio \"%s\")", nome);
   { char outro[64];
     rec_nome_exibicao(outro, sizeof outro, "", "nuvio:5269539e-1111-4222-8333-944455556666");
     CONFERE(!strcmp(nome, outro), "e estavel para o mesmo id"); }
@@ -109,7 +112,7 @@ int main(void) {
   { RecItem it;
     const char *j = "{\"id\":3,\"de\":\"nuvio:5269539e-aaaa\",\"deNome\":\"\",\"imdb\":\"tt1\",\"titulo\":\"T\"}";
     lerItem(j, j + strlen(j), &it);
-    CONFERE(!strncmp(it.deNome, "Amigo #", 7), "rec de quem nao tem nome: 'Amigo #n' (veio \"%s\")", it.deNome); }
+    CONFERE(SEM_NOME(it.deNome), "rec de quem nao tem nome: 'Amigo #n' (veio \"%s\")", it.deNome); }
 
   // --- parse do feed (JSON real) -------------------------------------------------
   { RecEvento f[8];
@@ -119,7 +122,7 @@ int main(void) {
     CONFERE(f[1].acao == REC_ACAO_INICIO && f[1].temporada == 2 && f[1].episodio == 5, "inicio com episodio");
     CONFERE(!strcmp(f[1].titulo, "Serie \"X\"") && !strcmp(f[1].midia, "series"), "titulo com aspas e midia");
     CONFERE(f[2].grau == 2 && !strcmp(f[2].via, "Gustavo"), "amigo de amigo com via");
-    CONFERE(!strncmp(f[2].pessoaNome, "Amigo #", 7), "amigo de amigo sem nome nao mostra o handle (\"%s\")", f[2].pessoaNome); }
+    CONFERE(SEM_NOME(f[2].pessoaNome), "amigo de amigo sem nome nao mostra o handle (\"%s\")", f[2].pessoaNome); }
 
   // --- perfil do amigo (JSON real) ----------------------------------------------
   { static RecAmigo a;

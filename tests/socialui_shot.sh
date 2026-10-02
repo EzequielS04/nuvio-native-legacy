@@ -16,7 +16,7 @@ for source in src/*.c; do
   sources+=("$source")
 done
 if ! cc "${sources[@]}" tests/socialui_shot.c -Isrc -o "$NUVIO_DADOS/shot" \
-  -O1 -g -DNV_SOCIALVIS_DEMO -DNV_SOCIAL_V2_UI -include tests/socialv2_stub.h -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
+  -O1 -g -DNV_SOCIALVIS_DEMO -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
   -L/opt/homebrew/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lz -framework OpenGL \
   -Wno-deprecated-declarations -Wno-macro-redefined >"$NUVIO_DADOS/build.log" 2>&1; then
   cat "$NUVIO_DADOS/build.log" >&2
