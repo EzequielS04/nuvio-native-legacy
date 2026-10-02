@@ -28,6 +28,11 @@
 // Guarda `corpo` (a resposta crua) como a copia desta superficie. 1 se gravou.
 int   contacache_gravar(const char *superficie, int perfil, const char *usuario,
                         const char *corpo);
+// Uma resposta iniciada antes do logout nao pode recriar os arquivos apagados.
+unsigned contacache_geracao(void);
+int   contacache_gravar_geracao(const char *superficie, int perfil,
+                               const char *usuario, const char *corpo,
+                               unsigned geracao);
 
 // Le a copia, se existir e for desta conta e deste perfil. Devolve o corpo
 // (free pelo chamador) ou NULL. `quando` recebe o instante da gravacao (epoch).

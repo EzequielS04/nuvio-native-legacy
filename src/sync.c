@@ -153,6 +153,16 @@ static int  foraHttp, usandoCopia;
 static long copiaQuando;
 // Status HTTP da ultima puxarBlob (-2 quando nem perguntou: RPC ausente).
 static int  ultimoSt;
+static char usuarioDoCiclo[80];
+static unsigned copiaGeracaoDoCiclo;
+
+static int contaDoCicloAtual(void) {
+  return sessao_logada() && !strcmp(usuarioDoCiclo, sessao_usuario()) &&
+         copiaGeracaoDoCiclo == contacache_geracao();
+}
+static int perfilDoCicloAtual(void) {
+  return contaDoCicloAtual() && perfilDoCiclo == perfis_ativo();
+}
 
 static void falhaServidor(int st) { if (!foraCiclo) foraCiclo = st ? st : -1; }
 
@@ -205,7 +215,7 @@ static int lerAddons(const char *r) {
 static int puxarAddons(void) {
   char consulta[400], dono[80];
   char *r;
-  int st = 0, k;
+  int st = 0, k, perfilAddons = perfis_ativo_addons();
 
   if (!perfis_dono()[0]) return 0;
   nuvem_url_escapar(perfis_dono(), dono, sizeof dono);
@@ -217,10 +227,16 @@ static int puxarAddons(void) {
   // resposta vinha vazia e o perfil abria sem addon nenhum.
   snprintf(consulta, sizeof consulta,
            "user_id=eq.%s&profile_id=eq.%d&select=*&order=sort_order.asc",
-           dono, perfis_ativo_addons());
+           dono, perfilAddons);
   // Com a chave anonima o RLS responde 401 "permission denied for table
   // addons": ler as linhas de alguem exige o token de quem esta pedindo.
   r = sessao_tabela("addons", consulta, &st);
+  // O pedido pertence ao perfil/conta de antes da rede. Uma troca durante a
+  // resposta nao pode guardar nem aplicar a lista antiga no novo perfil.
+  if (!perfilDoCicloAtual() || perfilAddons != perfis_ativo_addons()) {
+    free(r);
+    return 0;
+  }
   if (!ok2xx(r, st)) {
     int ausente = r && nuvem_erro_ausente(r);
     if (ausente) printf("[sync] tabela addons ausente\n");
@@ -232,7 +248,7 @@ static int puxarAddons(void) {
     // abria vazia em toda TV ao mesmo tempo.
     falhaServidor(st);
     { long q = 0;
-      char *c = contacache_ler(CC_ADDONS, perfis_ativo_addons(), sessao_usuario(), &q);
+      char *c = contacache_ler(CC_ADDONS, perfilAddons, usuarioDoCiclo, &q);
       k = c ? lerAddons(c) : 0;
       free(c);
       // Com mudanca local pendente a lista DESTA TV e a certa (ela nao subiu
@@ -251,7 +267,8 @@ static int puxarAddons(void) {
   k = lerAddons(r);
   // So uma lista NAO VAZIA vira copia: um 200 com array vazio por um perfil
   // errado (o caso do Mane155, abaixo) nao pode apagar a copia boa.
-  if (k > 0) contacache_gravar(CC_ADDONS, perfis_ativo_addons(), sessao_usuario(), r);
+  if (k > 0) contacache_gravar_geracao(CC_ADDONS, perfilAddons, usuarioDoCiclo,
+                                      r, copiaGeracaoDoCiclo);
   free(r);
   nAddonsRem = k;
   temAddonsRem = 1;
@@ -544,9 +561,11 @@ static int puxarVistos(int perfil, char **destino) {
 // corpo em *destino) ou -1 sem copia.
 static int copiaBlob(const char *sup, int perfil, int st, char **destino) {
   long q = 0;
-  char *c = contacache_ler(sup, perfil, sessao_usuario(), &q);
+  char *c;
   const char *p;
   int k = 0;
+  if (!perfilDoCicloAtual()) return -1;
+  c = contacache_ler(sup, perfil, usuarioDoCiclo, &q);
   if (!c) { avisoSemCopia(sup, st); return -1; }
   for (p = js_raiz_array(c); p; p = js_prox(js_fim(p))) k++;
   free(*destino);
@@ -561,12 +580,25 @@ static int copiaBlob(const char *sup, int perfil, int st, char **destino) {
 // troca pela copia. `n` e o que puxarBlob/puxarBiblioteca/puxarVistos
 // devolveu; o retorno e o que fica valendo.
 static int guardarOuCopia(const char *sup, int perfil, int n, char **blob) {
-  if (n > 0 && *blob) { contacache_gravar(sup, perfil, sessao_usuario(), *blob); return n; }
-  if (n < 0 && contacache_falha_transitoria(ultimoSt)) {
+  if (!perfilDoCicloAtual()) return -1;
+  // Uma pagina posterior pode falhar depois de n linhas chegarem. Essa lista
+  // parcial nao substitui a ultima copia boa nem esconde a queda do servidor.
+  if (contacache_falha_transitoria(ultimoSt)) {
     int st = ultimoSt;
+    int copia;
     falhaServidor(st);
-    return copiaBlob(sup, perfil, st, blob);
+    copia = copiaBlob(sup, perfil, st, blob);
+    if (copia < 0) {
+      // Sem snapshot inteiro, conserva a superficie que ja esta em memoria.
+      // Publicar so a primeira pagina faria os demais titulos desaparecerem.
+      free(*blob);
+      *blob = NULL;
+    }
+    return copia;
   }
+  if (n > 0 && *blob && ultimoSt >= 200 && ultimoSt < 300)
+    contacache_gravar_geracao(sup, perfil, usuarioDoCiclo, *blob,
+                              copiaGeracaoDoCiclo);
   return n;
 }
 
@@ -806,6 +838,11 @@ static void *rodar(void *u) {
   addonsCiclo = 0;
   copiaQuandoCiclo = 0;
   perfis_puxar();
+  if (!contaDoCicloAtual()) {
+    estado = SYNC_PRONTO;
+    fioPronto = 1;
+    return NULL;
+  }
   // ESCOLHA DE PERFIL PENDENTE: PARA AQUI, e nao adivinha o perfil 1.
   //
   // Issue #19, "Random Profile Data Appears Briefly Before My Trakt Profile
@@ -888,7 +925,7 @@ static void *rodar(void *u) {
   // (o blob de ajustes, a lista de addons) veio do perfil ANTERIOR — subir
   // seria escrever o perfil 1 dentro do 2 na conta. sync_passo descarta o que
   // foi puxado e pede a volta certa.
-  if (perfis_ativo() != perfilDoCiclo) {
+  if (!perfilDoCicloAtual()) {
     printf("[sync] perfil trocado no meio do ciclo (%d -> %d): nada sobe\n",
            perfilDoCiclo, perfis_ativo());
     fflush(stdout);
@@ -959,6 +996,8 @@ void sync_iniciar(void) {
   if (nuvem_freio_ativo()) return;
   cicloInterrompido = 0;
   perfilDoCiclo = perfis_ativo();
+  snprintf(usuarioDoCiclo, sizeof usuarioDoCiclo, "%s", sessao_usuario());
+  copiaGeracaoDoCiclo = contacache_geracao();
   estado = SYNC_RODANDO;
   fioPronto = 0;
   if (pthread_create(&fio, NULL, rodar, NULL) == 0) { pthread_detach(fio); fioVivo = 1; }
@@ -990,7 +1029,7 @@ void sync_passo(unsigned agoraMs) {
   // frente, porque so eles mudam O QUE a descoberta vai buscar.
   if (addonsCedo) {
     addonsCedo = 0;
-    if (temAddonsRem && perfilDoCiclo == perfis_ativo()) {
+    if (temAddonsRem && perfilDoCicloAtual()) {
       // _addons: a volta que ainda nao leu a lista (o caso do arranque e da
       // escolha de perfil) atende o pedido sozinha, sem ser jogada fora.
       // A lista vale para a poda de fileiras SO DEPOIS de marcada como deste
@@ -1024,7 +1063,7 @@ void sync_passo(unsigned agoraMs) {
   // 2 passava a ser o do 1 (medido na C9 do dono, 24/09: 103 linhas aceitas).
   // Descartar tudo e pedir a volta do perfil certo; o que ja estava na tela e
   // do perfil novo (invalidarPerfil em app.c).
-  if (!cicloInterrompido && perfilDoCiclo != perfis_ativo()) {
+  if (!contaDoCicloAtual() || (!cicloInterrompido && !perfilDoCicloAtual())) {
     printf("[sync] ciclo do perfil %d descartado: o perfil ativo agora e %d\n",
            perfilDoCiclo, perfis_ativo());
     fflush(stdout);

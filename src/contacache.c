@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <pthread.h>
 
 // Envelope: cinco linhas curtas e o corpo intacto. A versao muda se o formato
 // mudar; um arquivo de versao desconhecida e ignorado, nunca interpretado.
@@ -12,6 +13,8 @@
 
 static const char *const SUPERFICIES[] = { CC_ADDONS, CC_COLECOES, CC_BIBLIOTECA, CC_VISTOS };
 #define CC_N_SUP ((int)(sizeof SUPERFICIES / sizeof SUPERFICIES[0]))
+static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
+static unsigned geracao;
 
 static int nome(char *dst, size_t tam, const char *sup, int perfil) {
   int i, conhecida = 0;
@@ -39,8 +42,17 @@ static const char *linha(const char *p, char *dst, size_t tam) {
   return fim + 1;
 }
 
-int contacache_gravar(const char *superficie, int perfil, const char *usuario,
-                      const char *corpo) {
+unsigned contacache_geracao(void) {
+  unsigned g;
+  pthread_mutex_lock(&trava);
+  g = geracao;
+  pthread_mutex_unlock(&trava);
+  return g;
+}
+
+int contacache_gravar_geracao(const char *superficie, int perfil,
+                             const char *usuario, const char *corpo,
+                             unsigned esperada) {
   char arq[64];
   char *buf;
   size_t tam;
@@ -53,9 +65,17 @@ int contacache_gravar(const char *superficie, int perfil, const char *usuario,
   if (!buf) return 0;
   snprintf(buf, tam, CC_VERSAO "\nowner %s\nprofile %d\nsurface %s\nsaved %ld\n%s",
            usuario, perfil, superficie, (long)time(NULL), corpo);
-  ok = dados_gravar(arq, buf);
+  pthread_mutex_lock(&trava);
+  ok = esperada == geracao && dados_gravar(arq, buf);
+  pthread_mutex_unlock(&trava);
   free(buf);
   return ok;
+}
+
+int contacache_gravar(const char *superficie, int perfil, const char *usuario,
+                      const char *corpo) {
+  return contacache_gravar_geracao(superficie, perfil, usuario, corpo,
+                                  contacache_geracao());
 }
 
 char *contacache_ler(const char *superficie, int perfil, const char *usuario,
@@ -66,7 +86,9 @@ char *contacache_ler(const char *superficie, int perfil, const char *usuario,
   long q;
   if (quando) *quando = 0;
   if (!nome(arq, sizeof arq, superficie, perfil) || !usuarioValido(usuario)) return NULL;
+  pthread_mutex_lock(&trava);
   buf = dados_ler(arq);
+  pthread_mutex_unlock(&trava);
   if (!buf) return NULL;
   p = linha(buf, l, sizeof l);
   if (!p || strcmp(l, CC_VERSAO)) goto recusa;
@@ -95,9 +117,12 @@ recusa:
 void contacache_esquecer(void) {
   char arq[64];
   int i, perfil;
+  pthread_mutex_lock(&trava);
+  geracao++;
   for (i = 0; i < CC_N_SUP; i++)
     for (perfil = 1; perfil <= CC_PERFIS; perfil++)
       if (nome(arq, sizeof arq, SUPERFICIES[i], perfil)) dados_apagar(arq);
+  pthread_mutex_unlock(&trava);
 }
 
 void contacache_data(long quando, char *dst, unsigned tam) {
