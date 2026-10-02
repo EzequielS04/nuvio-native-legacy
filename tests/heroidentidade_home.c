@@ -93,3 +93,6 @@ int main(void) {
   puts("heroidentidade: tudo ok");
   return 0;
 }
+
+// Sem textura nesta fixture de identidade.
+float tex_aspecto(const char *url) { (void)url; return 0.0f; }

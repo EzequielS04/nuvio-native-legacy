@@ -320,3 +320,6 @@ int main(void) {
   puts("colfileiras: tudo ok");
   return 0;
 }
+
+// Fixture sem persistencia nem conta real.
+const char *dados_dir(void) { return ""; }

@@ -1526,10 +1526,14 @@ static void posCapturar(void) {
   }
 }
 
-// Devolve o indice que ficou com o foco, ou -1 se a chave gravada nao esta na
-// tela — e nesse caso NADA e movido: o foco fica onde focus_iniciar o deixou,
-// em (0,0). Posicionar num vizinho por aproximacao seria pior que nao
-// restaurar: a pessoa acharia que voltou ao lugar certo.
+static int primeiraFileiraNavegavel(void) {
+  for (int r = 0; r < foco.nFileiras; r++)
+    if (foco.nColunas[r] > 0) return r;
+  return -1;
+}
+
+// Restaura a chave somente quando tem cards. Se ficou vazia, usa a primeira
+// fileira navegavel; sem nenhuma, conserva o destaque.
 static int posAplicarTabela(const HomePos *t, int n,
                             const char *chFoco, int colFoco) {
   int r, achou = -1;
@@ -1568,7 +1572,7 @@ static int posAplicarTabela(const HomePos *t, int n,
   }
   if (chFoco && chFoco[0])
     for (r = 0; r < nFileiras; r++)
-      if (!strcmp(fileiras[r].chave, chFoco)) { achou = r; break; }
+      if (!strcmp(fileiras[r].chave, chFoco) && foco.nColunas[r] > 0) { achou = r; break; }
   if (achou >= 0) {
     int c = colFoco;
     const HomePos *pf = posAchar(t, n, chFoco);
@@ -1592,6 +1596,13 @@ static int posAplicarTabela(const HomePos *t, int n,
     // destaque aqui faria a home sair dele sozinha assim que o segundo
     // catalogo chegasse da rede. Nada se perde — `foco` fica onde a tabela o
     // pos, e o primeiro toque para baixo cai la, com a fileira ja rolada.
+  }
+  if (foco.fileira < 0 || foco.fileira >= foco.nFileiras ||
+      foco.nColunas[foco.fileira] < 1) {
+    int primeira = primeiraFileiraNavegavel();
+    foco.fileira = primeira >= 0 ? primeira : 0;
+    foco.coluna = 0;
+    if (primeira < 0) focoHero = 1;
   }
   return achou;
 }
@@ -1846,12 +1857,17 @@ void home_evento(const SDL_Event *e) {
       heroAutoDesligado = 1;   // voltou um titulo: navega a mao, o carrossel para
       heroPasso(-1); return;
     }
-    if (k == SDLK_DOWN) { focoHero = 0; return; }
+    if (k == SDLK_DOWN) {
+      if (foco.fileira < 0 || foco.fileira >= foco.nFileiras ||
+          foco.nColunas[foco.fileira] < 1) {
+        int primeira = primeiraFileiraNavegavel();
+        if (primeira < 0) return;
+        foco.fileira = primeira; foco.coluna = 0;
+      }
+      focoHero = 0; return;
+    }
     // Cima no destaque: nao ha para onde ir. A pagina sobe um pouco e volta.
     if (k == SDLK_UP) { anim_borda_bater(&bordaPag, -NV_BORDA_AMP); return; }
-  } else if (k == SDLK_UP && foco.fileira == 0) {
-    focoHero = 1;
-    return;
   }
   if (k == SDLK_RIGHT) {
     // O `&&` aqui era um curto-circuito com efeito colateral: escrito como
@@ -1873,7 +1889,7 @@ void home_evento(const SDL_Event *e) {
       anim_borda_bater(&bordaFil[foco.fileira], -NV_BORDA_AMP);
   }
   else if (k == SDLK_DOWN)  focus_mover(&foco, 0, 1);
-  else if (k == SDLK_UP)    focus_mover(&foco, 0, -1);
+  else if (k == SDLK_UP && !focus_mover(&foco, 0, -1)) focoHero = 1;
 }
 
 // Reconstroi a lista a partir do catalogo. Chamada a cada quadro porque a

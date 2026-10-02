@@ -121,3 +121,6 @@ int main(void) {
   puts("cwremover_home: tudo ok");
   return 0;
 }
+
+// Sem textura carregada nesta fixture de navegacao: usa proporcao padrao.
+float tex_aspecto(const char *caminho) { (void)caminho; return 0.0f; }

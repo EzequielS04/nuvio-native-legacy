@@ -456,3 +456,7 @@ int main(void) {
   puts("homejanelas: tudo ok");
   return 0;
 }
+
+const char *dados_dir(void) { return ""; }
+int perfis_ativo(void) { return 1; }
+int ajustes_tmdb_arte(void) { return 0; }
