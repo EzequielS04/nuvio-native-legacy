@@ -735,7 +735,7 @@ int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou) {
   pthread_mutex_unlock(&verTrava);
   p.modo = ajustes_fonte_primeira() ? FONTEAUTO_PRIMEIRA : FONTEAUTO_MELHOR;
   p.total = total; p.preferida = posPref; p.prefPendente = prefPendente;
-  p.prazoPassou = prazoPassou; p.algumPendente = addons_busca_parcial();
+  p.prazoPassou = prazoPassou; p.algumPendente = addons_faltam(NULL, 0) > 0;
   p.pontos = pts; p.acimaTeto = acima; p.excluida = excl; p.boa = boa;
   p.addon = ad; p.pendenteAntes = pendenteAntesCb;
   r = fonteauto_pode_decidir(&p);

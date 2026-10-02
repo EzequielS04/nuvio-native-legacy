@@ -65,6 +65,8 @@ int stream_extrair(const char *json, const char *prov, Stream **saida) {
 void stream_definir_lista(const Stream *l, int n) { (void)l; (void)n; }
 void stream_definir_lista_idade(const Stream *l, int n, Uint32 idade) {
   (void)idade; stream_definir_lista(l, n); }
+void stream_lista_acrescentar(const Stream *l, int n, int o) { (void)l; (void)n; (void)o; }
+void stream_invalidar(const char *p) { (void)p; }
 int stream_n(void) { return 0; }
 int stream_lista_do_alvo(const char *id) { (void)id; return 0; }
 Uint32 SDL_GetTicks(void) { return 1000; }
