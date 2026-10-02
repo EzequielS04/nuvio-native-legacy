@@ -26,6 +26,7 @@
 #include "ajustes.h"
 #include "catordem.h"
 #include "catordemcache.h"
+#include "contacache.h"
 #include "descoberta.h"
 #include "simkl.h"
 #include "homeestado.h"
@@ -135,19 +136,74 @@ static int   temBibBlob;
 static char *vistosBlob;
 static int   temVistosBlob;
 
+// SERVIDOR DA CONTA FORA DO AR (#215, 02/10/2026: api.nuvio.tv em 504/502).
+// O fio escreve as variaveis "Ciclo"; sync_passo publica nas outras quando o
+// ciclo e aplicado, pela mesma porteira de `fioPronto` que o resto usa.
+//   foraCiclo: HTTP da primeira falha TRANSITORIA deste ciclo (-1 = sem
+//              resposta, 0 = o servidor respondeu);
+//   copiaCiclo: quantas superficies sairam da copia local (contacache.c);
+//   copiaQuandoCiclo: de quando e a copia (a dos addons, se usada).
+static int  foraCiclo, copiaCiclo;
+static long copiaQuandoCiclo;
+static int  foraHttp, usandoCopia;
+static long copiaQuando;
+// Status HTTP da ultima puxarBlob (-2 quando nem perguntou: RPC ausente).
+static int  ultimoSt;
+
+static void falhaServidor(int st) { if (!foraCiclo) foraCiclo = st ? st : -1; }
+
+static void avisoCopia(const char *sup, int st, long quando) {
+  char d[32];
+  contacache_data(quando, d, sizeof d);
+  if (st) printf("[sync] servidor da conta indisponivel (HTTP %d): usando a copia de %s (%s)\n",
+                 st, d, sup);
+  else    printf("[sync] servidor da conta indisponivel (sem resposta): usando a copia de %s (%s)\n",
+                 d, sup);
+  fflush(stdout);
+}
+
+static void avisoSemCopia(const char *sup, int st) {
+  if (st) printf("[sync] servidor da conta indisponivel (HTTP %d) e nenhuma copia de %s neste aparelho\n",
+                 st, sup);
+  else    printf("[sync] servidor da conta indisponivel (sem resposta) e nenhuma copia de %s neste aparelho\n",
+                 sup);
+  fflush(stdout);
+}
+
 // ---------------------------------------------------------------- utilitarios
 
 static int ok2xx(const char *r, int st) { return r && st >= 200 && st < 300; }
 
 // ---------------------------------------------------------------- addons
 
-static void puxarAddons(void) {
+// Le a resposta da tabela `addons` (ou a copia dela) para addonsRem.
+static int lerAddons(const char *r) {
+  const char *p;
+  int k = 0;
+  for (p = js_raiz_array(r); p && k < SY_ADD_MAX; p = js_prox(js_fim(p))) {
+    const char *f = js_fim(p);
+    char b[16];
+    memset(&addonsRem[k], 0, sizeof addonsRem[k]);
+    if (!js_texto(p, f, "url", addonsRem[k].url, sizeof addonsRem[k].url)) continue;
+    js_texto(p, f, "name", addonsRem[k].nome, sizeof addonsRem[k].nome);
+    // Ausente conta como LIGADO: e assim que o web le, e um addon que some por
+    // causa de um campo que o servidor nao mandou e pior que um a mais.
+    addonsRem[k].ativo = js_bruto(p, f, "enabled", b, sizeof b)
+                         ? (strcmp(b, "false") != 0) : 1;
+    k++;
+  }
+  return k;
+}
+
+// 1 = a conta respondeu; 0 = falhou e nao adianta repetir (4xx, tabela
+// ausente); -1 = o SERVIDOR falhou (sem resposta, 429, 5xx) — o ciclo inteiro
+// passa a usar as copias locais (ver rodar).
+static int puxarAddons(void) {
   char consulta[400], dono[80];
   char *r;
-  int st = 0, k = 0;
-  const char *p;
+  int st = 0, k;
 
-  if (!perfis_dono()[0]) return;
+  if (!perfis_dono()[0]) return 0;
   nuvem_url_escapar(perfis_dono(), dono, sizeof dono);
   // MEDIDO: `sync_pull_addons` NAO EXISTE neste servidor (PGRST202), e a
   // tabela `tv_addons` tambem nao (PGRST205). O unico caminho que responde e a
@@ -162,23 +218,35 @@ static void puxarAddons(void) {
   // addons": ler as linhas de alguem exige o token de quem esta pedindo.
   r = sessao_tabela("addons", consulta, &st);
   if (!ok2xx(r, st)) {
-    if (r && nuvem_erro_ausente(r)) printf("[sync] tabela addons ausente\n");
+    int ausente = r && nuvem_erro_ausente(r);
+    if (ausente) printf("[sync] tabela addons ausente\n");
     else if (st) printf("[sync] leitura de addons: HTTP %d\n", st);
     free(r);
-    return;
+    if (ausente || !contacache_falha_transitoria(st)) return 0;
+    // A COPIA DA ULTIMA RESPOSTA BOA (#215). Sem ela, um servidor fora do ar
+    // deixava o app sem addon nenhum — e sem addon nao ha catalogo, a home
+    // abria vazia em toda TV ao mesmo tempo.
+    falhaServidor(st);
+    { long q = 0;
+      char *c = contacache_ler(CC_ADDONS, perfis_ativo_addons(), sessao_usuario(), &q);
+      k = c ? lerAddons(c) : 0;
+      free(c);
+      // Com mudanca local pendente a lista DESTA TV e a certa (ela nao subiu
+      // ainda): a copia nao passa por cima dela.
+      if (k > 0 && !sujoAddons) {
+        nAddonsRem = k;
+        temAddonsRem = 1;
+        copiaCiclo++;
+        copiaQuandoCiclo = q;
+        avisoCopia(CC_ADDONS, st, q);
+      } else if (k <= 0) avisoSemCopia(CC_ADDONS, st);
+    }
+    return -1;
   }
-  for (p = js_raiz_array(r); p && k < SY_ADD_MAX; p = js_prox(js_fim(p))) {
-    const char *f = js_fim(p);
-    char b[16];
-    memset(&addonsRem[k], 0, sizeof addonsRem[k]);
-    if (!js_texto(p, f, "url", addonsRem[k].url, sizeof addonsRem[k].url)) continue;
-    js_texto(p, f, "name", addonsRem[k].nome, sizeof addonsRem[k].nome);
-    // Ausente conta como LIGADO: e assim que o web le, e um addon que some por
-    // causa de um campo que o servidor nao mandou e pior que um a mais.
-    addonsRem[k].ativo = js_bruto(p, f, "enabled", b, sizeof b)
-                         ? (strcmp(b, "false") != 0) : 1;
-    k++;
-  }
+  k = lerAddons(r);
+  // So uma lista NAO VAZIA vira copia: um 200 com array vazio por um perfil
+  // errado (o caso do Mane155, abaixo) nao pode apagar a copia boa.
+  if (k > 0) contacache_gravar(CC_ADDONS, perfis_ativo_addons(), sessao_usuario(), r);
   free(r);
   nAddonsRem = k;
   temAddonsRem = 1;
@@ -190,6 +258,7 @@ static void puxarAddons(void) {
   // exata dessa classe de erro.
   printf("[sync] addons: perfil %d (ativo %d) -> %d linha(s)\n",
          perfis_ativo_addons(), perfis_ativo(), k);
+  return 1;
 }
 
 static void empurrarAddons(void) {
@@ -332,10 +401,13 @@ static int puxarBlob(const char *funcao, const char *corpo, char **destino) {
   char *r;
   int st = 0, k = 0;
   const char *p;
+  ultimoSt = -2;
   if (jaAusente(funcao)) return -1;
   r = sessao_rpc(funcao, corpo, &st);
+  ultimoSt = st;
   if (!ok2xx(r, st)) {
     if (r && nuvem_erro_ausente(r)) {
+      ultimoSt = -2;
       printf("[sync] %s nao existe neste servidor\n", funcao);
       if (nAusentes < SY_AUSENTES) ausentes[nAusentes++] = funcao;
     } else if (st) {
@@ -460,6 +532,37 @@ static int puxarVistos(int perfil, char **destino) {
   if (destino) { free(*destino); *destino = acum; }
   else free(acum);
   return total;
+}
+
+// A copia local de uma superficie so-leitura, no lugar da resposta que o
+// servidor nao deu (#215). Mesmo contrato de puxarBlob: devolve a contagem (e o
+// corpo em *destino) ou -1 sem copia.
+static int copiaBlob(const char *sup, int perfil, int st, char **destino) {
+  long q = 0;
+  char *c = contacache_ler(sup, perfil, sessao_usuario(), &q);
+  const char *p;
+  int k = 0;
+  if (!c) { avisoSemCopia(sup, st); return -1; }
+  for (p = js_raiz_array(c); p; p = js_prox(js_fim(p))) k++;
+  free(*destino);
+  *destino = c;
+  copiaCiclo++;
+  if (!copiaQuandoCiclo) copiaQuandoCiclo = q;
+  avisoCopia(sup, st, q);
+  return k;
+}
+
+// Depois de puxar uma superficie: resposta boa vira a copia; falha do servidor
+// troca pela copia. `n` e o que puxarBlob/puxarBiblioteca/puxarVistos
+// devolveu; o retorno e o que fica valendo.
+static int guardarOuCopia(const char *sup, int perfil, int n, char **blob) {
+  if (n > 0 && *blob) { contacache_gravar(sup, perfil, sessao_usuario(), *blob); return n; }
+  if (n < 0 && contacache_falha_transitoria(ultimoSt)) {
+    int st = ultimoSt;
+    falhaServidor(st);
+    return copiaBlob(sup, perfil, st, blob);
+  }
+  return n;
 }
 
 // O blob de ajustes NAO e contado, e lido: ele e o layout da pessoa. Ate agora
@@ -604,6 +707,13 @@ static int puxarCatHome(const char *corpo) {
            (r && nuvem_erro_ausente(r)) ? " (funcao nao existe neste servidor)" : "");
     if (r && nuvem_erro_ausente(r) && nAusentes < SY_AUSENTES)
       ausentes[nAusentes++] = "sync_pull_home_catalog_settings";
+    // A ordem ja tem copia propria (catordemcache.c), restaurada em
+    // sync_iniciar antes de qualquer rede: aqui basta nao mexer nela.
+    if (!(r && nuvem_erro_ausente(r)) && contacache_falha_transitoria(st)) {
+      falhaServidor(st);
+      if (catordem_tem_ordem())
+        printf("[sync] servidor da conta indisponivel (HTTP %d): fica a ordem de catalogos guardada\n", st);
+    }
     free(r);
     return 0;
   }
@@ -619,6 +729,7 @@ static void puxarSoLeitura(void) {
 
   snprintf(corpo, sizeof corpo, "{\"p_profile_id\":%d}", perfil);
   cColecoes = puxarBlob("sync_pull_collections", corpo, &colBlob);
+  cColecoes = guardarOuCopia(CC_COLECOES, perfil, cColecoes, &colBlob);
   if (cColecoes > 0) temColBlob = 1;
 
   // A BIBLIOTECA E PAGINADA, e o codigo antigo nao mandava a pagina.
@@ -644,6 +755,7 @@ static void puxarSoLeitura(void) {
   // novos (issue do Owlphibia29, "o contador nunca passou de 205"). As paginas
   // sao COLADAS num array so e o contalib guarda as CONTALIB_MAX mais recentes.
   cBiblio = puxarBiblioteca(perfil, &bibBlob);
+  cBiblio = guardarOuCopia(CC_BIBLIOTECA, perfil, cBiblio, &bibBlob);
   if (cBiblio >= 0) temBibBlob = 1;
 
   // MEDIDO: `p_page` comeca em 1. Com 0 o servidor responde 400 "OFFSET must
@@ -651,6 +763,7 @@ static void puxarSoLeitura(void) {
   // 900 e o tamanho de pagina do web (WATCHED_ITEMS_PAGE_SIZE), nao um numero
   // escolhido aqui. Todas as paginas, como o web (puxarVistos, issue #199).
   cVistos = puxarVistos(perfil, &vistosBlob);
+  cVistos = guardarOuCopia(CC_VISTOS, perfil, cVistos, &vistosBlob);
   if (cVistos >= 0) temVistosBlob = 1;
 
   snprintf(corpo, sizeof corpo,
@@ -662,10 +775,30 @@ static void puxarSoLeitura(void) {
   temCatHome = puxarCatHome(corpo);
 }
 
+// O SERVIDOR DA CONTA CAIU NO MEIO DO CICLO (os addons falharam com 5xx/429/
+// sem resposta): o resto do ciclo NAO vai a rede. Cada RPC esperaria o mesmo
+// 504 (ate 25 s cada, ~10 RPCs: minutos de home vazia) e martelaria um
+// servidor que ja esta caido. As superficies so-leitura saem da copia; nada
+// sobe — subir exige a base que o servidor nao deu.
+static void soLeituraDaCopia(int st) {
+  int perfil = perfis_ativo();
+  cColecoes = copiaBlob(CC_COLECOES, perfil, st, &colBlob);
+  if (cColecoes > 0) temColBlob = 1;
+  cBiblio = copiaBlob(CC_BIBLIOTECA, perfil, st, &bibBlob);
+  if (cBiblio >= 0) temBibBlob = 1;
+  cVistos = copiaBlob(CC_VISTOS, perfil, st, &vistosBlob);
+  if (cVistos >= 0) temVistosBlob = 1;
+  if (catordem_tem_ordem())
+    printf("[sync] ordem de catalogos: fica a guardada neste aparelho\n");
+}
+
 // ---------------------------------------------------------------- ciclo
 
 static void *rodar(void *u) {
   (void)u;
+  foraCiclo = 0;
+  copiaCiclo = 0;
+  copiaQuandoCiclo = 0;
   perfis_puxar();
   // ESCOLHA DE PERFIL PENDENTE: PARA AQUI, e nao adivinha o perfil 1.
   //
@@ -700,7 +833,21 @@ static void *rodar(void *u) {
   // Lido DEPOIS da porteira: quando a pessoa responde enquanto perfis_puxar
   // ainda esta no ar, este ciclo ja segue com o perfil escolhido.
   perfilDoCiclo = perfis_ativo();
-  puxarAddons();
+  if (puxarAddons() < 0) {
+    char d[32];
+    if (temAddonsRem && !sujoAddons) addonsCedo = 1;
+    soLeituraDaCopia(foraCiclo > 0 ? foraCiclo : 0);
+    contacache_data(copiaQuandoCiclo, d, sizeof d);
+    if (copiaCiclo)
+      snprintf(resumo, sizeof resumo, "servidor da conta fora do ar (HTTP %d) · usando a cópia de %s",
+               foraCiclo > 0 ? foraCiclo : 0, d);
+    else
+      snprintf(resumo, sizeof resumo, "servidor da conta fora do ar (HTTP %d) · sem cópia salva",
+               foraCiclo > 0 ? foraCiclo : 0);
+    estado = SYNC_PRONTO;
+    fioPronto = 1;
+    return NULL;
+  }
   // OS ADDONS SAO A SEGUNDA RPC DO CICLO, E ERAM APLICADOS NA ULTIMA LINHA DELE.
   //
   // MEDIDO NA C9, no arranque com conta: os addons da conta chegam em ~2 s e
@@ -823,7 +970,10 @@ int sync_periodico(unsigned agoraMs) {
   // Sem nenhum ciclo bem-sucedido ainda, quem manda e quem chamou sync_iniciar
   // — nao adianta insistir por cima de uma falha que o freio ja esta segurando.
   if (!ultimoOk) return 0;
-  if (agoraMs - ultimoOk < SYNC_INTERVALO_MS) return 0;
+  // Com o servidor da conta fora do ar, a volta seguinte vem antes: e ela que
+  // troca a copia pela resposta de verdade quando ele voltar. O freio de
+  // nuvem.c (acima) continua mandando no ritmo das tentativas.
+  if (agoraMs - ultimoOk < (foraHttp ? SYNC_RETENTA_MS : SYNC_INTERVALO_MS)) return 0;
   sync_iniciar();
   return 1;
 }
@@ -1023,6 +1173,13 @@ void sync_passo(unsigned agoraMs) {
   // em "Continuar assistindo" no proximo ciclo de descoberta (issue #38).
   if (syncprog_aplicar(NULL) > 0) desc_refazer_continuar();
   if (estado == SYNC_PRONTO) ultimoOk = agoraMs;
+  // O ciclo parado na pergunta de perfil nao chegou a perguntar nada: o estado
+  // do servidor continua o do ciclo anterior.
+  if (!cicloInterrompido) {
+    foraHttp = foraCiclo;
+    usandoCopia = copiaCiclo > 0;
+    copiaQuando = copiaQuandoCiclo;
+  }
   if (!cicloInterrompido) perfilAplicado = perfilDoCiclo;
   // A VOLTA QUE FOI PEDIDA COM O FIO VIVO. So quando ela serve para algo: o
   // ciclo que acabou parou na pergunta de perfil (e a pergunta ja foi
@@ -1037,6 +1194,9 @@ void sync_passo(unsigned agoraMs) {
   }
 }
 
+int  sync_servidor_fora(void) { return foraHttp; }
+int  sync_usando_copia(void)  { return foraHttp && usandoCopia; }
+long sync_copia_quando(void)  { return copiaQuando; }
 SyncEstado  sync_estado(void)      { return estado; }
 const char *sync_resumo(void)      { return resumo; }
 unsigned    sync_ultimo_ok(void)   { return ultimoOk; }
@@ -1189,6 +1349,11 @@ void sync_esquecer_usuario(void) {
   catordem_esquecer();
   catordem_cache_esquecer();
   catordemCachePerfil = -1;
+  // As copias da conta (#215): addons com chave de debrid na URL, biblioteca,
+  // vistos e colecoes de quem saiu.
+  contacache_esquecer();
+  foraHttp = usandoCopia = 0;
+  copiaQuando = 0;
   pedidoComFioVivo = 0;
   homeestado_esquecer();
   cachearte_limpar_referencias();

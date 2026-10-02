@@ -73,6 +73,10 @@ unsigned sync_ultimo_ok(void);
 // colateral (login impossivel, sessao anonima, sync da conta errada) pareceu
 // bug do app. O ciclo tambem so roda com o app em uso, nunca durante o player.
 #define SYNC_INTERVALO_MS 300000u
+// Com o servidor da conta fora do ar (sync_servidor_fora), a proxima volta
+// sai 1 minuto depois, e nao 5: e ela que substitui a copia local pela conta
+// quando ele voltar. O freio de nuvem.c continua valendo por cima.
+#define SYNC_RETENTA_MS 60000u
 
 // Chamar uma vez por quadro. Nao bloqueia: so recolhe o resultado do fio e
 // aplica no app (lista de addons, credencial do Trakt, progresso).
@@ -158,6 +162,17 @@ void sync_proteger_ajustes_locais(void);
 // "trakt" este servidor responde 400 22023 "Unsupported provider credential",
 // e o proprio app web documenta a mesma recusa (traktCredentialSyncService.js).
 int  sync_empurrar_credencial(const char *provider, const char *credJson);
+
+// SERVIDOR DA CONTA FORA DO AR (#215). Estado do ultimo ciclo aplicado:
+//   sync_servidor_fora: 0 quando o servidor respondeu; senao o HTTP da falha
+//     (5xx, 429), ou -1 quando nao houve resposta;
+//   sync_usando_copia: 1 quando, por causa disso, os addons/colecoes/biblioteca/
+//     vistos em uso sao a ULTIMA copia boa guardada neste aparelho
+//     (contacache.h); sync_copia_quando = de quando ela e (epoch).
+// Volta a 0 sozinho no primeiro ciclo em que o servidor responde.
+int  sync_servidor_fora(void);
+int  sync_usando_copia(void);
+long sync_copia_quando(void);
 
 void sync_encerrar(void);
 
