@@ -16,6 +16,9 @@
 static IlhaCartao vivo, estreia;
 static int temVivo, temEstreia;
 static Uint32 ultimaTecla, ultimaSonda;
+static unsigned vivoSeq;
+
+unsigned ilhacart_vivo_seq(void) { return vivoSeq; }
 
 // O episodio (T, E) na lista que o catalogo ja tem desse titulo: nome, sinopse
 // e o still. Sem lista (serie que nunca abriu nesta sessao), fica o do titulo.
@@ -57,6 +60,7 @@ void ilhacart_player_saiu(int indice, double posSeg, double durSeg, int t, int e
   vivo.restanteMin = (int)((durSeg - posSeg) / 60.0 + 0.5);
   snprintf(vivo.chave, sizeof vivo.chave, "vivo:%s:%d:%d", vivo.imdb, vivo.t, vivo.e);
   temVivo = 1;
+  vivoSeq++;
   ultimaTecla = SDL_GetTicks();
   ilha_cartao(ILHA_VIVO, &vivo);
   printf("[ilha] atividade ao vivo: %s T%dE%d %.0f%%, faltam %d min\n", vivo.imdb, vivo.t,

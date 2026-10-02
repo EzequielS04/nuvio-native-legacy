@@ -280,6 +280,10 @@ typedef enum {
   // Fita (anterior/atual/seguinte) e sincronia da miniatura do Seekr. LOCAIS.
   // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_SEEKR_FITA, AJ_SEEKR_AJUSTE,
+  // Ao sair do player no meio: a home com o titulo minimizado na ilha (o
+  // "quadro do video" encolhe ate a mini capa da pilula) ou a pagina do titulo.
+  // So vale com o relogio ligado. LOCAL. No fim pelo mesmo motivo.
+  AJ_SAIDA_PLAYER,
   AJ_N
 } OpcaoId;
 
@@ -292,6 +296,8 @@ static const char *V_LIVETV_ESPERA[] = { "Automática", "25 s", "45 s" };
 // Dinamica, onde a pilula da barra lateral ocupa o canto esquerdo). 1 e 2 sao
 // escolha explicita; Esquerda no layout Dinamica fica AO LADO da pilula.
 static const char *V_RELOGIO_POS[] = { "Automática", "Esquerda", "Direita" };
+static const char *V_SAIDA_PLAYER[] = { "Voltar para a home (minimizar na ilha)",
+                                        "Voltar para a página do título" };
 static const char *V_LIVETV_MODO[] = { "A (padrão)", "B (sem seleção de faixa)", "C (payload de live)" };
 // Troca do destaque: 0 = a arte nova entra colada na velha, de lado; 1 = o
 // esvanecimento de antes.
@@ -864,6 +870,7 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Testar chave do Seekr"),
   ESC("Fita de miniaturas",              V_LIGA, 2),          // local: seekrFitaLocal
   NUM("Sincronia da miniatura",          -60, 60, 1, " s"),   // local: seekrAjusteLocal
+  ESC("Ao sair do player",               V_SAIDA_PLAYER, 2),  // local: saidaPlayerLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1025,6 +1032,7 @@ static const char *CHAVE[] = {
   // LOCAL e SEM o "-"; a chave e credencial e mora em seekr.txt (dados).
   "seekrLocal", "-seekrChave", "-seekrTestar",
   "seekrFitaLocal", "seekrAjusteLocal",
+  "saidaPlayerLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1106,7 +1114,7 @@ static const Item TELA[] = {
   // mesma decisao (de onde sai o destaque).
   SEC("Aparência", "Cor de destaque, idioma e animações", "aj_palette"),
     OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_VIDRO_CONTORNO), OPC(AJ_IDIOMA), OPC(AJ_ANIM),
-    OPC(AJ_FONTE_UI), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS),
+    OPC(AJ_FONTE_UI), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS), OPC(AJ_SAIDA_PLAYER),
 
   SEC("Layout", "Estrutura da página inicial e estilos de pôster", "aj_layout-dashboard"),
     GRP("Layout da Home", "Escolha a estrutura e a fonte do destaque.", "aj_panel-top"),
@@ -1498,6 +1506,7 @@ static int valor[] = {
   0, 0,             /* chave e teste do Seekr: acoes */
   1,                /* fita de miniaturas: DESLIGADA (V_LIGA: 1 = Desligado), uma so */
   0,                /* sincronia da miniatura: 0 s (a documentacao: nada automatico) */
+  0,                /* ao sair do player: a home, minimizando na ilha (com o relogio) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1671,6 +1680,7 @@ int ajustes_addons_do_principal(void) { return lig(AJ_ADDONS_PRINCIPAL); }
 #endif
 int ajustes_relogio_ligado(void) { return lig(AJ_RELOGIO); }
 int ajustes_relogio_pos(void) { return valor[AJ_RELOGIO_POS]; }
+int ajustes_saida_player_home(void) { return lig(AJ_RELOGIO) && valor[AJ_SAIDA_PLAYER] == 0; }
 int ajustes_selo_visto(void) { return lig(AJ_SELO_VISTO); }
 static void riscoNotar(int op, int antes);
 void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_VIDRO, a); }
@@ -3201,7 +3211,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_DET_SO_CINEMETA: /* o web nao tem esta escolha */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
-    case AJ_RELOGIO: case AJ_RELOGIO_POS: /* o web nao tem a ilha */
+    case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: /* o web nao tem o Seekr */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
@@ -3759,6 +3769,8 @@ static int inativa(int op) {
     case AJ_CW_BLUR_PROX: return !ajustes_cw_ligado() || !ajustes_cw_thumb_episodio();
     case AJ_EXPANDIR_ATRASO: return !ajustes_expandir_poster();
     case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: return !lig(AJ_SEEKR_LIGADO);
+    // Sem o relogio nao ha ilha para onde minimizar: sai para a pagina, como antes.
+    case AJ_SAIDA_PLAYER: return !lig(AJ_RELOGIO);
     // Som: na Samsung (.wgt) o trailer e sempre mudo (trailerfonte_com_som).
     case AJ_HERO_TRAILER_SOM:
       return !lig(AJ_HERO_TRAILER) || !trailerfonte_com_som(trailerfonte_tizen());
@@ -4083,6 +4095,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
+    case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
     case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
     case AJ_RESOLUCAO: return "4K desenha a interface em 4K nas TVs que permitem; muitas ignoram o pedido e continuam em 1080p. 720p desenha em 1280x720 e amplia para a tela: mais leve em TV fraca, com texto um pouco mais suave. Reinicie o app depois de mudar. O vídeo não muda: segue a qualidade da fonte.";
@@ -6824,7 +6837,7 @@ static AjPreview familiaPreviaOpcao(int op) {
       return AJPV_CARTAZ;
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
-    case AJ_RELOGIO: case AJ_RELOGIO_POS:
+    case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL:
@@ -7308,7 +7321,7 @@ static float previaInterfaceOpcao(int op, float x, float y, float w) {
            235, 237, 241, 255);
     txt_desenhar(sample, x + 24.0f, y + 30.0f);
     previaRealce(x + 14.0f, y + 20.0f, w - 28.0f, 56.0f, ar, ag, ab);
-  } else if (op == AJ_RELOGIO || op == AJ_RELOGIO_POS) {
+  } else if (op == AJ_RELOGIO || op == AJ_RELOGIO_POS || op == AJ_SAIDA_PLAYER) {
     // Tela em miniatura com a pilula no canto escolhido (ou sem ela).
     GfxRect tela = {x + 28.0f, y + 16.0f, w - 56.0f, 100.0f};
     int pos = valor[AJ_RELOGIO_POS], dir = pos == 2 || (pos == 0 && ajustes_home_layout() == HOME_LAYOUT_DINAMICA);

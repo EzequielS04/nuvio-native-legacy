@@ -1214,6 +1214,16 @@ void detail_fechar(void) {
   saindo = 1;
 }
 
+// SECO: o proximo detail_atualizar ja a encerra (o mesmo fim da mola de
+// saida, com o logo restaurado), sem a pagina recolher por cima da home.
+void detail_fechar_seco(void) {
+  if (!aberto) return;
+  pessoaAberta = 0;
+  nivel = 0;
+  saindo = 1;
+  t = 0.0f;
+}
+
 void detail_mostrar_pessoa(long tmdb, const char *nome, const char *foto) {
   if (!aberto || tmdb <= 0) return;
   pessoa_pedir(tmdb, nome ? nome : "", foto ? foto : "");
