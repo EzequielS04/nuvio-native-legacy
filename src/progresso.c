@@ -3,6 +3,8 @@
 #include "dados.h"
 #include "perfis.h"
 #include <pthread.h>
+#include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +12,14 @@
 
 #define ARQ "progresso.txt"
 #define CABECALHO "#nvprog2"
+
+// O sync converte segundos em milissegundos inteiros. NaN, infinito e valores
+// fora dessa faixa nao sao progresso e nao podem chegar ao arquivo ou ao cast.
+static int temposValidos(double pos, double dur) {
+  const double limite = (double)LLONG_MAX / 1000.0;
+  return isfinite(pos) && isfinite(dur) && dur > 1.0 &&
+         pos < limite && dur < limite;
+}
 
 // Dois fios tocam aqui: o principal (player fechando, olho, pos-play, catalogo
 // reaplicando) e o do sync (pendentes para o push, marcar empurrados). Um
@@ -71,7 +81,7 @@ static int lerLinhaAntiga(const char *linha, ProgRegistro *r) {
   double pos, dur;
   int temp = 0, ep = 0, n;
   n = sscanf(linha, "%39s %lf %lf %d %d", id, &pos, &dur, &temp, &ep);
-  if (n < 3 || dur <= 1.0) return 0;
+  if (n < 3 || !temposValidos(pos, dur)) return 0;
   memset(r, 0, sizeof *r);
   { int tI = 0, eI = 0;
     prog_content_id(r->contentId, sizeof r->contentId, id, &tI, &eI);
@@ -82,7 +92,7 @@ static int lerLinhaAntiga(const char *linha, ProgRegistro *r) {
   r->episodio  = ep > 0 ? ep : 0;
   snprintf(r->tipo, sizeof r->tipo, "%s", ep > 0 ? "series" : "movie");
   prog_chave(r->chave, sizeof r->chave, r->contentId, r->temporada, r->episodio);
-  r->posSeg = pos;
+  r->posSeg = pos < 0 ? 0 : pos;
   r->durSeg = dur;
   r->lastWatchedMs = 0;
   r->pendente = 1;        // nunca foi empurrado com a chave certa
@@ -99,7 +109,9 @@ static int lerLinhaNova(const char *linha, ProgRegistro *r) {
              &r->perfil, r->chave, r->contentId, r->tipo,
              &r->temporada, &r->episodio, &r->posSeg, &r->durSeg,
              &r->lastWatchedMs, &r->pendente);
-  if (n != 10 || !r->chave[0] || !r->contentId[0]) return 0;
+  if (n != 10 || !r->chave[0] || !r->contentId[0] ||
+      !temposValidos(r->posSeg, r->durSeg)) return 0;
+  if (r->posSeg < 0) r->posSeg = 0;
   return 1;
 }
 
@@ -133,19 +145,24 @@ static void carregar(void) {
 }
 
 static int gravar(void) {
-  // 10 colunas curtas cabem folgadas em 160 bytes por linha.
-  size_t tam = (size_t)nRegs * 160 + 64;
+  // Ate os limites dos campos e dos inteiros cabem em 256 bytes por linha.
+  // Conferir snprintf tambem impede que uma mudanca futura desses limites
+  // transforme um arquivo invalido em escrita alem do buffer.
+  size_t tam = (size_t)nRegs * 256 + 64;
   char *buf = malloc(tam), *p;
-  int i, ok;
+  int i, ok, escrito;
   if (!buf) return 0;
   p = buf;
-  p += sprintf(p, "%s\n", CABECALHO);
+  p += snprintf(p, tam, "%s\n", CABECALHO);
   for (i = 0; i < nRegs; i++) {
     const ProgRegistro *r = &regs[i];
-    p += sprintf(p, "%d\t%s\t%s\t%s\t%d\t%d\t%.0f\t%.0f\t%lld\t%d\n",
+    size_t livre = tam - (size_t)(p - buf);
+    escrito = snprintf(p, livre, "%d\t%s\t%s\t%s\t%d\t%d\t%.0f\t%.0f\t%lld\t%d\n",
                  r->perfil, r->chave, r->contentId, r->tipo,
                  r->temporada, r->episodio, r->posSeg, r->durSeg,
                  r->lastWatchedMs, r->pendente ? 1 : 0);
+    if (escrito < 0 || (size_t)escrito >= livre) { free(buf); return 0; }
+    p += escrito;
   }
   ok = dados_gravar(ARQ, buf);
   free(buf);
@@ -180,11 +197,26 @@ static int maisNovoPrimeiro(const void *a, const void *b) {
 // ------------------------------------------------------------ leitura
 
 int prog_ler(ProgRegistro *saida, int max) {
-  int i, k = 0, perfil = perfis_ativo();
+  int i, k = 0, maisVelho = -1, perfil = perfis_ativo();
+  if (!saida || max < 1) return 0;
   TRANCAR();
   carregar();
-  for (i = 0; i < nRegs && k < max; i++)
-    if (regs[i].perfil == perfil) saida[k++] = regs[i];
+  for (i = 0; i < nRegs; i++) {
+    int j;
+    if (regs[i].perfil != perfil) continue;
+    if (k < max) { saida[k++] = regs[i]; continue; }
+    // O limite vale DEPOIS da escolha dos mais novos. Truncar na ordem do
+    // arquivo antes de ordenar descartava justamente a sessao recem-gravada.
+    if (maisVelho < 0) {
+      maisVelho = 0;
+      for (j = 1; j < k; j++)
+        if (maisNovoPrimeiro(&saida[j], &saida[maisVelho]) > 0) maisVelho = j;
+    }
+    if (maisNovoPrimeiro(&regs[i], &saida[maisVelho]) < 0) {
+      saida[maisVelho] = regs[i];
+      maisVelho = -1;
+    }
+  }
   DESTRANCAR();
   qsort(saida, (size_t)k, sizeof *saida, maisNovoPrimeiro);
   return k;
@@ -203,6 +235,7 @@ int prog_por_chave(const char *chave, ProgRegistro *saida) {
 
 int prog_pendentes(ProgRegistro *saida, int max) {
   int i, k = 0, perfil = perfis_ativo();
+  if (!saida || max < 1) return 0;
   TRANCAR();
   carregar();
   for (i = 0; i < nRegs && k < max; i++)
@@ -217,7 +250,7 @@ int prog_gravar_local(const char *imdb, int temporada, int episodio,
                       double posSeg, double durSeg) {
   ProgRegistro r;
   int i, ok;
-  if (!imdb || !*imdb || durSeg <= 1.0) return 0;
+  if (!imdb || !*imdb || !temposValidos(posSeg, durSeg)) return 0;
   memset(&r, 0, sizeof r);
   { int tI = 0, eI = 0;
     prog_content_id(r.contentId, sizeof r.contentId, imdb, &tI, &eI);
@@ -246,10 +279,14 @@ int prog_gravar_local(const char *imdb, int temporada, int episodio,
 int prog_aplicar_remoto(const ProgRegistro *rem) {
   ProgRegistro r;
   int i;
-  if (!rem || !rem->contentId[0] || rem->durSeg <= 1.0) return 0;
+  if (!rem || !rem->contentId[0] || !temposValidos(rem->posSeg, rem->durSeg) ||
+      !memchr(rem->contentId, 0, sizeof rem->contentId) ||
+      !memchr(rem->chave, 0, sizeof rem->chave) ||
+      !memchr(rem->tipo, 0, sizeof rem->tipo)) return 0;
   r = *rem;
   r.perfil = perfis_ativo();
   r.pendente = 0;
+  if (r.posSeg < 0) r.posSeg = 0;
   if (!r.chave[0]) prog_chave(r.chave, sizeof r.chave, r.contentId, r.temporada, r.episodio);
   if (!r.tipo[0]) snprintf(r.tipo, sizeof r.tipo, "%s", r.episodio > 0 ? "series" : "movie");
   TRANCAR();
@@ -268,8 +305,30 @@ int prog_aplicar_remoto(const ProgRegistro *rem) {
   return 1;
 }
 
+void prog_confirmar_empurrados(const ProgRegistro *enviados, int n) {
+  int i, k, mudou = 0;
+  if (!enviados || n < 1) return;
+  TRANCAR();
+  carregar();
+  for (k = 0; k < n; k++) {
+    const ProgRegistro *e = &enviados[k];
+    if (!memchr(e->chave, 0, sizeof e->chave)) continue;
+    i = achar(e->perfil, e->chave);
+    if (i >= 0 && regs[i].pendente && regs[i].lastWatchedMs == e->lastWatchedMs &&
+        regs[i].posSeg == e->posSeg && regs[i].durSeg == e->durSeg) {
+      regs[i].pendente = 0;
+      mudou = 1;
+    }
+  }
+  if (mudou) gravar();
+  DESTRANCAR();
+}
+
+// Compatibilidade para confirmacoes imediatas por chave. Um pedido de rede
+// em voo usa prog_confirmar_empurrados com a copia que de fato enviou.
 void prog_marcar_empurrados(const char *const *chaves, int n) {
   int i, k, perfil = perfis_ativo(), mudou = 0;
+  if (!chaves || n < 1) return;
   TRANCAR();
   carregar();
   for (k = 0; k < n; k++) {

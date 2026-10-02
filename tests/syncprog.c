@@ -24,10 +24,12 @@ static long long relogio(void) { return agora; }
 static char ultimaFuncao[64], ultimoCorpo[4096];
 static int  chamadas, proximoStatus = 200;
 static const char *proximaResposta = "[]";
+static void (*duranteRpc)(void);
 char *sessao_rpc(const char *funcao, const char *corpo, int *status) {
   snprintf(ultimaFuncao, sizeof ultimaFuncao, "%s", funcao);
   snprintf(ultimoCorpo, sizeof ultimoCorpo, "%s", corpo);
   chamadas++;
+  if (duranteRpc) duranteRpc();
   if (status) *status = proximoStatus;
   return strdup(proximaResposta);
 }
@@ -51,6 +53,7 @@ static void zerar(void) {
   prog_invalidar();
   syncprog_esquecer();
   chamadas = 0; proximoStatus = 200; proximaResposta = "[]";
+  duranteRpc = NULL;
   aplicadosNoCatalogo = 0; ultimaPosAplicada = -1;
   ultimoCorpo[0] = 0; ultimaFuncao[0] = 0;
 }
@@ -195,6 +198,79 @@ static void migradoSobeComChaveCerta(void) {
   puts("ok  linhas antigas sobem como serie, com a chave do web");
 }
 
+static void avancarDurantePush(void) {
+  // Mesmo milissegundo: comparar somente a hora ainda perderia este avanco.
+  assert(prog_gravar_local("tt1234567", 4, 9, 1500, 2640));
+}
+
+static void trocarPerfilDurantePush(void) { perfil = 2; }
+
+static void confirmacaoPreservaEscritaNovaEPerfil(void) {
+  ProgRegistro r;
+  zerar(); perfil = 1; agora = 1757000600000LL;
+  assert(prog_gravar_local("tt1234567", 4, 9, 1432, 2640));
+  duranteRpc = avancarDurantePush;
+  assert(syncprog_empurrar() == 1 && tem("\"position\":1432000"));
+  r = porChave("tt1234567_s4e9");
+  assert(r.posSeg == 1500 && r.pendente);
+  duranteRpc = NULL;
+  assert(syncprog_empurrar() == 1 && tem("\"position\":1500000"));
+  assert(!porChave("tt1234567_s4e9").pendente);
+
+  zerar(); perfil = 1;
+  assert(prog_gravar_local("tt1234567", 4, 9, 100, 2640));
+  perfil = 2;
+  assert(prog_gravar_local("tt1234567", 4, 9, 200, 2640));
+  perfil = 1; duranteRpc = trocarPerfilDurantePush;
+  assert(syncprog_empurrar() == 1 && tem("\"p_profile_id\":1"));
+  assert(perfil == 2 && porChave("tt1234567_s4e9").pendente);
+  perfil = 1;
+  assert(!porChave("tt1234567_s4e9").pendente);
+  duranteRpc = NULL;
+  puts("ok  confirmacao do push preserva escrita mais nova e perfil diferente");
+}
+
+static void pullRecusaNumerosForaDaFaixa(void) {
+  zerar(); perfil = 1;
+  proximaResposta =
+    "[{\"content_id\":\"tt1\",\"season\":1e100,\"episode\":1,\"position\":10000,\"duration\":600000},"
+    "{\"content_id\":\"tt2\",\"season\":1,\"episode\":1e100,\"position\":10000,\"duration\":600000},"
+    "{\"content_id\":\"tt3\",\"season\":1,\"episode\":1.5,\"position\":10000,\"duration\":600000},"
+    "{\"content_id\":\"tt4\",\"position\":10000,\"duration\":1e100},"
+    "{\"content_id\":\"tt5\",\"position\":1e100,\"duration\":600000},"
+    "{\"content_id\":\"tt6\",\"season\":1,\"episode\":1e309,\"position\":10000,\"duration\":600000},"
+    "{\"content_id\":\"tt7\",\"position_ms\":1e309,\"position\":10000,\"duration\":600000},"
+    "{\"content_id\":\"tt8\",\"duration_ms\":1e309,\"position\":10000,\"duration\":600000},"
+    "{\"content_id\":\"tt9\",\"position_ms\":\"bad\",\"position\":10000,\"duration\":600000},"
+    "{\"content_id\":\"tt7654321\",\"season\":null,\"episode\":null,\"position_ms\":null,\"duration_ms\":null,\"position\":20000,\"duration\":600000},"
+    "{\"content_id\":\"tt1234567\",\"position\":10000,\"duration\":600000,\"updated_at\":1e100,\"last_watched\":1757000150000}]";
+  assert(syncprog_puxar() == 2);
+  assert(syncprog_aplicar(NULL) == 2);
+  assert(porChave("tt1234567").lastWatchedMs == 1757000150000LL);
+  assert(porChave("tt7654321").posSeg == 20);
+  assert(!porChave("tt1_s0e1").chave[0]);
+  puts("ok  pull rejeita coordenadas e tempos fora da faixa antes dos casts");
+}
+
+static void trocarPerfilDurantePull(void) { perfil = 2; }
+
+static void pullDoPerfilAnteriorNaoSeMistura(void) {
+  zerar(); perfil = 1;
+  proximaResposta = "[{\"content_id\":\"tt1234567\",\"position\":10000,\"duration\":600000}]";
+  duranteRpc = trocarPerfilDurantePull;
+  assert(syncprog_puxar() == 1 && tem("\"p_profile_id\":1"));
+  assert(perfil == 2 && syncprog_aplicar(NULL) == 0);
+  assert(!porChave("tt1234567").chave[0]);
+  perfil = 1; duranteRpc = NULL;
+  assert(syncprog_puxar() == 1);
+  perfil = 2; // A troca tambem pode ocorrer depois da resposta e antes da aplicacao.
+  assert(syncprog_aplicar(NULL) == 0 && !porChave("tt1234567").chave[0]);
+  perfil = 1;
+  assert(syncprog_puxar() == 1 && syncprog_aplicar(NULL) == 1);
+  assert(porChave("tt1234567").posSeg == 10);
+  puts("ok  pull do perfil anterior e descartado depois da troca de perfil");
+}
+
 int main(void) {
   prog_definir_relogio(relogio);
   pushNoFormatoDoWeb();
@@ -202,6 +278,9 @@ int main(void) {
   pullAceitaOsFormatosDoServidor();
   rollbackNaoAcontece();
   migradoSobeComChaveCerta();
+  confirmacaoPreservaEscritaNovaEPerfil();
+  pullRecusaNumerosForaDaFaixa();
+  pullDoPerfilAnteriorNaoSeMistura();
   puts("syncprog: tudo ok");
   return 0;
 }

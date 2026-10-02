@@ -16,6 +16,8 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <time.h>
+#include <limits.h>
+#include <stdint.h>
 
 #define CINEMETA "https://v3-cinemeta.strem.io"
 
@@ -798,39 +800,107 @@ static void consultarProximos(TarefaProx *v, int n, const char *const *cab) {
 // reproducoes, e quem ve serie enche esse limite de episodios: no log da #212
 // ("historico: 12 serie(s) com ultimo episodio visto") nenhum filme entrou, e
 // o selo de visto do cartaz e o olho do detalhe nao tinham de onde sair.
-// /sync/watched/movies e o mapa COMPLETO, uma linha curta por filme.
+// O mapa completo vem de TODAS as paginas de /sync/watched/movies. Desde
+// junho/2026, sem page/limit o Trakt so devolve os primeiros 100 filmes.
 //
 // So baixa de novo quando o Trakt diz que mudou: /sync/last_activities e um
 // corpo de ~1 KB, e o ciclo da descoberta roda a cada 5 min. O que a pessoa
 // marca nesta TV ja entrou no historico na hora (ctxmenu/app), sem esperar.
 //
-// trakt_ler_filmes_vistos devolve quantos filmes entraram (-1 = corpo nulo).
-int trakt_ler_filmes_vistos(const char *corpo) {
+typedef struct { char (*ids)[24]; size_t n, cap; } FilmesVistos;
+
+static const char *filmesPula(const char *p) {
+  while (*p && (unsigned char)*p <= ' ') p++;
+  return p;
+}
+
+// O leitor compartilhado e tolerante com objeto truncado. Aqui um corpo
+// incompleto nao pode confirmar a atividade nem publicar metade do mapa.
+static const char *filmesObjetoFim(const char *p) {
+  char pilha[64];
+  size_t n = 0;
+  int texto = 0;
+  for (; *p; p++) {
+    if (texto) {
+      if (*p == '\\') { if (!p[1]) return NULL; p++; }
+      else if (*p == '"') texto = 0;
+    } else if (*p == '"') texto = 1;
+    else if (*p == '{' || *p == '[') {
+      if (n == sizeof pilha) return NULL;
+      pilha[n++] = *p;
+    } else if (*p == '}' || *p == ']') {
+      if (!n || pilha[n - 1] != (*p == '}' ? '{' : '[')) return NULL;
+      if (--n == 0) return p + 1;
+    }
+  }
+  return NULL;
+}
+
+static int filmesAdicionar(FilmesVistos *v, const char *id) {
+  if (v->n >= INT_MAX) return 0;
+  if (v->n == v->cap) {
+    size_t cap = v->cap ? v->cap * 2 : 256;
+    void *novo;
+    if (cap < v->cap || cap > SIZE_MAX / sizeof *v->ids) return 0;
+    novo = realloc(v->ids, cap * sizeof *v->ids);
+    if (!novo) return 0;
+    v->ids = novo; v->cap = cap;
+  }
+  snprintf(v->ids[v->n++], sizeof *v->ids, "%s", id);
+  return 1;
+}
+
+// Devolve o numero de OBJETOS, inclusive filmes sem IMDb: esses nao entram
+// no catalogo, mas nao podem ser confundidos com a pagina vazia que encerra.
+static int filmesLerPagina(const char *corpo, FilmesVistos *v) {
   const char *p;
-  int n = 0;
+  int objetos = 0;
   if (!corpo) return -1;
-  p = strchr(corpo, '[');
-  p = p ? p + 1 : NULL;
-  while (p && *p) {
+  p = filmesPula(corpo);
+  if (*p != '[') return -1;
+  p = filmesPula(p + 1);
+  while (*p != ']') {
     const char *f, *obj;
     char id[24] = "";
-    while (*p && (unsigned char)*p <= ' ') p++;
-    if (*p != '{') break;
-    f = js_fim(p);
-    if (!f) break;
+    if (*p != '{' || objetos == INT_MAX) return -1;
+    f = filmesObjetoFim(p);
+    if (!f) return -1;
     obj = strstr(p, "\"movie\"");
     if (obj && obj < f) {
-      const char *o = strchr(obj, '{');
-      if (o && o < f) js_texto(o, js_fim(o), "imdb", id, sizeof id);
+      const char *o = filmesPula(obj + 7);
+      if (*o == ':') {
+        o = filmesPula(o + 1);
+        if (*o == '{') js_texto(o, filmesObjetoFim(o), "imdb", id, sizeof id);
+      }
     }
-    if (id[0]) { cat_historico_definir_id(id, "movie", 1); n++; }
-    p = js_prox(f);
+    if (id[0] && !filmesAdicionar(v, id)) return -1;
+    objetos++;
+    p = filmesPula(f);
+    if (*p == ']') break;
+    if (*p != ',') return -1;
+    p = filmesPula(p + 1);
+    if (*p != '{') return -1;
   }
+  return *filmesPula(p + 1) ? -1 : objetos;
+}
+
+static void filmesAplicar(const FilmesVistos *v) {
+  for (size_t i = 0; i < v->n; i++) cat_historico_definir_id(v->ids[i], "movie", 1);
+}
+
+int trakt_ler_filmes_vistos(const char *corpo) {
+  FilmesVistos v = {0};
+  int n = filmesLerPagina(corpo, &v);
+  if (n >= 0) { filmesAplicar(&v); n = (int)v.n; }
+  free(v.ids);
   return n;
 }
 
 static void carregarFilmesVistos(const char *const *cab) {
+  FilmesVistos v = {0};
   char ativ[40] = "";
+  char url[128], *anterior = NULL;
+  int pagina = 1, ok = 0;
   char *corpo = rede_baixar_com("https://api.trakt.tv/sync/last_activities", 15, cab);
   if (corpo) {
     const char *m = strstr(corpo, "\"movies\"");
@@ -839,13 +909,28 @@ static void carregarFilmesVistos(const char *const *cab) {
     free(corpo);
   }
   if (ativ[0] && !strcmp(ativ, filmesAtiv)) return;
-  corpo = rede_baixar_com("https://api.trakt.tv/sync/watched/movies", 25, cab);
-  if (!corpo) { printf("[trakt] filmes vistos: falhou\n"); fflush(stdout); return; }
-  { int n = trakt_ler_filmes_vistos(corpo);
-    printf("[trakt] filmes vistos: %d\n", n);
-    fflush(stdout);
-    if (n >= 0) snprintf(filmesAtiv, sizeof filmesAtiv, "%s", ativ); }
-  free(corpo);
+  for (;;) {
+    int st = 0, n;
+    snprintf(url, sizeof url, "https://api.trakt.tv/sync/watched/movies?page=%d&limit=250", pagina);
+    corpo = rede_baixar_st(url, 25, cab, &st);
+    if (!corpo || st != 200 || (anterior && !strcmp(anterior, corpo))) { free(corpo); break; }
+    n = filmesLerPagina(corpo, &v);
+    free(anterior); anterior = corpo;
+    if (n < 0) break;
+    // O Trakt pode capar a pagina abaixo do limit solicitado. So [] encerra;
+    // uma pagina de 37 objetos ainda pode ter outra depois dela.
+    if (!n) { ok = 1; break; }
+    if (pagina == INT_MAX) break;
+    pagina++;
+  }
+  free(anterior);
+  if (ok) {
+    filmesAplicar(&v);
+    if (ativ[0]) snprintf(filmesAtiv, sizeof filmesAtiv, "%s", ativ);
+    printf("[trakt] filmes vistos: %d (%d pagina(s))\n", (int)v.n, pagina);
+  } else printf("[trakt] filmes vistos: falhou na pagina %d; mapa anterior mantido\n", pagina);
+  fflush(stdout);
+  free(v.ids);
 }
 
 static volatile int continuarFalhou;

@@ -61,7 +61,8 @@ int  prog_por_chave(const char *chave, ProgRegistro *saida);
 
 // Escrita LOCAL (player ao fechar, botao do olho, pos-play). `imdb` pode ser
 // composto; temporada/episodio explicitos ganham dos que vierem no id.
-// Marca pendente e lastWatched = agora. Recusa durSeg <= 1 (ruido do player).
+// Marca pendente e lastWatched = agora. Recusa durSeg <= 1 (ruido do player),
+// tempos nao finitos ou que nao caibam em milissegundos inteiros para o sync.
 // Devolve 1 quando gravou.
 int  prog_gravar_local(const char *imdb, int temporada, int episodio,
                        double posSeg, double durSeg);
@@ -74,8 +75,13 @@ int  prog_aplicar_remoto(const ProgRegistro *r);
 // Pendentes do perfil ativo, para o push. Devolve quantos.
 int  prog_pendentes(ProgRegistro *saida, int max);
 
-// Depois de um push com sucesso: as chaves deixam de ser pendentes. So elas —
-// o player pode ter gravado outra linha durante a viagem.
+// Depois de um push com sucesso: somente os registros enviados que ainda
+// tem o mesmo instante, posicao e duracao deixam de ser pendentes. O perfil
+// vem da copia enviada, pois pode ter mudado durante a viagem.
+void prog_confirmar_empurrados(const ProgRegistro *enviados, int n);
+
+// Confirmacao imediata por chave, mantida para compatibilidade. Pedidos de
+// rede devem usar prog_confirmar_empurrados com sua copia anterior ao envio.
 void prog_marcar_empurrados(const char *const *chaves, int n);
 
 void prog_remover(const char *chave);

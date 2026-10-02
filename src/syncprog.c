@@ -8,6 +8,8 @@
 #include "js.h"
 #include "jsw.h"
 #include <stdio.h>
+#include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -39,20 +41,45 @@ static long long lerInstanteMs(const char *p, const char *f) {
     } else {
       v = js_num(p, f, chaves[i], -1.0);
     }
-    if (v > 0) return v > 1000000000000.0 ? (long long)v : (long long)(v * 1000.0);
+    if (v > 0) {
+      double ms = v > 1000000000000.0 ? v : v * 1000.0;
+      if (isfinite(ms) && ms < (double)LLONG_MAX) return (long long)ms;
+    }
   }
   return 0;
+}
+
+// Ausencia/null permitem o fallback do contrato; um valor presente invalido
+// nao pode virar "ausente" e sobrescrever uma posicao valida com zero.
+static int lerNumero(const char *p, const char *f, const char *chave,
+                     double padrao, double *saida) {
+  char cru[8];
+  if (!js_tem(p, f, chave) ||
+      (js_bruto(p, f, chave, cru, sizeof cru) && !strcmp(cru, "null"))) {
+    *saida = padrao;
+    return 1;
+  }
+  *saida = js_num(p, f, chave, NAN);
+  return isfinite(*saida);
+}
+
+static int lerCoordenada(const char *p, const char *f, const char *chave, int *saida) {
+  double v;
+  if (!lerNumero(p, f, chave, -1.0, &v)) return 0;
+  if (!isfinite(v) || v < INT_MIN || v > INT_MAX) return 0;
+  *saida = (int)v;
+  return v == *saida;
 }
 
 int syncprog_puxar(void) {
   Jsw w;
   char *r;
-  int st = 0, k = 0;
+  int st = 0, k = 0, perfil = perfis_ativo();
   const char *p;
 
   jsw_iniciar(&w);
   jsw_obj_ini(&w);
-  jsw_ci(&w, "p_profile_id", perfis_ativo());
+  jsw_ci(&w, "p_profile_id", perfil);
   jsw_obj_fim(&w);
   r = sessao_rpc("sync_pull_watch_progress", jsw_texto_final(&w), &st);
   jsw_livre(&w);
@@ -67,20 +94,22 @@ int syncprog_puxar(void) {
     // O web aceita position_ms/duration_ms e position/duration; os primeiros
     // ganham quando existem, porque os segundos ja vem em milissegundos nesta
     // RPC e misturar as duas unidades produz progresso de 100% em tudo.
-    pos = js_num(p, f, "position_ms", -1.0);
-    dur = js_num(p, f, "duration_ms", -1.0);
-    if (pos < 0) pos = js_num(p, f, "position", 0);
-    if (dur < 0) dur = js_num(p, f, "duration", 0);
+    if (!lerNumero(p, f, "position_ms", -1.0, &pos) ||
+        !lerNumero(p, f, "duration_ms", -1.0, &dur)) continue;
+    if (pos < 0 && !lerNumero(p, f, "position", 0, &pos)) continue;
+    if (dur < 0 && !lerNumero(p, f, "duration", 0, &dur)) continue;
     pos /= 1000.0;
     dur /= 1000.0;
-    if (dur <= 1.0) continue;
+    if (!isfinite(pos) || !isfinite(dur) || dur <= 1.0 ||
+        pos >= (double)LLONG_MAX / 1000.0 || dur >= (double)LLONG_MAX / 1000.0) continue;
     memset(d, 0, sizeof *d);
+    d->perfil = perfil;
     // content_id pode vir composto de um cliente antigo ("tt123:4:9"): corta,
     // e aproveita temporada/episodio de la se as colunas nao vierem.
     { int tI = 0, eI = 0;
       prog_content_id(d->contentId, sizeof d->contentId, id, &tI, &eI);
-      d->temporada = (int)js_num(p, f, "season", -1);
-      d->episodio  = (int)js_num(p, f, "episode", -1);
+      if (!lerCoordenada(p, f, "season", &d->temporada) ||
+          !lerCoordenada(p, f, "episode", &d->episodio)) continue;
       if (d->episodio <= 0) { d->temporada = tI; d->episodio = eI; } }
     if (d->episodio <= 0) { d->temporada = 0; d->episodio = 0; }
     if (d->temporada < 0) d->temporada = 0;
@@ -89,7 +118,7 @@ int syncprog_puxar(void) {
     // escrita por este mesmo app trazia "tt123:4:9" em progress_key, e adotar
     // isso perpetuaria a duplicata que estamos consertando.
     prog_chave(d->chave, sizeof d->chave, d->contentId, d->temporada, d->episodio);
-    d->posSeg = pos;
+    d->posSeg = pos < 0 ? 0 : pos;
     d->durSeg = dur;
     d->lastWatchedMs = lerInstanteMs(p, f);
     d->pendente = 0;
@@ -103,7 +132,6 @@ int syncprog_puxar(void) {
 
 int syncprog_empurrar(void) {
   static ProgRegistro pend[PROG_MAX];
-  static const char *chaves[PROG_MAX];
   Jsw w;
   char *r;
   int n, i, k = 0, st = 0;
@@ -113,7 +141,7 @@ int syncprog_empurrar(void) {
 
   jsw_iniciar(&w);
   jsw_obj_ini(&w);
-  jsw_ci(&w, "p_profile_id", perfis_ativo());
+  jsw_ci(&w, "p_profile_id", pend[0].perfil);
   jsw_cs(&w, "p_origin_client_id", dados_cliente_id());
   jsw_chave(&w, "p_entries");
   jsw_arr_ini(&w);
@@ -135,7 +163,10 @@ int syncprog_empurrar(void) {
     jsw_ci(&w, "last_watched", p->lastWatchedMs > 0 ? p->lastWatchedMs : prog_agora_ms());
     jsw_cs(&w, "progress_key", p->chave);
     jsw_obj_fim(&w);
-    chaves[k++] = p->chave;
+    // Compactar so o que foi enviado preserva a copia usada para confirmar o
+    // push. k <= i, entao nao pisa em uma entrada ainda nao processada.
+    if (k != i) pend[k] = *p;
+    k++;
   }
   jsw_arr_fim(&w);
   jsw_obj_fim(&w);
@@ -148,8 +179,9 @@ int syncprog_empurrar(void) {
     return -1;
   }
   free(r);
-  // So as chaves que foram: o player pode ter gravado outra durante a viagem.
-  prog_marcar_empurrados(chaves, k);
+  // A confirmacao de uma copia antiga nao quita uma escrita mais nova feita
+  // pelo player na mesma chave durante a viagem.
+  prog_confirmar_empurrados(pend, k);
   return k;
 }
 
@@ -279,8 +311,11 @@ int syncvisto_titulo(const char *imdb, const char *tipo, int visto) {
 }
 
 int syncprog_aplicar(int *casaram) {
-  int i, aceitos = 0, noCatalogo = 0;
+  int i, aceitos = 0, noCatalogo = 0, perfil = perfis_ativo();
   for (i = 0; i < nCaixa; i++) {
+    // A resposta pertence ao perfil que fez o pedido. A escolha na TV pode
+    // mudar enquanto a RPC esta em voo ou antes deste consumo no fio principal.
+    if (caixa[i].perfil != perfil) continue;
     if (!prog_aplicar_remoto(&caixa[i])) continue;
     aceitos++;
     { int idx = cat_indice_por_imdb(caixa[i].contentId);

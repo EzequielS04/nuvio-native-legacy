@@ -7,6 +7,7 @@
 // — a mesma familia de defeito que o heroi mostrando a arte do titulo anterior.
 #include "vistoep.h"
 #include <assert.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -21,6 +22,57 @@ static const char *PROG =
  "{\"number\":2,\"aired\":5,\"completed\":1,\"episodes\":["
    "{\"number\":1,\"completed\":true},"
    "{\"number\":2,\"completed\":false}]}]}";
+
+static void booleanosENumerosInvalidos(void) {
+  const char *json =
+    "{\"seasons\":[{\"number\":1,\"episodes\":["
+      "{\"number\":1,\"completed\":                    true},"
+      "{\"number\":2,\"completed\": false,\"other\":true},"
+      "{\"number\":3,\"completed\":\"true\"},"
+      "{\"number\":4,\"completed\":null},"
+      "{\"number\":5,\"last_watched_at\":\"true\"},"
+      "{\"number\":1e100,\"completed\":true},"
+      "{\"number\":32768,\"completed\":true},"
+      "{\"number\":1.5,\"completed\":true},"
+      "{\"number\":6,\"completed\":true                     }]},"
+      "{\"number\":1e100,\"episodes\":[{\"number\":1,\"completed\":true}]},"
+      "{\"number\":32768,\"episodes\":[{\"number\":1,\"completed\":true}]},"
+      "{\"number\":2,\"episodes\":[{\"number\":1,\"completed\":true}]}]}";
+  vistoep_esquecer();
+  assert(vistoep_ler_progresso("tt1", json) == 4);
+  assert(vistoep_estado("tt1", 1, 1) == 1);
+  assert(vistoep_estado("tt1", 1, 2) == 0);
+  assert(vistoep_estado("tt1", 1, 3) == -1);
+  assert(vistoep_estado("tt1", 1, 4) == -1);
+  assert(vistoep_estado("tt1", 1, 5) == -1);
+  assert(vistoep_estado("tt1", 1, 6) == 1);
+  assert(vistoep_estado("tt1", 2, 1) == 1);
+  assert(vistoep_n() == 4);
+  vistoep_definir("tt1", SHRT_MAX + 1, 1, 1);
+  vistoep_definir("tt1", 1, SHRT_MAX + 1, 1);
+  assert(vistoep_n() == 4);
+  puts("ok  completed exige booleano e numeros invalidos nao corrompem o mapa");
+}
+
+static void loteSoContaMudancasEfetivas(void) {
+  VistoPar pares[] = {{1, 1}, {1, 0}, {-1, 1}, {1, 1}};
+  VistoPar saida[2];
+  int i;
+  vistoep_esquecer();
+  assert(vistoep_marcar_lote("", pares, 4, 1) == 0);
+  assert(vistoep_marcar_lote("tt1", pares, 4, 1) == 1);
+  assert(vistoep_n() == 1);
+  assert(vistoep_lote("tt1", 1, 1, 1, pares, 4, 0, 0, saida, -1) == 0);
+  // Depois do teto uma tentativa recusada nao pode anunciar mudanca ou
+  // disparar um envio ao servidor como se o estado local tivesse mudado.
+  for (i = 2; i <= 8000; i++) vistoep_definir("tt1", 1, i, 1);
+  assert(vistoep_n() == 8000);
+  pares[0].episodio = 8001;
+  assert(vistoep_marcar_lote("tt1", pares, 1, 1) == 0);
+  assert(vistoep_estado("tt1", 1, 8001) == -1);
+  vistoep_esquecer();
+  puts("ok  lote so conta entradas validas aceitas e respeita o teto do mapa");
+}
 
 int main(void) {
   int n;
@@ -143,6 +195,8 @@ int main(void) {
     puts("ok  saida nula conta sem truncar em max");
   }
 
+  booleanosENumerosInvalidos();
+  loteSoContaMudancasEfetivas();
   puts("vistoep: tudo ok");
   return 0;
 }

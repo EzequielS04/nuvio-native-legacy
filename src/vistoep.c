@@ -1,5 +1,7 @@
 #include "vistoep.h"
 #include "js.h"
+#include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,27 +39,28 @@ static int achar(const char *id, int t, int e) {
   return -1;
 }
 
-void vistoep_definir(const char *imdb, int temporada, int episodio, int visto) {
+static int definir(const char *imdb, int temporada, int episodio, int visto) {
   char id[16];
   int i;
   base(imdb, id, sizeof id);
-  if (!id[0] || temporada < 0 || episodio < 1) return;
+  if (!id[0] || temporada < 0 || temporada > SHRT_MAX ||
+      episodio < 1 || episodio > SHRT_MAX) return 0;
   i = achar(id, temporada, episodio);
-  if (i >= 0) { mapa[i].visto = visto ? 1 : 0; return; }
+  if (i >= 0) { mapa[i].visto = visto ? 1 : 0; return 1; }
   if (n >= VE_MAX) {
     if (!avisouTeto) {
       avisouTeto = 1;
       printf("[vistoep] teto de %d episodios; o mapa para de crescer\n", VE_MAX);
       fflush(stdout);
     }
-    return;
+    return 0;
   }
   if (n == cap) {
     int novo = cap ? cap * 2 : 256;
     Marca *m;
     if (novo > VE_MAX) novo = VE_MAX;
     m = (Marca *)realloc(mapa, (size_t)novo * sizeof *m);
-    if (!m) return;
+    if (!m) return 0;
     mapa = m; cap = novo;
   }
   memset(&mapa[n], 0, sizeof mapa[n]);
@@ -66,6 +69,11 @@ void vistoep_definir(const char *imdb, int temporada, int episodio, int visto) {
   mapa[n].ep = (short)episodio;
   mapa[n].visto = visto ? 1 : 0;
   n++;
+  return 1;
+}
+
+void vistoep_definir(const char *imdb, int temporada, int episodio, int visto) {
+  definir(imdb, temporada, episodio, visto);
 }
 
 int vistoep_estado(const char *imdb, int temporada, int episodio) {
@@ -101,8 +109,7 @@ int vistoep_marcar_lote(const char *imdb, const VistoPar *pares, int qtd, int vi
   for (i = 0; i < qtd; i++) {
     if (vistoep_estado(imdb, pares[i].temporada, pares[i].episodio) == (visto ? 1 : 0))
       continue;
-    vistoep_definir(imdb, pares[i].temporada, pares[i].episodio, visto);
-    mudou++;
+    mudou += definir(imdb, pares[i].temporada, pares[i].episodio, visto);
   }
   return mudou;
 }
@@ -161,6 +168,7 @@ int vistoep_lote(const char *imdb, int ateAqui, int temporada, int episodio,
                  VistoPar *saida, int max) {
   static VistoPar buf[VE_LOTE];
   int k, i, j;
+  if (saida && max < 1) return 0;
   k = ateAqui ? vistoep_ate_aqui(imdb, temporada, episodio, buf, VE_LOTE)
               : vistoep_temporada(imdb, temporada, buf, VE_LOTE);
   for (i = 0; cat && i < nCat && k < VE_LOTE; i++) {
@@ -211,19 +219,31 @@ int vistoep_ler_progresso(const char *imdb, const char *json) {
   if (!temps) { printf("[vistoep] %s: resposta sem \"seasons\"\n", imdb); fflush(stdout); return -1; }
   for (; temps && *temps == '{'; temps = js_prox(js_fim(temps))) {
     const char *ft = js_fim(temps), *eps;
-    int nt = (int)js_num(temps, ft, "number", -1.0);
-    if (!ft || nt < 0) break;
+    double temporada;
+    int nt;
+    if (!ft || ft > fim || ft[-1] != '}') return -1;
+    temporada = js_num(temps, ft, "number", -1.0);
+    if (!isfinite(temporada) || temporada < 0 || temporada > SHRT_MAX) continue;
+    nt = (int)temporada;
+    if (temporada != nt) continue;
     eps = js_array(temps, ft, "episodes");
     for (; eps && *eps == '{'; eps = js_prox(js_fim(eps))) {
       const char *fe = js_fim(eps);
+      double episodio;
+      char concluido[16];
       int ne, feito;
-      if (!fe) break;
-      ne = (int)js_num(eps, fe, "number", -1.0);
-      // js_bool nao existe nesta camada; `completed` e true/false cru.
-      { const char *c = strstr(eps, "\"completed\"");
-        feito = (c && c < fe && strstr(c, "true") && strstr(c, "true") < fe &&
-                 (size_t)(strstr(c, "true") - c) < 16) ? 1 : 0; }
-      if (ne >= 1) { vistoep_definir(imdb, nt, ne, feito); total++; }
+      if (!fe || fe > ft || fe[-1] != '}') return -1;
+      episodio = js_num(eps, fe, "number", -1.0);
+      if (!isfinite(episodio) || episodio < 1 || episodio > SHRT_MAX) continue;
+      ne = (int)episodio;
+      if (episodio != ne) continue;
+      // Somente a afirmacao explicita true/false define o estado. Procurar
+      // "true" perto da chave lia strings como bool e falhava com espacos.
+      if (!js_bruto(eps, fe, "completed", concluido, sizeof concluido)) continue;
+      if (!strcmp(concluido, "true")) feito = 1;
+      else if (!strcmp(concluido, "false")) feito = 0;
+      else continue;
+      total += definir(imdb, nt, ne, feito);
       if (fe >= ft) break;
     }
     if (ft >= fim) break;

@@ -2,6 +2,9 @@
 // e perfis_ativo sao substituidos aqui por versoes em memoria.
 #include "progresso.h"
 #include <assert.h>
+#include <float.h>
+#include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,10 +107,11 @@ static void gravarLocalEhPendenteComHora(void) {
 static void pendenteVenceServidor(void) {
   ProgRegistro rem;
   const ProgRegistro *s;
-  const char *chaves[1] = { "tt1234567_s4e9" };
+  ProgRegistro enviado;
   zerar(NULL);
   agora = 1757000200000LL;
   assert(prog_gravar_local("tt1234567", 4, 9, 1500, 2640));
+  assert(prog_por_chave("tt1234567_s4e9", &enviado));
 
   // Cenario 1.3 do plano: pull traz o servidor ANTIGO depois de assistir aqui.
   memset(&rem, 0, sizeof rem);
@@ -123,7 +127,7 @@ static void pendenteVenceServidor(void) {
   s = porChave("tt1234567_s4e9"); assert(s->posSeg == 1500 && s->pendente);
 
   // Depois do push, remoto mais novo vence; mais velho nao.
-  prog_marcar_empurrados(chaves, 1);
+  prog_confirmar_empurrados(&enviado, 1);
   s = porChave("tt1234567_s4e9"); assert(!s->pendente);
   assert(prog_aplicar_remoto(&rem) == 1);
   s = porChave("tt1234567_s4e9"); assert(s->posSeg == 2000 && !s->pendente);
@@ -193,6 +197,48 @@ static void sobreviveAoDisco(void) {
   puts("ok  gravado e relido sem perda");
 }
 
+static void temposInvalidosNaoEntram(void) {
+  ProgRegistro rem, r[8];
+  zerar(NULL);
+  assert(!prog_gravar_local("tt1", 0, 0, NAN, 600));
+  assert(!prog_gravar_local("tt1", 0, 0, 10, NAN));
+  assert(!prog_gravar_local("tt1", 0, 0, INFINITY, 600));
+  assert(!prog_gravar_local("tt1", 0, 0, 10, DBL_MAX));
+  assert(!prog_gravar_local("tt1", 0, 0, 10, (double)LLONG_MAX / 1000.0));
+  assert(prog_ler(r, 8) == 0 && !arquivo);
+  memset(&rem, 0, sizeof rem);
+  snprintf(rem.contentId, sizeof rem.contentId, "tt1");
+  rem.posSeg = 10; rem.durSeg = INFINITY;
+  assert(!prog_aplicar_remoto(&rem));
+  rem.durSeg = 600; memset(rem.chave, 'x', sizeof rem.chave);
+  assert(!prog_aplicar_remoto(&rem));
+  zerar("tt1 nan 600\ntt2 10 inf\ntt3 10 1e308\ntt4 -5 600\n");
+  assert(prog_ler(r, 8) == 1 && !strcmp(r[0].contentId, "tt4") && r[0].posSeg == 0);
+  zerar("#nvprog2\n1\ttt1\ttt1\tmovie\t0\t0\tnan\t600\t1\t1\n"
+        "1\ttt2\ttt2\tmovie\t0\t0\t10\tinf\t1\t1\n"
+        "1\ttt3\ttt3\tmovie\t0\t0\t10\t0\t1\t1\n");
+  assert(prog_ler(r, 8) == 0);
+  assert(prog_ler(NULL, 8) == 0 && prog_pendentes(NULL, 8) == 0);
+  assert(prog_ler(r, -1) == 0 && prog_pendentes(r, -1) == 0);
+  puts("ok  tempos invalidos do player, servidor e disco sao recusados");
+}
+
+static void limiteEscolheOsMaisNovos(void) {
+  ProgRegistro r[2];
+  zerar(NULL);
+  agora = 1000; assert(prog_gravar_local("tt1", 0, 0, 10, 600));
+  agora = 2000; assert(prog_gravar_local("tt2", 0, 0, 10, 600));
+  agora = 3000; assert(prog_gravar_local("tt3", 0, 0, 10, 600));
+  assert(prog_ler(r, 2) == 2);
+  assert(!strcmp(r[0].contentId, "tt3") && !strcmp(r[1].contentId, "tt2"));
+  agora = 4000; assert(prog_gravar_local("tt1", 0, 0, 10, 600));
+  assert(prog_ler(r, 1) == 1 && !strcmp(r[0].contentId, "tt1"));
+  prog_invalidar();
+  assert(prog_ler(r, 2) == 2);
+  assert(!strcmp(r[0].contentId, "tt1") && !strcmp(r[1].contentId, "tt3"));
+  puts("ok  leitura limitada inclui os mais novos antes de truncar");
+}
+
 int main(void) {
   prog_definir_relogio(relogio);
   chaveIgualAoWeb();
@@ -202,6 +248,8 @@ int main(void) {
   perfisNaoSeMisturam();
   ordemMaisNovoPrimeiro();
   sobreviveAoDisco();
+  temposInvalidosNaoEntram();
+  limiteEscolheOsMaisNovos();
   puts("progresso: tudo ok");
   return 0;
 }
