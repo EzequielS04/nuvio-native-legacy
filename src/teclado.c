@@ -86,7 +86,7 @@
 // DIGITAR PELO CELULAR (celular.h): painel a DIREITA da modal, com o QR e o
 // endereco. A modal anda para a esquerda para o par ficar centrado; numa grade
 // tao larga que o par nao caiba (20 colunas, nenhum chamador hoje), sem painel.
-#define TE_CEL_W    400.0f
+#define TE_CEL_W    440.0f
 #define TE_CEL_GAP   24.0f
 #define TE_CEL_QR   300.0f
 static int celAtivo;   // o painel existe nesta abertura

@@ -356,6 +356,9 @@ static int atender(int c, int *erros) {
     return 0;
   }
   if (!strcmp(metodo, "GET") || !strcmp(metodo, "HEAD")) {
+    // Sem IP de quem pediu: so que a pagina chegou ao celular. E esta linha
+    // que diz, no log de uma LG/Samsung, se a rede da TV deixa entrar.
+    if (metodo[0] == 'G') puts("[celular] pagina aberta");
     responder(c, 200, metodo[0] == 'G' ? pagina : NULL);
     return 0;
   }
