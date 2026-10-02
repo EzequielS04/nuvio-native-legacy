@@ -171,8 +171,8 @@ static void montarPaginas(const char *titulo) {
   escapar(ph, sizeof ph, i18n("Toque e segure para colar"));
   escapar(colar, sizeof colar, i18n("Colar"));
   escapar(enviar, sizeof enviar, i18n("Enviar para a TV"));
-  escapar(fim, sizeof fim, i18n("Enviado. Confira na TV e aperte Pronto."));
-  escapar(usado, sizeof usado, i18n("Este endereço expirou ou já foi usado. Abra o teclado na TV de novo."));
+  escapar(fim, sizeof fim, i18n("Enviado. Confira na TV."));
+  escapar(usado, sizeof usado, i18n("Este endereço expirou ou já foi usado. Gere outro na TV."));
   // FORMULARIO COMUM, sem fetch: funciona em qualquer navegador de celular, com
   // ou sem JS. O unico JS e o botao Colar, que so aparece onde a area de
   // transferencia existe (no http da LAN o Safari e o Chrome a escondem: la a

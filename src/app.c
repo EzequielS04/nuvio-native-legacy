@@ -11,6 +11,7 @@
 //   2. detalhe — camada sobre a tela corrente
 //   3. menu    — camada sobre a tela corrente
 //   4. a tela corrente (home, busca, biblioteca ou ajustes)
+#include "celbotao.h"
 #include "ponteiro.h"
 #include "app.h"
 #include "registro.h"
@@ -1318,6 +1319,9 @@ void app_evento(const SDL_Event *e) {
   // O CARTAO DO LEMBRETE DE PROGRAMA, em qualquer tela: com ele de pe as
   // setas laterais, o OK e o Voltar sao dele (ver guialembrete.h).
   if (glem_evento(e)) return;
+  // O CARTAO DO CELULAR (celbotao.h), aberto de qualquer campo de texto: come
+  // o teclado todo ate fechar.
+  if (celb_evento(e)) return;
 
   // PORTA DE TESTE: F10 abre o Guia de TV de onde quer que o app esteja.
   //
@@ -3486,6 +3490,7 @@ void app_desenhar(Uint32 agora) {
   CAMADA_SE(pipintro_aberto());
   if (!registro_aberto()) pipintro_desenhar(agora);
   if (!registro_aberto()) spot_desenhar(agora, spotVeuPronto);
+  if (!registro_aberto()) celb_desenhar();
   CAMADA_SE(diagnostico_intro_aberto());
   if (!registro_aberto()) diagnostico_intro_desenhar(agora);
   CAMADA_SE(registro_aberto());

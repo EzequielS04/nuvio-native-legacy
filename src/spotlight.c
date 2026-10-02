@@ -52,6 +52,7 @@
 #include "posterprov.h"
 #include "ponteiro.h"
 #include "sistexto.h"
+#include "celbotao.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -127,7 +128,7 @@ static float animLin[SP_MAX_LIN], entraLin[SP_MAX_LIN];
 static int   aberto;
 static float entrada;              // 0..1 (mola)
 // Onde esta o foco. O teclado do app so existe com kbAberto.
-enum { P_CAMPO = 0, P_MIC, P_TECLADO, P_LISTA };
+enum { P_CAMPO = 0, P_MIC, P_TECLADO, P_LISTA, P_CEL };
 static int   painel;
 static int   kbAberto;
 static float kbAnim;               // 0..1, o teclado do app entrando
@@ -164,6 +165,13 @@ enum { K_ESPACO, K_APAGAR, K_LIMPAR, K_FALAR, K_TECLADO };
 static int   kbCmd[6], kbNCmd;
 
 static int ditadoDisponivel(void) { return st_voz_disponivel(); }
+// DIGITAR PELO CELULAR (celbotao.h): o disco no fim da barra, depois do Falar.
+static int celDisponivel(void) { return celb_disponivel(); }
+// Largura que os botoes da direita (Falar, Celular) tiram da barra.
+static float botoesW(void) {
+  return (ditadoDisponivel() ? SP_MIC_D + 14.0f : 0.0f) + (celDisponivel() ? SP_MIC_D + 14.0f : 0.0f) +
+         (ditadoDisponivel() || celDisponivel() ? 12.0f : 0.0f);
+}
 static int imeDisponivel(void) { return st_ime_disponivel(); }
 static int ouvindo(void) {
   return st_dono() == ST_SPOT && (st_estado() == ST_OUVINDO || st_estado() == ST_PERMISSAO ||
@@ -634,6 +642,16 @@ static void okCampo(void) {
 
 static void lerSistema(void) {
   char t[SP_MAX_TXT * 2];
+  // DO CELULAR: o campo inteiro, como se a pessoa tivesse digitado, e o foco
+  // vai para os resultados (o mesmo que o "Concluir" do teclado da TV).
+  if (celb_pegar(CELB_SPOT, t, sizeof t)) {
+    st_fechar(ST_SPOT);
+    campoDefinir(t, 1);
+    memset(t, 0, sizeof t);
+    registrar();
+    if (temResultados()) entrarLista(); else painel = P_CAMPO;
+    return;
+  }
   int r = st_ler(ST_SPOT, t, sizeof t);
   int voz = ouvindo();
   if (r == ST_NADA) return;
@@ -689,6 +707,7 @@ void spot_fechar(void) {
   okPress = okLongo = 0;
   kbAberto = 0;
   st_fechar(ST_SPOT);
+  celb_fechar_dono(CELB_SPOT);
 }
 
 int spot_aberto(void)  { return aberto; }
@@ -700,7 +719,7 @@ int spot_linha_tipo(int i) { return i >= 0 && i < nLin ? lin[i].tipo : -1; }
 const char *spot_linha_texto(int i) { return i >= 0 && i < nLin ? lin[i].t1 : ""; }
 int spot_linha_focada(void) { return painel == P_LISTA ? focoL : -1; }
 int spot_teclado_app_aberto(void) { return kbAberto; }
-int spot_foco_campo(void) { return painel == P_CAMPO ? 1 : painel == P_MIC ? 2 : 0; }
+int spot_foco_campo(void) { return painel == P_CAMPO ? 1 : painel == P_MIC ? 2 : painel == P_CEL ? 3 : 0; }
 float spot_altura_corpo(void) { return corpoH; }
 
 int spot_pediu(SpotPedido *p) {
@@ -830,7 +849,7 @@ static void focarLinha(int i, int b) {
   (void)b;
   if (i >= 0 && i < nLin && focavel(lin[i].tipo)) { painel = P_LISTA; focoL = i; }
 }
-static void focarCampo(int a, int b) { (void)b; painel = a ? P_MIC : P_CAMPO; }
+static void focarCampo(int a, int b) { (void)b; painel = a == 2 ? P_CEL : a ? P_MIC : P_CAMPO; }
 
 // Baixo a partir da barra: o teclado do app (se aberto) ou a lista.
 static void descerDaBarra(void) {
@@ -878,7 +897,7 @@ void spot_evento(const SDL_Event *e) {
   // VOLTAR desfaz na ordem inversa (ver o topo).
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || e->key.keysym.scancode == NV_SCANCODE_BACK) {
     if (ouvindo()) { st_fechar(ST_SPOT); painel = P_CAMPO; return; }
-    if (kbAberto || painel == P_LISTA || painel == P_TECLADO) {
+    if (kbAberto || painel == P_LISTA || painel == P_TECLADO || painel == P_CEL) {
       kbAberto = 0; painel = P_CAMPO; return;
     }
     if (nConsulta > 0) { registrar(); nConsulta = 0; consulta[0] = 0; remontar(); return; }
@@ -901,17 +920,27 @@ void spot_evento(const SDL_Event *e) {
       acrescentar(um);
       remontar();
     }
-    if (painel == P_LISTA || painel == P_MIC) painel = P_CAMPO;
+    if (painel == P_LISTA || painel == P_MIC || painel == P_CEL) painel = P_CAMPO;
     return;
   }
   switch (painel) {
-    case P_CAMPO: case P_MIC:
+    case P_CAMPO: case P_MIC: case P_CEL:
       switch (k) {
-        case SDLK_RIGHT: if (painel == P_CAMPO && ditadoDisponivel()) painel = P_MIC; break;
-        case SDLK_LEFT:  if (painel == P_MIC) painel = P_CAMPO; break;
+        // DIREITA anda campo -> Falar -> Celular, o que existir aqui.
+        case SDLK_RIGHT:
+          if (painel == P_CAMPO && ditadoDisponivel()) painel = P_MIC;
+          else if (painel != P_CEL && celDisponivel()) painel = P_CEL;
+          break;
+        case SDLK_LEFT:
+          if (painel == P_CEL && ditadoDisponivel()) painel = P_MIC;
+          else if (painel != P_CAMPO) painel = P_CAMPO;
+          break;
         case SDLK_DOWN: case SDLK_TAB: descerDaBarra(); break;
         case SDLK_RETURN: case SDLK_KP_ENTER:
-          if (painel == P_MIC) ditar(); else okCampo();
+          if (e->key.repeat) break;
+          if (painel == P_MIC) ditar();
+          else if (painel == P_CEL) { st_fechar(ST_SPOT); celb_abrir(CELB_SPOT, "Buscar"); }
+          else okCampo();
           break;
         default: break;
       }
@@ -1056,19 +1085,19 @@ static void desenhaCampo(float dy, float a, Uint32 agora) {
   ajustes_acento(&ar, &ag, &ab);
   // Foco no campo: um aro na cor do tema por dentro da barra.
   if (animCampo > 0.01f) {
-    GfxRect r = { barra.x + 8.0f, barra.y + 8.0f, (comMic ? barra.w - SP_MIC_D - 40.0f : barra.w) - 16.0f,
+    GfxRect r = { barra.x + 8.0f, barra.y + 8.0f, barra.w - botoesW() - 16.0f,
                   barra.h - 16.0f };
     gfx_vidro_aro(r, 0.5f, 2.5f, ar, ag, ab, 0.9f * animCampo * a);
     gfx_cor(r, 0.5f, ar, ag, ab, 0.10f * animCampo * a);
   }
   if (ponteiro_ativo()) {
-    ponteiro_alvo(barra.x, barra.y, barra.w - (comMic ? SP_MIC_D + 40.0f : 0.0f), barra.h,
+    ponteiro_alvo(barra.x, barra.y, barra.w - botoesW(), barra.h,
                   focarCampo, NULL, 0, 0);
   }
   gfx_icone((GfxRect){ barra.x + 40.0f, barra.y + (barra.h - 40.0f) * 0.5f, 40.0f, 40.0f },
             "menu_search", 0.78f, 0.79f, 0.83f, a);
   tx = barra.x + 40.0f + 40.0f + 24.0f;
-  xMax = barra.x + barra.w - (comMic ? SP_MIC_D + 56.0f : 40.0f) - (ouve ? 170.0f : 0.0f);
+  xMax = barra.x + barra.w - (botoesW() > 0.0f ? botoesW() + 16.0f : 40.0f) - (ouve ? 170.0f : 0.0f);
   if (nConsulta) {
     TxtLinha l = txt_linha_corta(TXT_HEADLINE, consulta, 246, 247, 251, 255, xMax - tx - 10.0f);
     txt_desenhar_alpha(l, tx, barra.y + (barra.h - l.h) * 0.5f, a);
@@ -1090,7 +1119,8 @@ static void desenhaCampo(float dy, float a, Uint32 agora) {
   // MICROFONE: botao focavel a direita, so onde ha voz (nao se promete o que a
   // TV nao faz). Ouvindo, acende na cor do tema e um anel cresce com o som.
   if (comMic) {
-    float d = SP_MIC_D, cx = barra.x + barra.w - 26.0f - d, cy = barra.y + (barra.h - d) * 0.5f;
+    float d = SP_MIC_D, cx = barra.x + barra.w - 26.0f - d - (celDisponivel() ? d + 14.0f : 0.0f);
+    float cy = barra.y + (barra.h - d) * 0.5f;
     float k = animMic;
     if (ponteiro_ativo()) ponteiro_alvo(cx - 8, barra.y, d + 16, barra.h, focarCampo, NULL, 1, 0);
     if (ouve) {
@@ -1118,6 +1148,12 @@ static void desenhaCampo(float dy, float a, Uint32 agora) {
     { int t = (ouve || k > 0.5f) ? ajustes_tinta_foco() : 224;
       gfx_icone((GfxRect){ cx + 17, cy + 17, d - 34, d - 34 }, "aj_mic",
                 t / 255.0f, t / 255.0f, t / 255.0f, a); }
+  }
+  // CELULAR: o ultimo da barra, sempre na mesma ponta.
+  if (celDisponivel()) {
+    float d = SP_MIC_D;
+    celb_botao(CELB_SPOT, (GfxRect){ barra.x + barra.w - 26.0f - d, barra.y + (barra.h - d) * 0.5f, d, d },
+               painel == P_CEL, focarCampo, 2, 0, a);
   }
 }
 
@@ -1328,7 +1364,7 @@ static void desenhaRodape(float dy, float a) {
     if (recente) x = dica(x, y, i18n("Segure OK"), i18n("Remover"), a);
     dica(x, y, i18n("Voltar"), i18n("Campo"), a);
   } else {
-    x = dica(x, y, "OK", i18n(painel == P_MIC ? "Falar" : "Digitar"), a);
+    x = dica(x, y, "OK", i18n(painel == P_MIC ? "Falar" : painel == P_CEL ? "Digitar pelo celular" : "Digitar"), a);
     x = dica(x, y, "\xe2\x86\x93", i18n("Resultados"), a);
     dica(x, y, i18n("Voltar"), i18n(nConsulta > 0 ? "Limpar" : "Fechar"), a);
   }

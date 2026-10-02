@@ -46,6 +46,7 @@
 #include "botoes.h"
 #include "sistexto.h"
 #include "ponteiro.h"
+#include "celbotao.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -170,7 +171,8 @@ static int     nRecLayout = 0;
 // curto.
 static int     okPress = 0, okLongo = 0;
 static Uint32  okDesde = 0;
-// Foco na barra (so com sistexto disponivel): 0 = teclado, 1 = campo, 2 = Falar.
+// Foco na barra: 0 = teclado, 1 = campo, 2 = Falar (estes dois so com sistexto),
+// 3 = Digitar pelo celular (celbotao.h, onde ha servidor).
 static int     campoFoco = 0;
 static float   animFocoCampo = 0.0f, animMic = 0.0f;
 
@@ -507,7 +509,8 @@ static int vozBusca(void) {
                                    st_estado() == ST_VOZ_SISTEMA);
 }
 static void campoOk(void) {
-  if (campoFoco == 2) st_voz_iniciar(ST_BUSCA);
+  if (campoFoco == 3) { st_fechar(ST_BUSCA); celb_abrir(CELB_BUSCA, "Buscar filmes e séries"); }
+  else if (campoFoco == 2) st_voz_iniciar(ST_BUSCA);
   else st_ime_abrir(ST_BUSCA, consulta, BU_MAX_CONSULTA - 1);
 }
 static void focarCampoPonteiro(int a, int b) { (void)b; painel = 0; campoFoco = a; }
@@ -575,7 +578,7 @@ int busca_iniciar(void) {
   return 1;
 }
 
-void busca_encerrar(void) { temItemFoco = 0; st_fechar(ST_BUSCA); }
+void busca_encerrar(void) { temItemFoco = 0; st_fechar(ST_BUSCA); celb_fechar_dono(CELB_BUSCA); }
 const char *busca_consulta(void) { return consulta; }
 int  busca_quer_sair(void) { return sair; }
 
@@ -672,12 +675,18 @@ void busca_evento(const SDL_Event *e) {
   if (painel == 0 && campoFoco) {
     switch (k) {
       case SDLK_DOWN: campoFoco = 0; return;
-      case SDLK_RIGHT: if (campoFoco == 1 && st_voz_disponivel()) campoFoco = 2; return;
+      // DIREITA anda campo -> Falar -> Celular, o que existir aqui.
+      case SDLK_RIGHT:
+        if (campoFoco == 1 && st_voz_disponivel()) campoFoco = 2;
+        else if (campoFoco < 3 && celb_disponivel()) campoFoco = 3;
+        return;
       case SDLK_LEFT:
-        if (campoFoco == 2) campoFoco = 1;
+        if (campoFoco == 3 && st_voz_disponivel()) campoFoco = 2;
+        else if (campoFoco >= 2 && st_ime_disponivel()) campoFoco = 1;
+        else if (campoFoco >= 2) campoFoco = 0;
         else { registrarConsulta(); sair = 1; }
         return;
-      case SDLK_RETURN: case SDLK_KP_ENTER: campoOk(); return;
+      case SDLK_RETURN: case SDLK_KP_ENTER: if (!e->key.repeat) campoOk(); return;
       default: break;
     }
   }
@@ -711,7 +720,12 @@ void busca_evento(const SDL_Event *e) {
       // salto para uma letra aleatoria ao subir ou descer no teclado.
       // CIMA da primeira fileira: o campo, onde ha teclado do sistema.
       case SDLK_UP:
-        if (!focus_mover_grade(&focoKb, 0, -1) && st_ime_disponivel()) campoFoco = 1;
+        // Sem teclado do sistema (LG, Samsung) o campo nao e alvo: cima vai
+        // direto ao botao do celular.
+        if (!focus_mover_grade(&focoKb, 0, -1)) {
+          if (st_ime_disponivel()) campoFoco = 1;
+          else if (celb_disponivel()) campoFoco = 3;
+        }
         break;
       case SDLK_DOWN:   focus_mover_grade(&focoKb, 0,  1); break;
       case SDLK_RETURN: case SDLK_KP_ENTER: aplicarTecla(); break;
@@ -753,7 +767,18 @@ void busca_atualizar(float dt, Uint32 agora) {
   // TECLADO/VOZ DO SISTEMA (sistexto.h): o texto vem inteiro e substitui o campo.
   { char t[BU_MAX_CONSULTA * 2];
     int voz = vozBusca();
-    int r = st_ler(ST_BUSCA, t, sizeof t);
+    int r;
+    // DO CELULAR: o campo inteiro, como se a pessoa tivesse digitado; com
+    // resultado o foco vai para eles, como no "Concluir" do teclado da TV.
+    if (celb_pegar(CELB_BUSCA, t, sizeof t)) {
+      st_fechar(ST_BUSCA);
+      campoDefinir(t, 1);
+      memset(t, 0, sizeof t);
+      refiltrar();
+      campoFoco = 0;
+      if (nFil > 0) { registrarConsulta(); painel = 1; }
+    }
+    r = st_ler(ST_BUSCA, t, sizeof t);
     if (r == ST_PEDE_TECLADO) { campoFoco = 1; st_ime_abrir(ST_BUSCA, consulta, BU_MAX_CONSULTA - 1); }
     else if (r == ST_TEXTO || r == ST_FIM) {
       campoDefinir(t, voz || r == ST_FIM);
@@ -856,15 +881,22 @@ static void desenhaCabecalho(Uint32 agora) {
     gfx_cor(campo, raio, lum, lum + 0.004f, lum + 0.014f, 1.0f); }
   // CAMPO E FALAR COMO ALVOS (so com teclado/voz do sistema): aro na cor do
   // tema no foco, e o microfone num disco no fim do campo.
-  { int temIme = st_ime_disponivel(), temVoz = st_voz_disponivel();
-    float d = campo.h - 20.0f, mx = campo.x + campo.w - 10.0f - d, my = campo.y + 10.0f;
+  { int temIme = st_ime_disponivel(), temVoz = st_voz_disponivel(), temCel = celb_disponivel();
+    float d = campo.h - 20.0f, my = campo.y + 10.0f;
+    // Da direita para a esquerda: Celular (sempre na ponta), Falar.
+    float cx = campo.x + campo.w - 10.0f - d;
+    float mx = temCel ? cx - 10.0f - d : cx;
+    float fim = temVoz ? mx - 10.0f : temCel ? cx - 10.0f : campo.x + campo.w;
     if (temIme && animFocoCampo > 0.01f)
-      gfx_vidro_aro((GfxRect){ campo.x + 3, campo.y + 3, (temVoz ? mx - 10.0f : campo.x + campo.w) - campo.x - 6,
+      gfx_vidro_aro((GfxRect){ campo.x + 3, campo.y + 3, fim - campo.x - 6,
                                campo.h - 6 }, 0.5f, 2.5f, ar, ag, ab, 0.9f * animFocoCampo);
     if (temIme && ponteiro_ativo()) {
-      ponteiro_alvo(campo.x, campo.y, (temVoz ? mx - 6.0f : campo.x + campo.w) - campo.x, campo.h,
+      ponteiro_alvo(campo.x, campo.y, fim + 4.0f - campo.x, campo.h,
                     focarCampoPonteiro, NULL, 1, 0);
     }
+    if (temCel)
+      celb_botao(CELB_BUSCA, (GfxRect){ cx, my, d, d }, painel == 0 && campoFoco == 3,
+                 focarCampoPonteiro, 3, 0, 1.0f);
     if (temVoz) {
       int ouve = vozBusca();
       float k = ouve ? 1.0f : animMic;
@@ -888,7 +920,8 @@ static void desenhaCabecalho(Uint32 agora) {
   float tx = campo.x + BU_CAMPO_PADX + 32.0f + 20.0f;
   if (nConsulta) {
     TxtLinha l = txt_linha_corta(TXT_HEADLINE, consulta, 245, 246, 250, 255,
-                                campo.w - 2 * BU_CAMPO_PADX - 12 - 56);
+                                campo.w - 2 * BU_CAMPO_PADX - 12 - 56 -
+                                (celb_disponivel() ? campo.h : 0.0f));
     txt_desenhar(l, tx, campo.y + (campo.h - l.h) * 0.5f);
     tx += l.w + 6.0f;
   } else {
@@ -947,9 +980,11 @@ static void desenhaTeclado(void) {
   { float y = BU_KB_Y + (kbFil + 1) * BU_KB_PASSO + 28.0f;
     const char *d1 = campoFoco == 1 ? i18n("OK   Teclado da TV")
                    : campoFoco == 2 ? i18n("OK   Falar")
+                   : campoFoco == 3 ? i18n("OK   Digitar pelo celular")
                    : nFil ? i18n("→   Resultados")
                    : recentesVisiveis() ? i18n("→   Buscas recentes")
                    : st_ime_disponivel() ? i18n("↑   Campo de busca")
+                   : celb_disponivel() ? i18n("↑   Digitar pelo celular")
                    : i18n("OK   Digitar");
     const char *d2 = i18n("Voltar   Menu");
     TxtLinha a1 = txt_linha(TXT_CAPTION2, d1, 150, 154, 163, 255);
