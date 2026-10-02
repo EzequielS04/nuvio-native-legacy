@@ -65,6 +65,8 @@ int ajustes_dolby_atmos(void);
 // pauseOverlayEnabled: o painel de ficha que sobe alguns segundos depois de
 // pausar o video. Ver pausao.h.
 int ajustes_pausa_overlay(void);
+// "O que achou?" nos creditos (reacao.h). Ligado de fabrica.
+int ajustes_reacao_creditos(void);
 // 1 = ao mandar Reproduzir, ABRIR A FOLHA DE FONTES em vez de escolher
 // sozinho. Padrao 0: quem nunca entrou em Ajustes continua com a escolha
 // automatica de sempre.

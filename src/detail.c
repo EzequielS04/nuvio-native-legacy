@@ -58,6 +58,7 @@
 #include "catalogo.h"
 #include "artehero.h"
 #include "recomenda.h"
+#include "reacao.h"
 #include "recenviar.h"
 #include "serieaud.h"
 #include "seriefrases.h"
@@ -1838,6 +1839,8 @@ static int acaoEm(int n) {
 
 void detail_evento(const SDL_Event *e) {
   if (saindo) return;
+  // O CARTAO "O QUE ACHOU?" aberto pela pagina e modal: a tecla e dele.
+  if (reacao_aberta() && reacao_evento(e, 1)) return;
   // CARROSSEL ANDANDO: as setas laterais continuam andando pela fileira (a
   // pagina do titulo do meio do caminho nem chegou a ser montada); qualquer
   // outra tecla monta a pagina do titulo em cena antes de agir nela.
@@ -2219,6 +2222,9 @@ void detail_evento(const SDL_Event *e) {
     return;
   }
   if (nivel == 0) {
+    // CIMA na linha de botoes nao fazia nada; com uma reacao pendente ele abre
+    // a pergunta (reacao.h). Sem pendencia, continua sem fazer nada.
+    if (k == SDLK_UP && reacao_detalhe_abrir(cat_item(idx))) return;
     // CARROSSEL: a primeira seta para baixo so estica o cartao (ver carCheia).
     if (k == SDLK_DOWN && carro && !carCheia) { carCheia = 1; return; }
     if (k == SDLK_DOWN) {
@@ -5902,6 +5908,16 @@ static void carFundo(void) {
   gfx_janela_atual[2] = gfx_janela_atual[3] = 1.0f;
 }
 
+// "O QUE ACHOU?" AINDA SEM RESPOSTA (reacao.h): uma linha discreta no canto
+// inferior direito, so no topo da pagina e sem nada aberto por cima. CIMA na
+// linha de botoes abre o cartao (detail_evento); aberto, ele desenha aqui.
+static void reacaoPendente(float s) {
+  int livre = nivel == 0 && scrollY < 1.0f && !pessoaAberta && !colListaAberta &&
+              !episodios_menu_aberto() && trocaarte_visivel() < 0.005f;
+  if (!livre && !reacao_aberta()) return;
+  reacao_detalhe_dica(cat_item(idx), livre ? s : 0.0f);
+}
+
 void detail_desenhar(Uint32 agora) {
   if (!aberto) return;
   // COR VIVA: a pagina do titulo manda na cor, acima da home que pode estar
@@ -6035,6 +6051,7 @@ void detail_desenhar(Uint32 agora) {
     if (pessoaAberta) { ponteiro_camada(); desenhaPessoa(s); }
     if (colListaAberta) { ponteiro_camada(); desenhaListaColecao(s); }
     if (episodios_menu_aberto()) ponteiro_camada();
+    reacaoPendente(s);
     return;
   }
   desenhaEsqueletoEpisodios(pg);
@@ -6046,6 +6063,7 @@ void detail_desenhar(Uint32 agora) {
   if (colListaAberta) { ponteiro_camada(); desenhaListaColecao(s); }
   // E o menu de visto por cima da ficha tambem: ele e o ultimo a abrir.
   if (episodios_menu_aberto()) ponteiro_camada();
+  reacaoPendente(s);
   episodios_menu_desenhar();
 }
 

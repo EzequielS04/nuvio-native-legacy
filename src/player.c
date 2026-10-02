@@ -93,6 +93,8 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include <strings.h>   // strcasecmp, para comparar o hdrType do pipeline
 #include <math.h>
 #include "ponteiro.h"
+#include "atividade.h"
+#include "reacao.h"
 
 // Quanto tempo os controles ficam de pe sem receber tecla. Medido a olho no
 // aparelho: perto de 4s. Menos que isso e o usuario perde a barra no meio de
@@ -1102,6 +1104,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   posVis = 0.0f; posVisV = 0.0f; posVisSolto = 0;
   encolhe = 1.0f; encolheAlvo = 0.0f; encolheT = 0.0f; encolheEm = 0;
   posplay_fechar();   // titulo novo, painel do anterior nao vale mais
+  reacao_fechar();
   pgDesde = 0;
   epgIdx = -1;
   // Canal ao vivo nao tem classificacao por titulo: o id "cs:channel:..." nao
@@ -1342,6 +1345,8 @@ static void fecharSessao(int manter) {
       // atividade (ou os "vistos recentemente" do perfil). Largar aos 8% nao
       // assistiu nada — e nao chega a lugar nenhum.
       recomenda_atividade_fim(ci, concluiu);
+      // A PARADA para o Social: fim, abandono (< 20%) ou progresso.
+      atividade_player_saiu(pos, duracaoSeg, concluiu);
       // O CHECK NA LISTA, LOCALMENTE E AGORA — a outra metade do #100.
       //
       // O relato e preciso: "mostra a barra de progresso mas nao fica com o
@@ -1399,6 +1404,7 @@ static void fecharSessao(int manter) {
     if (comVideo && !manter) video_parar();
     tv = SDL_GetTicks();
     pausao_fechar();
+    reacao_fechar();
     episodios_fechar();
     if (!manter) { intro_desligar(); introIdx=introT=introE=-1; }
     seekr_desligar();
@@ -2104,6 +2110,10 @@ void player_evento(const SDL_Event *e) {
   // mais recente na tela e o dono esta olhando para ele. O 2 e o BAIXO: ele
   // dispensa o painel E pede a barra de tempo de volta, que e o gesto que o
   // dono descreveu ("se clicar para baixo ele sobe e mostra o player").
+  // O CARTAO "O QUE ACHOU?" vem antes do pos-reproducao: e o mais recente na
+  // tela e some em 8 s. So toma ESQUERDA/DIREITA/OK/VOLTAR, e so com a barra
+  // escondida (reacao.h).
+  if (reacao_evento(e, visivel)) return;
   { int r = posplay_evento(e);
     if (r) { if (r == 2) acordar(); return; } }
   if (!aberto || saindo || e->type != SDL_KEYDOWN) return;
@@ -2433,6 +2443,15 @@ void player_atualizar(float dt, Uint32 agora) {
       // Filme/episodio de verdade, nunca o clipe curto de erro do provedor.
       if (ci && ci->imdb[0] && video_pronto() && duracaoSeg >= 120.0f)
         recomenda_atividade_passo(ci, tocando);
+      // ATIVIDADE PARA O SOCIAL (atividade.h): inicio, progresso a cada 5 min
+      // tocando e fim (90% ou creditos, pela MESMA regra da saida). Sem envio
+      // permitido, atividade.c so acompanha o trecho e nada sai.
+      if (ci && ci->imdb[0] && video_pronto() && duracaoSeg >= 120.0f) {
+        double cr = video_creditos();
+        if (cr <= 1.0) cr = intro_creditos_seg();
+        atividade_player_passo(ci, epT, epE, posSeg, duracaoSeg, tocando && !scrubbing,
+                               player_regra_concluiu(posSeg, duracaoSeg, cr), dt);
+      }
     }
     relogio_amostra(&relLeg, video_pos(), monoSeg(), tocando && !scrubbing);
     // A cada 10 s: o numero cru do pipeline e o do relogio da legenda, no
@@ -2533,7 +2552,16 @@ void player_atualizar(float dt, Uint32 agora) {
     // programacao.
     if (!ehCanal())
       posplay_atualizar(dt, agora, posSeg, duracaoSeg, eSerie, idxAtual(),
-                        eSerie && ofertaProximo()); }
+                        eSerie && ofertaProximo());
+    // "O QUE ACHOU?" (reacao.h): no mesmo instante do pos-reproducao do filme,
+    // e na serie so no fim da temporada ou no ultimo episodio disponivel.
+    if (!ehCanal() && ci && comVideo && video_pronto() && duracaoSeg >= 120.0f) {
+      const CatEp *px = eSerie ? player_proximo_episodio() : NULL;
+      double cr = video_creditos();
+      if (cr <= 1.0) cr = intro_creditos_seg();
+      reacao_player_atualizar(dt, agora, ci, eSerie, posSeg, duracaoSeg, cr,
+                              px != NULL, px && px->temporada != epT);
+    } else reacao_player_atualizar(dt, agora, NULL, 0, 0, 0, 0, 0, 0); }
   // Com o painel no ar os controles nao somem: eles sao a saida do dono.
   if (posplay_visivel()) ultimoInput = agora;
 
@@ -3222,6 +3250,9 @@ void player_desenhar(Uint32 agora) {
   // se abriu. Ancorar acima da barra desperdicaria a faixa que o recuo existe
   // para criar.
   posplay_desenhar(agora, NV_TELA_H - PLR_PAD_Y);
+  // Acima do pos-reproducao quando ele esta no ar (posplay_topo), senao na
+  // mesma margem inferior.
+  reacao_desenhar(agora, posplay_topo(NV_TELA_H - PLR_PAD_Y));
 
   // GUIA PARENTAL, canto superior esquerdo (.player-parental-guide).
   //

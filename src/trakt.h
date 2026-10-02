@@ -135,4 +135,7 @@ void trakt_assistido(const char *imdb, int marcar);
 // O ciclo de trakt_continuar baixa TODAS as paginas antes de aplicar (#212).
 int trakt_ler_filmes_vistos(const char *corpo);
 
+// Nota de 1 a 10 em /sync/ratings (a reacao dos creditos, reacao.c). Nao
+// bloqueia; 0 quando o Trakt esta desligado ou o id nao e IMDb.
+int trakt_avaliar(const char *imdb, const char *tipo, int nota);
 #endif

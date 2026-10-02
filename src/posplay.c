@@ -544,3 +544,15 @@ void posplay_desenhar(Uint32 agora, float baseY) {
                              150, 154, 163, 255);
       txt_desenhar_alpha(t, x, y + PP_CARD_H + PP_ROTULO_H - 4.0f, a * 0.85f); } }
 }
+
+// O TOPO do que o painel ocupa, para quem empilha acima dele (o cartao de
+// reacao, reacao.h). As contas sao as de posplay_desenhar, sem a mola.
+float posplay_topo(float baseY) {
+  if (anim < 0.01f) return baseY;
+  if (serie) {
+    TxtLinha t = txt_linha(TXT_DET_META2, "A seguir", 214, 216, 222, 255);
+    return baseY - PP_EP_H - (float)t.h - 12.0f - 16.0f;
+  }
+  { TxtLinha cab = txt_linha(TXT_ROW_TITULO, "Mais como este", 255, 255, 255, 255);
+    return baseY - PP_CARD_H - PP_ROTULO_H - (float)cab.h - 18.0f - PP_PAD - 16.0f; }
+}
