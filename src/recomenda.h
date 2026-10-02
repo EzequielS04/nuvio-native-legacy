@@ -444,4 +444,149 @@ void recomenda_desenhar(Uint32 agora);
 // conhece detail.c, pela mesma razao que salvospainel.c nao conhece.
 const char *recomenda_pediu_abrir(void);
 
+
+// =============================================================================
+// REDESENHO DO SOCIAL (02/10/2026) — API para quem desenha. Contrato completo
+// com o servidor em docs/social-contrato.md; fontes em docs/social-fontes.md.
+//
+// TUDO AQUI SEGUE A DISCIPLINA DO RESTO DO MODULO: nenhuma funcao bloqueia,
+// pedidos so ENFILEIRAM e acordam o fio de rede, leituras COPIAM de tras do
+// mutex. Sem NUVIO_REC_URL tudo devolve 0/vazio.
+//
+// IDENTIDADE: cada PERFIL Nuvio e uma pessoa. O fio manda `X-Nuvio-Perfil` com
+// o profile_index quando o perfil ativo NAO e o principal (o principal continua
+// `nuvio:<sub>`). Trocar de perfil = trocar de pessoa: o modulo esquece tudo,
+// como em sair da conta. Em /v1/eu vao o nome e a foto do perfil ativo.
+// =============================================================================
+
+// Nome que a TV escreve para uma pessoa. `nome` quando ha; senao o slug (id
+// "trakt:<slug>"); senao "Amigo #<n>" (n curto, derivado do id). NUNCA o id
+// cru — era assim que um amigo por codigo aparecia como "5269539e-...".
+void rec_nome_exibicao(char *dst, size_t tam, const char *nome, const char *id);
+
+// O meu nome como os amigos o veem (resposta do servidor; "" antes do 1o ciclo).
+const char *recomenda_meu_nome(void);
+// O que eu digitei como nome de exibicao ("" = uso o nome do perfil).
+const char *recomenda_minha_exibicao(void);
+// Enfileira POST /v1/eu/nome. "" volta ao nome do perfil. 1 = enfileirou.
+// Resultado: recomenda_meu_nome() muda no ciclo seguinte.
+int  recomenda_definir_nome(const char *nome);
+
+// QUEM VE O QUE EU ASSISTO. Tres respostas e o "nao perguntado", pela mesma
+// razao dos tres estados de REC_APARECER_*: a tela pergunta enquanto for
+// REC_ALCANCE_NAO_PERGUNTADO, e nada sai da TV ate a pessoa responder.
+//   NINGUEM (0)   nada e enviado; o servidor apaga o que havia.
+//   AMIGOS (1)    contatos veem atividade, "assistindo agora", agregados e
+//                 reacoes; "gosto parecido" exige 1+ dos dois lados.
+//   AMIGOS2 (2)   tambem amigos de amigos (sem foto e sem o id da conta).
+// E SEPARADO do "aparecer"/descobrivel (quem pode me ACHAR) e do antigo
+// RecPerfil.ativ (rota velha /v1/amigos/atividade, mantida para TVs no ar).
+enum { REC_ALCANCE_NAO_PERGUNTADO = -1, REC_ALCANCE_NINGUEM = 0,
+       REC_ALCANCE_AMIGOS = 1, REC_ALCANCE_AMIGOS2 = 2 };
+int  recomenda_alcance(void);
+// Grava no aparelho NA HORA e enfileira POST /v1/alcance. Descer para 0 limpa
+// a fila de atividade que ainda nao saiu.
+void recomenda_responder_alcance(int nivel);
+
+// --- ATIVIDADE DO PLAYER (contrato com o agente do player) --------------------
+//
+// O player preenche e chama recomenda_atividade(); o modulo decide se sai (so
+// com alcance >= 1). "progresso" seguidos do mesmo titulo se fundem na fila
+// (somando `seg`), entao chamar a cada minuto e barato.
+typedef struct {
+  char ev[12];        // "inicio" | "progresso" | "fim" | "abandono" | "reacao" | "salvo"
+  char imdb[24];      // "tt..." (obrigatorio)
+  char midia[8];      // "movie" | "series"
+  char titulo[160];
+  char poster[512];   // so sai no feed se for de host conhecido (servidor)
+  int  temporada, episodio;
+  int  pct;           // 0-100
+  int  seg;           // segundos assistidos NESTE trecho (desde o evento anterior)
+  int  reacao;        // 1 | 0 | -1, so em ev "reacao"
+  long long rec;      // id da recomendacao de origem (RecItem.id) ou 0
+} RecAtiv;
+int  recomenda_atividade(const RecAtiv *a);   // 1 = enfileirou
+
+// --- FEED UNIFICADO ------------------------------------------------------------
+enum { REC_FONTE_NUVIO = 1, REC_FONTE_TRAKT, REC_FONTE_SIMKL, REC_FONTE_LETTERBOXD };
+enum { REC_ACAO_INICIO = 1,     // comecou (nosso) / "assistindo agora" (Trakt)
+       REC_ACAO_FIM,            // terminou / "assistiu"
+       REC_ACAO_ABANDONO,
+       REC_ACAO_REACAO,         // `reacao` 1/0/-1
+       REC_ACAO_SALVO,
+       REC_ACAO_NOTA };         // nota de tracker (`nota` 0-100)
+typedef struct {
+  int  fonte, acao;
+  char pessoa[96];      // "nuvio:..", "trakt:<slug>" ou "pub:<handle>" (amigo de amigo)
+  char pessoaNome[64];  // ja pronto (rec_nome_exibicao)
+  char pessoaAvatar[256];
+  int  grau;            // 1 amigo, 2 amigo de amigo
+  char via[64];         // grau 2: nome do amigo em comum
+  char imdb[24];
+  char midia[8];        // "movie" | "series"
+  char titulo[160];
+  char poster[512];
+  int  temporada, episodio, pct;
+  long long quando;     // epoch s; 0 = desconhecido (vai para o fim)
+  int  reacao;          // so REC_ACAO_REACAO
+  int  nota;            // so REC_ACAO_NOTA
+  long long id;         // id do evento no nosso servidor (0 nas outras fontes)
+} RecEvento;
+#define REC_FEED_MAX 50
+
+// Pede GET /v1/feed agora (ETag/304). O feed tambem e relido a cada 10 min com
+// a lista de contatos e fica em disco: a tela abre com o ultimo no 1o quadro.
+void recomenda_feed_pedir(void);
+int  recomenda_feed_n(void);
+int  recomenda_feed_item(int i, RecEvento *saida);   // copia; mais novo primeiro
+
+// O FEED DA TELA: o nosso (cache) + os itens que o Trakt ja montou
+// (trakt_social), num formato so, sem duplicata, mais novo primeiro. Sem rede.
+// `quandoTrakt` e o epoch de cada item do Trakt ou NULL (trakt_social ainda nao
+// le `watched_at`: esses vao para o fim). Devolve quantos copiou.
+int  recomenda_feed_unido(RecEvento *saida, int max, const CatItem *trakt,
+                          const long long *quandoTrakt, int nTrakt);
+// As pecas, publicas para o teste e para fontes futuras (Simkl/Letterboxd):
+// converte um item de trakt_social; 0 se nao serve (sem imdb/pessoa).
+int  rec_evento_de_trakt(const CatItem *ci, long long quando, RecEvento *saida);
+// Funde `src` em `dst` (n itens, capacidade max): DEDUPE por pessoa + imdb +
+// acao (INICIO e FIM do mesmo titulo NAO se fundem) com |dt| <= 1 h — ou
+// qualquer dt quando um dos dois nao tem hora. Na fusao fica o do NOSSO
+// servidor (tem reacao, grau, capa), completado com o que faltar. Ordena por
+// `quando` decrescente (0 por ultimo). Devolve o novo n.
+int  rec_eventos_unir(RecEvento *dst, int n, const RecEvento *src, int nsrc, int max);
+
+// --- PERFIL DO AMIGO (GET /v1/amigo?id=) ---------------------------------------
+enum { REC_REC_ENTREGUE = 0, REC_REC_ABERTA, REC_REC_COMECOU, REC_REC_TERMINOU,
+       REC_REC_REAGIU };
+#define REC_AMIGO_GOSTOU 10
+#define REC_AMIGO_RECS   20
+typedef struct {
+  char id[96];          // o que foi pedido (contato) ou "pub:<handle>"
+  char nome[64];
+  char avatar[256];     // vazio para amigo de amigo
+  int  grau;            // 1 contato, 2 amigo de amigo
+  char via[64];         // grau 2: amigo em comum
+  long long desde;      // contato desde (epoch s); 0 em grau 2
+  char origem[12];      // "codigo" | "trakt" | "sugestao" | "pedido" | ""
+  int  compartilha;     // 0: a pessoa nao compartilha atividade comigo
+  // agregados do mes corrente (so com compartilha)
+  int  temMes; char mes[8]; long long seg; int filmes, series;
+  // assistindo agora (some 15 min sem evento)
+  int  temAgora; RecEvento agora;
+  int  nGostou; RecEvento gostou[REC_AMIGO_GOSTOU];
+  // recs que EU mandei para ela, mais nova primeiro (so grau 1)
+  int  nRecs;
+  struct { long long id, criado; char imdb[24], tipo[8], titulo[160], poster[512];
+           int estado, temReacao, reacao; } recs[REC_AMIGO_RECS];
+  // gosto parecido: % de titulos com a MESMA reacao (so se os dois compartilham)
+  int  temGosto, gostoTotal, gostoIguais, gostoPct;
+} RecAmigo;
+
+// Enfileira a leitura. Se o cache em disco for desta pessoa, ele ja fica
+// disponivel em recomenda_amigo() antes da rede. Estado em recomenda_amigo_estado.
+int  recomenda_amigo_pedir(const char *id);
+int  recomenda_amigo(RecAmigo *saida);    // 1 = ha dados (cache ou novos)
+int  recomenda_amigo_estado(void);        // REC_SOC_* (NADA/INDO/OK/FALHA/NAO_ACHOU)
+
 #endif
