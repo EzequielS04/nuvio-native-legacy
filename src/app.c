@@ -150,6 +150,7 @@ static int autoParcialPronto(void) {
   const FontePref *fp;
   int prazo, lembrada = -1, prefPendente = 0;
   static int ultN = -1, ultLembrada = -1;
+  static unsigned ultGeracao;
   if (!addons_busca_parcial() || player_id_canal()[0]) return 0;
   if (stream_n() < 1 || stream_n() <= autoEsperaN) return 0;
   if (stream_n_candidatas() < 1) return 0;
@@ -157,7 +158,10 @@ static int autoParcialPronto(void) {
   fp = base[0] ? fontepref_do_titulo(base) : NULL;
   if (fp) {
     // fontepref_escolher escreve no log: uma vez por tamanho de lista.
-    if (stream_n() != ultN) { ultN = stream_n(); ultLembrada = fontepref_escolher(base); }
+    if (stream_n() != ultN || stream_lista_geracao() != ultGeracao) {
+      ultN = stream_n(); ultGeracao = stream_lista_geracao();
+      ultLembrada = fontepref_escolher(base);
+    }
     lembrada = ultLembrada;
     prefPendente = lembrada < 0 && addons_pendente_nome(fp->provedor);
   }
@@ -540,6 +544,7 @@ static void buscarParaPlayerModo(int renovar) {
   // Episodio novo abre um ciclo novo de fontes. A fonte automatica do
   // episodio anterior nao pode contaminar o watchdog nem a lista de exclusao.
   limparFonteVOD();
+  autoEsperaN = 0;
   // CARIMBA O ALVO ANTES DE PEDIR (issue #101). A lista que voltar passa a
   // saber de que episodio ela e; sem isto ninguem consegue distinguir "a lista
   // do E6" de "a lista do E5 que ninguem invalidou". Ver streams.h.

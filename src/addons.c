@@ -1304,6 +1304,7 @@ typedef struct {
   int timeout;                // segundos por requisicao (12 na 1a rodada)
   int progresso;              // 1 = a busca real que publica aos poucos (#221)
   int rodada;                 // 0/1 = primeira, 2 = segunda chance
+  Uint32 inicio;              // SDL_GetTicks do disparo, para o log por addon
   pthread_mutex_t trava;
 } Consulta;
 
@@ -1392,7 +1393,9 @@ static void *fioFontes(void *u) {
       }
     }
     if (!corpo) {
-      free(achados); printf("[addons] %s: sem resposta\n", addon[i].nome);
+      free(achados);
+      printf("[addons] %s: sem resposta (%u ms)\n", addon[i].nome,
+             (unsigned)(SDL_GetTicks() - c->inicio));
       // Desistiu de vez quando nao ha segunda chance pela frente: a mesma regra
       // de segundaChance (mudoSeg ainda e o da consulta anterior aqui).
       if (c->progresso)
@@ -1403,8 +1406,11 @@ static void *fioFontes(void *u) {
     c->baldes[meu].respondeu = 1;
     c->baldes[meu].n = n;
     c->baldes[meu].achados = achados;
-    printf("[addons] %s: %d fontes (%u bytes)\n",
-           addon[i].nome, c->baldes[meu].n, (unsigned)strlen(corpo));
+    // O TEMPO DE CADA ADDON NO LOG (#221): sem ele o D1 so dava o total da
+    // consulta, e "quem segura" tinha de ser adivinhado pela ordem das linhas.
+    printf("[addons] %s: %d fontes (%u bytes, %u ms)\n",
+           addon[i].nome, c->baldes[meu].n, (unsigned)strlen(corpo),
+           (unsigned)(SDL_GetTicks() - c->inicio));
     // RESPOSTA CURTA SEM FONTE VAI PARA O LOG. No registro 1504 havia
     // "Torrentio TB: 0 fontes (75 bytes)": 75 bytes nao sao {"streams":[]}
     // (14), e provavelmente e o addon dizendo por que (chave de debrid
@@ -1460,7 +1466,7 @@ static void segundaChance(Consulta *c, int fios) {
     c2.id = c->id; c2.tipo = c->tipo; c2.tipoAlt = c->tipoAlt;
     c2.nBaldes = m; c2.cancelado = c->cancelado; c2.ctx = c->ctx;
     c2.timeout = 20;
-    c2.progresso = c->progresso; c2.rodada = 2;
+    c2.progresso = c->progresso; c2.rodada = 2; c2.inicio = c->inicio;
     pthread_mutex_init(&c2.trava, NULL);
     printf("[addons] %d sem resposta: segunda tentativa (20 s)\n", m);
     fflush(stdout);
@@ -1491,6 +1497,7 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
   c.id = id; c.tipo = tipo; c.tipoAlt = tipoAlternativo(tipo);
   c.cancelado = cancelado; c.ctx = ctx;
   c.progresso = progresso;
+  c.inicio = SDL_GetTicks();
   pthread_mutex_init(&c.trava, NULL);
   c.baldes = calloc((size_t)nAddon, sizeof(BaldeFonte));
   if (c.baldes) {
