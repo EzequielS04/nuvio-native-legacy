@@ -89,7 +89,7 @@
 // tao larga que o par nao caiba (20 colunas, nenhum chamador hoje), sem painel.
 #define TE_CEL_W    400.0f
 #define TE_CEL_GAP   24.0f
-#define TE_CEL_QR   280.0f
+#define TE_CEL_QR   300.0f
 static int celAtivo;   // o painel existe nesta abertura
 #define TE_X        ((NV_TELA_W - TE_W - (celAtivo ? TE_CEL_GAP + TE_CEL_W : 0.0f)) * 0.5f)
 
@@ -384,7 +384,7 @@ static void desenharCelular(float dy, float a) {
   int est = celular_estado();
   const char *u = celular_url();
   gfx_cor((GfxRect){ px, py, TE_CEL_W, ph }, 24.0f / ph, 0.075f, 0.078f, 0.088f, 0.99f * a);
-  { TxtLinha t = txt_linha(TXT_TITULO3, "Digitar pelo celular", 245, 248, 255, 255);
+  { TxtLinha t = txt_linha(TXT_HEADLINE, "Digitar pelo celular", 245, 248, 255, 255);
     txt_desenhar_alpha(t, x, y, a);
     y += t.h + 14.0f; }
   if (celRecebido || est == CEL_RECEBIDO) {

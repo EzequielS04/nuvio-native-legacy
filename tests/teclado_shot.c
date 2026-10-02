@@ -17,6 +17,7 @@
 #include "text.h"
 #include "tex_cache.h"
 #include "sistexto.h"
+#include "celular.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -180,6 +181,34 @@ int main(int argc, char **argv) {
   assert(!strcmp(teclado_texto(), "meu.tv:80") && st_dono() == ST_DONO_NENHUM);
   { int i; for (i = 0; i < 60; i++) quadro(); }
   st_teste_ligar(0);
+
+  // DIGITAR PELO CELULAR: a chave do Seekr (64 simbolos, 13 colunas) com o
+  // painel do QR; um POST de verdade (curl) entrega um TEXTO DE TESTE, o campo
+  // mostra, o foco vai para "pronto" e um OK confirma.
+  { static const char *SK =
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
+    static const char *TESTE = "TESTE_celular-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN";
+    char cmd[512], url[128];
+    FILE *f;
+    teclado_abrir_com("Chave do Seekr", "Chave pessoal: seekr.tv. Vazio apaga.", 90, SK, NULL);
+    assert(celular_estado() == CEL_ESPERANDO);
+    snprintf(url, sizeof url, "%s", celular_url());
+    captura(saida, "seekr-celular");
+    f = fopen("/tmp/nv-teclado-url.txt", "w"); if (f) { fputs(url, f); fclose(f); }
+    snprintf(cmd, sizeof cmd, "curl -s -m 5 -o /dev/null -w '%%{http_code}\\n' --data-urlencode 't= %s \n' '%s'", TESTE, url);
+    assert(system(cmd) == 0);
+    captura(saida, "seekr-recebido");
+    assert(!strcmp(teclado_texto(), TESTE));
+    assert(teclado_aberto());
+    tecla(SDLK_RETURN);   // o foco ja esta em "pronto"
+    assert(!teclado_aberto() && teclado_resultado() == TECLADO_PRONTO);
+    assert(celular_estado() == CEL_PARADO);
+    { int i; for (i = 0; i < 60; i++) quadro(); }
+    // Grade curta (6 colunas) tambem ganha o painel.
+    teclado_abrir("Código do amigo", "Peça o código que aparece na tela dele", 6);
+    captura(saida, "padrao-celular");
+    fechar();
+    puts("ok: texto do celular chegou no campo e Pronto confirmou"); }
 
   if (falhou) { puts("FAIL: capturas gravadas, mas ha simbolo inalcancavel."); return 1; }
   puts("PASS: capturas do teclado gravadas.");

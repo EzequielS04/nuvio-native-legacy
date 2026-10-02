@@ -69,6 +69,17 @@ int main(void) {
   assert(curl(a) == 403);
   snprintf(a, sizeof a, "-H 'Origin: http://evil.example' --data-urlencode 't=x' '%s'", local);
   assert(curl(a) == 403);
+  // A pagina tem de pedir ao navegador o Origin de verdade no POST: com
+  // Referrer-Policy no-referrer o Chrome manda "Origin: null" (recusado abaixo)
+  // e o envio do formulario falhava.
+  { char cmd[600]; FILE *f; char l[512]; int ok = 0;
+    snprintf(cmd, sizeof cmd, "curl -s -D - -o /dev/null '%s'", local);
+    f = popen(cmd, "r");
+    while (f && fgets(l, sizeof l, f)) if (strcasestr(l, "referrer-policy: same-origin")) ok = 1;
+    if (f) pclose(f);
+    assert(ok); }
+  snprintf(a, sizeof a, "-H 'Origin: null' --data-urlencode 't=x' '%s'", local);
+  assert(curl(a) == 403);
   // Metodo: so GET/HEAD/POST.
   snprintf(a, sizeof a, "-X PUT '%s'", local);
   assert(curl(a) == 405);

@@ -240,7 +240,7 @@ static void responder(int c, int cod, const char *corpo) {
   size_t n = corpo ? strlen(corpo) : 0;
   int k = snprintf(cab, sizeof cab,
     "HTTP/1.1 %d %s\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %zu\r\n"
-    "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n"
+    "Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: same-origin\r\n"
     "X-Frame-Options: DENY\r\n"
     "Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; "
     "script-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'\r\n"
@@ -330,11 +330,23 @@ static int atender(int c, int *erros) {
   // aberto no celular que tentasse falar com a TV por outro nome (rebinding)
   // ou de outra origem para aqui.
   if (!cabecalho(cab, "Host", host, sizeof host) ||
-      (strcmp(host, hostLan) && strcmp(host, hostLocal))) { responder(c, 403, NULL); return 0; }
+      (strcmp(host, hostLan) && strcmp(host, hostLocal))) {
+    puts("[celular] recusado: Host de fora");
+    responder(c, 403, pagUsado);
+    return 0;
+  }
   if (cabecalho(cab, "Origin", orig, sizeof orig)) {
     char o2[96];
     snprintf(o2, sizeof o2, "http://%s", hostLocal);
-    if (strcmp(orig, origem) && strcmp(orig, o2)) { responder(c, 403, NULL); return 0; }
+    // "Referrer-Policy: same-origin" (e nao no-referrer) e o que faz o
+    // navegador mandar o Origin de verdade no POST do formulario: com
+    // no-referrer o Chrome manda "Origin: null" e o envio era recusado
+    // (medido no Chrome, 02/10).
+    if (strcmp(orig, origem) && strcmp(orig, o2)) {
+      puts("[celular] recusado: Origin de fora");
+      responder(c, 403, pagUsado);
+      return 0;
+    }
   }
   { char *q = strchr(caminho, '?'); if (q) *q = 0; }
   if (caminho[0] != '/' || strcmp(caminho + 1, token)) {
