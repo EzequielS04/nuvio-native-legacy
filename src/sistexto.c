@@ -25,10 +25,11 @@ static const char *aviso = "";
 static char  fila[ST_FILA][600];
 static int   filaIni, filaN;
 
+static int modoTeste = -1;
+void st_teste_ligar(int on) { modoTeste = on ? 1 : 0; }
 static int teste(void) {
-  static int v = -1;
-  if (v < 0) { const char *e = getenv("NUVIO_SISTEXTO_TESTE"); v = e && *e == '1'; }
-  return v;
+  if (modoTeste < 0) { const char *e = getenv("NUVIO_SISTEXTO_TESTE"); modoTeste = e && *e == '1'; }
+  return modoTeste;
 }
 
 int st_ime_disponivel(void) {

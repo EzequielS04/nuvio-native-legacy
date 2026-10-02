@@ -30,11 +30,10 @@
 // F6 e "abrir pela voz": onde ha ditado (Android), o ditado ja comeca. F5 e
 // "abrir": so a caixa.
 //
-// DITADO: so no Android, pelo RecognizerIntent (a tela de voz do sistema; o
-// app nao pede permissao de microfone, quem grava e o reconhecedor). O texto
-// reconhecido entra no campo como se tivesse sido digitado. Tambem no Android
-// a tecla "Teclado" chama o IME do sistema (SDL_StartTextInput), que nas TVs
-// com Gboard tem o proprio microfone.
+// DITADO E TECLADO DO SISTEMA: so no Android, por sistexto.h (SpeechRecognizer
+// dentro do app com RECORD_AUDIO pedida no primeiro uso; reserva na tela de voz
+// do sistema e no teclado do sistema, que tem o proprio microfone). O texto
+// entra no campo enquanto a pessoa fala ou digita.
 //
 // LG E O TECLADO DO SISTEMA (pesquisa de 01/10/2026, NAO ligado):
 //   O app usa o libSDL2 DO APARELHO (nenhum .so vai no .ipk). Na C9 (webOS
@@ -130,4 +129,9 @@ int  spot_n_linhas(void);
 int  spot_linha_tipo(int i);
 const char *spot_linha_texto(int i);
 int  spot_linha_focada(void);
+// Para testes: o teclado do app esta aberto? Foco na barra (1 campo, 2
+// microfone, 0 fora dela)? Altura atual do corpo (0 = so a barra).
+int  spot_teclado_app_aberto(void);
+int  spot_foco_campo(void);
+float spot_altura_corpo(void);
 #endif

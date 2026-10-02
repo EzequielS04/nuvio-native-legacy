@@ -63,6 +63,8 @@ const char *st_aviso(void);
 int   st_ler(int dono, char *dst, size_t n);
 
 // --- testes ---
+// Liga/desliga o modo de teste (o mesmo de NUVIO_SISTEXTO_TESTE=1).
+void  st_teste_ligar(int on);
 // Evento cru, no formato do Android (ver sistexto.c).
 void  st_teste_evento(const char *ev);
 #endif
