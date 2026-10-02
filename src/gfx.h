@@ -514,6 +514,9 @@ void gfx_furo(GfxRect r);
 // video so aparece pela area arredondada.
 void gfx_furo_raio(GfxRect r, float raio);
 void gfx_textura(GfxRect r, GLuint tex);
+// Esmaece o quadro inteiro ja desenhado para `a` (0 = transparente, mostra o
+// plano de video de baixo). Usado no dissolve do voo da ilha.
+void gfx_dissolver_tela(float a);
 // Card carregando: a superficie do esqueleto com a luz passando (GFX_ESQUELETO).
 void gfx_esqueleto(GfxRect r, float raio, float cr, float cg, float cb, float ca);
 

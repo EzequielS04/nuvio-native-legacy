@@ -52,4 +52,30 @@ typedef void (*FonteFalhou)(int indice, void *u);
 int fonteauto_primeira(const int *fila, int n, FonteVerificar verificar,
                        FonteFalhou falhou, void *u, int *tocadas);
 
+// A ESCOLHA PODE SAIR ANTES DE TODOS OS ADDONS RESPONDEREM? (#221)
+//
+// Os vetores estao na ORDEM DE EXIBICAO da lista parcial (a ordem final da
+// lista inteira, sem os addons que faltam). Devolve 1 quando:
+//   - ninguem falta (e a escolha de sempre);
+//   - a lembrada (preferida >= 0) ja esta na lista: ela vai na frente da fila
+//     com qualquer lista, cheia ou parcial;
+//   - PRIMEIRA: nenhum addon instalado ANTES do da primeira candidata falta
+//     (a primeira da lista inteira nao pode mudar), e ela cabe no teto ou
+//     ninguem mais falta;
+//   - MELHOR: a melhor candidata presente e `boa` (dentro do teto, em cache,
+//     na resolucao do teto — 4K com teto automatico);
+//   - o prazo passou (prazoPassou).
+// E 0 quando nao ha candidata nao excluida, ou quando a lembrada pode estar
+// num addon que ainda nao respondeu (prefPendente): ai nem o prazo vale — a
+// escolha que a pessoa fez nao e trocada por pressa.
+typedef struct {
+  int modo, total, preferida, prefPendente, prazoPassou, algumPendente;
+  const long *pontos;
+  const unsigned char *acimaTeto, *excluida, *boa;
+  const int *addon;                       // ordem do addon de cada fonte
+  int (*pendenteAntes)(int addon, void *u);   // falta algum addon antes deste?
+  void *u;
+} FonteautoParcial;
+int fonteauto_pode_decidir(const FonteautoParcial *p);
+
 #endif

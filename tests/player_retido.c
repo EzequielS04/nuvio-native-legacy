@@ -3,6 +3,8 @@
 #include "player.h"
 #include "catalogo.h"
 #include "perfis.h"
+#include "streams.h"
+#include "fontevolta.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -66,9 +68,11 @@ int main(void) {
 
   guardar();
   int p = paradas;
-  player_validar_retido(SDL_GetTicks() + 120000u);
+  player_validar_retido(SDL_GetTicks() + 299000u);
+  assert(player_retido() && paradas == p);
+  player_validar_retido(SDL_GetTicks() + 300000u);
   assert(!player_retido() && paradas == p + 1);
-  puts("ok teto de 120 s libera pipeline");
+  puts("ok teto de 300 s libera pipeline");
 
   abrir("movie"); guardar(); p = paradas;
   perfis_definir_ativo(2); player_validar_retido(SDL_GetTicks());
@@ -104,5 +108,40 @@ int main(void) {
   player_preparar_retencao(); confirmado = 1;
   assert(!player_suspender()); player_encerrar();
   puts("ok novo player, canal e clipe curto seguem fechamento normal");
+
+  // FONTE PARA O RETOMAR (fontevolta.h): a sessao que tocou guarda a fonte da
+  // LISTA quando a url bate com a do video; falha e fim apagam.
+  { Stream st; memset(&st, 0, sizeof st);
+    snprintf(st.url, sizeof st.url, "https://example.invalid/fixture.mp4");
+    snprintf(st.cabecalhos, sizeof st.cabecalhos, "Referer: https://example.invalid/");
+    st.mp4 = 1;
+    snprintf(conta, sizeof conta, "fixture-conta-a"); perfis_definir_ativo(1);
+    fontevolta_esquecer("teste");
+    stream_definir_lista(&st, 1); stream_definir_atual(0);
+    abrir("movie"); stream_definir_atual(0); guardar();
+    Stream got;
+    assert(fontevolta_pegar("fixture-titulo", "fixture-conta-a", 1, SDL_GetTicks(), &got));
+    assert(!strcmp(got.url, st.url) && !strcmp(got.cabecalhos, st.cabecalhos) && got.mp4);
+    player_descartar_retido();   // soltar a retida nao apaga nem regrava
+    assert(fontevolta_pegar("fixture-titulo", "fixture-conta-a", 1, SDL_GetTicks(), &got));
+    puts("ok suspensao guarda a fonte com cabecalhos; soltar a retida mantem");
+
+    abrir("movie"); stream_definir_atual(0); falha = 1; player_encerrar(); falha = 0;
+    assert(!fontevolta_pegar("fixture-titulo", "fixture-conta-a", 1, SDL_GetTicks(), &got));
+    abrir("movie"); stream_definir_atual(0); player_encerrar();
+    assert(fontevolta_pegar("fixture-titulo", "fixture-conta-a", 1, SDL_GetTicks(), &got));
+    abrir("movie"); stream_definir_atual(0); posicao = 3590; player_atualizar(.016f, SDL_GetTicks());
+    player_encerrar();
+    assert(!fontevolta_pegar("fixture-titulo", "fixture-conta-a", 1, SDL_GetTicks(), &got));
+    puts("ok sessao que falhou ou terminou apaga; fechamento normal guarda");
+
+    // Lista trocada por baixo (busca de fundo): a entrada que toca nao some.
+    abrir("movie"); stream_definir_atual(0); player_encerrar();
+    stream_definir_lista(NULL, 0);
+    abrir("movie"); player_encerrar();
+    assert(fontevolta_pegar("fixture-titulo", "fixture-conta-a", 1, SDL_GetTicks(), &got));
+    abrir("channel"); stream_definir_lista(&st, 1); stream_definir_atual(0); player_encerrar();
+    assert(fontevolta_pegar("fixture-titulo", "fixture-conta-a", 1, SDL_GetTicks(), &got));
+    puts("ok lista trocada e canal nao mexem na entrada"); }
   SDL_Quit(); puts("player_retido: tudo ok");
 }

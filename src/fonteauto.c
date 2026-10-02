@@ -68,3 +68,25 @@ int fonteauto_primeira(const int *fila, int n, FonteVerificar verificar,
   if (tocadas) *tocadas = conta;
   return escolhida;
 }
+
+int fonteauto_pode_decidir(const FonteautoParcial *p) {
+  int fila[1], nf, c, q, temCand = 0;
+  if (!p || p->total < 1) return 0;
+  for (q = 0; q < p->total; q++)
+    if (!(p->excluida && p->excluida[q])) { temCand = 1; break; }
+  if (!temCand) return 0;
+  if (!p->algumPendente) return 1;
+  if (p->preferida >= 0 && p->preferida < p->total &&
+      !(p->excluida && p->excluida[p->preferida])) return 1;
+  if (p->prefPendente) return 0;
+  if (p->prazoPassou) return 1;
+  nf = fonteauto_fila(p->modo, p->total, -1, p->pontos, p->acimaTeto,
+                      p->excluida, 1, fila);
+  if (nf < 1) return 0;
+  c = fila[0];
+  if (p->modo == FONTEAUTO_PRIMEIRA) {
+    if (p->pendenteAntes && p->addon && p->pendenteAntes(p->addon[c], p->u)) return 0;
+    return !(p->acimaTeto && p->acimaTeto[c]);
+  }
+  return p->boa && p->boa[c];
+}

@@ -89,6 +89,21 @@ void stream_definir_lista(const Stream *lista, int n);
 // Lista reaproveitada: conserva a idade da resposta original dos addons.
 // O cache de metadados nao pode dar validade nova a um link assinado antigo.
 void stream_definir_lista_idade(const Stream *lista, int n, Uint32 idade);
+// ACRESCENTA as fontes de UM addon a lista corrente, sem substitui-la (#221):
+// a busca publica cada addon que responde. Os indices de quem ja estava NAO
+// mudam (a verificacao em curso, a fonte tocando, a preferida e as excluidas
+// continuam valendo); a ORDEM DE EXIBICAO e por `ordemAddon` (o indice do
+// addon na lista instalada) e, dentro dele, a ordem que o addon mandou — a
+// mesma da lista inteira de antes. Com a folha aberta, o foco fica no mesmo
+// cartao e a rolagem compensa as linhas que entraram acima dele.
+void stream_lista_acrescentar(const Stream *lista, int n, int ordemAddon);
+// O addon (ordemAddon) de cada fonte, como entrou; 0 na lista inteira.
+int  stream_ordem_addon(int i);
+// A escolha automatica ja pode sair com a lista parcial? Ver
+// fonteauto_pode_decidir. `preferida` e o indice da lembrada nesta lista (-1).
+int  stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou);
+// Candidatas que o automatico ainda pode tentar nesta lista (nao excluidas).
+int  stream_n_candidatas(void);
 
 // DE QUEM E A LISTA QUE ESTA EM MEMORIA — issue #101.
 //
@@ -155,6 +170,8 @@ Uint32 stream_idade_ms(void);
 // que vai tocar e conferida. As que falham saem da fila desta lista
 // (stream_automatico_excluir) e nao sao conferidas de novo.
 int  stream_primeira_boa(int tentativas);
+// Conferencia de uma URL avulsa, sem lista (bloqueia; chamar de fio proprio).
+int  stream_url_serve(const char *url, const char *cabecalhos);
 
 // 1 quando o texto da fonte diz "fora de cache" (ver Stream.foraCache).
 // Publica para o parser e o teste; a lista ja vem com o campo preenchido.

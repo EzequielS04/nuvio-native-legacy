@@ -83,6 +83,15 @@ static Uint32 vooDesde;
 static GfxRect vooAlvo;
 static int vooAlvoOk;
 static char vooArte[1024], vooCapa[1024];
+// DISSOLVER (Android, sessao retida): o video parado continua no plano de
+// baixo, entao o primeiro quadro do voo e ELE (a tela inteira transparente) e
+// a arte + home entram por cima em VOO_DISSOLVE_MS, ja encolhendo. Sem isso o
+// voo nascia com o still em tela cheia: um corte do quadro do filme para o
+// fundo do titulo. (Copiar o quadro real com PixelCopy levou 603-724 ms na
+// TCL, 02/10: lento demais para a saida.)
+#define VOO_DISSOLVE_MS 150u
+static int vooDissolve;
+static Uint32 pousouEm;          // o pulso da pilula conta daqui
 static Uint32 altBase;           // a alternancia dos cartoes conta daqui
 
 void ilha_avisar(const char *chave, int tipo, const char *icone,
@@ -639,7 +648,7 @@ static void desenharModal(GfxRect m, float a) {
 // Pedido do dono (02/10): "quando sair do filme, minimizasse para a ilha do
 // relogio e voltasse para a home". O plano de video e hardware e nao se le de
 // volta (LG), entao a transicao usa a arte do modal (still do
-// episodio ou fundo do titulo): nasce em tela cheia e encolhe em 400 ms
+// episodio ou fundo do titulo): nasce em tela cheia e encolhe numa mola de 560 ms (ilha_voo.h)
 // ate o retangulo exato da mini capa da pilula, onde troca para o
 // cartaz que a capa mostra. A home aparece por tras com o veu preto apagando.
 //
@@ -659,20 +668,27 @@ int ilha_minimizar(const char *fundoReserva) {
   if (vooArte[0] && !tex_obter_larg_qualquer(vooArte, 960.0f) && fundoReserva && fundoReserva[0])
     snprintf(vooArte, sizeof vooArte, "%s", fundoReserva);
   snprintf(vooCapa, sizeof vooCapa, "%s", c->poster);
+  vooDissolve = 0;
   // vooDesde = 0: o relogio do voo comeca no primeiro quadro DESENHADO. O
   // ultimo quadro da ilha foi antes do player, e um dt de minutos daria o
   // primeiro passo inteiro de uma vez.
-  voo = 1; vooT = 0.0f; vooDesde = 0; vooAlvoOk = 0;
+  voo = 1; vooT = 0.0f; vooDesde = 0; vooAlvoOk = 0; pousouEm = 0;
   printf("[ilha] minimizar: %s -> mini capa\n", c->imdb);
   return 1;
 }
 
 int ilha_minimizando(void) { return voo; }
 
+void ilha_minimizar_dissolver(int sim) {
+  if (voo) vooDissolve = sim ? 1 : 0;
+  if (voo && sim) printf("[ilha] minimizar: dissolve a partir do video parado\n");
+}
+
 static void vooFim(const char *por, Uint32 agora) {
   if (!voo) return;
   voo = 0;
   altBase = agora;
+  pousouEm = strcmp(por, "pousou") ? 0 : agora ? agora : 1;
   printf("[ilha] minimizar: fim (%s, %u ms)\n", por, vooDesde ? (unsigned)(agora - vooDesde) : 0u);
 }
 
@@ -701,14 +717,23 @@ static void vooVeu(GfxRect q, float a) {
   if (x1 < W0)   gfx_cor((GfxRect){ x1, y0, W0 - x1, y1 - y0 }, 0.0f, 0, 0, 0, a);
 }
 
+// COVER FORCADO: o retangulo passa de 16:9 para a proporcao da capa no fim,
+// e o GFX_CARD trocava cover por contain (com faixas cinza) assim que a
+// moldura fugia 25% da arte (issue #89) — no meio do voo a imagem pulava para
+// uma tarja. Aqui ela recorta sempre; nunca estica nem ganha faixa.
+static void vooTexEm(GLuint tex, float asp, GfxRect q, float raio, float a) {
+  float antes = gfx_card_forcar_cover_atual;
+  gfx_tex_aspect_atual = asp;
+  gfx_card_forcar_cover_atual = 1.0f;
+  gfx_rect(q, tex, GFX_CARD, 0.0f, 0.0f, 0.0f, raio, 0, 0, 0, a);
+  gfx_card_forcar_cover_atual = antes;
+  gfx_tex_aspect_atual = 0.0f;
+}
 static void vooArteEm(const char *url, GfxRect q, float raio, float a) {
   GLuint tex = url[0] ? tex_obter_larg_qualquer(url, 960.0f) : 0;
   if (a < 0.01f) return;
-  if (tex) {
-    gfx_tex_aspect_atual = tex_aspecto(url);
-    gfx_rect(q, tex, GFX_CARD, 0.0f, 0.0f, 0.0f, raio, 0, 0, 0, a);
-    gfx_tex_aspect_atual = 0.0f;
-  } else gfx_cor(q, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
+  if (tex) vooTexEm(tex, tex_aspecto(url), q, raio, a);
+  else gfx_cor(q, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
 }
 
 // fase 0 = o veu (vai por baixo da pilula), 1 = o quadro (por cima dela).
@@ -720,16 +745,27 @@ static void desenharVoo(GfxRect pilulaFinal, int fase) {
     vooAlvoOk = 1;
   }
   q = vooRect(vooAlvo, t, &f);
-  if (fase == 0) { vooVeu(q, 1.0f - suave01(0.0f, 0.75f, t)); return; }
-  // Canto: reto na tela cheia, arredonda no caminho, assenta no da capa.
-  raioPx = 6.0f * f + 40.0f * sinf(3.14159265f * f);
+  // Veu: no primeiro quadro e o preto exato em volta do video (a tarja do
+  // player); escurece a home de leve e se desfaz antes do pouso.
+  if (fase == 0) { float v = 1.0f - suave01(0.0f, 0.7f, t); vooVeu(q, v * v); return; }
+  // Canto: reto no primeiro quadro (igual ao player), arredonda cedo e
+  // assenta no da capa (6 px), em pixels e nunca acima de meia altura.
+  raioPx = 6.0f * f + 30.0f * suave01(0.0f, 0.25f, f) * (1.0f - f);
   if (raioPx > q.h * 0.5f) raioPx = q.h * 0.5f;
   if (f > 0.02f)
     gfx_rect((GfxRect){ q.x - 18.0f, q.y - 8.0f, q.w + 36.0f, q.h + 40.0f }, 0, GFX_SOMBRA,
-             1.0f, 0, 0, 0.5f, 0, 0, 0, 0.45f * (f > 1.0f ? 1.0f : f));
-  cruza = vooCapa[0] ? suave01(0.93f, 1.0f, t) : 0.0f;
-  vooArteEm(vooArte, q, raioPx / q.h, 1.0f - cruza);
+             1.0f, 0, 0, 0.5f, 0, 0, 0, 0.40f * suave01(0.0f, 0.3f, f));
+  // O cartaz entra enquanto o quadro assume a forma da capa: no pouso ja e ele.
+  cruza = vooCapa[0] ? suave01(0.72f, 0.98f, t) : 0.0f;
+  if (cruza < 0.99f) vooArteEm(vooArte, q, raioPx / q.h, 1.0f);
   if (cruza > 0.0f) vooArteEm(vooCapa, q, raioPx / q.h, cruza);
+  // Por ultimo: tudo o que ja esta no quadro (home, veu, arte) entra em
+  // fracao `d`, e o resto e o video parado no plano de baixo.
+  if (vooDissolve && vooDesde) {
+    float d = (float)(SDL_GetTicks() - vooDesde) / (float)VOO_DISSOLVE_MS;
+    if (d >= 1.0f) vooDissolve = 0;
+    else gfx_dissolver_tela(d * d * (3.0f - 2.0f * d));
+  }
 }
 
 static void vooPasso(Uint32 agora) {
@@ -841,6 +877,16 @@ void ilha_desenhar(Uint32 agora) {
       aPil = 1.0f - modalT * 3.0f; if (aPil < 0.0f) aPil = 0.0f;
       aMod = (modalT - 0.55f) / 0.40f; aMod = aMod < 0.0f ? 0.0f : aMod > 1.0f ? 1.0f : aMod;
       if (anim_politica_reduzida || ajustes_animacoes_reduzidas()) { aPil = modalAberto ? 0.0f : 1.0f; aMod = modalAberto ? 1.0f : 0.0f; }
+    }
+    // A PILULA RECEBE O QUADRO: depois do pouso ela cresce ~6% e assenta
+    // (ilha_voo_pulso), em volta do proprio centro. So o vidro; o conteudo
+    // fica onde estava, para o texto nao tremer.
+    if (pousouEm && modalT <= 0.0f && !anim_politica_reduzida && !ajustes_animacoes_reduzidas()) {
+      unsigned d = agora - pousouEm;
+      float k = ilha_voo_pulso(d);
+      if (d >= NV_ILHA_PULSO_MS) pousouEm = 0;
+      else { float cx = R.x + R.w * 0.5f, cy = R.y + R.h * 0.5f;
+             R.w *= k; R.h *= k; R.x = cx - R.w * 0.5f; R.y = cy - R.h * 0.5f; }
     }
     ultRect = R; ultRectOk = 1;
     if (coberta) { coberta = 0; return; }

@@ -26,6 +26,7 @@
 // sonda MKV segue "nao ha sonda", como no .tpk); capitulos do MKV para
 // video_creditos; passthrough fino de AC3/EAC3 por AudioCapabilities.
 #ifdef NV_ANDROID
+#include "marco.h"
 #include "video.h"
 #include "video_reconexao.h"
 #include "idioma.h"
@@ -174,6 +175,10 @@ static char cabecalhos[2048];
 // video_pronto() so e 1 com imagem (ver o cabecalho).
 static volatile int ativo, prontoLoad, primeiroQuadro, falhou, terminou, tocando, largura, altura;
 static volatile int conflito, semDecoderAudio;
+// PAUSA CONFIRMADA (player_suspender): o pedido daqui e o evento 3 do Kotlin
+// DEPOIS dele. O evento chega do fio principal ~3 ms depois (medido na TCL,
+// 02/10); um evento 2 (tocando) no meio desfaz a confirmacao.
+static volatile int pausaPedida, pausaVista;
 static volatile int durMs, bufferando, posMs;
 static volatile Uint32 bufferDesde, tocandoDesde;
 static volatile const char *hdrAtual = "none";
@@ -306,9 +311,9 @@ enum { EV_PRONTO = 1, EV_TOCANDO = 2, EV_PAUSADO = 3, EV_FIM = 4, EV_ERRO = 5,
 JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeEvento(JNIEnv *env, jclass cls, jint tipo, jint a, jint b) {
   (void)env; (void)cls;
   switch (tipo) {
-    case EV_PRONTO:  durMs = a; prontoLoad = 1; break;
-    case EV_TOCANDO: tocando = 1; bufferando = 0; if (!tocandoDesde) tocandoDesde = SDL_GetTicks() | 1; break;
-    case EV_PAUSADO: tocando = 0; break;
+    case EV_PRONTO:  if (!prontoLoad) marco("video: pronto (android)"); durMs = a; prontoLoad = 1; break;
+    case EV_TOCANDO: tocando = 1; bufferando = 0; pausaVista = 0; if (!tocandoDesde) tocandoDesde = SDL_GetTicks() | 1; break;
+    case EV_PAUSADO: tocando = 0; if (pausaPedida) pausaVista = 1; break;
     case EV_FIM:     terminou = 1; tocando = 0; break;
     // Sem `falhou` aqui: o video_bombear decide entre reconectar e desistir.
     case EV_ERRO:    reconErroCod = a; reconErroPend = 1; tocando = 0;
@@ -319,7 +324,7 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeEvento(JNIEn
       if (a < 100 && !bufferando) { bufferando = 1; bufferDesde = SDL_GetTicks(); }
       else if (a >= 100) bufferando = 0;
       break;
-    case EV_PRIMEIRO_QUADRO: primeiroQuadro = 1; break;
+    case EV_PRIMEIRO_QUADRO: marco("video: primeiro quadro (android)"); primeiroQuadro = 1; break;
     case EV_AUDIO_SEM_DECODER: semDecoderAudio = 1; break;
     default: break;
   }
@@ -342,6 +347,7 @@ static int abrirSessao(void) {
   ativo = 1; prontoLoad = primeiroQuadro = falhou = terminou = tocando = 0;
   largura = altura = durMs = posMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
   tocandoDesde = 0; semDecoderAudio = 0; erroTxt[0] = 0;
+  pausaPedida = pausaVista = 0;
   hdrAtual = "none"; dvAtual = atmosAtual = 0;
   nAudio = nLeg = 0; audioAtual = 0; legAtual = -1; legAte = 0;
   nNovasA = nNovasL = 0;
@@ -416,9 +422,14 @@ void video_parar(void) {
   reconErroPend = 0; reconFaixasPend = 0; reconBuscarMs = -1;
   if (ativo) kSemArg(mParar);
   ativo = prontoLoad = primeiroQuadro = tocando = 0;
+  pausaPedida = pausaVista = 0;
 }
-void video_pausar(int p) { kInt(mPausar, p ? 1 : 0); }
-int video_pausa_confirmada(void) { return 0; } // JNI nao fornece ack por sessao
+void video_pausar(int p) { pausaVista = 0; pausaPedida = p ? 1 : 0; kInt(mPausar, p ? 1 : 0); }
+int video_pausa_confirmada(void) {
+  return pausaPedida && pausaVista && !tocando && ativo && prontoLoad && primeiroQuadro &&
+         !falhou && !terminou && !video_reconectando();
+}
+
 void video_volume(int pct) { kInt(mVolume, pct); }
 void video_buscar(double s) {
   posMs = (int)(s * 1000.0);   // a barra nao pode voltar enquanto o seek corre

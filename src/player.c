@@ -87,6 +87,8 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "proxyts.h"
 #include "perfis.h"
 #include "sessao.h"
+#include "fontevolta.h"
+#include "marco.h"
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -237,11 +239,25 @@ static int   aberto = 0, saindo = 0, pediuSair = 0;
 static int   idx = 0;
 #define PLR_SCR_TOCOU_S 5.0f   // #179: reproducao continua antes do /scrobble/start
 static int   tocando = 1;
-// Uma unica sessao VOD pausada, por no maximo dois minutos. Nao abre conexao
+// Uma unica sessao VOD pausada, por no maximo cinco minutos. Nao abre conexao
 // especulativa: e o pipeline que ja estava exibindo este titulo.
-#define PLR_RETIDO_MS 120000u
+//
+// O PRECO DE RETER MAIS: o pipeline e um so. Enquanto a sessao esta retida o
+// trailer do destaque da home nao toca (home_trailer_passo exige
+// !player_retido(), app.c) — com 5 min, sao ate 5 min de home sem trailer
+// depois de sair para a ilha. Abrir uma pagina de titulo, outro video, trocar
+// de perfil/conta ou dispensar a ilha soltam na hora, como antes. Passado o
+// prazo, o Retomar ainda evita a busca nos addons pela fonte guardada
+// (fontevolta.h).
+#define PLR_RETIDO_MS 300000u
 static int retido, prepararRetencao, retidoPerfil, retomarMkv;
 static Uint32 retidoDesde;
+// SAIDA PARA A ILHA SEM O FADE DO PLAYER (Android): o voo comeca assim que a
+// pausa foi confirmada (evento 3, ~3 ms na TCL), em vez de ~430 ms de OSD
+// apagando sobre o video parado antes de a home aparecer. Sem confirmacao no
+// teto, segue sem reter (fechamento normal).
+#define PLR_SAIDA_ILHA_TETO_MS 220u
+static Uint32 saidaIlhaDesde;
 static char retidoConta[96], retidoUrl[4096];
 // Botao em foco na fileira de transporte. Comeca no PLAY porque e a resposta
 // que nove de cada dez aberturas quer: o dedo para no centro e o OK decide.
@@ -1221,6 +1237,7 @@ static int prebuscaCabe(const char *url) {
 #endif
 
 static void tocarFonte(const char *url) {
+  marco("abrir: url ao pipeline");
   video_definir_reconexao(!ehCanal());
   video_definir_modo_live(ehCanal() ? ajustes_livetv_modo() : 0);
   { char px[96];
@@ -1255,6 +1272,19 @@ void player_definir_fonte(const char *url) {
   tocarFonte(url);
 }
 
+void player_voltar_a_esperar(void) {
+  if (!aberto) return;
+  if (comVideo) { video_parar(); comVideo = 0; }
+  mkvass_parar();
+  mkvass_video_aberto(0);
+#ifndef __EMSCRIPTEN__
+  prebuscaUrl[0] = 0;
+#endif
+  esperandoFonte = 1; erroFonte = 0; tocando = 1;
+  erroTitulo[0] = erroDica[0] = 0;
+  retomadaAplicada = 0; inicioImagem = 0;
+}
+
 // Consome o pedido de abrir a folha de faixas: quem le, zera.
 int  player_pediu_faixas(void) { int v = pedFaixas; pedFaixas = 0; return v; }
 
@@ -1277,8 +1307,42 @@ static void idTrakt(const CatItem *ci, char *dst, size_t n) {
   else snprintf(dst, n, "%s", base);
 }
 
+// O ALVO DO STREAM desta sessao, no formato que app.c usa para pedir fontes
+// (alvoPlayer): "tt1" no filme, o id do episodio na serie.
+static void alvoStream(char *dst, unsigned tam) {
+  const CatItem *c = item();
+  dst[0] = 0;
+  if (!c || !c->imdb[0]) return;
+  if (epT > 0 && epE > 0) cat_id_stream(idxAtual(), epT, epE, dst, tam);
+  else snprintf(dst, tam, "%s", c->imdb);
+}
+
+// A FONTE PARA O PROXIMO RETOMAR (fontevolta.h). Roda uma vez por sessao, no
+// fechamento de verdade ou na suspensao — nunca no descarte da retida, que ja
+// passou por aqui. So a sessao que TOCOU guarda: pronto, sem erro, duracao de
+// titulo (o clipe de aviso de 30 s do debrid nao conta) e sem ter terminado.
+// Falhou ou terminou: apaga, para o Retomar nao reabrir o que nao serve.
+static void lembrarFonte(void) {
+  const Stream *s = stream_item(stream_atual());
+  const char *url = video_url_atual();
+  double cred;
+  char alvo[64];
+  if (ehCanal() || !comVideo) return;
+  if (erroFonte || video_falhou()) { fontevolta_esquecer("sessao falhou"); return; }
+  if (!video_pronto() || duracaoSeg < 120.0f) return;
+  cred = video_creditos();
+  if (cred <= 1.0) cred = intro_creditos_seg();
+  if (player_regra_concluiu(posSeg, duracaoSeg, cred)) { fontevolta_esquecer("titulo concluido"); return; }
+  // A lista pode ter sido trocada por baixo (a busca de fundo do Retomar que
+  // abriu pela fonte guardada): quem toca e a entrada que ja existe.
+  if (!s || strcmp(s->url, url)) return;
+  alvoStream(alvo, sizeof alvo);
+  fontevolta_guardar(alvo, sessao_usuario(), perfis_ativo(), s, stream_idade_ms(), SDL_GetTicks());
+}
+
 static void fecharSessao(int manter) {
   int jaRetido = retido;
+  if (!jaRetido) lembrarFonte();
   // Salvar ANTES de parar: video_parar descarrega o pipeline e a posicao some
   // junto. Titulo quase no fim conta como visto por inteiro — voltar a um card
   // marcando "2 min restantes" que na verdade acabou e pior que arredondar.
@@ -1413,7 +1477,7 @@ static void fecharSessao(int manter) {
            (unsigned)(tv - t0), (unsigned)(SDL_GetTicks() - tv));
     fflush(stdout); }
   if (!manter) comVideo = 0;
-  retido = manter; prepararRetencao = 0;
+  retido = manter; prepararRetencao = 0; saidaIlhaDesde = 0;
   esperandoFonte = 0; aberto = 0; saindo = 0; pediuSair = 0;
   mini = 0; querMini = 0; miniGuia = 0; janAtiva = 0;
   avisarCascaAberto(0);
@@ -1444,6 +1508,9 @@ void player_preparar_retencao(void) {
   // player. Sem confirmacao na saida, o app usa o fechamento normal.
   if (prepararRetencao || retido || !podeReter()) return;
   prepararRetencao = 1;
+#ifdef NV_ANDROID
+  saidaIlhaDesde = SDL_GetTicks() | 1u;
+#endif
   video_pausar(1);
 }
 
@@ -2370,7 +2437,15 @@ void player_atualizar(float dt, Uint32 agora) {
   // enquanto o app ainda procurava fonte, e ela sumiria antes de o filme
   // aparecer.
   if (!inicioImagem && comVideo && video_pronto()) { inicioImagem = agora; acordar(); }
-  if (saindo && entrada < 0.02f) { aberto = 0; saindo = 0; entrada = 0.0f; avisarCascaAberto(0); return; }
+  if (saindo && saidaIlhaDesde && prepararRetencao &&
+      (video_pausa_confirmada() ||
+       (Sint32)(SDL_GetTicks() - saidaIlhaDesde) >= (Sint32)PLR_SAIDA_ILHA_TETO_MS)) {
+    printf("[player] saida para a ilha em %d ms (pausa %d)\n",
+           (int)(Sint32)(SDL_GetTicks() - saidaIlhaDesde), video_pausa_confirmada());
+    fflush(stdout);
+    entrada = 0.0f;
+  }
+  if (saindo && entrada < 0.02f) { aberto = 0; saindo = 0; entrada = 0.0f; saidaIlhaDesde = 0; avisarCascaAberto(0); return; }
 
   // Havendo pipeline, posicao e duracao vem DELE; o dt so serve para as
   // animacoes. O relogio somado continua existindo para quando nao ha video
@@ -2431,7 +2506,7 @@ void player_atualizar(float dt, Uint32 agora) {
     }
     if (!retomadaAplicada && video_pronto() && d>1.0) {
       retomadaAplicada=1;
-      if(retomarPct>0) video_buscar(d*retomarPct/100.0);
+      if(retomarPct>0) { marco("abrir: seek para o ponto salvo"); video_buscar(d*retomarPct/100.0); }
     }
     tocando = video_tocando();
     { const CatItem *ci = ehCanal() ? NULL : item();

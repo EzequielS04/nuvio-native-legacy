@@ -414,6 +414,14 @@ object NvPlayer {
             }
         }
 
+        // Pausa pedida com o player em buffer nao passa por onIsPlayingChanged
+        // (ele ja estava parado): a confirmacao do C sai daqui.
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            if (minha != sessao) return
+            val p = player ?: return
+            if (!playWhenReady && !p.isPlaying && p.playbackState != Player.STATE_ENDED) ev(EV_PAUSADO)
+        }
+
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (minha != sessao) return
             val p = player ?: return
