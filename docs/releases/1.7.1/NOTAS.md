@@ -13,6 +13,7 @@ Faster returns to your movie, more resilient account loading, and fixes for watc
 - **End time and startup** (#213): long translated end-time labels fit, and startup uses Nuvio artwork.
 - **Account outages** (#214, #215): temporary server errors preserve your session and the last successful account data for the current profile. Incomplete replies cannot replace a complete saved library.
 - **Live TV on LG** (#158): a second player connection no longer cancels the main Xtream stream.
+- **Live TV categories**: channel genres with accents from some add-ons no longer show escape codes (e.g. "Notu00edcias").
 - **Artwork and stability**: improved GIF cover decoding, recovery from damaged image caches, concurrent WebP loading, and handling of long catalogue identifiers and incomplete network replies.
 - **Crashes**: native Samsung no longer treats leaving with Exit or power off as a crash (which could revert settings); fixed a catalogue race that crashed some Tizen 9 TVs while loading Home; Android TVs that restart the app in the same process relaunch cleanly.
 - **Paused session**: the kept session is no longer released on the first frame after leaving.
