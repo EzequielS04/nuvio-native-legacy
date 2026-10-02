@@ -49,6 +49,8 @@ void teclado_abrir(const char *titulo, const char *dica, int max);
 void teclado_abrir_com(const char *titulo, const char *dica, int max,
                        const char *alfabeto, const char *inicial);
 int  teclado_aberto(void);
+// Para testes: foco na barra do campo (1 campo, 2 Falar, 0 no teclado).
+int  teclado_foco_campo(void);
 void teclado_evento(const SDL_Event *e);
 void teclado_atualizar(float dt, Uint32 agora);
 void teclado_desenhar(Uint32 agora);

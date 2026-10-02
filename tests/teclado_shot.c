@@ -16,6 +16,7 @@
 #include "gfx.h"
 #include "text.h"
 #include "tex_cache.h"
+#include "sistexto.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -154,6 +155,32 @@ int main(int argc, char **argv) {
   teclado_abrir("Código do amigo", "Peça o código que aparece na tela dele", 6);
   captura(saida, "padrao");
   fechar();
+  // ANDROID (sistexto em modo de teste): CIMA da primeira fileira foca o campo,
+  // direita o Falar; o texto do sistema passa pelo alfabeto da modal; Concluir
+  // e o "pronto".
+  fechar();
+  st_teste_ligar(1);
+  teclado_abrir_com("Portal Stalker (MAC)", "Endereço e porta, sem http://", 48, PORTAL, NULL);
+  tecla(SDLK_UP);
+  assert(teclado_foco_campo() == 1);
+  captura(saida, "android-campo");
+  tecla(SDLK_RIGHT);
+  assert(teclado_foco_campo() == 2);
+  captura(saida, "android-falar");
+  tecla(SDLK_LEFT);
+  tecla(SDLK_RETURN);
+  assert(st_dono() == ST_TECLADO && st_estado() == ST_DIGITANDO);
+  st_teste_evento("TMeu-Portal.tv:8080 ção");
+  quadro();
+  assert(!strcmp(teclado_texto(), "meu-portal.tv:8080o"));
+  captura(saida, "android-texto");
+  st_teste_evento("Dmeu.tv:80");
+  quadro();
+  assert(!teclado_aberto() && teclado_resultado() == TECLADO_PRONTO);
+  assert(!strcmp(teclado_texto(), "meu.tv:80") && st_dono() == ST_DONO_NENHUM);
+  { int i; for (i = 0; i < 60; i++) quadro(); }
+  st_teste_ligar(0);
+
   if (falhou) { puts("FAIL: capturas gravadas, mas ha simbolo inalcancavel."); return 1; }
   puts("PASS: capturas do teclado gravadas.");
   return 0;
