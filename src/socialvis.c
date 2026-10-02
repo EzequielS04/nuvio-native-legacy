@@ -255,26 +255,135 @@ static void svDoQueExiste(void) {
   dasRecomendacoes();
 }
 
-// A PONTE DO socialsrv. -1 = o servidor ainda nao da isso (hoje, sempre).
-//
-// Com recomenda_feed() pronto, isto vira:
-//   RecEvento *r = calloc(SV_EVENTOS_MAX, sizeof *r);
-//   int n = recomenda_feed(r, SV_EVENTOS_MAX), i;
-//   for (i = 0; i < n; i++) svDeRecEvento(&r[i], &saida[i]);
-//   free(r); return n;
-// onde svDeRecEvento copia campo a campo (os nomes sao os mesmos) e traduz
-// `fonte`/`acao` de texto para SV_FONTE_*/SV_*:
-//   "agora"->SV_AGORA "inicio"->SV_INICIO "fim"->SV_FIM "reacao"->SV_REACAO
-//   "salvo"->SV_SALVO "abandono"->SV_ABANDONO.
+// A PONTE DO socialsrv (branch agente/socialsrv: recomenda_feed_unido,
+// recomenda_amigo). Desligada ate o merge: com -DNV_SOCIAL_V2 o modelo passa a
+// ler o feed unificado (nosso servidor + Trakt, deduplicado em recomenda.c) e o
+// perfil do amigo do servidor. Sem a bandeira, -1 = "o servidor ainda nao da
+// isso", e o modelo cai em svDoQueExiste().
+#ifdef NV_SOCIAL_V2
+// "Assistindo agora": o Trakt so manda INICIO para quem esta vendo (sem hora);
+// o nosso servidor manda INICIO com hora, e "agora" vence em 15 min.
+static int svAcaoDe(const RecEvento *r) {
+  switch (r->acao) {
+    case REC_ACAO_INICIO:
+      if (r->fonte == REC_FONTE_TRAKT && r->quando <= 0) return SV_AGORA;
+      if (r->quando > 0 && (long long)time(NULL) - r->quando < 15 * 60) return SV_AGORA;
+      return SV_INICIO;
+    case REC_ACAO_FIM:      return SV_FIM;
+    case REC_ACAO_ABANDONO: return SV_ABANDONO;
+    case REC_ACAO_REACAO:   return SV_REACAO;
+    case REC_ACAO_SALVO:    return SV_SALVO;
+    case REC_ACAO_NOTA:     return SV_AVALIOU;
+    default:                return SV_ATIVIDADE;
+  }
+}
+static int svFonteDe(int f) {
+  return f == REC_FONTE_TRAKT ? SV_FONTE_TRAKT : f == REC_FONTE_SIMKL ? SV_FONTE_SIMKL
+       : f == REC_FONTE_LETTERBOXD ? SV_FONTE_LETTERBOXD : SV_FONTE_NUVIO;
+}
+static void svDeRecEvento(const RecEvento *r, SvEvento *e) {
+  int k;
+  memset(e, 0, sizeof *e);
+  snprintf(e->pessoaId, sizeof e->pessoaId, "%s", r->pessoa);
+  snprintf(e->pessoaNome, sizeof e->pessoaNome, "%s", r->pessoaNome);
+  snprintf(e->pessoaAvatar, sizeof e->pessoaAvatar, "%s", r->pessoaAvatar);
+  e->fonte = svFonteDe(r->fonte);
+  e->acao = svAcaoDe(r);
+  e->reacao = r->acao == REC_ACAO_REACAO ? r->reacao : SV_REAC_NADA;
+  snprintf(e->imdb, sizeof e->imdb, "%s", r->imdb);
+  snprintf(e->tipo, sizeof e->tipo, "%s", r->midia);
+  snprintf(e->titulo, sizeof e->titulo, "%s", r->titulo);
+  snprintf(e->poster, sizeof e->poster, "%s", r->poster);
+  e->temporada = r->temporada; e->episodio = r->episodio;
+  e->pct = r->pct > 0 ? r->pct : -1;
+  e->restanteMin = -1;
+  e->quando = r->quando;
+  // A arte deitada vem do catalogo (o feed so traz o cartaz).
+  k = cat_indice_por_imdb(r->imdb);
+  if (k >= 0) {
+    const CatItem *it = cat_item(k);
+    if (it) {
+      snprintf(e->arte, sizeof e->arte, "%s", it->backdrop);
+      if (!e->poster[0]) snprintf(e->poster, sizeof e->poster, "%s", it->poster);
+    }
+  }
+}
+static int svDoServidor(SvEvento *saida, int max) {
+  static RecEvento r[SV_EVENTOS_MAX];
+  CatItem *trakt;
+  int nT = 0, n, i, f;
+  if (!recomenda_ativo()) return -1;
+  // Os itens que o Trakt ja montou (a fileira social_activity do catalogo).
+  trakt = (CatItem *)calloc(16, sizeof *trakt);
+  if (!trakt) return -1;
+  for (f = 0; f < cat_n_fileiras(); f++) {
+    const CatFileira *cf = cat_fileira(f);
+    if (!cf || strcmp(cf->chave, "social_activity")) continue;
+    for (i = 0; i < cf->n && nT < 16; i++) {
+      const CatItem *it = cat_item(cf->ini + i);
+      if (it && strncmp(it->socialSlug, "nuvio:", 6)) trakt[nT++] = *it;
+    }
+    break;
+  }
+  if (max > SV_EVENTOS_MAX) max = SV_EVENTOS_MAX;
+  n = recomenda_feed_unido(r, max, trakt, NULL, nT);
+  free(trakt);
+  for (i = 0; i < n; i++) svDeRecEvento(&r[i], &saida[i]);
+  return n;
+}
+// O perfil do servidor. O pedido sai na primeira vez que o perfil e lido (e de
+// novo a cada abertura); a resposta chega no fio e entra na leitura seguinte —
+// amigoperfil.c rele o modelo a cada segundo.
+static int svPerfilDoServidor(const char *id, SvPerfil *p) {
+  static char pedido[96];
+  static RecAmigo ra;
+  int i;
+  if (!recomenda_ativo() || !id || !id[0]) return -1;
+  if (strcmp(pedido, id)) { snprintf(pedido, sizeof pedido, "%s", id); recomenda_amigo_pedir(id); }
+  if (!recomenda_amigo(&ra) || strcmp(ra.id, id)) return -1;
+  p->desde = ra.desde;
+  p->porOnde = !strcmp(ra.origem, "trakt") ? SV_FONTE_TRAKT : SV_FONTE_NUVIO;
+  if (ra.temGosto) { p->gostoPct = ra.gostoPct; p->emComum = ra.gostoIguais; }
+  if (ra.temMes) { p->minutosMes = (int)(ra.seg / 60); p->filmesMes = ra.filmes; p->seriesCurso = ra.series; }
+  if (ra.temAgora && p->nAssistindo < SV_FILA_MAX) {
+    svDeRecEvento(&ra.agora, &p->assistindo[p->nAssistindo]);
+    p->assistindo[p->nAssistindo++].acao = SV_AGORA;
+  }
+  for (i = 0; i < ra.nGostou && p->nGostou < SV_FILA_MAX; i++) {
+    svDeRecEvento(&ra.gostou[i], &p->gostou[p->nGostou]);
+    p->gostou[p->nGostou++].reacao = SV_REAC_GOSTOU;
+  }
+  { int vistas = 0;
+    for (i = 0; i < ra.nRecs; i++) {
+      int est = ra.recs[i].estado;
+      if (est >= REC_REC_COMECOU) vistas++;
+      if (p->nMandou < SV_FILA_MAX) {
+        SvEnviada *m = &p->mandou[p->nMandou++];
+        memset(m, 0, sizeof *m);
+        snprintf(m->imdb, sizeof m->imdb, "%s", ra.recs[i].imdb);
+        snprintf(m->titulo, sizeof m->titulo, "%s", ra.recs[i].titulo);
+        snprintf(m->poster, sizeof m->poster, "%s", ra.recs[i].poster);
+        m->estado = est >= REC_REC_COMECOU ? SV_REC_VIU : est == REC_REC_ABERTA ? SV_REC_ABRIU
+                  : SV_REC_ENTREGUE;
+        m->reacao = ra.recs[i].temReacao ? ra.recs[i].reacao : SV_REAC_NADA;
+        m->quando = ra.recs[i].criado;
+      }
+    }
+    if (ra.nRecs > 0) { p->recsVistas = vistas; p->recsTotal = ra.nRecs; } }
+  // Guarda o que veio, para a cadeia da linha do amigo (socialvis_ultima_enviada).
+  socialvis_definir_perfil_extra(id, p);
+  return 1;
+}
+#else
 static int svDoServidor(SvEvento *saida, int max) {
   (void)saida; (void)max;
   return -1;
 }
-// Idem para o perfil (RecAmigoPerfil -> os campos de SvPerfil). -1 hoje.
 static int svPerfilDoServidor(const char *id, SvPerfil *p) {
   (void)id; (void)p;
   return -1;
 }
+#endif
 
 // --- agrupamento ------------------------------------------------------------
 
@@ -391,7 +500,7 @@ static void refazer(void) {
     nCtts = recomenda_contatos(ctts, REC_CONTATOS_MAX);
   } else {
     int n = svDoServidor(brutos, SV_EVENTOS_MAX);
-    if (n >= 0) { nBrutos = n; nCtts = recomenda_contatos(ctts, REC_CONTATOS_MAX); }
+    if (n >= 0) { nBrutos = n; nCtts = recomenda_contatos(ctts, REC_CONTATOS_MAX); dasRecomendacoes(); }
     else svDoQueExiste();
   }
   agrupar();
@@ -459,14 +568,16 @@ int socialvis_perfil(const char *id, SvPerfil *p) {
   p->gostoPct = p->emComum = -1;
   p->minutosMes = p->filmesMes = p->seriesCurso = -1;
   p->recsVistas = p->recsTotal = -1;
-  for (i = 0; i < nExtras; i++)
-    if (!strcmp(extras[i].id, id)) {
-      SvAmigo base = p->a;
-      *p = extras[i].p;
-      p->a = base;
-      break;
-    }
-  if (i == nExtras) svPerfilDoServidor(id, p);
+  // O SERVIDOR PRIMEIRO (com NV_SOCIAL_V2): ele e a verdade e muda; o extra
+  // guardado e o que valia na ultima leitura (ou os dados de exemplo).
+  if (svPerfilDoServidor(id, p) < 0)
+    for (i = 0; i < nExtras; i++)
+      if (!strcmp(extras[i].id, id)) {
+        SvAmigo base = p->a;
+        *p = extras[i].p;
+        p->a = base;
+        break;
+      }
   // AS FILEIRAS QUE O FEED JA RESPONDE, quando ninguem as trouxe prontas:
   // "Assistindo" = agora/comecou; "Gostou" = reacao boa ou avaliou.
   if (!p->nAssistindo || !p->nGostou) {

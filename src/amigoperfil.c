@@ -96,9 +96,11 @@ void amigoperfil_evento(const SDL_Event *e) {
 
 void amigoperfil_atualizar(float dt, Uint32 agora) {
   int f, c, red = ajustes_animacoes_reduzidas();
-  (void)agora;
   socialvis_atualizar();
-  if (revPerf != socialvis_revisao()) recarregar();
+  // O MODELO MUDOU, ou passou um segundo: o perfil do servidor chega no fio
+  // (recomenda_amigo) sem mexer na revisao do modelo.
+  { static Uint32 ult;
+    if (revPerf != socialvis_revisao() || agora - ult > 1000u) { ult = agora; recarregar(); } }
   entrada = red ? 1.0f : anim_mola(entrada, 1.0f, dt, NV_MOLA_TELA);
   for (f = 0; f < AP_NFILAS; f++)
     for (c = 0; c < SV_FILA_MAX; c++) {
