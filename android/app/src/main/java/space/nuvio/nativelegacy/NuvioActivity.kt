@@ -38,6 +38,11 @@ import java.util.concurrent.TimeUnit
 // ANTES do SDL subir, traduz teclas de controle remoto e poe a camada de video
 // do ExoPlayer atras da superficie GLES do SDL.
 class NuvioActivity : SDLActivity() {
+    companion object {
+        // Vive enquanto o processo vive: ver o comeco de onCreate.
+        @Volatile private var jaCriada = false
+    }
+
 
     // SDL2 e compartilhada; SDL2_image e SDL2_ttf entram estaticas na libmain.
     override fun getLibraries(): Array<String> = arrayOf("SDL2", "main")
@@ -45,6 +50,21 @@ class NuvioActivity : SDLActivity() {
     private var camadaVideo: FrameLayout? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // SEGUNDO onCreate NO MESMO PROCESSO = SEGUNDO main() DO C (o
+        // SDLActivity.initialize() zera mSDLThread e o SDL sobe outro fio de
+        // main). O nucleo C guarda estado global (mutex, fios, caches) que nao
+        // nasce de novo. Medido no D1 (1.7.0, Xiaomi MiTV Android 14, 4 vezes
+        // em 6 h): o log da sessao que caiu tem so [tv], [dados] e o "[tex] teto
+        // ... pedido em Ajustes" — linha que so sai com o mutex do cache de
+        // textura de uma sessao anterior ainda no lugar — e morre em "FORTIFY:
+        // pthread_mutex_lock called on a destroyed mutex". Em vez disso, abre
+        // o app num processo novo, como na primeira vez.
+        if (jaCriada) {
+            super.onCreate(savedInstanceState)
+            reabrirEmProcessoNovo()
+            return
+        }
+        jaCriada = true
         prepararAmbiente()
         super.onCreate(savedInstanceState)
 
@@ -60,6 +80,17 @@ class NuvioActivity : SDLActivity() {
         mSurface.setZOrderMediaOverlay(true)
         mSurface.holder.setFormat(PixelFormat.TRANSLUCENT)
         NvPlayer.iniciar(this, camada)
+    }
+
+    private fun reabrirEmProcessoNovo() {
+        Log.w("Nuvio", "segundo onCreate no mesmo processo: reabrindo em processo novo")
+        try {
+            packageManager.getLaunchIntentForPackage(packageName)?.let {
+                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                startActivity(it)
+            }
+        } catch (_: Exception) {}
+        Process.killProcess(Process.myPid())
     }
 
     // Chamado pelo C (android_pedir_superficie), do fio do SDL, antes de criar a
