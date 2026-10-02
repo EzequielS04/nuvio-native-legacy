@@ -11,6 +11,7 @@
 #include "gfx.h"
 #include <stdio.h>
 #include <string.h>
+#include "ponteiro_sdl.h"
 
 float gfx_opacidade_grupo = 1.0f;
 void gfx_sem_recorte(void) {}

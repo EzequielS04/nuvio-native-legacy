@@ -40,6 +40,8 @@
 #define PONT_SETA_JANELA_MS 350
 #define PONT_SETA_LIMIAR    32.0f
 #define PONT_SETA_PAUSA_MS  300
+#define PONT_TOQUE_LIMIAR   32.0f  // deslocamento logico maximo de um tap
+#define PONT_DEDOS_MAX      16
 
 static PonteiroAlvo lista[2][PONT_MAX_ALVOS];
 static int nLista[2];
@@ -81,6 +83,24 @@ static int setaAncora = 0;
 // Nos que pedimos ao compositor para esconder a seta dele (webOS).
 static int sistemaEscondido = 0;
 
+#ifdef NV_ANDROID
+static int toqueDisponivel = 1;
+#else
+static int toqueDisponivel;
+#endif
+typedef struct { SDL_TouchID toque; SDL_FingerID dedo; } Dedo;
+static Dedo dedos[PONT_DEDOS_MAX];
+static int nDedos, dedosExcedentes, toqueCancelado;
+static float toqueX, toqueY;
+static Ident toqueAlvo;
+static int toqueSemAlvos;
+
+static void cancelarToque(void) {
+  nDedos = dedosExcedentes = 0;
+  toqueCancelado = 1;
+  toqueAlvo.ok = 0;
+}
+
 #ifdef NV_PONT_WEBOS
 static SDL_bool (*cursorSistema)(SDL_bool) = NULL;
 #endif
@@ -89,13 +109,14 @@ static Uint32 agoraMs(void) { return relogio ? relogio() : SDL_GetTicks(); }
 
 void ponteiro_teste_relogio(Uint32 (*fn)(void)) { relogio = fn; }
 void ponteiro_teste_janela(int w, int h) { janelaW = w; janelaH = h; }
+void ponteiro_teste_toque(int ligado) { toqueDisponivel = ligado != 0; cancelarToque(); }
 #ifdef NV_PONT_WEBOS
 void ponteiro_teste_cursor_sistema(SDL_bool (*fn)(SDL_bool)) { cursorSistema = fn; }
 #endif
 
 float ponteiro_x(void) { return px; }
 float ponteiro_y(void) { return py; }
-int ponteiro_ativo(void) { return visivel; }
+int ponteiro_ativo(void) { return visivel || toqueDisponivel; }
 
 // DIAGNOSTICO DE ENTRADA (#99, segunda volta). Na C9 chegaram os avisos
 // 484/485 e a rodinha, e NENHUM movimento nem clique. Para saber o que o SDL
@@ -173,6 +194,10 @@ void ponteiro_iniciar(void) {
   visivel = 0;
   escondidoSeta = 0; sistemaEscondido = 0;
   memset(&hover, 0, sizeof hover);
+  cancelarToque();
+#ifndef NV_ANDROID
+  toqueDisponivel = SDL_GetNumTouchDevices() > 0;
+#endif
   { SDL_Window *w = SDL_GL_GetCurrentWindow();
     int ww = 0, wh = 0, dw = 0, dh = 0;
     if (w) { SDL_GetWindowSize(w, &ww, &wh); SDL_GL_GetDrawableSize(w, &dw, &dh); }
@@ -304,11 +329,87 @@ static void mover(void) {
   if (v[i].focar) { rastro("foco", &v[i], nLista[pronto]); v[i].focar(v[i].a, v[i].b); }
 }
 
+static int dedoIndice(const SDL_TouchFingerEvent *e) {
+  for (int i = 0; i < nDedos; i++)
+    if (dedos[i].toque == e->touchId && dedos[i].dedo == e->fingerId) return i;
+  return -1;
+}
+
+static int converterToque(const SDL_TouchFingerEvent *e) {
+  if (!isfinite(e->x) || !isfinite(e->y)) return 0;
+  // SDL ja normalizou pela janela. O viewport ocupa a superficie inteira;
+  // DPI e janela menor nao mudam a coordenada no layout 1920x1080.
+  px = fminf(fmaxf(e->x, 0.0f) * NV_TELA_W, NV_TELA_W - 1.0f);
+  py = fminf(fmaxf(e->y, 0.0f) * NV_TELA_H, NV_TELA_H - 1.0f);
+  return 1;
+}
+
+static int eventoToque(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
+  const SDL_TouchFingerEvent *t = &e->tfinger;
+  int dedo = dedoIndice(t);
+  toqueDisponivel = 1;
+  if (e->type == SDL_FINGERDOWN) {
+    if (dedo >= 0) return 1;
+    if (nDedos == PONT_DEDOS_MAX) { dedosExcedentes++; toqueCancelado = 1; return 1; }
+    dedos[nDedos++] = (Dedo){t->touchId, t->fingerId};
+    if (nDedos > 1 || dedosExcedentes) { toqueCancelado = 1; return 1; }
+    toqueCancelado = !converterToque(t);
+    toqueX = px; toqueY = py;
+    toqueAlvo.ok = 0;
+    toqueSemAlvos = nLista[pronto] == 0;
+    if (!toqueCancelado) {
+      int i = ponteiro_achar(lista[pronto], nLista[pronto], px, py);
+      if (i >= 0) guardar(&toqueAlvo, &lista[pronto][i]);
+    }
+    // Nao foca nem entrega OK no DOWN: arrastar nao pode abrir um titulo.
+    return 1;
+  }
+  if (dedo < 0) {
+    if (e->type == SDL_FINGERUP && dedosExcedentes) dedosExcedentes--;
+    return 1;
+  }
+  if (!converterToque(t)) toqueCancelado = 1;
+  else {
+    float dx = px - toqueX, dy = py - toqueY;
+    if (dx * dx + dy * dy > PONT_TOQUE_LIMIAR * PONT_TOQUE_LIMIAR) toqueCancelado = 1;
+  }
+  if (e->type != SDL_FINGERUP) return 1;
+  // Um segundo dedo cancela o gesto inteiro, mesmo se ele sair primeiro.
+  if (nDedos == 1 && !dedosExcedentes && !toqueCancelado) {
+    int i = ponteiro_achar(lista[pronto], nLista[pronto], px, py);
+    PonteiroAlvo al;
+    if (i >= 0 && mesmo(&toqueAlvo, &lista[pronto][i])) {
+      al = lista[pronto][i];
+      rastro("toque", &al, nLista[pronto]);
+      if (al.focar) al.focar(al.a, al.b);
+      if (al.ativar) al.ativar(al.a, al.b);
+      else if (al.focar) {
+        tecla(entregar, SDL_KEYDOWN, SDLK_RETURN);
+        tecla(entregar, SDL_KEYUP, SDLK_RETURN);
+      }
+    } else if (toqueSemAlvos && nLista[pronto] == 0) {
+      tecla(entregar, SDL_KEYDOWN, SDLK_RETURN);
+      tecla(entregar, SDL_KEYUP, SDLK_RETURN);
+    }
+  }
+  memmove(dedos + dedo, dedos + dedo + 1, (size_t)(--nDedos - dedo) * sizeof *dedos);
+  if (!nDedos && !dedosExcedentes) toqueAlvo.ok = 0;
+  return 1;
+}
+
 int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
   Uint32 agora = agoraMs();
   switch (e->type) {
+    case SDL_FINGERDOWN: case SDL_FINGERMOTION: case SDL_FINGERUP:
+      return eventoToque(e, entregar);
+    case SDL_APP_WILLENTERBACKGROUND:
+      cancelarToque();
+      return 0;
+    case SDL_WINDOWEVENT:
+      if (e->window.event == SDL_WINDOWEVENT_FOCUS_LOST) cancelarToque();
+      return 0;
     case SDL_MOUSEMOTION:
-      if (e->motion.which == SDL_TOUCH_MOUSEID) return 0;
+      if (e->motion.which == SDL_TOUCH_MOUSEID) return 1;
       converter(e->motion.windowID, e->motion.x, e->motion.y);
       primeiro(0, "movimento", e->motion.x, e->motion.y);
       if (tremorDaSeta(agora)) return 1;
@@ -318,7 +419,7 @@ int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
       return 1;
 
     case SDL_MOUSEBUTTONDOWN: {
-      if (e->button.which == SDL_TOUCH_MOUSEID) return 0;
+      if (e->button.which == SDL_TOUCH_MOUSEID) return 1;
       converter(e->button.windowID, e->button.x, e->button.y);
       primeiro(1, "clique", e->button.x, e->button.y);
       ultimoMov = agora;
@@ -355,7 +456,7 @@ int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
     }
 
     case SDL_MOUSEBUTTONUP:
-      if (e->button.which == SDL_TOUCH_MOUSEID) return 0;
+      if (e->button.which == SDL_TOUCH_MOUSEID) return 1;
       converter(e->button.windowID, e->button.x, e->button.y);
       if (voltarPendente && e->button.button == SDL_BUTTON_RIGHT) {
         voltarPendente = 0; tecla(entregar, SDL_KEYUP, SDLK_AC_BACK); return 1;
@@ -373,6 +474,7 @@ int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
       return 1;
 
     case SDL_MOUSEWHEEL: {
+      if (e->wheel.which == SDL_TOUCH_MOUSEID) return 1;
       int dy = e->wheel.y, dx = e->wheel.x;
       primeiro(2, "rodinha", dx, dy);
       if (e->wheel.direction == SDL_MOUSEWHEEL_FLIPPED) { dy = -dy; dx = -dx; }
@@ -492,7 +594,7 @@ static void fecharQuadro(void) {
 void ponteiro_alvo(float x, float y, float w, float h,
                    PonteiroFn focar, PonteiroFn ativar, int a, int b) {
   PonteiroAlvo *al;
-  if (!visivel) return;
+  if (!ponteiro_ativo()) return;
   if (w <= 0 || h <= 0 || nLista[escreve] >= PONT_MAX_ALVOS) return;
   al = &lista[escreve][nLista[escreve]++];
   al->x = x; al->y = y; al->w = w; al->h = h;
@@ -500,7 +602,7 @@ void ponteiro_alvo(float x, float y, float w, float h,
 }
 
 void ponteiro_camada(void) {
-  if (!visivel) return;
+  if (!ponteiro_ativo()) return;
   nLista[escreve] = 0;
 }
 

@@ -1,4 +1,4 @@
-// PONTEIRO DO MAGIC REMOTE (issue #99).
+// PONTEIRO DO MAGIC REMOTE (#99) E TOQUE DIRETO (#216).
 //
 // COMO ELE CHEGA. No webOS o ponteiro e um wl_pointer do compositor, e o SDL
 // da LG o entrega como mouse comum: SDL_MOUSEMOTION em coordenadas da janela,
@@ -74,7 +74,8 @@ void ponteiro_quadro(Uint32 agora);
 // cursor (sem ele e so a troca de lista).
 void ponteiro_desenhar(void);
 
-// Vale a pena registrar alvos? (cursor na tela)
+// Vale a pena registrar alvos? Cursor na tela ou dispositivo de toque. No
+// Android os alvos existem antes do primeiro dedo, sem desenhar cursor.
 int  ponteiro_ativo(void);
 
 void ponteiro_alvo(float x, float y, float w, float h,
@@ -93,6 +94,8 @@ int  ponteiro_achar(const PonteiroAlvo *v, int n, float x, float y);
 void ponteiro_teste_relogio(Uint32 (*fn)(void));
 // Tamanho da janela para a conversao janela -> logico (0 = SDL_GetWindowSize).
 void ponteiro_teste_janela(int w, int h);
+// Disponibilidade de toque injetavel, sem precisar de hardware no teste.
+void ponteiro_teste_toque(int ligado);
 // SDL_webOSCursorVisibility de mentira (so com -DNV_PONT_WEBOS_TESTE).
 void ponteiro_teste_cursor_sistema(SDL_bool (*fn)(SDL_bool));
 

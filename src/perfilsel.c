@@ -12,6 +12,7 @@
 #include "sessao.h"
 #include "catalogo.h"
 #include "cachearte.h"
+#include "ponteiro.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -611,6 +612,27 @@ static void eventoPin(SDL_Keycode k) {
     if (z < PS_PIN_MAX) { pin[z] = (char)('0' + digito); pin[z + 1] = 0; } }
 }
 
+static void perfilFocar(int slot, int indice) {
+  const ContaPerfil *p = perfis_item(slot);
+  if (!preparando && pinDe < 0 && p && p->indice == indice) foco = slot;
+}
+static void perfilAtivar(int slot, int indice) {
+  const ContaPerfil *p = perfis_item(slot);
+  if (!preparando && pinDe < 0 && p && p->indice == indice) {
+    foco = slot;
+    escolher(slot);
+  }
+}
+static void pinFocar(int tecla, int b) {
+  (void)b;
+  if (pinDe >= 0 && !verificando && !preparando &&
+      tecla >= 0 && tecla < PS_TECLA_COLS * PS_TECLA_LINS) pinFoco = tecla;
+}
+static void perfisRetentar(int a, int b) {
+  (void)a; (void)b;
+  if (!preparando && !perfis_n() && sync_estado() == SYNC_FALHOU) repetir = 1;
+}
+
 void perfilsel_evento(const SDL_Event *e) {
   SDL_Keycode k;
   int m = perfis_n();
@@ -908,6 +930,9 @@ static void desenhaPin(void) {
   float a = animPin;
   int i;
   size_t n = strlen(pin), mostrar;
+  // PIN e uma camada modal: toque no fundo nao pode escolher outro perfil.
+  ponteiro_camada();
+  ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, NULL, 0, 0);
 
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     gfx_cor(tela, 0.0f, 0.02f, 0.02f, 0.025f, 0.88f * a); }
@@ -953,6 +978,8 @@ static void desenhaPin(void) {
     GfxRect r = { x0 + col * (PS_TECLA + PS_TECLA_GAP),
                   y0 + lin * (PS_TECLA + PS_TECLA_GAP), PS_TECLA, PS_TECLA };
     int f = (i == pinFoco && !verificando);
+    if (pinDe >= 0 && !verificando && !preparando)
+      ponteiro_alvo(r.x, r.y, r.w, r.h, pinFocar, NULL, i, pinDe);
     TxtLinha l;
     // FOCO EM SUPERFICIE: fundo ESCURO (--focus-bg #303030) com texto branco e
     // o anel de 4px por fora. Esta tela fazia o contrario — pilula branca com
@@ -974,6 +1001,9 @@ void perfilsel_desenhar(Uint32 agora) {
   int i, m = perfis_n();
   float d, vao, largura, x, subida, a;
   int reduzida = ajustes_animacoes_reduzidas();
+
+  ponteiro_camada();
+  ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, NULL, 0, 0);
 
   desenhaFundo();
 
@@ -1000,6 +1030,9 @@ void perfilsel_desenhar(Uint32 agora) {
       ? "Não foi possível carregar os perfis. OK: tentar novamente"
       : "Carregando os perfis da sua conta…";
     TxtLinha e = txt_linha(TXT_BODY, msg, 176, 179, 190, 255);
+    if (!preparando && sync_estado() == SYNC_FALHOU)
+      ponteiro_alvo((NV_TELA_W - e.w) * 0.5f, 450.0f + subida,
+                    (float)e.w, (float)e.h + 40.0f, NULL, perfisRetentar, 0, 0);
     txt_desenhar_alpha(e, (NV_TELA_W - e.w) * 0.5f, 470.0f + subida, a);
     return;
   }
@@ -1050,6 +1083,10 @@ void perfilsel_desenhar(Uint32 agora) {
     c = 176 + (int)(79.0f * f);
     nome = txt_linha_corta(d >= 230.0f ? TXT_TITULO3 : TXT_HEADLINE, p->nome,
                            c, c, c + 6 > 255 ? 255 : c + 6, 255, d + vao * 0.9f);
+    if (!preparando && pinDe < 0)
+      ponteiro_alvo(av.x, av.y, av.w,
+                    av.h + PS_NOME_GAP + (float)nome.h + PS_SELO_GAP + 32.0f,
+                    perfilFocar, perfilAtivar, i, p->indice);
     sombra = txt_linha_corta(d >= 230.0f ? TXT_TITULO3 : TXT_HEADLINE, p->nome,
                              0, 0, 0, 220, d + vao * 0.9f);
     txt_desenhar_alpha(sombra, px + (d - sombra.w) * 0.5f + 2.0f,
