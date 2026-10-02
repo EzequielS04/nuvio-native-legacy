@@ -69,6 +69,7 @@
 #include "gif.h"
 #include "idioma.h"
 #include "idiomaauto.h"
+#include "abertura.h"
 // O idioma AUTOMATICO da interface mudou depois do arranque (a conta chegou, ou
 // a TV respondeu o locale). Titulos e generos das fileiras saem no idioma novo,
 // e a pessoa fica sabendo por que a tela trocou sozinha — uma vez por idioma
@@ -763,6 +764,9 @@ int main(int argc, char **argv) {
   marco("gfx_iniciar");
   if (!gfx_iniciar()) { printf("[arranque] gfx_iniciar FALHOU\n"); fflush(stdout); return 1; }
   printf("[arranque] gfx_iniciar ok\n"); fflush(stdout);
+  // A marca da abertura (#213), ANTES do primeiro quadro: ele ja nasce com ela,
+  // no lugar em que o splash do sistema a deixou.
+  abertura_iniciar(dirArte);
 #ifdef __EMSCRIPTEN__
   // O ARRANQUE CEDE AO NAVEGADOR EM DOIS PONTOS (24/09/2026). Do topo do main
   // ate o primeiro quadro era UMA tarefa so do fio principal: 1,0 a 3,4 s nos
@@ -1021,6 +1025,7 @@ int main(int argc, char **argv) {
       // vez de exigir uma build instrumentada de proposito. Cada scancode sai
       // UMA vez por sessao: um controle de TV repete a tecla sozinho e um log
       // por evento afogaria o resto.
+      if (e.type == SDL_KEYDOWN) abertura_tecla();   // a pessoa quer entrar: a marca sai
       if (e.type == SDL_KEYDOWN) {
         static unsigned char visto[512];
         SDL_Scancode sc = e.key.keysym.scancode;
@@ -1177,6 +1182,12 @@ int main(int argc, char **argv) {
     txt_novo_quadro();
     ponteiro_quadro(agora);
     app_desenhar(agora);
+    // A abertura (#213) cobre os primeiros quadros, com a home montando por baixo.
+    if (abertura_ativa()) {
+      int pend = 0;
+      tex_estatisticas(NULL, &pend, NULL, NULL, NULL);
+      abertura_desenhar(agora, dt, pend);
+    }
     ponteiro_desenhar();
     // GIF QUE NINGUEM DESENHOU ha 1,5 s sai da memoria (tela de perfis
     // fechada, foco fora do cartaz). Ver gif_ocioso em gif.h.

@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Tela cheia, sem barra: o app desenha tudo em GLES. -->
+    <!-- Android 12+: o sistema mostra a SplashScreen dele antes da janela; aqui
+         ela so ganha o fundo da abertura (o icone e o do app). Depois dela vem
+         o windowBackground (drawable/abertura.xml) ate o primeiro quadro. -->
     <style name="Tema.Nuvio" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowFullscreen">true</item>
-        <!-- A abertura (#213) ate o primeiro quadro do GLES: drawable/abertura.xml. -->
         <item name="android:windowBackground">@drawable/abertura</item>
         <item name="android:windowDrawsSystemBarBackgrounds">false</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowSplashScreenBackground">@color/nuvio_abertura</item>
     </style>
 </resources>

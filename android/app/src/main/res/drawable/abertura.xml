@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ABERTURA (#213): o fundo da janela ate o GLES desenhar o primeiro quadro.
+     Mesma arte e mesmo lugar do splash.png da LG (marca de 780 px no centro de
+     1920x1080, fundo #0E0F12) e da abertura dentro do app (src/abertura.c),
+     que assume no primeiro quadro sem salto. nodpi: pixel e pixel na TV. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/nuvio_abertura" />
+    <item>
+        <bitmap android:src="@drawable/abertura_marca" android:gravity="center" />
+    </item>
+</layer-list>

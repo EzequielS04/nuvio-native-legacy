@@ -1632,7 +1632,12 @@ int home_iniciar(const char *dirArte) {
   // O cache da ULTIMA sessao entra por cima do catalogo do pacote, antes de
   // qualquer rede. Se nao existir (primeira execucao) ou for de outra build,
   // segue-se com o do pacote, como sempre foi.
-  if (cat_ler_cache(dirArte)) marco("catalogo do cache na tela");
+  // E com o texto/arte localizados que a sessao anterior ja buscou (#213): o
+  // Continuar gravado no cache podia ter saido antes da traducao.
+  if (cat_ler_cache(dirArte)) {
+    desc_localizar_catalogo_cache();
+    marco("catalogo do cache na tela");
+  }
   carregaDir(dirArte, bd, &nBd, NULL);
   carregaDir(dirArte, pst, &nPst, "poster");
   if (!nBd) { printf("home: nenhum backdrop em %s\n", dirArte); return 0; }
