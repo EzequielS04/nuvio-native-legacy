@@ -91,6 +91,7 @@ void ajustes_perfil_guardar(int perfil) { (void)perfil; }
 int  ajustes_perfil_restaurar(int perfil) { (void)perfil; return 0; }
 void ajustes_perfil_esquecer(void) { }
 void arteesc_esquecer(void) { }
+void sorg_esquecer(void) { }
 static void carregarAtivo(void) {
   char *b = dados_ler("perfil.txt");
   if (b) { if (atoi(b) > 0) ativo = atoi(b); free(b); }
