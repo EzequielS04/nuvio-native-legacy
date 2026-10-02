@@ -53,6 +53,8 @@ int  celb_pegar(int dono, char *dst, size_t n);
 // Com o cartao aberto, todo evento de teclado e dele (Voltar fecha; OK com o
 // endereco vencido gera outro). 1 = consumido.
 int  celb_evento(const SDL_Event *e);
+// Uma vez por quadro (app.c): as molas do botao e do cartao.
+void celb_atualizar(float dt);
 // O cartao, por cima de tudo. Sem cartao, nao faz nada.
 void celb_desenhar(void);
 

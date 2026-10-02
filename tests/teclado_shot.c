@@ -18,6 +18,7 @@
 #include "tex_cache.h"
 #include "sistexto.h"
 #include "celular.h"
+#include "celbotao.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -37,7 +38,8 @@ static void tecla(SDL_Keycode k) {
   memset(&e, 0, sizeof e);
   e.type = SDL_KEYDOWN;
   e.key.keysym.sym = k;
-  teclado_evento(&e);
+  // Como app.c: o cartao do celular aberto come a tecla antes da modal.
+  if (!celb_evento(&e)) teclado_evento(&e);
 }
 static void teclas(SDL_Keycode k, int n) { while (n-- > 0) tecla(k); }
 
@@ -48,9 +50,11 @@ static void quadro(void) {
   tex_bombear(12);
   gfx_novo_quadro();
   teclado_atualizar(1.0f / 60.0f, SDL_GetTicks());
+  celb_atualizar(1.0f / 60.0f);
   glClearColor(0.051f, 0.051f, 0.051f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
   teclado_desenhar(SDL_GetTicks());
+  celb_desenhar();
   SDL_GL_SwapWindow(janela);
 }
 
@@ -182,32 +186,48 @@ int main(int argc, char **argv) {
   { int i; for (i = 0; i < 60; i++) quadro(); }
   st_teste_ligar(0);
 
-  // DIGITAR PELO CELULAR: a chave do Seekr (64 simbolos, 13 colunas) com o
-  // painel do QR; um POST de verdade (curl) entrega um TEXTO DE TESTE, o campo
+  // DIGITAR PELO CELULAR: a chave do Seekr (64 simbolos, 13 colunas). Sem
+  // teclado do sistema (Mac = LG/Samsung), CIMA da primeira fileira vai direto
+  // ao botao do celular; OK abre o cartao (o servidor sobe so agora); um POST
+  // de verdade (curl) entrega um TEXTO DE TESTE, o cartao fecha, o campo
   // mostra, o foco vai para "pronto" e um OK confirma.
   { static const char *SK =
       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
     static const char *TESTE = "TESTE_celular-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN";
     char cmd[512], url[128];
-    FILE *f;
     teclado_abrir_com("Chave do Seekr", "Chave pessoal: seekr.tv. Vazio apaga.", 90, SK, NULL);
-    assert(celular_estado() == CEL_ESPERANDO);
+    assert(celular_estado() == CEL_PARADO);   // abrir o teclado nao abre porta
+    tecla(SDLK_UP);
+    assert(teclado_foco_campo() == 3);
+    captura(saida, "seekr-botao");
+    tecla(SDLK_RETURN);
+    assert(celb_aberto() && celb_dono() == CELB_TECLADO && celular_estado() == CEL_ESPERANDO);
     snprintf(url, sizeof url, "%s", celular_url());
-    captura(saida, "seekr-celular");
-    f = fopen("/tmp/nv-teclado-url.txt", "w"); if (f) { fputs(url, f); fclose(f); }
+    captura(saida, "seekr-cartao");
+    // Voltar fecha o cartao e derruba o servidor, sem fechar a modal.
+    tecla(SDLK_ESCAPE);
+    assert(!celb_aberto() && celular_estado() == CEL_PARADO && teclado_aberto());
+    tecla(SDLK_RETURN);   // o foco continua no botao: abre de novo, token novo
+    assert(celb_aberto() && strcmp(url, celular_url()));
+    snprintf(url, sizeof url, "%s", celular_url());
     snprintf(cmd, sizeof cmd, "curl -s -m 5 -o /dev/null -w '%%{http_code}\\n' --data-urlencode 't= %s \n' '%s'", TESTE, url);
     assert(system(cmd) == 0);
+    { int i; for (i = 0; i < 3; i++) quadro(); }
+    assert(!celb_aberto() && celular_estado() == CEL_PARADO);
     captura(saida, "seekr-recebido");
     assert(!strcmp(teclado_texto(), TESTE));
     assert(teclado_aberto());
     tecla(SDLK_RETURN);   // o foco ja esta em "pronto"
     assert(!teclado_aberto() && teclado_resultado() == TECLADO_PRONTO);
-    assert(celular_estado() == CEL_PARADO);
     { int i; for (i = 0; i < 60; i++) quadro(); }
-    // Grade curta (6 colunas) tambem ganha o painel.
+    // Grade curta (6 colunas): o botao no fim do campo, o cartao por cima.
     teclado_abrir("Código do amigo", "Peça o código que aparece na tela dele", 6);
+    tecla(SDLK_UP); tecla(SDLK_RETURN);
+    assert(celb_aberto());
     captura(saida, "padrao-celular");
+    tecla(SDLK_ESCAPE);
     fechar();
+    assert(celular_estado() == CEL_PARADO);
     puts("ok: texto do celular chegou no campo e Pronto confirmou"); }
 
   if (falhou) { puts("FAIL: capturas gravadas, mas ha simbolo inalcancavel."); return 1; }

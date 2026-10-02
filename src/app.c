@@ -1650,6 +1650,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // Spotlight: a mola de entrada/saida e o ditado correm em qualquer tela; o
   // OK segurado em "Buscar" (menu.c) abre por aqui, no quadro em que cruza.
   spot_atualizar(dt, agora);
+  celb_atualizar(dt);
   if (menu_pediu_spotlight() && spotPode()) spotAbrir(0);
   if (spot_aberto() && !spotPode()) spot_fechar();
   cancelarFonteSeSaiu();

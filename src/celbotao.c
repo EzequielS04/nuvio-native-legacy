@@ -13,7 +13,7 @@
 
 // O CARTAO: 380 de largura cabe o QR de 248 com folga para o endereco numa
 // linha em TXT_CAPTION ("192.168.100.200:65535/abcdefgh" mede ~330).
-#define CB_W      380.0f
+#define CB_W      400.0f
 #define CB_PAD     30.0f
 #define CB_QR     248.0f
 #define CB_MOLDURA 12.0f
@@ -21,10 +21,9 @@
 
 static int     dono, aberto;
 static float   animCartao;            // 0..1 (mola), entrando
-static Uint32  ultimoQuadro;
 static GfxRect ancora[CELB_N];        // ultimo botao desenhado de cada dono
 static float   animBotao[CELB_N];
-static Uint32  ultimoBotao[CELB_N];
+static int     focoBotao[CELB_N];     // o que o ultimo desenho pediu
 static char    titulo[96];
 static GfxRect cartao;
 
@@ -33,24 +32,25 @@ int celb_aberto(void) { return aberto; }
 int celb_dono(void) { return aberto ? dono : CELB_NENHUM; }
 GfxRect celb_cartao_rect(void) { return aberto ? cartao : (GfxRect){ 0, 0, 0, 0 }; }
 
-static float passo(Uint32 *ultimo) {
-  Uint32 t = SDL_GetTicks();
-  float dt = *ultimo ? (float)(t - *ultimo) / 1000.0f : 1.0f / 60.0f;
-  *ultimo = t;
-  return dt > 0.1f ? 0.1f : dt;
+void celb_atualizar(float dt) {
+  int d;
+  for (d = 1; d < CELB_N; d++) {
+    float alvo = (focoBotao[d] || (aberto && dono == d)) ? 1.0f : 0.0f;
+    animBotao[d] = ajustes_animacoes_reduzidas() ? alvo : anim_mola(animBotao[d], alvo, dt, NV_MOLA_FOCO);
+    focoBotao[d] = 0;   // o proximo desenho repoe; botao que sumiu apaga
+  }
+  if (!aberto) { animCartao = 0.0f; return; }
+  animCartao = ajustes_animacoes_reduzidas() ? 1.0f : anim_mola(animCartao, 1.0f, dt, NV_MOLA_TELA);
 }
 
 void celb_botao(int d, GfxRect r, int focado, PonteiroFn focar, int a, int b, float alpha) {
-  float ar, ag, ab, k, esc, dt;
+  float ar, ag, ab, k, esc;
   GfxRect c;
   int t;
   if (d <= CELB_NENHUM || d >= CELB_N || !celular_disponivel()) return;
   ancora[d] = r;
-  dt = passo(&ultimoBotao[d]);
-  // Com o cartao aberto o botao fica aceso: e dele que o cartao saiu.
-  if (aberto && dono == d) focado = 1;
-  animBotao[d] = ajustes_animacoes_reduzidas() ? (focado ? 1.0f : 0.0f)
-               : anim_mola(animBotao[d], focado ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
+  // A mola anda em celb_atualizar; com o cartao aberto o botao fica aceso.
+  focoBotao[d] = focado;
   k = animBotao[d];
   if (ponteiro_ativo()) ponteiro_alvo(r.x - 4.0f, r.y - 4.0f, r.w + 8.0f, r.h + 8.0f, focar, NULL, a, b);
   ajustes_acento(&ar, &ag, &ab);
@@ -76,7 +76,6 @@ int celb_abrir(int d, const char *t) {
   dono = d;
   aberto = 1;
   animCartao = 0.0f;
-  ultimoQuadro = 0;
   // Sem rede o cartao abre assim mesmo e diz por que nao ha codigo: um OK que
   // nao faz nada pareceria botao quebrado.
   celular_abrir(titulo);
@@ -165,17 +164,15 @@ static void qrTextura(const char *u) {
 static float alturaCartao(int temQr) {
   if (!temQr) return CB_PAD + CB_TITULO_H + 16.0f + 3 * CB_LINHA_H + CB_PAD;
   return CB_PAD + CB_TITULO_H + 18.0f + CB_QR + 2 * CB_MOLDURA + 18.0f + 30.0f + 10.0f +
-         2 * CB_LINHA_H + CB_PAD - 6.0f;
+         3 * CB_LINHA_H + CB_PAD - 6.0f;
 }
 
 void celb_desenhar(void) {
-  float a, dt, x, y, w, h, ar, ag, ab;
+  float a, x, y, w, h, ar, ag, ab;
   GfxRect r;
   int est, temQr;
   const char *u, *curta;
-  if (!aberto) { animCartao = 0.0f; return; }
-  dt = passo(&ultimoQuadro);
-  animCartao = ajustes_animacoes_reduzidas() ? 1.0f : anim_mola(animCartao, 1.0f, dt, NV_MOLA_TELA);
+  if (!aberto) return;
   a = anim_suave(animCartao);
   est = celular_estado();
   u = celular_url();
@@ -207,10 +204,12 @@ void celb_desenhar(void) {
     else gfx_cor(cartao, raio, 0.075f, 0.078f, 0.090f, 0.98f * a);
     gfx_vidro_aro(cartao, raio, 1.5f, 1.0f, 1.0f, 1.0f, 0.12f * a); }
 
-  { TxtLinha t = txt_linha(TXT_HEADLINE, i18n("Digitar pelo celular"), 245, 248, 255, 255);
-    gfx_icone((GfxRect){ x + CB_PAD, y + CB_PAD + (t.h - 30.0f) * 0.5f, 30.0f, 30.0f }, "aj_smartphone",
+  { TxtLinha t = txt_linha_corta(TXT_CALLOUT, i18n("Digitar pelo celular"), 245, 248, 255, 255,
+                                 w - 2 * CB_PAD - 40.0f);
+    float ty = y + CB_PAD + (CB_TITULO_H - t.h) * 0.5f;
+    gfx_icone((GfxRect){ x + CB_PAD, y + CB_PAD + (CB_TITULO_H - 28.0f) * 0.5f, 28.0f, 28.0f }, "aj_smartphone",
               ar, ag, ab, a);
-    txt_desenhar_alpha(t, x + CB_PAD + 42.0f, y + CB_PAD, a); }
+    txt_desenhar_alpha(t, x + CB_PAD + 40.0f, ty, a); }
   y += CB_PAD + CB_TITULO_H;
 
   if (!temQr) {
@@ -237,5 +236,5 @@ void celb_desenhar(void) {
     txt_desenhar_alpha(t, x + (w - t.w) * 0.5f, y, a); }
   y += 30.0f + 10.0f;
   txt_bloco(TXT_CAPTION2, i18n("Aponte a câmera do celular. Mesma rede Wi-Fi, vale por 5 minutos."),
-            160, 164, 175, x + CB_PAD, y, w - 2 * CB_PAD, CB_LINHA_H, a * 0.9f, 2);
+            170, 174, 184, x + CB_PAD, y, w - 2 * CB_PAD, CB_LINHA_H, a * 0.9f, 3);
 }
