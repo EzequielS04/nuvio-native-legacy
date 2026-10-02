@@ -290,3 +290,5 @@ int main(int argc, char **argv) {
   printf("%s\n", falhas ? "FALHOU" : "PASSOU");
   return falhas ? 1 : 0;
 }
+
+void cat_historico_contexto(const char *u, int p) { (void)u; (void)p; }

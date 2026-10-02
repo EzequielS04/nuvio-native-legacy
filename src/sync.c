@@ -47,7 +47,24 @@ static int fioVivo, fioPronto;
 static SyncEstado estado = SYNC_PARADO;
 static char resumo[220] = "sem sincronizar";
 static unsigned ultimoOk;
-static int sujoProgresso, sujoAddons, sujoAjustes;
+static int sujoProgresso, sujoAjustes;
+// Capturado no fio principal: o worker nao le a lista enquanto ela muda.
+static unsigned addonsRev, addonsConfirmada, addonsRevCiclo;
+static char addonsDono[80];
+static int addonsPerfil, addonsPerfilCiclo, addonsLocalCiclo, nAddonsEnv;
+static AddonRemoto addonsEnv[SY_ADD_MAX];
+static pthread_mutex_t addonsTrava = PTHREAD_MUTEX_INITIALIZER;
+static int addonsPendentes(void) {
+  int pendente;
+  pthread_mutex_lock(&addonsTrava);
+  pendente = __atomic_load_n(&addonsRev, __ATOMIC_ACQUIRE) !=
+         __atomic_load_n(&addonsConfirmada, __ATOMIC_ACQUIRE) &&
+         addonsPerfil == perfis_ativo_addons() &&
+         !strcmp(addonsDono, sessao_usuario());
+  pthread_mutex_unlock(&addonsTrava);
+  return pendente;
+}
+
 
 // O fio NAO toca no app: ele so preenche estas caixas, e sync_passo aplica no
 // laco principal. Sem essa separacao, uma resposta de rede reescreveria a lista
@@ -253,7 +270,7 @@ static int puxarAddons(void) {
       free(c);
       // Com mudanca local pendente a lista DESTA TV e a certa (ela nao subiu
       // ainda): a copia nao passa por cima dela.
-      if (k > 0 && !sujoAddons) {
+      if (k > 0 && !addonsPendentes()) {
         nAddonsRem = k;
         temAddonsRem = 1;
         copiaCiclo++;
@@ -284,12 +301,12 @@ static int puxarAddons(void) {
 }
 
 static void empurrarAddons(void) {
-  AddonRemoto atuais[SY_ADD_MAX];
+  const AddonRemoto *atuais = addonsEnv;
   Jsw w;
   char *r;
   int st = 0, n, i;
 
-  n = addons_exportar(atuais, SY_ADD_MAX);
+  n = nAddonsEnv;
   // Lista local vazia NAO vira push. Um push vazio apaga os addons da pessoa em
   // todos os aparelhos dela, e "ainda nao carreguei nada" e indistinguivel de
   // "o usuario removeu tudo" deste lado.
@@ -300,7 +317,7 @@ static void empurrarAddons(void) {
   // O MESMO perfil da leitura. Ler do perfil 1 e escrever no indice do perfil
   // atual criaria uma copia divergente a cada sync; escrever no 1 sem ler dele
   // sobrescreveria os addons de quem compartilha.
-  jsw_ci(&w, "p_profile_id", perfis_ativo_addons());
+  jsw_ci(&w, "p_profile_id", addonsPerfilCiclo);
   jsw_chave(&w, "p_addons");
   jsw_arr_ini(&w);
   for (i = 0; i < n; i++) {
@@ -315,8 +332,13 @@ static void empurrarAddons(void) {
   jsw_obj_fim(&w);
   r = sessao_rpc("sync_push_addons", jsw_texto_final(&w), &st);
   jsw_livre(&w);
-  if (!ok2xx(r, st)) printf("[sync] push de addons falhou (HTTP %d)\n", st);
-  else sujoAddons = 0;
+  if (!ok2xx(r, st)) {
+    printf("[sync] push de addons falhou (HTTP %d): edicao local mantida\n", st);
+    if (contacache_falha_transitoria(st)) falhaServidor(st);
+  } else if (perfilDoCicloAtual()) {
+    // O ack so confirma esta copia; uma edicao posterior continua pendente.
+    __atomic_store_n(&addonsConfirmada, addonsRevCiclo, __ATOMIC_RELEASE);
+  }
   free(r);
 }
 
@@ -878,7 +900,7 @@ static void *rodar(void *u) {
   perfilDoCiclo = perfis_ativo();
   if (puxarAddons() < 0) {
     char d[32];
-    if (temAddonsRem && !sujoAddons) addonsCedo = 1;
+    if (temAddonsRem && !addonsPendentes()) addonsCedo = 1;
     soLeituraDaCopia(foraCiclo > 0 ? foraCiclo : 0);
     contacache_data(copiaQuandoCiclo, d, sizeof d);
     if (copiaCiclo)
@@ -911,7 +933,7 @@ static void *rodar(void *u) {
   // addon que a pessoa acabou de ligar, e so depois a lista da conta e
   // aplicada. Antecipar ali sobrescreveria a escolha antes de ela ser enviada,
   // e a pessoa veria o proprio toque desaparecer.
-  if (temAddonsRem && !sujoAddons) addonsCedo = 1;
+  if (temAddonsRem && !addonsPendentes()) addonsCedo = 1;
   puxarCredenciais();
   syncprog_puxar();
   puxarSoLeitura();
@@ -934,7 +956,7 @@ static void *rodar(void *u) {
     fioPronto = 1;
     return NULL;
   }
-  if (sujoAddons) empurrarAddons();
+  if (addonsLocalCiclo) empurrarAddons();
   // DEPOIS de puxarSoLeitura, pelo mesmo motivo dos addons e com um agravante:
   // a base da costura e o blob que acabou de chegar. Ver empurrarAjustes.
   empurrarAjustes();
@@ -983,6 +1005,8 @@ static void restaurarOrdemLocal(void) {
 }
 
 void sync_iniciar(void) {
+  cat_historico_contexto(sessao_logada() ? sessao_usuario() : "",
+                         sessao_logada() ? perfis_ativo() : 0);
   restaurarOrdemLocal();
   if (!sessao_logada()) return;
   // PEDIDO COM O FIO VIVO NAO SE PERDE. Voltar calado deixava um buraco: o
@@ -994,6 +1018,10 @@ void sync_iniciar(void) {
   if (fioVivo) { pedidoComFioVivo = 1; return; }
   pedidoComFioVivo = 0;
   if (nuvem_freio_ativo()) return;
+  addonsRevCiclo = __atomic_load_n(&addonsRev, __ATOMIC_ACQUIRE);
+  addonsLocalCiclo = addonsPendentes();
+  addonsPerfilCiclo = perfis_ativo_addons();
+  nAddonsEnv = addonsLocalCiclo ? addons_exportar(addonsEnv, SY_ADD_MAX) : 0;
   cicloInterrompido = 0;
   perfilDoCiclo = perfis_ativo();
   snprintf(usuarioDoCiclo, sizeof usuarioDoCiclo, "%s", sessao_usuario());
@@ -1029,7 +1057,7 @@ void sync_passo(unsigned agoraMs) {
   // frente, porque so eles mudam O QUE a descoberta vai buscar.
   if (addonsCedo) {
     addonsCedo = 0;
-    if (temAddonsRem && perfilDoCicloAtual()) {
+    if (temAddonsRem && perfilDoCicloAtual() && !addonsPendentes()) {
       // _addons: a volta que ainda nao leu a lista (o caso do arranque e da
       // escolha de perfil) atende o pedido sozinha, sem ser jogada fora.
       // A lista vale para a poda de fileiras SO DEPOIS de marcada como deste
@@ -1095,12 +1123,13 @@ void sync_passo(unsigned agoraMs) {
   // SO REMONTA QUANDO A LISTA MUDOU DE VERDADE. Ligar `remontar` porque a
   // resposta chegou fazia um ciclo de descoberta completo a cada cinco minutos
   // com a lista identica — ver listaIgual em addons.c.
-  if (temAddonsRem) {
+  if (temAddonsRem && !addonsPendentes() && !addonsLocalCiclo) {
     if (addons_definir_lista(addonsRem, nAddonsRem)) soAddons = 1;
     // O ciclo de outro perfil ja foi descartado acima: esta lista e do ativo.
     if (nAddonsRem > 0) addons_marcar_da_conta(perfilDoCiclo);
-    temAddonsRem = 0;
   }
+  // O pull precede o push: depois dele a caixa antiga nao vale como confirmacao.
+  temAddonsRem = 0;
   // Vinculo feito NESTA TV ganha do que a conta manda: o servidor nao aceita o
   // push de "trakt" (400 22023), entao a linha da conta pode ser um token
   // antigo e vencido — aplica-lo por cima do novo devolvia 401 em tudo logo
@@ -1248,7 +1277,13 @@ SyncEstado  sync_estado(void)      { return estado; }
 const char *sync_resumo(void)      { return resumo; }
 unsigned    sync_ultimo_ok(void)   { return ultimoOk; }
 void        sync_sujar_progresso(void) { sujoProgresso = 1; }
-void        sync_sujar_addons(void)    { sujoAddons = 1; }
+void        sync_sujar_addons(void) {
+  pthread_mutex_lock(&addonsTrava);
+  snprintf(addonsDono, sizeof addonsDono, "%s", sessao_usuario());
+  addonsPerfil = perfis_ativo_addons();
+  __atomic_add_fetch(&addonsRev, 1u, __ATOMIC_RELEASE);
+  pthread_mutex_unlock(&addonsTrava);
+}
 // Provedor que o servidor recusou com "Unsupported provider credential": o
 // servidor de hoje nao guarda trakt/simkl, e a resposta nao muda ate o app
 // reiniciar. Perguntar de novo a cada renovacao do token era um 400 no log por
@@ -1300,6 +1335,7 @@ int sync_empurrar_credencial(const char *provider, const char *credJson) {
 }
 
 void sync_reaplicar_ajustes(void) {
+  cat_historico_contexto(sessao_usuario(), perfis_ativo());
   // A conta ou o perfil ativo mudou: solta pins dos dois grupos para que cada
   // superfície publique em seguida o conjunto pertencente ao novo contexto.
   cachearte_limpar_referencias();
@@ -1391,6 +1427,7 @@ void sync_proteger_ajustes_locais(void) {
 }
 
 void sync_esquecer_usuario(void) {
+  cat_historico_contexto("", 0);
   // A ordem importa pouco, mas o CONJUNTO nao: cada linha aqui corresponde a
   // uma coisa que sobrevivia ao logout.
   catordem_esquecer();
@@ -1493,7 +1530,11 @@ void sync_esquecer_usuario(void) {
   temAjustesPerfil = temCatHome = 0;
   estado = SYNC_PARADO;
   ultimoOk = 0;
-  sujoProgresso = 0; sujoAddons = 0; sujoAjustes = 0;
+  sujoProgresso = 0; sujoAjustes = 0;
+  pthread_mutex_lock(&addonsTrava);
+  __atomic_store_n(&addonsConfirmada, __atomic_load_n(&addonsRev, __ATOMIC_ACQUIRE), __ATOMIC_RELEASE);
+  addonsDono[0] = 0; addonsPerfil = 0;
+  pthread_mutex_unlock(&addonsTrava);
   free(ajustesBlob);
   ajustesBlob = NULL;
   temAjustesBlob = 0;

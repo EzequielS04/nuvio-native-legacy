@@ -146,11 +146,23 @@ static const char *ORDEM_B =
 
 static volatile int rpcCatHome;
 static int rpcCredencial;
+static int modoAddons, pushSt = 500, pushes, aplicacoesAddons, segurandoPush, noPush;
+static char addonLocal[120] = "https://local-a.example/manifest.json";
+static char ultimoPush[2048];
 // Modo "troca": a RPC das colecoes do perfil 1 fica presa ate a pessoa trocar
 // para o 2 — o ciclo do 1 termina com o 2 ja ativo.
 static int segurarCol, puxandoCol;
 char *sessao_rpc(const char *funcao, const char *corpo, int *st) {
   *st = 200;
+  if (modoAddons && !strcmp(funcao, "sync_push_addons")) {
+    pthread_mutex_lock(&trava);
+    snprintf(ultimoPush, sizeof ultimoPush, "%s", corpo);
+    pushes++; noPush = 1; pthread_cond_broadcast(&sinal);
+    while (segurandoPush) pthread_cond_wait(&sinal, &trava);
+    *st = pushSt;
+    pthread_mutex_unlock(&trava);
+    return strdup(*st == 200 ? "{}" : "{\"code\":\"server_error\"}");
+  }
   if (!strcmp(funcao, "sync_pull_collections")) {
     int p1 = strstr(corpo, "\"p_profile_id\":1") != NULL;
     pthread_mutex_lock(&trava);
@@ -173,7 +185,11 @@ char *sessao_rpc(const char *funcao, const char *corpo, int *st) {
   }
   return strdup("[]");
 }
-char *sessao_tabela(const char *t, const char *q, int *st) { (void)t; (void)q; *st = 200; return strdup("[]"); }
+char *sessao_tabela(const char *t, const char *q, int *st) {
+  (void)q; *st = 200;
+  if (modoAddons && !strcmp(t, "addons")) return strdup("[{\"url\":\"https://server-old.example/manifest.json\",\"enabled\":true}]");
+  return strdup("[]");
+}
 int  sessao_logada(void)          { return 1; }
 const char *sessao_usuario(void)  { return "conta-a"; }
 int  nuvem_freio_ativo(void)      { return 0; }
@@ -201,10 +217,23 @@ void desc_tmdb_definir(const char *c) { (void)c; }
 
 // ------------------------------------------------------------ o resto, mudo
 
-int  addons_definir_lista(const AddonRemoto *l, int n) { (void)l; (void)n; return 0; }
+static int historicoPerfil;
+static char historicoDono[80];
+void cat_historico_contexto(const char *u, int p) {
+  snprintf(historicoDono, sizeof historicoDono, "%s", u); historicoPerfil = p;
+}
+
+int  addons_definir_lista(const AddonRemoto *l, int n) {
+  if (modoAddons && n > 0) { aplicacoesAddons++; snprintf(addonLocal, sizeof addonLocal, "%s", l[0].url); }
+  return 0;
+}
 void addons_marcar_da_conta(int perfil) { (void)perfil; }
 void addons_esquecer(void) {}
-int  addons_exportar(AddonRemoto *s, int m) { (void)s; (void)m; return 0; }
+int  addons_exportar(AddonRemoto *s, int m) {
+  if (!modoAddons || m < 1) return 0;
+  memset(s, 0, sizeof *s); snprintf(s[0].url, sizeof s[0].url, "%s", addonLocal);
+  s[0].ativo = 1; return 1;
+}
 void agenda_esquecer(void) {}
 void lembrete_esquecer_todos(void) {}
 int  ajustes_aplicar_blob(const char *j) { (void)j; return 0; }
@@ -286,6 +315,28 @@ int main(int argc, char **argv) {
   int remAntes, rpcAntes;
 
   setvbuf(stdout, NULL, _IOLBF, 0);
+  if (argc > 1 && !strcmp(argv[1], "addons")) {
+    modoAddons = 1; escolher(1); sync_sujar_addons(); sync_iniciar(); ateTerminar();
+    confere("500 preserva edicao local sem aplicar pull antigo", pushes == 1 && !aplicacoesAddons && strstr(addonLocal, "local-a"));
+    confere("500 participa do ritmo de retentativa", sync_servidor_fora() == 500);
+    unsigned t = sync_ultimo_ok();
+    confere("sem rajada antes de um minuto", !sync_periodico(t + 59999u));
+    pushSt = 200; segurandoPush = 1; noPush = 0;
+    confere("retenta apos um minuto", sync_periodico(t + 60000u));
+    pthread_mutex_lock(&trava);
+    while (!noPush) pthread_cond_wait(&sinal, &trava);
+    pthread_mutex_unlock(&trava);
+    snprintf(addonLocal, sizeof addonLocal, "https://local-b.example/manifest.json");
+    sync_sujar_addons();
+    pthread_mutex_lock(&trava); segurandoPush = 0; pthread_cond_broadcast(&sinal); pthread_mutex_unlock(&trava);
+    ateTerminar();
+    confere("ack antigo nao aplica pull nem perde mudanca nova", pushes == 2 && !aplicacoesAddons && strstr(ultimoPush, "local-a") && strstr(addonLocal, "local-b"));
+    sync_iniciar(); ateTerminar();
+    confere("mudanca nova ainda enviada depois do ack antigo", pushes == 3 && strstr(ultimoPush, "local-b") && !aplicacoesAddons);
+    sync_iniciar(); ateTerminar();
+    confere("sem push duplicado apos ack atual", pushes == 3 && aplicacoesAddons > 0);
+    return falhas != 0;
+  }
   if (argc > 1 && !strcmp(argv[1], "credencial")) {
     // O servidor recusa a credencial: a primeira tentativa sai, as seguintes
     // (renovacao do token, proximo ciclo) nao voltam a perguntar.
@@ -321,6 +372,8 @@ int main(int argc, char **argv) {
       free(p1); free(g); }
     confere("home do 2 ainda nao pronta com o ciclo do 1 no ar", !sync_perfil_pronto());
     sync_iniciar();                    // app.c, ramo da escolha: fio vivo
+    confere("historico muda antes da resposta do perfil anterior",
+            historicoPerfil == 2 && !strcmp(historicoDono, "conta-a"));
     pthread_mutex_lock(&trava);
     segurarCol = 0;
     pthread_cond_broadcast(&sinal);

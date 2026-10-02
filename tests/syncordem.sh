@@ -52,4 +52,5 @@ echo "$SAIDA" | grep -qF '[sync] ciclo do perfil 1 descartado' \
 sessao credencial
 echo "$SAIDA" | grep -qF 'nao tento de novo nesta sessao' \
   || { echo "FALHOU: sessao 8 nao anotou a recusa"; exit 1; }
+sessao addons
 echo "syncordem.sh: ok"
