@@ -168,8 +168,19 @@ typedef struct {
   int visto;
 } CatHistorico;
 
-static CatHistorico historico[CAT_MAX];
+// TETO PROPRIO, e nao CAT_MAX (#212). A tabela agora recebe o mapa INTEIRO de
+// filmes vistos do Trakt (/sync/watched/movies, trakt.c), e quem assiste muito
+// passa de 2000 filmes; o catalogo nao tem nada com isso.
+#define HIST_MAX 8192
+// INDICE POR HASH (#212): o selo de visto e lido por cartaz, por quadro, e a
+// busca linear de antes (ate HIST_MAX strcmp por cartaz) custaria fps numa
+// fileira cheia. Endereçamento aberto, 2x a capacidade; cada balde guarda
+// posicao+1 (0 = vazio). A entrada e escrita inteira ANTES de o balde ser
+// publicado, entao o fio de desenho nunca le uma entrada pela metade.
+#define HIST_BALDES (HIST_MAX * 2)
+static CatHistorico historico[HIST_MAX];
 static int nHistorico;
+static int histBalde[HIST_BALDES];
 
 static void id_base(const char *origem, char *destino, size_t tam) {
   size_t n = 0;
@@ -186,17 +197,34 @@ static const char *tipo_base(const char *tipo) {
   return "movie";
 }
 
+static unsigned hist_hash(const char *id, const char *tipo) {
+  unsigned h = 2166136261u;
+  while (*id) { h ^= (unsigned char)*id++; h *= 16777619u; }
+  h ^= (unsigned char)tipo[0];
+  h *= 16777619u;
+  return h;
+}
+
 static int historico_pos(const char *imdb, const char *tipo, int criar) {
   char id[32];
-  int i;
+  const char *tb = tipo_base(tipo);
+  unsigned b;
+  int k;
   id_base(imdb, id, sizeof id);
   if (!id[0]) return -1;
-  for (i = 0; i < nHistorico; i++)
-    if (!strcmp(historico[i].imdb, id) &&
-        !strcmp(historico[i].tipo, tipo_base(tipo))) return i;
-  if (!criar || nHistorico >= CAT_MAX) return -1;
+  b = hist_hash(id, tb) % HIST_BALDES;
+  for (k = 0; k < HIST_BALDES; k++, b = (b + 1) % HIST_BALDES) {
+    int v = __atomic_load_n(&histBalde[b], __ATOMIC_ACQUIRE);
+    if (!v) break;
+    if (!strcmp(historico[v - 1].imdb, id) && !strcmp(historico[v - 1].tipo, tb))
+      return v - 1;
+  }
+  if (!criar || nHistorico >= HIST_MAX || k >= HIST_BALDES) return -1;
   snprintf(historico[nHistorico].imdb, sizeof historico[nHistorico].imdb, "%s", id);
-  snprintf(historico[nHistorico].tipo, sizeof historico[nHistorico].tipo, "%s", tipo_base(tipo));
+  snprintf(historico[nHistorico].tipo, sizeof historico[nHistorico].tipo, "%s", tb);
+  historico[nHistorico].conhecido = 0;
+  historico[nHistorico].visto = 0;
+  __atomic_store_n(&histBalde[b], nHistorico + 1, __ATOMIC_RELEASE);
   return nHistorico++;
 }
 
@@ -225,8 +253,32 @@ int cat_historico_estado_id(const char *imdb, const char *tipo) {
 void cat_historico_definir_id(const char *imdb, const char *tipo, int visto) {
   int p = historico_pos(imdb, tipo, 1);
   if (p < 0) return;
-  historico[p].conhecido = 1;
+  if (historico[p].conhecido && historico[p].visto == (visto ? 1 : 0)) return;
   historico[p].visto = visto ? 1 : 0;
+  historico[p].conhecido = 1;
+  mudou();   // a home e o detalhe redesenham o selo (cat_revisao_itens)
+}
+
+// O ESTADO "VISTO" DE UM TITULO INTEIRO, para o selo do cartaz e o olho do
+// detalhe (#212). Antes os dois liam so `progresso >= 90` — a posicao de
+// retomada, que o Trakt so manda para o que esta PAUSADO. Filme terminado em
+// outro aparelho, ou marcado pelo menu, nunca tinha progresso aqui: o selo
+// nao aparecia e o olho ficava riscado em todo titulo (medido no log da #212:
+// "historico add ... HTTP 201" e nada na tela).
+//
+// Ordem: historico conhecido (Trakt /sync/watched/movies, /sync/history, conta
+// Nuvio, a acao da pessoa) manda — inclusive o "nao visto" de quem desmarcou;
+// sem ele, o progresso de sempre (so filme). Leitura O(1): o hash acima.
+int cat_visto(const CatItem *c) {
+  int h;
+  if (!c) return 0;
+  h = c->imdb[0] ? cat_historico_estado_id(c->imdb, c->tipo) : -1;
+  if (h >= 0) return h;
+  // SERIE sem historico: nao visto. O progresso de um item de serie e de UM
+  // episodio, nao da serie; quem decide a serie inteira e o historico, que
+  // extras.c escreve com os contadores de /shows/<id>/progress/watched.
+  if (!strcmp(tipo_base(c->tipo), "series")) return 0;
+  return c->progresso >= 90;
 }
 
 // Compatibilidade para chamadores antigos que so conhecem o IMDb. A serie e

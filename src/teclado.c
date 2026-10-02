@@ -6,6 +6,11 @@
 #include "layout.h"
 #include "ajustes.h"
 #include "idioma.h"
+#include "sistexto.h"
+#include "ponteiro.h"
+#include "celbotao.h"
+#include <ctype.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -77,12 +82,20 @@
 #define TE_RODAPE    64.0f
 #define TE_W        (gradeW() + TE_PAD * 2.0f)
 
+// DIGITAR PELO CELULAR (celbotao.h): era um painel fixo de 440 px a direita
+// da modal, com o QR sempre a vista. Virou o MESMO botao do Spotlight e da
+// Busca, ao lado do campo (depois do Falar): um so gesto em todo o app, a
+// modal volta a ser centrada e da largura da grade, e o servidor so sobe
+// quando a pessoa pede (OK no botao), nao a cada teclado aberto.
 #define TE_X        ((NV_TELA_W - TE_W) * 0.5f)
 
 
 static const char *ALFABETO = "abcdefghijklmnopqrstuvwxyz0123456789";
 
+// fileira -1 = a BARRA do campo: coluna 0 o campo (OK chama o teclado da TV),
+// coluna 1 o Falar (os dois so com sistexto.h), coluna 2 o celular.
 static int   aberto, fileira, coluna;
+static float animBarra[3];
 // Coluna de caractere de onde o foco desceu para apagar/limpar/pronto. Sem ela,
 // subir de "pronto" (coluna 2) numa grade de 13 caia no 'c', a dez teclas de
 // onde a pessoa estava; com ela, volta para a mesma tecla.
@@ -95,6 +108,14 @@ static int   nCols = TE_COLS;
 static float gradeW(void) {
   return (float)nCols * TE_TECLA + (float)(nCols - 1) * TE_GAP;   // 504 com 6
 }
+// O campo perde a largura do botao Falar onde ha voz.
+#define TE_MIC_D (TE_CY - 12.0f)
+static float campoW(void) {
+  return gradeW() - (st_voz_disponivel() ? TE_MIC_D + 14.0f : 0.0f) -
+         (celb_disponivel() ? TE_MIC_D + 14.0f : 0.0f);
+}
+// A barra existe como destino do foco se tiver algum alvo.
+static int temBarra(void) { return st_ime_disponivel() || celb_disponivel(); }
 
 // A altura da modal depende de quantas fileiras o alfabeto pediu, entao as tres
 // medidas que dela dependem viraram funcao. Continuam sendo a mesma conta.
@@ -107,9 +128,11 @@ static const char *alfa(void) { return alfabetoAtual ? alfabetoAtual : ALFABETO;
 static char  texto[TECLADO_LONGO + 1];
 static int   n, maxN, resultado;
 static char  tituloAtual[96], dicaAtual[160];
+static int   celRecebido;
 
 const char *teclado_alfabeto(void) { return ALFABETO; }
 int teclado_aberto(void) { return aberto; }
+int teclado_foco_campo(void) { return fileira < 0 ? coluna + 1 : 0; }
 const char *teclado_texto(void) { return texto; }
 
 int teclado_resultado(void) {
@@ -155,7 +178,40 @@ void teclado_abrir_com(const char *titulo, const char *dica, int max,
   snprintf(tituloAtual, sizeof tituloAtual, "%s", titulo ? titulo : "");
   snprintf(dicaAtual,   sizeof dicaAtual,   "%s", dica   ? dica   : "");
   memset(focoAnim, 0, sizeof focoAnim);
+  animBarra[0] = animBarra[1] = animBarra[2] = 0.0f;
+  celRecebido = 0;
 }
+
+// O texto do sistema passa pelo ALFABETO da modal: o codigo de pareamento e
+// a-z0-9, o MAC e 0-9a-f — caixa alta vira baixa quando so a baixa existe, e
+// o que nao existe nele (acento, emoji) fica de fora.
+static void definirDoSistema(const char *t) {
+  const char *a = alfa();
+  int w = 0;
+  for (; *t && w < maxN; t++) {
+    unsigned char c = (unsigned char)*t;
+    if (c >= 0x80 || !c) continue;
+    if (strchr(a, c)) texto[w++] = (char)c;
+    else if (isupper(c) && strchr(a, tolower(c))) texto[w++] = (char)tolower(c);
+    else if (islower(c) && strchr(a, toupper(c))) texto[w++] = (char)toupper(c);
+  }
+  texto[w] = 0;
+  n = w;
+}
+
+static void fechar(int r) {
+  aberto = 0;
+  celb_fechar_dono(CELB_TECLADO);
+  resultado = r;
+  st_fechar(ST_TECLADO);
+}
+
+static void okBarra(void) {
+  if (coluna == 2) { st_fechar(ST_TECLADO); celb_abrir(CELB_TECLADO, tituloAtual); }
+  else if (coluna == 1) st_voz_iniciar(ST_TECLADO);
+  else st_ime_abrir(ST_TECLADO, texto, maxN);
+}
+static void focarBarra(int c, int b) { (void)b; fileira = -1; coluna = c; }
 
 static int colunasDe(int f) {
   int n;
@@ -198,21 +254,36 @@ static void aplicar(void) {
   // sem digitar quis olhar o teclado, e fechar a modal com resultado PRONTO
   // mandaria a tela de amigos tentar vincular uma string vazia.
   if (n < 1) return;
-  aberto = 0;
-  resultado = TECLADO_PRONTO;
+  fechar(TECLADO_PRONTO);
 }
 
 void teclado_evento(const SDL_Event *e) {
   SDL_Keycode k;
+  if (aberto && st_evento(e)) return;   // teclado da TV: valor inteiro por sistexto
   if (!aberto || e->type != SDL_KEYDOWN) return;
   k = e->key.keysym.sym;
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
       k == SDLK_DELETE || e->key.keysym.scancode == NV_SCANCODE_BACK) {
-    aberto = 0;
-    resultado = TECLADO_CANCELOU;
+    fechar(TECLADO_CANCELOU);
+    return;
+  }
+  if (fileira < 0) {
+    if (k == SDLK_DOWN) { fileira = 0; coluna = colunaAntes < colunasDe(0) ? colunaAntes : 0; }
+    // DIREITA anda campo -> Falar -> Celular, o que existir aqui.
+    else if (k == SDLK_RIGHT && coluna == 0 && st_voz_disponivel()) coluna = 1;
+    else if (k == SDLK_RIGHT && coluna < 2 && celb_disponivel()) coluna = 2;
+    else if (k == SDLK_LEFT && coluna == 2 && st_voz_disponivel()) coluna = 1;
+    else if (k == SDLK_LEFT && coluna >= 1 && st_ime_disponivel()) coluna = 0;
+    else if ((k == SDLK_RETURN || k == SDLK_KP_ENTER) && !e->key.repeat) okBarra();
     return;
   }
   if (k == SDLK_UP) {
+    // Cima da primeira fileira: o campo, onde ha teclado do sistema; sem ele
+    // (LG, Samsung), direto o botao do celular.
+    if (fileira == 0 && temBarra()) {
+      colunaAntes = coluna; fileira = -1; coluna = st_ime_disponivel() ? 0 : 2;
+      return;
+    }
     if (fileira > 0) {
       if (fileira == nFileiras - 1) coluna = colunaAntes;
       fileira--;
@@ -240,6 +311,32 @@ void teclado_evento(const SDL_Event *e) {
 void teclado_atualizar(float dt, Uint32 agora) {
   int f, c;
   (void)agora;
+  if (aberto) {
+    char t[TECLADO_LONGO + 1];
+    int voz = st_estado() == ST_OUVINDO || st_estado() == ST_PERMISSAO || st_estado() == ST_VOZ_SISTEMA;
+    int r;
+    if (celb_pegar(CELB_TECLADO, t, sizeof t)) {
+      // O texto do celular e o VALOR INTEIRO do campo, como o do teclado da
+      // TV: passa pelo mesmo filtro de alfabeto. Nao confirma sozinho — a
+      // pessoa ve o que chegou, e o foco vai para "pronto": um OK salva.
+      st_fechar(ST_TECLADO);
+      definirDoSistema(t);
+      memset(t, 0, sizeof t);
+      celRecebido = 1;
+      fileira = nFileiras - 1; coluna = 2;
+    }
+    r = st_ler(ST_TECLADO, t, sizeof t);
+    if (r == ST_PEDE_TECLADO) { coluna = 0; st_ime_abrir(ST_TECLADO, texto, maxN); }
+    else if (r == ST_TEXTO || r == ST_FIM) {
+      definirDoSistema(t);
+      // "Concluir" no teclado da TV e o "pronto" da modal; o fim da FALA nao —
+      // a pessoa confere o que o reconhecedor entendeu antes de enviar.
+      if (r == ST_FIM && !voz && n > 0) fechar(TECLADO_PRONTO);
+    }
+  }
+  for (c = 0; c < 3; c++)
+    animBarra[c] = anim_mola(animBarra[c], (aberto && fileira < 0 && coluna == c) ? 1.0f : 0.0f,
+                             dt, NV_MOLA_FOCO);
   if (!aberto && anim < 0.002f) { anim = 0.0f; return; }
   anim = ajustes_animacoes_reduzidas()
            ? (aberto ? 1.0f : 0.0f)
@@ -287,11 +384,42 @@ void teclado_desenhar(Uint32 agora) {
   // com cursor, que e a forma certa para texto livre de qualquer tamanho. E a
   // fileira de casas vazias nao faz falta aqui — numa busca nao ha numero de
   // caracteres a completar.
-  if ((gradeW() - (float)(maxN - 1) * TE_CGAP) / (float)maxN >= TE_CX_MIN) {
-    float bw = (gradeW() - (float)(maxN - 1) * TE_CGAP) / (float)maxN;
+  { float ar, ag, ab, cw = campoW();
+    GfxRect zona = { TE_X + TE_PAD, teY() + dy + TE_CAIXA_Y, cw, TE_CY };
+    ajustes_acento(&ar, &ag, &ab);
+    // FOCO NO CAMPO (cima da primeira fileira, so com teclado do sistema).
+    if (animBarra[0] > 0.01f)
+      gfx_vidro_aro((GfxRect){ zona.x - 8, zona.y - 8, zona.w + 16, zona.h + 16 }, NV_RAIO_CARD, 2.5f,
+                    ar, ag, ab, 0.95f * animBarra[0] * a);
+    if (st_ime_disponivel() && ponteiro_ativo())
+      ponteiro_alvo(zona.x, zona.y, zona.w, zona.h, focarBarra, NULL, 0, 0);
+    // FALAR, ao lado do campo.
+    if (st_voz_disponivel()) {
+      float d = TE_MIC_D, mx = zona.x + zona.w + 14.0f, my = zona.y + (zona.h - d) * 0.5f;
+      int ouve = st_dono() == ST_TECLADO && (st_estado() == ST_OUVINDO || st_estado() == ST_PERMISSAO ||
+                                              st_estado() == ST_VOZ_SISTEMA);
+      float k = ouve ? 1.0f : animBarra[1];
+      if (ponteiro_ativo()) ponteiro_alvo(mx, my, d, d, focarBarra, NULL, 1, 0);
+      if (k > 0.01f)
+        gfx_rect((GfxRect){ mx - 12, my - 12, d + 24, d + 24 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
+                 ar, ag, ab, (ouve ? 0.25f + 0.4f * st_nivel() : 0.3f) * k * a);
+      gfx_cor((GfxRect){ mx, my, d, d }, 0.5f, anim_mistura(0.18f, ar, k), anim_mistura(0.185f, ag, k),
+              anim_mistura(0.205f, ab, k), a);
+      { int t = k > 0.5f ? ajustes_tinta_foco() : 220;
+        gfx_icone((GfxRect){ mx + d * 0.27f, my + d * 0.27f, d * 0.46f, d * 0.46f }, "aj_mic",
+                  t / 255.0f, t / 255.0f, t / 255.0f, a); }
+    }
+    // CELULAR, o ultimo da barra (celbotao.h).
+    if (celb_disponivel()) {
+      float d = TE_MIC_D, mx = TE_X + TE_PAD + gradeW() - d, my = zona.y + (zona.h - d) * 0.5f;
+      celb_botao(CELB_TECLADO, (GfxRect){ mx, my, d, d }, aberto && fileira < 0 && coluna == 2,
+                 focarBarra, 2, 0, a);
+    } }
+  if ((campoW() - (float)(maxN - 1) * TE_CGAP) / (float)maxN >= TE_CX_MIN) {
+    float bw = (campoW() - (float)(maxN - 1) * TE_CGAP) / (float)maxN;
     float bx, by = teY() + dy + TE_CAIXA_Y;
     if (bw > TE_CX) bw = TE_CX;
-    bx = TE_X + (TE_W - ((float)maxN * bw + (float)(maxN - 1) * TE_CGAP)) * 0.5f;
+    bx = TE_X + TE_PAD + (campoW() - ((float)maxN * bw + (float)(maxN - 1) * TE_CGAP)) * 0.5f;
     for (i = 0; i < maxN; i++) {
       GfxRect b = { bx, by, bw, TE_CY };
       char ch[2];
@@ -312,7 +440,7 @@ void teclado_desenhar(Uint32 agora) {
     }
   } else {
     GfxRect campo = { TE_X + TE_PAD, teY() + dy + TE_CAIXA_Y,
-                      gradeW(), TE_CY };
+                      campoW(), TE_CY };
     float tx = campo.x + TE_CAMPO_PAD, cursorX = tx;
     gfx_cor(campo, NV_RAIO_CARD, 1.0f, 1.0f, 1.0f, 0.07f * a);
     if (n) {
@@ -379,7 +507,15 @@ void teclado_desenhar(Uint32 agora) {
     }
   }
 
-  { TxtLinha t = txt_linha(TXT_CAPTION2,
-        "Setas Navegar   OK Digitar   Voltar Cancelar", 155, 159, 169, 255);
+  { const char *av = st_dono() == ST_TECLADO ? st_aviso() : "";
+    const char *d = av[0] ? av
+      : celRecebido && fileira == nFileiras - 1 ? "Recebido do celular. Confira e aperte Pronto."
+      : fileira < 0 ? (coluna == 2 ? "OK Digitar pelo celular   Baixo Teclado   Voltar Cancelar"
+                     : coluna == 1 ? "OK Falar   Baixo Teclado   Voltar Cancelar"
+                                   : "OK Teclado da TV   Baixo Teclado   Voltar Cancelar")
+      : st_ime_disponivel() ? "Setas Navegar   OK Digitar   Cima Teclado da TV"
+      : celb_disponivel() ? "Setas Navegar   OK Digitar   Cima Celular"
+      : "Setas Navegar   OK Digitar   Voltar Cancelar";
+    TxtLinha t = txt_linha(TXT_CAPTION2, d, av[0] ? 240 : 155, av[0] ? 196 : 159, av[0] ? 140 : 169, 255);
     txt_desenhar_alpha(t, x, teY() + dy + teH() - TE_PAD - t.h, a * 0.86f); }
 }

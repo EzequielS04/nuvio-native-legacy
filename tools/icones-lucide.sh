@@ -46,7 +46,7 @@ SVG="$DIR/lucide"
 NOMES="
 circle-play database file-text folders gallery-vertical-end house
 images info layout-dashboard list-checks monitor-cog palette panel-top plug puzzle
-rotate-ccw-clock rows-3 scan star user-round mic keyboard
+rotate-ccw-clock rows-3 scan star user-round mic keyboard smartphone
 "
 # Conferencia: todo aj_* citado em src/ tem de estar em NOMES, e todo NOMES
 # tem de ser citado — senao sobra PNG morto no pacote ou falta icone na tela

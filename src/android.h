@@ -17,10 +17,12 @@ int android_pedir_superficie(int w, int h);
 // FileProvider). 1 = instalador aberto, 2 = falta a permissao de instalar apps
 // desta fonte (a tela dela foi aberta), 0 = falhou. Chamar do fio do SDL.
 int android_instalar_apk(const char *caminho);
-// Ditado do Spotlight: abre a tela de voz do sistema (RecognizerIntent). 1 se
-// abriu, 0 se o aparelho nao tem reconhecedor. Depois, a cada quadro,
-// android_ditado_ler: -1 ainda ouvindo, 0 voltou sem texto, 1 texto em dst.
-int android_ditado_iniciar(void);
-int android_ditado_ler(char *dst, size_t n);
+// Texto do sistema (sistexto.h). Teclado do sistema com `inicial` no campo;
+// voz no idioma dado ("pt-BR"); fechar os dois; e o proximo evento da fila do
+// NuvioActivity (1 = veio um em dst). O formato dos eventos esta em sistexto.c.
+int  android_st_teclado(const char *inicial, int max);
+int  android_st_ditar(const char *idioma);
+void android_st_fechar(void);
+int  android_st_evento(char *dst, size_t n);
 #endif
 #endif

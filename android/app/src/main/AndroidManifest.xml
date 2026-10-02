@@ -6,11 +6,20 @@
     <!-- Para a auto-atualizacao instalar o APK baixado (fase seguinte). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Ditado dentro do app (SpeechRecognizer, src/sistexto.h): pedida em
+         tempo de execucao no primeiro uso do microfone. Negada, o app cai na
+         tela de voz do sistema, que grava por conta propria. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- Android 11+: sem isto resolveActivity nao enxerga a tela de voz do
          sistema e o ditado do Spotlight diria "sem reconhecedor" em toda TV. -->
     <queries>
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <!-- e sem isto SpeechRecognizer.isRecognitionAvailable diz false -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 

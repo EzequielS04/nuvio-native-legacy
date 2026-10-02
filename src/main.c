@@ -65,9 +65,11 @@
 #include "player.h"
 #include "trailer.h"
 #include "ponteiro.h"
+#include "entrada_texto.h"
 #include "gif.h"
 #include "idioma.h"
 #include "idiomaauto.h"
+#include "abertura.h"
 // O idioma AUTOMATICO da interface mudou depois do arranque (a conta chegou, ou
 // a TV respondeu o locale). Titulos e generos das fileiras saem no idioma novo,
 // e a pessoa fica sabendo por que a tela trocou sozinha — uma vez por idioma
@@ -260,6 +262,15 @@ static void teclasInjetadas(void (*entregar)(const SDL_Event *)) {
     // "abrir:tt0121955" abre o titulo direto (app.c). Porta de teste, como
     // "guia".
     if (dp && !strncmp(linha, "abrir:", 6)) { app_abrir_titulo(dp + 1); continue; }
+    // "ime:abrir", "ime:voz", "ime:fechar": teclado do sistema direto
+    // (entrada_texto.h), para medir na TV sem depender da tela que o liga.
+    if (dp && !strncmp(linha, "ime:", 4)) {
+      if (!strcmp(dp + 1, "fechar")) texto_sistema_fechar();
+      else texto_sistema_abrir("", !strcmp(dp + 1, "voz"));
+      printf("[texto] porta de teste: %s (disponivel=%d)\n", dp + 1, texto_sistema_disponivel());
+      fflush(stdout);
+      continue;
+    }
     // "texto:matrix" digita letra por letra (a-z, 0-9; "_" e espaco), como o
     // teclado fisico: e o que o Spotlight e a Busca aceitam fora da grade.
     if (dp && !strncmp(linha, "texto:", 6)) {
@@ -753,6 +764,9 @@ int main(int argc, char **argv) {
   marco("gfx_iniciar");
   if (!gfx_iniciar()) { printf("[arranque] gfx_iniciar FALHOU\n"); fflush(stdout); return 1; }
   printf("[arranque] gfx_iniciar ok\n"); fflush(stdout);
+  // A marca da abertura (#213), ANTES do primeiro quadro: ele ja nasce com ela,
+  // no lugar em que o splash do sistema a deixou.
+  abertura_iniciar(dirArte);
 #ifdef __EMSCRIPTEN__
   // O ARRANQUE CEDE AO NAVEGADOR EM DOIS PONTOS (24/09/2026). Do topo do main
   // ate o primeiro quadro era UMA tarefa so do fio principal: 1,0 a 3,4 s nos
@@ -932,6 +946,8 @@ int main(int argc, char **argv) {
     // continua desenhada por baixo, mas nao deve reagir ao D-pad.
     while (SDL_PollEvent(&e)) {
       ponteiro_diag(&e);
+      // Teclado do sistema (entrada_texto.h): ve o texto ANTES de qualquer tela.
+      texto_sistema_observar(&e);
       if (e.type == SDL_WINDOWEVENT) {
         // Ultimo sinal de vida na marca de sessao (avisos_sinal): e o que diz,
         // na abertura seguinte, se a sessao que "nao se despediu" tinha ido
@@ -982,7 +998,8 @@ int main(int argc, char **argv) {
       // Com canal na tela (guia, canal ao vivo, canal no canto) sao CH+/CH- de
       // verdade, com os scancodes do webOS que guia.c, player.c e app.c ja
       // tratam. Fora disso fazem o papel das teclas que o controle Android nao
-      // tem: CH+ = AZUL (Salvos), CH- = VERMELHA (registro).
+      // tem: CH+ = AZUL (Salvos), CH- = Spotlight (F5, SPOT_TECLA_ABRIR). O
+      // registro foi para a tecla Info (NuvioActivity: KEYCODE_INFO -> F9).
       if ((e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) &&
           (e.key.keysym.sym == SDLK_F7 || e.key.keysym.sym == SDLK_F8)) {
         int sobe = e.key.keysym.sym == SDLK_F7;
@@ -990,8 +1007,8 @@ int main(int argc, char **argv) {
           e.key.keysym.scancode = (SDL_Scancode)(sobe ? NV_SCANCODE_CH_UP : NV_SCANCODE_CH_DOWN);
           e.key.keysym.sym = sobe ? SDLK_PAGEUP : SDLK_PAGEDOWN;
         } else {
-          e.key.keysym.scancode = sobe ? SDL_SCANCODE_S : SDL_SCANCODE_F9;
-          e.key.keysym.sym = sobe ? SDLK_s : SDLK_F9;
+          e.key.keysym.scancode = sobe ? SDL_SCANCODE_S : SDL_SCANCODE_F5;
+          e.key.keysym.sym = sobe ? SDLK_s : SDLK_F5;
         }
       }
 #endif
@@ -1008,6 +1025,7 @@ int main(int argc, char **argv) {
       // vez de exigir uma build instrumentada de proposito. Cada scancode sai
       // UMA vez por sessao: um controle de TV repete a tecla sozinho e um log
       // por evento afogaria o resto.
+      if (e.type == SDL_KEYDOWN) abertura_tecla();   // a pessoa quer entrar: a marca sai
       if (e.type == SDL_KEYDOWN) {
         static unsigned char visto[512];
         SDL_Scancode sc = e.key.keysym.scancode;
@@ -1028,6 +1046,7 @@ int main(int argc, char **argv) {
       app_evento(&e);
     }
     teclasInjetadas(app_evento);
+    texto_sistema_quadro();
     fEv = NV_DT(tEv);
 
     Uint32 agora = SDL_GetTicks();
@@ -1163,6 +1182,12 @@ int main(int argc, char **argv) {
     txt_novo_quadro();
     ponteiro_quadro(agora);
     app_desenhar(agora);
+    // A abertura (#213) cobre os primeiros quadros, com a home montando por baixo.
+    if (abertura_ativa()) {
+      int pend = 0;
+      tex_estatisticas(NULL, &pend, NULL, NULL, NULL);
+      abertura_desenhar(agora, dt, pend);
+    }
     ponteiro_desenhar();
     // GIF QUE NINGUEM DESENHOU ha 1,5 s sai da memoria (tela de perfis
     // fechada, foco fora do cartaz). Ver gif_ocioso em gif.h.

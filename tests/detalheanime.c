@@ -34,9 +34,11 @@ int   ajustes_cw_ordem(void)               { return 0; }   // Padrao (issue #127
 int   ajustes_cw_mostrar_nao_exibidos(void) { return 1; }
 const char *i18n(const char *s)         { return s; }
 const char *idioma_mes_data(int mes, const char *nomePt) { (void)mes; return nomePt; }
-const char *dados_dir(void)             { return ""; }
+static const char *fakeDados = "";
+const char *dados_dir(void)             { return fakeDados; }
 const char *sessao_usuario(void)        { return ""; }
-int         perfis_ativo(void)          { return 1; }
+static int fakePerfil = 1;
+int         perfis_ativo(void)          { return fakePerfil; }
 int   ajustes_itens_fileira(void)          { return 12; }   // padrao (#163)
 unsigned homeestado_geracao(void) { return 1; }
 int homeestado_contexto_valido(void) { return 0; }
@@ -71,7 +73,8 @@ int   ajustes_meta_so_cinemeta(void)        { return fakeSoCinemeta; }
 int   ajustes_fundo_addon(void)            { return 0; }
 int   ajustes_logo_addon(void)             { return 0; }
 int   ajustes_tmdb_basico(void)            { return fakeTmdbBasico; }
-int   ajustes_tmdb_arte(void)              { return 0; }
+static int fakeTmdbArte;
+int   ajustes_tmdb_arte(void)              { return fakeTmdbArte; }
 int   ajustes_tmdb_elenco(void)            { return 0; }
 int   ajustes_tmdb_cw(void)                { return 0; }
 static const char *fakeIdioma = "pt-BR";
@@ -1028,6 +1031,114 @@ int main(void) {
       }
       assert(!strcmp(cat_item(0)->sinopse, "Sinopse pt.")); }
     puts("ok  #209: Continuar/destaque em pt-BR: TMDB antes da ficha do addon");
+
+    // 31) ISSUE #213 (LG G5, 1.7.0, AIOMetadata em russo): o destaque do
+    //     arranque mostra o Continuar do Trakt com logo/fundo do metahub
+    //     (ingles). A volta de localizacao traz a ARTE do addon de metadados
+    //     primeiro; o texto segue o #209 (TMDB no idioma antes do addon).
+    limparCacheMeta(); nRotas = 0;
+    memset(locCache, 0, sizeof locCache);
+    fakeIdioma = "ru-RU";
+    fakeTmdbArte = 1;
+    addonResp = "{\"meta\":{\"id\":\"tt13293588\",\"type\":\"series\","
+                "\"_providerArt\":{\"logo\":\"https://tmdb.test/en.png\"},"
+                "\"name\":\"Реинкарнация безработного\","
+                "\"logo\":\"https://addon.test/logo-ru.png\","
+                "\"background\":\"https://addon.test/fundo-ru.jpg\",\"videos\":[]}}";
+    rota("themoviedb.org/3/tv/555?",
+         "{\"id\":555,\"name\":\"Реинкарнация (TMDB)\",\"overview\":\"Синопсис.\","
+         "\"images\":{\"logos\":[{\"iso_639_1\":\"ru\",\"file_path\":\"/ru.png\"}]}}");
+    { CatItem it[1];
+      memset(it, 0, sizeof it);
+      snprintf(it[0].imdb, sizeof it[0].imdb, "tt13293588:1:2");
+      snprintf(it[0].tipo, sizeof it[0].tipo, "series");
+      snprintf(it[0].titulo, sizeof it[0].titulo, "Mushoku Tensei: Jobless Reincarnation");
+      snprintf(it[0].logo, sizeof it[0].logo, "https://images.metahub.space/logo/medium/tt13293588/img");
+      snprintf(it[0].backdrop, sizeof it[0].backdrop, "https://images.metahub.space/background/medium/tt13293588/img");
+      it[0].poster[0] = 'x';
+      cat_definir_tudo(it, 1, NULL, 0);
+      desc_localizar_indices((int[]){ 0 }, 1);
+      while (locVivo) usleep(2000);
+      assert(pediu("include_image_language=ru"));
+      assert(!strcmp(cat_item(0)->titulo, "Реинкарнация (TMDB)"));
+      if (strcmp(cat_item(0)->logo, "https://addon.test/logo-ru.png") ||
+          strcmp(cat_item(0)->backdrop, "https://addon.test/fundo-ru.jpg")) {
+        printf("FALHOU #213 arte: logo '%s' fundo '%s'\n", cat_item(0)->logo, cat_item(0)->backdrop);
+        return 1;
+      } }
+    puts("ok  #213: Continuar/destaque: logo e fundo do addon de metadados (raiz), texto do #209");
+
+    // 31b) Addon sem logo: o logo do TMDB no idioma entra; o fundo do addon fica.
+    limparCacheMeta();
+    memset(locCache, 0, sizeof locCache);
+    addonResp = "{\"meta\":{\"id\":\"tt13293588\",\"type\":\"series\",\"name\":\"X\","
+                "\"background\":\"https://addon.test/fundo-ru.jpg\",\"videos\":[]}}";
+    { CatItem it[1];
+      memset(it, 0, sizeof it);
+      snprintf(it[0].imdb, sizeof it[0].imdb, "tt13293588");
+      snprintf(it[0].tipo, sizeof it[0].tipo, "series");
+      snprintf(it[0].titulo, sizeof it[0].titulo, "Mushoku Tensei");
+      it[0].poster[0] = 'x';
+      cat_definir_tudo(it, 1, NULL, 0);
+      desc_localizar_indices((int[]){ 0 }, 1);
+      while (locVivo) usleep(2000);
+      assert(!strcmp(cat_item(0)->logo, "https://image.tmdb.org/t/p/w500/ru.png")); }
+    puts("ok  #213: sem logo no addon, o do TMDB no idioma");
+
+    // 31c) O QUE FOI LOCALIZADO VAI AO DISCO, e a abertura seguinte pinta o
+    //      Continuar ja no idioma, sem rede (o ingles de 1-2 s do relato).
+    { char dir[] = "/tmp/nuvio-loc-XXXXXX", arq[600];
+      CatItem it[1];
+      FILE *f;
+      assert(mkdtemp(dir));
+      fakeDados = dir;
+      limparCacheMeta();
+      memset(locCache, 0, sizeof locCache);
+      locDiscoLido = 0;
+      memset(it, 0, sizeof it);
+      snprintf(it[0].imdb, sizeof it[0].imdb, "tt13293588");
+      snprintf(it[0].tipo, sizeof it[0].tipo, "series");
+      snprintf(it[0].titulo, sizeof it[0].titulo, "Mushoku Tensei");
+      snprintf(it[0].sinopse, sizeof it[0].sinopse, "English plot\twith tab");
+      it[0].poster[0] = 'x';
+      cat_definir_tudo(it, 1, NULL, 0);
+      desc_localizar_indices((int[]){ 0 }, 1);
+      while (locVivo) usleep(2000);
+      snprintf(arq, sizeof arq, "%s/loc-texto.txt", dir);
+      f = fopen(arq, "r"); assert(f); fclose(f);
+      // "Nova abertura": memoria zerada, nenhuma rede.
+      memset(locCache, 0, sizeof locCache);
+      locDiscoLido = 0;
+      nPedidos = 0;
+      cat_definir_tudo(it, 1, NULL, 0);
+      assert(desc_localizar_catalogo_cache() == 1);
+      assert(nPedidos == 0);
+      assert(!strcmp(cat_item(0)->titulo, "Реинкарнация (TMDB)"));
+      assert(!strcmp(cat_item(0)->sinopse, "Синопсис."));
+      assert(!strcmp(cat_item(0)->logo, "https://image.tmdb.org/t/p/w500/ru.png"));
+      { CatItem cw = it[0];
+        assert(aplicarLocCache(&cw, 1) == 1 && !strcmp(cw.titulo, "Реинкарнация (TMDB)")); }
+      // A entrada do disco pinta, mas a rede ainda refaz uma vez na sessao.
+      desc_localizar_indices((int[]){ 0 }, 1);
+      while (locVivo) usleep(2000);
+      assert(pediu("themoviedb.org/3/tv/555?"));
+      puts("ok  #213: texto/arte localizados no disco: o primeiro quadro ja no idioma");
+
+      // 31d) Arquivo de outro perfil e descartado (arte de addon pode levar config).
+      memset(locCache, 0, sizeof locCache);
+      locDiscoLido = 0;
+      fakePerfil = 2;
+      cat_definir_tudo(it, 1, NULL, 0);
+      assert(desc_localizar_catalogo_cache() == 0);
+      assert(!strcmp(cat_item(0)->titulo, "Mushoku Tensei"));
+      f = fopen(arq, "r"); assert(!f);
+      fakePerfil = 1;
+      puts("ok  #213: arquivo de outro perfil descartado");
+      desc_loc_apagar();
+      rmdir(dir);
+      fakeDados = ""; }
+    fakeTmdbArte = 0;
+
     tmdbFind = NULL; fakeTmdbBasico = 0; addonResp = NULL;
 
     nFake = 0; nRotas = 0; addonMeta = 0;

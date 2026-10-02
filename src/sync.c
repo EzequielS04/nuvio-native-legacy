@@ -1201,6 +1201,8 @@ void sync_esquecer_usuario(void) {
   // O cache tambem se recusa sozinho por nao bater o usuario no cabecalho, mas
   // recusar so serve a quem ABRE; apagar e o que tira o arquivo do aparelho.
   cat_apagar_cache();
+  // O texto/arte localizados guardados (loc-texto.txt, #213) tambem.
+  desc_loc_apagar();
   // O mapa de episodios vistos e da conta que saiu, como todo o resto.
   vistoep_esquecer();
   free(catHomeBlob);

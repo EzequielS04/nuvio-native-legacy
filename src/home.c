@@ -1632,7 +1632,12 @@ int home_iniciar(const char *dirArte) {
   // O cache da ULTIMA sessao entra por cima do catalogo do pacote, antes de
   // qualquer rede. Se nao existir (primeira execucao) ou for de outra build,
   // segue-se com o do pacote, como sempre foi.
-  if (cat_ler_cache(dirArte)) marco("catalogo do cache na tela");
+  // E com o texto/arte localizados que a sessao anterior ja buscou (#213): o
+  // Continuar gravado no cache podia ter saido antes da traducao.
+  if (cat_ler_cache(dirArte)) {
+    desc_localizar_catalogo_cache();
+    marco("catalogo do cache na tela");
+  }
   carregaDir(dirArte, bd, &nBd, NULL);
   carregaDir(dirArte, pst, &nPst, "poster");
   if (!nBd) { printf("home: nenhum backdrop em %s\n", dirArte); return 0; }
@@ -5049,7 +5054,14 @@ void home_desenhar(Uint32 agora) {
           // liam como um traco "—", nao como um check. Nao e o visto.png: esse
           // e um OLHO, o do botao "marcar como visto" do detalhe, e no disco
           // de 34 px virava um olho sobre o poster.
-          if (cItem && cItem->progresso >= 90 && tipo != FILEIRA_CONTINUE) {
+          //
+          // O ESTADO E cat_visto (#212), nao mais `progresso >= 90`: o
+          // progresso so existe para o que esta pausado, entao filme visto
+          // no Trakt (ou marcado pelo menu, que zera o progresso) nunca
+          // ganhava o selo. Leitura O(1) por cartaz (hash em catalogo.c),
+          // sem pedido de rede: o mapa ja veio no ciclo da descoberta.
+          if (cItem && tipo != FILEIRA_CONTINUE && tipo != FILEIRA_RETORNO &&
+              ajustes_selo_visto() && cat_visto(cItem)) {
             float d = 34.0f;
             float mx = px + w - d - 14.0f, my = py + 14.0f;
             GfxRect disco = { mx, my, d, d };

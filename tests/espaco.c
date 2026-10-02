@@ -55,12 +55,15 @@ static void dpadBusca(const char *s) {
 }
 
 // Spotlight: a troca de fileira escolhe a tecla mais perto pelo x, entao cada
-// letra parte do canto (ESQUERDA na coluna 0 nao faz nada aqui).
+// letra parte do canto (ESQUERDA na coluna 0 nao faz nada aqui). O teclado do
+// app so abre com OK no campo, e CIMA da primeira fileira volta ao campo: por
+// isso cada letra sobe ate o campo e desce uma para a primeira fileira.
 static void dpadSpot(const char *s) {
   int tf, tc;
+  tecla(SDLK_RETURN);                        // OK no campo: o teclado do app
   for (; *s; s++) {
     posicao(*s, &tf, &tc);
-    repetir(SDLK_UP, 8); repetir(SDLK_LEFT, 8);
+    repetir(SDLK_UP, 8); tecla(SDLK_DOWN); repetir(SDLK_LEFT, 8);
     repetir(SDLK_DOWN, tf); repetir(SDLK_LEFT, 8);
     repetir(SDLK_RIGHT, tc);
     tecla(SDLK_RETURN);

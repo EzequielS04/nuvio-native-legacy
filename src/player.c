@@ -69,9 +69,11 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "mkvass.h"
 #include "relogio.h"
 #include "intro.h"
+#include "seekr.h"
 #include "visto.h"     /* fim de episodio/filme para Simkl e conta */
 #include "vistoep.h"   /* o check de "assistido" na lista de episodios (issue #100) */
 #include "pausao.h"
+#include "relogiofim.h"
 #include "aovivo.h"
 #include "botoes.h"
 #include "recomenda.h"
@@ -1389,6 +1391,7 @@ void player_encerrar(void) {
     pausao_fechar();
     episodios_fechar();
     intro_desligar(); introIdx=introT=introE=-1;
+    seekr_desligar();
     // Antes do legenda_desligar: o fio do mkvass ainda entregaria um lote ao
     // overlay depois do desligamento, e o proximo titulo abriria com a legenda
     // do anterior. mkvass_parar grava o sidecar parcial com o que ja veio.
@@ -2002,6 +2005,7 @@ static void saltar(int dir) {
 static void terminarSalto(void) {
   if (!scrubbing) return;
   scrubbing = 0;
+  seekr_ocioso();   // solta a folha decodificada (~22 MB), fica o JPEG
   if (comVideo) {
     video_buscar(posSeg);
     if (scrubTocava) { video_pausar(0); tocando = 1; }
@@ -2322,6 +2326,14 @@ void player_atualizar(float dt, Uint32 agora) {
     { double bf = video_buffer_fim();
       mkvass_folga(bf > 0.5 ? bf - (double)posSeg : -1.0); }
     if (d > 1.0) duracaoSeg = (float)d;
+    // MINIATURAS DO SEEKR: so com a duracao REAL (o servico escolhe a versao
+    // da folha por ela) e uma vez por titulo — seekr_pedir ignora o repetido.
+    if (d > 60.0 && video_pronto() && !ehCanal() && ajustes_seekr_ligado()) {
+      const CatItem *cs = item();
+      if (cs && !strncmp(cs->imdb, "tt", 2))
+        seekr_pedir(cs->imdb, strcmp(cs->tipo, "series") ? 0 : epT,
+                    strcmp(cs->tipo, "series") ? 0 : epE, (long)(d * 1000.0));
+    }
     if (!retomadaAplicada && video_pronto() && d>1.0) {
       retomadaAplicada=1;
       if(retomarPct>0) video_buscar(d*retomarPct/100.0);
@@ -2491,6 +2503,51 @@ void player_atualizar(float dt, Uint32 agora) {
 
 // hh:mm:ss so quando passa de uma hora — "0:03:12" num episodio curto le como
 // erro de formatacao, nao como tempo.
+static void fmtTempo(char *b, size_t n, float seg, int negativo);
+// MINIATURA DO SEEKR acima da barra, so enquanto a pessoa procura (o avanco
+// em curso ou a barra ainda deslizando ate o alvo). Centrada na cabeca da
+// barra e presa as margens do conteudo. O tempo embaixo e o do QUADRO (cue),
+// nao o da posicao crua: o quadro existe a cada ~10 s, e chamar de 18:29 o
+// quadro das 18:30 seria uma pequena mentira (seekrvtt.h).
+static void seekrMiniatura(float bx, float bw, float frac, float yBarra, float a) {
+  GLuint t[3] = { 0, 0, 0 };
+  double cue[3] = { -1, -1, -1 };
+  int fita, n, k;
+  const float w = 384.0f, h = 216.0f, ws = 256.0f, hs = 144.0f, vao = 16.0f;
+  float x, y, xs[3], tot;
+  if (ehCanal() || !(scrubbing || posVisSolto) || a < 0.05f) return;
+  seekr_definir_ajuste_ms((long)ajustes_seekr_ajuste_s() * 1000L);
+  fita = ajustes_seekr_fita();
+  n = fita ? 3 : 1;
+  if (!seekr_quadros(posSeg, n, t, cue)) return;
+  // A fita: anterior e seguinte menores dos lados da atual. A largura total e
+  // o que se prende as margens, para a fita nunca sair da tela.
+  tot = fita ? w + 2.0f * (ws + vao) : w;
+  x = bx + bw * frac - tot * 0.5f;
+  if (x < PLR_MARGEM) x = PLR_MARGEM;
+  if (x + tot > bx + bw - PLR_MARGEM) x = bx + bw - PLR_MARGEM - tot;
+  y = yBarra - 28.0f - h;
+  if (fita) { xs[0] = x; xs[1] = x + ws + vao; xs[2] = xs[1] + w + vao; }
+  else xs[0] = x;
+  for (k = 0; k < n; k++) {
+    int atual = (n == 1 || k == 1);
+    float qw = atual ? w : ws, qh = atual ? h : hs;
+    float qx = xs[k], qy = atual ? y : y + (h - hs);
+    char rot[32];
+    if (!t[k] || cue[k] < 0) continue;
+    gfx_cor((GfxRect){ qx - 3.0f, qy - 3.0f, qw + 6.0f, qh + 6.0f }, 10.0f / (qh + 6.0f),
+            0.0f, 0.0f, 0.0f, 0.55f * a);
+    gfx_textura((GfxRect){ qx, qy, qw, qh }, t[k]);
+    gfx_anel((GfxRect){ qx, qy, qw, qh }, 0.0f, atual ? 2.0f : 1.0f, 1.0f, 1.0f, 1.0f,
+             (atual ? 0.85f : 0.35f) * a);
+    // O tempo e o do QUADRO, nao o da posicao (ver seekrvtt.h).
+    fmtTempo(rot, sizeof rot, (float)cue[k], 0);
+    { TxtLinha lt = txt_linha_corta(TXT_PLR_CORPO, rot, 255, 255, 255, atual ? 255 : 200, qw);
+      gfx_cor((GfxRect){ qx + (qw - lt.w) * 0.5f - 10.0f, qy + qh - lt.h - 12.0f, lt.w + 20.0f, lt.h + 6.0f },
+              0.5f, 0.0f, 0.0f, 0.0f, 0.60f * a);
+      txt_desenhar_alpha(lt, qx + (qw - lt.w) * 0.5f, qy + qh - lt.h - 9.0f, a); }
+  }
+}
 static void fmtTempo(char *b, size_t n, float seg, int negativo) {
   if (seg < 0.0f) seg = 0.0f;
   int t = (int)(seg + 0.5f);
@@ -3396,6 +3453,8 @@ void player_desenhar(Uint32 agora) {
     hTit = (float)lt.h;
     yTit = yMetaBase - hTit;
     txt_desenhar_alpha(lt, cx, yTit, ac); }
+  // Depois do titulo: a miniatura fica POR CIMA dele enquanto a pessoa procura.
+  seekrMiniatura(bx, bw, frac, yBarra, a);
 
   // --- fileira de BOTOES: o transporte do aparelho --------------------------
   // Sem botoes redundantes de salto. O foco percorre so as acoes visiveis.
@@ -3513,19 +3572,11 @@ void player_desenhar(Uint32 agora) {
     {
       time_t agoraT = time(NULL);
       struct tm lt;
-      char hora[8], fim[32];
+      char hora[8], fim[RELOGIO_FIM_MAX];
       localtime_r(&agoraT, &lt);
       strftime(hora, sizeof hora, "%H:%M", &lt);
-      { double falta = duracaoSeg - posSeg;
-        time_t t2 = agoraT + (time_t)(falta > 0.0 ? falta : 0.0);
-        struct tm lf; char h2[8];
-        localtime_r(&t2, &lf);
-        strftime(h2, sizeof h2, "%H:%M", &lf);
-        // i18n NO FORMATO: frase montada nao casa com chave. Escapou da
-        // primeira varredura do issue #12 porque o "a" com crase esta escrito
-        // como \xc3\xa0 e o literal esta partido em dois — a busca por palavra
-        // acentuada nao encontrava nenhum dos dois pedacos.
-        snprintf(fim, sizeof fim, i18n("Termina \xc3\xa0" "s %s"), h2); }
+      // fim[32] cortava o russo em "Заканчивается в 1" (issue #213).
+      relogio_fim(fim, sizeof fim, agoraT, duracaoSeg - posSeg);
       TxtLinha lh = txt_linha(TXT_PG_RELOGIO, hora, 255, 255, 255, 255);
       TxtLinha lf = txt_linha(TXT_PG_FIM, fim, 255, 255, 255, 255);
       txt_desenhar_alpha(lh, NV_TELA_W - PLR_PAD_X - lh.w, yRel, ac * 0.96f);

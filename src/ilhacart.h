@@ -23,6 +23,9 @@
 void ilhacart_player_saiu(int indice, double posSeg, double durSeg, int t, int e);
 // Toda tecla ou clique (app_evento): o relogio da ociosidade recomeca.
 void ilhacart_tecla(Uint32 agora);
+// Sobe a cada saida do player que POS o cartao: compare antes e depois de
+// player_encerrar para saber se ESTA saida virou atividade ao vivo.
+unsigned ilhacart_vivo_seq(void);
 // Por quadro. `imdbAberto` = o titulo com a pagina aberta agora, ou NULL.
 void ilhacart_atualizar(Uint32 agora, const char *imdbAberto);
 // O modal pediu para tirar o cartao (Fechar / Marcar como visto).

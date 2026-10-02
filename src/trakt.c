@@ -10,6 +10,7 @@
 #include "nuvem.h"
 #include "cwordem.h"
 #include "traktscrobble.h"
+#include "traktult.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -116,8 +117,11 @@ int trakt_credencial_igual(const char *tk, const char *cli) {
   return !strcmp(token, tk) && !strcmp(cliente, c);
 }
 
+// Marca do ultimo /sync/watched/movies aplicado (carregarFilmesVistos).
+static char filmesAtiv[40];
 int trakt_definir(const char *tk, const char *cli) {
   if (!tk || !*tk) return 0;
+  filmesAtiv[0] = 0;   // conta nova: o mapa de filmes vistos vem de novo
   snprintf(token, sizeof token, "%s", tk);
   if (cli && *cli) snprintf(cliente, sizeof cliente, "%s", cli);
   ligado = token[0] && cliente[0];
@@ -280,7 +284,7 @@ static void doBlocoTrakt(CatItem *d, const char *bloco, const char *fim,
 // CatItem, pelo motivo dito em `play[]`: sizeof(CatItem) e o cabecalho do
 // cache em disco.
 #define TK_ULT_MAX 64
-typedef struct { char imdb[24]; int temporada, episodio; long long quandoMs; } TkUltimo;
+// TkUltimo e a regra de empate: traktult.h (issue #213).
 static TkUltimo ult[TK_ULT_MAX];   // nUlt: ver trakt_esquecer
 // Os ids ("tt:S:E") dos itens "a seguir" desta rodada, para enfeitar() saber
 // que precisa CONFERIR que o episodio existe antes de publicar.
@@ -717,23 +721,18 @@ static void carregarHistoricoReal(const char *const *cab) {
       if (ep && ep < f) {
         // EPISODIO: nao marca a serie como vista (ver acima), mas anota o
         // ultimo visto de cada serie. O historico vem do mais recente para o
-        // mais antigo, entao a primeira ocorrencia de cada serie e a ultima.
+        // mais antigo; no EMPATE de instante (serie marcada inteira de uma
+        // vez) fica o maior episodio — tk_ult_anotar, issue #213.
         const char *sh = strstr(p, "\"show\"");
         char id[24] = "";
         if (sh && sh < f) js_texto(sh, js_fim(strchr(sh, '{')), "imdb", id, sizeof id);
-        if (id[0] && nUlt < TK_ULT_MAX) {
-          int k, ja = 0;
-          for (k = 0; k < nUlt; k++) if (!strcmp(ult[k].imdb, id)) { ja = 1; break; }
-          if (!ja) {
-            const char *fe = js_fim(strchr(ep, '{'));
-            char quando[40] = "";
-            snprintf(ult[nUlt].imdb, sizeof ult[nUlt].imdb, "%s", id);
-            ult[nUlt].temporada = (int)js_num(ep, fe, "season", 0);
-            ult[nUlt].episodio  = (int)js_num(ep, fe, "number", 0);
-            js_texto(p, f, "watched_at", quando, sizeof quando);
-            ult[nUlt].quandoMs = quando[0] ? js_ms_iso(quando) : 0;
-            nUlt++;
-          }
+        if (id[0]) {
+          const char *fe = js_fim(strchr(ep, '{'));
+          char quando[40] = "";
+          js_texto(p, f, "watched_at", quando, sizeof quando);
+          tk_ult_anotar(ult, &nUlt, TK_ULT_MAX, id,
+                        (int)js_num(ep, fe, "season", 0), (int)js_num(ep, fe, "number", 0),
+                        quando[0] ? js_ms_iso(quando) : 0);
         }
         p = js_prox(f);
         continue;
@@ -751,6 +750,101 @@ static void carregarHistoricoReal(const char *const *cab) {
     }
     p = js_prox(f);
   }
+  free(corpo);
+}
+
+// O "A SEGUIR" DO PROPRIO TRAKT (issue #213). O historico so diz o ultimo
+// episodio visto; quem sabe se ainda ha o que ver e /shows/<id>/progress/
+// watched (next_episode). Um GET por serie candidata, TK_FIOS em paralelo,
+// so para quem passou do filtro de playback. Falha de rede: fica o palpite do
+// historico, como antes (o enfeitar ainda confere no Cinemeta).
+typedef struct { int u, estado, t, e; } TarefaProx;
+static TarefaProx *proxTarefas;
+static int proxN, proxProx;
+static const char *const *proxCab;
+static pthread_mutex_t proxTrava = PTHREAD_MUTEX_INITIALIZER;
+
+static void *fioProximo(void *x) {
+  (void)x;
+  for (;;) {
+    int meu;
+    char url[160], *corpo;
+    pthread_mutex_lock(&proxTrava);
+    if (proxProx >= proxN) { pthread_mutex_unlock(&proxTrava); return NULL; }
+    meu = proxProx++;
+    pthread_mutex_unlock(&proxTrava);
+    snprintf(url, sizeof url,
+             "https://api.trakt.tv/shows/%s/progress/watched?hidden=false&specials=false",
+             ult[proxTarefas[meu].u].imdb);
+    corpo = rede_baixar_com(url, 8, proxCab);
+    proxTarefas[meu].estado = tk_prog_proximo(corpo, &proxTarefas[meu].t, &proxTarefas[meu].e);
+    free(corpo);
+  }
+}
+
+static void consultarProximos(TarefaProx *v, int n, const char *const *cab) {
+  pthread_t fios[TK_FIOS];
+  int q, criados = 0;
+  if (n <= 0) return;
+  proxTarefas = v; proxN = n; proxProx = 0; proxCab = cab;
+  for (q = 0; q < TK_FIOS && q < n; q++)
+    if (pthread_create(&fios[criados], NULL, fioProximo, NULL) == 0) criados++;
+  if (!criados) fioProximo(NULL);
+  for (q = 0; q < criados; q++) pthread_join(fios[q], NULL);
+  proxTarefas = NULL; proxN = 0;
+}
+
+// TODOS OS FILMES VISTOS (#212). carregarHistoricoReal le as ultimas 100
+// reproducoes, e quem ve serie enche esse limite de episodios: no log da #212
+// ("historico: 12 serie(s) com ultimo episodio visto") nenhum filme entrou, e
+// o selo de visto do cartaz e o olho do detalhe nao tinham de onde sair.
+// /sync/watched/movies e o mapa COMPLETO, uma linha curta por filme.
+//
+// So baixa de novo quando o Trakt diz que mudou: /sync/last_activities e um
+// corpo de ~1 KB, e o ciclo da descoberta roda a cada 5 min. O que a pessoa
+// marca nesta TV ja entrou no historico na hora (ctxmenu/app), sem esperar.
+//
+// trakt_ler_filmes_vistos devolve quantos filmes entraram (-1 = corpo nulo).
+int trakt_ler_filmes_vistos(const char *corpo) {
+  const char *p;
+  int n = 0;
+  if (!corpo) return -1;
+  p = strchr(corpo, '[');
+  p = p ? p + 1 : NULL;
+  while (p && *p) {
+    const char *f, *obj;
+    char id[24] = "";
+    while (*p && (unsigned char)*p <= ' ') p++;
+    if (*p != '{') break;
+    f = js_fim(p);
+    if (!f) break;
+    obj = strstr(p, "\"movie\"");
+    if (obj && obj < f) {
+      const char *o = strchr(obj, '{');
+      if (o && o < f) js_texto(o, js_fim(o), "imdb", id, sizeof id);
+    }
+    if (id[0]) { cat_historico_definir_id(id, "movie", 1); n++; }
+    p = js_prox(f);
+  }
+  return n;
+}
+
+static void carregarFilmesVistos(const char *const *cab) {
+  char ativ[40] = "";
+  char *corpo = rede_baixar_com("https://api.trakt.tv/sync/last_activities", 15, cab);
+  if (corpo) {
+    const char *m = strstr(corpo, "\"movies\"");
+    const char *o = m ? strchr(m, '{') : NULL;
+    if (o) js_texto(o, js_fim(o), "watched_at", ativ, sizeof ativ);
+    free(corpo);
+  }
+  if (ativ[0] && !strcmp(ativ, filmesAtiv)) return;
+  corpo = rede_baixar_com("https://api.trakt.tv/sync/watched/movies", 25, cab);
+  if (!corpo) { printf("[trakt] filmes vistos: falhou\n"); fflush(stdout); return; }
+  { int n = trakt_ler_filmes_vistos(corpo);
+    printf("[trakt] filmes vistos: %d\n", n);
+    fflush(stdout);
+    if (n >= 0) snprintf(filmesAtiv, sizeof filmesAtiv, "%s", ativ); }
   free(corpo);
 }
 
@@ -853,21 +947,49 @@ int trakt_continuar(CatItem *saida, int max) {
   }
   free(corpo);
   carregarHistoricoReal(cab);
+  carregarFilmesVistos(cab);
   printf("[trakt] historico: %d serie(s) com ultimo episodio visto\n", nUlt);
   // "A SEGUIR": serie cujo ultimo episodio visto terminou e que nao esta
   // pausada em nada. Entra com progresso 0 no episodio seguinte; enfeitar()
   // confere no Cinemeta que ele existe (ou salta para a temporada seguinte) e
   // descarta o que acabou. Ver ult[].
   nProxIds = 0;
-  { int u;
+  { int u, nTar = 0, acabou = 0;
+    static TarefaProx tar[TK_ULT_MAX];
+    static int tarDe[TK_ULT_MAX];   // ult[u] -> indice em tar[], ou -1
     for (u = 0; u < nUlt; u++) {
-      int k, ja = 0, alvo;
+      int k, ja = 0;
+      size_t L = strlen(ult[u].imdb);
+      tarDe[u] = -1;
+      if (ult[u].temporada <= 0 || ult[u].episodio <= 0) continue;
+      for (k = 0; k < n; k++)
+        if (!strncmp(saida[k].imdb, ult[u].imdb, L) &&
+            (saida[k].imdb[L] == 0 || saida[k].imdb[L] == ':')) { ja = 1; break; }
+      if (ja || strncmp(ult[u].imdb, "tt", 2)) continue;
+      tar[nTar].u = u; tar[nTar].estado = -1; tar[nTar].t = tar[nTar].e = 0;
+      tarDe[u] = nTar++;
+    }
+    consultarProximos(tar, nTar, cab);
+    for (u = 0; u < nUlt; u++) {
+      int k, ja = 0, alvo, proxT = ult[u].temporada, proxE = ult[u].episodio + 1;
       size_t L = strlen(ult[u].imdb);
       if (ult[u].temporada <= 0 || ult[u].episodio <= 0) continue;
       for (k = 0; k < n; k++)
         if (!strncmp(saida[k].imdb, ult[u].imdb, L) &&
             (saida[k].imdb[L] == 0 || saida[k].imdb[L] == ':')) { ja = 1; break; }
       if (ja) continue;
+      if (tarDe[u] >= 0) {
+        TarefaProx *r = &tar[tarDe[u]];
+        if (r->estado == 0) {
+          // O Trakt diz que nao ha proximo: a serie acabou (ou tudo o que foi
+          // ao ar ja foi visto). Nao e "continuar".
+          printf("[trakt] a seguir: %s sem proximo no Trakt (ultimo visto T%dE%d); fora\n",
+                 ult[u].imdb, ult[u].temporada, ult[u].episodio);
+          acabou++;
+          continue;
+        }
+        if (r->estado == 1) { proxT = r->t; proxE = r->e; }
+      }
       // LISTA CHEIA: o "a seguir" entra no lugar do item mais antigo se for
       // mais novo que ele. Sem isto, com `max` pausados a fileira nunca
       // mostrava um "a seguir", por mais recente que fosse (medido: 12 de 12
@@ -882,8 +1004,8 @@ int trakt_continuar(CatItem *saida, int max) {
       }
       { CatItem *d = &saida[alvo];
         memset(d, 0, sizeof *d);
-        d->temporada = ult[u].temporada;
-        d->episodio = ult[u].episodio + 1;
+        d->temporada = proxT;
+        d->episodio = proxE;
         snprintf(d->imdb, sizeof d->imdb, "%s:%d:%d", ult[u].imdb, d->temporada, d->episodio);
         snprintf(d->tipo, sizeof d->tipo, "series");
         d->progresso = 0;
@@ -891,7 +1013,9 @@ int trakt_continuar(CatItem *saida, int max) {
         if (nProxIds < TK_ULT_MAX) snprintf(proxIds[nProxIds++], sizeof proxIds[0], "%s", d->imdb);
         printf("[trakt] a seguir: %s (ultimo visto T%dE%d, %lld)\n", d->imdb, ult[u].temporada, ult[u].episodio, ult[u].quandoMs);
       }
-    } }
+    }
+    if (nTar)
+      printf("[trakt] a seguir conferido no Trakt: %d serie(s), %d sem proximo\n", nTar, acabou); }
   // MAIS RECENTE PRIMEIRO, pausado ou "a seguir" — e a ordem em que a fileira
   // corta quando ha mais itens que lugares. Insercao: n <= CONT_MAX.
   { int a, b;

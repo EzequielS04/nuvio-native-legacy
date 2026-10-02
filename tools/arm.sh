@@ -339,7 +339,7 @@ echo "==> sincronizando arte"
 if ! ( set -o pipefail
        tar czf - -C deploy/app --exclude 'art/cache' \
            --exclude 'appinfo.json.stamped' \
-           art fonts icon.png icon-large.png \
+           art fonts icon.png icon-large.png splash.png \
          | $SSH "root@$TV_IP" "tar xzf - -C $APPDIR" ) 2>&1 \
      | grep -v 'unknown extended header keyword'; then
   :

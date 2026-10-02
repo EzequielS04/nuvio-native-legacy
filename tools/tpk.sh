@@ -156,10 +156,20 @@ for p in NuvioTpk40 NuvioTpk60 NuvioTpk65 NuvioTpk; do
   [ "$p" = NuvioTpk40 ] || cp tizen-tpk/silencio.mp4 "$H/res/"
   cp deploy/app/tizen/icon.png "$H/shared/res/$p.png"
   sed -i '' "s/ version=\"[^\"]*\">/ version=\"$VER\">/" "$H/tizen-manifest.xml"
-  dotnet build "$H/$p.csproj" -c Release -nologo -v q
+  # CANARIO do teclado/ditado do sistema (tizen-tpk/Texto.cs, #imetv):
+  # NUVIO_TPK_TEXTO=1 compila o Texto.cs e poe o privilegio do microfone
+  # (recorder, para o Tizen.Uix.Stt) SO durante este build; o manifesto do git
+  # nao muda. Nao vai em release sem teste numa TV.
+  if [ "${NUVIO_TPK_TEXTO:-}" = 1 ] && [ "$p" != NuvioTpk40 ]; then
+    sed -i '' 's|<privilege>http://tizen.org/privilege/internet</privilege>|&<privilege>http://tizen.org/privilege/recorder</privilege>|' "$H/tizen-manifest.xml"
+    dotnet build "$H/$p.csproj" -c Release -nologo -v q -p:NvTextoCanario=1
+    sed -i '' 's|<privilege>http://tizen.org/privilege/recorder</privilege>||' "$H/tizen-manifest.xml"
+  else
+    dotnet build "$H/$p.csproj" -c Release -nologo -v q
+  fi
   TPK=$(find "$H/bin/Release" -name '*.tpk' | head -1)
   [ -n "$TPK" ] || { echo "$p: dotnet nao gerou .tpk" >&2; exit 1; }
-  cp "$TPK" "$SAIDA/Nuvio-$VER-$p.tpk"
+  cp "$TPK" "$SAIDA/Nuvio-$VER-$p${NUVIO_TPK_TEXTO:+-texto}.tpk"
 done
 
 echo "[3/3] conferindo"

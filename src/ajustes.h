@@ -271,6 +271,11 @@ int   ajustes_720p(void);
 // continuam saindo dela). _pos: 0 automatica, 1 esquerda, 2 direita.
 int   ajustes_relogio_ligado(void);
 int   ajustes_relogio_pos(void);
+// Sair do player no meio vai para a HOME, minimizando o titulo na ilha (o
+// relogio ligado e Ao sair do player = home). 0 = a pagina do titulo, como antes.
+int   ajustes_saida_player_home(void);
+// Selo de visto no cartaz da home (#212). 1 = ligado (o de fabrica).
+int   ajustes_selo_visto(void);
 // MODO SEGURO (seguro.h). Chamar no arranque, DEPOIS de ajustes_dir e de
 // avisos_iniciar: `caiu` = a sessao anterior nao se despediu. Desfaz o ajuste
 // arriscado que estava em prova, liga o perfil seguro se as quedas se repetem e
@@ -363,6 +368,10 @@ int         ajustes_tmdb_col(void);             // tmdb_use_collections
 int         ajustes_tmdb_cw(void);              // tmdb_enrich_continue_watching
 
 int         ajustes_mdblist_ligado(void);       // mdblist_enabled
+// Miniaturas do Seekr na barra de tempo: ajuste ligado E chave definida.
+int         ajustes_seekr_ligado(void);
+int         ajustes_seekr_fita(void);       // anterior/atual/seguinte
+int         ajustes_seekr_ajuste_s(void);   // sincronia, em segundos (-60..60)
 // `fonte` e um ExFonte de extras.h (trakt, imdb, tmdb, tomatoes, audience,
 // metacritic, letterboxd). 0 = esconder a nota dessa fonte na fileira.
 int         ajustes_mdblist_fonte(int fonte);   // mdblist_show_*

@@ -11,6 +11,7 @@
 //   2. detalhe — camada sobre a tela corrente
 //   3. menu    — camada sobre a tela corrente
 //   4. a tela corrente (home, busca, biblioteca ou ajustes)
+#include "celbotao.h"
 #include "ponteiro.h"
 #include "app.h"
 #include "registro.h"
@@ -1318,6 +1319,9 @@ void app_evento(const SDL_Event *e) {
   // O CARTAO DO LEMBRETE DE PROGRAMA, em qualquer tela: com ele de pe as
   // setas laterais, o OK e o Voltar sao dele (ver guialembrete.h).
   if (glem_evento(e)) return;
+  // O CARTAO DO CELULAR (celbotao.h), aberto de qualquer campo de texto: come
+  // o teclado todo ate fechar.
+  if (celb_evento(e)) return;
 
   // PORTA DE TESTE: F10 abre o Guia de TV de onde quer que o app esteja.
   //
@@ -1591,7 +1595,10 @@ static void marcarAssistidoSeSolicitado(void) {
   // funcao devolvia antes de gravar — o espelho local nunca mudava, so o Trakt.
   // Sem duracao conhecida do item, usa-se uma hora inteira como sentinela: o
   // que importa e a porcentagem (100% ou 0%), e e isso que sync e fileira leem.
-  { int visto = (c->progresso >= 90);
+  // O ESTADO DE PARTIDA e o mesmo que o olho desenha (cat_visto, #212). Era
+  // `progresso >= 90`: filme visto no Trakt mas sem progresso local mostrava o
+  // olho aberto e o toque "marcava" de novo em vez de desmarcar.
+  { int visto = cat_visto(c);
     const double dur = 3600.0;
     cat_salvar_progresso(i, visto ? 0.0 : dur, dur);
     if (c->imdb[0]) {
@@ -1603,7 +1610,11 @@ static void marcarAssistidoSeSolicitado(void) {
       // — nunca era escrito. Com Trakt quem escreve o historico e o 2xx dele.
       visto_titulo(c->imdb, c->tipo, c->temporadas, c->nTemporadas, !visto,
                    visto_destinos());
-      if (!trakt_ativo()) cat_historico_definir_id(c->imdb, c->tipo, !visto);
+      // NA HORA, com ou sem Trakt (#212): o olho e o selo leem o historico, e
+      // esperar o 2xx deixava o olho no estado velho por um ou dois segundos
+      // — ou para sempre, se o historico conhecido dizia o contrario do
+      // progresso. O 2xx do Trakt (trakt.c) reescreve o mesmo valor.
+      cat_historico_definir_id(c->imdb, c->tipo, !visto);
     }
     printf("[app] assistido %s: %s\n", visto ? "desmarcado" : "marcado",
            c->titulo); fflush(stdout); }
@@ -1639,6 +1650,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // Spotlight: a mola de entrada/saida e o ditado correm em qualquer tela; o
   // OK segurado em "Buscar" (menu.c) abre por aqui, no quadro em que cruza.
   spot_atualizar(dt, agora);
+  celb_atualizar(dt);
   if (menu_pediu_spotlight() && spotPode()) spotAbrir(0);
   if (spot_aberto() && !spotPode()) spot_fechar();
   cancelarFonteSeSaiu();
@@ -2995,7 +3007,21 @@ void app_atualizar(float dt, Uint32 agora) {
         desc_repetir();
       }
     }
-    player_encerrar();
+    { unsigned vivoAntes = ilhacart_vivo_seq();
+      player_encerrar();
+      // MINIMIZAR NA ILHA (pedido do dono, 02/10): saiu no MEIO (esta saida
+      // virou a atividade ao vivo, o criterio de home_retorno_vale) com o
+      // relogio ligado e "Ao sair do player" = home. A pagina do titulo e o
+      // que mais estiver por cima fecham SECOS — quem anima e o quadro do
+      // video encolhendo ate a pilula. Terminou o titulo: o fluxo de sempre.
+      if (ajustes_saida_player_home() && ilhacart_vivo_seq() != vivoAntes) {
+        if (detail_aberto()) detail_fechar_seco();
+        if (vertudo_aberta()) vertudo_fechar_seco();
+        if (menu_aberto()) menu_fechar();
+        trocarTela(TELA_HOME);
+        menu_definir_destino(MENU_INICIO);
+        ilha_minimizar(ci ? ci->backdrop : NULL);
+      } }
     }
   }
 
@@ -3479,6 +3505,7 @@ void app_desenhar(Uint32 agora) {
   CAMADA_SE(pipintro_aberto());
   if (!registro_aberto()) pipintro_desenhar(agora);
   if (!registro_aberto()) spot_desenhar(agora, spotVeuPronto);
+  if (!registro_aberto()) celb_desenhar();
   CAMADA_SE(diagnostico_intro_aberto());
   if (!registro_aberto()) diagnostico_intro_desenhar(agora);
   CAMADA_SE(registro_aberto());

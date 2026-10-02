@@ -54,6 +54,7 @@
 #include "posterprov.h"
 #include "rede.h"
 #include "debrid.h"
+#include "seekr.h"
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -269,6 +270,20 @@ typedef enum {
   // Ilha do relogio (ilha.h): mostrar a pilula do relogio em repouso e em que
   // canto. LOCAIS. No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_RELOGIO, AJ_RELOGIO_POS,
+  // Selo de visto no canto do cartaz (home.c, cat_visto, #212). LOCAL. No fim
+  // pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_SELO_VISTO,
+  // SEEKR (seekr.h): miniatura da barra de tempo. Ligado e LOCAL; a chave mora
+  // em seekr.txt (dados), por aparelho, como a do fanart.tv; o teste e acao.
+  // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_SEEKR_LIGADO, AJ_SEEKR_CHAVE, AJ_SEEKR_TESTAR,
+  // Fita (anterior/atual/seguinte) e sincronia da miniatura do Seekr. LOCAIS.
+  // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_SEEKR_FITA, AJ_SEEKR_AJUSTE,
+  // Ao sair do player no meio: a home com o titulo minimizado na ilha (o
+  // "quadro do video" encolhe ate a mini capa da pilula) ou a pagina do titulo.
+  // So vale com o relogio ligado. LOCAL. No fim pelo mesmo motivo.
+  AJ_SAIDA_PLAYER,
   AJ_N
 } OpcaoId;
 
@@ -281,6 +296,8 @@ static const char *V_LIVETV_ESPERA[] = { "Automática", "25 s", "45 s" };
 // Dinamica, onde a pilula da barra lateral ocupa o canto esquerdo). 1 e 2 sao
 // escolha explicita; Esquerda no layout Dinamica fica AO LADO da pilula.
 static const char *V_RELOGIO_POS[] = { "Automática", "Esquerda", "Direita" };
+static const char *V_SAIDA_PLAYER[] = { "Voltar para a home (minimizar na ilha)",
+                                        "Voltar para a página do título" };
 static const char *V_LIVETV_MODO[] = { "A (padrão)", "B (sem seleção de faixa)", "C (payload de live)" };
 // Troca do destaque: 0 = a arte nova entra colada na velha, de lado; 1 = o
 // esvanecimento de antes.
@@ -847,6 +864,13 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Proxy de TS da Live TV",          V_LIGA, 2),          // local: liveTvProxyLocal
   ESC("Relógio na tela",                 V_LIGA, 2),          // local: relogioTelaLocal
   ESC("Posição do relógio",              V_RELOGIO_POS, 3),   // local: relogioPosLocal
+  ESC("Selo de assistido nos pôsteres",  V_LIGA, 2),          // local: seloVistoLocal
+  ESC("Miniaturas na barra de tempo",    V_LIGA, 2),          // local: seekrLocal
+  ACAO("Chave do Seekr"),
+  ACAO("Testar chave do Seekr"),
+  ESC("Fita de miniaturas",              V_LIGA, 2),          // local: seekrFitaLocal
+  NUM("Sincronia da miniatura",          -60, 60, 1, " s"),   // local: seekrAjusteLocal
+  ESC("Ao sair do player",               V_SAIDA_PLAYER, 2),  // local: saidaPlayerLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1004,6 +1028,11 @@ static const char *CHAVE[] = {
   "liveTvProxyLocal",
   "relogioTelaLocal",
   "relogioPosLocal",
+  "seloVistoLocal",
+  // LOCAL e SEM o "-"; a chave e credencial e mora em seekr.txt (dados).
+  "seekrLocal", "-seekrChave", "-seekrTestar",
+  "seekrFitaLocal", "seekrAjusteLocal",
+  "saidaPlayerLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1085,7 +1114,7 @@ static const Item TELA[] = {
   // mesma decisao (de onde sai o destaque).
   SEC("Aparência", "Cor de destaque, idioma e animações", "aj_palette"),
     OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_VIDRO_CONTORNO), OPC(AJ_IDIOMA), OPC(AJ_ANIM),
-    OPC(AJ_FONTE_UI), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS),
+    OPC(AJ_FONTE_UI), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS), OPC(AJ_SAIDA_PLAYER),
 
   SEC("Layout", "Estrutura da página inicial e estilos de pôster", "aj_layout-dashboard"),
     GRP("Layout da Home", "Escolha a estrutura e a fonte do destaque.", "aj_panel-top"),
@@ -1098,7 +1127,7 @@ static const Item TELA[] = {
       OPC(AJ_MENU_EXPLORAR), OPC(AJ_MENU_GUIA), OPC(AJ_MENU_AGENDA),
       OPC(AJ_MENU_PERFIL),
       OPC(AJ_HERO), OPC(AJ_HERO_CATALOGOS), OPC(AJ_DESCOBRIR),
-      OPC(AJ_GRAD_CLASSICO), OPC(AJ_ROTULOS), OPC(AJ_NOME_ADDON),
+      OPC(AJ_GRAD_CLASSICO), OPC(AJ_ROTULOS), OPC(AJ_SELO_VISTO), OPC(AJ_NOME_ADDON),
       OPC(AJ_SUFIXO_TIPO), OPC(AJ_OCULTAR_NLANC), OPC(AJ_NOTAS_HOME),
       OPC(AJ_PS_FUNDO),
     GRP("Continuar assistindo", "Configure os próximos episódios e a ordem.", "aj_rotate-ccw-clock"),
@@ -1160,6 +1189,9 @@ static const Item TELA[] = {
       OPC(AJ_NT_MAL), OPC(AJ_NT_EBERT), OPC(AJ_NT_SCORE),
     GRP("fanart.tv", "Chave pessoal para a arte do destaque.", "aj_images"),
       OPC(AJ_FANART_CHAVE),
+    GRP("Seekr", "Miniaturas da barra de tempo no player.", "aj_images"),
+      OPC(AJ_SEEKR_LIGADO), OPC(AJ_SEEKR_CHAVE), OPC(AJ_SEEKR_TESTAR),
+      OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
     GRP("Debrid", "Chaves de API para tocar torrents pelo seu serviço.", "aj_plug"),
       OPC(AJ_DEBRID_AD), OPC(AJ_DEBRID_AD_TESTAR), OPC(AJ_DEBRID_RD),
       OPC(AJ_DEBRID_TB), OPC(AJ_DEBRID_PM),
@@ -1467,6 +1499,14 @@ static int valor[] = {
   0,                /* proxy de TS da Live TV: LIGADO (V_LIGA: 0 = Ligado) */
   0,                /* relogio na tela: LIGADO (V_LIGA: 0 = Ligado), o de sempre */
   0,                /* posicao do relogio: Automatica, a de sempre */
+  0,                /* selo de assistido nos posteres: LIGADO (V_LIGA: 0 = Ligado) */
+  // Seekr DESLIGADO (V_LIGA: 1 = Desligado): sem chave nao ha o que mostrar, e
+  // cada titulo aberto gasta uma consulta da cota diaria da pessoa.
+  1,                /* miniaturas do Seekr */
+  0, 0,             /* chave e teste do Seekr: acoes */
+  1,                /* fita de miniaturas: DESLIGADA (V_LIGA: 1 = Desligado), uma so */
+  0,                /* sincronia da miniatura: 0 s (a documentacao: nada automatico) */
+  0,                /* ao sair do player: a home, minimizando na ilha (com o relogio) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1640,6 +1680,8 @@ int ajustes_addons_do_principal(void) { return lig(AJ_ADDONS_PRINCIPAL); }
 #endif
 int ajustes_relogio_ligado(void) { return lig(AJ_RELOGIO); }
 int ajustes_relogio_pos(void) { return valor[AJ_RELOGIO_POS]; }
+int ajustes_saida_player_home(void) { return lig(AJ_RELOGIO) && valor[AJ_SAIDA_PLAYER] == 0; }
+int ajustes_selo_visto(void) { return lig(AJ_SELO_VISTO); }
 static void riscoNotar(int op, int antes);
 void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_VIDRO, a); }
 int ajustes_p2p_ligado(void) { return lig(AJ_P2P_LIGADO) && !SEGURO; }
@@ -2102,6 +2144,41 @@ static const char *fanartMascarada(void) {
   return m;
 }
 
+// CHAVE PESSOAL DO SEEKR (seekr.h). Mesmo trato da do fanart.tv: seekr.txt na
+// pasta de dados, nunca no ajustes.txt nem na conta, so mascarada na tela. Os
+// termos do servico proibem embutir a chave no app, entao cada um usa a sua.
+static char seekrChave[96];
+static const char *SEEKR_ALFA =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
+static void seekrLimpar(char *dst, size_t n, const char *t) {
+  size_t i, k = 0;
+  for (i = 0; t && t[i] && k + 1 < n; i++)
+    if (strchr(SEEKR_ALFA, t[i])) dst[k++] = t[i];
+  dst[k] = 0;
+}
+static void seekrCarregar(void) {
+  char *t = dados_ler("seekr.txt");
+  seekrLimpar(seekrChave, sizeof seekrChave, t);
+  free(t);
+  seekr_definir_chave(seekrChave);
+}
+static void seekrDefinir(const char *txt) {
+  seekrLimpar(seekrChave, sizeof seekrChave, txt);
+  if (seekrChave[0]) dados_gravar("seekr.txt", seekrChave);
+  else dados_apagar("seekr.txt");
+  seekr_definir_chave(seekrChave);
+}
+static const char *seekrMascarada(void) {
+  static char m[24];
+  size_t n = strlen(seekrChave);
+  if (!n) return i18n("Não configurado");
+  snprintf(m, sizeof m, "····%s", n > 4 ? seekrChave + n - 4 : "");
+  return m;
+}
+int ajustes_seekr_ligado(void) { return lig(AJ_SEEKR_LIGADO) && seekrChave[0]; }
+int ajustes_seekr_fita(void)   { return lig(AJ_SEEKR_FITA); }
+int ajustes_seekr_ajuste_s(void) { return valor[AJ_SEEKR_AJUSTE]; }
+
 // ENDERECO DO SERVIDOR P2P (p2p.h). Mora em p2p.txt na pasta de dados, por
 // aparelho: e o IP de um PC/NAS da casa desta TV, sem sentido em outra.
 static char p2pEndereco[200];
@@ -2296,12 +2373,54 @@ static const char *adTesteTexto(void) {
   return i18n(adTesteMsg);
 }
 
+// "TESTAR CHAVE DO SEEKR": GET /v1/keys/validate, em fio proprio como o do
+// AllDebrid. 0 nunca, 1 testando, 2 pronto, 3 fio terminou.
+static pthread_t skFio;
+static int skFioVivo;
+static _Atomic int skTeste;
+static int skTesteRes;
+static char skTesteChave[96];
+static void *skTesteFioF(void *u) {
+  (void)u;
+  skTesteRes = seekr_validar(skTesteChave);
+  atomic_store_explicit(&skTeste, 3, memory_order_release);
+  return NULL;
+}
+static void skTesteIniciar(void) {
+  if (skFioVivo || !seekrChave[0]) return;
+  snprintf(skTesteChave, sizeof skTesteChave, "%s", seekrChave);
+  atomic_store_explicit(&skTeste, 1, memory_order_release);
+  if (pthread_create(&skFio, NULL, skTesteFioF, NULL) != 0) {
+    skTesteRes = -1;
+    atomic_store_explicit(&skTeste, 2, memory_order_release);
+    return;
+  }
+  skFioVivo = 1;
+}
+static void skTesteRecolher(void) {
+  if (skFioVivo && atomic_load_explicit(&skTeste, memory_order_acquire) == 3) {
+    pthread_join(skFio, NULL);
+    skFioVivo = 0;
+    atomic_store_explicit(&skTeste, 2, memory_order_release);
+  }
+}
+static const char *skTesteTexto(void) {
+  int e = atomic_load_explicit(&skTeste, memory_order_acquire);
+  if (!seekrChave[0]) return i18n("informe a chave primeiro");
+  if (e == 0) return i18n("OK testa");
+  if (e == 1 || e == 3) return i18n("testando…");
+  if (skTesteRes > 0) return i18n("chave válida");
+  if (skTesteRes == 0) return i18n("chave recusada");
+  return i18n("sem resposta do servidor");
+}
+
 void ajustes_dir(const char *dir) {
   FILE *f;
   char caminho[600], linha[96];
   if (!dir || !*dir) return;
   snprintf(dirAjustes, sizeof dirAjustes, "%s", dir);
   fanartCarregar();
+  seekrCarregar();
   p2pCarregar();
   pstCarregar();
   debCarregar();
@@ -2969,6 +3088,17 @@ int ajustes_aplicar_blob(const char *json) {
       // o valor de verdade — e a rejeicao era CORRETA (melhor manter que
       // inventar), mas o efeito era o ajuste nunca chegar.
       if (lit) { int k; for (k = 0; lit[k]; k++) if (!igualSemCaixa(lit[k], texto)) { novo = k; break; } }
+      // IDIOMA COM REGIAO: contas antigas guardam "pt-br"/"pt-BR" (22 logs
+      // no D1 em 01/10/2026) e a lista so tem a base. Sem casar exato,
+      // tenta a base antes do '-' ("pt-br" -> "pt"); "pt-pt" e "zh-tw" ja
+      // casaram exato acima.
+      if (novo < 0 && lit && i == AJ_TMDB_IDIOMA && strchr(texto, '-')) {
+        char base[16]; int k; size_t b = (size_t)(strchr(texto, '-') - texto);
+        if (b > 0 && b < sizeof base) {
+          memcpy(base, texto, b); base[b] = 0;
+          for (k = 1; lit[k]; k++) if (!igualSemCaixa(lit[k], base)) { novo = k; break; }
+        }
+      }
       if (novo < 0) {
         // Valor que este app nao conhece (versao nova do web, opcao nova).
         // Manter o que esta e a resposta certa: escolher um padrao aqui
@@ -3081,7 +3211,9 @@ static int somenteDesteAparelho(int op) {
     case AJ_DET_SO_CINEMETA: /* o web nao tem esta escolha */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
-    case AJ_RELOGIO: case AJ_RELOGIO_POS: /* o web nao tem a ilha */
+    case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
+    case AJ_SELO_VISTO:     /* o web nao tem a escolha */
+    case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: /* o web nao tem o Seekr */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
     // Linha do titulo: o web nao tem, e nenhuma conta pode desliga-las aqui.
     case AJ_NT_IMDB: case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
@@ -3485,6 +3617,8 @@ static const char *textoLeitura(int op) {
       return bufConta; }
   }
   if (op == AJ_FANART_CHAVE) return fanartMascarada();
+  if (op == AJ_SEEKR_CHAVE) return seekrMascarada();
+  if (op == AJ_SEEKR_TESTAR) return skTesteTexto();
   if (op == AJ_PERFIL_EDITAR) {
     // static: o texto devolvido e lido DEPOIS do return (era endereco de
     // variavel local, -Wreturn-stack-address).
@@ -3634,6 +3768,9 @@ static int inativa(int op) {
       return !ajustes_cw_ligado();
     case AJ_CW_BLUR_PROX: return !ajustes_cw_ligado() || !ajustes_cw_thumb_episodio();
     case AJ_EXPANDIR_ATRASO: return !ajustes_expandir_poster();
+    case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: return !lig(AJ_SEEKR_LIGADO);
+    // Sem o relogio nao ha ilha para onde minimizar: sai para a pagina, como antes.
+    case AJ_SAIDA_PLAYER: return !lig(AJ_RELOGIO);
     // Som: na Samsung (.wgt) o trailer e sempre mudo (trailerfonte_com_som).
     case AJ_HERO_TRAILER_SOM:
       return !lig(AJ_HERO_TRAILER) || !trailerfonte_com_som(trailerfonte_tizen());
@@ -3853,6 +3990,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_HERO_CATALOGOS: return "De onde vêm os títulos do destaque: os primeiros do catálogo, um sorteio, ou uma fileira da Home. OK troca.";
     case AJ_PS_FUNDO: return "A tela \"Quem está assistindo?\" mostra arte do catálogo atrás dos perfis. Desligado volta à tela lisa de antes.";
     case AJ_DESCOBRIR: return "Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.";
+    case AJ_SELO_VISTO: return "Um check pequeno no canto de cima do pôster dos títulos que você já assistiu, pelo Trakt, pela conta ou marcados nesta TV.";
     case AJ_ROTULOS: return "Escreve o nome do título abaixo do cartaz. A maior parte da arte já traz o nome impresso.";
     case AJ_NOME_ADDON: return "Acrescenta o nome do addon ao título da fileira, para separar dois catálogos com o mesmo nome.";
     case AJ_SUFIXO_TIPO: return "Acrescenta \"Filme\" ou \"Série\" ao título da fileira, para separar as duas versões do mesmo catálogo.";
@@ -3957,6 +4095,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
+    case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
     case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
     case AJ_RESOLUCAO: return "4K desenha a interface em 4K nas TVs que permitem; muitas ignoram o pedido e continuam em 1080p. 720p desenha em 1280x720 e amplia para a tela: mais leve em TV fraca, com texto um pouco mais suave. Reinicie o app depois de mudar. O vídeo não muda: segue a qualidade da fonte.";
@@ -3997,6 +4136,11 @@ static const char *ajudaOpcao(int op) {
     case AJ_TMDB_CW: return "Usa o TMDB para preencher os cartazes da fileira de retomada.";
     case AJ_MDB_LIGADO: return "O MDBList junta notas de várias fontes na página do título. Desligar esconde a fileira inteira.";
     case AJ_MDB_CHAVE: return "A chave vem da sua conta Nuvio ou do arquivo do pacote. Não dá para digitar nesta TV.";
+    case AJ_SEEKR_LIGADO: return "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.";
+    case AJ_SEEKR_CHAVE: return "Sua chave pessoal do Seekr, gratuita na prévia em seekr.tv. Fica só nesta TV e aparece mascarada.";
+    case AJ_SEEKR_FITA: return "Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.";
+    case AJ_SEEKR_AJUSTE: return "Use quando a miniatura mostra sempre a cena de alguns segundos antes ou depois. Acontece quando a sua versão do título é diferente da usada pelo Seekr (outro corte, abertura mais longa). Vale para todos os títulos; volte a 0 ao trocar de filme.";
+    case AJ_SEEKR_TESTAR: return "Pergunta ao Seekr se a chave vale. Não envia nada sobre o que você assiste.";
     case AJ_FANART_CHAVE: return "Sua chave pessoal do fanart.tv, gratuita em fanart.tv/get-an-api-key. Com ela a fonte fanart.tv entra no Background do hero. Fica só nesta TV e aparece mascarada.";
     case AJ_MDB_TRAKT: case AJ_MDB_IMDB: case AJ_MDB_TMDB:
     case AJ_MDB_LETTER: case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA:
@@ -4905,6 +5049,14 @@ static void eventoTela(const SDL_Event *e) {
     }
     // A grade curta guardada era da conta que saiu (#158).
     if (focoOp == AJ_XTREAM_LIMPAR) { xtream_esquecer(); xtepg_limpar(); return; }
+    if (focoOp == AJ_SEEKR_CHAVE) {
+      // Como o fanart: a chave NUNCA volta para o campo; vazio apaga.
+      stCampo = focoOp;
+      teclado_abrir_com("Chave do Seekr", "Chave pessoal: seekr.tv. Vazio apaga.",
+                        90, SEEKR_ALFA, NULL);
+      return;
+    }
+    if (focoOp == AJ_SEEKR_TESTAR) { skTesteIniciar(); return; }
     if (focoOp == AJ_FANART_CHAVE) {
       // A chave NUNCA volta para o campo (a modal fica na tela e a tela vira
       // foto); confirmar vazio esquece a que estava.
@@ -4980,6 +5132,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   p2pTesteRecolher();
   pstTesteRecolher();
   adTesteRecolher();
+  skTesteRecolher();
   // "Procurar atualização" achou versao nova: abre o cartao por cima dos
   // Ajustes, como o OK em "Atualizar o aplicativo" ja fazia.
   if (atualizacao_busca_achou() && !atualizacao_aberta()) atualizacao_abrir();
@@ -4995,6 +5148,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       else if (stCampo == AJ_XTREAM_USUARIO)  xtream_definir_usuario(teclado_texto());
       else if (stCampo == AJ_XTREAM_SENHA)    xtream_definir_senha(teclado_texto());
       else if (stCampo == AJ_FANART_CHAVE)    fanartDefinir(teclado_texto());
+      else if (stCampo == AJ_SEEKR_CHAVE)     { seekrDefinir(teclado_texto()); atomic_store_explicit(&skTeste, 0, memory_order_release); }
       else if (stCampo == AJ_P2P_URL)         ajustes_definir_p2p_url(teclado_texto());
       else if (stCampo >= AJ_POSTER_INST && stCampo <= AJ_POSTER_MODELO) pstDefinir(stCampo, teclado_texto());
       else if (debIdx(stCampo) >= 0)          debDefinir(stCampo, teclado_texto());
@@ -6660,7 +6814,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_RAIL_BLUR: case AJ_HERO: case AJ_HERO_CATALOGOS:
     case AJ_PS_FUNDO: case AJ_DESCOBRIR: case AJ_ROTULOS:
     case AJ_NOME_ADDON: case AJ_SUFIXO_TIPO: case AJ_OCULTAR_NLANC:
-    case AJ_NOTAS_HOME: case AJ_GRAD_CLASSICO:
+    case AJ_NOTAS_HOME: case AJ_GRAD_CLASSICO: case AJ_SELO_VISTO:
       return AJPV_HOME;
     case AJ_CW_LIGADO: case AJ_CW_OK: case AJ_CW_FONTE:
     case AJ_CW_ESTILO: case AJ_CW_THUMB: case AJ_CW_BLUR_PROX:
@@ -6683,7 +6837,7 @@ static AjPreview familiaPreviaOpcao(int op) {
       return AJPV_CARTAZ;
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
-    case AJ_RELOGIO: case AJ_RELOGIO_POS:
+    case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL:
@@ -6713,6 +6867,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_ADDONS: case AJ_STALKER_PORTAL: case AJ_STALKER_MAC:
     case AJ_STALKER_LIMPAR: case AJ_XTREAM_SERVIDOR: case AJ_XTREAM_USUARIO:
     case AJ_XTREAM_SENHA: case AJ_XTREAM_LIMPAR: case AJ_FANART_CHAVE:
+    case AJ_SEEKR_CHAVE: case AJ_SEEKR_TESTAR:
     case AJ_XTREAM_CONTA:
     case AJ_DIAGNOSTICO: case AJ_VELOCIDADE: case AJ_LIVETV_DIAG:
     case AJ_P2P_URL: case AJ_P2P_TESTAR:
@@ -7166,7 +7321,7 @@ static float previaInterfaceOpcao(int op, float x, float y, float w) {
            235, 237, 241, 255);
     txt_desenhar(sample, x + 24.0f, y + 30.0f);
     previaRealce(x + 14.0f, y + 20.0f, w - 28.0f, 56.0f, ar, ag, ab);
-  } else if (op == AJ_RELOGIO || op == AJ_RELOGIO_POS) {
+  } else if (op == AJ_RELOGIO || op == AJ_RELOGIO_POS || op == AJ_SAIDA_PLAYER) {
     // Tela em miniatura com a pilula no canto escolhido (ou sem ela).
     GfxRect tela = {x + 28.0f, y + 16.0f, w - 56.0f, 100.0f};
     int pos = valor[AJ_RELOGIO_POS], dir = pos == 2 || (pos == 0 && ajustes_home_layout() == HOME_LAYOUT_DINAMICA);
@@ -7408,7 +7563,7 @@ static float previaAcaoOpcao(int op, float x, float y, float w) {
                 0.5f, 0.43f, 0.45f, 0.50f, 0.9f);
       int field = (op == AJ_STALKER_PORTAL || op == AJ_XTREAM_SERVIDOR) ? i == 0 :
                   (op == AJ_STALKER_MAC || op == AJ_XTREAM_USUARIO) ? i == 1 :
-                  (op == AJ_XTREAM_SENHA || op == AJ_FANART_CHAVE) ? i == 2 :
+                  (op == AJ_XTREAM_SENHA || op == AJ_FANART_CHAVE || op == AJ_SEEKR_CHAVE) ? i == 2 :
                   i == 0;
       if (field) previaRealce(row.x, row.y, row.w, row.h, ar, ag, ab);
     }

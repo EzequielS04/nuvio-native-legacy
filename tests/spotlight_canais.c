@@ -60,7 +60,7 @@ static SpotPedido escolherCanal(void) {
   printf("spotlight: canal ESPN na linha %d de %d\n", alvo, spot_n_linhas());
   assert(alvo >= 0);
   assert(achar(T_CANAL, "Globo") < 0);         // filtra pelo nome
-  for (k = 0; k < 6; k++) tecla(SDLK_RIGHT);   // teclado -> lista
+  tecla(SDLK_DOWN);                            // barra -> lista
   for (k = 0; k < 30 && spot_linha_focada() != alvo; k++) tecla(SDLK_DOWN);
   assert(spot_linha_focada() == alvo);
   tecla(SDLK_RETURN);
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
     spot_abrir(0);
     digitar("espn");
     assert(achar(T_CANAL, NULL) < 0);
-    tecla(SDLK_ESCAPE);
+    spot_fechar();
 
     snprintf(man, sizeof man, "%s/manifest.json", base);
     assert(addons_adicionar("Canais Teste", man) == 1);

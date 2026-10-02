@@ -1,10 +1,17 @@
 // CAPTURAS DO SPOTLIGHT (spotlight.h), sem rede e sem interacao.
 //
 // O que cada foto prova:
-//   -entrada     a caixa no meio da animacao de entrada;
-//   -vazio       campo vazio: pesquisas recentes do perfil, "Limpar" e "Em
-//                alta" (os primeiros da primeira fileira de addon), por cima de
-//                uma tela de posteres escurecida;
+//   -barra       sem pesquisa recente nenhuma: SO a barra (lupa, campo), sem
+//                corpo — o desenho do dono, "so a barra e so crescer";
+//   -entrada     a barra no meio da animacao de entrada;
+//   -vazio       campo vazio com recentes: a lista curta logo abaixo;
+//   -crescendo   logo depois de "the": o corpo no meio da mola, crescendo;
+//   -teclado-app OK no campo onde nao ha teclado do sistema (LG/Samsung/Mac):
+//                o teclado do app a esquerda do corpo, resultados a direita;
+//   -android-ime o caminho do Android (sistexto em modo de teste): o teclado
+//                do sistema "aberto", o texto vindo dele no campo;
+//   -android-voz o microfone ouvindo, com a parcial no campo e o anel do som;
+//   -android-semvoz  sem reconhecedor: o aviso e o teclado do sistema;
 //   -digitado    "the" digitado: melhor resultado em destaque e Titulos, a
 //                lista mudando a cada letra;
 //   -foco        o foco na lista (direita a partir da ultima coluna): a linha
@@ -38,6 +45,7 @@
 #include "guia.h"
 #include "addons.h"
 #include "descoberta.h"
+#include "sistexto.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -79,7 +87,10 @@ static void tecla(SDL_Keycode k) {
   spot_evento(&e);
 }
 static void digitar(const char *s) { for (; *s; s++) tecla(*s == ' ' ? SDLK_SPACE : (SDL_Keycode)*s); }
-static void paraLista(void) { int i; for (i = 0; i < 6; i++) tecla(SDLK_RIGHT); }
+// Da barra, BAIXO desce aos resultados (o teclado do app nao esta aberto).
+static void paraLista(void) { tecla(SDLK_DOWN); }
+// Voltar desfaz em ordem (lista -> campo -> limpa -> fecha): aperta ate fechar.
+static void fechar(void) { int i; for (i = 0; i < 5 && spot_aberto(); i++) tecla(SDLK_ESCAPE); }
 
 // O "fundo": fileiras de posteres do pacote, como uma home.
 static void fundo(void) {
@@ -135,6 +146,12 @@ static void capturaEm(const char *saida, const char *nome, Uint32 ms) {
   printf("captura: %s\n", arq);
 }
 static void captura(const char *saida, const char *nome) { capturaEm(saida, nome, 900); }
+// N quadros de 1/60 s: a mola anda pelo dt, nao pelo relogio (sem vsync o
+// laco roda a centenas de quadros por segundo).
+static void capturaQuadros(const char *saida, const char *nome, int n) {
+  while (n-- > 1) quadro();
+  capturaEm(saida, nome, 0);
+}
 
 static int achar(int tipo, const char *texto) {
   int i;
@@ -215,17 +232,30 @@ int main(int argc, char **argv) {
     f[0].extra = 1;
     col_extra_definir(f, 1); }
 
+  // SO A BARRA: sem recentes, nada abre o corpo.
+  spot_abrir(0);
+  assert(spot_foco_campo() == 1);
+  captura(saida, "barra");
+  assert(spot_n_linhas() == 0 && spot_altura_corpo() < 1.0f);
+  fechar();
+
   { static const char *termos[] = { "duna", "breaking bad", "interestelar", "the office" };
     int i; for (i = 0; i < 4; i++) buscasrec_registrar(termos[i]); }
 
   spot_abrir(0);
-  capturaEm(saida, "entrada", 60);
+  capturaQuadros(saida, "entrada", 5);
   captura(saida, "vazio");
   assert(achar(T_RECENTE, "the office") >= 0);
 
-  digitar("the");
-  assert(!strcmp(spot_consulta(), "the"));
+  { float h0 = spot_altura_corpo(), h1;
+    digitar("the");
+    assert(!strcmp(spot_consulta(), "the"));
+    capturaQuadros(saida, "crescendo", 7);
+    h1 = spot_altura_corpo();
+    printf("corpo: vazio %.0f -> crescendo %.0f\n", h0, h1);
+    assert(h1 > h0 + 20.0f && h1 < 780.0f); }
   captura(saida, "digitado");
+  assert(spot_altura_corpo() > 300.0f);
   assert(achar(T_TOPO, NULL) >= 0);
   assert(achar(T_PESSOA, NULL) < 0);   // "the" nao comeca nome nenhum
   paraLista();
@@ -234,9 +264,34 @@ int main(int argc, char **argv) {
   tecla(SDLK_DOWN); tecla(SDLK_DOWN);
   captura(saida, "foco2");
 
-  // Pessoa: "chri" acha Christian Bale no elenco do Prestige.
+  // Voltar: lista -> campo -> limpa (o corpo encolhe para as recentes) -> fecha.
+  tecla(SDLK_ESCAPE);
+  assert(spot_aberto() && spot_foco_campo() == 1 && !strcmp(spot_consulta(), "the"));
+  tecla(SDLK_ESCAPE);
+  assert(spot_aberto() && !spot_consulta()[0]);
   tecla(SDLK_ESCAPE);
   assert(!spot_aberto());
+
+  // TECLADO DO APP (sem teclado do sistema): so com OK no campo.
+  spot_abrir(0);
+  assert(!spot_teclado_app_aberto());
+  tecla(SDLK_RETURN);
+  assert(spot_teclado_app_aberto() && spot_foco_campo() == 0);
+  tecla(SDLK_RETURN);                 // 'a', a primeira tecla
+  assert(!strcmp(spot_consulta(), "a"));
+  tecla(SDLK_UP);                     // cima da primeira fileira: o campo
+  assert(spot_foco_campo() == 1 && spot_teclado_app_aberto());
+  tecla(SDLK_DOWN);                   // e de volta ao teclado
+  assert(spot_foco_campo() == 0);
+  tecla(SDLK_BACKSPACE);
+  assert(!spot_consulta()[0] && spot_aberto() && spot_foco_campo() == 0);
+  digitar("the");
+  captura(saida, "teclado-app");
+  { int i; for (i = 0; i < 6; i++) tecla(SDLK_RIGHT); }   // passa da ultima coluna
+  assert(spot_linha_focada() >= 0 && !spot_teclado_app_aberto());
+  fechar();
+
+  // Pessoa: "chri" acha Christian Bale no elenco do Prestige.
   spot_abrir(0);
   digitar("chri");
   { int alvo = achar(T_PESSOA, "Christian Bale"), k;
@@ -267,7 +322,7 @@ int main(int argc, char **argv) {
   captura(saida, "colecao");
 
   // Nada encontrado.
-  tecla(SDLK_ESCAPE);
+  fechar();
   spot_abrir(0);
   digitar("zzqx");
   assert(achar(T_AVISO, NULL) >= 0);
@@ -278,7 +333,7 @@ int main(int argc, char **argv) {
   assert(!strcmp(spot_consulta(), "the"));
 
   // Vidro.
-  tecla(SDLK_ESCAPE);
+  fechar();
   ajustes_definir_vidro(1);
   assert(ajustes_vidro());
   spot_abrir(0);
@@ -287,7 +342,7 @@ int main(int argc, char **argv) {
   tecla(SDLK_DOWN);
   captura(saida, "vidro");
   ajustes_definir_vidro(0);
-  tecla(SDLK_ESCAPE);
+  fechar();
 
   // PESSOA DO TMDB, com debounce. Digitar "keanu" de uma vez: nada sai antes
   // de SPP_ESPERA_MS; depois sai UM pedido, com o termo inteiro e o idioma.
@@ -336,6 +391,45 @@ int main(int argc, char **argv) {
     assert(p.tipo == SPOT_PESSOA && p.indice < 0 && p.tmdb == 6384);
     assert(p.tituloTmdb == 603 && !strcmp(p.tituloTipo, "movie"));
     spotpessoa_teste(NULL); }
+
+  // ANDROID (sistexto em modo de teste): abrir ja chama o teclado do sistema, e
+  // o texto que vem dele SUBSTITUI o campo (com o espaco do fim, que o IME
+  // ainda vai completar).
+  st_teste_ligar(1);
+  spot_abrir(0);
+  assert(st_dono() == ST_SPOT && st_estado() == ST_DIGITANDO);
+  st_teste_evento("Tthe ");
+  quadro();
+  assert(!strcmp(spot_consulta(), "the "));
+  st_teste_evento("Tthe dark");
+  captura(saida, "android-ime");
+  assert(!strcmp(spot_consulta(), "the dark"));
+  st_teste_evento("Dthe dark knight");      // Concluir: vai para a lista
+  quadro();
+  assert(!strcmp(spot_consulta(), "the dark knight") && st_estado() == ST_PARADO);
+  assert(spot_linha_focada() >= 0);
+  fechar();
+  assert(st_dono() == ST_DONO_NENHUM);
+  // Voz: a tecla de microfone ja comeca; parcial no campo; final vai a lista.
+  spot_abrir(1);
+  assert(st_estado() == ST_OUVINDO && spot_foco_campo() == 2);
+  st_teste_evento("Souvindo");
+  st_teste_evento("R70");
+  st_teste_evento("Pprest");
+  captura(saida, "android-voz");
+  assert(!strcmp(spot_consulta(), "prest"));
+  st_teste_evento("V prestige ");
+  quadro();
+  assert(!strcmp(spot_consulta(), "prestige") && spot_linha_focada() >= 0);
+  fechar();
+  // Sem reconhecedor: cai no teclado do sistema, com o aviso.
+  spot_abrir(1);
+  st_teste_evento("Steclado:semvoz");
+  quadro();
+  assert(st_estado() == ST_DIGITANDO && st_aviso()[0]);
+  captura(saida, "android-semvoz");
+  fechar();
+  st_teste_ligar(0);
 
   // Canais: o guia carregado do addon falso (o .sh sobe o servidor).
   if (getenv("SPOT_CANAIS_BASE") && *getenv("SPOT_CANAIS_BASE")) {

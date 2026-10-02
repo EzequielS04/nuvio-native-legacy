@@ -133,47 +133,56 @@ int android_instalar_apk(const char *caminho) {
   return r;
 }
 
-// DITADO DO SPOTLIGHT (spotlight.h). NuvioActivity.ditar abre a tela de voz do
-// sistema (RecognizerIntent); o resultado chega em onActivityResult, no fio da
-// interface, e fica guardado ate ditadoLer o entregar a este fio.
-int android_ditado_iniciar(void) {
-  JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
-  jobject act = (jobject)SDL_AndroidGetActivity();
-  jclass cls;
-  jmethodID m;
-  int ok = 0;
-  if (!env || !act) return 0;
-  cls = (*env)->GetObjectClass(env, act);
-  m = cls ? (*env)->GetMethodID(env, cls, "ditar", "()Z") : NULL;
-  if (m) ok = (*env)->CallBooleanMethod(env, act, m) ? 1 : 0;
-  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); ok = 0; }
-  if (cls) (*env)->DeleteLocalRef(env, cls);
-  (*env)->DeleteLocalRef(env, act);
-  printf("[spotlight] ditado: %s\n", ok ? "tela de voz aberta" : "sem reconhecedor de voz neste aparelho");
-  fflush(stdout);
-  return ok;
-}
-
-// -1 = ainda ouvindo; 0 = cancelado/sem resultado; 1 = texto em `dst`.
-int android_ditado_ler(char *dst, size_t n) {
+// TEXTO DO SISTEMA (sistexto.h): teclado do sistema e voz. Tudo chamado do fio
+// do SDL; o NuvioActivity faz o trabalho no fio da interface e devolve o que
+// aconteceu numa fila de strings que android_st_evento drena.
+static int chamaBool(const char *nome, const char *assin, const char *s, int i, int temInt) {
   JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
   jobject act = (jobject)SDL_AndroidGetActivity();
   jclass cls;
   jmethodID m;
   jstring js = NULL;
-  int r = -1;
+  int ok = 0;
+  if (!env || !act) return 0;
+  cls = (*env)->GetObjectClass(env, act);
+  m = cls ? (*env)->GetMethodID(env, cls, nome, assin) : NULL;
+  if (s) js = (*env)->NewStringUTF(env, s);
+  if (m) {
+    if (s && temInt) ok = (*env)->CallBooleanMethod(env, act, m, js, (jint)i) ? 1 : 0;
+    else if (s) ok = (*env)->CallBooleanMethod(env, act, m, js) ? 1 : 0;
+    else ok = (*env)->CallBooleanMethod(env, act, m) ? 1 : 0;
+  }
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); ok = 0; }
+  if (js) (*env)->DeleteLocalRef(env, js);
+  if (cls) (*env)->DeleteLocalRef(env, cls);
+  (*env)->DeleteLocalRef(env, act);
+  return ok;
+}
+
+int android_st_teclado(const char *inicial, int max) {
+  return chamaBool("abrirTeclado", "(Ljava/lang/String;I)Z", inicial ? inicial : "", max, 1);
+}
+int android_st_ditar(const char *idioma) {
+  return chamaBool("ditar", "(Ljava/lang/String;)Z", idioma ? idioma : "", 0, 0);
+}
+void android_st_fechar(void) { chamaBool("fecharEntrada", "()Z", NULL, 0, 0); }
+
+int android_st_evento(char *dst, size_t n) {
+  JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+  jobject act = (jobject)SDL_AndroidGetActivity();
+  jclass cls;
+  jmethodID m;
+  jstring js = NULL;
+  int r = 0;
   if (n) dst[0] = 0;
   if (!env || !act) return 0;
   cls = (*env)->GetObjectClass(env, act);
-  m = cls ? (*env)->GetMethodID(env, cls, "ditadoLer", "()Ljava/lang/String;") : NULL;
+  m = cls ? (*env)->GetMethodID(env, cls, "proximoEvento", "()Ljava/lang/String;") : NULL;
   if (m) js = (jstring)(*env)->CallObjectMethod(env, act, m);
-  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); js = NULL; r = 0; }
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); js = NULL; }
   if (js) {
-    // "=" + texto, ou "!" quando a tela de voz voltou sem nada.
     const char *c = (*env)->GetStringUTFChars(env, js, NULL);
-    if (c && c[0] == '=') { snprintf(dst, n, "%s", c + 1); r = 1; }
-    else r = 0;
-    if (c) (*env)->ReleaseStringUTFChars(env, js, c);
+    if (c) { snprintf(dst, n, "%s", c); r = 1; (*env)->ReleaseStringUTFChars(env, js, c); }
     (*env)->DeleteLocalRef(env, js);
   }
   if (cls) (*env)->DeleteLocalRef(env, cls);

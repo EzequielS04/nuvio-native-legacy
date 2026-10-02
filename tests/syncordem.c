@@ -195,6 +195,7 @@ static int repeticoes;
 void desc_repetir(void) { repeticoes++; }
 void desc_repetir_addons(void) { repeticoes++; }
 void desc_refazer_continuar(void) {}
+void desc_loc_apagar(void) {}
 void desc_esquecer(void) {}
 void desc_tmdb_definir(const char *c) { (void)c; }
 

@@ -730,6 +730,22 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-20-filme-colecao-sem-fundo.png", saida);
   gravar(nome);
 
+  // --- 21/22. O OLHO DO HERO (#212): sem progresso, so pelo historico de
+  //            titulo (o que o Trakt manda por /sync/watched/movies). Antes o
+  //            olho lia `progresso >= 90` e ficava riscado em todo filme.
+  { extern void cat_historico_definir_id(const char *imdb, const char *tipo, int visto);
+    colecaoSemFundo = 0;
+    abrir(1, SEC_ELENCO, 0);
+    nivel = 0;
+    quadros(60);
+    snprintf(nome, sizeof nome, "%s-21-filme-olho-nao-visto.png", saida);
+    gravar(nome);
+    cat_historico_definir_id(IMDB_FILME, "movie", 1);
+    assert(cat_visto(cat_item(1)));
+    quadros(30);
+    snprintf(nome, sizeof nome, "%s-22-filme-olho-visto.png", saida);
+    gravar(nome); }
+
 
   SDL_GL_DeleteContext(gl);
   SDL_DestroyWindow(janela);

@@ -148,7 +148,14 @@ static void tecladoAcao(int c) {
   toque(SDLK_RETURN);
 }
 static void tecladoAbriu(void) { tf = 0; tc = 0; }
-static void tecladoVoltarTopo(void) { toques(SDLK_UP, 7); tf = 0; tc = 0; }
+// CIMA da primeira fileira leva a barra do campo (o botao do celular): desce
+// de volta e encosta a esquerda.
+static void tecladoVoltarTopo(void) {
+  toques(SDLK_UP, 7);
+  if (teclado_foco_campo()) toque(SDLK_DOWN);
+  toques(SDLK_LEFT, 6);
+  tf = 0; tc = 0;
+}
 
 // Segura OK na linha focada ate o menu do cartaz abrir e solta.
 static void segurarOk(void) {

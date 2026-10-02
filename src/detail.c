@@ -148,7 +148,10 @@ static HomeItem item;
 static int  aberto = 0, saindo = 0;
 static int  idx = 0;                 // titulo atual dentro do acervo
 // A IDENTIDADE do titulo aberto, e uma copia dele. Ver revalidarIdx.
-static char idxImdb[24];
+// Do tamanho do CatItem.imdb: com [24] o id de canal ao vivo ("pp-live:...",
+// mais de 23 caracteres) era cortado, revalidarIdx nunca o achava e reinseria a
+// copia da abertura a cada quadro (D1 da 1.7.0: "saiu de 740 para 741"...).
+static char idxImdb[sizeof(((CatItem *)0)->imdb)];
 static CatItem idxCopia;
 static int  idxTemCopia;
 // Ultima revisao do catalogo que esta pagina ja tratou. Ver detail_atualizar.
@@ -1209,6 +1212,16 @@ void detail_fechar(void) {
   pessoaAberta = 0;
   nivel = 0;
   saindo = 1;
+}
+
+// SECO: o proximo detail_atualizar ja a encerra (o mesmo fim da mola de
+// saida, com o logo restaurado), sem a pagina recolher por cima da home.
+void detail_fechar_seco(void) {
+  if (!aberto) return;
+  pessoaAberta = 0;
+  nivel = 0;
+  saindo = 1;
+  t = 0.0f;
 }
 
 void detail_mostrar_pessoa(long tmdb, const char *nome, const char *foto) {
@@ -2847,11 +2860,6 @@ void detail_atualizar(float dt, Uint32 agora) {
 // com `justify-content: flex-end`). Empilhar de cima para baixo faz o bloco
 // inteiro subir e descer conforme o tamanho da sinopse; no web ele fica preso
 // na base e so o topo se move.
-// Quanto do titulo ja foi assistido, 0..100. 0 quando nunca comecou.
-static int progressoDe(int i) {
-  const CatItem *c = cat_item(i);
-  return c ? c->progresso : 0;
-}
 
 // COR DE FOCO dos botoes do hero: a cor de realce dos Ajustes, e a tinta do
 // texto/glifo por cima dela — escura sobre realce claro, branca sobre realce
@@ -2936,7 +2944,10 @@ static void desenhaBotao(GfxRect r, const char *rot, int icone, int focado, floa
       // ASSISTIDO: olho aberto quando ja viu, olho riscado quando nao. Antes o
       // icone era sempre o mesmo e nao dizia estado nenhum — era so um enfeite
       // que o dono nao conseguia ler ("avisar o que foi visto").
-      gfx_icone(ig, progressoDe(idx) >= 90 ? "visto" : "naovisto", ic, ic, ic, a);
+      // O ESTADO E O DE cat_visto (#212), o mesmo do selo do cartaz: antes era
+      // so `progresso >= 90`, e filme visto em outro aparelho (ou marcado pelo
+      // menu do cartaz, que zera o progresso) ficava com o olho riscado.
+      gfx_icone(ig, cat_visto(cat_item(idx)) ? "visto" : "naovisto", ic, ic, ic, a);
     } else if (icone == ACAO_ARTE) {
       // MOLDURA COM MONTANHA: o glifo universal de "imagem". PNG de
       // deploy/app/art/icones como os vizinhos; arte.svg descreve o desenho.

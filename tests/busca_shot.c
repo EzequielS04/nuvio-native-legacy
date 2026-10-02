@@ -12,6 +12,7 @@
 #include "text.h"
 #include "tex_cache.h"
 #include "catalogo.h"
+#include "sistexto.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -186,6 +187,30 @@ int main(int argc, char **argv) {
   capturaEm(nome, 170);
   snprintf(nome, sizeof nome, "%s-resultados.bmp", saida);
   capturaEm(nome, 1200);
+  // ANDROID (sistexto em modo de teste): CIMA da primeira fileira foca o campo,
+  // direita o Falar; OK no campo chama o teclado do sistema e o texto dele
+  // substitui o campo; Concluir leva aos resultados.
+  st_teste_ligar(1);
+  busca_iniciar();
+  tecla(SDLK_UP);
+  snprintf(nome, sizeof nome, "%s-android-campo.bmp", saida);
+  captura(nome);
+  tecla(SDLK_RIGHT);
+  snprintf(nome, sizeof nome, "%s-android-falar.bmp", saida);
+  captura(nome);
+  tecla(SDLK_LEFT);
+  tecla(SDLK_RETURN);
+  assert(st_dono() == ST_BUSCA && st_estado() == ST_DIGITANDO);
+  st_teste_evento("Ter ");
+  quadro();
+  assert(!strcmp(busca_consulta(), "er "));
+  st_teste_evento("Der");
+  quadro();
+  assert(!strcmp(busca_consulta(), "er") && st_estado() == ST_PARADO);
+  snprintf(nome, sizeof nome, "%s-android-concluiu.bmp", saida);
+  captura(nome);
+  busca_encerrar();
+  st_teste_ligar(0);
   puts("PASS: capturas da Busca gravadas.");
   return 0;
 }
