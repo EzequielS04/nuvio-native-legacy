@@ -210,7 +210,9 @@ done
 echo "[3/3] conferindo"
 for T in "$SAIDA"/*.tpk; do
   L=$(unzip -l "$T")
-  if unzip -Z1 "$T" | grep -qE '(^|/)conta-[^/]*\.txt(\.tmp)?$'; then
+  # Consumir a lista inteira: grep -q fecha cedo e SIGPIPE mascara o match
+  # sob pipefail quando o pacote tem muitas entradas.
+  if unzip -Z1 "$T" | grep -E '(^|/)conta-[^/]*\.txt(\.tmp)?$' >/dev/null; then
     echo "tpk.sh: $T leva arquivo privado da conta — abortado" >&2; exit 1
   fi
   grep -qE " lib/libnuvio.so$" <<<"$L" || { echo "$T sem lib/libnuvio.so" >&2; exit 1; }
