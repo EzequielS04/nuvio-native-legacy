@@ -2884,19 +2884,22 @@ static void sistemaConsultar(void) {
   }, sistemaLoc, (int)sizeof sistemaLoc);
 }
 static void sistemaRecolher(void) {}
-#elif defined(__APPLE__) || defined(NV_ANDROID)
-// Android: sem luna-send. O NuvioActivity pode exportar NUVIO_LOCALE (ex.
-// Locale.getDefault().toLanguageTag()); sem ela o idioma cai no automatico.
-static void sistemaConsultar(void) {
-  // NUVIO_LOCALE=ro-RO simula a TV em outra lingua na previa (e nos testes).
-  const char *v = getenv("NUVIO_LOCALE");
-  if (!v || !*v) v = getenv("LC_ALL");
-  if (!v || !*v) v = getenv("LC_MESSAGES");
-  if (!v || !*v) v = getenv("LANG");
-  snprintf(sistemaLoc, sizeof sistemaLoc, "%s", v ? v : "");
-}
-static void sistemaRecolher(void) {}
-#else
+#elif defined(NV_WEBOS) || defined(NV_TPK)
+// WEBOS AND NATIVE TIZEN: the TV builds. The webOS compiler defines __linux__
+// like any other Linux target and the toolchain has no webOS macro of its
+// own, so the target identity is spelled by the build: -DNV_WEBOS in
+// tools/arm.sh, the same way every other target carries its macro (NV_TPK
+// from tools/tpk.sh, NV_ANDROID from android/app/src/main/cpp/CMakeLists.txt).
+// The native Tizen tpk has always landed in this same branch (it used to be
+// the #else fallthrough): luna-send does not exist on Tizen, the popen() comes
+// back empty, and the automatic language stays on the saved/default choice -
+// upstream behaviour, kept on purpose, because reading env vars on a TV could
+// pick up a LANG and switch the language out of nowhere.
+//
+// The lookup itself: luna://com.webos.settingsservice/getSystemSettings
+// (locales.UI, "pt-BR"), read on a thread - the process takes a few hundred
+// ms on the TV and startup must not wait for it. The main loop collects the
+// result in ajustes_idioma_auto_tick.
 #include <pthread.h>
 static char sistemaBruto[32];
 static volatile int sistemaPronto;             // 1 = o fio deixou o resultado
@@ -2931,6 +2934,28 @@ static void sistemaRecolher(void) {
   fflush(stdout);
   idiomaResolver(1);
 }
+#else
+// MAC, DESKTOP LINUX AND ANDROID, all without luna-send: read the environment.
+//
+// Linux is here because it is the test bench (galaxy), not a TV target: the
+// TV builds carry their target macros (NV_WEBOS, NV_TPK) and this build has
+// none, so it reaches this branch instead of the webOS lookup above, which
+// popen()s luna-send - a binary that does not exist off webOS. Without that,
+// every automatic-language test failed on the bench for a platform reason,
+// not a code one.
+//
+// Android reads the same variables (the upstream addition); the body is
+// identical, so the two share one branch. NUVIO_LOCALE=ro-RO simulates a TV in
+// another language on the preview and in the tests.
+static void sistemaConsultar(void) {
+  // NUVIO_LOCALE=ro-RO simula a TV em outra lingua na previa (e nos testes).
+  const char *v = getenv("NUVIO_LOCALE");
+  if (!v || !*v) v = getenv("LC_ALL");
+  if (!v || !*v) v = getenv("LC_MESSAGES");
+  if (!v || !*v) v = getenv("LANG");
+  snprintf(sistemaLoc, sizeof sistemaLoc, "%s", v ? v : "");
+}
+static void sistemaRecolher(void) {}
 #endif
 
 void ajustes_idioma_auto_iniciar(void (*aoMudar)(const char *codigo, int fonte, int notificar)) {
