@@ -2558,6 +2558,7 @@ void player_atualizar(float dt, Uint32 agora) {
       int estado = retomadaNaPreparacao ? video_retomada_inicial_estado() : -1;
       if (estado != 0) {
         retomadaAplicada = 1;
+        if (estado > 0) marco("abrir: ponto salvo na preparacao");
         if (estado < 0 && retomarPct > 0) {
           marco("abrir: seek para o ponto salvo"); video_buscar(d * retomarPct / 100.0);
         }
