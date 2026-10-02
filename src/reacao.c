@@ -187,12 +187,15 @@ static struct {
   Uint32 desde;                  // ultima tecla (ou abertura), para os 8 s
 } c;
 static char  oferecido[24];      // titulo ja perguntado nesta sessao do player
+// O RELOGIO DO PLAYER (o `agora` de reacao_player_atualizar). A contagem dos
+// 8 s e a tecla que a reinicia usam o mesmo relogio que a confere.
+static Uint32 ultimoAgora;
 static double durVista, durEstavel;
 
 int reacao_aberta(void) { return c.aberto; }
 
 static void abrir(const char *imdb, const char *midia, const char *titulo,
-                  const char *poster, int detalhe) {
+                  const char *poster, int detalhe, Uint32 agora) {
   memset(&c, 0, sizeof c);
   c.aberto = 1;
   c.modoDetalhe = detalhe;
@@ -202,7 +205,7 @@ static void abrir(const char *imdb, const char *midia, const char *titulo,
   snprintf(c.poster, sizeof c.poster, "%s", poster ? poster : "");
   c.rec = atividade_origem(c.imdb, c.nome, sizeof c.nome);
   c.envia = atividade_envia();
-  c.desde = SDL_GetTicks();
+  c.desde = agora;
 }
 
 void reacao_fechar(void) {
@@ -243,6 +246,7 @@ void reacao_player_atualizar(float dt, Uint32 agora, const CatItem *ci, int ehSe
   char id[24];
   float alvo = c.aberto ? 1.0f : 0.0f;
   int i;
+  ultimoAgora = agora;
   c.anim = anim_mola(c.anim, alvo, dt, NV_MOLA_TELA);
   for (i = 0; i < 3; i++)
     c.focoA[i] = anim_mola(c.focoA[i], (c.aberto && c.foco == i) ? 1.0f : 0.0f, dt,
@@ -261,7 +265,7 @@ void reacao_player_atualizar(float dt, Uint32 agora, const CatItem *ci, int ehSe
     if (st >= -1 && st <= 1) return; }
   if (!reacao_regra_perguntar(ehSerie, temProximo, proxOutraTemporada, pos, dur, cred)) return;
   snprintf(oferecido, sizeof oferecido, "%s", id);
-  abrir(id, ehSerie ? "series" : "movie", ci->titulo, ci->poster, 0);
+  abrir(id, ehSerie ? "series" : "movie", ci->titulo, ci->poster, 0, agora);
   // PENDENTE DESDE JA: se a pessoa sair do player com o cartao no ar, a
   // pergunta continua de pe na pagina do titulo.
   marcarPendente(id, c.midia, c.titulo, c.rec, c.nome);
@@ -280,8 +284,8 @@ int reacao_evento(const SDL_Event *e, int controlesVisiveis) {
     c.aberto = 0;               // pula; a pendencia fica
     return 1;
   }
-  if (k == SDLK_LEFT)  { if (c.foco > 0) c.foco--; c.desde = SDL_GetTicks(); return 1; }
-  if (k == SDLK_RIGHT) { if (c.foco < 2) c.foco++; c.desde = SDL_GetTicks(); return 1; }
+  if (k == SDLK_LEFT)  { if (c.foco > 0) c.foco--; c.desde = ultimoAgora; return 1; }
+  if (k == SDLK_RIGHT) { if (c.foco < 2) c.foco++; c.desde = ultimoAgora; return 1; }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
     reacao_responder(c.imdb, VALOR[c.foco]);
     c.aberto = 0;
@@ -357,7 +361,7 @@ int reacao_detalhe_pendente(const CatItem *ci) {
 
 int reacao_detalhe_abrir(const CatItem *ci) {
   if (!reacao_detalhe_pendente(ci)) return 0;
-  abrir(ci->imdb, ci->tipo, ci->titulo, ci->poster, 1);
+  abrir(ci->imdb, ci->tipo, ci->titulo, ci->poster, 1, SDL_GetTicks());
   { Reacao *r = achar(ci->imdb);
     // A ORIGEM GUARDADA na pendencia vale mais que a busca de agora: a
     // recomendacao pode ter saido da lista do servidor depois da pergunta.
@@ -398,7 +402,7 @@ void reacao_detalhe_dica(const CatItem *ci, float a) {
 
 void reacao_teste_abrir(const char *imdb, const char *titulo, const char *midia,
                         long long rec, const char *nomeRec, int envia) {
-  abrir(imdb, midia, titulo, "", 0);
+  abrir(imdb, midia, titulo, "", 0, SDL_GetTicks());
   c.rec = rec;
   snprintf(c.nome, sizeof c.nome, "%s", nomeRec ? nomeRec : "");
   c.envia = envia;
