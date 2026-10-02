@@ -421,7 +421,7 @@ AddEstado addons_estado(void) {
       // pertence mais a tela, nem pode recriar o cache depois do logout.
       free(resultado); resultado = NULL; nResultado = 0;
       estado = ADD_PARADO;
-      if (progPublicou && !pendId[0]) stream_invalidar("a conta mudou durante a busca");
+      if (progPublicou && !pendId[0]) stream_invalidar("account or profile changed during the search");
     } else {
       if (alvoVod() && resultadoCacheavel)
         fontecache_vod_guardar(alvoId, alvoTipo, fioBase, &fioEscopo,
