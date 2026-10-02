@@ -73,6 +73,9 @@ int  addons_tem_catalogo(int i);  // 1 quando o addon fornece catalogo
 // pergunta SO a esse addon; vazia, pergunta a todos. Ver alvoBase em addons.c.
 void addons_definir_origem(const char *base);
 void addons_buscar(const char *imdb, const char *tipo);
+// Recarregar explicito: descarta a resposta anterior e vai a rede, inclusive
+// quando a lista atual esta vazia ou foi filtrada por falta de debrid.
+void addons_buscar_renovar(const char *imdb, const char *tipo);
 
 // A mesma consulta, SINCRONA E REENTRANTE, e addons_consultar — declarada em
 // fontecache.h, e nao aqui, porque a assinatura precisa de Stream (streams.h,

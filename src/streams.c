@@ -162,18 +162,22 @@ static int soP2P(const Stream *s) {
 }
 
 static Uint32 recebidaEm;
+static int temRecebidaEm;
 // Torrents que a ultima lista jogou fora por falta de debrid: com 0 na lista e
 // isto > 0, a causa da folha vazia e "falta conta de debrid", nao "os addons
 // nao tem" (1.3.12: "145 torrents sem debrid descartados" e folha vazia).
 static int descartadosSemDebrid;
 
 Uint32 stream_idade_ms(void) {
-  return recebidaEm ? SDL_GetTicks() - recebidaEm : 0xFFFFFFFFu;
+  return temRecebidaEm ? SDL_GetTicks() - recebidaEm : 0xFFFFFFFFu;
 }
 
 void stream_definir_lista(const Stream *l, int qtd) {
+  stream_definir_lista_idade(l, qtd, 0);
+}
+
+void stream_definir_lista_idade(const Stream *l, int qtd, Uint32 idade) {
   int i, k = 0;
-  recebidaEm = SDL_GetTicks();
   Stream *nova = l && qtd > 0 ? malloc(sizeof(Stream) * (size_t)qtd) : NULL;
   if (l && qtd > 0 && !nova) return;
   // Torrent sem url so fica se ha debrid para resolve-lo; senao seria uma linha
@@ -185,6 +189,8 @@ void stream_definir_lista(const Stream *l, int qtd) {
   descartadosSemDebrid = nova ? qtd - k : 0;
   pthread_mutex_lock(&verTrava);
   free(lista); lista = nova; n = nova ? k : 0; atual = -1;
+  recebidaEm = SDL_GetTicks() - idade;
+  temRecebidaEm = 1;
   listaGeracao++;
   pthread_mutex_unlock(&verTrava);
   pthread_mutex_lock(&autoExclTrava);

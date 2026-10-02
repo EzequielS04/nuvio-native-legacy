@@ -1,0 +1,38 @@
+// Idade real da lista reaproveitada: nao reinicia validade de URL assinada.
+#include "streams.h"
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
+
+static Uint32 relogio;
+Uint32 SDL_GetTicks(void) { return relogio; }
+int debrid_ativo(void) { return 0; }
+int p2p_ativo(void) { return 0; }
+int main(void) {
+  Stream s = {0};
+  strcpy(s.url, "https://video.invalid/assinado.mp4");
+  assert(stream_idade_ms() == UINT32_MAX);
+  stream_definir_alvo("tt1:2:3");
+  relogio = 10000;
+  stream_definir_lista_idade(&s, 1, 7000);
+  assert(stream_n() == 1 && stream_lista_do_alvo("tt1:2:3"));
+  assert(stream_idade_ms() == 7000);
+  relogio += 5000;
+  assert(stream_idade_ms() == 12000);
+  stream_definir_lista(&s, 1);
+  assert(stream_idade_ms() == 0);
+  relogio = 10000;
+  stream_definir_lista_idade(&s, 1, 10000);
+  assert(stream_idade_ms() == 10000);  // timestamp original zero e valido
+  relogio = UINT32_MAX - 5;
+  stream_definir_lista_idade(&s, 1, 12);
+  relogio = 4;
+  assert(stream_idade_ms() == 22);
+  relogio = 0;
+  stream_definir_lista(&s, 1);
+  assert(stream_idade_ms() == 0);
+  stream_definir_lista(NULL, 0);
+  puts("streams idade: PASS (idade original, lista nova, zero, wrap Uint32)");
+  return 0;
+}

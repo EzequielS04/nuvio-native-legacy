@@ -86,6 +86,9 @@ float stream_folha_anim(void);
 
 // Substitui a lista do titulo corrente. Chamar quando os addons responderem.
 void stream_definir_lista(const Stream *lista, int n);
+// Lista reaproveitada: conserva a idade da resposta original dos addons.
+// O cache de metadados nao pode dar validade nova a um link assinado antigo.
+void stream_definir_lista_idade(const Stream *lista, int n, Uint32 idade);
 
 // DE QUEM E A LISTA QUE ESTA EM MEMORIA — issue #101.
 //

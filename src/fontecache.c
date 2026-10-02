@@ -32,6 +32,13 @@ typedef struct {
 // rede com a trava tomada.
 static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 static Entrada cache[FONTECACHE_MAX];
+typedef struct {
+  Entrada resposta;
+  FontecacheEscopo escopo;
+  char origem[600];
+} EntradaVod;
+static EntradaVod vod[FONTECACHE_VOD_MAX];
+static unsigned vodGeracao;
 
 // Os pedidos do guia: no maximo dois (um vizinho de cada lado). Substituidos
 // inteiros a cada engatilhar — o foco mudou, os vizinhos de antes nao
@@ -147,6 +154,131 @@ int fontecache_n(void) {
     if (cache[i].lista && !expirada(&cache[i], agora)) k++;
   pthread_mutex_unlock(&trava);
   return k;
+}
+
+static int ehVod(const char *tipo) {
+  return tipo && (!strcmp(tipo, "movie") || !strcmp(tipo, "series"));
+}
+
+static int mesmoEscopo(const FontecacheEscopo *a, const FontecacheEscopo *b) {
+  return a->perfil == b->perfil && a->addons == b->addons &&
+         a->geracao == b->geracao && !strcmp(a->conta, b->conta);
+}
+
+// Com a trava. Uma troca de conta/perfil/configuracao tambem solta os dados
+// anteriores, em vez de deixa-los ocupados ate alguem pedir o mesmo titulo.
+static void podarVod(const FontecacheEscopo *escopo, Uint32 agora) {
+  for (int i = 0; i < FONTECACHE_VOD_MAX; i++) {
+    Entrada *e = &vod[i].resposta;
+    if (e->lista && ((Uint32)(agora - e->quando) >= FONTECACHE_VOD_VALIDADE_MS ||
+                    !mesmoEscopo(&vod[i].escopo, escopo)))
+      soltar(e);
+  }
+}
+
+unsigned fontecache_vod_geracao(void) {
+  unsigned g;
+  pthread_mutex_lock(&trava);
+  g = vodGeracao;
+  pthread_mutex_unlock(&trava);
+  return g;
+}
+
+void fontecache_vod_limpar(void) {
+  pthread_mutex_lock(&trava);
+  vodGeracao++;
+  for (int i = 0; i < FONTECACHE_VOD_MAX; i++) soltar(&vod[i].resposta);
+  pthread_mutex_unlock(&trava);
+}
+
+void fontecache_vod_guardar(const char *id, const char *tipo, const char *origem,
+                            const FontecacheEscopo *escopo,
+                            const Stream *lista, int n, Uint32 quando) {
+  int alvo = -1;
+  Uint32 agora = FC_AGORA();
+  Stream *copia;
+  size_t bytes;
+  origem = origem ? origem : "";
+  if (!id || !*id || !ehVod(tipo) || !escopo || !lista || n <= 0 ||
+      strlen(id) >= sizeof vod[0].resposta.id ||
+      strlen(origem) >= sizeof vod[0].origem ||
+      (size_t)n > FONTECACHE_VOD_BYTES / sizeof(Stream) ||
+      (Uint32)(agora - quando) >= FONTECACHE_VOD_VALIDADE_MS) return;
+  bytes = sizeof(Stream) * (size_t)n;
+  pthread_mutex_lock(&trava);
+  if (escopo->geracao != vodGeracao) { pthread_mutex_unlock(&trava); return; }
+  podarVod(escopo, agora);
+  for (int i = 0; i < FONTECACHE_VOD_MAX; i++)
+    if (vod[i].resposta.lista && !strcmp(vod[i].resposta.id, id) &&
+        !strcmp(vod[i].resposta.tipo, tipo) && !strcmp(vod[i].origem, origem)) {
+      alvo = i; break;
+    }
+  if (alvo < 0)
+    for (int i = 0; i < FONTECACHE_VOD_MAX; i++)
+      if (!vod[i].resposta.lista) { alvo = i; break; }
+  if (alvo < 0) {
+    alvo = 0;
+    for (int i = 1; i < FONTECACHE_VOD_MAX; i++)
+      if ((Uint32)(agora - vod[i].resposta.quando) >
+          (Uint32)(agora - vod[alvo].resposta.quando)) alvo = i;
+  }
+  // Solta antes de alocar: mesmo a substituicao respeita o teto do cache.
+  soltar(&vod[alvo].resposta);
+  copia = malloc(bytes);
+  if (copia) {
+    Entrada *e = &vod[alvo].resposta;
+    memcpy(copia, lista, bytes);
+    snprintf(e->id, sizeof e->id, "%s", id);
+    snprintf(e->tipo, sizeof e->tipo, "%s", tipo);
+    e->lista = copia; e->n = n; e->quando = quando;
+    vod[alvo].escopo = *escopo;
+    snprintf(vod[alvo].origem, sizeof vod[alvo].origem, "%s", origem);
+  }
+  pthread_mutex_unlock(&trava);
+}
+
+int fontecache_vod_pegar(const char *id, const char *tipo, const char *origem,
+                        const FontecacheEscopo *escopo,
+                        Stream **lista, int *n, Uint32 *idade) {
+  int r = FC_NADA;
+  Uint32 agora = FC_AGORA();
+  if (lista) *lista = NULL;
+  if (n) *n = 0;
+  if (idade) *idade = 0;
+  if (!id || !*id || !ehVod(tipo) || !escopo || !lista || !n) return FC_NADA;
+  origem = origem ? origem : "";
+  pthread_mutex_lock(&trava);
+  if (escopo->geracao != vodGeracao) { pthread_mutex_unlock(&trava); return FC_NADA; }
+  podarVod(escopo, agora);
+  for (int i = 0; i < FONTECACHE_VOD_MAX; i++) {
+    Entrada *e = &vod[i].resposta;
+    if (!e->lista || strcmp(e->id, id) || strcmp(e->tipo, tipo) ||
+        strcmp(vod[i].origem, origem)) continue;
+    *lista = malloc(sizeof(Stream) * (size_t)e->n);
+    if (*lista) {
+      memcpy(*lista, e->lista, sizeof(Stream) * (size_t)e->n);
+      *n = e->n;
+      if (idade) *idade = agora - e->quando;
+      r = FC_ACERTO;
+    }
+    break;
+  }
+  pthread_mutex_unlock(&trava);
+  return r;
+}
+
+void fontecache_vod_apagar(const char *id, const char *tipo, const char *origem,
+                          const FontecacheEscopo *escopo) {
+  if (!id || !tipo || !escopo) return;
+  origem = origem ? origem : "";
+  pthread_mutex_lock(&trava);
+  for (int i = 0; i < FONTECACHE_VOD_MAX; i++) {
+    Entrada *e = &vod[i].resposta;
+    if (e->lista && mesmoEscopo(&vod[i].escopo, escopo) &&
+        !strcmp(e->id, id) && !strcmp(e->tipo, tipo) &&
+        !strcmp(vod[i].origem, origem)) soltar(e);
+  }
+  pthread_mutex_unlock(&trava);
 }
 
 // --- o fio de prefetch ------------------------------------------------------------
@@ -277,5 +409,7 @@ void fontecache_encerrar(void) {
   criado = vivo = 0;
   emCurso[0] = 0;
   for (i = 0; i < FONTECACHE_MAX; i++) soltar(&cache[i]);
+  vodGeracao++;
+  for (i = 0; i < FONTECACHE_VOD_MAX; i++) soltar(&vod[i].resposta);
   pthread_mutex_unlock(&trava);
 }

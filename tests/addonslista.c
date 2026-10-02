@@ -63,6 +63,13 @@ int stream_extrair(const char *json, const char *prov, Stream **saida) {
   return n;
 }
 void stream_definir_lista(const Stream *l, int n) { (void)l; (void)n; }
+void stream_definir_lista_idade(const Stream *l, int n, Uint32 idade) {
+  (void)idade; stream_definir_lista(l, n); }
+int stream_n(void) { return 0; }
+int stream_lista_do_alvo(const char *id) { (void)id; return 0; }
+Uint32 SDL_GetTicks(void) { return 1000; }
+const char *sessao_usuario(void) { return ""; }
+int perfis_ativo(void) { return 1; }
 void debrid_definir_episodio(int t, int e) { (void)t; (void)e; }
 void debrid_nova_busca(void) { nDebridNovaBusca++; }
 const char *i18n(const char *s) { return s; }
@@ -76,6 +83,23 @@ void fontecache_guardar(const char *id, const char *tipo, const Stream *l, int n
   (void)id; (void)tipo; (void)l; (void)n; }
 void fontecache_ceder(void) {}
 void fontecache_avancar(void) {}
+unsigned fontecache_vod_geracao(void) { return 0; }
+void fontecache_vod_limpar(void) {}
+void fontecache_vod_apagar(const char *id, const char *tipo, const char *origem,
+                          const FontecacheEscopo *escopo) {
+  (void)id; (void)tipo; (void)origem; (void)escopo;
+}
+void fontecache_vod_guardar(const char *id, const char *tipo, const char *origem,
+                           const FontecacheEscopo *escopo,
+                           const Stream *l, int n, Uint32 quando) {
+  (void)id; (void)tipo; (void)origem; (void)escopo; (void)l; (void)n; (void)quando;
+}
+int fontecache_vod_pegar(const char *id, const char *tipo, const char *origem,
+                        const FontecacheEscopo *escopo,
+                        Stream **l, int *n, Uint32 *idade) {
+  (void)id; (void)tipo; (void)origem; (void)escopo;
+  *l = NULL; *n = 0; *idade = 0; return FC_NADA;
+}
 
 // Uma busca inteira, esperando o fio acabar, e a frase da folha.
 static const char *buscarMotivo(const char *id) {

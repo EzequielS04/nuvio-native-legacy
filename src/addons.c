@@ -8,6 +8,8 @@
 #include "js.h"
 #include "marco.h"
 #include "fontecache.h"
+#include "sessao.h"
+#include "perfis.h"
 // So para a cache UNICA de manifesto (desc_manifesto_cache_obter/guardar): ver
 // a nota grande em sondar(), mais abaixo.
 #include "descoberta.h"
@@ -87,12 +89,40 @@ static char fioBase[600];
 static int fioVivo;
 static Stream *resultado;
 static int nResultado;
+static Uint32 resultadoQuando;
+static int resultadoCacheavel;
+static FontecacheEscopo fioEscopo;
 static char pendId[64], pendTipo[16];
+static int pendRenovar;
 // O alvo corrente esta sendo buscado pelo PREFETCH do guia (fontecache.c), e
 // nao por `fio`: addons_buscar o encontrou a caminho e resolveu esperar em vez
 // de repetir. addons_estado e quem colhe. Ver addons_buscar.
 static int adotado;
 static void dispararBusca(void);
+
+static void capturarEscopo(FontecacheEscopo *e) {
+  memset(e, 0, sizeof *e);
+  snprintf(e->conta, sizeof e->conta, "%s", sessao_usuario());
+  e->perfil = perfis_ativo();
+  e->addons = versaoLista;
+  e->geracao = fontecache_vod_geracao();
+}
+
+static int escopoAindaAtual(const FontecacheEscopo *e) {
+  FontecacheEscopo atual;
+  capturarEscopo(&atual);
+  return atual.perfil == e->perfil && atual.addons == e->addons &&
+         atual.geracao == e->geracao && !strcmp(atual.conta, e->conta);
+}
+
+static int alvoVod(void) {
+  return !strcmp(alvoTipo, "movie") || !strcmp(alvoTipo, "series");
+}
+
+static void listaMudou(void) {
+  versaoLista++;
+  fontecache_vod_limpar();
+}
 
 // A BASE de um addon a partir da URL guardada (arquivo local ou conta). A URL
 // aponta para o manifesto; a base e ela sem o sufixo, e e dela que saem
@@ -184,6 +214,7 @@ int addons_carregar(const char *dirArte) {
     nAddon++;
   }
   fclose(f);
+  listaMudou();
   { int f = 0, k;
     for (k = 0; k < nAddon; k++) f += addon[k].fonte;
     printf("[addons] %d configurados, %d fornecem stream\n", nAddon, f); }
@@ -272,7 +303,7 @@ int addons_definir_lista(const AddonRemoto *nova, int n) {
     if (uteis > aceitos)
       printf("[addons] %d da conta ficaram de fora: o app guarda no maximo %d\n",
              uteis - aceitos, ADD_MAX); }
-  versaoLista++;
+  listaMudou();
   return 1;
 }
 
@@ -291,7 +322,7 @@ void addons_esquecer(void) {
   memset(addon, 0, sizeof addon);
   nAddon = 0;
   perfilLista = 0;
-  versaoLista++;
+  listaMudou();
   printf("[addons] lista esquecida (saiu da conta)\n");
 }
 
@@ -330,14 +361,31 @@ AddEstado addons_estado(void) {
   if (fioVivo && e != ADD_BUSCANDO) {
     pthread_join(fio, NULL);
     fioVivo = 0;
-    if (!pendId[0]) stream_definir_lista(resultado, nResultado);
+    if (alvoVod() && !escopoAindaAtual(&fioEscopo)) {
+      // Conta/perfil/configuracao mudaram durante a rede. Essa resposta nao
+      // pertence mais a tela, nem pode recriar o cache depois do logout.
+      free(resultado); resultado = NULL; nResultado = 0;
+      estado = ADD_PARADO;
+    } else {
+      if (alvoVod() && resultadoCacheavel)
+        fontecache_vod_guardar(alvoId, alvoTipo, fioBase, &fioEscopo,
+                              resultado, nResultado, resultadoQuando);
+      if (!pendId[0]) {
+        if (alvoVod())
+          stream_definir_lista_idade(resultado, nResultado, SDL_GetTicks() - resultadoQuando);
+        else stream_definir_lista(resultado, nResultado);
+      }
+    }
     free(resultado); resultado = NULL; nResultado = 0;
     if (pendId[0]) {
       char id[64], tipo[16];
+      int renovar = pendRenovar;
       snprintf(id, sizeof id, "%s", pendId);
       snprintf(tipo, sizeof tipo, "%s", pendTipo);
       pendId[0] = 0;
-      addons_buscar(id, tipo);
+      pendRenovar = 0;
+      if (renovar) addons_buscar_renovar(id, tipo);
+      else addons_buscar(id, tipo);
       return ADD_BUSCANDO;
     }
     e = atomic_load(&estado);
@@ -622,7 +670,7 @@ int addons_fornece(int i, int oque) {
 int addons_alternar(int i) {
   if (i < 0 || i >= nAddon) return 0;
   addon[i].ativo = !addon[i].ativo;
-  versaoLista++;
+  listaMudou();
   printf("[addons] %s: %s\n", addon[i].nome, addon[i].ativo ? "ligado" : "desligado");
   fflush(stdout);
   return addon[i].ativo;
@@ -676,7 +724,7 @@ int addons_adicionar(const char *nome, const char *urlManifest) {
   addon[nAddon].sondado = 0;
   addon[nAddon].canalLido = 0; addon[nAddon].nCanal = 0; addon[nAddon].mudoSeg = 0;
   nAddon++;
-  versaoLista++;
+  listaMudou();
   printf("[addons] instalado pelo guia: %s (%s)\n",
          addon[nAddon - 1].nome, nova);
   fflush(stdout);
@@ -1449,11 +1497,13 @@ static void *buscar(void *u) {
   marco("addons: consulta inicio");
   resumoDaLista(&rs);
   n = consultar(alvoId, alvoTipo, fioBase, ADD_FIOS, NULL, NULL, &achados, &rs);
+  resultadoQuando = SDL_GetTicks();
+  resultadoCacheavel = n > 0 && rs.semResposta == 0;
   if (n < 0) n = 0;
   resumo = rs;
   marco(n ? "addons: fontes recebidas" : "addons: nenhuma fonte");
-  // O canal que vai ao ar fica no cache para o zap de VOLTA. Filme e serie
-  // nao entram (fontecache_guardar decide pelo tipo).
+  // O canal fica no cache para o zap de volta. VOD so entra na publicacao
+  // pela UI, depois de conferir a conta/perfil/configuracao capturados.
   fontecache_guardar(alvoId, alvoTipo, achados, n);
   resultado = achados; nResultado = n;
   printf("[addons] total %d\n", n);
@@ -1469,6 +1519,7 @@ static void dispararBusca(void) {
   fontecache_ceder();
   estado = ADD_BUSCANDO;
   fioVivo = 1;
+  capturarEscopo(&fioEscopo);
   snprintf(fioBase, sizeof fioBase, "%s", alvoBase);
   alvoBase[0] = 0;   // consumida: origem e do pedido, nao de sessao
   if (pthread_create(&fio, NULL, buscar, NULL) != 0) { fioVivo = 0; estado = ADD_PARADO; }
@@ -1480,24 +1531,24 @@ void addons_definir_origem(const char *base) {
   snprintf(alvoBase, sizeof alvoBase, "%s", base ? base : "");
 }
 
-void addons_buscar(const char *imdb, const char *tipo) {
-  int serie;
+static void buscarPedido(const char *imdb, const char *tipo, int forcar) {
+  int serie, renovar;
   if (!imdb || !*imdb) return;
   resumo.valido = 0;
   // Recusa de conta do debrid vale por busca: a nova volta a tentar todos.
   debrid_nova_busca();
   if (!nAddon) { stream_definir_lista(NULL, 0); resumoDaLista(&resumo); estado = ADD_VAZIO; return; }
   if (fioVivo) {
-    if (strcmp(imdb, alvoId) || strcmp(tipo ? tipo : "movie", alvoTipo)) {
+    if (forcar || strcmp(imdb, alvoId) || strcmp(tipo ? tipo : "movie", alvoTipo)) {
       snprintf(pendId, sizeof pendId, "%s", imdb);
       snprintf(pendTipo, sizeof pendTipo, "%s", tipo ? tipo : "movie");
+      pendRenovar = forcar;
     }
     return;
   }
   // Um pedido novo desfaz a espera pelo prefetch do anterior; o prefetch em si
   // segue ou cede conforme o que vem abaixo.
   adotado = 0;
-  stream_definir_lista(NULL, 0);
   serie = tipo && !strcmp(tipo, "series");
   // Serie SEM episodio devolve lista vazia, com HTTP 200 e sem erro nenhum
   // (medido: 14 bytes de resposta). O identificador tem de ser
@@ -1510,15 +1561,38 @@ void addons_buscar(const char *imdb, const char *tipo) {
   else
     snprintf(alvoId, sizeof alvoId, "%s", imdb);
   snprintf(alvoTipo, sizeof alvoTipo, "%s", tipo && *tipo ? tipo : "movie");
+  // Pedir de novo a lista que ainda esta ativa e renovar/recarregar, inclusive
+  // depois de falha de reproducao: esse pedido continua indo a rede.
+  renovar = forcar || (stream_n() > 0 && stream_lista_do_alvo(alvoId));
+  stream_definir_lista(NULL, 0);
   { int t = 0, e = 0;
     idbase_episodio(alvoId, &t, &e);
     debrid_definir_episodio(t, e); }
+  if (alvoVod()) {
+    FontecacheEscopo escopo;
+    Stream *l;
+    int n;
+    Uint32 idade;
+    capturarEscopo(&escopo);
+    if (renovar) fontecache_vod_apagar(alvoId, alvoTipo, alvoBase, &escopo);
+    else if (fontecache_vod_pegar(alvoId, alvoTipo, alvoBase, &escopo,
+                            &l, &n, &idade) == FC_ACERTO) {
+      stream_definir_lista_idade(l, n, idade);
+      free(l);
+      alvoBase[0] = 0;
+      estado = ADD_PRONTO;
+      printf("[addons] %d fontes VOD reaproveitadas (%u ms)\n", n, (unsigned)idade);
+      return;
+    }
+  }
   // O CACHE ANTES DA REDE. Canal que o guia engatilhou (ou que acabou de sair
   // do ar) responde daqui, sem fio nenhum; canal cujo prefetch esta na rede
   // AGORA e adotado — esperar o que ja esta a caminho e mais curto que repetir
   // as mesmas requisicoes, e addons_estado publica quando chegar.
   { Stream *l; int n;
     int r = fontecache_pegar(alvoId, alvoTipo, &l, &n);
+    if (forcar && r == FC_ACERTO) { free(l); r = FC_NADA; }
+    if (forcar && r == FC_EM_CURSO) r = FC_NADA;
     if (r == FC_ACERTO) {
       printf("[addons] %s: %d fontes do cache\n", alvoId, n);
       stream_definir_lista(l, n);
@@ -1534,6 +1608,9 @@ void addons_buscar(const char *imdb, const char *tipo) {
     } }
   dispararBusca();
 }
+
+void addons_buscar(const char *imdb, const char *tipo) { buscarPedido(imdb, tipo, 0); }
+void addons_buscar_renovar(const char *imdb, const char *tipo) { buscarPedido(imdb, tipo, 1); }
 
 void addons_encerrar(void) {
   int juntarLeg;
