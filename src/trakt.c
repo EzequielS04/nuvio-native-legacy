@@ -792,6 +792,8 @@ static void consultarProximos(TarefaProx *v, int n, const char *const *cab) {
   if (!criados) fioProximo(NULL);
   for (q = 0; q < criados; q++) pthread_join(fios[q], NULL);
   proxTarefas = NULL; proxN = 0;
+}
+
 // TODOS OS FILMES VISTOS (#212). carregarHistoricoReal le as ultimas 100
 // reproducoes, e quem ve serie enche esse limite de episodios: no log da #212
 // ("historico: 12 serie(s) com ultimo episodio visto") nenhum filme entrou, e
