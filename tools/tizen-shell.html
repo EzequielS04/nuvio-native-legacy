@@ -118,6 +118,13 @@
 <div id="diag" hidden>Nuvio: iniciando…</div>
 <canvas id="canvas" width="1920" height="1080" tabindex="0"
         oncontextmenu="event.preventDefault()"></canvas>
+<!-- CAMPO DO IME (src/entrada_texto.c). Invisivel e fora do caminho do
+     ponteiro; so existe para o IME da Samsung ter onde escrever. -->
+<input id="nvTextoCampo" type="text" autocomplete="off" autocorrect="off"
+       spellcheck="false" aria-hidden="true" tabindex="-1"
+       style="position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0.01;
+              border:0;padding:0;margin:0;color:transparent;background:transparent;
+              caret-color:transparent;pointer-events:none;z-index:0">
 <script>
   // DIAGNOSTICO DE ARRANQUE, e ele sai ANTES de qualquer coisa do app.
   //
@@ -464,6 +471,79 @@
     },
     printErr: function (t) { console.warn(t); if (window.__nvDiag) window.__nvDiag(t, 1); }
   };
+
+  // TECLADO DO SISTEMA (src/entrada_texto.c). O C chama nvTexto.abrir/fechar
+  // por EM_ASM e LE seq/valor/fim a cada quadro; o JS nunca chama o WASM.
+  //
+  // focus() por JS abre o IME porque o metadado
+  // http://samsung.com/tv/metadata/use.keypad.without.useraction vale true por
+  // padrao (guia "Keyboard/IME" da Samsung). Done = 65376, Cancel = 65385;
+  // o resto do IME chega como keyCode 229 e o texto pelo evento input.
+  // Enquanto o campo tem foco, as teclas NAO sobem ao window: o SDL escuta la,
+  // e a letra entraria duas vezes (pelo IME e pelo KEYDOWN).
+  // Este ouvinte de captura vem ANTES dos outros de keydown de proposito: o
+  // Return (10009) com o IME aberto fecha so o IME, e nao o Spotlight.
+  (function () {
+    var t = { seq: 0, valor: "", fim: -1, aberto: false };
+    var campo = function () { return document.getElementById("nvTextoCampo"); };
+    function devolverFoco() {
+      var c = document.getElementById("canvas");
+      if (c) c.focus();
+    }
+    function terminar(confirmou) {
+      if (!t.aberto) return;
+      t.aberto = false;
+      t.fim = confirmou ? 1 : 0;
+      var el = campo();
+      if (el) el.blur();
+      devolverFoco();
+    }
+    function ler() {
+      var el = campo();
+      if (!el || !t.aberto) return;
+      if (el.value !== t.valor) { t.valor = el.value; t.seq++; }
+    }
+    t.abrir = function (atual, voz) {
+      var el = campo();
+      if (!el) return;
+      t.valor = atual || ""; el.value = t.valor; t.fim = -1; t.aberto = true;
+      t.seq++;
+      el.focus();
+      try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {}
+      console.log("[texto] wgt: campo focado (voz=" + (voz ? 1 : 0) + ")");
+    };
+    t.fechar = function () {
+      if (!t.aberto) return;
+      t.aberto = false;
+      var el = campo();
+      if (el) el.blur();
+      devolverFoco();
+    };
+    window.nvTexto = t;
+    window.addEventListener("load", function () {
+      var el = campo();
+      if (!el) return;
+      el.addEventListener("input", ler);
+      el.addEventListener("compositionend", ler);
+      el.addEventListener("change", ler);
+      el.addEventListener("blur", function () { ler(); terminar(0); });
+      ["keydown", "keyup", "keypress"].forEach(function (tipo) {
+        el.addEventListener(tipo, function (ev) {
+          if (!t.aberto) return;
+          ev.stopPropagation();
+          if (tipo !== "keydown") return;
+          if (ev.keyCode === 65376 || ev.keyCode === 13) { ev.preventDefault(); ler(); terminar(1); }
+          else if (ev.keyCode === 65385 || ev.keyCode === 27) { ev.preventDefault(); ler(); terminar(0); }
+        });
+      });
+    });
+    window.addEventListener("keydown", function (ev) {
+      if (!t.aberto || ev.keyCode !== 10009) return;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      ler(); terminar(0);
+    }, true);
+  })();
 
   // Teclas do controle Samsung. Sem registrar, o firmware nao entrega nada alem
   // das setas e do OK — as coloridas, as de midia e o Return sao engolidas
