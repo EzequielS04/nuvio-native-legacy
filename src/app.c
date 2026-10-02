@@ -80,6 +80,8 @@
 #include "atualizacao.h"
 #include "pipintro.h"
 #include "social.h"
+#include "amigoperfil.h"
+#include "amigosfil.h"
 #include "ajustes.h"
 #include "anim.h"
 #include "diagnostico.h"
@@ -1557,7 +1559,7 @@ void app_evento(const SDL_Event *e) {
     case TELA_BIBLIOTECA: biblioteca_evento(e); break;
     case TELA_AGENDA:     agendaui_evento(e);   break;
     case TELA_PERFIL:     perfil_evento(e);     break;
-    case TELA_SOCIAL:     social_evento(e);     break;
+    case TELA_SOCIAL:     amigoperfil_evento(e); break;
     case TELA_ADDONS:     addonsui_evento(e);   break;
     case TELA_AJUSTES:    ajustes_evento(e);    break;
     case TELA_DIAGNOSTICO: diagnostico_evento(e); break;
@@ -2140,6 +2142,8 @@ void app_atualizar(float dt, Uint32 agora) {
     const char *alvo = spainel_pediu_abrir();
     if (!alvo) alvo = recomenda_pediu_abrir();   // mesmo contrato, outra origem
     if (!alvo) alvo = avisos_pediu_abrir();
+    { static char afImdb[24];
+      if (!alvo && amigosfil_pediu_titulo(afImdb, sizeof afImdb)) alvo = afImdb; }
     if (!alvo && tela == TELA_AGENDA) alvo = agendaui_pediu_abrir();
     // "ASSISTIR T<n>E<n>" DO MODAL DA AGENDA: abre o titulo e pede a
     // reproducao do episodio no mesmo passe — o caminho do cartao de Continuar
@@ -2164,12 +2168,14 @@ void app_atualizar(float dt, Uint32 agora) {
     }
   }
 
-  if (tela==TELA_HOME) {
-    CatItem pessoa;
-    if(home_pediu_pessoa_social(&pessoa)) {
-      social_abrir(&pessoa);trocarTela(TELA_SOCIAL);
-    }
-  }
+  // O PERFIL DO AMIGO (amigoperfil.c): OK num rosto da fileira de amigos ou
+  // na linha do amigo no painel. Substitui a ficha do Trakt de social.c.
+  { char pid[96];
+    if ((tela == TELA_HOME && amigosfil_pediu_perfil(pid, sizeof pid)) ||
+        spainel_pediu_perfil(pid, sizeof pid)) {
+      if (spainel_aberto()) spainel_fechar();
+      amigoperfil_abrir(pid); trocarTela(TELA_SOCIAL);
+    } }
   if (tela==TELA_HOME && home_pediu_social()) {
     trocarTela(TELA_AJUSTES);menu_definir_destino(MENU_AJUSTES);
   }
@@ -2245,7 +2251,7 @@ void app_atualizar(float dt, Uint32 agora) {
               || (tela == TELA_BIBLIOTECA && biblioteca_quer_sair())
               || (tela == TELA_AGENDA     && agendaui_quer_sair())
               || (tela == TELA_PERFIL      && perfil_quer_sair())
-              || (tela == TELA_SOCIAL      && social_quer_sair())
+              || (tela == TELA_SOCIAL      && amigoperfil_quer_sair())
               || (tela == TELA_AJUSTES    && ajustes_quer_sair())
               || (tela == TELA_DIAGNOSTICO && diagnostico_quer_sair());
     if (fechar) {
@@ -2368,10 +2374,10 @@ void app_atualizar(float dt, Uint32 agora) {
         if (idx >= 0) abrirPorIndice(idx); else desc_pedir_titulo(p.id);
       }
     } else if (tela == TELA_SOCIAL) {
-      SocialItemSelecionado s;
-      if (social_item_selecionado(&s) && s.imdb[0]) {
-        idx=cat_indice_por_imdb(s.imdb);
-        if(idx>=0)abrirPorIndice(idx); else desc_pedir_titulo(s.imdb);
+      char si[24];
+      if (amigoperfil_pediu_titulo(si, sizeof si) && si[0]) {
+        idx=cat_indice_por_imdb(si);
+        if(idx>=0)abrirPorIndice(idx); else desc_pedir_titulo(si);
       }
     }
   }
@@ -3238,7 +3244,7 @@ void app_atualizar(float dt, Uint32 agora) {
     }
   }
   pipintro_atualizar(dt, agora);
-  if(tela==TELA_SOCIAL) social_atualizar(dt, agora);
+  if(tela==TELA_SOCIAL) amigoperfil_atualizar(dt, agora);
   if(tela==TELA_ADDONS) addonsui_atualizar(dt, agora);
 }
 
@@ -3268,7 +3274,7 @@ static void desenharAtrasDoPainel(void *ctx) {
       case TELA_BIBLIOTECA: biblioteca_desenhar(agora); break;
       case TELA_AGENDA:     agendaui_desenhar(agora);   break;
       case TELA_PERFIL:     perfil_desenhar(agora);     break;
-      case TELA_SOCIAL:     social_desenhar(agora);     break;
+      case TELA_SOCIAL:     amigoperfil_desenhar(agora);     break;
       case TELA_ADDONS:     addonsui_desenhar(agora);   break;
       case TELA_AJUSTES:    ajustes_desenhar(agora);    break;
       case TELA_DIAGNOSTICO: diagnostico_desenhar(agora); break;

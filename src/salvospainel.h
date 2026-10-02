@@ -14,6 +14,7 @@
 #ifndef NV_SALVOSPAINEL_H
 #define NV_SALVOSPAINEL_H
 #include <SDL2/SDL.h>
+#include <stddef.h>
 
 void spainel_abrir(void);
 void spainel_fechar(void);
@@ -53,5 +54,11 @@ int  spainel_n_fundos(void);
 // o id no catalogo e abre o detalhe e o roteador (app.c) — o painel nao conhece
 // nem detail.c nem a descoberta, exatamente como perfil.c nao conhecia.
 const char *spainel_pediu_abrir(void);
+// OK na linha de um amigo (aba Amigos): o id da pessoa, uma vez, para app.c
+// abrir o perfil (amigoperfil.h). O painel ja fechou.
+int spainel_pediu_perfil(char *id, size_t tam);
+// Para os testes: abre direto numa aba (0 Salvos, 1 Atividade, 2 Amigos,
+// 3 Avisos), com o foco na primeira linha da lista.
+void spainel_ir_aba(int aba);
 
 #endif
