@@ -7,7 +7,6 @@
 // texto — que o cache de text.c ja guarda por string.
 #include "ilha.h"
 #include "ilha_voo.h"
-#include "video_quadro.h"
 #include "ajustes.h"
 #include "anim.h"
 #include "botoes.h"
@@ -84,11 +83,14 @@ static Uint32 vooDesde;
 static GfxRect vooAlvo;
 static int vooAlvoOk;
 static char vooArte[1024], vooCapa[1024];
-// O QUADRO DO VIDEO (Android, video_quadro.h): textura propria, de onde ele
-// estava na tela. 0 = sem quadro, o voo usa o still (vooArte) em tela cheia.
-static GLuint vooQuadro;
-static float vooQuadroAsp;
-static GfxRect vooDe;
+// DISSOLVER (Android, sessao retida): o video parado continua no plano de
+// baixo, entao o primeiro quadro do voo e ELE (a tela inteira transparente) e
+// a arte + home entram por cima em VOO_DISSOLVE_MS, ja encolhendo. Sem isso o
+// voo nascia com o still em tela cheia: um corte do quadro do filme para o
+// fundo do titulo. (Copiar o quadro real com PixelCopy levou 603-724 ms na
+// TCL, 02/10: lento demais para a saida.)
+#define VOO_DISSOLVE_MS 150u
+static int vooDissolve;
 static Uint32 pousouEm;          // o pulso da pilula conta daqui
 static Uint32 altBase;           // a alternancia dos cartoes conta daqui
 
@@ -666,42 +668,27 @@ int ilha_minimizar(const char *fundoReserva) {
   if (vooArte[0] && !tex_obter_larg_qualquer(vooArte, 960.0f) && fundoReserva && fundoReserva[0])
     snprintf(vooArte, sizeof vooArte, "%s", fundoReserva);
   snprintf(vooCapa, sizeof vooCapa, "%s", c->poster);
-  vooDe = (GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H };
-  vooQuadroAsp = 0.0f;
-  if (vooQuadro) { glDeleteTextures(1, &vooQuadro); vooQuadro = 0; }
-  { int pw = 0, ph = 0, qx = 0, qy = 0, qw = 0, qh = 0;
-    const unsigned char *px = video_quadro_pixels(&pw, &ph, &qx, &qy, &qw, &qh);
-    if (px && pw > 1 && ph > 1 && qw > 1 && qh > 1) {
-      glGenTextures(1, &vooQuadro);
-      glBindTexture(GL_TEXTURE_2D, vooQuadro);
-      glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pw, ph, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      gfx_tex_esquecer(0);
-      vooDe = (GfxRect){ (float)qx, (float)qy, (float)qw, (float)qh };
-      vooQuadroAsp = (float)pw / (float)ph;
-      printf("[ilha] minimizar: quadro do video %dx%d de %d,%d %dx%d\n", pw, ph, qx, qy, qw, qh);
-    } }
-  video_quadro_soltar();
+  vooDissolve = 0;
   // vooDesde = 0: o relogio do voo comeca no primeiro quadro DESENHADO. O
   // ultimo quadro da ilha foi antes do player, e um dt de minutos daria o
   // primeiro passo inteiro de uma vez.
   voo = 1; vooT = 0.0f; vooDesde = 0; vooAlvoOk = 0; pousouEm = 0;
-  printf("[ilha] minimizar: %s -> mini capa (%s)\n", c->imdb, vooQuadro ? "quadro" : "still");
+  printf("[ilha] minimizar: %s -> mini capa\n", c->imdb);
   return 1;
 }
 
 int ilha_minimizando(void) { return voo; }
+
+void ilha_minimizar_dissolver(int sim) {
+  if (voo) vooDissolve = sim ? 1 : 0;
+  if (voo && sim) printf("[ilha] minimizar: dissolve a partir do video parado\n");
+}
 
 static void vooFim(const char *por, Uint32 agora) {
   if (!voo) return;
   voo = 0;
   altBase = agora;
   pousouEm = strcmp(por, "pousou") ? 0 : agora ? agora : 1;
-  if (vooQuadro) { glDeleteTextures(1, &vooQuadro); vooQuadro = 0; gfx_tex_esquecer(0); }
   printf("[ilha] minimizar: fim (%s, %u ms)\n", por, vooDesde ? (unsigned)(agora - vooDesde) : 0u);
 }
 
@@ -715,7 +702,6 @@ static float suave01(float a, float b, float x) {
 // linha reta. A curva acelera e desacelera sem atravessar o destino: tamanho
 // e centro chegam juntos, sem um cartaz grande sobre o texto da pilula.
 static GfxRect vooRect(GfxRect alvo, float t, float *f) {
-  if (vooQuadro) return ilha_voo_rect_de(vooDe, vooQuadroAsp, alvo, t, f);
   return ilha_voo_rect(alvo, t, NV_TELA_W, NV_TELA_H, f);
 }
 
@@ -771,9 +757,15 @@ static void desenharVoo(GfxRect pilulaFinal, int fase) {
              1.0f, 0, 0, 0.5f, 0, 0, 0, 0.40f * suave01(0.0f, 0.3f, f));
   // O cartaz entra enquanto o quadro assume a forma da capa: no pouso ja e ele.
   cruza = vooCapa[0] ? suave01(0.72f, 0.98f, t) : 0.0f;
-  if (vooQuadro) { if (cruza < 0.99f) vooTexEm(vooQuadro, vooQuadroAsp, q, raioPx / q.h, 1.0f); }
-  else if (cruza < 0.99f) vooArteEm(vooArte, q, raioPx / q.h, 1.0f);
+  if (cruza < 0.99f) vooArteEm(vooArte, q, raioPx / q.h, 1.0f);
   if (cruza > 0.0f) vooArteEm(vooCapa, q, raioPx / q.h, cruza);
+  // Por ultimo: tudo o que ja esta no quadro (home, veu, arte) entra em
+  // fracao `d`, e o resto e o video parado no plano de baixo.
+  if (vooDissolve && vooDesde) {
+    float d = (float)(SDL_GetTicks() - vooDesde) / (float)VOO_DISSOLVE_MS;
+    if (d >= 1.0f) vooDissolve = 0;
+    else gfx_dissolver_tela(d * d * (3.0f - 2.0f * d));
+  }
 }
 
 static void vooPasso(Uint32 agora) {

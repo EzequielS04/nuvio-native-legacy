@@ -2005,6 +2005,18 @@ void gfx_furo_raio(GfxRect r, float raio) {
   gfxBlend(1);
 }
 
+// Multiplica TUDO o que ja foi desenhado neste quadro (cor e alfa, que e
+// pre-multiplicado na superficie) por `a`: onde havia home opaca passa a
+// haver home * a sobre o plano de video * (1 - a). Um quad de tela cheia.
+void gfx_dissolver_tela(float a) {
+  GfxRect t = { 0, 0, NV_TELA_W, NV_TELA_H };
+  if (a >= 0.999f) return;
+  if (a < 0.0f) a = 0.0f;
+  glBlendFuncSeparate(GL_ZERO, GL_SRC_ALPHA, GL_ZERO, GL_SRC_ALPHA);
+  gfx_rect(t, 0, GFX_COR, 0, 0, 0, 0.0f, 0, 0, 0, a);
+  glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+}
+
 void gfx_esqueleto(GfxRect r, float raio, float cr, float cg, float cb, float ca) {
   // Com animacoes reduzidas, a superficie parada: e o mesmo "carregando" sem
   // nada passando por cima.

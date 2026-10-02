@@ -1,17 +1,14 @@
 package space.nuvio.nativelegacy
 
 import android.app.Activity
-import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
-import android.view.PixelCopy
 import android.view.SurfaceView
 import android.view.View
 import android.widget.FrameLayout
-import java.nio.ByteBuffer
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -105,7 +102,6 @@ object NvPlayer {
     @JvmStatic external fun nativeLegenda(texto: String, durMs: Int)
     @JvmStatic external fun nativePos(ms: Int)
     @JvmStatic external fun nativeHdr(hdr: String, dv: Int, atmos: Int)
-    @JvmStatic external fun nativeQuadro(seq: Int, px: ByteBuffer?, pw: Int, ph: Int, x: Int, y: Int, w: Int, h: Int)
 
     private fun ev(tipo: Int, a: Int = 0, b: Int = 0) {
         try { nativeEvento(tipo, a, b) } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "evento $tipo sem lib: $e") }
@@ -158,38 +154,6 @@ object NvPlayer {
     @JvmStatic fun volume(pct: Int) { principal.post { player?.volume = pct.coerceIn(0, 100) / 100f } }
     @JvmStatic fun janela(x: Int, y: Int, w: Int, h: Int, encaixa: Int) { principal.post { definirJanela(x, y, w, h, encaixa != 0) } }
     @JvmStatic fun escolher(tipo: Int, idx: Int) { principal.post { escolherMain(tipo, idx) } }
-    @JvmStatic fun capturar(seq: Int) { principal.post { capturarMain(seq) } }
-
-    // O QUADRO DO VIDEO PARA O VOO DA ILHA (src/video_quadro.h). PixelCopy le
-    // o ultimo buffer da SurfaceView (o player acabou de pausar: o pedido vem
-    // logo atras do pausar, na mesma fila). 960 de largura na proporcao da
-    // janela: o voo so encolhe, metade da tela basta e sao ~2 MB. Responde
-    // sempre, com ou sem pixels, para o C nao esperar o prazo dele.
-    private const val QUADRO_W = 960
-    private fun capturarMain(seq: Int) {
-        val sv = superficie
-        fun falha(cod: Int) { try { nativeQuadro(seq, null, 0, 0, 0, 0, 0, cod) } catch (e: UnsatisfiedLinkError) { } }
-        if (player == null || sv == null || sv.visibility != View.VISIBLE || sv.holder.surface?.isValid != true ||
-            sv.width < 2 || sv.height < 2) { falha(-1); return }
-        val w = QUADRO_W
-        val h = maxOf(2, Math.round(QUADRO_W.toFloat() * sv.height / sv.width))
-        val bmp = try { Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888) } catch (e: Throwable) { falha(-2); return }
-        val x0 = jx; val y0 = jy; val w0 = jw; val h0 = jh
-        val t0 = SystemClock.uptimeMillis()
-        try {
-            PixelCopy.request(sv, bmp, { r ->
-                Log.i(TAG, "PixelCopy $r em ${SystemClock.uptimeMillis() - t0} ms (${w}x$h)")
-                if (r == PixelCopy.SUCCESS) {
-                    try {
-                        val buf = ByteBuffer.allocateDirect(w * h * 4)
-                        bmp.copyPixelsToBuffer(buf)
-                        nativeQuadro(seq, buf, w, h, x0, y0, w0, h0)
-                    } catch (e: Throwable) { falha(-3) }
-                } else falha(r)
-                bmp.recycle()
-            }, principal)
-        } catch (e: Throwable) { Log.w(TAG, "capturar: $e"); bmp.recycle(); falha(-4) }
-    }
 
     // --- abrir / liberar ------------------------------------------------------
 

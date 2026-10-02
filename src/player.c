@@ -34,7 +34,6 @@
 #include "posplay.h"
 #include "extras.h"
 #include "video.h"
-#include "video_quadro.h"
 #include "faixas.h"
 #include "gfx.h"
 #include "text.h"
@@ -244,10 +243,10 @@ static int   tocando = 1;
 static int retido, prepararRetencao, retidoPerfil, retomarMkv;
 static Uint32 retidoDesde;
 // SAIDA PARA A ILHA SEM O FADE DO PLAYER (Android): o voo comeca assim que a
-// pausa foi confirmada e o quadro do video copiado (video_quadro.h), em vez
-// de ~430 ms de OSD apagando sobre o video parado antes de a home aparecer.
-// O teto cobre um PixelCopy que nao responde: o voo sai com o still.
-#define PLR_SAIDA_ILHA_TETO_MS 600u
+// pausa foi confirmada (evento 3, ~3 ms na TCL), em vez de ~430 ms de OSD
+// apagando sobre o video parado antes de a home aparecer. Sem confirmacao no
+// teto, segue sem reter (fechamento normal).
+#define PLR_SAIDA_ILHA_TETO_MS 220u
 static Uint32 saidaIlhaDesde;
 static char retidoConta[96], retidoUrl[4096];
 // Botao em foco na fileira de transporte. Comeca no PLAY porque e a resposta
@@ -1452,9 +1451,6 @@ void player_preparar_retencao(void) {
   if (prepararRetencao || retido || !podeReter()) return;
   prepararRetencao = 1;
 #ifdef NV_ANDROID
-  // ANTES do pausar na fila do fio principal (teste: PixelCopy depois da
-  // pausa levou 603 ms na TCL).
-  video_quadro_pedir();
   saidaIlhaDesde = SDL_GetTicks() | 1u;
 #endif
   video_pausar(1);
@@ -2384,10 +2380,10 @@ void player_atualizar(float dt, Uint32 agora) {
   // aparecer.
   if (!inicioImagem && comVideo && video_pronto()) { inicioImagem = agora; acordar(); }
   if (saindo && saidaIlhaDesde && prepararRetencao &&
-      ((video_quadro_estado() != VQ_ESPERANDO && video_pausa_confirmada()) ||
+      (video_pausa_confirmada() ||
        (Sint32)(SDL_GetTicks() - saidaIlhaDesde) >= (Sint32)PLR_SAIDA_ILHA_TETO_MS)) {
-    printf("[player] saida para a ilha em %d ms (quadro %d, pausa %d)\n",
-           (int)(Sint32)(SDL_GetTicks() - saidaIlhaDesde), video_quadro_estado(), video_pausa_confirmada());
+    printf("[player] saida para a ilha em %d ms (pausa %d)\n",
+           (int)(Sint32)(SDL_GetTicks() - saidaIlhaDesde), video_pausa_confirmada());
     fflush(stdout);
     entrada = 0.0f;
   }

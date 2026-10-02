@@ -110,6 +110,9 @@ int  ilha_pediu(IlhaCartao *c, int *qual);
 // posto. Animacoes reduzidas: nada voa, a pilula ja aparece com o cartao.
 // 0 = sem cartao ou sem relogio: nada a fazer.
 int  ilha_minimizar(const char *fundoReserva);
+// Logo depois do ilha_minimizar: 1 = o video pausado segue no plano de baixo
+// (sessao retida, Android) e o voo nasce dissolvendo a partir dele.
+void ilha_minimizar_dissolver(int sim);
 int  ilha_minimizando(void);
 
 // Retangulo da pilula (ou do modal, enquanto ele esta na tela) no ultimo

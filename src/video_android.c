@@ -28,8 +28,6 @@
 #ifdef NV_ANDROID
 #include "video.h"
 #include "video_reconexao.h"
-#include "video_quadro.h"
-#include <stdlib.h>
 #include "idioma.h"
 #include "linguas.h"
 #include <SDL2/SDL.h>
@@ -41,7 +39,7 @@
 #define NV_CLASSE "space/nuvio/nativelegacy/NvPlayer"
 
 static jclass    gCls;      // GlobalRef: FindClass de fio do SDL nao acha classe do app
-static jmethodID mAbrir, mParar, mPausar, mBuscar, mVolume, mJanela, mEscolher, mCapturar;
+static jmethodID mAbrir, mParar, mPausar, mBuscar, mVolume, mJanela, mEscolher;
 
 static int resolverMetodos(JNIEnv *env) {
   mAbrir    = (*env)->GetStaticMethodID(env, gCls, "abrir", "(Ljava/lang/String;Ljava/lang/String;)V");
@@ -52,9 +50,6 @@ static int resolverMetodos(JNIEnv *env) {
   mJanela   = (*env)->GetStaticMethodID(env, gCls, "janela", "(IIIII)V");
   mEscolher = (*env)->GetStaticMethodID(env, gCls, "escolher", "(II)V");
   if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); return 0; }
-  // Opcional: um APK velho sem capturar() so perde o quadro do voo.
-  mCapturar = (*env)->GetStaticMethodID(env, gCls, "capturar", "(I)V");
-  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); mCapturar = NULL; }
   return mAbrir && mParar && mPausar && mBuscar && mVolume && mJanela && mEscolher;
 }
 
@@ -434,60 +429,6 @@ int video_pausa_confirmada(void) {
          !falhou && !terminou && !video_reconectando();
 }
 
-// --- o quadro do video para o voo da ilha (video_quadro.h) -------------------
-static SDL_mutex *travaQ;
-static volatile int qEstado = VQ_NADA, qSeq;
-static unsigned char *qPx;
-static int qPw, qPh, qX, qY, qW, qH;
-
-void video_quadro_pedir(void) {
-  JNIEnv *env;
-  if (!travaQ) travaQ = SDL_CreateMutex();
-  video_quadro_soltar();
-  if (!ativo || !primeiroQuadro || !mCapturar) return;
-  env = ambiente();
-  if (!env) return;
-  SDL_LockMutex(travaQ);
-  qSeq++;
-  qEstado = VQ_ESPERANDO;
-  SDL_UnlockMutex(travaQ);
-  (*env)->CallStaticVoidMethod(env, gCls, mCapturar, (jint)qSeq);
-  fimChamada(env);
-}
-int video_quadro_estado(void) { return qEstado; }
-const unsigned char *video_quadro_pixels(int *pw, int *ph, int *x, int *y, int *w, int *h) {
-  if (qEstado != VQ_PRONTO || !qPx) return NULL;
-  *pw = qPw; *ph = qPh; *x = qX; *y = qY; *w = qW; *h = qH;
-  return qPx;
-}
-void video_quadro_soltar(void) {
-  if (!travaQ) return;
-  SDL_LockMutex(travaQ);
-  free(qPx); qPx = NULL;
-  qEstado = VQ_NADA;
-  qSeq++;   // a resposta de um pedido velho nao entra mais
-  SDL_UnlockMutex(travaQ);
-}
-// Fio principal do Kotlin. `px` = RGBA (Bitmap.copyPixelsToBuffer) ou NULL.
-JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeQuadro(JNIEnv *env, jclass cls, jint seq,
-    jobject px, jint pw, jint ph, jint x, jint y, jint w, jint h) {
-  const unsigned char *src = px ? (const unsigned char *)(*env)->GetDirectBufferAddress(env, px) : NULL;
-  (void)cls;
-  if (!travaQ) return;
-  SDL_LockMutex(travaQ);
-  if (seq == qSeq && qEstado == VQ_ESPERANDO) {
-    size_t n = (size_t)pw * (size_t)ph * 4u;
-    if (src && pw > 1 && ph > 1 && (qPx = (unsigned char *)malloc(n)) != NULL) {
-      memcpy(qPx, src, n);
-      qPw = pw; qPh = ph; qX = x; qY = y; qW = w; qH = h;
-      qEstado = VQ_PRONTO;
-    } else qEstado = VQ_FALHOU;
-    printf("[video] android quadro %s (%dx%d, cod %d)\n", qEstado == VQ_PRONTO ? "copiado" : "falhou",
-           (int)pw, (int)ph, src ? 0 : (int)h);
-    fflush(stdout);
-  }
-  SDL_UnlockMutex(travaQ);
-}
 void video_volume(int pct) { kInt(mVolume, pct); }
 void video_buscar(double s) {
   posMs = (int)(s * 1000.0);   // a barra nao pode voltar enquanto o seek corre

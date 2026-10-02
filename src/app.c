@@ -93,7 +93,6 @@
 #include <unistd.h>
 #include "fontepref.h"
 #include "video.h"
-#include "video_quadro.h"
 #include "addons.h"
 #include "idioma.h"
 #include "descoberta.h"
@@ -3059,9 +3058,12 @@ void app_atualizar(float dt, Uint32 agora) {
         trocarTela(TELA_HOME);
         menu_definir_destino(MENU_INICIO);
         ilha_minimizar(ci ? ci->backdrop : NULL);
-      }
-      // O quadro copiado para o voo (Android) ja virou textura ou nao serve.
-      video_quadro_soltar(); }
+#ifdef NV_ANDROID
+        // A sessao ficou pausada atras da home: o voo comeca DISSOLVENDO a
+        // partir do proprio video parado (ilha_minimizar_dissolver).
+        ilha_minimizar_dissolver(player_retido());
+#endif
+      } }
     }
   }
 
