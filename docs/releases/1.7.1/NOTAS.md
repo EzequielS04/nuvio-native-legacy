@@ -37,5 +37,6 @@ Faster returns to your movie, more resilient account loading, and fixes for watc
 | Samsung 2022–2023 | Tizen 6.5 / 7.0 | `Nuvio-1.7.1-NuvioTpk65.tpk` (native) |
 | Samsung 2024 and newer | Tizen 8.0 / 9.0 | `Nuvio-1.7.1-NuvioTpk.tpk` (native) |
 | Samsung 2020 and newer | Tizen 5.5 or newer | `NuvioTV-1.7.1-tizen.wgt` (web version) |
+| Android TV / Google TV | Android 7 or newer | `Nuvio-1.7.1-android.apk` |
 
 You do not need `libnuvio-*.so`, `repo.json`, `webosbrew.manifest.json` or `SHA256SUMS`: they support self-update, the Homebrew Channel and checksum verification.
