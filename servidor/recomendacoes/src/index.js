@@ -698,7 +698,7 @@ export default {
     const quem = await registrar(env, quemBruto);
     const h = { json, erro, agora, limparTexto, limpar };
 
-    if (rota === "/v1/eu/nome" && req.method === "POST") return rotaEuNome(env, quem, corpo, h, registrar);
+    if (rota === "/v1/eu/nome" && req.method === "POST") return rotaEuNome(env, quem, corpo, h, () => registrar(env, quemBruto));
     if (rota === "/v1/alcance" && req.method === "POST") return rotaAlcance(env, quem, corpo, h);
     // MESMA ROTA, DOIS CONTRATOS: com "ev" e o evento do player (social.js); sem
     // ele e o corpo antigo de amigos.js, que TVs ja no ar continuam mandando.

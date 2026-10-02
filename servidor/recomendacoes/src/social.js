@@ -83,10 +83,13 @@ const int = (v, a, b) => {
 
 // --- nome e nivel ---------------------------------------------------------------
 
-export async function rotaEuNome(env, quem, corpo, h, registrar) {
+// `recalcular` e o registrar com a identidade VERIFICADA (quemBruto), e nao
+// com a saida de um registrar anterior: aquela traz o nome JA RESOLVIDO, e
+// grava-lo como nome da conta faria a exibicao apagada "grudar".
+export async function rotaEuNome(env, quem, corpo, h, recalcular) {
   const nome = limparNome(corpo?.nome);
   await env.DB.prepare("UPDATE pessoa SET exibicao = ? WHERE id = ?").bind(nome, quem.id).run();
-  const eu = await registrar(env, quem);           // recalcula `pessoa.nome`
+  const eu = await recalcular();                   // recalcula `pessoa.nome`
   return h.json({ ok: 1, nome: eu.nome, exibicao: nome });
 }
 
@@ -212,7 +215,7 @@ async function idPublico(env, x, garantirPerfil) {
 
 export async function rotaFeed(env, quem, url, req, h, garantirPerfil) {
   const desde = Math.max(0, parseInt(url.searchParams.get("desde") || "0", 10) || 0);
-  const marcas = NO_FEED.map(() => "?").join(",");
+  const marcas = NO_FEED.map((_, i) => `?${i + 5}`).join(",");
   const r = await env.DB.prepare(
     VISIVEIS +
     "SELECT e.id, e.pessoa, e.ev, e.imdb, e.midia, e.titulo, e.poster, e.temporada, e.episodio, " +
