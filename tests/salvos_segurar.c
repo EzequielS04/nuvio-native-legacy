@@ -309,10 +309,14 @@ int main(int argc, char **argv) {
   naTela = 1;
   ajustes_iniciar();
   quadros(w, 10);
-  toque(w, SDLK_ESCAPE);                       // coluna de categorias
-  for (i = 0; i < 12; i++) toque(w, SDLK_DOWN); // ate a ultima: Diagnostico
+  // Ajustes abre na coluna de categorias. Avançado precede Sobre.
+  for (i = 0; i < 12; i++) toque(w, SDLK_DOWN);
+  toque(w, SDLK_UP);
   toque(w, SDLK_RETURN);
-  toque(w, SDLK_DOWN);                         // a linha de baixo
+  for (i = 0; i < 6; i++) toque(w, SDLK_DOWN); // Teste de velocidade
+#if defined(NV_TPK) || defined(NV_ANDROID)
+  toque(w, SDLK_DOWN);                         // opção de GPU adicional
+#endif
   capturaAssentada(w, "ajustes-velocidade.png", 60);
   toque(w, SDLK_RETURN);
   confere("OK em \"Teste de velocidade\" e o pedido que app.c le",

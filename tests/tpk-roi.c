@@ -3,6 +3,26 @@
 #include <stdio.h>
 #include <string.h>
 #include "video.h"
+#include "faixasmkv.h"
+#include "mkvass.h"
+
+// This geometry fixture has no media bytes or network metadata provider.
+int mkv_faixas(const char *url, MkvFaixa *out, int max) {
+  (void)url; (void)out; (void)max; return 0;
+}
+int mkv_faixas_do_trecho(const unsigned char *buf, long n, MkvFaixa *out, int max,
+                       MkvCap *caps, int maxCaps, int *nCaps) {
+  (void)buf; (void)n; (void)out; (void)max; (void)caps; (void)maxCaps;
+  if (nCaps) *nCaps = 0;
+  return 0;
+}
+int mkvass_cabecalho(const char *url, unsigned char **buf, long *n) {
+  (void)url; if (buf) *buf = NULL; if (n) *n = 0; return 0;
+}
+int faixasmkv_aplicar(VideoFaixa *aud, int nAud, VideoFaixa *leg, int nLeg,
+                     const MkvFaixa *fx, int n) {
+  (void)aud; (void)nAud; (void)leg; (void)nLeg; (void)fx; (void)n; return 0;
+}
 
 const char *i18n(const char *s) { return s; }
 const char *ling_nome(const char *c) { return c; }
