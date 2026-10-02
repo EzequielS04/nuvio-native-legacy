@@ -88,6 +88,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "perfis.h"
 #include "sessao.h"
 #include "fontevolta.h"
+#include "marco.h"
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -1236,6 +1237,7 @@ static int prebuscaCabe(const char *url) {
 #endif
 
 static void tocarFonte(const char *url) {
+  marco("abrir: url ao pipeline");
   video_definir_reconexao(!ehCanal());
   video_definir_modo_live(ehCanal() ? ajustes_livetv_modo() : 0);
   { char px[96];
@@ -2504,7 +2506,7 @@ void player_atualizar(float dt, Uint32 agora) {
     }
     if (!retomadaAplicada && video_pronto() && d>1.0) {
       retomadaAplicada=1;
-      if(retomarPct>0) video_buscar(d*retomarPct/100.0);
+      if(retomarPct>0) { marco("abrir: seek para o ponto salvo"); video_buscar(d*retomarPct/100.0); }
     }
     tocando = video_tocando();
     { const CatItem *ci = ehCanal() ? NULL : item();

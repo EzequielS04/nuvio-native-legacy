@@ -26,6 +26,7 @@
 // sonda MKV segue "nao ha sonda", como no .tpk); capitulos do MKV para
 // video_creditos; passthrough fino de AC3/EAC3 por AudioCapabilities.
 #ifdef NV_ANDROID
+#include "marco.h"
 #include "video.h"
 #include "video_reconexao.h"
 #include "idioma.h"
@@ -310,7 +311,7 @@ enum { EV_PRONTO = 1, EV_TOCANDO = 2, EV_PAUSADO = 3, EV_FIM = 4, EV_ERRO = 5,
 JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeEvento(JNIEnv *env, jclass cls, jint tipo, jint a, jint b) {
   (void)env; (void)cls;
   switch (tipo) {
-    case EV_PRONTO:  durMs = a; prontoLoad = 1; break;
+    case EV_PRONTO:  if (!prontoLoad) marco("video: pronto (android)"); durMs = a; prontoLoad = 1; break;
     case EV_TOCANDO: tocando = 1; bufferando = 0; pausaVista = 0; if (!tocandoDesde) tocandoDesde = SDL_GetTicks() | 1; break;
     case EV_PAUSADO: tocando = 0; if (pausaPedida) pausaVista = 1; break;
     case EV_FIM:     terminou = 1; tocando = 0; break;
@@ -323,7 +324,7 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeEvento(JNIEn
       if (a < 100 && !bufferando) { bufferando = 1; bufferDesde = SDL_GetTicks(); }
       else if (a >= 100) bufferando = 0;
       break;
-    case EV_PRIMEIRO_QUADRO: primeiroQuadro = 1; break;
+    case EV_PRIMEIRO_QUADRO: marco("video: primeiro quadro (android)"); primeiroQuadro = 1; break;
     case EV_AUDIO_SEM_DECODER: semDecoderAudio = 1; break;
     default: break;
   }
