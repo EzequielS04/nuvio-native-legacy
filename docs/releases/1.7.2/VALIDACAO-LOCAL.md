@@ -49,9 +49,15 @@ Android: regra numérica/JNI com ASan/UBSan, integração de player normal e Kot
 3. Samsung: fontes incrementais#221 e espera configurada, Ajustes/busca/Voltar no controle, ícone em pacote completo e autoatualização, proporção da mesma fonte#195. Distinguir modos de recorte indisponíveis do backend.
 4. Todas: trocar perfil e logout enquanto histórico/fontes chegam; selo de assistido correto; Continuar assistindo#144 sem cintilação; catálogo/localização no cenário do relator#195/#197/#209.
 
-Nenhum desses casos foi confirmado nos aparelhos nesta rodada. TCL permanece no APK estável1.7.1, não nesta build.
+Nenhum desses casos foi confirmado nos aparelhos nesta rodada. A última instalação feita por esta rodada na TCL foi o APK estável 1.7.1; o roadmap registra relato posterior de APK social instalado por outra sessão. O pacote atual no aparelho não foi reconsultado e nenhuma 1.7.2 desta rodada foi instalada.
 
 
 ## Sonda de fonte
 
 `5fcae85c`: testa HTTP500,403comReferer,206,redirecionamento,corpoparcial,URL>2000/truncamento,timeout e servidor ignorandoRange. Normal e ASan/UBSan PASS; corpo nativo descartado com limite, sem baixar mídia inteira para sondar. Fim da URL ainda não é reutilizado para reprodução; não afirmar que remove o segundo redirecionamento. PolíticaWGT/EMJS PASS, sem cópia do corpo ao heapWASM. XHR síncrono mantém limitações de cancelamento/timeout e pode receber corpo do servidor se este ignorarRange. AVPlay ainda decide401/403 quando o addon exige cabeçalho proibido pelo navegador. Fonteauto/cache/volta e sintaxeTPK4/6 PASS.
+
+## Fila durável e pacote final local
+
+`d8402e54`: syncordem e contaoffline com ASan/UBSan passaram. O teste usa processos separados para HTTP500 → encerrar → reabrir, restauração antes da rede e ACK exato. Cobre nome vazio, addon desligado, contas A→B→A, perfis, edição durante POST, ACK de perfil anterior, falhas de escrita/leitura/remoção, leitura transitória no boot, logout de todas as identidades e oito entradas em RAM. Snapshots gravados podem sair da RAM e voltar do disco; snapshot cuja gravação falhou permanece em RAM. Não há acesso à fila no disco por quadro. Revisão independente reproduziu e confirmou a correção das bordas de leitura no boot e no ACK. Log: `/Volumes/ExternalSSD/nv172-syncordem-fila.log`.
+
+`fc711f6b`: exclusões/guards dos pacotes cobrem `conta-*.txt` e temporários; templates explícitos fazem mktemp respeitar TMPDIR. Sintaxe shell, conferência dos guards e regressão de caminho SSD passaram. É o commit comum da geração final local. Resultados de cada pacote e checksums ficam em [PACOTES.md](PACOTES.md); validação física ainda pendente.

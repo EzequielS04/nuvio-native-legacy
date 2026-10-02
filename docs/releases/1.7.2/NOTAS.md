@@ -10,7 +10,7 @@
 ## Fixed
 
 - Resume Android playback at a valid saved position during preparation, avoiding a second seek.
-- Keep local addon changes when sync fails or an older response arrives.
+- Keep pending addon changes across restarts and failed sync, without letting an older response overwrite them.
 - Keep watched history separate for each account and profile; ignore late responses from a previous session.
 - Prevent catalog updates from changing a different title after a refresh.
 - Keep the phone-input icon available after a Samsung native core update.
