@@ -46,6 +46,7 @@ static void teclaPlayer(SDL_Keycode k) {
 }
 static void teclaMenu(SDL_Keycode k) {
   SDL_Event e={0};e.type=SDL_KEYDOWN;e.key.keysym.sym=k;menu_evento(&e);
+  e.type=SDL_KEYUP;menu_evento(&e);
 }
 static void testar(void) {
   perfil_iniciar();perfil_abrir();
