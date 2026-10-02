@@ -2534,6 +2534,15 @@ void home_atualizar(float dt, Uint32 agora) {
     int focada = !focoHero && foco.fileira == r, c = foco.coluna;
     amigosfil_atualizar(dt, focada, focada ? &c : NULL);
     int nc = amigosfil_n_colunas();
+    // A FILEIRA DO CATALOGO QUE RESPONDEU VAZIA (estado 1) continua sem
+    // coluna quando nao ha amigo nenhum: o convite so mora no lugar reservado
+    // (ini < 0), e um cabecalho vazio nao recebe foco (tests/fimfileira).
+    if (amigosfil_convite() && fileiras[r].ini >= 0) {
+      for (int q = 0; q < cat_n_fileiras(); q++) {
+        const CatFileira *cf = cat_fileira(q);
+        if (cf && !strcmp(cf->chave, "social_activity")) { if (cf->n == 0) nc = 0; break; }
+      }
+    }
     if (fileiras[r].n != nc || fileiras[r].verTudo) {
       fileiras[r].n = nc; fileiras[r].verTudo = 0;
       if (r < FOCUS_MAX_FILEIRAS) foco.nColunas[r] = nc;

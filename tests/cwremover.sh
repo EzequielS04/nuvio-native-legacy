@@ -7,7 +7,7 @@
 #   tests/cwremover.c      — fileira publicada, refacao com o "Trakt" falso
 #                            (paused_at mais velho fica fora, mais novo volta),
 #                            publicacao em voo, remontagem sem rede;
-#   tests/cwremover_home.c — a HOME remonta no mesmo quadro (guarda curto da
+#   tests/cwremover_home.c tests/amigosfil_stub.c — a HOME remonta no mesmo quadro (guarda curto da
 #                            1.4 em sincronizarFileiras).
 set -eu
 cd "$(dirname "$0")/.."
@@ -19,7 +19,7 @@ cc ${flags[@]+"${flags[@]}"} src/catalogo.c src/progresso.c src/cwordem.c tests/
   -o /tmp/nuvio-cwremover-tests -O1 -g \
   -Wall -Wno-deprecated-declarations -Wno-macro-redefined -Wno-unused-function
 /tmp/nuvio-cwremover-tests
-cc ${flags[@]+"${flags[@]}"} src/catalogo.c src/progresso.c src/focus.c src/ajustes.c src/posterprov.c src/redeurl.c src/colecoes.c src/js.c src/catordem.c src/fileiras.c src/artehero.c src/cwordem.c tests/cwremover_home.c \
+cc ${flags[@]+"${flags[@]}"} src/catalogo.c src/progresso.c src/focus.c src/ajustes.c src/posterprov.c src/redeurl.c src/colecoes.c src/js.c src/catordem.c src/fileiras.c src/artehero.c src/cwordem.c tests/cwremover_home.c tests/amigosfil_stub.c \
   -Isrc -o /tmp/nuvio-cwremover-home-tests -O1 -g -ffunction-sections -fdata-sections \
   -Wl,-dead_strip -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
   -L/opt/homebrew/lib -lSDL2 -Wno-deprecated-declarations -Wno-macro-redefined
