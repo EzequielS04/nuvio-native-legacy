@@ -316,6 +316,12 @@ IGNORAR = {
     "# Fileiras da Home, escolha DESTE aparelho. Nunca e enviada para\n"
     "# a conta nem para o Trakt.\n",
     "%d addons · %d progressos · %d vistos · %d na lista · %d coleções%s",
+    # #215: as duas variantes do mesmo resumo de sync acima (servidor da conta
+    # fora do ar), o nome de arquivo da copia local (contacache.c) e a chave
+    # do aviso na ilha (app.c) — chave interna, nao rotulo.
+    "servidor da conta fora do ar (HTTP %d) · usando a cópia de %s",
+    "servidor da conta fora do ar (HTTP %d) · sem cópia salva",
+    "conta-%s-p%d.json", "conta-fora",
     "hdr do pipeline: %s (fonte DV=%d)",
     # Tres marcos de video.c/video_tizen.c. O buffer e montado numa instrucao
     # e entregue a marco() na SEGUINTE, entao marco — que ja esta em

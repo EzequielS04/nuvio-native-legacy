@@ -92,6 +92,22 @@ static int vencido(void) {
   return expiraEm <= (long)time(NULL) + 30;
 }
 
+// FALHA DO SERVIDOR, e nao da pessoa (#215): sem resposta, 429 ou 5xx. Nesses
+// casos nada que a TV tem e invalido — o token, o refresh token, o codigo — e
+// apagar qualquer um deles transformaria uma queda de horas do servidor numa
+// conta perdida neste aparelho.
+static int falhaServidor(int st) { return st == 0 || st == 429 || st >= 500; }
+
+// A frase da tela para "o servidor da conta nao respondeu". i18n no FORMATO,
+// como o resto deste arquivo: a frase final, com o numero, nunca casaria com
+// a chave.
+static void erroServidor(int st) {
+  if (st) snprintf(erro, sizeof erro,
+                   i18n("O servidor da conta Nuvio não respondeu (HTTP %d). Tente de novo em alguns minutos."), st);
+  else    snprintf(erro, sizeof erro, "%s",
+                   i18n("O servidor da conta Nuvio não respondeu. Tente de novo em alguns minutos."));
+}
+
 // ---------------------------------------------------------------- disco
 
 static void gravarSessao(void) {
@@ -151,21 +167,26 @@ static int sessaoAnonima(void) {
   // dedicado. O web tenta os dois na mesma ordem.
   resp = nuvem_post("/auth/v1/token?grant_type=anonymous", "{}", NULL, &st);
   if (resp && st >= 200 && st < 300 && guardarTokens(resp, 1)) { free(resp); return 1; }
-  if (resp) {
-    snprintf(erro, sizeof erro, "sessao anonima recusada (HTTP %d)", st);
-    free(resp);
-  } else {
-    snprintf(erro, sizeof erro, "sem rede ao abrir sessao");
-  }
+  printf("[sessao] sessao anonima: HTTP %d\n", st);
+  if (falhaServidor(st)) erroServidor(st);
+  else snprintf(erro, sizeof erro, "sessao anonima recusada (HTTP %d)", st);
+  free(resp);
   return 0;
 }
 
 // ---------------------------------------------------------------- renovacao
 
+// Status HTTP da ultima renovacao, para chamar() devolver a quem pediu o
+// motivo real (um 504 da renovacao nao e um 401 da RPC).
+static int stRenovacao;
+
+// 1 = renovado; 0 = recusado de verdade (sessao encerrada); -1 = o servidor
+// nao respondeu: a sessao FICA, e a proxima chamada tenta de novo.
 static int renovarToken(void) {
   Jsw w;
   char *resp;
   int st = 0, ok;
+  stRenovacao = 0;
   if (!renovar[0]) return 0;
   jsw_iniciar(&w);
   jsw_obj_ini(&w);
@@ -176,6 +197,17 @@ static int renovarToken(void) {
   jsw_livre(&w);
   ok = (resp && st >= 200 && st < 300 && guardarTokens(resp, anonima));
   free(resp);
+  stRenovacao = st;
+  if (!ok && falhaServidor(st)) {
+    // O SERVIDOR CAIU, O TOKEN NAO (#215). Ate aqui qualquer falha da
+    // renovacao apagava a sessao do disco: com o servidor da conta em 504 por
+    // horas, cada TV cujo token vencesse nesse intervalo saia da conta sozinha
+    // — e nao conseguia entrar de novo, porque o login fala com o mesmo
+    // servidor. So uma RECUSA (4xx) encerra a sessao.
+    printf("[sessao] renovacao sem resposta do servidor (HTTP %d): sessao mantida\n", st);
+    nuvem_falhou();
+    return -1;
+  }
   if (!ok) {
     // Renovacao recusada e o fim da sessao, nao um erro transitorio: insistir
     // com um refresh token invalido devolve 400 para sempre.
@@ -193,15 +225,25 @@ static char *chamar(const char *caminho, const char *corpo, int *status) {
   char *resp;
   int st = 0;
   if (!nuvem_pronta()) { if (status) *status = 0; return NULL; }
-  if (vencido() && renovar[0]) renovarToken();
+  // Token vencido e servidor sem responder a renovacao: nem tenta a RPC (ela
+  // voltaria 401 e pediria outra renovacao). O status e o da renovacao, para
+  // quem chamou saber que a falha e do servidor e usar a copia (sync.c).
+  if (vencido() && renovar[0] && renovarToken() < 0) {
+    if (status) *status = stRenovacao;
+    return NULL;
+  }
   resp = nuvem_post(caminho, corpo, acesso, &st);
   if (st == 401 && renovar[0]) {
+    int rr;
     free(resp);
-    if (!renovarToken()) { if (status) *status = 401; return NULL; }
+    rr = renovarToken();
+    if (rr <= 0) { if (status) *status = rr < 0 ? stRenovacao : 401; return NULL; }
     resp = nuvem_post(caminho, corpo, acesso, &st);
   }
   if (status) *status = st;
-  if (!resp || st == 0 || st >= 500) nuvem_falhou();
+  // 429 tambem freia: e o servidor pedindo menos pedidos, e o ciclo de sync
+  // mandaria mais dez em seguida.
+  if (!resp || st == 0 || st == 429 || st >= 500) nuvem_falhou();
   else nuvem_ok();
   return resp;
 }
@@ -217,15 +259,20 @@ char *sessao_tabela(const char *tabela, const char *consulta, int *status) {
   char *resp;
   int st = 0;
   if (!nuvem_pronta()) { if (status) *status = 0; return NULL; }
-  if (vencido() && renovar[0]) renovarToken();
+  if (vencido() && renovar[0] && renovarToken() < 0) {
+    if (status) *status = stRenovacao;
+    return NULL;
+  }
   resp = nuvem_tabela(tabela, consulta, acesso, &st);
   if (st == 401 && renovar[0]) {
+    int rr;
     free(resp);
-    if (!renovarToken()) { if (status) *status = 401; return NULL; }
+    rr = renovarToken();
+    if (rr <= 0) { if (status) *status = rr < 0 ? stRenovacao : 401; return NULL; }
     resp = nuvem_tabela(tabela, consulta, acesso, &st);
   }
   if (status) *status = st;
-  if (!resp || st == 0 || st >= 500) nuvem_falhou();
+  if (!resp || st == 0 || st == 429 || st >= 500) nuvem_falhou();
   else nuvem_ok();
   return resp;
 }
@@ -310,8 +357,16 @@ static void *fioPedir(void *u) {
     char msg[160];
     msg[0] = 0;
     if (resp) js_texto(resp, resp + strlen(resp), "message", msg, sizeof msg);
-    if (msg[0]) snprintf(erro, sizeof erro, "o servidor recusou: %s", msg);
-    else        snprintf(erro, sizeof erro, i18n("nao consegui pedir o codigo (HTTP %d)"), st);
+    // NO LOG, com o corpo: ate aqui a falha do pedido de codigo so ia para a
+    // tela, e o #214 ("QR da erro HTTP 400") nao deixou rastro nenhum no
+    // registro para dizer QUEM respondeu 400 — o PostgREST (JSON com
+    // "message") ou algo na frente dele (Cloudflare responde texto puro,
+    // "error code: 502", medido em 02/10). O corpo de erro nao traz segredo.
+    printf("[sessao] pedido de codigo: HTTP %d: %.160s\n", st, resp ? resp : "(sem corpo)");
+    if (falhaServidor(st)) erroServidor(st);
+    else if (msg[0]) snprintf(erro, sizeof erro, "o servidor recusou: %s", msg);
+    else snprintf(erro, sizeof erro,
+                  i18n("O servidor da conta Nuvio recusou o pedido do código (HTTP %d). Tente de novo em alguns minutos."), st);
     estado = SES_ERRO;
   } else {
     if (!urlLogin[0])
@@ -363,7 +418,14 @@ static void *fioPoll(void *u) {
       estado = SES_LOGADO;
       codigo[0] = 0;
       printf("[sessao] logado como %s\n", sub[0] ? sub : "(sem sub)");
+    } else if (falhaServidor(st)) {
+      // AUTORIZADO, mas o servidor nao respondeu a troca: o codigo continua
+      // valendo, entao a TV continua esperando e a proxima volta do poll tenta
+      // a troca de novo — a pessoa nao precisa escanear outra vez.
+      printf("[sessao] troca do codigo sem resposta do servidor (HTTP %d): tento de novo\n", st);
+      estado = SES_AGUARDANDO;
     } else {
+      printf("[sessao] troca do codigo recusada (HTTP %d)\n", st);
       snprintf(erro, sizeof erro, i18n("troca de codigo recusada (HTTP %d)"), st);
       estado = SES_ERRO;
     }
