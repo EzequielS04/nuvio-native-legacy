@@ -127,7 +127,7 @@ int texto_sistema_disponivel(void) {
   return hAbrir ? (TS_TECLADO | (hFlags & TS_VOZ)) : 0;
 #elif defined(__EMSCRIPTEN__)
   return EM_ASM_INT({ return (typeof window !== "undefined" && window.nvTexto) ? 1 : 0; }) ? TS_TECLADO : 0;
-#elif defined(NV_ANDROID)
+#elif defined(NV_ANDROID) || defined(NV_TEXTO_SDL_TESTE)
   return TS_TECLADO;
 #elif defined(__linux__)
   return SDL_HasScreenKeyboardSupport() ? TS_TECLADO : 0;
