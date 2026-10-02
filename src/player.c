@@ -34,6 +34,7 @@
 #include "posplay.h"
 #include "extras.h"
 #include "video.h"
+#include "video_quadro.h"
 #include "faixas.h"
 #include "gfx.h"
 #include "text.h"
@@ -242,6 +243,12 @@ static int   tocando = 1;
 #define PLR_RETIDO_MS 120000u
 static int retido, prepararRetencao, retidoPerfil, retomarMkv;
 static Uint32 retidoDesde;
+// SAIDA PARA A ILHA SEM O FADE DO PLAYER (Android): o voo comeca assim que a
+// pausa foi confirmada e o quadro do video copiado (video_quadro.h), em vez
+// de ~430 ms de OSD apagando sobre o video parado antes de a home aparecer.
+// O teto cobre um PixelCopy que nao responde: o voo sai com o still.
+#define PLR_SAIDA_ILHA_TETO_MS 220u
+static Uint32 saidaIlhaDesde;
 static char retidoConta[96], retidoUrl[4096];
 // Botao em foco na fileira de transporte. Comeca no PLAY porque e a resposta
 // que nove de cada dez aberturas quer: o dedo para no centro e o OK decide.
@@ -1413,7 +1420,7 @@ static void fecharSessao(int manter) {
            (unsigned)(tv - t0), (unsigned)(SDL_GetTicks() - tv));
     fflush(stdout); }
   if (!manter) comVideo = 0;
-  retido = manter; prepararRetencao = 0;
+  retido = manter; prepararRetencao = 0; saidaIlhaDesde = 0;
   esperandoFonte = 0; aberto = 0; saindo = 0; pediuSair = 0;
   mini = 0; querMini = 0; miniGuia = 0; janAtiva = 0;
   avisarCascaAberto(0);
@@ -1445,6 +1452,11 @@ void player_preparar_retencao(void) {
   if (prepararRetencao || retido || !podeReter()) return;
   prepararRetencao = 1;
   video_pausar(1);
+#ifdef NV_ANDROID
+  // Atras do pausar na fila do fio principal: o quadro copiado ja e o parado.
+  video_quadro_pedir();
+  saidaIlhaDesde = SDL_GetTicks() | 1u;
+#endif
 }
 
 int player_suspender(void) {
@@ -2363,7 +2375,15 @@ void player_atualizar(float dt, Uint32 agora) {
   // enquanto o app ainda procurava fonte, e ela sumiria antes de o filme
   // aparecer.
   if (!inicioImagem && comVideo && video_pronto()) { inicioImagem = agora; acordar(); }
-  if (saindo && entrada < 0.02f) { aberto = 0; saindo = 0; entrada = 0.0f; avisarCascaAberto(0); return; }
+  if (saindo && saidaIlhaDesde && prepararRetencao &&
+      ((video_quadro_estado() != VQ_ESPERANDO && video_pausa_confirmada()) ||
+       agora - saidaIlhaDesde >= PLR_SAIDA_ILHA_TETO_MS)) {
+    printf("[player] saida para a ilha em %u ms (quadro %d, pausa %d)\n",
+           (unsigned)(agora - saidaIlhaDesde), video_quadro_estado(), video_pausa_confirmada());
+    fflush(stdout);
+    entrada = 0.0f;
+  }
+  if (saindo && entrada < 0.02f) { aberto = 0; saindo = 0; entrada = 0.0f; saidaIlhaDesde = 0; avisarCascaAberto(0); return; }
 
   // Havendo pipeline, posicao e duracao vem DELE; o dt so serve para as
   // animacoes. O relogio somado continua existindo para quando nao ha video
