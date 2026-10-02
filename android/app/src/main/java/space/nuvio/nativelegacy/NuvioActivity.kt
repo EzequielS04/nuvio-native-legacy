@@ -1,21 +1,36 @@
 package space.nuvio.nativelegacy
 
+import android.Manifest
+import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.text.Editable
+import android.text.InputFilter
+import android.text.InputType
+import android.text.TextWatcher
+import android.util.Log
 import android.system.Os
 import android.view.KeyEvent
 import android.view.SurfaceHolder
 import android.view.ViewGroup
+import android.view.WindowInsets
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import android.widget.FrameLayout
 import androidx.core.content.FileProvider
 import org.libsdl.app.SDLActivity
 import java.io.File
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -197,33 +212,236 @@ class NuvioActivity : SDLActivity() {
         for (f in filhos) copiarAsset("$caminho/$f", File(destino, f))
     }
 
-    // DITADO DO SPOTLIGHT (android_ditado_iniciar/ler, src/android.c). A tela de
-    // voz e a do sistema (Google na maioria das TVs): quem grava e ela, entao o
-    // app nao pede RECORD_AUDIO. O resultado fica aqui ate o C ler.
-    @Volatile private var ditado: String? = null
-    private val PEDIDO_DITADO = 4711
+    // TEXTO DO SISTEMA (src/sistexto.h, android_st_* em src/android.c): o
+    // teclado do sistema e a voz para os campos do app. O C chama do fio do
+    // SDL; o trabalho e no fio da interface, e o que acontece volta numa fila
+    // de strings (formato em src/sistexto.c) que o C drena por quadro.
+    private val eventos = ConcurrentLinkedQueue<String>()
+    fun proximoEvento(): String? = eventos.poll()
 
-    // Chamado pelo C, do fio do SDL. false = nao ha reconhecedor de voz.
-    fun ditar(): Boolean {
-        val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
-            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        if (i.resolveActivity(packageManager) == null) return false
-        ditado = null
-        return try {
-            runOnUiThread {
-                @Suppress("DEPRECATION")
-                try { startActivityForResult(i, PEDIDO_DITADO) } catch (e: Exception) { ditado = "!" }
+    private fun log(m: String) = Log.i("nuvio", "[texto] $m")
+
+    // --- Teclado do sistema -------------------------------------------------
+    // Um EditText de 1 px, invisivel, recebe o foco e chama o IME. O texto
+    // INTEIRO (com a composicao em andamento) vai ao C a cada mudanca: o campo
+    // desenhado pelo app e um espelho deste.
+    private var campo: CampoIme? = null
+    private var campoAberto = false
+    private var campoImeVisto = false
+    private var ignorarMudanca = false
+
+    private inner class CampoIme(ctx: Context) : EditText(ctx) {
+        // Voltar com o IME aberto: fecha o IME e devolve o foco ao app (o texto
+        // que ja veio fica). Consome as duas metades, senao o UP cairia no app.
+        override fun onKeyPreIme(keyCode: Int, event: KeyEvent): Boolean {
+            if (campoAberto && keyCode == KeyEvent.KEYCODE_BACK) {
+                if (event.action == KeyEvent.ACTION_UP) fecharCampo("X")
+                return true
             }
-            true
-        } catch (e: Exception) { false }
+            return super.onKeyPreIme(keyCode, event)
+        }
     }
 
-    // "=texto", "!" (voltou sem nada) ou null (ainda ouvindo). Consome.
-    fun ditadoLer(): String? {
-        val d = ditado ?: return null
-        ditado = null
-        return d
+    private fun criarCampo(): CampoIme {
+        campo?.let { return it }
+        val c = CampoIme(this)
+        c.alpha = 0f
+        c.isFocusable = true
+        c.isFocusableInTouchMode = true
+        c.setSingleLine(true)
+        c.inputType = InputType.TYPE_CLASS_TEXT
+        c.imeOptions = EditorInfo.IME_ACTION_DONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI or
+            EditorInfo.IME_FLAG_NO_FULLSCREEN
+        c.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, d: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, d: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (!ignorarMudanca && campoAberto) eventos.add("T" + (s?.toString() ?: ""))
+            }
+        })
+        c.setOnEditorActionListener { v, _, _ -> if (campoAberto) fecharCampo("D" + v.text); true }
+        // Tecla que o IME NAO consumiu e chegou ao campo: o IME esta fechado (ou a
+        // pessoa saiu dele pela borda). Devolve o foco ao app em vez de prender.
+        c.setOnKeyListener { v, code, ev ->
+            if (!campoAberto) return@setOnKeyListener false
+            when (code) {
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                    if (ev.action == KeyEvent.ACTION_UP) fecharCampo("D" + (v as EditText).text)
+                    true
+                }
+                else -> false
+            }
+        }
+        // IME escondido por fora (o botao dele de fechar): Android 11+ diz pelos insets.
+        c.setOnApplyWindowInsetsListener { v, ins ->
+            if (Build.VERSION.SDK_INT >= 30 && campoAberto) {
+                val vis = ins.isVisible(WindowInsets.Type.ime())
+                if (vis) campoImeVisto = true
+                else if (campoImeVisto) fecharCampo("X")
+            }
+            v.onApplyWindowInsets(ins)
+        }
+        mLayout.addView(c, ViewGroup.LayoutParams(1, 1))
+        campo = c
+        return c
+    }
+
+    private fun fecharCampo(ev: String?) {
+        val c = campo ?: return
+        if (!campoAberto) return
+        campoAberto = false
+        campoImeVisto = false
+        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+            .hideSoftInputFromWindow(c.windowToken, 0)
+        c.clearFocus()
+        mSurface?.requestFocus()
+        if (ev != null) { log("teclado fechou (${ev[0]})"); eventos.add(ev) }
+    }
+
+    // Chamado pelo C (android_st_teclado). Nao bloqueia.
+    fun abrirTeclado(inicial: String, max: Int): Boolean {
+        runOnUiThread {
+            val c = criarCampo()
+            ignorarMudanca = true
+            c.filters = arrayOf(InputFilter.LengthFilter(if (max > 0) max else 400))
+            c.setText(inicial)
+            c.setSelection(c.text.length)
+            ignorarMudanca = false
+            campoAberto = true
+            campoImeVisto = false
+            c.requestFocus()
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            val ok = imm.showSoftInput(c, InputMethodManager.SHOW_IMPLICIT)
+            log("teclado pedido (showSoftInput=$ok)")
+            // Logo depois do requestFocus o IME as vezes ainda nao se ligou ao
+            // campo e o showSoftInput volta false: tenta de novo num instante.
+            if (!ok) c.postDelayed({ if (campoAberto) imm.showSoftInput(c, InputMethodManager.SHOW_IMPLICIT) }, 150)
+        }
+        return true
+    }
+
+    // Chamado pelo C (android_st_fechar): fecha teclado e voz SEM evento (quem
+    // fechou foi o C, ele ja sabe).
+    fun fecharEntrada(): Boolean {
+        runOnUiThread {
+            fecharCampo(null)
+            reconhecedor?.let { try { it.cancel(); it.destroy() } catch (_: Exception) {} }
+            reconhecedor = null
+        }
+        return true
+    }
+
+    // --- Voz ------------------------------------------------------------------
+    // Degraus: SpeechRecognizer dentro do app (com RECORD_AUDIO pedida no
+    // primeiro uso) -> tela de voz do sistema (RecognizerIntent) -> teclado do
+    // sistema, que tem o proprio microfone.
+    private var reconhecedor: SpeechRecognizer? = null
+    private var idiomaVoz = ""
+    private var ultimoNivel = -100
+    private val PEDIDO_DITADO = 4711
+    private val PEDIDO_MIC = 4712
+
+    // Chamado pelo C (android_st_ditar). Nao bloqueia.
+    fun ditar(idioma: String): Boolean {
+        runOnUiThread { iniciarVoz(idioma) }
+        return true
+    }
+
+    private fun iniciarVoz(idioma: String) {
+        idiomaVoz = idioma
+        fecharCampo(null)
+        val disponivel = SpeechRecognizer.isRecognitionAvailable(this)
+        val permitido = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        log("voz: reconhecedor=${if (disponivel) "sim" else "nao"} permissao=${if (permitido) "sim" else "nao"} idioma=$idioma")
+        eventos.add("Ireconhecedor=${if (disponivel) "sim" else "nao"} permissao=${if (permitido) "sim" else "nao"}")
+        if (!disponivel) { vozDoSistema("semvoz"); return }
+        if (!permitido) {
+            eventos.add("Spermissao")
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), PEDIDO_MIC)
+            return
+        }
+        ouvir()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (requestCode == PEDIDO_MIC) {
+            val ok = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            log("voz: permissao ${if (ok) "concedida" else "negada"}")
+            eventos.add("Ipermissao=${if (ok) "concedida" else "negada"}")
+            if (ok) ouvir() else vozDoSistema("negada")
+            return
+        }
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    private fun intentVoz(): Intent =
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            .apply { if (idiomaVoz.isNotEmpty()) putExtra(RecognizerIntent.EXTRA_LANGUAGE, idiomaVoz) }
+
+    private fun ouvir() {
+        reconhecedor?.let { try { it.destroy() } catch (_: Exception) {} }
+        val r = try { SpeechRecognizer.createSpeechRecognizer(this) } catch (e: Exception) { null }
+        if (r == null) { vozDoSistema("semvoz"); return }
+        reconhecedor = r
+        ultimoNivel = -100
+        r.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) { eventos.add("Souvindo") }
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {
+                // -2..10 dB e a faixa que o reconhecedor do Google entrega.
+                val n = (((rmsdB + 2f) / 12f).coerceIn(0f, 1f) * 100f).toInt()
+                if (kotlin.math.abs(n - ultimoNivel) >= 4) { ultimoNivel = n; eventos.add("R$n") }
+            }
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onError(error: Int) {
+                log("voz: erro $error")
+                reconhecedor = null
+                try { r.destroy() } catch (_: Exception) {}
+                when (error) {
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> vozDoSistema("negada")
+                    SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> eventos.add("Enada")
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> eventos.add("Eocupado")
+                    // 12/13: idioma nao suportado/indisponivel no reconhecedor
+                    // do aparelho; a tela de voz do sistema pode ter outro.
+                    12, 13 -> vozDoSistema("idioma")
+                    else -> eventos.add("Eerro:$error")
+                }
+            }
+            override fun onResults(results: Bundle?) {
+                reconhecedor = null
+                try { r.destroy() } catch (_: Exception) {}
+                val t = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                eventos.add(if (t.isNullOrBlank()) "Enada" else "V$t")
+            }
+            override fun onPartialResults(partialResults: Bundle?) {
+                val t = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                if (!t.isNullOrBlank()) eventos.add("P$t")
+            }
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+        try {
+            r.startListening(intentVoz().putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                .putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName))
+        } catch (e: Exception) {
+            log("voz: startListening falhou: $e")
+            reconhecedor = null
+            vozDoSistema("semvoz")
+        }
+    }
+
+    private fun vozDoSistema(motivo: String) {
+        val i = intentVoz()
+        if (i.resolveActivity(packageManager) != null) {
+            eventos.add("Ssistema:$motivo")
+            @Suppress("DEPRECATION")
+            try { startActivityForResult(i, PEDIDO_DITADO); return } catch (_: Exception) {}
+        }
+        // Nem a tela de voz: o C abre o teclado do sistema (o microfone dele dita).
+        eventos.add("Steclado:$motivo")
     }
 
     @Deprecated("startActivityForResult e o que o SDLActivity (Activity) oferece")
@@ -231,7 +449,7 @@ class NuvioActivity : SDLActivity() {
         if (requestCode == PEDIDO_DITADO) {
             val t = if (resultCode == RESULT_OK)
                 data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() else null
-            ditado = if (t.isNullOrBlank()) "!" else "=$t"
+            eventos.add(if (t.isNullOrBlank()) "Enada" else "V$t")
             return
         }
         @Suppress("DEPRECATION")
