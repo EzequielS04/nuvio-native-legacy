@@ -327,8 +327,9 @@ static SvAmigo *amigoDe(const SvEvento *e) {
 
 static int ordemAmigo(const void *pa, const void *pb) {
   const SvAmigo *a = (const SvAmigo *)pa, *b = (const SvAmigo *)pb;
+  // A NOVIDADE NAO ORDENA: ela apaga quando a pessoa olha o rosto, e se
+  // ordenasse a fileira trocaria de lugar debaixo do foco nesse instante.
   if (a->agora != b->agora) return b->agora - a->agora;
-  if (a->novo != b->novo) return b->novo - a->novo;
   if ((a->nTit > 0) != (b->nTit > 0)) return a->nTit > 0 ? -1 : 1;
   if (a->nTit > 0 && b->nTit > 0 && a->tit[0].quando != b->tit[0].quando)
     return a->tit[0].quando > b->tit[0].quando ? -1 : 1;
