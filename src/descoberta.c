@@ -4537,13 +4537,18 @@ static int textoDoAddon(const char *tipo, const char *id, char *tit, size_t nt,
 }
 
 // Titulo e sinopse do TMDB no idioma configurado: /find + /tv|movie/<id>.
+// `logo` (pode ser NULL): com "Arte localizada" ligada, o logo do TMDB NO
+// IDIOMA dos metadados, no mesmo pedido (append_to_response=images). So o do
+// idioma: o sem idioma e o ingles sao o que o Continuar ja tem (metahub).
 static int textoDoTmdb(const char *tipo, const char *id, char *tit, size_t nt,
-                       char *sin, size_t ns) {
+                       char *sin, size_t ns, char *logo, size_t nl) {
   const char *chave = desc_chave_tmdb();
   int serie = !strcmp(tipo, "series");
-  char url[400], *c;
+  int querLogo = logo && nl && ajustes_tmdb_arte();
+  char url[460], *c;
   long idT = 0;
-  if (!chave[0] || !ajustes_tmdb_basico()) return 0;
+  if (logo && nl) logo[0] = 0;
+  if (!chave[0] || (!ajustes_tmdb_basico() && !querLogo)) return 0;
   snprintf(url, sizeof url, "%s/find/%s?api_key=%s&external_source=imdb_id",
            TMDB, id, chave);
   c = rede_baixar(url, 8);
@@ -4552,22 +4557,84 @@ static int textoDoTmdb(const char *tipo, const char *id, char *tit, size_t nt,
     if (p) idT = (long)js_num(p, js_fim(p), "id", 0.0); }
   free(c);
   if (idT <= 0) return 0;
-  snprintf(url, sizeof url, "%s/%s/%ld?api_key=%s&language=%s",
-           TMDB, serie ? "tv" : "movie", idT, chave, desc_tmdb_idioma());
+  { char incImg[80] = "";
+    if (querLogo)
+      snprintf(incImg, sizeof incImg,
+               "&append_to_response=images&include_image_language=%.2s",
+               desc_tmdb_idioma());
+    snprintf(url, sizeof url, "%s/%s/%ld?api_key=%s&language=%s%s",
+             TMDB, serie ? "tv" : "movie", idT, chave, desc_tmdb_idioma(), incImg); }
   c = rede_baixar(url, 8);
   if (!c) return 0;
   tit[0] = sin[0] = 0;
-  js_texto_raiz(c, serie ? "name" : "title", tit, nt);
-  js_texto_raiz(c, "overview", sin, ns);
+  if (ajustes_tmdb_basico()) {
+    js_texto_raiz(c, serie ? "name" : "title", tit, nt);
+    js_texto_raiz(c, "overview", sin, ns);
+  }
+  if (querLogo) {
+    const char *im = strstr(c, "\"images\"");
+    const char *imObj = im ? strchr(im, '{') : NULL;
+    const char *imFim = imObj ? js_fim(imObj) : NULL;
+    const char *p = (imObj && imFim) ? js_array(imObj, imFim, "logos") : NULL;
+    char base[3];
+    snprintf(base, sizeof base, "%.2s", desc_tmdb_idioma());
+    while (p && !logo[0]) {
+      const char *f = js_fim(p);
+      char iso[8] = "", fp[160] = "";
+      js_texto(p, f, "iso_639_1", iso, sizeof iso);
+      js_texto(p, f, "file_path", fp, sizeof fp);
+      if (fp[0] == '/' && !ehSvg(fp) && !strcmp(iso, base))
+        snprintf(logo, nl, "https://image.tmdb.org/t/p/w500%s", fp);
+      p = js_prox(f);
+    }
+  }
   free(c);
-  return tit[0] || sin[0];
+  return tit[0] || sin[0] || (logo && nl && logo[0]);
+}
+
+// Logo e fundo da RAIZ do meta do primeiro addon de metadados que conhece `id`
+// (#213). E o addon que a pessoa escolheu com idioma (AIOMetadata com ru, por
+// exemplo): o logo dele vem no idioma dela. O Continuar assistindo nasce do
+// Trakt com arte do metahub/Cinemeta — o logo em ingles do destaque no
+// arranque. Raiz e nao primeira chave: o _providerArt do AIOMetadata vem antes
+// (#200). SVG nao decodifica e fica fora.
+static int arteDoAddon(const char *tipo, const char *id, char *logo, size_t nl,
+                       char *fundo, size_t nf) {
+  int i, n = addons_n();
+  logo[0] = fundo[0] = 0;
+  for (i = 0; i < n; i++) {
+    char *c = metaDoAddon(i, tipo, id);
+    const char *m = c ? strstr(c, "\"meta\"") : NULL;
+    if (m) {
+      m += 6;
+      while (*m == ' ' || *m == ':' || *m == '\n' || *m == '\t' || *m == '\r') m++;
+      if (*m == '{') {
+        js_texto_raiz_em(m, NULL, "logo", logo, nl);
+        js_texto_raiz_em(m, NULL, "background", fundo, nf);
+        if (ehSvg(logo) || strncmp(logo, "http", 4)) logo[0] = 0;
+        if (ehSvg(fundo) || strncmp(fundo, "http", 4)) fundo[0] = 0;
+      }
+    }
+    free(c);
+    if (logo[0] || fundo[0]) return 1;
+  }
+  return 0;
 }
 
 // Cache do texto localizado: um pedido por titulo e por idioma, nao um por
 // refazagem da fileira. Resposta negativa vale 10 min (falha de rede nao vira
 // "sem traducao" para a sessao inteira).
+//
+// GUARDADO EM DISCO (#213). So na memoria, ele nascia vazio a cada abertura: o
+// Continuar do Trakt saia com o texto do Cinemeta (ingles) e o destaque, que le
+// o primeiro item, mostrava a sinopse em ingles ate a volta da rede trocar 1-2 s
+// depois — medido no registro da G5 (ru): "[t] 2110 trakt continuar assistindo"
+// com aplicarLocCache sem nada, e o texto russo so depois de fioLocalizar. Com o
+// arquivo, o primeiro quadro ja e o do idioma; a entrada do disco serve para
+// pintar, e a rede ainda refaz uma vez por sessao (`doDisco`) para nao congelar.
 #define LOC_N 64
-static struct { char chave[64]; char titulo[160]; char sinopse[900]; int ok; long quando; }
+static struct { char chave[64]; char titulo[160]; char sinopse[900];
+                char logo[512]; char fundo[512]; int ok, doDisco; long quando; }
   locCache[LOC_N];
 static int locProx;
 static pthread_mutex_t locTrava = PTHREAD_MUTEX_INITIALIZER;
@@ -4577,16 +4644,21 @@ static void locChave(char *dst, size_t n, const char *tipo, const char *id) {
 }
 
 // 1 = achou entrada valida; *ok diz se ha texto. Entrada negativa vencida = 0.
-static int locLer(const char *chave, char *tit, size_t nt, char *sin, size_t ns, int *ok) {
+// `disco` 0 recusa a entrada que so veio do arquivo (quem pergunta e a rede).
+static int locLerEx(const char *chave, char *tit, size_t nt, char *sin, size_t ns,
+                    char *logo, size_t nl, char *fundo, size_t nf, int *ok, int disco) {
   int i, achou = 0;
   pthread_mutex_lock(&locTrava);
   for (i = 0; i < LOC_N; i++) {
     if (!locCache[i].chave[0] || strcmp(locCache[i].chave, chave)) continue;
     if (!locCache[i].ok && time(NULL) - locCache[i].quando > 600) break;
+    if (locCache[i].doDisco && !disco) break;
     *ok = locCache[i].ok;
     if (*ok) {
       snprintf(tit, nt, "%s", locCache[i].titulo);
       snprintf(sin, ns, "%s", locCache[i].sinopse);
+      if (logo && nl) snprintf(logo, nl, "%s", locCache[i].logo);
+      if (fundo && nf) snprintf(fundo, nf, "%s", locCache[i].fundo);
     }
     achou = 1;
     break;
@@ -4595,7 +4667,8 @@ static int locLer(const char *chave, char *tit, size_t nt, char *sin, size_t ns,
   return achou;
 }
 
-static void locGuardar(const char *chave, const char *tit, const char *sin, int ok) {
+static void locGuardar(const char *chave, const char *tit, const char *sin,
+                       const char *logo, const char *fundo, int ok) {
   int i, vaga = -1;
   pthread_mutex_lock(&locTrava);
   for (i = 0; i < LOC_N; i++)
@@ -4604,9 +4677,153 @@ static void locGuardar(const char *chave, const char *tit, const char *sin, int 
   snprintf(locCache[vaga].chave, sizeof locCache[vaga].chave, "%s", chave);
   snprintf(locCache[vaga].titulo, sizeof locCache[vaga].titulo, "%s", ok ? tit : "");
   snprintf(locCache[vaga].sinopse, sizeof locCache[vaga].sinopse, "%s", ok ? sin : "");
+  snprintf(locCache[vaga].logo, sizeof locCache[vaga].logo, "%s", ok && logo ? logo : "");
+  snprintf(locCache[vaga].fundo, sizeof locCache[vaga].fundo, "%s", ok && fundo ? fundo : "");
   locCache[vaga].ok = ok;
+  locCache[vaga].doDisco = 0;
   locCache[vaga].quando = (long)time(NULL);
   pthread_mutex_unlock(&locTrava);
+}
+
+// --- O ARQUIVO (loc-texto.txt na pasta de dados) ----------------------------
+// Uma linha por entrada com texto: chave, titulo, sinopse, logo, fundo, por
+// TAB; TAB, quebra e barra escapados. A primeira linha e a identidade (conta e
+// perfil), como no cache do catalogo: a url de arte de addon pode carregar
+// configuracao, e arquivo de outra conta e descartado. Sem pasta gravavel
+// (dados_dir vazio, os testes) nao ha arquivo e tudo segue so na memoria.
+#ifdef __EMSCRIPTEN__
+#include "dados.h"
+#define LOC_FS_TRAVAR()   dados_fs_travar()
+#define LOC_FS_LIBERAR()  dados_fs_liberar()
+#define LOC_MARCAR_SUJO() dados_marcar_sujo(1)
+#else
+#define LOC_FS_TRAVAR()   ((void)0)
+#define LOC_FS_LIBERAR()  ((void)0)
+#define LOC_MARCAR_SUJO() ((void)0)
+#endif
+const char *dados_dir(void);
+static int locDiscoLido;
+
+static int locCaminho(char *dst, size_t n) {
+  const char *d = dados_dir();
+  if (!d || !d[0]) return 0;
+  snprintf(dst, n, "%s/loc-texto.txt", d);
+  return 1;
+}
+
+static void locEscapar(FILE *f, const char *s) {
+  for (; *s; s++) {
+    if (*s == '\t') fputs("\\t", f);
+    else if (*s == '\n') fputs("\\n", f);
+    else if (*s == '\r') continue;
+    else if (*s == '\\') fputs("\\\\", f);
+    else fputc(*s, f);
+  }
+}
+
+// Corta o campo em `p` ate o proximo TAB, desescapando. Devolve o resto.
+static char *locCampo(char *p, char *dst, size_t n) {
+  size_t k = 0;
+  while (*p && *p != '\t' && *p != '\n') {
+    char c = *p++;
+    if (c == '\\' && *p) { c = *p++; c = c == 't' ? '\t' : c == 'n' ? '\n' : c; }
+    if (k + 1 < n) dst[k++] = c;
+  }
+  if (n) dst[k] = 0;
+  return *p == '\t' ? p + 1 : p;
+}
+
+static void locIdentidade(char *dst, size_t n) {
+  const char *u = sessao_usuario();
+  snprintf(dst, n, "loc1 %s %d", u ? u : "", perfis_ativo());
+}
+
+static void locSalvarDisco(void) {
+  char caminho[600], tmp[620], ident[128];
+  FILE *f;
+  int i, n = 0;
+  if (!locCaminho(caminho, sizeof caminho)) return;
+  snprintf(tmp, sizeof tmp, "%s.tmp", caminho);
+  locIdentidade(ident, sizeof ident);
+  LOC_FS_TRAVAR();
+  f = fopen(tmp, "w");
+  if (!f) { LOC_FS_LIBERAR(); return; }
+  fprintf(f, "%s\n", ident);
+  pthread_mutex_lock(&locTrava);
+  for (i = 0; i < LOC_N; i++) {
+    if (!locCache[i].chave[0] || !locCache[i].ok) continue;
+    locEscapar(f, locCache[i].chave);   fputc('\t', f);
+    locEscapar(f, locCache[i].titulo);  fputc('\t', f);
+    locEscapar(f, locCache[i].sinopse); fputc('\t', f);
+    locEscapar(f, locCache[i].logo);    fputc('\t', f);
+    locEscapar(f, locCache[i].fundo);   fputc('\n', f);
+    n++;
+  }
+  pthread_mutex_unlock(&locTrava);
+  if (fclose(f) != 0 || rename(tmp, caminho) != 0) remove(tmp);
+  LOC_FS_LIBERAR();
+  LOC_MARCAR_SUJO();
+  printf("[desc] texto localizado gravado: %d titulo(s)\n", n);
+  fflush(stdout);
+}
+
+// Uma vez por processo, no primeiro uso. Nao pisa entrada que a rede ja deu.
+static void locLerDisco(void) {
+  char caminho[600], ident[128], linha[2400];
+  FILE *f;
+  int n = 0;
+  if (__atomic_exchange_n(&locDiscoLido, 1, __ATOMIC_ACQ_REL)) return;
+  if (!locCaminho(caminho, sizeof caminho)) return;
+  LOC_FS_TRAVAR();
+  f = fopen(caminho, "r");
+  if (!f) { LOC_FS_LIBERAR(); return; }
+  locIdentidade(ident, sizeof ident);
+  if (!fgets(linha, sizeof linha, f) || strncmp(linha, ident, strlen(ident)) ||
+      (linha[strlen(ident)] != '\n' && linha[strlen(ident)] != 0)) {
+    fclose(f);
+    remove(caminho);
+    LOC_FS_LIBERAR();
+    printf("[desc] texto localizado do disco descartado (outra conta/perfil)\n");
+    fflush(stdout);
+    return;
+  }
+  pthread_mutex_lock(&locTrava);
+  while (fgets(linha, sizeof linha, f) && n < LOC_N) {
+    char chave[64], *p = linha;
+    int i, vaga = -1;
+    p = locCampo(p, chave, sizeof chave);
+    if (!chave[0]) continue;
+    for (i = 0; i < LOC_N; i++)
+      if (!strcmp(locCache[i].chave, chave)) { vaga = -2; break; }
+    if (vaga == -2) continue;
+    vaga = locProx; locProx = (locProx + 1) % LOC_N;
+    snprintf(locCache[vaga].chave, sizeof locCache[vaga].chave, "%s", chave);
+    p = locCampo(p, locCache[vaga].titulo, sizeof locCache[vaga].titulo);
+    p = locCampo(p, locCache[vaga].sinopse, sizeof locCache[vaga].sinopse);
+    p = locCampo(p, locCache[vaga].logo, sizeof locCache[vaga].logo);
+    locCampo(p, locCache[vaga].fundo, sizeof locCache[vaga].fundo);
+    locCache[vaga].ok = 1;
+    locCache[vaga].doDisco = 1;
+    locCache[vaga].quando = (long)time(NULL);
+    n++;
+  }
+  pthread_mutex_unlock(&locTrava);
+  fclose(f);
+  LOC_FS_LIBERAR();
+  printf("[desc] texto localizado do disco: %d titulo(s)\n", n);
+  fflush(stdout);
+}
+
+void desc_loc_apagar(void) {
+  char caminho[600];
+  pthread_mutex_lock(&locTrava);
+  memset(locCache, 0, sizeof locCache);
+  locProx = 0;
+  pthread_mutex_unlock(&locTrava);
+  if (!locCaminho(caminho, sizeof caminho)) return;
+  LOC_FS_TRAVAR();
+  if (remove(caminho) == 0) LOC_MARCAR_SUJO();
+  LOC_FS_LIBERAR();
 }
 
 // Id do titulo ("tt123" de "tt123:1:2") e tipo do meta ("movie"/"series") de um
@@ -4627,44 +4844,90 @@ static int locChaveDoItem(const CatItem *c, char *id, size_t nid, const char **t
 // com "Prefere a ficha do addon de metadados" o addon vem primeiro; sem ele, o
 // TMDB no idioma configurado, e o addon so quando o TMDB nao tem (ou esta
 // desligado). Em ingles e sem a preferencia nao ha nada a localizar.
+//
+// A ARTE (#213) e outra regra: o addon de metadados PRIMEIRO (logo e fundo da
+// raiz do meta dele), o logo do TMDB no idioma so na falta. O texto fica com a
+// ordem do #209 porque ali o addon em ingles (Ultra MAX, Bingecat) e medido;
+// um logo do addon em ingles nao piora nada — o do Continuar ja e o ingles do
+// metahub.
 static int localizarTexto(const char *tipo, const char *id, char *tit, size_t nt,
-                          char *sin, size_t ns) {
-  char chave[64];
+                          char *sin, size_t ns, char *logo, size_t nl,
+                          char *fundo, size_t nf) {
+  char chave[64], logoTmdb[512] = "";
   int ok = 0, externo = ajustes_meta_externo(), naoIng = idiomaNaoIngles(), lido;
+  logo[0] = fundo[0] = 0;
   if (!externo && !naoIng) return 0;
+  locLerDisco();
   locChave(chave, sizeof chave, tipo, id);
-  if (locLer(chave, tit, nt, sin, ns, &lido)) return lido;
+  if (locLerEx(chave, tit, nt, sin, ns, logo, nl, fundo, nf, &lido, 0)) return lido;
   tit[0] = sin[0] = 0;
   // Com a preferencia o addon vem primeiro SO em ingles (#209): num idioma
   // que nao e o ingles o TMDB traduz antes, como na ficha do titulo.
   if (externo && !naoIng) {
     ok = textoDoAddon(tipo, id, tit, nt, sin, ns, NULL);
   } else {
-    ok = textoDoTmdb(tipo, id, tit, nt, sin, ns);
-    if (!ok) ok = textoDoAddon(tipo, id, tit, nt, sin, ns, NULL);
+    ok = textoDoTmdb(tipo, id, tit, nt, sin, ns,
+                     naoIng ? logoTmdb : NULL, sizeof logoTmdb);
+    if (!tit[0] && !sin[0]) ok = textoDoAddon(tipo, id, tit, nt, sin, ns, NULL);
   }
-  locGuardar(chave, tit, sin, ok);
+  if (arteDoAddon(tipo, id, logo, nl, fundo, nf)) ok = 1;
+  if (!logo[0] && logoTmdb[0]) { snprintf(logo, nl, "%s", logoTmdb); ok = 1; }
+  locGuardar(chave, tit, sin, logo, fundo, ok);
   return ok;
 }
 
 // Aplica ao item o que o cache ja sabe (sem rede). Campo vazio nao apaga.
+// A arte so troca a do proprio item: logo e fundo vao para `logo`/`backdrop`
+// (o card deitado e o destaque leem dali); o fundo do addon tambem fica como
+// backdropCatalogo, que e a "arte do catalogo" para a fonte escolhida.
 static int aplicarLocItem(CatItem *c) {
-  char id[24], tit[160], sin[900];
+  char id[24], tit[160], sin[900], logo[512], fundo[512];
   const char *tipo;
   int ok = 0;
   if (!locChaveDoItem(c, id, sizeof id, &tipo)) return 0;
+  locLerDisco();
   { char chave[64];
     locChave(chave, sizeof chave, tipo, id);
-    if (!locLer(chave, tit, sizeof tit, sin, sizeof sin, &ok) || !ok) return 0; }
+    if (!locLerEx(chave, tit, sizeof tit, sin, sizeof sin, logo, sizeof logo,
+                  fundo, sizeof fundo, &ok, 1) || !ok) return 0; }
   if (tit[0] && strcmp(tit, c->titulo)) { snprintf(c->titulo, sizeof c->titulo, "%s", tit); ok = 2; }
   if (sin[0] && strcmp(sin, c->sinopse)) { snprintf(c->sinopse, sizeof c->sinopse, "%s", sin); ok = 2; }
+  if (logo[0] && strcmp(logo, c->logo)) { snprintf(c->logo, sizeof c->logo, "%s", logo); ok = 2; }
+  if (fundo[0] && strcmp(fundo, c->backdrop)) {
+    snprintf(c->backdrop, sizeof c->backdrop, "%s", fundo);
+    snprintf(c->backdropCatalogo, sizeof c->backdropCatalogo, "%s", fundo);
+    ok = 2;
+  }
   return ok == 2;
 }
-
 static int aplicarLocCache(CatItem *v, int n) {
   int i, mudou = 0;
   if (!ajustes_meta_externo() && !idiomaNaoIngles()) return 0;
   for (i = 0; i < n; i++) mudou += aplicarLocItem(&v[i]);
+  return mudou;
+}
+
+// O CATALOGO LIDO DO CACHE NO ARRANQUE (#213) passa pelo mesmo texto
+// localizado do disco antes do primeiro quadro: o Continuar gravado la pode
+// ter saido antes de a traducao chegar. Sem rede; so o fio principal, na
+// abertura (home_iniciar), antes de a descoberta comecar a publicar.
+int desc_localizar_catalogo_cache(void) {
+  int i, n = cat_n(), mudou = 0;
+  CatItem *e;
+  if (!ajustes_meta_externo() && !idiomaNaoIngles()) return 0;
+  e = malloc(sizeof *e);
+  if (!e) return 0;
+  for (i = 0; i < n; i++) {
+    const CatItem *o = cat_item(i);
+    if (!o) continue;
+    *e = *o;
+    if (aplicarLocItem(e)) { cat_atualizar_item(i, e); mudou++; }
+  }
+  free(e);
+  if (mudou) {
+    printf("[desc] cache do catalogo: %d titulo(s) no idioma ja no primeiro quadro\n", mudou);
+    fflush(stdout);
+  }
   return mudou;
 }
 
@@ -4676,6 +4939,7 @@ static volatile int locVivo, locDeNovo;
 static pthread_mutex_t locFilaTrava = PTHREAD_MUTEX_INITIALIZER;
 
 static void *fioLocalizar(void *u) {
+  int novos = 0;
   (void)u;
   for (;;) {
     int lista[LOC_LOTE], n, k;
@@ -4686,11 +4950,13 @@ static void *fioLocalizar(void *u) {
     pthread_mutex_unlock(&locFilaTrava);
     for (k = 0; k < n; k++) {
       const CatItem *o = lista[k] < cat_n() ? cat_item(lista[k]) : NULL;
-      char id[24], imdb[64], tit[160], sin[900];
+      char id[24], imdb[64], tit[160], sin[900], logo[512], fundo[512];
       const char *tipo;
       if (!o || !locChaveDoItem(o, id, sizeof id, &tipo)) continue;
       snprintf(imdb, sizeof imdb, "%s", o->imdb);
-      if (!localizarTexto(tipo, id, tit, sizeof tit, sin, sizeof sin)) continue;
+      if (!localizarTexto(tipo, id, tit, sizeof tit, sin, sizeof sin,
+                          logo, sizeof logo, fundo, sizeof fundo)) continue;
+      novos++;
       // Reler: o item pode ter mudado de lugar ou de texto enquanto a rede
       // respondia. So o titulo e a sinopse sao tocados.
       o = lista[k] < cat_n() ? cat_item(lista[k]) : NULL;
@@ -4705,6 +4971,12 @@ static void *fioLocalizar(void *u) {
     }
     pthread_mutex_lock(&locFilaTrava);
     if (locDeNovo) { pthread_mutex_unlock(&locFilaTrava); continue; }
+    pthread_mutex_unlock(&locFilaTrava);
+    // Uma gravacao por lote, FORA da trava da fila e antes de soltar locVivo
+    // (quem espera o fio — o teste — ve o arquivo pronto).
+    if (novos) locSalvarDisco();
+    pthread_mutex_lock(&locFilaTrava);
+    if (locDeNovo) { pthread_mutex_unlock(&locFilaTrava); novos = 0; continue; }
     locVivo = 0;
     pthread_mutex_unlock(&locFilaTrava);
     return NULL;

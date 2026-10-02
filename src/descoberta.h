@@ -250,6 +250,11 @@ void desc_mesclar_episodios(CatEp *base, int nb, const CatEp *outro, int no,
 // prefere, ou o TMDB no idioma configurado (#176). Chamada barata e repetivel:
 // o que ja foi resolvido vem do cache.
 void desc_localizar_indices(const int *idx, int n);
+// Texto e arte localizados ja conhecidos (memoria + loc-texto.txt) aplicados ao
+// catalogo que veio do cache, sem rede (#213). Devolve quantos mudaram.
+int desc_localizar_catalogo_cache(void);
+// Esquece o texto localizado (memoria e arquivo). Logout.
+void desc_loc_apagar(void);
 // Casa o `cast` de /credits do TMDB com o elenco do item POR NOME (sem acento,
 // caixa nem pontuacao) e completa a lista com o resto do TMDB (#153). Pura;
 // devolve quantos nomes casaram.
