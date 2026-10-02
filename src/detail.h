@@ -19,6 +19,8 @@ int  detail_aberto(void);
 // Fecha a pagina pela mesma saida animada do Voltar (Spotlight: uma colecao ou
 // um catalogo escolhido com a pagina aberta abriria POR TRAS dela).
 void detail_fechar(void);
+// Fecha sem a mola de saida (o player saiu para a home: ilha_minimizar).
+void detail_fechar_seco(void);
 int  detail_pediu_menu(void);   // ESQUERDA na borda fechou a pagina pedindo a barra
 // 0..1 de quanto o detalhe tomou a tela; a home usa para descer as fileiras.
 float detail_progresso(void);        // 1 enquanto a tela existe, inclusive saindo

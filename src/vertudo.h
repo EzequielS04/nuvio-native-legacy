@@ -20,6 +20,8 @@ void vertudo_colecao(const ColFolder *folder);
 void vertudo_abrir(const char *base, const char *tipo, const char *catId,
                    const char *titulo);
 int  vertudo_aberta(void);
+// Some sem animar (o player saiu para a home: ilha_minimizar).
+void vertudo_fechar_seco(void);
 void vertudo_evento(const SDL_Event *e);
 void vertudo_atualizar(float dt, Uint32 agora);
 void vertudo_desenhar(Uint32 agora);

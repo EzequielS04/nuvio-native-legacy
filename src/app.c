@@ -3007,7 +3007,21 @@ void app_atualizar(float dt, Uint32 agora) {
         desc_repetir();
       }
     }
-    player_encerrar();
+    { unsigned vivoAntes = ilhacart_vivo_seq();
+      player_encerrar();
+      // MINIMIZAR NA ILHA (pedido do dono, 02/10): saiu no MEIO (esta saida
+      // virou a atividade ao vivo, o criterio de home_retorno_vale) com o
+      // relogio ligado e "Ao sair do player" = home. A pagina do titulo e o
+      // que mais estiver por cima fecham SECOS — quem anima e o quadro do
+      // video encolhendo ate a pilula. Terminou o titulo: o fluxo de sempre.
+      if (ajustes_saida_player_home() && ilhacart_vivo_seq() != vivoAntes) {
+        if (detail_aberto()) detail_fechar_seco();
+        if (vertudo_aberta()) vertudo_fechar_seco();
+        if (menu_aberto()) menu_fechar();
+        trocarTela(TELA_HOME);
+        menu_definir_destino(MENU_INICIO);
+        ilha_minimizar(ci ? ci->backdrop : NULL);
+      } }
     }
   }
 

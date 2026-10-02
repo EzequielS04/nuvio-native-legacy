@@ -212,6 +212,7 @@ void vertudo_abrir(const char *base, const char *tipo, const char *catId,
 }
 
 int vertudo_aberta(void) { return aberta; }
+void vertudo_fechar_seco(void) { aberta = 0; anim = 0.0f; }
 int vertudo_pediu_abrir(void) { int v = pedAbrir; pedAbrir = -1; return v; }
 
 static int nItens(void) { return desc_vertudo_n(); }

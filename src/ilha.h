@@ -102,6 +102,16 @@ enum { ILHA_PEDIU_NADA = 0, ILHA_PEDIU_TOCAR, ILHA_PEDIU_DETALHES,
        ILHA_PEDIU_DISPENSAR, ILHA_PEDIU_SALVOS };
 int  ilha_pediu(IlhaCartao *c, int *qual);
 
+// MINIMIZAR NA ILHA: o player saiu no meio e a sessao virou o cartao
+// ILHA_VIVO. A arte do cartao (still do episodio; `fundoReserva` = o fundo do
+// titulo, quando o still nao esta decodificado) nasce em tela cheia e encolhe
+// com mola ate a mini capa da pilula, com a tela de baixo aparecendo por tras.
+// Chamar com o relogio na tela (quem chama ja trocou para a home) e o cartao
+// posto. Animacoes reduzidas: nada voa, a pilula ja aparece com o cartao.
+// 0 = sem cartao ou sem relogio: nada a fazer.
+int  ilha_minimizar(const char *fundoReserva);
+int  ilha_minimizando(void);
+
 // Retangulo da pilula (ou do modal, enquanto ele esta na tela) no ultimo
 // quadro: e de onde o painel de Salvos nasce e para onde ele recolhe. 0 quando
 // a ilha nao esta na tela.
