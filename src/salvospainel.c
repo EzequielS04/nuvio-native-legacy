@@ -33,6 +33,8 @@
 #include "idioma.h"
 #include "badges.h"
 #include "botoes.h"
+#include "socialvis.h"
+#include "svdesenho.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -198,7 +200,12 @@ static int nCont;            // quantas das primeiras linhas sao "Continuar"
 // A ABA AVISOS e a central de avisos (avisos.h) dentro deste painel, para
 // abrir quando se quiser e nao so no toast. Existe SEMPRE; a Social so com o
 // servico de recomendacoes.
-enum { SP_ABA_SALVOS = 0, SP_ABA_SOCIAL = 1, SP_ABA_AVISOS = 2 };
+// ATIVIDADE (02/10/2026, tela B do desenho aprovado): o feed dos amigos
+// agrupado por dia, entre Salvos e a antiga Social — que passou a se chamar
+// AMIGOS, porque e isso que ela lista (recomendacoes recebidas, sugestoes e a
+// lista de amigos). O nome interno SP_ABA_SOCIAL ficou: e o mesmo conteudo.
+enum { SP_ABA_SALVOS = 0, SP_ABA_ATIVIDADE = 1, SP_ABA_SOCIAL = 2, SP_ABA_AVISOS = 3,
+       SP_ABA_N = 4 };
 #define SP_FOCO_ABAS (-1)
 static int aba;
 static RecItem recs[REC_MAX];
@@ -239,6 +246,27 @@ static int nCtts;
 // tela depois de ja ter sido respondida.
 static int consentEstado = -1;
 
+// A LINHA DO AMIGO SABE O QUE ELE ESTA FAZENDO (tela A, 02/10/2026): o indice
+// dele no modelo do social (socialvis.h; -1 = sem atividade) e se ha uma
+// recomendacao MINHA para ele, que ganha a cadeia "Voce mandou X › viu ›
+// gostou" e por isso uma linha mais alta. Refeito com a lista (reconstruirSocial)
+// e quando o modelo muda.
+static short cttSv[REC_CONTATOS_MAX];
+static unsigned char cttCadeia[REC_CONTATOS_MAX];
+static unsigned svRevSocial = ~0u;
+
+// A ABA ATIVIDADE (tela B): o feed de socialvis, uma linha por evento, com o
+// rotulo do dia ("Agora", "Hoje", "Ontem", a data, "Recentes") antes da
+// primeira linha de cada dia. Os rotulos sao montados aqui, uma vez por
+// mudanca do modelo, e nao por quadro.
+static int nAtv;
+static unsigned char atvDia[SV_EVENTOS_MAX];
+static char atvRot[SV_EVENTOS_MAX][32];
+static unsigned atvRev = ~0u;
+// O perfil pedido pela linha do amigo (spainel_pediu_perfil).
+static char pedidoPerfil[96];
+static int temPedidoPerfil;
+
 // Alturas das linhas novas. A recomendacao mantem SP_POSTER_H + SPS_GAP, que e
 // exatamente o SP_PASSO de antes — a aba nao mudou de ritmo, so ganhou vizinhos.
 // AMIGO E MAIS COMPACTO: ele nao tem poster, selo nem botao, so identidade e a
@@ -277,6 +305,13 @@ static int consentEstado = -1;
 // Sao 10 px, e nao um cabecalho de secao: um rotulo ali repetiria o titulo da
 // propria linha, que e exatamente o ar de formulario que se quer evitar.
 #define SPS_SEP_APARECER 10.0f
+// A linha da Atividade: rosto pequeno, cartaz 64x96 e tres linhas de texto.
+#define SPA_H         112.0f
+#define SPA_AV         44.0f
+#define SPA_PW         64.0f
+#define SPA_PH         96.0f
+// A cadeia sob a linha do amigo: a pilula (SVD_CHIP_H) e o ar ate ela.
+#define SPS_CADEIA_H   42.0f
 
 static int aberto, foco, marcaCatN = -1;
 static float entrada, scrollY;
@@ -313,6 +348,21 @@ static char   menuId[24], menuProximo[24];
 static char   seguirId[24];
 
 int spainel_aberto(void)  { return aberto; }
+static int abaExiste(int a);
+static void trocarAba(int nova);
+static int nVisiveis(void);
+void spainel_ir_aba(int a) {
+  if (!aberto) spainel_abrir();
+  if (a < SP_ABA_SALVOS || a >= SP_ABA_N || !abaExiste(a)) return;
+  if (a != aba) trocarAba(a);
+  foco = nVisiveis() > 0 ? 0 : SP_FOCO_ABAS;
+}
+int spainel_pediu_perfil(char *id, size_t tam) {
+  if (!temPedidoPerfil) return 0;
+  temPedidoPerfil = 0;
+  if (id && tam) snprintf(id, tam, "%s", pedidoPerfil);
+  return 1;
+}
 int spainel_visivel(void) { return aberto || entrada > 0.002f; }
 
 const char *spainel_pediu_abrir(void) {
@@ -662,9 +712,19 @@ static void organizar(void) {
 static int temAbas(void) { return 1; }
 // A Social so existe com o servico; sem ele as abas sao Salvos e Avisos.
 static int temSocial(void) { return recomenda_ativo(); }
+// A Atividade existe quando ha de onde ela vir: o servico, ou o Trakt ja ter
+// trazido gente (socialvis.h).
+static int temAtividade(void) {
+  return temSocial() || socialvis_n_eventos() > 0 || socialvis_n_amigos() > 0;
+}
+static int abaExiste(int a) {
+  if (a == SP_ABA_SOCIAL) return temSocial();
+  if (a == SP_ABA_ATIVIDADE) return temAtividade();
+  return a >= SP_ABA_SALVOS && a < SP_ABA_N;
+}
 static int proximaAba(int de, int dir) {
   int a = de + dir;
-  if (a == SP_ABA_SOCIAL && !temSocial()) a += dir;
+  while (a > SP_ABA_SALVOS && a < SP_ABA_AVISOS && !abaExiste(a)) a += dir;
   if (a < SP_ABA_SALVOS) return de;
   if (a > SP_ABA_AVISOS) return de;
   return a;
@@ -682,6 +742,7 @@ static int nVisiveis(void) {
   // adicionar alguem era preciso escolher um filme primeiro.
   if (aba == SP_ABA_SOCIAL) return nSocial;
   if (aba == SP_ABA_AVISOS) return avisos_lista_n();
+  if (aba == SP_ABA_ATIVIDADE) return nAtv;
   return nLinhas;
 }
 
@@ -704,7 +765,9 @@ static float socialAlt(int i) {
   switch (social[i].tipo) {
     case SPS_REC:       return SP_POSTER_H;
     case SPS_SUG:       return SPS_H_SUG;
-    case SPS_AMIGO:     return SPS_H_AMIGO;
+    case SPS_AMIGO:     return SPS_H_AMIGO +
+                          ((social[i].idx >= 0 && social[i].idx < REC_CONTATOS_MAX &&
+                            cttCadeia[social[i].idx]) ? SPS_CADEIA_H : 0.0f);
     case SPS_ADICIONAR: return SPS_H_ACAO;
     case SPS_ENCONTRAR: return SPS_H_ACAO;
     case SPS_APARECER:  return SPS_H_APARECER;
@@ -801,6 +864,11 @@ static void reconstruirSocial(void) {
   // dizia o codigo e oferecia adicionar, mas nunca mostrava QUEM ja estava
   // na lista.
   nCtts = recomenda_contatos(ctts, REC_CONTATOS_MAX);
+  svRevSocial = socialvis_revisao();
+  for (i = 0; i < nCtts; i++) {
+    cttSv[i] = (short)socialvis_amigo_indice(ctts[i].id);
+    cttCadeia[i] = (unsigned char)socialvis_ultima_enviada(ctts[i].id, NULL);
+  }
   for (i = 0; i < nCtts && nSocial < SP_SOCIAL_MAX; i++) {
     social[nSocial].tipo = SPS_AMIGO; social[nSocial].idx = (short)i; nSocial++;
   }
@@ -821,6 +889,21 @@ static void reconstruirSocial(void) {
   }
 }
 
+static void reconstruirAtividade(void) {
+  int i;
+  atvRev = socialvis_revisao();
+  nAtv = socialvis_n_eventos();
+  if (nAtv > SV_EVENTOS_MAX) nAtv = SV_EVENTOS_MAX;
+  for (i = 0; i < nAtv; i++)
+    atvDia[i] = (unsigned char)socialvis_dia(socialvis_evento(i), atvRot[i], sizeof atvRot[i]);
+}
+// O rotulo do dia antes da linha `i`, quando o dia muda.
+static float atvAntes(int i) {
+  if (i < 0 || i >= nAtv) return 0.0f;
+  if (i == 0) return SP_SECAO_H;
+  return (atvDia[i] != atvDia[i - 1] || strcmp(atvRot[i], atvRot[i - 1])) ? SP_SECAO_H : 0.0f;
+}
+
 static void trocarAba(int nova) {
   if (!temAbas() || nova == aba) return;
   if (aba == SP_ABA_AVISOS) avisos_marcar_lidos();
@@ -828,6 +911,7 @@ static void trocarAba(int nova) {
   foco = SP_FOCO_ABAS;
   scrollY = 0.0f; velY = 0.0f;
   memset(animFoco, 0, sizeof animFoco);
+  if (aba == SP_ABA_ATIVIDADE) { socialvis_atualizar(); reconstruirAtividade(); }
   if (aba == SP_ABA_SOCIAL) {
     // CONSULTA IMEDIATA ao entrar, para nao mostrar lista velha; e o selo some
     // porque a pessoa esta olhando justamente para ela.
@@ -1208,6 +1292,12 @@ static float topoDe(int i) {
     return y + socialAntes(i);
   }
   if (aba == SP_ABA_AVISOS) return avisos_lista_y(i, foco);
+  if (aba == SP_ABA_ATIVIDADE) {
+    int k;
+    y = 0.0f;
+    for (k = 0; k < i && k < nAtv; k++) y += atvAntes(k) + SPA_H + SPS_GAP;
+    return y + atvAntes(i);
+  }
   // Rotulo da primeira secao, sempre; mais o de "Não começados" para quem vem
   // depois dele. Com nCont == 0 nao existe segunda secao — a unica que aparece
   // e "Sua lista", e o segundo termo tem de ser zero para todo mundo.
@@ -1353,6 +1443,15 @@ void spainel_evento(const SDL_Event *e) {
       if (avisos_lista_ok(foco)) spainel_fechar();
       return;
     }
+    if (aba == SP_ABA_ATIVIDADE) {
+      const SvEvento *ev = socialvis_evento(foco);
+      if (ev && ev->imdb[0]) {
+        snprintf(pedido, sizeof pedido, "%s", ev->imdb);
+        temPedido = 1;
+        aberto = 0;
+      }
+      return;
+    }
     if (aba == SP_ABA_SOCIAL) {
       if (foco < 0 || foco >= nSocial) return;
       switch (social[foco].tipo) {
@@ -1388,9 +1487,12 @@ void spainel_evento(const SDL_Event *e) {
           pessoas_abrir();
           return;
         case SPS_AMIGO:
-          // Sem acao por enquanto: a linha existe para mostrar quem ja esta
-          // na lista. Cair no `default` abriria o titulo de uma recomendacao
-          // pelo indice do contato.
+          // O PERFIL DO AMIGO (amigoperfil.h). app.c abre e o painel fecha.
+          if (social[foco].idx >= 0 && social[foco].idx < nCtts) {
+            snprintf(pedidoPerfil, sizeof pedidoPerfil, "%s", ctts[social[foco].idx].id);
+            temPedidoPerfil = 1;
+            aberto = 0;
+          }
           return;
         case SPS_APARECER:
           // MUDAR DE IDEIA CUSTA UM OK, nos dois sentidos. Sem confirmacao de
@@ -1474,9 +1576,14 @@ void spainel_atualizar(float dt, Uint32 agora) {
   // aparecer foi reconciliada com o servidor — esta ultima acontece quando a
   // pessoa respondeu SIM em outra TV e o registro deste aparelho adotou a
   // resposta. Sem ela a pergunta continuaria na tela ja respondida.
+  if (aberto && (aba == SP_ABA_SOCIAL || aba == SP_ABA_ATIVIDADE)) socialvis_atualizar();
+  if (aberto && aba == SP_ABA_ATIVIDADE && atvRev != socialvis_revisao()) {
+    reconstruirAtividade();
+    if (foco >= nAtv) foco = nAtv > 0 ? nAtv - 1 : SP_FOCO_ABAS;
+  }
   if (aberto && aba == SP_ABA_SOCIAL &&
       (nRecs != recomenda_n() || nSugs != recomenda_n_sugestoes() ||
-       consentEstado != recomenda_aparecer())) {
+       consentEstado != recomenda_aparecer() || svRevSocial != socialvis_revisao())) {
     reconstruirSocial();
     if (foco >= nVisiveis()) foco = nVisiveis() > 0 ? nVisiveis() - 1 : 0;
   }
@@ -1533,7 +1640,10 @@ void spainel_atualizar(float dt, Uint32 agora) {
     // A ALTURA DA LINHA FOCADA, e nao SP_POSTER_H sempre: na aba Social a linha
     // pode ter 84, 112 ou 138px, e usar a maior empurraria a rolagem 54px alem
     // do necessario num interruptor de 104.
-    base = topo + (aba == SP_ABA_SOCIAL ? socialAlt(foco) : aba == SP_ABA_AVISOS ? avisos_lista_altura_linha(foco, foco) - 10.0f : linhas[foco].lh);
+    base = topo + (aba == SP_ABA_SOCIAL ? socialAlt(foco)
+                 : aba == SP_ABA_ATIVIDADE ? SPA_H
+                 : aba == SP_ABA_AVISOS ? avisos_lista_altura_linha(foco, foco) - 10.0f
+                 : linhas[foco].lh);
     // O ar do foco nas duas pontas: o conteudo ja nasce SP_FOCO_AR abaixo do
     // recorte (ver SP_FOCO_AR), entao em cima basta `topo` e embaixo sao dois.
     if (base + 2.0f * SP_FOCO_AR - alvo > janela) alvo = base + 2.0f * SP_FOCO_AR - janela;
@@ -2034,8 +2144,23 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a) {
     // desenhado: a linha nao dizia se o amigo estava mandando um filme de duas
     // horas ou oito temporadas.
     { float sx = tx;
+      int pct, te, ee, est;
       sx += rec_selo_tipo(sx, y + SPR_Y_SELOS, r->tipo, esc, a) + REC_SELO_GAP;
-      rec_selo_imdb(sx, y + SPR_Y_SELOS, r->nota, esc, a); }
+      if (r->nota > 0) sx += rec_selo_imdb(sx, y + SPR_Y_SELOS, r->nota, esc, a) + REC_SELO_GAP;
+      // O MEU ESTADO NO QUE ME MANDARAM (tela A): "Voce comecou › T1E3" ou
+      // "Voce viu", pelo catalogo. Sem estado, nada.
+      est = socialvis_meu_estado(r->imdb, &pct, &te, &ee);
+      if (est == 2) svd_chip(sx + 8.0f, y + SPR_Y_SELOS + (REC_SELO_H - SVD_CHIP_H) * 0.5f,
+                             "Você viu", 1, esc, a);
+      else if (est == 1) {
+        char d[32];
+        float cy = y + SPR_Y_SELOS + (REC_SELO_H - SVD_CHIP_H) * 0.5f;
+        sx += 8.0f + svd_chip(sx + 8.0f, cy, "Você começou", 1, esc, a);
+        sx += svd_seta(sx, cy, esc, a);
+        if (te > 0 && ee > 0) snprintf(d, sizeof d, i18n("T%dE%d"), te, ee);
+        else snprintf(d, sizeof d, "%d%%", pct);
+        svd_chip(sx, cy, d, 0, esc, a);
+      } }
     { const char *frase = rec_frase(r);
       if (frase[0]) {
         snprintf(buf, sizeof buf, "\xe2\x80\x9c%s\xe2\x80\x9d", frase);
@@ -2052,14 +2177,15 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a) {
 // e geometria e nao custa texto.
 // Largura da faixa de abas, para a contagem do cabecalho parar antes dela.
 static float abasLargura(void) {
-  const char *rot[3]; int i; float w = 0.0f;
+  const char *rot[SP_ABA_N]; int i; float w = 0.0f;
   int novasRec = recomenda_n_novas(), novasAv = avisos_n_novos();
-  rot[SP_ABA_SALVOS] = "Salvos"; rot[SP_ABA_SOCIAL] = "Social"; rot[SP_ABA_AVISOS] = "Avisos";
-  for (i = 0; i < 3; i++) {
+  rot[SP_ABA_SALVOS] = "Salvos"; rot[SP_ABA_ATIVIDADE] = "Atividade";
+  rot[SP_ABA_SOCIAL] = "Amigos"; rot[SP_ABA_AVISOS] = "Avisos";
+  for (i = 0; i < SP_ABA_N; i++) {
     int ativa = (i == aba);
     int novas = i == SP_ABA_SOCIAL ? novasRec : i == SP_ABA_AVISOS ? novasAv : 0;
     TxtLinha t;
-    if (i == SP_ABA_SOCIAL && !temSocial()) continue;
+    if (!abaExiste(i)) continue;
     t = txt_linha(TXT_CALLOUT, i18n(rot[i]), 176, 176, 176, 255);
     w += t.w + (ativa ? 20.0f : 0.0f) + ((!ativa && novas > 0) ? 34.0f : 0.0f) + SP_ABA_GAP;
   }
@@ -2067,19 +2193,20 @@ static float abasLargura(void) {
 }
 
 static void desenhaAbas(float dx, float a) {
-  const char *rot[3];
+  const char *rot[SP_ABA_N];
   float x = SP_X + dx + SP_PAD;
   int i, novasRec = recomenda_n_novas(), novasAv = avisos_n_novos();
   rot[SP_ABA_SALVOS] = "Salvos";
-  rot[SP_ABA_SOCIAL] = "Social";
+  rot[SP_ABA_ATIVIDADE] = "Atividade";
+  rot[SP_ABA_SOCIAL] = "Amigos";
   rot[SP_ABA_AVISOS] = "Avisos";
-  for (i = 0; i < 3; i++) {
+  for (i = 0; i < SP_ABA_N; i++) {
     int ativa = (i == aba);
     int focada = ativa && foco == SP_FOCO_ABAS;
     int cor = focada ? ajustes_tinta_foco() : ativa ? 245 : 176;
     int novas = i == SP_ABA_SOCIAL ? novasRec : i == SP_ABA_AVISOS ? novasAv : 0;
     TxtLinha t;
-    if (i == SP_ABA_SOCIAL && !temSocial()) continue;
+    if (!abaExiste(i)) continue;
     t = txt_linha(TXT_CALLOUT, i18n(rot[i]), cor, cor, cor, 255);
     // O selo so aparece na aba que NAO esta aberta. Ele responde "ha algo
     // novo la?"; com a aba Social na tela, a propria lista responde isso, e o
@@ -2556,64 +2683,142 @@ static void desenhaSugLinha(int i, int idx, float dx, float y, float a) {
 // Linha de um AMIGO JA ADICIONADO: foto (ou inicial), nome e de onde veio
 // (Trakt ou codigo). Mesma caixa e mesmo foco da sugestao, sem o botao —
 // nao ha acao aqui alem de reconhecer quem esta na lista.
-static void desenhaAmigoLinha(int i, int idx, float dx, float y, float a) {
+static void desenhaAmigoLinha(int i, int idx, float dx, float y, float a, Uint32 agora) {
   const RecContato *c = &ctts[idx];
   float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f;
   float v = focoTexto(f);   // cor do texto e dos selos no foco (vidro: nao inverte)
-  float px = SP_X + dx + SP_PAD;
+  float px = SP_X + dx + SP_PAD, alt = socialAlt(i);
+  const SvAmigo *am = (cttSv[idx] >= 0) ? socialvis_amigo(cttSv[idx]) : NULL;
   { GfxRect p = { px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
-                  SPS_H_AMIGO + SP_FOCO_PADY * 2.0f };
+                  alt + SP_FOCO_PADY * 2.0f };
     superficieItem(p, 14.0f / p.h, f, a); }
   { GfxRect av = { px, y + (SPS_H_AMIGO - SPS_AMIGO_AV) * 0.5f,
                    SPS_AMIGO_AV, SPS_AMIGO_AV };
-    rec_avatar(av, c->avatar, c->nome, c->id, a); }
+    if (am) svd_rosto(av, am, 0.0f, a, agora);
+    else rec_avatar(av, c->avatar, c->nome, c->id, a); }
   { float tx = px + SPS_AMIGO_AV + SPS_AMIGO_GAP;
     float larg = SP_INTERNO - (SPS_AMIGO_AV + SPS_AMIGO_GAP) - 20.0f;
     int tf = ajustes_tinta_foco(), tf2 = ajustes_tinta_foco2();
-    const char *origem = !strcmp(c->origem, "trakt") ? "Amigo do Trakt" : "Adicionado pelo código";
-    char linha2[220];
-    // O QUE ELE VIU POR ULTIMO (dono, 20/09/2026): a fileira "Amigos
-    // assistindo" da home ja carrega a ultima atividade de cada seguido do
-    // Trakt (socialSlug/socialAcao/titulo); o contato do Trakt tem id
-    // "trakt:<slug>". Sem atividade, fica a origem.
-    snprintf(linha2, sizeof linha2, "%s", i18n(origem));
-    // O amigo do NUVIO (id "nuvio:...") tambem: a fileira o traz com o proprio id
-    // em socialSlug (recomenda.c, lerFeedCorpo), so que sem o prefixo cortado.
-    if (!strncmp(c->id, "trakt:", 6) || !strncmp(c->id, "nuvio:", 6)) {
-      int r, k;
-      const char *chaveSocial = !strncmp(c->id, "trakt:", 6) ? c->id + 6 : c->id;
-      for (r = 0; r < cat_n_fileiras(); r++) {
-        const CatFileira *f = cat_fileira(r);
-        if (!f || strcmp(f->chave, "social_activity")) continue;
-        for (k = 0; k < f->n; k++) {
-          const CatItem *it = cat_item(f->ini + k);
-          if (!it || strcmp(it->socialSlug, chaveSocial)) continue;
-          if (it->temporada > 0 && it->episodio > 0) {
-            char te[24];
-            snprintf(te, sizeof te, i18n("T%dE%d"), it->temporada, it->episodio);
-            snprintf(linha2, sizeof linha2, "%s  \xc2\xb7  %s  %s", i18n(it->socialAcao),
-                     it->titulo, te);
-          }
-          else
-            snprintf(linha2, sizeof linha2, "%s  \xc2\xb7  %s", i18n(it->socialAcao), it->titulo);
-          r = cat_n_fileiras(); break;
-        }
-      }
-    }
-    // AS DUAS TINTAS FAZEM CROSSFADE, como nas linhas de Salvos. A troca
-    // anterior por `f > 0,5` dava um estalo no meio da mola — especialmente
-    // visivel quando o branco do foco precisava virar quase preto.
-    { TxtLinha repouso = txt_linha_corta(TXT_BODY, c->nome, 245, 245, 245, 255, larg);
-      TxtLinha foco = txt_linha_corta(TXT_BODY, c->nome, tf, tf, tf, 255, larg);
-      TxtLinha subRepouso = txt_linha_corta(TXT_CAPTION, linha2,
-                                            168, 172, 182, 255, larg);
-      TxtLinha subFoco = txt_linha_corta(TXT_CAPTION, linha2,
-                                         tf2, tf2, tf2, 255, larg);
-      float bloco = (float)repouso.h + 6.0f + (float)subRepouso.h;
+    int vivo = am && am->agora && am->nTit > 0;
+    char linha2[260];
+    // O QUE ELE ESTA FAZENDO (tela A, 02/10/2026), do modelo do social: "●
+    // Agora · The Bear · T3E4 · faltam 12 min" com a barra, ou "Project Hail
+    // Mary · Terminou e gostou · ontem". Sem atividade, como ele chegou — e so
+    // isso; a FONTE (Trakt) nao e escrita aqui, fica no perfil.
+    if (am && am->nTit > 0) {
+      char st[160];
+      const SvEvento *e = &am->tit[0];
+      socialvis_status(e, st, sizeof st);
+      if (vivo) {
+        // "Agora · T3E4 · faltam..." com o titulo depois do "Agora".
+        const char *resto = strstr(st, " \xc2\xb7 ");
+        snprintf(linha2, sizeof linha2, "%s \xc2\xb7 %s%s", i18n("Agora"), e->titulo,
+                 resto ? resto : "");
+      } else snprintf(linha2, sizeof linha2, "%s \xc2\xb7 %s", e->titulo, st);
+    } else snprintf(linha2, sizeof linha2, "%s", i18n("Ainda sem atividade"));
+    { TxtLinha repouso = txt_linha_corta(TXT_BODY, c->nome, 245, 245, 245, 255, larg - 30.0f);
+      TxtLinha foco = txt_linha_corta(TXT_BODY, c->nome, tf, tf, tf, 255, larg - 30.0f);
+      float sx = tx + (vivo ? 24.0f : 0.0f);
+      TxtLinha subRepouso = vivo ? txt_linha_corta(TXT_CAPTION, linha2, 255, 196, 196, 255, larg - 24.0f)
+                                 : txt_linha_corta(TXT_CAPTION, linha2, 168, 172, 182, 255, larg);
+      TxtLinha subFoco = txt_linha_corta(TXT_CAPTION, linha2, tf2, tf2, tf2, 255,
+                                         vivo ? larg - 24.0f : larg);
+      int barra = vivo && am->tit[0].pct >= 0;
+      float bloco = (float)repouso.h + 6.0f + (float)subRepouso.h + (barra ? 14.0f : 0.0f);
       float ty = y + (SPS_H_AMIGO - bloco) * 0.5f;
       txt_foco_transicao(repouso, foco, tx, ty, v, a);
-      txt_foco_transicao(subRepouso, subFoco, tx, ty + repouso.h + 6.0f,
-                         v, a * 0.95f); } }
+      if (vivo) svd_ponto_vivo(tx + 8.0f, ty + repouso.h + 6.0f + subRepouso.h * 0.5f, 14.0f, 0.0f, a, agora);
+      txt_foco_transicao(subRepouso, subFoco, sx, ty + repouso.h + 6.0f, v, a * 0.95f);
+      if (barra)
+        svd_barra((GfxRect){ tx, ty + repouso.h + 6.0f + subRepouso.h + 9.0f, larg * 0.6f, 5.0f },
+                  am->tit[0].pct, a); }
+    // A CADEIA DO QUE EU MANDEI: "Voce mandou X › viu › gostou".
+    if (cttCadeia[idx]) {
+      SvEnviada m;
+      if (socialvis_ultima_enviada(c->id, &m)) {
+        char t1[220];
+        int esc = v > 0.5f;
+        float cx = tx, cy = y + SPS_H_AMIGO - 2.0f;
+        snprintf(t1, sizeof t1, i18n("Você mandou %s"), m.titulo);
+        cx += svd_chip(cx, cy, t1, 0, esc, a);
+        cx += svd_seta(cx, cy, esc, a);
+        if (m.estado == SV_REC_VIU) {
+          cx += svd_chip(cx, cy, "viu", 1, esc, a);
+          if (m.reacao == SV_REAC_GOSTOU) {
+            cx += svd_seta(cx, cy, esc, a);
+            svd_chip(cx, cy, "gostou", 2, esc, a);
+          }
+        } else svd_chip(cx, cy, m.estado == SV_REC_ABRIU ? "abriu" : "ainda não viu", 0, esc, a);
+      }
+    } }
+}
+
+// A ATIVIDADE VAZIA: diz o que vai aparecer e de onde, sem prometer dado que
+// ainda nao existe.
+static void desenhaAtividadeVazia(float dx, float y0, float a) {
+  float x = SP_X + dx + SP_PAD, y = y0 + 8.0f;
+  TxtLinha t = txt_linha(TXT_CALLOUT, "Nada por aqui ainda", 240, 242, 248, 255);
+  txt_desenhar_alpha(t, x, y, a * 0.96f);
+  y += (float)t.h + 14.0f;
+  txt_bloco(TXT_CAPTION,
+      "Quando seus amigos começarem, terminarem ou gostarem de um título, aparece aqui.",
+      190, 194, 204, x, y, SP_INTERNO, 30.0f, a * 0.9f, 3);
+}
+
+// UMA LINHA DO FEED (tela B): o rosto, o cartaz e tres linhas — "Marina esta
+// vendo", "The Bear · T3E4" e quando. O nome e o verbo sao DUAS linhas de
+// texto lado a lado (o verbo e chave de i18n inteira; a frase com o nome
+// dentro nunca seria). Mesma superficie e mesmo foco das outras linhas.
+static void desenhaAtvLinha(int i, float dx, float y, float a, Uint32 agora) {
+  const SvEvento *e = socialvis_evento(i);
+  float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoTexto(f);
+  float px = SP_X + dx + SP_PAD, tx, larg;
+  int tf = ajustes_tinta_foco(), tf2 = ajustes_tinta_foco2();
+  char linha[220], ep[24], q[48];
+  if (!e) return;
+  superficieItem((GfxRect){ px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
+                            SPA_H + SP_FOCO_PADY * 2.0f }, 14.0f / (SPA_H + 12.0f), f, a);
+  { SvAmigo am;
+    memset(&am, 0, sizeof am);
+    snprintf(am.id, sizeof am.id, "%s", e->pessoaId);
+    snprintf(am.nome, sizeof am.nome, "%s", e->pessoaNome);
+    snprintf(am.avatar, sizeof am.avatar, "%s", e->pessoaAvatar);
+    am.agora = e->acao == SV_AGORA;
+    am.novo = 0;
+    svd_rosto((GfxRect){ px + 4.0f, y + 8.0f, SPA_AV, SPA_AV }, &am, 0.0f, a, agora); }
+  svd_poster((GfxRect){ px + SPA_AV + 22.0f, y + (SPA_H - SPA_PH) * 0.5f, SPA_PW, SPA_PH },
+             e->poster[0] ? e->poster : e->arte, 0.08f, a);
+  tx = px + SPA_AV + 22.0f + SPA_PW + 20.0f;
+  larg = SP_INTERNO - (tx - px) - 8.0f;
+  { TxtLinha nr = txt_linha_corta(TXT_CALLOUT, e->pessoaNome, 245, 245, 247, 255, larg * 0.5f);
+    TxtLinha nf = txt_linha_corta(TXT_CALLOUT, e->pessoaNome, tf, tf, tf, 255, larg * 0.5f);
+    const char *verbo = socialvis_verbo(e);
+    TxtLinha vr = txt_linha_corta(TXT_CALLOUT, verbo, 200, 198, 210, 255, larg - (float)nr.w - 10.0f);
+    TxtLinha vf = txt_linha_corta(TXT_CALLOUT, verbo, tf2, tf2, tf2, 255, larg - (float)nr.w - 10.0f);
+    txt_foco_transicao(nr, nf, tx, y + 8.0f, v, a);
+    txt_foco_transicao(vr, vf, tx + (float)nr.w + 10.0f, y + 8.0f, v, a); }
+  socialvis_ep(e, ep, sizeof ep);
+  if (ep[0]) snprintf(linha, sizeof linha, "%s \xc2\xb7 %s", e->titulo, ep);
+  else snprintf(linha, sizeof linha, "%s", e->titulo);
+  { TxtLinha r = txt_linha_corta(TXT_CAPTION, linha, 228, 226, 236, 255, larg);
+    TxtLinha fo = txt_linha_corta(TXT_CAPTION, linha, tf, tf, tf, 255, larg);
+    txt_foco_transicao(r, fo, tx, y + 48.0f, v, a); }
+  // QUANDO, e o que o cartao da home tambem diria: "faltam 12 min", "aos 18 %".
+  socialvis_quando(e->quando, q, sizeof q);
+  linha[0] = 0;
+  if (e->acao == SV_AGORA && e->restanteMin > 0)
+    snprintf(linha, sizeof linha, i18n("faltam %d min"), e->restanteMin);
+  else if (e->acao == SV_ABANDONO && e->pct >= 0)
+    snprintf(linha, sizeof linha, i18n("Parou aos %d%%"), e->pct);
+  if (q[0]) {
+    size_t k = strlen(linha);
+    snprintf(linha + k, sizeof linha - k, "%s%s", k ? " \xc2\xb7 " : "", q);
+  }
+  if (linha[0]) {
+    TxtLinha r = txt_linha_corta(TXT_MINI, linha, 160, 158, 171, 255, larg);
+    TxtLinha fo = txt_linha_corta(TXT_MINI, linha, tf2, tf2, tf2, 255, larg);
+    txt_foco_transicao(r, fo, tx, y + 82.0f, v, a);
+  }
 }
 
 static void desenhaVazio(float dx, float a) {
@@ -2742,7 +2947,6 @@ static void desenharPainel(Uint32 agora) {
   char buf[160];
   GfxRect forma = { SP_X, SP_Y, SP_W, SP_H };
   float raioForma = 28.0f / SP_W;
-  (void)agora;
   morfOn = 0;
   if (entrada < 0.002f) return;
 
@@ -2799,6 +3003,11 @@ static void desenharPainel(Uint32 agora) {
     snprintf(buf, sizeof buf, "%d %s", n,
              i18n(n == 1 ? "recomendação" : "recomendações"));
   }
+  else if (aba == SP_ABA_ATIVIDADE) {
+    int nv = socialvis_n_ao_vivo();
+    if (nv > 0) snprintf(buf, sizeof buf, i18n("assistindo agora: %d"), nv);
+    else buf[0] = 0;
+  }
   else if (aba == SP_ABA_AVISOS) {
     int n = avisos_lista_n(), nv = avisos_n_novos();
     if (nv > 0) snprintf(buf, sizeof buf, i18n("%d avisos · %d novos"), n, nv);
@@ -2833,6 +3042,24 @@ static void desenharPainel(Uint32 agora) {
     txt_desenhar_alpha(t, SP_X + x + SP_PAD, SP_Y + 74.0f, a);
   }
 
+  if (aba == SP_ABA_ATIVIDADE) {
+    gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
+    y = listaTopo() + SP_FOCO_AR - scrollY;
+    if (nAtv == 0) desenhaAtividadeVazia(x, y, a);
+    for (i = 0; i < nAtv; i++) {
+      float cab = atvAntes(i);
+      if (cab > 0.0f) {
+        if (y + cab >= listaTopo() && y <= SP_LISTA_BASE)
+          desenhaSecao(SP_X + x + SP_PAD, y, atvRot[i], a);
+        y += cab;
+      }
+      if (y + SPA_H >= listaTopo() && y <= SP_LISTA_BASE)
+        desenhaAtvLinha(i, x, y, a, agora);
+      y += SPA_H + SPS_GAP;
+    }
+    gfx_sem_recorte();
+    return;
+  }
   if (aba == SP_ABA_AVISOS) {
     gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
     avisos_lista_desenhar(SP_X + x + SP_PAD, listaTopo() + SP_FOCO_AR - scrollY, SP_INTERNO, a, foco);
@@ -2872,7 +3099,7 @@ static void desenharPainel(Uint32 agora) {
         switch (social[i].tipo) {
           case SPS_REC: desenhaRecLinha(i, social[i].idx, x, y, a); break;
           case SPS_SUG: desenhaSugLinha(i, social[i].idx, x, y, a); break;
-          case SPS_AMIGO: desenhaAmigoLinha(i, social[i].idx, x, y, a); break;
+          case SPS_AMIGO: desenhaAmigoLinha(i, social[i].idx, x, y, a, agora); break;
           case SPS_ENCONTRAR: {
             char rot[96];
             int np = recomenda_n_pedidos();

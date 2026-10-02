@@ -70,6 +70,8 @@ int player_aberto(void);
 #include "trailerapple.h"
 #include "trailerfonte.h"
 #include "ponteiro.h"
+#include "amigosfil.h"
+#include "socialvis.h"
 
 #define MAX_ARTE   64
 // Era 32 para as 16 fileiras (CAT_FIL_MAX) do web neste runtime, mais o que a
@@ -147,6 +149,10 @@ typedef struct {
 
 static int fileiraItemIndice(const Fileira *f, int coluna) {
   if (!f || coluna < 0 || coluna >= f->n) return -1;
+  // A FILEIRA DE AMIGOS (amigosfil.h): as colunas sao ROSTOS, e nao itens do
+  // catalogo. O item dela e o cartao em foco (ou o titulo mais novo do rosto),
+  // que e o que o destaque e a memoria de posicao precisam.
+  if (f->tipo == FILEIRA_SOCIAL) return amigosfil_indice_cat(coluna);
   return f->usaItens ? f->itens[coluna] : f->ini + coluna;
 }
 
@@ -1748,12 +1754,12 @@ void home_evento(const SDL_Event *e) {
         foco.nColunas[foco.fileira]=s->n+1;
         return;
       }
-      if(fileiras[foco.fileira].tipo==FILEIRA_SOCIAL && fileiras[foco.fileira].ini<0) {
-        pedidoSocial=1;return;
-      }
+      // A FILEIRA DE AMIGOS decide o proprio OK: rosto = perfil, cartao =
+      // titulo, "+ Adicionar"/convite = tela de amigos ou o QR do celular.
       if(fileiras[foco.fileira].tipo==FILEIRA_SOCIAL) {
-        const CatItem *ci=cat_item_exato(fileiraItemIndice(&fileiras[foco.fileira], foco.coluna));
-        if(ci){pessoaSocial=*ci;pedidoPessoaSocial=1;}return;
+        amigosfil_ok(foco.coluna);
+        if(amigosfil_pediu_ajustes())pedidoSocial=1;
+        return;
       }
       if (fileiras[foco.fileira].tipo == FILEIRA_CATALOGOS) {
         if (dur >= NV_HOLD_MS) abrirMenuCartaz();
@@ -1868,6 +1874,19 @@ void home_evento(const SDL_Event *e) {
     }
     // Cima no destaque: nao ha para onde ir. A pagina sobe um pouco e volta.
     if (k == SDLK_UP) { anim_borda_bater(&bordaPag, -NV_BORDA_AMP); return; }
+  }
+  // A FILEIRA DE AMIGOS ANDA POR DENTRO antes da home: direita entra nos
+  // cartoes do rosto em foco, esquerda volta ao rosto (amigosfil.h).
+  if (foco.fileira >= 0 && foco.fileira < nFileiras &&
+      fileiras[foco.fileira].tipo == FILEIRA_SOCIAL) {
+    int c = foco.coluna;
+    if (amigosfil_tecla(k, &c)) {
+      if (c != foco.coluna) {
+        foco.coluna = c;
+        if (foco.fileira < FOCUS_MAX_FILEIRAS) foco.colunaLembrada[foco.fileira] = c;
+      }
+      return;
+    }
   }
   if (k == SDLK_RIGHT) {
     // O `&&` aqui era um curto-circuito com efeito colateral: escrito como
@@ -2251,7 +2270,7 @@ static void sincronizarFileiras(void) {
     memmove(fileiras+pos+1,fileiras+pos,(destino-pos)*sizeof *fileiras);
     Fileira *s=&fileiras[pos];memset(s,0,sizeof *s);
     s->tipo=FILEIRA_SOCIAL;s->ini=-1;s->n=1;
-    snprintf(s->titulo,sizeof s->titulo,"Entre amigos");
+    snprintf(s->titulo,sizeof s->titulo,"Amigos assistindo");
     snprintf(s->chave,sizeof s->chave,"social_activity");destino++;
   }
   // Um retorno do player e contexto, nao catalogo: entra acima das fileiras e
@@ -2508,6 +2527,24 @@ void home_ir_topo(void) {
 
 void home_atualizar(float dt, Uint32 agora) {
   sincronizarFileiras();
+  // A FILEIRA DE AMIGOS tem tantas colunas quantos rostos (+ "Adicionar"), e
+  // isso muda sem o catalogo mudar (um amigo novo chega do recomenda.c).
+  for (int r = 0; r < nFileiras; r++) {
+    if (fileiras[r].tipo != FILEIRA_SOCIAL) continue;
+    int focada = !focoHero && foco.fileira == r, c = foco.coluna;
+    amigosfil_atualizar(dt, focada, focada ? &c : NULL);
+    int nc = amigosfil_n_colunas();
+    if (fileiras[r].n != nc || fileiras[r].verTudo) {
+      fileiras[r].n = nc; fileiras[r].verTudo = 0;
+      if (r < FOCUS_MAX_FILEIRAS) foco.nColunas[r] = nc;
+    }
+    if (focada) {
+      if (c >= nc) c = nc - 1;
+      if (c < 0) c = 0;
+      foco.coluna = c;
+      if (r < FOCUS_MAX_FILEIRAS) foco.colunaLembrada[r] = c;
+    }
+  }
   // Primeira batida da home viva: ancora o ocio do carrossel no "agora", nao
   // no zero do BSS (ver nota em heroUltTecla).
   if (!heroUltTecla) heroUltTecla = agora;
@@ -3210,12 +3247,8 @@ static void desenhaHero(Uint32 agora, float saida) {
       if(p->sinopse[0])
         txt_bloco(TXT_HERO_SIN,p->sinopse,229,231,237,x,402,700,31,a,2);
     } else {
-      const char *marca=extras_caminho_marca_nome("trakt_wordmark");
-      GLuint logo=tex_obter(marca);
-      float marcaAsp=logo?tex_aspecto(marca):2.66f;
-      if(marcaAsp<=0)marcaAsp=2.66f;
-      if(logo)gfx_rect((GfxRect){x,144,44*marcaAsp,44},logo,GFX_MARCA,0,0,0,0,.96f,.94f,.95f,a);
-      txt_desenhar_alpha(txt_linha(TXT_HERO_META,"SUA COMUNIDADE",210,191,199,255),x+44*marcaAsp+24,154,a);
+      // Sem a marca do Trakt: a fonte nao aparece na home (amigosfil.h).
+      txt_desenhar_alpha(txt_linha(TXT_HERO_META,"SUA COMUNIDADE",210,191,199,255),x,154,a);
       txt_desenhar_alpha(txt_linha(TXT_TITULO1,"Boas histórias conectam.",244,243,247,255),x,226,a);
       txt_bloco(TXT_HERO_SIN,"Descubra o que seus amigos estão vendo.\nUma nova recomendação pode começar aqui.",187,190,202,x,330,740,36,a,2);
     }
@@ -4753,18 +4786,14 @@ void home_desenhar(Uint32 agora) {
       TxtLinha tl = txt_linha_corta(TXT_ROW_TITULO, rotFil, 245, 246, 249, 255,
                                     NV_TELA_W - ajustes_conteudo_x() - 180);
       txt_desenhar(tl, ajustes_conteudo_x(), y);
-      if(tipo==FILEIRA_SOCIAL) {
-        const char *marca=extras_caminho_marca_nome("trakt_wordmark");
-        GLuint logo=tex_obter(marca);float ap=logo?tex_aspecto(marca):2.66f;
-        if(ap<=0)ap=2.66f;
-        if(logo)gfx_rect((GfxRect){ajustes_conteudo_x()+tl.w+18,y+(tl.h-30)*.5f,30*ap,30},
-                         logo,GFX_MARCA,0,0,0,0,.95f,.93f,.94f,1);
-      }
+      // A FONTE (Trakt, Simkl...) NAO APARECE NA FILEIRA DE AMIGOS: a pessoa
+      // quer saber quem viu e o que achou, nao de onde veio o dado. Ela fica
+      // so no perfil do amigo (amigoperfil.c). Era a marca do Trakt aqui.
       if(!strncmp(fileiras[r].catId,"ai_",3)) {
         TxtLinha ai=txt_linha(TXT_HERO_META,"AI-powered",183,192,219,255);
         txt_desenhar(ai,ajustes_conteudo_x()+tl.w+22,y+(tl.h-ai.h)*.5f);
       }
-      if (foco.fileira == r && !focoHero) {
+      if (foco.fileira == r && !focoHero && tipo != FILEIRA_SOCIAL) {
         char pos[32];
         if (foco.coluna < fileiras[r].n)
           snprintf(pos, sizeof pos, "%d / %d", foco.coluna + 1, fileiras[r].n);
@@ -4781,6 +4810,13 @@ void home_desenhar(Uint32 agora) {
         gfx_cor((GfxRect){ px - 16.0f, py - 6.0f, lp.w + 32.0f, lp.h + 12.0f }, 0.5f,
                 0.04f, 0.045f, 0.055f, 0.62f);
         txt_desenhar(lp, px, py);
+      }
+      if (tipo == FILEIRA_SOCIAL) {
+        amigosfil_desenhar(ajustes_conteudo_x() + bordaX(r), cardY, alturaFil(r), corte,
+                           foco.fileira == r && !focoHero, foco.coluna, agora);
+        if (foco.fileira == r && !focoHero) temItemFoco = 0;
+        y += NV_LEGACY_ROW_HEAD_H + alturaTotalFil(r) + fileiraGap();
+        continue;
       }
       if (tipo == FILEIRA_CATALOGOS) {
         desenhaAtalhos(r, cardY);
