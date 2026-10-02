@@ -6,6 +6,7 @@
 #include "anim.h"
 #include "layout.h"
 #include "idioma.h"
+#include "relogiofim.h"
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -191,13 +192,9 @@ void pausao_desenhar(Uint32 agora, const PausaoCena *cena) {
     txt_desenhar_alpha(lh, NV_TELA_W - PAUSAO_X - lh.w, yR, a * 0.96f);
     yR += lh.h + 2.0f;
     if (cena && cena->dur > 0.0f) {
-      double falta = cena->dur - cena->pos;
-      time_t t2 = agoraT + (time_t)(falta > 0.0 ? falta : 0.0);
-      struct tm lf; char h2[8], fim[40];
+      char fim[RELOGIO_FIM_MAX];
       TxtLinha lfim;
-      localtime_r(&t2, &lf);
-      strftime(h2, sizeof h2, "%H:%M", &lf);
-      snprintf(fim, sizeof fim, i18n("Termina \xc3\xa0" "s %s"), h2);
+      relogio_fim(fim, sizeof fim, agoraT, cena->dur - cena->pos);
       lfim = txt_linha(TXT_PG_FIM, fim, 255, 255, 255, 255);
       txt_desenhar_alpha(lfim, NV_TELA_W - PAUSAO_X - lfim.w, yR, a * 0.78f);
     } }
