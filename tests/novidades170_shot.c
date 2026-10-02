@@ -1,11 +1,10 @@
-// Captura do cartao de novidades da 1.6.6 SEM janela visivel — janela GL
+// Captura do cartao de novidades da 1.7 SEM janela visivel — janela GL
 // escondida, desenho num FBO, quadro por glReadPixels, como
 // tests/novidades160_shot.c. Antes das capturas, confere as regras do cartao
-// por evento de tecla. Depois grava as tres cenas em portugues (e momentos de
-// cada uma: a pilula fechada, o painel abrindo, a ilha com o aviso, a fileira,
-// o cartao abrindo e andando), as tres em ingles, a Live TV em russo, e com
-// animacoes reduzidas.
-#include "novidades166.h"
+// por evento de tecla. Depois grava as tres cenas (ilha do relogio, Spotlight,
+// layout Apple TV) em portugues e em ingles, nos momentos de cada uma, o modal
+// e o Spotlight em russo, e com animacoes reduzidas.
+#include "novidades170.h"
 #include "dados.h"
 #include "ajustes.h"
 #include "badges.h"
@@ -38,7 +37,7 @@ static void tecla(SDL_Keycode k) {
   memset(&e, 0, sizeof e);
   e.type = SDL_KEYDOWN;
   e.key.keysym.sym = k;
-  novidades166_evento(&e);
+  novidades170_evento(&e);
 }
 
 static int existe(const char *arq) {
@@ -48,68 +47,62 @@ static int existe(const char *arq) {
   return ok;
 }
 
-#define MARCA "novidades-166-ui.txt"
+#define MARCA "novidades-170-ui.txt"
 
 static void regras(void) {
   int c;
-  // OK com o foco inicial = Ver o layout Apple TV.
+  // OK com o foco inicial = Abrir o Spotlight.
   dados_apagar(MARCA);
-  novidades166_abrir();
-  assert(!novidades166_foco_na_previa());
+  novidades170_abrir();
+  assert(!novidades170_foco_na_previa());
   tecla(SDLK_RETURN);
-  assert(!novidades166_aberto());
-  assert(novidades166_pedido() == N166_PEDIU_LAYOUT);
-  assert(novidades166_pedido() == N166_PEDIU_NADA);   // consumido
+  assert(!novidades170_aberto());
+  assert(novidades170_pedido() == N170_PEDIU_SPOT);
+  assert(novidades170_pedido() == N170_PEDIU_NADA);   // consumido
   assert(existe(MARCA));
-  // Esquerda + OK = Abrir o guia.
+  // Esquerda + OK = Agora nao; duas esquerdas param na borda.
   dados_apagar(MARCA);
-  novidades166_abrir();
-  tecla(SDLK_LEFT);
+  novidades170_abrir();
+  tecla(SDLK_LEFT); tecla(SDLK_LEFT);
   tecla(SDLK_RETURN);
-  assert(novidades166_pedido() == N166_PEDIU_GUIA);
-  // Tres esquerdas (a ultima para na borda) + OK = Agora nao, e grava a marca.
-  dados_apagar(MARCA);
-  novidades166_abrir();
-  tecla(SDLK_LEFT); tecla(SDLK_LEFT); tecla(SDLK_LEFT);
-  tecla(SDLK_RETURN);
-  assert(novidades166_pedido() == N166_PEDIU_NADA);
+  assert(!novidades170_aberto());
+  assert(novidades170_pedido() == N170_PEDIU_NADA);
   assert(existe(MARCA));
+  // Esquerda e direita de volta: o Spotlight de novo.
+  dados_apagar(MARCA);
+  novidades170_abrir();
+  tecla(SDLK_LEFT); tecla(SDLK_RIGHT); tecla(SDLK_RIGHT);
+  tecla(SDLK_RETURN);
+  assert(novidades170_pedido() == N170_PEDIU_SPOT);
   // Cima: foco na previa. Direita/OK trocam a cena e NAO fecham; esquerda na
   // primeira volta para a ultima. Baixo devolve o foco aos botoes, no primario.
   dados_apagar(MARCA);
-  novidades166_abrir();
+  novidades170_abrir();
   tecla(SDLK_UP);
-  assert(novidades166_foco_na_previa());
-  c = novidades166_cena();
+  assert(novidades170_foco_na_previa());
+  c = novidades170_cena();
   tecla(SDLK_RIGHT);
-  assert(novidades166_cena() == (c + 1) % novidades166_cenas());
+  assert(novidades170_cena() == (c + 1) % novidades170_cenas());
   tecla(SDLK_RETURN);
-  assert(novidades166_aberto());
-  assert(novidades166_cena() == (c + 2) % novidades166_cenas());
+  assert(novidades170_aberto());
+  assert(novidades170_cena() == (c + 2) % novidades170_cenas());
   tecla(SDLK_LEFT); tecla(SDLK_LEFT); tecla(SDLK_LEFT);
-  assert(novidades166_cena() == novidades166_cenas() - 1);
+  assert(novidades170_cena() == novidades170_cenas() - 1);
   tecla(SDLK_DOWN);
-  assert(!novidades166_foco_na_previa());
+  assert(!novidades170_foco_na_previa());
   tecla(SDLK_RETURN);
-  assert(novidades166_pedido() == N166_PEDIU_LAYOUT);
+  assert(novidades170_pedido() == N170_PEDIU_SPOT);
   // Voltar = Agora nao, e grava a marca.
   dados_apagar(MARCA);
-  novidades166_abrir();
+  novidades170_abrir();
   tecla(SDLK_ESCAPE);
-  assert(!novidades166_aberto());
-  assert(novidades166_pedido() == N166_PEDIU_NADA);
+  assert(!novidades170_aberto());
+  assert(novidades170_pedido() == N170_PEDIU_NADA);
   assert(existe(MARCA));
   // Com a marca gravada, primeira_vez nao abre.
-  novidades166_primeira_vez();
-  assert(!novidades166_aberto());
-  // O atalho do layout pousa Ajustes NA LINHA, uma vez so.
-  ajustes_abrir_no_layout();
-  ajustes_iniciar();
-  assert(!ajustes_foco_no_indice());
-  assert(ajustes_opcao_em_foco() > 0);
-  ajustes_iniciar();
-  assert(ajustes_foco_no_indice());
-  puts("PASS: regras do cartao da 1.6.6");
+  novidades170_primeira_vez();
+  assert(!novidades170_aberto());
+  puts("PASS: regras do cartao da 1.7");
 }
 
 static void quadro(float dt) {
@@ -118,12 +111,12 @@ static void quadro(float dt) {
   tex_novo_quadro();
   tex_bombear(8);
   gfx_novo_quadro();
-  novidades166_atualizar(dt, SDL_GetTicks());
+  novidades170_atualizar(dt, SDL_GetTicks());
   glBindFramebuffer(GL_FRAMEBUFFER, fbo);
   glViewport(0, 0, 1920, 1080);
   glClearColor(0.051f, 0.051f, 0.051f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
-  novidades166_desenhar(SDL_GetTicks());
+  novidades170_desenhar(SDL_GetTicks());
   glFinish();
 }
 
@@ -149,9 +142,9 @@ static void gravar(const char *nome) {
 static void captura(const char *saida, const char *sufixo, int c, float t, int previa, float andar) {
   char nome[800];
   int i, n = (int)(andar * 60.0f + 0.5f);
-  novidades166_abrir();
+  novidades170_abrir();
   if (previa) tecla(SDLK_UP);
-  novidades166_ir(c, t);
+  novidades170_ir(c, t);
   for (i = 0; i < 160; i++) { quadro(0.0f); SDL_Delay(4); }
   for (i = 0; i < n; i++) quadro(1.0f / 60.0f);
   for (i = 0; i < 6; i++) { quadro(0.0f); SDL_Delay(2); }
@@ -160,25 +153,23 @@ static void captura(const char *saida, const char *sufixo, int c, float t, int p
 }
 
 int main(int argc, char **argv) {
-  const char *saida = argc > 1 ? argv[1] : "/tmp/nuvio-novidades166";
-  const char *so = getenv("N166_SO");   // "pt", "en"...: so um grupo de capturas
+  const char *saida = argc > 1 ? argv[1] : "/tmp/nuvio-novidades170";
+  const char *so = getenv("N170_SO");   // "pt", "en"...: so um grupo de capturas
   const char *dir = getenv("NUVIO_DADOS");
   SDL_Window *w;
   SDL_GLContext gl;
-  static const float TEMPO[3] = { 2.75f, 3.2f, 6.2f };
-  char suf[64];
-  int c;
+    char suf[64];
   if (!dir || !dir[0]) return 2;
   dados_iniciar(dir);
   if (strcmp(dados_dir(), dir)) return 2;
-  novidades166_dir("deploy/app/art");
+  novidades170_dir("deploy/app/art");
 
   SDL_SetHint("SDL_MAC_BACKGROUND_APP", "1");
   assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) == 0);
   IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-  w = SDL_CreateWindow("novidades166-shot", 0, 0, 64, 64, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+  w = SDL_CreateWindow("novidades170-shot", 0, 0, 64, 64, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
   assert(w);
   gl = SDL_GL_CreateContext(w);
   assert(gl);
@@ -202,50 +193,56 @@ int main(int argc, char **argv) {
 
   // CADA DESCRICAO CABE NUMA LINHA, nos 30 idiomas. Com duas a lista ainda se
   // arruma (medirLista), mas corta com reticencias quando falta altura: aqui
-  // se ve qual texto precisa encurtar. So avisa; N166_ESTRITO=1 reprova.
+  // se ve qual texto precisa encurtar. So avisa; N170_ESTRITO=1 reprova.
   { int lg, i, largas = 0;
     for (lg = 0; lg < IDIOMA_N; lg++) {
       ajustesDeTeste(lg, 0, 2);
-      for (i = 0; i < novidades166_itens(); i++) {
+      for (i = 0; i < novidades170_itens(); i++) {
         int lim = 0;
         const char *nome = NULL;
-        int w = novidades166_item_largura(i, &lim, &nome);
+        int w = novidades170_item_largura(i, &lim, &nome);
         if (w > lim) { printf("larga: idioma %d, %s: %d > %d\n", lg, nome, w, lim); largas++; }
       }
     }
     printf("descricoes em duas linhas: %d\n", largas);
-    if (getenv("N166_ESTRITO")) assert(largas == 0); }
+    if (getenv("N170_ESTRITO")) assert(largas == 0); }
 
   // Tema fixo (2) nas capturas; o de animacoes reduzidas usa outro realce.
-  assert(novidades166_cenas() == 3);
-  if (!so || !strcmp(so, "pt")) {
-    ajustesDeTeste(IDIOMA_PT, 0, 2);
-    for (c = 0; c < novidades166_cenas(); c++) {
-      snprintf(suf, sizeof suf, "pt-%d", c);
-      captura(saida, suf, c, TEMPO[c], 0, 0.0f);
+  // Cada cena num instante "cheio" e os momentos que tem texto apertado: a
+  // pilula com o episodio, o modal, o foco no "Salvos ›", o painel, a volta, a
+  // estreia; o Spotlight vazio, a cada letra e com o foco na lista; a barra e
+  // o carrossel.
+  assert(novidades170_cenas() == 3);
+  { static const struct { const char *suf; int c; float t; } MOM[] = {
+      { "0-relogio", 0, 0.3f }, { "0-vivo", 0, 1.6f }, { "0-tecla", 0, 2.55f },
+      { "0-crescendo", 0, 3.0f }, { "0-modal", 0, 4.4f }, { "0-modal-salvos", 0, 6.2f },
+      { "0-painel-nascendo", 0, 6.5f }, { "0-painel", 0, 8.0f }, { "0-recolhendo", 0, 9.5f },
+      { "0-de-volta", 0, 10.2f }, { "0-estreia", 0, 12.0f },
+      { "1-vazio", 1, 1.0f }, { "1-m", 1, 2.2f }, { "1-ma", 1, 3.2f }, { "1-mar", 1, 4.6f },
+      { "1-lista", 1, 5.8f }, { "1-desce", 1, 7.5f },
+      { "2-barra", 2, 2.75f }, { "2-passagem", 2, 4.65f }, { "2-carrossel", 2, 7.4f },
+      { "2-andando", 2, 8.8f },
+    };
+    static const int LG[2] = { IDIOMA_PT, IDIOMA_EN };
+    static const char *const NOME[2] = { "pt", "en" };
+    int l, i;
+    for (l = 0; l < 2; l++) {
+      if (so && strcmp(so, NOME[l])) continue;
+      ajustesDeTeste(LG[l], 0, 2);
+      for (i = 0; i < (int)(sizeof MOM / sizeof *MOM); i++) {
+        snprintf(suf, sizeof suf, "%s-%s", NOME[l], MOM[i].suf);
+        captura(saida, suf, MOM[i].c, MOM[i].t, 0, 0.0f);
+      }
     }
-    captura(saida, "pt-0-fechada", 0, 0.3f, 0, 0.0f);
-    captura(saida, "pt-0-abrindo", 0, 0.98f, 0, 0.0f);
-    captura(saida, "pt-0-ilha", 0, 5.6f, 0, 0.0f);
-    captura(saida, "pt-1-fileira", 1, 0.2f, 0, 0.0f);
-    captura(saida, "pt-1-abrindo", 1, 0.95f, 0, 0.0f);
-    captura(saida, "pt-1-andando", 1, 4.35f, 0, 0.0f);
-    captura(saida, "pt-1-seguinte", 1, 5.6f, 0, 0.0f);
-    captura(saida, "pt-2-meio", 2, 2.4f, 1, 0.0f);
-    // No meio da passagem da cena 0 para a 1 (6.0 s + 0.45 s andando).
-    captura(saida, "pt-passagem", 0, 6.15f, 0, 0.45f);
-  }
-  if (!so || !strcmp(so, "en")) {
-    ajustesDeTeste(IDIOMA_EN, 0, 2);
-    for (c = 0; c < novidades166_cenas(); c++) {
-      snprintf(suf, sizeof suf, "en-%d", c);
-      captura(saida, suf, c, TEMPO[c], 0, 0.0f);
-    }
-    captura(saida, "en-0-ilha", 0, 5.6f, 0, 0.0f);
-  }
+    if (!so || !strcmp(so, "pt")) {
+      captura(saida, "pt-previa", 1, 4.6f, 1, 0.0f);
+      // No meio da passagem da cena 0 para a 1.
+      captura(saida, "pt-passagem", 0, 13.05f, 0, 0.45f);
+    } }
   if (!so || !strcmp(so, "ru")) {
     ajustesDeTeste(IDIOMA_RU, 0, 2);
-    captura(saida, "ru-2", 2, TEMPO[2], 0, 0.0f);
+    captura(saida, "ru-0-modal", 0, 4.4f, 0, 0.0f);
+    captura(saida, "ru-1-mar", 1, 4.6f, 0, 0.0f);
   }
   if (!so || !strcmp(so, "reduzido")) {
     ajustesDeTeste(IDIOMA_PT, 1, 5);
@@ -259,6 +256,6 @@ int main(int argc, char **argv) {
   SDL_DestroyWindow(w);
   IMG_Quit();
   SDL_Quit();
-  puts("PASS: capturas da 1.6.6 gravadas.");
+  puts("PASS: capturas da 1.7 gravadas.");
   return 0;
 }
