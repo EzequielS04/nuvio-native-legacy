@@ -47,6 +47,11 @@ int  trakt_cabecalhos(const char **cab, char *aut, size_t nAut,
 // pacote trazem chave — e ai quem chama esconde a secao em vez de tentar.
 int  trakt_cabecalhos_publicos(const char **cab, char *chave, size_t nChave);
 int  trakt_ativo(void);
+// Outros workers (extras) capturam ambas as geracoes antes da rede. Troca do
+// Trakt no mesmo perfil invalida resposta sem limpar provas da conta/local.
+unsigned long long trakt_credencial_geracao(void);
+int trakt_historico_aplicar(const char *imdb, const char *tipo, int visto,
+                            unsigned long long mapa, unsigned long long credencial);
 // 1 quando a ultima resposta do Trakt foi 401 para ESTE token. traktauth
 // observa isto para disparar a renovacao por refresh token.
 int  trakt_recusada(void);
