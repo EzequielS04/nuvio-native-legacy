@@ -1,12 +1,23 @@
-# Plano proposto para 1.7.2 — 02/10/2026
+# Plano aprovado para 1.7.2 — 02/10/2026
 
-Somente local, em `release/1.7.2` (`/private/tmp/nv-172`), base 1.7.1 `2bc9659b`. Nenhum merge adicional aprovado por este documento; propostas de escopo, não promessas de correção. Testes focados + i18n; comportamento nas TVs testado pelo dono. Nenhum push/tag/publicação/comentário nesta rodada.
+Somente local, em `release/1.7.2` (`/private/tmp/nv-172`), base 1.7.1 `2bc9659b`. Dono autorizou executar esta proposta e escolheu a reorganização funcional dos Ajustes; peles A/B, ícones de apoiador e social continuam fora. Testes focados + i18n; comportamento nas TVs testado pelo dono. Nenhum push/tag/publicação/comentário nesta rodada.
 
 ## Já integrado
 
 `agente/abrirrapido` (inclui `ilhavolta` e `i221`) e `agente/i216`. Nova ilha, fontes parciais, espera configurável pelos addons, fonte da última sessão com fallback, toque/arrastar e login por e-mail. Retenção decidida em dois minutos, commit `1bf49696`; teste 119/120 s passou. Nove testes focados aprovados. TCL recebeu apenas APK estável 1.7.1.
 
 Conferência da fonte guardada já roda em paralelo (`app.c:tocarFonteGuardada`); não contabilizar como trabalho futuro nesse caminho. Conferência da abertura normal permanece uma proposta separada.
+
+## Execução local desta rodada
+
+- `2d6f2eb9`: operações do catálogo protegidas, atualização tardia confere identidade do título; histórico muda por conta/perfil e rejeita respostas antigas do Trakt/extras. ASan/UBSan e ThreadSanitizer focados passaram.
+- `49ad2fbc`: ícone do celular embutido no núcleo, mesma arte Lucide do pacote, um upload por contexto. Registro 18898 comprova núcleo 1.7.1 carregado por memfd junto do host api11 e arte ausente; não informa versão exata do pacote antigo. Teste normal passou; tentativa ASan com SDL travou antes de main e não vale como aprovação.
+- `bff916b4`: snapshot de addons no fio principal, revisão/ack por edição e perfil; falha 500 mantém alteração local, não aplica pull anterior ao push e não perde edição feita enquanto o push responde. Retentativa usa ritmo/backoff existente. Syncordem/offline/limites com ASan/UBSan passaram. Nenhum deploy no servidor; causa remota de HTTP500 não demonstrada.
+- `f9083b10`: reorganização funcional `ajustesux` mesclada por escolha do dono. Defaults e enum persistido conservados; espera pelos addons continua na seção Reprodução, padrão cinco segundos.
+- `4412ae0c`: Android recebe posição local válida durante a preparação, com ack por sessão e fallback. Testes distinguem posição válida, só percentual, episódio/perfil, ao vivo e sessão retida; Kotlin/NDK compilam. Tempo da pré-busca é corrigido somente no log.
+- Conferência paralela genérica da primeira mídia adiada: o GET Range pode criar arquivos/cobrar cota no debrid, e o caminho atual não cancela a transferência. A retomada guardada já abre em paralelo. Corrigir o contrato da sonda antes de ampliar essa concorrência.
+- `5fcae85c`: sonda nativa valida HTTP2xx, cabeçalhos, transporte e URL sem truncamento; descarta corpo e corta no teto. WGT não copia corpo ao heapWASM e preserva autorização inconclusiva quando XHR não consegue cabeçalho que AVPlay manda. Focos nativos ASan/UBSan, políticaWGT, três regressões de fonte, sintaxeTPK4/6 e i18n passaram. XHR síncrono ainda não oferece cancelamento/timeout por chamada.
+- Proporção TPK: recorte da origem desativado por padrão por limite do backend; não reintroduzir ROI fora da tela que já expôs a Home da Samsung. Sem alteração .NET; #195 ainda depende do cenário/aparelho/fonte do relator.
 
 ## Plano de execução
 
