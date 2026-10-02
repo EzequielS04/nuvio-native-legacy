@@ -163,5 +163,16 @@ checa "corpo antigo de /v1/atividade continua aceito" 1 \
 checa "ev invalido da 400" 400 "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'authorization: Bearer tok-b' \
   -H 'x-nuvio-auth: nuvio' -d '{"ev":"hackear","imdb":"tt1"}' "$BASE/v1/atividade")"
 
+# --- migracao 006 sobre linha antiga --------------------------------------------------
+# Pessoa de antes da migracao, sem nome (o caso do UUID). Roda SO os UPDATE do
+# arquivo (os ALTER ja passaram em preparar-local.sh).
+sql "INSERT INTO pessoa (id, nome, codigo, avatar, criado, visto) VALUES ('nuvio:velho', '', 'zz9zz9', '', 1, 1);"
+sql "INSERT INTO pessoa (id, nome, codigo, avatar, criado, visto, nome_conta) VALUES ('nuvio:velho2', 'Marta', 'zz8zz8', '', 1, 1, '');"
+grep '^UPDATE' servidor/recomendacoes/migracao-006-social.sql | sqlite3 "$NV_D1"
+checa "migracao: sem nome vira Amigo #rowid" "Amigo #$(sql "SELECT rowid FROM pessoa WHERE id='nuvio:velho'")" \
+  "$(sql "SELECT nome FROM pessoa WHERE id='nuvio:velho'")"
+checa "migracao: nome antigo vira nome da conta" "Marta|Marta" "$(sql "SELECT nome, nome_conta FROM pessoa WHERE id='nuvio:velho2'")"
+checa "migracao: nivel de quem ja existia fica -1" "-1" "$(sql "SELECT alcance FROM pessoa WHERE id='nuvio:velho2'")"
+
 printf '\n%d ok, %d falharam\n' "$ok" "$falhou"
 [ "$falhou" -eq 0 ]
