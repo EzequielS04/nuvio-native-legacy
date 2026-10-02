@@ -594,6 +594,7 @@ int busca_item_focado(HomeItem *out) {
 
 void busca_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
+  if (st_evento(e)) return;   // teclado da TV: o valor inteiro vem por sistexto
   // TEXTO DE TECLADO FISICO OU IME (#176): o que nao e ASCII (cirilico, ș, ț,
   // ă...) chega como SDL_TEXTINPUT. O ASCII fica com o SDL_KEYDOWN abaixo — o
   // mesmo caractere chega pelos dois, e entrar nos dois duplicaria a letra.

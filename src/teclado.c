@@ -243,6 +243,7 @@ static void aplicar(void) {
 
 void teclado_evento(const SDL_Event *e) {
   SDL_Keycode k;
+  if (aberto && st_evento(e)) return;   // teclado da TV: valor inteiro por sistexto
   if (!aberto || e->type != SDL_KEYDOWN) return;
   k = e->key.keysym.sym;
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||

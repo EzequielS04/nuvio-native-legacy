@@ -52,6 +52,9 @@ enum { ST_NADA = 0, ST_TEXTO, ST_FIM, ST_CANCELOU, ST_PEDE_TECLADO };
 
 int   st_ime_disponivel(void);
 int   st_voz_disponivel(void);
+// O campo ja abre o teclado do sistema sozinho ao aparecer? So no Android (o
+// pedido do dono); na LG/Samsung so com OK no campo.
+int   st_abre_sozinho(void);
 // Abre o teclado do sistema com `inicial` no campo (max em bytes). 1 = abriu.
 int   st_ime_abrir(int dono, const char *inicial, int max);
 // Comeca o ditado (permissao, reconhecedor do app, ou os degraus de reserva).
@@ -71,6 +74,13 @@ const char *st_aviso(void);
 // ST_PEDE_TECLADO: a voz nao existe aqui; o dono abre st_ime_abrir com o texto
 // dele (o aviso ja diz que o microfone do teclado do sistema dita).
 int   st_ler(int dono, char *dst, size_t n);
+
+// Primeira coisa no laco de eventos de quem tem o campo: 1 = o evento era do
+// texto do sistema (o aviso de valor/fim de entrada_texto.h, ou TEXTINPUT,
+// letra e Backspace que JA entraram no valor) e nao deve ser tratado de novo.
+// Com o teclado da TV aberto, Backspace NAO e "apagar/fechar" da tela.
+#include <SDL2/SDL.h>
+int   st_evento(const SDL_Event *e);
 
 // --- testes ---
 // Liga/desliga o modo de teste (o mesmo de NUVIO_SISTEXTO_TESTE=1).

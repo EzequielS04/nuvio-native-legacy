@@ -680,7 +680,7 @@ void spot_abrir(int voz) {
 #endif
   fflush(stdout);
   if (voz && ditadoDisponivel()) { painel = P_MIC; ditar(); }
-  else if (imeDisponivel()) abrirTecladoSis();
+  else if (imeDisponivel() && st_abre_sozinho()) abrirTecladoSis();
 }
 
 void spot_fechar(void) {
@@ -841,6 +841,8 @@ static void descerDaBarra(void) {
 void spot_evento(const SDL_Event *e) {
   SDL_Keycode k;
   if (!aberto) return;
+  // Teclado da TV aberto: o texto (e o Backspace) ja entraram no valor inteiro.
+  if (st_evento(e)) return;
   if (e->type == SDL_TEXTINPUT) {
     // Teclado FISICO: ASCII alfanumerico chega TAMBEM como KEYDOWN (tratado
     // abaixo); o resto (acentos, cirilico, pontuacao) so por aqui.

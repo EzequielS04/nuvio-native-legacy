@@ -10,6 +10,7 @@
 // Um motivo depois de ":" no S diz por que caiu de degrau (S sistema:negada).
 #include "sistexto.h"
 #include "descoberta.h"
+#include "entrada_texto.h"
 #ifdef NV_ANDROID
 #include "android.h"
 #endif
@@ -32,14 +33,38 @@ static int teste(void) {
   return modoTeste;
 }
 
+// FORA DO ANDROID quem fala com o teclado da TV e entrada_texto.h (agente
+// imetv: SDL_StartTextInput do SDL da LG, MEDIDO na C9 com microfone no
+// teclado; <input> escondido no .wgt; host .NET no .tpk canario). Este modulo
+// so traduz os avisos dele para a mesma fila do Android (st_evento).
 int st_ime_disponivel(void) {
+#ifdef NV_ANDROID
+  return 1;
+#else
+  return teste() || (texto_sistema_disponivel() & TS_TECLADO) != 0;
+#endif
+}
+int st_voz_disponivel(void) {
+#ifdef NV_ANDROID
+  return 1;
+#else
+  return teste() || (texto_sistema_disponivel() & TS_VOZ) != 0;
+#endif
+}
+int st_abre_sozinho(void) {
 #ifdef NV_ANDROID
   return 1;
 #else
   return teste();
 #endif
 }
-int st_voz_disponivel(void) { return st_ime_disponivel(); }
+static int pelaPlataforma(void) {
+#ifdef NV_ANDROID
+  return 0;
+#else
+  return !teste();
+#endif
+}
 
 int st_estado(void) { return estado; }
 int st_dono(void) { return dono; }
@@ -61,7 +86,9 @@ int st_ime_abrir(int d, const char *inicial, int max) {
 #ifdef NV_ANDROID
   ok = android_st_teclado(inicial ? inicial : "", max);
 #else
-  ok = 1;
+  (void)max;
+  if (pelaPlataforma()) { texto_sistema_abrir(inicial ? inicial : "", 0); ok = texto_sistema_aberto(); }
+  else ok = 1;
 #endif
   estado = ok ? ST_DIGITANDO : ST_PARADO;
   if (!ok) aviso = "O teclado do sistema não abriu.";
@@ -78,7 +105,8 @@ int st_voz_iniciar(int d) {
 #ifdef NV_ANDROID
   ok = android_st_ditar(desc_tmdb_idioma());
 #else
-  ok = 1;
+  if (pelaPlataforma()) { texto_sistema_abrir("", 1); ok = texto_sistema_aberto(); }
+  else ok = 1;
 #endif
   estado = ok ? ST_OUVINDO : ST_PARADO;
   if (!ok) aviso = "O ditado não respondeu. Tente de novo ou digite.";
@@ -91,6 +119,8 @@ void st_fechar(int d) {
   if (d != dono || estado == ST_PARADO) { if (d == dono) dono = ST_DONO_NENHUM; return; }
 #ifdef NV_ANDROID
   android_st_fechar();
+#else
+  if (pelaPlataforma()) texto_sistema_fechar();
 #endif
   estado = ST_PARADO;
   dono = ST_DONO_NENHUM;
@@ -171,4 +201,19 @@ int st_ler(int d, char *dst, size_t n) {
     }
   }
   return r;
+}
+
+int st_evento(const SDL_Event *e) {
+  if (e->type == texto_sistema_evento()) {
+    char ev[600];
+    if (e->user.code == TS_EV_TEXTO) {
+      snprintf(ev, sizeof ev, "T%s", texto_sistema_valor());
+      st_teste_evento(ev);
+    } else if (e->user.code == TS_EV_FIM) {
+      if (e->user.data1) { snprintf(ev, sizeof ev, "D%s", texto_sistema_valor()); st_teste_evento(ev); }
+      else st_teste_evento("X");
+    }
+    return 1;
+  }
+  return texto_sistema_aberto() && texto_sistema_engole(e);
 }
