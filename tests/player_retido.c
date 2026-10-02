@@ -66,9 +66,11 @@ int main(void) {
 
   guardar();
   int p = paradas;
-  player_validar_retido(SDL_GetTicks() + 120000u);
+  player_validar_retido(SDL_GetTicks() + 299000u);
+  assert(player_retido() && paradas == p);
+  player_validar_retido(SDL_GetTicks() + 300000u);
   assert(!player_retido() && paradas == p + 1);
-  puts("ok teto de 120 s libera pipeline");
+  puts("ok teto de 300 s libera pipeline");
 
   abrir("movie"); guardar(); p = paradas;
   perfis_definir_ativo(2); player_validar_retido(SDL_GetTicks());

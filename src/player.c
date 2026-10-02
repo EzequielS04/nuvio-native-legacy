@@ -237,9 +237,17 @@ static int   aberto = 0, saindo = 0, pediuSair = 0;
 static int   idx = 0;
 #define PLR_SCR_TOCOU_S 5.0f   // #179: reproducao continua antes do /scrobble/start
 static int   tocando = 1;
-// Uma unica sessao VOD pausada, por no maximo dois minutos. Nao abre conexao
+// Uma unica sessao VOD pausada, por no maximo cinco minutos. Nao abre conexao
 // especulativa: e o pipeline que ja estava exibindo este titulo.
-#define PLR_RETIDO_MS 120000u
+//
+// O PRECO DE RETER MAIS: o pipeline e um so. Enquanto a sessao esta retida o
+// trailer do destaque da home nao toca (home_trailer_passo exige
+// !player_retido(), app.c) — com 5 min, sao ate 5 min de home sem trailer
+// depois de sair para a ilha. Abrir uma pagina de titulo, outro video, trocar
+// de perfil/conta ou dispensar a ilha soltam na hora, como antes. Passado o
+// prazo, o Retomar ainda evita a busca nos addons pela fonte guardada
+// (fontevolta.h).
+#define PLR_RETIDO_MS 300000u
 static int retido, prepararRetencao, retidoPerfil, retomarMkv;
 static Uint32 retidoDesde;
 // SAIDA PARA A ILHA SEM O FADE DO PLAYER (Android): o voo comeca assim que a
