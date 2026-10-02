@@ -170,6 +170,8 @@ Uint32 stream_idade_ms(void);
 // que vai tocar e conferida. As que falham saem da fila desta lista
 // (stream_automatico_excluir) e nao sao conferidas de novo.
 int  stream_primeira_boa(int tentativas);
+// Conferencia de uma URL avulsa, sem lista (bloqueia; chamar de fio proprio).
+int  stream_url_serve(const char *url, const char *cabecalhos);
 
 // 1 quando o texto da fonte diz "fora de cache" (ver Stream.foraCache).
 // Publica para o parser e o teste; a lista ja vem com o campo preenchido.

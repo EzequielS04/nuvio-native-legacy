@@ -555,6 +555,19 @@ static int verificarUma(int i, Conferencia *c) {
   return ok;
 }
 
+// A MESMA CONFERENCIA de verificarUma, para uma URL avulsa (fontevolta.c):
+// segue os redirecionamentos com um GET de 64 bytes e recusa o endereco de
+// aviso do debrid e a playlist sem segmento. 5 s e nao 10: quem chama ja esta
+// tocando a URL em paralelo e so quer saber cedo se ela morreu.
+int stream_url_serve(const char *url, const char *cabecalhos) {
+  char fim[900];
+  if (!url || !*url) return 0;
+  if (!rede_url_final(url, 5, fim, sizeof fim)) return 0;
+  if (enderecoDeAviso(fim)) return 0;
+  if (playlistVazia(fim, cabecalhos)) return 0;
+  return 1;
+}
+
 // fonteauto_primeira nao sabe de lista trocada: depois de uma conferencia
 // abortada, as candidatas seguintes "falham" sem tocar a rede.
 static int verificarOuParar(int i, void *u) {

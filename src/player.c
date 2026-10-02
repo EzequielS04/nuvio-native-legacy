@@ -87,6 +87,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "proxyts.h"
 #include "perfis.h"
 #include "sessao.h"
+#include "fontevolta.h"
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -1269,6 +1270,19 @@ void player_definir_fonte(const char *url) {
   tocarFonte(url);
 }
 
+void player_voltar_a_esperar(void) {
+  if (!aberto) return;
+  if (comVideo) { video_parar(); comVideo = 0; }
+  mkvass_parar();
+  mkvass_video_aberto(0);
+#ifndef __EMSCRIPTEN__
+  prebuscaUrl[0] = 0;
+#endif
+  esperandoFonte = 1; erroFonte = 0; tocando = 1;
+  erroTitulo[0] = erroDica[0] = 0;
+  retomadaAplicada = 0; inicioImagem = 0;
+}
+
 // Consome o pedido de abrir a folha de faixas: quem le, zera.
 int  player_pediu_faixas(void) { int v = pedFaixas; pedFaixas = 0; return v; }
 
@@ -1291,8 +1305,42 @@ static void idTrakt(const CatItem *ci, char *dst, size_t n) {
   else snprintf(dst, n, "%s", base);
 }
 
+// O ALVO DO STREAM desta sessao, no formato que app.c usa para pedir fontes
+// (alvoPlayer): "tt1" no filme, o id do episodio na serie.
+static void alvoStream(char *dst, unsigned tam) {
+  const CatItem *c = item();
+  dst[0] = 0;
+  if (!c || !c->imdb[0]) return;
+  if (epT > 0 && epE > 0) cat_id_stream(idxAtual(), epT, epE, dst, tam);
+  else snprintf(dst, tam, "%s", c->imdb);
+}
+
+// A FONTE PARA O PROXIMO RETOMAR (fontevolta.h). Roda uma vez por sessao, no
+// fechamento de verdade ou na suspensao — nunca no descarte da retida, que ja
+// passou por aqui. So a sessao que TOCOU guarda: pronto, sem erro, duracao de
+// titulo (o clipe de aviso de 30 s do debrid nao conta) e sem ter terminado.
+// Falhou ou terminou: apaga, para o Retomar nao reabrir o que nao serve.
+static void lembrarFonte(void) {
+  const Stream *s = stream_item(stream_atual());
+  const char *url = video_url_atual();
+  double cred;
+  char alvo[64];
+  if (ehCanal() || !comVideo) return;
+  if (erroFonte || video_falhou()) { fontevolta_esquecer("sessao falhou"); return; }
+  if (!video_pronto() || duracaoSeg < 120.0f) return;
+  cred = video_creditos();
+  if (cred <= 1.0) cred = intro_creditos_seg();
+  if (player_regra_concluiu(posSeg, duracaoSeg, cred)) { fontevolta_esquecer("titulo concluido"); return; }
+  // A lista pode ter sido trocada por baixo (a busca de fundo do Retomar que
+  // abriu pela fonte guardada): quem toca e a entrada que ja existe.
+  if (!s || strcmp(s->url, url)) return;
+  alvoStream(alvo, sizeof alvo);
+  fontevolta_guardar(alvo, sessao_usuario(), perfis_ativo(), s, stream_idade_ms(), SDL_GetTicks());
+}
+
 static void fecharSessao(int manter) {
   int jaRetido = retido;
+  if (!jaRetido) lembrarFonte();
   // Salvar ANTES de parar: video_parar descarrega o pipeline e a posicao some
   // junto. Titulo quase no fim conta como visto por inteiro — voltar a um card
   // marcando "2 min restantes" que na verdade acabou e pior que arredondar.

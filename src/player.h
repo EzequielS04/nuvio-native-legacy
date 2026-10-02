@@ -82,6 +82,11 @@ float player_posicao_seg(void);
 // no ultimo instante (ver stream_idade_ms), entao a tela abre antes de haver
 // URL e o video entra quando chega.
 void player_definir_fonte(const char *url);
+// Desfaz a fonte em curso SEM fechar a tela: o video para e a sessao volta a
+// "abrindo fonte", como logo depois de player_abrir. E o recuo da fonte
+// guardada (fontevolta.h) para a busca normal, sem a pessoa ver o player
+// fechar e abrir.
+void player_voltar_a_esperar(void);
 
 int  player_aberto(void);   // 1 enquanto a tela existe, inclusive durante o fade de saida
 // Pedidos que so existem com um CANAL no ar (tipo "channel"/"tv"):
