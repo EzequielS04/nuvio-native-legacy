@@ -648,7 +648,7 @@ static void desenharModal(GfxRect m, float a) {
 // Pedido do dono (02/10): "quando sair do filme, minimizasse para a ilha do
 // relogio e voltasse para a home". O plano de video e hardware e nao se le de
 // volta (LG), entao a transicao usa a arte do modal (still do
-// episodio ou fundo do titulo): nasce em tela cheia e encolhe em 400 ms
+// episodio ou fundo do titulo): nasce em tela cheia e encolhe numa mola de 560 ms (ilha_voo.h)
 // ate o retangulo exato da mini capa da pilula, onde troca para o
 // cartaz que a capa mostra. A home aparece por tras com o veu preto apagando.
 //
