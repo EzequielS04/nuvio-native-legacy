@@ -40,3 +40,6 @@ Erros de player vem das fontes (Pluto 401, IPTV 429, codec nao suportado, decode
 
 ## Receita (ver memoria receita-de-release)
 `export NUVIO_PROPERTIES="/Users/hrocha/Projetos/Pessoal/LG WEB/NuvioWeb-0.3.38-beta/local.properties"`; `/private/tmp/NuvioWeb-0.3.38-beta` com `@webos-tools/cli` (ares-package) e symlink do local.properties; libass WASM: `source ~/emsdk/emsdk_env.sh; sh tools/build-ass-wasm.sh` (copia em `~/.cache/nuvio-ass-wasm`). adb para a TCL pode precisar rodar fora do sandbox (`No route to host` com a porta aberta). Pacotes da 1.7.0 em `~/.cache/nuvio-rel-170`.
+
+## Adendo: "Digitar pelo celular" (agente/celular, ja mesclado)
+Todo campo que usa src/teclado.c mostra um QR para colar o texto pelo celular na mesma rede (src/celular.c: servidor HTTP so com o teclado aberto, token de uso unico, 5 min, 4 KB, sem CORS, log sem o texto). Provado no Mac e na TCL. FALTA: LG (jail/firewall deixa porta alta? log "[celular] servidor no ar"/"pagina aberta"), .tpk, iPhone/Safari; .wgt nao tem (navegador nao escuta). FALTA traduzir as frases novas (i18n.sh falha por elas). Spotlight e Busca principal nao usam teclado.c (fora).
