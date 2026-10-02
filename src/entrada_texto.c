@@ -12,8 +12,26 @@
 //   protocolo que o MaliitServer da TV atende). MEDIDO no D1 (registro 15988 e
 //   16001, webos, Mali-G71): "[spotlight] lg sdl 2.0.5 osk=1 textinput=0" —
 //   SDL_HasScreenKeyboardSupport responde 1 na TV.
-//   O que aparece na tela e o que chega ao app: ver o relatorio do agente
-//   imetv e o commit que mediu (a C9 e o unico aparelho testado).
+//   MEDIDO NA C9 (OLED65C9PSA, 01/10/2026, porta "ime:abrir" + captura do
+//   compositor por com.webos.service.tv.capture/executeOneShot):
+//     - SDL_StartTextInput abre o teclado da LG (QWERTY "POR", com tecla de
+//       MICROFONE, Enter, Limpar todos) na metade de baixo da tela; o
+//       SDL_IsScreenKeyboardShown vira 1 uns 5 quadros depois.
+//     - Texto confirmado chega como UM SDL_TEXTINPUT com a palavra inteira
+//       (insertText "matrix" -> TEXTINPUT de 6 bytes; "x ção" -> 7 bytes,
+//       UTF-8 certo), SEM KEYDOWN de letra. Apagar no teclado chega como
+//       KEYDOWN SDLK_BACKSPACE (scancode 42).
+//     - Enter do teclado FECHA o teclado e nao manda Return ao app; so se ve
+//       o IsScreenKeyboardShown cair. Por isso na LG TS_EV_FIM nunca diz
+//       "confirmou".
+//     - SDL_StopTextInput esconde o teclado.
+//     - O texto foi injetado pelo com.webos.service.ime/insertText (API
+//       interna, so root): o MaliitServer entrega ao app pelo mesmo
+//       commit_string que a digitacao no controle. Digitar com o controle de
+//       verdade e a tecla de microfone NAO foram exercitados por mim.
+//   ARMADILHA MEDIDA: o Spotlight de hoje descarta TEXTINPUT ASCII (espera o
+//   KEYDOWN, que na LG nao vem) e fecha com Backspace no campo vazio — por isso
+//   o consumidor TEM de usar texto_sistema_engole e o valor deste modulo.
 //   Ditado: o servico com.webos.service.voiceinput da TV e PRIVADO
 //   (api-permissions.d: getDevices/startStreaming... em "private"); app de
 //   terceiros nao o chama. TS_VOZ fica 0 na LG.
@@ -155,6 +173,7 @@ void texto_sistema_fechar(void) {
   terminar(0, "app");
 }
 
+#if !defined(NV_TPK) && !defined(__EMSCRIPTEN__)
 // Apaga o ultimo caractere UTF-8.
 static void apagarUltimo(void) {
   size_t n = strlen(valor);
@@ -164,6 +183,7 @@ static void apagarUltimo(void) {
   }
   valor[n] = 0;
 }
+#endif
 
 static int teclaDeTexto(SDL_Keycode k) {
   return k == SDLK_BACKSPACE || (k >= 32 && k < 127);
