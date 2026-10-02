@@ -85,7 +85,11 @@ docker run --rm --platform linux/arm64 --env-file "$ENVF" \
     ASS_CFLAGS="-DNV_ASS_LIBASS -I$ASS/include"
     ASS_LIBS="-L$ASS/lib -Wl,--start-group -lass -lharfbuzz -lfribidi -lfreetype -Wl,--end-group"
   fi
-  arm-webos-linux-gnueabi-gcc src/*.c -o nuvio-proto.arm -O2 $NUVIO_EXTRA_CFLAGS $ASS_CFLAGS \
+  # -DNV_WEBOS: a identidade do alvo tem que vir daqui, porque o compilador
+  # webos define __linux__ igual a qualquer Linux e a toolchain nao tem macro
+  # propria (src/ajustes.c separa o locale da TV por ela, como NV_TPK e
+  # NV_ANDROID fazem nos outros alvos).
+  arm-webos-linux-gnueabi-gcc src/*.c -o nuvio-proto.arm -O2 -DNV_WEBOS $NUVIO_EXTRA_CFLAGS $ASS_CFLAGS \
     -DNV_SUPABASE_URL="\"$NV_SUPABASE_URL\"" \
     -DNV_SUPABASE_ANON_KEY="\"$NV_SUPABASE_ANON_KEY\"" \
     -DNV_TV_LOGIN_BASE="\"$NV_TV_LOGIN_BASE\"" \
