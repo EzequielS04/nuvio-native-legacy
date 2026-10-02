@@ -1,0 +1,72 @@
+// O MODELO DO SOCIAL (socialvis.h) sem GL: agrupar por pessoa, "agora" na
+// frente, um titulo por cartao, o feed sem SV_ATIVIDADE, os textos de status e
+// a novidade que apaga ao ser vista e fica gravada.
+#include "socialvis.h"
+#include "dados.h"
+#include "ajustes.h"
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+
+static SvEvento ev(const char *pid, const char *nome, int acao, const char *imdb,
+                   const char *titulo, long long quando) {
+  SvEvento e;
+  memset(&e, 0, sizeof e);
+  snprintf(e.pessoaId, sizeof e.pessoaId, "%s", pid);
+  snprintf(e.pessoaNome, sizeof e.pessoaNome, "%s", nome);
+  e.acao = acao; e.reacao = SV_REAC_NADA; e.pct = -1; e.restanteMin = -1;
+  snprintf(e.imdb, sizeof e.imdb, "%s", imdb);
+  snprintf(e.titulo, sizeof e.titulo, "%s", titulo);
+  e.quando = quando;
+  return e;
+}
+
+int main(void) {
+  long long agora = (long long)time(NULL);
+  SvEvento v[8];
+  char buf[200];
+  int n = 0;
+  dados_iniciar("deploy/app/art");
+  ajustes_dir(dados_dir());
+  v[n++] = ev("nuvio:p", "Pedro", SV_FIM, "tt1", "Um", agora - 3600);
+  v[n++] = ev("nuvio:p", "Pedro", SV_INICIO, "tt2", "Dois", agora - 7200);
+  v[n++] = ev("nuvio:p", "Pedro", SV_REACAO, "tt1", "Um", agora - 3500);   // mesmo titulo
+  v[n++] = ev("trakt:m", "Marina", SV_ATIVIDADE, "tt3", "Tres", 0);       // nao entra no feed
+  v[n++] = ev("nuvio:z", "Zeca", SV_AGORA, "tt4", "Quatro", agora - 60);
+  v[n] = ev("nuvio:z", "Zeca", SV_AGORA, "tt4", "Quatro", 0);
+  v[n].temporada = 3; v[n].episodio = 4; v[n].restanteMin = 12; v[n].pct = 64;
+  socialvis_definir_feed(v, n);
+
+  assert(socialvis_n_amigos() == 3);
+  assert(!strcmp(socialvis_amigo(0)->id, "nuvio:z"));      // ao vivo na frente
+  assert(socialvis_amigo(0)->agora == 1);
+  assert(socialvis_amigo(1)->nTit == 2);                   // tt1 uma vez so
+  assert(socialvis_n_ao_vivo() == 1);
+  assert(socialvis_n_eventos() == 4);                      // sem a SV_ATIVIDADE
+  assert(socialvis_evento(0)->acao == SV_AGORA);
+  { int i;
+    for (i = 0; i < socialvis_n_eventos(); i++) assert(socialvis_evento(i)->acao != SV_ATIVIDADE); }
+
+  socialvis_status(&v[n], buf, sizeof buf);
+  printf("status ao vivo: %s\n", buf);
+  assert(strstr(buf, "3E4") && strstr(buf, "12"));
+  socialvis_dia(&v[0], buf, sizeof buf);
+  printf("dia: %s\n", buf);
+
+  // A novidade: todo mundo nasce "novo"; vista, apaga e sobrevive a refazer.
+  assert(socialvis_amigo(1)->novo == 1);
+  socialvis_marcar_visto("nuvio:p");
+  socialvis_definir_feed(v, n);
+  assert(socialvis_amigo(socialvis_amigo_indice("nuvio:p"))->novo == 0);
+  // Mudou o titulo mais novo: e novidade de novo.
+  v[0].quando = agora - 10; snprintf(v[0].imdb, sizeof v[0].imdb, "tt9");
+  socialvis_definir_feed(v, n);
+  assert(socialvis_amigo(socialvis_amigo_indice("nuvio:p"))->novo == 1);
+
+  { SvPerfil p;
+    assert(socialvis_perfil("nuvio:p", &p));
+    assert(p.nAssistindo == 1 && p.gostoPct == -1); }
+  printf("socialvis: ok\n");
+  return 0;
+}
