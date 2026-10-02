@@ -15,6 +15,7 @@
 // contexto EGL so pode estar corrente num fio por vez; a vez (`vez`) garante
 // isso sem que nenhum dos lados precise saber o que o outro faz.
 #ifdef NV_TPK
+#include "tpkdesp.h"
 #include <SDL2/SDL.h>
 #include "tpk_egl.h"
 #include <GLES2/gl2.h>
@@ -164,6 +165,7 @@ int nv_tpk_iniciar(const char *arte, const char *dados, int w, int h) {
     snprintf(ant, sizeof ant, "%s/nuvio-anterior.log", dados);
     setenv("NUVIO_LOG_ANTERIOR", ant, 1); }
   setenv("NUVIO_DADOS", dados, 1);
+  tpkdesp_iniciar(dados);   // saida pela TV != queda (tpkdesp.h)
   setenv("NUVIO_LOG", log, 1);
 #ifdef NV_TPK40
   snprintf(etapasArq, sizeof etapasArq, "%s/tpk-etapas.txt", dados);
@@ -186,6 +188,7 @@ int nv_tpk_iniciar(const char *arte, const char *dados, int w, int h) {
 __attribute__((visibility("default")))
 void nv_tpk_log(const char *linha) {
   printf("[host] %s\n", linha ? linha : "");
+  tpkdesp_linha(linha);
   video_tpk_log_host(linha);
   fflush(stdout);
 }
@@ -355,6 +358,7 @@ void nv_tpk_tecla(const char *nome, int apertou) {
   SDL_Keycode k = SDLK_UNKNOWN;
   size_t i;
   if (!nome) return;
+  if (apertou) tpkdesp_tecla(nome);
   for (i = 0; i < sizeof T / sizeof T[0]; i++)
     if (!strcmp(nome, T[i].n)) { k = T[i].k; break; }
   if (k == SDLK_UNKNOWN && nome[0] >= '0' && nome[0] <= '9' && !nome[1]) k = (SDL_Keycode)nome[0];

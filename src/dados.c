@@ -600,12 +600,14 @@ int dados_despedida_ler(void) {
   });
   nv_despedida_armar();
   return r;
-#elif defined(NV_ANDROID)
+#elif defined(NV_ANDROID) || defined(NV_TPK)
   // ANDROID: mesmo papel do localStorage do Tizen, em arquivo. Quem escreve
   // "oculto" e o NuvioActivity no onStop (Home, outro app, TV desligada: o
   // Android mata o processo depois, sem saida limpa) e apaga no onStart. Sem
   // isto toda volta pelo Home contava como queda e o modo seguro desfazia os
   // ajustes em prova (TCL Smart TV Pro, 30/09/2026).
+  // .tpk (Samsung nativo): quem escreve "oculto" e tpkdesp.c, pelas linhas do
+  // host (janela escondida, pause, terminate) e por Exit/PowerOff.
   char *v = dados_ler("despedida.txt");
   int r = 0;
   if (v) { r = !strncmp(v, "fim", 3) ? 1 : !strncmp(v, "oculto", 6) ? 2 : 0; free(v); }
@@ -619,7 +621,7 @@ int dados_despedida_ler(void) {
 void dados_despedida_fim(void) {
 #ifdef __EMSCRIPTEN__
   EM_ASM({ try { localStorage.setItem("nv-despedida", "fim"); } catch (e) {} });
-#elif defined(NV_ANDROID)
+#elif defined(NV_ANDROID) || defined(NV_TPK)
   dados_gravar("despedida.txt", "fim\n");
 #endif
 }
