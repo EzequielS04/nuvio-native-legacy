@@ -304,6 +304,9 @@ void gfx_recorte(float x, float y, float w, float h);
 // `nome` e o basename sem extensao: "mais", "visto", "naovisto", "fontes",
 // "play", "pause", "legenda", "audio", "aspecto", "avancar", "episodios",
 // "trailer".
+// Excecao: aj_smartphone acompanha o nucleo como o mesmo PNG embutido. O TPK
+// pode atualizar somente a .so e conservar arte antiga sem esse arquivo.
+// Carga preguiçosa, uma textura de 128x128; gfx_encerrar devolve a textura.
 void gfx_icones_dir(const char *dirArte);
 void gfx_icone(GfxRect r, const char *nome, float cr, float cg, float cb, float ca);
 void gfx_sem_recorte(void);

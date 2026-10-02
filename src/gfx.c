@@ -1,6 +1,8 @@
 #include "gfx.h"
 #include "tex_cache.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
+#include "gfx_smartphone_png.h"
 #include "layout.h"
 #include <stdio.h>
 #include <string.h>
@@ -1253,7 +1255,9 @@ int gfx_iniciar(void) {
 }
 
 static void desfEncerrar(void);
+static void iconesEncerrar(void);
 void gfx_encerrar(void) {
+  iconesEncerrar();
   desfEncerrar();
   for (int m = 0; m < GFX_NMODOS; m++)
     if (progs[m].prog) { glDeleteProgram(progs[m].prog); progs[m].prog = 0; }
@@ -2101,6 +2105,51 @@ void gfx_snap_encerrar(void) {
 
 // --- icones ------------------------------------------------------------------
 static char dirIcones[512];
+static GLuint smartphoneTex;
+static int smartphoneTentou;
+
+// O TPK atualiza somente libnuvio.so: res/art ainda pode vir de um pacote
+// anterior ao botao do celular. Um icone essencial novo precisa acompanhar o
+// nucleo. E o MESMO PNG Lucide do pacote, sem desenho aproximado; 1244 bytes
+// no binario e 64 KiB de textura, somente quando usado pela primeira vez.
+// Nao passa pelo cache de arquivo: ausencia de arte antiga nao entra no ciclo
+// de decode/recuo nem deixa o botao vazio. Uma falha de decode/alocacao tambem
+// nao vira trabalho por quadro; encerrar o contexto permite outra tentativa.
+static GLuint smartphoneObter(void) {
+  SDL_RWops *rw;
+  SDL_Surface *s, *rgba;
+  if (smartphoneTentou) return smartphoneTex;
+  smartphoneTentou = 1;
+  rw = SDL_RWFromConstMem(gfx_smartphone_png, sizeof gfx_smartphone_png);
+  s = rw ? IMG_Load_RW(rw, 1) : NULL;
+  if (!s) return 0;
+  rgba = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_ABGR8888, 0);
+  SDL_FreeSurface(s);
+  if (!rgba) return 0;
+  glGenTextures(1, &smartphoneTex);
+  if (smartphoneTex) {
+    glBindTexture(GL_TEXTURE_2D, smartphoneTex);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, rgba->w, rgba->h, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, rgba->pixels);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    gfx_tex_esquecer(0);
+  }
+  SDL_FreeSurface(rgba);
+  return smartphoneTex;
+}
+
+static void iconesEncerrar(void) {
+  if (smartphoneTex) {
+    gfx_tex_esquecer(smartphoneTex);
+    glDeleteTextures(1, &smartphoneTex);
+  }
+  smartphoneTex = 0;
+  smartphoneTentou = 0;
+}
 
 void gfx_icones_dir(const char *dirArte) {
   snprintf(dirIcones, sizeof dirIcones, "%s/icones", dirArte ? dirArte : ".");
@@ -2109,14 +2158,18 @@ void gfx_icones_dir(const char *dirArte) {
 void gfx_icone(GfxRect r, const char *nome, float cr, float cg, float cb, float ca) {
   char cam[600];
   GLuint t;
-  if (!nome || !nome[0] || !dirIcones[0]) return;
-  // Caminho ABSOLUTO: o diretorio de trabalho do app nao e a pasta da arte, e
-  // com caminho relativo o IMG_Load falha em silencio e o icone some sem erro.
-  // Mesma armadilha ja documentada em extras_caminho_marca.
-  snprintf(cam, sizeof cam, "%s/%s.png", dirIcones, nome);
-  // Pede pela largura de desenho: um icone de 38px nao precisa dos 128 do
-  // arquivo, e o teto por uso e o que mantem o cache fora do vermelho.
-  t = tex_obter_larg(cam, r.w);
+  if (!nome || !nome[0] || ca <= 0.0f || r.w <= 0.0f || r.h <= 0.0f) return;
+  if (!strcmp(nome, "aj_smartphone")) t = smartphoneObter();
+  else {
+    if (!dirIcones[0]) return;
+    // Caminho ABSOLUTO: o diretorio de trabalho do app nao e a pasta da arte,
+    // e com caminho relativo o IMG_Load falha e o icone some sem erro.
+    // Mesma armadilha ja documentada em extras_caminho_marca.
+    snprintf(cam, sizeof cam, "%s/%s.png", dirIcones, nome);
+    // Pede pela largura de desenho: um icone de 38px nao precisa dos 128 do
+    // arquivo, e o teto por uso e o que mantem o cache fora do vermelho.
+    t = tex_obter_larg(cam, r.w);
+  }
   if (!t) return;
   gfx_tex_aspect_atual = 0.0f;   // o arquivo ja e quadrado
   gfx_rect(r, t, GFX_MARCA, 0, 0, 0, 0.0f, cr, cg, cb, ca);
