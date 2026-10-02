@@ -343,7 +343,7 @@
   { "Apelido (3 letras ou mais) ou o código de 6 letras.", "Nickname (3 letters or more) or the 6-letter code." },
   { "Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Nickname, bio, genres and what to show on your profile; activity shared only with friends (off by default); friend requests you received and your blocked list." },
   { "Aperte + em um filme ou série e ele aparece aqui.", "Press + on a movie or series and it shows up here." },
-  { "Aperte CH- no controle para abrir e fechar o registro.", "Press CH- on the remote to open and close the log." },
+  { "Aperte Info (i) no controle para abrir e fechar o registro.", "Press Info (i) on the remote to open and close the log." },
   { "Aperte Voltar de novo para sair do aplicativo", "Press Back again to exit the app" },
   { "Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Press the red button on the remote to open and close the log. On LG remotes it is in the row of coloured buttons, when the remote has that row." },
   { "Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Press the red button on the remote to open and close the log. On newer Samsung remotes red is not a button: press (or hold) the numbers-and-colours button below the power key until the colour row appears on screen." },

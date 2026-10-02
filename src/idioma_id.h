@@ -344,7 +344,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Nama panggilan (minimal 3 huruf) atau kode 6 huruf."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Nama panggilan, bio, genre, dan apa yang ditampilkan di profil; aktivitas dibagikan hanya ke teman (mati secara default); permintaan pertemanan yang diterima dan daftar yang diblokir."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Tekan + pada film atau serial dan akan muncul di sini."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Tekan CH- pada remote untuk membuka dan menutup log."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Tekan Info (i) pada remote untuk membuka dan menutup log."),
   T("Aperte Voltar de novo para sair do aplicativo", "Tekan Kembali lagi untuk keluar dari aplikasi"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Tekan tombol merah di remote untuk membuka dan menutup log. Pada remote LG letaknya di baris tombol berwarna, jika remote memiliki baris itu."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Tekan tombol merah di remote untuk membuka dan menutup log. Pada remote Samsung yang lebih baru, merah bukan tombol tersendiri: tekan (atau tahan) tombol angka-dan-warna di bawah tombol daya sampai baris warna muncul di layar."),

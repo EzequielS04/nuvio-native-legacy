@@ -344,7 +344,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Biệt danh (từ 3 chữ cái) hoặc mã 6 chữ cái."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Biệt danh, tiểu sử, thể loại và nội dung hiển thị trên hồ sơ; hoạt động chỉ chia sẻ với bạn bè (mặc định tắt); lời mời kết bạn đã nhận và danh sách chặn."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Nhấn + trên một phim hoặc phim bộ và nó sẽ hiện ở đây."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Nhấn CH- trên điều khiển để mở và đóng nhật ký."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Nhấn Info (i) trên điều khiển để mở và đóng nhật ký."),
   T("Aperte Voltar de novo para sair do aplicativo", "Nhấn Quay lại lần nữa để thoát ứng dụng"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Nhấn nút đỏ trên điều khiển để mở và đóng nhật ký. Trên điều khiển LG, nút này nằm ở hàng nút màu, nếu điều khiển có hàng đó."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Nhấn nút đỏ trên điều khiển để mở và đóng nhật ký. Trên điều khiển Samsung đời mới, nút đỏ không phải là một nút riêng: hãy nhấn (hoặc giữ) nút số-và-màu bên dưới nút nguồn cho đến khi hàng màu hiện trên màn hình."),

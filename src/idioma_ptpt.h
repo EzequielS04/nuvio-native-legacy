@@ -344,7 +344,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Alcunha (3 letras ou mais) ou o código de 6 letras."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Alcunha, bio, géneros e o que mostrar no perfil; a atividade partilhada só com amigos (desligada por predefinição); pedidos de amizade recebidos e a lista de bloqueados."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Prime + num filme ou série e ele aparece aqui."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Prime CH- no comando para abrir e fechar o registo."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Prime Info (i) no comando para abrir e fechar o registo."),
   T("Aperte Voltar de novo para sair do aplicativo", "Prime Voltar outra vez para sair da app"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Prime o botão vermelho do comando para abrir e fechar o registo. No comando da LG fica na fila de botões coloridos, quando o comando a tiver."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Prime o botão vermelho do comando para abrir e fechar o registo. Nos comandos Samsung novos o vermelho não é um botão: prime (ou mantém premido) o botão de números e cores, abaixo do botão de ligar, até a fila de cores aparecer no ecrã."),

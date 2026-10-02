@@ -344,7 +344,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Kallenavn (minst 3 bokstaver) eller koden på 6 bokstaver."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Kallenavn, bio, sjangre og hva som vises på profilen din; aktivitet delt bare med venner (av som standard); mottatte venneforespørsler og listen over blokkerte."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Trykk på + på en film eller serie, så vises den her."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Trykk CH- på fjernkontrollen for å åpne og lukke loggen."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Trykk Info (i) på fjernkontrollen for å åpne og lukke loggen."),
   T("Aperte Voltar de novo para sair do aplicativo", "Trykk på Tilbake igjen for å avslutte appen"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Trykk på den røde knappen på fjernkontrollen for å åpne og lukke loggen. På LG-fjernkontroller sitter den i raden med fargede knapper, hvis fjernkontrollen har en slik rad."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Trykk på den røde knappen på fjernkontrollen for å åpne og lukke loggen. På nyere Samsung-fjernkontroller er rød ikke en knapp: trykk på (eller hold inne) knappen for tall og farger under av/på-knappen til fargeraden vises på skjermen."),

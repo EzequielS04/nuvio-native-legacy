@@ -456,7 +456,7 @@ static void desenhaAviso(void) {
 
   y += txt_bloco(TXT_BODY,
 #if defined(NV_ANDROID)
-                 "Aperte CH- no controle para abrir e fechar o registro.",
+                 "Aperte Info (i) no controle para abrir e fechar o registro.",
 #elif defined(__EMSCRIPTEN__)
                  "Aperte o botão vermelho do controle para abrir e fechar o "
                  "registro. Nos controles Samsung novos o vermelho não é um "

@@ -982,7 +982,8 @@ int main(int argc, char **argv) {
       // Com canal na tela (guia, canal ao vivo, canal no canto) sao CH+/CH- de
       // verdade, com os scancodes do webOS que guia.c, player.c e app.c ja
       // tratam. Fora disso fazem o papel das teclas que o controle Android nao
-      // tem: CH+ = AZUL (Salvos), CH- = VERMELHA (registro).
+      // tem: CH+ = AZUL (Salvos), CH- = Spotlight (F5, SPOT_TECLA_ABRIR). O
+      // registro foi para a tecla Info (NuvioActivity: KEYCODE_INFO -> F9).
       if ((e.type == SDL_KEYDOWN || e.type == SDL_KEYUP) &&
           (e.key.keysym.sym == SDLK_F7 || e.key.keysym.sym == SDLK_F8)) {
         int sobe = e.key.keysym.sym == SDLK_F7;
@@ -990,8 +991,8 @@ int main(int argc, char **argv) {
           e.key.keysym.scancode = (SDL_Scancode)(sobe ? NV_SCANCODE_CH_UP : NV_SCANCODE_CH_DOWN);
           e.key.keysym.sym = sobe ? SDLK_PAGEUP : SDLK_PAGEDOWN;
         } else {
-          e.key.keysym.scancode = sobe ? SDL_SCANCODE_S : SDL_SCANCODE_F9;
-          e.key.keysym.sym = sobe ? SDLK_s : SDLK_F9;
+          e.key.keysym.scancode = sobe ? SDL_SCANCODE_S : SDL_SCANCODE_F5;
+          e.key.keysym.sym = sobe ? SDLK_s : SDLK_F5;
         }
       }
 #endif

@@ -344,7 +344,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Nadimak (najmanje 3 slova) ili kod od 6 slova."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Nadimak, biografija, žanrovi i šta prikazati na profilu; aktivnost se deli samo sa prijateljima (isključeno po podrazumevanom); primljeni zahtevi za prijateljstvo i lista blokiranih."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Pritisnite + na filmu ili seriji i pojaviće se ovde."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Pritisnite CH- na daljinskom da otvorite i zatvorite dnevnik."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Pritisnite Info (i) na daljinskom da otvorite i zatvorite dnevnik."),
   T("Aperte Voltar de novo para sair do aplicativo", "Ponovo pritisnite Nazad da izađete iz aplikacije"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Pritisnite crveno dugme na daljinskom da otvorite i zatvorite dnevnik. Na LG daljinskim je u redu obojenih dugmadi, ako daljinski ima taj red."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Pritisnite crveno dugme na daljinskom da otvorite i zatvorite dnevnik. Na novijim Samsung daljinskim crvena nije zasebno dugme: pritisnite (ili držite) dugme sa brojevima i bojama ispod tastera za napajanje dok se na ekranu ne pojavi red boja."),

@@ -344,7 +344,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "用户名（至少 3 个字符）或 6 位代码。"),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "用户名、简介、类型，以及个人资料中要显示的内容；仅与好友共享的动态（默认关闭）；收到的好友请求和屏蔽名单。"),
   T("Aperte + em um filme ou série e ele aparece aqui.", "在电影或剧集上按 + 后，它就会显示在这里。"),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "按遥控器上的 CH- 键打开或关闭日志。"),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "按遥控器上的 Info (i) 键打开或关闭日志。"),
   T("Aperte Voltar de novo para sair do aplicativo", "再按一次返回键退出应用"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "按遥控器上的红色按钮可打开或关闭日志。LG 遥控器上它位于彩色按钮那一排（如果遥控器有这一排的话）。"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "按遥控器上的红色按钮可打开或关闭日志。新款三星遥控器上没有单独的红色按钮：按住（或按下）电源键下方的数字与彩色键，直到屏幕上出现彩色按钮行。"),

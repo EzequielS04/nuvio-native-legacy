@@ -344,7 +344,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Přezdívka (aspoň 3 písmena) nebo 6písmenný kód."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Přezdívka, bio, žánry a co se ukáže na profilu; aktivita sdílená jen s přáteli (ve výchozím stavu vypnuto); přijaté žádosti o přátelství a seznam blokovaných."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Stiskněte + u filmu nebo seriálu a objeví se tady."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Stisknutím CH- na ovladači otevřete a zavřete log."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Stisknutím Info (i) na ovladači otevřete a zavřete log."),
   T("Aperte Voltar de novo para sair do aplicativo", "Stiskněte Zpět ještě jednou pro ukončení aplikace"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Červeným tlačítkem na ovladači log otevřete a zavřete. Na ovladačích LG je v řadě barevných tlačítek, pokud ji ovladač má."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Červeným tlačítkem na ovladači log otevřete a zavřete. Na novějších ovladačích Samsung červená tlačítko není: stiskněte (nebo podržte) tlačítko čísel a barev pod tlačítkem napájení, dokud se na obrazovce neobjeví řada barev."),

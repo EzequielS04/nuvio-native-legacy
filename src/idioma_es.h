@@ -343,7 +343,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Apodo (3 letras o más) o el código de 6 letras."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Apodo, bio, géneros y qué mostrar en el perfil; actividad compartida solo con amigos (desactivada por defecto); solicitudes de amistad recibidas y la lista de bloqueados."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Pulsa + en una película o serie y aparecerá aquí."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Pulsa CH- en el mando para abrir y cerrar el registro."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Pulsa Info (i) en el mando para abrir y cerrar el registro."),
   T("Aperte Voltar de novo para sair do aplicativo", "Pulsa Atrás otra vez para salir de la aplicación"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Pulsa el botón rojo del mando para abrir y cerrar el registro. En el mando de LG está en la fila de botones de colores, si el mando tiene esa fila."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Pulsa el botón rojo del mando para abrir y cerrar el registro. En los mandos Samsung nuevos el rojo no es un botón: pulsa (o mantén) el botón de números y colores, debajo del de encendido, hasta que aparezca la fila de colores en la pantalla."),

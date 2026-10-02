@@ -344,7 +344,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Vzdevek (vsaj 3 črke) ali koda s 6 črkami."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Vzdevek, bio, žanri in kaj se prikaže na profilu; dejavnost, deljena samo s prijatelji (privzeto izklopljeno); prejete prošnje za prijateljstvo in seznam blokiranih."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Pritisnite + pri filmu ali seriji in prikazal se bo tukaj."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Pritisnite CH- na daljincu za odpiranje in zapiranje dnevnika."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Pritisnite Info (i) na daljincu za odpiranje in zapiranje dnevnika."),
   T("Aperte Voltar de novo para sair do aplicativo", "Ponovno pritisnite Nazaj za izhod iz aplikacije"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Z rdečim gumbom na daljincu dnevnik odprete in zaprete. Na daljincih LG je v vrsti barvnih gumbov, če jo daljinec ima."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Z rdečim gumbom na daljincu dnevnik odprete in zaprete. Na novejših daljincih Samsung rdeča ni gumb: pritisnite (ali pridržite) gumb s številkami in barvami pod gumbom za vklop, dokler se na zaslonu ne pojavi vrsta barv."),

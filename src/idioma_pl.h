@@ -344,7 +344,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Pseudonim (min. 3 litery) lub 6-literowy kod."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Pseudonim, bio, gatunki i to, co pokazywać w profilu; aktywność udostępniana tylko znajomym (domyślnie wyłączona); otrzymane zaproszenia i lista zablokowanych."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Naciśnij + przy filmie lub serialu, a pojawi się tutaj."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Naciśnij CH- na pilocie, aby otworzyć i zamknąć dziennik."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Naciśnij Info (i) na pilocie, aby otworzyć i zamknąć dziennik."),
   T("Aperte Voltar de novo para sair do aplicativo", "Naciśnij Wstecz ponownie, aby wyjść z aplikacji"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Naciśnij czerwony przycisk na pilocie, aby otworzyć i zamknąć dziennik. W pilotach LG jest w rzędzie kolorowych przycisków, jeśli pilot ma taki rząd."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Naciśnij czerwony przycisk na pilocie, aby otworzyć i zamknąć dziennik. W nowszych pilotach Samsung czerwony nie jest osobnym przyciskiem: naciśnij (lub przytrzymaj) przycisk z cyframi i kolorami pod przyciskiem zasilania, aż na ekranie pojawi się rząd kolorów."),

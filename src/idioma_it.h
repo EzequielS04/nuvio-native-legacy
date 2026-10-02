@@ -344,7 +344,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Nickname (almeno 3 lettere) o codice di 6 lettere."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Nickname, bio, generi e cosa mostrare nel profilo; attività condivisa solo con gli amici (disattivata di default); richieste di amicizia ricevute e lista dei bloccati."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Premi + su un film o una serie e comparirà qui."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Premi CH- sul telecomando per aprire e chiudere il log."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Premi Info (i) sul telecomando per aprire e chiudere il log."),
   T("Aperte Voltar de novo para sair do aplicativo", "Premi di nuovo Indietro per uscire dall'app"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Premi il tasto rosso del telecomando per aprire e chiudere il log. Sui telecomandi LG è nella fila dei tasti colorati, quando il telecomando ce l'ha."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Premi il tasto rosso del telecomando per aprire e chiudere il log. Sui telecomandi Samsung più recenti il rosso non è un tasto: premi (o tieni premuto) il tasto numeri e colori sotto il tasto di accensione finché la fila dei colori non compare sullo schermo."),

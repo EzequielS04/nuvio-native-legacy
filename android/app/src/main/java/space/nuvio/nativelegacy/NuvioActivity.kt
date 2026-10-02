@@ -248,10 +248,13 @@ class NuvioActivity : SDLActivity() {
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_MEDIA_NEXT -> KeyEvent.KEYCODE_DPAD_RIGHT
             KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> KeyEvent.KEYCODE_DPAD_LEFT
             KeyEvent.KEYCODE_PROG_BLUE -> KeyEvent.KEYCODE_S
-            KeyEvent.KEYCODE_PROG_RED, KeyEvent.KEYCODE_PROG_GREEN -> KeyEvent.KEYCODE_F9
+            // Info (i) = registro (enviar o log), como a vermelha/verde.
+            KeyEvent.KEYCODE_PROG_RED, KeyEvent.KEYCODE_PROG_GREEN,
+            KeyEvent.KEYCODE_INFO -> KeyEvent.KEYCODE_F9
             // CH+/CH- vao como F7/F8 e o C decide (main.c): troca de canal com
-            // canal na tela; fora disso, CH+ = AZUL e CH- = registro, porque a
-            // TCL e a maioria dos controles Android TV nao tem teclas coloridas.
+            // canal na tela; fora disso, CH+ = AZUL e CH- = Spotlight, porque a
+            // TCL e a maioria dos controles Android TV nao tem teclas coloridas
+            // e o microfone da TCL manda ASSIST (abre o Gemini, nao chega aqui).
             KeyEvent.KEYCODE_CHANNEL_UP -> KeyEvent.KEYCODE_F7
             KeyEvent.KEYCODE_CHANNEL_DOWN -> KeyEvent.KEYCODE_F8
             // SPOTLIGHT (spotlight.h). O botao de microfone da maioria dos

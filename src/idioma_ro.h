@@ -343,7 +343,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Poreclă (minimum 3 litere) sau codul de 6 litere."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Poreclă, bio, genuri și ce se arată în profil; activitatea împărtășită doar cu prietenii (dezactivată implicit); cererile de prietenie primite și lista de blocați."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Apasă + pe un film sau serial și apare aici."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Apasă CH- pe telecomandă pentru a deschide și închide jurnalul."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Apasă Info (i) pe telecomandă pentru a deschide și închide jurnalul."),
   T("Aperte Voltar de novo para sair do aplicativo", "Apasă Înapoi din nou pentru a ieși din aplicație"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Apasă butonul roșu de pe telecomandă pentru a deschide și închide jurnalul. Pe telecomenzile LG se află în rândul de butoane colorate, dacă telecomanda are acest rând."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Apasă butonul roșu de pe telecomandă pentru a deschide și închide jurnalul. Pe telecomenzile Samsung noi, roșu nu este un buton: apasă (sau ține apăsat) butonul de cifre și culori, sub butonul de pornire, până apare pe ecran rândul de culori."),

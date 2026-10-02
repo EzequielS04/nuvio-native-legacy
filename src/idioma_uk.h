@@ -343,7 +343,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "Псевдонім (від 3 літер) або код із 6 літер."),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "Псевдонім, біо, жанри та що показувати в профілі; активність лише для друзів (вимкнена за замовчуванням); отримані запити в друзі та список заблокованих."),
   T("Aperte + em um filme ou série e ele aparece aqui.", "Натисніть + на фільмі чи серіалі, і він з'явиться тут."),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "Натисніть CH- на пульті, щоб відкрити й закрити журнал."),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "Натисніть Info (i) на пульті, щоб відкрити й закрити журнал."),
   T("Aperte Voltar de novo para sair do aplicativo", "Натисніть «Назад» ще раз, щоб вийти із застосунку"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "Натисніть червону кнопку на пульті, щоб відкрити або закрити журнал. На пультах LG вона в ряду кольорових кнопок, якщо такий ряд є."),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "Натисніть червону кнопку на пульті, щоб відкрити або закрити журнал. На нових пультах Samsung червоного кольору як кнопки немає: натисніть (або утримуйте) кнопку цифр і кольорів під кнопкою живлення, доки на екрані не з'явиться ряд кольорів."),

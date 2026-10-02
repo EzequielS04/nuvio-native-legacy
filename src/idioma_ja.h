@@ -344,7 +344,7 @@
   T("Apelido (3 letras ou mais) ou o código de 6 letras.", "ニックネーム (3 文字以上) または 6 文字のコード。"),
   T("Apelido, bio, gêneros e o que mostrar no perfil; a atividade compartilhada só com amigos (desligada por padrão); pedidos de amizade recebidos e a lista de bloqueados.", "ニックネーム、自己紹介、ジャンル、プロフィールに表示する内容。フレンドだけに共有するアクティビティ (初期設定はオフ)。受信したフレンドリクエストとブロックリスト。"),
   T("Aperte + em um filme ou série e ele aparece aqui.", "映画や番組で + を押すと、ここに表示されます。"),
-  T("Aperte CH- no controle para abrir e fechar o registro.", "リモコンの CH- を押すと、ログを開いたり閉じたりできます。"),
+  T("Aperte Info (i) no controle para abrir e fechar o registro.", "リモコンの Info (i) を押すと、ログを開いたり閉じたりできます。"),
   T("Aperte Voltar de novo para sair do aplicativo", "もう一度「戻る」を押すとアプリを終了します"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. No controle da LG ele fica na fileira de botões coloridos, quando o controle tiver essa fileira.", "リモコンの赤いボタンでログを開閉します。LG のリモコンでは、その列がある場合、カラーボタンの列にあります。"),
   T("Aperte o botão vermelho do controle para abrir e fechar o registro. Nos controles Samsung novos o vermelho não é um botão: aperte (ou segure) o botão de números e cores, abaixo do liga-desliga, até a fileira de cores aparecer na tela.", "リモコンの赤いボタンでログを開閉します。新しい Samsung のリモコンでは赤は独立したボタンではありません。電源ボタンの下にある数字とカラーのボタンを押す（または長押しする）と、画面にカラーの列が表示されます。"),
