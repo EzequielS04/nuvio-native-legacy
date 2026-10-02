@@ -1471,11 +1471,18 @@ void player_descartar_retido(void) {
 }
 
 void player_validar_retido(Uint32 agora) {
-  if (retido && (agora - retidoDesde >= PLR_RETIDO_MS ||
-      perfis_ativo() != retidoPerfil || strcmp(retidoConta, sessao_usuario()) ||
-      strcmp(retidoUrl, video_url_atual()) || !video_pausa_confirmada() ||
-      video_falhou() || video_terminou() || video_conflito_recurso() || video_reconectando()))
-    player_descartar_retido();
+  const char *por = NULL;
+  if (!retido) return;
+  // (Sint32): `agora` e o do inicio do quadro e retidoDesde pode ser mais novo.
+  if ((Sint32)(agora - retidoDesde) >= (Sint32)PLR_RETIDO_MS) por = "prazo";
+  else if (perfis_ativo() != retidoPerfil || strcmp(retidoConta, sessao_usuario())) por = "perfil";
+  else if (strcmp(retidoUrl, video_url_atual())) por = "outro video";
+  else if (!video_pausa_confirmada()) por = "pausa perdida";
+  else if (video_falhou() || video_terminou() || video_conflito_recurso() || video_reconectando()) por = "backend";
+  if (!por) return;
+  printf("[player] sessao retida solta: %s (%u ms)\n", por, (unsigned)(SDL_GetTicks() - retidoDesde));
+  fflush(stdout);
+  player_descartar_retido();
 }
 
 int player_retomar_retido(const char *imdb, int t, int e) {
