@@ -36,7 +36,6 @@
 #include "botoes.h"
 #include "dados.h"
 #include "gfx.h"
-#include "guia.h"
 #include "idioma.h"
 #include "idiomacod.h"
 #include "layout.h"
@@ -218,6 +217,17 @@ static GfxRect misturaRect(GfxRect a, GfxRect b, float s) {
   return r;
 }
 
+// "2015|f" -> "2015  ·  Filme", "2004|s" -> "2004  ·  Série": o ano e numero,
+// o tipo passa por i18n (as chaves de spotlight.c).
+static void anoTipo(const char *m, char *b, size_t n) {
+  const char *bar = strchr(m, '|');
+  if (!bar) { snprintf(b, n, "%s", m); return; }
+  snprintf(b, n, "%.*s  \xc2\xb7  %s", (int)(bar - m), m, bar[1] == 's' ? i18n("Série") : i18n("Filme"));
+}
+
+// Ano e duracao do destaque: numeros, iguais em todo idioma.
+static const char *const META_HOME = "2025  ·  2h 42min";
+
 // A home da Dinamica atras das cenas: o destaque (logo, nota, botoes) e a
 // fileira na base. `ah` apaga so o bloco do destaque.
 static void homeDinamica(float x, float y, float ah, float a) {
@@ -227,7 +237,7 @@ static void homeDinamica(float x, float y, float ah, float a) {
   float yl = yb - 152.0f;                     // base do logo
   const char *rp = i18n("Reproduzir");
   float wp = botao_largura(rp, "play", 1);
-  TxtLinha meta = txt_linha(TXT_DET_META2, "2025  ·  2h 42min", 214, 218, 226, 255);
+  TxtLinha meta = txt_linha(TXT_DET_META2, META_HOME, 214, 218, 226, 255);
   int i;
   arte(A_HOME, pv, N170_PV_RAIO, 0.9f, a);
   logoTitulo(A_L_HOME, x + N170_M, yl, 300.0f, 104.0f, ah);
@@ -262,7 +272,7 @@ static void homeDinamica(float x, float y, float ah, float a) {
 #define IL_MD_ARTE_H (IL_MD_ARTE_W * 9.0f / 16.0f)
 #define IL_MD_RAIO   30.0f
 #define IL_MD_H      (IL_MD_PAD * 2.0f + IL_MD_ARTE_H + 20.0f + BOTAO_H_SECUNDARIO)
-#define IL_PN_W     440.0f
+#define IL_PN_W     520.0f
 #define IL_T_CARTAO  0.6f    // o relogio se abre para o episodio
 #define IL_T_TECLA   1.9f    // a tecla da central aparece embaixo
 #define IL_T_MODAL   2.8f    // e e apertada: a pilula cresce ate o modal
@@ -274,6 +284,8 @@ static void homeDinamica(float x, float y, float ah, float a) {
 #define IL_T_ESTREIA 10.6f   // a vez da estreia
 #define IL_DUR      13.2f
 
+// Nomes proprios e numeros: iguais em todo idioma.
+static const char *const TIT_VIVO = "Fallout", *const TIT_ESTREIA = "Widow's Bay";
 // Os tres conteudos da pilula: relogio, o episodio largado, a estreia.
 enum { IL_RELOGIO = 0, IL_VIVO, IL_ESTREIA };
 typedef struct { TxtLinha hora, tit, meta; float w, h; } IlhaLin;
@@ -284,12 +296,12 @@ static void ilhaLinhas(int k, IlhaLin *L) {
   if (k == IL_RELOGIO) { L->w = IL_PAD_E + IL_PAD_D + (float)L->hora.w; L->h = NV_ILHA_H; return; }
   if (k == IL_VIVO) {
     snprintf(meta, sizeof meta, i18n("T%dE%d · %d min restantes"), 1, 3, 32);
-    L->tit = txt_linha_corta(TXT_BODY, "Fallout", 240, 242, 246, 255, IL_TIT_MAX);
+    L->tit = txt_linha_corta(TXT_BODY, TIT_VIVO, 240, 242, 246, 255, IL_TIT_MAX);
   } else {
     char te[32];
     snprintf(te, sizeof te, i18n("T%dE%d"), 2, 5);
     snprintf(meta, sizeof meta, "%s · %s", te, i18n("hoje"));
-    L->tit = txt_linha_corta(TXT_BODY, "Widow's Bay", 240, 242, 246, 255, IL_TIT_MAX);
+    L->tit = txt_linha_corta(TXT_BODY, TIT_ESTREIA, 240, 242, 246, 255, IL_TIT_MAX);
   }
   L->meta = txt_linha(TXT_CAPTION2, meta, 176, 180, 190, 255);
   L->w = IL_PAD_E + IL_PAD_D + (float)L->hora.w + IL_CT_VAO * 2.0f + 1.5f +
@@ -407,9 +419,9 @@ static void ilhaModal(GfxRect m, float t, float a) {
 typedef struct { int capa; const char *titulo, *meta; int traduz, prog; } LinhaSalvo;
 static const LinhaSalvo SALVOS_LIN[4] = {
   { A_P_FALLOUT, "Fallout",           NULL,                   0, 1 },
-  { A_P_HAIL,    "Project Hail Mary", "2026  ·  Filme",       1, 0 },
-  { A_P_LOST,    "Lost",              "2004  ·  Série",       1, 0 },
-  { A_P_WIDOW,   "Widow's Bay",       "2026  ·  Série",       1, 0 },
+  { A_P_HAIL,    "Project Hail Mary", "2026|f", 1, 0 },
+  { A_P_LOST,    "Lost",              "2004|s", 1, 0 },
+  { A_P_WIDOW,   "Widow's Bay",       "2026|s", 1, 0 },
 };
 static void painelSalvos(GfxRect P, float a) {
   float x = P.x + 24.0f, y = P.y + 22.0f, w = P.w - 48.0f, cr, cg, cb;
@@ -455,10 +467,8 @@ static void painelSalvos(GfxRect P, float a) {
     c = (GfxRect){ x, y, 60.0f, 90.0f };
     capa(L->capa, c, 8.0f, a);
     if (L->meta) {
-      // "2026  ·  Filme": o ano e numero, o tipo passa por i18n.
-      const char *tipo = strstr(L->meta, "·  ");
-      snprintf(meta, sizeof meta, "%.*s%s", (int)(tipo ? tipo + 3 - L->meta : 0), L->meta,
-               tipo ? i18n(tipo + 3) : L->meta);
+      // "2026|f": o ano e numero, o tipo passa por i18n.
+      anoTipo(L->meta, meta, sizeof meta);
     } else snprintf(meta, sizeof meta, i18n("T%dE%d · %d min restantes"), 1, 3, 32);
     t = txt_linha_corta(TXT_CALLOUT, L->titulo, 240, 242, 246, 255, w - 80.0f);
     m = txt_linha_corta(TXT_CAPTION2, meta, 160, 164, 176, 255, w - 80.0f);
@@ -477,7 +487,7 @@ static void cenaIlha(float x, float y, float t, float a) {
   const float W = N170_PV_W, H = N170_PV_H;
   const float xd = x + W - 24.0f, yI = y + 88.0f;
   IlhaLin L0, L1, L2;
-  float sM, sP, sV, ePn;
+  float sM, ePn;
   GfxRect pil, M, P;
   int kAntes, kAgora;
   float tTroca;
@@ -494,7 +504,7 @@ static void cenaIlha(float x, float y, float t, float a) {
     pil = (GfxRect){ xd - w, yI, w, h }; }
 
   // ---- a home atras; com o painel aberto, o veu dele (SP_VEU) por cima.
-  ePn = t >= IL_T_PAINEL ? anim_clamp(molaSub(t, IL_T_PAINEL, 9.0f, 0.80f), 0.0f, 1.06f)
+  ePn = t >= IL_T_PAINEL ? anim_clamp(molaSub(t, IL_T_PAINEL, N170_MODAL_W, N170_MODAL_Z), 0.0f, 1.06f)
                            * (1.0f - passo(t, IL_T_RECOLHE, 0.42f)) : 0.0f;
   homeDinamica(x, y, a, a);
   if (ePn > 0.0f)
@@ -572,7 +582,6 @@ static void cenaIlha(float x, float y, float t, float a) {
     }
     if (aMod > 0.0f) ilhaModal(M, t, a * aMod);
     recorteVolta(); }
-  (void)sP; (void)sV;
 }
 
 // ===================================================== CENA 1: O SPOTLIGHT
@@ -604,29 +613,29 @@ static const SpotLin SPOT_ETAPA[4][9] = {
     { SL_RECENTE, -1, "drama hd", NULL, 0, 0 },
     { SL_LIMPAR, -1, "Limpar pesquisas recentes", NULL, 1, 0 },
     { SL_CAB, -1, "Em alta", NULL, 1, 0 },
-    { SL_TITULO, A_P_HAIL, "Project Hail Mary", "2026|Filme", 0, 0 },
-    { SL_TITULO, A_P_3BODY, "3 Body Problem", "2024|Série", 0, 0 },
+    { SL_TITULO, A_P_HAIL, "Project Hail Mary", "2026|f", 0, 0 },
+    { SL_TITULO, A_P_3BODY, "3 Body Problem", "2024|s", 0, 0 },
     SL_FIM },
   { { SL_CAB, -1, "Melhor resultado", NULL, 1, 0 },
-    { SL_TOPO, A_MERCY, "Mercy", "2026|Filme", 0, 0 },
+    { SL_TOPO, A_MERCY, "Mercy", "2026|f", 0, 0 },
     { SL_CAB, -1, "Títulos", NULL, 1, 0 },
-    { SL_TITULO, A_P_MRK, "Mr. K", "2025|Filme", 0, 0 },
-    { SL_TITULO, A_P_MANIAC, "Maniac", "2018|Série", 0, 0 },
+    { SL_TITULO, A_P_MRK, "Mr. K", "2025|f", 0, 0 },
+    { SL_TITULO, A_P_MANIAC, "Maniac", "2018|s", 0, 0 },
     { SL_CAB, -1, "Pessoas", NULL, 1, 0 },
     { SL_PESSOA, A_F_MERYL, "Meryl Streep", "The Devil Wears Prada 2", 0, 0 },
     SL_FIM, SL_FIM },
   { { SL_CAB, -1, "Melhor resultado", NULL, 1, 0 },
-    { SL_TOPO, A_MANIAC, "Maniac", "2018|Série", 0, 0 },
+    { SL_TOPO, A_MANIAC, "Maniac", "2018|s", 0, 0 },
     { SL_CAB, -1, "Títulos", NULL, 1, 0 },
-    { SL_TITULO, A_P_MARTIAN, "The Martian", "2015|Filme", 0, 0 },
-    { SL_TITULO, A_P_MARSH, "The Marsh King's Daughter", "2023|Filme", 0, 0 },
+    { SL_TITULO, A_P_MARTIAN, "The Martian", "2015|f", 0, 0 },
+    { SL_TITULO, A_P_MARSH, "The Marsh King's Daughter", "2023|f", 0, 0 },
     { SL_CAB, -1, "Canais ao vivo", NULL, 1, 0 },
     { SL_CANAL, -1, "Max Action", "Filmes", 0, 0 },
     SL_FIM, SL_FIM },
   { { SL_CAB, -1, "Melhor resultado", NULL, 1, 0 },
-    { SL_TOPO, A_C2, "The Martian", "2015|Filme", 0, 0 },
+    { SL_TOPO, A_C2, "The Martian", "2015|f", 0, 0 },
     { SL_CAB, -1, "Títulos", NULL, 1, 0 },
-    { SL_TITULO, A_P_MARSH, "The Marsh King's Daughter", "2023|Filme", 0, 0 },
+    { SL_TITULO, A_P_MARSH, "The Marsh King's Daughter", "2023|f", 0, 0 },
     { SL_CAB, -1, "Pessoas", NULL, 1, 0 },
     { SL_PESSOA, A_F_MARK, "Mark Coles Smith", "We Bury the Dead", 0, 0 },
     { SL_CAB, -1, "Canais ao vivo", NULL, 1, 0 },
@@ -634,17 +643,14 @@ static const SpotLin SPOT_ETAPA[4][9] = {
     SL_FIM },
 };
 
-// "2015|Filme" -> "2015  ·  Filme" (o tipo traduzido); pessoa: "Em <titulo>";
+// "2015|f" -> "2015  ·  Filme" (o tipo traduzido); pessoa: "Em <titulo>";
 // canal: "Canal  ·  <categoria>".
 static void spotMeta(const SpotLin *l, char *b, size_t n) {
-  const char *bar;
   b[0] = 0;
   if (!l->t2) return;
   if (l->tipo == SL_PESSOA) { snprintf(b, n, i18n("Em %s"), l->t2); return; }
   if (l->tipo == SL_CANAL) { snprintf(b, n, "%s  \xc2\xb7  %s", i18n("Canal"), i18n(l->t2)); return; }
-  bar = strchr(l->t2, '|');
-  if (bar) snprintf(b, n, "%.*s  \xc2\xb7  %s", (int)(bar - l->t2), l->t2, i18n(bar + 1));
-  else snprintf(b, n, "%s", l->t2);
+  anoTipo(l->t2, b, n);
 }
 
 // A linha da lista (desenhaLinha de spotlight.c). `f` 0..1 = foco.
@@ -698,8 +704,10 @@ static void spotLinha(const SpotLin *l, float x, float y, float w, float f, floa
         break;
       case SL_CANAL:
         ic.w = ic.h * 16.0f / 9.0f;
+        // Sem logo no pacote: o nome do canal como marca, na caixa do logo.
         gfx_cor(ic, rr(8.0f, ic), 0.16f, 0.165f, 0.185f, a);
-        guia_logo_desenhar("", l->t1, ic, ic.w - 12.0f, ic.h - 12.0f, 0.965f, a);
+        { TxtLinha m = txt_linha_corta(TXT_MINI, l->t1, 214, 218, 228, 255, ic.w - 10.0f);
+          txt_desenhar_alpha(m, ic.x + (ic.w - (float)m.w) * 0.5f, ic.y + (ic.h - (float)m.h) * 0.5f, a); }
         break;
       default: {
         float d = 38.0f;
@@ -1139,9 +1147,12 @@ static void cenaCarrossel(float x, float y, float t, float a) {
 
 // As duas emendadas: a barra ate fechar, e o carrossel por cima dela.
 static void cenaAppleTV(float x, float y, float t, float a) {
-  float s = passo(t, N170_CARRO_T, N170_CARRO_X);
-  if (s < 1.0f) cenaBarra(x, y, t, a);
-  if (s > 0.0f || t >= N170_CARRO_T) cenaCarrossel(x, y, t - N170_CARRO_T, a * s);
+  // Em sequencia, nao sobrepostas: duas homes diferentes misturadas leem
+  // como imagem dupla. A barra apaga na primeira metade, o carrossel acende
+  // na segunda.
+  float s = anim_clamp((t - N170_CARRO_T) / N170_CARRO_X, 0.0f, 1.0f);
+  if (s < 0.5f) cenaBarra(x, y, t, a * (1.0f - anim_suave(s * 2.0f)));
+  if (s > 0.5f) cenaCarrossel(x, y, t - N170_CARRO_T, a * anim_suave(s * 2.0f - 1.0f));
 }
 
 // ================================================================ as tabelas
@@ -1166,7 +1177,7 @@ static const Item ITENS[] = {
   { ID_ILHA,      "sino",                "Ilha do relógio",
     "O episódio pela metade e a estreia nova ficam no relógio. AZUL ou CH+ abre, → leva aos Salvos." },
   { ID_SPOT,      "menu_search",         "Spotlight",
-    "A tecla amarela abre a busca por cima de qualquer tela. A lista muda a cada letra." },
+    "A tecla amarela abre a busca em qualquer tela. A lista muda a cada letra." },
   { ID_SALVOS,    "aj_folders",          "Organizar Salvos",
     "Categorias suas, a ordem que quiser e o estilo da lista, no painel de Salvos." },
   { ID_ATV,       "aj_layout-dashboard", "Layout Apple TV",
