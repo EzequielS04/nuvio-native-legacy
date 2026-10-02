@@ -20,6 +20,7 @@ const char *proxyts_resolver(const char *url, char *buf, size_t n) {
 #include <pthread.h>
 #include <signal.h>
 #include <stdatomic.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,9 +47,6 @@ static atomic_uint sessaoAtual;
 // O download do segmento em curso, para a troca de canal cortar na hora (a
 // conta de 1 tela recusaria o canal novo com o velho ainda baixando).
 static volatile int *cancelarEmCurso;
-// A conexao que esta entregando HLS: uma nova da mesma sessao (o uMS reabre)
-// encerra a anterior, para nunca haver dois downloads na conta de 1 tela.
-static void *conexaoAtiva;
 
 // --- playlist -----------------------------------------------------------------
 typedef struct {
@@ -155,10 +153,74 @@ static int pxEnviar(int s, const void *b, size_t n) {
   return 1;
 }
 
-typedef struct { int s; unsigned sessao; char fonte[4096]; volatile int cancelar; } PxConexao;
+typedef struct PxFluxo PxFluxo;
+typedef struct PxConexao {
+  int s; unsigned sessao; char fonte[4096]; volatile int cancelar;
+  PxFluxo *fluxo;
+  struct PxConexao *proxima;
+  uint64_t pos;
+  int proteger;                    // cursor entregue, protegido por fluxo->trava
+} PxConexao;
+
+// O uMS faz mais de um GET durante o mesmo load (sonda e leitura). Uma
+// segunda conexao nao pode fechar a primeira: isso virava endOfStream depois
+// de 10..20s na C4. Uma ingestao HLS alimenta todos os leitores locais.
+#define PX_BUFFER ((16U << 20) / 188 * 188)
+#define PX_BLOCO (188U * 256)
+struct PxFluxo {
+  pthread_mutex_t trava;
+  pthread_cond_t chegou;
+  unsigned char *buffer;
+  uint64_t inicio, fim;
+  uint64_t segmentos[64];
+  unsigned nSegmentos;
+  PxTabelas tabelas;
+  unsigned refs;                    // protegido pela trava global
+  int encerrado, leitores;
+  PxConexao *clientes;
+  time_t semLeitorDesde;
+  char lista[4096];
+  PxConexao produtor;
+};
+static PxFluxo *fluxoAtual;
+static uint64_t pxCursorInicio(const PxFluxo *f);
+
+static void pxFluxoDestruir(PxFluxo *f) {
+  pthread_cond_destroy(&f->chegou);
+  pthread_mutex_destroy(&f->trava);
+  free(f->buffer); free(f);
+}
+
+static void pxFluxoSoltar(PxFluxo *f) {
+  int destruir;
+  pthread_mutex_lock(&trava);
+  destruir = --f->refs == 0;
+  pthread_mutex_unlock(&trava);
+  if (destruir) pxFluxoDestruir(f);
+}
+
+// Chamado com trava global; produtor/leitores conservam suas referencias.
+static void pxFluxoParar(void) {
+  PxFluxo *f = fluxoAtual;
+  if (!f) return;
+  fluxoAtual = NULL;
+  __atomic_store_n(&f->produtor.cancelar, 1, __ATOMIC_RELEASE);
+  pthread_mutex_lock(&f->trava);
+  f->encerrado = 1; pthread_cond_broadcast(&f->chegou);
+  pthread_mutex_unlock(&f->trava);
+  if (--f->refs == 0) pxFluxoDestruir(f);
+}
 
 static int pxViva(const PxConexao *c) {
-  return !c->cancelar && atomic_load(&sessaoAtual) == c->sessao;
+  if (__atomic_load_n(&c->cancelar, __ATOMIC_ACQUIRE) || atomic_load(&sessaoAtual) != c->sessao) return 0;
+  if (c->s < 0 && c->fluxo) {
+    int ocioso;
+    pthread_mutex_lock(&c->fluxo->trava);
+    ocioso = c->fluxo->semLeitorDesde && time(NULL) - c->fluxo->semLeitorDesde >= 3;
+    pthread_mutex_unlock(&c->fluxo->trava);
+    if (ocioso) return 0;
+  }
+  return 1;
 }
 
 static void pxDormir(const PxConexao *c, int ms) {
@@ -186,6 +248,56 @@ static int pxPlaylist(const char *url, PxLista *l, char *final, size_t nf) {
     snprintf(atual, sizeof atual, "%s", l->uri[0]);
   }
   return 0;
+}
+
+static void pxInicioSegmento(PxFluxo *f) {
+  pthread_mutex_lock(&f->trava);
+  f->segmentos[f->nSegmentos++ % 64] = f->fim;
+  pthread_mutex_unlock(&f->trava);
+}
+
+static int pxEntregar(PxConexao *c, const void *b, size_t n) {
+  PxFluxo *f = c->fluxo;
+  const unsigned char *p = b;
+  while (n) {
+    size_t guardar = n < PX_BLOCO ? n : PX_BLOCO, off, primeira;
+    uint64_t limite;
+    struct timespec prazo;
+    pthread_mutex_lock(&f->trava);
+    limite = f->fim + guardar > PX_BUFFER ? f->fim + guardar - PX_BUFFER : 0;
+    clock_gettime(CLOCK_REALTIME, &prazo); prazo.tv_nsec += 250000000;
+    if (prazo.tv_nsec >= 1000000000) { prazo.tv_nsec -= 1000000000; prazo.tv_sec++; }
+    for (;;) {
+      uint64_t maisAdiantado = 0;
+      int ativos = 0, r;
+      PxConexao *leitor;
+      for (leitor = f->clientes; leitor; leitor = leitor->proxima)
+        if (leitor->proteger) {
+          ativos++;
+          if (leitor->pos > maisAdiantado) maisAdiantado = leitor->pos;
+        }
+      if (!ativos || maisAdiantado >= limite || f->encerrado) break;
+      // Destravar permite ao leitor ativo consumir o comeco de um segmento
+      // maior que o ring. Uma sonda parada nao prende o fluxo indefinidamente.
+      r = pthread_cond_timedwait(&f->chegou, &f->trava, &prazo);
+      if (r == ETIMEDOUT) {
+        for (leitor = f->clientes; leitor; leitor = leitor->proxima)
+          if (leitor->pos < limite) leitor->proteger = 0;
+        break;
+      }
+    }
+    if (f->encerrado) { pthread_mutex_unlock(&f->trava); return 0; }
+    off = (size_t)(f->fim % PX_BUFFER);
+    primeira = guardar < PX_BUFFER - off ? guardar : PX_BUFFER - off;
+    memcpy(f->buffer + off, p, primeira);
+    memcpy(f->buffer, p + primeira, guardar - primeira);
+    f->fim += guardar;
+    if (f->fim - f->inicio > PX_BUFFER) f->inicio = f->fim - PX_BUFFER;
+    pthread_cond_broadcast(&f->chegou);
+    pthread_mutex_unlock(&f->trava);
+    p += guardar; n -= guardar;
+  }
+  return 1;
 }
 
 static void pxHls(PxConexao *c, const char *urlLista) {
@@ -241,10 +353,14 @@ static void pxHls(PxConexao *c, const char *urlLista) {
       // Founded" do segmento unico na C9): se o segmento nao abre com o PAT,
       // repoe o ultimo PAT/PMT visto antes dele.
       pxColher(b + ini, n - ini, &tab);
+      pthread_mutex_lock(&c->fluxo->trava);
+      c->fluxo->tabelas = tab;
+      pthread_mutex_unlock(&c->fluxo->trava);
+      pxInicioSegmento(c->fluxo);
       if (pxPid(b + ini) != 0 && tab.temPat && tab.temPmt) {
-        if (!pxEnviar(c->s, tab.pat, 188) || !pxEnviar(c->s, tab.pmt, 188)) { free(b); goto fim; }
+        if (!pxEntregar(c, tab.pat, 188) || !pxEntregar(c, tab.pmt, 188)) { free(b); goto fim; }
       }
-      if (!pxEnviar(c->s, b + ini, (size_t)((n - ini) / 188 * 188))) { free(b); goto fim; }
+      if (!pxEntregar(c, b + ini, (size_t)((n - ini) / 188 * 188))) { free(b); goto fim; }
       segs++; bytes += n - ini; novos++;
       if (segs <= 3 || segs % 30 == 0) {
         printf("[proxy-ts] segmento %ld: %ld KB em %lu ms (%s)\n", segs, (n - ini) / 1024, md.ms,
@@ -269,6 +385,120 @@ fim:
   printf("[proxy-ts] sessao %u encerrada: %ld segmento(s), %ld KB em %ld s\n", c->sessao, segs,
          bytes / 1024, (long)(time(NULL) - t0));
   fflush(stdout);
+}
+
+static void *pxProduzir(void *u) {
+  PxFluxo *f = u;
+  pxHls(&f->produtor, f->lista);
+  pthread_mutex_lock(&f->trava);
+  f->encerrado = 1; pthread_cond_broadcast(&f->chegou);
+  pthread_mutex_unlock(&f->trava);
+  pxFluxoSoltar(f);
+  return NULL;
+}
+
+static PxFluxo *pxFluxoPegar(PxConexao *c, const char *lista) {
+  PxFluxo *f;
+  pthread_t t;
+  pthread_mutex_lock(&trava);
+  if (!pxViva(c)) { pthread_mutex_unlock(&trava); return NULL; }
+  f = fluxoAtual;
+  if (f) {
+    int encerrado;
+    pthread_mutex_lock(&f->trava); encerrado = f->encerrado; pthread_mutex_unlock(&f->trava);
+    if (encerrado) { pxFluxoParar(); f = NULL; }
+  }
+  if (!f && lista) {
+    f = calloc(1, sizeof *f);
+    if (f) f->buffer = malloc(PX_BUFFER);
+    if (!f || !f->buffer) { if (f) free(f); pthread_mutex_unlock(&trava); return NULL; }
+    if (pthread_mutex_init(&f->trava, NULL) != 0) {
+      free(f->buffer); free(f); pthread_mutex_unlock(&trava); return NULL;
+    }
+    if (pthread_cond_init(&f->chegou, NULL) != 0) {
+      pthread_mutex_destroy(&f->trava); free(f->buffer); free(f);
+      pthread_mutex_unlock(&trava); return NULL;
+    }
+    f->refs = 2; // sessao e produtor
+    f->produtor.s = -1; f->produtor.sessao = c->sessao; f->produtor.fluxo = f;
+    snprintf(f->lista, sizeof f->lista, "%s", lista);
+    fluxoAtual = f;
+    if (pthread_create(&t, NULL, pxProduzir, f) != 0) {
+      fluxoAtual = NULL; pxFluxoDestruir(f); pthread_mutex_unlock(&trava); return NULL;
+    }
+    pthread_detach(t);
+  }
+  if (f) {
+    f->refs++;
+    pthread_mutex_lock(&f->trava);
+    f->leitores++; f->semLeitorDesde = 0;
+    c->pos = pxCursorInicio(f); c->proteger = 1;
+    c->proxima = f->clientes; f->clientes = c;
+    pthread_mutex_unlock(&f->trava);
+  }
+  pthread_mutex_unlock(&trava);
+  return f;
+}
+
+static uint64_t pxCursorInicio(const PxFluxo *f) {
+  uint64_t ini = f->fim;
+  unsigned n = f->nSegmentos < 64 ? f->nSegmentos : 64;
+  for (unsigned i = 0; i < n; i++)
+    if (f->segmentos[i] >= f->inicio && f->segmentos[i] < ini) ini = f->segmentos[i];
+  // Um segmento pode exceder o buffer. Ainda ha TS alinhado disponivel;
+  // o leitor repoe PAT/PMT e o decoder reencontra o proximo quadro chave.
+  return ini == f->fim ? f->inicio : ini;
+}
+
+static void pxServirFluxo(PxConexao *c) {
+  const char cab[] = "HTTP/1.1 200 OK\r\nContent-Type: video/mp2t\r\n"
+    "Cache-Control: no-cache\r\nConnection: close\r\n\r\n";
+  PxFluxo *f = c->fluxo;
+  unsigned char *b = malloc(PX_BLOCO);
+  uint64_t pos;
+  int reporTabelas = 1;
+  if (c->s < 0) { free(b); return; }
+  if (!b || !pxEnviar(c->s, cab, sizeof cab - 1)) { free(b); return; }
+  pthread_mutex_lock(&f->trava); pos = c->pos; pthread_mutex_unlock(&f->trava);
+  while (pxViva(c)) {
+    size_t n, off, primeira;
+    PxTabelas tab = {0};
+    pthread_mutex_lock(&f->trava);
+    if (pos >= f->fim && !f->encerrado) {
+      struct timespec ts;
+      clock_gettime(CLOCK_REALTIME, &ts); ts.tv_sec++;
+      pthread_cond_timedwait(&f->chegou, &f->trava, &ts);
+    }
+    if (pos < f->inicio) { pos = pxCursorInicio(f); reporTabelas = 1; }
+    if (pos >= f->fim) {
+      int fim = f->encerrado;
+      unsigned char byte;
+      ssize_t r;
+      pthread_mutex_unlock(&f->trava);
+      if (fim) break;
+      // Detecta a sonda fechada mesmo sem segmento novo, sem conservar um
+      // leitor fantasma e a ingestao apos o uMS sair.
+      r = recv(c->s, &byte, 1, MSG_PEEK | MSG_DONTWAIT);
+      if (r == 0 || (r < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)) break;
+      continue;
+    }
+    n = f->fim - pos > PX_BLOCO ? PX_BLOCO : (size_t)(f->fim - pos);
+    off = (size_t)(pos % PX_BUFFER);
+    primeira = n < PX_BUFFER - off ? n : PX_BUFFER - off;
+    memcpy(b, f->buffer + off, primeira);
+    memcpy(b + primeira, f->buffer, n - primeira);
+    if (reporTabelas) { tab = f->tabelas; reporTabelas = 0; }
+    pos += n;
+    pthread_mutex_unlock(&f->trava);
+    if (tab.temPat && tab.temPmt &&
+        (!pxEnviar(c->s, tab.pat, 188) || !pxEnviar(c->s, tab.pmt, 188))) break;
+    if (!pxEnviar(c->s, b, n)) break;
+    pthread_mutex_lock(&f->trava);
+    c->pos = pos; c->proteger = 1;
+    pthread_cond_broadcast(&f->chegou);
+    pthread_mutex_unlock(&f->trava);
+  }
+  free(b);
 }
 
 static void *pxAtender(void *u) {
@@ -297,6 +527,26 @@ static void *pxAtender(void *u) {
     pxEnviar(c->s, nao, sizeof nao - 1);
     goto sair;
   }
+  { const char *p = req, *range = "absent";
+    while ((p = strchr(p, '\n')) != NULL) {
+      p++;
+      if (!strncasecmp(p, "Range:", 6)) {
+        const char *v = p + 6;
+        while (*v == ' ' || *v == '\t') v++;
+        range = !strncmp(v, "bytes=0-", 8) ? "inicio" : "outro";
+        break;
+      }
+    }
+    // A URI e os demais cabecalhos podem conter credenciais. Somente a
+    // categoria do Range ajuda a confirmar as sondas do uMS no aparelho.
+    printf("[proxy-ts] sessao %u: GET (Range %s)\n", c->sessao, range);
+    fflush(stdout); }
+  // Uma conexao da mesma sessao usa a ingestao que ja esta em andamento.
+  c->fluxo = pxFluxoPegar(c, NULL);
+  if (c->fluxo) {
+    printf("[proxy-ts] sessao %u: GET compartilha a ingestao HLS\n", c->sessao);
+    fflush(stdout); pxServirFluxo(c); goto sair;
+  }
   // O QUE A FONTE E: um trecho do comeco decide entre TS continuo e playlist.
   { long n = 0;
     int st = 0, er = 0;
@@ -306,20 +556,11 @@ static void *pxAtender(void *u) {
     b = rede_baixar_trecho_st(c->fonte, 8, 0, 65535, &n, &st, &er, fin, sizeof fin);
     if (b && n >= 7 && !strncmp(b, "#EXTM3U", 7)) {
       free(b);
-      snprintf(cab, sizeof cab, "HTTP/1.1 200 OK\r\nContent-Type: video/mp2t\r\n"
-               "Cache-Control: no-cache\r\nConnection: close\r\n\r\n");
-      pthread_mutex_lock(&trava);
-      if (conexaoAtiva) ((PxConexao *)conexaoAtiva)->cancelar = 1;
-      conexaoAtiva = c;
-      pthread_mutex_unlock(&trava);
-      if (pxEnviar(c->s, cab, strlen(cab))) {
+      c->fluxo = pxFluxoPegar(c, fin[0] ? fin : c->fonte);
+      if (c->fluxo) {
         printf("[proxy-ts] sessao %u: a fonte e playlist HLS; entregando TS continuo\n", c->sessao);
-        fflush(stdout);
-        pxHls(c, fin[0] ? fin : c->fonte);
+        fflush(stdout); pxServirFluxo(c);
       }
-      pthread_mutex_lock(&trava);
-      if (conexaoAtiva == c) conexaoAtiva = NULL;
-      pthread_mutex_unlock(&trava);
     } else {
       // TS CONTINUO (ou qualquer outra coisa): o player vai direto a fonte,
       // como antes do proxy. O 302 nao custa nada ao caminho que ja tocava.
@@ -334,6 +575,16 @@ static void *pxAtender(void *u) {
     }
   }
 sair:
+  if (c->fluxo) {
+    PxConexao **p;
+    pthread_mutex_lock(&c->fluxo->trava);
+    for (p = &c->fluxo->clientes; *p && *p != c; p = &(*p)->proxima) {}
+    if (*p) *p = c->proxima;
+    if (--c->fluxo->leitores == 0) c->fluxo->semLeitorDesde = time(NULL);
+    pthread_cond_broadcast(&c->fluxo->chegou);
+    pthread_mutex_unlock(&c->fluxo->trava);
+    pxFluxoSoltar(c->fluxo);
+  }
   close(c->s);
   free(c);
   return NULL;
@@ -349,7 +600,9 @@ static void *pxOuvir(void *u) {
 #ifdef SO_NOSIGPIPE
     { int um = 1; setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &um, sizeof um); }
 #endif
-    { struct timeval tv = { 10, 0 }; setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv); }
+    { struct timeval tv = { 10, 0 };
+      setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+      setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv); }
     c = calloc(1, sizeof *c);
     if (!c) { close(s); continue; }
     c->s = s;
@@ -392,7 +645,8 @@ int proxyts_url(const char *fonte, char *saida, size_t n) {
   if (!fonte || !fonte[0] || !saida || n < 40) return 0;
   pthread_mutex_lock(&trava);
   if (!pxSubir()) { pthread_mutex_unlock(&trava); return 0; }
-  if (cancelarEmCurso) *cancelarEmCurso = 1;
+  if (cancelarEmCurso) __atomic_store_n(cancelarEmCurso, 1, __ATOMIC_RELEASE);
+  pxFluxoParar();
   snprintf(fonteAtual, sizeof fonteAtual, "%s", fonte);
   s = atomic_fetch_add(&sessaoAtual, 1) + 1;
   pthread_mutex_unlock(&trava);
@@ -402,7 +656,8 @@ int proxyts_url(const char *fonte, char *saida, size_t n) {
 
 void proxyts_parar(void) {
   pthread_mutex_lock(&trava);
-  if (cancelarEmCurso) *cancelarEmCurso = 1;
+  if (cancelarEmCurso) __atomic_store_n(cancelarEmCurso, 1, __ATOMIC_RELEASE);
+  pxFluxoParar();
   atomic_fetch_add(&sessaoAtual, 1);
   fonteAtual[0] = 0;
   pthread_mutex_unlock(&trava);

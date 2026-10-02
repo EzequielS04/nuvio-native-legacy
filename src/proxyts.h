@@ -14,6 +14,9 @@
 //     antes do primeiro pacote de cada segmento.
 // Uma sessao por vez: pedir uma URL nova encerra a anterior e cancela o
 // download dela (a conta Xtream costuma ter 1 tela). Logs [proxy-ts] sem URL.
+// GETs simultaneos do uMS compartilham uma ingestao, com buffer de ate 16MiB;
+// fechar uma sonda nao interrompe outro leitor. Sem leitores, encerra apos uma
+// folga de 3s para a reabertura do uMS (ou ao terminar o download em curso).
 #ifndef NV_PROXYTS_H
 #define NV_PROXYTS_H
 #include <stddef.h>
