@@ -1,14 +1,52 @@
 # Ajustes: pesquisa e proposta de UX
 
-Base: `release/1.6.6` (399c195). Etapa de pesquisa: nada de código de produto,
-nenhum texto novo de tela. Os rótulos citados abaixo são os de hoje, só para
-identificar a linha; os textos novos vêm depois, numa lista à parte.
+Base da pesquisa: commit `399c1953`, então no ramo `release/1.6.6`. O nome
+do ramo não identifica a versão do app: esse commit já sucede o commit de
+versão 1.7.0. Revisão da proposta: **02/10/2026**. Estado: **proposta revisada,
+sem implementação ou validação com pessoas/controle físico nesta revisão**.
+
+Os rótulos e wireframes abaixo são provisórios; os textos finais de tela e
+suas traduções vêm depois. O inventário descreve a base indicada, não uma
+medição de produção atual. A referência local `release/1.7.1` foi consultada
+em `be9e413e`; contém mudanças em Ajustes e Spotlight que a implementação
+precisará incorporar. Não usar o checkout principal divergente como se fosse
+a continuação desta base.
 
 O pedido do dono: "repensar em como as pessoas usam e mexem nas configs, para
 entender tudo o que cada coisa faz, para deixar do jeito da pessoa". A troca de
 visual da 1.6.x foi rejeitada ("o problema tá igual, só tá com outro design").
 Este documento tenta explicar por que o problema continua igual e o que mudaria
 de fato.
+
+## Protótipo para experimentar
+
+A proposta tem um [protótipo local navegável](prototypes/ajustes-ux/README.md)
+com Trailers, Idiomas e Desempenho: 18 opções, busca, diferenças do padrão,
+folhas de escolha e experimento reversível. Valores e sincronização são
+simulados; a demonstração não altera o app ou a conta. Os testes de navegador
+registrados no README não substituem validação com pessoas ou em TV física.
+
+## Resultado da revisão
+
+A direção continua válida: organizar por intenção, explicar consequências
+e permitir experimentar com segurança. A proposta precisava fechar o
+comportamento, reduzir promessas sem evidência e dividir melhor a entrega.
+
+| Prioridade | Lacuna encontrada | Decisão desta proposta |
+|---|---|---|
+| Alta | Setas mudam valores e também precisam navegar entre colunas | Navegar não altera valores; OK abre edição; painel de ajuda não recebe foco |
+| Alta | Diferença do padrão é atribuída à pessoa sem histórico | Usar “Diferente do padrão”; origem/data só quando registradas |
+| Alta | Prévia usa caminhos que já gravam e sincronizam | Separar rascunho, aplicação e confirmação; cancelar recompõe o estado anterior |
+| Alta | Perfil “só desta TV” inclui preferências sincronizáveis | Restringir perfis a uma lista comprovadamente local; não mudar gosto automaticamente |
+| Alta | A Fase 1 promete alterar só tabelas, mas inclui busca e estado novo | Separar navegação, busca e comparação/restauração em entregas próprias |
+| Alta | Logs de alteração são tratados como prova de descoberta e causalidade | Manter limites da amostra e validar tarefas com pessoas |
+| Média | Onze seções e três colunas são tratadas como solução comprovada | Prototipar e comparar custo em teclas, legibilidade e entendimento |
+
+Contextos de uso a validar: quem quer apenas assistir e corrigir um incômodo;
+quem personaliza a aparência; quem tenta resolver lentidão ou falha. São
+hipóteses de uso, não personas obtidas em entrevistas. A avaliação é
+qualitativa: não há base para atribuir uma nota numérica de usabilidade ou
+prometer redução percentual de tempo.
 
 ---
 
@@ -21,7 +59,7 @@ Contagem feita por script sobre o fonte, não à mão.
 | | |
 |---|---|
 | Opções no enum `AJ_*` | **176** |
-| Por tipo | 127 escolhas (97 delas são liga/desliga), 10 números, 33 ações, 6 só leitura |
+| Por tipo | 127 escolhas (97 binárias, das quais 90 usam Ligado/Desligado), 10 números, 33 ações, 6 só leitura |
 | Ajustes com valor (escolha + número) | 137: 76 podem ir para a conta, 61 ficam só nesta TV |
 | Chaves com "-" (não gravam) | 41 (ações, leituras, credenciais em arquivo próprio) |
 | Estrutura da tela | 9 categorias › 13 grupos recolhíveis + 9 rótulos fixos › 176 linhas |
@@ -31,6 +69,12 @@ Contagem feita por script sobre o fonte, não à mão.
 | Têm frase de ajuda própria | 175 de 176 (falta só `AJ_SALVOS_DEST`, que cai no texto genérico) |
 | Têm a linha "o que muda na prática" (`efeitoOpcao`) | 14 |
 | Têm prévia desenhada (`desenhaPrevia`) | 8 opções, 5 desenhos distintos — todos **esquemáticos** (retângulos cinza), não a tela de verdade |
+
+Enum, tipos, categorias, elegibilidade conta/local e cobertura do mapa foram
+recontados nesta revisão. As contagens de qualidade da ajuda e de prévias
+continuam sendo avaliações da pesquisa original. As 176 linhas incluem
+`AJ_GPU_EFEITOS`, visível apenas em builds TPK/Android; nos demais são 175
+linhas e 12 em Avançado. Elegibilidade à conta não comprova sincronização.
 
 **Qualidade da ajuda.** A quantidade de texto não é o problema; o tipo de
 texto é. Lendo as 175 frases, uma a uma:
@@ -58,7 +102,7 @@ achei"):
 | Trailer | Layout da Home (destaque, som, espera) · Foco no pôster (cartaz em foco) · Página de detalhes (automático, som, botão, qualidade, proporção, fonte) — 10 linhas em 3 grupos |
 | Notas | Conteúdo da Home › Avaliações gerais · Integrações › MDBList (8 fontes) · Integrações › Notas no título (11 fontes) |
 | Arte | Layout da Home (Background do hero, Destaque com outra arte) · Pôsteres personalizados (7) · Arte do addon (4) · Integrações › TMDB › Arte localizada · fanart.tv |
-| Ficha do título | Página de detalhes (Priorizar metadados externos **e** Usar sempre o Cinemeta, que se sobrepõem) · TMDB (14 toggles) |
+| Ficha do título | Página de detalhes (Priorizar metadados externos **e** Usar sempre o Cinemeta, que se sobrepõem) · TMDB (13 toggles e 1 idioma) |
 
 **Por que a troca de visual não resolveu.** A árvore atual é a do app web
 (`SECTION_META` de `settingsScreen.js`), que organiza por **onde o ajuste mora
@@ -68,6 +112,7 @@ os mesmos caminhos de 4 níveis, os mesmos assuntos espalhados e as mesmas
 prévias que não mostram a tela da pessoa.
 
 O que já existe e serve de base (não reinventar):
+
 - `TELA[]` é **separada do enum** desde a 1.4.4: reorganizar a tela não toca
   `valor[]`, `CHAVE[]` nem o arquivo.
 - `inativa()` já conhece as dependências entre opções (e diz o porquê).
@@ -77,10 +122,42 @@ O que já existe e serve de base (não reinventar):
   numa linha (usados pelos cartões de novidades).
 - O menu de segurar OK no cartaz (`ctxmenu.c`) já tem "Estilo da fileira": um
   ajuste contextual que funciona.
-- `perfiltv.c` (`PtvPerfil`) e o diagnóstico já aplicam um perfil "Qualidade"
-  ou "Desempenho"; `gpunivel.c` já mede a GPU no .tpk.
+- `perfiltv.c` (`PtvPerfil`) dimensiona recursos como texturas, rede e largura
+  de arte; não implementa os novos conjuntos visuais da §4.6. `gpunivel.c`
+  já oferece medição de GPU como entrada para diagnóstico.
 - O Spotlight (`spotlight.c`) busca títulos, pessoas, canais, catálogos e
   addons — **não busca ajustes**.
+
+### 1.1 Diferenças verificadas depois da base
+
+Comparação local em 02/10/2026, ancorada em commits, sem executar o app:
+
+| Medida | `399c1953` (pesquisa) | `be9e413e` (release/1.7.1 consultada) |
+|---|---:|---:|
+| Opções no enum | 176 | 182 |
+| Escolhas / números / ações / leituras | 127 / 10 / 33 / 6 | 130 / 11 / 35 / 6 |
+| Com valor: elegíveis à conta / locais | 76 / 61 | 76 / 65 |
+| Grupos recolhíveis | 13 | 14 |
+
+Acrescentar ao mapa, preservando enum e persistência existentes:
+
+| ID novo | Destino proposto | Tratamento |
+|---|---|---|
+| `AJ_SELO_VISTO` | Tela inicial › Fileiras | Básico; escolha local |
+| `AJ_SEEKR_LIGADO`, `AJ_SEEKR_FITA` | Reprodução › Miniaturas na barra de tempo | Básicos; escolhas locais |
+| `AJ_SEEKR_CHAVE`, `AJ_SEEKR_TESTAR` | Mesmo bloco de miniaturas | Básicos; configurar/testar serviço; chave protegida, fora da comparação de valores |
+| `AJ_SEEKR_AJUSTE` | Mesmo bloco de miniaturas | Avançado; correção local de tempo |
+
+O mapa-base continua com 116 básicas e 60 avançadas; incluir esse delta leva
+a **121 básicas e 61 avançadas** antes de agrupamentos e filtros de plataforma.
+Isso é cobertura de opções, não quantidade final de linhas visíveis.
+
+A normalização regional de idioma TMDB (`pt-br` → `pt`) já está no código da
+tag `v1.7.0` (`b07bb926`). A suspeita histórica da §2.1 não deve virar trabalho
+duplicado; vínculo com #209 e resultado em TV continuam não comprovados aqui.
+O Spotlight também mudou: integrar no código da versão-alvo, não copiar o
+arquivo da pesquisa. `seguro.c` e `perfiltv.c` não mudaram entre a base e
+`be9e413e`, portanto os limites técnicos descritos nas §§4.3/4.6 permanecem.
 
 ---
 
@@ -88,9 +165,17 @@ O que já existe e serve de base (não reinventar):
 
 ### 2.1 Registros das TVs (D1, só agregados)
 
-Janela: ~9,4 dias de registros, **265 aparelhos** (webOS 162, Tizen .wgt 73,
-.tpk 49, VIDAA 5, Android 3, Mac 1). Inclui as TVs de teste do dono. Viés:
-só quem tem envio de registro ligado.
+Recorte da pesquisa original: ~9,4 dias de registros, **265 aparelhos
+reportados** (webOS 162, Tizen .wgt 73, .tpk 49, VIDAA 5, Android 3, Mac 1).
+Inclui as TVs de teste do dono e só quem tem envio de registro ligado.
+
+**Limite da evidência:** os subtotais por plataforma somam **293**, não 265.
+Pode haver sobreposição, mas ela não está demonstrada. Faltam neste documento
+as datas exatas da janela, a consulta e a regra de deduplicação; os números
+abaixo foram preservados como relato histórico e **não foram reconsultados
+nesta revisão**. Não somar plataformas nem generalizar percentuais para toda
+a base até reconciliar essa diferença. Anexar apenas consulta e agregados,
+sem identificadores de aparelhos.
 
 **Não existe hoje uma linha de log por ajuste mudado.** O que dá para medir:
 
@@ -105,19 +190,30 @@ só quem tem envio de registro ligado.
 | `nao reconhecido; mantido` | `tmdb_language` com valor que a TV não conhece em 16+ aparelhos (`pt-br` 7, `ro` 4, `el`, `es-419`, `ru`, `ar`, `uk`); `selected_theme=CUSTOM/DARK` 3 |
 
 Leitura:
-- As pessoas **mexem**, e mexem no visual: vidro é o ajuste mais mudado e o que
-  mais derrubou o app. Entre as sessões lentas, 60% estão com vidro.
-  Recomendação por TV e "experimentar" têm demanda medida.
+- Entre os **10 ajustes monitorados pelo modo seguro**, vidro tem mais
+  aparelhos com mudanças e reversões registradas. Isso não prova que seja o
+  mais alterado entre todos os ajustes, nem que tenha causado as quedas.
+  Vidro ligado em 60% dos aparelhos com sessões lentas é associação, sem
+  grupo de comparação. Recomendação por TV e experimentação são hipóteses
+  justificadas para testar, não demanda ou efeito causal já demonstrados.
 - Quase um quarto mudou o número de fileiras — ajuste de "como fica a
   minha home", hoje no 1º grupo de Layout, ok.
-- A conta e a TV brigam por ajuste com frequência (120/200 arranques com
-  mudança vinda da conta). "O que mudou e de onde veio" não é luxo.
-- Achado fora do escopo, **suspeito, não provado**: `tmdb_language` "pt-br"
+- Em 120/200 aparelhos do recorte, o último arranque observado aplicou
+  mudanças da conta. Isso pode ser sincronização esperada; o log não prova
+  conflito ou frustração. Mostrar origem e alcance ajuda a explicar o estado.
+- Achado original fora do escopo, **suspeito, não provado**: `tmdb_language` "pt-br"
   da conta não casa com a lista `W_TMDB_LING` (que tem "pt"), então a TV
   ignora o idioma de metadados escolhido no web. Pode estar por trás do #209
-  (títulos em inglês com português escolhido). Merece uma etapa própria.
+  (títulos em inglês com português escolhido). O fallback regional já foi
+  tratado no código posterior (§1.1); falta comprovar a relação com o relato
+  e o comportamento no aparelho, não reimplementar a normalização.
 
 ### 2.2 Issues do GitHub (204 lidas pelo título, ~50 abertas e lidas inteiras)
+
+Síntese herdada da pesquisa original; as issues não foram relidas nesta
+revisão. Os números identificam relatos, não confirmam que cada falha ainda
+exista na versão atual. Antes de usar uma issue como critério de correção,
+registrar seu link, versão afetada, estado atual e reprodução.
 
 | Padrão | Issues |
 |---|---|
@@ -135,23 +231,22 @@ direto de que achar é o problema, não entender a frase.
 
 ---
 
-## 3. Referências (o que funciona com controle remoto)
+## 3. Referências verificadas e decisões para o Nuvio
 
-| Produto | O que faz bem | O que levar |
+Fontes primárias consultadas em 02/10/2026. Elas sustentam princípios; não
+demonstram que todas as TVs usam a mesma árvore ou o mesmo gesto de edição.
+
+| Fonte | Princípio documentado | Aplicação proposta |
 |---|---|---|
-| **tvOS Ajustes** | Lista curta de categorias por tarefa ("Vídeo e Áudio", "Acessibilidade"); valor à direita; OK abre a **lista de valores com ✓**, não alterna no lugar; painel com imagem do que a linha muda; legenda com **amostra ao vivo** do estilo | Escolha em lista vertical com explicação por valor; prévia ilustrada à direita |
-| **Google TV / webOS (ajustes rápidos)** | Engrenagem abre um **painel lateral por cima do conteúdo**: muda imagem/som e o efeito aparece atrás, na hora; "Todos os ajustes" fica um nível abaixo | Ajuste contextual sobre a tela real é a prévia mais honesta que existe |
-| **Google TV (primeira vez)** | Pergunta quais serviços a pessoa assina e personaliza a partir disso | Assistente curto de gosto, não de configuração |
-| **Netflix** | Quase nenhum ajuste no app; áudio/legenda escolhidos **no player**, lembrados por perfil | O lugar certo de um ajuste é onde ele é sentido |
-| **Kodi** | Nível de ajustes **Básico / Padrão / Avançado / Especialista**; texto de ajuda fixo embaixo; "restaurar padrão" por seção | Esconder o avançado por um interruptor, não por mais um nível de menu |
-| **Plex** | "Mostrar avançado" na própria lista; qualidade separada por rede local/remota; ajustes por aparelho vs por conta claramente separados | Dizer na linha se vale "nesta TV" ou "na conta" |
-| **Stremio (TV)** | Uma página só, seções com âncora na coluna da esquerda, poucos ajustes | Poucas seções, todas rasas |
-| **Infuse** | Seções por assunto (Reprodução, Legendas, Áudio); descrição curta por linha; amostra da legenda | Legendas + áudio + idioma num lugar só |
-| **iOS / macOS / Android (telefone)** | Busca nos ajustes por palavra e sinônimo | tvOS não tem; aqui o Spotlight já existe e já tem teclado de D-pad |
+| [Android — Design for TV](https://developer.android.com/design/ui/tv/guides/foundations/design-for-tv) | Leitura à distância, pouca densidade e resposta clara ao D-pad | Testar a ficha no sofá; não encolher texto para caber em três colunas |
+| [Android — TV navigation](https://developer.android.com/training/tv/get-started/navigation) | Navegação previsível, foco visível e acesso aos controles pelo direcional | Definir transições, retorno e restauração de foco antes do desenho final |
+| [Apple — Focus and selection](https://developer.apple.com/design/human-interface-guidelines/focus-and-selection/) | Foco e ativação têm papéis distintos; evitar mudanças inesperadas de foco | Percorrer um ajuste não deve ativá-lo nem salvar uma escolha |
+| [Kodi — Settings](https://kodi.wiki/view/Settings) | Níveis Básico, Padrão, Avançado e Especialista controlam opções visíveis | Testar divulgação progressiva sem tornar busca ou recuperação dependentes do nível |
 
-Regras de controle remoto que todas seguem: no máximo 2 níveis até a linha;
-←/→ só para liga/desliga e números; acima de 2 valores, OK abre lista; Voltar
-sempre sobe um nível; o foco nunca some.
+Painel sobre a tela real, busca por sinônimos e restauração contextual são
+decisões de projeto a validar no Nuvio. A regra de duas camadas descreve a
+navegação **seção → opção**; seletores, conexões de serviços e confirmações
+podem acrescentar passos. Medir o caminho completo, não só profundidade.
 
 ---
 
@@ -159,17 +254,22 @@ sempre sobe um nível; o foco nunca some.
 
 ### 4.1 Arquitetura por intenção
 
-Onze seções pela pergunta que a pessoa tem na cabeça. Toda opção do enum foi
-encaixada (conferido por script: 176, nenhuma repetida, nenhuma faltando).
-**116 visíveis, 60 em Avançado** (escondidas até ligar "Mostrar ajustes
-avançados", como no Kodi/Plex). Agrupando os blocos de liga/desliga parecidos
-numa só linha de múltipla escolha (11 notas, 4 itens da barra, 5 chaves de
-serviço, Stalker/Xtream), sobram **~85 linhas visíveis**, nenhuma seção acima
-de 24, e todo caminho com no máximo 2 níveis.
+Onze seções são a **hipótese inicial**, não uma quantidade validada. O mapa
+da base cobre 176 opções, sem repetição nem ausência, com **116 básicas e 60
+avançadas**, recontadas nesta revisão. O total de linhas depende de
+agrupamentos e da plataforma. A previsão anterior de ~85 não era uma contagem
+reproduzível e deixa de ser meta; medir se as pessoas concluem suas tarefas.
+O delta posterior à base deve entrar no mapa antes da implementação (§1.1).
+
+Agrupar notas ou itens da barra pode facilitar escolhas relacionadas, mas
+acrescenta uma folha e teclas. Credenciais e provedores são fluxos de conexão,
+não múltipla escolha; não agrupá-los apenas para baixar a contagem. Cada
+opção terá um destino canônico e referências cruzadas quando houver duas
+expectativas razoáveis, como trailer do cartaz em “Cartazes” e “Trailers”.
 
 ```
  Buscar nos ajustes            (abre o Spotlight já filtrado em Ajustes)
- O que você mudou (12)         (só aparece com algo diferente do padrão)
+ Diferente do padrão (12)      (permanece acessível quando vazio)
  ─────────────────────────────
  1  Tela inicial               estilo · fileiras · Continuar assistindo · barra lateral
  2  Cartazes e arte            cartaz em foco · forma · de onde vem a arte
@@ -216,223 +316,447 @@ Mapa (prefixo `AJ_` omitido; *itálico* = Avançado):
 | 11 | VERSAO_I, ATUALIZAR, ENVIAR_LOG, ENVIO_AUTO |
 
 Outras regras da arquitetura:
+
 - **Linhas de leitura saem da lista** (Versão, Perfil, Sincronização, Conta
   Xtream, Memória usada): viram o cabeçalho da seção. Resolve #71.
-- **Linha que não se aplica some** em vez de ficar cinza (TV ao vivo sem
-  provedor mostra só "Adicionar provedor"; Som do trailer na Samsung .wgt, que
-  é sempre mudo, não aparece). O cinza com explicação de `inativa()` fica só
-  para dependência que a pessoa pode resolver na mesma tela.
+- **Avançada:** recolhida por preferência, mas encontrada na busca e em
+  “Diferente do padrão”. “Mostrar avançados” fica no topo da lista, alcançável
+  sem percorrer todas as opções. Busca pode revelar uma linha temporariamente.
+- **Dependente:** continua visível, com motivo e ação para abrir o requisito,
+  mesmo em outra seção. Não sumir com “Som do trailer” só porque o trailer
+  foi desligado; isso impediria entender a relação entre os dois.
+- **Incompatível com a plataforma:** pode sair da lista padrão, mas a busca
+  explica a indisponibilidade. Não oferecer botão sem efeito. TV ao vivo sem
+  provedor mostra uma entrada para conectar um provedor e explica o requisito.
+- Manter a ordem estável; se um filtro remover a linha em foco, ir para a
+  linha válida mais próxima ou o cabeçalho. Foco e seleção não dependem só
+  de cor. Um valor avançado já alterado nunca desaparece da recuperação.
 - **Duas linhas que se sobrepõem viram uma** com valores claros: "Priorizar
   metadados externos" + "Usar sempre o Cinemeta" → uma escolha de 3 valores
   (o mapeamento para as duas chaves continua por baixo, nada muda no arquivo).
 
-### 4.2 A tela
+### 4.2 A tela e o contrato do controle remoto
 
+O esboço de três colunas é uma alternativa de protótipo. Só as duas primeiras
+participam da navegação; a ficha à direita é informativa. Os controles de
+alterar, restaurar e abrir requisito ficam na folha acessível por OK.
+
+```text
+┌─────────────────────┬────────────────────────────────┬──────────────────────────┐
+│ Buscar              │ Trailers                       │ No cartaz em foco        │
+│ Diferente do padrão │ Mostrar avançados: Não         │                          │
+│                     │                                │ Ao parar num cartaz,     │
+│ Tela inicial        │ ONDE TOCA                      │ mostra o trailer quando  │
+│ Cartazes e arte     │ No destaque do topo  Ligado    │ os requisitos permitem.  │
+│ Trailers            │ > No cartaz em foco  Ligado  › │                          │
+│ Página do título    │ Na página do título  Ligado    │ Desligado: mantém a foto │
+│ Reprodução          │ Botão de trailer     Ligado    │                          │
+│ Idiomas e legendas  │                                │ Vale: neste perfil*     │
+│ …                   │ SOM E IMAGEM                   │ Padrão: Desligado        │
+│                     │ Som no destaque      Desligado │                          │
+│                     │ Fonte do trailer     Automático│ OK: opções e detalhes   │
+└─────────────────────┴────────────────────────────────┴──────────────────────────┘
 ```
-┌──────────────┬──────────────────────────────────┬────────────────────────────┐
-│ Buscar       │ Trailers                         │  ┌──────────────────────┐  │
-│ O que mudou 3│                                  │  │  [home de verdade,   │  │
-│──────────────│ ONDE TOCA                        │  │   cartaz em foco com │  │
-│ Tela inicial │ No destaque do topo      Ligado ●│  │   o trailer no fundo]│  │
-│ Cartazes     │▶No cartaz em foco      ◀ Ligado ▶│  └──────────────────────┘  │
-│▶Trailers     │ Na página do título      Ligado  │  Parar o foco num cartaz   │
-│ Página       │ Botão de trailer         Ligado  │  por 3 s toca o trailer    │
-│ Reprodução   │                                  │  dele no fundo, sem som.   │
-│ Idiomas      │ SOM E IMAGEM                     │                            │
-│ Aparência    │ Som no destaque       Desligado  │  Desligado: o fundo fica   │
-│ TV ao vivo   │ Fonte do trailer     Automático ›│  com a foto.               │
-│ Contas       │                                  │  Precisa de: Expandir      │
-│ Desempenho   │                                  │  cartaz ao focar  [ir]     │
-│ Sobre        │ ○ Mostrar ajustes avançados      │  Vale: só nesta TV         │
-│              │                                  │  Padrão: Desligado · você  │
-│              │                                  │  mudou hoje   [Restaurar]  │
-└──────────────┴──────────────────────────────────┴────────────────────────────┘
-```
 
-O painel da direita deixa de ser parágrafo e vira uma ficha fixa, sempre na
-mesma ordem, cada parte curta:
-1. **Prévia** (ver 4.3).
-2. **Ligado:** o que a pessoa vê de diferente. **Desligado:** idem. Uma frase
-   cada. Para escolhas, uma frase por valor.
-3. **Precisa de / afeta:** a dependência, com atalho que leva à outra linha
-   (hoje `inativa()` só diz em texto).
-4. **Vale:** "só nesta TV" ou "na sua conta (também no app web e nas outras
-   TVs)". Sai de `somenteDesteAparelho` + chave com/sem "-".
-5. **Padrão e histórico:** valor de fábrica, se a pessoa mudou, quando, e de
-   onde veio (esta TV / conta). Botão de restaurar a linha.
+`*` O escopo e o estado de sincronização são calculados para a chave e o
+valor efetivos, não escritos de forma fixa no desenho. A folha detalha os
+requisitos exatos; para trailer no cartaz, a base aceita expansão **ou**
+formato paisagem e o modo seguro pode suspender o efeito.
 
-Escolha com mais de 2 valores (Layout da home, Fonte do trailer, Cor de
-destaque, Idioma, Background do hero…): OK abre **lista vertical** com todos
-os valores, cada um com sua frase e sua prévia; ↑/↓ troca a prévia, OK
-confirma, Voltar desiste. ←/→ continua valendo para liga/desliga e números.
-Hoje, ciclar com ←/→ mostra um valor por vez e esconde os outros.
+| Contexto | Direcionais | OK | Voltar |
+|---|---|---|---|
+| Coluna de seções | ↑/↓ percorrem; → entra na lista | Entra na lista, preservando última linha válida | Retorna à tela de origem |
+| Lista de opções | ↑/↓ percorrem; ← volta às seções; → não altera valor | Abre folha de edição ou o fluxo identificado na linha | Volta às seções; em entrada por busca/atalho, retorna à origem |
+| Folha de escolha | ↑/↓ percorrem valores e ações; ✓ marca o valor salvo | Confirma o candidato ou executa a ação explicitamente escolhida | Descarta candidato e devolve foco à linha |
+| Folha numérica | ←/→ ajustam o candidato; ↑/↓ alcançam Aplicar/Cancelar | Aplica apenas quando Aplicar está em foco | Descarta candidato |
+| Folha de seleção múltipla | ↑/↓ percorrem itens e Aplicar/Cancelar | Marca candidato; só Aplicar confirma o conjunto | Descarta todas as mudanças da folha |
+| Teclado/diálogo subordinado | Conforme o componente | Confirma apenas esse componente | Fecha uma camada, sem saltar até a home |
 
-### 4.3 Prévia ao vivo: três níveis, do mais honesto ao mais barato
+Toda linha editável, inclusive liga/desliga, usa OK para entrar na edição.
+Isso custa uma ativação extra; comparar com a tela atual nas tarefas da §7.
+Não mudar gestos entre linhas sem indicação visível. Ações como sair da conta
+ou conectar serviço não simulam seletores de valor. Não depender de voz,
+tecla colorida ou segurar OK para acessar uma função essencial.
 
-1. **A própria tela (ajuste rápido).** Painel lateral de ~40% da largura por
-   cima da tela onde a pessoa está (home, título, player), como os ajustes
-   rápidos da webOS/Google TV. A tela de trás continua sendo desenhada e lê
-   os `ajustes_*()` a cada quadro: mudar a borda, o raio, o vidro, a cor, os
-   rótulos, o relógio, as notas, a profundidade aparece **na home dela, com os
-   cartazes dela**. É a resposta direta ao "entender o que cada coisa faz".
-   Precisa medir quais ajustes são lidos por quadro e quais exigem remontar
-   (fileiras, itens, layout, idioma); estes vão para o nível 3.
-2. **Miniatura com a arte de verdade** na tela cheia de Ajustes: o desenho
-   de `desenhaPrevia` passa a usar texturas que já estão no `tex_cache` (os
-   cartazes e o fundo do destaque atuais) em vez de retângulos cinza. Antes /
-   depois lado a lado para os liga/desliga visuais.
-3. **Experimentar com volta automática** para o que é pesado ou exige
-   remontar (Layout da home, limite de fileiras, 4K, vidro, tema imersivo):
-   aplica, volta para a home, mostra uma pílula "Manter · Voltar (15 s)" como
-   a troca de resolução de um sistema operacional. Sem resposta, volta. Usa o
-   diário do `seguro.c`, que já confirma/desfaz exatamente esses ajustes.
+Ao voltar, preservar consulta, rolagem, seção e identificador da linha, não
+apenas seu índice na lista filtrada. Se a origem deixou de existir, pousar
+no ancestral válido mais próximo. Atualizações assíncronas não roubam foco.
+
+**Ficha curta:** efeito do valor atual, consequência da alternativa,
+requisito quando necessário, alcance e padrão. Texto completo e ações ficam
+na folha. Não colocar controles desenhados no painel sem caminho pelo D-pad.
+Não usar só cor para distinguir foco, seleção, erro e indisponibilidade.
+
+Comparar três colunas com duas colunas e descrição ampliada na folha. Em
+720p ou com tradução longa, priorizar leitura e reduzir conteúdo simultâneo;
+não reduzir a fonte para encaixar tudo. Validar foco visível, margens,
+contraste em todos os temas e uso com animações reduzidas. Uma imagem de
+prévia só entra se explicar o efeito; texto continua suficiente sem ela.
+
+### 4.3 Prévia e experimento: aplicar sem perder a escolha anterior
+
+Há três estados distintos: **candidato**, **em teste** e **confirmado**.
+Percorrer valores não grava arquivo, não sobe para a conta e não conta como
+alteração confirmada. Voltar, trocar de perfil ou fechar o fluxo descarta o
+candidato. Se não houver prévia segura, mostrar uma explicação ou miniatura;
+não simular cancelamento enquanto a mudança já foi sincronizada.
+
+1. **A própria tela, em ajuste rápido.** Painel lateral sobre a superfície
+   onde o efeito é percebido, com largura e densidade a testar. A cena de
+   fundo pode ler valores temporários de opções elegíveis. Antes de habilitar
+   um ajuste, verificar efeitos colaterais: alguns acessos remontam fileiras,
+   carregam arte ou alteram estado fora de `valor[]`. “Aplicar” confirma;
+   “Cancelar” recompõe valor e efeitos. Reusar texturas com vida útil garantida;
+   não manter outra cópia da tela nem depender de uma imagem congelada para
+   afirmar que é prévia ao vivo.
+2. **Miniatura com arte real.** Reusar recursos disponíveis do cache, sem
+   exigir downloads; se faltarem, usar uma amostra identificada como exemplo.
+   Mostrar antes/depois para opções em que isso ajuda. A miniatura não prova
+   fluidez nem compatibilidade na TV.
+3. **Experimento que pode ser revertido.** Para alterações que exigem remontar
+   ou podem deixar a tela inutilizável, mostrar previamente o conjunto afetado
+   e as ações Manter/Voltar. O prazo inicial de 15 s é hipótese de teste e só
+   começa após a tela utilizável aparecer; considerar tempo maior para leitura.
+   Há também um prazo de aplicação, iniciado ao aplicar: se a tela não ficar
+   pronta dentro desse limite, reverter sem esperar a confirmação humana.
+   Definir esse limite com medições por plataforma; em travamento do processo,
+   a recuperação persistida deve atuar no próximo arranque.
+   Voltar, expiração ou falha recompõem o conjunto inteiro. Só a confirmação
+   autoriza publicar a preferência; nenhuma mudança parcial deve escapar.
+
+**Dependência de implementação:** `mudarValorDireto()` já aplica efeitos,
+grava e sinaliza sincronização. Não pode ser chamado a cada foco como se fosse
+uma API de prévia. É necessária uma camada temporária e um caminho único de
+confirmação, com captura dos valores anteriores e tratamento de falhas.
+
+`seguro.c` protege contra queda: confirma após 180 s ou saída limpa e tenta
+reverter no arranque seguinte após falha. Isso **não equivale** à confirmação
+humana com prazo de 15 s; `AJ_HOME_LAYOUT` sequer integra a lista de riscos
+nessa base. Coordenar os dois mecanismos: registrar transação, perfil e lote;
+impedir que estabilidade ou saída limpa confirmem um experimento não aceito;
+preservar recuperação após reinício e não expulsar mudança pendente do diário.
+O modo seguro continua com prioridade sobre o experimento e deve explicar
+quando suspender um efeito.
 
 ### 4.4 Busca nos ajustes
 
-- O Spotlight ganha o grupo **Ajustes**: indexa rótulo, valores, a frase da
-  ajuda e uma lista de sinônimos por linha (legenda/subtitle/CC, dublado,
-  trailer, 4K/HDR/DV, lento/travando, barra/menu). No idioma da interface,
-  pelo `i18n` que já existe.
-- Resultado abre Ajustes com o foco na linha e o grupo aberto. Generaliza
-  `ajustes_abrir_na_cor()` & cia. num `ajustes_abrir_em(op)`.
-- "Buscar" é a primeira linha da coluna de categorias, e a tecla de busca/voz
-  do controle dentro de Ajustes já abre filtrado.
+- O Spotlight ganha o grupo Ajustes e um modo exclusivo aberto por “Buscar”
+  na tela de configurações. Nesse modo, consultar somente índice local; não
+  disparar busca de títulos, pessoas ou addons nem misturar seus recentes.
+- Indexar rótulo, valores não sensíveis, ajuda e sinônimos revisados por idioma
+  (legenda/subtitle/CC, dublado, trailer, lento/travando). Não indexar senha,
+  token, URL de provedor, nome de perfil ou conteúdo digitado em credenciais.
+- Priorizar correspondência exata de rótulo, depois sinônimo e ajuda; manter
+  ordenação estável. Mostrar caminho, valor atual e estado de disponibilidade.
+- Incluir avançadas. Ao abrir uma, revelar temporariamente a linha e informar
+  o motivo; isso não liga todos os avançados. Resultado dependente permite
+  chegar ao requisito; resultado incompatível explica por que não funciona
+  neste aparelho. Nunca conduzir a uma lista vazia ou à linha errada.
+- Generalizar os atalhos em `ajustes_abrir_em(op)`, com destino canônico e
+  contexto de retorno. Voltar recupera resultados e consulta anteriores.
+- Consulta vazia oferece temas locais; sem resultados, explicar como tentar
+  outro termo e manter acesso às seções. Busca funciona sem rede e sem voz.
+  Integrar a entrada de texto já existente na versão-alvo, sem reinstalar a
+  implementação antiga do Spotlight.
 
-### 4.5 "O que você mudou"
+### 4.5 “Diferente do padrão”, origem e restauração
 
-- Lista de tudo que difere do padrão de fábrica, agrupada por seção, com o
-  valor de fábrica ao lado, de onde veio (esta TV / conta) e quando.
-- Restaurar por linha e "Restaurar esta seção". Para chave da conta, o botão
-  diz que volta também no app web (ver Riscos).
-- Precisa de uma cópia constante dos padrões (`valor[]` é sobrescrito no
-  arranque) e de gravar data/origem da última mudança por chave.
-- Responde também ao "não confio que salvou" (#85, #129, #149): a pessoa vê
-  a própria mudança registrada.
+A primeira entrega compara preferências configuradas/salvas com **padrões da
+versão atual, aplicáveis à plataforma**. Apresentar separadamente o efeito
+vigente e suspensões pelo modo seguro, dependências ou capacidade da TV; não
+confundir idioma “Automático” com o idioma resolvido nem ocultar um valor
+salvo porque seu efeito está temporariamente suspenso. Diferença não prova
+autoria, data ou problema. O nome “O que você mudou” fica descartado enquanto
+esses fatos não existirem.
 
-### 4.6 Perfis prontos (Desempenho desta TV)
+- Criar uma referência imutável de padrões; `valor[]` é estado mutável. Se
+  houver padrão recomendado para o aparelho, nomeá-lo separadamente. Atualizar
+  o app pode mudar a comparação sem que ninguém tenha alterado a preferência.
+- Mostrar opções avançadas alteradas e estado vazio explicativo. Excluir ações,
+  leituras e credenciais da comparação/restauração automática. Opções compostas
+  mostram as duas chaves e preservam combinações legadas sem conversão silenciosa.
+- Informar duas coisas diferentes: **alcance** (aparelho ou preferência do
+  perfil) e **estado da gravação/sync**. “Salvo nesta TV”, “Aguardando
+  sincronização” e “Sincronizado” exigem evidência do caminho real. Falha de
+  gravação precisa aparecer; não prometer salvamento só porque o valor mudou.
+- Não deduzir exportação somente de `somenteDesteAparelho()` ou chave `"-"`:
+  há exceções por valor, chave ausente no blob e conta/rede sem suporte. Uma
+  chave compartilhável não está necessariamente publicada.
+- “Restaurar padrão” mostra o valor de destino e o alcance antes da confirmação.
+  Em preferência sincronizável, explicar que a mudança pode chegar às outras
+  TVs e ao app web do mesmo perfil. Aplicar pelo fluxo normal de efeitos e
+  sincronização; offline, indicar pendência. Reabrir confirma persistência local.
+- “Usar valor da conta” é outra operação, só disponível com valor remoto
+  conhecido. Não inventar essa ação sem manter a referência remota. Credenciais,
+  logout e reset completo continuam em fluxos próprios.
+- Restauração por seção fica para depois da restauração por linha; deve listar
+  o lote, omitir ações/segredos, tratar falha parcial e permitir desfazer de
+  forma coerente com o escopo compartilhado.
 
-Uma linha no topo da seção 10: **Leve / Equilibrado / Máximo / Personalizado**.
+**Histórico é uma entrega posterior.** Para valores preexistentes, origem e
+data são desconhecidas; não deduzi-las pela diferença do padrão nem pelo
+horário de carregamento. Novos registros distinguem confirmação local, conta,
+migração, recomendação e recuperação. Preferências de perfil e do aparelho
+têm escopos diferentes: respeitar `dePerfil()`, não gravar todo histórico em
+um arquivo por perfil. Definir limpeza no logout e preservar as preferências
+locais que hoje sobrevivem à saída.
 
-| | Leve | Equilibrado | Máximo |
-|---|---|---|---|
-| Vidro, tema imersivo | desligados | como a pessoa deixou | como a pessoa deixou |
-| Profundidade, trailer no cartaz | desligados | desligados | ligados |
-| Qualidade da imagem | Baixa | Padrão | Alta |
-| Fileiras / itens | 7 / 12 | 7 / 12 | escolha da pessoa |
-| Efeitos (.tpk) | Leves | Automático | Completos |
-| Interface | 720p | 1080p | 4K se a TV aceita |
+### 4.6 Desempenho desta TV: recomendações e conjuntos de mudanças
 
-- Antes de aplicar, mostra a lista do que muda ("muda 6 ajustes: …"); depois,
-  "Voltar ao que eu tinha" por um tempo (cópia dos valores anteriores).
-- Mexer em qualquer linha da tabela depois passa o perfil a "Personalizado".
-- Só toca ajustes **desta TV**; nenhum sobe para a conta (o perfil é sobre o
-  aparelho, não o gosto).
-- A recomendação usa o que o app já sabe: plataforma, RAM (`perfiltv.c`),
-  nível de GPU medido (`gpunivel.c`), quedas recentes (`seguro.c`) e FPS da
-  home (`[gpu-modos]`). Ex.: "Esta TV: webOS 4.5, 1 GB. Recomendado: Leve".
+Substituir a tabela universal Leve/Equilibrado/Máximo por uma proposta
+revisável para **este aparelho**, com o que muda, o que é preservado e por quê.
+“Máximo” não equivale a qualidade garantida; aceitar sinal 4K não comprova
+que a interface terá bom desempenho em 4K.
 
-### 4.7 Assistente de primeira vez (5 perguntas, pulável)
+A primeira versão considera apenas uma lista comprovadamente local:
+resolução da interface, qualidade/memória de imagens, limite de fileiras,
+itens por fileira, efeitos da GPU quando disponíveis e vidro. Cada campo
+precisa de limite por plataforma e do protocolo de experimento da §4.3.
+Sem evidência para recomendar, manter Automático e oferecer diagnóstico.
 
-Só em instalação nova sem ajustes da conta. Com conta que já traz ajustes, em
-vez do assistente: "Trouxemos N ajustes da sua conta" com link para "O que
-você mudou". Refazível em Ajustes › Sobre e ajuda.
+**Excluir da aplicação automática profundidade, trailer no cartaz e tema.**
+`AJ_PROF` e `AJ_FOCO_TRAILER` são sincronizáveis na base; trocar um tema dinâmico
+por fixo também pode torná-lo exportável. Não tratar preferências de gosto
+como ajuste local de desempenho. Um futuro override local exigiria projeto
+explícito de precedência, persistência e indicação do valor efetivo.
 
-1. Idioma da interface (já vem preenchido pelo automático; só confirma).
-2. Áudio: original ou dublado? Legenda: nunca / só quando o áudio não é meu
-   idioma / sempre, e em que idioma. (AUD_LINGUA, LEG_LINGUA)
-3. Ao apertar Reproduzir: o app escolhe a melhor fonte / quero escolher
-   sempre. (FONTE_MANUAL, FONTE_AUTO)
-4. Visual da home: Moderna / Padrão / Dinâmica, com a prévia de cada.
-5. Trailers sozinhos: sim / sem som / não. (HERO_TRAILER, DET_TRAILER_AUTO,
-   FOCO_TRAILER, sons)
+`PtvPerfil` já dimensiona recursos como texturas, rede e largura da arte;
+não representa esses novos conjuntos de preferências. Usar seu diagnóstico
+como entrada, não como prova de que o recurso proposto já existe. RAM, GPU,
+quedas e FPS podem orientar uma recomendação depois de validar a relação com
+o custo de cada opção por plataforma.
 
-O desempenho não vira pergunta: o perfil da TV é escolhido sozinho e dito
-no fim ("Esta TV ficou no Equilibrado; dá para trocar em Desempenho").
+Aplicação manual lista valores anteriores e propostos. Preservar escolhas
+existentes no arranque; não reaplicar um conjunto em toda abertura. Após
+ajuste manual, indicar Personalizado. Se os dados da TV justificarem uma
+mudança, oferecer uma recomendação explicada. “Voltar ao que eu tinha” usa
+uma captura do lote anterior e respeita perfil, concorrência e modo seguro.
+
+### 4.7 Assistente opcional de primeira vez
+
+Entrega posterior, condicionada às tarefas que continuarem difíceis. Só
+oferecer em instalação nova sem preferências recuperadas; não interceptar
+quem quer assistir. Pular mantém padrões explícitos e o assistente pode ser
+aberto depois. Conta existente recebe resumo de importação apenas quando
+número e origem forem conhecidos.
+
+Perguntas candidatas: idioma da interface; idioma preferido de áudio e de
+legenda; seleção automática ou manual da fonte; estilo da home; autoplay de
+trailers. Cada resposta mostra as opções afetadas e seu alcance. “Nunca/só
+quando necessário/sempre” para legendas exige política além de `LEG_LINGUA`;
+não prometer esse comportamento sem especificar suporte no player.
+
+Escolhas ficam em rascunho até um resumo final; Voltar preserva o rascunho e
+Sair/Pular não aplica respostas pela metade. Não selecionar silenciosamente
+um perfil visual com base em RAM. Manter o dimensionamento automático já
+existente e apresentar recomendações adicionais de forma explícita.
 
 ### 4.8 Atalhos contextuais
 
-O ajuste aparece onde ele é sentido (lição da Netflix), sem roubar gesto que
-já existe:
-- **Segurar OK num cartaz da home**: o menu já tem "Estilo da fileira"; ganha
-  "Ajustar a tela inicial…", que abre o ajuste rápido (4.3-1) com o bloco
-  daquela superfície (fileira → Fileiras; Continuar assistindo → bloco dele;
-  destaque → Estilo + Trailers).
-- **Player**: o painel (Legendas / Áudio / Fontes…) ganha "Ajustes de
-  reprodução" com qualidade, DV/Atmos, idioma padrão, estilo da legenda e
-  "Escolher a fonte ao reproduzir". Responde ao #57 no lugar certo.
-- **Página do título**: botão de opções com Trailers, Notas e Escurecimento.
-- **Mensagens que hoje explicam sem levar**: fileira do Simkl vazia,
-  trailer mudo na Samsung, canal que não abre, aviso de memória — cada uma
-  com "Abrir o ajuste".
-- Cartões de novidades continuam usando `ajustes_abrir_em(op)`.
+O mesmo ajuste pode ser alcançado de onde seu efeito é percebido, preservando
+um destino canônico e o contrato de edição:
 
-### 4.9 Medir o uso (para não decidir no escuro de novo)
+- Menu de segurar OK no cartaz: manter “Estilo da fileira” e acrescentar
+  entrada de ajustes da superfície atual. Toda opção também existe em Ajustes.
+- Player: preferências de reprodução, áudio/legenda e escolha da fonte, sem
+  interromper a sessão por navegar. Distinguir faixa desta reprodução de
+  preferência para próximas reproduções.
+- Página do título: trailers, notas e escurecimento, com retorno ao mesmo
+  título e posição. Mensagens de diagnóstico podem oferecer atalho específico.
+- Cartões de novidades: usam a mesma abertura por identificador. Se opção
+  ou plataforma não estiver disponível, explicar e oferecer destino válido.
 
-Uma linha de log por mudança: `[ajustes] mudou <chave> <antes> -> <depois>
-via=<tela|rapido|busca|assistente|perfil|conta>`, sem nada da pessoa. Com
-isso, em duas semanas se sabe o que é mudado, o que é achado pela busca e o
-que ninguém toca (candidato a Avançado ou a sair).
+Atalhos não contam como segunda definição da opção em `TELA[]`. Busca,
+atalhos e tela completa compartilham efeitos, validação, confirmação e retorno.
+
+### 4.9 Medição mínima, sem registrar conteúdo sensível
+
+Instrumentar **mudanças confirmadas**, com uma lista positiva de opções
+seguras. Exemplo de formato: `[ajustes] confirmou id=<id> antes=<enum>
+depois=<enum> via=<tela|rapido|busca|assistente|recomendacao|conta>`.
+Números só entram com domínio/limites conhecidos. Não registrar texto livre,
+consultas, nomes de perfil, URLs, servidor, MAC, senha, chave ou token; para
+uma conexão, no máximo tipo de ação e resultado sem credenciais.
+
+Separar abertura de ajuste, confirmação, cancelamento e falha. Prévia,
+carregamento e tentativa sem mudança não contam como confirmação. `via=busca`
+só significa uma alteração confirmada após esse caminho; não mede todas as
+buscas, descobertas ou compreensão. Propagar a origem real, inclusive nos
+setters fora da tela, sem anunciar cobertura completa antes de instrumentá-los.
+
+Respeitar a preferência existente de envio de registros; não criar upload ou
+identificador adicional. Histórico local para a pessoa e telemetria agregada
+são recursos distintos. Definir retenção, limite e limpeza dos novos dados.
+
+Uma janela inicial de duas semanas pode revelar padrões de uso, mas baixa
+frequência não justifica remover um ajuste: pode haver padrão satisfatório,
+falta de descoberta ou uso raro essencial. Combinar agregados com as tarefas
+da §7; não atribuir lentidão, queda ou sucesso à mudança sem evidência.
 
 ---
 
-## 5. Prioridade
+## 5. Entregas, dependências e prioridade
 
-**Fase 1 — maior ganho, menor custo (só `TELA[]`, `SECAO_AJUDA[]`, testes da
-tela; nenhum enum, chave ou arquivo muda)**
-1. Log de mudança (4.9). Uma linha em `ajustes.c`; mede tudo o que vem depois.
-2. Nova árvore por intenção + "Mostrar ajustes avançados" (4.1).
-3. Busca nos ajustes pelo Spotlight + `ajustes_abrir_em(op)` (4.4).
-4. "O que você mudou" + restaurar por linha (4.5).
-5. Painel da direita em ficha fixa (Ligado/Desligado, Precisa de, Vale onde,
-   Padrão) — reescrita de texto, sem desenho novo (4.2).
+Recomendação: validar o caminho completo de uma tarefa antes de transformar
+as 182 opções de uma vez. O recorte de protótipo deve incluir Trailers,
+Idiomas e uma opção de desempenho; cobre achar, entender, editar e desfazer.
+A entrega do produto mantém acesso a todas as opções da versão-alvo.
 
-**Fase 2 — o "entender" de verdade**
-6. Ajuste rápido sobre a tela real + atalhos de segurar OK, player e título
-   (4.3-1, 4.8).
-7. Lista vertical de valores com frase e prévia por valor (4.2).
-8. Perfis prontos com recomendação pela TV e "Experimentar · voltar em 15 s"
-   via `seguro.c` (4.6, 4.3-3).
+| Etapa | Entrega | Dependências reais | Condição para avançar |
+|---|---|---|---|
+| Preparação | Mapa atualizado, textos de exemplo e protótipo das tarefas | Inventário por commit; contrato de foco e estados | Revisão visual e comparação das tarefas da §7 |
+| 1A — Navegação e explicação | Árvore por intenção, avançados, ficha curta e folhas de escolha sem gravação por foco | `ajustes.c/.h`, tradução, atalhos existentes e testes de navegação; confirmar onde guardar preferência de avançados | Cobertura de todos os IDs; zero mudança acidental e foco recuperável |
+| 1B — Encontrar | Busca local de ajustes, sinônimos, abertura por ID e retorno | `spotlight.c/.h`, despacho em `app.c`, entrada de texto da versão-alvo e índice traduzido | Busca offline; revela avançadas; não dispara consultas de entretenimento |
+| 1C — Entender estado e recuperar | Diferente do padrão e restauração por linha, com alcance e status reais | Referência imutável de padrões, aplicação de efeitos, gravação e sync | Reabrir conserva valor; falha/pendência visíveis; nenhuma credencial no reset |
+| 2A — Experimentar | Prévia sobre a tela real e atalhos contextuais | Camada temporária, retorno, vida útil de texturas e reversão de efeitos | Cancelar recompõe estado sem gravação/sync; desempenho medido |
+| 2B — Recomendar | Experimento com prazo e lotes locais de desempenho | Coordenação com `seguro.c`, limites por plataforma e captura do lote | Reversão integral por timeout/falha/reinício; nunca publicar rascunho |
+| 3 — Só com necessidade demonstrada | Histórico de origem/data, restauração por seção, miniaturas e assistente | Persistência nova versionada, isolamento de perfil e evidência das tarefas | Resolve dificuldade observada; não substitui correção das etapas anteriores |
 
-**Fase 3 — depois, com os números da Fase 1**
-9. Prévias com a arte real (4.3-2).
-10. Assistente de primeira vez (4.7).
-11. Juntar/remover o que o log mostrar que ninguém usa.
+Não chamar a Fase 1 de mudança “só em `TELA[]`”: busca envolve o roteamento do
+app; comparação exige padrões; restauração usa efeitos e sync; histórico
+exige dados novos. Manter os IDs, chaves e índices existentes é uma restrição
+de compatibilidade, não a promessa de que apenas tabelas de tela serão editadas.
+
+Instrumentação segura da §4.9 acompanha cada caminho entregue, com cobertura
+explícita. Não bloquear melhorias básicas por uma coleta completa de produção,
+nem remover opções por frequência baixa. Nova preferência de avançados e
+qualquer estado persistente precisam definir escopo e migrar sem perder os
+valores existentes, inclusive no Tizen .wgt.
 
 ---
 
 ## 6. Riscos (o que não pode quebrar)
 
 - **Vetores paralelos posicionais.** `OPCOES[]`, `CHAVE[]` e `valor[]` são
-  indexados pelo enum; opção nova só no fim (já houve #149 e o desalinhamento
-  de 876742e). A reorganização da Fase 1 não precisa tocar o enum: só `TELA[]`.
-- **Índices gravados.** `ajustes.txt` é por chave, mas grava o **índice** do
-  valor: nenhum `V_*` pode ganhar valor no meio (ex.: `LING_OPC_ORIGINAL` no
-  fim de propósito). A junção "metadados externos + Cinemeta" tem de ser só
-  de tela, gravando as duas chaves como hoje.
-- **Sync com a conta e o app web.** O blob usa os literais `W_*` e
-  `ajustes_mesclar_blob` só reescreve chave que já existe. "Restaurar padrão"
-  ou perfil pronto numa chave da conta **muda o app web e as outras TVs**:
-  ou avisa, ou restaura para o valor da conta em vez do de fábrica. Tema
-  dinâmico continua sem subir. Perfis prontos só em chaves de
-  `somenteDesteAparelho`.
-- **Perfis de pessoa.** `ajustes-p<N>.txt` guarda os ajustes por perfil;
-  "O que você mudou" e o histórico (data/origem) têm de ser por perfil também,
-  e o logout continua apagando tudo (`ajustes_perfil_esquecer`).
-- **"Cada opção aparece uma vez em TELA".** `conferirTela()` e
-  `tests/ajustes_secoes.sh` exigem isso. Mostrar o mesmo ajuste em dois
-  lugares (ex.: idioma do áudio em Idiomas e no player) pede um tipo de item
-  "atalho" que não conta como aparição, ou relaxar a regra com cuidado.
-- **Testes que fixam a tela atual:** `ajustes_secoes`, `ajustes_shot`,
-  `notas_ajustes_shot`, `ajustes_opcao_em_foco`/`ajustes_abrir_no_*` e os
-  cartões de novidades que abrem em "Layout da home" e "Interface de vidro".
-  Mudam junto, no mesmo commit.
-- **Memória nas TVs de 1 GB.** Ajuste rápido sobre a tela real não pode
-  segurar uma cópia extra da tela; o Spotlight já congela o fundo numa cópia
-  (~8 MB a 1080p). Medir na C9 e numa Tizen 5 antes de ligar por padrão.
-- **Persistência no Tizen .wgt.** Estado novo (histórico, perfil escolhido,
-  assistente visto) tem de passar por `dados_gravar`, senão some como no #85.
-- **Textos.** Toda frase nova passa pela tradução (30 idiomas de interface). Ficha curta
-  e fixa ajuda: menos texto por linha para traduzir e para caber.
-- **Modo seguro.** "Experimentar" e perfis prontos não podem disputar o
-  diário de `seguro.c` (teto de 12 mudanças); a volta automática tem de ser a
-  mesma peça, não uma segunda.
+  indexados pelo enum; opção nova só no fim. Reordenar a apresentação em
+  `TELA[]` não exige reordenar enum. Preservar também os índices de `V_*`
+  gravados em disco; não inserir valores no meio.
+- **Opções compostas.** A junção metadados externos/Cinemeta é apresentação;
+  continua gravando as duas chaves. Não normalizar silenciosamente combinações
+  legadas ao abrir a tela. Avisar sobre o alcance distinto de cada chave.
+- **Sync com conta e app web.** `ajustes_mesclar_blob()` só reescreve chave
+  existente e exportável. Uma restauração compartilhável pode ser propagada
+  após confirmação do servidor. Informar alcance antes da ação e status
+  depois; não substituir padrão por valor da conta silenciosamente. Preservar
+  exceções por valor, como tema dinâmico. Lotes de desempenho só usam chaves
+  comprovadamente locais.
+- **Perfis de pessoa.** `ajustes-p<N>.txt` guarda só o subconjunto de
+  `dePerfil()`, não todos os ajustes. Separar origem/histórico do aparelho e
+  do perfil; cancelar edição pendente antes de trocar perfil. O logout limpa
+  dados vinculados à conta conforme contrato existente, preservando preferências
+  do aparelho. `ajustes_perfil_esquecer()` não equivale a reset geral.
+- **Cobertura de tela.** Manter uma definição por ID conforme `conferirTela()`
+  e `tests/ajustes_secoes.sh`. Atalhos não contam como segunda definição;
+  filtros de plataforma e avançados não podem quebrar os destinos da busca.
+- **Compatibilidade de navegação.** Atualizar no mesmo conjunto os testes
+  `ajustes_secoes`, `ajustes_shot`, `notas_ajustes_shot`, os atalhos
+  `ajustes_abrir_no_*` e os cartões de novidades. Preservar o destino esperado.
+- **Memória nas TVs com poucos recursos.** Não criar outra cópia da tela para
+  a prévia; uma textura RGBA de 1080p ocupa cerca de 8 MB antes de custos
+  adicionais. Medir o uso real por plataforma, o tempo de quadro e a vida útil
+  das texturas, sem converter estimativa em orçamento de memória comprovado.
+- **Persistência no Tizen .wgt.** Estado novo usa a camada `dados_gravar`,
+  com formato, escopo e recuperação de falha definidos. Testar fechamento e
+  reabertura; escrita em memória não demonstra gravação durável.
+- **Textos e acessibilidade.** Traduzir para os idiomas suportados pela
+  versão-alvo; verificar rótulos longos, pluralização, fallback de glifos e
+  direcionalidade. Manter contraste, foco além de cor e animação reduzida.
+- **Modo seguro.** Experimentos e recomendações não podem disputar o diário
+  de `seguro.c` (teto de 12 mudanças). Coordenar confirmação humana,
+  estabilidade e recuperação; não descartar pendência para caber outro lote.
+- **Concorrência.** Se conta, diagnóstico ou modo seguro mudar uma chave
+  durante a edição, invalidar o candidato afetado e mostrar o novo estado.
+  Cancelar não pode sobrescrever uma atualização legítima posterior. Definir
+  essa política antes de oferecer prévia de chaves compartilhadas.
+
+---
+
+## 7. Como validar a proposta
+
+Comparar a tela atual da versão-alvo com um protótipo navegável, mantendo o
+mesmo aparelho, perfil de teste e configuração inicial. Alternar a ordem
+entre participantes para reduzir aprendizado. Começar com 5–8 pessoas com
+experiências distintas; é estudo formativo, não amostra para inferir
+percentuais de toda a base. Não foi realizado nesta revisão.
+
+| Tarefa, sem indicar caminho | O que deve ser observado |
+|---|---|
+| “Não quero trailer quando paro num cartaz; o do topo pode continuar.” | Encontra a opção específica e não desliga as demais |
+| “Quero preferir áudio em português, mantendo a interface em inglês.” | Distingue idioma da interface, áudio, legenda e metadados |
+| “Quero corrigir uma opção avançada que não aparece na lista.” | Encontra pela busca, entende o estado e retorna à consulta |
+| “Quero ligar este recurso, mas ele não está disponível.” | Explica se falta requisito ou suporte e encontra o próximo passo |
+| “Quero ver outra aparência e depois ficar como estava.” | Experimenta e cancela sem perder a configuração anterior |
+| “Quero restaurar uma opção que também uso na outra TV.” | Identifica valor de destino, alcance por perfil e pendência de sync |
+| “Quero deixar esta TV mais leve sem mudar a outra.” | Entende o lote local, confirma conscientemente e consegue desfazer |
+
+Registrar sucesso sem ajuda, tempo, teclas até conclusão, caminhos errados,
+mudanças acidentais e explicação do efeito/alcance pela pessoa. Perguntar
+“o que você espera que aconteça?” antes de confirmar. Repetir casos sem voz,
+sem rede e com avançados ocultos. Uma captura estática não mede essas tarefas.
+
+**Critérios obrigatórios dos cenários testados:**
+
+- Zero mudança causada apenas por navegação; cancelar não grava/sincroniza.
+- Zero perda de foco ou controle inacessível; Voltar recupera a origem prevista.
+- Confirmação persiste após fechar/reabrir; falha de gravação é visível.
+- Estado pendente/offline não é apresentado como sincronizado; outro perfil
+  não recebe preferências locais de forma indevida.
+- Experimento reverte o lote por cancelamento, prazo, falha e reinício;
+  concorrência segue a política da §6 sem sobrescrever estado posterior.
+- Busca abre o ID certo, inclusive avançado, indisponível e após tradução.
+- Leitura no sofá em 720p/1080p, contraste nos temas, texto longo e animações
+  reduzidas; nenhum texto essencial cortado para acomodar as colunas.
+
+Definir metas de tempo e teclas depois de medir a linha de base. A nova árvore
+deve reduzir dificuldade de encontrar e explicar efeitos nas tarefas
+principais; se só reduzir linhas, a hipótese não passou. Não sacrificar
+compreensão/cancelamento para obter menos teclas.
+
+Verificação de implementação futura: testes focados de mapa/IDs, foco e
+retorno, persistência por perfil, sync e falhas; depois inspeção visual e
+controle físico nas plataformas suportadas. Registrar separadamente revisão
+do desenho, build/pacote/instalação e evidência em TV. Para custo de memória e
+experimentos, incluir C9, Tizen com recursos limitados e Android; validar .wgt
+e .tpk nos respectivos caminhos, sem tratar um como prova do outro.
+
+## 8. Rastreabilidade da revisão
+
+Leitura técnica na base `399c1953` (mesmos arquivos no worktree `9ce4f55e`):
+
+| Evidência | Local para revisão |
+|---|---|
+| Escopo do aparelho e persistência por perfil | `src/ajustes.c`: `somenteDesteAparelho()`, `dePerfil()`, `ajustes_perfil_guardar()` |
+| Exportação condicionada ao blob e ao valor | `src/ajustes.c`: `ajustes_mesclar_blob()`; `src/sync.c`: `empurrarAjustes()` |
+| Edição aplica, grava e sinaliza sync | `src/ajustes.c`: `mudarValorDireto()` |
+| Lista de ajustes arriscados | `src/ajustes.c`: `RISCOS[]` |
+| Confirmação por estabilidade e recuperação após queda | `src/seguro.h`, `src/seguro.c`: `seguro_iniciar()`, `seguro_mudou()` |
+| Dimensionamento de recursos por TV | `src/perfiltv.h`: `PtvPerfil`; `src/perfiltv.c` |
+| Busca e despacho atuais | `src/spotlight.c/.h`; `src/app.c` |
+| Credenciais e restrição de logs | `src/ajustes.c`: armazenamento de provedores de pôsteres |
+
+Comando de leitura para repetir o inventário bruto nas duas revisões. Conta
+IDs e macros do fonte; não simula filtros de plataforma, agrupamentos da
+proposta nem comportamento em execução:
+
+```bash
+python3 - <<'PYCODE'
+import collections, re, subprocess
+for ref in ('399c1953', 'be9e413e'):
+    src = subprocess.check_output(
+        ['git', 'show', ref + ':src/ajustes.c'], text=True)
+    src = re.sub(r'//[^\n]*|/\*.*?\*/', '', src, flags=re.S)
+    enum = src.split('typedef enum {', 1)[1].split('} OpcaoId;', 1)[0]
+    ids = re.findall(r'\bAJ_[A-Z0-9_]+\b', enum)
+    ids.remove('AJ_N')
+    opts = src.split('static const Opcao OPCOES[AJ_N] = {', 1)[1].split('\n};', 1)[0]
+    kinds = collections.Counter(re.findall(r'\b(ESC|NUM|LER|ACAO)\(', opts))
+    print(ref, len(ids), dict(kinds))
+PYCODE
+```
+
+A cobertura do mapa-base foi conferida expandindo barras pelo prefixo,
+intervalos pela ordem do enum e `NT_*` por prefixo: 176 IDs únicos, 0 ausentes
+e 0 duplicados, 116 básicos/60 avançados. O mapa executável da implementação
+deve tornar essa verificação automática para os 182 IDs e todas as plataformas.
+Logs D1, issues e teste com usuários permanecem evidências a atualizar, não
+resultados produzidos por esta revisão.
