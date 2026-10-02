@@ -87,6 +87,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "proxyts.h"
 #include "perfis.h"
 #include "sessao.h"
+#include "progresso.h"
 #include "fontevolta.h"
 #include "marco.h"
 #include <time.h>
@@ -497,6 +498,10 @@ static int credAvisado, credFimAvisado, semProxAvisado;
 static double credAvisadoEm;
 static int introIdx=-1, introT=-1, introE=-1;
 static int retomadaAplicada, retomarPct;
+#ifdef NV_ANDROID
+static double retomarSeg;
+static int retomadaNaPreparacao;
+#endif
 // "Assistir do comeco" (issue #46): trava da sessao, armada por
 // player_do_inicio depois de player_abrir. Tem de sobreviver as CHAMADAS
 // REPETIDAS de player_definir_episodio — uma delas dispara quando o nome do
@@ -568,7 +573,24 @@ int  player_tem_video(void) { return comVideo && !retido; }
 // sessao ignora o ponto salvo, inclusive nas re-chamadas tardias de
 // player_definir_episodio. O progresso gravado NAO e apagado — comecar do
 // zero nao desmarca nada (mesma regra do web: startOver so pula o seek).
-void player_do_inicio(void) { semRetomada = 1; retomarPct = 0; }
+double player_regra_retomada_inicial(double posSalva, double durSalva,
+                                     int percentual, int concluido) {
+  double pct;
+  if (percentual <= 0 || percentual >= concluido ||
+      !isfinite(posSalva) || !isfinite(durSalva) || durSalva <= 1.0 ||
+      posSalva <= 0.0 || posSalva >= durSalva || posSalva > 2147483.647)
+    return 0.0;
+  pct = posSalva * 100.0 / durSalva;
+  // Catalogo guarda percentual inteiro. Uma discrepancia maior que o
+  // arredondamento e dado velho/novo: espera a duracao do pipeline.
+  return fabs(pct - percentual) < 1.0 ? posSalva : 0.0;
+}
+void player_do_inicio(void) {
+  semRetomada = 1; retomarPct = 0;
+#ifdef NV_ANDROID
+  retomarSeg = 0.0;
+#endif
+}
 void player_definir_episodio(int t, int e) {
   const CatItem *c = item();
   epT = t; epE = e; linhaEp[0] = 0;
@@ -577,6 +599,17 @@ void player_definir_episodio(int t, int e) {
   // "progresso" lido ali seria de outro titulo qualquer.
   if (c && !canalSessao && !semRetomada && c->progresso > 0 && c->progresso < ajustes_cw_concluido() &&
       (strcmp(c->tipo,"series") || (t==c->temporada && e==c->episodio))) retomarPct=c->progresso;
+#ifdef NV_ANDROID
+  retomarSeg = 0.0;
+  if (c && retomarPct > 0) {
+    char chave[48]; ProgRegistro r;
+    int serie = !strcmp(c->tipo, "series");
+    prog_chave(chave, sizeof chave, c->imdb, serie ? t : 0, serie ? e : 0);
+    if (prog_por_chave(chave, &r))
+      retomarSeg = player_regra_retomada_inicial(r.posSeg, r.durSeg,
+                                                retomarPct, ajustes_cw_concluido());
+  }
+#endif
   // FILME TAMBEM PEDE MARCADOR, e ate agora nao pedia: esta linha desligava o
   // modulo e voltava. Fazia sentido enquanto a fonte era o api.introdb.app, que
   // e indexado por episodio; o TheIntroDB responde por imdb sozinho e devolve os
@@ -1149,6 +1182,9 @@ void player_abrir(int indiceCatalogo, const char *url) {
   memset(&zapEst, 0, sizeof zapEst); bannerAV = 0.0f; botaoAV = 0; infoAV = 0; pedRecarregar = 0;
   avLat0 = -1.0; avAtraso = 0.0; avPausaDesde = 0;
   retomadaAplicada=0; semRetomada=0;
+#ifdef NV_ANDROID
+  retomarSeg = 0.0; retomadaNaPreparacao = 0;
+#endif
   botao = PLR_PLAY;
   memset(focoB, 0, sizeof focoB);
   posSeg = 0.0f; relogio_zerar(&relLeg);
@@ -1241,7 +1277,17 @@ static void tocarFonte(const char *url) {
   video_definir_reconexao(!ehCanal());
   video_definir_modo_live(ehCanal() ? ajustes_livetv_modo() : 0);
   { char px[96];
-    comVideo = video_tocar(proxyts_resolver(url, px, sizeof px)); }
+#ifdef NV_ANDROID
+    // app.c define episodio e "do inicio" antes de entregar a fonte. O
+    // instante viaja junto da URL, nunca numa variavel pendente do Kotlin.
+    retomadaNaPreparacao = !ehCanal() && !semRetomada && retomarSeg > 0.0;
+    comVideo = video_tocar_posicao(proxyts_resolver(url, px, sizeof px),
+                                   retomadaNaPreparacao ? retomarSeg : 0.0);
+    if (!comVideo) retomadaNaPreparacao = 0;
+#else
+    comVideo = video_tocar(proxyts_resolver(url, px, sizeof px));
+#endif
+  }
   mkvass_video_aberto(comVideo);
   if (!comVideo) erroSemVideo();
   // No PiP a fonte nova retoca o mesmo canto — o destino de tela cheia do
@@ -2411,7 +2457,8 @@ void player_atualizar(float dt, Uint32 agora) {
       long ped = 0, bytes = 0; int col = 0, tot = 0;
       mkvass_estatisticas(&ped, &bytes, &col, &tot);
       printf("[player] pre-busca da legenda: video solto apos %u ms (%s; %d/%d blocos, %ld Ranges, %ld KB)\n",
-             (unsigned)esperou, fase == 1 ? "teto vencido, o resto segue em segundo plano"
+             (Sint32)esperou < 0 ? 0u : (unsigned)esperou,
+             fase == 1 ? "teto vencido, o resto segue em segundo plano"
              : "a pre-busca acabou", col, tot, ped, bytes / 1024);
       fflush(stdout);
       snprintf(u, sizeof u, "%s", prebuscaUrl);
@@ -2505,8 +2552,20 @@ void player_atualizar(float dt, Uint32 agora) {
                     strcmp(cs->tipo, "series") ? 0 : epE, (long)(d * 1000.0));
     }
     if (!retomadaAplicada && video_pronto() && d>1.0) {
+#ifdef NV_ANDROID
+      // O ack chega antes do prepare. Se a ponte/Media3 recusou a posicao,
+      // recua ao seek de sempre; pendente nunca vira um segundo seek.
+      int estado = retomadaNaPreparacao ? video_retomada_inicial_estado() : -1;
+      if (estado != 0) {
+        retomadaAplicada = 1;
+        if (estado < 0 && retomarPct > 0) {
+          marco("abrir: seek para o ponto salvo"); video_buscar(d * retomarPct / 100.0);
+        }
+      }
+#else
       retomadaAplicada=1;
       if(retomarPct>0) { marco("abrir: seek para o ponto salvo"); video_buscar(d*retomarPct/100.0); }
+#endif
     }
     tocando = video_tocando();
     { const CatItem *ci = ehCanal() ? NULL : item();

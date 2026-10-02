@@ -16,6 +16,11 @@
 void player_abrir(int indiceCatalogo, const char *url);
 void player_definir_episodio(int temporada, int episodio);
 void player_do_inicio(void);
+// Posicao confiavel para preparar o Android: registro com duracao conhecida,
+// coerente com o percentual escolhido. Zero mantem a retomada normal depois
+// da duracao real; metadados/reservas nao servem para converter percentual.
+double player_regra_retomada_inicial(double posSalva, double durSalva,
+                                     int percentual, int concluido);
 void player_episodio_atual(int *temporada, int *episodio);
 int player_indice(void);
 const char *player_linha_episodio(void);
