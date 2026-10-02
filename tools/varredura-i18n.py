@@ -204,7 +204,9 @@ NAO_E_TELA = ("printf", "fprintf", "puts", "fputs", "perror", "marco",
               "strcmp", "strncmp", "strcasecmp", "strstr", "strchr", "strrchr",
               "getenv", "setenv", "fopen", "unlink", "remove", "rename",
               "mkdir", "system", "dlopen", "dlsym", "js_", "jsw_", "rede_",
-              "curl_", "SDL_Log", "addons_buscar", "cat_indice_por",
+              "curl_", "SDL_Log",
+              # motivo de log da fonte guardada (fontevolta.h): nunca tela
+              "fontevolta_", "addons_buscar", "cat_indice_por",
               "idioma_registrar", "assert", "_Static_assert",
               "EM_ASM", "MAIN_THREAD",
               # NOME DE ICONE NAO E TEXTO. gfx_icone recebe o basename do SVG
@@ -247,6 +249,9 @@ def contexto(txt, i):
 # "nao sei o que e": sem esta lista a ferramenta nao pode virar teste, e sem
 # virar teste ela nao impede a proxima regressao.
 IGNORAR = {
+    # Motivos do vigia da fonte guardada (fontevolta.c, fontevolta_decidir):
+    # vao so para o log "[voltafonte] recuo para a busca: <motivo>".
+    "erro do player", "clipe curto", "conferencia falhou",
     # Hosts de provedor de poster/meta que levam a config no caminho
     # (redeurl.c, rede_url_log): dado de comparacao, nunca tela. "com" casou
     # com a lista de palavras de portugues.
