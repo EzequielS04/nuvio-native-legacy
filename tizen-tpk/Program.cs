@@ -183,6 +183,9 @@ namespace NuvioTpk
         volatile bool fim;
         NuiTimer vigia, prime;
         Video video;
+#if NV_TEXTO
+        Texto texto;
+#endif
         bool soCarregada;
 
         protected override void OnCreate()
@@ -286,6 +289,11 @@ namespace NuvioTpk
                 return;
             }
             Etapa("ok video-init");
+#if NV_TEXTO
+            // CANARIO (Texto.cs): teclado/ditado do sistema. So com -p:NvTextoCanario=1.
+            try { texto = new Texto(a => { if (principal != null) principal.Post(_ => a(), null); else a(); }, s => video.Log(s)); }
+            catch (Exception e) { Etapa("note texto-init " + e.GetType().Name + ": " + e.Message); }
+#endif
 
             // API8: o callback roda no fio principal e o DALi troca os buffers
             // mesmo em quadro pulado, entao espera o app terminar o quadro.

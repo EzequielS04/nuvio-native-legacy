@@ -11,10 +11,16 @@
     <DefineConstants>$(DefineConstants);NV_API9</DefineConstants>
     <LangVersion>8.0</LangVersion>
   </PropertyGroup>
+  <!-- CANARIO do teclado/ditado do sistema (../Texto.cs): so com
+       -p:NvTextoCanario=1 (NUVIO_TPK_TEXTO=1 bash tools/tpk.sh). -->
+  <PropertyGroup Condition="'$(NvTextoCanario)' == '1'">
+    <DefineConstants>$(DefineConstants);NV_TEXTO</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="../Program.cs" />
     <Compile Include="../Video.cs" />
     <Compile Include="../Carga.cs" />
+    <Compile Include="../Texto.cs" Condition="'$(NvTextoCanario)' == '1'" />
     <PackageReference Include="Tizen.NET" Version="9.0.*"><ExcludeAssets>Runtime</ExcludeAssets></PackageReference>
     <PackageReference Include="Tizen.NET.Sdk" Version="1.1.*" />
   </ItemGroup>

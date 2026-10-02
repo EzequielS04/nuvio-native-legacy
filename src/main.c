@@ -65,6 +65,7 @@
 #include "player.h"
 #include "trailer.h"
 #include "ponteiro.h"
+#include "entrada_texto.h"
 #include "gif.h"
 #include "idioma.h"
 #include "idiomaauto.h"
@@ -260,6 +261,15 @@ static void teclasInjetadas(void (*entregar)(const SDL_Event *)) {
     // "abrir:tt0121955" abre o titulo direto (app.c). Porta de teste, como
     // "guia".
     if (dp && !strncmp(linha, "abrir:", 6)) { app_abrir_titulo(dp + 1); continue; }
+    // "ime:abrir", "ime:voz", "ime:fechar": teclado do sistema direto
+    // (entrada_texto.h), para medir na TV sem depender da tela que o liga.
+    if (dp && !strncmp(linha, "ime:", 4)) {
+      if (!strcmp(dp + 1, "fechar")) texto_sistema_fechar();
+      else texto_sistema_abrir("", !strcmp(dp + 1, "voz"));
+      printf("[texto] porta de teste: %s (disponivel=%d)\n", dp + 1, texto_sistema_disponivel());
+      fflush(stdout);
+      continue;
+    }
     // "texto:matrix" digita letra por letra (a-z, 0-9; "_" e espaco), como o
     // teclado fisico: e o que o Spotlight e a Busca aceitam fora da grade.
     if (dp && !strncmp(linha, "texto:", 6)) {
@@ -932,6 +942,8 @@ int main(int argc, char **argv) {
     // continua desenhada por baixo, mas nao deve reagir ao D-pad.
     while (SDL_PollEvent(&e)) {
       ponteiro_diag(&e);
+      // Teclado do sistema (entrada_texto.h): ve o texto ANTES de qualquer tela.
+      texto_sistema_observar(&e);
       if (e.type == SDL_WINDOWEVENT) {
         // Ultimo sinal de vida na marca de sessao (avisos_sinal): e o que diz,
         // na abertura seguinte, se a sessao que "nao se despediu" tinha ido
@@ -1029,6 +1041,7 @@ int main(int argc, char **argv) {
       app_evento(&e);
     }
     teclasInjetadas(app_evento);
+    texto_sistema_quadro();
     fEv = NV_DT(tEv);
 
     Uint32 agora = SDL_GetTicks();
