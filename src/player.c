@@ -2384,9 +2384,9 @@ void player_atualizar(float dt, Uint32 agora) {
   if (!inicioImagem && comVideo && video_pronto()) { inicioImagem = agora; acordar(); }
   if (saindo && saidaIlhaDesde && prepararRetencao &&
       ((video_quadro_estado() != VQ_ESPERANDO && video_pausa_confirmada()) ||
-       SDL_GetTicks() - saidaIlhaDesde >= PLR_SAIDA_ILHA_TETO_MS)) {
-    printf("[player] saida para a ilha em %u ms (quadro %d, pausa %d)\n",
-           (unsigned)(SDL_GetTicks() - saidaIlhaDesde), video_quadro_estado(), video_pausa_confirmada());
+       (Sint32)(SDL_GetTicks() - saidaIlhaDesde) >= (Sint32)PLR_SAIDA_ILHA_TETO_MS)) {
+    printf("[player] saida para a ilha em %d ms (quadro %d, pausa %d)\n",
+           (int)(Sint32)(SDL_GetTicks() - saidaIlhaDesde), video_quadro_estado(), video_pausa_confirmada());
     fflush(stdout);
     entrada = 0.0f;
   }
