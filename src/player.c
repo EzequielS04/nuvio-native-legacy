@@ -2555,7 +2555,12 @@ void player_atualizar(float dt, Uint32 agora) {
                         eSerie && ofertaProximo());
     // "O QUE ACHOU?" (reacao.h): no mesmo instante do pos-reproducao do filme,
     // e na serie so no fim da temporada ou no ultimo episodio disponivel.
-    if (!ehCanal() && ci && comVideo && video_pronto() && duracaoSeg >= 120.0f) {
+    //
+    // SERIE SO COM A LISTA DE EPISODIOS NA MAO: sem ela, player_proximo_episodio
+    // e NULL e todo episodio pareceria "o ultimo disponivel" (o #151 mostra que
+    // a lista pode chegar tarde ou nao chegar).
+    if (!ehCanal() && ci && comVideo && video_pronto() && duracaoSeg >= 120.0f &&
+        (!eSerie || (cat_n_episodios(idxAtual()) > 0 && !desc_episodios_carregando(idxAtual())))) {
       const CatEp *px = eSerie ? player_proximo_episodio() : NULL;
       double cr = video_creditos();
       if (cr <= 1.0) cr = intro_creditos_seg();
