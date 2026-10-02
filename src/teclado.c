@@ -105,6 +105,12 @@ static const char *alfabetoAtual = NULL;   // NULL = o padrao
 static int   nFileiras = TE_FILEIRAS_PAD;
 static int   nCols = TE_COLS;
 
+// LOGIN POR E-MAIL (#216, decisao do dono): quem entra por e-mail e senha e
+// justamente quem nao tem celular a mao — se tivesse, logava pelo QR. Nesses
+// campos o botao "Digitar pelo celular" some.
+static int semCel;
+static int celOk(void) { return celb_disponivel() && !semCel; }
+
 static float gradeW(void) {
   return (float)nCols * TE_TECLA + (float)(nCols - 1) * TE_GAP;   // 504 com 6
 }
@@ -112,10 +118,10 @@ static float gradeW(void) {
 #define TE_MIC_D (TE_CY - 12.0f)
 static float campoW(void) {
   return gradeW() - (st_voz_disponivel() ? TE_MIC_D + 14.0f : 0.0f) -
-         (celb_disponivel() ? TE_MIC_D + 14.0f : 0.0f);
+         (celOk() ? TE_MIC_D + 14.0f : 0.0f);
 }
 // A barra existe como destino do foco se tiver algum alvo.
-static int temBarra(void) { return st_ime_disponivel() || celb_disponivel(); }
+static int temBarra(void) { return st_ime_disponivel() || celOk(); }
 
 // A altura da modal depende de quantas fileiras o alfabeto pediu, entao as tres
 // medidas que dela dependem viraram funcao. Continuam sendo a mesma conta.
@@ -131,11 +137,42 @@ static char  tituloAtual[96], dicaAtual[160];
 static int   celRecebido;
 // SENHA (#216): o campo mostra pontos, nunca o texto. A modal fica na tela e
 // a tela vira foto.
-static int   mascarar, tipoIme;
+static int   mascarar, tipoIme, ehSenha;
+// ATALHOS DE E-MAIL (#216): uma fileira de teclas que digitam o pedaco
+// inteiro. Com o D-pad, "@gmail.com" sao dez teclas a menos.
+static const char *ATALHOS_EMAIL[] = { ".com", "@gmail.com", "@hotmail.com", "@outlook.com" };
+#define TE_N_ATALHOS ((int)(sizeof ATALHOS_EMAIL / sizeof ATALHOS_EMAIL[0]))
+static int   nAtalhos;
+// Fileiras: as de caractere, a de atalhos (so no e-mail) e a de
+// apagar/limpar/(mostrar)/pronto, sempre a ultima.
+static int fileirasChar(void) { return nFileiras - 1 - (nAtalhos ? 1 : 0); }
+static int ehChar(int f) { return f >= 0 && f < fileirasChar(); }
+static int ehAtalho(int f) { return nAtalhos && f == fileirasChar(); }
+static int colunaPronto(void) { return ehSenha ? 3 : 2; }
+static void abrirImeAgora(void);
 void teclado_tipo(int tipo) {
   tipoIme = tipo == TECLADO_TIPO_EMAIL ? ST_IME_EMAIL : tipo == TECLADO_TIPO_SENHA ? ST_IME_SENHA : ST_IME_TEXTO;
-  mascarar = tipo == TECLADO_TIPO_SENHA;
+  ehSenha = tipo == TECLADO_TIPO_SENHA;
+  mascarar = ehSenha;
+  semCel = tipo == TECLADO_TIPO_EMAIL || tipo == TECLADO_TIPO_SENHA;
+  if (tipo == TECLADO_TIPO_EMAIL) {
+    // 13 colunas (a-m / n-z / 0-9@._ / -+) + atalhos: 6 fileiras, a altura
+    // do teclado padrao, em vez de 8 de 6 colunas.
+    int letras = (int)strlen(alfa());
+    nCols = TE_COLS_LONGO;
+    nAtalhos = TE_N_ATALHOS;
+    nFileiras = (letras + nCols - 1) / nCols + 2;
+    if (nFileiras > TE_FILEIRAS_MAX) nFileiras = TE_FILEIRAS_MAX;
+  }
+  // Onde o teclado do sistema abre sozinho (Android), ele ja vem aberto: quem
+  // toca no campo de e-mail quer o teclado do aparelho, nao a grade.
+  if (semCel && aberto && st_ime_disponivel() && st_abre_sozinho()) {
+    fileira = -1; coluna = 0;
+    abrirImeAgora();
+  }
 }
+void teclado_mascarar(int liga) { mascarar = liga != 0; }
+int  teclado_mascarado(void) { return mascarar; }
 
 const char *teclado_alfabeto(void) { return ALFABETO; }
 int teclado_aberto(void) { return aberto; }
@@ -188,7 +225,7 @@ void teclado_abrir_com(const char *titulo, const char *dica, int max,
   memset(focoAnim, 0, sizeof focoAnim);
   animBarra[0] = animBarra[1] = animBarra[2] = 0.0f;
   celRecebido = 0;
-  mascarar = 0; tipoIme = ST_IME_TEXTO;
+  mascarar = 0; tipoIme = ST_IME_TEXTO; ehSenha = 0; semCel = 0; nAtalhos = 0;
 }
 
 // O texto do sistema passa pelo ALFABETO da modal: o codigo de pareamento e
@@ -215,6 +252,7 @@ static void fechar(int r) {
   st_fechar(ST_TECLADO);
 }
 
+static void abrirImeAgora(void) { st_ime_tipo(tipoIme); st_ime_abrir(ST_TECLADO, texto, maxN); }
 static void okBarra(void) {
   if (coluna == 2) { st_fechar(ST_TECLADO); celb_abrir(CELB_TECLADO, tituloAtual); }
   else if (coluna == 1) st_voz_iniciar(ST_TECLADO);
@@ -223,13 +261,15 @@ static void okBarra(void) {
 static void focarBarra(int c, int b) { (void)b; fileira = -1; coluna = c; }
 static void focarTecla(int f, int c) {
   if (!aberto || f < 0 || f >= nFileiras) return;
-  if (f == nFileiras - 1 && fileira < nFileiras - 1) colunaAntes = coluna;
+  if (!ehChar(f) && ehChar(fileira)) colunaAntes = coluna;
   fileira = f; coluna = c;
 }
 
+
 static int colunasDe(int f) {
   int n;
-  if (f >= nFileiras - 1) return 3;         // apagar / limpar / pronto
+  if (f >= nFileiras - 1) return ehSenha ? 4 : 3;   // apagar / limpar / (mostrar) / pronto
+  if (ehAtalho(f)) return nAtalhos;
   // A ULTIMA FILEIRA DE CARACTERE PODE SER PARCIAL: um alfabeto de 39 enche
   // seis colunas em seis fileiras e deixa tres na setima. Sem isto o foco
   // entraria em celula vazia e "digitaria" o byte depois do fim da string.
@@ -241,11 +281,12 @@ static GfxRect retangulo(int f, int c) {
   GfxRect r;
   r.y = teY() + TE_CAB + (float)f * TE_PASSO;
   r.h = TE_TECLA;
-  if (f < nFileiras - 1) {
+  if (ehChar(f)) {
     r.x = TE_X + TE_PAD + (float)c * TE_PASSO;
     r.w = TE_TECLA;
   } else {
-    r.w = (gradeW() - 2.0f * TE_GAP) / 3.0f;
+    int k = colunasDe(f);
+    r.w = (gradeW() - (float)(k - 1) * TE_GAP) / (float)k;
     r.x = TE_X + TE_PAD + (float)c * (r.w + TE_GAP);
   }
   return r;
@@ -254,16 +295,27 @@ static GfxRect retangulo(int f, int c) {
 // O rotulo da ultima fileira. As tres teclas sao o unico ponto da modal com
 // palavra em vez de caractere, e por isso as tres estao na tabela de i18n.
 static const char *rotuloExtra(int c) {
-  return c == 0 ? "apagar" : (c == 1 ? "limpar" : "pronto");
+  if (c == 0) return "apagar";
+  if (c == 1) return "limpar";
+  if (ehSenha && c == 2) return mascarar ? "mostrar" : "ocultar";
+  return "pronto";
 }
 
 static void aplicar(void) {
-  if (fileira < nFileiras - 1) {
+  if (ehChar(fileira)) {
     if (n < maxN) { texto[n++] = alfa()[fileira * nCols + coluna]; texto[n] = 0; }
+    return;
+  }
+  if (ehAtalho(fileira)) {
+    const char *a = ATALHOS_EMAIL[coluna < nAtalhos ? coluna : 0];
+    // "@gmail.com" depois de um "@" ja digitado nao duplica a arroba.
+    if (a[0] == '@' && strchr(texto, '@')) a++;
+    if (n + (int)strlen(a) <= maxN) { memcpy(texto + n, a, strlen(a) + 1); n += (int)strlen(a); }
     return;
   }
   if (coluna == 0) { if (n > 0) texto[--n] = 0; return; }
   if (coluna == 1) { n = 0; texto[0] = 0; return; }
+  if (ehSenha && coluna == 2) { mascarar = !mascarar; return; }
   // "pronto" com o campo vazio nao e uma confirmacao de nada: quem chega ali
   // sem digitar quis olhar o teclado, e fechar a modal com resultado PRONTO
   // mandaria a tela de amigos tentar vincular uma string vazia.
@@ -285,7 +337,7 @@ void teclado_evento(const SDL_Event *e) {
     if (k == SDLK_DOWN) { fileira = 0; coluna = colunaAntes < colunasDe(0) ? colunaAntes : 0; }
     // DIREITA anda campo -> Falar -> Celular, o que existir aqui.
     else if (k == SDLK_RIGHT && coluna == 0 && st_voz_disponivel()) coluna = 1;
-    else if (k == SDLK_RIGHT && coluna < 2 && celb_disponivel()) coluna = 2;
+    else if (k == SDLK_RIGHT && coluna < 2 && celOk()) coluna = 2;
     else if (k == SDLK_LEFT && coluna == 2 && st_voz_disponivel()) coluna = 1;
     else if (k == SDLK_LEFT && coluna >= 1 && st_ime_disponivel()) coluna = 0;
     else if ((k == SDLK_RETURN || k == SDLK_KP_ENTER) && !e->key.repeat) okBarra();
@@ -299,7 +351,7 @@ void teclado_evento(const SDL_Event *e) {
       return;
     }
     if (fileira > 0) {
-      if (fileira == nFileiras - 1) coluna = colunaAntes;
+      if (!ehChar(fileira) && ehChar(fileira - 1)) coluna = colunaAntes;
       fileira--;
     }
     if (coluna >= colunasDe(fileira)) coluna = colunasDe(fileira) - 1;
@@ -307,7 +359,7 @@ void teclado_evento(const SDL_Event *e) {
   }
   if (k == SDLK_DOWN) {
     if (fileira + 1 < nFileiras) {
-      if (fileira + 1 == nFileiras - 1) colunaAntes = coluna;
+      if (ehChar(fileira) && !ehChar(fileira + 1)) colunaAntes = coluna;
       fileira++;
     }
     if (coluna >= colunasDe(fileira)) coluna = colunasDe(fileira) - 1;
@@ -337,7 +389,7 @@ void teclado_atualizar(float dt, Uint32 agora) {
       definirDoSistema(t);
       memset(t, 0, sizeof t);
       celRecebido = 1;
-      fileira = nFileiras - 1; coluna = 2;
+      fileira = nFileiras - 1; coluna = colunaPronto();
     }
     r = st_ler(ST_TECLADO, t, sizeof t);
     if (r == ST_PEDE_TECLADO) { coluna = 0; st_ime_tipo(tipoIme); st_ime_abrir(ST_TECLADO, texto, maxN); }
@@ -430,7 +482,7 @@ void teclado_desenhar(Uint32 agora) {
                   t / 255.0f, t / 255.0f, t / 255.0f, a); }
     }
     // CELULAR, o ultimo da barra (celbotao.h).
-    if (celb_disponivel()) {
+    if (celOk()) {
       float d = TE_MIC_D, mx = TE_X + TE_PAD + gradeW() - d, my = zona.y + (zona.h - d) * 0.5f;
       celb_botao(CELB_TECLADO, (GfxRect){ mx, my, d, d }, aberto && fileira < 0 && coluna == 2,
                  focarBarra, 2, 0, a);
@@ -510,7 +562,9 @@ void teclado_desenhar(Uint32 agora) {
       // INVERTE no foco, como a grade da busca: a tres metros, numa grade de
       // 39 alvos iguais, a inversao e o unico contraste que se ve de relance.
       gfx_cor(t, NV_RAIO_CARD, 1.0f, 1.0f, 1.0f, anim_mistura(0.09f, 1.0f, k) * a);
-      if (f < nFileiras - 1) {
+      if (ehAtalho(f)) {
+        s = ATALHOS_EMAIL[c];
+      } else if (ehChar(f)) {
         ch[0] = alfa()[f * nCols + c]; ch[1] = 0;
         s = ch;
         // A TECLA DE ESPACO (busca do guia) diz o que e: uma tecla vazia
@@ -527,7 +581,7 @@ void teclado_desenhar(Uint32 agora) {
       tom = k >= 0.5f ? 26 : 236;
       // "espaco" no corpo de uma letra (TITULO3) passava das bordas da tecla
       // de 74 px e cobria a vizinha; a palavra vai no corpo de legenda.
-      { TxtLinha l = txt_linha(f >= nFileiras - 1 ? TXT_BODY
+      { TxtLinha l = txt_linha(!ehChar(f) ? TXT_BODY
                                : (s != ch ? TXT_CAPTION2 : TXT_TITULO3),
                                s, tom, tom, tom, 255);
         txt_desenhar_alpha(l, t.x + (t.w - l.w) * 0.5f,
@@ -542,7 +596,7 @@ void teclado_desenhar(Uint32 agora) {
                      : coluna == 1 ? "OK Falar   Baixo Teclado   Voltar Cancelar"
                                    : "OK Teclado da TV   Baixo Teclado   Voltar Cancelar")
       : st_ime_disponivel() ? "Setas Navegar   OK Digitar   Cima Teclado da TV"
-      : celb_disponivel() ? "Setas Navegar   OK Digitar   Cima Celular"
+      : celOk() ? "Setas Navegar   OK Digitar   Cima Celular"
       : "Setas Navegar   OK Digitar   Voltar Cancelar";
     TxtLinha t = txt_linha(TXT_CAPTION2, d, av[0] ? 240 : 155, av[0] ? 196 : 159, av[0] ? 140 : 169, 255);
     txt_desenhar_alpha(t, x, teY() + dy + teH() - TE_PAD - t.h, a * 0.86f); }

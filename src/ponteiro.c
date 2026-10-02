@@ -386,7 +386,7 @@ static void alvoPorToque(const PonteiroAlvo *al, int focar, int ativar) {
   porToque = 0;
 }
 
-// Anda o acumulado em setas. `dentro` positivo = dedo andou para direita/baixo.
+// Anda o acumulado em setas. Positivo = o dedo andou para a direita/baixo.
 static float rolarPassos(float acum, int eixoY, int teto) {
   float passo = eixoY ? PONT_PASSO_V : PONT_PASSO_H;
   int n = 0;

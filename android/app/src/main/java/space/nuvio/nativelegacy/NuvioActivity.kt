@@ -325,6 +325,10 @@ class NuvioActivity : SDLActivity() {
                 else -> InputType.TYPE_CLASS_TEXT
             }
             c.setSingleLine(true)
+            // E-mail: a tecla do teclado diz "Proximo" (o app abre a senha em
+            // seguida); senha e texto: "Concluido". As duas fecham o campo.
+            val flags = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
+            c.imeOptions = (if (tipo == 1) EditorInfo.IME_ACTION_NEXT else EditorInfo.IME_ACTION_DONE) or flags
             c.filters = arrayOf(InputFilter.LengthFilter(if (max > 0) max else 400))
             c.setText(inicial)
             c.setSelection(c.text.length)

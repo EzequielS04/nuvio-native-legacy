@@ -25,6 +25,7 @@
 #define LG_EMAIL_PILL_W  560.0f
 #define LG_CAMPO_W       760.0f
 #define LG_CAMPO_H        88.0f
+#define LG_MOSTRAR_W     150.0f
 // Zona de silencio: 4 modulos claros em volta, exigidos pela norma. Vao DENTRO
 // da textura para que nenhum ajuste de layout possa comer a margem por
 // acidente — sem ela, leitor nenhum acha o simbolo.
@@ -39,13 +40,14 @@ static float pulso;
 // campos abrem a modal do teclado (teclado.h), que no Android chama o teclado
 // do sistema e na TV oferece a grade, o ditado e o celular.
 enum { LG_QR = 0, LG_EMAIL };
-enum { LE_EMAIL = 0, LE_SENHA, LE_ENTRAR, LE_QR, LE_N };
+enum { LE_EMAIL = 0, LE_SENHA, LE_MOSTRAR, LE_ENTRAR, LE_QR, LE_N };
 static int modo, foco, focoQr;
 static int campoAberto = -1;
 static char email[TECLADO_LONGO + 1], senha[TECLADO_LONGO + 1];
 static char aviso[160];          // erro local ("preencha..."), traduzido no desenho
 static float animFoco[LE_N], animFocoQr[2];
 static int esperando;            // pedido de e-mail saiu, resposta ainda nao veio
+static int senhaVisivel;         // "Mostrar" na senha (campo e modal)
 
 // O e-mail: minusculas (o servidor compara sem caixa), digitos e o que um
 // endereco usa. A senha: todo ASCII imprimivel, com espaco — e a senha que a
@@ -82,10 +84,11 @@ static void abrirCampo(int c) {
     teclado_abrir_com("E-mail", "O e-mail da sua conta Nuvio.", 120, ALFA_EMAIL, email);
     teclado_tipo(TECLADO_TIPO_EMAIL);
   } else {
-    // A senha nao volta para o campo: a modal mostra so pontos, mas o texto
-    // inicial iria inteiro para o teclado do sistema.
-    teclado_abrir_com("Senha", "A senha da sua conta Nuvio. Ela não aparece na tela.", 128, ALFA_SENHA, NULL);
+    // A senha VOLTA para a modal (em pontos): errar uma letra no fim de uma
+    // senha longa nao pode obrigar a redigitar tudo no D-pad.
+    teclado_abrir_com("Senha", "A senha da sua conta Nuvio. Ela não aparece na tela.", 128, ALFA_SENHA, senha);
     teclado_tipo(TECLADO_TIPO_SENHA);
+    teclado_mascarar(!senhaVisivel);
   }
 }
 static void enviar(void) {
@@ -104,6 +107,7 @@ static void enviar(void) {
 static void okEmail(void) {
   switch (foco) {
     case LE_EMAIL: case LE_SENHA: abrirCampo(foco); break;
+    case LE_MOSTRAR: senhaVisivel = !senhaVisivel; break;
     case LE_ENTRAR: enviar(); break;
     default: voltarQr(); break;
   }
@@ -157,6 +161,7 @@ void login_iniciar(void) {
   animBotao = 0.0f;
   pulso = 0.0f;
   modo = LG_QR; foco = LE_EMAIL; focoQr = 0; campoAberto = -1; aviso[0] = 0; esperando = 0;
+  senhaVisivel = 0;
   apagarTexto(senha, sizeof senha);
   // Pedir o codigo JA, sem esperar o OK: a pessoa que acabou de instalar o app
   // nao tem nada para decidir nesta tela, e um botao "entrar" antes do codigo
@@ -175,8 +180,13 @@ void login_evento(const SDL_Event *e) {
   if (modo == LG_EMAIL) {
     if (voltar) { voltarQr(); return; }
     if (sessao_estado() == SES_EMAIL) return;   // esperando o servidor
-    if (k == SDLK_UP && foco > 0) foco--;
-    else if (k == SDLK_DOWN && foco < LE_N - 1) foco++;
+    // Mostrar fica a direita da senha: cima/baixo pulam ele.
+    if (k == SDLK_UP)
+      foco = foco == LE_QR ? LE_ENTRAR : foco == LE_ENTRAR ? LE_SENHA : LE_EMAIL;
+    else if (k == SDLK_DOWN)
+      foco = foco == LE_EMAIL ? LE_SENHA : foco == LE_ENTRAR || foco == LE_QR ? LE_QR : LE_ENTRAR;
+    else if (k == SDLK_RIGHT && foco == LE_SENHA) foco = LE_MOSTRAR;
+    else if (k == SDLK_LEFT && foco == LE_MOSTRAR) foco = LE_SENHA;
     else if (ok) okEmail();
     return;
   }
@@ -201,10 +211,15 @@ void login_atualizar(float dt, Uint32 agora) {
   teclado_atualizar(dt, agora);
   r = teclado_resultado();
   if (r != TECLADO_NADA && campoAberto >= 0) {
+    int seguir = 0;
+    if (campoAberto == LE_SENHA) senhaVisivel = !teclado_mascarado();
     if (r == TECLADO_PRONTO) {
+      // PRONTO/ENTER AVANCA (#216): do e-mail direto para a senha, da senha
+      // para Entrar. So com o controle, sao dois OK a menos.
       if (campoAberto == LE_EMAIL) {
         snprintf(email, sizeof email, "%s", teclado_texto());
         foco = LE_SENHA;
+        seguir = 1;
       } else {
         snprintf(senha, sizeof senha, "%s", teclado_texto());
         foco = LE_ENTRAR;
@@ -213,6 +228,7 @@ void login_atualizar(float dt, Uint32 agora) {
     }
     teclado_esquecer();
     campoAberto = -1;
+    if (seguir) abrirCampo(LE_SENHA);
   }
   // Falhou: o foco vai para onde a pessoa conserta.
   // (O estado muda no fio do pedido, entre quadros: por isso a bandeira.)
@@ -262,7 +278,7 @@ static void campo(float y, int i, const char *rotulo, const char *valor, int ocu
   if (valor[0]) {
     char pontos[TECLADO_LONGO * 3 + 1];
     TxtLinha t;
-    float larg = cx.w - 48.0f;
+    float larg = cx.w - 48.0f - (i == LE_SENHA ? LG_MOSTRAR_W + 12.0f : 0.0f);
     if (oculto) {
       size_t j, n = strlen(valor);
       for (j = 0; j < n && j < TECLADO_LONGO; j++) memcpy(pontos + j * 3, "\xE2\x80\xA2", 3);
@@ -285,7 +301,16 @@ static void desenharEmail(float y, Uint32 agora) {
   y += 84.0f;
   campo(y, LE_EMAIL, "E-mail", email, 0);
   y += 42.0f + LG_CAMPO_H + 30.0f;
-  campo(y, LE_SENHA, "Senha", senha, 1);
+  campo(y, LE_SENHA, "Senha", senha, !senhaVisivel);
+  // MOSTRAR/OCULTAR dentro do campo, a direita (como nos sites).
+  { float x = (NV_TELA_W + LG_CAMPO_W) * 0.5f - LG_MOSTRAR_W - 12.0f;
+    float yb = y + 42.0f + (LG_CAMPO_H - 60.0f) * 0.5f, k = animFoco[LE_MOSTRAR];
+    GfxRect b = { x, yb, LG_MOSTRAR_W, 60.0f };
+    int tom = k >= 0.5f ? 24 : 220;
+    TxtLinha t = txt_linha(TXT_CAPTION, senhaVisivel ? "Ocultar" : "Mostrar", tom, tom, tom, 255);
+    gfx_cor(b, NV_RAIO_PILL, 1.0f, 1.0f, 1.0f, anim_mistura(0.10f, 0.92f, k));
+    txt_desenhar_alpha(t, b.x + (b.w - t.w) * 0.5f, b.y + (b.h - t.h) * 0.5f, 1.0f);
+    ponteiro_alvo(b.x, b.y, b.w, b.h, ptFocoEmail, NULL, LE_MOSTRAR, 0); }
   y += 42.0f + LG_CAMPO_H + 48.0f;
   pilula(NV_TELA_W * 0.5f, y, LG_EMAIL_PILL_W, st == SES_EMAIL ? "Entrando…" : "Entrar",
          animFoco[LE_ENTRAR], 1.0f, ptFocoEmail, LE_ENTRAR);
