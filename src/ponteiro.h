@@ -91,6 +91,8 @@ void ponteiro_alvo_arrastavel(void);
 // 1 enquanto focar/ativar estao rodando por causa de um DEDO (e nao do Magic
 // Remote). O player usa para tocar = mostrar controles e arrastar = procurar.
 int  ponteiro_toque(void);
+// Ha tela de toque (Android, ou um dedo ja chegou): alvos pequenos crescem.
+int  ponteiro_tem_toque(void);
 
 // Posicao logica atual (para quem ativa por coordenada, como a barra de tempo).
 float ponteiro_x(void);

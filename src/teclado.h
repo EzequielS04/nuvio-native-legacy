@@ -48,6 +48,11 @@ void teclado_abrir(const char *titulo, const char *dica, int max);
 // a nota no topo: a saida errada seria uma segunda modal.
 void teclado_abrir_com(const char *titulo, const char *dica, int max,
                        const char *alfabeto, const char *inicial);
+// Depois de teclado_abrir_com: que campo e este. SENHA mostra um ponto por
+// caractere; EMAIL e SENHA pedem o teclado certo ao sistema (Android). A
+// proxima abertura volta a TEXTO.
+enum { TECLADO_TIPO_TEXTO = 0, TECLADO_TIPO_EMAIL, TECLADO_TIPO_SENHA };
+void teclado_tipo(int tipo);
 int  teclado_aberto(void);
 // Para testes: foco na barra do campo (1 campo, 2 Falar, 0 no teclado).
 int  teclado_foco_campo(void);
@@ -63,5 +68,7 @@ int  teclado_resultado(void);
 // O que foi digitado. Continua valido depois de teclado_resultado(); so a
 // proxima abertura o zera.
 const char *teclado_texto(void);
+// Zera o que foi digitado (senha): quem leu teclado_texto() e nao precisa mais.
+void teclado_esquecer(void);
 
 #endif

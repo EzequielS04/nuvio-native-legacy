@@ -76,17 +76,22 @@ static int proximo(char *dst, size_t n);
 // fechar) nao pode cair no campo novo.
 static void descartar(void) { char ev[600]; int k = 0; while (k++ < 64 && proximo(ev, sizeof ev)) {} }
 
+static int proximoTipo;
+void st_ime_tipo(int tipo) { proximoTipo = tipo; }
+
 int st_ime_abrir(int d, const char *inicial, int max) {
-  int ok = 0;
+  int ok = 0, tipo = proximoTipo;
+  proximoTipo = ST_IME_TEXTO;
   if (!st_ime_disponivel()) return 0;
   descartar();
   dono = d; nivel = 0.0f;
   if (!quedaTeclado) aviso = "";      // caiu da voz: o aviso de por que fica
   quedaTeclado = 0;
 #ifdef NV_ANDROID
-  ok = android_st_teclado(inicial ? inicial : "", max);
+  // O tipo vai nos bits altos do max: a assinatura JNI fica a mesma.
+  ok = android_st_teclado(inicial ? inicial : "", (max & 0xFFFF) | (tipo << 16));
 #else
-  (void)max;
+  (void)max; (void)tipo;
   if (pelaPlataforma()) { texto_sistema_abrir(inicial ? inicial : "", 0); ok = texto_sistema_aberto(); }
   else ok = 1;
 #endif

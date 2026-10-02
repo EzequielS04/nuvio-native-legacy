@@ -6,6 +6,10 @@
 #include "text.h"
 #include "anim.h"
 #include "layout.h"
+#include "teclado.h"
+#include "ponteiro.h"
+#include "ajustes.h"
+#include "idioma.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +22,9 @@
 #define LG_BLOCO_W      1100.0f
 #define LG_PILL_W        360.0f
 #define LG_PILL_H         76.0f
+#define LG_EMAIL_PILL_W  560.0f
+#define LG_CAMPO_W       760.0f
+#define LG_CAMPO_H        88.0f
 // Zona de silencio: 4 modulos claros em volta, exigidos pela norma. Vao DENTRO
 // da textura para que nenhum ajuste de layout possa comer a margem por
 // acidente — sem ela, leitor nenhum acha o simbolo.
@@ -25,6 +32,84 @@
 
 static float animBotao;
 static float pulso;
+
+// LOGIN POR E-MAIL E SENHA (#216). O QR continua sendo o caminho da TV; o
+// e-mail entra como opcao ao lado dele, para quem esta num celular/tablet
+// Android (escanear a propria tela nao da) ou nao tem outro aparelho. Os
+// campos abrem a modal do teclado (teclado.h), que no Android chama o teclado
+// do sistema e na TV oferece a grade, o ditado e o celular.
+enum { LG_QR = 0, LG_EMAIL };
+enum { LE_EMAIL = 0, LE_SENHA, LE_ENTRAR, LE_QR, LE_N };
+static int modo, foco, focoQr;
+static int campoAberto = -1;
+static char email[TECLADO_LONGO + 1], senha[TECLADO_LONGO + 1];
+static char aviso[160];          // erro local ("preencha..."), traduzido no desenho
+static float animFoco[LE_N], animFocoQr[2];
+
+// O e-mail: minusculas (o servidor compara sem caixa), digitos e o que um
+// endereco usa. A senha: todo ASCII imprimivel, com espaco — e a senha que a
+// pessoa criou no site, nao uma que o app escolhe.
+static const char *ALFA_EMAIL = "abcdefghijklmnopqrstuvwxyz0123456789@._-+";
+static const char *ALFA_SENHA =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+  " .,_-@!#$%&*+=?/\\:;'\"()[]{}<>^~`|";
+
+static void apagarTexto(char *p, size_t n) { volatile char *v = p; while (n--) *v++ = 0; }
+
+// Quantos botoes a tela do QR tem agora: "Tentar de novo" so existe no erro.
+static int qrTemRetry(void) {
+  SesEstado st = sessao_estado();
+  return st == SES_ERRO || st == SES_DESLOGADO;
+}
+static int qrN(void) { return nuvem_pronta() ? (qrTemRetry() ? 2 : 1) : 0; }
+// Indice do botao "e-mail" na tela do QR.
+static int qrEmail(void) { return qrTemRetry() ? 1 : 0; }
+
+static void abrirEmail(void) {
+  modo = LG_EMAIL; foco = email[0] ? LE_SENHA : LE_EMAIL; aviso[0] = 0;
+}
+static void voltarQr(void) {
+  modo = LG_QR; focoQr = 0; aviso[0] = 0;
+  apagarTexto(senha, sizeof senha);
+  if (!sessao_logada() && sessao_estado() != SES_AGUARDANDO &&
+      sessao_estado() != SES_PEDINDO && sessao_estado() != SES_EMAIL)
+    sessao_login_comecar();
+}
+static void abrirCampo(int c) {
+  campoAberto = c;
+  if (c == LE_EMAIL) {
+    teclado_abrir_com("E-mail", "O e-mail da sua conta Nuvio.", 120, ALFA_EMAIL, email);
+    teclado_tipo(TECLADO_TIPO_EMAIL);
+  } else {
+    // A senha nao volta para o campo: a modal mostra so pontos, mas o texto
+    // inicial iria inteiro para o teclado do sistema.
+    teclado_abrir_com("Senha", "A senha da sua conta Nuvio. Ela não aparece na tela.", 128, ALFA_SENHA, NULL);
+    teclado_tipo(TECLADO_TIPO_SENHA);
+  }
+}
+static void enviar(void) {
+  if (sessao_estado() == SES_EMAIL) return;
+  if (!email[0] || !senha[0]) {
+    snprintf(aviso, sizeof aviso, "%s", "Preencha o e-mail e a senha.");
+    foco = email[0] ? LE_SENHA : LE_EMAIL;
+    return;
+  }
+  aviso[0] = 0;
+  sessao_login_email(email, senha);
+  // A senha sai da memoria da tela ja: errada, a pessoa digita de novo.
+  apagarTexto(senha, sizeof senha);
+}
+static void okEmail(void) {
+  switch (foco) {
+    case LE_EMAIL: case LE_SENHA: abrirCampo(foco); break;
+    case LE_ENTRAR: enviar(); break;
+    default: voltarQr(); break;
+  }
+}
+
+// Ponteiro e dedo: o alvo poe o foco; o OK (do ponteiro) faz o resto.
+static void ptFocoEmail(int i, int b) { (void)b; if (modo == LG_EMAIL) foco = i; }
+static void ptFocoQr(int i, int b) { (void)b; if (modo == LG_QR) focoQr = i; }
 
 static GLuint texQr;
 static char   qrDe[512];   // conteudo ja desenhado, para nao refazer por quadro
@@ -69,6 +154,8 @@ static void gerarTexQr(const char *texto) {
 void login_iniciar(void) {
   animBotao = 0.0f;
   pulso = 0.0f;
+  modo = LG_QR; foco = LE_EMAIL; focoQr = 0; campoAberto = -1; aviso[0] = 0;
+  apagarTexto(senha, sizeof senha);
   // Pedir o codigo JA, sem esperar o OK: a pessoa que acabou de instalar o app
   // nao tem nada para decidir nesta tela, e um botao "entrar" antes do codigo
   // so acrescenta um toque e uns segundos de espera depois dele.
@@ -76,27 +163,138 @@ void login_iniciar(void) {
 }
 
 void login_evento(const SDL_Event *e) {
+  SDL_Keycode k;
+  int ok, voltar;
+  if (teclado_aberto()) { teclado_evento(e); return; }
   if (e->type != SDL_KEYDOWN) return;
-  { SDL_Keycode k = e->key.keysym.sym;
-    if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
-      // OK so faz sentido quando ha o que refazer. Com o codigo na tela ele nao
-      // faz nada de proposito: reiniciar o fluxo aqui trocaria o codigo que a
-      // pessoa acabou de digitar no celular.
-      if (sessao_estado() == SES_ERRO || sessao_estado() == SES_DESLOGADO)
-        sessao_login_comecar();
-    } }
+  k = e->key.keysym.sym;
+  ok = (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) && !e->key.repeat;
+  voltar = k == SDLK_AC_BACK || k == SDLK_ESCAPE || e->key.keysym.scancode == NV_SCANCODE_BACK;
+  if (modo == LG_EMAIL) {
+    if (voltar) { voltarQr(); return; }
+    if (sessao_estado() == SES_EMAIL) return;   // esperando o servidor
+    if (k == SDLK_UP && foco > 0) foco--;
+    else if (k == SDLK_DOWN && foco < LE_N - 1) foco++;
+    else if (ok) okEmail();
+    return;
+  }
+  if (k == SDLK_UP && focoQr > 0) focoQr--;
+  else if (k == SDLK_DOWN && focoQr + 1 < qrN()) focoQr++;
+  else if (ok && qrN()) {
+    if (focoQr >= qrN()) focoQr = qrN() - 1;
+    if (focoQr == qrEmail()) { abrirEmail(); return; }
+    // "Tentar de novo". OK so faz sentido quando ha o que refazer. Com o
+    // codigo na tela o unico botao e o do e-mail: reiniciar o fluxo trocaria o
+    // codigo que a pessoa acabou de digitar no celular.
+    if (sessao_estado() == SES_ERRO || sessao_estado() == SES_DESLOGADO)
+      sessao_login_comecar();
+  }
 }
 
 void login_atualizar(float dt, Uint32 agora) {
+  int i, r;
+  SesEstado antes = sessao_estado();
   sessao_passo((unsigned)agora);
   animBotao = anim_mola(animBotao, 1.0f, dt, NV_MOLA_FOCO);
   pulso += dt;
+  teclado_atualizar(dt, agora);
+  r = teclado_resultado();
+  if (r != TECLADO_NADA && campoAberto >= 0) {
+    if (r == TECLADO_PRONTO) {
+      if (campoAberto == LE_EMAIL) {
+        snprintf(email, sizeof email, "%s", teclado_texto());
+        foco = LE_SENHA;
+      } else {
+        snprintf(senha, sizeof senha, "%s", teclado_texto());
+        foco = LE_ENTRAR;
+      }
+      aviso[0] = 0;
+    }
+    teclado_esquecer();
+    campoAberto = -1;
+  }
+  // Falhou: o foco vai para onde a pessoa conserta.
+  if (modo == LG_EMAIL && antes == SES_EMAIL && sessao_estado() != SES_EMAIL && !sessao_logada())
+    foco = LE_SENHA;
+  if (focoQr >= qrN() && qrN()) focoQr = qrN() - 1;
+  for (i = 0; i < LE_N; i++)
+    animFoco[i] = anim_mola(animFoco[i], modo == LG_EMAIL && foco == i && !teclado_aberto() ? 1.0f : 0.0f,
+                            dt, NV_MOLA_FOCO);
+  for (i = 0; i < 2; i++)
+    animFocoQr[i] = anim_mola(animFocoQr[i], modo == LG_QR && focoQr == i ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
+}
+
+// Pilula de botao: cheia e clara no foco, vidro discreto fora dele.
+static void pilula(float cx, float y, float w, const char *rot, float k, float alpha,
+                   PonteiroFn focar, int i) {
+  GfxRect pill = { cx - w * 0.5f, y, w, LG_PILL_H };
+  TxtLinha t;
+  int tom = k >= 0.5f ? 24 : 236;
+  gfx_cor(pill, NV_RAIO_PILL, 1.0f, 1.0f, 1.0f, anim_mistura(0.12f, 0.92f, k) * alpha);
+  t = txt_linha_corta(TXT_BODY, rot, tom, tom, tom + 2 > 255 ? 255 : tom + 2, 255, w - 48.0f);
+  txt_desenhar_alpha(t, cx - t.w * 0.5f, y + (LG_PILL_H - t.h) * 0.5f, alpha);
+  if (focar) ponteiro_alvo(pill.x, pill.y, pill.w, pill.h, focar, NULL, i, 0);
 }
 
 static void linhaCentrada(TxtEstilo est, const char *s, int r, int g, int b,
                           float y, float alpha) {
   TxtLinha l = txt_linha_corta(est, s, r, g, b, 255, LG_BLOCO_W);
   txt_desenhar_alpha(l, (NV_TELA_W - l.w) * 0.5f, y, alpha);
+}
+
+// Campo da tela de e-mail: rotulo em cima, caixa com o valor (ou pontos).
+static void campo(float y, int i, const char *rotulo, const char *valor, int oculto) {
+  float x = (NV_TELA_W - LG_CAMPO_W) * 0.5f, k = animFoco[i];
+  GfxRect cx = { x, y + 42.0f, LG_CAMPO_W, LG_CAMPO_H };
+  float ar, ag, ab;
+  TxtLinha r = txt_linha(TXT_CAPTION, rotulo, 176, 178, 186, 255);
+  txt_desenhar_alpha(r, x + 4.0f, y, 1.0f);
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_cor(cx, NV_RAIO_CARD, 1.0f, 1.0f, 1.0f, anim_mistura(0.07f, 0.13f, k));
+  if (k > 0.01f)
+    gfx_vidro_aro((GfxRect){ cx.x - 6, cx.y - 6, cx.w + 12, cx.h + 12 }, NV_RAIO_CARD, 2.5f,
+                  ar, ag, ab, 0.95f * k);
+  ponteiro_alvo(cx.x, y, cx.w, cx.h + 42.0f, ptFocoEmail, NULL, i, 0);
+  if (valor[0]) {
+    char pontos[TECLADO_LONGO * 3 + 1];
+    TxtLinha t;
+    float larg = cx.w - 48.0f;
+    if (oculto) {
+      size_t j, n = strlen(valor);
+      for (j = 0; j < n && j < TECLADO_LONGO; j++) memcpy(pontos + j * 3, "\xE2\x80\xA2", 3);
+      pontos[j * 3] = 0;
+    }
+    // O valor e da pessoa; txt_linha procura traducao, e um e-mail nunca casa.
+    t = txt_linha(TXT_HEADLINE, oculto ? pontos : valor, 240, 242, 248, 255);
+    gfx_recorte(cx.x + 24.0f, cx.y, larg, cx.h);
+    txt_desenhar_alpha(t, cx.x + 24.0f - (t.w > larg ? t.w - larg : 0.0f),
+                       cx.y + (cx.h - t.h) * 0.5f, 1.0f);
+    gfx_sem_recorte();
+  }
+}
+
+static void desenharEmail(float y, Uint32 agora) {
+  SesEstado st = sessao_estado();
+  const char *falha = sessao_erro_email();
+  (void)agora;
+  linhaCentrada(TXT_BODY, "Use o e-mail e a senha da sua conta Nuvio.", 176, 178, 186, y, 1.0f);
+  y += 84.0f;
+  campo(y, LE_EMAIL, "E-mail", email, 0);
+  y += 42.0f + LG_CAMPO_H + 30.0f;
+  campo(y, LE_SENHA, "Senha", senha, 1);
+  y += 42.0f + LG_CAMPO_H + 48.0f;
+  pilula(NV_TELA_W * 0.5f, y, LG_EMAIL_PILL_W, st == SES_EMAIL ? "Entrando…" : "Entrar",
+         animFoco[LE_ENTRAR], 1.0f, ptFocoEmail, LE_ENTRAR);
+  y += LG_PILL_H + 24.0f;
+  pilula(NV_TELA_W * 0.5f, y, LG_EMAIL_PILL_W, "Usar o código QR",
+         animFoco[LE_QR], 1.0f, ptFocoEmail, LE_QR);
+  y += LG_PILL_H + 36.0f;
+  if (aviso[0]) linhaCentrada(TXT_BODY, aviso, 236, 108, 108, y, 1.0f);
+  else if (st != SES_EMAIL && falha[0]) {
+    // Ja vem traduzida de sessao.c (formato com i18n): nao passa de novo.
+    TxtLinha l = txt_linha_corta(TXT_BODY, falha, 236, 108, 108, 255, LG_BLOCO_W);
+    txt_desenhar_alpha(l, (NV_TELA_W - l.w) * 0.5f, y, 1.0f);
+  }
 }
 
 void login_desenhar(Uint32 agora) {
@@ -106,10 +304,19 @@ void login_desenhar(Uint32 agora) {
 
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f); }
+  // A tela inteira e a camada: nada de tras recebe toque.
+  ponteiro_camada();
+  ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, NULL, 0, 0);
 
   y = 118.0f;
   linhaCentrada(TXT_TITULO1, "Entrar na sua conta", 255, 255, 255, y, 1.0f);
   y += 118.0f;
+
+  if (modo == LG_EMAIL && nuvem_pronta()) {
+    desenharEmail(y, agora);
+    teclado_desenhar(agora);
+    return;
+  }
 
   if (!nuvem_pronta()) {
     // Este caso e de COMPILACAO, nao do usuario: o pacote saiu sem a
@@ -126,6 +333,8 @@ void login_desenhar(Uint32 agora) {
   switch (st) {
     case SES_PEDINDO:
       linhaCentrada(TXT_HEADLINE, "Preparando o código…", 210, 212, 220, y, 1.0f);
+      pilula(NV_TELA_W * 0.5f, y + 110.0f, LG_EMAIL_PILL_W, "Entrar com e-mail e senha",
+             animFocoQr[0], 1.0f, ptFocoQr, 0);
       break;
 
     case SES_AGUARDANDO: {
@@ -163,6 +372,9 @@ void login_desenhar(Uint32 agora) {
       { float a = 0.5f + 0.5f * sinf(pulso * 3.14159f);
         linhaCentrada(TXT_CAPTION, "Aguardando a autorização…",
                       150, 152, 160, y, 0.45f + 0.40f * a); }
+      y += 64.0f;
+      pilula(NV_TELA_W * 0.5f, y, LG_EMAIL_PILL_W, "Entrar com e-mail e senha",
+             animFocoQr[0], 1.0f, ptFocoQr, 0);
       break;
     }
 
@@ -181,12 +393,10 @@ void login_desenhar(Uint32 agora) {
       linhaCentrada(TXT_HEADLINE, msg[0] ? msg : "Não consegui falar com o servidor.",
                     236, 108, 108, y, 1.0f);
       y += 96.0f;
-      { GfxRect pill = { (NV_TELA_W - LG_PILL_W) * 0.5f, y, LG_PILL_W, LG_PILL_H };
-        TxtLinha t;
-        gfx_cor(pill, NV_RAIO_PILL, 1.0f, 1.0f, 1.0f, 0.92f * animBotao);
-        t = txt_linha(TXT_BODY, "Tentar de novo", 24, 24, 26, 255);
-        txt_desenhar_alpha(t, (NV_TELA_W - t.w) * 0.5f,
-                           y + (LG_PILL_H - t.h) * 0.5f, animBotao); }
+      pilula(NV_TELA_W * 0.5f, y, LG_EMAIL_PILL_W, "Tentar de novo",
+             animFocoQr[0], animBotao, ptFocoQr, 0);
+      pilula(NV_TELA_W * 0.5f, y + LG_PILL_H + 24.0f, LG_EMAIL_PILL_W, "Entrar com e-mail e senha",
+             animFocoQr[1], animBotao, ptFocoQr, 1);
       break;
     }
   }

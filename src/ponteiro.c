@@ -377,6 +377,7 @@ static void (*entregarToque)(const SDL_Event *);
 static int porToque;   // 1 durante focar/ativar disparados por dedo
 
 int ponteiro_toque(void) { return porToque; }
+int ponteiro_tem_toque(void) { return toqueDisponivel; }
 
 static void alvoPorToque(const PonteiroAlvo *al, int focar, int ativar) {
   porToque = 1;

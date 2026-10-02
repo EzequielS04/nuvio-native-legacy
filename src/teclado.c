@@ -129,11 +129,19 @@ static char  texto[TECLADO_LONGO + 1];
 static int   n, maxN, resultado;
 static char  tituloAtual[96], dicaAtual[160];
 static int   celRecebido;
+// SENHA (#216): o campo mostra pontos, nunca o texto. A modal fica na tela e
+// a tela vira foto.
+static int   mascarar, tipoIme;
+void teclado_tipo(int tipo) {
+  tipoIme = tipo == TECLADO_TIPO_EMAIL ? ST_IME_EMAIL : tipo == TECLADO_TIPO_SENHA ? ST_IME_SENHA : ST_IME_TEXTO;
+  mascarar = tipo == TECLADO_TIPO_SENHA;
+}
 
 const char *teclado_alfabeto(void) { return ALFABETO; }
 int teclado_aberto(void) { return aberto; }
 int teclado_foco_campo(void) { return fileira < 0 ? coluna + 1 : 0; }
 const char *teclado_texto(void) { return texto; }
+void teclado_esquecer(void) { volatile char *p = texto; size_t k = sizeof texto; while (k--) *p++ = 0; n = 0; }
 
 int teclado_resultado(void) {
   int r = resultado;
@@ -180,6 +188,7 @@ void teclado_abrir_com(const char *titulo, const char *dica, int max,
   memset(focoAnim, 0, sizeof focoAnim);
   animBarra[0] = animBarra[1] = animBarra[2] = 0.0f;
   celRecebido = 0;
+  mascarar = 0; tipoIme = ST_IME_TEXTO;
 }
 
 // O texto do sistema passa pelo ALFABETO da modal: o codigo de pareamento e
@@ -209,9 +218,14 @@ static void fechar(int r) {
 static void okBarra(void) {
   if (coluna == 2) { st_fechar(ST_TECLADO); celb_abrir(CELB_TECLADO, tituloAtual); }
   else if (coluna == 1) st_voz_iniciar(ST_TECLADO);
-  else st_ime_abrir(ST_TECLADO, texto, maxN);
+  else { st_ime_tipo(tipoIme); st_ime_abrir(ST_TECLADO, texto, maxN); }
 }
 static void focarBarra(int c, int b) { (void)b; fileira = -1; coluna = c; }
+static void focarTecla(int f, int c) {
+  if (!aberto || f < 0 || f >= nFileiras) return;
+  if (f == nFileiras - 1 && fileira < nFileiras - 1) colunaAntes = coluna;
+  fileira = f; coluna = c;
+}
 
 static int colunasDe(int f) {
   int n;
@@ -326,7 +340,7 @@ void teclado_atualizar(float dt, Uint32 agora) {
       fileira = nFileiras - 1; coluna = 2;
     }
     r = st_ler(ST_TECLADO, t, sizeof t);
-    if (r == ST_PEDE_TECLADO) { coluna = 0; st_ime_abrir(ST_TECLADO, texto, maxN); }
+    if (r == ST_PEDE_TECLADO) { coluna = 0; st_ime_tipo(tipoIme); st_ime_abrir(ST_TECLADO, texto, maxN); }
     else if (r == ST_TEXTO || r == ST_FIM) {
       definirDoSistema(t);
       // "Concluir" no teclado da TV e o "pronto" da modal; o fim da FALA nao —
@@ -355,6 +369,12 @@ void teclado_desenhar(Uint32 agora) {
   if (anim < 0.01f) return;
   dy = (1.0f - a) * 36.0f;
 
+  // MODAL PARA O PONTEIRO E O DEDO (#216): os alvos da tela de tras deixam de
+  // valer, o fundo absorve o toque, e cada tecla e um alvo (foco + OK).
+  if (aberto && ponteiro_ativo()) {
+    ponteiro_camada();
+    ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, NULL, 0, 0);
+  }
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.76f * anim);
   { GfxRect p = { TE_X, teY() + dy, TE_W, teH() };
     gfx_cor(p, 24.0f / teH(), 0.075f, 0.078f, 0.088f, 0.99f * a); }
@@ -415,7 +435,7 @@ void teclado_desenhar(Uint32 agora) {
       celb_botao(CELB_TECLADO, (GfxRect){ mx, my, d, d }, aberto && fileira < 0 && coluna == 2,
                  focarBarra, 2, 0, a);
     } }
-  if ((campoW() - (float)(maxN - 1) * TE_CGAP) / (float)maxN >= TE_CX_MIN) {
+  if (!mascarar && (campoW() - (float)(maxN - 1) * TE_CGAP) / (float)maxN >= TE_CX_MIN) {
     float bw = (campoW() - (float)(maxN - 1) * TE_CGAP) / (float)maxN;
     float bx, by = teY() + dy + TE_CAIXA_Y;
     if (bw > TE_CX) bw = TE_CX;
@@ -444,7 +464,14 @@ void teclado_desenhar(Uint32 agora) {
     float tx = campo.x + TE_CAMPO_PAD, cursorX = tx;
     gfx_cor(campo, NV_RAIO_CARD, 1.0f, 1.0f, 1.0f, 0.07f * a);
     if (n) {
-      TxtLinha t = txt_linha(TXT_TITULO2, texto, 246, 248, 255, 255);
+      char pontos[TECLADO_LONGO * 3 + 1];
+      TxtLinha t;
+      if (mascarar) {
+        int i2;
+        for (i2 = 0; i2 < n && i2 < TECLADO_LONGO; i2++) memcpy(pontos + i2 * 3, "\xE2\x80\xA2", 3);
+        pontos[i2 * 3] = 0;
+      }
+      t = txt_linha(TXT_TITULO2, mascarar ? pontos : texto, 246, 248, 255, 255);
       // TEXTO MAIS LARGO QUE O CAMPO ROLA PELO FIM, nao pelo comeco: quem
       // digita precisa ver a ultima letra que apertou, nao a primeira.
       float larg = campo.w - TE_CAMPO_PAD * 2.0f;
@@ -476,6 +503,7 @@ void teclado_desenhar(Uint32 agora) {
       char ch[2];
       int tom;
       base.y += dy;
+      if (aberto && ponteiro_ativo()) ponteiro_alvo(base.x, base.y, base.w, base.h, focarTecla, NULL, f, c);
       t.w = base.w * esc; t.h = base.h * esc;
       t.x = base.x - (t.w - base.w) * 0.5f;
       t.y = base.y - (t.h - base.h) * 0.5f;
