@@ -83,6 +83,10 @@
 // `voz` = 1 quando quem abriu foi o botao de microfone: com ditado disponivel
 // ele comeca na hora.
 void spot_abrir(int voz);
+// Busca somente preferencias locais, sem consultas de catalogo/pessoas nem historico.
+void spot_abrir_ajustes(int voz);
+// Reabre a busca local após abrir um resultado, restaurando consulta e foco.
+void spot_reabrir_ajustes(void);
 void spot_fechar(void);
 int  spot_aberto(void);
 // Ainda na tela (aberto ou saindo na animacao).
@@ -105,7 +109,8 @@ enum {
   SPOT_COLECAO,     // indice = col_folder(indice)
   SPOT_CANAL,       // id/nome/base do canal (guia_item_do_canal)
   SPOT_CATALOGO,    // indice = cat_fileira(indice)
-  SPOT_ADDONS       // abre a tela de Addons
+  SPOT_ADDONS,      // abre a tela de Addons
+  SPOT_AJUSTE       // indice = OpcaoId estavel da preferencia
 };
 typedef struct {
   int  tipo;

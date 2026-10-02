@@ -1,0 +1,17 @@
+#!/bin/bash
+# Busca local e dados de comparacao, sem abrir janela ou fazer requisicoes.
+#   bash tests/ajustes_ux_dados.sh
+set -eu
+cd "$(dirname "$0")/.."
+sources=()
+for source in src/*.c; do
+  case "$source" in src/main.c|src/ajustes.c) continue;; esac
+  sources+=("$source")
+done
+binary="$(mktemp /tmp/nuvio-ajustes-ux-dados.XXXXXX)"
+trap 'rm -f "$binary"' EXIT
+cc "${sources[@]}" tests/ajustes_ux_dados.c -Isrc -o "$binary" \
+  -O1 -g -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
+  -L/opt/homebrew/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lz -framework OpenGL \
+  -Wno-deprecated-declarations -Wno-macro-redefined
+"$binary"

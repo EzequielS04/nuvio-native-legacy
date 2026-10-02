@@ -1,0 +1,164 @@
+// Catalogo de apresentacao da Fase 1. Incluir depois de Item/SEC/ROT/OPC.
+// A ordem do enum, CHAVE e valor[] nao participa deste mapa.
+static const Item TELA[] = {
+  SEC("Tela inicial", "Estilo, fileiras, barra lateral e Continuar assistindo", "aj_layout-dashboard"),
+    ROT("Estilo"),
+      OPC(AJ_HOME_LAYOUT), OPC(AJ_LANDSCAPE), OPC(AJ_HERO), OPC(AJ_HERO_CHEIO),
+      OPC(AJ_HERO_CATALOGOS), OPC(AJ_HERO_TRANSICAO),
+    ROT("Fileiras"),
+      OPC(AJ_FIL_ORDEM), OPC(AJ_FIL_LIMITE), OPC(AJ_ITENS_FILEIRA),
+      OPC(AJ_OCULTAR_NLANC), OPC(AJ_NOTAS_HOME), OPC(AJ_ROTULOS),
+      OPC(AJ_NOME_ADDON), OPC(AJ_SUFIXO_TIPO), OPC(AJ_SELO_VISTO),
+    ROT("Continuar assistindo"),
+      OPC(AJ_CW_LIGADO), OPC(AJ_CW_OK), OPC(AJ_CW_ESTILO), OPC(AJ_CW_THUMB),
+      OPC(AJ_CW_BLUR_PROX), OPC(AJ_CW_ORDEM), OPC(AJ_CW_NAO_EXIBIDOS),
+      OPC(AJ_CW_FURTHEST),
+    ROT("Barra lateral"),
+      OPC(AJ_RAIL_MODERNA), OPC(AJ_RAIL), OPC(AJ_MENU_EXPLORAR),
+      OPC(AJ_MENU_GUIA), OPC(AJ_MENU_AGENDA), OPC(AJ_MENU_PERFIL),
+      OPC(AJ_RAIL_BLUR), OPC(AJ_DESCOBRIR),
+    ROT("Escolha de perfil"), OPC(AJ_PS_FUNDO),
+
+  SEC("Cartazes e arte", "Cartaz em foco, formato e origem da arte", "aj_images"),
+    ROT("Cartaz em foco"),
+      OPC(AJ_EXPANDIR), OPC(AJ_EXPANDIR_ATRASO), OPC(AJ_BORDA_FOCO),
+      OPC(AJ_GRAD_CLASSICO),
+    ROT("Forma"),
+      OPC(AJ_LARGURA_DP), OPC(AJ_RAIO_DP), OPC(AJ_PROF), OPC(AJ_PROF_BORDA),
+      OPC(AJ_PROF_BRILHO), OPC(AJ_PROF_COBERTURA), OPC(AJ_PROF_POSTERS),
+      OPC(AJ_PROF_CW), OPC(AJ_PROF_EPS), OPC(AJ_PROF_ELENCO),
+      OPC(AJ_PROF_TRAILERS),
+    ROT("De onde vem a arte"),
+      OPC(AJ_HERO_FUNDO), OPC(AJ_HERO_ARTE_DIF), OPC(AJ_POSTER_PROV),
+      OPC(AJ_ADDON_POSTER), OPC(AJ_ADDON_FUNDO), OPC(AJ_ADDON_LOGO),
+      OPC(AJ_COL_ARTE_CONTA), OPC(AJ_POSTER_INST), OPC(AJ_POSTER_TOKEN),
+      OPC(AJ_POSTER_EXTRA), OPC(AJ_POSTER_CHAVE), OPC(AJ_POSTER_MODELO),
+      OPC(AJ_POSTER_TESTAR),
+
+  SEC("Trailers", "Onde tocam, com que som e de qual fonte", "aj_circle-play"),
+    ROT("Onde toca"),
+      OPC(AJ_HERO_TRAILER), OPC(AJ_FOCO_TRAILER), OPC(AJ_DET_TRAILER_AUTO),
+      OPC(AJ_DET_TRAILER),
+    ROT("Som e imagem"),
+      OPC(AJ_HERO_TRAILER_SOM), OPC(AJ_DET_TRAILER_SOM), OPC(AJ_TRAILER_FONTE),
+      OPC(AJ_HERO_TRAILER_ESPERA), OPC(AJ_TRAILER_QUAL), OPC(AJ_TRAILER_ASPECTO),
+
+  SEC("Página do título", "O que aparece, notas e dados do título", "aj_file-text"),
+    ROT("O que aparece"),
+      OPC(AJ_DET_VEU), OPC(AJ_DET_DATA_CHEIA), OPC(AJ_DET_BLUR_NAO_VISTOS),
+    ROT("Notas"),
+      OPC(AJ_NT_IMDB), OPC(AJ_NT_TOMATES), OPC(AJ_NT_AUDIENCIA), OPC(AJ_NT_META),
+      OPC(AJ_NT_METAUSER), OPC(AJ_NT_TRAKT), OPC(AJ_NT_TMDB), OPC(AJ_NT_LETTER),
+      OPC(AJ_NT_MAL), OPC(AJ_NT_EBERT), OPC(AJ_NT_SCORE), OPC(AJ_MDB_LIGADO),
+      OPC(AJ_MDB_TRAKT), OPC(AJ_MDB_IMDB), OPC(AJ_MDB_TMDB), OPC(AJ_MDB_LETTER),
+      OPC(AJ_MDB_TOMATES), OPC(AJ_MDB_AUDIENCIA), OPC(AJ_MDB_META), OPC(AJ_MDB_MAL),
+    ROT("Dados do título"),
+      OPC(AJ_TMDB_LIGADO), OPC(AJ_TMDB_ARTE), OPC(AJ_TMDB_BASICO),
+      OPC(AJ_TMDB_FICHA), OPC(AJ_TMDB_DATAS), OPC(AJ_TMDB_ELENCO),
+      OPC(AJ_TMDB_PROD), OPC(AJ_TMDB_REDES), OPC(AJ_TMDB_EPS),
+      OPC(AJ_TMDB_TRAILERS), OPC(AJ_TMDB_MAIS), OPC(AJ_TMDB_COL), OPC(AJ_TMDB_CW),
+      OPC(AJ_DET_META_EXT), OPC(AJ_DET_SO_CINEMETA),
+
+  SEC("Reprodução", "Fonte, imagem, som e comportamento do player", "aj_circle-play"),
+    ROT("Escolha da fonte"),
+      OPC(AJ_FONTE_MANUAL), OPC(AJ_FONTE_AUTO), OPC(AJ_FONTE_REPOR),
+      OPC(AJ_FONTE_PRAZO),
+      OPC(AJ_SELOS_CORES),
+    ROT("Imagem e som"), OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS),
+    ROT("Durante e depois"),
+      OPC(AJ_PAUSA_OVERLAY), OPC(AJ_CW_CONCLUIDO), OPC(AJ_SAIDA_PLAYER),
+    ROT("Miniaturas na barra de tempo"),
+      OPC(AJ_SEEKR_LIGADO), OPC(AJ_SEEKR_CHAVE), OPC(AJ_SEEKR_TESTAR),
+      OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
+
+  SEC("Idiomas e legendas", "Idioma da interface, áudio, legenda e metadados", "aj_list-checks"),
+    OPC(AJ_IDIOMA), OPC(AJ_AUD_LINGUA), OPC(AJ_LEG_LINGUA), OPC(AJ_TMDB_IDIOMA),
+
+  SEC("Aparência", "Cor, transparência, fonte, animações e relógio", "aj_palette"),
+    OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_FONTE_UI),
+    OPC(AJ_ANIM), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS), OPC(AJ_VIDRO_CONTORNO),
+
+  SEC("TV ao vivo", "Provedor e solução de problemas ao assistir canais", "aj_puzzle"),
+    ROT("Provedor"),
+      OPC(AJ_XTREAM_SERVIDOR), OPC(AJ_XTREAM_USUARIO), OPC(AJ_XTREAM_SENHA),
+      OPC(AJ_XTREAM_CONTA), OPC(AJ_XTREAM_LIMPAR), OPC(AJ_STALKER_PORTAL),
+      OPC(AJ_STALKER_MAC), OPC(AJ_STALKER_LIMPAR), OPC(AJ_EPG_PAIS),
+    ROT("Se o canal não abre"),
+      OPC(AJ_LIVETV_DIAG), OPC(AJ_LIVETV_RES), OPC(AJ_LIVETV_ESPERA),
+      OPC(AJ_LIVETV_FORMATO), OPC(AJ_LIVETV_MODO), OPC(AJ_LIVETV_PROXY),
+
+  SEC("Contas e serviços", "Perfil, sincronização, histórico e serviços conectados", "aj_user-round"),
+    ROT("Conta e perfis"),
+      OPC(AJ_PERFIL_ATIVO), OPC(AJ_SYNC), OPC(AJ_ADDONS), OPC(AJ_ADDONS_PRINCIPAL),
+      OPC(AJ_PERFIL_PESQ), OPC(AJ_PERFIL_EDITAR), OPC(AJ_SAIR),
+    ROT("Trakt e Simkl"),
+      OPC(AJ_TRAKT), OPC(AJ_SIMKL), OPC(AJ_SALVOS_DEST), OPC(AJ_CW_FONTE),
+    ROT("Chaves"),
+      OPC(AJ_DEBRID_RD), OPC(AJ_DEBRID_TB), OPC(AJ_DEBRID_PM), OPC(AJ_DEBRID_AD),
+      OPC(AJ_DEBRID_AD_TESTAR), OPC(AJ_MDB_CHAVE), OPC(AJ_FANART_CHAVE),
+    ROT("P2P"), OPC(AJ_P2P_LIGADO), OPC(AJ_P2P_URL), OPC(AJ_P2P_TESTAR),
+
+  SEC("Desempenho desta TV", "Resolução, imagens, efeitos e diagnóstico", "aj_monitor-cog"),
+    OPC(AJ_RESOLUCAO), OPC(AJ_QUALIDADE_IMG),
+#if defined(NV_TPK) || defined(NV_ANDROID)
+    OPC(AJ_GPU_EFEITOS),
+#endif
+    OPC(AJ_NAV_RAPIDA), OPC(AJ_DIAGNOSTICO), OPC(AJ_VELOCIDADE), OPC(AJ_ESPACO),
+    OPC(AJ_TEX_MB),
+
+  SEC("Sobre e ajuda", "Versão, atualização e envio de registros", "aj_info"),
+    OPC(AJ_VERSAO_I), OPC(AJ_ATUALIZAR), OPC(AJ_ENVIAR_LOG), OPC(AJ_ENVIO_AUTO),
+};
+#define AJ_N_TELA (int)(sizeof TELA / sizeof *TELA)
+#define AJ_MAX_SECOES 16
+
+// Texto exibido no painel ao selecionar uma categoria. Mesma ordem dos SECs.
+static const char *SECAO_AJUDA[] = {
+  "Estilo da home, fileiras, Continuar assistindo, barra lateral e escolha de perfil.",
+  "Comportamento do cartaz em foco, formato dos cartões e origem das imagens.",
+  "Configuração dos trailers no destaque, no cartaz em foco e na página do título.",
+  "Informações visíveis, notas e fontes de dados da página de cada título.",
+  "Preferências de reprodução, escolha da fonte e miniaturas na barra de tempo.",
+  "Idioma da interface, preferências de áudio e legenda e idioma dos metadados.",
+  "Cor de destaque, transparência, tipografia, animações e relógio na tela.",
+  "Conexão dos provedores e diagnóstico de reprodução de canais ao vivo.",
+  "Perfil e serviços conectados, histórico e opções de contas e chaves.",
+  "Recursos e diagnóstico deste aparelho.",
+  "Versão instalada, atualização e envio de registros para a equipe do app.",
+};
+
+// Básico por padrão; a lista abaixo segue os 60 IDs avançados da proposta-base
+// mais AJ_SEEKR_AJUSTE, a única opção avançada acrescentada no delta 1.7.1.
+static int uxAvancada(int op) {
+  switch (op) {
+    case AJ_HERO_TRANSICAO:
+    case AJ_ROTULOS: case AJ_NOME_ADDON: case AJ_SUFIXO_TIPO:
+    case AJ_RAIL_BLUR: case AJ_DESCOBRIR:
+    case AJ_CW_FURTHEST:
+    case AJ_GRAD_CLASSICO:
+    case AJ_PROF_BORDA: case AJ_PROF_BRILHO: case AJ_PROF_COBERTURA:
+    case AJ_PROF_POSTERS: case AJ_PROF_CW: case AJ_PROF_EPS:
+    case AJ_PROF_ELENCO: case AJ_PROF_TRAILERS:
+    case AJ_ADDON_POSTER: case AJ_ADDON_FUNDO: case AJ_ADDON_LOGO:
+    case AJ_COL_ARTE_CONTA: case AJ_POSTER_INST: case AJ_POSTER_TOKEN:
+    case AJ_POSTER_EXTRA: case AJ_POSTER_CHAVE: case AJ_POSTER_MODELO:
+    case AJ_POSTER_TESTAR:
+    case AJ_HERO_TRAILER_ESPERA: case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO:
+    case AJ_DET_META_EXT: case AJ_DET_SO_CINEMETA:
+    case AJ_MDB_TRAKT: case AJ_MDB_IMDB: case AJ_MDB_TMDB: case AJ_MDB_LETTER:
+    case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA: case AJ_MDB_META: case AJ_MDB_MAL:
+    case AJ_TMDB_ARTE: case AJ_TMDB_BASICO: case AJ_TMDB_FICHA:
+    case AJ_TMDB_DATAS: case AJ_TMDB_ELENCO:
+    case AJ_TMDB_PROD: case AJ_TMDB_REDES: case AJ_TMDB_EPS: case AJ_TMDB_TRAILERS:
+    case AJ_TMDB_MAIS: case AJ_TMDB_COL: case AJ_TMDB_CW:
+    case AJ_SELOS_CORES:
+    case AJ_VIDRO_CONTORNO:
+    case AJ_LIVETV_FORMATO: case AJ_LIVETV_MODO: case AJ_LIVETV_PROXY:
+    case AJ_P2P_LIGADO: case AJ_P2P_URL: case AJ_P2P_TESTAR:
+    case AJ_TEX_MB:
+    case AJ_SEEKR_AJUSTE:
+      return 1;
+    default:
+      return 0;
+  }
+}

@@ -81,6 +81,7 @@
 #include "pipintro.h"
 #include "social.h"
 #include "ajustes.h"
+#include "ajustes_ux.h"
 #include "anim.h"
 #include "diagnostico.h"
 #include "debrid.h"
@@ -514,6 +515,7 @@ static int ltdDoGuia;
 
 static void trocarTela(Tela nova) {
   if (nova == tela) return;
+  if (tela == TELA_AJUSTES) ajustes_encerrar();
   if (tela == TELA_LIVETV_DIAG) livetvdiag_encerrar();
   tela = nova;
   // Cada tela zera o proprio estado ao ser aberta: voltar para a busca com o
@@ -1277,6 +1279,7 @@ static void guiaComCanalNoAr(void) {
 static int homePronta;
 
 int app_iniciar(const char *dirArte) {
+  ajustes_recursos(dirArte);
   diagnostico_recuperar_checkpoint();
   homePronta = home_iniciar(dirArte);
   novidades148_dir(dirArte);
@@ -1413,6 +1416,13 @@ static void spotAtender(void) {
       detail_fechar();
       addonsui_abrir();
       trocarTela(TELA_ADDONS);
+      break;
+    case SPOT_AJUSTE:
+      detail_fechar();
+      ajustes_abrir_opcao(p.indice);
+      if (tela == TELA_AJUSTES) ajustes_iniciar();
+      else trocarTela(TELA_AJUSTES);
+      menu_definir_destino(MENU_AJUSTES);
       break;
     case SPOT_CANAL: {
       CatItem it;
@@ -2333,6 +2343,11 @@ void app_atualizar(float dt, Uint32 agora) {
     menu_abrir();
   } else if (tela == TELA_ADDONS && addonsui_quer_sair()) {
     trocarTela(TELA_AJUSTES); menu_definir_destino(MENU_AJUSTES);
+  }
+  if (tela == TELA_AJUSTES) {
+    int buscaAjustes = ajustes_pediu_busca();
+    if (buscaAjustes == 2) spot_reabrir_ajustes();
+    else if (buscaAjustes == 1) spot_abrir_ajustes(0);
   }
   if (tela == TELA_AJUSTES && ajustes_pediu_addons()) {
     addonsui_abrir();
