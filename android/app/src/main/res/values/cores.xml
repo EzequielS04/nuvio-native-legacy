@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fundo do splash.png da LG; ver drawable/abertura.xml. -->
+    <color name="nuvio_abertura">#0E0F12</color>
+</resources>
