@@ -12,6 +12,7 @@
 #include "ajustes.h"   /* ajustes_qualidade: o teto de "Qualidade maxima" */
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <stdlib.h>
 #include <math.h>
 #include "addons.h"
@@ -514,8 +515,41 @@ static int playlistVazia(const char *url, const char *cabecalhos) {
 // do episodio seguinte.
 typedef struct { unsigned geracao; int abortou; } Conferencia;
 
+static int resolverUrl(const char *url, const char *cabecalhos, int segundos,
+                        char *fim, unsigned tam) {
+  const char *vetor[8];
+  char copia[512];
+  int nc = 0, http = 0;
+#ifdef __EMSCRIPTEN__
+  int restrito = 0;
+#endif
+  if (cabecalhos && *cabecalhos) {
+    char *l, *ctx = NULL;
+    snprintf(copia, sizeof copia, "%s", cabecalhos);
+    for (l = strtok_r(copia, "\n", &ctx); l && nc < 7; l = strtok_r(NULL, "\n", &ctx)) {
+      vetor[nc++] = l;
+#ifdef __EMSCRIPTEN__
+      if (!strncasecmp(l, "Referer:", 8) || !strncasecmp(l, "Origin:", 7) ||
+          !strncasecmp(l, "User-Agent:", 11)) restrito = 1;
+#endif
+    }
+  }
+  vetor[nc] = NULL;
+  if (rede_url_final_cab(url, segundos, nc ? vetor : NULL, fim, tam, &http)) return 1;
+#ifdef __EMSCRIPTEN__
+  // XHR nao manda estes cabecalhos; AVPlay manda. A recusa nao prova que a
+  // fonte morreu (mesmo contrato de playlistVazia). 5xx nao entram aqui.
+  if ((http == 401 || http == 403) && restrito && strlen(url) < tam) {
+    memcpy(fim, url, strlen(url) + 1);
+    printf("[fonte] sonda HTTP %d com cabecalho controlado pelo navegador: quem decide e o player\n", http);
+    return 1;
+  }
+#endif
+  return 0;
+}
+
 static int verificarUma(int i, Conferencia *c) {
-  char fim[900], url[4096], cab[512];
+  char fim[4096], url[4096], cab[512];
   int fileIdx, ok = 0;
   char infoHash[48];
   pthread_mutex_lock(&verTrava);
@@ -545,7 +579,7 @@ static int verificarUma(int i, Conferencia *c) {
     } else printf("[fonte] %d torrent nao resolveu no debrid\n", i);
   } else if (!url[0]) {
     ok = 0;
-  } else if (!rede_url_final(url, 10, fim, sizeof fim)) {
+  } else if (!resolverUrl(url, cab, 10, fim, sizeof fim)) {
     printf("[fonte] %d nao resolveu\n", i);
   } else if (enderecoDeAviso(fim)) {
     printf("[fonte] %d e aviso (%.60s)\n", i, fim);
@@ -560,9 +594,9 @@ static int verificarUma(int i, Conferencia *c) {
 // aviso do debrid e a playlist sem segmento. 5 s e nao 10: quem chama ja esta
 // tocando a URL em paralelo e so quer saber cedo se ela morreu.
 int stream_url_serve(const char *url, const char *cabecalhos) {
-  char fim[900];
+  char fim[4096];
   if (!url || !*url) return 0;
-  if (!rede_url_final(url, 5, fim, sizeof fim)) return 0;
+  if (!resolverUrl(url, cabecalhos, 5, fim, sizeof fim)) return 0;
   if (enderecoDeAviso(fim)) return 0;
   if (playlistVazia(fim, cabecalhos)) return 0;
   return 1;
