@@ -13,17 +13,26 @@
 # ".." porque este script mora em tools/, e a suite e relativa a RAIZ do
 # repositorio. Ele nasceu na raiz e o `cd` de la ficou para tras na mudanca:
 # o sintoma era `tests/*.sh: No such file or directory`.
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
+LOGS=$(mktemp -d "${TMPDIR:-/tmp}/nuvio-testes.XXXXXX") || exit 1
 falhou=0
+passaram=0
+pulados=0
 for f in tests/*.sh; do
   n=$(basename "$f")
   case "$n" in
-    *_shot.sh|cinematic.sh|director.sh|webp-tizen.sh|tizen-clock.sh|salvospainel_perf.sh) continue;;
+    *_shot.sh|cinematic.sh|director.sh|webp-tizen.sh|tizen-clock.sh|salvospainel_perf.sh) pulados=$((pulados + 1)); continue;;
   esac
-  if bash "$f" >/tmp/nvteste.log 2>&1; then
-    echo "ok    $n"
+  if bash "$f" >"$LOGS/$n.log" 2>&1; then
+    if grep -Eq 'PULADO|pulados|sem resultado' "$LOGS/$n.log"; then
+      echo "ok*   $n (ver casos pulados no log)"
+    else
+      echo "ok    $n"
+    fi
+    passaram=$((passaram + 1))
   else
-    echo "FALHA $n"; tail -15 /tmp/nvteste.log; falhou=1
+    echo "FALHA $n"; tail -15 "$LOGS/$n.log"; falhou=$((falhou + 1))
   fi
 done
-exit $falhou
+echo "testes: $passaram passaram, $falhou falharam, $pulados fora da suite; logs: $LOGS"
+[ "$falhou" -eq 0 ]

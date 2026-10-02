@@ -7,6 +7,7 @@
 #include <strings.h>
 #include <dlfcn.h>
 #include <time.h>
+#include <limits.h>
 
 #if defined(NV_TPK40) && defined(__EMSCRIPTEN__)
 #error "NV_TPK40 e so da libnuvio.so do Tizen 4/5; nunca junto com Emscripten"
@@ -788,7 +789,17 @@ static void ligarVigia(void *c, Vigia *v, unsigned long prazoMs) {
   curl_setopt(c, OPT_NOPROGRESS, (long)0);
 }
 
-typedef struct { char *p; size_t n; } Balde;
+typedef struct { char *p; size_t n, cap; } Balde;
+
+/* Durante o download a capacidade cresce geometricamente. Antes de devolver
+ * o corpo, solta a folga: caches contam o tamanho recebido, nao a capacidade. */
+static char *baldeFinal(Balde *b) {
+  if (b->p && b->cap > b->n + 1) {
+    char *p = realloc(b->p, b->n + 1);
+    if (p) { b->p = p; b->cap = b->n + 1; }
+  }
+  return b->p;
+}
 
 static char *rede_baixar_interno(const char *url, int segundos, long *tam,
                                  const char *const *cab);
@@ -836,9 +847,11 @@ _Thread_local long rede_teto = 0;
 
 static size_t receber(void *dados, size_t tam, size_t qtd, void *u) {
   Balde *b = (Balde *)u;
-  size_t bytes = tam * qtd;
+  size_t bytes, necessario;
   long limite = redeLimiteAtual();
-  char *novo;
+  if (tam && qtd > SIZE_MAX / tam) return 0;
+  bytes = tam * qtd;
+  if (!bytes) return 0;
   if (redeCancelLocal && *redeCancelLocal) {
     redeCancelouLocal = 1;
     return 0;
@@ -847,13 +860,26 @@ static size_t receber(void *dados, size_t tam, size_t qtd, void *u) {
     redeLimitouLocal = 1;
     return 0;
   }
-  if (limite > 0 && b->n + bytes > (size_t)limite) {
+  if (limite > 0 && bytes > (size_t)limite - b->n) {
     bytes = (size_t)limite - b->n;
     redeLimitouLocal = 1;
   }
-  novo = realloc(b->p, b->n + bytes + 1);
-  if (!novo) return 0;              // devolver 0 aborta a transferencia
-  b->p = novo;
+  // O contrato publico expoe `long` para o tamanho, inclusive no ARM 32-bit.
+  if (bytes > (size_t)LONG_MAX || b->n > (size_t)LONG_MAX - bytes ||
+      b->n + bytes == SIZE_MAX) return 0;
+  necessario = b->n + bytes + 1;
+  if (necessario > b->cap) {
+    size_t cap = b->cap ? b->cap : 4096;
+    char *novo;
+    while (cap < necessario) {
+      if (cap > SIZE_MAX / 2) { cap = necessario; break; }
+      cap *= 2;
+    }
+    if (limite > 0 && cap > (size_t)limite + 1) cap = (size_t)limite + 1;
+    novo = realloc(b->p, cap);
+    if (!novo) return 0;              // devolver 0 aborta a transferencia
+    b->p = novo; b->cap = cap;
+  }
   memcpy(b->p + b->n, dados, bytes);
   b->n += bytes;
   b->p[b->n] = 0;
@@ -1123,7 +1149,7 @@ static char *rede_baixar_interno2(const char *url, int segundos, long *tam,
 static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
                                   const char *const *cab, int *status,
                                   char *etag, unsigned tamEtag, int *retry) {
-  Balde b = { NULL, 0 };
+  Balde b = {0};
   CacaCab caca;
   Vigia vigia;
   void *c, *lista = NULL;
@@ -1193,7 +1219,7 @@ static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
       if (lista) { curl_setopt(c, OPT_HTTPHEADER, (void *)0); if (slist_free) slist_free(lista); lista = NULL; }
       soltarHandleR(c, r, url);            // r != 0: descarta o handle
       free(b.p);
-      b.p = NULL; b.n = 0;
+      b.p = NULL; b.n = b.cap = 0;
       if (etag && tamEtag) etag[0] = 0;
       continue;
     }
@@ -1258,7 +1284,7 @@ static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
     fflush(stdout);
     redeBytesLocal = (long)b.n;
     if (tam) *tam = (long)b.n;
-    return b.p;
+    return baldeFinal(&b);
   }
   // O RESTO DA HISTORIA no log: por qual conexao foi, quanto veio e quanto
   // esperou. "falha 28" sozinho nao separa conexao morta (reusada, 0 bytes),
@@ -1272,11 +1298,11 @@ static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
     return NULL; }
   redeBytesLocal = (long)b.n;
   if (tam) *tam = (long)b.n;
-  return b.p;
+  return baldeFinal(&b);
 }
 
 int rede_url_final(const char *url, int segundos, char *dst, unsigned tam) {
-  Balde b = { NULL, 0 };
+  Balde b = {0};
   void *c;
   char *fim = NULL;
   int r;
@@ -1321,7 +1347,7 @@ char *rede_postar(const char *url, int segundos, const char *const *cab,
 // barra de retomada por DELETE /sync/playback/:id. Ver trakt_playback_remover.
 char *rede_apagar(const char *url, int segundos, const char *const *cab,
                   int *status) {
-  Balde b = { NULL, 0 };
+  Balde b = {0};
   void *c, *lista = NULL;
   int r;
   if (status) *status = 0;
@@ -1349,12 +1375,12 @@ char *rede_apagar(const char *url, int segundos, const char *const *cab,
   // 204 sem corpo e a resposta NORMAL de um DELETE aceito: devolver NULL ali
   // faria o chamador ler sucesso como falha de transporte.
   if (!b.p) return strdup("");
-  return b.p;
+  return baldeFinal(&b);
 }
 
 char *rede_postar_st(const char *url, int segundos, const char *const *cab,
                      const char *corpo, int *status) {
-  Balde b = { NULL, 0 };
+  Balde b = {0};
   void *c, *lista = NULL;
   int r;
   if (status) *status = 0;
@@ -1389,7 +1415,7 @@ char *rede_postar_st(const char *url, int segundos, const char *const *cab,
   // nenhuma. O corpo de um 4xx, ao contrario, e devolvido: e nele que o
   // PostgREST explica o que faltou.
   if (r != 0) { free(b.p); return NULL; }
-  return b.p ? b.p : strdup("");
+  return b.p ? baldeFinal(&b) : strdup("");
 }
 
 // ------------------------------------------------------------ VAZAO (curl)

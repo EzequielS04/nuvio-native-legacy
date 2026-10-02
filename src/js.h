@@ -13,9 +13,14 @@
 // respeitando aspas e escapes.
 const char *js_fim(const char *p);
 
+// Presenca da chave em [ini,fim), inclusive valores null ou malformados.
+// Permite distinguir um campo ausente de um numero invalido sem converter.
+int js_tem(const char *ini, const char *fim, const char *chave);
+
 // Valor textual de "chave" dentro de [ini,fim). 1 se achou. Escapes \uXXXX
-// viram espaco de proposito: os textos vem cheios de emoji e sao so para
-// exibicao — decodificar UTF-16 aqui seria trabalho sem retorno.
+// e pares de substitutos viram UTF-8; strings truncadas devolvem 0.
+// `fim` NULL significa ate o NUL. O limite vale tambem para o valor.
+// Campo ausente, de outro tipo ou truncado preserva o valor previo de dst.
 int js_texto(const char *ini, const char *fim, const char *chave,
              char *dst, size_t tam);
 
@@ -40,6 +45,7 @@ const char *js_raiz_array(const char *corpo);
 // Existe para o `credential_json` das credenciais: o app repassa aquele objeto
 // ao servidor sem interpretar, e reconstrui-lo campo a campo perderia tudo que
 // esta versao do app nao conhece. 1 se achou e coube.
+// Falha preserva o valor previo de dst.
 int js_bruto(const char *ini, const char *fim, const char *chave,
              char *dst, size_t tam);
 

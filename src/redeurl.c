@@ -35,7 +35,7 @@ const char *rede_url_publica(const char *url, char *dst, unsigned tam) {
   // vazaria uma credencial no log. Conservamos esquema, host e porta.
   for (p = e + 3; p < h; p++) if (*p == '@') at = p;
   { const char *inicio = at ? at + 1 : e + 3;
-    n = (unsigned)(inicio - url);
+    n = (unsigned)(e + 3 - url);
     if (n >= tam) n = tam - 1;
     memcpy(dst, url, n);
     if (n < tam - 1) {
