@@ -10,7 +10,6 @@
 #include "ponteiro.h"
 #include "celular.h"
 #include "qr.h"
-#include "gl_compat.h"
 #include <ctype.h>
 #include <stdlib.h>
 #include <stdio.h>
