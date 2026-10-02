@@ -169,7 +169,7 @@ void fontecache_vod_apagar(const char *id, const char *tipo, const char *origem,
 // fica em torno de 100 ms; 350 ms so acontece quando a pessoa parou num canal.
 #define FONTECACHE_ESPERA_MS 350
 
-// Fios de rede do prefetch: dois, e nao os ADD_FIOS (4) da busca real. O
+// Fios de rede do prefetch: dois, e nao os ADD_FIOS (12) da busca real. O
 // prefetch divide o mesmo enlace com o pedido real que pode chegar a qualquer
 // momento; metade dos fios e metade da concorrencia que ele impoe.
 #define FONTECACHE_FIOS 2
