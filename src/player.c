@@ -1335,6 +1335,10 @@ void player_voltar_a_esperar(void) {
 int  player_pediu_faixas(void) { int v = pedFaixas; pedFaixas = 0; return v; }
 
 int  player_com_video(void) { return comVideo && !retido && video_pronto(); }
+// Para o Discord (discord.c), que so le: pausado, duracao e se e canal ao vivo.
+int   player_pausado(void) { return !tocando; }
+float player_duracao_seg(void) { return duracaoSeg; }
+int   player_eh_canal(void) { return ehCanal(); }
 
 // Esta abrindo o fluxo: ha video pedido, mas ainda nao ha imagem.
 int  player_carregando(void) { return esperandoFonte || (comVideo && !video_pronto()); }

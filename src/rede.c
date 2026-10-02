@@ -526,6 +526,13 @@ int rede_medir_vazao(const char *url, const char *const *cab, int segundos,
   return nSeg;
 }
 
+// Navegador nao abre socket. O websocket do Tizen web usa o WebSocket do
+// proprio navegador (discordws.c); estes existem para o modulo linkar.
+RedeTls *rede_tls_abrir(const char *url, int segundos) { (void)url; (void)segundos; return NULL; }
+int rede_tls_enviar(RedeTls *t, const void *buf, size_t n) { (void)t; (void)buf; (void)n; return -1; }
+int rede_tls_receber(RedeTls *t, void *buf, size_t n, int esperaMs) { (void)t; (void)buf; (void)n; (void)esperaMs; return -1; }
+void rede_tls_fechar(RedeTls *t) { (void)t; }
+
 #else
 
 #ifndef NV_TPK40   // no NV_TPK40 estes nomes sao macros da struct por fio (topo)
@@ -600,6 +607,11 @@ static void *(*slist_append)(void *, const char *);
 static void  (*slist_free)(void *);
 static int   (*curl_getinfo)(void *, int, ...);
 static void  (*curl_reset)(void *);
+// Conexao crua (CONNECT_ONLY): so rede_tls_* usam. Existem desde a 7.18.2, entao
+// a libcurl 7.53.1 das TVs tem; o que ela NAO tem e websocket (7.86+), e por
+// isso o quadro do websocket e feito a mao em discordws.c.
+static int   (*curl_send)(void *, const void *, size_t, size_t *);
+static int   (*curl_recv)(void *, void *, size_t, size_t *);
 static int    pronto;
 
 // UM HANDLE POR FIO, REUSADO, e nao um novo por pedido.
@@ -1051,6 +1063,8 @@ static int abrir(void) {
   *(void **)(&slist_append) = dlsym(h, "curl_slist_append");
   *(void **)(&slist_free)   = dlsym(h, "curl_slist_free_all");
   *(void **)(&curl_getinfo) = dlsym(h, "curl_easy_getinfo");
+  *(void **)(&curl_send)    = dlsym(h, "curl_easy_send");
+  *(void **)(&curl_recv)    = dlsym(h, "curl_easy_recv");
   // O REUSO NUNCA LIGOU ATE AQUI (23/09/2026). pegarHandle e soltarHandle
   // existem desde 5eb8bd2, mas este dlsym nao: `curl_reset` ficava NULL, e o
   // ramo "libcurl sem reset: como antes" criava e destruia um handle por
@@ -1685,6 +1699,117 @@ int rede_medir_vazao(const char *url, const char *const *cab, int segundos,
     res->cancelado = ct.cancelou;
   }
   return nSeg;
+}
+
+
+// ------------------------------------------------------------ TLS CRU (curl)
+//
+// Ver rede_tls_abrir em rede.h. CONNECT_ONLY faz a libcurl resolver, conectar
+// e negociar o TLS e PARAR: nenhum byte de HTTP sai. Dai em diante o fio fala
+// pelo curl_easy_send/recv, que cifram e decifram. O handle e proprio e nunca
+// vai para o cache de pegarHandle: uma conexao de websocket nao e reaproveitavel.
+#define OPT_CONNECT_ONLY      141
+#define OPT_HTTP_VERSION       84
+// CURLINFO_LASTSOCKET = CURLINFO_LONG + 29. ACTIVESOCKET (7.45+) seria o certo,
+// mas LASTSOCKET existe em toda versao que estas TVs trazem e devolve o mesmo
+// descritor quando ha uma conexao so — que e o caso de um handle CONNECT_ONLY.
+#define INFO_LASTSOCKET  2097181
+#define CURLE_AGAIN_ 81
+
+#include <sys/select.h>
+
+struct RedeTls { void *c; int fd; };
+
+static int tlsEsperar(int fd, int escrever, int ms) {
+  fd_set f;
+  struct timeval tv;
+  if (fd < 0) return -1;
+  FD_ZERO(&f);
+  FD_SET(fd, &f);
+  tv.tv_sec = ms / 1000;
+  tv.tv_usec = (ms % 1000) * 1000;
+  return select(fd + 1, escrever ? NULL : &f, escrever ? &f : NULL, NULL, &tv);
+}
+
+RedeTls *rede_tls_abrir(const char *url, int segundos) {
+  RedeTls *t;
+  void *c;
+  long fd = -1;
+  int r;
+  if (!url || !*url || !abrir() || !curl_send || !curl_recv) return NULL;
+  c = curl_init();
+  if (!c) return NULL;
+  curl_setopt(c, OPT_URL, url);
+  curl_setopt(c, OPT_CONNECT_ONLY, (long)1);
+  // HTTP/1.1 no ALPN. Sem isto uma libcurl com nghttp2 (a do Mac, a do Android)
+  // negocia h2 com o servidor, e o aperto de mao do websocket — texto HTTP/1.1
+  // — chega num canal HTTP/2: o servidor fecha sem resposta. MEDIDO no Mac
+  // contra gateway.discord.gg. A 7.53.1 das TVs nao tem h2, mas a opcao e
+  // inofensiva la.
+  curl_setopt(c, OPT_HTTP_VERSION, (long)2 /* CURL_HTTP_VERSION_1_1 */);
+  curl_setopt(c, OPT_CONNECTTIMEOUT_MS, (long)(segundos > 0 ? segundos : 15) * 1000L);
+  curl_setopt(c, OPT_NOSIGNAL, (long)1);
+  curl_setopt(c, OPT_TCP_KEEPALIVE, (long)1);
+  curl_setopt(c, OPT_TCP_KEEPIDLE, (long)15);
+  curl_setopt(c, OPT_TCP_KEEPINTVL, (long)5);
+  // Mesma escolha de opcoesComuns: o pacote de CAs de fabrica das TVs nao se
+  // atualiza. Ver a nota la.
+  curl_setopt(c, OPT_SSL_VERIFYPEER, (long)0);
+  curl_setopt(c, OPT_SSL_VERIFYHOST, (long)0);
+  r = curl_perform(c);
+  if (r == 0 && curl_getinfo) curl_getinfo(c, INFO_LASTSOCKET, &fd);
+  if (r != 0 || fd < 0) {
+    printf("[rede] tls: falhou (curl %d)\n", r);
+    curl_cleanup(c);
+    return NULL;
+  }
+  t = (RedeTls *)calloc(1, sizeof *t);
+  if (!t) { curl_cleanup(c); return NULL; }
+  t->c = c;
+  t->fd = (int)fd;
+  return t;
+}
+
+int rede_tls_enviar(RedeTls *t, const void *buf, size_t n) {
+  const unsigned char *p = (const unsigned char *)buf;
+  int voltas = 0;
+  if (!t) return -1;
+  while (n > 0) {
+    size_t foi = 0;
+    int r = curl_send(t->c, p, n, &foi);
+    if (r == CURLE_AGAIN_) {
+      // Socket cheio: espera ate 10 s no total. Websocket de presenca manda
+      // quadros de centenas de bytes; isto so acontece com a rede travada.
+      if (++voltas > 100 || tlsEsperar(t->fd, 1, 100) < 0) return -1;
+      continue;
+    }
+    if (r != 0) return -1;
+    p += foi;
+    n -= foi;
+  }
+  return 0;
+}
+
+int rede_tls_receber(RedeTls *t, void *buf, size_t n, int esperaMs) {
+  size_t veio = 0;
+  int r;
+  if (!t) return -1;
+  // recv ANTES do select: o TLS pode ter bytes ja decifrados no buffer dele, e
+  // o socket nao acusaria nada.
+  r = curl_recv(t->c, buf, n, &veio);
+  if (r == CURLE_AGAIN_ && esperaMs > 0) {
+    if (tlsEsperar(t->fd, 0, esperaMs) <= 0) return 0;
+    r = curl_recv(t->c, buf, n, &veio);
+  }
+  if (r == CURLE_AGAIN_) return 0;
+  if (r != 0) return -1;
+  return veio > 0 ? (int)veio : -1;   // 0 bytes com r == 0 = o outro lado fechou
+}
+
+void rede_tls_fechar(RedeTls *t) {
+  if (!t) return;
+  curl_cleanup(t->c);
+  free(t);
 }
 
 #endif  /* __EMSCRIPTEN__ */

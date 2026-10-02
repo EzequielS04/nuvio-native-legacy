@@ -192,3 +192,5 @@
   1,                /* espera pelos add-ons: 5 s (#221) */
 
   0, /* app icon: Original */
+
+  0, /* Discord action; appended to preserve option indices */

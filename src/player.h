@@ -82,6 +82,9 @@ int   player_so_barra(void);
 void  player_limpar_legenda_nativa(char *s);
 int   player_texto_legenda_nativa(char *dst, int tam);
 float player_posicao_seg(void);
+int   player_pausado(void);
+float player_duracao_seg(void);
+int   player_eh_canal(void);
 
 // Liga a fonte numa sessao ja aberta. Existe porque o link so pode ser pedido
 // no ultimo instante (ver stream_idade_ms), entao a tela abre antes de haver

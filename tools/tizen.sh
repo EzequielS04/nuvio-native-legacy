@@ -293,6 +293,7 @@ eval emcc $SOURCES ${EXTRA_SOURCES} -o "$SAIDA/index.html" -O2 "$ENV_D" ${NUVIO_
   `# ("'PThread' was not exported"), ou seja, o proprio medidor mataria o app.` \
   -sEXPORTED_RUNTIME_METHODS='["PThread","ccall"]' \
   -lidbfs.js \
+  -lwebsocket.js \
   `# ASSERTIONS=0 NA BUILD DE ENTREGA (20/09/2026, #72). Com 1 o glue confere` \
   `# pilha e assinatura a cada chamada JS<->wasm e cada erro de FS monta um` \
   `# ErrnoError com pilha. O que ele dava — morrer falando em vez de calado —` \

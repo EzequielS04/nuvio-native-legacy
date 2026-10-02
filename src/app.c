@@ -24,6 +24,7 @@
 #include "perfilsel.h"
 #include "sync.h"
 #include "traktauth.h"
+#include "discord.h"
 #include "simklauth.h"
 #include "simkl.h"
 #include "listas.h"
@@ -1877,6 +1878,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // onde o vinculo e feito, "Aguardando a autorizacao" nunca saia do lugar
   // mesmo com a pessoa ja tendo autorizado no celular.
   traktauth_passo((unsigned)agora);
+  discord_passo((unsigned)agora);
   simklauth_passo((unsigned)agora);
 
   if (tela == TELA_ESCOLHA_PERFIL) {
@@ -3780,6 +3782,7 @@ void app_encerrar(void) {
   }
   aguardandoFonte = 0;
   player_encerrar();
+  discord_encerrar();   // a atividade some na hora, sem esperar o Discord notar a queda
   video_encerrar();    // solta o nome LS2 antes do processo sumir (deploy mata sem aviso)
   ajustes_encerrar();
   diagnostico_encerrar();

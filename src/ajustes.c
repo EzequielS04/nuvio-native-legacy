@@ -29,6 +29,7 @@
 #include "perfis.h"
 #include "traktauth.h"
 #include "simklauth.h"
+#include "discord.h"
 #include "simkl.h"
 #include "qr.h"
 #include "atualizacao.h"
@@ -280,6 +281,8 @@ typedef enum {
   // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_FONTE_PRAZO,
   AJ_ICONE_APP, // local, appended to preserve persisted option indices
+  // Vinculo do Discord (discord.c, #222). Acao, no fim pelo mesmo motivo.
+  AJ_DISCORD,
   AJ_N
 } OpcaoId;
 
@@ -875,6 +878,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Ao sair do player",               V_SAIDA_PLAYER, 2),  // local: saidaPlayerLocal
   ESC("Espera pelos add-ons",            V_FONTE_PRAZO, 4),   // local: fontePrazoLocal
   ESC("Ícone do app", V_ICONE_APP, ICONEAPP_N),
+  ACAO("Discord"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1039,6 +1043,7 @@ static const char *CHAVE[] = {
   "saidaPlayerLocal",
   "fontePrazoLocal",
   "iconeAppLocal",
+  "-discord",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -3446,6 +3451,17 @@ static const char *textoLeitura(int op) {
       default:             return i18n("conectar");
     }
   }
+  if (op == AJ_DISCORD) {
+    if (!discord_disponivel()) return i18n("indisponível nesta versão");
+    switch (discord_estado()) {
+      case DIS_LIGADO:     return i18n("conectado — OK desconecta");
+      case DIS_PEDINDO:    return i18n("preparando…");
+      case DIS_AGUARDANDO: return i18n("aguardando");
+      case DIS_ERRO:       return i18n("falhou");
+      case DIS_INVALIDO:   return i18n("expirou — reconectar");
+      default:             return i18n("conectar");
+    }
+  }
   if (op == AJ_SIMKL) {
     switch (simklauth_estado()) {
       case SMK_LIGADO:     return i18n("conectado");
@@ -3871,6 +3887,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_ADDONS: return "Abre a lista de addons da sua conta, para ligar e desligar cada um nesta TV.";
     case AJ_TRAKT: return "Conecta a sua conta do Trakt para marcar o que assistiu e usar a sua lista.";
     case AJ_SIMKL: return "Conecta a sua conta do Simkl, uma alternativa ao Trakt para acompanhar séries.";
+    case AJ_DISCORD: return "Mostra no seu perfil do Discord o que você está assistindo, com o cartaz e o tempo. Só sai alguma coisa enquanto um vídeo toca neste perfil.";
     case AJ_SAIR: return "Sai da conta nesta TV e apaga daqui a sessão, os addons e o progresso guardados.";
     case AJ_ESPACO: return "Uso atual de memória pelo cache de imagens, não espaço ocupado no armazenamento da TV.";
     case AJ_TEX_MB: return "Quanta memória o cache de imagens pode usar. Automático escolhe pela RAM da TV. Um valor acima do que esta TV suporta é reduzido ao máximo dela — o painel ao lado mostra o teto em vigor.";
@@ -3979,7 +3996,7 @@ static const char *efeitoOpcao(int op) {
       if (valor[op] == AJ_SALVOS_SIMKL && !simklauth_token()[0])
         return "Vincule o Simkl em Ajustes: sem o vínculo, o + guarda só na lista desta TV.";
       return "A lista desta TV recebe o título em todos os casos. Isto decide se ele também vai para o Trakt ou para o Simkl.";
-    case AJ_ADDONS: case AJ_TRAKT: case AJ_SIMKL:
+    case AJ_ADDONS: case AJ_TRAKT: case AJ_SIMKL: case AJ_DISCORD:
       return "OK abre. As setas laterais não fazem nada nesta linha.";
     default: return NULL;
   }
@@ -4668,10 +4685,15 @@ static void eventoTela(const SDL_Event *e) {
     SmkEstado sa = simklauth_estado();
     int traAtivo = (ta == TRA_PEDINDO || ta == TRA_AGUARDANDO || ta == TRA_ERRO);
     int smkAtivo = (sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO);
-    if (traAtivo || smkAtivo) {
+    DisEstado da = discord_estado();
+    int disAtivo = (da == DIS_PEDINDO || da == DIS_AGUARDANDO || da == DIS_ERRO);
+    if (traAtivo || smkAtivo || disAtivo) {
       if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE) {
-        if (traAtivo) traktauth_cancelar(); else simklauth_cancelar();
+        if (traAtivo) traktauth_cancelar();
+        else if (smkAtivo) simklauth_cancelar();
+        else discord_cancelar();
       } else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
+        if (disAtivo && da == DIS_ERRO) discord_comecar();
         // OK so refaz o pedido quando deu erro; com o codigo na tela ele nao
         // faz nada de proposito, para nao trocar o codigo que a pessoa acabou
         // de digitar no celular.
@@ -4786,6 +4808,10 @@ static void eventoTela(const SDL_Event *e) {
     if (focoOp == AJ_DEBRID_AD_TESTAR) { adTesteIniciar(); return; }
     if (focoOp == AJ_TRAKT) { traktauth_comecar(); return; }
     if (focoOp == AJ_SIMKL) { simklauth_comecar(); return; }
+    if (focoOp == AJ_DISCORD) {
+      if (discord_estado() == DIS_LIGADO) discord_esquecer(); else discord_comecar();
+      return;
+    }
     if (focoOp == AJ_SAIR) {
       // Sair apaga a sessao do disco. Chega aqui so no SEGUNDO OK (ver
       // pedeConfirmacao, acima): o primeiro arma e a linha diz o que o
@@ -6477,7 +6503,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL:
       return AJPV_CONTA;
-    case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL:
+    case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL: case AJ_DISCORD:
       return AJPV_RASTREIO;
     case AJ_VERSAO_I: case AJ_ATUALIZAR: case AJ_ENVIAR_LOG:
     case AJ_ENVIO_AUTO:
@@ -7353,7 +7379,11 @@ void ajustes_desenhar(Uint32 agora) {
                      traktauth_erro(), ta == TRA_AGUARDANDO);
     else if (sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO)
       desenhaVinculo("o Simkl", simklauth_codigo(), simklauth_url(),
-                     simklauth_erro(), sa == SMK_AGUARDANDO); }
+                     simklauth_erro(), sa == SMK_AGUARDANDO);
+    else { DisEstado da = discord_estado();
+      if (da == DIS_PEDINDO || da == DIS_AGUARDANDO || da == DIS_ERRO)
+        desenhaVinculo("o Discord", discord_codigo(), discord_url(),
+                       discord_erro(), da == DIS_AGUARDANDO); } }
 
   // A modal de digitacao e a ultima: ela e sempre a pergunta mais recente da
   // tela, e tem de ficar por cima ate do cartao de vinculo.
