@@ -229,6 +229,7 @@ class NuvioActivity : SDLActivity() {
     private var campoAberto = false
     private var campoImeVisto = false
     private var ignorarMudanca = false
+    private var teclaDesceuNoCampo = 0
 
     private inner class CampoIme(ctx: Context) : EditText(ctx) {
         // Voltar com o IME aberto: fecha o IME e devolve o foco ao app (o texto
@@ -262,12 +263,18 @@ class NuvioActivity : SDLActivity() {
         c.setOnEditorActionListener { v, _, _ -> if (campoAberto) fecharCampo("D" + v.text); true }
         // Tecla que o IME NAO consumiu e chegou ao campo: o IME esta fechado (ou a
         // pessoa saiu dele pela borda). Devolve o foco ao app em vez de prender.
+        // So vale a tecla que DESCEU aqui: o OK que abriu o teclado desce no SDL e
+        // SOBE no campo (MEDIDO na TCL: abriu e fechou em 15 ms).
         c.setOnKeyListener { v, code, ev ->
             if (!campoAberto) return@setOnKeyListener false
             when (code) {
                 KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN,
                 KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                    if (ev.action == KeyEvent.ACTION_UP) fecharCampo("D" + (v as EditText).text)
+                    if (ev.action == KeyEvent.ACTION_DOWN) teclaDesceuNoCampo = code
+                    else if (ev.action == KeyEvent.ACTION_UP && teclaDesceuNoCampo == code) {
+                        teclaDesceuNoCampo = 0
+                        fecharCampo("D" + (v as EditText).text)
+                    }
                     true
                 }
                 else -> false
@@ -310,6 +317,7 @@ class NuvioActivity : SDLActivity() {
             ignorarMudanca = false
             campoAberto = true
             campoImeVisto = false
+            teclaDesceuNoCampo = 0
             c.requestFocus()
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             val ok = imm.showSoftInput(c, InputMethodManager.SHOW_IMPLICIT)
