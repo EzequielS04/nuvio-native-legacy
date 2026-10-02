@@ -54,6 +54,7 @@
 #include "perfil.h"
 #include "salvos.h"
 #include "recomenda.h"
+#include "atividade.h"
 #include "recenviar.h"
 #include "pessoas.h"
 #include "salvospainel.h"
@@ -1172,6 +1173,7 @@ int app_iniciar(const char *dirArte) {
   // existir catalogo e antes de a rede responder. Isto nao abre conexao — quem
   // faz isso e recomenda_verificar, la embaixo, com a home ja de pe.
   recomenda_iniciar();
+  atividade_iniciar();   // a fila de POST /v1/atividade que nao saiu (atividade.h)
   // Sem conta, o app abre no login. Com sessao gravada ele nem passa por ela —
   // pedir o codigo de novo a cada arranque seria o mesmo que nao ter gravado.
   if (sessao_logada()) {
@@ -2511,6 +2513,7 @@ void app_atualizar(float dt, Uint32 agora) {
       // fechamento do app sem depender de conta nenhuma; ver salvos.h. Sem
       // isto, quem nao tem Trakt vinculado apertava "+" e nao guardava nada.
       if (c) salvos_definir(c, entrar);
+      if (c) atividade_salvo(c, entrar);   // ev=salvo para o Social (atividade.h)
       // O TRAKT SO SE A PESSOA PEDIU. A escolha vem do explicador de primeira
       // vez e continua em Ajustes › Interface e conta ("Onde o + salva"). O
       // padrao e ligado, entao para quem ja usava o app nada muda.

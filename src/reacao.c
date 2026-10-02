@@ -1,0 +1,416 @@
+// Ver reacao.h.
+#include "reacao.h"
+#include "atividade.h"
+#include "ajustes.h"
+#include "anim.h"
+#include "botoes.h"
+#include "dados.h"
+#include "gfx.h"
+#include "idioma.h"
+#include "layout.h"
+#include "perfis.h"
+#include "player.h"
+#include "posplay.h"
+#include "text.h"
+#include "trakt.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+// --- medidas do cartao ---------------------------------------------------------
+// A margem direita e a do player (PLR_MARGEM, 96): o cartao alinha com o fim
+// da barra de tempo, que e onde o olho ja vai no fim do filme.
+#define RX_MARGEM     96.0f
+#define RX_PAD        30.0f
+#define RX_RAIO       28.0f
+#define RX_W_MIN     560.0f
+#define RX_GAP_LINHA  12.0f
+#define RX_BARRA_H     4.0f
+#define RX_MAX        400    // reacoes guardadas por perfil
+
+static const char *const ROTULO[3] = { "Gostei", "Mais ou menos", "Não gostei" };
+static const int VALOR[3] = { REACAO_GOSTEI, REACAO_MAIS_MENOS, REACAO_NAO };
+
+// --- regras puras ----------------------------------------------------------------
+
+int reacao_regra_perguntar(int ehSerie, int temProximo, int proxOutraTemporada,
+                           double pos, double dur, double cred) {
+  if (dur <= 1.0) return 0;
+  if (!ehSerie) return posplay_regra_filme(pos, dur, cred);
+  // Meio da temporada: o "A seguir" manda, a pergunta espera o fim dela.
+  if (temProximo && !proxOutraTemporada) return 0;
+  return player_regra_proximo(pos, dur, cred);
+}
+
+int reacao_nota_trakt(int r) {
+  return r == REACAO_GOSTEI ? 8 : r == REACAO_MAIS_MENOS ? 5 : r == REACAO_NAO ? 2 : 0;
+}
+
+// --- arquivo, por perfil ------------------------------------------------------------
+//
+// Uma linha por titulo: imdb TAB estado TAB epoch TAB rec TAB midia TAB nome
+// TAB titulo. O titulo por ULTIMO, como em salvos.c (pode ter qualquer coisa
+// menos TAB). Estado 9 = pendente.
+typedef struct {
+  char imdb[24];
+  int  estado;
+  long long quando, rec;
+  char midia[8];
+  char nome[64];
+  char titulo[160];
+} Reacao;
+
+static Reacao lista[RX_MAX];
+static int    nLista;
+static int    perfilLido = -999;
+
+static const char *arquivo(void) {
+  static char nome[40];
+  int p = perfis_ativo();
+  if (p <= 0) snprintf(nome, sizeof nome, "reacoes.txt");
+  else snprintf(nome, sizeof nome, "reacoes-p%d.txt", p);
+  return nome;
+}
+
+static void semTab(char *s) { for (; *s; s++) if (*s == '\t' || *s == '\n' || *s == '\r') *s = ' '; }
+
+static char *campo(char **p) {
+  char *ini = *p, *t = strchr(ini, '\t');
+  if (t) { *t = 0; *p = t + 1; } else *p = ini + strlen(ini);
+  return ini;
+}
+
+static void carregar(void) {
+  char *b, *p;
+  if (perfilLido == perfis_ativo()) return;
+  perfilLido = perfis_ativo();
+  nLista = 0;
+  b = dados_ler(arquivo());
+  if (!b) return;
+  for (p = b; *p && nLista < RX_MAX;) {
+    char *fim = strchr(p, '\n'), *q;
+    Reacao r;
+    if (fim) *fim = 0;
+    memset(&r, 0, sizeof r);
+    q = p;
+    if (*q && *q != '#') {
+      snprintf(r.imdb, sizeof r.imdb, "%s", campo(&q));
+      r.estado = atoi(campo(&q));
+      r.quando = atoll(campo(&q));
+      r.rec = atoll(campo(&q));
+      snprintf(r.midia, sizeof r.midia, "%s", campo(&q));
+      snprintf(r.nome, sizeof r.nome, "%s", campo(&q));
+      snprintf(r.titulo, sizeof r.titulo, "%s", q);
+      if (!strncmp(r.imdb, "tt", 2) &&
+          (r.estado == REACAO_PENDENTE || (r.estado >= -1 && r.estado <= 1)))
+        lista[nLista++] = r;
+    }
+    if (!fim) break;
+    p = fim + 1;
+  }
+  free(b);
+}
+
+static void gravar(void) {
+  static char buf[RX_MAX * 300 + 64];
+  size_t k = 0;
+  int i;
+  k += (size_t)snprintf(buf, sizeof buf, "# nuvio reacoes v1\n");
+  for (i = 0; i < nLista && k < sizeof buf; i++)
+    k += (size_t)snprintf(buf + k, sizeof buf - k, "%s\t%d\t%lld\t%lld\t%s\t%s\t%s\n",
+                          lista[i].imdb, lista[i].estado, lista[i].quando, lista[i].rec,
+                          lista[i].midia, lista[i].nome, lista[i].titulo);
+  dados_gravar(arquivo(), buf);
+}
+
+static Reacao *achar(const char *imdb) {
+  char id[24];
+  int i;
+  carregar();
+  atividade_id_puro(id, sizeof id, imdb);
+  for (i = 0; i < nLista; i++) if (!strcmp(lista[i].imdb, id)) return &lista[i];
+  return NULL;
+}
+
+// Cria ou devolve a linha. Cheia: sai a mais velha (pendentes primeiro).
+static Reacao *linhaDe(const char *imdb) {
+  Reacao *r = achar(imdb);
+  if (r) return r;
+  if (nLista >= RX_MAX) {
+    int i, sai = 0;
+    for (i = 0; i < nLista; i++)
+      if (lista[i].estado == REACAO_PENDENTE) { sai = i; break; }
+    memmove(lista + sai, lista + sai + 1, sizeof lista[0] * (size_t)(nLista - sai - 1));
+    nLista--;
+  }
+  r = &lista[nLista++];
+  memset(r, 0, sizeof *r);
+  atividade_id_puro(r->imdb, sizeof r->imdb, imdb);
+  r->estado = REACAO_NENHUMA;
+  return r;
+}
+
+int reacao_estado(const char *imdb) {
+  Reacao *r = achar(imdb);
+  if (!r) return REACAO_NENHUMA;
+  if (r->estado == REACAO_PENDENTE &&
+      (long long)time(NULL) - r->quando > (long long)REACAO_PENDENTE_DIAS * 86400LL)
+    return REACAO_NENHUMA;
+  return r->estado;
+}
+
+static void marcarPendente(const char *imdb, const char *midia, const char *titulo,
+                           long long rec, const char *nome) {
+  Reacao *r = achar(imdb);
+  if (r && r->estado != REACAO_PENDENTE) return;   // ja respondida: nao rebaixa
+  r = linhaDe(imdb);
+  r->estado = REACAO_PENDENTE;
+  r->quando = (long long)time(NULL);
+  r->rec = rec;
+  snprintf(r->midia, sizeof r->midia, "%s", midia);
+  snprintf(r->nome, sizeof r->nome, "%s", nome ? nome : "");
+  snprintf(r->titulo, sizeof r->titulo, "%s", titulo ? titulo : "");
+  semTab(r->nome); semTab(r->titulo);
+  gravar();
+}
+
+// --- o cartao -------------------------------------------------------------------------
+static struct {
+  int    aberto;
+  int    modoDetalhe;            // aberto pela pagina: sem contagem
+  char   imdb[24], midia[8], titulo[160], poster[512], nome[64];
+  long long rec;
+  int    envia;                  // "vai ver sua resposta" so com envio de verdade
+  int    foco;
+  float  anim, focoA[3];
+  Uint32 desde;                  // ultima tecla (ou abertura), para os 8 s
+} c;
+static char  oferecido[24];      // titulo ja perguntado nesta sessao do player
+// O RELOGIO DO PLAYER (o `agora` de reacao_player_atualizar). A contagem dos
+// 8 s e a tecla que a reinicia usam o mesmo relogio que a confere.
+static Uint32 ultimoAgora;
+static double durVista, durEstavel;
+
+int reacao_aberta(void) { return c.aberto; }
+
+static void abrir(const char *imdb, const char *midia, const char *titulo,
+                  const char *poster, int detalhe, Uint32 agora) {
+  memset(&c, 0, sizeof c);
+  c.aberto = 1;
+  c.modoDetalhe = detalhe;
+  atividade_id_puro(c.imdb, sizeof c.imdb, imdb);
+  snprintf(c.midia, sizeof c.midia, "%s", midia && !strcmp(midia, "series") ? "series" : "movie");
+  snprintf(c.titulo, sizeof c.titulo, "%s", titulo ? titulo : "");
+  snprintf(c.poster, sizeof c.poster, "%s", poster ? poster : "");
+  c.rec = atividade_origem(c.imdb, c.nome, sizeof c.nome);
+  c.envia = atividade_envia();
+  c.desde = agora;
+}
+
+void reacao_fechar(void) {
+  c.aberto = 0;
+  oferecido[0] = 0;
+  durVista = durEstavel = 0.0;
+}
+
+void reacao_responder(const char *imdb, int v) {
+  Reacao *r;
+  int nota;
+  if (v < -1 || v > 1) return;
+  r = linhaDe(imdb);
+  r->estado = v;
+  r->quando = (long long)time(NULL);
+  // Dados do cartao aberto, quando e dele a resposta; senao o que ja havia.
+  if (c.imdb[0] && !strcmp(c.imdb, r->imdb)) {
+    r->rec = c.rec;
+    snprintf(r->midia, sizeof r->midia, "%s", c.midia);
+    snprintf(r->nome, sizeof r->nome, "%s", c.nome);
+    snprintf(r->titulo, sizeof r->titulo, "%s", c.titulo);
+    semTab(r->nome); semTab(r->titulo);
+  }
+  gravar();
+  atividade_reacao(r->imdb, r->midia, r->titulo,
+                   c.imdb[0] && !strcmp(c.imdb, r->imdb) ? c.poster : "", v, r->rec);
+  nota = reacao_nota_trakt(v);
+  // SO COM O TRAKT LIGADO. Sem ele a resposta fica nesta TV (e no servico,
+  // se a pessoa permitiu) e o Trakt nao fica sabendo — e e o certo.
+  if (nota && trakt_ativo()) trakt_avaliar(r->imdb, r->midia, nota);
+  printf("[reacao] %s -> %d%s\n", r->imdb, v, nota && trakt_ativo() ? " (nota no Trakt)" : "");
+  fflush(stdout);
+}
+
+void reacao_player_atualizar(float dt, Uint32 agora, const CatItem *ci, int ehSerie,
+                             double pos, double dur, double cred, int temProximo,
+                             int proxOutraTemporada) {
+  char id[24];
+  float alvo = c.aberto ? 1.0f : 0.0f;
+  int i;
+  ultimoAgora = agora;
+  c.anim = anim_mola(c.anim, alvo, dt, NV_MOLA_TELA);
+  for (i = 0; i < 3; i++)
+    c.focoA[i] = anim_mola(c.focoA[i], (c.aberto && c.foco == i) ? 1.0f : 0.0f, dt,
+                           c.foco == i ? NV_MOLA_FOCO : NV_MOLA_DESFOCO);
+  // A CONTAGEM: 8 s desde a abertura ou da ultima tecla. So no player.
+  if (c.aberto && !c.modoDetalhe && agora - c.desde >= REACAO_TIMEOUT_MS) c.aberto = 0;
+  // DURACAO ESTAVEL, a mesma guarda do posplay: a duracao provisoria do
+  // primeiro instante nao pode fazer a "metade do filme" chegar aos 15 s.
+  if (dur - durVista > 2.0 || durVista - dur > 2.0) { durVista = dur; durEstavel = 0.0; }
+  else durEstavel += dt;
+  if (!ci || !ci->imdb[0] || c.aberto || !ajustes_reacao_creditos()) return;
+  atividade_id_puro(id, sizeof id, ci->imdb);
+  if (strncmp(id, "tt", 2) || !strcmp(oferecido, id)) return;
+  if (durEstavel < 8.0) return;
+  { int st = reacao_estado(id);
+    if (st >= -1 && st <= 1) return; }
+  if (!reacao_regra_perguntar(ehSerie, temProximo, proxOutraTemporada, pos, dur, cred)) return;
+  snprintf(oferecido, sizeof oferecido, "%s", id);
+  abrir(id, ehSerie ? "series" : "movie", ci->titulo, ci->poster, 0, agora);
+  // PENDENTE DESDE JA: se a pessoa sair do player com o cartao no ar, a
+  // pergunta continua de pe na pagina do titulo.
+  marcarPendente(id, c.midia, c.titulo, c.rec, c.nome);
+  printf("[reacao] pergunta de %s em %.0fs de %.0fs%s\n", id, pos, dur,
+         c.rec ? " (veio de recomendacao)" : "");
+  fflush(stdout);
+}
+
+int reacao_evento(const SDL_Event *e, int controlesVisiveis) {
+  SDL_Keycode k;
+  if (!c.aberto || e->type != SDL_KEYDOWN) return 0;
+  if (controlesVisiveis && !c.modoDetalhe) return 0;
+  k = e->key.keysym.sym;
+  if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
+      e->key.keysym.scancode == NV_SCANCODE_BACK) {
+    c.aberto = 0;               // pula; a pendencia fica
+    return 1;
+  }
+  if (k == SDLK_LEFT)  { if (c.foco > 0) c.foco--; c.desde = ultimoAgora; return 1; }
+  if (k == SDLK_RIGHT) { if (c.foco < 2) c.foco++; c.desde = ultimoAgora; return 1; }
+  if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
+    reacao_responder(c.imdb, VALOR[c.foco]);
+    c.aberto = 0;
+    return 1;
+  }
+  // Na pagina o cartao e modal: o resto das teclas nao vaza para baixo dele.
+  return c.modoDetalhe;
+}
+
+// Linhas de texto do cartao, montadas uma vez por quadro.
+static void linhaOrigem(char *dst, size_t n) {
+  dst[0] = 0;
+  if (!c.rec || !c.nome[0]) return;
+  snprintf(dst, n, i18n(!strcmp(c.midia, "series") ? "%s mandou esta série"
+                                                     : "%s mandou este filme"), c.nome);
+}
+
+void reacao_desenhar(Uint32 agora, float baseY) {
+  float a = c.anim, w, h, x, y, pw[3], tot = 0.0f;
+  char perg[256], orig[160], ver[160];
+  TxtLinha lo, lv;
+  float lead, hp;
+  int i;
+  if (a < 0.01f || !c.imdb[0]) return;
+  snprintf(perg, sizeof perg, i18n("O que achou de %s?"), c.titulo);
+  linhaOrigem(orig, sizeof orig);
+  ver[0] = 0;
+  if (orig[0] && c.envia) snprintf(ver, sizeof ver, i18n("%s vai ver sua resposta"), c.nome);
+  for (i = 0; i < 3; i++) { pw[i] = botao_largura(i18n(ROTULO[i]), NULL, 0); tot += pw[i]; }
+  tot += 2.0f * BOTAO_GAP;
+  w = tot + 2.0f * RX_PAD;
+  if (w < RX_W_MIN) w = RX_W_MIN;
+  // A PERGUNTA QUEBRA EM ATE DUAS LINHAS: com o titulo cortado em "Um..." a
+  // pergunta perde o sujeito (medido na primeira captura). A altura sai de uma
+  // passada invisivel do mesmo bloco — o texto ja fica no cache para a de verdade.
+  lead = (float)txt_linha(TXT_HEADLINE, "Ág", 245, 246, 248, 255).h + 2.0f;
+  hp = txt_bloco_corta(TXT_HEADLINE, perg, 245, 246, 248, -4000.0f, -4000.0f,
+                       w - 2.0f * RX_PAD, lead, 0.0f, 2);
+  lo = txt_linha_corta(TXT_CAPTION, orig, 176, 180, 190, 255, w - 2.0f * RX_PAD);
+  lv = txt_linha_corta(TXT_CAPTION2, ver, 150, 154, 163, 255, w - 2.0f * RX_PAD);
+  h = RX_PAD + (orig[0] ? (float)lo.h + 8.0f : 0.0f) + hp + 20.0f +
+      BOTAO_H_SECUNDARIO + (ver[0] ? 14.0f + (float)lv.h : 0.0f) + RX_PAD;
+  x = NV_TELA_W - RX_MARGEM - w;
+  y = baseY - h + (1.0f - a) * 24.0f;
+  { GfxRect fundo = { x, y, w, h };
+    if (ajustes_vidro()) gfx_vidro_superficie(fundo, RX_RAIO / h, a);
+    else gfx_cor(fundo, RX_RAIO / h, .062f, .066f, .079f, .94f * a);
+    // A CONTAGEM VISIVEL: um fio na base que encolhe nos 8 s. Sem ele o cartao
+    // sumiria "do nada"; com ele, a pessoa ve que ha tempo e quanto.
+    if (!c.modoDetalhe && c.aberto) {
+      float resta = 1.0f - (float)(agora - c.desde) / (float)REACAO_TIMEOUT_MS;
+      float cr, cg, cb;
+      if (resta < 0.0f) resta = 0.0f;
+      botao_cor_foco(&cr, &cg, &cb);
+      gfx_cor((GfxRect){ x + RX_RAIO, y + h - RX_BARRA_H - 6.0f,
+                         (w - 2.0f * RX_RAIO) * resta, RX_BARRA_H },
+              0.5f, cr, cg, cb, 0.85f * a);
+    } }
+  { float ty = y + RX_PAD;
+    if (orig[0]) { txt_desenhar_alpha(lo, x + RX_PAD, ty, a); ty += (float)lo.h + 8.0f; }
+    txt_bloco_corta(TXT_HEADLINE, perg, 245, 246, 248, x + RX_PAD, ty,
+                    w - 2.0f * RX_PAD, lead, a, 2);
+    ty += hp + 20.0f;
+    { float bx = x + RX_PAD;
+      for (i = 0; i < 3; i++) {
+        GfxRect r = { bx, ty, pw[i], BOTAO_H_SECUNDARIO };
+        botao_pilula(r, i18n(ROTULO[i]), NULL, c.focoA[i], 0, 0, a);
+        bx += pw[i] + BOTAO_GAP;
+      } }
+    ty += BOTAO_H_SECUNDARIO;
+    if (ver[0]) txt_desenhar_alpha(lv, x + RX_PAD, ty + 14.0f, a * 0.9f); }
+}
+
+// --- pagina do titulo --------------------------------------------------------------
+
+int reacao_detalhe_pendente(const CatItem *ci) {
+  if (!ci || !ci->imdb[0] || !ajustes_reacao_creditos()) return 0;
+  return reacao_estado(ci->imdb) == REACAO_PENDENTE;
+}
+
+int reacao_detalhe_abrir(const CatItem *ci) {
+  if (!reacao_detalhe_pendente(ci)) return 0;
+  abrir(ci->imdb, ci->tipo, ci->titulo, ci->poster, 1, SDL_GetTicks());
+  { Reacao *r = achar(ci->imdb);
+    // A ORIGEM GUARDADA na pendencia vale mais que a busca de agora: a
+    // recomendacao pode ter saido da lista do servidor depois da pergunta.
+    if (r && r->rec && !c.rec) { c.rec = r->rec; snprintf(c.nome, sizeof c.nome, "%s", r->nome); } }
+  c.anim = 0.0f;
+  return 1;
+}
+
+void reacao_detalhe_dica(const CatItem *ci, float a) {
+  char perg[256];
+  TxtLinha l, s;
+  float x, y, w;
+  // O cartao aberto (pela pagina) desenha por cima de tudo, com a mola dele.
+  if (c.aberto && c.modoDetalhe) {
+    c.anim = anim_mola(c.anim, 1.0f, 1.0f / 60.0f, NV_MOLA_TELA);
+    { int i;
+      for (i = 0; i < 3; i++)
+        c.focoA[i] = anim_mola(c.focoA[i], c.foco == i ? 1.0f : 0.0f, 1.0f / 60.0f,
+                               c.foco == i ? NV_MOLA_FOCO : NV_MOLA_DESFOCO); }
+    reacao_desenhar(SDL_GetTicks(), NV_TELA_H - 48.0f);
+    return;
+  }
+  if (c.modoDetalhe && !c.aberto) c.anim = 0.0f;
+  if (a < 0.01f || !reacao_detalhe_pendente(ci)) return;
+  snprintf(perg, sizeof perg, i18n("O que achou de %s?"), ci->titulo);
+  // DISCRETA: texto pequeno e cinza, sem caixa de foco — ela nao e um botao,
+  // e um lembrete de que CIMA abre a pergunta.
+  s = txt_linha(TXT_CAPTION, "↑", 200, 204, 212, 255);
+  l = txt_linha_corta(TXT_CAPTION, perg, 176, 180, 190, 255, 620.0f);
+  w = (float)s.w + 12.0f + (float)l.w;
+  x = NV_TELA_W - RX_MARGEM - w;
+  y = NV_TELA_H - 48.0f - (float)l.h;
+  gfx_cor((GfxRect){ x - 18.0f, y - 10.0f, w + 36.0f, (float)l.h + 20.0f }, 0.5f,
+          .04f, .042f, .05f, .62f * a);
+  txt_desenhar_alpha(s, x, y, a * 0.9f);
+  txt_desenhar_alpha(l, x + (float)s.w + 12.0f, y, a * 0.85f);
+}
+
+void reacao_teste_abrir(const char *imdb, const char *titulo, const char *midia,
+                        long long rec, const char *nomeRec, int envia) {
+  abrir(imdb, midia, titulo, "", 0, ultimoAgora);
+  c.rec = rec;
+  snprintf(c.nome, sizeof c.nome, "%s", nomeRec ? nomeRec : "");
+  c.envia = envia;
+}

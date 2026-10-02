@@ -19,6 +19,7 @@
 #include "teclado.h"
 #include "simkl.h"
 #include "recomenda.h"
+#include "atividade.h"
 #include "avisos.h"
 #include "recenviar.h"
 #include "pessoas.h"
@@ -1405,6 +1406,8 @@ void spainel_evento(const SDL_Event *e) {
           // detail.c nem a descoberta, exatamente como antes.
           if (social[foco].idx >= 0 && social[foco].idx < nRecs) {
             snprintf(pedido, sizeof pedido, "%s", recs[social[foco].idx].imdb);
+            atividade_marcar_origem(recs[social[foco].idx].id, recs[social[foco].idx].imdb,
+                                    recs[social[foco].idx].deNome);
             temPedido = 1;
             aberto = 0;
           }

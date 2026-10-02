@@ -16,6 +16,7 @@
 #include "progresso.h"
 #include "salvos.h"
 #include "recomenda.h"
+#include "atividade.h"
 #include "recenviar.h"
 #include "botoes.h"
 #include "badges.h"
@@ -556,6 +557,7 @@ static void aplicar(void) {
       // acontece fora do jogo de estados abaixo; ver salvos.h para por que ele
       // e o unico destino que sobrevive ao fechamento do app.
       salvos_definir(ci, intencao);
+      atividade_salvo(ci, intencao);   // ev=salvo para o Social (atividade.h)
       // TRAKT ESCOLHIDO E SEM VINCULO cai no ramo local, como o Simkl sem
       // vinculo ja caia. Antes era CTX_FALHA com a lista local JA escrita: o
       // titulo saia do arquivo, a marca do catalogo ficava, e o "Remover" do

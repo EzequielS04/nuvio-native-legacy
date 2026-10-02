@@ -284,6 +284,9 @@ typedef enum {
   // "quadro do video" encolhe ate a mini capa da pilula) ou a pagina do titulo.
   // So vale com o relogio ligado. LOCAL. No fim pelo mesmo motivo.
   AJ_SAIDA_PLAYER,
+  // "O que achou?" nos creditos (reacao.h). LOCAL. No fim pelo mesmo motivo:
+  // valor[] e CHAVE[] sao posicionais.
+  AJ_REACAO_CREDITOS,
   AJ_N
 } OpcaoId;
 
@@ -871,6 +874,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Fita de miniaturas",              V_LIGA, 2),          // local: seekrFitaLocal
   NUM("Sincronia da miniatura",          -60, 60, 1, " s"),   // local: seekrAjusteLocal
   ESC("Ao sair do player",               V_SAIDA_PLAYER, 2),  // local: saidaPlayerLocal
+  ESC("Perguntar o que achou nos créditos", V_LIGA, 2),     // local: reacaoCreditosLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1033,6 +1037,8 @@ static const char *CHAVE[] = {
   "seekrLocal", "-seekrChave", "-seekrTestar",
   "seekrFitaLocal", "seekrAjusteLocal",
   "saidaPlayerLocal",
+  // LOCAL e SEM o "-": o web nao tem a pergunta.
+  "reacaoCreditosLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1200,7 +1206,7 @@ static const Item TELA[] = {
   // linhas, e as mais usadas do app (qualidade, idiomas) nao podem ficar atras
   // de um OK a mais.
   SEC("Reprodução", "Player, fontes, áudio e legendas", "aj_circle-play"),
-    OPC(AJ_PAUSA_OVERLAY),
+    OPC(AJ_PAUSA_OVERLAY), OPC(AJ_REACAO_CREDITOS),
     ROT("Player e seleção de fontes"),
       OPC(AJ_FONTE_MANUAL), OPC(AJ_FONTE_AUTO), OPC(AJ_FONTE_REPOR),
       OPC(AJ_SELOS_CORES),
@@ -1507,6 +1513,7 @@ static int valor[] = {
   1,                /* fita de miniaturas: DESLIGADA (V_LIGA: 1 = Desligado), uma so */
   0,                /* sincronia da miniatura: 0 s (a documentacao: nada automatico) */
   0,                /* ao sair do player: a home, minimizando na ilha (com o relogio) */
+  0,                /* perguntar o que achou nos creditos: LIGADO (V_LIGA: 0 = Ligado) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1611,6 +1618,7 @@ int ajustes_720p(void)                { return valor[AJ_RESOLUCAO] == 2 && !SEGU
 int ajustes_dolby_vision(void)        { return lig(AJ_DV); }
 int ajustes_dolby_atmos(void)         { return lig(AJ_ATMOS); }
 int ajustes_pausa_overlay(void)       { return lig(AJ_PAUSA_OVERLAY); }
+int ajustes_reacao_creditos(void)     { return lig(AJ_REACAO_CREDITOS); }
 int ajustes_fonte_manual(void)        { return lig(AJ_FONTE_MANUAL); }
 int ajustes_fonte_primeira(void)      { return valor[AJ_FONTE_AUTO] == 1; }
 int ajustes_fonte_repor(void) {
@@ -3238,6 +3246,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
+    case AJ_REACAO_CREDITOS: /* o web nao tem a pergunta */
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: /* o web nao tem o Seekr */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
     // Linha do titulo: o web nao tem, e nenhuma conta pode desliga-las aqui.
@@ -3968,6 +3977,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_LEG_LINGUA: return "Idioma ligado sozinho quando o vídeo começa. Legendas dos addons aparecem em inglês e no idioma escolhido aqui. \"Da conta\" segue o que está no seu perfil.";
     case AJ_AUD_LINGUA: return "Faixa de áudio escolhida quando o arquivo tem mais de uma. Se o idioma não existir no arquivo, o player usa a primeira.";
     case AJ_PAUSA_OVERLAY: return "Ao pausar, sobe uma ficha com a sinopse e os dados do que você está vendo.";
+    case AJ_REACAO_CREDITOS: return "Nos créditos de um filme, ou no fim de uma temporada, um cartão pequeno pergunta o que você achou. Some sozinho em 8 s. Com o Trakt ligado, a resposta vira nota lá.";
     case AJ_STALKER_PORTAL: return "Os canais do portal entram no Guia de TV, junto com os dos addons. Endereço sem http:// e sem barra no fim: meu-portal.exemplo.tv:8080";
     case AJ_STALKER_MAC: return "O MAC que o provedor cadastrou para você. É credencial: vale como senha, e só aparece nesta tela mascarado.";
     case AJ_STALKER_LIMPAR: return "Apaga o portal e o MAC deste perfil, e os canais dele somem do Guia. Sair da conta também apaga.";
@@ -6836,6 +6846,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA:
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_SELOS_CORES:
+    case AJ_REACAO_CREDITOS:
       return AJPV_REPRO;
     case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
