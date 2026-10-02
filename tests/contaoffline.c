@@ -38,6 +38,11 @@ static const char *pasta(void) {
 static void caminho(char *dst, size_t tam, const char *nome) {
   snprintf(dst, tam, "%s/%s", pasta(), nome);
 }
+const char *dados_dir(void) { return pasta(); }
+void dados_uuid(char *dst, unsigned tam) {
+  static unsigned seq;
+  snprintf(dst, tam, "%08x-0000-4000-8000-%012x", (unsigned)getpid(), ++seq);
+}
 char *dados_ler(const char *nome) {
   char c[600];
   FILE *f;

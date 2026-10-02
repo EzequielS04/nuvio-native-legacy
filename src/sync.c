@@ -39,6 +39,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <dirent.h>
+#include <errno.h>
+#include <sys/stat.h>
 
 #define SY_ADD_MAX   32   // o mesmo teto de ADD_MAX (addons.c)
 
@@ -49,18 +52,194 @@ static char resumo[220] = "sem sincronizar";
 static unsigned ultimoOk;
 static int sujoProgresso, sujoAjustes;
 // Capturado no fio principal: o worker nao le a lista enquanto ela muda.
-static unsigned addonsRev, addonsConfirmada, addonsRevCiclo;
-static char addonsDono[80];
-static int addonsPerfil, addonsPerfilCiclo, addonsLocalCiclo, nAddonsEnv;
+static unsigned addonsRev, addonsRevCiclo;
+static int addonsPerfilCiclo, addonsLocalCiclo, nAddonsEnv;
+static char addonsEdicaoCiclo[37];
 static AddonRemoto addonsEnv[SY_ADD_MAX];
 static pthread_mutex_t addonsTrava = PTHREAD_MUTEX_INITIALIZER;
+// Cada identidade guarda sua edicao, inclusive quando o disco falha e a pessoa
+// troca de perfil. URLs ficam apenas na pasta de dados; conta-*.txt tambem sai
+// dos pacotes caso essa pasta tenha caido no ultimo recurso (art/).
+#define SY_ADD_PREFIXO "conta-addons-pend-"
+typedef struct AddonsPendencia {
+  struct AddonsPendencia *prox;
+  char dono[80], edicao[37];
+  int perfil, n, pendente, gravada;
+  unsigned rev;
+  AddonRemoto lista[SY_ADD_MAX];
+} AddonsPendencia;
+static AddonsPendencia *addonsFila;
+static char addonsContexto[80];
+static int addonsContextoPerfil;
+static char addonsLeituraDono[80];
+static int addonsLeituraPerfil;
+
+// Sempre sob addonsTrava; o quadro so consulta a fila, nunca o disco.
+static AddonsPendencia *addonsEdicao(const char *dono, int perfil) {
+  AddonsPendencia *p;
+  for (p = addonsFila; p; p = p->prox)
+    if (p->perfil == perfil && !strcmp(p->dono, dono)) return p;
+  return NULL;
+}
+// Lazy, no maximo ~175 KB. Entradas ja salvas podem sair da RAM porque voltam
+// do arquivo na proxima troca; nunca descartar uma edicao que o disco recusou.
+static AddonsPendencia *addonsNova(const char *dono, int perfil) {
+  AddonsPendencia *p, **elo, **vitima = NULL;
+  int n = 0;
+  for (elo = &addonsFila; *elo; elo = &(*elo)->prox) {
+    n++;
+    if (!(*elo)->pendente || (*elo)->gravada) vitima = elo;
+  }
+  if (n >= 8 && !vitima) {
+    printf("[sync] fila de addons cheia com edicoes sem disco: edicao atual nao guardada\n");
+    return NULL;
+  }
+  p = calloc(1, sizeof *p);
+  if (!p) { printf("[sync] sem memoria para guardar edicao de addons\n"); return NULL; }
+  if (n >= 8) { AddonsPendencia *velha = *vitima; *vitima = velha->prox; free(velha); }
+  snprintf(p->dono, sizeof p->dono, "%s", dono); p->perfil = perfil;
+  p->prox = addonsFila; addonsFila = p;
+  return p;
+}
+static int addonsNome(char *dst, unsigned tam, const char *dono, int perfil) {
+  static const char hex[] = "0123456789abcdef";
+  char chave[160];
+  size_t i, n = dono ? strlen(dono) : 0;
+  int escritos;
+  if (!n || n >= 80 || perfil < 1 || perfil > 32) return 0;
+  for (i = 0; i < n; i++) {
+    chave[2*i] = hex[(unsigned char)dono[i] >> 4];
+    chave[2*i+1] = hex[(unsigned char)dono[i] & 15];
+  }
+  chave[2*n] = 0;
+  escritos = snprintf(dst, tam, SY_ADD_PREFIXO "%s-p%d.txt", chave, perfil);
+  return escritos > 0 && (unsigned)escritos < tam;
+}
+static int addonsGuardar(AddonsPendencia *p) {
+  char nome[220];
+  Jsw w;
+  const char *texto;
+  int i;
+  if (!addonsNome(nome, sizeof nome, p->dono, p->perfil)) return 0;
+  jsw_iniciar(&w); jsw_obj_ini(&w);
+  jsw_ci(&w, "version", 1); jsw_cs(&w, "owner", p->dono);
+  jsw_ci(&w, "profile", p->perfil); jsw_cs(&w, "edit", p->edicao);
+  jsw_chave(&w, "addons"); jsw_arr_ini(&w);
+  for (i = 0; i < p->n; i++) {
+    jsw_obj_ini(&w); jsw_cs(&w, "url", p->lista[i].url);
+    jsw_cs(&w, "name", p->lista[i].nome);
+    jsw_cb(&w, "enabled", p->lista[i].ativo); jsw_obj_fim(&w);
+  }
+  jsw_arr_fim(&w); jsw_obj_fim(&w);
+  texto = jsw_texto_final(&w);
+  p->gravada = texto && dados_gravar(nome, texto);
+  jsw_livre(&w);
+  if (!p->gravada) {
+    printf("[sync] nao foi possivel guardar edicao de addons: mantida em RAM, envio aguarda disco\n");
+    fflush(stdout);
+  }
+  return p->gravada;
+}
+
+// 0 somente quando o arquivo certamente nao existe; erro de disco nao e
+// ausencia. Esse stat so roda quando a leitura de um novo ciclo falhou.
+static int addonsArquivoPodeExistir(const char *nome) {
+  char caminho[600];
+  struct stat st;
+  const char *pasta = dados_dir();
+  if (!pasta || !*pasta ||
+      snprintf(caminho, sizeof caminho, "%s/%s", pasta, nome) >= (int)sizeof caminho) return 1;
+  return !stat(caminho, &st) || errno != ENOENT;
+}
+
+static int addonsLer(AddonsPendencia *p, const char *texto) {
+  const char *fim, *a, *f, *s;
+  char dono[80], habilitado[8];
+  int n = 0;
+  if (!texto || strlen(texto) > 140000 || *texto != '{') return 0;
+  fim = js_fim(texto);
+  if (fim <= texto || fim[-1] != '}') return 0;
+  for (s = fim; *s && (unsigned char)*s <= ' '; s++) {}
+  if (*s || js_num(texto, fim, "version", 0) != 1 ||
+      js_num(texto, fim, "profile", 0) != p->perfil ||
+      !js_texto_raiz(texto, "owner", dono, sizeof dono) || strcmp(dono, p->dono) ||
+      !js_texto_raiz(texto, "edit", p->edicao, sizeof p->edicao) ||
+      strlen(p->edicao) != 36) return 0;
+  for (a = js_array(texto, fim, "addons"); a; a = js_prox(f)) {
+    if (*a != '{' || n == SY_ADD_MAX) return 0;
+    f = js_fim(a);
+    if (f <= a || f > fim || f[-1] != '}') return 0;
+    if (!js_texto_raiz_em(a, f, "url", p->lista[n].url, sizeof p->lista[n].url) ||
+        !p->lista[n].url[0] ||
+        !js_bruto(a, f, "enabled", habilitado, sizeof habilitado) ||
+        (strcmp(habilitado, "true") && strcmp(habilitado, "false"))) return 0;
+    // O servidor aceita addon sem nome. O texto vazio nao invalida sua URL
+    // nem pode impedir que um liga/desliga sobreviva ao proximo arranque.
+    p->lista[n].nome[0] = 0;
+    js_texto_raiz_em(a, f, "name", p->lista[n].nome, sizeof p->lista[n].nome);
+    p->lista[n++].ativo = !strcmp(habilitado, "true");
+  }
+  if (!n) return 0; // nunca interpretar arquivo incompleto como remocao total
+  p->n = n; p->pendente = p->gravada = 1; p->rev = ++addonsRev;
+  return 1;
+}
+
+// Chamado no fio principal ANTES da rede, inclusive com um ciclo antigo no ar.
+// Reentrar na mesma identidade nao relê nem refaz descoberta.
+static void addonsRestaurar(void) {
+  AddonsPendencia *p;
+  AddonRemoto lista[SY_ADD_MAX];
+  char nome[220], *texto;
+  const char *dono = sessao_usuario();
+  int perfil = perfis_ativo_addons(), n = 0, leituraFalhou = 0;
+  if (!sessao_logada() || !addonsNome(nome, sizeof nome, dono, perfil)) return;
+  pthread_mutex_lock(&addonsTrava);
+  if (addonsContextoPerfil == perfil && !strcmp(addonsContexto, dono)) {
+    pthread_mutex_unlock(&addonsTrava); return;
+  }
+  addonsLeituraDono[0] = 0; addonsLeituraPerfil = 0;
+  p = addonsEdicao(dono, perfil);
+  if (!p) {
+    texto = dados_ler(nome);
+    if (texto) {
+      p = addonsNova(dono, perfil);
+      if (!p) leituraFalhou = 1;
+      if (p) {
+        if (!addonsLer(p, texto)) {
+          addonsFila = p->prox; free(p); p = NULL;
+          printf("[sync] edicao de addons invalida: nao aplicada\n");
+        }
+      }
+    } else leituraFalhou = addonsArquivoPodeExistir(nome);
+    free(texto);
+  }
+  if (leituraFalhou) {
+    // A lista salva nao chegou a memoria: bloquear o pull antigo e tentar
+    // ler de novo no proximo ciclo. Nunca fazer essa retentativa por quadro.
+    snprintf(addonsLeituraDono, sizeof addonsLeituraDono, "%s", dono);
+    addonsLeituraPerfil = perfil;
+    printf("[sync] leitura de edicao de addons falhou: pull aguarda copia local\n");
+    pthread_mutex_unlock(&addonsTrava); return;
+  }
+  snprintf(addonsContexto, sizeof addonsContexto, "%s", dono);
+  addonsContextoPerfil = perfil;
+  if (p && p->pendente) { n = p->n; memcpy(lista, p->lista, (size_t)n * sizeof *lista); }
+  pthread_mutex_unlock(&addonsTrava);
+  if (n) {
+    int mudou = addons_definir_lista(lista, n);
+    addons_marcar_da_conta(perfis_ativo());
+    if (mudou) desc_repetir_addons();
+    printf("[sync] edicao local de addons restaurada antes da rede\n");
+  }
+}
 static int addonsPendentes(void) {
   int pendente;
+  AddonsPendencia *p;
   pthread_mutex_lock(&addonsTrava);
-  pendente = __atomic_load_n(&addonsRev, __ATOMIC_ACQUIRE) !=
-         __atomic_load_n(&addonsConfirmada, __ATOMIC_ACQUIRE) &&
-         addonsPerfil == perfis_ativo_addons() &&
-         !strcmp(addonsDono, sessao_usuario());
+  p = addonsEdicao(sessao_usuario(), perfis_ativo_addons());
+  pendente = (p && p->pendente) ||
+             (addonsLeituraPerfil == perfis_ativo_addons() &&
+              !strcmp(addonsLeituraDono, sessao_usuario()));
   pthread_mutex_unlock(&addonsTrava);
   return pendente;
 }
@@ -179,6 +358,72 @@ static int contaDoCicloAtual(void) {
 }
 static int perfilDoCicloAtual(void) {
   return contaDoCicloAtual() && perfilDoCiclo == perfis_ativo();
+}
+
+static void addonsConfirmar(void) {
+  AddonsPendencia *p;
+  char nome[220], edicao[37], dono[80], *texto;
+  int confere;
+  pthread_mutex_lock(&addonsTrava);
+  p = addonsEdicao(usuarioDoCiclo, addonsPerfilCiclo);
+  if (!perfilDoCicloAtual() || addonsPerfilCiclo != perfis_ativo_addons() ||
+      !p || !p->pendente || !p->gravada || p->rev != addonsRevCiclo ||
+      strcmp(p->edicao, addonsEdicaoCiclo) ||
+      !addonsNome(nome, sizeof nome, p->dono, p->perfil)) {
+    pthread_mutex_unlock(&addonsTrava); return;
+  }
+  // Nao apagar sequer uma edicao diferente que apareca no disco entre ciclos.
+  // O mesmo mutex serializa a leitura/remocao com a gravacao de uma edicao nova.
+  texto = dados_ler(nome);
+  confere = texto && js_texto_raiz(texto, "edit", edicao, sizeof edicao) &&
+            !strcmp(edicao, addonsEdicaoCiclo) &&
+            js_texto_raiz(texto, "owner", dono, sizeof dono) && !strcmp(dono, p->dono) &&
+            js_num(texto, NULL, "profile", 0) == p->perfil;
+  if (confere && dados_apagar(nome)) {
+    char tmp[224];
+    p->pendente = 0;
+    snprintf(tmp, sizeof tmp, "%s.tmp", nome); dados_apagar(tmp);
+  } else {
+    // NULL tambem pode ser falha de leitura/alocacao: nao e prova de que o
+    // arquivo sumiu. Regravar antes da retentativa recupera ambos os casos.
+    if (!texto) p->gravada = 0;
+    printf("[sync] ACK de addons sem remover edicao local: retentativa preservada\n");
+    fflush(stdout);
+  }
+  free(texto);
+  pthread_mutex_unlock(&addonsTrava);
+}
+
+static void addonsEsquecer(void) {
+  AddonsPendencia *p;
+  DIR *d;
+  struct dirent *e;
+  const char *pasta = dados_dir();
+  pthread_mutex_lock(&addonsTrava);
+  // Inclui arquivos de outras identidades e os temporarios interrompidos; o
+  // logout deste aparelho limpa todas as pendencias, nao so o perfil aberto.
+  if (pasta && *pasta && (d = opendir(pasta)) != NULL) {
+    while ((e = readdir(d)) != NULL) {
+      const char *nome = e->d_name, *s;
+      if (strncmp(nome, SY_ADD_PREFIXO, sizeof SY_ADD_PREFIXO - 1)) continue;
+      s = nome + sizeof SY_ADD_PREFIXO - 1;
+      while ((*s >= '0' && *s <= '9') || (*s >= 'a' && *s <= 'f')) s++;
+      if (s == nome + sizeof SY_ADD_PREFIXO - 1 || strncmp(s, "-p", 2)) continue;
+      s += 2;
+      char *fim;
+      long perfil = strtol(s, &fim, 10);
+      if (perfil < 1 || perfil > 32 ||
+          (strcmp(fim, ".txt") && strcmp(fim, ".txt.tmp"))) continue;
+      if (!dados_apagar(nome)) printf("[sync] nao foi possivel apagar pendencia de addons no logout\n");
+    }
+    closedir(d);
+  } else if (pasta && *pasta) {
+    printf("[sync] nao foi possivel conferir pendencias de addons no logout\n");
+  }
+  while ((p = addonsFila) != NULL) { addonsFila = p->prox; free(p); }
+  addonsContexto[0] = 0; addonsContextoPerfil = 0;
+  addonsLeituraDono[0] = 0; addonsLeituraPerfil = 0;
+  pthread_mutex_unlock(&addonsTrava);
 }
 
 static void falhaServidor(int st) { if (!foraCiclo) foraCiclo = st ? st : -1; }
@@ -335,10 +580,7 @@ static void empurrarAddons(void) {
   if (!ok2xx(r, st)) {
     printf("[sync] push de addons falhou (HTTP %d): edicao local mantida\n", st);
     if (contacache_falha_transitoria(st)) falhaServidor(st);
-  } else if (perfilDoCicloAtual()) {
-    // O ack so confirma esta copia; uma edicao posterior continua pendente.
-    __atomic_store_n(&addonsConfirmada, addonsRevCiclo, __ATOMIC_RELEASE);
-  }
+  } else addonsConfirmar();
   free(r);
 }
 
@@ -1009,6 +1251,7 @@ void sync_iniciar(void) {
                          sessao_logada() ? perfis_ativo() : 0);
   restaurarOrdemLocal();
   if (!sessao_logada()) return;
+  addonsRestaurar();
   // PEDIDO COM O FIO VIVO NAO SE PERDE. Voltar calado deixava um buraco: o
   // fio que estava no ar pode ser justamente o interrompido pela pergunta de
   // perfil, e ai o ciclo completo do perfil escolhido so partia com
@@ -1018,10 +1261,17 @@ void sync_iniciar(void) {
   if (fioVivo) { pedidoComFioVivo = 1; return; }
   pedidoComFioVivo = 0;
   if (nuvem_freio_ativo()) return;
-  addonsRevCiclo = __atomic_load_n(&addonsRev, __ATOMIC_ACQUIRE);
-  addonsLocalCiclo = addonsPendentes();
   addonsPerfilCiclo = perfis_ativo_addons();
-  nAddonsEnv = addonsLocalCiclo ? addons_exportar(addonsEnv, SY_ADD_MAX) : 0;
+  pthread_mutex_lock(&addonsTrava);
+  AddonsPendencia *p = addonsEdicao(sessao_usuario(), addonsPerfilCiclo);
+  addonsLocalCiclo = p && p->pendente;
+  nAddonsEnv = 0; addonsEdicaoCiclo[0] = 0;
+  if (addonsLocalCiclo && (p->gravada || addonsGuardar(p))) {
+    addonsRevCiclo = p->rev; nAddonsEnv = p->n;
+    snprintf(addonsEdicaoCiclo, sizeof addonsEdicaoCiclo, "%s", p->edicao);
+    memcpy(addonsEnv, p->lista, (size_t)p->n * sizeof *addonsEnv);
+  }
+  pthread_mutex_unlock(&addonsTrava);
   cicloInterrompido = 0;
   perfilDoCiclo = perfis_ativo();
   snprintf(usuarioDoCiclo, sizeof usuarioDoCiclo, "%s", sessao_usuario());
@@ -1278,10 +1528,24 @@ const char *sync_resumo(void)      { return resumo; }
 unsigned    sync_ultimo_ok(void)   { return ultimoOk; }
 void        sync_sujar_progresso(void) { sujoProgresso = 1; }
 void        sync_sujar_addons(void) {
+  AddonsPendencia *p;
+  char nome[220];
+  const char *dono = sessao_usuario();
+  int perfil = perfis_ativo_addons();
+  if (!sessao_logada() || !addonsNome(nome, sizeof nome, dono, perfil)) return;
   pthread_mutex_lock(&addonsTrava);
-  snprintf(addonsDono, sizeof addonsDono, "%s", sessao_usuario());
-  addonsPerfil = perfis_ativo_addons();
-  __atomic_add_fetch(&addonsRev, 1u, __ATOMIC_RELEASE);
+  p = addonsEdicao(dono, perfil);
+  if (!p) p = addonsNova(dono, perfil);
+  if (p) {
+    p->n = addons_exportar(p->lista, SY_ADD_MAX);
+    p->pendente = 1; p->gravada = 0; p->rev = ++addonsRev;
+    dados_uuid(p->edicao, sizeof p->edicao);
+    addonsGuardar(p);
+    addonsLeituraDono[0] = 0; addonsLeituraPerfil = 0;
+    // Essa edicao ja e a lista do fio principal: nao reaplicar ao iniciar.
+    snprintf(addonsContexto, sizeof addonsContexto, "%s", dono);
+    addonsContextoPerfil = perfil;
+  }
   pthread_mutex_unlock(&addonsTrava);
 }
 // Provedor que o servidor recusou com "Unsupported provider credential": o
@@ -1531,10 +1795,7 @@ void sync_esquecer_usuario(void) {
   estado = SYNC_PARADO;
   ultimoOk = 0;
   sujoProgresso = 0; sujoAjustes = 0;
-  pthread_mutex_lock(&addonsTrava);
-  __atomic_store_n(&addonsConfirmada, __atomic_load_n(&addonsRev, __ATOMIC_ACQUIRE), __ATOMIC_RELEASE);
-  addonsDono[0] = 0; addonsPerfil = 0;
-  pthread_mutex_unlock(&addonsTrava);
+  addonsEsquecer();
   free(ajustesBlob);
   ajustesBlob = NULL;
   temAjustesBlob = 0;
