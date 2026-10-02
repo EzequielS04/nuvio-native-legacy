@@ -23,7 +23,15 @@
 //
 // PLATAFORMAS: sockets POSIX (LG webOS, Samsung .tpk, Android, Mac). No .wgt
 // (Emscripten) o navegador nao escuta socket: celular_disponivel() = 0 e a
-// modal fica como era.
+// modal fica como era (sem painel).
+//   MEDIDO (02/10/2026): Mac (curl + Chrome) e Android na TCL (APK de release,
+//   curl do Mac para a TV: pagina 200, envio entregue ao campo, servidor fecha
+//   com o Voltar).
+//   NAO MEDIDO: LG (o jail ou o firewall do webOS podem barrar conexao de fora
+//   em porta alta; o proxy de TS so escuta em 127.0.0.1) e Samsung .tpk (tem
+//   privilegio internet; escuta nao testada). O log diz: "[celular] servidor no
+//   ar" = bind/listen deram certo; "[celular] pagina aberta" = o celular chegou.
+//   Se a TV nao deixar entrar, o painel aparece mas o celular nao abre a pagina.
 #ifndef NV_CELULAR_H
 #define NV_CELULAR_H
 #include <stddef.h>
