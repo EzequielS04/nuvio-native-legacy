@@ -1,4 +1,14 @@
-# nuvio-native-legacy
+<picture>
+  <source media="(max-width: 640px)" srcset="docs/assets/nuvio-readme-banner-mobile.png">
+  <img src="docs/assets/nuvio-readme-banner.png" alt="Nuvio Native Legacy. A native TV client for LG webOS and Samsung Tizen. Independent, unofficial fork." width="1600">
+</picture>
+
+<p align="center">
+  <a href="https://github.com/iqui27/nuvio-native-legacy/releases/latest"><strong>Download latest release</strong></a>
+  &nbsp;·&nbsp; <a href="INSTALL.md">Install guide</a>
+  &nbsp;·&nbsp; <a href="#reporting-a-problem">Report a problem</a>
+  &nbsp;·&nbsp; <a href="https://www.patreon.com/cw/CraaazyDevs"><strong>Support on Patreon ♥</strong></a>
+</p>
 
 I wanted Nuvio on my 2019 LG OLED (C9, webOS 4) and the web app was too heavy
 for it. So I rewrote the TV client in C, on top of SDL2 and GLES2, talking to
@@ -10,10 +20,6 @@ zero janks**. The same code also runs **natively on Samsung Tizen** (TVs from
 This is an **unofficial fork**. It's not affiliated with NuvioMedia, and all the
 credit for Nuvio itself goes to them. It uses the same account, addons and
 settings as the official app: sign in once and your stuff is there.
-
-**[Latest release](https://github.com/iqui27/nuvio-native-legacy/releases/latest)**
-· [Install guide](INSTALL.md)
-· [Report a problem](#reporting-a-problem)
 
 ---
 
@@ -188,6 +194,13 @@ network threads and image sizes for another TV model.
 ---
 
 ## Support development
+
+<a href="https://www.patreon.com/cw/CraaazyDevs">
+  <picture>
+    <source media="(max-width: 640px)" srcset="docs/assets/patreon-support-banner-mobile.png">
+    <img src="docs/assets/patreon-support-banner.png" alt="Support Nuvio Native Legacy by CraaazyDevs on Patreon. Built with care. Supported by the community. Support is optional." width="1600">
+  </picture>
+</a>
 
 This project grew out of wanting a smooth, beautiful Nuvio experience on my LG C9. It now reaches more TVs, with help from people testing builds and sharing feedback.
 
