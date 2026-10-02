@@ -4,31 +4,31 @@ Somente local, em `release/1.7.2` (`/private/tmp/nv-172`), base 1.7.1 `2bc9659b`
 
 ## Já integrado
 
-`agente/abrirrapido` (inclui `ilhavolta` e `i221`) e `agente/i216`. Nova ilha, fontes parciais, espera configurável pelos addons, fonte da última sessão com fallback, toque/arrastar e login por e-mail. Retenção decidida em dois minutos, commit `1bf49696`; teste 119/120 s passou. Nove testes focados aprovados. TCL recebeu apenas APK estável 1.7.1.
+`agente/abrirrapido` (inclui `ilhavolta` e `i221`) e `agente/i216`. Nova ilha, fontes parciais, espera configurável pelos addons, fonte da última sessão com fallback, toque/arrastar e login por e-mail. Retenção decidida em dois minutos, commit `1bf49696`; teste 119/120 s passou. Nove testes focados aprovados. Na instalação anterior desta rodada, a TCL recebeu o APK estável 1.7.1; envio e validação física da 1.7.2 terão registro próprio.
 
-Conferência da fonte guardada já roda em paralelo (`app.c:tocarFonteGuardada`); não contabilizar como trabalho futuro nesse caminho. Conferência da abertura normal permanece uma proposta separada.
+Conferência da fonte guardada já roda em paralelo (`app.c:tocarFonteGuardada`); não contabilizar como trabalho futuro nesse caminho. Conferência paralela da abertura normal foi adiada nesta rodada; a sonda foi endurecida, mas cancelamento por chamada ainda é requisito para ampliar a concorrência.
 
 ## Execução local desta rodada
 
 - `2d6f2eb9`: operações do catálogo protegidas, atualização tardia confere identidade do título; histórico muda por conta/perfil e rejeita respostas antigas do Trakt/extras. ASan/UBSan e ThreadSanitizer focados passaram.
 - `49ad2fbc`: ícone do celular embutido no núcleo, mesma arte Lucide do pacote, um upload por contexto. Registro 18898 comprova núcleo 1.7.1 carregado por memfd junto do host api11 e arte ausente; não informa versão exata do pacote antigo. Teste normal passou; tentativa ASan com SDL travou antes de main e não vale como aprovação.
 - `bff916b4`: snapshot de addons no fio principal, revisão/ack por edição e perfil; falha 500 mantém alteração local, não aplica pull anterior ao push e não perde edição feita enquanto o push responde. Retentativa usa ritmo/backoff existente. Syncordem/offline/limites com ASan/UBSan passaram. Nenhum deploy no servidor; causa remota de HTTP500 não demonstrada.
-- `f9083b10`: reorganização funcional `ajustesux` mesclada por escolha do dono. Defaults e enum persistido conservados; espera pelos addons continua na seção Reprodução, padrão cinco segundos.
-- `4412ae0c`: Android recebe posição local válida durante a preparação, com ack por sessão e fallback. Testes distinguem posição válida, só percentual, episódio/perfil, ao vivo e sessão retida; Kotlin/NDK compilam. Tempo da pré-busca é corrigido somente no log.
+- `f9083b10`: reorganização funcional `ajustesux` mesclada por escolha do dono. Defaults e enum persistido conservados; espera pelos addons continua na seção Reprodução, padrão cinco segundos. `61ab2263` comprova os quatro prazos, escopo local, entrada única em Reprodução → Escolha da fonte e resultado da busca sem duplicação. Dados, interação, seções, padrões, perfis e i18n passaram; 12 cenas nativas da UX foram capturadas e revisadas no Mac. Foco claro com texto escuro, categoria ativa e textos auxiliares legíveis; teclas simuladas cobrem confirmar/cancelar/Voltar/restaurar/busca/avançados. Essas provas não substituem controle físico e painel das TVs.
+- `4412ae0c` / `1b74378d`: Android recebe posição local válida durante a preparação, com ack por sessão e fallback; o ack inicial entra na telemetria da abertura. Testes distinguem posição válida, só percentual, episódio/perfil, ao vivo e sessão retida; Kotlin/NDK compilam. Tempo da pré-busca é corrigido somente no log.
 - Conferência paralela genérica da primeira mídia adiada: o GET Range pode criar arquivos/cobrar cota no debrid, e o caminho atual não cancela a transferência. A retomada guardada já abre em paralelo. Corrigir o contrato da sonda antes de ampliar essa concorrência.
 - `5fcae85c`: sonda nativa valida HTTP2xx, cabeçalhos, transporte e URL sem truncamento; descarta corpo e corta no teto. WGT não copia corpo ao heapWASM e preserva autorização inconclusiva quando XHR não consegue cabeçalho que AVPlay manda. Focos nativos ASan/UBSan, políticaWGT, três regressões de fonte, sintaxeTPK4/6 e i18n passaram. XHR síncrono ainda não oferece cancelamento/timeout por chamada.
 - Proporção TPK: recorte da origem desativado por padrão por limite do backend; não reintroduzir ROI fora da tela que já expôs a Home da Samsung. Sem alteração .NET; #195 ainda depende do cenário/aparelho/fonte do relator.
 
-## Plano de execução
+## Execução e pendências
 
-1. **Correções de consistência antes das otimizações.** Proteger as leituras/escritas de `cat_definir_na_lista`, `_imdb` e outras operações no vetor publicado, sem mutex recursivo nem retenção de ponteiro antigo. Isolar mapa de assistidos por conta/perfil e descartar respostas atrasadas da identidade anterior: a chave atual é IMDb+tipo e não há reset da tabela no código consultado. Testar troca A→B, logout, resposta tardia e fallback de progresso.
-2. **Autoatualização TPK e arte.** Cinco registros 1.7.1 não encontram `aj_smartphone.png`; os quatro pacotes completos 1.7.1 contêm esse arquivo. Autoatualização troca somente `.so`, portanto atualização parcial é hipótese concreta, ainda não causa comprovada de todos os registros. Confirmar manifesto/host instalado e corrigir contrato biblioteca/arte (fallback embutido para ícones essenciais ou atualização versionada de recursos). Evitar caminho quente tentando abrir arquivo ausente em cada quadro.
-3. **Sincronização e indisponibilidade.** Dois registros Android trazem push de addons HTTP500; há 521/522/429 em operações Nuvio. Identificar rota/status/corpo sanitizado, separar servidor e cliente; testar preservação da fila, backoff e ausência de rajadas. Não perder sessão, biblioteca nem mudanças locais. Corrigir servidor apenas se causa demonstrada, sem deploy automático.
-4. **Abertura de filme.** Instrumentar pedido→fontes→URL→pronto→primeiro quadro→ponto salvo. Android: preparar Media3 já na posição inicial quando houver posição válida; manter fallback se duração desconhecida e não executar seek duplicado. Ganho de 3–6 s citado no handoff é estimativa/medição anterior, não resultado desta implementação. Avaliar conferência paralela para primeira abertura com fallback e cancelamento; não abrir duas reproduções nem consumir debrid especulativamente.
-5. **Pré-busca MKV.** Tempo unsigned pode estourar se `agora` antecede timestamp criado durante o mesmo quadro. Corrigir diagnóstico de tempo primeiro; separar alteração da espera de até 4 s, pois muda latência e disponibilidade da legenda no início. Critério: nenhum tempo falso e nenhuma regressão silenciosa na legenda embutida.
-6. **Relatos visuais/reprodução.** Reproduzir proporção que falha (#195), cintilação de Continuar assistindo (#144), catálogos ainda ausentes (#195/#197) e título/descrição localizada (#209) com log atual e fonte/configuração. Não assumir que todos vêm da mesma causa. Confirmar #158 com usuário após 1.7.1.
-7. **Escolha de UX.** Decidir `ajustesux` antes de combinar `ajustesvisual`; comparar controle remoto, toque, contraste, memória e legibilidade. Branch limpa no momento da inspeção, porém contém reorganização grande e 94 frases por idioma. Não mesclar as duas cegamente. Ícones de apoiador exigem decisão e teste do alias/launcher Android.
-8. **Build para o dono.** Identificar versão/commit; gerar LG normal/highcache, WGT, quatro TPKs, dois .so e APK dual ABI, conferir arte/configuração/assinatura/checksums. Dono testa C9, TCL e Samsung. Casos curtos: retomada antes/depois de dois minutos, fonte vencida, addon lento, troca de perfil, login/toque, proporção e Xtream. Publicação só com autorização posterior.
+1. **Consistência — concluída no código.** `2d6f2eb9` protege leituras/escritas no vetor publicado sem mutex recursivo e rejeita atualização cujo índice mudou de título. O mapa de assistidos agora muda na fronteira efetiva de conta/perfil; geração capturada antes da rede impede resposta atrasada de repovoar a identidade nova. Mesma identidade conserva provas locais/de outras fontes. Testes cobriram A→B, perfil, logout, A→B→A, fallback de progresso, 6.400 inserções em oito threads e publicação concorrente do catálogo. ASan/UBSan e ThreadSanitizer aprovados; validação física continua pendente.
+2. **Autoatualização TPK e arte — fallback implementado.** Cinco registros 1.7.1 não encontram `aj_smartphone.png`; os quatro pacotes completos 1.7.1 contêm esse arquivo. Um registro comprova núcleo atualizado por memfd, host api11 e arte ausente, sem revelar a versão exata do pacote antigo. `49ad2fbc` inclui o ícone essencial no núcleo e evita tentativas de arquivo ausente por quadro. Conferir o resultado numa Samsung com host anterior permanece teste físico; a hipótese não foi generalizada a todos os registros.
+3. **Sincronização e indisponibilidade — proteção do cliente concluída.** Dois registros Android trazem push de addons HTTP500; também há 521/522/429 em operações Nuvio. `bff916b4` preserva edição local após falha, descarta ack de outro perfil, mantém edição feita durante o POST e conserva o backoff existente. Testes focados passaram. A causa remota dos 500 não foi demonstrada; nenhum servidor foi alterado ou publicado. Não contabilizar isso como recuperação comprovada do serviço externo.
+4. **Abertura de filme — Android e telemetria implementados; ganho físico pendente.** A preparação recebe posição válida, com confirmação por sessão e fallback sem seek duplicado. Pedido→fontes→URL→pronto→primeiro quadro→ponto salvo pode ser comparado na mesma fonte/aparelho. Ganho de 3–6 s citado no handoff é estimativa/medição anterior, não resultado desta implementação. Conferência paralela genérica da primeira mídia foi adiada por efeitos do GET Range no debrid e ausência de cancelamento por chamada. A fonte da última sessão já usa o caminho paralelo integrado.
+5. **Pré-busca MKV — diagnóstico corrigido.** O log deixa de produzir tempo unsigned falso quando `agora` antecede o timestamp criado no mesmo quadro. A espera de até 4 s permanece; ela não foi reduzida como parte da correção de telemetria. Conferir legenda ASS embutida na mídia real ainda é teste físico específico.
+6. **Relatos visuais/reprodução — evidência física pendente.** Proporção (#195), cintilação de Continuar assistindo (#144), catálogos ausentes (#195/#197) e localização (#209) precisam do cenário/fonte/configuração/log atual. Não afirmar que todos têm a mesma causa. #158 já recebeu resposta da 1.7.1; aguarda confirmação de reprodução contínua do relator, sem nova resposta nesta rodada.
+7. **UX — escolha e merge concluídos.** O dono escolheu `ajustesux`; `f9083b10` integrou a reorganização funcional, conservando enum/defaults e #221. `ajustesvisual` A/B, ícones de apoiador e recursos sociais ficam fora da 1.7.2. Não combinar automaticamente as alternativas visuais nem alterar launcher Android sem escolha e prova próprias.
+8. **Pacotes e TVs — em execução pelo agente principal.** Versão 1.7.2 alterada localmente em `32e70e48`. Gerar LG normal/highcache, WGT, quatro TPKs, dois .so e APK dual ABI; conferir arte/configuração/assinatura/checksums e registrar o commit de origem de cada build. Resultado da geração e instalação ficará no registro de validação/pacotes. Dono testa C9, TCL e Samsung: antes/depois de dois minutos, fonte vencida, addon lento, troca de perfil, login/toque, proporção e Xtream. Publicação continua dependendo de autorização posterior.
 
 ## Evidências dos logs
 
@@ -45,51 +45,51 @@ Relatórios automáticos #192 confundem fallback ASS, código zero e sessão sem
 
 ## Branches soltas
 
-Inventário por ancestralidade + `git cherry` contra HEAD: 18 branches com patches sem equivalência exata. Contagem não indica que todo patch é funcionalmente novo; cherry-pick adaptado pode aparecer como não integrado.
+Inventário revisto por ancestralidade + `git cherry` contra `32e70e48`: 17 branches com patches sem equivalência exata. `agente/ajustesux` está integrada e tem zero patches pendentes; aparece abaixo apenas para registrar seu encaminhamento concluído. Contagem não indica que todo patch é funcionalmente novo; cherry-pick adaptado pode aparecer como não integrado. As outras worktrees não foram alteradas nem reavaliadas quanto a mudanças sem commit.
 
 | Branch | Patches sem equivalência exata | Encaminhamento |
 |---|---:|---|
-| `agente/ajustesux` | 5 | Candidata 1.7.2 mediante escolha da UX |
-| `agente/ajustesvisual` | 2 | Experimento A/B; escolher direção antes de integrar |
+| `agente/ajustesux` | 0 | Integrada em `f9083b10`; validação focada e 12 capturas aprovadas no host |
+| `agente/ajustesvisual` | 2 | Alternativas A/B fora da 1.7.2; direção funcional `ajustesux` já escolhida |
 | `agente/guiaunicode` | 1 | Conserto de gênero Unicode já presente; não reverter busca Spotlight mais nova |
 | `agente/i195` | 1 | Canário/porte antigo; preservar e confirmar obsolescência, não mesclar nem apagar agora |
 | `agente/i195b` | 1 | Canário/porte antigo; preservar e confirmar obsolescência, não mesclar nem apagar agora |
 | `agente/i195c` | 2 | Canário/porte antigo; preservar e confirmar obsolescência, não mesclar nem apagar agora |
 | `agente/i195d` | 3 | Canário/porte antigo; preservar e confirmar obsolescência, não mesclar nem apagar agora |
 | `agente/i203` | 1 | Canário/porte antigo; preservar e confirmar obsolescência, não mesclar nem apagar agora |
-| `agente/icones` | 5 | Decisão do dono; risco de alteração do launcher Android |
+| `agente/icones` | 5 | Fora da 1.7.2; exige decisão e prova do launcher Android |
 | `agente/p2p` | 6 | Versão antiga; não mesclar |
 | `agente/p2p2` | 13 | 1.8; requer validação de plataforma/cancelamento/disco |
 | `agente/plugins` | 14 | Versão antiga; não mesclar |
 | `agente/plugins2` | 21 | 1.8; requer validação de plataforma/cancelamento/disco |
-| `agente/reacao` | 6 | Outra sessão; não tocar sem decisão. Socialui contém trabalho não commitado |
-| `agente/socialsrv` | 7 | Outra sessão; não tocar sem decisão. Socialui contém trabalho não commitado |
-| `agente/socialui` | 6 | Outra sessão; não tocar sem decisão. Socialui contém trabalho não commitado |
+| `agente/reacao` | 6 | Fora da 1.7.2; outra sessão, preservar sem merge nesta rodada |
+| `agente/socialsrv` | 7 | Fora da 1.7.2; outra sessão, preservar sem merge nesta rodada |
+| `agente/socialui` | 9 | Fora da 1.7.2; avançou desde a inspeção inicial, preservar sem merge |
 | `feat/tizen4-coop` | 5 | Canário/porte antigo; preservar e confirmar obsolescência, não mesclar nem apagar agora |
 | `feat/vidaa` | 7 | Canário/porte antigo; preservar e confirmar obsolescência, não mesclar nem apagar agora |
 
-Socialsrv/socialui avançaram desde o handoff: sete/seis patches sem equivalência exata nesta inspeção. Não assumir estabilidade por número de commits. Não foram mescladas nesta rodada.
+Socialsrv/socialui têm sete/nove patches sem equivalência exata na revisão atual; socialui tinha seis na inspeção inicial. Na inspeção inicial também havia mudanças sem commit em socialui; essa worktree não foi reaberta nesta revisão. Não assumir estabilidade por número de commits. Nenhuma branch social foi mesclada nesta rodada.
 
 ## Issues abertas consultadas
 
-Consulta GitHub atual: 20 abertas; sem PR aberta. #212/#213/#215 já fechadas e #158 respondida em 1.7.1 por outra sessão. Não refazer respostas.
+Reconsulta GitHub somente leitura após o merge dos Ajustes: mesmas 20 issues abertas, com números e timestamps iguais ao snapshot inicial desta rodada; nenhum bloqueador novo de escopo identificado. A inspeção inicial não encontrou PR aberta; PRs não foram reconsultadas nesta revisão. #212/#213/#215 já estavam fechadas e #158 respondida em 1.7.1 por outra sessão. Não refazer respostas.
 
 | Issue | Encaminhamento |
 |---|---|
 | [#222](https://github.com/iqui27/nuvio-native-legacy/issues/222) | Pedido Discord RP: estudar viabilidade/dependência de aplicativo auxiliar; fora do bloqueio de bug TV |
-| [#221](https://github.com/iqui27/nuvio-native-legacy/issues/221) | Integrada: addons chegam incrementalmente; confirmação do dono em Samsung pendente |
-| [#217](https://github.com/iqui27/nuvio-native-legacy/issues/217) | Portabilidade Linux: sed, conversor de arte, seleção de pacotes e NV_WEBOS; sem PR aberta, coordenar antes de duplicar contribuição |
+| [#221](https://github.com/iqui27/nuvio-native-legacy/issues/221) | Integrada: addons chegam incrementalmente; merge dos Ajustes preserva prazo de cinco segundos e busca. Confirmação do dono em Samsung pendente |
+| [#217](https://github.com/iqui27/nuvio-native-legacy/issues/217) | Portabilidade Linux: sed, conversor de arte, seleção de pacotes e NV_WEBOS; sem PR na inspeção inicial, coordenar antes de duplicar contribuição |
 | [#216](https://github.com/iqui27/nuvio-native-legacy/issues/216) | Integrada: toque/arrastar/login; falta validação do dono em dispositivo apropriado |
 | [#211](https://github.com/iqui27/nuvio-native-legacy/issues/211) | Startup UK6540: sem log/firmware; aguardando evidência, não declarar corrigida |
 | [#209](https://github.com/iqui27/nuvio-native-legacy/issues/209) | Correção publicada; confirmar comportamento/localização no cenário atual |
-| [#202](https://github.com/iqui27/nuvio-native-legacy/issues/202) | Contraste corrigido publicado; confirmar se nova UX mantém comportamento |
+| [#202](https://github.com/iqui27/nuvio-native-legacy/issues/202) | Correção publicada; 12 capturas da nova UX revisadas no host, com texto escuro no foco claro. Conferir painel/controle físico na TV |
 | [#201](https://github.com/iqui27/nuvio-native-legacy/issues/201) | Usuário confirmou primeira fileira; pedido de mais itens TopN é decisão de produto separada |
 | [#197](https://github.com/iqui27/nuvio-native-legacy/issues/197) | Catálogo depende de addon/perfil/retorno vazio; pedir cenário/log atual se persistir |
 | [#195](https://github.com/iqui27/nuvio-native-legacy/issues/195) | Trailer confirmado corrigido; novo relato inclui proporção e catálogos, além de pedidos de recursos |
 | [#192](https://github.com/iqui27/nuvio-native-legacy/issues/192) | Agregador: revisar eventos brutos, não tomar rótulo automático como diagnóstico |
 | [#190](https://github.com/iqui27/nuvio-native-legacy/issues/190) | Usuário confirmou resolução; tarefa administrativa pendente |
 | [#188](https://github.com/iqui27/nuvio-native-legacy/issues/188) | Correção anterior; confirmar mesmo cenário no TPK atual |
-| [#172](https://github.com/iqui27/nuvio-native-legacy/issues/172) | Pedido visual; avaliar UX sem penalizar TVs antigas |
+| [#172](https://github.com/iqui27/nuvio-native-legacy/issues/172) | Reorganização funcional dos Ajustes integrada; demais pedidos visuais não foram presumidos como atendidos. Medir fluidez nas TVs |
 | [#171](https://github.com/iqui27/nuvio-native-legacy/issues/171) | P2P nativo reservado 1.8 |
 | [#158](https://github.com/iqui27/nuvio-native-legacy/issues/158) | Resposta 1.7.1 já enviada; aguardar playback contínuo do relator |
 | [#155](https://github.com/iqui27/nuvio-native-legacy/issues/155) | Agradecimento, nenhum defeito para corrigir |
