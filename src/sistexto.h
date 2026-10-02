@@ -26,7 +26,17 @@
 //     sistema e avisa que o microfone dele dita.
 //
 // FORA DO ANDROID (LG, Samsung, Mac) nada disto existe: st_*_disponivel() = 0 e
-// as telas ficam como eram. Para captura e teste no Mac, NUVIO_SISTEXTO_TESTE=1
+// as telas ficam como eram (no Spotlight, o teclado do app abre com OK no
+// campo). O que se sabe, NADA testado em TV (01/10/2026):
+//   - LG: o app usa o libSDL2 de fabrica; SUSPEITO que o SDL_StartTextInput
+//     dele nao levante o teclado do webOS (pesquisa em spotlight.h, "LG E O
+//     TECLADO DO SISTEMA"; a linha "[spotlight] lg sdl ... osk=N" do log vai
+//     dizer). O caminho certo seria embarcar o SDL-webOS do webosbrew.
+//   - Samsung .tpk: quem tem acesso a STT/IME e o host .NET (tizen-tpk/), nao
+//     o nucleo C; ligar aqui exige uma ponte nova no host, que fica para um
+//     canario separado.
+//   - Samsung .wgt: webapis.voiceinteraction so a partir de Tizen 6.0 (nota em
+//     spotlight.h). Para captura e teste no Mac, NUVIO_SISTEXTO_TESTE=1
 // finge que existe (abrir so loga) e st_teste_evento injeta o que o Android
 // mandaria.
 #ifndef NV_SISTEXTO_H

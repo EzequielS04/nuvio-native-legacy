@@ -46,9 +46,15 @@ int st_dono(void) { return dono; }
 float st_nivel(void) { return estado == ST_OUVINDO ? nivel : 0.0f; }
 const char *st_aviso(void) { return aviso; }
 
+static int proximo(char *dst, size_t n);
+// O que sobrou de uma entrada anterior (a fala que terminou depois de a tela
+// fechar) nao pode cair no campo novo.
+static void descartar(void) { char ev[600]; int k = 0; while (k++ < 64 && proximo(ev, sizeof ev)) {} }
+
 int st_ime_abrir(int d, const char *inicial, int max) {
   int ok = 0;
   if (!st_ime_disponivel()) return 0;
+  descartar();
   dono = d; nivel = 0.0f;
   if (!quedaTeclado) aviso = "";      // caiu da voz: o aviso de por que fica
   quedaTeclado = 0;
@@ -67,6 +73,7 @@ int st_ime_abrir(int d, const char *inicial, int max) {
 int st_voz_iniciar(int d) {
   int ok = 0;
   if (!st_voz_disponivel()) return 0;
+  descartar();
   dono = d; aviso = ""; nivel = 0.0f;
 #ifdef NV_ANDROID
   ok = android_st_ditar(desc_tmdb_idioma());
