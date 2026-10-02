@@ -132,6 +132,45 @@ void app_abrir_titulo(const char *imdb) {
 }
 
 static int aguardandoFonte;
+// ESCOLHA AUTOMATICA COM A LISTA AINDA ENCHENDO (#221). A busca publica cada
+// addon que responde (addons.c); a escolha de VOD nao espera mais o ultimo.
+// Ela sai quando a lista ja tem uma fonte boa o bastante pelos criterios de
+// sempre (fonteauto_pode_decidir) ou quando passa o prazo de Ajustes ("Espera
+// pelos add-ons"). Com fonte LEMBRADA neste titulo, o addon dela e esperado
+// sem prazo: a escolha da pessoa nao e trocada por pressa.
+//
+// `autoEsperaN` > 0: a verificacao da lista parcial nao achou nenhuma que
+// sirva e a busca ainda esta no ar; a proxima tentativa so sai quando a
+// lista crescer alem disso (senao reconferia as mesmas a cada quadro).
+static int autoEsperaN;
+static void idBaseDoTitulo(char *dst, size_t tam);
+static int prefFolhaN = -1;
+static int autoParcialPronto(void) {
+  char base[24];
+  const FontePref *fp;
+  int prazo, lembrada = -1, prefPendente = 0;
+  static int ultN = -1, ultLembrada = -1;
+  static unsigned ultGeracao;
+  if (!addons_busca_parcial() || player_id_canal()[0]) return 0;
+  if (stream_n() < 1 || stream_n() <= autoEsperaN) return 0;
+  if (stream_n_candidatas() < 1) return 0;
+  idBaseDoTitulo(base, sizeof base);
+  fp = base[0] ? fontepref_do_titulo(base) : NULL;
+  if (fp) {
+    // fontepref_escolher escreve no log: uma vez por tamanho de lista.
+    if (stream_n() != ultN || stream_lista_geracao() != ultGeracao) {
+      ultN = stream_n(); ultGeracao = stream_lista_geracao();
+      ultLembrada = fontepref_escolher(base);
+    }
+    lembrada = ultLembrada;
+    prefPendente = lembrada < 0 && addons_pendente_nome(fp->provedor);
+  }
+  // Escolher a mao: a folha abre com o que ja chegou e continua enchendo.
+  if (ajustes_fonte_manual() && lembrada < 0) return !prefPendente;
+  prazo = ajustes_fonte_prazo_ms();
+  return stream_auto_pode_decidir(lembrada, prefPendente,
+                                  prazo > 0 && addons_busca_ms() >= (unsigned)prazo);
+}
 // Episodio que o card de "Continuar assistindo" ANUNCIAVA quando o OK pediu
 // para tocar (issue #93). Armado no ramo home_pediu_tocar e consumido pelo
 // ramo de detail_pediu_reproduzir, no lugar do episodioAlvo — que neste
@@ -505,6 +544,7 @@ static void buscarParaPlayerModo(int renovar) {
   // Episodio novo abre um ciclo novo de fontes. A fonte automatica do
   // episodio anterior nao pode contaminar o watchdog nem a lista de exclusao.
   limparFonteVOD();
+  autoEsperaN = 0;
   // CARIMBA O ALVO ANTES DE PEDIR (issue #101). A lista que voltar passa a
   // saber de que episodio ela e; sem isto ninguem consegue distinguir "a lista
   // do E6" de "a lista do E5 que ninguem invalidou". Ver streams.h.
@@ -2073,7 +2113,17 @@ void app_atualizar(float dt, Uint32 agora) {
   salvos_reconciliar();
 
   // Durante a verificacao nao substituir a lista que os workers consultam.
+  // ACRESCENTAR pode (#221): os indices de quem ja estava nao mudam.
+  addons_drenar();
   if (aguardandoFonte != 2) addons_estado();
+  // A marca "Sua escolha anterior" na folha que abriu antes de o addon da
+  // lembrada responder: confere de novo quando a lista cresce.
+  if (stream_folha_aberta() && stream_preferida() < 0 && stream_n() != prefFolhaN) {
+    char base[24];
+    prefFolhaN = stream_n();
+    idBaseDoTitulo(base, sizeof base);
+    if (base[0] && fontepref_tem(base)) stream_preferir(fontepref_escolher(base));
+  } else if (!stream_folha_aberta()) prefFolhaN = -1;
   trocaDeTituloSeSolicitada();
   marcarAssistidoSeSolicitado();
   if (atomic_load_explicit(&perfilCarga, memory_order_acquire) == 2) {
@@ -2539,8 +2589,17 @@ void app_atualizar(float dt, Uint32 agora) {
   // duas ficariam presas no mesmo pipeline.
   // A busca disparada por Reproduzir terminou: agora VERIFICA as fontes, em
   // ordem, ate achar uma que leve ao arquivo — e so entao liga o video.
-  if (aguardandoFonte == 1 && addons_estado() != ADD_BUSCANDO) {
+  if (aguardandoFonte == 1 &&
+      (addons_estado() != ADD_BUSCANDO || autoParcialPronto())) {
     unsigned geracao = novaGeracaoFonte();
+    if (addons_busca_parcial()) {
+      char faltam[160];
+      int k = addons_faltam(faltam, sizeof faltam);
+      printf("[fonte] escolha com %d fontes aos %u ms; faltam %d addon(s): %s\n",
+             stream_n(), addons_busca_ms(), k, faltam);
+      marco("fonte: escolha antes do ultimo addon");
+    }
+    autoEsperaN = 0;
     aguardandoFonte = 2;
     fontePedidoGeracao = geracao;
     limparFontePendente();
@@ -2630,12 +2689,28 @@ void app_atualizar(float dt, Uint32 agora) {
     // Anuncia o CONTENTOR pelo mesmo caminho: e o que dispensa a sonda de
     // Matroska num arquivo que nunca teria um cabecalho desses.
     if (s) video_definir_mp4(s->mp4 || strstr(s->url, ".mp4") != NULL);
-    marco(s ? "fonte escolhida" : "nenhuma fonte serve");
+    { int esperarMais = !s && !player_id_canal()[0] && !ajustes_fonte_primeira() &&
+                        addons_busca_parcial();
+      marco(s ? "fonte escolhida" : esperarMais ? "fonte: nenhuma das parciais serve"
+                                                : "nenhuma fonte serve"); }
     // Nenhuma fonte e um debrid recusou a CONTA (403 de plano/limite, registro
     // 1541): diz qual no log, que e onde se separa "o addon nao tinha" de "o
     // TorBox nao deixou". Ver debrid_recusa em debrid.h.
     if (!s) { char rec[64];
       if (debrid_recusa(rec, sizeof rec)) printf("[fonte] o debrid recusou (%s)\n", rec); }
+    // NENHUMA DAS QUE JA CHEGARAM SERVE, MAS A BUSCA AINDA ESTA NO AR (#221):
+    // nao e "nenhuma fonte serve" — e esperar os addons que faltam. As que
+    // falharam ja sairam da fila (stream_automatico_excluir); a proxima
+    // escolha so sai com lista maior. "Primeira da lista" segue o caminho dela
+    // abaixo (uma conferida por vez, dentro do orcamento de tentativas).
+    if (!s && !player_id_canal()[0] && !ajustes_fonte_primeira() &&
+        addons_busca_parcial() && (player_aberto() || player_mini_ativo()) &&
+        !player_quer_sair()) {
+      printf("[fonte] nenhuma das %d que chegaram serve; esperando os addons que faltam\n",
+             stream_n());
+      autoEsperaN = stream_n();
+      aguardandoFonte = 1;
+    } else {
     // PiP conta como sessao viva: o zap dentro da miniatura depende desta
     // fonte chegar — com a guarda antiga ela seria descartada.
     if ((player_aberto() || player_mini_ativo()) && !player_quer_sair()) {
@@ -2668,6 +2743,7 @@ void app_atualizar(float dt, Uint32 agora) {
         (void)pedirProximaFonteVOD();
       }
       else { limparFonteVOD(); erroSemFonte(); }
+    }
     }
   }
 

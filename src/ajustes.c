@@ -284,6 +284,9 @@ typedef enum {
   // "quadro do video" encolhe ate a mini capa da pilula) ou a pagina do titulo.
   // So vale com o relogio ligado. LOCAL. No fim pelo mesmo motivo.
   AJ_SAIDA_PLAYER,
+  // Quanto a escolha automatica de fonte espera os addons lentos (#221). LOCAL.
+  // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_FONTE_PRAZO,
   AJ_N
 } OpcaoId;
 
@@ -296,6 +299,8 @@ static const char *V_LIVETV_ESPERA[] = { "Automática", "25 s", "45 s" };
 // Dinamica, onde a pilula da barra lateral ocupa o canto esquerdo). 1 e 2 sao
 // escolha explicita; Esquerda no layout Dinamica fica AO LADO da pilula.
 static const char *V_RELOGIO_POS[] = { "Automática", "Esquerda", "Direita" };
+// Indice gravado em fontePrazoLocal; ver ajustes_fonte_prazo_ms.
+static const char *V_FONTE_PRAZO[] = { "3 s", "5 s", "8 s", "Todos os add-ons" };
 static const char *V_SAIDA_PLAYER[] = { "Voltar para a home (minimizar na ilha)",
                                         "Voltar para a página do título" };
 static const char *V_LIVETV_MODO[] = { "A (padrão)", "B (sem seleção de faixa)", "C (payload de live)" };
@@ -871,6 +876,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Fita de miniaturas",              V_LIGA, 2),          // local: seekrFitaLocal
   NUM("Sincronia da miniatura",          -60, 60, 1, " s"),   // local: seekrAjusteLocal
   ESC("Ao sair do player",               V_SAIDA_PLAYER, 2),  // local: saidaPlayerLocal
+  ESC("Espera pelos add-ons",            V_FONTE_PRAZO, 4),   // local: fontePrazoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1033,6 +1039,7 @@ static const char *CHAVE[] = {
   "seekrLocal", "-seekrChave", "-seekrTestar",
   "seekrFitaLocal", "seekrAjusteLocal",
   "saidaPlayerLocal",
+  "fontePrazoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1202,7 +1209,7 @@ static const Item TELA[] = {
   SEC("Reprodução", "Player, fontes, áudio e legendas", "aj_circle-play"),
     OPC(AJ_PAUSA_OVERLAY),
     ROT("Player e seleção de fontes"),
-      OPC(AJ_FONTE_MANUAL), OPC(AJ_FONTE_AUTO), OPC(AJ_FONTE_REPOR),
+      OPC(AJ_FONTE_MANUAL), OPC(AJ_FONTE_AUTO), OPC(AJ_FONTE_REPOR), OPC(AJ_FONTE_PRAZO),
       OPC(AJ_SELOS_CORES),
     ROT("Áudio e vídeo"),
       OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS),
@@ -1507,6 +1514,7 @@ static int valor[] = {
   1,                /* fita de miniaturas: DESLIGADA (V_LIGA: 1 = Desligado), uma so */
   0,                /* sincronia da miniatura: 0 s (a documentacao: nada automatico) */
   0,                /* ao sair do player: a home, minimizando na ilha (com o relogio) */
+  1,                /* espera pelos add-ons: 5 s (#221) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1613,6 +1621,19 @@ int ajustes_dolby_atmos(void)         { return lig(AJ_ATMOS); }
 int ajustes_pausa_overlay(void)       { return lig(AJ_PAUSA_OVERLAY); }
 int ajustes_fonte_manual(void)        { return lig(AJ_FONTE_MANUAL); }
 int ajustes_fonte_primeira(void)      { return valor[AJ_FONTE_AUTO] == 1; }
+// PRAZO DA ESCOLHA AUTOMATICA COM A LISTA AINDA ENCHENDO (#221), em ms; 0 =
+// esperar todos os addons (o comportamento ate a 1.7.0). 5 s de fabrica:
+// medido no D1 da 1.7.0 (.tpk), a primeira fonte chega em 0,85 s no p90 e o
+// ultimo addon em 12 s — o prazo cobre a cauda dos rapidos sem pagar a dos
+// mudos.
+int ajustes_fonte_prazo_ms(void) {
+  switch (valor[AJ_FONTE_PRAZO]) {
+    case 0: return 3000;
+    case 2: return 8000;
+    case 3: return 0;
+    default: return 5000;
+  }
+}
 int ajustes_fonte_repor(void) {
   int v = valor[AJ_FONTE_REPOR];
   return v < 0 ? 0 : v > 3 ? 3 : v;     // arquivo editado a mao: dentro da tabela
@@ -3237,6 +3258,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
+    case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: /* o web nao tem o Seekr */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
@@ -3803,6 +3825,8 @@ static int inativa(int op) {
     case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: return !lig(AJ_SEEKR_LIGADO);
     // Sem o relogio nao ha ilha para onde minimizar: sai para a pagina, como antes.
     case AJ_SAIDA_PLAYER: return !lig(AJ_RELOGIO);
+    // Escolhendo a mao, a folha abre com o que chegou: nao ha escolha a apressar.
+    case AJ_FONTE_PRAZO: return lig(AJ_FONTE_MANUAL);
     // Som: na Samsung (.wgt) o trailer e sempre mudo (trailerfonte_com_som).
     case AJ_HERO_TRAILER_SOM:
       return !lig(AJ_HERO_TRAILER) || !trailerfonte_com_som(trailerfonte_tizen());
@@ -3989,6 +4013,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_EPG_PAIS: return "De que país vem a programação dos canais no Guia. Automático escolhe pelo idioma e pelos nomes dos canais (RO:, |RO|…). A grade do próprio provedor Xtream entra sempre que existir.";
     case AJ_FONTE_MANUAL: return "Ao mandar reproduzir, abre a lista de fontes em vez de escolher sozinho. Canal ao vivo não pergunta.";
     case AJ_FONTE_AUTO: return "Melhor fonte: prefere 4K, Dolby Vision e MP4 e confere uma fonte por vez. Primeira da lista: toca a primeira que o addon mandou e não confere nenhuma outra — para quem já filtra e ordena no AIOStreams.";
+    case AJ_FONTE_PRAZO: return "As fontes aparecem na lista assim que cada add-on responde. A escolha automática não espera o mais lento: sai quando já há uma fonte boa ou depois deste tempo. Com uma fonte escolhida antes neste título, o add-on dela é sempre esperado.";
     case AJ_FONTE_REPOR: return "Quantas outras fontes o automático tenta quando a escolhida não abre. Cada tentativa pode adicionar um arquivo na sua conta de debrid.";
 
     // --- Home
@@ -6836,6 +6861,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA:
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_SELOS_CORES:
+    case AJ_FONTE_PRAZO:
       return AJPV_REPRO;
     case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
