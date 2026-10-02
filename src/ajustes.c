@@ -3716,7 +3716,14 @@ static const char *textoLeitura(int op) {
   }
   // Armada pelo primeiro OK, a linha diz o que o segundo faz. Em repouso nao
   // diz nada: o chevron ja e o "OK faz alguma coisa aqui".
-  if (op == AJ_SAIR) return sairArmado == op ? i18n("OK de novo para sair") : "";
+  // Com o servidor da conta fora do ar, sair agora e ficar sem conta ate ele
+  // voltar: o login fala com o mesmo servidor (#215 — a pessoa saiu para
+  // "consertar" os addons sumidos e nao conseguiu entrar de novo). A linha
+  // armada diz isso antes do segundo OK.
+  if (op == AJ_SAIR)
+    return sairArmado != op ? ""
+         : sync_servidor_fora() ? i18n("Servidor da conta fora do ar: OK de novo sai mesmo assim")
+         : i18n("OK de novo para sair");
   if (op == AJ_STALKER_LIMPAR || op == AJ_XTREAM_LIMPAR)
     return sairArmado == op ? i18n("OK de novo para remover") : "";
   if (op == AJ_MDB_CHAVE) {

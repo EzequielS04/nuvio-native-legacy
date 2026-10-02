@@ -1847,6 +1847,23 @@ void app_atualizar(float dt, Uint32 agora) {
   // Um ciclo por vez, e so quando a conta existe. O passo e barato: sem fio
   // terminado ele nao faz nada.
   sync_passo((unsigned)agora);
+  // SERVIDOR DA CONTA FORA DO AR (#215): um aviso discreto na ilha, uma vez
+  // por queda, e retirado quando ele volta. Sem isto a pessoa via a home sem
+  // addons (ou com os de ontem) e concluia que o app quebrou — e saia da conta
+  // para "consertar", que e a unica coisa que piora o caso.
+  { static int avisado;
+    int fora = sync_servidor_fora();
+    if (fora && !avisado) {
+      ilha_avisar("conta-fora", ILHA_INFO, NULL,
+                  sync_usando_copia()
+                    ? i18n("Servidor da conta Nuvio fora do ar — usando seus addons salvos")
+                    : i18n("Servidor da conta Nuvio fora do ar — seus addons voltam quando ele responder"),
+                  9000u, 0);
+      avisado = 1;
+    } else if (!fora && avisado) {
+      ilha_retirar("conta-fora");
+      avisado = 0;
+    } }
 
   // A REDE DESCOBRIU PERFIS QUE O CACHE NAO TINHA: perguntar mesmo assim.
   //
