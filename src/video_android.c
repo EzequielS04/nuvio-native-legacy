@@ -418,6 +418,7 @@ void video_parar(void) {
   ativo = prontoLoad = primeiroQuadro = tocando = 0;
 }
 void video_pausar(int p) { kInt(mPausar, p ? 1 : 0); }
+int video_pausa_confirmada(void) { return 0; } // JNI nao fornece ack por sessao
 void video_volume(int pct) { kInt(mVolume, pct); }
 void video_buscar(double s) {
   posMs = (int)(s * 1000.0);   // a barra nao pode voltar enquanto o seek corre

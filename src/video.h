@@ -144,6 +144,9 @@ int  video_modo_live_consumir(void);
 // recarregando; 0 fora disso. Enquanto nao e 0, video_falhou fica em 0.
 int    video_reconectando(void);
 int    video_tocando(void);
+// Pausa comprovada pelo backend da sessao atual, nao a intencao local de
+// video_pausar. Alvos sem confirmacao confiavel devolvem 0.
+int    video_pausa_confirmada(void);
 int    video_pronto(void);   // 1 depois do loadCompleted
 int    video_ativo(void);    // 1 assim que ha mediaId — e o que abre o furo
 int    video_falhou(void);   // 1 depois de um errorText real na fonte atual

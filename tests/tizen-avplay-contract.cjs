@@ -74,6 +74,20 @@ const call = (op, text = '', a = 0, b = 0, c = 0, d = 0, dst = 0, size = 0) =>
     assert.doesNotMatch(source, /%.80s\\n", url/);
     assert.match(source, /fonte id=%08x/);
   });
+  check('pausa confirmada requires real AVPlay PAUSED state', () => {
+    assert.equal(call('pausa_confirmada'), 0);
+    assert.equal(call('pausar', '', 1), 1);
+    assert.equal(call('pausa_confirmada'), 1);
+    const play = context.webapis.avplay;
+    const getState = play.getState;
+    play.getState = () => 'PLAYING';
+    assert.equal(call('pausa_confirmada'), 0);
+    play.getState = () => { throw new Error('resource gone'); };
+    assert.equal(call('pausa_confirmada'), 0);
+    play.getState = getState;
+    assert.equal(call('pausar', '', 0), 1);
+    assert.equal(call('pausa_confirmada'), 0);
+  });
   check('app pumps video before any screen can return', () => {
     const app = fs.readFileSync('src/app.c', 'utf8');
     const start = app.indexOf('void app_atualizar(float dt, Uint32 agora)');

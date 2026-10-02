@@ -380,6 +380,13 @@ EM_JS(double, nv_av, (const char *cmd, const char *txt,
     return 1;
   }
 
+  if (op === "pausa_confirmada") {
+    var pp = pl();
+    if (!pp || !S.aberto || !S.pronto || S.erro || S.fim) return 0;
+    try { return pp.getState() === "PAUSED" ? 1 : 0; }
+    catch (e) { return 0; }
+  }
+
   if (op === "buscar") {
     var p4 = pl();
     if (!p4 || !S.aberto) return 0;
@@ -1270,8 +1277,14 @@ void video_escala_definir(int sw, int sh) { (void)sw; (void)sh; }
 
 void video_pausar(int pausado) {
   if (!temAvplay || !ativo) return;
-  AVN("pausar", pausado ? 1 : 0);
-  tocando = !pausado;
+  if (AVN("pausar", pausado ? 1 : 0) >= 1) tocando = !pausado;
+}
+
+int video_pausa_confirmada(void) {
+  // Le o estado REAL do AVPlay; setVolume nao existe neste backend. Um
+  // p.pause que levantou excecao nao pode autorizar audio escondido na Home.
+  return temAvplay && ativo && pronto && !houveErro && !video_reconectando() &&
+         avChamar("pausa_confirmada", NULL, 0, 0, 0, 0, NULL, 0) >= 1;
 }
 
 void video_buscar(double segundos) {

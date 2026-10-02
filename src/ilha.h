@@ -105,7 +105,7 @@ int  ilha_pediu(IlhaCartao *c, int *qual);
 // MINIMIZAR NA ILHA: o player saiu no meio e a sessao virou o cartao
 // ILHA_VIVO. A arte do cartao (still do episodio; `fundoReserva` = o fundo do
 // titulo, quando o still nao esta decodificado) nasce em tela cheia e encolhe
-// com mola ate a mini capa da pilula, com a tela de baixo aparecendo por tras.
+// em 400 ms ate a mini capa da pilula, com a tela de baixo aparecendo por tras.
 // Chamar com o relogio na tela (quem chama ja trocou para a home) e o cartao
 // posto. Animacoes reduzidas: nada voa, a pilula ja aparece com o cartao.
 // 0 = sem cartao ou sem relogio: nada a fazer.

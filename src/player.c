@@ -85,6 +85,8 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "xtepg.h"   /* grade curta do Xtream quando a XMLTV nao casa (#158) */
 #include "ajustes.h"
 #include "proxyts.h"
+#include "perfis.h"
+#include "sessao.h"
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -235,6 +237,12 @@ static int   aberto = 0, saindo = 0, pediuSair = 0;
 static int   idx = 0;
 #define PLR_SCR_TOCOU_S 5.0f   // #179: reproducao continua antes do /scrobble/start
 static int   tocando = 1;
+// Uma unica sessao VOD pausada, por no maximo dois minutos. Nao abre conexao
+// especulativa: e o pipeline que ja estava exibindo este titulo.
+#define PLR_RETIDO_MS 120000u
+static int retido, prepararRetencao, retidoPerfil, retomarMkv;
+static Uint32 retidoDesde;
+static char retidoConta[96], retidoUrl[4096];
 // Botao em foco na fileira de transporte. Comeca no PLAY porque e a resposta
 // que nove de cada dez aberturas quer: o dedo para no centro e o OK decide.
 static int   botao = PLR_PLAY;
@@ -539,7 +547,7 @@ int  player_fonte_falhou(void) { return erroFonte; }
 // O pipeline de video e COMPARTILHADO: o trailer do detalhe toca por ele
 // tambem. "O video esta entregando" so desmente o cartao de erro se o video
 // que entrega foi aberto POR ESTA SESSAO do player — ver app.c.
-int  player_tem_video(void) { return comVideo; }
+int  player_tem_video(void) { return comVideo && !retido; }
 // Arma DEPOIS de player_abrir + player_definir_episodio: daqui em diante a
 // sessao ignora o ponto salvo, inclusive nas re-chamadas tardias de
 // player_definir_episodio. O progresso gravado NAO e apagado — comecar do
@@ -1071,6 +1079,7 @@ void player_aspecto_ciclar(void) {
 }
 
 void player_abrir(int indiceCatalogo, const char *url) {
+  player_descartar_retido();
   // O trailer usa o mesmo plano de video (LG) — solta antes de o player
   // carregar a fonte, senao o load novo pisa no mediaId do trailer.
   trailer_fechar();
@@ -1249,7 +1258,7 @@ void player_definir_fonte(const char *url) {
 // Consome o pedido de abrir a folha de faixas: quem le, zera.
 int  player_pediu_faixas(void) { int v = pedFaixas; pedFaixas = 0; return v; }
 
-int  player_com_video(void) { return comVideo && video_pronto(); }
+int  player_com_video(void) { return comVideo && !retido && video_pronto(); }
 
 // Esta abrindo o fluxo: ha video pedido, mas ainda nao ha imagem.
 int  player_carregando(void) { return esperandoFonte || (comVideo && !video_pronto()); }
@@ -1268,7 +1277,8 @@ static void idTrakt(const CatItem *ci, char *dst, size_t n) {
   else snprintf(dst, n, "%s", base);
 }
 
-void player_encerrar(void) {
+static void fecharSessao(int manter) {
+  int jaRetido = retido;
   // Salvar ANTES de parar: video_parar descarrega o pipeline e a posicao some
   // junto. Titulo quase no fim conta como visto por inteiro — voltar a um card
   // marcando "2 min restantes" que na verdade acabou e pior que arredondar.
@@ -1287,13 +1297,13 @@ void player_encerrar(void) {
   // provedor. Dois minutos nao descartam nada que este catalogo toque: filme e
   // episodio de serie. Canal ao vivo ja sai pelo ehCanal() logo abaixo, e a
   // duracao dele nem e comparavel.
-  if (comVideo && video_pronto() && duracaoSeg > 1.0f && duracaoSeg < 120.0f &&
+  if (!jaRetido && comVideo && video_pronto() && duracaoSeg > 1.0f && duracaoSeg < 120.0f &&
       !ehCanal()) {
     printf("[player] fluxo de %.0f s: curto demais para ser o titulo, "
            "progresso NAO gravado (clipe de erro do provedor?)\n", duracaoSeg);
     fflush(stdout);
   }
-  if (comVideo && video_pronto() && duracaoSeg >= 120.0f && !ehCanal()) {
+  if (!jaRetido && comVideo && video_pronto() && duracaoSeg >= 120.0f && !ehCanal()) {
     // CANAL nao grava progresso: uma transmissao ao vivo nao tem "onde parou" —
     // guardar posSeg contra a duracao reserva colocaria "Globo 68%" em
     // Continuar assistindo, que e justamente o que nao pode acontecer.
@@ -1386,11 +1396,11 @@ void player_encerrar(void) {
   // principal" (impossivel): e a tela DIZER que esta saindo em vez de parecer
   // travada. Medir antes de escolher.
   { Uint32 t0 = SDL_GetTicks(), tv;
-    if (comVideo) video_parar();
+    if (comVideo && !manter) video_parar();
     tv = SDL_GetTicks();
     pausao_fechar();
     episodios_fechar();
-    intro_desligar(); introIdx=introT=introE=-1;
+    if (!manter) { intro_desligar(); introIdx=introT=introE=-1; }
     seekr_desligar();
     // Antes do legenda_desligar: o fio do mkvass ainda entregaria um lote ao
     // overlay depois do desligamento, e o proximo titulo abriria com a legenda
@@ -1398,11 +1408,13 @@ void player_encerrar(void) {
     mkvass_parar();
     mkvass_video_aberto(0);
     prebuscaUrl[0] = 0;
-    legenda_desligar();
-    printf("[player] saida: video_parar %u ms, resto %u ms\n",
+    if (!manter) legenda_desligar();
+    printf("[player] saida: video %s %u ms, resto %u ms\n", manter ? "retido" : "parar",
            (unsigned)(tv - t0), (unsigned)(SDL_GetTicks() - tv));
     fflush(stdout); }
-  comVideo = 0; esperandoFonte = 0; aberto = 0; saindo = 0; pediuSair = 0;
+  if (!manter) comVideo = 0;
+  retido = manter; prepararRetencao = 0;
+  esperandoFonte = 0; aberto = 0; saindo = 0; pediuSair = 0;
   mini = 0; querMini = 0; miniGuia = 0; janAtiva = 0;
   avisarCascaAberto(0);
   // Os DOIS relogios, e nao so o do primeiro quadro. `pgDesde` sobrevivendo ao
@@ -1410,6 +1422,81 @@ void player_encerrar(void) {
   // corrido — o aviso simplesmente nao entraria, sem nada no log dizendo por
   // que. Ver a nota no desenho da guia parental.
   inicioImagem = 0; pgDesde = 0;
+}
+
+void player_encerrar(void) {
+  if (retido) player_descartar_retido(); else fecharSessao(0);
+}
+
+static int podeReter(void) {
+  const CatItem *c = item();
+  return ajustes_relogio_ligado() && ajustes_saida_player_home() &&
+         comVideo && !ehCanal() && c && c->imdb[0] && !erroFonte &&
+         video_pronto() && video_ativo() && !video_falhou() && !video_terminou() &&
+         !video_conflito_recurso() && !video_reconectando() && video_url_atual()[0] &&
+         duracaoSeg >= 120.0f && home_retorno_vale(idxAtual(), posSeg, duracaoSeg) &&
+         !player_regra_concluiu(posSeg, duracaoSeg,
+                               video_creditos() > 1.0 ? video_creditos() : intro_creditos_seg());
+}
+
+void player_preparar_retencao(void) {
+  // Antes do fade terminar, para o ack chegar enquanto a tela ainda e do
+  // player. Sem confirmacao na saida, o app usa o fechamento normal.
+  if (prepararRetencao || retido || !podeReter()) return;
+  prepararRetencao = 1;
+  video_pausar(1);
+}
+
+int player_suspender(void) {
+  if (!prepararRetencao || !podeReter() || !video_pausa_confirmada()) return 0;
+  retidoPerfil = perfis_ativo();
+  snprintf(retidoConta, sizeof retidoConta, "%s", sessao_usuario());
+  snprintf(retidoUrl, sizeof retidoUrl, "%s", video_url_atual());
+  retidoDesde = SDL_GetTicks();
+  retomarMkv = mkvass_ocupado();
+  fecharSessao(1);
+  printf("[player] sessao pausada pronta para retomar (teto %u ms)\n", PLR_RETIDO_MS);
+  return 1;
+}
+
+int player_retido(void) { return retido; }
+
+void player_descartar_retido(void) {
+  if (!retido) return;
+  // Um backend ja substituido nao pertence mais a esta sessao.
+  if (strcmp(retidoUrl, video_url_atual())) comVideo = 0;
+  fecharSessao(0); // progresso ja gravado na suspensao, nao faz outro scrobble
+  retidoUrl[0] = retidoConta[0] = 0;
+  retomarMkv = 0;
+}
+
+void player_validar_retido(Uint32 agora) {
+  if (retido && (agora - retidoDesde >= PLR_RETIDO_MS ||
+      perfis_ativo() != retidoPerfil || strcmp(retidoConta, sessao_usuario()) ||
+      strcmp(retidoUrl, video_url_atual()) || !video_pausa_confirmada() ||
+      video_falhou() || video_terminou() || video_conflito_recurso() || video_reconectando()))
+    player_descartar_retido();
+}
+
+int player_retomar_retido(const char *imdb, int t, int e) {
+  Uint32 agora = SDL_GetTicks();
+  player_validar_retido(agora);
+  if (!retido) return 0;
+  if (!imdb || strcmp(imdb, itemFixo.imdb) || t != epT || e != epE) {
+    player_descartar_retido(); return 0;
+  }
+  retido = 0; aberto = 1; saindo = pediuSair = 0;
+  entrada = 1.0f; visivel = 0; anim = 0.0f; soBarra = 0;
+  scrubbing = barraFoco = 0; encolhe = 1.0f; encolheT = encolheAlvo = 0.0f;
+  ultimoInput = agora; retomadaAplicada = 1; tocando = 1;
+  relogio_zerar(&relLeg);
+  avisarCascaAberto(1); aplicarAspecto();
+  mkvass_video_aberto(1);
+  if (retomarMkv) mkvass_retomar();
+  retomarMkv = 0;
+  video_pausar(0);
+  printf("[player] retomada pronta: %u ms, sem load nem seek\n", (unsigned)(SDL_GetTicks() - agora));
+  return 1;
 }
 
 // MINI-PLAYER (PiP) DE CANAL AO VIVO.
@@ -2215,6 +2302,7 @@ void player_evento(const SDL_Event *e) {
 }
 
 void player_atualizar(float dt, Uint32 agora) {
+  if (retido) { player_validar_retido(agora); return; }
   // AUDIO QUE A TV NAO TOCA (uMS errorCode 200, registro 1545): o video segue
   // mudo, e sem isto a pessoa nao tinha como saber que era a fonte e nao o
   // volume. Um aviso por sessao, 6 s, no lugar do de proporcao.

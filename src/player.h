@@ -105,6 +105,14 @@ void player_atualizar(float dt, Uint32 agora);
 void player_desenhar(Uint32 agora);
 int  player_quer_sair(void);  // 1 assim que o Back foi apertado
 void player_encerrar(void);
+// VOD na ilha: pausa antecipada durante a saida, conserva somente com ack,
+// depois retoma o mesmo IMDb/episodio sem reabrir fonte ou buscar posicao.
+void player_preparar_retencao(void);
+int  player_suspender(void);
+int  player_retido(void);
+int  player_retomar_retido(const char *imdb, int temporada, int episodio);
+void player_validar_retido(Uint32 agora);
+void player_descartar_retido(void);
 
 // --- MINI-PLAYER (PiP) DE CANAL ---------------------------------------------
 // Sair de um canal para a home nao mata a transmissao: o destino do plano de

@@ -125,6 +125,7 @@ static char  legUrlAoCarregar[1024];
 static char  legUrlAtual[1024];
 // Avanco pendente: alvo e quando manda-lo. Ver SEEK_REPOUSO_MS.
 static int    pausaPedida;   // 1 enquanto a pausa foi pedida por nos
+static int    pausaConfirmada;
 // Sonda de MKV pedida, esperando o buffer. Ver a nota no sourceInfo.
 static int    mkvPendente;
 // 1 quando a fonte foi anunciada como MP4. Ver video_definir_mp4.
@@ -153,6 +154,7 @@ int  video_tocar(const char *u) { snprintf(urlAtual, sizeof urlAtual, "%s", u ? 
 void video_bombear(void) {}
 void video_parar(void) {}
 void video_pausar(int p) { (void)p; }
+int  video_pausa_confirmada(void) { return 0; }
 void video_volume(int pct) { (void)pct; }
 void video_buscar(double s) { (void)s; }
 void video_janela(int x,int y,int w,int h) { (void)x;(void)y;(void)w;(void)h; }
@@ -1026,6 +1028,7 @@ static int aoEvento(LSHandle *h, LSMessage *m, void *u) {
     marco(m);
   }
   if (strstr(p, "playing")) {
+    pausaConfirmada = 0;
     tocando = 1;
     if (acb && midia[0]) {
       long tarefa = 0;
@@ -1052,6 +1055,7 @@ static int aoEvento(LSHandle *h, LSMessage *m, void *u) {
     // pausa vinda do pipeline e o defeito.
     if (tocando && !pausaPedida) marco("pausado PELO PIPELINE");
     tocando = 0;
+    pausaConfirmada = pausaPedida;
   }
   if (strstr(p, "endOfStream")) { tocando = 0; terminou = 1; marco("endOfStream"); }
 
@@ -2027,6 +2031,7 @@ static void pararSessao(void) {
   audioAoCarregar = legAoCarregar = -1;
   legUrlAoCarregar[0] = 0;
   pausaPedida = 0; seekEm = 0; mkvPendente = 0;
+  pausaConfirmada = 0;
   if (ligado && midia[0]) {
     snprintf(b, sizeof b, "{\"mediaId\":\"%s\"}", midia);
     chamar("unload", b, soLog);
@@ -2039,9 +2044,15 @@ void video_pausar(int pausado) {
   char b[128];
   if (!ligado || !midia[0]) return;
   snprintf(b, sizeof b, "{\"mediaId\":\"%s\"}", midia);
+  pausaConfirmada = 0;
+  pausaPedida = pausado;
   chamar(pausado ? "pause" : "play", b, soLog);
   tocando = !pausado;
-  pausaPedida = pausado;
+}
+
+int video_pausa_confirmada(void) {
+  return pausaPedida && pausaConfirmada && pronto && midia[0] &&
+         !falhou && !terminou && !video_reconectando();
 }
 
 void video_volume(int pct) {

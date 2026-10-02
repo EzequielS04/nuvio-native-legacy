@@ -411,6 +411,9 @@ static void abrirTitulo(const HomeItem *it) {
   // aqui e nao. Um so lugar para os dois: o titulo resolvido entra no catalogo
   // e trocaDeTituloSeSolicitada abre ele.
   c = cat_item(it->indice);
+  // Uma pagina nova pode abrir trailer no mesmo plano. Retomar na ilha ja
+  // foi tratado antes deste caminho, sem passar pela pagina nem por fontes.
+  player_descartar_retido();
   if (c && !strncmp(c->imdb, "tmdb:", 5) && desc_chave_tmdb() &&
       desc_chave_tmdb()[0] && !desc_titulo_buscando()) {
     // Sem chave do TMDB nao ha como resolver: abre como dava (arte e sinopse,
@@ -496,7 +499,7 @@ static void alvoPlayer(char *alvo, size_t tam) {
   if (t > 0 && e > 0) cat_id_stream(player_indice(), t, e, alvo, (unsigned)tam);
   else snprintf(alvo,tam,"%s",c->imdb);
 }
-static void buscarParaPlayer(void) {
+static void buscarParaPlayerModo(int renovar) {
   char alvo[64]; alvoPlayer(alvo,sizeof alvo);
   const char *idC = player_id_canal();
   // Episodio novo abre um ciclo novo de fontes. A fonte automatica do
@@ -506,15 +509,19 @@ static void buscarParaPlayer(void) {
   // saber de que episodio ela e; sem isto ninguem consegue distinguir "a lista
   // do E6" de "a lista do E5 que ninguem invalidou". Ver streams.h.
   stream_definir_alvo(alvo);
-  if (idC[0]) { addons_buscar(alvo,"tv"); addons_buscar_legendas(alvo,"tv"); return; }
+  if (idC[0]) {
+    if (renovar) addons_buscar_renovar(alvo,"tv"); else addons_buscar(alvo,"tv");
+    addons_buscar_legendas(alvo,"tv"); return;
+  }
   {
     const CatItem *c = cat_item(player_indice());
     if (c && alvo[0]) {
-      addons_buscar(alvo,c->tipo);
+      if (renovar) addons_buscar_renovar(alvo,c->tipo); else addons_buscar(alvo,c->tipo);
       addons_buscar_legendas(alvo,c->tipo);
     }
   }
 }
+static void buscarParaPlayer(void) { buscarParaPlayerModo(0); }
 // ID BASE DO TITULO EM JOGO, sem ":temporada:episodio".
 //
 // E a chave da preferencia de fonte, e ela e DO TITULO de proposito: o issue
@@ -1081,7 +1088,7 @@ static void tocarCanal(const CatItem *it) {
   if (ni < 0) ni = cat_acrescentar(it);
   if (ni < 0) return;
   limparFonteVOD();
-  if (player_aberto()) player_encerrar();
+  if (player_aberto() || player_retido()) player_encerrar();
   player_abrir(ni, NULL);
   // cat_acrescentar e cat_definir_tudo correm juntos: se uma republicacao
   // atravessou os dois, ni ja nao e o canal. A marca garante a sessao.
@@ -1632,7 +1639,7 @@ static void trocaDeTituloSeSolicitada(void) {
     // O caminho do titulo que JA esta no catalogo (posplay_pediu_titulo)
     // encerra o player antes; este faz o mesmo.
     if (novo >= 0) {
-      if (player_aberto()) player_encerrar();
+      if (player_aberto() || player_retido()) player_encerrar();
       abrirPorIndice(novo);
       if (spotPessoaDepois.tmdb > 0) {
         if (SDL_GetTicks() - spotPessoaDesde < SPOT_PESSOA_PRAZO_MS)
@@ -1675,6 +1682,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // O backend precisa progredir mesmo no login, perfis e transicoes que
   // retornam cedo: seek pendente no Tizen e prazo de recuo DV no webOS.
   video_bombear();
+  player_validar_retido(agora);
   if (tela == TELA_LOGIN) {
     login_atualizar(dt, agora);
     // A troca so acontece AQUI, quando a sessao existe de verdade — nao no
@@ -1875,6 +1883,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // sempre nessa primeira sessao.
   if (tela == TELA_HOME && !player_aberto() && !detail_aberto() &&
       perfis_precisa_escolher()) {
+    player_descartar_retido();
     tela = TELA_ESCOLHA_PERFIL;
     perfilAntes = perfis_ativo();
     perfilsel_iniciar();
@@ -2106,7 +2115,12 @@ void app_atualizar(float dt, Uint32 agora) {
     } else if ((o == ILHA_PEDIU_TOCAR || o == ILHA_PEDIU_DETALHES) && !player_aberto()) {
       int idx = cat_indice_por_imdb(ic.imdb);
       if (qual == ILHA_ESTREIA) avisos_marcar_visto(ic.avisoId);
-      if (idx >= 0) {
+      if (o == ILHA_PEDIU_TOCAR && qual == ILHA_VIVO &&
+          player_retomar_retido(ic.imdb, ic.serie ? ic.t : 0, ic.serie ? ic.e : 0)) {
+        if (detail_aberto()) detail_fechar_seco();
+        if (menu_aberto()) menu_fechar();
+        ilha_modal_fechar(1);
+      } else if (idx >= 0) {
         // O mesmo caminho do OK no card de "Continuar assistindo" com "OK no
         // card" = Retomar: a pagina abre e a reproducao e pedida junto, no
         // episodio que o cartao mostrava (cwTocarT/E, issue #93).
@@ -2115,7 +2129,10 @@ void app_atualizar(float dt, Uint32 agora) {
         abrirPorIndice(idx);
         if (o == ILHA_PEDIU_TOCAR) detail_pedir_reproduzir();
       } else desc_pedir_titulo(ic.imdb);
-    } else if (o == ILHA_PEDIU_DISPENSAR) ilhacart_dispensar(qual);
+    } else if (o == ILHA_PEDIU_DISPENSAR) {
+      if (qual == ILHA_VIVO) player_descartar_retido();
+      ilhacart_dispensar(qual);
+    }
   }
   if (!detail_aberto() && !player_aberto()) {
     const char *alvo = spainel_pediu_abrir();
@@ -2249,6 +2266,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // destino: as duas coisas saem do mesmo menu, e quem pediu troca nao quer
   // mudar de aba.
   if (menu_pediu_trocar()) {
+    player_descartar_retido();
     invalidarPerfil();
     tela = TELA_ESCOLHA_PERFIL;
     perfilAntes = perfis_ativo();
@@ -2930,11 +2948,11 @@ void app_atualizar(float dt, Uint32 agora) {
     if (id[0]) guia_focar_id(id);
   }
   if (aguardandoFonte != 2 && stream_folha_recarregar()) {
-    if (player_aberto()) buscarParaPlayer();
+    if (player_aberto()) buscarParaPlayerModo(1);
     else {
       const CatItem *ci=cat_item(detail_indice()); char id[64];
       idDoAlvo(ci,id,sizeof id);
-      if (ci) { stream_definir_alvo(id); addons_buscar(id,ci->tipo); }
+      if (ci) { stream_definir_alvo(id); addons_buscar_renovar(id,ci->tipo); }
     }
   }
   { int t,e;
@@ -2956,7 +2974,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // O player devolve 1 para a coluna de audio e 2 para a de legenda.
   { int q = player_pediu_faixas();
     if (q) faixas_abrir_em(q == 2 ? 1 : 0); }
-  faixas_atualizar(dt, agora);
+  if (!player_retido()) faixas_atualizar(dt, agora);
   stream_folha_atualizar(dt, agora);
   // FOLHA FECHADA SEM ESCOLHER, com o player esperando por ela. Voltar na
   // folha e "desisti", nao "tente sozinho": abrir a fonte que a pessoa acabou
@@ -2989,6 +3007,8 @@ void app_atualizar(float dt, Uint32 agora) {
   // PiP de canto ficou para os canais abertos fora do guia.
   if (player_quer_sair() && player_minimizavel() && tela == TELA_GUIA && guia_aberta())
     guiaComCanalNoAr();
+  if (player_quer_sair() && !player_minimizavel() && ajustes_saida_player_home())
+    player_preparar_retencao();
   if (player_quer_sair() && !player_aberto()) {
     if (player_minimizavel()) {
       // CANAL AO VIVO sai para PiP: o fluxo fica num canto da tela em vez de
@@ -3025,7 +3045,7 @@ void app_atualizar(float dt, Uint32 agora) {
       }
     }
     { unsigned vivoAntes = ilhacart_vivo_seq();
-      player_encerrar();
+      if (!ajustes_saida_player_home() || !player_suspender()) player_encerrar();
       // MINIMIZAR NA ILHA (pedido do dono, 02/10): saiu no MEIO (esta saida
       // virou a atividade ao vivo, o criterio de home_retorno_vale) com o
       // relogio ligado e "Ao sair do player" = home. A pagina do titulo e o
@@ -3117,6 +3137,7 @@ void app_atualizar(float dt, Uint32 agora) {
   ctx_atualizar(dt, agora);
   { int i = ctx_pediu_detalhes();
     if (i >= 0) {
+      player_descartar_retido();
       const CatItem *ci = cat_item(i);
       HomeItem it;
       memset(&it, 0, sizeof it);
@@ -3132,6 +3153,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // Titulo escolhido na grade: abre o detalhe, como se tivesse vindo da home.
   { int idx = vertudo_pediu_abrir();
     if (idx >= 0) {
+      player_descartar_retido();
       const CatItem *ci = cat_item(idx);
       // A grade nao tem retangulo de origem para a transicao crescer a partir
       // dele: o card fica na tela que esta saindo. Entra centrado, do tamanho
@@ -3162,7 +3184,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // ordem de app_evento — o que come tecla antes da home tambem esta na
   // frente dela na tela.
   home_trailer_passo(tela == TELA_HOME && homePronta && login_concluido() && perfilsel_concluido() &&
-                     !player_aberto() && !player_mini_ativo() && !detail_aberto() && !spainel_aberto() &&
+                     !player_aberto() && !player_retido() && !player_mini_ativo() && !detail_aberto() && !spainel_aberto() &&
                      !menu_aberto() && !ctx_aberto() && !vertudo_aberta() && !avisos_aberto() &&
                      !avisos_cartao_aberto() && !sintro_aberto() && !pipintro_aberto() &&
                      !novidades_aberto() && !novidades11_aberto() && !novidades12_aberto() &&

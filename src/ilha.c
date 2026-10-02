@@ -6,6 +6,7 @@
 // minuto). Nada de tela cheia, nada de FBO, nenhuma textura nova alem das de
 // texto — que o cache de text.c ja guarda por string.
 #include "ilha.h"
+#include "ilha_voo.h"
 #include "ajustes.h"
 #include "anim.h"
 #include "botoes.h"
@@ -77,8 +78,10 @@ static IlhaCartao pedidoC;
 
 // MINIMIZAR NA ILHA (ilha_minimizar): o quadro do video encolhe ate a mini capa.
 static int voo;                  // 1 = em voo
-static float vooT, vooV;         // mola 0 -> 1 (as molas lentas do modal)
+static float vooT;              // 0 -> 1, sem repique
 static Uint32 vooDesde;
+static GfxRect vooAlvo;
+static int vooAlvoOk;
 static char vooArte[1024], vooCapa[1024];
 static Uint32 altBase;           // a alternancia dos cartoes conta daqui
 
@@ -635,9 +638,9 @@ static void desenharModal(GfxRect m, float a) {
 // --- minimizar na ilha ----------------------------------------------------------
 // Pedido do dono (02/10): "quando sair do filme, minimizasse para a ilha do
 // relogio e voltasse para a home". O plano de video e hardware e nao se le de
-// volta (LG), entao o "quadro do video" e a arte que o modal usa (still do
-// episodio ou fundo do titulo): nasce em tela cheia e encolhe, na mola lenta
-// do modal, ate o retangulo exato da mini capa da pilula, onde troca para o
+// volta (LG), entao a transicao usa a arte do modal (still do
+// episodio ou fundo do titulo): nasce em tela cheia e encolhe em 400 ms
+// ate o retangulo exato da mini capa da pilula, onde troca para o
 // cartaz que a capa mostra. A home aparece por tras com o veu preto apagando.
 //
 // CUSTO: a arte (1 quad), o cartaz no fim (1 quad, so no cruzamento), uma
@@ -659,7 +662,7 @@ int ilha_minimizar(const char *fundoReserva) {
   // vooDesde = 0: o relogio do voo comeca no primeiro quadro DESENHADO. O
   // ultimo quadro da ilha foi antes do player, e um dt de minutos daria o
   // primeiro passo inteiro de uma vez.
-  voo = 1; vooT = 0.0f; vooV = 0.0f; vooDesde = 0;
+  voo = 1; vooT = 0.0f; vooDesde = 0; vooAlvoOk = 0;
   printf("[ilha] minimizar: %s -> mini capa\n", c->imdb);
   return 1;
 }
@@ -680,17 +683,10 @@ static float suave01(float a, float b, float x) {
 }
 
 // O retangulo do quadro no instante t: tamanho e centro na MESMA fracao, em
-// linha reta (a escala geometrica, que parecia o certo, gastava 7/8 do
-// encolhimento no primeiro tercio e o voo lia como um corte). O repique da
-// mola (t > 1) passa um pouco abaixo do tamanho da capa e volta.
+// linha reta. A curva acelera e desacelera sem atravessar o destino: tamanho
+// e centro chegam juntos, sem um cartaz grande sobre o texto da pilula.
 static GfxRect vooRect(GfxRect alvo, float t, float *f) {
-  float W0 = (float)NV_TELA_W, H0 = (float)NV_TELA_H;
-  float u = t > 1.0f ? 1.0f : t, k = t > 1.0f ? 1.0f - 1.5f * (t - 1.0f) : 1.0f;
-  float w = (W0 + (alvo.w - W0) * u) * k, h = (H0 + (alvo.h - H0) * u) * k;
-  float cx = W0 * 0.5f + (alvo.x + alvo.w * 0.5f - W0 * 0.5f) * t;
-  float cy = H0 * 0.5f + (alvo.y + alvo.h * 0.5f - H0 * 0.5f) * t;
-  *f = u;
-  return (GfxRect){ cx - w * 0.5f, cy - h * 0.5f, w, h };
+  return ilha_voo_rect(alvo, t, NV_TELA_W, NV_TELA_H, f);
 }
 
 // Veu: o preto do player apagando, so ao redor da arte.
@@ -717,9 +713,13 @@ static void vooArteEm(const char *url, GfxRect q, float raio, float a) {
 
 // fase 0 = o veu (vai por baixo da pilula), 1 = o quadro (por cima dela).
 static void desenharVoo(GfxRect pilulaFinal, int fase) {
-  GfxRect alvo = capaNaPilula(&cartoes[ILHA_VIVO], pilulaFinal), q;
+  GfxRect q;
   float f, t = vooT, raioPx, cruza;
-  q = vooRect(alvo, t, &f);
+  if (!vooAlvoOk) {
+    vooAlvo = capaNaPilula(&cartoes[ILHA_VIVO], pilulaFinal);
+    vooAlvoOk = 1;
+  }
+  q = vooRect(vooAlvo, t, &f);
   if (fase == 0) { vooVeu(q, 1.0f - suave01(0.0f, 0.75f, t)); return; }
   // Canto: reto na tela cheia, arredonda no caminho, assenta no da capa.
   raioPx = 6.0f * f + 40.0f * sinf(3.14159265f * f);
@@ -727,20 +727,16 @@ static void desenharVoo(GfxRect pilulaFinal, int fase) {
   if (f > 0.02f)
     gfx_rect((GfxRect){ q.x - 18.0f, q.y - 8.0f, q.w + 36.0f, q.h + 40.0f }, 0, GFX_SOMBRA,
              1.0f, 0, 0, 0.5f, 0, 0, 0, 0.45f * (f > 1.0f ? 1.0f : f));
-  cruza = vooCapa[0] ? suave01(0.62f, 0.95f, t) : 0.0f;
+  cruza = vooCapa[0] ? suave01(0.93f, 1.0f, t) : 0.0f;
   vooArteEm(vooArte, q, raioPx / q.h, 1.0f - cruza);
   if (cruza > 0.0f) vooArteEm(vooCapa, q, raioPx / q.h, cruza);
 }
 
-static void vooPasso(float dt, Uint32 agora) {
+static void vooPasso(Uint32 agora) {
   if (!voo) return;
   if (!vooDesde) { vooDesde = agora ? agora : 1; return; }
-  vooT = molaIlhaWZ(&vooV, vooT, 1.0f, dt, MODAL_MOLA_W, MODAL_MOLA_Z);
-  if (vooT > 1.04f) vooT = 1.04f;
-  if ((fabsf(vooT - 1.0f) < 0.002f && fabsf(vooV) < 0.02f) || agora - vooDesde > 3000u) {
-    vooT = 1.0f;
-    vooFim("pousou", agora);
-  }
+  vooT = ilha_voo_fracao(agora - vooDesde);
+  if (vooT >= 1.0f) vooFim("pousou", agora);
 }
 
 void ilha_desenhar(Uint32 agora) {
@@ -814,7 +810,7 @@ void ilha_desenhar(Uint32 agora) {
   { LinhasCartao Lv;
     float pw = voo ? PAD_E + PAD_D + larguraCartao(&cartoes[ILHA_VIVO], ILHA_VIVO, &Lv) : alvoW;
     GfxRect pf = { dir ? x - pw : x, y, pw, NV_ILHA_H_ABERTA };
-    vooPasso(dt, agora);
+    vooPasso(agora);
     if (A < 0.01f) {
       if (!vis) { mostra = alvo; conteudoA = 0.0f; W = H = NV_ILHA_H * 0.6f; vW = vH = 0.0f; }
       ancDef = 0; ultRectOk = 0; coberta = 0;

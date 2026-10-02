@@ -341,6 +341,7 @@ void video_parar(void) {
   ativo = pronto = tocando = 0;
 }
 void video_pausar(int p) { if (hPausar) hPausar(p); }
+int video_pausa_confirmada(void) { return 0; } // host nao fornece ack por sessao
 void video_volume(int pct) { if (hVolume) hVolume(pct); }
 void video_buscar(double s) {
   if (hBuscar) hBuscar((int)(s * 1000.0));
