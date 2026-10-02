@@ -148,7 +148,10 @@ static HomeItem item;
 static int  aberto = 0, saindo = 0;
 static int  idx = 0;                 // titulo atual dentro do acervo
 // A IDENTIDADE do titulo aberto, e uma copia dele. Ver revalidarIdx.
-static char idxImdb[24];
+// Do tamanho do CatItem.imdb: com [24] o id de canal ao vivo ("pp-live:...",
+// mais de 23 caracteres) era cortado, revalidarIdx nunca o achava e reinseria a
+// copia da abertura a cada quadro (D1 da 1.7.0: "saiu de 740 para 741"...).
+static char idxImdb[sizeof(((CatItem *)0)->imdb)];
 static CatItem idxCopia;
 static int  idxTemCopia;
 // Ultima revisao do catalogo que esta pagina ja tratou. Ver detail_atualizar.
