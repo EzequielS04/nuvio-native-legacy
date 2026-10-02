@@ -43,3 +43,14 @@ Erros de player vem das fontes (Pluto 401, IPTV 429, codec nao suportado, decode
 
 ## Adendo: "Digitar pelo celular" (agente/celular, ja mesclado)
 Todo campo que usa src/teclado.c mostra um QR para colar o texto pelo celular na mesma rede (src/celular.c: servidor HTTP so com o teclado aberto, token de uso unico, 5 min, 4 KB, sem CORS, log sem o texto). Provado no Mac e na TCL. FALTA: LG (jail/firewall deixa porta alta? log "[celular] servidor no ar"/"pagina aberta"), .tpk, iPhone/Safari; .wgt nao tem (navegador nao escuta). FALTA traduzir as frases novas (i18n.sh falha por elas). Spotlight e Busca principal nao usam teclado.c (fora).
+
+## Adendo 2 (02/10 ~13h BRT)
+Mesclados depois da primeira passagem (Mac ok; TV parcial):
+- **agente/celular2**: botao de celular (src/celbotao.c) ao lado de TODO campo de texto (Spotlight, Busca, teclado.c: guia, Salvos, apelido, codigos, chaves). OK abre cartao com QR por cima; texto recebido busca direto no Spotlight/Busca. Servidor so sobe com o cartao aberto. NuvioActivity.kt reextrai os assets a cada instalacao (resolve o "sem a marca" da abertura). Provado na TCL (curl ponta a ponta). Testes de tela (celbotao_shot, teclado_shot, ilha2_shot, spotlight_shot) FALHARAM na ultima rodada so por DISCO CHEIO no Mac — rodar de novo.
+- **agente/ilhasaida**: saindo do player no meio com o relogio ligado volta para a HOME e a arte encolhe ate a mini capa da ilha; ajuste novo AJ_SAIDA_PLAYER ("Ao sair do player": home / pagina do titulo). Caminho dentro de app.c sem teste automatizado; nao visto na TV.
+- Efeito colateral dos testes na TCL: "Blue Lights" foi parar na watchlist/Salvos do dono por OK perdido — conferir.
+
+**QUEDA DO SERVIDOR DA CONTA (medido 02/10 ~13h):** api.nuvio.tv /rest/v1 responde 504 (auth/v1/health 200) — do lado do Nuvio. Por isso #214 (QR HTTP 400) e #215 (sem addons + login HTTP 504) e a TCL sem addons. Rascunho de resposta curta pronto (nao postado; dono precisa liberar): "The Nuvio account server (api.nuvio.tv) is currently returning errors (504)... don't sign out... next update keeps your last add-ons".
+- Em andamento: **agente/offline** (base release/1.7.1): cache em disco da ultima lista boa de addons/colecoes/biblioteca/vistos/ordem por conta+perfil, aviso "servidor fora do ar", login com mensagem clara e sem apagar sessao em 5xx; investigar o 400 do #214. Mesclar quando terminar.
+
+Disco do Mac chegou a 136 MB livres (testes falharam por isso); liberados 8,5 GB apagando so build/ das worktrees de agentes e pacotes velhos. Continua ~99% cheio.
