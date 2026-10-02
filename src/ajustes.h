@@ -271,6 +271,8 @@ int   ajustes_720p(void);
 // continuam saindo dela). _pos: 0 automatica, 1 esquerda, 2 direita.
 int   ajustes_relogio_ligado(void);
 int   ajustes_relogio_pos(void);
+// Selo de visto no cartaz da home (#212). 1 = ligado (o de fabrica).
+int   ajustes_selo_visto(void);
 // MODO SEGURO (seguro.h). Chamar no arranque, DEPOIS de ajustes_dir e de
 // avisos_iniciar: `caiu` = a sessao anterior nao se despediu. Desfaz o ajuste
 // arriscado que estava em prova, liga o perfil seguro se as quedas se repetem e

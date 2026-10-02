@@ -9,6 +9,7 @@
 #include "agenda.h"
 #include "comentordem.h"
 #include "idiomacod.h"
+extern void cat_historico_definir_id(const char *imdb, const char *tipo, int visto);
 #include <pthread.h>
 #include <stdint.h>
 #include <string.h>
@@ -540,6 +541,11 @@ static void *buscar(void *arg) {
       // dia em que o mapa nasceu.
       printf("[vistoep] %s: %d episodios no mapa (%d vistos)\n",
              id, vistoep_conhecido(id) ? vistoep_n() : 0, vistoep_contar(id));
+      // A SERIE INTEIRA (#212): o selo do cartaz e o olho do detalhe leem o
+      // historico de titulo (cat_visto), e /sync/history nunca diz "serie
+      // vista" — so episodios. Os contadores do topo dizem: tudo o que ja foi
+      // ao ar foi visto. Com 0 exibidos nao se afirma nada.
+      if (exib > 0) cat_historico_definir_id(id, "series", vist >= exib);
       fflush(stdout);
       int pt = 0, pe = 0;
       const char *prox = strstr(corpo, "\"next_episode\"");

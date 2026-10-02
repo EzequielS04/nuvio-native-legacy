@@ -129,4 +129,9 @@ void trakt_watchlist(const char *imdb, int adicionar);
 // chegava ao Trakt.
 void trakt_assistido(const char *imdb, int marcar);
 
+// Le o corpo de /sync/watched/movies e marca cada filme como visto no
+// historico do catalogo (cat_visto). Devolve quantos entraram; -1 sem corpo.
+// Publica para o teste; quem baixa e o ciclo de trakt_continuar (#212).
+int trakt_ler_filmes_vistos(const char *corpo);
+
 #endif
