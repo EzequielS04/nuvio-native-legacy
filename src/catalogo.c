@@ -31,6 +31,13 @@ static int aplicarProgressoDoDisco(void);
 static pthread_mutex_t pubTrava = PTHREAD_MUTEX_INITIALIZER;
 #include <string.h>
 #include <stdlib.h>
+#ifdef NV_CAT_TEST_ANTES_TRAVA
+// Teste (tests/catcorrida.c): outra troca de bloco entre a entrada e a trava.
+extern void NV_CAT_TEST_ANTES_TRAVA(void);
+#define CAT_TESTE_ANTES_TRAVA() NV_CAT_TEST_ANTES_TRAVA()
+#else
+#define CAT_TESTE_ANTES_TRAVA() ((void)0)
+#endif
 
 // --- QUANDO O BLOCO VELHO PODE MORRER ----------------------------------------
 // O bloco trocado fora morria na troca SEGUINTE. Isso protegia o leitor de UMA
@@ -1461,13 +1468,20 @@ void cat_atualizar_item(int i, const CatItem *item) {
 int cat_acrescentar_lote(const CatItem *v, int qtd, int *saidaIdx) {
   CatItem *novo;
   int novoN, k;
-  if (!v || qtd < 1 || n < 1) return 0;
+  if (!v || qtd < 1) return 0;
+  // `n` SO SE LE COM A TRAVA (queda "free(): invalid pointer", 1.7.0 .tpk).
+  // O tamanho era calculado antes dela: se a descoberta ou o fio de
+  // "Continuar assistindo" publicasse um catalogo maior nesse meio, o memcpy
+  // abaixo copiava o `n` novo para dentro do bloco do `n` velho e passava do
+  // fim — heap corrompido, abort no proximo free. tests/catcorrida.sh.
+  CAT_TESTE_ANTES_TRAVA();
+  pthread_mutex_lock(&pubTrava);
+  if (n < 1) { pthread_mutex_unlock(&pubTrava); return 0; }
   if (n + qtd > CAT_MAX) qtd = CAT_MAX - n;
-  if (qtd < 1) return 0;
+  if (qtd < 1) { pthread_mutex_unlock(&pubTrava); return 0; }
   novoN = n + qtd;
   novo = malloc(sizeof(CatItem) * (size_t)novoN);
-  if (!novo) return 0;
-  pthread_mutex_lock(&pubTrava);
+  if (!novo) { pthread_mutex_unlock(&pubTrava); return 0; }
   memcpy(novo, itens, sizeof(CatItem) * (size_t)n);
   memcpy(&novo[n], v, sizeof(CatItem) * (size_t)qtd);
   { int k; for (k = 0; k < qtd; k++) {
@@ -1542,12 +1556,14 @@ int cat_mesclar_listas(const CatItem *v, int qtd) {
 int cat_acrescentar(const CatItem *item) {
   CatItem *novo;
   int novoN;
-  if (!item || n < 1) return -1;
-  if (n >= CAT_MAX) return -1;
+  if (!item) return -1;
+  // Mesma regra de cat_acrescentar_lote: `n` so com a trava.
+  CAT_TESTE_ANTES_TRAVA();
+  pthread_mutex_lock(&pubTrava);
+  if (n < 1 || n >= CAT_MAX) { pthread_mutex_unlock(&pubTrava); return -1; }
   novoN = n + 1;
   novo = malloc(sizeof(CatItem) * (size_t)novoN);
-  if (!novo) return -1;
-  pthread_mutex_lock(&pubTrava);
+  if (!novo) { pthread_mutex_unlock(&pubTrava); return -1; }
   memcpy(novo, itens, sizeof(CatItem) * (size_t)n);
   memcpy(&novo[n], item, sizeof(CatItem));
   aposentar(itens);
