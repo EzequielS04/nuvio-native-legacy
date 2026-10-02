@@ -144,6 +144,10 @@ static int   temVistosBlob;
 //   copiaCiclo: quantas superficies sairam da copia local (contacache.c);
 //   copiaQuandoCiclo: de quando e a copia (a dos addons, se usada).
 static int  foraCiclo, copiaCiclo;
+// Os ADDONS deste ciclo: 0 = vieram da conta, 1 = da copia, 2 = falharam sem
+// copia. Separado de foraCiclo porque um 429 so na ordem de catalogos nao
+// deixa a home sem addon nenhum, e o aviso da ilha e sobre os addons.
+static int  addonsCiclo, addonsFora;
 static long copiaQuandoCiclo;
 static int  foraHttp, usandoCopia;
 static long copiaQuando;
@@ -239,7 +243,8 @@ static int puxarAddons(void) {
         copiaCiclo++;
         copiaQuandoCiclo = q;
         avisoCopia(CC_ADDONS, st, q);
-      } else if (k <= 0) avisoSemCopia(CC_ADDONS, st);
+        addonsCiclo = 1;
+      } else if (k <= 0) { avisoSemCopia(CC_ADDONS, st); addonsCiclo = 2; }
     }
     return -1;
   }
@@ -798,6 +803,7 @@ static void *rodar(void *u) {
   (void)u;
   foraCiclo = 0;
   copiaCiclo = 0;
+  addonsCiclo = 0;
   copiaQuandoCiclo = 0;
   perfis_puxar();
   // ESCOLHA DE PERFIL PENDENTE: PARA AQUI, e nao adivinha o perfil 1.
@@ -1179,6 +1185,7 @@ void sync_passo(unsigned agoraMs) {
     foraHttp = foraCiclo;
     usandoCopia = copiaCiclo > 0;
     copiaQuando = copiaQuandoCiclo;
+    addonsFora = addonsCiclo;
   }
   if (!cicloInterrompido) perfilAplicado = perfilDoCiclo;
   // A VOLTA QUE FOI PEDIDA COM O FIO VIVO. So quando ela serve para algo: o
@@ -1197,6 +1204,7 @@ void sync_passo(unsigned agoraMs) {
 int  sync_servidor_fora(void) { return foraHttp; }
 int  sync_usando_copia(void)  { return foraHttp && usandoCopia; }
 long sync_copia_quando(void)  { return copiaQuando; }
+int  sync_addons_fora(void)   { return foraHttp ? addonsFora : 0; }
 SyncEstado  sync_estado(void)      { return estado; }
 const char *sync_resumo(void)      { return resumo; }
 unsigned    sync_ultimo_ok(void)   { return ultimoOk; }
@@ -1352,7 +1360,7 @@ void sync_esquecer_usuario(void) {
   // As copias da conta (#215): addons com chave de debrid na URL, biblioteca,
   // vistos e colecoes de quem saiu.
   contacache_esquecer();
-  foraHttp = usandoCopia = 0;
+  foraHttp = usandoCopia = addonsFora = 0;
   copiaQuando = 0;
   pedidoComFioVivo = 0;
   homeestado_esquecer();

@@ -1852,10 +1852,10 @@ void app_atualizar(float dt, Uint32 agora) {
   // addons (ou com os de ontem) e concluia que o app quebrou — e saia da conta
   // para "consertar", que e a unica coisa que piora o caso.
   { static int avisado;
-    int fora = sync_servidor_fora();
+    int fora = sync_addons_fora();
     if (fora && !avisado) {
       ilha_avisar("conta-fora", ILHA_INFO, NULL,
-                  sync_usando_copia()
+                  fora == 1
                     ? i18n("Servidor da conta Nuvio fora do ar — usando seus addons salvos")
                     : i18n("Servidor da conta Nuvio fora do ar — seus addons voltam quando ele responder"),
                   9000u, 0);

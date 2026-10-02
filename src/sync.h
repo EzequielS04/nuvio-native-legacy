@@ -173,6 +173,9 @@ int  sync_empurrar_credencial(const char *provider, const char *credJson);
 int  sync_servidor_fora(void);
 int  sync_usando_copia(void);
 long sync_copia_quando(void);
+// Os addons em uso, pelo mesmo motivo: 0 = vieram da conta; 1 = da copia
+// (servidor fora); 2 = o servidor falhou e nao ha copia neste aparelho.
+int  sync_addons_fora(void);
 
 void sync_encerrar(void);
 
