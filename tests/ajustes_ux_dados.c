@@ -12,6 +12,54 @@ static int indiceResultado(int op, int n) {
   return -1;
 }
 
+/* #221 sobreviveu a reorganizacao da tela: default, escopo local, prazo
+ * efetivo, entrada unica em Reproducao e descoberta pela busca. */
+static void prazoDosAddonsIntegrado(void) {
+  int prazoAntes = valor[AJ_FONTE_PRAZO], manualAntes = valor[AJ_FONTE_MANUAL];
+  int idiomaAntes = valor[AJ_IDIOMA], vezes = 0, n, indice;
+  const char *categoria = "", *grupo = "";
+  char texto[80];
+  assert(valor[AJ_FONTE_PRAZO] == 1 && valorPadrao[AJ_FONTE_PRAZO] == 1);
+  assert(ajustes_fonte_prazo_ms() == 5000);
+  assert(!dePerfil(AJ_FONTE_PRAZO));
+  assert(!strcmp(uxEscopo(AJ_FONTE_PRAZO), "Só nesta TV"));
+  assert(uxTemPadrao(AJ_FONTE_PRAZO) && !uxDiferente(AJ_FONTE_PRAZO));
+  assert(OPCOES[AJ_FONTE_PRAZO].n == 4);
+  assert(!strcmp(OPCOES[AJ_FONTE_PRAZO].valores[1], "5 s"));
+  assert(familiaPreviaOpcao(AJ_FONTE_PRAZO) == AJPV_REPRO);
+  for (int i = 0; i < AJ_N_TELA; i++) {
+    if (TELA[i].tipo == IT_SEC) { categoria = TELA[i].titulo; grupo = ""; }
+    if (TELA[i].tipo == IT_ROT) grupo = TELA[i].titulo;
+    if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_FONTE_PRAZO) {
+      vezes++;
+      assert(!strcmp(categoria, "Reprodução"));
+      assert(!strcmp(grupo, "Escolha da fonte"));
+    }
+  }
+  assert(vezes == 1);
+  valor[AJ_IDIOMA] = IDIOMA_PT + 1;
+  valor[AJ_FONTE_MANUAL] = 1; // escolha automatica habilita o prazo
+  n = ajustes_buscar("Espera pelos add-ons", resultados, AJ_N);
+  indice = indiceResultado(AJ_FONTE_PRAZO, n);
+  assert(indice >= 0 && !resultados[indice].bloqueado);
+  assert(strstr(resultados[indice].caminho, "Reprodução"));
+  assert(!strcmp(resultados[indice].valor, "5 s"));
+  vezes = 0;
+  for (int i = 0; i < n; i++) if (resultados[i].op == AJ_FONTE_PRAZO) vezes++;
+  assert(vezes == 1);
+  static const int esperado[] = {3000, 5000, 8000, 0};
+  for (int i = 0; i < 4; i++) {
+    valor[AJ_FONTE_PRAZO] = i;
+    assert(ajustes_fonte_prazo_ms() == esperado[i]);
+    uxValorTexto(AJ_FONTE_PRAZO, i, texto, sizeof texto);
+    assert(!strcmp(texto, i18n(V_FONTE_PRAZO[i])));
+  }
+  valor[AJ_FONTE_PRAZO] = prazoAntes;
+  valor[AJ_FONTE_MANUAL] = manualAntes;
+  valor[AJ_IDIOMA] = idiomaAntes;
+  assert(ajustes_fonte_prazo_ms() == 5000);
+}
+
 static void escoposPorValor(void) {
   int copia[AJ_N], v, temaSalvo = valor[AJ_TEMA];
   int seguroAntes = SEGURO, corAntes = ajustes_cor_viva();
@@ -210,6 +258,7 @@ static void bloqueadosESegredos(void) {
 
 int main(void) {
   char dir[] = "/tmp/nuvio-aj-ux-dados-XXXXXX";
+  prazoDosAddonsIntegrado();
   padroesEValores();
   escoposPorValor();
   assert(mkdtemp(dir));
