@@ -5,9 +5,9 @@
 // Sem isto TODA saida pela TV — tecla Exit, desligar, Home com o app morto em
 // segundo plano — contava como "anterior caiu": o host chama OnTerminate,
 // solta o player, esconde as janelas e arma o _exit sem o main() do app
-// chegar a avisos_encerrar. Medido no D1 (1.7.0, 6 h): 59 das 62 linhas
-// "anterior caiu" do tizen-tpk terminam com "saida: principal escondida",
-// XF86Exit ou XF86PowerOff; so 3 sao queda de verdade (free() invalid pointer).
+// chegar a avisos_encerrar. Medido no D1 (1.7.0, 6 h): das 23 quedas do
+// tizen-tpk com log da sessao, 19 terminam com "saida: principal escondida",
+// XF86Exit ou XF86PowerOff; 3 sao queda de verdade (free() invalid pointer).
 //
 // "oculto" e escrito quando a janela some, o app pausa ou termina, ou chega
 // Exit/PowerOff; e apagado quando a janela volta, o app retoma ou chega outra
