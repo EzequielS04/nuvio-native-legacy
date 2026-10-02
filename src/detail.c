@@ -4103,22 +4103,19 @@ static float desenhaNotaEpisodio(float x, float y, const char *fonte,
 
 
 // Estado concluido: material escuro proprio para sobreviver a qualquer still,
-// check no acento da pessoa e rotulo legivel. O foco pertence a miniatura inteira.
+// circulo jade com check branco e rotulo legivel. O foco pertence a miniatura inteira.
 static void desenhaAssistidoEpisodio(GfxRect th, float a) {
   const float h = 46, pad = 12, icone = 28, gap = 10;
-  float ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
-  TxtLinha texto = txt_linha_corta(TXT_CAPTION2, "Assistido", 231, 237, 246, 255,
+  TxtLinha texto = txt_linha_corta(TXT_CAPTION2, "Assistido", 255, 255, 255, 255,
                                   th.w * .5f - pad * 2 - icone - gap);
   float w = pad * 2 + icone + gap + texto.w;
   GfxRect selo = {th.x + th.w - w - 18, th.y + 18, w, h};
-  gfx_cor(selo, 13 / h, .055f, .068f, .09f, .96f * a);
-  gfx_anel(selo, 13 / h, 1, .68f, .75f, .86f, .30f * a);
+  gfx_cor(selo, .5f, .055f, .068f, .09f, .96f * a);
+  gfx_anel(selo, .5f, 1, .68f, .75f, .86f, .30f * a);
   GfxRect disco = {selo.x + pad, selo.y + (h - icone) * .5f, icone, icone};
-  gfx_cor(disco, .5f, ar, ag, ab, a);
-  float tinta = ajustes_acento_tinta(&ar, &ag, &ab);
+  gfx_cor(disco, .5f, .451f, .839f, .694f, a);
   gfx_icone((GfxRect){disco.x + 5, disco.y + 5, icone - 10, icone - 10},
-             "check", tinta, tinta, tinta, a);
+             "check", 1, 1, 1, a);
   txt_desenhar_alpha(texto, disco.x + icone + gap,
                      selo.y + (h - texto.h) * .5f, a);
 }
