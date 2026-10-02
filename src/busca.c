@@ -580,6 +580,7 @@ int busca_iniciar(void) {
 
 void busca_encerrar(void) { temItemFoco = 0; st_fechar(ST_BUSCA); celb_fechar_dono(CELB_BUSCA); }
 const char *busca_consulta(void) { return consulta; }
+int busca_foco_campo(void) { return painel == 0 ? campoFoco : 0; }
 int  busca_quer_sair(void) { return sair; }
 
 int busca_pediu_abrir(int *indiceCatalogo) {
