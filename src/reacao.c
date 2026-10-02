@@ -306,7 +306,8 @@ static void linhaOrigem(char *dst, size_t n) {
 void reacao_desenhar(Uint32 agora, float baseY) {
   float a = c.anim, w, h, x, y, pw[3], tot = 0.0f;
   char perg[256], orig[160], ver[160];
-  TxtLinha lp, lo, lv;
+  TxtLinha lo, lv;
+  float lead, hp;
   int i;
   if (a < 0.01f || !c.imdb[0]) return;
   snprintf(perg, sizeof perg, i18n("O que achou de %s?"), c.titulo);
@@ -317,10 +318,15 @@ void reacao_desenhar(Uint32 agora, float baseY) {
   tot += 2.0f * BOTAO_GAP;
   w = tot + 2.0f * RX_PAD;
   if (w < RX_W_MIN) w = RX_W_MIN;
-  lp = txt_linha_corta(TXT_HEADLINE, perg, 245, 246, 248, 255, w - 2.0f * RX_PAD);
+  // A PERGUNTA QUEBRA EM ATE DUAS LINHAS: com o titulo cortado em "Um..." a
+  // pergunta perde o sujeito (medido na primeira captura). A altura sai de uma
+  // passada invisivel do mesmo bloco — o texto ja fica no cache para a de verdade.
+  lead = (float)txt_linha(TXT_HEADLINE, "Ág", 245, 246, 248, 255).h + 2.0f;
+  hp = txt_bloco_corta(TXT_HEADLINE, perg, 245, 246, 248, -4000.0f, -4000.0f,
+                       w - 2.0f * RX_PAD, lead, 0.0f, 2);
   lo = txt_linha_corta(TXT_CAPTION, orig, 176, 180, 190, 255, w - 2.0f * RX_PAD);
   lv = txt_linha_corta(TXT_CAPTION2, ver, 150, 154, 163, 255, w - 2.0f * RX_PAD);
-  h = RX_PAD + (orig[0] ? (float)lo.h + 8.0f : 0.0f) + (float)lp.h + 20.0f +
+  h = RX_PAD + (orig[0] ? (float)lo.h + 8.0f : 0.0f) + hp + 20.0f +
       BOTAO_H_SECUNDARIO + (ver[0] ? 14.0f + (float)lv.h : 0.0f) + RX_PAD;
   x = NV_TELA_W - RX_MARGEM - w;
   y = baseY - h + (1.0f - a) * 24.0f;
@@ -340,8 +346,9 @@ void reacao_desenhar(Uint32 agora, float baseY) {
     } }
   { float ty = y + RX_PAD;
     if (orig[0]) { txt_desenhar_alpha(lo, x + RX_PAD, ty, a); ty += (float)lo.h + 8.0f; }
-    txt_desenhar_alpha(lp, x + RX_PAD, ty, a);
-    ty += (float)lp.h + 20.0f;
+    txt_bloco_corta(TXT_HEADLINE, perg, 245, 246, 248, x + RX_PAD, ty,
+                    w - 2.0f * RX_PAD, lead, a, 2);
+    ty += hp + 20.0f;
     { float bx = x + RX_PAD;
       for (i = 0; i < 3; i++) {
         GfxRect r = { bx, ty, pw[i], BOTAO_H_SECUNDARIO };
@@ -402,7 +409,7 @@ void reacao_detalhe_dica(const CatItem *ci, float a) {
 
 void reacao_teste_abrir(const char *imdb, const char *titulo, const char *midia,
                         long long rec, const char *nomeRec, int envia) {
-  abrir(imdb, midia, titulo, "", 0, SDL_GetTicks());
+  abrir(imdb, midia, titulo, "", 0, ultimoAgora);
   c.rec = rec;
   snprintf(c.nome, sizeof c.nome, "%s", nomeRec ? nomeRec : "");
   c.envia = envia;
