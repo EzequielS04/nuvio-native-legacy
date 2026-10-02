@@ -390,8 +390,8 @@ async function rotaComunidade(env, quem, corpo, h) {
 async function vincular(env, a, b) {
   const t = Math.floor(Date.now() / 1000);
   await env.DB.batch([
-    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado) VALUES (?, ?, ?)").bind(a, b, t),
-    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado) VALUES (?, ?, ?)").bind(b, a, t),
+    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado, via) VALUES (?, ?, ?, 'pedido')").bind(a, b, t),
+    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado, via) VALUES (?, ?, ?, 'pedido')").bind(b, a, t),
     env.DB.prepare("DELETE FROM pedido WHERE (de = ? AND para = ?) OR (de = ? AND para = ?)").bind(a, b, b, a),
   ]);
 }
@@ -607,7 +607,7 @@ export async function rotaAmigos(rota, metodo, env, quem, corpo, h) {
 
 // Usado por index.js: garante que quem ja e "descobrivel" tem handle, e devolve
 // o handle publico de um id de conta (nunca o id).
-export { garantirPerfil, bloqueado, avatarPublico, norm };
+export { garantirPerfil, bloqueado, avatarPublico, norm, limitar };
 
 export function limpezaAmigos(env, t) {
   return [

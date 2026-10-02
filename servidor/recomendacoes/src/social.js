@@ -1,0 +1,354 @@
+// Redesenho do Social (02/10/2026): pessoa por perfil, nome de exibicao,
+// nivel de atividade, eventos do player, feed, perfil do amigo.
+// Contrato com a TV: docs/social-contrato.md. Tabelas: migracao-006-social.sql.
+//
+// A REGRA QUE TUDO AQUI OBEDECE: `pessoa.alcance` decide QUEM ve a atividade
+// de alguem, e e conferido no servidor a cada escrita E a cada leitura.
+//   -1 nao respondeu (vale 0) | 0 ninguem | 1 so amigos | 2 amigos de amigos
+// Nada e gravado com alcance < 1, e baixar para 0 apaga o que havia.
+
+const EVENTOS = new Set(["inicio", "progresso", "fim", "abandono", "reacao", "salvo"]);
+const NO_FEED = ["inicio", "fim", "abandono", "reacao", "salvo"];
+const AGORA_S = 15 * 60;            // "assistindo agora" vence em 15 min
+const RETENCAO = 90 * 86400;
+const SEG_MAX = 4 * 3600;           // um trecho nao passa de 4 h
+const FEED_MAX = 50;
+const GOSTOU_MAX = 10;
+const RECS_MAX = 20;
+const DEDUPE_S = 600;               // mesmo evento do mesmo titulo em 10 min = um so
+const NOME_MAX = 32;
+
+// NOME: letras (qualquer alfabeto), numeros, espaco, apostrofo e hifen. Sem
+// ponto, arroba, barra ou dois-pontos — nao cabe e-mail, link nem @usuario.
+export function limparNome(s, max = NOME_MAX) {
+  return String(s == null ? "" : s)
+    .normalize("NFC")
+    .replace(/[^\p{L}\p{N} '\-]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max)
+    .trim();
+}
+
+// FOTO DO PERFIL: so https e so de host conhecido. O host do Supabase do Nuvio
+// e de onde saem os avatares do catalogo e as fotos enviadas
+// (<url>/storage/v1/object/public/avatars/...; ver perfis.c); o Trakt pelo
+// mesmo motivo de amigos.js. Qualquer outra URL vira "": uma URL livre
+// deixaria alguem apontar a propria foto para um servidor dele e ler o IP de
+// todo amigo que abrisse a lista.
+export function avatarPerfilOk(url, env) {
+  if (typeof url !== "string" || url.length > 512) return "";
+  let u;
+  try { u = new URL(url); } catch { return ""; }
+  if (u.protocol !== "https:") return "";
+  const hosts = new Set(["walter.trakt.tv", "media.trakt.tv", "trakt.tv"]);
+  try { if (env?.SUPABASE_URL) hosts.add(new URL(env.SUPABASE_URL).host); } catch {}
+  for (const h of String(env?.AVATAR_HOSTS || "").split(",")) if (h.trim()) hosts.add(h.trim());
+  return hosts.has(u.host) ? u.toString() : "";
+}
+
+// CAPA NO FEED: mesma ideia, outra lista. Quem le o feed baixa a capa na TV
+// dele; um host livre seria um rastreador de IP para amigos de amigos.
+const POSTER_HOSTS = new Set([
+  "image.tmdb.org", "images.metahub.space", "live.metahub.space",
+  "episodes.metahub.space", "m.media-amazon.com", "artworks.thetvdb.com",
+  "walter.trakt.tv", "media.trakt.tv",
+]);
+export function posterOk(url) {
+  if (typeof url !== "string" || !url || url.length > 512) return "";
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && POSTER_HOSTS.has(u.host) ? u.toString() : "";
+  } catch { return ""; }
+}
+
+// O NOME PRONTO, na ordem: o que a pessoa digitou; depois o do perfil (Nuvio)
+// ou o da conta (Trakt, onde o nome e da pessoa e nao do aparelho); por fim
+// "Amigo #<n>", com n = rowid da linha. NUNCA o id.
+export function resolverNome(p, id) {
+  const ex = p.exibicao || "";
+  if (ex) return ex;
+  const conta = p.nome_conta || "", perfil = p.nome_perfil || "";
+  const n = String(id || "").startsWith("trakt:") ? (conta || perfil) : (perfil || conta);
+  return n || `Amigo #${p.n || 0}`;
+}
+
+export const nivelDe = (p) => (p && Number.isInteger(p.alcance) && p.alcance > 0 ? p.alcance : 0);
+
+const mesDe = (t) => new Date(t * 1000).toISOString().slice(0, 7);
+const int = (v, a, b) => {
+  const n = Number.isFinite(v) ? Math.round(v) : parseInt(v, 10);
+  return Number.isFinite(n) ? Math.max(a, Math.min(b, n)) : a;
+};
+
+// --- nome e nivel ---------------------------------------------------------------
+
+export async function rotaEuNome(env, quem, corpo, h, registrar) {
+  const nome = limparNome(corpo?.nome);
+  await env.DB.prepare("UPDATE pessoa SET exibicao = ? WHERE id = ?").bind(nome, quem.id).run();
+  const eu = await registrar(env, quem);           // recalcula `pessoa.nome`
+  return h.json({ ok: 1, nome: eu.nome, exibicao: nome });
+}
+
+export async function rotaAlcance(env, quem, corpo, h) {
+  const n = Number.isInteger(corpo?.nivel) ? Math.max(0, Math.min(2, corpo.nivel)) : 0;
+  const cmds = [env.DB.prepare("UPDATE pessoa SET alcance = ? WHERE id = ?").bind(n, quem.id)];
+  // DESLIGAR APAGA. Nao basta esconder: "ninguem" tem de valer tambem para um
+  // erro de consulta futuro.
+  if (n === 0) cmds.push(
+    env.DB.prepare("DELETE FROM evento WHERE pessoa = ?").bind(quem.id),
+    env.DB.prepare("DELETE FROM agora WHERE pessoa = ?").bind(quem.id),
+    env.DB.prepare("DELETE FROM agregado WHERE pessoa = ?").bind(quem.id),
+    env.DB.prepare("DELETE FROM agregado_titulo WHERE pessoa = ?").bind(quem.id),
+  );
+  await env.DB.batch(cmds);
+  return h.json({ ok: 1, alcance: n });
+}
+
+// --- POST /v1/atividade (corpo com "ev") ----------------------------------------
+
+export async function rotaEvento(env, quem, corpo, h, limitar) {
+  const t = h.agora();
+  const ev = String(corpo?.ev || "");
+  if (!EVENTOS.has(ev)) return h.erro("ev invalido", 400);
+  const imdb = h.limpar(corpo?.imdb, 16);
+  if (!/^tt\d{1,10}$/.test(imdb)) return h.erro("imdb invalido", 400);
+  if (!(await limitar(env, `ev:${quem.id}`, 600, 3600, t))) return h.erro("limite", 429);
+  const eu = await env.DB.prepare("SELECT alcance FROM pessoa WHERE id = ?").bind(quem.id).first();
+  // CONSENTIMENTO AQUI, nao so na TV: cliente velho, com defeito ou de ma-fe
+  // que mande evento com o nivel em 0 nao grava NADA — nem agregado, nem rec.
+  if (nivelDe(eu) < 1) return h.json({ ok: 1, guardado: 0 });
+
+  const midia = corpo?.midia === "series" ? "series" : "movie";
+  const titulo = h.limpar(corpo?.titulo, 160).replace(/[\u0000-\u001f]/g, " ");
+  const poster = posterOk(corpo?.poster);
+  const temporada = int(corpo?.temporada, 0, 9999);
+  const episodio = int(corpo?.episodio, 0, 99999);
+  const pct = int(corpo?.pct, 0, 100);
+  const seg = int(corpo?.seg, 0, SEG_MAX);
+  const reacao = ev === "reacao" ? int(corpo?.reacao, -1, 1) : 0;
+  const rec = int(corpo?.rec, 0, 2 ** 31 - 1);
+  const mes = mesDe(t);
+  const cmds = [];
+
+  if (seg > 0) cmds.push(env.DB.prepare(
+    "INSERT INTO agregado (pessoa, mes, seg) VALUES (?, ?, ?) " +
+    "ON CONFLICT(pessoa, mes) DO UPDATE SET seg = agregado.seg + excluded.seg"
+  ).bind(quem.id, mes, seg));
+  if (midia === "series" && (ev === "inicio" || ev === "progresso" || ev === "fim"))
+    cmds.push(env.DB.prepare("INSERT OR IGNORE INTO agregado_titulo VALUES (?, ?, ?, 'serie')")
+      .bind(quem.id, mes, imdb));
+  if (midia === "movie" && ev === "fim")
+    cmds.push(env.DB.prepare("INSERT OR IGNORE INTO agregado_titulo VALUES (?, ?, ?, 'filme')")
+      .bind(quem.id, mes, imdb));
+
+  if (ev === "inicio" || ev === "progresso") cmds.push(env.DB.prepare(
+    "INSERT INTO agora (pessoa, imdb, midia, titulo, poster, temporada, episodio, pct, atualizado) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(pessoa) DO UPDATE SET imdb = excluded.imdb, " +
+    "midia = excluded.midia, titulo = excluded.titulo, poster = excluded.poster, " +
+    "temporada = excluded.temporada, episodio = excluded.episodio, pct = excluded.pct, " +
+    "atualizado = excluded.atualizado"
+  ).bind(quem.id, imdb, midia, titulo, poster, temporada, episodio, pct, t));
+  if (ev === "fim" || ev === "abandono")
+    cmds.push(env.DB.prepare("DELETE FROM agora WHERE pessoa = ? AND imdb = ?").bind(quem.id, imdb));
+
+  let gravou = 0;
+  if (ev !== "progresso") {
+    // Retomar o mesmo episodio tres vezes em dez minutos nao sao tres "comecou".
+    const ja = await env.DB.prepare(
+      "SELECT 1 FROM evento WHERE pessoa = ? AND ev = ? AND imdb = ? AND temporada = ? " +
+      "AND episodio = ? AND reacao = ? AND criado > ?"
+    ).bind(quem.id, ev, imdb, temporada, episodio, reacao, t - DEDUPE_S).first();
+    if (!ja) {
+      cmds.push(env.DB.prepare(
+        "INSERT INTO evento (pessoa, ev, imdb, midia, titulo, poster, temporada, episodio, pct, reacao, rec, criado) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ).bind(quem.id, ev, imdb, midia, titulo, poster, temporada, episodio, pct, reacao, rec, t));
+      gravou = 1;
+    }
+  }
+
+  // A REC DE ORIGEM: so a que FOI MANDADA PARA MIM (para = quem.id). Um id de
+  // rec alheio nao muda nada.
+  if (rec > 0) {
+    if (ev === "inicio" || ev === "progresso")
+      cmds.push(env.DB.prepare("UPDATE rec SET comecou = 1 WHERE id = ? AND para = ?").bind(rec, quem.id));
+    else if (ev === "fim")
+      cmds.push(env.DB.prepare("UPDATE rec SET comecou = 1, terminou = 1 WHERE id = ? AND para = ?").bind(rec, quem.id));
+    else if (ev === "reacao")
+      cmds.push(env.DB.prepare("UPDATE rec SET reacao = ? WHERE id = ? AND para = ?").bind(reacao, rec, quem.id));
+  }
+  if (cmds.length) await env.DB.batch(cmds);
+  return h.json({ ok: 1, guardado: 1, evento: gravou });
+}
+
+// --- quem eu posso ver -----------------------------------------------------------
+//
+// AMIGO (grau 1): contato com alcance >= 1. AMIGO DE AMIGO (grau 2): contato
+// de um contato meu, que NAO e meu contato, com alcance = 2. Bloqueio entre
+// mim e a pessoa (qualquer sentido) tira ela das duas listas.
+const VISIVEIS =
+  "WITH vis AS (" +
+  " SELECT c.b AS pessoa, 1 AS grau, '' AS via FROM contato c JOIN pessoa p ON p.id = c.b " +
+  "  WHERE c.a = ?1 AND p.alcance >= 1 " +
+  " UNION ALL " +
+  " SELECT c2.b AS pessoa, 2 AS grau, MIN(v.nome) AS via FROM contato c1 " +
+  "  JOIN contato c2 ON c2.a = c1.b JOIN pessoa p ON p.id = c2.b JOIN pessoa v ON v.id = c1.b " +
+  "  WHERE c1.a = ?1 AND c2.b <> ?1 AND p.alcance = 2 " +
+  "  AND NOT EXISTS (SELECT 1 FROM contato x WHERE x.a = ?1 AND x.b = c2.b) " +
+  "  GROUP BY c2.b" +
+  "), visl AS (SELECT * FROM vis WHERE NOT EXISTS (SELECT 1 FROM bloqueio bq WHERE " +
+  " (bq.quem = ?1 AND bq.alvo = vis.pessoa) OR (bq.quem = vis.pessoa AND bq.alvo = ?1))) ";
+
+// Id que sai para FORA: o do contato como e; o do amigo de amigo vira handle
+// opaco, como nas sugestoes (o `nuvio:<uuid>` nao se entrega a quem nao e amigo).
+async function idPublico(env, x, garantirPerfil) {
+  if (x.grau === 1 || String(x.pessoa).startsWith("trakt:")) return x.pessoa;
+  const pub = x.pub || (await garantirPerfil(env, x.pessoa))?.pub || "";
+  return `pub:${pub}`;
+}
+
+// --- GET /v1/feed ------------------------------------------------------------------
+
+export async function rotaFeed(env, quem, url, req, h, garantirPerfil) {
+  const desde = Math.max(0, parseInt(url.searchParams.get("desde") || "0", 10) || 0);
+  const marcas = NO_FEED.map(() => "?").join(",");
+  const r = await env.DB.prepare(
+    VISIVEIS +
+    "SELECT e.id, e.pessoa, e.ev, e.imdb, e.midia, e.titulo, e.poster, e.temporada, e.episodio, " +
+    "e.pct, e.reacao, e.criado, visl.grau, visl.via, p.nome AS nome, p.avatar AS avatar, f.pub AS pub " +
+    "FROM evento e JOIN visl ON visl.pessoa = e.pessoa JOIN pessoa p ON p.id = e.pessoa " +
+    "LEFT JOIN perfil f ON f.pessoa = e.pessoa " +
+    `WHERE e.id > ?2 AND e.criado > ?3 AND e.ev IN (${marcas}) ORDER BY e.id DESC LIMIT ?4`
+  ).bind(quem.id, desde, h.agora() - RETENCAO, FEED_MAX, ...NO_FEED).all();
+  const linhas = r.results || [];
+  const maior = linhas.reduce((m, x) => (x.id > m ? x.id : m), desde);
+  // ETag pelo maior id E pela quantidade: alguem que baixa o nivel tira linhas
+  // e muda a contagem, entao a TV nao fica com a lista velha num 304.
+  const etag = `"f-${maior}-${linhas.length}"`;
+  if (req.headers.get("if-none-match") === etag)
+    return new Response(null, { status: 304, headers: { etag } });
+  const itens = [];
+  for (const x of linhas) {
+    itens.push({
+      id: x.id, de: await idPublico(env, x, garantirPerfil),
+      deNome: x.nome || "", deAvatar: x.grau === 1 ? (x.avatar || "") : "",
+      grau: x.grau, via: x.grau === 2 ? (x.via || "") : "",
+      ev: x.ev, imdb: x.imdb, midia: x.midia, titulo: x.titulo, poster: x.poster,
+      temporada: x.temporada, episodio: x.episodio, pct: x.pct,
+      reacao: x.reacao, criado: x.criado,
+    });
+  }
+  return h.json({ cursor: maior, itens }, 200, { etag });
+}
+
+// --- GET /v1/amigo?id= --------------------------------------------------------------
+
+function estadoRec(x) {
+  if (x.reacao !== null && x.reacao !== undefined) return "reacao";
+  if (x.terminou) return "terminou";
+  if (x.comecou) return "comecou";
+  if (x.visto || x.aberto) return "aberta";
+  return "entregue";
+}
+
+export async function rotaAmigo(env, quem, url, h, garantirPerfil) {
+  const t = h.agora();
+  const pedido = String(url.searchParams.get("id") || "").slice(0, 96);
+  if (!pedido) return h.erro("sem id", 400);
+  let alvo = pedido;
+  if (pedido.startsWith("pub:")) {
+    const f = await env.DB.prepare("SELECT pessoa FROM perfil WHERE pub = ?")
+      .bind(pedido.slice(4).replace(/[^a-z0-9]/g, "").slice(0, 10)).first();
+    if (!f) return h.erro("nao encontrado", 404);
+    alvo = f.pessoa;
+  }
+  if (alvo === quem.id) return h.erro("nao encontrado", 404);
+  const bloq = await env.DB.prepare(
+    "SELECT 1 FROM bloqueio WHERE (quem = ? AND alvo = ?) OR (quem = ? AND alvo = ?)"
+  ).bind(quem.id, alvo, alvo, quem.id).first();
+  if (bloq) return h.erro("nao encontrado", 404);
+
+  const p = await env.DB.prepare(
+    "SELECT rowid AS n, id, nome, avatar, alcance FROM pessoa WHERE id = ?").bind(alvo).first();
+  if (!p) return h.erro("nao encontrado", 404);
+  const c = await env.DB.prepare("SELECT criado, via FROM contato WHERE a = ? AND b = ?")
+    .bind(quem.id, alvo).first();
+  let grau = c ? 1 : 0, via = "";
+  if (!c) {
+    // Amigo de amigo so e visivel a quem ELE autorizou (alcance 2) — e o mesmo
+    // 404 de "nao existe" para quem nao pode ver.
+    const v = await env.DB.prepare(
+      "SELECT MIN(v.nome) AS via FROM contato c1 JOIN contato c2 ON c2.a = c1.b " +
+      "JOIN pessoa v ON v.id = c1.b WHERE c1.a = ? AND c2.b = ?"
+    ).bind(quem.id, alvo).first();
+    if (!v?.via || nivelDe(p) !== 2) return h.erro("nao encontrado", 404);
+    grau = 2; via = v.via;
+  }
+  const nivel = nivelDe(p);
+  const compartilha = grau === 1 ? nivel >= 1 : nivel === 2;
+  let origem = c?.via || "";
+  if (c && !origem) origem = alvo.startsWith("trakt:") && quem.id.startsWith("trakt:") ? "trakt" : "";
+
+  const saida = {
+    id: grau === 1 ? alvo : await idPublico(env, { pessoa: alvo, grau }, garantirPerfil),
+    nome: p.nome || `Amigo #${p.n}`,
+    avatar: grau === 1 ? (p.avatar || "") : "",
+    grau, via, desde: c?.criado || 0, origem,
+    compartilha: compartilha ? 1 : 0,
+    mes: null, agora: null, gostou: [], recs: [], gosto: null,
+  };
+
+  if (compartilha) {
+    const mes = mesDe(t);
+    const ag = await env.DB.prepare("SELECT seg FROM agregado WHERE pessoa = ? AND mes = ?")
+      .bind(alvo, mes).first();
+    const tt = await env.DB.prepare(
+      "SELECT SUM(tipo = 'filme') AS filmes, SUM(tipo = 'serie') AS series " +
+      "FROM agregado_titulo WHERE pessoa = ? AND mes = ?").bind(alvo, mes).first();
+    saida.mes = { mes, seg: ag?.seg || 0, filmes: tt?.filmes || 0, series: tt?.series || 0 };
+    const a = await env.DB.prepare(
+      "SELECT imdb, midia, titulo, poster, temporada, episodio, pct, atualizado FROM agora " +
+      "WHERE pessoa = ? AND atualizado > ?").bind(alvo, t - AGORA_S).first();
+    saida.agora = a || null;
+    const g = await env.DB.prepare(
+      "SELECT imdb, midia, titulo, poster, MAX(criado) AS criado FROM evento " +
+      "WHERE pessoa = ? AND ev = 'reacao' AND reacao = 1 AND criado > ? " +
+      "GROUP BY imdb ORDER BY criado DESC LIMIT ?").bind(alvo, t - RETENCAO, GOSTOU_MAX).all();
+    saida.gostou = g.results || [];
+    // GOSTO PARECIDO so entre dois que compartilham: quem nao mostra as
+    // proprias reacoes nao ganha uma janela para as dos outros.
+    const eu = await env.DB.prepare("SELECT alcance FROM pessoa WHERE id = ?").bind(quem.id).first();
+    if (nivelDe(eu) >= 1) {
+      const ULT = (q) =>
+        `SELECT imdb, reacao FROM evento WHERE id IN (SELECT MAX(id) FROM evento ` +
+        `WHERE pessoa = ${q} AND ev = 'reacao' GROUP BY imdb)`;
+      const s = await env.DB.prepare(
+        `SELECT COUNT(*) AS total, COALESCE(SUM(a.reacao = b.reacao), 0) AS iguais ` +
+        `FROM (${ULT("?1")}) a JOIN (${ULT("?2")}) b ON a.imdb = b.imdb`
+      ).bind(quem.id, alvo).first();
+      const total = s?.total || 0, iguais = s?.iguais || 0;
+      saida.gosto = { total, iguais, pct: total ? Math.round((100 * iguais) / total) : 0 };
+    }
+  }
+
+  if (grau === 1) {
+    const r = await env.DB.prepare(
+      "SELECT id, imdb, tipo, titulo, poster, criado, visto, aberto, comecou, terminou, reacao " +
+      "FROM rec WHERE de = ? AND para = ? ORDER BY id DESC LIMIT ?").bind(quem.id, alvo, RECS_MAX).all();
+    saida.recs = (r.results || []).map((x) => ({
+      id: x.id, imdb: x.imdb, tipo: x.tipo, titulo: x.titulo, poster: x.poster, criado: x.criado,
+      estado: estadoRec(x), reacao: x.reacao === null ? null : x.reacao,
+    }));
+  }
+  return h.json(saida);
+}
+
+export function limpezaSocial(env, t) {
+  return [
+    env.DB.prepare("DELETE FROM evento WHERE criado < ?").bind(t - RETENCAO),
+    env.DB.prepare("DELETE FROM agora WHERE atualizado < ?").bind(t - AGORA_S),
+    env.DB.prepare("DELETE FROM agregado WHERE mes < ?").bind(mesDe(t - RETENCAO)),
+    env.DB.prepare("DELETE FROM agregado_titulo WHERE mes < ?").bind(mesDe(t - RETENCAO)),
+  ];
+}

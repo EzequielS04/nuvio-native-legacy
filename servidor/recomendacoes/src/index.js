@@ -12,7 +12,9 @@
 import { rotaXtream } from "./xtream.js";
 import { rotaTrailerImdb, rotaTrailerYoutube } from "./trailer.js";
 import { rotaNoticia, rotaNoticiaImg } from "./noticia.js";
-import { rotaAmigos, limpezaAmigos, despublicar, garantirPerfil, avatarPublico } from "./amigos.js";
+import { rotaAmigos, limpezaAmigos, despublicar, garantirPerfil, avatarPublico, limitar } from "./amigos.js";
+import { rotaEuNome, rotaAlcance, rotaEvento, rotaFeed, rotaAmigo, limpezaSocial,
+         limparNome, avatarPerfilOk, resolverNome } from "./social.js";
 
 const DIA = 86400;
 const RETENCAO = 90 * DIA;
@@ -34,7 +36,7 @@ const agora = () => Math.floor(Date.now() / 1000);
 // nada sem o Bearer — a origem nao e o que protege aqui.
 const CORS = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, content-type, x-nuvio-auth, if-none-match",
+  "access-control-allow-headers": "authorization, content-type, x-nuvio-auth, x-nuvio-perfil, if-none-match",
   "access-control-allow-methods": "GET, POST, OPTIONS",
   "cross-origin-resource-policy": "cross-origin",
 };
@@ -142,7 +144,7 @@ async function quemE(req, env) {
   // `avatar: ""` aqui quer dizer "nao perguntei agora", e `registrar` so
   // sobrescreve a foto guardada quando ela vem de uma verificacao DE VERDADE.
   // Sem essa regra, os 10 min de cache apagariam a foto de todo mundo.
-  if (cache) return { id: cache.id, nome: cache.nome, avatar: "" };
+  if (cache) return comPerfil(req, via, { id: cache.id, nome: cache.nome, avatar: "" });
 
   const quem = via === "trakt" ? await idTrakt(token, env) : await idNuvio(token, env);
   if (!quem) return null;
@@ -150,7 +152,22 @@ async function quemE(req, env) {
     "INSERT INTO sessao (hash, id, nome, expira) VALUES (?, ?, ?, ?) " +
     "ON CONFLICT(hash) DO UPDATE SET id = excluded.id, nome = excluded.nome, expira = excluded.expira"
   ).bind(hash, quem.id, quem.nome, t + SESSAO_TTL).run();
-  return quem;
+  return comPerfil(req, via, quem);
+}
+
+// CADA PERFIL NUVIO E UMA PESSOA (decisao do dono, 02/10/2026). O token prova a
+// CONTA; o perfil vem no cabecalho `X-Nuvio-Perfil: <profile_index>` e so
+// escolhe ENTRE as pessoas daquela conta — nao ha valor que leve a outra conta.
+// O PRINCIPAL nao manda o cabecalho e continua `nuvio:<sub>`: e assim que tudo
+// o que foi gravado antes (contatos, recs, perfil publico) continua dele sem
+// migrar linha nenhuma. Trakt ignora: o slug ja e de uma pessoa.
+function comPerfil(req, via, quem) {
+  if (via !== "nuvio") return quem;
+  const v = (req.headers.get("x-nuvio-perfil") || "").trim();
+  if (!/^\d{1,2}$/.test(v)) return quem;
+  const n = parseInt(v, 10);
+  if (n < 1 || n > 32) return quem;
+  return { ...quem, id: `${quem.id}:${n}`, perfil: n };
 }
 
 async function codigoLivre(db) {
@@ -164,39 +181,56 @@ async function codigoLivre(db) {
 }
 
 // Registra ou atualiza a pessoa. E o unico ponto que cria linha em `pessoa`.
-async function registrar(env, quem) {
+//
+// `extra` so vem de POST /v1/eu: o nome e a foto do PERFIL ativo na TV. As
+// outras rotas chamam sem ele e nao mexem nesses campos.
+//
+// O NOME QUE SAI (`pessoa.nome`) E RECALCULADO AQUI, sempre: exibicao digitada >
+// nome do perfil (ou da conta, no Trakt) > "Amigo #<rowid>". Todas as consultas
+// antigas leem `pessoa.nome`, entao nenhuma delas volta a mostrar UUID.
+async function registrar(env, quem, extra) {
   const t = agora();
-  // `descobrivel` SAI DAQUI E NAO ENTRA. Esta funcao roda em TODA requisicao
-  // autenticada: se ela escrevesse a coluna, qualquer sondagem de 60 s poderia
-  // desfazer a escolha da pessoa por omissao do cliente. Quem escreve e so
-  // `/v1/descobrivel`, que existe para isso e nao faz mais nada.
-  const ja = await env.DB.prepare(
-    "SELECT id, nome, codigo, avatar, descobrivel FROM pessoa WHERE id = ?"
+  // `descobrivel` e `alcance` SAEM DAQUI E NAO ENTRAM: so as rotas proprias
+  // (/v1/descobrivel, /v1/alcance) escrevem — uma sondagem nunca desfaz a
+  // escolha da pessoa por omissao do cliente.
+  let ja = await env.DB.prepare(
+    "SELECT rowid AS n, id, nome, codigo, avatar, descobrivel, nome_conta, nome_perfil, " +
+    "exibicao, avatar_perfil, alcance FROM pessoa WHERE id = ?"
   ).bind(quem.id).first();
-  if (ja) {
-    let codigo = ja.codigo;
-    if (!codigo) {
-      codigo = await codigoLivre(env.DB);
-      await env.DB.prepare("UPDATE pessoa SET codigo = ? WHERE id = ?").bind(codigo, quem.id).run();
-    }
-    const nome = quem.nome || ja.nome;
-    // MESMA REGRA DO NOME: o que veio vazio nao apaga o que estava guardado.
-    // Uma verificacao servida pelo cache da sessao chega sem foto, e uma pessoa
-    // que troca de foto no Trakt tem a nova na proxima verificacao de verdade.
-    const avatar = quem.avatar || ja.avatar || "";
-    await env.DB.prepare("UPDATE pessoa SET nome = ?, avatar = ?, visto = ? WHERE id = ?")
-      .bind(nome, avatar, t, quem.id).run();
-    return { id: quem.id, nome, codigo, avatar, descobrivel: ja.descobrivel ? 1 : 0 };
+  if (!ja) {
+    const codigo = await codigoLivre(env.DB);
+    // `descobrivel` e `alcance` ficam no DEFAULT do esquema (0 e -1).
+    const r = await env.DB.prepare(
+      "INSERT INTO pessoa (id, nome, codigo, avatar, criado, visto, nome_conta) VALUES (?, '', ?, '', ?, ?, ?)"
+    ).bind(quem.id, codigo, t, t, quem.nome || "").run();
+    ja = { n: r.meta?.last_row_id || 0, id: quem.id, nome: "", codigo, avatar: "", descobrivel: 0,
+           nome_conta: quem.nome || "", nome_perfil: "", exibicao: "", avatar_perfil: "", alcance: -1 };
   }
-  const codigo = await codigoLivre(env.DB);
-  const avatar = quem.avatar || "";
-  // A COLUNA `descobrivel` NAO APARECE NO INSERT de proposito: o DEFAULT 0 do
-  // esquema e quem responde, e escreve-la aqui seria dar ao codigo a chance de
-  // um dia inserir 1 sem ninguem ter respondido a pergunta.
+  let codigo = ja.codigo;
+  if (!codigo) {
+    codigo = await codigoLivre(env.DB);
+    await env.DB.prepare("UPDATE pessoa SET codigo = ? WHERE id = ?").bind(codigo, quem.id).run();
+  }
+  // O QUE VEIO VAZIO NAO APAGA O GUARDADO: verificacao servida pelo cache da
+  // sessao chega sem foto e, na conta Nuvio, quase sempre sem nome.
+  const nomeConta = quem.nome || ja.nome_conta || "";
+  const nomePerfil = extra && extra.nome !== undefined ? limparNome(extra.nome, 64) : (ja.nome_perfil || "");
+  const avatarPerfil = extra && extra.avatar !== undefined ? avatarPerfilOk(extra.avatar, env) : (ja.avatar_perfil || "");
+  // FOTO: no Trakt e a da verificacao (como sempre foi); na conta Nuvio e a do
+  // perfil, que so a TV conhece — filtrada por host em avatarPerfilOk.
+  const avatar = quem.id.startsWith("trakt:")
+    ? (quem.avatar || ja.avatar || avatarPerfil || "")
+    : (avatarPerfil || "");
+  const p = { ...ja, nome_conta: nomeConta, nome_perfil: nomePerfil };
+  const nome = resolverNome(p, quem.id);
   await env.DB.prepare(
-    "INSERT INTO pessoa (id, nome, codigo, avatar, criado, visto) VALUES (?, ?, ?, ?, ?, ?)"
-  ).bind(quem.id, quem.nome, codigo, avatar, t, t).run();
-  return { id: quem.id, nome: quem.nome, codigo, avatar, descobrivel: 0 };
+    "UPDATE pessoa SET nome = ?, avatar = ?, visto = ?, nome_conta = ?, nome_perfil = ?, avatar_perfil = ? WHERE id = ?"
+  ).bind(nome, avatar, t, nomeConta, nomePerfil, avatarPerfil, quem.id).run();
+  return {
+    id: quem.id, nome, codigo, avatar, descobrivel: ja.descobrivel ? 1 : 0,
+    exibicao: ja.exibicao || "", alcance: Number.isInteger(ja.alcance) ? ja.alcance : -1,
+    perfil: quem.perfil || 0,
+  };
 }
 
 const bloqueadoPar = (db, a, b) =>
@@ -210,7 +244,7 @@ const saoContatos = (db, a, b) =>
 
 async function rotaContatosLer(env, quem) {
   const r = await env.DB.prepare(
-    "SELECT p.id AS id, p.nome AS nome, p.avatar AS avatar FROM contato c " +
+    "SELECT p.id AS id, p.nome AS nome, p.avatar AS avatar, c.criado AS desde, c.via AS via FROM contato c " +
     "JOIN pessoa p ON p.id = c.b WHERE c.a = ? ORDER BY p.nome"
   ).bind(quem.id).all();
   return json({
@@ -219,6 +253,8 @@ async function rotaContatosLer(env, quem) {
       nome: x.nome,
       avatar: x.avatar || "",
       origem: x.id.startsWith("trakt:") ? "trakt" : "nuvio",
+      // desde quando e contato e por onde (codigo|trakt|sugestao|pedido|"")
+      desde: x.desde || 0, via: x.via || "",
     })),
   });
 }
@@ -235,9 +271,9 @@ async function rotaContatosVincular(env, quem, corpo) {
   if (await bloqueadoPar(env.DB, quem.id, outro.id)) return erro("codigo nao encontrado", 404);
   const t = agora();
   await env.DB.batch([
-    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado) VALUES (?, ?, ?)")
+    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado, via) VALUES (?, ?, ?, 'codigo')")
       .bind(quem.id, outro.id, t),
-    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado) VALUES (?, ?, ?)")
+    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado, via) VALUES (?, ?, ?, 'codigo')")
       .bind(outro.id, quem.id, t),
   ]);
   return json({ ok: 1, contato: { id: outro.id, nome: outro.nome } });
@@ -272,9 +308,9 @@ async function rotaContatosTrakt(env, quem, corpo) {
   const t = agora();
   const cmds = [];
   for (const x of r.results || []) {
-    cmds.push(env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado) VALUES (?, ?, ?)")
+    cmds.push(env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado, via) VALUES (?, ?, ?, 'trakt')")
       .bind(quem.id, x.id, t));
-    cmds.push(env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado) VALUES (?, ?, ?)")
+    cmds.push(env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado, via) VALUES (?, ?, ?, 'trakt')")
       .bind(x.id, quem.id, t));
   }
   if (cmds.length) await env.DB.batch(cmds);
@@ -427,9 +463,9 @@ async function rotaContatoSugerido(env, quem, corpo) {
   if (!achado) return erro("nao esta nas suas sugestoes", 403);
   const t = agora();
   await env.DB.batch([
-    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado) VALUES (?, ?, ?)")
+    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado, via) VALUES (?, ?, ?, 'sugestao')")
       .bind(quem.id, achado._id, t),
-    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado) VALUES (?, ?, ?)")
+    env.DB.prepare("INSERT OR IGNORE INTO contato (a, b, criado, via) VALUES (?, ?, ?, 'sugestao')")
       .bind(achado._id, quem.id, t),
   ]);
   // A resposta devolve o handle, nao o id da conta: e o que o cliente ja tinha.
@@ -650,9 +686,26 @@ export default {
     }
 
     // `/v1/eu` tambem e o registro: a primeira chamada de uma TV cria a pessoa.
-    if (rota === "/v1/eu" && req.method === "POST") return json(await registrar(env, quemBruto));
+    // O corpo pode trazer {"nome","avatar"} do PERFIL ativo; corpo vazio (cliente
+    // antigo) nao mexe neles.
+    if (rota === "/v1/eu" && req.method === "POST") {
+      const extra = {};
+      if (typeof corpo?.nome === "string") extra.nome = corpo.nome;
+      if (typeof corpo?.avatar === "string") extra.avatar = corpo.avatar;
+      return json(await registrar(env, quemBruto, Object.keys(extra).length ? extra : undefined));
+    }
 
     const quem = await registrar(env, quemBruto);
+    const h = { json, erro, agora, limparTexto, limpar };
+
+    if (rota === "/v1/eu/nome" && req.method === "POST") return rotaEuNome(env, quem, corpo, h, registrar);
+    if (rota === "/v1/alcance" && req.method === "POST") return rotaAlcance(env, quem, corpo, h);
+    // MESMA ROTA, DOIS CONTRATOS: com "ev" e o evento do player (social.js); sem
+    // ele e o corpo antigo de amigos.js, que TVs ja no ar continuam mandando.
+    if (rota === "/v1/atividade" && req.method === "POST" && typeof corpo?.ev === "string")
+      return rotaEvento(env, quem, corpo, h, limitar);
+    if (rota === "/v1/feed" && req.method === "GET") return rotaFeed(env, quem, url, req, h, garantirPerfil);
+    if (rota === "/v1/amigo" && req.method === "GET") return rotaAmigo(env, quem, url, h, garantirPerfil);
 
     if (rota === "/v1/contatos" && req.method === "GET")  return rotaContatosLer(env, quem);
     if (rota === "/v1/contatos" && req.method === "POST") return rotaContatosVincular(env, quem, corpo);
@@ -668,8 +721,7 @@ export default {
     if (rota === "/v1/registro" && req.method === "POST")   return rotaRegistro(env, quem, corpo);
 
     // Perfil publico, busca, pedidos, bloqueio e atividade (amigos.js).
-    const amigos = await rotaAmigos(rota, req.method, env, quem, corpo,
-                                    { json, erro, agora, limparTexto, limpar });
+    const amigos = await rotaAmigos(rota, req.method, env, quem, corpo, h);
     if (amigos) return amigos;
 
     return erro("rota desconhecida", 404);
@@ -682,6 +734,7 @@ export default {
       env.DB.prepare("DELETE FROM sessao WHERE expira < ?").bind(t),
       env.DB.prepare("DELETE FROM registro WHERE criado < ?").bind(t - REGISTRO_RETENCAO),
       ...limpezaAmigos(env, t),
+      ...limpezaSocial(env, t),
     ]);
   },
 };
