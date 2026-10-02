@@ -43,7 +43,7 @@ OUT="build/release-$VER"; rm -rf "$OUT"; mkdir -p "$OUT"
 echo "== release-samsung $VER (commit $(git rev-parse --short HEAD)) -> $OUT"
 
 # Credenciais: a lista de exclusao dos scripts e INTENCAO; isto e o fato.
-SEGREDO='(^|/)(trakt|addons|tmdb|mdblist|sessao|simkl[^/]*|fanart|diag-token)\.txt$|collections\.json$|catalogo-rede\.bin|local\.properties|\.env$|(^|/)(trakt|stalker|xtream|listas)-p[0-9]'
+SEGREDO='(^|/)(trakt|addons|tmdb|mdblist|sessao|simkl[^/]*|fanart|diag-token)\.txt$|collections\.json$|catalogo-rede\.bin|local\.properties|\.env$|(^|/)(trakt|stalker|xtream|listas)-p[0-9]|(^|/)conta-[^/]*\.txt(\.tmp)?$'
 confere() {  # $1 pacote (zip)
   local n; n=$(unzip -Z1 "$1" | grep -c -E "$SEGREDO" || true)
   [ "$n" = "0" ] || { echo "release-samsung: $1 leva $n arquivo(s) de pessoa:" >&2; unzip -Z1 "$1" | grep -E "$SEGREDO" >&2; exit 1; }
@@ -67,7 +67,7 @@ done
 cp "build/tpk/libnuvio-$VER-tpk-arm.so" "build/tpk/libnuvio-$VER-tpk40-arm.so" "$OUT/"
 # O pacote 6+ tem de levar a MESMA .so do anexo, e o 4/5 a dele: a auto-
 # atualizacao compara versao, nao bytes, mas um anexo errado seria carregado.
-D=$(mktemp -d); trap 'rm -rf "$D"' EXIT
+D=$(mktemp -d "${TMPDIR:-/tmp}/nuvio-samsung-check.XXXXXXXX"); trap 'rm -rf "$D"' EXIT
 unzip -qo "$OUT/Nuvio-$VER-NuvioTpk.tpk" lib/libnuvio.so -d "$D/6"
 unzip -qo "$OUT/Nuvio-$VER-NuvioTpk40.tpk" lib/libnuvio.so -d "$D/4"
 cmp -s "$D/6/lib/libnuvio.so" "$OUT/libnuvio-$VER-tpk-arm.so"   || { echo "release-samsung: anexo 6+ != .so do pacote" >&2; exit 1; }

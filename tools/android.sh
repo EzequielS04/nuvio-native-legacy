@@ -47,7 +47,7 @@ mkdir -p "$EST/assets/fonts"
 cp deploy/app/fonts/* "$EST/assets/fonts/"
 
 echo "[3/5] chaves (-D) e libs nativas"
-ENVF="$(mktemp)"; trap 'rm -f "$ENVF"' EXIT
+ENVF="$(mktemp "${TMPDIR:-/tmp}/nuvio-android-env.XXXXXXXX")"; trap 'rm -f "$ENVF"' EXIT
 # env.sh le UMA opcao so: a checagem de configuracao vai numa chamada propria.
 [ -z "${NUVIO_REQUIRE_CORE:-}" ] || tools/env.sh --require-core >/dev/null
 tools/env.sh --env-file "$ENVF"
@@ -93,7 +93,7 @@ else
 fi
 
 # Mesma lista de credenciais de pessoa do tools/release-samsung.sh.
-SEGREDO='(^|/)(trakt|addons|tmdb|mdblist|sessao|simkl[^/]*|fanart|diag-token)\.txt$|collections\.json$|catalogo-rede\.bin|local\.properties|\.env$|(^|/)(trakt|stalker|xtream|listas)-p[0-9]'
+SEGREDO='(^|/)(trakt|addons|tmdb|mdblist|sessao|simkl[^/]*|fanart|diag-token)\.txt$|collections\.json$|catalogo-rede\.bin|local\.properties|\.env$|(^|/)(trakt|stalker|xtream|listas)-p[0-9]|(^|/)conta-[^/]*\.txt(\.tmp)?$'
 for a in "${APKS[@]}"; do
   L=$(unzip -Z1 "$a")
   for need in lib/arm64-v8a/libmain.so lib/armeabi-v7a/libmain.so lib/arm64-v8a/libSDL2.so lib/armeabi-v7a/libSDL2.so; do
