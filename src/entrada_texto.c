@@ -264,7 +264,7 @@ void texto_sistema_quadro(void) {
       printf("[texto] teclado do sistema na tela (quadro %d)\n", quadrosAberto);
       fflush(stdout);
     }
-    if (viuTeclado && !mostra) { SDL_StopTextInput(); terminar(0, "sumiu da tela"); }
+    if (viuTeclado && !mostra) { SDL_StopTextInput(); terminar(0, "osk-oculto"); }
     else if (!viuTeclado && quadrosAberto == 180) {
       printf("[texto] 180 quadros e SDL_IsScreenKeyboardShown ainda 0 (janela=%p)\n", (void *)w);
       fflush(stdout);
