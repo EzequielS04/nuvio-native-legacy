@@ -35,6 +35,22 @@ RAIZ="$PWD"
 CACHE="${NUVIO_TPK_CACHE:-$HOME/.cache/nuvio-tpk}"
 SAIDA="build/tpk"
 mkdir -p "$SAIDA" "$CACHE"
+# WHICH PACKAGES TO BUILD. Default is all four, as it always was. `NV_TPK_PACOTES`
+# exists for the Tizen 4/5 target, which is the one being built right now:
+#
+#   NV_TPK_PACOTES=NuvioTpk40 bash tools/tpk.sh
+#
+# Two reasons, and the second is what forces the variable to exist. (1) time:
+# each package copies the art and runs a dotnet build. (2) NuvioTpk (API11) uses
+# the `net6.0-tizen8.0` TFM, which needs the Samsung WORKLOAD — and that workload
+# only accepts Tizen >= 8.0 (see tizen-tpk-spike/README.md). Without the
+# workload, that loop iteration dies under `set -e` and takes the WHOLE script
+# down, even though the three `tizenNN` packages were already built and their
+# .tpk are on disk. So without this variable there is no way to package the 40 on
+# a bench that does not have the workload. The three `tizenNN` (40/80/90) use the
+# old SDK through NuGet (Tizen.NET.Sdk) and need NO workload at all.
+PACOTES="${NV_TPK_PACOTES:-NuvioTpk40 NuvioTpk60 NuvioTpk65 NuvioTpk}"
+
 CANARIO=""
 case "${NV_TPK_NIVEL:-}" in
   "") ;;
@@ -76,6 +92,10 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" \
   mkdir -p /tmp/o
   # As -D vao num arquivo de resposta do gcc (@/tmp/flags): assim o xargs -P
   # abaixo compila em paralelo sem reabrir o problema de aspas das chaves.
+  # A LISTA DE CHAVES E FECHADA, e nao "tudo o que o env.sh imprimir": o que
+  # nao estiver aqui simplesmente nao chega ao compilador, e o sintoma e um
+  # "undefined reference" no link (nao um erro no -D). Ao acrescentar uma chave
+  # nova ao env.sh, acrescente-a aqui TAMBEM.
   for k in NV_SUPABASE_URL NV_SUPABASE_ANON_KEY NV_TV_LOGIN_BASE NV_TRAKT_CLIENT_ID \
            NV_TRAKT_CLIENT_SECRET NV_SIMKL_CLIENT_ID NV_SIMKL_APP NV_TMDB_API_KEY \
            NV_REC_URL NV_VERSAO; do
@@ -140,7 +160,7 @@ VER=$(sed -n 's/^NV_VERSAO=//p' "$ENVF")
 # de art/, que e onde o main.c procura.
 ARTE=$(bash tools/tizen-art.sh)
 rm -f "$SAIDA"/*.tpk
-for p in NuvioTpk40 NuvioTpk60 NuvioTpk65 NuvioTpk; do
+for p in $PACOTES; do
   H=tizen-tpk/$p
   rm -rf "$H/lib" "$H/res" "$H/bin" "$H/obj"
   mkdir -p "$H/lib" "$H/res" "$H/shared/res"
@@ -155,18 +175,33 @@ for p in NuvioTpk40 NuvioTpk60 NuvioTpk65 NuvioTpk; do
   # Clipe mudo do canario de audio (#137, Video.PrimeAudio); so o host 6+ usa.
   [ "$p" = NuvioTpk40 ] || cp tizen-tpk/silencio.mp4 "$H/res/"
   cp deploy/app/tizen/icon.png "$H/shared/res/$p.png"
-  sed -i '' "s/ version=\"[^\"]*\">/ version=\"$VER\">/" "$H/tizen-manifest.xml"
+  # The version AND the keyboard-canary privilege are rewritten here, per
+  # package — but the SOURCE manifest is a tracked file, so it is saved and put
+  # back. Without this every build left the tree dirty (and a later
+  # `git commit -a` would commit the build's identity into the source).
+  # `sed -i ''` is BSD syntax: on GNU sed the '' becomes the script itself and the
+  # command dies with "cannot read ...: No such file". `-i.bak` works on both.
+  MAN="$H/tizen-manifest.xml"
+  cp "$MAN" "$MAN.orig"
+  sed -i.bak "s/ version=\"[^\"]*\">/ version=\"$VER\">/" "$MAN"
   # CANARIO do teclado/ditado do sistema (tizen-tpk/Texto.cs, #imetv):
   # NUVIO_TPK_TEXTO=1 compila o Texto.cs e poe o privilegio do microfone
-  # (recorder, para o Tizen.Uix.Stt) SO durante este build; o manifesto do git
-  # nao muda. Nao vai em release sem teste numa TV.
+  # (recorder, para o Tizen.Uix.Stt) SO neste build — o manifesto do git nao muda,
+  # porque e restaurado logo abaixo. Nao vai em release sem teste numa TV.
+  FLAG_TEXTO=""
   if [ "${NUVIO_TPK_TEXTO:-}" = 1 ] && [ "$p" != NuvioTpk40 ]; then
-    sed -i '' 's|<privilege>http://tizen.org/privilege/internet</privilege>|&<privilege>http://tizen.org/privilege/recorder</privilege>|' "$H/tizen-manifest.xml"
-    dotnet build "$H/$p.csproj" -c Release -nologo -v q -p:NvTextoCanario=1
-    sed -i '' 's|<privilege>http://tizen.org/privilege/recorder</privilege>||' "$H/tizen-manifest.xml"
-  else
-    dotnet build "$H/$p.csproj" -c Release -nologo -v q
+    sed -i.bak 's|<privilege>http://tizen.org/privilege/internet</privilege>|&<privilege>http://tizen.org/privilege/recorder</privilege>|' "$MAN"
+    FLAG_TEXTO="-p:NvTextoCanario=1"
   fi
+  rm -f "$MAN.bak"
+  # Restore on BOTH paths: a failed build must not leave the tracked manifest
+  # wearing this build's identity.
+  if ! dotnet build "$H/$p.csproj" -c Release -nologo -v q $FLAG_TEXTO; then
+    mv "$MAN.orig" "$MAN"
+    echo "$p: dotnet build falhou" >&2
+    exit 1
+  fi
+  mv "$MAN.orig" "$MAN"
   TPK=$(find "$H/bin/Release" -name '*.tpk' | head -1)
   [ -n "$TPK" ] || { echo "$p: dotnet nao gerou .tpk" >&2; exit 1; }
   cp "$TPK" "$SAIDA/Nuvio-$VER-$p${NUVIO_TPK_TEXTO:+-texto}.tpk"
