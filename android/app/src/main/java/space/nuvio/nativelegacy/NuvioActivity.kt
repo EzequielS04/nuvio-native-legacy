@@ -181,12 +181,16 @@ class NuvioActivity : SDLActivity() {
         env("NUVIO_TV_INFO", "${Build.MANUFACTURER} ${Build.MODEL}|${Build.VERSION.SDK_INT}|${Build.VERSION.RELEASE}|$versao")
     }
 
-    // Copia assets art/ e fonts/ para filesDir/res, uma vez por versionCode.
+    // Copia assets art/ e fonts/ para filesDir/res, uma vez por INSTALACAO.
+    // So o versionCode nao bastava: um APK novo com a MESMA versao (teste na
+    // TCL, 02/10/2026) achava a marca igual e ficava com a arte velha — o icone
+    // novo do celular (aj_smartphone.png) nao existia em filesDir e o botao saiu
+    // vazio. lastUpdateTime muda a cada `adb install -r`/atualizacao.
     private fun extrairAssets(res: File) {
         val marca = File(res, ".versao")
         val atual = try {
             packageManager.getPackageInfo(packageName, 0).let {
-                @Suppress("DEPRECATION") it.versionCode.toString()
+                @Suppress("DEPRECATION") "${it.versionCode}-${it.lastUpdateTime}"
             }
         } catch (e: Exception) { "0" }
         if (marca.exists() && marca.readText() == atual && File(res, "art").isDirectory) return
