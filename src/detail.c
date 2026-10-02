@@ -2416,6 +2416,17 @@ static void revalidarIdx(void) {
   novo = cat_indice_por_imdb(idxImdb);
   if (novo < 0 && idxTemCopia) novo = cat_acrescentar(&idxCopia);
   if (novo < 0) return;                              // sem para onde ir: fica
+  // O MESMO TITULO NA MESMA POSICAO, so com o id escrito de outro jeito: o
+  // card de serie carrega o episodio ("tt0052520:1:32") e a copia que ficou
+  // nesta posicao nao, ou o contrario. cat_indice_por_imdb casa os dois
+  // (mesmoTitulo) e devolve o proprio idx — nao houve remontagem nenhuma.
+  // Antes, o strcmp acima falhava em TODO quadro e a linha abaixo saia 20 a
+  // 40 vezes por segundo: no D1, 3400 linhas a cada 5 min (ids 15821..15897,
+  // "tt20285780 saiu de 0 para 0"; 15747, "475 para 475"), o que enchia os
+  // 200 KB do registro e apagava todo o resto do log. O id guardado NAO e
+  // trocado pelo da tela: entre o cat_item acima e a busca pode ter caido uma
+  // republicacao, e adotar o id lido ali seria adotar outro titulo.
+  if (novo == idx) return;
   printf("[detail] catalogo remontou: %s saiu de %d para %d\n",
          idxImdb, idx, novo);
   fflush(stdout);
