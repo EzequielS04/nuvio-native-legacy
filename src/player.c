@@ -69,6 +69,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "mkvass.h"
 #include "relogio.h"
 #include "intro.h"
+#include "seekr.h"
 #include "visto.h"     /* fim de episodio/filme para Simkl e conta */
 #include "vistoep.h"   /* o check de "assistido" na lista de episodios (issue #100) */
 #include "pausao.h"
@@ -1389,6 +1390,7 @@ void player_encerrar(void) {
     pausao_fechar();
     episodios_fechar();
     intro_desligar(); introIdx=introT=introE=-1;
+    seekr_desligar();
     // Antes do legenda_desligar: o fio do mkvass ainda entregaria um lote ao
     // overlay depois do desligamento, e o proximo titulo abriria com a legenda
     // do anterior. mkvass_parar grava o sidecar parcial com o que ja veio.
@@ -2322,6 +2324,14 @@ void player_atualizar(float dt, Uint32 agora) {
     { double bf = video_buffer_fim();
       mkvass_folga(bf > 0.5 ? bf - (double)posSeg : -1.0); }
     if (d > 1.0) duracaoSeg = (float)d;
+    // MINIATURAS DO SEEKR: so com a duracao REAL (o servico escolhe a versao
+    // da folha por ela) e uma vez por titulo — seekr_pedir ignora o repetido.
+    if (d > 60.0 && video_pronto() && !ehCanal() && ajustes_seekr_ligado()) {
+      const CatItem *cs = item();
+      if (cs && cs->imdb[0])
+        seekr_pedir(cs->imdb, strcmp(cs->tipo, "series") ? 0 : epT,
+                    strcmp(cs->tipo, "series") ? 0 : epE, (long)(d * 1000.0));
+    }
     if (!retomadaAplicada && video_pronto() && d>1.0) {
       retomadaAplicada=1;
       if(retomarPct>0) video_buscar(d*retomarPct/100.0);
@@ -2491,6 +2501,33 @@ void player_atualizar(float dt, Uint32 agora) {
 
 // hh:mm:ss so quando passa de uma hora — "0:03:12" num episodio curto le como
 // erro de formatacao, nao como tempo.
+static void fmtTempo(char *b, size_t n, float seg, int negativo);
+// MINIATURA DO SEEKR acima da barra, so enquanto a pessoa procura (o avanco
+// em curso ou a barra ainda deslizando ate o alvo). Centrada na cabeca da
+// barra e presa as margens do conteudo. O tempo embaixo e o do QUADRO (cue),
+// nao o da posicao crua: o quadro existe a cada ~10 s, e chamar de 18:29 o
+// quadro das 18:30 seria uma pequena mentira (seekrvtt.h).
+static void seekrMiniatura(float bx, float bw, float frac, float yBarra, float a) {
+  double cue = 0.0;
+  GLuint t;
+  if (ehCanal() || !(scrubbing || posVisSolto) || a < 0.05f) return;
+  t = seekr_quadro(posSeg, &cue);
+  if (!t) return;
+  { const float w = 384.0f, h = 216.0f;
+    float x = bx + bw * frac - w * 0.5f, y = yBarra - 28.0f - h;
+    char rot[32];
+    if (x < PLR_MARGEM) x = PLR_MARGEM;
+    if (x + w > bx + bw - PLR_MARGEM) x = bx + bw - PLR_MARGEM - w;
+    gfx_cor((GfxRect){ x - 3.0f, y - 3.0f, w + 6.0f, h + 6.0f }, 10.0f / (h + 6.0f),
+            0.0f, 0.0f, 0.0f, 0.55f * a);
+    gfx_textura((GfxRect){ x, y, w, h }, t);
+    gfx_anel((GfxRect){ x, y, w, h }, 0.0f, 2.0f, 1.0f, 1.0f, 1.0f, 0.85f * a);
+    fmtTempo(rot, sizeof rot, (float)cue, 0);
+    { TxtLinha lt = txt_linha_corta(TXT_PLR_CORPO, rot, 255, 255, 255, 255, w);
+      gfx_cor((GfxRect){ x + (w - lt.w) * 0.5f - 10.0f, y + h - lt.h - 12.0f, lt.w + 20.0f, lt.h + 6.0f },
+              0.5f, 0.0f, 0.0f, 0.0f, 0.60f * a);
+      txt_desenhar_alpha(lt, x + (w - lt.w) * 0.5f, y + h - lt.h - 9.0f, a); } }
+}
 static void fmtTempo(char *b, size_t n, float seg, int negativo) {
   if (seg < 0.0f) seg = 0.0f;
   int t = (int)(seg + 0.5f);
@@ -3352,6 +3389,7 @@ void player_desenhar(Uint32 agora) {
   // nada, e a barra parecia so comecar a andar depois de um tempo.
   if (andado.w > 0.5f)
     gfx_cor(andado, PLR_TRILHO_R, fr, fg, fb, a);
+  seekrMiniatura(bx, bw, frac, yBarra, a);
 
   // Filme: somente nome. Serie: nome seguido de T/E e titulo do episodio.
   // O arquivo e o provedor pertencem a folha de fontes, nao ao transporte.
