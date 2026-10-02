@@ -1,6 +1,6 @@
 <picture>
   <source media="(max-width: 640px)" srcset="docs/assets/nuvio-readme-banner-mobile.png">
-  <img src="docs/assets/nuvio-readme-banner.png" alt="Nuvio Native Legacy. A native TV client for LG webOS and Samsung Tizen. Independent, unofficial fork." width="1600">
+  <img src="docs/assets/nuvio-readme-banner.png" alt="Nuvio Native Legacy. A native TV client for LG webOS, Samsung Tizen and Android TV (experimental). Independent, unofficial fork." width="1600">
 </picture>
 
 <p align="center">
