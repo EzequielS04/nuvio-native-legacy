@@ -1,5 +1,5 @@
-// DIGITAR PELO CELULAR: um servidor HTTP minimo, na LAN, enquanto a modal de
-// teclado (teclado.c) esta aberta.
+// DIGITAR PELO CELULAR: um servidor HTTP minimo, na LAN, enquanto o cartao do
+// botao do celular (celbotao.c) esta aberto — em qualquer campo de texto.
 //
 // POR QUE EXISTE (pedido do dono, 02/10/2026): a chave do Seekr tem 64
 // caracteres, e digitar 64 simbolos de a-zA-Z0-9_- no D-pad e a pior parte de
@@ -11,7 +11,7 @@
 // SEGURANCA (o texto e chave de API na maioria dos campos):
 //   - token aleatorio de /dev/urandom, de uso unico: o primeiro POST valido
 //     consome o token e o servidor fecha;
-//   - expira em CEL_VALIDADE_S ou quando a modal fecha (celular_fechar);
+//   - expira em CEL_VALIDADE_S ou quando o cartao fecha (celular_fechar);
 //   - so a pagina (GET) e o envio (POST) no caminho exato do token; o resto e
 //     404, e CEL_ERROS_MAX caminhos errados derrubam o servidor (adivinhar o
 //     token custaria 2^39 tentativas, nao 30);
