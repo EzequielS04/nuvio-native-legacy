@@ -45,6 +45,7 @@ static int campoAberto = -1;
 static char email[TECLADO_LONGO + 1], senha[TECLADO_LONGO + 1];
 static char aviso[160];          // erro local ("preencha..."), traduzido no desenho
 static float animFoco[LE_N], animFocoQr[2];
+static int esperando;            // pedido de e-mail saiu, resposta ainda nao veio
 
 // O e-mail: minusculas (o servidor compara sem caixa), digitos e o que um
 // endereco usa. A senha: todo ASCII imprimivel, com espaco — e a senha que a
@@ -96,6 +97,7 @@ static void enviar(void) {
   }
   aviso[0] = 0;
   sessao_login_email(email, senha);
+  esperando = sessao_estado() == SES_EMAIL;
   // A senha sai da memoria da tela ja: errada, a pessoa digita de novo.
   apagarTexto(senha, sizeof senha);
 }
@@ -154,7 +156,7 @@ static void gerarTexQr(const char *texto) {
 void login_iniciar(void) {
   animBotao = 0.0f;
   pulso = 0.0f;
-  modo = LG_QR; foco = LE_EMAIL; focoQr = 0; campoAberto = -1; aviso[0] = 0;
+  modo = LG_QR; foco = LE_EMAIL; focoQr = 0; campoAberto = -1; aviso[0] = 0; esperando = 0;
   apagarTexto(senha, sizeof senha);
   // Pedir o codigo JA, sem esperar o OK: a pessoa que acabou de instalar o app
   // nao tem nada para decidir nesta tela, e um botao "entrar" antes do codigo
@@ -193,7 +195,6 @@ void login_evento(const SDL_Event *e) {
 
 void login_atualizar(float dt, Uint32 agora) {
   int i, r;
-  SesEstado antes = sessao_estado();
   sessao_passo((unsigned)agora);
   animBotao = anim_mola(animBotao, 1.0f, dt, NV_MOLA_FOCO);
   pulso += dt;
@@ -214,8 +215,11 @@ void login_atualizar(float dt, Uint32 agora) {
     campoAberto = -1;
   }
   // Falhou: o foco vai para onde a pessoa conserta.
-  if (modo == LG_EMAIL && antes == SES_EMAIL && sessao_estado() != SES_EMAIL && !sessao_logada())
-    foco = LE_SENHA;
+  // (O estado muda no fio do pedido, entre quadros: por isso a bandeira.)
+  if (esperando && sessao_estado() != SES_EMAIL) {
+    esperando = 0;
+    if (modo == LG_EMAIL && !sessao_logada()) foco = LE_SENHA;
+  }
   if (focoQr >= qrN() && qrN()) focoQr = qrN() - 1;
   for (i = 0; i < LE_N; i++)
     animFoco[i] = anim_mola(animFoco[i], modo == LG_EMAIL && foco == i && !teclado_aberto() ? 1.0f : 0.0f,
