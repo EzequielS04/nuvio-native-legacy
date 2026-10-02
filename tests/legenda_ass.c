@@ -83,6 +83,34 @@ int main(void) {
      "SSA reduzido: detector case-insensitive e com recuo");
   free(v);
 
+  // A busca de cues e binaria para todos os formatos. SRT/VTT fora de ordem
+  // precisa ter a mesma ordenacao que ASS antes de chegar a essa busca.
+  const char *foraOrdem = "2\n00:00:10,000 --> 00:00:12,000\nMais tarde\n\n"
+                         "1\n00:00:01,000 --> 00:00:03,000\nMais cedo\n\n";
+  n = legenda_extrair(foraOrdem, &v);
+  OK(n == 2 && v[0].inicio == 1.0 && v[1].inicio == 10.0,
+     "SRT fora de ordem: cues ordenados por inicio");
+  free(v);
+  legenda_definir_corpo(foraOrdem);
+  LegendaCue atual;
+  OK(legenda_cues(11.0, 0, &atual, 1) == 1 && !strcmp(atual.texto, "Mais tarde"),
+     "SRT fora de ordem: fala ativa continua visivel");
+  legenda_desligar();
+
+  // NaN passa pelas comparacoes de ordem e envenena a busca binaria; infinito
+  // tambem nao representa um instante valido de uma faixa.
+  n = legenda_extrair("1\n00:00:nan --> 00:00:05,000\nInvalida\n\n"
+                      "2\n00:00:01,000 --> 00:00:inf\nInfinita\n\n"
+                      "4\n00:00:erro --> 00:00:05,000\nTruncada\n\n"
+                      "3\n00:00:01,000 --> 00:00:03,000\nValida\n\n", &v);
+  OK(n == 1 && !strcmp(v[0].texto, "Valida"), "SRT: timestamps nao finitos descartados");
+  free(v);
+  n = legenda_extrair_ass("Dialogue: 0,0:00:nan,0:00:05.00,Default,,0,0,0,,Invalida\n"
+                         "Dialogue: 0,0:00:01.00,0:00:inf,Default,,0,0,0,,Infinita\n"
+                         "Dialogue: 0,0:00:01.00,0:00:03.00,Default,,0,0,0,,Valida\n", &v);
+  OK(n == 1 && !strcmp(v[0].texto, "Valida"), "ASS: timestamps nao finitos descartados");
+  free(v);
+
   // --- CHARSET: o texto chega ao parser em UTF-8, venha como vier -----------
   { const char *cs; char *u;
     // "Não, você está enganado." em Windows-1252

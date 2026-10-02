@@ -6,6 +6,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <limits.h>
+#include <math.h>
+
+// Addons tambem mandam numeros como strings. Evita conversao indefinida de
+// infinito ou expoentes enormes a int/long, preservando tamanho desconhecido.
+static long tamanhoMB(double valor) {
+  return isfinite(valor) && valor > 0 && valor < (double)LONG_MAX ? (long)valor : 0;
+}
 
 static int contem(const char *s, const char *termo) {
   for (; *s; s++) if (!strncasecmp(s, termo, strlen(termo))) return 1;
@@ -159,7 +167,9 @@ int stream_extrair(const char *json, const char *provedor, Stream **saida) {
       s.url[0] = 0;
       if (!js_texto(p, fim, "infoHash", s.infoHash, sizeof s.infoHash) && cr && cr < fim)
         js_texto(cr, fim, "infoHash", s.infoHash, sizeof s.infoHash);
-      s.fileIdx = (int)js_num(p, fim, "fileIdx", -1);
+      double indice = js_num(p, fim, "fileIdx", -1);
+      if (isfinite(indice) && indice >= 0 && indice <= INT_MAX)
+        s.fileIdx = (int)indice;
       if (s.infoHash[0]) lerFontesP2P(p, fim, s.fontes, sizeof s.fontes);
     }
     // Nao tocar URL cortada; sem url e sem hash nao ha o que tocar.
@@ -205,7 +215,7 @@ int stream_extrair(const char *json, const char *provedor, Stream **saida) {
       s.mp4 = token(texto, "mp4") || contem(s.url, ".mp4");
       s.foraCache = stream_texto_fora_de_cache(texto);
       double bytes = js_num(p, fim, "videoSize", 0);
-      if (bytes > 0) s.tamanhoMB = (long)(bytes / (1024.0 * 1024.0));
+      if (bytes > 0) s.tamanhoMB = tamanhoMB(bytes / (1024.0 * 1024.0));
       else {
         const char *u = strstr(texto, " GB");
         double escala = 1024;
@@ -213,7 +223,7 @@ int stream_extrair(const char *json, const char *provedor, Stream **saida) {
         if (u) {
           const char *ini = u;
           while (ini > texto && (isdigit((unsigned char)ini[-1]) || ini[-1] == '.')) ini--;
-          if (ini < u) s.tamanhoMB = (long)(atof(ini) * escala);
+          if (ini < u) s.tamanhoMB = tamanhoMB(atof(ini) * escala);
         }
       }
       if (n == cap) {

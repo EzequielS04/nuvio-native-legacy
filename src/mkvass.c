@@ -149,7 +149,7 @@ static unsigned long lerId(const unsigned char *p, long resta, int *usou) {
 
 // -1 invalido, -2 tamanho desconhecido.
 static long lerTam(const unsigned char *p, long resta, int *usou) {
-  int w, i, todosUm = 1; unsigned long v;
+  int w, i, todosUm = 1; unsigned long long v;
   if (resta < 1) return -1;
   w = larguraDe(p[0]);
   if (w < 1 || w > 8 || resta < w) return -1;
@@ -158,20 +158,27 @@ static long lerTam(const unsigned char *p, long resta, int *usou) {
   for (i = 1; i < w; i++) { if (p[i] != 0xFF) todosUm = 0; v = (v << 8) | p[i]; }
   *usou = w;
   if (todosUm) return -2;
+  if (v > LONG_MAX) return -1;
   return (long)v;
 }
 
 // Vint de DADO (o numero da faixa no Block): mascara removida, sem o caso
 // "desconhecido".
-static long lerVint(const unsigned char *p, long resta, int *usou) {
-  int w, i; unsigned long v;
+static long long lerVint64(const unsigned char *p, long resta, int *usou) {
+  int w, i; unsigned long long v;
+  *usou = 0;
   if (resta < 1) return -1;
   w = larguraDe(p[0]);
   if (w < 1 || w > 8 || resta < w) return -1;
   v = p[0] & (0xFF >> w);
   for (i = 1; i < w; i++) v = (v << 8) | p[i];
   *usou = w;
-  return (long)v;
+  return (long long)v;
+}
+
+static long lerVint(const unsigned char *p, long resta, int *usou) {
+  long long v = lerVint64(p, resta, usou);
+  return v < 0 || v > LONG_MAX ? -1 : (long)v;
 }
 
 static unsigned long lerUint(const unsigned char *p, long n) {
@@ -192,7 +199,7 @@ static int proximo(Iter *it, unsigned long *id, const unsigned char **dados, lon
   t = lerTam(it->p + it->o + ui, it->n - it->o - ui, &ut);
   if (t < 0) return 0;
   it->o += ui + ut;
-  if (it->o + t > it->n) return 0;
+  if (t > it->n - it->o) return 0;
   *dados = it->p + it->o; *tam = t;
   it->o += t;
   return 1;
@@ -1741,8 +1748,11 @@ static int tamanhosLace(const unsigned char *p, long n, unsigned flags,
       long v = 0;
       do {
         if (pos >= n) { free(tam); return 0; }
-        v += p[pos++];
+        unsigned b = p[pos++];
+        if (v > n - pos || b > n - pos - v) { free(tam); return 0; }
+        v += b;
       } while (p[pos - 1] == 255);
+      if (soma > n - pos || v > n - pos - soma) { free(tam); return 0; }
       tam[i] = v; soma += v;
     }
   } else if ((flags & 0x06) == 0x04) {      /* fixed-size lacing */
@@ -1755,17 +1765,19 @@ static int tamanhosLace(const unsigned char *p, long n, unsigned flags,
     v = lerVint(p + pos, n - pos, &w);
     if (v < 0) { free(tam); return 0; }
     tam[0] = v; soma = v; pos += w;
+    if (soma > n - pos) { free(tam); return 0; }
     for (i = 1; i < nf - 1; i++) {
-      unsigned long raw; long delta, bias;
-      raw = (unsigned long)lerVint(p + pos, n - pos, &w);
-      if (!w) { free(tam); return 0; }
-      /* EBML signed integer: bias = 2^(7*w-1)-1. */
-      if (w >= 8) bias = LONG_MAX;
-      else bias = (1L << (7 * w - 1)) - 1L;
-      delta = (long)raw - bias;
-      tam[i] = tam[i - 1] + delta;
-      if (tam[i] < 0) { free(tam); return 0; }
-      soma += tam[i]; pos += w;
+      long long raw = lerVint64(p + pos, n - pos, &w), delta;
+      if (raw < 0) { free(tam); return 0; }
+      pos += w;
+      /* O bias usa os 7*w bits de DADO, inclusive para w=8. Fazê-lo em long
+       * estourava no ARM de 32 bits, e LONG_MAX dava outro valor no host. */
+      delta = raw - ((1LL << (7 * w - 1)) - 1LL);
+      if (delta < -(long long)tam[i - 1] ||
+          delta > (long long)(n - pos) - tam[i - 1]) { free(tam); return 0; }
+      tam[i] = (long)((long long)tam[i - 1] + delta);
+      if (soma > n - pos || tam[i] > n - pos - soma) { free(tam); return 0; }
+      soma += tam[i];
     }
   }
   if (pos > n || soma > n - pos) { free(tam); return 0; }
@@ -1785,6 +1797,7 @@ static long lerBloco(Fio *f, const unsigned char *p, long n, const ClCache *cl,
   if (id != ID_BLOCKGROUP && id != ID_SIMPLEBLOCK) return 0;
   tam = lerTam(p + ui, n - ui, &ut);
   if (tam <= 0) return 0;
+  if (tam > LONG_MAX - ui - ut) return 0;
   total = ui + ut + tam;
   if (total > n) return -(total - n);
   if (id == ID_BLOCKGROUP) {

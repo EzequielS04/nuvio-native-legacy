@@ -15,5 +15,13 @@ int main(void) {
   assert(count==100 && v[99].mp4 && v[99].dolbyVision && v[99].altura==2160);
   assert(!v[0].dolbyVision);free(v);
   count=stream_extrair("{\"streams\":[]}","fixture",&v);assert(count==0);free(v);
+  count=stream_extrair("{\"streams\":["
+    "{\"infoHash\":\"abc\",\"fileIdx\":1e99},"
+    "{\"url\":\"https://example.invalid/a\",\"videoSize\":1e99},"
+    "{\"url\":\"https://example.invalid/b\",\"title\":\"999999999999999999999999999999 GB\"},"
+    "{\"infoHash\":\"def\",\"fileIdx\":2},"
+    "{\"url\":\"https://example.invalid/c\",\"videoSize\":1073741824}]}","fixture",&v);
+  assert(count==5 && v[0].fileIdx==-1 && v[1].tamanhoMB==0 && v[2].tamanhoMB==0);
+  assert(v[3].fileIdx==2 && v[4].tamanhoMB==1024);free(v);
   puts("PASS ASan/UBSan: parser isolado, 100 fontes, MP4/DV na última posição.");
 }

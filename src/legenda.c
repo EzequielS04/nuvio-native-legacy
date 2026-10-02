@@ -7,6 +7,7 @@
 #include <string.h>
 #include <strings.h>
 #include <ctype.h>
+#include <math.h>
 
 static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 static LegendaCue *cues;
@@ -19,9 +20,18 @@ static unsigned geracao;
 static double maiorDur;
 
 static double tempo(const char *s) {
-  int h=0,m=0; double seg=0;
-  if (sscanf(s,"%d:%d:%lf",&h,&m,&seg)==3) return h*3600.0+m*60.0+seg;
-  if (sscanf(s,"%d:%lf",&m,&seg)==2) return m*60.0+seg;
+  double h=0,m=0,seg=0,t;
+  int usados=0;
+  if (sscanf(s,"%lf:%lf:%lf%n",&h,&m,&seg,&usados)==3) {
+    if (s[usados] && !isspace((unsigned char)s[usados])) return -1;
+    t=h*3600.0+m*60.0+seg;
+    return isfinite(t) && h>=0 && m>=0 && seg>=0 ? t : -1;
+  }
+  if (sscanf(s,"%lf:%lf%n",&m,&seg,&usados)==2) {
+    if (s[usados] && !isspace((unsigned char)s[usados])) return -1;
+    t=m*60.0+seg;
+    return isfinite(t) && m>=0 && seg>=0 ? t : -1;
+  }
   return -1;
 }
 
@@ -61,6 +71,8 @@ static LegendaCue *crescer(LegendaCue *v, int n, int *cap) {
   nv = realloc(v, (size_t)*cap * sizeof *v);
   return nv ? nv : NULL;
 }
+
+static int cmpCue(const void *a, const void *b);
 
 // --- SRT / WebVTT ------------------------------------------------------------
 
@@ -104,6 +116,9 @@ int legenda_extrair_srt(const char *corpo, LegendaCue **saida) {
   }
   free(buf);
   if(!n){free(v);return 0;}
+  // legenda_cues usa busca binaria e a mesma janela de duracao do ASS.
+  // SRT/VTT reordenado pelo servidor tambem precisa satisfazer esse contrato.
+  qsort(v,(size_t)n,sizeof *v,cmpCue);
   *saida=v;return n;
 }
 
