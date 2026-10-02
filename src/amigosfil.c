@@ -263,20 +263,20 @@ static void desenhaConvite(float x0, float y, float alt, int focada, Uint32 agor
     float yy = r.y + 30.0f;
     txt_desenhar(t1, tx, yy);
     yy += (float)t1.h + 8.0f;
-    txt_bloco(TXT_CAPTION, "Veja o que eles estão assistindo e troquem recomendações.",
-              200, 198, 210, tx, yy, tw, 30.0f, 1.0f, 2);
-    yy = r.y + r.h - 30.0f - 30.0f;
+    yy += txt_bloco(TXT_CAPTION, "Veja o que eles estão assistindo e troquem recomendações.",
+                    200, 198, 210, tx, yy, tw, 30.0f, 1.0f, 2) + 10.0f;
+    { float yOk = r.y + r.h - 30.0f - 30.0f;
     { char linha[160];
       if (cel) snprintf(linha, sizeof linha, "%s", i18n("OK · digite o código de um amigo pelo celular"));
       else snprintf(linha, sizeof linha, "%s", i18n("OK · adicionar um amigo"));
       { TxtLinha t = txt_linha_corta(TXT_CAPTION, linha, 247, 192, 138, 255, tw);
-        txt_desenhar(t, tx, yy); } }
+        txt_desenhar(t, tx, yOk); } }
     if (cod[0]) {
       char c2[64];
       snprintf(c2, sizeof c2, i18n("Seu código: %s"), cod);
       { TxtLinha t = txt_linha_corta(TXT_CAPTION, c2, 168, 166, 178, 255, tw);
-        txt_desenhar(t, tx, yy - (float)t.h - 6.0f); }
-    } }
+        if (yy + (float)t.h < yOk - 4.0f) txt_desenhar(t, tx, yy); }
+    } } }
   if (cel)
     celb_botao(CELB_AMIGO, (GfxRect){ r.x + r.w - 48.0f - bd, r.y + (r.h - bd) * 0.5f, bd, bd },
                focada, NULL, 0, 0, 1.0f);

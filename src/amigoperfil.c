@@ -166,7 +166,7 @@ void amigoperfil_desenhar(Uint32 agora) {
     if (t) {
       gfx_tex_aspect_atual = tex_aspecto(arte);
       gfx_rect((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H * 0.62f }, t, GFX_HERO, 0, 0, 0, 0,
-               0, 0, 0, 0.30f * a);
+               0, 0, 0, 0.22f * a);
       gfx_tex_aspect_atual = 0.0f;
     } }
 
@@ -219,7 +219,7 @@ void amigoperfil_desenhar(Uint32 agora) {
     // OS QUATRO NUMEROS DO MES, numa grade 2x2. "—" quando nao ha dado.
     { char v[4][32];
       const char *rot[4] = { "assistidas neste mês", "filmes vistos", "séries em curso",
-                             "das suas recomendações vistas" };
+                             "recomendações vistas" };
       float bw = (lw - 16.0f) * 0.5f, bh = 116.0f;
       int i;
       if (perf.minutosMes >= 0) snprintf(v[0], sizeof v[0], i18n("%d h"), perf.minutosMes / 60);
