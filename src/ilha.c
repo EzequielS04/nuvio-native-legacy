@@ -762,8 +762,8 @@ void ilha_desenhar(Uint32 agora) {
   // EM VOO o cartao e o da sessao que acabou de sair; se ela sumiu, a pilula
   // saiu da tela ou o modal abriu por cima, o voo acaba seco.
   if (voo) {
-    if (!temCartao[ILHA_VIVO]) vooFim("sem cartao", agora);
-    else if (!relogioQuer && vooDesde && agora - vooDesde > 200u) vooFim("sem relogio", agora);
+    if (!temCartao[ILHA_VIVO]) vooFim("cartao", agora);
+    else if (!relogioQuer && vooDesde && agora - vooDesde > 200u) vooFim("relogio", agora);
     else if (modalAberto) vooFim("modal", agora);
     else cartaoVez = ILHA_VIVO;
   }
