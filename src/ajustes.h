@@ -365,6 +365,8 @@ int         ajustes_tmdb_cw(void);              // tmdb_enrich_continue_watching
 int         ajustes_mdblist_ligado(void);       // mdblist_enabled
 // Miniaturas do Seekr na barra de tempo: ajuste ligado E chave definida.
 int         ajustes_seekr_ligado(void);
+int         ajustes_seekr_fita(void);       // anterior/atual/seguinte
+int         ajustes_seekr_ajuste_s(void);   // sincronia, em segundos (-60..60)
 // `fonte` e um ExFonte de extras.h (trakt, imdb, tmdb, tomatoes, audience,
 // metacritic, letterboxd). 0 = esconder a nota dessa fonte na fileira.
 int         ajustes_mdblist_fonte(int fonte);   // mdblist_show_*

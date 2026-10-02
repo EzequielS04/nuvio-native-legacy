@@ -2004,6 +2004,7 @@ static void saltar(int dir) {
 static void terminarSalto(void) {
   if (!scrubbing) return;
   scrubbing = 0;
+  seekr_ocioso();   // solta a folha decodificada (~22 MB), fica o JPEG
   if (comVideo) {
     video_buscar(posSeg);
     if (scrubTocava) { video_pausar(0); tocando = 1; }
@@ -2508,25 +2509,43 @@ static void fmtTempo(char *b, size_t n, float seg, int negativo);
 // nao o da posicao crua: o quadro existe a cada ~10 s, e chamar de 18:29 o
 // quadro das 18:30 seria uma pequena mentira (seekrvtt.h).
 static void seekrMiniatura(float bx, float bw, float frac, float yBarra, float a) {
-  double cue = 0.0;
-  GLuint t;
+  GLuint t[3] = { 0, 0, 0 };
+  double cue[3] = { -1, -1, -1 };
+  int fita, n, k;
+  const float w = 384.0f, h = 216.0f, ws = 256.0f, hs = 144.0f, vao = 16.0f;
+  float x, y, xs[3], tot;
   if (ehCanal() || !(scrubbing || posVisSolto) || a < 0.05f) return;
-  t = seekr_quadro(posSeg, &cue);
-  if (!t) return;
-  { const float w = 384.0f, h = 216.0f;
-    float x = bx + bw * frac - w * 0.5f, y = yBarra - 28.0f - h;
+  seekr_definir_ajuste_ms((long)ajustes_seekr_ajuste_s() * 1000L);
+  fita = ajustes_seekr_fita();
+  n = fita ? 3 : 1;
+  if (!seekr_quadros(posSeg, n, t, cue)) return;
+  // A fita: anterior e seguinte menores dos lados da atual. A largura total e
+  // o que se prende as margens, para a fita nunca sair da tela.
+  tot = fita ? w + 2.0f * (ws + vao) : w;
+  x = bx + bw * frac - tot * 0.5f;
+  if (x < PLR_MARGEM) x = PLR_MARGEM;
+  if (x + tot > bx + bw - PLR_MARGEM) x = bx + bw - PLR_MARGEM - tot;
+  y = yBarra - 28.0f - h;
+  if (fita) { xs[0] = x; xs[1] = x + ws + vao; xs[2] = xs[1] + w + vao; }
+  else xs[0] = x;
+  for (k = 0; k < n; k++) {
+    int atual = (n == 1 || k == 1);
+    float qw = atual ? w : ws, qh = atual ? h : hs;
+    float qx = xs[k], qy = atual ? y : y + (h - hs);
     char rot[32];
-    if (x < PLR_MARGEM) x = PLR_MARGEM;
-    if (x + w > bx + bw - PLR_MARGEM) x = bx + bw - PLR_MARGEM - w;
-    gfx_cor((GfxRect){ x - 3.0f, y - 3.0f, w + 6.0f, h + 6.0f }, 10.0f / (h + 6.0f),
+    if (!t[k] || cue[k] < 0) continue;
+    gfx_cor((GfxRect){ qx - 3.0f, qy - 3.0f, qw + 6.0f, qh + 6.0f }, 10.0f / (qh + 6.0f),
             0.0f, 0.0f, 0.0f, 0.55f * a);
-    gfx_textura((GfxRect){ x, y, w, h }, t);
-    gfx_anel((GfxRect){ x, y, w, h }, 0.0f, 2.0f, 1.0f, 1.0f, 1.0f, 0.85f * a);
-    fmtTempo(rot, sizeof rot, (float)cue, 0);
-    { TxtLinha lt = txt_linha_corta(TXT_PLR_CORPO, rot, 255, 255, 255, 255, w);
-      gfx_cor((GfxRect){ x + (w - lt.w) * 0.5f - 10.0f, y + h - lt.h - 12.0f, lt.w + 20.0f, lt.h + 6.0f },
+    gfx_textura((GfxRect){ qx, qy, qw, qh }, t[k]);
+    gfx_anel((GfxRect){ qx, qy, qw, qh }, 0.0f, atual ? 2.0f : 1.0f, 1.0f, 1.0f, 1.0f,
+             (atual ? 0.85f : 0.35f) * a);
+    // O tempo e o do QUADRO, nao o da posicao (ver seekrvtt.h).
+    fmtTempo(rot, sizeof rot, (float)cue[k], 0);
+    { TxtLinha lt = txt_linha_corta(TXT_PLR_CORPO, rot, 255, 255, 255, atual ? 255 : 200, qw);
+      gfx_cor((GfxRect){ qx + (qw - lt.w) * 0.5f - 10.0f, qy + qh - lt.h - 12.0f, lt.w + 20.0f, lt.h + 6.0f },
               0.5f, 0.0f, 0.0f, 0.0f, 0.60f * a);
-      txt_desenhar_alpha(lt, x + (w - lt.w) * 0.5f, y + h - lt.h - 9.0f, a); } }
+      txt_desenhar_alpha(lt, qx + (qw - lt.w) * 0.5f, qy + qh - lt.h - 9.0f, a); }
+  }
 }
 static void fmtTempo(char *b, size_t n, float seg, int negativo) {
   if (seg < 0.0f) seg = 0.0f;
@@ -3389,7 +3408,6 @@ void player_desenhar(Uint32 agora) {
   // nada, e a barra parecia so comecar a andar depois de um tempo.
   if (andado.w > 0.5f)
     gfx_cor(andado, PLR_TRILHO_R, fr, fg, fb, a);
-  seekrMiniatura(bx, bw, frac, yBarra, a);
 
   // Filme: somente nome. Serie: nome seguido de T/E e titulo do episodio.
   // O arquivo e o provedor pertencem a folha de fontes, nao ao transporte.
@@ -3434,6 +3452,8 @@ void player_desenhar(Uint32 agora) {
     hTit = (float)lt.h;
     yTit = yMetaBase - hTit;
     txt_desenhar_alpha(lt, cx, yTit, ac); }
+  // Depois do titulo: a miniatura fica POR CIMA dele enquanto a pessoa procura.
+  seekrMiniatura(bx, bw, frac, yBarra, a);
 
   // --- fileira de BOTOES: o transporte do aparelho --------------------------
   // Sem botoes redundantes de salto. O foco percorre so as acoes visiveis.

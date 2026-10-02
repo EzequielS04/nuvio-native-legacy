@@ -274,6 +274,9 @@ typedef enum {
   // em seekr.txt (dados), por aparelho, como a do fanart.tv; o teste e acao.
   // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_SEEKR_LIGADO, AJ_SEEKR_CHAVE, AJ_SEEKR_TESTAR,
+  // Fita (anterior/atual/seguinte) e sincronia da miniatura do Seekr. LOCAIS.
+  // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_SEEKR_FITA, AJ_SEEKR_AJUSTE,
   AJ_N
 } OpcaoId;
 
@@ -855,6 +858,8 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Miniaturas na barra de tempo",    V_LIGA, 2),          // local: seekrLocal
   ACAO("Chave do Seekr"),
   ACAO("Testar chave do Seekr"),
+  ESC("Fita de miniaturas",              V_LIGA, 2),          // local: seekrFitaLocal
+  NUM("Sincronia da miniatura",          -60, 60, 1, " s"),   // local: seekrAjusteLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1014,6 +1019,7 @@ static const char *CHAVE[] = {
   "relogioPosLocal",
   // LOCAL e SEM o "-"; a chave e credencial e mora em seekr.txt (dados).
   "seekrLocal", "-seekrChave", "-seekrTestar",
+  "seekrFitaLocal", "seekrAjusteLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1172,6 +1178,7 @@ static const Item TELA[] = {
       OPC(AJ_FANART_CHAVE),
     GRP("Seekr", "Miniaturas da barra de tempo no player.", "aj_images"),
       OPC(AJ_SEEKR_LIGADO), OPC(AJ_SEEKR_CHAVE), OPC(AJ_SEEKR_TESTAR),
+      OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
     GRP("Debrid", "Chaves de API para tocar torrents pelo seu serviço.", "aj_plug"),
       OPC(AJ_DEBRID_AD), OPC(AJ_DEBRID_AD_TESTAR), OPC(AJ_DEBRID_RD),
       OPC(AJ_DEBRID_TB), OPC(AJ_DEBRID_PM),
@@ -1483,6 +1490,8 @@ static int valor[] = {
   // cada titulo aberto gasta uma consulta da cota diaria da pessoa.
   1,                /* miniaturas do Seekr */
   0, 0,             /* chave e teste do Seekr: acoes */
+  1,                /* fita de miniaturas: DESLIGADA (V_LIGA: 1 = Desligado), uma so */
+  0,                /* sincronia da miniatura: 0 s (a documentacao: nada automatico) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -2150,6 +2159,8 @@ static const char *seekrMascarada(void) {
   return m;
 }
 int ajustes_seekr_ligado(void) { return lig(AJ_SEEKR_LIGADO) && seekrChave[0]; }
+int ajustes_seekr_fita(void)   { return lig(AJ_SEEKR_FITA); }
+int ajustes_seekr_ajuste_s(void) { return valor[AJ_SEEKR_AJUSTE]; }
 
 // ENDERECO DO SERVIDOR P2P (p2p.h). Mora em p2p.txt na pasta de dados, por
 // aparelho: e o IP de um PC/NAS da casa desta TV, sem sentido em outra.
@@ -3184,6 +3195,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: /* o web nao tem a ilha */
+    case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: /* o web nao tem o Seekr */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
     // Linha do titulo: o web nao tem, e nenhuma conta pode desliga-las aqui.
     case AJ_NT_IMDB: case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
@@ -3738,6 +3750,7 @@ static int inativa(int op) {
       return !ajustes_cw_ligado();
     case AJ_CW_BLUR_PROX: return !ajustes_cw_ligado() || !ajustes_cw_thumb_episodio();
     case AJ_EXPANDIR_ATRASO: return !ajustes_expandir_poster();
+    case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: return !lig(AJ_SEEKR_LIGADO);
     // Som: na Samsung (.wgt) o trailer e sempre mudo (trailerfonte_com_som).
     case AJ_HERO_TRAILER_SOM:
       return !lig(AJ_HERO_TRAILER) || !trailerfonte_com_som(trailerfonte_tizen());
@@ -4103,6 +4116,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_MDB_CHAVE: return "A chave vem da sua conta Nuvio ou do arquivo do pacote. Não dá para digitar nesta TV.";
     case AJ_SEEKR_LIGADO: return "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.";
     case AJ_SEEKR_CHAVE: return "Sua chave pessoal do Seekr, gratuita na prévia em seekr.tv. Fica só nesta TV e aparece mascarada.";
+    case AJ_SEEKR_FITA: return "Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.";
+    case AJ_SEEKR_AJUSTE: return "Use quando a miniatura mostra sempre a cena de alguns segundos antes ou depois. Acontece quando a sua versão do título é diferente da usada pelo Seekr (outro corte, abertura mais longa). Vale para todos os títulos; volte a 0 ao trocar de filme.";
     case AJ_SEEKR_TESTAR: return "Pergunta ao Seekr se a chave vale. Não envia nada sobre o que você assiste.";
     case AJ_FANART_CHAVE: return "Sua chave pessoal do fanart.tv, gratuita em fanart.tv/get-an-api-key. Com ela a fonte fanart.tv entra no Background do hero. Fica só nesta TV e aparece mascarada.";
     case AJ_MDB_TRAKT: case AJ_MDB_IMDB: case AJ_MDB_TMDB:

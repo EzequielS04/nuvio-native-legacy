@@ -40,27 +40,30 @@ int main(void) {
   emVoo = 1;
   recortar(r);                    // sincrono: libera r
   assert(!emVoo);
-  assert(prontoPx && prontoW == 320 && prontoH == 180 && prontoCue == 3);
+  assert(prontos[0].px && prontos[0].w == 320 && prontos[0].h == 180 && prontos[0].cue == 3);
   for (y = 0; y < 180; y++)
-    difs += memcmp(prontoPx + (size_t)y * 320 * 4,
+    difs += memcmp(prontos[0].px + (size_t)y * 320 * 4,
                    (unsigned char *)ref->pixels + (size_t)(180 + y) * ref->pitch + 320 * 4,
                    320 * 4) != 0;
   assert(difs == 0);
-  // A folha ficou guardada: o segundo recorte nao le o arquivo de novo.
-  assert(folhaSup && folhaIdx == 0);
-  // Recorte fora da folha: nada pronto, sem estourar.
-  free(prontoPx); prontoPx = NULL;
+  // A folha ficou guardada, decodificada e em JPEG.
+  assert(folhaSup && folhaIdx == 0 && jpgBytes && jpgIdx == 0);
+  // Ocioso solta a decodificada e mantem o JPEG.
+  seekr_ocioso();
+  assert(!folhaSup && jpgBytes);
+  // Recorte fora da folha: nada pronto, sem estourar (e decodifica do JPEG).
+  soltarProntos();
   r = calloc(1, sizeof *r);
   snprintf(r->url, sizeof r->url, "tests/amostra.jpg");
   r->folha = 0; r->x = 400; r->y = 0; r->w = 320; r->h = 180; r->g = geracao; emVoo = 1;
   recortar(r);
-  assert(!prontoPx && !emVoo);
+  assert(!prontos[0].px && !prontos[1].px && !emVoo);
   // Geracao velha (titulo trocado no meio): descartado.
   r = calloc(1, sizeof *r);
   snprintf(r->url, sizeof r->url, "tests/amostra.jpg");
   r->folha = 0; r->x = 0; r->y = 0; r->w = 320; r->h = 180; r->g = geracao - 1; emVoo = 1;
   recortar(r);
-  assert(!prontoPx);
+  assert(!prontos[0].px && !prontos[1].px);
   SDL_FreeSurface(ref);
   seekr_desligar();
   printf("seekr_recorte: ok\n");

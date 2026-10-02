@@ -42,6 +42,20 @@ int  seekr_estado(void);
 // a etiqueta deve mostrar, nao a posicao crua. Pede a folha sozinho; enquanto
 // a nova nao chega devolve a anterior (melhor que piscar).
 GLuint seekr_quadro(double posSeg, double *cueSeg);
+// A FITA (anterior, atual, seguinte), a sugestao da documentacao para deixar a
+// grade de ~10 s explicita. n = 1 e o mesmo que seekr_quadro; n = 3 enche
+// texs[0..2] e cueSeg[0..2] nessa ordem (0 / -1 onde nao ha). 1 quando ha a
+// atual (ou a anterior a ela, enquanto a nova nao chega).
+int seekr_quadros(double posSeg, int n, GLuint *texs, double *cueSeg);
+// Fim do avanco: solta a folha DECODIFICADA (3200x1800, ~22 MB medidos) e fica
+// so o JPEG, para a proxima busca na mesma folha nao ir a rede.
+void seekr_ocioso(void);
+// SINCRONIA DA MINIATURA, em ms, somada a posicao antes da escolha. Existe
+// porque a folha foi tirada de UMA versao do titulo: noutra versao (corte
+// regional, abertura mais longa) a miniatura fica deslocada por igual no
+// filme todo. A documentacao pede um ajuste manual e desaconselha deduzir o
+// numero da diferenca de duracao — por isso nao ha nada automatico aqui.
+void seekr_definir_ajuste_ms(long ms);
 // BLOQUEIA: confere a chave em /v1/keys/validate. 1 valida, 0 recusada,
 // -1 sem resposta. Chamar fora do fio de desenho.
 int  seekr_validar(const char *chave);
