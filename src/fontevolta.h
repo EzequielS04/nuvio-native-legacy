@@ -80,8 +80,13 @@ typedef struct {
 } FontevoltaSinais;
 int fontevolta_decidir(const FontevoltaSinais *g, const char **motivo);
 
-// PRAZO para a fonte guardada provar que abre (loadCompleted/pronto). Passou
-// disso carregando, a busca normal assume. Ver a medida em app.c.
-#define FONTEVOLTA_PRAZO_MS 10000u
+// PRAZO para a fonte guardada provar que abre (pronto). Passou disso
+// carregando, a busca normal assume. O MESMO teto do caminho normal
+// (VOD_FONTE_PRAZO_MS, app.c), e nao um "curto": MEDIDO na TCL em 02/10, um
+// MKV 4K de 10 GB levou 10,7 e 12,5 s da URL ao pronto — com 10 s o recuo
+// matou uma abertura que ia dar certo e custou a busca inteira por cima. A
+// falha RAPIDA (4xx/5xx, aviso, erro do player) ja sai pela conferencia e
+// pelo erro; o prazo so cobre a fonte que trava calada.
+#define FONTEVOLTA_PRAZO_MS 30000u
 
 #endif
