@@ -35,6 +35,7 @@
 #include <SDL2/SDL_image.h>
 #include "gl_compat.h"
 #include "posterprov.h"
+#include "trakt.h"
 #include <unistd.h>
 #include <assert.h>
 #include <stdio.h>
@@ -293,6 +294,25 @@ int main(int argc, char **argv) {
   }
   cat_definir_tudo(itens, total, fils, NF);
   quadros(60, NULL);
+  // NV_VISTOS=1 (#212): o selo de visto pelo HISTORICO, sem progresso. Dois
+  // filmes de "Popular" pelo leitor de /sync/watched/movies (o corpo do Trakt)
+  // e uma serie de "Em alta" pelo historico de titulo — nenhum deles tem
+  // progresso, que era a unica coisa que o selo lia.
+  if (getenv("NV_VISTOS")) {
+    char corpo[600];
+    extern void cat_historico_definir_id(const char *imdb, const char *tipo, int visto);
+    snprintf(corpo, sizeof corpo,
+             "[{\"plays\":1,\"last_watched_at\":\"2026-01-01T00:00:00.000Z\",\"movie\":{\"title\":\"A\",\"year\":2020,"
+             "\"ids\":{\"trakt\":1,\"slug\":\"a\",\"imdb\":\"%s\",\"tmdb\":1}}},"
+             "{\"plays\":2,\"movie\":{\"title\":\"B\",\"ids\":{\"trakt\":2,\"imdb\":\"%s\"}}}]",
+             itens[fils[1].ini].imdb, itens[fils[1].ini + 2].imdb);
+    printf("[shot] filmes vistos lidos: %d\n", trakt_ler_filmes_vistos(corpo));
+    cat_historico_definir_id(itens[fils[2].ini + 1].imdb, "series", 1);
+    printf("[shot] cat_visto pop0=%d pop1=%d pop2=%d serie1=%d\n",
+           cat_visto(&itens[fils[1].ini]), cat_visto(&itens[fils[1].ini + 1]),
+           cat_visto(&itens[fils[1].ini + 2]), cat_visto(&itens[fils[2].ini + 1]));
+    quadros(10, NULL);
+  }
   // NV_TIPOS="chave=tipo,chave=tipo": a forma escolhida em "Estilo da fileira"
   // (o numero FilTipo de fileiras.h), como se a pessoa tivesse escolhido.
   if (getenv("NV_TIPOS")) {
@@ -426,6 +446,32 @@ int main(int argc, char **argv) {
     quadros(120, NULL);
     printf("[shot] ctx depois da escolha aberto=%d\n", ctx_aberto());
     snprintf(bmp, sizeof bmp, "%s-ctx-4-depois.bmp", saida); quadros(1, bmp);
+  }
+
+  // NV_VISTO_CTX=<n> (#212): segurar OK no PRIMEIRO cartaz da fileira n (um
+  // passo a direita: o segundo), descer NV_VISTO_DESCE linhas ate "Marcar como
+  // assistido" e OK. Sem Trakt o espelho e na hora: a home depois tem de
+  // mostrar o selo naquele cartaz.
+  if (getenv("NV_VISTO_CTX")) {
+    int r, alvo = atoi(getenv("NV_VISTO_CTX"));
+    int d = getenv("NV_VISTO_DESCE") ? atoi(getenv("NV_VISTO_DESCE")) : 1;
+    ajusta(camadas[0] - '0', 0);
+    for (r = 0; r < 14; r++) tecla(SDLK_UP);
+    quadros(60, NULL);
+    for (r = 0; r < alvo; r++) { tecla(SDLK_DOWN); quadros(40, NULL); }
+    tecla(SDLK_RIGHT); quadros(80, NULL);
+    snprintf(bmp, sizeof bmp, "%s-visto-0-antes.bmp", saida); quadros(1, bmp);
+    segurarOk();
+    for (r = 0; r < d; r++) teclaCtx(SDLK_DOWN);
+    quadros(60, NULL);
+    snprintf(bmp, sizeof bmp, "%s-visto-1-menu.bmp", saida); quadros(1, bmp);
+    teclaCtx(SDLK_RETURN);
+    quadros(60, NULL);
+    snprintf(bmp, sizeof bmp, "%s-visto-2-confirmado.bmp", saida); quadros(1, bmp);
+    if (ctx_aberto()) { teclaCtx(SDLK_ESCAPE); teclaCtx(SDLK_BACKSPACE); }
+    quadros(90, NULL);
+    printf("[shot] visto ctx: menu aberto=%d\n", ctx_aberto());
+    snprintf(bmp, sizeof bmp, "%s-visto-3-home.bmp", saida); quadros(1, bmp);
   }
 
   tex_encerrar();

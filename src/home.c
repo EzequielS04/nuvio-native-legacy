@@ -5054,7 +5054,14 @@ void home_desenhar(Uint32 agora) {
           // liam como um traco "—", nao como um check. Nao e o visto.png: esse
           // e um OLHO, o do botao "marcar como visto" do detalhe, e no disco
           // de 34 px virava um olho sobre o poster.
-          if (cItem && cItem->progresso >= 90 && tipo != FILEIRA_CONTINUE) {
+          //
+          // O ESTADO E cat_visto (#212), nao mais `progresso >= 90`: o
+          // progresso so existe para o que esta pausado, entao filme visto
+          // no Trakt (ou marcado pelo menu, que zera o progresso) nunca
+          // ganhava o selo. Leitura O(1) por cartaz (hash em catalogo.c),
+          // sem pedido de rede: o mapa ja veio no ciclo da descoberta.
+          if (cItem && tipo != FILEIRA_CONTINUE && tipo != FILEIRA_RETORNO &&
+              ajustes_selo_visto() && cat_visto(cItem)) {
             float d = 34.0f;
             float mx = px + w - d - 14.0f, my = py + 14.0f;
             GfxRect disco = { mx, my, d, d };

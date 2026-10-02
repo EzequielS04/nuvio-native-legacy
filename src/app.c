@@ -1591,7 +1591,10 @@ static void marcarAssistidoSeSolicitado(void) {
   // funcao devolvia antes de gravar — o espelho local nunca mudava, so o Trakt.
   // Sem duracao conhecida do item, usa-se uma hora inteira como sentinela: o
   // que importa e a porcentagem (100% ou 0%), e e isso que sync e fileira leem.
-  { int visto = (c->progresso >= 90);
+  // O ESTADO DE PARTIDA e o mesmo que o olho desenha (cat_visto, #212). Era
+  // `progresso >= 90`: filme visto no Trakt mas sem progresso local mostrava o
+  // olho aberto e o toque "marcava" de novo em vez de desmarcar.
+  { int visto = cat_visto(c);
     const double dur = 3600.0;
     cat_salvar_progresso(i, visto ? 0.0 : dur, dur);
     if (c->imdb[0]) {
@@ -1603,7 +1606,11 @@ static void marcarAssistidoSeSolicitado(void) {
       // — nunca era escrito. Com Trakt quem escreve o historico e o 2xx dele.
       visto_titulo(c->imdb, c->tipo, c->temporadas, c->nTemporadas, !visto,
                    visto_destinos());
-      if (!trakt_ativo()) cat_historico_definir_id(c->imdb, c->tipo, !visto);
+      // NA HORA, com ou sem Trakt (#212): o olho e o selo leem o historico, e
+      // esperar o 2xx deixava o olho no estado velho por um ou dois segundos
+      // — ou para sempre, se o historico conhecido dizia o contrario do
+      // progresso. O 2xx do Trakt (trakt.c) reescreve o mesmo valor.
+      cat_historico_definir_id(c->imdb, c->tipo, !visto);
     }
     printf("[app] assistido %s: %s\n", visto ? "desmarcado" : "marcado",
            c->titulo); fflush(stdout); }

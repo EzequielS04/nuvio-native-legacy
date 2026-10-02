@@ -117,8 +117,11 @@ int trakt_credencial_igual(const char *tk, const char *cli) {
   return !strcmp(token, tk) && !strcmp(cliente, c);
 }
 
+// Marca do ultimo /sync/watched/movies aplicado (carregarFilmesVistos).
+static char filmesAtiv[40];
 int trakt_definir(const char *tk, const char *cli) {
   if (!tk || !*tk) return 0;
+  filmesAtiv[0] = 0;   // conta nova: o mapa de filmes vistos vem de novo
   snprintf(token, sizeof token, "%s", tk);
   if (cli && *cli) snprintf(cliente, sizeof cliente, "%s", cli);
   ligado = token[0] && cliente[0];
@@ -789,6 +792,58 @@ static void consultarProximos(TarefaProx *v, int n, const char *const *cab) {
   if (!criados) fioProximo(NULL);
   for (q = 0; q < criados; q++) pthread_join(fios[q], NULL);
   proxTarefas = NULL; proxN = 0;
+// TODOS OS FILMES VISTOS (#212). carregarHistoricoReal le as ultimas 100
+// reproducoes, e quem ve serie enche esse limite de episodios: no log da #212
+// ("historico: 12 serie(s) com ultimo episodio visto") nenhum filme entrou, e
+// o selo de visto do cartaz e o olho do detalhe nao tinham de onde sair.
+// /sync/watched/movies e o mapa COMPLETO, uma linha curta por filme.
+//
+// So baixa de novo quando o Trakt diz que mudou: /sync/last_activities e um
+// corpo de ~1 KB, e o ciclo da descoberta roda a cada 5 min. O que a pessoa
+// marca nesta TV ja entrou no historico na hora (ctxmenu/app), sem esperar.
+//
+// trakt_ler_filmes_vistos devolve quantos filmes entraram (-1 = corpo nulo).
+int trakt_ler_filmes_vistos(const char *corpo) {
+  const char *p;
+  int n = 0;
+  if (!corpo) return -1;
+  p = strchr(corpo, '[');
+  p = p ? p + 1 : NULL;
+  while (p && *p) {
+    const char *f, *obj;
+    char id[24] = "";
+    while (*p && (unsigned char)*p <= ' ') p++;
+    if (*p != '{') break;
+    f = js_fim(p);
+    if (!f) break;
+    obj = strstr(p, "\"movie\"");
+    if (obj && obj < f) {
+      const char *o = strchr(obj, '{');
+      if (o && o < f) js_texto(o, js_fim(o), "imdb", id, sizeof id);
+    }
+    if (id[0]) { cat_historico_definir_id(id, "movie", 1); n++; }
+    p = js_prox(f);
+  }
+  return n;
+}
+
+static void carregarFilmesVistos(const char *const *cab) {
+  char ativ[40] = "";
+  char *corpo = rede_baixar_com("https://api.trakt.tv/sync/last_activities", 15, cab);
+  if (corpo) {
+    const char *m = strstr(corpo, "\"movies\"");
+    const char *o = m ? strchr(m, '{') : NULL;
+    if (o) js_texto(o, js_fim(o), "watched_at", ativ, sizeof ativ);
+    free(corpo);
+  }
+  if (ativ[0] && !strcmp(ativ, filmesAtiv)) return;
+  corpo = rede_baixar_com("https://api.trakt.tv/sync/watched/movies", 25, cab);
+  if (!corpo) { printf("[trakt] filmes vistos: falhou\n"); fflush(stdout); return; }
+  { int n = trakt_ler_filmes_vistos(corpo);
+    printf("[trakt] filmes vistos: %d\n", n);
+    fflush(stdout);
+    if (n >= 0) snprintf(filmesAtiv, sizeof filmesAtiv, "%s", ativ); }
+  free(corpo);
 }
 
 static volatile int continuarFalhou;
@@ -890,6 +945,7 @@ int trakt_continuar(CatItem *saida, int max) {
   }
   free(corpo);
   carregarHistoricoReal(cab);
+  carregarFilmesVistos(cab);
   printf("[trakt] historico: %d serie(s) com ultimo episodio visto\n", nUlt);
   // "A SEGUIR": serie cujo ultimo episodio visto terminou e que nao esta
   // pausada em nada. Entra com progresso 0 no episodio seguinte; enfeitar()

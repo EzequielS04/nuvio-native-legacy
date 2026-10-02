@@ -2850,11 +2850,6 @@ void detail_atualizar(float dt, Uint32 agora) {
 // com `justify-content: flex-end`). Empilhar de cima para baixo faz o bloco
 // inteiro subir e descer conforme o tamanho da sinopse; no web ele fica preso
 // na base e so o topo se move.
-// Quanto do titulo ja foi assistido, 0..100. 0 quando nunca comecou.
-static int progressoDe(int i) {
-  const CatItem *c = cat_item(i);
-  return c ? c->progresso : 0;
-}
 
 // COR DE FOCO dos botoes do hero: a cor de realce dos Ajustes, e a tinta do
 // texto/glifo por cima dela — escura sobre realce claro, branca sobre realce
@@ -2939,7 +2934,10 @@ static void desenhaBotao(GfxRect r, const char *rot, int icone, int focado, floa
       // ASSISTIDO: olho aberto quando ja viu, olho riscado quando nao. Antes o
       // icone era sempre o mesmo e nao dizia estado nenhum — era so um enfeite
       // que o dono nao conseguia ler ("avisar o que foi visto").
-      gfx_icone(ig, progressoDe(idx) >= 90 ? "visto" : "naovisto", ic, ic, ic, a);
+      // O ESTADO E O DE cat_visto (#212), o mesmo do selo do cartaz: antes era
+      // so `progresso >= 90`, e filme visto em outro aparelho (ou marcado pelo
+      // menu do cartaz, que zera o progresso) ficava com o olho riscado.
+      gfx_icone(ig, cat_visto(cat_item(idx)) ? "visto" : "naovisto", ic, ic, ic, a);
     } else if (icone == ACAO_ARTE) {
       // MOLDURA COM MONTANHA: o glifo universal de "imagem". PNG de
       // deploy/app/art/icones como os vizinhos; arte.svg descreve o desenho.

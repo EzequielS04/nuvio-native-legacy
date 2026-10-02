@@ -269,6 +269,9 @@ typedef enum {
   // Ilha do relogio (ilha.h): mostrar a pilula do relogio em repouso e em que
   // canto. LOCAIS. No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_RELOGIO, AJ_RELOGIO_POS,
+  // Selo de visto no canto do cartaz (home.c, cat_visto, #212). LOCAL. No fim
+  // pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_SELO_VISTO,
   AJ_N
 } OpcaoId;
 
@@ -847,6 +850,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Proxy de TS da Live TV",          V_LIGA, 2),          // local: liveTvProxyLocal
   ESC("Relógio na tela",                 V_LIGA, 2),          // local: relogioTelaLocal
   ESC("Posição do relógio",              V_RELOGIO_POS, 3),   // local: relogioPosLocal
+  ESC("Selo de assistido nos pôsteres",  V_LIGA, 2),          // local: seloVistoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1004,6 +1008,7 @@ static const char *CHAVE[] = {
   "liveTvProxyLocal",
   "relogioTelaLocal",
   "relogioPosLocal",
+  "seloVistoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1098,7 +1103,7 @@ static const Item TELA[] = {
       OPC(AJ_MENU_EXPLORAR), OPC(AJ_MENU_GUIA), OPC(AJ_MENU_AGENDA),
       OPC(AJ_MENU_PERFIL),
       OPC(AJ_HERO), OPC(AJ_HERO_CATALOGOS), OPC(AJ_DESCOBRIR),
-      OPC(AJ_GRAD_CLASSICO), OPC(AJ_ROTULOS), OPC(AJ_NOME_ADDON),
+      OPC(AJ_GRAD_CLASSICO), OPC(AJ_ROTULOS), OPC(AJ_SELO_VISTO), OPC(AJ_NOME_ADDON),
       OPC(AJ_SUFIXO_TIPO), OPC(AJ_OCULTAR_NLANC), OPC(AJ_NOTAS_HOME),
       OPC(AJ_PS_FUNDO),
     GRP("Continuar assistindo", "Configure os próximos episódios e a ordem.", "aj_rotate-ccw-clock"),
@@ -1467,6 +1472,7 @@ static int valor[] = {
   0,                /* proxy de TS da Live TV: LIGADO (V_LIGA: 0 = Ligado) */
   0,                /* relogio na tela: LIGADO (V_LIGA: 0 = Ligado), o de sempre */
   0,                /* posicao do relogio: Automatica, a de sempre */
+  0,                /* selo de assistido nos posteres: LIGADO (V_LIGA: 0 = Ligado) */
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1640,6 +1646,7 @@ int ajustes_addons_do_principal(void) { return lig(AJ_ADDONS_PRINCIPAL); }
 #endif
 int ajustes_relogio_ligado(void) { return lig(AJ_RELOGIO); }
 int ajustes_relogio_pos(void) { return valor[AJ_RELOGIO_POS]; }
+int ajustes_selo_visto(void) { return lig(AJ_SELO_VISTO); }
 static void riscoNotar(int op, int antes);
 void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_VIDRO, a); }
 int ajustes_p2p_ligado(void) { return lig(AJ_P2P_LIGADO) && !SEGURO; }
@@ -3093,6 +3100,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: /* o web nao tem a ilha */
+    case AJ_SELO_VISTO:     /* o web nao tem a escolha */
     case AJ_MENU_EXPLORAR: case AJ_MENU_GUIA: case AJ_MENU_AGENDA: case AJ_MENU_PERFIL:
     // Linha do titulo: o web nao tem, e nenhuma conta pode desliga-las aqui.
     case AJ_NT_IMDB: case AJ_NT_TOMATES: case AJ_NT_AUDIENCIA: case AJ_NT_META:
@@ -3864,6 +3872,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_HERO_CATALOGOS: return "De onde vêm os títulos do destaque: os primeiros do catálogo, um sorteio, ou uma fileira da Home. OK troca.";
     case AJ_PS_FUNDO: return "A tela \"Quem está assistindo?\" mostra arte do catálogo atrás dos perfis. Desligado volta à tela lisa de antes.";
     case AJ_DESCOBRIR: return "Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.";
+    case AJ_SELO_VISTO: return "Um check pequeno no canto de cima do pôster dos títulos que você já assistiu, pelo Trakt, pela conta ou marcados nesta TV.";
     case AJ_ROTULOS: return "Escreve o nome do título abaixo do cartaz. A maior parte da arte já traz o nome impresso.";
     case AJ_NOME_ADDON: return "Acrescenta o nome do addon ao título da fileira, para separar dois catálogos com o mesmo nome.";
     case AJ_SUFIXO_TIPO: return "Acrescenta \"Filme\" ou \"Série\" ao título da fileira, para separar as duas versões do mesmo catálogo.";
@@ -6671,7 +6680,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_RAIL_BLUR: case AJ_HERO: case AJ_HERO_CATALOGOS:
     case AJ_PS_FUNDO: case AJ_DESCOBRIR: case AJ_ROTULOS:
     case AJ_NOME_ADDON: case AJ_SUFIXO_TIPO: case AJ_OCULTAR_NLANC:
-    case AJ_NOTAS_HOME: case AJ_GRAD_CLASSICO:
+    case AJ_NOTAS_HOME: case AJ_GRAD_CLASSICO: case AJ_SELO_VISTO:
       return AJPV_HOME;
     case AJ_CW_LIGADO: case AJ_CW_OK: case AJ_CW_FONTE:
     case AJ_CW_ESTILO: case AJ_CW_THUMB: case AJ_CW_BLUR_PROX:

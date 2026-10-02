@@ -316,6 +316,10 @@ int cat_tirar_item_da_fileira(int indice);
 // a home remonta no mesmo quadro. Devolve quantos cards sairam.
 int cat_tirar_continuar(const char *imdb);
 void cat_zerar_progresso(int indice);
+// TITULO INTEIRO VISTO (#212): o selo do cartaz e o olho do detalhe. Historico
+// conhecido (Trakt, conta, acao da pessoa) manda; sem ele, progresso >= 90 so
+// em filme. O(1), pode ser chamada por cartaz em todo quadro.
+int cat_visto(const CatItem *c);
 
 void cat_salvar_progresso(int indice, double posSeg, double durSeg);
 void cat_salvar_progresso_ep(int indice, double posSeg, double durSeg, int temporada, int episodio);
