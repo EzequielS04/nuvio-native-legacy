@@ -395,6 +395,7 @@ static void ilhaModal(GfxRect m, float t, float a) {
     float f;
     const char *rot = i18n(MD_ROT[i]);
     float w = botao_largura(rot, MD_IC[i], i == 0);
+    if (x + w > m.x + m.w - IL_MD_PAD) break;   // idioma longo: o botao que nao cabe sai
     if (i == 0) f = 1.0f - passo(t, IL_T_FOCO1, 0.18f);
     else if (i == 1) f = passo(t, IL_T_FOCO1, 0.18f) * (1.0f - passo(t, IL_T_FOCO2, 0.18f));
     else f = passo(t, IL_T_FOCO2, 0.18f) * (1.0f - sv);
@@ -407,9 +408,14 @@ static void ilhaModal(GfxRect m, float t, float a) {
     TxtLinha vf = txt_linha(TXT_CALLOUT, "\xE2\x80\xBA", 250, 251, 253, 255);
     float xr = m.x + m.w - IL_MD_PAD, yc = by + BOTAO_H_SECUNDARIO * 0.5f;
     float x0 = xr - (float)v.w - 8.0f - (float)s.w;
-    txt_desenhar_alpha(s, x0, yc - (float)s.h * 0.5f, a * 0.9f * (1.0f - sv));
+    // Botoes longos (ru, de): a palavra sai e fica so a seta; sem lugar nem
+    // para ela, nada — texto por cima de botao nunca.
+    float sa = 1.0f;
+    if (x0 < x - BOTAO_GAP + 12.0f) { sa = 0.0f; x0 = xr - (float)v.w; }
+    if (x0 < x - BOTAO_GAP + 12.0f) return;
+    txt_desenhar_alpha(s, x0, yc - (float)s.h * 0.5f, a * 0.9f * (1.0f - sv) * sa);
     txt_desenhar_alpha(v, xr - (float)v.w, yc - (float)v.h * 0.5f - 2.0f, a * 0.9f * (1.0f - sv));
-    txt_desenhar_alpha(sf, x0, yc - (float)s.h * 0.5f, a * sv);
+    txt_desenhar_alpha(sf, x0, yc - (float)s.h * 0.5f, a * sv * sa);
     txt_desenhar_alpha(vf, xr - (float)v.w + 4.0f * sv, yc - (float)v.h * 0.5f - 2.0f, a * sv); }
 }
 
@@ -687,11 +693,9 @@ static void spotLinha(const SpotLin *l, float x, float y, float w, float f, floa
     { TxtLinha t = txt_linha_corta(TXT_CALLOUT, s1, t1, t1, t1, 255, r.x + r.w - tx - 16.0f);
       TxtLinha m = txt_linha_corta(TXT_CAPTION2, meta, t2, t2, t2, 255, r.x + r.w - tx - 16.0f);
       txt_desenhar_alpha(t, tx, r.y + 26.0f, a);
-      txt_desenhar_alpha(m, tx, r.y + 26.0f + (float)t.h + 6.0f, a);
-      if (f > 0.5f) {
-        TxtLinha o = txt_linha(TXT_CAPTION2, i18n("OK   Abrir"), t2, t2, t2, 255);
-        txt_desenhar_alpha(o, tx, r.y + r.h - (float)o.h - 14.0f, (f - 0.5f) * 2.0f * a);
-      } }
+      // Sem o "OK  Abrir" da linha de verdade: na altura da previa ele cairia
+      // em cima da meta, e o rodape ja diz o que o OK faz.
+      txt_desenhar_alpha(m, tx, r.y + 26.0f + (float)t.h + 6.0f, a); }
     return;
   }
   { GfxRect ic = { r.x + 12.0f, r.y + 6.0f, 0, r.h - 12.0f };
@@ -703,7 +707,7 @@ static void spotLinha(const SpotLin *l, float x, float y, float w, float f, floa
         else gfx_cor(ic, 0.5f, 0.20f, 0.205f, 0.225f, a);
         break;
       case SL_CANAL:
-        ic.w = ic.h * 16.0f / 9.0f;
+        ic.w = ic.h * 2.3f;
         // Sem logo no pacote: o nome do canal como marca, na caixa do logo.
         gfx_cor(ic, rr(8.0f, ic), 0.16f, 0.165f, 0.185f, a);
         { TxtLinha m = txt_linha_corta(TXT_MINI, l->t1, 214, 218, 228, 255, ic.w - 10.0f);
