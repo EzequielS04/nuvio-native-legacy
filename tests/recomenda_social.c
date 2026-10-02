@@ -72,6 +72,9 @@ static const char *AMIGO_FECHADO =
   "{\"id\":\"nuvio:bbb\",\"nome\":\"Gustavo\",\"avatar\":\"\",\"grau\":1,\"via\":\"\",\"desde\":1,\"origem\":\"\",\"compartilha\":0,"
   "\"mes\":null,\"agora\":null,\"gostou\":[],\"recs\":[],\"gosto\":null}";
 
+static int avisos[8], nAvisos;
+static void aoAlcance(int n) { if (nAvisos < 8) avisos[nAvisos++] = n; }
+
 static RecEvento ev(int fonte, int acao, const char *pessoa, const char *imdb, long long quando) {
   RecEvento e;
   memset(&e, 0, sizeof e);
@@ -268,9 +271,20 @@ int main(void) {
     lerAmigo(cab);
     CONFERE(recomenda_amigo_estado() == REC_SOC_FALHA && recomenda_amigo(&a), "falha de rede mantem o cache"); }
 
+  // --- aviso ao modulo do player (atividade_definir_permitido no merge) ----------
+  SDL_LockMutex(mtx); alcance = 2; SDL_UnlockMutex(mtx);
+  recomenda_ao_mudar_alcance(aoAlcance);
+  CONFERE(nAvisos == 1 && avisos[0] == 2, "registrar avisa o nivel atual");
+  recomenda_responder_alcance(2);
+  CONFERE(nAvisos == 1, "mesmo nivel nao repete o aviso");
+  recomenda_responder_alcance(0);
+  CONFERE(nAvisos == 2 && avisos[1] == 0, "mudanca avisa");
+  recomenda_responder_alcance(1);
+
   // --- esquecer ---------------------------------------------------------------------------
   recomenda_esquecer();
   CONFERE(recomenda_feed_n() == 0 && recomenda_alcance() == REC_ALCANCE_NAO_PERGUNTADO, "esquecer zera");
+  CONFERE(nAvisos == 4 && avisos[3] == 0, "sair da conta avisa 0 (%d avisos)", nAvisos);
   { char *b = dados_ler(REC_ARQ_FEED); CONFERE(!b, "esquecer apaga o feed do disco"); free(b); }
 
   printf(falhas ? "recomenda_social: %d falhas\n" : "recomenda_social: ok\n", falhas);

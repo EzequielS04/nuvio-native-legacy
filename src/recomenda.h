@@ -488,6 +488,22 @@ int  recomenda_alcance(void);
 // a fila de atividade que ainda nao saiu.
 void recomenda_responder_alcance(int nivel);
 
+
+// LIGACAO COM O MODULO DO PLAYER (src/atividade.c, branch agente/reacao): ele so
+// envia com atividade_definir_permitido(nivel) > 0. No merge, uma linha no
+// arranque: recomenda_ao_mudar_alcance(atividade_definir_permitido). O aviso
+// chama na hora com o nivel atual e de novo a cada mudanca (resposta da pessoa,
+// adocao do servidor, sair da conta), SEMPRE fora do mutex deste modulo.
+// "Nao perguntado" chega como 0.
+void recomenda_ao_mudar_alcance(void (*fn)(int nivel));
+
+// Os cabecalhos do servico para OUTRO modulo que fale com ele (atividade.c):
+// Authorization, X-Nuvio-Auth e, num perfil que nao e o principal,
+// X-Nuvio-Perfil — sem este, o evento cairia na pessoa do perfil principal.
+// `cab` precisa de 4 posicoes; os buffers sao do chamador. 0 = sem identidade.
+int  recomenda_cabecalhos(const char **cab, char *aut, size_t na, char *via, size_t nv,
+                          char *perfil, size_t np);
+
 // --- ATIVIDADE DO PLAYER (contrato com o agente do player) --------------------
 //
 // O player preenche e chama recomenda_atividade(); o modulo decide se sai (so

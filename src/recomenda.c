@@ -260,6 +260,7 @@ static void perfilZerarPublico(void);
 static void socNovoEsquecer(void);
 static void socNovoCarregar(void);
 static void socNovoRegistrado(const char *nome, const char *exib, int alcance);
+static void avisarAlcance(void);
 
 int recomenda_ativo(void) { return NV_REC_URL[0] != 0; }
 int recomenda_aberta(void) { return cartaoAberto; }
@@ -450,6 +451,7 @@ void recomenda_iniciar(void) {
          nItens, cursor, aparecer);
   fflush(stdout);
   SDL_UnlockMutex(mtx);
+  avisarAlcance();
 }
 
 int recomenda_n(void) {
@@ -1112,6 +1114,7 @@ void recomenda_esquecer(void) {
   nFeed = 0;
   socNovoEsquecer();
   SDL_UnlockMutex(mtx);
+  avisarAlcance();
   dados_apagar(REC_ARQ_PERFIL);
   dados_apagar(REC_ARQ);
   dados_apagar(REC_ARQ_CURSOR);
@@ -1238,6 +1241,9 @@ static int registrar(const char **cab) {
   registrado = 1;
   gravarEu();
   socNovoRegistrado(nome, exib, alc);
+  SDL_UnlockMutex(mtx);
+  avisarAlcance();
+  SDL_LockMutex(mtx);
   // RECONCILIACAO EM UM SO SENTIDO, e o sentido importa.
   //
   // Se este aparelho nunca perguntou e o servidor ja diz 1, a pessoa respondeu
@@ -2537,6 +2543,45 @@ static void socNovoRegistrado(const char *nome, const char *exib, int alc) {
 
 // --- API publica ---------------------------------------------------------------
 
+static void (*alcanceCb)(int);
+static int alcanceAvisado = -9;
+
+// Fora do mutex: o outro modulo pode chamar recomenda_* de dentro do aviso.
+static void avisarAlcance(void) {
+  int v;
+  void (*fn)(int);
+  if (!mtx) return;
+  SDL_LockMutex(mtx);
+  v = alcance > 0 ? alcance : 0;
+  fn = alcanceCb;
+  if (v == alcanceAvisado) fn = NULL;
+  else alcanceAvisado = v;
+  SDL_UnlockMutex(mtx);
+  if (fn) fn(v);
+}
+
+void recomenda_ao_mudar_alcance(void (*fn)(int nivel)) {
+  if (!mtx) mtx = SDL_CreateMutex();
+  SDL_LockMutex(mtx); alcanceCb = fn; alcanceAvisado = -9; SDL_UnlockMutex(mtx);
+  avisarAlcance();
+}
+
+int recomenda_cabecalhos(const char **cab, char *aut, size_t na, char *via, size_t nv,
+                         char *perfil, size_t np) {
+  const char *tcab[4];
+  char chave[160];
+  if (!recomenda_ativo() || !cab || !aut || !via || !perfil) return 0;
+  if (trakt_ativo() && trakt_cabecalhos(tcab, aut, na, chave, sizeof chave)) {
+    snprintf(via, nv, "X-Nuvio-Auth: trakt");
+  } else if (sessao_token()[0]) {
+    snprintf(aut, na, "Authorization: Bearer %s", sessao_token());
+    snprintf(via, nv, "X-Nuvio-Auth: nuvio");
+  } else return 0;
+  cab[0] = aut; cab[1] = via; cab[2] = NULL; cab[3] = NULL;
+  if (perfilCab(perfil, np, !strcmp(via, "X-Nuvio-Auth: nuvio"))) cab[2] = perfil;
+  return 1;
+}
+
 const char *recomenda_meu_nome(void) { return meuNome; }
 const char *recomenda_minha_exibicao(void) { return minhaExib; }
 
@@ -2577,6 +2622,7 @@ void recomenda_responder_alcance(int nivel) {
   if (nivel == 0) nAtivN = 0;
   gravarAlcance();
   SDL_UnlockMutex(mtx);
+  avisarAlcance();
   acordar();
 }
 
