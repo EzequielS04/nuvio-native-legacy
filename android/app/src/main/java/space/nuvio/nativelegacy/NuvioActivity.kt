@@ -210,6 +210,39 @@ class NuvioActivity : SDLActivity() {
         env("NUVIO_ARTE", File(res, "art").path)
         env("NUVIO_LOCALE", java.util.Locale.getDefault().toLanguageTag())
         env("NUVIO_TV_INFO", "${Build.MANUFACTURER} ${Build.MODEL}|${Build.VERSION.SDK_INT}|${Build.VERSION.RELEASE}|$versao")
+        env("NUVIO_SAIDA_ANTERIOR", saidaAnterior())
+    }
+
+    // POR QUE O PROCESSO ANTERIOR MORREU, segundo o proprio Android (11+). O log
+    // do app nao ve ANR, crash nativo nem o low memory killer: a sessao
+    // simplesmente para. Medido no D1 (1.7.0, TCL Android 14): 6 sessoes que
+    // terminam em FPS=60 na home, sem linha nenhuma. android.c imprime isto.
+    private fun saidaAnterior(): String {
+        if (Build.VERSION.SDK_INT < 30) return ""
+        return try {
+            val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            val r = am.getHistoricalProcessExitReasons(packageName, 0, 1).firstOrNull() ?: return ""
+            val nome = when (r.reason) {
+                android.app.ApplicationExitInfo.REASON_ANR -> "ANR"
+                android.app.ApplicationExitInfo.REASON_CRASH -> "crash-java"
+                android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "crash-nativo"
+                android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "pouca-memoria"
+                android.app.ApplicationExitInfo.REASON_SIGNALED -> "sinal"
+                android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "saiu-sozinho"
+                android.app.ApplicationExitInfo.REASON_USER_REQUESTED -> "usuario"
+                android.app.ApplicationExitInfo.REASON_USER_STOPPED -> "usuario-parou"
+                android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "recurso-excessivo"
+                android.app.ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "permissao"
+                android.app.ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "dependencia"
+                android.app.ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "falha-inicio"
+                android.app.ApplicationExitInfo.REASON_OTHER -> "outro"
+                else -> "desconhecido"
+            }
+            val ha = (System.currentTimeMillis() - r.timestamp) / 1000
+            val desc = (r.description ?: "").replace('\n', ' ').take(120)
+            "motivo=$nome(${r.reason}) status=${r.status} importancia=${r.importance} " +
+                "pss=${r.pss / 1024}MB rss=${r.rss / 1024}MB ha=${ha}s desc=$desc"
+        } catch (_: Exception) { "" }
     }
 
     // Copia assets art/ e fonts/ para filesDir/res, uma vez por INSTALACAO.

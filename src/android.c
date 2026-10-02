@@ -28,6 +28,9 @@ static void logaTv(void) {
   printf("[tv] modelo=%s host=android-%s dotnet=- tela=- sdk=%s app=%s\n",
          campo[0][0] ? campo[0] : "?", campo[2][0] ? campo[2] : "?",
          campo[1][0] ? campo[1] : "?", campo[3][0] ? campo[3] : "?");
+  // Motivo da morte do processo anterior (ApplicationExitInfo, NuvioActivity).
+  e = getenv("NUVIO_SAIDA_ANTERIOR");
+  if (e && e[0]) printf("[android] saida anterior: %s\n", e);
   fflush(stdout);
 }
 
