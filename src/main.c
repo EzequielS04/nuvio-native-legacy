@@ -307,6 +307,30 @@ static void teclasInjetadas(void (*entregar)(const SDL_Event *)) {
       continue;
     }
 
+    // "tocar:960,540" e "arrastar:x0,y0,x1,y1" fazem o papel do DEDO (#216),
+    // em coordenadas do layout: SDL_FINGER* normalizados, pelo mesmo
+    // ponteiro_evento do toque de verdade.
+    if (dp && (!strncmp(linha, "tocar:", 6) || !strncmp(linha, "arrastar:", 9))) {
+      float x0 = 0, y0 = 0, x1, y1;
+      int n = sscanf(dp + 1, "%f,%f,%f,%f", &x0, &y0, &x1, &y1), passos, i;
+      if (n < 2) continue;
+      if (n < 4) { x1 = x0; y1 = y0; }
+      passos = n < 4 ? 0 : 12;
+      { SDL_Event t; SDL_zero(t);
+        t.tfinger.touchId = 1; t.tfinger.fingerId = 1;
+        t.type = SDL_FINGERDOWN; t.tfinger.x = x0 / NV_TELA_W; t.tfinger.y = y0 / NV_TELA_H;
+        ponteiro_evento(&t, entregar);
+        for (i = 1; i <= passos; i++) {
+          t.type = SDL_FINGERMOTION;
+          t.tfinger.x = (x0 + (x1 - x0) * i / passos) / NV_TELA_W;
+          t.tfinger.y = (y0 + (y1 - y0) * i / passos) / NV_TELA_H;
+          ponteiro_evento(&t, entregar);
+        }
+        t.type = SDL_FINGERUP; t.tfinger.x = x1 / NV_TELA_W; t.tfinger.y = y1 / NV_TELA_H;
+        ponteiro_evento(&t, entregar); }
+      continue;
+    }
+
     SDL_Keycode k = codigoDaTecla(linha);
     if (!k) continue;
     SDL_Event e; SDL_zero(e);

@@ -257,6 +257,9 @@ IGNORAR = {
     # com a lista de palavras de portugues.
     "elfhosted.com", "ratingposterdb.com", "top-poster", "top-posters.com",
     "toposters.com",
+    # Atalhos de e-mail do teclado (teclado.c, #216): digitam o pedaco de
+    # endereco, igual em toda lingua.
+    ".com", "@gmail.com", "@hotmail.com", "@outlook.com",
     # Pedaco do printf "[tmdb] idioma dos metadados" (ajustes.c,
     # ajustes_tmdb_idioma_relatar): o ternario fica numa linha sem o printf,
     # entao NAO_E_TELA nao o ve. So log.

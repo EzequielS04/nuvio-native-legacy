@@ -3004,9 +3004,18 @@ static int ponteiroNoPlayer(void) {
   return ponteiro_ativo() && aberto && !saindo &&
          !posplay_visivel() && !pausao_visivel();
 }
-static void ponteiroAcordar(int a, int b) { (void)a; (void)b; soBarra = 0; acordar(); }
+// DEDO (#216): tocar no video com os controles escondidos so os mostra (o
+// gesto de todo player de celular); com eles na tela, tocar no video os
+// esconde. Play/Pause por dedo e o botao. O Magic Remote segue como antes.
+static int visivelAntesDoToque;
+static void ponteiroAcordar(int a, int b) {
+  (void)a; (void)b;
+  if (ponteiro_toque()) visivelAntesDoToque = visivel;
+  soBarra = 0; acordar();
+}
 static void ponteiroPlayPause(int a, int b) {
   (void)a; (void)b;
+  if (ponteiro_toque()) { if (visivelAntesDoToque) visivel = 0; return; }
   botao = PLR_PLAY; barraFoco = 0; skipFoco = 0;
   alternarTocando(); acordar();
 }
@@ -3024,6 +3033,19 @@ static void ponteiroBuscar(int a, int b) {
   acordar();
   if (ehCanal() || duracaoSeg <= 0.0f || barraPtrW <= 0.0f) return;
   f = anim_clamp((ponteiro_x() - barraPtrX) / barraPtrW, 0.0f, 1.0f);
+  if (ponteiro_toque()) {
+    // ARRASTAR NA BARRA (#216): o mesmo avanco das setas (saltar) — video
+    // pausado, posSeg na mao do dedo, UMA busca no fim (terminarSalto, depois
+    // de PLR_SCRUB_FIM_MS sem movimento).
+    if (!scrubbing) {
+      scrubbing = 1; scrubPassos = 0; scrubTocava = tocando;
+      if (tocando && comVideo) { video_pausar(1); tocando = 0; }
+    }
+    barraFoco = 1; skipFoco = 0;
+    posSeg = f * duracaoSeg;
+    scrubUltimo = SDL_GetTicks();
+    return;
+  }
   posSeg = f * duracaoSeg;
   if (comVideo) video_buscar(posSeg);
 }
@@ -3564,8 +3586,14 @@ void player_desenhar(Uint32 agora) {
   // A area clicavel da barra e mais alta que o trilho de 4-8 px: um fio desse
   // tamanho nao se acerta com a mao no ar.
   barraPtrX = bx; barraPtrW = bw;
-  if (ponteiroNoPlayer() && a > 0.3f)
-    ponteiro_alvo(bx, yBarra - 14.0f, bw, hTrilho + 28.0f, ponteiroBarra, ponteiroBuscar, 0, 0);
+  // Com dedo (#216) a faixa cresce para 44 px de cada lado: o trilho tem 4 px
+  // logicos, menos de meio milimetro num celular. Os botoes, registrados
+  // depois, continuam ganhando onde a faixa encosta neles.
+  if (ponteiroNoPlayer() && a > 0.3f) {
+    float folga = ponteiro_tem_toque() ? 44.0f : 14.0f;
+    ponteiro_alvo(bx, yBarra - folga, bw, hTrilho + folga * 2.0f, ponteiroBarra, ponteiroBuscar, 0, 0);
+    ponteiro_alvo_arrastavel();
+  }
   // O buffer do pipeline, entre o andado e o fim: e o que mostra que o video
   // esta a frente do relogio. Sem dado do pipeline o segmento nao existe —
   // inventar "quase todo carregado" seria pior que a barra simples. No web ele

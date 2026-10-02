@@ -30,6 +30,8 @@
 //     barra de tempo do player, o fundo que fecha uma folha) chama ele em vez
 //     do OK.
 //   - RODINHA vira seta: cima/baixo, e esquerda/direita na rodinha lateral.
+//   - DEDO (#216): tocar = focar + OK; arrastar rola (vira setas, com
+//     inercia na soltura); arrastar sobre alvo arrastavel chama o ativar.
 //   - SETA DO CONTROLE esconde o cursor; ele volta com um movimento de
 //     verdade (janela curta e limiar de distancia: o tremor de quem aperta a
 //     seta nao conta). Parado alguns segundos ele some sozinho.
@@ -54,6 +56,7 @@ typedef struct {
   PonteiroFn ativar;   // clique proprio no lugar do OK. Pode ser NULL.
                        // Os dois NULL = anteparo: absorve o clique, nao faz nada.
   int a, b;
+  int arrasta;         // ponteiro_alvo_arrastavel: o dedo arrasta, nao rola
 } PonteiroAlvo;
 
 void ponteiro_iniciar(void);
@@ -81,6 +84,15 @@ int  ponteiro_ativo(void);
 void ponteiro_alvo(float x, float y, float w, float h,
                    PonteiroFn focar, PonteiroFn ativar, int a, int b);
 void ponteiro_camada(void);
+// Marca o ULTIMO alvo registrado como arrastavel por dedo (#216): arrastar
+// sobre ele chama o `ativar` a cada movimento, em vez de rolar a tela. E a
+// barra de tempo do player.
+void ponteiro_alvo_arrastavel(void);
+// 1 enquanto focar/ativar estao rodando por causa de um DEDO (e nao do Magic
+// Remote). O player usa para tocar = mostrar controles e arrastar = procurar.
+int  ponteiro_toque(void);
+// Ha tela de toque (Android, ou um dedo ja chegou): alvos pequenos crescem.
+int  ponteiro_tem_toque(void);
 
 // Posicao logica atual (para quem ativa por coordenada, como a barra de tempo).
 float ponteiro_x(void);

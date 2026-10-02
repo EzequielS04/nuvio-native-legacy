@@ -27,7 +27,8 @@ typedef enum {
   SES_AGUARDANDO,   // codigo na tela, esperando a pessoa autorizar
   SES_TROCANDO,     // autorizado, trocando pelo token
   SES_LOGADO,
-  SES_ERRO
+  SES_ERRO,
+  SES_EMAIL         // login por e-mail e senha em andamento (#216)
 } SesEstado;
 
 // Carrega a sessao gravada, se houver. Chamar depois de dados_iniciar e
@@ -61,6 +62,20 @@ void sessao_login_comecar(void);
 void sessao_passo(unsigned agoraMs);
 
 void sessao_cancelar(void);
+
+// LOGIN POR E-MAIL E SENHA (#216), o mesmo do app web (authManager.js
+// signInWithEmail): POST /auth/v1/token?grant_type=password com a chave
+// anonima. A sessao sai gravada IGUAL a do QR (sessao.txt). Interrompe o
+// fluxo do QR. Nao bloqueia: o resultado aparece em sessao_estado() (LOGADO)
+// ou em sessao_erro_email() quando volta a DESLOGADO. Email, senha e token
+// NUNCA vao para o log; as copias internas sao apagadas logo depois do pedido.
+void sessao_login_email(const char *email, const char *senha);
+// Ultima falha do login por e-mail, ja traduzida; "" sem falha.
+const char *sessao_erro_email(void);
+
+// Puro, para tests/sessao_email.c: a frase da tela para uma resposta de erro
+// do /auth/v1/token (status + corpo). Escreve em dst.
+void sessao_email_erro_de(int status, const char *corpo, char *dst, unsigned tam);
 
 // Apaga tokens do disco e da memoria. Depois disto o app volta a nao ter conta
 // nenhuma — e e isso que o usuario espera de "sair".
