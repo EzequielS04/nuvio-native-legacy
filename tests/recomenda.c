@@ -127,7 +127,7 @@ static void simularArranque(void) {
 int main(void) {
   const char *dir = getenv("NUVIO_DADOS");
 #ifndef REC_TESTE_SEM_URL
-  const char *cab[3];
+  const char *cab[4];   // identidade() usa 4 desde o X-Nuvio-Perfil
   char *fixture;
 #endif
 
