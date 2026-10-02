@@ -12,7 +12,7 @@ A TCL recebeu o APK estável 1.7.1 de `~/.cache/nuvio-rel-171`, com SHA256 confe
 
 ## Pendências de decisão e teste
 
-- Retenção veio em cinco minutos; escolher dois ou cinco antes do pacote final. Durante retenção o pipeline único impede trailer da Home.
+- Dono decidiu retenção de dois minutos. Durante retenção o pipeline único impede trailer da Home; após o prazo, a fonte guardada continua disponível para retomada.
 - A versão dos manifestos permanece 1.7.1 até fechar escopo e gerar build identificada de 1.7.2.
 - O dono testa o comportamento nas TVs; não rodar suíte longa nem controlar aparelhos sem combinar e obter a trava exclusiva.
 - Pré-busca MKV ainda tem cálculo unsigned que pode produzir tempo enorme no log. Alterar a espera pode aumentar abertura em até quatro segundos; decisão separada.
