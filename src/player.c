@@ -1451,12 +1451,13 @@ void player_preparar_retencao(void) {
   // player. Sem confirmacao na saida, o app usa o fechamento normal.
   if (prepararRetencao || retido || !podeReter()) return;
   prepararRetencao = 1;
-  video_pausar(1);
 #ifdef NV_ANDROID
-  // Atras do pausar na fila do fio principal: o quadro copiado ja e o parado.
+  // ANTES do pausar na fila do fio principal (teste: PixelCopy depois da
+  // pausa levou 603 ms na TCL).
   video_quadro_pedir();
   saidaIlhaDesde = SDL_GetTicks() | 1u;
 #endif
+  video_pausar(1);
 }
 
 int player_suspender(void) {
