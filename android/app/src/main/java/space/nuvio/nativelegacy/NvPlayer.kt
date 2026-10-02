@@ -175,8 +175,10 @@ object NvPlayer {
         val h = maxOf(2, Math.round(QUADRO_W.toFloat() * sv.height / sv.width))
         val bmp = try { Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888) } catch (e: Throwable) { falha(-2); return }
         val x0 = jx; val y0 = jy; val w0 = jw; val h0 = jh
+        val t0 = SystemClock.uptimeMillis()
         try {
             PixelCopy.request(sv, bmp, { r ->
+                Log.i(TAG, "PixelCopy $r em ${SystemClock.uptimeMillis() - t0} ms (${w}x$h)")
                 if (r == PixelCopy.SUCCESS) {
                     try {
                         val buf = ByteBuffer.allocateDirect(w * h * 4)

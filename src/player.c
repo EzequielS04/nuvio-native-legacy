@@ -247,7 +247,7 @@ static Uint32 retidoDesde;
 // pausa foi confirmada e o quadro do video copiado (video_quadro.h), em vez
 // de ~430 ms de OSD apagando sobre o video parado antes de a home aparecer.
 // O teto cobre um PixelCopy que nao responde: o voo sai com o still.
-#define PLR_SAIDA_ILHA_TETO_MS 220u
+#define PLR_SAIDA_ILHA_TETO_MS 600u
 static Uint32 saidaIlhaDesde;
 static char retidoConta[96], retidoUrl[4096];
 // Botao em foco na fileira de transporte. Comeca no PLAY porque e a resposta
