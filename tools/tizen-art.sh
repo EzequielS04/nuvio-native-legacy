@@ -63,24 +63,48 @@ cp "$ORIGEM"/*.jpg "$DESTINO"/ 2>/dev/null || true
 # campo "image" de badges/index.json, entao trocar a extensao la fecha o
 # circuito sem mexer em uma linha de C (ver src/badges.c:63).
 if find "$DESTINO" -name '*.webp' | grep -q .; then
-  command -v sips >/dev/null || { echo "tizen-art.sh: sips ausente, nao da para converter webp" >&2; exit 1; }
+  # CONVERTER: sips on macOS, ffmpeg on Linux — the test bench (galaxy) has no
+  # sips and the whole build used to stop here. ffmpeg is already required by
+  # tests/mkv_legendas.sh, and `scale=-1:64` reproduces sips' `--resampleHeight
+  # 64` exactly (fixed height, width by aspect ratio).
+  # (Note: `dwebp -getinfo` does not exist in Ubuntu's webp 1.5.0, and plain
+  # `-scale` would need the width read and computed by hand. ffmpeg does both.)
+  if command -v sips >/dev/null; then CONV=sips
+  elif command -v ffmpeg >/dev/null; then CONV=ffmpeg
+  else
+    echo "tizen-art.sh: no webp converter (sips on macOS, ffmpeg on Linux)" >&2
+    exit 1
+  fi
   N=0
   for w in $(find "$DESTINO" -name '*.webp'); do
-    # BADGES NA ALTURA DE USO (#159). Os selos vem com 194 px de altura e sao
-    # desenhados com 28 no maximo (BADGE_H); no Tizen cada um custava ~300 ms
-    # de decode ("[tex] decode lento: 312 ms ... 663x194 (saiu 160x47)",
-    # registros 3595-3632) justo quando a folha de fontes abre. 64 px e ~2,3x
-    # a altura de desenho: continua nitido e decodifica ~9x menos pixels.
+    # BADGES AT THEIR DRAWING HEIGHT (#159). The badges ship 194 px tall and are
+    # drawn at 28 at most (BADGE_H); on Tizen each cost ~300 ms to decode
+    # ("[tex] decode lento: 312 ms ... 663x194 (saiu 160x47)", records
+    # 3595-3632) right when the source sheet opens. 64 px is ~2.3x the drawn
+    # height: still sharp and decodes ~9x fewer pixels.
     RED=""
     case "$w" in */badges/*) RED="--resampleHeight 64" ;; esac
-    sips -s format png $RED "$w" --out "${w%.webp}.png" >/dev/null 2>&1 || {
-      echo "tizen-art.sh: falhou convertendo $w" >&2; exit 1; }
+    if [ "$CONV" = sips ]; then
+      sips -s format png $RED "$w" --out "${w%.webp}.png" >/dev/null 2>&1 || {
+        echo "tizen-art.sh: failed converting $w" >&2; exit 1; }
+    elif [ -n "$RED" ]; then
+      if ! ffmpeg -v error -i "$w" -vf "scale=-1:64:flags=lanczos" -y "${w%.webp}.png" 2>/dev/null; then
+        echo "tizen-art.sh: failed converting $w" >&2; exit 1; fi
+    else
+      if ! ffmpeg -v error -i "$w" -y "${w%.webp}.png" 2>/dev/null; then
+        echo "tizen-art.sh: failed converting $w" >&2; exit 1; fi
+    fi
     rm -f "$w"; N=$((N+1))
   done
-  # O indice aponta para os nomes antigos; sem isto o app procura .webp que nao
-  # existe mais e troca um defeito silencioso por outro.
-  [ -f "$DESTINO/badges/index.json" ] && sed -i '' 's/\.webp"/.png"/g' "$DESTINO/badges/index.json"
-  echo "tizen-art.sh: $N webp convertidos para png" >&2
+  # The index points at the old names; without this the app looks for a .webp
+  # that is gone and one silent defect replaces another.
+  # `sed -i ''` is BSD syntax: on GNU sed the '' becomes the script itself and
+  # the command dies with "cannot read ...: No such file". `-i.bak` + rm works
+  # on both.
+  if [ -f "$DESTINO/badges/index.json" ]; then
+    sed -i.bak 's/\.webp"/.png"/g' "$DESTINO/badges/index.json" && rm -f "$DESTINO/badges/index.json.bak"
+  fi
+  echo "tizen-art.sh: $N webp converted to png (via $CONV)" >&2
 fi
 
 # CONFERE QUE NADA DE PESSOA ENTROU. Nao e paranoia: o .ipk ja saiu uma vez com
