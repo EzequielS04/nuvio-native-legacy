@@ -48,6 +48,7 @@
 #include "anim.h"
 #include "layout.h"
 #include "ajustes.h"
+#include "ajustes_ux.h"
 #include "idioma.h"
 #include "posterprov.h"
 #include "ponteiro.h"
@@ -100,8 +101,9 @@ enum {
   L_ADDON,
   L_RECENTE,
   L_LIMPAR,
+  L_AJUSTE,
 };
-static const float ALTURA[] = { 50, 64, 210, 92, 92, 92, 92, 80, 80, 72, 72 };
+static const float ALTURA[] = { 50, 64, 210, 92, 92, 92, 92, 80, 80, 72, 72, 92 };
 
 typedef struct {
   int  tipo;
@@ -126,6 +128,10 @@ static float animLin[SP_MAX_LIN], entraLin[SP_MAX_LIN];
 
 // --- Estado ----------------------------------------------------------------------
 static int   aberto;
+static int   modoAjustes;
+static int   retornoAjustesValido;
+static char  retornoAjustesConsulta[SP_MAX_TXT];
+static char  retornoAjustesChave[96];
 static float entrada;              // 0..1 (mola)
 // Onde esta o foco. O teclado do app so existe com kbAberto.
 enum { P_CAMPO = 0, P_MIC, P_TECLADO, P_LISTA, P_CEL };
@@ -167,6 +173,8 @@ static int   kbCmd[6], kbNCmd;
 static int ditadoDisponivel(void) { return st_voz_disponivel(); }
 // DIGITAR PELO CELULAR (celbotao.h): o disco no fim da barra, depois do Falar.
 static int celDisponivel(void) { return celb_disponivel(); }
+static void spotAbrirBase(int voz, int tecladoAuto);
+static int primeiraFocavel(void);
 // Largura que os botoes da direita (Falar, Celular) tiram da barra.
 static float botoesW(void) {
   return (ditadoDisponivel() ? SP_MIC_D + 14.0f : 0.0f) + (celDisponivel() ? SP_MIC_D + 14.0f : 0.0f) +
@@ -520,6 +528,42 @@ static void montarVazio(void) {
              snprintf(l->chave, sizeof l->chave, "limpar"); } }
 }
 
+static void montarAjustes(const char *consultaLocal) {
+  AjusteBuscaResultado resultados[10];
+  int i, n;
+  n = ajustes_buscar(consultaLocal, resultados, (int)(sizeof resultados / sizeof resultados[0]));
+  if (modoAjustes && (!consultaLocal || !consultaLocal[0]) && n == 0) {
+    static const char *const termos[] = {"idioma", "legenda", "tema", "qualidade", "animacoes"};
+    int t;
+    for (t = 0; t < (int)(sizeof termos / sizeof termos[0]) && n < 5; t++) {
+      AjusteBuscaResultado sugestao[1];
+      int dup = 0, j;
+      if (ajustes_buscar(termos[t], sugestao, 1) != 1) continue;
+      for (j = 0; j < n; j++) if (resultados[j].op == sugestao[0].op) { dup = 1; break; }
+      if (!dup) resultados[n++] = sugestao[0];
+    }
+  }
+  // No modo dedicado, o rotulo explicita o escopo e consultas vazias podem
+  // trazer sugestoes locais do proprio backend de preferencias. Na busca
+  // comum o grupo so aparece quando ha um ajuste relevante.
+  if (modoAjustes || n > 0) cabecalho(i18n("Ajustes"));
+  for (i = 0; i < n && i < (int)(sizeof resultados / sizeof resultados[0]); i++) {
+    Linha *l = nova(L_AJUSTE);
+    if (!l) return;
+    l->ref = resultados[i].op;
+    snprintf(l->t1, sizeof l->t1, "%s", resultados[i].titulo);
+    snprintf(l->t2, sizeof l->t2, "%s%s%s%s", resultados[i].caminho,
+             resultados[i].valor[0] ? "  ·  " : "", resultados[i].valor,
+             resultados[i].bloqueado ? "  ·  " : "");
+    if (resultados[i].bloqueado) {
+      size_t usado = strlen(l->t2);
+      snprintf(l->t2 + usado, sizeof l->t2 - usado, "%s", i18n("Indisponível"));
+    }
+    snprintf(l->icone, sizeof l->icone, "%s", resultados[i].avancado ? "menu_settings" : "menu_search");
+    snprintf(l->chave, sizeof l->chave, "aj|%d", resultados[i].op);
+  }
+}
+
 static void remontar(void) {
   char alvo[SP_MAX_TXT * 2];
   char chaveFoco[96] = "";
@@ -531,6 +575,16 @@ static void remontar(void) {
   snprintf(montada, sizeof montada, "%s", consulta);
   nLin = 0;
   busca_normalizar(consulta, alvo, sizeof alvo);
+  if (modoAjustes) {
+    montarAjustes(consulta);
+    if (nLin <= (modoAjustes ? 1 : 0)) {
+      Linha *l = nova(L_AVISO);
+      if (l) {
+        snprintf(l->t1, sizeof l->t1, "%s", i18n("Nenhum ajuste encontrado."));
+        snprintf(l->chave, sizeof l->chave, "aj-vazio");
+      }
+    }
+  } else {
   // Sempre, inclusive com o campo vazio: o debounce precisa saber que o
   // texto mudou para nao disparar um termo que ja nao esta no campo.
   spotpessoa_pedir(consulta, SDL_GetTicks());
@@ -547,11 +601,15 @@ static void remontar(void) {
       if (l) { snprintf(l->t1, sizeof l->t1, "%s", i18n("Buscando nos seus addons…"));
                snprintf(l->chave, sizeof l->chave, "aviso"); }
     } else if (nLin == 0) {
+      montarAjustes(consulta);
+    }
+    if (nLin == 0) {
       Linha *l = nova(L_AVISO);
       if (l) { snprintf(l->t1, sizeof l->t1, i18n("Nada encontrado para “%s”."), consulta);
                snprintf(l->t2, sizeof l->t2, "%s", i18n("Confira a grafia ou tente o nome original."));
                snprintf(l->chave, sizeof l->chave, "aviso"); }
     }
+  }
   }
   // Posicoes, e quem ja estava herda foco e entrada.
   { float y = 0.0f;
@@ -570,10 +628,10 @@ static void remontar(void) {
     for (i = 0; i < nLin; i++) if (!strcmp(lin[i].chave, chaveFoco)) { focoL = i; break; }
   if (focoL < 0) for (i = 0; i < nLin; i++) if (focavel(lin[i].tipo)) { focoL = i; break; }
   if (focoL < 0 && painel == P_LISTA) painel = P_CAMPO;
-  ultimoRemoto = busca_codepoints(alvo) >= 2 ? remotoTotal() : -1;
-  ultimoBuscando = desc_buscando();
-  ultimaGeracao = desc_busca_geracao();
-  ultimaGerPessoa = spotpessoa_geracao();
+  ultimoRemoto = !modoAjustes && busca_codepoints(alvo) >= 2 ? remotoTotal() : -1;
+  ultimoBuscando = modoAjustes ? 0 : desc_buscando();
+  ultimaGeracao = modoAjustes ? 0 : desc_busca_geracao();
+  ultimaGerPessoa = modoAjustes ? 0 : spotpessoa_geracao();
 }
 
 static int temResultados(void) {
@@ -586,6 +644,7 @@ static int temResultados(void) {
 // registrarConsulta) — abriu um resultado, fechou com resultado na tela, ou
 // o ditado trouxe o texto. Nunca por letra.
 static void registrar(void) {
+  if (modoAjustes) return;
   if (nConsulta >= 2 && temResultados()) buscasrec_registrar(consulta);
 }
 
@@ -667,8 +726,14 @@ static void lerSistema(void) {
 
 // --- Ciclo de vida -------------------------------------------------------------------
 void spot_abrir(int voz) {
+  modoAjustes = 0;
+  retornoAjustesValido = 0;
+  spotAbrirBase(voz, 1);
+}
+
+static void spotAbrirBase(int voz, int tecladoAuto) {
   kbMontar();
-  guia_preparar_busca();
+  if (!modoAjustes) guia_preparar_busca();
   aberto = 1;
   painel = P_CAMPO; kbF = 0; kbC = 0;
   kbAberto = 0; kbAnim = 0.0f;
@@ -698,7 +763,38 @@ void spot_abrir(int voz) {
 #endif
   fflush(stdout);
   if (voz && ditadoDisponivel()) { painel = P_MIC; ditar(); }
-  else if (imeDisponivel() && st_abre_sozinho()) abrirTecladoSis();
+  else if (tecladoAuto && imeDisponivel() && st_abre_sozinho()) abrirTecladoSis();
+}
+
+void spot_abrir_ajustes(int voz) {
+  modoAjustes = 1;
+  retornoAjustesValido = 0;
+  spotAbrirBase(voz, 1);
+}
+
+void spot_reabrir_ajustes(void) {
+  int i;
+  char chave[sizeof retornoAjustesChave];
+  if (!retornoAjustesValido) return;
+  snprintf(chave, sizeof chave, "%s", retornoAjustesChave);
+  modoAjustes = 1;
+  spotAbrirBase(0, 0);
+  snprintf(consulta, sizeof consulta, "%s", retornoAjustesConsulta);
+  nConsulta = (int)strlen(consulta);
+  painel = P_LISTA;
+  kbAberto = 0;
+  remontar();
+  for (i = 0; i < nLin; i++) {
+    if (!strcmp(lin[i].chave, chave)) { focoL = i; break; }
+  }
+  if (focoL >= 0 && focoL < nLin && lin[focoL].tipo == L_AJUSTE) {
+    scrollAlvo = lin[focoL].y;
+  } else {
+    /* O catálogo local pode ter mudado: mantém a consulta e deixa foco útil. */
+    focoL = primeiraFocavel();
+    scrollAlvo = focoL >= 0 ? lin[focoL].y : 0.0f;
+  }
+  retornoAjustesValido = 0;
 }
 
 void spot_fechar(void) {
@@ -758,6 +854,7 @@ static void acionar(int i) {
     case L_COLECAO:  pedido.tipo = SPOT_COLECAO;  pedido.indice = l->ref; break;
     case L_CATALOGO: pedido.tipo = SPOT_CATALOGO; pedido.indice = l->ref; break;
     case L_ADDON:    pedido.tipo = SPOT_ADDONS;   pedido.indice = l->ref; break;
+    case L_AJUSTE:   pedido.tipo = SPOT_AJUSTE;   pedido.indice = l->ref; break;
     case L_CANAL:
       pedido.tipo = SPOT_CANAL;
       snprintf(pedido.id, sizeof pedido.id, "%s", l->id);
@@ -766,7 +863,12 @@ static void acionar(int i) {
       break;
     default: return;
   }
-  registrar();
+  if (l->tipo == L_AJUSTE) {
+    snprintf(retornoAjustesConsulta, sizeof retornoAjustesConsulta, "%s", consulta);
+    snprintf(retornoAjustesChave, sizeof retornoAjustesChave, "%s", l->chave);
+    retornoAjustesValido = 1;
+  }
+  if (!modoAjustes) registrar();
   temPedido = 1;
   spot_fechar();
 }
@@ -891,6 +993,11 @@ void spot_evento(const SDL_Event *e) {
   }
   if (e->type != SDL_KEYDOWN) { okPress = 0; return; }
 
+  if (modoAjustes && (k == SDLK_AC_BACK || k == SDLK_ESCAPE ||
+      e->key.keysym.scancode == NV_SCANCODE_BACK)) {
+    spot_fechar();
+    return;
+  }
   if (k == SPOT_TECLA_ABRIR || e->key.keysym.scancode == NV_SCANCODE_YELLOW) {
     registrar(); spot_fechar(); return;
   }
@@ -1003,9 +1110,9 @@ void spot_atualizar(float dt, Uint32 agora) {
   lerSistema();
   // A RESPOSTA DA REDE CHEGA DEPOIS DA TECLA: remonta quando a contagem do termo
   // corrente muda ou quando a busca termina (o aviso "Buscando..." sai).
-  spotpessoa_atualizar(agora);
+  if (!modoAjustes) spotpessoa_atualizar(agora);
   if (strcmp(montada, consulta)) remontar();
-  else if (nConsulta >= 2) {
+  else if (!modoAjustes && nConsulta >= 2) {
     int n = remotoTotal(), b = desc_buscando(), g = desc_busca_geracao();
     if (n != ultimoRemoto || b != ultimoBuscando || g != ultimaGeracao ||
         spotpessoa_geracao() != ultimaGerPessoa) remontar();
@@ -1105,6 +1212,7 @@ static void desenhaCampo(float dy, float a, Uint32 agora) {
   } else {
     const char *ph = ouve ? i18n(st_estado() == ST_PERMISSAO ? "Permita o microfone para falar…" : "Ouvindo…")
                    : av[0] ? i18n(av)
+                   : modoAjustes ? i18n("Buscar nos ajustes")
                    : i18n(comMic ? "Buscar ou falar: filmes, séries, pessoas, canais"
                                  : "Buscar filmes, séries, pessoas e canais");
     int amb = !ouve && av[0];

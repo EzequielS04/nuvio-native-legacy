@@ -2,14 +2,15 @@
 
 Base da pesquisa: commit `399c1953`, então no ramo `release/1.6.6`. O nome
 do ramo não identifica a versão do app: esse commit já sucede o commit de
-versão 1.7.0. Revisão da proposta: **02/10/2026**. Estado: **proposta revisada,
-sem implementação ou validação com pessoas/controle físico nesta revisão**.
+versão 1.7.0. Revisão da proposta: **02/10/2026**. Estado: **primeira entrega nativa implementada em worktree isolado; sem validação
+com pessoas/controle físico**. A pesquisa histórica abaixo permanece identificada
+pela base original; o estado atual está no bloco a seguir.
 
 Os rótulos e wireframes abaixo são provisórios; os textos finais de tela e
 suas traduções vêm depois. O inventário descreve a base indicada, não uma
 medição de produção atual. A referência local `release/1.7.1` foi consultada
-em `be9e413e`; contém mudanças em Ajustes e Spotlight que a implementação
-precisará incorporar. Não usar o checkout principal divergente como se fosse
+em `be9e413e`; a implementação depois incorporou `eba014d9` da 1.7.1. A
+base integrada é o merge `2ab3ccc8`. Não usar o checkout principal divergente como se fosse
 a continuação desta base.
 
 O pedido do dono: "repensar em como as pessoas usam e mexem nas configs, para
@@ -17,6 +18,62 @@ entender tudo o que cada coisa faz, para deixar do jeito da pessoa". A troca de
 visual da 1.6.x foi rejeitada ("o problema tá igual, só tá com outro design").
 Este documento tenta explicar por que o problema continua igual e o que mudaria
 de fato.
+
+## Implementação nativa em 02/10/2026
+
+O catálogo agora contém **183 opções em 11 categorias**, com **61 avançadas**.
+`AJ_SAIDA_PLAYER` entrou em Reprodução como básico depois do inventário de 182.
+A opção GPU continua condicionada a TPK/Android; no Mac/LG a lista compilada
+não a inclui. IDs, chaves e índices dos valores persistidos foram preservados.
+
+- Navegação em blocos fixos; avançados lembrados por categoria durante a sessão.
+- OK abre seletor; setas percorrem o candidato sem gravar; OK aplica uma vez;
+  Voltar descarta. O valor salvo tem marca própria, independente do foco.
+- Busca dedicada local, com acentos/sinônimos, caminho e opção indisponível;
+  abre por ID, revela avançados e Voltar recupera consulta e resultado.
+- Diferenças comparadas com o mesmo inicializador imutável de fábrica, sem
+  atribuir autoria à pessoa. A lista mantém posição após restaurar uma linha.
+- Restauração individual com destino/alcance e Cancelar selecionado; exclui
+  ações, credenciais, leituras, perfil pesquisável e chaves em arquivo próprio
+  como limite de fileiras. A ordem de fileiras permanece no fluxo existente.
+- Dependências explicadas; quando há um requisito editável, OK leva até ele e
+  Voltar recupera a opção. Nenhum requisito é ativado silenciosamente.
+- Falhas detectadas no arquivo principal mantêm o valor anterior e o editor;
+  mudança concorrente invalida o candidato. O feedback confirma aplicação
+  local; não alega confirmação do servidor ou descarga concluída de IDBFS.
+
+### Acabamento alinhado ao mockup
+
+A primeira captura nativa ficou visualmente mais pesada que o protótipo; após
+esse retorno do dono, a composição foi revista usando o mockup como referência.
+Título menor, coluna central mais larga, linhas de 80 px, valores em texto,
+foco com contorno preciso e sem halo, superfícies azuladas e controle compacto
+de avançados recuperam a hierarquia da proposta. Alcance e padrão ficam em
+linhas próprias no painel explicativo. As dicas do controle ficam no rodapé.
+
+Amostras de arte usam a mesma imagem local do protótipo, marcada como
+“Exemplo ilustrativo”; não reproduzem trailer, não chamam a rede e não simulam
+uma prévia reversível sobre a Home real. Se a arte não estiver no pacote, o
+painel retorna à ilustração esquemática existente. As superfícies de Ajustes
+são opacas para leitura, inclusive com Vidro ativado para a Home; a cor de
+realce escolhida continua respeitada. Nenhuma mudança no shader global.
+
+[Capturas nativas e verificação](reviews/ajustes-ux/README.md).
+
+Fontes: `src/ajustes_ux_tela.inc`, `ajustes_ux_dados.inc`,
+`ajustes_ux_interacao.inc`, `ajustes_ux_desenho.inc`, `ajustes.c`,
+`spotlight.c/.h` e despacho de `app.c`.
+
+Validação de host: catálogo, busca/defaults/privacidade, cenários D-pad e
+persistência, padrões, perfis, modo seguro, idiomas e Spotlight. Capturas
+nativas usam fixtures sem conta. Isso não é prova de controle físico,
+acessibilidade semântica, desempenho ou persistência em TV.
+
+As etapas 2A/2B (prévia na tela real, prazo e presets de desempenho) e 3
+continuam propostas. O protótipo abaixo demonstra algumas delas, mas elas
+não foram transferidas ao renderer nativo nesta entrega. Textos novos têm
+EN/ES e fallback para os outros idiomas; revisão linguística completa está
+pendente. [Direção e pesquisas por plataforma](ux-direcao.md).
 
 ## Protótipo para experimentar
 
@@ -598,7 +655,7 @@ da §7; não atribuir lentidão, queda ou sucesso à mudança sem evidência.
 ## 5. Entregas, dependências e prioridade
 
 Recomendação: validar o caminho completo de uma tarefa antes de transformar
-as 182 opções de uma vez. O recorte de protótipo deve incluir Trailers,
+as 183 opções de uma vez. O recorte de protótipo deve incluir Trailers,
 Idiomas e uma opção de desempenho; cobre achar, entender, editar e desfazer.
 A entrega do produto mantém acesso a todas as opções da versão-alvo.
 

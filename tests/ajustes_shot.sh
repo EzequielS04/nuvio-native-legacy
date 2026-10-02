@@ -1,16 +1,12 @@
 #!/bin/bash
-# Capturas da tela de Ajustes e da folha de fileiras, em BMP, sem interacao.
-# Nao entra na suite: precisa de janela GL e de olho humano para julgar.
+# Capturas nativas de Ajustes com fixtures locais, sem conta nem rede.
+# Precisa de janela GL; inspecao visual no host nao valida uma TV fisica.
 #
-#   bash tests/ajustes_shot.sh /tmp/nuvio-ajustes-antes
+#   NUVIO_AJUSTES_UX=1 bash tests/ajustes_shot.sh /tmp/nuvio-ajustes
 #   NUVIO_RAIL=fixa bash tests/ajustes_shot.sh /tmp/nuvio-ajustes-fixa
 #
-# O roteiro (tests/ajustes_shot.c) segue a navegacao da arquitetura do web:
-# indice de categorias -> lista -> grupo. Alem das telas de sempre, grava
-# Aparencia com as linhas da cor (-aparencia-cor), Avancado > Diagnostico com o
-# teste de velocidade (-avancado-velocidade), a abertura pelo cartao de
-# novidades (-abrir-na-cor) e TODAS as linhas, categoria a categoria e grupo a
-# grupo (-todas-c<N>[-g<M>]-<pagina>).
+# Salva 12 cenas da UX (incluindo Trailers no enquadramento do mockup).
+# Sem NUVIO_AJUSTES_UX, acrescenta uma captura para cada categoria.
 set -eu
 cd "$(dirname "$0")/.."
 sources=()

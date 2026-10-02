@@ -36,6 +36,7 @@
 #include "buscasrec.h"
 #include "dados.h"
 #include "ajustes.h"
+#include "ajustes_ux.h"
 #include "gfx.h"
 #include "text.h"
 #include "tex_cache.h"
@@ -56,7 +57,7 @@
 #include <sys/stat.h>
 
 // Tipos de linha de spotlight.c (enum interno L_*).
-enum { T_AVISO = 1, T_TOPO = 2, T_PESSOA = 4, T_COLECAO = 5, T_RECENTE = 9 };
+enum { T_AVISO = 1, T_TOPO = 2, T_PESSOA = 4, T_COLECAO = 5, T_RECENTE = 9, T_AJUSTE = 11 };
 
 static SDL_Window *janela;
 static char ultimaUrl[800];
@@ -305,6 +306,42 @@ int main(int argc, char **argv) {
   assert(p.tipo == SPOT_PESSOA && p.tmdb == 3894);
   assert(!spot_aberto());
   assert(!strcmp(buscasrec_termo(0), "chri"));
+
+  // Ajustes: a busca local encontra opcoes, seleciona o OpcaoId estavel e
+  // nao grava o termo no historico de pesquisas de midia.
+  { AjusteBuscaResultado esperado[1];
+    int antes = buscasrec_n(), alvo, passos;
+    char textoFoco[160];
+    assert(ajustes_buscar("idioma", esperado, 1) == 1);
+    spot_abrir_ajustes(0);
+    assert(achar(T_AJUSTE, NULL) >= 0); /* sugestoes locais sem consulta */
+    tecla(SDLK_ESCAPE);
+    assert(!spot_aberto() && buscasrec_n() == antes);
+    spot_abrir_ajustes(0);
+    spot_texto_externo("idioma");
+    alvo = achar(T_AJUSTE, NULL);
+    assert(alvo >= 0);
+    paraLista();
+    for (passos = 0; passos < 20 && spot_linha_focada() != alvo; passos++) tecla(SDLK_DOWN);
+    assert(spot_linha_focada() == alvo);
+    snprintf(textoFoco, sizeof textoFoco, "%s", spot_linha_texto(spot_linha_focada()));
+    tecla(SDLK_RETURN);
+    assert(spot_pediu(&p) && p.tipo == SPOT_AJUSTE && p.indice == esperado[0].op);
+    assert(buscasrec_n() == antes);
+    spot_reabrir_ajustes();
+    assert(spot_aberto() && !strcmp(spot_consulta(), "idioma"));
+    assert(spot_linha_focada() >= 0 && spot_linha_tipo(spot_linha_focada()) == T_AJUSTE);
+    assert(!strcmp(spot_linha_texto(spot_linha_focada()), textoFoco));
+    assert(buscasrec_n() == antes);
+    tecla(SDLK_ESCAPE);
+    assert(!spot_aberto() && buscasrec_n() == antes);
+    spot_abrir_ajustes(0);
+    assert(!spot_consulta()[0] && achar(T_AJUSTE, NULL) >= 0);
+    tecla(SDLK_ESCAPE);
+    ajustes_abrir_opcao(p.indice);
+    ajustes_iniciar();
+    assert(ajustes_opcao_em_foco() == p.indice);
+  }
 
   // Titulo: OK no melhor resultado pede o indice dele.
   spot_abrir(0);

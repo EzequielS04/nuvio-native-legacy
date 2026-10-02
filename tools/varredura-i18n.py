@@ -416,7 +416,12 @@ def varrer():
     chaves = chaves_da_tabela()
     faltando_tabela, faltando_i18n = {}, {}
     faltando_funcao = {}
-    for arq in sorted((RAIZ / "src").glob("*.c")):
+    src = RAIZ / "src"
+    arquivos = sorted(src.glob("*.c")) + [
+        src / nome for nome in ("ajustes_ux_tela.inc", "ajustes_ux_interacao.inc",
+                                "ajustes_ux_desenho.inc") if (src / nome).exists()
+    ]
+    for arq in sorted(arquivos):
         if arq.name == "idioma.c":
             continue
         txt = arq.read_text(encoding="utf-8")
