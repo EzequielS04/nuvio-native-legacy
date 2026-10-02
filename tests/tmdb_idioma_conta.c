@@ -40,6 +40,15 @@ int main(void) {
   assert(ajustes_mesclar_blob(BLOB, &out) == 0);   // igual a conta: nada sobe
   ajustes_tmdb_idioma_relatar(BLOB);
 
+  // 4. Conta antiga com regiao ("pt-br", 22 logs no D1): vira Portugues
+  // (Brasil), nao "nao reconhecido; mantido". "pt-pt" continua exato.
+  valor[AJ_TMDB_IDIOMA] = 0;
+  ajustes_aplicar_blob("{\"tmdb_settings\":{\"tmdb_language\":{\"type\":\"string\",\"value\":\"pt-br\"}}}");
+  assert(valor[AJ_TMDB_IDIOMA] == 1);
+  assert(!strcmp(ajustes_tmdb_idioma(), "pt-BR"));
+  ajustes_aplicar_blob("{\"tmdb_settings\":{\"tmdb_language\":{\"type\":\"string\",\"value\":\"pt-pt\"}}}");
+  assert(valor[AJ_TMDB_IDIOMA] == 7);
+
   printf("ok: tmdb_idioma_conta\n");
   return 0;
 }

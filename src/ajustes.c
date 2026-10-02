@@ -2969,6 +2969,17 @@ int ajustes_aplicar_blob(const char *json) {
       // o valor de verdade — e a rejeicao era CORRETA (melhor manter que
       // inventar), mas o efeito era o ajuste nunca chegar.
       if (lit) { int k; for (k = 0; lit[k]; k++) if (!igualSemCaixa(lit[k], texto)) { novo = k; break; } }
+      // IDIOMA COM REGIAO: contas antigas guardam "pt-br"/"pt-BR" (22 logs
+      // no D1 em 01/10/2026) e a lista so tem a base. Sem casar exato,
+      // tenta a base antes do '-' ("pt-br" -> "pt"); "pt-pt" e "zh-tw" ja
+      // casaram exato acima.
+      if (novo < 0 && lit && i == AJ_TMDB_IDIOMA && strchr(texto, '-')) {
+        char base[16]; int k; size_t b = (size_t)(strchr(texto, '-') - texto);
+        if (b > 0 && b < sizeof base) {
+          memcpy(base, texto, b); base[b] = 0;
+          for (k = 1; lit[k]; k++) if (!igualSemCaixa(lit[k], base)) { novo = k; break; }
+        }
+      }
       if (novo < 0) {
         // Valor que este app nao conhece (versao nova do web, opcao nova).
         // Manter o que esta e a resposta certa: escolher um padrao aqui
