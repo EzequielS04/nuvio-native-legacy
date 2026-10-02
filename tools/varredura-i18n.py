@@ -262,6 +262,8 @@ IGNORAR = {
     "em alta", "mais vist", "tendência",
     "-perfil",                      # sufixo de nome de arquivo (ajustes.c)
     "recomendacoes-perfil.txt",     # nome de arquivo do perfil publico (recomenda.c)
+    "amigos-vistos.txt",            # nome de arquivo das novidades vistas (socialvis.c)
+    "%s/poster/%02d.jpg",           # caminho da arte dos dados de exemplo (socialvis.c, so teste)
     "biblioteca.h", "catalogo.h", "fileiras.h", "perfil.h", "legenda.h",
     "perfil.txt",                   # #include e nome de arquivo
     "com.webos.media.client.nuvio", # id do cliente LS2

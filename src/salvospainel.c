@@ -2754,7 +2754,7 @@ static void desenhaAjusteSocial(int i, float dx, float y, float alt, float a) {
     valor = buf;
   } else {
     int n = recomenda_alcance();
-    titulo = "Quem vê o que você assiste";
+    titulo = "Quem vê o que você assiste?";
     valor = n == REC_ALCANCE_AMIGOS ? i18n("Só meus amigos")
           : n == REC_ALCANCE_AMIGOS2 ? i18n("Amigos e amigos deles") : i18n("Ninguém");
   }

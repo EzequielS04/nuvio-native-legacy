@@ -249,7 +249,7 @@ void amigoperfil_desenhar(Uint32 agora) {
     y += 46.0f;
     if (n == 0) {
       vazioFila(rx, y, f == AP_MANDOU ? "Você ainda não mandou nada para essa pessoa."
-                                      : "Nada por aqui ainda.", a);
+                                      : "Nada por aqui ainda", a);
       continue;
     }
     for (c = 0; c < n && c < SV_FILA_MAX; c++) {

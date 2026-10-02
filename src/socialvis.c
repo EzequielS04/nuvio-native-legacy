@@ -45,6 +45,7 @@ static int nExtras;
 // sem hora (ver socialvis.h). A assinatura e o titulo + acao + episodio do
 // evento mais novo da pessoa; mudou, e novidade. Fica em amigos-vistos.txt
 // (uma linha "id\tassinatura"), gravado so quando muda.
+#define SV_ARQ_VISTOS "amigos-vistos.txt"
 typedef struct { char id[96]; unsigned ass; } SvVisto;
 static SvVisto vistos[SV_AMIGOS_MAX * 2];
 static int nVistos, vistosLidos;
@@ -70,7 +71,7 @@ static void lerVistos(void) {
   char *s, *p;
   vistosLidos = 1;
   nVistos = 0;
-  s = dados_ler("amigos-vistos.txt");
+  s = dados_ler(SV_ARQ_VISTOS);
   if (!s) return;
   for (p = s; *p && nVistos < (int)(sizeof vistos / sizeof *vistos);) {
     char *fim = strchr(p, '\n'), *tab;
@@ -95,7 +96,7 @@ static void gravarVistos(void) {
   buf[0] = 0;
   for (i = 0; i < nVistos && k + 112 < sizeof buf; i++)
     k += (size_t)snprintf(buf + k, sizeof buf - k, "%s\t%u\n", vistos[i].id, vistos[i].ass);
-  dados_gravar_leve("amigos-vistos.txt", buf);
+  dados_gravar_leve(SV_ARQ_VISTOS, buf);
 }
 
 static int vistoDe(const char *id, unsigned *ass) {
@@ -748,6 +749,7 @@ int socialvis_dia(const SvEvento *ev, char *rot, size_t tam) {
 
 // --- dados de exemplo (so para as capturas) -----------------------------------
 #ifdef NV_SOCIALVIS_DEMO
+#define SV_DEMO_ARTE "deploy/app/art"
 static void ev(SvEvento *e, const char *pid, const char *nome, const char *av, int fonte,
                int acao, int reacao, const char *imdb, const char *tipo, const char *titulo,
                int arte, int t, int epi, int pct, int falta, long long quando) {
@@ -759,8 +761,8 @@ static void ev(SvEvento *e, const char *pid, const char *nome, const char *av, i
   snprintf(e->imdb, sizeof e->imdb, "%s", imdb);
   snprintf(e->tipo, sizeof e->tipo, "%s", tipo);
   snprintf(e->titulo, sizeof e->titulo, "%s", titulo);
-  snprintf(e->poster, sizeof e->poster, "deploy/app/art/poster/%02d.jpg", arte);
-  snprintf(e->arte, sizeof e->arte, "deploy/app/art/%02d.jpg", arte);
+  snprintf(e->poster, sizeof e->poster, "%s/poster/%02d.jpg", SV_DEMO_ARTE, arte);
+  snprintf(e->arte, sizeof e->arte, "%s/%02d.jpg", SV_DEMO_ARTE, arte);
   e->temporada = t; e->episodio = epi; e->pct = pct; e->restanteMin = falta;
   e->quando = quando;
 }
