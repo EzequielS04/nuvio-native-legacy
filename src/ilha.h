@@ -102,6 +102,18 @@ typedef struct {
   int vivo;                 // ponto vermelho de "agora"
   int cartao;               // AZUL abre o modal deste cartao (ILHA_VIVO + 1 ...); 0 = nao
   const IlhaModal *modal;   // AZUL abre este modal; NULL = nao
+  // AVISO DE DUAS LINHAS (Glass UI v2, 03/10 — o da atualizacao, mockup
+  // ajustes-v2 "v2-upd-aviso"/"v2-upd-em-dia"). Com `titulo` a pilula fica com
+  // 84 de altura: o icone num disco de 56 na cor do tipo a 22%, `titulo` em
+  // 26/700 e `texto` embaixo em 20, apagado. Com `kicker` (sem titulo) o disco
+  // e de 40 e a marca em caixa alta, na cor do tipo, vai em cima do `texto`
+  // em 26/600 ("EM DIA"). NULL nos dois = o aviso de uma linha de sempre.
+  const char *titulo;
+  const char *kicker;
+  const char *dica;         // rotulo ao lado da tecla no lugar de "abre"
+  // 1 = a tecla (AZUL/CH+, ou o clique) ENTREGA o aviso a quem o pos, sem
+  // modal: ilha_aviso_pediu devolve 1 com a chave, e o aviso sai da fila.
+  int acao;
 } IlhaAvisoEx;
 void ilha_avisar_ex(const IlhaAvisoEx *a);
 // Embrulha `s` em ILHA_FORTE em `dst` (devolve dst), para passar como %s.
@@ -122,6 +134,12 @@ int  ilha_esperando(void);
 // ATIVIDADE em andamento: chame A CADA QUADRO enquanto durar; sem renovacao
 // por ~0,4 s ela sai sozinha. `progresso` de 0 a 1, ou < 0 quando nao ha numero.
 void ilha_atividade(const char *texto, float progresso);
+// A MESMA ATIVIDADE NO DESENHO v2 (mockup ajustes-v2, 03/10: "Procurando
+// atualização…", "Baixando a atualização..."): pilula de 72. `icone` "" = o
+// ponto que respira e o texto em 26/600; com nome de icone, o icone no acento,
+// o texto em 24/600 e o trilho de 180 x 6 com a porcentagem AO LADO do texto
+// (nao embaixo). NULL = ilha_atividade.
+void ilha_atividade_ex(const char *texto, float progresso, const char *icone);
 
 // Onde o relogio pode ficar, decidido por quadro por app.c (a home tem o topo
 // esquerdo livre; Ajustes e Explorar tem titulo ali).
