@@ -640,13 +640,15 @@ const Legenda *addons_legenda(int i) {
 // fala espanhol abria o player e nao achava legenda nenhuma.
 //
 // AGORA: os grupos vem da preferencia (Ajustes desta TV, senao a conta) e o
-// INGLES entra sempre por ultimo. Sem preferencia a lista era sem filtro, e
-// doze resultados de idiomas aleatorios enchiam a folha; com preferencia o
-// ingles sumia — e ele e o que existe para quase todo titulo, o plano B de
-// quem nao acha o proprio idioma. O texto do ajuste diz isso (ajustes.c).
+// INGLES entra por ultimo quando ha preferencia. Sem preferencia (inclusive
+// "Todas" nesta TV), a lista aceita qualquer idioma ate LEG_MAX. Com idiomas
+// escolhidos, o ingles continua como reserva para quem nao acha o proprio.
 static int gruposIdioma(const char *g[3]) {
   const char *a = ling_legenda(), *b = ling_legenda2();
   int n = 0;
+  // Empty preferences include the explicit local "All" choice. One
+  // unfiltered group must keep every language, rather than only English.
+  if (!a[0] && !b[0]) { g[0] = ""; return 1; }
   if (a[0] && strcasecmp(a, "none")) g[n++] = a;
   if (b[0] && strcasecmp(b, "none") && !(n && ling_casa(b, a))) g[n++] = b;
   { int i, tem = 0;
