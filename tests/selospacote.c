@@ -173,7 +173,7 @@ int main(void) {
     regexjs_liberar(r);
     r = regexjs_compilar_web("(?<=\\.)DV(?=\\.)", e, sizeof e);
     assert(r && regexjs_testar(r, ARQ, strlen(ARQ))); regexjs_liberar(r);
-    r = regexjs_compilar_web("^(?:(?!remux).)*$", e, sizeof e);
+    r = regexjs_compilar_web("(?i)^(?:(?!remux).)*$", e, sizeof e);
     assert(r && regexjs_testar(r, ARQ, strlen(ARQ)) && !regexjs_testar(r, "a.REMUX.b", 9)); regexjs_liberar(r);
     r = regexjs_compilar_web("(?i)caf\\u00e9|\xc3\xa9", e, sizeof e);   // UTF-8
     assert(r && regexjs_testar(r, "Cafe\xc3\xa9", 6)); regexjs_liberar(r);
