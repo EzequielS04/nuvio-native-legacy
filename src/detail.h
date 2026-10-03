@@ -105,9 +105,9 @@ int  detail_pediu_do_inicio(void);
 // Abas de temporada: 269x80 em x=96, passo 321 (gap 52), raio 40, fonte 32/500.
 // A largura sai do texto + padding, e nao e constante: "Especiais" mede 219.
 #define NV_DETP_TEMP_Y      1160.0f
-#define NV_DETP_TEMP_H        83.0f   // MEDIDO na referencia (era 80)
-#define NV_DETP_TEMP_PADX     40.0f
-#define NV_DETP_TEMP_GAP      52.0f
+#define NV_DETP_TEMP_H        60.0f   // Compact season selector
+#define NV_DETP_TEMP_PADX     26.0f
+#define NV_DETP_TEMP_GAP      20.0f
 // Base do resumo da temporada ("12 episódios · 5 assistidos") ao TOPO das
 // pilulas. A folga vive na vaga do cabecalho "Temporadas" que foi retirado: o
 // grupo comeca em NV_DETP_G_TEMP (1080) e a pilula so em 1160, entao ha 80 px

@@ -1818,8 +1818,10 @@ static int nBotoesTodos(void) {
          + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0);
 }
 
+static int acoesAgrupadas(void) { return carro || epApple(); }
+
 static int nBotoes(void) {
-  return carro && !maisAcoes ? 2 + (temInicio() ? 1 : 0) : nBotoesTodos();
+  return acoesAgrupadas() && !maisAcoes ? 2 + (temInicio() ? 1 : 0) : nBotoesTodos();
 }
 
 // Que ACAO esta na posicao `n` da linha. As acoes tem numeros fixos (0
@@ -1836,7 +1838,7 @@ static int acaoEm(int n) {
     if (n == 1) return ACAO_INICIO;
     n--;
   }
-  if (carro && n > 0) {
+  if (acoesAgrupadas() && n > 0) {
     if (n == 1) return ACAO_LISTA;
     n--;
   }
@@ -1847,7 +1849,7 @@ static int acaoEm(int n) {
     if (n == 1) return ACAO_LEMBRAR;
     n--;
   }
-  if (carro && n > 0) n++; // skip the list action already used as group anchor
+  if (acoesAgrupadas() && n > 0) n++; // skip the list action already used as group anchor
   // O RECOMENDAR E O ULTIMO DA LINHA e a conferencia vem ANTES do salto da
   // serie: com 3 circulares numa serie, a ultima posicao e n == 3, e a regra
   // de baixo devolveria 4 — que e ACAO_INICIO, o botao de texto. O OK ali
@@ -2239,7 +2241,7 @@ void detail_evento(const SDL_Event *e) {
 
   if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE ||
       k == SDLK_DELETE) {
-    if (carro && maisAcoes && nivel == 0) { maisAcoes = 0; botao = temInicio() ? 1 : 0; }
+    if (acoesAgrupadas() && maisAcoes && nivel == 0) { maisAcoes = 0; botao = temInicio() ? 1 : 0; }
     else if (nivel > 0) nivel = 0;
     else if (carro && carCheia) carCheia = 0;   // tela cheia no topo -> cartao
     else saindo = 1;
@@ -2282,7 +2284,7 @@ void detail_evento(const SDL_Event *e) {
       else if (carro && !carCheia && carPos > 0) carPasso(-1);
       else if (!(carro && carCheia)) { saindo = 1; pediuMenu = 1; }
     }
-    if (carro) maisAcoes = nivel == 0 && botao >= 1 + (temInicio() ? 1 : 0);
+    if (acoesAgrupadas()) maisAcoes = nivel == 0 && botao >= 1 + (temInicio() ? 1 : 0);
     return;
   }
   // A guarda que existia aqui bloqueava DESCER das abas sempre que a aba
@@ -3547,7 +3549,7 @@ static void heroWeb(float a, float desloc) {
 
   float larguraAcoes = 0;
   { float cyBtn = yAcoes + NV_DETW2_BTN_H * 0.5f;
-    if (carro) {
+    if (acoesAgrupadas()) {
       int grupo = 1 + (temInicio() ? 1 : 0);
       maisAcoes = nivel == 0 && botao >= grupo;
     }
@@ -3577,13 +3579,13 @@ static void heroWeb(float a, float desloc) {
       float alvoIni = selIni ? 1.0f : 0.0f;
       inicioExp = ajustes_animacoes_reduzidas() ? alvoIni :
         inicioExp + (alvoIni-inicioExp)*(1.0f-expf(-dtIni/65.0f));
-      float fechado = carro ? NV_DETW2_CIRC : larguraSecundario(rotIni);
+      float fechado = acoesAgrupadas() ? NV_DETW2_CIRC : larguraSecundario(rotIni);
       float abertoIni = larguraSecundario(rotIni) + 44.0f;
       GfxRect rs = { bx, cyBtn-fechado*.5f,
-        carro ? fechado+(abertoIni-fechado)*inicioExp : fechado,
-        carro ? NV_DETW2_CIRC : NV_DETW2_BTN_H };
+        acoesAgrupadas() ? fechado+(abertoIni-fechado)*inicioExp : fechado,
+        acoesAgrupadas() ? NV_DETW2_CIRC : NV_DETW2_BTN_H };
       rs.y = cyBtn - rs.h*.5f;
-      if (carro) {
+      if (acoesAgrupadas()) {
         botao_pilula(rs, "", NULL, selIni ? 1.0f : 0.0f, 0, 0, a);
         float tinta = selIni ? ajustes_acento_tinta(NULL,NULL,NULL) : 235.0f/255.0f;
         gfx_icone((GfxRect){rs.x+22,rs.y+(rs.h-28)*.5f,28,28},
@@ -3598,7 +3600,7 @@ static void heroWeb(float a, float desloc) {
       bx += rs.w + NV_DETW2_BTN_GAP; nb++;
     }
     larguraAcoes = larguraPrimario(rot);
-    if (temLembrar() && !carro) {
+    if (temLembrar() && !acoesAgrupadas()) {
       const CatItem *ciL = cat_item(idx);
       GfxRect rs = { bx, cyBtn - NV_DETW2_CIRC * 0.5f,
                      NV_DETW2_CIRC, NV_DETW2_CIRC };
@@ -3607,7 +3609,7 @@ static void heroWeb(float a, float desloc) {
       if (a > 0.3f) ponteiro_alvo(rs.x, rs.y, rs.w, rs.h, ponteiroDetalhe, NULL, -1, nb);
       bx += NV_DETW2_CIRC + NV_DETW2_BTN_GAP; nb++;
     }
-    if (carro) {
+    if (acoesAgrupadas()) {
       static float reveal, revealVelocity;
       static Uint32 revealTick;
       static int revealIdx = -1;
@@ -3942,7 +3944,7 @@ static void rotuloTemporada(int c, char *dst, size_t n) {
 }
 static float larguraTemporada(int c) {
   char rot[32]; rotuloTemporada(c, rot, sizeof rot);
-  TxtLinha l = txt_linha(TXT_PLR_CORPO, rot, 255, 255, 255, 255);
+  TxtLinha l = txt_linha(TXT_CALLOUT, rot, 255, 255, 255, 255);
   return l.w + NV_DETP_TEMP_PADX * 2;
 }
 static float larguraAbaInfo(int i) {
@@ -4120,7 +4122,7 @@ static void desenhaTemporada(GfxRect r, int c, float f, float a) {
   { int t = (int)(ti * 255.0f + 0.5f);
     int cor = (sel || f > 0.5f) ? t : 179;
     if (ajustes_vidro()) cor = f > 0.5f ? t : (sel ? 245 : 179);   // escolhida: superficie escura
-    TxtLinha l = txt_linha(TXT_PLR_CORPO, rot, cor, cor, cor, 255);
+    TxtLinha l = txt_linha(TXT_CALLOUT, rot, cor, cor, cor, 255);
     // 500 de peso na Inter Regular: uma segunda passada meio pixel a direita.
     txt_peso(l, r.x + (r.w - l.w) * 0.5f, r.y + (r.h - l.h) * 0.5f, a, 0.5f); }
 }
@@ -4305,18 +4307,34 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
       gfx_anel(th,20.0f/th.h,1.5f,1,1,1,.18f*f*a);
     }
     float metaY = th.y + th.h - 36.0f;
-    gfx_rect((GfxRect){textX,metaY+4,14,17},0,GFX_PLAY,0,0,0,0,
-             .9f,.92f,.94f,a);
-    float durationX = textX+24;
-    int progress = serie && ep && serie->temporada == ep->temporada &&
-      serie->episodio == ep->episodio ? serie->progresso : 0;
+    int watched = serie && ep &&
+      vistoep_estado(serie->imdb, ep->temporada, ep->episodio) == 1;
+    int current = serie && ep && serie->temporada == ep->temporada &&
+      serie->episodio == ep->episodio;
+    int progress = current && !watched ? serie->progresso : 0;
+    if (watched)
+      gfx_icone((GfxRect){textX,metaY+2,20,20},"aj_rotate-ccw-clock",
+                .9f,.92f,.94f,a);
+    else
+      gfx_rect((GfxRect){textX,metaY+4,14,17},0,GFX_PLAY,0,0,0,0,
+               .9f,.92f,.94f,a);
+    float durationX = textX+28;
     if (progress > 0 && progress < 100) {
-      GfxRect track = {durationX,metaY+10,40,4};
+      GfxRect track = {durationX,metaY+10,72,4};
       gfx_cor(track,.5f,1,1,1,.25f*a);
       track.w *= progress/100.0f; gfx_cor(track,.5f,1,1,1,.8f*a);
-      durationX += 50;
-    }
-    if (epDur) txt_desenhar_alpha(txt_linha(TXT_CAPTION,epDur,235,237,240,255),durationX,metaY,a);
+      durationX += 84;
+      if (serie->restanteMin > 0) {
+        char remaining[64];
+        int h = serie->restanteMin / 60, m = serie->restanteMin % 60;
+        if (h && m) snprintf(remaining,sizeof remaining,i18n("%dh %dmin Restantes"),h,m);
+        else if (h) snprintf(remaining,sizeof remaining,i18n("%dh Restantes"),h);
+        else snprintf(remaining,sizeof remaining,i18n("%dmin Restantes"),m);
+        txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION,remaining,235,237,240,255,
+                          r.x+r.w-18-durationX),durationX,metaY,a);
+      }
+    } else if (epDur)
+      txt_desenhar_alpha(txt_linha(TXT_CAPTION,epDur,235,237,240,255),durationX,metaY,a);
     char number[32]; snprintf(number,sizeof number,i18n("EPISÓDIO %d"),epNum);
     txt_desenhar_alpha(txt_linha(TXT_CAPTION2,number,164,169,176,255),textX,textY,a);
     char fallback[40]; snprintf(fallback,sizeof fallback,i18n("Episódio %d"),epNum);

@@ -475,10 +475,20 @@ int main(int argc, char **argv) {
 
   montarCatalogo();
   if (getenv("NV_APPLE_EP")) {
-    semear(1,T1_N,T1_N); abrir(0,0); nosEpisodios(0);
+    semear(1,2,T1_N);
+    itens[0].temporada=1; itens[0].episodio=3;
+    itens[0].progresso=45; itens[0].restanteMin=24;
+    cat_definir_tudo(itens,2,&filEnsaio,1);
+    cat_definir_episodios(0,episodios,T1_N+T2_N+T3_N);
+    abrir(0,0); nosEpisodios(0);
     snprintf(nome,sizeof nome,"%s-apple-episodes.png",saida); gravar(nome);
     foco.fileira=SEC_ELENCO; foco.coluna=0; quadros(120);
     snprintf(nome,sizeof nome,"%s-apple-cast.png",saida); gravar(nome);
+    carro=0; nivel=0; botao=0; maisAcoes=0;
+    assert(acoesAgrupadas() && nBotoes()==2+(temInicio()?1:0));
+    assert(acaoEm(1+(temInicio()?1:0))==ACAO_LISTA);
+    quadros(120);
+    snprintf(nome,sizeof nome,"%s-hero-actions.png",saida); gravar(nome);
     carro=1; carCheia=0; nivel=0; botao=0; maisAcoes=0;
     for (int step=0;step<25;step++) {SDL_Delay(16);quadros(1);}
     snprintf(nome,sizeof nome,"%s-actions-closed.png",saida); gravar(nome);
