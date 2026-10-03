@@ -112,6 +112,24 @@
      sobreposicao e o z-index (abertura 4, diag 5): com o painel aberto por
      tecla ou pelo cao de guarda, e ele que fica por cima. -->
 <div id="abertura"><img src="icon.png" alt="Nuvio Legacy"><div class="barra"><i></i></div></div>
+<script>
+  // ICONE DO APP (apoiadores, src/iconeapp.h): o app grava em localStorage o id
+  // do icone escolhido; a abertura troca a imagem antes do wasm subir. So ids
+  // conhecidos (o nome vira caminho de arquivo). A arte e 256px com fundo
+  // transparente: 320px na tela, para nao ampliar demais.
+  (function () {
+    var ids = ['fenix', 'nverde', 'tvlaranja', 'npixel', 'tricolor', 'arco',
+               'tvviva', 'cluberetro', 'arcaden'];
+    var v = null;
+    try { v = localStorage.getItem('nuvio-icone'); } catch (e) {}
+    if (!v || ids.indexOf(v) < 0) return;
+    var img = document.querySelector('#abertura img');
+    if (!img) return;
+    img.onerror = function () { img.onerror = null; img.src = 'icon.png'; img.style.width = ''; };
+    img.style.width = '320px';
+    img.src = 'icones-app/' + v + '.png';
+  })();
+</script>
 <!-- NASCE ESCONDIDO. Ver o cao de guarda no fim do arranque: ele volta sozinho
      quando o primeiro quadro NAO chega, que e o unico caso em que ele tinha de
      estar na tela. A tecla verde tambem continua trazendo-o a qualquer hora. -->

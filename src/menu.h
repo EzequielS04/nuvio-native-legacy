@@ -78,7 +78,7 @@ int  menu_pediu_spotlight(void);
 
 // --- O MENU DOS LAYOUTS CLASSICOS -------------------------------------------
 // MODERNA: uma ilha flutuante na margem da ilha do relogio (x NV_MENU_MODERNA_X,
-// logo abaixo dela): fechada a pilula vertical de icones, aberta o painel com
+// centrada na altura e ampliada em20%): fechada a pilula vertical de icones, aberta o painel com
 // rotulos. PADRAO: o mesmo painel colado na borda esquerda e centrado na
 // altura (fechado, a mesma pilula estreita na borda). Na Moderna a ilha do
 // relogio se posiciona na margem do menu (ilha_posicionar). Devolve a borda
@@ -86,7 +86,7 @@ int  menu_pediu_spotlight(void);
 // Dinamica, que tem a pilula abaixo). Abrindo ja devolve a largura aberta;
 // fechando, a que ainda esta na tela. A largura que o CONTEUDO reserva para a
 // rail fixa e ajustes_rail_largura_fixa (NV_MENU_RAIL_BORDA_* em layout.h).
-// O menu inteiro desenha em escala FIXA de 90 % (menu.c), nao no Tamanho da
+// O menu usa escala propria (90%, ampliada20% na Moderna), nao o Tamanho da
 // interface; tudo o que esta API devolve ja vem em px da tela REAL.
 #define NV_MENU_MODERNA_X 48.0f   // px da tela REAL
 float menu_barra_borda(void);

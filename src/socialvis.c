@@ -38,6 +38,9 @@ static int nExterno, temExterno;
 typedef struct { char id[96]; SvPerfil p; } SvExtra;
 static SvExtra *extras;
 static int nExtras;
+static char perfilPedido[96];
+static unsigned geracaoVista;
+static int temGeracao;
 
 // --- vistos -----------------------------------------------------------------
 //
@@ -136,16 +139,18 @@ void socialvis_marcar_visto(const char *id) {
 static int acaoDoTexto(const char *s) {
   if (!s || !s[0]) return SV_ATIVIDADE;
   if (!strcmp(s, "assistindo agora")) return SV_AGORA;
-  if (!strcmp(s, "registrou um check-in")) return SV_AGORA;
+  if (!strcmp(s, "registrou um check-in")) return SV_INICIO;
   if (!strcmp(s, "assistiu")) return SV_FIM;
   if (!strcmp(s, "avaliou")) return SV_AVALIOU;
   return SV_ATIVIDADE;
 }
 
-static int jaTemEvento(const char *pessoa, const char *imdb) {
+static int jaTemEvento(const char *pessoa, const char *imdb, const char *tipo, int acao, int t, int ep) {
   int i;
   for (i = 0; i < nBrutos; i++)
-    if (!strcmp(brutos[i].pessoaId, pessoa) && !strcmp(brutos[i].imdb, imdb)) return 1;
+    if (!strcmp(brutos[i].pessoaId, pessoa) && !strcmp(brutos[i].imdb, imdb) &&
+        !strcmp(brutos[i].tipo, tipo) && brutos[i].acao == acao &&
+        brutos[i].temporada == t && brutos[i].episodio == ep) return 1;
   return 0;
 }
 
@@ -163,7 +168,7 @@ static void doCatalogo(void) {
   int r, k;
   for (r = 0; r < cat_n_fileiras(); r++) {
     const CatFileira *f = cat_fileira(r);
-    if (!f || strcmp(f->chave, "social_activity")) continue;
+    if (!f || strcmp(f->chave, "social_activity") || f->socialGeracao != recomenda_geracao()) continue;
     for (k = 0; k < f->n; k++) {
       const CatItem *it = cat_item(f->ini + k);
       char pid[96];
@@ -171,7 +176,8 @@ static void doCatalogo(void) {
       if (!it || !it->socialSlug[0] || !it->imdb[0]) continue;
       if (!strncmp(it->socialSlug, "nuvio:", 6)) snprintf(pid, sizeof pid, "%s", it->socialSlug);
       else snprintf(pid, sizeof pid, "trakt:%s", it->socialSlug);
-      if (jaTemEvento(pid, it->imdb) || !(e = novoBruto())) continue;
+      if (jaTemEvento(pid, it->imdb, it->tipo, acaoDoTexto(it->socialAcao), it->temporada, it->episodio) ||
+          !(e = novoBruto())) continue;
       snprintf(e->pessoaId, sizeof e->pessoaId, "%s", pid);
       snprintf(e->pessoaNome, sizeof e->pessoaNome, "%s",
                it->socialNome[0] ? it->socialNome : it->pais);
@@ -202,7 +208,8 @@ static void doServidorPorAmigo(const RecContato *c) {
   for (i = 0; i < n; i++) {
     SvEvento *e;
     int k;
-    if (!at[i].imdb[0] || jaTemEvento(c->id, at[i].imdb) || !(e = novoBruto())) continue;
+    if (!at[i].imdb[0] || jaTemEvento(c->id, at[i].imdb, at[i].tipo, at[i].agora ? SV_AGORA : SV_FIM, 0, 0) ||
+        !(e = novoBruto())) continue;
     snprintf(e->pessoaId, sizeof e->pessoaId, "%s", c->id);
     snprintf(e->pessoaNome, sizeof e->pessoaNome, "%s", c->nome);
     snprintf(e->pessoaAvatar, sizeof e->pessoaAvatar, "%s", c->avatar);
@@ -267,7 +274,7 @@ static void svDoQueExiste(void) {
 static int svAcaoDe(const RecEvento *r) {
   switch (r->acao) {
     case REC_ACAO_INICIO:
-      if (r->fonte == REC_FONTE_TRAKT && r->quando <= 0) return SV_AGORA;
+      if (r->fonte == REC_FONTE_TRAKT) return r->agora ? SV_AGORA : SV_INICIO;
       if (r->quando > 0 && (long long)time(NULL) - r->quando < 15 * 60) return SV_AGORA;
       return SV_INICIO;
     case REC_ACAO_FIM:      return SV_FIM;
@@ -319,7 +326,7 @@ static int svDoServidor(SvEvento *saida, int max) {
   if (!trakt) return -1;
   for (f = 0; f < cat_n_fileiras(); f++) {
     const CatFileira *cf = cat_fileira(f);
-    if (!cf || strcmp(cf->chave, "social_activity")) continue;
+    if (!cf || strcmp(cf->chave, "social_activity") || cf->socialGeracao != recomenda_geracao()) continue;
     for (i = 0; i < cf->n && nT < 16; i++) {
       const CatItem *it = cat_item(cf->ini + i);
       if (it && strncmp(it->socialSlug, "nuvio:", 6)) trakt[nT++] = *it;
@@ -336,36 +343,46 @@ static int svDoServidor(SvEvento *saida, int max) {
 // novo a cada abertura); a resposta chega no fio e entra na leitura seguinte —
 // amigoperfil.c rele o modelo a cada segundo.
 static int svPerfilDoServidor(const char *id, SvPerfil *p) {
-  static char pedido[96];
   static RecAmigo ra;
   int i;
   if (!recomenda_ativo() || !id || !id[0]) return -1;
-  if (strcmp(pedido, id)) { snprintf(pedido, sizeof pedido, "%s", id); recomenda_amigo_pedir(id); }
-  if (!recomenda_amigo(&ra) || strcmp(ra.id, id)) return -1;
+  if (strcmp(perfilPedido, id)) socialvis_abrir_perfil(id);
+  switch (recomenda_amigo_estado()) {
+    case REC_SOC_INDO: p->estado = SV_PERFIL_INDO; break;
+    case REC_SOC_OK: p->estado = SV_PERFIL_OK; break;
+    case REC_SOC_FALHA: p->estado = SV_PERFIL_FALHA; break;
+    case REC_SOC_NAO_ACHOU: p->estado = SV_PERFIL_NAO_ACHOU; break;
+    case REC_SOC_NEGADO: p->estado = SV_PERFIL_NEGADO; break;
+    default: p->estado = SV_PERFIL_NADA; break;
+  }
+  if (!recomenda_amigo(&ra) || strcmp(ra.id, id)) return 0;
+  p->compartilha = ra.compartilha;
   p->desde = ra.desde;
   p->porOnde = !strcmp(ra.origem, "trakt") ? SV_FONTE_TRAKT : SV_FONTE_NUVIO;
-  if (ra.temGosto) { p->gostoPct = ra.gostoPct; p->emComum = ra.gostoIguais; }
-  if (ra.temMes) { p->minutosMes = (int)(ra.seg / 60); p->filmesMes = ra.filmes; p->seriesCurso = ra.series; }
-  if (ra.temAgora && p->nAssistindo < SV_FILA_MAX) {
+  if (ra.compartilha && ra.temGosto && ra.gostoTotal > 0) { p->gostoPct = ra.gostoPct; p->emComum = ra.gostoIguais; p->gostoTotal = ra.gostoTotal; }
+  if (ra.compartilha && ra.temMes) { p->minutosMes = (int)(ra.seg / 60); p->filmesMes = ra.filmes; p->seriesCurso = ra.series; }
+  if (ra.compartilha && ra.temAgora && p->nAssistindo < SV_FILA_MAX) {
     svDeRecEvento(&ra.agora, &p->assistindo[p->nAssistindo]);
     p->assistindo[p->nAssistindo++].acao = SV_AGORA;
   }
-  for (i = 0; i < ra.nGostou && p->nGostou < SV_FILA_MAX; i++) {
+  for (i = 0; ra.compartilha && i < ra.nGostou && p->nGostou < SV_FILA_MAX; i++) {
     svDeRecEvento(&ra.gostou[i], &p->gostou[p->nGostou]);
     p->gostou[p->nGostou++].reacao = SV_REAC_GOSTOU;
   }
   { int vistas = 0;
     for (i = 0; i < ra.nRecs; i++) {
       int est = ra.recs[i].estado;
-      if (est >= REC_REC_COMECOU) vistas++;
+      if (ra.recs[i].terminou || est == REC_REC_TERMINOU) vistas++;
       if (p->nMandou < SV_FILA_MAX) {
         SvEnviada *m = &p->mandou[p->nMandou++];
         memset(m, 0, sizeof *m);
         snprintf(m->imdb, sizeof m->imdb, "%s", ra.recs[i].imdb);
         snprintf(m->titulo, sizeof m->titulo, "%s", ra.recs[i].titulo);
         snprintf(m->poster, sizeof m->poster, "%s", ra.recs[i].poster);
-        m->estado = est >= REC_REC_COMECOU ? SV_REC_VIU : est == REC_REC_ABERTA ? SV_REC_ABRIU
-                  : SV_REC_ENTREGUE;
+        m->estado = ra.recs[i].terminou || est == REC_REC_TERMINOU ? SV_REC_VIU
+                  : est == REC_REC_COMECOU ? SV_REC_COMECOU
+                  : est == REC_REC_REAGIU ? SV_REC_REAGIU
+                  : est == REC_REC_ABERTA ? SV_REC_ABRIU : SV_REC_ENTREGUE;
         m->reacao = ra.recs[i].temReacao ? ra.recs[i].reacao : SV_REAC_NADA;
         m->quando = ra.recs[i].criado;
       }
@@ -510,8 +527,35 @@ static void refazer(void) {
   if (h != hashUlt || !rev) { hashUlt = h; rev++; }
 }
 
+// Consume account changes here, on the UI thread. recomenda_esquecer also runs
+// on the service thread: it only changes its own generation under its mutex.
+static void conferirIdentidade(void) {
+  unsigned g = recomenda_geracao();
+  if (temGeracao && g != geracaoVista) {
+    dados_apagar(SV_ARQ_VISTOS); // Also close any race with the final old-account UI frame.
+    free(externo); externo = NULL; nExterno = temExterno = 0;
+    free(extras); extras = NULL; nExtras = 0;
+    nBrutos = nFeed = nAmigos = nCtts = nVistos = 0;
+    memset(vistos, 0, sizeof vistos); vistosLidos = 1;
+    perfilPedido[0] = 0;
+    catRevUlt = ~0u; recNUlt = -1; hashUlt = 0; refeitoEm = 0;
+    rev++;
+  }
+  temGeracao = 1; geracaoVista = g;
+}
+
+void socialvis_abrir_perfil(const char *id) {
+  conferirIdentidade();
+  if (!id || !id[0]) return;
+  snprintf(perfilPedido, sizeof perfilPedido, "%s", id);
+#ifdef NV_SOCIAL_V2
+  if (recomenda_ativo()) recomenda_amigo_pedir(id);
+#endif
+}
+
 void socialvis_atualizar(void) {
   Uint32 agora = SDL_GetTicks();
+  conferirIdentidade();
   unsigned cr = cat_revisao();
   int rn = recomenda_n();
   if (rev && cr == catRevUlt && rn == recNUlt && agora - refeitoEm < SV_REFAZ_MS) return;
@@ -559,19 +603,22 @@ void socialvis_definir_perfil_extra(const char *id, const SvPerfil *extra) {
 }
 
 int socialvis_perfil(const char *id, SvPerfil *p) {
-  int k, i;
+  int k, i, servidor;
   if (!id || !p) return 0;
+  conferirIdentidade();
   k = achaAmigo(id);
   if (k < 0) return 0;
   memset(p, 0, sizeof *p);
   p->a = amigos[k];
+  p->compartilha = -1;
   p->porOnde = amigos[k].fonte;
-  p->gostoPct = p->emComum = -1;
+  p->gostoPct = p->emComum = p->gostoTotal = -1;
   p->minutosMes = p->filmesMes = p->seriesCurso = -1;
   p->recsVistas = p->recsTotal = -1;
   // O SERVIDOR PRIMEIRO (com NV_SOCIAL_V2): ele e a verdade e muda; o extra
   // guardado e o que valia na ultima leitura (ou os dados de exemplo).
-  if (svPerfilDoServidor(id, p) < 0)
+  servidor = svPerfilDoServidor(id, p);
+  if (servidor < 0)
     for (i = 0; i < nExtras; i++)
       if (!strcmp(extras[i].id, id)) {
         SvAmigo base = p->a;
@@ -579,18 +626,48 @@ int socialvis_perfil(const char *id, SvPerfil *p) {
         p->a = base;
         break;
       }
-  // AS FILEIRAS QUE O FEED JA RESPONDE, quando ninguem as trouxe prontas:
-  // "Assistindo" = agora/comecou; "Gostou" = reacao boa ou avaliou.
+  if (p->estado == SV_PERFIL_NEGADO || p->compartilha == 0) {
+    p->a.agora = p->a.nTit = 0;
+    p->nAssistindo = p->nGostou = 0;
+    return 1;
+  }
+  if (p->estado == SV_PERFIL_NAO_ACHOU) {
+    p->a.nTit = p->a.agora = 0;
+    for (i = 0; i < nBrutos; i++) {
+      const SvEvento *e = &brutos[i];
+      int j, repetido = 0;
+      if (strcmp(e->pessoaId, id) || e->fonte != SV_FONTE_TRAKT || e->acao == SV_MANDOU) continue;
+      p->a.fonte = SV_FONTE_TRAKT;
+      if (e->pessoaNome[0]) snprintf(p->a.nome, sizeof p->a.nome, "%s", e->pessoaNome);
+      if (e->pessoaAvatar[0]) snprintf(p->a.avatar, sizeof p->a.avatar, "%s", e->pessoaAvatar);
+      if (e->acao == SV_AGORA) p->a.agora = 1;
+      for (j = 0; j < p->a.nTit; j++) if (!strcmp(p->a.tit[j].imdb, e->imdb)) repetido = 1;
+      if (!repetido && p->a.nTit < SV_TIT_MAX) p->a.tit[p->a.nTit++] = *e;
+    }
+  }
+  // An unqualified rating does not prove a positive reaction. Only explicitly
+  // shared positive reactions belong in Recently liked.
   if (!p->nAssistindo || !p->nGostou) {
     int fazA = !p->nAssistindo, fazG = !p->nGostou;
     for (i = 0; i < nBrutos; i++) {
       const SvEvento *e = &brutos[i];
       if (strcmp(e->pessoaId, id) || e->acao == SV_MANDOU) continue;
+      // The worker does not own public Trakt data. Its generic 404 cannot
+      // establish that an independently authorized tracker source is empty.
+      if ((p->estado == SV_PERFIL_NAO_ACHOU || servidor == 1) && e->fonte != SV_FONTE_TRAKT) continue;
       if (fazA && (e->acao == SV_AGORA || e->acao == SV_INICIO) && p->nAssistindo < SV_FILA_MAX)
         p->assistindo[p->nAssistindo++] = *e;
-      if (fazG && (e->reacao == SV_REAC_GOSTOU || e->acao == SV_AVALIOU ||
-                   (e->acao == SV_REACAO && e->reacao > 0)) && p->nGostou < SV_FILA_MAX)
-        p->gostou[p->nGostou++] = *e;
+      if (fazG && e->reacao == SV_REAC_GOSTOU && p->nGostou < SV_FILA_MAX) {
+        int j;
+        // The latest explicit opinion wins, even if it is negative/neutral.
+        for (j = 0; j < i; j++) {
+          const SvEvento *o = &brutos[j];
+          if (o->reacao != SV_REAC_NADA && !strcmp(o->pessoaId, e->pessoaId) &&
+              !strcmp(o->imdb, e->imdb) && !strcmp(o->tipo, e->tipo) &&
+              o->temporada == e->temporada && o->episodio == e->episodio) break;
+        }
+        if (j == i) p->gostou[p->nGostou++] = *e;
+      }
     }
   }
   return 1;
@@ -599,6 +676,7 @@ int socialvis_perfil(const char *id, SvPerfil *p) {
 int socialvis_ultima_enviada(const char *id, SvEnviada *saida) {
   int i;
   if (!id) return 0;
+  conferirIdentidade();
   for (i = 0; i < nExtras; i++)
     if (!strcmp(extras[i].id, id) && extras[i].p.nMandou > 0) {
       if (saida) *saida = extras[i].p.mandou[0];
@@ -617,7 +695,11 @@ int socialvis_meu_estado(const char *imdb, int *pct, int *t, int *e) {
   k = cat_indice_por_imdb(imdb);
   it = k >= 0 ? cat_item(k) : NULL;
   if (!it) return 0;
-  if (cat_visto(it)) return 2;
+  if (cat_visto(it)) {
+    if (t) *t = it->temporada;
+    if (e) *e = it->episodio;
+    return 2;
+  }
   if (it->progresso > 0) {
     if (pct) *pct = it->progresso;
     if (t) *t = it->temporada;
@@ -807,9 +889,10 @@ void socialvis_demo(int cenario) {
   socialvis_definir_feed(v, n);
   if (cenario >= 1) {
     memset(&p, 0, sizeof p);
+    p.estado = SV_PERFIL_OK; p.compartilha = 1;
     p.desde = agora - 60 * 86400;
     p.porOnde = SV_FONTE_NUVIO;
-    p.gostoPct = 78; p.emComum = 14;
+    p.gostoPct = 78; p.emComum = 14; p.gostoTotal = 18;
     p.minutosMes = 31 * 60; p.filmesMes = 12; p.seriesCurso = 4;
     p.recsVistas = 6; p.recsTotal = 7;
     p.nMandou = 2;

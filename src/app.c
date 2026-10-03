@@ -14,6 +14,7 @@
 #include "celbotao.h"
 #include "ponteiro.h"
 #include "app.h"
+#include "iconeapp.h"
 #include "registro.h"
 #include "desempenho.h"
 #include "addonsui.h"
@@ -24,6 +25,7 @@
 #include "perfilsel.h"
 #include "sync.h"
 #include "traktauth.h"
+#include "discord.h"
 #include "simklauth.h"
 #include "simkl.h"
 #include "listas.h"
@@ -101,6 +103,7 @@
 #include "rede.h"
 #include "ts_sonda.h"
 #include <unistd.h>
+#include "ondever.h"
 #include "fontepref.h"
 #include "video.h"
 #include "addons.h"
@@ -1330,6 +1333,7 @@ int app_iniciar(const char *dirArte) {
   // A FONTE LEMBRADA, do mesmo jeito e pelo mesmo motivo: ela e lida antes do
   // primeiro Reproduzir, que pode acontecer segundos depois do arranque quando
   // a pessoa abre direto no "Continuar assistindo".
+  ondever_iniciar();
   fontepref_iniciar();
   // A ARTE ESCOLHIDA A MAO (#142) tambem, antes do primeiro destaque: sem ela
   // lida, o hero abriria na foto automatica e trocaria no quadro seguinte.
@@ -1579,7 +1583,7 @@ void app_evento(const SDL_Event *e) {
   // Relogio desligado: o de sempre.
   if(e->type==SDL_KEYDOWN && !e->key.repeat &&
      (e->key.keysym.sym==SDLK_s || e->key.keysym.scancode==NV_SCANCODE_BLUE ||
-      (ilha_cartao_na_tela() && !spainel_aberto() &&
+      ((ilha_cartao_na_tela() || ilha_atividade_expansivel()) && !spainel_aberto() &&
        (e->key.keysym.scancode==NV_SCANCODE_CH_UP || e->key.keysym.sym==SDLK_PAGEUP))) &&
      tela==TELA_HOME && !player_aberto() && !player_mini_ativo() &&
      !detail_aberto() && !vertudo_aberta() && !menu_aberto()) {
@@ -1589,7 +1593,7 @@ void app_evento(const SDL_Event *e) {
     if (agoraTecla - ultimoToque < 400) return;   // repeticao do firmware
     ultimoToque = agoraTecla;
     if(spainel_aberto())spainel_fechar();
-    else if (ilha_cartao_na_tela() && ilha_modal_abrir()) {}
+    else if ((ilha_cartao_na_tela() || ilha_atividade_expansivel()) && ilha_modal_abrir()) {}
     else if (ajustes_relogio_ligado() && ilha_rect(&ix, &iy, &iw, &ih)) spainel_abrir_de(ix, iy, iw, ih);
     else spainel_abrir();
     return;
@@ -1936,6 +1940,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // onde o vinculo e feito, "Aguardando a autorizacao" nunca saia do lugar
   // mesmo com a pessoa ja tendo autorizado no celular.
   traktauth_passo((unsigned)agora);
+  discord_passo((unsigned)agora);
   simklauth_passo((unsigned)agora);
 
   if (tela == TELA_ESCOLHA_PERFIL) {
@@ -3648,6 +3653,9 @@ static void desenharTelas(Uint32 agora) {
     GfxRect fundo = { 0, 0, NV_TELA_W, NV_TELA_H };
     TxtLinha t, sb;
     gfx_cor(fundo, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+    // A ABERTURA com a marca do icone escolhido (apoiadores); com o Original,
+    // a tela de sempre, so com o texto.
+    iconeapp_marca((GfxRect){ (NV_TELA_W - 160.0f) * 0.5f, 260.0f, 160.0f, 160.0f }, 1.0f);
     t = txt_linha(TXT_TITULO2, "Preparando seu catálogo…", 255, 255, 255, 255);
     txt_desenhar(t, (NV_TELA_W - t.w) * 0.5f, 460.0f);
     sb = txt_linha(TXT_BODY,
@@ -3729,8 +3737,8 @@ static int relogioCabe(void) {
       novidades13_aberto() || novidades131_aberto() || novidades132_aberto() ||
       novidades133_aberto() || novidades134_aberto() || novidades139_aberto() ||
       novidades1312_aberto() || novidades142_aberto() || novidades148_aberto() ||
-      novidades170_aberto() || telemetria_aberto() || recintro_aberto() ||
-      agendaviso_aberto() || avisos_cartao_aberto() ||
+      novidades170_aberto() || novidades180_aberto() || telemetria_aberto() || recintro_aberto() ||
+      atualizacao_aberta() || agendaviso_aberto() || avisos_cartao_aberto() ||
       glem_cartao_aberto() || recenviar_aberto() || pessoas_aberto() ||
       recomenda_aberta() || pipintro_aberto() || diagnostico_intro_aberto())
     return 0;
@@ -3738,6 +3746,16 @@ static int relogioCabe(void) {
 }
 
 void app_desenhar(Uint32 agora) {
+  // The highlights modal owns input and covers almost the whole screen.
+  // Do not rasterize Home text or punch trailer holes through its backdrop.
+  if (novidades180_aberto() && !registro_aberto() && !player_aberto()) {
+    gfx_sem_recorte();
+    gfx_cor((GfxRect){0, 0, NV_TELA_W, NV_TELA_H}, 0,
+            NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+    ponteiro_camada();
+    novidades180_desenhar(agora);
+    return;
+  }
   // COM O PAINEL DE LOG ABERTO A INTERFACE NAO E PINTADA.
   //
   // O painel e um cartao de tela quase cheia e opaco (alpha 0.94): pintar a
@@ -3834,6 +3852,7 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto()) novidades148_desenhar(agora);
   CAMADA_SE(novidades170_aberto());
   if (!registro_aberto()) novidades170_desenhar(agora);
+  CAMADA_SE(novidades180_aberto());
   if (!registro_aberto()) novidades180_desenhar(agora);
   CAMADA_SE(telemetria_aberto());
   if (!registro_aberto()) telemetria_desenhar(agora);
@@ -3856,6 +3875,28 @@ void app_desenhar(Uint32 agora) {
   // (plrilha.h, desenhada em desenharTelas): a mesma pilula, no mesmo canto,
   // com a hora e o "termina as" do titulo. No Guia ela vai para o topo direito
   // (o titulo do guia ocupa o esquerdo).
+  static int homeCarregando;
+  static Uint32 homeConcluida;
+  if (tela == TELA_HOME && !detail_aberto()) {
+    DescHomeCarga load; desc_home_carga(&load);
+    if (load.ativo) { homeCarregando = 1; homeConcluida = 0; }
+    else if (homeCarregando) { homeCarregando = 0; homeConcluida = agora; }
+    int concluida = homeConcluida && agora - homeConcluida < 1000u;
+    if (load.ativo || concluida || ilha_modal_aberto()) {
+      char details[640];
+      const char *stage = !load.ativo ? i18n("Home carregada") :
+        load.fase == 2 ? i18n("Carregando fileiras…") : i18n("Sincronizando a Home…");
+      snprintf(details, sizeof details,
+        i18n("%s\nTempo: %u s · Add-ons consultados: %d de %d\nFileiras atualizadas: %d · Falhas: %d\nVocê pode continuar navegando enquanto a Home atualiza."),
+        stage, load.ms / 1000u, load.addonsProntos, load.addonsTotal, load.fileiras, load.falhas);
+      ilha_atividade_detalhes(i18n("Carregamento da Home"), details);
+      if (load.ativo) {
+        char shortStatus[160];
+        snprintf(shortStatus, sizeof shortStatus, "%s · %s", i18n("Carregando fileiras…"), i18n("Detalhes"));
+        ilha_atividade(shortStatus, -1.0f);
+      } else if (concluida) ilha_atividade(i18n("Home carregada"), -1.0f);
+    } else ilha_atividade_detalhes(NULL, NULL);
+  } else ilha_atividade_detalhes(NULL, NULL);
   if (guia_atualizando_lista()) ilha_atividade(i18n("Atualizando a lista de canais…"), -1.0f);
   if (!registro_aberto() && !player_aberto() && sessao_logada() &&
       tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL) {
@@ -3927,6 +3968,7 @@ void app_encerrar(void) {
   }
   aguardandoFonte = 0;
   player_encerrar();
+  discord_encerrar();   // a atividade some na hora, sem esperar o Discord notar a queda
   video_encerrar();    // solta o nome LS2 antes do processo sumir (deploy mata sem aviso)
   ajustes_encerrar();
   diagnostico_encerrar();

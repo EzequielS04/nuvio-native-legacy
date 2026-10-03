@@ -68,7 +68,7 @@ static const Item TELA[] = {
     ROT("Imagem e som"), OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS),
     ROT("Durante e depois"),
       OPC(AJ_PAUSA_OVERLAY), OPC(AJ_REACAO_CREDITOS), OPC(AJ_CW_CONCLUIDO), OPC(AJ_SAIDA_PLAYER),
-    ROT("Miniaturas na barra de tempo"),
+    ROT("Seekr"),
       OPC(AJ_SEEKR_LIGADO), OPC(AJ_SEEKR_CHAVE), OPC(AJ_SEEKR_TESTAR),
       OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
 
@@ -77,7 +77,7 @@ static const Item TELA[] = {
 
   SEC("Aparência", "Cor, transparência, fonte, animações e relógio", "aj_palette"),
     OPC(AJ_TEMA), OPC(AJ_FUNDO), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_FONTE_UI),
-    OPC(AJ_TAMANHO_UI),
+    OPC(AJ_TAMANHO_UI), OPC(AJ_TAMANHO_AJUSTES), OPC(AJ_ICONE_APP),
     OPC(AJ_ANIM), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS), OPC(AJ_VIDRO_CONTORNO),
     OPC(AJ_VIDRO_OPAC), OPC(AJ_VIDRO_FOSCO),
 
@@ -95,7 +95,7 @@ static const Item TELA[] = {
       OPC(AJ_PERFIL_ATIVO), OPC(AJ_SYNC), OPC(AJ_ADDONS), OPC(AJ_ADDONS_PRINCIPAL),
       OPC(AJ_PERFIL_PESQ), OPC(AJ_PERFIL_EDITAR), OPC(AJ_SAIR),
     ROT("Trakt e Simkl"),
-      OPC(AJ_TRAKT), OPC(AJ_SIMKL), OPC(AJ_SALVOS_DEST), OPC(AJ_CW_FONTE),
+      OPC(AJ_TRAKT), OPC(AJ_SIMKL), OPC(AJ_DISCORD), OPC(AJ_SALVOS_DEST), OPC(AJ_CW_FONTE),
     ROT("Chaves"),
       OPC(AJ_DEBRID_RD), OPC(AJ_DEBRID_TB), OPC(AJ_DEBRID_PM), OPC(AJ_DEBRID_AD),
       OPC(AJ_DEBRID_AD_TESTAR), OPC(AJ_MDB_CHAVE), OPC(AJ_FANART_CHAVE),
@@ -133,8 +133,8 @@ static const char *SECAO_AJUDA[] = {
   "Versão instalada, atualização e envio de registros para a equipe do app.",
 };
 
-// Básico por padrão; a lista abaixo segue os 60 IDs avançados da proposta-base
-// mais AJ_SEEKR_AJUSTE, a única opção avançada acrescentada no delta 1.7.1.
+// Basic by default. Glass and its outline remain visible together in Appearance.
+// Technical options below are revealed through the advanced control.
 static int uxAvancada(int op) {
   switch (op) {
     case AJ_HERO_TRANSICAO:
@@ -159,7 +159,7 @@ static int uxAvancada(int op) {
     case AJ_TMDB_MAIS: case AJ_TMDB_COL: case AJ_TMDB_CW:
     case AJ_SELOS_CORES:
     case AJ_SELOS_PACOTE: case AJ_SELOS_PACOTE_ADD: case AJ_SELOS_PACOTE_REM:
-    case AJ_VIDRO_CONTORNO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
+    case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
     case AJ_LIVETV_FORMATO: case AJ_LIVETV_MODO: case AJ_LIVETV_PROXY:
     case AJ_P2P_LIGADO: case AJ_P2P_URL: case AJ_P2P_TESTAR:
     case AJ_TEX_MB:

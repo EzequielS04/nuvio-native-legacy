@@ -8,6 +8,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 Q="${1:-900}"
+# The command string expands this value before its inner conditional runs.
+: "${NV_HOST_LOCALE:=}"
 mkdir -p build/tpk/teste
 rm -f build/tpk/teste/*
 docker run --rm --platform linux/arm/v5 -v "$PWD":/work -w /work nuvio-tpk-sdk sh -c "

@@ -33,6 +33,7 @@ int homeestado_identidade_geracao(unsigned g, char *dono, unsigned tamDono, int 
 int arte_reserva_episodios(const char *imdb, const char *corpo) { (void)imdb; (void)corpo; return 0; }
 
 #include "../src/descoberta.c"
+Uint32 SDL_GetTicks(void) { return 0; }
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>

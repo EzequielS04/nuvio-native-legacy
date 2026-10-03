@@ -1,3 +1,4 @@
+#include "imdbnota.h"
 #include "vertudo.h"
 #include "posterprov.h"
 #include "idioma.h"
@@ -351,9 +352,10 @@ static void painel(float a) {
     y += t.h + 6.0f;
   }
   // Pastilha da nota, no amarelo do IMDb que o web usa (245,197,24).
-  if (it.nota > 0) {
+  int imdbRating = imdbnota_obter(it.imdb, it.nota, !strcmp(it.tipo,"series"));
+  if (imdbRating > 0) {
     char n[16];
-    snprintf(n, sizeof n, "%.1f", it.nota / 10.0f);
+    snprintf(n, sizeof n, "%.1f", imdbRating / 10.0f);
     { TxtLinha t = txt_linha(TXT_CAPTION, n, 23, 19, 10, 255);
       GfxRect r = { VT_PAN_X, y + 8.0f, t.w + 26.0f, t.h + 8.0f };
       gfx_cor(r, 8.0f / (t.h + 8.0f), 0.961f, 0.773f, 0.094f, 0.92f * a);

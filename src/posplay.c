@@ -449,8 +449,10 @@ static void posplay_desenharCorpo_(Uint32 agora, float baseY) {
       GLuint t = arte[0] ? tex_obter_larg(arte, tr.w) : 0;
       gfx_cor(tr, 22.0f / tr.h, 0.102f, 0.106f, 0.125f, a);
       // DESFOCAR NAO ASSISTIDOS (#177): o proximo e o que a pessoa nao viu.
+      if (t && posplay_desfocar_thumb(idx, proxT, proxE))
+        t = gfx_desfocado(t, arte);
       // Sem copia desfocada pronta, gfx_desfocado devolve 0 e fica o fundo.
-      if (t && posplay_desfocar_thumb(idx, proxT, proxE)) t = gfx_desfocado(t, arte);
+      // A textura retornada ja esta desfocada: nunca a envie de novo ao cache.
       if (t) {
         gfx_tex_aspect_atual = tex_aspecto(arte);
         gfx_rect(tr, t, GFX_CARD, 0, 0, 0, 22.0f / tr.h, 0, 0, 0, a);

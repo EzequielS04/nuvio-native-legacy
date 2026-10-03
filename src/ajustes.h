@@ -355,11 +355,17 @@ int   ajustes_relogio_ligado(void);
 int   ajustes_relogio_pos(void);
 // Tamanho da interface: 1, 1.2, 1.3 ou 1.5 (gfx_escala_ui). LOCAL.
 float ajustes_tamanho_ui(void);
+// Settings only: 0.8/0.9/1.0, default 0.9; independent of global UI zoom.
+float ajustes_tamanho_ajustes(void);
+#ifdef AJUSTES_TESTE
+void  ajustes_teste_escala(int percentual); // fixture only; does not persist
+#endif
 // Fundo atras dos paineis (Aparencia › Fundo): 0 Arte, 1 Arte borrada, 2 Frost.
 int   ajustes_fundo(void);
 float ajustes_vidro_opacidade(void);   // 0,60..0,92; 0,78 = o vidro de sempre
 int   ajustes_vidro_fosco(void);
 void  ajustes_teste_vidro_env(void);   // so capturas        // 1 = arte borrada atras do vidro
+int   ajustes_icone_app(void);
 // Sair do player no meio vai para a HOME, minimizando o titulo na ilha (o
 // relogio ligado e Ao sair do player = home). 0 = a pagina do titulo, como antes.
 int   ajustes_saida_player_home(void);

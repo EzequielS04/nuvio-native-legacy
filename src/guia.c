@@ -2977,12 +2977,23 @@ static void desenharHero(float a, time_t agoraT, time_t tFoco) {
 //     quina. Agora os cantos ficam fora da tela (borda reta) e o fio de 1,2 px
 //     a 6% do cartao de novidades marca a borda.
 #define G_CAT_FADE 60.0f
+// As gavetas do guia usam a mesma folha do Glass UI. O miolo de vidro aplica
+// Opacidade e Frost; o ramo solido permanece opaco quando a interface de vidro
+// esta desligada.
+static void materialPainelGuia(GfxRect p, float raioPx, float a) {
+  float raio = raioPx / (p.h > 1.0f ? p.h : 1.0f);
+  gfx_rect((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f },
+           0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, 0, 0, 0, 0.38f * a);
+  if (ajustes_vidro()) gfx_vidro_folha(p, raio, a);
+  else gfx_cor(p, raio, 0.071f, 0.075f, 0.086f, 0.98f * a);
+}
+
 static void desenharPainelCategorias(float a) {
   float e = catAnim, ar, ag, ab;
   float x0 = -G_CAT_W * 0.18f * (1.0f - e);   // desliza ~80 px enquanto aparece
   float ea = e * a;
   float areaH = G_CAT_BASE - G_CAT_TOPO, maxY, acima, abaixo;
-  int nl = nLinhas(), i, tf = ajustes_tinta_foco();
+  int nl = nLinhas(), i, tf = 243;
   if (e < 0.01f || nl < 1) return;
   ajustes_acento(&ar, &ag, &ab);
   maxY = (float)nl * G_CAT_ROW - areaH;
@@ -2991,14 +3002,12 @@ static void desenharPainelCategorias(float a) {
   // e o que liga o esmaecimento de cada borda.
   acima  = catRol / G_CAT_ROW;          acima  = acima  < 0 ? 0 : (acima  > 1 ? 1 : acima);
   abaixo = (maxY - catRol) / G_CAT_ROW; abaixo = abaixo < 0 ? 0 : (abaixo > 1 ? 1 : abaixo);
-  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.62f * ea);
+  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, (ajustes_vidro() ? 0.30f : 0.42f) * ea);
   // O painel passa 40 px das bordas de cima e de baixo: os cantos ficam fora
   // da tela e o que se ve e uma borda reta de alto a baixo. Com o canto
   // arredondado DENTRO da tela, o fundo aparecia pela quina.
   { GfxRect p = { x0 - 40.0f, -40.0f, G_CAT_W + 40.0f, NV_TELA_H + 80.0f };
-    gfx_cor(p, 28.0f / p.h, 0.070f, 0.072f, 0.080f, ea);
-    gfx_luz_canto(p, 28.0f / p.h, p.w * 0.30f, -p.w * 0.25f, p.w * 1.45f, ar, ag, ab, 0.06f * ea);
-    gfx_rect(p, 0, GFX_ANEL, 0, 1.2f / p.h, 0, 28.0f / p.h, 1, 1, 1, 0.06f * ea); }
+    materialPainelGuia(p, 28.0f, ea); }
   // Titulo, linhas e rodape na MESMA coluna de texto (x0 + 56): antes o titulo
   // e o rodape ficavam a 48 e o texto das linhas a 56, e a borda esquerda do
   // bloco nao fechava.
@@ -3022,7 +3031,7 @@ static void desenharPainelCategorias(float a) {
     la = (1.0f - (1.0f - ft) * acima) * (1.0f - (1.0f - fb) * abaixo) * ea;
     if (la < 0.01f) continue;
     snprintf(n, sizeof n, "%d", linhaN(i));
-    if (foc) gfx_cor(r, 12.0f / r.h, ar, ag, ab, la);
+    if (foc) plrui_linha_foco(r, 20.0f, la);
     else if (atual) gfx_cor(r, 12.0f / r.h, 1, 1, 1, 0.06f * la);
     // A barra da secao atual: 4x22 com raio de 2 px. Com raio 0,5 (da altura)
     // num retangulo de 4 px o SDF saia um grao oval colado na borda da linha.
@@ -3452,18 +3461,18 @@ static void desenharLinhaLista(GCanal *c, float y, int focada, float a,
 static void desenharPainelAddons(float a) {
   float x = G_PA_X + G_PA_MARG, w = G_PA_W - 2.0f * G_PA_MARG;
   float ar, ag, ab, y0 = G_PA_LISTA_Y;
-  int n = paN, i;
+  int n = paN, i, vidro = ajustes_vidro();
+  int tf = 243;
   ajustes_acento(&ar, &ag, &ab);
 
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-    gfx_cor(tela, 0.0f, 0, 0, 0, 0.45f * a); }
+    gfx_cor(tela, 0.0f, 0, 0, 0, (vidro ? 0.30f : 0.42f) * a); }
   // PAINEL FLUTUANTE como o de Salvos e a barra lateral (21/09/2026): solto
   // 24 px do topo e da base, cantos de 28 px pelo menor lado, translucido,
   // UMA luz difusa na cor de realce pelo canto superior direito, presa aos
   // cantos (GFX_LUZ). O veu de tela cheia acima ja e a primeira camada.
   { GfxRect p = { G_PA_X, 24.0f, G_PA_W, NV_TELA_H - 48.0f };
-    gfx_cor(p, 28.0f / G_PA_W, 0.055f, 0.058f, 0.068f, 0.94f * a);
-    gfx_luz_canto(p, 28.0f / G_PA_W, G_PA_W * 0.9f, -G_PA_W * 0.1f, G_PA_W * 0.65f, ar, ag, ab, 0.22f * a); }
+    materialPainelGuia(p, 28.0f, a); }
 
   { TxtLinha t = txt_linha(TXT_HEADLINE, i18n("Addons de canais"), 240, 242, 248, 255);
     txt_desenhar_alpha(t, x, 64.0f, a); }
@@ -3490,16 +3499,11 @@ static void desenharPainelAddons(float a) {
   for (i = 0; i < painelN(); i++) {
     float yi = y0 + paItemY(i) - paRol;
     GfxRect row = { x, yi, w, (i < n ? G_PA_ROW : G_PA_ROW_REC) - 8.0f };
-    float raio = 12.0f / row.h;
     int f = i == paFoco;
     if (yi + row.h < y0 - 8.0f || yi > NV_TELA_H - 80.0f) continue;
-    // Linha em repouso e linha em foco: as mesmas de addonsui.c. A em foco
-    // ganha o brilho difuso por tras (0,9x a altura de folga), a luz das
-    // pilulas do menu lateral.
-    gfx_cor(row, raio, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B, 0.34f * a);
-    if (f) { GfxRect luz = { row.x - row.h * 0.9f, row.y - row.h * 0.9f, row.w + row.h * 1.8f, row.h * 2.8f };
-             gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * a); }
-    if (f) gfx_cor(row, raio, ar, ag, ab, a);
+    // A linha em repouso faz parte da folha; apenas o foco recebe
+    // a superficie clara comum das listas, sem brilho ou bloco de accent.
+    if (f) plrui_linha_foco(row, 20.0f, a);
     if (i < n) {
       int ai = paIdx[i];
       int sc = sabeCanal(addons_base(ai));
@@ -3510,11 +3514,11 @@ static void desenharPainelAddons(float a) {
                                 : i18n("Ainda não conferido pelo guia");
       GfxRect pill = { x + w - 24.0f - 136.0f, yi + (row.h - 40.0f) * 0.5f, 136.0f, 40.0f };
       float txtW = pill.x - 24.0f - (x + 24.0f);
-      { int tf = ajustes_tinta_foco();
+      {
         TxtLinha t = f ? txt_linha_corta(TXT_BODY, addons_nome(ai), tf, tf, tf, 255, txtW)
                        : txt_linha_corta(TXT_BODY, addons_nome(ai), 240, 241, 245, 255, txtW);
         txt_desenhar_alpha(t, x + 24.0f, yi + 12.0f, a); }
-      { TxtLinha t = f ? txt_linha_corta(TXT_CAPTION, sub, 60, 62, 70, 255, txtW)
+      { TxtLinha t = f ? txt_linha_corta(TXT_CAPTION, sub, 190, 192, 200, 255, txtW)
                        : txt_linha_corta(TXT_CAPTION, sub, 150, 153, 162, 255, txtW);
         txt_desenhar_alpha(t, x + 24.0f, yi + 48.0f, a); }
       // LIGADO = pilula preenchida; DESLIGADO = so o anel. Preenchimento e o
@@ -3527,10 +3531,9 @@ static void desenharPainelAddons(float a) {
                          : txt_linha(TXT_CAPTION, i18n("Ligado"), 20, 21, 25, 255);
           txt_desenhar_alpha(t, pill.x + (pill.w - t.w) * 0.5f, pill.y + (pill.h - t.h) * 0.5f, a); }
       } else {
-        float c = f ? 0.12f : 0.72f;
+        float c = 0.72f;
         gfx_rect(pill, 0, GFX_ANEL, 0, 0.05f, 0, 0.5f, c, c, c + 0.02f, 0.9f * a);
-        { TxtLinha t = f ? txt_linha(TXT_CAPTION, i18n("Desligado"), 40, 42, 50, 255)
-                         : txt_linha(TXT_CAPTION, i18n("Desligado"), 190, 192, 200, 255);
+        { TxtLinha t = txt_linha(TXT_CAPTION, i18n("Desligado"), 190, 192, 200, 255);
           txt_desenhar_alpha(t, pill.x + (pill.w - t.w) * 0.5f, pill.y + (pill.h - t.h) * 0.5f, a); }
       }
     } else {
@@ -3550,7 +3553,7 @@ static void desenharPainelAddons(float a) {
       TxtLinha selo = txt_linha(TXT_CAPTION2, i18n("Destaque"), 20, 21, 25, 255);
       float seloW = destaque ? selo.w + 20.0f : 0.0f;
       { float nomeW = txtW - (destaque ? seloW + 12.0f : 0.0f);
-        TxtLinha t = f ? txt_linha_corta(TXT_BODY, rc->nome, ajustes_tinta_foco(), ajustes_tinta_foco(), ajustes_tinta_foco(), 255, nomeW)
+        TxtLinha t = f ? txt_linha_corta(TXT_BODY, rc->nome, tf, tf, tf, 255, nomeW)
                        : txt_linha_corta(TXT_BODY, rc->nome, 240, 241, 245, 255, nomeW);
         txt_desenhar_alpha(t, x + 24.0f, yi + 12.0f, a);
         if (destaque) {
@@ -3569,17 +3572,17 @@ static void desenharPainelAddons(float a) {
         // Em ingles usa a quarta coluna se existir; senao a portuguesa, que e
         // melhor que linha vazia.
         const char *desc = (ajustes_idioma() != IDIOMA_PT && ajustes_idioma() != IDIOMA_PTPT && rc->descEn[0]) ? rc->descEn : rc->desc;
-        if (f) txt_bloco(TXT_CAPTION, desc, 60, 62, 70,     x + 24.0f, yi + 46.0f, txtW, 27.0f, a, 2);
+        if (f) txt_bloco(TXT_CAPTION, desc, 190, 192, 200,     x + 24.0f, yi + 46.0f, txtW, 27.0f, a, 2);
         else   txt_bloco(TXT_CAPTION, desc, 150, 153, 162,  x + 24.0f, yi + 46.0f, txtW, 27.0f, a, 2);
       }
       if (inst) {
-        TxtLinha t = f ? txt_linha(TXT_CAPTION, i18n("Instalado"), ajustes_tinta_foco2(), ajustes_tinta_foco2(), ajustes_tinta_foco2(), 255)
+        TxtLinha t = f ? txt_linha(TXT_CAPTION, i18n("Instalado"), 190, 192, 200, 255)
                        : txt_linha(TXT_CAPTION, i18n("Instalado"), 150, 153, 162, 255);
         txt_desenhar_alpha(t, pill.x + pill.w - t.w, pill.y + (pill.h - t.h) * 0.5f, a);
       } else {
-        float c = f ? ajustes_tinta_foco() / 255.0f : 0.72f;
+        float c = f ? tf / 255.0f : 0.72f;
         gfx_rect(pill, 0, GFX_ANEL, 0, 0.05f, 0, 0.5f, c, c, c + 0.02f, 0.9f * a);
-        { TxtLinha t = f ? txt_linha(TXT_CAPTION, i18n("Instalar"), ajustes_tinta_foco(), ajustes_tinta_foco(), ajustes_tinta_foco(), 255)
+        { TxtLinha t = f ? txt_linha(TXT_CAPTION, i18n("Instalar"), tf, tf, tf, 255)
                          : txt_linha(TXT_CAPTION, i18n("Instalar"), 240, 241, 245, 255);
           txt_desenhar_alpha(t, pill.x + (pill.w - t.w) * 0.5f, pill.y + (pill.h - t.h) * 0.5f, a); }
       }

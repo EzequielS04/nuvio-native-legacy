@@ -58,4 +58,14 @@ linha_tirar=$(rg -n 'desc_tirar_continuar\(imdb, temp, ep\)' src/ctxmenu.c | cut
   echo 'ctxmenu: tirar de Continuar sem a confirmacao antes' >&2; exit 1; }
 rg -q 'if \(confFoco == 0\) aplicar\(\); else pagina = 0;' src/ctxmenu.c
 
+# A ilha do menu sempre fica fora do cartaz focado: direita quando cabe,
+# esquerda como segunda opcao e, sem largura livre, dentro dos limites da tela.
+rg -q 'if \(direita <= maxX\) return direita;' src/ctxmenu.c
+rg -q 'if \(esquerda >= minX\) return esquerda;' src/ctxmenu.c
+rg -q 'if \(maxX - direita >= esquerda - minX\)' src/ctxmenu.c
+rg -q 'x = ctxXCartaz\(cartazRect\);' src/ctxmenu.c
+if rg -q 'CTX_CARTAO_LARGO|sobreArte' src/ctxmenu.c; then
+  echo 'ctxmenu: ilha ancorada sobre a arte do cartaz' >&2; exit 1
+fi
+
 echo 'ctxmenu contract: PASS'

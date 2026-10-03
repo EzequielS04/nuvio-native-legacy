@@ -98,7 +98,9 @@ docker run --rm --platform linux/arm64 --env-file "$ENVF" \
     -DNV_SIMKL_CLIENT_ID="\"$NV_SIMKL_CLIENT_ID\"" \
     -DNV_SIMKL_APP="\"$NV_SIMKL_APP\"" \
     -DNV_TMDB_API_KEY="\"$NV_TMDB_API_KEY\"" \
+    -DNV_SEEKR_API_KEY="\"$NV_SEEKR_API_KEY\"" \
     -DNV_REC_URL="\"$NV_REC_URL\"" \
+    -DNV_DISCORD_CLIENT_ID="\"${NV_DISCORD_CLIENT_ID:-}\"" \
     -DNV_VERSAO="\"$NV_VERSAO\"" \
     -I$SR/usr/include -I$SR/usr/include/SDL2 \
     -lSDL2 -lSDL2_image -lSDL2_ttf -lGLESv2 -lEGL -ldl -lpthread -lz -lm $ASS_LIBS'
@@ -161,7 +163,7 @@ ARQ_DE_PESSOA="trakt.txt addons.txt tmdb.txt mdblist.txt ajustes.txt
 # trakt-p*/trakt-fluxo*/simkl*: o vinculo do Trakt e do Simkl passou a ser um
 # arquivo POR PERFIL (traktauth.c, simklauth.c) — o trakt.txt da lista de nomes
 # acima deixou de alcancar o token quando a pasta de dados cai na da arte.
-GLOB_DE_PESSOA="stalker-p*.txt xtream-p*.txt listas-p*.txt trakt-p*.txt trakt-fluxo*.txt simkl*.txt conta-*.txt conta-*.txt.tmp"
+GLOB_DE_PESSOA="stalker-p*.txt xtream-p*.txt listas-p*.txt trakt-p*.txt trakt-fluxo*.txt simkl*.txt conta-*.txt conta-*.txt.tmp discord-p*.txt discord-p*.txt.tmp"
 
 # O ACERVO DE QUEM EMPACOTOU, que nao e credencial de login e vaza igual.
 #
@@ -257,6 +259,7 @@ if [ "$1" = "--ipk" ]; then
   done
   printf '%s\n' "$LISTA" | grep -qE "art/(trakt-fluxo|simkl)\.txt$" && VAZOU="$VAZOU trakt-fluxo.txt/simkl.txt"
   printf '%s\n' "$LISTA" | grep -qE '(^|/)conta-[^/]*\.txt(\.tmp)?$' && VAZOU="$VAZOU conta-*.txt/conta-*.txt.tmp"
+  printf '%s\n' "$LISTA" | grep -qE '(^|/)discord-p[^/]*\.txt(\.tmp)?$' && VAZOU="$VAZOU discord profile tokens"
   # Diretorio: qualquer caminho DENTRO dele conta como vazamento, nao so a
   # entrada da pasta — o tar pode listar os arquivos sem listar o diretorio.
   for d in $DIR_DE_PESSOA; do

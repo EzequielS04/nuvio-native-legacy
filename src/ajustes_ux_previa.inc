@@ -661,9 +661,29 @@ static float ajPreviaCartao(int op, float x, float y, float w) {
   return y + 64 + 26 - y0;
 }
 
+// A galeria usa as artes reais do launcher; editar so mostra o candidato,
+// sem aplicar o alias do Android antes de confirmar.
+static float ajPreviaIconeApp(float x, float y, float w) {
+  const float gap = 16.0f, cw = (w - gap * 4.0f) / 5.0f;
+  const float lado = cw < 86.0f ? cw : 86.0f, passo = lado + 54.0f;
+  const int sel = valor[AJ_ICONE_APP];
+  float ar, ag, ab;
+  ajustes_acento(&ar, &ag, &ab);
+  for (int i = 0; i < ICONEAPP_N; i++) {
+    float bx = x + (i % 5) * (cw + gap), by = y + (i / 5) * passo;
+    GfxRect r = {bx + (cw - lado) * 0.5f, by, lado, lado};
+    iconeapp_desenhar(i, r, 1, i == sel ? 1.0f : 0.65f);
+    if (i == sel) gfx_anel_fora(r, 18.0f / lado, 2.0f, 3.0f, ar, ag, ab, 0.9f);
+    { TxtLinha nome = ajTxtC(TXT_AJ_MINI12, V_ICONE_APP[i], cw);
+      txt_desenhar_alpha(nome, bx + (cw - nome.w) * 0.5f, by + lado + 12.0f, i == sel ? 1.0f : 0.6f); }
+  }
+  return passo * 2.0f;
+}
+
 // A previa da opcao em foco. Devolve a altura usada (0 = sem previa).
 static float ajPrevia(int op, float x, float y, float w) {
   switch (op) {
+    case AJ_ICONE_APP: return ajPreviaIconeApp(x, y, w);
     case AJ_HOME_LAYOUT: return ajPreviaLayout(x, y, w);
     case AJ_RELOGIO_POS: return ajPreviaRelogio(x, y, w);
     case AJ_LARGURA_DP: case AJ_RAIO_DP: return ajPreviaCartaz(op, x, y, w);

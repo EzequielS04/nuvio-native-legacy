@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "socialvis.h"
 
 #define NV_REC_URL "http://127.0.0.1:8799"
 #define rede_baixar_etag  teste_rede_etag
@@ -135,8 +136,15 @@ int main(void) {
             "amigo: rec reagiu");
     CONFERE(a.recs[1].estado == REC_REC_COMECOU && !a.recs[1].temReacao, "amigo: rec comecou, sem reacao");
     CONFERE(a.temGosto && a.gostoPct == 50 && a.gostoTotal == 2, "amigo: gosto parecido");
+    CONFERE(amigoParse("{\"id\":\"nuvio:p\",\"compartilha\":1,\"recs\":[{\"id\":1,\"estado\":\"reacao\",\"terminou\":1,\"reacao\":1},{\"id\":2,\"estado\":\"reacao\",\"reacao\":1}]}", &a) &&
+            a.recs[0].terminou && !a.recs[1].terminou,
+            "parse separates completion proof from a reaction-only recommendation");
     CONFERE(amigoParse(AMIGO_FECHADO, &a), "amigo fechado: parse");
-    CONFERE(!a.compartilha && !a.temMes && !a.temAgora && !a.temGosto && !a.nGostou, "amigo fechado: nada de atividade"); }
+    CONFERE(!a.compartilha && !a.temMes && !a.temAgora && !a.temGosto && !a.nGostou, "amigo fechado: nada de atividade");
+    CONFERE(amigoParse("{\"id\":\"nuvio:p\",\"compartilha\":1,\"gosto\":{\"total\":0,\"iguais\":0,\"pct\":0}}", &a) &&
+            !a.temGosto, "zero compared reactions means unknown match, not zero percent");
+    CONFERE(amigoParse("{\"id\":\"nuvio:p\",\"compartilha\":0,\"mes\":{\"seg\":500},\"gosto\":{\"total\":2,\"pct\":50},\"gostou\":[{\"imdb\":\"tt1\"}]}" , &a) &&
+            !a.temMes && !a.temGosto && !a.nGostou, "private responses cannot revive cached sharing"); }
 
   // --- merge / dedupe ---------------------------------------------------------------
   { RecEvento d[6], s[6];
@@ -157,6 +165,13 @@ int main(void) {
       CONFERE(nosso >= 0 && !strcmp(d[nosso].poster, "https://trakt/p.jpg"), "completado com a capa do Trakt");
       CONFERE(nosso >= 0 && d[nosso].quando == 11800, "com a hora mais nova (veio %lld)", nosso >= 0 ? d[nosso].quando : 0);
       for (i = 1; i < n; i++) CONFERE(d[i - 1].quando >= d[i].quando, "ordem decrescente em %d", i); }
+    // Same series and time, different episodes/media: independent events.
+    d[0] = ev(REC_FONTE_NUVIO, REC_ACAO_FIM, "trakt:ana", "tt1", 10000);
+    snprintf(d[0].midia, sizeof d[0].midia, "series"); d[0].temporada = 1; d[0].episodio = 1;
+    s[0] = d[0]; s[0].episodio = 2;
+    s[1] = d[0]; s[1].temporada = 2;
+    s[2] = d[0]; snprintf(s[2].midia, sizeof s[2].midia, "movie");
+    CONFERE(rec_eventos_unir(d, 1, s, 3, 6) == 4, "distinct media/season/episodes are not collapsed");
     // sem hora vai para o fim
     d[0] = ev(REC_FONTE_TRAKT, REC_ACAO_FIM, "trakt:c", "tt9", 0);
     s[0] = ev(REC_FONTE_NUVIO, REC_ACAO_SALVO, "nuvio:z", "tt8", 50);
@@ -184,6 +199,11 @@ int main(void) {
     snprintf(ci.socialAcao, sizeof ci.socialAcao, "assistiu");
     CONFERE(rec_evento_de_trakt(&ci, 5, &e) && e.fonte == REC_FONTE_NUVIO && e.acao == REC_ACAO_FIM &&
             !strcmp(e.pessoa, "nuvio:aaa"), "item Nuvio da fileira antiga mantem o id do servico");
+    snprintf(ci.socialAcao, sizeof ci.socialAcao, "registrou um check-in");
+    CONFERE(rec_evento_de_trakt(&ci, 0, &e) && e.acao == REC_ACAO_INICIO && !e.agora,
+            "check-in is a start without proof of live playback or completion");
+    snprintf(ci.socialAcao, sizeof ci.socialAcao, "atividade recente");
+    CONFERE(!rec_evento_de_trakt(&ci, 0, &e), "unknown tracker actions are ignored");
     ci.imdb[0] = 0;
     CONFERE(!rec_evento_de_trakt(&ci, 0, &e), "sem imdb nao serve"); }
 
@@ -252,12 +272,15 @@ int main(void) {
     snprintf(t[0].tipo, sizeof t[0].tipo, "series");
     snprintf(t[0].socialSlug, sizeof t[0].socialSlug, "nuvio:aaa");   // mesmo fato que o feed
     snprintf(t[0].socialAcao, sizeof t[0].socialAcao, "assistindo agora");
+    t[0].temporada = 2; t[0].episodio = 5; // same episode as the real feed fixture
     snprintf(t[1].imdb, sizeof t[1].imdb, "tt0000099");
     snprintf(t[1].socialSlug, sizeof t[1].socialSlug, "pedrinho");
     snprintf(t[1].socialAcao, sizeof t[1].socialAcao, "assistiu");
     n = recomenda_feed_unido(u, 10, t, q, 2);
     CONFERE(n == 4, "feed unido: 3 nossos + 1 Trakt novo (veio %d)", n);
-    CONFERE(u[n - 1].fonte == REC_FONTE_TRAKT && u[n - 1].quando == 0, "o do Trakt sem hora no fim"); }
+    CONFERE(u[n - 1].fonte == REC_FONTE_TRAKT && u[n - 1].quando == 0, "o do Trakt sem hora no fim");
+    t[0].episodio = 6;
+    CONFERE(recomenda_feed_unido(u, 10, t, q, 2) == 5, "same series with a different episode remains distinct"); }
 
   // --- perfil do amigo: rede e cache ---------------------------------------------------
   respCorpo = AMIGO; respStatus = 200;
@@ -285,10 +308,63 @@ int main(void) {
   recomenda_responder_alcance(1);
 
   // --- esquecer ---------------------------------------------------------------------------
-  recomenda_esquecer();
+  { unsigned antes = recomenda_geracao();
+    recomenda_esquecer();
+    CONFERE(recomenda_geracao() != antes, "forget increments UI cache generation"); }
   CONFERE(recomenda_feed_n() == 0 && recomenda_alcance() == REC_ALCANCE_NAO_PERGUNTADO, "esquecer zera");
   CONFERE(nAvisos == 4 && avisos[3] == 0, "sair da conta avisa 0 (%d avisos)", nAvisos);
   { char *b = dados_ler(REC_ARQ_FEED); CONFERE(!b, "esquecer apaga o feed do disco"); free(b); }
+
+  // Independent Trakt source remains usable when the worker has no such user;
+  // explicit service denial/privacy still suppresses the profile's activity.
+  { SvEvento ext[2] = {0}; SvPerfil p;
+    snprintf(ext[0].pessoaId, sizeof ext[0].pessoaId, "trakt:outside");
+    snprintf(ext[0].pessoaNome, sizeof ext[0].pessoaNome, "Outside");
+    snprintf(ext[0].imdb, sizeof ext[0].imdb, "tt50");
+    ext[0].fonte = SV_FONTE_TRAKT; ext[0].acao = SV_AGORA; ext[0].reacao = SV_REAC_NADA;
+    ext[1] = ext[0]; ext[1].fonte = SV_FONTE_NUVIO; ext[1].acao = SV_REACAO; ext[1].reacao = SV_REAC_GOSTOU;
+    socialvis_definir_feed(ext, 2);
+    socialvis_abrir_perfil("trakt:outside");
+    SDL_LockMutex(mtx); amigoEstado = REC_SOC_NAO_ACHOU; temAmigo = 0; SDL_UnlockMutex(mtx);
+    CONFERE(socialvis_perfil("trakt:outside", &p) && p.nAssistindo == 1 && p.nGostou == 0 &&
+            p.a.agora && p.a.nTit == 1 && p.a.tit[0].fonte == SV_FONTE_TRAKT,
+            "worker 404 preserves only independently authorized Trakt activity");
+    SDL_LockMutex(mtx); amigoEstado = REC_SOC_NEGADO; SDL_UnlockMutex(mtx);
+    CONFERE(socialvis_perfil("trakt:outside", &p) && !p.nAssistindo && !p.a.agora,
+            "explicit 403 does not use external fallback");
+    SDL_LockMutex(mtx);
+    memset(&amigo, 0, sizeof amigo); snprintf(amigo.id, sizeof amigo.id, "trakt:outside");
+    temAmigo = 1; amigoEstado = REC_SOC_OK;
+    SDL_UnlockMutex(mtx);
+    CONFERE(socialvis_perfil("trakt:outside", &p) && p.compartilha == 0 && !p.nAssistindo,
+            "explicit private sharing remains respected");
+    SDL_LockMutex(mtx); amigo.compartilha = 1; amigo.nRecs = 2;
+    amigo.recs[0].estado = REC_REC_REAGIU; amigo.recs[0].terminou = 1;
+    amigo.recs[0].temReacao = 1; amigo.recs[0].reacao = 1;
+    amigo.recs[1].estado = REC_REC_REAGIU; amigo.recs[1].terminou = 0;
+    SDL_UnlockMutex(mtx);
+    CONFERE(socialvis_perfil("trakt:outside", &p) && p.recsVistas == 1 && p.recsTotal == 2 &&
+            p.mandou[0].estado == SV_REC_VIU && p.mandou[0].reacao == SV_REAC_GOSTOU &&
+            p.mandou[1].estado == SV_REC_REAGIU,
+            "completed plus reacted stays watched; reaction alone does not prove completion");
+  }
+  // A Social row's source generation survives arbitrary catalog revisions.
+  // Generic metadata/progress changes cannot release the previous identity.
+  { CatItem it = {0}; CatFileira row = {0};
+    snprintf(it.imdb, sizeof it.imdb, "tt90"); snprintf(it.socialSlug, sizeof it.socialSlug, "outside");
+    snprintf(it.socialAcao, sizeof it.socialAcao, "assistindo agora");
+    snprintf(row.chave, sizeof row.chave, "social_activity"); row.n = 1; row.socialGeracao = recomenda_geracao();
+    cat_definir_tudo(&it, 1, &row, 1);
+    recomenda_esquecer(); socialvis_atualizar();
+    CONFERE(socialvis_n_eventos() == 0, "old account Social row is quarantined");
+    cat_apontar_episodio(0, 2, 6); socialvis_atualizar();
+    CONFERE(socialvis_n_eventos() == 0, "episode changes cannot resurrect old account Social row");
+    cat_definir_tudo(&it, 1, &row, 1); socialvis_atualizar();
+    CONFERE(socialvis_n_eventos() == 0, "generic snapshot republication cannot release old Social generation");
+    row.socialGeracao = recomenda_geracao();
+    cat_definir_tudo(&it, 1, &row, 1); socialvis_atualizar();
+    CONFERE(socialvis_n_eventos() == 1, "new source generation publishes Social again");
+  }
 
   printf(falhas ? "recomenda_social: %d falhas\n" : "recomenda_social: ok\n", falhas);
   return falhas ? 1 : 0;

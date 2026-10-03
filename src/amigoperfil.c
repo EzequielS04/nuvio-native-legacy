@@ -56,6 +56,7 @@ void amigoperfil_abrir(const char *id) {
   entrada = 0.0f;
   memset(fFoco, 0, sizeof fFoco);
   socialvis_atualizar();
+  socialvis_abrir_perfil(pessoa);
   recarregar();
   socialvis_marcar_visto(pessoa);
 }
@@ -136,7 +137,7 @@ static void tituloFila(float x, float y, const char *t, float a) {
 }
 
 static void vazioFila(float x, float y, const char *t, float a) {
-  TxtLinha l = txt_linha(TXT_CAPTION, t, 140, 138, 150, 255);
+  TxtLinha l = txt_linha_corta(TXT_CAPTION, t, 140, 138, 150, 255, 4.0f * (AP_PW + AP_PGAP) - AP_PGAP - 48.0f);
   gfx_cor((GfxRect){ x, y, 4.0f * (AP_PW + AP_PGAP) - AP_PGAP, 90.0f }, 18.0f / 90.0f,
           1.0f, 1.0f, 1.0f, 0.04f * a);
   txt_desenhar_alpha(l, x + 24.0f, y + (90.0f - (float)l.h) * 0.5f, a);
@@ -156,7 +157,7 @@ void amigoperfil_desenhar(Uint32 agora) {
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, NV_COR_FUNDO_R, NV_COR_FUNDO_G,
           NV_COR_FUNDO_B, 1.0f);
   if (!temPerfil) {
-    TxtLinha t = txt_linha(TXT_TITULO3, "Perfil indisponível", 240, 240, 245, 255);
+    TxtLinha t = txt_linha(TXT_TITULO3, i18n("Perfil indisponível"), 240, 240, 245, 255);
     txt_desenhar_alpha(t, lx, 200.0f, a);
     return;
   }
@@ -197,13 +198,13 @@ void amigoperfil_desenhar(Uint32 agora) {
       socialvis_status(&perf.a.tit[0], st, sizeof st);
       snprintf(buf, sizeof buf, "%s \xc2\xb7 %s", st, perf.a.tit[0].titulo);
       svd_ponto_vivo(lx + 8.0f, y + 15.0f, 14.0f, 0.0f, a, agora);
-      { TxtLinha t = txt_linha_corta(TXT_CAPTION, buf, 255, 214, 214, 255, lw - 26.0f);
+      { TxtLinha t = txt_linha_corta(TXT_CAPTION, buf, 163, 230, 186, 255, lw - 26.0f);
         txt_desenhar_alpha(t, lx + 26.0f, y, a); y += (float)t.h + 22.0f; }
     }
     // GOSTO PARECIDO: so com dado; sem ele a linha nao existe (um "0 %" seria
     // uma afirmacao falsa sobre duas pessoas).
     if (perf.gostoPct >= 0) {
-      TxtLinha l = txt_linha(TXT_CALLOUT, "Gosto parecido", 216, 213, 224, 255);
+      TxtLinha l = txt_linha(TXT_CALLOUT, i18n("Gosto parecido"), 216, 213, 224, 255);
       char pc[16];
       TxtLinha v;
       snprintf(pc, sizeof pc, "%d%%", perf.gostoPct);
@@ -211,8 +212,8 @@ void amigoperfil_desenhar(Uint32 agora) {
       txt_desenhar_alpha(l, lx, y, a);
       txt_desenhar_alpha(v, lx + (float)l.w + 14.0f, y, a);
       y += (float)l.h + 4.0f;
-      if (perf.emComum > 0) {
-        snprintf(buf, sizeof buf, i18n("vocês gostaram de %d títulos iguais"), perf.emComum);
+      if (perf.emComum >= 0 && perf.gostoTotal > 0) {
+        snprintf(buf, sizeof buf, i18n("Mesma opinião em %d de %d títulos"), perf.emComum, perf.gostoTotal);
         { TxtLinha t = txt_linha_corta(TXT_CAPTION, buf, 168, 166, 178, 255, lw);
           txt_desenhar_alpha(t, lx, y, a); y += (float)t.h; }
       }
@@ -236,8 +237,39 @@ void amigoperfil_desenhar(Uint32 agora) {
       if (y < 640.0f) y = 640.0f;
       for (i = 0; i < 4; i++) {
         GfxRect r = { lx + (float)(i % 2) * (bw + 16.0f), y + (float)(i / 2) * (bh + 16.0f), bw, bh };
-        numero(r, v[i], rot[i], a);
+        numero(r, v[i], i18n(rot[i]), a);
       } } }
+
+  // Cached cards stay visible during refresh, but loading/privacy/network
+  // failures are explicit rather than all looking like an empty history.
+  if (perf.estado == SV_PERFIL_INDO || perf.estado == SV_PERFIL_FALHA || perf.compartilha == 0) {
+    const char *st = perf.estado == SV_PERFIL_INDO ? "Carregando atividade…"
+                   : perf.estado == SV_PERFIL_FALHA ? (perf.compartilha >= 0 ? "Não foi possível atualizar. Mostrando os dados salvos."
+                                                        : "Não foi possível atualizar. Tente novamente.")
+                   : "Esta pessoa não compartilha sua atividade.";
+    TxtLinha t = txt_linha_corta(TXT_CAPTION, i18n(st), 168, 166, 178, 255, lw);
+    txt_desenhar_alpha(t, lx, 920.0f, a);
+  }
+
+  // Focus on a shared event compares only the progress that is actually known.
+  // A missing local history is unknown, not evidence the viewer never watched.
+  if (fila == AP_ASSISTINDO || fila == AP_GOSTOU) {
+    const SvEvento *e = fila == AP_ASSISTINDO ? &perf.assistindo[col] : &perf.gostou[col];
+    char st[160], meu[160], ep[24];
+    int pct, t, epn, m = socialvis_meu_estado(e->imdb, &pct, &t, &epn);
+    socialvis_status(e, st, sizeof st);
+    snprintf(buf, sizeof buf, "%s: %s", perf.a.nome, st);
+    { TxtLinha l = txt_linha_corta(TXT_MINI, buf, 188, 185, 198, 255, lw);
+      txt_desenhar_alpha(l, lx, 956.0f, a); }
+    if (m == 2) snprintf(meu, sizeof meu, "%s", i18n("Você viu"));
+    else if (m == 1) {
+      SvEvento eu = {0}; eu.temporada = t; eu.episodio = epn;
+      socialvis_ep(&eu, ep, sizeof ep);
+      snprintf(meu, sizeof meu, "%s%s%s · %d%%", i18n("Você está assistindo"), ep[0] ? " · " : "", ep, pct);
+    } else snprintf(meu, sizeof meu, "%s", i18n("Seu progresso não está disponível"));
+    { TxtLinha l = txt_linha_corta(TXT_MINI, meu, 188, 185, 198, 255, lw);
+      txt_desenhar_alpha(l, lx, 988.0f, a); }
+  }
 
   // --- as tres fileiras ---
   for (f = 0; f < AP_NFILAS; f++) {
@@ -245,11 +277,17 @@ void amigoperfil_desenhar(Uint32 agora) {
     const char *tit = f == AP_ASSISTINDO ? "Assistindo" : f == AP_GOSTOU ? "Gostou recentemente"
                                                                        : "Você mandou";
     int n = nFila(f);
-    tituloFila(rx, y, tit, a);
+    tituloFila(rx, y, i18n(tit), a);
     y += 46.0f;
     if (n == 0) {
-      vazioFila(rx, y, f == AP_MANDOU ? "Você ainda não mandou nada para essa pessoa."
-                                      : "Nada por aqui ainda", a);
+      const char *st = f == AP_MANDOU ? "Você ainda não mandou nada para essa pessoa."
+                    : perf.estado == SV_PERFIL_INDO ? "Carregando atividade…"
+                    : (perf.estado == SV_PERFIL_NAO_ACHOU || perf.estado == SV_PERFIL_NEGADO) ? "Perfil indisponível"
+                    : perf.estado == SV_PERFIL_FALHA ? (perf.compartilha >= 0 ? "Não foi possível atualizar. Mostrando os dados salvos."
+                                                        : "Não foi possível atualizar. Tente novamente.")
+                    : perf.compartilha == 0 ? "Esta pessoa não compartilha sua atividade."
+                    : "Nada compartilhado por aqui ainda";
+      vazioFila(rx, y, i18n(st), a);
       continue;
     }
     for (c = 0; c < n && c < SV_FILA_MAX; c++) {
@@ -263,9 +301,12 @@ void amigoperfil_desenhar(Uint32 agora) {
         // O ESTADO, que e o motivo desta fileira existir.
         { const char *st = m->estado == SV_REC_VIU
                              ? (m->reacao == SV_REAC_GOSTOU ? "viu · gostou" : "viu")
+                         : m->estado == SV_REC_COMECOU ? "começou"
+                         : m->estado == SV_REC_REAGIU ? (m->reacao == SV_REAC_GOSTOU ? "Gostou"
+                                                       : m->reacao == SV_REAC_NAO ? "Não gostou" : "Mais ou menos")
                          : m->estado == SV_REC_ABRIU ? "abriu" : "ainda não viu";
           int ok = m->estado == SV_REC_VIU;
-          legenda(x, y + AP_PH + 10.0f, st,
+          legenda(x, y + AP_PH + 10.0f, i18n(st),
                   ok ? 111 : 160, ok ? 207 : 158, ok ? 151 : 170, a); }
       } else {
         const SvEvento *e = f == AP_ASSISTINDO ? &perf.assistindo[c] : &perf.gostou[c];
@@ -276,7 +317,7 @@ void amigoperfil_desenhar(Uint32 agora) {
         socialvis_ep(e, ep, sizeof ep);
         if (f == AP_ASSISTINDO && e->acao == SV_AGORA) {
           snprintf(buf, sizeof buf, "%s%s%s", i18n("Agora"), ep[0] ? " \xc2\xb7 " : "", ep);
-          legenda(x, y + AP_PH + 10.0f, buf, 255, 190, 190, a);
+          legenda(x, y + AP_PH + 10.0f, buf, 138, 225, 168, a);
         } else if (f == AP_ASSISTINDO) {
           legenda(x, y + AP_PH + 10.0f, ep[0] ? ep : e->titulo, 190, 188, 200, a);
         } else {
@@ -285,6 +326,6 @@ void amigoperfil_desenhar(Uint32 agora) {
       }
     }
   }
-  { TxtLinha t = txt_linha(TXT_MINI, "OK · abrir o título   ·   Voltar · fechar", 150, 148, 160, 255);
+  { TxtLinha t = txt_linha(TXT_MINI, i18n("OK · abrir o título   ·   Voltar · fechar"), 150, 148, 160, 255);
     txt_desenhar_alpha(t, lx, NV_TELA_H - 44.0f, a * 0.9f); }
 }

@@ -200,3 +200,8 @@
   0,                /* fundo: Arte, o de sempre */
   2,                /* opacidade do vidro: 78%, a de sempre */
   0,                /* vidro fosco: desligado */
+
+  0, /* app icon: Original */
+
+  0, /* Discord action; appended to preserve option indices */
+  1, /* Settings size: 90%, independent of global UI zoom */

@@ -71,8 +71,6 @@ enum { CTX_PENDENTE = 1, CTX_CONFIRMADA = 2, CTX_FALHA = 3 };
 #define CTX_LINHA     60.0f
 #define CTX_GAP        4.0f
 #define CTX_AO_LADO   30.0f     // do poster a ilha
-#define CTX_CARTAO_LARGO 480.0f // cartao a partir daqui: a ilha entra nele
-#define CTX_DENTRO    24.0f
 #define CTX_BORDA     48.0f     // margem minima da tela
 
 // SALVO E UM FATO DO TITULO, NAO DO CARTAO. Segurar OK num cartao do
@@ -427,6 +425,32 @@ static GfxRect ctxDaHome(GfxRect r) {
   float e = gfx_escala_ui();
   return (GfxRect){ r.x / e, r.y / e, r.w / e, r.h / e };
 }
+
+// Coloca o menu FORA do cartaz selecionado. Tenta o lado direito primeiro,
+// depois o esquerdo; se nenhum lado comporta a ilha inteira, escolhe o lado
+// com mais espaco e prende a ilha dentro da viewport. A mesma geometria vale
+// para cartazes retrato e paisagem e para todos os chamadores.
+static float ctxXCartaz(GfxRect r) {
+  float minX = CTX_BORDA;
+  float maxX = NV_TELA_W - CTX_BORDA - CTX_W;
+  float direita = r.x + r.w + CTX_AO_LADO;
+  float esquerda = r.x - CTX_AO_LADO - CTX_W;
+  if (maxX < minX) {
+    minX = 0.0f;
+    maxX = NV_TELA_W > CTX_W ? NV_TELA_W - CTX_W : 0.0f;
+  }
+  if (direita <= maxX) return direita;
+  if (esquerda >= minX) return esquerda;
+  if (maxX - direita >= esquerda - minX) {
+    if (direita < minX) return minX;
+    if (direita > maxX) return maxX;
+    return direita;
+  }
+  if (esquerda < minX) return minX;
+  if (esquerda > maxX) return maxX;
+  return esquerda;
+}
+
 void ctx_abrir(int indice) {
   if (holdCancelado) {
     holdCancelado = 0;
@@ -1439,7 +1463,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   const CatItem *ci;
   const char *mensagem = NULL;
   float a = anim, alt, x, y, cab;
-  int i, comLogo, sobreArte = 0;
+  int i, comLogo;
   (void)agora;
   // So no painel de Salvos (dicaCx): na home o cartao pressionado ja tem a
   // propria barra (home.c), e esta, no meio da tela, era a sobra duplicada.
@@ -1499,24 +1523,15 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   comLogo = logotitulo_url(ci, CTX_LOGO_W) != NULL;
   cab = comLogo ? CTX_CAB_LOGO : CTX_CAB;
   alt = CTX_ILHA_PAD * 2.0f + cab + (float)nOps * (CTX_LINHA + CTX_GAP);
-  // AO LADO DO POSTER, alinhada ao topo dele: a direita, ou a esquerda quando
-  // nao cabe (cartao na ponta direita da fileira); sem lugar dos dois lados,
-  // no meio. Sem poster: no meio da tela, ou do painel de Salvos (dicaCx).
+  // AO LADO DO CARTAZ, alinhada ao topo: tenta a direita, depois a esquerda.
+  // Se ambos os lados forem estreitos, ctxXCartaz escolhe o de maior espaco e
+  // prende a ilha na viewport para manter todas as opcoes acessiveis.
+  // Sem cartaz: no meio da tela, ou do painel de Salvos (dicaCx).
   x = -1.0f;
   y = (NV_TELA_H - alt) * 0.5f;
   if (temCartaz && !doPainel) {
-    float d = cartazRect.x + cartazRect.w + CTX_AO_LADO, e = cartazRect.x - CTX_AO_LADO - CTX_W;
-    if (d + CTX_W <= NV_TELA_W - CTX_BORDA) x = d;
-    else if (e >= CTX_BORDA) x = e;
+    x = ctxXCartaz(cartazRect);
     y = cartazRect.y;
-    // CARTAO LARGO (4:3 grande, card aberto, deitado): ao lado dele so ha o
-    // VIZINHO, e a ilha ficava em cima do cartao errado. Ancorada DENTRO do
-    // cartao focado, no canto de cima a direita.
-    if (cartazRect.w >= CTX_CARTAO_LARGO && cartazRect.x + cartazRect.w - CTX_W - CTX_DENTRO >= cartazRect.x) {
-      x = cartazRect.x + cartazRect.w - CTX_W - CTX_DENTRO;
-      y = cartazRect.y + CTX_DENTRO;
-      sobreArte = 1;
-    }
   }
   if (x < 0.0f) {
     float cx = doPainel && dicaCx >= 0.0f ? dicaCx : NV_TELA_W * 0.5f;
@@ -1551,10 +1566,6 @@ static void ctx_desenharCorpo_(Uint32 agora) {
 
   // Entra deslizando 16 px a partir do lado do poster, como as folhas do app.
   x += (1.0f - a) * (temCartaz && !doPainel && x < cartazRect.x ? 16.0f : -16.0f);
-  // SOBRE A ARTE: a mesma regra dos outros modais — o que passa por tras nao
-  // compete com as opcoes. Um fundo escuro por baixo do vidro/solido.
-  if (sobreArte)
-    gfx_cor((GfxRect){ x, y, CTX_W, alt }, CTX_ILHA_RAIO / alt, .03f, .032f, .04f, .80f * a);
   ilhaCtx((GfxRect){ x, y, CTX_W, alt }, CTX_ILHA_RAIO, a);
 
   // CABECALHO: o nome e, embaixo, o que o titulo e ("Serie · 2024 · ...") —

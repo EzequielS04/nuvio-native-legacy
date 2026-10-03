@@ -16,6 +16,12 @@
 #include "addons.h"
 #include "fontecache.h"
 
+// Provider discovery is tested in ondever_lookup.c. This isolated addon
+// transport fixture must not start an unrelated TMDB request.
+void ondever_pedir(const char *id, int series, long tmdb) {
+  (void)id; (void)series; (void)tmdb;
+}
+
 // ---------------------------------------------------------------- duble
 //
 // A BUSCA DE FONTES DE VERDADE (addons_buscar -> fio -> addons_estado), com a

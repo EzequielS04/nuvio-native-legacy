@@ -1,5 +1,7 @@
 #include "streams.h"
 #include "plrui.h"
+#include "ondever.h"
+#include "tex_cache.h"
 #include "livetv_regras.h"
 #include "idioma.h"
 #include "badges.h"
@@ -1154,6 +1156,7 @@ static int passaChips(int i) {
   return 1;
 }
 static int passaFiltro(int i) {
+  if (filtro < 0) return 0;
   if (!passaChips(i)) return 0;
   if (filtro && strcmp(lista[i].provedor, provedores[filtro])) return 0;
   return 1;
@@ -1180,6 +1183,7 @@ static void atualizarProvedores(void) {
   if(filtro>=nProvedores) filtro=0;
 }
 static int nFiltrados(void) {
+  if (filtro == -1) return ondever_n(alvoPedido);
   int k=0;
   for(int i=0;i<n;i++) if(passaFiltro(i)) k++;
   return k;
@@ -1476,8 +1480,9 @@ static int grupoTmpCap;
 static void montar(int automatica) {
   float y = 0;
   int g, i, k, m = -1, nt;
-  if (ordemCap < n) {
-    int cap = n + 32;
+  int needed = filtro == -1 ? ondever_n(alvoPedido) : n;
+  if (ordemCap < needed) {
+    int cap = needed + 32;
     int *o = realloc(ordem, cap * sizeof *o);
     if (o) ordem = o;
     float *a = realloc(linhaY, cap * sizeof *a);
@@ -1486,6 +1491,16 @@ static void montar(int automatica) {
     if (b) linhaH = b;
     if (!o || !a || !b) { nOrdem = 0; return; }
     ordemCap = cap;
+  }
+  if (filtro == -1) {
+    memset(secN, 0, sizeof secN);
+    nOrdem = needed;
+    for (k = 0; k < needed; k++) {
+      ordem[k] = -2-k; linhaY[k] = y; linhaH[k] = 158.0f;
+      y += linhaH[k] + FOLHA_LINHA_GAP;
+    }
+    alturaTotal = y;
+    return;
   }
   if (grupoTmpCap < n) {
     int *t = realloc(grupoTmp, (n + 32) * sizeof *t);
@@ -1578,6 +1593,7 @@ void stream_folha_abrir(void) {
   int excl, aut, alvo;
   aberta=1; escolha=-1; grupo=1; filtro=0; soMp4=0; soCache=0; soDub=0; recarregar=0;
   atualizarProvedores();
+  ondever_apps_atualizar();
   // A FOLHA ABRE NA FONTE QUE IMPORTA: a que esta tocando, senao a que o
   // automatico tocaria. Com a lista agrupada por resolucao a primeira linha ja
   // nao e a de maior pontuacao, entao abrir na linha 0 poria o realce numa
@@ -1673,7 +1689,7 @@ void stream_folha_evento(const SDL_Event *e) {
   // trocar de addon eram duas teclas a mais a cada troca.
   if(grupo>=0 && (k==SDLK_LEFT || k==SDLK_RIGHT)) {
     filtro+=k==SDLK_RIGHT?1:-1;
-    if(filtro<0) filtro=0;
+    if(filtro < -1) filtro=-1;
     if(filtro>=nProvedores) filtro=nProvedores-1;
     foco=0;rolagem=0;velRol=0;
   }
@@ -1697,8 +1713,12 @@ void stream_folha_evento(const SDL_Event *e) {
     }
     else if(grupo==0) {grupo=1;foco=0;}
     else {
-      int r=filtrado(foco);
-      if(r>=0) {escolha=r;aberta=0;}
+      int i = filtrado(foco);
+      if (i >= 0) { escolha=i; aberta=0; }
+      else if (i <= -2) {
+        OndeVer o;
+        if (ondever_item(alvoPedido,-i-2,&o) && ondever_abrir(o.nome)!=ONDE_INFO) aberta=0;
+      }
     }
   }
 }
@@ -1740,10 +1760,29 @@ static void ponteiroFolhaBotao(int i, int b) { (void)b; grupo = -1; foco = i; }
 static void ponteiroFolhaLinha(int row, int b) { (void)b; grupo = 1; foco = row; }
 static void ponteiroFolhaFiltro(int i, int b) {
   (void)b;
-  if (i < 0 || i >= nProvedores) return;
+  if (i < -1 || i >= nProvedores) return;
   filtro = i; foco = 0; rolagem = 0; grupo = 1;
 }
 static void ponteiroFolhaFora(int a, int b) { (void)a; (void)b; aberta = 0; }
+
+// Availability lives in its own tab so asynchronous responses cannot shift
+// source indexes, focus or an in-progress debrid resolution.
+static void desenharOnde(GfxRect r, const OndeVer *o, int selected) {
+  const int solid = selected && !ajustes_vidro();
+  const int title = solid ? ajustes_tinta_foco() : 236;
+  const int detail = solid ? ajustes_tinta_foco2() : 160;
+  const int actionInk = solid ? ajustes_tinta_foco2() : 190;
+  const float side=56.0f, left=r.x+18.0f, text=left+side+20.0f;
+  const char *action;
+  int state=ondever_estado(o->nome);
+  action=state==ONDE_ABRIR ? "Abrir app" : state==ONDE_LOJA ? "Ver na loja"
+        : state==ONDE_PROCURAR ? "Procurar na loja" : "Disponível neste serviço";
+  GLuint logo=o->logo[0] ? tex_obter(o->logo) : 0;
+  if(logo) gfx_rect((GfxRect){left,r.y+20,side,side},logo,GFX_CARD,0,0,0,.2f,1,1,1,anim);
+  txt_desenhar_alpha(txt_linha_corta(TXT_CALLOUT,o->nome,title,solid ? title : 239,solid ? title : 243,255,r.w-120),text,r.y+20,anim);
+  txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION2,o->gratis ? "Grátis / com anúncios" : "Na assinatura",detail,solid ? detail : 164,solid ? detail : 174,255,r.w-120),text,r.y+58,anim);
+  txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,action,actionInk,solid ? actionInk : 194,solid ? actionInk : 204,255,r.w-44),left,r.y+108,anim);
+}
 
 // Texto em maiusculas espacadas da linha de marca e dos cabecalhos de grupo.
 // i18n antes da caixa alta: a tabela de idioma guarda a frase normal.
@@ -1893,7 +1932,11 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
   { const int vid = ajustes_vidro();
     GfxRect corpo={x,FOLHA_MARGEM,FOLHA_W,NV_TELA_H-2*FOLHA_MARGEM};
     gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,0,0,0,(vid?.30f:.42f)*anim);
-    plrui_material(corpo,FOLHA_RAIO_IL,0,anim); }
+    if (vid) {
+      gfx_rect((GfxRect){corpo.x-18.0f,corpo.y-8.0f,corpo.w+36.0f,corpo.h+40.0f},
+               0,GFX_SOMBRA,1.0f,0,0,.5f,0,0,0,.38f*anim);
+      gfx_vidro_folha(corpo,FOLHA_RAIO_IL/corpo.h,anim);
+    } else plrui_material(corpo,FOLHA_RAIO_IL,0,anim); }
   int ptr = aberta && anim > .5f && ponteiro_ativo();
   if (ptr) {
     ponteiro_alvo(0, 0, x, NV_TELA_H, NULL, ponteiroFolhaFora, 0, 0);
@@ -1929,6 +1972,8 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
       if (ptr) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroFolhaBotao, NULL, i, 0);
       chipFolha(r,rotuloBotao(b),iconeBotao(b),grupo==-1&&foco==i,botaoLigado(b),anim);
     } }
+  if (filtro == -1 && grupo != -1)
+    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,"Disponibilidade: TMDB / JustWatch. Abre o app, não o título.",160,160,158,255,rw),lx,156+cabExtra,anim);
   // A LINHA DE AJUDA so aparece com o cabecalho em foco: "Sem HDR" nao se
   // explica pelo rotulo, e o rotulo nao pode crescer sem estourar a pilula.
   if (grupo==-1) {
@@ -1953,34 +1998,36 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
   }
   // SELETOR DE ADDON, segmentado: o selecionado em superficie clara, o foco
   // no acento. Quantas fontes cada addon tem, ao lado do nome.
-  { int cnt[13]={0}; float iw[13], sx, segY=(grupo==-1?204.0f:186.0f)+cabExtra, maxW=rw+4.0f;
-    TxtLinha nome[13], num[13];
+  { int cnt[13]={0}; float iw[14], sx, segY=(grupo==-1?204.0f:186.0f)+cabExtra, maxW=rw+4.0f;
+    TxtLinha nome[14], num[14];
     for(int i=0;i<n;i++){ if(!passaChips(i)) continue; cnt[0]++;
       for(int j=1;j<nProvedores;j++) if(!strcmp(provedores[j],lista[i].provedor)){cnt[j]++;break;} }
-    for(int i=0;i<nProvedores;i++){
+    for(int i=-1;i<nProvedores;i++){
+      int qidx=i+1;
       int sel=i==filtro, foc=sel&&grupo==0, c=foc?ajustes_tinta_foco():sel?250:150;
-      char q[16]; snprintf(q,sizeof q,"%d",cnt[i]);
-      nome[i]=txt_linha_corta(TXT_HERO_META,i?provedores[i]:"Todos",c,c,c,255,260);
-      num[i]=txt_linha(TXT_PG_FIM,q,foc?c:sel?170:100,foc?c:sel?170:100,foc?c:sel?170:100,255);
-      iw[i]=nome[i].w+10.0f+num[i].w+44.0f; }
-    int ini=0; float soma;
-    for(;;){ soma=12.0f; for(int i=ini;i<=filtro&&i<nProvedores;i++) soma+=iw[i]+6.0f;
+      char q[16]; snprintf(q,sizeof q,"%d",i<0?ondever_n(alvoPedido):cnt[i]);
+      nome[qidx]=txt_linha_corta(TXT_HERO_META,i<0?"Onde ver":i?provedores[i]:"Todos",c,c,c,255,260);
+      num[qidx]=txt_linha(TXT_PG_FIM,q,foc?c:sel?170:100,foc?c:sel?170:100,foc?c:sel?170:100,255);
+      iw[qidx]=nome[qidx].w+10.0f+num[qidx].w+44.0f; }
+    int ini=-1; float soma;
+    for(;;){ soma=12.0f; for(int i=ini;i<=filtro&&i<nProvedores;i++) soma+=iw[i+1]+6.0f;
       if(soma<=maxW||ini>=filtro) break; ini++; }
     soma=12.0f; int fim=ini;
-    while(fim<nProvedores && soma+iw[fim]+6.0f<=maxW){ soma+=iw[fim]+6.0f; fim++; }
+    while(fim<nProvedores && soma+iw[fim+1]+6.0f<=maxW){ soma+=iw[fim+1]+6.0f; fim++; }
     if(fim==ini) fim=ini+1;
     sx=lx-2.0f;
     if (ajustes_vidro()) gfx_cor((GfxRect){sx,segY,soma-6.0f,60},.5f,1,1,1,.05f*anim);
     else gfx_cor((GfxRect){sx,segY,soma-6.0f,60},.5f,.113f,.118f,.137f,anim);
     sx+=6.0f;
     for(int i=ini;i<fim;i++){
-      GfxRect r={sx,segY+6,iw[i],48}; int sel=i==filtro;
+      int qidx=i+1;
+      GfxRect r={sx,segY+6,iw[qidx],48}; int sel=i==filtro;
       if (ptr) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, ponteiroFolhaFiltro, i, 0);
       if(sel&&grupo==0) focoFonte(r,.5f,anim);
       else if(sel) { if (ajustes_vidro()) gfx_cor(r,.5f,1,1,1,.12f*anim); else gfx_cor(r,.5f,.204f,.212f,.243f,anim); }
-      txt_desenhar_alpha(nome[i],r.x+22,r.y+(48-nome[i].h)*.5f,anim);
-      txt_desenhar_alpha(num[i],r.x+22+nome[i].w+10,r.y+(48-num[i].h)*.5f+1,anim);
-      sx+=iw[i]+6.0f; } }
+      txt_desenhar_alpha(nome[qidx],r.x+22,r.y+(48-nome[qidx].h)*.5f,anim);
+      txt_desenhar_alpha(num[qidx],r.x+22+nome[qidx].w+10,r.y+(48-num[qidx].h)*.5f+1,anim);
+      sx+=iw[qidx]+6.0f; } }
   automatica = automaticaDaFolha();
   melhor = melhorFolha = stream_automatico();
   montar(automatica);
@@ -2019,6 +2066,15 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
     uint64_t tira, logos;
     if(y+h<FOLHA_TOPO-8 || y>NV_TELA_H) continue;
     GfxRect r={lx,y,rw,h};
+    if (i <= -2) {
+      OndeVer o;
+      if (ptr) ponteiro_alvo(r.x,r.y,r.w,r.h,ponteiroFolhaLinha,NULL,row,0);
+      if (sel) focoFonte(r,22.0f/r.h,anim);
+      else gfx_cor(r,22.0f/r.h,1,1,1,.04f*anim);
+      if (ondever_item(alvoPedido,-i-2,&o)) desenharOnde(r,&o,sel);
+      continue;
+    }
+    if (i < 0) continue;
     if (ptr) {
       // So o que o recorte da lista deixa ver.
       float t = y < FOLHA_TOPO ? FOLHA_TOPO : y;
@@ -2185,7 +2241,12 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
   if (rolagem > 1.0f) { float e=rolagem>30.0f?1.0f:rolagem/30.0f;
     gfx_rect((GfxRect){x,FOLHA_TOPO-8,FOLHA_W,34},0,GFX_BRILHO_TOPO,0,1.0f,0,0,
              .071f,.075f,.086f,(ajustes_vidro()?.78f:.98f)*e*anim); }
-  if(!nFiltrados()) {
+  if(!nf && filtro == -1) {
+    const int state=ondever_status(alvoPedido);
+    const char *message=state==ONDE_BUSCANDO ? "Buscando onde assistir…" : state==ONDE_FALHOU ? "Não foi possível consultar a disponibilidade." : "Nenhum serviço informado para esta região.";
+    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,message,160,164,172,255,rw),lx,FOLHA_TOPO+36,anim);
+  }
+  if(!nFiltrados() && filtro != -1) {
     // A FOLHA VAZIA DIZ A CAUSA (B6/#107, D5). So quando a lista esta vazia
     // de verdade (n == 0): lista cheia com filtro de provedor que nao casa
     // nada fica na frase generica, porque ali a causa e o filtro na tela.

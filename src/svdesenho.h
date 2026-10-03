@@ -12,15 +12,15 @@
 #include "socialvis.h"
 #include <SDL2/SDL.h>
 
-// As cores de estado. A novidade e LARANJA fixo e o ao vivo VERMELHO fixo, e
+// As cores de estado. A novidade e LARANJA fixo e o ao vivo VERDE fixo, e
 // nao a cor de realce: o realce e o FOCO, e com o tema padrao (branco) um anel
 // de novidade na cor de realce seria o anel de foco.
 #define SVD_NOVO_R 0.949f
 #define SVD_NOVO_G 0.635f
 #define SVD_NOVO_B 0.361f
-#define SVD_VIVO_R 1.000f
-#define SVD_VIVO_G 0.353f
-#define SVD_VIVO_B 0.353f
+#define SVD_VIVO_R 0.314f
+#define SVD_VIVO_G 0.827f
+#define SVD_VIVO_B 0.490f
 
 // A superficie de linha/cartao do painel: neutra em repouso, realce cheio no
 // foco (o degrade do tema dinamico vem sozinho de gfx_rect), vidro quando o
@@ -31,12 +31,12 @@ float svd_foco_visual(float f);
 float svd_foco_texto(float f);
 void  svd_txt_foco(TxtLinha repouso, TxtLinha foco, float x, float y, float f, float a);
 
-// O ponto vermelho de "assistindo agora", pulsando no alfa (parado com
+// O ponto verde de "assistindo agora", pulsando no alfa (parado com
 // animacoes reduzidas). `borda` > 0 desenha o aro escuro por fora.
 void  svd_ponto_vivo(float cx, float cy, float d, float borda, float a, Uint32 t);
 
 // O ROSTO: foto (ou inicial no disco colorido), anel de estado (laranja =
-// novidade, vermelho = ao vivo, cinza = nada) e, com foco, o anel de foco na
+// novidade, verde = ao vivo, cinza = nada) e, com foco, o anel de foco na
 // cor de realce. `r` e o quadrado da FOTO; os aneis ficam por fora dele.
 void  svd_rosto(GfxRect r, const SvAmigo *am, float foco, float a, Uint32 t);
 // Um rosto de acao ("+ Adicionar"): disco neutro com o icone.

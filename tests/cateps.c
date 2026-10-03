@@ -32,6 +32,8 @@
 #include <stdio.h>
 #include <unistd.h>
 
+Uint32 SDL_GetTicks(void) { return 0; }
+
 // --- DUBLES: nenhum participa da regra, so fazem descoberta.c linkar ---------
 // (o conjunto e o de tests/colfileiras.c, menos os cat_* — que catalogo.c ja
 // traz — e mais os que este teste ja tinha)
@@ -377,5 +379,14 @@ int main(void) {
   puts("ok  elenco do TMDB casa por nome, nao por posicao (#153)");
 
   puts("cateps: tudo ok");
+  {
+    CatEp timed = {0}; timed.temporada=1; timed.episodio=1;
+    const char *runtime = "{\"episodes\":[{\"episode_number\":1,\"runtime\":47}]}";
+    assert(desc_tmdb_notas_temporada(runtime,&timed,1,1)==1);
+    assert(!strcmp(timed.duracao,"47 min"));
+    assert(desc_tmdb_notas_temporada(runtime,&timed,1,1)==0);
+    assert(desc_tmdb_notas_temporada("{\"episodes\":[{\"episode_number\":1,\"runtime\":null}]}",&timed,1,1)==0);
+    assert(!strcmp(timed.duracao,"47 min"));
+  }
   return 0;
 }

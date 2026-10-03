@@ -1067,7 +1067,16 @@ void recomenda_atividade_fim(const CatItem *ci, int concluiu) {
   SDL_UnlockMutex(mtx);
 }
 
+unsigned recomenda_geracao(void) {
+  unsigned g;
+  if (!mtx) return geracao;
+  SDL_LockMutex(mtx); g = geracao; SDL_UnlockMutex(mtx);
+  return g;
+}
+
 void recomenda_esquecer(void) {
+  dados_apagar("amigos-vistos.txt");
+  if (!mtx) { geracao++; }
   if (!mtx) { dados_apagar(REC_ARQ); dados_apagar(REC_ARQ_CURSOR);
               dados_apagar(REC_ARQ_CARTAO); dados_apagar(REC_ARQ_EU);
               dados_apagar(REC_ARQ_APARECER); dados_apagar(REC_ARQ_PERFIL);
@@ -2455,6 +2464,8 @@ static int amigoParse(const char *r, RecAmigo *a) {
     js_texto(p, f, "midia", e->midia, sizeof e->midia);
     js_texto(p, f, "titulo", e->titulo, sizeof e->titulo);
     js_texto(p, f, "poster", e->poster, sizeof e->poster);
+    e->temporada = (int)js_num(p, f, "temporada", 0.0);
+    e->episodio = (int)js_num(p, f, "episodio", 0.0);
     e->quando = (long long)js_num(p, f, "criado", 0.0);
     semTab(e->titulo);
     if (!strncmp(e->imdb, "tt", 2)) a->nGostou++;
@@ -2473,6 +2484,8 @@ static int amigoParse(const char *r, RecAmigo *a) {
     js_texto(p, f, "estado", est, sizeof est);
     semTab(a->recs[a->nRecs].titulo);
     a->recs[a->nRecs].estado = estadoRecDe(est);
+    a->recs[a->nRecs].terminou = (int)js_num(p, f, "terminou", 0.0) > 0 ||
+                                a->recs[a->nRecs].estado == REC_REC_TERMINOU;
     if (a->recs[a->nRecs].estado == REC_REC_REAGIU) {
       a->recs[a->nRecs].temReacao = 1;
       a->recs[a->nRecs].reacao = (int)js_num(p, f, "reacao", 0.0);
@@ -2481,11 +2494,13 @@ static int amigoParse(const char *r, RecAmigo *a) {
     p = js_prox(f);
   }
   if ((o = objeto(r, "gosto", &of))) {
-    a->temGosto = 1;
     a->gostoTotal = (int)js_num(o, of, "total", 0.0);
     a->gostoIguais = (int)js_num(o, of, "iguais", 0.0);
     a->gostoPct = (int)js_num(o, of, "pct", 0.0);
+    a->temGosto = a->compartilha && a->gostoTotal > 0 && a->gostoPct >= 0 && a->gostoPct <= 100;
   }
+  // A cached or malformed response must never resurrect withdrawn sharing.
+  if (!a->compartilha) { a->temMes = a->temAgora = a->temGosto = a->nGostou = 0; }
   return 1;
 }
 
@@ -2696,8 +2711,12 @@ int rec_evento_de_trakt(const CatItem *ci, long long quando, RecEvento *e) {
   a = ci->socialAcao;
   // Os rotulos que trakt_social grava (trakt.c). "assistindo agora" e o
   // "inicio" do nosso lado: e o mesmo fato visto por duas fontes.
-  e->acao = !strcmp(a, "assistindo agora") ? REC_ACAO_INICIO
-          : !strcmp(a, "avaliou") ? REC_ACAO_NOTA : REC_ACAO_FIM;
+  if (!strcmp(a, "assistindo agora") || !strcmp(a, "registrou um check-in"))
+    e->acao = REC_ACAO_INICIO;
+  else if (!strcmp(a, "avaliou")) e->acao = REC_ACAO_NOTA;
+  else if (!strcmp(a, "assistiu")) e->acao = REC_ACAO_FIM;
+  else return 0; // Unknown tracker actions are not proof that someone finished.
+  e->agora = !strcmp(a, "assistindo agora");
   // O amigo Nuvio que ja vem no item (recomenda_social_mesclar) tem o id do
   // servico ("nuvio:..."); o do Trakt e o slug puro.
   if (strchr(ci->socialSlug, ':')) {
@@ -2722,7 +2741,8 @@ int rec_evento_de_trakt(const CatItem *ci, long long quando, RecEvento *e) {
 // Mesma pessoa, mesmo titulo, mesmo fato, perto no tempo (ou sem hora).
 static int mesmoFato(const RecEvento *a, const RecEvento *b) {
   long long dt;
-  if (a->acao != b->acao || strcmp(a->imdb, b->imdb) || strcmp(a->pessoa, b->pessoa)) return 0;
+  if (a->acao != b->acao || strcmp(a->imdb, b->imdb) || strcmp(a->pessoa, b->pessoa) ||
+      strcmp(a->midia, b->midia) || a->temporada != b->temporada || a->episodio != b->episodio) return 0;
   if (a->acao == REC_ACAO_REACAO && a->reacao != b->reacao) return 0;
   if (!a->quando || !b->quando) return 1;
   dt = a->quando - b->quando;
@@ -2971,7 +2991,11 @@ static void lerAmigo(const char **cab) {
       amigo = tmp; temAmigo = 1;
       if (arq) { snprintf(arq, tam, "%s\n%s", id, r); dados_gravar_leve(REC_ARQ_AMIGO, arq); free(arq); }
     }
-    amigoEstado = ok ? REC_SOC_OK : st == 404 ? REC_SOC_NAO_ACHOU : REC_SOC_FALHA;
+    if (!ok && (st == 403 || st == 404)) {
+      temAmigo = 0; memset(&amigo, 0, sizeof amigo); dados_apagar(REC_ARQ_AMIGO);
+    }
+    amigoEstado = ok ? REC_SOC_OK : st == 403 ? REC_SOC_NEGADO
+                : st == 404 ? REC_SOC_NAO_ACHOU : REC_SOC_FALHA;
   }
   SDL_UnlockMutex(mtx);
   printf("[recomenda] perfil do amigo HTTP %d\n", st); fflush(stdout);

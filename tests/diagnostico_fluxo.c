@@ -15,6 +15,16 @@
 
 static int orcamento(void) { int mb = 0; tex_orcamento_info(&mb, NULL, NULL, NULL); return mb; }
 
+// A tela usa o cache REAL, inclusive quando o candidato foi restaurado ou
+// algum limite local impediu o valor solicitado. Nao basta testar o veredito.
+static void conferePerfilResultado(int mantido) {
+  PtvPerfil antes, atual, real;
+  perfilAtual(&real, NULL, NULL);
+  perfilDoResultado(&antes, &atual);
+  assert(!memcmp(&atual, &real, sizeof real));
+  assert(!memcmp(&antes, mantido ? &d.perfAntes : &real, sizeof real));
+}
+
 static void reset(DiagnosticoModo modo) {
   free(d.cfgAntes);
   memset(&d, 0, sizeof d);
@@ -58,6 +68,11 @@ int main(void) {
   assert(orcamento() == 96 && atomic_load(&d.experimento) == 0);
   assert(!dados_ler("diagnostico-otimizacao.checkpoint"));
   assert(!dados_ler("diagnostico-otimizacao.cfg"));
+  assert(d.perfCand.texMb == 160); // continua sendo o candidato, nao o ativo
+  conferePerfilResultado(0);
+  montarRelatorio();
+  assert(strstr(d.relatorio, "perfil_candidato=160|4|1920\n"));
+  assert(strstr(d.relatorio, "perfil_ativo=96|4|1920\n"));
   puts("ok  aplicar -> reteste pior -> restaura sozinho (sem gravar perfil)");
 
   // 1b. DESEMPENHO, reteste um pouco melhor mas DENTRO DO RUIDO (100 ms de
@@ -75,7 +90,20 @@ int main(void) {
   assert(atomic_load(&d.experimento) == 0);
   assert(!dados_ler("diagnostico-otimizacao.checkpoint"));
   assert(!dados_ler("diagnostico-otimizacao.cfg"));
+  conferePerfilResultado(0);
   puts("ok  reteste dentro do ruido: o anterior volta, nada gravado (mantido_ruido)");
+
+  // 1c. So aumentar memoria sem ganho nem arte visivel descartada nao ajuda.
+  // Na TV de 2 GB isso e 128 -> 300; no host sem MemTotal e 96 -> 160.
+  // A tela deve mostrar o orcamento restaurado, nunca a promessa do candidato.
+  reset(DIAG_QUALIDADE);
+  assert(aplicarCandidato() == 1 && orcamento() == 160);
+  d.medAntes = med(1000, 0);
+  d.medDepois = med(950, 0);
+  concluirComparacao();
+  assert(d.aplicacao == DA_RUIDO && orcamento() == 96);
+  conferePerfilResultado(0);
+  puts("ok  aumento de memoria sem ganho: resultado mostra cache ativo restaurado");
 
   // 2. DESEMPENHO, reteste CLARAMENTE melhor: fica, e vai para o disco.
   reset(DIAG_DESEMPENHO);
@@ -86,6 +114,13 @@ int main(void) {
   concluirComparacao();
   assert(d.aplicacao == DA_MANTIDO);
   assert(tex_fios_rede() == 2 && tex_teto_heroi() == 1280);
+  conferePerfilResultado(1);
+  // O perfil exibido e lido do cache ate quando a memoria foi mudada depois
+  // da rodada: d.perfCand deixa de representar o que esta em uso nesta TV.
+  tex_definir_orcamento_mb(300);
+  assert(d.perfCand.texMb == 96 && orcamento() == 160);
+  conferePerfilResultado(1);
+  tex_definir_orcamento_mb(0);
   cfg = dados_ler("diagnostico-otimizacao.cfg");
   assert(cfg && strstr(cfg, "fios_rede=2") && strstr(cfg, "heroi=1280")); free(cfg);
   puts("ok  aplicar -> reteste melhor -> mantem e grava o perfil");
@@ -94,6 +129,7 @@ int main(void) {
   restaurarManual();
   assert(d.aplicacao == DA_RESTAURADO_MANUAL);
   assert(tex_fios_rede() == 4 && tex_teto_heroi() == 1920);
+  conferePerfilResultado(0);
   assert(!dados_ler("diagnostico-otimizacao.cfg"));
   puts("ok  restaurar anterior desfaz o perfil mantido");
 
@@ -104,6 +140,7 @@ int main(void) {
   d.medDepois = med(500, 1);
   concluirComparacao();
   assert(d.aplicacao == DA_RESTAURADO_AUTO && tex_fios_rede() == 4);
+  conferePerfilResultado(0);
   puts("ok  falha a mais no reteste restaura");
 
   // 5. Voltar no meio: o experimento sai, uma vez so.
@@ -111,6 +148,8 @@ int main(void) {
   assert(aplicarCandidato() == 1 && orcamento() == 160);
   assert(desfazerExperimento() == 1 && orcamento() == 96);
   assert(desfazerExperimento() == 0);
+  d.aplicacao = DA_CANCELADO;
+  conferePerfilResultado(0);
   puts("ok  cancelar no meio desfaz o candidato");
 
   // 6. ESCOLHA MANUAL em Ajustes (300 pedido, 160 e o teto sem MemTotal): o
@@ -120,6 +159,7 @@ int main(void) {
   reset(DIAG_DESEMPENHO);
   assert(aplicarCandidato() == 1);
   assert(orcamento() == 160 && tex_fios_rede() == 2);
+  conferePerfilResultado(0);
   assert(desfazerExperimento() == 1);
   tex_definir_orcamento_mb(0);
   assert(orcamento() == 96);
@@ -129,6 +169,7 @@ int main(void) {
   reset(DIAG_QUALIDADE);
   tex_definir_orcamento_auto_mb(160);
   assert(aplicarCandidato() == 0 && d.aplicacao == DA_IGUAL);
+  conferePerfilResultado(0);
   tex_definir_orcamento_auto_mb(0);
   puts("ok  candidato igual ao perfil atual: nada aplicado");
 
@@ -170,6 +211,7 @@ int main(void) {
   d.fonte[PTV_FONTE_APPLE].downloadOkMs = 2718;
   d.fonte[PTV_FONTE_APPLE].downloadPiorMs = 6000;
   montarRelatorio();
+  assert(strstr(d.relatorio, "platform=lg\n"));
   assert(strstr(d.relatorio, "arte_fonte=apple|ok=2|falhas=1|resolve_ms=0|download_ms=8718|"));
   assert(strstr(d.relatorio, "|download_medio_ms=1359|download_pior_ms=6000\narte_fonte=fanart"));
   assert(strstr(d.relatorio, "arte_fonte=fanart|ok=0|falhas=0|") &&

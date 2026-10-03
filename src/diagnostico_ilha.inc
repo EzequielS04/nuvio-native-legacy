@@ -130,7 +130,7 @@ static void dgObjetivo(void) {
     "Cada fonte de arte: catálogo, Metahub, TMDB, Trakt, Apple TV, fanart.tv, anime e logo",
     "As mesmas artes pelo cache, com o perfil atual",
     "Aplica o candidato e mede as mesmas artes de novo",
-    "Mantém se não piorou; senão volta sozinho ao anterior",
+    "Aplica só se ajudar; senão restaura o perfil anterior",
   };
   static const char *const PIC[5] = { "aj_puzzle", "aj_images", "aj_database", "aj_zap", "aj_rotate-ccw-clock" };
   dr.w = NV_TELA_W - 40 - dr.x;
@@ -159,7 +159,7 @@ static void dgObjetivo(void) {
               c.x + 26, c.y + 26 + t.h + 10, c.w - 52, 24.6f, 0.58f, 2); }
   }
   y += 126 + 32;
-  { TxtLinha t = dgT(TXT_AJ_SECAO, "O que muda nesta TV"); txt_desenhar(t, x, y); y += t.h + 6; }
+  { TxtLinha t = dgT(TXT_AJ_SECAO, "Candidato desta rodada"); txt_desenhar(t, x, y); y += t.h + 6; }
   y += ajustes_ui_antes_depois("Memória para imagens", atual.texMb, cand.texMb, "MB", 512, x, y, w, 0, -1, 0, 0);
   y += ajustes_ui_antes_depois("Fios de rede das artes", atual.fiosRede, cand.fiosRede, "fios", 6, x, y, w, 0, -1, 0, 0);
   y += ajustes_ui_antes_depois("Largura do fundo em tela cheia", atual.heroiLarg, cand.heroiLarg, "px", 2560, x, y, w, 0, -1, 0, 0);
@@ -438,7 +438,7 @@ static void dgResultado(void) {
   // O que foi aplicado
   ajustes_ui_ilha(br, 32, 0);
   x = br.x + 34; w = br.w - 68; y = br.y + 30;
-  ajustes_ui_kicker("O que foi aplicado", x, y, 1);
+  ajustes_ui_kicker("Agora nesta TV", x, y, 1);
   { TxtLinha m = dgT(TXT_ILHA_APOIO, d.modo == DIAG_DESEMPENHO ? "Desempenho" : "Qualidade");
     txt_desenhar_alpha(m, x + w - m.w, y, 0.5f); }
   y += 18 + 12;
@@ -451,15 +451,11 @@ static void dgResultado(void) {
     y += t.h + 6;
     if (d.motivo) { TxtLinha m = dgTC(TXT_ILHA_APOIO, d.motivo, w - 17); txt_desenhar_alpha(m, x + 17, y, 0.55f); y += 22; } }
   y += 8;
-  { int testado = d.aplicacao == DA_MANTIDO || d.aplicacao == DA_RESTAURADO_AUTO ||
-                  d.aplicacao == DA_RESTAURADO_MANUAL || d.aplicacao == DA_CANCELADO || d.aplicacao == DA_RUIDO;
-    int pior = d.aplicacao == DA_RESTAURADO_AUTO;
+  { int pior = d.aplicacao == DA_RESTAURADO_AUTO;
     PtvPerfil a, b;
-    int trv;
-    long mm;
     float hw = (w - 32) * 0.5f, yy = y;
-    if (testado) { a = d.perfAntes; b = d.perfCand; } else { perfilAtual(&a, &trv, &mm); b = a; }
-    yy += ajustes_ui_antes_depois("Memória para imagens", a.texMb, b.texMb, "MB", 512, x, yy, hw, 1, pior ? 0.910f : -1, 0.722f, 0.290f);
+    perfilDoResultado(&a, &b);
+    yy += ajustes_ui_antes_depois("Memória para imagens agora", a.texMb, b.texMb, "MB", 512, x, yy, hw, 1, pior ? 0.910f : -1, 0.722f, 0.290f);
     yy += ajustes_ui_antes_depois("Fios de rede das artes", a.fiosRede, b.fiosRede, "fios", 6, x, yy, hw, 1, pior ? 0.910f : -1, 0.722f, 0.290f);
     ajustes_ui_antes_depois("Largura do fundo em tela cheia", a.heroiLarg, b.heroiLarg, "px", 2560, x, yy, hw, 1, pior ? 0.910f : -1, 0.722f, 0.290f);
     if (d.medAntes.artesMs || d.medDepois.artesMs) {

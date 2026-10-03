@@ -945,6 +945,7 @@ unsigned long cat_assinatura_de(const CatItem *lista, int qtd,
     MIX(fl[i].base); MIX(fl[i].catId);
     h ^= (unsigned long)fl[i].ini * 31UL + (unsigned long)fl[i].n; h *= 16777619UL;
     h ^= (unsigned long)fl[i].estado; h *= 16777619UL;
+    h ^= (unsigned long)fl[i].socialGeracao; h *= 16777619UL;
   }
   for (i = 0; i < qtd; i++) {
     MIX(lista[i].imdb); MIX(lista[i].tipo); MIX(lista[i].titulo);
@@ -1695,7 +1696,8 @@ void cat_republicar_fileiras(const CatFileira *novasFils, int nNovas) {
           strcmp(novasFils[k].base, fils[k].base) ||
           strcmp(novasFils[k].catId, fils[k].catId) ||
           novasFils[k].ini != fils[k].ini || novasFils[k].n != fils[k].n ||
-          novasFils[k].estado != fils[k].estado) igual = 0;
+          novasFils[k].estado != fils[k].estado ||
+          novasFils[k].socialGeracao != fils[k].socialGeracao) igual = 0;
     if (igual) { pthread_mutex_unlock(&pubTrava); return; }
   }
   nFils = 0;                 // ver a nota em catalogo.h: zera antes de mexer

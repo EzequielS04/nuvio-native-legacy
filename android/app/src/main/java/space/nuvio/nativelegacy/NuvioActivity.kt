@@ -2,6 +2,7 @@ package space.nuvio.nativelegacy
 
 import android.Manifest
 import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
@@ -151,6 +152,54 @@ class NuvioActivity : SDLActivity() {
         }
     }
 
+    // ONDE ASSISTIR (src/ondever.c), chamados pelo C do fio do SDL.
+    //
+    // Apps que aparecem no inicio da TV, "pacote\tnome" por linha. Leanback
+    // primeiro (e o que a TV mostra), LAUNCHER como reserva para app de
+    // celular instalado na TV. Precisa do <queries> do manifesto: sem ele o
+    // Android 11+ esconde os outros apps e a lista volta vazia.
+    fun listarApps(): String? {
+        return try {
+            val pm = packageManager
+            val vistos = LinkedHashMap<String, String>()
+            for (cat in arrayOf(Intent.CATEGORY_LEANBACK_LAUNCHER, Intent.CATEGORY_LAUNCHER)) {
+                val q = Intent(Intent.ACTION_MAIN).addCategory(cat)
+                for (r in pm.queryIntentActivities(q, 0)) {
+                    val pkg = r.activityInfo?.packageName ?: continue
+                    if (pkg == packageName || vistos.containsKey(pkg)) continue
+                    vistos[pkg] = r.loadLabel(pm).toString().replace('\t', ' ').replace('\n', ' ')
+                }
+            }
+            vistos.entries.joinToString("\n") { it.key + "\t" + it.value }
+        } catch (e: Exception) { null }
+    }
+
+    fun abrirApp(pacote: String): Boolean {
+        return try {
+            val i = packageManager.getLeanbackLaunchIntentForPackage(pacote)
+                ?: packageManager.getLaunchIntentForPackage(pacote) ?: return false
+            startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        } catch (e: Exception) { false }
+    }
+
+    // A loja (Google Play) na pagina do app; sem pacote, a busca pelo nome.
+    fun abrirLoja(pacote: String, nome: String): Boolean {
+        val alvo = if (pacote.isNotEmpty()) "market://details?id=$pacote"
+                   else "market://search?q=" + Uri.encode(nome)
+        return try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(alvo)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            true
+        } catch (e: Exception) {
+            try {
+                val web = if (pacote.isNotEmpty()) "https://play.google.com/store/apps/details?id=$pacote"
+                          else "https://play.google.com/store/search?q=" + Uri.encode(nome)
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(web)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                true
+            } catch (e2: Exception) { false }
+        }
+    }
+
     // So apaga ao VOLTAR com o processo vivo: no primeiro onStart quem le (e
     // apaga) a despedida da sessao anterior e o C, no arranque.
     private var jaComecou = false
@@ -176,6 +225,9 @@ class NuvioActivity : SDLActivity() {
             val f = despedida()
             if (!(f.exists() && f.readText().startsWith("fim"))) f.writeText("oculto\n")
         } catch (_: Exception) {}
+        // Instalador ou tela de voz por cima NAO e sair do app: trocar o icone
+        // ali fecharia a tarefa embaixo deles (ver aplicarIconePendente).
+        if (!instalando && !esperandoTela && !isChangingConfigurations) aplicarIconePendente()
         super.onStop()
     }
 
@@ -190,7 +242,7 @@ class NuvioActivity : SDLActivity() {
         super.onDestroy()
         // O nucleo C guarda estado global: sair do app e matar o processo, para
         // a proxima abertura nascer limpa (o SDL ja pediu finish quando o main voltou).
-        if (saindo) Process.killProcess(Process.myPid())
+        if (saindo) { aplicarIconePendente(); Process.killProcess(Process.myPid()) }
     }
 
     // Variaveis que o C le (contrato do porte Android). Tem de rodar antes do
@@ -429,6 +481,56 @@ class NuvioActivity : SDLActivity() {
     private var reconhecedor: SpeechRecognizer? = null
     private var idiomaVoz = ""
     private var ultimoNivel = -100
+    // ICONE DO APP (iconeapp_aplicar_plataforma, src/iconeapp.c). Um
+    // activity-alias ".Icone_<id>" por icone; so um ligado de cada vez.
+    //
+    // A TROCA NAO E NA HORA, e sim quando o app sai da frente (onStop) ou fecha.
+    // MEDIDO no emulador Android TV (API 34): desligar o alias pelo qual a tarefa
+    // foi aberta FECHA a tarefa e mata o processo cerca de 1 s depois, mesmo com
+    // DONT_KILL_APP — o app sumia da tela no meio dos Ajustes. Na saida isso nao
+    // importa (a pessoa ja saiu, e a proxima abertura nasce limpa, como sempre).
+    //
+    // 0 = ja estava assim, 2 = agendada para a saida, -1 = id desconhecido.
+    private val ICONES = arrayOf("original", "fenix", "nverde", "tvlaranja", "npixel",
+                                 "tricolor", "arco", "tvviva", "cluberetro", "arcaden")
+    @Volatile private var iconePendente: String? = null
+    @Volatile private var esperandoTela = false   // voz do sistema por cima
+
+    private fun compIcone(i: String) = ComponentName(this, "$packageName.Icone_$i")
+    private fun iconeLigado(i: String): Boolean {
+        val st = packageManager.getComponentEnabledSetting(compIcone(i))
+        // DEFAULT = o que o manifest diz: so o original nasce ligado.
+        return if (st == PackageManager.COMPONENT_ENABLED_STATE_DEFAULT) i == "original"
+               else st == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+    }
+
+    fun trocarIcone(id: String): Int {
+        if (id !in ICONES) return -1
+        return try {
+            if (iconeLigado(id) && ICONES.none { it != id && iconeLigado(it) }) {
+                iconePendente = null; 0
+            } else { iconePendente = id; 2 }
+        } catch (e: Exception) { -1 }
+    }
+
+    // Liga o novo ANTES de desligar os outros: na ordem inversa havia um
+    // instante sem nenhuma entrada no launcher. EFEITO COLATERAL, de qualquer
+    // launcher: ele tira a entrada velha e poe a nova; leva de um a varios
+    // segundos e a entrada pode mudar de lugar (fim da lista; um favorito do
+    // Android TV ou atalho fixado pode sumir e precisar ser fixado de novo).
+    private fun aplicarIconePendente() {
+        val id = iconePendente ?: return
+        iconePendente = null
+        try {
+            val pm = packageManager
+            pm.setComponentEnabledSetting(compIcone(id),
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+            for (i in ICONES) if (i != id && iconeLigado(i))
+                pm.setComponentEnabledSetting(compIcone(i),
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        } catch (_: Exception) {}
+    }
+
     private val PEDIDO_DITADO = 4711
     private val PEDIDO_MIC = 4712
 
@@ -528,7 +630,8 @@ class NuvioActivity : SDLActivity() {
         if (i.resolveActivity(packageManager) != null) {
             eventos.add("Ssistema:$motivo")
             @Suppress("DEPRECATION")
-            try { startActivityForResult(i, PEDIDO_DITADO); return } catch (_: Exception) {}
+            try { esperandoTela = true; startActivityForResult(i, PEDIDO_DITADO); return }
+            catch (_: Exception) { esperandoTela = false }
         }
         // Nem a tela de voz: o C abre o teclado do sistema (o microfone dele dita).
         eventos.add("Steclado:$motivo")
@@ -536,6 +639,7 @@ class NuvioActivity : SDLActivity() {
 
     @Deprecated("startActivityForResult e o que o SDLActivity (Activity) oferece")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == PEDIDO_DITADO) esperandoTela = false
         if (requestCode == PEDIDO_DITADO) {
             val t = if (resultCode == RESULT_OK)
                 data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() else null

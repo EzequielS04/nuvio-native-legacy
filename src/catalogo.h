@@ -40,6 +40,9 @@ typedef struct {
   // Mesmo teto do cache de textura (NV_TEX_URL_MAX, tex_cache.h).
   char poster[1024];
   char logo[512];      // vazio quando o titulo nao tem logo
+  // Language evidence belongs to this exact logo, never to another selection.
+  char logoIdioma[8];
+  char logoIdiomaUrl[512];
   char titulo[160];
   char genero[160];    // "Programa de TV · Drama · Misterio"
   char meta[96];       // "2022 · 3 temporadas"
@@ -399,6 +402,9 @@ typedef struct {
   // 1 = resposta valida explicitamente vazia. A linha permanece na
   // estrutura para que uma resposta parcial nao desloque as seguintes.
   int estado;
+  // Social-only account generation captured BEFORE fetching its source data.
+  // Metadata/progress revisions never make an old account row current.
+  unsigned socialGeracao;
 } CatFileira;
 
 int cat_n_fileiras(void);

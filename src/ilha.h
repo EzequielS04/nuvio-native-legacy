@@ -161,6 +161,9 @@ void ilha_atividade(const char *texto, float progresso);
 // o texto em 24/600 e o trilho de 180 x 6 com a porcentagem AO LADO do texto
 // (nao embaixo). NULL = ilha_atividade.
 void ilha_atividade_ex(const char *texto, float progresso, const char *icone);
+// Optional live details: NULL removes the activity's expandable panel.
+void ilha_atividade_detalhes(const char *titulo, const char *texto);
+int ilha_atividade_expansivel(void);
 
 // Onde o relogio pode ficar, decidido por quadro por app.c (a home tem o topo
 // esquerdo livre; Ajustes e Explorar tem titulo ali).

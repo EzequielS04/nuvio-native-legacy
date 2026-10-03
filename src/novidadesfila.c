@@ -21,6 +21,8 @@ static const struct { const char *arq, *conteudo; } ANTIGAS[] = {
   { "novidades-152-ui.txt", "1\n" },            // novidades151.c
   { "novidades-160-ui.txt", "1\n" },            // novidades160.c
   { "novidades-170-ui.txt", "1\n" },            // novidades170.c
+  { "novidades-172-ui.txt", "1\n" },            // novidades172.c (published as 1.7.3)
+  { "novidades-174-ui.txt", "1\n" },            // novidades174.c
   { "salvos-intro.txt", "1\n" },                // salvosintro.c
   { "aviso-log.txt", "1\n" },                   // registro.c
   { "recintro-social.txt", "1\n" },             // recintro.c

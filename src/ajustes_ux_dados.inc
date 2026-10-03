@@ -232,6 +232,7 @@ int ajustes_buscar(const char *consulta, AjusteBuscaResultado *resultados, int c
     op = item->op;
     if (op < 0 || op >= AJ_N || visto[op]) continue;
     visto[op] = 1;
+    if (op == AJ_ICONE_APP && !apoiador_ativo()) continue;
     if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) continue;
     uxNormalizar(i18n(rotuloOpcao(op)), titulo, sizeof titulo);
     uxNormalizar(rotuloOpcao(op), tituloPt, sizeof tituloPt);

@@ -629,6 +629,13 @@ static void perfilAtual(PtvPerfil *pf, int *travado, long *mem) {
   if (mem) *mem = m;
 }
 
+// Resultado e perfil EM USO, lido do cache. O candidato continua no relatorio
+// e na etapa de teste, mas nao pode aparecer como aplicado depois de rollback.
+static void perfilDoResultado(PtvPerfil *antes, PtvPerfil *atual) {
+  perfilAtual(atual, NULL, NULL);
+  *antes = d.aplicacao == DA_MANTIDO ? d.perfAntes : *atual;
+}
+
 static const char *modoNome(void) {
   return d.modo == DIAG_DESEMPENHO ? "desempenho" : "qualidade";
 }
@@ -715,6 +722,10 @@ static void concluirComparacao(void) {
          d.medAntes.artesMs, d.medAntes.falhas, d.medAntes.piorQuadroMs,
          d.medDepois.artesMs, d.medDepois.falhas, d.medDepois.piorQuadroMs,
          aplicacaoNome(d.aplicacao), m ? ": " : "", m ? m : "");
+  { PtvPerfil ativo;
+    perfilAtual(&ativo, NULL, NULL);
+    printf("[diagnostico] active image profile: %d MB, %d workers, hero %d px\n",
+           ativo.texMb, ativo.fiosRede, ativo.heroiLarg); }
   fflush(stdout);
 }
 
@@ -954,10 +965,12 @@ static void montarRelatorio(void) {
   char *p = d.relatorio;
   size_t left = sizeof d.relatorio;
   int wrote;
+  PtvPerfil ativo;
   tex_estatisticas(&texItens, &texPend, &texBytes, &texQuentes, NULL);
   tex_orcamento_info(&texMb, &memTotal, NULL, &texSlots);
   texLimite = tex_orcamento_bytes();
   tex_threads_info(&fios, &fiosMax);
+  perfilAtual(&ativo, NULL, NULL);
   d.relatorio[0] = 0;
 #define ACRESCENTA(...) do { wrote = snprintf(p, left, __VA_ARGS__); \
     if (wrote > 0 && (size_t)wrote < left) { p += wrote; left -= (size_t)wrote; } } while (0)
@@ -968,9 +981,11 @@ static void montarRelatorio(void) {
     d.streamMs, texItens, texPend, texQuentes, texBytes, texLimite, texMb,
     memTotal, fios, fiosMax, gargaloPrincipal(), aplicacaoNome(d.aplicacao),
     d.coberturaParcial ? "parcial" : "completa");
+  ACRESCENTA("platform=%s\n", ptv_plataforma_nome(ptv_plataforma()));
   ACRESCENTA("perfil_antes=%d|%d|%d\nperfil_candidato=%d|%d|%d\ntravado_mb=%d\n",
              d.perfAntes.texMb, d.perfAntes.fiosRede, d.perfAntes.heroiLarg,
              d.perfCand.texMb, d.perfCand.fiosRede, d.perfCand.heroiLarg, d.travadoMb);
+  ACRESCENTA("perfil_ativo=%d|%d|%d\n", ativo.texMb, ativo.fiosRede, ativo.heroiLarg);
   ACRESCENTA("amostra_artes=%d\nartes_frio_ms=%d\nartes_antes_ms=%d\nartes_depois_ms=%d\nartes_falhas_antes=%d\nartes_falhas_depois=%d\npior_quadro_antes_ms=%d\npior_quadro_depois_ms=%d\ndespejos_quentes_depois=%d\nmotivo=%s\n",
              d.nArte, d.medFrio.artesMs, d.medAntes.artesMs, d.medDepois.artesMs,
              d.medAntes.falhas, d.medDepois.falhas, d.medAntes.piorQuadroMs,
@@ -2796,7 +2811,7 @@ static void diagnosticoAntigo(Uint32 agora) {
       "Cada fonte de arte: catálogo, Metahub, TMDB, Trakt, Apple TV, fanart.tv, anime e logo",
       "As mesmas artes pelo cache, com o perfil atual",
       "Aplica o candidato e mede as mesmas artes de novo",
-      "Mantém se não piorou; senão volta sozinho ao anterior",
+      "Aplica só se ajudar; senão restaura o perfil anterior",
     };
     PtvPerfil atual, cand;
     int travado, i;
@@ -2819,7 +2834,7 @@ static void diagnosticoAntigo(Uint32 agora) {
                 foco ? 24 : 178, foco ? 26 : 184, foco ? 30 : 194,
                 c.x + 24.0f, c.y + 72.0f, c.w - 48.0f, 30.0f, 1, 3);
     }
-    txt_desenhar(txt_linha(TXT_BODY, i18n("O que muda nesta TV"), 238, 242, 248, 255),
+    txt_desenhar(txt_linha(TXT_BODY, i18n("Candidato desta rodada"), 238, 242, 248, 255),
                  esq.x + 28.0f, esq.y + 326.0f);
     linhasDoPerfil(esq, esq.y + 372.0f, 40.0f, &atual, &cand);
     txt_bloco(TXT_CAPTION, i18n("Se o reteste da mesma amostra piorar, o perfil anterior volta sozinho e a tela diz o motivo."),
@@ -2954,7 +2969,7 @@ static void diagnosticoAntigo(Uint32 agora) {
     metrica(bl, bl.y + 254.0f, "Fila de imagens", v, 176, 188, 202);
 
     txtAp = textoAplicacao(&cor);
-    painelTitulo(br, "O que foi aplicado", d.modo == DIAG_DESEMPENHO ? "Desempenho" : "Qualidade");
+    painelTitulo(br, "Agora nesta TV", d.modo == DIAG_DESEMPENHO ? "Desempenho" : "Qualidade");
     txt_desenhar(txt_linha_corta(TXT_BODY, i18n(txtAp), cor == 1 ? 170 : cor == 2 ? 244 : 214,
                                  cor == 1 ? 222 : cor == 2 ? 196 : 220, cor == 1 ? 190 : cor == 2 ? 150 : 230,
                                  255, br.w - 56.0f),
@@ -2962,18 +2977,9 @@ static void diagnosticoAntigo(Uint32 agora) {
     if (d.motivo)
       txt_desenhar(txt_linha_corta(TXT_CAPTION, i18n(d.motivo), 240, 176, 150, 255, br.w - 56.0f),
                    br.x + 28.0f, br.y + 128.0f);
-    // O CANDIDATO TESTADO aparece como antes -> depois sempre que ele entrou
-    // no ar, tenha ficado ou nao: o veredito acima diz qual dos dois vale.
-    // Sem candidato (igual, sem amostra), so o que vale agora.
-    { int testado = d.aplicacao == DA_MANTIDO || d.aplicacao == DA_RESTAURADO_AUTO ||
-                    d.aplicacao == DA_RESTAURADO_MANUAL || d.aplicacao == DA_CANCELADO ||
-                    d.aplicacao == DA_RUIDO;
-      PtvPerfil atual_;
-      int tr_;
-      long m_;
-      perfilAtual(&atual_, &tr_, &m_);
-      if (testado) linhasDoPerfil(br, br.y + 158.0f, 32.0f, &d.perfAntes, &d.perfCand);
-      else linhasDoPerfil(br, br.y + 158.0f, 32.0f, &atual_, &atual_); }
+    { PtvPerfil antes_, atual_;
+      perfilDoResultado(&antes_, &atual_);
+      linhasDoPerfil(br, br.y + 158.0f, 32.0f, &antes_, &atual_); }
     if (d.medAntes.artesMs || d.medDepois.artesMs) {
       snprintf(v, sizeof v, "%d → %d ms", d.medAntes.artesMs, d.medDepois.artesMs);
       metrica(br, br.y + 254.0f, "Artes, mesma amostra", v, 214, 220, 230);

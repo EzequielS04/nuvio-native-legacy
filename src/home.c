@@ -1,3 +1,4 @@
+#include "imdbnota.h"
 // Home nativa compatível com a interface moderna do Nuvio 1.0.1 legacy:
 // hero no topo, rail fixa à esquerda e fileiras horizontais de posters. A
 // infraestrutura nativa cuida de cache assíncrono, foco e transições.
@@ -1187,8 +1188,9 @@ static void desenhaFaixaAberta(const CatItem *ci, int r, float px, float py,
   // Sem ID nao ha como atribuir a nota ao IMDb; em itens `tmdb:` a nota pode
   // ser do TMDB e o rotulo amarelo seria enganoso. O restante da faixa segue
   // independente e continua aparecendo quando existe.
-  if (ci->nota > 0 && ci->imdb[0] && strncmp(ci->imdb, "tmdb:", 5) != 0) {
-    float bw = badge_imdb_largura(ci->nota);
+  int imdbRating = imdbnota_obter(ci->imdb, ci->nota, !strcmp(ci->tipo,"series"));
+  if (imdbRating > 0) {
+    float bw = badge_imdb_largura(imdbRating);
     float xMin = px + pad + (ci->logo[0] ? w * 0.34f : 0.0f);
     float badgeX = cx - bw;
     // O logo ocupa a esquerda da mesma faixa. Se os outros chips consumirem
@@ -1196,7 +1198,7 @@ static void desenhaFaixaAberta(const CatItem *ci, int r, float px, float py,
     // arredondado do card.
     if (badgeX >= xMin) {
       cx = badgeX;
-      badge_imdb(cx, cy + (ch - BADGE_H) * 0.5f, ci->nota, 0, a);
+      badge_imdb(cx, cy + (ch - BADGE_H) * 0.5f, imdbRating, 0, a);
     }
   }
   // 5. Progresso em andamento: fio na base, dentro do raio do card.
@@ -3021,7 +3023,8 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
   const char *selo = (ci && ci->classificacao[0] && !contHero && !seguirHero) ? ci->classificacao : NULL;
   char nota[8];
   nota[0] = 0;
-  if (ci && ci->nota > 0) snprintf(nota, sizeof nota, "%.1f", ci->nota / 10.0f);
+  int imdbRating = ci ? imdbnota_obter(ci->imdb, ci->nota, !strcmp(ci->tipo,"series")) : 0;
+  if (imdbRating > 0) snprintf(nota, sizeof nota, "%.1f", imdbRating / 10.0f);
   int temSec = (destaque[0] || selo || nota[0]);
 
   const char *sinopse = (ci && ci->sinopse[0]) ? ci->sinopse : "";
@@ -3146,11 +3149,11 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
         cx += badge_desenhar(cx, ySec + (NV_LD_HERO_SEC - BADGE_H) * 0.5f,
                              selo, BADGE_NEUTRO, a) + 14.0f;
     }
-    if (nota[0] && ci && ci->nota > 0) {
-      float bw = badge_imdb_largura(ci->nota);
+    if (nota[0] && imdbRating > 0) {
+      float bw = badge_imdb_largura(imdbRating);
       if (cx + bw <= x + sinW)
         badge_imdb(cx, ySec + (NV_LD_HERO_SEC - BADGE_H) * 0.5f,
-                   ci->nota, 0, a);
+                   imdbRating, 0, a);
     }
   }
 
@@ -4006,11 +4009,30 @@ static int heroTrailerSegurando(Uint32 agora) {
          agora - heroTrailerDesde <= heroTrailerMaxEspera();
 }
 
+enum { HERO_GATE_READY, HERO_GATE_UNSUPPORTED, HERO_GATE_OVERLAY,
+       HERO_GATE_DISABLED, HERO_GATE_SETTING, HERO_GATE_DYNAMIC,
+       HERO_GATE_POSTER_WAIT, HERO_GATE_TRANSITION, HERO_GATE_NONCONTENT,
+       HERO_GATE_NO_ID };
+static int heroTrailerGateAnterior = -1;
+static void heroTrailerGateLog(int motivo, int enabled) {
+  static const char *const nomes[] = { "ready", "unsupported", "top-overlay",
+    "hero-disabled", "focused-setting-disabled", "dynamic-poster-hidden",
+    "poster-wait", "art-transition", "non-content-row", "missing-content-id" };
+  if (!enabled) { heroTrailerGateAnterior = -1; return; }
+  if (motivo != heroTrailerGateAnterior) {
+    heroTrailerGateAnterior = motivo;
+    printf("[home-trailer] autoplay gate=%s\n", nomes[motivo]);
+    fflush(stdout);
+  }
+}
+
 void home_trailer_passo(int topo, float dt, Uint32 agora) {
   const CatItem *ci = NULL;
   int pronto;
   Uint32 decorrido;
-  if (!trailer_suportado()) return;
+  int heroSetting = ajustes_trailer_hero(), posterSetting = ajustes_trailer_cartaz();
+  int enabled = heroSetting || posterSetting, motivo = HERO_GATE_READY;
+  if (!trailer_suportado()) { heroTrailerGateLog(HERO_GATE_UNSUPPORTED, enabled); return; }
   // DUAS PORTAS PARA O MESMO TRAILER. Com o foco no destaque, "Trailer no
   // destaque". Com o foco num CARTAZ das fileiras (#124: "parado num titulo do
   // catalogo, nada toca"), "Trailer do cartaz em foco" — o
@@ -4018,21 +4040,35 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
   // ja segue o card em repouso (heroAtual, ver "O HERO SEGUE O FOCO"), entao o
   // trailer toca onde a arte dele ja esta. Espera o mesmo tempo da expansao do
   // cartaz, contado de quando o foco parou nele.
-  { int noHero = focoHero && ajustes_hero_ligado() && ajustes_trailer_hero();
+  { int noHero = focoHero && ajustes_hero_ligado() && heroSetting;
     // Na Dinamica o destaque ROLOU para fora quando o foco esta num cartaz: o
     // trailer do cartaz tocaria onde ninguem ve.
-    int noCartaz = !focoHero && ajustes_hero_ligado() && ajustes_trailer_cartaz() &&
+    int noCartaz = !focoHero && ajustes_hero_ligado() && posterSetting &&
                    layoutHome() != HOME_LAYOUT_DINAMICA &&
                    heroPendente == heroAtual &&
                    agora - heroPendenteEm >= (Uint32)(ajustes_expandir_poster_atraso() * 1000.0f);
-    pronto = topo && (noHero || noCartaz); }
+    pronto = topo && (noHero || noCartaz);
+    if (!topo) motivo = HERO_GATE_OVERLAY;
+    else if (!ajustes_hero_ligado()) motivo = HERO_GATE_DISABLED;
+    else if (focoHero ? !heroSetting : !posterSetting) motivo = HERO_GATE_SETTING;
+    else if (!focoHero && layoutHome() == HOME_LAYOUT_DINAMICA) motivo = HERO_GATE_DYNAMIC;
+    else if (!noHero && !noCartaz) motivo = HERO_GATE_POSTER_WAIT;
+  }
   pronto = pronto &&
            heroDesejado < 0 && heroAtual >= 0 && heroEntra >= 0.999f && heroSai <= 0.001f &&
            heroDesliza >= 1.0f &&   // o trailer abre com a arte ja parada
-           !(foco.fileira >= 0 && foco.fileira < nFileiras &&
+           !(!focoHero && foco.fileira >= 0 && foco.fileira < nFileiras &&
              (fileiras[foco.fileira].tipo == FILEIRA_CATALOGOS ||
               fileiras[foco.fileira].tipo == FILEIRA_SOCIAL));
+  if (motivo == HERO_GATE_READY && !pronto) {
+    if (!focoHero && foco.fileira >= 0 && foco.fileira < nFileiras &&
+        (fileiras[foco.fileira].tipo == FILEIRA_CATALOGOS || fileiras[foco.fileira].tipo == FILEIRA_SOCIAL))
+      motivo = HERO_GATE_NONCONTENT;
+    else motivo = HERO_GATE_TRANSITION;
+  }
   if (pronto) ci = cat_item_exato(heroAtual);
+  if (pronto && (!ci || !ci->imdb[0])) motivo = HERO_GATE_NO_ID;
+  heroTrailerGateLog(motivo, enabled);
   if (!pronto || !ci || !ci->imdb[0]) {
     // Hero deixou de estar pronto (foco saiu, transicao da arte, detalhe por
     // cima): fecha. E o outro caminho de fechamento que o prazo nao ve —
@@ -4524,12 +4560,13 @@ static void desenhaEditorialCard(const CatItem *cItem, TipoFileira tipo, float p
   // Continuar, faixa do card aberto), e nao com uma estrela solta —
   // um so vocabulario de nota. Com o selo, a classificacao etaria sai
   // da linha (a referencia nao a tem); sem nota atribuivel ao IMDb
-  // (sem ID, ou `tmdb:`), a classificacao volta como antes.
+  // (sem ID, ou `tmdb:` sem vínculo IMDb verificado), a classificacao volta como antes.
   int notaFeita = 0;
-  if (orig && ci && ci->nota > 0 && ci->imdb[0] && strncmp(ci->imdb, "tmdb:", 5) != 0) {
+  int imdbRating = orig && ci ? imdbnota_obter(ci->imdb, ci->nota, !strcmp(ci->tipo,"series")) : 0;
+  if (imdbRating > 0) {
     float bx = px + pad + tg.w + (genero ? 14.0f : 0.0f);
-    if (bx + badge_imdb_largura(ci->nota) < px + w - pad) {
-      badge_imdb(bx, yMeta + (tg.h - BADGE_H) * 0.5f, ci->nota, 0, 1.0f);
+    if (bx + badge_imdb_largura(imdbRating) < px + w - pad) {
+      badge_imdb(bx, yMeta + (tg.h - BADGE_H) * 0.5f, imdbRating, 0, 1.0f);
       notaFeita = 1;
     }
   }

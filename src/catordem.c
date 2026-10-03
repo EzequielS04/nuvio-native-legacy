@@ -82,10 +82,19 @@ static int chaveDoItem(const char *ini, const char *fim, char *dst, size_t tam) 
 // gravar, mas nada garante que o servidor devolva ja ordenado.
 static int lerItens(const char *ini, const char *fim) {
   typedef struct { char chave[CATORD_CHAVE]; int ordem, ligado; } Ent;
-  Ent v[CATORD_MAX];
+  // Applied on the main thread, like the module state. Keep TV stacks small.
+  static Ent v[CATORD_MAX];
   int nv = 0, i, j;
   const char *p = js_array(ini, fim, "items");
-  if (!p) return 0;
+  if (!p) {
+    char raw[32];
+    if (!js_bruto(ini, fim, "items", raw, sizeof raw)) return 0;
+    const char *q = raw;
+    while (*q && (unsigned char)*q <= ' ') q++;
+    if (*q++ != '[') return 0;
+    while (*q && (unsigned char)*q <= ' ') q++;
+    return *q == ']';
+  }
   for (; p && nv < CATORD_MAX; p = js_prox(fimElemento(p))) {
     const char *f = fimElemento(p);
     char b[32];
@@ -98,7 +107,7 @@ static int lerItens(const char *ini, const char *fim) {
     nv++;
   }
   if (!nv) return 0;
-  for (i = 1; i < nv; i++) {           // insercao: estavel e nv <= 64
+  for (i = 1; i < nv; i++) {           // Stable insertion sort over bounded account configuration
     int k = i;
     while (k > 0 && v[k - 1].ordem > v[k].ordem) {
       Ent t = v[k - 1]; v[k - 1] = v[k]; v[k] = t; k--;
@@ -171,8 +180,8 @@ static const char *blobDe(const char *resposta, const char **fimOut) {
 }
 
 int catordem_ler(const char *resposta) {
-  char antesOrdem[CATORD_MAX][CATORD_CHAVE];
-  char antesOcultos[CATORD_MAX][CATORD_DESL];
+  static char antesOrdem[CATORD_MAX][CATORD_CHAVE];
+  static char antesOcultos[CATORD_MAX][CATORD_DESL];
   int nAntesOrdem = nOrdem, nAntesOcultos = nOcultos, mudou = 0, i;
   const char *fim = NULL, *blob;
   static const char *NOMES_ORDEM[4] = {

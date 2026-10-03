@@ -55,7 +55,8 @@ static Uint32 curAte;           // 0 = ainda nao apareceu (o prazo conta do 1o q
 static Aviso mostraA;           // o aviso DESENHADO (pode atrasar o da vez)
 static unsigned ordemSeq;
 
-static char atvTexto[160];
+static char atvTexto[160], atvTitulo[96], atvDetalhes[640];
+static int modalAtividade;
 static float atvProg = -1.0f;
 static int  atvV2;              // ilha_atividade_ex: o desenho de 72
 static char atvIcone[32];       // "" = o ponto que respira
@@ -326,6 +327,12 @@ void ilha_atividade(const char *texto, float progresso) {
   if (!atvVisto) atvVisto = 1;
 }
 
+void ilha_atividade_detalhes(const char *titulo, const char *texto) {
+  snprintf(atvTitulo, sizeof atvTitulo, "%s", titulo ? titulo : "");
+  snprintf(atvDetalhes, sizeof atvDetalhes, "%s", texto ? texto : "");
+}
+int ilha_atividade_expansivel(void) { return atvDetalhes[0] && atvVisto && SDL_GetTicks() - atvVisto < 400u; }
+
 void ilha_relogio_visivel(int visivel) { relogioQuer = visivel; }
 
 void ilha_cartao(int qual, const IlhaCartao *c) {
@@ -387,10 +394,12 @@ int ilha_rect(float *x, float *y, float *w, float *h) {
 // pilula (abrir a pagina do titulo continua contando como visto, ilhacart.c).
 // AMIGO: Ver tambem · Detalhes · Fechar, o A5 de oportunidades.md.
 static int nBotoes(void) {
+  if (modalAtividade) return 1;
   if (modalAviso) return modalM.nBotoes < 1 ? 1 : modalM.nBotoes > ILHA_MODAL_BOTOES ? ILHA_MODAL_BOTOES : modalM.nBotoes;
   return modalQual == ILHA_ESTREIA ? 2 : 3;
 }
 static const char *rotuloBotao(int i) {
+  if (modalAtividade) return i18n("Fechar");
   if (modalAviso) return modalM.botao[i];
   if (modalQual == ILHA_ESTREIA) return i == 0 ? i18n("Assistir") : i18n("Depois");
   if (i == 0) return modalQual == ILHA_AMIGO ? i18n("Ver também") : i18n("Retomar");
@@ -404,9 +413,10 @@ static const char *iconeBotao(int i) {
   if (i == 1) return "aj_info";
   return NULL;
 }
-static int modalTemSalvos(void) { return modalAviso ? modalM.salvos : 1; }
+static int modalTemSalvos(void) { return !modalAtividade && (modalAviso ? modalM.salvos : 1); }
 
 static void abrirCartao(int qual) {
+  modalAtividade = 0;
   modalAberto = 1;
   modalAviso = 0;
   modalQual = qual;
@@ -417,8 +427,11 @@ static void abrirCartao(int qual) {
 }
 
 int ilha_modal_abrir(void) {
-  if (modalAberto || cartaoVez < 0 || !relogioQuer) return 0;
-  abrirCartao(cartaoVez);
+  if (modalAberto || !relogioQuer) return 0;
+  modalAtividade = ilha_atividade_expansivel();
+  if (!modalAtividade && cartaoVez < 0) return 0;
+  if (!modalAtividade) abrirCartao(cartaoVez);
+  else { modalAberto = 1; modalAviso = 0; modalFoco = 0; modalDesde = SDL_GetTicks(); memset(modalFocoA, 0, sizeof modalFocoA); }
   return 1;
 }
 
@@ -427,6 +440,7 @@ int ilha_modal_abrir(void) {
 // recolhe. Com `cartao`, o modal e o do cartao (o episodio novo abre a estreia).
 static int abrirDoAviso(void) {
   if (modalAberto || !temCur || !curAte) return 0;
+  modalAtividade = 0;
   if (cur.cartao > 0 && cur.cartao <= ILHA_N_CARTOES && temCartao[cur.cartao - 1]) {
     abrirCartao(cur.cartao - 1);
     proximo();
@@ -475,6 +489,7 @@ int ilha_pediu(IlhaCartao *c, int *qual) {
 }
 
 static void acionar(int i) {
+  if (modalAtividade) { ilha_modal_fechar(0); return; }
   if (modalAviso) {
     // Quem pos o aviso decide o que o botao faz (ilha_aviso_pediu).
     avPedido = i + 1;
@@ -522,13 +537,14 @@ int ilha_evento(const SDL_Event *e) {
   // mora a direita da tela. So nos modais que mostram "Salvos ›".
   if (k == SDLK_RIGHT) {
     if (modalFoco + 1 < nBotoes()) modalFoco++;
-    else if (modalTemSalvos()) pedir(ILHA_PEDIU_SALVOS);
+    else if (!modalAtividade && modalTemSalvos()) pedir(ILHA_PEDIU_SALVOS);
     return 1;
   }
   // A MESMA JANELA DE 400 ms do atalho em app.c: o controle manda a AZUL
   // segurada como KEYDOWNs separados, e o segundo levaria direto ao painel.
   if (k == SDLK_s || sc == NV_SCANCODE_BLUE) {
-    if (modalTemSalvos() && SDL_GetTicks() - modalDesde >= 400u) pedir(ILHA_PEDIU_SALVOS);
+    if (modalAtividade) ilha_modal_fechar(0);
+    else if (modalTemSalvos() && SDL_GetTicks() - modalDesde >= 400u) pedir(ILHA_PEDIU_SALVOS);
     return 1;
   }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) { acionar(modalFoco); return 1; }
@@ -547,12 +563,13 @@ void ilha_ancorar(float x, float y, int daDireita) {
 }
 
 // Canto escolhido em Ajustes > Aparencia > Posicao do relogio. O Guia tem o
-// titulo a esquerda e fica sempre a direita. Fora dele: 2 = Direita; 1 =
-// Esquerda, que no layout Dinamica vai AO LADO da pilula da barra (o canto
-// dela); 0 = Automatica, o padrao de sempre (ver ilha_desenhar).
+// titulo a esquerda e fica sempre a direita. Fora dele: 0 = Automatica e 2 =
+// Direita vao a DIREITA em qualquer layout (padrao do dono desde a 1.7.2; era
+// esquerda, e direita so na Dinamica); 1 = Esquerda, que no layout Dinamica
+// vai AO LADO da pilula da barra (o canto dela).
 void ilha_posicionar(int guia) {
   int pos = ajustes_relogio_pos();
-  if (guia || pos == 2) ilha_ancorar(NV_TELA_W - NV_ILHA_MARGEM_D, NV_ILHA_Y, 1);
+  if (guia || pos != 1) ilha_ancorar(NV_TELA_W - NV_ILHA_MARGEM_D, NV_ILHA_Y, 1);
   else if (pos == 1 && ajustes_home_layout() == HOME_LAYOUT_DINAMICA) {
     // A pilula e o recuo do conteudo chegam em pixels da tela REAL; a ilha
     // mede pela virtual (escala.h).
@@ -1334,6 +1351,26 @@ static void desenharModal(GfxRect m, float a) {
   int i;
   if (a < 0.01f) return;
   ajustes_acento(&cr, &cg, &cb);
+  if (modalAtividade) {
+    GfxRect box = {ax, ay, 120, 120};
+    gfx_cor(box, 0.22f, 0.14f, 0.15f, 0.17f, a);
+    TxtLinha mark = txt_linha(TXT_TITULO3, "…", 190, 200, 220, 255);
+    txt_desenhar_alpha(mark, ax + (120 - mark.w) * 0.5f, ay + 30, a);
+    float tx = ax + 152, width = m.w - MD_PAD * 2 - 152;
+    TxtLinha title = txt_linha_corta(TXT_TITULO3, atvTitulo, 246, 247, 252, 255, width);
+    txt_desenhar_alpha(title, tx, ay, a);
+    txt_bloco_corta(TXT_CAPTION, atvDetalhes, 190, 194, 204,
+                    tx, ay + title.h + 18, width, 32, a, 6);
+    GfxRect button = { ax, by, botao_largura("Fechar", NULL, 1), BOTAO_H_SECUNDARIO };
+    plrui_botao(button.x, button.y, "Fechar", NULL, modalFocoA[0], a);
+    if (a > 0.3f) {
+      ponteiro_camada();
+      ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, pontFora, 0, 0);
+      ponteiro_alvo(m.x, m.y, m.w, m.h, NULL, NULL, 0, 0);
+      ponteiro_alvo(button.x, button.y, button.w, button.h, NULL, pontFora, 0, 0);
+    }
+    return;
+  }
   // A arte: o still do episodio quando ha, senao o fundo do titulo, senao o cartaz.
   { const char *arte = c->arte[0] ? c->arte : c->poster;
     GfxRect ra = { ax, ay, MD_ARTE_W, MD_ARTE_H };
@@ -1683,7 +1720,7 @@ static void ilha_desenharCorpo_(Uint32 agora) {
   if (!modalAberto && modalT < 0.01f) { modalT = 0.0f; modalV = 0.0f; }
   for (int i = 0; i < ILHA_MODAL_BOTOES; i++)
     modalFocoA[i] = anim_mola(modalFocoA[i], modalAberto && i == modalFoco ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
-  // POSICAO, num ponto so (ilha_ancorar ou o padrao).
+  // POSICAO, num ponto so (ilha_ancorar ou o padrao, que e a direita).
   if (ancDef) { x = ancX; y = ancY; dir = ancDir; }
   else if (ajustes_home_layout() == HOME_LAYOUT_DINAMICA) { x = NV_TELA_W - NV_ILHA_MARGEM_D; y = NV_ILHA_Y; dir = 1; }
   else { x = ajustes_conteudo_x() / gfx_escala_ui(); y = NV_ILHA_Y; dir = 0; }   // real -> virtual
@@ -1782,7 +1819,7 @@ static void ilha_desenharCorpo_(Uint32 agora) {
     if (aMod > 0.0f) desenharModal(modalAlvo(r, dir), A * aMod);
     gfx_sem_recorte();
     // Magic Remote: o clique na pilula com um cartao abre o modal.
-    if (modalT <= 0.0f && mostra == M_CARTAO && A > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontPilula, 0, 0);
+    if (modalT <= 0.0f && (mostra == M_CARTAO || (mostra == M_ATIVIDADE && ilha_atividade_expansivel())) && A > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontPilula, 0, 0);
     // E num aviso com modal (ou que abre um cartao), o mesmo clique abre o dele.
     if (modalT <= 0.0f && mostra == M_AVISO && temCur && (cur.temModal || cur.cartao || cur.acao) && A > 0.5f)
       ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontAviso, 0, 0);

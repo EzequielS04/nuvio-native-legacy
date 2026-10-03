@@ -1,6 +1,7 @@
 // Sem TV: o .tpk nunca manda ao plano um ROI fora da tela (#188, #195).
 // Liga src/video_tpk.c a um host falso que so anota o ultimo retangulo.
 #include <stdio.h>
+#include <assert.h>
 #include <string.h>
 #include "video.h"
 #include "faixasmkv.h"
@@ -55,6 +56,15 @@ static __attribute__((unused)) void naTela(const char *nome) {
 int main(void) {
   nv_tpk_video_registrar(hAbrir, hParar, hInt, hInt, hInt, hJanela, hPos);
   video_tocar("http://x/trailer.m3u8");
+  assert(!video_erro_texto()[0]);
+  nv_tpk_video_evento(5, (int)0xfe6c0031u, 0);
+  video_bombear();
+  assert(video_falhou());
+  assert(strstr(video_erro_texto(), "0xfe6c0031"));
+  video_tocar("http://x/replacement.m3u8");
+  assert(!video_falhou());
+  assert(!video_erro_texto()[0]);
+
   nv_tpk_video_evento(6, 3828, 1588);   // Apple matted, registro 11875
   nv_tpk_video_evento(1, 60000, 0);
 #if NV_TPK_ZOOM_ROI

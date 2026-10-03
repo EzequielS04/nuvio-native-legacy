@@ -27,6 +27,7 @@
 // o numero de retangulos do quadro — o que da para medir no Mac do custo de
 // desenho; o custo em ms de GPU so existe na TV.
 #include "ajustes.h"
+#include "agenda.h"
 #include "artehero.h"
 #include "catalogo.h"
 #include "colecoes.h"
@@ -305,7 +306,26 @@ int main(int argc, char **argv) {
     }
     assert(col_definir_json(js) == 4);
   }
+  if (getenv("NV_AGENDA")) {
+    agenda_iniciar(); agenda_definir_hoje("2026-10-03");
+    for (int j = 0; j < total; j++) if (!strcmp(itens[j].tipo, "series"))
+      agenda_registrar(itens[j].imdb, itens[j].titulo, itens[j].poster,
+                        "Returning Series", 2, 5, "Episódio de ensaio",
+                        "2026-10-07", "2026-09-30");
+  }
   cat_definir_tudo(itens, total, fils, NF);
+  if (getenv("NV_EP_LIST")) for (int j=0;j<total;j++) if (!strcmp(itens[j].tipo,"series")) {
+    CatEp eps[6] = {0};
+    for (int e=0;e<6;e++) {
+      eps[e].temporada=1; eps[e].episodio=e+1;
+      snprintf(eps[e].nome,sizeof eps[e].nome,"Episódio de ensaio %d",e+1);
+      snprintf(eps[e].thumb,sizeof eps[e].thumb,"deploy/app/art/%02d.jpg",e%NA);
+      snprintf(eps[e].sinopse,sizeof eps[e].sinopse,"Uma sinopse de ensaio para conferir a leitura, o foco e a separação entre a imagem e as informações do episódio.");
+      snprintf(eps[e].duracao,sizeof eps[e].duracao,"50 min");
+      snprintf(eps[e].data,sizeof eps[e].data,"01/04/2022");
+    }
+    cat_definir_episodios(j,eps,6);
+  }
   quadros(90, NULL);
   {
     int q, r, n = 0;
@@ -345,13 +365,14 @@ int main(int argc, char **argv) {
     for (q = 0; q < 5; q++) { quadros(4, NULL); FOTO("andando2"); }
     quadros(90, NULL); FOTO("titulo3");
     // TELA CHEIA: a primeira seta para baixo so estica o cartao (o texto
-    // fica onde estava); a segunda desce para a pagina.
+    // vai para a margem); a segunda desce para a pagina.
     tecla(SDLK_DOWN);
     for (q = 0; q < 6; q++) { quadros(3, NULL); FOTO("esticando"); }
     quadros(90, NULL); FOTO("tela-cheia");
     tecla(SDLK_DOWN);
     for (q = 0; q < 3; q++) { quadros(4, NULL); FOTO("descendo"); }
     quadros(90, NULL); FOTO("pagina");
+    if (getenv("NV_EP_LIST")) { tecla(SDLK_DOWN); quadros(90,NULL); FOTO("episodios"); tecla(SDLK_UP); quadros(90,NULL); }
     // VOLTAR: pagina -> tela cheia no topo -> cartao -> fileira.
     tecla(SDLK_AC_BACK);
     quadros(90, NULL); FOTO("tela-cheia-de-novo");
@@ -361,6 +382,7 @@ int main(int argc, char **argv) {
     tecla(SDLK_AC_BACK);
     for (q = 0; q < 6; q++) { quadros(3, NULL); FOTO("fechando"); }
     quadros(90, NULL); FOTO("fileira");
+    for (int back=0; back<4 && detail_aberto(); back++) { tecla(SDLK_AC_BACK); quadros(90,NULL); }
     printf("[shot] detalhe aberto no fim: %d\n", detail_aberto());
   }
 fim:

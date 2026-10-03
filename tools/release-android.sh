@@ -59,7 +59,7 @@ CERT=$("$BT/apksigner" verify --print-certs "$A" 2>/dev/null | sed -n 's/^Signer
 VN=$("$BT/aapt2" dump badging "$A" 2>/dev/null | sed -n "s/.*versionName='\([^']*\)'.*/\1/p" | head -1)
 [ "$VN" = "$VER" ] || { echo "release-android: versionName $VN != $VER" >&2; exit 1; }
 
-SEGREDO='(^|/)(trakt|addons|tmdb|mdblist|sessao|simkl[^/]*|fanart|diag-token)\.txt$|collections\.json$|catalogo-rede\.bin|local\.properties|\.env$|(^|/)(trakt|stalker|xtream|listas)-p[0-9]|\.jks$|\.keystore$'
+SEGREDO='(^|/)(trakt|addons|tmdb|mdblist|sessao|simkl[^/]*|fanart|diag-token)\.txt$|collections\.json$|catalogo-rede\.bin|local\.properties|\.env$|(^|/)(trakt|stalker|xtream|listas|discord)-p[0-9]|\.jks$|\.keystore$'
 # A lista uma vez so: `unzip | grep -q` com pipefail falha quando o grep fecha
 # o pipe antes de o unzip terminar.
 LISTA=$(unzip -Z1 "$A")

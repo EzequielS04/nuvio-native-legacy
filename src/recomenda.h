@@ -369,7 +369,8 @@ enum { REC_SOC_NADA = 0, REC_SOC_INDO, REC_SOC_OK,
        REC_SOC_LIMITE,         // 429: muitas buscas/pedidos, tente mais tarde
        REC_SOC_NAO_ACHOU,      // 404
        REC_SOC_SEM_APELIDO,    // 409: pedir amizade exige um apelido
-       REC_SOC_CURTA };        // busca com menos de 3 letras (nem sai do aparelho)
+       REC_SOC_CURTA,          // busca com menos de 3 letras (nem sai do aparelho)
+       REC_SOC_NEGADO };       // explicit 403; different from unavailable source/404
 
 // UMA OPERACAO SOCIAL POR VEZ (a mesma disciplina de vincular/remover): todas
 // devolvem 1 quando entraram na fila e o resultado sai em recomenda_soc_estado().
@@ -433,6 +434,8 @@ int  rec_social_unir(CatItem *itens, int nTrakt, const CatItem *nuvio, int nNuvi
 // Apaga cache, cursor e marca do cartao do aparelho. Chamar de
 // sync_esquecer_usuario: recomendacao e tao pessoal quanto a lista de salvos.
 void recomenda_esquecer(void);
+// Changes when the account/profile is forgotten. UI caches consume it on their thread.
+unsigned recomenda_geracao(void);
 
 // --- CARTAO DE ABERTURA ------------------------------------------------------
 //
@@ -538,6 +541,7 @@ enum { REC_ACAO_INICIO = 1,     // comecou (nosso) / "assistindo agora" (Trakt)
        REC_ACAO_NOTA };         // nota de tracker (`nota` 0-100)
 typedef struct {
   int  fonte, acao;
+  int  agora;           // explicit watching response; a check-in alone is not live
   char pessoa[96];      // "nuvio:..", "trakt:<slug>" ou "pub:<handle>" (amigo de amigo)
   char pessoaNome[64];  // ja pronto (rec_nome_exibicao)
   char pessoaAvatar[256];
@@ -571,7 +575,7 @@ int  recomenda_feed_unido(RecEvento *saida, int max, const CatItem *trakt,
 // converte um item de trakt_social; 0 se nao serve (sem imdb/pessoa).
 int  rec_evento_de_trakt(const CatItem *ci, long long quando, RecEvento *saida);
 // Funde `src` em `dst` (n itens, capacidade max): DEDUPE por pessoa + imdb +
-// acao (INICIO e FIM do mesmo titulo NAO se fundem) com |dt| <= 1 h — ou
+// acao + midia + temporada/episodio (INICIO e FIM NAO se fundem) com |dt| <= 1 h — ou
 // qualquer dt quando um dos dois nao tem hora. Na fusao fica o do NOSSO
 // servidor (tem reacao, grau, capa), completado com o que faltar. Ordena por
 // `quando` decrescente (0 por ultimo). Devolve o novo n.
@@ -599,7 +603,7 @@ typedef struct {
   // recs que EU mandei para ela, mais nova primeiro (so grau 1)
   int  nRecs;
   struct { long long id, criado; char imdb[24], tipo[8], titulo[160], poster[512];
-           int estado, temReacao, reacao; } recs[REC_AMIGO_RECS];
+           int estado, temReacao, reacao, terminou; } recs[REC_AMIGO_RECS];
   // gosto parecido: % de titulos com a MESMA reacao (so se os dois compartilham)
   int  temGosto, gostoTotal, gostoIguais, gostoPct;
 } RecAmigo;
@@ -608,6 +612,6 @@ typedef struct {
 // disponivel em recomenda_amigo() antes da rede. Estado em recomenda_amigo_estado.
 int  recomenda_amigo_pedir(const char *id);
 int  recomenda_amigo(RecAmigo *saida);    // 1 = ha dados (cache ou novos)
-int  recomenda_amigo_estado(void);        // REC_SOC_* (NADA/INDO/OK/FALHA/NAO_ACHOU)
+int  recomenda_amigo_estado(void);        // REC_SOC_* (NADA/INDO/OK/FALHA/NAO_ACHOU/NEGADO)
 
 #endif

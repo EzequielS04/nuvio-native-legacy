@@ -72,8 +72,42 @@
 // pagina pediu desfocada e repassa ao modulo real (gfx.c), que gera a copia de
 // verdade no GL — a captura mostra o resultado, o espiao prova a regra.
 #define gfx_desfocado fx_desfocado
+#define recomenda_ativo fx_recomenda_ativo
+#define recomenda_n fx_recomenda_n
+#define recomenda_item fx_recomenda_item
 
+#include "text.h"
+static const char *fxTituloEsperado;
+static int fxTituloDesenhado;
+static const char *fxSinopseEsperada;
+static int fxSinopseDesenhada;
+static float fxSinopseFim;
+static float fx_titulo_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
+                            float x, float y, float larg, float leading,
+                            float alpha, int maxLinhas);
+#define txt_bloco fx_titulo_bloco
 #include "../src/detail.c"
+#undef txt_bloco
+#undef recomenda_ativo
+#undef recomenda_n
+#undef recomenda_item
+static float fx_titulo_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
+                            float x, float y, float larg, float leading,
+                            float alpha, int maxLinhas) {
+  float height = txt_bloco(estilo,s,r,g,b,x,y,larg,leading,alpha,maxLinhas);
+  if (fxTituloEsperado && s && !strcmp(s,fxTituloEsperado) && alpha > 0.3f) {
+    assert(maxLinhas == 0); // The complete name is wrapped, never ellipsized.
+    assert(y >= 109.0f && y + height < NV_TELA_H);
+    fxTituloDesenhado++;
+  }
+  if (fxSinopseEsperada && s && !strcmp(s,fxSinopseEsperada) && alpha > 0.3f) {
+    assert(estilo == TXT_DET_SIN && leading == 38 && maxLinhas == 5);
+    assert(y >= 109 && y + height + 134 <= NV_TELA_H - HI_MARGEM_BASE + 1);
+    fxSinopseFim = y + height;
+    fxSinopseDesenhada++;
+  }
+  return height;
+}
 
 #undef gfx_desfocado
 GLuint gfx_desfocado(GLuint src, const char *chave);
@@ -111,6 +145,18 @@ static int fxDesfPediu(const char *chave) {
 // era da montagem, nao do desenho, mas so apareceu porque a foto foi olhada.
 #define IMDB_SERIE "tt0903747"
 #define IMDB_FILME "tt0133093"
+
+static int fxRecomendacaoLigada;
+int fx_recomenda_ativo(void) { return fxRecomendacaoLigada; }
+int fx_recomenda_n(void) { return fxRecomendacaoLigada; }
+int fx_recomenda_item(int i, RecItem *item) {
+  if (!fxRecomendacaoLigada || i != 0) return 0;
+  memset(item, 0, sizeof *item);
+  snprintf(item->imdb, sizeof item->imdb, "%s", IMDB_FILME);
+  snprintf(item->deNome, sizeof item->deNome, "Marina");
+  snprintf(item->de, sizeof item->de, "nuvio:fixture");
+  return 1;
+}
 
 #define T1_N 10
 #define T2_N 12
@@ -450,10 +496,127 @@ int main(int argc, char **argv) {
     // NUVIO_SHOT_IDIOMA=N troca o idioma das capturas que nao sao as das notas
     // da release (0 pt ... 7 es; ver idiomacod.h): serve a conferir traducao.
     fprintf(f, "idioma %d\n", getenv("NUVIO_SHOT_IDIOMA") ? atoi(getenv("NUVIO_SHOT_IDIOMA")) : 0);
+    if (getenv("NV_APPLE_EP")) fprintf(f,"homeLayoutLocal %d\n",HOME_LAYOUT_DINAMICA);
     fclose(f);
     ajustes_dir(dados_dir()); }
 
   montarCatalogo();
+  if (getenv("NV_APPLE_EP")) {
+    semear(1,2,T1_N);
+    itens[0].temporada=1; itens[0].episodio=3;
+    itens[0].progresso=45; itens[0].restanteMin=24;
+    cat_definir_tudo(itens,2,&filEnsaio,1);
+    cat_definir_episodios(0,episodios,T1_N+T2_N+T3_N);
+    abrir(0,0); nosEpisodios(0);
+    snprintf(nome,sizeof nome,"%s-apple-episodes.png",saida); gravar(nome);
+    foco.fileira=SEC_ELENCO; foco.coluna=0; quadros(120);
+    snprintf(nome,sizeof nome,"%s-apple-cast.png",saida); gravar(nome);
+    HomeItem replacement={0}; replacement.indice=0;
+    replacement.rect=(GfxRect){0,0,NV_TELA_W,NV_TELA_H};
+    replacement.titulo=itens[0].titulo;
+    assert(aberto && !saindo);
+    detail_abrir(&replacement); assert(t==1.0f && pg==1.0f);
+    carro=0; nivel=0; botao=0; maisAcoes=0;
+    assert(acoesAgrupadas() && nBotoes()==2+(temInicio()?1:0));
+    assert(acaoEm(1+(temInicio()?1:0))==ACAO_LISTA);
+    quadros(120);
+    // TextGate fades by wallclock time, unlike the frame-stepped springs.
+    for (int step=0;step<20;step++) {SDL_Delay(16);quadros(1);}
+    snprintf(nome,sizeof nome,"%s-hero-actions.png",saida); gravar(nome);
+    carro=1; carCheia=0; nivel=0; botao=0; maisAcoes=0;
+    carN=2; carIdx[0]=0; carIdx[1]=1; carPos=carAplicado=0; carOff=0;
+    carEsperaRect=0; cartao=carTxt=1; cartaoVel=carTxtVel=0;
+    assert(epTempY() == 1160 && epRowY() == 1286);
+    assert(epCardW()==420 && epCardH()==500 && epThumbH()==236);
+    for (int step=0;step<25;step++) {SDL_Delay(16);quadros(1);}
+    snprintf(nome,sizeof nome,"%s-actions-closed.png",saida); gravar(nome);
+    botao=1+(temInicio()?1:0);
+    for (int step=0;step<28;step++) {
+      SDL_Delay(16);quadros(1);
+      if (step==3 || step==10 || step==27) {
+        snprintf(nome,sizeof nome,"%s-actions-open-%d.png",saida,step);gravar(nome);
+      }
+    }
+    SDL_Event down = {0}; down.type=SDL_KEYDOWN; down.key.keysym.sym=SDLK_DOWN;
+    botao=0; maisAcoes=0; detail_evento(&down); assert(carCheia);
+    // CAR_MOLA_PAG=9 settles below2% after0.8s;32frames still leave4.8%.
+    for (int step=0;step<48;step++) {SDL_Delay(16);quadros(1);}
+    assert(carTxt < .02f && cartao < .02f);
+    down.key.keysym.sym=SDLK_LEFT; detail_evento(&down); assert(carPos==0 && !saindo);
+    snprintf(nome,sizeof nome,"%s-carousel-expanded-series.png",saida); gravar(nome);
+    replacement.indice=1; replacement.titulo=itens[1].titulo;
+    detail_abrir(&replacement);
+    carro=1; carCheia=1; nivel=0; botao=0; maisAcoes=0;
+    carN=2; carIdx[0]=0; carIdx[1]=1; carPos=carAplicado=1; carOff=1;
+    carEsperaRect=0; cartao=carTxt=0; cartaoVel=carTxtVel=0;
+    quadros(120);
+    for (int step=0;step<20;step++) {SDL_Delay(16);quadros(1);}
+    snprintf(nome,sizeof nome,"%s-carousel-expanded-film.png",saida); gravar(nome);
+    down.key.keysym.sym=SDLK_RIGHT; botao=nBotoes()-1;
+    detail_evento(&down); assert(carPos==1 && !saindo);
+    // Stress the measured bottom limit with actual fonts and real wrapping:
+    // foreign artwork, a complete long title, five synopsis lines, resume,
+    // country/direction, cast and the received recommendation chip.
+    snprintf(itens[1].titulo,sizeof itens[1].titulo,
+      "Uma história extraordinariamente longa sobre a viagem de volta para casa e os amigos que encontramos pelo caminho através de mundos desconhecidos");
+    snprintf(itens[1].sinopse,sizeof itens[1].sinopse,
+      "Durante uma longa viagem de volta para casa, uma família precisa atravessar "
+      "cidades desconhecidas e enfrentar escolhas difíceis. Quando antigos amigos "
+      "reaparecem com notícias inesperadas, cada encontro revela uma parte esquecida "
+      "de sua história. Entre lembranças, descobertas e caminhos que parecem não ter "
+      "fim, eles aprendem a encontrar esperança nos pequenos gestos e decidem juntos "
+      "qual futuro desejam construir. A jornada transforma o modo como enxergam o "
+      "mundo e as pessoas que sempre estiveram ao seu lado.");
+    snprintf(itens[1].logo,sizeof itens[1].logo,"deploy/app/art/logo/01.png");
+    snprintf(itens[1].logoIdiomaUrl,sizeof itens[1].logoIdiomaUrl,"%s",itens[1].logo);
+    snprintf(itens[1].logoIdioma,sizeof itens[1].logoIdioma,"en");
+    snprintf(itens[1].pais,sizeof itens[1].pais,"Brazil");
+    snprintf(itens[1].direcao,sizeof itens[1].direcao,"Diretor de Ensaio");
+    itens[1].progresso=45; itens[1].restanteMin=92;
+    cat_definir_tudo(itens,2,&filEnsaio,1);
+    fxRecomendacaoLigada=1;
+    detail_abrir(&replacement);
+    carro=1; carCheia=1; nivel=0; botao=0; maisAcoes=0;
+    cartao=carTxt=0; cartaoVel=carTxtVel=0;
+    quadros(120);
+    for (int step=0;step<20;step++) {SDL_Delay(16);quadros(1);}
+    fxTituloEsperado=itens[1].titulo; fxTituloDesenhado=0;
+    fxSinopseEsperada=itens[1].sinopse; fxSinopseDesenhada=0;
+    quadros(3);
+    assert(fxTituloDesenhado>0 && fxSinopseDesenhada>0);
+    printf("long movie synopsis bottom %.0f; recommendation bottom %.0f\n",
+           fxSinopseFim,fxSinopseFim+134);
+    snprintf(nome,sizeof nome,"%s-carousel-expanded-film-long.png",saida); gravar(nome);
+    puts("PASS: Apple episode/cast, Add reveal, expanded carousel and measured long movie captures"); return 0;
+  }
+  if (getenv("NUVIO_SHOT_TITULO")) {
+    CatFileira fil=filEnsaio;
+    snprintf(itens[1].titulo,sizeof itens[1].titulo,"O Senhor dos Anéis: A Sociedade do Anel");
+    snprintf(itens[1].logo,sizeof itens[1].logo,"deploy/app/art/logo/01.png");
+    snprintf(itens[1].logoIdiomaUrl,sizeof itens[1].logoIdiomaUrl,"%s",itens[1].logo);
+    snprintf(itens[1].logoIdioma,sizeof itens[1].logoIdioma,"en");
+    cat_definir_tudo(itens,2,&fil,1);
+    fxTituloEsperado=NULL;abrir(1,0);nivel=0;SDL_Delay(400);quadros(120);
+    fxTituloEsperado=itens[1].titulo;fxTituloDesenhado=0;quadros(3);
+    assert(fxTituloDesenhado>0);assert(tex_obter_larg_qualquer(logoDe(idx),NV_DETW_LOGO_MAXW));
+    snprintf(nome,sizeof nome,"%s-localizado.png",saida);gravar(nome);
+    // Metadata can localize after opening; read the live catalog every frame.
+    snprintf(itens[1].titulo,sizeof itens[1].titulo,"Uma história extraordinariamente longa sobre a viagem de volta para casa e os amigos que encontramos pelo caminho através de mundos desconhecidos");
+    cat_definir_tudo(itens,2,&fil,1);fxTituloDesenhado=0;quadros(120);
+    assert(fxTituloDesenhado>0);
+    snprintf(nome,sizeof nome,"%s-longo.png",saida);gravar(nome);
+    // A new opening resets the frozen artwork session, like a real title.
+    itens[1].logo[0]=0;
+    snprintf(itens[1].imdb,sizeof itens[1].imdb,"tt99887766");
+    cat_definir_tudo(itens,2,&fil,1);fxTituloEsperado=NULL;
+    abrir(1,0);nivel=0;SDL_Delay(400);quadros(120);
+    fxTituloEsperado=itens[1].titulo;fxTituloDesenhado=0;quadros(3);
+    assert(!logoDe(idx));
+    assert(fxTituloDesenhado>0);
+    snprintf(nome,sizeof nome,"%s-sem-logo.png",saida);gravar(nome);
+    puts("detail title: live localized caption, complete wrapping and no-logo rendering passed");
+    return 0;
+  }
 
   // --- 1. HISTORICO NAO CHEGOU. Nada foi semeado: vistoep_estado devolve -1
   //        em tudo. Nenhum check, e a temporada nao pode afirmar "0 vistos".

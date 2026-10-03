@@ -62,6 +62,7 @@
 #include "ajustes.h"
 #include "corviva.h"
 #include "catalogo.h"
+#include "iconeapp.h"
 #include "descoberta.h"
 #include "trakt.h"
 #include "player.h"
@@ -792,6 +793,15 @@ int main(int argc, char **argv) {
   marco_iniciar();
   printf("[arranque] rede_preparar\n"); fflush(stdout);
   // ANTES de tex_iniciar e de app_iniciar, que sao quem cria os fios de rede.
+  // Discord alone uses the bundled Mozilla roots on native TV builds.
+  char discordCa[4096];
+  snprintf(discordCa, sizeof discordCa, "%s/discord-ca.pem", dirArte);
+#if defined(__APPLE__) && !defined(NV_ANDROID) && !defined(NV_TPK)
+  FILE *discordRoots = fopen(discordCa, "rb");
+  if (discordRoots) fclose(discordRoots);
+  else discordCa[0] = 0; // Desktop development can use system trust.
+#endif
+  rede_discord_ca(discordCa);
   rede_preparar();
   // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
   // o nivel de partida ANTES de tex_iniciar, que tira o perfil do aparelho.
@@ -905,6 +915,10 @@ int main(int argc, char **argv) {
   addons_carregar(dirArte);
   // Ajustes tambem sao do USUARIO, nao do pacote.
   ajustes_dir(dirDados);
+  // Icone do app (apoiadores): a arte vem do pacote; o alias do launcher do
+  // Android e a abertura do .wgt seguem o que ficou gravado (idempotente).
+  iconeapp_iniciar(dirArte);
+  iconeapp_aplicar_plataforma();
   ajustes_idioma_auto_iniciar(aoMudarIdiomaAuto);
   // A estrutura persistida só pode ser comparada após carregar a configuração.
   homeestado_iniciar();

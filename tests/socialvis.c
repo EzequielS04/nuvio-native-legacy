@@ -3,6 +3,7 @@
 // a novidade que apaga ao ser vista e fica gravada.
 #include "socialvis.h"
 #include "dados.h"
+#include "recomenda.h"
 #include "ajustes.h"
 #include <assert.h>
 #include <stdio.h>
@@ -67,6 +68,35 @@ int main(void) {
   { SvPerfil p;
     assert(socialvis_perfil("nuvio:p", &p));
     assert(p.nAssistindo == 1 && p.gostoPct == -1); }
+  // A tracker rating has no known like/dislike value: it must not populate
+  // Recently liked. Only a real positive reaction belongs there.
+  v[0] = ev("nuvio:p", "Pedro", SV_AVALIOU, "tt20", "Rated", agora);
+  v[1] = ev("nuvio:p", "Pedro", SV_REACAO, "tt21", "Liked", agora - 1);
+  v[1].reacao = SV_REAC_GOSTOU;
+  socialvis_definir_feed(v, 2);
+  { SvPerfil p;
+    assert(socialvis_perfil("nuvio:p", &p));
+    assert(p.nGostou == 1 && !strcmp(p.gostou[0].imdb, "tt21")); }
+
+  v[0] = ev("nuvio:p", "Pedro", SV_REACAO, "tt30", "Changed opinion", agora - 10);
+  v[0].reacao = SV_REAC_GOSTOU;
+  v[1] = v[0]; v[1].quando = agora; v[1].reacao = SV_REAC_NAO;
+  socialvis_definir_feed(v, 2);
+  { SvPerfil p;
+    assert(socialvis_perfil("nuvio:p", &p) && p.nGostou == 0); }
+
+  // Account/profile generation invalidates render-thread caches, including the
+  // recommendation chain and previously seen activity, without sharing consent.
+  socialvis_atualizar();
+  { SvPerfil p = {0}; SvEnviada m;
+    p.nMandou = 1;
+    snprintf(p.mandou[0].imdb, sizeof p.mandou[0].imdb, "tt21");
+    socialvis_definir_perfil_extra("nuvio:p", &p);
+    assert(socialvis_ultima_enviada("nuvio:p", &m));
+    recomenda_esquecer();
+    socialvis_atualizar();
+    assert(!socialvis_ultima_enviada("nuvio:p", &m));
+    assert(socialvis_n_amigos() == 0 && socialvis_n_eventos() == 0); }
   printf("socialvis: ok\n");
   return 0;
 }

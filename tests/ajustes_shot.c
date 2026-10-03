@@ -19,6 +19,7 @@
 #include "catalogo.h"
 #include "gfx.h"
 #include "ilha.h"
+#include "iconeapp.h"
 #include "text.h"
 #include "tex_cache.h"
 #include <SDL2/SDL.h>
@@ -27,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 static const char *const AJ_IDS[] = {
   "AJ_QUALIDADE", "AJ_DV", "AJ_ATMOS", "AJ_LEG_LINGUA",
@@ -64,6 +66,7 @@ extern int ajustes_teste_focar_opcao(int op);
 extern void ajustes_teste_ux_captura(int cenario);
 extern void atualizacao_teste_estado(int busca, const char *tag);
 extern int ajustes_teste_op_atualizar(void);
+extern int ajustes_teste_op_icone(int escolha);
 extern int ajustes_teste_familia_previa(int op);
 extern void ajustes_teste_fonte_interface(int familia);
 extern void ajustes_teste_tema(int tema, int vidro);
@@ -195,12 +198,34 @@ int main(int argc, char **argv) {
   fil_remover(12);  // Animes
 
   ajustes_iniciar();
+  if (getenv("NUVIO_SHOT_AJUSTES_ESCALA"))
+    ajustes_teste_escala(atoi(getenv("NUVIO_SHOT_AJUSTES_ESCALA")));
   ajustes_teste_vidro_env();   // NUVIO_SHOT_VIDRO_OPAC / _FOSCO
   // NUVIO_SHOT_TEMA=<indice> (0 branco, 12 Dinamica) e NUVIO_SHOT_VIDRO=1: o
   // foco no acento claro com e sem vidro (#202).
   if (getenv("NUVIO_SHOT_TEMA") || getenv("NUVIO_SHOT_VIDRO"))
     ajustes_teste_tema(getenv("NUVIO_SHOT_TEMA") ? atoi(getenv("NUVIO_SHOT_TEMA")) : -1,
                        getenv("NUVIO_SHOT_VIDRO") && atoi(getenv("NUVIO_SHOT_VIDRO")));
+
+  // Reuse the compiled harness to compare Settings at 80% and 90%.
+  // NUVIO_AJUSTES_ESCALA_COMPARAR=1 /tmp/nuvio-ajustes-shot /tmp/settings
+  if (getenv("NUVIO_AJUSTES_ESCALA_COMPARAR")) {
+    static const int percentuais[] = {80, 90};
+    static const char *const cenas[] = {"v2-menu", "v2-aberto"};
+    const float zoomGlobal = gfx_escala_ui(), escalaAtiva = gfx_escala();
+    for (int p = 0; p < 2; p++) {
+      ajustes_teste_escala(percentuais[p]);
+      for (int c = 0; c < 2; c++) {
+        assert(ajustes_teste_quadro(cenas[c]));
+        assert(fabsf(ajustes_tamanho_ajustes() - percentuais[p] / 100.0f) < 0.001f);
+        snprintf(nome, sizeof nome, "%s-%d-%s.png", saida, percentuais[p], cenas[c]);
+        captura(nome, w);
+        assert(gfx_escala_ui() == zoomGlobal);
+        assert(gfx_escala() == escalaAtiva);
+      }
+    }
+    goto fim_capturas;
+  }
 
   // OS QUADROS DO MOCKUP (ajustes-mockup.html): NUVIO_AJ_QUADROS="principal
   // cor ..." grava <saida>-<id>.png de cada um, com a ilha do relogio.
@@ -240,6 +265,25 @@ int main(int argc, char **argv) {
       assert(ajustes_teste_focar_opcao(op));
       snprintf(nome, sizeof nome, "%s-atualizar-%s.png", saida, est[i].nome);
       captura(nome, w);
+    }
+    goto fim_capturas;
+  }
+
+  // A GALERIA DO "Ícone do app" (apoiadores), forcada pelo portao do dono:
+  // NUVIO_AJUSTES_ICONE=1 grava -icone-<id>.png com tres escolhas diferentes.
+  if (getenv("NUVIO_AJUSTES_ICONE")) {
+    static const int esc[] = { 0, 1, 7 };
+    setenv("NUVIO_APOIADOR", "1", 1);
+    apoiador_reler();
+    iconeapp_iniciar("deploy/app/art");
+    for (i = 0; i < 3; i++) {
+      int op = ajustes_teste_op_icone(esc[i]);
+      assert(ajustes_teste_focar_opcao(op));
+      snprintf(nome, sizeof nome, "%s-icone-%s.png", saida, iconeapp_id(esc[i]));
+      SDL_Event e = {0}; e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_RETURN;
+      ajustes_evento(&e);
+      captura(nome, w);
+      e.key.keysym.sym = SDLK_ESCAPE; ajustes_evento(&e);
     }
     goto fim_capturas;
   }

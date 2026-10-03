@@ -253,13 +253,13 @@ static void ajFundo(void) {
 }
 
 // --- GEOMETRIA ------------------------------------------------------------------
-#define AJI_TOPO        112.0f   // indice: logo abaixo da ilha do relogio
-#define AJI_MARGEM       40.0f   // folha e inspetor: 40 das bordas
+#define AJI_TOPO        (112.0f / ajustes_tamanho_ajustes())   // indice: logo abaixo da ilha do relogio
+#define AJI_MARGEM       (40.0f / ajustes_tamanho_ajustes())   // folha e inspetor: 40 das bordas
 #define AJI_IDX_W       360.0f
 #define AJI_INSP_X     1276.0f
 #define AJI_LN_H         76.0f
 #define AJI_LN_GAP        4.0f
-static float ajX0(void) { return 48.0f + ajustes_rail_largura_fixa(); }
+static float ajX0(void) { return (48.0f + ajustes_rail_largura_fixa()) / ajustes_tamanho_ajustes(); }
 static float ajFolhaX(void) { return ajX0() + AJI_IDX_W + 24.0f; }
 // TAMANHO DA INTERFACE (escala.h): na tela virtual menor as tres ilhas nao
 // cabem com as larguras de 1080p. A folha fica com pelo menos AJI_FOLHA_MIN (o
@@ -270,7 +270,7 @@ static float ajFolhaX(void) { return ajX0() + AJI_IDX_W + 24.0f; }
 #define AJI_INSP_MIN   440.0f   // as dicas do rodape do inspetor nao cabem em menos
 static float ajInspX(void) {
   float total, folha;
-  if (gfx_escala_ui() == 1.0f) return AJI_INSP_X;
+  if (ajustes_tamanho_ajustes() == 1.0f) return AJI_INSP_X;
   total = NV_VTELA_W - AJI_MARGEM - ajFolhaX() - 24.0f;
   folha = total * (820.0f / 1424.0f);
   if (folha < AJI_FOLHA_MIN) folha = AJI_FOLHA_MIN;
@@ -289,19 +289,16 @@ static GfxRect ajInspR(void) { return (GfxRect){ ajInspX(), AJI_MARGEM, NV_VTELA
 // direita); no OK a LISTA cresce por cima dele a partir de x = 172 e o menu
 // recua para a coluna de icones, com o INSPETOR ao lado; o EDITOR entra do
 // mesmo jeito em x = 300. Tudo na tela virtual (escala.h), desenhado a 100%.
-// A partir de 120% de "Tamanho da interface" o inspetor sai: a lista vai ate
-// a margem e a ajuda entra na linha em foco (inventory-v2.md §4).
-// Margens e posicoes da moldura NAO crescem com o "Tamanho da interface" (o
-// quadro de 130% do mockup: o menu continua em x 48, a lista em 172 e as
-// margens em 40 px reais); so os tamanhos de dentro crescem.
-#define AJ2_S          gfx_escala_ui()
+// The Settings scale changes content size while frame anchors remain at
+// 48/172/300 px and screen margins at 40 px. The global UI zoom is independent.
+#define AJ2_S          ajustes_tamanho_ajustes()
 #define AJ2_TOPO       (112.0f / AJ2_S)
 #define AJ2_MARGEM     (40.0f / AJ2_S)
 #define AJ2_MENU_W     660.0f
 #define AJ2_LISTA_DX   (124.0f / AJ2_S)   // 172 com a ilha do menu em 48
 #define AJ2_LISTA_W   1000.0f
 #define AJ2_EDITOR_DX  (252.0f / AJ2_S)   // 300
-static float aj2X0(void) { return 48.0f / AJ2_S + ajustes_rail_largura_fixa(); }
+static float aj2X0(void) { return (48.0f + ajustes_rail_largura_fixa()) / AJ2_S; }
 #define AJ2_LN_H        96.0f
 #define AJ2_LN_GAP       4.0f
 #define AJ2_LN_LINHA1   70.4f   // a primeira linha de uma linha que abre (16 + 38,4 + 16)
@@ -310,7 +307,7 @@ static GfxRect aj2ResumoR(void) {
   float x = aj2X0() + AJ2_MENU_W + 24.0f;
   return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
 }
-static int aj2TemInsp(void) { return gfx_escala_ui() < 1.19f; }
+static int aj2TemInsp(void) { return ajustes_tamanho_ajustes() < 1.19f; }
 static GfxRect aj2ListaR(void) {
   float x = aj2X0() + AJ2_LISTA_DX;
   float w = aj2TemInsp() ? AJ2_LISTA_W : NV_VTELA_W - AJ2_MARGEM - x;
@@ -521,7 +518,7 @@ static void ajDesenharIndice(void) {
   // escolhida; em 100% tudo cabe e nada disso acontece.
   { float topoL = ilha.y + 8.0f, fimL = ilha.y + ilha.h - 14.0f - 6.0f - 21.0f - 20.0f - 12.0f;
     float tot = (float)(nSecoes + 2) * 62.0f + 21.0f + 14.0f;
-    if (gfx_escala_ui() != 1.0f && tot > fimL - topoL) {
+    if (ajustes_tamanho_ajustes() != 1.0f && tot > fimL - topoL) {
       float jan = fimL - topoL, sy = 14.0f + uxIndice * 62.0f + (uxIndice >= 2 ? 21.0f : 0.0f) + 29.0f;
       float off = sy - jan * 0.5f;
       if (off > tot - jan) off = tot - jan;
@@ -670,7 +667,8 @@ static float ajPressao(void) {
 // O estado curto de uma acao leva o ponto no acento quando e um VINCULO ativo.
 static int ajEstadoLigado(int op) {
   return (op == AJ_TRAKT && traktauth_estado() == TRA_LIGADO) ||
-         (op == AJ_SIMKL && simklauth_estado() == SMK_LIGADO);
+         (op == AJ_SIMKL && simklauth_estado() == SMK_LIGADO) ||
+         (op == AJ_DISCORD && discord_estado() == DIS_LIGADO);
 }
 static const char *ajEstadoAcao(int op) {
   static char b[64];

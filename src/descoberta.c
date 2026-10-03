@@ -460,9 +460,13 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
         int manterAddon = ajustes_logo_addon() && d->origem[0] && logoAntes[0] &&
                           !ehSvg(logoAntes) && strcmp(logoAntes, d->poster);
         { const char *esc = local[0] ? local : neutro[0] ? neutro : en;
-          if (esc[0] && !manterAddon)
+          if (esc[0] && !manterAddon) {
             snprintf(d->logo, sizeof d->logo,
-                     "https://image.tmdb.org/t/p/w500%s", esc); }
+                     "https://image.tmdb.org/t/p/w500%s", esc);
+            snprintf(d->logoIdioma, sizeof d->logoIdioma, "%s",
+                     local[0] ? base : neutro[0] ? "und" : "en");
+            snprintf(d->logoIdiomaUrl, sizeof d->logoIdiomaUrl, "%s", d->logo);
+          } }
         // LIMPA O QUE JA ESTAVA ENVENENADO: item do cache do catalogo pode ter
         // entrado com logo .svg (desta funcao antes do filtro, ou de um addon
         // que mande svg em `logo` — ver deMeta). Sem uso possivel, fora.
@@ -1356,6 +1360,7 @@ static void formatarTitulo(const char *nome, const char *tipo, char *dst, size_t
 static struct {
   char  url[900];
   char *corpo;
+  int   ativo, erro;
   int   pronto;      // 1 = tentativa terminada (corpo pode ser NULL)
 } mani[MANI_MAX];
 
@@ -1399,6 +1404,28 @@ static int  maniProx;
 // addon. Ele descobre que ficou para tras aqui, joga o proprio download fora e
 // sai.
 static unsigned maniGeracao;
+
+static pthread_mutex_t cargaTrava = PTHREAD_MUTEX_INITIALIZER;
+static DescHomeCarga carga;
+static Uint32 cargaDesde;
+static void cargaFase(int fase) {
+  pthread_mutex_lock(&cargaTrava); carga.fase = fase; pthread_mutex_unlock(&cargaTrava);
+}
+void desc_home_carga(DescHomeCarga *estado) {
+  if (!estado) return;
+  pthread_mutex_lock(&cargaTrava);
+  carga.ativo = desc_montando();
+  if (carga.ativo && cargaDesde) carga.ms = SDL_GetTicks() - cargaDesde;
+  *estado = carga;
+  pthread_mutex_unlock(&cargaTrava);
+  pthread_mutex_lock(&maniTrava);
+  estado->addonsProntos = estado->addonsTotal = 0;
+  for (int i = 0; i < maniN; i++) if (mani[i].ativo) {
+    estado->addonsTotal++;
+    if (mani[i].pronto) { estado->addonsProntos++; estado->falhas += mani[i].erro; }
+  }
+  pthread_mutex_unlock(&maniTrava);
+}
 
 // --- cache de corpo de manifesto -------------------------------------------
 // maniPegar/lerManifesto tomam posse do corpo e o liberam. A cache guarda uma
@@ -1483,6 +1510,8 @@ static void *fioManifesto(void *u) {
     char *corpo;
     char url[900];
     pthread_mutex_lock(&maniTrava);
+    if (minha == maniGeracao)
+      while (maniProx < maniN && mani[maniProx].pronto) maniProx++;
     if (minha != maniGeracao || maniProx >= maniN) {
       pthread_mutex_unlock(&maniTrava); return NULL;
     }
@@ -1495,6 +1524,7 @@ static void *fioManifesto(void *u) {
       pthread_mutex_unlock(&maniTrava); free(corpo); return NULL;
     }
     mani[meu].corpo = corpo;
+    mani[meu].erro = !corpo;
     mani[meu].pronto = 1;
     // ARMAZENA NA CACHE uma copia propria, se o corpo couber no teto de
     // memoria. A copia vive enquanto a versao da lista nao mudar; o corpo
@@ -1520,11 +1550,15 @@ static void maniLargar(void) {
   // Sobra da volta anterior (ninguem pediu, addon trocado no meio): nao pode
   // virar vazamento nem ser entregue como se fosse desta volta.
   for (i = 0; i < maniN; i++) { free(mani[i].corpo); mani[i].corpo = NULL; }
-  maniN = nAd > MANI_MAX ? MANI_MAX : nAd;
-  for (i = 0; i < maniN; i++) {
+  maniN = 0;
+  for (int pass = 0; pass < 2; pass++)
+  for (int ad = 0; ad < nAd && maniN < MANI_MAX; ad++) {
+    if (!!addons_ativo(ad) != (pass == 0)) continue;
+    i = maniN++;
+    mani[i].ativo = addons_ativo(ad);
     int cache;
-    snprintf(mani[i].url, sizeof mani[i].url, "%s/manifest.json", addons_base(i));
-    mani[i].pronto = 0;
+    snprintf(mani[i].url, sizeof mani[i].url, "%s/manifest.json", addons_base(ad));
+    mani[i].pronto = 0; mani[i].erro = 0;
     // CACHE HIT: o manifesto deste addon ja foi baixado numa volta com a
     // MESMA versao da lista (lista inalterada). Reaproveita sem rede. A
     // copia da cache e strdup para mani[i].corpo; a cache mantem a sua e
@@ -1545,13 +1579,14 @@ static void maniLargar(void) {
   maniGeracao++;
   // Ninguem mais espera por um `pronto` que a volta passada deixou pendente.
   pthread_cond_broadcast(&maniCond);
+  int pendentes = 0;
+  for (i = 0; i < maniN; i++) if (!mani[i].pronto) pendentes++;
   { unsigned g = maniGeracao;
     pthread_mutex_unlock(&maniTrava);
   if (maniN < 1) return;
   // So dispara fios para os slots que NAO vieram da cache. Os outros ja
   // estao prontos e maniPegar os entrega na hora.
-  for (i = 0; i < MANI_FIOS && i < maniN; i++) {
-    if (mani[i].pronto) continue;
+  for (i = 0; i < MANI_FIOS && i < pendentes; i++) {
     if (pthread_create(&fios[criados], NULL, fioManifesto,
                        (void *)(uintptr_t)g) == 0) {
       pthread_detach(fios[criados]);
@@ -1560,7 +1595,7 @@ static void maniLargar(void) {
   }
   // Sem fio nenhum o corpo fica NULL e `pronto` fica 0: maniPegar percebe que
   // ninguem esta baixando e baixa no proprio fio, como sempre foi.
-  if (!criados) {
+  if (!criados && pendentes > 0) {
     pthread_mutex_lock(&maniTrava);
     maniN = 0;
     pthread_cond_broadcast(&maniCond);
@@ -1571,8 +1606,9 @@ static void maniLargar(void) {
 
 // O corpo do manifesto de `url`, esperando o download largado por maniLargar se
 // ele ainda estiver em curso. A posse passa para quem chamou.
-static char *maniPegar(const char *url) {
+static char *maniPegar(const char *url, int esperar, int *tentado) {
   int i;
+  *tentado = 0;
   char *corpo = NULL;
   pthread_mutex_lock(&maniTrava);
   for (i = 0; i < maniN; i++) if (!strcmp(mani[i].url, url)) break;
@@ -1580,11 +1616,23 @@ static char *maniPegar(const char *url) {
     unsigned g = maniGeracao;
     // A espera acaba tambem quando a volta vira: nesse caso o corpo daqui nao
     // serve mais a ninguem e quem chamou baixa por conta propria.
-    while (!mani[i].pronto && g == maniGeracao)
+    while (esperar && !mani[i].pronto && g == maniGeracao)
       pthread_cond_wait(&maniCond, &maniTrava);
-    if (g == maniGeracao) { corpo = mani[i].corpo; mani[i].corpo = NULL; }
+    if (g == maniGeracao) {
+      *tentado = 1;
+      if (mani[i].pronto) { corpo = mani[i].corpo; mani[i].corpo = NULL; }
+    }
   }
   pthread_mutex_unlock(&maniTrava);
+  return corpo;
+}
+
+// Completed failure is a result, not a cache miss requiring another timeout.
+// Disabled add-ons may finish probing in the background; Home never waits.
+static char *maniObter(const char *url, int ativo) {
+  int tentado;
+  char *corpo = maniPegar(url, ativo, &tentado);
+  if (!corpo && ativo && !tentado) corpo = rede_baixar(url, 20);
   return corpo;
 }
 
@@ -1823,7 +1871,7 @@ static int nSoBuscaVolta;
 // snapshot sem elas as poria atras de todas as outras dali em diante.
 static int nManiFalhouVolta;
 
-// `ativo` = 0 para addon DESLIGADO na conta: o manifesto e lido do mesmo jeito
+// `ativo` = 0 para addon DESLIGADO na conta: o manifesto pronto e lido sem esperar
 // (addons_manifesto_lido aprende o id — a poda de fileiras e as colecoes da
 // conta precisam dele) e os nomes dos catalogos ficam registrados, mas nenhum
 // catalogo vira candidato a fileira, fica "fora da cota" ou vira alvo de busca.
@@ -1838,11 +1886,12 @@ static int lerManifesto(int iAddon, const char *base, Decl *saida, int max,
   char *corpo, *escolhido;
   const char *p, *fim;
   int n = 0, total = 0, e = 0, nEleg = 0;
+  if (totalReal) *totalReal = 0;
+  if (promovidos) *promovidos = 0;
   snprintf(url, sizeof url, "%s/manifest.json", base);
   // Ja largado em paralelo no comeco de montar(); so cai na rede aqui quando
   // este addon nao estava na lista daquele instante.
-  corpo = maniPegar(url);
-  if (!corpo) corpo = rede_baixar(url, 20);
+  corpo = maniObter(url, ativo);
   if (!corpo) {
     // Sem esta linha o log dizia "0 catalogo(s) declarado(s)", igual a um
     // addon que so tem stream.
@@ -3284,6 +3333,7 @@ static void *montar(void *u) {
   CatItem *lote = malloc(sizeof(CatItem) * (size_t)cap);
   int n = 0, i;
   int nContinuar = 0, nSocial = 0;
+  unsigned socialGeracao;
   unsigned minhaGeracao = montagemGeracao;
   // O CONTEXTO EM QUE ESTA VOLTA BUSCA, em partes (ver homeestado.h). A
   // identidade vale do inicio: o Trakt e lido logo abaixo. Os addons sao
@@ -3316,6 +3366,9 @@ static void *montar(void *u) {
   // Versao da lista de addons que maniLargar viu. Ver o relargar na leitura.
   unsigned versaoLargada;
   (void)u;
+  pthread_mutex_lock(&cargaTrava);
+  memset(&carga, 0, sizeof carga); cargaDesde = SDL_GetTicks();
+  pthread_mutex_unlock(&cargaTrava);
   if (!lote) { buscando = 0; return NULL; }
 
   // O "continue assistindo" vem PRIMEIRO e do Trakt. A home usa as primeiras
@@ -3344,6 +3397,7 @@ static void *montar(void *u) {
   // cabecalho de maniLargar: eles nao dependem do Trakt, e eram o bloco de 7 s
   // logo depois dele.
   versaoLargada = addons_versao();
+  cargaFase(1);
   maniLargar();
   // E a watchlist/colecao do Trakt tambem: ver ListasTrakt.
   listas = listasLargar();
@@ -3391,6 +3445,7 @@ static void *montar(void *u) {
   // addons e usa a mesma credencial Trakt ja carregada.
   // Sob a MESMA trava: trakt_social e montarContinuar compartilham os buffers
   // de trakt_enfeitar_lote com o fio de desc_refazer_continuar.
+  socialGeracao = recomenda_geracao();
   nSocial = trakt_social(lote + n, 8);
   // ... E OS AMIGOS DO NUVIO. 251 das 310 contas do servico social nao tem
   // Trakt (docs/ANALISE-ADDONS-AMIGOS.md): para elas a fileira so existia vazia.
@@ -3424,6 +3479,7 @@ static void *montar(void *u) {
       snprintf(fs->titulo, sizeof fs->titulo, "Amigos assistindo");
       snprintf(fs->tipo, sizeof fs->tipo, "social");
       fs->ini = nContinuar; fs->n = nSocial;
+      fs->socialGeracao = socialGeracao;
     }
     nFileirasMontadas = nf;
     nPublicado = n;
@@ -3471,6 +3527,7 @@ static void *montar(void *u) {
       snprintf(fs->titulo, sizeof fs->titulo, "Amigos assistindo");
       snprintf(fs->tipo, sizeof fs->tipo, "social");
       fs->ini = nContinuar; fs->n = nSocial;
+      fs->socialGeracao = socialGeracao;
     }
 
     lerPrefs();
@@ -3688,6 +3745,7 @@ static void *montar(void *u) {
       }
       foraCotaSoltar();
 
+      cargaFase(2);
       int marcouPrimeira = 0;
       // Instrumentacao do arranque. Antes dava para ver o TOTAL de fileiras e
       // nada mais: catalogo que nao respondeu, catalogo vazio e catalogo
@@ -3813,6 +3871,7 @@ static void *montar(void *u) {
               respondeu = tarefas[k].respondeu;
             }
             if (respondeu) responderam++;
+            else { pthread_mutex_lock(&cargaTrava); carga.falhas++; pthread_mutex_unlock(&cargaTrava); }
             if (respondeu && !got) {
               // Respondeu SEM `metas`: o catalogo existe e esta vazio hoje. Nao e
               // erro e nao pode virar titulo pendurado na home — a rodada seguinte
@@ -3862,6 +3921,7 @@ static void *montar(void *u) {
             f->ini = n; f->n = got; f->estado = estadoLinha;
           }
           n += got;
+          pthread_mutex_lock(&cargaTrava); carga.fileiras++; pthread_mutex_unlock(&cargaTrava);
           printf("[desc] fileira %d: %s (%d)\n", nFil - 1, d->titulo, got);
           // PUBLICA A CADA FILEIRA, em vez de so no fim.
           //
@@ -5184,6 +5244,11 @@ int desc_tmdb_notas_temporada_ex(const char *json, CatEp *eps, int n,
           double v = js_num(p, f, "vote_average", 0.0);
           char sin[sizeof eps[i].sinopse], nome[sizeof eps[i].nome];
           int mudou = 0, soVazio = (textos & DESC_EPT_SO_VAZIO) != 0;
+          int runtime = (int)js_num(p, f, "runtime", 0);
+          if (!eps[i].duracao[0] && runtime > 0 && runtime < 1440) {
+            snprintf(eps[i].duracao, sizeof eps[i].duracao, "%d min", runtime);
+            mudou = 1;
+          }
           if (v > 0.0) { eps[i].nota = (int)(v * 10.0 + 0.5); mudou = 1; }
           // SINOPSE NO IDIOMA ESCOLHIDO (#150). O pedido ja vai com
           // language=desc_tmdb_idioma(), e o `overview` vinha sendo jogado
@@ -5293,6 +5358,12 @@ static int parsearEpisodios(const char *corpo, CatEp *eps, int max) {
       js_texto(p, f, "overview", e->sinopse, sizeof e->sinopse);
       if (!e->sinopse[0]) js_texto(p, f, "description", e->sinopse, sizeof e->sinopse);
       js_texto(p, f, "thumbnail", e->thumb, sizeof e->thumb);
+      js_texto(p, f, "runtime", e->duracao, sizeof e->duracao);
+      if (!e->duracao[0]) {
+        int runtime = (int)js_num(p, f, "runtime", 0);
+        if (runtime > 0 && runtime < 1440)
+          snprintf(e->duracao, sizeof e->duracao, "%d min", runtime);
+      }
       js_texto(p, f, "released", d, sizeof d);
       desc_data_extenso(d, e->data, sizeof e->data);
       n++;

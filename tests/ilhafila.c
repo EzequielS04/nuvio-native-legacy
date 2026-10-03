@@ -13,6 +13,7 @@
 const char *i18n(const char *s) { return s; }
 // Os dados que ilha.c cita (o codigo que os usa nao roda aqui).
 float gfx_tex_aspect_atual;
+float gfx_card_forcar_cover_atual;
 int txt_pendentes;
 
 static void av(const char *chave, int tipo, int grupo) {

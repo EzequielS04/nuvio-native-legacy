@@ -23,6 +23,8 @@
 #include "novidades151.h"
 #include "novidades160.h"
 #include "novidades170.h"
+#include "novidades172.h"
+#include "novidades174.h"
 #include "recintro.h"
 #include "registro.h"
 #include "salvosintro.h"
@@ -55,6 +57,8 @@ static int fila(void) {
   novidades151_primeira_vez();      abertos += novidades151_aberto();
   novidades160_primeira_vez();      abertos += novidades160_aberto();
   novidades170_primeira_vez();      abertos += novidades170_aberto();
+  novidades172_primeira_vez();      abertos += novidades172_aberto();
+  novidades174_primeira_vez();      abertos += novidades174_aberto();
   novidades1312_primeira_vez();     abertos += novidades1312_aberto();
   recintro_primeira_vez();          abertos += recintro_aberto();
   return abertos;

@@ -1,6 +1,6 @@
 #!/bin/bash
 # O modelo do social (src/socialvis.c), sem GL. Escreve so em NUVIO_DADOS.
-set -eu
+set -euo pipefail
 cd "$(dirname "$0")/.."
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/nuvio-socialvis-XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT

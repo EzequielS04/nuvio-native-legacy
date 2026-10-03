@@ -6,8 +6,9 @@
 # chegam em i18n() por variavel (painelTitulo, metrica, BOTAO_ROTULO...), e a
 # varredura so le literal dentro de txt_*. Foi assim que "Modo", "Artes" e
 # "Resultado geral" apareceram em portugues com o app em ingles (C9, 22/09).
-set -eu
+set -euo pipefail
 cd "$(dirname "$0")/.."
+bash tests/diagnostico_dispatch.sh
 
 cc tests/diagnostico.c src/perfiltv.c -Isrc -o /tmp/nuvio-diagnostico \
   -O1 -g -Wall -Wextra

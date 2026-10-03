@@ -190,6 +190,7 @@ static int   aberto = 0, saindo = 0, pediuSair = 0;
 static int   idx = 0;
 #define PLR_SCR_TOCOU_S 5.0f   // #179: reproducao continua antes do /scrobble/start
 static int   tocando = 1;
+static int retomandoSalto; // seek requested playback; buffering is not user pause
 // Uma unica sessao VOD pausada, por no maximo dois minutos. Nao abre conexao
 // especulativa: e o pipeline que ja estava exibindo este titulo.
 //
@@ -1129,7 +1130,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
     // A grade EPG comeca a baixar ja: o banner "agora/a seguir" do OSD e o
     // overlay do guia dependem dela. Idempotente.
     if (canalSessao) { guia_carregar(); epg_iniciar(); } }
-  tocando = 1; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f; fileira = 1.0f;
+  tocando = 1; retomandoSalto = 0; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f; fileira = 1.0f;
   pedFontes = erroFonte = pedFaixas = pedProxT = pedProxE = 0; inicioImagem = 0;
   erroTitulo[0] = erroDica[0] = 0;
   pedGuia = pedZap = pedGuiaCheio = 0;
@@ -1289,6 +1290,10 @@ void player_voltar_a_esperar(void) {
 int  player_pediu_faixas(void) { int v = pedFaixas; pedFaixas = 0; return v; }
 
 int  player_com_video(void) { return comVideo && !retido && video_pronto(); }
+// Para o Discord (discord.c), que so le: pausado, duracao e se e canal ao vivo.
+int   player_pausado(void) { return !tocando; }
+float player_duracao_seg(void) { return duracaoSeg; }
+int   player_eh_canal(void) { return ehCanal(); }
 
 // Esta abrindo o fluxo: ha video pedido, mas ainda nao ha imagem.
 int  player_carregando(void) { return esperandoFonte || (comVideo && !video_pronto()); }
@@ -1953,6 +1958,7 @@ static void alternarTocando(void) {
   // Canal sem janela de tempo nao pausa (ver avPodePausar): a tecla fisica de
   // Pause tambem cai aqui, e congelar um ao vivo so desincroniza o som.
   if (ehCanal() && !avPodePausar()) return;
+  retomandoSalto = 0;
   tocando = !tocando;
   if (comVideo) video_pausar(!tocando);
 }
@@ -2164,7 +2170,8 @@ static void saltar(int dir) {
   if (!scrubbing) {
     scrubbing = 1;
     scrubPassos = 0;
-    scrubTocava = tocando;
+    scrubTocava = tocando || retomandoSalto;
+    pausao_fechar();
     if (tocando && comVideo) { video_pausar(1); tocando = 0; }
   }
   scrubPassos++;
@@ -2180,6 +2187,8 @@ static void saltar(int dir) {
 static void terminarSalto(void) {
   if (!scrubbing) return;
   scrubbing = 0;
+  retomandoSalto = scrubTocava;
+  pausao_fechar();
   seekr_ocioso();   // solta a folha decodificada (~22 MB), fica o JPEG
   if (comVideo) {
     video_buscar(posSeg);
@@ -2557,6 +2566,7 @@ void player_atualizar(float dt, Uint32 agora) {
 #endif
     }
     tocando = video_tocando();
+    if (tocando && !scrubbing) retomandoSalto = 0;
     { const CatItem *ci = ehCanal() ? NULL : item();
       // "ASSISTINDO AGORA" para os amigos, SO se a pessoa ligou o nivel 2 em
       // Ajustes (recomenda.c decide; com tudo desligado isto nao faz nada).
@@ -2713,7 +2723,7 @@ void player_atualizar(float dt, Uint32 agora) {
                    // esta condicao o painel subia sozinho no meio de um avanco
                    // longo — o "componente que aparece quando ta pausado
                    // piscando" do relato.
-                   !ehCanal() && !tocando && !scrubbing && !saindo && !erroFonte &&
+                   !ehCanal() && !tocando && !scrubbing && !retomandoSalto && !saindo && !erroFonte &&
                    !player_carregando() &&
                    !episodios_aberto() && !stream_folha_aberta() &&
                    !faixas_aberta() && !ofertaProximo() && !posplay_visivel(),
@@ -3124,7 +3134,8 @@ static void ponteiroBuscar(int a, int b) {
     // pausado, posSeg na mao do dedo, UMA busca no fim (terminarSalto, depois
     // de PLR_SCRUB_FIM_MS sem movimento).
     if (!scrubbing) {
-      scrubbing = 1; scrubPassos = 0; scrubTocava = tocando;
+      scrubbing = 1; scrubPassos = 0; scrubTocava = tocando || retomandoSalto;
+    pausao_fechar();
       if (tocando && comVideo) { video_pausar(1); tocando = 0; }
     }
     barraFoco = 1; skipFoco = 0;
@@ -3167,7 +3178,7 @@ static void desenharAcoesEpisodioCorpo(void){
     TxtLinha t=txt_linha(TXT_G21B,rot,255,255,255,255);
     const float h=64.0f;
     float w=22.0f+26.0f+12.0f+(float)t.w+28.0f;
-    float k=anim, xa=PLR_MARGEM, ya=NV_VTELA_H-120.0f;
+    float k=anim, xa=posplay_visivel() ? NV_VTELA_W-PLR_MARGEM-w : PLR_MARGEM, ya=NV_VTELA_H-120.0f;
     float xb=NV_VTELA_W-PLR_MARGEM-w, yb=PLR_BARRA_Y-36.0f-h;
     GfxRect p={xa+(xb-xa)*k,ya+(yb-ya)*k,w,h};
     int tinta=sel?plrui_tinta():243;

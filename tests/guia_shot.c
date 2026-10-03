@@ -26,6 +26,8 @@
 #include "gfx.h"
 #include "text.h"
 #include "tex_cache.h"
+#include "vidro_fundo.h"
+#include "shot_arte.h"
 #include <SDL2/SDL_image.h>
 #include <assert.h>
 
@@ -110,6 +112,26 @@ static void capturaTela(const char *nome, SDL_Window *win, int comCanais) {
   }
   (void)comCanais;
   printf("captura: %s\n", nome);
+}
+
+// The real drawer renderers against artwork; no add-on service is started.
+static void capturaPainel(const char *nome, SDL_Window *win, int addonsPane) {
+  int q,y;
+  for(q=0;q<70;q++) {
+    SDL_PumpEvents();txt_novo_quadro();tex_novo_quadro();tex_bombear(6);gfx_novo_quadro();
+    glClearColor(.03f,.03f,.035f,1);glClear(GL_COLOR_BUFFER_BIT);
+    if (vidroFundoAtivo()) vidroFundoDesenhar(); else shot_arte_desenhar(0);
+    if(addonsPane) desenharPainelAddons(1); else desenharPainelCategorias(1);
+    if(q==69) {
+      unsigned char *pix=malloc(1920*1080*4);
+      SDL_Surface *s=SDL_CreateRGBSurfaceWithFormat(0,1920,1080,32,SDL_PIXELFORMAT_RGBA32);assert(pix&&s);
+      glReadPixels(0,0,1920,1080,GL_RGBA,GL_UNSIGNED_BYTE,pix);
+      for(y=0;y<1080;y++) memcpy((char*)s->pixels+y*s->pitch,pix+(1079-y)*1920*4,1920*4);
+      assert(IMG_SavePNG(s,nome)==0);SDL_FreeSurface(s);free(pix);
+    }
+    SDL_GL_SwapWindow(win);
+  }
+  printf("capture: %s\n",nome);
 }
 
 static void poeCanal(int i, const char *nome, const char *logo) {
@@ -247,6 +269,25 @@ int main(int argc, char **argv) {
   tex_iniciar(64);
   gfx_icones_dir("deploy/app/art");
   badges_carregar("deploy/app/art");   // marcas de resolucao no heroi; no app quem faz e home.c
+
+  if(getenv("NUVIO_GUIDE_PANELS")) {
+    extern void ajustes_teste_vidro_env(void);
+    const char *dir=getenv("NUVIO_DADOS");FILE *f;int i;
+    assert(dir&&*dir);snprintf(nome,sizeof nome,"%s/ajustes.txt",dir);f=fopen(nome,"w");assert(f);
+    fprintf(f,"idioma 0\nselected_theme 2\nvidroLocal %d\n",getenv("NUVIO_SHOT_SOLIDO")?1:0);fclose(f);
+    ajustes_dir(dir);ajustes_teste_vidro_env();vidroFundoPreparar();
+    semearGuia();catAnim=1;catFoco=1;focoLin=0;
+    snprintf(nome,sizeof nome,"%s-categories.png",saida);capturaPainel(nome,w,0);
+    paN=0;nRec=3;paFoco=0;
+    for(i=0;i<3;i++) {
+      snprintf(rec[i].nome,sizeof rec[i].nome,"%s",i==0?"FrostView":i==1?"Minha TV":"Canais ao vivo");
+      snprintf(rec[i].desc,sizeof rec[i].desc,"%s","Canais e programação ao vivo");
+      snprintf(rec[i].url,sizeof rec[i].url,"https://fixture.invalid/%d",i);
+    }
+    snprintf(nome,sizeof nome,"%s-addons.png",saida);capturaPainel(nome,w,1);
+    tex_encerrar();txt_encerrar();gfx_encerrar();SDL_GL_DeleteContext(gl);SDL_DestroyWindow(w);SDL_Quit();
+    return 0;
+  }
 
   poeCanal(0, "Canal Recortado HD", "tests/fixtures/logos/recortado.png");
   poeCanal(1, "Canal Recortado HD", "tests/fixtures/logos/recortado.png");

@@ -21,6 +21,14 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -52,13 +60,150 @@
             android:screenOrientation="landscape"
             android:launchMode="singleTask"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode|navigation|density|locale|layoutDirection|fontScale|colorMode|touchscreen|mcc|mnc|fontWeightAdjustment|grammaticalGender"
-            android:resizeableActivity="false">
+            android:resizeableActivity="false" />
+
+        <!-- ICONE DO APP (apoiadores, src/iconeapp.h). A entrada do launcher NAO
+             e mais a NuvioActivity e sim um activity-alias por icone; so um fica
+             ligado de cada vez (NuvioActivity.trocarIcone; a troca e feita na
+             saida do app, porque desligar o alias em uso fecha a tarefa). O
+             nome do alias termina no id de src/iconeapp.c. O Original nasce
+             ligado; os outros nascem desligados.
+             EFEITO COLATERAL NA ATUALIZACAO: o componente do launcher passa de
+             .NuvioActivity para .Icone_original. Um atalho fixado na tela
+             inicial (launcher de celular) ou um favorito do Android TV que
+             guarde o componente pode sumir e precisar ser fixado de novo. -->
+        <activity-alias
+            android:name=".Icone_original"
+            android:targetActivity=".NuvioActivity"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:banner="@drawable/banner">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+        <activity-alias
+            android:name=".Icone_fenix"
+            android:targetActivity=".NuvioActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_fenix"
+            android:banner="@drawable/banner_fenix">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".Icone_nverde"
+            android:targetActivity=".NuvioActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_nverde"
+            android:banner="@drawable/banner_nverde">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".Icone_tvlaranja"
+            android:targetActivity=".NuvioActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_tvlaranja"
+            android:banner="@drawable/banner_tvlaranja">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".Icone_npixel"
+            android:targetActivity=".NuvioActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_npixel"
+            android:banner="@drawable/banner_npixel">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".Icone_tricolor"
+            android:targetActivity=".NuvioActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_tricolor"
+            android:banner="@drawable/banner_tricolor">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".Icone_arco"
+            android:targetActivity=".NuvioActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_arco"
+            android:banner="@drawable/banner_arco">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".Icone_tvviva"
+            android:targetActivity=".NuvioActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_tvviva"
+            android:banner="@drawable/banner_tvviva">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".Icone_cluberetro"
+            android:targetActivity=".NuvioActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_cluberetro"
+            android:banner="@drawable/banner_cluberetro">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".Icone_arcaden"
+            android:targetActivity=".NuvioActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_arcaden"
+            android:banner="@drawable/banner_arcaden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+
 
         <!-- Entrega o APK baixado (dados/atualizacao) ao instalador do sistema. -->
         <provider

@@ -16,7 +16,7 @@
 // vive no heap fixo de 256 MiB do WASM e as texturas no processo de GPU do
 // navegador; aqui e um processo nativo como o da LG, com fios de rede proprios
 // (curl) e as texturas no driver da TV. Tabela propria em perfiltv.c.
-typedef enum { PTV_LG = 0, PTV_TIZEN = 1, PTV_TPK = 2 } PtvPlataforma;
+typedef enum { PTV_LG = 0, PTV_TIZEN = 1, PTV_TPK = 2, PTV_ANDROID = 3 } PtvPlataforma;
 typedef enum { PTV_QUALIDADE = 0, PTV_DESEMPENHO = 1 } PtvModo;
 
 typedef struct {
@@ -25,8 +25,10 @@ typedef struct {
   int heroiLarg;  // teto de decodificacao da arte de tela cheia, px
 } PtvPerfil;
 
-// Plataforma do build (Tizen = __EMSCRIPTEN__, TPK = NV_TPK).
+// Build identity. Android retains the previous conservative native policy.
 PtvPlataforma ptv_plataforma(void);
+// Stable English identifiers for diagnostics; not a hardware recommendation.
+const char *ptv_plataforma_nome(PtvPlataforma p);
 
 // GPU FRACA, pelo GL_RENDERER (so vale para PTV_TPK). 1 = Mali de geracao
 // antiga (Utgard "Mali-4xx", Midgard "Mali-T...", inclusive o "Mali-TDVX" das

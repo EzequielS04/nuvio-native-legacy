@@ -277,6 +277,21 @@ IGNORAR = {
     # saber se ha audio em portugues (streams.c, idiomaDa). Dado de comparacao,
     # nunca texto desenhado.
     "português",
+    # Trailer diagnostic gate IDs are log codes, never UI labels.
+    "dynamic-poster-hidden", "poster-wait",
+    # Identificadores de aplicativos; nunca apresentados como texto da interface.
+    'br.com.claro-now',
+    'br.com.claro.now.smarttvclient',
+    'com.amazon.amazonvideo.livingroom',
+    'com.apple.appletv',
+    'com.apple.atve.androidtv.appletv',
+    'com.disney.disneyplus',
+    'com.disney.disneyplus-prod',
+    'com.globo.globotv',
+    'com.google.android.youtube.tv',
+    'com.netflix.ninja',
+    'com.wbd.stream',
+
     # Motivos do vigia da fonte guardada (fontevolta.c, fontevolta_decidir):
     # vao so para o log "[voltafonte] recuo para a busca: <motivo>".
     "erro do player", "clipe curto", "conferencia falhou",
@@ -288,6 +303,9 @@ IGNORAR = {
     # Atalhos de e-mail do teclado (teclado.c, #216): digitam o pedaco de
     # endereco, igual em toda lingua.
     ".com", "@gmail.com", "@hotmail.com", "@outlook.com",
+    # Cartao da 1.7.2 (novidades172.c): a marca, igual em toda lingua, e o
+    # endereco de exemplo digitado na previa do login por e-mail.
+    "NUVIO LEGACY", "voce@gmail.com",
     # Pedaco do printf "[tmdb] idioma dos metadados" (ajustes.c,
     # ajustes_tmdb_idioma_relatar): o ternario fica numa linha sem o printf,
     # entao NAO_E_TELA nao o ve. So log.

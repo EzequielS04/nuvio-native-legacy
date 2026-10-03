@@ -47,7 +47,8 @@
 //   typedef struct {
 //     long long desde;            // epoch s em que viraram amigos; 0 = ?
 //     char porOnde[12];           // "codigo" | "trakt" | "simkl" | "sugestao"
-//     int  gostoPct, emComum;     // -1 = ainda nao ha dado
+//     int  gostoTotal;                          // number of paired shared reactions
+  int  gostoPct, emComum;     // -1 = ainda nao ha dado
 //     int  minutosMes, filmesMes, seriesCurso;   // do mes corrente; -1 = ?
 //     int  recsVistas, recsTotal; // das MINHAS recomendacoes para ele
 //     int  nEnviadas;
@@ -88,7 +89,8 @@ enum { SV_AGORA = 0, SV_INICIO, SV_FIM, SV_REACAO, SV_SALVO, SV_ABANDONO,
 enum { SV_REAC_NADA = -2, SV_REAC_NAO = -1, SV_REAC_MEIO = 0, SV_REAC_GOSTOU = 1 };
 enum { SV_FONTE_NUVIO = 0, SV_FONTE_TRAKT, SV_FONTE_SIMKL, SV_FONTE_LETTERBOXD };
 // Estado de uma recomendacao que EU mandei.
-enum { SV_REC_ENTREGUE = 0, SV_REC_ABRIU, SV_REC_VIU };
+enum { SV_REC_ENTREGUE = 0, SV_REC_ABRIU, SV_REC_VIU, SV_REC_COMECOU, SV_REC_REAGIU };
+enum { SV_PERFIL_NADA = 0, SV_PERFIL_INDO, SV_PERFIL_OK, SV_PERFIL_FALHA, SV_PERFIL_NAO_ACHOU, SV_PERFIL_NEGADO };
 
 typedef struct {
   char pessoaId[96], pessoaNome[64], pessoaAvatar[512];
@@ -108,7 +110,7 @@ typedef struct {
 typedef struct {
   char id[96], nome[64], avatar[512];
   int  fonte;
-  int  agora;           // assistindo agora (ponto vermelho)
+  int  agora;           // assistindo agora (ponto verde)
   int  novo;            // ha evento que a pessoa ainda nao viu (anel laranja)
   int  nTit;
   SvEvento tit[SV_TIT_MAX];   // os ultimos, um por titulo, mais novo primeiro
@@ -123,8 +125,11 @@ typedef struct {
 
 typedef struct {
   SvAmigo a;
+  int estado;          // SV_PERFIL_*; refreshing keeps the cached first frame
+  int compartilha;     // -1 unknown, 0 private, 1 shared with this viewer
   long long desde;      // 0 = nao se sabe
   int  porOnde;         // SV_FONTE_* (NUVIO = pelo codigo)
+  int  gostoTotal;                          // number of paired shared reactions
   int  gostoPct, emComum;                    // -1 = sem dado
   int  minutosMes, filmesMes, seriesCurso;   // -1 = sem dado
   int  recsVistas, recsTotal;                // -1 = sem dado
@@ -149,6 +154,8 @@ int  socialvis_n_ao_vivo(void);
 int  socialvis_n_eventos(void);
 const SvEvento *socialvis_evento(int i);
 
+// Refresh explicitly on each opening, including reopening the same friend.
+void socialvis_abrir_perfil(const char *id);
 // O perfil (tela C). 1 = achou a pessoa.
 int  socialvis_perfil(const char *id, SvPerfil *saida);
 // O que EU mandei para essa pessoa, o mais novo (para a cadeia "Voce mandou ›

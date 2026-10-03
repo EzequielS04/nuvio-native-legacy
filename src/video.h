@@ -321,4 +321,8 @@ typedef struct {
 void video_simular(const VideoSimulacao *s);
 #endif
 
+// One-reply webOS LS2 request; callback runs on the GLib thread.
+#if !defined(NV_TPK) && !defined(NV_ANDROID)
+int video_luna(const char *uri, const char *payload, void (*callback)(const char *, void *), void *context);
+#endif
 #endif

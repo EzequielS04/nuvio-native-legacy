@@ -51,6 +51,10 @@ const call = (op, text = '', a = 0, b = 0, c = 0, d = 0, dst = 0, size = 0) =>
     const calls = context.__avReg().filter(entry => entry.startsWith('getTotalTrackInfo'));
     assert.equal(calls.length, 1);
   });
+  check('repeated subtitle-menu reads reuse native metadata', () => {
+    for (let i = 0; i < 1000; i++) call('faixas', '', 0, 0, 0, 0, 100, 4096);
+    assert.equal(context.__avReg().filter(entry => entry.startsWith('getTotalTrackInfo')).length, 1);
+  });
   check('AVPlay timing diagnostics are bounded and contain no URL', () => {
     const timing = diagnostics.filter(entry => / \d+ ms$/.test(entry.message));
     const metadata = diagnostics.filter(entry => /getTotalTrackInfo bruto/.test(entry.message));

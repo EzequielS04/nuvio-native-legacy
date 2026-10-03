@@ -324,7 +324,7 @@ static float aj2PreviaPendente(float x, float y, float w) {
 // Modal centrado na tela virtual, e no maximo do tamanho dela menos 40 de cada
 // lado (escala.h). Em 100% os numeros fixos de cada modal ja sao os centrados.
 static void ajCentraModal(GfxRect *m) {
-  if (gfx_escala_ui() == 1.0f) return;
+  if (ajustes_tamanho_ajustes() == 1.0f) return;
   if (m->w > NV_VTELA_W - 80.0f) m->w = NV_VTELA_W - 80.0f;
   if (m->h > NV_VTELA_H - 80.0f) m->h = NV_VTELA_H - 80.0f;
   m->x = (NV_VTELA_W - m->w) * 0.5f;
@@ -339,7 +339,7 @@ static void ajConfirmacao(const char *kick, int alerta, const char *pergunta, co
   hTxt = txt_bloco(TXT_AJ_TEXTO, texto, 0, 0, 0, 0, -4000, m.w - 88, 30, 0, 6);
   m.h = 44 + 22 + 8 + 44 + 14 + hTxt + (de ? 22 + 24 : 0) + 34 + 60 + 44;
   m.y = m.h < 480 ? 300 : (NV_VTELA_H - m.h) * 0.5f;
-  if (gfx_escala_ui() != 1.0f) { ajCentraModal(&m); x = m.x + 44; }
+  if (ajustes_tamanho_ajustes() != 1.0f) { ajCentraModal(&m); x = m.x + 44; }
   ajIlha(m, 36, 1, 1);
   y = m.y + 44;
   if (alerta) { gfx_icone((GfxRect){ x, y - 2, 22, 22 }, "aj_triangle-alert", 0.961f, 0.784f, 0.298f, 1); ajKicker(kick, x + 34, y, 1); }
@@ -496,11 +496,13 @@ static void desenhaVinculo(const char *servico, const char *codigo,
 static int ajVinculoAtivo(void) {
   TraEstado ta = traktauth_estado();
   SmkEstado sa = simklauth_estado();
+  DisEstado da = discord_estado();
 #ifdef AJUSTES_TESTE
   if (ajVinculoTeste) return 1;
 #endif
   return ta == TRA_PEDINDO || ta == TRA_AGUARDANDO || ta == TRA_ERRO ||
-         sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO;
+         sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO ||
+         da == DIS_PEDINDO || da == DIS_AGUARDANDO || da == DIS_ERRO;
 }
 
 // --- O EDITOR (v2: terceiro degrau) ------------------------------------------------
@@ -680,8 +682,13 @@ static void aj2EditorEscolha(GfxRect m) {
     fv = marcaDoValor(uxOp, o->valores ? o->valores[i] : NULL);
     if (fv >= 0) marca_formato((FormatoMarca)fv, r.x + 30, r.y + 26, 44, 1, 1, 1, foco ? 0.9f : 0.6f);
     else {
-      TxtLinha l = ajTxtC(TXT_V2_ROT, t, lw - 240);
-      txt_desenhar_alpha(l, r.x + 30, r.y + (96 - l.h) * 0.5f, foco ? 1.0f : 0.88f);
+      float textoX = r.x + 30;
+      if (uxOp == AJ_ICONE_APP) {
+        iconeapp_desenhar(i, (GfxRect){r.x + 24, r.y + 16, 64, 64}, 1, foco ? 1.0f : 0.7f);
+        textoX = r.x + 110;
+      }
+      TxtLinha l = ajTxtC(TXT_V2_ROT, t, lw - 210 - (textoX - r.x));
+      txt_desenhar_alpha(l, textoX, r.y + (96 - l.h) * 0.5f, foco ? 1.0f : 0.88f);
     }
     if (i == uxOriginal) {
       TxtLinha s = ajTxt(TXT_V2_28, "Salvo");
@@ -887,9 +894,9 @@ static void ajRosto(const char *nome, float x, float y, float lado, float raio, 
 }
 static void ajDesenharAddons(int foco);
 void ajustes_desenhar_addons(int foco) {
-  ESCALA_INI();
+  AJ_ESCALA_INI();
   ajDesenharAddons(foco);
-  ESCALA_FIM();
+  AJ_ESCALA_FIM();
 }
 static void ajDesenharAddons(int foco) {
   int n = addons_n(), i, lig = 0, salvoIdx = uxIndice, salvoFoco = focoIndice;

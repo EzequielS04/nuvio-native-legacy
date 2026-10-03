@@ -860,7 +860,10 @@ static int guardarOuCopia(const char *sup, int perfil, int n, char **blob) {
     }
     return copia;
   }
-  if (n > 0 && *blob && ultimoSt >= 200 && ultimoSt < 300)
+  // Collections can be a collections_json object rather than a root array.
+  // Preserve that successful response for offline use, including count zero.
+  if ((n > 0 || (n == 0 && !strcmp(sup, CC_COLECOES))) &&
+      *blob && ultimoSt >= 200 && ultimoSt < 300)
     contacache_gravar_geracao(sup, perfil, usuarioDoCiclo, *blob,
                               copiaGeracaoDoCiclo);
   return n;
@@ -1031,7 +1034,8 @@ static void puxarSoLeitura(void) {
   snprintf(corpo, sizeof corpo, "{\"p_profile_id\":%d}", perfil);
   cColecoes = puxarBlob("sync_pull_collections", corpo, &colBlob);
   cColecoes = guardarOuCopia(CC_COLECOES, perfil, cColecoes, &colBlob);
-  if (cColecoes > 0) temColBlob = 1;
+  // Collections RPC may return an object: a zero array count is still a successful blob.
+  if (cColecoes >= 0 && colBlob) temColBlob = 1;
 
   // A BIBLIOTECA E PAGINADA, e o codigo antigo nao mandava a pagina.
   //
@@ -1084,7 +1088,8 @@ static void puxarSoLeitura(void) {
 static void soLeituraDaCopia(int st) {
   int perfil = perfis_ativo();
   cColecoes = copiaBlob(CC_COLECOES, perfil, st, &colBlob);
-  if (cColecoes > 0) temColBlob = 1;
+  // Collections RPC may return an object: a zero array count is still a successful blob.
+  if (cColecoes >= 0 && colBlob) temColBlob = 1;
   cBiblio = copiaBlob(CC_BIBLIOTECA, perfil, st, &bibBlob);
   if (cBiblio >= 0) temBibBlob = 1;
   cVistos = copiaBlob(CC_VISTOS, perfil, st, &vistosBlob);

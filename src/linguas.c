@@ -33,7 +33,7 @@ static const struct { const char *cod, *nome; } NOMES[] = {
   { "cs", "Tcheco" },     { "cze", "Tcheco" },
   { "el", "Grego" },      { "gre", "Grego" },
   { "hu", "Húngaro" },    { "hun", "Húngaro" },
-  { "ro", "Romeno" },     { "rum", "Romeno" },
+  { "ro", "Romeno" },     { "rum", "Romeno" }, { "ron", "Romeno" },
   { "uk", "Ucraniano" },  { "ukr", "Ucraniano" },
   { "vi", "Vietnamita" }, { "vie", "Vietnamita" },
   { "id", "Indonésio" },  { "ind", "Indonésio" },
@@ -75,7 +75,7 @@ static const char *familia(const char *c) {
     { "rus","ru" },{ "ara","ar" },{ "hin","hi" },{ "dut","nl" },{ "nld","nl" },
     { "swe","sv" },{ "nor","no" },{ "dan","da" },{ "fin","fi" },{ "pol","pl" },
     { "tur","tr" },{ "heb","he" },{ "tha","th" },{ "cze","cs" },{ "gre","el" },
-    { "hun","hu" },{ "rum","ro" },{ "ukr","uk" },{ "vie","vi" },{ "ind","id" },
+    { "hun","hu" },{ "rum","ro" },{ "ron","ro" },{ "ukr","uk" },{ "vie","vi" },{ "ind","id" },
   };
   size_t i;
   for (i = 0; i < sizeof F / sizeof *F; i++)

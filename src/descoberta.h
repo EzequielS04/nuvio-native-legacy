@@ -64,6 +64,8 @@ void desc_refazer_continuar(void);
 // uma pedida para o fim dela) ou o "Continuar assistindo" sendo refeito. E o
 // que a troca de perfil espera antes de mostrar a home (app.c).
 int  desc_montando(void);
+typedef struct { int ativo, fase, fileiras, falhas, addonsProntos, addonsTotal; unsigned ms; } DescHomeCarga;
+void desc_home_carga(DescHomeCarga *estado);
 // A metade LOCAL de "Tirar de Continuar assistindo": progresso, carimbo de
 // remocao e o card fora da fileira no mesmo quadro. Sem rede. Ver descoberta.c.
 int desc_tirar_continuar(const char *imdb, int temporada, int episodio);

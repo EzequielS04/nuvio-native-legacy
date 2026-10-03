@@ -168,7 +168,7 @@ static GfxRect guiaIdxR(void) { return (GfxRect){ ajX0(), AJI_TOPO, GU_IDX_W, NV
 // Em 100% e o 1176 de sempre.
 static float guiaInspX(void) {
   float x = ajX0() + GU_IDX_W + 24.0f, total, lista;
-  if (gfx_escala_ui() == 1.0f) return GU_INSP_X;
+  if (ajustes_tamanho_ajustes() == 1.0f) return GU_INSP_X;
   total = NV_VTELA_W - AJI_MARGEM - x - 24.0f;
   lista = total * (700.0f / 1428.0f);
   if (lista < 560.0f) lista = 560.0f;

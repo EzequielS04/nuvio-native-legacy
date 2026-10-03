@@ -31,6 +31,7 @@
 #include "perfis.h"
 #include "traktauth.h"
 #include "simklauth.h"
+#include "discord.h"
 #include "simkl.h"
 #include "qr.h"
 #include "atualizacao.h"
@@ -57,6 +58,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "iconeapp.h"
+
+// Settings has its own canvas and scale, independent of the global UI zoom.
+// Layout, text measurement, drawing and pointer targets share this factor.
+#undef NV_VTELA_W
+#undef NV_VTELA_H
+#define NV_VTELA_W (1920.0f / ajustes_tamanho_ajustes())
+#define NV_VTELA_H (1080.0f / ajustes_tamanho_ajustes())
+#define AJ_ESCALA_INI() float ajEscalaAnt_ = gfx_escala(); gfx_escala_sair(ajustes_tamanho_ajustes())
+#define AJ_ESCALA_FIM() gfx_escala_sair(ajEscalaAnt_)
 
 // Versao do app: vem do build (-DNV_VERSAO, que tools/env.sh le do
 // appinfo.json). Era um literal aqui e ficou parado em 1.0.44 por nove
@@ -122,8 +133,8 @@ static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foc
 #define AJ_PAD           24.0f    // borda da linha ao texto
 // A janela da LISTA dentro da folha (Glass UI): abaixo do cabecalho da folha
 // (kicker, titulo e sub) ate 18 px da base da ilha.
-#define AJ_TOPO        (112.0f / gfx_escala_ui() + 185.7f)   // Ajustes v2: fim do cabecalho da lista
-#define AJ_BASE        (NV_VTELA_H - 40.0f / gfx_escala_ui())   // 1040 na tela de 1080 (esvanece nos ultimos 90)
+#define AJ_TOPO        (112.0f / ajustes_tamanho_ajustes() + 185.7f)
+#define AJ_BASE        (NV_VTELA_H - 40.0f / ajustes_tamanho_ajustes())
 // Raio da linha em fracao do menor lado (o SDF do shader e normalizado):
 // 12px sobre 88 de altura.
 #define AJ_RAIO           0.14f
@@ -303,8 +314,8 @@ typedef enum {
   // selos-p<N>.txt (nao em ajustes.txt: o valor so espelha). No fim pelo mesmo
   // motivo: valor[] e CHAVE[] sao posicionais.
   AJ_SELOS_PACOTE, AJ_SELOS_PACOTE_ADD, AJ_SELOS_PACOTE_REM,
-  // TAMANHO DA INTERFACE (gfx.h: gfx_escala_ui): Ajustes, player, folhas, ilhas,
-  // menus e modais ampliados por 1,2 / 1,3 / 1,5; a home e a pagina do titulo
+  // TAMANHO DA INTERFACE (gfx.h: gfx_escala_ui): player, folhas, ilhas e
+  // modais ampliados por 1,2 / 1,3 / 1,5; a home e a pagina do titulo
   // ficam como estao. LOCAL (o tamanho e da tela, nao da conta). No fim pelo
   // mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_TAMANHO_UI,
@@ -318,12 +329,20 @@ typedef enum {
   // se ele leva a arte borrada atras ("fosco"). LOCAIS, avancados. No fim pelo
   // mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_VIDRO_OPAC, AJ_VIDRO_FOSCO,
+  AJ_ICONE_APP, // append-only: keeps Glass option indices
+  AJ_DISCORD,
+  AJ_TAMANHO_AJUSTES, // local, append-only; 80/90/100%, default 90%
   AJ_N
 } OpcaoId;
 
 // "Pacote de selos": so o TAMANHO importa aqui (3 pacotes + "Do Nuvio"); o texto
 // de cada valor vem de selospacote_nome (textoValor / uxValorTexto).
 static const char *V_SELOS_PACOTE[] = { "Do Nuvio", "Pacote 1", "Pacote 2", "Pacote 3" };
+
+static const char *V_ICONE_APP[ICONEAPP_N] = {
+  "Original", "Fênix", "N verde-água", "TV laranja", "N pixel",
+  "Play tricolor", "Arco", "TV viva", "Clube retrô", "Arcade N",
+};
 static const char *V_QUALIDADE[] = { "Automática", "4K", "1080p", "720p" };
 static const char *V_LIGA[]      = { "Ligado", "Desligado" };
 static const char *V_LIVETV_RES[] = { "Automática", "4K", "1080p", "720p", "SD" };
@@ -337,6 +356,7 @@ static const char *V_RELOGIO_POS[] = { "Automática", "Esquerda", "Direita" };
 static const char *V_FONTE_PRAZO[] = { "3 s", "5 s", "8 s", "Todos os add-ons" };
 // Indice gravado em tamanhoUiLocal; o fator sai de ajustes_tamanho_ui.
 static const char *V_TAMANHO_UI[] = { "100%", "120%", "130%", "150%" };
+static const char *V_TAMANHO_AJUSTES[] = { "80%", "90%", "100%" };
 // Indice gravado em fundoLocal (ajustes_fundo).
 static const char *V_FUNDO[] = { "Arte", "Arte borrada", "Frost" };
 static const char *V_VIDRO_OPAC[] = { "60%", "70%", "78%", "86%", "92%" };
@@ -981,6 +1001,9 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Fundo",                           V_FUNDO, 3),         // local: fundoLocal
   ESC("Opacidade do vidro",              V_VIDRO_OPAC, 5),    // local: vidroOpacLocal
   ESC("Vidro fosco",                     V_VIDRO_FOSCO, 2),   // local: vidroFoscoLocal
+  ESC("Ícone do app", V_ICONE_APP, ICONEAPP_N),
+  ACAO("Discord"),
+  ESC("Tamanho dos ajustes", V_TAMANHO_AJUSTES, 3),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1154,6 +1177,9 @@ static const char *CHAVE[] = {
   "tamanhoUiLocal",
   "fundoLocal",
   "vidroOpacLocal", "vidroFoscoLocal",
+  "iconeAppLocal",
+  "-discord",
+  "tamanhoAjustesLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1537,6 +1563,21 @@ float ajustes_tamanho_ui(void) {
   int v = valor[AJ_TAMANHO_UI];
   return v >= 0 && v < 4 ? F[v] : 1.0f;
 }
+#ifdef AJUSTES_TESTE
+static int ajEscalaTestePct;
+void ajustes_teste_escala(int percentual) {
+  ajEscalaTestePct = percentual == 80 || percentual == 90 || percentual == 100 ? percentual : 0;
+}
+#endif
+float ajustes_tamanho_ajustes(void) {
+  static const float F[] = { 0.8f, 0.9f, 1.0f };
+  int v = valor[AJ_TAMANHO_AJUSTES];
+#ifdef AJUSTES_TESTE
+  if (ajEscalaTestePct) return ajEscalaTestePct / 100.0f;
+#endif
+  return v >= 0 && v < 3 ? F[v] : 0.9f;
+}
+int ajustes_icone_app(void) { return valor[AJ_ICONE_APP]; }
 int ajustes_saida_player_home(void) { return lig(AJ_RELOGIO) && valor[AJ_SAIDA_PLAYER] == 0; }
 int ajustes_selo_visto(void) { return lig(AJ_SELO_VISTO); }
 static void riscoNotar(int op, int antes);
@@ -2069,9 +2110,17 @@ static const char *fanartMascarada(void) {
   return m;
 }
 
-// CHAVE PESSOAL DO SEEKR (seekr.h). Mesmo trato da do fanart.tv: seekr.txt na
-// pasta de dados, nunca no ajustes.txt nem na conta, so mascarada na tela. Os
-// termos do servico proibem embutir a chave no app, entao cada um usa a sua.
+// CHAVE DO SEEKR (seekr.h). Duas origens:
+//   - EMBUTIDA (NV_SEEKR_API_KEY, do local.properties via tools/env.sh): a do
+//     dono, decisao dele em 03/10/2026 sabendo que os termos do servico pedem
+//     chave por pessoa e que quem tiver o pacote consegue extrai-la. Com ela,
+//     a chave e o "Testar" saem dos Ajustes e ficam so os interruptores.
+//   - PESSOAL (build sem a chave): seekr.txt na pasta de dados, nunca no
+//     ajustes.txt nem na conta, so mascarada na tela, como a do fanart.tv.
+#ifndef NV_SEEKR_API_KEY
+#define NV_SEEKR_API_KEY ""
+#endif
+static int seekrEmbutida(void) { return NV_SEEKR_API_KEY[0] != 0; }
 static char seekrChave[96];
 static const char *SEEKR_ALFA =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
@@ -2082,7 +2131,13 @@ static void seekrLimpar(char *dst, size_t n, const char *t) {
   dst[k] = 0;
 }
 static void seekrCarregar(void) {
-  char *t = dados_ler("seekr.txt");
+  char *t;
+  if (seekrEmbutida()) {
+    seekrLimpar(seekrChave, sizeof seekrChave, NV_SEEKR_API_KEY);
+    seekr_definir_chave(seekrChave);
+    return;
+  }
+  t = dados_ler("seekr.txt");
   seekrLimpar(seekrChave, sizeof seekrChave, t);
   free(t);
   seekr_definir_chave(seekrChave);
@@ -3189,6 +3244,7 @@ int ajustes_aplicar_blob(const char *json) {
 // exigiria adivinhar a feature e o `type`, e um blob com forma errada e pior
 // que uma chave a menos.
 static int somenteDesteAparelho(int op) {
+  if (op == AJ_ICONE_APP) return 1;
   switch (op) {
     // LAYOUT/APARELHO: nao sobem nem que o blob tenha a chave.
     // A regra que separa: se o valor descreve ESTA TV (RAM, painel, rede,
@@ -3247,6 +3303,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
     case AJ_MEDIDOR:        /* o medidor e da GPU desta TV; o web nao tem */
     case AJ_TAMANHO_UI:     /* o tamanho e desta tela, e o web nao tem */
+    case AJ_TAMANHO_AJUSTES:
     case AJ_FUNDO:          /* o desfoque custa GPU desta TV; o web nao tem */
     case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: /* teste do vidro: visual desta TV */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
@@ -3765,6 +3822,17 @@ static const char *textoLeitura(int op) {
       default:             return i18n("conectar");
     }
   }
+  if (op == AJ_DISCORD) {
+    if (!discord_disponivel()) return i18n("indisponível nesta versão");
+    switch (discord_estado()) {
+      case DIS_LIGADO:     return i18n("conectado — OK desconecta");
+      case DIS_PEDINDO:    return i18n("preparando…");
+      case DIS_AGUARDANDO: return i18n("aguardando");
+      case DIS_ERRO:       return i18n("falhou");
+      case DIS_INVALIDO:   return i18n("expirou — reconectar");
+      default:             return i18n("conectar");
+    }
+  }
   if (op == AJ_SIMKL) {
     switch (simklauth_estado()) {
       case SMK_LIGADO:     return i18n("conectado");
@@ -3908,6 +3976,8 @@ static int mutavel(int op)   { return OPCOES[op].tipo != OP_LEITURA &&
 // Item desenhado agora? Opcao de grupo fechado nao e — nem desenhada, nem
 // alcancada pelo cima/baixo.
 static int visivel(int i) {
+  if (i >= 0 && i < AJ_N_TELA && TELA[i].tipo == IT_OPC &&
+      TELA[i].op == AJ_ICONE_APP && !apoiador_ativo()) return 0;
   if (i < 0 || i >= AJ_N_TELA) return 0;
   if (TELA[i].tipo == IT_ROT) {
     int j;
@@ -3918,6 +3988,7 @@ static int visivel(int i) {
   if (TELA[i].tipo == IT_OPC) {
     int op = TELA[i].op;
     if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) return 0;
+    if ((op == AJ_SEEKR_CHAVE || op == AJ_SEEKR_TESTAR) && seekrEmbutida()) return 0;
     if (uxAvancada(op) && !uxAvancados[secDoItem[i]]) return 0;
   }
   return 1;
@@ -3977,6 +4048,7 @@ static void focarOpcao(int op) {
 // separado de proposito: as duas perguntas sao diferentes e juntas viram um
 // paragrafo que ninguem le do sofa.
 static const char *ajudaOpcao(int op) {
+  if (op == AJ_ICONE_APP) return "Escolha uma marca alternativa para o Nuvio nesta TV. Um agradecimento a quem apoia o projeto.";
   if (inativa(op)) {
     if (op == AJ_VIDRO_CONTORNO) return "Ative a interface de vidro para ajustar o contorno.";
     if (op == AJ_VIDRO_OPAC || op == AJ_VIDRO_FOSCO) return "Ative a interface de vidro para ajustar o vidro.";
@@ -4161,7 +4233,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_IDIOMA: return "Idioma de toda a interface. Automático segue a sua conta e, sem ela, o idioma da TV. Não muda o idioma das legendas nem do áudio.";
     case AJ_GPU_EFEITOS: return "Automático mede a TV nos primeiros segundos e, se ela não der conta, tira os efeitos mais pesados. Completos mantém tudo; Leves tira desfoque e brilho para deixar a navegação mais lisa.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
-    case AJ_TAMANHO_UI: return "Aumenta os Ajustes, os controles do player, os menus, os painéis e os avisos — bom para TVs grandes ou para quem assiste de longe. A tela inicial e a página do título continuam do mesmo tamanho. Vale na hora.";
+    case AJ_TAMANHO_UI: return "Aumenta os controles do player, os painéis e os avisos. Os Ajustes têm um tamanho próprio.";
+    case AJ_TAMANHO_AJUSTES: return i18n("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.");
     case AJ_TEMA: return "Cor do botão em foco e das marcas de estado. Os claros levam texto escuro, os profundos texto branco — sempre a 4,5:1 ou mais.";
     case AJ_VIDRO_OPAC: return "Teste: quanto os painéis de vidro deixam a arte aparecer. O valor do meio é o de hoje; menos é mais transparente, mais é mais escuro e fácil de ler.";
     case AJ_VIDRO_FOSCO: return "Teste: põe a arte borrada atrás de cada painel de vidro, como um vidro jateado. Onde não há arte borrada, o vidro fica como sempre.";
@@ -4190,7 +4263,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
     case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
-    case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
+    case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
     case AJ_RESOLUCAO: return "4K desenha a interface em 4K nas TVs que permitem; muitas ignoram o pedido e continuam em 1080p. 720p desenha em 1280x720 e amplia para a tela: mais leve em TV fraca, com texto um pouco mais suave. Reinicie o app depois de mudar. O vídeo não muda: segue a qualidade da fonte.";
     case AJ_PERFIL_ATIVO: return "Perfil em uso nesta TV. Trocar de perfil é feito na tela de perfis, ao abrir o app.";
@@ -4198,6 +4271,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_ADDONS: return "Abre a lista de addons da sua conta, para ligar e desligar cada um nesta TV.";
     case AJ_TRAKT: return "Conecta a sua conta do Trakt para marcar o que assistiu e usar a sua lista.";
     case AJ_SIMKL: return "Conecta a sua conta do Simkl, uma alternativa ao Trakt para acompanhar séries.";
+    case AJ_DISCORD: return "Mostra no seu perfil do Discord o que você está assistindo, com o cartaz e o tempo. Só sai alguma coisa enquanto um vídeo toca neste perfil.";
     case AJ_SAIR: return "Sai da conta nesta TV e apaga daqui a sessão, os addons e o progresso guardados.";
     case AJ_ESPACO: return "Uso atual de memória pelo cache de imagens, não espaço ocupado no armazenamento da TV.";
     case AJ_TEX_MB: return "Quanta memória o cache de imagens pode usar. Automático escolhe pela RAM da TV. Um valor acima do que esta TV suporta é reduzido ao máximo dela — o painel ao lado mostra o teto em vigor.";
@@ -4233,7 +4307,10 @@ static const char *ajudaOpcao(int op) {
     case AJ_TMDB_CW: return "Usa o TMDB para preencher os cartazes da fileira de retomada.";
     case AJ_MDB_LIGADO: return "O MDBList junta notas de várias fontes na página do título. Desligar esconde a fileira inteira.";
     case AJ_MDB_CHAVE: return "A chave vem da sua conta Nuvio ou do arquivo do pacote. Não dá para digitar nesta TV.";
-    case AJ_SEEKR_LIGADO: return "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.";
+    case AJ_SEEKR_LIGADO:
+      if (seekrEmbutida())
+        return "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).";
+      return "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.";
     case AJ_SEEKR_CHAVE: return "Sua chave pessoal do Seekr, gratuita na prévia em seekr.tv. Fica só nesta TV e aparece mascarada.";
     case AJ_SEEKR_FITA: return "Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.";
     case AJ_SEEKR_AJUSTE: return "Use quando a miniatura mostra sempre a cena de alguns segundos antes ou depois. Acontece quando a sua versão do título é diferente da usada pelo Seekr (outro corte, abertura mais longa). Vale para todos os títulos; volte a 0 ao trocar de filme.";
@@ -4272,6 +4349,12 @@ static const char *efeitoOpcao(int op) {
       default: return NULL;
     }
   }
+  if (op == AJ_ICONE_APP)
+#ifdef NV_ANDROID
+    return "Também troca o ícone e o banner na tela inicial da TV quando você sai do app. O launcher pode levar alguns segundos para atualizar e pode mudar o app de lugar na lista.";
+#else
+    return "O ícone na lista de apps da TV é o do pacote instalado e não muda: a troca vale dentro do app.";
+#endif
   switch (op) {
     case AJ_FIL_LIMITE:
       return "Vale só nesta TV. Cada fileira a mais é um pedido a mais pela rede quando a Home monta.";
@@ -4304,7 +4387,7 @@ static const char *efeitoOpcao(int op) {
       return (op == AJ_TRAKT ? traktauth_estado() == TRA_LIGADO : simklauth_estado() == SMK_LIGADO)
         ? "OK abre o vínculo de novo, com QR e código. As setas laterais não fazem nada nesta linha."
         : "OK abre o vínculo, com QR e código. As setas laterais não fazem nada nesta linha.";
-    case AJ_ADDONS:
+    case AJ_ADDONS: case AJ_DISCORD:
       return "OK abre. As setas laterais não fazem nada nesta linha.";
     default: return NULL;
   }
@@ -4894,6 +4977,7 @@ static int definirValorDireto(int op, int novo) {
   if (op == AJ_IDIOMA) { idiomaEscolhido(); desc_repetir(); }
   if (op == AJ_FONTE_UI) txt_definir_fonte_interface((TxtFamilia)novo);
   if (op == AJ_TAMANHO_UI) gfx_escala_ui_definir(ajustes_tamanho_ui());
+  if (op == AJ_ICONE_APP) iconeapp_aplicar_plataforma();
   if (op == AJ_CW_FONTE || op == AJ_SALVOS_DEST) desc_repetir();
   if (op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS || op == AJ_CW_CONCLUIDO)
     desc_refazer_continuar();
@@ -4932,12 +5016,14 @@ static const char *uxCaminho(int op);
 static const char *uxBloco(int op);
 static void eventoTela(const SDL_Event *e);
 void ajustes_evento(const SDL_Event *e) {
-  if (guiaAberto) { guiaEvento(e); return; }
+  AJ_ESCALA_INI();
+  if (guiaAberto) { guiaEvento(e); AJ_ESCALA_FIM(); return; }
   eventoTela(e);
   // FIM DA EDICAO DO LIMITE (issue #197): qualquer tecla que solte a linha
   // (OK, Voltar, cima/baixo, sair da tela) confirma a rajada. Sem rajada em
   // curso e um no-op.
   if (!(emEdicao && focoOp == AJ_FIL_LIMITE) || sair) fil_confirmar_limite();
+  AJ_ESCALA_FIM();
 }
 
 static void eventoTela(const SDL_Event *e) {
@@ -4956,10 +5042,15 @@ static void eventoTela(const SDL_Event *e) {
     SmkEstado sa = simklauth_estado();
     int traAtivo = (ta == TRA_PEDINDO || ta == TRA_AGUARDANDO || ta == TRA_ERRO);
     int smkAtivo = (sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO);
-    if (traAtivo || smkAtivo) {
+    DisEstado da = discord_estado();
+    int disAtivo = (da == DIS_PEDINDO || da == DIS_AGUARDANDO || da == DIS_ERRO);
+    if (traAtivo || smkAtivo || disAtivo) {
       if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE) {
-        if (traAtivo) traktauth_cancelar(); else simklauth_cancelar();
+        if (traAtivo) traktauth_cancelar();
+        else if (smkAtivo) simklauth_cancelar();
+        else discord_cancelar();
       } else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
+        if (disAtivo && da == DIS_ERRO) discord_comecar();
         // OK so refaz o pedido quando deu erro; com o codigo na tela ele nao
         // faz nada de proposito, para nao trocar o codigo que a pessoa acabou
         // de digitar no celular.
@@ -5095,6 +5186,10 @@ static void eventoTela(const SDL_Event *e) {
     if (focoOp == AJ_DEBRID_AD_TESTAR) { adTesteIniciar(); return; }
     if (focoOp == AJ_TRAKT) { traktauth_comecar(); return; }
     if (focoOp == AJ_SIMKL) { simklauth_comecar(); return; }
+    if (focoOp == AJ_DISCORD) {
+      if (discord_estado() == DIS_LIGADO) discord_esquecer(); else discord_comecar();
+      return;
+    }
     if (focoOp == AJ_SAIR) {
       // Sair apaga a sessao do disco. Chega aqui so no SEGUNDO OK (ver
       // pedeConfirmacao, acima): o primeiro arma e a linha diz o que o
@@ -5126,6 +5221,7 @@ static void eventoTela(const SDL_Event *e) {
 
 static void aj2Atualizar(float dt);
 void ajustes_atualizar(float dt, Uint32 agora) {
+  AJ_ESCALA_INI();
   guiaAtualizar(dt);
   if (uxAviso[0] && SDL_TICKS_PASSED(agora, uxAvisoAte)) uxAviso[0] = 0;
   montarTela();
@@ -5218,6 +5314,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   scrollY = anim_mola2_reduzida(&velY, scrollY, alvo, dt, NV_MOLA2_SCROLL,
                                 ajustes_animacoes_reduzidas());
   aj2Atualizar(dt);
+  AJ_ESCALA_FIM();
 }
 
 // Leva a escolha da linha para linguas.c. "Da conta" (indice 0) manda string
@@ -5719,12 +5816,12 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER:
-    case AJ_TAMANHO_UI: case AJ_FUNDO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
+    case AJ_TAMANHO_UI: case AJ_TAMANHO_AJUSTES: case AJ_FUNDO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL:
       return AJPV_CONTA;
-    case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL:
+    case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL: case AJ_DISCORD:
       return AJPV_RASTREIO;
     case AJ_VERSAO_I: case AJ_ATUALIZAR: case AJ_ENVIAR_LOG: case AJ_GUIA:
     case AJ_ENVIO_AUTO: case AJ_VER_REGISTRO:
@@ -5772,12 +5869,11 @@ void teclado_teste_foco(int f, int c);
 static int ajQuadroAddons;   // captura: a tela de addons no lugar de Ajustes
 #endif
 static void ajDesenharTudo(Uint32 agora);
-// "Tamanho da interface": Ajustes e uma camada ampliada (escala.h). O layout
-// das ilhas mede pela tela virtual e o desenho inteiro sai ampliado.
+// Own Settings scale: the virtual canvas and the active drawing factor agree.
 void ajustes_desenhar(Uint32 agora) {
-  ESCALA_INI();
+  AJ_ESCALA_INI();
   ajDesenharTudo(agora);
-  ESCALA_FIM();
+  AJ_ESCALA_FIM();
 }
 static void ajDesenharTudo(Uint32 agora) {
   // A TELA E DONA DO PROPRIO FUNDO (Glass UI): a arte do titulo com o veu, e
@@ -5810,14 +5906,18 @@ static void ajDesenharTudo(Uint32 agora) {
                      traktauth_erro(), ta == TRA_AGUARDANDO);
     else if (sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO)
       desenhaVinculo("o Simkl", simklauth_codigo(), simklauth_url(),
-                     simklauth_erro(), sa == SMK_AGUARDANDO); }
+                     simklauth_erro(), sa == SMK_AGUARDANDO);
+    else { DisEstado da = discord_estado();
+      if (da == DIS_PEDINDO || da == DIS_AGUARDANDO || da == DIS_ERRO)
+        desenhaVinculo("o Discord", discord_codigo(), discord_url(),
+                       discord_erro(), da == DIS_AGUARDANDO); } }
 
   // A modal de digitacao e a ultima: ela e sempre a pergunta mais recente da
   // tela, e tem de ficar por cima ate do cartao de vinculo.
   if (teclado_aberto()) teclado_desenhar(agora);
 }
 
-float ajustes_ilha_x(void) { return ajX0(); }
+float ajustes_ilha_x(void) { return aj2X0() * ajustes_tamanho_ajustes(); }
 int ajustes_relogio_cabe(void) {
   TraEstado ta = traktauth_estado();
   SmkEstado sa = simklauth_estado();
@@ -5873,6 +5973,7 @@ int ajustes_teste_op_por_chave(const char *chave) {
   return -1;
 }
 int ajustes_teste_op_atualizar(void) { return AJ_ATUALIZAR; }
+int ajustes_teste_op_icone(int escolha) { valor[AJ_ICONE_APP] = escolha; return AJ_ICONE_APP; }
 // O primeiro dos onze interruptores de "Notas no titulo" (consecutivos no enum).
 int ajustes_teste_primeira_nota_titulo(void) { return AJ_NT_IMDB; }
 

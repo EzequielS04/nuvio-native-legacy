@@ -144,7 +144,9 @@ static void ajCelula(float x, float yc, float w, const char *t, float al, int fo
 static void ajFilPainel(GfxRect pr, int n, int lim);
 
 static void desenhaFileiras(void) {
-  GfxRect ilha = { 48, AJI_TOPO, NV_TELA_W - 96, NV_TELA_H - AJI_TOPO - AJI_MARGEM };
+  const float topoTela = AJI_TOPO * ajustes_tamanho_ajustes();
+  const float margemTela = AJI_MARGEM * ajustes_tamanho_ajustes();
+  GfxRect ilha = { 48, topoTela, NV_TELA_W - 96, NV_TELA_H - topoTela - margemTela };
   GfxRect pr = { ilha.x + ilha.w - 24 - AJF_PAINEL_W, ilha.y + 24, AJF_PAINEL_W, ilha.h - 48 };
   float cx = ilha.x + 30, cw = pr.x - 30 - cx;   // coluna da lista
   float hx = cx + 14, y, topo, base, segL = cx + cw;

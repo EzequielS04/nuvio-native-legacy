@@ -149,6 +149,25 @@ int main(void) {
   confere("hide_catalog_underline presente",  catordem_tem_ocultar_sublinhado(), 1);
   confere("...e vale false",                  catordem_ocultar_sublinhado(), 0);
 
+  {
+    char blob[100000];
+    int pos = snprintf(blob, sizeof blob, "{\"items\":[");
+    catordem_esquecer();
+    for (int k = 0; k < 300; k++)
+      pos += snprintf(blob + pos, sizeof blob - pos,
+        "%s{\"addon_id\":\"a\",\"type\":\"movie\",\"catalog_id\":\"c%d\",\"order\":%d,\"enabled\":%s}",
+        k ? "," : "", k, 299-k, k == 299 ? "false" : "true");
+    snprintf(blob + pos, sizeof blob - pos, "]}");
+    confere("large account accepted", catordem_ler(blob), 1);
+    confere("all 300 catalogues retained", catordem_n(), 300);
+    confereTexto("late item sorted first", catordem_chave(0), "a_movie_c299");
+    confere("late disabled item hidden", catordem_oculta("a_movie_c299", ""), 1);
+    confere("explicit empty items clears remote state", catordem_ler("{\"items\":[]}"), 1);
+    confere("remote order cleared", catordem_n(), 0);
+    confere("remote hidden state cleared", catordem_oculta("a_movie_c299", ""), 0);
+    confere("repeated empty does not rebuild", catordem_ler("{\"items\":[]}"), 0);
+  }
+
   printf("\nlogout esquece a ordem da conta anterior:\n");
   catordem_esquecer();
   confere("sem ordem depois de esquecer", catordem_tem_ordem(), 0);

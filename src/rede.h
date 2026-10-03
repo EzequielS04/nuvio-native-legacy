@@ -6,6 +6,8 @@
 #ifndef NV_REDE_H
 #define NV_REDE_H
 
+#include <stddef.h>
+
 typedef struct {
   int status;          // 0 = transporte sem resposta
   long bytes;          // corpo recebido; -1 quando nao medido
@@ -276,5 +278,27 @@ const char *rede_url_publica(const char *url, char *dst, unsigned tam);
 const char *rede_url_log(const char *url, char *dst, unsigned tam);
 // O criterio de "segmento suspeito" acima, exposto para o teste.
 int rede_segmento_suspeito(const char *s, unsigned n);
+
+// CONEXAO TLS CRUA, sem HTTP. Existe para o websocket do Discord (discordws.c):
+// a libcurl das TVs (7.53.1) nao fala websocket, mas abre o TLS e entrega o
+// canal com CONNECT_ONLY. `url` e "https://host:porta/" — so host e porta
+// contam. Bloqueia ate conectar ou estourar `segundos`. NULL = sem conexao.
+// No navegador (Emscripten) sempre NULL.
+// Startup only: optional trusted CA bundle for Discord OAuth and Gateway.
+// Empty uses libcurl system trust; never disables certificate verification.
+void rede_discord_ca(const char *pemPath);
+// OAuth POST: verified TLS, dedicated handle, no native redirects.
+char *rede_postar_seguro_st(const char *url, int segundos, const char *const *cab,
+                            const char *corpo, int *status);
+typedef struct RedeTls RedeTls;
+RedeTls *rede_tls_abrir(const char *url, int segundos);
+// Manda tudo ou falha: 0 ok, -1 erro.
+int rede_tls_enviar(RedeTls *t, const void *buf, size_t n);
+// One nonblocking send. 0 = success/would-block; *foi is the consumed prefix.
+int rede_tls_tentar_enviar(RedeTls *t, const void *buf, size_t n, size_t *foi);
+// Ate `n` bytes, esperando no maximo `esperaMs` (0 = nao espera).
+// >0 bytes lidos, 0 nada chegou, -1 conexao caiu ou fechou.
+int rede_tls_receber(RedeTls *t, void *buf, size_t n, int esperaMs);
+void rede_tls_fechar(RedeTls *t);
 
 #endif

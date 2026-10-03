@@ -158,11 +158,13 @@ export async function rotaEvento(env, quem, corpo, h, limitar) {
   let gravou = 0;
   if (ev !== "progresso") {
     // Retomar o mesmo episodio tres vezes em dez minutos nao sao tres "comecou".
+    // Reacao so repete a ULTIMA: gostei -> nao gostei -> gostei precisa guardar
+    // a mudanca final, mesmo que o primeiro gostei ainda esteja na janela.
     const ja = await env.DB.prepare(
-      "SELECT 1 FROM evento WHERE pessoa = ? AND ev = ? AND imdb = ? AND temporada = ? " +
-      "AND episodio = ? AND reacao = ? AND criado > ?"
-    ).bind(quem.id, ev, imdb, temporada, episodio, reacao, t - DEDUPE_S).first();
-    if (!ja) {
+      "SELECT reacao FROM evento WHERE pessoa = ? AND ev = ? AND imdb = ? AND midia = ? " +
+      "AND temporada = ? AND episodio = ? AND criado > ? ORDER BY id DESC LIMIT 1"
+    ).bind(quem.id, ev, imdb, midia, temporada, episodio, t - DEDUPE_S).first();
+    if (!ja || (ev === "reacao" && ja.reacao !== reacao)) {
       cmds.push(env.DB.prepare(
         "INSERT INTO evento (pessoa, ev, imdb, midia, titulo, poster, temporada, episodio, pct, reacao, rec, criado) " +
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -315,9 +317,10 @@ export async function rotaAmigo(env, quem, url, h, garantirPerfil) {
       "WHERE pessoa = ? AND atualizado > ?").bind(alvo, t - AGORA_S).first();
     saida.agora = a || null;
     const g = await env.DB.prepare(
-      "SELECT imdb, midia, titulo, poster, MAX(criado) AS criado FROM evento " +
-      "WHERE pessoa = ? AND ev = 'reacao' AND reacao = 1 AND criado > ? " +
-      "GROUP BY imdb ORDER BY criado DESC LIMIT ?").bind(alvo, t - RETENCAO, GOSTOU_MAX).all();
+      "SELECT imdb, midia, titulo, poster, temporada, episodio, criado FROM evento " +
+      "WHERE id IN (SELECT MAX(id) FROM evento WHERE pessoa = ?1 AND ev = 'reacao' " +
+      "GROUP BY imdb, midia, temporada, episodio) AND reacao = 1 AND criado > ?2 " +
+      "ORDER BY criado DESC, id DESC LIMIT ?3").bind(alvo, t - RETENCAO, GOSTOU_MAX).all();
     saida.gostou = g.results || [];
     // GOSTO PARECIDO so entre dois que compartilham: quem nao mostra as
     // proprias reacoes nao ganha uma janela para as dos outros.
@@ -342,6 +345,9 @@ export async function rotaAmigo(env, quem, url, h, garantirPerfil) {
     saida.recs = (r.results || []).map((x) => ({
       id: x.id, imdb: x.imdb, tipo: x.tipo, titulo: x.titulo, poster: x.poster, criado: x.criado,
       estado: estadoRec(x), reacao: x.reacao === null ? null : x.reacao,
+      // Reagir e concluir sao fatos independentes. `estado` pode mostrar a
+      // reacao sem esconder uma conclusao conhecida da TV que recebe.
+      terminou: x.terminou ? 1 : 0,
     }));
   }
   return h.json(saida);
