@@ -3947,11 +3947,30 @@ static int heroTrailerSegurando(Uint32 agora) {
          agora - heroTrailerDesde <= heroTrailerMaxEspera();
 }
 
+enum { HERO_GATE_READY, HERO_GATE_UNSUPPORTED, HERO_GATE_OVERLAY,
+       HERO_GATE_DISABLED, HERO_GATE_SETTING, HERO_GATE_DYNAMIC,
+       HERO_GATE_POSTER_WAIT, HERO_GATE_TRANSITION, HERO_GATE_NONCONTENT,
+       HERO_GATE_NO_ID };
+static int heroTrailerGateAnterior = -1;
+static void heroTrailerGateLog(int motivo, int enabled) {
+  static const char *const nomes[] = { "ready", "unsupported", "top-overlay",
+    "hero-disabled", "focused-setting-disabled", "dynamic-poster-hidden",
+    "poster-wait", "art-transition", "non-content-row", "missing-content-id" };
+  if (!enabled) { heroTrailerGateAnterior = -1; return; }
+  if (motivo != heroTrailerGateAnterior) {
+    heroTrailerGateAnterior = motivo;
+    printf("[home-trailer] autoplay gate=%s\n", nomes[motivo]);
+    fflush(stdout);
+  }
+}
+
 void home_trailer_passo(int topo, float dt, Uint32 agora) {
   const CatItem *ci = NULL;
   int pronto;
   Uint32 decorrido;
-  if (!trailer_suportado()) return;
+  int heroSetting = ajustes_trailer_hero(), posterSetting = ajustes_trailer_cartaz();
+  int enabled = heroSetting || posterSetting, motivo = HERO_GATE_READY;
+  if (!trailer_suportado()) { heroTrailerGateLog(HERO_GATE_UNSUPPORTED, enabled); return; }
   // DUAS PORTAS PARA O MESMO TRAILER. Com o foco no destaque, "Trailer no
   // destaque". Com o foco num CARTAZ das fileiras (#124: "parado num titulo do
   // catalogo, nada toca"), "Trailer do cartaz em foco" — o
@@ -3959,21 +3978,35 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
   // ja segue o card em repouso (heroAtual, ver "O HERO SEGUE O FOCO"), entao o
   // trailer toca onde a arte dele ja esta. Espera o mesmo tempo da expansao do
   // cartaz, contado de quando o foco parou nele.
-  { int noHero = focoHero && ajustes_hero_ligado() && ajustes_trailer_hero();
+  { int noHero = focoHero && ajustes_hero_ligado() && heroSetting;
     // Na Dinamica o destaque ROLOU para fora quando o foco esta num cartaz: o
     // trailer do cartaz tocaria onde ninguem ve.
-    int noCartaz = !focoHero && ajustes_hero_ligado() && ajustes_trailer_cartaz() &&
+    int noCartaz = !focoHero && ajustes_hero_ligado() && posterSetting &&
                    layoutHome() != HOME_LAYOUT_DINAMICA &&
                    heroPendente == heroAtual &&
                    agora - heroPendenteEm >= (Uint32)(ajustes_expandir_poster_atraso() * 1000.0f);
-    pronto = topo && (noHero || noCartaz); }
+    pronto = topo && (noHero || noCartaz);
+    if (!topo) motivo = HERO_GATE_OVERLAY;
+    else if (!ajustes_hero_ligado()) motivo = HERO_GATE_DISABLED;
+    else if (focoHero ? !heroSetting : !posterSetting) motivo = HERO_GATE_SETTING;
+    else if (!focoHero && layoutHome() == HOME_LAYOUT_DINAMICA) motivo = HERO_GATE_DYNAMIC;
+    else if (!noHero && !noCartaz) motivo = HERO_GATE_POSTER_WAIT;
+  }
   pronto = pronto &&
            heroDesejado < 0 && heroAtual >= 0 && heroEntra >= 0.999f && heroSai <= 0.001f &&
            heroDesliza >= 1.0f &&   // o trailer abre com a arte ja parada
-           !(foco.fileira >= 0 && foco.fileira < nFileiras &&
+           !(!focoHero && foco.fileira >= 0 && foco.fileira < nFileiras &&
              (fileiras[foco.fileira].tipo == FILEIRA_CATALOGOS ||
               fileiras[foco.fileira].tipo == FILEIRA_SOCIAL));
+  if (motivo == HERO_GATE_READY && !pronto) {
+    if (!focoHero && foco.fileira >= 0 && foco.fileira < nFileiras &&
+        (fileiras[foco.fileira].tipo == FILEIRA_CATALOGOS || fileiras[foco.fileira].tipo == FILEIRA_SOCIAL))
+      motivo = HERO_GATE_NONCONTENT;
+    else motivo = HERO_GATE_TRANSITION;
+  }
   if (pronto) ci = cat_item_exato(heroAtual);
+  if (pronto && (!ci || !ci->imdb[0])) motivo = HERO_GATE_NO_ID;
+  heroTrailerGateLog(motivo, enabled);
   if (!pronto || !ci || !ci->imdb[0]) {
     // Hero deixou de estar pronto (foco saiu, transicao da arte, detalhe por
     // cima): fecha. E o outro caminho de fechamento que o prazo nao ve —

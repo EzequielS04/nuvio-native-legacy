@@ -11,10 +11,19 @@
 #include "../src/trailercinema.h"   // static inline: antes do `#define static`, senao vira inline sem corpo
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
+static int gateLogs;
+static int fixturePrintf(const char *format, ...);
+#define printf fixturePrintf
 
 #define static
 #include "../src/home.c"
 #undef static
+#undef printf
+static int fixturePrintf(const char *format, ...) {
+  if (!strcmp(format,"[home-trailer] autoplay gate=%s\n")) gateLogs++;
+  va_list args;va_start(args,format);int result=vprintf(format,args);va_end(args);return result;
+}
 // A espera virou ajuste (ajustes_trailer_hero_espera_ms); o stub devolve o
 // padrao de fabrica, 2,2 s, e a janela da Apple conta a partir dela.
 #define NV_TRAILER_HERO_ESPERA_MS 2200
@@ -22,6 +31,7 @@
 
 static CatItem item;
 static int trailerSetting = 1;
+static int posterSetting;
 // "Fonte do trailer" (trailerfonte.h). A regra e a de producao
 // (src/trailerfonte.c entra na linha do emcc); so o valor gravado e do teste.
 static int fonteSetting = TRF_AUTO;
@@ -47,7 +57,7 @@ int ajustes_trailer_hero_som(void) { return somSetting; }
 Uint32 ajustes_trailer_hero_espera_ms(void) { return NV_TRAILER_HERO_ESPERA_MS; }
 int ajustes_tmdb_trailers(void) { return 1; }
 int ajustes_home_layout(void) { return 0; }
-int ajustes_trailer_cartaz(void) { return 0; }
+int ajustes_trailer_cartaz(void) { return posterSetting; }
 float ajustes_expandir_poster_atraso(void) { return 0.5f; }
 int ajustes_animacoes_reduzidas(void) { return 0; }
 int ajustes_trailer_fonte(void) { return fonteSetting; }
@@ -141,6 +151,8 @@ static void resetState(const char *id) {
   heroTrailerTocouN = 0;   // cada caso reinicia a memoria da sessao no teste
   heroTrailerMemoriaFalhou = 0;
   trailerSetting = 1;
+  posterSetting = 0;
+  nFileiras = 0;
   fonteSetting = TRF_AUTO;
   lastSom = -1;
   somSetting = 0;
@@ -373,6 +385,26 @@ int main(void) {
   home_trailer_passo(1, 0.016f, start);
   home_trailer_passo(1, 0.016f, start + NV_TRAILER_HERO_ESPERA_MS);
   rc |= check("ajuste de som ligado: destaque pede som", openedCount == 1 && lastSom == 1);
+
+  for (int social=0; social<2; social++) {
+    resetState(social ? "tt228social" : "tt228catalog");
+    nFileiras=1;foco.fileira=0;fileiras[0].tipo=social ? FILEIRA_SOCIAL : FILEIRA_CATALOGOS;
+    appleReady=1;
+    home_trailer_passo(1,0.016f,start);
+    home_trailer_passo(1,0.016f,start+NV_TRAILER_HERO_ESPERA_MS);
+    rc |= check(social ? "hero after cached social row opens" : "hero after cached catalog row opens",openedCount==1);
+    resetState(social ? "tt228socialfocus" : "tt228catalogfocus");
+    nFileiras=1;foco.fileira=0;fileiras[0].tipo=social ? FILEIRA_SOCIAL : FILEIRA_CATALOGOS;
+    focoHero=0;posterSetting=1;heroPendente=heroAtual;heroPendenteEm=start-1000;appleReady=1;
+    home_trailer_passo(1,0.016f,start);
+    home_trailer_passo(1,0.016f,start+NV_TRAILER_HERO_ESPERA_MS);
+    rc |= check(social ? "focused social row remains blocked" : "focused catalog row remains blocked",openedCount==0 && heroTrailerGateAnterior==HERO_GATE_NONCONTENT);
+    int logsBefore=gateLogs;
+    for (int frame=0;frame<100;frame++) home_trailer_passo(1,0.016f,start+2500+frame);
+    rc |= check("unchanged gate emits no per-frame logs",gateLogs==logsBefore);
+    home_trailer_passo(0,0.016f,start+3000);
+    rc |= check("overlay gate reported",heroTrailerGateAnterior==HERO_GATE_OVERLAY);
+  }
 
   puts(rc ? "home-trailer-timer: FALHOU" : "home-trailer-timer: tudo ok");
   return rc ? 1 : 0;
