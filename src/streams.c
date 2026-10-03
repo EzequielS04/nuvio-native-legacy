@@ -3,6 +3,9 @@
 #include "livetv_regras.h"
 #include "idioma.h"
 #include "badges.h"
+#include "logotitulo.h"
+#include "tex_cache.h"
+#include "catalogo.h"
 #include "limpa.h"
 #include <ctype.h>
 #include <strings.h>
@@ -1317,6 +1320,8 @@ static int temAudioPt(const Stream *s) {
 // e episodio vem do ALVO DA LISTA ("tt...:2:5"), que e de que episodio estas
 // fontes sao — e nao do episodio em foco no detalhe, que pode ser outro.
 static char nomeFolha[160];
+static int itemFolha = -1;
+void stream_folha_item(int indice) { itemFolha = indice; }
 void stream_folha_nome(const char *nome) {
   snprintf(nomeFolha, sizeof nomeFolha, "%s", nome ? nome : "");
 }
@@ -1711,6 +1716,8 @@ static float caixaAlta(const char *s, int r, int g, int b, float x, float y, flo
 // acento com a tinta calculada, e `ligado` (o filtro MP4 ativo) num acento a
 // 22% com texto no acento: estado, nao foco.
 #define FOLHA_CHIP_H 56.0f
+#define FOLHA_LOGO_H 40.0f   // logo do titulo na linha: caixa da altura do nome
+#define FOLHA_LOGO_W 220.0f
 static void chipFolha(GfxRect r, const char *rot, const char *icone, int foco, int ligado, float a) {
   float ar, ag, ab;
   int c = 225, cr, cg, cb;
@@ -1971,6 +1978,22 @@ void stream_folha_desenhar(Uint32 agora) {
       if(ajustes_fonte_texto_addon()) tituloAddon(s,nome,sizeof nome);
       else tituloConteudo(s,nome,sizeof nome,ep,sizeof ep);
       { TxtLinha l=txt_linha_corta(TXT_CALLOUT,nome,c,c,c-2,255,txtW);
+        // LOGO DO TITULO no lugar do nome (ajuste em teste): a mesma logo do
+        // hero/detalhe, encostada a esquerda numa caixa da altura do nome.
+        // Sem logo (ausente ou ainda baixando) fica o nome escrito.
+        const CatItem *ci = ajustes_fonte_texto_logo() && itemFolha >= 0 ? cat_item(itemFolha) : NULL;
+        const char *lu = ci ? logotitulo_url(ci, FOLHA_LOGO_W) : NULL;
+        GLuint lt = lu ? tex_obter_larg_qualquer(lu, FOLHA_LOGO_W) : 0;
+        float la = lt ? tex_aspecto(lu) : 0.0f;
+        if (lt && la > .01f) {
+          float lh = FOLHA_LOGO_H, lw = lh * la;
+          if (lw > FOLHA_LOGO_W) { lw = FOLHA_LOGO_W; lh = lw / la; }
+          gfx_tex_aspect_atual = 0.0f;
+          gfx_rect((GfxRect){tx, cy + (l.h - lh) * .5f, lw, lh}, lt,
+                   tex_marca_escura(lu) ? GFX_MARCA : GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1,
+                   anim * (sel ? 1.0f : .80f));
+          l.w = (int)(lw + .5f);
+        } else
         txt_desenhar_alpha(l,tx,cy,anim);
         if(ep[0]){ int ce=sel?175:135;
           TxtLinha le=txt_linha(TXT_PG_FIM,ep,ce,ce,ce,255);

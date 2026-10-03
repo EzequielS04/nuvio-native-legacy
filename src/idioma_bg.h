@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Прочетете този код на приятеля си. Той го въвежда тук и двамата ставате контакти."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Кажете да и ще се показвате на хора, които имат вашия контакт или ви следват в Trakt. На никой друг."),
   T("Do Nuvio", "От Nuvio"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "От Nuvio: името на заглавието отгоре и логата за качество отдолу. От добавката: името и описанието точно както ги изпраща добавката — за тези, които вече форматират текста в AIOStreams."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "От Nuvio: името на заглавието отгоре и логата за качество отдолу. От добавката: името и описанието точно както ги изпраща добавката — за тези, които вече форматират текста в AIOStreams. Лого на заглавието: логото на заглавието вместо изписаното име."),
   T("Do addon", "От добавката"),
   T("Do app", "От приложението"),
   T("Do catálogo, quando ele já foi lido", "От каталога, щом е прочетен"),

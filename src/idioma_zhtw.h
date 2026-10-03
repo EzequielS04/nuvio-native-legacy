@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "把這個代碼告訴你的好友。對方在這裡輸入後，你們就互為聯絡人了。"),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "選擇「是」，那麼通訊錄裡有你的人和在 Trakt 上追蹤你的人就能看到你，其他人都看不到。"),
   T("Do Nuvio", "來自 Nuvio"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "來自 Nuvio：上方顯示片名，下方顯示畫質標誌。來自外掛：名稱和說明完全照外掛傳送的顯示——適合已在 AIOStreams 設定格式的人。"),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "來自 Nuvio：上方顯示片名，下方顯示畫質標誌。來自外掛：名稱和說明完全照外掛傳送的顯示——適合已在 AIOStreams 設定格式的人。 標題標誌：以標題的標誌取代文字名稱。"),
   T("Do addon", "來自外掛"),
   T("Do app", "來自應用程式"),
   T("Do catálogo, quando ele já foi lido", "來自目錄（已讀取時）"),

@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Lees deze code voor aan je vriend. Die typt hem hier in en jullie worden contacten."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Zeg je ja, dan verschijn je bij mensen die jouw contact hebben of je volgen op Trakt. Bij niemand anders."),
   T("Do Nuvio", "Van Nuvio"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "Van Nuvio: de titel bovenaan en de kwaliteitslogo's eronder. Van de add-on: naam en beschrijving precies zoals de add-on ze stuurt — voor wie de tekst al in AIOStreams opmaakt."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "Van Nuvio: de titel bovenaan en de kwaliteitslogo's eronder. Van de add-on: naam en beschrijving precies zoals de add-on ze stuurt — voor wie de tekst al in AIOStreams opmaakt. Titellogo: het logo van de titel in plaats van de geschreven naam."),
   T("Do addon", "Van de add-on"),
   T("Do app", "Uit de app"),
   T("Do catálogo, quando ele já foi lido", "Uit de catalogus, zodra die gelezen is"),

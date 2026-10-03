@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "このコードをフレンドに伝えてください。相手がここに入力すると、お互いが連絡先になります。"),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "「はい」を選ぶと、あなたの連絡先を持っている人や Trakt でフォローしている人にあなたが表示されます。それ以外の人には表示されません。"),
   T("Do Nuvio", "Nuvio 表示"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "Nuvio：上にタイトル名、下に画質ロゴ。アドオン：アドオンが送る名前と説明をそのまま表示 — AIOStreams で書式を整えている人向け。"),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "Nuvio：上にタイトル名、下に画質ロゴ。アドオン：アドオンが送る名前と説明をそのまま表示 — AIOStreams で書式を整えている人向け。 タイトルロゴ: 文字の名前の代わりにタイトルのロゴを表示。"),
   T("Do addon", "アドオン表示"),
   T("Do app", "アプリから"),
   T("Do catálogo, quando ele já foi lido", "読み込み済みのカタログから"),

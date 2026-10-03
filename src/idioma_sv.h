@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Läs upp den här koden för din vän. Vännen skriver in den här och ni blir kontakter."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Om du säger ja syns du för dem som har din kontakt eller följer dig på Trakt. Ingen annan."),
   T("Do Nuvio", "Från Nuvio"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "Från Nuvio: titelns namn överst och kvalitetslogotyperna under. Från tillägget: namn och beskrivning precis som tillägget skickar dem — för dig som redan formaterar texten i AIOStreams."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "Från Nuvio: titelns namn överst och kvalitetslogotyperna under. Från tillägget: namn och beskrivning precis som tillägget skickar dem — för dig som redan formaterar texten i AIOStreams. Titellogga: titelns logga i stället för det skrivna namnet."),
   T("Do addon", "Från tillägget"),
   T("Do app", "Från appen"),
   T("Do catálogo, quando ele já foi lido", "Från katalogen, när den har lästs"),

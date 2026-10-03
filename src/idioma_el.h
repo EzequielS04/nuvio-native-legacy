@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Πες αυτόν τον κωδικό στον φίλο σου. Τον πληκτρολογεί εδώ και γίνεστε επαφές."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Αν πεις ναι, εμφανίζεσαι σε όσους έχουν την επαφή σου ή σε ακολουθούν στο Trakt. Σε κανέναν άλλον."),
   T("Do Nuvio", "Από το Nuvio"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "Από το Nuvio: το όνομα του τίτλου πάνω και τα λογότυπα ποιότητας από κάτω. Από το πρόσθετο: όνομα και περιγραφή ακριβώς όπως τα στέλνει το πρόσθετο — για όσους ήδη μορφοποιούν το κείμενο στο AIOStreams."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "Από το Nuvio: το όνομα του τίτλου πάνω και τα λογότυπα ποιότητας από κάτω. Από το πρόσθετο: όνομα και περιγραφή ακριβώς όπως τα στέλνει το πρόσθετο — για όσους ήδη μορφοποιούν το κείμενο στο AIOStreams. Λογότυπο τίτλου: το λογότυπο του τίτλου αντί για το γραμμένο όνομα."),
   T("Do addon", "Από το πρόσθετο"),
   T("Do app", "Από την εφαρμογή"),
   T("Do catálogo, quando ele já foi lido", "Από τον κατάλογο, όταν έχει διαβαστεί"),

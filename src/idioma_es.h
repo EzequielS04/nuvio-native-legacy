@@ -945,7 +945,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Dicta este código a tu amigo. Él lo escribe aquí y los dos se vuelven contactos."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Si dices que sí, apareces ante quien tiene tu contacto o te sigue en Trakt. Ante nadie más."),
   T("Do Nuvio", "De Nuvio"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "De Nuvio: el nombre del título arriba y los logos de calidad abajo. Del addon: el nombre y la descripción tal como los envía el addon — para quien ya formatea el texto en AIOStreams."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "De Nuvio: el nombre del título arriba y los logos de calidad abajo. Del addon: el nombre y la descripción tal como los envía el addon — para quien ya formatea el texto en AIOStreams. Logo del título: el logo del título en lugar del nombre escrito."),
   T("Do addon", "Del addon"),
   T("Do app", "De la app"),
   T("Do catálogo, quando ele já foi lido", "Del catálogo, cuando ya se leyó"),

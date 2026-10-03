@@ -945,7 +945,7 @@
   { "Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Read this code out to your friend. They type it here and you both become contacts." },
   { "Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Say yes and you appear to people who have your contact or follow you on Trakt. To nobody else." },
   { "Do Nuvio", "From Nuvio" },
-  { "Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "From Nuvio: the title's name on top and the quality logos below. From the addon: the name and description exactly as the addon sends them — for people who already format the text in AIOStreams." },
+  { "Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "From Nuvio: the title's name on top and the quality logos below. From the addon: the name and description exactly as the addon sends them — for people who already format the text in AIOStreams. Title logo: the title's logo instead of the written name." },
   { "Do addon", "From the addon" },
   { "Do app", "From the app" },
   { "Do catálogo, quando ele já foi lido", "From the catalog, once it has been read" },

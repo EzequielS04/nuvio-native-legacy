@@ -692,6 +692,7 @@ static void nomeParaFolha(void) {
   const CatItem *c = player_id_canal()[0] ? NULL
                    : cat_item(player_aberto() ? player_indice() : detail_indice());
   stream_folha_nome(c ? c->titulo : "");
+  stream_folha_item(c ? (player_aberto() ? player_indice() : detail_indice()) : -1);
 }
 
 static void episodioDoDetalhe(void) {
