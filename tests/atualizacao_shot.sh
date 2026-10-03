@@ -1,8 +1,10 @@
 #!/bin/bash
-# Cartao de atualizacao nos quatro estados, em BMP. Nao entra na suite
+# A atualizacao no Glass UI v2 (aviso na ilha, ilha crescendo, os estados do
+# cartao, a barra na ilha, procurando/em dia), em BMP. Nao entra na suite
 # (tools/testa-tudo.sh pula *_shot.sh): precisa de janela GL e de olho humano.
 #
-#   bash tests/atualizacao_shot.sh /tmp/nuvio-update
+#   bash tests/atualizacao_shot.sh /tmp/nuvio-upd                       # vidro
+#   NUVIO_SHOT_VIDRO=0 bash tests/atualizacao_shot.sh /tmp/nuvio-upd-s  # solido
 #
 # NV_AT_INSTALA=1 encena a TV COM Homebrew Channel, que e o ramo com botoes e
 # barra de progresso. Nenhum build de produto define esta macro.
