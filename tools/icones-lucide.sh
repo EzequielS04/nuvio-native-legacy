@@ -52,6 +52,7 @@ rotate-cw x library eye eye-off users
 clock triangle-alert tv-minimal-play calendar download wifi-off wifi link-2-off
 cloud megaphone bookmark
 clapperboard languages search chevron-right check plus minus memory-stick delete
+activity gauge zap database
 arrow-up-down
 "
 # A penultima linha e da ILHA DO RELOGIO (02/10, mockup aprovado em design/ilha):

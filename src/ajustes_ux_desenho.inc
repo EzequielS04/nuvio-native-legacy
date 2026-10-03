@@ -9,6 +9,7 @@
 // la (ilha, idx, folha, ln, tg, seg, insp, dicas) para que a comparacao lado a
 // lado ache cada peca.
 
+#include "home.h"
 static char uxDirArte[1024];
 void ajustes_recursos(const char *dirArte) {
   snprintf(uxDirArte, sizeof uxDirArte, "%s", dirArte ? dirArte : "");
@@ -183,7 +184,10 @@ static float ajBloco(TxtEstilo e, const char *s, float x, float y, float w, floa
 // do mockup, preto ~50%. Chapado e nao degrade: veu de cor unica nao faz faixa
 // no painel de 8 bits.
 static void ajFundo(void) {
-  const char *c = ajArte(AJA_FUNDO, ajArteFundoN);
+  // O titulo em foco na Home quando ha catalogo; a amostra n sem ele.
+  HomeItem hi;
+  const char *c = (cat_n() > 0 && home_item_focado(&hi) && hi.indice >= 0)
+                    ? ajArte(AJA_FUNDO, hi.indice) : ajArte(AJA_FUNDO, ajArteFundoN);
   if (!ajImg(c, (GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, 1.0f))
     gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1);
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, 0, 0, 0, 0.50f);

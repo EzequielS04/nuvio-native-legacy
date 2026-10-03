@@ -759,3 +759,95 @@ void ajustes_desenhar_addons(int foco) {
   { AjDica d[2] = { { "OK", "Ligar ou desligar" }, { "Voltar", "Ajustes" } };
     ajDicas(d, 2, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1); }
 }
+
+// --- KIT DAS ILHAS PARA AS TELAS VIZINHAS (diagnostico.c, livetvdiag.c) -----------
+// As mesmas pecas de Ajustes, para o diagnostico, o teste de velocidade e o
+// diagnostico da Live TV ornarem com a tela de onde saem. Ver ajustes.h.
+void ajustes_ui_fundo(void) { ajFundo(); }
+void ajustes_ui_arte(int n) { ajArteFundoN = n; }
+void ajustes_ui_ilha(GfxRect r, float raioPx, int modal) { ajIlha(r, raioPx, 1, modal); }
+void ajustes_ui_veu(void) { ajVeuModal(); }
+float ajustes_ui_kicker(const char *s, float x, float y, float a) { return ajKicker(s, x, y, a); }
+float ajustes_ui_meta(const char *k, const char *v, float x, float y, float w) { return ajMeta(k, v, x, y, w, 1); }
+float ajustes_ui_ef(const char *icone, const char *s, float x, float y, float w) { return ajEf(icone, s, x, y, w, 1); }
+float ajustes_ui_botao(const char *rot, const char *icone, float x, float y, int foco) { return ajBotao(rot, icone, x, y, foco, 1); }
+float ajustes_ui_dicas(const char *const *teclas, const char *const *rotulos, int n, float x, float y, int desenha) {
+  AjDica d[6];
+  int i;
+  if (n > 6) n = 6;
+  for (i = 0; i < n; i++) { d[i].k = teclas[i]; d[i].l = rotulos[i]; }
+  if (!desenha) return ajDicasLargura(d, n);
+  return ajDicasLinha(d, n, x, y, 1);
+}
+void ajustes_ui_neutro(GfxRect r, float raioPx, float vidA) { ajNeutro(r, raioPx, vidA, 0.106f, 0.110f, 0.129f, 1); }
+void ajustes_ui_foco_linha(GfxRect r, float raioPx) { ajFocoLinha(r, raioPx, 1, 1); }
+// "Rotulo ........ a → b unidade" com a barra de cada valor na mesma escala.
+float ajustes_ui_antes_depois(const char *rot, int a, int b, const char *unid, int max,
+                              float x, float y, float w, int compacto, float cr, float cg, float cb) {
+  float pad = compacto ? 9.0f : 14.0f, ar, ag, ab;
+  char t[96];
+  TxtLinha lr = ajTxtC(TXT_AJ_ESTADO, rot, w * 0.6f), lv;
+  ajustes_acento(&ar, &ag, &ab);
+  if (cr >= 0) { ar = cr; ag = cg; ab = cb; }
+  gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f);
+  y += pad;
+  txt_desenhar_alpha(lr, x, y, 0.5f);
+  snprintf(t, sizeof t, "%d %s", b, i18n(unid));
+  lv = txt_linha(TXT_AJ_ESTADO, t, AJ_TX);
+  txt_desenhar_alpha(lv, x + w - lv.w, y, 0.9f);
+  if (a != b) {
+    char s[32];
+    TxtLinha la;
+    snprintf(s, sizeof s, "%d → ", a);
+    la = ajTxt(TXT_AJ_ESTADO, s);
+    txt_desenhar_alpha(la, x + w - lv.w - la.w, y, 0.45f);
+  }
+  y += lr.h + (compacto ? 7.0f : 10.0f);
+  if (max <= 0) max = 1;
+  gfx_cor((GfxRect){ x, y, w, 6 }, 0.5f, 1, 1, 1, 0.07f);
+  if (a != b) {
+    gfx_cor((GfxRect){ x, y, w * (b > max ? 1.0f : (float)b / max), 6 }, 0.5f, ar, ag, ab, 0.85f);
+    gfx_cor((GfxRect){ x, y, w * (float)(a < b ? a : b) / max, 6 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.4f);
+  } else gfx_cor((GfxRect){ x, y, w * (a > max ? 1.0f : (float)a / max), 6 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.28f);
+  return pad + lr.h + (compacto ? 7.0f : 10.0f) + 6 + pad * 0.5f;
+}
+// O grafico de pressao da memoria (os ultimos 2 min) sem o painel em volta.
+void ajustes_ui_grafico_memoria(float x, float y, float w, float h) {
+  long hist[120], teto = tex_orcamento_bytes();
+  int nh = tex_historico(hist, 120), i;
+  float pw = w / 120.0f;
+#ifdef AJUSTES_TESTE
+  if (ajMemFixa) {
+    teto = 240L << 20; nh = 120;
+    for (i = 0; i < 120; i++) {
+      double v = i < 30 ? .30 + i * .009 + sin(i * .9) * .01 : i < 52 ? .58 + (i - 30) * .0165 + sin(i * 1.3) * .012
+               : i < 74 ? (i % 5 < 3 ? .91 : .80) + sin(i) * .015 : .66 - (i - 74) * .0008 + sin(i * .7) * .012;
+      hist[i] = (long)(v * teto);
+    }
+  }
+#endif
+  if (teto <= 0) teto = 1;
+  gfx_cor((GfxRect){ x, y, w, h }, 12.0f / h, 0, 0, 0, 0.18f);
+  for (i = 0; i < nh; i++) {
+    float v = (float)hist[i] / (float)teto, hh, cx, r2, g2, b2;
+    if (v > 1) v = 1;
+    hh = h * v;
+    if (hh < 1) continue;
+    corPressao(v, &r2, &g2, &b2);
+    cx = x + w - (float)(nh - i) * pw;
+    gfx_cor((GfxRect){ cx, y + h - hh, pw - 1.2f, hh }, 0, r2, g2, b2, 0.38f);
+    gfx_cor((GfxRect){ cx, y + h - hh, pw - 1.2f, 2.5f }, 0, r2, g2, b2, 1);
+  }
+  { static const float F[2] = { 0.7f, 0.9f };
+    static const char *const N[2] = { "70%", "90%" };
+    int k;
+    for (k = 0; k < 2; k++) {
+      float ly = y + h * (1 - F[k]), dx;
+      TxtLinha l = ajTxt(TXT_AJ_MINI12, N[k]);
+      for (dx = 0; dx < w; dx += 10) gfx_cor((GfxRect){ x + dx, ly, 4, 1 }, 0, 1, 1, 1, 0.22f);
+      txt_desenhar_alpha(l, x + 8, ly + 4, 0.45f);
+    } }
+}
+#ifdef AJUSTES_TESTE
+void ajustes_teste_mem_fixa(int liga) { ajMemFixa = liga; }
+#endif

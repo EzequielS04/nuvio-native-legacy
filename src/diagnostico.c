@@ -2019,17 +2019,15 @@ static void miniCartao(GfxRect r, int tipo, const char *rotulo) {
  * equivalentes aos SVGs da versao web, mas nao dependem de imagem ou fonte
  * externa para aparecer no primeiro quadro da TV. */
 static void painel(GfxRect r, float ar, float ag, float ab) {
-  gfx_cor(r, 22.0f / r.h, 0.055f, 0.065f, 0.085f, 0.97f);
-  gfx_luz_canto(r, 26.0f / r.h, 150.0f, -70.0f, 500.0f, ar, ag, ab, 0.11f);
-  gfx_cor((GfxRect){ r.x, r.y, r.w, 2.0f }, 1.0f, ar, ag, ab, 0.48f);
+  (void)ar; (void)ag; (void)ab;
+  ajustes_ui_ilha(r, 32, 0);
 }
 
 static void painelTitulo(GfxRect r, const char *titulo, const char *subtitulo) {
-  txt_desenhar(txt_linha_corta(TXT_BODY, i18n(titulo), 238, 242, 248, 255, r.w - 56.0f),
-               r.x + 28.0f, r.y + 22.0f);
+  ajustes_ui_kicker(titulo, r.x + 28.0f, r.y + 26.0f, 1);
   if (subtitulo)
-    txt_desenhar(txt_linha_corta(TXT_CAPTION, i18n(subtitulo), 154, 164, 178, 255, r.w - 56.0f),
-                 r.x + 28.0f, r.y + 58.0f);
+    txt_desenhar_alpha(txt_linha_corta(TXT_AJ_SUB, i18n(subtitulo), 243, 242, 239, 255, r.w - 56.0f),
+                       r.x + 28.0f, r.y + 52.0f, 0.62f);
 }
 
 static float limitePct(float n) {
@@ -2177,9 +2175,10 @@ void diagnostico_intro_atualizar(float dt, Uint32 agora) {
   (void)agora;
 }
 
+static void dgApresentacao(int primeiraAbertura);
 void diagnostico_intro_desenhar(Uint32 agora) {
   (void)agora;
-  if (introGlobal) desenharApresentacao(1);
+  if (introGlobal) dgApresentacao(1);
 }
 
 // "128 → 300 MB": o antes e o depois de um parametro, com a unidade traduzida.
@@ -2732,7 +2731,26 @@ static void desenharVazao(float y0, float ar, float ag, float ab, Uint32 agora) 
                x0, y0 + (ve != 1 ? 736.0f : 668.0f));
 }
 
+static void diagnosticoAntigo(Uint32 agora);
+#include "diagnostico_ilha.inc"
+
 void diagnostico_desenhar(Uint32 agora) {
+  // GLASS UI: as ilhas de diagnostico_ilha.inc sobre a arte, como Ajustes.
+  { int est = atomic_load(&d.estado);
+    ajustes_ui_fundo();
+    if (vz.aberto) {
+      if (vz.ciclo == VCM_RAPIDO && atomic_load(&vz.estado) != 1 && vz.resultado == VR_OK) dgVazaoResultado(agora);
+      else dgVazaoGenerico(agora);
+      return;
+    }
+    if (est == 0) { dgObjetivo(); if (d.intro) dgApresentacao(0); return; }
+    if (est == 1) { dgAndamento(agora); return; }
+    if (est == 2) { dgResultado(); if (d.intro) dgApresentacao(0); return; }
+  }
+  diagnosticoAntigo(agora);
+}
+
+static void diagnosticoAntigo(Uint32 agora) {
   int estado = atomic_load(&d.estado);
   int feito = atomic_load(&d.feitos), total = atomic_load(&d.total);
   int itens = 0, pend = 0, quentes = 0, fios = 0, fiosMax = 0;
