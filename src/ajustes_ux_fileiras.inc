@@ -10,26 +10,112 @@
 
 // Arte de uma fileira: os titulos do catalogo DELA quando ja foi lido, a
 // amostra antes disso. `fundo` = arte deitada (backdrop) em vez do cartaz.
-static const char *ajArteFileira(int fil, int k, int fundo) {
-  static char cache[FIL_MAX][8][2][200];
-  static unsigned char pronto[FIL_MAX];
+//
+// TRES CASOS (tcl-agora5, fileira "Canais de TV" do FrostView): um catalogo de
+// canais so traz LOGO no lugar de cartaz. Cortado em "cover" 2:3, o logo vira
+// borrao sobre cinza e, pior, quando os primeiros canais repetem o mesmo logo
+// (varias afiliadas da Globo) os 4 quadros e as 8 formas ficam identicos.
+//   ART_REAL  : cartaz/fundo de verdade, como sempre;
+//   ART_LOGO  : fileira de canais com logos diferentes: o logo INTEIRO sobre
+//               uma placa clara (ajImgFil), nunca cortado;
+//   ART_AMOSTRA: o catalogo nao ajuda (sem arte, ou tudo igual): a arte de
+//               outros titulos do catalogo, so para mostrar a FORMA.
+// Tipos de catalogo que so trazem logo (ver addons.c: "channel", "tv").
+static int ajTipoCanal(const char *t) {
+  return !strcasecmp(t, "channel") || !strcasecmp(t, "channels") || !strcasecmp(t, "tv");
+}
+enum { ART_REAL = 0, ART_LOGO, ART_AMOSTRA };
+static char ajFilCache[FIL_MAX][8][2][200];
+static unsigned char ajFilPronto[FIL_MAX], ajFilModo[FIL_MAX];
+static void ajFilLer(int fil) {
   static unsigned rev = 0xffffffffu;
+  if (cat_revisao() != rev) { rev = cat_revisao(); memset(ajFilPronto, 0, sizeof ajFilPronto); }
+  if (fil >= 0 && fil < FIL_MAX && !ajFilPronto[fil]) {
+    static CatItem it[40];
+    CatFileira meta;
+    int n, j, i, dif = 0, comArte = 0;
+    memset(&meta, 0, sizeof meta);
+    n = cat_n() > 0 ? cat_copiar_fileira(fil_chave(fil), it, 40, &meta) : 0;
+    for (j = 0; j < 8; j++) { ajFilCache[fil][j][0][0] = ajFilCache[fil][j][1][0] = 0; }
+    // Os 8 quadros pegam itens de arte DIFERENTE (varias afiliadas de uma rede
+    // repetem o mesmo logo nos primeiros itens); so se faltar, repete.
+    for (j = 0; j < n; j++) {
+      const char *a = it[j].poster[0] ? it[j].poster : it[j].backdrop;
+      if (!a[0]) continue;
+      comArte++;
+      for (i = 0; i < dif; i++) {
+        const char *b = ajFilCache[fil][i][0][0] ? ajFilCache[fil][i][0] : ajFilCache[fil][i][1];
+        if (!strcmp(a, b)) break;
+      }
+      if (i == dif && dif < 8) {
+        snprintf(ajFilCache[fil][dif][0], sizeof ajFilCache[fil][dif][0], "%s", it[j].poster);
+        snprintf(ajFilCache[fil][dif][1], sizeof ajFilCache[fil][dif][1], "%s", it[j].backdrop);
+        dif++;
+      }
+    }
+    // Menos de 8 distintos: completa repetindo, para o quadro k nunca ficar vazio.
+    for (j = dif; dif > 0 && j < 8; j++) {
+      memcpy(ajFilCache[fil][j], ajFilCache[fil][j % dif], sizeof ajFilCache[fil][j]);
+    }
+    if (n < 1 || comArte < 1) ajFilModo[fil] = ART_AMOSTRA;
+    else if (dif < 2 && comArte >= 2) ajFilModo[fil] = ART_AMOSTRA;
+    else if (ajTipoCanal(meta.tipo)) ajFilModo[fil] = ART_LOGO;
+    else ajFilModo[fil] = ART_REAL;
+    ajFilPronto[fil] = 1;
+  }
+}
+static const char *ajArteFileira(int fil, int k, int fundo) {
   if (k < 0) k = 0;
   k %= 8;
-  if (cat_revisao() != rev) { rev = cat_revisao(); memset(pronto, 0, sizeof pronto); }
-  if (fil >= 0 && fil < FIL_MAX && cat_n() > 0) {
-    if (!pronto[fil]) {
-      static CatItem it[8];
-      int n = cat_copiar_fileira(fil_chave(fil), it, 8, NULL), j;
-      for (j = 0; j < 8; j++) {
-        snprintf(cache[fil][j][0], sizeof cache[fil][j][0], "%s", j < n ? it[j].poster : "");
-        snprintf(cache[fil][j][1], sizeof cache[fil][j][1], "%s", j < n ? it[j].backdrop : "");
-      }
-      pronto[fil] = 1;
-    }
-    if (cache[fil][k][fundo ? 1 : 0][0]) return cache[fil][k][fundo ? 1 : 0];
+  ajFilLer(fil);
+  if (fil >= 0 && fil < FIL_MAX && ajFilModo[fil] != ART_AMOSTRA) {
+    const char *c = ajFilCache[fil][k][fundo ? 1 : 0];
+    if (!c[0]) c = ajFilCache[fil][k][fundo ? 0 : 1];
+    if (c[0]) return c;
   }
-  return ajArte(fundo ? AJA_FUNDO : AJA_POSTER, AJ_POS[((fil < 0 ? 0 : fil) * 3 + k) % 14]);
+  // Amostra: titulos de filme/serie de OUTRAS fileiras (nunca os canais, que
+  // sao logo), e so se o catalogo nao tiver nenhum, a amostra embarcada.
+  { int nc = cat_n(), i, ok = 0, alvo = ((fil < 0 ? 0 : fil) * 3 + k) % 14, quero;
+    for (i = 0; i < nc; i++) {
+      const CatItem *c = cat_item(i);
+      const char *a;
+      if (!c || ajTipoCanal(c->tipo)) continue;
+      a = fundo ? (c->backdrop[0] ? c->backdrop : c->poster) : (c->poster[0] ? c->poster : c->backdrop);
+      if (a[0]) ok++;
+    }
+    if (ok > 0) {
+      quero = alvo % ok;
+      for (i = 0; i < nc; i++) {
+        const CatItem *c = cat_item(i);
+        const char *a;
+        if (!c || ajTipoCanal(c->tipo)) continue;
+        a = fundo ? (c->backdrop[0] ? c->backdrop : c->poster) : (c->poster[0] ? c->poster : c->backdrop);
+        if (a[0] && quero-- == 0) return a;
+      }
+    } }
+  { const char *r;
+    ajArteSoAmostra = 1;
+    r = ajArte(fundo ? AJA_FUNDO : AJA_POSTER, AJ_POS[((fil < 0 ? 0 : fil) * 3 + k) % 14]);
+    ajArteSoAmostra = 0;
+    return r; }
+}
+// ajImg da arte da fileira: logo de canal inteiro numa placa clara.
+static int ajImgFil(int fil, int k, int fundo, GfxRect r, float raioPx, float a) {
+  const char *c = ajArteFileira(fil, k, fundo);
+  GLuint t;
+  float asp, w, h;
+  if (fil < 0 || fil >= FIL_MAX || ajFilModo[fil] != ART_LOGO) return ajImg(c, r, raioPx, a);
+  gfx_cor(r, raioPx / r.h, 0.27f, 0.28f, 0.31f, a);
+  t = tex_obter_larg(c, r.w > r.h ? r.w : r.h);
+  if (!t) return 0;
+  asp = tex_aspecto(c);
+  if (asp <= 0.0f) asp = 1.0f;
+  w = r.w * 0.78f; h = w / asp;
+  if (h > r.h * 0.78f) { h = r.h * 0.78f; w = h * asp; }
+  gfx_tex_aspect_atual = asp;
+  gfx_rect((GfxRect){ r.x + (r.w - w) * 0.5f, r.y + (r.h - h) * 0.5f, w, h }, t, GFX_ARTE, 0, 0, 0, 0, 1, 1, 1, a);
+  gfx_tex_aspect_atual = 0;
+  return 1;
 }
 static int ajFormaDeitada(int t) {
   return t != FIL_TIPO_CARTAZ && t != FIL_TIPO_TOP10 && t != FIL_TIPO_RANKING && t != FIL_TIPO_AUTO;
@@ -61,7 +147,7 @@ static void desenhaFileiras(void) {
   GfxRect ilha = { 48, AJI_TOPO, NV_TELA_W - 96, NV_TELA_H - AJI_TOPO - AJI_MARGEM };
   GfxRect pr = { ilha.x + ilha.w - 24 - AJF_PAINEL_W, ilha.y + 24, AJF_PAINEL_W, ilha.h - 48 };
   float cx = ilha.x + 30, cw = pr.x - 30 - cx;   // coluna da lista
-  float hx = cx + 14, y, topo, base;
+  float hx = cx + 14, y, topo, base, segL = cx + cw;
   int n, lim = fil_limite(), i;
   filMontarLista();
   n = filListaN;
@@ -71,9 +157,6 @@ static void desenhaFileiras(void) {
   ajKicker("Tela inicial · Ordenar e ativar", hx, ilha.y + 36, 1);
   { TxtLinha t = ajTxt(TXT_ILHA_TITULO, "Fileiras da Home");
     txt_desenhar(t, hx, ilha.y + 36 + 22 + (46 - t.h) * 0.5f); }
-  { TxtLinha s = ajTxtC(TXT_AJ_ESTADO, filAba == 0 ? "Vale só nesta TV e neste perfil · não altera a Home dos outros aparelhos"
-                                                   : "OK adiciona: entra na Home se couber, senão entra na fila", cw - 560);
-    txt_desenhar_alpha(s, hx, ilha.y + 36 + 22 + 46 + 8, 0.55f); }
   // Segmentado das abas + os botoes do cabecalho, alinhados pela base.
   { char a0[48], a1[48], n0[32], n1[32];
     const char *rot[2], *num[2];
@@ -99,15 +182,19 @@ static void desenhaFileiras(void) {
     }
     { float w = ajSegLargura(rot, num, 2);
       bx -= 10 + w;
-      ajSeg(rot, num, 2, filAba, filNaBarra, bx, by + 28, 56, 1); } }
+      ajSeg(rot, num, 2, filAba, filNaBarra, bx, by + 28, 56, 1);
+      segL = bx; } }
+  { TxtLinha s = ajTxtC(TXT_AJ_ESTADO, filAba == 0 ? "Vale só nesta TV e neste perfil · não altera a Home dos outros aparelhos"
+                                                   : "OK adiciona: entra na Home se couber, senão entra na fila", segL - hx - 24);
+    txt_desenhar_alpha(s, hx, ilha.y + 36 + 22 + 46 + 8, 0.55f); }
   topo = ilha.y + 36 + 22 + 46 + 8 + 24 + 22;
   base = ilha.y + ilha.h - 20;
   // CABECALHO DAS COLUNAS (so na aba Na Home)
   if (filAba == 0 && n > 0) {
     float x = cx + cw - 14;
-    x -= 150; ajCaps(TXT_AJ_CAPS13, "Tamanho", 1.68f, x + 16, topo, 0.38f);
-    x -= 220; ajCaps(TXT_AJ_CAPS13, "Card", 1.68f, x + 16, topo, 0.38f);
-    x -= 150; ajCaps(TXT_AJ_CAPS13, "Estado", 1.68f, x + 16, topo, 0.38f);
+    x -= 200; ajCaps(TXT_AJ_CAPS13, "Tamanho", 1.68f, x + 16, topo, 0.38f);
+    x -= 230; ajCaps(TXT_AJ_CAPS13, "Card", 1.68f, x + 16, topo, 0.38f);
+    x -= 200; ajCaps(TXT_AJ_CAPS13, "Estado", 1.68f, x + 16, topo, 0.38f);
     ajCaps(TXT_AJ_CAPS13, "Fileira", 1.68f, cx + 92, topo, 0.38f);
     topo += 17 + 8;
   } else topo += 4;
@@ -151,8 +238,8 @@ static void desenhaFileiras(void) {
       snprintf(q, sizeof q, "%d", fil_n_fila());
       txt_desenhar(b, cx + 22, y + 14 + 6);
       bx2 = cx + 22 + b.w + 12;
-      ajCaps(TXT_AJ_CAPS13, "entram sozinhas quando abrir vaga", 1.82f, bx2, y + 14 + 6 + b.h - 17, 0.4f);
       c = ajTxt(TXT_ILHA_GENERO, q);
+      ajCapsC(TXT_AJ_CAPS13, "entram sozinhas quando abrir vaga", 1.82f, bx2, y + 14 + 6 + b.h - 17, 0.4f, cx + cw - 22 - c.w - 16 - bx2);
       txt_desenhar_alpha(c, cx + cw - 22 - c.w, y + 14 + 6 + b.h - c.h, 0.38f);
       gfx_cor((GfxRect){ cx, y + AJF_SEC_H - 5, cw, 1 }, 0, 1, 1, 1, 0.08f);
       y += AJF_SEC_H;
@@ -186,7 +273,7 @@ static void desenhaFileiras(void) {
         ajIcone("aj_panel-top", x + 30 + 4, yc - 12, 24, 0.6f);
         txt_desenhar_alpha(t, x + 30 + 40, yc - (t.h + 2 + s.h) * 0.5f, foco ? 1.0f : 0.86f);
         txt_desenhar_alpha(s, x + 30 + 40, yc - (t.h + 2 + s.h) * 0.5f + t.h + 2, 0.42f);
-        txt_desenhar_alpha(v, cx + cw - 14 - 520 + 16, yc - v.h * 0.5f, foco ? 0.85f : 0.55f);
+        txt_desenhar_alpha(v, cx + cw - 14 - 630 + 16, yc - v.h * 0.5f, foco ? 0.85f : 0.55f);
         if (foco) { ajIcone("aj_chevron-right", cx + cw - 14 - 24, yc - 12, 24, 0.7f); }
         y += rh + 4;
         continue;
@@ -204,7 +291,7 @@ static void desenhaFileiras(void) {
       ajIcone(ic, x + 4, yc - 12, 24, 0.6f);
       x += 4 + 24 + 6 + 6;
       { char sb[160];
-        float wt = filAba == 0 ? cx + cw - 14 - 520 - x - 10 : cx + cw - 14 - 260 - x;
+        float wt = filAba == 0 ? cx + cw - 14 - 630 - x - 10 : cx + cw - 14 - 260 - x;
         TxtLinha t, s;
         ajSubFileira(idx, sb, sizeof sb);
         if (filAba == 1) {
@@ -220,10 +307,10 @@ static void desenhaFileiras(void) {
         txt_desenhar_alpha(s, x, yc - (t.h + 2 + s.h) * 0.5f + t.h + 2, 0.42f); }
       if (filAba == 0) {
         int naFila = filSep >= 0 && i >= filSep, aceita = fil_aceita_tipo(idx);
-        float xc = cx + cw - 14 - 520;
-        ajCelula(xc, yc, 150, foco && filCampo == 1 ? "Remover" : naFila ? "Na fila" : "Na Home", 0.55f, foco && filCampo == 1 && !filPegou);
-        ajCelula(xc + 150, yc, 220, aceita ? fil_linha_tipo_rotulo(idx) : "Fixo", aceita ? 0.55f : 0.35f, foco && filCampo == 2 && !filPegou);
-        ajCelula(xc + 370, yc, 150, fil_tam_rotulo(fil_linha_tam(idx)), 0.55f, foco && filCampo == 3 && !filPegou);
+        float xc = cx + cw - 14 - 630;
+        ajCelula(xc, yc, 200, foco && filCampo == 1 ? "Remover" : naFila ? "Na fila" : "Na Home", 0.55f, foco && filCampo == 1 && !filPegou);
+        ajCelula(xc + 200, yc, 230, aceita ? fil_linha_tipo_rotulo(idx) : "Fixo", aceita ? 0.55f : 0.35f, foco && filCampo == 2 && !filPegou);
+        ajCelula(xc + 430, yc, 200, fil_tam_rotulo(fil_linha_tam(idx)), 0.55f, foco && filCampo == 3 && !filPegou);
       } else if (foco) {
         TxtLinha t = ajTxtT(TXT_AJ_CHIP, "Adicionar à Home");
         float w = 18 + 20 + 10 + t.w + 18, bx = cx + cw - 22 - w;
@@ -275,9 +362,16 @@ static void ajFormas(float x, float y, float w, int tipo, int idx) {
     txt_desenhar_alpha(l, cx + (cw - l.w) * 0.5f, cy + 142 - 10 - l.h, sel ? 1.0f : 0.62f * 0.72f);
     by = cy + 142 - 10 - l.h - 9;
     if (t == FIL_TIPO_AUTO) {
+      // Duas pecas lado a lado: a deitada a esquerda, o cartaz na frente e rente a
+      // direita, sobre um fundo opaco da cor do quadro (antes as duas ficavam
+      // translucidas uma sobre a outra e o logo/arte de uma vazava na outra).
       fw = 360 * esc; fh = 203 * esc;
-      ajImg(ajArteFileira(idx, 4, 1), (GfxRect){ cx + (cw - 212 * esc) * 0.5f, by - fh, fw > cw - 8 ? cw - 8 : fw, fh }, 7, 0.5f * (sel ? 1 : 0.72f));
-      ajImg(ajArteFileira(idx, 4, 0), (GfxRect){ cx + (cw - 212 * esc) * 0.5f + 70 * esc, by - 225 * esc, 150 * esc, 225 * esc }, 7, sel ? 1 : 0.72f);
+      if (fw > cw - 8) { fh *= (cw - 8) / fw; fw = cw - 8; }
+      { float wx = cx + (cw - fw) * 0.5f, pw = 150 * esc, ph = 225 * esc, px = wx + fw - pw + 2;
+        float al = sel ? 1.0f : 0.72f;
+        ajImgFil(idx, 5, 1, (GfxRect){ wx, by - fh, fw, fh }, 7, 0.5f * al);
+        gfx_cor((GfxRect){ px - 2, by - ph - 2, pw + 4, ph + 4 }, 9.0f / (ph + 4), sel ? 0.169f : 0.106f, sel ? 0.176f : 0.110f, sel ? 0.204f : 0.129f, 1);
+        ajImgFil(idx, 4, 0, (GfxRect){ px, by - ph, pw, ph }, 7, al); }
       continue;
     }
     fw = AJ_FIL_FORMA[t].w * esc; fh = AJ_FIL_FORMA[t].h * esc;
@@ -288,7 +382,7 @@ static void ajFormas(float x, float y, float w, int tipo, int idx) {
       TxtLinha num = ajTxt(TXT_AJ_NUM58, "1");
       txt_desenhar_alpha(num, bx - 22, by + 8 - num.h, 0.25f);
     }
-    ajImg(ajArteFileira(idx, i, ajFormaDeitada(t)), (GfxRect){ bx, by - fh, fw, fh }, 7, sel ? 1 : 0.72f);
+    ajImgFil(idx, i, ajFormaDeitada(t), (GfxRect){ bx, by - fh, fw, fh }, 7, sel ? 1 : 0.72f);
   }
 }
 
@@ -308,7 +402,7 @@ static void ajFilPainel(GfxRect pr, int n, int lim) {
     ajBloco(TXT_AJ_ESTADO, s, x, y + 28 + 40, w, 27, 0.62f, 4);
   } else if (idx == AJ_FIL_DESTAQUE) {
     int k;
-    ajKicker("Destaque do topo", x, y, 1);
+    ajKickerC("Destaque do topo", x, y, 1, w);
     { TxtLinha l = ajTxtC(TXT_AJ_TIT28, heroFonteRotulo(), w); txt_desenhar(l, x, y + 28); }
     y += 28 + 40 + ajBloco(TXT_AJ_ESTADO, "Automático usa os primeiros títulos do catálogo; o sorteio troca a cada abertura; uma fileira mostra os títulos dela.",
                            x, y + 28 + 40, w, 27, 0.62f, 4) + 22;
@@ -323,17 +417,17 @@ static void ajFilPainel(GfxRect pr, int n, int lim) {
     if (fil_linha_addon(idx)[0]) len += snprintf(k + len, sizeof k - len, " · %s", fil_linha_addon(idx));
     if (cont && cont[0]) len += snprintf(k + len, sizeof k - len, " · %s", i18n(cont));
     if (it >= 0) snprintf(k + len, sizeof k - len, it == 1 ? i18n(" · %d título") : i18n(" · %d títulos"), it);
-    ajKicker(k, x, y, 1);
+    ajKickerC(k, x, y, 1, w);
     y += 28;
     if (filAba == 1) {
       int j;
       TxtLinha l = ajTxtC(TXT_AJ_TIT28, fil_titulo(idx), w);
       txt_desenhar(l, x, y); y += 40;
       y += ajBloco(TXT_AJ_ESTADO, fil_origem_ajuda(fil_linha_origem(idx)), x, y, w, 27, 0.62f, 3) + 26;
-      ajKicker("Do catálogo, quando ele já foi lido", x, y, 1);
+      ajKickerC("Do catálogo, quando ele já foi lido", x, y, 1, w);
       y += 18 + 14;
       { float pw = (w - 36) / 4.0f, ph = pw * 1.5f;
-        for (j = 0; j < 8; j++) ajImg(ajArteFileira(idx, j, 0), (GfxRect){ x + (j % 4) * (pw + 12), y + (j / 4) * (ph + 12), pw, ph }, 10, 1);
+        for (j = 0; j < 8; j++) ajImgFil(idx, j, 0, (GfxRect){ x + (j % 4) * (pw + 12), y + (j / 4) * (ph + 12), pw, ph }, 10, 1);
         y += 2 * ph + 12 + 22; }
       if (fil_n_na_home() >= lim) {
         snprintf(sb, sizeof sb, i18n("Home cheia (%d de %d): esta fileira entra na fila e sobe sozinha quando abrir vaga."), fil_n_na_home(), lim);
@@ -362,11 +456,11 @@ static void ajFilPainel(GfxRect pr, int n, int lim) {
         for (j = 0; j < 4; j++) {
           GfxRect r = { x + 16 + j * (fw + 14), y + 42 + (120 - fh), fw, fh };
           if (j == 0) gfx_rect((GfxRect){ r.x - 10, r.y + 4, r.w + 20, r.h + 26 }, 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.5f);
-          ajImg(ajArteFileira(idx, j, deit), r, 10, j ? 0.8f : 1);
+          ajImgFil(idx, j, deit, r, 10, j ? 0.8f : 1);
         }
         gfx_sem_recorte();
         y += 178 + 24; }
-      ajKicker("Card · proporções da Home", x, y, 1);
+      ajKickerC("Card · proporções da Home", x, y, 1, w);
       y += 18 + 12;
       ajFormas(x, y, w, tipo, idx);
     }
@@ -386,5 +480,5 @@ static void ajFilPainel(GfxRect pr, int n, int lim) {
       if (filCampo != 0) d[nd++] = (AjDica){ "OK", "na 1ª coluna move" };
       else d[nd++] = (AjDica){ "Voltar", "Fechar" };
     }
-    ajDicas(d, nd, x - 6, pr.y + pr.h - 30, w + 12, 1); }
+    ajDicasQuebra(d, nd, x - 6, pr.y + pr.h - 30, w + 12, 1); }
 }

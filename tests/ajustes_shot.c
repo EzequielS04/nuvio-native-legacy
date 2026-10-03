@@ -16,6 +16,7 @@
 #include "rail_shot.h"
 #include "spotlight.h"
 #include "fileiras.h"
+#include "catalogo.h"
 #include "gfx.h"
 #include "ilha.h"
 #include "text.h"
@@ -151,6 +152,28 @@ int main(int argc, char **argv) {
   // fileiras que o proprio app monta.
   fil_registrar("continue_watching", "Continuar assistindo", "", "", 12);
   fil_registrar("social_activity", "Entre amigos", "", "", 6);
+  // NUVIO_SHOT_CANAIS=iguais|mistos|distintos (mistos: os 8 primeiros repetem o logo): no lugar de "Popular", a fileira de
+  // canais de TV do FrostView (itens so com logo) e o catalogo que a alimenta.
+  if (getenv("NUVIO_SHOT_CANAIS")) {
+    static CatItem it[12];
+    CatFileira f;
+    int k, iguais = !strcmp(getenv("NUVIO_SHOT_CANAIS"), "iguais"), mistos = !strcmp(getenv("NUVIO_SHOT_CANAIS"), "mistos");
+    fil_registrar("frostview_channel_canais", "Canais de TV - Channels", "FrostView TV", "channel", 12);
+    memset(it, 0, sizeof it);
+    memset(&f, 0, sizeof f);
+    for (k = 0; k < 12; k++) {
+      snprintf(it[k].titulo, sizeof it[k].titulo, "Canal %d", k);
+      snprintf(it[k].imdb, sizeof it[k].imdb, "cs:channel:c%d", k);
+      snprintf(it[k].tipo, sizeof it[k].tipo, "channel");
+      snprintf(it[k].poster, sizeof it[k].poster, "deploy/app/art/logo/%02d.png", (iguais || (mistos && k < 8)) ? 0 : (k + 1) % 8);
+      snprintf(it[k].backdrop, sizeof it[k].backdrop, "%s", it[k].poster);
+    }
+    snprintf(f.chave, sizeof f.chave, "frostview_channel_canais");
+    snprintf(f.titulo, sizeof f.titulo, "Canais de TV - Channels");
+    snprintf(f.tipo, sizeof f.tipo, "channels");
+    f.ini = 0; f.n = 12;
+    cat_definir_tudo(it, 12, &f, 1);
+  } else
   fil_registrar("com.linvo.cinemeta_movie_top", "Popular", "Cinemeta", "movie", 40);
   fil_registrar("xperience_series_foryou", "For You", "Xperience", "series", 24);
   fil_registrar("collection_a24", "A24", "", "", 9);
