@@ -2024,7 +2024,12 @@ void stream_folha_desenhar(Uint32 agora) {
       // todas brancas"). A rodada de "cor so no premium" deixava uns logos no
       // acento e outros brancos, e na TV isso lia como inconsistencia, nao
       // como hierarquia. O peso vem do brilho: apagado fora do foco, claro nele.
-      if(logos) lw=badges_desenhar_tom(logos,tx,cy,txtW-mpW,FOLHA_SELO_H,t,t,t,anim);
+      // SELOS COLORIDOS (Ajustes, #198): o dono manteve a opcao (03/10). Ligada,
+      // cada selo na peca da cor do seu grupo; desligada (o padrao do Glass
+      // UI), todos na mesma tinta branca.
+      if(logos) lw=ajustes_selos_coloridos()
+        ? badges_desenhar_selos(logos,tx,cy,txtW-mpW,FOLHA_SELO_H,anim*(sel?1.0f:.85f))
+        : badges_desenhar_tom(logos,tx,cy,txtW-mpW,FOLHA_SELO_H,t,t,t,anim);
       else if(!ehMp4){ char d[sizeof s->descricao];
         snprintf(d,sizeof d,"%s",s->descricao);
         for(char *p=d;*p;p++)if((unsigned char)*p<32)*p=' ';
