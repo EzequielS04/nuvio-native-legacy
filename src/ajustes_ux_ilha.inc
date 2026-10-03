@@ -559,18 +559,88 @@ static void desenhaRiscoFolha(void) {
                 de, para, "Continuar", "Cancelar", riscoFolhaFoco == 0);
 }
 
+// VINCULO (Trakt/Simkl) como ilha modal: o QR real (src/qr.c) num ladrilho
+// branco, endereco e codigo grandes, e o "aguardando" com o ponto que respira
+// da ilha do relogio. O codigo curto e o endereco continuam ao lado do QR:
+// a pagina de ativacao pede o codigo depois de aberta.
+#ifdef AJUSTES_TESTE
+static int ajVinculoTeste;
+#endif
+static void desenhaVinculo(const char *servico, const char *codigo,
+                           const char *endereco, const char *falha, int esperando) {
+  GfxRect m = { 410, 230, 1100, 620 };
+  float x, y;
+  char t[96];
+  ajIlha(m, 36, 1, 1);
+  x = m.x + 56 + 356 + 56; y = m.y + 50;
+  ajKicker("Contas e serviços", x, y, 1);
+  y += 22 + 4;
+  snprintf(t, sizeof t, i18n("Conectar %s"), i18n(servico));
+  { TxtLinha l = ajTxtC(TXT_ILHA_TITULO, t, m.x + m.w - 56 - x); txt_desenhar(l, x, y); y += 48; }
+  if (falha && falha[0]) {
+    TxtLinha l = txt_linha_corta(TXT_AJ_NOME, falha, 236, 108, 108, 255, m.x + m.w - 56 - x);
+    txt_desenhar(l, x, y + 30);
+    { AjDica d[2] = { { "OK", "Tentar de novo" }, { "Voltar", "Fechar" } };
+      ajDicasLinha(d, 2, x, m.y + m.h - 50 - 30, 1); }
+    return;
+  }
+  if (!codigo || !codigo[0]) {
+    TxtLinha l = ajTxt(TXT_AJ_SUB, "Preparando o código…");
+    txt_desenhar_alpha(l, x, y + 30, 0.6f);
+    return;
+  }
+  qrVinTex(endereco);
+  { GfxRect tile = { m.x + 56, m.y + (m.h - 356) * 0.5f, 356, 356 };
+    gfx_cor(tile, 28.0f / 356, 1, 1, 1, 1);
+    if (texQrVin) {
+      gfx_tex_aspect_atual = 0.0f;
+      gfx_rect((GfxRect){ tile.x + 14, tile.y + 14, 328, 328 }, texQrVin, GFX_SNAP, 0, 0, 0, 0, 0, 0, 0, 1);
+    } }
+  y += 30;
+  { TxtLinha l = ajTxt(TXT_AJ_TEXTO, "Aponte a câmera do celular, ou abra:"); txt_desenhar_alpha(l, x, y, 0.6f); y += l.h + 6; }
+  { char e[200]; const char *p = endereco ? strstr(endereco, "://") : NULL;
+    snprintf(e, sizeof e, "%s", p ? p + 3 : endereco ? endereco : "-");
+    { TxtLinha l = ajTxtC(TXT_ILHA_TITULO, e, m.x + m.w - 56 - x); txt_desenhar(l, x, y); y += l.h + 26; } }
+  { TxtLinha l = ajTxt(TXT_AJ_TEXTO, "e informe o código:"); txt_desenhar_alpha(l, x, y, 0.6f); y += l.h + 4; }
+  txt_tracking(TXT_AJ_NUM64, codigo, 243, 242, 239, x, y, 1.0f, 14.0f);
+  { float by = m.y + m.h - 50 - 30;
+    AjDica d[1] = { { "Voltar", "Fechar" } };
+    float dw = ajDicasLargura(d, 1);
+    if (esperando) {
+      float ar, ag, ab, p = ajustes_animacoes_reduzidas() ? 1.0f
+                          : 0.55f + 0.45f * sinf((float)SDL_GetTicks() * (2.0f * 3.14159265f / 1200.0f));
+      TxtLinha l = ajTxt(TXT_AJ_ESTADO, "Aguardando a autorização…");
+      ajustes_acento(&ar, &ag, &ab);
+      gfx_cor((GfxRect){ x - 6, by + 15 - 11, 22, 22 }, 0.5f, ar, ag, ab, 0.22f * p);
+      gfx_cor((GfxRect){ x, by + 10, 10, 10 }, 0.5f, ar, ag, ab, p);
+      txt_desenhar_alpha(l, x + 20, by + (30 - l.h) * 0.5f, 0.62f);
+    }
+    ajDicasLinha(d, 1, m.x + m.w - 56 - dw, by, 1); }
+}
+static int ajVinculoAtivo(void) {
+  TraEstado ta = traktauth_estado();
+  SmkEstado sa = simklauth_estado();
+#ifdef AJUSTES_TESTE
+  if (ajVinculoTeste) return 1;
+#endif
+  return ta == TRA_PEDINDO || ta == TRA_AGUARDANDO || ta == TRA_ERRO ||
+         sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO;
+}
+
 // --- A TELA ---------------------------------------------------------------------
 static int ajModalAberto(void) {
-  return (uxEditor && !ajEditandoLinha(uxOp)) || riscoFolha;
+  return (uxEditor && !ajEditandoLinha(uxOp)) || riscoFolha || ajVinculoAtivo() || teclado_aberto();
 }
 static void ajDesenharTela(void) {
   int modal = ajModalAberto();
   ajFundo();
+  if (filAberta) return;   // a folha de fileiras ocupa a tela (desenhada depois)
   if (modal) gfx_opacidade_grupo = 0.16f;
   ajDesenharIndice();
   if (uxIndice < 2) ajDesenharEspecial();
   else { ajDesenharFolha(); ajDesenharInspetor(); }
   gfx_opacidade_grupo = 1.0f;
+  if (modal && !(uxEditor && !ajEditandoLinha(uxOp)) && !riscoFolha) ajVeuModal();
   if (!uxEditor && uxAviso[0]) {
     GfxRect fr = ajFolhaR();
     TxtLinha t = ajTxtC(TXT_ILHA_GENERO, uxAviso, fr.w - 88);

@@ -5190,73 +5190,7 @@ static void qrVinTex(const char *texto) {
 }
 
 static void desenhaVinculo(const char *servico, const char *codigo,
-                           const char *endereco, const char *falha, int esperando) {
-  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  GfxRect cartao = { (NV_TELA_W - 1000.0f) * 0.5f, 250.0f, 1000.0f, 560.0f };
-  TxtLinha l;
-  char t[80];
-  float y = 300.0f;
-  // Veu QUASE opaco mais um cartao solido atras do bloco. Com 0.80 de veu e sem
-  // cartao, as linhas de Ajustes atravessavam o texto — "aguardando" caia em
-  // cima de "Trakt" e "conectar" em cima de "e informe o codigo". Um codigo que
-  // a pessoa precisa transcrever nao pode competir com texto de fundo.
-  gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 0.92f);
-  gfx_cor(cartao, 0.045f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
-
-  snprintf(t, sizeof t, i18n("Conectar %s"), servico);
-  l = txt_linha(TXT_TITULO2, t, 255, 255, 255, 255);
-  txt_desenhar(l, (NV_TELA_W - l.w) * 0.5f, y);
-  y += 92.0f;
-
-  if (falha && falha[0]) {
-    l = txt_linha(TXT_HEADLINE, falha, 236, 108, 108, 255);
-    txt_desenhar(l, (NV_TELA_W - l.w) * 0.5f, y);
-    y += 70.0f;
-    l = txt_linha(TXT_CAPTION, "OK para tentar de novo · Voltar para fechar",
-                  150, 152, 160, 255);
-    txt_desenhar(l, (NV_TELA_W - l.w) * 0.5f, y);
-    return;
-  }
-  if (!codigo || !codigo[0]) {
-    l = txt_linha(TXT_HEADLINE, "Preparando o código…", 210, 212, 220, 255);
-    txt_desenhar(l, (NV_TELA_W - l.w) * 0.5f, y);
-    return;
-  }
-
-  // QR a ESQUERDA, instrucoes a DIREITA. Apontar a camera abre a pagina de
-  // ativacao; o codigo continua grande ao lado porque a pagina o pede em
-  // seguida — sem ele visivel o QR serviria para nada.
-  { float qLado = 300.0f;
-    float qx = cartao.x + 64.0f, qy = 350.0f;
-    float tx = cartao.x + 440.0f, ty = qy + 6.0f;
-    qrVinTex(endereco);
-    if (texQrVin) {
-      GfxRect moldura = { qx - 16.0f, qy - 16.0f, qLado + 32.0f, qLado + 32.0f };
-      GfxRect rq = { qx, qy, qLado, qLado };
-      gfx_cor(moldura, 0.06f, 1.0f, 1.0f, 1.0f, 1.0f);
-      gfx_tex_aspect_atual = 0.0f;   // 1:1, sem recorte
-      gfx_rect(rq, texQrVin, GFX_SNAP, 0, 0.0f, 0.0f, 0.0f, 0, 0, 0, 1.0f);
-    }
-    l = txt_linha(TXT_BODY, "No celular, abra:", 176, 178, 186, 255);
-    txt_desenhar(l, tx, ty);
-    ty += 52.0f;
-    l = txt_linha(TXT_TITULO3, endereco && endereco[0] ? endereco : "-",
-                  255, 255, 255, 255);
-    txt_desenhar(l, tx, ty);
-    ty += 96.0f;
-    l = txt_linha(TXT_BODY, "e informe o código:", 176, 178, 186, 255);
-    txt_desenhar(l, tx, ty);
-    ty += 62.0f;
-    // Espacamento entre letras: um codigo curto sem tracking le como palavra,
-    // e a pessoa transcreve errado.
-    txt_tracking(TXT_TITULO1, codigo, 255, 255, 255, tx, ty, 1.0f, 16.0f); }
-
-  if (esperando) {
-    l = txt_linha(TXT_CAPTION, "Aguardando a autorização…", 150, 152, 160, 255);
-    txt_desenhar(l, (NV_TELA_W - l.w) * 0.5f, cartao.y + cartao.h - 60.0f);
-  }
-}
-
+                           const char *endereco, const char *falha, int esperando);
 
 // --- COLUNA DE SECOES -------------------------------------------------------
 // Ela nao e enfeite: e o unico caminho entre categorias que o controle da TV
@@ -5362,6 +5296,7 @@ static const char *aj_fil_forma_ajuda(int t) {
     default:                return i18n("O app escolhe pela fileira: retomada e coleções já têm forma própria.");
   }
 }
+
 
 // PAINEL DA LINHA "MEMORIA USADA POR IMAGENS": o numero que a linha corta e
 // aqui inteiro, mais o que ele nao diz sozinho — quanto e o teto, quanto do
@@ -6742,6 +6677,9 @@ void ajustes_desenhar(Uint32 agora) {
   // da tela.
   { TraEstado ta = traktauth_estado();
     SmkEstado sa = simklauth_estado();
+#ifdef AJUSTES_TESTE
+    if (ajVinculoTeste) desenhaVinculo("o Trakt", "8F3K2QPA", "https://trakt.tv/activate", NULL, 1); else
+#endif
     if (ta == TRA_PEDINDO || ta == TRA_AGUARDANDO || ta == TRA_ERRO)
       desenhaVinculo("o Trakt", traktauth_codigo(), traktauth_url(),
                      traktauth_erro(), ta == TRA_AGUARDANDO);
@@ -6758,7 +6696,7 @@ float ajustes_ilha_x(void) { return ajX0(); }
 int ajustes_relogio_cabe(void) {
   TraEstado ta = traktauth_estado();
   SmkEstado sa = simklauth_estado();
-  if (filAberta || teclado_aberto() || ajModalAberto()) return 0;
+  if (teclado_aberto() || (ajModalAberto() && !filAberta)) return 0;
   if (ta == TRA_PEDINDO || ta == TRA_AGUARDANDO || ta == TRA_ERRO) return 0;
   if (sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO) return 0;
   return 1;
@@ -6835,7 +6773,7 @@ int ajustes_teste_quadro(const char *id) {
   scrollY = velY = 0; paginaA = 1;
   filAberta = 0; riscoFolha = 0;
   focarSecao(0); focoIndice = 1;
-  ajArteFundoN = 12; ajMemFixa = 0; ajQuadroAddons = 0;
+  ajArteFundoN = 12; ajMemFixa = 0; ajQuadroAddons = 0; ajVinculoTeste = 0;
   if (!strcmp(id, "principal")) { focarOpcao(AJ_HOME_LAYOUT); }
   else if (!strcmp(id, "cartazes")) { ajArteFundoN = 13; valor[AJ_LARGURA_DP] = 128; focarOpcao(AJ_LARGURA_DP); }
   else if (!strcmp(id, "memoria")) { ajArteFundoN = 21; ajMemFixa = 1; focarOpcao(AJ_ESPACO); uxAvancados[secAtual] = 1; }
@@ -6843,9 +6781,17 @@ int ajustes_teste_quadro(const char *id) {
   else if (!strcmp(id, "relogio")) { ajArteFundoN = 0; focarOpcao(AJ_RELOGIO_POS); uxAbrirEditor(AJ_RELOGIO_POS); uxEvento(SDLK_RIGHT); uxEvento(SDLK_RIGHT); }
   else if (!strcmp(id, "reproducao")) { ajArteFundoN = 15; valor[AJ_QUALIDADE] = 1; focarOpcao(AJ_DV); }
   else if (!strcmp(id, "contas")) { ajArteFundoN = 13; focarOpcao(AJ_TRAKT); }
+  else if (!strcmp(id, "trakt")) { ajArteFundoN = 13; focarOpcao(AJ_TRAKT); ajVinculoTeste = 1; }
   else if (!strcmp(id, "editor-escolha")) { ajArteFundoN = 15; valor[AJ_QUALIDADE] = 1; focarOpcao(AJ_QUALIDADE); uxAbrirEditor(AJ_QUALIDADE); uxEvento(SDLK_DOWN); }
   else if (!strcmp(id, "editor-numero")) { focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); { int i; for (i = 0; i < 5; i++) uxEvento(SDLK_DOWN); } }
   else if (!strcmp(id, "confirmacao")) { focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); uxPendente = 17; uxAvisoRisco = SEG_AVISO_FILEIRAS; uxConfirmar = 1; }
+  else if (!strcmp(id, "fileiras") || !strcmp(id, "fileiras-fora")) {
+    ajArteFundoN = 2;
+    focarOpcao(AJ_FIL_ORDEM);
+    fil_definir_tipo("com.linvo.cinemeta_movie_top", FIL_TIPO_DESTAQUE); filAberta = 1; filFoco = 3; filCampo = 2; filPegou = 0; filTopo = 0; filNaBarra = 0;
+    filAba = !strcmp(id, "fileiras-fora"); filForaAgrupada = 1;
+    if (filAba) filFoco = 0;
+  }
   else if (!strcmp(id, "diferencas")) {
     ajArteFundoN = 3;
     valor[AJ_HOME_LAYOUT] = HOME_LAYOUT_DINAMICA; valor[AJ_ANIM] = 1; valor[AJ_LARGURA_DP] = 128;
