@@ -71,7 +71,12 @@ static void ajDesenharInspetor(void) {
       if (TELA[it].tipo == IT_OPC) opPv = TELA[it].op;
     }
     if (opPv >= 0) {
-      float ph = ajPrevia(opPv, x, y, w);
+      // Editando na linha, a previa ja mostra o valor PENDENTE (so desenho).
+      int salvo = valor[opPv], ed = ajEditandoLinha(opPv);
+      float ph;
+      if (ed) valor[opPv] = uxPendente;
+      ph = ajPrevia(opPv, x, y, w);
+      if (ed) valor[opPv] = salvo;
       if (ph > 0) y += ph;
     } }
   x += 6.0f; w -= 12.0f;

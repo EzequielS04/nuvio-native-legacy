@@ -243,7 +243,7 @@ static int ajEditandoLinha(int op) {
   return uxEditor == 1 && !uxRestaurar && !uxAvisoRisco && uxOp == op && ajEmLinha(op);
 }
 // A linha da cor de destaque abre a regua de amostras quando tem o foco.
-#define AJ_REGUA_H 104.0f
+#define AJ_REGUA_H 118.0f
 static float ajLinhaH(int i) {
   int op = TELA[i].op;
   float h = AJI_LN_H;
@@ -427,6 +427,7 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
   int sub = desligada && uxRequisito(op) >= 0;
   float aT = a * (desligada ? 0.45f : 1.0f);
   float xDir = ln.x + ln.w - 22.0f, yc = y + (sub ? h : AJI_LN_H) * 0.5f;
+  if (h > AJI_LN_H + 30) yc = y + 28.0f;   // linha que abre: o rotulo fica no alto
   float cauda = 0;
   if (a <= 0.004f) return;
   ajFocoLinha(ln, 22.0f, f, a);
@@ -538,7 +539,7 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
   // A REGUA DA COR DE DESTAQUE: os doze temas da conta e os quatro dinamicos.
   if (op == AJ_TEMA && h > AJI_LN_H + 1) {
     int sel = valor[op], i, alvo = ed ? uxPendente : sel;
-    float sx = ln.x + 22.0f, sy = y + AJI_LN_H + 2.0f;
+    float sx = ln.x + 22.0f, sy = y + 74.0f;
     for (i = 0; i < AJ_N_TEMAS; i++) {
       float s = (ed && i == alvo) ? 1.2f : 1.0f, d = 44.0f * s;
       float cx = sx + i * 56.0f + 22.0f, cy = sy + 22.0f;
@@ -551,13 +552,13 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
         gfx_icone((GfxRect){ cx - 11 * s, cy - 11 * s, 22 * s, 22 * s }, "aj_check", k, k, k, a);
       }
     }
-    sy += 44.0f + 16.0f;
+    sy = y + 134.0f;
     { float px = sx + ajCaps(TXT_AJ_CAPS13, "Dinâmicas", 1.82f, sx, sy + 12, 0.45f * a) + 18.0f;
       static const int ARTE[4] = { 7, 12, 15, 0 };
       static const char *const NOME[4] = { "Dinâmica", "Estilizada", "Gradiente", "Imersiva" };
       for (i = 0; i < 4; i++) {
         int k = AJ_TEMA_DINAMICA + i, foc = ed && alvo == k;
-        TxtLinha t = foc ? ajTxtT(TXT_AJ_ESTADO, NOME[i]) : ajTxt(TXT_AJ_ESTADO, NOME[i]);
+        TxtLinha t = foc ? ajTxtT(TXT_MINI, NOME[i]) : ajTxt(TXT_MINI, NOME[i]);
         float w = 44 + t.w + 16;
         GfxRect p = { px, sy, w, 40 };
         if (foc) ajPilulaAcento(p, 20, a);

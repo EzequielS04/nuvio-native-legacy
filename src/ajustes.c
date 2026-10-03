@@ -3830,7 +3830,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_IDIOMA: return "Idioma de toda a interface. Automático segue a sua conta e, sem ela, o idioma da TV. Não muda o idioma das legendas nem do áudio.";
     case AJ_GPU_EFEITOS: return "Automático mede a TV nos primeiros segundos e, se ela não der conta, tira os efeitos mais pesados. Completos mantém tudo; Leves tira desfoque e brilho para deixar a navegação mais lisa.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
-    case AJ_TEMA: return "Cor do anel que marca onde está o foco. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena: estilizada também tinge o fundo, gradiente pinta os botões com as cores da arte e imersiva deixa a cor vazar pela tela como luz. Ficam só nesta TV.";
+    case AJ_TEMA: return "Cor dos botões em foco e das marcas de estado. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena e ficam só nesta TV.";
     case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
     case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
     case AJ_DEBRID_AD: return "Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.";
@@ -3849,7 +3849,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_POSTER_MODELO: return "Endereço com {imdb}, {tmdb}, {type} (movie ou series) e {tipo_tmdb} (movie ou tv), por exemplo https://meu.servidor/{type}/{imdb}.jpg. Quem não tiver o dado que o modelo pede fica com o cartaz normal.";
     case AJ_POSTER_TESTAR: return "Baixa o cartaz de um filme conhecido com a configuração atual e mostra se deu certo. O primeiro cartaz de cada título é montado no servidor e pode levar alguns segundos.";
     case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso. Dinâmica: estilo Apple TV, com destaques grandes e Top 10 com numerais.";
-    case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
+    case AJ_VIDRO: return "Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.";
     case AJ_ADDONS_PRINCIPAL: return "Os outros perfis desta conta usam os addons do perfil principal. Desligado, cada perfil usa os seus — a não ser que a conta já diga para usar os do principal.";
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
@@ -3962,7 +3962,11 @@ static const char *efeitoOpcao(int op) {
       if (valor[op] == AJ_SALVOS_SIMKL && !simklauth_token()[0])
         return "Vincule o Simkl em Ajustes: sem o vínculo, o + guarda só na lista desta TV.";
       return "A lista desta TV recebe o título em todos os casos. Isto decide se ele também vai para o Trakt ou para o Simkl.";
-    case AJ_ADDONS: case AJ_TRAKT: case AJ_SIMKL:
+    case AJ_TRAKT: case AJ_SIMKL:
+      return (op == AJ_TRAKT ? traktauth_estado() == TRA_LIGADO : simklauth_estado() == SMK_LIGADO)
+        ? "OK abre o vínculo de novo, com QR e código. As setas laterais não fazem nada nesta linha."
+        : "OK abre o vínculo, com QR e código. As setas laterais não fazem nada nesta linha.";
+    case AJ_ADDONS:
       return "OK abre. As setas laterais não fazem nada nesta linha.";
     default: return NULL;
   }
@@ -4850,16 +4854,17 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       secVista = secAgora; scrollY = 0.0f; velY = 0.0f; alvo = 0.0f;
     } }
   paginaA = ajustes_animacoes_reduzidas() ? 1.0f : anim_rampa(paginaA, 1.0f, dt, 220.0f);
-  if (base - alvo > AJ_BASE - AJ_TOPO) alvo = base - (AJ_BASE - AJ_TOPO);
-  if (topo - alvo < 0.0f)              alvo = topo;
+  // GLASS UI: a linha em foco fica no MEIO da janela (a lista some nos 80 px
+  // de baixo e, rolada, nos 60 de cima — no meio ela nunca encosta no
+  // esvanecer), presa entre o topo e o fim da categoria.
+  { float janela = AJ_BASE - AJ_TOPO, fim = 0.0f;
+    int k;
+    for (k = secIni[secAtual]; k < secFim(secAtual); k++) fim += alturaItem(k);
+    alvo = (topo + base) * 0.5f - janela * 0.5f;
+    if (alvo > fim - janela) alvo = fim - janela;
+    if (topo - alvo < 0.0f) alvo = topo; }
   if (alvo < 0.0f) alvo = 0.0f;
-  // CABECALHO INTEIRO OU NENHUM. Uma categoria que passa da altura por pouco
-  // (Avancado, com o teste de velocidade e o rotulo "Diagnóstico") rolava so
-  // uns 40 px, e o recorte da lista cortava o titulo da categoria ao meio —
-  // parecia defeito de desenho. Rolando, rola ate o cabecalho sair; so se o
-  // item em foco continuar inteiro na tela (topo >= h0).
-  { float h0 = yDoItem(primeiroDaSecao(secAtual));
-    if (alvo > 0.0f && alvo < h0 && topo >= h0) alvo = h0; }
+  // (O "cabecalho inteiro ou nenhum" saiu: o cabecalho agora e fixo na folha.)
   scrollY = anim_mola2_reduzida(&velY, scrollY, alvo, dt, NV_MOLA2_SCROLL,
                                 ajustes_animacoes_reduzidas());
 }

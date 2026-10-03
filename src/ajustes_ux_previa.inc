@@ -49,6 +49,30 @@ static const char *ajMetaTitulo(int n) {
   return buf;
 }
 
+// O titulo n da amostra (catalogo ou art/catalogo.txt).
+static const char *ajTituloN(int n) {
+  static char t[40][96];
+  static int lido;
+  if (cat_n() > 0) { const CatItem *c = cat_item(n % cat_n()); return c ? c->titulo : ""; }
+  if (!lido && uxDirArte[0]) {
+    char cam[1100], l[2048];
+    FILE *f;
+    int i = 0;
+    lido = 1;
+    snprintf(cam, sizeof cam, "%s/catalogo.txt", uxDirArte);
+    f = fopen(cam, "r");
+    while (f && i < 40 && fgets(l, sizeof l, f)) {
+      char *c[5] = { 0 }, *p = l;
+      int k = 0;
+      while (k < 5 && p) { c[k++] = p; p = strchr(p, '|'); if (p) *p++ = 0; }
+      if (k >= 4) snprintf(t[i], sizeof t[i], "%s", c[3]);
+      i++;
+    }
+    if (f) fclose(f);
+  }
+  return t[n % 40];
+}
+
 // Estilo de texto mais proximo de `px` entre os que a miniatura usa. 0 = nao
 // desenha (abaixo de 6 px o texto e so ruido).
 static TxtEstilo ajEstiloPx(float px, int forte) {
@@ -400,6 +424,139 @@ static float ajPainelMemoria(float x, float y, float w) {
   return y - y0;
 }
 
+// ONDE O ACENTO APARECE no Glass UI: a pagina de um titulo com o botao em
+// foco, as marcas, o chip ligado e a pagina ativa do menu.
+static float ajPreviaCor(float x, float y, float w) {
+  float ar, ag, ab, h = w * 304.0f / 540.0f;
+  int ti = ajTinta(), i;
+  ajustes_acento(&ar, &ag, &ab);
+  ajImg(ajArte(AJA_FUNDO, 7), (GfxRect){ x, y, w, h }, 22, 1);
+  gfx_rect((GfxRect){ x, y, w, h }, 0, GFX_VEU, 0, 0, 0, 22.0f / h, 0, 0, 0, 1);
+  gfx_recorte(x, y, w, h);
+  { char k[64]; const char *m = ajMetaTitulo(7);
+    snprintf(k, sizeof k, "%s", m);
+    { char *c = strstr(k, " · "); if (c) { char *d = strstr(c + 3, " · "); if (d) *d = 0; } }
+    ajCaps(TXT_AJ_MINI12, k, 1.7f, x + 26, y + 24, 0.5f); }
+  ajLogo(ajArte(AJA_LOGO, 7), x + 24, y + 46, 240, 80, 1);
+  { float mx = x + 26;
+    TxtLinha l = txt_linha(TXT_AJ_MINI12, "4K", (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255);
+    txt_desenhar(l, mx, y + 140); mx += l.w + 10;
+    l = txt_linha(TXT_AJ_MINI12, "DOLBY VISION", (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255);
+    txt_desenhar(l, mx, y + 140); mx += l.w + 10;
+    l = txt_linha(TXT_AJ_MINI12, "DOLBY ATMOS", (int)((ar * .45f + .55f) * 255), (int)((ag * .45f + .55f) * 255), (int)((ab * .45f + .55f) * 255), 255);
+    txt_desenhar(l, mx, y + 140); }
+  { TxtLinha l = ajTxtT(TXT_AJ_CHIP, "Reproduzir");
+    float bw = 20 + 16 + 8 + l.w + 20;
+    ajPilulaAcento((GfxRect){ x + 26, y + 172, bw, 44 }, 22, 1);
+    gfx_rect((GfxRect){ x + 46, y + 186, 14, 16 }, 0, GFX_PLAY, 0, 0, 0, 0, ti / 255.0f, ti / 255.0f, ti / 255.0f, 1);
+    txt_desenhar(l, x + 70, y + 172 + (44 - l.h) * 0.5f);
+    gfx_cor((GfxRect){ x + 26 + bw + 10, y + 172, 44, 44 }, 0.5f, 1, 1, 1, 0.12f);
+    gfx_cor((GfxRect){ x + 26 + bw + 62, y + 172, 44, 44 }, 0.5f, 1, 1, 1, 0.12f); }
+  { TxtLinha l = txt_linha(TXT_AJ_MINI13, "Só MP4", (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255);
+    float cw = 14 + 6 + 7 + l.w + 14;
+    gfx_cor((GfxRect){ x + 26, y + 236, cw, 36 }, 0.5f, ar, ag, ab, 0.22f);
+    gfx_cor((GfxRect){ x + 40, y + 251, 6, 6 }, 0.5f, ar, ag, ab, 1);
+    txt_desenhar(l, x + 53, y + 236 + (36 - l.h) * 0.5f); }
+  { GfxRect mb = { x + w - 20 - 150, y + 20, 150, 8 + 3 * 34 + 8 };
+    static const char *const M[3] = { "Início", "Explorar", "Ajustes" };
+    if (ajVid()) gfx_cor(mb, 20.0f / mb.h, 0.055f, 0.059f, 0.071f, 0.82f);
+    else gfx_cor(mb, 20.0f / mb.h, 0.082f, 0.086f, 0.102f, 1);
+    for (i = 0; i < 3; i++) {
+      TxtLinha l = ajTxt(TXT_AJ_MINI14, M[i]);
+      float iy = mb.y + 8 + i * 34;
+      if (i == 2) gfx_cor((GfxRect){ mb.x + 13, iy + 15, 4, 4 }, 0.5f, ar, ag, ab, 1);
+      txt_desenhar_alpha(l, mb.x + 22, iy + (34 - l.h) * 0.5f, i == 2 ? 1.0f : 0.6f);
+    } }
+  gfx_sem_recorte();
+  y += h + 14;
+  { float tw = (w - 20) / 3.0f;
+    static const char *const T[3] = { "Botão em foco", "Marcas e chip ligado", "Página ativa" };
+    for (i = 0; i < 3; i++) {
+      float tx = x + i * (tw + 10);
+      TxtLinha l = ajTxtC(TXT_AJ_MINI14, T[i], tw - 8);
+      ajNeutro((GfxRect){ tx, y, tw, 64 }, 16, 0.05f, 0.106f, 0.110f, 0.129f, 1);
+      if (i == 0) gfx_cor((GfxRect){ tx + (tw - 44) * 0.5f, y + 9, 44, 22 }, 0.5f, ar, ag, ab, 1);
+      else if (i == 1) { TxtLinha m = txt_linha(TXT_AJ_MINI12, "4K · DV", (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255);
+                         txt_desenhar(m, tx + (tw - m.w) * 0.5f, y + 20 - m.h * 0.5f); }
+      else gfx_cor((GfxRect){ tx + (tw - 7) * 0.5f, y + 16.5f, 7, 7 }, 0.5f, ar, ag, ab, 1);
+      txt_desenhar_alpha(l, tx + (tw - l.w) * 0.5f, y + 38, 0.6f);
+    } }
+  return h + 14 + 64;
+}
+
+// O PLAYER com as marcas que as opcoes de imagem e som afetam (no lugar das
+// caixas de ajudaFluxoReproducao). Marca apagada = a opcao esta desligada.
+static float ajPreviaPlayer(float x, float y, float w) {
+  float h = w * 304.0f / 540.0f, bx = x + 24, by;
+  static const FormatoMarca M[3] = { FMT_4K, FMT_DV, FMT_ATMOS };
+  int i, on[3];
+  on[0] = valor[AJ_QUALIDADE] <= 1; on[1] = lig(AJ_DV); on[2] = lig(AJ_ATMOS);
+  ajImg(ajArte(AJA_FUNDO, 15), (GfxRect){ x, y, w, h }, 22, 1);
+  gfx_rect((GfxRect){ x, y + h * 0.4f, w, h * 0.6f }, 0, GFX_VEU_BAIXO, 0, 0, 0, 22.0f / (h * 0.6f), 0, 0, 0, 0.85f);
+  by = y + h - 22 - 18 - 6 - 5 - 14 - 34 - 12 - 17 - 2 - 24;
+  { TxtLinha t = ajTxt(TXT_ILHA_ITEM, ajTituloN(15)); txt_desenhar(t, bx, by); by += 24 + 2; }
+  { TxtLinha t = ajTxtC(TXT_AJ_MINI14, ajMetaTitulo(15), w - 48); txt_desenhar_alpha(t, bx, by, 0.6f); by += 17 + 12; }
+  for (i = 0; i < 3; i++) {
+    float mw = marca_formato_largura(M[i], 34);
+    marca_formato(M[i], bx, by, 34, 1, 1, 1, on[i] ? 0.78f : 0.22f);
+    bx += mw + 14;
+  }
+  by += 34 + 14;
+  gfx_cor((GfxRect){ x + 24, by, w - 48, 5 }, 0.5f, 1, 1, 1, 0.2f);
+  gfx_cor((GfxRect){ x + 24, by, (w - 48) * 0.38f, 5 }, 0.5f, 0.953f, 0.949f, 0.937f, 1);
+  by += 5 + 6;
+  { TxtLinha a = ajTxt(TXT_AJ_MINI14, "21:40"), b = ajTxt(TXT_AJ_MINI14, "58:12");
+    txt_desenhar_alpha(a, x + 24, by, 0.55f); txt_desenhar_alpha(b, x + w - 24 - b.w, by, 0.55f); }
+  return h;
+}
+// As resolucoes que o teto de "Qualidade maxima" deixa passar.
+static float ajBarrasQualidade(float x, float y, float w) {
+  static const FormatoMarca F[3] = { FMT_720, FMT_1080, FMT_4K };
+  static const float H[3] = { 120, 190, 260 };
+  int sel = valor[AJ_QUALIDADE], i;
+  float bw = (w - 12 - 36) / 3.0f, ar, ag, ab;
+  ajustes_acento(&ar, &ag, &ab);
+  for (i = 0; i < 3; i++) {
+    int passa = sel == 0 || sel == 1 || (sel == 2 && i <= 1) || (sel == 3 && i == 0);
+    float bx = x + 6 + i * (bw + 18), bh = H[i], mw = marca_formato_largura(F[i], 30);
+    GfxRect r = { bx, y + 300 - 44 - bh, bw, bh };
+    if (passa) { gfx_cor(r, 16.0f / bh, ar, ag, ab, 0.30f); gfx_recorte(r.x, r.y, r.w, 5); gfx_cor(r, 16.0f / bh, ar, ag, ab, 1); gfx_sem_recorte(); }
+    else gfx_cor(r, 16.0f / bh, 1, 1, 1, 0.06f);
+    marca_formato(F[i], bx + (bw - mw) * 0.5f, y + 300 - 30, 30, 1, 1, 1, passa ? 0.85f : 0.3f);
+  }
+  return 300;
+}
+// O cartao do servico (Trakt/Simkl) com o que o vinculo alimenta no app.
+static float ajPreviaServico(int op, float x, float y, float w) {
+  int trakt = op == AJ_TRAKT, lig2 = ajEstadoLigado(op), i;
+  float ix = x + 26, iw = w - 52, y0 = y, ar, ag, ab;
+  static const char *const IC[4] = { "aj_eye", "aj_bookmark", "aj_rotate-ccw-clock", "aj_star" };
+  static const char *const TX[4] = { "Marcar assistidos", "Salvos (botão +)", "Continuar assistindo", "Nota nos créditos" };
+  ajustes_acento(&ar, &ag, &ab);
+  ajNeutro((GfxRect){ x, y, w, 26 + 64 + 24 + 18 + 12 + 56 * 2 + 10 + 26 }, 22, 0.04f, 0.106f, 0.110f, 0.129f, 1);
+  y += 26;
+  gfx_cor((GfxRect){ ix, y, 64, 64 }, 20.0f / 64, 1, 1, 1, 0.1f);
+  { TxtLinha l = ajTxt(TXT_AJ_TIT28, trakt ? "t" : "s");
+    txt_desenhar(l, ix + (64 - l.w) * 0.5f, y + (64 - l.h) * 0.5f); }
+  { TxtLinha n = ajTxt(TXT_AJ_NOME, trakt ? "Trakt" : "Simkl"), e = ajTxt(TXT_ILHA_GENERO, textoLeitura(op));
+    float ty = y + 32 - (n.h + 4 + e.h) * 0.5f;
+    txt_desenhar(n, ix + 80, ty);
+    if (lig2) gfx_cor((GfxRect){ ix + 80, ty + n.h + 4 + (e.h - 8) * 0.5f, 8, 8 }, 0.5f, ar, ag, ab, 1);
+    txt_desenhar_alpha(e, ix + 80 + (lig2 ? 16 : 0), ty + n.h + 4, 0.6f); }
+  y += 64 + 24;
+  ajKicker(trakt ? "O que usa o Trakt" : "O que usa o Simkl", ix, y, 1);
+  y += 18 + 12;
+  for (i = 0; i < 4; i++) {
+    float tw = (iw - 10) * 0.5f, tx = ix + (i % 2) * (tw + 10), ty = y + (i / 2) * 66;
+    TxtLinha l = ajTxtC(TXT_ILHA_GENERO, TX[i], tw - 60);
+    ajNeutro((GfxRect){ tx, ty, tw, 56 }, 18, 0.05f, 0.141f, 0.149f, 0.173f, 1);
+    ajIcone(IC[i], tx + 16, ty + 17, 22, 0.8f);
+    txt_desenhar_alpha(l, tx + 16 + 22 + 12, ty + (56 - l.h) * 0.5f, 0.8f);
+  }
+  y += 56 * 2 + 10 + 26;
+  return y - y0;
+}
+
 // A previa da opcao em foco. Devolve a altura usada (0 = sem previa).
 static float ajPrevia(int op, float x, float y, float w) {
   switch (op) {
@@ -407,6 +564,9 @@ static float ajPrevia(int op, float x, float y, float w) {
     case AJ_RELOGIO_POS: return ajPreviaRelogio(x, y, w);
     case AJ_LARGURA_DP: case AJ_RAIO_DP: return ajPreviaCartaz(op, x, y, w);
     case AJ_ESPACO: case AJ_TEX_MB: return ajPainelMemoria(x, y, w);
+    case AJ_TEMA: case AJ_COR_LOGO: return ajPreviaCor(x, y, w);
+    case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: return ajPreviaPlayer(x, y, w);
+    case AJ_TRAKT: case AJ_SIMKL: return ajPreviaServico(op, x, y, w);
     default: break;
   }
   return ajPreviaHome(x, y, w);
@@ -421,5 +581,11 @@ static float ajPreviaCompacta(int op, float x, float y, float w) {
 }
 // Previa da coluna direita dos editores modais.
 static float ajPreviaEditor(int op, float x, float y, float w) {
+  if (op == AJ_QUALIDADE) {
+    float h;
+    ajKicker("Resoluções que passam", x, y, 1);
+    h = ajBarrasQualidade(x, y + 36, w);
+    return 36 + h + 16 + ajBloco(TXT_ILHA_APOIO, ajudaOpcao(op), x, y + 36 + h + 16, w, 21, 0.45f, 4);
+  }
   return ajPrevia(op, x, y, w);
 }
