@@ -8,7 +8,13 @@ typedef struct {
   char valor[160];
   int avancado;
   int bloqueado;
+  char icone[40];     /* o icone da secao (aj_*) */
+  char ajuda[300];    /* a frase da opcao, para o melhor resultado */
 } AjusteBuscaResultado;
+
+/* A previa da opcao no melhor resultado da busca: a arte do titulo com o
+ * valor atual por cima (Spotlight no modo Ajustes). */
+void ajustes_previa_busca(int op, float x, float y, float w, float h, float a);
 
 /* Arte local usada nas amostras ilustrativas, sem rede. */
 void ajustes_recursos(const char *dirArte);

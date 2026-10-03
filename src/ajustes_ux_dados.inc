@@ -281,6 +281,13 @@ int ajustes_buscar(const char *consulta, AjusteBuscaResultado *resultados, int c
     uxValorTexto(r->op, uxValorAtual(r->op), r->valor, sizeof r->valor);
     r->avancado = uxAvancada(r->op);
     r->bloqueado = inativa(r->op);
+    { int k;
+      for (k = 0; k < AJ_N_TELA; k++)
+        if (TELA[k].tipo == IT_OPC && TELA[k].op == r->op) {
+          uxTextoCopiar(r->icone, sizeof r->icone, TELA[secIni[secDoItem[k]]].icone);
+          break;
+        } }
+    uxTextoCopiar(r->ajuda, sizeof r->ajuda, i18n(ajudaOpcao(r->op)));
   }
   return total;
 }

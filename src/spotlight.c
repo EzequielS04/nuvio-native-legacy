@@ -121,7 +121,7 @@ enum {
 };
 // Alturas SEM vao entre as linhas, como as .row do mockup: o melhor resultado
 // e 140 de arte + 16 em cima e embaixo, a linha de titulo 62 de cartaz + 12.
-static const float ALTURA[] = { 50, 64, 172, 86, 86, 86, 86, 72, 72, 64, 64, 72 };
+static const float ALTURA[] = { 50, 64, 172, 86, 86, 86, 86, 72, 72, 64, 64, 80 };
 
 typedef struct {
   int  tipo;
@@ -569,11 +569,25 @@ static void montarAjustes(const char *consultaLocal) {
   // No modo dedicado, o rotulo explicita o escopo e consultas vazias podem
   // trazer sugestoes locais do proprio backend de preferencias. Na busca
   // comum o grupo so aparece quando ha um ajuste relevante.
-  if (modoAjustes || n > 0) cabecalho(i18n("Ajustes"));
+  // MODO AJUSTES (mockup de Ajustes, quadro "busca"): com consulta, o primeiro
+  // vira o MELHOR RESULTADO, com a previa da opcao; os demais em "Ajustes".
+  { int topo = modoAjustes && consultaLocal && consultaLocal[0] && n > 0;
+  if (topo) cabecalho(i18n("Melhor resultado"));
+  else if (modoAjustes || n > 0) cabecalho(i18n("Ajustes"));
   for (i = 0; i < n && i < (int)(sizeof resultados / sizeof resultados[0]); i++) {
-    Linha *l = nova(L_AJUSTE);
+    Linha *l;
+    if (topo && i == 1) cabecalho(i18n("Ajustes"));
+    l = nova(L_AJUSTE);
     if (!l) return;
     l->ref = resultados[i].op;
+    if (topo && i == 0) {
+      l->ref2 = 1;
+      // So a primeira frase: o melhor resultado e um resumo, nao a ajuda.
+      { char *pt;
+        snprintf(l->base, sizeof l->base, "%s", resultados[i].ajuda);
+        pt = strstr(l->base, ". ");
+        if (pt) pt[1] = 0; }
+    }
     snprintf(l->t1, sizeof l->t1, "%s", resultados[i].titulo);
     snprintf(l->t2, sizeof l->t2, "%s%s%s%s", resultados[i].caminho,
              resultados[i].valor[0] ? "  ·  " : "", resultados[i].valor,
@@ -582,9 +596,9 @@ static void montarAjustes(const char *consultaLocal) {
       size_t usado = strlen(l->t2);
       snprintf(l->t2 + usado, sizeof l->t2 - usado, "%s", i18n("Indisponível"));
     }
-    snprintf(l->icone, sizeof l->icone, "%s", resultados[i].avancado ? "menu_settings" : "menu_search");
+    snprintf(l->icone, sizeof l->icone, "%s", resultados[i].icone[0] ? resultados[i].icone : "menu_settings");
     snprintf(l->chave, sizeof l->chave, "aj|%d", resultados[i].op);
-  }
+  } }
 }
 
 static void remontar(void) {
@@ -638,6 +652,7 @@ static void remontar(void) {
   { float y = 0.0f;
     for (i = 0; i < nLin; i++) {
       lin[i].h = ALTURA[lin[i].tipo];
+      if (lin[i].tipo == L_AJUSTE && lin[i].ref2 == 1) lin[i].h = 194.0f;
       if (lin[i].tipo == L_AVISO && lin[i].t2[0]) lin[i].h += 30.0f;
       // Sem vao extra antes de um grupo: os 50 px do cabecalho ja sao o
       // "22 em cima, 10 embaixo" do kicker do mockup.
@@ -1263,6 +1278,18 @@ static void desenhaCampo(float dy, float a, Uint32 agora) {
     dicaPar(barra.x + barra.w - 30.0f - w, ty - l.h * 0.5f, "OK", i18n("Digitar"), .45f * a);
     xMax -= w + 24.0f;
   }
+  // No modo Ajustes a ponta direita diz o escopo, como kicker.
+  if (modoAjustes && nConsulta && !ouve) {
+    char up[96];
+    float w;
+    idioma_maiusc_em(ajustes_idioma(), up, sizeof up, i18n("Buscar nos ajustes"));
+    w = txt_tracking(TXT_MINI, up, SP_TINTA, -1, 0, 0, 2.1f);
+    if (xMax - w - 30.0f > tx + 200.0f) {
+      TxtLinha m = txt_linha(TXT_MINI, "M", SP_TINTA, 255);
+      txt_tracking(TXT_MINI, up, SP_TINTA, xMax - w, ty - m.h * 0.5f, .45f * a, 2.1f);
+      xMax -= w + 30.0f;
+    }
+  }
   if (nConsulta) {
     TxtLinha l = txt_linha_corta(TXT_CALLOUT, consulta, SP_TINTA, 255, xMax - tx - 10.0f);
     txt_desenhar_alpha(l, tx, ty - l.h * 0.5f, a);
@@ -1451,6 +1478,26 @@ static void desenhaLinha(int i, float x, float y, float a) {
       if (g.h) txt_desenhar_alpha(g, tx, ty + t.h + 6.0f + m.h + 6.0f, .42f * a); }
     return;
   }
+  if (l->tipo == L_AJUSTE && l->ref2 == 1) {
+    // MELHOR RESULTADO DE AJUSTE: a previa da opcao (280 x 158), o nome,
+    // o caminho com o valor e a frase da opcao.
+    GfxRect art = { r.x + 18.0f, r.y + 18.0f, 280.0f, 158.0f };
+    float tx = art.x + art.w + 26.0f, dw = 0.0f, tw, ty, bloco;
+    TxtLinha t, m, o;
+    ajustes_previa_busca(l->ref, art.x, art.y, art.w, art.h, a);
+    o = txt_linha(TXT_ILHA_APOIO, "OK abre", SP_TINTA, 255);
+    if (f > 0.02f) { txt_desenhar_alpha(o, r.x + r.w - 28.0f - o.w, r.y + (r.h - o.h) * 0.5f, .5f * f * a); dw = o.w + 40.0f; }
+    tw = r.x + r.w - tx - 26.0f - dw;
+    t = txt_linha_corta(TXT_AJ_INSP, l->t1, SP_TINTA, 255, tw);
+    m = txt_linha_corta(TXT_ILHA_META, l->t2, SP_TINTA, 255, tw);
+    bloco = t.h + 6.0f + m.h + 10.0f + 50.0f;
+    ty = r.y + (r.h - bloco) * 0.5f;
+    txt_desenhar_alpha(t, tx, ty, a);
+    txt_desenhar_alpha(m, tx, ty + t.h + 6.0f, .62f * a);
+    if (l->base[0]) txt_bloco(TXT_AJ_ESTADO, l->base, SP_TINTA, tx, ty + t.h + 6.0f + m.h + 10.0f,
+                              tw < 560.0f ? tw : 560.0f, 25.0f, .45f * a, 2);
+    return;
+  }
   { GfxRect ic = { r.x + 16.0f, r.y + 12.0f, 0, r.h - 24.0f };
     float tx;
     switch (l->tipo) {
@@ -1471,6 +1518,14 @@ static void desenhaLinha(int i, float x, float y, float a) {
         gfx_cor(ic, 8.0f / ic.h, 0.16f, 0.165f, 0.185f, a);
         guia_logo_desenhar(l->arte, l->t1, ic, ic.w - 16.0f, ic.h - 16.0f, 0.965f, a);
         break;
+      case L_AJUSTE: {
+        // O icone da SECAO num ladrilho de 52 (raio 16), como no indice.
+        GfxRect dc = { r.x + 18.0f, r.y + (r.h - 52.0f) * 0.5f, 52.0f, 52.0f };
+        if (vidro) gfx_cor(dc, 16.0f / 52.0f, 1, 1, 1, .07f * a);
+        else gfx_cor(dc, 16.0f / 52.0f, .125f, .129f, .153f, a);
+        gfx_icone((GfxRect){ dc.x + 14, dc.y + 14, 24, 24 }, l->icone, .953f, .949f, .937f, .75f * a);
+        ic.x = dc.x; ic.w = 52.0f;
+        break; }
       default: {
         // Icone num disco: recente, limpar, catalogo, addon.
         float d = 42.0f;

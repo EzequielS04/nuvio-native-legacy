@@ -106,59 +106,13 @@ static const char *capacidades(int i) {
   return buf;
 }
 
+// A TELA DE ADDONS NO GLASS UI (mockup de Ajustes, quadro "addons"): o mesmo
+// arranjo de ilhas de Ajustes, desenhado por ajustes.c (que tem as pecas).
 void addonsui_desenhar(Uint32 agora) {
-  int i, n = addons_n();
-  float y;
   (void)agora;
-
-  { TxtLinha t = txt_linha(TXT_TITULO2, "Addons", 240, 240, 244, 255);
-    txt_desenhar(t, LISTA_X, NV_MARGEM_Y + 24.0f); }
-
-  if (n == 0) {
-    TxtLinha t = txt_linha(TXT_CALLOUT,
-                           "Nenhum addon nesta conta.", 176, 176, 182, 255);
-    txt_desenhar(t, LISTA_X, TOPO + 40.0f);
-    return;
-  }
-
-  y = TOPO - scrollY;
-  for (i = 0; i < n; i++, y += LINHA_H + LINHA_GAP) {
-    GfxRect linha = { LISTA_X, y, LISTA_W, LINHA_H };
-    float f = (i < 64) ? animFoco[i] : 0.0f;
-    int ligado = addons_ativo(i);
-    float a;
-    if (y + LINHA_H < TOPO - 40.0f || y > BASE + 40.0f) continue;
-    a = anim_clamp((y - (TOPO - 70.0f)) / 60.0f, 0.0f, 1.0f);
-    if (a <= 0.005f) continue;
-
-    // Foco = linha preenchida na cor de realce com texto escuro, sem anel:
-    // a mesma regra de ajustes.c (desenhaLinha) e de NV_COR_FOCO em layout.h.
-    gfx_cor(linha, RAIO, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B, 0.34f * a);
-    if (f > 0.01f) {
-      float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
-      gfx_cor(linha, RAIO, ar, ag, ab, f * a);
-    }
-    int emFoco = f > 0.5f;
-
-    // Addon desligado fica apagado, e o estado vai ESCRITO na direita: cor
-    // sozinha nao diz se aquilo esta ligado ou so sem foco.
-    { float aT = a * (ligado ? 1.0f : 0.55f);
-      int c1 = emFoco ? ajustes_tinta_foco() : 240, c2 = emFoco ? ajustes_tinta_foco2() : 168;
-      int c3 = emFoco ? ajustes_tinta_foco2() : (ligado ? 220 : 150);
-      TxtLinha nome = txt_linha_corta(TXT_CALLOUT, addons_nome(i),
-                                      c1, c1, c1, 255, LISTA_W - 300.0f);
-      TxtLinha cap  = txt_linha_corta(TXT_CAPTION, capacidades(i),
-                                      c2, c2, c2 + 8, 255, LISTA_W - 300.0f);
-      TxtLinha est  = txt_linha(TXT_CALLOUT, ligado ? "Ligado" : "Desligado",
-                                c3, c3, c3 + 6, 255);
-      txt_desenhar_alpha(nome, LISTA_X + 34.0f, y + 20.0f, aT);
-      txt_desenhar_alpha(cap,  LISTA_X + 34.0f, y + 20.0f + nome.h + 6.0f, aT);
-      txt_desenhar_alpha(est,  LISTA_X + LISTA_W - 34.0f - est.w,
-                         y + (LINHA_H - est.h) * 0.5f, aT); }
-  }
-
-  { TxtLinha t = txt_linha(TXT_CAPTION,
-                           "OK: ligar ou desligar   ·   Voltar: Ajustes",
-                           150, 150, 158, 255);
-    txt_desenhar(t, LISTA_X, BASE + 12.0f); }
+  ajustes_desenhar_addons(foco);
 }
+
+#ifdef AJUSTES_TESTE
+void addonsui_teste_foco(int f) { foco = f; }
+#endif

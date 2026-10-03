@@ -16,6 +16,7 @@
 #include "rail_shot.h"
 #include "fileiras.h"
 #include "gfx.h"
+#include "ilha.h"
 #include "text.h"
 #include "tex_cache.h"
 #include <SDL2/SDL.h>
@@ -64,6 +65,7 @@ extern int ajustes_teste_op_atualizar(void);
 extern int ajustes_teste_familia_previa(int op);
 extern void ajustes_teste_fonte_interface(int familia);
 extern void ajustes_teste_tema(int tema, int vidro);
+extern int ajustes_teste_quadro(const char *id);
 static int quadrosCaptura = 60;
 
 static void tecla(SDL_Keycode k) {
@@ -86,6 +88,11 @@ static void captura(const char *nome, SDL_Window *win) {
     glClear(GL_COLOR_BUFFER_BIT);
     ajustes_desenhar(SDL_GetTicks());
     rail_shot_desenhar(MENU_AJUSTES);
+    if (getenv("NUVIO_AJ_QUADROS")) {   // a ilha do relogio, como o app poe
+      ilha_relogio_visivel(ajustes_relogio_cabe());
+      ilha_ancorar(ajustes_ilha_x(), 36, 0);
+      ilha_desenhar(SDL_GetTicks());
+    }
     if (i == quadrosCaptura - 1) {
       unsigned char *pix = malloc(1920 * 1080 * 4);
       SDL_Surface *s;
@@ -101,6 +108,7 @@ static void captura(const char *nome, SDL_Window *win) {
       free(pix);
     }
     SDL_GL_SwapWindow(win);
+    if (getenv("NUVIO_AJ_QUADROS")) SDL_Delay(16);   // a mola da ilha anda no relogio
   }
   printf("captura: %s\n", nome);
 }
@@ -163,6 +171,19 @@ int main(int argc, char **argv) {
   if (getenv("NUVIO_SHOT_TEMA") || getenv("NUVIO_SHOT_VIDRO"))
     ajustes_teste_tema(getenv("NUVIO_SHOT_TEMA") ? atoi(getenv("NUVIO_SHOT_TEMA")) : -1,
                        getenv("NUVIO_SHOT_VIDRO") && atoi(getenv("NUVIO_SHOT_VIDRO")));
+
+  // OS QUADROS DO MOCKUP (ajustes-mockup.html): NUVIO_AJ_QUADROS="principal
+  // cor ..." grava <saida>-<id>.png de cada um, com a ilha do relogio.
+  if (getenv("NUVIO_AJ_QUADROS")) {
+    char lista[1024], *id, *ctx = NULL;
+    snprintf(lista, sizeof lista, "%s", getenv("NUVIO_AJ_QUADROS"));
+    for (id = strtok_r(lista, " ,", &ctx); id; id = strtok_r(NULL, " ,", &ctx)) {
+      if (!ajustes_teste_quadro(id)) { printf("quadro desconhecido: %s\n", id); continue; }
+      snprintf(nome, sizeof nome, "%s-%s.png", saida, id);
+      captura(nome, w);
+    }
+    goto fim_capturas;
+  }
 
   // A LINHA "Procurar atualização" NOS ESTADOS (01/10/2026): sem versao nova
   // (antes de procurar, procurando, em dia, sem rede) e com versao nova.

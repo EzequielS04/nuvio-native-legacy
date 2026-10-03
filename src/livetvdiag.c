@@ -57,7 +57,7 @@
 #define LTD_MOSTRA_MS    1500u   // o quadro fica na tela um instante depois de abrir
 #define LTD_PAUSA_MS     1000u   // o provedor solta a conexao entre um pedido e outro
 #define LTD_TRECHO_B     786431L
-#define LTD_LINHA        60.0f   // altura de cada canal na lista
+#define LTD_LINHA        70.0f   // altura de cada canal na lista
 
 enum { F_HLS = 0, F_TS = 1 };
 enum { E_PARADO, E_REDE, E_PLAYER, E_PRONTO };
@@ -717,21 +717,23 @@ static float areaX(void) { float x; ajustes_area_conteudo(NV_MARGEM_X, NV_MARGEM
 static float areaW(void) { float w; ajustes_area_conteudo(NV_MARGEM_X, NV_MARGEM_X, NULL, &w); return w; }
 static char sepDec(void) { return idioma_ponto_decimal(ajustes_idioma()) ? '.' : ','; }
 
+// GLASS UI (mockup de Ajustes, quadros "livetv-diag"): cada painel e uma
+// ilha, o titulo e o kicker, as metricas sao as linhas com fio das ilhas.
 static void painel(GfxRect r, float ar, float ag, float ab) {
-  gfx_cor(r, 22.0f / r.h, 0.055f, 0.065f, 0.085f, 0.97f);
-  gfx_luz_canto(r, 26.0f / r.h, 150.0f, -70.0f, 500.0f, ar, ag, ab, 0.11f);
-  gfx_cor((GfxRect){ r.x, r.y, r.w, 2.0f }, 1.0f, ar, ag, ab, 0.48f);
+  (void)ar; (void)ag; (void)ab;
+  ajustes_ui_ilha(r, 32, 0);
 }
 static void titulo(GfxRect r, const char *t, const char *sub) {
-  txt_desenhar(txt_linha_corta(TXT_BODY, i18n(t), 238, 242, 248, 255, r.w - 56.0f), r.x + 28.0f, r.y + 22.0f);
-  if (sub) txt_desenhar(txt_linha_corta(TXT_CAPTION, sub, 154, 164, 178, 255, r.w - 56.0f),
-                        r.x + 28.0f, r.y + 58.0f);
+  ajustes_ui_kicker(t, r.x + 32.0f, r.y + 28.0f, 1);
+  if (sub) txt_desenhar_alpha(txt_linha_corta(TXT_ILHA_APOIO, sub, 243, 242, 239, 255, r.w - 64.0f),
+                              r.x + 32.0f, r.y + 52.0f, 0.48f);
 }
 static void metrica(GfxRect r, float y, const char *rot, const char *val, int cr, int cg, int cb) {
-  TxtLinha v = txt_linha_corta(TXT_BODY, val, cr, cg, cb, 255, r.w * 0.55f);
-  txt_desenhar(txt_linha_corta(TXT_CAPTION, i18n(rot), 154, 164, 178, 255, r.w - 80.0f - v.w),
-               r.x + 28.0f, y + 3.0f);
-  txt_desenhar(v, r.x + r.w - 28.0f - v.w, y);
+  TxtLinha v = txt_linha_corta(TXT_AJ_ESTADO, val, cr, cg, cb, 255, r.w * 0.55f);
+  TxtLinha k = txt_linha_corta(TXT_AJ_ESTADO, i18n(rot), 243, 242, 239, 255, r.w - 80.0f - v.w);
+  gfx_cor((GfxRect){ r.x + 32.0f, y, r.w - 64.0f, 1 }, 0, 1, 1, 1, 0.07f);
+  txt_desenhar_alpha(k, r.x + 32.0f, y + 11.0f, 0.45f);
+  txt_desenhar(v, r.x + r.w - 32.0f - v.w, y + 11.0f);
 }
 static void segundos(char *d, size_t n, int ms) {
   snprintf(d, n, "%d%c%d s", ms / 1000, sepDec(), (ms % 1000) / 100);
@@ -763,14 +765,39 @@ static void desenharRede(GfxRect r, float ar, float ag, float ab) {
                                  170, 178, 190, 255, r.w - 56.0f), r.x + 28.0f, r.y + 76.0f);
     return;
   }
-  mbps(a, sizeof a, L.kbps);
-  metrica(r, r.y + 72.0f, "Velocidade", a, 238, 242, 248);
-  if (L.kbpsPior > 0) { mbps(a, sizeof a, L.kbpsPior); metrica(r, r.y + 112.0f, "Pior segundo", a, 214, 220, 230); }
-  if (L.latenciaMs >= 0) {
-    snprintf(b, sizeof b, i18n("%d ms"), L.latenciaMs);
-    metrica(r, r.y + 152.0f, "Latência (primeiro byte)", b, L.latenciaMs > 800 ? 244 : 214,
-            L.latenciaMs > 800 ? 196 : 220, L.latenciaMs > 800 ? 150 : 230);
-  }
+  // O NUMERO GRANDE e a barra com o pior segundo por cima, na mesma escala.
+  { float x = r.x + 32.0f, w = r.w - 64.0f, y = r.y + 54.0f, esc = 30000.0f;
+    TxtLinha n, u;
+    vazao_fmt_mbps(b, sizeof b, L.kbps, sepDec());
+    n = txt_linha(TXT_AJ_NUM58, b, 243, 242, 239, 255);
+    u = txt_linha(TXT_AJ_TEXTO, "Mbps", 243, 242, 239, 255);
+    txt_desenhar(n, x, y);
+    txt_desenhar_alpha(u, x + n.w + 10, y + n.h * 0.78f - u.h, 0.55f);
+    y += n.h * 0.92f + 12;
+    while (L.kbps > esc * 0.9f) esc *= 2;
+    gfx_cor((GfxRect){ x, y, w, 8 }, 0.5f, 1, 1, 1, 0.07f);
+    gfx_cor((GfxRect){ x, y, w * L.kbps / esc, 8 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.55f);
+    if (L.kbpsPior > 0) gfx_cor((GfxRect){ x, y, w * L.kbpsPior / esc, 8 }, 0.5f, 0.910f, 0.722f, 0.290f, 1);
+    y += 8 + 10;
+    { float lx = x;
+      TxtLinha l;
+      if (L.kbpsPior > 0) {
+        char m[32];
+        vazao_fmt_mbps(m, sizeof m, L.kbpsPior, sepDec());
+        snprintf(a, sizeof a, i18n("Pior segundo %s Mbps"), m);
+        l = txt_linha(TXT_ILHA_HORA, a, 243, 242, 239, 255);
+        gfx_cor((GfxRect){ lx, y + (l.h - 10) * 0.5f, 10, 10 }, 0.3f, 0.910f, 0.722f, 0.290f, 1);
+        txt_desenhar_alpha(l, lx + 17, y, 0.5f); lx += 17 + l.w + 18;
+      }
+      l = txt_linha(TXT_ILHA_HORA, i18n("Velocidade"), 243, 242, 239, 255);
+      gfx_cor((GfxRect){ lx, y + (l.h - 10) * 0.5f, 10, 10 }, 0.3f, 0.953f, 0.949f, 0.937f, 0.55f);
+      txt_desenhar_alpha(l, lx + 17, y, 0.5f); }
+    y += 18 + 12;
+    if (L.latenciaMs >= 0) {
+      snprintf(b, sizeof b, i18n("%d ms"), L.latenciaMs);
+      metrica(r, y, "Latência (primeiro byte)", b, L.latenciaMs > 800 ? 232 : 243,
+              L.latenciaMs > 800 ? 184 : 242, L.latenciaMs > 800 ? 74 : 239);
+    } }
 }
 
 static void desenharConta(GfxRect r, float ar, float ag, float ab) {
@@ -792,22 +819,27 @@ static void desenharConta(GfxRect r, float ar, float ag, float ab) {
     txt_bloco(TXT_CAPTION, a, 244, 196, 150, r.x + 28.0f, r.y + 76.0f, r.w - 56.0f, 30.0f, 1, 3);
     return;
   }
-  metrica(r, r.y + 72.0f, "Situação", L.conta.status, 238, 242, 248);
+  metrica(r, r.y + 62.0f, "Situação", L.conta.status, 243, 242, 239);
   if (L.conta.formatosDeclarados)
     snprintf(a, sizeof a, "%s%s%s", L.conta.temM3u8 ? "HLS" : "", L.conta.temM3u8 && L.conta.temTs ? " · " : "",
              L.conta.temTs ? "TS" : "");
   else snprintf(a, sizeof a, "%s", i18n("não declarados"));
-  metrica(r, r.y + 112.0f, "Formatos permitidos", a, 214, 220, 230);
+  metrica(r, r.y + 104.5f, "Formatos permitidos", a, 243, 242, 239);
   snprintf(a, sizeof a, i18n("%d de %d"), L.conta.conexoes, L.conta.maxConexoes);
-  metrica(r, r.y + 152.0f, "Telas em uso", a, L.conta.maxConexoes > 0 && L.conta.conexoes >= L.conta.maxConexoes ? 244 : 214,
-          220, 230);
+  { int cheio = L.conta.maxConexoes > 0 && L.conta.conexoes >= L.conta.maxConexoes, k;
+    TxtLinha v = txt_linha(TXT_AJ_ESTADO, a, 243, 242, 239, 255);
+    metrica(r, r.y + 147.0f, "Telas em uso", a, cheio ? 232 : 243, cheio ? 184 : 242, cheio ? 74 : 239);
+    for (k = 0; k < L.conta.maxConexoes && k < 10; k++) {
+      float px = r.x + r.w - 32.0f - v.w - 10 - (L.conta.maxConexoes - k) * 15.0f;
+      gfx_cor((GfxRect){ px, r.y + 147.0f + 11 + (v.h - 10) * 0.5f, 10, 10 }, 0.3f, 1, 1, 1, k < L.conta.conexoes ? 0.8f : 0.12f);
+    } }
   if (L.conta.expira > 0) {
     time_t t = (time_t)L.conta.expira;
     struct tm tm;
     localtime_r(&t, &tm);
     strftime(a, sizeof a, "%d/%m/%Y", &tm);
   } else snprintf(a, sizeof a, "%s", i18n("sem vencimento"));
-  metrica(r, r.y + 192.0f, "Validade", a, 214, 220, 230);
+  metrica(r, r.y + 189.5f, "Validade", a, 243, 242, 239);
 }
 
 static void textoResultado(const LtdItem *it, char *res, size_t nr, char *det, size_t nd, int *cor) {
@@ -869,26 +901,36 @@ static void desenharCanais(GfxRect r, float ar, float ag, float ab) {
   titulo(r, "Canais testados", sub);
   for (i = 0; i < L.n; i++) {
     const LtdItem *it = &L.it[i];
-    float y = r.y + 100.0f + (float)i * LTD_LINHA;
-    int cor;
-    TxtLinha tr;
+    GfxRect ln = { r.x + 32.0f, r.y + 90.0f + (float)i * (LTD_LINHA + 4.0f), r.w - 64.0f, LTD_LINHA };
+    int cor, atual = i == L.atual && L.estado != E_PRONTO;
+    float x = ln.x + 20, yc = ln.y + ln.h * 0.5f;
+    TxtLinha tn, tr;
+    if (ln.y + ln.h > r.y + r.h - 16) break;
     textoResultado(it, res, sizeof res, det, sizeof det, &cor);
-    if (i == L.atual && L.estado != E_PRONTO)
-      gfx_cor((GfxRect){ r.x + 16.0f, y - 6.0f, r.w - 32.0f, LTD_LINHA - 4.0f }, 12.0f / (LTD_LINHA - 4.0f), ar, ag, ab, 0.10f);
-    txt_desenhar(txt_linha_corta(TXT_BODY, it->nome, 232, 236, 244, 255, r.w * 0.38f), r.x + 28.0f, y);
-    tr = txt_linha_corta(TXT_BODY, res, cor == 1 ? 150 : cor == 2 ? 244 : 190,
-                         cor == 1 ? 222 : cor == 2 ? 170 : 196, cor == 1 ? 170 : cor == 2 ? 140 : 206,
-                         255, r.w * 0.56f - 28.0f);
-    txt_desenhar(tr, r.x + r.w - 28.0f - tr.w, y);
-    if (det[0])
-      txt_desenhar(txt_linha_corta(TXT_CAPTION, det, 150, 160, 174, 255, r.w - 56.0f),
-                   r.x + 28.0f, y + 30.0f);
+    if (atual) ajustes_ui_foco_linha(ln, 22);
+    ajustes_ui_neutro((GfxRect){ x, yc - 21, 42, 42 }, 12, 0.07f);
+    gfx_icone((GfxRect){ x + 10, yc - 11, 22, 22 }, "aj_tv-minimal-play", 0.953f, 0.949f, 0.937f, 0.7f);
+    x += 42 + 16;
+    tr = cor == 1 ? txt_linha_corta(TXT_AJ_18, res, 76, 195, 138, 255, ln.w * 0.5f)
+       : cor == 2 ? txt_linha_corta(TXT_AJ_18, res, 229, 83, 75, 255, ln.w * 0.5f)
+       : txt_linha_corta(TXT_AJ_18, res, 243, 242, 239, 255, ln.w * 0.5f);
+    tn = txt_linha_corta(TXT_ILHA_ITEM, it->nome, 243, 242, 239, 255, ln.x + ln.w - 20 - tr.w - 30 - x);
+    if (det[0]) {
+      TxtLinha td = txt_linha_corta(TXT_ILHA_HORA, det, 243, 242, 239, 255, ln.x + ln.w - 20 - tr.w - 30 - x);
+      txt_desenhar(tn, x, yc - (tn.h + 3 + td.h) * 0.5f);
+      txt_desenhar_alpha(td, x, yc - (tn.h + 3 + td.h) * 0.5f + tn.h + 3, 0.45f);
+    } else txt_desenhar(tn, x, yc - tn.h * 0.5f);
+    txt_desenhar_alpha(tr, ln.x + ln.w - 20 - tr.w, yc - tr.h * 0.5f, cor == 3 && !atual ? 0.4f : cor == 3 ? 0.75f : 1.0f);
+    if (atual) {
+      float px = ln.x + ln.w - 20 - tr.w - 9 - 9;
+      gfx_cor((GfxRect){ px - 5, yc - 9.5f, 19, 19 }, 0.5f, ar, ag, ab, 0.22f);
+      gfx_cor((GfxRect){ px, yc - 4.5f, 9, 9 }, 0.5f, ar, ag, ab, 1);
+    }
   }
 }
 
 static void desenharTeste(GfxRect r, float ar, float ag, float ab, Uint32 agora) {
-  GfxRect v = { r.x + 28.0f, r.y + 76.0f, r.w - 56.0f, (r.w - 56.0f) * 9.0f / 16.0f };
-  if (v.y + v.h > r.y + r.h - 20.0f) { v.h = r.y + r.h - 20.0f - v.y; v.w = v.h * 16.0f / 9.0f; }
+  GfxRect v = { r.x + 32.0f, r.y + 90.0f, r.w - 64.0f, r.h - 90.0f - 28.0f };
   quadroPlayer = v;
   painel(r, ar, ag, ab);
   if (L.estado == E_PLAYER && L.pfVivo) {
@@ -897,7 +939,7 @@ static void desenharTeste(GfxRect r, float ar, float ag, float ab, Uint32 agora)
     snprintf(a, sizeof a, i18n("%s em %s · %s"), L.it[L.atual].nome, L.pfFormato == F_HLS ? "HLS" : "TS", t);
     titulo(r, "No player agora", a);
     video_janela((int)v.x, (int)v.y, (int)v.w, (int)v.h);
-    gfx_furo_raio(v, 10.0f / v.h);
+    gfx_furo_raio(v, 18.0f / v.h);
     return;
   }
   if (L.estado == E_PRONTO && (L.rec.confianca || L.redeMedida)) {
@@ -907,38 +949,40 @@ static void desenharTeste(GfxRect r, float ar, float ag, float ab, Uint32 agora)
     ec = ec == 25000 ? 1 : ec == 45000 ? 2 : 0;
     titulo(r, "Ajustes sugeridos", NULL);
     snprintf(a, sizeof a, "%s  \xe2\x86\x92  %s", i18n(nomeResOpcao(ac)), i18n(nomeResOpcao(L.rec.resolucao)));
-    metrica(r, r.y + 72.0f, "Resolução principal", a, ac == L.rec.resolucao ? 214 : (int)(ar * 255),
-            ac == L.rec.resolucao ? 220 : (int)(ag * 255), ac == L.rec.resolucao ? 230 : (int)(ab * 255));
+    metrica(r, r.y + 62.0f, "Resolução principal", a, ac == L.rec.resolucao ? 190 : 255, ac == L.rec.resolucao ? 189 : 255, ac == L.rec.resolucao ? 187 : 255);
     snprintf(a, sizeof a, "%s  \xe2\x86\x92  %s", i18n(nomeFormatoOpcao(fc)), i18n(nomeFormatoOpcao(L.rec.formato)));
-    metrica(r, r.y + 112.0f, "Formato do Xtream", a, fc == L.rec.formato ? 214 : (int)(ar * 255),
-            fc == L.rec.formato ? 220 : (int)(ag * 255), fc == L.rec.formato ? 230 : (int)(ab * 255));
+    metrica(r, r.y + 104.5f, "Formato do Xtream", a, fc == L.rec.formato ? 190 : 255, fc == L.rec.formato ? 189 : 255, fc == L.rec.formato ? 187 : 255);
     snprintf(a, sizeof a, "%s  \xe2\x86\x92  %s", i18n(nomeEsperaOpcao(ec)), i18n(nomeEsperaOpcao(L.rec.espera)));
-    metrica(r, r.y + 152.0f, "Espera para abrir o canal", a, ec == L.rec.espera ? 214 : (int)(ar * 255),
-            ec == L.rec.espera ? 220 : (int)(ag * 255), ec == L.rec.espera ? 230 : (int)(ab * 255));
+    metrica(r, r.y + 147.0f, "Espera para abrir o canal", a, ec == L.rec.espera ? 190 : 255, ec == L.rec.espera ? 189 : 255, ec == L.rec.espera ? 187 : 255);
     if (L.recModo >= 0) {
       int mc = ajustes_livetv_modo();
       snprintf(a, sizeof a, "%s  \xe2\x86\x92  %s", letraModo(mc), letraModo(L.recModo));
-      metrica(r, r.y + 192.0f, "Modo do player da Live TV", a, mc == L.recModo ? 214 : (int)(ar * 255),
-              mc == L.recModo ? 220 : (int)(ag * 255), mc == L.recModo ? 230 : (int)(ab * 255));
+      metrica(r, r.y + 189.5f, "Modo do player da Live TV", a, mc == L.recModo ? 190 : 255, mc == L.recModo ? 189 : 255, mc == L.recModo ? 187 : 255);
     }
-    txt_bloco(TXT_CAPTION, i18n("Ficam em Ajustes › Conteúdo › Live TV, e dá para mudar à mão depois."),
-              150, 160, 174, r.x + 28.0f, r.y + 246.0f, r.w - 56.0f, 30.0f, 1, 3);
+    txt_bloco(TXT_ILHA_HORA, i18n("Ficam em Ajustes › TV ao vivo › Se o canal não abre, e dá para mudar à mão depois."),
+              243, 242, 239, r.x + 32.0f, r.y + r.h - 28.0f - 44.0f, r.w - 64.0f, 22.0f, 0.45f, 2);
     return;
   }
   titulo(r, "No player agora", NULL);
-  txt_bloco(TXT_CAPTION, i18n(L.estado == E_PRONTO ? "Teste concluído. O vídeo de cada canal aparece aqui enquanto ele é testado."
+  txt_bloco(TXT_ILHA_GENERO, i18n(L.estado == E_PRONTO ? "Teste concluído. O vídeo de cada canal aparece aqui enquanto ele é testado."
                                                    : "Cada canal abre aqui por até 18 s em cada modo do player, depois de a rede responder."),
-            170, 178, 190, r.x + 28.0f, r.y + 76.0f, r.w - 56.0f, 30.0f, 1, 4);
+            243, 242, 239, r.x + 32.0f, r.y + 62.0f, r.w - 64.0f, 24.0f, 0.55f, 4);
 }
 
 // Uma linha (ou duas) de recomendacao; a que nao cabe acima dos botoes fica de
 // fora — por isso a ordem de chamada e a ordem de importancia.
 static int linhaRec(GfxRect r, float *y, const char *s, int cr, int cg, int cb) {
-  float lim = r.y + r.h - 96.0f, w = r.w - 56.0f;
-  int linhas = (float)txt_linha(TXT_CAPTION, s, cr, cg, cb, 255).w > w ? 2 : 1;
-  if (*y + 30.0f * (float)linhas > lim) return 0;
-  txt_bloco(TXT_CAPTION, s, cr, cg, cb, r.x + 28.0f, *y, w, 30.0f, 1, 2);
-  *y += 30.0f * (float)linhas + 8.0f;
+  float lim = r.y + r.h - 96.0f, w = r.w - 64.0f;
+  int linhas = (float)txt_linha(TXT_ILHA_GENERO, s, cr, cg, cb, 255).w > w - 36.0f ? 2 : 1;
+  int alerta = cr > 230 && cg < 200;
+  if (*y + 26.0f * (float)linhas > lim) return 0;
+  // Icone pela gravidade (alerta ambar, informacao neutra); o texto na tinta
+  // da ilha, so o alerta em ambar.
+  if (alerta) gfx_icone((GfxRect){ r.x + 32.0f, *y + 2.0f, 18, 18 }, "aj_triangle-alert", 0.910f, 0.722f, 0.290f, 1);
+  else gfx_icone((GfxRect){ r.x + 32.0f, *y + 2.0f, 18, 18 }, "aj_info", 0.953f, 0.949f, 0.937f, 0.55f);
+  if (!alerta && cr == 214) { cr = 243; cg = 242; cb = 239; }
+  txt_bloco(TXT_ILHA_GENERO, s, cr, cg, cb, r.x + 32.0f + 28.0f, *y, w - 36.0f, 25.0f, alerta ? 1.0f : 0.8f, 2);
+  *y += 25.0f * (float)linhas + 10.0f;
   return 1;
 }
 
@@ -949,8 +993,13 @@ static void desenharRecomendacoes(GfxRect r, float ar, float ag, float ab) {
   painel(r, ar, ag, ab);
   titulo(r, "Recomendações", NULL);
   if (L.estado != E_PRONTO) {
+    float pct = L.n ? (float)L.atual / (float)L.n : 0.0f;
     snprintf(a, sizeof a, i18n("Testando %d de %d…"), L.atual + 1, L.n);
-    txt_desenhar(txt_linha_corta(TXT_BODY, a, 214, 220, 230, 255, r.w - 56.0f), r.x + 28.0f, y);
+    txt_desenhar(txt_linha_corta(TXT_ILHA_NOME, a, 243, 242, 239, 255, r.w - 64.0f), r.x + 32.0f, r.y + 62.0f);
+    gfx_cor((GfxRect){ r.x + 32.0f, r.y + 106.0f, r.w - 64.0f, 8 }, 0.5f, 1, 1, 1, 0.07f);
+    if (pct > 0) gfx_cor((GfxRect){ r.x + 32.0f, r.y + 106.0f, (r.w - 64.0f) * pct, 8 }, 0.5f, ar, ag, ab, 1);
+    txt_bloco(TXT_ILHA_APOIO, i18n("Cada canal abre aqui por até 18 s em cada modo do player, depois de a rede responder."),
+              243, 242, 239, r.x + 32.0f, r.y + 128.0f, r.w - 64.0f, 22.0f, 0.45f, 2);
     return;
   }
   for (i = 0; i < L.n; i++) {
@@ -1004,33 +1053,27 @@ static void desenharRecomendacoes(GfxRect r, float ar, float ag, float ab) {
   // BOTOES no rodape do painel.
   n = botoes(lista);
   { static const char *const ROT[B_N] = { "Aplicar recomendadas", "Enviar no registro", "Testar de novo" };
-    float x = r.x + 28.0f, by = r.y + r.h - 88.0f;
+    float x = r.x + 32.0f, by = r.y + r.h - 28.0f - 60.0f;
     if (L.botao >= n) L.botao = n ? n - 1 : 0;
-    for (i = 0; i < n; i++) {
-      int foco = i == L.botao;
-      TxtLinha t = txt_linha(TXT_BODY, i18n(ROT[lista[i]]), foco ? 16 : 232, foco ? 18 : 236, foco ? 22 : 244, 255);
-      float w = (float)t.w + 56.0f;
-      gfx_cor((GfxRect){ x, by, w, 60.0f }, 0.5f, foco ? ar : 0.13f, foco ? ag : 0.15f, foco ? ab : 0.19f, 1.0f);
-      txt_desenhar(t, x + 28.0f, by + (60.0f - (float)t.h) * 0.5f);
-      x += w + 20.0f;
-    } }
+    for (i = 0; i < n; i++) x += ajustes_ui_botao(i18n(ROT[lista[i]]), NULL, x, by, i == L.botao) + 12.0f; }
 }
 
 void livetvdiag_desenhar(Uint32 agora) {
-  float ar, ag, ab, x0 = areaX(), W = areaW(), y0, colE = 560.0f, vao = 40.0f;
+  float ar, ag, ab, x0 = 48.0f + ajustes_rail_largura_fixa(), colE = 620.0f, vao = 24.0f;
   ajustes_acento(&ar, &ag, &ab);
-  { TxtLinha tit = txt_linha(TXT_TITULO1, i18n("Diagnóstico da Live TV"), 255, 255, 255, 255);
-    TxtLinha sub = txt_linha_corta(TXT_BODY, i18n("Mede a rede até o provedor e testa canais de verdade nesta TV."),
-                                   178, 182, 190, 255, W);
-    txt_desenhar(tit, x0, NV_MARGEM_Y);
-    txt_desenhar(sub, x0, NV_MARGEM_Y + (float)tit.h + 4.0f);
-    y0 = NV_MARGEM_Y + (float)tit.h + 4.0f + (float)sub.h + 28.0f;
-    if (y0 < 196.0f) y0 = 196.0f; }
-  { float yb = NV_TELA_H - NV_MARGEM_Y, xd = x0 + colE + vao, wd = W - colE - vao;
-    float hRede = 200.0f, hConta = 250.0f, hCanais = 100.0f + LTD_MAX * LTD_LINHA + 4.0f;
+  ajustes_ui_fundo();
+  // Titulo ao lado da ilha do relogio, como o diagnostico.
+  { float x = ajustes_ilha_x() + 202.0f;
+    TxtLinha tit = txt_linha(TXT_AJ_TIT28, i18n("Diagnóstico da Live TV"), 243, 242, 239, 255);
+    TxtLinha sub = txt_linha_corta(TXT_AJ_ESTADO, i18n("Mede a rede até o provedor e testa canais de verdade nesta TV."),
+                                   243, 242, 239, 255, NV_TELA_W - 60 - x - tit.w - 18);
+    txt_desenhar(tit, x, 64 - tit.h * 0.5f);
+    txt_desenhar_alpha(sub, x + tit.w + 18, 64 - sub.h * 0.5f, 0.62f); }
+  { float y0 = 112.0f, yb = NV_TELA_H - 40.0f, xd = x0 + colE + vao, wd = NV_TELA_W - 40.0f - xd;
+    float hRede = 238.0f, hConta = 246.0f, hCanais = 610.0f;
     desenharRede((GfxRect){ x0, y0, colE, hRede }, ar, ag, ab);
-    desenharConta((GfxRect){ x0, y0 + hRede + 20.0f, colE, hConta }, ar, ag, ab);
-    desenharTeste((GfxRect){ x0, y0 + hRede + hConta + 40.0f, colE, yb - (y0 + hRede + hConta + 40.0f) },
+    desenharConta((GfxRect){ x0, y0 + hRede + 18.0f, colE, hConta }, ar, ag, ab);
+    desenharTeste((GfxRect){ x0, y0 + hRede + hConta + 36.0f, colE, yb - (y0 + hRede + hConta + 36.0f) },
                   ar, ag, ab, agora);
     desenharCanais((GfxRect){ xd, y0, wd, hCanais }, ar, ag, ab);
     desenharRecomendacoes((GfxRect){ xd, y0 + hCanais + 20.0f, wd, yb - (y0 + hCanais + 20.0f) }, ar, ag, ab); }

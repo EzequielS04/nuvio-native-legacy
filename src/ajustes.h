@@ -11,6 +11,7 @@
 #define NV_AJUSTES_H
 #include <SDL2/SDL.h>
 #include "idiomacod.h"
+#include "gfx.h"
 
 int  ajustes_iniciar(void);
 
@@ -200,6 +201,30 @@ int   ajustes_gradiente_foco_classico(void); // classicFocusGradientEnabled
 // x onde o conteudo comeca. Nao e constante: o recuo e sempre 104 e a rail
 // soma os 144 dela quando esta fixa.
 float ajustes_conteudo_x(void);
+// Ajustes no Glass UI: onde a ilha do relogio fica (em cima da ilha de
+// categorias) e se ela cabe agora (sem folha nem modal na frente).
+float ajustes_ilha_x(void);
+// A tela de addons (addonsui.c) desenhada no arranjo de Ajustes: indice,
+// folha com os addons e o inspetor do manifesto do addon em `foco`.
+void  ajustes_desenhar_addons(int foco);
+// KIT DAS ILHAS (Glass UI) para as telas que saem de Ajustes: diagnostico,
+// teste de velocidade e diagnostico da Live TV. Mesmo material e mesmas pecas
+// da tela de Ajustes (ajustes_ux_ilha.inc).
+void  ajustes_ui_fundo(void);                                  // arte + veu
+void  ajustes_ui_arte(int n);   // amostra atras da tela sem catalogo (capturas)
+void  ajustes_ui_ilha(GfxRect r, float raioPx, int modal);     // miolo, luz, sombra
+void  ajustes_ui_veu(void);                                    // veu dos modais
+float ajustes_ui_kicker(const char *s, float x, float y, float a);
+float ajustes_ui_meta(const char *k, const char *v, float x, float y, float w);
+float ajustes_ui_ef(const char *icone, const char *s, float x, float y, float w);
+float ajustes_ui_botao(const char *rot, const char *icone, float x, float y, int foco);
+float ajustes_ui_dicas(const char *const *teclas, const char *const *rotulos, int n, float x, float y, int desenha);
+void  ajustes_ui_neutro(GfxRect r, float raioPx, float vidA);
+void  ajustes_ui_foco_linha(GfxRect r, float raioPx);
+float ajustes_ui_antes_depois(const char *rot, int a, int b, const char *unid, int max,
+                              float x, float y, float w, int compacto, float cr, float cg, float cb);
+void  ajustes_ui_grafico_memoria(float x, float y, float w, float h);
+int   ajustes_relogio_cabe(void);
 // A FAIXA QUE A RAIL FIXA COBRE na borda esquerda, em px de tela: 144 com ela
 // presa (classica OU moderna — as duas pintam o mesmo desenhaRailFixa, e a
 // moderna desliga o recolhimento), 0 recolhida. E a UNICA fonte desse numero:

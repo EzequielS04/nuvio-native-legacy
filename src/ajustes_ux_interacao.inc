@@ -1,3 +1,4 @@
+static int ajEmLinha(int op);
 // Interação do seletor: só OK aplica; foco e rascunho nunca persistem.
 static int uxVoltar(SDL_Keycode k) {
   return k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE || k == SDLK_DELETE;
@@ -106,6 +107,14 @@ static int uxEvento(SDL_Keycode k) {
         if (uxRestaurar) uxPendente = uxValorPadrao(uxOp);
         uxAplicar();
       }
+      return 1;
+    }
+    // NA LINHA (segmentado, interruptor, cor de destaque): as setas laterais
+    // movem o valor pendente; nao ha rodape de "Restaurar padrao" ali.
+    if (ajEmLinha(uxOp) && uxEditor == 1 && (k == SDLK_LEFT || k == SDLK_RIGHT)) {
+      uxPendente += k == SDLK_RIGHT ? 1 : -1;
+      if (uxPendente < 0) uxPendente = 0;
+      if (uxPendente >= nValores(uxOp)) uxPendente = nValores(uxOp) - 1;
       return 1;
     }
     if (k == SDLK_RIGHT && uxTemPadrao(uxOp)) { uxRodape = 1; return 1; }

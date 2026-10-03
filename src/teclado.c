@@ -128,7 +128,32 @@ static int temBarra(void) { return st_ime_disponivel() || celOk(); }
 static float gradeH(void) {
   return (float)nFileiras * TE_TECLA + (float)(nFileiras - 1) * TE_GAP;
 }
-static float teH(void) { return TE_CAB + gradeH() + TE_RODAPE + TE_PAD; }
+// GLASS UI (mockup de Ajustes, quadro "teclado", 03/10): a modal virou uma
+// ilha de DUAS COLUNAS para caber a 3 m sem rolar — a esquerda o titulo, a
+// dica, o campo e os modos (teclado da TV, falar, celular); a direita a grade
+// de 74 px e a fileira apagar / limpar / concluir, de 56.
+#define TE_ILHA_PX   52.0f
+#define TE_ILHA_PY   48.0f
+#define TE_COL_GAP   56.0f
+#define TE_EXTRA_H   56.0f
+static float teEsqW(void) {
+  float w = 1340.0f - 2 * TE_ILHA_PX - TE_COL_GAP - gradeW();
+  float teto = NV_TELA_W - 80.0f - 2 * TE_ILHA_PX - TE_COL_GAP - gradeW();
+  if (w > teto) w = teto;
+  if (w < 420.0f) w = 420.0f;
+  return w;
+}
+static float teW(void) { return 2 * TE_ILHA_PX + teEsqW() + TE_COL_GAP + gradeW(); }
+static float teX(void) { return (NV_TELA_W - teW()) * 0.5f; }
+static float teGradeX(void) { return teX() + TE_ILHA_PX + teEsqW() + TE_COL_GAP; }
+static float teH(void) {
+  float grade = (float)(nFileiras - 1) * TE_PASSO - TE_GAP + 20.0f + TE_EXTRA_H;
+  // A coluna da esquerda tem altura propria (titulo, dica, campo, modos e
+  // as dicas na base): com um alfabeto curto (hexadecimal, 3 fileiras) a
+  // grade sozinha deixaria as dicas em cima do texto.
+  float esq = 22 + 48 + 10 + 57 + 30 + 76 + 22 + 55 + 16 + 50 + 40 + 30;
+  return 2 * TE_ILHA_PY + (grade > esq ? grade : esq);
+}
 static float teY(void) { return (NV_TELA_H - teH()) * 0.5f; }
 static const char *alfa(void) { return alfabetoAtual ? alfabetoAtual : ALFABETO; }
 static char  texto[TECLADO_LONGO + 1];
@@ -186,6 +211,20 @@ int teclado_resultado(void) {
   return r;
 }
 
+// O contexto da modal ("Contas e serviços · Chaves"), consumido pela proxima
+// abertura: quem chama poe antes de teclado_abrir_com, e a seguinte nasce sem.
+// Vale por um instante: quem pos e nao abriu nao contamina a proxima modal.
+static char kickerPend[120], kickerAtual[120];
+static Uint32 kickerQuando;
+void teclado_contexto(const char *kicker) {
+  snprintf(kickerPend, sizeof kickerPend, "%s", kicker ? kicker : "");
+  kickerQuando = SDL_GetTicks();
+}
+#ifdef AJUSTES_TESTE
+void teclado_teste_texto(const char *t) { snprintf(texto, sizeof texto, "%s", t); n = (int)strlen(texto); }
+void teclado_teste_foco(int f, int c) { fileira = f; coluna = c; }
+#endif
+
 void teclado_abrir(const char *titulo, const char *dica, int max) {
   teclado_abrir_com(titulo, dica, max, NULL, NULL);
 }
@@ -222,6 +261,8 @@ void teclado_abrir_com(const char *titulo, const char *dica, int max,
   n = (int)strlen(texto);
   snprintf(tituloAtual, sizeof tituloAtual, "%s", titulo ? titulo : "");
   snprintf(dicaAtual,   sizeof dicaAtual,   "%s", dica   ? dica   : "");
+  snprintf(kickerAtual, sizeof kickerAtual, "%s", SDL_GetTicks() - kickerQuando < 1000u ? kickerPend : "");
+  kickerPend[0] = 0;
   memset(focoAnim, 0, sizeof focoAnim);
   animBarra[0] = animBarra[1] = animBarra[2] = 0.0f;
   celRecebido = 0;
@@ -279,15 +320,24 @@ static int colunasDe(int f) {
 
 static GfxRect retangulo(int f, int c) {
   GfxRect r;
-  r.y = teY() + TE_CAB + (float)f * TE_PASSO;
+  r.y = teY() + TE_ILHA_PY + (float)f * TE_PASSO;
   r.h = TE_TECLA;
   if (ehChar(f)) {
-    r.x = TE_X + TE_PAD + (float)c * TE_PASSO;
+    r.x = teGradeX() + (float)c * TE_PASSO;
     r.w = TE_TECLA;
+  } else if (f == nFileiras - 1) {
+    // apagar / limpar / (mostrar) / CONCLUIR: o ultimo e 1,3 vez os outros.
+    int k = colunasDe(f), i;
+    float unid = (gradeW() - (float)(k - 1) * TE_GAP) / ((float)(k - 1) + 1.3f);
+    r.y = teY() + TE_ILHA_PY + (float)(nFileiras - 1) * TE_PASSO - TE_GAP + 20.0f;
+    r.h = TE_EXTRA_H;
+    r.x = teGradeX();
+    for (i = 0; i < c; i++) r.x += unid + TE_GAP;
+    r.w = c == k - 1 ? unid * 1.3f : unid;
   } else {
     int k = colunasDe(f);
     r.w = (gradeW() - (float)(k - 1) * TE_GAP) / (float)k;
-    r.x = TE_X + TE_PAD + (float)c * (r.w + TE_GAP);
+    r.x = teGradeX() + (float)c * (r.w + TE_GAP);
   }
   return r;
 }
@@ -298,7 +348,7 @@ static const char *rotuloExtra(int c) {
   if (c == 0) return "apagar";
   if (c == 1) return "limpar";
   if (ehSenha && c == 2) return mascarar ? "mostrar" : "ocultar";
-  return "pronto";
+  return "Concluir";
 }
 
 static void aplicar(void) {
@@ -415,141 +465,166 @@ void teclado_atualizar(float dt, Uint32 agora) {
     }
 }
 
+// Material da ilha (o mesmo de ajustes_ux_desenho.inc): vidro a 86% com a
+// luz do canto, solido #15161A; foco de tecla/chip = cheio no acento.
+static void teNeutro(GfxRect r, float raioPx, float vid, float sr, float sg, float sb, float a) {
+  if (ajustes_vidro()) gfx_cor(r, raioPx / r.h, 1, 1, 1, vid * a);
+  else gfx_cor(r, raioPx / r.h, sr, sg, sb, a);
+}
+static void teAcento(GfxRect r, float raioPx, float k, float a) {
+  float ar, ag, ab;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_rect((GfxRect){ r.x - 12, r.y - 2, r.w + 24, r.h + 26 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * k * a);
+  gfx_cor(r, raioPx / r.h, ar, ag, ab, k * a);
+}
+static float teCaps(const char *s, float x, float y, float a) {
+  char up[200];
+  idioma_maiusc_em(ajustes_idioma(), up, sizeof up, i18n(s));
+  return txt_tracking(TXT_MINI, up, 243, 242, 239, x, y, 0.45f * a, 2.1f);
+}
+static void teDica(float *x, float y, const char *k, const char *l, float a) {
+  TxtLinha tk = txt_linha(TXT_AJ_KBD, k, 243, 242, 239, 255), tl = txt_linha(TXT_ILHA_APOIO, l, 243, 242, 239, 255);
+  float kw = tk.w + 18.0f < 34.0f ? 34.0f : tk.w + 18.0f;
+  teNeutro((GfxRect){ *x, y, kw, 30 }, 15, 0.09f, 0.141f, 0.149f, 0.173f, a);
+  txt_desenhar_alpha(tk, *x + (kw - tk.w) * 0.5f, y + (30 - tk.h) * 0.5f, 0.82f * a);
+  txt_desenhar_alpha(tl, *x + kw + 9, y + (30 - tl.h) * 0.5f, 0.45f * a);
+  *x += kw + 9 + tl.w + 20;
+}
+
 void teclado_desenhar(Uint32 agora) {
-  float a = anim_suave(anim), dy, x, y;
+  float a = anim_suave(anim), dy, x, y, ew;
   int f, c, i;
   if (anim < 0.01f) return;
   dy = (1.0f - a) * 36.0f;
-
-  // MODAL PARA O PONTEIRO E O DEDO (#216): os alvos da tela de tras deixam de
-  // valer, o fundo absorve o toque, e cada tecla e um alvo (foco + OK).
   if (aberto && ponteiro_ativo()) {
     ponteiro_camada();
     ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, NULL, 0, 0);
   }
-  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.76f * anim);
-  { GfxRect p = { TE_X, teY() + dy, TE_W, teH() };
-    gfx_cor(p, 24.0f / teH(), 0.075f, 0.078f, 0.088f, 0.99f * a); }
+  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, (ajustes_vidro() ? 0.40f : 0.42f) * anim);
+  { GfxRect p = { teX(), teY() + dy, teW(), teH() };
+    float raio = 36.0f / p.h;
+    gfx_rect((GfxRect){ p.x - 20, p.y - 6, p.w + 40, p.h + 46 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, 0, 0, 0, 0.40f * a);
+    if (ajustes_vidro()) {
+      gfx_cor(p, raio, 0.055f, 0.059f, 0.071f, 0.86f * a);
+      gfx_luz_canto(p, raio, p.w * 0.22f, -p.h * 0.40f, p.h * 0.62f, 1, 1, 1, 0.10f * a);
+    } else gfx_cor(p, raio, 0.082f, 0.086f, 0.102f, a); }
 
-  x = TE_X + TE_PAD;
-  y = teY() + dy + TE_PAD;
-  { TxtLinha t = txt_linha(TXT_HEADLINE, tituloAtual, 245, 248, 255, 255);
-    txt_desenhar_alpha(t, x, y, a); }
-  // EM BLOCO: a dica nao cabe numa linha de 504px em portugues, e na captura
-  // ela saiu terminando em "...que ele te...".
-  if (dicaAtual[0])
-    txt_bloco(TXT_CAPTION2, dicaAtual, 160, 164, 175,
-              x, teY() + dy + TE_DICA_Y, gradeW(), 28.0f, a * 0.9f, 2);
-
-  // O QUE FOI DIGITADO — em CAIXAS ou em LINHA, e quem decide e a conta, nao
-  // quem chamou.
-  //
-  // Uma caixa por caractere so funciona enquanto a caixa couber o glifo. Com
-  // maxN = 4 (o codigo do amigo) cada caixa tem 117 px e a fileira de casas
-  // vazias diz "faltam tres" sem precisar de frase nenhuma. Com maxN = 24 (a
-  // busca de listas publicas) a mesma conta da 9,5 px por caixa, e o glifo de
-  // TXT_TITULO2 tem mais de 30: as letras se sobrepunham umas nas outras e o
-  // dono fotografou o resultado — tres "a" viraram uma mancha em cima de uma
-  // cerca de barrinhas.
-  //
-  // Entao: caixa so quando ela cabe o glifo (TE_CX_MIN), senao CAMPO DE TEXTO
-  // com cursor, que e a forma certa para texto livre de qualquer tamanho. E a
-  // fileira de casas vazias nao faz falta aqui — numa busca nao ha numero de
-  // caracteres a completar.
-  { float ar, ag, ab, cw = campoW();
-    GfxRect zona = { TE_X + TE_PAD, teY() + dy + TE_CAIXA_Y, cw, TE_CY };
-    ajustes_acento(&ar, &ag, &ab);
-    // FOCO NO CAMPO (cima da primeira fileira, so com teclado do sistema).
-    if (animBarra[0] > 0.01f)
-      gfx_vidro_aro((GfxRect){ zona.x - 8, zona.y - 8, zona.w + 16, zona.h + 16 }, NV_RAIO_CARD, 2.5f,
-                    ar, ag, ab, 0.95f * animBarra[0] * a);
-    if (st_ime_disponivel() && ponteiro_ativo())
-      ponteiro_alvo(zona.x, zona.y, zona.w, zona.h, focarBarra, NULL, 0, 0);
-    // FALAR, ao lado do campo.
-    if (st_voz_disponivel()) {
-      float d = TE_MIC_D, mx = zona.x + zona.w + 14.0f, my = zona.y + (zona.h - d) * 0.5f;
-      int ouve = st_dono() == ST_TECLADO && (st_estado() == ST_OUVINDO || st_estado() == ST_PERMISSAO ||
-                                              st_estado() == ST_VOZ_SISTEMA);
-      float k = ouve ? 1.0f : animBarra[1];
-      if (ponteiro_ativo()) ponteiro_alvo(mx, my, d, d, focarBarra, NULL, 1, 0);
-      if (k > 0.01f)
-        gfx_rect((GfxRect){ mx - 12, my - 12, d + 24, d + 24 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
-                 ar, ag, ab, (ouve ? 0.25f + 0.4f * st_nivel() : 0.3f) * k * a);
-      gfx_cor((GfxRect){ mx, my, d, d }, 0.5f, anim_mistura(0.18f, ar, k), anim_mistura(0.185f, ag, k),
-              anim_mistura(0.205f, ab, k), a);
-      { int t = k > 0.5f ? ajustes_tinta_foco() : 220;
-        gfx_icone((GfxRect){ mx + d * 0.27f, my + d * 0.27f, d * 0.46f, d * 0.46f }, "aj_mic",
-                  t / 255.0f, t / 255.0f, t / 255.0f, a); }
-    }
-    // CELULAR, o ultimo da barra (celbotao.h).
-    if (celOk()) {
-      float d = TE_MIC_D, mx = TE_X + TE_PAD + gradeW() - d, my = zona.y + (zona.h - d) * 0.5f;
-      celb_botao(CELB_TECLADO, (GfxRect){ mx, my, d, d }, aberto && fileira < 0 && coluna == 2,
-                 focarBarra, 2, 0, a);
-    } }
-  if (!mascarar && (campoW() - (float)(maxN - 1) * TE_CGAP) / (float)maxN >= TE_CX_MIN) {
-    float bw = (campoW() - (float)(maxN - 1) * TE_CGAP) / (float)maxN;
-    float bx, by = teY() + dy + TE_CAIXA_Y;
-    if (bw > TE_CX) bw = TE_CX;
-    bx = TE_X + TE_PAD + (campoW() - ((float)maxN * bw + (float)(maxN - 1) * TE_CGAP)) * 0.5f;
-    for (i = 0; i < maxN; i++) {
-      GfxRect b = { bx, by, bw, TE_CY };
-      char ch[2];
-      // 0.055 do menor lado, como NV_RAIO_CARD: o raio do gfx_cor e FRACAO,
-      // nao pixel, e um 12 aqui viraria uma pilula.
-      // A CHEIA BEM MAIS CLARA QUE A VAZIA, pelo mesmo motivo: com 0,13
-      // contra 0,09 de uma tecla em repouso, cheia e vazia eram a mesma
-      // mancha a tres metros.
-      gfx_cor(b, NV_RAIO_CARD, 1.0f, 1.0f, 1.0f, (i < n ? 0.22f : 0.04f) * a);
-      if (i < n) {
-        TxtLinha t;
-        ch[0] = texto[i]; ch[1] = 0;
-        t = txt_linha(TXT_TITULO2, ch, 246, 248, 255, 255);
-        txt_desenhar_alpha(t, b.x + (b.w - t.w) * 0.5f,
-                           b.y + (b.h - t.h) * 0.5f, a);
-      }
-      bx += bw + TE_CGAP;
-    }
-  } else {
-    GfxRect campo = { TE_X + TE_PAD, teY() + dy + TE_CAIXA_Y,
-                      campoW(), TE_CY };
-    float tx = campo.x + TE_CAMPO_PAD, cursorX = tx;
-    gfx_cor(campo, NV_RAIO_CARD, 1.0f, 1.0f, 1.0f, 0.07f * a);
-    if (n) {
-      char pontos[TECLADO_LONGO * 3 + 1];
-      TxtLinha t;
-      if (mascarar) {
-        int i2;
-        for (i2 = 0; i2 < n && i2 < TECLADO_LONGO; i2++) memcpy(pontos + i2 * 3, "\xE2\x80\xA2", 3);
-        pontos[i2 * 3] = 0;
-      }
-      t = txt_linha(TXT_TITULO2, mascarar ? pontos : texto, 246, 248, 255, 255);
-      // TEXTO MAIS LARGO QUE O CAMPO ROLA PELO FIM, nao pelo comeco: quem
-      // digita precisa ver a ultima letra que apertou, nao a primeira.
-      float larg = campo.w - TE_CAMPO_PAD * 2.0f;
-      float ox = t.w > larg ? t.w - larg : 0.0f;
-      gfx_recorte(campo.x + TE_CAMPO_PAD, campo.y,
-                  larg, campo.h);
-      txt_desenhar_alpha(t, tx - ox, campo.y + (campo.h - t.h) * 0.5f, a);
-      gfx_sem_recorte();
-      cursorX = tx + (t.w - ox);
-    }
-    // CURSOR SEM PISCA-PISCA quando as animacoes estao reduzidas — piscar e
-    // movimento, e a regra vale aqui como vale no resto do app.
-    { float op = ajustes_animacoes_reduzidas()
-                   ? 0.85f
-                   : 0.35f + 0.5f * (((agora / 500) % 2) ? 0.0f : 1.0f);
-      GfxRect cur = { cursorX + 3.0f, campo.y + 22.0f, 3.0f, campo.h - 44.0f };
-      if (cur.x > campo.x + campo.w - TE_CAMPO_PAD)
-        cur.x = campo.x + campo.w - TE_CAMPO_PAD;
-      gfx_cor(cur, 0.5f, 0.95f, 0.96f, 0.99f, op * a); }
+  // COLUNA DA ESQUERDA
+  x = teX() + TE_ILHA_PX; ew = teEsqW();
+  y = teY() + dy + TE_ILHA_PY;
+  if (kickerAtual[0]) { teCaps(kickerAtual, x, y + 2, a); y += 22.0f; }
+  { TxtLinha t = txt_linha_corta(TXT_ILHA_TITULO, tituloAtual, 243, 242, 239, 255, ew);
+    txt_desenhar_alpha(t, x, y, a); y += 48.0f; }
+  if (dicaAtual[0]) {
+    y += 10.0f;
+    y += txt_bloco(TXT_AJ_SUB, dicaAtual, 243, 242, 239, x, y, ew, 28.5f, 0.58f * a, 3);
   }
+  y += 30.0f;
+  { float ar, ag, ab;
+    ajustes_acento(&ar, &ag, &ab);
+    // O QUE FOI DIGITADO: caixas quando cada uma cabe o glifo (codigos
+    // curtos), senao o campo de texto com cursor.
+    if (!mascarar && (ew - (float)(maxN - 1) * TE_CGAP) / (float)maxN >= TE_CX_MIN) {
+      float bw = (ew - (float)(maxN - 1) * TE_CGAP) / (float)maxN, bx = x;
+      if (bw > TE_CX) bw = TE_CX;
+      for (i = 0; i < maxN; i++) {
+        GfxRect b = { bx, y, bw, TE_CY };
+        teNeutro(b, 20, i < n ? 0.16f : 0.05f, i < n ? 0.20f : 0.12f, i < n ? 0.205f : 0.125f, i < n ? 0.23f : 0.145f, a);
+        if (i < n) {
+          char ch[2] = { texto[i], 0 };
+          TxtLinha t = txt_linha(TXT_TITULO2, ch, 243, 242, 239, 255);
+          txt_desenhar_alpha(t, b.x + (b.w - t.w) * 0.5f, b.y + (b.h - t.h) * 0.5f, a);
+        }
+        bx += bw + TE_CGAP;
+      }
+      y += TE_CY;
+    } else {
+      GfxRect campo = { x, y, ew, 76.0f };
+      float tx = campo.x + 24.0f, cursorX = tx, larg;
+      char q[48];
+      TxtLinha lq;
+      teNeutro(campo, 24, 0.07f, 0.125f, 0.129f, 0.153f, a);
+      if (animBarra[0] > 0.01f) teNeutro(campo, 24, 0.07f * animBarra[0], 0.17f, 0.176f, 0.204f, animBarra[0] * a);
+      if (st_ime_disponivel() && ponteiro_ativo()) ponteiro_alvo(campo.x, campo.y, campo.w, campo.h, focarBarra, NULL, 0, 0);
+      snprintf(q, sizeof q, n == 1 ? i18n("%d caractere") : i18n("%d caracteres"), n);
+      lq = txt_linha(TXT_ILHA_APOIO, q, 243, 242, 239, 255);
+      txt_desenhar_alpha(lq, campo.x + campo.w - 24 - lq.w, campo.y + (campo.h - lq.h) * 0.5f, 0.4f * a);
+      larg = campo.w - 48.0f - lq.w - 20.0f;
+      if (n) {
+        char pontos[TECLADO_LONGO * 3 + 1];
+        TxtLinha t;
+        float ox;
+        if (mascarar) {
+          int i2;
+          for (i2 = 0; i2 < n && i2 < TECLADO_LONGO; i2++) memcpy(pontos + i2 * 3, "\xE2\x80\xA2", 3);
+          pontos[i2 * 3] = 0;
+        }
+        t = txt_linha(TXT_AJ_INSP, mascarar ? pontos : texto, 243, 242, 239, 255);
+        ox = t.w > larg ? t.w - larg : 0.0f;
+        gfx_recorte(tx, campo.y, larg, campo.h);
+        txt_desenhar_alpha(t, tx - ox, campo.y + (campo.h - t.h) * 0.5f, a);
+        gfx_sem_recorte();
+        cursorX = tx + (t.w - ox);
+      }
+      { float op = ajustes_animacoes_reduzidas() ? 0.95f : (((agora / 500) % 2) ? 0.35f : 0.95f);
+        gfx_cor((GfxRect){ cursorX + 3.0f, campo.y + 20.0f, 2.0f, 36.0f }, 0.5f, ar, ag, ab, op * a); }
+      y += 76.0f;
+    } }
+  // MODOS: teclado da TV, falar e celular, num segmentado (o que existir).
+  { const char *rot[3]; int col[3], k = 0;
+    if (st_ime_disponivel()) { rot[k] = "Teclado da TV"; col[k++] = 0; }
+    if (st_voz_disponivel()) { rot[k] = "Falar"; col[k++] = 1; }
+    if (celOk()) { rot[k] = "Digitar pelo celular"; col[k++] = 2; }
+    if (k) {
+      float sx = x, sw = 10.0f, h = 55.0f, ih = 45.0f;
+      y += 22.0f;
+      for (i = 0; i < k; i++) sw += txt_linha(TXT_AJ_SEG, rot[i], 0, 0, 0, 255).w + 40.0f + (i ? 4.0f : 0.0f);
+      teNeutro((GfxRect){ sx, y, sw, h }, h * 0.5f, 0.06f, 0.114f, 0.118f, 0.137f, a);
+      sx += 5.0f;
+      for (i = 0; i < k; i++) {
+        int foco = aberto && fileira < 0 && coluna == col[i];
+        int ti = foco ? ajustes_tinta_foco() : 243;
+        TxtLinha t = txt_linha(TXT_AJ_SEG, rot[i], ti, ti, ti, 255);
+        GfxRect r = { sx, y + 5.0f, t.w + 40.0f, ih };
+        if (aberto && ponteiro_ativo()) ponteiro_alvo(r.x, r.y, r.w, r.h, focarBarra, NULL, col[i], 0);
+        if (foco) teAcento(r, ih * 0.5f, animBarra[col[i]] > 0.5f ? 1.0f : animBarra[col[i]] * 2.0f, a);
+        else if (col[i] == 2 && celRecebido) teNeutro(r, ih * 0.5f, 0.14f, 0.204f, 0.212f, 0.243f, a);
+        txt_desenhar_alpha(t, r.x + 20, r.y + (ih - t.h) * 0.5f, (foco ? 1.0f : 0.55f) * a);
+        sx += r.w + 4.0f;
+      }
+      y += h;
+      if (celOk()) {
+        y += 16.0f;
+        txt_bloco(TXT_ILHA_GENERO, "Pelo celular, o texto chega aqui para você conferir antes de concluir.",
+                  243, 242, 239, x, y, ew, 25.0f, 0.45f * a, 2);
+      }
+    } }
+  // Dicas na base da coluna.
+  { const char *av = st_dono() == ST_TECLADO ? st_aviso() : "";
+    float dx = x, by = teY() + dy + teH() - TE_ILHA_PY - 30.0f;
+    if (av[0]) {
+      TxtLinha t = txt_linha_corta(TXT_ILHA_GENERO, av, 240, 196, 140, 255, ew);
+      txt_desenhar_alpha(t, x, by + (30 - t.h) * 0.5f, a);
+    } else if (celRecebido && fileira == nFileiras - 1) {
+      TxtLinha t = txt_linha_corta(TXT_ILHA_GENERO, "Recebido do celular. Confira e aperte Concluir.", 243, 242, 239, 255, ew);
+      txt_desenhar_alpha(t, x, by + (30 - t.h) * 0.5f, 0.62f * a);
+    } else if (fileira < 0) {
+      teDica(&dx, by, "OK", coluna == 2 ? "Digitar pelo celular" : coluna == 1 ? "Falar" : "Teclado da TV", a);
+      teDica(&dx, by, "↓", "Teclado", a);
+      teDica(&dx, by, "Voltar", "Cancelar", a);
+    } else {
+      teDica(&dx, by, "Setas", "Navegar", a);
+      teDica(&dx, by, "OK", "Digitar", a);
+      teDica(&dx, by, "Voltar", "Cancelar", a);
+    } }
 
+  // COLUNA DA DIREITA: a grade.
   for (f = 0; f < nFileiras; f++) {
     for (c = 0; c < colunasDe(f); c++) {
       float k = focoAnim[f][c];
       GfxRect base = retangulo(f, c);
-      float esc = 1.0f + TE_ESCALA * k;
+      int extra = f == nFileiras - 1, concluir = extra && c == colunasDe(f) - 1;
+      float esc = 1.0f + (extra ? 0.0f : TE_ESCALA * k);
       GfxRect t;
       const char *s;
       char ch[2];
@@ -559,45 +634,23 @@ void teclado_desenhar(Uint32 agora) {
       t.w = base.w * esc; t.h = base.h * esc;
       t.x = base.x - (t.w - base.w) * 0.5f;
       t.y = base.y - (t.h - base.h) * 0.5f;
-      // INVERTE no foco, como a grade da busca: a tres metros, numa grade de
-      // 39 alvos iguais, a inversao e o unico contraste que se ve de relance.
-      gfx_cor(t, NV_RAIO_CARD, 1.0f, 1.0f, 1.0f, anim_mistura(0.09f, 1.0f, k) * a);
-      if (ehAtalho(f)) {
-        s = ATALHOS_EMAIL[c];
-      } else if (ehChar(f)) {
+      if (extra) teNeutro(t, t.h * 0.5f, 0.08f, 0.141f, 0.149f, 0.173f, a);
+      else teNeutro(t, 20.0f * esc, 0.07f, 0.125f, 0.129f, 0.153f, a);
+      if (k > 0.01f) teAcento(t, extra ? t.h * 0.5f : 20.0f * esc, k, a);
+      if (ehAtalho(f)) s = ATALHOS_EMAIL[c];
+      else if (ehChar(f)) {
         ch[0] = alfa()[f * nCols + c]; ch[1] = 0;
         s = ch;
-        // A TECLA DE ESPACO (busca do guia) diz o que e: uma tecla vazia
-        // pareceria quebrada. "␣" nao existe na fonte da interface.
         if (ch[0] == ' ') s = i18n("espaço");
-      } else {
-        s = rotuloExtra(c);
-      }
-      // A COR DO TEXTO EM DEGRAU e nao interpolada: ela faz parte da chave do
-      // cache de linhas de text.c, e uma cor por quadro em 39 teclas estoura o
-      // orcamento de rasterizacao — e ai a tecla sai SEM GLIFO (a nota longa
-      // esta em ctxmenu.c). O degrau cai em k=0,5, onde o fundo esta a 0,55 de
-      // luminancia e as duas cores ainda sao legiveis.
-      tom = k >= 0.5f ? 26 : 236;
-      // "espaco" no corpo de uma letra (TITULO3) passava das bordas da tecla
-      // de 74 px e cobria a vizinha; a palavra vai no corpo de legenda.
-      { TxtLinha l = txt_linha(!ehChar(f) ? TXT_BODY
-                               : (s != ch ? TXT_CAPTION2 : TXT_TITULO3),
+      } else s = rotuloExtra(c);
+      // A cor do texto em DEGRAU (a chave do cache de linhas de text.c).
+      tom = k >= 0.5f ? ajustes_tinta_foco() : 243;
+      { TxtLinha l = txt_linha(extra ? TXT_AJ_SEG : (!ehChar(f) || s != ch ? TXT_AJ_ESTADO : TXT_AJ_TIT28),
                                s, tom, tom, tom, 255);
-        txt_desenhar_alpha(l, t.x + (t.w - l.w) * 0.5f,
-                           t.y + (t.h - l.h) * 0.5f, a); }
+        const char *ic = extra ? (c == 0 ? "aj_delete" : concluir ? "aj_check" : NULL) : NULL;
+        float iw = ic ? 22.0f + 10.0f : 0.0f, lx = t.x + (t.w - l.w - iw) * 0.5f;
+        if (ic) gfx_icone((GfxRect){ lx, t.y + (t.h - 22) * 0.5f, 22, 22 }, ic, tom / 255.0f, tom / 255.0f, tom / 255.0f, (k >= 0.5f ? 1.0f : 0.85f) * a);
+        txt_desenhar_alpha(l, lx + iw, t.y + (t.h - l.h) * 0.5f, (k >= 0.5f ? 1.0f : extra ? 0.85f : 0.9f) * a); }
     }
   }
-
-  { const char *av = st_dono() == ST_TECLADO ? st_aviso() : "";
-    const char *d = av[0] ? av
-      : celRecebido && fileira == nFileiras - 1 ? "Recebido do celular. Confira e aperte Pronto."
-      : fileira < 0 ? (coluna == 2 ? "OK Digitar pelo celular   Baixo Teclado   Voltar Cancelar"
-                     : coluna == 1 ? "OK Falar   Baixo Teclado   Voltar Cancelar"
-                                   : "OK Teclado da TV   Baixo Teclado   Voltar Cancelar")
-      : st_ime_disponivel() ? "Setas Navegar   OK Digitar   Cima Teclado da TV"
-      : celOk() ? "Setas Navegar   OK Digitar   Cima Celular"
-      : "Setas Navegar   OK Digitar   Voltar Cancelar";
-    TxtLinha t = txt_linha(TXT_CAPTION2, d, av[0] ? 240 : 155, av[0] ? 196 : 159, av[0] ? 140 : 169, 255);
-    txt_desenhar_alpha(t, x, teY() + dy + teH() - TE_PAD - t.h, a * 0.86f); }
 }

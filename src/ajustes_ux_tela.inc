@@ -35,7 +35,7 @@ static const Item TELA[] = {
       OPC(AJ_POSTER_EXTRA), OPC(AJ_POSTER_CHAVE), OPC(AJ_POSTER_MODELO),
       OPC(AJ_POSTER_TESTAR),
 
-  SEC("Trailers", "Onde tocam, com que som e de qual fonte", "aj_circle-play"),
+  SEC("Trailers", "Onde tocam, com que som e de qual fonte", "aj_clapperboard"),
     ROT("Onde toca"),
       OPC(AJ_HERO_TRAILER), OPC(AJ_FOCO_TRAILER), OPC(AJ_DET_TRAILER_AUTO),
       OPC(AJ_DET_TRAILER),
@@ -71,14 +71,14 @@ static const Item TELA[] = {
       OPC(AJ_SEEKR_LIGADO), OPC(AJ_SEEKR_CHAVE), OPC(AJ_SEEKR_TESTAR),
       OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
 
-  SEC("Idiomas e legendas", "Idioma da interface, áudio, legenda e metadados", "aj_list-checks"),
+  SEC("Idiomas e legendas", "Idioma da interface, áudio, legenda e metadados", "aj_languages"),
     OPC(AJ_IDIOMA), OPC(AJ_AUD_LINGUA), OPC(AJ_LEG_LINGUA), OPC(AJ_TMDB_IDIOMA),
 
   SEC("Aparência", "Cor, transparência, fonte, animações e relógio", "aj_palette"),
     OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_FONTE_UI),
     OPC(AJ_ANIM), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS), OPC(AJ_VIDRO_CONTORNO),
 
-  SEC("TV ao vivo", "Provedor e solução de problemas ao assistir canais", "aj_puzzle"),
+  SEC("TV ao vivo", "Provedor e solução de problemas ao assistir canais", "aj_tv-minimal-play"),
     ROT("Provedor"),
       OPC(AJ_XTREAM_SERVIDOR), OPC(AJ_XTREAM_USUARIO), OPC(AJ_XTREAM_SENHA),
       OPC(AJ_XTREAM_CONTA), OPC(AJ_XTREAM_LIMPAR), OPC(AJ_STALKER_PORTAL),

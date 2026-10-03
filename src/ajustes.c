@@ -115,8 +115,10 @@ static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foc
 #define AJ_LISTA_X      (AJ_IDX_X + AJ_IDX_W + AJ_IDX_GAP)
 #define AJ_LISTA_W      866.0f
 #define AJ_PAD           24.0f    // borda da linha ao texto
-#define AJ_TOPO        (NV_MARGEM_Y + 140.0f)   // abaixo do titulo da tela
-#define AJ_BASE        (NV_TELA_H - NV_MARGEM_Y - 48.0f)
+// A janela da LISTA dentro da folha (Glass UI): abaixo do cabecalho da folha
+// (kicker, titulo e sub) ate 18 px da base da ilha.
+#define AJ_TOPO        199.0f
+#define AJ_BASE        1022.0f
 // Raio da linha em fracao do menor lado (o SDF do shader e normalizado):
 // 12px sobre 88 de altura.
 #define AJ_RAIO           0.14f
@@ -1267,8 +1269,6 @@ static const char *textoValor(int op);
 static int uxTemPadrao(int op);
 static int uxDiferente(int op);
 static void uxCancelar(void);
-static void uxDesenharEditor(void);
-static void uxDesenharEspecial(void);
 
 int ajustes_pediu_busca(void) { int p = uxPediuBusca; uxPediuBusca = 0; return p; }
 void ajustes_abrir_opcao(int op) {
@@ -3830,7 +3830,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_IDIOMA: return "Idioma de toda a interface. Automático segue a sua conta e, sem ela, o idioma da TV. Não muda o idioma das legendas nem do áudio.";
     case AJ_GPU_EFEITOS: return "Automático mede a TV nos primeiros segundos e, se ela não der conta, tira os efeitos mais pesados. Completos mantém tudo; Leves tira desfoque e brilho para deixar a navegação mais lisa.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
-    case AJ_TEMA: return "Cor do anel que marca onde está o foco. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena: estilizada também tinge o fundo, gradiente pinta os botões com as cores da arte e imersiva deixa a cor vazar pela tela como luz. Ficam só nesta TV.";
+    case AJ_TEMA: return "Cor dos botões em foco e das marcas de estado. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena e ficam só nesta TV.";
     case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
     case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
     case AJ_DEBRID_AD: return "Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.";
@@ -3848,8 +3848,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_POSTER_CHAVE: return "Sua chave do RPDB (ratingposterdb.com). Fica só nesta TV e nunca aparece nos registros.";
     case AJ_POSTER_MODELO: return "Endereço com {imdb}, {tmdb}, {type} (movie ou series) e {tipo_tmdb} (movie ou tv), por exemplo https://meu.servidor/{type}/{imdb}.jpg. Quem não tiver o dado que o modelo pede fica com o cartaz normal.";
     case AJ_POSTER_TESTAR: return "Baixa o cartaz de um filme conhecido com a configuração atual e mostra se deu certo. O primeiro cartaz de cada título é montado no servidor e pode levar alguns segundos.";
-    case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso, como nos apps de streaming clássicos. Dinâmica: estilo Apple TV, com o destaque que sobe e some ao descer, fileiras de tamanhos diferentes (destaques grandes, Top 10 com numerais, cartazes e faixas deitadas) sobre um fundo de vidro fosco tingido pela arte.";
-    case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
+    case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso. Dinâmica: estilo Apple TV, com destaques grandes e Top 10 com numerais.";
+    case AJ_VIDRO: return "Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.";
     case AJ_ADDONS_PRINCIPAL: return "Os outros perfis desta conta usam os addons do perfil principal. Desligado, cada perfil usa os seus — a não ser que a conta já diga para usar os do principal.";
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
@@ -3962,30 +3962,16 @@ static const char *efeitoOpcao(int op) {
       if (valor[op] == AJ_SALVOS_SIMKL && !simklauth_token()[0])
         return "Vincule o Simkl em Ajustes: sem o vínculo, o + guarda só na lista desta TV.";
       return "A lista desta TV recebe o título em todos os casos. Isto decide se ele também vai para o Trakt ou para o Simkl.";
-    case AJ_ADDONS: case AJ_TRAKT: case AJ_SIMKL:
+    case AJ_TRAKT: case AJ_SIMKL:
+      return (op == AJ_TRAKT ? traktauth_estado() == TRA_LIGADO : simklauth_estado() == SMK_LIGADO)
+        ? "OK abre o vínculo de novo, com QR e código. As setas laterais não fazem nada nesta linha."
+        : "OK abre o vínculo, com QR e código. As setas laterais não fazem nada nesta linha.";
+    case AJ_ADDONS:
       return "OK abre. As setas laterais não fazem nada nesta linha.";
     default: return NULL;
   }
 }
 
-// txt_bloco QUEBRA POR ESPACO E SO POR ESPACO: um "\n" no meio do texto nao
-// quebra linha nenhuma — ele chega na fonte como caractere e sai desenhado como
-// um retangulo vazio, com as linhas coladas numa so. Os tres blocos de dica
-// desta tela e os dois da folha de fileiras estavam assim, e na captura de
-// 1080p liam "↑ ↓ Navegar▯← → Alterar valor▯Voltar Ir para as categorias".
-//
-// Aqui cada dica e uma string propria e uma linha propria. Nao e conserto do
-// txt_bloco de proposito: ele e de text.c, que esta com outro dono agora — a
-// falha esta anotada no relatorio para quem cuidar daquele arquivo.
-static void desenhaDicas(const char *const *linhas, int n, float x, float y,
-                         float larg, int r, int g, int b) {
-  int i;
-  for (i = 0; i < n; i++) {
-    TxtLinha l = txt_linha_corta(TXT_CAPTION, linhas[i], r, g, b, 255, larg);
-    txt_desenhar(l, x, y);
-    y += 34.0f;
-  }
-}
 
 // Deslocamento vertical do topo da lista ate a linha `op`, contando os
 // cabecalhos das secoes E das subsecoes que vieram antes. Tem de casar
@@ -4001,22 +3987,16 @@ static void desenhaDicas(const char *const *linhas, int n, float x, float y,
 // ajustes_desenhar: duas contas do mesmo layout sao duas chances de discordar,
 // e quando discordam a rolagem para na linha errada. UMA CATEGORIA POR PAGINA
 // (dono, 20/09/2026), entao trocar de categoria zera a rolagem.
-static float alturaItem(int i) {
-  if (!visivel(i)) return 0.0f;
-  switch (TELA[i].tipo) {
-    case IT_SEC: return AJ_SEC_CABEC;
-    case IT_ROT: return AJ_SUB_CABEC;
-    case IT_GRP: return AJ_GRUPO_H + AJ_LINHA_GAP;
-    default:     return AJ_LINHA_H + AJ_LINHA_GAP;
-  }
-}
+static float ajAlturaItem(int i);
+static float ajLinhaH(int i);
+static float alturaItem(int i) { return ajAlturaItem(i); }
 static float yDoItem(int item) {
   int s = secDoItem[item], i;
   float y = 0.0f;
   for (i = secIni[s]; i < item && i < secFim(s); i++) y += alturaItem(i);
   return y;
 }
-static float alturaFoco(int i) { return TELA[i].tipo == IT_GRP ? AJ_GRUPO_H : AJ_LINHA_H; }
+static float alturaFoco(int i) { return TELA[i].tipo == IT_GRP ? AJ_GRUPO_H : ajLinhaH(i); }
 
 // Tecla dentro da folha de fileiras.
 //
@@ -4546,24 +4526,7 @@ static void riscoFolhaEvento(SDL_Keycode k) {
     mudarValor(op, dir);   // agora vista: aplica de verdade
   }
 }
-static void desenhaRiscoFolha(void) {
-  const float W = 980.0f, H = 380.0f;
-  float x = (NV_TELA_W - W) * 0.5f, y = (NV_TELA_H - H) * 0.5f, ar, ag, ab, bx, by;
-  TxtLinha t;
-  ajustes_acento(&ar, &ag, &ab);
-  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.78f);
-  gfx_cor((GfxRect){ x, y, W, H }, 28.0f / H, 0.055f, 0.058f, 0.068f, 0.97f);
-  gfx_luz_canto((GfxRect){ x, y, W, H }, 28.0f / H, W * 0.05f, -W * 0.15f, W * 0.5f, ar, ag, ab, 0.22f);
-  t = txt_linha(TXT_TITULO3, i18n(riscoFolhaTitulo()), 246, 247, 252, 255);
-  txt_desenhar(t, x + 56.0f, y + 48.0f);
-  txt_bloco(TXT_BODY, i18n(riscoFolhaTexto()), 200, 203, 210, x + 56.0f, y + 130.0f, W - 112.0f, 36.0f, 1.0f, 4);
-  bx = x + 56.0f; by = y + H - 48.0f - BOTAO_H_PRIMARIO;
-  { GfxRect r = { bx, by, botao_largura(i18n("Continuar"), NULL, 1), BOTAO_H_PRIMARIO };
-    botao_pilula(r, i18n("Continuar"), NULL, riscoFolhaFoco == 0 ? 1.0f : 0.0f, 1, 0, 1.0f);
-    bx += r.w + BOTAO_GAP; }
-  { GfxRect r = { bx, by + (BOTAO_H_PRIMARIO - BOTAO_H_SECUNDARIO), botao_largura(i18n("Cancelar"), NULL, 0), BOTAO_H_SECUNDARIO };
-    botao_pilula(r, i18n("Cancelar"), NULL, riscoFolhaFoco == 1 ? 1.0f : 0.0f, 0, 0, 1.0f); }
-}
+static void desenhaRiscoFolha(void);
 
 // UM PASSO NO VALOR DA OPCAO `op` (dir = +1 ou -1), com tudo o que a mudanca
 // tem de disparar, e a gravacao. Um lugar so para as setas do modo edicao e
@@ -4625,6 +4588,8 @@ static int ehInterruptor(int op) {
 #include "ajustes_ux_dados.inc"
 #include "ajustes_ux_interacao.inc"
 
+static const char *uxCaminho(int op);
+static const char *uxBloco(int op);
 static void eventoTela(const SDL_Event *e);
 void ajustes_evento(const SDL_Event *e) {
   eventoTela(e);
@@ -4673,6 +4638,11 @@ static void eventoTela(const SDL_Event *e) {
     // fica no cabecalho; baixo entra nas opcoes.
     if (focoOp < 0) { if (TELA[focoItem].tipo == IT_GRP) abrirGrupo(focoItem); return; }
     if (OPCOES[focoOp].tipo != OP_ACAO) { uxAbrirEditor(focoOp); return; }
+    // O contexto da modal de digitacao, se esta acao abrir uma: "Secao · Bloco".
+    { char kc[200]; const char *b = uxBloco(focoOp);
+      if (b[0]) snprintf(kc, sizeof kc, "%s · %s", i18n(uxCaminho(focoOp)), i18n(b));
+      else snprintf(kc, sizeof kc, "%s", i18n(uxCaminho(focoOp)));
+      teclado_contexto(kc); }
     if (focoOp == AJ_FIL_ORDEM) {
       filAberta = 1; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
       filAba = 0; filNaBarra = 0; filAviso[0] = 0;
@@ -4849,7 +4819,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   // sem titulo.
   float topo = yDoItem(focoItem);
   if (focoItem == primeiroDaSecao(secAtual)) topo = 0.0f;
-  else if (focoItem > 0 && TELA[focoItem - 1].tipo == IT_ROT) topo -= AJ_SUB_CABEC;
+  else if (focoItem > 0 && TELA[focoItem - 1].tipo == IT_ROT) topo -= alturaItem(focoItem - 1);
   float base = yDoItem(focoItem) + alturaFoco(focoItem);
   // UM GRUPO ABERTO QUER SER VISTO INTEIRO, ou quanto couber: com o foco no
   // cabecalho, a rolagem estica a base ate a ultima opcao dele. Sem isto o OK
@@ -4873,16 +4843,17 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       secVista = secAgora; scrollY = 0.0f; velY = 0.0f; alvo = 0.0f;
     } }
   paginaA = ajustes_animacoes_reduzidas() ? 1.0f : anim_rampa(paginaA, 1.0f, dt, 220.0f);
-  if (base - alvo > AJ_BASE - AJ_TOPO) alvo = base - (AJ_BASE - AJ_TOPO);
-  if (topo - alvo < 0.0f)              alvo = topo;
+  // GLASS UI: a linha em foco fica no MEIO da janela (a lista some nos 80 px
+  // de baixo e, rolada, nos 60 de cima — no meio ela nunca encosta no
+  // esvanecer), presa entre o topo e o fim da categoria.
+  { float janela = AJ_BASE - AJ_TOPO, fim = 0.0f;
+    int k;
+    for (k = secIni[secAtual]; k < secFim(secAtual); k++) fim += alturaItem(k);
+    alvo = (topo + base) * 0.5f - janela * 0.5f;
+    if (alvo > fim - janela) alvo = fim - janela;
+    if (topo - alvo < 0.0f) alvo = topo; }
   if (alvo < 0.0f) alvo = 0.0f;
-  // CABECALHO INTEIRO OU NENHUM. Uma categoria que passa da altura por pouco
-  // (Avancado, com o teste de velocidade e o rotulo "Diagnóstico") rolava so
-  // uns 40 px, e o recorte da lista cortava o titulo da categoria ao meio —
-  // parecia defeito de desenho. Rolando, rola ate o cabecalho sair; so se o
-  // item em foco continuar inteiro na tela (topo >= h0).
-  { float h0 = yDoItem(primeiroDaSecao(secAtual));
-    if (alvo > 0.0f && alvo < h0 && topo >= h0) alvo = h0; }
+  // (O "cabecalho inteiro ou nenhum" saiu: o cabecalho agora e fixo na folha.)
   scrollY = anim_mola2_reduzida(&velY, scrollY, alvo, dt, NV_MOLA2_SCROLL,
                                 ajustes_animacoes_reduzidas());
 }
@@ -5208,73 +5179,7 @@ static void qrVinTex(const char *texto) {
 }
 
 static void desenhaVinculo(const char *servico, const char *codigo,
-                           const char *endereco, const char *falha, int esperando) {
-  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  GfxRect cartao = { (NV_TELA_W - 1000.0f) * 0.5f, 250.0f, 1000.0f, 560.0f };
-  TxtLinha l;
-  char t[80];
-  float y = 300.0f;
-  // Veu QUASE opaco mais um cartao solido atras do bloco. Com 0.80 de veu e sem
-  // cartao, as linhas de Ajustes atravessavam o texto — "aguardando" caia em
-  // cima de "Trakt" e "conectar" em cima de "e informe o codigo". Um codigo que
-  // a pessoa precisa transcrever nao pode competir com texto de fundo.
-  gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 0.92f);
-  gfx_cor(cartao, 0.045f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
-
-  snprintf(t, sizeof t, i18n("Conectar %s"), servico);
-  l = txt_linha(TXT_TITULO2, t, 255, 255, 255, 255);
-  txt_desenhar(l, (NV_TELA_W - l.w) * 0.5f, y);
-  y += 92.0f;
-
-  if (falha && falha[0]) {
-    l = txt_linha(TXT_HEADLINE, falha, 236, 108, 108, 255);
-    txt_desenhar(l, (NV_TELA_W - l.w) * 0.5f, y);
-    y += 70.0f;
-    l = txt_linha(TXT_CAPTION, "OK para tentar de novo · Voltar para fechar",
-                  150, 152, 160, 255);
-    txt_desenhar(l, (NV_TELA_W - l.w) * 0.5f, y);
-    return;
-  }
-  if (!codigo || !codigo[0]) {
-    l = txt_linha(TXT_HEADLINE, "Preparando o código…", 210, 212, 220, 255);
-    txt_desenhar(l, (NV_TELA_W - l.w) * 0.5f, y);
-    return;
-  }
-
-  // QR a ESQUERDA, instrucoes a DIREITA. Apontar a camera abre a pagina de
-  // ativacao; o codigo continua grande ao lado porque a pagina o pede em
-  // seguida — sem ele visivel o QR serviria para nada.
-  { float qLado = 300.0f;
-    float qx = cartao.x + 64.0f, qy = 350.0f;
-    float tx = cartao.x + 440.0f, ty = qy + 6.0f;
-    qrVinTex(endereco);
-    if (texQrVin) {
-      GfxRect moldura = { qx - 16.0f, qy - 16.0f, qLado + 32.0f, qLado + 32.0f };
-      GfxRect rq = { qx, qy, qLado, qLado };
-      gfx_cor(moldura, 0.06f, 1.0f, 1.0f, 1.0f, 1.0f);
-      gfx_tex_aspect_atual = 0.0f;   // 1:1, sem recorte
-      gfx_rect(rq, texQrVin, GFX_SNAP, 0, 0.0f, 0.0f, 0.0f, 0, 0, 0, 1.0f);
-    }
-    l = txt_linha(TXT_BODY, "No celular, abra:", 176, 178, 186, 255);
-    txt_desenhar(l, tx, ty);
-    ty += 52.0f;
-    l = txt_linha(TXT_TITULO3, endereco && endereco[0] ? endereco : "-",
-                  255, 255, 255, 255);
-    txt_desenhar(l, tx, ty);
-    ty += 96.0f;
-    l = txt_linha(TXT_BODY, "e informe o código:", 176, 178, 186, 255);
-    txt_desenhar(l, tx, ty);
-    ty += 62.0f;
-    // Espacamento entre letras: um codigo curto sem tracking le como palavra,
-    // e a pessoa transcreve errado.
-    txt_tracking(TXT_TITULO1, codigo, 255, 255, 255, tx, ty, 1.0f, 16.0f); }
-
-  if (esperando) {
-    l = txt_linha(TXT_CAPTION, "Aguardando a autorização…", 150, 152, 160, 255);
-    txt_desenhar(l, (NV_TELA_W - l.w) * 0.5f, cartao.y + cartao.h - 60.0f);
-  }
-}
-
+                           const char *endereco, const char *falha, int esperando);
 
 // --- COLUNA DE SECOES -------------------------------------------------------
 // Ela nao e enfeite: e o unico caminho entre categorias que o controle da TV
@@ -5381,1030 +5286,20 @@ static const char *aj_fil_forma_ajuda(int t) {
   }
 }
 
-// O desenho de UMA forma, na escala dada. `foco` acende; `fantasma` e o
-// AUTOMATICO, que nao tem forma propria — duas silhuetas sobrepostas dizem
-// "depende" melhor que um retangulo qualquer com um rotulo.
-static void desenhaForma(float x, float yBase, int tipo, float esc, int aceso,
-                         float ar, float ag, float ab) {
-  float w = AJ_FIL_FORMA[tipo].w * esc, h = AJ_FIL_FORMA[tipo].h * esc;
-  float raio = 10.0f * esc;
-  GfxRect r = { x, yBase - h, w, h };
-  if (tipo == FIL_TIPO_AUTO) {
-    GfxRect deitado = { x, yBase - AJ_FIL_FORMA[FIL_TIPO_SERVICO].h * esc,
-                        AJ_FIL_FORMA[FIL_TIPO_SERVICO].w * esc,
-                        AJ_FIL_FORMA[FIL_TIPO_SERVICO].h * esc };
-    gfx_cor(deitado, raio / deitado.h, 0.62f, 0.65f, 0.72f, aceso ? 0.45f : 0.22f);
-    r.w = AJ_FIL_FORMA[FIL_TIPO_CARTAZ].w * esc * 0.7f;
-    gfx_cor(r, raio / r.h, aceso ? ar : 0.72f, aceso ? ag : 0.74f,
-            aceso ? ab : 0.80f, aceso ? 0.9f : 0.5f);
-    return;
-  }
-  gfx_cor(r, raio / h, aceso ? ar : 0.55f, aceso ? ag : 0.57f, aceso ? ab : 0.63f,
-          aceso ? 1.0f : 0.55f);
-  if (tipo == FIL_TIPO_TOP10 || tipo == FIL_TIPO_RANKING) {
-    // O numeral E a forma: o Top 10 desenha o cartaz deslocado com o numero
-    // atras. Sem ele a previa do Top 10 e igual a do cartaz.
-    TxtLinha num = txt_linha(TXT_TITULO1, "1", aceso ? 250 : 170,
-                             aceso ? 250 : 172, aceso ? 252 : 180, 255);
-    txt_desenhar_alpha(num, x - num.w * 0.42f, yBase - h * 0.58f,
-                       aceso ? 0.95f : 0.5f);
-  }
-}
-
-static void desenhaFileiras(void) {
-  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  GfxRect cartao = { (NV_TELA_W - AJ_FIL_W) * 0.5f, AJ_FIL_Y, AJ_FIL_W, AJ_FIL_H };
-  int n, lim = fil_limite();
-  int i, vis;
-  float cx = cartao.x, y, filCabecY;
-  TxtLinha l;
-  char buf[160];
-  float ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
-
-  filMontarLista();
-  n = filListaN;
-
-  // Veu quase opaco mais cartao solido: a lista de Ajustes atras atravessava o
-  // texto do vinculo, e aqui ha texto pequeno em quatro colunas.
-  gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 0.92f);
-  // CARTAO FLUTUANTE na "cara nova" (menu.c, 21/09/2026): cantos de 28 px
-  // pelo menor lado (a altura), fundo translucido — o veu de 0,92 atras ja
-  // apaga a lista — e UMA luz difusa na cor de realce pelo canto superior
-  // esquerdo, presa aos cantos do cartao (GFX_LUZ).
-  gfx_cor(cartao, 28.0f / AJ_FIL_H, 0.055f, 0.058f, 0.068f, 0.94f);
-  gfx_luz_canto(cartao, 28.0f / AJ_FIL_H, AJ_FIL_H * 0.1f, -AJ_FIL_H * 0.1f, AJ_FIL_H * 0.65f, ar, ag, ab, 0.22f);
-
-  // EMPILHADO PELA ALTURA MEDIDA, e nao por deslocamentos fixos: a altura de
-  // uma linha depende do estilo, da escala e do idioma, e so txt_linha sabe.
-  { float hy = cartao.y + 30.0f;
-    l = txt_linha(TXT_TITULO2, "Fileiras da Home", 255, 255, 255, 255);
-    txt_desenhar(l, cx + 40.0f, hy);
-    hy += l.h + 8.0f;
-    l = txt_linha(TXT_MINI, "Vale só nesta TV e neste perfil · não altera a Home dos outros aparelhos",
-                  150, 153, 162, 255);
-    txt_desenhar(l, cx + 40.0f, hy);
-    hy += l.h + 14.0f;
-
-    // BARRA DE ABAS. Duas pilulas com a contagem: "Na Home 14 de 16" diz de
-    // uma vez o que esta em uso e o limite; "Fora da Home 178" diz o tamanho
-    // do resto. A ativa e clara; a outra, apagada; o anel so quando a barra
-    // tem o foco.
-    { float bx = cx + 40.0f, bh = 44.0f;
-      int t;
-      for (t = 0; t < 2; t++) {
-        int ativa = (filAba == t);
-        if (t == 0) snprintf(buf, sizeof buf, i18n("Na Home  %d de %d"), fil_n_na_home(), lim);
-        else        snprintf(buf, sizeof buf, i18n("Fora da Home  %d"), fil_n() - fil_n_na_home() - fil_n_fila());
-        { int emFoco = (filNaBarra && ativa);
-          int ct = emFoco ? AJ_TEXTO_SOLIDO : (ativa ? 255 : 170);
-          l = txt_linha(TXT_CALLOUT, buf, ct, emFoco || ativa ? ct : 173,
-                        emFoco || ativa ? ct : 182, 255);
-          GfxRect pil = { bx, hy, l.w + 44.0f, bh };
-          // Foco = pilula na cor de realce com texto escuro; ativa sem foco =
-          // superficie clara; a outra, apagada. Sem anel (ver desenhaLinha).
-          if (emFoco) {
-            GfxRect luz = { pil.x - bh * 0.9f, pil.y - bh * 0.9f, pil.w + bh * 1.8f, bh * 2.8f };
-            gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f);
-            gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, 1.0f);
-          }
-          else gfx_cor(pil, NV_RAIO_PILL, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B,
-                       ativa ? 0.95f : 0.30f);
-          txt_desenhar(l, pil.x + 22.0f, pil.y + (bh - l.h) * 0.5f);
-          bx += pil.w + 14.0f; }
-      }
-      // Fila, quando ha: um numero ao lado das abas, para nao ser surpresa.
-      if (fil_n_fila() > 0) {
-        snprintf(buf, sizeof buf, fil_n_fila() == 1 ? i18n("%d na fila") : i18n("%d na fila"), fil_n_fila());
-        l = txt_linha(TXT_CAPTION, buf, 226, 186, 108, 255);
-        txt_desenhar(l, bx + 8.0f, hy + (bh - l.h) * 0.5f);
-      }
-      hy += bh + 12.0f; }
-    filCabecY = hy; }
-
-  if (n < 1 && filAba == 0) {
-    l = txt_linha(TXT_HEADLINE, "Nenhuma fileira ligada", 222, 224, 232, 255);
-    txt_desenhar(l, cx + 40.0f, filCabecY + 40.0f);
-    txt_bloco(TXT_CAPTION,
-              "Vá para a aba \"Fora da Home\" (↑ e depois →) e aperte OK numa fileira para adicioná-la.",
-              183, 186, 194, cx + 40.0f, filCabecY + 88.0f, AJ_FIL_W - 80.0f, 34, 1, 3);
-  } else if (n < 1) {
-    l = txt_linha(TXT_HEADLINE, "Tudo o que o app conhece já está na Home", 222, 224, 232, 255);
-    txt_desenhar(l, cx + 40.0f, filCabecY + 40.0f);
-    txt_bloco(TXT_CAPTION,
-              "As fileiras aparecem aqui depois que o app lê os catálogos dos seus addons. "
-              "Abra a Home, espere o catálogo carregar e volte a esta tela.",
-              183, 186, 194, cx + 40.0f, filCabecY + 88.0f, AJ_FIL_W - 80.0f, 34, 1, 3);
-  }
-
-  // QUANTAS LINHAS CABEM, medido no espaco que sobra entre o cabecalho das
-  // colunas e a ficha do rodape — e nao um numero cravado. A barra de abas
-  // empurrou a lista ~60 px para baixo, e com o 6 fixo a sexta linha caia em
-  // cima da ficha e do botao (visto na captura de revisao).
-  { float topoLista = filCabecY + 34.0f;
-    float fimLista  = cartao.y + AJ_FIL_H - 232.0f - 8.0f - (52.0f + 8.0f);
-    vis = (int)((fimLista - topoLista) / (AJ_FIL_LINHA + AJ_FIL_LGAP));
-    if (vis < 3) vis = 3; }
-
-  { int max = n + (filAba == 1 ? 1 : 0);
-    if (filFoco > max) filFoco = max; }
-  if (filFoco < 0) filFoco = 0;
-  if (filFoco < filTopo) filTopo = filFoco;
-  if (filFoco >= filTopo + vis) filTopo = filFoco - vis + 1;
-  if (filTopo > n - vis) filTopo = n - vis;
-  if (filTopo < 0) filTopo = 0;
-
-  // Cabecalho das colunas. Na aba "Fora" so ha a coluna da fileira e a acao.
-  if (n > 0) {
-    if (filAba == 0)
-      for (i = 0; i < AJ_FIL_CAMPOS; i++) {
-        l = txt_linha(TXT_MINI, AJ_FIL_COL[i].cabec, 148, 151, 160, 255);
-        txt_desenhar(l, cx + AJ_FIL_COL[i].x, filCabecY);
-      }
-    else {
-      l = txt_linha(TXT_MINI, "Fileira", 148, 151, 160, 255);
-      txt_desenhar(l, cx + AJ_FIL_COL[0].x, filCabecY);
-      l = txt_linha(TXT_MINI, "Addon", 148, 151, 160, 255);
-      txt_desenhar(l, cx + AJ_FIL_COL[1].x, filCabecY);
-    }
-  }
-
-  y = filCabecY + 34.0f;
-  for (i = filTopo; i < n && i < filTopo + vis; i++) {
-    int idx = filLista[i];
-    GfxRect linha = { cx + 24.0f, y, AJ_FIL_W - 48.0f, AJ_FIL_LINHA };
-    float raio = 12.0f / AJ_FIL_LINHA;
-    int foco = (i == filFoco && !filNaBarra);
-    int naFila = (filAba == 0 && filSep >= 0 && i >= filSep);
-    float aTexto = naFila ? 0.80f : 1.0f;
-    int c = 234;
-    gfx_cor(linha, raio, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B,
-            filPegou && foco ? 1.0f : (foco ? 0.72f : 0.30f));
-
-    // SEPARADOR DA FILA: a partir daqui as fileiras esperam vaga.
-    if (filAba == 0 && filSep >= 0 && i == filSep) {
-      GfxRect corte = { cx + 24.0f, y - AJ_FIL_LGAP * 0.5f - 1.0f, AJ_FIL_W - 48.0f, 2.0f };
-      gfx_cor(corte, 0.0f, 0.90f, 0.72f, 0.42f, 0.65f);
-    }
-
-    if (foco) {
-      // O ANEL MARCA A COLUNA, nao a linha: e a coluna que diz o que OK vai
-      // fazer. Na aba "Fora" ha uma acao so, e o anel toma a linha inteira — e
-      // no DESTAQUE tambem, que nao tem colunas e sim um valor.
-      GfxRect cel = (filAba == 0 && idx != AJ_FIL_DESTAQUE)
-        ? (GfxRect){ cx + AJ_FIL_COL[filCampo].x - 12.0f, y, AJ_FIL_COL[filCampo].w + 24.0f, AJ_FIL_LINHA }
-        : linha;
-      gfx_rect(cel, 0, GFX_ANEL, 0, NV_ANEL_FOCO / AJ_FIL_LINHA, 0, raio, ar, ag, ab, 1.0f);
-    }
-
-    // A LINHA DO DESTAQUE. Nome a esquerda, fonte a direita, e a dica das setas
-    // so quando ela esta em foco — a gramatica das linhas de escolha da lista
-    // principal, que e onde a pessoa aprendeu que ← → trocam um valor.
-    if (idx == AJ_FIL_DESTAQUE) {
-      { GfxRect ic = { cx + AJ_FIL_COL[0].x, y + (AJ_FIL_LINHA - 26.0f) * 0.5f, 26.0f, 26.0f };
-        gfx_icone(ic, "aj_panel-top", 0.78f, 0.80f, 0.85f, 0.9f); }   // o de "Mostrar destaque"
-      l = txt_linha_corta(TXT_CALLOUT, i18n("Destaque do topo"), 234, 234, 234, 255,
-                          AJ_FIL_COL[0].w - 38.0f);
-      txt_desenhar(l, cx + AJ_FIL_COL[0].x + 38.0f, y + 8.0f);
-      { TxtLinha sub = txt_linha_corta(TXT_MINI,
-            i18n("O que aparece no destaque da Home"), 148, 151, 160, 255,
-            AJ_FIL_COL[0].w - 38.0f);
-        txt_desenhar_alpha(sub, cx + AJ_FIL_COL[0].x + 38.0f, y + 8.0f + l.h + 4.0f, 0.85f); }
-      { float vw = AJ_FIL_COL[2].w + AJ_FIL_COL[3].w;
-        l = txt_linha_corta(TXT_CALLOUT, heroFonteRotulo(), 220, 220, 220, 255, vw);
-        txt_desenhar(l, cx + AJ_FIL_COL[2].x, y + (AJ_FIL_LINHA - l.h) * 0.5f); }
-      if (foco) {
-        l = txt_linha(TXT_MINI, i18n("← →  trocar"), 150, 214, 158, 255);
-        txt_desenhar(l, cx + AJ_FIL_COL[1].x, y + (AJ_FIL_LINHA - l.h) * 0.5f);
-      }
-      y += AJ_FIL_LINHA + AJ_FIL_LGAP;
-      continue;
-    }
-
-    { float tx = cx + AJ_FIL_COL[0].x;
-      float tw = AJ_FIL_COL[0].w;
-      // SELO DE ORIGEM ANTES DO NOME: icone, porque a 3 m dois cinzas sao
-      // iguais e a forma sobrevive ao idioma.
-      { int orig = fil_linha_origem(idx);
-        GfxRect ic = { tx, y + (AJ_FIL_LINHA - 26.0f) * 0.5f, 26.0f, 26.0f };
-        gfx_icone(ic, fil_origem_icone(orig), 0.78f, 0.80f, 0.85f, aTexto * 0.9f);
-        tx += 38.0f; tw -= 38.0f; }
-      if (filPegou && foco) {
-        TxtLinha m = txt_linha(TXT_CALLOUT, "\xe2\x87\x95", 250, 250, 252, 255);
-        txt_desenhar(m, tx, y + (AJ_FIL_LINHA - m.h) * 0.5f);
-        tx += m.w + 12.0f; tw -= m.w + 12.0f;
-      }
-      { const char *addon = fil_linha_addon(idx);
-        l = txt_linha_corta(TXT_CALLOUT, fil_titulo(idx), c, c, c, 255, tw);
-        txt_desenhar_alpha(l, tx, y + 8.0f, aTexto);
-        // Na aba 0 o addon vai sob o titulo; na aba 1 ele tem coluna propria,
-        // porque e o agrupamento — e o cabecalho de grupo e a mudanca de nome.
-        if (filAba == 0 && addon[0]) {
-          TxtLinha ad = txt_linha_corta(TXT_MINI, addon, 148, 151, 160, 255, tw);
-          txt_desenhar_alpha(ad, tx, y + 8.0f + l.h + 4.0f, aTexto * 0.85f);
-        }
-      } }
-
-    if (filAba == 0) {
-      { const char *est = naFila ? "Na fila" : "Na Home";
-        int er = naFila ? 226 : 150, eg = naFila ? 186 : 214, eb = naFila ? 108 : 158;
-        // A coluna "Estado" e tambem a acao REMOVER: com o foco nela, diz.
-        if (foco && filCampo == 1) { est = "Remover"; er = 240; eg = 200; eb = 200; }
-        l = txt_linha_corta(TXT_CALLOUT, est, er, eg, eb, 255, AJ_FIL_COL[1].w);
-        txt_desenhar_alpha(l, cx + AJ_FIL_COL[1].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, 1.0f); }
-      { int aceita = fil_aceita_tipo(idx);
-        const char *rot = aceita ? fil_linha_tipo_rotulo(idx) : "Fixo";
-        int cc = aceita ? 220 : 150;
-        l = txt_linha_corta(TXT_CALLOUT, rot, cc, cc, cc, 255, AJ_FIL_COL[2].w);
-        txt_desenhar_alpha(l, cx + AJ_FIL_COL[2].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, aTexto); }
-      { l = txt_linha_corta(TXT_CALLOUT, fil_tam_rotulo(fil_linha_tam(idx)), 220, 220, 220, 255, AJ_FIL_COL[3].w);
-        txt_desenhar_alpha(l, cx + AJ_FIL_COL[3].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, aTexto); }
-    } else {
-      // GRUPO: o nome do addon aparece na PRIMEIRA linha de cada bloco e some
-      // nas seguintes — e o agrupamento que a pessoa pediu, sem gastar linha
-      // de cabecalho numa lista que ja e longa.
-      const char *addon = fil_linha_addon(idx);
-      const char *rot = addon[0] ? addon : i18n(fil_origem_rotulo(fil_linha_origem(idx)));
-      int primeiro = !filForaAgrupada || (i == 0) ||
-                     strcasecmp(fil_linha_addon(filLista[i - 1]), addon) != 0 ||
-                     fil_linha_origem(filLista[i - 1]) != fil_linha_origem(idx);
-      if (primeiro) {
-        l = txt_linha_corta(TXT_CALLOUT, rot, 200, 203, 212, 255, AJ_FIL_COL[1].w + AJ_FIL_COL[2].w);
-        txt_desenhar_alpha(l, cx + AJ_FIL_COL[1].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, 1.0f);
-      }
-      { const char *acao = foco ? "OK  Adicionar à Home" : "";
-        l = txt_linha(TXT_CALLOUT, acao, 150, 214, 158, 255);
-        txt_desenhar_alpha(l, cx + AJ_FIL_COL[3].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, 1.0f); }
-    }
-    y += AJ_FIL_LINHA + AJ_FIL_LGAP;
-  }
-
-  // Posicao na lista: com 200 linhas a barra de rolagem teria 6 px.
-  if (n > 0) {
-    // O DESTAQUE NAO ENTRA NA CONTAGEM. Ele esta na lista, mas nao e fileira:
-    // dizer "1 de 8" com a aba mostrando "7 de 7" seriam dois numeros do mesmo
-    // conjunto que nao batem, e quem le acredita no que estiver mais perto.
-    int fileirasN = n - (filAba == 0 ? 1 : 0);
-    if (filAba == 0 && filFoco == 0) snprintf(buf, sizeof buf, "%s", i18n("Destaque"));
-    else if (filFoco >= n) snprintf(buf, sizeof buf, "%s", i18n("Botão"));
-    else snprintf(buf, sizeof buf, i18n("%d de %d"),
-                  filFoco + (filAba == 0 ? 0 : 1), fileirasN);
-    l = txt_linha(TXT_CAPTION, buf, 156, 159, 168, 255);
-    txt_desenhar(l, cx + AJ_FIL_W - 40.0f - l.w, filCabecY);
-  }
-
-  // BOTOES no fim da lista, lado a lado. Aba "Fora": "Agrupar por addon" (a
-  // alternancia agrupado/alfabetico) e "Atualizar tudo". Aba "Na Home": so
-  // "Atualizar tudo" — la a ordem e a da home e a pessoa e quem a arruma.
-  { float sy = y + 14.0f, bw = AJ_FIL_W - 48.0f, bx = cx + 24.0f;
-    int nb = (filAba == 1) ? 2 : 1, b;
-    float cada = (bw - (nb - 1) * 16.0f) / nb;
-    for (b = 0; b < nb; b++) {
-      int ehAgrupar = (filAba == 1 && b == 0);
-      int pos = ehAgrupar ? n : (filAba == 1 ? n + 1 : n);
-      int foco = (filFoco == pos && !filNaBarra);
-      const char *rot = ehAgrupar ? (filForaAgrupada ? "Agrupado por addon · OK: lista alfabética"
-                                                     : "Alfabética · OK: agrupar por addon")
-                                  : "Atualizar tudo";
-      GfxRect btn = { bx + b * (cada + 16.0f), sy, cada, 52.0f };
-      // Botao em foco: preenchido com a cor de realce, texto escuro, sem anel.
-      if (foco) gfx_cor(btn, 26.0f / cada, ar, ag, ab, 1.0f);
-      else gfx_cor(btn, 26.0f / cada, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B, 0.30f);
-      { int ct = foco ? AJ_TEXTO_SOLIDO : 220;
-        l = txt_linha(TXT_CALLOUT, rot, ct, ct, ct, 255); }
-      txt_desenhar(l, btn.x + (btn.w - l.w) * 0.5f, btn.y + (btn.h - l.h) * 0.5f);
-    } }
-
-  // A FICHA DA FILEIRA EM FOCO: de qual addon veio, filme ou serie, e quantos
-  // titulos ela tem AGORA (omitido antes de a Home montar — "0 titulos" seria
-  // mentira sobre uma fileira talvez cheia).
-  if (n > 0 && filFoco >= 0 && filFoco < n && !filNaBarra &&
-      filLista[filFoco] == AJ_FIL_DESTAQUE) {
-    l = txt_linha_corta(TXT_CALLOUT, heroFonteRotulo(), 232, 234, 241, 255,
-                        AJ_FIL_W - 80.0f);
-    txt_desenhar(l, cx + 40.0f, cartao.y + AJ_FIL_H - 232.0f);
-    l = txt_linha_corta(TXT_MINI,
-        i18n("Automático usa os primeiros títulos do catálogo; o sorteio troca a cada abertura; uma fileira mostra os títulos dela."),
-        170, 173, 182, 255, AJ_FIL_W - 80.0f);
-    txt_desenhar(l, cx + 40.0f, cartao.y + AJ_FIL_H - 200.0f);
-  } else if (n > 0 && filFoco >= 0 && filFoco < n && !filNaBarra) {
-    int idx = filLista[filFoco];
-    int orig = fil_linha_origem(idx);
-    const char *addon = fil_linha_addon(idx);
-    const char *cont  = fil_linha_conteudo(idx);
-    int itens = fil_linha_itens(idx);
-    char ficha[220];
-    int k = snprintf(ficha, sizeof ficha, "%s", i18n(fil_origem_rotulo(orig)));
-    if (addon && addon[0]) k += snprintf(ficha + k, sizeof ficha - (size_t)k, "  ·  %s", addon);
-    if (cont && cont[0])   k += snprintf(ficha + k, sizeof ficha - (size_t)k, "  ·  %s", i18n(cont));
-    if (itens >= 0)
-      snprintf(ficha + k, sizeof ficha - (size_t)k,
-               itens == 1 ? i18n("  ·  %d título") : i18n("  ·  %d títulos"), itens);
-    l = txt_linha_corta(TXT_CALLOUT, ficha, 232, 234, 241, 255, AJ_FIL_W - 80.0f);
-    txt_desenhar(l, cx + 40.0f, cartao.y + AJ_FIL_H - 232.0f);
-    // A SEGUNDA LINHA E DA COLUNA EM FOCO quando ela tem o que explicar. A
-    // origem da fileira ja foi dita na linha de cima (o rotulo e o addon); com
-    // o foco em "Card" ou "Tamanho" a pergunta de quem esta ali e outra.
-    { const char *frase = fil_origem_ajuda(orig);
-      if (filAba == 0 && !filPegou) {
-        if (filCampo == 2)
-          frase = orig == FIL_ORIGEM_COLECAO
-                ? "Forma das pastas: Automático segue a que a coleção tem na conta."
-                : fil_aceita_tipo(idx)
-                ? aj_fil_forma_ajuda(fil_linha_tipo(idx))
-                : "Esta fileira tem forma própria: ver a frase abaixo do nome.";
-        else if (filCampo == 3)
-          frase = "O fator vale sobre a medida do tipo, então a proporção do card não muda.";
-      }
-      l = txt_linha_corta(TXT_MINI, frase, 170, 173, 182, 255, AJ_FIL_W - 760.0f); }
-    txt_desenhar(l, cx + 40.0f, cartao.y + AJ_FIL_H - 200.0f);
-  }
-
-  // A PREVIA DA COLUNA EM FOCO, no espaco livre a direita das instrucoes.
-  //
-  // So aparece nas colunas "Card" e "Tamanho", que sao as que oferecem uma
-  // escolha sem dizer o que ela faz. Nas outras o espaco fica vazio de
-  // proposito: desenhar sempre alguma coisa ali ensinaria a ignorar o canto.
-  if (filAba == 0 && !filPegou && !filNaBarra &&
-      filFoco >= 0 && filFoco < n && filLista[filFoco] >= 0 &&
-      (filCampo == 3 || (filCampo == 2 &&
-                         fil_linha_origem(filLista[filFoco]) != FIL_ORIGEM_COLECAO))) {
-    int idx = filLista[filFoco];
-    int aceita = fil_aceita_tipo(idx);
-    int tipo = aceita ? fil_linha_tipo(idx) : FIL_TIPO_AUTO;
-    int tam = fil_linha_tam(idx);
-    // A tira comeca depois da coluna de instrucoes (que ocupa ~700px) e assenta
-    // as formas sobre uma linha de base comum: e a base que deixa comparar
-    // altura entre elas, que e metade da informacao.
-    // CANTO INFERIOR DIREITO, que e o unico retangulo livre do cartao: a ficha
-    // ocupa a esquerda logo acima, e das quatro linhas de instrucao a mais
-    // comprida termina a 788px da borda esquerda do cartao. MEDIDO na captura,
-    // nao estimado — foi assim que as duas primeiras tentativas sairam por
-    // cima do texto.
-    float px = cx + 832.0f, base = cartao.y + AJ_FIL_H - 24.0f;
-    // 0,175 e nao 0,19 desde a faixa com titulo: sao nove formas e a 0,19 a
-    // ultima passava da borda direita do cartao (AJ_FIL_W).
-    float esc = 0.175f;  // 322 (o card mais alto) x 0,175 = 56px
-    int t;
-    // SO A ESCOLHIDA E NOMEADA. Seis rotulos lado a lado nao cabem sem
-    // reticencia, e reticencia em rotulo de 9 caracteres nao ensina nada — as
-    // formas se explicam pelo desenho, e o nome da escolhida ja esta na coluna.
-    if (filCampo == 2) {
-      float x = px;
-      for (t = 0; t < FIL_TIPO_N; t++) {
-        // Os 4:3 medio e grande NAO ganham silhueta propria: sao o 4:3 em outro
-        // tamanho, e duas silhuetas a mais (118 e 142 px) passavam da borda
-        // direita do cartao. O 4:3 acende por eles e leva o nome do escolhido.
-        int quad = t == FIL_TIPO_DESTAQUE_QUADRADO &&
-                   (tipo == FIL_TIPO_DESTAQUE_QUADRADO_M || tipo == FIL_TIPO_DESTAQUE_QUADRADO_G);
-        float w = AJ_FIL_FORMA[t].w * esc;
-        if (t == FIL_TIPO_DESTAQUE_QUADRADO_M || t == FIL_TIPO_DESTAQUE_QUADRADO_G) continue;
-        desenhaForma(x, base, t, esc, t == tipo || quad, ar, ag, ab);
-        if (t == tipo || quad) {
-          TxtLinha rot = txt_linha(TXT_MINI, fil_tipo_rotulo(tipo), 236, 238, 243, 255);
-          txt_desenhar(rot, x + (w - rot.w) * 0.5f,
-                       base - AJ_FIL_FORMA[t].h * esc - rot.h - 6.0f);
-        }
-        // 14 e nao 22: com o Ranking numerado (#201) sao oito formas, e a 22
-        // a ultima saia pela borda direita do cartao (MEDIDO na captura).
-        x += w + 10.0f;
-      }
-    } else {
-      // TAMANHO: a MESMA forma tres vezes, nos tres fatores. O que muda e o
-      // tamanho, entao mostrar tres formas diferentes seria mudar duas coisas.
-      float x = px;
-      int formaBase = (aceita && tipo != FIL_TIPO_AUTO) ? tipo : FIL_TIPO_CARTAZ;
-      for (t = 0; t < FIL_TAM_N; t++) {
-        // Nos 4:3 maiores o produto Tamanho x forma tem o teto do 4:3 grande
-        // (escalaCom, fileiras.c): o desenho mostra o que a Home vai medir.
-        float f = fil_tipo_fator(formaBase), v = fil_tam_escala(t) * f;
-        float e, w, teto = fil_tipo_fator(FIL_TIPO_DESTAQUE_QUADRADO_G);
-        if (f > 1.0f && v > teto) v = teto;
-        e = esc * v / f;
-        w = AJ_FIL_FORMA[formaBase].w * e;
-        desenhaForma(x, base, formaBase, e, t == tam, ar, ag, ab);
-        if (t == tam) {
-          char rot[48];
-          TxtLinha lr;
-          snprintf(rot, sizeof rot, "%s  %.0f%%", i18n(fil_tam_rotulo(t)),
-                   (double)(fil_tam_escala(t) * 100.0f));
-          lr = txt_linha(TXT_MINI, rot, 236, 238, 243, 255);
-          txt_desenhar(lr, x + (w - lr.w) * 0.5f,
-                       base - AJ_FIL_FORMA[formaBase].h * e - lr.h - 6.0f);
-        }
-        x += w + 46.0f;
-      }
-    }
-  }
-
-  // A INSTRUCAO, escrita na tela: o gesto de pegar e mover nao se descobre
-  // sozinho num D-pad, e muda com o item na mao e com a aba.
-  y = cartao.y + AJ_FIL_H - 168.0f;
-  if (filPegou == 2) {
-    txt_bloco(TXT_CAPTION,
-              "↑ ↓  Mover o bloco do addon\n← →  Mover so a fileira\nOK  Soltar aqui\nVoltar  Cancelar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 4);
-  } else if (filPegou) {
-    txt_bloco(TXT_CAPTION,
-              "↑ ↓  Mover a fileira\n← →  Mover o bloco do addon\nOK  Soltar aqui\nVoltar  Cancelar o movimento",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 4);
-  } else if (filNaBarra) {
-    txt_bloco(TXT_CAPTION, "← →  Trocar de aba\n↓  Voltar à lista\nVoltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 3);
-  } else if (filFoco >= 0 && filFoco < n && filLista[filFoco] == AJ_FIL_DESTAQUE) {
-    txt_bloco(TXT_CAPTION,
-              "← →  Trocar o que aparece no destaque\n"
-              "OK  Avançar para a próxima fonte\n"
-              "↑ no topo  Abas\nVoltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 4);
-  } else if (filAba == 1 && filFoco < n) {
-    txt_bloco(TXT_CAPTION,
-              "↑ ↓  Escolher fileira · segure para pular por letra\n"
-              "OK  Adicionar à Home (entra na fila se a Home estiver cheia)\n"
-              "↑ no topo  Abas\nVoltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 4);
-  } else if ((filAba == 0 && filFoco == n) || (filAba == 1 && filFoco == n + 1)) {
-    txt_bloco(TXT_CAPTION,
-              "OK  Sincronizar a conta e refazer a Home agora (addons, coleções e fileiras)\nVoltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 2);
-  } else if (filAba == 1 && filFoco == n) {
-    txt_bloco(TXT_CAPTION, "OK  Alternar entre agrupado por addon e lista alfabética\nVoltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 2);
-  } else {
-    txt_bloco(TXT_CAPTION,
-              "↑ ↓  Escolher fileira\n← →  Trocar de coluna\n"
-              "OK  Pegar e mover (coluna Fileira) · Remover, trocar card e tamanho nas outras\n"
-              "Voltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 4);
-    if (filFoco < n && filCampo == 2 && !fil_aceita_tipo(filLista[filFoco])) {
-      // LARGURA ATE A TIRA DE FORMAS, e nao a do cartao. A nota fica na mesma
-      // altura da ultima linha de instrucao ("Voltar Fechar", que e curta) e,
-      // com a largura cheia, as duas se sobrepunham — visivel na captura do
-      // album. 800 px param antes da tira e depois do texto da instrucao.
-      l = txt_linha_corta(TXT_MINI, motivoFormaFixa(fil_chave(filLista[filFoco])),
-                          176, 179, 188, 255, 800.0f);
-      txt_desenhar(l, cx + 40.0f, cartao.y + AJ_FIL_H - 24.0f);
-    }
-  }
-
-  // AVISO ("Home cheia...", "Adicionada..."): pilula no rodape do cartao por
-  // alguns segundos. E a resposta visivel ao OK, que na aba "Fora" nao muda
-  // nada na linha em que a pessoa esta olhando.
-  if (filAviso[0] && SDL_GetTicks() < filAvisoAte) {
-    l = txt_linha(TXT_CALLOUT, filAviso, 20, 22, 28, 255);
-    { GfxRect pil = { cx + (AJ_FIL_W - l.w - 56.0f) * 0.5f, cartao.y + AJ_FIL_H - 84.0f, l.w + 56.0f, 48.0f };
-      gfx_cor(pil, NV_RAIO_PILL, 0.96f, 0.86f, 0.52f, 0.96f);
-      txt_desenhar(l, pil.x + 28.0f, pil.y + (pil.h - l.h) * 0.5f); }
-  }
-}
-
-// PAINEL DA LINHA "MEMORIA USADA POR IMAGENS": o numero que a linha corta e
-// aqui inteiro, mais o que ele nao diz sozinho — quanto e o teto, quanto do
-// cache e o que esta NA TELA agora, se ele anda despejando, e como o teto foi
-// escolhido. Pedido do dono (16/09): "mostrar o valor real e nao cortado, e
-// colocar um grafico e estatistica de uso ao lado". Devolve a altura usada.
-//
-// Os numeros vem do proprio cache (tex_estatisticas, tex_orcamento_info,
-// tex_historico), nao de contas feitas aqui: se o cache mudar de regra, o
-// painel muda junto.
-static float linhaStat(float x, float y, float w, const char *rot, const char *val) {
-  TxtLinha r = txt_linha(TXT_CAPTION, rot, 156, 159, 168, 255);
-  TxtLinha v = txt_linha_corta(TXT_CAPTION, val, 226, 228, 236, 255, w - r.w - 16.0f);
-  txt_desenhar(r, x, y);
-  txt_desenhar(v, x + w - v.w, y);
-  return 34.0f;
-}
 
 // COR DE PRESSAO do cache: verde com folga, amarelo perto do teto, vermelho
 // encostado. Pedido do dono (16/09): o grafico e a barra passam a dizer com
 // cor o que o numero diz com digitos. As faixas vem do comportamento medido
 // em tex_cache.c: acima de ~90% o cache despeja a cada arte nova (encostado),
 // entre 70 e 90 ele ainda absorve uma tela de fileiras sem despejar.
+// Tons ABAFADOS (Glass UI, 03/10): e cor de estado, nao de acento, e o verde
+// vivo de antes gritava mais que o resto do painel.
 static void corPressao(float t, float *r, float *g, float *b) {
-  if (t < 0.70f)      { *r = 0.24f; *g = 0.86f; *b = 0.52f; }   // #3ddc84
-  else if (t < 0.90f) { *r = 0.96f; *g = 0.78f; *b = 0.30f; }   // ambar
-  else                { *r = 0.93f; *g = 0.30f; *b = 0.30f; }   // vermelho
+  if (t < 0.70f)      { *r = 0.298f; *g = 0.765f; *b = 0.541f; }   // #4cc38a
+  else if (t < 0.90f) { *r = 0.910f; *g = 0.722f; *b = 0.290f; }   // #e8b84a
+  else                { *r = 0.898f; *g = 0.325f; *b = 0.294f; }   // #e5534b
 }
 
-static float desenhaPainelImagens(float x, float y, float w) {
-  float y0 = y;
-  int itens = 0, pend = 0, quentes = 0, mb = 0, fixo = 0, slots = 0;
-  long bytes = 0, bytesQ = 0, memTotal = 0, teto;
-  long hist[120]; int nh, i;
-  char a[96], b[96];
-  tex_estatisticas(&itens, &pend, &bytes, &quentes, &bytesQ);
-  tex_orcamento_info(&mb, &memTotal, &fixo, &slots);
-  teto = tex_orcamento_bytes();
-  if (teto <= 0) teto = 1;
-
-  // 1. A BARRA: usado sobre o teto, na cor de realce. O teto MOSTRADO e o
-  // efetivo (tex_orcamento_bytes), nao o `mb` decidido: no Mac retina o
-  // orcamento e mb x 4 e a linha dizia "139 de 96 MB". Na TV os dois sao
-  // iguais.
-  snprintf(a, sizeof a, i18n("%.1f de %d MB · %d%%"), bytes / 1048576.0,
-           (int)(teto / 1048576), (int)(bytes * 100 / teto));
-  y += linhaStat(x, y, w, i18n("Ocupado"), a);
-  { GfxRect trilho = { x, y, w, 8.0f };
-    float t = (float)bytes / (float)teto; if (t > 1.0f) t = 1.0f;
-    float pr, pg, pb;
-    GfxRect cheio = { x, y, w * t, 8.0f };
-    GfxRect naTela = { x, y, w * ((float)bytesQ / (float)teto), 8.0f };
-    corPressao(t, &pr, &pg, &pb);
-    gfx_cor(trilho, 0.5f, 0.94f, 0.94f, 0.96f, 0.16f);
-    if (cheio.w > 0.5f) gfx_cor(cheio, 0.5f, pr, pg, pb, 0.55f);
-    // O trecho que esta NA TELA agora, mais forte: e a parte que nao pode
-    // ser despejada sem piscar (ver `quente` em tex_cache.c).
-    if (naTela.w > 0.5f && naTela.w <= cheio.w) gfx_cor(naTela, 0.5f, pr, pg, pb, 1.0f);
-    y += 8.0f + 22.0f; }
-
-  // 2. O GRAFICO: ocupacao nos ultimos dois minutos, uma coluna por segundo,
-  // escala do teto. Uma linha reta e um cache que assentou; serrilhado e
-  // despejo em ciclo — a forma do defeito que este cache tinha.
-  nh = tex_historico(hist, 120);
-  { float gh = 84.0f, gx = x, gw = w;
-    GfxRect fundo = { gx, y, gw, gh };
-    gfx_cor(fundo, 0.0f, 1.0f, 1.0f, 1.0f, 0.06f);
-    if (nh > 1) {
-      float passo = gw / 120.0f;
-      for (i = 0; i < nh; i++) {
-        float t = (float)hist[i] / (float)teto;
-        float h = gh * t, pr, pg, pb;
-        if (h > gh) h = gh;
-        if (h < 1.0f) continue;
-        // Cada coluna com a cor da pressao DAQUELE segundo: um grafico que
-        // fica verde, sobe para amarelo e vira vermelho e a historia do
-        // cache enchendo — e uma faixa vermelha continua e ele encostado.
-        corPressao(t, &pr, &pg, &pb);
-        GfxRect col = { gx + gw - (float)(nh - i) * passo, y + gh - h, passo + 0.5f, h };
-        gfx_cor(col, 0.0f, pr, pg, pb, 0.80f);
-      }
-      // Linhas de referencia dos 70% e 90%, para o olho saber onde a cor vira.
-      { GfxRect l70 = { gx, y + gh * 0.30f, gw, 1.0f };
-        GfxRect l90 = { gx, y + gh * 0.10f, gw, 1.0f };
-        gfx_cor(l70, 0.0f, 1.0f, 1.0f, 1.0f, 0.10f);
-        gfx_cor(l90, 0.0f, 1.0f, 1.0f, 1.0f, 0.10f); }
-    }
-    { TxtLinha l = txt_linha(TXT_MINI, i18n("últimos 2 min · escala do teto"), 130, 133, 142, 255);
-      txt_desenhar(l, gx, y + gh + 6.0f); }
-    y += gh + 34.0f; }
-
-  // 3. AS ESTATISTICAS.
-  snprintf(a, sizeof a, i18n("%d imagens · %.1f MB"), quentes, bytesQ / 1048576.0);
-  y += linhaStat(x, y, w, i18n("Na tela agora"), a);
-  snprintf(a, sizeof a, i18n("%d imagens · %d em carregamento"), itens, pend);
-  y += linhaStat(x, y, w, i18n("No cache"), a);
-  snprintf(a, sizeof a, i18n("%d de %d"), itens + pend, slots);
-  y += linhaStat(x, y, w, i18n("Vagas"), a);
-  snprintf(a, sizeof a, i18n("%ld · %ld da tela"), tex_despejos_total, tex_despejos_quentes_total);
-  y += linhaStat(x, y, w, i18n("Despejadas na sessão"), a);
-  snprintf(a, sizeof a, i18n("%.1f MB"), tex_cache_disco_bytes() / 1048576.0);
-  y += linhaStat(x, y, w, i18n("Baixado na sessão"), a);
-  if (fixo == 1)      snprintf(b, sizeof b, "%s", i18n("cravado nesta build"));
-  else if (fixo == 2) snprintf(b, sizeof b, "%s", "NUVIO_TEX_MB");
-  else if (fixo == 3) snprintf(b, sizeof b, "%s", i18n("escolhido em Ajustes"));
-  else if (memTotal > 0) snprintf(b, sizeof b, i18n("pela RAM da TV (%.1f GB)"), memTotal / 1024.0);
-  else snprintf(b, sizeof b, "%s", i18n("padrão"));
-  // O teto mostrado e o efetivo (no Mac retina e mb x 4; na TV, o mesmo).
-  snprintf(a, sizeof a, "%d MB · %s", (int)(teto / 1048576), b);
-  y += linhaStat(x, y, w, i18n("Teto"), a);
-  return y - y0;
-}
-
-
-// PREVIA DESENHADA NO PAINEL DE AJUDA (dono, 20/09/2026: "icones e graficos no
-// que faltam"). Nao e imagem: sao as mesmas primitivas da tela, com o VALOR
-// ATUAL da opcao — mexer na opcao mexe no desenho na hora. So para o que tem
-// forma: tamanho e canto do cartaz, estilo do Continuar assistindo, limite de
-// fileiras, layout da home, qualidade maxima. Devolve a altura ocupada.
-static void previaCartaz(float x, float y, float w, float h, float raioPx, float ar, float ag, float ab, float a) {
-  float r = raioPx / (w < h ? w : h);
-  if (r > 0.5f) r = 0.5f;
-  gfx_cor((GfxRect){ x, y, w, h }, r, 0.30f, 0.32f, 0.38f, a);
-  // Um "poster" abstrato: faixa clara em cima, titulo em baixo.
-  gfx_cor((GfxRect){ x + w * 0.18f, y + h * 0.14f, w * 0.64f, h * 0.10f }, 0.5f, 0.86f, 0.87f, 0.90f, 0.35f * a);
-  gfx_cor((GfxRect){ x + w * 0.12f, y + h * 0.78f, w * 0.50f, h * 0.06f }, 0.5f, ar, ag, ab, 0.9f * a);
-}
-static float desenhaPrevia(int op, float x, float y, float w) {
-  float ar, ag, ab, y0 = y;
-  ajustes_acento(&ar, &ag, &ab);
-  switch (op) {
-    case AJ_LARGURA_DP: case AJ_RAIO_DP: {
-      // Tres cartazes no tamanho ESCOLHIDO (dp x 2 = px da tela), lado a lado
-      // como na fileira; o do meio com foco. A escala e 1:1 com a home ate
-      // caber na largura do painel.
-      float cw = (float)valor[AJ_LARGURA_DP] * 2.0f, ch = cw * 1.5f, gap = 18.0f;
-      float esc = (3.0f * cw + 2.0f * gap > w) ? w / (3.0f * cw + 2.0f * gap) : 1.0f;
-      float raio = ajustes_raio_poster_px() * esc;
-      int i;
-      cw *= esc; ch *= esc; gap *= esc;
-      if (ch > 300.0f) { esc = 300.0f / ch; cw *= esc; ch *= esc; gap *= esc; raio *= esc; }
-      for (i = 0; i < 3; i++) {
-        float px = x + (float)i * (cw + gap);
-        if (i == 1) gfx_cor((GfxRect){ px - 4.0f, y - 4.0f, cw + 8.0f, ch + 8.0f }, (raio + 4.0f) / (cw + 8.0f), ar, ag, ab, 0.95f);
-        previaCartaz(px, y, cw, ch, raio, ar, ag, ab, 1.0f);
-      }
-      { char t[80];
-        snprintf(t, sizeof t, i18n("%d px de largura · canto de %d px, como na home"), (int)(valor[AJ_LARGURA_DP] * 2), (int)ajustes_raio_poster_px());
-        TxtLinha l = txt_linha_corta(TXT_MINI, t, 130, 133, 142, 255, w);
-        txt_desenhar(l, x, y + ch + 10.0f);
-        return ch + 10.0f + l.h + 8.0f; }
-    }
-    case AJ_FIL_LIMITE: {
-      // Uma home em miniatura: heroi em cima e N fileiras, N = o limite.
-      int n = valor[AJ_FIL_LIMITE], i;
-      float mh = 300.0f, hero = 70.0f, fil = 22.0f, gap = 8.0f;
-      gfx_cor((GfxRect){ x, y, w, mh }, 12.0f / mh, 0.09f, 0.095f, 0.11f, 1.0f);
-      gfx_cor((GfxRect){ x + 12.0f, y + 12.0f, w - 24.0f, hero }, 8.0f / hero, 0.22f, 0.24f, 0.30f, 1.0f);
-      for (i = 0; i < n; i++) {
-        float fy = y + 12.0f + hero + 12.0f + (float)i * (fil + gap);
-        int k;
-        if (fy + fil > y + mh - 8.0f) break;
-        for (k = 0; k < 7; k++)
-          gfx_cor((GfxRect){ x + 12.0f + (float)k * ((w - 24.0f) / 7.0f), fy, (w - 24.0f) / 7.0f - 6.0f, fil },
-                  4.0f / fil, 0.28f, 0.30f, 0.36f, 1.0f);
-      }
-      { char t[80];
-        snprintf(t, sizeof t, i18n("%d fileiras abaixo do herói"), n);
-        TxtLinha l = txt_linha_corta(TXT_MINI, t, 130, 133, 142, 255, w);
-        txt_desenhar(l, x, y + mh + 10.0f);
-        return mh + 10.0f + l.h + 8.0f; }
-    }
-    case AJ_CW_ESTILO: {
-      // Os tres estilos, o escolhido em destaque: card (16:9 com texto
-      // embaixo), largo (16:9 com texto dentro), poster (2:3).
-      int est = valor[AJ_CW_ESTILO], i;
-      float cw = (w - 2.0f * 18.0f) / 3.0f;
-      for (i = 0; i < 3; i++) {
-        float px = x + (float)i * (cw + 18.0f), ch = i == 2 ? cw * 1.5f : cw * 0.5625f;
-        float al = (i == est) ? 1.0f : 0.35f;
-        if (i == est) gfx_cor((GfxRect){ px - 4.0f, y - 4.0f, cw + 8.0f, ch + 8.0f }, 12.0f / (cw + 8.0f), ar, ag, ab, 0.95f);
-        gfx_cor((GfxRect){ px, y, cw, ch }, 8.0f / (cw < ch ? cw : ch), 0.30f, 0.32f, 0.38f, al);
-        gfx_cor((GfxRect){ px + 10.0f, y + ch - 12.0f, cw * 0.5f, 4.0f }, 0.5f, ar, ag, ab, 0.9f * al);
-        if (i != 2 && i == 0) {
-          TxtLinha l = txt_linha(TXT_MINI, i18n("Título · T1E3"), 200, 203, 210, 255);
-          txt_desenhar_alpha(l, px, y + ch + 8.0f, al);
-        }
-      }
-      return cw * 1.5f + 8.0f + 30.0f;
-    }
-    case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO: {
-      // A home em miniatura com o heroi em tela cheia ou nao, e cartazes
-      // deitados ou em pe.
-      float mh = 300.0f;
-      int cheio = valor[AJ_HERO_CHEIO] == 0, deitado = valor[AJ_LANDSCAPE] == 0, semHero = valor[AJ_HERO] != 0, k;
-      float hero = semHero ? 0.0f : (cheio ? 150.0f : 96.0f);
-      gfx_cor((GfxRect){ x, y, w, mh }, 12.0f / mh, 0.09f, 0.095f, 0.11f, 1.0f);
-      if (!semHero) gfx_cor((GfxRect){ x + (cheio ? 0.0f : 12.0f), y + (cheio ? 0.0f : 12.0f), w - (cheio ? 0.0f : 24.0f), hero },
-                            (cheio ? 12.0f : 8.0f) / hero, 0.22f, 0.24f, 0.30f, 1.0f);
-      { float cw = deitado ? (w - 24.0f) / 4.0f - 8.0f : (w - 24.0f) / 6.0f - 8.0f;
-        float ch = deitado ? cw * 0.5625f : cw * 1.5f, fy = y + hero + 24.0f;
-        int n = deitado ? 4 : 6;
-        for (k = 0; k < n; k++)
-          if (fy + ch < y + mh - 8.0f)
-            gfx_cor((GfxRect){ x + 12.0f + (float)k * (cw + 8.0f), fy, cw, ch }, 6.0f / (cw < ch ? cw : ch), 0.28f, 0.30f, 0.36f, 1.0f); }
-      { TxtLinha l = txt_linha_corta(TXT_MINI,
-            semHero ? i18n("Sem herói: as fileiras sobem") : cheio ? i18n("Herói em tela cheia, fileiras por cima") : i18n("Herói contido, fileiras abaixo"),
-            130, 133, 142, 255, w);
-        txt_desenhar(l, x, y + mh + 10.0f);
-        return mh + 10.0f + l.h + 8.0f; }
-    }
-    case AJ_QUALIDADE: {
-      // Quatro barras, uma por resolucao; as que o teto deixa passar acesas.
-      int teto = valor[AJ_QUALIDADE], i;   // 0 auto, 1 4K, 2 1080p, 3 720p
-      float bw = (w - 2.0f * 14.0f) / 3.0f;
-      for (i = 0; i < 3; i++) {
-        int passa = teto == 0 || (teto == 1) || (teto == 2 && i <= 1) || (teto == 3 && i == 0);
-        float bh = 40.0f + (float)i * 40.0f, px = x + (float)i * (bw + 14.0f);
-        gfx_cor((GfxRect){ px, y + 120.0f - bh, bw, bh }, 6.0f / bw, passa ? ar : 0.30f, passa ? ag : 0.32f, passa ? ab : 0.38f, passa ? 0.9f : 0.6f);
-        { static const FormatoMarca F[] = { FMT_720, FMT_1080, FMT_4K };
-          float mw = marca_formato_largura(F[i], 30.0f);
-          marca_formato(F[i], px + (bw - mw) * 0.5f, y + 124.0f, 30.0f, 0.78f, 0.80f, 0.82f, 1.0f); }
-      }
-      return 128.0f + 30.0f;
-    }
-    default: return 0.0f;
-  }
-  (void)y0;
-}
-
-// Diagramas pequenos do painel de ajuda. Sao superficies do proprio renderer,
-// com o acento ativo, e representam fluxos de produto sem simular estados reais
-// de conta, sincronizacao, diagnostico ou metricas.
-static void ajudaMiniTexto(const char *s, float x, float y, float w,
-                           int r, int g, int b) {
-  TxtLinha l = txt_linha_corta(TXT_CAPTION2, i18n(s), r, g, b, 255, w);
-  txt_desenhar(l, x, y);
-}
-
-static void ajudaMiniCaixa(float x, float y, float w, float h, int ativa,
-                           float ar, float ag, float ab) {
-  if (ativa) {
-    GfxRect r = { x, y, w, h };
-    gfx_cor(r, 10.0f / h, ar, ag, ab, 0.92f);
-  } else {
-    GfxRect r = { x, y, w, h };
-    gfx_cor(r, 10.0f / h, 0.095f, 0.10f, 0.12f, 1.0f);
-  }
-}
-
-static void ajudaMiniSeta(float x, float y) {
-  GfxRect haste = { x, y + 15.0f, 25.0f, 2.0f };
-  gfx_cor(haste, 0.0f, 0.45f, 0.47f, 0.52f, 0.9f);
-  { TxtLinha l = txt_linha(TXT_HEADLINE, "→", 175, 178, 186, 255);
-    txt_desenhar(l, x + 18.0f, y); }
-}
-
-static float ajudaFluxoCatalogos(float x, float y, float w) {
-  float ar, ag, ab, h = 188.0f, sx = x + 18.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  ajudaMiniCaixa(sx, y + 30.0f, 112.0f, 54.0f, 1, ar, ag, ab);
-  ajudaMiniTexto("Addon", sx + 14.0f, y + 46.0f, 86.0f,
-                 ajustes_tinta_foco(), ajustes_tinta_foco(), ajustes_tinta_foco());
-  ajudaMiniSeta(sx + 122.0f, y + 36.0f);
-  { float gx = sx + 168.0f, gw = w - 204.0f;
-    ajudaMiniTexto("Catálogo", gx, y + 10.0f, gw, 190, 193, 201);
-    for (int row = 0; row < 2; row++) {
-      float ry = y + 46.0f + row * 62.0f;
-      gfx_cor((GfxRect){ gx, ry, gw, 48.0f }, 6.0f / 48.0f,
-              0.07f, 0.075f, 0.09f, 1.0f);
-      for (int k = 0; k < 4; k++) {
-        float cw = (gw - 30.0f) / 4.0f;
-        gfx_cor((GfxRect){ gx + 6.0f + k * (cw + 6.0f), ry + 7.0f,
-                           cw, 34.0f }, 4.0f / 34.0f,
-                0.27f, 0.29f, 0.34f, 1.0f);
-      }
-    }
-  }
-  return h;
-}
-
-static float ajudaFluxoMetadata(float x, float y, float w) {
-  float ar, ag, ab, h = 188.0f, sx = x + 16.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  ajudaMiniCaixa(sx, y + 20.0f, 120.0f, 50.0f, 0, ar, ag, ab);
-  ajudaMiniTexto("TMDB", sx + 18.0f, y + 36.0f, 85.0f, 214, 217, 224);
-  ajudaMiniCaixa(sx, y + 82.0f, 120.0f, 50.0f, 0, ar, ag, ab);
-  ajudaMiniTexto("IMDb", sx + 18.0f, y + 98.0f, 85.0f, 214, 217, 224);
-  ajudaMiniSeta(sx + 130.0f, y + 58.0f);
-  { float px = sx + 174.0f, pw = w - 204.0f;
-    ajudaMiniCaixa(px, y + 18.0f, pw, 152.0f, 0, ar, ag, ab);
-    gfx_cor((GfxRect){ px + 12.0f, y + 30.0f, 62.0f, 82.0f }, 6.0f / 62.0f,
-            0.27f, 0.29f, 0.34f, 1.0f);
-    ajudaMiniTexto("Título", px + 88.0f, y + 30.0f, pw - 100.0f,
-                   238, 239, 242);
-    gfx_cor((GfxRect){ px + 88.0f, y + 62.0f, pw * 0.48f, 4.0f }, 0.5f,
-            0.50f, 0.52f, 0.57f, 1.0f);
-    gfx_cor((GfxRect){ px + 88.0f, y + 74.0f, pw * 0.62f, 4.0f }, 0.5f,
-            0.38f, 0.40f, 0.45f, 1.0f);
-    ajudaMiniTexto("Detalhes", px + 12.0f, y + 124.0f, 92.0f,
-                   178, 181, 189);
-    ajudaMiniTexto("Nota", px + 116.0f, y + 124.0f, 60.0f,
-                   ar * 255, ag * 255, ab * 255);
-  }
-  return h;
-}
-
-static float ajudaFluxoSobre(float x, float y, float w) {
-  float ar, ag, ab, h = 170.0f, gap = 14.0f, bw = (w - 3.0f * gap) / 2.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  ajudaMiniCaixa(x + gap, y + 20.0f, bw, 56.0f, 0, ar, ag, ab);
-  ajudaMiniTexto("Perfil", x + gap + 16.0f, y + 38.0f, bw - 28.0f,
-                 220, 222, 228);
-  ajudaMiniCaixa(x + 2.0f * gap + bw, y + 20.0f, bw, 56.0f, 1, ar, ag, ab);
-  ajudaMiniTexto("Conta", x + 2.0f * gap + bw + 16.0f, y + 38.0f,
-                 bw - 28.0f, ajustes_tinta_foco(), ajustes_tinta_foco(), ajustes_tinta_foco());
-  // Linhas de acao sem dizer que ha uma conta conectada ou sincronizada.
-  for (int i = 0; i < 2; i++) {
-    float rx = x + gap + i * (bw + gap), ry = y + 96.0f;
-    gfx_cor((GfxRect){ rx, ry, bw, 42.0f }, 6.0f / 42.0f,
-            0.07f, 0.075f, 0.09f, 1.0f);
-    gfx_cor((GfxRect){ rx + 12.0f, ry + 12.0f, bw * 0.55f, 4.0f }, 0.5f,
-            0.58f, 0.60f, 0.64f, 0.9f);
-    gfx_cor((GfxRect){ rx + 12.0f, ry + 23.0f, bw * 0.35f, 3.0f }, 0.5f,
-            0.38f, 0.40f, 0.44f, 0.9f);
-  }
-  return h;
-}
-
-static float ajudaFluxoAparencia(float x, float y, float w) {
-  float ar, ag, ab, h = 188.0f;
-  int tinta;
-  ajustes_acento(&ar, &ag, &ab);
-  tinta = ajustes_tinta_foco();
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  // Uma tela de exemplo mostra o acento apenas como foco, sem sugerir uma
-  // escolha fixa de paleta. A amostra de idioma fica ao lado.
-  ajudaMiniCaixa(x + 18.0f, y + 18.0f, 238.0f, 108.0f, 0, ar, ag, ab);
-  gfx_cor((GfxRect){ x + 30.0f, y + 30.0f, 214.0f, 28.0f }, 5.0f / 28.0f,
-          0.08f, 0.09f, 0.11f, 1.0f);
-  ajudaMiniCaixa(x + 30.0f, y + 66.0f, 214.0f, 42.0f, 1, ar, ag, ab);
-  gfx_cor((GfxRect){ x + 44.0f, y + 84.0f, 74.0f, 4.0f }, 0.5f,
-          tinta / 255.0f, tinta / 255.0f, tinta / 255.0f, 0.85f);
-  ajudaMiniTexto("Cor de destaque", x + 30.0f, y + 127.0f, 238.0f,
-                 191, 194, 202);
-  ajudaMiniCaixa(x + 286.0f, y + 18.0f, w - 304.0f, 108.0f, 0, ar, ag, ab);
-  { TxtLinha aa = txt_linha(TXT_HEADLINE, "Aa", 235, 237, 241, 255);
-    txt_desenhar(aa, x + 310.0f, y + 30.0f); }
-  ajudaMiniTexto("Idioma", x + 310.0f, y + 70.0f, w - 328.0f,
-                 175, 178, 186);
-  ajudaMiniCaixa(x + 18.0f, y + 158.0f, w - 36.0f, 26.0f, 0, ar, ag, ab);
-  ajudaMiniTexto("Animações", x + 30.0f, y + 160.0f, 132.0f,
-                 185, 188, 196);
-  for (int i = 0; i < 3; i++) {
-    float bx = x + 190.0f + i * 96.0f;
-    gfx_cor((GfxRect){ bx, y + 169.0f, 58.0f, 4.0f }, 0.5f,
-            i == 1 ? ar : 0.48f, i == 1 ? ag : 0.50f,
-            i == 1 ? ab : 0.54f, 0.9f);
-  }
-  return h;
-}
-
-static float ajudaFluxoIntegracoes(float x, float y, float w) {
-  return ajudaFluxoMetadata(x, y, w);
-}
-
-static float ajudaFluxoReproducao(float x, float y, float w) {
-  float ar, ag, ab, h = 188.0f, tinta;
-  ajustes_acento(&ar, &ag, &ab);
-  tinta = ajustes_tinta_foco() / 255.0f;
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  // Mini-player: imagem, progresso e duas trilhas selecionáveis identificam
-  // a reprodução sem inventar arquivo ou valores de qualidade.
-  ajudaMiniCaixa(x + 14.0f, y + 14.0f, w - 28.0f, 102.0f, 0, ar, ag, ab);
-  gfx_cor((GfxRect){ x + 26.0f, y + 26.0f, 118.0f, 76.0f }, 6.0f / 76.0f,
-          0.20f, 0.22f, 0.27f, 1.0f);
-  gfx_cor((GfxRect){ x + 40.0f, y + 42.0f, 90.0f, 44.0f }, 5.0f / 44.0f,
-          0.28f, 0.30f, 0.36f, 1.0f);
-  gfx_cor((GfxRect){ x + 166.0f, y + 38.0f, w - 198.0f, 5.0f }, 0.5f,
-          0.80f, 0.82f, 0.86f, 0.9f);
-  gfx_cor((GfxRect){ x + 166.0f, y + 58.0f, w - 234.0f, 4.0f }, 0.5f,
-          0.38f, 0.40f, 0.45f, 0.9f);
-  gfx_cor((GfxRect){ x + 166.0f, y + 78.0f, w - 270.0f, 4.0f }, 0.5f,
-          0.32f, 0.34f, 0.39f, 0.9f);
-  gfx_cor((GfxRect){ x + 26.0f, y + 122.0f, w - 52.0f, 4.0f }, 0.5f,
-          0.27f, 0.29f, 0.33f, 1.0f);
-  gfx_cor((GfxRect){ x + 26.0f, y + 122.0f, (w - 52.0f) * 0.44f, 4.0f },
-          0.5f, ar, ag, ab, 1.0f);
-  ajudaMiniCaixa(x + 18.0f, y + 140.0f, 174.0f, 34.0f, 1, ar, ag, ab);
-  ajudaMiniTexto("Áudio", x + 32.0f, y + 147.0f, 146.0f,
-                 tinta * 255, tinta * 255, tinta * 255);
-  ajudaMiniCaixa(x + 206.0f, y + 140.0f, w - 224.0f, 34.0f, 0, ar, ag, ab);
-  ajudaMiniTexto("Legenda", x + 220.0f, y + 147.0f, w - 252.0f,
-                 196, 199, 206);
-  return h;
-}
-
-static float ajudaFluxoHistorico(float x, float y, float w) {
-  float ar, ag, ab, h = 170.0f, bw = (w - 66.0f) / 3.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  ajudaMiniCaixa(x + 16.0f, y + 24.0f, bw, 48.0f, 0, ar, ag, ab);
-  ajudaMiniTexto("Trakt", x + 28.0f, y + 40.0f, bw - 24.0f,
-                 209, 212, 220);
-  ajudaMiniCaixa(x + 16.0f, y + 88.0f, bw, 48.0f, 0, ar, ag, ab);
-  ajudaMiniTexto("Simkl", x + 28.0f, y + 104.0f, bw - 24.0f,
-                 209, 212, 220);
-  ajudaMiniSeta(x + bw + 28.0f, y + 55.0f);
-  { float rx = x + 2.0f * bw + 56.0f, rw = w - (rx - x) - 16.0f;
-    ajudaMiniCaixa(rx, y + 22.0f, rw, 116.0f, 0, ar, ag, ab);
-    ajudaMiniTexto("Histórico", rx + 12.0f, y + 34.0f, rw - 24.0f,
-                   216, 219, 226);
-    for (int i = 0; i < 4; i++)
-      gfx_cor((GfxRect){ rx + 12.0f, y + 68.0f + i * 14.0f,
-                         rw - 24.0f - (i % 2) * 40.0f, 4.0f }, 0.5f,
-              0.36f, 0.38f, 0.43f, 0.9f);
-  }
-  return h;
-}
-
-static float ajudaFluxoAvancado(float x, float y, float w) {
-  float ar, ag, ab, h = 170.0f, bx = x + 16.0f, bw = 232.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  ajudaMiniCaixa(bx, y + 14.0f, bw, 40.0f, 0, ar, ag, ab);
-  ajudaMiniTexto("Resolução da interface", bx + 10.0f, y + 26.0f, bw - 20.0f,
-                 203, 206, 214);
-  ajudaMiniCaixa(bx, y + 64.0f, bw, 40.0f, 0, ar, ag, ab);
-  ajudaMiniTexto("Memória para imagens", bx + 10.0f, y + 76.0f, bw - 20.0f,
-                 203, 206, 214);
-  ajudaMiniCaixa(bx, y + 114.0f, bw, 40.0f, 0, ar, ag, ab);
-  ajudaMiniTexto("Diagnóstico", bx + 10.0f, y + 126.0f, bw - 20.0f,
-                 203, 206, 214);
-  ajudaMiniSeta(x + 250.0f, y + 66.0f);
-  { float tx = x + 296.0f, tw = w - 314.0f;
-    ajudaMiniCaixa(tx, y + 28.0f, tw, 112.0f, 0, ar, ag, ab);
-    gfx_cor((GfxRect){ tx + 14.0f, y + 42.0f, tw - 28.0f, 74.0f },
-            6.0f / 74.0f, 0.035f, 0.04f, 0.05f, 1.0f);
-    gfx_cor((GfxRect){ tx + tw * 0.38f, y + 118.0f, tw * 0.24f, 5.0f },
-            0.5f, ar, ag, ab, 0.9f);
-  }
-  return h;
-}
-
-static int grupoTemOpcao(int grupo, int op) {
-  for (int i = grupo + 1; i < AJ_N_TELA && grupoDoItem[i] == grupo; i++)
-    if (TELA[i].tipo == IT_OPC && TELA[i].op == op) return 1;
-  return 0;
-}
-
-static float desenhaPreviaGrupo(int grupo, float x, float y, float w) {
-  float ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
-  if (grupoTemOpcao(grupo, AJ_LANDSCAPE) || grupoTemOpcao(grupo, AJ_HERO_CHEIO))
-    return desenhaPrevia(AJ_LANDSCAPE, x, y, w);
-  if (grupoTemOpcao(grupo, AJ_FIL_LIMITE))
-    return desenhaPrevia(AJ_FIL_LIMITE, x, y, w);
-  if (grupoTemOpcao(grupo, AJ_CW_ESTILO))
-    return desenhaPrevia(AJ_CW_ESTILO, x, y, w);
-  if (grupoTemOpcao(grupo, AJ_LARGURA_DP))
-    return desenhaPrevia(AJ_LARGURA_DP, x, y, w);
-  if (grupoTemOpcao(grupo, AJ_EXPANDIR)) {
-    float cw = 72.0f, ch = 112.0f, gap = 24.0f;
-    for (int i = 0; i < 3; i++) {
-      float px = x + 34.0f + i * (cw + gap);
-      float scale = i == 1 ? 1.12f : 1.0f;
-      if (i == 1) gfx_cor((GfxRect){ px - 6, y - 6, cw + 12, ch + 12 },
-                          12.0f / (cw + 12), ar, ag, ab, 0.9f);
-      previaCartaz(px, y, cw * scale, ch * scale, 12.0f, ar, ag, ab, 1.0f);
-    }
-    return 140.0f;
-  }
-  if (grupoTemOpcao(grupo, AJ_DET_TRAILER) || grupoTemOpcao(grupo, AJ_DET_VEU)) {
-    float hero = 74.0f, rowY = y + 92.0f, cardW = (w - 32.0f) / 3.0f;
-    ajudaMiniCaixa(x, y, w, 82.0f, 0, ar, ag, ab);
-    previaCartaz(x + 14.0f, y + 10.0f, 48.0f, 62.0f, 8.0f,
-                 ar, ag, ab, 0.7f);
-    gfx_cor((GfxRect){ x + 78.0f, y + 22.0f, w * 0.42f, 6.0f }, 0.5f,
-            0.85f, 0.86f, 0.89f, 0.9f);
-    gfx_cor((GfxRect){ x + 78.0f, y + 40.0f, w * 0.65f, 4.0f }, 0.5f,
-            0.43f, 0.45f, 0.50f, 0.9f);
-    for (int i = 0; i < 3; i++) {
-      float cx = x + i * (cardW + 16.0f);
-      gfx_cor((GfxRect){ cx, rowY, cardW, hero }, 8.0f / hero,
-              i == 0 ? 0.23f : 0.16f, i == 0 ? 0.25f : 0.17f,
-              i == 0 ? 0.31f : 0.18f, 1.0f);
-      gfx_cor((GfxRect){ cx + 8.0f, rowY + hero - 15.0f, cardW * 0.7f, 3.0f },
-              0.5f, 0.83f, 0.84f, 0.87f, 0.85f);
-    }
-    return 174.0f;
-  }
-  if (grupoTemOpcao(grupo, AJ_TMDB_LIGADO))
-    return ajudaFluxoMetadata(x, y, w);
-  if (grupoTemOpcao(grupo, AJ_MDB_LIGADO))
-    return ajudaFluxoIntegracoes(x, y, w);
-  if (grupoTemOpcao(grupo, AJ_FANART_CHAVE)) {
-    float h = 166.0f;
-    ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-    gfx_cor((GfxRect){ x + 14.0f, y + 14.0f, w - 28.0f, 94.0f },
-            10.0f / 94.0f, 0.15f, 0.17f, 0.21f, 1.0f);
-    gfx_cor((GfxRect){ x + 34.0f, y + 30.0f, 58.0f, 72.0f }, 6.0f / 58.0f,
-            0.30f, 0.32f, 0.38f, 1.0f);
-    for (int i = 0; i < 3; i++)
-      gfx_cor((GfxRect){ x + 112.0f, y + 34.0f + i * 18.0f,
-                         w * 0.44f, 4.0f }, 0.5f,
-              i == 1 ? ar : 0.40f, i == 1 ? ag : 0.42f,
-              i == 1 ? ab : 0.46f, 0.9f);
-    return h;
-  }
-  return 0.0f;
-}
-
-static float desenhaPreviaCategoria(int sec, float x, float y, float w) {
-  switch (sec) {
-    case 0: return desenhaPrevia(AJ_LANDSCAPE, x, y, w);
-    case 1: return desenhaPrevia(AJ_LARGURA_DP, x, y, w);
-    case 2: return desenhaPrevia(AJ_HERO_TRAILER, x, y, w);
-    case 3: return ajudaFluxoMetadata(x, y, w);
-    case 4: return ajudaFluxoReproducao(x, y, w);
-    case 5: return ajudaFluxoReproducao(x, y, w);
-    case 6: return ajudaFluxoAparencia(x, y, w);
-    case 7: return ajudaFluxoCatalogos(x, y, w);
-    case 8: return ajudaFluxoHistorico(x, y, w);
-    case 9: return ajudaFluxoAvancado(x, y, w);
-    case 10: {                                           // Versao e suporte
-      float ar, ag, ab, h = 170.0f;
-      ajustes_acento(&ar, &ag, &ab);
-      ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-      ajudaMiniTexto("Versão", x + 18.0f, y + 16.0f, w - 36.0f,
-                     220, 222, 229);
-      gfx_cor((GfxRect){ x + 18.0f, y + 48.0f, w - 36.0f, 4.0f }, 0.5f,
-              0.37f, 0.39f, 0.44f, 1.0f);
-      ajudaMiniCaixa(x + 18.0f, y + 78.0f, (w - 48.0f) * 0.5f, 52.0f,
-                     1, ar, ag, ab);
-      ajudaMiniTexto("Atualizar o app", x + 30.0f, y + 96.0f, (w - 72.0f) * 0.5f,
-                     ajustes_tinta_foco(), ajustes_tinta_foco(), ajustes_tinta_foco());
-      ajudaMiniCaixa(x + w * 0.5f + 6.0f, y + 78.0f,
-                     (w - 48.0f) * 0.5f, 52.0f, 0, ar, ag, ab);
-      ajudaMiniTexto("Enviar registro", x + w * 0.5f + 18.0f,
-                     y + 96.0f, w * 0.5f - 36.0f, 210, 213, 220);
-      return h;
-    }
-  }
-  return 0.0f;
-}
 
 // Previews em foco por opção. Cada família desenha a mesma superfície do app
 // e realça a peça que a opção altera; os controles binários usam `valor[]`.
@@ -6499,794 +5394,24 @@ static AjPreview familiaPreviaOpcao(int op) {
   }
 }
 
-static void previaRealce(float x, float y, float w, float h,
-                         float ar, float ag, float ab) {
-  const float t = 3.0f;
-  gfx_cor((GfxRect){x, y, w, t}, 0.0f, ar, ag, ab, 0.95f);
-  gfx_cor((GfxRect){x, y + h - t, w, t}, 0.0f, ar, ag, ab, 0.95f);
-  gfx_cor((GfxRect){x, y, t, h}, 0.0f, ar, ag, ab, 0.95f);
-  gfx_cor((GfxRect){x + w - t, y, t, h}, 0.0f, ar, ag, ab, 0.95f);
-}
-
-static void previaMarcador(int op, float x, float y, float w, float h,
-                           float ar, float ag, float ab) {
-  int on = OPCOES[op].valores == V_LIGA ? lig(op) : 0;
-  ajudaMiniCaixa(x, y, w, h, on, ar, ag, ab);
-  previaRealce(x - 2.0f, y - 2.0f, w + 4.0f, h + 4.0f, ar, ag, ab);
-}
-
-static void previaSwitch(int op, float x, float y, float w,
-                         float ar, float ag, float ab) {
-  int ligado = lig(op);
-  gfx_cor((GfxRect){x, y, w, 24.0f}, 0.5f,
-          ligado ? ar : 0.28f, ligado ? ag : 0.29f,
-          ligado ? ab : 0.32f, 0.95f);
-  gfx_cor((GfxRect){x + (ligado ? w - 22.0f : 2.0f), y + 2.0f,
-                     20.0f, 20.0f}, 0.5f, 0.92f, 0.93f, 0.95f, 1.0f);
-}
-
-static void previaLinhas(float x, float y, float w, int n,
-                         float ar, float ag, float ab, int marcada) {
-  for (int i = 0; i < n; i++) {
-    float yy = y + i * 19.0f;
-    float ww = w * (0.48f + 0.09f * (float)(i % 3));
-    if (i == marcada) {
-      gfx_cor((GfxRect){x, yy - 4.0f, w, 14.0f}, 5.0f/14.0f,
-              ar, ag, ab, 0.92f);
-      gfx_cor((GfxRect){x + 8.0f, yy + 1.0f, ww, 4.0f}, 0.5f,
-              ajustes_tinta_foco()/255.0f,
-              ajustes_tinta_foco()/255.0f,
-              ajustes_tinta_foco()/255.0f, 0.95f);
-    } else {
-      gfx_cor((GfxRect){x + 8.0f, yy + 1.0f, ww, 4.0f}, 0.5f,
-              0.40f, 0.42f, 0.47f, 0.9f);
-    }
-  }
-}
-
-static float previaReproducaoOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 142.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  // Tela e barra de progresso do player.
-  gfx_cor((GfxRect){x + 14.0f, y + 14.0f, w - 28.0f, 76.0f}, 7.0f/76.0f,
-          0.055f, 0.06f, 0.075f, 1.0f);
-  gfx_cor((GfxRect){x + 27.0f, y + 23.0f, 84.0f, 54.0f}, 5.0f/54.0f,
-          0.25f, 0.27f, 0.33f, 1.0f);
-  gfx_cor((GfxRect){x + 128.0f, y + 30.0f, w - 158.0f, 5.0f}, 0.5f,
-          0.80f, 0.82f, 0.85f, 0.9f);
-  gfx_cor((GfxRect){x + 128.0f, y + 46.0f, w - 190.0f, 4.0f}, 0.5f,
-          0.39f, 0.41f, 0.46f, 0.9f);
-  gfx_cor((GfxRect){x + 128.0f, y + 61.0f, w - 220.0f, 4.0f}, 0.5f,
-          0.32f, 0.34f, 0.39f, 0.9f);
-  if (op == AJ_QUALIDADE) {
-    float bw = (w - 48.0f) / 3.0f;
-    for (int i = 0; i < 3; i++) {
-      float bh = 24.0f + i * 10.0f;
-      float bx = x + 14.0f + i * (bw + 10.0f);
-      gfx_cor((GfxRect){bx, y + 122.0f - bh, bw, bh}, 4.0f/bh,
-              0.20f, 0.22f, 0.27f, 1.0f);
-      if ((valor[op] == 1) || (valor[op] == 2 && i < 2) ||
-          (valor[op] == 3 && i == 0) || valor[op] == 0)
-        gfx_cor((GfxRect){bx + bw - 5.0f, y + 122.0f - bh, 5.0f, bh},
-                0.0f, ar, ag, ab, 0.95f);
-    }
-    previaRealce(x + 12.0f, y + 98.0f, w - 24.0f, 34.0f, ar, ag, ab);
-  } else if (op == AJ_DV || op == AJ_ATMOS) {
-    // A MARCA do formato no lugar de "DV"/"ATMOS" (pedido do dono, 29/09):
-    // a previa mostra o logo que a opcao liga. Pilula de 42 px para a marca de
-    // duas linhas do Dolby ler; a largura sai da propria arte.
-    FormatoMarca fm = op == AJ_DV ? FMT_DV : FMT_ATMOS;
-    float mh = 34.0f, mw = marca_formato_largura(fm, mh);
-    float pw = mw + 24.0f, py = y + 93.0f;
-    float bx = x + 18.0f;
-    float tinta = lig(op) ? ajustes_tinta_foco() / 255.0f : 0.78f;
-    ajudaMiniCaixa(bx, py, pw, 42.0f, lig(op), ar, ag, ab);
-    marca_formato(fm, bx + 12.0f, py + 4.0f, mh, tinta, tinta, tinta, 1.0f);
-    previaRealce(bx - 2.0f, py - 2.0f, pw + 4.0f, 46.0f, ar, ag, ab);
-  } else if (op == AJ_AUD_LINGUA || op == AJ_LEG_LINGUA) {
-    float ty = y + 101.0f;
-    for (int i = 0; i < 2; i++) {
-      float tx = x + 14.0f + i * ((w - 38.0f) * 0.5f + 10.0f);
-      GfxRect r = {tx, ty, (w - 38.0f) * 0.5f, 28.0f};
-      gfx_cor(r, 6.0f/28.0f, 0.11f, 0.12f, 0.15f, 1.0f);
-      if (i == (valor[op] ? 1 : 0)) previaRealce(tx, ty, r.w, r.h, ar, ag, ab);
-    }
-    previaLinhas(x + 24.0f, y + 102.0f, w - 48.0f, 1, ar, ag, ab,
-                 valor[op] ? 0 : -1);
-  } else if (op == AJ_PAUSA_OVERLAY) {
-    GfxRect r = {x + 110.0f, y + 96.0f, w - 220.0f, 36.0f};
-    ajudaMiniCaixa(r.x, r.y, r.w, r.h, lig(op), ar, ag, ab);
-    previaSwitch(op, r.x + r.w - 74.0f, r.y + 6.0f, 58.0f, ar, ag, ab);
-    previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
-  } else {
-    float col = (w - 50.0f) / 3.0f;
-    for (int i = 0; i < 3; i++) {
-      float bx = x + 14.0f + i * (col + 11.0f);
-      GfxRect r = {bx, y + 104.0f, col, 27.0f};
-      gfx_cor(r, 6.0f/27.0f, 0.12f, 0.13f, 0.16f, 1.0f);
-      if ((op == AJ_FONTE_AUTO && i == valor[op]) ||
-          (op == AJ_FONTE_MANUAL && i == (lig(op) ? 1 : 0)) ||
-          (op == AJ_FONTE_REPOR && i == valor[op]) ||
-          (op == AJ_FONTE_TEXTO && i == valor[op]))
-        previaRealce(bx, r.y, r.w, r.h, ar, ag, ab);
-    }
-  }
-  return h;
-}
-
-static float previaHomeOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 148.0f;
-  int hero = valor[AJ_HERO] == 0;
-  // O layout da home decide a forma do destaque: Padrao contido, Dinamica de
-  // ponta a ponta e mais alto; na Moderna vale "Fundo em tela cheia".
-  int lay = valor[AJ_HOME_LAYOUT];
-  int full = lay == HOME_LAYOUT_DINAMICA ? 1
-           : lay == HOME_LAYOUT_PADRAO ? 0 : valor[AJ_HERO_CHEIO] == 0;
-  int landscape = valor[AJ_LANDSCAPE] == 0;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  float rail = (valor[AJ_RAIL_MODERNA] == 0) ? 46.0f :
-               (valor[AJ_RAIL] == 1 ? 30.0f : 0.0f);
-  if (rail > 0.0f) {
-    GfxRect r = {x + 8.0f, y + 8.0f, rail, h - 16.0f};
-    gfx_cor(r, 5.0f/rail, 0.10f, 0.11f, 0.14f, 1.0f);
-    for (int i = 0; i < 4; i++) {
-      float ry = y + 20.0f + i * 25.0f;
-      gfx_cor((GfxRect){r.x + 8.0f, ry, rail - 16.0f, 5.0f}, 0.5f,
-              (op == AJ_RAIL || op == AJ_RAIL_MODERNA) && i == 1 ? ar : 0.38f,
-              (op == AJ_RAIL || op == AJ_RAIL_MODERNA) && i == 1 ? ag : 0.40f,
-              (op == AJ_RAIL || op == AJ_RAIL_MODERNA) && i == 1 ? ab : 0.44f,
-              valor[AJ_RAIL_BLUR] == 0 ? 0.55f : 0.95f);
-    }
-    if (op == AJ_RAIL || op == AJ_RAIL_MODERNA || op == AJ_RAIL_BLUR)
-      previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
-  }
-  float cx = x + rail + 18.0f, cw = w - rail - 28.0f;
-  // Padrao e Dinamica: destaque de borda a borda, do topo da miniatura e sem canto.
-  int sangra = lay != HOME_LAYOUT_MODERNA;
-  float heroH = hero ? (lay == HOME_LAYOUT_DINAMICA ? 66.0f : lay == HOME_LAYOUT_PADRAO ? 52.0f : full ? 60.0f : 42.0f) : 0.0f;
-  if (hero) {
-    GfxRect hr = sangra ? (GfxRect){x + rail, y, w - rail, heroH + 10.0f}
-                        : (GfxRect){cx, y + 10.0f, cw, heroH};
-    gfx_cor(hr, sangra ? 0.0f : 6.0f/heroH, 0.19f, 0.21f, 0.27f, 1.0f);
-    gfx_cor((GfxRect){cx + 12.0f, hr.y + 12.0f, cw * 0.40f, 4.0f},
-            0.5f, 0.70f, 0.72f, 0.76f, 0.9f);
-    if (op == AJ_HERO || op == AJ_HERO_CHEIO || op == AJ_HERO_FUNDO ||
-        op == AJ_HERO_ARTE_DIF || op == AJ_HERO_TRAILER ||
-        op == AJ_HERO_TRAILER_SOM || op == AJ_HERO_TRAILER_ESPERA ||
-        op == AJ_HERO_TRANSICAO ||
-        op == AJ_ADDON_FUNDO || op == AJ_ADDON_LOGO ||
-        op == AJ_HERO_CATALOGOS || op == AJ_GRAD_CLASSICO)
-      previaRealce(hr.x, hr.y, hr.w, hr.h, ar, ag, ab);
-    if (valor[AJ_HERO_TRAILER] == 0) {
-      gfx_cor((GfxRect){cx + cw - 24.0f, hr.y + 8.0f, 14.0f, 14.0f},
-              0.5f, ar, ag, ab, 0.95f);
-    }
-  }
-  int rows = op == AJ_FIL_LIMITE ? valor[AJ_FIL_LIMITE] : 2;
-  if (rows < 1) rows = 1;
-  if (rows > 2) rows = 2;
-  for (int row = 0; row < rows; row++) {
-    float ry = y + 18.0f + heroH + row * 45.0f;
-    // Dinamica: a primeira fileira e a de destaques grandes (dois cartoes largos).
-    int grande = lay == HOME_LAYOUT_DINAMICA && row == 0;
-    // Padrao: o cartaz em pe e 260 e nao 212 (home.c, escalaCartazPadrao) —
-    // cabem cinco na miniatura, nao seis.
-    int emPe = lay == HOME_LAYOUT_PADRAO ? 5 : 6;
-    float cardW = grande ? (cw - 6.0f) / 2.0f
-                : landscape ? (cw - 36.0f) / 4.0f
-                : (cw - 6.0f * (float)(emPe - 1) * 2.0f) / (float)emPe;
-    int count = grande ? 2 : landscape ? 4 : emPe;
-    // A fileira que o foco altera fica em destaque. Campos próprios mostram
-    // somente seções que de fato estão ligadas/desligadas.
-    int isTargetRow = (op >= AJ_FIL_LIMITE && op <= AJ_PS_FUNDO) ||
-                      (op == AJ_LANDSCAPE);
-    if (row == 0 && (op == AJ_FIL_ORDEM || op == AJ_FIL_LIMITE))
-      previaRealce(cx - 2.0f, ry - 4.0f, cw + 4.0f, 38.0f, ar, ag, ab);
-    if ((op == AJ_HERO || op == AJ_HERO_CATALOGOS) && !hero) continue;
-    for (int k = 0; k < count; k++) {
-      float bx = cx + k * (cardW + 6.0f);
-      float ch = grande ? 26.0f : landscape ? 20.0f : 31.0f;
-      GfxRect card = {bx, ry, cardW, ch};
-      int cardTarget = (op == AJ_LANDSCAPE) ||
-        (op == AJ_ROTULOS && valor[op] == 0) ||
-        (op == AJ_NOME_ADDON && valor[op] == 0) ||
-        (op == AJ_SUFIXO_TIPO && valor[op] == 0) ||
-        (op == AJ_OCULTAR_NLANC && valor[op] != 0 && k == count - 1) ||
-        (op == AJ_NOTAS_HOME && k == count - 1) ||
-        (op == AJ_HERO_ARTE_DIF && k == 0);
-      gfx_cor(card, 4.0f/ch, 0.21f, 0.23f, 0.28f,
-              op == AJ_LANDSCAPE && !landscape ? 0.42f : 0.9f);
-      if (cardTarget) previaRealce(bx, ry, cardW, ch, ar, ag, ab);
-      if ((op == AJ_ROTULOS && valor[op] == 0) ||
-          (op == AJ_NOME_ADDON && valor[op] == 0) ||
-          (op == AJ_SUFIXO_TIPO && valor[op] == 0) ||
-          (op == AJ_NOTAS_HOME && k == count - 1))
-        gfx_cor((GfxRect){bx + 4.0f, ry + ch - 6.0f, cardW * 0.55f, 2.0f},
-                0.5f, ar, ag, ab, 0.95f);
-    }
-  }
-  if (op == AJ_DESCOBRIR || op == AJ_PS_FUNDO || op == AJ_HERO_ARTE_DIF) {
-    float bx = cx + cw - 56.0f;
-    GfxRect r = {bx, y + 14.0f, 44.0f, 32.0f};
-    gfx_cor(r, 5.0f/32.0f, 0.24f, 0.26f, 0.31f, 1.0f);
-    previaRealce(bx, r.y, r.w, r.h, ar, ag, ab);
-  }
-  if (op == AJ_RAIL_BLUR && valor[op] == 0)
-    gfx_cor((GfxRect){cx + 6.0f, y + 8.0f, cw - 12.0f, 2.0f}, 0.0f, ar, ag, ab, 0.8f);
-  if (op == AJ_HERO_FUNDO || op == AJ_HERO_CATALOGOS || op == AJ_FIL_ORDEM ||
-      op == AJ_DESCOBRIR || op == AJ_PS_FUNDO || op == AJ_GRAD_CLASSICO)
-    previaRealce(cx, y + 8.0f, cw, h - 16.0f, ar, ag, ab);
-  return h;
-}
-
-static float previaContinuarOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 144.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  if (valor[AJ_CW_LIGADO] == 0 || op == AJ_CW_LIGADO) {
-    for (int i = 0; i < 3; i++) {
-      float cw = (w - 52.0f) / 3.0f, cx = x + 14.0f + i * (cw + 12.0f);
-      float ch = valor[AJ_CW_ESTILO] == 2 ? 62.0f : 38.0f;
-      float cy = y + 14.0f;
-      GfxRect card = {cx, cy, cw, ch};
-      float fade = i == 2 && valor[AJ_CW_BLUR_PROX] == 0 ? 0.38f : 0.92f;
-      gfx_cor(card, 5.0f/ch, 0.22f, 0.24f, 0.30f, fade);
-      if (i == 0 && (op == AJ_CW_LIGADO || op == AJ_CW_ESTILO ||
-                     op == AJ_CW_THUMB || op == AJ_CW_FONTE ||
-                     op == AJ_CW_OK || op == AJ_TMDB_CW))
-        previaRealce(cx, cy, cw, ch, ar, ag, ab);
-      gfx_cor((GfxRect){cx + 8.0f, cy + ch - 12.0f, cw * 0.46f, 3.0f},
-              0.5f, ar, ag, ab, 0.9f * fade);
-      if (op == AJ_CW_THUMB && valor[op] == 0 && i == 0) {
-        gfx_cor((GfxRect){cx + cw - 24.0f, cy + 8.0f, 16.0f, 20.0f},
-                3.0f/16.0f, 0.43f, 0.46f, 0.52f, 1.0f);
-      }
-      if (op == AJ_CW_FURTHEST && i == 2) previaRealce(cx, cy, cw, ch, ar, ag, ab);
-    }
-  } else {
-    gfx_cor((GfxRect){x + 18.0f, y + 22.0f, w - 36.0f, 84.0f},
-            8.0f/84.0f, 0.12f, 0.13f, 0.16f, 1.0f);
-    previaRealce(x + 18.0f, y + 22.0f, w - 36.0f, 84.0f, ar, ag, ab);
-  }
-  if (op == AJ_CW_NAO_EXIBIDOS && valor[op] != 0)
-    gfx_cor((GfxRect){x + w - 30.0f, y + 98.0f, 12.0f, 12.0f},
-            0.5f, 0.30f, 0.31f, 0.34f, 0.5f);
-  if (op == AJ_CW_ORDEM) {
-    previaRealce(x + 8.0f, y + 116.0f, w - 16.0f, 18.0f, ar, ag, ab);
-    gfx_cor((GfxRect){x + 20.0f, y + 123.0f, w - 40.0f, 3.0f},
-            0.5f, ar, ag, ab, 0.9f);
-  }
-  if (op == AJ_CW_OK) {
-    float bx = x + 20.0f, by = y + 112.0f, bw = w - 40.0f;
-    ajudaMiniCaixa(bx, by, bw, 24.0f, 1, ar, ag, ab);
-    previaRealce(bx, by, bw, 24.0f, ar, ag, ab);
-  }
-  return h;
-}
-
-static float previaDetalheOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 150.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  GfxRect poster = {x + 14.0f, y + 14.0f, 66.0f, 94.0f};
-  gfx_cor(poster, 6.0f/66.0f, 0.24f, 0.26f, 0.32f, 1.0f);
-  gfx_cor((GfxRect){x + 96.0f, y + 22.0f, w - 114.0f, 5.0f},
-          0.5f, 0.82f, 0.84f, 0.88f, 0.9f);
-  previaLinhas(x + 96.0f, y + 38.0f, w - 114.0f, 3, ar, ag, ab,
-               op == AJ_DET_META_EXT || op == AJ_DET_DATA_CHEIA ? 0 : -1);
-  if (op == AJ_DET_BLUR_NAO_VISTOS) {
-    for (int i = 0; i < 4; i++) {
-      float bx = x + 14.0f + i * ((w - 44.0f) / 4.0f + 5.0f);
-      GfxRect r = {bx, y + 118.0f, (w - 44.0f) / 4.0f, 22.0f};
-      gfx_cor(r, 4.0f/22.0f, 0.28f, 0.30f, 0.35f,
-              i > 0 ? 0.35f : 0.9f);
-      if (i == 1) previaRealce(bx, r.y, r.w, r.h, ar, ag, ab);
-    }
-  } else if (op == AJ_DET_TRAILER || op == AJ_DET_TRAILER_AUTO ||
-             op == AJ_DET_TRAILER_SOM ||
-             op == AJ_TRAILER_QUAL || op == AJ_TRAILER_ASPECTO ||
-             op == AJ_TRAILER_FONTE) {
-    GfxRect video = {x + 98.0f, y + 68.0f, w - 116.0f, 62.0f};
-    gfx_cor(video, 5.0f/62.0f, 0.08f, 0.09f, 0.11f, 1.0f);
-    if (op == AJ_DET_TRAILER || op == AJ_DET_TRAILER_AUTO)
-      previaRealce(video.x, video.y, video.w, video.h, ar, ag, ab);
-    gfx_cor((GfxRect){video.x + video.w*0.5f - 8.0f, video.y + 21.0f,
-                      16.0f, 20.0f}, 6.0f/16.0f, ar, ag, ab, 0.9f);
-  } else if (op == AJ_DET_VEU) {
-    float pct = (float)valor[op] / 100.0f;
-    GfxRect veil = {poster.x, poster.y, poster.w, poster.h};
-    gfx_cor(veil, 6.0f/66.0f, 0.0f, 0.0f, 0.0f, pct * 0.8f);
-    gfx_cor((GfxRect){x + 96.0f, y + 124.0f, w - 114.0f, 5.0f},
-            0.5f, 0.27f, 0.29f, 0.33f, 1.0f);
-    gfx_cor((GfxRect){x + 96.0f, y + 124.0f, (w - 114.0f)*pct, 5.0f},
-            0.5f, ar, ag, ab, 1.0f);
-  } else {
-    int n = op == AJ_DET_TRAILER ? 4 : 3;
-    for (int i = 0; i < n; i++) {
-      float cw = (w - 44.0f) / (float)n, bx = x + 14.0f + i * (cw + 5.0f);
-      float by = y + 118.0f;
-      gfx_cor((GfxRect){bx, by, cw, 22.0f}, 4.0f/22.0f,
-              0.22f, 0.24f, 0.29f, 1.0f);
-      if ((op == AJ_DET_DATA_CHEIA && i == 0) ||
-          (op == AJ_DET_META_EXT && i == 1))
-        previaRealce(bx, by, cw, 22.0f, ar, ag, ab);
-    }
-  }
-  if (op == AJ_DET_TRAILER && valor[op] != 0)
-    gfx_cor((GfxRect){x + 100.0f, y + 70.0f, w - 120.0f, 58.0f},
-            5.0f/58.0f, 0.07f, 0.08f, 0.10f, 0.55f);
-  if (op == AJ_DET_META_EXT || op == AJ_DET_DATA_CHEIA)
-    previaRealce(x + 92.0f, y + 16.0f, w - 108.0f, 78.0f, ar, ag, ab);
-  return h;
-}
-
-static float previaFocoOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 136.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  float cardW = (w - 56.0f) / 3.0f;
-  for (int i = 0; i < 3; i++) {
-    float bx = x + 14.0f + i * (cardW + 14.0f);
-    float ch = i == 1 && (op == AJ_EXPANDIR || op == AJ_EXPANDIR_ATRASO) &&
-               valor[AJ_EXPANDIR] == 0 ? 78.0f : 60.0f;
-    float by = y + 16.0f + (78.0f - ch);
-    previaCartaz(bx, by, cardW, ch, (float)valor[AJ_RAIO_DP] * 2.0f,
-                 ar, ag, ab, 0.92f);
-    if (i == 1) {
-      if (op == AJ_BORDA_FOCO && lig(op))
-        previaRealce(bx - 3.0f, by - 3.0f, cardW + 6.0f, ch + 6.0f, ar, ag, ab);
-      else if (op == AJ_EXPANDIR || op == AJ_EXPANDIR_ATRASO)
-        previaRealce(bx - 3.0f, by - 3.0f, cardW + 6.0f, ch + 6.0f, ar, ag, ab);
-    }
-  }
-  if (op == AJ_EXPANDIR_ATRASO) {
-    float bw = w - 40.0f, fill = bw * ((float)valor[op] / 10.0f);
-    gfx_cor((GfxRect){x + 20.0f, y + 114.0f, bw, 5.0f}, 0.5f,
-            0.30f, 0.32f, 0.37f, 1.0f);
-    gfx_cor((GfxRect){x + 20.0f, y + 114.0f, fill, 5.0f}, 0.5f,
-            ar, ag, ab, 1.0f);
-  } else if (op == AJ_NAV_RAPIDA) {
-    for (int i = 0; i < 3; i++) {
-      float yy = y + 30.0f + i * 32.0f;
-      gfx_cor((GfxRect){x + 24.0f, yy, w - 48.0f, 4.0f}, 0.5f,
-              0.34f, 0.36f, 0.41f, 0.85f);
-      gfx_cor((GfxRect){x + 24.0f + (lig(op) ? 120.0f : 12.0f), yy - 5.0f,
-                        12.0f, 14.0f}, 0.5f, ar, ag, ab, 1.0f);
-    }
-    previaRealce(x + 14.0f, y + 18.0f, w - 28.0f, 100.0f, ar, ag, ab);
-  }
-  return h;
-}
-
-static float previaProfundidadeOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 136.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  for (int i = 0; i < 3; i++) {
-    float cw = (w - 56.0f) / 3.0f;
-    float bx = x + 14.0f + i * (cw + 14.0f), by = y + 20.0f;
-    GfxRect r = {bx, by, cw, 84.0f};
-    float borda = (float)valor[AJ_PROF_BORDA] / 100.0f;
-    float reflexo = (float)valor[AJ_PROF_BRILHO] / 100.0f;
-    float cobertura = (float)valor[AJ_PROF_COBERTURA] / 100.0f;
-    int alvo = (op == AJ_PROF_POSTERS && i == 0) ||
-               (op == AJ_PROF_CW && i == 1) ||
-               ((op == AJ_PROF_EPS || op == AJ_PROF_ELENCO ||
-                 op == AJ_PROF_TRAILERS) && i == 2) ||
-               op == AJ_PROF || op == AJ_PROF_BORDA ||
-               op == AJ_PROF_BRILHO || op == AJ_PROF_COBERTURA;
-    gfx_cor(r, 6.0f/84.0f, 0.20f, 0.22f, 0.28f, 1.0f);
-    if (lig(AJ_PROF) && alvo) {
-      gfx_cor((GfxRect){bx - 3.0f, by - 3.0f, cw + 6.0f, 90.0f},
-              8.0f/90.0f, ar, ag, ab, 0.15f + borda * 0.65f);
-      gfx_cor((GfxRect){bx + 4.0f, by + 4.0f, cw - 8.0f, 3.0f}, 0.5f,
-              ar, ag, ab, 0.2f + cobertura * 0.8f);
-      gfx_cor((GfxRect){bx + 8.0f, by + 15.0f, cw * 0.45f, 18.0f},
-              5.0f/18.0f, 0.92f, 0.94f, 0.97f, reflexo * 0.65f);
-    }
-    if (alvo) previaRealce(bx, by, cw, r.h, ar, ag, ab);
-  }
-  previaSwitch(AJ_PROF, x + w - 86.0f, y + 108.0f, 64.0f, ar, ag, ab);
-  return h;
-}
-
-static float previaCartazOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 138.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  for (int i = 0; i < 3; i++) {
-    float cw = (w - 56.0f) / 3.0f, cx = x + 14.0f + i * (cw + 14.0f);
-    float ratio = op == AJ_LARGURA_DP ? (0.80f + i * 0.10f) : 0.76f;
-    float ww = cw * ratio, hh = 76.0f, xx = cx + (cw - ww) * 0.5f;
-    float radius = (float)ajustes_raio_poster_px();
-    float q = (float)valor[AJ_QUALIDADE_IMG] * 0.25f + 0.45f;
-    previaCartaz(xx, y + 16.0f, ww, hh, radius, ar, ag, ab, q);
-    if ((op == AJ_LARGURA_DP && i == 1) ||
-        (op == AJ_RAIO_DP && i == 1) || (op == AJ_QUALIDADE_IMG && i == 2))
-      previaRealce(xx - 3.0f, y + 13.0f, ww + 6.0f, hh + 6.0f, ar, ag, ab);
-  }
-  if (op == AJ_LARGURA_DP || op == AJ_RAIO_DP || op == AJ_QUALIDADE_IMG) {
-    float value = op == AJ_LARGURA_DP ? (float)valor[op] / 200.0f :
-                  op == AJ_RAIO_DP ? (float)valor[op] / 40.0f :
-                  (float)valor[op] / 2.0f;
-    gfx_cor((GfxRect){x + 18.0f, y + 112.0f, w - 36.0f, 5.0f}, 0.5f,
-            0.30f, 0.32f, 0.37f, 1.0f);
-    gfx_cor((GfxRect){x + 18.0f, y + 112.0f, (w - 36.0f)*value, 5.0f},
-            0.5f, ar, ag, ab, 1.0f);
-  }
-  return h;
-}
-
-static float previaInterfaceOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 140.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  if (op == AJ_FONTE_UI) {
-    TxtFamilia familia = txt_fonte_interface();
-    TxtLinha sample = txt_linha_familia(TXT_HEADLINE,
-                         i18n("Aa  Nuvio  0123"), 235, 237, 241, 255, familia);
-    txt_desenhar(sample, x + 18.0f, y + 20.0f);
-    TxtLinha nome = txt_linha(TXT_CAPTION2,
-                       TXT_FAMILIAS_PT[familia], 190, 193, 201, 255);
-    txt_desenhar(nome, x + 18.0f, y + 82.0f);
-    previaRealce(x + 12.0f, y + 10.0f, w - 24.0f, 116.0f, ar, ag, ab);
-  } else if (op == AJ_IDIOMA) {
-    TxtLinha sample = txt_linha(TXT_HEADLINE,
-           // pt, ro, uk e ru pela chave portuguesa (cada idioma a traduz);
-           // ingles pela chave inglesa, que a tabela devolve como esta.
-           ajustes_idioma() == IDIOMA_EN ? i18n("Hello · Action") : i18n("Olá · Ação"),
-           235, 237, 241, 255);
-    txt_desenhar(sample, x + 24.0f, y + 30.0f);
-    previaRealce(x + 14.0f, y + 20.0f, w - 28.0f, 56.0f, ar, ag, ab);
-  } else if (op == AJ_RELOGIO || op == AJ_RELOGIO_POS || op == AJ_SAIDA_PLAYER) {
-    // Tela em miniatura com a pilula no canto escolhido (ou sem ela).
-    GfxRect tela = {x + 28.0f, y + 16.0f, w - 56.0f, 100.0f};
-    int pos = valor[AJ_RELOGIO_POS], dir = pos == 2 || (pos == 0 && ajustes_home_layout() == HOME_LAYOUT_DINAMICA);
-    float pw = 58.0f;
-    gfx_cor(tela, 6.0f/100.0f, 0.06f, 0.07f, 0.09f, 1.0f);
-    if (lig(AJ_RELOGIO))
-      gfx_cor((GfxRect){ dir ? tela.x + tela.w - pw - 10.0f : tela.x + 10.0f, tela.y + 10.0f, pw, 18.0f },
-              0.5f, ar, ag, ab, 0.9f);
-    previaRealce(tela.x, tela.y, tela.w, tela.h, ar, ag, ab);
-  } else if (op == AJ_ANIM) {
-    int reduzida = valor[op] != 0;
-    for (int i = 0; i < 3; i++) {
-      float bx = x + 18.0f + i * ((w - 64.0f) / 3.0f + 14.0f);
-      float xx = reduzida ? bx + 16.0f : bx + (i == 1 ? 16.0f : 0.0f);
-      GfxRect r = {xx, y + 34.0f, (w - 64.0f) / 3.0f, 48.0f};
-      gfx_cor(r, 6.0f/48.0f, 0.26f, 0.28f, 0.34f, 0.95f);
-      if (i == 1) previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
-      if (i < 2) ajudaMiniSeta(bx + r.w, y + 44.0f);
-    }
-  } else if (op == AJ_RESOLUCAO) {
-    GfxRect display = {x + 24.0f, y + 20.0f, w - 48.0f, 88.0f};
-    gfx_cor(display, 6.0f/88.0f, 0.06f, 0.07f, 0.09f, 1.0f);
-    previaRealce(display.x, display.y, display.w, display.h, ar, ag, ab);
-    gfx_cor((GfxRect){display.x + display.w*0.35f, display.y + 92.0f,
-                      display.w*0.30f, 4.0f}, 0.5f, ar, ag, ab, 0.9f);
-  } else {
-    // A cor configurada fica na borda do controle em foco. Cor da logo altera
-    // a amostra de marca separadamente e não presume nenhum título carregado.
-    GfxRect card = {x + 18.0f, y + 20.0f, w - 36.0f, 92.0f};
-    gfx_cor(card, 6.0f/92.0f, 0.075f, 0.08f, 0.10f, 1.0f);
-    if (op == AJ_COR_LOGO) {
-      gfx_cor((GfxRect){card.x + 16.0f, card.y + 24.0f, card.w * 0.38f, 14.0f},
-              0.5f, lig(op) ? ar : 0.82f, lig(op) ? ag : 0.83f,
-              lig(op) ? ab : 0.85f, 1.0f);
-      previaRealce(card.x + 10.0f, card.y + 12.0f, card.w * 0.55f, 42.0f, ar, ag, ab);
-    } else {
-      gfx_cor((GfxRect){card.x + 12.0f, card.y + 28.0f, card.w - 24.0f, 30.0f},
-              6.0f/30.0f, ar, ag, ab, 0.95f);
-      previaRealce(card.x + 12.0f, card.y + 28.0f, card.w - 24.0f, 30.0f, ar, ag, ab);
-    }
-  }
-  return h;
-}
-
-static float previaContaOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 138.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  // Apenas uma estrutura de campos; os dados de perfil/serviço não são copiados
-  // para a prévia nem revelados, mesmo que existam no aparelho.
-  for (int i = 0; i < 3; i++) {
-    float by = y + 15.0f + i * 37.0f;
-    GfxRect row = {x + 14.0f, by, w - 28.0f, 28.0f};
-    gfx_cor(row, 5.0f/28.0f, 0.075f, 0.08f, 0.10f, 1.0f);
-    gfx_cor((GfxRect){row.x + 12.0f, row.y + 11.0f, row.w * 0.50f, 4.0f},
-            0.5f, 0.43f, 0.45f, 0.50f, 0.9f);
-    if ((op == AJ_PERFIL_ATIVO && i == 0) ||
-        (op == AJ_SYNC && i == 1) || (op == AJ_SAIR && i == 2))
-      previaRealce(row.x, row.y, row.w, row.h, ar, ag, ab);
-  }
-  return h;
-}
-
-static float previaRastreioOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 138.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  const char *nomes[] = {"Trakt", "Simkl", i18n("Lista do Nuvio")};
-  for (int i = 0; i < 3; i++) {
-    float bw = (w - 52.0f) / 3.0f;
-    float bx = x + 14.0f + i * (bw + 12.0f);
-    ajudaMiniCaixa(bx, y + 24.0f, bw, 60.0f,
-                   op == AJ_SALVOS_DEST && i == valor[op], ar, ag, ab);
-    TxtLinha t = txt_linha_corta(TXT_CAPTION2, i18n(nomes[i]),
-                   op == AJ_SALVOS_DEST && i == valor[op]
-                     ? ajustes_tinta_foco() : 202,
-                   op == AJ_SALVOS_DEST && i == valor[op]
-                     ? ajustes_tinta_foco() : 205,
-                   op == AJ_SALVOS_DEST && i == valor[op]
-                     ? ajustes_tinta_foco() : 211, 255, bw - 18.0f);
-    txt_desenhar(t, bx + 9.0f, y + 45.0f);
-    if (op == AJ_TRAKT && i == 0) previaRealce(bx, y + 24.0f, bw, 60.0f, ar, ag, ab);
-    if (op == AJ_SIMKL && i == 1) previaRealce(bx, y + 24.0f, bw, 60.0f, ar, ag, ab);
-  }
-  return h;
-}
-
-static float previaAboutOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 138.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  if (op == AJ_VERSAO_I || op == AJ_ATUALIZAR) {
-    ajudaMiniTexto("Versão", x + 16.0f, y + 18.0f, w - 32.0f, 210, 213, 220);
-    GfxRect r = {x + 16.0f, y + 56.0f, w - 32.0f, 46.0f};
-    gfx_cor(r, 6.0f/46.0f, 0.08f, 0.09f, 0.11f, 1.0f);
-    if (op == AJ_ATUALIZAR) previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
-    else gfx_cor((GfxRect){r.x + 12.0f, r.y + 21.0f, r.w * 0.30f, 4.0f},
-                 0.5f, 0.54f, 0.56f, 0.61f, 1.0f);
-  } else {
-    GfxRect log = {x + 16.0f, y + 20.0f, w - 32.0f, 82.0f};
-    gfx_cor(log, 6.0f/82.0f, 0.07f, 0.08f, 0.10f, 1.0f);
-    for (int i = 0; i < 3; i++)
-      gfx_cor((GfxRect){log.x + 12.0f, log.y + 16.0f + i*18.0f,
-                        log.w * (0.55f + 0.10f*i), 4.0f},
-              0.5f, 0.38f, 0.40f, 0.45f, 0.9f);
-    if (op == AJ_ENVIAR_LOG) previaRealce(log.x, log.y, log.w, log.h, ar, ag, ab);
-    else previaSwitch(op, log.x + log.w - 78.0f, log.y + 52.0f, 64.0f, ar, ag, ab);
-  }
-  return h;
-}
-
-static float previaTmdbOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 146.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  // Página do título: cartaz, texto, ficha, elenco, episódios e fileiras.
-  GfxRect poster = {x + 12.0f, y + 14.0f, 54.0f, 74.0f};
-  gfx_cor(poster, 5.0f/54.0f, 0.23f, 0.25f, 0.30f, 1.0f);
-  previaLinhas(x + 78.0f, y + 18.0f, w - 92.0f, 3, ar, ag, ab,
-               op == AJ_TMDB_BASICO ? 0 : -1);
-  GfxRect ficha = {x + 78.0f, y + 74.0f, w - 92.0f, 18.0f};
-  gfx_cor(ficha, 4.0f/18.0f, 0.13f, 0.14f, 0.17f, 1.0f);
-  if (op == AJ_TMDB_FICHA || op == AJ_TMDB_DATAS)
-    previaRealce(ficha.x, ficha.y, ficha.w, ficha.h, ar, ag, ab);
-  for (int i = 0; i < 3; i++) {
-    float bx = x + 12.0f + i * ((w - 38.0f)/3.0f + 7.0f);
-    GfxRect tile = {bx, y + 106.0f, (w - 38.0f)/3.0f, 25.0f};
-    gfx_cor(tile, 4.0f/25.0f, 0.19f, 0.21f, 0.26f,
-            valor[op] == 0 ? 0.92f : 0.50f);
-    int alvo = (op == AJ_TMDB_ELENCO && i == 0) ||
-               (op == AJ_TMDB_PROD && i == 0) ||
-               (op == AJ_TMDB_REDES && i == 1) ||
-               (op == AJ_TMDB_EPS && i == 2) ||
-               (op == AJ_TMDB_TRAILERS && i == 0) ||
-               (op == AJ_TMDB_MAIS && i == 1) ||
-               (op == AJ_TMDB_COL && i == 2) ||
-               (op == AJ_TMDB_CW && i == 0) ||
-               (op == AJ_TMDB_ARTE && i == 0) ||
-               op == AJ_TMDB_LIGADO || op == AJ_TMDB_IDIOMA;
-    if (alvo) previaRealce(tile.x, tile.y, tile.w, tile.h, ar, ag, ab);
-  }
-  if (op == AJ_TMDB_ARTE) previaRealce(poster.x, poster.y, poster.w, poster.h, ar, ag, ab);
-  if (op == AJ_TMDB_BASICO) previaRealce(x + 74.0f, y + 12.0f, w - 88.0f, 58.0f, ar, ag, ab);
-  if (op == AJ_TMDB_IDIOMA) {
-    GfxRect lang = {x + w - 90.0f, y + 12.0f, 76.0f, 18.0f};
-    previaRealce(lang.x, lang.y, lang.w, lang.h, ar, ag, ab);
-  }
-  return h;
-}
-
-static float previaMdbOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 136.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  const int ops[] = {AJ_MDB_TRAKT, AJ_MDB_IMDB, AJ_MDB_TMDB, AJ_MDB_LETTER,
-                     AJ_MDB_TOMATES, AJ_MDB_AUDIENCIA, AJ_MDB_META, AJ_MDB_MAL};
-  for (int i = 0; i < 8; i++) {
-    int col = i % 4, row = i / 4, id = ops[i];
-    float cw = (w - 44.0f) / 4.0f;
-    float bx = x + 10.0f + col * (cw + 6.0f), by = y + 18.0f + row * 48.0f;
-    int on = valor[id] == 0;
-    ajudaMiniCaixa(bx, by, cw, 32.0f, on, ar, ag, ab);
-    if (op == id || op == AJ_MDB_LIGADO || op == AJ_MDB_CHAVE)
-      previaRealce(bx, by, cw, 32.0f, ar, ag, ab);
-  }
-  if (op == AJ_MDB_CHAVE) {
-    // Campo mascarado; o desenho deliberadamente não consulta nem mostra a chave.
-    GfxRect key = {x + 18.0f, y + 114.0f, w - 36.0f, 12.0f};
-    gfx_cor(key, 4.0f/12.0f, 0.08f, 0.09f, 0.11f, 1.0f);
-    for (int i = 0; i < 6; i++)
-      gfx_cor((GfxRect){key.x + 12.0f + 20.0f*i, key.y + 4.0f, 4.0f, 4.0f},
-              0.5f, 0.50f, 0.52f, 0.56f, 0.9f);
-    previaRealce(key.x, key.y, key.w, key.h, ar, ag, ab);
-  }
-  return h;
-}
-
-static float previaTvOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 136.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  if (op == AJ_ESPACO) return desenhaPainelImagens(x, y, w);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  GfxRect screen = {x + 28.0f, y + 16.0f, w - 56.0f, 82.0f};
-  gfx_cor(screen, 6.0f/82.0f, 0.055f, 0.06f, 0.075f, 1.0f);
-  gfx_cor((GfxRect){screen.x + 12.0f, screen.y + 12.0f, screen.w - 24.0f, 4.0f},
-          0.5f, 0.34f, 0.36f, 0.41f, 0.9f);
-  if (op == AJ_RESOLUCAO) {
-    float mult = valor[op] == 1 ? 0.66f : valor[op] == 2 ? 0.22f : 0.34f;
-    gfx_cor((GfxRect){screen.x + screen.w * 0.14f, screen.y + 30.0f,
-                      screen.w * mult, 25.0f}, 4.0f/25.0f, ar, ag, ab, 0.85f);
-  } else if (op == AJ_QUALIDADE_IMG) {
-    for (int i = 0; i < 3; i++)
-      gfx_cor((GfxRect){screen.x + 16.0f + i*28.0f, screen.y + 30.0f,
-                        20.0f, 28.0f}, 3.0f/20.0f, 0.22f + i*0.10f,
-              0.24f + i*0.10f, 0.30f + i*0.10f, 0.95f);
-    previaRealce(screen.x + 10.0f + valor[op]*28.0f, screen.y + 24.0f,
-                 32.0f, 40.0f, ar, ag, ab);
-  } else {
-    int cap = valor[AJ_TEX_MB] == 0 ? 5 : valor[AJ_TEX_MB];
-    for (int i = 0; i < 6; i++) {
-      float bw = (screen.w - 36.0f) / 6.0f;
-      float bx = screen.x + 12.0f + i * (bw + 2.0f);
-      gfx_cor((GfxRect){bx, screen.y + 38.0f, bw, 20.0f}, 3.0f/20.0f,
-              i < cap ? ar : 0.28f, i < cap ? ag : 0.29f,
-              i < cap ? ab : 0.32f, 0.9f);
-    }
-    previaRealce(screen.x + 8.0f, screen.y + 30.0f, screen.w - 16.0f, 36.0f, ar, ag, ab);
-  }
-  return h;
-}
-
-static float previaAcaoOpcao(int op, float x, float y, float w) {
-  float ar, ag, ab, h = 132.0f;
-  ajustes_acento(&ar, &ag, &ab);
-  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
-  if (op == AJ_ADDONS) {
-    for (int i = 0; i < 4; i++) {
-      float bw = (w - 48.0f)/4.0f, bx = x + 12.0f + i * (bw + 8.0f);
-      ajudaMiniCaixa(bx, y + 28.0f, bw, 60.0f, 0, ar, ag, ab);
-    }
-  } else if (op == AJ_DIAGNOSTICO || op == AJ_VELOCIDADE) {
-    for (int i = 0; i < 3; i++) {
-      float bx = x + 20.0f, by = y + 16.0f + i * 34.0f;
-      GfxRect row = {bx, by, w - 40.0f, 24.0f};
-      gfx_cor(row, 5.0f/24.0f, 0.08f, 0.09f, 0.11f, 1.0f);
-      gfx_cor((GfxRect){bx + 12.0f, by + 10.0f, row.w * (0.35f + i*0.12f), 4.0f},
-              0.5f, 0.40f, 0.42f, 0.47f, 0.9f);
-    }
-    previaRealce(x + 14.0f, y + 12.0f, w - 28.0f, 102.0f, ar, ag, ab);
-  } else {
-    // Stalker/Xtream/fanart: formulário de endpoint/usuário/chave sem copiar
-    // credenciais reais. Ações de remoção mostram só o campo afetado.
-    for (int i = 0; i < 3; i++) {
-      float bx = x + 18.0f, by = y + 18.0f + i * 31.0f;
-      GfxRect row = {bx, by, w - 36.0f, 22.0f};
-      gfx_cor(row, 4.0f/22.0f, 0.075f, 0.08f, 0.10f, 1.0f);
-      for (int k = 0; k < 4; k++)
-        gfx_cor((GfxRect){bx + 12.0f + k*18.0f, by + 9.0f, 5.0f, 4.0f},
-                0.5f, 0.43f, 0.45f, 0.50f, 0.9f);
-      int field = (op == AJ_STALKER_PORTAL || op == AJ_XTREAM_SERVIDOR) ? i == 0 :
-                  (op == AJ_STALKER_MAC || op == AJ_XTREAM_USUARIO) ? i == 1 :
-                  (op == AJ_XTREAM_SENHA || op == AJ_FANART_CHAVE || op == AJ_SEEKR_CHAVE) ? i == 2 :
-                  i == 0;
-      if (field) previaRealce(row.x, row.y, row.w, row.h, ar, ag, ab);
-    }
-  }
-  return h;
-}
-
-static float previaOpcao(int op, float x, float y, float w) {
-  AjPreview fam = familiaPreviaOpcao(op);
-  switch (fam) {
-    case AJPV_REPRO: return previaReproducaoOpcao(op, x, y, w);
-    case AJPV_HOME: return previaHomeOpcao(op, x, y, w);
-    case AJPV_CONTINUAR: return previaContinuarOpcao(op, x, y, w);
-    case AJPV_DETALHE: return previaDetalheOpcao(op, x, y, w);
-    case AJPV_FOCO: return previaFocoOpcao(op, x, y, w);
-    case AJPV_PROFUNDIDADE: return previaProfundidadeOpcao(op, x, y, w);
-    case AJPV_CARTAZ: return previaCartazOpcao(op, x, y, w);
-    case AJPV_INTERFACE: return previaInterfaceOpcao(op, x, y, w);
-    case AJPV_CONTA: return previaContaOpcao(op, x, y, w);
-    case AJPV_RASTREIO: return previaRastreioOpcao(op, x, y, w);
-    case AJPV_ABOUT: return previaAboutOpcao(op, x, y, w);
-    case AJPV_TMDB: return previaTmdbOpcao(op, x, y, w);
-    case AJPV_MDB: return previaMdbOpcao(op, x, y, w);
-    case AJPV_TV: return previaTvOpcao(op, x, y, w);
-    case AJPV_ACAO: return previaAcaoOpcao(op, x, y, w);
-    default: return 0.0f;
-  }
-}
-
 #include "ajustes_ux_desenho.inc"
 
+#ifdef AJUSTES_TESTE
+void teclado_teste_texto(const char *t);
+void teclado_teste_foco(int f, int c);
+static int ajQuadroAddons;   // captura: a tela de addons no lugar de Ajustes
+#endif
 void ajustes_desenhar(Uint32 agora) {
-  // Fundo opaco proprio: a tela cobre tudo e nao pode depender de quem desenhou
-  // antes dela — sem isto a home aparece entre as linhas da lista.
-  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  // A tela ja foi limpa com ESTA MESMA COR por glClearColor/glClear em
-  // main.c antes de app_desenhar. Pintar por cima era uma camada de tela
-  // cheia jogada fora por quadro — e o custo dominante nesta GPU e fill
-  // rate (gfx.c registra que DUAS camadas de tela cheia derrubavam a
-  // Mali-G71 para ~40fps). Nao repor sem antes mudar a cor do clear.
-  (void)tela;
+  // A TELA E DONA DO PROPRIO FUNDO (Glass UI): a arte do titulo com o veu, e
+  // as tres ilhas por cima. Ver ajustes_ux_desenho.inc.
+#ifdef AJUSTES_TESTE
+  if (ajQuadroAddons) { ajustes_desenhar_addons(ajQuadroAddons - 1); return; }
+#endif
   montarTela();
-
-  uxDesenharCabecalho();
-  int sec = secAtual;
-  const Item *itSec = &TELA[secIni[sec]];
-  desenhaIndice();
-  gfx_cor((GfxRect){AJ_LISTA_X - 26, AJ_TOPO, 1, AJ_BASE - AJ_TOPO},
-          0, 0.145f, 0.165f, 0.204f, 1);
-  if (uxIndice < 2) { uxDesenharEspecial(); uxDesenharRodape(); uxDesenharEditor(); return; }
-  uxDesenharInspetor();
-
-  gfx_recorte(AJ_LISTA_X - 8, AJ_TOPO - 8,
-               AJ_LISTA_W + 16, AJ_BASE - AJ_TOPO + 8);
-  float y = AJ_TOPO - scrollY;
-  float aPag = anim_suave(paginaA), dxPag = (1.0f - aPag) * 28.0f;
-  { int i;
-    // CABECALHO DA CATEGORIA: titulo e subtitulo, o `settings-content-header`
-    // do web. O subtitulo e o que diz o que a categoria abrange antes de
-    // descer por ela.
-    float aC = anim_clamp((y - (AJ_TOPO - 70.0f)) / 60.0f, 0.0f, 1.0f) * aPag;
-    if (aC > 0.005f && y < AJ_BASE) {
-      TxtLinha ts = txt_linha_corta(TXT_HEADLINE, itSec->titulo, 236, 240, 248, 255, AJ_LISTA_W - 170);
-      txt_desenhar_alpha(ts, AJ_LISTA_X + dxPag, y, aC);
-      txt_bloco(TXT_CAPTION, itSec->sub, 165, 173, 189,
-                AJ_LISTA_X + dxPag, y + ts.h + 8, AJ_LISTA_W - 176, 29, aC, 2);
-    }
-    uxDesenharAvancados(y);
-    y += AJ_SEC_CABEC;
-    for (i = secIni[sec] + 1; i < secFim(sec); i++) {
-      const Item *it = &TELA[i];
-      if (!visivel(i)) continue;
-      if (it->tipo == IT_ROT) {
-        float aS = anim_clamp((y - (AJ_TOPO - 70.0f)) / 60.0f, 0.0f, 1.0f) * aPag;
-        if (aS > 0.005f && y < AJ_BASE) {
-          TxtLinha tsub = txt_linha(TXT_CAPTION, it->titulo, 142, 153, 174, 255);
-          txt_desenhar_alpha(tsub, AJ_LISTA_X + 16 + dxPag,
-                             y + AJ_SUB_CABEC - tsub.h - 12, aS);
-        }
-      } else if (it->tipo == IT_GRP) {
-        desenhaGrupo(i, y, animItem[i], dxPag, aPag);
-      } else if (it->tipo == IT_OPC) {
-        desenhaLinha(i, y, animItem[i], dxPag, aPag);
-      }
-      y += alturaItem(i);
-    }
-  }
-  gfx_sem_recorte();
-
-  float total = yDoItem(secFim(sec) - 1) + alturaItem(secFim(sec) - 1);
-  float janela = AJ_BASE - AJ_TOPO;
-  if (total > janela) {
-    float altura = janela * janela / total;
-    float sy = AJ_TOPO + (janela - altura) * anim_clamp(scrollY / (total - janela), 0, 1);
-    gfx_cor((GfxRect){ AJ_LISTA_X + AJ_LISTA_W + 20, AJ_TOPO, 2, janela },
-            1.0f / janela, 0.20f, 0.23f, 0.29f, 0.35f);
-    gfx_cor((GfxRect){ AJ_LISTA_X + AJ_LISTA_W + 20, sy, 2, altura },
-            1.0f / altura, 0.44f, 0.49f, 0.58f, 0.65f);
-  }
+  ajDesenharTela();
 
   // A folha de fileiras cobre a lista; o vinculo cobre as duas, porque ele e a
   // unica coisa aqui com prazo (o codigo do dispositivo expira).
-  uxDesenharRodape();
-  uxDesenharEditor();
   if (filAberta) desenhaFileiras();
   if (riscoFolha) desenhaRiscoFolha();
 
@@ -7294,6 +5419,9 @@ void ajustes_desenhar(Uint32 agora) {
   // da tela.
   { TraEstado ta = traktauth_estado();
     SmkEstado sa = simklauth_estado();
+#ifdef AJUSTES_TESTE
+    if (ajVinculoTeste) desenhaVinculo("o Trakt", "8F3K2QPA", "https://trakt.tv/activate", NULL, 1); else
+#endif
     if (ta == TRA_PEDINDO || ta == TRA_AGUARDANDO || ta == TRA_ERRO)
       desenhaVinculo("o Trakt", traktauth_codigo(), traktauth_url(),
                      traktauth_erro(), ta == TRA_AGUARDANDO);
@@ -7304,6 +5432,16 @@ void ajustes_desenhar(Uint32 agora) {
   // A modal de digitacao e a ultima: ela e sempre a pergunta mais recente da
   // tela, e tem de ficar por cima ate do cartao de vinculo.
   if (teclado_aberto()) teclado_desenhar(agora);
+}
+
+float ajustes_ilha_x(void) { return ajX0(); }
+int ajustes_relogio_cabe(void) {
+  TraEstado ta = traktauth_estado();
+  SmkEstado sa = simklauth_estado();
+  if (teclado_aberto() || (ajModalAberto() && !filAberta)) return 0;
+  if (ta == TRA_PEDINDO || ta == TRA_AGUARDANDO || ta == TRA_ERRO) return 0;
+  if (sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO) return 0;
+  return 1;
 }
 
 #ifdef AJUSTES_TESTE
@@ -7363,6 +5501,89 @@ void ajustes_teste_tema(int tema, int vidro) {
   if (tema >= 0 && tema < AJ_N_TEMAS_OPC) valor[AJ_TEMA] = tema;
   valor[AJ_VIDRO] = vidro ? 0 : 1;
 }
+
+// OS QUADROS DO MOCKUP (ajustes-mockup.html), um por id, para a captura lado
+// a lado (tests/ajustes_shot.sh com NUVIO_AJ_QUADROS). Tema e vidro ficam os
+// que a captura escolheu.
+int ajustes_teste_quadro(const char *id) {
+  int tema = valor[AJ_TEMA], vidro = valor[AJ_VIDRO];
+  memcpy(valor, valorPadrao, sizeof valor);
+  valor[AJ_TEMA] = tema; valor[AJ_VIDRO] = vidro;
+  valor[AJ_IDIOMA] = IDIOMA_PT + 1;
+  uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
+  memset(uxAvancados, 0, sizeof uxAvancados);
+  scrollY = velY = 0; paginaA = 1;
+  filAberta = 0; riscoFolha = 0;
+  focarSecao(0); focoIndice = 1;
+  ajArteFundoN = 12; ajMemFixa = 0; ajQuadroAddons = 0; ajVinculoTeste = 0;
+  if (teclado_aberto()) { SDL_Event e = { 0 }; e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_ESCAPE; teclado_evento(&e); }
+  if (!strncmp(id, "op:", 3)) {   // qualquer opcao, pela chave do disco
+    int op, k;
+    for (op = -1, k = 0; k < AJ_N; k++) if (CHAVE[k] && !strcmp(CHAVE[k], id + 3)) op = k;
+    if (op < 0) return 0;
+    focarOpcao(op);
+  }
+  else if (!strcmp(id, "principal")) { focarOpcao(AJ_HOME_LAYOUT); }
+  else if (!strcmp(id, "cartazes")) { ajArteFundoN = 13; valor[AJ_LARGURA_DP] = 128; focarOpcao(AJ_LARGURA_DP); }
+  else if (!strcmp(id, "memoria")) { ajArteFundoN = 21; ajMemFixa = 1; focarOpcao(AJ_ESPACO); uxAvancados[secAtual] = 1; }
+  else if (!strcmp(id, "cor")) { ajArteFundoN = 9; focarOpcao(AJ_TEMA); uxAbrirEditor(AJ_TEMA); }
+  else if (!strcmp(id, "relogio")) { ajArteFundoN = 0; focarOpcao(AJ_RELOGIO_POS); uxAbrirEditor(AJ_RELOGIO_POS); uxEvento(SDLK_RIGHT); uxEvento(SDLK_RIGHT); }
+  else if (!strcmp(id, "reproducao")) { ajArteFundoN = 15; valor[AJ_QUALIDADE] = 1; focarOpcao(AJ_DV); }
+  else if (!strcmp(id, "contas")) { ajArteFundoN = 13; focarOpcao(AJ_TRAKT); }
+  else if (!strcmp(id, "teclado")) {
+    SDL_Event e = { 0 };
+    ajArteFundoN = 13; focarOpcao(AJ_FANART_CHAVE);
+    e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_RETURN;
+    eventoTela(&e);
+    teclado_teste_texto("3f9a2c"); teclado_teste_foco(0, 2);
+  }
+  else if (!strcmp(id, "trakt")) { ajArteFundoN = 13; focarOpcao(AJ_TRAKT); ajVinculoTeste = 1; }
+  else if (!strcmp(id, "editor-escolha")) { ajArteFundoN = 15; valor[AJ_QUALIDADE] = 1; focarOpcao(AJ_QUALIDADE); uxAbrirEditor(AJ_QUALIDADE); uxEvento(SDLK_DOWN); }
+  else if (!strcmp(id, "editor-numero")) { focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); { int i; for (i = 0; i < 5; i++) uxEvento(SDLK_DOWN); } }
+  else if (!strcmp(id, "confirmacao")) { focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); uxPendente = 17; uxAvisoRisco = SEG_AVISO_FILEIRAS; uxConfirmar = 1; }
+  else if (!strcmp(id, "fileiras") || !strcmp(id, "fileiras-fora")) {
+    ajArteFundoN = 2;
+    focarOpcao(AJ_FIL_ORDEM);
+    fil_definir_tipo("com.linvo.cinemeta_movie_top", FIL_TIPO_DESTAQUE); filAberta = 1; filFoco = 3; filCampo = 2; filPegou = 0; filTopo = 0; filNaBarra = 0;
+    filAba = !strcmp(id, "fileiras-fora"); filForaAgrupada = 1;
+    if (filAba) {   // o grupo do mockup: Akashi, AIOStreams e Xperience fora da Home
+      int k;
+      static const int FORA[4] = { 11, 13, 14, 15 };
+      for (k = 0; k < 4; k++) if (k < fil_n() && fil_estado(FORA[k]) != FIL_FORA) fil_remover(FORA[k]);
+      filMontarLista(); filFoco = 0;
+      for (k = 0; k < filListaN; k++) if (filLista[k] == 7) filFoco = k;
+    }
+  }
+  else if (!strcmp(id, "diferencas")) {
+    ajArteFundoN = 3;
+    valor[AJ_HOME_LAYOUT] = HOME_LAYOUT_DINAMICA; valor[AJ_ANIM] = 1; valor[AJ_LARGURA_DP] = 128;
+    valor[AJ_QUALIDADE] = 1; valor[AJ_HERO_TRAILER] = 0;
+    uxListarDiferencas(); uxIndice = 1; focoIndice = 0; uxDifFoco = 0;
+  }
+  else if (!strcmp(id, "addons")) {
+    static const char *const NOME[8] = { "Cinemeta", "AIOStreams", "Xperience", "TMDB", "Akashi", "MDBList", "OpenSubtitles v3", "Torrentio" };
+    static const char *const REC[8] = { "\"catalog\",\"meta\"", "\"catalog\",\"stream\"", "\"catalog\"", "\"catalog\",\"meta\"",
+                                        "\"catalog\"", "\"catalog\"", "\"subtitles\"", "\"stream\"" };
+    int k;
+    ajArteFundoN = 3;
+    if (addons_n() == 0)
+      for (k = 0; k < 8; k++) {
+        char url[200], man[400];
+        snprintf(url, sizeof url, "https://%s.exemplo.org/manifest.json", NOME[k][0] == 'O' ? "opensubtitles" : NOME[k]);
+        addons_adicionar(NOME[k], url);
+        snprintf(man, sizeof man, "{\"id\":\"x.%d\",\"name\":\"%s\",\"resources\":[%s],\"types\":[\"movie\",\"series\"]}", k, NOME[k], REC[k]);
+        addons_manifesto_lido(k, man);
+        if ((k == 4 || k == 7) && addons_ativo(k)) addons_alternar(k);
+      }
+    ajQuadroAddons = 2;
+  }
+  else return 0;
+  scrollY = velY = 0;
+  return 1;
+}
+
+// A arte atras da tela nas capturas (o indice da amostra de deploy/app/art).
+void ajustes_teste_arte(int n) { ajArteFundoN = n; }
 
 void ajustes_teste_fonte_interface(int familia) {
   if (familia < TXT_FAMILIA_INTER || familia > TXT_FAMILIA_ATKINSON) return;
