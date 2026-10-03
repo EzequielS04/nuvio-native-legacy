@@ -119,6 +119,16 @@ static void ajIlha(GfxRect r, float raioPx, float a, int modal) {
     gfx_cor(r, raio, 0.082f, 0.086f, 0.102f, a);
   }
 }
+// Ilha com o miolo do vidro a `miolo` (o editor da v2: 88%).
+static void ajIlhaMiolo(GfxRect r, float raioPx, float miolo) {
+  float raio = raioPx / r.h;
+  gfx_rect((GfxRect){ r.x - 20, r.y - 6, r.w + 40, r.h + 46 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
+           0, 0, 0, ajVid() ? 0.36f : 0.45f);
+  if (ajVid()) {
+    gfx_cor(r, raio, 0.055f, 0.059f, 0.071f, miolo);
+    gfx_luz_canto(r, raio, r.w * 0.22f, -r.h * 0.40f, r.h * 0.62f, 1, 1, 1, 0.10f);
+  } else gfx_cor(r, raio, 0.082f, 0.086f, 0.102f, 1);
+}
 // Superficie de FOCO de linha: um degrau mais clara (vidro 12%, solido #2B2D34).
 static void ajFocoLinha(GfxRect r, float raioPx, float f, float a) {
   if (f <= 0.01f) return;
@@ -183,17 +193,25 @@ static float ajBloco(TxtEstilo e, const char *s, float x, float y, float w, floa
 }
 
 // --- FUNDO ----------------------------------------------------------------------
-// A arte do titulo atras de Ajustes (o modo "Arte" do DESIGN.md §6) com o veu
-// do mockup, preto ~50%. Chapado e nao degrade: veu de cor unica nao faz faixa
-// no painel de 8 bits.
-static void ajFundo(void) {
-  // O titulo em foco na Home quando ha catalogo; a amostra n sem ele.
+// Aparencia › Fundo (Ajustes v2, ajustes_fundo): o que fica atras das ilhas.
+// O desenho mora em fundo.c (a pagina do titulo usa o mesmo); resumo:
+//   Arte: a arte do titulo nitida com o veu do mockup (preto ~50%, chapado: veu
+//         de cor unica nao faz faixa no painel de 8 bits).
+//   Arte borrada: so as cores dela — a LUZ ASSADA da "Dinamica imersiva" (o
+//         quadro de 320x180 de gfx_ambiente) com a paleta da arte, saturacao
+//         +35% e brilho 62%. Nenhum desfoque por quadro: o assado so refaz
+//         quando a paleta muda.
+//   Frost: sem arte. Cinza frio com tres luzes largas no acento (58%, 38% e
+//         14%); todo degrade pelo nv_dither (GFX_VEU_CSS e GFX_LUZ).
+#include "corviva.h"
+#include "fundo.h"
+static const char *ajFundoArte(void) {
   HomeItem hi;
-  const char *c = (cat_n() > 0 && home_item_focado(&hi) && hi.indice >= 0)
-                    ? ajArte(AJA_FUNDO, hi.indice) : ajArte(AJA_FUNDO, ajArteFundoN);
-  if (!ajImg(c, (GfxRect){ 0, 0, NV_VTELA_W, NV_VTELA_H }, 0, 1.0f))
-    gfx_cor((GfxRect){ 0, 0, NV_VTELA_W, NV_VTELA_H }, 0, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1);
-  gfx_cor((GfxRect){ 0, 0, NV_VTELA_W, NV_VTELA_H }, 0, 0, 0, 0, 0.50f);
+  return (cat_n() > 0 && home_item_focado(&hi) && hi.indice >= 0)
+           ? ajArte(AJA_FUNDO, hi.indice) : ajArte(AJA_FUNDO, ajArteFundoN);
+}
+static void ajFundo(void) {
+  fundo_desenhar((GfxRect){ 0, 0, NV_VTELA_W, NV_VTELA_H }, ajFundoArte(), 1.0f);
 }
 
 // --- GEOMETRIA ------------------------------------------------------------------
@@ -228,6 +246,54 @@ static float ajFolhaW(void) {
 static GfxRect ajFolhaR(void) { return (GfxRect){ ajFolhaX(), AJI_MARGEM, ajFolhaW(), NV_VTELA_H - 2 * AJI_MARGEM }; }
 static GfxRect ajInspR(void) { return (GfxRect){ ajInspX(), AJI_MARGEM, NV_VTELA_W - AJI_MARGEM - ajInspX(), NV_VTELA_H - 2 * AJI_MARGEM }; }
 
+// --- GEOMETRIA DA V2 (ajustes-v2.html, aprovado em 03/10) --------------------------
+// A pilha de tres degraus: o MENU grande sozinho (com o resumo da categoria a
+// direita); no OK a LISTA cresce por cima dele a partir de x = 172 e o menu
+// recua para a coluna de icones, com o INSPETOR ao lado; o EDITOR entra do
+// mesmo jeito em x = 300. Tudo na tela virtual (escala.h), desenhado a 100%.
+// A partir de 120% de "Tamanho da interface" o inspetor sai: a lista vai ate
+// a margem e a ajuda entra na linha em foco (inventory-v2.md §4).
+// Margens e posicoes da moldura NAO crescem com o "Tamanho da interface" (o
+// quadro de 130% do mockup: o menu continua em x 48, a lista em 172 e as
+// margens em 40 px reais); so os tamanhos de dentro crescem.
+#define AJ2_S          gfx_escala_ui()
+#define AJ2_TOPO       (112.0f / AJ2_S)
+#define AJ2_MARGEM     (40.0f / AJ2_S)
+#define AJ2_MENU_W     660.0f
+#define AJ2_LISTA_DX   (124.0f / AJ2_S)   // 172 com a ilha do menu em 48
+#define AJ2_LISTA_W   1000.0f
+#define AJ2_EDITOR_DX  (252.0f / AJ2_S)   // 300
+static float aj2X0(void) { return 48.0f / AJ2_S + ajustes_rail_largura_fixa(); }
+#define AJ2_LN_H        96.0f
+#define AJ2_LN_GAP       4.0f
+#define AJ2_LN_LINHA1   70.4f   // a primeira linha de uma linha que abre (16 + 38,4 + 16)
+static GfxRect aj2MenuR(void) { return (GfxRect){ aj2X0(), AJ2_TOPO, AJ2_MENU_W, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM }; }
+static GfxRect aj2ResumoR(void) {
+  float x = aj2X0() + AJ2_MENU_W + 24.0f;
+  return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+}
+static int aj2TemInsp(void) { return gfx_escala_ui() < 1.19f; }
+static GfxRect aj2ListaR(void) {
+  float x = aj2X0() + AJ2_LISTA_DX;
+  float w = aj2TemInsp() ? AJ2_LISTA_W : NV_VTELA_W - AJ2_MARGEM - x;
+  if (aj2TemInsp() && x + w + 24.0f + 440.0f > NV_VTELA_W - AJ2_MARGEM) w = NV_VTELA_W - AJ2_MARGEM - 464.0f - x;
+  return (GfxRect){ x, AJ2_TOPO, w, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+}
+static GfxRect aj2InspR(void) {
+  GfxRect l = aj2ListaR();
+  float x = l.x + l.w + 24.0f;
+  return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+}
+static GfxRect aj2EditorR(void) {
+  float x = aj2X0() + AJ2_EDITOR_DX;
+  return (GfxRect){ x, AJ2_TOPO, NV_VTELA_W - AJ2_MARGEM - x, NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM };
+}
+// Onde a lista comeca (o fim do cabecalho: 42 + kicker 21,8 + 4 + titulo 62,9
+// + 8 + sub 29 + 18) e onde termina (a margem; os ultimos 90 px esvanecem).
+static float aj2TextoLista = 1.0f;   // o texto da lista (0 com o editor por cima)
+#define AJ2_LISTA_TOPO (AJ2_TOPO + 185.7f)
+#define AJ2_LISTA_BASE (NV_VTELA_H - AJ2_MARGEM)
+
 // --- CLASSIFICACAO DAS LINHAS -----------------------------------------------------
 enum { AJL_TOG = 0, AJL_ESC, AJL_NUM, AJL_ACAO, AJL_LER };
 static int ajTipo(int op) {
@@ -250,36 +316,49 @@ static const char *ajRotSeg(int op, int i) {
   return b[i % 3];
 }
 // Escolha que cabe na linha: ate tres valores curtos viram o segmentado.
+static float aj2SegLargura(int op, int n);
 static int ajSegmentada(int op) {
-  int i, n;
-  float w = 10.0f;
-  if (op < 0 || ajTipo(op) != AJL_ESC || op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) return 0;
+  int n;
+  if (op < 0 || ajTipo(op) != AJL_ESC || op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA || op == AJ_FUNDO) return 0;
   n = nValores(op);
   if (n < 2 || n > 3 || !OPCOES[op].valores) return 0;
-  for (i = 0; i < n; i++) w += (float)txt_largura(TXT_AJ_SEG, ajRotSeg(op, i)) + 44.0f;
-  // Folha mais estreita (escala.h): o segmentado so fica na linha se o nome
-  // da opcao cabe ao lado dele; senao a escolha abre no editor.
-  if (gfx_escala_ui() != 1.0f &&
-      w + (float)txt_largura(TXT_AJ_ROTULO, rotuloOpcao(op)) + 96.0f > ajFolhaW()) return 0;
-  return w < 460.0f;
+  // O segmentado so fica na linha se o nome da opcao cabe ao lado dele;
+  // senao a escolha abre no editor.
+  { float w = aj2SegLargura(op, n);
+    if (w + (float)txt_largura(TXT_V2_ROT, rotuloOpcao(op)) + 60.0f + 20.0f > aj2ListaR().w - 44.0f) return 0;
+    return w < 560.0f; }
 }
-// O editor desta opcao acontece NA LINHA (segmentado, interruptor, cor), e nao
-// no modal. Vindo da lista de diferencas a linha nao esta na tela: la e modal.
+// O editor desta opcao acontece NA LINHA (segmentado, interruptor, cor, fundo),
+// e nao no painel do editor. Vindo da lista de diferencas a linha nao esta na
+// tela: la e o editor.
 static int ajEmLinha(int op) {
   if (op < 0 || uxIndice < 2) return 0;
-  return ajTipo(op) == AJL_TOG || ajSegmentada(op) || op == AJ_TEMA;
+  return ajTipo(op) == AJL_TOG || ajSegmentada(op) || op == AJ_TEMA || op == AJ_FUNDO;
 }
 static int ajEditandoLinha(int op) {
   return uxEditor == 1 && !uxRestaurar && !uxAvisoRisco && uxOp == op && ajEmLinha(op);
 }
-// A linha da cor de destaque abre a regua de amostras quando tem o foco.
+// AS LINHAS QUE ABREM (v2): a primeira linha fica com 70,4 (16 + 38,4 + 16),
+// 20 de vao (o gap do flex que quebra) e o que vem embaixo — a regua da cor
+// de destaque editando, os tres cartoes do Fundo em foco e, sem inspetor
+// (120% ou mais), a ajuda da opcao em foco.
 #define AJ_REGUA_H 118.0f
+#define AJ2_FUNDO_BAIXO 237.75f   // 4 + cartao (10 + 150,75 + 10 + 29 + 10) + 24
+static int aj2FocoNaLista(int i) { return i == focoItem && !focoIndice && !uxCabecalho && uxIndice >= 2; }
+static float aj2AjudaAltura(int op, float w) {
+  return txt_bloco(TXT_V2_28, uxResumo(op), 0, 0, 0, 0, -4000, w, 36.4f, 0, 4);
+}
 static float ajLinhaH(int i) {
   int op = TELA[i].op;
-  float h = AJI_LN_H;
-  if (inativa(op) && uxRequisito(op) >= 0) h = 96.0f;
-  if (op == AJ_GUIA) h = 80.0f;   // a linha do guia leva o subtitulo
-  if (op == AJ_TEMA && i == focoItem && !focoIndice && uxIndice >= 2) h += AJ_REGUA_H;
+  float h = AJ2_LN_H, baixo = 0;
+  GfxRect fr = aj2ListaR();
+  if ((inativa(op) && uxRequisito(op) >= 0) || op == AJ_GUIA) h = 101.8f;
+  // A regua de cores so entra sem inspetor: com ele, as amostras estao na previa.
+  if (op == AJ_TEMA && ajEditandoLinha(op) && aj2FocoNaLista(i) && !aj2TemInsp()) baixo += AJ_REGUA_H;
+  if (op == AJ_FUNDO && aj2FocoNaLista(i)) baixo += AJ2_FUNDO_BAIXO;
+  if (!aj2TemInsp() && aj2FocoNaLista(i) && op != AJ_FUNDO && !(op == AJ_TEMA && ajEditandoLinha(op)))
+    baixo += aj2AjudaAltura(op, fr.w - 44.0f - 60.0f) + 20.0f;
+  if (baixo > 0) h = AJ2_LN_LINHA1 + 20.0f + baixo;
   return h;
 }
 
@@ -413,19 +492,6 @@ static float ajSeg(const char *const *rot, const char *const *num, int n, int se
   }
   return w;
 }
-// Trilho do numero: onde o valor fica no intervalo e o risco do padrao.
-static void ajTrilho(float x, float yc, float w, float frac, float fracPad, int foco, float a) {
-  float ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
-  if (frac < 0) frac = 0;
-  if (frac > 1) frac = 1;
-  gfx_cor((GfxRect){ x, yc - 2, w, 4 }, 0.5f, 1, 1, 1, 0.14f * a);
-  if (frac * w >= 1.0f) {
-    if (foco) gfx_cor((GfxRect){ x, yc - 2, w * frac, 4 }, 0.5f, ar, ag, ab, a);
-    else gfx_cor((GfxRect){ x, yc - 2, w * frac, 4 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.55f * a);
-  }
-  if (fracPad >= 0) gfx_cor((GfxRect){ x + w * fracPad - 1, yc - 7, 2, 14 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.35f * a);
-}
 static float ajFracao(int op, int v) {
   const Opcao *o = &OPCOES[op];
   return o->max > o->min ? (float)(v - o->min) / (float)(o->max - o->min) : 0.0f;
@@ -473,72 +539,150 @@ static const char *ajEstadoAcao(int op) {
   return textoLeitura(op);
 }
 
-// --- A LINHA ----------------------------------------------------------------------
+// --- A LINHA (v2) -------------------------------------------------------------------
 // So a linha em foco ganha superficie. Cada tipo tem a sua cauda: interruptor
 // = chip; escolha = valor + seta, ou o segmentado na linha; numero = valor +
 // trilho + seta; acao = estado + seta; leitura = valor apagado, sem seta.
+// Medidas do lnV2 do mockup: 96 de altura, raio 28, padding 0 30, rotulo
+// 32/500, valor 28, chip 48/22, segmentado 24/600, seta de 30.
+static void aj2Chevron(float xDir, float yc, float al) {
+  ajIcone("aj_chevron-right", xDir - 30.0f, yc - 15.0f, 30.0f, al);
+}
+static float aj2ChipLiga(float xDir, float yc, int ligado, float a) {
+  TxtLinha t;
+  float w, ar, ag, ab;
+  ajustes_acento(&ar, &ag, &ab);
+  if (ligado) {
+    t = txt_linha(TXT_V2_CHIP, "Ligado", (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255);
+    w = 22 + 9 + 10 + t.w + 22;
+    gfx_cor((GfxRect){ xDir - w, yc - 24, w, 48 }, 0.5f, ar, ag, ab, 0.22f * a);
+    gfx_cor((GfxRect){ xDir - w + 22, yc - 4.5f, 9, 9 }, 0.5f, ar, ag, ab, a);
+    txt_desenhar_alpha(t, xDir - w + 41, yc - t.h * 0.5f, a);
+  } else {
+    t = ajTxt(TXT_V2_CHIP, "Desligado");
+    w = 22 + t.w + 22;
+    ajNeutro((GfxRect){ xDir - w, yc - 24, w, 48 }, 24, 0.07f, AJ_CHIP_SOL, a);
+    txt_desenhar_alpha(t, xDir - w + 22, yc - t.h * 0.5f, 0.5f * a);
+  }
+  return w;
+}
+static float aj2SegLargura(int op, int n) {
+  float w = 10.0f;
+  int i;
+  for (i = 0; i < n; i++) w += (float)txt_largura(TXT_V2_SEG, ajRotSeg(op, i)) + 44.0f + (i ? 4.0f : 0.0f);
+  return w;
+}
+// Segmentado da v2: trilho 6% (solido #1D1E23) com padding 5, itens 24/600 com
+// padding 12 22; o selecionado 14% (#34363E), editando cheio no acento.
+static float aj2Seg(int op, int n, int sel, int ed, float xDir, float yc, float a) {
+  float w = aj2SegLargura(op, n), h = 63.0f, ih = h - 10.0f, x = xDir - w;
+  int i;
+  ajNeutro((GfxRect){ x, yc - h * 0.5f, w, h }, h * 0.5f, 0.06f, 0.114f, 0.118f, 0.137f, a);
+  x += 5.0f;
+  for (i = 0; i < n; i++) {
+    int ac = i == sel && ed;
+    TxtLinha t = ac ? ajTxtT(TXT_V2_SEG, ajRotSeg(op, i)) : ajTxt(TXT_V2_SEG, ajRotSeg(op, i));
+    float iw = t.w + 44.0f, al = 0.55f;
+    if (ac) { ajPilulaAcento((GfxRect){ x, yc - ih * 0.5f, iw, ih }, ih * 0.5f, a); al = 1; }
+    else if (i == sel) { ajNeutro((GfxRect){ x, yc - ih * 0.5f, iw, ih }, ih * 0.5f, 0.14f, 0.204f, 0.212f, 0.243f, a); al = 1; }
+    txt_desenhar_alpha(t, x + 22, yc - t.h * 0.5f, al * a);
+    x += iw + 4.0f;
+  }
+  return w;
+}
+static void aj2Trilho(float x, float yc, float w, float frac, int foco, float a) {
+  float ar, ag, ab;
+  ajustes_acento(&ar, &ag, &ab);
+  if (frac < 0) frac = 0;
+  if (frac > 1) frac = 1;
+  gfx_cor((GfxRect){ x, yc - 3, w, 6 }, 0.5f, 1, 1, 1, 0.14f * a);
+  if (frac * w >= 1.0f) {
+    if (foco) gfx_cor((GfxRect){ x, yc - 3, w * frac, 6 }, 0.5f, ar, ag, ab, a);
+    else gfx_cor((GfxRect){ x, yc - 3, w * frac, 6 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.55f * a);
+  }
+}
+static void aj2MiniFundo(int modo, float x, float y, float w, float a);
+// Os tres cartoes do Fundo dentro da linha em foco: a tela de Ajustes em
+// miniatura em cada fundo, a escolhida em superficie com o check.
+static void aj2CartoesFundo(GfxRect ln, float y, float a) {
+  static const char *const N[3] = { "Arte", "Arte borrada", "Frost" };
+  int i, sel = ajEditandoLinha(AJ_FUNDO) ? uxPendente : valor[AJ_FUNDO];
+  float gap = 16.0f, cw = (ln.w - 60.0f - 2 * gap) / 3.0f;
+  y += 4.0f;
+  for (i = 0; i < 3; i++) {
+    float cx = ln.x + 30.0f + i * (cw + gap), mw = cw - 20.0f, mh = mw * 9.0f / 16.0f;
+    TxtLinha t = ajTxtC(TXT_V2_SEG, N[i], cw - 50.0f);
+    if (i == sel) ajNeutro((GfxRect){ cx, y, cw, 10 + mh + 10 + 29 + 10 }, 20, 0.12f, 0.204f, 0.212f, 0.243f, a);
+    aj2MiniFundo(i, cx + 10, y + 10, mw, (i == sel ? 1.0f : 0.7f) * a);
+    if (i == sel) {
+      ajIcone("aj_check", cx + 10, y + 10 + mh + 10 + (29 - 22) * 0.5f, 22, a);
+      txt_desenhar_alpha(t, cx + 10 + 30, y + 10 + mh + 10 + (29 - t.h) * 0.5f, a);
+    } else txt_desenhar_alpha(t, cx + 10, y + 10 + mh + 10 + (29 - t.h) * 0.5f, 0.6f * a);
+  }
+}
 static void ajDesenharLinha(int item, float y, float f, float a) {
   int op = TELA[item].op, tipo = ajTipo(op);
   float h = ajLinhaH(item);
-  GfxRect fr = ajFolhaR();
-  GfxRect ln = { fr.x + 18.0f, y, fr.w - 36.0f, h };
+  GfxRect fr = aj2ListaR();
+  GfxRect ln = { fr.x + 22.0f, y, fr.w - 44.0f, h };
   int desligada = inativa(op), emFoco = f > 0.5f, ed = ajEditandoLinha(op);
-  int sub = desligada && uxRequisito(op) >= 0;
-  float aT = a * (desligada ? 0.45f : 1.0f);
-  float xDir = ln.x + ln.w - 22.0f, yc = y + ((sub || op == AJ_GUIA) ? h : AJI_LN_H) * 0.5f;
-  if (h > AJI_LN_H + 30) yc = y + 28.0f;   // linha que abre: o rotulo fica no alto
+  int sub = (desligada && uxRequisito(op) >= 0) || op == AJ_GUIA;
+  int abre = h > 102.0f;
+  float aT = a * (desligada ? 0.45f : 1.0f), aTx = a * aj2TextoLista;
+  float xDir = ln.x + ln.w - 30.0f, yc = abre ? y + AJ2_LN_LINHA1 * 0.5f : y + h * 0.5f;
   float cauda = 0;
   if (a <= 0.004f) return;
-  ajFocoLinha(ln, 22.0f, f, a);
+  // O texto da lista some quando o editor entra por cima (a lista fica so
+  // superficie): aTx leva esse alfa; a superficie de foco fica.
+  aT *= aj2TextoLista;
+  ajFocoLinha(ln, 28.0f, f, aTx);
+  if (aTx <= 0.004f) return;
   if ((tipo == AJL_TOG && ed) || (ajSegmentada(op) && emFoco && !desligada)) {
-    const char *rot[3];
-    int n = nValores(op), i;
-    float w;
+    int n = nValores(op);
     if (n > 3) n = 3;
-    for (i = 0; i < n; i++) rot[i] = ajRotSeg(op, i);
-    w = ajSegLargura(rot, NULL, n);
-    cauda = ajSeg(rot, NULL, n, ed ? uxPendente : valor[op], ed, ln.x + ln.w - 22.0f - w + 0.0f, yc, 55.0f, a);
+    cauda = aj2Seg(op, n, ed ? uxPendente : valor[op], ed, xDir, yc, aTx);
   } else if (tipo == AJL_TOG) {
-    cauda = ajChipLiga(xDir, yc, lig(op), aT);
+    cauda = aj2ChipLiga(xDir, yc, lig(op), aT);
   } else if (tipo == AJL_ESC || tipo == AJL_NUM) {
+    char vb[96];
     const char *v = textoValor(op);
     float x = xDir;
-    if (!desligada) { ajChevron(x, yc, (emFoco ? 0.7f : 0.32f) * aT); x -= 24.0f + 12.0f; }
+    if (op == AJ_FUNDO && ed) { uxValorTexto(op, uxPendente, vb, sizeof vb); v = vb; }
+    if (!desligada) { aj2Chevron(x, yc, (emFoco ? 0.7f : 0.32f) * aT); x -= 30.0f + 14.0f; }
     if (tipo == AJL_NUM) {
-      int pad = ajPadraoVisual(op);
-      ajTrilho(x - 150.0f, yc, 150.0f, ajFracao(op, valor[op]), pad >= 0 ? ajFracao(op, pad) : -1.0f, emFoco, aT);
-      x -= 150.0f + 12.0f;
+      aj2Trilho(x - 170.0f, yc, 170.0f, ajFracao(op, valor[op]), emFoco, aT);
+      x -= 170.0f + 14.0f;
     }
     { int fv = marcaDoValor(op, v);
       if (fv >= 0) {
-        float mw = marca_formato_largura((FormatoMarca)fv, 36.0f);
-        marca_formato((FormatoMarca)fv, x - mw, yc - 18.0f, 36.0f, 1, 1, 1, (emFoco ? 0.85f : 0.6f) * aT);
+        float mw = marca_formato_largura((FormatoMarca)fv, 42.0f);
+        marca_formato((FormatoMarca)fv, x - mw, yc - 21.0f, 42.0f, 1, 1, 1, (emFoco ? 0.85f : 0.6f) * aT);
         x -= mw;
       } else {
-        TxtLinha t = ajTxtC(TXT_AJ_VALOR, v, 300.0f);
+        TxtLinha t = ajTxtC(TXT_V2_28, v, 360.0f);
         txt_desenhar_alpha(t, x - t.w, yc - t.h * 0.5f, (emFoco ? 0.85f : 0.55f) * aT);
         x -= t.w;
         if (op == AJ_TEMA) {
           float sr, sg, sb;
           ajustes_acento(&sr, &sg, &sb);
-          gfx_cor((GfxRect){ x - 10 - 22, yc - 11, 22, 22 }, 0.5f, sr, sg, sb, aT);
-          x -= 32.0f;
+          gfx_cor((GfxRect){ x - 12 - 26, yc - 13, 26, 26 }, 0.5f, sr, sg, sb, aT);
+          x -= 38.0f;
         }
       } }
     cauda = xDir - x;
   } else if (tipo == AJL_ACAO) {
     const char *st = ajEstadoAcao(op);
     float x = xDir;
-    if (!desligada) { ajChevron(x, yc, (emFoco ? 0.7f : 0.32f) * aT); x -= 24.0f + 12.0f; }
+    if (!desligada) { aj2Chevron(x, yc, (emFoco ? 0.7f : 0.32f) * aT); x -= 30.0f + 14.0f; }
     if (st && st[0]) {
-      TxtLinha t = ajTxtC(TXT_AJ_18, st, 380.0f);
+      TxtLinha t = ajTxtC(TXT_V2_28, st, 420.0f);
       txt_desenhar_alpha(t, x - t.w, yc - t.h * 0.5f, 0.55f * aT);
       x -= t.w;
       if (ajEstadoLigado(op)) {
         float ar, ag, ab;
         ajustes_acento(&ar, &ag, &ab);
-        gfx_cor((GfxRect){ x - 9 - 8, yc - 4, 8, 8 }, 0.5f, ar, ag, ab, aT);
-        x -= 17.0f;
+        gfx_cor((GfxRect){ x - 10 - 9, yc - 4.5f, 9, 9 }, 0.5f, ar, ag, ab, aT);
+        x -= 19.0f;
       }
     }
     cauda = xDir - x;
@@ -552,70 +696,74 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
       ajMemUso(&bytes, &teto);
       if (t > 1) t = 1;
       corPressao(t, &pr, &pg, &pb);
-      gfx_cor((GfxRect){ x - 120, yc - 3, 120, 6 }, 0.5f, 1, 1, 1, 0.12f * aT);
-      if (t * 120 > 1) gfx_cor((GfxRect){ x - 120, yc - 3, 120 * t, 6 }, 0.5f, pr, pg, pb, 0.85f * aT);
-      x -= 132.0f;
+      gfx_cor((GfxRect){ x - 150, yc - 3, 150, 6 }, 0.5f, 1, 1, 1, 0.12f * aT);
+      if (t * 150 > 1) gfx_cor((GfxRect){ x - 150, yc - 3, 150 * t, 6 }, 0.5f, pr, pg, pb, 0.85f * aT);
+      x -= 164.0f;
       snprintf(vb, sizeof vb, i18n("%d de %d MB"), (int)(bytes / 1048576), (int)(teto / 1048576));
       v = vb;
     }
-    { TxtLinha t = ajTxtC(TXT_AJ_VALOR, v, 380.0f);
+    { TxtLinha t = ajTxtC(TXT_V2_28, v, 420.0f);
       txt_desenhar_alpha(t, x - t.w, yc - t.h * 0.5f, (emFoco ? 0.85f : 0.42f) * aT);
       x -= t.w; }
     cauda = xDir - x;
   }
   // ROTULO, marca do formato, ponto de "diferente do padrao", "AVANCADO".
-  { float tx = ln.x + 22.0f, maxW = ln.w - 44.0f - cauda - 20.0f, tyc = yc;
-    TxtLinha r = ajTxtC(TXT_AJ_ROTULO, rotuloOpcao(op), maxW);
+  { float tx = ln.x + 30.0f, maxW = ln.w - 60.0f - cauda - 20.0f, tyc = yc;
+    TxtLinha r = ajTxtC(TXT_V2_ROT, rotuloOpcao(op), maxW);
     float rx;
-    if (sub || op == AJ_GUIA) tyc = y + h * 0.5f - 12.0f;
-    if (op == AJ_GUIA) {
-      TxtLinha s = ajTxtC(TXT_ILHA_GENERO, "Tudo o que o app faz, por assunto", maxW);
-      txt_desenhar_alpha(s, tx, tyc + r.h * 0.5f + 4, 0.42f * aT);
+    if (sub) tyc = y + 16.0f + 19.2f;
+    if (sub) {
+      char t[200];
+      TxtLinha s;
+      if (op == AJ_GUIA) snprintf(t, sizeof t, "%s", i18n("Tudo o que o app faz, por assunto"));
+      else snprintf(t, sizeof t, emFoco ? i18n("Depende de: %s · OK mostra") : i18n("Depende de: %s"),
+                    i18n(rotuloOpcao(uxRequisito(op))));
+      s = ajTxtC(TXT_V2_24, t, maxW);
+      txt_desenhar_alpha(s, tx, y + 16.0f + 38.4f + 5.0f + (26.4f - s.h) * 0.5f, 0.45f * aT);
     }
-    txt_desenhar_alpha(r, tx, tyc - r.h * 0.5f, (emFoco ? 1.0f : 0.86f) * aT);
+    txt_desenhar_alpha(r, tx, tyc - r.h * 0.5f, (emFoco ? 1.0f : 0.88f) * aT);
     rx = tx + r.w;
     { int fm = marcaDaOpcao(op);
       if (fm >= 0) {
-        float mw = marca_formato_largura((FormatoMarca)fm, 40.0f);
-        if (rx + 12 + mw < tx + maxW) {
-          marca_formato((FormatoMarca)fm, rx + 12, tyc - 20, 40, 1, 1, 1, (emFoco ? 0.85f : 0.55f) * aT);
-          rx += 12 + mw;
+        float mw = marca_formato_largura((FormatoMarca)fm, 44.0f);
+        if (rx + 14 + mw < tx + maxW) {
+          marca_formato((FormatoMarca)fm, rx + 14, tyc - 22, 44, 1, 1, 1, (emFoco ? 0.85f : 0.55f) * aT);
+          rx += 14 + mw;
         }
       } }
-    if (uxDiferente(op) && rx + 19 < tx + maxW) {
-      gfx_cor((GfxRect){ rx + 12, tyc - 3.5f, 7, 7 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.45f * aT);
-      rx += 19;
+    if (uxDiferente(op) && rx + 23 < tx + maxW) {
+      gfx_cor((GfxRect){ rx + 14, tyc - 4.5f, 9, 9 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.45f * aT);
+      rx += 23;
     }
     // "NOVO" no acento (e estado) ate a pessoa abrir o registro uma vez.
     if (op == AJ_VER_REGISTRO && !registro_ja_aberto()) {
       int r8, g8, b8;
-      float w = ajCaps(TXT_AJ_CAPS13, "Novo", 1.56f, -1, 0, 0);
+      float w = ajCaps(TXT_G16B, "Novo", 1.9f, -1, 0, 0);
       ajAcento8(&r8, &g8, &b8);
       if (rx + 16 + w < tx + maxW) {
         char up[40];
         idioma_maiusc_em(ajustes_idioma(), up, sizeof up, i18n("Novo"));
-        txt_tracking(TXT_AJ_CAPS13, up, r8, g8, b8, rx + 16, tyc - 8, aT, 1.56f);
+        txt_tracking(TXT_G16B, up, r8, g8, b8, rx + 16, tyc - 10, aT, 1.9f);
       }
     }
     if (uxAvancada(op)) {
-      float w = ajCaps(TXT_AJ_CAPS13, "Avançado", 1.56f, -1, 0, 0);
-      if (rx + 16 + w < tx + maxW) ajCaps(TXT_AJ_CAPS13, "Avançado", 1.56f, rx + 16, tyc - 8, 0.38f * aT);
-    }
-    if (sub) {
-      char t[200];
-      TxtLinha s;
-      snprintf(t, sizeof t, emFoco ? i18n("Depende de: %s · OK mostra") : i18n("Depende de: %s"),
-               i18n(rotuloOpcao(uxRequisito(op))));
-      s = ajTxtC(TXT_ILHA_GENERO, t, maxW);
-      txt_desenhar_alpha(s, tx, tyc + r.h * 0.5f + 4, 0.42f * aT);
+      float w = ajCaps(TXT_G16B, "Avançado", 1.9f, -1, 0, 0);
+      if (rx + 16 + w < tx + maxW) ajCaps(TXT_G16B, "Avançado", 1.9f, rx + 16, tyc - 10, 0.38f * aT);
     }
   }
-  // A REGUA DA COR DE DESTAQUE: os doze temas da conta e os quatro dinamicos.
-  if (op == AJ_TEMA && h > AJI_LN_H + 1) {
-    int sel = valor[op], i, alvo = ed ? uxPendente : sel;
-    float sx = ln.x + 22.0f, sy = y + 74.0f;
+  // O QUE VEM EMBAIXO numa linha que abre.
+  if (abre) {
+    float by = y + AJ2_LN_LINHA1 + 20.0f;
+    if (op == AJ_FUNDO && aj2FocoNaLista(item)) aj2CartoesFundo(ln, by, aTx);
+    else if (!aj2TemInsp() && aj2FocoNaLista(item) && !(op == AJ_TEMA && ed))
+      ajBloco(TXT_V2_28, uxResumo(op), ln.x + 30.0f, by, ln.w - 60.0f, 36.4f, 0.62f * aTx, 4);
+  }
+  // A REGUA DA COR DE DESTAQUE (editando): os doze temas e os quatro dinamicos.
+  if (op == AJ_TEMA && abre && ed && !aj2TemInsp()) {
+    int sel = valor[op], i, alvo = uxPendente;
+    float sx = ln.x + 30.0f, sy = y + AJ2_LN_LINHA1 + 20.0f;
     for (i = 0; i < AJ_N_TEMAS; i++) {
-      float s = (ed && i == alvo) ? 1.2f : 1.0f, d = 44.0f * s;
+      float s = (i == alvo) ? 1.2f : 1.0f, d = 44.0f * s;
       float cx = sx + i * 56.0f + 22.0f, cy = sy + 22.0f;
       float cr = TEMA_ACENTO[i].r, cg = TEMA_ACENTO[i].g, cb = TEMA_ACENTO[i].b;
       float lum = 0.2126f * cr + 0.7152f * cg + 0.0722f * cb;
@@ -626,12 +774,12 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
         gfx_icone((GfxRect){ cx - 11 * s, cy - 11 * s, 22 * s, 22 * s }, "aj_check", k, k, k, a);
       }
     }
-    sy = y + 134.0f;
+    sy += 60.0f;
     { float px = sx + ajCaps(TXT_AJ_CAPS13, "Dinâmicas", 1.82f, sx, sy + 12, 0.45f * a) + 18.0f;
       static const int ARTE[4] = { 7, 12, 15, 0 };
       static const char *const NOME[4] = { "Dinâmica", "Estilizada", "Gradiente", "Imersiva" };
       for (i = 0; i < 4; i++) {
-        int k = AJ_TEMA_DINAMICA + i, foc = ed && alvo == k;
+        int k = AJ_TEMA_DINAMICA + i, foc = alvo == k;
         TxtLinha t = foc ? ajTxtT(TXT_MINI, NOME[i]) : ajTxt(TXT_MINI, NOME[i]);
         float w = 44 + t.w + 16;
         GfxRect p = { px, sy, w, 40 };
@@ -645,7 +793,11 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
   }
 }
 
-// Cabecalho de grupo (ROT): nome forte, contagem a direita, fio de 1 px.
+// Cabecalho de grupo (grpV2): nome 26/800, contagem 22 a direita, fio de 1 px.
+// margin 26 0 6, padding 0 30 12.
+// As margens do mockup colapsam: a linha seguinte (margin-top 4) fica a 6 do
+// fio, nao a 10 — o grupo leva 2 e a linha os seus 4.
+#define AJ2_GRUPO_H (26.0f + 31.2f + 12.0f + 1.0f + 2.0f)
 static int ajContaGrupo(int item) {
   int i, n = 0;
   for (i = item + 1; i < secFim(secDoItem[item]) && TELA[i].tipo == IT_OPC; i++)
@@ -653,20 +805,21 @@ static int ajContaGrupo(int item) {
   return n;
 }
 static void ajDesenharGrupo(int item, float y, float a) {
-  GfxRect fr = ajFolhaR();
-  float x = fr.x + 18.0f, w = fr.w - 36.0f;
+  GfxRect fr = aj2ListaR();
+  float x = fr.x + 22.0f, w = fr.w - 44.0f, yc = y + 26.0f + 15.6f;
   char q[16];
   TxtLinha t, c;
+  a *= aj2TextoLista;
   if (a <= 0.004f) return;
   snprintf(q, sizeof q, "%d", ajContaGrupo(item));
-  t = ajTxt(TXT_AJ_SECAO, TELA[item].titulo);
-  c = ajTxt(TXT_ILHA_GENERO, TELA[item].sub ? TELA[item].sub : q);
-  txt_desenhar_alpha(t, x + 22, y + 14 - t.h * 0.5f + 0.0f, a);
-  txt_desenhar_alpha(c, x + w - 22 - c.w, y + 16 - c.h * 0.5f, 0.38f * a);
-  gfx_cor((GfxRect){ x, y + 37, w, 1 }, 0, 1, 1, 1, 0.08f * a);
+  t = ajTxt(TXT_V2_GRUPO, TELA[item].titulo);
+  c = ajTxt(TXT_V2_24, TELA[item].sub ? TELA[item].sub : q);
+  txt_desenhar_alpha(t, x + 30, yc - t.h * 0.5f, a);
+  txt_desenhar_alpha(c, x + w - 30 - c.w, yc - c.h * 0.5f + 1.0f, 0.38f * a);
+  gfx_cor((GfxRect){ x, y + 26.0f + 31.2f + 12.0f, w, 1 }, 0, 1, 1, 1, 0.08f * a);
 }
 
-// O chip "Avançados · ocultos N" do cabecalho da folha. Devolve a largura.
+// O chip "Avançados N" do cabecalho da lista (60 de altura, 22/600). Devolve a largura.
 static int ajNAvancadas(void) {
   int n = 0, i;
   for (i = secIni[secAtual] + 1; i < secFim(secAtual); i++)
@@ -674,22 +827,22 @@ static int ajNAvancadas(void) {
   return n;
 }
 static float ajChipAvancados(float xDir, float y, int foco, float a) {
-  char t[80];
+  char t[16];
   int n = ajNAvancadas(), vis = uxAvancados[secAtual];
   TxtLinha r, q;
   float w, x;
   if (!n) return 0;
-  snprintf(t, sizeof t, vis ? i18n("visíveis · %d") : i18n("ocultos · %d"), n);
-  r = foco ? ajTxtT(TXT_AJ_SEG, "Avançados") : ajTxt(TXT_AJ_SEG, "Avançados");
-  q = foco ? ajTxtT(TXT_AJ_VALOR, t) : ajTxt(TXT_AJ_VALOR, t);
-  w = 22 + 22 + 10 + r.w + 8 + q.w + 22;
+  snprintf(t, sizeof t, "%d", n);
+  r = foco ? ajTxtT(TXT_V2_CHIP, "Avançados") : ajTxt(TXT_V2_CHIP, "Avançados");
+  q = foco ? ajTxtT(TXT_V2_24, t) : ajTxt(TXT_V2_24, t);
+  w = 24 + 24 + 10 + r.w + 10 + q.w + 24;
   x = xDir - w;
-  if (foco) ajPilulaAcento((GfxRect){ x, y, w, 56 }, 28, a);
-  else ajNeutro((GfxRect){ x, y, w, 56 }, 28, 0.08f, AJ_CHIP_SOL, a);
-  if (foco) ajIconeT(vis ? "aj_eye" : "aj_eye-off", x + 22, y + 17, 22, a);
-  else ajIcone(vis ? "aj_eye" : "aj_eye-off", x + 22, y + 17, 22, 0.85f * a);
-  txt_desenhar_alpha(r, x + 54, y + (56 - r.h) * 0.5f, (foco ? 1.0f : 0.85f) * a);
-  txt_desenhar_alpha(q, x + 54 + r.w + 8, y + (56 - q.h) * 0.5f, (foco ? 0.65f : 0.45f) * a);
+  if (foco) ajPilulaAcento((GfxRect){ x, y, w, 60 }, 30, a);
+  else ajNeutro((GfxRect){ x, y, w, 60 }, 30, 0.08f, AJ_CHIP_SOL, a);
+  if (foco) ajIconeT(vis ? "aj_eye" : "aj_eye-off", x + 24, y + 18, 24, a);
+  else ajIcone(vis ? "aj_eye" : "aj_eye-off", x + 24, y + 18, 24, 0.85f * a);
+  txt_desenhar_alpha(r, x + 58, y + (60 - r.h) * 0.5f, (foco ? 1.0f : 0.85f) * a);
+  txt_desenhar_alpha(q, x + 58 + r.w + 10, y + (60 - q.h) * 0.5f, (foco ? 0.65f : 0.45f) * a);
   return w;
 }
 
@@ -761,6 +914,7 @@ static float ajEf(const char *icone, const char *s, float x, float y, float w, f
   return h + 28;
 }
 #include "ajustes_ux_previa.inc"
+#include "ajustes_ux_v2.inc"
 #include "ajustes_ux_ilha.inc"
 #include "ajustes_ux_fileiras.inc"
 #include "ajustes_ux_guia.inc"

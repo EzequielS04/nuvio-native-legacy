@@ -337,6 +337,8 @@ int   ajustes_relogio_ligado(void);
 int   ajustes_relogio_pos(void);
 // Tamanho da interface: 1, 1.2, 1.3 ou 1.5 (gfx_escala_ui). LOCAL.
 float ajustes_tamanho_ui(void);
+// Fundo atras dos paineis (Aparencia › Fundo): 0 Arte, 1 Arte borrada, 2 Frost.
+int   ajustes_fundo(void);
 // Sair do player no meio vai para a HOME, minimizando o titulo na ilha (o
 // relogio ligado e Ao sair do player = home). 0 = a pagina do titulo, como antes.
 int   ajustes_saida_player_home(void);

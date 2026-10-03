@@ -76,7 +76,7 @@ static const Item TELA[] = {
     OPC(AJ_IDIOMA), OPC(AJ_AUD_LINGUA), OPC(AJ_LEG_LINGUA), OPC(AJ_TMDB_IDIOMA),
 
   SEC("Aparência", "Cor, transparência, fonte, animações e relógio", "aj_palette"),
-    OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_FONTE_UI),
+    OPC(AJ_TEMA), OPC(AJ_FUNDO), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_FONTE_UI),
     OPC(AJ_TAMANHO_UI),
     OPC(AJ_ANIM), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS), OPC(AJ_VIDRO_CONTORNO),
 

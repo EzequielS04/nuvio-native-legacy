@@ -132,6 +132,27 @@ typedef enum {
   TXT_NOV_TITULO,   // .c-tit do cartao de novidades  50 / 700
   TXT_G28R,   // "Você está na" do cartao da atualizacao (mockup 26/400; a
               // InterDisplay e ~9% mais estreita que a Inter do navegador)
+  // AJUSTES V2 (ajustes-v2.html, aprovado em 03/10): o menu grande, a lista
+  // de 96 px e o inspetor de 40/26. Corpos medidos contra o mockup (a
+  // InterDisplay e mais estreita que a Inter do navegador). No FIM do enum.
+  TXT_V2_MENU,     // rotulo do menu de categorias (36/500)
+  TXT_V2_MENU_B,   // rotulo da categoria aberta/em foco (36/600)
+  TXT_V2_26,       // descricao, sub, meta, dicas grandes (24/400)
+  TXT_V2_TIT,      // titulo da lista e do editor (52/700)
+  TXT_V2_KICK,     // kicker da lista e do inspetor (18/700)
+  TXT_V2_CHIP,     // chip Ligado/Avancados (22/600)
+  TXT_V2_GRUPO,    // cabecalho de grupo (26/800)
+  TXT_V2_24,       // contagem do grupo, dicas do inspetor (22/400)
+  TXT_V2_ROT,      // rotulo da linha (32/500)
+  TXT_V2_28,       // valor da linha, ajuda do inspetor (28 e 26/400)
+  TXT_V2_SEG,      // segmentado e chips de grupo (24/600)
+  TXT_V2_INSP,     // titulo do inspetor (40/700)
+  TXT_V2_KBD20,    // tecla das dicas do resumo (20/700)
+  TXT_V2_KBD18,    // tecla das dicas do inspetor (18/700)
+  TXT_V2_NUM,      // contagem do resumo (52/800)
+  TXT_V2_NUM150,   // numero do editor (150/800)
+  TXT_V2_36B,      // unidade do editor (34/600)
+  TXT_V2_18,       // posicao na ordem da Home (17/400)
   TXT_NFONTES
 } TxtEstilo;
 

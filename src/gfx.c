@@ -87,8 +87,21 @@ float gfx_escala_ui(void) { return escUi; }
 float gfx_escala(void) { return escAtiva; }
 float gfx_escala_entrar(void) { float a = escAtiva; escAtiva = escUi; return a; }
 void gfx_escala_sair(float anterior) { escAtiva = anterior; }
-#define ESC_REAL_INI() float escGuard_ = escAtiva; escAtiva = 1.0f
-#define ESC_REAL_FIM() escAtiva = escGuard_
+// TRANSFORMACAO DE GRUPO (gfx_transformar): escala em torno de (ox, oy) e
+// deslocamento, em coordenadas de layout, ANTES do fator da camada. As
+// passadas internas (ESC_REAL, miniatura) desligam junto com o fator.
+static struct { int on; float ox, oy, s, dx, dy; } gfxTr, miniTrAnt;
+void gfx_transformar(float ox, float oy, float s, float dx, float dy) {
+  gfxTr.on = !(s == 1.0f && dx == 0.0f && dy == 0.0f);
+  gfxTr.ox = ox; gfxTr.oy = oy; gfxTr.s = s; gfxTr.dx = dx; gfxTr.dy = dy;
+}
+void gfx_sem_transformar(void) { gfxTr.on = 0; }
+#define GFX_TR_RECT(x, y, w, h) do { if (gfxTr.on) { \
+    x = gfxTr.ox + ((x) - gfxTr.ox) * gfxTr.s + gfxTr.dx; \
+    y = gfxTr.oy + ((y) - gfxTr.oy) * gfxTr.s + gfxTr.dy; \
+    w *= gfxTr.s; h *= gfxTr.s; } } while (0)
+#define ESC_REAL_INI() float escGuard_ = escAtiva; int trGuard_ = gfxTr.on; escAtiva = 1.0f; gfxTr.on = 0
+#define ESC_REAL_FIM() escAtiva = escGuard_; gfxTr.on = trGuard_
 
 static GLuint snapFbo = 0, snapTex = 0;
 static int snapW = 0, snapH = 0;
@@ -1471,6 +1484,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
               float cr, float cg, float cb, float ca) {
   int comAmb = 0, opaco = 0, cheia, clearCor, duplo = 0;
   if ((int)modo < 0 || (int)modo >= GFX_NMODOS) return;
+  GFX_TR_RECT(r.x, r.y, r.w, r.h);
   if (escAtiva != 1.0f) { r.x *= escAtiva; r.y *= escAtiva; r.w *= escAtiva; r.h *= escAtiva; }
   // A COR DO DESTAQUE E A ASSINATURA. Com o degrade ligado, todo retangulo ou
   // anel pintado EXATAMENTE com o destaque vivo (os tres floats que
@@ -2043,6 +2057,7 @@ static GLint recorteBox[4];
 void gfx_furo(GfxRect r) {
   float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
   int x0, x1, y0, y1, cheia;
+  GFX_TR_RECT(r.x, r.y, r.w, r.h);
   if (escAtiva != 1.0f) { r.x *= escAtiva; r.y *= escAtiva; r.w *= escAtiva; r.h *= escAtiva; }
   if (r.w <= 0.0f || r.h <= 0.0f) return;
   if (gfx_modos_desligados && ((gfx_modos_desligados >> (unsigned)GFX_COR) & 1ull)) return;
@@ -2260,6 +2275,7 @@ void gfx_recorte(float x, float y, float w, float h) {
   //    cobria um quarto da area pedida — o menu lateral perdia os dois
   //    primeiros itens e os rotulos saiam cortados no meio da palavra.
   float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
+  GFX_TR_RECT(x, y, w, h);
   if (escAtiva != 1.0f) { x *= escAtiva; y *= escAtiva; w *= escAtiva; h *= escAtiva; }
   int yy = (int)((NV_TELA_H - (y + h)) * ey);
   if (miniAtiva) {   // layout -> pixel do alvo da miniatura
@@ -2562,6 +2578,7 @@ void gfx_mini_comecar(GfxMini *m, float x0, float y0, float esc) {
   // A miniatura e uma tela REAL de 1920x1080 reduzida: dentro dela nao ha
   // camada ampliada (escala.h), venha de onde vier quem a desenha.
   miniEscAnt = escAtiva; escAtiva = 1.0f;
+  miniTrAnt = gfxTr; gfxTr.on = 0;
   miniAtiva = 1; miniPxW = m->w; miniPxH = m->h;
   miniX0 = x0; miniY0 = y0; miniEsc = esc;
   uTelaW = x0 + (float)m->w / esc;
@@ -2574,6 +2591,7 @@ void gfx_mini_terminar(void) {
   GFX_OUTRO_INI();
   miniAtiva = 0;
   escAtiva = miniEscAnt;
+  gfxTr = miniTrAnt;
   uTelaW = NV_TELA_W; uTelaH = NV_TELA_H;
   glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)miniFboAnt);
   glViewport(miniVpAnt[0], miniVpAnt[1], miniVpAnt[2], miniVpAnt[3]);
