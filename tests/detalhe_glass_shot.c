@@ -304,6 +304,10 @@ static void abrir(int i, int nv, int sec, int col) {
   if (nv == 0) botao = col;
   else { foco.fileira = sec; foco.coluna = col; }
   quadros(160);
+  // Os quadros daqui sao muito mais rapidos que os da TV: o esvanecer do logo
+  // (260 ms, SDL_GetTicks) ainda nao terminou. Espera e assenta.
+  SDL_Delay(400);
+  quadros(4);
 }
 
 static int quer(int argc, char **argv, const char *id) {
@@ -351,6 +355,8 @@ int main(int argc, char **argv) {
     else fputs("vidroLocal 1\n", f);
     fclose(f);
     ajustes_dir(dd); }
+  // As marcas das notas (IMDb, Rotten Tomatoes, Trakt) vem da pasta de arte.
+  { char ar[1024]; if (realpath("deploy/app/art", ar)) extras_carregar(ar); }
   montarCatalogo();
 
   if (quer(argc, argv, "filme-topo")) { abrir(1, 0, 0, 0); gravar("filme-topo"); }
