@@ -490,6 +490,22 @@ int fil_estado(int i) {
   return r;
 }
 
+// Estado de uma fileira pela CHAVE: FIL_NA_HOME, FIL_NA_FILA ou FIL_FORA; -1 se
+// a tabela nao a conhece (ainda nao foi registrada). E a mesma regra do editor
+// (fil_estado), para a home nao desenhar o que o editor diz que esta na fila.
+static int achar(const char *chave);
+int fil_estado_chave(const char *chave) {
+  int i, r = -1;
+  if (!chave || !chave[0]) return -1;
+  pthread_mutex_lock(&trava);
+  garantir();
+  i = achar(chave);
+  if (i >= 0) r = linhas[i].oculta ? FIL_FORA
+                : (posicaoLigada(i) < limite ? FIL_NA_HOME : FIL_NA_FILA);
+  pthread_mutex_unlock(&trava);
+  return r;
+}
+
 int fil_n_na_home(void) {
   int i, p = 0;
   pthread_mutex_lock(&trava);

@@ -3605,6 +3605,22 @@ static void *montar(void *u) {
       if (cortados)
         printf("[desc] %d catalogo(s) so respondem com busca e nao viram fileira\n", cortados);
       nDecl = w2; }
+    // CANAL E DO GUIA, NAO DA HOME. Ligar um addon de TV ao vivo no guia fazia
+    // o catalogo "channel" virar candidato (e, por ser addon novo, ganhar a
+    // vaga garantida) e aparecer na home sem a pessoa pedir. So fica quem ela
+    // ja escolheu na TV (fil_escolhida); o guia nao depende disto, ele le o
+    // manifesto do addon.
+    { int r2, w2 = 0, canais = 0;
+      for (r2 = 0; r2 < nDecl; r2++) {
+        if (ehCanal(decls[r2].tipo) && fil_escolhida(decls[r2].chave) < 0) {
+          canais++;
+          continue;
+        }
+        if (w2 != r2) decls[w2] = decls[r2];
+        w2++;
+      }
+      if (canais) printf("[desc] %d catalogo(s) de canal ficam no guia, nao na home\n", canais);
+      nDecl = w2; }
     printf("[desc] %d catalogos declarados pelos addons\n", nDecl);
     // FANTASMAS. Addon removido da conta deixava os catalogos dele na lista de
     // fileiras — e na home — ate o proximo login (@rawldon). Aqui TODOS os

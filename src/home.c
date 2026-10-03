@@ -2401,6 +2401,16 @@ static void sincronizarFileiras(void) {
     { int q2, rede = 0, mantidas = 0;
       for (q2 = 0; q2 < w; q2++) {
         int pedeRede = arranjo[q2].base[0] && arranjo[q2].catId[0];
+        // FILA NAO DESENHA. O editor numera TODAS as linhas ligadas (colecoes e
+        // fixas incluidas) e diz "Na fila" a partir da posicao `limite`; este
+        // corte so conta catalogo e deixava passar um catalogo que o editor
+        // mostrava na fila (FrostView #8, "7 de 7", e estava na home). Catalogo
+        // que o editor conhece como fila ou fora nao entra; entra sozinho
+        // quando abrir vaga, porque o estado e recalculado a cada remontagem.
+        if (pedeRede) {
+          int est = fil_estado_chave(arranjo[q2].chave);
+          if (est == FIL_NA_FILA || est == FIL_FORA) continue;
+        }
         if (pedeRede && ++rede > lim) continue;
         if (mantidas != q2) arranjo[mantidas] = arranjo[q2];
         mantidas++;
