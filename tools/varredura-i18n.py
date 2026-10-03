@@ -330,6 +330,7 @@ IGNORAR = {
     "servidor da conta fora do ar (HTTP %d) · usando a cópia de %s",
     "servidor da conta fora do ar (HTTP %d) · sem cópia salva",
     "conta-%s-p%d.json", "conta-fora",
+    "conta-addons-pend-",  # prefixo de arquivo da fila offline, nunca texto de tela
     "hdr do pipeline: %s (fonte DV=%d)",
     # Tres marcos de video.c/video_tizen.c. O buffer e montado numa instrucao
     # e entregue a marco() na SEGUINTE, entao marco — que ja esta em
