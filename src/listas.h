@@ -130,6 +130,8 @@ void lst_abrir(const LstLista *l, const char *midia);
 int  lst_itens_n(void);
 int  lst_item(int i, CatItem *dst);
 int  lst_itens_carregando(void);
+// So para testes e capturas: itens de mentira na lista aberta; ver listas.c.
+void lst_teste_itens(const CatItem *v, int n);
 // Pede a proxima pagina, quando a fonte pagina. Sem efeito no Simkl (uma volta
 // so) e quando a anterior veio curta.
 void lst_itens_mais(void);

@@ -13,6 +13,8 @@
 // fixar uma lista GRAVA, e um teste deste repositorio ja sobrescreveu os dados
 // reais do dono.
 #include "biblioteca.h"
+#include "ctxmenu.h"
+#include "colecoes.h"
 #include "listas.h"
 #include "ajustes.h"
 #include "rail_shot.h"
@@ -35,7 +37,15 @@ static void tecla(SDL_Keycode k) {
   SDL_Event e = { 0 };
   e.type = SDL_KEYDOWN;
   e.key.keysym.sym = k;
-  biblioteca_evento(&e);
+  if (ctx_aberto()) ctx_evento(&e); else biblioteca_evento(&e);
+}
+
+// SOLTA a tecla (o KEYUP que fecha o toque ou o gesto de segurar).
+static void solta(SDL_Keycode k) {
+  SDL_Event e = { 0 };
+  e.type = SDL_KEYUP;
+  e.key.keysym.sym = k;
+  if (ctx_aberto()) ctx_evento(&e); else biblioteca_evento(&e);
 }
 
 static void quadros(int n) {
@@ -46,10 +56,12 @@ static void quadros(int n) {
     tex_novo_quadro();
     tex_bombear(6);
     biblioteca_atualizar(1.0f / 60.0f, SDL_GetTicks());
+    ctx_atualizar(1.0f / 60.0f, SDL_GetTicks());
     glClearColor(0.025f, 0.025f, 0.03f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     biblioteca_desenhar(SDL_GetTicks());
     rail_shot_desenhar(MENU_BIBLIOTECA);
+    ctx_desenhar(SDL_GetTicks());
     SDL_GL_SwapWindow(win);
   }
 }
@@ -87,10 +99,12 @@ static void captura(const char *nome) {
   tex_novo_quadro();
   tex_bombear(6);
   biblioteca_atualizar(1.0f / 60.0f, SDL_GetTicks());
+  ctx_atualizar(1.0f / 60.0f, SDL_GetTicks());
   glClearColor(0.025f, 0.025f, 0.03f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
   biblioteca_desenhar(SDL_GetTicks());
   rail_shot_desenhar(MENU_BIBLIOTECA);
+  ctx_desenhar(SDL_GetTicks());
   pix = malloc(1920 * 1080 * 4);
   assert(pix);
   glReadPixels(0, 0, 1920, 1080, GL_RGBA, GL_UNSIGNED_BYTE, pix);
@@ -308,9 +322,8 @@ int main(int argc, char **argv) {
   biblioteca_iniciar();
   if (comecaLista) {
     int k;
-    tecla(SDLK_DOWN);
-    for (k = 0; k < 3; k++) tecla(SDLK_LEFT);
-    for (k = 0; k < 2; k++) tecla(SDLK_RIGHT);
+    for (k = 0; k < 8; k++) tecla(SDLK_LEFT);
+    for (k = 0; k < 5; k++) tecla(SDLK_RIGHT);   // 3 abas + 2 seletores
     tecla(SDLK_RETURN);
   }
 
@@ -319,13 +332,67 @@ int main(int argc, char **argv) {
   // fileiras visiveis, e subir alem do topo nao faz nada.
   #define AO_TOPO() do { int _k; for (_k = 0; _k < 8; _k++) tecla(SDLK_UP); } while (0)
   // Anda ate o seletor `n` da faixa, vindo da barra de modos.
-  #define SELETOR(n) do { int _k; tecla(SDLK_DOWN); \
-    for (_k = 0; _k < 3; _k++) tecla(SDLK_LEFT); \
-    for (_k = 0; _k < (n); _k++) tecla(SDLK_RIGHT); } while (0)
-  // Escolhe o modo `n` da barra (0 = Salvos, 1 = Coleção, 2 = Listas).
+  // Anda ate o seletor `n` da faixa: a faixa e UMA linha (abas, depois os tres
+  // seletores), entao e so ir para a esquerda ate a primeira aba e para a
+  // direita ate la — sem escolher aba nenhuma pelo caminho.
+  #define SELETOR(n) do { int _k; \
+    for (_k = 0; _k < 8; _k++) tecla(SDLK_LEFT); \
+    for (_k = 0; _k < 3 + (n); _k++) tecla(SDLK_RIGHT); } while (0)
+  // Escolhe a aba `n` da barra (0 = Salvos, 1 = Coleção, 2 = Listas): a seta so
+  // move o foco, o OK escolhe.
   #define MODO(n) do { int _k; AO_TOPO(); \
     for (_k = 0; _k < 3; _k++) tecla(SDLK_LEFT); \
-    for (_k = 0; _k < (n); _k++) tecla(SDLK_RIGHT); } while (0)
+    for (_k = 0; _k < (n); _k++) tecla(SDLK_RIGHT); \
+    tecla(SDLK_RETURN); solta(SDLK_RETURN); } while (0)
+
+  // MODO "ctx": a navegacao da faixa e os menus de contexto (segurar OK).
+  if (argc > 2 && !strcmp(argv[2], "ctx")) {
+    CatItem it[10];
+    int k, n = cat_n() < 10 ? cat_n() : 10;
+    for (k = 0; k < n; k++) { const CatItem *c = cat_item(k); if (c) it[k] = *c; }
+    col_definir_json("[{\"id\":\"c1\",\"title\":\"Casa\",\"backdropImageUrl\":\"deploy/app/art/21.jpg\","
+      "\"folders\":[{\"id\":\"f1\",\"title\":\"Cl\xc3\xa1ssicos da casa\",\"coverImageUrl\":\"deploy/app/art/22.jpg\","
+      "\"sources\":[{\"provider\":\"addon\",\"addonBaseUrl\":\"https://x.test\",\"type\":\"movie\",\"catalogId\":\"top\"}]}]}]");
+    // A faixa de cima: foco nas abas, depois nos seletores, sem trocar de aba.
+    snprintf(nome, sizeof nome, "%s-nav-1-abas.bmp", saida); captura(nome);
+    for (k = 0; k < 3; k++) tecla(SDLK_RIGHT);
+    snprintf(nome, sizeof nome, "%s-nav-2-seletor-ao-lado.bmp", saida); captura(nome);
+    tecla(SDLK_RIGHT);
+    snprintf(nome, sizeof nome, "%s-nav-3-segundo-seletor.bmp", saida); captura(nome);
+    tecla(SDLK_DOWN);
+    snprintf(nome, sizeof nome, "%s-nav-4-desceu-na-coluna.bmp", saida); captura(nome);
+    // Segurar OK num cartaz de titulo: o menu do cartaz.
+    tecla(SDLK_UP); tecla(SDLK_LEFT); tecla(SDLK_LEFT); tecla(SDLK_LEFT); tecla(SDLK_LEFT);
+    tecla(SDLK_DOWN); tecla(SDLK_RIGHT);
+    tecla(SDLK_RETURN);
+    { Uint32 t0 = SDL_GetTicks(); while (!ctx_aberto() && SDL_GetTicks() - t0 < 2000u) quadros(1); }
+    snprintf(nome, sizeof nome, "%s-ctx-cartaz.bmp", saida); captura(nome);
+    tecla(SDLK_ESCAPE); solta(SDLK_RETURN); quadros(30);
+    // Lista do Trakt, com itens.
+    MODO(2);
+    injetarListas();
+    lst_teste_itens(it, n);
+    quadros(10);
+    tecla(SDLK_DOWN);
+    tecla(SDLK_RETURN);
+    { Uint32 t0 = SDL_GetTicks(); while (!ctx_aberto() && SDL_GetTicks() - t0 < 2000u) quadros(1); }
+    snprintf(nome, sizeof nome, "%s-ctx-lista-trakt.bmp", saida); captura(nome);
+    tecla(SDLK_DOWN);
+    snprintf(nome, sizeof nome, "%s-ctx-lista-trakt-foco2.bmp", saida); captura(nome);
+    tecla(SDLK_ESCAPE); solta(SDLK_RETURN); quadros(30);
+    // Lista da conta Nuvio, com a arte da pasta.
+    tecla(SDLK_UP);
+    SELETOR(0);
+    tecla(SDLK_RETURN); tecla(SDLK_RETURN);   // Trakt -> Simkl -> Nuvio
+    quadros(20);
+    tecla(SDLK_DOWN);
+    tecla(SDLK_RETURN);
+    { Uint32 t0 = SDL_GetTicks(); while (!ctx_aberto() && SDL_GetTicks() - t0 < 2000u) quadros(1); }
+    snprintf(nome, sizeof nome, "%s-ctx-lista-nuvio.bmp", saida); captura(nome);
+    tecla(SDLK_ESCAPE); solta(SDLK_RETURN);
+    printf("pronto\n");
+    return 0;
+  }
 
   // 1. Salvos em cartazes, com o foco NA GRADE: e onde se ve a pilula escolhida
   // continuando marcada com o foco longe dela, e o contorno do cartaz.
@@ -375,7 +442,7 @@ int main(int argc, char **argv) {
 
   // 6, 7 e 8. Uma lista ABERTA: breadcrumb e barra de acoes. Sem rede nao ha
   // itens, e o estado vazio e o certo. Depois, fixada e na Home.
-  tecla(SDLK_RETURN);
+  tecla(SDLK_RETURN); solta(SDLK_RETURN);
   snprintf(nome, sizeof nome, "%s-lista-aberta.bmp", saida);
   captura(nome);
   tecla(SDLK_RETURN);      // acao 0: fixar
