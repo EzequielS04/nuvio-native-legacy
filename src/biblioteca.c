@@ -82,6 +82,7 @@
 #include "revela.h"
 #include "layout.h"
 #include "ajustes.h"
+#include "ctxmenu.h"
 
 // Tinta do texto sobre o foco: em vidro o foco e so contorno sobre superficie
 // escura, entao o texto fica CLARO mesmo com realce branco (que pede escuro).
@@ -799,6 +800,116 @@ static void executarAcao(int a) {
 
 // ---------------------------------------------------------------- eventos
 
+// Geometria da faixa de cima, desenhada mais abaixo no arquivo.
+static float larguraModo(int a);
+static float pickerX(int p);
+static float pickerLargura(int p);
+
+// QUAL DOS DOIS GRUPOS DA FAIXA TINHA O FOCO por ultimo: e para ele que o Cima
+// volta, em vez de sempre cair no mesmo lugar.
+static int faixaNoPicker;
+static int ctxListaIdx;   // a lista de onde o menu saiu; "Abrir" volta para ela
+
+// A coluna da grade que fica embaixo do centro do item da faixa que tem o foco.
+// Descer pela coluna 0 sempre fazia "Ordenar" ou "Exibicao" aterrissarem no
+// primeiro cartaz, o outro lado da tela.
+static int colunaSobFaixa(void) {
+  float cx, passo = passoColuna();
+  if (foco.fileira == BIB_FIL_MODO) {
+    float x = bibX() + BIB_SEG_PAD;
+    for (int a = 0; a < foco.coluna && a < BIB_N_MODOS; a++) x += larguraModo(a) + BIB_SEG_ITEM_GAP;
+    cx = x + larguraModo(foco.coluna < BIB_N_MODOS ? foco.coluna : 0) * 0.5f;
+  } else {
+    cx = pickerX(foco.coluna) + pickerLargura(foco.coluna) * 0.5f;
+  }
+  if (passo < 1.0f) return 0;
+  return (int)((cx - bibX()) / passo);
+}
+
+static void descerDaFaixa(void) {
+  int c;
+  if (!nCelulas) return;
+  faixaNoPicker = foco.fileira == BIB_FIL_PICK;
+  c = colunaSobFaixa();
+  foco.fileira = BIB_FIL_GRADE;
+  if (c >= foco.nColunas[BIB_FIL_GRADE]) c = foco.nColunas[BIB_FIL_GRADE] - 1;
+  foco.coluna = c < 0 ? 0 : c;
+}
+
+static void subirParaFaixa(void) {
+  if (faixaNoPicker) { foco.fileira = BIB_FIL_PICK; foco.coluna = pickSel; }
+  else               { foco.fileira = BIB_FIL_MODO; foco.coluna = modo; }
+}
+
+// O indice no CATALOGO do titulo da celula `i` (grade de titulos ou itens de
+// uma lista aberta), acrescentando-o ao fim quando ele nao esta la — o detalhe
+// e o menu do cartaz trabalham por indice. -1 quando nao ha titulo.
+static int indiceDaCelula(int i) {
+  CatItem it;
+  const CatItem *ci;
+  int idx;
+  if (estado() == EST_LISTAS || i < 0 || i >= nCelulas) return -1;
+  if (estado() == EST_ITENS) {
+    if (!lst_item(i, &it) || !it.imdb[0]) return -1;
+    ci = &it;
+  } else {
+    if (filtro[i] >= 0) return filtro[i];
+    ci = itemFiltro(filtro[i], &it);
+    if (!ci || !ci->imdb[0]) return -1;
+  }
+  idx = cat_indice_por_imdb(ci->imdb);
+  if (idx < 0) idx = cat_acrescentar(ci);
+  return idx;
+}
+
+static int celulaEmFoco(void) {
+  int i = (foco.fileira - gradeIni()) * colunas() + foco.coluna;
+  return (foco.fileira >= gradeIni() && i >= 0 && i < nCelulas) ? i : -1;
+}
+
+// O OK CURTO NUMA CELULA: abre. Roda no KEYUP (ver okDesde): so ali se sabe se
+// foi toque ou pressao longa.
+static void okNaCelula(int i) {
+  if (i < 0 || i >= nCelulas) return;
+  if (estado() == EST_ITENS) { abrirItemDaLista(i); return; }
+  if (estado() == EST_LISTAS) { abrirLista(i); return; }
+  { int idx = indiceDaCelula(i);
+    if (idx >= 0) pedido = idx; }
+}
+
+// SEGURAR OK NUMA CELULA: o menu de contexto. Cartaz de titulo/item = o MESMO
+// menu do cartaz da home (ctxmenu.c); cartao de lista = o menu da lista, com o
+// resumo do que tem nela.
+static void menuNaCelula(int i) {
+  if (i < 0 || i >= nCelulas) return;
+  if (estado() == EST_LISTAS) {
+    const LstLista *l = lst_lista(i);
+    if (l) { ctxListaIdx = i; ctx_abrir_lista(l); }
+    return;
+  }
+  { int idx = indiceDaCelula(i);
+    CatItem tmp;
+    const CatItem *ci;
+    if (idx < 0) return;
+    ctx_fileira(NULL, NULL);
+    ci = estado() == EST_ITENS ? (lst_item(i, &tmp) ? &tmp : NULL) : itemFiltro(filtro[i], &tmp);
+    if (exibicao == VIS_CARTAZ && ci) {
+      // O poster volta por cima do veu, onde esta na tela agora.
+      float esc = 1.0f + BIB_FOCO_ESCALA, w = BIB_CARD_W * esc, h = BIB_POSTER_H * esc;
+      int nc = colunas(), r = i / nc, c = i % nc;
+      float x = bibX() + c * passoColuna() + (BIB_CARD_W - w) * 0.5f;
+      float y = gradeY() + r * passoLinha() - scrollY + (BIB_POSTER_H - h) * 0.5f;
+      const char *arte = posterprov_card_addon(ci->origem, ci->imdb, ci->tmdb, ci->tipo, ci->poster);
+      ctx_abrir_cartaz(idx, (GfxRect){ x, y, w, h }, arte);
+    } else ctx_abrir(idx);
+  }
+}
+
+// O OK da grade e medido: KEYDOWN arma, KEYUP decide (toque x pressao longa), e
+// biblioteca_atualizar dispara o menu no limiar com o dedo ainda no botao — a
+// mesma mecanica da home (home.c), com o mesmo NV_HOLD_MS. Setas cancelam.
+static Uint32 okDesde;
+
 static void eventoAberta(SDL_Keycode k) {
   if (foco.fileira == 0) {
     if (k == SDLK_RIGHT && acaoSel < 2) { acaoSel++; foco.coluna = acaoSel; return; }
@@ -807,11 +918,7 @@ static void eventoAberta(SDL_Keycode k) {
     if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) executarAcao(acaoSel);
     return;
   }
-  if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
-    int i = (foco.fileira - 1) * colunas() + foco.coluna;
-    if (i >= 0 && i < nCelulas) abrirItemDaLista(i);
-    return;
-  }
+  if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) return;  // KEYUP
   if (k == SDLK_RIGHT)     focus_mover_grade(&foco, 1, 0);
   else if (k == SDLK_LEFT) { if (!focus_mover_grade(&foco, -1, 0)) sair = 1; }
   else if (k == SDLK_DOWN) {
@@ -830,6 +937,22 @@ void biblioteca_evento(const SDL_Event *e) {
   // as teclas. Deixar a grade responder por baixo foi o defeito que a busca de
   // codigo de amigo ja teve.
   if (teclado_aberto()) { teclado_evento(e); return; }
+  { SDL_Keycode kk = e->key.keysym.sym;
+    int ehOk = kk == SDLK_RETURN || kk == SDLK_KP_ENTER || kk == SDLK_SPACE;
+    // SOLTAR O OK: se ele foi armado numa celula e o menu nao abriu, foi toque.
+    // Sem armar (o KEYDOWN foi na faixa, ou antes de entrar nesta tela) nao ha
+    // clique nenhum — a mesma guarda da home.
+    if (e->type == SDL_KEYUP && ehOk) {
+      Uint32 desde = okDesde;
+      okDesde = 0;
+      if (desde) okNaCelula(celulaEmFoco());
+      return;
+    }
+    if (e->type == SDL_KEYDOWN && ehOk && !e->key.repeat) {
+      int dentro = estado() == EST_ITENS ? foco.fileira >= 1 : foco.fileira >= BIB_FIL_GRADE;
+      okDesde = dentro && celulaEmFoco() >= 0 ? (SDL_GetTicks() | 1u) : 0;
+    } else if (e->type == SDL_KEYDOWN && !ehOk) okDesde = 0;
+  }
   if (e->type != SDL_KEYDOWN) return;
   SDL_Keycode k = e->key.keysym.sym;
   if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE ||
@@ -842,32 +965,44 @@ void biblioteca_evento(const SDL_Event *e) {
 
   if (estado() == EST_ITENS) { eventoAberta(k); return; }
 
-  // Barra de modos: esquerda/direita TROCA o modo, e trocar refaz o mapa de
-  // foco. Por isso o modo muda AQUI e nao por focus_mover — chamar os dois na
-  // ordem errada devolvia o foco para a coluna 0 a cada movimento.
+  // A FAIXA DE CIMA E UMA LINHA SO (modos + seletores, lado a lado desde a
+  // Glass UI), entao esquerda/direita ANDA por ela de ponta a ponta: do ultimo
+  // modo para o primeiro seletor e de volta. Cima/baixo e que mudam de linha:
+  // baixo desce para a grade, na coluna que fica embaixo do que estava em foco.
+  // Internamente continuam duas "fileiras" de foco (MODO e PICK) porque cada
+  // uma tem o proprio vetor de animacao; o D-pad que as trata como uma so.
+  //
+  // Barra de modos: esquerda/direita MOVE O FOCO entre as abas e, na ultima,
+  // segue para o primeiro seletor; OK escolhe a aba em foco. Antes a seta
+  // TROCAVA o modo, e isso era o que impedia o lado: para chegar nos seletores
+  // a partir de "Salvos" era preciso atravessar "Coleção" e "Listas", trocando
+  // de aba (e pedindo a rede, nas listas) a cada passo.
   if (foco.fileira == BIB_FIL_MODO) {
-    if ((k == SDLK_RIGHT && modo < BIB_N_MODOS - 1) ||
-        (k == SDLK_LEFT  && modo > 0)) {
-      modo += (k == SDLK_RIGHT) ? 1 : -1;
-      recado[0] = 0;
-      if (modo == MODO_LISTAS) pedirFonte(); else reconstruir();
-      foco.fileira = BIB_FIL_MODO; foco.coluna = modo;
-      return;
-    }
-    if (k == SDLK_DOWN || k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
-      foco.fileira = BIB_FIL_PICK; foco.coluna = pickSel;
+    if (k == SDLK_LEFT  && foco.coluna > 0) { foco.coluna--; return; }
+    if (k == SDLK_RIGHT && foco.coluna < BIB_N_MODOS - 1) { foco.coluna++; return; }
+    if (k == SDLK_RIGHT) { pickSel = 0; foco.fileira = BIB_FIL_PICK; foco.coluna = 0; return; }
+    if (k == SDLK_DOWN) { descerDaFaixa(); return; }
+    if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
+      int novo = foco.coluna;
+      if (novo != modo) {
+        modo = novo;
+        recado[0] = 0;
+        if (modo == MODO_LISTAS) pedirFonte(); else reconstruir();
+        foco.fileira = BIB_FIL_MODO; foco.coluna = modo;
+      }
     }
     return;
   }
 
-  // Linha de seletores: esquerda/direita anda ENTRE os tres; OK cicla o valor do
-  // que esta em foco. O web abre um menu suspenso; num D-pad, ciclar no proprio
-  // seletor poupa a viagem de ida e volta ate a lista.
+  // Seletores: esquerda/direita anda ENTRE os tres e, na ponta esquerda, volta
+  // para a barra de modos; OK cicla o valor do que esta em foco. O web abre um
+  // menu suspenso; num D-pad, ciclar no proprio seletor poupa a viagem de ida
+  // e volta ate a lista.
   if (foco.fileira == BIB_FIL_PICK) {
     if (k == SDLK_RIGHT && pickSel < 2) { pickSel++; foco.coluna = pickSel; return; }
     if (k == SDLK_LEFT  && pickSel > 0) { pickSel--; foco.coluna = pickSel; return; }
-    if (k == SDLK_UP)   { foco.fileira = BIB_FIL_MODO; foco.coluna = modo; return; }
-    if (k == SDLK_DOWN) { if (nCelulas) focus_mover_grade(&foco, 0, 1); return; }
+    if (k == SDLK_LEFT)  { foco.fileira = BIB_FIL_MODO; foco.coluna = BIB_N_MODOS - 1; return; }
+    if (k == SDLK_DOWN) { descerDaFaixa(); return; }
     if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
       if (modo == MODO_LISTAS) {
         if (pickSel == 0) {
@@ -893,29 +1028,14 @@ void biblioteca_evento(const SDL_Event *e) {
     return;
   }
 
-  if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
-    int i = (foco.fileira - BIB_FIL_GRADE) * colunas() + foco.coluna;
-    if (i < 0 || i >= nCelulas) return;
-    if (estado() == EST_LISTAS) abrirLista(i);
-    else if (filtro[i] >= 0)    pedido = filtro[i];
-    else {
-      // Salvo local fora do catalogo: entra no fim dele para o detalhe ter um
-      // indice, o mesmo caminho de abrirItemDaLista.
-      CatItem it;
-      const CatItem *ci = itemFiltro(filtro[i], &it);
-      int idx = ci ? cat_indice_por_imdb(ci->imdb) : -1;
-      if (ci && idx < 0) idx = cat_acrescentar(ci);
-      if (idx >= 0) pedido = idx;
-    }
-    return;
-  }
+  if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) return;  // KEYUP
   // A grade da biblioteca e uma GRADE: manter a coluna ao subir e descer, e
   // nao voltar para a coluna onde o cursor esteve por ultimo naquela linha.
   if (k == SDLK_RIGHT)     focus_mover_grade(&foco, 1, 0);
   else if (k == SDLK_LEFT) { if (!focus_mover_grade(&foco, -1, 0)) sair = 1; }
   else if (k == SDLK_DOWN) focus_mover_grade(&foco, 0, 1);
   else if (k == SDLK_UP) {
-    if (foco.fileira == BIB_FIL_GRADE) { foco.fileira = BIB_FIL_PICK; foco.coluna = pickSel; }
+    if (foco.fileira == BIB_FIL_GRADE) subirParaFaixa();
     else focus_mover_grade(&foco, 0, -1);
   }
 }
@@ -935,6 +1055,18 @@ void biblioteca_atualizar(float dt, Uint32 agora) {
     if (r2 == TECLADO_PRONTO) { lst_buscar(teclado_texto()); remapear(0); }
   }
   if (recadoAte > 0.0f) recadoAte -= dt;
+  // SEGUROU O OK NA CELULA ATE O LIMIAR: abre o menu agora, com o dedo ainda no
+  // botao, e desarma — o KEYUP seguinte nao e toque. O modal ignora o OK que
+  // ainda esta afundado (ctxmenu.c, esperandoSoltura).
+  if (okDesde && !ctx_aberto() && SDL_GetTicks() - okDesde >= NV_HOLD_MS) {
+    int i = celulaEmFoco();
+    okDesde = 0;
+    menuNaCelula(i);
+  }
+  // A lista foi fixada/desfixada pelo menu: a grade de Fixadas se refaz.
+  if (ctx_lista_alterou() && modo == MODO_LISTAS && !temAberta && fonte == FONTE_FIXADAS)
+    pedirFonte();
+  if (ctx_pediu_lista()) abrirLista(ctxListaIdx);
 
   // A GRADE CRESCE SOZINHA quando a rede entrega mais. Sem remapear, as linhas
   // novas existem no modulo e o foco nao alcanca nenhuma delas.
@@ -1202,13 +1334,15 @@ static void desenhaModos(void) {
     if (sel) {
       if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .14f * (1.0f - v));
       else gfx_cor(r, 0.5f, .204f, .212f, .243f, 1.0f - v);  // #34363e
-      if (v > 0.01f) {
-        if (ajustes_vidro()) gfx_vidro_pilula_cheia(r, 0.5f, v, 1.0f);
-        else { brilhoFoco(r, 0.9f, v, 1.0f); gfx_cor(r, 0.5f, ar, ag, ab, v); }
-      }
     }
-    t  = sel ? (v > 0.5f ? ajustes_tinta_foco() : 255) : 140;
-    tn = sel && v > 0.5f ? ajustes_tinta_foco2() : sel ? 118 : 93;
+    // O FOCO E INDEPENDENTE DA ESCOLHA: a aba em foco acende mesmo sem ser a
+    // escolhida (a seta so move o foco; OK escolhe).
+    if (v > 0.01f) {
+      if (ajustes_vidro()) gfx_vidro_pilula_cheia(r, 0.5f, v, 1.0f);
+      else { brilhoFoco(r, 0.9f, v, 1.0f); gfx_cor(r, 0.5f, ar, ag, ab, v); }
+    }
+    t  = v > 0.5f ? ajustes_tinta_foco() : sel ? 255 : 140;
+    tn = v > 0.5f ? ajustes_tinta_foco2() : sel ? 118 : 93;
     l = txt_linha(TXT_ROW_TITULO, ROT_MODO[a], t, t, t, 255);
     txtEsc(l, r.x + BIB_SEG_ITEM_PADX, r.y + (r.h - (float)l.h * BIB_ESC_MODO) * 0.5f,
            BIB_ESC_MODO, 1.0f);
