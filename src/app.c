@@ -3623,6 +3623,16 @@ static int relogioCabe(void) {
 }
 
 void app_desenhar(Uint32 agora) {
+  // The highlights modal owns input and covers almost the whole screen.
+  // Do not rasterize Home text or punch trailer holes through its backdrop.
+  if (novidades174_aberto() && !registro_aberto() && !player_aberto()) {
+    gfx_sem_recorte();
+    gfx_cor((GfxRect){0, 0, NV_TELA_W, NV_TELA_H}, 0,
+            NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+    ponteiro_camada();
+    novidades174_desenhar(agora);
+    return;
+  }
   // COM O PAINEL DE LOG ABERTO A INTERFACE NAO E PINTADA.
   //
   // O painel e um cartao de tela quase cheia e opaco (alpha 0.94): pintar a
