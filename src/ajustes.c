@@ -49,6 +49,7 @@
 #include "rede.h"
 #include "debrid.h"
 #include "seekr.h"
+#include "selospacote.h"
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -294,9 +295,18 @@ typedef enum {
   // guia (ajustes_ux_guia.inc). Acao. No fim pelo mesmo motivo: valor[] e
   // CHAVE[] sao posicionais.
   AJ_GUIA,
+  // PACOTE DE SELOS (selospacote.h): qual pacote desenha os selos da folha de
+  // Fontes (0 = "Do Nuvio", o embutido; 1.. = os pacotes da conta e desta TV),
+  // adicionar um por URL e remover o escolhido. A escolha mora por perfil em
+  // selos-p<N>.txt (nao em ajustes.txt: o valor so espelha). No fim pelo mesmo
+  // motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_SELOS_PACOTE, AJ_SELOS_PACOTE_ADD, AJ_SELOS_PACOTE_REM,
   AJ_N
 } OpcaoId;
 
+// "Pacote de selos": so o TAMANHO importa aqui (3 pacotes + "Do Nuvio"); o texto
+// de cada valor vem de selospacote_nome (textoValor / uxValorTexto).
+static const char *V_SELOS_PACOTE[] = { "Do Nuvio", "Pacote 1", "Pacote 2", "Pacote 3" };
 static const char *V_QUALIDADE[] = { "Automática", "4K", "1080p", "720p" };
 static const char *V_LIGA[]      = { "Ligado", "Desligado" };
 static const char *V_LIVETV_RES[] = { "Automática", "4K", "1080p", "720p", "SD" };
@@ -894,6 +904,9 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Ver o registro na tela"),
   ESC("Medidor de desempenho",           V_LIGA, 2),          // local: medidorDesempenhoLocal
   ACAO("Guia de uso"),
+  ESC("Pacote de selos",                 V_SELOS_PACOTE, 4),   // por perfil: selospacote.c
+  ACAO("Adicionar pacote de selos"),
+  ACAO("Remover pacote"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1062,6 +1075,8 @@ static const char *CHAVE[] = {
   // "-": acao, nao grava. O medidor e LOCAL e SEM o "-": e desta TV.
   "-verRegistro", "medidorDesempenhoLocal",
   "-guiaUso",
+  // "-": a escolha mora em selos-p<N>.txt (por perfil), nao em ajustes.txt.
+  "-selosPacote", "-selosPacoteAdd", "-selosPacoteRem",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -2152,6 +2167,71 @@ static const char *skTesteTexto(void) {
   return i18n("sem resposta do servidor");
 }
 
+// "ADICIONAR PACOTE DE SELOS": baixa o JSON do pacote por URL (fio proprio, como
+// o teste do Seekr: rede_baixar bloqueia), e na thread principal valida e
+// guarda (selospacote_adicionar). 0 livre, 1 baixando, 3 fio terminou, 2 pronto.
+static pthread_t spFio;
+static int spFioVivo;
+static _Atomic int spEstado;
+static char spUrl[512];
+static char *spCorpo;
+static int spResultado = -1;      // -1 nada; SelosResultado; 100 sem resposta; 101 endereco invalido
+static void *spBaixarFio(void *u) {
+  (void)u;
+  spCorpo = rede_baixar(spUrl, 20);
+  atomic_store_explicit(&spEstado, 3, memory_order_release);
+  return NULL;
+}
+static void spAdicionar(const char *url) {
+  char t[512];
+  size_t n;
+  snprintf(t, sizeof t, "%s", url ? url : "");
+  n = strlen(t);
+  while (n && (t[n - 1] == ' ' || t[n - 1] == '\n')) t[--n] = 0;
+  if (!n || spFioVivo) return;
+  if (strncmp(t, "http://", 7) && strncmp(t, "https://", 8)) { spResultado = 101; return; }
+  snprintf(spUrl, sizeof spUrl, "%s", t);
+  spResultado = -1;
+  atomic_store_explicit(&spEstado, 1, memory_order_release);
+  if (pthread_create(&spFio, NULL, spBaixarFio, NULL) != 0) {
+    spResultado = 100;
+    atomic_store_explicit(&spEstado, 2, memory_order_release);
+    return;
+  }
+  spFioVivo = 1;
+}
+// Espelho da escolha: o valor da linha e selospacote_ativo() + 1.
+static void spEspelhar(void) { valor[AJ_SELOS_PACOTE] = selospacote_ativo() + 1; }
+static void spRecolher(void) {
+  if (spFioVivo && atomic_load_explicit(&spEstado, memory_order_acquire) == 3) {
+    pthread_join(spFio, NULL);
+    spFioVivo = 0;
+    if (!spCorpo || strlen(spCorpo) > 4u * 1024u * 1024u) spResultado = spCorpo ? SELOS_ERR_JSON : 100;
+    else spResultado = selospacote_adicionar(spCorpo, spUrl);
+    free(spCorpo); spCorpo = NULL;
+    atomic_store_explicit(&spEstado, 2, memory_order_release);
+    if (spResultado == SELOS_OK) printf("[selos] pacote adicionado: %s\n", rede_url_publica(spUrl, (char[160]){0}, 160));
+    fflush(stdout);
+  }
+  spEspelhar();
+}
+static const char *spAddTexto(void) {
+  if (atomic_load_explicit(&spEstado, memory_order_acquire) == 1 ||
+      atomic_load_explicit(&spEstado, memory_order_acquire) == 3) return i18n("baixando…");
+  switch (spResultado) {
+    case SELOS_OK:            return i18n("adicionado");
+    case SELOS_ERR_JSON:      return i18n("isso não é um JSON de selos");
+    case SELOS_ERR_VAZIO:     return i18n("nenhum selo válido nele");
+    case SELOS_ERR_LIMITE:    return i18n("limite de 3 pacotes");
+    case SELOS_ERR_DUPLICADO: return i18n("já está na conta");
+    case 100:                 return i18n("sem resposta do servidor");
+    case 101:                 return i18n("o endereço precisa começar com http");
+    default:                  return i18n("OK adiciona");
+  }
+}
+static const char *SP_ALFA_URL =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:/.-_?=&%#+~@!,;";
+
 void ajustes_dir(const char *dir) {
   FILE *f;
   char caminho[600], linha[96];
@@ -2797,6 +2877,9 @@ int ajustes_aplicar_blob(const char *json) {
   const char *fim;
   int i, mudou = 0, reconhecidas = 0;
   if (!json || !*json) return 0;
+  // Os pacotes de selos da conta (features.stream_badge_settings) vivem em
+  // selospacote.c, que guarda por perfil; nao sao uma opcao desta tabela.
+  selospacote_conta_do_blob(json);
   fim = json + strlen(json);
   idiomasDoBlob(json, fim);
   idiomaContaDoBlob(json, fim);
@@ -2967,6 +3050,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_DET_TRAILER_SOM: /* o web nao tem */
     case AJ_COL_ARTE_CONTA: /* arte do addon: o web nao tem estas escolhas */
     case AJ_SELOS_CORES:    /* no web a cor vem do pacote de selos importado */
+    case AJ_SELOS_PACOTE: case AJ_SELOS_PACOTE_ADD: case AJ_SELOS_PACOTE_REM: /* a escolha e por perfil, em selospacote.c */
     case AJ_LIVETV_RES: case AJ_LIVETV_FORMATO: case AJ_LIVETV_ESPERA:
     case AJ_LIVETV_DIAG: case AJ_LIVETV_MODO: case AJ_LIVETV_PROXY: /* rede e provedor desta casa: o web nao tem */
     case AJ_HOME_LAYOUT:    /* a Dinamica nao tem par na conta (selected_layout) */
@@ -3399,6 +3483,12 @@ static const char *textoLeitura(int op) {
   if (op == AJ_FANART_CHAVE) return fanartMascarada();
   if (op == AJ_SEEKR_CHAVE) return seekrMascarada();
   if (op == AJ_SEEKR_TESTAR) return skTesteTexto();
+  if (op == AJ_SELOS_PACOTE_ADD) return spAddTexto();
+  if (op == AJ_SELOS_PACOTE_REM) {
+    int a = selospacote_ativo();
+    if (a < 0) return i18n("nenhum pacote escolhido");
+    return selospacote_da_tv(a) ? i18n("OK remove") : i18n("só na conta, no Nuvio web");
+  }
   if (op == AJ_PERFIL_EDITAR) {
     // static: o texto devolvido e lido DEPOIS do return (era endereco de
     // variavel local, -Wreturn-stack-address).
@@ -3568,6 +3658,8 @@ static int inativa(int op) {
     case AJ_CW_BLUR_PROX: return !ajustes_cw_ligado() || !ajustes_cw_thumb_episodio();
     case AJ_EXPANDIR_ATRASO: return !ajustes_expandir_poster();
     case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: return !lig(AJ_SEEKR_LIGADO);
+    // Remover so vale para o pacote escolhido que foi posto nesta TV.
+    case AJ_SELOS_PACOTE_REM: return selospacote_ativo() < 0 || !selospacote_da_tv(selospacote_ativo());
     // Sem o relogio nao ha ilha para onde minimizar: sai para a pagina, como antes.
     case AJ_SAIDA_PLAYER: return !lig(AJ_RELOGIO);
     // Escolhendo a mao, a folha abre com o que chegou: nao ha escolha a apressar.
@@ -3787,6 +3879,9 @@ static const char *ajudaOpcao(int op) {
     case AJ_LIVETV_MODO: return "Teste para TVs em que o canal chega mas não aparece. A é o modo de sempre; B não escolhe a faixa de vídeo antes de o canal abrir; C também manda o pedido no formato de transmissão ao vivo. O diagnóstico da Live TV testa os três.";
     case AJ_LIVETV_DIAG: return "Mede a rede até o provedor, lê a conta Xtream e testa vários canais: se tocam, em que formato, com que resolução e em quanto tempo. No fim sugere ajustes da Live TV e pode aplicá-los.";
     case AJ_SELOS_CORES: return "Na lista de fontes, cada selo (4K, HDR, Dolby, codec, serviço) ganha a cor do seu tipo, como no pacote de selos do Nuvio. Desligado, os selos ficam brancos.";
+    case AJ_SELOS_PACOTE: return "Qual pacote de selos desenha a lista de fontes. Do Nuvio é o pacote que vem no app; os outros são os pacotes da sua conta (importados no Nuvio web) e os que você adiciona aqui. Vale para este perfil. Se nenhum selo do pacote combinar com a fonte, ela usa os selos do app.";
+    case AJ_SELOS_PACOTE_ADD: return "Adiciona um pacote de selos pelo link do JSON dele (no máximo 3 no total, contando os da conta). O pacote entra já escolhido.";
+    case AJ_SELOS_PACOTE_REM: return "Tira desta TV o pacote escolhido. Pacote que veio da conta só se remove na conta, no Nuvio web.";
     case AJ_COL_ARTE_CONTA: return "As pastas de coleção que o app já traz com arte própria passam a usar a capa, o fundo e o logo que estão na sua conta (editor de coleções do site). O que a conta não tiver continua com a arte do app.";
     case AJ_HERO_TRANSICAO: return "Deslizar: quando o destaque troca de título, a arte e o texto saem para o lado e o próximo entra colado, como num carrossel. Esmaecer: a arte apaga e a nova aparece no lugar. Com Animações reduzidas a troca é sempre sem movimento.";
     case AJ_FIL_LIMITE: return "Quantas fileiras a Home monta, de 3 a 40. Menos fileiras também significam menos catálogos pedidos pela rede, e não fileiras invisíveis. Mais fileiras usam mais memória e rede: em TV com 1 GB de memória a Home pode ficar lenta ou fechar. Se o app fechar depois de você aumentar, ele volta sozinho ao valor anterior.";
@@ -4613,6 +4708,7 @@ static int definirValorDireto(int op, int novo) {
     desc_refazer_continuar();
   if (op == AJ_TEX_MB) tex_definir_orcamento_mb(ajustes_tex_mb());
   if (op == AJ_ADDONS_PRINCIPAL) sync_iniciar();
+  if (op == AJ_SELOS_PACOTE) { selospacote_escolher(novo - 1); spEspelhar(); }
   sync_proteger_ajustes_locais();
   return 1;
 }
@@ -4764,6 +4860,18 @@ static void eventoTela(const SDL_Event *e) {
       return;
     }
     if (focoOp == AJ_SEEKR_TESTAR) { skTesteIniciar(); return; }
+    if (focoOp == AJ_SELOS_PACOTE_ADD) {
+      if (spFioVivo) return;
+      stCampo = focoOp;
+      teclado_abrir_com("Endereço do pacote de selos", "O link do JSON do pacote (https://…). Vazio cancela.",
+                        200, SP_ALFA_URL, NULL);
+      return;
+    }
+    if (focoOp == AJ_SELOS_PACOTE_REM) {
+      int a = selospacote_ativo();
+      if (a >= 0 && selospacote_da_tv(a)) { selospacote_remover(a); spResultado = -1; spEspelhar(); }
+      return;
+    }
     if (focoOp == AJ_FANART_CHAVE) {
       // A chave NUNCA volta para o campo (a modal fica na tela e a tela vira
       // foto); confirmar vazio esquece a que estava.
@@ -4834,6 +4942,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   pstTesteRecolher();
   adTesteRecolher();
   skTesteRecolher();
+  spRecolher();
   // "Procurar atualização" achou versao nova: abre o cartao por cima dos
   // Ajustes, como o OK em "Atualizar o aplicativo" ja fazia.
   if (atualizacao_busca_achou() && !atualizacao_aberta()) atualizacao_abrir();
@@ -4850,6 +4959,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       else if (stCampo == AJ_XTREAM_SENHA)    xtream_definir_senha(teclado_texto());
       else if (stCampo == AJ_FANART_CHAVE)    fanartDefinir(teclado_texto());
       else if (stCampo == AJ_SEEKR_CHAVE)     { seekrDefinir(teclado_texto()); atomic_store_explicit(&skTeste, 0, memory_order_release); }
+      else if (stCampo == AJ_SELOS_PACOTE_ADD) spAdicionar(teclado_texto());
       else if (stCampo == AJ_P2P_URL)         ajustes_definir_p2p_url(teclado_texto());
       else if (stCampo >= AJ_POSTER_INST && stCampo <= AJ_POSTER_MODELO) pstDefinir(stCampo, teclado_texto());
       else if (debIdx(stCampo) >= 0)          debDefinir(stCampo, teclado_texto());
@@ -4943,6 +5053,7 @@ static void aplicarIdioma(int op) {
 // const e foi escrita antes de linguas.c existir.
 static int nValores(int op) {
   if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) return nLingua > 0 ? nLingua : 1;
+  if (op == AJ_SELOS_PACOTE) return 1 + selospacote_n();
 #ifndef __EMSCRIPTEN__
   // "YouTube" (o 4o valor) so toca no .wgt da Samsung (trailerfonte.c, existe).
   // Aqui ele era escolhivel e deixava a TV sem trailer nenhum: sem trailer no
@@ -4973,6 +5084,10 @@ static const char *textoValor(int op) {
   if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) {
     int v = valor[op];
     return (v >= 0 && v < nLingua && V_LINGUA[v]) ? V_LINGUA[v] : "Da conta";
+  }
+  if (op == AJ_SELOS_PACOTE) {
+    int v = valor[op];
+    return v > 0 && v <= selospacote_n() ? selospacote_nome(v - 1) : "Do Nuvio";
   }
   // FORA DO INTERVALO NAO LE FORA DO VETOR.
   //
@@ -5374,6 +5489,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA:
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES:
+    case AJ_SELOS_PACOTE:
     case AJ_REACAO_CREDITOS:
     case AJ_FONTE_PRAZO:
       return AJPV_REPRO;
@@ -5440,6 +5556,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_STALKER_LIMPAR: case AJ_XTREAM_SERVIDOR: case AJ_XTREAM_USUARIO:
     case AJ_XTREAM_SENHA: case AJ_XTREAM_LIMPAR: case AJ_FANART_CHAVE:
     case AJ_SEEKR_CHAVE: case AJ_SEEKR_TESTAR:
+    case AJ_SELOS_PACOTE_ADD: case AJ_SELOS_PACOTE_REM:
     case AJ_XTREAM_CONTA:
     case AJ_DIAGNOSTICO: case AJ_VELOCIDADE: case AJ_LIVETV_DIAG:
     case AJ_P2P_URL: case AJ_P2P_TESTAR:

@@ -3,6 +3,7 @@
 #include "livetv_regras.h"
 #include "idioma.h"
 #include "badges.h"
+#include "selospacote.h"
 #include "logotitulo.h"
 #include "tex_cache.h"
 #include "catalogo.h"
@@ -217,6 +218,7 @@ void stream_definir_lista(const Stream *l, int qtd) {
   stream_definir_lista_idade(l, qtd, 0);
 }
 
+static int selosPacoteDa(Stream *s);
 void stream_definir_lista_idade(const Stream *l, int qtd, Uint32 idade) {
   int i, k = 0;
   Stream *nova = l && qtd > 0 ? malloc(sizeof(Stream) * (size_t)qtd) : NULL;
@@ -228,6 +230,7 @@ void stream_definir_lista_idade(const Stream *l, int qtd, Uint32 idade) {
     if (l[i].url[0] || debrid_ativo() || p2p_ativo()) nova[k++] = l[i];
   if (nova && qtd - k) printf("[fonte] %d torrents sem debrid descartados\n", qtd - k);
   descartadosSemDebrid = nova ? qtd - k : 0;
+  for (i = 0; i < k && nova; i++) { nova[i].selosPacoteVer = 0; selosPacoteDa(&nova[i]); }
   pthread_mutex_lock(&verTrava);
   free(lista); lista = nova; n = nova ? k : 0; atual = -1;
   free(chave); free(exib); chave = NULL; exib = NULL;
@@ -286,6 +289,7 @@ void stream_lista_acrescentar(const Stream *l, int qtd, int ordemAddon) {
   if (qtd - k) printf("[fonte] %d torrents sem debrid descartados\n", qtd - k);
   descartadosSemDebrid += qtd - k;
   if (!k) { free(nova); return; }
+  for (i = 0; i < k; i++) { nova[i].selosPacoteVer = 0; selosPacoteDa(&nova[i]); }
   // O CARTAO EM FOCO E O QUE FICA PARADO. Guardado pelo indice da lista (que
   // nao muda), e nao pela linha (que muda quando entra coisa acima).
   if (aberta && grupo == 1 && n > 0) {
@@ -1338,6 +1342,24 @@ static void tituloConteudo(const Stream *s, char *nome, size_t tn, char *ep, siz
     snprintf(ep, te, i18n("Temporada %d Episódio %d"), atoi(c1 + 1), atoi(c2 + 1));
 }
 
+// PACOTE DE SELOS ATIVO: os filtros do pacote que casam com a fonte, ordem do
+// pacote. Calculado uma vez por fonte (ver Stream.selosPacote); com o pacote
+// "Do Nuvio" devolve 0 e a fileira usa a deteccao embutida. Se nenhum filtro
+// casa tambem devolve 0: a fileira cai na deteccao embutida em vez de ficar
+// vazia.
+_Static_assert(SELOS_MAX_CASADOS == sizeof(((Stream *)0)->selosPacote) / sizeof(unsigned short),
+               "Stream.selosPacote e SELOS_MAX_CASADOS tem de ter o mesmo tamanho");
+static int selosPacoteDa(Stream *s) {
+  const char *campos[4];
+  if (selospacote_ativo() < 0) return 0;
+  if (s->selosPacoteVer != selospacote_versao()) {
+    campos[0] = s->arquivo; campos[1] = s->rotulo; campos[2] = s->descricao; campos[3] = s->provedor;
+    s->nSelosPacote = (unsigned char)selospacote_casar(campos, 4, s->selosPacote, SELOS_MAX_CASADOS);
+    s->selosPacoteVer = selospacote_versao();
+  }
+  return s->nSelosPacote;
+}
+
 // A fileira mostra TODOS os logos, inclusive o que tambem esta no titulo
 // (dono, 02/10: "tem que colocar as badges do dolby vision tb" — o titulo e
 // para ler, o logo e a marca que o olho reconhece de longe). Sai so a
@@ -1373,7 +1395,7 @@ static const char *arquivoDa(const Stream *s) {
   static char ult[192];
   const char *p, *f;
   if (s->arquivo[0]) return s->arquivo;
-  if (!logosDa(s, 0) && strcmp(containerDa(s), "MP4") && !idiomaDa(s)) return "";
+  if (!logosDa(s, 0) && !selosPacoteDa((Stream *)s) && strcmp(containerDa(s), "MP4") && !idiomaDa(s)) return "";
   ult[0] = 0;
   for (p = s->descricao; *p; p = f + 1) {
     f = strchr(p, '\n');
@@ -1699,6 +1721,65 @@ static void ponteiroFolhaFora(int a, int b) { (void)a; (void)b; aberta = 0; }
 
 // Texto em maiusculas espacadas da linha de marca e dos cabecalhos de grupo.
 // i18n antes da caixa alta: a tabela de idioma guarda a frase normal.
+// A FILEIRA DO PACOTE DE SELOS (selospacote.h): cada filtro que casou, na ordem
+// do pacote. A imagem sai COMO O PACOTE A FEZ (textura normal, sem tinta e sem
+// a marca clara — o pacote e colorido), na altura `h` e com a proporcao dela;
+// sem imagem (ou imagem que nao baixou) vira uma pilula com o NOME e as cores
+// do filtro. Para no `maxW`. Devolve a largura usada.
+static float desenharSelosPacote(const Stream *s, float x, float y, float maxW, float h, float a) {
+  const float gap = 8.0f, padX = 9.0f, imgMaxW = 220.0f;
+  float x0 = x;
+  int k;
+  for (k = 0; k < (int)s->nSelosPacote; k++) {
+    const SeloFiltro *f = selospacote_filtro(s->selosPacote[k]);
+    float w, r, g, b, al;
+    int pronta = 0;
+    if (!f) continue;
+    if (f->imagem[0]) {
+      GLuint t = tex_obter_larg(f->imagem, 128);
+      float asp = t ? tex_aspecto(f->imagem) : 0.0f;
+      if (t && asp > 0.01f) {
+        float ih = h;
+        w = ih * asp;
+        if (w > imgMaxW) { w = imgMaxW; ih = w / asp; }
+        if (x + w > x0 + maxW) break;
+        gfx_tex_aspect_atual = 0.0f;
+        gfx_rect((GfxRect){x, y + (h - ih) * .5f, w, ih}, t, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, a);
+        x += w + gap;
+        continue;
+      }
+      // Ainda baixando: guarda o lugar (a fileira nao pula quando chega) e nao
+      // desenha. Se falhou, mostra o nome.
+      pronta = tex_falhou(f->imagem);
+      if (!pronta) {
+        w = h * 2.0f;
+        if (x + w > x0 + maxW) break;
+        x += w + gap;
+        continue;
+      }
+    }
+    // pilula de texto
+    { int tr = f->temTexto ? (int)(f->texto[0] * 255.0f + .5f) : 235,
+          tg = f->temTexto ? (int)(f->texto[1] * 255.0f + .5f) : 235,
+          tb = f->temTexto ? (int)(f->texto[2] * 255.0f + .5f) : 238;
+      TxtLinha l = txt_linha_corta(TXT_MINI, f->nome, tr, tg, tb, 255, 200.0f);
+      float ph = h + 6.0f, raio = 6.0f / ph;
+      GfxRect p;
+      w = (float)l.w + padX * 2.0f;
+      if (x + w > x0 + maxW) break;
+      p = (GfxRect){x, y - 3.0f, w, ph};
+      if (f->temTag) { r = f->tag[0]; g = f->tag[1]; b = f->tag[2]; al = f->tag[3]; }
+      else { r = .10f; g = .11f; b = .13f; al = .88f; }
+      if (al > 0.01f) gfx_cor(p, raio, r, g, b, al * a);
+      if (f->temBorda && f->borda[3] > 0.01f)
+        gfx_anel(p, raio, 1.5f, f->borda[0], f->borda[1], f->borda[2], f->borda[3] * a);
+      else if (!f->temTag) gfx_anel(p, raio, 1.5f, .35f, .36f, .40f, .60f * a);
+      txt_desenhar_alpha(l, x + padX, y + (h - (float)l.h) * .5f, a);
+      x += w + gap; }
+  }
+  return x > x0 ? x - x0 - gap : 0.0f;
+}
+
 static float caixaAlta(const char *s, int r, int g, int b, float x, float y, float a) {
   char up[160];
   size_t k;
@@ -2027,7 +2108,9 @@ void stream_folha_desenhar(Uint32 agora) {
       // SELOS COLORIDOS (Ajustes, #198): o dono manteve a opcao (03/10). Ligada,
       // cada selo na peca da cor do seu grupo; desligada (o padrao do Glass
       // UI), todos na mesma tinta branca.
-      if(logos) lw=ajustes_selos_coloridos()
+      if(selosPacoteDa((Stream *)s))
+        lw=desenharSelosPacote(s,tx,cy,txtW-mpW,FOLHA_SELO_H,anim*(sel?1.0f:.85f));
+      else if(logos) lw=ajustes_selos_coloridos()
         ? badges_desenhar_selos(logos,tx,cy,txtW-mpW,FOLHA_SELO_H,anim*(sel?1.0f:.85f))
         : badges_desenhar_tom(logos,tx,cy,txtW-mpW,FOLHA_SELO_H,t,t,t,anim);
       else if(!ehMp4){ char d[sizeof s->descricao];

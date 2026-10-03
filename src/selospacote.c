@@ -496,7 +496,7 @@ static void gravarEscolha(int perfil) {
 }
 static void gravarConta(int perfil) {
   char nome[48]; char *s;
-  snprintf(nome, sizeof nome, "selos-conta-p%d.json", perfil);
+  nomeArq(nome, sizeof nome, "selos-acct-p%d.json", perfil, 0);
   if (!conta.n) { dados_apagar(nome); return; }
   s = serializa(&conta, 1);
   if (s) { dados_gravar(nome, s); free(s); }
@@ -533,7 +533,7 @@ void selospacote_iniciar(void) {
   perfilLido = perfil;
   loteLiberar(&conta); loteLiberar(&tv);
   escolhaExplicita = 0; escolhaUrl[0] = 0;
-  snprintf(nome, sizeof nome, "selos-conta-p%d.json", perfil);
+  nomeArq(nome, sizeof nome, "selos-acct-p%d.json", perfil, 0);
   if ((t = dados_ler(nome))) {
     J *j = jParse(t, strlen(t));
     if (j) { loteDoValor(&conta, j, "", 0); jLiberar(j); }

@@ -47,7 +47,7 @@ static int novoNo(Pr *pr, int tipo) {
   if (pr->nno == pr->capno) {
     int c = pr->capno ? pr->capno * 2 : 32;
     No *n = realloc(pr->no, (size_t)c * sizeof *n);
-    if (!n) return falha(pr, "memoria");
+    if (!n) return falha(pr, "out of memory");
     pr->no = n; pr->capno = c;
   }
   memset(&pr->no[pr->nno], 0, sizeof(No));
@@ -60,7 +60,7 @@ static int novaClasse(Pr *pr) {
   if (pr->ncls == pr->capcls) {
     int c = pr->capcls ? pr->capcls * 2 : 8;
     Classe *n = realloc(pr->cls, (size_t)c * sizeof *n);
-    if (!n) return falha(pr, "memoria");
+    if (!n) return falha(pr, "out of memory");
     pr->cls = n; pr->capcls = c;
   }
   memset(&pr->cls[pr->ncls], 0, sizeof(Classe));
@@ -71,7 +71,7 @@ static int addFaixa(Pr *pr, Classe *c, unsigned lo, unsigned hi) {
   if (c->n == c->cap) {
     int cap = c->cap ? c->cap * 2 : 8;
     Faixa *f = realloc(c->f, (size_t)cap * sizeof *f);
-    if (!f) return falha(pr, "memoria");
+    if (!f) return falha(pr, "out of memory");
     c->f = f; c->cap = cap;
   }
   c->f[c->n].lo = lo; c->f[c->n].hi = hi; c->n++;
@@ -140,8 +140,8 @@ static int escapeLiteral(Pr *pr, unsigned *cp) {
       if (pr->p < pr->fim && isalpha((unsigned char)*pr->p)) { *cp = (unsigned)(*pr->p++ & 31); return 0; }
       *cp = '\\'; pr->p--; return 0;
     default:
-      if (c >= '1' && c <= '9') return falha(pr, "retrorreferencia nao suportada");
-      if (c == 'p' || c == 'P' || c == 'k') return falha(pr, "escape nao suportado");
+      if (c >= '1' && c <= '9') return falha(pr, "backreference unsupported");
+      if (c == 'p' || c == 'P' || c == 'k') return falha(pr, "unsupported escape");
       pr->p--;
       { int l; *cp = decodifica((const unsigned char *)pr->p, (const unsigned char *)pr->fim, &l); pr->p += l; }
       return 0;
@@ -156,12 +156,12 @@ static int parseClasse(Pr *pr) {   // depois do '['
   if (pr->p < pr->fim && *pr->p == '^') { neg = 1; pr->p++; }
   for (;;) {
     unsigned lo, hi; int l, atalho = 0;
-    if (pr->p >= pr->fim) return falha(pr, "classe sem fechar");
+    if (pr->p >= pr->fim) return falha(pr, "unclosed class");
     if (*pr->p == ']') { pr->p++; break; }
     if (*pr->p == '\\') {
       char k;
       pr->p++;
-      if (pr->p >= pr->fim) return falha(pr, "barra no fim");
+      if (pr->p >= pr->fim) return falha(pr, "trailing backslash");
       k = *pr->p;
       if (k == 'd' || k == 'w' || k == 's' || k == 'D' || k == 'W' || k == 'S') {
         pr->p++;
@@ -178,7 +178,7 @@ static int parseClasse(Pr *pr) {   // depois do '['
       if (*pr->p == '\\') {
         char k;
         pr->p++;
-        if (pr->p >= pr->fim) return falha(pr, "barra no fim");
+        if (pr->p >= pr->fim) return falha(pr, "trailing backslash");
         k = *pr->p;
         if (k == 'd' || k == 'w' || k == 's' || k == 'D' || k == 'W' || k == 'S') {
           // "a-\d": o hifen e literal.
@@ -190,7 +190,7 @@ static int parseClasse(Pr *pr) {   // depois do '['
         if (k == 'b') { pr->p++; hi = 8; }
         else if (escapeLiteral(pr, &hi) < 0) return -1;
       } else hi = decodifica((const unsigned char *)pr->p, (const unsigned char *)pr->fim, &l), pr->p += l;
-      if (hi < lo) return falha(pr, "faixa invertida");
+      if (hi < lo) return falha(pr, "reversed range");
     }
     if (addFaixa(pr, &pr->cls[ci], lo, hi) < 0) return -1;
   }
@@ -212,16 +212,16 @@ static int parseAtomo(Pr *pr, int prof) {
       else if (k == '=' || k == '!') { look = 1; neg = k == '!'; pr->p += 2; }
       else if (k == '<' && pr->fim - pr->p >= 3 && (pr->p[2] == '=' || pr->p[2] == '!')) {
         look = 1; atras = 1; neg = pr->p[2] == '!'; pr->p += 3; }
-      else if (k == '<') {   // grupo nomeado: (?<nome>...)
+      else if (k == '<') {   // bad group name: (?<nome>...)
         const char *q = pr->p + 2;
         while (q < pr->fim && *q != '>') q++;
-        if (q >= pr->fim) return falha(pr, "grupo nomeado");
+        if (q >= pr->fim) return falha(pr, "bad group name");
         pr->p = q + 1;
-      } else return falha(pr, "grupo desconhecido");
+      } else return falha(pr, "unknown group");
     }
     filho = parseAlt(pr, prof + 1);
     if (filho < 0) return -1;
-    if (pr->p >= pr->fim || *pr->p != ')') return falha(pr, "parentese sem fechar");
+    if (pr->p >= pr->fim || *pr->p != ')') return falha(pr, "unclosed group");
     pr->p++;
     if (!look) return filho;
     n = novoNo(pr, N_LOOK);
@@ -240,7 +240,7 @@ static int parseAtomo(Pr *pr, int prof) {
   if (c == '\\') {
     char k;
     pr->p++;
-    if (pr->p >= pr->fim) return falha(pr, "barra no fim");
+    if (pr->p >= pr->fim) return falha(pr, "trailing backslash");
     k = *pr->p;
     if (k == 'b' || k == 'B') {
       pr->p++;
@@ -276,7 +276,7 @@ static int parseAtomo(Pr *pr, int prof) {
         return ult; }
     }
   }
-  if (c == '*' || c == '+' || c == '?') return falha(pr, "nada para repetir");
+  if (c == '*' || c == '+' || c == '?') return falha(pr, "nothing to repeat");
   // literal (um codepoint UTF-8 inteiro, para o quantificador valer para ele todo)
   { int nb;
     decodifica((const unsigned char *)pr->p, (const unsigned char *)pr->fim, &l);
@@ -323,12 +323,12 @@ static int parseTermo(Pr *pr, int prof) {
     case '?': mn = 0; mx = 1; pr->p++; break;
     case '{':
       r = lerChaves(pr, &mn, &mx);
-      if (r < 0) return falha(pr, "quantificador invertido");
+      if (r < 0) return falha(pr, "reversed quantifier");
       if (!r) return at;   // '{' solto e literal (sem a flag u)
       break;
     default: return at;
   }
-  if (pr->no[at].tipo == N_ASSERT) return falha(pr, "nada para repetir");
+  if (pr->no[at].tipo == N_ASSERT) return falha(pr, "nothing to repeat");
   { int n = novoNo(pr, N_REP);
     if (n < 0) return -1;
     pr->no[n].a = mn; pr->no[n].b = mx; pr->no[n].f1 = at;
@@ -350,7 +350,7 @@ static int parseSeq(Pr *pr, int prof) {
 
 static int parseAlt(Pr *pr, int prof) {
   int e;
-  if (prof > 100) return falha(pr, "aninhamento demais");
+  if (prof > 100) return falha(pr, "nested too deep");
   e = parseSeq(pr, prof);
   if (e < 0) return -1;
   while (pr->p < pr->fim && *pr->p == '|') {
@@ -491,10 +491,10 @@ RegexJs *regexjs_compilar(const char *padrao, int flags, char *erro, size_t erro
   memset(&pr, 0, sizeof pr);
   pr.p = padrao; pr.fim = padrao + strlen(padrao); pr.flags = flags;
   raiz = parseAlt(&pr, 0);
-  if (raiz >= 0 && pr.p < pr.fim) { raiz = -1; falha(&pr, "parentese sobrando"); }
+  if (raiz >= 0 && pr.p < pr.fim) { raiz = -1; falha(&pr, "unmatched )"); }
   if (raiz < 0) {
     int i;
-    if (erro && errotam) snprintf(erro, errotam, "%s", pr.erro[0] ? pr.erro : "padrao invalido");
+    if (erro && errotam) snprintf(erro, errotam, "%s", pr.erro[0] ? pr.erro : "invalid pattern");
     for (i = 0; i < pr.ncls; i++) free(pr.cls[i].f);
     free(pr.cls); free(pr.no);
     return NULL;
@@ -508,7 +508,7 @@ RegexJs *regexjs_compilar(const char *padrao, int flags, char *erro, size_t erro
   re->cls = pr.cls; re->ncls = pr.ncls; re->capcls = pr.capcls;
   free(pr.no);
   if (em.erro) {
-    if (erro && errotam) snprintf(erro, errotam, "padrao grande demais");
+    if (erro && errotam) snprintf(erro, errotam, "pattern too large");
     regexjs_liberar(re);
     return NULL;
   }
