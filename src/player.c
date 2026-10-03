@@ -3572,9 +3572,17 @@ void player_desenhar(Uint32 agora) {
   // FOLHA ABERTA, OSD APAGADO. A folha de Fontes e a de Legendas sao vidro
   // translucido: o relogio, os selos 4K/HDR e o tempo do player apareciam
   // atraves dela, encavalados nos botoes da folha (foto do dono, 30/09).
-  { float fa = stream_folha_anim(), fx = faixas_anim();
+  { float fa = stream_folha_anim(), fx = faixas_anim(), fe = episodios_anim();
     float cob = fa > fx ? fa : fx;
-    a *= 1.0f - anim_clamp(cob, 0.0f, 1.0f); }
+    if (fe > cob) cob = fe;
+    a *= 1.0f - anim_clamp(cob, 0.0f, 1.0f);
+    // A folha de episodios fica com a pilula da hora no canto (mockup): o OSD
+    // sai, a ilha nao.
+    if (fe > 0.02f && episodios_aberto() && !episodios_menu_aberto_qualquer()) {
+      PlrIlhaPedido pd;
+      memset(&pd, 0, sizeof pd);
+      plrilha_pedir(&pd);
+    } }
   // O que NAO e barra nem tempo (titulo, meta, botoes, relogio, selos, veu de
   // cima) segue `ac`: some na busca so com a barra (#128).
   float ac = a * cheio;

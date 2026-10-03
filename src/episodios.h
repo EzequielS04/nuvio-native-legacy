@@ -4,6 +4,7 @@
 #include "vistoep.h"
 void episodios_abrir(int titulo, int temporada, int episodio);
 int episodios_aberto(void);
+float episodios_anim(void);   // 0..1, a entrada da folha
 void episodios_evento(const SDL_Event *e);
 void episodios_atualizar(float dt);
 void episodios_desenhar(void);
@@ -48,5 +49,10 @@ int  episodios_titulo(void);
 // O menu de visto esta aberto, venha da folha ou da pagina de detalhe. Para
 // teste; a pagina de detalhe usa episodios_menu_aberto, que so ve o seu.
 int  episodios_menu_aberto_qualquer(void);
+
+#ifdef NV_SHOT_HOOKS
+void episodios_shot_menu(void);
+void episodios_shot_foco(int linha);
+#endif
 
 #endif
