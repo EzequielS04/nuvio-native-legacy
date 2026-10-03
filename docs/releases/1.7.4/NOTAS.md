@@ -51,3 +51,7 @@ open. No universal playback-start latency or FPS improvement is claimed.
 New subtitle/audio AutoSync, personal media servers and other 1.8 features are
 not included. Newly added card text is Portuguese and English, with English
 fallback for the other UI languages.
+
+The broad regression run and targeted reruns retain one pre-existing anime-detail
+test failure and skipped account QR/service-dependent checks. See the repository
+validation report for the full accounting; the entire suite is not claimed green.
