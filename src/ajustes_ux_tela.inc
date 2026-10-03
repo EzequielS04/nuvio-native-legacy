@@ -67,9 +67,10 @@ static const Item TELA[] = {
     ROT("Imagem e som"), OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS),
     ROT("Durante e depois"),
       OPC(AJ_PAUSA_OVERLAY), OPC(AJ_CW_CONCLUIDO), OPC(AJ_SAIDA_PLAYER),
-    // O NOME DO SERVICO volta ao titulo (como na 1.7.1): quem procura o Seekr
-    // procura pelo nome, e "Miniaturas na barra de tempo" nao o dizia.
-    GRP("Seekr", "Miniaturas da barra de tempo no player.", "aj_images"),
+    // O NOME DO SERVICO no rotulo (era o grupo "Seekr" na 1.7.1): quem procura
+    // o Seekr procura pelo nome, e "Miniaturas na barra de tempo" nao o dizia.
+    // ROT e nao GRP: esta tela so tem blocos fixos (tests/ajustes_secoes.sh).
+    ROT("Seekr"),
       OPC(AJ_SEEKR_LIGADO), OPC(AJ_SEEKR_CHAVE), OPC(AJ_SEEKR_TESTAR),
       OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
 
