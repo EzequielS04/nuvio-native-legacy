@@ -1044,9 +1044,34 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // GFX_COPIA — ampliacao do alvo interno (gpunivel.c). RGB E ALPHA da
   // textura, que e o que diferencia do GFX_SNAP (la o alpha vem de uCor): o
   // furo de alpha 0 por onde o plano de video aparece tem de sobreviver.
+  //
+  // uFoco > 0,5 = CATMULL-ROM (gpun_ampliar_1080, so a build de teste
+  // NV_AMPLIA_4K): o alvo interno de 1920x1080 ampliado 2x para a superficie
+  // 4K com o bicubico de 5 leituras bilineares (a forma de 9 sem os cantos),
+  // em vez do bilinear — que e o que o escalonador da TV ja faz. Bancada
+  // (texto 15-16/400 ampliado 2x, gradiente RMS): bilinear 16,2, Catmull-Rom
+  // 20,4, nativo 4K 25,9. O tamanho do alvo e o layout (NV_TELA_W/H).
   "void main(){\n"
   "  vec2 uv = (uPar.y > 0.5) ? vec2(vUv.x, 1.0 - vUv.y) : vUv;\n"
-  "  gl_FragColor = texture2D(uTex, uv);\n"
+  "  if (uFoco > 0.5) {\n"
+  "    NV_HP vec2 tam = vec2(1920.0, 1080.0);\n"
+  "    NV_HP vec2 pos = uv * tam;\n"
+  "    NV_HP vec2 c = floor(pos - 0.5) + 0.5;\n"
+  "    vec2 f = pos - c;\n"
+  "    vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));\n"
+  "    vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);\n"
+  "    vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));\n"
+  "    vec2 w3 = f * f * (-0.5 + 0.5 * f);\n"
+  "    vec2 w12 = w1 + w2;\n"
+  "    NV_HP vec2 t0 = (c - 1.0) / tam, t3 = (c + 2.0) / tam, t12 = (c + w2 / w12) / tam;\n"
+  "    vec4 r = texture2D(uTex, vec2(t12.x, t0.y)) * (w12.x * w0.y)\n"
+  "           + texture2D(uTex, vec2(t0.x, t12.y)) * (w0.x * w12.y)\n"
+  "           + texture2D(uTex, t12) * (w12.x * w12.y)\n"
+  "           + texture2D(uTex, vec2(t3.x, t12.y)) * (w3.x * w12.y)\n"
+  "           + texture2D(uTex, vec2(t12.x, t3.y)) * (w12.x * w3.y);\n"
+  "    float n = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;\n"
+  "    gl_FragColor = clamp(r / n, 0.0, 1.0);\n"
+  "  } else gl_FragColor = texture2D(uTex, uv);\n"
   "}\n",
 
   // GFX_HERO_CAM / GFX_HERO_CHEIO_CAM — AS CAMADAS DO DESTAQUE NUMA PASSADA
