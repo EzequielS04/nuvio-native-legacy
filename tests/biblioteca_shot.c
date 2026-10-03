@@ -288,6 +288,9 @@ int main(int argc, char **argv) {
   // revisadas. Sem ajustes_iniciar, `valor[AJ_IDIOMA]` fica no default estatico
   // e a captura sai em ingles com as chaves novas cruas no meio.
   ajustes_iniciar();
+  // NUVIO_SHOT_VIDRO=0: o material solido (Interface de vidro desligada).
+  { const char *v = getenv("NUVIO_SHOT_VIDRO");
+    ajustes_definir_vidro(!(v && *v == '0')); }
   povoar();
   biblioteca_iniciar();
   if (comecaLista) {
