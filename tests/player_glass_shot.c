@@ -675,7 +675,7 @@ int main(int argc, char **argv) {
     salvar("ilha-crescendo-1");
     faixas_abrir_em(0);
     teclaFaixas(SDLK_DOWN);
-    quadros(6);
+    quadros(10);
     salvar("ilha-crescendo-2");
     quadros(90);
     salvar("ilha-crescendo-3");
