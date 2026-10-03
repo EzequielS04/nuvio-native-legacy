@@ -13,6 +13,8 @@
 #include "ajustes.h"
 #include "ilha.h"
 #include "shot_arte.h"
+#include "dados.h"
+#include "perfis.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -92,8 +94,22 @@ int main(int argc, char **argv) {
       { const char *rail = getenv("NUVIO_SHOT_RAIL");
         fprintf(f, "idioma 0\nselected_theme %d\ncollapseSidebar %d\n", tema,
                 rail && !strcmp(rail, "recolhida") ? 0 : 1); }
+      // NUVIO_SHOT_LAYOUT=0|1|2: Moderna, Padrao ou Dinamica (homeLayoutLocal);
+      // o menu muda de forma com o layout da home.
+      { const char *lay = getenv("NUVIO_SHOT_LAYOUT");
+        if (lay && *lay) fprintf(f, "homeLayoutLocal %d\n", atoi(lay)); }
       shot_arte_material(f);
       fclose(f);
+      // O perfil do mockup (avatar roxo com a inicial e o nome), pelo mesmo
+      // cache que o app le no arranque: o rodape do menu deixa de ser "Sua conta".
+      snprintf(caminho, sizeof caminho, "%s/perfis.txt", dir);
+      f = fopen(caminho, "w"); assert(f);
+      fputs("1\t0\t1\t0\t#7c5cff\tHenrique\t\t\t\n", f);
+      fclose(f);
+      snprintf(caminho, sizeof caminho, "%s/perfil.txt", dir);
+      f = fopen(caminho, "w"); assert(f); fputs("1\n", f); fclose(f);
+      dados_iniciar("deploy/app/art");
+      perfis_carregar_ativo();
       ajustes_dir(dir);
     } }
 
@@ -128,6 +144,14 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-menu.bmp", saida);
   captura(nome, w);
   menu_fechar();
+  // NUVIO_SHOT_SO_MENU=1: so o menu (sem a folha de faixas), para comparar com
+  // os mockups do Glass UI sem gravar o que nao vai ser olhado.
+  if (getenv("NUVIO_SHOT_SO_MENU")) {
+    tex_encerrar(); txt_encerrar(); gfx_encerrar();
+    SDL_GL_DeleteContext(gl); SDL_DestroyWindow(w); SDL_Quit();
+    puts("PASS: capturas do menu gravadas.");
+    return 0;
+  }
   qual = 1;
   faixas_reiniciar();
   faixas_abrir_em(1);

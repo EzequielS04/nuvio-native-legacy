@@ -380,6 +380,9 @@ int main(int argc, char **argv) {
             quadros(60, NULL);
           }
         }
+        // NV_SO_DESTAQUE=1: so o destaque (e o menu, com NV_MENU_ABRIR), sem
+        // descer pelas fileiras — a conferencia do menu e do recuo do conteudo.
+        if (getenv("NV_SO_DESTAQUE")) continue;
         for (r = 0; r < 9; r++) {
           tecla(SDLK_DOWN);
           quadros(110, NULL);
