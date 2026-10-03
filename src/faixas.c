@@ -587,7 +587,7 @@ static void avisarQueda(int e) {
              : e == MKVASS_NOGO_NAO_MKV ? i18n("Legenda ASS: a TV vai desenhar (a fonte n\xc3\xa3o \xc3\xa9 MKV)")
              : e == MKVASS_NOGO_FAIXA   ? i18n("Legenda ASS: a TV vai desenhar (faixa n\xc3\xa3o \xc3\xa9 ASS)")
              : i18n("Legenda ASS: a TV vai desenhar (arquivo sem \xc3\xadndice)"));
-  player_toast(b, 6000);
+  player_toast_ex(b, 6000, "aj_triangle-alert", 1);
 }
 
 void faixas_atualizar(float dt, Uint32 agora) {
@@ -657,7 +657,7 @@ void faixas_atualizar(float dt, Uint32 agora) {
         legOverlayTV = 1;
         printf("[legenda] faixa %d: a TV desenha POR ENQUANTO (%d colhidos), o app segue tentando\n", i, col);
         fflush(stdout);
-        player_toast(i18n("Legenda ASS: a TV desenha por enquanto (falha de rede); o app tenta de novo"), 6000);
+        player_toast_ex(i18n("Legenda ASS: a TV desenha por enquanto (falha de rede); o app tenta de novo"), 6000, "aj_wifi-off", 1);
         legenda_desligar();
         video_escolher_legenda(i);
       }
@@ -694,7 +694,7 @@ void faixas_atualizar(float dt, Uint32 agora) {
         // Sem par no arquivo e uma falha do casamento, nao da TV: avisa, para
         // a pessoa poder mandar o log em vez de achar que a legenda e assim.
         if (f && !f->codec[0] && video_mkv_sondado() == 1)
-          player_toast(i18n("Legenda: n\xc3\xa3o deu para casar as faixas com o arquivo; a TV desenha"), 6000);
+          player_toast_ex(i18n("Legenda: n\xc3\xa3o deu para casar as faixas com o arquivo; a TV desenha"), 6000, "aj_triangle-alert", 1);
       }
     }
   }

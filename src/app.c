@@ -76,6 +76,7 @@
 #include "telemetria.h"
 #include "avisos.h"
 #include "ilha.h"
+#include "plrilha.h"
 #include "ilhacart.h"
 #include "ilhasinais.h"
 #include "recintro.h"
@@ -1092,9 +1093,9 @@ static void pedirTorrentEscolhido(int indice) {
   // Sem debrid, quem responde e o servidor P2P, que espera peers: dizer que
   // pode levar meio minuto evita a pessoa achar que travou.
   if (!debrid_ativo() && p2p_ativo())
-    player_toast(i18n("Pedindo o torrent ao servidor P2P… pode levar até um minuto"), 30000);
+    player_toast_ex(i18n("Pedindo o torrent ao servidor P2P… pode levar até um minuto"), 30000, "aj_download", 0);
   else
-    player_toast(i18n("Pedindo o torrent ao serviço de debrid…"), 5000);
+    player_toast_ex(i18n("Pedindo o torrent ao serviço de debrid…"), 5000, "aj_download", 0);
 }
 static void processarTorrentJob(void) {
   TorrentJob *j = &torrentJob;
@@ -2866,7 +2867,7 @@ void app_atualizar(float dt, Uint32 agora) {
         // Tocou por outra fonte, mas um servico de debrid ficou de fora por
         // conta sem plano: diz uma vez por sessao, sem bloquear nada.
         { int novo = debrid_sem_plano_novo();
-          if (novo) player_toast(i18n(debrid_sem_plano_frase(novo)), 7000); }
+          if (novo) player_toast_ex(i18n(debrid_sem_plano_frase(novo)), 7000, "aj_triangle-alert", 1); }
         if (!player_id_canal()[0]) {
           fonteVODAutomatica = 1;
           fonteVODTentativas++;
@@ -3096,7 +3097,7 @@ void app_atualizar(float dt, Uint32 agora) {
         // 2501). O clipe fecha o player sem nada na tela; o aviso diz o que
         // esta acontecendo e o que fazer.
         if (s->foraCache)
-          player_toast(i18n("Fonte fora do cache: o debrid começa a baixar. Se tocar um aviso curto, tente de novo em alguns minutos."), 9000);
+          player_toast_ex(i18n("Fonte fora do cache: o debrid começa a baixar. Se tocar um aviso curto, tente de novo em alguns minutos."), 9000, "aj_download", 0);
       }
       // Escolha manual num canal tambem entra no watchdog: fonte viva escolhida
       // a dedo pode morrer igual.
@@ -3622,6 +3623,14 @@ static void desenharTelas(Uint32 agora) {
   stream_folha_desenhar(agora);
   CAMADA_SE(faixas_aberta());
   faixas_desenhar(agora);
+  // A ILHA DO RELOGIO DENTRO DO PLAYER (plrilha.h), por cima de todas as
+  // camadas dele: a pilula da hora, os avisos e o que nasce dela (Audio,
+  // Legendas, estilo, carregando, erro). Com a folha de Fontes por cima ela
+  // sai — a folha cobre o lado do relogio no layout Dinamica.
+  if (player_aberto()) {
+    if (stream_folha_anim() > 0.02f) plrilha_esconder();
+    plrilha_desenhar(agora);
+  }
 }
 
 // ONDE O RELOGIO DA ILHA CABE (ilha.h). So na home, que tem o topo esquerdo
@@ -3746,8 +3755,10 @@ void app_desenhar(Uint32 agora) {
       tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL)
     avisos_desenhar(agora);
   // A ILHA DO RELOGIO (ilha.h): mesmas guardas da central — com a pessoa
-  // dentro do app e nunca sobre o player. No Guia ela vai para o topo direito
-  // (o titulo do guia ocupa o esquerdo), o mesmo canto do toast de antes.
+  // dentro do app. Com o player aberto quem fala e a ilha DO PLAYER
+  // (plrilha.h, desenhada em desenharTelas): a mesma pilula, no mesmo canto,
+  // com a hora e o "termina as" do titulo. No Guia ela vai para o topo direito
+  // (o titulo do guia ocupa o esquerdo).
   if (guia_atualizando_lista()) ilha_atividade(i18n("Atualizando a lista de canais…"), -1.0f);
   if (!registro_aberto() && !player_aberto() && sessao_logada() &&
       tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL) {

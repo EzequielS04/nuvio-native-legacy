@@ -57,6 +57,9 @@ void player_erro_fonte_motivo(const char *titulo, const char *dica);
 // Aviso curto no alto da tela do player (a mesma pilula do modo de aspecto),
 // por `ms`. Some sozinho; a sessao nova do player apaga o que estiver de pe.
 void player_toast(const char *texto, unsigned ms);
+// O mesmo aviso com o icone (art/icones) e, `ambar` = 1, a cor de aviso: a
+// pilula da ilha abre com ele (plrilha.h). player_toast e o informativo.
+void player_toast_ex(const char *texto, unsigned ms, const char *icone, int ambar);
 void player_limpar_erro_fonte(void);   // fonte "morta" que voltou a entregar
 // 1 quando a fonte atual falhou. O app usa no watchdog de canal: stream de TV
 // ao vivo que nao abre troca sozinho para o proximo da lista.
@@ -232,5 +235,15 @@ int  player_leg_estilo_tocado(int campo);
 // pasta de arte, que a TV nao trata como persistente. Ver a nota em
 // prefsArquivo (player.c).
 void player_dir(const char *dir);
+
+#ifdef NV_SHOT_HOOKS
+// Capturas (tests/player_glass_shot.c): estado de tela sem pipeline.
+void player_shot_estado(Uint32 agora, float pos, float dur, int tocando, int botao,
+                        int barraFoco, int soBarra);
+void player_shot_toast(Uint32 agora, const char *texto, const char *icone, int ambar, int modo);
+void player_shot_esconder(void);
+void player_shot_carregando(int sim);
+void player_shot_buscando(int sim);
+#endif
 
 #endif
