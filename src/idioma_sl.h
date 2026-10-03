@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Poleg sličice prikaže prejšnji in naslednji kader s časom vsakega. Jasno je, da je kader na vsakih 10 sekund."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Prikaže ali skrije ta vir v vrstici ocen na strani naslova."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Med previjanjem naprej ali nazaj nad vrstico prikaže sličico filma. Slike prihajajo iz Seekr (seekr.tv) in zahtevajo vaš osebni ključ; vsak odprt naslov porabi eno poizvedbo dnevne kvote."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Med previjanjem naprej ali nazaj nad vrstico pokaže sličico filma. Slike prihajajo iz Seekr (seekr.tv)."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Prikazani so samo vsebniki MP4 (priročno za iskanje Dolby Vision v MP4). OK počisti filter."),
   T("Mostrar", "Prikaži"),
   T("Mostrar \"Continuar assistindo\"", "Prikaži \"Nadaljuj z ogledom\""),

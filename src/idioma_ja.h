@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "サムネイルの横に前後のフレームを、それぞれの時刻つきで表示します。10秒ごとに1フレームあることが分かります。"),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "作品ページの評価の行で、このソースを表示または非表示にします。"),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "早送りや巻き戻しのとき、バーの上に映画のサムネイルを表示します。画像は Seekr（seekr.tv）から取得し、個人キーが必要です。作品を開くたびに、1日の上限から1回分が使われます。"),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "早送りや巻き戻し中、バーの上に映画のサムネイルを表示します。画像は Seekr（seekr.tv）から取得します。"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "MP4 コンテナのみ表示しています（MP4 の Dolby Vision を探すのに便利です）。OK でフィルターを解除します。"),
   T("Mostrar", "表示"),
   T("Mostrar \"Continuar assistindo\"", "\"続きを見る\"を表示"),

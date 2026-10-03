@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Zobrazí predchádzajúci a nasledujúci snímok vedľa náhľadu s časom každého. Je tak jasné, že snímka je každých 10 sekúnd."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Zobrazí alebo skryje tento zdroj v riadku hodnotení na stránke titulu."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Pri pretáčaní dopredu alebo dozadu zobrazí nad lištou náhľad filmu. Obrázky pochádzajú zo Seekr (seekr.tv) a vyžadujú váš osobný kľúč; každý otvorený titul spotrebuje jeden dopyt z dennej kvóty."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Pri posúvaní dopredu alebo dozadu ukazuje nad lištou náhľad filmu. Obrázky pochádzajú zo Seekr (seekr.tv)."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Zobrazujú sa len kontajnery MP4 (šikovné na hľadanie Dolby Vision v MP4). OK filter zruší."),
   T("Mostrar", "Zobraziť"),
   T("Mostrar \"Continuar assistindo\"", "Zobraziť \"Pokračovať v sledovaní\""),

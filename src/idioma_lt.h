@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Šalia miniatiūros rodo ankstesnį ir kitą kadrą su jų laiku. Aišku, kad kadras yra kas 10 sekundžių."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Rodo arba slepia šį šaltinį pavadinimo puslapio įvertinimų eilutėje."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Prasukdami pirmyn ar atgal, virš juostos matote filmo miniatiūrą. Vaizdai gaunami iš Seekr (seekr.tv), jiems reikia jūsų asmeninio rakto; kiekvienas atidarytas pavadinimas sunaudoja vieną dienos kvotos užklausą."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Sukant pirmyn ar atgal virš juostos rodo filmo miniatiūrą. Vaizdai gaunami iš Seekr (seekr.tv)."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Rodomi tik MP4 konteineriai (patogu ieškant Dolby Vision MP4). OK išvalo filtrą."),
   T("Mostrar", "Rodyti"),
   T("Mostrar \"Continuar assistindo\"", "Rodyti \"Tęsti žiūrėjimą\""),

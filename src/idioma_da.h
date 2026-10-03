@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Viser det forrige og det næste billede ved siden af miniaturen, med tiden for hvert. Gør det tydeligt, at der er et billede hvert 10. sekund."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Viser eller skjuler denne kilde i rækken med bedømmelser på titelsiden."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Viser en miniature af filmen over bjælken, når du spoler frem eller tilbage. Billederne kommer fra Seekr (seekr.tv) og kræver din personlige nøgle; hver åbnet titel tæller som én forespørgsel i din daglige kvote."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Viser en miniature af filmen over linjen, mens du spoler frem eller tilbage. Billederne kommer fra Seekr (seekr.tv)."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Viser kun MP4-containere (praktisk for at finde Dolby Vision i MP4). OK fjerner filteret."),
   T("Mostrar", "Vis"),
   T("Mostrar \"Continuar assistindo\"", "Vis \"Fortsæt med at se\""),

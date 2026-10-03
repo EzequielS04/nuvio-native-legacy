@@ -1833,9 +1833,17 @@ static const char *fanartMascarada(void) {
   return m;
 }
 
-// CHAVE PESSOAL DO SEEKR (seekr.h). Mesmo trato da do fanart.tv: seekr.txt na
-// pasta de dados, nunca no ajustes.txt nem na conta, so mascarada na tela. Os
-// termos do servico proibem embutir a chave no app, entao cada um usa a sua.
+// CHAVE DO SEEKR (seekr.h). Duas origens:
+//   - EMBUTIDA (NV_SEEKR_API_KEY, do local.properties via tools/env.sh): a do
+//     dono, decisao dele em 03/10/2026 sabendo que os termos do servico pedem
+//     chave por pessoa e que quem tiver o pacote consegue extrai-la. Com ela,
+//     a chave e o "Testar" saem dos Ajustes e ficam so os interruptores.
+//   - PESSOAL (build sem a chave): seekr.txt na pasta de dados, nunca no
+//     ajustes.txt nem na conta, so mascarada na tela, como a do fanart.tv.
+#ifndef NV_SEEKR_API_KEY
+#define NV_SEEKR_API_KEY ""
+#endif
+static int seekrEmbutida(void) { return NV_SEEKR_API_KEY[0] != 0; }
 static char seekrChave[96];
 static const char *SEEKR_ALFA =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
@@ -1846,7 +1854,13 @@ static void seekrLimpar(char *dst, size_t n, const char *t) {
   dst[k] = 0;
 }
 static void seekrCarregar(void) {
-  char *t = dados_ler("seekr.txt");
+  char *t;
+  if (seekrEmbutida()) {
+    seekrLimpar(seekrChave, sizeof seekrChave, NV_SEEKR_API_KEY);
+    seekr_definir_chave(seekrChave);
+    return;
+  }
+  t = dados_ler("seekr.txt");
   seekrLimpar(seekrChave, sizeof seekrChave, t);
   free(t);
   seekr_definir_chave(seekrChave);
@@ -3573,6 +3587,7 @@ static int visivel(int i) {
   if (TELA[i].tipo == IT_OPC) {
     int op = TELA[i].op;
     if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) return 0;
+    if ((op == AJ_SEEKR_CHAVE || op == AJ_SEEKR_TESTAR) && seekrEmbutida()) return 0;
     if (uxAvancada(op) && !uxAvancados[secDoItem[i]]) return 0;
   }
   return 1;
@@ -3875,7 +3890,10 @@ static const char *ajudaOpcao(int op) {
     case AJ_TMDB_CW: return "Usa o TMDB para preencher os cartazes da fileira de retomada.";
     case AJ_MDB_LIGADO: return "O MDBList junta notas de várias fontes na página do título. Desligar esconde a fileira inteira.";
     case AJ_MDB_CHAVE: return "A chave vem da sua conta Nuvio ou do arquivo do pacote. Não dá para digitar nesta TV.";
-    case AJ_SEEKR_LIGADO: return "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.";
+    case AJ_SEEKR_LIGADO:
+      if (seekrEmbutida())
+        return "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).";
+      return "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.";
     case AJ_SEEKR_CHAVE: return "Sua chave pessoal do Seekr, gratuita na prévia em seekr.tv. Fica só nesta TV e aparece mascarada.";
     case AJ_SEEKR_FITA: return "Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.";
     case AJ_SEEKR_AJUSTE: return "Use quando a miniatura mostra sempre a cena de alguns segundos antes ou depois. Acontece quando a sua versão do título é diferente da usada pelo Seekr (outro corte, abertura mais longa). Vale para todos os títulos; volte a 0 ao trocar de filme.";

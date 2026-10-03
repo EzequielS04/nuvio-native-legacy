@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "在縮圖旁顯示前後兩幀及各自的時間，可以看出每 10 秒一幀。"),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "在作品頁的評分列中顯示或隱藏此來源。"),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "快轉或倒轉時，在進度條上方顯示影片縮圖。圖片來自 Seekr（seekr.tv），需要您的個人金鑰；每開啟一個片名會消耗一次每日額度。"),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "快轉或倒轉時，在進度條上方顯示影片縮圖。圖片來自 Seekr（seekr.tv）。"),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "僅顯示 MP4 容器（適合尋找 MP4 格式的 Dolby Vision）。按確定鍵取消篩選。"),
   T("Mostrar", "顯示"),
   T("Mostrar \"Continuar assistindo\"", "顯示「繼續觀看」"),

@@ -1488,6 +1488,7 @@
   { "Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Shows the previous and next frames beside the thumbnail, with the time of each. Makes it clear there is one frame every 10 seconds." },
   { "Mostra ou esconde esta fonte na fileira de notas da página do título.", "Shows or hides this source in the ratings row of the title page." },
   { "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Shows a movie thumbnail above the bar as you skip forward or back. Images come from Seekr (seekr.tv) and need your personal key; each title you open counts one request against your daily quota." },
+  { "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Shows a movie thumbnail above the bar while you skip forward or back. The images come from Seekr (seekr.tv)." },
   { "Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Showing MP4 containers only (handy to find Dolby Vision in MP4). OK clears the filter." },
   { "Mostrar", "Show" },
   { "Mostrar \"Continuar assistindo\"", "Show \"Continue Watching\"" },

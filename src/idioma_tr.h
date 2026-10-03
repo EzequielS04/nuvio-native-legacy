@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Küçük resmin yanında önceki ve sonraki kareyi, her birinin zamanıyla gösterir. Her 10 saniyede bir kare olduğunu netleştirir."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Bu kaynağı başlık sayfasının puan satırında gösterir veya gizler."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "İleri veya geri sararken çubuğun üstünde filmin küçük resmini gösterir. Görüntüler Seekr'den (seekr.tv) gelir ve kişisel anahtarını ister; açılan her yapım günlük kotandan bir sorgu harcar."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "İleri veya geri sararken çubuğun üstünde filmin küçük resmini gösterir. Görseller Seekr'dan (seekr.tv) gelir."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Yalnızca MP4 kapsayıcıları gösteriliyor (MP4'te Dolby Vision bulmak için kullanışlı). OK filtreyi kaldırır."),
   T("Mostrar", "Göster"),
   T("Mostrar \"Continuar assistindo\"", "\"İzlemeye devam et\"i göster"),

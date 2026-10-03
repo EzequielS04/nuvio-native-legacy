@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Toont het vorige en het volgende beeld naast de miniatuur, met de tijd van elk. Zo zie je dat er om de 10 seconden een beeld is."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Toont of verbergt deze bron in de beoordelingsrij van de titelpagina."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Toont een miniatuur van de film boven de balk terwijl je vooruit of terug spoelt. De beelden komen van Seekr (seekr.tv) en hebben je persoonlijke sleutel nodig; elke geopende titel telt als één opvraag van je dagquotum."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Toont een miniatuur van de film boven de balk terwijl je vooruit of terug spoelt. De beelden komen van Seekr (seekr.tv)."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Alleen MP4-containers (handig om Dolby Vision in MP4 te vinden). OK wist het filter."),
   T("Mostrar", "Tonen"),
   T("Mostrar \"Continuar assistindo\"", "\"Verder kijken\" tonen"),

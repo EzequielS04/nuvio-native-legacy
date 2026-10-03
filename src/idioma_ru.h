@@ -1488,6 +1488,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Показывает предыдущий и следующий кадры рядом с миниатюрой и время каждого. Видно, что кадр есть каждые 10 секунд."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Показывает или скрывает этот источник в ряду оценок на странице названия."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Показывает миниатюру фильма над шкалой при перемотке вперёд или назад. Кадры берутся из Seekr (seekr.tv) и требуют ваш личный ключ; каждый открытый тайтл расходует один запрос дневной квоты."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Показывает миниатюру фильма над шкалой, когда вы перематываете вперёд или назад. Изображения берутся из Seekr (seekr.tv)."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Показаны только контейнеры MP4 (удобно, чтобы найти Dolby Vision в MP4). OK снимает фильтр."),
   T("Mostrar", "Показывать"),
   T("Mostrar \"Continuar assistindo\"", "Показывать \"Продолжить просмотр\""),

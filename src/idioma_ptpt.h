@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Mostra o fotograma anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um fotograma a cada 10 segundos."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Mostra ou esconde esta fonte na fila de classificações da página do título."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Mostra uma miniatura do filme por cima da barra enquanto avança ou recua. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua quota diária."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Mostra uma miniatura do filme acima da barra enquanto avança ou recua. As imagens vêm do Seekr (seekr.tv)."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "A mostrar só contentores MP4 (útil para encontrar Dolby Vision em MP4). OK remove o filtro."),
   T("Mostrar", "Mostrar"),
   T("Mostrar \"Continuar assistindo\"", "Mostrar \"Continuar a ver\""),

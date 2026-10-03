@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Menampilkan bingkai sebelum dan sesudah di samping thumbnail, lengkap dengan waktunya. Jadi jelas ada satu bingkai setiap 10 detik."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Menampilkan atau menyembunyikan sumber ini di baris rating halaman judul."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Menampilkan thumbnail film di atas bilah saat Anda maju atau mundur. Gambar berasal dari Seekr (seekr.tv) dan butuh kunci pribadi Anda; setiap judul yang dibuka menghitung satu permintaan dari kuota harian."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Menampilkan gambar mini film di atas bilah saat Anda maju atau mundur. Gambarnya berasal dari Seekr (seekr.tv)."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Hanya menampilkan kontainer MP4 (berguna untuk menemukan Dolby Vision dalam MP4). OK menghapus filter."),
   T("Mostrar", "Tampilkan"),
   T("Mostrar \"Continuar assistindo\"", "Tampilkan \"Lanjutkan menonton\""),

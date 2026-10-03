@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Hiện khung hình trước và sau cạnh ảnh thu nhỏ, kèm thời gian của từng khung. Cho thấy rõ cứ 10 giây có một khung."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Hiện hoặc ẩn nguồn này ở hàng điểm đánh giá của trang tựa phim."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Hiện ảnh thu nhỏ của phim phía trên thanh khi bạn tua tới hoặc lui. Ảnh lấy từ Seekr (seekr.tv) và cần khóa cá nhân của bạn; mỗi tựa mở ra tính một lượt truy vấn trong hạn mức hằng ngày."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Hiển thị ảnh thu nhỏ của phim phía trên thanh khi bạn tua tới hoặc lùi. Hình ảnh lấy từ Seekr (seekr.tv)."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Chỉ hiển thị định dạng chứa MP4 (tiện để tìm Dolby Vision trong MP4). OK để xóa bộ lọc."),
   T("Mostrar", "Hiển thị"),
   T("Mostrar \"Continuar assistindo\"", "Hiển thị \"Xem tiếp\""),

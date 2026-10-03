@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Δείχνει το προηγούμενο και το επόμενο καρέ δίπλα στη μικρογραφία, με τον χρόνο του καθενός. Φαίνεται ότι υπάρχει ένα καρέ κάθε 10 δευτερόλεπτα."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Εμφανίζει ή κρύβει αυτή την πηγή στη σειρά βαθμολογιών της σελίδας τίτλου."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Δείχνει μια μικρογραφία της ταινίας πάνω από τη γραμμή όταν προχωράς ή γυρνάς πίσω. Οι εικόνες έρχονται από το Seekr (seekr.tv) και θέλουν το προσωπικό σου κλειδί· κάθε τίτλος που ανοίγεις μετρά ένα αίτημα της ημερήσιας ποσόστωσής σου."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Δείχνει μια μικρογραφία της ταινίας πάνω από τη γραμμή όσο πας μπροστά ή πίσω. Οι εικόνες έρχονται από το Seekr (seekr.tv)."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Εμφανίζονται μόνο κοντέινερ MP4 (χρήσιμο για να βρεις Dolby Vision σε MP4). Το OK καθαρίζει το φίλτρο."),
   T("Mostrar", "Εμφάνιση"),
   T("Mostrar \"Continuar assistindo\"", "Εμφάνιση του \"Συνέχεια προβολής\""),

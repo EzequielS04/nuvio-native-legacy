@@ -1488,6 +1488,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Arată cadrul anterior și cel următor lângă miniatură, cu timpul fiecăruia. Se vede clar că există un cadru la fiecare 10 secunde."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Arată sau ascunde această sursă în rândul de note de pe pagina titlului."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Arată o miniatură a filmului deasupra barei când derulezi înainte sau înapoi. Imaginile vin de la Seekr (seekr.tv) și cer cheia ta personală; fiecare titlu deschis consumă o cerere din cota zilnică."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Arată o miniatură a filmului deasupra barei când derulezi înainte sau înapoi. Imaginile vin de la Seekr (seekr.tv)."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Se arată doar containere MP4 (util pentru a găsi Dolby Vision în MP4). OK scoate filtrul."),
   T("Mostrar", "Arată"),
   T("Mostrar \"Continuar assistindo\"", "Arată \"Continuă vizionarea\""),

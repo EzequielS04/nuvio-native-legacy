@@ -1489,6 +1489,7 @@
   T("Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.", "Megmutatja az előző és a következő képkockát a miniatűr mellett, mindegyik idejével. Jól látszik, hogy 10 másodpercenként van egy kép."),
   T("Mostra ou esconde esta fonte na fileira de notas da página do título.", "Megjeleníti vagy elrejti ezt a forrást a cím oldalának értékelési sorában."),
   T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.", "Előre- vagy visszatekeréskor a sáv fölött megmutatja a film miniatűrjét. A képek a Seekr-től (seekr.tv) jönnek, és a személyes kulcsodat kérik; minden megnyitott cím egy lekérdezést használ a napi keretedből."),
+  T("Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).", "Előre- vagy visszatekeréskor a sáv fölött megmutatja a film bélyegképét. A képek a Seekrtől (seekr.tv) származnak."),
   T("Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro.", "Csak az MP4-konténerek látszanak (hasznos a Dolby Vision keresésére MP4-ben). Az OK törli a szűrőt."),
   T("Mostrar", "Megjelenítés"),
   T("Mostrar \"Continuar assistindo\"", "A \"Folytatás\" megjelenítése"),
