@@ -157,7 +157,14 @@ static void rgMilhar(char *d, size_t tam, long n) {
   d[j] = 0;
 }
 
+static void registro_envio_desenharCorpo_(void);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void registro_envio_desenhar(void) {
+  ESCALA_INI();
+  registro_envio_desenharCorpo_();
+  ESCALA_FIM();
+}
+static void registro_envio_desenharCorpo_(void) {
   AvisosEnvio env;
   float x, y, w, base = RE_Y + RE_H - 56;
   char kb[32], v[200], a[96], s[160];

@@ -7,6 +7,8 @@
 #include "idiomacod.h"
 #include "tex_cache.h"
 #include "layout.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -155,7 +157,14 @@ static void ilha(void) {
     if (fr > 0.005f) gfx_cor((GfxRect){ x, y, cw * fr, 8 }, 0.5f, 0.298f, 0.765f, 0.541f, 0.8f); }
 }
 
+static void desempenho_desenharCorpo_(Uint32 agora, int forma);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void desempenho_desenhar(Uint32 agora, int forma) {
+  ESCALA_INI();
+  desempenho_desenharCorpo_(agora, forma);
+  ESCALA_FIM();
+}
+static void desempenho_desenharCorpo_(Uint32 agora, int forma) {
   (void)agora;
   if (!temAmostra) return;
   gfx_sem_recorte();
