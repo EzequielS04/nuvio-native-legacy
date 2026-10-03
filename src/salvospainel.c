@@ -1919,17 +1919,6 @@ static void botaoSup(GfxRect r, float raio, float f, float a) {
   gfx_cor(r, raio, ar, ag, ab, v * a);
 }
 
-// As duas cores ja ficam no cache de texto. O que muda por quadro e somente a
-// opacidade, nunca a chave de rasterizacao: o titulo e a meta fazem a mesma
-// travessia que a superficie, sem o estalo claro/escuro no meio da mola.
-static void txt_foco_transicao(TxtLinha repouso, TxtLinha foco,
-                               float x, float y, float f, float a) {
-  if (f < 0.999f)
-    txt_desenhar_alpha(repouso, x, y, a * (1.0f - f));
-  if (f > 0.001f)
-    txt_desenhar_alpha(foco, x, y, a * f);
-}
-
 // CAIXA ALTA ESPACADA (".kick" do mockup: 15 bold, 0,14 em): o kicker do
 // cabecalho e o rotulo dos chips. A mesma conta de caixaAlta em streams.c —
 // i18n antes da caixa alta, porque a tabela de idioma guarda a frase normal.
@@ -2117,10 +2106,13 @@ static void desenhaCelulaGrade(int i, float dx, float y, float a) {
   }
   arteCelula(poster, l->poster, 0.06f, a);
   barraSobreArte(poster, l->progresso, a);
-  { TxtLinha r = txt_linha_corta(TXT_CAPTION, l->titulo, 240, 240, 240, 255, l->lw);
-    TxtLinha fo = txt_linha_corta(TXT_CAPTION, l->titulo, tf, tf, tf, 255, l->lw);
-    txt_foco_transicao(r, fo, x, y + SPG_POSTER_H + 10.0f, v, a); }
-  (void)tf2;
+  // O titulo na tinta da ilha: 19 a 88 %, branco cheio no foco.
+  { TxtLinha r = txtIlha(TXT_ILHA_SUB, l->titulo, l->lw);
+    TxtLinha fo = txt_linha_corta(TXT_ILHA_SUB, l->titulo, 255, 255, 255, 255, l->lw);
+    float fv = focoVisual(f);
+    txt_desenhar_alpha(r, x, y + SPG_POSTER_H + 12.0f, a * 0.88f * (1.0f - fv));
+    txt_desenhar_alpha(fo, x, y + SPG_POSTER_H + 12.0f, a * fv); }
+  (void)tf2; (void)tf; (void)v;
 }
 
 // CARTOES PAISAGEM: a arte 16:9 do catalogo (o cartaz recortado quando ela
@@ -2142,12 +2134,11 @@ static void desenhaCelulaPaisagem(int i, float dx, float y, float a) {
   if (l->progresso > 0 && l->txtRestante[0]) snprintf(apoio, sizeof apoio, "%s", l->txtRestante);
   else if (l->ano > 0) snprintf(apoio, sizeof apoio, "%s · %d", i18n(tipoRotulo(l)), l->ano);
   else snprintf(apoio, sizeof apoio, "%s", i18n(tipoRotulo(l)));
-  { TxtLinha r = txt_linha_corta(TXT_BODY, l->titulo, 245, 245, 245, 255, l->lw);
-    TxtLinha fo = txt_linha_corta(TXT_BODY, l->titulo, tf, tf, tf, 255, l->lw);
-    txt_foco_transicao(r, fo, x, y + SPP_IMG_H + 12.0f, v, a); }
-  { TxtLinha r = txt_linha_corta(TXT_CAPTION, apoio, 168, 172, 183, 255, l->lw);
-    TxtLinha fo = txt_linha_corta(TXT_CAPTION, apoio, tf2, tf2, tf2, 255, l->lw);
-    txt_foco_transicao(r, fo, x, y + SPP_IMG_H + 48.0f, v, a * 0.95f); }
+  // Os dois andares de cima da linha da ilha: o titulo (24 semibold) e o
+  // apoio (19 a 62 %).
+  nomeVerbo(l->titulo, NULL, x, y + SPP_IMG_H + 12.0f, l->lw / 0.6f, focoVisual(f), a);
+  txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, apoio, l->lw), x, y + SPP_IMG_H + 45.0f, a * 0.62f);
+  (void)tf; (void)tf2; (void)v;
 }
 
 // A LINHA DE SALVOS, na gramatica da ilha: o cartaz e a coisa (fica a
@@ -2510,7 +2501,7 @@ static void desenhaPop(float a) {
   h = topoL + janela + 28.0f;
   x = SP_X + 40.0f;
   y = SP_Y + (SP_H - h) * 0.42f + (1.0f - e) * 18.0f;
-  gfx_cor((GfxRect){ SP_X, SP_Y, SP_W, SP_H }, 28.0f / SP_H, 0.0f, 0.0f, 0.0f, 0.50f * e);
+  gfx_cor((GfxRect){ SP_X, SP_Y, SP_W, SP_H }, SP_RAIO / SP_W, 0.0f, 0.0f, 0.0f, 0.50f * e);
   // A ESCOLHA E UMA ILHA por cima da ilha do painel: o mesmo material, um
   // degrau mais clara no solido para se separar dele sem aro.
   { GfxRect r = { x, y, w, h };
@@ -2520,11 +2511,13 @@ static void desenhaPop(float a) {
     if (vid) gfx_vidro_folha(r, 28.0f / h, e);
     else gfx_cor(r, 28.0f / h, .098f, .102f, .118f, .99f * e);
     gfx_luz_canto(r, 28.0f / h, w * .25f, -h * .25f, w * .9f, 1, 1, 1, (vid ? .06f : .04f) * e); }
-  { TxtLinha t = txt_linha_corta(TXT_CALLOUT, popTitulo, 246, 247, 252, 255, w - 64.0f);
+  // O TEXTO NA ESCALA DA ILHA: titulo 24 semibold, apoio 19 a 62 %, opcoes
+  // 24 regular a 88 % (branco cheio na focada).
+  { TxtLinha t = txtIlha(TXT_ILHA_NOME, popTitulo, w - 64.0f);
     txt_desenhar_alpha(t, x + 32.0f, y + 26.0f, e); }
   if (popSub[0]) {
-    TxtLinha t = txt_linha_corta(TXT_CAPTION, popSub, 168, 172, 183, 255, w - 64.0f);
-    txt_desenhar_alpha(t, x + 32.0f, y + 72.0f, e * 0.95f);
+    TxtLinha t = txtIlha(TXT_ILHA_SUB, popSub, w - 64.0f);
+    txt_desenhar_alpha(t, x + 32.0f, y + 66.0f, e * 0.62f);
   }
   // Com icone em alguma opcao, todas reservam a coluna dele: texto alinhado
   // numa coluna so, como num menu, e nao em degraus.
@@ -2537,16 +2530,19 @@ static void desenhaPop(float a) {
     float tinta = ajustes_acento_tinta(NULL, NULL, NULL);
     GfxRect r = { x + 20.0f, ry, w - 40.0f, POP_LINHA_H };
     if (ry + POP_LINHA_H < y + topoL - 8.0f || ry > y + topoL + janela + 8.0f) continue;
-    if (f > 0.01f) superficieItem(r, 16.0f / POP_LINHA_H, f, e);
+    if (f > 0.01f) superficieItem(r, SP_LINHA_RAIO / POP_LINHA_H, f, e);
     if (popL[i].icone) {
       float ic = anim_mistura(200.0f / 255.0f, tinta, v);
       gfx_icone((GfxRect){ tx, ry + (POP_LINHA_H - 24.0f) * 0.5f, 24.0f, 24.0f },
                 popL[i].icone, ic, ic, ic, e);
     }
     if (algumIcone) tx += 38.0f;
-    { TxtLinha rp = txt_linha_corta(TXT_CALLOUT, popL[i].rot, 236, 237, 242, 255, w - 160.0f);
-      TxtLinha fo = txt_linha_corta(TXT_CALLOUT, popL[i].rot, tf, tf, tf, 255, w - 160.0f);
-      txt_foco_transicao(rp, fo, tx, ry + (POP_LINHA_H - (float)rp.h) * 0.5f, v, e); }
+    { TxtLinha rp = txtIlha(TXT_ILHA_CORPO, popL[i].rot, w - 160.0f);
+      TxtLinha fo = txt_linha_corta(TXT_ILHA_CORPO, popL[i].rot, 255, 255, 255, 255, w - 160.0f);
+      float fv = focoVisual(f);
+      (void)tf;
+      txt_desenhar_alpha(rp, tx, ry + (POP_LINHA_H - (float)rp.h) * 0.5f, e * 0.88f * (1.0f - fv));
+      txt_desenhar_alpha(fo, tx, ry + (POP_LINHA_H - (float)fo.h) * 0.5f, e * fv); }
     if (popL[i].marcado) {
       float ar, ag, ab;
       ajustes_acento(&ar, &ag, &ab);
@@ -3126,7 +3122,7 @@ static void desenharPainel(Uint32 agora) {
   int i;
   char buf[160];
   GfxRect forma = { SP_X, SP_Y, SP_W, SP_H };
-  float raioForma = 28.0f / SP_W;
+  float raioForma = SP_RAIO / SP_W;
   morfOn = 0;
   if (entrada < 0.002f) return;
 
@@ -3344,10 +3340,10 @@ static void desenharPainel(Uint32 agora) {
     if (sy + sh < listaTopo() || sy > SP_LISTA_BASE) continue;
     desenhaSecao(SP_X + x, sy, secoes[i].rot, a, secoes[i].y <= 0.0f);
     if (secoes[i].vazia) {
-      TxtLinha t = txt_linha_corta(TXT_CAPTION,
+      TxtLinha t = txtIlha(TXT_ILHA_SUB,
           "Vazia. Segure OK num título e escolha \xe2\x80\x9cMover para categoria\xe2\x80\x9d.",
-          150, 154, 166, 255, SP_INTERNO);
-      txt_desenhar_alpha(t, SP_X + x + SP_PAD, sy + sa + 6.0f, a * 0.9f);
+          SP_INTERNO);
+      txt_desenhar_alpha(t, SP_X + x + SP_PAD, sy + sa + 6.0f, a * 0.5f);
     }
   }
   { int estilo = sorg_estilo();

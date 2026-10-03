@@ -972,8 +972,8 @@ void avisos_lista_desenhar(float x, float y0, float w, float a, int focoLinha) {
     if (expande) {
       float h = txt_bloco(TXT_ILHA_SUB, av->texto, 243, 242, 239, tx, y + 51.0f, tw, 25.0f, a * 0.62f,
                           AVL_LINHAS_CANAL);
-      float nova = 51.0f + h + 4.0f + 18.0f + 18.0f;
-      if (nova < AVL_ROW) nova = AVL_ROW;
+      float nova = 51.0f + h + (temAcaoAviso(av) ? 4.0f + 18.0f : 0.0f) + 18.0f;
+      if (nova < alturaAviso(i)) nova = alturaAviso(i);
       alturaCanalFoco = nova;
     }
     else txt_bloco(TXT_ILHA_SUB, av->texto, 243, 242, 239, tx, y + 51.0f, tw, 25.0f, a * 0.62f, 2);
