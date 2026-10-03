@@ -10,6 +10,7 @@
 ## Fixed
 
 - Resume Android playback at a valid saved position during preparation, avoiding a second seek.
+- Keep the LG screensaver inactive during playback, allowing it after pause or stop.
 - Keep pending addon changes across restarts and failed sync, without letting an older response overwrite them.
 - Clear the resume card and its pending actions when switching accounts or profiles.
 - Keep watched history separate for each account and profile; ignore late responses from a previous session.

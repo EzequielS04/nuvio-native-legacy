@@ -2,6 +2,14 @@
 
 Somente local, em `release/1.7.2` (`/private/tmp/nv-172`), base 1.7.1 `2bc9659b`. Dono autorizou executar esta proposta e escolheu a reorganização funcional dos Ajustes; peles A/B, ícones de apoiador e social continuam fora. Testes focados + i18n; comportamento nas TVs testado pelo dono. Nenhum push/tag/publicação/comentário nesta rodada.
 
+## Inclusão posterior — screensaver webOS
+
+Pedido explícito do dono: incluir `8a4995617bb4a43810a46e064dbfd7a61540146e` na 1.7.2. Cherry-pick local `857f83e3`; ajuste de integração `11835ffa`. A chamada original estava no caminho de falha de registro LS2. Agora assina no callback do load válido, uma vez por ciclo do barramento, e não bloqueia novas tentativas após falha de transporte.
+
+Responde ao estado Active usando o timestamp recebido sem truncar/arredondar. Bloqueia screensaver somente com mídia efetivamente tocando; libera em pausa, fim, erro ou ausência de mídia. Ignora estados não Active, timestamps ausentes/inválidos/longos e callback após encerramento. Reset permite assinar no próximo ciclo do backend.
+
+**Estado da candidata:** código atualizado; testes focados e i18n PASS. Validação física e novo empacotamento pendentes. Pacotes `b71471bc` são anteriores ao screensaver. Detalhes em VALIDACAO-LOCAL.md.
+
 ## Já integrado
 
 `agente/abrirrapido` (inclui `ilhavolta` e `i221`) e `agente/i216`. Nova ilha, fontes parciais, espera configurável pelos addons, fonte da última sessão com fallback, toque/arrastar e login por e-mail. Retenção decidida em dois minutos, commit `1bf49696`; teste 119/120 s passou. Nove testes focados aprovados. Na instalação anterior desta rodada, a TCL recebeu o APK estável 1.7.1; outra sessão relata instalação posterior de APK social. O pacote atual no aparelho não foi reconsultado. Envio e validação física da 1.7.2 terão registro próprio.

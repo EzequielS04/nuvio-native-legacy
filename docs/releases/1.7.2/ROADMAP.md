@@ -16,6 +16,10 @@ Referências locais: [plano aprovado](PLANO.md), [validação focada e casos das
 
 O [inventário e mockup da ilha](ILHA-PROPOSTA.md) revelaram defeito P2 confirmado por callchain: cartão, modal/pedido e conteúdo animado não estavam todos ligados à conta/perfil. A sessão retida já bloqueia a identidade anterior; o fallback do cartão podia usar o título/episódio antigo no contexto novo. Correção focada `b71471bc` aprovada com ASan/UBSan e revisão independente, sem adicionar as funcionalidades propostas no mockup. Invalida também modal/pedido/arte/voo e rejeita instância antiga mesmo quando o novo perfil vê o mesmo episódio; reempacotamento concluído: três plataformas PASS e 12 checksums aprovados. O conjunto de 13 anexos `fc711f6b` passou na conferência técnica, mas está preservado como intermediário após o fix; a nova candidata deriva de `b71471bc`. A auditoria anterior abaixo mantém seus horários e evidências.
 
+## Inclusão posterior do screensaver
+
+`8a49956` autorizado pelo dono para 1.7.2. Integrado em `857f83e3`, ativação corrigida em `11835ffa`; teste focado e i18n PASS. API ainda sem confirmação física; novo empacotamento pendente. O lote `b71471bc` auditado abaixo não inclui esse fix. Detalhes em VALIDACAO-LOCAL.md.
+
 ## Estado confirmado nesta revisão
 
 - GitHub, consulta somente leitura às 20:34 BRT: **20 issues abertas e nenhuma PR aberta**. Foram relidos os últimos comentários de #158, #195, #201, #217, #222, #144, #192 e #190. #212/#213/#215 já foram tratadas pela sessão da 1.7.1; não duplicar respostas.

@@ -4,6 +4,8 @@ Atualizado em 02/10/2026 21:39 BRT. Planejamento local sobre `release/1.7.2`, co
 
 O dono rejeitou o mockup da ilha e pediu continuidade no roadmap. As quatro funcionalidades daquele mockup saem da fila. A ilha já integrada e seu bugfix de isolamento por conta/perfil permanecem. Não há novo desenho da ilha aprovado.
 
+**Inclusão autorizada na 1.7.2:** fix do screensaver LG `8a49956`, cherry-pick `857f83e3` + ajuste `11835ffa`. Teste focado e i18n PASS; falta confirmação da API na TV e novo empacotamento. Os pacotes `b71471bc` mencionados abaixo são o lote anterior, sem essa inclusão.
+
 ## Distribuição entre versões
 
 | Destino | Objetivo e conteúdo | Estado / condição |
@@ -26,6 +28,7 @@ Já integrado e exercitado por testes focados:
 - **Conta/offline:** cache/sessão conservados na indisponibilidade; fila durável de addons por conta/perfil, ACK exato e retomada após reinício. HTTP500 remoto não foi corrigido pelo cliente.
 - **Consistência:** catálogo concorrente, selo/histórico de assistidos por identidade, rejeição de resposta antiga, cartão/modal/pedido da ilha isolados entre contas/perfis.
 - **Entradas e arte:** toque/login (#216), ícone do celular embutido para atualização do núcleo Samsung. Recursos da 1.7.1, como entrada pelo celular, traduções e Seekr, são base; não contar como novo merge.
+- **Screensaver LG:** assinatura no load válido; manter desligado durante reprodução efetiva e liberar em pausa/fim/erro/parada. Pedido do dono incorporado; prova física pendente.
 - **Sonda/build:** validação HTTP/cabeçalhos/URL sem truncamento, corpo limitado; temporários no SSD e exclusão de arquivos pessoais. APK, dois IPKs, WGT, quatro TPKs, dois núcleos, metadados e checksums conferidos.
 
 ### O que impede chamar a 1.7.2 de pronta

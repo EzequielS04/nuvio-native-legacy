@@ -1,6 +1,8 @@
 # Pacotes locais 1.7.2
 
-Candidata técnica local concluída, sem publicação ou instalação nesta rodada. Todos os pacotes derivam da fonte congelada `b71471bc20e36806de9665145e4898c5e8e67884`, incluindo a fila durável de addons e a correção de identidade do cartão da ilha. Desenvolvimento em `/private/tmp/nv-172`, branch `release/1.7.2`; eventual commit posterior só de documentação não altera a origem compilada.
+**Inclusão posterior:** screensaver webOS `8a49956` integrado por `857f83e3` e ajustado em `11835ffa`. Código atual `ab281e99`; o lote abaixo de `b71471bc` não inclui o fix. Ele permanece tecnicamente conferido, mas é intermediário para a candidata ampliada. Novo empacotamento pendente após congelamento.
+
+Conjunto técnico anterior concluído, sem publicação ou instalação nesta rodada. Todos os pacotes derivam da fonte congelada `b71471bc20e36806de9665145e4898c5e8e67884`, incluindo a fila durável de addons e a correção de identidade do cartão da ilha. Desenvolvimento em `/private/tmp/nv-172`, branch `release/1.7.2`; eventual commit posterior só de documentação não altera a origem compilada.
 
 ## Conjunto atual
 
