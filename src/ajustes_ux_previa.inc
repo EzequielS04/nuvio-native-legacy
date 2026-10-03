@@ -663,37 +663,24 @@ static float ajPreviaCartao(int op, float x, float y, float w) {
 
 // A previa da opcao em foco. Devolve a altura usada (0 = sem previa).
 static float ajPrevia(int op, float x, float y, float w) {
+  float h = -1;
+  int anterior = ajVisualSemFoto;
+  ajVisualSemFoto = 1;
   switch (op) {
-    case AJ_HOME_LAYOUT: return ajPreviaLayout(x, y, w);
-    case AJ_RELOGIO_POS: return ajPreviaRelogio(x, y, w);
-    case AJ_LARGURA_DP: case AJ_RAIO_DP: return ajPreviaCartaz(op, x, y, w);
-    case AJ_ESPACO: case AJ_TEX_MB: return ajPainelMemoria(x, y, w);
-    case AJ_TEMA: case AJ_COR_LOGO: return ajPreviaCor(x, y, w);
-    case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: return ajPreviaPlayer(x, y, w);
-    case AJ_TRAKT: case AJ_SIMKL: return ajPreviaServico(op, x, y, w);
-    // O fim do log de verdade, no mesmo mono do painel (mockup quadro 7).
+    case AJ_HOME_LAYOUT: h = ajPreviaLayout(x,y,w); break;
+    case AJ_RELOGIO_POS: h = ajPreviaRelogio(x,y,w); break;
+    case AJ_LARGURA_DP: case AJ_RAIO_DP: h = ajPreviaCartaz(op,x,y,w); break;
+    case AJ_ESPACO: case AJ_TEX_MB: h = ajPainelMemoria(x,y,w); break;
     case AJ_ENVIAR_LOG: case AJ_VER_REGISTRO: case AJ_ENVIO_AUTO:
-      registro_pacote(x, y, w, 300, 9, i18n("últimos 200 KB"), 1);
-      return 300;
+      registro_pacote(x,y,w,300,9,i18n("últimos 200 KB"),1); h=300; break;
     default: break;
   }
-  switch ((int)familiaPreviaOpcao(op)) {
-    case AJPV_REPRO: return ajPreviaPlayer(x, y, w);
-    case AJPV_CONTINUAR: return ajPreviaContinuar(x, y, w);
-    case AJPV_DETALHE: return ajPreviaDetalhe(x, y, w);
-    case AJPV_FOCO: case AJPV_PROFUNDIDADE: case AJPV_CARTAZ: return ajPreviaFoco(x, y, w);
-    case AJPV_CONTA: case AJPV_RASTREIO: case AJPV_ABOUT: case AJPV_TMDB: case AJPV_MDB: case AJPV_ACAO:
-      return ajPreviaCartao(op, x, y, w);
-    default: break;
-  }
-  return ajPreviaHome(x, y, w);
+  ajVisualSemFoto = anterior;
+  return h >= 0 ? h : ajVisualCena(uxSecaoDe(op), op, x, y, w);
 }
 
 // Previa pequena (diferencas: padrao e atual lado a lado).
 static float ajPreviaCompacta(int op, float x, float y, float w) {
-  AjMini m = ajMiniPadrao();
-  if (op == AJ_HOME_LAYOUT) { m.lay = valor[op]; ajMiniHome(m, x, y, w); return w * 9.0f / 16.0f; }
-  if (op == AJ_RELOGIO_POS) { m.relogio = valor[op] == 0 ? 2 : valor[op] == 1 ? 0 : 1; ajMiniHome(m, x, y, w); return w * 9.0f / 16.0f; }
   return ajPrevia(op, x, y, w);
 }
 // Tres cartazes de uma fileira da Home: os do catalogo dela quando ja foi
@@ -758,7 +745,6 @@ static float ajOrdemHome(float x, float y, float w) {
 
 // Previa da coluna direita dos editores modais.
 static float ajPreviaEditor(int op, float x, float y, float w) {
-  if (op == AJ_FIL_LIMITE) return ajOrdemHome(x, y, w);
   if (op == AJ_QUALIDADE) {
     float h;
     ajKicker("Resoluções que passam", x, y, 1);

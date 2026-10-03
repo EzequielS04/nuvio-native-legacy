@@ -19,8 +19,9 @@ static void igual(const char *antes) { char *depois = arquivo(); assert(!strcmp(
 static void abrir(int op) { focarOpcao(op); key(SDLK_RETURN); assert(uxEditor); }
 
 int main(void) {
-  char dir[] = "/tmp/nuvio-ajustes-interacao-XXXXXX", bad[700]; char *antes;
+  char dir[1024], bad[1400]; char *antes;
   int original, foco, n, i;
+  snprintf(dir, sizeof dir, "%s/nuvio-ajustes-interacao-XXXXXX", getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp");
   assert(mkdtemp(dir)); assert(SDL_Init(SDL_INIT_TIMER) == 0);
   assert(setenv("NUVIO_DADOS", dir, 1) == 0);
   dados_iniciar(dir); assert(!strcmp(dados_dir(), dir)); snprintf(dirAjustes, sizeof dirAjustes, "%s", dir);
@@ -39,16 +40,37 @@ int main(void) {
 
   // Número só aplica o candidato final, sem gravar cada passo.
   original = valor[AJ_LARGURA_DP]; antes = arquivo(); abrir(AJ_LARGURA_DP);
-  key(SDLK_DOWN); key(SDLK_DOWN); key(SDLK_DOWN);
+  key(SDLK_RIGHT); key(SDLK_RIGHT); key(SDLK_RIGHT);
   assert(valor[AJ_LARGURA_DP] == original); igual(antes); free(antes);
   key(SDLK_RETURN); assert(valor[AJ_LARGURA_DP] == original + 3 * OPCOES[AJ_LARGURA_DP].passo);
+
+  // Eixo horizontal, limites, cancelamento e estado visual continuo.
+  abrir(AJ_LARGURA_DP); original = valor[AJ_LARGURA_DP];
+  key(SDLK_LEFT); assert(uxPendente == original-OPCOES[AJ_LARGURA_DP].passo);
+  key(SDLK_DOWN); assert(uxRodape); assert(uxPendente == original-OPCOES[AJ_LARGURA_DP].passo);
+  key(SDLK_UP); assert(!uxRodape);
+  for (i=0;i<1000;i++) key(SDLK_LEFT);
+  assert(uxPendente == OPCOES[AJ_LARGURA_DP].min);
+  for (i=0;i<1000;i++) key(SDLK_RIGHT);
+  assert(uxPendente == OPCOES[AJ_LARGURA_DP].max);
+  key(SDLK_ESCAPE); assert(valor[AJ_LARGURA_DP] == original);
+  valor[AJ_ANIM] = 0;
+  ajMovPronto[AJ_RELOGIO] = 0; valor[AJ_RELOGIO] = 0;
+  assert(ajMov(AJ_RELOGIO,0) == 0);
+  valor[AJ_RELOGIO] = 1; ajMovAtualizar(0.016f);
+  assert(ajMovValor[AJ_RELOGIO] > 0 && ajMovValor[AJ_RELOGIO] < 1);
+  float meio = ajMovValor[AJ_RELOGIO];
+  valor[AJ_RELOGIO] = 0; ajMovAtualizar(0.016f);
+  assert(ajMovValor[AJ_RELOGIO] < meio && ajMovValor[AJ_RELOGIO] > 0);
+  valor[AJ_ANIM] = 1; valor[AJ_RELOGIO] = 1; ajMovAtualizar(0.016f);
+  assert(ajMovValor[AJ_RELOGIO] == 1); valor[AJ_ANIM] = 0;
 
   // Diferenças permanecem estáveis após restaurar; confirmação começa em Cancelar.
   uxListarDiferencas(); n = uxNDifs; assert(n >= 2);
   for (i = 0; i < uxNDifs && uxDifs[i] != AJ_LARGURA_DP; i++) { }
   assert(i < uxNDifs);
   uxIndice = 1; focoIndice = 0; uxDifFoco = i; foco = i;
-  key(SDLK_RETURN); key(SDLK_RIGHT); key(SDLK_RETURN);
+  key(SDLK_RETURN); key(SDLK_DOWN); key(SDLK_RETURN);
   assert(uxRestaurar && !uxConfirmar); antes = arquivo();
   key(SDLK_RETURN); assert(uxEditor && !uxRestaurar); igual(antes); free(antes);
   key(SDLK_RETURN); assert(uxRestaurar); key(SDLK_LEFT); key(SDLK_RETURN);
@@ -99,6 +121,10 @@ int main(void) {
   key(SDLK_ESCAPE); key(SDLK_ESCAPE); assert(valor[AJ_ITENS_FILEIRA] == 0); igual(antes); free(antes);
   abrir(AJ_ITENS_FILEIRA); key(SDLK_DOWN); key(SDLK_RETURN);
   key(SDLK_LEFT); key(SDLK_RETURN); assert(!uxEditor && valor[AJ_ITENS_FILEIRA] == 1);
+
+  // Toda opcao visivel tem uma escolha explicita no mapa visual.
+  for (i=0;i<AJ_N_TELA;i++) if (TELA[i].tipo == IT_OPC)
+    assert(strcmp(ajVisualIcone(TELA[i].op), "aj_settings-2"));
 
   // Reabrir a tela preserva valores confirmados e não confirma rascunhos.
   int confirmado = valor[AJ_RELOGIO]; ajustes_encerrar(); ajustes_iniciar();

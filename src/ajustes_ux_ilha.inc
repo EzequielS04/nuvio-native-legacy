@@ -14,16 +14,7 @@ static const char *ajTipoRotulo(int op) {
   }
 }
 static const char *ajIconeOpcao(int op) {
-  switch (op) {
-    case AJ_ESPACO: case AJ_TEX_MB: return "aj_memory-stick";
-    case AJ_RELOGIO: case AJ_RELOGIO_POS: return "aj_clock";
-    case AJ_TRAKT: case AJ_SIMKL: return "aj_plug";
-    case AJ_ENVIAR_LOG: return "aj_send";
-    case AJ_VER_REGISTRO: return "aj_scroll-text";
-    case AJ_MEDIDOR: return "aj_activity";
-    default: break;
-  }
-  return TELA[secIni[uxSecaoDe(op)]].icone;
+  return ajVisualIcone(op);
 }
 // As teclas que valem AGORA, pelo tipo da linha em foco.
 static int ajDicasDe(int op, AjDica *d) {
@@ -98,11 +89,11 @@ static void aj2Dicas(const AjDica *d, int n, float x, float yBase, float w, floa
   aj2DicasLinha(d, n, x + 6.0f, yBase - 18.0f, TXT_V2_KBD18, 36, 40, 11, TXT_V2_24, 10, 24, 1, a);
 }
 static float aj2Previa(int op, float x, float y, float w) {
-  if (op == AJ_TEMA) return aj2PreviaCor(x, y, w);
-  if (op == AJ_FUNDO) {
-    int m = ajEditandoLinha(op) ? uxPendente : valor[op];
-    aj2MiniFundo(m, x, y, w, 1);
-    return w * 9.0f / 16.0f;
+  if (op == AJ_TEMA) {
+    int anterior = ajVisualSemFoto;
+    float h;
+    ajVisualSemFoto = 1; h = aj2PreviaCor(x,y,w); ajVisualSemFoto = anterior;
+    return h;
   }
   return ajPrevia(op, x, y, w);
 }
@@ -115,7 +106,6 @@ static void ajDesenharInspetor(void) {
   int nd;
   if (!aj2TemInsp()) return;
   ajIlha(ir, 40.0f, 1, 0);
-  if (op == AJ_GUIA) { guiaInspetorAjustes(ir); return; }
   { int opPv = op >= 0 ? op : -1;
     if (opPv < 0) {   // categoria: a previa da primeira opcao dela
       int it = primeiroDaSecao(secAtual);
@@ -577,7 +567,7 @@ static float aj2OrdemHome(float x, float y, float w) {
     l = ajTxtC(TXT_V2_24, fil_titulo(f)[0] ? fil_titulo(f) : fil_chave(f), rw - 26 - 14 - 22 - 14 - 3 * 24 - 2 * 6 - 14);
     txt_desenhar_alpha(l, rx + 26 + 14 + 22 + 14, y + (44 - l.h) * 0.5f, sai ? 0.35f : (novo || i >= salvo) ? 1.0f : 0.62f);
     for (k = 0; k < 3; k++)
-      ajImg(ajPosterFileira(f, k), (GfxRect){ rx + rw - 3 * 24 - 2 * 14 + k * 38, y + 4, 24, 36 }, 4, (sai ? 0.4f : 1.0f));
+      ajIcone("aj_image", rx + rw - 3 * 24 - 2 * 14 + k * 38, y + 10, 24, sai ? 0.4f : 1.0f);
     y += 44;
   }
   return 21.8f + 14.0f + h;
@@ -600,7 +590,7 @@ static void aj2EditorNumero(GfxRect m) {
   if (uxOp == AJ_FIL_LIMITE) snprintf(uni, sizeof uni, "%s", i18n("fileiras"));
   else snprintf(uni, sizeof uni, "%s", o->sufixo ? o->sufixo + (o->sufixo[0] == ' ') : "");
   { GfxRect r = { lx, y, lw, 34 + 150 + 40 + 10 + 14 + 40 + 34 };
-    float fr = ajFracao(uxOp, uxPendente), fp = ajPadraoVisual(uxOp) >= 0 ? ajFracao(uxOp, ajPadraoVisual(uxOp)) : -1;
+    float fr = ajMovFracao(uxOp, uxPendente), fp = ajPadraoVisual(uxOp) >= 0 ? ajFracao(uxOp, ajPadraoVisual(uxOp)) : -1;
     float tx = r.x + 40, tw = r.w - 80, ty = r.y + 34 + 150 + 40, cy = r.y + 34 + 75;
     TxtLinha big, u = ajTxt(TXT_V2_36B, uni), ls;
     char sv[96];
@@ -614,8 +604,8 @@ static void aj2EditorNumero(GfxRect m) {
     { float bx = tx - 4 + big.w + 30, bh = 43.6f + 6 + 29;
       txt_desenhar(u, bx, cy - bh * 0.5f + (43.6f - u.h) * 0.5f);
       txt_desenhar_alpha(ls, bx, cy - bh * 0.5f + 43.6f + 6 + (29 - ls.h) * 0.5f, 0.5f); }
-    ajIcone("aj_plus", r.x + r.w - 40 - 40, cy - 6 - 40, 40, 0.75f);
-    ajIcone("aj_minus", r.x + r.w - 40 - 40, cy + 6, 40, 0.75f);
+    ajIcone("aj_plus", r.x + r.w - 40 - 40, cy - 20, 40, 0.75f);
+    ajIcone("aj_minus", r.x + r.w - 40 - 96, cy - 20, 40, 0.75f);
     gfx_cor((GfxRect){ tx, ty, tw, 10 }, 0.5f, 1, 1, 1, 0.12f);
     if (fr > 0) gfx_cor((GfxRect){ tx, ty, tw * (fr > 1 ? 1 : fr), 10 }, 0.5f, ar, ag, ab, 1);
     if (risco >= o->min && risco < o->max) {
@@ -654,7 +644,7 @@ static void aj2EditorNumero(GfxRect m) {
     if (ef && ef[0] && y + 12 + 80 <= m.y + m.h - 40 - 64 - 20) {
       y += 12; y += aj2Ef("aj_info", i18n(ef), lx, y, lw, 1); } }
   if (pw > 0) aj2PreviaPendente(m.x + m.w - 52 - pw, aj2CabecalhoEditor(m), pw);
-  { AjDica d[3] = { { "↑ ↓", "Ajustar" }, { "OK", "Confirmar" }, { "Voltar", "Cancelar" } };
+  { AjDica d[3] = { { "← →", "Ajustar" }, { "OK", "Confirmar" }, { "Voltar", "Cancelar" } };
     aj2RodapeEditor(m, lw, d, 3); }
 }
 static void aj2EditorEscolha(GfxRect m) {
