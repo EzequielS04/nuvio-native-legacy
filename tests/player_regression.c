@@ -226,6 +226,24 @@ static void testar(void) {
   teclaPlayer(SDLK_LEFT);assert(player_so_barra());
   teclaPlayer(SDLK_RETURN);assert(player_controles_visiveis()&&!player_so_barra());
   player_encerrar();
+  // FOCO NA BARRA (pedido do dono, 03/10): a fileira de botoes FECHA e volta
+  // quando o foco desce; e CIMA na barra nao faz NADA — abria o Audio.
+  player_abrir(0,NULL);player_definir_episodio(2,4);
+  assert(player_controles_visiveis()&&!player_foco_na_barra());
+  { Uint32 t0=SDL_GetTicks();int i;
+    for(i=0;i<60;i++)player_atualizar(1.f/60,t0);
+    assert(player_fileira()>0.95f);
+    teclaPlayer(SDLK_UP);assert(player_foco_na_barra());
+    for(i=0;i<60;i++)player_atualizar(1.f/60,t0);
+    assert(player_fileira()<0.05f);
+    teclaPlayer(SDLK_UP);
+    assert(player_pediu_faixas()==0&&player_foco_na_barra()&&player_controles_visiveis());
+    teclaPlayer(SDLK_UP);teclaPlayer(SDLK_UP);
+    assert(player_pediu_faixas()==0&&player_foco_na_barra());
+    teclaPlayer(SDLK_DOWN);assert(!player_foco_na_barra()&&player_controles_visiveis());
+    for(i=0;i<60;i++)player_atualizar(1.f/60,t0);
+    assert(player_fileira()>0.95f); }
+  player_encerrar();
   strcpy(c.tipo,"movie");cat_definir(&c,1);player_abrir(0,NULL);
   player_definir_episodio(2,4);assert(!player_linha_episodio()[0]);
   for(int i=0;i<10;i++)teclaPlayer(SDLK_RIGHT);

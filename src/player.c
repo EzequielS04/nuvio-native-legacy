@@ -226,6 +226,13 @@ static float anim = 0.0f;          // 0..1 seguindo `visivel`, por mola
 static int   soBarra = 0;
 static float cheio = 1.0f;
 static float focoB[PLR_NBTNS];     // mola de foco de cada botao
+// A FILEIRA DE BOTOES FECHA COM O FOCO NA BARRA (pedido do dono, 03/10): quem
+// subiu para a barra esta procurando no filme, e os botoes embaixo dela so
+// disputam o olhar. Ela desce e apaga pela mola dos controles e volta quando o
+// foco desce de novo. Com o ponteiro ela fica: passar a mao na barra a
+// fecharia, e a mao nao teria onde achar os botoes de volta.
+static float fileira = 1.0f;
+static int ponteiroNoPlayer(void);
 static float entrada = 0.0f;       // 0..1 fade de abertura/fechamento da tela
 static Uint32 ultimoInput = 0;
 // Foco no botao "Pular abertura/resumo". Ele e um alvo de foco de verdade no
@@ -1115,7 +1122,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
     // A grade EPG comeca a baixar ja: o banner "agora/a seguir" do OSD e o
     // overlay do guia dependem dela. Idempotente.
     if (canalSessao) { guia_carregar(); epg_iniciar(); } }
-  tocando = 1; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f;
+  tocando = 1; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f; fileira = 1.0f;
   pedFontes = erroFonte = pedFaixas = pedProxT = pedProxE = 0; inicioImagem = 0;
   erroTitulo[0] = erroDica[0] = 0;
   pedGuia = pedZap = pedGuiaCheio = 0;
@@ -1280,6 +1287,7 @@ int  player_com_video(void) { return comVideo && !retido && video_pronto(); }
 int  player_carregando(void) { return esperandoFonte || (comVideo && !video_pronto()); }
 int  player_controles_visiveis(void) { return visivel; }
 int   player_foco_na_barra(void) { return barraFoco; }
+float player_fileira(void) { return fileira; }
 int   player_so_barra(void) { return soBarra && visivel; }
 float player_posicao_seg(void) { return posSeg; }
 
@@ -2314,8 +2322,9 @@ void player_evento(const SDL_Event *e) {
       posSeg = (float)puloDestino(fim); if (comVideo) video_buscar(posSeg);
       skipFoco = 0; acordar(); return;
     } else if (k == SDLK_DOWN) { skipFoco = 0; acordar(); return; }
-    else if (k == SDLK_UP) { pedFaixas = 1; acordar(); return; }
-    else { acordar(); return; }                         // esquerda/direita: nada ao lado
+    // CIMA nao abre mais a folha de Audio daqui (pedido do dono, 03/10): acima
+    // do botao de pular nao ha nada. Esquerda/direita: nada ao lado.
+    else { acordar(); return; }
   }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
     // Na barra o OK pausa/retoma: e o que sobra de util, ja que a barra nao
@@ -2350,16 +2359,13 @@ void player_evento(const SDL_Event *e) {
   // isso nao havia como adiantar o filme pela barra — so os saltos de 10s dos
   // botoes, que e o defeito que o dono relatou.
   //
-  // A folha de faixas NAO se perde: ela continua no CIMA, um nivel acima. Da
-  // fileira de botoes o primeiro CIMA pega a barra e o segundo abre a folha.
-  // Trocar o gesto por outro (um botao a mais, um menu) seria pior: no aparelho
-  // "pra cima revela legendas e audio" e o que a mao ja sabe.
+  // DA BARRA PARA CIMA NAO HA NADA (pedido do dono, 03/10): o CIMA na barra
+  // abria a folha no Audio, um salto que ninguem pediu no meio de uma busca.
+  // Audio e Legendas ficam nos botoes deles. O unico alvo acima da barra e o
+  // "Pular abertura", quando existe — e esse esta mesmo em cima dela.
   if (k == SDLK_UP) {
-    // Pelo gesto de CIMA a folha abre no AUDIO, que e a coluna que a mao
-    // procura mais.
     if (!barraFoco) barraFoco = 1;
     else if (trechoPulavel(NULL)) skipFoco = 1;
-    else pedFaixas = 1;
     acordar();
     return;
   }
@@ -2720,6 +2726,8 @@ void player_atualizar(float dt, Uint32 agora) {
   if (visivel || soBarra)
     cheio = anim_mola(cheio, soBarra ? 0.0f : 1.0f, dt,
                       soBarra ? NV_MOLA_DESFOCO : NV_MOLA_FOCO);
+  { float alvoF = (barraFoco && !ponteiroNoPlayer()) ? 0.0f : 1.0f;
+    fileira = anim_mola(fileira, alvoF, dt, alvoF > fileira ? NV_MOLA_FOCO : NV_MOLA_DESFOCO); }
   for (int i = 0; i < PLR_NBTNS; i++) {
     float alvo = (visivel && botao == i) ? 1.0f : 0.0f;
     focoB[i] = anim_mola(focoB[i], alvo, dt,
@@ -3809,8 +3817,10 @@ void player_desenhar(Uint32 agora) {
   // Discos de 68 no material da ilha; o focado vira PILULA cheia no acento com
   // o NOME DENTRO (o rotulo solto embaixo caia em y~1042, zona de overscan). A
   // largura acompanha a mola do foco, entao os vizinhos andam junto.
-  {
-    float x = cx;
+  // Com o foco na barra a fileira desce PLR_DESLIZE/2 e apaga (`fileira`).
+  if (fileira > 0.01f) {
+    float x = cx, af = ac * fileira, dy = (1.0f - fileira) * PLR_DESLIZE * 0.5f;
+    float yRow = yRowTopo + dy, cyB = cyBotoes + dy;
     for (int i = 0; i < PLR_NBTNS - (temUltimoBotao() ? 0 : 1); i++) {
       float f = focoB[i];
       int sel = (botao == i && !barraFoco);
@@ -3818,19 +3828,19 @@ void player_desenhar(Uint32 agora) {
       TxtLinha lr = txt_linha(TXT_G21B, rot, 0, 0, 0, 255);
       float wCheio = 22.0f + 30.0f + 12.0f + (float)lr.w + 28.0f;
       float w = PLR_BTN_D + (wCheio - PLR_BTN_D) * f;
-      GfxRect r = { x, yRowTopo, w, PLR_BTN_D };
+      GfxRect r = { x, yRow, w, PLR_BTN_D };
       int tinta = (int)(242.0f + (plrui_tinta() - 242.0f) * f);
       float k = tinta / 255.0f;
-      if (f > 0.02f) plrui_pilula_foco(r, ac * f);
-      if (f < 0.98f) plrui_disco_osd(r, ac * (1.0f - f));
-      if (ponteiroNoPlayer() && ac > 0.3f)
+      if (f > 0.02f) plrui_pilula_foco(r, af * f);
+      if (f < 0.98f) plrui_disco_osd(r, af * (1.0f - f));
+      if (ponteiroNoPlayer() && af > 0.3f)
         ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroBotao, NULL, i, 0);
       { float ix = x + (PLR_BTN_D - 30.0f) * 0.5f + (22.0f - (PLR_BTN_D - 30.0f) * 0.5f) * f;
-        gfx_icone((GfxRect){ ix, cyBotoes - 15.0f, 30.0f, 30.0f }, ic, k, k, k, ac * 0.96f);
+        gfx_icone((GfxRect){ ix, cyB - 15.0f, 30.0f, 30.0f }, ic, k, k, k, af * 0.96f);
         if (f > 0.05f) {
           TxtLinha l = txt_linha(TXT_G21B, rot, tinta, tinta, tinta, 255);
           gfx_recorte(r.x, r.y, r.w, r.h);
-          txt_desenhar_alpha(l, ix + 30.0f + 12.0f, cyBotoes - (float)l.h * 0.5f, ac * f * (sel ? 1.0f : 0.0f));
+          txt_desenhar_alpha(l, ix + 30.0f + 12.0f, cyB - (float)l.h * 0.5f, af * f * (sel ? 1.0f : 0.0f));
           gfx_sem_recorte();
         } }
       x += w + PLR_BTN_GAP;
@@ -3948,6 +3958,7 @@ void player_shot_estado(Uint32 agora, float pos, float dur, int toca, int bt,
   if (dur > 0.0f) duracaoSeg = dur;
   tocando = toca; botao = bt; barraFoco = barra; soBarra = so;
   cheio = so ? 0.0f : 1.0f;
+  fileira = barra ? 0.0f : 1.0f;
   visivel = 1; ultimoInput = agora; anim = 1.0f; entrada = 1.0f;
   esperandoFonte = 0; erroFonte = 0;
 }
