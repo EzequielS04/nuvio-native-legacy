@@ -2199,6 +2199,16 @@ void gfx_icone(GfxRect r, const char *nome, float cr, float cg, float cb, float 
     t = tex_obter_larg(cam, r.w);
   }
   if (!t) return;
+  // ICONE NO PIXEL, como o texto (encaixa, text.c). O icone vem centrado na
+  // linha (`yc - ICONE * 0.5f`, `cx - s * .5f`) e caia em meio pixel: o traco
+  // de 2 px do Lucide virava duas colunas a meia forca. Bancada a 1080, mesmo
+  // icone deslocado 0,4 px cai de 242 para 136 de borda maxima (32 px); com o
+  // encaixe as duas posicoes dao o mesmo pixel. Arredonda na grade do
+  // ALVO (em 2x meio pixel de layout ja e um pixel inteiro).
+  { float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
+    float pw = floorf(r.w * ex + 0.5f), ph = floorf(r.h * ey + 0.5f);
+    r.x = floorf(r.x * ex + 0.5f) / ex; r.y = floorf(r.y * ey + 0.5f) / ey;
+    if (pw >= 1.0f && ph >= 1.0f) { r.w = pw / ex; r.h = ph / ey; } }
   gfx_tex_aspect_atual = 0.0f;   // o arquivo ja e quadrado
   gfx_rect(r, t, GFX_MARCA, 0, 0, 0, 0.0f, cr, cg, cb, ca);
 }
