@@ -410,7 +410,12 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // — um disco solido com 20% de penumbra, que na tela de perfis saia como
   // uma laje colorida. A cor vem de uCor (preto = sombra; a cor de um perfil
   // = luz ambiente em perfilsel.c). Nao havia chamador em src/ antes disso.
-  "  float t = clamp(-d * 2.0, 0.0, 1.0);\n"
+  // uPar.x > 0: a queda e de uPar.x PIXELS a partir da borda (o box-shadow
+  // do CSS), e nao da metade da altura. Numa peca ALTA e estreita (a rail do
+  // menu, 88 x 700) a distancia em fracao da altura nunca passava de ~0,06 e
+  // a mancha nao aparecia. uAlt e a altura em px do alvo.
+  "  float t = uPar.x > 0.0 ? clamp(-d * uAlt / uPar.x, 0.0, 1.0)\n"
+  "                         : clamp(-d * 2.0, 0.0, 1.0);\n"
   "  gl_FragColor = nv_dither(uCor.rgb, t * t * uFoco * uCor.a);\n"
   "}\n",
 
