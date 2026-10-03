@@ -8,6 +8,12 @@
 #include <unistd.h>
 #include "../src/fontecache.c"
 
+// Regional provider discovery has its own harness; keep this cache fixture
+// limited to its mocked addon transport.
+void ondever_pedir(const char *id, int series, long tmdb) {
+  (void)id; (void)series; (void)tmdb;
+}
+
 static _Atomic Uint32 relogio = 100000;
 static _Atomic int pedidos;
 static const char *conta = "conta-a";
