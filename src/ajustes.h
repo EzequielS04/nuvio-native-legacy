@@ -200,6 +200,10 @@ int   ajustes_gradiente_foco_classico(void); // classicFocusGradientEnabled
 // x onde o conteudo comeca. Nao e constante: o recuo e sempre 104 e a rail
 // soma os 144 dela quando esta fixa.
 float ajustes_conteudo_x(void);
+// Ajustes no Glass UI: onde a ilha do relogio fica (em cima da ilha de
+// categorias) e se ela cabe agora (sem folha nem modal na frente).
+float ajustes_ilha_x(void);
+int   ajustes_relogio_cabe(void);
 // A FAIXA QUE A RAIL FIXA COBRE na borda esquerda, em px de tela: 144 com ela
 // presa (classica OU moderna — as duas pintam o mesmo desenhaRailFixa, e a
 // moderna desliga o recolhimento), 0 recolhida. E a UNICA fonte desse numero:

@@ -3632,6 +3632,10 @@ static void desenharTelas(Uint32 agora) {
 // passam por aqui — eles aparecem em qualquer tela fora do player.
 static int spotVeuPronto;   // o veu do Spotlight ja esta na copia congelada
 static int relogioCabe(void) {
+  // AJUSTES NO GLASS UI (mockup de 03/10): o relogio fica no canto, em cima da
+  // ilha de categorias — a tela nao tem mais titulo ali. Com folha, vinculo ou
+  // teclado por cima ele some, como na home com um cartao na frente.
+  if (tela == TELA_AJUSTES) return !menu_aberto() && ajustes_relogio_cabe();
   if (tela != TELA_HOME || !homePronta) return 0;
   // O MENU ABERTO NAO ESCONDE MAIS O RELOGIO (Glass UI, mockup "ilha" tela 1):
   // a ilha do menu nasce logo abaixo da do relogio, na mesma margem
@@ -3753,6 +3757,7 @@ void app_desenhar(Uint32 agora) {
       tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL) {
     ilha_relogio_visivel(relogioCabe() && ajustes_relogio_ligado());
     ilha_posicionar(tela == TELA_GUIA);
+    if (tela == TELA_AJUSTES && ajustes_relogio_pos() != 2) ilha_ancorar(ajustes_ilha_x(), NV_ILHA_Y, 0);
     // O painel de Salvos que nasceu da pilula recolhe para ela (o retangulo
     // do quadro anterior) e, enquanto esta na tela, a cobre.
     { float ix = 0, iy = 0, iw = 0, ih = 0;

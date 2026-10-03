@@ -115,8 +115,10 @@ static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foc
 #define AJ_LISTA_X      (AJ_IDX_X + AJ_IDX_W + AJ_IDX_GAP)
 #define AJ_LISTA_W      866.0f
 #define AJ_PAD           24.0f    // borda da linha ao texto
-#define AJ_TOPO        (NV_MARGEM_Y + 140.0f)   // abaixo do titulo da tela
-#define AJ_BASE        (NV_TELA_H - NV_MARGEM_Y - 48.0f)
+// A janela da LISTA dentro da folha (Glass UI): abaixo do cabecalho da folha
+// (kicker, titulo e sub) ate 18 px da base da ilha.
+#define AJ_TOPO        199.0f
+#define AJ_BASE        1022.0f
 // Raio da linha em fracao do menor lado (o SDF do shader e normalizado):
 // 12px sobre 88 de altura.
 #define AJ_RAIO           0.14f
@@ -1267,8 +1269,6 @@ static const char *textoValor(int op);
 static int uxTemPadrao(int op);
 static int uxDiferente(int op);
 static void uxCancelar(void);
-static void uxDesenharEditor(void);
-static void uxDesenharEspecial(void);
 
 int ajustes_pediu_busca(void) { int p = uxPediuBusca; uxPediuBusca = 0; return p; }
 void ajustes_abrir_opcao(int op) {
@@ -3848,7 +3848,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_POSTER_CHAVE: return "Sua chave do RPDB (ratingposterdb.com). Fica só nesta TV e nunca aparece nos registros.";
     case AJ_POSTER_MODELO: return "Endereço com {imdb}, {tmdb}, {type} (movie ou series) e {tipo_tmdb} (movie ou tv), por exemplo https://meu.servidor/{type}/{imdb}.jpg. Quem não tiver o dado que o modelo pede fica com o cartaz normal.";
     case AJ_POSTER_TESTAR: return "Baixa o cartaz de um filme conhecido com a configuração atual e mostra se deu certo. O primeiro cartaz de cada título é montado no servidor e pode levar alguns segundos.";
-    case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso, como nos apps de streaming clássicos. Dinâmica: estilo Apple TV, com o destaque que sobe e some ao descer, fileiras de tamanhos diferentes (destaques grandes, Top 10 com numerais, cartazes e faixas deitadas) sobre um fundo de vidro fosco tingido pela arte.";
+    case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso. Dinâmica: estilo Apple TV, com destaques grandes e Top 10 com numerais.";
     case AJ_VIDRO: return "Painéis, botões e menus viram vidro fosco: fundo translúcido, borda fina e o foco marcado por um contorno branco, sem brilho colorido. Só muda o visual; nada muda de lugar.";
     case AJ_ADDONS_PRINCIPAL: return "Os outros perfis desta conta usam os addons do perfil principal. Desligado, cada perfil usa os seus — a não ser que a conta já diga para usar os do principal.";
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
@@ -4001,22 +4001,16 @@ static void desenhaDicas(const char *const *linhas, int n, float x, float y,
 // ajustes_desenhar: duas contas do mesmo layout sao duas chances de discordar,
 // e quando discordam a rolagem para na linha errada. UMA CATEGORIA POR PAGINA
 // (dono, 20/09/2026), entao trocar de categoria zera a rolagem.
-static float alturaItem(int i) {
-  if (!visivel(i)) return 0.0f;
-  switch (TELA[i].tipo) {
-    case IT_SEC: return AJ_SEC_CABEC;
-    case IT_ROT: return AJ_SUB_CABEC;
-    case IT_GRP: return AJ_GRUPO_H + AJ_LINHA_GAP;
-    default:     return AJ_LINHA_H + AJ_LINHA_GAP;
-  }
-}
+static float ajAlturaItem(int i);
+static float ajLinhaH(int i);
+static float alturaItem(int i) { return ajAlturaItem(i); }
 static float yDoItem(int item) {
   int s = secDoItem[item], i;
   float y = 0.0f;
   for (i = secIni[s]; i < item && i < secFim(s); i++) y += alturaItem(i);
   return y;
 }
-static float alturaFoco(int i) { return TELA[i].tipo == IT_GRP ? AJ_GRUPO_H : AJ_LINHA_H; }
+static float alturaFoco(int i) { return TELA[i].tipo == IT_GRP ? AJ_GRUPO_H : ajLinhaH(i); }
 
 // Tecla dentro da folha de fileiras.
 //
@@ -4546,24 +4540,7 @@ static void riscoFolhaEvento(SDL_Keycode k) {
     mudarValor(op, dir);   // agora vista: aplica de verdade
   }
 }
-static void desenhaRiscoFolha(void) {
-  const float W = 980.0f, H = 380.0f;
-  float x = (NV_TELA_W - W) * 0.5f, y = (NV_TELA_H - H) * 0.5f, ar, ag, ab, bx, by;
-  TxtLinha t;
-  ajustes_acento(&ar, &ag, &ab);
-  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.78f);
-  gfx_cor((GfxRect){ x, y, W, H }, 28.0f / H, 0.055f, 0.058f, 0.068f, 0.97f);
-  gfx_luz_canto((GfxRect){ x, y, W, H }, 28.0f / H, W * 0.05f, -W * 0.15f, W * 0.5f, ar, ag, ab, 0.22f);
-  t = txt_linha(TXT_TITULO3, i18n(riscoFolhaTitulo()), 246, 247, 252, 255);
-  txt_desenhar(t, x + 56.0f, y + 48.0f);
-  txt_bloco(TXT_BODY, i18n(riscoFolhaTexto()), 200, 203, 210, x + 56.0f, y + 130.0f, W - 112.0f, 36.0f, 1.0f, 4);
-  bx = x + 56.0f; by = y + H - 48.0f - BOTAO_H_PRIMARIO;
-  { GfxRect r = { bx, by, botao_largura(i18n("Continuar"), NULL, 1), BOTAO_H_PRIMARIO };
-    botao_pilula(r, i18n("Continuar"), NULL, riscoFolhaFoco == 0 ? 1.0f : 0.0f, 1, 0, 1.0f);
-    bx += r.w + BOTAO_GAP; }
-  { GfxRect r = { bx, by + (BOTAO_H_PRIMARIO - BOTAO_H_SECUNDARIO), botao_largura(i18n("Cancelar"), NULL, 0), BOTAO_H_SECUNDARIO };
-    botao_pilula(r, i18n("Cancelar"), NULL, riscoFolhaFoco == 1 ? 1.0f : 0.0f, 0, 0, 1.0f); }
-}
+static void desenhaRiscoFolha(void);
 
 // UM PASSO NO VALOR DA OPCAO `op` (dir = +1 ou -1), com tudo o que a mudanca
 // tem de disparar, e a gravacao. Um lugar so para as setas do modo edicao e
@@ -4849,7 +4826,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   // sem titulo.
   float topo = yDoItem(focoItem);
   if (focoItem == primeiroDaSecao(secAtual)) topo = 0.0f;
-  else if (focoItem > 0 && TELA[focoItem - 1].tipo == IT_ROT) topo -= AJ_SUB_CABEC;
+  else if (focoItem > 0 && TELA[focoItem - 1].tipo == IT_ROT) topo -= alturaItem(focoItem - 1);
   float base = yDoItem(focoItem) + alturaFoco(focoItem);
   // UM GRUPO ABERTO QUER SER VISTO INTEIRO, ou quanto couber: com o foco no
   // cabecalho, a rolagem estica a base ate a ultima opcao dele. Sem isto o OK
@@ -5880,10 +5857,12 @@ static float linhaStat(float x, float y, float w, const char *rot, const char *v
 // cor o que o numero diz com digitos. As faixas vem do comportamento medido
 // em tex_cache.c: acima de ~90% o cache despeja a cada arte nova (encostado),
 // entre 70 e 90 ele ainda absorve uma tela de fileiras sem despejar.
+// Tons ABAFADOS (Glass UI, 03/10): e cor de estado, nao de acento, e o verde
+// vivo de antes gritava mais que o resto do painel.
 static void corPressao(float t, float *r, float *g, float *b) {
-  if (t < 0.70f)      { *r = 0.24f; *g = 0.86f; *b = 0.52f; }   // #3ddc84
-  else if (t < 0.90f) { *r = 0.96f; *g = 0.78f; *b = 0.30f; }   // ambar
-  else                { *r = 0.93f; *g = 0.30f; *b = 0.30f; }   // vermelho
+  if (t < 0.70f)      { *r = 0.298f; *g = 0.765f; *b = 0.541f; }   // #4cc38a
+  else if (t < 0.90f) { *r = 0.910f; *g = 0.722f; *b = 0.290f; }   // #e8b84a
+  else                { *r = 0.898f; *g = 0.325f; *b = 0.294f; }   // #e5534b
 }
 
 static float desenhaPainelImagens(float x, float y, float w) {
@@ -7215,78 +7194,13 @@ static float previaOpcao(int op, float x, float y, float w) {
 #include "ajustes_ux_desenho.inc"
 
 void ajustes_desenhar(Uint32 agora) {
-  // Fundo opaco proprio: a tela cobre tudo e nao pode depender de quem desenhou
-  // antes dela — sem isto a home aparece entre as linhas da lista.
-  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  // A tela ja foi limpa com ESTA MESMA COR por glClearColor/glClear em
-  // main.c antes de app_desenhar. Pintar por cima era uma camada de tela
-  // cheia jogada fora por quadro — e o custo dominante nesta GPU e fill
-  // rate (gfx.c registra que DUAS camadas de tela cheia derrubavam a
-  // Mali-G71 para ~40fps). Nao repor sem antes mudar a cor do clear.
-  (void)tela;
+  // A TELA E DONA DO PROPRIO FUNDO (Glass UI): a arte do titulo com o veu, e
+  // as tres ilhas por cima. Ver ajustes_ux_desenho.inc.
   montarTela();
-
-  uxDesenharCabecalho();
-  int sec = secAtual;
-  const Item *itSec = &TELA[secIni[sec]];
-  desenhaIndice();
-  gfx_cor((GfxRect){AJ_LISTA_X - 26, AJ_TOPO, 1, AJ_BASE - AJ_TOPO},
-          0, 0.145f, 0.165f, 0.204f, 1);
-  if (uxIndice < 2) { uxDesenharEspecial(); uxDesenharRodape(); uxDesenharEditor(); return; }
-  uxDesenharInspetor();
-
-  gfx_recorte(AJ_LISTA_X - 8, AJ_TOPO - 8,
-               AJ_LISTA_W + 16, AJ_BASE - AJ_TOPO + 8);
-  float y = AJ_TOPO - scrollY;
-  float aPag = anim_suave(paginaA), dxPag = (1.0f - aPag) * 28.0f;
-  { int i;
-    // CABECALHO DA CATEGORIA: titulo e subtitulo, o `settings-content-header`
-    // do web. O subtitulo e o que diz o que a categoria abrange antes de
-    // descer por ela.
-    float aC = anim_clamp((y - (AJ_TOPO - 70.0f)) / 60.0f, 0.0f, 1.0f) * aPag;
-    if (aC > 0.005f && y < AJ_BASE) {
-      TxtLinha ts = txt_linha_corta(TXT_HEADLINE, itSec->titulo, 236, 240, 248, 255, AJ_LISTA_W - 170);
-      txt_desenhar_alpha(ts, AJ_LISTA_X + dxPag, y, aC);
-      txt_bloco(TXT_CAPTION, itSec->sub, 165, 173, 189,
-                AJ_LISTA_X + dxPag, y + ts.h + 8, AJ_LISTA_W - 176, 29, aC, 2);
-    }
-    uxDesenharAvancados(y);
-    y += AJ_SEC_CABEC;
-    for (i = secIni[sec] + 1; i < secFim(sec); i++) {
-      const Item *it = &TELA[i];
-      if (!visivel(i)) continue;
-      if (it->tipo == IT_ROT) {
-        float aS = anim_clamp((y - (AJ_TOPO - 70.0f)) / 60.0f, 0.0f, 1.0f) * aPag;
-        if (aS > 0.005f && y < AJ_BASE) {
-          TxtLinha tsub = txt_linha(TXT_CAPTION, it->titulo, 142, 153, 174, 255);
-          txt_desenhar_alpha(tsub, AJ_LISTA_X + 16 + dxPag,
-                             y + AJ_SUB_CABEC - tsub.h - 12, aS);
-        }
-      } else if (it->tipo == IT_GRP) {
-        desenhaGrupo(i, y, animItem[i], dxPag, aPag);
-      } else if (it->tipo == IT_OPC) {
-        desenhaLinha(i, y, animItem[i], dxPag, aPag);
-      }
-      y += alturaItem(i);
-    }
-  }
-  gfx_sem_recorte();
-
-  float total = yDoItem(secFim(sec) - 1) + alturaItem(secFim(sec) - 1);
-  float janela = AJ_BASE - AJ_TOPO;
-  if (total > janela) {
-    float altura = janela * janela / total;
-    float sy = AJ_TOPO + (janela - altura) * anim_clamp(scrollY / (total - janela), 0, 1);
-    gfx_cor((GfxRect){ AJ_LISTA_X + AJ_LISTA_W + 20, AJ_TOPO, 2, janela },
-            1.0f / janela, 0.20f, 0.23f, 0.29f, 0.35f);
-    gfx_cor((GfxRect){ AJ_LISTA_X + AJ_LISTA_W + 20, sy, 2, altura },
-            1.0f / altura, 0.44f, 0.49f, 0.58f, 0.65f);
-  }
+  ajDesenharTela();
 
   // A folha de fileiras cobre a lista; o vinculo cobre as duas, porque ele e a
   // unica coisa aqui com prazo (o codigo do dispositivo expira).
-  uxDesenharRodape();
-  uxDesenharEditor();
   if (filAberta) desenhaFileiras();
   if (riscoFolha) desenhaRiscoFolha();
 
@@ -7304,6 +7218,16 @@ void ajustes_desenhar(Uint32 agora) {
   // A modal de digitacao e a ultima: ela e sempre a pergunta mais recente da
   // tela, e tem de ficar por cima ate do cartao de vinculo.
   if (teclado_aberto()) teclado_desenhar(agora);
+}
+
+float ajustes_ilha_x(void) { return ajX0(); }
+int ajustes_relogio_cabe(void) {
+  TraEstado ta = traktauth_estado();
+  SmkEstado sa = simklauth_estado();
+  if (filAberta || teclado_aberto() || ajModalAberto()) return 0;
+  if (ta == TRA_PEDINDO || ta == TRA_AGUARDANDO || ta == TRA_ERRO) return 0;
+  if (sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO) return 0;
+  return 1;
 }
 
 #ifdef AJUSTES_TESTE
@@ -7363,6 +7287,44 @@ void ajustes_teste_tema(int tema, int vidro) {
   if (tema >= 0 && tema < AJ_N_TEMAS_OPC) valor[AJ_TEMA] = tema;
   valor[AJ_VIDRO] = vidro ? 0 : 1;
 }
+
+// OS QUADROS DO MOCKUP (ajustes-mockup.html), um por id, para a captura lado
+// a lado (tests/ajustes_shot.sh com NUVIO_AJ_QUADROS). Tema e vidro ficam os
+// que a captura escolheu.
+int ajustes_teste_quadro(const char *id) {
+  int tema = valor[AJ_TEMA], vidro = valor[AJ_VIDRO];
+  memcpy(valor, valorPadrao, sizeof valor);
+  valor[AJ_TEMA] = tema; valor[AJ_VIDRO] = vidro;
+  valor[AJ_IDIOMA] = IDIOMA_PT + 1;
+  uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
+  memset(uxAvancados, 0, sizeof uxAvancados);
+  scrollY = velY = 0; paginaA = 1;
+  filAberta = 0; riscoFolha = 0;
+  focarSecao(0); focoIndice = 1;
+  ajArteFundoN = 12; ajMemFixa = 0;
+  if (!strcmp(id, "principal")) { focarOpcao(AJ_HOME_LAYOUT); }
+  else if (!strcmp(id, "cartazes")) { ajArteFundoN = 13; valor[AJ_LARGURA_DP] = 128; focarOpcao(AJ_LARGURA_DP); }
+  else if (!strcmp(id, "memoria")) { ajArteFundoN = 21; ajMemFixa = 1; focarOpcao(AJ_ESPACO); uxAvancados[secAtual] = 1; }
+  else if (!strcmp(id, "cor")) { ajArteFundoN = 9; focarOpcao(AJ_TEMA); uxAbrirEditor(AJ_TEMA); }
+  else if (!strcmp(id, "relogio")) { ajArteFundoN = 0; focarOpcao(AJ_RELOGIO_POS); uxAbrirEditor(AJ_RELOGIO_POS); uxEvento(SDLK_RIGHT); uxEvento(SDLK_RIGHT); }
+  else if (!strcmp(id, "reproducao")) { ajArteFundoN = 15; valor[AJ_QUALIDADE] = 1; focarOpcao(AJ_DV); }
+  else if (!strcmp(id, "contas")) { ajArteFundoN = 13; focarOpcao(AJ_TRAKT); }
+  else if (!strcmp(id, "editor-escolha")) { ajArteFundoN = 15; valor[AJ_QUALIDADE] = 1; focarOpcao(AJ_QUALIDADE); uxAbrirEditor(AJ_QUALIDADE); uxEvento(SDLK_DOWN); }
+  else if (!strcmp(id, "editor-numero")) { focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); { int i; for (i = 0; i < 5; i++) uxEvento(SDLK_DOWN); } }
+  else if (!strcmp(id, "confirmacao")) { focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); uxPendente = 17; uxAvisoRisco = SEG_AVISO_FILEIRAS; uxConfirmar = 1; }
+  else if (!strcmp(id, "diferencas")) {
+    ajArteFundoN = 3;
+    valor[AJ_HOME_LAYOUT] = HOME_LAYOUT_DINAMICA; valor[AJ_ANIM] = 1; valor[AJ_LARGURA_DP] = 128;
+    valor[AJ_QUALIDADE] = 1; valor[AJ_HERO_TRAILER] = 0;
+    uxListarDiferencas(); uxIndice = 1; focoIndice = 0; uxDifFoco = 0;
+  }
+  else return 0;
+  scrollY = velY = 0;
+  return 1;
+}
+
+// A arte atras da tela nas capturas (o indice da amostra de deploy/app/art).
+void ajustes_teste_arte(int n) { ajArteFundoN = n; }
 
 void ajustes_teste_fonte_interface(int familia) {
   if (familia < TXT_FAMILIA_INTER || familia > TXT_FAMILIA_ATKINSON) return;

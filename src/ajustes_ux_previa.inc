@@ -1,0 +1,425 @@
+#include <math.h>
+// PREVIAS DO INSPETOR (Ajustes no Glass UI). Tudo desenhado com a arte de
+// verdade (ajArte) e as primitivas da propria tela, com o VALOR ATUAL da
+// opcao: mexer na opcao muda o desenho na hora. Substitui a foto fixa
+// "Exemplo ilustrativo" (uxPreviaCena), os cartazes cinza (previaCartaz) e os
+// diagramas de caixas (ajudaFluxo*).
+
+// A linha de meta do titulo n da amostra ("Filme · 2015 · 141 min"): do
+// catalogo quando ha, senao de art/catalogo.txt (lido uma vez).
+static const char *ajMetaTitulo(int n) {
+  static char meta[40][96];
+  static int lido;
+  static char buf[160];
+  const char *gen = NULL, *m = NULL;
+  if (cat_n() > 0) {
+    const CatItem *c = cat_item(n % cat_n());
+    if (c) { gen = c->genero; m = c->meta; }
+  } else {
+    if (!lido && uxDirArte[0]) {
+      char cam[1100], l[2048];
+      FILE *f;
+      int i = 0;
+      lido = 1;
+      snprintf(cam, sizeof cam, "%s/catalogo.txt", uxDirArte);
+      f = fopen(cam, "r");
+      while (f && i < 40 && fgets(l, sizeof l, f)) {
+        char *c[8] = { 0 }, *p = l;
+        int k = 0;
+        while (k < 8 && p) { c[k++] = p; p = strchr(p, '|'); if (p) *p++ = 0; }
+        if (k >= 6) {
+          char g[64];
+          char *pt = strstr(c[4], "  ·");
+          snprintf(g, sizeof g, "%.*s", pt ? (int)(pt - c[4]) : 60, c[4]);
+          if (!strcmp(g, "Programa de TV")) snprintf(g, sizeof g, "%s", "Série");
+          { char mm[64]; char *q, *o = mm;
+            for (q = c[5]; *q && o < mm + 60; q++) { if (*q == ' ' && q[1] == ' ') continue; *o++ = *q; }
+            *o = 0;
+            snprintf(meta[i], sizeof meta[i], "%s · %s", g, mm); }
+        }
+        i++;
+      }
+      if (f) fclose(f);
+    }
+    return meta[n % 40];
+  }
+  if (!gen || !gen[0]) return m ? m : "";
+  { const char *pt = strstr(gen, " · ");
+    snprintf(buf, sizeof buf, "%.*s · %s", pt ? (int)(pt - gen) : 60, gen, m ? m : ""); }
+  return buf;
+}
+
+// Estilo de texto mais proximo de `px` entre os que a miniatura usa. 0 = nao
+// desenha (abaixo de 6 px o texto e so ruido).
+static TxtEstilo ajEstiloPx(float px, int forte) {
+  if (px < 6.0f) return (TxtEstilo)-1;
+  if (px < 11.0f) return forte ? TXT_AJ_MINI9B : TXT_AJ_MINI9;
+  if (px < 13.5f) return forte ? TXT_AJ_MINI12 : TXT_AJ_MINI13;
+  if (px < 15.5f) return forte ? TXT_MINI : TXT_ILHA_APOIO;
+  if (px < 18.0f) return forte ? TXT_AJ_CHIP : TXT_AJ_ESTADO;
+  if (px < 21.0f) return forte ? TXT_AJ_SEG : TXT_AJ_SUB;
+  if (px < 30.0f) return forte ? TXT_AJ_NOME : TXT_ILHA_CORPO;
+  if (px < 50.0f) return TXT_ILHA_TITULO;
+  if (px < 61.0f) return TXT_AJ_NUM58;
+  if (px < 90.0f) return TXT_AJ_NUM64;
+  return TXT_AJ_NUM110;
+}
+static void ajTextoMini(const char *s, float px, int forte, float x, float y, int r, int g, int b, float a) {
+  TxtEstilo e = ajEstiloPx(px, forte);
+  TxtLinha l;
+  if ((int)e < 0) return;
+  l = txt_linha(e, s, r, g, b, 255);
+  txt_desenhar_alpha(l, x, y + (px * 1.2f - l.h) * 0.5f, a);
+}
+
+// HOME EM MINIATURA: as coordenadas de 1920x1080 da home de verdade, em escala.
+// lay = HOME_LAYOUT_*; relogio: -1 sem pilula, 0 esquerda, 1 direita, 2 o
+// automatico do layout. Desenha com cantos 16 (12 nas pequenas).
+typedef struct { int lay, art, relogio, land, rail; float alfa; } AjMini;
+static const int AJ_POS[14] = { 13, 12, 15, 2, 21, 9, 33, 36, 3, 29, 5, 10, 16, 20 };
+static void ajMiniHome(AjMini o, float ox, float oy, float W) {
+  float s = W / 1920.0f, H = W * 9.0f / 16.0f, rr = W > 300.0f ? 16.0f : 12.0f;
+  float a = o.alfa > 0 ? o.alfa : 1.0f;
+  GfxRect quad = { ox, oy, W, H };
+  float ar, ag, ab;
+  int ti = ajTinta(), i;
+#define MX(v) (ox + (v) * s)
+#define MY(v) (oy + (v) * s)
+#define MR(x, y, w, h) (GfxRect){ MX(x), MY(y), (w) * s, (h) * s }
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_cor(quad, rr / H, 0.047f, 0.051f, 0.063f, a);
+  gfx_recorte(ox, oy, W, H);
+  if (o.lay == HOME_LAYOUT_PADRAO) {
+    gfx_cor(quad, rr / H, 0.071f, 0.075f, 0.09f, a);
+    ajImg(ajArte(AJA_FUNDO, o.art), MR(0, 0, 1920, 600), rr, a);
+    gfx_rect(MR(0, 300, 1920, 302), 0, GFX_VEU_BAIXO, 0, 0, 0, 0, 0.071f, 0.075f, 0.09f, a);
+    gfx_rect(MR(0, 0, 1100, 600), 0, GFX_VEU, 0, 0, 0, 0, 0, 0, 0, 0.9f * a);
+    if (o.rail) {
+      gfx_cor(MR(48, 150, 96, 520), 24.0f / 520.0f, 0.071f, 0.075f, 0.09f, 0.95f * a);
+      for (i = 0; i < 5; i++) gfx_rect(MR(48 + 33, 190 + i * 60, 30, 30), 0, GFX_ANEL, 0, 4.0f / 30.0f, 0, 9.0f / 30.0f, 0.953f, 0.949f, 0.937f, 0.55f * a);
+    }
+    ajLogo(ajArte(AJA_LOGO, o.art), MX(210), MY(170), 560 * s, 190 * s, a);
+    { TxtLinha l; float bw;
+      TxtEstilo e = ajEstiloPx(32 * s, 1);
+      if ((int)e >= 0) { l = txt_linha(e, "Reproduzir", ti, ti, ti, 255); bw = l.w + 88 * s; }
+      else { l.w = 0; l.h = 0; bw = 290 * s; }
+      gfx_cor(MR(210, 420, bw / s, 84), 0.5f, ar, ag, ab, a);
+      if (l.w) txt_desenhar_alpha(l, MX(210) + 44 * s, MY(420) + (84 * s - l.h) * 0.5f, a); }
+    ajTextoMini("Continuar assistindo", 30 * s, 1, MX(210), MY(650), 243, 242, 239, a);
+    { static const int L[4] = { 13, 15, 21, 33 };
+      for (i = 0; i < 4; i++) ajImg(ajArte(AJA_FUNDO, L[i]), MR(210 + i * 428, 700, 400, 225), 14 * s, a); }
+    for (i = 0; i < 7; i++) ajImg(ajArte(AJA_POSTER, AJ_POS[(i + 2) % 14]), MR(210 + i * 288, 1010, 260, 390), 14 * s, a);
+  } else if (o.lay == HOME_LAYOUT_DINAMICA) {
+    const char *c = ajArte(AJA_FUNDO, o.art);
+    GLuint t = c[0] ? tex_obter_larg(c, 24.0f) : 0;
+    if (t) {
+      gfx_tex_aspect_atual = tex_aspecto(c);
+      gfx_rect(MR(-192, -108, 2304, 1296), t, GFX_ARTE, 0, 0, 0, 0, 1, 1, 1, a);
+      gfx_tex_aspect_atual = 0;
+    }
+    gfx_cor(quad, 0, 0.04f, 0.04f, 0.055f, 0.62f * a);
+    gfx_rect(MR(180, 180, 940, 546), 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.5f * a);
+    ajImg(c, MR(200, 170, 900, 506), 22 * s, a);
+    ajImg(ajArte(AJA_FUNDO, 15), MR(1130, 170, 900, 506), 22 * s, a);
+    ajLogo(ajArte(AJA_LOGO, o.art), MX(250), MY(510), 420 * s, 130 * s, a);
+    ajTextoMini("Top 10 hoje", 30 * s, 1, MX(200), MY(730), 243, 242, 239, a);
+    for (i = 0; i < 4; i++) {
+      char d[4];
+      snprintf(d, sizeof d, "%d", i + 1);
+      ajTextoMini(d, 300 * s * 0.72f, 1, MX(150 + i * 440), MY(800), 255, 255, 255, 0.14f * a);
+      ajImg(ajArte(AJA_POSTER, AJ_POS[i + 3]), MR(300 + i * 440, 790, 200, 300), 14 * s, a);
+    }
+  } else {
+    ajImg(ajArte(AJA_FUNDO, o.art), quad, rr, a);
+    gfx_rect(quad, 0, GFX_VEU, 0, 0, 0, rr / H, 0, 0, 0, a);
+    if (o.rail) {
+      if (ajVid()) gfx_cor(MR(48, 150, 88, 560), 0.5f * 88.0f / 560.0f, 0.055f, 0.059f, 0.071f, 0.82f * a);
+      else gfx_cor(MR(48, 150, 88, 560), 0.5f * 88.0f / 560.0f, 0.082f, 0.086f, 0.102f, a);
+      for (i = 0; i < 6; i++) gfx_rect(MR(48 + 29, 190 + i * 60, 30, 30), 0, GFX_ANEL, 0, 4.0f / 30.0f, 0, 9.0f / 30.0f, 0.953f, 0.949f, 0.937f, 0.55f * a);
+    }
+    ajLogo(ajArte(AJA_LOGO, o.art), MX(200), MY(200), 640 * s, 220 * s, a);
+    ajTextoMini(ajMetaTitulo(o.art), 30 * s, 0, MX(200), MY(450), 243, 242, 239, 0.75f * a);
+    { TxtLinha l; float bw;
+      TxtEstilo e = ajEstiloPx(32 * s, 1);
+      if ((int)e >= 0) { l = txt_linha(e, "Reproduzir", ti, ti, ti, 255); bw = l.w + 88 * s; }
+      else { l.w = 0; l.h = 0; bw = 290 * s; }
+      gfx_cor((GfxRect){ MX(200), MY(510), bw, 84 * s }, 0.5f, ar, ag, ab, a);
+      if (l.w) txt_desenhar_alpha(l, MX(200) + 44 * s, MY(510) + (84 * s - l.h) * 0.5f, a);
+      gfx_cor(MR(520, 510, 84, 84), 0.5f, 1, 1, 1, 0.14f * a);
+      gfx_cor(MR(620, 510, 84, 84), 0.5f, 1, 1, 1, 0.14f * a); }
+    ajTextoMini("Em alta", 30 * s, 1, MX(200), MY(650), 243, 242, 239, a);
+    { float pw = o.land ? 380.0f : 212.0f, ph = o.land ? 214.0f : 318.0f;
+      for (i = 0; i < 8; i++) {
+        float x = 200 + i * (pw + 28);
+        if (x > 1920) break;
+        gfx_rect(MR(x - 10, 700 + 4, pw + 20, ph + 30), 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.35f * a);
+        ajImg(ajArte(o.land ? AJA_FUNDO : AJA_POSTER, AJ_POS[i % 14]), MR(x, 700, pw, ph), 14 * s, a);
+      }
+      if (o.land) for (i = 0; i < 5; i++) ajImg(ajArte(AJA_FUNDO, AJ_POS[(i + 4) % 14]), MR(200 + i * 408, 1050, 380, 214), 14 * s, a); }
+  }
+  // A pilula do relogio, no canto que a opcao escolhe.
+  if (o.relogio >= 0) {
+    char hora[8];
+    time_t t = time(NULL);
+    struct tm lt;
+    int dir = o.relogio == 1 || (o.relogio == 2 && o.lay == HOME_LAYOUT_DINAMICA);
+    TxtEstilo e = ajEstiloPx(46 * s, 1);
+    float tw = 0, pw, px;
+    TxtLinha l = { 0 };
+    if (localtime_r(&t, &lt)) strftime(hora, sizeof hora, "%H:%M", &lt); else snprintf(hora, sizeof hora, "--:--");
+    if ((int)e >= 0) { l = txt_linha(e, hora, 243, 242, 239, 255); tw = l.w; } else tw = 110 * s;
+    pw = 40 * s + tw + 22 * s + 52 * s + 40 * s;
+    px = dir ? ox + W - 48 * s - pw : MX(48);
+    if (ajVid()) gfx_cor((GfxRect){ px, MY(36), pw, 96 * s }, 0.5f, 0.055f, 0.059f, 0.071f, 0.86f * a);
+    else gfx_cor((GfxRect){ px, MY(36), pw, 96 * s }, 0.5f, 0.082f, 0.086f, 0.102f, a);
+    if (l.w) txt_desenhar_alpha(l, px + 40 * s, MY(36) + (96 * s - l.h) * 0.5f, a);
+    gfx_cor((GfxRect){ px + 40 * s + tw + 22 * s, MY(36 + 22), 52 * s, 52 * s }, 0.5f, 0.486f, 0.361f, 1.0f, a);
+  }
+  gfx_sem_recorte();
+#undef MX
+#undef MY
+#undef MR
+}
+
+// Fileira de miniaturas com rotulo embaixo; a escolhida acesa, as outras a 55%.
+static float ajOpcoesMini(const AjMini *m, const char *const *nome, int n, int sel, float x, float y, float w) {
+  float gap = 14.0f, mw = (w - gap * (n - 1)) / n, mh = mw * 9.0f / 16.0f;
+  float ar, ag, ab;
+  int i;
+  ajustes_acento(&ar, &ag, &ab);
+  for (i = 0; i < n; i++) {
+    AjMini o = m[i];
+    float px = x + i * (mw + gap);
+    TxtLinha lb = txt_linha_corta(TXT_AJ_16B, nome[i], AJ_TX, mw - (i == sel ? 15 : 0));
+    o.alfa = i == sel ? 1.0f : 0.55f;
+    ajMiniHome(o, px, y, mw);
+    if (i == sel) {
+      gfx_cor((GfxRect){ px, y + mh + 10 + (lb.h - 7) * 0.5f, 7, 7 }, 0.5f, ar, ag, ab, 1);
+      txt_desenhar(lb, px + 15, y + mh + 10);
+    } else txt_desenhar_alpha(lb, px, y + mh + 10, 0.5f);
+  }
+  return mh + 10 + 20;
+}
+
+// --- PREVIAS POR OPCAO -------------------------------------------------------------
+static int ajLayoutAtual(void) { return ajustes_home_layout(); }
+static AjMini ajMiniPadrao(void) {
+  AjMini m = { ajLayoutAtual(), ajArteFundoN, 2, valor[AJ_LANDSCAPE] == 0, 1, 1 };
+  if (valor[AJ_RELOGIO] != 0) m.relogio = -1;
+  else m.relogio = valor[AJ_RELOGIO_POS] == 0 ? 2 : valor[AJ_RELOGIO_POS] == 1 ? 0 : 1;
+  return m;
+}
+static float ajPreviaLayout(float x, float y, float w) {
+  AjMini m = ajMiniPadrao(), o[3];
+  static const char *const N[3] = { "Moderna", "Padrão", "Dinâmica (Apple TV)" };
+  int i, sel = valor[AJ_HOME_LAYOUT];
+  if (ajEditandoLinha(AJ_HOME_LAYOUT)) sel = uxPendente;
+  m.lay = sel;
+  ajMiniHome(m, x, y, w);
+  for (i = 0; i < 3; i++) { o[i] = m; o[i].lay = i; }
+  return w * 9.0f / 16.0f + 16.0f + ajOpcoesMini(o, N, 3, sel, x, y + w * 9.0f / 16.0f + 16.0f, w);
+}
+static float ajPreviaRelogio(float x, float y, float w) {
+  AjMini m = ajMiniPadrao(), o[3];
+  static const char *const N[3] = { "Automática", "Esquerda", "Direita" };
+  int i, sel = valor[AJ_RELOGIO_POS];
+  if (ajEditandoLinha(AJ_RELOGIO_POS)) sel = uxPendente;
+  m.relogio = sel == 0 ? 2 : sel == 1 ? 0 : 1;
+  ajMiniHome(m, x, y, w);
+  for (i = 0; i < 3; i++) { o[i] = m; o[i].relogio = i == 0 ? 2 : i == 1 ? 0 : 1; }
+  return w * 9.0f / 16.0f + 16.0f + ajOpcoesMini(o, N, 3, sel, x, y + w * 9.0f / 16.0f + 16.0f, w);
+}
+static float ajPreviaHome(float x, float y, float w) {
+  ajMiniHome(ajMiniPadrao(), x, y, w);
+  return w * 9.0f / 16.0f;
+}
+
+// Tres cartazes de verdade no tamanho e no canto escolhidos, o do meio com o
+// foco da home (sobe 1,08 e ganha sombra, sem borda), e o trilho do intervalo.
+static float ajPreviaCartaz(int op, float x, float y, float w) {
+  int dp = valor[AJ_LARGURA_DP];
+  float k = 148.0f / 256.0f, cw, ch, gap = 22.0f, x0, raio;
+  int i;
+  static const int P[3] = { 13, 12, 15 };
+  if (k * 6.0f * dp > w - 96.0f) k = (w - 96.0f) / (6.0f * dp);
+  if (k * 3.0f * dp > 222.0f) k = 222.0f / (3.0f * dp);
+  cw = 2.0f * dp * k; ch = cw * 1.5f; raio = ajustes_raio_poster_px() * k;
+  ajNeutro((GfxRect){ x, y, w, 330 }, 22, 0.035f, 0.106f, 0.110f, 0.129f, 1);
+  x0 = x + (w - 3 * cw - 2 * gap) * 0.5f;
+  for (i = 0; i < 3; i += 2) ajImg(ajArte(AJA_POSTER, P[i]), (GfxRect){ x0 + i * (cw + gap), y + 46 + (222 - ch) * 0.5f, cw, ch }, raio, 0.7f);
+  { float s = 1.08f, fw = cw * s, fh = ch * s, fx = x0 + cw + gap - (fw - cw) * 0.5f, fy = y + 46 + (222 - ch) * 0.5f - (fh - ch) * 0.5f;
+    gfx_rect((GfxRect){ fx - 20, fy + 6, fw + 40, fh + 44 }, 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.55f);
+    ajImg(ajArte(AJA_POSTER, P[1]), (GfxRect){ fx, fy, fw, fh }, raio * s, 1); }
+  y += 330 + 18;
+  { const Opcao *o = &OPCOES[op];
+    char a[32], b[32], c[32], t[160];
+    float fr = ajFracao(op, valor[op]), fp = ajFracao(op, uxValorPadrao(op));
+    float ar, ag, ab;
+    TxtLinha l;
+    ajustes_acento(&ar, &ag, &ab);
+    snprintf(a, sizeof a, "%d%s", o->min, o->sufixo ? o->sufixo : "");
+    snprintf(b, sizeof b, "%d%s", valor[op], o->sufixo ? o->sufixo : "");
+    snprintf(c, sizeof c, "%d%s", o->max, o->sufixo ? o->sufixo : "");
+    l = ajTxt(TXT_ILHA_APOIO, a); txt_desenhar_alpha(l, x, y, 0.45f);
+    l = ajTxt(TXT_ILHA_APOIO, c); txt_desenhar_alpha(l, x + w - l.w, y, 0.45f);
+    l = txt_linha(TXT_AJ_16B, b, AJ_TX); txt_desenhar(l, x + (w - l.w) * 0.5f, y - 1);
+    y += 21 + 8;
+    gfx_cor((GfxRect){ x, y, w, 6 }, 0.5f, 1, 1, 1, 0.12f);
+    if (fr > 0) gfx_cor((GfxRect){ x, y, w * fr, 6 }, 0.5f, ar, ag, ab, 1);
+    gfx_cor((GfxRect){ x + w * fp - 1, y - 7, 2, 20 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.5f);
+    y += 6 + 8;
+    snprintf(t, sizeof t, i18n("padrão %d"), uxValorPadrao(op));
+    l = ajTxt(TXT_AJ_MINI14, t); txt_desenhar_alpha(l, x + w * fp - l.w * 0.5f, y + 2, 0.45f);
+    y += 22 + 6;
+    snprintf(t, sizeof t, i18n("%d px de largura · canto de %d px, como na home"), dp * 2, (int)ajustes_raio_poster_px());
+    l = ajTxtC(TXT_ILHA_APOIO, t, w); txt_desenhar_alpha(l, x, y, 0.45f);
+    y += 20; }
+  return y - (y - 0) + 330 + 18 + 29 + 14 + 28 + 20;
+}
+
+// Decimal na lingua da interface: virgula em 25 das 29 (idiomacod.h).
+static char *ajDec(char *s) {
+  char *p;
+  if (!idioma_ponto_decimal(ajustes_idioma())) for (p = s; *p; p++) if (*p == '.' && p[1] >= '0' && p[1] <= '9' && p > s && p[-1] >= '0' && p[-1] <= '9') *p = ',';
+  return s;
+}
+
+// PRESSAO DA MEMORIA DE IMAGENS (desenhaPainelImagens, que a foto de exemplo
+// escondia): numero, barra com o trecho "na tela" mais forte, grafico dos
+// ultimos 2 min com a cor da pressao em cada segundo (verde < 70%, ambar < 90%,
+// vermelho) e as estatisticas do cache.
+static float ajPainelMemoria(float x, float y, float w) {
+  int itens = 0, pend = 0, quentes = 0, mb = 0, fixo = 0, slots = 0, nh, i;
+  long bytes = 0, bytesQ = 0, memTotal = 0, teto, hist[120], despT, despQ, disco;
+  char a[128], b[96];
+  float y0 = y, t, tt, pr, pg, pb, ix = x + 26, iw = w - 52;
+  tex_estatisticas(&itens, &pend, &bytes, &quentes, &bytesQ);
+  tex_orcamento_info(&mb, &memTotal, &fixo, &slots);
+  teto = tex_orcamento_bytes();
+  nh = tex_historico(hist, 120);
+  despT = tex_despejos_total; despQ = tex_despejos_quentes_total; disco = tex_cache_disco_bytes();
+#ifdef AJUSTES_TESTE
+  if (ajMemFixa) {
+    teto = 240L << 20; bytes = (long)(151.4 * 1048576); bytesQ = (long)(96.2 * 1048576);
+    quentes = 38; itens = 64; pend = 2; slots = 256; despT = 41; despQ = 0; disco = (long)(212.8 * 1048576);
+    memTotal = 2253; fixo = 0; nh = 120;
+    for (i = 0; i < 120; i++) {
+      double v;
+      if (i < 30) v = .30 + i * .009 + sin(i * .9) * .01;
+      else if (i < 52) v = .58 + (i - 30) * .0165 + sin(i * 1.3) * .012;
+      else if (i < 74) v = (i % 5 < 3 ? .91 : .80) + sin(i) * .015;
+      else v = .66 - (i - 74) * .0008 + sin(i * .7) * .012;
+      if (v < .05) v = .05;
+      if (v > .99) v = .99;
+      hist[i] = (long)(v * teto);
+    }
+  }
+#endif
+  if (teto <= 0) teto = 1;
+  t = (float)bytes / (float)teto; if (t > 1) t = 1;
+  tt = (float)bytesQ / (float)teto; if (tt > t) tt = t;
+  corPressao(t, &pr, &pg, &pb);
+  { float nh58 = (float)ajTxt(TXT_AJ_NUM58, "0").h;
+    ajNeutro((GfxRect){ x, y0, w, 26 + 28 + nh58 * 0.92f + 22 + 20 + 44 + 178 + 31 + 6 * 42.5f + 17 }, 22, 0.04f, 0.106f, 0.110f, 0.129f, 1); }
+  y += 26;
+  ajKicker("Memória para imagens agora", ix, y, 1);
+  y += 18 + 10;
+  { TxtLinha n, d, p;
+    snprintf(a, sizeof a, "%.1f", bytes / 1048576.0); ajDec(a);
+    snprintf(b, sizeof b, i18n("de %d MB"), (int)(teto >> 20));
+    n = ajTxt(TXT_AJ_NUM58, a); d = ajTxt(TXT_ILHA_CORPO, b);
+    txt_desenhar(n, ix, y);
+    txt_desenhar_alpha(d, ix + n.w + 12, y + n.h * 0.78f - d.h, 0.55f);
+    snprintf(a, sizeof a, i18n("%d%% do teto"), (int)(t * 100 + 0.5f));
+    p = txt_linha(TXT_AJ_CHIP, a, (int)(pr * 255), (int)(pg * 255), (int)(pb * 255), 255);
+    txt_desenhar(p, ix + iw - p.w, y + n.h * 0.78f - p.h);
+    gfx_cor((GfxRect){ ix + iw - p.w - 8 - 9, y + n.h * 0.78f - p.h * 0.5f - 4.5f, 9, 9 }, 0.5f, pr, pg, pb, 1);
+    y += n.h * 0.92f + 22; }
+  gfx_cor((GfxRect){ ix, y, iw, 10 }, 0.5f, 1, 1, 1, 0.08f);
+  if (t * iw > 1) gfx_cor((GfxRect){ ix, y, iw * t, 10 }, 0.5f, pr, pg, pb, 0.45f);
+  if (tt * iw > 1) gfx_cor((GfxRect){ ix, y, iw * tt, 10 }, 0.5f, pr, pg, pb, 1);
+  y += 10 + 10;
+  { static const char *const L[3] = { "Na tela", "No cache", "Livre" };
+    float lx = ix;
+    for (i = 0; i < 3; i++) {
+      TxtLinha l = ajTxt(TXT_ILHA_APOIO, L[i]);
+      if (i == 2) gfx_cor((GfxRect){ lx, y + (l.h - 10) * 0.5f, 10, 10 }, 0.3f, 1, 1, 1, 0.12f);
+      else gfx_cor((GfxRect){ lx, y + (l.h - 10) * 0.5f, 10, 10 }, 0.3f, pr, pg, pb, i ? 0.45f : 1);
+      txt_desenhar_alpha(l, lx + 17, y, 0.5f);
+      lx += 17 + l.w + 18;
+    }
+    y += 18 + 26; }
+  { float gh = 170, gw = iw, pw = gw / 120.0f;
+    gfx_cor((GfxRect){ ix, y, gw, gh }, 12.0f / gh, 0, 0, 0, 0.18f);
+    for (i = 0; i < nh; i++) {
+      float v = (float)hist[i] / (float)teto, h, cx;
+      float r2, g2, b2;
+      if (v > 1) v = 1;
+      h = gh * v;
+      if (h < 1) continue;
+      corPressao(v, &r2, &g2, &b2);
+      cx = ix + gw - (float)(nh - i) * pw;
+      gfx_cor((GfxRect){ cx, y + gh - h, pw - 1.2f, h }, 0, r2, g2, b2, 0.38f);
+      gfx_cor((GfxRect){ cx, y + gh - h, pw - 1.2f, 2.5f }, 0, r2, g2, b2, 1);
+    }
+    { static const float F[2] = { 0.7f, 0.9f };
+      static const char *const N[2] = { "70%", "90%" };
+      int k;
+      for (k = 0; k < 2; k++) {
+        float ly = y + gh * (1 - F[k]), dx;
+        TxtLinha l = ajTxt(TXT_AJ_MINI12, N[k]);
+        for (dx = 0; dx < gw; dx += 10) gfx_cor((GfxRect){ ix + dx, ly, 4, 1 }, 0, 1, 1, 1, 0.22f);
+        txt_desenhar_alpha(l, ix + 8, ly + 4, 0.45f);
+      } }
+    y += gh + 8; }
+  { TxtLinha l = ajTxt(TXT_AJ_MINI14, "há 2 min");
+    txt_desenhar_alpha(l, ix, y, 0.42f);
+    l = ajTxt(TXT_AJ_MINI14, "escala do teto · uma coluna por segundo");
+    txt_desenhar_alpha(l, ix + (iw - l.w) * 0.5f, y, 0.42f);
+    l = ajTxt(TXT_AJ_MINI14, "agora");
+    txt_desenhar_alpha(l, ix + iw - l.w, y, 0.42f);
+    y += 17 + 14; }
+  snprintf(a, sizeof a, i18n("%d imagens · %.1f MB"), quentes, bytesQ / 1048576.0);
+  y += ajMeta(i18n("Na tela agora"), ajDec(a), ix, y, iw, 1) - 4;
+  snprintf(a, sizeof a, i18n("%d imagens · %d em carregamento"), itens, pend);
+  y += ajMeta(i18n("No cache"), a, ix, y, iw, 1) - 4;
+  snprintf(a, sizeof a, i18n("%d de %d"), itens + pend, slots);
+  y += ajMeta(i18n("Vagas"), a, ix, y, iw, 1) - 4;
+  snprintf(a, sizeof a, i18n("%ld · %ld da tela"), despT, despQ);
+  y += ajMeta(i18n("Despejadas na sessão"), a, ix, y, iw, 1) - 4;
+  snprintf(a, sizeof a, i18n("%.1f MB"), disco / 1048576.0);
+  y += ajMeta(i18n("Baixado na sessão"), ajDec(a), ix, y, iw, 1) - 4;
+  if (fixo == 1) snprintf(b, sizeof b, "%s", i18n("cravado nesta build"));
+  else if (fixo == 2) snprintf(b, sizeof b, "%s", "NUVIO_TEX_MB");
+  else if (fixo == 3) snprintf(b, sizeof b, "%s", i18n("escolhido em Ajustes"));
+  else if (memTotal > 0) snprintf(b, sizeof b, i18n("pela RAM da TV (%.1f GB)"), memTotal / 1024.0);
+  else snprintf(b, sizeof b, "%s", i18n("padrão"));
+  snprintf(a, sizeof a, "%d MB · %s", (int)(teto >> 20), b);
+  y += ajMeta(i18n("Teto"), ajDec(a), ix, y, iw, 1) - 4;
+  y += 22 - 5;
+  return y - y0;
+}
+
+// A previa da opcao em foco. Devolve a altura usada (0 = sem previa).
+static float ajPrevia(int op, float x, float y, float w) {
+  switch (op) {
+    case AJ_HOME_LAYOUT: return ajPreviaLayout(x, y, w);
+    case AJ_RELOGIO_POS: return ajPreviaRelogio(x, y, w);
+    case AJ_LARGURA_DP: case AJ_RAIO_DP: return ajPreviaCartaz(op, x, y, w);
+    case AJ_ESPACO: case AJ_TEX_MB: return ajPainelMemoria(x, y, w);
+    default: break;
+  }
+  return ajPreviaHome(x, y, w);
+}
+
+// Previa pequena (diferencas: padrao e atual lado a lado).
+static float ajPreviaCompacta(int op, float x, float y, float w) {
+  AjMini m = ajMiniPadrao();
+  if (op == AJ_HOME_LAYOUT) { m.lay = valor[op]; ajMiniHome(m, x, y, w); return w * 9.0f / 16.0f; }
+  if (op == AJ_RELOGIO_POS) { m.relogio = valor[op] == 0 ? 2 : valor[op] == 1 ? 0 : 1; ajMiniHome(m, x, y, w); return w * 9.0f / 16.0f; }
+  return ajPrevia(op, x, y, w);
+}
+// Previa da coluna direita dos editores modais.
+static float ajPreviaEditor(int op, float x, float y, float w) {
+  return ajPrevia(op, x, y, w);
+}

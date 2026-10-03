@@ -45,16 +45,20 @@ SVG="$DIR/lucide"
 # fileiras. O menu do cartaz (ctxmenu.c) usa info/library/eye/eye-off/users/
 # x/rows-3/folders, o traco do mockup "ilha" tela 7.
 NOMES="
-circle-play database file-text folders gallery-vertical-end house
-images info layout-dashboard list-checks monitor-cog palette panel-top plug puzzle
-rotate-ccw-clock rows-3 scan star user-round mic keyboard smartphone
+circle-play file-text folders house
+images info layout-dashboard monitor-cog palette panel-top plug puzzle
+rotate-ccw-clock rows-3 star user-round mic keyboard smartphone
 rotate-cw x library eye eye-off users
 clock triangle-alert tv-minimal-play calendar download wifi-off wifi link-2-off
 cloud megaphone bookmark
+clapperboard languages search chevron-right check plus minus memory-stick
 "
-# A ultima linha e da ILHA DO RELOGIO (02/10, mockup aprovado em design/ilha):
+# A penultima linha e da ILHA DO RELOGIO (02/10, mockup aprovado em design/ilha):
 # os icones dos avisos (alerta, wifi, debrid baixando, Trakt desconectado...) e
 # dos botoes dos modais (Depois, Salvar, Reconectar).
+# A ultima e dos AJUSTES no Glass UI (03/10, mockup aprovado): Trailers e
+# Idiomas com desenho proprio, a lupa e a seta das linhas, o "Salvo", o mais e
+# o menos do editor numerico e a memoria de imagens.
 # Conferencia: todo aj_* citado em src/ tem de estar em NOMES, e todo NOMES
 # tem de ser citado — senao sobra PNG morto no pacote ou falta icone na tela
 # (gfx_icone falha em silencio).
@@ -84,7 +88,7 @@ for f in "$DIR"/aj_*.png "$SVG"/*.svg; do
   case " $(echo $NOMES) " in *" $n "*) ;; *) rm -f "$f"; echo "icones-lucide: removido $f" ;; esac
 done
 
-USADOS=$(grep -ho '"aj_[a-z0-9-]*"' src/*.c | tr -d '"' | sed 's/^aj_//' | sort -u)
+USADOS=$(grep -ho '"aj_[a-z0-9-]*"' src/*.c src/*.inc | tr -d '"' | sed 's/^aj_//' | sort -u)
 FALHA=0
 for n in $USADOS; do
   case " $(echo $NOMES) " in *" $n "*) ;; *) echo "icones-lucide: src/ usa aj_$n, que nao esta em NOMES" >&2; FALHA=1 ;; esac

@@ -270,6 +270,32 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 36, PESO_BOLD    },   // TXT_ILHA_PERGUNTA: a pergunta da confirmacao
   { 20, PESO_REGULAR },   // TXT_ILHA_TEXTO: o texto corrido da confirmacao
   { NV_FT_BODY, PESO_BOLD },           // destaque na frase da ilha (TXT_ILHA_FORTE)
+  // Ajustes no Glass UI (text.h). 600/800 claros sobre o miolo escuro: Bold.
+  { 23, PESO_MEDIUM  },   // TXT_AJ_ITEM: categoria no indice (mockup 21/500)
+  { 25, PESO_MEDIUM  },   // TXT_AJ_ROTULO: nome na linha (23/500)
+  { 22, PESO_MEDIUM  },   // TXT_AJ_VALOR: valor na linha (20/500)
+  { 18, PESO_BOLD    },   // TXT_AJ_CHIP: "Ligado" / "Desligado" (17/600)
+  { 33, PESO_BOLD    },   // TXT_AJ_INSP: titulo do inspetor (32/700)
+  { 15, PESO_BOLD    },   // TXT_AJ_KBD: tecla das dicas (14/700)
+  { 18, PESO_REGULAR },   // TXT_AJ_ESTADO: meta e texto de apoio (17/400)
+  { 14, PESO_BOLD    },   // TXT_AJ_CAPS13: marca pequena em caixa alta (13/700)
+  {  9, PESO_REGULAR },   // TXT_AJ_MINI9: texto da home em miniatura
+  {  9, PESO_BOLD    },   // TXT_AJ_MINI9B
+  { 19, PESO_MEDIUM  },   // TXT_AJ_VALOR18: celulas da folha de fileiras (18/500)
+  { 58, PESO_BOLD    },   // TXT_AJ_NUM58: numero do painel de memoria
+  { 64, PESO_BOLD    },   // TXT_AJ_NUM64: codigo do vinculo
+  { 110, PESO_BOLD   },   // TXT_AJ_NUM110: numeros dos editores e do teste
+  { 29, PESO_BOLD    },   // TXT_AJ_TIT28: titulo do painel lateral (28/700)
+  { 13, PESO_BOLD    },   // TXT_AJ_MINI12 (12/700)
+  { 14, PESO_REGULAR },   // TXT_AJ_MINI13: eixos dos graficos (13/400)
+  { 15, PESO_REGULAR },   // TXT_AJ_MINI14 (14/400)
+  { 17, PESO_BOLD    },   // TXT_AJ_16B: rotulo das miniaturas (16/600)
+  { 21, PESO_REGULAR },   // TXT_AJ_SUB: subtitulo e ajuda (19/400)
+  { 21, PESO_BOLD    },   // TXT_AJ_SEG: segmentado e chip (19/600)
+  { 19, PESO_REGULAR },   // TXT_AJ_18: estado curto da acao (18/400)
+  { 23, PESO_BOLD    },   // TXT_AJ_SECAO: cabecalho de grupo (22/800)
+  { 22, PESO_REGULAR },   // TXT_AJ_TEXTO: texto corrido dos modais (20/400)
+  { 25, PESO_BOLD    },   // TXT_AJ_NOME: botao e nome forte (24/600)
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.

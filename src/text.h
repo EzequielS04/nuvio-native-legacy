@@ -75,6 +75,19 @@ typedef enum {
   // mockup em texto claro sobre o miolo escuro e Bold pela regra optica de
   // text.c. No FIM, pela mesma razao do TXT_RANK_GRANDE.
   TXT_ILHA_FORTE,
+  // AJUSTES NO GLASS UI (mockup ajustes-mockup.html, 03/10): os corpos que a
+  // escala das ilhas nao tinha. Indice 21/500, rotulo da linha 23/500, valor
+  // 20/500, chip Ligado 17/600, titulo do inspetor 32/700, tecla 14/700,
+  // estado 18/400, caixa alta 13/700, e os corpos minusculos da home em
+  // miniatura (9) e os numeros grandes dos paineis. ABAIXO DE ~24 px O CORPO E
+  // O DO MOCKUP + ~8%: a InterDisplay embarcada e mais estreita que a Inter do
+  // navegador (DESIGN.md §4: meca largura) — "Estilo, fileiras..." em 19 px
+  // media 399 px contra 442 no mockup.
+  TXT_AJ_ITEM, TXT_AJ_ROTULO, TXT_AJ_VALOR, TXT_AJ_CHIP, TXT_AJ_INSP,
+  TXT_AJ_KBD, TXT_AJ_ESTADO, TXT_AJ_CAPS13, TXT_AJ_MINI9, TXT_AJ_MINI9B,
+  TXT_AJ_VALOR18, TXT_AJ_NUM58, TXT_AJ_NUM64, TXT_AJ_NUM110, TXT_AJ_TIT28,
+  TXT_AJ_MINI12, TXT_AJ_MINI13, TXT_AJ_MINI14, TXT_AJ_16B,
+  TXT_AJ_SUB, TXT_AJ_SEG, TXT_AJ_18, TXT_AJ_SECAO, TXT_AJ_TEXTO, TXT_AJ_NOME,
   TXT_NFONTES
 } TxtEstilo;
 
