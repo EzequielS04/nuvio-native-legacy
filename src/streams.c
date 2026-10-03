@@ -43,7 +43,11 @@
 #define FOLHA_PAD_E     48.0f  // da borda da folha ao cartao da linha
 #define FOLHA_PAD_D     56.0f
 #define FOLHA_TXT       26.0f  // do cartao ao texto
-#define FOLHA_TOPO     286.0f  // onde a lista comeca
+// Onde a lista comeca. Desce uma linha quando os filtros nao cabem ao lado do
+// titulo (cabExtra, ver medirCabecalho).
+static float cabExtra;
+#define FOLHA_TOPO     (286.0f + cabExtra)
+static int medirCabecalho(void);
 #define FOLHA_LINHA_H  112.0f  // linha sem marca e sem arquivo
 #define FOLHA_MARCA_H   30.0f  // "SUA ESCOLHA ANTERIOR" / "REPRODUZINDO AGORA"
 #define FOLHA_ARQ_H     34.0f  // nome do arquivo, so na linha em foco
@@ -1647,6 +1651,7 @@ void stream_folha_evento(const SDL_Event *e) {
 }
 void stream_folha_atualizar(float dt, Uint32 agora) {
   int nf;
+  medirCabecalho();
   (void)agora;
   anim=anim_mola(anim,aberta?1:0,dt,NV_MOLA_TELA);
   atualizarProvedores();
@@ -1730,6 +1735,27 @@ static void chipFolha(GfxRect r, const char *rot, const char *icone, int foco, i
   }
 }
 
+// OS BOTOES NAO CABEM AO LADO DO TITULO com seis botoes (a LG tem "Sem HDR")
+// nem em ingles ("MP4 only", "Cached"): passavam por cima de "Fontes". Medido,
+// e nao suposto por lingua: se a fila nao cabe, o titulo fica com os discos
+// (Recarregar, Fechar) e os filtros descem para uma linha propria.
+#define FOLHA_CAB_LINHA 68.0f
+static float bwCab[6];
+static int medirCabecalho(void) {
+  float rw = FOLHA_W - FOLHA_PAD_E - FOLHA_PAD_D, soma = 0;
+  float tit = (float)txt_linha(TXT_ILHA_TITULO, "Fontes", 255, 255, 255, 255).w;
+  int nbt = nBotoes(), dois;
+  for (int i = 0; i < nbt; i++) {
+    int b = botaoDe(i);
+    bwCab[i] = iconeBotao(b) ? FOLHA_CHIP_H
+             : (float)txt_linha(TXT_HERO_META, rotuloBotao(b), 255, 255, 255, 255).w + 40.0f;
+    soma += bwCab[i] + (i ? 10.0f : 0.0f);
+  }
+  dois = soma > rw - FOLHA_TXT - tit - 28.0f;
+  cabExtra = dois ? FOLHA_CAB_LINHA : 0.0f;
+  return dois;
+}
+
 void stream_folha_desenhar(Uint32 agora) {
   float ar, ag, ab;
   int ai, nf, automatica, melhor;
@@ -1768,17 +1794,20 @@ void stream_folha_desenhar(Uint32 agora) {
       txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,"Buscando mais fontes…",ai,(int)(ag*255),(int)(ab*255),255,rw-360-cw),tx+cw,72,anim);
     } }
   txt_desenhar_alpha(txt_linha(TXT_ILHA_TITULO,"Fontes",243,242,239,255),tx,94,anim);
-  { int nbt=nBotoes(); float bw[6], bx=lx+rw;
+  { int nbt=nBotoes(), dois=medirCabecalho(); float *bw=bwCab, bx=lx+rw, fx=lx;
+    // Linha do titulo: tudo (uma linha) ou so os discos (duas), a direita.
     for(int i=nbt-1;i>=0;i--){
-      int b=botaoDe(i);
-      bw[i]=iconeBotao(b)?FOLHA_CHIP_H:(float)txt_linha(TXT_HERO_META,rotuloBotao(b),255,255,255,255).w+40.0f;
-      bx-=bw[i]; if(i) bx-=10.0f; }
+      if(dois && !iconeBotao(botaoDe(i))) continue;
+      bx-=bw[i]+10.0f; }
+    bx+=10.0f;
     for(int i=0;i<nbt;i++){
       int b=botaoDe(i);
-      GfxRect r={bx,100,bw[i],FOLHA_CHIP_H};
+      GfxRect r;
+      if(dois && !iconeBotao(b)) { r=(GfxRect){fx,100+FOLHA_CAB_LINHA,bw[i],FOLHA_CHIP_H}; fx+=bw[i]+10.0f; }
+      else { r=(GfxRect){bx,100,bw[i],FOLHA_CHIP_H}; bx+=bw[i]+10.0f; }
       if (ptr) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroFolhaBotao, NULL, i, 0);
       chipFolha(r,rotuloBotao(b),iconeBotao(b),grupo==-1&&foco==i,botaoLigado(b),anim);
-      bx+=bw[i]+10.0f; } }
+    } }
   // A LINHA DE AJUDA so aparece com o cabecalho em foco: "Sem HDR" nao se
   // explica pelo rotulo, e o rotulo nao pode crescer sem estourar a pilula.
   if (grupo==-1) {
@@ -1799,11 +1828,11 @@ void stream_folha_desenhar(Uint32 agora) {
       ajuda=soMp4
         ? "Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro."
         : "Filtra a lista para fontes em MP4. OK liga o filtro.";
-    if(ajuda) txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,160,160,158,255,rw),lx,170,anim);
+    if(ajuda) txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,160,160,158,255,rw),lx,170+cabExtra,anim);
   }
   // SELETOR DE ADDON, segmentado: o selecionado em superficie clara, o foco
   // no acento. Quantas fontes cada addon tem, ao lado do nome.
-  { int cnt[13]={0}; float iw[13], sx, segY=grupo==-1?204.0f:186.0f, maxW=rw+4.0f;
+  { int cnt[13]={0}; float iw[13], sx, segY=(grupo==-1?204.0f:186.0f)+cabExtra, maxW=rw+4.0f;
     TxtLinha nome[13], num[13];
     for(int i=0;i<n;i++){ if(!passaChips(i)) continue; cnt[0]++;
       for(int j=1;j<nProvedores;j++) if(!strcmp(provedores[j],lista[i].provedor)){cnt[j]++;break;} }

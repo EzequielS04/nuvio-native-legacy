@@ -102,7 +102,10 @@ int main(int argc, char **argv) {
       if (tema < 0 || tema >= 12) tema = 2;
       snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dir);
       f = fopen(caminho, "w"); assert(f);
-      fprintf(f, "idioma 0\nselected_theme %d\n", tema);
+      { const char *li = getenv("NUVIO_SHOT_IDIOMA");   // 2 = English
+        fprintf(f, "idioma %d\nselected_theme %d\n", li && *li ? atoi(li) : 0, tema); }
+      { const char *fu = getenv("NUVIO_SHOT_FONTE_UI");   // 3 = Montserrat
+        if (fu && *fu) fprintf(f, "fonteInterface %d\n", atoi(fu)); }
       { const char *t = getenv("NUVIO_SHOT_TEXTO");
         if (t && *t == '1') fprintf(f, "fonteTextoLocal 1\n"); }
       // Material: NUVIO_SHOT_VIDRO=0 desliga a Interface de vidro (folha solida).
