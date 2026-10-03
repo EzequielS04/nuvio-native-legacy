@@ -1,4 +1,5 @@
 static int ajEmLinha(int op);
+static int ajReguaMover(int v, int dx, int dy);
 // Interação do seletor: só OK aplica; foco e rascunho nunca persistem.
 static int uxVoltar(SDL_Keycode k) {
   return k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE || k == SDLK_DELETE;
@@ -111,6 +112,14 @@ static int uxEvento(SDL_Keycode k) {
     }
     // NA LINHA (segmentado, interruptor, cor de destaque): as setas laterais
     // movem o valor pendente; nao ha rodape de "Restaurar padrao" ali.
+    // A REGUA DA COR: ← → na fileira, ↑ ↓ entre as fileiras (claros,
+    // profundos, dinamicas, Textura), na ordem da tela.
+    if (uxOp == AJ_TEMA && ajEmLinha(uxOp) && uxEditor == 1 &&
+        (k == SDLK_LEFT || k == SDLK_RIGHT || k == SDLK_UP || k == SDLK_DOWN)) {
+      uxPendente = ajReguaMover(uxPendente, k == SDLK_RIGHT ? 1 : k == SDLK_LEFT ? -1 : 0,
+                                k == SDLK_DOWN ? 1 : k == SDLK_UP ? -1 : 0);
+      return 1;
+    }
     if (ajEmLinha(uxOp) && uxEditor == 1 && (k == SDLK_LEFT || k == SDLK_RIGHT)) {
       uxPendente += k == SDLK_RIGHT ? 1 : -1;
       if (uxPendente < 0) uxPendente = 0;

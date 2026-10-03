@@ -361,36 +361,144 @@ static void aj2MiniFundo(int modo, float x, float y, float w, float a) {
 #undef FY
   gfx_sem_recorte();
 }
-// Cor de destaque na v2 (corPvV2): as doze cores com a escolhida em destaque
-// e o que ela pinta — o botao em foco e o chip ligado.
+// Cor de destaque (acentos-mockup.html, quadro 1): a PREVIA VIVA da cor — o
+// cartao de um titulo com o que a cor pinta (marcas, botao em foco, chip
+// ligado, pagina ativa, a luz do aviso) — e, embaixo do texto de ajuda, as
+// medidas que ela tem de passar (aj2CorMedidas). A cor e a PENDENTE: o
+// inspetor troca valor[AJ_TEMA] enquanto desenha (ajDesenharInspetor).
+static void aj2Cor8(const float c[3], int *r, int *g, int *b) {
+  *r = (int)(c[0] * 255.0f + 0.5f); *g = (int)(c[1] * 255.0f + 0.5f); *b = (int)(c[2] * 255.0f + 0.5f);
+}
 static float aj2PreviaCor(float x, float y, float w) {
-  int i, sel = ajEditandoLinha(AJ_TEMA) ? uxPendente : valor[AJ_TEMA], ti = ajTinta();
-  float cx = x, cy = y, ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
-  for (i = 0; i < AJ_N_TEMAS; i++) {
-    float cr = TEMA_ACENTO[i].r, cg = TEMA_ACENTO[i].g, cb = TEMA_ACENTO[i].b, d = 50.0f;
-    if (cx + 50 > x + w + 0.5f) { cx = x; cy += 64.0f; }
-    if (i == sel) {
-      float k = 0.2126f * cr + 0.7152f * cg + 0.0722f * cb > 0.5f ? 0.05f : 1.0f;
-      d = 57.5f;
-      gfx_rect((GfxRect){ cx + 25 - d * 0.5f - 12, cy + 25 - d * 0.5f + 2, d + 24, d + 30 }, 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.5f);
-      gfx_cor((GfxRect){ cx + 25 - d * 0.5f, cy + 25 - d * 0.5f, d, d }, 0.5f, cr, cg, cb, 1);
-      gfx_icone((GfxRect){ cx + 13, cy + 13, 24, 24 }, "aj_check", k, k, k, 1);
-    } else gfx_cor((GfxRect){ cx, cy, d, d }, 0.5f, cr, cg, cb, 1);
-    cx += 64.0f;
+  // O cartao do mockup (540x300) na largura do inspetor, a 2:1: a ilha da v2 e
+  // mais baixa que a do mockup das cores, e as medidas tem de caber embaixo.
+  float h = w * 0.5f, s = h / 300.0f, ac[3], mc[3], hd[3], tk;
+  int r8, g8, b8;
+  GfxRect q = { x, y, w, h };
+  const char *arte = ajFundoArte();
+  ajustes_acento(&ac[0], &ac[1], &ac[2]);
+  ajustes_acento_marca(&mc[0], &mc[1], &mc[2]);
+  ajustes_acento_hdr(&hd[0], &hd[1], &hd[2]);
+  tk = ajustes_acento_tinta(NULL, NULL, NULL);
+#define PX(v) (x + (v) * s)
+#define PY(v) (y + (v) * s)
+  gfx_recorte(x, y, w, h);
+  if (!ajImg(arte, q, 22.0f * s, 1)) gfx_cor(q, 22.0f * s / h, 0.10f, 0.105f, 0.12f, 1);
+  // veu: linear-gradient(90deg, rgba(8,8,10,.92), rgba(8,8,10,.35) 75%)
+  gfx_cor(q, 22.0f * s / h, 0.031f, 0.031f, 0.039f, 0.35f);
+  gfx_veu_css((GfxRect){ x, y, w * 0.75f, h }, 2, 0, 1.0f, 0.877f);
+  ajCaps(TXT_AJ_CAPS13, "Filme · 2026 · 119 min", 1.9f, PX(26), PY(20), 0.5f);
+  ajLogo(ajArte(AJA_LOGO, ajArteFundoN), PX(24), PY(44), 250.0f * s, 78.0f * s, 1);
+  { char up[64]; float mx = PX(26);
+    static const char *const M[3] = { "4K", "DOLBY VISION", "DOLBY ATMOS" };
+    int k;
+    for (k = 0; k < 3; k++) {
+      const float *c = k < 2 ? mc : hd;
+      aj2Cor8(c, &r8, &g8, &b8);
+      snprintf(up, sizeof up, "%s", M[k]);
+      mx += txt_tracking(TXT_AJ_CAPS13, up, r8, g8, b8, mx, PY(132), 1, 1.3f) + 12.0f * s;
+    } }
+  // botao em foco
+  { int ti = (int)(tk * 255.0f + 0.5f);
+    TxtLinha l = txt_linha(TXT_G20B, i18n("Reproduzir"), ti, ti, ti, 255);
+    float bh = 46.0f * s, bw = 16.0f * s + 18.0f * s + 8.0f * s + l.w + 20.0f * s;
+    ajPilulaAcento((GfxRect){ PX(26), PY(166), bw, bh }, bh * 0.5f, 1);
+    gfx_icone((GfxRect){ PX(26) + 16.0f * s, PY(166) + (bh - 18.0f * s) * 0.5f, 18.0f * s, 18.0f * s }, "pl_play-f", tk, tk, tk, 1);
+    txt_desenhar(l, PX(26) + 42.0f * s, PY(166) + (bh - l.h) * 0.5f);
+    gfx_cor((GfxRect){ PX(26) + bw + 14.0f * s, PY(166), bh, bh }, 0.5f, 1, 1, 1, 0.12f);
+    gfx_cor((GfxRect){ PX(26) + bw + 14.0f * s + bh + 8.0f * s, PY(166), bh, bh }, 0.5f, 1, 1, 1, 0.12f); }
+  // chip ligado + pagina ativa
+  { TxtLinha l;
+    float ch = 38.0f * s, cw;
+    aj2Cor8(mc, &r8, &g8, &b8);
+    l = txt_linha(TXT_G16B, i18n("Só MP4"), r8, g8, b8, 255);
+    cw = 15.0f * s + 7.0f * s + 8.0f * s + l.w + 15.0f * s;
+    gfx_cor((GfxRect){ PX(26), PY(232), cw, ch }, 0.5f, 0.055f, 0.059f, 0.071f, 0.7f);
+    gfx_cor((GfxRect){ PX(26), PY(232), cw, ch }, 0.5f, ac[0], ac[1], ac[2], 0.22f);
+    gfx_cor((GfxRect){ PX(26) + 15.0f * s, PY(232) + (ch - 7.0f * s) * 0.5f, 7.0f * s, 7.0f * s }, 0.5f, mc[0], mc[1], mc[2], 1);
+    txt_desenhar(l, PX(26) + 30.0f * s, PY(232) + (ch - l.h) * 0.5f);
+    { float dx = PX(26) + cw + 22.0f * s; int k;
+      for (k = 0; k < 4; k++) {
+        float dw = (k == 1 ? 18.0f : 6.0f) * s;
+        if (k == 1) gfx_cor((GfxRect){ dx, PY(248), dw, 6.0f * s }, 0.5f, mc[0], mc[1], mc[2], 1);
+        else gfx_cor((GfxRect){ dx, PY(248), dw, 6.0f * s }, 0.5f, 0.953f, 0.949f, 0.937f, 0.3f);
+        dx += dw + 7.0f * s;
+      } } }
+  // a ilha do aviso, com a luz do acento
+  { TxtLinha l = txt_linha(TXT_G16B, i18n("Começa em 5 min"), 243, 242, 239, 255);
+    float ih = 44.0f * s, iw = 8.0f * s + 30.0f * s + 10.0f * s + l.w + 14.0f * s;
+    GfxRect il = { x + w - 18.0f * s - iw, PY(18), iw, ih };
+    gfx_cor(il, 0.5f, 0.055f, 0.059f, 0.071f, 0.82f);
+    gfx_cor((GfxRect){ il.x + 8.0f * s, il.y + 7.0f * s, 30.0f * s, 30.0f * s }, 0.5f, ac[0], ac[1], ac[2], 0.24f);
+    gfx_icone((GfxRect){ il.x + 15.0f * s, il.y + 14.0f * s, 16.0f * s, 16.0f * s }, "aj_bell", mc[0], mc[1], mc[2], 1);
+    txt_desenhar(l, il.x + 48.0f * s, il.y + (ih - l.h) * 0.5f); }
+#undef PX
+#undef PY
+  gfx_sem_recorte();
+  return h;
+}
+// As MEDIDAS da cor (o "tok" do mockup): pilula, pilula contra a ilha, marca
+// no escuro, chip ligado e "HDR" de grupo, cada uma com a razao de contraste
+// e a meta (verde passa, vermelho nao); embaixo, a familia e o OKLCH.
+static void aj2Num(char *d, size_t n, const char *fmt, float v) {
+  char *p;
+  snprintf(d, n, fmt, v);
+  if (ajustes_idioma() == IDIOMA_PT || ajustes_idioma() == IDIOMA_PTPT)
+    for (p = d; *p; p++) if (*p == '.') *p = ',';
+}
+static float aj2CorMedidas(float x, float y, float w, float fim, float a) {
+  static const float ILHA[3] = { 18 / 255.0f, 19 / 255.0f, 22 / 255.0f };
+  float ac[3], mc[3], hd[3], ch[3], tk, tinta[3], lab[3], y0 = y;
+  int k;
+  char hx[5][12], cr[16], cap[160];
+  struct { const char *rot; const float *sw; const char *hex; float c, meta; int aro; } L[5];
+  ajustes_acento(&ac[0], &ac[1], &ac[2]);
+  ajustes_acento_marca(&mc[0], &mc[1], &mc[2]);
+  ajustes_acento_hdr(&hd[0], &hd[1], &hd[2]);
+  tk = ajustes_acento_tinta(NULL, NULL, NULL);
+  tinta[0] = tinta[1] = tinta[2] = tk;
+  if (tk < 0.5f) { tinta[0] = ILHA[0]; tinta[1] = ILHA[1]; tinta[2] = ILHA[2]; }
+  for (k = 0; k < 3; k++) ch[k] = ILHA[k] + (ac[k] - ILHA[k]) * 0.22f;
+  { const float *C[5] = { ac, ILHA, mc, ch, hd };
+    for (k = 0; k < 5; k++) { int r8, g8, b8; aj2Cor8(C[k], &r8, &g8, &b8); snprintf(hx[k], sizeof hx[k], "#%02x%02x%02x", r8, g8, b8); } }
+  L[0].rot = tk > 0.5f ? "Pílula · tinta branca" : "Pílula · tinta escura"; L[0].sw = ac; L[0].hex = hx[0];
+  L[0].c = corviva_contraste(ac, tinta); L[0].meta = 4.5f; L[0].aro = 0;
+  L[1].rot = "Pílula contra a ilha"; L[1].sw = ac; L[1].hex = hx[1]; L[1].c = corviva_contraste(ac, ILHA); L[1].meta = 3.0f; L[1].aro = 1;
+  L[2].rot = "Marca no escuro"; L[2].sw = mc; L[2].hex = hx[2]; L[2].c = corviva_contraste(mc, ILHA); L[2].meta = 7.0f; L[2].aro = 0;
+  L[3].rot = "Chip ligado (22%)"; L[3].sw = ch; L[3].hex = hx[3]; L[3].c = corviva_contraste(mc, ch); L[3].meta = 4.5f; L[3].aro = 0;
+  L[4].rot = "\"HDR\" do grupo"; L[4].sw = hd; L[4].hex = hx[4]; L[4].c = corviva_contraste(hd, ILHA); L[4].meta = 4.5f; L[4].aro = 0;
+  for (k = 0; k < 5 && y + 42.0f <= fim; k++) {
+    float yc = y + 21.0f;
+    TxtLinha t = ajTxtC(TXT_V2_24, L[k].rot, w - 260.0f), hxl, crl;
+    int ok = L[k].c >= L[k].meta;
+    gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * a);
+    if (L[k].aro) gfx_cor((GfxRect){ x - 4, yc - 15, 30, 30 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.2f * a);
+    if (L[k].aro) gfx_cor((GfxRect){ x - 3, yc - 14, 28, 28 }, 0.5f, ILHA[0], ILHA[1], ILHA[2], a);
+    gfx_cor((GfxRect){ x, yc - 11, 22, 22 }, 0.5f, L[k].sw[0], L[k].sw[1], L[k].sw[2], a);
+    txt_desenhar_alpha(t, x + 34, yc - t.h * 0.5f, 0.5f * a);
+    aj2Num(cr, sizeof cr, "%.1f:1", L[k].c);
+    crl = txt_linha(TXT_V2_SEG, cr, ok ? 110 : 240, ok ? 210 : 110, ok ? 140 : 110, 255);
+    txt_desenhar_alpha(crl, x + w - crl.w, yc - crl.h * 0.5f, a);
+    hxl = ajTxt(TXT_V2_24, L[k].hex);
+    txt_desenhar_alpha(hxl, x + w - 96.0f - hxl.w, yc - hxl.h * 0.5f, 0.85f * a);
+    y += 42.0f;
   }
-  cy += 50.0f + 22.0f;
-  { TxtLinha l = ajTxtT(TXT_V2_SEG, "Reproduzir"), m;
-    float bw = 28 + 20 + 10 + l.w + 28, cw;
-    ajPilulaAcento((GfxRect){ x, cy, bw, 64 }, 32, 1);
-    gfx_icone((GfxRect){ x + 28, cy + 22, 20, 20 }, "aj_play", ti / 255.0f, ti / 255.0f, ti / 255.0f, 1);
-    txt_desenhar(l, x + 58, cy + (64 - l.h) * 0.5f);
-    m = txt_linha(TXT_G20B, "Só MP4", (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255);
-    cw = 20 + 8 + 9 + m.w + 20;
-    gfx_cor((GfxRect){ x + bw + 14, cy, cw, 52 }, 0.5f, ar, ag, ab, 0.22f);
-    gfx_cor((GfxRect){ x + bw + 14 + 20, cy + 22, 8, 8 }, 0.5f, ar, ag, ab, 1);
-    txt_desenhar(m, x + bw + 14 + 37, cy + (52 - m.h) * 0.5f); }
-  return cy + 64.0f - y;
+  if (y + 40.0f <= fim) {
+    char Ls[16], Cs[16];
+    float Cc, hh;
+    corviva_srgb_para_oklab(ac, lab);
+    Cc = sqrtf(lab[1] * lab[1] + lab[2] * lab[2]);
+    hh = atan2f(lab[2], lab[1]) * 57.29578f;
+    if (hh < 0) hh += 360.0f;
+    aj2Num(Ls, sizeof Ls, "%.2f", lab[0]);
+    aj2Num(Cs, sizeof Cs, "%.3f", Cc);
+    snprintf(cap, sizeof cap, "%s · OKLCH L %s · C %s · %.0f°", i18n(tk > 0.5f ? "Profundo" : "Claro"), Ls, Cs, hh);
+    { TxtLinha c = ajTxtC(TXT_V2_24, cap, w);
+      gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * a);
+      txt_desenhar_alpha(c, x, y + 14.0f, 0.42f * a); }
+    y += 40.0f + 14.0f;
+  }
+  return y - y0;
 }
 
 // --- A ANIMACAO ---------------------------------------------------------------------

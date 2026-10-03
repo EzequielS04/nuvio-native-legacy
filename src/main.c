@@ -1183,6 +1183,7 @@ int main(int argc, char **argv) {
     ajustes_idioma_auto_tick();   // locale da TV (webOS): chega de um fio
     corviva_quadro(dt, ajustes_cor_viva(), ajustes_cor_logo(),
                    ajustes_animacoes_reduzidas());
+    ajustes_textura_quadro();   // Textura: a do titulo em cena vai ao gfx
     fUpd = NV_DT(t0);
 
     // RECORTE DESLIGADO ANTES DO CLEAR. glClear respeita o scissor test: se
