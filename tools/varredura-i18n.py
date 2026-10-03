@@ -252,6 +252,11 @@ def contexto(txt, i):
 # "nao sei o que e": sem esta lista a ferramenta nao pode virar teste, e sem
 # virar teste ela nao impede a proxima regressao.
 IGNORAR = {
+    # Ajustes no Glass UI (03/10): a unidade "Mbps" e universal (mesma em
+    # todas as linguas); a chave de fileira de mentira da captura de Ajustes
+    # (ajustes_teste_quadro) e a subpasta da arte embarcada (ajArte) nao sao
+    # texto de tela.
+    "Mbps", "com.linvo.cinemeta_movie_top", "poster/",
     # Palavra que a folha de Fontes PROCURA no nome/descricao do arquivo para
     # saber se ha audio em portugues (streams.c, idiomaDa). Dado de comparacao,
     # nunca texto desenhado.
