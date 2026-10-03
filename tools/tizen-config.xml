@@ -13,7 +13,7 @@
                      required_version="5.5"/>
   <tizen:profile name="tv"/>
 
-  <name>Nuvio</name>
+  <name>Nuvio Legacy</name>
   <icon src="icon.png"/>
   <content src="index.html"/>
   <tizen:content-security-policy>

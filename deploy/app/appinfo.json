@@ -4,7 +4,7 @@
   "vendor": "iqui27",
   "type": "native",
   "main": "nuvio-proto",
-  "title": "Nuvio",
+  "title": "Nuvio Legacy",
   "icon": "icon.png",
   "largeIcon": "icon-large.png",
   "splashBackground": "splash.png",
