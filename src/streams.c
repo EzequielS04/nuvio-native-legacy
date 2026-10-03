@@ -1,4 +1,5 @@
 #include "streams.h"
+#include "plrui.h"
 #include "livetv_regras.h"
 #include "idioma.h"
 #include "badges.h"
@@ -33,7 +34,12 @@
 // Remux") — o nome do addon ("[AD] Debridio 4K") nao diz nada sobre a fonte
 // e era a primeira coisa que a linha mostrava. O resto da linha de antes
 // (provedor, descricao, meta, seis selos) lia como planilha.
-#define FOLHA_W        900.0f
+// A ILHA DO MOCKUP APROVADO (Glass UI, design/glass-ilha "Fontes", e o
+// player-mockup de 03/10): 820 de largura, a 40 das bordas, raio 36 — a
+// mesma folha dos Episodios no player.
+#define FOLHA_W        820.0f
+#define FOLHA_MARGEM    40.0f
+#define FOLHA_RAIO_IL   36.0f
 #define FOLHA_PAD_E     48.0f  // da borda da folha ao cartao da linha
 #define FOLHA_PAD_D     56.0f
 #define FOLHA_TXT       26.0f  // do cartao ao texto
@@ -1466,7 +1472,7 @@ static int linhaDe(int indice) {
   for (int r = 0; r < nOrdem; r++) if (ordem[r] == indice) return r;
   return -1;
 }
-static float areaLista(void) { return NV_TELA_H - NV_FOLHA_MARGEM - 16.0f - FOLHA_TOPO; }
+static float areaLista(void) { return NV_TELA_H - FOLHA_MARGEM - 16.0f - FOLHA_TOPO; }
 // A linha em foco no meio da area; a primeira de um grupo leva o cabecalho
 // junto, senao subir ate ela deixaria "4K" escondido acima da borda.
 static float alvoRolagem(void) {
@@ -1728,7 +1734,7 @@ void stream_folha_desenhar(Uint32 agora) {
   float ar, ag, ab;
   int ai, nf, automatica, melhor;
   if(anim<.005f) return;
-  float x=NV_TELA_W-FOLHA_W-NV_FOLHA_MARGEM+(1-anim)*(FOLHA_W+NV_FOLHA_MARGEM);
+  float x=NV_TELA_W-FOLHA_W-FOLHA_MARGEM+(1-anim)*(FOLHA_W+FOLHA_MARGEM);
   float lx=x+FOLHA_PAD_E, rw=FOLHA_W-FOLHA_PAD_E-FOLHA_PAD_D;
   float tx=lx+FOLHA_TXT, tr=lx+rw-FOLHA_TXT;
   ajustes_acento(&ar,&ag,&ab);
@@ -1738,13 +1744,9 @@ void stream_folha_desenhar(Uint32 agora) {
   // luz larga no canto de cima — o mesmo material da ilha do relogio. O ajuste
   // de vidro escolhe o miolo: translucido (gfx_vidro_folha) ou solido.
   { const int vid = ajustes_vidro();
-    GfxRect corpo={x,NV_FOLHA_MARGEM,FOLHA_W,NV_TELA_H-2*NV_FOLHA_MARGEM};
-    float raio=NV_FOLHA_RAIO/corpo.h;
+    GfxRect corpo={x,FOLHA_MARGEM,FOLHA_W,NV_TELA_H-2*FOLHA_MARGEM};
     gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,0,0,0,(vid?.30f:.42f)*anim);
-    gfx_rect((GfxRect){corpo.x-18,corpo.y-8,corpo.w+36,corpo.h+40},0,GFX_SOMBRA,1.0f,0,0,0.5f,0,0,0,.38f*anim);
-    if (vid) gfx_vidro_folha(corpo,raio,anim);
-    else gfx_cor(corpo,raio,.071f,.075f,.086f,.98f*anim);
-    gfx_luz_canto(corpo,raio,corpo.w*.25f,-corpo.h*.25f,corpo.w*.9f,1,1,1,(vid?.06f:.04f)*anim); }
+    plrui_material(corpo,FOLHA_RAIO_IL,0,anim); }
   int ptr = aberta && anim > .5f && ponteiro_ativo();
   if (ptr) {
     ponteiro_alvo(0, 0, x, NV_TELA_H, NULL, ponteiroFolhaFora, 0, 0);
@@ -1755,18 +1757,17 @@ void stream_folha_desenhar(Uint32 agora) {
   // "Fontes"; os botoes alinhados a direita, centrados no titulo.
   { float cw = 0, ch = 0;
     if (contexto[0]) {
-      TxtLinha c = txt_linha_corta(TXT_HERO_META,contexto,150,150,148,255,rw-360);
-      txt_desenhar_alpha(c,tx,66,anim);
-      cw = c.w + 22.0f; ch = c.h;
+      // Kicker do Glass UI: 15/700 em caixa alta espacada, cinza 45%.
+      cw = plrui_kicker(contexto,tx,74,243,242,239,anim*.45f) + 22.0f; ch = 18.0f;
     }
     // AINDA HA ADDON RESPONDENDO, com fonte ja na lista (#221): a lista vai
     // crescer, e quem escolhe agora escolhe entre o que chegou. Na linha do
     // contexto, no acento, para nao disputar com o titulo nem com a ajuda.
     if (n > 0 && addons_ocupado() && rw-360-cw > 80) {
-      if (cw > 0) gfx_cor((GfxRect){tx+cw-13.5f,66+ch*.5f-2.5f,5,5},.5f,.5f,.5f,.49f,anim);
-      txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,"Buscando mais fontes…",ai,(int)(ag*255),(int)(ab*255),255,rw-360-cw),tx+cw,66,anim);
+      if (cw > 0) gfx_cor((GfxRect){tx+cw-13.5f,74+ch*.5f-2.5f,5,5},.5f,.5f,.5f,.49f,anim);
+      txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,"Buscando mais fontes…",ai,(int)(ag*255),(int)(ab*255),255,rw-360-cw),tx+cw,72,anim);
     } }
-  txt_desenhar_alpha(txt_linha(TXT_TITULO3,"Fontes",242,242,240,255),tx,94,anim);
+  txt_desenhar_alpha(txt_linha(TXT_ILHA_TITULO,"Fontes",243,242,239,255),tx,94,anim);
   { int nbt=nBotoes(); float bw[6], bx=lx+rw;
     for(int i=nbt-1;i>=0;i--){
       int b=botaoDe(i);
@@ -1834,7 +1835,7 @@ void stream_folha_desenhar(Uint32 agora) {
   melhor = melhorFolha = stream_automatico();
   montar(automatica);
   nf=nOrdem;
-  gfx_recorte(x,FOLHA_TOPO-8,FOLHA_W,NV_TELA_H-NV_FOLHA_MARGEM-16.0f-(FOLHA_TOPO-8));
+  gfx_recorte(x,FOLHA_TOPO-8,FOLHA_W,NV_TELA_H-FOLHA_MARGEM-16.0f-(FOLHA_TOPO-8));
   // CABECALHOS DE GRUPO: "4K  ULTRA HD ........ 3 fontes", com um fio embaixo.
   for(int g=0;g<FOLHA_GRUPOS;g++){
     float y; char q[48];
@@ -1886,7 +1887,7 @@ void stream_folha_desenhar(Uint32 agora) {
       TxtLinha lg, lu, lp;
       int cg=sel?250:218;
       // No modo do addon o tamanho ja vem no texto dele; so o addon fica.
-      if(s->tamanhoMB && !ajustes_fonte_texto_addon()) snprintf(gb,sizeof gb,s->tamanhoMB>=102400?"%.0f":"%.1f",s->tamanhoMB/1024.0);
+      if(s->tamanhoMB && !ajustes_fonte_texto_addon()) { snprintf(gb,sizeof gb,s->tamanhoMB>=102400?"%.0f":"%.1f",s->tamanhoMB/1024.0); plrui_decimal(gb); }
       lg=txt_linha(TXT_CW_TITULO,gb,cg,cg,cg-2,255);
       lu=txt_linha(TXT_PG_FIM,"GB",120,120,118,255);
       lp=txt_linha_corta(TXT_PG_FIM,s->provedor,sel?150:110,sel?150:110,sel?148:108,255,240);
@@ -1918,11 +1919,13 @@ void stream_folha_desenhar(Uint32 agora) {
         gfx_cor((GfxRect){tx,cy+5,7,7},.5f,ar,ag,ab,anim);
         mx=tx+16+caixaAlta(rot,ai,(int)(ag*255),(int)(ab*255),tx+16,cy,anim)+18;
       }
+      // "MELHOR PARA ESTA TV" E MARCA, nao botao (Glass UI do player, 03/10):
+      // o ponto e o texto espacado no acento, como as outras marcas — a
+      // pilula cheia de acento era a forma mais pesada da lista.
       if(i==melhor && nOrdem>1){
-        float sw=caixaAlta("Melhor para esta TV",tf,tf,tf,-1,0,1);
-        GfxRect p={mx,cy-6,sw+24,28};
-        gfx_cor(p,.5f,ar,ag,ab,anim);
-        caixaAlta("Melhor para esta TV",tf,tf,tf,p.x+12,cy,anim);
+        (void)tf;
+        gfx_cor((GfxRect){mx,cy+5,7,7},.5f,ar,ag,ab,anim);
+        caixaAlta("Melhor para esta TV",ai,(int)(ag*255),(int)(ab*255),mx+16,cy,anim);
       }
       cy+=FOLHA_MARCA_H;
     }

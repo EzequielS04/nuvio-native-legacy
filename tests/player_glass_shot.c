@@ -504,6 +504,36 @@ int main(int argc, char **argv) {
     quadros(110);
     salvar("reacao");
   }
+  if (quer(argc, argv, "fontes")) {
+    static Stream st[5];
+    static const char *prov[5] = { "AIOStreams", "AIOStreams", "Torrentio", "AIOStreams", "Torrentio" };
+    static const long mb[5] = { 18637, 9626, 7987, 2150, 1840 };
+    static const int alt[5] = { 2160, 2160, 2160, 1080, 1080 };
+    int i;
+    memset(st, 0, sizeof st);
+    for (i = 0; i < 5; i++) {
+      snprintf(st[i].rotulo, sizeof st[i].rotulo, "Fallout");
+      snprintf(st[i].provedor, sizeof st[i].provedor, "%s", prov[i]);
+      snprintf(st[i].url, sizeof st[i].url, "http://exemplo/%d.mkv", i);
+      st[i].tamanhoMB = mb[i]; st[i].altura = alt[i]; st[i].fileIdx = -1;
+    }
+    st[0].badges = badges_bit("r-4k") | badges_bit("v-hdr10") | badges_bit("a-atmos") | badges_bit("q-remux");
+    st[1].badges = badges_bit("r-4k") | badges_bit("v-dv") | badges_bit("a-ddp") | badges_bit("q-webdl");
+    st[1].mp4 = 1; st[1].dolbyVision = 1;
+    snprintf(st[1].arquivo, sizeof st[1].arquivo, "Fallout.S01E03.2160p.AMZN.WEB-DL.DV.DDP5.1.mp4");
+    st[2].badges = badges_bit("r-4k") | badges_bit("v-hdr10plus") | badges_bit("a-ddp");
+    st[3].badges = badges_bit("r-1080") | badges_bit("a-ddp");
+    st[4].badges = badges_bit("r-1080");
+    abrir(&serie); simular(3840, 2160, "HDR10", 0, 1);
+    stream_definir_lista(st, 5);
+    stream_definir_atual(0);
+    quadros(10);
+    player_shot_esconder();
+    stream_folha_contexto("Fallout \xc2\xb7 T1E3");
+    stream_folha_abrir();
+    quadros(90);
+    salvar("fontes");
+  }
   puts("player_glass_shot: ok");
   return 0;
 }
