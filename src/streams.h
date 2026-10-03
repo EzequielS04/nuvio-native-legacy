@@ -73,6 +73,13 @@ typedef struct {
   // em streams.c), e a escolha manual avisa na tela que o servico esta
   // baixando. Nao exclui nada: escolhida a dedo, toca como na 1.3.5.
   int  foraCache;
+  // PACOTE DE SELOS ATIVO (selospacote.h): os filtros que casaram com esta
+  // fonte, calculados UMA vez (quando a lista chega, ou quando o pacote muda;
+  // `selosPacoteVer` != selospacote_versao() manda recalcular), nunca no
+  // desenho. 16 = SELOS_MAX_CASADOS.
+  unsigned short selosPacote[16];
+  unsigned char  nSelosPacote;
+  unsigned       selosPacoteVer;
 } Stream;
 
 // Parser sem rede: o chamador libera *saida. Retorna -1 se a alocacao falhar.

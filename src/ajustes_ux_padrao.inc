@@ -195,3 +195,4 @@
   0,                /* ver o registro na tela: acao */
   1,                /* medidor de desempenho: DESLIGADO (V_LIGA: 1 = Desligado) */
   0,                /* guia de uso: acao */
+  0, 0, 0,          /* pacote de selos (espelho de selospacote_ativo), adicionar e remover: o embutido */
