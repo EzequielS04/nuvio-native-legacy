@@ -1008,7 +1008,13 @@ void atualizacao_teste_estado(int b, const char *tag) {
 // pilula no canto de sempre. Reabrir no meio do recolhimento continua dali.
 static void origemDaIlha(void) {
   float x, y, w, h;
-  if (ilha_rect(&x, &y, &w, &h) && w > 1.0f && h > 1.0f) origem = (GfxRect){ x, y, w, h };
+  // A pilula vem da ilha, que e camada ampliada (tela virtual, escala.h); o
+  // cartao (1300x1008) nao cabe ampliado e fica em 1080p: a origem vai para a
+  // tela real.
+  if (ilha_rect(&x, &y, &w, &h) && w > 1.0f && h > 1.0f) {
+    float e = gfx_escala_ui();
+    origem = (GfxRect){ x * e, y * e, w * e, h * e };
+  }
   else if (origem.w <= 0.0f) origem = (GfxRect){ ajustes_conteudo_x(), NV_ILHA_Y, 220.0f, NV_ILHA_H_ABERTA };
 }
 static void nascer(void) {

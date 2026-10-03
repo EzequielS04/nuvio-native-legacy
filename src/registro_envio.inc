@@ -117,10 +117,12 @@ void registro_pacote(float x, float y, float w, float h, int n, const char *rotD
 }
 
 // --- O MODAL ---------------------------------------------------------------------
-#define RE_X 300.0f
-#define RE_Y 250.0f
-#define RE_W 1320.0f
+// Centrado na tela virtual (escala.h) e no maximo da largura dela menos 80:
+// 300, 250, 1320 e 580 em 100%.
+#define RE_W (NV_TELA_W - 80.0f < 1320.0f ? NV_TELA_W - 80.0f : 1320.0f)
 #define RE_H 580.0f
+#define RE_X ((NV_TELA_W - RE_W) * 0.5f)
+#define RE_Y ((NV_TELA_H - RE_H) * 0.5f)
 static void rgKbdTexto(const char *k, const char *l, float xDir, float yc) {
   TxtLinha kt = rgT(TXT_AJ_KBD, k), lt = rgT(TXT_ILHA_APOIO, l);
   float kw = kt.w + 18 < 34 ? 34 : kt.w + 18, x = xDir - lt.w - 9 - kw;

@@ -9,6 +9,8 @@
 #include "layout.h"
 #include "idioma.h"
 #include "idiomacod.h"
+#define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -93,7 +95,14 @@ static float tlBotao(const char *rot, float x, float y, int f, float a) {
   return w;
 }
 
+static void telemetria_desenharCorpo_(Uint32 agora);
+// Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
 void telemetria_desenhar(Uint32 agora) {
+  ESCALA_SE_COUBER_INI(1260.0f, 600.0f);
+  telemetria_desenharCorpo_(agora);
+  ESCALA_SE_COUBER_FIM();
+}
+static void telemetria_desenharCorpo_(Uint32 agora) {
   static const char *const IC[3] = { "aj_activity", "aj_shield-check", "aj_clock" };
   static const char *const K[3] = { "Vai", "Não vai", "Quando" };
   static const char *const T[3] = { "O que o app fez e quanto demorou",
@@ -117,7 +126,9 @@ void telemetria_desenhar(Uint32 agora) {
     if (hh > cartH) cartH = hh;
   }
   h = 52 + 18 + 8 + 48 + 14 + th + 30 + cartH + 34 + 60 + 48;
-  x = 330; y = 228 + dy;
+  // Centrado na tela do fator ativo (escala.h); 330, 228 em 100%.
+  x = (NV_TELA_W - w) * 0.5f;
+  y = (gfx_escala() == 1.0f ? 228.0f : (NV_TELA_H - h) * 0.5f) + dy;
   { GfxRect r = { x, y, w, h };
     gfx_rect((GfxRect){ r.x - 20, r.y - 6, r.w + 40, r.h + 46 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, 0, 0, 0, (ajustes_vidro() ? 0.36f : 0.45f) * a);
     if (ajustes_vidro()) {

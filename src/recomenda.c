@@ -29,6 +29,8 @@
 #include "logotitulo.h"
 #include "artemetahub.h"
 #include "perfis.h"
+#define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -3354,7 +3356,14 @@ static const CatItem *cartaoLogoItem(void) {
   return &ci;
 }
 
+static void recomenda_desenharCorpo_(Uint32 agora);
+// Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
 void recomenda_desenhar(Uint32 agora) {
+  ESCALA_SE_COUBER_INI(RC_W, RC_H);
+  recomenda_desenharCorpo_(agora);
+  ESCALA_SE_COUBER_FIM();
+}
+static void recomenda_desenharCorpo_(Uint32 agora) {
   float a, dy, x, y;
   char buf[320];
   (void)agora;

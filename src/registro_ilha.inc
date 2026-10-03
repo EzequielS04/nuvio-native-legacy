@@ -14,9 +14,14 @@
 // Geometria (o CSS do mockup).
 #define RP_X   48.0f
 #define RP_Y  112.0f
-#define RP_W 1290.0f
-#define RP_H  928.0f
-#define RI_X 1362.0f
+// TAMANHO DA INTERFACE (escala.h): o painel e camada ampliada e mede pela tela
+// virtual. A lista fica com o que sobra do inspetor (518) e, quando sobraria
+// menos de 840 para ela (150%), o inspetor SAI e a lista vai ate a borda. Em
+// 100% sao os numeros do mockup: 1290, 928 e 1362.
+#define RG_SEM_INSP (NV_TELA_W - 630.0f < 840.0f)
+#define RP_W (RG_SEM_INSP ? NV_TELA_W - 88.0f : NV_TELA_W - 630.0f)
+#define RP_H (NV_TELA_H - 152.0f)
+#define RI_X (NV_TELA_W - 558.0f)
 #define RI_W  518.0f
 #define RL_TOPO   208.0f   // lghead: 26 + 56 + 14
 #define RL_BASE   937.0f   // acima do "seguindo" (30) e do rodape (72 + fio)
@@ -1220,7 +1225,7 @@ static void desenhaPainel(void) {
     RgDica d[2] = { { "OK", "Ler de novo" }, { "Voltar", "Fechar" } };
     desenhaVazio();
     rgRodape(d, 2, NULL);
-    inspVazio();
+    if (!RG_SEM_INSP) inspVazio();
     return;
   }
   // Estado a direita do segmentado: "Ao vivo" + o disco da pausa, ou a pilula
@@ -1286,7 +1291,8 @@ static void desenhaPainel(void) {
     rgRodape(d, 4, t);
   }
   // O inspetor pelo estado.
-  if (pausado && foco >= 0 && detalhe) inspLinha();
+  if (RG_SEM_INSP) { /* tela virtual estreita: sem inspetor */ }
+  else if (pausado && foco >= 0 && detalhe) inspLinha();
   else if (etap) inspAparelho();
   else if (area == RG_PROB && !focoEnviar) inspProblemas();
   else if (area == RG_REDE && !focoEnviar) inspRede();
