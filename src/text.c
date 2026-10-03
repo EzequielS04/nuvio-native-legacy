@@ -373,6 +373,9 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 172, PESO_BOLD    },   // TXT_V2_NUM150
   { 36, PESO_BOLD    },   // TXT_V2_36B
   { 18, PESO_REGULAR },   // TXT_V2_18
+  { 28, PESO_BOLD    },   // TXT_ILHA_NOME_L (24 + 17 %)
+  { 22, PESO_REGULAR },   // TXT_ILHA_SUB_L (19 + 16 %)
+  { 17, PESO_REGULAR },   // TXT_ILHA_HORA_L (15 + 13 %)
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.
