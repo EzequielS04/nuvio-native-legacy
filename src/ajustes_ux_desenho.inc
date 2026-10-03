@@ -50,13 +50,14 @@ static const char *uxBloco(int op) {
 // os mesmos da Home), e a amostra embarcada (deploy/app/art) antes disso. `n`
 // e o indice da amostra que o mockup usa; com catalogo vira o titulo n.
 enum { AJA_FUNDO = 0, AJA_POSTER, AJA_LOGO };
-static int ajArteFundoN = 12;   // titulo atras da tela (ajustes_teste_arte)
+static int ajArteFundoN = 12;
+static int ajArteSoAmostra;   // 1 = ignora o catalogo e usa so a amostra embarcada   // titulo atras da tela (ajustes_teste_arte)
 static const char *ajArte(int tipo, int n) {
   static char buf[8][1100];
   static int k;
   char *b;
   if (n < 0) n = 0;
-  if (cat_n() > 0) {
+  if (cat_n() > 0 && !ajArteSoAmostra) {
     const CatItem *c = cat_item(n % cat_n());
     if (c) {
       const char *s = tipo == AJA_POSTER ? c->poster : tipo == AJA_LOGO ? c->logo : c->backdrop;
@@ -184,9 +185,37 @@ static float ajCaps(TxtEstilo e, const char *s, float track, float x, float y, f
       { up[k + 1] = (char)((unsigned char)up[k + 1] - 0x20); k++; }
   return txt_tracking(e, up, 243, 242, 239, x, y, al, track);
 }
+// Como ajCaps, mas cabe em `maxW`: o que passa e cortado por caractere UTF-8 e
+// termina em "…". O kicker da folha de fileiras junta titulo, addon, tipo e
+// contagem; em alemao/russo (ou num titulo longo de addon) passava da borda.
+static float ajCapsC(TxtEstilo e, const char *s, float track, float x, float y, float al, float maxW) {
+  char up[240];
+  size_t k, n;
+  snprintf(up, sizeof up, "%s", i18n(s));
+  for (k = 0; up[k]; k++)
+    if (up[k] >= 'a' && up[k] <= 'z') up[k] = (char)(up[k] - 32);
+    else if ((unsigned char)up[k] == 0xC3 && up[k + 1] && (unsigned char)up[k + 1] >= 0xA0 && (unsigned char)up[k + 1] <= 0xBE)
+      { up[k + 1] = (char)((unsigned char)up[k + 1] - 0x20); k++; }
+  if (maxW > 0 && txt_tracking(e, up, 243, 242, 239, -1, 0, 1, track) > maxW) {
+    if (txt_tracking(e, up, 243, 242, 239, -1, 0, 1, track * 0.6f) <= maxW) track *= 0.6f;   // aperta o tracking antes de cortar
+    else {
+    n = strlen(up);
+    while (n > 0) {
+      do n--; while (n > 0 && ((unsigned char)up[n] & 0xC0) == 0x80);
+      up[n] = 0;
+      { char t[250];
+        snprintf(t, sizeof t, "%s\xe2\x80\xa6", up);
+        if (txt_tracking(e, t, 243, 242, 239, -1, 0, 1, track) <= maxW) { snprintf(up, sizeof up, "%s", t); break; } }
+    } }
+  }
+  return txt_tracking(e, up, 243, 242, 239, x, y, al, track);
+}
 // Kicker padrao: 15/700, tracking .14em, branco a 45%. Devolve a largura.
 static float ajKicker(const char *s, float x, float y, float a) {
   return ajCaps(TXT_MINI, s, 2.1f, x, y, 0.45f * a);
+}
+static float ajKickerC(const char *s, float x, float y, float a, float maxW) {
+  return ajCapsC(TXT_MINI, s, 2.1f, x, y, 0.45f * a, maxW);
 }
 // Icone Lucide na cor do texto do mockup.
 static void ajIcone(const char *nome, float x, float y, float lado, float al) {
@@ -977,6 +1006,22 @@ static float ajDicasLargura(const AjDica *d, int n) {
 static void ajDicas(const AjDica *d, int n, float x, float yBase, float w, float a) {
   gfx_cor((GfxRect){ x, yBase - 30.0f - 18.0f, w, 1 }, 0, 1, 1, 1, 0.07f * a);
   ajDicasLinha(d, n, x + 6.0f, yBase - 30.0f, a);
+}
+
+// Como ajDicas, mas quebra em mais de uma linha quando as teclas nao cabem em
+// `w` (alemao, russo): a ultima linha fica rente a yBase e as outras acima.
+static void ajDicasQuebra(const AjDica *d, int n, float x, float yBase, float w, float a) {
+  int ini[8], nl = 0, i = 0, r;
+  while (i < n && nl < 8) {
+    int j = i + 1;
+    ini[nl++] = i;
+    while (j < n && ajDicasLargura(d + i, j - i + 1) <= w - 12.0f) j++;
+    i = j;
+  }
+  ini[nl] = n;
+  gfx_cor((GfxRect){ x, yBase - 30.0f - 18.0f - (nl - 1) * 40.0f, w, 1 }, 0, 1, 1, 1, 0.07f * a);
+  for (r = 0; r < nl; r++)
+    ajDicasLinha(d + ini[r], (r + 1 < nl ? ini[r + 1] : n) - ini[r], x + 6.0f, yBase - 30.0f - (nl - 1 - r) * 40.0f, a);
 }
 
 // Linhas "rotulo ........ valor" com fio de 7% em cima (o .meta do mockup).

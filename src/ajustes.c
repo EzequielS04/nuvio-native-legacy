@@ -5916,6 +5916,8 @@ int ajustes_teste_quadro(const char *id) {
   memcpy(valor, valorPadrao, sizeof valor);
   valor[AJ_TEMA] = tema; valor[AJ_VIDRO] = vidro;
   valor[AJ_IDIOMA] = IDIOMA_PT + 1;
+  // NUVIO_SHOT_IDIOMA=N (IDIOMA_*: 1 en, 4 ru, 6 de...): o quadro sai nesse idioma.
+  if (getenv("NUVIO_SHOT_IDIOMA") && *getenv("NUVIO_SHOT_IDIOMA")) valor[AJ_IDIOMA] = atoi(getenv("NUVIO_SHOT_IDIOMA")) + 1;
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
   memset(uxAvancados, 0, sizeof uxAvancados);
   scrollY = velY = 0; paginaA = 1;
