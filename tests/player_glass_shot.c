@@ -35,6 +35,7 @@
 #include "trailer.h"
 #include "guialembrete.h"
 #include "aovivo.h"
+#include "ilha.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -281,6 +282,30 @@ static void desenhaZap(void) {
   b.numero = 13; b.salto = 1;
   arteCheia("img/bd/21.jpg", 0.0f);
   aovivo_banner_desenhar(&b, 1.0f);
+}
+
+static void desenhaHomeIlha(void) {
+  arteCheia("img/bd/15.jpg", 0.0f);
+  gfx_veu_css((GfxRect){ 0, 0, 1920, 1080 }, 2, 1.0f, 0.7f, 0.80f);
+  gfx_veu_css((GfxRect){ 0, 0, 1920, 1080 }, 0, 1.0f, 0.55f, 0.90f);
+  ilha_relogio_visivel(1);
+  ilha_posicionar(0);
+  ilha_desenhar(relogio);
+}
+static void cartaoVivo(void) {
+  IlhaCartao v;
+  memset(&v, 0, sizeof v);
+  snprintf(v.chave, sizeof v.chave, "vivo:tt99999990:1:3");
+  snprintf(v.imdb, sizeof v.imdb, "tt99999990");
+  v.serie = 1; v.t = 1; v.e = 3;
+  snprintf(v.titulo, sizeof v.titulo, "Fallout");
+  snprintf(v.epNome, sizeof v.epNome, "The Head");
+  snprintf(v.sinopse, sizeof v.sinopse, "Lucy, Maximus e o Ghoul disputam a mesma recompensa no deserto.");
+  snprintf(v.poster, sizeof v.poster, "%s", img("img/po/00.jpg"));
+  snprintf(v.logo, sizeof v.logo, "%s", img("img/lg/00.png"));
+  snprintf(v.arte, sizeof v.arte, "%s", img("img/ep/00_1_03.jpg"));
+  v.progresso = 0.58f; v.restanteMin = 24;
+  ilha_cartao(ILHA_VIVO, &v);
 }
 
 static int quer(int argc, char **argv, const char *id) {
@@ -654,6 +679,28 @@ int main(int argc, char **argv) {
     salvar("ilha-crescendo-2");
     quadros(90);
     salvar("ilha-crescendo-3");
+  }
+  if (quer(argc, argv, "saida-modal") || quer(argc, argv, "saida-voo")) {
+    struct tm lt; time_t t = time(NULL);
+    ajustes_shot_valor("relogioTelaLocal", 0);
+    cartaoVivo();
+    extra = desenhaHomeIlha;
+    if (quer(argc, argv, "saida-voo")) {
+      quadros(5);
+      ilha_minimizar(img("img/bd/00.jpg"));
+      quadros(13);   // o meio do voo de 560 ms (o quadro do mockup)
+      salvar("saida-voo");
+      quadros(60);
+    } else quadros(60);
+    if (quer(argc, argv, "saida-modal")) {
+      SDL_Event ev; memset(&ev, 0, sizeof ev);
+      (void)lt; (void)t;
+      ev.type = SDL_KEYDOWN; ev.key.keysym.sym = SDLK_s;
+      if (!ilha_evento(&ev)) ilha_modal_abrir();
+      quadros(80);
+      salvar("saida-modal");
+    }
+    extra = NULL;
   }
   puts("player_glass_shot: ok");
   return 0;
