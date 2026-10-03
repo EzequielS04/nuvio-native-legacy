@@ -2752,6 +2752,8 @@
   T("alienígenas", "vanzemaljac"),
   T("amadurecimento", "odrastanje"),
   T("amanhã", "sutra"),
+  T("amigo", "prijatelj"),
+  T("amigos", "prijatelja"),
   T("amizade", "prijateljstvo"),
   T("amnésia", "amnezija"),
   T("amor", "ljubav"),

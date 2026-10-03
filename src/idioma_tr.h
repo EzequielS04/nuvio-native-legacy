@@ -2752,6 +2752,8 @@
   T("alienígenas", "uzaylı"),
   T("amadurecimento", "büyüme hikâyesi"),
   T("amanhã", "yarın"),
+  T("amigo", "arkadaş"),
+  T("amigos", "arkadaş"),
   T("amizade", "arkadaşlık"),
   T("amnésia", "amnezi"),
   T("amor", "aşk"),

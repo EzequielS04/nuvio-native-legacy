@@ -2752,6 +2752,8 @@
   T("alienígenas", "utomjording"),
   T("amadurecimento", "uppväxt"),
   T("amanhã", "i morgon"),
+  T("amigo", "vän"),
+  T("amigos", "vänner"),
   T("amizade", "vänskap"),
   T("amnésia", "minnesförlust"),
   T("amor", "kärlek"),

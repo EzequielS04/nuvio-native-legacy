@@ -2751,6 +2751,8 @@
   T("alienígenas", "пришельцы"),
   T("amadurecimento", "взросление"),
   T("amanhã", "завтра"),
+  T("amigo", "друг"),
+  T("amigos", "друзей"),
   T("amizade", "дружба"),
   T("amnésia", "амнезия"),
   T("amor", "любовь"),

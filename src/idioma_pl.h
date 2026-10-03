@@ -2752,6 +2752,8 @@
   T("alienígenas", "kosmita"),
   T("amadurecimento", "dojrzewanie"),
   T("amanhã", "jutro"),
+  T("amigo", "znajomy"),
+  T("amigos", "znajomych"),
   T("amizade", "przyjaźń"),
   T("amnésia", "amnezja"),
   T("amor", "miłość"),

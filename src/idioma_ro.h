@@ -2751,6 +2751,8 @@
   T("alienígenas", "extratereștri"),
   T("amadurecimento", "maturizare"),
   T("amanhã", "mâine"),
+  T("amigo", "prieten"),
+  T("amigos", "prieteni"),
   T("amizade", "prietenie"),
   T("amnésia", "amnezie"),
   T("amor", "dragoste"),

@@ -2752,6 +2752,8 @@
   T("alienígenas", "alien"),
   T("amadurecimento", "coming of age"),
   T("amanhã", "besok"),
+  T("amigo", "teman"),
+  T("amigos", "teman"),
   T("amizade", "persahabatan"),
   T("amnésia", "amnesia"),
   T("amor", "cinta"),

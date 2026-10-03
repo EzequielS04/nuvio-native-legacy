@@ -49,6 +49,20 @@ typedef enum {
   // Numeral do Top 10 da home Dinamica (NV_TOP10_NUM_CORPO). No FIM, depois das
   // legendas: TXT_LEG_* e contado por aritmetica a partir de TXT_LEG_50.
   TXT_RANK_GRANDE,
+  // ESCALA DAS ILHAS (Glass UI, mockup "ilha" tela 3 — o painel Social): os
+  // corpos do CSS aprovado, em px de 1080p, que nenhum estilo acima tinha. O
+  // painel misturava CALLOUT 28, CAPTION 22 e MINI 15 e saia "parecido" com o
+  // mockup, nunca igual: o dono comparou lado a lado e viu (02/10, "o mockup
+  // ta bem mais polido que a build"). No FIM, pela mesma razao do RANK_GRANDE.
+  TXT_ILHA_TITULO,   // .ttl            40 / 700  ("Social")
+  TXT_ILHA_SECAO,    // .sec b          22 / 800  ("Hoje", "Esta semana")
+  TXT_ILHA_NOME,     // nome na linha   24 / 600
+  TXT_ILHA_CORPO,    // verbo na linha  24 / 400  ("te mandou")
+  TXT_ILHA_SEG,      // .sg             19 / 600  (abas segmentadas)
+  TXT_ILHA_SUB,      // titulo da linha 19 / 400
+  TXT_ILHA_NUM,      // .sg .n          16 / 400  (contagem da aba)
+  TXT_ILHA_HORA,     // quando          15 / 400  ("há 15 min")
+  TXT_ILHA_INICIAL,  // .av             20 / 700  (inicial no disco de 52)
   TXT_NFONTES
 } TxtEstilo;
 

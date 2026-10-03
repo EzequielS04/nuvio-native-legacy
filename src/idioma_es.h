@@ -2751,6 +2751,8 @@
   T("alienígenas", "alienígenas"),
   T("amadurecimento", "crecimiento personal"),
   T("amanhã", "mañana"),
+  T("amigo", "amigo"),
+  T("amigos", "amigos"),
   T("amizade", "amistad"),
   T("amnésia", "amnesia"),
   T("amor", "amor"),

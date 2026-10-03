@@ -2752,6 +2752,8 @@
   T("alienígenas", "alien"),
   T("amadurecimento", "coming of age"),
   T("amanhã", "morgen"),
+  T("amigo", "vriend"),
+  T("amigos", "vrienden"),
   T("amizade", "vriendschap"),
   T("amnésia", "geheugenverlies"),
   T("amor", "liefde"),

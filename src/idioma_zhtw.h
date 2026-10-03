@@ -2752,6 +2752,8 @@
   T("alienígenas", "外星人"),
   T("amadurecimento", "成長"),
   T("amanhã", "明天"),
+  T("amigo", "位好友"),
+  T("amigos", "位好友"),
   T("amizade", "友情"),
   T("amnésia", "失憶"),
   T("amor", "愛情"),

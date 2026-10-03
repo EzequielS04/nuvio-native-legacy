@@ -2752,6 +2752,8 @@
   T("alienígenas", "vetřelec"),
   T("amadurecimento", "dospívání"),
   T("amanhã", "zítra"),
+  T("amigo", "přítel"),
+  T("amigos", "přátel"),
   T("amizade", "přátelství"),
   T("amnésia", "amnézie"),
   T("amor", "láska"),

@@ -252,6 +252,17 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 68, PESO_REGULAR }, { 72, PESO_REGULAR }, { 76, PESO_REGULAR },
   { 80, PESO_REGULAR },
   { NV_TOP10_NUM_CORPO, PESO_BOLD },   // numeral do Top 10 da Dinamica
+  // Escala das ilhas (text.h). 600 e 800 claros sobre o vidro escuro vao para
+  // Bold pela regra optica escrita acima; 400 fica Regular.
+  { 40, PESO_BOLD    },   // TXT_ILHA_TITULO
+  { 22, PESO_BOLD    },   // TXT_ILHA_SECAO
+  { 24, PESO_BOLD    },   // TXT_ILHA_NOME
+  { 24, PESO_REGULAR },   // TXT_ILHA_CORPO
+  { 19, PESO_BOLD    },   // TXT_ILHA_SEG
+  { 19, PESO_REGULAR },   // TXT_ILHA_SUB
+  { 16, PESO_REGULAR },   // TXT_ILHA_NUM
+  { 15, PESO_REGULAR },   // TXT_ILHA_HORA
+  { 20, PESO_BOLD    },   // TXT_ILHA_INICIAL
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.
