@@ -33,6 +33,8 @@
 #include "posplay.h"
 #include "reacao.h"
 #include "trailer.h"
+#include "guialembrete.h"
+#include "aovivo.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -232,6 +234,53 @@ static void arteCheia(const char *rel, float escuro) {
 static void desenhaTrailer(void) {
   arteCheia("img/bd/03.jpg", 0.0f);
   trailer_osd_desenhar("One Battle After Another", 1.0f);
+}
+
+static void abrirCanal(int atras, int foco, int info, int numero, const char *nome, const char *prog,
+                       const char *bd) {
+  CatItem c;
+  AoVivoEpg e;
+  time_t t = time(NULL);
+  struct tm lt;
+  memset(&c, 0, sizeof c);
+  snprintf(c.tipo, sizeof c.tipo, "tv");
+  snprintf(c.titulo, sizeof c.titulo, "%s", nome);
+  snprintf(c.imdb, sizeof c.imdb, "canal:%d", numero);
+  snprintf(c.backdrop, sizeof c.backdrop, "%s", img(bd));
+  snprintf(c.sinopse, sizeof c.sinopse, "Transmiss\xc3\xa3o ao vivo dos principais eventos esportivos do dia, com coment\xc3\xa1rios e reportagens.");
+  { CatItem l[1]; l[0] = c; cat_definir(l, 1); }
+  player_marcar_canal(&c);
+  player_abrir(0, NULL);
+  player_erro_fonte(); player_limpar_erro_fonte();
+  { VideoSimulacao v; memset(&v, 0, sizeof v);
+    v.largura = 1920; v.altura = 1080; v.pronto = 1; video_simular(&v); }
+  player_shot_video(1);
+  memset(&e, 0, sizeof e);
+  localtime_r(&t, &lt); lt.tm_hour = 23; lt.tm_min = 18; lt.tm_sec = 0;
+  e.temAgora = 1; e.agoraIni = mktime(&lt); e.agoraFim = e.agoraIni + 120 * 60;
+  e.temProx = 1; e.proxIni = e.agoraFim;
+  e.progresso = 0.58f;
+  snprintf(e.agoraTit, sizeof e.agoraTit, "%s", prog);
+  snprintf(e.proxTit, sizeof e.proxTit, "Bate-bola: Os melhores momentos");
+  player_shot_canal(&e, numero, atras, foco, info);
+  { struct tm h; localtime_r(&t, &h); h.tm_hour = 23; h.tm_min = 51; h.tm_sec = 0;
+    plrilha_shot_hora(mktime(&h)); }
+}
+
+static void desenhaMini(void) {
+  arteCheia("img/bd/15.jpg", 0.0f);
+  gfx_veu_css((GfxRect){ 0, 0, 1920, 1080 }, 2, 1.0f, 0.7f, 0.80f);
+  gfx_veu_css((GfxRect){ 0, 0, 1920, 1080 }, 0, 1.0f, 0.55f, 0.90f);
+  player_mini_desenhar(relogio);
+  glem_desenhar(relogio);
+}
+static void desenhaZap(void) {
+  AoVivoBanner b;
+  memset(&b, 0, sizeof b);
+  b.nome = "Globo News"; b.logo = ""; b.agoraTit = "Em Foco com Andr\xc3\xa9ia Sadi";
+  b.numero = 13; b.salto = 1;
+  arteCheia("img/bd/21.jpg", 0.0f);
+  aovivo_banner_desenhar(&b, 1.0f);
 }
 
 static int quer(int argc, char **argv, const char *id) {
@@ -560,6 +609,37 @@ int main(int argc, char **argv) {
     quadros(60);
     salvar("trailer");
     extra = NULL; trailer_shot_pausado(0);
+  }
+  if (quer(argc, argv, "aovivo-osd") || quer(argc, argv, "aovivo-atras")) {
+    int atras = quer(argc, argv, "aovivo-atras");
+    abrirCanal(atras ? 252 : 0, atras ? 7 : 0, atras, 12, "Sportv 2", "Campeonato Brasileiro: Rodada 24", "img/bd/36.jpg");
+    quadros(10);
+    player_shot_estado(relogio, 0, 0, 1, 0, 0, 0);
+    quadros(60);
+    salvar(atras ? "aovivo-atras" : "aovivo-osd");
+  }
+  if (quer(argc, argv, "aovivo-erro")) {
+    abrirCanal(0, 0, 0, 12, "Sportv 2", "Campeonato Brasileiro: Rodada 24", "img/bd/36.jpg");
+    player_shot_video(0);
+    player_erro_fonte_motivo("N\xc3\xa3o foi poss\xc3\xadvel abrir a fonte", "Todas as telas da conta Xtream est\xc3\xa3o em uso (2 de 2).");
+    quadros(80);
+    salvar("aovivo-erro");
+  }
+  if (quer(argc, argv, "aovivo-mini")) {
+    abrirCanal(0, 0, 0, 12, "Sportv 2", "Campeonato Brasileiro", "img/bd/36.jpg");
+    quadros(10);
+    player_minimizar();
+    glem_teste_cartao("Jornal das Dez", "Globo News", 0);
+    extra = desenhaMini;
+    quadros(60);
+    salvar("aovivo-mini");
+    extra = NULL;
+  }
+  if (quer(argc, argv, "aovivo-zap")) {
+    extra = desenhaZap;
+    quadros(30);
+    salvar("aovivo-zap");
+    extra = NULL;
   }
   puts("player_glass_shot: ok");
   return 0;

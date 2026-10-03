@@ -251,6 +251,8 @@ static Uint32 pgDesde;
 static int   comVideo = 0;
 #ifdef NV_SHOT_HOOKS
 static int   shotSemFuro, shotBusca;
+static int   shotEpgOk, shotNumero, shotAtras;
+static AoVivoEpg shotEpg;
 #endif
 static int   pedFaixas = 0;
 static int   esperandoFonte = 0;   // aberto sem URL, esperando o addon responder
@@ -402,6 +404,7 @@ static int pedGuia, pedZap, pedGuiaCheio;   // pedidos de canal: overlay do guia
 static AoVivoZap zapEst;
 static float bannerAV;         // 0..1, a entrada do banner do zapping
 static int botaoAV, infoAV, pedRecarregar;
+static int avErroFoco;   // o botao em foco no modal do erro do canal
 // ATRAS DO AO VIVO (29/09/2026). Canal com janela de tempo (DVR do provedor)
 // pausa; quem pausa fica atras da transmissao, e o OSD diz quanto e oferece
 // "Voltar ao vivo". A conta NAO e `duracao - posicao` crua: na borda do ao vivo
@@ -1568,10 +1571,14 @@ int player_retomar_retido(const char *imdb, int t, int e) {
 // tela cheia e instantaneo porque o fluxo nunca parou. So canal entra: um
 // filme no canto tem progresso, episodio e fim para cuidar; um canal ao vivo
 // nao perde nada.
-#define PLR_PIP_W  460.0f
-#define PLR_PIP_H  259.0f
-#define PLR_PIP_X  (NV_TELA_W - PLR_PIP_W - 56.0f)
-#define PLR_PIP_Y  (NV_TELA_H - PLR_PIP_H - 96.0f)
+// O CANAL NO CANTO (Glass UI): um cartaz-ilha de 500 a 40 das bordas — o
+// video 480x270 com raio 22 dentro do miolo, e embaixo a faixa com AO VIVO,
+// o canal e o programa, e as dicas. PLR_PIP_* e o retangulo do VIDEO.
+#define PLR_PIP_ILHA_H 368.0f
+#define PLR_PIP_W  480.0f
+#define PLR_PIP_H  270.0f
+#define PLR_PIP_X  (NV_TELA_W - 40.0f - 500.0f + 10.0f)
+#define PLR_PIP_Y  (NV_TELA_H - 40.0f - PLR_PIP_ILHA_H + 10.0f)
 
 // O destino em miniatura: a caixa e 16:9 e a proporcao do quadro e respeitada
 // DENTRO dela — um canal 4:3 letterboxa na caixa em vez de esticar.
@@ -1720,54 +1727,36 @@ void player_mini_desenhar(Uint32 agora) {
   // No guia quem desenha e o guia (furo no preview, selo, bordas).
   if (miniGuia) return;
   f = (GfxRect){ r.x, r.y, r.w, r.h };
-  corFocoPlayer(&fr, &fg, &fb);
-  // Furo com o MESMO raio do anel: sem ele o plano de video e retangular e
-  // os cantos do quadro escapam por fora da moldura arredondada.
-  gfx_furo_raio(f, 0.14f);
-  // Espessura em pixels (gfx_anel): NV_ANEL_FOCO / f.w dava 2,25 px num
-  // quadro 16:9, porque o anel mede em fracao da ALTURA.
-  gfx_anel(f, 0.14f, NV_ANEL_FOCO, fr, fg, fb, 0.85f);
-  // A etiqueta e UMA linha so dentro do furo: ponto vermelho + AO VIVO +
-  // canal + programa do ar, cortada na borda direita do quadro para nomes
-  // longos nao vazarem por cima do anel.
-  gfx_cor((GfxRect){ f.x, f.y + f.h - 50.0f, f.w, 50.0f },
-          0.0f, 0.02f, 0.02f, 0.03f, 0.78f);
-  { char rot[160];
-    TxtLinha lv, nm;
-    float lx2 = f.x + 16.0f, ly2;
+  (void)fr; (void)fg; (void)fb;
+  // A ILHA em volta (sem o anel de acento de 4 px), o furo com raio 22.
+  { GfxRect il = { f.x - 10.0f, f.y - 10.0f, 500.0f, PLR_PIP_ILHA_H };
+    char rot[160];
     EpgProg ag;
-    snprintf(rot, sizeof rot, "%s", itemCanal.titulo[0] ? itemCanal.titulo
-                                                        : i18n("Canal"));
+    float x = il.x + 20.0f, yc = f.y + f.h + 14.0f + 14.0f;
+    plrui_material(il, 30.0f, 0, 1.0f);
+    gfx_furo_raio(f, 22.0f / f.h);
+    // AO VIVO em vermelho (estado da transmissao) e "Canal · programa".
+    { TxtLinha l = txt_linha(TXT_MINI, "AO VIVO", 255, 255, 255, 255);
+      float w = 12.0f + 8.0f + 8.0f + (float)l.w + 12.0f;
+      gfx_cor((GfxRect){ x, yc - 14.0f, w, 28.0f }, 0.5f, 0.898f, 0.282f, 0.302f, 1.0f);
+      gfx_cor((GfxRect){ x + 12.0f, yc - 4.0f, 8.0f, 8.0f }, 0.5f, 1, 1, 1, 1.0f);
+      txt_tracking(TXT_MINI, "AO VIVO", 255, 255, 255, x + 28.0f, yc - (float)l.h * 0.5f, 1.0f, 1.3f);
+      x += w + 12.0f; }
+    snprintf(rot, sizeof rot, "%s", itemCanal.titulo[0] ? itemCanal.titulo : i18n("Canal"));
     if (pAgora(epgIdx, time(NULL), &ag)) {
       size_t u = strlen(rot);
-      snprintf(rot + u, sizeof rot - u, "  \xc2\xb7  %s", ag.titulo);
+      snprintf(rot + u, sizeof rot - u, " \xc2\xb7 %s", ag.titulo);
     }
-    lv = txt_linha(TXT_MINI, i18n("AO VIVO"), 255, 120, 120, 255);
-    nm = txt_linha(TXT_CAPTION, rot, 246, 247, 252, 255);
-    ly2 = f.y + f.h - 50.0f + (50.0f - nm.h) * 0.5f;
-    gfx_recorte(f.x + 1.0f, f.y + f.h - 50.0f, f.w - 2.0f, 49.0f);
-    gfx_cor((GfxRect){ lx2, ly2 + (nm.h - 10.0f) * 0.5f, 10.0f, 10.0f },
-            0.5f, 0.96f, 0.24f, 0.24f, 1.0f);
-    lx2 += 18.0f;
-    txt_desenhar_alpha(lv, lx2, ly2 + (nm.h - lv.h) * 0.5f, 1.0f);
-    lx2 += lv.w + 14.0f;
-    txt_desenhar_alpha(nm, lx2, ly2, 0.96f);
-    gfx_sem_recorte(); }
-  // A dica de teclas mora num pill escuro sob o quadro: texto solto sobre a
-  // home se perdia no fundo, e "flutuava" quando a miniatura cobria outra
-  // tela.
-  { TxtLinha l = txt_linha(TXT_MINI,
+    { TxtLinha nm = txt_linha_corta(TXT_G18M, rot, 243, 242, 239, 255, il.x + il.w - 20.0f - x);
+      txt_desenhar_alpha(nm, x, yc - (float)nm.h * 0.5f, 1.0f); }
+    { const char *k[2] = {
 #ifdef NV_ANDROID
-        i18n("CH+: tela cheia · Voltar: fechar")
+        "CH+",
 #else
-        i18n("Azul: tela cheia · Voltar: fechar")
+        "Azul",
 #endif
-        , 205, 208, 216, 255);
-    gfx_cor((GfxRect){ f.x, PLR_PIP_Y + PLR_PIP_H + 10.0f,
-                       l.w + 30.0f, l.h + 14.0f },
-            0.14f, 0.02f, 0.02f, 0.03f, 0.72f);
-    txt_desenhar_alpha(l, f.x + 15.0f,
-                       PLR_PIP_Y + PLR_PIP_H + 10.0f + 7.0f, 0.9f); }
+        "Voltar" }, *rt[2] = { "Tela cheia", "Fechar" };
+      plrui_dicas(k, rt, 2, il.x + 20.0f, yc + 14.0f + 8.0f + 15.0f, 0, 1.0f); } }
 }
 
 // O ultimo botao da fileira: "Episodios" numa serie, "Relacionados" num filme
@@ -2000,12 +1989,12 @@ static int avBotoes(int *ids) {
   ids[n++] = AV_B_ANT;
   ids[n++] = AV_B_PROX;
   if (guia_info_canal(player_id_canal(), NULL, NULL, NULL, 0)) ids[n++] = AV_B_FAV;
-  ids[n++] = AV_B_ASPECTO;
   ids[n++] = AV_B_AUDIO;
   ids[n++] = AV_B_LEGENDA;
   ids[n++] = AV_B_INFO;
   ids[n++] = AV_B_RECARREGAR;
   ids[n++] = AV_B_FONTE;
+  ids[n++] = AV_B_ASPECTO;   // no fim, como no mockup do Glass UI
   return n;
 }
 
@@ -2058,12 +2047,18 @@ static void avMontarOsd(AoVivoOsd *o) {
   }
   if (id[0] && xtream_e_id(id)) { xtepg_querer(id); xtepg_passo(); }
   aovivo_epg_montar(epgIdx, id, time(NULL), &o->epg);
+#ifdef NV_SHOT_HOOKS
+  if (shotEpgOk) { o->epg = shotEpg; o->numero = shotNumero; }
+#endif
   for (i = 0; i < n; i++) o->botoes[i] = ids[i];
   o->nBotoes = n;
   o->foco = (botaoAV < n) ? botaoAV : n - 1;
   o->favorito = guia_e_favorito(id);
   o->pausado = !tocando && avPodePausar();
   o->atrasoS = avAtrasoS(SDL_GetTicks());
+#ifdef NV_SHOT_HOOKS
+  if (shotEpgOk && shotAtras) { o->atrasoS = shotAtras; o->pausado = 0; }
+#endif
   o->pausaS = (o->pausado && avPausaDesde) ? (int)((SDL_GetTicks() - avPausaDesde) / 1000u) : 0;
   o->janelaS = avPodePausar() ? (int)video_duracao() : 0;
   o->bufferando = comVideo && video_bufferando_ms() > 1500u;
@@ -2089,6 +2084,13 @@ static void avMontarOsd(AoVivoOsd *o) {
     else snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Buffer: estável"));
     snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Codec, quadros e taxa: a TV não informa"));
     o->nInfo = k;
+    // As marcas do OSD de filme no topo do painel (pela mesma regra de
+    // medida: o que o pipeline confirma).
+    { int fm = marca_resolucao(o->res);
+      if (fm >= 0) o->marcas[o->nMarcas++] = fm;
+      if (video_tem_dolby_vision()) o->marcas[o->nMarcas++] = FMT_DV;
+      else if (!strcasecmp(video_hdr(), "HDR10")) o->marcas[o->nMarcas++] = FMT_HDR10;
+      if (video_tem_atmos()) o->marcas[o->nMarcas++] = FMT_ATMOS; }
   }
 }
 
@@ -2096,6 +2098,14 @@ static void avMontarOsd(AoVivoOsd *o) {
 static void avTecla(SDL_Keycode k) {
   int ids[AV_B_N], n = avBotoes(ids);
   int ok = (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE);
+  // CANAL QUE NAO ABRIU: a tecla e do modal (Recarregar, Fonte, Guia).
+  if (erroFonte) {
+    if (k == SDLK_LEFT && avErroFoco > 0) avErroFoco--;
+    else if (k == SDLK_RIGHT && avErroFoco < 2) avErroFoco++;
+    else if (ok) avAtivar(avErroFoco == 0 ? AV_B_RECARREGAR : avErroFoco == 1 ? AV_B_FONTE : AV_B_GUIA);
+    aovivo_erro_foco(avErroFoco);
+    return;
+  }
   if (botaoAV >= n) botaoAV = n - 1;
   if (botaoAV < 0) botaoAV = 0;
   if (!visivel) {
@@ -3340,6 +3350,9 @@ void player_desenhar(Uint32 agora) {
     // no catalogo e o do card, e aqui ele ocupa 1920.
     const char *arte = (c && c->backdrop[0] && !player_id_canal()[0])
                      ? artehero_url(c) : NULL;
+#ifdef NV_SHOT_HOOKS
+    if (shotSemFuro && c && c->backdrop[0]) arte = c->backdrop;   // capturas: o "video" do canal
+#endif
     GLuint tex = arte ? tex_obter_hero(arte) : 0;   // ocupa a tela inteira
     if (tex) {
       gfx_tex_aspect_atual = tex_aspecto(arte);
@@ -3646,7 +3659,7 @@ void player_desenhar(Uint32 agora) {
         aovivo_banner_desenhar(&bn, entrada * bannerAV);
       }
     }
-    if (a > 0.005f) {
+    if (a > 0.005f && !erroFonte) {
       AoVivoOsd o;
       desenharLegendaExterna();
       if (!zapEst.pend) {
@@ -3923,6 +3936,10 @@ void player_desenhar(Uint32 agora) {
 // CAPTURAS (tests/player_glass_shot.c): poe o player num estado de tela sem
 // pipeline. `agora` e o relogio do harness (o mesmo passado a desenhar).
 void player_shot_video(int sim) { comVideo = sim; shotSemFuro = sim; }
+void player_shot_canal(const AoVivoEpg *e, int numero, int atrasS, int botaoFoco, int info) {
+  shotEpgOk = e != NULL; if (e) shotEpg = *e; shotNumero = numero; shotAtras = atrasS;
+  botaoAV = botaoFoco; infoAV = info;
+}
 void player_shot_estado(Uint32 agora, float pos, float dur, int toca, int bt,
                         int barra, int so) {
   posSeg = posVis = pos; posVisSolto = 0;

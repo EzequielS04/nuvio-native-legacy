@@ -7,6 +7,7 @@
 // preferencias do player, mas quem o define e o modulo de video.
 #include "video.h"
 #include "catalogo.h"
+#include "aovivo.h"
 #include <SDL2/SDL.h>
 
 // Abre a reproducao do titulo `indiceCatalogo` (indice circular, igual ao do
@@ -247,7 +248,10 @@ void player_shot_toast(Uint32 agora, const char *texto, const char *icone, int a
 void player_shot_esconder(void);
 void player_shot_carregando(int sim);
 void player_shot_buscando(int sim);
-void player_shot_video(int sim);   // comVideo sem furo: a arte faz de video
+void player_shot_video(int sim);
+// Canal: a grade, o numero, quanto atras do ao vivo, o botao em foco e o
+// painel de Informacoes.
+void player_shot_canal(const AoVivoEpg *e, int numero, int atrasS, int botaoFoco, int info);   // comVideo sem furo: a arte faz de video
 #endif
 
 #endif
