@@ -1,0 +1,97 @@
+// TRACK SELECTION ON THE .tpk: the deferred write, exercised with no TV.
+//
+// WHY THIS TEST EXISTS. The first track assignment after opening a file is
+// recorded by the player and never applied (measured on the TV: the write at
+// 0.00 s came back as "already on 2" while the demuxer kept track 0). The
+// fix holds every choice until playback has really started, and lets the
+// subtitle wait out the player's settle window. This pins the split: audio
+// out on the first tick, the subtitle out after the settle, and a change
+// during playback going out immediately.
+#include <stdio.h>
+#include <string.h>
+#include "video.h"
+#include <SDL2/SDL.h>
+
+const char *i18n(const char *s) { return s; }
+const char *ling_nome(const char *c) { return c; }
+int ling_casa(const char *c, const char *p) { (void)c; (void)p; return 0; }
+const char *ling_audio(void) { return ""; }
+
+// Stubs for the dependencies #206 added to video_tpk.c (MKV header probe);
+// not the subject of this test.
+const char *ling_do_nome(const char *nome) { (void)nome; return NULL; }
+int ling_letreiro(const char *nome, int forcado) { (void)nome; (void)forcado; return 0; }
+int mkvass_cabecalho(const char *url, unsigned char **buf, long *n) {
+  (void)url; if (buf) *buf = NULL; if (n) *n = 0; return 0;
+}
+char *rede_baixar_trecho(const char *url, int segundos, long ini, long fim, long *tam) {
+  (void)url; (void)segundos; (void)ini; (void)fim; if (tam) *tam = 0; return NULL;
+}
+
+void nv_tpk_video_registrar(void (*)(const char *, const char *), void (*)(void), void (*)(int),
+                            void (*)(int), void (*)(int), void (*)(int, int, int, int), int (*)(void));
+void nv_tpk_video_registrar_faixas(void (*)(int, int));
+void nv_tpk_video_faixa(int tipo, int idx, const char *lingua);
+void nv_tpk_video_faixas_fim(int selAudio, int selLeg);
+void nv_tpk_video_evento(int tipo, int a, int b);
+void video_escolher_audio(int i);
+void video_escolher_legenda(int i);
+void video_bombear(void);
+
+static void hAbrir(const char *u, const char *c) { (void)u; (void)c; }
+static void hSem(void) {}
+static void hInt(int v) { (void)v; }
+static void hJanela(int x, int y, int w, int h) { (void)x; (void)y; (void)w; (void)h; }
+static int  hPos(void) { return 0; }
+
+// The fake host counts what actually reaches it.
+static int nAudios, nLegs, ultAudio, ultLeg;
+static void hEscolher(int tipo, int idx) {
+  if (tipo == 0) { nAudios++; ultAudio = idx; }
+  else if (tipo == 1) { nLegs++; ultLeg = idx; }
+}
+
+static int falhas;
+static void ok(const char *nome, int cond) {
+  printf("%s %s\n", cond ? "ok  " : "FALHA", nome);
+  if (!cond) falhas++;
+}
+
+int main(void) {
+  nv_tpk_video_registrar(hAbrir, hSem, hInt, hInt, hInt, hJanela, hPos);
+  nv_tpk_video_registrar_faixas(hEscolher);
+  video_tocar("http://x/filme.mkv");
+  nv_tpk_video_evento(6, 1920, 1080);
+  nv_tpk_video_evento(1, 100000, 0);
+  // 1 audio (ko) and 2 subtitles (ru, en); the file opens on its own default.
+  nv_tpk_video_faixa(0, 0, "ko");
+  nv_tpk_video_faixa(1, 0, "ru");
+  nv_tpk_video_faixa(1, 1, "en");
+  nv_tpk_video_faixas_fim(0, 0);
+
+  // --- 1. the app picks before playback starts ------------------------------
+  video_escolher_audio(0);
+  video_escolher_legenda(1);
+  video_bombear();
+  ok("choices before playing stay in the app", nAudios == 0 && nLegs == 0);
+
+  // --- 2. audio leaves on the first tick ------------------------------------
+  nv_tpk_video_evento(2, 0, 0);          // playback starts
+  video_bombear();
+  ok("audio leaves on the first tick", nAudios == 1 && ultAudio == 0);
+  ok("the subtitle waits for the settle", nLegs == 0);
+
+  // --- 3. the subtitle leaves after the settle window -----------------------
+  SDL_Delay(2600);                       // LEG_ACOMODAR_MS + slack
+  video_bombear();
+  ok("the subtitle leaves after the settle", nLegs == 1 && ultLeg == 1);
+
+  // --- 4. a change during playback is not deferred --------------------------
+  video_escolher_legenda(0);
+  ok("a change during playback goes out immediately", nLegs == 2 && ultLeg == 0);
+  video_escolher_audio(0);
+  ok("the same for audio", nAudios == 2);
+
+  printf(falhas ? "tpk-escolha: %d falha(s)\n" : "tpk-escolha: ok\n", falhas);
+  return falhas != 0;
+}

@@ -116,6 +116,13 @@ namespace NuvioTpk
         void Escolher(int tipo, int idx)
         {
             if (player == null) return;
+            // Diagnostics: the player's REAL state at the moment of the write.
+            // The contract only allows a track switch while playing (AVPlay:
+            // "READY state is supported for Smooth Streaming only"); if a write
+            // "before Start" shows up here, it is the root-cause suspect.
+            string estado = "?";
+            try { estado = player.State.ToString(); } catch { }
+            Log("escolher " + tipo + "/" + idx + " em " + estado);
             try
             {
                 if (tipo == 0) player.AudioTrackInfo.Selected = idx;

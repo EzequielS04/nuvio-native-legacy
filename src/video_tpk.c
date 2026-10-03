@@ -52,6 +52,14 @@ static volatile int conflito;   // ver video_tpk_log_host
 static volatile int durMs, bufferando;
 static volatile Uint32 bufferDesde;
 static unsigned sessao;
+// DEFERRED SELECTION (see escolhasPendentes). The track choice is born too
+// soon after open and the write is swallowed: measured on the TV, the subtitle
+// write at 0.00 s of the first tick was accepted by the player's bookkeeping
+// and NEVER applied to the demuxer. Audio only needed the deferral (measured:
+// the Korean audio came up right); the subtitle waits for the player to settle.
+static volatile int comecou;                 // playback has really started
+static Uint32 comecouEm;                     // when it started (SDL clock)
+static int audioPend = -1, legPend = -1;     // choice waiting to be written
 
 // RECONEXAO (video_reconexao.h). O evento 5 chega de qualquer fio e so ANOTA;
 // a decisao e o recarregar sao do video_bombear. A classe do erro sai do
@@ -202,6 +210,7 @@ static int abrirSessao(void) {
   ativo = 1; pronto = falhou = terminou = tocando = 0;
   largura = altura = durMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
   nAudio = nLeg = 0; audioAtual = 0; legAtual = -1; legAte = 0;
+  comecou = 0; comecouEm = 0; audioPend = legPend = -1;
   if (!travaLeg) travaLeg = SDL_CreateMutex();
   sessao++;
   if (!hAbrir) { falhou = 1; printf("[video] tpk: host sem player\n"); return 0; }
@@ -294,7 +303,34 @@ static void sondaMkv(double pos) {
   }
 }
 
+// THE DEFERRED CHOICE LEAVES once playback has really started: the host's
+// EV_TOCANDO, or the position clock moving (a host that never sends
+// EV_TOCANDO). AUDIO leaves on the first tick - measured to be enough (the
+// Korean audio came up right on the TV). SUBTITLE waits LEG_ACOMODAR_MS
+// longer: the write at 0.00 s was swallowed EVEN while already playing (the
+// player's bookkeeping said "already on 2" while the demuxer kept track 0).
+// With this, the cue-text defense of the companion PR is only a fallback.
+#define LEG_ACOMODAR_MS 2500u
+static void escolhasPendentes(void) {
+  Uint32 agora = SDL_GetTicks();
+  if (!comecou && (tocando || (pronto && video_pos() > 0))) { comecou = 1; comecouEm = agora; }
+  if (!comecou) return;
+  if (audioPend >= 0) {
+    int i = audioPend; audioPend = -1;
+    printf("[video] tpk: escolha de audio adiada sai agora (faixa %d)\n", i);
+    fflush(stdout);
+    if (hEscolher) hEscolher(0, faixaAudio[i].numero);
+  }
+  if (legPend >= 0 && agora - comecouEm >= LEG_ACOMODAR_MS) {
+    int i = legPend; legPend = -1;
+    printf("[video] tpk: escolha de legenda sai apos a acomodacao (faixa %d)\n", i);
+    fflush(stdout);
+    if (hEscolher) hEscolher(1, faixaLeg[i].numero);
+  }
+}
+
 void video_bombear(void) {
+  escolhasPendentes();
   double pos = video_pos();
   sondaMkv(pos);
   if (pronto && pos > 0.5) reconIniciou = 1;
@@ -497,13 +533,22 @@ int  video_legenda_atual(void) { return legAtual; }
 void video_escolher_audio(int i) {
   if (i < 0 || i >= nAudio) return;
   audioAtual = i;
+  // DEFERRED until playing (see escolhasPendentes): a write before Start is
+  // prohibited by the player's contract and can be swallowed.
+  if (!comecou) { audioPend = i; return; }
   if (hEscolher) hEscolher(0, faixaAudio[i].numero);
 }
 void video_escolher_legenda(int i) {
   if (i >= nLeg) return;
   legAtual = i;
   if (travaLeg) { SDL_LockMutex(travaLeg); legTexto[0] = 0; legAte = 0; SDL_UnlockMutex(travaLeg); }
-  if (i >= 0 && hEscolher) hEscolher(1, faixaLeg[i].numero);
+  if (i < 0) legPend = -1;   // turned off before it left: do not send the old one
+  if (i >= 0 && hEscolher) {
+    // DEFERRED until the settle (see escolhasPendentes): no early writes -
+    // the one at 0.00 s was measured being swallowed even while playing.
+    if (!comecou || SDL_GetTicks() - comecouEm < LEG_ACOMODAR_MS) { legPend = i; return; }
+    hEscolher(1, faixaLeg[i].numero);
+  }
 }
 int  video_legenda_nativa(char *d, int t) {
   if (!d || t < 2) return 0;
