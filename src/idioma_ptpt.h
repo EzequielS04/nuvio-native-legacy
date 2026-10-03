@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "Média de %d fontes"),
   T("Médio", "Médio"),
   T("México", "México"),
+  T("Mês", "Mês"),
   T("Música", "Música"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

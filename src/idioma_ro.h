@@ -1946,6 +1946,7 @@
   T("Média de %d fontes", "Media a %d surse"),
   T("Médio", "Intermediar"),
   T("México", "Mexic"),
+  T("Mês", "Lună"),
   T("Música", "Muzică"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

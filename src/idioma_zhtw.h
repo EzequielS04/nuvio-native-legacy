@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "%d 個來源的平均分"),
   T("Médio", "中"),
   T("México", "墨西哥"),
+  T("Mês", "月"),
   T("Música", "音樂"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

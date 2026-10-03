@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "%d šaltinių vidurkis"),
   T("Médio", "Vidutinis"),
   T("México", "Meksika"),
+  T("Mês", "Mėnuo"),
   T("Música", "Muzika"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

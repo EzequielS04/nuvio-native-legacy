@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "%d forrás átlaga"),
   T("Médio", "Közepes"),
   T("México", "Mexikó"),
+  T("Mês", "Hónap"),
   T("Música", "Zene"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

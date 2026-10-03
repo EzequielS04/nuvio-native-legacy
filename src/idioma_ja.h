@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "%d 件の平均"),
   T("Médio", "中"),
   T("México", "メキシコ"),
+  T("Mês", "月"),
   T("Música", "音楽"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

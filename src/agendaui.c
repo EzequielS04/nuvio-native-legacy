@@ -16,8 +16,8 @@
 //   - o sino circular virou o CHIP "Lembrete ativo" (acento a 22%, texto no
 //     acento) / "Lembrar-me" (vidro), em toda linha que pode ter lembrete;
 //   - sairam a data por extenso do canto e a frase "OK abre as opcoes...", que
-//     o mockup nao tem. O seletor Lista/Mes do mockup NAO entrou: nao ha vista
-//     de mes, e um seletor que nao troca nada seria enfeite.
+//     o mockup nao tem. Lista/Mes alterna entre a timeline e a grade mensal;
+//     as duas vistas usam as mesmas datas e series ja guardadas pela Agenda.
 // As notas historicas abaixo continuam valendo no que diz respeito a DADOS
 // (de onde vem cada texto, o que nunca se inventa); o desenho e o daqui.
 //
@@ -208,7 +208,7 @@ static float agEscala(void) { return escala_min(AG_ESCALA_MIN); }
 #define AG_MARGEM 96.0f
 static float agX(void) { return ajustes_rail_largura_fixa() / agEscala() + AG_MARGEM; }
 static float agFim(void) { return NV_TELA_W - AG_MARGEM; }
-#define AG_LISTA_Y     200.0f   // topo do primeiro cartao
+#define AG_LISTA_Y     218.0f   // reserva uma faixa abaixo do subtitulo para os controles
 #define AG_EST_W        96.0f   // coluna de datas
 #define AG_EIXO_GAP     28.0f
 #define AG_EIXO_W        2.0f
@@ -458,6 +458,8 @@ int agendaui_sinopse(TxtEstilo estilo, const char *s, float x, float y,
 static Uint32 relogio, trocaEm;
 
 static int   foco;
+static int   vistaMes, focoCabecalho;
+static int   calAno, calMes, calDia, calCelula, calPainel, calEvento;
 static int   versaoVista;   // agenda_versao() da ultima montagem; ver agendaui_atualizar
 static float animFoco[AG_MAX];
 static float scrollY;
@@ -484,6 +486,8 @@ static float  notGateA, notTrechoA;
 // texto ou carregando, AGL_H_FALHA no fallback). 0 = encaixa no primeiro quadro.
 static float  notH, notHAlvo = 900.0f;
 
+enum { AG_CAB_LISTA = 1, AG_CAB_MES, AG_CAB_ANTERIOR, AG_CAB_HOJE, AG_CAB_PROXIMO };
+
 // Onde a lista comeca a rolar, e onde ela termina. O cabecalho ocupa o topo e
 // nao rola junto: numa TV perder o titulo da tela ao descer uma linha faz a
 // pessoa esquecer onde esta.
@@ -504,6 +508,81 @@ static int indiceSeparador(void) {
 
 static int temData(const AgItem *it) {
   return it && it->dataProx[0] && agenda_dias(it->dataProx) >= 0;
+}
+
+static int anoBissexto(int a) {
+  return (a % 4 == 0 && (a % 100 != 0 || a % 400 == 0));
+}
+
+static int diasNoMes(int a, int m) {
+  static const unsigned char dias[] = { 31,28,31,30,31,30,31,31,30,31,30,31 };
+  if (m < 1 || m > 12) return 30;
+  return dias[m - 1] + (m == 2 && anoBissexto(a));
+}
+
+static void dataIso(int a, int m, int d, char *dst, size_t tam) {
+  if (!dst || !tam) return;
+  snprintf(dst, tam, "%04d-%02d-%02d", a, m, d);
+}
+
+static void selecionaData(int a, int m, int d) {
+  if (m < 1) { --a; m = 12; }
+  if (m > 12) { ++a; m = 1; }
+  if (d < 1) d = 1;
+  if (d > diasNoMes(a, m)) d = diasNoMes(a, m);
+  calAno = a; calMes = m; calDia = d;
+  { char primeiro[12];
+    dataIso(calAno, calMes, 1, primeiro, sizeof primeiro);
+    calCelula = agenda_semana(primeiro) + calDia - 1;
+    if (calCelula < 0) calCelula = calDia - 1;
+  }
+  calEvento = 0;
+}
+
+static void selecionaCelula(int celula) {
+  char primeiro[12];
+  int dia, ano = calAno, mes = calMes;
+  int semana;
+  if (celula < 0) celula = 0;
+  if (celula > 41) celula = 41;
+  dataIso(ano, mes, 1, primeiro, sizeof primeiro);
+  semana = agenda_semana(primeiro);
+  if (semana < 0) semana = 0;
+  dia = celula - semana + 1;
+  if (dia < 1) {
+    if (--mes < 1) { mes = 12; --ano; }
+    dia += diasNoMes(ano, mes);
+  } else if (dia > diasNoMes(ano, mes)) {
+    dia -= diasNoMes(ano, mes);
+    if (++mes > 12) { mes = 1; ++ano; }
+  }
+  selecionaData(ano, mes, dia);
+}
+
+static void mudaMes(int passo) {
+  int a = calAno, m = calMes + passo, d = calDia;
+  while (m < 1) { m += 12; --a; }
+  while (m > 12) { m -= 12; ++a; }
+  if (d > diasNoMes(a, m)) d = diasNoMes(a, m);
+  selecionaData(a, m, d);
+}
+
+static void dataSelecionada(char *dst, size_t tam) {
+  dataIso(calAno, calMes, calDia, dst, tam);
+}
+
+static int eventosDoDia(int *indices, int max) {
+  char iso[12];
+  int i, n = 0;
+  dataSelecionada(iso, sizeof iso);
+  for (i = 0; i < agenda_n(); i++) {
+    const AgItem *it = agenda_lista(i);
+    if (temData(it) && !strcmp(it->dataProx, iso)) {
+      if (indices && n < max) indices[n] = i;
+      ++n;
+    }
+  }
+  return n;
 }
 
 static float alturaFoco(const AgItem *it);
@@ -550,6 +629,10 @@ int agendaui_iniciar(void) {
   int i;
   sair = 0;
   foco = 0;
+  vistaMes = focoCabecalho = calPainel = calEvento = 0;
+  { const char *h = agenda_hoje();
+    int a = agenda_ano(h), m = agenda_mes(h), d = agenda_dia(h);
+    selecionaData(a ? a : 2026, m ? m : 1, d ? d : 1); }
   scrollY = 0.0f; velY = 0.0f;
   ctxAberto = 0; ctxUltimo = 0; ctxFoco = 0; ctxA = 0.0f; notFoco = 0;
   notRol = notRolAlvo = notRolMax = notVel = 0.0f;
@@ -707,7 +790,6 @@ void agendaui_evento(const SDL_Event *e) {
   volta = (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE || k == SDLK_DELETE);
   ok = (k == SDLK_RETURN || k == SDLK_KP_ENTER);
   if (e->type != SDL_KEYDOWN) return;
-
   if (ctxAberto == 3) {           // a noticia aberta
     if (volta || k == SDLK_LEFT) { ctxAberto = 2; return; }
     if (k == SDLK_DOWN) notRolAlvo += 132.0f;
@@ -758,7 +840,93 @@ void agendaui_evento(const SDL_Event *e) {
     }
     return;
   }
+  if (vistaMes) {
+    int itens[AG_MAX], qtd = eventosDoDia(itens, AG_MAX);
+    if (focoCabecalho) {
+      int ordemLista[] = { AG_CAB_ANTERIOR, AG_CAB_HOJE, AG_CAB_PROXIMO,
+                           AG_CAB_LISTA, AG_CAB_MES };
+      int ordemListaN = vistaMes ? 5 : 2;
+      int pos = 0, j;
+      if (volta || k == SDLK_DOWN) { focoCabecalho = 0; return; }
+      if (k == SDLK_UP) return;
+      if (k == SDLK_LEFT || k == SDLK_RIGHT) {
+        for (j = 0; j < ordemListaN; j++) {
+          int id = vistaMes ? ordemLista[j] : (j == 0 ? AG_CAB_LISTA : AG_CAB_MES);
+          if (id == focoCabecalho) { pos = j; break; }
+        }
+        pos += k == SDLK_RIGHT ? 1 : -1;
+        if (pos < 0) pos = ordemListaN - 1;
+        if (pos >= ordemListaN) pos = 0;
+        focoCabecalho = vistaMes ? ordemLista[pos]
+                                  : (pos == 0 ? AG_CAB_LISTA : AG_CAB_MES);
+        return;
+      }
+      if (ok && !e->key.repeat) {
+        switch (focoCabecalho) {
+          case AG_CAB_LISTA: vistaMes = 0; calPainel = 0; focoCabecalho = 0; break;
+          case AG_CAB_MES: vistaMes = 1; calPainel = 0; focoCabecalho = 0; break;
+          case AG_CAB_HOJE: {
+            const char *h = agenda_hoje();
+            selecionaData(agenda_ano(h), agenda_mes(h), agenda_dia(h));
+            focoCabecalho = 0;
+            break;
+          }
+          case AG_CAB_ANTERIOR: mudaMes(-1); focoCabecalho = 0; break;
+          case AG_CAB_PROXIMO: mudaMes(1); focoCabecalho = 0; break;
+        }
+      }
+      return;
+    }
+    if (volta) {
+      if (calPainel) { calPainel = 0; return; }
+      sair = 1; return;
+    }
+    if (calPainel) {
+      if (k == SDLK_LEFT) { calPainel = 0; return; }
+      if (k == SDLK_UP) {
+        if (calEvento > 0) calEvento--;
+        else calPainel = 0;
+      } else if (k == SDLK_DOWN && calEvento < qtd - 1) calEvento++;
+      else if (ok && !e->key.repeat && calEvento < qtd)
+        abrirModal(itens[calEvento]);
+      return;
+    }
+    if (k == SDLK_UP && calCelula < 7) { focoCabecalho = AG_CAB_HOJE; return; }
+    if (k == SDLK_LEFT) {
+      if (calCelula > 0) selecionaCelula(calCelula - 1);
+      return;
+    }
+    if (k == SDLK_RIGHT) {
+      if (calCelula < 41) selecionaCelula(calCelula + 1);
+      return;
+    }
+    if (k == SDLK_UP) {
+      if (calCelula >= 7) selecionaCelula(calCelula - 7);
+      return;
+    }
+    if (k == SDLK_DOWN) {
+      if (calCelula < 35) selecionaCelula(calCelula + 7);
+      return;
+    }
+    if (ok && !e->key.repeat && qtd > 0) { calPainel = 1; calEvento = 0; }
+    return;
+  }
+  if (focoCabecalho) {
+    if (volta || k == SDLK_DOWN) { focoCabecalho = 0; return; }
+    if (k == SDLK_UP) return;
+    if (k == SDLK_LEFT || k == SDLK_RIGHT) {
+      focoCabecalho = focoCabecalho == AG_CAB_LISTA ? AG_CAB_MES : AG_CAB_LISTA;
+      return;
+    }
+    if (ok && !e->key.repeat) {
+      vistaMes = focoCabecalho == AG_CAB_MES;
+      focoCabecalho = 0;
+      calPainel = 0;
+    }
+    return;
+  }
   if (volta || k == SDLK_LEFT) { sair = 1; return; }
+  if (k == SDLK_UP && foco == 0) { focoCabecalho = AG_CAB_LISTA; return; }
   if (k == SDLK_DOWN && foco < n - 1) foco++;
   else if (k == SDLK_UP && foco > 0)  foco--;
   // NO KEYDOWN, e nao no KEYUP como o gesto de segurar pedia: sem duas acoes
@@ -1175,19 +1343,17 @@ static float alturaFoco(const AgItem *it) {
   return h > AG_FOCO_H ? h : AG_FOCO_H;
 }
 
-// O MATERIAL DO CARTAO (.vid do mockup). Sobre a arte do mockup o vidro e
-// rgba(14,15,18,.72) e o focado rgba(52,54,60,.82); aqui atras da pagina ha o
-// fundo liso do app, e o vidro escuro sumiria nele. Entao o vidro sai como um
-// veu frio que da, sobre o fundo, o MESMO valor medido no mockup: ~#141517 em
-// repouso e ~#34353a em foco. O solido e o do mockup: #15161a e #2b2d34.
+// O MATERIAL DO CARTAO (.vid do mockup). Reusa o material comum para que
+// opacidade, fosco e brilho acompanhem Ajustes; foco continua sendo apenas
+// uma superficie, sem anel. O solido preserva as cores exatas do mockup.
 static void cartaoMaterial(GfxRect r, float f) {
   float raio = AG_CARD_RAIO / r.h;
   // A SOMBRA do .vid: 0 14px 40px preto a 30% (45% no solido, 0 10px 30px).
   gfx_rect((GfxRect){ r.x - 30.0f, r.y - 10.0f, r.w + 60.0f, r.h + 64.0f }, 0, GFX_SOMBRA,
            1.0f, 0, 0, 0.5f, 0, 0, 0, ajustes_vidro() ? .80f : .90f);
   if (ajustes_vidro()) {
-    gfx_cor(r, raio, .055f, .059f, .071f, .72f);   // rgba(14,15,18,.72)
-    // O focado do mockup: rgba(52,54,60,.82) — frio, um degrau acima do repouso.
+    gfx_vidro_folha(r, raio, 1.0f);
+    // O foco do .vid do mockup clareia a superficie, sem o anel de selecao.
     if (f > 0.01f) gfx_cor(r, raio, .204f, .212f, .235f, .82f * f);
   } else {
     gfx_cor(r, raio, .082f, .086f, .102f, 1.0f);
@@ -1947,6 +2113,217 @@ static void desenhaContexto(float a) {
   desenhaModalSerie(it, a);
 }
 
+static void botaoAgenda(GfxRect r, const char *rotulo, int ativo, int foco,
+                        int acento) {
+  float ar, ag, ab;
+  TxtLinha t;
+  int c = ajustes_vidro() ? 230 : 220;
+  ajustes_acento(&ar, &ag, &ab);
+  if (ajustes_vidro()) {
+    gfx_vidro_painel(r, 0.5f, ativo ? 0.58f : 0.36f, 1.0f);
+    if (ativo) gfx_cor(r, 0.5f, ar, ag, ab, 0.17f);
+    if (foco) gfx_vidro_foco(r, 0.5f, 1.0f, 1.0f);
+  } else {
+    gfx_cor(r, 0.5f, ativo ? ar : 0.09f, ativo ? ag : 0.095f,
+            ativo ? ab : 0.11f, ativo ? 0.24f : 0.92f);
+    if (foco) gfx_anel(r, 0.5f, 2.0f, ar, ag, ab, 0.92f);
+  }
+  if (acento || (ativo && !foco))
+    t = txt_linha(TXT_HERO_SEC, rotulo,
+                  (int)(ar * 255.0f + 0.5f), (int)(ag * 255.0f + 0.5f),
+                  (int)(ab * 255.0f + 0.5f), 255);
+  else
+    t = txt_linha(TXT_HERO_SEC, rotulo, c, c, c, 255);
+  txt_desenhar_alpha(t, r.x + (r.w - t.w) * 0.5f,
+                     r.y + (r.h - t.h) * 0.5f, 1.0f);
+}
+
+static void desenhaBarraCalendario(float x, float xDir) {
+  const float y = AG_LISTA_Y - 46.0f, h = 42.0f;
+  int focandoMes = focoCabecalho == AG_CAB_HOJE;
+  if (vistaMes) {
+    char mes[96], mesBruto[96];
+    GfxRect ant = { x, y, 46.0f, h };
+    GfxRect centro = { x + 54.0f, y, 238.0f, h };
+    GfxRect prox = { x + 300.0f, y, 46.0f, h };
+    snprintf(mesBruto, sizeof mesBruto, "%s %d", i18n(agenda_mes_nome(calMes)), calAno);
+    maiusc(mes, sizeof mes, mesBruto);
+    botaoAgenda(ant, "‹", focoCabecalho == AG_CAB_ANTERIOR, focoCabecalho == AG_CAB_ANTERIOR, 0);
+    botaoAgenda(centro, mes, 1, focandoMes, 0);
+    botaoAgenda(prox, "›", focoCabecalho == AG_CAB_PROXIMO, focoCabecalho == AG_CAB_PROXIMO, 0);
+  }
+  { float w = 94.0f, gap = 8.0f;
+    GfxRect lista = { xDir - w * 2.0f - gap, y, w, h };
+    GfxRect mes = { xDir - w, y, w, h };
+    botaoAgenda(lista, i18n("Lista"), !vistaMes, focoCabecalho == AG_CAB_LISTA,
+                !vistaMes && focoCabecalho != AG_CAB_LISTA);
+    botaoAgenda(mes, i18n("Mês"), vistaMes, focoCabecalho == AG_CAB_MES,
+                vistaMes && focoCabecalho != AG_CAB_MES);
+  }
+}
+
+static void desenhaDiaCalendario(GfxRect r, int dia, int mesmoMes,
+                                 int hoje, int eventos, int selecionado) {
+  float ar, ag, ab;
+  int cor = mesmoMes ? 232 : 116;
+  char num[8], qtd[16];
+  TxtLinha t;
+  ajustes_acento(&ar, &ag, &ab);
+  if (ajustes_vidro()) {
+    gfx_cor(r, 0.14f, 1, 1, 1, selecionado ? 0.12f : 0.035f);
+    if (selecionado) gfx_vidro_foco(r, 0.14f, 1.0f, 1.0f);
+  } else {
+    gfx_cor(r, 0.14f, selecionado ? ar : 0.13f,
+            selecionado ? ag : 0.14f, selecionado ? ab : 0.16f,
+            selecionado ? 0.32f : 0.92f);
+    if (selecionado) gfx_anel(r, 0.14f, 2.0f, ar, ag, ab, 0.9f);
+  }
+  snprintf(num, sizeof num, "%d", dia);
+  t = txt_linha(TXT_HERO_SEC, num,
+                hoje ? (int)(ar * 255.0f) : cor,
+                hoje ? (int)(ag * 255.0f) : cor,
+                hoje ? (int)(ab * 255.0f) : cor, 255);
+  txt_desenhar_alpha(t, r.x + 14.0f + (hoje ? 12.0f : 0.0f), r.y + 10.0f, 1.0f);
+  if (hoje)
+    gfx_cor((GfxRect){ r.x + 14.0f, r.y + 20.0f, 7.0f, 7.0f }, 0.5f, ar, ag, ab, 1.0f);
+  if (eventos > 0) {
+    int i, vis = eventos > 3 ? 3 : eventos;
+    for (i = 0; i < vis; i++)
+      gfx_cor((GfxRect){ r.x + 14.0f + i * 11.0f, r.y + r.h - 14.0f,
+                         5.0f, 5.0f }, 0.5f, ar, ag, ab, 0.9f);
+    if (eventos > 3) {
+      snprintf(qtd, sizeof qtd, "+%d", eventos - 3);
+      t = txt_linha(TXT_MINI, qtd, 190, 190, 193, 255);
+      txt_desenhar_alpha(t, r.x + r.w - t.w - 10.0f, r.y + r.h - t.h - 7.0f, 1.0f);
+    }
+  }
+}
+
+static void desenhaEventoCalendario(GfxRect r, const AgItem *it, int foco) {
+  char ep[220];
+  TxtLinha t, subt;
+  GfxRect cartaz;
+  float ar, ag, ab;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_cor(r, 0.16f, 1, 1, 1, foco ? 0.095f : 0.035f);
+  if (foco) gfx_vidro_foco(r, 0.16f, 1.0f, 1.0f);
+  cartaz = (GfxRect){ r.x + 9.0f, r.y + 7.0f, 38.0f, r.h - 14.0f };
+  if (it->poster[0]) {
+    GLuint tex = tex_obter_larg(it->poster, 42);
+    if (tex) {
+      gfx_tex_aspect_atual = cartaz.w / cartaz.h;
+      gfx_rect(cartaz, tex, GFX_CARD, 0, 0, 0, 12.0f / cartaz.h, 0, 0, 0, 1.0f);
+      gfx_tex_aspect_atual = 0.0f;
+    }
+  }
+  t = txt_linha_corta(TXT_HERO_SEC, it->titulo[0] ? it->titulo : i18n("Série"),
+                      foco ? 250 : 224, foco ? 250 : 224, foco ? 250 : 224, 255,
+                      r.w - 68.0f);
+  txt_desenhar_alpha(t, r.x + 58.0f, r.y + 9.0f, 1.0f);
+  linhaEpisodio(it, ep, sizeof ep);
+  if (!ep[0]) snprintf(ep, sizeof ep, "%s", i18n("Próximo episódio"));
+  subt = txt_linha_corta(TXT_CAPTION2, ep, (int)(ar * 220), (int)(ag * 220),
+                         (int)(ab * 220), 255, r.w - 68.0f);
+  txt_desenhar_alpha(subt, r.x + 58.0f, r.y + 12.0f + t.h, 1.0f);
+}
+
+static void desenhaCalendarioMensal(void) {
+  const float x = agX(), xDir = agFim();
+  const float painelW = 366.0f, vao = 22.0f;
+  const float semanaY = AG_LISTA_Y + 4.0f;
+  const float gradeY = semanaY + 34.0f;
+  const float base = listaBase() - 8.0f;
+  float disponivel = xDir - x;
+  float gradeW = disponivel - painelW - vao;
+  float espacX = 8.0f, espacY = 8.0f;
+  float celW = (gradeW - espacX * 6.0f) / 7.0f;
+  float celH = (base - gradeY - espacY * 5.0f) / 6.0f;
+  float painelX = x + gradeW + vao, painelH = base - semanaY;
+  char datas[42][12], selecionada[12], rot[112], tmp[96];
+  int cont[42] = { 0 }, total[AG_MAX], nTotal, i, c, linha;
+  static const int DIAS[] = { 0,1,2,3,4,5,6 };
+  float ar, ag, ab;
+  GfxRect painel = { painelX, semanaY, painelW, painelH };
+  const char *h = agenda_hoje();
+  if (gradeW < 450.0f) { gradeW = disponivel * 0.68f; celW = (gradeW - espacX * 6.0f) / 7.0f; }
+  if (celH < 44.0f) celH = 44.0f;
+  ajustes_acento(&ar, &ag, &ab);
+  dataSelecionada(selecionada, sizeof selecionada);
+  for (c = 0; c < 42; c++) {
+    char primeiro[12];
+    int semana, dia, ano = calAno, mes = calMes;
+    dataIso(calAno, calMes, 1, primeiro, sizeof primeiro);
+    semana = agenda_semana(primeiro);
+    if (semana < 0) semana = 0;
+    dia = c - semana + 1;
+    if (dia < 1) {
+      if (--mes < 1) { mes = 12; --ano; }
+      dia += diasNoMes(ano, mes);
+    } else if (dia > diasNoMes(ano, mes)) {
+      dia -= diasNoMes(ano, mes);
+      if (++mes > 12) { mes = 1; ++ano; }
+    }
+    dataIso(ano, mes, dia, datas[c], sizeof datas[c]);
+  }
+  for (i = 0; i < agenda_n(); i++) {
+    const AgItem *it = agenda_lista(i);
+    if (!temData(it)) continue;
+    for (c = 0; c < 42; c++)
+      if (!strcmp(it->dataProx, datas[c])) { ++cont[c]; break; }
+  }
+
+  // O mes e navegavel por setas no topo; as colunas seguem o calendario local
+  // (domingo a sabado), e as datas adjacentes ficam visiveis como contexto.
+  for (c = 0; c < 7; c++) {
+    char sem[24];
+    maiusc(sem, sizeof sem, agenda_semana_nome(DIAS[c]));
+    kicker(sem, 135, 138, 146, x + c * (celW + espacX) + 12.0f, semanaY, 1.0f);
+  }
+  for (c = 0; c < 42; c++) {
+    int linha = c / 7, coluna = c % 7;
+    int dia = agenda_dia(datas[c]);
+    int mesmoMes = agenda_mes(datas[c]) == calMes && agenda_ano(datas[c]) == calAno;
+    int hoje = !strcmp(datas[c], h);
+    GfxRect cel = { x + coluna * (celW + espacX),
+                    gradeY + linha * (celH + espacY), celW, celH };
+    desenhaDiaCalendario(cel, dia, mesmoMes, hoje, cont[c], c == calCelula && !calPainel);
+  }
+
+  // A coluna de detalhe transforma os pontos do calendario em algo acionavel:
+  // entrar nela e escolher a serie abre o mesmo painel de acoes da timeline.
+  gfx_rect((GfxRect){ painel.x - 9.0f, painel.y - 7.0f, painel.w + 18.0f,
+                      painel.h + 24.0f }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
+           0, 0, 0, 0.42f);
+  if (ajustes_vidro()) gfx_vidro_folha(painel, 28.0f / painel.h, 1.0f);
+  else gfx_cor(painel, 28.0f / painel.h, .065f, .07f, .082f, .96f);
+  snprintf(rot, sizeof rot, "%d %s %d", calDia,
+           idioma_mes_data(calMes, agenda_mes_nome(calMes)), calAno);
+  { TxtLinha titulo = txt_linha_corta(TXT_HERO_SEC, rot, 246, 247, 250, 255,
+                                       painel.w - 44.0f);
+    txt_desenhar_alpha(titulo, painel.x + 22.0f, painel.y + 18.0f, 1.0f); }
+  nTotal = eventosDoDia(total, AG_MAX);
+  snprintf(tmp, sizeof tmp, i18n(nTotal == 1 ? "%d episódio" : "%d episódios"), nTotal);
+  { TxtLinha sub = txt_linha_corta(TXT_CAPTION2, tmp, 150, 153, 162, 255,
+                                    painel.w - 44.0f);
+    txt_desenhar_alpha(sub, painel.x + 22.0f, painel.y + 66.0f, 1.0f); }
+  if (nTotal == 0) return;
+  { float y = painel.y + 104.0f;
+    float passo = 78.0f;
+    int maxLinhas = (int)((painel.y + painel.h - y - 10.0f) / passo);
+    int inicio = calEvento - maxLinhas / 2;
+    if (maxLinhas < 1) maxLinhas = 1;
+    if (inicio < 0) inicio = 0;
+    if (inicio > nTotal - maxLinhas) inicio = nTotal - maxLinhas;
+    if (inicio < 0) inicio = 0;
+    for (linha = inicio; linha < nTotal && linha < inicio + maxLinhas; linha++, y += passo) {
+      GfxRect r = { painel.x + 12.0f, y, painel.w - 24.0f, 70.0f };
+      int emFoco = calPainel && linha == calEvento;
+      if (r.y + r.h > painel.y + painel.h - 4.0f) break;
+      desenhaEventoCalendario(r, agenda_lista(total[linha]), emFoco);
+    }
+  }
+}
+
 static void desenharNaEscala(Uint32 agora) {
   AgMedidas m = medidasDaTela();
   float x = agX();
@@ -1961,8 +2338,8 @@ static void desenharNaEscala(Uint32 agora) {
   // fonte (o "48 + 74" que existiu aqui punha o subtitulo sobre o "g").
   // SAIRAM a data por extenso do canto e a frase "OK abre as opcoes. A TV nao
   // avisa sozinha": o mockup nao tem nenhuma das duas, e a segunda continua
-  // dita no proprio modal do lembrete. O seletor Lista/Mes do mockup NAO entrou:
-  // o app nao tem vista de mes, e um seletor que nao troca nada e enfeite.
+  // dita no proprio modal do lembrete. Lista/Mes e um seletor real: a lista
+  // continua sendo a timeline e Mes abre a grade com os episodios daquele dia.
   { TxtLinha t = txt_linha(TXT_TITULO2, i18n("Agenda"), 245, 245, 243, 255);
     if (!menu_pilula_titulo()) txt_desenhar(t, x, yc);   // Dinamica: na pilula
     yc += (float)t.h + 4.0f; }
@@ -2013,6 +2390,8 @@ static void desenharNaEscala(Uint32 agora) {
       txtEsc(l, x, yc, esc, 1.0f);
     } }
 
+  desenhaBarraCalendario(x, xDir);
+
   // ESTADO VAZIO: o despertador DESLIGADO, grande e apagado, no lugar onde a
   // lista vai ficar. Uma tela so com duas frases cinzas nao diz se ela esta
   // vazia ou se quebrou; o icone diz do que a tela trata antes de a pessoa ler.
@@ -2021,6 +2400,12 @@ static void desenharNaEscala(Uint32 agora) {
     GfxRect ic = { x + (xDir - x - lado) * 0.5f,
                    topo + (base - topo - lado) * 0.5f - 40.0f, lado, lado };
     agendaui_despertador(ic, 0, 0.30f, 0.30f, 0.30f, 0.55f, agora, 0);
+    return;
+  }
+
+  if (vistaMes) {
+    desenhaCalendarioMensal();
+    if (ctxA > 0.01f) desenhaContexto(ctxA);
     return;
   }
 

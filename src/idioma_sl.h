@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "Povprečje %d virov"),
   T("Médio", "Srednje"),
   T("México", "Mehika"),
+  T("Mês", "Mesec"),
   T("Música", "Glasba"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

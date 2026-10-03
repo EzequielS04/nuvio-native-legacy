@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "Trung bình từ %d nguồn"),
   T("Médio", "Vừa"),
   T("México", "Mexico"),
+  T("Mês", "Tháng"),
   T("Música", "Âm nhạc"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

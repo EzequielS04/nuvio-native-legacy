@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "Priemer z %d zdrojov"),
   T("Médio", "Stredné"),
   T("México", "Mexiko"),
+  T("Mês", "Mesiac"),
   T("Música", "Hudba"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

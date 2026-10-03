@@ -1946,6 +1946,7 @@
   T("Média de %d fontes", "Moyenne de %d sources"),
   T("Médio", "Moyen"),
   T("México", "Mexique"),
+  T("Mês", "Mois"),
   T("Música", "Musique"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

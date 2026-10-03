@@ -1946,6 +1946,7 @@
   T("Média de %d fontes", "Середнє за %d джерелами"),
   T("Médio", "Середній"),
   T("México", "Мексика"),
+  T("Mês", "Місяць"),
   T("Música", "Музика"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

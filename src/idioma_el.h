@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "Μέσος όρος από %d πηγές"),
   T("Médio", "Ενδιάμεσο"),
   T("México", "Μεξικό"),
+  T("Mês", "Μήνας"),
   T("Música", "Μουσική"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

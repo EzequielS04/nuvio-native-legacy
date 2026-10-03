@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "Rata-rata dari %d sumber"),
   T("Médio", "Sedang"),
   T("México", "Meksiko"),
+  T("Mês", "Bulan"),
   T("Música", "Musik"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "Snitt av %d kilder"),
   T("Médio", "Middels"),
   T("México", "Mexico"),
+  T("Mês", "Måned"),
   T("Música", "Musikk"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

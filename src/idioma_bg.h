@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "Средно от %d източника"),
   T("Médio", "Средно"),
   T("México", "Мексико"),
+  T("Mês", "Месец"),
   T("Música", "Музика"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

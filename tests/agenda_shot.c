@@ -539,6 +539,27 @@ int main(int argc, char **argv) {
     printf("PASS: captura -hoje gravada.\n");
     return 0;
   }
+  if (getenv("NUVIO_SHOT_SO") && !strcmp(getenv("NUVIO_SHOT_SO"), "calendario")) {
+    tecla(SDLK_UP); tecla(SDLK_RIGHT); tecla(SDLK_RETURN);
+    snprintf(nome, sizeof nome, "%s-calendario.bmp", saida);
+    captura(nome, w);
+    tecla(SDLK_RETURN); tecla(SDLK_RETURN);
+    assert(agendaui_menu_aberto());
+    tecla(SDLK_ESCAPE);
+    assert(!agendaui_menu_aberto());
+    tecla(SDLK_LEFT);
+    tecla(SDLK_UP); tecla(SDLK_UP); tecla(SDLK_UP);
+    // O dia selecionado deve ser preservado ao avançar o mês.
+    tecla(SDLK_RIGHT); tecla(SDLK_RETURN);
+    snprintf(nome, sizeof nome, "%s-calendario-proximo-mes.bmp", saida);
+    captura(nome, w);
+    tecla(SDLK_UP); tecla(SDLK_UP); tecla(SDLK_UP);
+    tecla(SDLK_RIGHT); tecla(SDLK_RIGHT); tecla(SDLK_RETURN);
+    snprintf(nome, sizeof nome, "%s-calendario-lista.bmp", saida);
+    captura(nome, w);
+    printf("PASS: captura -calendario gravada.\n");
+    return 0;
+  }
 
   // --- 2b. A ULTIMA NOTICIA como citacao, o menu de contexto e o painel ------
   // Rede de verdade (Google News): espera ate 8 s pela resposta da primeira

@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "Prosjek iz %d izvora"),
   T("Médio", "Srednje"),
   T("México", "Meksiko"),
+  T("Mês", "Mjesec"),
   T("Música", "Muzika"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

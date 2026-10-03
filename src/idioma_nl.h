@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "Gemiddelde van %d bronnen"),
   T("Médio", "Middelgroot"),
   T("México", "Mexico"),
+  T("Mês", "Maand"),
   T("Música", "Muziek"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

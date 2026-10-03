@@ -1947,6 +1947,7 @@
   T("Média de %d fontes", "%d kaynağın ortalaması"),
   T("Médio", "Orta"),
   T("México", "Meksika"),
+  T("Mês", "Ay"),
   T("Música", "Müzik"),
   T("N pixel", "Pixel N"),
   T("N verde-água", "Teal N"),

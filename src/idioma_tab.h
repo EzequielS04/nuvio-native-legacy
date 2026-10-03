@@ -1946,6 +1946,7 @@
   { "Média de %d fontes", "Average of %d sources" },
   { "Médio", "Medium" },
   { "México", "Mexico" },
+  { "Mês", "Month" },
   { "Música", "Music" },
   { "N pixel", "Pixel N" },
   { "N verde-água", "Teal N" },
