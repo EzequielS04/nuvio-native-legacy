@@ -21,6 +21,15 @@
 //   sem internet        ERRO   fica "rede"          ate voltar
 //   internet de volta   OK      3 s "rede"          a mesma chave: troca no lugar
 //   addon fora do ar    ERRO    6 s "addon:<nome>"  uma vez por queda do addon
+// FORA, DE PROPOSITO: o PROGRESSO do torrent no debrid ("TorBox baixando Duna
+// 12%", estado 29 do mockup). Os servicos expoem o numero (TorBox mylist,
+// Real-Debrid torrents/info), mas debrid.c nao guarda o id do torrent depois
+// do DEBRID_BAIXANDO, e perguntar de novo pelo caminho que existe
+// (debrid_resolver_escolhido) RE-ADICIONA o magnet a cada volta. Fazer direito
+// e uma sonda nova por servico, com o id guardado e um intervalo que nao
+// encoste no limite de pedidos de cada um — fica para quando houver como
+// provar numa conta de verdade. Hoje a ilha diz uma vez que ficou baixando.
+//
 // Os da CENTRAL (recomendacao, episodio novo, versao, aviso do dono, queda)
 // moram em avisos.c (anunciarItem); o cartao e o aviso do amigo vendo agora,
 // em ilhacart.c.
