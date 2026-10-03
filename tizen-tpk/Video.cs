@@ -119,6 +119,14 @@ namespace NuvioTpk
         void Escolher(int tipo, int idx)
         {
             if (player == null) return;
+            // Diagnostics: the player's REAL state at the moment of the write.
+            // Tizen.Multimedia track selection also supports Ready and Paused.
+            // The native delay is a measured firmware workaround: an early
+            // accepted write did not change the demuxed subtitle on the test TV.
+            // This is not the web AVPlay state contract.
+            string estado = "?";
+            try { estado = player.State.ToString(); } catch { }
+            Log("select track " + tipo + "/" + idx + " state=" + estado);
             try
             {
                 if (tipo == 0) player.AudioTrackInfo.Selected = idx;

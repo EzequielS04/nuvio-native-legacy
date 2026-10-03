@@ -45,6 +45,8 @@ static volatile int nAudio, nLeg, audioAtual, legAtual = -1;
 static SDL_mutex *travaLeg;
 static char legTexto[1024];
 static Uint32 legAte;
+// Host cue callbacks may run on another thread; only access under travaLeg.
+static int legCuesBloqueados = 1;
 
 static char urlAtual[4096];
 static char cabecalhos[2048];
@@ -57,6 +59,14 @@ static unsigned sessao;
 // for the source failure screen without guessing a codec or network cause.
 static atomic_uint erroDetalhe;
 static atomic_int temErroDetalhe;
+// DEFERRED SELECTION (see escolhasPendentes). The track choice is born too
+// soon after open and the write is swallowed: measured on the TV, the subtitle
+// write at 0.00 s of the first tick was accepted by the player's bookkeeping
+// and NEVER applied to the demuxer. Audio only needed the deferral (measured:
+// the Korean audio came up right); the subtitle waits for the player to settle.
+static volatile int comecou;                 // playback has really started
+static Uint32 comecouEm;                     // when it started (SDL clock)
+static int audioPend = -1, legPend = -1;     // choice waiting to be written
 
 // RECONEXAO (video_reconexao.h). O evento 5 chega de qualquer fio e so ANOTA;
 // a decisao e o recarregar sao do video_bombear. A classe do erro sai do
@@ -170,6 +180,7 @@ __attribute__((visibility("default")))
 void nv_tpk_video_legenda(const char *texto, int durMs) {
   if (!travaLeg) return;
   SDL_LockMutex(travaLeg);
+  if (legCuesBloqueados) { SDL_UnlockMutex(travaLeg); return; }
   snprintf(legTexto, sizeof legTexto, "%s", texto ? texto : "");
   legAte = SDL_GetTicks() + (Uint32)(durMs > 0 ? durMs : 3000);
   SDL_UnlockMutex(travaLeg);
@@ -200,6 +211,21 @@ void nv_tpk_video_evento(int tipo, int a, int b) {
   if (tipo != EV_BUFFER) { printf("[video] tpk evento %d (%d, %d)\n", tipo, a, b); fflush(stdout); }
 }
 
+static void legendaLimpar(int bloquear) {
+  if (!travaLeg) return;
+  SDL_LockMutex(travaLeg);
+  legTexto[0] = 0; legAte = 0; legCuesBloqueados = bloquear;
+  SDL_UnlockMutex(travaLeg);
+}
+static void legendaEnviar(int i) {
+  // Discard the cached old cue and callbacks during the host write. The host
+  // callback has no track/session identity; late cues after dispatch cannot
+  // be identified here and still require the host's track switch to work.
+  legendaLimpar(1);
+  if (hEscolher) hEscolher(1, faixaLeg[i].numero);
+  legendaLimpar(0);
+}
+
 int  video_iniciar(void) { if (!travaLeg) travaLeg = SDL_CreateMutex(); return hAbrir != NULL; }
 int  video_iniciar_auto(void) { return hAbrir != NULL; }
 int  video_registro_negado(void) { return 0; }
@@ -209,8 +235,10 @@ static int abrirSessao(void) {
   atomic_store(&temErroDetalhe, 0);
   ativo = 1; pronto = falhou = terminou = tocando = 0;
   largura = altura = durMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
-  nAudio = nLeg = 0; audioAtual = 0; legAtual = -1; legAte = 0;
+  nAudio = nLeg = 0; audioAtual = 0; legAtual = -1;
+  comecou = 0; comecouEm = 0; audioPend = legPend = -1;
   if (!travaLeg) travaLeg = SDL_CreateMutex();
+  legendaLimpar(1);
   sessao++;
   if (!hAbrir) { falhou = 1; printf("[video] tpk: host sem player\n"); return 0; }
   hAbrir(urlAtual, cabecalhos);
@@ -302,7 +330,34 @@ static void sondaMkv(double pos) {
   }
 }
 
+// THE DEFERRED CHOICE LEAVES once playback has really started: the host's
+// EV_TOCANDO, or the position clock moving (a host that never sends
+// EV_TOCANDO). AUDIO leaves on the first tick - measured to be enough (the
+// Korean audio came up right on the TV). SUBTITLE waits LEG_ACOMODAR_MS
+// longer: the write at 0.00 s was swallowed EVEN while already playing (the
+// player's bookkeeping said "already on 2" while the demuxer kept track 0).
+// With this, the cue-text defense of the companion PR is only a fallback.
+#define LEG_ACOMODAR_MS 2500u
+static void escolhasPendentes(void) {
+  Uint32 agora = SDL_GetTicks();
+  if (!comecou && (tocando || (pronto && video_pos() > 0))) { comecou = 1; comecouEm = agora; }
+  if (!comecou) return;
+  if (audioPend >= 0) {
+    int i = audioPend; audioPend = -1;
+    printf("[video] tpk: deferred audio dispatched track=%d\n", i);
+    fflush(stdout);
+    if (hEscolher) hEscolher(0, faixaAudio[i].numero);
+  }
+  if (legPend >= 0 && agora - comecouEm >= LEG_ACOMODAR_MS) {
+    int i = legPend; legPend = -1;
+    printf("[video] tpk: settled subtitle dispatched track=%d\n", i);
+    fflush(stdout);
+    legendaEnviar(i);
+  }
+}
+
 void video_bombear(void) {
+  escolhasPendentes();
   double pos = video_pos();
   sondaMkv(pos);
   if (pronto && pos > 0.5) reconIniciou = 1;
@@ -343,6 +398,8 @@ void video_bombear(void) {
   }
 }
 void video_parar(void) {
+  audioPend = legPend = -1; comecou = 0; comecouEm = 0;
+  legendaLimpar(1);
   nv_recon_zerar(&recon);
   reconErroPend = 0; reconFaixasPend = 0; reconBuscarMs = -1;
   if (ativo && hParar) hParar();
@@ -505,20 +562,30 @@ int  video_legenda_atual(void) { return legAtual; }
 void video_escolher_audio(int i) {
   if (i < 0 || i >= nAudio) return;
   audioAtual = i;
+  // Defer until playing: an early write can be accepted but ignored on the
+  // measured firmware. This is not a restriction of the .NET API contract.
+  if (!comecou) { audioPend = i; return; }
   if (hEscolher) hEscolher(0, faixaAudio[i].numero);
 }
 void video_escolher_legenda(int i) {
   if (i >= nLeg) return;
   legAtual = i;
-  if (travaLeg) { SDL_LockMutex(travaLeg); legTexto[0] = 0; legAte = 0; SDL_UnlockMutex(travaLeg); }
-  if (i >= 0 && hEscolher) hEscolher(1, faixaLeg[i].numero);
+  // Every new choice supersedes an older deferred one, including immediate
+  // choices made after the settle window but before the next pump.
+  legPend = -1;
+  legendaLimpar(1);
+  if (i >= 0 && hEscolher) {
+    if (!comecou || SDL_GetTicks() - comecouEm < LEG_ACOMODAR_MS) { legPend = i; return; }
+    legendaEnviar(i);
+  }
 }
+
 int  video_legenda_nativa(char *d, int t) {
   if (!d || t < 2) return 0;
   d[0] = 0;
   if (!ativo || legAtual < 0 || !travaLeg) return 0;
   SDL_LockMutex(travaLeg);
-  if (legTexto[0] && (Sint32)(legAte - SDL_GetTicks()) > 0) snprintf(d, (size_t)t, "%s", legTexto);
+  if (!legCuesBloqueados && legTexto[0] && (Sint32)(legAte - SDL_GetTicks()) > 0) snprintf(d, (size_t)t, "%s", legTexto);
   SDL_UnlockMutex(travaLeg);
   return d[0] != 0;
 }
