@@ -47,6 +47,9 @@ void ajustes_abrir_na_fonte(void);
 // Ajustes › Aparência na linha "Interface de vidro". Mesma regra da cor.
 void ajustes_abrir_no_layout(void);
 void ajustes_abrir_no_vidro(void);
+// O "Reconectar" do modal do Trakt na ilha (02/10): pousa na linha do Trakt,
+// onde o OK comeca o pareamento.
+void ajustes_abrir_no_trakt(void);
 // A linha em foco (indice AJ_*; -1 com o foco num grupo), para os testes
 // conferirem onde a tela abriu.
 int  ajustes_opcao_em_foco(void);

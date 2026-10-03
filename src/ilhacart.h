@@ -13,7 +13,13 @@
 // ESTREIA. O episodio novo de serie com lembrete (AV_AGENDA em avisos.c) ainda
 // nao lido: o mais recente fica na pilula ate ser lido — a aba Avisos aberta,
 // "Marcar como visto" no modal, ou a pagina do titulo aberta (com o relogio
-// ligado; desligado nada aqui marca coisa alguma).
+// ligado; desligado nada aqui marca coisa alguma). Desde 02/10 o modal da
+// estreia e Assistir / Depois (mockup aprovado): "Depois" recolhe sem marcar.
+//
+// AMIGO VENDO AGORA (02/10). O evento de inicio mais novo do feed de um amigo,
+// com menos de 15 min: um aviso uma vez por evento ("Ana está vendo
+// Severance", em qualquer tela) e, com o relogio, o terceiro cartao ao lado
+// dele ate o evento envelhecer ou "Fechar" no modal.
 //
 // FIO PRINCIPAL.
 #ifndef NV_ILHACART_H

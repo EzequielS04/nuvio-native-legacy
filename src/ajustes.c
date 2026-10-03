@@ -1545,11 +1545,12 @@ static int focoItem = 0;
 static int focoOp = -1;
 // Pedido do cartao de novidades ("Experimentar a cor viva"): a proxima
 // abertura pousa na linha da cor, dentro de Aparencia (ver ajustes_iniciar).
-static int abrirNaCor, abrirNaFonte, abrirNoLayout, abrirNoVidro;
+static int abrirNaCor, abrirNaFonte, abrirNoLayout, abrirNoVidro, abrirNoTrakt;
 void ajustes_abrir_na_cor(void) { abrirNaCor = 1; }
 void ajustes_abrir_na_fonte(void) { abrirNaFonte = 1; }
 void ajustes_abrir_no_layout(void) { abrirNoLayout = 1; }
 void ajustes_abrir_no_vidro(void) { abrirNoVidro = 1; }
+void ajustes_abrir_no_trakt(void) { abrirNoTrakt = 1; }
 int  ajustes_opcao_em_foco(void) { return focoOp; }
 // Categoria mostrada na lista. Com o foco no indice ela e a categoria em foco
 // la; com o foco na lista, a do item.
@@ -3595,6 +3596,7 @@ int ajustes_iniciar(void) {
   // "Layout da Home", que focarOpcao abre) e a Interface de vidro.
   if (abrirNoLayout) { abrirNoLayout = 0; focarOpcao(AJ_HOME_LAYOUT); }
   if (abrirNoVidro) { abrirNoVidro = 0; focarOpcao(AJ_VIDRO); }
+  if (abrirNoTrakt) { abrirNoTrakt = 0; focarOpcao(AJ_TRAKT); }
   filAberta = 0; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
   emEdicao = 0;
   fil_confirmar_limite();   // rajada de uma visita anterior que nao fechou

@@ -206,6 +206,16 @@ const char *debrid_sem_plano_frase(int mascara) {
   return NULL;
 }
 
+const char *debrid_sem_plano_nome(int mascara) {
+  int tb = (mascara & (1 << STB)) != 0, pm = (mascara & (1 << SPM)) != 0;
+  int rd = (mascara & (1 << SRD)) != 0, ad = (mascara & (1 << SAD)) != 0;
+  if (tb + pm + rd + ad != 1) return NULL;
+  if (tb) return "TorBox";
+  if (pm) return "Premiumize";
+  if (rd) return "Real-Debrid";
+  return atomic_load(&semPlano[SAD]) == 2 ? NULL : "AllDebrid";
+}
+
 int debrid_sem_plano_novo(void) {
   int q, m = 0;
   for (q = 0; q < SN; q++) {
