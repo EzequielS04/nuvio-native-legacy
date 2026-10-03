@@ -17,6 +17,7 @@
 #include "text.h"
 #include "tex_cache.h"
 #include "ajustes.h"
+#include "selospacote.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -138,6 +139,21 @@ int main(int argc, char **argv) {
   tex_iniciar(64);
   gfx_icones_dir("deploy/app/art");
   badges_carregar("deploy/app/art");   // quem faz isto no app e home.c
+  // NUVIO_SHOT_PACOTE=<json>: um pacote de selos do Nuvio (3 formas aceitas)
+  // vira o pacote ativo, como depois de "Adicionar pacote de selos". Amostra:
+  // tests/selospacote_amostra.json (imagens locais + filtros so de texto).
+  { const char *pc = getenv("NUVIO_SHOT_PACOTE");
+    if (pc && *pc) {
+      FILE *f = fopen(pc, "rb");
+      char *buf; long n;
+      assert(f);
+      fseek(f, 0, SEEK_END); n = ftell(f); rewind(f);
+      buf = malloc((size_t)n + 1); assert(buf);
+      assert(fread(buf, 1, (size_t)n, f) == (size_t)n);
+      buf[n] = 0; fclose(f);
+      assert(selospacote_adicionar(buf, "https://pacote.exemplo.invalido/amostra.json") == SELOS_OK);
+      free(buf);
+    } }
 
   // O CONJUNTO DE UMA FOLHA REAL: cinco fontes como o AIOStreams do dono as
   // mandou para Silo S02E05 em 02/10 — `name` igual em todas, `description`
