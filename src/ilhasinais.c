@@ -1,6 +1,8 @@
 // Sinais da ilha do relogio — ver ilhasinais.h.
 #include "ilhasinais.h"
 #include "ilha.h"
+#include "ilhasalvar.h"
+#include "ilhaacao.h"
 #include "addons.h"
 #include "avisos.h"
 #include "debrid.h"
@@ -33,6 +35,8 @@ static void acoes(void) {
   int b = ilha_aviso_pediu(chave, sizeof chave);
   if (!b) return;
   if (!strncmp(chave, "av:", 3)) { avisos_ilha_acao(chave, b); return; }
+  if (!strcmp(chave, ILHA_ACAO_CHAVE)) { ilhaacao_botao(b); return; }
+  if (!strncmp(chave, "salvar:", 7)) { ilhasalvar_acao(chave, b); return; }
   if (!strncmp(chave, "pedido:", 7)) {
     const char *pub = chave + 7;
     if (b == 1) recomenda_aceitar(pub);
@@ -237,6 +241,7 @@ static void addonFora(void) {
 void ilhasinais_passo(Uint32 agora) {
   static Uint32 ultSonda;
   acoes();
+  ilhasalvar_passo(agora);
   rede();
   addonFora();
   sincronia(agora);   // a atividade e renovada por quadro

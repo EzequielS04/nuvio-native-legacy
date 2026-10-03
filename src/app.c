@@ -78,6 +78,7 @@
 #include "telemetria.h"
 #include "avisos.h"
 #include "ilha.h"
+#include "ilhasalvar.h"
 #include "plrilha.h"
 #include "ilhacart.h"
 #include "ilhasinais.h"
@@ -2760,6 +2761,8 @@ void app_atualizar(float dt, Uint32 agora) {
       // mesma disciplina que ctxmenu.c ja aplica (e que o teste de contrato
       // cobra la).
       int entrar = c ? !c->naLista : 0;
+      // Primeira vez: a ilha pergunta onde o + salva e grava DEPOIS (ilhasalvar.c).
+      if (c && ilhasalvar_perguntar(c, entrar)) c = NULL;
       biblioteca_alternar_lista(i);
       // LOCAL SEMPRE, e primeiro. E o unico destino que sobrevive ao
       // fechamento do app sem depender de conta nenhuma; ver salvos.h. Sem
@@ -2779,6 +2782,7 @@ void app_atualizar(float dt, Uint32 agora) {
         else simkl_lista_tipo(c->imdb, c->tipo, entrar);
       }
       if (c) cat_definir_na_lista(i, entrar);
+      if (c) ilhasalvar_aviso(c, entrar);   // o voo da capa e o "Salvo em ..." na ilha
     }
     if (detail_pediu_fontes()) {
       // A lembrada e localizada ANTES de abrir, para a folha ja desenhar a
