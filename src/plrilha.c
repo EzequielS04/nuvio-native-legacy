@@ -10,6 +10,7 @@
 #include "idioma.h"
 #include "layout.h"
 #include "text.h"
+#include "relogiofim.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -105,17 +106,11 @@ static void horaAgora(char *h, size_t n, char *fim, size_t nf) {
   localtime_r(&t, &lt);
   strftime(h, n, "%H:%M", &lt);
   fim[0] = 0;
-  if (falta >= 0.0) {
-    char h2[16];
-    time_t t2 = t + (time_t)falta;
-    localtime_r(&t2, &lt);
-    strftime(h2, sizeof h2, "%H:%M", &lt);
-    snprintf(fim, nf, i18n("termina \xc3\xa0" "s %s"), h2);
-  }
+  if (falta >= 0.0) relogio_fim_ilha(fim, nf, t, falta);
 }
 
 static float montar(const PlrIlhaPedido *p, Linha *L) {
-  char h[16], fim[96];
+  char h[16], fim[RELOGIO_FIM_MAX];
   float w = 0.0f;
   memset(L, 0, sizeof *L);
   horaAgora(h, sizeof h, fim, sizeof fim);
