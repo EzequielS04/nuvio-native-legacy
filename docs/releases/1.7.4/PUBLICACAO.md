@@ -25,3 +25,15 @@ The serial suite and follow-ups retain the documented pre-existing anime-detail
 failure and skipped cases. See VALIDACAO.md for the full regression accounting.
 Issue reports remain open where reporter/platform confirmation is needed.
 
+## Issue replies
+
+- [#158](https://github.com/iqui27/nuvio-native-legacy/issues/158#issuecomment-5972591678)
+- [#222](https://github.com/iqui27/nuvio-native-legacy/issues/222#issuecomment-5972591891)
+- [#223](https://github.com/iqui27/nuvio-native-legacy/issues/223#issuecomment-5972592161)
+- [#226](https://github.com/iqui27/nuvio-native-legacy/issues/226#issuecomment-5972592442)
+- [#227](https://github.com/iqui27/nuvio-native-legacy/issues/227#issuecomment-5972592656)
+- [#228](https://github.com/iqui27/nuvio-native-legacy/issues/228#issuecomment-5972592916)
+- [#229](https://github.com/iqui27/nuvio-native-legacy/issues/229#issuecomment-5972593177)
+- [#231](https://github.com/iqui27/nuvio-native-legacy/issues/231#issuecomment-5972593444)
+- [#232](https://github.com/iqui27/nuvio-native-legacy/issues/232#issuecomment-5972593734)
+- [#233](https://github.com/iqui27/nuvio-native-legacy/issues/233#issuecomment-5972594025)
