@@ -387,6 +387,30 @@ int main(int argc, char **argv) {
     salvar("pular-abertura");
     intro_shot_definir(NULL, 0);
   }
+  if (quer(argc, argv, "pausa")) {
+    static const char *nomes[5] = { "Ella Purnell", "Aaron Moten", "Walton Goggins", "Mois\xc3\xa9s Arias", "Kyle MacLachlan" };
+    CatItem f = serie;
+    int i;
+    snprintf(f.sinopse, sizeof f.sinopse, "Lucy, Maximus e o Ghoul disputam a mesma recompensa no deserto. Cada um tem um motivo para querer a cabe\xc3\xa7" "a que todos est\xc3\xa3o ca\xc3\xa7" "ando.");
+    for (i = 0; i < 5; i++) {
+      char r[32];
+      snprintf(f.elenco[i].nome, sizeof f.elenco[i].nome, "%s", nomes[i]);
+      snprintf(r, sizeof r, "img/el/00_%d.jpg", i);
+      snprintf(f.elenco[i].foto, sizeof f.elenco[i].foto, "%s", img(r));
+    }
+    f.nElenco = 5;
+    abrir(&f); simular(3840, 2160, "HDR10", 0, 1);
+    quadros(10);
+    player_shot_estado(relogio, 1948.0f, 3360.0f, 0, 0, 0, 0);
+    { struct tm lt; time_t t = time(NULL);
+      localtime_r(&t, &lt); lt.tm_hour = 20; lt.tm_min = 41; lt.tm_sec = 0;
+      plrilha_shot_hora(mktime(&lt)); }
+    quadros(420);
+    salvar("pausa");
+    { struct tm lt; time_t t = time(NULL);
+      localtime_r(&t, &lt); lt.tm_hour = 20; lt.tm_min = 19; lt.tm_sec = 0;
+      plrilha_shot_hora(mktime(&lt)); }
+  }
   puts("player_glass_shot: ok");
   return 0;
 }
