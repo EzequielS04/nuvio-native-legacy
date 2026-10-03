@@ -995,7 +995,17 @@ void spot_evento(const SDL_Event *e) {
 static float alturaLista(void) { return nLin ? lin[nLin - 1].y + lin[nLin - 1].h : 0.0f; }
 static float alturaTeclado(void) { return (kbFil + 1) * SP_KB_PASSO - SP_TECLA_GAP + 52.0f; }
 static float corpoAlvo(void) {
-  float h = alturaLista();
+  float h = alturaLista(), teto = SP_CORPO_MAX - SP_CPAD_T - SP_CPAD_B - SP_RODAPE_H;
+  int i;
+  // LISTA MAIOR QUE A ILHA: a janela termina no fim de uma linha inteira, e
+  // nao no meio da proxima — a linha cortada encostava no rodape ("The
+  // Terminal List" pela metade sobre o "OK Abrir", captura de 02/10).
+  if (h > teto) {
+    float fim = 0.0f;
+    for (i = 0; i < nLin; i++)
+      if (lin[i].y + lin[i].h <= teto) fim = lin[i].y + lin[i].h;
+    h = fim > 0.0f ? fim : teto;
+  }
   if (kbAberto && alturaTeclado() > h) h = alturaTeclado();
   if (h <= 0.0f) return 0.0f;
   h += SP_CPAD_T + SP_CPAD_B + SP_RODAPE_H;
