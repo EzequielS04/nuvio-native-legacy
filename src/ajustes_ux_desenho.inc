@@ -696,3 +696,4 @@ static float ajEf(const char *icone, const char *s, float x, float y, float w, f
 }
 #include "ajustes_ux_previa.inc"
 #include "ajustes_ux_ilha.inc"
+#include "ajustes_ux_fileiras.inc"

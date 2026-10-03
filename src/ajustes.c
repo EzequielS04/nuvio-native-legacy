@@ -6790,7 +6790,13 @@ int ajustes_teste_quadro(const char *id) {
     focarOpcao(AJ_FIL_ORDEM);
     fil_definir_tipo("com.linvo.cinemeta_movie_top", FIL_TIPO_DESTAQUE); filAberta = 1; filFoco = 3; filCampo = 2; filPegou = 0; filTopo = 0; filNaBarra = 0;
     filAba = !strcmp(id, "fileiras-fora"); filForaAgrupada = 1;
-    if (filAba) filFoco = 0;
+    if (filAba) {   // o grupo do mockup: Akashi, AIOStreams e Xperience fora da Home
+      int k;
+      static const int FORA[4] = { 11, 13, 14, 15 };
+      for (k = 0; k < 4; k++) if (k < fil_n() && fil_estado(FORA[k]) != FIL_FORA) fil_remover(FORA[k]);
+      filMontarLista(); filFoco = 0;
+      for (k = 0; k < filListaN; k++) if (filLista[k] == 7) filFoco = k;
+    }
   }
   else if (!strcmp(id, "diferencas")) {
     ajArteFundoN = 3;
