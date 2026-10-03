@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Olvasd fel ezt a kódot az ismerősödnek. Ő itt beírja, és mindketten kapcsolatok lesztek."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Ha igent mondasz, azoknak jelensz meg, akiknél megvan a kapcsolatod, vagy követnek a Trakton. Senki másnak."),
   T("Do Nuvio", "A Nuviótól"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "A Nuviótól: fent a cím neve, alatta a minőségi logók. A kiegészítőtől: a név és a leírás pontosan úgy, ahogy a kiegészítő küldi — annak, aki már az AIOStreamsben formázza a szöveget."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "A Nuviótól: fent a cím neve, alatta a minőségi logók. A kiegészítőtől: a név és a leírás pontosan úgy, ahogy a kiegészítő küldi — annak, aki már az AIOStreamsben formázza a szöveget. Cím logója: a cím logója a kiírt név helyett."),
   T("Do addon", "A kiegészítőtől"),
   T("Do app", "Az appból"),
   T("Do catálogo, quando ele já foi lido", "A katalógusból, ha már beolvasta"),

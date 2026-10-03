@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Đọc mã này cho bạn của bạn. Họ nhập ở đây và hai người trở thành liên hệ của nhau."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Nếu đồng ý, bạn sẽ hiện với những người có liên hệ của bạn hoặc theo dõi bạn trên Trakt. Không ai khác."),
   T("Do Nuvio", "Từ Nuvio"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "Từ Nuvio: tên phim ở trên và logo chất lượng ở dưới. Từ addon: tên và mô tả đúng như addon gửi — dành cho ai đã định dạng chữ trong AIOStreams."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "Từ Nuvio: tên phim ở trên và logo chất lượng ở dưới. Từ addon: tên và mô tả đúng như addon gửi — dành cho ai đã định dạng chữ trong AIOStreams. Logo tiêu đề: logo của tiêu đề thay cho tên viết."),
   T("Do addon", "Từ addon"),
   T("Do app", "Từ ứng dụng"),
   T("Do catálogo, quando ele já foi lido", "Từ danh mục, khi đã đọc xong"),

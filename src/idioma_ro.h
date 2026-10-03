@@ -945,7 +945,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Spune acest cod prietenului tău. El îl introduce aici și deveniți contacte unul pentru altul."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Dacă spui da, apari pentru cei care te au în contacte sau te urmăresc pe Trakt. Pentru nimeni altcineva."),
   T("Do Nuvio", "De la Nuvio"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "De la Nuvio: numele titlului sus și logourile de calitate dedesubt. Din addon: numele și descrierea exact cum le trimite addonul — pentru cine formatează deja textul în AIOStreams."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "De la Nuvio: numele titlului sus și logourile de calitate dedesubt. Din addon: numele și descrierea exact cum le trimite addonul — pentru cine formatează deja textul în AIOStreams. Logo titlu: logo-ul titlului în locul numelui scris."),
   T("Do addon", "Din addon"),
   T("Do app", "Din aplicație"),
   T("Do catálogo, quando ele já foi lido", "Din catalog, după ce a fost citit"),

@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Perskaitykite šį kodą draugui. Jis jį čia įveda ir abu tampate kontaktais."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Pasakykite taip ir būsite matomi tiems, kurie turi jūsų kontaktą arba seka jus Trakt. Niekam daugiau."),
   T("Do Nuvio", "Iš Nuvio"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "Iš Nuvio: viršuje pavadinimas, apačioje kokybės logotipai. Iš priedo: pavadinimas ir aprašymas tiksliai taip, kaip siunčia priedas — tiems, kas jau formatuoja tekstą AIOStreams."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "Iš Nuvio: viršuje pavadinimas, apačioje kokybės logotipai. Iš priedo: pavadinimas ir aprašymas tiksliai taip, kaip siunčia priedas — tiems, kas jau formatuoja tekstą AIOStreams. Pavadinimo logotipas: pavadinimo logotipas vietoj parašyto pavadinimo."),
   T("Do addon", "Iš priedo"),
   T("Do app", "Iš programos"),
   T("Do catálogo, quando ele já foi lido", "Iš katalogo, kai jis jau perskaitytas"),

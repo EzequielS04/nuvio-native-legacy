@@ -9,6 +9,7 @@
 // NAO ENTRA NA SUITE (tools/testa-tudo.sh pula *_shot.sh): precisa de janela GL
 // e de olho humano. Nao chama dados_iniciar: sem pasta de dados, fontepref nao
 // le nem escreve arquivo nenhum e a captura nao toca no ~/.nuvio de quem roda.
+#include "catalogo.h"
 #include "streams.h"
 #include "fontepref.h"
 #include "badges.h"
@@ -107,7 +108,9 @@ int main(int argc, char **argv) {
       { const char *fu = getenv("NUVIO_SHOT_FONTE_UI");   // 3 = Montserrat
         if (fu && *fu) fprintf(f, "fonteInterface %d\n", atoi(fu)); }
       { const char *t = getenv("NUVIO_SHOT_TEXTO");
-        if (t && *t == '1') fprintf(f, "fonteTextoLocal 1\n"); }
+        if (t && *t == '1') fprintf(f, "fonteTextoLocal 1\n");
+        // NUVIO_SHOT_LOGO=1: Texto das fontes > Logo do titulo.
+        if (getenv("NUVIO_SHOT_LOGO")) fprintf(f, "fonteTextoLocal 2\n"); }
       // Material: NUVIO_SHOT_VIDRO=0 desliga a Interface de vidro (folha solida).
       { const char *v = getenv("NUVIO_SHOT_VIDRO");
         fprintf(f, "vidroLocal %d\n", v && *v == '0' ? 1 : 0); }
@@ -153,6 +156,8 @@ int main(int argc, char **argv) {
   stream_definir_alvo("tt14688458:2:5");
   stream_definir_lista(v, 5);
   stream_folha_nome("Silo");
+  // A logo do primeiro titulo do catalogo de exemplo (deploy/app/art/logo).
+  if (getenv("NUVIO_SHOT_LOGO") && cat_carregar("deploy/app/art")) stream_folha_item(0);
   stream_folha_contexto("T2:E5 · Silo");
 
   // A DUBLADA E A LEMBRADA (indice 3), e a que esta TOCANDO e a 4K (indice 0):

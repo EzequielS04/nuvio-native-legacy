@@ -332,7 +332,7 @@ static const char *V_FONTE_REPOR[] = { "Desligado", "1 fonte", "2 fontes", "3 fo
 // Nuvio (nome do conteudo em cima, logos de qualidade embaixo, tamanho); 1 =
 // o nome e a descricao como o addon formatou — quem monta o proprio formato no
 // AIOStreams quer ver o dele.
-static const char *V_FONTE_TEXTO[] = { "Do Nuvio", "Do addon" };
+static const char *V_FONTE_TEXTO[] = { "Do Nuvio", "Do addon", "Logo do título" };
 // #90: o fundo de arte da tela de escolha de perfil (psfundo.c). "Automático"
 // e o comportamento atual (perfil primeiro, catalogo como reserva, com
 // rotacao); "Desligado" volta a tela ao que era antes da issue — psfundo nao
@@ -625,7 +625,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Escolher a fonte ao reproduzir", V_LIGA, 2), // local: ver ajustes_fonte_manual
   ESC("Fonte automática",           V_FONTE_AUTO, 2),  // local: ver fonteauto.h
   ESC("Outra fonte se falhar",      V_FONTE_REPOR, 4), // local: ver ajustes_fonte_repor
-  ESC("Texto das fontes",           V_FONTE_TEXTO, 2), // local: ver ajustes_fonte_texto_addon
+  ESC("Texto das fontes",           V_FONTE_TEXTO, 3), // local: ver ajustes_fonte_texto_addon
 
   ESC("Pôsteres horizontais",       V_LIGA, 2),   // modernLandscapePostersEnabled
   ESC("Fundo em tela cheia",        V_LIGA, 2),   // modernHeroFullScreenBackdropEnabled
@@ -1304,6 +1304,10 @@ int ajustes_reacao_creditos(void)     { return lig(AJ_REACAO_CREDITOS); }
 int ajustes_fonte_manual(void)        { return lig(AJ_FONTE_MANUAL); }
 int ajustes_fonte_primeira(void)      { return valor[AJ_FONTE_AUTO] == 1; }
 int ajustes_fonte_texto_addon(void)   { return valor[AJ_FONTE_TEXTO] == 1; }
+// "Logo do titulo" (dono, 03/10, em teste): o layout do Nuvio com a logo do
+// conteudo no lugar do nome escrito em cada linha. Indice 2: o 0 e o 1 ja
+// estavam gravados em fonteTextoLocal.
+int ajustes_fonte_texto_logo(void)    { return valor[AJ_FONTE_TEXTO] == 2; }
 // PRAZO DA ESCOLHA AUTOMATICA COM A LISTA AINDA ENCHENDO (#221), em ms; 0 =
 // esperar todos os addons (o comportamento ate a 1.7.0). 5 s de fabrica:
 // medido no D1 da 1.7.0 (.tpk), a primeira fonte chega em 0,85 s no p90 e o
@@ -3714,7 +3718,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_EPG_PAIS: return "De que país vem a programação dos canais no Guia. Automático escolhe pelo idioma e pelos nomes dos canais (RO:, |RO|…). A grade do próprio provedor Xtream entra sempre que existir.";
     case AJ_FONTE_MANUAL: return "Ao mandar reproduzir, abre a lista de fontes em vez de escolher sozinho. Canal ao vivo não pergunta.";
     case AJ_FONTE_AUTO: return "Melhor fonte: prefere 4K, Dolby Vision e MP4 e confere uma fonte por vez. Primeira da lista: toca a primeira que o addon mandou e não confere nenhuma outra — para quem já filtra e ordena no AIOStreams.";
-    case AJ_FONTE_TEXTO: return "Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.";
+    case AJ_FONTE_TEXTO: return "Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.";
     case AJ_FONTE_PRAZO: return "As fontes aparecem na lista assim que cada add-on responde. A escolha automática não espera o mais lento: sai quando já há uma fonte boa ou depois deste tempo. Com uma fonte escolhida antes neste título, o add-on dela é sempre esperado.";
     case AJ_FONTE_REPOR: return "Quantas outras fontes o automático tenta quando a escolhida não abre. Cada tentativa pode adicionar um arquivo na sua conta de debrid.";
 

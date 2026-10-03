@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Bacakan kode ini kepada temanmu. Dia mengetiknya di sini dan kalian menjadi kontak."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Jika kamu setuju, kamu muncul bagi orang yang punya kontakmu atau mengikutimu di Trakt. Tidak untuk siapa pun selain itu."),
   T("Do Nuvio", "Dari Nuvio"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "Dari Nuvio: nama judul di atas dan logo kualitas di bawahnya. Dari addon: nama dan deskripsi persis seperti yang dikirim addon — untuk yang sudah memformat teks di AIOStreams."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "Dari Nuvio: nama judul di atas dan logo kualitas di bawahnya. Dari addon: nama dan deskripsi persis seperti yang dikirim addon — untuk yang sudah memformat teks di AIOStreams. Logo judul: logo judul sebagai ganti nama yang ditulis."),
   T("Do addon", "Dari addon"),
   T("Do app", "Dari aplikasi"),
   T("Do catálogo, quando ele já foi lido", "Dari katalog, setelah dibaca"),

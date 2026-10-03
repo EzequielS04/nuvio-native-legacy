@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Přečtěte tento kód příteli. Zadá ho tady a oba se stanete kontakty."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Když řeknete ano, zobrazíte se lidem, kteří mají váš kontakt nebo vás sledují na Traktu. Nikomu jinému."),
   T("Do Nuvio", "Od Nuvia"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "Od Nuvia: název titulu nahoře a loga kvality pod ním. Z doplňku: název a popis přesně tak, jak je doplněk posílá — pro ty, kdo už text formátují v AIOStreams."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "Od Nuvia: název titulu nahoře a loga kvality pod ním. Z doplňku: název a popis přesně tak, jak je doplněk posílá — pro ty, kdo už text formátují v AIOStreams. Logo titulu: logo titulu místo napsaného názvu."),
   T("Do addon", "Z doplňku"),
   T("Do app", "Z aplikace"),
   T("Do catálogo, quando ele já foi lido", "Z katalogu, jakmile byl načten"),

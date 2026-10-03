@@ -946,7 +946,7 @@
   T("Dite este código ao seu amigo. Ele digita aqui e vocês dois viram contatos.", "Bu kodu arkadaşına oku. O buraya yazar ve ikiniz kişi olursunuz."),
   T("Dizendo sim, você aparece para quem tem o seu contato ou te segue no Trakt. Para mais ninguém.", "Evet dersen, kişisi sende olan veya seni Trakt'ta takip eden kişilere görünürsün. Başka kimseye değil."),
   T("Do Nuvio", "Nuvio'dan"),
-  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.", "Nuvio'dan: üstte başlığın adı, altta kalite logoları. Eklentiden: ad ve açıklama tam eklentinin gönderdiği gibi — metni zaten AIOStreams'te biçimlendirenler için."),
+  T("Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.", "Nuvio'dan: üstte başlığın adı, altta kalite logoları. Eklentiden: ad ve açıklama tam eklentinin gönderdiği gibi — metni zaten AIOStreams'te biçimlendirenler için. Başlık logosu: yazılı ad yerine başlığın logosu."),
   T("Do addon", "Eklentiden"),
   T("Do app", "Uygulamadan"),
   T("Do catálogo, quando ele já foi lido", "Katalogdan, okunduğunda"),
