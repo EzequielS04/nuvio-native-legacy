@@ -1242,6 +1242,7 @@
   T("Histórico, progresso e listas", "Istorija, eiga ir sąrašai"),
   T("Holandês", "Olandų"),
   T("Home atualizada", "Home updated"),
+  T("Home carregada", "Home loaded"),
   T("Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "Pradžia pilna (%d iš %d) · eilėje, pakils, kai atsiras vieta"),
   T("Hong Kong", "Honkongas"),
   T("Hungria", "Vengrija"),

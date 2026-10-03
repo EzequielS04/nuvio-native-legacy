@@ -1242,6 +1242,7 @@
   T("Histórico, progresso e listas", "Geçmiş, ilerleme ve listeler"),
   T("Holandês", "Felemenkçe"),
   T("Home atualizada", "Home updated"),
+  T("Home carregada", "Home loaded"),
   T("Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "Ana ekran dolu (%d / %d) · sırada, yer açılınca yükselir"),
   T("Hong Kong", "Hong Kong"),
   T("Hungria", "Macaristan"),

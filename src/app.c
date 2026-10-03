@@ -3723,11 +3723,16 @@ void app_desenhar(Uint32 agora) {
   // A ILHA DO RELOGIO (ilha.h): mesmas guardas da central — com a pessoa
   // dentro do app e nunca sobre o player. No Guia ela vai para o topo direito
   // (o titulo do guia ocupa o esquerdo), o mesmo canto do toast de antes.
+  static int homeCarregando;
+  static Uint32 homeConcluida;
   if (tela == TELA_HOME && !detail_aberto()) {
     DescHomeCarga load; desc_home_carga(&load);
-    if (load.ativo || ilha_modal_aberto()) {
+    if (load.ativo) { homeCarregando = 1; homeConcluida = 0; }
+    else if (homeCarregando) { homeCarregando = 0; homeConcluida = agora; }
+    int concluida = homeConcluida && agora - homeConcluida < 1000u;
+    if (load.ativo || concluida || ilha_modal_aberto()) {
       char details[640];
-      const char *stage = !load.ativo ? i18n("Home atualizada") :
+      const char *stage = !load.ativo ? i18n("Home carregada") :
         load.fase == 2 ? i18n("Carregando fileiras…") : i18n("Sincronizando a Home…");
       snprintf(details, sizeof details,
         i18n("%s\nTempo: %u s · Add-ons consultados: %d de %d\nFileiras atualizadas: %d · Falhas: %d\nVocê pode continuar navegando enquanto a Home atualiza."),
@@ -3737,7 +3742,7 @@ void app_desenhar(Uint32 agora) {
         char shortStatus[160];
         snprintf(shortStatus, sizeof shortStatus, "%s · %s", i18n("Carregando fileiras…"), i18n("Detalhes"));
         ilha_atividade(shortStatus, -1.0f);
-      }
+      } else if (concluida) ilha_atividade(i18n("Home carregada"), -1.0f);
     } else ilha_atividade_detalhes(NULL, NULL);
   } else ilha_atividade_detalhes(NULL, NULL);
   if (guia_atualizando_lista()) ilha_atividade(i18n("Atualizando a lista de canais…"), -1.0f);

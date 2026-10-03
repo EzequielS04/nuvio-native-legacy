@@ -1241,6 +1241,7 @@
   { "Histórico, progresso e listas", "History, progress and lists" },
   { "Holandês", "Dutch" },
   { "Home atualizada", "Home updated" },
+  { "Home carregada", "Home loaded" },
   { "Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "Home is full (%d of %d) · queued, moves up when a slot opens" },
   { "Hong Kong", "Hong Kong" },
   { "Hungria", "Hungary" },

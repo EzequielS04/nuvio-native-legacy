@@ -3420,7 +3420,7 @@ static void heroWeb(float a, float desloc) {
   float yEstado = yAcoes - NV_DETW_GAP_RETOM;
   float yRetom = yEstado, yAgenda = yEstado;
   if (temRetom > 0.0f) { yEstado -= NV_DETW_RETOM_H; yRetom = yEstado; }
-  if (agLinha[0]) { yEstado -= carro ? 56.0f : NV_DETW_RETOM_H; yAgenda = yEstado; }
+  if (agLinha[0]) { yEstado -= carro ? 46.0f : NV_DETW_RETOM_H; yAgenda = yEstado; }
 
   // Sobe alguns pixels enquanto entra: continua o movimento da arte em vez de
   // aparecer pronto no lugar. `desloc` e a rolagem do documento.
@@ -3587,16 +3587,16 @@ static void heroWeb(float a, float desloc) {
       snprintf(leg, sizeof leg, "%s", agLinha);
     }
     if (carro && !emFoco) {
-      TxtLinha label = txt_linha_corta(TXT_CAPTION, leg, 255, 255, 255, 255,
-                                      NV_DETW2_TEXTO_W - 40.0f);
-      float w = label.w + 40.0f, h = 44.0f;
+      TxtLinha label = txt_linha_corta(TXT_CAPTION2, leg, 232, 235, 240, 255,
+                                      NV_DETW2_TEXTO_W - 28.0f);
+      float w = label.w + 28.0f, h = 34.0f;
       GfxRect pill = {NV_DETW2_X + (larguraAcoes - w) * .5f, yAgenda, w, h};
       if (pill.x < NV_DETW2_X) pill.x = NV_DETW2_X;
       ajustes_acento(&ar, &ag, &ab);
-      gfx_cor(pill, .5f, ar, ag, ab, a);
-      gfx_cor((GfxRect){pill.x+2, pill.y+2, pill.w-4, pill.h-4}, .5f,
-              .045f, .05f, .06f, .96f*a);
-      txt_desenhar_alpha(label, pill.x + 20.0f,
+      gfx_cor(pill, .5f, ar, ag, ab, .32f*a);
+      gfx_cor((GfxRect){pill.x+1, pill.y+1, pill.w-2, pill.h-2}, .5f,
+              .045f, .05f, .06f, .88f*a);
+      txt_desenhar_alpha(label, pill.x + 14.0f,
                         pill.y + (h-label.h)*.5f, a);
     } else {
     // SEMPRE BRANCA (dono, 21/09/2026: "mantenha o texto sempre em branco").

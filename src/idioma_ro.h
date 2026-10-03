@@ -1241,6 +1241,7 @@
   T("Histórico, progresso e listas", "Istoric, progres și liste"),
   T("Holandês", "Olandeză"),
   T("Home atualizada", "Home updated"),
+  T("Home carregada", "Home loaded"),
   T("Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "Acasă este plină (%d din %d) · pus în coadă, urcă când se eliberează un loc"),
   T("Hong Kong", "Hong Kong"),
   T("Hungria", "Ungaria"),

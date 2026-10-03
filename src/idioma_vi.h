@@ -1242,6 +1242,7 @@
   T("Histórico, progresso e listas", "Lịch sử, tiến độ và danh sách"),
   T("Holandês", "Tiếng Hà Lan"),
   T("Home atualizada", "Home updated"),
+  T("Home carregada", "Home loaded"),
   T("Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "Trang chủ đã đầy (%d / %d) · đang chờ, sẽ được đưa lên khi có chỗ trống"),
   T("Hong Kong", "Hồng Kông"),
   T("Hungria", "Hungary"),

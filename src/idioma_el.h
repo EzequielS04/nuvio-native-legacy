@@ -1242,6 +1242,7 @@
   T("Histórico, progresso e listas", "Ιστορικό, πρόοδος και λίστες"),
   T("Holandês", "Ολλανδικά"),
   T("Home atualizada", "Home updated"),
+  T("Home carregada", "Home loaded"),
   T("Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "Η Αρχική είναι γεμάτη (%d από %d) · σε αναμονή, ανεβαίνει όταν ελευθερωθεί θέση"),
   T("Hong Kong", "Χονγκ Κονγκ"),
   T("Hungria", "Ουγγαρία"),

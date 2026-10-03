@@ -1242,6 +1242,7 @@
   T("Histórico, progresso e listas", "Riwayat, progres, dan daftar"),
   T("Holandês", "Belanda"),
   T("Home atualizada", "Home updated"),
+  T("Home carregada", "Home loaded"),
   T("Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "Beranda penuh (%d dari %d) · mengantre, naik saat ada slot kosong"),
   T("Hong Kong", "Hong Kong"),
   T("Hungria", "Hungaria"),

@@ -1242,6 +1242,7 @@
   T("Histórico, progresso e listas", "Geschiedenis, voortgang en lijsten"),
   T("Holandês", "Nederlands"),
   T("Home atualizada", "Home updated"),
+  T("Home carregada", "Home loaded"),
   T("Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "Start is vol (%d van %d) · in de wachtrij, schuift op als er een plek vrijkomt"),
   T("Hong Kong", "Hongkong"),
   T("Hungria", "Hongarije"),

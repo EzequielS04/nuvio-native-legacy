@@ -1242,6 +1242,7 @@
   T("Histórico, progresso e listas", "歷史記錄、進度和清單"),
   T("Holandês", "荷蘭語"),
   T("Home atualizada", "Home updated"),
+  T("Home carregada", "Home loaded"),
   T("Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "首頁已滿 (%d / %d) · 已排隊，有空位時自動上移"),
   T("Hong Kong", "香港"),
   T("Hungria", "匈牙利"),

@@ -1242,6 +1242,7 @@
   T("Histórico, progresso e listas", "Historie, postup a seznamy"),
   T("Holandês", "Nizozemština"),
   T("Home atualizada", "Home updated"),
+  T("Home carregada", "Home loaded"),
   T("Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "Úvodní obrazovka je plná (%d z %d) · ve frontě, posune se, až se uvolní místo"),
   T("Hong Kong", "Hongkong"),
   T("Hungria", "Maďarsko"),

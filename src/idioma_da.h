@@ -1242,6 +1242,7 @@
   T("Histórico, progresso e listas", "Historik, fremskridt og lister"),
   T("Holandês", "Hollandsk"),
   T("Home atualizada", "Home updated"),
+  T("Home carregada", "Home loaded"),
   T("Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "Hjem er fuld (%d af %d) · sat i kø og rykker op, når der bliver plads"),
   T("Hong Kong", "Hongkong"),
   T("Hungria", "Ungarn"),

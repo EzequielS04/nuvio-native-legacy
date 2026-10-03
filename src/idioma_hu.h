@@ -1242,6 +1242,7 @@
   T("Histórico, progresso e listas", "Előzmények, előrehaladás és listák"),
   T("Holandês", "Holland"),
   T("Home atualizada", "Home updated"),
+  T("Home carregada", "Home loaded"),
   T("Home cheia (%d de %d) · entrou na fila e sobe quando abrir vaga", "A főoldal tele van (%d / %d) · sorban áll, előrébb kerül, ha felszabadul hely"),
   T("Hong Kong", "Hongkong"),
   T("Hungria", "Magyarország"),
