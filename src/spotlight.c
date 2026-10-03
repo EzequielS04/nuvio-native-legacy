@@ -65,7 +65,11 @@
 #define SP_RAIO      34.0f          // px do corpo aberto; a barra sozinha e pilula
 #define SP_CORPO_Y   (SP_BY + SP_BH)
 #define SP_CORPO_MAX (1024.0f - SP_CORPO_Y)
-#define SP_CPAD_T    16.0f
+// DUAS ILHAS (Glass UI, mockup "ilha" tela 6): o campo e uma pilula sozinha e
+// os resultados moram numa segunda ilha SP_ILHA_VAO abaixo dela. O recuo de
+// cima do corpo conta o vao e o ar de dentro da ilha de baixo.
+#define SP_ILHA_VAO  18.0f
+#define SP_CPAD_T    (SP_ILHA_VAO + 22.0f)
 #define SP_CPAD_B    10.0f
 #define SP_RODAPE_H  56.0f
 #define SP_MIC_D     64.0f
@@ -1050,31 +1054,34 @@ void spot_veu(void) {
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0.0f, 0.0f, 0.01f, 0.62f);
 }
 
-// A superficie unica: barra sozinha = pilula; crescendo, o raio vai para o de
-// painel e a parte de baixo vira o corpo.
-static void desenhaSuperficie(GfxRect p, float a) {
-  float ar, ag, ab, menor = p.w < p.h ? p.w : p.h;
-  float abre = anim_clamp(corpoH / 120.0f, 0.0f, 1.0f);
-  float raio = anim_mistura(SP_BH * 0.5f, SP_RAIO, abre) / menor;
-  ajustes_acento(&ar, &ag, &ab);
-  // Uma luz curta da cor do tema atras, no alto: tira a barra do plano de tras
-  // sem uma sombra de tela inteira.
-  gfx_rect((GfxRect){ p.x - 60.0f, p.y - 46.0f, p.w + 120.0f, SP_BH + 120.0f }, 0, GFX_SOMBRA,
-           1.0f, 0, 0, 0.5f, ar, ag, ab, 0.12f * a);
-  gfx_rect((GfxRect){ p.x - 40.0f, p.y - 10.0f, p.w + 80.0f, p.h + 70.0f }, 0, GFX_SOMBRA,
-           1.0f, 0, 0, 0.5f, 0, 0, 0, 0.45f * a);
+// O MATERIAL DA ILHA, o mesmo da folha de Fontes, do menu e da ilha do relogio:
+// sombra curta, miolo de vidro (gfx_vidro_folha) ou solido, luz larga e fraca
+// BRANCA no canto de cima, sem aro. A luz e a mancha na cor do tema que havia
+// atras da barra sairam: o acento agora so marca estado (o cursor, a voz).
+static void ilhaSpot(GfxRect p, float raioPx, float a) {
+  const int vid = ajustes_vidro();
+  float raio;
+  if (p.h < 2.0f || a <= 0.01f) return;
+  if (raioPx > p.h * 0.5f) raioPx = p.h * 0.5f;
+  raio = raioPx / p.h;
+  gfx_rect((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f }, 0, GFX_SOMBRA,
+           1.0f, 0, 0, 0.5f, 0, 0, 0, .42f * a);
   // No vidro a folha sozinha deixa os cartazes de tras competirem com o texto
   // (captura de 01/10): um miolo escuro por baixo dela.
-  if (ajustes_vidro()) { gfx_cor(p, raio, 0.03f, 0.032f, 0.04f, 0.55f * a); gfx_vidro_folha(p, raio, a); }
-  else {
-    gfx_cor(p, raio, 0.066f, 0.070f, 0.084f, 0.95f * a);
-    gfx_luz_canto(p, raio, p.w * 0.18f, -40.0f, 620.0f, ar, ag, ab, 0.06f * a);
+  if (vid) { gfx_cor(p, raio, 0.03f, 0.032f, 0.04f, 0.55f * a); gfx_vidro_folha(p, raio, a); }
+  else gfx_cor(p, raio, .071f, .075f, .086f, .98f * a);
+  gfx_luz_canto(p, raio, p.w * .22f, -120.0f, p.w * .6f, 1, 1, 1, (vid ? .06f : .04f) * a);
+}
+
+// As duas ilhas: a barra (pilula) e, com o corpo aberto, os resultados logo
+// abaixo. A de baixo nasce do vao e cresce com a mesma mola do corpo.
+static void desenhaSuperficie(GfxRect p, float a) {
+  GfxRect barra = { p.x, p.y, p.w, SP_BH };
+  ilhaSpot(barra, SP_BH * 0.5f, a);
+  if (corpoH > SP_ILHA_VAO + 4.0f) {
+    GfxRect corpo = { p.x, p.y + SP_BH + SP_ILHA_VAO, p.w, corpoH - SP_ILHA_VAO };
+    ilhaSpot(corpo, SP_RAIO, a * anim_clamp((corpoH - SP_ILHA_VAO) / 60.0f, 0.0f, 1.0f));
   }
-  gfx_vidro_aro(p, raio, 1.5f, 1.0f, 1.0f, 1.0f, (0.10f + 0.10f * animCampo) * a);
-  // Separador entre a barra e o corpo, so com o corpo aberto.
-  if (corpoH > 6.0f)
-    gfx_cor((GfxRect){ p.x + 30.0f, SP_CORPO_Y - 1.0f + (p.y - SP_BY), p.w - 60.0f, 1.5f }, 0.0f,
-            1.0f, 1.0f, 1.0f, 0.08f * abre * a);
 }
 
 static void desenhaCampo(float dy, float a, Uint32 agora) {
@@ -1083,12 +1090,13 @@ static void desenhaCampo(float dy, float a, Uint32 agora) {
   int ouve = ouvindo(), comMic = ditadoDisponivel();
   const char *av = st_dono() == ST_SPOT || !st_dono() ? st_aviso() : "";
   ajustes_acento(&ar, &ag, &ab);
-  // Foco no campo: um aro na cor do tema por dentro da barra.
+  // Foco no campo: a superficie um degrau mais clara por dentro da barra
+  // (regra do Glass UI: foco de linha sem contorno). O acento fica no cursor.
   if (animCampo > 0.01f) {
     GfxRect r = { barra.x + 8.0f, barra.y + 8.0f, barra.w - botoesW() - 16.0f,
                   barra.h - 16.0f };
-    gfx_vidro_aro(r, 0.5f, 2.5f, ar, ag, ab, 0.9f * animCampo * a);
-    gfx_cor(r, 0.5f, ar, ag, ab, 0.10f * animCampo * a);
+    if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .12f * animCampo * a);
+    else gfx_cor(r, 0.5f, .17f, .176f, .204f, animCampo * a);
   }
   if (ponteiro_ativo()) {
     ponteiro_alvo(barra.x, barra.y, barra.w - botoesW(), barra.h,
@@ -1171,7 +1179,10 @@ static void desenhaTeclado(float dy, float a) {
       int tom;
       b.y += dy; b.x += sx;
       t = (GfxRect){ b.x - b.w * (esc - 1) * 0.5f, b.y - b.h * (esc - 1) * 0.5f, b.w * esc, b.h * esc };
-      gfx_cor(t, 0.16f, 0.13f, 0.138f, 0.158f, 0.95f * a);
+      // Tecla em repouso: branco a 7 % no vidro, cinza opaco no solido; o foco
+      // e a pilula cheia no acento (foco de botao), como ja era.
+      if (ajustes_vidro()) gfx_cor(t, 0.16f, 1, 1, 1, .07f * a);
+      else gfx_cor(t, 0.16f, .125f, .13f, .153f, a);
       if (k > 0.01f) {
         gfx_rect((GfxRect){ t.x - 12, t.y - 12, t.w + 24, t.h + 24 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
                  ar, ag, ab, 0.28f * k * a);
@@ -1233,19 +1244,18 @@ static void desenhaLinha(int i, float x, float y, float a) {
     return;
   }
   if (ponteiro_ativo()) ponteiro_alvo(r.x, r.y, r.w, r.h, focarLinha, NULL, i, 0);
-  // Foco: a linha inteira acende na cor do tema (o realce do Spotlight); no
-  // vidro, a superficie clareia e ganha o contorno branco.
+  // Foco: SUPERFICIE UM DEGRAU MAIS CLARA (Glass UI): branco a 12 % no vidro,
+  // cinza opaco no solido. Era o bloco cheio no acento (solido) e o contorno
+  // branco (vidro) — o dono pediu foco sem contorno, so superficie. O texto
+  // nao inverte: so clareia um pouco.
   if (f > 0.01f) {
-    float rr = 20.0f / r.h;
-    if (vidro) { gfx_vidro_painel(r, rr, 0.55f, f * a); gfx_vidro_foco(r, rr, f, a); }
-    else {
-      gfx_rect((GfxRect){ r.x - 14, r.y - 14, r.w + 28, r.h + 28 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
-               ar, ag, ab, 0.22f * f * a);
-      gfx_cor(r, rr, ar, ag, ab, f * a);
-      t1 = (int)anim_mistura(246.0f, (float)ajustes_tinta_foco(), f);
-      t2 = (int)anim_mistura(168.0f, (float)ajustes_tinta_foco(), f * 0.85f);
-    }
-  }
+    float rr = 22.0f / r.h;
+    if (vidro) gfx_cor(r, rr, 1, 1, 1, .12f * f * a);
+    else gfx_cor(r, rr, .17f, .176f, .204f, f * a);
+    t1 = (int)anim_mistura(232.0f, 255.0f, f);
+    t2 = (int)anim_mistura(160.0f, 190.0f, f);
+  } else { t1 = 232; t2 = 160; }
+  (void)ar; (void)ag; (void)ab;
   if (l->tipo == L_TOPO) {
     const CatItem *ci = cat_item(l->ref);
     GfxRect art = { r.x + 14.0f, r.y + 14.0f, 0, r.h - 28.0f };
@@ -1294,7 +1304,7 @@ static void desenhaLinha(int i, float x, float y, float a) {
         // Icone num disco: recente, limpar, catalogo, addon.
         float d = 46.0f;
         GfxRect dc = { r.x + 18.0f, r.y + (r.h - d) * 0.5f, d, d };
-        int tt = (f > 0.5f && !vidro) ? ajustes_tinta_foco() : 210;
+        int tt = 210;
         gfx_cor(dc, 0.5f, 1.0f, 1.0f, 1.0f, (0.08f + 0.06f * (1.0f - f)) * a);
         gfx_icone((GfxRect){ dc.x + 11, dc.y + 11, d - 22, d - 22 },
                   l->icone[0] ? l->icone : "aj_rotate-ccw-clock",
