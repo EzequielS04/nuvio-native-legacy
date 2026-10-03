@@ -3535,11 +3535,39 @@ static void heroWeb(float a, float desloc) {
     if (temInicio()) {
       // "Assistir do comeco" entre o primario e os circulares (issue #46).
       const char *rotIni = i18n("Assistir do começo");
-      GfxRect rs = { bx, yAcoes, larguraSecundario(rotIni), NV_DETW2_BTN_H };
-      desenhaSecundario(rs, rotIni, nivel == 0 && botao == nb, a);
+      int selIni = nivel == 0 && botao == nb;
+      static float inicioExp;
+      static Uint32 inicioTick;
+      static int inicioIdx = -1;
+      Uint32 tick = SDL_GetTicks();
+      float dtIni = inicioTick ? (float)(Uint32)(tick - inicioTick) : 0;
+      if (dtIni > 80) dtIni = 80;
+      if (inicioIdx != idx) { inicioExp = 0; inicioIdx = idx; }
+      inicioTick = tick;
+      float alvoIni = selIni ? 1.0f : 0.0f;
+      inicioExp = ajustes_animacoes_reduzidas() ? alvoIni :
+        inicioExp + (alvoIni-inicioExp)*(1.0f-expf(-dtIni/65.0f));
+      float fechado = carro ? NV_DETW2_CIRC : larguraSecundario(rotIni);
+      float abertoIni = larguraSecundario(rotIni) + 44.0f;
+      GfxRect rs = { bx, cyBtn-fechado*.5f,
+        carro ? fechado+(abertoIni-fechado)*inicioExp : fechado,
+        carro ? NV_DETW2_CIRC : NV_DETW2_BTN_H };
+      rs.y = cyBtn - rs.h*.5f;
+      if (carro) {
+        botao_pilula(rs, "", NULL, selIni ? 1.0f : 0.0f, 0, 0, a);
+        float tinta = selIni ? ajustes_acento_tinta(NULL,NULL,NULL) : 235.0f/255.0f;
+        gfx_icone((GfxRect){rs.x+22,rs.y+(rs.h-28)*.5f,28,28},
+                  "aj_rotate-ccw-clock", tinta,tinta,tinta,a);
+        if (rs.w > fechado+10) {
+          int cor = (int)(tinta*255);
+          TxtLinha label = txt_linha_corta(TXT_DET_BOTAO,rotIni,cor,cor,cor,255,rs.w-86);
+          txt_desenhar_alpha(label,rs.x+64,rs.y+(rs.h-label.h)*.5f,a*inicioExp);
+        }
+      } else desenhaSecundario(rs, rotIni, selIni, a);
       if (a > 0.3f) ponteiro_alvo(rs.x, rs.y, rs.w, rs.h, ponteiroDetalhe, NULL, -1, nb);
       bx += rs.w + NV_DETW2_BTN_GAP; nb++;
     }
+    larguraAcoes = larguraPrimario(rot);
     if (temLembrar()) {
       const CatItem *ciL = cat_item(idx);
       GfxRect rs = { bx, cyBtn - NV_DETW2_CIRC * 0.5f,
@@ -3556,7 +3584,6 @@ static void heroWeb(float a, float desloc) {
       if (a > 0.3f) ponteiro_alvo(rc.x, rc.y, rc.w, rc.h, ponteiroDetalhe, NULL, -1, nb);
       bx += NV_DETW2_CIRC + NV_DETW2_BTN_GAP;
     }
-    larguraAcoes = bx - NV_DETW2_X - NV_DETW2_BTN_GAP;
   }
 
   // --- linha da AGENDA ------------------------------------------------------
@@ -3593,9 +3620,9 @@ static void heroWeb(float a, float desloc) {
       GfxRect pill = {NV_DETW2_X + (larguraAcoes - w) * .5f, yAgenda, w, h};
       if (pill.x < NV_DETW2_X) pill.x = NV_DETW2_X;
       ajustes_acento(&ar, &ag, &ab);
-      gfx_cor(pill, .5f, ar, ag, ab, .32f*a);
+      gfx_cor(pill, .5f, ar, ag, ab, .16f*a);
       gfx_cor((GfxRect){pill.x+1, pill.y+1, pill.w-2, pill.h-2}, .5f,
-              .045f, .05f, .06f, .88f*a);
+              .075f, .08f, .095f, .76f*a);
       txt_desenhar_alpha(label, pill.x + 14.0f,
                         pill.y + (h-label.h)*.5f, a);
     } else {
