@@ -380,6 +380,14 @@ static float ajFracao(int op, int v) {
   const Opcao *o = &OPCOES[op];
   return o->max > o->min ? (float)(v - o->min) / (float)(o->max - o->min) : 0.0f;
 }
+// O padrao que a tela MOSTRA. O limite de fileiras mora em fileiras.c e nao
+// tem "Restaurar padrao" (uxTemPadrao), mas o risco do 7 no trilho ainda diz
+// onde o valor de fabrica fica.
+static int ajPadraoVisual(int op) {
+  if (uxTemPadrao(op)) return uxValorPadrao(op);
+  if (op == AJ_FIL_LIMITE) return FIL_LIMITE_PADRAO;
+  return -1;
+}
 // Pressao da memoria de imagens: usado sobre o teto.
 static void corPressao(float t, float *r, float *g, float *b);
 #ifdef AJUSTES_TESTE
@@ -446,7 +454,7 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
     float x = xDir;
     if (!desligada) { ajChevron(x, yc, (emFoco ? 0.7f : 0.32f) * aT); x -= 24.0f + 12.0f; }
     if (tipo == AJL_NUM) {
-      int pad = uxTemPadrao(op) ? uxValorPadrao(op) : -1;
+      int pad = ajPadraoVisual(op);
       ajTrilho(x - 150.0f, yc, 150.0f, ajFracao(op, valor[op]), pad >= 0 ? ajFracao(op, pad) : -1.0f, emFoco, aT);
       x -= 150.0f + 12.0f;
     }

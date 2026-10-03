@@ -579,8 +579,69 @@ static float ajPreviaCompacta(int op, float x, float y, float w) {
   if (op == AJ_RELOGIO_POS) { m.relogio = valor[op] == 0 ? 2 : valor[op] == 1 ? 0 : 1; ajMiniHome(m, x, y, w); return w * 9.0f / 16.0f; }
   return ajPrevia(op, x, y, w);
 }
+// Tres cartazes de uma fileira da Home: os do catalogo dela quando ja foi
+// lida, a amostra antes disso. Guardados por revisao do catalogo.
+static const char *ajPosterFileira(int fil, int k) {
+  static char cache[24][3][256];
+  static unsigned rev = 0xffffffffu;
+  static int pronto[24];
+  if (cat_revisao() != rev) { rev = cat_revisao(); memset(pronto, 0, sizeof pronto); }
+  if (fil >= 0 && fil < 24 && cat_n() > 0) {
+    if (!pronto[fil]) {
+      static CatItem it[3];
+      int n = cat_copiar_fileira(fil_chave(fil), it, 3, NULL), j;
+      for (j = 0; j < 3; j++) snprintf(cache[fil][j], sizeof cache[fil][j], "%s", j < n ? it[j].poster : "");
+      pronto[fil] = 1;
+    }
+    if (cache[fil][k][0]) return cache[fil][k];
+  }
+  return ajArte(AJA_POSTER, AJ_POS[(fil * 2 + k) % 14]);
+}
+// A ORDEM REAL DA HOME no editor do limite: quais fileiras entram (ou saem)
+// com o valor novo. As de fora da Home nao contam.
+static float ajOrdemHome(float x, float y, float w) {
+  int ordem[40], n = 0, i, salvo = uxOriginal;
+  int pend = valor[AJ_FIL_LIMITE], lim, corte;
+  float y0 = y, h;
+  for (i = 0; i < fil_n() && n < 40; i++) if (fil_estado(i) != FIL_FORA) ordem[n++] = i;
+  lim = pend > salvo ? pend : salvo;
+  if (lim > n) lim = n;
+  if (lim > 12) lim = 12;
+  corte = pend < salvo ? pend : salvo;
+  h = 18 * 2 + lim * 36 + (corte < lim ? 32 : 0);
+  ajKicker("Ordem da Home", x, y, 1);
+  y += 18 + 12; y0 = y;
+  ajNeutro((GfxRect){ x, y, w, h }, 16, 0.04f, 0.106f, 0.110f, 0.129f, 1);
+  y += 18;
+  for (i = 0; i < lim; i++) {
+    int f = ordem[i], k, novo = pend > salvo && i >= salvo && i < pend, sai = pend < salvo && i >= pend;
+    char num[8];
+    TxtLinha l;
+    if (i == corte && corte < lim) {
+      char t[64];
+      snprintf(t, sizeof t, pend > salvo ? i18n("Entram com %d") : i18n("Saem com %d"), pend);
+      { float dw = ajCaps(TXT_AJ_CAPS13, t, 1.56f, -1, 0, 0), cx = x + 20 + (w - 40 - dw) * 0.5f;
+        gfx_cor((GfxRect){ x + 20, y + 16, cx - 10 - x - 20, 1 }, 0, 1, 1, 1, 0.14f);
+        gfx_cor((GfxRect){ cx + dw + 10, y + 16, x + w - 20 - cx - dw - 10, 1 }, 0, 1, 1, 1, 0.14f);
+        ajCaps(TXT_AJ_CAPS13, t, 1.56f, cx, y + 8, 0.4f); }
+      y += 32;
+    }
+    snprintf(num, sizeof num, "%d", i + 1);
+    l = ajTxt(TXT_AJ_MINI13, num);
+    txt_desenhar_alpha(l, x + 20 + 20 - l.w, y + (36 - l.h) * 0.5f, 0.35f);
+    ajIcone(fil_origem_icone(fil_linha_origem(f)), x + 20 + 32, y + 9, 18, 0.45f);
+    l = ajTxtC(TXT_ILHA_GENERO, fil_titulo(f)[0] ? fil_titulo(f) : fil_chave(f), w - 40 - 62 - 80);
+    txt_desenhar_alpha(l, x + 20 + 62, y + (36 - l.h) * 0.5f, sai ? 0.35f : novo ? 1.0f : 0.62f);
+    for (k = 0; k < 3; k++)
+      ajImg(ajPosterFileira(f, k), (GfxRect){ x + w - 20 - 3 * 20 - 2 * 6 + k * 26, y + 3, 20, 30 }, 4, (novo ? 1.0f : 0.7f) * (sai ? 0.4f : 1.0f));
+    y += 36;
+  }
+  return 30 + h;
+}
+
 // Previa da coluna direita dos editores modais.
 static float ajPreviaEditor(int op, float x, float y, float w) {
+  if (op == AJ_FIL_LIMITE) return ajOrdemHome(x, y, w);
   if (op == AJ_QUALIDADE) {
     float h;
     ajKicker("Resoluções que passam", x, y, 1);

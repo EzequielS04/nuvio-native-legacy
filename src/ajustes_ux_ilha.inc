@@ -183,7 +183,7 @@ static void ajDesenharEspecial(void) {
   topo = ajCabecalhoFolha(fr, "Ajustes", "Diferentes do padrão",
     "Valores diferentes da configuração de fábrica. Podem ter vindo da conta ou de outra versão do app.", 0, 1);
   { float y = topo, base = AJ_BASE;
-    int primeiro = uxDifFoco > 7 ? uxDifFoco - 7 : 0, i;
+    int primeiro = uxDifFoco > 8 ? uxDifFoco - 8 : 0, i;
     float x = fr.x + 18, w = fr.w - 36;
     gfx_recorte(fr.x, topo, fr.w, base - topo);
     if (!uxNDifs) {
@@ -194,8 +194,8 @@ static void ajDesenharEspecial(void) {
     for (i = primeiro; i < uxNDifs; i++) {
       char atual[160], padrao[160], det[300];
       int op = uxDifs[i], foco = !focoIndice && i == uxDifFoco;
-      GfxRect r = { x, y, w, 92 };
-      float xd = x + w - 22, a = ajMascara(y + 46, topo, base);
+      GfxRect r = { x, y, w, 80 };
+      float xd = x + w - 22, a = ajMascara(y + 40, topo, base);
       TxtLinha la, lp, lr, ls;
       if (y > base) break;
       if (foco) ajFocoLinha(r, 22, 1, a);
@@ -203,30 +203,30 @@ static void ajDesenharEspecial(void) {
       uxValorTexto(op, uxValorPadrao(op), padrao, sizeof padrao);
       la = ajTxtC(TXT_AJ_VALOR18, atual, 200);
       lp = ajTxtC(TXT_AJ_VALOR18, padrao, 200);
-      txt_desenhar_alpha(la, xd - la.w, y + 46 - la.h * 0.5f, (foco ? 1.0f : 0.8f) * a);
+      txt_desenhar_alpha(la, xd - la.w, y + 40 - la.h * 0.5f, (foco ? 1.0f : 0.8f) * a);
       xd -= la.w + 10;
       { float sr, sg, sb; int sw = op == AJ_TEMA;
         if (sw) {
           ajustes_acento(&sr, &sg, &sb);
-          gfx_cor((GfxRect){ xd - 22, y + 35, 22, 22 }, 0.5f, sr, sg, sb, a);
+          gfx_cor((GfxRect){ xd - 22, y + 29, 22, 22 }, 0.5f, sr, sg, sb, a);
           xd -= 32;
         } }
-      ajIcone("aj_chevron-right", xd - 18, y + 37, 18, 0.35f * a);
+      ajIcone("aj_chevron-right", xd - 18, y + 31, 18, 0.35f * a);
       xd -= 18 + 12;
-      txt_desenhar_alpha(lp, xd - lp.w, y + 46 - lp.h * 0.5f, 0.4f * a);
-      gfx_cor((GfxRect){ xd - lp.w, y + 46, lp.w, 1.5f }, 0, 0.953f, 0.949f, 0.937f, 0.25f * a);
+      txt_desenhar_alpha(lp, xd - lp.w, y + 40 - lp.h * 0.5f, 0.4f * a);
+      gfx_cor((GfxRect){ xd - lp.w, y + 40, lp.w, 1.5f }, 0, 0.953f, 0.949f, 0.937f, 0.25f * a);
       xd -= lp.w;
       if (op == AJ_TEMA) {
         float pr = TEMA_ACENTO[uxValorPadrao(op) % AJ_N_TEMAS].r, pg = TEMA_ACENTO[uxValorPadrao(op) % AJ_N_TEMAS].g, pb = TEMA_ACENTO[uxValorPadrao(op) % AJ_N_TEMAS].b;
-        gfx_cor((GfxRect){ xd - 32, y + 35, 22, 22 }, 0.5f, pr, pg, pb, 0.4f * a);
+        gfx_cor((GfxRect){ xd - 32, y + 29, 22, 22 }, 0.5f, pr, pg, pb, 0.4f * a);
         xd -= 32;
       }
       lr = ajTxtC(TXT_AJ_ROTULO, rotuloOpcao(op), xd - x - 44);
       snprintf(det, sizeof det, "%s · %s", i18n(uxCaminho(op)), i18n(uxEscopo(op)));
       ls = ajTxtC(TXT_ILHA_GENERO, det, xd - x - 44);
-      txt_desenhar_alpha(lr, x + 22, y + 46 - (lr.h + 4 + ls.h) * 0.5f, (foco ? 1.0f : 0.86f) * a);
-      txt_desenhar_alpha(ls, x + 22, y + 46 - (lr.h + 4 + ls.h) * 0.5f + lr.h + 4, 0.42f * a);
-      y += 96;
+      txt_desenhar_alpha(lr, x + 22, y + 40 - (lr.h + 4 + ls.h) * 0.5f, (foco ? 1.0f : 0.86f) * a);
+      txt_desenhar_alpha(ls, x + 22, y + 40 - (lr.h + 4 + ls.h) * 0.5f + lr.h + 4, 0.42f * a);
+      y += 84;
     }
     if (y < base - 40) {
       TxtLinha n = ajTxt(TXT_ILHA_GENERO, "Seus serviços e credenciais não entram nesta lista.");
@@ -285,7 +285,7 @@ static void ajVeuModal(void) {
 }
 // Botao pilula 60 (21/600): o focado cheio no acento, o outro neutro 8%.
 static float ajBotao(const char *rot, const char *icone, float x, float y, int foco, float a) {
-  TxtLinha t = foco ? ajTxtT(TXT_AJ_NOME, rot) : ajTxt(TXT_AJ_NOME, rot);
+  TxtLinha t = foco ? ajTxtT(TXT_ILHA_ITEM, rot) : ajTxt(TXT_ILHA_ITEM, rot);
   float w = 28 + (icone ? 22 + 10 : 0) + t.w + 28;
   if (foco) ajPilulaAcento((GfxRect){ x, y, w, 60 }, 30, a);
   else ajNeutro((GfxRect){ x, y, w, 60 }, 30, 0.08f, AJ_CHIP_SOL, a);
@@ -328,8 +328,8 @@ static float ajCabecalhoEditor(GfxRect m) {
   y += 18 + 8;
   { TxtLinha t = ajTxtC(TXT_ILHA_TITULO, rotuloOpcao(uxOp), m.w - 88);
     txt_desenhar(t, x, y); y += 48; }
-  uxValorTexto(uxOp, uxValorPadrao(uxOp), padrao, sizeof padrao);
-  if (uxTemPadrao(uxOp)) snprintf(linha, sizeof linha, i18n("%s · Padrão: %s"), i18n(uxEscopoValor(uxOp, uxPendente)), padrao);
+  if (ajPadraoVisual(uxOp) >= 0) uxValorTexto(uxOp, ajPadraoVisual(uxOp), padrao, sizeof padrao);
+  if (ajPadraoVisual(uxOp) >= 0) snprintf(linha, sizeof linha, i18n("%s · Padrão: %s"), i18n(uxEscopoValor(uxOp, uxPendente)), padrao);
   else snprintf(linha, sizeof linha, "%s", i18n(uxEscopoValor(uxOp, uxPendente)));
   { TxtLinha t = ajTxtC(TXT_AJ_SUB, linha, m.w - 88);
     txt_desenhar_alpha(t, x, y + 8, 0.55f); }
@@ -393,7 +393,7 @@ static void ajEditorNumero(void) {
   float y, lx, lw, ar, ag, ab;
   char v[64], salvo[64], uni[64];
   int risco = uxOp == AJ_FIL_LIMITE ? FIL_LIMITE_SEGURO : -1;
-  m.h = 760; m.y = (NV_TELA_H - m.h) * 0.5f;
+  m.h = uxOp == AJ_FIL_LIMITE ? 830 : 760; m.y = (NV_TELA_H - m.h) * 0.5f;
   ajustes_acento(&ar, &ag, &ab);
   ajIlha(m, 36, 1, 1);
   y = ajCabecalhoEditor(m) + 26;
@@ -403,7 +403,7 @@ static void ajEditorNumero(void) {
   if (uxOp == AJ_FIL_LIMITE) snprintf(uni, sizeof uni, "%s", i18n("fileiras"));
   else snprintf(uni, sizeof uni, "%s", o->sufixo ? o->sufixo + (o->sufixo[0] == ' ') : "");
   { GfxRect r = { lx, y, lw, 240 };
-    float fr = ajFracao(uxOp, uxPendente), fp = uxTemPadrao(uxOp) ? ajFracao(uxOp, uxValorPadrao(uxOp)) : -1;
+    float fr = ajFracao(uxOp, uxPendente), fp = ajPadraoVisual(uxOp) >= 0 ? ajFracao(uxOp, ajPadraoVisual(uxOp)) : -1;
     float tx = r.x + 34, tw = r.w - 68, ty = r.y + 30 + 120 + 34;
     TxtLinha big = ajTxt(TXT_AJ_NUM110, v), u = ajTxt(TXT_PG_RELOGIO, uni);
     char sv[96];
@@ -422,8 +422,13 @@ static void ajEditorNumero(void) {
     if (fr > 0) gfx_cor((GfxRect){ tx, ty, tw * (fr > 1 ? 1 : fr), 8 }, 0.5f, ar, ag, ab, 1);
     if (risco >= o->min && risco < o->max) {
       float fx = ajFracao(uxOp, risco), sx;
-      for (sx = tx + tw * fx; sx < tx + tw; sx += 12.0f)
-        gfx_rect((GfxRect){ sx, ty, 12.0f, 8.0f }, 0, GFX_LINHA, 0, 0.0f, 0, 0.12f, 0.96f, 0.78f, 0.30f, 0.45f);
+      // Faixa vigiada: listras ambar (o repeating-linear-gradient do mockup).
+      gfx_recorte(tx + tw * fx, ty, tw * (1 - fx), 8);
+      for (sx = tx + tw * fx - 8; sx < tx + tw; sx += 12.0f) {
+        int q;
+        for (q = 0; q < 4; q++) gfx_cor((GfxRect){ sx + q * 2.0f, ty + q * 2.0f, 6, 2 }, 0, 0.961f, 0.784f, 0.298f, 0.32f);
+      }
+      gfx_sem_recorte();
     }
     if (fp >= 0) gfx_cor((GfxRect){ tx + tw * fp - 1, ty - 9, 2, 26 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.6f);
     { char t[64]; TxtLinha l;
@@ -432,7 +437,7 @@ static void ajEditorNumero(void) {
       snprintf(t, sizeof t, "%d", o->max); l = ajTxt(TXT_ILHA_APOIO, t); txt_desenhar_alpha(l, tx + tw - l.w, ly, 0.45f);
       if (fp >= 0) {
         char pv[64];
-        uxValorTexto(uxOp, uxValorPadrao(uxOp), pv, sizeof pv);
+        uxValorTexto(uxOp, ajPadraoVisual(uxOp), pv, sizeof pv);
         snprintf(t, sizeof t, i18n("padrão %s"), pv); l = ajTxt(TXT_ILHA_APOIO, t);
         txt_desenhar_alpha(l, tx + tw * fp - l.w * 0.5f, ly, 0.45f);
       }
@@ -462,7 +467,7 @@ static void ajConfirmacao(const char *kick, int alerta, const char *pergunta, co
   float x = m.x + 44, y, hTxt;
   hTxt = txt_bloco(TXT_AJ_TEXTO, texto, 0, 0, 0, 0, -4000, m.w - 88, 30, 0, 6);
   m.h = 44 + 22 + 8 + 44 + 14 + hTxt + (de ? 22 + 24 : 0) + 34 + 60 + 44;
-  m.y = (NV_TELA_H - m.h) * 0.5f;
+  m.y = m.h < 480 ? 300 : (NV_TELA_H - m.h) * 0.5f;
   ajIlha(m, 36, 1, 1);
   y = m.y + 44;
   if (alerta) { gfx_icone((GfxRect){ x, y - 2, 22, 22 }, "aj_triangle-alert", 0.961f, 0.784f, 0.298f, 1); ajKicker(kick, x + 34, y, 1); }
