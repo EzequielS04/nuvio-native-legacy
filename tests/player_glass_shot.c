@@ -26,6 +26,7 @@
 #include "video.h"
 #include "extras.h"
 #include "badges.h"
+#include "seekr.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -154,6 +155,27 @@ static void teclaFaixas(SDL_Keycode k) {
   SDL_Event ev; memset(&ev, 0, sizeof ev);
   ev.type = SDL_KEYDOWN; ev.key.keysym.sym = k; faixas_evento(&ev);
   quadros(2);
+}
+
+
+// Uma arte do mockup como textura GL (as miniaturas do Seekr da captura).
+static GLuint texDe(const char *rel) {
+  SDL_Surface *sf = IMG_Load(img(rel)), *t;
+  GLuint tex = 0;
+  if (!sf) return 0;
+  t = SDL_ConvertSurfaceFormat(sf, SDL_PIXELFORMAT_ABGR8888, 0);
+  SDL_FreeSurface(sf);
+  if (!t) return 0;
+  glGenTextures(1, &tex); glBindTexture(GL_TEXTURE_2D, tex);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glPixelStorei(GL_UNPACK_ROW_LENGTH, t->pitch / 4);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, t->w, t->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, t->pixels);
+  glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+  SDL_FreeSurface(t);
+  return tex;
 }
 
 static int quer(int argc, char **argv, const char *id) {
@@ -307,6 +329,34 @@ int main(int argc, char **argv) {
     quadros(120);
     salvar("erro");
     player_limpar_erro_fonte();
+  }
+  if (quer(argc, argv, "seekr") || quer(argc, argv, "seekr-fita") || quer(argc, argv, "seekr-carregando")) {
+    static const char *ids[3] = { "seekr", "seekr-fita", "seekr-carregando" };
+    int q;
+    ajustes_shot_valor("seekrChave", 1);
+    ajustes_shot_valor("seekrLocal", 0);
+    for (q = 0; q < 3; q++) {
+      GLuint t[3] = { 0, 0, 0 };
+      double cue[3] = { -1, -1, -1 };
+      float pos;
+      if (!quer(argc, argv, ids[q])) continue;
+      ajustes_shot_valor("seekrFitaLocal", q == 1 ? 0 : 1);
+      abrir(&serie); simular(3840, 2160, "HDR10", 0, 1);
+      quadros(10);
+      if (q == 0) { pos = 2083.0f; t[1] = texDe("img/ep/00_1_04.jpg"); cue[1] = 2083.0; }
+      else if (q == 1) { pos = 1040.0f; t[0] = texDe("img/ep/00_1_02.jpg"); t[1] = texDe("img/ep/00_1_03.jpg");
+                         t[2] = texDe("img/ep/00_1_08.jpg"); cue[0] = 1030.0; cue[1] = 1040.0; cue[2] = 1050.0; }
+      else { pos = 2620.0f; cue[1] = 2620.0; t[1] = texDe("img/ep/00_1_06.jpg"); }
+      seekr_shot(SEEKR_PRONTO, t, cue, q == 2);
+      player_shot_estado(relogio, pos, 3360.0f, 1, 0, 1, 1);
+      player_shot_buscando(1);
+      quadros(60);
+      salvar(ids[q]);
+      player_shot_buscando(0);
+      seekr_shot(0, NULL, NULL, 0);
+      quadros(30);
+    }
+    ajustes_shot_valor("seekrChave", 0);
   }
   puts("player_glass_shot: ok");
   return 0;

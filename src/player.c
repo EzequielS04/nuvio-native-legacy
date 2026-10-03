@@ -283,7 +283,7 @@ static Uint32 pgDesde;
 // video real entrar, sao elas que passam a ser preenchidas pelo decodificador.
 static int   comVideo = 0;
 #ifdef NV_SHOT_HOOKS
-static int   shotSemFuro;
+static int   shotSemFuro, shotBusca;
 #endif
 static int   pedFaixas = 0;
 static int   esperandoFonte = 0;   // aberto sem URL, esperando o addon responder
@@ -2520,6 +2520,9 @@ void player_atualizar(float dt, Uint32 agora) {
 
   // Fim do avanco por inatividade: o controle nao manda KEYUP confiavel, entao
   // quem decide que a pessoa soltou e o silencio.
+#ifdef NV_SHOT_HOOKS
+  if (shotBusca) { scrubbing = 1; posVisSolto = 1; scrubUltimo = agora; }
+#endif
   if (scrubbing && agora - scrubUltimo > PLR_SCRUB_FIM_MS) terminarSalto();
 
   if (comVideo && video_ativo()) {
@@ -2746,60 +2749,80 @@ void player_atualizar(float dt, Uint32 agora) {
   }
 }
 
-// hh:mm:ss so quando passa de uma hora — "0:03:12" num episodio curto le como
-// erro de formatacao, nao como tempo.
-static void fmtTempo(char *b, size_t n, float seg, int negativo);
-// MINIATURA DO SEEKR acima da barra, so enquanto a pessoa procura (o avanco
-// em curso ou a barra ainda deslizando ate o alvo). Centrada na cabeca da
-// barra e presa as margens do conteudo. O tempo embaixo e o do QUADRO (cue),
-// nao o da posicao crua: o quadro existe a cada ~10 s, e chamar de 18:29 o
-// quadro das 18:30 seria uma pequena mentira (seekrvtt.h).
+// MINIATURA DO SEEKR: UMA ILHA acima da barra (Glass UI), so enquanto a
+// pessoa procura. 384x216 com raio 17 dentro do miolo (raio 26) e o tempo do
+// QUADRO na base da propria ilha, com o que falta ao lado — saiu a chapa
+// preta, o anel branco de 2 px e a pilula preta sobre a imagem. Na fita, a
+// anterior e a seguinte (256x144, apagadas) ficam centradas na altura da
+// atual, cada uma com o seu tempo. Sem quadro pronto a ilha ja nasce no lugar
+// com o tempo certo e o anel de 12 pontos: o Seekr nao parece desligado.
+// O tempo e o do QUADRO (cue), nao a posicao crua (seekrvtt.h).
 static void seekrMiniatura(float bx, float bw, float frac, float yBarra, float a) {
   GLuint t[3] = { 0, 0, 0 };
   double cue[3] = { -1, -1, -1 };
-  int fita, n, k;
-  const float w = 384.0f, h = 216.0f, ws = 256.0f, hs = 144.0f, vao = 16.0f;
-  float x, y, xs[3], tot;
-  if (ehCanal() || !(scrubbing || posVisSolto) || a < 0.05f) return;
+  int fita, n, k, est;
+  const float w = 384.0f, h = 216.0f, ws = 256.0f, hs = 144.0f, vao = 12.0f, linha = 52.0f;
+  float x, y, tot, xs[3];
+  Uint32 agora = SDL_GetTicks();
+  if (ehCanal() || !(scrubbing || posVisSolto) || a < 0.05f || !ajustes_seekr_ligado()) return;
+  est = seekr_estado();
+  if (est != SEEKR_PRONTO && est != SEEKR_BUSCANDO) return;
   seekr_definir_ajuste_ms((long)ajustes_seekr_ajuste_s() * 1000L);
   fita = ajustes_seekr_fita();
   n = fita ? 3 : 1;
-  if (!seekr_quadros(posSeg, n, t, cue)) return;
-  // A fita: anterior e seguinte menores dos lados da atual. A largura total e
-  // o que se prende as margens, para a fita nunca sair da tela.
-  tot = fita ? w + 2.0f * (ws + vao) : w;
+  if (est == SEEKR_PRONTO) seekr_quadros(posSeg, n, t, cue);
+  // A sincronia ja entra no tempo do quadro; sem cue ainda (a folha chegando),
+  // a posicao com o mesmo ajuste.
+  if (cue[n == 1 ? 0 : 1] < 0.0) cue[n == 1 ? 0 : 1] = posSeg + ajustes_seekr_ajuste_s();
+  tot = fita ? 20.0f + ws * 2.0f + w + vao * 2.0f : w + 20.0f;
   x = bx + bw * frac - tot * 0.5f;
   if (x < PLR_MARGEM) x = PLR_MARGEM;
-  if (x + tot > bx + bw - PLR_MARGEM) x = bx + bw - PLR_MARGEM - tot;
-  y = yBarra - 28.0f - h;
-  if (fita) { xs[0] = x; xs[1] = x + ws + vao; xs[2] = xs[1] + w + vao; }
-  else xs[0] = x;
+  if (x + tot > bx + bw) x = bx + bw - tot;
+  y = yBarra - 24.0f - (10.0f + h + linha);
+  plrui_material((GfxRect){ x, y, tot, 10.0f + h + linha }, 26.0f, 0, a);
+  if (fita) { xs[0] = x + 10.0f; xs[1] = xs[0] + ws + vao; xs[2] = xs[1] + w + vao; }
+  else xs[0] = x + 10.0f;
   for (k = 0; k < n; k++) {
     int atual = (n == 1 || k == 1);
     float qw = atual ? w : ws, qh = atual ? h : hs;
-    float qx = xs[k], qy = atual ? y : y + (h - hs);
+    float qx = xs[k], qy = y + 10.0f + (h - qh) * 0.5f, ca = atual ? 1.0f : 0.6f;
+    GfxRect q = { qx, qy, qw, qh };
     char rot[32];
-    if (!t[k] || cue[k] < 0) continue;
-    gfx_cor((GfxRect){ qx - 3.0f, qy - 3.0f, qw + 6.0f, qh + 6.0f }, 10.0f / (qh + 6.0f),
-            0.0f, 0.0f, 0.0f, 0.55f * a);
-    gfx_textura((GfxRect){ qx, qy, qw, qh }, t[k]);
-    gfx_anel((GfxRect){ qx, qy, qw, qh }, 0.0f, atual ? 2.0f : 1.0f, 1.0f, 1.0f, 1.0f,
-             (atual ? 0.85f : 0.35f) * a);
-    // O tempo e o do QUADRO, nao o da posicao (ver seekrvtt.h).
-    fmtTempo(rot, sizeof rot, (float)cue[k], 0);
-    { TxtLinha lt = txt_linha_corta(TXT_PLR_CORPO, rot, 255, 255, 255, atual ? 255 : 200, qw);
-      gfx_cor((GfxRect){ qx + (qw - lt.w) * 0.5f - 10.0f, qy + qh - lt.h - 12.0f, lt.w + 20.0f, lt.h + 6.0f },
-              0.5f, 0.0f, 0.0f, 0.0f, 0.60f * a);
-      txt_desenhar_alpha(lt, qx + (qw - lt.w) * 0.5f, qy + qh - lt.h - 9.0f, a); }
+    if (cue[k] < 0.0) continue;
+    if (t[k]) {
+      gfx_tex_aspect_atual = 16.0f / 9.0f;
+      gfx_rect(q, t[k], GFX_CARD, 0, 0, 0, 17.0f / qh, 0, 0, 0, a * ca);
+      gfx_tex_aspect_atual = 0.0f;
+      // A atual ainda chegando (seekr da a ultima usada no lugar): o anel por
+      // cima, para nao parecer que o quadro e deste ponto.
+      if (atual && seekr_quadro_velho()) {
+        gfx_cor(q, 17.0f / qh, 1, 1, 1, 0.05f * a);
+        plrui_anel(qx + qw * 0.5f, qy + qh * 0.5f, 44.0f, 1, agora, a);
+      }
+    } else {
+      if (ajustes_vidro()) gfx_cor(q, 17.0f / qh, 1, 1, 1, 0.05f * a);
+      else gfx_cor(q, 17.0f / qh, 0.125f, 0.129f, 0.149f, a);
+      if (atual) plrui_anel(qx + qw * 0.5f, qy + qh * 0.5f, 44.0f, 1, agora, a);
+    }
+    plrui_tempo(rot, sizeof rot, cue[k]);
+    { float yc = y + 10.0f + h + linha * 0.5f;
+      if (atual) {
+        TxtLinha lt = txt_linha(TXT_G26B, rot, 243, 242, 239, 255), lr = { 0 };
+        float tw = (float)lt.w;
+        if (!fita) {
+          char r[32], d[24];
+          plrui_tempo(d, sizeof d, duracaoSeg - cue[k]);
+          snprintf(r, sizeof r, "\xe2\x88\x92%s", d);
+          lr = txt_linha(TXT_G18M, r, 243, 242, 239, 128);
+          tw += 10.0f + (float)lr.w;
+        }
+        txt_desenhar_alpha(lt, qx + (qw - tw) * 0.5f, yc - (float)lt.h * 0.5f, a);
+        if (lr.w) txt_desenhar_alpha(lr, qx + (qw - tw) * 0.5f + lt.w + 10.0f, yc - (float)lr.h * 0.5f + 2.0f, a);
+      } else {
+        TxtLinha lt = txt_linha(TXT_G20B, rot, 243, 242, 239, 140);
+        txt_desenhar_alpha(lt, qx + (qw - (float)lt.w) * 0.5f, yc - (float)lt.h * 0.5f, a);
+      } }
   }
-}
-static void fmtTempo(char *b, size_t n, float seg, int negativo) {
-  if (seg < 0.0f) seg = 0.0f;
-  int t = (int)(seg + 0.5f);
-  int h = t / 3600, m = (t / 60) % 60, s = t % 60;
-  const char *sinal = negativo ? "-" : "";
-  if (h > 0) snprintf(b, n, "%s%d:%02d:%02d", sinal, h, m, s);
-  else       snprintf(b, n, "%s%d:%02d", sinal, m, s);
 }
 
 // --- icones -----------------------------------------------------------------
@@ -3926,5 +3949,5 @@ void player_shot_toast(Uint32 agora, const char *texto, const char *icone, int a
 }
 void player_shot_esconder(void) { visivel = 0; anim = 0.0f; }
 void player_shot_carregando(int sim) { esperandoFonte = sim; erroFonte = 0; }
-void player_shot_buscando(int sim) { scrubbing = sim; posVisSolto = sim; scrubUltimo = 0xFFFFFFF0u; }
+void player_shot_buscando(int sim) { shotBusca = sim; scrubbing = sim; posVisSolto = sim; }
 #endif

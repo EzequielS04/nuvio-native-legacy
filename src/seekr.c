@@ -61,8 +61,15 @@ int seekr_tem_chave(void) {
   int r; pthread_mutex_lock(&trava); r = chave[0] != 0; pthread_mutex_unlock(&trava);
   return r;
 }
+#ifdef NV_SHOT_HOOKS
+static int shotEstado;
+#endif
 int seekr_estado(void) {
-  int r; pthread_mutex_lock(&trava); r = estado; pthread_mutex_unlock(&trava);
+  int r;
+#ifdef NV_SHOT_HOOKS
+  if (shotEstado) return shotEstado;
+#endif
+  pthread_mutex_lock(&trava); r = estado; pthread_mutex_unlock(&trava);
   return r;
 }
 
@@ -248,6 +255,20 @@ static int slotLivre(const int *proteger, int n) {
   return melhor < 0 ? 0 : melhor;
 }
 
+// 1 quando a atual devolvida e a ULTIMA USADA no lugar da que ainda chega.
+static int quadroVelho;
+int seekr_quadro_velho(void) { return quadroVelho; }
+#ifdef NV_SHOT_HOOKS
+// Capturas: quadros fixos (anterior, atual, seguinte), sem rede nem cota.
+static int shotVelho;
+static GLuint shotTex[3];
+static double shotCue[3];
+void seekr_shot(int est, const GLuint *t, const double *cue, int velho) {
+  int k;
+  shotEstado = est; shotVelho = velho;
+  for (k = 0; k < 3; k++) { shotTex[k] = t ? t[k] : 0; shotCue[k] = cue ? cue[k] : -1.0; }
+}
+#endif
 int seekr_quadros(double posSeg, int n, GLuint *texs, double *cueSeg) {
   int quer[3], nq = 0, i, k, achou = 0;
   Recorte *pedir = NULL;
@@ -255,6 +276,18 @@ int seekr_quadros(double posSeg, int n, GLuint *texs, double *cueSeg) {
   unsigned g;
   if (n < 1) return 0;
   if (n > 3) n = 3;
+#ifdef NV_SHOT_HOOKS
+  if (shotEstado) {
+    (void)posSeg;
+    for (k = 0; k < n; k++) {
+      int o = n == 1 ? 1 : k;
+      texs[k] = shotTex[o];
+      if (cueSeg) cueSeg[k] = shotCue[o];
+    }
+    quadroVelho = shotVelho;
+    return texs[n == 1 ? 0 : 1] != 0;
+  }
+#endif
   for (k = 0; k < n; k++) { texs[k] = 0; if (cueSeg) cueSeg[k] = -1.0; }
   pthread_mutex_lock(&trava);
   g = geracao;
@@ -330,11 +363,12 @@ int seekr_quadros(double posSeg, int n, GLuint *texs, double *cueSeg) {
     }
     // A atual ainda nao chegou: a ultima usada do MESMO titulo no lugar dela
     // (melhor que piscar vazio entre duas cues).
+    quadroVelho = 0;
     if (!achou) {
       int m = -1, c = n == 1 ? 0 : 1;
       for (k = 0; k < SK_SLOTS; k++)
         if (slots[k].tex && slots[k].g == g && (m < 0 || slots[k].uso > slots[m].uso)) m = k;
-      if (m >= 0) { texs[c] = slots[m].tex; achou = 1; }
+      if (m >= 0) { texs[c] = slots[m].tex; achou = 1; quadroVelho = 1; }
     }
   }
   return achou;

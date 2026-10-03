@@ -7376,6 +7376,7 @@ void ajustes_teste_fonte_interface(int familia) {
 // gravar. 0 = nao achou.
 int ajustes_shot_valor(const char *chave, int v) {
   int i;
+  if (!strcmp(chave, "seekrChave")) { snprintf(seekrChave, sizeof seekrChave, "%s", v ? "captura" : ""); return 1; }
   for (i = 0; i < AJ_N; i++) {
     const char *c = CHAVE[i];
     if (c && c[0] == '-') c++;
