@@ -1352,7 +1352,11 @@ static void ponteiroFolhaFora(int a, int b) { (void)a; (void)b; aberta = 0; }
 
 // Availability lives in its own tab so asynchronous responses cannot shift
 // source indexes, focus or an in-progress debrid resolution.
-static void desenharOnde(GfxRect r, const OndeVer *o) {
+static void desenharOnde(GfxRect r, const OndeVer *o, int selected) {
+  const int solid = selected && !ajustes_vidro();
+  const int title = solid ? ajustes_tinta_foco() : 236;
+  const int detail = solid ? ajustes_tinta_foco2() : 160;
+  const int actionInk = solid ? ajustes_tinta_foco2() : 190;
   const float side=56.0f, left=r.x+18.0f, text=left+side+20.0f;
   const char *action;
   int state=ondever_estado(o->nome);
@@ -1360,9 +1364,9 @@ static void desenharOnde(GfxRect r, const OndeVer *o) {
         : state==ONDE_PROCURAR ? "Procurar na loja" : "Disponível neste serviço";
   GLuint logo=o->logo[0] ? tex_obter(o->logo) : 0;
   if(logo) gfx_rect((GfxRect){left,r.y+20,side,side},logo,GFX_CARD,0,0,0,.2f,1,1,1,anim);
-  txt_desenhar_alpha(txt_linha_corta(TXT_CALLOUT,o->nome,236,239,243,255,r.w-120),text,r.y+20,anim);
-  txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION2,o->gratis ? "Grátis / com anúncios" : "Na assinatura",160,164,174,255,r.w-120),text,r.y+58,anim);
-  txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,action,190,194,204,255,r.w-44),left,r.y+108,anim);
+  txt_desenhar_alpha(txt_linha_corta(TXT_CALLOUT,o->nome,title,solid ? title : 239,solid ? title : 243,255,r.w-120),text,r.y+20,anim);
+  txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION2,o->gratis ? "Grátis / com anúncios" : "Na assinatura",detail,solid ? detail : 164,solid ? detail : 174,255,r.w-120),text,r.y+58,anim);
+  txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,action,actionInk,solid ? actionInk : 194,solid ? actionInk : 204,255,r.w-44),left,r.y+108,anim);
 }
 
 void stream_folha_desenhar(Uint32 agora) {
@@ -1495,7 +1499,7 @@ void stream_folha_desenhar(Uint32 agora) {
       GfxRect card={x+NV_FOLHA_PAD,y,FOLHA_W-2*NV_FOLHA_PAD,FOLHA_LINHA-NV_LINHA_VAO};
       if(ptr) ponteiro_alvo(card.x,card.y,card.w,card.h,ponteiroFolhaLinha,NULL,row,0);
       if(sel) focoFonte(card,NV_LINHA_RAIO_PX/card.h,anim);
-      if(ondever_item(alvoPedido,-i-2,&o)) desenharOnde(card,&o);
+      if(ondever_item(alvoPedido,-i-2,&o)) desenharOnde(card,&o,sel);
       continue;
     }
     if(i < 0) continue;
