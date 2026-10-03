@@ -640,7 +640,7 @@ static void ajDesenharTela(void) {
   if (uxIndice < 2) ajDesenharEspecial();
   else { ajDesenharFolha(); ajDesenharInspetor(); }
   gfx_opacidade_grupo = 1.0f;
-  if (modal && !(uxEditor && !ajEditandoLinha(uxOp)) && !riscoFolha) ajVeuModal();
+  if (modal && !(uxEditor && !ajEditandoLinha(uxOp)) && !riscoFolha && !teclado_aberto()) ajVeuModal();
   if (!uxEditor && uxAviso[0]) {
     GfxRect fr = ajFolhaR();
     TxtLinha t = ajTxtC(TXT_ILHA_GENERO, uxAviso, fr.w - 88);
