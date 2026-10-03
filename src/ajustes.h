@@ -203,6 +203,9 @@ float ajustes_conteudo_x(void);
 // Ajustes no Glass UI: onde a ilha do relogio fica (em cima da ilha de
 // categorias) e se ela cabe agora (sem folha nem modal na frente).
 float ajustes_ilha_x(void);
+// A tela de addons (addonsui.c) desenhada no arranjo de Ajustes: indice,
+// folha com os addons e o inspetor do manifesto do addon em `foco`.
+void  ajustes_desenhar_addons(int foco);
 int   ajustes_relogio_cabe(void);
 // A FAIXA QUE A RAIL FIXA COBRE na borda esquerda, em px de tela: 144 com ela
 // presa (classica OU moderna — as duas pintam o mesmo desenhaRailFixa, e a

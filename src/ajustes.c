@@ -5363,483 +5363,6 @@ static const char *aj_fil_forma_ajuda(int t) {
   }
 }
 
-// O desenho de UMA forma, na escala dada. `foco` acende; `fantasma` e o
-// AUTOMATICO, que nao tem forma propria — duas silhuetas sobrepostas dizem
-// "depende" melhor que um retangulo qualquer com um rotulo.
-static void desenhaForma(float x, float yBase, int tipo, float esc, int aceso,
-                         float ar, float ag, float ab) {
-  float w = AJ_FIL_FORMA[tipo].w * esc, h = AJ_FIL_FORMA[tipo].h * esc;
-  float raio = 10.0f * esc;
-  GfxRect r = { x, yBase - h, w, h };
-  if (tipo == FIL_TIPO_AUTO) {
-    GfxRect deitado = { x, yBase - AJ_FIL_FORMA[FIL_TIPO_SERVICO].h * esc,
-                        AJ_FIL_FORMA[FIL_TIPO_SERVICO].w * esc,
-                        AJ_FIL_FORMA[FIL_TIPO_SERVICO].h * esc };
-    gfx_cor(deitado, raio / deitado.h, 0.62f, 0.65f, 0.72f, aceso ? 0.45f : 0.22f);
-    r.w = AJ_FIL_FORMA[FIL_TIPO_CARTAZ].w * esc * 0.7f;
-    gfx_cor(r, raio / r.h, aceso ? ar : 0.72f, aceso ? ag : 0.74f,
-            aceso ? ab : 0.80f, aceso ? 0.9f : 0.5f);
-    return;
-  }
-  gfx_cor(r, raio / h, aceso ? ar : 0.55f, aceso ? ag : 0.57f, aceso ? ab : 0.63f,
-          aceso ? 1.0f : 0.55f);
-  if (tipo == FIL_TIPO_TOP10 || tipo == FIL_TIPO_RANKING) {
-    // O numeral E a forma: o Top 10 desenha o cartaz deslocado com o numero
-    // atras. Sem ele a previa do Top 10 e igual a do cartaz.
-    TxtLinha num = txt_linha(TXT_TITULO1, "1", aceso ? 250 : 170,
-                             aceso ? 250 : 172, aceso ? 252 : 180, 255);
-    txt_desenhar_alpha(num, x - num.w * 0.42f, yBase - h * 0.58f,
-                       aceso ? 0.95f : 0.5f);
-  }
-}
-
-static void desenhaFileiras(void) {
-  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  GfxRect cartao = { (NV_TELA_W - AJ_FIL_W) * 0.5f, AJ_FIL_Y, AJ_FIL_W, AJ_FIL_H };
-  int n, lim = fil_limite();
-  int i, vis;
-  float cx = cartao.x, y, filCabecY;
-  TxtLinha l;
-  char buf[160];
-  float ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
-
-  filMontarLista();
-  n = filListaN;
-
-  // Veu quase opaco mais cartao solido: a lista de Ajustes atras atravessava o
-  // texto do vinculo, e aqui ha texto pequeno em quatro colunas.
-  gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 0.92f);
-  // CARTAO FLUTUANTE na "cara nova" (menu.c, 21/09/2026): cantos de 28 px
-  // pelo menor lado (a altura), fundo translucido — o veu de 0,92 atras ja
-  // apaga a lista — e UMA luz difusa na cor de realce pelo canto superior
-  // esquerdo, presa aos cantos do cartao (GFX_LUZ).
-  gfx_cor(cartao, 28.0f / AJ_FIL_H, 0.055f, 0.058f, 0.068f, 0.94f);
-  gfx_luz_canto(cartao, 28.0f / AJ_FIL_H, AJ_FIL_H * 0.1f, -AJ_FIL_H * 0.1f, AJ_FIL_H * 0.65f, ar, ag, ab, 0.22f);
-
-  // EMPILHADO PELA ALTURA MEDIDA, e nao por deslocamentos fixos: a altura de
-  // uma linha depende do estilo, da escala e do idioma, e so txt_linha sabe.
-  { float hy = cartao.y + 30.0f;
-    l = txt_linha(TXT_TITULO2, "Fileiras da Home", 255, 255, 255, 255);
-    txt_desenhar(l, cx + 40.0f, hy);
-    hy += l.h + 8.0f;
-    l = txt_linha(TXT_MINI, "Vale só nesta TV e neste perfil · não altera a Home dos outros aparelhos",
-                  150, 153, 162, 255);
-    txt_desenhar(l, cx + 40.0f, hy);
-    hy += l.h + 14.0f;
-
-    // BARRA DE ABAS. Duas pilulas com a contagem: "Na Home 14 de 16" diz de
-    // uma vez o que esta em uso e o limite; "Fora da Home 178" diz o tamanho
-    // do resto. A ativa e clara; a outra, apagada; o anel so quando a barra
-    // tem o foco.
-    { float bx = cx + 40.0f, bh = 44.0f;
-      int t;
-      for (t = 0; t < 2; t++) {
-        int ativa = (filAba == t);
-        if (t == 0) snprintf(buf, sizeof buf, i18n("Na Home  %d de %d"), fil_n_na_home(), lim);
-        else        snprintf(buf, sizeof buf, i18n("Fora da Home  %d"), fil_n() - fil_n_na_home() - fil_n_fila());
-        { int emFoco = (filNaBarra && ativa);
-          int ct = emFoco ? AJ_TEXTO_SOLIDO : (ativa ? 255 : 170);
-          l = txt_linha(TXT_CALLOUT, buf, ct, emFoco || ativa ? ct : 173,
-                        emFoco || ativa ? ct : 182, 255);
-          GfxRect pil = { bx, hy, l.w + 44.0f, bh };
-          // Foco = pilula na cor de realce com texto escuro; ativa sem foco =
-          // superficie clara; a outra, apagada. Sem anel (ver desenhaLinha).
-          if (emFoco) {
-            GfxRect luz = { pil.x - bh * 0.9f, pil.y - bh * 0.9f, pil.w + bh * 1.8f, bh * 2.8f };
-            gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f);
-            gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, 1.0f);
-          }
-          else gfx_cor(pil, NV_RAIO_PILL, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B,
-                       ativa ? 0.95f : 0.30f);
-          txt_desenhar(l, pil.x + 22.0f, pil.y + (bh - l.h) * 0.5f);
-          bx += pil.w + 14.0f; }
-      }
-      // Fila, quando ha: um numero ao lado das abas, para nao ser surpresa.
-      if (fil_n_fila() > 0) {
-        snprintf(buf, sizeof buf, fil_n_fila() == 1 ? i18n("%d na fila") : i18n("%d na fila"), fil_n_fila());
-        l = txt_linha(TXT_CAPTION, buf, 226, 186, 108, 255);
-        txt_desenhar(l, bx + 8.0f, hy + (bh - l.h) * 0.5f);
-      }
-      hy += bh + 12.0f; }
-    filCabecY = hy; }
-
-  if (n < 1 && filAba == 0) {
-    l = txt_linha(TXT_HEADLINE, "Nenhuma fileira ligada", 222, 224, 232, 255);
-    txt_desenhar(l, cx + 40.0f, filCabecY + 40.0f);
-    txt_bloco(TXT_CAPTION,
-              "Vá para a aba \"Fora da Home\" (↑ e depois →) e aperte OK numa fileira para adicioná-la.",
-              183, 186, 194, cx + 40.0f, filCabecY + 88.0f, AJ_FIL_W - 80.0f, 34, 1, 3);
-  } else if (n < 1) {
-    l = txt_linha(TXT_HEADLINE, "Tudo o que o app conhece já está na Home", 222, 224, 232, 255);
-    txt_desenhar(l, cx + 40.0f, filCabecY + 40.0f);
-    txt_bloco(TXT_CAPTION,
-              "As fileiras aparecem aqui depois que o app lê os catálogos dos seus addons. "
-              "Abra a Home, espere o catálogo carregar e volte a esta tela.",
-              183, 186, 194, cx + 40.0f, filCabecY + 88.0f, AJ_FIL_W - 80.0f, 34, 1, 3);
-  }
-
-  // QUANTAS LINHAS CABEM, medido no espaco que sobra entre o cabecalho das
-  // colunas e a ficha do rodape — e nao um numero cravado. A barra de abas
-  // empurrou a lista ~60 px para baixo, e com o 6 fixo a sexta linha caia em
-  // cima da ficha e do botao (visto na captura de revisao).
-  { float topoLista = filCabecY + 34.0f;
-    float fimLista  = cartao.y + AJ_FIL_H - 232.0f - 8.0f - (52.0f + 8.0f);
-    vis = (int)((fimLista - topoLista) / (AJ_FIL_LINHA + AJ_FIL_LGAP));
-    if (vis < 3) vis = 3; }
-
-  { int max = n + (filAba == 1 ? 1 : 0);
-    if (filFoco > max) filFoco = max; }
-  if (filFoco < 0) filFoco = 0;
-  if (filFoco < filTopo) filTopo = filFoco;
-  if (filFoco >= filTopo + vis) filTopo = filFoco - vis + 1;
-  if (filTopo > n - vis) filTopo = n - vis;
-  if (filTopo < 0) filTopo = 0;
-
-  // Cabecalho das colunas. Na aba "Fora" so ha a coluna da fileira e a acao.
-  if (n > 0) {
-    if (filAba == 0)
-      for (i = 0; i < AJ_FIL_CAMPOS; i++) {
-        l = txt_linha(TXT_MINI, AJ_FIL_COL[i].cabec, 148, 151, 160, 255);
-        txt_desenhar(l, cx + AJ_FIL_COL[i].x, filCabecY);
-      }
-    else {
-      l = txt_linha(TXT_MINI, "Fileira", 148, 151, 160, 255);
-      txt_desenhar(l, cx + AJ_FIL_COL[0].x, filCabecY);
-      l = txt_linha(TXT_MINI, "Addon", 148, 151, 160, 255);
-      txt_desenhar(l, cx + AJ_FIL_COL[1].x, filCabecY);
-    }
-  }
-
-  y = filCabecY + 34.0f;
-  for (i = filTopo; i < n && i < filTopo + vis; i++) {
-    int idx = filLista[i];
-    GfxRect linha = { cx + 24.0f, y, AJ_FIL_W - 48.0f, AJ_FIL_LINHA };
-    float raio = 12.0f / AJ_FIL_LINHA;
-    int foco = (i == filFoco && !filNaBarra);
-    int naFila = (filAba == 0 && filSep >= 0 && i >= filSep);
-    float aTexto = naFila ? 0.80f : 1.0f;
-    int c = 234;
-    gfx_cor(linha, raio, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B,
-            filPegou && foco ? 1.0f : (foco ? 0.72f : 0.30f));
-
-    // SEPARADOR DA FILA: a partir daqui as fileiras esperam vaga.
-    if (filAba == 0 && filSep >= 0 && i == filSep) {
-      GfxRect corte = { cx + 24.0f, y - AJ_FIL_LGAP * 0.5f - 1.0f, AJ_FIL_W - 48.0f, 2.0f };
-      gfx_cor(corte, 0.0f, 0.90f, 0.72f, 0.42f, 0.65f);
-    }
-
-    if (foco) {
-      // O ANEL MARCA A COLUNA, nao a linha: e a coluna que diz o que OK vai
-      // fazer. Na aba "Fora" ha uma acao so, e o anel toma a linha inteira — e
-      // no DESTAQUE tambem, que nao tem colunas e sim um valor.
-      GfxRect cel = (filAba == 0 && idx != AJ_FIL_DESTAQUE)
-        ? (GfxRect){ cx + AJ_FIL_COL[filCampo].x - 12.0f, y, AJ_FIL_COL[filCampo].w + 24.0f, AJ_FIL_LINHA }
-        : linha;
-      gfx_rect(cel, 0, GFX_ANEL, 0, NV_ANEL_FOCO / AJ_FIL_LINHA, 0, raio, ar, ag, ab, 1.0f);
-    }
-
-    // A LINHA DO DESTAQUE. Nome a esquerda, fonte a direita, e a dica das setas
-    // so quando ela esta em foco — a gramatica das linhas de escolha da lista
-    // principal, que e onde a pessoa aprendeu que ← → trocam um valor.
-    if (idx == AJ_FIL_DESTAQUE) {
-      { GfxRect ic = { cx + AJ_FIL_COL[0].x, y + (AJ_FIL_LINHA - 26.0f) * 0.5f, 26.0f, 26.0f };
-        gfx_icone(ic, "aj_panel-top", 0.78f, 0.80f, 0.85f, 0.9f); }   // o de "Mostrar destaque"
-      l = txt_linha_corta(TXT_CALLOUT, i18n("Destaque do topo"), 234, 234, 234, 255,
-                          AJ_FIL_COL[0].w - 38.0f);
-      txt_desenhar(l, cx + AJ_FIL_COL[0].x + 38.0f, y + 8.0f);
-      { TxtLinha sub = txt_linha_corta(TXT_MINI,
-            i18n("O que aparece no destaque da Home"), 148, 151, 160, 255,
-            AJ_FIL_COL[0].w - 38.0f);
-        txt_desenhar_alpha(sub, cx + AJ_FIL_COL[0].x + 38.0f, y + 8.0f + l.h + 4.0f, 0.85f); }
-      { float vw = AJ_FIL_COL[2].w + AJ_FIL_COL[3].w;
-        l = txt_linha_corta(TXT_CALLOUT, heroFonteRotulo(), 220, 220, 220, 255, vw);
-        txt_desenhar(l, cx + AJ_FIL_COL[2].x, y + (AJ_FIL_LINHA - l.h) * 0.5f); }
-      if (foco) {
-        l = txt_linha(TXT_MINI, i18n("← →  trocar"), 150, 214, 158, 255);
-        txt_desenhar(l, cx + AJ_FIL_COL[1].x, y + (AJ_FIL_LINHA - l.h) * 0.5f);
-      }
-      y += AJ_FIL_LINHA + AJ_FIL_LGAP;
-      continue;
-    }
-
-    { float tx = cx + AJ_FIL_COL[0].x;
-      float tw = AJ_FIL_COL[0].w;
-      // SELO DE ORIGEM ANTES DO NOME: icone, porque a 3 m dois cinzas sao
-      // iguais e a forma sobrevive ao idioma.
-      { int orig = fil_linha_origem(idx);
-        GfxRect ic = { tx, y + (AJ_FIL_LINHA - 26.0f) * 0.5f, 26.0f, 26.0f };
-        gfx_icone(ic, fil_origem_icone(orig), 0.78f, 0.80f, 0.85f, aTexto * 0.9f);
-        tx += 38.0f; tw -= 38.0f; }
-      if (filPegou && foco) {
-        TxtLinha m = txt_linha(TXT_CALLOUT, "\xe2\x87\x95", 250, 250, 252, 255);
-        txt_desenhar(m, tx, y + (AJ_FIL_LINHA - m.h) * 0.5f);
-        tx += m.w + 12.0f; tw -= m.w + 12.0f;
-      }
-      { const char *addon = fil_linha_addon(idx);
-        l = txt_linha_corta(TXT_CALLOUT, fil_titulo(idx), c, c, c, 255, tw);
-        txt_desenhar_alpha(l, tx, y + 8.0f, aTexto);
-        // Na aba 0 o addon vai sob o titulo; na aba 1 ele tem coluna propria,
-        // porque e o agrupamento — e o cabecalho de grupo e a mudanca de nome.
-        if (filAba == 0 && addon[0]) {
-          TxtLinha ad = txt_linha_corta(TXT_MINI, addon, 148, 151, 160, 255, tw);
-          txt_desenhar_alpha(ad, tx, y + 8.0f + l.h + 4.0f, aTexto * 0.85f);
-        }
-      } }
-
-    if (filAba == 0) {
-      { const char *est = naFila ? "Na fila" : "Na Home";
-        int er = naFila ? 226 : 150, eg = naFila ? 186 : 214, eb = naFila ? 108 : 158;
-        // A coluna "Estado" e tambem a acao REMOVER: com o foco nela, diz.
-        if (foco && filCampo == 1) { est = "Remover"; er = 240; eg = 200; eb = 200; }
-        l = txt_linha_corta(TXT_CALLOUT, est, er, eg, eb, 255, AJ_FIL_COL[1].w);
-        txt_desenhar_alpha(l, cx + AJ_FIL_COL[1].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, 1.0f); }
-      { int aceita = fil_aceita_tipo(idx);
-        const char *rot = aceita ? fil_linha_tipo_rotulo(idx) : "Fixo";
-        int cc = aceita ? 220 : 150;
-        l = txt_linha_corta(TXT_CALLOUT, rot, cc, cc, cc, 255, AJ_FIL_COL[2].w);
-        txt_desenhar_alpha(l, cx + AJ_FIL_COL[2].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, aTexto); }
-      { l = txt_linha_corta(TXT_CALLOUT, fil_tam_rotulo(fil_linha_tam(idx)), 220, 220, 220, 255, AJ_FIL_COL[3].w);
-        txt_desenhar_alpha(l, cx + AJ_FIL_COL[3].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, aTexto); }
-    } else {
-      // GRUPO: o nome do addon aparece na PRIMEIRA linha de cada bloco e some
-      // nas seguintes — e o agrupamento que a pessoa pediu, sem gastar linha
-      // de cabecalho numa lista que ja e longa.
-      const char *addon = fil_linha_addon(idx);
-      const char *rot = addon[0] ? addon : i18n(fil_origem_rotulo(fil_linha_origem(idx)));
-      int primeiro = !filForaAgrupada || (i == 0) ||
-                     strcasecmp(fil_linha_addon(filLista[i - 1]), addon) != 0 ||
-                     fil_linha_origem(filLista[i - 1]) != fil_linha_origem(idx);
-      if (primeiro) {
-        l = txt_linha_corta(TXT_CALLOUT, rot, 200, 203, 212, 255, AJ_FIL_COL[1].w + AJ_FIL_COL[2].w);
-        txt_desenhar_alpha(l, cx + AJ_FIL_COL[1].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, 1.0f);
-      }
-      { const char *acao = foco ? "OK  Adicionar à Home" : "";
-        l = txt_linha(TXT_CALLOUT, acao, 150, 214, 158, 255);
-        txt_desenhar_alpha(l, cx + AJ_FIL_COL[3].x, y + (AJ_FIL_LINHA - l.h) * 0.5f, 1.0f); }
-    }
-    y += AJ_FIL_LINHA + AJ_FIL_LGAP;
-  }
-
-  // Posicao na lista: com 200 linhas a barra de rolagem teria 6 px.
-  if (n > 0) {
-    // O DESTAQUE NAO ENTRA NA CONTAGEM. Ele esta na lista, mas nao e fileira:
-    // dizer "1 de 8" com a aba mostrando "7 de 7" seriam dois numeros do mesmo
-    // conjunto que nao batem, e quem le acredita no que estiver mais perto.
-    int fileirasN = n - (filAba == 0 ? 1 : 0);
-    if (filAba == 0 && filFoco == 0) snprintf(buf, sizeof buf, "%s", i18n("Destaque"));
-    else if (filFoco >= n) snprintf(buf, sizeof buf, "%s", i18n("Botão"));
-    else snprintf(buf, sizeof buf, i18n("%d de %d"),
-                  filFoco + (filAba == 0 ? 0 : 1), fileirasN);
-    l = txt_linha(TXT_CAPTION, buf, 156, 159, 168, 255);
-    txt_desenhar(l, cx + AJ_FIL_W - 40.0f - l.w, filCabecY);
-  }
-
-  // BOTOES no fim da lista, lado a lado. Aba "Fora": "Agrupar por addon" (a
-  // alternancia agrupado/alfabetico) e "Atualizar tudo". Aba "Na Home": so
-  // "Atualizar tudo" — la a ordem e a da home e a pessoa e quem a arruma.
-  { float sy = y + 14.0f, bw = AJ_FIL_W - 48.0f, bx = cx + 24.0f;
-    int nb = (filAba == 1) ? 2 : 1, b;
-    float cada = (bw - (nb - 1) * 16.0f) / nb;
-    for (b = 0; b < nb; b++) {
-      int ehAgrupar = (filAba == 1 && b == 0);
-      int pos = ehAgrupar ? n : (filAba == 1 ? n + 1 : n);
-      int foco = (filFoco == pos && !filNaBarra);
-      const char *rot = ehAgrupar ? (filForaAgrupada ? "Agrupado por addon · OK: lista alfabética"
-                                                     : "Alfabética · OK: agrupar por addon")
-                                  : "Atualizar tudo";
-      GfxRect btn = { bx + b * (cada + 16.0f), sy, cada, 52.0f };
-      // Botao em foco: preenchido com a cor de realce, texto escuro, sem anel.
-      if (foco) gfx_cor(btn, 26.0f / cada, ar, ag, ab, 1.0f);
-      else gfx_cor(btn, 26.0f / cada, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B, 0.30f);
-      { int ct = foco ? AJ_TEXTO_SOLIDO : 220;
-        l = txt_linha(TXT_CALLOUT, rot, ct, ct, ct, 255); }
-      txt_desenhar(l, btn.x + (btn.w - l.w) * 0.5f, btn.y + (btn.h - l.h) * 0.5f);
-    } }
-
-  // A FICHA DA FILEIRA EM FOCO: de qual addon veio, filme ou serie, e quantos
-  // titulos ela tem AGORA (omitido antes de a Home montar — "0 titulos" seria
-  // mentira sobre uma fileira talvez cheia).
-  if (n > 0 && filFoco >= 0 && filFoco < n && !filNaBarra &&
-      filLista[filFoco] == AJ_FIL_DESTAQUE) {
-    l = txt_linha_corta(TXT_CALLOUT, heroFonteRotulo(), 232, 234, 241, 255,
-                        AJ_FIL_W - 80.0f);
-    txt_desenhar(l, cx + 40.0f, cartao.y + AJ_FIL_H - 232.0f);
-    l = txt_linha_corta(TXT_MINI,
-        i18n("Automático usa os primeiros títulos do catálogo; o sorteio troca a cada abertura; uma fileira mostra os títulos dela."),
-        170, 173, 182, 255, AJ_FIL_W - 80.0f);
-    txt_desenhar(l, cx + 40.0f, cartao.y + AJ_FIL_H - 200.0f);
-  } else if (n > 0 && filFoco >= 0 && filFoco < n && !filNaBarra) {
-    int idx = filLista[filFoco];
-    int orig = fil_linha_origem(idx);
-    const char *addon = fil_linha_addon(idx);
-    const char *cont  = fil_linha_conteudo(idx);
-    int itens = fil_linha_itens(idx);
-    char ficha[220];
-    int k = snprintf(ficha, sizeof ficha, "%s", i18n(fil_origem_rotulo(orig)));
-    if (addon && addon[0]) k += snprintf(ficha + k, sizeof ficha - (size_t)k, "  ·  %s", addon);
-    if (cont && cont[0])   k += snprintf(ficha + k, sizeof ficha - (size_t)k, "  ·  %s", i18n(cont));
-    if (itens >= 0)
-      snprintf(ficha + k, sizeof ficha - (size_t)k,
-               itens == 1 ? i18n("  ·  %d título") : i18n("  ·  %d títulos"), itens);
-    l = txt_linha_corta(TXT_CALLOUT, ficha, 232, 234, 241, 255, AJ_FIL_W - 80.0f);
-    txt_desenhar(l, cx + 40.0f, cartao.y + AJ_FIL_H - 232.0f);
-    // A SEGUNDA LINHA E DA COLUNA EM FOCO quando ela tem o que explicar. A
-    // origem da fileira ja foi dita na linha de cima (o rotulo e o addon); com
-    // o foco em "Card" ou "Tamanho" a pergunta de quem esta ali e outra.
-    { const char *frase = fil_origem_ajuda(orig);
-      if (filAba == 0 && !filPegou) {
-        if (filCampo == 2)
-          frase = orig == FIL_ORIGEM_COLECAO
-                ? "Forma das pastas: Automático segue a que a coleção tem na conta."
-                : fil_aceita_tipo(idx)
-                ? aj_fil_forma_ajuda(fil_linha_tipo(idx))
-                : "Esta fileira tem forma própria: ver a frase abaixo do nome.";
-        else if (filCampo == 3)
-          frase = "O fator vale sobre a medida do tipo, então a proporção do card não muda.";
-      }
-      l = txt_linha_corta(TXT_MINI, frase, 170, 173, 182, 255, AJ_FIL_W - 760.0f); }
-    txt_desenhar(l, cx + 40.0f, cartao.y + AJ_FIL_H - 200.0f);
-  }
-
-  // A PREVIA DA COLUNA EM FOCO, no espaco livre a direita das instrucoes.
-  //
-  // So aparece nas colunas "Card" e "Tamanho", que sao as que oferecem uma
-  // escolha sem dizer o que ela faz. Nas outras o espaco fica vazio de
-  // proposito: desenhar sempre alguma coisa ali ensinaria a ignorar o canto.
-  if (filAba == 0 && !filPegou && !filNaBarra &&
-      filFoco >= 0 && filFoco < n && filLista[filFoco] >= 0 &&
-      (filCampo == 3 || (filCampo == 2 &&
-                         fil_linha_origem(filLista[filFoco]) != FIL_ORIGEM_COLECAO))) {
-    int idx = filLista[filFoco];
-    int aceita = fil_aceita_tipo(idx);
-    int tipo = aceita ? fil_linha_tipo(idx) : FIL_TIPO_AUTO;
-    int tam = fil_linha_tam(idx);
-    // A tira comeca depois da coluna de instrucoes (que ocupa ~700px) e assenta
-    // as formas sobre uma linha de base comum: e a base que deixa comparar
-    // altura entre elas, que e metade da informacao.
-    // CANTO INFERIOR DIREITO, que e o unico retangulo livre do cartao: a ficha
-    // ocupa a esquerda logo acima, e das quatro linhas de instrucao a mais
-    // comprida termina a 788px da borda esquerda do cartao. MEDIDO na captura,
-    // nao estimado — foi assim que as duas primeiras tentativas sairam por
-    // cima do texto.
-    float px = cx + 832.0f, base = cartao.y + AJ_FIL_H - 24.0f;
-    // 0,175 e nao 0,19 desde a faixa com titulo: sao nove formas e a 0,19 a
-    // ultima passava da borda direita do cartao (AJ_FIL_W).
-    float esc = 0.175f;  // 322 (o card mais alto) x 0,175 = 56px
-    int t;
-    // SO A ESCOLHIDA E NOMEADA. Seis rotulos lado a lado nao cabem sem
-    // reticencia, e reticencia em rotulo de 9 caracteres nao ensina nada — as
-    // formas se explicam pelo desenho, e o nome da escolhida ja esta na coluna.
-    if (filCampo == 2) {
-      float x = px;
-      for (t = 0; t < FIL_TIPO_N; t++) {
-        // Os 4:3 medio e grande NAO ganham silhueta propria: sao o 4:3 em outro
-        // tamanho, e duas silhuetas a mais (118 e 142 px) passavam da borda
-        // direita do cartao. O 4:3 acende por eles e leva o nome do escolhido.
-        int quad = t == FIL_TIPO_DESTAQUE_QUADRADO &&
-                   (tipo == FIL_TIPO_DESTAQUE_QUADRADO_M || tipo == FIL_TIPO_DESTAQUE_QUADRADO_G);
-        float w = AJ_FIL_FORMA[t].w * esc;
-        if (t == FIL_TIPO_DESTAQUE_QUADRADO_M || t == FIL_TIPO_DESTAQUE_QUADRADO_G) continue;
-        desenhaForma(x, base, t, esc, t == tipo || quad, ar, ag, ab);
-        if (t == tipo || quad) {
-          TxtLinha rot = txt_linha(TXT_MINI, fil_tipo_rotulo(tipo), 236, 238, 243, 255);
-          txt_desenhar(rot, x + (w - rot.w) * 0.5f,
-                       base - AJ_FIL_FORMA[t].h * esc - rot.h - 6.0f);
-        }
-        // 14 e nao 22: com o Ranking numerado (#201) sao oito formas, e a 22
-        // a ultima saia pela borda direita do cartao (MEDIDO na captura).
-        x += w + 10.0f;
-      }
-    } else {
-      // TAMANHO: a MESMA forma tres vezes, nos tres fatores. O que muda e o
-      // tamanho, entao mostrar tres formas diferentes seria mudar duas coisas.
-      float x = px;
-      int formaBase = (aceita && tipo != FIL_TIPO_AUTO) ? tipo : FIL_TIPO_CARTAZ;
-      for (t = 0; t < FIL_TAM_N; t++) {
-        // Nos 4:3 maiores o produto Tamanho x forma tem o teto do 4:3 grande
-        // (escalaCom, fileiras.c): o desenho mostra o que a Home vai medir.
-        float f = fil_tipo_fator(formaBase), v = fil_tam_escala(t) * f;
-        float e, w, teto = fil_tipo_fator(FIL_TIPO_DESTAQUE_QUADRADO_G);
-        if (f > 1.0f && v > teto) v = teto;
-        e = esc * v / f;
-        w = AJ_FIL_FORMA[formaBase].w * e;
-        desenhaForma(x, base, formaBase, e, t == tam, ar, ag, ab);
-        if (t == tam) {
-          char rot[48];
-          TxtLinha lr;
-          snprintf(rot, sizeof rot, "%s  %.0f%%", i18n(fil_tam_rotulo(t)),
-                   (double)(fil_tam_escala(t) * 100.0f));
-          lr = txt_linha(TXT_MINI, rot, 236, 238, 243, 255);
-          txt_desenhar(lr, x + (w - lr.w) * 0.5f,
-                       base - AJ_FIL_FORMA[formaBase].h * e - lr.h - 6.0f);
-        }
-        x += w + 46.0f;
-      }
-    }
-  }
-
-  // A INSTRUCAO, escrita na tela: o gesto de pegar e mover nao se descobre
-  // sozinho num D-pad, e muda com o item na mao e com a aba.
-  y = cartao.y + AJ_FIL_H - 168.0f;
-  if (filPegou == 2) {
-    txt_bloco(TXT_CAPTION,
-              "↑ ↓  Mover o bloco do addon\n← →  Mover so a fileira\nOK  Soltar aqui\nVoltar  Cancelar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 4);
-  } else if (filPegou) {
-    txt_bloco(TXT_CAPTION,
-              "↑ ↓  Mover a fileira\n← →  Mover o bloco do addon\nOK  Soltar aqui\nVoltar  Cancelar o movimento",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 4);
-  } else if (filNaBarra) {
-    txt_bloco(TXT_CAPTION, "← →  Trocar de aba\n↓  Voltar à lista\nVoltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 3);
-  } else if (filFoco >= 0 && filFoco < n && filLista[filFoco] == AJ_FIL_DESTAQUE) {
-    txt_bloco(TXT_CAPTION,
-              "← →  Trocar o que aparece no destaque\n"
-              "OK  Avançar para a próxima fonte\n"
-              "↑ no topo  Abas\nVoltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 4);
-  } else if (filAba == 1 && filFoco < n) {
-    txt_bloco(TXT_CAPTION,
-              "↑ ↓  Escolher fileira · segure para pular por letra\n"
-              "OK  Adicionar à Home (entra na fila se a Home estiver cheia)\n"
-              "↑ no topo  Abas\nVoltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 4);
-  } else if ((filAba == 0 && filFoco == n) || (filAba == 1 && filFoco == n + 1)) {
-    txt_bloco(TXT_CAPTION,
-              "OK  Sincronizar a conta e refazer a Home agora (addons, coleções e fileiras)\nVoltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 2);
-  } else if (filAba == 1 && filFoco == n) {
-    txt_bloco(TXT_CAPTION, "OK  Alternar entre agrupado por addon e lista alfabética\nVoltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 2);
-  } else {
-    txt_bloco(TXT_CAPTION,
-              "↑ ↓  Escolher fileira\n← →  Trocar de coluna\n"
-              "OK  Pegar e mover (coluna Fileira) · Remover, trocar card e tamanho nas outras\n"
-              "Voltar  Fechar",
-              206, 209, 218, cx + 40.0f, y, AJ_FIL_W - 80.0f, 36, 1, 4);
-    if (filFoco < n && filCampo == 2 && !fil_aceita_tipo(filLista[filFoco])) {
-      // LARGURA ATE A TIRA DE FORMAS, e nao a do cartao. A nota fica na mesma
-      // altura da ultima linha de instrucao ("Voltar Fechar", que e curta) e,
-      // com a largura cheia, as duas se sobrepunham — visivel na captura do
-      // album. 800 px param antes da tira e depois do texto da instrucao.
-      l = txt_linha_corta(TXT_MINI, motivoFormaFixa(fil_chave(filLista[filFoco])),
-                          176, 179, 188, 255, 800.0f);
-      txt_desenhar(l, cx + 40.0f, cartao.y + AJ_FIL_H - 24.0f);
-    }
-  }
-
-  // AVISO ("Home cheia...", "Adicionada..."): pilula no rodape do cartao por
-  // alguns segundos. E a resposta visivel ao OK, que na aba "Fora" nao muda
-  // nada na linha em que a pessoa esta olhando.
-  if (filAviso[0] && SDL_GetTicks() < filAvisoAte) {
-    l = txt_linha(TXT_CALLOUT, filAviso, 20, 22, 28, 255);
-    { GfxRect pil = { cx + (AJ_FIL_W - l.w - 56.0f) * 0.5f, cartao.y + AJ_FIL_H - 84.0f, l.w + 56.0f, 48.0f };
-      gfx_cor(pil, NV_RAIO_PILL, 0.96f, 0.86f, 0.52f, 0.96f);
-      txt_desenhar(l, pil.x + 28.0f, pil.y + (pil.h - l.h) * 0.5f); }
-  }
-}
-
 // PAINEL DA LINHA "MEMORIA USADA POR IMAGENS": o numero que a linha corta e
 // aqui inteiro, mais o que ele nao diz sozinho — quanto e o teto, quanto do
 // cache e o que esta NA TELA agora, se ele anda despejando, e como o teto foi
@@ -7198,9 +6721,15 @@ static float previaOpcao(int op, float x, float y, float w) {
 
 #include "ajustes_ux_desenho.inc"
 
+#ifdef AJUSTES_TESTE
+static int ajQuadroAddons;   // captura: a tela de addons no lugar de Ajustes
+#endif
 void ajustes_desenhar(Uint32 agora) {
   // A TELA E DONA DO PROPRIO FUNDO (Glass UI): a arte do titulo com o veu, e
   // as tres ilhas por cima. Ver ajustes_ux_desenho.inc.
+#ifdef AJUSTES_TESTE
+  if (ajQuadroAddons) { ajustes_desenhar_addons(ajQuadroAddons - 1); return; }
+#endif
   montarTela();
   ajDesenharTela();
 
@@ -7306,7 +6835,7 @@ int ajustes_teste_quadro(const char *id) {
   scrollY = velY = 0; paginaA = 1;
   filAberta = 0; riscoFolha = 0;
   focarSecao(0); focoIndice = 1;
-  ajArteFundoN = 12; ajMemFixa = 0;
+  ajArteFundoN = 12; ajMemFixa = 0; ajQuadroAddons = 0;
   if (!strcmp(id, "principal")) { focarOpcao(AJ_HOME_LAYOUT); }
   else if (!strcmp(id, "cartazes")) { ajArteFundoN = 13; valor[AJ_LARGURA_DP] = 128; focarOpcao(AJ_LARGURA_DP); }
   else if (!strcmp(id, "memoria")) { ajArteFundoN = 21; ajMemFixa = 1; focarOpcao(AJ_ESPACO); uxAvancados[secAtual] = 1; }
@@ -7322,6 +6851,23 @@ int ajustes_teste_quadro(const char *id) {
     valor[AJ_HOME_LAYOUT] = HOME_LAYOUT_DINAMICA; valor[AJ_ANIM] = 1; valor[AJ_LARGURA_DP] = 128;
     valor[AJ_QUALIDADE] = 1; valor[AJ_HERO_TRAILER] = 0;
     uxListarDiferencas(); uxIndice = 1; focoIndice = 0; uxDifFoco = 0;
+  }
+  else if (!strcmp(id, "addons")) {
+    static const char *const NOME[8] = { "Cinemeta", "AIOStreams", "Xperience", "TMDB", "Akashi", "MDBList", "OpenSubtitles v3", "Torrentio" };
+    static const char *const REC[8] = { "\"catalog\",\"meta\"", "\"catalog\",\"stream\"", "\"catalog\"", "\"catalog\",\"meta\"",
+                                        "\"catalog\"", "\"catalog\"", "\"subtitles\"", "\"stream\"" };
+    int k;
+    ajArteFundoN = 3;
+    if (addons_n() == 0)
+      for (k = 0; k < 8; k++) {
+        char url[200], man[400];
+        snprintf(url, sizeof url, "https://%s.exemplo.org/manifest.json", NOME[k][0] == 'O' ? "opensubtitles" : NOME[k]);
+        addons_adicionar(NOME[k], url);
+        snprintf(man, sizeof man, "{\"id\":\"x.%d\",\"name\":\"%s\",\"resources\":[%s],\"types\":[\"movie\",\"series\"]}", k, NOME[k], REC[k]);
+        addons_manifesto_lido(k, man);
+        if ((k == 4 || k == 7) && addons_ativo(k)) addons_alternar(k);
+      }
+    ajQuadroAddons = 2;
   }
   else return 0;
   scrollY = velY = 0;
