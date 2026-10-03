@@ -3476,7 +3476,14 @@ void player_desenhar(Uint32 agora) {
   posplay_desenhar(agora, NV_TELA_H - PLR_PAD_Y);
   // Acima do pos-reproducao quando ele esta no ar (posplay_topo), senao na
   // mesma margem inferior.
-  reacao_desenhar(agora, posplay_topo(NV_TELA_H - PLR_PAD_Y));
+  // "O que achou?" na margem de 96 (mockup) ou acima do pos-reproducao.
+  { float base = posplay_visivel() ? posplay_topo(NV_TELA_H) : NV_TELA_H - 96.0f;
+    if (reacao_visivel()) {
+      // O video um degrau mais escuro e o veu leve de baixo, sob o cartao.
+      gfx_cor(tela, 0, 0, 0, 0, 0.25f * entrada);
+      gfx_veu_css((GfxRect){ 0, NV_TELA_H - 300.0f, NV_TELA_W, 300.0f }, 0, 1.0f, 1.0f, 0.60f * entrada);
+    }
+    reacao_desenhar(agora, base); }
 
   // GUIA PARENTAL, canto superior esquerdo (.player-parental-guide).
   //

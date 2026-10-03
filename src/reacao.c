@@ -13,6 +13,8 @@
 #include "posplay.h"
 #include "text.h"
 #include "trakt.h"
+#include "plrui.h"
+#include "recomenda.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,11 +24,6 @@
 // A margem direita e a do player (PLR_MARGEM, 96): o cartao alinha com o fim
 // da barra de tempo, que e onde o olho ja vai no fim do filme.
 #define RX_MARGEM     96.0f
-#define RX_PAD        30.0f
-#define RX_RAIO       28.0f
-#define RX_W_MIN     560.0f
-#define RX_GAP_LINHA  12.0f
-#define RX_BARRA_H     4.0f
 #define RX_MAX        400    // reacoes guardadas por perfil
 
 static const char *const ROTULO[3] = { "Gostei", "Mais ou menos", "Não gostei" };
@@ -303,60 +300,54 @@ static void linhaOrigem(char *dst, size_t n) {
                                                      : "%s mandou este filme"), c.nome);
 }
 
+// GLASS UI (mockup de 03/10, "reacao"): a ilha de 760 a 96 da borda direita,
+// no material da ilha (o vidro antigo era um gfx_vidro_superficie a 5%, e o
+// harness mostrava o fundo em faixas): rosto + "Ana mandou este filme", a
+// pergunta 36/700, as tres respostas em pilulas (a focada cheia no acento) e
+// a contagem de 8 s como trilho DENTRO da ilha, ao lado de "Ana vai ver sua
+// resposta" — nao mais um fio colado na borda.
 void reacao_desenhar(Uint32 agora, float baseY) {
-  float a = c.anim, w, h, x, y, pw[3], tot = 0.0f;
+  float a = c.anim, w = 760.0f, h, x, y, lead, hp, pw = 0.0f;
   char perg[256], orig[160], ver[160];
-  TxtLinha lo, lv;
-  float lead, hp;
+  static const char *const ICONE[3] = { "pl_thumbs-up", NULL, "pl_thumbs-down" };
   int i;
   if (a < 0.01f || !c.imdb[0]) return;
   snprintf(perg, sizeof perg, i18n("O que achou de %s?"), c.titulo);
   linhaOrigem(orig, sizeof orig);
   ver[0] = 0;
   if (orig[0] && c.envia) snprintf(ver, sizeof ver, i18n("%s vai ver sua resposta"), c.nome);
-  for (i = 0; i < 3; i++) { pw[i] = botao_largura(i18n(ROTULO[i]), NULL, 0); tot += pw[i]; }
-  tot += 2.0f * BOTAO_GAP;
-  w = tot + 2.0f * RX_PAD;
-  if (w < RX_W_MIN) w = RX_W_MIN;
-  // A PERGUNTA QUEBRA EM ATE DUAS LINHAS: com o titulo cortado em "Um..." a
-  // pergunta perde o sujeito (medido na primeira captura). A altura sai de uma
-  // passada invisivel do mesmo bloco — o texto ja fica no cache para a de verdade.
-  lead = (float)txt_linha(TXT_HEADLINE, "Ág", 245, 246, 248, 255).h + 2.0f;
-  hp = txt_bloco_corta(TXT_HEADLINE, perg, 245, 246, 248, -4000.0f, -4000.0f,
-                       w - 2.0f * RX_PAD, lead, 0.0f, 2);
-  lo = txt_linha_corta(TXT_CAPTION, orig, 176, 180, 190, 255, w - 2.0f * RX_PAD);
-  lv = txt_linha_corta(TXT_CAPTION2, ver, 150, 154, 163, 255, w - 2.0f * RX_PAD);
-  h = RX_PAD + (orig[0] ? (float)lo.h + 8.0f : 0.0f) + hp + 20.0f +
-      BOTAO_H_SECUNDARIO + (ver[0] ? 14.0f + (float)lv.h : 0.0f) + RX_PAD;
+  for (i = 0; i < 3; i++) pw += plrui_botao_largura(ROTULO[i], ICONE[i]) + (i ? 12.0f : 0.0f);
+  if (pw + 72.0f > w) w = pw + 72.0f;
+  lead = (float)txt_linha(TXT_ILHA_PERGUNTA, "Ág", 245, 246, 248, 255).h + 6.0f;
+  hp = txt_bloco_corta(TXT_ILHA_PERGUNTA, perg, 0, 0, 0, -4000.0f, -4000.0f, w - 72.0f, lead, 0.0f, 2);
+  h = 34.0f + (orig[0] ? 30.0f + 8.0f : 0.0f) + hp + 26.0f + 60.0f + 24.0f + 22.0f + 30.0f;
   x = NV_TELA_W - RX_MARGEM - w;
   y = baseY - h + (1.0f - a) * 24.0f;
-  { GfxRect fundo = { x, y, w, h };
-    if (ajustes_vidro()) gfx_vidro_superficie(fundo, RX_RAIO / h, a);
-    else gfx_cor(fundo, RX_RAIO / h, .062f, .066f, .079f, .94f * a);
-    // A CONTAGEM VISIVEL: um fio na base que encolhe nos 8 s. Sem ele o cartao
-    // sumiria "do nada"; com ele, a pessoa ve que ha tempo e quanto.
-    if (!c.modoDetalhe && c.aberto) {
-      float resta = 1.0f - (float)(agora - c.desde) / (float)REACAO_TIMEOUT_MS;
-      float cr, cg, cb;
-      if (resta < 0.0f) resta = 0.0f;
-      botao_cor_foco(&cr, &cg, &cb);
-      gfx_cor((GfxRect){ x + RX_RAIO, y + h - RX_BARRA_H - 6.0f,
-                         (w - 2.0f * RX_RAIO) * resta, RX_BARRA_H },
-              0.5f, cr, cg, cb, 0.85f * a);
-    } }
-  { float ty = y + RX_PAD;
-    if (orig[0]) { txt_desenhar_alpha(lo, x + RX_PAD, ty, a); ty += (float)lo.h + 8.0f; }
-    txt_bloco_corta(TXT_HEADLINE, perg, 245, 246, 248, x + RX_PAD, ty,
-                    w - 2.0f * RX_PAD, lead, a, 2);
-    ty += hp + 20.0f;
-    { float bx = x + RX_PAD;
-      for (i = 0; i < 3; i++) {
-        GfxRect r = { bx, ty, pw[i], BOTAO_H_SECUNDARIO };
-        botao_pilula(r, i18n(ROTULO[i]), NULL, c.focoA[i], 0, 0, a);
-        bx += pw[i] + BOTAO_GAP;
-      } }
-    ty += BOTAO_H_SECUNDARIO;
-    if (ver[0]) txt_desenhar_alpha(lv, x + RX_PAD, ty + 14.0f, a * 0.9f); }
+  plrui_material((GfxRect){ x, y, w, h }, 36.0f, 0, a);
+  { float ty = y + 34.0f, tx = x + 36.0f;
+    if (orig[0]) {
+      TxtLinha lo = txt_linha_corta(TXT_G18M, orig, 243, 242, 239, 158, w - 72.0f - 42.0f);
+      rec_avatar_estilo((GfxRect){ tx, ty, 30.0f, 30.0f }, "", c.nome, c.nome, a, TXT_MINI);
+      txt_desenhar_alpha(lo, tx + 30.0f + 12.0f, ty + (30.0f - (float)lo.h) * 0.5f, a);
+      ty += 30.0f + 8.0f;
+    }
+    txt_bloco_corta(TXT_ILHA_PERGUNTA, perg, 243, 242, 239, tx, ty, w - 72.0f, lead, a, 2);
+    ty += hp + 26.0f;
+    { float bx = tx;
+      for (i = 0; i < 3; i++) bx += plrui_botao(bx, ty, ROTULO[i], ICONE[i], c.focoA[i], a) + 12.0f; }
+    ty += 60.0f + 24.0f;
+    { float yc = ty + 11.0f, tw = 0.0f;
+      if (ver[0]) {
+        TxtLinha lv = txt_linha_corta(TXT_ILHA_GENERO, ver, 243, 242, 239, 128, w * 0.5f);
+        txt_desenhar_alpha(lv, tx, yc - (float)lv.h * 0.5f, a);
+        tw = (float)lv.w + 18.0f;
+      }
+      // A CONTAGEM VISIVEL: sem ela o cartao sumiria "do nada".
+      if (!c.modoDetalhe && c.aberto) {
+        float resta = 1.0f - (float)(agora - c.desde) / (float)REACAO_TIMEOUT_MS;
+        if (resta < 0.0f) resta = 0.0f;
+        plrui_trilho((GfxRect){ tx + tw, yc - 2.0f, w - 72.0f - tw, 4.0f }, resta, 0.953f, 0.949f, 0.937f, a * 0.55f);
+      } } }
 }
 
 // --- pagina do titulo --------------------------------------------------------------
@@ -414,3 +405,6 @@ void reacao_teste_abrir(const char *imdb, const char *titulo, const char *midia,
   snprintf(c.nome, sizeof c.nome, "%s", nomeRec ? nomeRec : "");
   c.envia = envia;
 }
+
+// O cartao esta (ou ainda esta saindo) na tela do player.
+int reacao_visivel(void) { return c.anim > 0.01f && c.imdb[0] && !c.modoDetalhe; }

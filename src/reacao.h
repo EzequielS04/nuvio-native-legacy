@@ -52,6 +52,8 @@ int reacao_regra_perguntar(int ehSerie, int temProximo, int proxOutraTemporada,
                            double posSeg, double durSeg, double cred);
 // Nota do Trakt para cada resposta (8/5/2); 0 para valor invalido.
 int reacao_nota_trakt(int reacao);
+// 1 com o cartao no ar no player (para o player escurecer o video embaixo).
+int reacao_visivel(void);
 
 // --- estado local ---------------------------------------------------------------
 // REACAO_GOSTEI/MAIS_MENOS/NAO, REACAO_PENDENTE ou REACAO_NENHUMA.

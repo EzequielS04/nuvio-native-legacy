@@ -31,6 +31,7 @@
 #include "vistoep.h"
 #include "progresso.h"
 #include "posplay.h"
+#include "reacao.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -494,6 +495,14 @@ int main(int argc, char **argv) {
     quadros(120);
     salvar("mais-como-este");
     posplay_fechar(); player_shot_video(0); quadros(30);
+  }
+  if (quer(argc, argv, "reacao")) {
+    abrir(&filme); simular(3840, 2160, "", 1, 1);
+    quadros(10);
+    player_shot_esconder();
+    reacao_teste_abrir("tt99999991", "Project Hail Mary", "movie", 42, "Ana", 1);
+    quadros(110);
+    salvar("reacao");
   }
   puts("player_glass_shot: ok");
   return 0;
