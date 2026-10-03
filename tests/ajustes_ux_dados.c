@@ -258,6 +258,15 @@ static void bloqueadosESegredos(void) {
 
 int main(void) {
   char dir[] = "/tmp/nuvio-aj-ux-dados-XXXXXX";
+  assert(AJ_DISCORD == AJ_ICONE_APP + 1 && AJ_DISCORD == AJ_N - 1);
+  assert(!strcmp(CHAVE[AJ_DISCORD], "-discord"));
+  assert(!uxTemPadrao(AJ_DISCORD));
+  assert(familiaPreviaOpcao(AJ_DISCORD) == AJPV_RASTREIO);
+  int nDiscord = ajustes_buscar("Discord", resultados, AJ_N);
+  assert(indiceResultado(AJ_DISCORD, nDiscord) >= 0);
+  int discordCount=0;
+  for (int i=0;i<AJ_N_TELA;i++) if(TELA[i].tipo==IT_OPC && TELA[i].op==AJ_DISCORD) discordCount++;
+  assert(discordCount==1);
   prazoDosAddonsIntegrado();
   padroesEValores();
   escoposPorValor();
