@@ -49,6 +49,13 @@ static void captura(const char *nome, SDL_Window *win) {
     stream_folha_atualizar(1.0f / 60.0f, SDL_GetTicks());
     glClearColor(0.025f, 0.025f, 0.03f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+    // UMA ARTE DE MENTIRA atras da folha: sem ela o vidro (corpo translucido)
+    // e o degrade da borda nao tem o que deixar passar, e a captura nao
+    // prova se o texto fica sobre fundo. Faixas quentes e um bloco claro que
+    // atravessa a borda da folha, o pior caso de contraste.
+    gfx_cor((GfxRect){ 0, 0, 1920, 1080 }, 0, .26f, .17f, .12f, 1);
+    gfx_cor((GfxRect){ 0, 0, 1920, 360 }, 0, .55f, .36f, .22f, 1);
+    gfx_cor((GfxRect){ 900, 420, 900, 260 }, 0, .82f, .78f, .70f, 1);
     stream_folha_desenhar(SDL_GetTicks());
     if (i == 59) {
       unsigned char *pix = malloc(1920 * 1080 * 4);
@@ -96,6 +103,11 @@ int main(int argc, char **argv) {
       snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dir);
       f = fopen(caminho, "w"); assert(f);
       fprintf(f, "idioma 0\nselected_theme %d\n", tema);
+      { const char *t = getenv("NUVIO_SHOT_TEXTO");
+        if (t && *t == '1') fprintf(f, "fonteTextoLocal 1\n"); }
+      // Material: NUVIO_SHOT_VIDRO=0 desliga a Interface de vidro (folha solida).
+      { const char *v = getenv("NUVIO_SHOT_VIDRO");
+        fprintf(f, "vidroLocal %d\n", v && *v == '0' ? 1 : 0); }
       fclose(f);
       ajustes_dir(dir);
     } }
@@ -119,25 +131,25 @@ int main(int argc, char **argv) {
   gfx_icones_dir("deploy/app/art");
   badges_carregar("deploy/app/art");   // quem faz isto no app e home.c
 
-  fonte(&v[0], "Torrentio", "Torrentio\n4k",
-        "Silo.S02E05.2160p.WEB-DL.DV.HDR.Atmos.mp4\n11.2 GB", 2160, 1, 1);
-  fonte(&v[1], "Torrentio", "Torrentio\n1080p",
-        "Silo.S02E05.1080p.WEB.x264.mkv\nEnglish", 1080, 0, 0);
-  // #144: o formatador escreve com versalete e subscrito ("RᴇLᴇAꜱᴇ",
-  // "S₀₁ᴇ₀₈", "ᴇN · ᴊA"), que a Inter nao tem. Tem de sair em letra comum.
-  fonte(&v[2], "AIOStreams", "AIOStreams\n1080p",
-        "R\xe1\xb4\x87L\xe1\xb4\x87" "A\xea\x9c\xb1\xe1\xb4\x87 Silo S\xe2\x82\x80\xe2\x82\x82\xe1\xb4\x87\xe2\x82\x80\xe2\x82\x85"
-        " \xe1\xb4\x87N \xc2\xb7 \xe1\xb4\x8a" "A \xc2\xb7 S\xe1\xb4\x9c" "B\nDual Audio", 1080, 0, 0);
-  // A LEMBRADA CARREGA BADGES DE PROPOSITO: e a linha que recebe A MARCA e o
-  // realce ao mesmo tempo, entao e nela que "pilula clara sobre linha clara" e
-  // "badge branca sobre linha clara" aparecem juntas.
-  // O NOME DE ADDON E LONGO DE PROPOSITO: e o corte por wProv que decide se a
-  // linha do provedor encosta na marca, e com um "Torrentio" de 9 letras a
-  // folga nunca e exercida — a captura passava sem provar nada.
-  fonte(&v[3], "Torrentio · RealDebrid · Cached", "Torrentio\n1080p",
-        "Silo.S02E05.1080p.WEB-DL.x265.DDP5.1.DUBLADO.mkv\n\xf0\x9f\x87\xa7\xf0\x9f\x87\xb7 Dublado", 1080, 0, 0);
-  fonte(&v[4], "Outro Addon", "Outro Addon 720p", "Silo.S02E05.720p.mkv", 720, 0, 0);
+  // O CONJUNTO DE UMA FOLHA REAL: cinco fontes como o AIOStreams do dono as
+  // mandou para Silo S02E05 em 02/10 — `name` igual em todas, `description`
+  // em linhas (tamanho | taxa, grupo, idiomas, arquivo). O mesmo conjunto
+  // serve aos dois modos de Ajustes > Texto das fontes: no "Do Nuvio" ele
+  // exercita tituloDa (origem · destaque) sobre texto real; no "Do addon"
+  // (NUVIO_SHOT_TEXTO=1) mostra o texto como chegou, ⚡ e ⚑ inclusive.
+#define AIO "AIOStreams | ElfHosted"
+#define NOME "\xe2\x9a\xa1\xef\xb8\x8e  Silo S02 E05 "
+  fonte(&v[0], AIO, NOME,
+        "11.1 GB  |   30.1 Mbps  |\nSGF   \n\xe2\x9a\x91 English | Spanish | German | Italian | French | Portuguese\n"
+        "Silo.S02E05.Eng.Fre.Ger.Ita.Por.Spa.2160p.WEBMux.DV.HDR.HEVC.Atmos-SGF.mkv", 2160, 0, 1);
+  fonte(&v[1], AIO, NOME, "10.2 GB  |   27.8 Mbps  |\nSilo.S02E05.2160p.DV.HDR.mkv", 2160, 0, 1);
+  fonte(&v[2], AIO, NOME, "4.1 GB  |   11.2 Mbps  |\nSilo.2024.S02E05.WEB-DL.1080p.HDREZKA.STUDIO.mkv", 1080, 0, 0);
+  fonte(&v[3], AIO, NOME, "413 MB  |   1.12 Mbps  |\nELiTE\nSilo.S02E05.1080p.x265-ELiTE.mkv", 1080, 0, 0);
+  fonte(&v[4], AIO, NOME, "1.2 GB  |   3.27 Mbps  |\nSilo S02E05.mp4", 720, 1, 0);
+  // O alvo e o nome fazem o titulo de cada linha: "Silo Temporada 2 Episodio 5".
+  stream_definir_alvo("tt14688458:2:5");
   stream_definir_lista(v, 5);
+  stream_folha_nome("Silo");
   stream_folha_contexto("T2:E5 · Silo");
 
   // A DUBLADA E A LEMBRADA (indice 3), e a que esta TOCANDO e a 4K (indice 0):

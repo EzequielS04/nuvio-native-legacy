@@ -80,6 +80,10 @@ int stream_extrair(const char *json, const char *provedor, Stream **saida);
 void stream_definir_atual(int indice);
 int stream_atual(void);
 void stream_folha_contexto(const char *texto);
+// O nome do conteudo da lista (titulo do filme ou da serie), para o titulo de
+// cada linha no modo "Do Nuvio" ("Silo  Temporada 2 Episodio 5"). Chamar antes
+// de stream_folha_abrir; vazio cai no nome do addon.
+void stream_folha_nome(const char *nome);
 int stream_folha_recarregar(void);
 // Abertura animada da folha (0..1): o player apaga o OSD por baixo dela.
 float stream_folha_anim(void);

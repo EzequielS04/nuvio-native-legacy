@@ -137,7 +137,7 @@ static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foc
 typedef enum {
   // Reproducao
   AJ_QUALIDADE, AJ_DV, AJ_ATMOS, AJ_LEG_LINGUA, AJ_AUD_LINGUA,
-  AJ_PAUSA_OVERLAY, AJ_FONTE_MANUAL, AJ_FONTE_AUTO, AJ_FONTE_REPOR,
+  AJ_PAUSA_OVERLAY, AJ_FONTE_MANUAL, AJ_FONTE_AUTO, AJ_FONTE_REPOR, AJ_FONTE_TEXTO,
   // Layout da Home
   AJ_LANDSCAPE, AJ_HERO_CHEIO, AJ_HERO_FUNDO, AJ_HERO_ARTE_DIF, AJ_HERO_TRAILER,
   // Fileiras da Home
@@ -330,6 +330,11 @@ static const char *V_FONTE_AUTO[] = { "Melhor fonte", "Primeira da lista" };
 // indice e o numero (fonteReporLocal); ate a 1.4.3 eram 7, fixos, e cada
 // tentativa e mais um arquivo na conta de debrid da pessoa.
 static const char *V_FONTE_REPOR[] = { "Desligado", "1 fonte", "2 fontes", "3 fontes" };
+// O que cada linha da folha de Fontes mostra (dono, 02/10). 0 = o texto do
+// Nuvio (nome do conteudo em cima, logos de qualidade embaixo, tamanho); 1 =
+// o nome e a descricao como o addon formatou — quem monta o proprio formato no
+// AIOStreams quer ver o dele.
+static const char *V_FONTE_TEXTO[] = { "Do Nuvio", "Do addon" };
 // #90: o fundo de arte da tela de escolha de perfil (psfundo.c). "Automático"
 // e o comportamento atual (perfil primeiro, catalogo como reserva, com
 // rotacao); "Desligado" volta a tela ao que era antes da issue — psfundo nao
@@ -622,6 +627,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Escolher a fonte ao reproduzir", V_LIGA, 2), // local: ver ajustes_fonte_manual
   ESC("Fonte automática",           V_FONTE_AUTO, 2),  // local: ver fonteauto.h
   ESC("Outra fonte se falhar",      V_FONTE_REPOR, 4), // local: ver ajustes_fonte_repor
+  ESC("Texto das fontes",           V_FONTE_TEXTO, 2), // local: ver ajustes_fonte_texto_addon
 
   ESC("Pôsteres horizontais",       V_LIGA, 2),   // modernLandscapePostersEnabled
   ESC("Fundo em tela cheia",        V_LIGA, 2),   // modernHeroFullScreenBackdropEnabled
@@ -890,7 +896,7 @@ static const char *CHAVE[] = {
   // traz a chave e o valor local fica de pe.
   "escolherFonteManual",
   // LOCAIS (#130), mesma razao: o app web nao tem estas escolhas.
-  "fonteAutoLocal", "fonteReporLocal",
+  "fonteAutoLocal", "fonteReporLocal", "fonteTextoLocal",
   "modernLandscapePostersEnabled", "modernHeroFullScreenBackdropEnabled", "heroFundoLocal",
   // LOCAL, e em ingles como pedido: o app web nao tem esta escolha (grep em
   // NuvioWeb 0.3.38 por hero/backdrop: so buildHeroBackdropSources, sem
@@ -1208,7 +1214,7 @@ static const Item TELA[] = {
   SEC("Reprodução", "Player, fontes, áudio e legendas", "aj_circle-play"),
     OPC(AJ_PAUSA_OVERLAY), OPC(AJ_REACAO_CREDITOS),
     ROT("Player e seleção de fontes"),
-      OPC(AJ_FONTE_MANUAL), OPC(AJ_FONTE_AUTO), OPC(AJ_FONTE_REPOR),
+      OPC(AJ_FONTE_MANUAL), OPC(AJ_FONTE_AUTO), OPC(AJ_FONTE_REPOR), OPC(AJ_FONTE_TEXTO),
       OPC(AJ_SELOS_CORES),
     ROT("Áudio e vídeo"),
       OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS),
@@ -1340,6 +1346,7 @@ static int valor[] = {
   1,                /* escolher a fonte ao reproduzir: DESLIGADO (V_LIGA: 1 = Desligado) */
   0,                /* fonte automatica: melhor fonte (a regra de sempre) */
   2,                /* outra fonte se falhar: ate 2 (eram 7 fixas ate a 1.4.3) */
+  0,                /* texto das fontes: do Nuvio */
 
   0,                /* posteres deitados: LIGADO (perfil do dono; fabrica: desligado) */
   0,                /* fundo em tela cheia: LIGADO (perfil; fabrica: desligado) */
@@ -1621,6 +1628,7 @@ int ajustes_pausa_overlay(void)       { return lig(AJ_PAUSA_OVERLAY); }
 int ajustes_reacao_creditos(void)     { return lig(AJ_REACAO_CREDITOS); }
 int ajustes_fonte_manual(void)        { return lig(AJ_FONTE_MANUAL); }
 int ajustes_fonte_primeira(void)      { return valor[AJ_FONTE_AUTO] == 1; }
+int ajustes_fonte_texto_addon(void)   { return valor[AJ_FONTE_TEXTO] == 1; }
 int ajustes_fonte_repor(void) {
   int v = valor[AJ_FONTE_REPOR];
   return v < 0 ? 0 : v > 3 ? 3 : v;     // arquivo editado a mao: dentro da tabela
@@ -3212,6 +3220,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO:
     case AJ_FONTE_REPOR:
+    case AJ_FONTE_TEXTO:
     case AJ_SALVOS_DEST:
     case AJ_EPG_PAIS:       /* pais da grade: por aparelho, o web nao tem */
     // Arte do destaque: o web nao tem as chaves (heroFundoLocal,
@@ -3999,6 +4008,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_EPG_PAIS: return "De que país vem a programação dos canais no Guia. Automático escolhe pelo idioma e pelos nomes dos canais (RO:, |RO|…). A grade do próprio provedor Xtream entra sempre que existir.";
     case AJ_FONTE_MANUAL: return "Ao mandar reproduzir, abre a lista de fontes em vez de escolher sozinho. Canal ao vivo não pergunta.";
     case AJ_FONTE_AUTO: return "Melhor fonte: prefere 4K, Dolby Vision e MP4 e confere uma fonte por vez. Primeira da lista: toca a primeira que o addon mandou e não confere nenhuma outra — para quem já filtra e ordena no AIOStreams.";
+    case AJ_FONTE_TEXTO: return "Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.";
     case AJ_FONTE_REPOR: return "Quantas outras fontes o automático tenta quando a escolhida não abre. Cada tentativa pode adicionar um arquivo na sua conta de debrid.";
 
     // --- Home
@@ -6845,7 +6855,7 @@ static AjPreview familiaPreviaOpcao(int op) {
   switch (op) {
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA:
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
-    case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_SELOS_CORES:
+    case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES:
     case AJ_REACAO_CREDITOS:
       return AJPV_REPRO;
     case AJ_HOME_LAYOUT:
@@ -7032,7 +7042,8 @@ static float previaReproducaoOpcao(int op, float x, float y, float w) {
       gfx_cor(r, 6.0f/27.0f, 0.12f, 0.13f, 0.16f, 1.0f);
       if ((op == AJ_FONTE_AUTO && i == valor[op]) ||
           (op == AJ_FONTE_MANUAL && i == (lig(op) ? 1 : 0)) ||
-          (op == AJ_FONTE_REPOR && i == valor[op]))
+          (op == AJ_FONTE_REPOR && i == valor[op]) ||
+          (op == AJ_FONTE_TEXTO && i == valor[op]))
         previaRealce(bx, r.y, r.w, r.h, ar, ag, ab);
     }
   }

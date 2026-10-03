@@ -544,6 +544,15 @@ static void idBaseDoTitulo(char *dst, size_t tam) {
   fontepref_id_base(c->imdb, dst, (unsigned)tam);
 }
 
+// O nome que a folha de Fontes poe no titulo de cada linha: o do item que
+// idBaseDoTitulo usa (o player aberto, senao o detalhe). Canal fica sem nome
+// e a folha cai no addon.
+static void nomeParaFolha(void) {
+  const CatItem *c = player_id_canal()[0] ? NULL
+                   : cat_item(player_aberto() ? player_indice() : detail_indice());
+  stream_folha_nome(c ? c->titulo : "");
+}
+
 static void episodioDoDetalhe(void) {
   int t=0,e=0;
   detail_ep_foco(&t,&e);
@@ -2543,7 +2552,7 @@ void app_atualizar(float dt, Uint32 agora) {
       char base[24];
       idBaseDoTitulo(base, sizeof base);
       stream_preferir(base[0] ? fontepref_escolher(base) : -1);
-      stream_folha_abrir();
+      nomeParaFolha(); stream_folha_abrir();
     }
   }
   // Escolher uma fonte na folha inicia a reproducao DELA. Trocar de fonte com o
@@ -2625,7 +2634,7 @@ void app_atualizar(float dt, Uint32 agora) {
       if (ajustes_fonte_manual() && stream_n() > 0 && lembrada < 0) {
         aguardandoFonte = 0;
         folhaParaTocar = 1;
-        stream_folha_abrir();
+        nomeParaFolha(); stream_folha_abrir();
       } else if (pedirFonteJob(FJOB_ADDON, geracao, NULL, 0) < 0) {
         aguardandoFonte = 0; player_erro_fonte();
       }
@@ -2897,7 +2906,7 @@ void app_atualizar(float dt, Uint32 agora) {
     stream_folha_contexto(player_linha_episodio());
     idBaseDoTitulo(base, sizeof base);
     stream_preferir(base[0] ? fontepref_escolher(base) : -1);
-    stream_folha_abrir();
+    nomeParaFolha(); stream_folha_abrir();
   }
 
   // CANAL ESCOLHIDO NO GUIA — tela cheia ou faixa, mesma acao: toca direto.

@@ -85,6 +85,8 @@ int ajustes_fonte_manual(void);
 // primeira fonte na ordem do addon e confere SO ela. 0 = "Melhor fonte", a
 // regra de pontuacao de streams.c. Ver fonteauto.h.
 int ajustes_fonte_primeira(void);
+// 1 = a folha de Fontes mostra o nome e a descricao do addon como vieram.
+int ajustes_fonte_texto_addon(void);
 // "Outra fonte se falhar": quantas OUTRAS fontes o automatico tenta quando a
 // escolhida nao abre (0..3; 0 = nenhuma). Nao vale para escolha manual nem
 // para canal ao vivo, que tem o watchdog proprio em app.c.

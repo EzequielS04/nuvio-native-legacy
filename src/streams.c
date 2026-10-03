@@ -3,6 +3,8 @@
 #include "idioma.h"
 #include "badges.h"
 #include "limpa.h"
+#include <ctype.h>
+#include <strings.h>
 #include <pthread.h>
 #include "rede.h"
 #include "gfx.h"
@@ -23,11 +25,26 @@
 #include "botoes.h"
 #include "ponteiro.h"
 
-#define FOLHA_W       720.0f
-#define FOLHA_LINHA   228.0f   // cartao de 216 + NV_LINHA_VAO
-#define FOLHA_SELO_Y  176.0f   // topo da fileira de selos dentro do cartao
-#define FOLHA_SELO_H   22.0f
-#define FOLHA_TOPO    300.0f
+// A FOLHA DE FONTES (dono, 02/10: "muito infantil, nao ta polida como o
+// resto"; aprovou o mockup "E" num canvas de tres rodadas). A folha encosta na
+// borda direita e se funde com a arte por um degrade; a lista e AGRUPADA POR
+// RESOLUCAO, e cada linha diz primeiro a QUALIDADE ("Dolby Vision", "BluRay
+// Remux") — o nome do addon ("[AD] Debridio 4K") nao diz nada sobre a fonte
+// e era a primeira coisa que a linha mostrava. O resto da linha de antes
+// (provedor, descricao, meta, seis selos) lia como planilha.
+#define FOLHA_W        900.0f
+#define FOLHA_PAD_E     48.0f  // da borda da folha ao cartao da linha
+#define FOLHA_PAD_D     56.0f
+#define FOLHA_TXT       26.0f  // do cartao ao texto
+#define FOLHA_TOPO     286.0f  // onde a lista comeca
+#define FOLHA_LINHA_H  120.0f  // linha sem marca e sem arquivo
+#define FOLHA_MARCA_H   30.0f  // "SUA ESCOLHA ANTERIOR" / "REPRODUZINDO AGORA"
+#define FOLHA_ARQ_H     34.0f  // nome do arquivo, so na linha em foco
+#define FOLHA_LINHA_GAP  4.0f
+#define FOLHA_SEC_H     64.0f  // cabecalho "4K  ULTRA HD ... 3 fontes"
+#define FOLHA_SEC_GAP   26.0f
+#define FOLHA_RAIO      22.0f
+#define FOLHA_SELO_H    32.0f
 #define FOLHA_AUDIO_W  60.0f
 #define FOLHA_AUDIO_N   8
 #define FOLHA_AUDIO_BAR 4.0f
@@ -870,21 +887,26 @@ static int grupo, filtro, soMp4;
 // BOTOES DO CABECALHO. "Sem HDR" so existe onde ha o que renegociar (webOS);
 // ver o bloco "TELA PRETA COM AUDIO TOCANDO" em video.h. Oferecer um botao que
 // nao faz nada seria pior que nao oferecer: a pessoa aperta, nada muda, e passa
-// a duvidar dos outros dois. "Só MP4" (#91) filtra a lista — permanece na folha.
+// a duvidar dos outros. "Só MP4" (#91) filtra a lista — permanece na folha.
+// Ordem visivel, da esquerda: [Sem HDR] e MP4 como pilulas com rotulo,
+// Recarregar e Fechar como discos de icone (Lucide rotate-cw e x).
 enum { BT_RECARREGAR, BT_SEM_HDR, BT_SO_MP4, BT_FECHAR };
 static int botaoDe(int i) {
-  // Ordem visivel: Recarregar, [Sem HDR], Só MP4, Fechar.
-  if (video_pode_forcar_sdr()) {
-    if (i == 0) return BT_RECARREGAR;
-    if (i == 1) return BT_SEM_HDR;
-    if (i == 2) return BT_SO_MP4;
-    return BT_FECHAR;
-  }
-  if (i == 0) return BT_RECARREGAR;
+  if (!video_pode_forcar_sdr()) i++;
+  if (i == 0) return BT_SEM_HDR;
   if (i == 1) return BT_SO_MP4;
+  if (i == 2) return BT_RECARREGAR;
   return BT_FECHAR;
 }
 static int nBotoes(void) { return video_pode_forcar_sdr() ? 4 : 3; }
+static const char *rotuloBotao(int b) {
+  if (b == BT_SEM_HDR) return "Sem HDR";
+  if (b == BT_SO_MP4)  return "Só MP4";
+  return NULL;
+}
+static const char *iconeBotao(int b) {
+  return b == BT_RECARREGAR ? "aj_rotate-cw" : b == BT_FECHAR ? "aj_x" : NULL;
+}
 // TEXTO DE ADDON LIMPO, GUARDADO POR LISTA (#144). nv_limpar_texto percorre o
 // texto e consulta tabelas: barato, mas a folha desenha ~10 linhas por quadro a
 // 60 Hz. Cada fonte e limpa na primeira vez que aparece e o resultado fica ate
@@ -915,12 +937,6 @@ static void limpo(int i, const char **nome, const char **desc) {
   *nome = t->nome; *desc = t->desc;
 }
 
-static const char *rotuloBotao(int b) {
-  if (b == BT_RECARREGAR) return "Recarregar";
-  if (b == BT_SEM_HDR)    return "Sem HDR";
-  if (b == BT_SO_MP4)     return soMp4 ? "MP4 ✓" : "MP4";
-  return "Fechar";
-}
 static char provedores[13][96];
 static int nProvedores;
 
@@ -940,93 +956,322 @@ static void atualizarProvedores(void) {
   }
   if(filtro>=nProvedores) filtro=0;
 }
-static int filtrado(int linha) {
-  for(int i=0,j=0;i<n;i++)
-    if(passaFiltro(i))
-      if(j++==linha) return i;
-  return -1;
-}
 static int nFiltrados(void) {
   int k=0;
   for(int i=0;i<n;i++) if(passaFiltro(i)) k++;
   return k;
 }
 
-// O foco da fonte segue o mesmo botao primario do menu: fill accent limpo e
-// halo macio atras do alvo, sem degradê, translucidez ou reflexo de vidro.
-static void corFocoFonte(float *r, float *g, float *b) {
-  ajustes_acento(r, g, b);
+// A FONTE QUE O AUTOMATICO ESCOLHERIA. E a resposta a "se eu nao escolher
+// nada, o que toca?". A ordem e a mesma de stream_primeira_boa: a lembrada vai
+// na frente quando existe; senao, a de maior pontuacao. Pedido do dono, 16/09.
+// Uma vez por quadro, nunca por linha: stream_automatico percorre a lista.
+static int automaticaDaFolha(void) {
+  return preferida >= 0 && !automaticaExcluida(preferida) ? preferida : stream_automatico();
 }
 
+// A LISTA AGRUPADA POR RESOLUCAO. A ordem da lista (a pontuacao) vale DENTRO
+// de cada grupo; os grupos vao do maior para o menor. `ordem[linha]` e o indice
+// em lista[] e e o que o OK escolhe — a navegacao anda nesta ordem, nao na da
+// lista, senao a seta desceria por uma linha e o realce apareceria em outra.
+//
+// As alturas sao por linha: a marca ("Sua escolha anterior") e o nome do
+// arquivo (so na linha em foco, abrindo por mola) somam altura. Montado a cada
+// quadro em atualizar e em desenhar: n e da ordem de dezenas, e guardar entre
+// quadros exigiria invalidar em cada filtro, recarga e troca de lista.
+#define FOLHA_GRUPOS 4
+static const char *const GRUPO_NOME[FOLHA_GRUPOS] = { "4K", "1080p", "720p", "Outras" };
+static const char *const GRUPO_SUB[FOLHA_GRUPOS]  = { "ULTRA HD", "FULL HD", "HD", "" };
+static int grupoRes(const Stream *s) {
+  if (s->altura >= 1800 || (s->badges & badges_bit("r-4k"))) return 0;
+  if (s->altura >= 1000 || (s->badges & badges_bit("r-1080"))) return 1;
+  if (s->altura >= 700  || (s->badges & badges_bit("r-720"))) return 2;
+  return 3;
+}
+static int *ordem;
+static float *linhaY, *linhaH;
+static int ordemCap, nOrdem;
+static float secY[FOLHA_GRUPOS], alturaTotal;
+static int secN[FOLHA_GRUPOS];
+// A linha em foco abre (abreFoco 0->1) e a que perdeu o foco fecha (abreAnt
+// 1->0) ao mesmo tempo: abrir uma e fechar a outra no mesmo quadro empurraria
+// a lista inteira de uma vez.
+static float abreFoco = 1.0f, abreAnt;
+static int linhaAnt = -1, focoVisto = -1;
+
+
+// MODO "DO ADDON" (Ajustes > Texto das fontes; dono, 02/10: "tem que ter a
+// opcao de receber pronto o texto que alguns addons mandam"). O titulo e o
+// `name` do addon numa linha so, e embaixo a `description` linha a linha, como
+// veio — o AIOStreams do dono manda "11.1 GB | 30.1 Mbps |", o grupo, os
+// idiomas e o arquivo, cada um numa linha. Glifo que a Inter nao tem (o ⚡ e o
+// ⚑ do formatador) cai fora em text.c, sem virar quadrado.
+#define FOLHA_ADDON_LINHAS 4
+#define FOLHA_ADDON_LD     28.0f
+static void linhaLimpa(char *d, size_t tam, const char *ini, size_t n) {
+  size_t k = 0;
+  while (n && (*ini == ' ' || *ini == '\t')) { ini++; n--; }
+  while (n && (ini[n-1] == ' ' || ini[n-1] == '\t' || ini[n-1] == '\r')) n--;
+  for (size_t j = 0; j < n && k + 1 < tam; j++) {
+    unsigned char c = (unsigned char)ini[j];
+    d[k++] = c < 32 ? ' ' : (char)c;
+  }
+  d[k] = 0;
+}
+static int linhasAddon(const Stream *s, char out[][192], int max) {
+  const char *p = s->descricao;
+  int nl = 0;
+  while (*p && nl < max) {
+    const char *f = strchr(p, '\n');
+    size_t n = f ? (size_t)(f - p) : strlen(p);
+    { char cru[1024];
+      // A linha passa pelo limpador do #144 (versalete, subscrito, glifo que
+      // a Inter nao tem) antes de ir para a tela, como o resto da folha.
+      linhaLimpa(cru, sizeof cru, p, n);
+      nv_limpar_texto(cru, out[nl], 192, NV_LIMPA_UMA_LINHA); }
+    if (out[nl][0]) nl++;
+    if (!f) break;
+    p = f + 1;
+  }
+  return nl;
+}
+static void tituloAddon(const Stream *s, char *buf, size_t tam) {
+  char t[sizeof s->rotulo], lim[sizeof s->rotulo];
+  size_t k = 0;
+  int esp = 0;
+  for (const char *p = s->rotulo; *p && k + 1 < sizeof t; p++) {
+    unsigned char c = (unsigned char)*p;
+    if (c < 33) { esp = k > 0; continue; }
+    if (esp) { t[k++] = ' '; esp = 0; }
+    t[k++] = (char)c;
+  }
+  t[k] = 0;
+  nv_limpar_texto(t, lim, sizeof lim, NV_LIMPA_UMA_LINHA);
+  snprintf(buf, tam, "%s", lim[0] ? lim : s->provedor);
+}
+
+static int temPalavra(const char *s, const char *p) {
+  size_t n = strlen(p);
+  for (const char *q = s; *q; q++) {
+    if (strncasecmp(q, p, n)) continue;
+    if (q > s && isalnum((unsigned char)q[-1])) continue;
+    if (isalnum((unsigned char)q[n])) continue;
+    return 1;
+  }
+  return 0;
+}
+static int temNoTexto(const Stream *s, const char *p) {
+  return temPalavra(s->rotulo, p) || temPalavra(s->descricao, p) || temPalavra(s->arquivo, p);
+}
+// O IDIOMA nao tem logo no pacote de selos, entao vai como texto no fim da
+// fileira. Lido por palavra no nome, na descricao e no arquivo.
+static const char *idiomaDa(const Stream *s) {
+  if (temNoTexto(s, "dublado") || temNoTexto(s, "dub")) return "Dublado";
+  if (temNoTexto(s, "dual")) return "Dual áudio";
+  if (temNoTexto(s, "legendado") || temNoTexto(s, "leg")) return "Legendado";
+  return NULL;
+}
+
+// O TITULO DA LINHA, modo "Do Nuvio": o NOME DO CONTEUDO (dono, 02/10: "deixar
+// as badges embaixo e o nome mesmo em cima — Silo Season 2 Episode 5; se fosse
+// filme so o nome do filme"). Toda a qualidade fica nos logos embaixo. O nome
+// vem de app.c (stream_folha_nome, junto de cada abertura da folha); temporada
+// e episodio vem do ALVO DA LISTA ("tt...:2:5"), que e de que episodio estas
+// fontes sao — e nao do episodio em foco no detalhe, que pode ser outro.
+static char nomeFolha[160];
+void stream_folha_nome(const char *nome) {
+  snprintf(nomeFolha, sizeof nomeFolha, "%s", nome ? nome : "");
+}
+// Duas partes: o NOME (grande) e o EPISODIO ("Temporada 2 Episodio 5"),
+// desenhado menor e mais apagado ao lado (dono, 02/10: "pode deixar menor e
+// mais delicado"). Filme e canal ficam so com o nome.
+static void tituloConteudo(const Stream *s, char *nome, size_t tn, char *ep, size_t te) {
+  const char *c1 = strchr(alvoLista, ':'), *c2 = c1 ? strchr(c1 + 1, ':') : NULL;
+  ep[0] = 0;
+  // Sem nome (canal, ou quem abriu a folha nao disse), o addon: e o que
+  // sobra que diz de onde a linha vem.
+  snprintf(nome, tn, "%s", nomeFolha[0] ? nomeFolha : s->provedor);
+  if (nomeFolha[0] && c1 && c2 && atoi(c1 + 1) > 0 && atoi(c2 + 1) > 0)
+    snprintf(ep, te, i18n("Temporada %d Episódio %d"), atoi(c1 + 1), atoi(c2 + 1));
+}
+
+static uint64_t FOLHA_PREMIUM_IMG(void) {
+  return badges_bit("v-dv") | badges_bit("v-hdr10plus") | badges_bit("v-hdr10") | badges_bit("v-hdr") | badges_bit("v-hlg") |
+         badges_bit("v-imax-enhanced") | badges_bit("v-imax");
+}
+static uint64_t FOLHA_PREMIUM_AUD(void) {
+  return badges_bit("a-atmos") | badges_bit("a-atmos-dv") | badges_bit("a-truehd") | badges_bit("a-truehd-dv") |
+         badges_bit("a-dtsx") | badges_bit("a-dtshdma");
+}
+// A fileira mostra TODOS os logos, inclusive o que tambem esta no titulo
+// (dono, 02/10: "tem que colocar as badges do dolby vision tb" — o titulo e
+// para ler, o logo e a marca que o olho reconhece de longe). Sai so a
+// resolucao, que ja e o grupo.
+//
+// Os logos de audio COMBINADOS ("Dolby Atmos · Vision", "TrueHD · Vision",
+// "Digital · Vision") trazem o Vision dentro, e badges_detectar NAO poe v-dv
+// quando ha um deles. Numa fonte Dolby Vision a fileira mostra entao o logo
+// do Vision sozinho e o audio sem o Vision, em vez de dizer Vision duas vezes.
+static uint64_t logosDa(const Stream *s, uint64_t tira) {
+  static const char *const COMB[][2] = {
+    { "a-atmos-dv", "a-atmos" }, { "a-truehd-dv", "a-truehd" }, { "a-dd-dv", "a-ddp" },
+  };
+  uint64_t m = s->badges & ~(badges_bit("r-4k") | badges_bit("r-1080") | badges_bit("r-720") | badges_bit("r-sd"));
+  (void)tira;
+  if (s->dolbyVision || (m & (badges_bit("v-dv") | badges_bit("a-atmos-dv") |
+                              badges_bit("a-truehd-dv") | badges_bit("a-dd-dv")))) {
+    m |= badges_bit("v-dv");
+    for (size_t k = 0; k < sizeof COMB / sizeof COMB[0]; k++)
+      if (m & badges_bit(COMB[k][0])) m = (m & ~badges_bit(COMB[k][0])) | badges_bit(COMB[k][1]);
+  }
+  return m;
+}
+// A linha de arquivo existe quando ha arquivo, ou quando a descricao NAO foi
+// usada no lugar da fileira de logos (linha sem selo e sem MP4). A altura da
+// linha e o desenho perguntam aqui, senao a linha abre um vao vazio.
+//
+// Da descricao vale so a ULTIMA linha: formatadores como o AIOStreams poem
+// tamanho e taxa em cima e o nome do arquivo no fim, e a linha inteira
+// repetia os numeros que a coluna da direita ja mostra. Buffer estatico: so
+// o fio principal chama, e cada chamador usa o texto antes da seguinte.
+static const char *arquivoDa(const Stream *s) {
+  static char ult[192];
+  const char *p, *f;
+  if (s->arquivo[0]) return s->arquivo;
+  if (!logosDa(s, 0) && strcmp(containerDa(s), "MP4") && !idiomaDa(s)) return "";
+  ult[0] = 0;
+  for (p = s->descricao; *p; p = f + 1) {
+    f = strchr(p, '\n');
+    char l[192];
+    linhaLimpa(l, sizeof l, p, f ? (size_t)(f - p) : strlen(p));
+    if (l[0]) snprintf(ult, sizeof ult, "%s", l);
+    if (!f) break;
+  }
+  return ult;
+}
+
+// A linha de marca e so para o que esta tocando e para a escolha anterior.
+// A fonte que o automatico tocaria ganha o selo "Melhor para esta TV" ao
+// lado do titulo (melhorDaFolha), e nao mais uma linha "Escolha automatica".
+static int melhorFolha = -1;   // stream_automatico() do quadro, posto antes de montar()
+static int temMarca(int i, int automatica) {
+  (void)automatica;
+  return i >= 0 && (i == atual || i == preferida || (i == melhorFolha && nFiltrados() > 1));
+}
+static void montar(int automatica) {
+  float y = 0;
+  int g, i;
+  if (ordemCap < n) {
+    int cap = n + 32;
+    int *o = realloc(ordem, cap * sizeof *o);
+    if (o) ordem = o;
+    float *a = realloc(linhaY, cap * sizeof *a);
+    if (a) linhaY = a;
+    float *b = realloc(linhaH, cap * sizeof *b);
+    if (b) linhaH = b;
+    if (!o || !a || !b) { nOrdem = 0; return; }
+    ordemCap = cap;
+  }
+  nOrdem = 0;
+  for (g = 0; g < FOLHA_GRUPOS; g++) {
+    secN[g] = 0;
+    for (i = 0; i < n; i++) {
+      float h;
+      if (!passaFiltro(i) || grupoRes(&lista[i]) != g) continue;
+      if (!secN[g]) {
+        if (nOrdem) y += FOLHA_SEC_GAP;
+        secY[g] = y;
+        y += FOLHA_SEC_H;
+      }
+      secN[g]++;
+      h = FOLHA_LINHA_H + (temMarca(i, automatica) ? FOLHA_MARCA_H : 0);
+      if (ajustes_fonte_texto_addon()) {
+        char tmp[FOLHA_ADDON_LINHAS][192];
+        int nl = linhasAddon(&lista[i], tmp, FOLHA_ADDON_LINHAS);
+        h = 20 + 40 + nl * FOLHA_ADDON_LD + 18 + (temMarca(i, automatica) ? FOLHA_MARCA_H : 0);
+        if (h < 96) h = 96;
+      } else if (!arquivoDa(&lista[i])[0]) ;
+      else if (grupo == 1 && nOrdem == foco) h += FOLHA_ARQ_H * abreFoco;
+      else if (nOrdem == linhaAnt)           h += FOLHA_ARQ_H * abreAnt;
+      ordem[nOrdem] = i;
+      linhaY[nOrdem] = y;
+      linhaH[nOrdem] = h;
+      y += h + FOLHA_LINHA_GAP;
+      nOrdem++;
+    }
+  }
+  alturaTotal = y;
+}
+static int filtrado(int linha) {
+  return linha >= 0 && linha < nOrdem ? ordem[linha] : -1;
+}
+static int linhaDe(int indice) {
+  for (int r = 0; r < nOrdem; r++) if (ordem[r] == indice) return r;
+  return -1;
+}
+static float areaLista(void) { return NV_TELA_H - NV_FOLHA_MARGEM - 16.0f - FOLHA_TOPO; }
+// A linha em foco no meio da area; a primeira de um grupo leva o cabecalho
+// junto, senao subir ate ela deixaria "4K" escondido acima da borda.
+static float alvoRolagem(void) {
+  float area = areaLista(), alvo, max;
+  if (grupo != 1 || foco >= nOrdem) return rolagem;
+  alvo = linhaY[foco] - (area - linhaH[foco]) * .5f;
+  for (int g = 0; g < FOLHA_GRUPOS; g++)
+    if (secN[g] && secY[g] + FOLHA_SEC_H == linhaY[foco] && alvo > secY[g]) alvo = secY[g];
+  max = alturaTotal - area + 40.0f;
+  if (alvo > max) alvo = max;
+  if (alvo < 0) alvo = 0;
+  return alvo;
+}
+
+// O foco do cabecalho e do seletor de addon segue o botao primario do app:
+// fill accent limpo e halo macio atras do alvo. A LINHA nao usa este foco —
+// la a superficie clara com contorno fino e o que o mockup aprovado mostra,
+// e um bloco cheio de acento de 112 px de altura era justamente o "infantil".
 static void focoFonte(GfxRect r, float raio, float alfa) {
   float sr, sg, sb;
   if (alfa <= 0.01f) return;
-  corFocoFonte(&sr, &sg, &sb);
-  // Retangulos de linha sao altos; metade da intensidade da pilula mantem a
-  // luz visivel sem espalhar uma mancha por varios cartoes vizinhos.
-  // Vidro: a linha em foco continua translucida, com o contorno (e um tom de
-  // 9 %) na cor do realce — nada de bloco cheio nem luz atras. Os pequenos
-  // (botoes e filtros) usam a pilula cheia, ver focoFontePilula.
-  if (ajustes_vidro()) { gfx_vidro_foco(r, raio, 1.0f, alfa); return; }
+  ajustes_acento(&sr, &sg, &sb);
   botao_luz(r, 0.55f, alfa);
   gfx_cor(r, raio, sr, sg, sb, alfa);
-}
-// Botao/filtro em foco no vidro: pilula CHEIA no realce (branca no padrao), com
-// a tinta que contrasta; fora do vidro e o foco de sempre.
-static void focoFontePilula(GfxRect r, float raio, float alfa) {
-  if (ajustes_vidro()) { gfx_vidro_pilula_cheia(r, raio, 1.0f, alfa); return; }
-  focoFonte(r, raio, alfa);
 }
 
 // EQUALIZADOR DO "REPRODUZINDO AGORA". O player nativo nao expoe amplitude
 // de audio por quadro, entao isto NAO finge ser medidor: e uma assinatura visual
-// discreta de que a fonte esta ativa. O movimento usa so primitivas ja existentes
-// e o relogio do desenho; sem alocacao, textura ou fio novo.
-static void desenharAudioBars(float x, float y, float alfa, int focado,
-                              Uint32 agora) {
+// discreta de que a fonte esta ativa. `alt` e a altura da caixa: na linha da
+// marca as barras tem a altura das letras.
+static void desenharAudioBars(float x, float y, float alt, float alfa, Uint32 agora) {
   static const float parado[FOLHA_AUDIO_N] = { .35f, .58f, .82f, .52f, .72f, .44f, .64f, .48f };
   float cr, cg, cb;
-  int i;
-  ajustes_acento_tinta(&cr, &cg, &cb);
-  if (focado) cr = cg = cb = ajustes_acento_tinta(NULL, NULL, NULL);
-  for (i = 0; i < FOLHA_AUDIO_N; i++) {
-    float nivel = parado[i];
-    float h;
+  ajustes_acento(&cr, &cg, &cb);
+  for (int i = 0; i < FOLHA_AUDIO_N; i++) {
+    float nivel = parado[i], h;
     if (!ajustes_animacoes_reduzidas())
       nivel = .22f + .78f * (.5f + .5f * sinf((float)agora * .0042f + i * .82f));
-    h = 6.0f + nivel * 18.0f;
-    gfx_cor((GfxRect){ x + i * (FOLHA_AUDIO_BAR + FOLHA_AUDIO_GAP),
-                       y + 24.0f - h, FOLHA_AUDIO_BAR, h },
-            .5f, cr, cg, cb, alfa * .85f);
+    h = alt * (.25f + .75f * nivel);
+    gfx_cor((GfxRect){ x + i * (FOLHA_AUDIO_BAR * .5f + FOLHA_AUDIO_GAP * .6f), y + alt - h,
+                       FOLHA_AUDIO_BAR * .5f, h }, .5f, cr, cg, cb, alfa * .92f);
   }
 }
 
-// ETIQUETA DE ESTADO da linha ("Escolha automática", "MP4"): lavagem de 16 %
-// do realce e o texto no realce clareado 35 % para o branco — legivel com
-// qualquer tema (o realce padrao e branco: lavagem branca, texto branco).
-static void etiquetaCor(float *r, float *g, float *b) {
-  ajustes_acento(r, g, b);
-  *r += (1.0f - *r) * .35f; *g += (1.0f - *g) * .35f; *b += (1.0f - *b) * .35f;
-}
-static TxtLinha etiquetaTexto(const char *rot) {
-  float r, g, b;
-  etiquetaCor(&r, &g, &b);
-  return txt_linha(TXT_CAPTION2, rot, (int)(r * 255), (int)(g * 255), (int)(b * 255), 255);
-}
-static void etiqueta(GfxRect pil, TxtLinha m, int vid) {
-  float ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
-  if (vid) gfx_vidro_painel_acento(pil, NV_RAIO_PILL, 0.4f, anim);
-  else gfx_cor(pil, NV_RAIO_PILL, ar, ag, ab, .16f * anim);
-  txt_desenhar_alpha(m, pil.x + (pil.w - (float)m.w) * .5f, pil.y + 3.0f, anim);
-}
-
 void stream_folha_abrir(void) {
-  int excl;
-  aberta=1; escolha=-1; foco=0; grupo=1; filtro=0; soMp4=0; recarregar=0;
+  int excl, aut, alvo;
+  aberta=1; escolha=-1; grupo=1; filtro=0; soMp4=0; recarregar=0;
   atualizarProvedores();
-  if(atual>=0) foco=atual;
-  rolagem=0;velRol=0;
+  // A FOLHA ABRE NA FONTE QUE IMPORTA: a que esta tocando, senao a que o
+  // automatico tocaria. Com a lista agrupada por resolucao a primeira linha ja
+  // nao e a de maior pontuacao, entao abrir na linha 0 poria o realce numa
+  // fonte qualquer de 4K enquanto a marca "automatica" fica la embaixo.
+  aut = automaticaDaFolha();
+  melhorFolha = stream_automatico();
+  alvo = atual >= 0 ? atual : aut;
+  abreFoco = 1; abreAnt = 0; linhaAnt = -1; foco = 0;
+  montar(aut);
+  foco = linhaDe(alvo);
+  if (foco < 0) foco = 0;
+  focoVisto = foco;
+  montar(aut);
+  rolagem = alvoRolagem(); velRol = 0;
   // A CONTAGEM DA FOLHA NO LOG (#132). O log tinha "[addons] X: N fontes" e
   // "[addons] total N" de um lado e nada do que a folha mostrou do outro: um
   // relato de "so 1 fonte listada" nao tinha como dizer se a queda foi no
@@ -1041,15 +1286,68 @@ void stream_folha_abrir(void) {
 }
 int stream_folha_aberta(void) { return aberta; }
 float stream_folha_anim(void) { return anim; }
+
+// A MESMA FONTE entre duas montagens da lista (ver stream_atualizar_lista).
+// Url sozinha nao basta: torrent sem debrid resolvido tem url vazia e se
+// distingue pelo hash e pelo arquivo.
+static int mesmaFonte(const Stream *a, const Stream *b) {
+  return a->fileIdx == b->fileIdx && !strcmp(a->provedor, b->provedor) &&
+         !strcmp(a->url, b->url) && !strcmp(a->infoHash, b->infoHash) &&
+         !strcmp(a->rotulo, b->rotulo);
+}
+static int acharFonte(const Stream *alvo) {
+  for (int i = 0; i < n; i++) if (mesmaFonte(&lista[i], alvo)) return i;
+  return -1;
+}
+
+// LISTA CRESCENDO COM A FOLHA ABERTA (issue #221). A pessoa pode estar
+// descendo a lista quando o addon seguinte responde: o realce fica na MESMA
+// fonte, mesmo que ela mude de linha (grupo de resolucao novo acima, ou addon
+// anterior na ordem). Com a folha aberta ainda vazia, a primeira leva poe o
+// realce na que o automatico tocaria — o mesmo criterio de stream_folha_abrir.
+void stream_atualizar_lista(const Stream *l, int qtd) {
+  static Stream marca[3];   // ~8 KB cada: fora da pilha
+  int tem[3] = {0}, idx[3], g = grupo, f = foco, k;
+  idx[0] = atual; idx[1] = preferida;
+  idx[2] = aberta && grupo == 1 ? filtrado(foco) : -1;
+  for (k = 0; k < 3; k++)
+    if (idx[k] >= 0 && idx[k] < n) { marca[k] = lista[idx[k]]; tem[k] = 1; }
+  stream_definir_lista(l, qtd);
+  if (tem[0]) atual = acharFonte(&marca[0]);
+  if (tem[1]) preferida = acharFonte(&marca[1]);
+  foco = f;   // fora da lista, `foco` e o botao do cabecalho
+  if (aberta && g == 1) {
+    int alvo = tem[2] ? acharFonte(&marca[2]) : -1, r;
+    atualizarProvedores();
+    montar(automaticaDaFolha());
+    if (alvo < 0 && !tem[2]) alvo = atual >= 0 ? atual : automaticaDaFolha();
+    r = alvo >= 0 ? linhaDe(alvo) : -1;
+    if (r >= 0) foco = r;
+    // Mudar de linha por causa da lista nao e a pessoa andando: sem isto a
+    // linha em foco fecharia e reabriria o nome do arquivo a cada addon.
+    focoVisto = foco; linhaAnt = -1;
+  }
+}
 int stream_folha_n(void) { return nFiltrados(); }
 void stream_folha_evento(const SDL_Event *e) {
   if(!aberta || e->type!=SDL_KEYDOWN) return;
   SDL_Keycode k=e->key.keysym.sym;
   if(k==SDLK_ESCAPE || k==SDLK_AC_BACK || k==SDLK_BACKSPACE || k==SDLK_DELETE) {aberta=0;return;}
   if(k==SDLK_r) {recarregar=1;return;}
-  int nf=nFiltrados();
-  if(k==SDLK_UP) {if(grupo==1 && foco>0) foco--; else if(grupo>-1) grupo--;}
-  if(k==SDLK_DOWN) {if(grupo<1) grupo++; else if(foco<nf-1) foco++;}
+  montar(automaticaDaFolha());
+  int nf=nOrdem;
+  // `foco` e indice de BOTAO no cabecalho e de LINHA na lista: ao trocar de
+  // grupo ele recomeca, senao descer do quarto botao caia na quarta linha.
+  if(k==SDLK_UP) {
+    if(grupo==1 && foco>0) foco--;
+    else if(grupo==1) grupo=0;
+    else if(grupo==0) {grupo=-1;foco=nBotoes()-1;}
+  }
+  if(k==SDLK_DOWN) {
+    if(grupo==-1) grupo=0;
+    else if(grupo==0) {grupo=1;foco=0;}
+    else if(foco<nf-1) foco++;
+  }
   if(grupo==0 && (k==SDLK_LEFT || k==SDLK_RIGHT)) {
     filtro+=k==SDLK_RIGHT?1:-1;
     if(filtro<0) filtro=0;
@@ -1068,32 +1366,36 @@ void stream_folha_evento(const SDL_Event *e) {
         // Fecha a folha junto: a imagem volta (ou nao) na propria tela do
         // player, e deixar a folha aberta em cima esconderia o resultado.
         case BT_SEM_HDR:    video_forcar_sdr(); aberta=0; break;
-        case BT_SO_MP4:     soMp4 = !soMp4; foco=0; rolagem=0;velRol=0; break;
+        case BT_SO_MP4:     soMp4 = !soMp4; rolagem=0;velRol=0; break;
         default:            aberta=0; break;
       }
     }
     else if(grupo==0) {grupo=1;foco=0;}
-    else {escolha=filtrado(foco);if(escolha>=0) aberta=0;}
+    else {
+      int r=filtrado(foco);
+      if(r>=0) {escolha=r;aberta=0;}
+    }
   }
 }
 void stream_folha_atualizar(float dt, Uint32 agora) {
+  int nf;
   (void)agora;
   anim=anim_mola(anim,aberta?1:0,dt,NV_MOLA_TELA);
   atualizarProvedores();
-  int nf=nFiltrados();
+  montar(automaticaDaFolha());
+  nf=nOrdem;
   if(grupo==1 && foco>=nf) foco=nf>0?nf-1:0;
-  // ROLAGEM EM DEGRAU DE CARTAO. Centrar o foco deixava sempre um cartao
-  // cortado debaixo das abas (so a fileira de marcas dele aparecia, foto de
-  // 30/09). Agora o topo da lista e sempre o topo de um cartao: o focado fica
-  // na segunda posicao, e no fim da lista o ultimo desce ate a terceira.
-  float area=NV_TELA_H-FOLHA_TOPO-32;
-  int cabem=(int)(area/FOLHA_LINHA);
-  int topo=foco>0?foco-1:0;
-  if(cabem<1) cabem=1;
-  if(topo>nf-cabem) topo=nf-cabem;
-  if(topo<0) topo=0;
-  float alvo=topo*FOLHA_LINHA;
-  rolagem=anim_mola2(&velRol,rolagem,alvo,dt,NV_MOLA2_SCROLL);
+  {
+    int linha = grupo==1 ? foco : -1;
+    if (linha != focoVisto) {
+      linhaAnt = focoVisto; abreAnt = abreFoco; abreFoco = 0; focoVisto = linha;
+    }
+  }
+  abreFoco = anim_mola(abreFoco, 1, dt, NV_MOLA_TELA);
+  abreAnt  = anim_mola(abreAnt, 0, dt, NV_MOLA_TELA);
+  melhorFolha = stream_automatico();
+  montar(automaticaDaFolha());
+  rolagem=anim_mola2(&velRol,rolagem,alvoRolagem(),dt,NV_MOLA2_SCROLL);
 }
 int stream_folha_escolheu(int *out) {
   if(escolha<0) return 0;
@@ -1112,217 +1414,308 @@ static void ponteiroFolhaFiltro(int i, int b) {
 }
 static void ponteiroFolhaFora(int a, int b) { (void)a; (void)b; aberta = 0; }
 
+// Texto em maiusculas espacadas da linha de marca e dos cabecalhos de grupo.
+// i18n antes da caixa alta: a tabela de idioma guarda a frase normal.
+static float caixaAlta(const char *s, int r, int g, int b, float x, float y, float a) {
+  char up[160];
+  size_t k;
+  snprintf(up, sizeof up, "%s", i18n(s));
+  for (k = 0; up[k]; k++)
+    if (up[k] >= 'a' && up[k] <= 'z') up[k] = (char)(up[k] - 32);
+    else if ((unsigned char)up[k] == 0xC3 && up[k+1] && (unsigned char)up[k+1] >= 0xA0 && (unsigned char)up[k+1] <= 0xBE)
+      { up[k+1] = (char)((unsigned char)up[k+1] - 0x20); k++; }   /* à..þ -> À..Þ */
+  return txt_tracking(TXT_MINI, up, r, g, b, x, y, a, 1.8f);
+}
+
+
+// CHIP DO CABECALHO: mais baixo e mais leve que a pilula primaria do app —
+// e acao secundaria de uma folha, nao o Play. Repouso em branco a 8%, foco no
+// acento com a tinta calculada, e `ligado` (o filtro MP4 ativo) num acento a
+// 22% com texto no acento: estado, nao foco.
+#define FOLHA_CHIP_H 56.0f
+static void chipFolha(GfxRect r, const char *rot, const char *icone, int foco, int ligado, float a) {
+  float ar, ag, ab;
+  int c = 225, cr, cg, cb;
+  ajustes_acento(&ar, &ag, &ab);
+  if (foco) {
+    if (ajustes_vidro()) gfx_vidro_pilula_cheia(r, .5f, 1.0f, a);
+    else { botao_luz(r, .55f, a); gfx_cor(r, .5f, ar, ag, ab, a); }
+    c = ajustes_tinta_foco();
+  }
+  else if (ligado) gfx_cor(r, .5f, ar, ag, ab, .22f * a);
+  else if (ajustes_vidro()) gfx_cor(r, .5f, 1, 1, 1, .08f * a);
+  else gfx_cor(r, .5f, .14f, .148f, .17f, a);
+  cr = cg = cb = c;
+  if (!foco && ligado) { cr = (int)(ar * 255); cg = (int)(ag * 255); cb = (int)(ab * 255); }
+  if (icone) {
+    float g = r.h * .42f;
+    gfx_icone((GfxRect){ r.x + (r.w - g) * .5f, r.y + (r.h - g) * .5f, g, g }, icone,
+              cr / 255.0f, cg / 255.0f, cb / 255.0f, a);
+  } else {
+    TxtLinha l = txt_linha(TXT_HERO_META, rot, cr, cg, cb, 255);
+    txt_desenhar_alpha(l, r.x + (r.w - l.w) * .5f, r.y + (r.h - l.h) * .5f, a);
+  }
+}
+
 void stream_folha_desenhar(Uint32 agora) {
-  (void)agora;
+  float ar, ag, ab;
+  int ai, nf, automatica, melhor;
   if(anim<.005f) return;
-  // A folha fica a NV_FOLHA_MARGEM das tres bordas, como a de Salvos: colada
-  // na borda direita ela parecia cortada pela tela.
   float x=NV_TELA_W-FOLHA_W-NV_FOLHA_MARGEM+(1-anim)*(FOLHA_W+NV_FOLHA_MARGEM);
-  // O foco tem fill solido; o painel permanece neutro e so o alvo recebe halo.
-  const int vid = ajustes_vidro();
-  gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,.02f,.02f,.025f,.35f*anim);
-  // Painel flutuante com raio amplo e material neutro. A separacao vem do
-  // veu e da superficie, nao de uma luz decorativa presa ao canto.
-  if (vid) {   // vidro SEM aro (dono, 29/09): a borda vem so do contraste do
-    // miolo translucido e de um brilho largo no topo, nao de um fio desenhado.
-    gfx_vidro_folha((GfxRect){x,NV_FOLHA_MARGEM,FOLHA_W,NV_TELA_H-2*NV_FOLHA_MARGEM},NV_FOLHA_RAIO/FOLHA_W,anim);
-  } else
-  gfx_cor((GfxRect){x,NV_FOLHA_MARGEM,FOLHA_W,NV_TELA_H-2*NV_FOLHA_MARGEM},NV_FOLHA_RAIO/FOLHA_W,.055f,.058f,.068f,.965f*anim);
-  txt_desenhar_alpha(txt_linha(TXT_PAINEL_TITULO,"Fontes",240,241,243,255),x+NV_FOLHA_PAD,44,anim);
+  float lx=x+FOLHA_PAD_E, rw=FOLHA_W-FOLHA_PAD_E-FOLHA_PAD_D;
+  float tx=lx+FOLHA_TXT, tr=lx+rw-FOLHA_TXT;
+  ajustes_acento(&ar,&ag,&ab);
+  ai=(int)(ar*255.0f+.5f);
+  // A FOLHA E UMA ILHA (dono, 02/10, mockups "Glass UI — ilha"): flutua a
+  // NV_FOLHA_MARGEM das tres bordas, raio NV_FOLHA_RAIO, sombra curta e uma
+  // luz larga no canto de cima — o mesmo material da ilha do relogio. O ajuste
+  // de vidro escolhe o miolo: translucido (gfx_vidro_folha) ou solido.
+  { const int vid = ajustes_vidro();
+    GfxRect corpo={x,NV_FOLHA_MARGEM,FOLHA_W,NV_TELA_H-2*NV_FOLHA_MARGEM};
+    float raio=NV_FOLHA_RAIO/corpo.h;
+    gfx_cor((GfxRect){0,0,NV_TELA_W,NV_TELA_H},0,0,0,0,(vid?.30f:.42f)*anim);
+    gfx_rect((GfxRect){corpo.x-18,corpo.y-8,corpo.w+36,corpo.h+40},0,GFX_SOMBRA,1.0f,0,0,0.5f,0,0,0,.38f*anim);
+    if (vid) gfx_vidro_folha(corpo,raio,anim);
+    else gfx_cor(corpo,raio,.071f,.075f,.086f,.98f*anim);
+    gfx_luz_canto(corpo,raio,corpo.w*.25f,-corpo.h*.25f,corpo.w*.9f,1,1,1,(vid?.06f:.04f)*anim); }
   int ptr = aberta && anim > .5f && ponteiro_ativo();
   if (ptr) {
     ponteiro_alvo(0, 0, x, NV_TELA_H, NULL, ponteiroFolhaFora, 0, 0);
     // O painel em si absorve o clique no vazio (nao fecha, nao da OK).
     ponteiro_alvo(x, 0, FOLHA_W, NV_TELA_H, NULL, NULL, 0, 0);
   }
-  int nbt=nBotoes();
-  // OS BOTOES TEM LINHA PROPRIA, abaixo do titulo, a esquerda e na largura do
-  // rotulo. Ancorados a direita na linha do titulo, quatro pilulas de 120 px
-  // (Recarregar, Sem HDR, MP4, Fechar) encostavam no "Fontes" e na borda.
-  { float bx=x+NV_FOLHA_PAD;
-    for(int i=0;i<nbt;i++) {
-      int b=botaoDe(i), sel=grupo==-1 && foco==i;
-      float tw=b==BT_SEM_HDR?marca_rotulo_largura(TXT_PG_FIM,"Sem HDR",FMT_HDR,30.0f)
-                            :(float)txt_largura(TXT_PG_FIM,rotuloBotao(b));
-      float bw=tw+44.0f;
-      if(bw<104.0f) bw=104.0f;
-      GfxRect br={bx,100,bw,NV_CTRL_H};
-      // Acoes seguem o accent solido e a tinta calculada pelo tema.
-      if (ptr) ponteiro_alvo(bx, 100, bw, NV_CTRL_H, ponteiroFolhaBotao, NULL, i, 0);
-      if(sel) focoFontePilula(br,vid?.5f:.3f,anim);
-      else if(vid) gfx_cor(br,.5f,1,1,1,.07f*anim);   // pilula sem aro
-      else    gfx_cor(br,.3f,.075f,.079f,.092f,anim);
-      int c=sel?ajustes_tinta_foco():224;
-      // "Sem" + a marca HDR no lugar da palavra (traduzido antes de trocar).
-      if(b==BT_SEM_HDR) marca_rotulo(TXT_PG_FIM,"Sem HDR",FMT_HDR,bx+(bw-tw)*.5f,100+(NV_CTRL_H-30.0f)*.5f,30.0f,c,anim);
-      else {
-        TxtLinha l=txt_linha(TXT_PG_FIM,rotuloBotao(b),c,c,c,255);
-        txt_desenhar_alpha(l,bx+(bw-l.w)*.5f,100+(NV_CTRL_H-l.h)*.5f,anim);
-      }
-      bx+=bw+NV_CTRL_VAO;
+  // CABECALHO: a linha de contexto (episodio) pequena e espacada sobre
+  // "Fontes"; os botoes alinhados a direita, centrados no titulo.
+  { float cw = 0, ch = 0;
+    if (contexto[0]) {
+      TxtLinha c = txt_linha_corta(TXT_HERO_META,contexto,150,150,148,255,rw-360);
+      txt_desenhar_alpha(c,tx,66,anim);
+      cw = c.w + 22.0f; ch = c.h;
+    }
+    // AINDA HA ADDON RESPONDENDO, com fonte ja na lista (#221): a lista vai
+    // crescer, e quem escolhe agora escolhe entre o que chegou. Na linha do
+    // contexto, no acento, para nao disputar com o titulo nem com a ajuda.
+    if (n > 0 && addons_ocupado() && rw-360-cw > 80) {
+      if (cw > 0) gfx_cor((GfxRect){tx+cw-13.5f,66+ch*.5f-2.5f,5,5},.5f,.5f,.5f,.49f,anim);
+      txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,"Buscando mais fontes…",ai,(int)(ag*255),(int)(ab*255),255,rw-360-cw),tx+cw,66,anim);
     } }
-  // A LINHA DE CONTEXTO EXPLICA O BOTAO EM FOCO. "Sem HDR" nao se explica pelo
-  // rotulo, e o rotulo nao pode crescer sem estourar a pilula de 120 px.
-  { const char *ajuda=contexto;
-    if(grupo==-1 && botaoDe(foco)==BT_SEM_HDR)
+  txt_desenhar_alpha(txt_linha(TXT_TITULO3,"Fontes",242,242,240,255),tx,94,anim);
+  { int nbt=nBotoes(); float bw[4], bx=lx+rw;
+    for(int i=nbt-1;i>=0;i--){
+      int b=botaoDe(i);
+      bw[i]=iconeBotao(b)?FOLHA_CHIP_H:(float)txt_linha(TXT_HERO_META,rotuloBotao(b),255,255,255,255).w+48.0f;
+      bx-=bw[i]; if(i) bx-=10.0f; }
+    for(int i=0;i<nbt;i++){
+      int b=botaoDe(i);
+      GfxRect r={bx,100,bw[i],FOLHA_CHIP_H};
+      if (ptr) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroFolhaBotao, NULL, i, 0);
+      chipFolha(r,rotuloBotao(b),iconeBotao(b),grupo==-1&&foco==i,b==BT_SO_MP4&&soMp4,anim);
+      bx+=bw[i]+10.0f; } }
+  // A LINHA DE AJUDA so aparece com o cabecalho em foco: "Sem HDR" nao se
+  // explica pelo rotulo, e o rotulo nao pode crescer sem estourar a pilula.
+  if (grupo==-1) {
+    const char *ajuda=NULL;
+    if(botaoDe(foco)==BT_SEM_HDR)
       ajuda="Imagem preta com o áudio tocando? Recarrega esta fonte sem HDR nem Dolby Vision.";
-    else if(grupo==-1 && botaoDe(foco)==BT_RECARREGAR)
+    else if(botaoDe(foco)==BT_RECARREGAR)
       ajuda="Pergunta as fontes de novo a todos os addons.";
-    else if(grupo==-1 && botaoDe(foco)==BT_SO_MP4)
+    else if(botaoDe(foco)==BT_SO_MP4)
       ajuda=soMp4
         ? "Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro."
         : "Filtra a lista para fontes em MP4. OK liga o filtro.";
-    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,184,187,193,255,FOLHA_W-2*NV_FOLHA_PAD),x+NV_FOLHA_PAD,172,anim); }
-  gfx_recorte(x+NV_FOLHA_PAD,214,FOLHA_W-2*NV_FOLHA_PAD,62);
-  int ini=filtro>1?filtro-1:0;
-  float tx=x+NV_FOLHA_PAD;
-  // ABAS NA LARGURA DO NOME, e tantas quanto couberem: a largura fixa de 232
-  // cortava "Debridio - Scraper AD" e "AIOStreams | ..." em reticencias com
-  // espaco sobrando no fim da fileira.
-  for(int i=ini;i<nProvedores;i++) {
-    int tw=txt_largura(TXT_PG_FIM,provedores[i]);
-    float w=tw+48.0f;
-    if(w<108.0f) w=108.0f;
-    if(w>300.0f) w=300.0f;
-    if(i>ini && tx+w>x+FOLHA_W-NV_FOLHA_PAD) break;
-    int sel=i==filtro;
-    int c=sel&&grupo==0?ajustes_tinta_foco():sel?245:190;
-    if (ptr) ponteiro_alvo(tx, 216, w, NV_CTRL_H, NULL, ponteiroFolhaFiltro, i, 0);
-    if(sel && grupo==0) focoFontePilula((GfxRect){tx,216,w,NV_CTRL_H},.5f,anim);
-    else if(vid) { if(sel) gfx_cor((GfxRect){tx,216,w,NV_CTRL_H},.5f,1,1,1,.08f*anim); }   // so o filtro escolhido leva superficie, sem aro
-    else gfx_cor((GfxRect){tx,216,w,NV_CTRL_H},.5f,
-                 sel?.092f:.075f,sel?.096f:.079f,sel?.110f:.092f,anim);
-    TxtLinha l=txt_linha_corta(TXT_PG_FIM,provedores[i],c,c,c,255,w-24);
-    txt_desenhar_alpha(l,tx+(w-l.w)*.5f,216+(NV_CTRL_H-l.h)*.5f,anim);
-    if(sel && grupo!=0) {
-      float cr,cg,cb; ajustes_acento(&cr,&cg,&cb);
-      gfx_cor((GfxRect){tx+18,216+NV_CTRL_H-6,w-36,2},1,cr,cg,cb,anim);
-    }
-    tx+=w+NV_CTRL_VAO;
+    if(ajuda) txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,160,160,158,255,rw),lx,170,anim);
   }
-  gfx_sem_recorte();
-  gfx_recorte(x+NV_FOLHA_PAD,FOLHA_TOPO,FOLHA_W-2*NV_FOLHA_PAD,NV_TELA_H-FOLHA_TOPO-NV_FOLHA_MARGEM-16);
-  int nf=nFiltrados();
-  // A FONTE QUE O AUTOMATICO ESCOLHERIA, marcada. E a resposta a "se eu nao
-  // escolher nada, o que toca?" — que ate aqui a folha nao dava: a pessoa via
-  // trinta linhas e a pontuacao do dono (MP4 4K DV primeiro) decidia em
-  // silencio. A ordem e a mesma de stream_primeira_boa: a lembrada vai na
-  // frente quando existe; senao, a de maior pontuacao. Pedido do dono, 16/09.
-  //
-  // Calculado UMA vez por quadro, fora do laco: stream_automatico percorre a
-  // lista inteira, e chama-lo por linha seria n^2 a cada quadro.
-  int automatica = preferida >= 0 && !automaticaExcluida(preferida)
-                     ? preferida : stream_automatico();
+  // SELETOR DE ADDON, segmentado: o selecionado em superficie clara, o foco
+  // no acento. Quantas fontes cada addon tem, ao lado do nome.
+  { int cnt[13]={0}; float iw[13], sx, segY=grupo==-1?204.0f:186.0f, maxW=rw+4.0f;
+    TxtLinha nome[13], num[13];
+    for(int i=0;i<n;i++){ if(soMp4&&!lista[i].mp4) continue; cnt[0]++;
+      for(int j=1;j<nProvedores;j++) if(!strcmp(provedores[j],lista[i].provedor)){cnt[j]++;break;} }
+    for(int i=0;i<nProvedores;i++){
+      int sel=i==filtro, foc=sel&&grupo==0, c=foc?ajustes_tinta_foco():sel?250:150;
+      char q[16]; snprintf(q,sizeof q,"%d",cnt[i]);
+      nome[i]=txt_linha_corta(TXT_HERO_META,i?provedores[i]:"Todos",c,c,c,255,260);
+      num[i]=txt_linha(TXT_PG_FIM,q,foc?c:sel?170:100,foc?c:sel?170:100,foc?c:sel?170:100,255);
+      iw[i]=nome[i].w+10.0f+num[i].w+44.0f; }
+    int ini=0; float soma;
+    for(;;){ soma=12.0f; for(int i=ini;i<=filtro&&i<nProvedores;i++) soma+=iw[i]+6.0f;
+      if(soma<=maxW||ini>=filtro) break; ini++; }
+    soma=12.0f; int fim=ini;
+    while(fim<nProvedores && soma+iw[fim]+6.0f<=maxW){ soma+=iw[fim]+6.0f; fim++; }
+    if(fim==ini) fim=ini+1;
+    sx=lx-2.0f;
+    if (ajustes_vidro()) gfx_cor((GfxRect){sx,segY,soma-6.0f,60},.5f,1,1,1,.05f*anim);
+    else gfx_cor((GfxRect){sx,segY,soma-6.0f,60},.5f,.113f,.118f,.137f,anim);
+    sx+=6.0f;
+    for(int i=ini;i<fim;i++){
+      GfxRect r={sx,segY+6,iw[i],48}; int sel=i==filtro;
+      if (ptr) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, ponteiroFolhaFiltro, i, 0);
+      if(sel&&grupo==0) focoFonte(r,.5f,anim);
+      else if(sel) { if (ajustes_vidro()) gfx_cor(r,.5f,1,1,1,.12f*anim); else gfx_cor(r,.5f,.204f,.212f,.243f,anim); }
+      txt_desenhar_alpha(nome[i],r.x+22,r.y+(48-nome[i].h)*.5f,anim);
+      txt_desenhar_alpha(num[i],r.x+22+nome[i].w+10,r.y+(48-num[i].h)*.5f+1,anim);
+      sx+=iw[i]+6.0f; } }
+  automatica = automaticaDaFolha();
+  melhor = melhorFolha = stream_automatico();
+  montar(automatica);
+  nf=nOrdem;
+  gfx_recorte(x,FOLHA_TOPO-8,FOLHA_W,NV_TELA_H-NV_FOLHA_MARGEM-16.0f-(FOLHA_TOPO-8));
+  // CABECALHOS DE GRUPO: "4K  ULTRA HD ........ 3 fontes", com um fio embaixo.
+  for(int g=0;g<FOLHA_GRUPOS;g++){
+    float y; char q[48];
+    if(!secN[g]) continue;
+    y=FOLHA_TOPO+secY[g]-rolagem;
+    if(y+FOLHA_SEC_H<FOLHA_TOPO-8||y>NV_TELA_H) continue;
+    { TxtLinha l=txt_linha(TXT_PAINEL_ITEM,GRUPO_NOME[g],242,242,240,255);
+      txt_desenhar_alpha(l,tx,y+8,anim);
+      if(GRUPO_SUB[g][0]) caixaAlta(GRUPO_SUB[g],120,120,118,tx+l.w+16,y+15,anim); }
+    snprintf(q,sizeof q,i18n(secN[g]==1?"%d fonte":"%d fontes"),secN[g]);
+    { TxtLinha l=txt_linha(TXT_PG_FIM,q,110,110,108,255);
+      txt_desenhar_alpha(l,tr-l.w,y+12,anim); }
+    gfx_cor((GfxRect){lx,y+FOLHA_SEC_H-14,rw,1},0,1,1,1,.08f*anim);
+  }
   for(int row=0;row<nf;row++) {
-    float y=FOLHA_TOPO+row*FOLHA_LINHA-rolagem;
-    if(y+FOLHA_LINHA<FOLHA_TOPO || y>NV_TELA_H-NV_FOLHA_MARGEM) continue;
-    int i=filtrado(row),sel=grupo==1 && foco==row;
-    int corTitulo,corProv,corDesc,corMeta;
-    const Stream *s=&lista[i];
-    // LINHA DELICADA (pedido do dono, 01/10: "muito bruta, nao ta delicada
-    // como o resto da interface"). Tres decisoes, todas conferidas na captura:
-    //  - QUATRO NIVEIS DE TEXTO, cada um num degrau de corpo E de luz:
-    //    titulo 26/500 a 236, addon 21 a 148, arquivo 22 a 184, meta 21 a 158.
-    //    Antes titulo/addon/arquivo/meta saiam em 26/22/22/22 quase no mesmo
-    //    cinza claro, e a linha lia como um bloco de texto so.
-    //  - FOCO SEM BLOCO CHAPADO: a linha em foco NAO inverte mais. Ela clareia
-    //    a superficie, ganha uma lavagem de 10 % do realce, uma luz macia atras
-    //    e um filete de 4 px do realce na margem esquerda. O preenchimento
-    //    cheio (amarelo/azul atras de cinco linhas de texto e seis selos) era o
-    //    "bloco pesado" da foto; num botao de uma palavra ele continua certo.
-    //  - SELOS MENORES (22 px, borda de 1,5 px), alinhados na base.
-    GfxRect r={x+NV_FOLHA_PAD,y,FOLHA_W-2*NV_FOLHA_PAD,FOLHA_LINHA-NV_LINHA_VAO};
-    const float raio=NV_LINHA_RAIO_PX/r.h;
+    float y=FOLHA_TOPO+linhaY[row]-rolagem, h=linhaH[row], cy, colW, txtW;
+    int i=ordem[row], sel=grupo==1&&foco==row;
+    const Stream *s=i>=0?&lista[i]:NULL;
+    uint64_t tira, logos;
+    if(y+h<FOLHA_TOPO-8 || y>NV_TELA_H) continue;
+    GfxRect r={lx,y,rw,h};
     if (ptr) {
       // So o que o recorte da lista deixa ver.
       float t = y < FOLHA_TOPO ? FOLHA_TOPO : y;
-      float b = y + r.h > NV_TELA_H - 32 ? NV_TELA_H - 32 : y + r.h;
+      float b = y + r.h > NV_TELA_H ? NV_TELA_H : y + r.h;
       if (b > t) ponteiro_alvo(r.x, t, r.w, b - t, ponteiroFolhaLinha, NULL, row, 0);
     }
-    { float ar, ag, ab;
-      ajustes_acento(&ar, &ag, &ab);
-      if(vid) {   // vidro: em repouso so um veu claro, sem contorno; o foco soma o aro
-        gfx_vidro_superficie(r,raio,anim);
-        if(sel) gfx_vidro_foco(r,raio,1.0f,anim);
-      } else if(sel) {
-        botao_luz(r, 0.30f, anim);
-        gfx_cor(r,raio,.118f,.123f,.140f,.97f*anim);
-        gfx_cor(r,raio,ar,ag,ab,.10f*anim);
-      } else gfx_cor(r,raio,.062f,.066f,.079f,.78f*anim);
-      // Raio em fracao da ALTURA (gfx_cor): 2 px de canto num filete de 4.
-      if(sel && !vid) gfx_cor((GfxRect){r.x+10.0f,r.y+44.0f,4.0f,r.h-88.0f},2.0f/(r.h-88.0f),ar,ag,ab,anim); }
-    corTitulo=sel?250:236; corProv=sel?168:148; corDesc=sel?200:184; corMeta=sel?178:158;
-    float lx=r.x+28,w=r.w-56;
-    // Texto de addon LIMPO uma vez por lista (limpo(), abaixo), nao por quadro:
-    // emoji, bandeira, versalete e tracos de caixa saem, e a quebra de linha da
-    // descricao vira separador (#144).
-    const char *nome,*descricao;
-    limpo(i,&nome,&descricao);
-    txt_desenhar_alpha(txt_linha_corta(TXT_PAINEL_ITEM,nome,corTitulo,C8(corTitulo+1),C8(corTitulo+3),255,w),lx,y+18,anim);
-    // A FONTE LEMBRADA / A AUTOMATICA, marcadas (#56; pedido do dono 16/09):
-    // sem a marca, quem abre a folha para conferir continua procurando a
-    // propria fonte entre dezenas de linhas. Fica NA LINHA DO FORMATO, a
-    // direita (30/09): na do provedor ela cortava o nome do addon.
-    //
-    // ETIQUETA, NAO PILULA CHEIA (01/10): lavagem de 16 % do realce com o
-    // texto no proprio realce clareado. Continua sendo a unica forma tingida
-    // da linha — o olho ainda vai nela — sem disputar com os selos coloridos.
-    // Como a linha em foco nao inverte mais, nao ha variante "sobre linha clara".
-    float wProv = w, pilW = 0.0f;
-    if (i != atual && (i == automatica || i == preferida)) {
-      const char *rot = (i == preferida && i == automatica) ? "Sua escolha anterior · automática"
-                      : (i == preferida) ? "Sua escolha anterior"
-                      : "Escolha automática";
-      TxtLinha m = etiquetaTexto(rot);
-      GfxRect pil = { lx + w - (float)m.w - 24.0f, y + 141.0f, (float)m.w + 24.0f, (float)m.h + 6.0f };
-      etiqueta(pil, m, vid);
-      // 40 px E NAO 24 DE FOLGA entre a etiqueta e o texto (dono, 16/09:
-      // "deixa a badge menos colado no texto").
-      pilW = pil.w + 24.0f;
+    if(sel){
+      // Foco so pela superficie clara: o contorno saiu a pedido do dono (02/10).
+      // No solido a superficie e um cinza opaco um degrau acima do miolo.
+      if (ajustes_vidro()) gfx_cor(r,FOLHA_RAIO/h,1,1,1,.12f*anim);
+      else gfx_cor(r,FOLHA_RAIO/h,.17f,.176f,.204f,anim);
     }
-    // A fonte ativa ganha um respiro para o equalizador. O rotulo continua
-    // sendo texto, entao a traducao de "Reproduzindo agora" permanece na
-    // camada de idioma e nao vira uma badge diferente em cada tela.
-    if (i == atual) wProv -= FOLHA_AUDIO_W + 14.0f;
-    if (wProv < 120.0f) wProv = 120.0f;
-    if (i == atual) {
-      float tr, tg, tb; etiquetaCor(&tr, &tg, &tb);
-      txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION2,"Reproduzindo agora",(int)(tr*255),(int)(tg*255),(int)(tb*255),255,wProv),lx,y+52,anim);
-      desenharAudioBars(lx + w - FOLHA_AUDIO_W, y + 48.0f, anim, 0, agora);
-    } else
-      txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION2,s->provedor,corProv,C8(corProv+3),C8(corProv+10),255,wProv),lx,y+52,anim);
-    // txt_bloco_corta: o que passa das duas linhas termina em reticencias na
-    // ULTIMA linha visivel, e nao some sem aviso no meio de uma frase.
-    txt_bloco_corta(TXT_PG_FIM,descricao,corDesc,C8(corDesc+3),C8(corDesc+8),lx,y+82,w,27,anim,2);
-    char meta[192],qual[24]="";
-    float mx = lx;
-    const char *cont = containerDa(s);
-    int ehMp4 = !strcmp(cont, "MP4");
-    if(s->altura) snprintf(qual,sizeof qual," · %dp",s->altura);
-    // MP4 EM DESTAQUE (na LG e o container que vale escolher, ver pontos()):
-    // a mesma etiqueta da escolha automatica no lugar da sigla solta.
-    if (ehMp4) {
-      TxtLinha m = etiquetaTexto("MP4");
-      GfxRect pil = { lx, y + 141.0f, (float)m.w + 20.0f, (float)m.h + 6.0f };
-      etiqueta(pil, m, vid);
-      mx = lx + pil.w + 10.0f;
+    // COLUNA DA DIREITA: tamanho grande, addon embaixo. Medida primeiro: o
+    // titulo e a fileira de logos param antes dela.
+    { char gb[24]="";
+      TxtLinha lg, lu, lp;
+      int cg=sel?250:218;
+      // No modo do addon o tamanho ja vem no texto dele; so o addon fica.
+      if(s->tamanhoMB && !ajustes_fonte_texto_addon()) snprintf(gb,sizeof gb,s->tamanhoMB>=102400?"%.0f":"%.1f",s->tamanhoMB/1024.0);
+      lg=txt_linha(TXT_CW_TITULO,gb,cg,cg,cg-2,255);
+      lu=txt_linha(TXT_PG_FIM,"GB",120,120,118,255);
+      lp=txt_linha_corta(TXT_PG_FIM,s->provedor,sel?150:110,sel?150:110,sel?148:108,255,240);
+      colW=lp.w;
+      if(gb[0] && lg.w+6+lu.w>colW) colW=lg.w+6+lu.w;
+      cy=y+20+(temMarca(i,automatica)?FOLHA_MARCA_H:0);
+      if(gb[0]){
+        txt_desenhar_alpha(lu,tr-lu.w,cy+(lg.h-lu.h)-3,anim);
+        txt_desenhar_alpha(lg,tr-lu.w-6-lg.w,cy,anim); }
+      txt_desenhar_alpha(lp,tr-lp.w,gb[0]?cy+40:cy+6,anim); }
+    txtW=tr-tx-colW-28;
+    cy=y+20;
+    // A MARCA: o que esta tocando (com o equalizador), a escolha anterior e a
+    // automatica. Texto espacado no acento, e nao pilula: a pilula cheia era a
+    // forma mais pesada da linha e o olho ia nela antes da qualidade.
+    // O SELO "MELHOR PARA ESTA TV" mora na linha de marca, depois do texto
+    // dela (ou sozinho): ao lado do titulo ele cortava o nome do conteudo.
+    // So na fonte de maior pontuacao (stream_automatico: MP4/DV que a LG toca
+    // primeiro), e e a unica forma cheia da lista — o olho vai nela.
+    if(temMarca(i,automatica)){
+      float mx=tx;
+      int tf=ajustes_tinta_foco();
+      if(i==atual){
+        float w=caixaAlta("Reproduzindo agora",ai,(int)(ag*255),(int)(ab*255),tx,cy,anim);
+        desenharAudioBars(tx+w+12,cy+1,14,anim,agora);
+        mx=tx+w+12+FOLHA_AUDIO_N*(FOLHA_AUDIO_BAR*.5f+FOLHA_AUDIO_GAP*.6f)+18;
+      } else if(i==preferida){
+        const char *rot = i == automatica ? "Sua escolha anterior · automática" : "Sua escolha anterior";
+        gfx_cor((GfxRect){tx,cy+5,7,7},.5f,ar,ag,ab,anim);
+        mx=tx+16+caixaAlta(rot,ai,(int)(ag*255),(int)(ab*255),tx+16,cy,anim)+18;
+      }
+      if(i==melhor && nOrdem>1){
+        float sw=caixaAlta("Melhor para esta TV",tf,tf,tf,-1,0,1);
+        GfxRect p={mx,cy-6,sw+24,28};
+        gfx_cor(p,.5f,ar,ag,ab,anim);
+        caixaAlta("Melhor para esta TV",tf,tf,tf,p.x+12,cy,anim);
+      }
+      cy+=FOLHA_MARCA_H;
     }
-    // DV e Atmos NAO entram mais como palavra: a fileira de marcas logo
-    // abaixo ja desenha o logo deles (badges_detectar), e dizer os dois era
-    // repetir. Pedido do dono (29/09): logo sempre que citar formato.
-    snprintf(meta,sizeof meta,"%s%s",cont,qual);
-    if(s->tamanhoMB) {size_t p=strlen(meta);snprintf(meta+p,sizeof meta-p," · %.1f GB",s->tamanhoMB/1024.0);}
-    { const char *texto = meta;
-      // A sigla ja esta na etiqueta: o texto comeca depois dela e do " · " (4
-      // bytes: espaco, U+00B7 em dois bytes, espaco).
-      if (ehMp4) { texto += 3; if (!strncmp(texto, " \xc2\xb7 ", 4)) texto += 4; }
-      txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION2,texto,corMeta,C8(corMeta+2),C8(corMeta+8),255,w-(mx-lx)-pilW),mx,y+144,anim); }
-    // Selos coloridos (#198, padrao ligado): cada marca na sua peca, com base
-    // escura propria — vale igual na linha em foco e no vidro.
-    if (ajustes_selos_coloridos()) badges_desenhar_selos(s->badges,lx,y+FOLHA_SELO_Y,w,FOLHA_SELO_H,anim);
-    else badges_desenhar(s->badges,lx,y+FOLHA_SELO_Y,w,FOLHA_SELO_H,anim);
+    // TITULO: o nome do conteudo (tituloConteudo). Fora do foco o titulo apaga um
+    // degrau: com todas as linhas no mesmo branco a lista lia como uma massa
+    // so (dono, 02/10: "tudo muito parecido").
+    // O SELO "MELHOR PARA ESTA TV" vai ao lado do titulo, so na fonte de maior
+    // pontuacao (stream_automatico: MP4/DV que a LG toca primeiro). E a unica
+    // forma cheia da lista inteira, e por isso o olho vai nela.
+    { char nome[96];
+      int c=sel?255:205;
+      char ep[64]="";
+      tira=0;
+      if(ajustes_fonte_texto_addon()) tituloAddon(s,nome,sizeof nome);
+      else tituloConteudo(s,nome,sizeof nome,ep,sizeof ep);
+      { TxtLinha l=txt_linha_corta(TXT_CALLOUT,nome,c,c,c-2,255,txtW);
+        txt_desenhar_alpha(l,tx,cy,anim);
+        if(ep[0]){ int ce=sel?175:135;
+          TxtLinha le=txt_linha(TXT_PG_FIM,ep,ce,ce,ce,255);
+          // Na linha de base do nome, nao no meio da altura dele.
+          if(l.w+14+le.w<=txtW) txt_desenhar_alpha(le,tx+l.w+14,cy+l.h-le.h-3,anim); } } }
+    cy+=40;
+    if(ajustes_fonte_texto_addon()) {
+      char ls[FOLHA_ADDON_LINHAS][192];
+      int nl=linhasAddon(s,ls,FOLHA_ADDON_LINHAS);
+      for(int k=0;k<nl;k++){
+        // A primeira linha do addon costuma ser a de numeros (tamanho, taxa):
+        // um degrau mais clara. As outras no cinza da especificacao.
+        int c = k==0 ? (sel?215:180) : (sel?170:130);
+        txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ls[k],c,c,c,255,k==0?txtW:tr-tx),tx,cy+k*FOLHA_ADDON_LD,anim);
+      }
+      continue;
+    }
+    // FILEIRA DE LOGOS: o pacote branco que o app ja embarca (deploy/app/art/
+    // badges, o mesmo "Ghost" do Xperience), tingido no cinza da linha. MP4
+    // no acento no fim:
+    // na LG e o container que vale escolher (ver pontos()).
+    logos=logosDa(s,tira);
+    { float t=sel?.78f:.52f, lw=0, mpW=0;
+      int ehMp4=!strcmp(containerDa(s),"MP4");
+      TxtLinha mp;
+      if(ehMp4){ mp=txt_linha(TXT_HERO_META,"MP4",ai,(int)(ag*255),(int)(ab*255),255); mpW=mp.w+18; }
+      // COR SO NO PREMIUM (dono, 02/10): imagem (DV, HDR, IMAX) no acento,
+      // audio de cinema (Atmos, TrueHD, DTS:X, DTS-HD MA) no acento clareado,
+      // o resto no cinza. Desenhados nessa ordem, o premium vem primeiro.
+      if(logos){ uint64_t img=logos&FOLHA_PREMIUM_IMG(), aud=logos&FOLHA_PREMIUM_AUD(), resto=logos&~(img|aud);
+        float k=sel?1.0f:.82f, w;
+        if(img){ w=badges_desenhar_tom(img,tx+lw,cy,txtW-mpW-lw,FOLHA_SELO_H,ar*k,ag*k,ab*k,anim); lw+=w+18; }
+        if(aud){ w=badges_desenhar_tom(aud,tx+lw,cy,txtW-mpW-lw,FOLHA_SELO_H,(ar*.45f+.55f)*k,(ag*.45f+.55f)*k,(ab*.45f+.55f)*k,anim); lw+=w+18; }
+        if(resto){ w=badges_desenhar_tom(resto,tx+lw,cy,txtW-mpW-lw,FOLHA_SELO_H,t,t,t,anim); lw+=w+18; }
+        if(lw>0) lw-=18; }
+      else if(!ehMp4){ char d[sizeof s->descricao];
+        snprintf(d,sizeof d,"%s",s->descricao);
+        for(char *p=d;*p;p++)if((unsigned char)*p<32)*p=' ';
+        int c=sel?180:130;
+        txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,d,c,c,c,255,txtW),tx,cy+(FOLHA_SELO_H-26)*.5f,anim); }
+      if(ehMp4){ txt_desenhar_alpha(mp,tx+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-mp.h)*.5f,anim); lw+=(lw>0?18:0)+mp.w; }
+      // O IDIOMA, em texto no fim da fileira (nao ha logo para ele).
+      { const char *id=idiomaDa(s);
+        if(id){ int c=sel?230:190;
+          TxtLinha li=txt_linha(TXT_HERO_META,id,c,c,c,255);
+          if(lw+18+li.w<=txtW) txt_desenhar_alpha(li,tx+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-li.h)*.5f,anim); } } }
+    cy+=FOLHA_SELO_H+12;
+    // O ARQUIVO, so na linha em foco: e o que distingue duas fontes iguais
+    // (grupo de release, versao), e em toda linha era ruido.
+    { float a=(sel?abreFoco:row==linhaAnt?abreAnt:0);
+      const char *arq=arquivoDa(s);
+      if(a>.02f && arq[0]){ char d[512];
+        snprintf(d,sizeof d,"%s",arq);
+        for(char *p=d;*p;p++)if((unsigned char)*p<32)*p=' ';
+        txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,d,125,125,123,255,tr-tx),tx,cy,anim*a); } }
   }
-  if(!nf) {
+  // O TOPO DA LISTA ESMAECE em vez de cortar seco embaixo do seletor: a linha
+  // que sobe some aos poucos, na cor da folha. So com a lista rolada: parada
+  // no topo, o esmaecido apagaria o cabecalho "4K" do primeiro grupo.
+  if (rolagem > 1.0f) { const int N=6; float e=rolagem>30.0f?1.0f:rolagem/30.0f;
+    for(int k=0;k<N;k++)
+      gfx_cor((GfxRect){x,FOLHA_TOPO-8+k*5,FOLHA_W,5},0,
+              .071f,.075f,.086f,(1.0f-(float)k/N)*(ajustes_vidro()?.78f:.98f)*e*anim); }
+  if(!nFiltrados()) {
     // A FOLHA VAZIA DIZ A CAUSA (B6/#107, D5). So quando a lista esta vazia
     // de verdade (n == 0): lista cheia com filtro de provedor que nao casa
     // nada fica na frase generica, porque ali a causa e o filtro na tela.
@@ -1338,7 +1731,8 @@ void stream_folha_desenhar(Uint32 agora) {
       } else tem = addons_motivo_vazio(causa,sizeof causa);
       if (tem) { snprintf(frase,sizeof frase,"%s. %s",causa,i18n("Use Recarregar para tentar novamente.")); s=frase; }
     }
-    txt_bloco(TXT_PG_FIM,s,196,199,204,x+56,FOLHA_TOPO+40,FOLHA_W-112,28,anim,3);
+    // Com servicos de streaming na lista, a frase vem DEPOIS deles.
+    txt_bloco(TXT_PG_FIM,s,196,199,204,tx,FOLHA_TOPO+20,rw-52,28,anim,3);
   }
   gfx_sem_recorte();
 }
