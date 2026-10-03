@@ -22,6 +22,8 @@
 #include "badges.h"
 #include "idioma.h"
 #include "fileiras.h"
+#include "colecoes.h"
+#include "listas.h"
 #include "home.h"
 #include <pthread.h>
 #include <stdio.h>
@@ -82,6 +84,11 @@ static int tituloSalvo(const CatItem *ci) {
 }
 
 static int   aberto, idx = -1, foco, pedDetalhes = -1;
+// MODO LISTA (Biblioteca > Listas): o menu e de uma LISTA, nao de um titulo.
+// `cartazFixo`: o retangulo do cartaz veio de quem abriu (biblioteca.c) e nao
+// deve ser refeito a cada quadro a partir do cartaz focado da HOME.
+static int       doLista, cartazFixo, listaPedida, listaAlterou;
+static LstLista  lista;
 static float anim;
 static int   operacao, intencao, estadoOperacao;
 static int   espelhoAplicado;
@@ -197,13 +204,13 @@ static int observarHold(void *u, SDL_Event *e) {
 // juntava contava UMA linha para o contrato e escrevia sete — e o teto de sete
 // era exatamente o que deixava o Destaque 4:3 e a faixa com titulo de fora do
 // menu. Agora elas moram em estLin[FIL_TIPO_N], do tamanho do enum.
-#define CTX_MAX 6
+#define CTX_MAX 9
 static struct { const char *rot; int acao; } ops[CTX_MAX];
 static int nOps;
 static float focoAnim[CTX_MAX];
 static int holdObservador;
 enum { OP_DETALHES, OP_LISTA, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR,
-       OP_ESTILO, OP_CATEGORIA };
+       OP_ESTILO, OP_CATEGORIA, OP_L_ABRIR, OP_L_FIXAR, OP_L_HOME };
 // "Mover para categoria" pedido no modo painel: o IMDb do titulo, consumido
 // uma vez pelo painel (ctx_pediu_categoria), que abre a escolha dele.
 static char pedCategoriaImdb[24];
@@ -307,6 +314,18 @@ static void montar(void) {
   int i = indiceAtual();
   const CatItem *ci = itemAtual();
   nOps = 0;
+  if (doLista) {
+    const char *porque;
+    juntar("Abrir lista", OP_L_ABRIR);
+    juntar(lst_fixada(&lista) ? "Tirar da Biblioteca" : "Fixar na Biblioteca", OP_L_FIXAR);
+    // So onde a Home sabe buscar a lista (o Simkl nao): oferecer a acao que so
+    // responde "nao" seria o botao que aparenta funcionar.
+    if (lst_aceita_home(&lista, &porque))
+      juntar(lst_na_home(&lista) ? "Tirar da Home" : "Adicionar à Home", OP_L_HOME);
+    if (foco >= nOps) foco = nOps - 1;
+    if (foco < 0) foco = 0;
+    return;
+  }
   if (pagina == 1) {
     int k, j, atual = fil_tipo(filChave);
     nEstilos = fil_estilo_linhas(filChave, estLin, FIL_TIPO_N);
@@ -412,6 +431,7 @@ void ctx_abrir(int indice) {
   if (indice < 0 || indice >= cat_n() || !cat_item(indice)) { filChave[0] = 0; return; }
   doPainel = 0;
   soFileira = 0;
+  doLista = 0;
   abrirComum(indice);
   { HomeItem hi;
     // So um CARTAZ: o destaque tambem e "item focado", mas o retangulo dele e
@@ -424,6 +444,33 @@ void ctx_abrir(int indice) {
     }
   }
 }
+
+void ctx_abrir_cartaz(int indice, GfxRect r, const char *arte) {
+  ctx_abrir(indice);
+  if (!aberto || doLista) return;
+  cartazFixo = 0;
+  if (r.w > 8.0f && r.h > 8.0f && arte && arte[0]) {
+    temCartaz = 1;
+    cartazFixo = 1;
+    cartazRect = r;
+    snprintf(cartazArte, sizeof cartazArte, "%s", arte);
+  }
+}
+
+void ctx_abrir_lista(const LstLista *l) {
+  if (holdCancelado) { holdCancelado = 0; holdPronto = 0; return; }
+  if (!l) return;
+  filChave[0] = 0;
+  doPainel = 0; soFileira = 0;
+  lista = *l;
+  doLista = 1;
+  abrirComum(-1);
+  // Baixa os itens para o resumo ter capas e a mistura. Os da lista aberta de
+  // antes (se havia) nao servem: lst_abrir comeca do zero.
+  lst_abrir(&lista, lista.midia[0] ? lista.midia : "MOVIE");
+}
+int ctx_pediu_lista(void) { int v = listaPedida; listaPedida = 0; return v; }
+int ctx_lista_alterou(void) { int v = listaAlterou; listaAlterou = 0; return v; }
 
 void ctx_fileira(const char *chave, const char *titulo) {
   snprintf(filChave, sizeof filChave, "%s", chave ? chave : "");
@@ -440,6 +487,7 @@ void ctx_abrir_fileira(const char *chave, const char *titulo) {
   if (fil_estilos(filChave, NULL, NULL, FIL_TIPO_N) < 1) { filChave[0] = 0; return; }
   doPainel = 0;
   soFileira = 1;
+  doLista = 0;
   abrirComum(-1);
 }
 
@@ -451,7 +499,7 @@ static void abrirComum(int indice) {
   holdPronto = 0;
   esperandoSoltura = 1;   // o OK que abriu ainda esta afundado; ver a nota acima
   idx = indice; foco = 0; aberto = 1; pedDetalhes = -1;
-  temCartaz = 0;
+  temCartaz = 0; cartazFixo = 0;
   pagina = soFileira ? 1 : 0;
   estFoco = -1;               // montar() poe o foco na forma atual
   prevAtual = prevAnt = prevRefAtual = prevRefAnt = -1; prevT = 1.0f;
@@ -480,6 +528,7 @@ void ctx_abrir_salvo(const CatItem *titulo) {
   salvos_id_titulo(titulo->imdb, copiaPainel.imdb, sizeof copiaPainel.imdb);
   if (!copiaPainel.tipo[0]) snprintf(copiaPainel.tipo, sizeof copiaPainel.tipo, "movie");
   doPainel = 1;
+  doLista = 0;
   abrirComum(-1);
 }
 
@@ -562,6 +611,12 @@ static void aplicar(void) {
   int acao;
   if (foco < 0 || foco >= nOps) return;
   acao = ops[foco].acao;
+  if (doLista) {
+    if (acao == OP_L_ABRIR) { listaPedida = 1; aberto = 0; }
+    else if (acao == OP_L_FIXAR) { lst_alternar_fixada(&lista); listaAlterou = 1; montar(); }
+    else if (acao == OP_L_HOME) { lst_alternar_home(&lista); listaAlterou = 1; montar(); }
+    return;
+  }
   if (acao == OP_ESTILO) {
     pagina = 1; estFoco = -1; prevAtual = prevAnt = prevRefAtual = prevRefAnt = -1; prevT = 1.0f;
     memset(estAnim, 0, sizeof estAnim);
@@ -842,7 +897,7 @@ void ctx_atualizar(float dt, Uint32 agora) {
   }
 
   atual = indiceAtual();
-  if (aberto && !soFileira && !itemAtual()) { aberto = 0; return; }
+  if (aberto && !soFileira && !doLista && !itemAtual()) { aberto = 0; return; }
 
   if (operacao != CTX_OP_NENHUMA && estadoOperacao == CTX_PENDENTE) {
     int novo = opSimkl ? simkl_lista_estado() : trakt_operacao_estado(operacao);
@@ -1159,6 +1214,160 @@ static void desenhaConfirmar(const CatItem *ci, float a) {
   botaoConf(1, bx, y, i18n("Cancelar"), confAnim[1], a);
 }
 
+// --- O MENU DE UMA LISTA ------------------------------------------------------
+//
+// Segurar OK num cartao de lista (Biblioteca > Listas) abre uma ilha mais larga
+// que a do cartaz, porque ela carrega um RESUMO: a arte da pasta quando a fonte
+// tem (so a conta Nuvio; ver col_capa — Trakt e Simkl nao dao imagem de lista),
+// o nome, o que ha nela (a mistura "12 filmes · 4 séries" quando os itens
+// baixados trazem os dois tipos; o Trakt devolve UM tipo por pedido, entao uma
+// lista dele diz so o tipo que esta aberto), quem fez e quantas curtidas, e as
+// capas dos primeiros itens. Tudo o que a fonte nao informa fica de fora: nada
+// de "0 títulos" onde o dado nao existe.
+#define CTXL_W       560.0f
+#define CTXL_ARTE_H  150.0f
+#define CTXL_CAPAS     6
+#define CTXL_CAPA_GAP 10.0f
+
+// A arte da lista, quando a fonte tem uma: a capa da pasta de colecao da conta.
+static const char *arteDaLista(const LstLista *l) {
+  int i;
+  if (l->fonte != LST_NUVIO || !l->colId[0]) return NULL;
+  for (i = 0; i < col_n(); i++) {
+    const ColFolder *f = col_folder(i);
+    if (f && !strcmp(f->id, l->colId)) {
+      const char *c = col_capa(f);
+      return c && c[0] ? c : NULL;
+    }
+  }
+  return NULL;
+}
+
+// "12 filmes · 4 séries", a partir dos itens ja baixados. Vazio ate chegarem.
+static void misturaDaLista(const LstLista *l, char *dst, size_t n) {
+  int total = lst_itens_n(), nf = 0, ns = 0, i;
+  CatItem it;
+  dst[0] = 0;
+  for (i = 0; i < total && i < LST_ITENS_MAX; i++) {
+    if (!lst_item(i, &it)) continue;
+    if (!strcmp(it.tipo, "series") || it.nTemporadas > 0) ns++; else nf++;
+  }
+  if (nf + ns == 0) return;
+  // So a primeira pagina chegou: a mistura dela nao e a da lista, e dizer
+  // "8 filmes · 2 séries" de uma lista de 138 seria inventar o resto. Fica a
+  // contagem que a fonte informa (quem chama).
+  if (l->itens > nf + ns) return;
+  if (nf && ns) {
+    snprintf(dst, n, "%d %s \xc2\xb7 %d %s", nf, i18n(nf == 1 ? "filme" : "filmes"),
+             ns, i18n(ns == 1 ? "série" : "séries"));
+    return;
+  }
+  { int q = nf ? nf : ns;
+    snprintf(dst, n, "%d %s", q, nf ? i18n(q == 1 ? "filme" : "filmes")
+                                    : i18n(q == 1 ? "série" : "séries")); }
+}
+
+static void desenhaLista(float a) {
+  const LstLista *l = &lista;
+  const char *arte = arteDaLista(l);
+  char mix[96], quem[160], kick[96];
+  TxtLinha n, m, q;
+  float x, y, alt, hx, hy, hw, cy;
+  int i, temQuem, carregando = lst_itens_carregando() > 0;
+  const float pad = CTX_ILHA_PAD, esc = gfx_escala_ui();
+  const float capaW = (CTXL_W - 2.0f * (pad + 20.0f) - (CTXL_CAPAS - 1) * CTXL_CAPA_GAP) / CTXL_CAPAS;
+  const float capaH = capaW * 1.5f;
+
+  misturaDaLista(l, mix, sizeof mix);
+  if (!mix[0]) {
+    if (l->itens >= 0) snprintf(mix, sizeof mix, "%d %s", l->itens, i18n(l->itens == 1 ? "título" : "títulos"));
+    else snprintf(mix, sizeof mix, "%s", carregando ? i18n("Carregando…") : "");
+  }
+  quem[0] = 0;
+  if (l->autor[0]) snprintf(quem, sizeof quem, "%s %s", i18n("por"), l->autor);
+  if (l->curtidas > 0) {
+    char c[48];
+    snprintf(c, sizeof c, "%d %s", l->curtidas, i18n(l->curtidas == 1 ? "curtida" : "curtidas"));
+    if (quem[0]) { size_t k = strlen(quem); snprintf(quem + k, sizeof quem - k, " \xc2\xb7 %s", c); }
+    else snprintf(quem, sizeof quem, "%s", c);
+  }
+  temQuem = quem[0] != 0;
+  snprintf(kick, sizeof kick, "%s \xc2\xb7 %s", i18n("Lista"),
+           l->fonte == LST_TRAKT ? "Trakt" : l->fonte == LST_SIMKL ? "Simkl" : "Nuvio");
+
+  hw = CTXL_W - 2.0f * (pad + 20.0f);
+  n = txt_linha_corta(TXT_ILHA_NOME, l->titulo, 243, 242, 239, 255, hw);
+  m = txt_linha_corta(TXT_ILHA_APOIO, mix, 243, 242, 239, 255, hw);
+  q = txt_linha_corta(TXT_ILHA_APOIO, quem, 243, 242, 239, 255, hw);
+
+  alt = pad * 2.0f + (arte ? CTXL_ARTE_H + 12.0f : 0.0f)
+      + 12.0f + 22.0f + n.h + 6.0f + m.h + (temQuem ? 4.0f + q.h : 0.0f)
+      + 18.0f + capaH + 14.0f + (float)nOps * (CTX_LINHA + CTX_GAP);
+  x = (NV_TELA_W - CTXL_W) * 0.5f;
+  y = (NV_TELA_H - alt) * 0.5f;
+  if (y < CTX_BORDA) y = CTX_BORDA;
+
+  { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+    gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * a); }
+  if (aberto && a > 0.5f && ponteiro_ativo()) {
+    ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, ponteiroCtxFora, 0, 0);
+    ponteiro_alvo(x, y, CTXL_W, alt, NULL, NULL, 0, 0);
+  }
+  y += (1.0f - a) * 16.0f;
+  ilhaCtx((GfxRect){ x, y, CTXL_W, alt }, CTX_ILHA_RAIO, a);
+
+  cy = y + pad;
+  if (arte) {
+    GfxRect r = { x + pad, cy, CTXL_W - 2.0f * pad, CTXL_ARTE_H };
+    GLuint t = tex_obter_larg(arte, r.w * esc);
+    float raio = 22.0f / r.h;
+    if (t) {
+      gfx_tex_aspect_atual = tex_aspecto(arte);
+      gfx_rect(r, t, GFX_CARD, 0, 0, 0, raio, 0, 0, 0, a);
+      gfx_tex_aspect_atual = 0.0f;
+    } else gfx_cor(r, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
+    cy += CTXL_ARTE_H + 12.0f;
+  }
+  hx = x + pad + 20.0f;
+  hy = cy + 12.0f;
+  kickerCtx(kick, hx, hy, a);
+  hy += 22.0f;
+  txt_desenhar_alpha(n, hx, hy, a);
+  hy += n.h + 6.0f;
+  txt_desenhar_alpha(m, hx, hy, .72f * a);
+  hy += m.h + 4.0f;
+  if (temQuem) { txt_desenhar_alpha(q, hx, hy, .5f * a); hy += q.h; }
+  hy += 18.0f;
+
+  // AS CAPAS DOS PRIMEIROS ITENS. Sem item ainda, o esqueleto marca o lugar.
+  for (i = 0; i < CTXL_CAPAS; i++) {
+    GfxRect r = { hx + i * (capaW + CTXL_CAPA_GAP), hy, capaW, capaH };
+    float raio = 10.0f / capaH;
+    CatItem it;
+    const char *u = NULL;
+    GLuint t = 0;
+    if (lst_item(i, &it)) u = it.poster[0] ? it.poster : it.backdrop[0] ? it.backdrop : NULL;
+    if (u) t = tex_obter_larg(u, capaW * esc);
+    if (t) {
+      gfx_tex_aspect_atual = tex_aspecto(u);
+      gfx_rect(r, t, GFX_CARD, 0, 0, 0, raio, 0, 0, 0, a);
+      gfx_tex_aspect_atual = 0.0f;
+    } else if (u || carregando || i == 0 || lst_itens_n() > i)
+      gfx_cor(r, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
+  }
+  hy += capaH + 14.0f;
+
+  for (i = 0; i < nOps; i++) {
+    float by = hy + CTX_GAP + (float)i * (CTX_LINHA + CTX_GAP) - CTX_GAP;
+    GfxRect r = { x + pad, by, CTXL_W - pad * 2.0f, CTX_LINHA };
+    const char *icone = ops[i].acao == OP_L_ABRIR ? "aj_library"
+                      : ops[i].acao == OP_L_FIXAR ? "aj_folders" : "aj_rows-3";
+    if (aberto && a > 0.5f)
+      ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroCtxOpcao, NULL, i, 0);
+    linhaCtx(r, ops[i].rot, icone, focoAnim[i], a);
+  }
+}
+
 static void ctx_desenharCorpo_(Uint32 agora);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void ctx_desenhar(Uint32 agora) {
@@ -1197,6 +1406,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
   }
   if (a < 0.01f) return;
   if (pagina == 1) { desenhaEstilos(a); return; }
+  if (doLista) { desenhaLista(a); return; }
   ci = itemAtual();
   if (!ci) return;
   if (pagina == 2) { desenhaConfirmar(ci, a); return; }
@@ -1215,7 +1425,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
 
   // O poster acompanha o cartao na home (a mola de foco ainda pode estar
   // andando quando o menu abre): o retangulo e o deste quadro.
-  if (temCartaz && !doPainel) {
+  if (temCartaz && !doPainel && !cartazFixo) {
     HomeItem hi;
     if (home_item_focado(&hi) && hi.indice == idx && hi.rect.w > 8.0f && hi.rect.h > 8.0f)
       cartazRect = ctxDaHome(hi.rect);

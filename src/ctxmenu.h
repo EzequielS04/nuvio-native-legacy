@@ -12,6 +12,8 @@
 #define NV_CTXMENU_H
 #include <SDL2/SDL.h>
 #include "catalogo.h"
+#include "listas.h"
+#include "gfx.h"
 
 // `indice` e a posicao no catalogo global.
 // A integracao da pressao longa fica em home.c: ele mede NV_HOLD_MS no KEYUP e
@@ -50,6 +52,22 @@ void ctx_fileira(const char *chave, const char *titulo);
 // previa da fileira a direita (home_previa_fileira). Nao abre nada se a chave
 // nao aceita forma.
 void ctx_abrir_fileira(const char *chave, const char *titulo);
+// O MESMO MENU, aberto pela BIBLIOTECA (biblioteca.c) segurando OK num cartaz.
+// `r` e a caixa do cartaz na tela virtual (1920x1080) e `arte` o poster dele: o
+// menu nasce ao lado e o poster volta por cima do veu, como na home. Sem arte
+// nem caixa valida, o menu abre no meio, como ctx_abrir quando nao ha cartaz.
+void ctx_abrir_cartaz(int indice, GfxRect r, const char *arte);
+// O MENU DE UMA LISTA (Biblioteca > Listas, segurando OK num cartao): o resumo
+// do que ha nela (nome, quantos titulos, a mistura de filmes e series, quem
+// fez, as capas dos primeiros itens e a arte da pasta quando a fonte tem) e as
+// acoes que existem de verdade: abrir, fixar na Biblioteca e levar para a Home.
+// `l` e COPIADA. Comeca a baixar os itens (lst_abrir) para ter o que mostrar.
+void ctx_abrir_lista(const LstLista *l);
+// 1 UMA vez quando a pessoa escolheu "Abrir lista"; quem abriu faz o resto.
+int  ctx_pediu_lista(void);
+// 1 UMA vez quando o menu fixou/desafixou ou ligou/desligou a Home, para a
+// grade de listas se refazer (a aba Fixadas perde a lista que saiu).
+int  ctx_lista_alterou(void);
 // Centro horizontal da barra "Segure OK para opções"; negativo = centro da tela.
 void ctx_centro_dica(float cx);
 #endif

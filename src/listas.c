@@ -664,6 +664,7 @@ static pthread_mutex_t itTrava = PTHREAD_MUTEX_INITIALIZER;
 static CatItem  itens[LST_ITENS_MAX];
 static int      nItens, itFioVivo, itSimkl;
 static unsigned itGeracao;
+static int      itInjetado;   // so os testes (lst_teste_itens)
 static char     itEstado[16], itMidia[8];
 
 static void *fioSimkl(void *u) {
@@ -712,7 +713,7 @@ static void *fioSimkl(void *u) {
 
 void lst_abrir(const LstLista *l, const char *midia) {
   ColSource s;
-  if (!l) return;
+  if (!l || itInjetado) return;
   pthread_mutex_lock(&itTrava);
   nItens = 0; itGeracao++;
   itSimkl = (l->fonte == LST_SIMKL);
@@ -753,6 +754,17 @@ void lst_abrir(const LstLista *l, const char *midia) {
                                f->sources[0].catId, f->sources[0].genre);
       return;
     } }
+}
+
+// GANCHO DE TESTE/CAPTURA: poe `n` itens como se a lista aberta os tivesse
+// baixado, e faz lst_abrir deixa-los em paz. Sem rede nenhuma lista tem item, e
+// o resumo do menu de contexto (ctxmenu.c) so se julga com eles na tela.
+void lst_teste_itens(const CatItem *v, int n) {
+  if (n > LST_ITENS_MAX) n = LST_ITENS_MAX;
+  pthread_mutex_lock(&itTrava);
+  for (int i = 0; i < n; i++) itens[i] = v[i];
+  nItens = n; itSimkl = 1; itInjetado = n > 0; itGeracao++;
+  pthread_mutex_unlock(&itTrava);
 }
 
 int lst_itens_n(void) {
