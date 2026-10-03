@@ -260,6 +260,9 @@ IGNORAR = {
     # Atalhos de e-mail do teclado (teclado.c, #216): digitam o pedaco de
     # endereco, igual em toda lingua.
     ".com", "@gmail.com", "@hotmail.com", "@outlook.com",
+    # Cartao da 1.7.2 (novidades172.c): a marca, igual em toda lingua, e o
+    # endereco de exemplo digitado na previa do login por e-mail.
+    "NUVIO LEGACY", "voce@gmail.com",
     # Pedaco do printf "[tmdb] idioma dos metadados" (ajustes.c,
     # ajustes_tmdb_idioma_relatar): o ternario fica numa linha sem o printf,
     # entao NAO_E_TELA nao o ve. So log.
