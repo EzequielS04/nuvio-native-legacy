@@ -2752,6 +2752,8 @@
   T("alienígenas", "ateivis"),
   T("amadurecimento", "brendimas"),
   T("amanhã", "rytoj"),
+  T("amigo", "draugas"),
+  T("amigos", "draugų"),
   T("amizade", "draugystė"),
   T("amnésia", "amnezija"),
   T("amor", "meilė"),

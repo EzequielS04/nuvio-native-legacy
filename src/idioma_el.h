@@ -2752,6 +2752,8 @@
   T("alienígenas", "εξωγήινος"),
   T("amadurecimento", "ενηλικίωση"),
   T("amanhã", "αύριο"),
+  T("amigo", "φίλος"),
+  T("amigos", "φίλοι"),
   T("amizade", "φιλία"),
   T("amnésia", "αμνησία"),
   T("amor", "έρωτας"),

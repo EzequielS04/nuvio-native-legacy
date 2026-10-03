@@ -2751,6 +2751,8 @@
   { "alienígenas", "alien" },
   { "amadurecimento", "coming of age" },
   { "amanhã", "tomorrow" },
+  { "amigo", "friend" },
+  { "amigos", "friends" },
   { "amizade", "friendship" },
   { "amnésia", "amnesia" },
   { "amor", "love" },

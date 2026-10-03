@@ -868,7 +868,15 @@ static void toastNaIlha(void) {
 // A LISTA, desenhada dentro de qualquer caixa: o painel proprio usa, e a aba
 // AVISOS do painel de Salvos tambem (pedido do dono: abrir quando quiser, sem
 // depender do toast). `foco` e de quem chama; -1 = nenhuma linha em foco.
-#define AVL_ROW 164.0f
+// GLASS UI (mockup "ilha" tela 3, 02/10): a linha do aviso e a LINHA DA ILHA
+// do painel Social (salvospainel.c) — sem caixa em repouso, superficie um
+// degrau mais clara so no foco, raio 22, recuo 18/22, o disco do icone de 52,
+// titulo 24 semibold, texto 19 a 62 % (duas linhas de 25) e a acao em 15 a
+// 38 %. 18 + 29 + 4 + 50 + 4 + 18 + 18 = 141. Era um cartao escuro por linha
+// e o foco num bloco cheio de acento: na aba Avisos, ao lado das outras
+// tres, lia como outro aplicativo.
+#define AVL_ROW 142.0f
+#define AVL_PADX 22.0f
 // A LINHA EM FOCO DE UM AVISO DO CANAL CRESCE para o texto inteiro (20/09/2026,
 // visto na previa do aviso da 1.3.4-rc1: duas linhas cortavam justamente o
 // "onde baixar"). As outras ficam em AVL_ROW. A altura expandida e medida no
@@ -877,10 +885,29 @@ static void toastNaIlha(void) {
 #define AVL_LINHAS_CANAL 8
 static float alturaCanalFoco = AVL_ROW + 4.0f * 27.0f;
 static int ehCanalExpansivel(int i) { return i >= 0 && i < n && itens[i].tipo == AV_CANAL; }
+// A ALTURA DE CADA LINHA SAI DO QUE ELA TEM: texto de uma ou de duas linhas,
+// e a linha da acao so quando o aviso tem acao. Com AVL_ROW fixo, um aviso de
+// "modo seguro" (uma frase, sem acao) ganhava 40 px de superficie vazia
+// embaixo no foco — a captura da aba Avisos mostrou. A largura do texto e a
+// do ultimo desenho (todo hospedeiro desenha antes de rolar); antes do
+// primeiro, a da aba Avisos do painel Social.
+static float larguraTextoAviso = 610.0f;
+static int temAcaoAviso(const Aviso *av) {
+  return av->tipo == AV_REC || av->tipo == AV_AGENDA || av->tipo == AV_UPDATE || av->tipo == AV_CRASH;
+}
+static float alturaAviso(int i) {
+  const Aviso *av = &itens[i];
+  float h = 18.0f + 29.0f + 18.0f;
+  if (av->texto[0])
+    h += 4.0f + ((float)txt_largura(TXT_ILHA_SUB, av->texto) > larguraTextoAviso ? 50.0f : 25.0f);
+  if (temAcaoAviso(av)) h += 4.0f + 18.0f;
+  return h < 92.0f ? 92.0f : h;
+}
 float avisos_lista_altura_linha(int linha, int focoLinha) {
   float h = AVL_ROW;
   pthread_mutex_lock(&trava);
   if (linha == focoLinha && ehCanalExpansivel(linha)) h = alturaCanalFoco;
+  else if (linha >= 0 && linha < n) h = alturaAviso(linha);
   pthread_mutex_unlock(&trava);
   return h;
 }
@@ -892,57 +919,64 @@ float avisos_lista_y(int linha, int focoLinha) {
 }
 float avisos_lista_altura(void) {
   pthread_mutex_lock(&trava);
-  { float h = n > 0 ? (float)n * AVL_ROW : 60.0f; pthread_mutex_unlock(&trava); return h; }
+  { float h = 0.0f;
+    int i;
+    for (i = 0; i < n; i++) h += alturaAviso(i);
+    if (n == 0) h = 60.0f;
+    pthread_mutex_unlock(&trava); return h; }
 }
 int avisos_lista_n(void) { int k; pthread_mutex_lock(&trava); k = n; pthread_mutex_unlock(&trava); return k; }
 
 void avisos_lista_desenhar(float x, float y0, float w, float a, int focoLinha) {
   float ar, ag, ab;
   int i;
-  // Tinta sobre o realce: branca, a nao ser que o realce seja branco
-  // (ajustes_acento_tinta). `tf` e o texto principal, `ts` o secundario.
+  const float fr = 243.0f / 255.0f, fg = 242.0f / 255.0f, fb = 239.0f / 255.0f;
   ajustes_acento(&ar, &ag, &ab);
-  int tf = ajustes_tinta_foco(), ts = ajustes_tinta_foco2();
   pthread_mutex_lock(&trava);
   if (n == 0) {
-    TxtLinha t = txt_linha(TXT_CAPTION, i18n("Nada por enquanto."), 150, 153, 162, 255);
-    txt_desenhar_alpha(t, x, y0, a);
+    TxtLinha t = txt_linha(TXT_ILHA_SUB, i18n("Nada por enquanto."), 243, 242, 239, 255);
+    txt_desenhar_alpha(t, x + AVL_PADX, y0, a * 0.5f);
   }
   { float y = y0;
   for (i = 0; i < n; i++) {
     const Aviso *av = &itens[i];
     int f = (i == focoLinha);
     int expande = f && av->tipo == AV_CANAL;
-    float rowH = expande ? alturaCanalFoco : AVL_ROW;
-    GfxRect row = { x, y, w, rowH - 10.0f };
+    float tx = x + AVL_PADX + 52.0f + 18.0f, tw = w - (tx - x) - AVL_PADX;
+    float rowH;
+    larguraTextoAviso = tw;
+    rowH = expande ? alturaCanalFoco : alturaAviso(i);
+    GfxRect row = { x, y, w, rowH };
     const char *acao = NULL;
-    // O cartao selecionado usa fill accent opaco; o halo reduzido fica atras
-    // dele e nao vaza para os avisos vizinhos.
     if (f) {
-      botao_luz(row, .4f, a);
-      gfx_cor(row, 14.0f / row.h, ar, ag, ab, a);
-    } else {
-      gfx_cor(row, 14.0f / row.h, .062f, .066f, .079f, .92f * a);
+      if (ajustes_vidro()) gfx_cor(row, 22.0f / row.h, 1, 1, 1, .12f * a);
+      else {
+        gfx_rect((GfxRect){ row.x - 14.0f, row.y - 2.0f, row.w + 28.0f, row.h + 30.0f }, 0,
+                 GFX_SOMBRA, 1.0f, 0, 0, 0.5f, 0, 0, 0, .30f * a);
+        gfx_cor(row, 22.0f / row.h, .169f, .176f, .204f, a);
+      }
     }
-    gfx_cor((GfxRect){ x + 20.0f, y + 22.0f, 52.0f, 52.0f }, 0.5f,
-            0.12f, 0.13f, 0.15f, a);
-    gfx_icone((GfxRect){ x + 32.0f, y + 34.0f, 28.0f, 28.0f }, icone(av->tipo),
-              f ? tf / 255.0f : 0.62f, f ? tf / 255.0f : 0.80f,
-              f ? tf / 255.0f : 0.96f, a);
+    // O disco do icone: branco a 8 % (o ".dsc" do mockup), o icone a 85 %.
+    if (ajustes_vidro()) gfx_cor((GfxRect){ x + AVL_PADX, y + 18.0f, 52.0f, 52.0f }, 0.5f, 1, 1, 1, .08f * a);
+    else gfx_cor((GfxRect){ x + AVL_PADX, y + 18.0f, 52.0f, 52.0f }, 0.5f, .141f, .149f, .173f, a);
+    gfx_icone((GfxRect){ x + AVL_PADX + 13.0f, y + 31.0f, 26.0f, 26.0f }, icone(av->tipo),
+              fr * .85f, fg * .85f, fb * .85f, a);
     // NOVO = um ponto na cor de acento colado ao icone, e nao uma pilula com
     // palavra: a palavra competia com o titulo e o ponto e o vocabulario que
-    // a aba Social ja usa para "qual delas e nova".
-    if (!av->visto && !f) gfx_cor((GfxRect){ x + 62.0f, y + 18.0f, 14.0f, 14.0f }, 0.5f, ar, ag, ab, a);
-    { TxtLinha t = txt_linha_corta(TXT_BODY, av->titulo, f ? tf : 240, f ? tf : 241, f ? tf : 245, 255, w - 116.0f);
-      txt_desenhar_alpha(t, x + 92.0f, y + 16.0f, a); }
+    // a aba Social ja usa para "qual delas e nova". Agora tambem no foco: a
+    // superficie do foco nao e mais o acento, entao o ponto nao some nela.
+    if (!av->visto) gfx_cor((GfxRect){ x + AVL_PADX + 40.0f, y + 16.0f, 14.0f, 14.0f }, 0.5f, ar, ag, ab, a);
+    { TxtLinha t = txt_linha_corta(TXT_ILHA_NOME, av->titulo, f ? 255 : 243, f ? 255 : 242,
+                                   f ? 255 : 239, 255, tw);
+      txt_desenhar_alpha(t, tx, y + 18.0f, a * (f ? 1.0f : 0.88f)); }
     if (expande) {
-      float h = txt_bloco(TXT_CAPTION, av->texto, 60, 62, 70, x + 92.0f, y + 50.0f, w - 116.0f, 27.0f, a, AVL_LINHAS_CANAL);
-      float nova = 50.0f + h + 34.0f;
+      float h = txt_bloco(TXT_ILHA_SUB, av->texto, 243, 242, 239, tx, y + 51.0f, tw, 25.0f, a * 0.62f,
+                          AVL_LINHAS_CANAL);
+      float nova = 51.0f + h + 4.0f + 18.0f + 18.0f;
       if (nova < AVL_ROW) nova = AVL_ROW;
       alturaCanalFoco = nova;
     }
-    else if (f) txt_bloco(TXT_CAPTION, av->texto, ts, ts, ts, x + 92.0f, y + 50.0f, w - 116.0f, 27.0f, a, 2);
-    else        txt_bloco(TXT_CAPTION, av->texto, 150, 153, 162, x + 92.0f, y + 50.0f, w - 116.0f, 27.0f, a, 2);
+    else txt_bloco(TXT_ILHA_SUB, av->texto, 243, 242, 239, tx, y + 51.0f, tw, 25.0f, a * 0.62f, 2);
     switch (av->tipo) {
       case AV_REC:    acao = i18n("OK abre Salvos"); break;
       case AV_AGENDA: acao = i18n("OK abre o título"); break;
@@ -952,9 +986,8 @@ void avisos_lista_desenhar(float x, float y0, float w, float a, int focoLinha) {
       default: break;
     }
     if (acao) {
-      TxtLinha t = txt_linha(TXT_CAPTION2, acao, f ? ts : 168,
-                             f ? ts : 172, f ? ts : 182, 255);
-      txt_desenhar_alpha(t, x + 92.0f, y + row.h - 34.0f, a * 0.95f);
+      TxtLinha t = txt_linha_corta(TXT_ILHA_HORA, acao, 243, 242, 239, 255, tw);
+      txt_desenhar_alpha(t, tx, y + rowH - 18.0f - 18.0f, a * (f ? 0.62f : 0.38f));
     }
     y += rowH;
   } }
@@ -1044,7 +1077,9 @@ void avisos_desenhar(Uint32 agora) {
     float fim = avisos_lista_y(foco, foco) + avisos_lista_altura_linha(foco, foco);
     float alvo = fim > areaH ? fim - areaH : 0.0f;
     rol += (alvo - rol) * 0.25f; }
-  avisos_lista_desenhar(AVP_X + dx + AVP_MARG, AVP_TOPO - rol, AVP_W - 2 * AVP_MARG, a, foco);
+  // A linha da ilha tem 22 de recuo proprio: a caixa dela sai 22 para fora,
+  // e o texto continua na prumada do titulo do painel.
+  avisos_lista_desenhar(AVP_X + dx + AVP_MARG - 22.0f, AVP_TOPO - rol, AVP_W - 2 * AVP_MARG + 44.0f, a, foco);
   gfx_sem_recorte();
   { TxtLinha t = txt_linha_corta(TXT_CAPTION2, i18n("↑ ↓ escolher · OK agir · Voltar fecha e marca tudo como lido"),
                                  140, 144, 154, 255, AVP_W - 2 * AVP_MARG);

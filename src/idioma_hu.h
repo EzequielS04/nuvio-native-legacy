@@ -2752,6 +2752,8 @@
   T("alienígenas", "idegen"),
   T("amadurecimento", "felnőtté válás"),
   T("amanhã", "holnap"),
+  T("amigo", "barát"),
+  T("amigos", "barát"),
   T("amizade", "barátság"),
   T("amnésia", "amnézia"),
   T("amor", "szerelem"),

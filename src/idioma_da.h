@@ -2752,6 +2752,8 @@
   T("alienígenas", "rumvæsen"),
   T("amadurecimento", "det at blive voksen"),
   T("amanhã", "i morgen"),
+  T("amigo", "ven"),
+  T("amigos", "venner"),
   T("amizade", "venskab"),
   T("amnésia", "hukommelsestab"),
   T("amor", "kærlighed"),

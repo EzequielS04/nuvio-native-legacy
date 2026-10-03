@@ -2752,6 +2752,8 @@
   T("alienígenas", "romvesen"),
   T("amadurecimento", "oppvekst"),
   T("amanhã", "i morgen"),
+  T("amigo", "venn"),
+  T("amigos", "venner"),
   T("amizade", "vennskap"),
   T("amnésia", "hukommelsestap"),
   T("amor", "kjærlighet"),

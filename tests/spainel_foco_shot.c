@@ -190,6 +190,10 @@ int main(int argc, char **argv) {
 
     // SOCIAL: foco na primeira recomendacao — a foto do dono
     tecla(SDLK_UP); { int k; for (k = 0; k < 10; k++) tecla(SDLK_UP); }
+    // DUAS para a direita: a Atividade (02/10) entrou entre Salvos e a Social
+    // (hoje "Amigos"). Com uma so, "social-1a" fotografava a Atividade e
+    // "avisos-1a" a Social.
+    tecla(SDLK_RIGHT);
     tecla(SDLK_RIGHT);
     tecla(SDLK_DOWN);   // a barra "Organizar" da Social
     tecla(SDLK_DOWN);

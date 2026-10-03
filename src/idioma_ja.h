@@ -2752,6 +2752,8 @@
   T("alienígenas", "エイリアン"),
   T("amadurecimento", "成長物語"),
   T("amanhã", "明日"),
+  T("amigo", "人の友達"),
+  T("amigos", "人の友達"),
   T("amizade", "友情"),
   T("amnésia", "記憶喪失"),
   T("amor", "愛"),

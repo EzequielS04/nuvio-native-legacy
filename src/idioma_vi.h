@@ -2752,6 +2752,8 @@
   T("alienígenas", "người ngoài hành tinh"),
   T("amadurecimento", "trưởng thành"),
   T("amanhã", "ngày mai"),
+  T("amigo", "bạn"),
+  T("amigos", "bạn"),
   T("amizade", "tình bạn"),
   T("amnésia", "mất trí nhớ"),
   T("amor", "tình yêu"),

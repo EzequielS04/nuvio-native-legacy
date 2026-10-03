@@ -2751,6 +2751,8 @@
   T("alienígenas", "Außerirdische"),
   T("amadurecimento", "Erwachsenwerden"),
   T("amanhã", "morgen"),
+  T("amigo", "Freund"),
+  T("amigos", "Freunde"),
   T("amizade", "Freundschaft"),
   T("amnésia", "Amnesie"),
   T("amor", "Liebe"),

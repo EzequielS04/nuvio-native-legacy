@@ -32,7 +32,6 @@
 #include "layout.h"
 #include "ajustes.h"
 #include "idioma.h"
-#include "badges.h"
 #include "botoes.h"
 #include "socialvis.h"
 #include "svdesenho.h"
@@ -47,64 +46,97 @@
 // camada no mesmo lugar, so com outro conteudo.
 #define SP_X          1120.0f
 #define SP_W           776.0f
-#define SP_Y            24.0f
-#define SP_H          1032.0f
-#define SP_PAD          NV_FOLHA_PAD
+// A ILHA FLUTUA A NV_FOLHA_MARGEM das tres bordas e com o raio da folha de
+// Fontes (streams.c): as duas camadas da direita sao o mesmo objeto, e uma
+// colada no topo ao lado da outra solta leria como dois materiais.
+#define SP_Y          NV_FOLHA_MARGEM
+#define SP_H          (NV_TELA_H - 2.0f * NV_FOLHA_MARGEM)
+#define SP_RAIO        NV_FOLHA_RAIO
+// A GRAMATICA DO MOCKUP APROVADO ("Glass UI — ilha", tela 3; o CSS esta em
+// design/glass-ilha/glass-ilha.html), em px de 1080p e RELATIVA AO TOPO E A
+// ESQUERDA DO PAINEL — o mockup poe a ilha a 40 da borda e a folha de Fontes
+// real a 24, entao o que se copia e a distancia de dentro, nao a absoluta:
+//   cabecalho  40 de ar; o kicker (15 caixa alta) e "Social" (40 bold) a 48 da
+//              borda; o disco de fechar (56) alinhado pela base do titulo
+//   abas       136 do topo, o seletor a 42 da borda: 5 de folga, segmentos de
+//              45 (19 semibold, 20 de recuo, contagem 16 em cinza a 9 do rotulo)
+//   lista      217 do topo; linhas de 26 a 26 das bordas, raio 22, 18/22 de
+//              recuo; secao 22 bold com um fio de 1 px a 8 % embaixo
+// Era o painel "parecido": abas no lugar do titulo, rotulos de secao em
+// cinza 22, rosto e capa juntos a esquerda (foto do dono lado a lado com o
+// mockup, 02/10: "o mockup ta bem mais polido que a build").
+#define SP_PAD          48.0f   // do painel ao texto (26 da linha + 22 dela)
 #define SP_INTERNO    (SP_W - SP_PAD * 2.0f)
+#define SP_LINHA_X      26.0f   // do painel a superficie da linha
+#define SP_LINHA_W    (SP_W - SP_LINHA_X * 2.0f)
+#define SP_LINHA_PADX   22.0f
+#define SP_LINHA_RAIO   22.0f
+#define SP_KICK_Y      (SP_Y + 40.0f)
+#define SP_TIT_Y       (SP_Y + 62.0f)
+#define SP_FECHAR_D     56.0f
+#define SP_FECHAR_Y    (SP_Y + 54.0f)
 // ABAS. Elas so existem quando o servico de recomendacoes foi compilado
 // (recomenda_ativo); sem ele o painel e exatamente o que era, sem uma linha a
 // mais de cromo para uma funcao que nao existe naquele pacote.
-// AS ABAS OCUPAM O LUGAR DO TITULO GRANDE, e nao uma faixa a mais. A pilula
-// acesa ja diz em que secao a pessoa esta — repetir isso num "Salvos" de 40px
-// logo acima gastaria 76px de altura para dizer duas vezes a mesma coisa, e a
-// lista comecaria mais embaixo em todo pacote com o servico ligado.
-#define SP_ABAS_Y      (SP_Y + 56.0f)
-#define SP_ABAS_H        NV_CTRL_H
-#define SP_ABA_GAP       NV_CTRL_VAO
-// 176, e nao 200: a secao ganhou 24 px de ar proprio acima do rotulo (ver
-// SP_SECAO_H), entao a lista sobe para o primeiro rotulo nao ficar a 90 px
-// das abas.
-#define SP_LISTA_Y     176.0f
-#define SP_LISTA_BASE (SP_Y + SP_H - 24.0f)
+#define SP_ABAS_Y      (SP_Y + 136.0f)
+#define SP_ABAS_H        55.0f
+#define SP_ABAS_X       42.0f
 // AR DO FOCO entre o recorte da lista e a primeira linha. A superficie da linha
-// focada nasce SP_FOCO_PADY ACIMA do `y` da linha (e o vidro poe o aro por
-// cima disso), e a lista comecava exatamente no topo do recorte: a primeira
-// linha em foco — e qualquer linha que a rolagem alinhava ao topo — saia com
-// a borda de cima reta, sem os cantos (foto do dono, 01/10, aba Social com
-// vidro; medido no tests/spainel_foco_shot: superficie cortada em y=176, o
-// topo do recorte). O conteudo comeca SP_FOCO_AR abaixo do recorte e a
-// rolagem guarda o mesmo ar em cima e embaixo da linha focada.
+// focada comeca no `y` da linha, e a lista comecava exatamente no topo do
+// recorte: a primeira linha em foco — e qualquer linha que a rolagem alinhava
+// ao topo — saia com a borda de cima reta, sem os cantos (foto do dono, 01/10,
+// aba Social com vidro; medido no tests/spainel_foco_shot). O conteudo comeca
+// SP_FOCO_AR abaixo do recorte e a rolagem guarda o mesmo ar em cima e embaixo
+// da linha focada. O recorte fica 12 px abaixo das abas, e o conteudo nasce
+// em 217 do topo do painel, onde o mockup poe a lista.
 #define SP_FOCO_AR      14.0f
-#define SP_POSTER_W     92.0f
-#define SP_POSTER_H    138.0f
-// 12 px entre linhas (dono, 21/09/2026); a pilula de foco tem 6 px de folga
-// vertical, entao duas pilulas vizinhas se tocariam sem se sobrepor.
-// 162 = cartao de 150 (cartaz 138 + 6 de cada lado) + NV_LINHA_VAO. Era 150:
-// o cartao tinha a altura do passo e dois focos vizinhos encostavam.
-#define SP_PASSO       162.0f
-#define SP_FOCO_PADY     6.0f
-// ROTULO DE SECAO: 24 px de ar acima, o texto (26), 8 px, uma linha de 1 px a
-// 8 % de branco e 13 px ate a primeira linha. O ar maior em cima e o que
-// separa "Continuar" da linha anterior sem precisar de caixa nenhuma.
-#define SP_SECAO_AR     24.0f
-#define SP_SECAO_H      72.0f
-// 28, e nao 20: o ponto de "nao lida" mora neste vao, e com 20 ele encostava
-// na primeira letra do titulo — foi o que o dono viu na foto ampliada.
-#define SP_TEXTO_X    (SP_PAD + SP_POSTER_W + 28.0f)
-#define SP_TEXTO_W    (SP_INTERNO - SP_POSTER_W - 28.0f)
-// Barra de progresso do card de retomada: a mesma altura da que a home usa nos
-// cards de "Continuar assistindo", para as duas lerem como a mesma coisa.
-// Trilho de 300 e o resto da coluna para "T3E4 · 43 min restantes", que e o
-// dado que importa e vai em tinta principal ao lado do trilho; o "≈35 min
-// assistidos" e secundario e fica embaixo.
-#define SP_BARRA_W     300.0f
-#define SP_BARRA_LABEL_GAP 16.0f
-#define SP_BARRA_H       6.0f
-// Entrada e saida com o MESMO relogio do menu lateral (menu.c): as duas camadas
-// aparecem no mesmo app e tempos diferentes se leem como bug, nao como estilo.
+#define SP_LISTA_Y     (SP_Y + 217.0f - SP_FOCO_AR)
+#define SP_LISTA_BASE  (SP_Y + SP_H - 24.0f)
+// A LINHA DE SALVOS: cartaz 2:3 de 64x96 com 18 px de recuo em cima e
+// embaixo, a mesma altura de ritmo das linhas do feed (capa 52x76 e 114). O
+// cartaz de 92x138 de antes fazia a aba Salvos parecer outra tela ao lado da
+// Atividade.
+#define SP_POSTER_W     64.0f
+#define SP_POSTER_H     96.0f
+#define SP_LINHA_PADY   18.0f
+#define SP_LINHA_SALVO (SP_POSTER_H + SP_LINHA_PADY * 2.0f)
+// As linhas se encostam, como no mockup: so uma tem superficie (a focada), e
+// o recuo de 18 de cada uma ja e o ar entre os textos.
+#define SP_PASSO       SP_LINHA_SALVO
+// ROTULO DE SECAO ("Hoje", "Continuar"): 22 bold em branco, 10 px ate um fio
+// de 1 px a 8 % de borda a borda da LINHA, e 6 px ate a primeira linha. Acima,
+// 6 px na primeira secao da lista e 22 nas outras (.sec do mockup, margem 6 e
+// "margin-top:22px" na segunda). Era CAPTION 22 cinza com 24 de ar: lia como
+// nota de rodape, nao como divisao.
+#define SP_SECAO_AR1     6.0f
+#define SP_SECAO_AR     22.0f
+#define SP_SECAO_TXT    27.0f   // a altura da linha de 22 px
+#define SP_SECAO_H     (SP_SECAO_AR + SP_SECAO_TXT + 10.0f + 1.0f + 6.0f)
+#define SP_SECAO_H1    (SP_SECAO_AR1 + SP_SECAO_TXT + 10.0f + 1.0f + 6.0f)
+#define SP_TEXTO_X    (SP_PAD + SP_POSTER_W + 18.0f)
+#define SP_TEXTO_W    (SP_INTERNO - SP_POSTER_W - 18.0f)
+// Barra de progresso do card de retomada: o trilho fino do mockup, com o que
+// FALTA ao lado ("T3E4 · 43 min restantes"), que e o dado que importa.
+#define SP_BARRA_W     200.0f
+#define SP_BARRA_LABEL_GAP 14.0f
+#define SP_BARRA_H       4.0f
+// A LINHA DA ILHA (ver linhaIlhaRet e andaresIlha, mais abaixo).
+#define SPI_H         114.0f   // 18 + 29 + 4 + 23 + 4 + 18 + 18
+#define SPI_H2         92.0f   // dois andares: 18 + 29 + 4 + 23 + 18
+#define SPI_AV         52.0f
+#define SPI_AV_GAP     18.0f
+#define SPI_CAP_W      52.0f
+#define SPI_CAP_H      76.0f
+#define SPI_CAP_RAIO    9.0f
+#define SPI_FG_R 243
+#define SPI_FG_G 242
+#define SPI_FG_B 239
 #define SP_ABRIR_MS    230.0f
 #define SP_FECHAR_MS   150.0f
-#define SP_VEU           0.58f
+// O VEU DA FOLHA DE FONTES (streams.c): 30 % sobre o vidro, 42 % no solido.
+// Era 58 %: a arte atras do painel apagava, e o vidro nao tinha o que mostrar
+// — no mockup o fundo continua vivo a esquerda da ilha.
+#define SP_VEU   (ajustes_vidro() ? 0.30f : 0.42f)
 // O RASTRO. A linha focada aqui e um bloco inteiro na cor de realce, e nao um
 // anel: com a mesma mola nos dois sentidos (95 % em 120 ms) e a tecla presa
 // descendo a ~10 linhas/s, duas ou tres linhas acima da focada ainda estavam
@@ -208,6 +240,8 @@ static int nCont;            // quantas das primeiras linhas sao "Continuar"
 enum { SP_ABA_SALVOS = 0, SP_ABA_ATIVIDADE = 1, SP_ABA_SOCIAL = 2, SP_ABA_AVISOS = 3,
        SP_ABA_N = 4 };
 #define SP_FOCO_ABAS (-1)
+// O disco de fechar do cabecalho (desenhaFechar). -3, porque -2 e a barra.
+#define SP_FOCO_FECHAR (-3)
 static int aba;
 static RecItem recs[REC_MAX];
 static int nRecs;
@@ -261,7 +295,7 @@ static int consentEstado = -1;
 #if SP_V2
 static int alcEstado = -2, escolhendoAlcance;
 #endif
-#define SPS_ALC_TOPO 262.0f
+#define SPS_ALC_TOPO 205.0f   // medido na captura com o corpo da ilha (19/27)
 
 // A LINHA DO AMIGO SABE O QUE ELE ESTA FAZENDO (tela A, 02/10/2026): o indice
 // dele no modelo do social (socialvis.h; -1 = sem atividade) e se ha uma
@@ -289,18 +323,24 @@ static int temPedidoPerfil;
 // AMIGO E MAIS COMPACTO: ele nao tem poster, selo nem botao, so identidade e a
 // ultima atividade. Dar a ele os mesmos 112px da sugestao fazia uma linha
 // simples parecer um cartao de destaque.
-#define SPS_GAP         18.0f
+// GLASS UI (mockup "ilha" tela 3): as linhas se ENCOSTAM — so a focada tem
+// superficie, e os 18 px de recuo de cada uma ja sao o ar entre os textos.
+// Pessoa e recomendacao tem os tres andares do mockup (114); sugestao tem dois
+// (92); as acoes sao chips de 56 com 8 de ar em cima e embaixo; as caixas de
+// ajuste tem 92 com 6 de ar (a caixa aparece em repouso, entao precisa de vao
+// para nao encostar na vizinha).
+#define SPS_GAP          0.0f
 #define SPS_H_CONSENT   84.0f
-#define SPS_H_SUG      112.0f
-#define SPS_H_AMIGO     88.0f
-#define SPS_H_ACAO      60.0f
-#define SPS_H_APARECER  88.0f
+#define SPS_H_SUG      SPI_H2
+#define SPS_H_AMIGO    SPI_H
+#define SPS_H_ACAO      72.0f
+#define SPS_H_APARECER 104.0f
 // Alturas dos dois blocos de texto que NAO sao linha e por isso nao recebem
 // foco: o enunciado da pergunta e a explicacao do estado vazio. Sao constantes
 // e nao medidas porque a rolagem precisa delas ANTES do desenho — e as duas
 // foram conferidas na captura, que e o unico juiz util aqui.
-#define SPS_CONSENT_TOPO 400.0f
-#define SPS_VAZIO_TOPO   320.0f
+#define SPS_CONSENT_TOPO 345.0f
+#define SPS_VAZIO_TOPO   280.0f
 
 // O INTERRUPTOR DE "APARECER". As medidas sao para TRES METROS, e nao copiadas
 // de um telefone.
@@ -323,12 +363,9 @@ static int temPedidoPerfil;
 // propria linha, que e exatamente o ar de formulario que se quer evitar.
 #define SPS_SEP_APARECER 10.0f
 // A linha da Atividade: rosto pequeno, cartaz 64x96 e tres linhas de texto.
-#define SPA_H         112.0f
-#define SPA_AV         44.0f
-#define SPA_PW         64.0f
-#define SPA_PH         96.0f
+#define SPA_H         SPI_H
 // A cadeia sob a linha do amigo: a pilula (SVD_CHIP_H) e o ar ate ela.
-#define SPS_CADEIA_H   42.0f
+#define SPS_CADEIA_H    0.0f   // a cadeia virou o terceiro andar da linha
 
 static int aberto, foco, marcaCatN = -1;
 static float entrada, scrollY;
@@ -660,7 +697,7 @@ static void montarLayout(void) {
   int estilo = sorg_estilo(), cols = 1, i, col = 0, fila = -1, gAnt = -999;
   int catVazias = grupoAtual == SORG_GRUPO_CATEGORIA;
   int proximaCat = 0;   // categorias vazias entram na ordem, entre as cheias
-  float w = SP_INTERNO, h = SP_POSTER_H, passo = SP_PASSO, vao = 0.0f, y = 0.0f;
+  float w = SP_INTERNO, h = SP_LINHA_SALVO, passo = SP_PASSO, vao = 0.0f, y = 0.0f;
   if (estilo == SORG_ESTILO_GRADE) { cols = SPG_COLS; w = SPG_W; h = SPG_H; passo = SPG_PASSO; vao = SPG_VAO; }
   else if (estilo == SORG_ESTILO_PAISAGEM) { cols = SPP_COLS; w = SPP_W; h = SPP_H; passo = SPP_PASSO; vao = SPP_VAO; }
   nSecoes = 0;
@@ -673,11 +710,11 @@ static void montarLayout(void) {
       if (catVazias)
         for (; proximaCat < sorg_n_categorias() && proximaCat < g; proximaCat++) {
           novaSecao(y, proximaCat, 1);
-          y += SP_SECAO_H + SP_VAZIA_H;
+          y += (y <= 0.0f ? SP_SECAO_H1 : SP_SECAO_H) + SP_VAZIA_H;
         }
       if (catVazias && g < SORG_CAT_MAX) proximaCat = g + 1;
       novaSecao(y, g, 0);
-      y += SP_SECAO_H;
+      y += y <= 0.0f ? SP_SECAO_H1 : SP_SECAO_H;
       gAnt = g;
     }
     if (col == 0) fila++;
@@ -692,7 +729,7 @@ static void montarLayout(void) {
   if (catVazias)
     for (; proximaCat < sorg_n_categorias(); proximaCat++) {
       novaSecao(y, proximaCat, 1);
-      y += SP_SECAO_H + SP_VAZIA_H;
+      y += (y <= 0.0f ? SP_SECAO_H1 : SP_SECAO_H) + SP_VAZIA_H;
     }
   alturaConteudo = y;
 }
@@ -766,9 +803,9 @@ static int nVisiveis(void) {
 // A BARRA DE OPCOES (Ordenar, Agrupar, Estilo, categorias) mora entre as abas
 // e a lista, e empurra a lista SP_OPC_EXTRA para baixo so quando existe.
 #define SP_FOCO_BARRA  (-2)
-#define SP_OPC_Y     (SP_ABAS_Y + SP_ABAS_H + 12.0f)
-#define SP_OPC_H      60.0f
-#define SP_OPC_EXTRA (SP_OPC_Y + SP_OPC_H + 4.0f - SP_LISTA_Y)
+#define SP_OPC_Y     (SP_ABAS_Y + SP_ABAS_H + 14.0f)
+#define SP_OPC_H      NV_CTRL_H
+#define SP_OPC_EXTRA (SP_OPC_Y + SP_OPC_H + 12.0f - SP_LISTA_Y)
 static int temBarra(void);
 static float listaTopo(void) { return SP_LISTA_Y + (temBarra() ? SP_OPC_EXTRA : 0.0f); }
 
@@ -784,7 +821,7 @@ static int perguntandoAlcance(void) {
 static float socialAlt(int i) {
   if (i < 0 || i >= nSocial) return 0.0f;
   switch (social[i].tipo) {
-    case SPS_REC:       return SP_POSTER_H;
+    case SPS_REC:       return SPI_H;
     case SPS_SUG:       return SPS_H_SUG;
     case SPS_AMIGO:     return SPS_H_AMIGO +
                           ((social[i].idx >= 0 && social[i].idx < REC_CONTATOS_MAX &&
@@ -806,18 +843,21 @@ static float socialAlt(int i) {
 //   SPS_APARECER  vao mudo. Ver SPS_SEP_APARECER.
 // Quem desenha tem de olhar o tipo para saber se escreve o rotulo — um vao
 // mudo com o cabecalho das sugestoes por cima seria pior que vao nenhum.
+static float socialTopo(void);
 static float socialAntes(int i) {
+  // A PRIMEIRA SECAO DA LISTA tem 6 px de ar, e nao 22 (ver SP_SECAO_AR1).
+  float sh = (i == 0 && socialTopo() <= 0.0f) ? SP_SECAO_H1 : SP_SECAO_H;
   if (i < 0 || i >= nSocial) return 0.0f;
   // POR PESSOA: um rotulo com o nome de quem mandou antes da primeira
   // recomendacao de cada pessoa.
   if (social[i].tipo == SPS_REC && sorg_social() == SORG_SOCIAL_PESSOA) {
-    if (i == 0 || social[i - 1].tipo != SPS_REC) return SP_SECAO_H;
-    return strcmp(recs[social[i].idx].de, recs[social[i - 1].idx].de) ? SP_SECAO_H : 0.0f;
+    if (i == 0 || social[i - 1].tipo != SPS_REC) return sh;
+    return strcmp(recs[social[i].idx].de, recs[social[i - 1].idx].de) ? sh : 0.0f;
   }
   if (social[i].tipo == SPS_APARECER) return SPS_SEP_APARECER;
   if (social[i].tipo == SPS_NOME) return SPS_SEP_APARECER;
   if (social[i].tipo != SPS_SUG && social[i].tipo != SPS_AMIGO) return 0.0f;
-  return (i == 0 || social[i - 1].tipo != social[i].tipo) ? SP_SECAO_H : 0.0f;
+  return (i == 0 || social[i - 1].tipo != social[i].tipo) ? sh : 0.0f;
 }
 
 // Altura do bloco de texto que abre a lista e nao recebe foco.
@@ -946,7 +986,7 @@ static void reconstruirAtividade(void) {
 // O rotulo do dia antes da linha `i`, quando o dia muda.
 static float atvAntes(int i) {
   if (i < 0 || i >= nAtv) return 0.0f;
-  if (i == 0) return SP_SECAO_H;
+  if (i == 0) return SP_SECAO_H1;
   return (atvDia[i] != atvDia[i - 1] || strcmp(atvRot[i], atvRot[i - 1])) ? SP_SECAO_H : 0.0f;
 }
 
@@ -1438,6 +1478,20 @@ void spainel_evento(const SDL_Event *e) {
   // ESQUERDA NA LINHA DE ABAS NAO FECHA SE HA PARA ONDE IR. Fora dela, e fora
   // da primeira aba, ela continua sendo "sair pela borda" — o gesto que
   // perfil.c ja tinha nesta posicao.
+  // O DISCO DE FECHAR: OK fecha, BAIXO volta para as abas (ou a lista, sem
+  // abas). Direita nao tem para onde ir; esquerda ja fecha, como em todo o
+  // painel.
+  if (foco == SP_FOCO_FECHAR) {
+    if (teclaOk(k)) { if (!e->key.repeat) spainel_fechar(); return; }
+    if (k == SDLK_DOWN) {
+      foco = temAbas() ? SP_FOCO_ABAS : (temBarra() ? SP_FOCO_BARRA : (nVisiveis() > 0 ? 0 : SP_FOCO_FECHAR));
+      return;
+    }
+    // Com abas, ESQUERDA volta a ultima delas (foi a DIREITA que trouxe ate
+    // aqui); sem abas ela fecha, como no resto do painel.
+    if (k == SDLK_LEFT) { if (temAbas()) foco = SP_FOCO_ABAS; else spainel_fechar(); return; }
+    return;
+  }
   if (k == SDLK_LEFT) {
     if (temAbas() && foco == SP_FOCO_ABAS && aba != SP_ABA_SALVOS) {
       trocarAba(proximaAba(aba, -1)); return;
@@ -1449,7 +1503,11 @@ void spainel_evento(const SDL_Event *e) {
     spainel_fechar(); return;
   }
   if (k == SDLK_RIGHT) {
-    if (temAbas() && foco == SP_FOCO_ABAS) trocarAba(proximaAba(aba, 1));
+    if (temAbas() && foco == SP_FOCO_ABAS) {
+      int p = proximaAba(aba, 1);
+      if (p == aba) foco = SP_FOCO_FECHAR;   // da ultima aba, o disco de fechar
+      else trocarAba(p);
+    }
     else if (foco == SP_FOCO_BARRA) { if (barraFoco + 1 < nChips()) barraFoco++; }
     else if (aba == SP_ABA_SALVOS && foco >= 0 && foco + 1 < nLinhas &&
              linhas[foco + 1].fila == linhas[foco].fila) foco++;
@@ -1474,12 +1532,16 @@ void spainel_evento(const SDL_Event *e) {
     // DE CIMA DA LISTA SOBE PARA A BARRA (se ha) E DAI PARA AS ABAS, e nao
     // para lugar nenhum. Sem isto a unica forma de trocar de aba seria fechar
     // e reabrir o painel.
-    if (foco == SP_FOCO_BARRA) { foco = SP_FOCO_ABAS; return; }
+    // SEM ABAS, A BARRA SOBE PARA O DISCO DE FECHAR. Com abas, CIMA para
+    // nelas como sempre (quem desce de volta tem de cair nas abas, e uma
+    // sequencia "CIMA ate parar, BAIXO" continua chegando a barra); o disco
+    // fica a DIREITA da ultima aba.
+    if (foco == SP_FOCO_BARRA) { foco = temAbas() ? SP_FOCO_ABAS : SP_FOCO_FECHAR; return; }
     if (foco == SP_FOCO_ABAS) return;
     if (aba == SP_ABA_SALVOS && foco < nLinhas) {
       int v = celulaVizinha(foco, -1);
       if (v >= 0) { foco = v; return; }
-      foco = temBarra() ? SP_FOCO_BARRA : SP_FOCO_ABAS;
+      foco = temBarra() ? SP_FOCO_BARRA : temAbas() ? SP_FOCO_ABAS : SP_FOCO_FECHAR;
       return;
     }
     if (foco == 0 && temAbas()) { foco = temBarra() ? SP_FOCO_BARRA : SP_FOCO_ABAS; return; }
@@ -1724,7 +1786,7 @@ void spainel_atualizar(float dt, Uint32 agora) {
   // Biblioteca. Alinhar a focada ao topo joga o cabecalho para fora na primeira
   // descida e a pessoa perde de vista em que painel esta.
   alvo = scrollY;
-  if (foco == SP_FOCO_ABAS || foco == SP_FOCO_BARRA) alvo = 0.0f;
+  if (foco == SP_FOCO_ABAS || foco == SP_FOCO_BARRA || foco == SP_FOCO_FECHAR) alvo = 0.0f;
   else if (nVisiveis() > 0 && foco >= 0 && foco < nVisiveis()) {
     float janela = SP_LISTA_BASE - listaTopo();
     topo = topoDe(foco);
@@ -1733,7 +1795,7 @@ void spainel_atualizar(float dt, Uint32 agora) {
     // do necessario num interruptor de 104.
     base = topo + (aba == SP_ABA_SOCIAL ? socialAlt(foco)
                  : aba == SP_ABA_ATIVIDADE ? SPA_H
-                 : aba == SP_ABA_AVISOS ? avisos_lista_altura_linha(foco, foco) - 10.0f
+                 : aba == SP_ABA_AVISOS ? avisos_lista_altura_linha(foco, foco)
                  : linhas[foco].lh);
     // O ar do foco nas duas pontas: o conteudo ja nasce SP_FOCO_AR abaixo do
     // recorte (ver SP_FOCO_AR), entao em cima basta `topo` e embaixo sao dois.
@@ -1820,8 +1882,16 @@ static float focoTexto(float f) { (void)f; return 0.0f; }
 static void superficieItem(GfxRect r, float raio, float f, float a) {
   float v = focoVisual(f);
   if (v <= .001f || a <= .001f) return;
-  if (ajustes_vidro()) gfx_cor(r, raio, 1, 1, 1, .12f * v * a);
-  else gfx_cor(r, raio, .17f, .176f, .204f, v * a);
+  if (ajustes_vidro()) { gfx_cor(r, raio, 1, 1, 1, .12f * v * a); return; }
+  // NO SOLIDO A LINHA FOCADA SOBE: #2b2d34 com a sombra curta do mockup
+  // (".row.foco" solido: 0 10px 30px a 40 %) e o fio claro de 1 px no topo
+  // ("inset 0 1px 0" a 6 %). Sem a sombra o degrau cinza sobre o cinza do
+  // painel e o unico sinal, e de longe ele some.
+  gfx_rect((GfxRect){ r.x - 14.0f, r.y - 2.0f, r.w + 28.0f, r.h + 30.0f }, 0, GFX_SOMBRA,
+           1.0f, 0, 0, 0.5f, 0, 0, 0, .30f * v * a);
+  gfx_cor(r, raio, .169f, .176f, .204f, v * a);
+  { float rp = raio * (r.h < r.w ? r.h : r.w);
+    gfx_cor((GfxRect){ r.x + rp, r.y, r.w - 2.0f * rp, 1.0f }, 0.0f, 1, 1, 1, .06f * v * a); }
 }
 
 // CAIXA DE AJUSTE (o interruptor de aparecer, nivel e nome): precisa de um
@@ -1860,59 +1930,136 @@ static void txt_foco_transicao(TxtLinha repouso, TxtLinha foco,
     txt_desenhar_alpha(foco, x, y, a * f);
 }
 
-// Os selos precisam acompanhar o texto principal. O fundo usa a mesma tabela
-// de BADGE_NEUTRO/BADGE_SOBRE_REALCE de badges.c, mas interpolada em uma unica
-// capsula para nao haver uma segunda pilula sobreposta durante o crossfade.
-static float badge_foco_transicao(float x, float y, const char *texto,
-                                  float f, float a) {
-  TxtLinha repouso, foco;
-  GfxRect p;
-  // Selo interno e uma peca neutra, opaca; nao repete o accent do cartao nem
-  // depende de transparencia para separar metadado do fundo.
-  repouso = txt_linha(TXT_CAPTION, texto, 235, 235, 235, 255);
-  foco = txt_linha(TXT_CAPTION, texto, 226, 226, 226, 255);
-  p.x = x; p.y = y; p.w = (float)repouso.w + BADGE_PADX * 2.0f; p.h = BADGE_H;
-  if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, 0.10f * a);   /* selo de vidro */
-  else gfx_cor(p, 0.5f, .095f, .102f, .116f, a);
-  txt_foco_transicao(repouso, foco, x + BADGE_PADX,
-                     y + (BADGE_H - (float)repouso.h) * 0.5f, f, a);
-  return p.w;
+// CAIXA ALTA ESPACADA (".kick" do mockup: 15 bold, 0,14 em): o kicker do
+// cabecalho e o rotulo dos chips. A mesma conta de caixaAlta em streams.c —
+// i18n antes da caixa alta, porque a tabela de idioma guarda a frase normal.
+// x = -1 so mede.
+static float caixaAltaIlha(const char *s, int r, int g, int b, float x, float y, float a) {
+  char up[200];
+  size_t k;
+  snprintf(up, sizeof up, "%s", i18n(s));
+  for (k = 0; up[k]; k++)
+    if (up[k] >= 'a' && up[k] <= 'z') up[k] = (char)(up[k] - 32);
+    else if ((unsigned char)up[k] == 0xC3 && up[k + 1] && (unsigned char)up[k + 1] >= 0xA0 &&
+             (unsigned char)up[k + 1] <= 0xBE) { up[k + 1] = (char)((unsigned char)up[k + 1] - 0x20); k++; }
+  return txt_tracking(TXT_MINI, up, r, g, b, x, y, a, 2.1f);
 }
-
-static void badge_imdb_foco_transicao(float x, float y, int nota,
-                                      float f, float a, int tintaFoco) {
-  char texto[8];
-  TxtLinha repouso, foco, marca;
-  GfxRect p;
-  if (nota <= 0) return;
-  snprintf(texto, sizeof texto, idioma_ponto_decimal(ajustes_idioma()) ? "%d.%d" : "%d,%d",
-           nota / 10, nota % 10);
-  repouso = txt_linha(TXT_CAPTION, texto, 235, 235, 235, 255);
-  foco = txt_linha(TXT_CAPTION, texto, tintaFoco, tintaFoco, tintaFoco, 255);
-  p.x = x; p.y = y; p.w = BADGE_IMDB_W; p.h = BADGE_H;
-  // A marca amarela nao troca de estado; somente a nota acompanha o texto da
-  // linha. Assim nao ha um segundo amarelo semitransparente sobre o primeiro.
-  gfx_cor(p, 5.0f / BADGE_H, 0.961f, 0.773f, 0.094f, a);
-  marca = txt_linha(TXT_MINI, "IMDb", 10, 10, 10, 255);
-  txt_desenhar_alpha(marca, p.x + (p.w - (float)marca.w) * 0.5f,
-                     p.y + (p.h - (float)marca.h) * 0.5f, a);
-  txt_foco_transicao(repouso, foco,
-                     x + BADGE_IMDB_W + BADGE_IMDB_GAP,
-                     y + (BADGE_H - (float)repouso.h) * 0.5f, f, a);
-}
-
-// ROTULO DE SECAO ("Continuar", "Nao comecados", "Seus amigos"): CAPTION2 em
-// 165 com SP_SECAO_AR de ar acima e uma linha de 1 px a 8 % de branco por
-// baixo, de borda a borda da coluna. A linha e o que separa a secao da lista
-// anterior sem caixa nem cor — o rotulo colado na primeira linha (foto do
-// dono, 21/09/2026) lia como parte do titulo. `y` e o topo do bloco de
-// SP_SECAO_H que a proxima linha vai ocupar.
-static void desenhaSecao(float x, float y, const char *rotulo, float a) {
-  TxtLinha t = txt_linha(TXT_CAPTION, rotulo, 165, 168, 178, 255);
-  float ty = y + SP_SECAO_AR;
-  txt_desenhar_alpha(t, x, ty, a * 0.95f);
-  gfx_cor((GfxRect){ x, ty + (float)t.h + 8.0f, SP_INTERNO, 1.0f }, 0.0f,
+static float secaoAlt(int primeira) { return primeira ? SP_SECAO_H1 : SP_SECAO_H; }
+static void desenhaSecao(float x, float y, const char *rotulo, float a, int primeira) {
+  TxtLinha t = txt_linha_corta(TXT_ILHA_SECAO, rotulo, 243, 242, 239, 255, SP_INTERNO);
+  float ty = y + (primeira ? SP_SECAO_AR1 : SP_SECAO_AR);
+  txt_desenhar_alpha(t, x + SP_PAD, ty, a);
+  gfx_cor((GfxRect){ x + SP_LINHA_X, ty + SP_SECAO_TXT + 10.0f, SP_LINHA_W, 1.0f }, 0.0f,
           1.0f, 1.0f, 1.0f, 0.08f * a);
+}
+
+// --- A LINHA DA ILHA ---------------------------------------------------------
+// Uma gramatica so para tudo que tem rosto ou capa (feed, recomendacao, amigo,
+// sugestao, aviso): a superficie de 26 a 26 das bordas, raio 22, 18/22 de
+// recuo; o rosto de 52 a esquerda, 18 px, o texto em ate tres andares e, quando
+// ha, a CAPA 52x76 A DIREITA. Os andares, do CSS do mockup:
+//   nome    24 semibold, branco a 88 % (100 % no foco) + o verbo 24 regular a 55 %
+//   titulo  19 regular a 62 %, 4 px abaixo
+//   quando  15 regular a 38 %, 4 px abaixo
+// A tinta e a cor do mockup (#f3f2ef) com ALFA, e nao um cinza opaco: sobre o
+// vidro o texto secundario deixa a arte passar do mesmo jeito que no CSS, e a
+// chave do cache de texto continua uma so por cor.
+static TxtLinha txtIlha(TxtEstilo e, const char *s, float maxW) {
+  return txt_linha_corta(e, s, SPI_FG_R, SPI_FG_G, SPI_FG_B, 255, maxW);
+}
+// A superficie da linha: so no foco (as linhas moram direto na ilha).
+static GfxRect linhaIlhaRet(float dx, float y, float h) {
+  return (GfxRect){ SP_X + dx + SP_LINHA_X, y, SP_LINHA_W, h };
+}
+// Nome + verbo na mesma linha de base. O nome atravessa de 88 % para branco
+// cheio com o foco, como ".row.foco" do mockup; o verbo fica a 55 %.
+static float nomeVerbo(const char *nome, const char *verbo, float x, float y, float larg,
+                       float v, float a) {
+  TxtLinha n = txtIlha(TXT_ILHA_NOME, nome, larg * 0.6f);
+  TxtLinha nb = txt_linha_corta(TXT_ILHA_NOME, nome, 255, 255, 255, 255, larg * 0.6f);
+  txt_desenhar_alpha(n, x, y, a * 0.88f * (1.0f - v));
+  txt_desenhar_alpha(nb, x, y, a * v);
+  if (verbo && verbo[0] && larg - (float)n.w - 7.0f > 40.0f) {
+    TxtLinha vb = txtIlha(TXT_ILHA_CORPO, verbo, larg - (float)n.w - 7.0f);
+    txt_desenhar_alpha(vb, x + (float)n.w + 7.0f, y, a * 0.55f);
+  }
+  return (float)n.w;
+}
+// Os tres andares a partir de `tx`, centrados na altura `h` da linha quando
+// faltam andares (o mockup centra o bloco ao lado do rosto, align-items).
+static void andaresIlha(float tx, float y, float h, float larg, float v, float a,
+                        const char *nome, const char *verbo, const char *l2, const char *l3) {
+  float bloco = 29.0f + (l2 && l2[0] ? 27.0f : 0.0f) + (l3 && l3[0] ? 22.0f : 0.0f);
+  float ty = y + (h - bloco) * 0.5f;
+  nomeVerbo(nome, verbo, tx, ty, larg, v, a);
+  ty += 29.0f + 4.0f;
+  if (l2 && l2[0]) {
+    txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, l2, larg), tx, ty, a * 0.62f);
+    ty += 23.0f + 4.0f;
+  }
+  if (l3 && l3[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA, l3, larg), tx, ty, a * 0.38f);
+}
+// O ROSTO: a foto, ou o disco na cor da pessoa com a inicial em 20 bold
+// (".av" do mockup). rec_avatar desenha a inicial no CALLOUT de 28, grande
+// demais para o disco de 52 — entao a letra dele vai em branco (" ") e a
+// inicial e escrita aqui. AO VIVO o anel vermelho e o ponto continuam: e
+// estado, e estado e o que leva cor na ilha.
+static void rostoIlha(GfxRect r, const char *url, const char *nome, const char *id,
+                      int vivo, float a, Uint32 agora) {
+  GLuint foto = (url && url[0]) ? tex_obter_larg(url, (int)r.w) : 0;
+  if (vivo) gfx_anel_fora(r, 0.5f, 3.0f, 3.0f, SVD_VIVO_R, SVD_VIVO_G, SVD_VIVO_B, a);
+  rec_avatar(r, url, foto ? nome : " ", id && id[0] ? id : nome, a);
+  if (!foto) {
+    char ini[8];
+    size_t z = 1;
+    TxtLinha l;
+    if (!nome || !nome[0]) nome = "?";
+    while (z < 4 && (nome[z] & 0xc0) == 0x80) z++;
+    memcpy(ini, nome, z);
+    ini[z] = 0;
+    if (ini[0] >= 'a' && ini[0] <= 'z') ini[0] = (char)(ini[0] - 32);
+    l = txt_linha(TXT_ILHA_INICIAL, ini, 255, 255, 255, 255);
+    txt_desenhar_alpha(l, r.x + (r.w - l.w) * 0.5f, r.y + (r.h - l.h) * 0.5f, a);
+  }
+  if (vivo) {
+    float pd = r.w * 0.26f;
+    svd_ponto_vivo(r.x + r.w * 0.5f + r.w * 0.5f * 0.7071f,
+                   r.y + r.h * 0.5f + r.w * 0.5f * 0.7071f, pd, pd * 0.18f, a, agora);
+  }
+}
+// A CAPA A DIREITA (".cap"): 52x76, raio 9, com o recuo de 22 da linha.
+// A arte ENCHE a caixa (cover), recortada pelo raio: um cartaz que chega
+// em outra proporcao (arte 16:9 no lugar do 2:3) sairia com faixas pretas
+// dentro da capa, que e o que a primeira captura mostrou.
+static void capaArte(GfxRect r, const char *url, float raioPx, float a) {
+  GLuint tex = url && url[0] ? tex_obter_larg(url, (int)r.w) : 0;
+  float raio = raioPx / (r.w < r.h ? r.w : r.h);
+  if (tex) {
+    gfx_tex_aspect_atual = tex_aspecto(url);
+    gfx_card_forcar_cover_atual = 1.0f;
+    gfx_rect(r, tex, GFX_CARD, 0.0f, 0.0f, 0.0f, raio, 0, 0, 0, a);
+    gfx_card_forcar_cover_atual = 0.0f;
+    gfx_tex_aspect_atual = 0.0f;
+  } else {
+    gfx_cor(r, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
+  }
+}
+static void capaIlha(float dx, float y, float h, const char *url, float a) {
+  GfxRect c = { SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPI_CAP_W,
+                y + (h - SPI_CAP_H) * 0.5f, SPI_CAP_W, SPI_CAP_H };
+  capaArte(c, url, SPI_CAP_RAIO, a);
+}
+// Nota do IMDb em texto ("IMDb 8,1"), com o separador do idioma.
+static void notaTexto(char *dst, size_t tam, int nota) {
+  if (nota <= 0) { dst[0] = 0; return; }
+  snprintf(dst, tam, idioma_ponto_decimal(ajustes_idioma()) ? "IMDb %d.%d" : "IMDb %d,%d",
+           nota / 10, nota % 10);
+}
+// Junta `parte` ao fim de `dst` com " · ".
+static void juntar(char *dst, size_t tam, const char *parte) {
+  size_t k = strlen(dst);
+  if (!parte || !parte[0] || k + 1 >= tam) return;
+  snprintf(dst + k, tam - k, "%s%s", k ? " \xc2\xb7 " : "", parte);
 }
 
 // `dx` e o deslocamento da animacao de entrada. Ele PRECISA chegar ate aqui: as
@@ -1966,7 +2113,7 @@ static void desenhaCelulaGrade(int i, float dx, float y, float a) {
   GfxRect poster = { x, y, l->lw, SPG_POSTER_H };
   if (f > 0.01f) {
     GfxRect r = { x - 10.0f, y - 10.0f, l->lw + 20.0f, l->lh + 14.0f };
-    superficieItem(r, NV_LINHA_RAIO_PX / r.h, f, a);
+    superficieItem(r, SP_LINHA_RAIO / r.h, f, a);
   }
   arteCelula(poster, l->poster, 0.06f, a);
   barraSobreArte(poster, l->progresso, a);
@@ -1988,7 +2135,7 @@ static void desenhaCelulaPaisagem(int i, float dx, float y, float a) {
   GfxRect img = { x, y, l->lw, SPP_IMG_H };
   if (f > 0.01f) {
     GfxRect r = { x - 10.0f, y - 10.0f, l->lw + 20.0f, l->lh + 14.0f };
-    superficieItem(r, NV_LINHA_RAIO_PX / r.h, f, a);
+    superficieItem(r, SP_LINHA_RAIO / r.h, f, a);
   }
   arteCelula(img, l->fundo[0] ? l->fundo : l->poster, 0.07f, a);
   barraSobreArte(img, l->progresso, a);
@@ -2003,135 +2150,68 @@ static void desenhaCelulaPaisagem(int i, float dx, float y, float a) {
     txt_foco_transicao(r, fo, x, y + SPP_IMG_H + 48.0f, v, a * 0.95f); }
 }
 
+// A LINHA DE SALVOS, na gramatica da ilha: o cartaz e a coisa (fica a
+// esquerda, onde o feed poe o rosto), o titulo em 24 semibold, o que ele e em
+// 19 a 62 % ("Série · 2016 · IMDb 8,7 · Kids") e o andar de baixo em 15 —
+// quando foi salvo, ou o trilho fino com o que falta. Os SELOS em pilula
+// (tipo, ano, IMDb amarelo) sairam: o mockup escreve qualidade como texto, e
+// tres pilulas por linha eram o "menos polido" que o dono apontou.
 static void desenhaLinha(int i, float dx, float y, float a) {
   const SPLinha *l = &linhas[i];
-  float f = animFoco[i];
+  float f = animFoco[i], v = focoVisual(f);
   float px = SP_X + dx + SP_PAD, tx = SP_X + dx + SP_TEXTO_X;
-  char buf[192];
-  GfxRect poster = { px, y, SP_POSTER_W, SP_POSTER_H };
-  float v = focoTexto(f);   // cor do texto e dos selos no foco (vidro: nao inverte)
-  int tintaFoco = ajustes_tinta_foco();
-  int tintaFoco2 = ajustes_tinta_foco2();
+  char buf[192], meta[256];
+  GfxRect poster = { px, y + SP_LINHA_PADY, SP_POSTER_W, SP_POSTER_H };
+  { GfxRect r = linhaIlhaRet(dx, y, SP_LINHA_SALVO);
+    superficieItem(r, SP_LINHA_RAIO / r.h, f, a); }
 
-  if (f > 0.01f) {
-    GfxRect r = { px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
-                  SP_POSTER_H + SP_FOCO_PADY * 2.0f };
-    superficieItem(r, NV_LINHA_RAIO_PX / r.h, f, a);
-  } else {
-    GfxRect r = { px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
-                  SP_POSTER_H + SP_FOCO_PADY * 2.0f };
-    superficieItem(r, NV_LINHA_RAIO_PX / r.h, 0.0f, a);
-  }
-
-  // PELA LARGURA DE DESENHO (92), e nao tex_obter: este decodificava cada
-  // cartaz a 640 de largura (~2,4 MB) para desenha-lo a 92: 121 salvos rolados
+  // PELA LARGURA DE DESENHO, e nao tex_obter: este decodificava cada cartaz a
+  // 640 de largura (~2,4 MB) para desenha-lo pequeno: 121 salvos rolados
   // pedem ~290 MB a um cache de 300 (o log da C9 de 24/09, com o painel
-  // aberto, mostrava gpu-cache=221 269MB), e cada quadro amostrava texturas
-  // sete vezes maiores que o destino. tex_cache.h: "Prefira esta a tex_obter
-  // em qualquer arte de lista". A Biblioteca ja fazia assim (96).
-  { GLuint tex = l->poster[0] ? tex_obter_larg(l->poster, SP_POSTER_W) : 0;
-    if (tex) {
-      gfx_tex_aspect_atual = tex_aspecto(l->poster);
-      gfx_rect(poster, tex, GFX_CARD, 0.0f, 0.0f, 0.0f, 0.08f, 0, 0, 0, a);
-      gfx_tex_aspect_atual = 0.0f;
+  // aberto, mostrava gpu-cache=221 269MB). tex_cache.h: "Prefira esta a
+  // tex_obter em qualquer arte de lista".
+  // Esqueleto VISIVEL (#2C2C2C) enquanto nao chega, o mesmo da home: um
+  // retangulo da cor do fundo le como card quebrado, nao como carregando.
+  capaArte(poster, l->poster, 9.0f, a);
+
+  meta[0] = 0;
+  juntar(meta, sizeof meta, i18n(tipoRotulo(l)));
+  juntar(meta, sizeof meta, l->meta);
+  notaTexto(buf, sizeof buf, l->nota);
+  juntar(meta, sizeof meta, buf);
+  // A CATEGORIA DA PESSOA, quando a lista nao esta agrupada por ela: e a
+  // resposta visivel do "Mover para categoria" — sem ela, mover com a lista
+  // agrupada por progresso nao mudaria nada na tela.
+  if (l->cat && grupoAtual != SORG_GRUPO_CATEGORIA)
+    juntar(meta, sizeof meta, sorg_categoria_nome_id(l->cat));
+
+  { float ty = y + SP_LINHA_PADY + (SP_POSTER_H - 78.0f) * 0.5f;
+    nomeVerbo(l->titulo, NULL, tx, ty, SP_TEXTO_W / 0.6f, v, a);
+    txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, meta, SP_TEXTO_W), tx, ty + 33.0f, a * 0.62f);
+    ty += 60.0f;
+    if (l->progresso > 0) {
+      // O TRILHO DA HOME em miniatura: branco a 18 % e o preenchimento no
+      // acento (e estado — o quanto falta). Ao lado, o que FALTA ("T3E4 · 43
+      // min restantes") a 62 %, e o ja visto, contexto, a 38 %.
+      float p = anim_clamp(l->progresso / 100.0f, 0.0f, 1.0f), pr, pg, pb;
+      float lx = tx + SP_BARRA_W + SP_BARRA_LABEL_GAP;
+      GfxRect trilho = { tx, ty + (18.0f - SP_BARRA_H) * 0.5f, SP_BARRA_W, SP_BARRA_H };
+      GfxRect cheio = trilho;
+      TxtLinha r = txtIlha(TXT_ILHA_HORA, l->txtRestante, SP_TEXTO_W - SP_BARRA_W - SP_BARRA_LABEL_GAP);
+      ajustes_acento(&pr, &pg, &pb);
+      cheio.w = trilho.w * p;
+      gfx_cor(trilho, 0.5f, 1.0f, 1.0f, 1.0f, 0.18f * a);
+      if (cheio.w > SP_BARRA_H) gfx_cor(cheio, 0.5f, pr, pg, pb, a);
+      txt_desenhar_alpha(r, lx, ty, a * 0.62f);
+      if (l->txtVisto[0] && lx + (float)r.w + 20.0f < tx + SP_TEXTO_W) {
+        snprintf(buf, sizeof buf, "\xc2\xb7 %s", l->txtVisto);
+        txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA, buf, tx + SP_TEXTO_W - lx - (float)r.w - 7.0f),
+                           lx + (float)r.w + 7.0f, ty, a * 0.38f);
+      }
     } else {
-      // Esqueleto VISIVEL (#2C2C2C), o mesmo da home e da biblioteca: um
-      // retangulo da cor do fundo le como card quebrado, nao como carregando.
-      gfx_cor(poster, 0.08f, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G,
-              NV_COR_ESQUELETO_B, a);
+      quandoTexto(buf, sizeof buf, l->quandoS);
+      if (buf[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA, buf, SP_TEXTO_W), tx, ty, a * 0.38f);
     } }
-
-  // A TINTA FAZ CROSSFADE entre duas texturas fixas do cache. Antes ela trocava
-  // em degrau no meio da mola: sobre o accent branco isso era exatamente o
-  // "flash" da captura — o cartao ja estava claro, mas o texto ainda parecia
-  // de repouso por um quadro. As duas chaves sao estaveis; so o alpha varia.
-  {
-    // Nao somar canais a 255: o cache aceita bytes e o estouro transforma
-    // branco em vermelho quando o accent pede tinta clara.
-    { TxtLinha repouso = txt_linha_corta(TXT_CALLOUT, l->titulo,
-                                         245, 245, 245, 255, SP_TEXTO_W);
-      TxtLinha foco = txt_linha_corta(TXT_CALLOUT, l->titulo,
-                                      tintaFoco, tintaFoco, tintaFoco, 255, SP_TEXTO_W);
-      txt_foco_transicao(repouso, foco, tx, y + 4.0f, v, a); }
-    // META: tipo, ano e nota sao selos da mesma tabela. A estrela solta que
-    // existia aqui nao dizia de onde vinha a nota e ainda duplicava o IMDb
-    // quando a marca era desenhada ao lado.
-    { float bx = tx, by = y + 42.0f;
-      float w;
-      w = badge_foco_transicao(bx, by, i18n(tipoRotulo(l)), v, a);
-      bx += w + BADGE_GAP;
-      if (l->meta[0]) {
-        w = badge_foco_transicao(bx, by, l->meta, v, a);
-        bx += w + BADGE_GAP;
-      }
-      if (l->nota > 0 && bx + badge_imdb_largura(l->nota) <= tx + SP_TEXTO_W) {
-        badge_imdb_foco_transicao(bx, by, l->nota, v, a, tintaFoco);
-        bx += badge_imdb_largura(l->nota) + BADGE_GAP;
-      }
-      // A CATEGORIA DA PESSOA, quando a lista nao esta agrupada por ela: e a
-      // resposta visivel do "Mover para categoria" — sem o selo, mover com a
-      // lista agrupada por progresso nao mudaria nada na tela.
-      if (l->cat && grupoAtual != SORG_GRUPO_CATEGORIA) {
-        const char *nome = sorg_categoria_nome_id(l->cat);
-        if (nome && bx + txt_largura(TXT_CAPTION, nome) + BADGE_PADX * 2.0f <= tx + SP_TEXTO_W)
-          badge_foco_transicao(bx, by, nome, v, a);
-      } } }
-
-  if (l->progresso > 0) {
-    float p = anim_clamp(l->progresso / 100.0f, 0.0f, 1.0f);
-    GfxRect trilho = { tx, y + 90.0f, SP_BARRA_W, SP_BARRA_H };
-    GfxRect cheio  = { tx, y + 90.0f, SP_BARRA_W * p, SP_BARRA_H };
-    float pr, pg, pb;
-    ajustes_acento(&pr, &pg, &pb);
-    // TRILHO cinza escuro (branco a 14 % sobre o painel) e PREENCHIMENTO NA
-    // COR DE REALCE (dono, 21/09/2026) — era branco em repouso e a barra nao
-    // dizia que era a mesma coisa que a barra dos cards da home. Sobre a
-    // linha em foco (superficie na cor de realce) o trilho e a tinta a 22 % e
-    // o preenchimento e a tinta cheia: realce sobre realce sumia.
-    // A MESMA tinta do texto da linha (ajustes_acento_tinta), e nao um degrau
-    // proprio: com o degrau em 0,52 a barra saia escura sobre o azul enquanto
-    // o texto ao lado saia branco — dois criterios para a mesma superficie.
-    { float ti = ajustes_acento_tinta(NULL, NULL, NULL);
-      // Duas camadas pequenas, ambas sobre a mesma barra: a leitura da
-      // progressao nunca some enquanto a linha troca de superficie.
-      gfx_cor(trilho, 0.5f, 1.0f, 1.0f, 1.0f, 0.14f * (1.0f - v) * a);
-      gfx_cor(trilho, 0.5f, ti, ti, ti, 0.22f * v * a);
-      if (cheio.w > SP_BARRA_H) {
-        gfx_cor(cheio, 0.5f, pr, pg, pb, (1.0f - v) * a);
-        gfx_cor(cheio, 0.5f, ti, ti, ti, v * a);
-      } }
-    // O tempo ja visto vem da mesma posicao/remaining reais do catalogo. Quando
-    // ha duracao suficiente para derivar minutos, o prefixo "≈" deixa claro o
-    // arredondamento; sem isso, cai para percentual em vez de fabricar tempo.
-    // A etiqueta fica ao lado da barra, em uma largura reservada fixa: assim a
-    // largura do trilho nao muda a cada quadro nem rasteriza uma linha nova.
-    // HIERARQUIA (dono, 21/09/2026): o que FALTA e o dado — "T3E4 · 43 min
-    // restantes" em tinta principal ao lado do trilho; o "≈35 min assistidos"
-    // e contexto e vai embaixo, em secundario. Antes os dois tinham a mesma
-    // cor e o restante ficava em segundo plano.
-      { int c2Repouso = 168;
-        float labelX = tx + SP_BARRA_W + SP_BARRA_LABEL_GAP;
-      { TxtLinha repouso = txt_linha_corta(TXT_CAPTION, l->txtRestante, 235, 235, 235, 255,
-                                           SP_TEXTO_W - SP_BARRA_W - SP_BARRA_LABEL_GAP);
-        TxtLinha foco = txt_linha_corta(TXT_CAPTION, l->txtRestante, tintaFoco, tintaFoco,
-                                        tintaFoco, 255,
-                                        SP_TEXTO_W - SP_BARRA_W - SP_BARRA_LABEL_GAP);
-        txt_foco_transicao(repouso, foco, labelX,
-                           y + 90.0f + (SP_BARRA_H - (float)repouso.h) * 0.5f, v, a); }
-      { TxtLinha repouso = txt_linha(TXT_CAPTION, l->txtVisto, c2Repouso, c2Repouso + 4,
-                                     c2Repouso + 14, 255);
-        TxtLinha foco = txt_linha(TXT_CAPTION, l->txtVisto, tintaFoco2,
-                                  tintaFoco2, tintaFoco2, 255);
-        txt_foco_transicao(repouso, foco, tx, y + 108.0f, v, a * 0.95f); } }
-  } else {
-    quandoTexto(buf, sizeof buf, l->quandoS);
-    if (buf[0]) {
-      TxtLinha repouso = txt_linha_corta(TXT_CAPTION, buf, 168, 172, 183, 255, SP_TEXTO_W);
-      TxtLinha foco = txt_linha_corta(TXT_CAPTION, buf, tintaFoco2,
-                                      tintaFoco2, tintaFoco2, 255, SP_TEXTO_W);
-      txt_foco_transicao(repouso, foco, tx, y + 92.0f, v, a * 0.9f);
-    }
-  }
 }
 
 // Uma linha da aba Social: cartaz, titulo, a CARA e o nome de quem mandou,
@@ -2149,135 +2229,66 @@ static void desenhaLinha(int i, float dx, float y, float a) {
 //   +38   disco de 30 + "Nome · há 2 h"
 //   +76   selos: [Filme] [IMDb 8,3]    (REC_SELO_H = 30)
 //   +108  a frase entre aspas          (TXT_CAPTION, 22)
-#define SPR_AVATAR   30.0f
-#define SPR_AV_GAP   12.0f
-#define SPR_Y_NOME   38.0f
-#define SPR_Y_SELOS  76.0f
-#define SPR_Y_FRASE 108.0f
-// Barra de "ainda nao lida" na borda esquerda da linha.
-#define SPR_BARRA_W   6.0f
-// A LINHA DE SUGESTAO. 56 e o mesmo disco do cartao de abertura (RC_AVATAR) e o
-// menor em que a INICIAL ainda se le a 3 m — sugestao de conta Nuvio quase
-// nunca tem foto, entao a inicial e o caso comum e nao a excecao.
-#define SPS_SUG_AV   56.0f
-#define SPS_SUG_GAP  18.0f
-#define SPS_SUG_PADX 14.0f
-#define SPS_AMIGO_AV 48.0f
-#define SPS_AMIGO_GAP 16.0f
 
 // `linha` e a posicao na lista da aba (de onde sai a animacao de foco) e `idx`
 // a posicao na lista de recomendacoes. Os dois coincidem hoje — as
 // recomendacoes vem primeiro — e sao parametros separados para que continuem
 // coincidindo por construcao e nao por sorte no dia em que algo entrar antes.
-static void desenhaRecLinha(int linha, int idx, float dx, float y, float a) {
+static void desenhaRecLinha(int linha, int idx, float dx, float y, float a, Uint32 agora) {
   const RecItem *r = &recs[idx];
-  float f = (linha >= 0 && linha < SP_MAX) ? animFoco[linha] : 0.0f;
-  float px = SP_X + dx + SP_PAD, tx = SP_X + dx + SP_TEXTO_X;
-  char buf[320], quando[64];
-  GfxRect poster = { px, y, SP_POSTER_W, SP_POSTER_H };
-
-  { GfxRect card = { px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
-                     SP_POSTER_H + SP_FOCO_PADY * 2.0f };
-    superficieItem(card, 14.0f / card.h, f, a); }
-
+  float f = (linha >= 0 && linha < SP_MAX) ? animFoco[linha] : 0.0f, v = focoVisual(f);
+  float px = SP_X + dx + SP_PAD, tx = px + SPI_AV + SPI_AV_GAP;
+  float larg = SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPI_CAP_W - 18.0f - tx;
+  char l2[256], l3[320], q[64], nota[24];
+  int pct, te, ee, est;
+  { GfxRect c = linhaIlhaRet(dx, y, SPI_H);
+    superficieItem(c, SP_LINHA_RAIO / c.h, f, a); }
+  // "NAO LIDA" E UM PONTO DE ACENTO no recuo esquerdo da linha, e nao mais a
+  // barra de 6x138 de fora: com a linha na gramatica do mockup (rosto a
+  // esquerda, sem cartaz alto) a barra virava um traco solto. O ponto de 8 px
+  // mora nos 22 de recuo, antes do rosto, e e estado — por isso no acento.
   if (!r->visto) {
-    // A MARCA DE "NAO LIDA" E UMA BARRA, e nao mais um ponto de 10px.
-    //
-    // O ponto morava no vao entre o cartaz e o texto, tinha a area de um grao
-    // de arroz a tres metros e sumia por completo quando a linha ganhava a
-    // pilula clara do foco (azul 0.42/0.72/0.98 sobre branco 0.96). A barra
-    // ocupa a altura INTEIRA do cartaz na borda da camada, onde nada mais
-    // desenha, e por isso continua visivel com e sem foco.
-    //
-    // NA COR DE ACENTO DO APARELHO, e nao no azul cravado de antes: o dono
-    // escolhe o acento em Ajustes e toda marca de estado do app ja o obedece.
-    //
-    // E POR ISSO ELA FICA FORA DA PILULA DO FOCO, em px-24 contra os px-12 em
-    // que a pilula comeca. O acento PADRAO e BRANCO: pintada por dentro da
-    // pilula clara, a barra sumiria justamente na linha em que o dedo esta.
-    // CONFERIDO nas duas capturas — tema OCEANO (azul) e tema padrao (branco).
-    //
-    // O RAIO E 3px EXPRESSOS EM ALTURAS, e nao 0.5: o SDF de gfx.c normaliza
-    // pela ALTURA do retangulo (uAspect = w/h), entao 0.5 num retangulo de
-    // 6x138 pede um raio de 69px e o que sai e uma lente pontuda de 50px — foi
-    // exatamente o que a primeira captura mostrou.
     float ar, ag, ab;
-    GfxRect barra = { px - 24.0f, y, SPR_BARRA_W, SP_POSTER_H };
     ajustes_acento(&ar, &ag, &ab);
-    { float ti = anim_mistura(ar, ajustes_acento_tinta(NULL, NULL, NULL),
-                              focoTexto(f));
-      ar = ag = ab = ti; }
-    gfx_cor(barra, SPR_BARRA_W * 0.5f / SP_POSTER_H, ar, ag, ab, a);
+    gfx_cor((GfxRect){ SP_X + dx + SP_LINHA_X + 7.0f, y + SPI_H * 0.5f - 4.0f, 8.0f, 8.0f },
+            0.5f, ar, ag, ab, a);
   }
-
-  { GLuint tex = r->poster[0] ? tex_obter_larg(r->poster, SP_POSTER_W) : 0;
-    if (tex) {
-      gfx_tex_aspect_atual = tex_aspecto(r->poster);
-      gfx_rect(poster, tex, GFX_CARD, 0.0f, 0.0f, 0.0f, 0.08f, 0, 0, 0, a);
-      gfx_tex_aspect_atual = 0.0f;
-    } else {
-      gfx_cor(poster, 0.08f, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G,
-              NV_COR_ESQUELETO_B, a);
+  // O MESMO ROSTO DA ATIVIDADE: quem mandou e o que distingue uma linha da
+  // outra antes de qualquer leitura (o pedido original do dono), e a linha
+  // diz a frase do feed — "Gustavo te mandou" — como a primeira do mockup.
+  rostoIlha((GfxRect){ px, y + (SPI_H - SPI_AV) * 0.5f, SPI_AV, SPI_AV },
+            r->deAvatar, r->deNome, r->de, 0, a, agora);
+  capaIlha(dx, y, SPI_H, r->poster, a);
+  // TITULO · FILME OU SERIE · NOTA: o tipo e a nota continuam (a linha nao
+  // dizia se era um filme de duas horas ou oito temporadas), agora em texto.
+  // A nota vem do proprio RecItem: o titulo recomendado costuma NAO estar no
+  // catalogo de quem recebe.
+  snprintf(l2, sizeof l2, "%s", r->titulo);
+  juntar(l2, sizeof l2, i18n(r->tipo[0] && !strncmp(r->tipo, "series", 6) ? "Série" : "Filme"));
+  notaTexto(nota, sizeof nota, r->nota);
+  juntar(l2, sizeof l2, nota);
+  // QUANDO, O MEU ESTADO NO QUE ME MANDARAM (tela A: "Você começou · T1E3")
+  // e a frase dele entre aspas — o andar de baixo do mockup, a 38 %.
+  rec_quando_texto(q, sizeof q, r->criado);
+  snprintf(l3, sizeof l3, "%s", q);
+  est = socialvis_meu_estado(r->imdb, &pct, &te, &ee);
+  if (est == 2) juntar(l3, sizeof l3, i18n("Você viu"));
+  else if (est == 1) {
+    char d[64];
+    if (te > 0 && ee > 0) {
+      char ep[24];
+      snprintf(ep, sizeof ep, i18n("T%dE%d"), te, ee);
+      snprintf(d, sizeof d, "%s %s", i18n("Você começou"), ep);
+    } else snprintf(d, sizeof d, "%s %d%%", i18n("Você começou"), pct);
+    juntar(l3, sizeof l3, d);
+  }
+  { const char *frase = rec_frase(r);
+    if (frase[0]) {
+      char fr[200];
+      snprintf(fr, sizeof fr, "\xe2\x80\x9c%s\xe2\x80\x9d", frase);
+      juntar(l3, sizeof l3, fr);
     } }
-
-  { TxtLinha repouso = txt_linha_corta(TXT_CALLOUT, r->titulo,
-                                        245, 245, 245, 255, SP_TEXTO_W);
-    TxtLinha foco = txt_linha_corta(TXT_CALLOUT, r->titulo,
-                                     ajustes_tinta_foco(),
-                                     ajustes_tinta_foco(),
-                                     ajustes_tinta_foco(), 255, SP_TEXTO_W);
-    txt_foco_transicao(repouso, foco, tx, y + 2.0f, focoTexto(f), a); }
-
-  // "Gustavo · há 2 h" — as PARTES passam por i18n e a juncao nao, pela mesma
-  // razao de metaTexto: a chave da tabela e uma string inteira, e a frase
-  // montada nunca existiria como chave.
-  rec_quando_texto(quando, sizeof quando, r->criado);
-  if (quando[0]) snprintf(buf, sizeof buf, "%s · %s", r->deNome, quando);
-  else           snprintf(buf, sizeof buf, "%s", r->deNome);
-  // As DUAS linhas de baixo invertem junto com o titulo: com a pilula clara,
-  // cinza-claro sobre claro fica ilegivel — foi o que a captura mostrou antes
-  // de isto existir.
-  { int esc = focoTexto(f) > 0.5f;
-    int c2 = esc ? ajustes_tinta_foco2() : 168;
-    int c3 = esc ? ajustes_tinta_foco2() : 214;
-    // O DISCO DA FOTO ANTES DO NOME. Com quatro recomendacoes na tela, a cara
-    // e o que distingue uma linha da outra antes de qualquer leitura — era o
-    // pedido do dono, e e o unico item da linha que nao depende de ler.
-    { GfxRect av = { tx, y + SPR_Y_NOME, SPR_AVATAR, SPR_AVATAR };
-      rec_avatar(av, r->deAvatar, r->deNome, r->de, a); }
-    { float nx = tx + SPR_AVATAR + SPR_AV_GAP;
-      TxtLinha t = txt_linha_corta(TXT_CAPTION, buf, c2, c2 + 4, c2 + 14, 255,
-                                   SP_TEXTO_W - (SPR_AVATAR + SPR_AV_GAP));
-      txt_desenhar_alpha(t, nx, y + SPR_Y_NOME + (SPR_AVATAR - t.h) * 0.5f,
-                         a * 0.95f); }
-    // FILME OU SÉRIE, E A NOTA. `tipo` sempre existiu no RecItem e nunca era
-    // desenhado: a linha nao dizia se o amigo estava mandando um filme de duas
-    // horas ou oito temporadas.
-    { float sx = tx;
-      int pct, te, ee, est;
-      sx += rec_selo_tipo(sx, y + SPR_Y_SELOS, r->tipo, esc, a) + REC_SELO_GAP;
-      if (r->nota > 0) sx += rec_selo_imdb(sx, y + SPR_Y_SELOS, r->nota, esc, a) + REC_SELO_GAP;
-      // O MEU ESTADO NO QUE ME MANDARAM (tela A): "Voce comecou › T1E3" ou
-      // "Voce viu", pelo catalogo. Sem estado, nada.
-      est = socialvis_meu_estado(r->imdb, &pct, &te, &ee);
-      if (est == 2) svd_chip(sx + 8.0f, y + SPR_Y_SELOS + (REC_SELO_H - SVD_CHIP_H) * 0.5f,
-                             "Você viu", 1, esc, a);
-      else if (est == 1) {
-        char d[32];
-        float cy = y + SPR_Y_SELOS + (REC_SELO_H - SVD_CHIP_H) * 0.5f;
-        sx += 8.0f + svd_chip(sx + 8.0f, cy, "Você começou", 1, esc, a);
-        sx += svd_seta(sx, cy, esc, a);
-        if (te > 0 && ee > 0) snprintf(d, sizeof d, i18n("T%dE%d"), te, ee);
-        else snprintf(d, sizeof d, "%d%%", pct);
-        svd_chip(sx, cy, d, 0, esc, a);
-      } }
-    { const char *frase = rec_frase(r);
-      if (frase[0]) {
-        snprintf(buf, sizeof buf, "\xe2\x80\x9c%s\xe2\x80\x9d", frase);
-        { TxtLinha t = txt_linha_corta(TXT_CAPTION, buf, c3, c3 + 4, c3 + 14, 255,
-                                       SP_TEXTO_W);
-          txt_desenhar_alpha(t, tx, y + SPR_Y_FRASE, a * 0.95f); }
-      } } }
+  andaresIlha(tx, y, SPI_H, larg, v, a, r->deNome, i18n("te mandou"), l2, l3);
 }
 
 // A LINHA DE ABAS. Sem animacao de cor de proposito: a cor faz parte da chave
@@ -2293,76 +2304,122 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a) {
 // Era rotulo solto com um traco de acento embaixo da aba aberta: lia como
 // texto, nao como controle, e o traco gastava o acento num estado que a
 // superficie ja diz.
-#define SP_SEG_PAD   6.0f
+#define SP_SEG_PAD   5.0f
 #define SP_SEG_VAO   4.0f
-#define SP_SEG_TXT  18.0f
-#define SP_SEG_SELO 34.0f
+#define SP_SEG_TXT  20.0f
+#define SP_SEG_NUM   9.0f
 static const char *rotuloAba(int i) {
   return i == SP_ABA_SALVOS ? "Salvos" : i == SP_ABA_ATIVIDADE ? "Atividade"
        : i == SP_ABA_SOCIAL ? "Amigos" : "Avisos";
 }
-static int novasDaAba(int i, int ativa) {
-  int n = i == SP_ABA_SOCIAL ? recomenda_n_novas() : i == SP_ABA_AVISOS ? avisos_n_novos() : 0;
-  // O selo so aparece na aba que NAO esta aberta. Ele responde "ha algo novo
-  // la?"; com a aba na tela, a propria lista responde isso.
-  return ativa ? 0 : n;
+// A CONTAGEM AO LADO DO ROTULO (".sg .n" do mockup: "Salvos 12", "Amigos 4",
+// "Avisos 3"), 16 px a 35 %. O que ha de NOVO (recomendacao recebida, aviso
+// nao lido) e estado: o numero passa a ser o das novidades e vai no acento —
+// era um disco de acento com o numeral dentro, e o mockup nao tem disco.
+// `*novo` diz qual dos dois. 0 = sem numero (Atividade, ou lista vazia).
+static int contaDaAba(int i, int *novo) {
+  int n;
+  *novo = 0;
+  if (i == SP_ABA_SALVOS) return nLinhas;
+  if (i == SP_ABA_SOCIAL) {
+    if ((n = recomenda_n_novas()) > 0) { *novo = 1; return n; }
+    return socialvis_n_amigos();
+  }
+  if (i == SP_ABA_AVISOS) {
+    if ((n = avisos_n_novos()) > 0) { *novo = 1; return n; }
+    return avisos_lista_n();
+  }
+  return 0;
 }
-static float segLargura(int i, TxtLinha *t, int cor) {
-  *t = txt_linha(TXT_HERO_META, i18n(rotuloAba(i)), cor, cor, cor, 255);
-  return (float)t->w + SP_SEG_TXT * 2.0f + (novasDaAba(i, i == aba) > 0 ? SP_SEG_SELO : 0.0f);
+static float segLargura(int i, TxtLinha *t, TxtLinha *num, int cor) {
+  int novo, n = contaDaAba(i, &novo);
+  char b[16];
+  *t = txt_linha(TXT_ILHA_SEG, i18n(rotuloAba(i)), cor, cor, cor, 255);
+  num->w = 0; num->h = 0; num->tex = 0;
+  if (n > 0) {
+    float ar, ag, ab;
+    snprintf(b, sizeof b, "%d", n > 99 ? 99 : n);
+    ajustes_acento(&ar, &ag, &ab);
+    *num = novo ? txt_linha(TXT_ILHA_NUM, b, (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255)
+                : txt_linha(TXT_ILHA_NUM, b, SPI_FG_R, SPI_FG_G, SPI_FG_B, 255);
+  }
+  return (float)t->w + SP_SEG_TXT * 2.0f + (num->w > 0 ? SP_SEG_NUM + (float)num->w : 0.0f);
 }
 static float abasLargura(void) {
   float w = SP_SEG_PAD * 2.0f - SP_SEG_VAO;
   int i;
   for (i = 0; i < SP_ABA_N; i++) {
-    TxtLinha t;
+    TxtLinha t, n;
     if (!abaExiste(i)) continue;
-    w += segLargura(i, &t, 176) + SP_SEG_VAO;
+    w += segLargura(i, &t, &n, 176) + SP_SEG_VAO;
   }
   return w;
 }
 
+// O DISCO DE FECHAR (".dsc": 56, branco a 8 %, solido #24262c, o X da
+// Lucide a 85 %). E foco de verdade, e nao enfeite: o OK fecha — um botao
+// que o D-pad nao alcanca seria mentira numa TV. Chega-se nele pela DIREITA
+// a partir da ultima aba (ou por CIMA, sem abas). Focado, vira a pilula
+// cheia no acento, como os discos da folha de Fontes (chipFolha).
+static void desenhaFechar(float dx, float a) {
+  GfxRect r = { SP_X + dx + SP_W - SP_PAD - SP_FECHAR_D, SP_FECHAR_Y, SP_FECHAR_D, SP_FECHAR_D };
+  int focado = foco == SP_FOCO_FECHAR;
+  float c = .85f * 243.0f / 255.0f, g = r.h * .42f;
+  botaoSup(r, 0.5f, focado ? 1.0f : 0.0f, a);
+  if (focado) c = ajustes_tinta_foco() / 255.0f;
+  gfx_icone((GfxRect){ r.x + (r.w - g) * .5f, r.y + (r.h - g) * .5f, g, g }, "aj_x", c, c, c, a);
+}
+
+// AS ABAS SAO UM SELETOR SEGMENTADO (".seg" do mockup): conteiner pilula em
+// branco a 6 % (solido #1d1e23), a aba aberta num segmento a 14 % (#34363e)
+// em branco, as outras a 55 %. Com o D-pad na faixa o segmento aberto vira a
+// pilula cheia no acento — e foco de botao, como os chips da folha de Fontes.
+// Sem animacao de cor de proposito: a cor faz parte da chave do cache de
+// linhas de text.c, e uma cor por quadro cria uma rasterizacao TTF por quadro.
+// Por isso o rotulo e branco e o 55 % e ALFA, e nao um cinza.
 static void desenhaAbas(float dx, float a) {
-  float x = SP_X + dx + SP_PAD, ar, ag, ab;
+  float x = SP_X + dx + SP_ABAS_X, ar, ag, ab;
   int i;
   GfxRect caixa = { x, SP_ABAS_Y, abasLargura(), SP_ABAS_H };
   ajustes_acento(&ar, &ag, &ab);
-  if (ajustes_vidro()) gfx_cor(caixa, 0.5f, 1, 1, 1, .05f * a);
+  if (ajustes_vidro()) gfx_cor(caixa, 0.5f, 1, 1, 1, .06f * a);
   else gfx_cor(caixa, 0.5f, .113f, .118f, .137f, a);
   x += SP_SEG_PAD;
   for (i = 0; i < SP_ABA_N; i++) {
     int ativa = (i == aba);
     int focada = ativa && foco == SP_FOCO_ABAS;
-    int cor = focada ? ajustes_tinta_foco() : ativa ? 250 : 150;
-    int novas = novasDaAba(i, ativa);
-    TxtLinha t;
+    int cor = focada ? ajustes_tinta_foco() : 255;
+    float alfaTxt = focada || ativa ? 1.0f : 0.55f;
+    TxtLinha t, num;
     float w;
     GfxRect p;
     if (!abaExiste(i)) continue;
-    w = segLargura(i, &t, cor);
+    w = segLargura(i, &t, &num, cor);
     p = (GfxRect){ x, SP_ABAS_Y + SP_SEG_PAD, w, SP_ABAS_H - SP_SEG_PAD * 2.0f };
     if (focada) {
       if (ajustes_vidro()) gfx_vidro_pilula_cheia(p, 0.5f, 1.0f, a);
       else { botao_luz(p, .55f, a); gfx_cor(p, 0.5f, ar, ag, ab, a); }
     } else if (ativa) {
-      if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, .12f * a);
+      if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, .14f * a);
       else gfx_cor(p, 0.5f, .204f, .212f, .243f, a);
     }
-    txt_desenhar_alpha(t, x + SP_SEG_TXT, p.y + (p.h - t.h) * 0.5f, a);
-    // O SELO E PEQUENO E MORA DENTRO DO SEGMENTO (dono, 20/09/2026: "o numero
-    // ta feio, menos amador"): 24 px, numeral TXT_MINI, no acento — e estado.
-    if (novas > 0) {
-      char n[16];
-      GfxRect b;
-      TxtLinha tn;
-      int ink = ajustes_tinta_foco();
-      snprintf(n, sizeof n, "%d", novas > 99 ? 99 : novas);
-      tn = txt_linha(TXT_MINI, n, ink, ink, ink, 255);
-      b.w = 24.0f; b.h = 24.0f;
-      b.x = x + SP_SEG_TXT + t.w + 10.0f;
-      b.y = p.y + (p.h - b.h) * 0.5f;
-      gfx_rect(b, 0, GFX_DISCO, 0, 0, 0, 0, ar, ag, ab, a);
-      txt_desenhar_alpha(tn, b.x + (b.w - tn.w) * 0.5f, b.y + (b.h - tn.h) * 0.5f, a);
+    txt_desenhar_alpha(t, x + SP_SEG_TXT, p.y + (p.h - t.h) * 0.5f, a * alfaTxt);
+    if (num.w > 0) {
+      int novo;
+      contaDaAba(i, &novo);
+      // Sobre a pilula de acento a contagem vai na tinta do foco: no acento
+      // ela sumiria justamente na aba em que o dedo esta.
+      if (focada) {
+        char b[16];
+        snprintf(b, sizeof b, "%d", contaDaAba(i, &novo) > 99 ? 99 : contaDaAba(i, &novo));
+        num = txt_linha(TXT_ILHA_NUM, b, cor, cor, cor, 255);
+        novo = 0;
+      }
+      // Na base do rotulo, como "align-items:baseline" do mockup: o numeral
+      // de 16 desce 3 px em relacao ao centro do de 19.
+      txt_desenhar_alpha(num, x + SP_SEG_TXT + (float)t.w + SP_SEG_NUM,
+                         p.y + (p.h - t.h) * 0.5f + (float)(t.h - num.h) * 0.78f,
+                         a * (novo ? 1.0f : focada ? 0.7f : 0.35f));
     }
     x += w + SP_SEG_VAO;
   }
@@ -2392,44 +2449,48 @@ static void chipTextos(int k, const char **cap, const char **val, const char **i
   }
 }
 
+// Os chips da ilha (".chip" do mockup): 56 de altura, branco a 8 % (solido
+// #24262c), o valor em 19 semibold a 85 % e o rotulo do que ele muda em
+// caixa alta pequena a 45 % por cima — "ORDENAR / Recentes". Foco = pilula
+// cheia no acento (botaoSup), como os chips da folha de Fontes.
 static void desenhaBarra(float dx, float a) {
-  float x = SP_X + dx + SP_PAD;
-  int k, n = nChips(), tf = ajustes_tinta_foco(), tf2 = ajustes_tinta_foco2();
+  float x = SP_X + dx + SP_ABAS_X;
+  int k, n = nChips(), tf = ajustes_tinta_foco();
   float tinta = ajustes_acento_tinta(NULL, NULL, NULL);
   for (k = 0; k < n; k++) {
     const char *cap, *val, *icone;
     char buf[24];
-    float f = animBarra[k], v = focoVisual(f), w, ix;
-    TxtLinha vr, vf, cr, cf;
+    float f = animBarra[k], v = focoVisual(f), w, ix, cw = 0.0f;
+    TxtLinha vr, vf;
     GfxRect r;
     chipTextos(k, &cap, &val, &icone, buf, sizeof buf);
-    vr = txt_linha(TXT_CAPTION, val, 240, 240, 244, 255);
-    vf = txt_linha(TXT_CAPTION, val, tf, tf, tf, 255);
+    vr = txt_linha(TXT_ILHA_SEG, i18n(val), SPI_FG_R, SPI_FG_G, SPI_FG_B, 255);
+    vf = txt_linha(TXT_ILHA_SEG, i18n(val), tf, tf, tf, 255);
     w = (float)vr.w;
-    if (cap) {
-      cr = txt_linha(TXT_MINI, cap, 150, 154, 166, 255);
-      cf = txt_linha(TXT_MINI, cap, tf2, tf2, tf2, 255);
-      if ((float)cr.w > w) w = (float)cr.w;
-    }
-    w += 40.0f + (icone ? 30.0f : 0.0f);
+    if (cap) { cw = caixaAltaIlha(cap, 255, 255, 255, -1.0f, 0.0f, 1.0f); if (cw > w) w = cw; }
+    w += 44.0f + (icone ? 30.0f : 0.0f);
     r = (GfxRect){ x, SP_OPC_Y, w, SP_OPC_H };
-    // Em repouso a pilula precisa existir: uma opcao invisivel nao se le como
-    // botao. E chip (foco de botao), entao o foco e a pilula cheia no acento.
     botaoSup(r, 0.5f, f, a);
-    ix = x + 20.0f;
+    ix = x + 22.0f;
     if (icone) {
-      float ic = anim_mistura(220.0f / 255.0f, tinta, v);
+      float ic = anim_mistura(.85f * 243.0f / 255.0f, tinta, v);
       gfx_icone((GfxRect){ ix, SP_OPC_Y + (SP_OPC_H - 22.0f) * 0.5f, 22.0f, 22.0f },
                 icone, ic, ic, ic, a);
       ix += 30.0f;
     }
     if (cap) {
-      float bloco = (float)cr.h + 2.0f + (float)vr.h;
+      float bloco = 18.0f + 1.0f + (float)vr.h;
       float ty = SP_OPC_Y + (SP_OPC_H - bloco) * 0.5f;
-      txt_foco_transicao(cr, cf, ix, ty, v, a * 0.95f);
-      txt_foco_transicao(vr, vf, ix, ty + (float)cr.h + 2.0f, v, a);
+      // O rotulo em caixa alta nao cruza para a tinta do foco por alfa: ele
+      // e desenhado duas vezes (repouso a 45 %, foco na tinta), como o valor.
+      caixaAltaIlha(cap, 255, 255, 255, ix, ty, a * 0.45f * (1.0f - v));
+      caixaAltaIlha(cap, tf, tf, tf, ix, ty, a * 0.8f * v);
+      txt_desenhar_alpha(vr, ix, ty + 19.0f, a * 0.85f * (1.0f - v));
+      txt_desenhar_alpha(vf, ix, ty + 19.0f, a * v);
     } else {
-      txt_foco_transicao(vr, vf, ix, SP_OPC_Y + (SP_OPC_H - (float)vr.h) * 0.5f, v, a);
+      float ty = SP_OPC_Y + (SP_OPC_H - (float)vr.h) * 0.5f;
+      txt_desenhar_alpha(vr, ix, ty, a * 0.85f * (1.0f - v));
+      txt_desenhar_alpha(vf, ix, ty, a * v);
     }
     x += w + NV_CTRL_VAO;
   }
@@ -2510,45 +2571,45 @@ static void desenhaPop(float a) {
 // aparecer: o que cada resposta faz, sem sermao, e onde mudar depois.
 static void desenhaAlcancePergunta(float dx, float y0, float a) {
   float x = SP_X + dx + SP_PAD, y = y0 + 8.0f;
-  { TxtLinha t = txt_linha(TXT_CALLOUT, "Quem vê o que você assiste?", 246, 247, 252, 255);
+  { TxtLinha t = txt_linha(TXT_ILHA_NOME, "Quem vê o que você assiste?", 243, 242, 239, 255);
     txt_desenhar_alpha(t, x, y, a); y += t.h + 18.0f; }
-  y += txt_bloco(TXT_CAPTION,
+  y += txt_bloco(TXT_ILHA_SUB,
       "Seus amigos podem ver o que você está assistindo, o que terminou e do que gostou. Nada sai desta TV antes de você escolher.",
-      214, 218, 228, x, y, SP_INTERNO, 30.0f, a * 0.95f, 4) + 14.0f;
-  y += txt_bloco(TXT_CAPTION,
+      243, 242, 239, x, y, SP_INTERNO, 27.0f, a * 0.62f, 4) + 14.0f;
+  y += txt_bloco(TXT_ILHA_SUB,
       "Amigos dos seus amigos veem só o título e a ação, sem a sua foto.",
-      190, 194, 204, x, y, SP_INTERNO, 30.0f, a * 0.9f, 2) + 14.0f;
-  txt_bloco(TXT_CAPTION, "Dá para mudar quando quiser, no fim desta aba.",
-            160, 164, 175, x, y, SP_INTERNO, 30.0f, a * 0.85f, 2);
+      243, 242, 239, x, y, SP_INTERNO, 27.0f, a * 0.5f, 2) + 14.0f;
+  txt_bloco(TXT_ILHA_SUB, "Dá para mudar quando quiser, no fim desta aba.",
+            243, 242, 239, x, y, SP_INTERNO, 27.0f, a * 0.42f, 2);
 }
 
 static void desenhaSocialVazio(float dx, float y0, float a) {
   float x = SP_X + dx + SP_PAD;
   float y = y0 + 8.0f;
   const char *cod = recomenda_meu_codigo();
-  { TxtLinha t = txt_linha(TXT_CALLOUT, "Nenhuma recomendação ainda",
-                           240, 242, 248, 255);
-    txt_desenhar_alpha(t, x, y, a * 0.96f); y += t.h + 14.0f; }
+  { TxtLinha t = txt_linha(TXT_ILHA_NOME, "Nenhuma recomendação ainda",
+                           243, 242, 239, 255);
+    txt_desenhar_alpha(t, x, y, a); y += t.h + 14.0f; }
   // EM BLOCO: a coluna do painel tem 688px e a frase tem duas oracoes; numa
   // linha so, a captura saiu cortada no meio.
-  y += txt_bloco(TXT_CAPTION,
+  y += txt_bloco(TXT_ILHA_SUB,
       "Quando alguém da sua lista te recomendar um filme ou série, ele aparece aqui.",
-      190, 194, 204, x, y, SP_INTERNO, 30.0f, a * 0.9f, 3) + 22.0f;
+      243, 242, 239, x, y, SP_INTERNO, 27.0f, a * 0.5f, 3) + 22.0f;
   if (cod[0]) {
     // O CODIGO TAMBEM AQUI, e nao so na tela de amigos: este e o painel que o
     // dono abre com uma tecla, e ditar seis caracteres ao telefone e a acao que
     // resolve uma lista vazia sem depender de ninguem ter aceitado aparecer.
-    TxtLinha r = txt_linha(TXT_CAPTION, "Seu código", 160, 164, 175, 255);
-    TxtLinha c = txt_linha(TXT_TITULO2, cod, 246, 248, 255, 255);
-    txt_desenhar_alpha(r, x, y, a * 0.88f);
+    TxtLinha r = txt_linha(TXT_ILHA_SUB, "Seu código", 243, 242, 239, 255);
+    TxtLinha c = txt_linha(TXT_TITULO2, cod, 243, 242, 239, 255);
+    txt_desenhar_alpha(r, x, y, a * 0.45f);
     y += r.h + 6.0f;
     txt_desenhar_alpha(c, x, y, a);
     y += c.h + 20.0f;
   }
-  { TxtLinha t = txt_linha_corta(TXT_CAPTION,
+  { TxtLinha t = txt_linha_corta(TXT_ILHA_SUB,
         "Peça o código do seu amigo e adicione-o abaixo.",
-        168, 172, 182, 255, SP_INTERNO);
-    txt_desenhar_alpha(t, x, y, a * 0.85f); }
+        243, 242, 239, 255, SP_INTERNO);
+    txt_desenhar_alpha(t, x, y, a * 0.42f); }
 }
 
 // A PERGUNTA DA PRIMEIRA ENTRADA, por extenso.
@@ -2563,25 +2624,25 @@ static void desenhaSocialVazio(float dx, float y0, float a) {
 static void desenhaConsentimento(float dx, float y0, float a) {
   float x = SP_X + dx + SP_PAD;
   float y = y0 + 8.0f;
-  // TXT_CALLOUT E NAO TXT_TITULO2. Com o titulo grande a pergunta saiu da
+  // TXT_ILHA_NOME E NAO TXT_TITULO2. Com o titulo grande a pergunta saiu da
   // captura como "Aparecer para outras pessoa" — 688px de coluna nao cabem uma
   // frase de 29 caracteres naquele corpo, e um enunciado cortado ao meio e
   // pior que um enunciado menor.
-  { TxtLinha t = txt_linha(TXT_CALLOUT, "Aparecer para outras pessoas?",
-                           246, 247, 252, 255);
+  { TxtLinha t = txt_linha(TXT_ILHA_NOME, "Aparecer para outras pessoas?",
+                           243, 242, 239, 255);
     txt_desenhar_alpha(t, x, y, a); y += t.h + 18.0f; }
-  y += txt_bloco(TXT_CAPTION,
+  y += txt_bloco(TXT_ILHA_SUB,
       "Se você aceitar, quem já te segue no Trakt e os amigos dos seus amigos passam a ver seu nome e sua foto numa lista de sugestões, e podem te adicionar como contato.",
-      214, 218, 228, x, y, SP_INTERNO, 30.0f, a * 0.95f, 4) + 18.0f;
-  y += txt_bloco(TXT_CAPTION,
+      243, 242, 239, x, y, SP_INTERNO, 27.0f, a * 0.62f, 4) + 18.0f;
+  y += txt_bloco(TXT_ILHA_SUB,
       "Eles não veem o que você assiste, o que você salvou nem o que você recomendou. Nada disso sai desta TV.",
-      214, 218, 228, x, y, SP_INTERNO, 30.0f, a * 0.95f, 3) + 18.0f;
-  y += txt_bloco(TXT_CAPTION,
+      243, 242, 239, x, y, SP_INTERNO, 27.0f, a * 0.62f, 3) + 18.0f;
+  y += txt_bloco(TXT_ILHA_SUB,
       "Se você recusar, continua recebendo e enviando recomendações do mesmo jeito. Você só não aparece na lista de ninguém.",
-      190, 194, 204, x, y, SP_INTERNO, 30.0f, a * 0.9f, 3) + 18.0f;
-  txt_bloco(TXT_CAPTION,
+      243, 242, 239, x, y, SP_INTERNO, 27.0f, a * 0.5f, 3) + 18.0f;
+  txt_bloco(TXT_ILHA_SUB,
       "Dá para mudar essa resposta quando quiser, no fim desta aba.",
-      160, 164, 175, x, y, SP_INTERNO, 30.0f, a * 0.85f, 2);
+      243, 242, 239, x, y, SP_INTERNO, 27.0f, a * 0.42f, 2);
 }
 
 // Uma linha-botao compacta: pilula que inverte no foco, com um subtitulo
@@ -2597,27 +2658,30 @@ static void desenhaBotaoLinha(int i, float dx, float y, float alt, float a,
   float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f;
   float v = focoVisual(f), tinta = ajustes_acento_tinta(NULL, NULL, NULL);
   int tintaFoco = ajustes_tinta_foco();
-  float h = primario ? BOTAO_H_PRIMARIO : BOTAO_H_SECUNDARIO;
-  float w = botao_largura(titulo, icone, primario);
-  GfxRect r = { SP_X + dx + SP_PAD, y + (alt - h) * 0.5f, w, h };
-  float grupo, x0;
+  float h = NV_CTRL_H;
   TxtLinha repouso, foco;
-  (void)sub;
-  if (r.w > SP_INTERNO) r.w = SP_INTERNO;
+  float grupo, x0, w;
+  GfxRect r;
+  (void)sub; (void)primario;
+  // O CHIP DA ILHA (".chip": 56 de altura, 19 semibold a 85 %, 22 de recuo),
+  // e nao mais a pilula de 25 px da tela de detalhe: as acoes da lista sao do
+  // mesmo tamanho que os chips da folha de Fontes e da barra de Salvos. O
+  // primario nao ganha corpo maior — e o foco que diz onde o OK cai.
+  repouso = txt_linha(TXT_ILHA_SEG, titulo, SPI_FG_R, SPI_FG_G, SPI_FG_B, 255);
+  foco = txt_linha(TXT_ILHA_SEG, titulo, tintaFoco, tintaFoco, tintaFoco, 255);
+  grupo = (float)repouso.w + ((icone && icone[0]) ? 20.0f + 10.0f : 0.0f);
+  w = grupo + 44.0f;
+  if (w > SP_INTERNO) w = SP_INTERNO;
+  r = (GfxRect){ SP_X + dx + SP_PAD, y + (alt - h) * 0.5f, w, h };
   botaoSup(r, 0.5f, f, a);
-  repouso = txt_linha(TXT_DET_BOTAO, titulo, 220, 220, 224, 255);
-  foco = txt_linha(TXT_DET_BOTAO, titulo, tintaFoco, tintaFoco, tintaFoco, 255);
-  grupo = (float)repouso.w + ((icone && icone[0]) ? BOTAO_ICONE + BOTAO_ICONE_GAP : 0.0f);
-  x0 = r.x + (r.w - grupo) * 0.5f;
+  x0 = r.x + 22.0f;
   if (icone && icone[0]) {
-    float ic = anim_mistura(220.0f / 255.0f, tinta, v);
-    GfxRect ir = { x0, r.y + (r.h - BOTAO_ICONE) * 0.5f,
-                   BOTAO_ICONE, BOTAO_ICONE };
-    gfx_icone(ir, icone, ic, ic, ic, a);
-    x0 += BOTAO_ICONE + BOTAO_ICONE_GAP;
+    float ic = anim_mistura(.85f * 243.0f / 255.0f, tinta, v);
+    gfx_icone((GfxRect){ x0, r.y + (r.h - 20.0f) * 0.5f, 20.0f, 20.0f }, icone, ic, ic, ic, a);
+    x0 += 30.0f;
   }
-  txt_foco_transicao(repouso, foco, x0,
-                     r.y + (r.h - (float)repouso.h) * 0.5f, v, a);
+  txt_desenhar_alpha(repouso, x0, r.y + (r.h - (float)repouso.h) * 0.5f, a * 0.85f * (1.0f - v));
+  txt_desenhar_alpha(foco, x0, r.y + (r.h - (float)foco.h) * 0.5f, a * v);
 }
 
 // O INTERRUPTOR DE "APARECER PARA OUTRAS PESSOAS", e por que ele deixou de ser
@@ -2677,7 +2741,7 @@ static void desenhaAparecer(int i, float dx, float y, float alt, float a) {
   // atualizacao. Um quadro desenhado antes dela (o painel abre e desenha no
   // mesmo quadro) deslocaria a bola para fora da capsula.
   float lig = animSw < 0.0f ? 0.0f : anim_clamp(animSw, 0.0f, 1.0f);
-  float largTexto = SP_INTERNO - 64.0f - SPS_SW_W - SPS_SW_GAP;
+  float largTexto = SP_LINHA_W - 2.0f * SP_LINHA_PADX - SPS_SW_W - SPS_SW_GAP;
   const char *sub = recomenda_aparecer() == REC_APARECER_SIM
       // O SUBTITULO PAROU DE REPETIR O ESTADO. Ele dizia "Sim, voce aparece
       // nas sugestoes de quem te conhece" / "Nao, voce nao aparece na lista de
@@ -2698,16 +2762,17 @@ static void desenhaAparecer(int i, float dx, float y, float alt, float a) {
       ? "Quem te conhece te acha nas sugestões"
       : "Você continua trocando recomendações";
 
-  superficieCaixa(r, 14.0f / alt, f, a);
-
-  { TxtLinha t = txt_linha_corta(TXT_CALLOUT, "Aparecer para outras pessoas",
-                                 c1, c1, c1, 255, largTexto);
-    TxtLinha s = txt_linha_corta(TXT_CAPTION, sub, c2, c2 + 4, c2 + 14, 255,
-                                 largTexto);
-    float h = t.h + 8.0f + s.h;
-    txt_desenhar_alpha(t, r.x + 32.0f, y + (alt - h) * 0.5f, a);
-    txt_desenhar_alpha(s, r.x + 32.0f, y + (alt - h) * 0.5f + t.h + 8.0f,
-                       a * 0.95f); }
+  // A CAIXA DA ILHA: a mesma borda e o mesmo raio das linhas (26/22), 6 px
+  // de ar em cima e embaixo dentro da altura da linha, o titulo em 24
+  // semibold e o subtitulo em 19 a 62 % — os dois andares de cima do mockup.
+  r.x = SP_X + dx + SP_LINHA_X; r.w = SP_LINHA_W; r.y = y + 6.0f; r.h = alt - 12.0f;
+  superficieCaixa(r, SP_LINHA_RAIO / r.h, f, a);
+  (void)c1; (void)c2;
+  { TxtLinha t = txtIlha(TXT_ILHA_NOME, "Aparecer para outras pessoas", largTexto);
+    TxtLinha s = txtIlha(TXT_ILHA_SUB, sub, largTexto);
+    float ty = r.y + (r.h - 56.0f) * 0.5f;
+    txt_desenhar_alpha(t, r.x + SP_LINHA_PADX, ty, a * (0.88f + 0.12f * focoVisual(f)));
+    txt_desenhar_alpha(s, r.x + SP_LINHA_PADX, ty + 33.0f, a * 0.62f); }
 
   // A TRILHA. Raio 0,5 numa caixa 80x40: o teto 0,5*w/h vale 1,0, entao os
   // 0,5 passam inteiros e as pontas saem em semicirculo de 20 px. Capsula de
@@ -2715,8 +2780,8 @@ static void desenhaAparecer(int i, float dx, float y, float alt, float a) {
   //
   // OS 32 px DE RECUO SAO OS MESMOS DO TEXTO. Sem eles a capsula encostava na
   // borda da pilula — apareceu na primeira captura e parecia a linha cortada.
-  trilho.x = r.x + SP_INTERNO - 32.0f - SPS_SW_W;
-  trilho.y = y + (alt - SPS_SW_H) * 0.5f;
+  trilho.x = r.x + r.w - SP_LINHA_PADX - SPS_SW_W;
+  trilho.y = r.y + (r.h - SPS_SW_H) * 0.5f;
   trilho.w = SPS_SW_W;
   trilho.h = SPS_SW_H;
   //
@@ -2793,14 +2858,13 @@ static void desenhaAjusteSocial(int i, float dx, float y, float alt, float a) {
 #else
   (void)buf;
 #endif
-  superficieCaixa(r, 14.0f / alt, f, a);
-  { TxtLinha t = txt_linha_corta(TXT_CALLOUT, titulo, 240, 240, 240, 255, SP_INTERNO - 64.0f);
-    TxtLinha tF = txt_linha_corta(TXT_CALLOUT, titulo, tf, tf, tf, 255, SP_INTERNO - 64.0f);
-    TxtLinha s2 = txt_linha_corta(TXT_CAPTION, valor, 168, 172, 182, 255, SP_INTERNO - 64.0f);
-    TxtLinha sF = txt_linha_corta(TXT_CAPTION, valor, tf2, tf2, tf2, 255, SP_INTERNO - 64.0f);
-    float h = t.h + 8.0f + s2.h;
-    txt_foco_transicao(t, tF, r.x + 32.0f, y + (alt - h) * 0.5f, v, a);
-    txt_foco_transicao(s2, sF, r.x + 32.0f, y + (alt - h) * 0.5f + t.h + 8.0f, v, a * 0.95f); }
+  r.x = SP_X + dx + SP_LINHA_X; r.w = SP_LINHA_W; r.y = y + 6.0f; r.h = alt - 12.0f;
+  superficieCaixa(r, SP_LINHA_RAIO / r.h, f, a);
+  (void)v; (void)tf; (void)tf2;
+  { float lw = r.w - 2.0f * SP_LINHA_PADX, ty = r.y + (r.h - 56.0f) * 0.5f;
+    txt_desenhar_alpha(txtIlha(TXT_ILHA_NOME, titulo, lw), r.x + SP_LINHA_PADX, ty,
+                       a * (0.88f + 0.12f * focoVisual(f)));
+    txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, valor, lw), r.x + SP_LINHA_PADX, ty + 33.0f, a * 0.62f); }
 }
 
 // Uma sugestao: a cara, o nome, POR ONDE ela chegou, e a pilula que diz o que
@@ -2810,129 +2874,101 @@ static void desenhaAjusteSocial(int i, float dx, float y, float alt, float a) {
 // conheca" de "um estranho que o app resolveu mostrar". Sem "Segue no Trakt" ou
 // "Amigo de Gustavo", a resposta honesta a "quem e essa pessoa?" seria "nao
 // sei", e a de quem esta olhando seria recusar.
-static void desenhaSugLinha(int i, int idx, float dx, float y, float a) {
+static void desenhaSugLinha(int i, int idx, float dx, float y, float a, Uint32 agora) {
   const RecSugestao *s = &sugs[idx];
-  float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f;
-  float px = SP_X + dx + SP_PAD;
+  float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoVisual(f);
+  float px = SP_X + dx + SP_PAD, tx = px + SPI_AV + SPI_AV_GAP;
+  float fimLinha = SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX;
   char origem[128];
-  int esc = focoTexto(f) > 0.5f;
-
-  { GfxRect p = { px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
-                  SPS_H_SUG + SP_FOCO_PADY * 2.0f };
-    superficieItem(p, 14.0f / p.h, f, a); }
-  { GfxRect av = { px, y + (SPS_H_SUG - SPS_SUG_AV) * 0.5f,
-                   SPS_SUG_AV, SPS_SUG_AV };
-    rec_avatar(av, s->avatar, s->nome, s->id, a); }
+  int tf = ajustes_tinta_foco();
+  { GfxRect r = linhaIlhaRet(dx, y, SPS_H_SUG);
+    superficieItem(r, SP_LINHA_RAIO / r.h, f, a); }
+  rostoIlha((GfxRect){ px, y + (SPS_H_SUG - SPI_AV) * 0.5f, SPI_AV, SPI_AV },
+            s->avatar, s->nome, s->id, 0, a, agora);
   rec_sugestao_origem(origem, sizeof origem, s);
-  { float tx = px + SPS_SUG_AV + SPS_SUG_GAP;
-    // A PILULA DA ACAO E MEDIDA ANTES DO NOME, e o nome e cortado para caber ao
-    // lado dela: sem isso, "Carolina Menezes" passava por baixo de "Adicionar"
-    // e as duas ficavam ilegiveis na captura.
-    int tinta = esc ? ajustes_tinta_foco() : 222;
-    TxtLinha acao = txt_linha(TXT_CAPTION, "Adicionar", tinta, tinta, tinta, 255);
-    float pw = acao.w + SPS_SUG_PADX * 2.0f;
-    float larg = SP_INTERNO - (SPS_SUG_AV + SPS_SUG_GAP) - pw - 20.0f;
-    int c1 = esc ? ajustes_tinta_foco() : 245;
-    int c2 = esc ? ajustes_tinta_foco2() : 168;
-    { TxtLinha t = txt_linha_corta(TXT_CALLOUT, s->nome, c1, c1, c1, 255,
-                                   larg);
-      txt_desenhar_alpha(t, tx, y + 26.0f, a); }
-    { TxtLinha t = txt_linha_corta(TXT_CAPTION, origem, c2, c2 + 4, c2 + 14,
-                                   255, larg);
-      txt_desenhar_alpha(t, tx, y + 62.0f, a * 0.95f); }
-    // A acao e um botao quieto opaco, sem contorno; fica legivel sobre a linha
-    // neutra e tambem sobre o accent solido quando o cartao recebe foco.
-    { GfxRect p = { px + SP_INTERNO - pw, y + (SPS_H_SUG - 36.0f) * 0.5f,
-                    pw, 36.0f };
-      if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, 0.10f * a);   /* selo de vidro */
-  else gfx_cor(p, 0.5f, .095f, .102f, .116f, a);
-      txt_desenhar_alpha(acao, p.x + SPS_SUG_PADX,
-                         p.y + (36.0f - acao.h) * 0.5f, a); } }
+  // A PILULA DA ACAO E MEDIDA ANTES DO NOME, e o nome e cortado para caber ao
+  // lado dela: sem isso, "Carolina Menezes" passava por baixo de "Adicionar"
+  // e as duas ficavam ilegiveis na captura. E um chip da ilha em tamanho de
+  // linha (44 de altura): repouso a 8 %, e com a linha em foco ele vira a
+  // pilula cheia no acento — o OK desta linha E "Adicionar".
+  { TxtLinha acR = txtIlha(TXT_ILHA_SEG, "Adicionar", 300.0f);
+    TxtLinha acF = txt_linha(TXT_ILHA_SEG, "Adicionar", tf, tf, tf, 255);
+    float pw = (float)acR.w + 40.0f;
+    GfxRect p = { fimLinha - pw, y + (SPS_H_SUG - 44.0f) * 0.5f, pw, 44.0f };
+    andaresIlha(tx, y, SPS_H_SUG, p.x - 18.0f - tx, v, a, s->nome, NULL, origem, NULL);
+    botaoSup(p, 0.5f, f, a);
+    txt_desenhar_alpha(acR, p.x + 20.0f, p.y + (p.h - acR.h) * 0.5f, a * 0.85f * (1.0f - v));
+    txt_desenhar_alpha(acF, p.x + 20.0f, p.y + (p.h - acF.h) * 0.5f, a * v); }
 }
 
-// Linha de um AMIGO JA ADICIONADO: foto (ou inicial), nome e de onde veio
-// (Trakt ou codigo). Mesma caixa e mesmo foco da sugestao, sem o botao —
-// nao ha acao aqui alem de reconhecer quem esta na lista.
+// Linha de um AMIGO JA ADICIONADO, na gramatica do feed: o rosto (anel
+// vermelho e ponto se esta vendo agora), o nome, o que ele esta fazendo e, a
+// direita, a capa do titulo dele. Sem acao alem de abrir o perfil.
 static void desenhaAmigoLinha(int i, int idx, float dx, float y, float a, Uint32 agora) {
   const RecContato *c = &ctts[idx];
-  float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f;
-  float v = focoTexto(f);   // cor do texto e dos selos no foco (vidro: nao inverte)
-  float px = SP_X + dx + SP_PAD, alt = socialAlt(i);
+  float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoVisual(f);
+  float px = SP_X + dx + SP_PAD, tx = px + SPI_AV + SPI_AV_GAP, alt = socialAlt(i);
+  float larg = SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - tx;
   const SvAmigo *am = (cttSv[idx] >= 0) ? socialvis_amigo(cttSv[idx]) : NULL;
-  { GfxRect p = { px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
-                  alt + SP_FOCO_PADY * 2.0f };
-    superficieItem(p, 14.0f / p.h, f, a); }
-  { GfxRect av = { px, y + (SPS_H_AMIGO - SPS_AMIGO_AV) * 0.5f,
-                   SPS_AMIGO_AV, SPS_AMIGO_AV };
-    if (am) svd_rosto(av, am, 0.0f, a, agora);
-    else rec_avatar(av, c->avatar, c->nome, c->id, a); }
-  { float tx = px + SPS_AMIGO_AV + SPS_AMIGO_GAP;
-    float larg = SP_INTERNO - (SPS_AMIGO_AV + SPS_AMIGO_GAP) - 20.0f;
-    int tf = ajustes_tinta_foco(), tf2 = ajustes_tinta_foco2();
-    int vivo = am && am->agora && am->nTit > 0;
-    char linha2[260];
-    // O QUE ELE ESTA FAZENDO (tela A, 02/10/2026), do modelo do social: "●
-    // Agora · The Bear · T3E4 · faltam 12 min" com a barra, ou "Project Hail
-    // Mary · Terminou e gostou · ontem". Sem atividade, como ele chegou — e so
-    // isso; a FONTE (Trakt) nao e escrita aqui, fica no perfil.
-    if (am && am->nTit > 0) {
-      char st[160];
-      const SvEvento *e = &am->tit[0];
-      socialvis_status(e, st, sizeof st);
-      if (vivo) {
-        // "Agora · T3E4 · faltam..." com o titulo depois do "Agora".
-        const char *resto = strstr(st, " \xc2\xb7 ");
-        snprintf(linha2, sizeof linha2, "%s \xc2\xb7 %s%s", i18n("Agora"), e->titulo,
-                 resto ? resto : "");
-      } else snprintf(linha2, sizeof linha2, "%s \xc2\xb7 %s", e->titulo, st);
-    } else snprintf(linha2, sizeof linha2, "%s", i18n("Ainda sem atividade"));
-    { TxtLinha repouso = txt_linha_corta(TXT_BODY, c->nome, 245, 245, 245, 255, larg - 30.0f);
-      TxtLinha foco = txt_linha_corta(TXT_BODY, c->nome, tf, tf, tf, 255, larg - 30.0f);
-      float sx = tx + (vivo ? 24.0f : 0.0f);
-      TxtLinha subRepouso = vivo ? txt_linha_corta(TXT_CAPTION, linha2, 255, 196, 196, 255, larg - 24.0f)
-                                 : txt_linha_corta(TXT_CAPTION, linha2, 168, 172, 182, 255, larg);
-      TxtLinha subFoco = txt_linha_corta(TXT_CAPTION, linha2, tf2, tf2, tf2, 255,
-                                         vivo ? larg - 24.0f : larg);
-      int barra = vivo && am->tit[0].pct >= 0;
-      float bloco = (float)repouso.h + 6.0f + (float)subRepouso.h + (barra ? 14.0f : 0.0f);
-      float ty = y + (SPS_H_AMIGO - bloco) * 0.5f;
-      txt_foco_transicao(repouso, foco, tx, ty, v, a);
-      if (vivo) svd_ponto_vivo(tx + 8.0f, ty + repouso.h + 6.0f + subRepouso.h * 0.5f, 14.0f, 0.0f, a, agora);
-      txt_foco_transicao(subRepouso, subFoco, sx, ty + repouso.h + 6.0f, v, a * 0.95f);
-      if (barra)
-        svd_barra((GfxRect){ tx, ty + repouso.h + 6.0f + subRepouso.h + 9.0f, larg * 0.6f, 5.0f },
-                  am->tit[0].pct, a); }
-    // A CADEIA DO QUE EU MANDEI: "Voce mandou X › viu › gostou".
-    if (cttCadeia[idx]) {
-      SvEnviada m;
-      if (socialvis_ultima_enviada(c->id, &m)) {
-        char t1[220];
-        int esc = v > 0.5f;
-        float cx = tx, cy = y + SPS_H_AMIGO - 2.0f;
-        snprintf(t1, sizeof t1, i18n("Você mandou %s"), m.titulo);
-        cx += svd_chip(cx, cy, t1, 0, esc, a);
-        cx += svd_seta(cx, cy, esc, a);
-        if (m.estado == SV_REC_VIU) {
-          cx += svd_chip(cx, cy, "viu", 1, esc, a);
-          if (m.reacao == SV_REAC_GOSTOU) {
-            cx += svd_seta(cx, cy, esc, a);
-            svd_chip(cx, cy, "gostou", 2, esc, a);
-          }
-        } else svd_chip(cx, cy, m.estado == SV_REC_ABRIU ? "abriu" : "ainda não viu", 0, esc, a);
+  int vivo = am && am->agora && am->nTit > 0;
+  char linha2[260], linha3[300];
+  { GfxRect r = linhaIlhaRet(dx, y, alt);
+    superficieItem(r, SP_LINHA_RAIO / r.h, f, a); }
+  rostoIlha((GfxRect){ px, y + (alt - SPI_AV) * 0.5f, SPI_AV, SPI_AV },
+            am ? am->avatar : c->avatar, c->nome, c->id, vivo, a, agora);
+  if (am && am->nTit > 0) {
+    larg -= SPI_CAP_W + 18.0f;
+    capaIlha(dx, y, alt, am->tit[0].poster[0] ? am->tit[0].poster : am->tit[0].arte, a);
+  }
+  // O QUE ELE ESTA FAZENDO (tela A, 02/10/2026), do modelo do social: "Agora ·
+  // The Bear · T3E4 · faltam 12 min", ou "Project Hail Mary · Terminou e
+  // gostou · ontem". Sem atividade, "Ainda sem atividade" — a FONTE (Trakt)
+  // nao e escrita aqui, fica no perfil.
+  if (am && am->nTit > 0) {
+    char st[160];
+    const SvEvento *e = &am->tit[0];
+    socialvis_status(e, st, sizeof st);
+    if (vivo) {
+      const char *resto = strstr(st, " \xc2\xb7 ");
+      snprintf(linha2, sizeof linha2, "%s \xc2\xb7 %s%s", i18n("Agora"), e->titulo,
+               resto ? resto : "");
+    } else snprintf(linha2, sizeof linha2, "%s \xc2\xb7 %s", e->titulo, st);
+  } else snprintf(linha2, sizeof linha2, "%s", i18n("Ainda sem atividade"));
+  // A CADEIA DO QUE EU MANDEI ("Voce mandou X › viu › gostou") e o andar de
+  // baixo, em texto como o resto da ilha — eram pilulas coloridas que o
+  // mockup nao tem.
+  linha3[0] = 0;
+  if (cttCadeia[idx]) {
+    SvEnviada m;
+    if (socialvis_ultima_enviada(c->id, &m)) {
+      snprintf(linha3, sizeof linha3, i18n("Você mandou %s"), m.titulo);
+      if (m.estado == SV_REC_VIU) {
+        size_t k = strlen(linha3);
+        snprintf(linha3 + k, sizeof linha3 - k, " \xe2\x80\xba %s", i18n("viu"));
+        if (m.reacao == SV_REAC_GOSTOU) {
+          k = strlen(linha3);
+          snprintf(linha3 + k, sizeof linha3 - k, " \xe2\x80\xba %s", i18n("gostou"));
+        }
+      } else {
+        size_t k = strlen(linha3);
+        snprintf(linha3 + k, sizeof linha3 - k, " \xe2\x80\xba %s",
+                 i18n(m.estado == SV_REC_ABRIU ? "abriu" : "ainda não viu"));
       }
-    } }
+    }
+  }
+  andaresIlha(tx, y, alt, larg, v, a, c->nome, NULL, linha2, linha3);
 }
 
 // A ATIVIDADE VAZIA: diz o que vai aparecer e de onde, sem prometer dado que
 // ainda nao existe.
 static void desenhaAtividadeVazia(float dx, float y0, float a) {
   float x = SP_X + dx + SP_PAD, y = y0 + 8.0f;
-  TxtLinha t = txt_linha(TXT_CALLOUT, "Nada por aqui ainda", 240, 242, 248, 255);
-  txt_desenhar_alpha(t, x, y, a * 0.96f);
+  TxtLinha t = txt_linha(TXT_ILHA_NOME, "Nada por aqui ainda", 243, 242, 239, 255);
+  txt_desenhar_alpha(t, x, y, a);
   y += (float)t.h + 14.0f;
-  txt_bloco(TXT_CAPTION,
+  txt_bloco(TXT_ILHA_SUB,
       "Quando seus amigos começarem, terminarem ou gostarem de um título, aparece aqui.",
-      190, 194, 204, x, y, SP_INTERNO, 30.0f, a * 0.9f, 3);
+      243, 242, 239, x, y, SP_INTERNO, 27.0f, a * 0.5f, 3);
 }
 
 // UMA LINHA DO FEED (tela B): o rosto, o cartaz e tres linhas — "Marina esta
@@ -2941,38 +2977,19 @@ static void desenhaAtividadeVazia(float dx, float y0, float a) {
 // dentro nunca seria). Mesma superficie e mesmo foco das outras linhas.
 static void desenhaAtvLinha(int i, float dx, float y, float a, Uint32 agora) {
   const SvEvento *e = socialvis_evento(i);
-  float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoTexto(f);
-  float px = SP_X + dx + SP_PAD, tx, larg;
-  int tf = ajustes_tinta_foco(), tf2 = ajustes_tinta_foco2();
-  char linha[220], ep[24], q[48];
+  float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoVisual(f);
+  float px = SP_X + dx + SP_PAD, tx = px + SPI_AV + SPI_AV_GAP;
+  float larg = SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPI_CAP_W - 18.0f - tx;
+  char linha[220], ep[24], q[48], tit[220];
   if (!e) return;
-  superficieItem((GfxRect){ px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
-                            SPA_H + SP_FOCO_PADY * 2.0f }, 14.0f / (SPA_H + 12.0f), f, a);
-  { SvAmigo am;
-    memset(&am, 0, sizeof am);
-    snprintf(am.id, sizeof am.id, "%s", e->pessoaId);
-    snprintf(am.nome, sizeof am.nome, "%s", e->pessoaNome);
-    snprintf(am.avatar, sizeof am.avatar, "%s", e->pessoaAvatar);
-    am.agora = e->acao == SV_AGORA;
-    am.novo = 0;
-    svd_rosto((GfxRect){ px + 4.0f, y + 8.0f, SPA_AV, SPA_AV }, &am, 0.0f, a, agora); }
-  svd_poster((GfxRect){ px + SPA_AV + 22.0f, y + (SPA_H - SPA_PH) * 0.5f, SPA_PW, SPA_PH },
-             e->poster[0] ? e->poster : e->arte, 0.08f, a);
-  tx = px + SPA_AV + 22.0f + SPA_PW + 20.0f;
-  larg = SP_INTERNO - (tx - px) - 8.0f;
-  { TxtLinha nr = txt_linha_corta(TXT_CALLOUT, e->pessoaNome, 245, 245, 247, 255, larg * 0.5f);
-    TxtLinha nf = txt_linha_corta(TXT_CALLOUT, e->pessoaNome, tf, tf, tf, 255, larg * 0.5f);
-    const char *verbo = socialvis_verbo(e);
-    TxtLinha vr = txt_linha_corta(TXT_CALLOUT, verbo, 200, 198, 210, 255, larg - (float)nr.w - 10.0f);
-    TxtLinha vf = txt_linha_corta(TXT_CALLOUT, verbo, tf2, tf2, tf2, 255, larg - (float)nr.w - 10.0f);
-    txt_foco_transicao(nr, nf, tx, y + 8.0f, v, a);
-    txt_foco_transicao(vr, vf, tx + (float)nr.w + 10.0f, y + 8.0f, v, a); }
+  { GfxRect r = linhaIlhaRet(dx, y, SPA_H);
+    superficieItem(r, SP_LINHA_RAIO / r.h, f, a); }
+  rostoIlha((GfxRect){ px, y + (SPA_H - SPI_AV) * 0.5f, SPI_AV, SPI_AV },
+            e->pessoaAvatar, e->pessoaNome, e->pessoaId, e->acao == SV_AGORA, a, agora);
+  capaIlha(dx, y, SPA_H, e->poster[0] ? e->poster : e->arte, a);
   socialvis_ep(e, ep, sizeof ep);
-  if (ep[0]) snprintf(linha, sizeof linha, "%s \xc2\xb7 %s", e->titulo, ep);
-  else snprintf(linha, sizeof linha, "%s", e->titulo);
-  { TxtLinha r = txt_linha_corta(TXT_CAPTION, linha, 228, 226, 236, 255, larg);
-    TxtLinha fo = txt_linha_corta(TXT_CAPTION, linha, tf, tf, tf, 255, larg);
-    txt_foco_transicao(r, fo, tx, y + 48.0f, v, a); }
+  if (ep[0]) snprintf(tit, sizeof tit, "%s \xc2\xb7 %s", e->titulo, ep);
+  else snprintf(tit, sizeof tit, "%s", e->titulo);
   // QUANDO, e o que o cartao da home tambem diria: "faltam 12 min", "aos 18 %".
   socialvis_quando(e->quando, q, sizeof q);
   linha[0] = 0;
@@ -2980,15 +2997,8 @@ static void desenhaAtvLinha(int i, float dx, float y, float a, Uint32 agora) {
     snprintf(linha, sizeof linha, i18n("faltam %d min"), e->restanteMin);
   else if (e->acao == SV_ABANDONO && e->pct >= 0)
     snprintf(linha, sizeof linha, i18n("Parou aos %d%%"), e->pct);
-  if (q[0]) {
-    size_t k = strlen(linha);
-    snprintf(linha + k, sizeof linha - k, "%s%s", k ? " \xc2\xb7 " : "", q);
-  }
-  if (linha[0]) {
-    TxtLinha r = txt_linha_corta(TXT_MINI, linha, 160, 158, 171, 255, larg);
-    TxtLinha fo = txt_linha_corta(TXT_MINI, linha, tf2, tf2, tf2, 255, larg);
-    txt_foco_transicao(r, fo, tx, y + 82.0f, v, a);
-  }
+  juntar(linha, sizeof linha, q);
+  andaresIlha(tx, y, SPA_H, larg, v, a, e->pessoaNome, socialvis_verbo(e), tit, linha);
 }
 
 static void desenhaVazio(float dx, float a) {
@@ -2996,16 +3006,16 @@ static void desenhaVazio(float dx, float a) {
   // DESTINO SIMKL SEM VINCULO (issue #110): a lista vazia muda seria lida como
   // "o Plan to Watch esta vazio". O que falta e o vinculo, e e isso que sai.
   const char *semSimkl = simkl_aviso_sem_vinculo(ajustes_salvos_no_simkl());
-  TxtLinha t1 = txt_linha(TXT_CALLOUT, semSimkl ? semSimkl : "Nada salvo por enquanto",
-                          240, 242, 248, 255);
-  TxtLinha t2 = txt_linha_corta(TXT_CAPTION,
+  TxtLinha t1 = txt_linha(TXT_ILHA_NOME, semSimkl ? semSimkl : "Nada salvo por enquanto",
+                          243, 242, 239, 255);
+  TxtLinha t2 = txt_linha_corta(TXT_ILHA_SUB,
       semSimkl ? "O + salva no Plan to Watch do Simkl, e ele ainda não está vinculado nesta TV."
                : "Aperte + em um filme ou série e ele aparece aqui.",
-      168, 172, 182, 255, SP_INTERNO);
+      243, 242, 239, 255, SP_INTERNO);
   gfx_icone((GfxRect){ cx - 30.0f, listaTopo() + 140.0f, 60.0f, 60.0f },
             "mais", 0.55f, 0.57f, 0.62f, a);
-  txt_desenhar_alpha(t1, cx - t1.w * 0.5f, listaTopo() + 232.0f, a * 0.96f);
-  txt_desenhar_alpha(t2, cx - t2.w * 0.5f, listaTopo() + 278.0f, a * 0.85f);
+  txt_desenhar_alpha(t1, cx - t1.w * 0.5f, listaTopo() + 232.0f, a);
+  txt_desenhar_alpha(t2, cx - t2.w * 0.5f, listaTopo() + 278.0f, a * 0.42f);
 }
 
 // 1 = o veu ja esta no fundo (a copia parada foi pintada com ele).
@@ -3170,8 +3180,12 @@ static void desenharPainel(Uint32 agora) {
   // desenha por cima do cabecalho e por baixo da borda inferior.
   gfx_recorte(SP_X + x, SP_Y, SP_W, SP_H);
 
-  // Cabecalho: a linha de resumo em cima e o nome grande embaixo, como na
-  // referencia. As PARTES passam por i18n; a juncao, nao (ver metaTexto).
+  // O CABECALHO DO MOCKUP (".kick" + ".ttl" + ".dsc"): o resumo da aba em
+  // caixa alta pequena e espacada a 45 %, "Social" em 40 bold embaixo e o
+  // disco de fechar a direita, alinhado pela base do titulo. Era a contagem
+  // solta a direita das abas e nenhum titulo — o painel nao dizia o nome
+  // dele (dono, 02/10, comparando com o mockup). As PARTES passam por i18n; a
+  // juncao, nao (ver metaTexto).
   // recomenda_n() E NAO nRecs: com a pergunta de consentimento na tela a lista
   // local esta vazia de proposito, e escrever "0 recomendações" ao lado de uma
   // aba com o selo em 2 seria o painel se contradizendo em dois centimetros.
@@ -3182,42 +3196,34 @@ static void desenharPainel(Uint32 agora) {
   }
   else if (aba == SP_ABA_ATIVIDADE) {
     int nv = socialvis_n_ao_vivo();
-    if (nv > 0) snprintf(buf, sizeof buf, i18n("assistindo agora: %d"), nv);
-    else buf[0] = 0;
+    if (nv > 0) snprintf(buf, sizeof buf, "%d %s", nv, i18n("assistindo agora"));
+    else {
+      // Sem ninguem ao vivo, quantos amigos ha; sem amigos no modelo (o feed
+      // pode vir so de recomendacoes), o nome da aba — "0 amigos" em cima de
+      // uma lista cheia seria o painel se contradizendo.
+      int na = socialvis_n_amigos();
+      if (na > 0) snprintf(buf, sizeof buf, "%d %s", na, i18n(na == 1 ? "amigo" : "amigos"));
+      else snprintf(buf, sizeof buf, "%s", i18n("Atividade"));
+    }
   }
   else if (aba == SP_ABA_AVISOS) {
     int n = avisos_lista_n(), nv = avisos_n_novos();
     if (nv > 0) snprintf(buf, sizeof buf, i18n("%d avisos · %d novos"), n, nv);
     else snprintf(buf, sizeof buf, "%d %s", n, i18n(n == 1 ? "aviso" : "avisos"));
   }
-  else {
-    snprintf(buf, sizeof buf, "%d %s   ·   %d %s", nLinhas,
+  else if (nCont > 0) {
+    snprintf(buf, sizeof buf, "%d %s \xc2\xb7 %d %s", nLinhas,
              i18n(nLinhas == 1 ? "título" : "títulos"),
              nCont, i18n("para retomar"));
   }
-  // COM ABAS a contagem vai para a DIREITA da propria linha de abas, e nao
-  // numa linha solta acima delas: sozinha la em cima ela lia como um titulo
-  // orfao, que foi a primeira coisa que saltou na foto ampliada.
-  { // Nunca por cima das abas: o que nao cabe entre a faixa e a borda sai
-    // com reticencias, em vez de a contagem colar no selo (foto de 20/09).
-    float sobra = SP_W - 2.0f * SP_PAD - (temAbas() ? abasLargura() + 24.0f : 0.0f);
-    TxtLinha t = txt_linha(TXT_CAPTION, buf, 160, 164, 175, 255);
-    // Com tres abas nao sobra lugar para a contagem na mesma linha: ela
-    // SOME em vez de sair cortada ("124 titles · 2 to…" nao diz nada). A
-    // informacao continua na propria lista.
-    if (temAbas()) {
-      if (t.w <= sobra)
-        txt_desenhar_alpha(t, SP_X + x + SP_W - SP_PAD - t.w,
-                           SP_ABAS_Y + (SP_ABAS_H - t.h) * 0.5f, a * 0.95f);
-    }
-    else
-      txt_desenhar_alpha(t, SP_X + x + SP_PAD, SP_Y + 38.0f, a * 0.95f); }
+  else snprintf(buf, sizeof buf, "%d %s", nLinhas, i18n(nLinhas == 1 ? "título" : "títulos"));
+  caixaAltaIlha(buf, SPI_FG_R, SPI_FG_G, SPI_FG_B, SP_X + x + SP_PAD, SP_KICK_Y, a * 0.45f);
+  { TxtLinha t = txt_linha(TXT_ILHA_TITULO, temAbas() ? "Social" : "Salvos",
+                           SPI_FG_R, SPI_FG_G, SPI_FG_B, 255);
+    txt_desenhar_alpha(t, SP_X + x + SP_PAD, SP_TIT_Y, a); }
+  desenhaFechar(x, a);
   if (temAbas()) desenhaAbas(x, a);
   if (temBarra()) desenhaBarra(x, a);
-  if (!temAbas()) {
-    TxtLinha t = txt_linha(TXT_TITULO2, "Salvos", 246, 247, 252, 255);
-    txt_desenhar_alpha(t, SP_X + x + SP_PAD, SP_Y + 74.0f, a);
-  }
 
   if (aba == SP_ABA_ATIVIDADE) {
     gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
@@ -3227,7 +3233,7 @@ static void desenharPainel(Uint32 agora) {
       float cab = atvAntes(i);
       if (cab > 0.0f) {
         if (y + cab >= listaTopo() && y <= SP_LISTA_BASE)
-          desenhaSecao(SP_X + x + SP_PAD, y, atvRot[i], a);
+          desenhaSecao(SP_X + x, y, atvRot[i], a, i == 0);
         y += cab;
       }
       if (y + SPA_H >= listaTopo() && y <= SP_LISTA_BASE)
@@ -3239,7 +3245,7 @@ static void desenharPainel(Uint32 agora) {
   }
   if (aba == SP_ABA_AVISOS) {
     gfx_recorte(SP_X + x, listaTopo(), SP_W, SP_LISTA_BASE - listaTopo());
-    avisos_lista_desenhar(SP_X + x + SP_PAD, listaTopo() + SP_FOCO_AR - scrollY, SP_INTERNO, a, foco);
+    avisos_lista_desenhar(SP_X + x + SP_LINHA_X, listaTopo() + SP_FOCO_AR - scrollY, SP_LINHA_W, a, foco);
     gfx_sem_recorte();
     return;
   }
@@ -3261,22 +3267,21 @@ static void desenharPainel(Uint32 agora) {
         // So a secao das sugestoes tem rotulo; o vao do interruptor e mudo.
         if ((social[i].tipo == SPS_SUG || social[i].tipo == SPS_AMIGO) &&
             y + cab >= listaTopo() && y <= SP_LISTA_BASE) {
-          desenhaSecao(SP_X + x + SP_PAD, y + cab - SP_SECAO_H,
+          desenhaSecao(SP_X + x, y,
                        social[i].tipo == SPS_SUG ? "Pessoas que você talvez conheça"
-                                                 : "Seus amigos", a);
+                                                 : "Seus amigos", a, cab < SP_SECAO_H - 0.5f);
         }
         // Por pessoa: o nome de quem mandou abre o grupo dele.
         if (social[i].tipo == SPS_REC && y + cab >= listaTopo() && y <= SP_LISTA_BASE)
-          desenhaSecao(SP_X + x + SP_PAD, y + cab - SP_SECAO_H,
-                       recs[social[i].idx].deNome, a);
+          desenhaSecao(SP_X + x, y, recs[social[i].idx].deNome, a, cab < SP_SECAO_H - 0.5f);
         y += cab;
       }
       // Fora da janela nao custa texto nem textura — mesma razao da lista de
       // Salvos logo abaixo.
       if (y + alt >= listaTopo() && y <= SP_LISTA_BASE) {
         switch (social[i].tipo) {
-          case SPS_REC: desenhaRecLinha(i, social[i].idx, x, y, a); break;
-          case SPS_SUG: desenhaSugLinha(i, social[i].idx, x, y, a); break;
+          case SPS_REC: desenhaRecLinha(i, social[i].idx, x, y, a, agora); break;
+          case SPS_SUG: desenhaSugLinha(i, social[i].idx, x, y, a, agora); break;
           case SPS_AMIGO: desenhaAmigoLinha(i, social[i].idx, x, y, a, agora); break;
           case SPS_ENCONTRAR: {
             char rot[96];
@@ -3334,14 +3339,15 @@ static void desenharPainel(Uint32 agora) {
   // a dica de como por algo nela, no lugar das celulas que ainda nao tem.
   for (i = 0; i < nSecoes; i++) {
     float sy = y + secoes[i].y;
-    float sh = SP_SECAO_H + (secoes[i].vazia ? SP_VAZIA_H : 0.0f);
+    float sa = secaoAlt(secoes[i].y <= 0.0f);
+    float sh = sa + (secoes[i].vazia ? SP_VAZIA_H : 0.0f);
     if (sy + sh < listaTopo() || sy > SP_LISTA_BASE) continue;
-    desenhaSecao(SP_X + x + SP_PAD, sy, secoes[i].rot, a);
+    desenhaSecao(SP_X + x, sy, secoes[i].rot, a, secoes[i].y <= 0.0f);
     if (secoes[i].vazia) {
       TxtLinha t = txt_linha_corta(TXT_CAPTION,
           "Vazia. Segure OK num título e escolha \xe2\x80\x9cMover para categoria\xe2\x80\x9d.",
           150, 154, 166, 255, SP_INTERNO);
-      txt_desenhar_alpha(t, SP_X + x + SP_PAD, sy + SP_SECAO_H + 6.0f, a * 0.9f);
+      txt_desenhar_alpha(t, SP_X + x + SP_PAD, sy + sa + 6.0f, a * 0.9f);
     }
   }
   { int estilo = sorg_estilo();
