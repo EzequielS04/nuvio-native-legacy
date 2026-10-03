@@ -226,6 +226,13 @@ static float anim = 0.0f;          // 0..1 seguindo `visivel`, por mola
 static int   soBarra = 0;
 static float cheio = 1.0f;
 static float focoB[PLR_NBTNS];     // mola de foco de cada botao
+// A FILEIRA DE BOTOES FECHA COM O FOCO NA BARRA (pedido do dono, 03/10): quem
+// subiu para a barra esta procurando no filme, e os botoes embaixo dela so
+// disputam o olhar. Ela desce e apaga pela mola dos controles e volta quando o
+// foco desce de novo. Com o ponteiro ela fica: passar a mao na barra a
+// fecharia, e a mao nao teria onde achar os botoes de volta.
+static float fileira = 1.0f;
+static int ponteiroNoPlayer(void);
 static float entrada = 0.0f;       // 0..1 fade de abertura/fechamento da tela
 static Uint32 ultimoInput = 0;
 // Foco no botao "Pular abertura/resumo". Ele e um alvo de foco de verdade no
@@ -1115,7 +1122,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
     // A grade EPG comeca a baixar ja: o banner "agora/a seguir" do OSD e o
     // overlay do guia dependem dela. Idempotente.
     if (canalSessao) { guia_carregar(); epg_iniciar(); } }
-  tocando = 1; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f;
+  tocando = 1; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f; fileira = 1.0f;
   pedFontes = erroFonte = pedFaixas = pedProxT = pedProxE = 0; inicioImagem = 0;
   erroTitulo[0] = erroDica[0] = 0;
   pedGuia = pedZap = pedGuiaCheio = 0;
@@ -1280,6 +1287,7 @@ int  player_com_video(void) { return comVideo && !retido && video_pronto(); }
 int  player_carregando(void) { return esperandoFonte || (comVideo && !video_pronto()); }
 int  player_controles_visiveis(void) { return visivel; }
 int   player_foco_na_barra(void) { return barraFoco; }
+float player_fileira(void) { return fileira; }
 int   player_so_barra(void) { return soBarra && visivel; }
 float player_posicao_seg(void) { return posSeg; }
 
@@ -2314,8 +2322,9 @@ void player_evento(const SDL_Event *e) {
       posSeg = (float)puloDestino(fim); if (comVideo) video_buscar(posSeg);
       skipFoco = 0; acordar(); return;
     } else if (k == SDLK_DOWN) { skipFoco = 0; acordar(); return; }
-    else if (k == SDLK_UP) { pedFaixas = 1; acordar(); return; }
-    else { acordar(); return; }                         // esquerda/direita: nada ao lado
+    // CIMA nao abre mais a folha de Audio daqui (pedido do dono, 03/10): acima
+    // do botao de pular nao ha nada. Esquerda/direita: nada ao lado.
+    else { acordar(); return; }
   }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
     // Na barra o OK pausa/retoma: e o que sobra de util, ja que a barra nao
@@ -2350,16 +2359,13 @@ void player_evento(const SDL_Event *e) {
   // isso nao havia como adiantar o filme pela barra — so os saltos de 10s dos
   // botoes, que e o defeito que o dono relatou.
   //
-  // A folha de faixas NAO se perde: ela continua no CIMA, um nivel acima. Da
-  // fileira de botoes o primeiro CIMA pega a barra e o segundo abre a folha.
-  // Trocar o gesto por outro (um botao a mais, um menu) seria pior: no aparelho
-  // "pra cima revela legendas e audio" e o que a mao ja sabe.
+  // DA BARRA PARA CIMA NAO HA NADA (pedido do dono, 03/10): o CIMA na barra
+  // abria a folha no Audio, um salto que ninguem pediu no meio de uma busca.
+  // Audio e Legendas ficam nos botoes deles. O unico alvo acima da barra e o
+  // "Pular abertura", quando existe — e esse esta mesmo em cima dela.
   if (k == SDLK_UP) {
-    // Pelo gesto de CIMA a folha abre no AUDIO, que e a coluna que a mao
-    // procura mais.
     if (!barraFoco) barraFoco = 1;
     else if (trechoPulavel(NULL)) skipFoco = 1;
-    else pedFaixas = 1;
     acordar();
     return;
   }
@@ -2720,6 +2726,8 @@ void player_atualizar(float dt, Uint32 agora) {
   if (visivel || soBarra)
     cheio = anim_mola(cheio, soBarra ? 0.0f : 1.0f, dt,
                       soBarra ? NV_MOLA_DESFOCO : NV_MOLA_FOCO);
+  { float alvoF = (barraFoco && !ponteiroNoPlayer()) ? 0.0f : 1.0f;
+    fileira = anim_mola(fileira, alvoF, dt, alvoF > fileira ? NV_MOLA_FOCO : NV_MOLA_DESFOCO); }
   for (int i = 0; i < PLR_NBTNS; i++) {
     float alvo = (visivel && botao == i) ? 1.0f : 0.0f;
     focoB[i] = anim_mola(focoB[i], alvo, dt,
@@ -3189,14 +3197,30 @@ static void corpoCarregando(GfxRect r, float a, void *u) {
         txt_desenhar_alpha(l, x + w - 18.0f - l.w, y + 26.0f - (float)l.h * 0.5f, a); }
     } }
   y += 52.0f + 18.0f;
-  // O TRILHO CORRE (nao ha porcentagem de abertura para mostrar): um trecho
-  // de 34% indo e voltando; com Animacoes reduzidas ele fica parado.
-  { float t = ajustes_animacoes_reduzidas() ? 0.0f : (float)(agora % 1800u) / 1800.0f;
-    float k = t < 0.5f ? t * 2.0f : 2.0f - t * 2.0f, seg = 0.34f, ar, ag, ab;
+  // O TRILHO E INDETERMINADO, DE PROPOSITO. O pipeline nao da porcentagem
+  // de abertura: video.h so diz ativo/pronto (loadCompleted), e o buffer_fim
+  // antes do pronto e contra uma duracao que ainda nao existe. Uma barra que
+  // "enche" com o tempo ou com as duas etapas mentiria sobre quanto falta.
+  // Entao um brilho atravessa o trilho da esquerda para a direita e recomeca;
+  // com Animacoes reduzidas o trilho fica inteiro no acento apagado, parado.
+  { float ar, ag, ab;
     GfxRect tr = { x, y, w, 4.0f };
     ajustes_acento(&ar, &ag, &ab);
     gfx_cor(tr, 0.5f, 1, 1, 1, 0.16f * a);
-    gfx_cor((GfxRect){ x + (w * (1.0f - seg)) * k, y, w * seg, 4.0f }, 0.5f, ar, ag, ab, a); }
+    if (ajustes_animacoes_reduzidas()) gfx_cor(tr, 0.5f, ar, ag, ab, 0.45f * a);
+    else {
+      float t = (float)(agora % 1600u) / 1600.0f, seg = 0.30f;
+      float x0 = x + (w * (1.0f + seg)) * t - w * seg, x1 = x0 + w * seg;
+      if (x0 < x) x0 = x;
+      if (x1 > x + w) x1 = x + w;
+      if (x1 - x0 > 1.0f) {
+        // Pontas suaves: o miolo cheio e duas abas a 45% de cada lado.
+        float aba = (x1 - x0) * 0.22f;
+        gfx_cor((GfxRect){ x0, y, x1 - x0, 4.0f }, 0.5f, ar, ag, ab, 0.45f * a);
+        if (x1 - x0 > aba * 2.0f + 4.0f)
+          gfx_cor((GfxRect){ x0 + aba, y, x1 - x0 - aba * 2.0f, 4.0f }, 0.5f, ar, ag, ab, a);
+      }
+    } }
 }
 
 // O MODAL DO ERRO: o motivo (36/700), a dica e os dois botoes. ESQUERDA e
@@ -3355,11 +3379,14 @@ void player_desenhar(Uint32 agora) {
     if (shotSemFuro && c && c->backdrop[0]) arte = c->backdrop;   // capturas: o "video" do canal
 #endif
     GLuint tex = arte ? tex_obter_hero(arte) : 0;   // ocupa a tela inteira
+    // ABRINDO A FONTE A TELA E PRETA (pedido do dono, 03/10): sem a arte e sem
+    // o logo; quem conta o que acontece e so a ilha do canto.
+    if (player_carregando()) tex = 0;
     if (tex) {
       gfx_tex_aspect_atual = tex_aspecto(arte);
       gfx_rect(tela, tex, GFX_CARD, 0, 0, 0, 0.0f, 0, 0, 0, entrada);
       gfx_tex_aspect_atual = 0.0f;
-    } else if (player_id_canal()[0]) {
+    } else if (player_id_canal()[0] || player_carregando()) {
       // PRETO de verdade no canal, e nao o quase-preto da interface: com o
       // video entrando por tras da pagina, qualquer tinta aqui e uma camada a
       // mais sobre o plano de hardware.
@@ -3369,28 +3396,13 @@ void player_desenhar(Uint32 agora) {
     }
   }
 
-  // ABRINDO A FONTE (Glass UI): a arte escurece, o logo fica no centro e o
-  // estado mora na ILHA do canto, crescida como a atividade da ilha do
-  // relogio — o ponto que respira, "Abrindo fonte", a linhaEp, a fonte
-  // escolhida (marcas, addon e tamanho) e um trilho que corre. Na ponta do
-  // cabecalho, "Fonte 2 de 3" quando o automatico ja esta na segunda.
+  // ABRINDO A FONTE (Glass UI, revisto pelo dono em 03/10): fundo PRETO, sem
+  // a arte, sem o logo e sem anel no meio da tela. O estado mora so na ILHA
+  // do canto, crescida como a atividade da ilha do relogio — o ponto que
+  // respira, "Abrindo fonte", a linhaEp, a fonte escolhida (marcas, addon e
+  // tamanho) e o trilho dentro dela. Na ponta do cabecalho, "Fonte 2 de 3"
+  // quando o automatico ja esta na segunda.
   if (player_carregando()) {
-    const char *marca = c ? artehero_logo_sessao(c) : NULL;
-    GLuint logo;
-    if (!marca && c && player_id_canal()[0] && c->backdrop[0]) marca = c->backdrop;
-    logo = marca ? tex_obter_larg_qualquer(marca, 560) : 0;
-    gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * entrada);
-    gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 360.0f }, 1, 1.0f, 1.0f, 0.40f * entrada);
-    gfx_veu_css((GfxRect){ 0, NV_TELA_H - 360.0f, NV_TELA_W, 360.0f }, 0, 1.0f, 1.0f, 0.40f * entrada);
-    if (logo) {
-      float ar = tex_aspecto(marca), w = 560, h = ar > 0 ? w / ar : 120;
-      if (h > 170) { h = 170; w = h * ar; }
-      gfx_rect((GfxRect){ (NV_TELA_W - w) * .5f, (NV_TELA_H - h) * .5f, w, h }, logo,
-               tex_marca_escura(marca) ? GFX_MARCA : GFX_TEXTO, 0, 0, 0, 0, .95f, .95f, .97f, entrada);
-    } else if (c && c->titulo[0]) {
-      TxtLinha t = txt_linha_corta(TXT_PLR_TITULO, c->titulo, 240, 241, 244, 255, 900);
-      txt_desenhar_alpha(t, (NV_TELA_W - t.w) * .5f, (NV_TELA_H - t.h) * .5f, entrada);
-    }
     { PlrIlhaPedido pd;
       char dir[48] = "";
       memset(&pd, 0, sizeof pd);
@@ -3626,14 +3638,8 @@ void player_desenhar(Uint32 agora) {
   { float fa = stream_folha_anim(), fx = faixas_anim(), fe = episodios_anim();
     float cob = fa > fx ? fa : fx;
     if (fe > cob) cob = fe;
-    a *= 1.0f - anim_clamp(cob, 0.0f, 1.0f);
-    // A folha de episodios fica com a pilula da hora no canto (mockup): o OSD
-    // sai, a ilha nao.
-    if (fe > 0.02f && episodios_aberto() && !episodios_menu_aberto_qualquer()) {
-      PlrIlhaPedido pd;
-      memset(&pd, 0, sizeof pd);
-      plrilha_pedir(&pd);
-    } }
+    // Os episodios nascem da ilha (episodios.c): o OSD sai, a ilha cresce.
+    a *= 1.0f - anim_clamp(cob, 0.0f, 1.0f); }
   // O que NAO e barra nem tempo (titulo, meta, botoes, relogio, selos, veu de
   // cima) segue `ac`: some na busca so com a barra (#128).
   float ac = a * cheio;
@@ -3809,8 +3815,10 @@ void player_desenhar(Uint32 agora) {
   // Discos de 68 no material da ilha; o focado vira PILULA cheia no acento com
   // o NOME DENTRO (o rotulo solto embaixo caia em y~1042, zona de overscan). A
   // largura acompanha a mola do foco, entao os vizinhos andam junto.
-  {
-    float x = cx;
+  // Com o foco na barra a fileira desce PLR_DESLIZE/2 e apaga (`fileira`).
+  if (fileira > 0.01f) {
+    float x = cx, af = ac * fileira, dy = (1.0f - fileira) * PLR_DESLIZE * 0.5f;
+    float yRow = yRowTopo + dy, cyB = cyBotoes + dy;
     for (int i = 0; i < PLR_NBTNS - (temUltimoBotao() ? 0 : 1); i++) {
       float f = focoB[i];
       int sel = (botao == i && !barraFoco);
@@ -3818,19 +3826,19 @@ void player_desenhar(Uint32 agora) {
       TxtLinha lr = txt_linha(TXT_G21B, rot, 0, 0, 0, 255);
       float wCheio = 22.0f + 30.0f + 12.0f + (float)lr.w + 28.0f;
       float w = PLR_BTN_D + (wCheio - PLR_BTN_D) * f;
-      GfxRect r = { x, yRowTopo, w, PLR_BTN_D };
+      GfxRect r = { x, yRow, w, PLR_BTN_D };
       int tinta = (int)(242.0f + (plrui_tinta() - 242.0f) * f);
       float k = tinta / 255.0f;
-      if (f > 0.02f) plrui_pilula_foco(r, ac * f);
-      if (f < 0.98f) plrui_disco_osd(r, ac * (1.0f - f));
-      if (ponteiroNoPlayer() && ac > 0.3f)
+      if (f > 0.02f) plrui_pilula_foco(r, af * f);
+      if (f < 0.98f) plrui_disco_osd(r, af * (1.0f - f));
+      if (ponteiroNoPlayer() && af > 0.3f)
         ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroBotao, NULL, i, 0);
       { float ix = x + (PLR_BTN_D - 30.0f) * 0.5f + (22.0f - (PLR_BTN_D - 30.0f) * 0.5f) * f;
-        gfx_icone((GfxRect){ ix, cyBotoes - 15.0f, 30.0f, 30.0f }, ic, k, k, k, ac * 0.96f);
+        gfx_icone((GfxRect){ ix, cyB - 15.0f, 30.0f, 30.0f }, ic, k, k, k, af * 0.96f);
         if (f > 0.05f) {
           TxtLinha l = txt_linha(TXT_G21B, rot, tinta, tinta, tinta, 255);
           gfx_recorte(r.x, r.y, r.w, r.h);
-          txt_desenhar_alpha(l, ix + 30.0f + 12.0f, cyBotoes - (float)l.h * 0.5f, ac * f * (sel ? 1.0f : 0.0f));
+          txt_desenhar_alpha(l, ix + 30.0f + 12.0f, cyB - (float)l.h * 0.5f, af * f * (sel ? 1.0f : 0.0f));
           gfx_sem_recorte();
         } }
       x += w + PLR_BTN_GAP;
@@ -3948,6 +3956,7 @@ void player_shot_estado(Uint32 agora, float pos, float dur, int toca, int bt,
   if (dur > 0.0f) duracaoSeg = dur;
   tocando = toca; botao = bt; barraFoco = barra; soBarra = so;
   cheio = so ? 0.0f : 1.0f;
+  fileira = barra ? 0.0f : 1.0f;
   visivel = 1; ultimoInput = agora; anim = 1.0f; entrada = 1.0f;
   esperandoFonte = 0; erroFonte = 0;
 }

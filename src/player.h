@@ -85,6 +85,9 @@ int   player_foco_na_barra(void);
 // #128: 1 na busca que comecou com os controles escondidos, quando so a barra
 // e o tempo estao na tela.
 int   player_so_barra(void);
+// A mola da fileira de botoes: fecha (0) com o foco na barra, volta (1) com
+// ele embaixo. Para teste.
+float player_fileira(void);
 // #122: texto da legenda embutida entregue pelo player nativo, ja limpo.
 void  player_limpar_legenda_nativa(char *s);
 int   player_texto_legenda_nativa(char *dst, int tam);

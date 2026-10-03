@@ -220,6 +220,7 @@ static CatItem serieComEps(void) {
     cat_definir_episodios(0, eps, 16);
     vistoep_definir(f.imdb, 1, 1, 1); vistoep_definir(f.imdb, 1, 2, 1);
     prog_gravar_local(f.imdb, 1, 3, 1948.0, 3360.0);
+    prog_gravar_local(f.imdb, 1, 5, 1210.0, 3360.0);   // um nao assistido pela metade
     return f;
 }
 
@@ -378,6 +379,15 @@ int main(int argc, char **argv) {
     player_shot_estado(relogio, 4820.0f, 9420.0f, 1, 0, 1, 1);
     quadros(60);
     salvar("osd-barra");
+  }
+  // Foco na barra com o OSD inteiro (pedido do dono, 03/10): a fileira de
+  // botoes fecha; o titulo, a barra e o tempo ficam.
+  if (quer(argc, argv, "osd-barra-foco")) {
+    abrir(&filme); simular(3840, 1606, "", 1, 1);
+    quadros(10);
+    player_shot_estado(relogio, 4820.0f, 9420.0f, 1, 0, 1, 0);
+    quadros(60);
+    salvar("osd-barra-foco");
   }
   if (quer(argc, argv, "toast-proporcao")) {
     abrir(&filme); simular(3840, 1606, "", 1, 1);
