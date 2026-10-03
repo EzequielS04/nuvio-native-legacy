@@ -416,13 +416,18 @@ int main(int argc, char **argv) {
   // para baixo), a pagina de estilos, a escolha e a home depois dela.
   if (getenv("NV_CTX")) {
     int r, alvo = atoi(getenv("NV_CTX"));
-    ajusta(camadas[0] - '0', 0);
+    // NV_CTX_VIDRO=1: o menu sobre a Interface de vidro (o padrao e o solido).
+    ajusta(camadas[0] - '0', getenv("NV_CTX_VIDRO") ? 1 : 0);
     for (r = 0; r < 14; r++) tecla(SDLK_UP);
     quadros(60, NULL);
     for (r = 0; r < alvo; r++) { tecla(SDLK_DOWN); quadros(40, NULL); }
     quadros(80, NULL);
     snprintf(bmp, sizeof bmp, "%s-ctx-0-antes.bmp", saida); quadros(1, bmp);
     segurarOk();
+    // NV_CTX_FOCO=<n>: o foco n linhas abaixo da primeira (o mockup acende a
+    // segunda).
+    { int d = getenv("NV_CTX_FOCO") ? atoi(getenv("NV_CTX_FOCO")) : 0;
+      for (r = 0; r < d; r++) teclaCtx(SDLK_DOWN); }
     quadros(60, NULL);
     snprintf(bmp, sizeof bmp, "%s-ctx-1-menu.bmp", saida); quadros(1, bmp);
     printf("[shot] ctx aberto=%d\n", ctx_aberto());

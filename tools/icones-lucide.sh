@@ -42,12 +42,13 @@ SVG="$DIR/lucide"
 # cabecalhos dos grupos recolhiveis (TELA[] em src/ajustes.c) — as linhas nao
 # tem icone desde o merge da 1.5 (feat/ajustes-ux), e os ~60 desenhos por
 # opcao sairam da lista. fileiras.c usa house/folders/puzzle na folha de
-# fileiras.
+# fileiras. O menu do cartaz (ctxmenu.c) usa info/library/eye/eye-off/users/
+# x/rows-3/folders, o traco do mockup "ilha" tela 7.
 NOMES="
 circle-play database file-text folders gallery-vertical-end house
 images info layout-dashboard list-checks monitor-cog palette panel-top plug puzzle
 rotate-ccw-clock rows-3 scan star user-round mic keyboard smartphone
-rotate-cw x
+rotate-cw x library eye eye-off users
 "
 # Conferencia: todo aj_* citado em src/ tem de estar em NOMES, e todo NOMES
 # tem de ser citado — senao sobra PNG morto no pacote ou falta icone na tela
