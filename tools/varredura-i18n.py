@@ -249,6 +249,8 @@ def contexto(txt, i):
 # "nao sei o que e": sem esta lista a ferramenta nao pode virar teste, e sem
 # virar teste ela nao impede a proxima regressao.
 IGNORAR = {
+    # Trailer diagnostic gate IDs are log codes, never UI labels.
+    "dynamic-poster-hidden", "poster-wait",
     # Identificadores de aplicativos; nunca apresentados como texto da interface.
     'br.com.claro-now',
     'br.com.claro.now.smarttvclient',

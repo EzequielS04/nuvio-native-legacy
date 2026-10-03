@@ -1886,6 +1886,8 @@ static int lerManifesto(int iAddon, const char *base, Decl *saida, int max,
   char *corpo, *escolhido;
   const char *p, *fim;
   int n = 0, total = 0, e = 0, nEleg = 0;
+  if (totalReal) *totalReal = 0;
+  if (promovidos) *promovidos = 0;
   snprintf(url, sizeof url, "%s/manifest.json", base);
   // Ja largado em paralelo no comeco de montar(); so cai na rede aqui quando
   // este addon nao estava na lista daquele instante.

@@ -118,7 +118,15 @@ fi
 # Os mesmos tempos, agora pelo LIBASS (o que a TV desenha). Ver tests/ass_tempos.c.
 if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists libass; then
   cc tests/ass_tempos.c -o /tmp/nuvio-ass-tempos-test $(pkg-config --cflags --libs libass)
-  SC=$(grep -l "^; mkvass-estado: completo" "$DIR"/dados/mkvass-*-3.ass 2>/dev/null | head -1)
+  # Select the sidecar for t.mkv, rather than an arbitrary completed track.
+  SC=$(python3 - "$DIR/dados" "http://127.0.0.1:$PORTA/t.mkv" <<'PYHASH'
+import os, sys
+h = 1469598103934665603
+for b in sys.argv[2].encode():
+    h = ((h ^ b) * 1099511628211) & ((1 << 64) - 1)
+print(os.path.join(sys.argv[1], f"mkvass-{h:016x}-3.ass"))
+PYHASH
+  )
   [ -n "$SC" ] || { echo "mkvass.sh: nenhum sidecar completo para conferir no libass"; exit 1; }
   /tmp/nuvio-ass-tempos-test "$DIR/ref.ass" "$SC"
 fi
