@@ -26,6 +26,23 @@ int main(void) {
   dados_iniciar(dir); assert(!strcmp(dados_dir(), dir)); snprintf(dirAjustes, sizeof dirAjustes, "%s", dir);
   ajustes_iniciar(); assert(gravar());
 
+  // Glass and outline are reachable without advanced settings, even when off.
+  assert(!uxAvancada(AJ_VIDRO) && !uxAvancada(AJ_VIDRO_CONTORNO));
+  original = valor[AJ_VIDRO]; valor[AJ_VIDRO] = 1;
+  for (i = 0; i < AJ_N_TELA; i++) {
+    if (TELA[i].tipo != IT_OPC ||
+        (TELA[i].op != AJ_VIDRO && TELA[i].op != AJ_VIDRO_CONTORNO)) continue;
+    uxAvancados[secDoItem[i]] = 0;
+    assert(visivel(i) && focavel(i));
+  }
+  assert(inativa(AJ_VIDRO_CONTORNO));
+  assert(uxRequisito(AJ_VIDRO_CONTORNO) == AJ_VIDRO);
+  assert(strstr(ajudaOpcao(AJ_VIDRO_CONTORNO), "Ative a interface de vidro"));
+  antes = arquivo(); abrir(AJ_VIDRO_CONTORNO);
+  assert(uxEditor == 2); igual(antes);
+  key(SDLK_ESCAPE); igual(antes); free(antes);
+  valor[AJ_VIDRO] = original;
+
   // Foco e rascunho não alteram nem o valor nem o arquivo; Back cancela.
   original = valor[AJ_RELOGIO]; antes = arquivo(); abrir(AJ_RELOGIO);
   key(SDLK_DOWN); assert(uxPendente != original); assert(valor[AJ_RELOGIO] == original); igual(antes);

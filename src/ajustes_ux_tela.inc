@@ -78,8 +78,8 @@ static const Item TELA[] = {
     OPC(AJ_IDIOMA), OPC(AJ_AUD_LINGUA), OPC(AJ_LEG_LINGUA), OPC(AJ_TMDB_IDIOMA),
 
   SEC("Aparência", "Cor, transparência, fonte, animações e relógio", "aj_palette"),
-    OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_FONTE_UI),
-    OPC(AJ_ANIM), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS), OPC(AJ_VIDRO_CONTORNO),
+    OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_VIDRO_CONTORNO), OPC(AJ_FONTE_UI), OPC(AJ_ICONE_APP),
+    OPC(AJ_ANIM), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS),
 
   SEC("TV ao vivo", "Provedor e solução de problemas ao assistir canais", "aj_puzzle"),
     ROT("Provedor"),
@@ -130,8 +130,8 @@ static const char *SECAO_AJUDA[] = {
   "Versão instalada, atualização e envio de registros para a equipe do app.",
 };
 
-// Básico por padrão; a lista abaixo segue os 60 IDs avançados da proposta-base
-// mais AJ_SEEKR_AJUSTE, a única opção avançada acrescentada no delta 1.7.1.
+// Basic by default. Glass and its outline remain visible together in Appearance.
+// Technical options below are revealed through the advanced control.
 static int uxAvancada(int op) {
   switch (op) {
     case AJ_HERO_TRANSICAO:
@@ -155,7 +155,6 @@ static int uxAvancada(int op) {
     case AJ_TMDB_PROD: case AJ_TMDB_REDES: case AJ_TMDB_EPS: case AJ_TMDB_TRAILERS:
     case AJ_TMDB_MAIS: case AJ_TMDB_COL: case AJ_TMDB_CW:
     case AJ_SELOS_CORES:
-    case AJ_VIDRO_CONTORNO:
     case AJ_LIVETV_FORMATO: case AJ_LIVETV_MODO: case AJ_LIVETV_PROXY:
     case AJ_P2P_LIGADO: case AJ_P2P_URL: case AJ_P2P_TESTAR:
     case AJ_TEX_MB:

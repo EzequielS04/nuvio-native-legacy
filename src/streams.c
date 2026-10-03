@@ -1,4 +1,6 @@
 #include "streams.h"
+#include "ondever.h"
+#include "tex_cache.h"
 #include "livetv_regras.h"
 #include "idioma.h"
 #include "badges.h"
@@ -1156,6 +1158,7 @@ static void atualizarProvedores(void) {
   if(filtro>=nProvedores) filtro=0;
 }
 static int filtrado(int linha) {
+  if (filtro == -1) return linha >= 0 && linha < ondever_n(alvoPedido) ? -2-linha : -1;
   for(int k=0,j=0;k<n;k++) {
     int i=ORD(k);
     if(passaFiltro(i))
@@ -1173,6 +1176,7 @@ static int linhaDoIndice(int indice) {
   return -1;
 }
 static int nFiltrados(void) {
+  if (filtro == -1) return ondever_n(alvoPedido);
   int k=0;
   for(int i=0;i<n;i++) if(passaFiltro(i)) k++;
   return k;
@@ -1251,6 +1255,7 @@ void stream_folha_abrir(void) {
   int excl;
   aberta=1; escolha=-1; foco=0; grupo=1; filtro=0; soMp4=0; recarregar=0;
   atualizarProvedores();
+  ondever_apps_atualizar();
   if(atual>=0) foco=atual;
   rolagem=0;velRol=0;
   // A CONTAGEM DA FOLHA NO LOG (#132). O log tinha "[addons] X: N fontes" e
@@ -1278,7 +1283,7 @@ void stream_folha_evento(const SDL_Event *e) {
   if(k==SDLK_DOWN) {if(grupo<1) grupo++; else if(foco<nf-1) foco++;}
   if(grupo==0 && (k==SDLK_LEFT || k==SDLK_RIGHT)) {
     filtro+=k==SDLK_RIGHT?1:-1;
-    if(filtro<0) filtro=0;
+    if(filtro < -1) filtro=-1;
     if(filtro>=nProvedores) filtro=nProvedores-1;
     foco=0;rolagem=0;velRol=0;
   }
@@ -1299,7 +1304,14 @@ void stream_folha_evento(const SDL_Event *e) {
       }
     }
     else if(grupo==0) {grupo=1;foco=0;}
-    else {escolha=filtrado(foco);if(escolha>=0) aberta=0;}
+    else {
+      int i = filtrado(foco);
+      if (i >= 0) { escolha=i; aberta=0; }
+      else if (i <= -2) {
+        OndeVer o;
+        if (ondever_item(alvoPedido,-i-2,&o) && ondever_abrir(o.nome)!=ONDE_INFO) aberta=0;
+      }
+    }
   }
 }
 void stream_folha_atualizar(float dt, Uint32 agora) {
@@ -1333,10 +1345,25 @@ static void ponteiroFolhaBotao(int i, int b) { (void)b; grupo = -1; foco = i; }
 static void ponteiroFolhaLinha(int row, int b) { (void)b; grupo = 1; foco = row; }
 static void ponteiroFolhaFiltro(int i, int b) {
   (void)b;
-  if (i < 0 || i >= nProvedores) return;
+  if (i < -1 || i >= nProvedores) return;
   filtro = i; foco = 0; rolagem = 0; grupo = 1;
 }
 static void ponteiroFolhaFora(int a, int b) { (void)a; (void)b; aberta = 0; }
+
+// Availability lives in its own tab so asynchronous responses cannot shift
+// source indexes, focus or an in-progress debrid resolution.
+static void desenharOnde(GfxRect r, const OndeVer *o) {
+  const float side=56.0f, left=r.x+18.0f, text=left+side+20.0f;
+  const char *action;
+  int state=ondever_estado(o->nome);
+  action=state==ONDE_ABRIR ? "Abrir app" : state==ONDE_LOJA ? "Ver na loja"
+        : state==ONDE_PROCURAR ? "Procurar na loja" : "Disponível neste serviço";
+  GLuint logo=o->logo[0] ? tex_obter(o->logo) : 0;
+  if(logo) gfx_rect((GfxRect){left,r.y+20,side,side},logo,GFX_CARD,0,0,0,.2f,1,1,1,anim);
+  txt_desenhar_alpha(txt_linha_corta(TXT_CALLOUT,o->nome,236,239,243,255,r.w-120),text,r.y+20,anim);
+  txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION2,o->gratis ? "Grátis / com anúncios" : "Na assinatura",160,164,174,255,r.w-120),text,r.y+58,anim);
+  txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,action,190,194,204,255,r.w-44),left,r.y+108,anim);
+}
 
 void stream_folha_desenhar(Uint32 agora) {
   if(anim<.005f) return;
@@ -1407,7 +1434,7 @@ void stream_folha_desenhar(Uint32 agora) {
     } }
   // A LINHA DE CONTEXTO EXPLICA O BOTAO EM FOCO. "Sem HDR" nao se explica pelo
   // rotulo, e o rotulo nao pode crescer sem estourar a pilula de 120 px.
-  { const char *ajuda=contexto;
+  { const char *ajuda=filtro == -1 ? "Disponibilidade: TMDB / JustWatch. Abre o app, não o título." : contexto;
     if(grupo==-1 && botaoDe(foco)==BT_SEM_HDR)
       ajuda="Imagem preta com o áudio tocando? Recarrega esta fonte sem HDR nem Dolby Vision.";
     else if(grupo==-1 && botaoDe(foco)==BT_RECARREGAR)
@@ -1418,13 +1445,14 @@ void stream_folha_desenhar(Uint32 agora) {
         : "Filtra a lista para fontes em MP4. OK liga o filtro.";
     txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,184,187,193,255,FOLHA_W-2*NV_FOLHA_PAD),x+NV_FOLHA_PAD,172,anim); }
   gfx_recorte(x+NV_FOLHA_PAD,214,FOLHA_W-2*NV_FOLHA_PAD,62);
-  int ini=filtro>1?filtro-1:0;
+  int ini=filtro>1?filtro-1:-1;
   float tx=x+NV_FOLHA_PAD;
   // ABAS NA LARGURA DO NOME, e tantas quanto couberem: a largura fixa de 232
   // cortava "Debridio - Scraper AD" e "AIOStreams | ..." em reticencias com
   // espaco sobrando no fim da fileira.
   for(int i=ini;i<nProvedores;i++) {
-    int tw=txt_largura(TXT_PG_FIM,provedores[i]);
+    const char *tab = i < 0 ? "Onde ver" : provedores[i];
+    int tw=txt_largura(TXT_PG_FIM,tab);
     float w=tw+48.0f;
     if(w<108.0f) w=108.0f;
     if(w>300.0f) w=300.0f;
@@ -1436,7 +1464,7 @@ void stream_folha_desenhar(Uint32 agora) {
     else if(vid) { if(sel) gfx_cor((GfxRect){tx,216,w,NV_CTRL_H},.5f,1,1,1,.08f*anim); }   // so o filtro escolhido leva superficie, sem aro
     else gfx_cor((GfxRect){tx,216,w,NV_CTRL_H},.5f,
                  sel?.092f:.075f,sel?.096f:.079f,sel?.110f:.092f,anim);
-    TxtLinha l=txt_linha_corta(TXT_PG_FIM,provedores[i],c,c,c,255,w-24);
+    TxtLinha l=txt_linha_corta(TXT_PG_FIM,tab,c,c,c,255,w-24);
     txt_desenhar_alpha(l,tx+(w-l.w)*.5f,216+(NV_CTRL_H-l.h)*.5f,anim);
     if(sel && grupo!=0) {
       float cr,cg,cb; ajustes_acento(&cr,&cg,&cb);
@@ -1462,6 +1490,15 @@ void stream_folha_desenhar(Uint32 agora) {
     if(y+FOLHA_LINHA<FOLHA_TOPO || y>NV_TELA_H-NV_FOLHA_MARGEM) continue;
     int i=filtrado(row),sel=grupo==1 && foco==row;
     int corTitulo,corProv,corDesc,corMeta;
+    if (i <= -2) {
+      OndeVer o;
+      GfxRect card={x+NV_FOLHA_PAD,y,FOLHA_W-2*NV_FOLHA_PAD,FOLHA_LINHA-NV_LINHA_VAO};
+      if(ptr) ponteiro_alvo(card.x,card.y,card.w,card.h,ponteiroFolhaLinha,NULL,row,0);
+      if(sel) focoFonte(card,NV_LINHA_RAIO_PX/card.h,anim);
+      if(ondever_item(alvoPedido,-i-2,&o)) desenharOnde(card,&o);
+      continue;
+    }
+    if(i < 0) continue;
     const Stream *s=&lista[i];
     // LINHA DELICADA (pedido do dono, 01/10: "muito bruta, nao ta delicada
     // como o resto da interface"). Tres decisoes, todas conferidas na captura:
@@ -1566,7 +1603,10 @@ void stream_folha_desenhar(Uint32 agora) {
     if (ajustes_selos_coloridos()) badges_desenhar_selos(s->badges,lx,y+FOLHA_SELO_Y,w,FOLHA_SELO_H,anim);
     else badges_desenhar(s->badges,lx,y+FOLHA_SELO_Y,w,FOLHA_SELO_H,anim);
   }
-  if(!nf) {
+  if(!nf && filtro == -1) {
+    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ondever_status(alvoPedido)==ONDE_BUSCANDO ? "Buscando onde assistir…" : ondever_status(alvoPedido)==ONDE_FALHOU ? "Não foi possível consultar a disponibilidade." : "Nenhum serviço informado para esta região.",180,184,192,255,FOLHA_W-2*NV_FOLHA_PAD),x+NV_FOLHA_PAD,FOLHA_TOPO+36,anim);
+  }
+  if(!nf && filtro != -1) {
     // A FOLHA VAZIA DIZ A CAUSA (B6/#107, D5). So quando a lista esta vazia
     // de verdade (n == 0): lista cheia com filtro de provedor que nao casa
     // nada fica na frase generica, porque ali a causa e o filtro na tela.

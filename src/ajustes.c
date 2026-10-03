@@ -52,6 +52,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "iconeapp.h"
 
 // Versao do app: vem do build (-DNV_VERSAO, que tools/env.sh le do
 // appinfo.json). Era um literal aqui e ficou parado em 1.0.44 por nove
@@ -278,9 +279,14 @@ typedef enum {
   // Quanto a escolha automatica de fonte espera os addons lentos (#221). LOCAL.
   // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_FONTE_PRAZO,
+  AJ_ICONE_APP, // local, appended to preserve persisted option indices
   AJ_N
 } OpcaoId;
 
+static const char *V_ICONE_APP[ICONEAPP_N] = {
+  "Original", "Fênix", "N verde-água", "TV laranja", "N pixel",
+  "Play tricolor", "Arco", "TV viva", "Clube retrô", "Arcade N",
+};
 static const char *V_QUALIDADE[] = { "Automática", "4K", "1080p", "720p" };
 static const char *V_LIGA[]      = { "Ligado", "Desligado" };
 static const char *V_LIVETV_RES[] = { "Automática", "4K", "1080p", "720p", "SD" };
@@ -868,6 +874,7 @@ static const Opcao OPCOES[AJ_N] = {
   NUM("Sincronia da miniatura",          -60, 60, 1, " s"),   // local: seekrAjusteLocal
   ESC("Ao sair do player",               V_SAIDA_PLAYER, 2),  // local: saidaPlayerLocal
   ESC("Espera pelos add-ons",            V_FONTE_PRAZO, 4),   // local: fontePrazoLocal
+  ESC("Ícone do app", V_ICONE_APP, ICONEAPP_N),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1031,6 +1038,7 @@ static const char *CHAVE[] = {
   "seekrFitaLocal", "seekrAjusteLocal",
   "saidaPlayerLocal",
   "fontePrazoLocal",
+  "iconeAppLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1369,6 +1377,7 @@ int ajustes_addons_do_principal(void) { return lig(AJ_ADDONS_PRINCIPAL); }
 #endif
 int ajustes_relogio_ligado(void) { return lig(AJ_RELOGIO); }
 int ajustes_relogio_pos(void) { return valor[AJ_RELOGIO_POS]; }
+int ajustes_icone_app(void) { return valor[AJ_ICONE_APP]; }
 int ajustes_saida_player_home(void) { return lig(AJ_RELOGIO) && valor[AJ_SAIDA_PLAYER] == 0; }
 int ajustes_selo_visto(void) { return lig(AJ_SELO_VISTO); }
 static void riscoNotar(int op, int antes);
@@ -2889,6 +2898,7 @@ int ajustes_aplicar_blob(const char *json) {
 // exigiria adivinhar a feature e o `type`, e um blob com forma errada e pior
 // que uma chave a menos.
 static int somenteDesteAparelho(int op) {
+  if (op == AJ_ICONE_APP) return 1;
   switch (op) {
     // LAYOUT/APARELHO: nao sobem nem que o blob tenha a chave.
     // A regra que separa: se o valor descreve ESTA TV (RAM, painel, rede,
@@ -3577,6 +3587,8 @@ static int mutavel(int op)   { return OPCOES[op].tipo != OP_LEITURA &&
 // Item desenhado agora? Opcao de grupo fechado nao e — nem desenhada, nem
 // alcancada pelo cima/baixo.
 static int visivel(int i) {
+  if (i >= 0 && i < AJ_N_TELA && TELA[i].tipo == IT_OPC &&
+      TELA[i].op == AJ_ICONE_APP && !apoiador_ativo()) return 0;
   if (i < 0 || i >= AJ_N_TELA) return 0;
   if (TELA[i].tipo == IT_ROT) {
     int j;
@@ -3647,6 +3659,7 @@ static void focarOpcao(int op) {
 // separado de proposito: as duas perguntas sao diferentes e juntas viram um
 // paragrafo que ninguem le do sofa.
 static const char *ajudaOpcao(int op) {
+  if (op == AJ_ICONE_APP) return "Escolha uma marca alternativa para o Nuvio nesta TV. Um agradecimento a quem apoia o projeto.";
   if (inativa(op)) {
     if (op == AJ_VIDRO_CONTORNO) return "Ative a interface de vidro para ajustar o contorno.";
     if (op == AJ_RAIL) return "Desative a barra lateral moderna para escolher entre recolhida e fixa.";
@@ -3932,6 +3945,12 @@ static const char *efeitoOpcao(int op) {
       default: return NULL;
     }
   }
+  if (op == AJ_ICONE_APP)
+#ifdef NV_ANDROID
+    return "Também troca o ícone e o banner na tela inicial da TV quando você sai do app. O launcher pode levar alguns segundos para atualizar e pode mudar o app de lugar na lista.";
+#else
+    return "O ícone na lista de apps da TV é o do pacote instalado e não muda: a troca vale dentro do app.";
+#endif
   switch (op) {
     case AJ_FIL_LIMITE:
       return "Vale só nesta TV. Cada fileira a mais é um pedido a mais pela rede quando a Home monta.";
@@ -4590,6 +4609,7 @@ static int definirValorDireto(int op, int novo) {
   if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) aplicarIdioma(op);
   if (op == AJ_IDIOMA) { idiomaEscolhido(); desc_repetir(); }
   if (op == AJ_FONTE_UI) txt_definir_fonte_interface((TxtFamilia)novo);
+  if (op == AJ_ICONE_APP) iconeapp_aplicar_plataforma();
   if (op == AJ_CW_FONTE || op == AJ_SALVOS_DEST) desc_repetir();
   if (op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS || op == AJ_CW_CONCLUIDO)
     desc_refazer_continuar();
@@ -6915,9 +6935,43 @@ static float previaCartazOpcao(int op, float x, float y, float w) {
   return h;
 }
 
+// A GALERIA DO "Ícone do app": os dez ladrilhos em 5 x 2, o escolhido com o
+// realce do acento e um degrau maior, o nome dele embaixo. E a previa e o
+// seletor ao mesmo tempo: esquerda/direita na linha anda pelos ladrilhos.
+static float previaIconeApp(float x, float y, float w) {
+  float ar, ag, ab;
+  const float pad = 18.0f, gap = 14.0f;
+  float lado = (w - pad * 2.0f - gap * 4.0f) / 5.0f;
+  float h = pad + lado * 2.0f + gap + 20.0f + 40.0f + pad;
+  int sel = valor[AJ_ICONE_APP];
+  ajustes_acento(&ar, &ag, &ab);
+  ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
+  for (int i = 0; i < ICONEAPP_N; i++) {
+    float tx = x + pad + (float)(i % 5) * (lado + gap);
+    float ty = y + pad + (float)(i / 5) * (lado + gap);
+    int esc = i == sel;
+    float enc = esc ? 0.0f : lado * 0.06f;
+    GfxRect r = { tx + enc, ty + enc, lado - enc * 2.0f, lado - enc * 2.0f };
+    if (!iconeapp_desenhar(i, r, 1, esc ? 1.0f : 0.62f))
+      gfx_cor(r, 0.22f, 0.20f, 0.22f, 0.28f, 1.0f);
+    if (esc) previaRealce(tx - 5.0f, ty - 5.0f, lado + 10.0f, lado + 10.0f, ar, ag, ab);
+  }
+  { TxtLinha nome = txt_linha(TXT_HEADLINE, V_ICONE_APP[sel >= 0 && sel < ICONEAPP_N ? sel : 0],
+                              235, 237, 241, 255);
+    char conta[16];
+    TxtLinha n;
+    snprintf(conta, sizeof conta, "%d / %d", sel + 1, ICONEAPP_N);
+    n = txt_linha(TXT_CAPTION2, conta, 150, 153, 162, 255);
+    float ly = y + pad + lado * 2.0f + gap + 20.0f;
+    txt_desenhar(nome, x + pad, ly);
+    txt_desenhar(n, x + w - pad - n.w, ly + (nome.h - n.h) * 0.5f); }
+  return h;
+}
+
 static float previaInterfaceOpcao(int op, float x, float y, float w) {
   float ar, ag, ab, h = 140.0f;
   ajustes_acento(&ar, &ag, &ab);
+  if (op == AJ_ICONE_APP) return previaIconeApp(x, y, w);
   ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
   if (op == AJ_FONTE_UI) {
     TxtFamilia familia = txt_fonte_interface();
@@ -7030,6 +7084,10 @@ static float previaAboutOpcao(int op, float x, float y, float w) {
   ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
   if (op == AJ_VERSAO_I || op == AJ_ATUALIZAR) {
     ajudaMiniTexto("Versão", x + 16.0f, y + 18.0f, w - 32.0f, 210, 213, 220);
+    // A MARCA DO APP no Sobre: o icone em vigor, Original incluido (com um de
+    // apoiador, e ele que aparece aqui).
+    if (op == AJ_VERSAO_I)
+      iconeapp_desenhar(iconeapp_atual(), (GfxRect){ x + w - 16.0f - 40.0f, y + 8.0f, 40.0f, 40.0f }, 1, 1.0f);
     GfxRect r = {x + 16.0f, y + 56.0f, w - 32.0f, 46.0f};
     gfx_cor(r, 6.0f/46.0f, 0.08f, 0.09f, 0.11f, 1.0f);
     if (op == AJ_ATUALIZAR) previaRealce(r.x, r.y, r.w, r.h, ar, ag, ab);
@@ -7347,6 +7405,7 @@ int ajustes_teste_op_por_chave(const char *chave) {
   return -1;
 }
 int ajustes_teste_op_atualizar(void) { return AJ_ATUALIZAR; }
+int ajustes_teste_op_icone(int escolha) { valor[AJ_ICONE_APP] = escolha; return AJ_ICONE_APP; }
 // O primeiro dos onze interruptores de "Notas no titulo" (consecutivos no enum).
 int ajustes_teste_primeira_nota_titulo(void) { return AJ_NT_IMDB; }
 

@@ -12,6 +12,7 @@
 //
 // Icones derivados dos SVGs originais do sidebar, com alpha e recortes reais.
 #include "menu.h"
+#include "iconeapp.h"
 #include "perfis.h"
 #include "tex_cache.h"
 #include "gfx.h"
@@ -187,6 +188,16 @@ static void alvosDasLinhas(float x, float w) {
                 ponteiroLinha, NULL, MENU_RODAPE, 0);
 }
 
+// A MARCA DO ICONE DO APP no alto da rail, acima das linhas (que sao centradas
+// na altura e comecam em ~188 com os oito destinos). So com um icone de
+// apoiador em vigor (iconeapp_marca): com o Original a rail fica como sempre foi.
+#define NV_MENU_MARCA 56.0f
+static void desenhaMarca(float cx, float alpha) {
+  GfxRect r = { cx - NV_MENU_MARCA * 0.5f, NV_MARGEM_Y, NV_MENU_MARCA, NV_MENU_MARCA };
+  if (topoLinhas() < r.y + r.h + 12.0f) return;   // muitas linhas: nao cabe
+  iconeapp_marca(r, alpha);
+}
+
 static void desenhaRailFixa(void) {
   GfxRect painel = { 0, 0, NV_LEGACY_RAIL_W, NV_TELA_H };
   int vidro = ajustes_vidro();
@@ -216,6 +227,7 @@ static void desenhaRailFixa(void) {
     icone(i, NV_MENU_ICONE_CX, y + NV_MENU_LINHA_H * 0.5f,
           NV_MENU_ICONE, lum, lum, lum, 0.95f);
   }
+  desenhaMarca(NV_MENU_ICONE_CX, 0.95f);
   desenhaRodape(0.0f, NV_LEGACY_RAIL_W, 0.95f, 0.0f);
 }
 
@@ -550,6 +562,7 @@ void menu_desenhar(Uint32 agora) {
   }
 
   desenhaRodape(px, w, entrada, animFoco[MENU_RODAPE]);
+  desenhaMarca(px + NV_MENU_ICONE_CX, entrada);
 
   gfx_sem_recorte();
 }

@@ -150,6 +150,9 @@ static unsigned  sessao;
 int  video_iniciar(void) { return 0; }
 int  video_iniciar_auto(void) { return 0; }
 int  video_registro_negado(void) { return 0; }
+int video_luna(const char *uri, const char *carga, void (*cb)(const char *, void *), void *ctx) {
+  (void)uri; (void)carga; (void)cb; (void)ctx; return 0;
+}
 int  video_tocar(const char *u) { snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : ""); return 0; }
 void video_bombear(void) {}
 void video_parar(void) {}
@@ -291,6 +294,7 @@ static int         (*lsRegister)(const char *, LSHandle **, void *);
 static int         (*lsUnregister)(LSHandle *, void *);
 static int         (*lsAttach)(LSHandle *, void *, void *);
 static int         (*lsCall)(LSHandle *, const char *, const char *, Filtro, void *, unsigned long *, void *);
+static int (*lsCallUma)(LSHandle *, const char *, const char *, Filtro, void *, unsigned long *, void *);
 static const char *(*lsPayload)(LSMessage *);
 static void *(*loopNovo)(void *, int);
 static void  (*loopRodar)(void *);
@@ -1171,6 +1175,42 @@ static int lsChamar(const char *uri, const char *carga, Filtro cb, void *ctx,
   return ok;
 }
 
+// CHAMADA LUNA PARA QUEM NAO E O PLAYER (ondever.c: listar apps, abrir a
+// Netflix, abrir a loja). Mesmo barramento: o app roda como usuario comum no
+// jail e nao pode executar luna-send (medido na C9, 02/10: "sh: luna-send:
+// Permission denied"); o LS2 por dlopen e a porta que funciona. Uma resposta
+// so (LSCallOneReply), entregue no fio do laco do glib.
+static int iniciar(int automatico);
+typedef struct { void (*cb)(const char *, void *); void *ctx; } LunaPedido;
+static int lunaResposta(LSHandle *h, LSMessage *m, void *u) {
+  LunaPedido *p = u;
+  (void)h;
+  if (p) { if (p->cb) p->cb(lsPayload(m), p->ctx); free(p); }
+  return 1;
+}
+int video_luna(const char *uri, const char *carga, void (*cb)(const char *, void *), void *ctx) {
+  union { NvLsErro e; char folga[256]; } er;
+  unsigned long tok = 0;
+  LunaPedido *p;
+  int ok;
+  if (!bus) iniciar(1);
+  if (!bus || !lsCallUma) { printf("[video] luna %s: bus unavailable\n", uri); fflush(stdout); return 0; }
+  p = malloc(sizeof *p);
+  if (!p) return 0;
+  p->cb = cb; p->ctx = ctx;
+  memset(&er, 0, sizeof er);
+  if (lsErroIniciar) lsErroIniciar(&er);
+  ok = lsCallUma(bus, uri, carga, lunaResposta, p, &tok, &er);
+  if (!ok) {
+    printf("[video] luna %s failed: code=%d msg=%.200s\n", uri, er.e.code,
+           er.e.message ? er.e.message : "(vazio)");
+    fflush(stdout);
+    free(p);
+  }
+  if (er.e.message && lsErroLiberar) lsErroLiberar(&er);
+  return ok;
+}
+
 static void chamar(const char *metodo, const char *carga, Filtro cb) {
   char uri[128];
   snprintf(uri, sizeof uri, "luna://com.webos.media/%s", metodo);
@@ -1368,6 +1408,7 @@ static int iniciar(int automatico) {
   // Soft como acbJanelaCustom: so e usado na limpeza de um registro a meio
   // caminho; faltar numa lib nao pode custar o video inteiro.
   *(void **)(&lsUnregister) = dlsym(L, "LSUnregister");
+  *(void **)(&lsCallUma) = dlsym(L, "LSCallOneReply");
   SIM(G, loopNovo,   "g_main_loop_new");
   SIM(G, loopRodar,  "g_main_loop_run");
   SIM(G, loopParar,  "g_main_loop_quit");

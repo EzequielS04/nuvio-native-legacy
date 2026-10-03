@@ -24,5 +24,10 @@ int  android_st_teclado(const char *inicial, int max);
 int  android_st_ditar(const char *idioma);
 void android_st_fechar(void);
 int  android_st_evento(char *dst, size_t n);
+// ONDE ASSISTIR (ondever.c). Lista: "pacote\tnome" por linha, malloc (free
+// pelo chamador), NULL se falhou. Abrir/loja: 1 = abriu.
+char *android_listar_apps(void);
+int android_abrir_app(const char *pacote);
+int android_abrir_loja(const char *pacote, const char *nome);
 #endif
 #endif

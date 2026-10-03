@@ -190,3 +190,5 @@
   0,                /* sincronia da miniatura: 0 s (a documentacao: nada automatico) */
   0,                /* ao sair do player: a home, minimizando na ilha (com o relogio) */
   1,                /* espera pelos add-ons: 5 s (#221) */
+
+  0, /* app icon: Original */

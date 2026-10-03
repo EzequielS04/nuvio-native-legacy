@@ -193,6 +193,64 @@ int android_st_evento(char *dst, size_t n) {
   return r;
 }
 
+// Metodo da Activity com ate dois textos; devolve o jobject/valor pelo tipo.
+static jmethodID metodo(JNIEnv *env, jobject act, jclass *cls, const char *nome, const char *assin) {
+  *cls = (*env)->GetObjectClass(env, act);
+  return *cls ? (*env)->GetMethodID(env, *cls, nome, assin) : NULL;
+}
+
+char *android_listar_apps(void) {
+  JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+  jobject act = (jobject)SDL_AndroidGetActivity();
+  jclass cls = NULL;
+  jmethodID m;
+  char *r = NULL;
+  if (!env || !act) return NULL;
+  m = metodo(env, act, &cls, "listarApps", "()Ljava/lang/String;");
+  if (m) {
+    jstring js = (jstring)(*env)->CallObjectMethod(env, act, m);
+    if (!(*env)->ExceptionCheck(env) && js) {
+      const char *c = (*env)->GetStringUTFChars(env, js, NULL);
+      if (c) { r = strdup(c); (*env)->ReleaseStringUTFChars(env, js, c); }
+    }
+    if (js) (*env)->DeleteLocalRef(env, js);
+  }
+  if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+  if (cls) (*env)->DeleteLocalRef(env, cls);
+  (*env)->DeleteLocalRef(env, act);
+  return r;
+}
+
+static int chamarBool(const char *nome, const char *assin, const char *a, const char *b) {
+  JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+  jobject act = (jobject)SDL_AndroidGetActivity();
+  jclass cls = NULL;
+  jmethodID m;
+  jstring ja = NULL, jb = NULL;
+  int ok = 0;
+  if (!env || !act) return 0;
+  m = metodo(env, act, &cls, nome, assin);
+  if (m && !(*env)->ExceptionCheck(env)) {
+    ja = (*env)->NewStringUTF(env, a ? a : "");
+    if (ja && !(*env)->ExceptionCheck(env) && b) jb = (*env)->NewStringUTF(env, b);
+    if (ja && (!b || jb) && !(*env)->ExceptionCheck(env))
+      ok = (b ? (*env)->CallBooleanMethod(env, act, m, ja, jb)
+              : (*env)->CallBooleanMethod(env, act, m, ja)) ? 1 : 0;
+  }
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); ok = 0; }
+  if (ja) (*env)->DeleteLocalRef(env, ja);
+  if (jb) (*env)->DeleteLocalRef(env, jb);
+  if (cls) (*env)->DeleteLocalRef(env, cls);
+  (*env)->DeleteLocalRef(env, act);
+  return ok;
+}
+int android_abrir_app(const char *pacote) {
+  return chamarBool("abrirApp", "(Ljava/lang/String;)Z", pacote, NULL);
+}
+int android_abrir_loja(const char *pacote, const char *nome) {
+  return chamarBool("abrirLoja", "(Ljava/lang/String;Ljava/lang/String;)Z", pacote, nome ? nome : "");
+}
+
 // PILHA DOS FIOS. O bionic da ~1 MB a um pthread criado sem atributo; o glibc
 // da LG e do Tizen da 8 MB, e o nucleo foi escrito contando com isso (vetores
 // de CatItem, DiagAddon, VazCand... na pilha dos fios de descoberta e

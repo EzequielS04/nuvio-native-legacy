@@ -208,6 +208,7 @@ namespace NuvioTpk
                     Erro("O Nuvio nao conseguiu iniciar.", Marshal.PtrToStringAnsi(NvLib.Erro()) ?? "nv_tpk_iniciar falhou");
                     return;
                 }
+                try { Apps.Registrar(a => EcoreMainloop.PostAndWakeUp(a)); } catch (Exception e) { Etapa("note apps-init " + e.GetType().Name); }
                 Etapa("ok nv_tpk_iniciar");
             }
             catch (Exception e)
@@ -669,6 +670,7 @@ namespace NuvioTpk
             // mas mantem UM caminho de chamada nas duas rotas; na rota ELF e
             // obrigatorio, pois o DllImport-por-soname nao resolveria.
             NvVid.Ligar(resolve);
+            Apps.Ligar(resolve);
             return NvLib.Pronto;
         }
 

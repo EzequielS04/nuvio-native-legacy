@@ -20,6 +20,7 @@
 #include "faixasmkv.h"
 #include <SDL2/SDL.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -52,6 +53,10 @@ static volatile int conflito;   // ver video_tpk_log_host
 static volatile int durMs, bufferando;
 static volatile Uint32 bufferDesde;
 static unsigned sessao;
+// The host reports numeric errors from another thread. Preserve that evidence
+// for the source failure screen without guessing a codec or network cause.
+static atomic_uint erroDetalhe;
+static atomic_int temErroDetalhe;
 
 // RECONEXAO (video_reconexao.h). O evento 5 chega de qualquer fio e so ANOTA;
 // a decisao e o recarregar sao do video_bombear. A classe do erro sai do
@@ -181,8 +186,10 @@ void nv_tpk_video_evento(int tipo, int a, int b) {
     case EV_PAUSADO: tocando = 0; break;
     case EV_FIM:     terminou = 1; tocando = 0; break;
     // Sem `falhou` aqui: o video_bombear decide entre reconectar e desistir.
-    case EV_ERRO:    reconErroCod = a; reconErroPend = 1; tocando = 0;
-                     printf("[video] tpk: erro do player 0x%x (%d)\n", a, b); break;
+    case EV_ERRO:    atomic_store(&erroDetalhe, (unsigned)a);
+                     atomic_store(&temErroDetalhe, 1);
+                     reconErroCod = a; reconErroPend = 1; tocando = 0;
+                     printf("[video] tpk: player error 0x%08x (%d)\n", (unsigned)a, b); break;
     case EV_TAMANHO: largura = a; altura = b; break;
     case EV_BUFFER:
       if (a < 100 && !bufferando) { bufferando = 1; bufferDesde = SDL_GetTicks(); }
@@ -199,6 +206,7 @@ int  video_registro_negado(void) { return 0; }
 
 // Abre urlAtual no host. Serve a fonte nova e ao recarregar da reconexao.
 static int abrirSessao(void) {
+  atomic_store(&temErroDetalhe, 0);
   ativo = 1; pronto = falhou = terminou = tocando = 0;
   largura = altura = durMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
   nAudio = nLeg = 0; audioAtual = 0; legAtual = -1; legAte = 0;
@@ -520,10 +528,15 @@ void video_legenda_estilo(const VideoLegendaEstilo *e) { if (e && hEscolher) hEs
 int  video_tem_atmos(void) { return 0; }
 int  video_tem_dolby_vision(void) { return 0; }
 const char *video_hdr(void) { return "none"; }
-// Watchdog do ao vivo (#158, app.c): o host .NET nao repassa o texto do erro
-// nem o aviso de decoder, entao valem os neutros do .wgt — sem texto, e o
-// ramo "dado chegando e decoder mudo" nunca dispara aqui.
-const char *video_erro_texto(void) { return ""; }
+// Numeric host error is useful evidence even when no textual cause is exposed.
+// Formatting happens on the app thread; the callback only publishes atomics.
+const char *video_erro_texto(void) {
+  static char texto[64];
+  if (!atomic_load(&temErroDetalhe)) return "";
+  snprintf(texto, sizeof texto, "Samsung player error 0x%08x",
+           atomic_load(&erroDetalhe));
+  return texto;
+}
 int video_decoder_anunciou(void) { return 1; }
 // Escala do alvo de desenho (GPU adaptativa, LG): o host .tpk nao usa.
 void video_escala_definir(int sw, int sh) { (void)sw; (void)sh; }

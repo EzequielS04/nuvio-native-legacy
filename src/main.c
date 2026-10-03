@@ -60,6 +60,7 @@
 #include "ajustes.h"
 #include "corviva.h"
 #include "catalogo.h"
+#include "iconeapp.h"
 #include "descoberta.h"
 #include "trakt.h"
 #include "player.h"
@@ -903,6 +904,10 @@ int main(int argc, char **argv) {
   addons_carregar(dirArte);
   // Ajustes tambem sao do USUARIO, nao do pacote.
   ajustes_dir(dirDados);
+  // Icone do app (apoiadores): a arte vem do pacote; o alias do launcher do
+  // Android e a abertura do .wgt seguem o que ficou gravado (idempotente).
+  iconeapp_iniciar(dirArte);
+  iconeapp_aplicar_plataforma();
   ajustes_idioma_auto_iniciar(aoMudarIdiomaAuto);
   // A estrutura persistida só pode ser comparada após carregar a configuração.
   homeestado_iniciar();

@@ -1,36 +1,6 @@
-// A arte e a mesma amostra local do prototipo. Nao representa um trailer
-// tocando nem pede catalogo/rede ao mover o foco.
-static char uxDirArte[1024];
-void ajustes_recursos(const char *dirArte) {
-  snprintf(uxDirArte, sizeof uxDirArte, "%s", dirArte ? dirArte : "");
-}
-static int uxPreviaCena(int op, float x, float y, float w) {
-  int sec = secAtual;
-  if (!uxDirArte[0] || !(sec == 0 || sec == 1 || sec == 2 || sec == 3 || sec == 5 || sec == 9)) return 0;
-  char caminho[1100];
-  snprintf(caminho, sizeof caminho, "%s/12.jpg", uxDirArte);
-  GLuint tex = tex_obter_larg(caminho, w);
-  if (!tex && tex_falhou(caminho)) return 0;
-  float h = w / 1.67f;
-  GfxRect r = {x, y, w, h};
-  gfx_cor(r, 16 / h, 0.090f, 0.106f, 0.137f, 1);
-  if (tex) {
-    gfx_tex_aspect_atual = tex_aspecto(caminho);
-    gfx_rect(r, tex, GFX_ARTE, 0, 0, 0, 16 / h, 1, 1, 1, 0.88f);
-    gfx_tex_aspect_atual = 0;
-    gfx_rect(r, 0, GFX_VEU_CARD, 0, 0, 0, 16 / h, 0.02f, 0.025f, 0.035f, 0.92f);
-  }
-  gfx_anel(r, 16 / h, 1, 0.20f, 0.23f, 0.29f, 1);
-  TxtLinha exemplo = txt_linha(TXT_CAPTION2, "Exemplo ilustrativo", 212, 220, 235, 255);
-  txt_desenhar(exemplo, x + 20, y + h - exemplo.h - 18);
-  if (op >= 0 && ehInterruptor(op)) {
-    TxtLinha estado = txt_linha(TXT_CAPTION2, textoValor(op), 231, 237, 248, 255);
-    GfxRect badge = { x + 16, y + 16, estado.w + 32, 36 };
-    gfx_cor(badge, 0.2f, 0.065f, 0.082f, 0.12f, 0.94f);
-    txt_desenhar(estado, badge.x + 16, badge.y + (badge.h - estado.h) * 0.5f);
-  }
-  return (int)h;
-}
+// Settings temporarily shows explanations without illustrative artwork.
+// Keep the public resource hook compatible with startup and existing callers.
+void ajustes_recursos(const char *dirArte) { (void)dirArte; }
 static const char *uxResumo(int op) {
   if (op == AJ_HOME_LAYOUT) return i18n("Escolha como o destaque e as fileiras se organizam na Tela inicial.");
   return ajudaOpcao(op);
@@ -71,9 +41,11 @@ static void uxDesenharInspetor(void) {
   int categoria = focoIndice || uxCabecalho;
   int op = categoria ? -1 : focoOp;
   if (w < 200) return;
-  float ph = uxPreviaCena(op, x, y, w);
-  if (ph <= 0) ph = categoria ? desenhaPreviaCategoria(secAtual, x, y, w) : previaOpcao(op, x, y, w);
-  y += ph > 0 ? ph + 28 : 8;
+  y += 8;
+  if (!categoria && op == AJ_ICONE_APP) {
+    iconeapp_desenhar(iconeapp_atual(), (GfxRect){x, y, 112, 112}, 1, 1.0f);
+    y += 136;
+  }
   const char *titulo = categoria ? TELA[secIni[secAtual]].titulo : rotuloOpcao(op);
   y += txt_bloco(TXT_CALLOUT, titulo, 239, 241, 246, x, y, w, 36, 1, 2) + 18;
   y += txt_bloco(TXT_CAPTION, categoria ? SECAO_AJUDA[secAtual] : uxResumo(op),
@@ -238,7 +210,12 @@ static void uxDesenharEditor(void) {
       GfxRect r = { x + 48, y + 207 + (i - primeiro) * 70, w - 96, 64 };
       uxValorTexto(uxOp, v, t, sizeof t);
       desenhaSuperficie(r, 0.18f, foco ? 1 : 0, 1);
-      uxTexto(t, r.x + 24, r.y + 14, r.w - 190, foco ? AJ_TEXTO_ESCURO : 225);
+      float textoX = r.x + 24;
+      if (uxOp == AJ_ICONE_APP) {
+        iconeapp_desenhar(v, (GfxRect){r.x + 16, r.y + 6, 52, 52}, 1, 1.0f);
+        textoX = r.x + 86;
+      }
+      uxTexto(t, textoX, r.y + 14, r.w - (textoX - r.x) - 166, foco ? AJ_TEXTO_ESCURO : 225);
       if (v == uxOriginal)
         uxTexto("✓ Salvo", r.x + r.w - 158, r.y + 14, 140, foco ? AJ_TEXTO_ESCURO2 : 184);
     }

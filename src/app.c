@@ -14,6 +14,7 @@
 #include "celbotao.h"
 #include "ponteiro.h"
 #include "app.h"
+#include "iconeapp.h"
 #include "registro.h"
 #include "addonsui.h"
 #include "login.h"
@@ -94,6 +95,7 @@
 #include "rede.h"
 #include "ts_sonda.h"
 #include <unistd.h>
+#include "ondever.h"
 #include "fontepref.h"
 #include "video.h"
 #include "addons.h"
@@ -1305,6 +1307,7 @@ int app_iniciar(const char *dirArte) {
   // A FONTE LEMBRADA, do mesmo jeito e pelo mesmo motivo: ela e lida antes do
   // primeiro Reproduzir, que pode acontecer segundos depois do arranque quando
   // a pessoa abre direto no "Continuar assistindo".
+  ondever_iniciar();
   fontepref_iniciar();
   // A ARTE ESCOLHIDA A MAO (#142) tambem, antes do primeiro destaque: sem ela
   // lida, o hero abriria na foto automatica e trocaria no quadro seguinte.
@@ -3540,6 +3543,9 @@ static void desenharTelas(Uint32 agora) {
     GfxRect fundo = { 0, 0, NV_TELA_W, NV_TELA_H };
     TxtLinha t, sb;
     gfx_cor(fundo, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+    // A ABERTURA com a marca do icone escolhido (apoiadores); com o Original,
+    // a tela de sempre, so com o texto.
+    iconeapp_marca((GfxRect){ (NV_TELA_W - 160.0f) * 0.5f, 260.0f, 160.0f, 160.0f }, 1.0f);
     t = txt_linha(TXT_TITULO2, "Preparando seu catálogo…", 255, 255, 255, 255);
     txt_desenhar(t, (NV_TELA_W - t.w) * 0.5f, 460.0f);
     sb = txt_linha(TXT_BODY,

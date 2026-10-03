@@ -249,6 +249,19 @@ def contexto(txt, i):
 # "nao sei o que e": sem esta lista a ferramenta nao pode virar teste, e sem
 # virar teste ela nao impede a proxima regressao.
 IGNORAR = {
+    # Identificadores de aplicativos; nunca apresentados como texto da interface.
+    'br.com.claro-now',
+    'br.com.claro.now.smarttvclient',
+    'com.amazon.amazonvideo.livingroom',
+    'com.apple.appletv',
+    'com.apple.atve.androidtv.appletv',
+    'com.disney.disneyplus',
+    'com.disney.disneyplus-prod',
+    'com.globo.globotv',
+    'com.google.android.youtube.tv',
+    'com.netflix.ninja',
+    'com.wbd.stream',
+
     # Motivos do vigia da fonte guardada (fontevolta.c, fontevolta_decidir):
     # vao so para o log "[voltafonte] recuo para a busca: <motivo>".
     "erro do player", "clipe curto", "conferencia falhou",

@@ -16,6 +16,7 @@
 #include "rail_shot.h"
 #include "fileiras.h"
 #include "gfx.h"
+#include "iconeapp.h"
 #include "text.h"
 #include "tex_cache.h"
 #include <SDL2/SDL.h>
@@ -61,6 +62,7 @@ extern int ajustes_teste_focar_opcao(int op);
 extern void ajustes_teste_ux_captura(int cenario);
 extern void atualizacao_teste_estado(int busca, const char *tag);
 extern int ajustes_teste_op_atualizar(void);
+extern int ajustes_teste_op_icone(int escolha);
 extern int ajustes_teste_familia_previa(int op);
 extern void ajustes_teste_fonte_interface(int familia);
 extern void ajustes_teste_tema(int tema, int vidro);
@@ -180,6 +182,25 @@ int main(int argc, char **argv) {
       assert(ajustes_teste_focar_opcao(op));
       snprintf(nome, sizeof nome, "%s-atualizar-%s.png", saida, est[i].nome);
       captura(nome, w);
+    }
+    goto fim_capturas;
+  }
+
+  // A GALERIA DO "Ícone do app" (apoiadores), forcada pelo portao do dono:
+  // NUVIO_AJUSTES_ICONE=1 grava -icone-<id>.png com tres escolhas diferentes.
+  if (getenv("NUVIO_AJUSTES_ICONE")) {
+    static const int esc[] = { 0, 1, 7 };
+    setenv("NUVIO_APOIADOR", "1", 1);
+    apoiador_reler();
+    iconeapp_iniciar("deploy/app/art");
+    for (i = 0; i < 3; i++) {
+      int op = ajustes_teste_op_icone(esc[i]);
+      assert(ajustes_teste_focar_opcao(op));
+      snprintf(nome, sizeof nome, "%s-icone-%s.png", saida, iconeapp_id(esc[i]));
+      SDL_Event e = {0}; e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_RETURN;
+      ajustes_evento(&e);
+      captura(nome, w);
+      e.key.keysym.sym = SDLK_ESCAPE; ajustes_evento(&e);
     }
     goto fim_capturas;
   }

@@ -42,7 +42,7 @@ DESTINO="${NUVIO_ARTE_ESTAGIO:-build/art-pacote}"
 rm -rf "$DESTINO"
 mkdir -p "$DESTINO"
 
-for d in icones badges marcas prov editorial logo poster ep elenco; do
+for d in icones icones-app badges marcas prov editorial logo poster ep elenco; do
   [ -d "$ORIGEM/$d" ] && cp -R "$ORIGEM/$d" "$DESTINO/"
 done
 # Backdrops da home: os .jpg numerados na raiz.

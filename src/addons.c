@@ -7,6 +7,7 @@
 #include "rede.h"
 #include "js.h"
 #include "marco.h"
+#include "ondever.h"
 #include "fontecache.h"
 #include "sessao.h"
 #include "perfis.h"
@@ -1704,6 +1705,7 @@ void addons_definir_origem(const char *base) {
 }
 
 static void buscarPedido(const char *imdb, const char *tipo, int forcar) {
+  ondever_pedir(imdb, tipo && (!strcmp(tipo, "tv") || !strcmp(tipo, "series")), 0);
   int serie, renovar;
   if (!imdb || !*imdb) return;
   resumo.valido = 0;

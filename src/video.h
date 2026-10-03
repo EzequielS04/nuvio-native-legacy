@@ -304,4 +304,8 @@ void video_forcar_sdr(void);
 
 void video_encerrar(void);
 
+// One-reply webOS LS2 request; callback runs on the GLib thread.
+#if !defined(NV_TPK) && !defined(NV_ANDROID)
+int video_luna(const char *uri, const char *payload, void (*callback)(const char *, void *), void *context);
+#endif
 #endif

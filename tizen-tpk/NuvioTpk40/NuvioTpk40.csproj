@@ -13,6 +13,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program40.cs" />
+    <Compile Include="../Apps.cs" />
     <Compile Include="../Video.cs" />
     <Compile Include="../Carga.cs" />
     <PackageReference Include="Tizen.NET" Version="4.0.*"><ExcludeAssets>Runtime</ExcludeAssets></PackageReference>
