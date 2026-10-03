@@ -5904,16 +5904,17 @@ static void reacaoPendente(float s) {
   reacao_detalhe_dica(cat_item(idx), livre ? s : 0.0f);
 }
 
-void detail_desenhar(Uint32 agora) {
-  if (!aberto) return;
-  // COR VIVA: a pagina do titulo manda na cor, acima da home que pode estar
-  // desenhada por baixo (a prioridade resolve o mesmo quadro). A chave e a
-  // MESMA arte que o fundo pede em tela cheia logo abaixo.
-  { const char *cv = arteDe(idx), *lg = logoDe(idx);
-    if (cv) corviva_definir(cv, CORVIVA_DETALHE);
-    if (lg) corviva_definir_logo(lg, CORVIVA_DETALHE); }
-  float s = suave(t), a2 = fase2();
-
+// O FUNDO DA PAGINA DO TITULO, inteiro, numa funcao so.
+//
+// Tudo o que pinta ATRAS do conteudo passa por aqui: o chao #0D0D0D (quando a
+// home ainda aparece por baixo), a arte do titulo com a vinheta, o apagar para
+// 15% quando a pagina rola, o furo do trailer de fundo e o carrossel da
+// Dinamica. E o caso "Arte" do ajuste Fundo (Arte / Arte borrada / Frost) que
+// esta nascendo em outro ramo (fundo.h, fundo_desenhar): quando os dois se
+// juntarem, a troca e AQUI e em mais lugar nenhum. O conteudo da pagina nao
+// depende da arte nitida para ter contraste — o veu de leitura do heroi
+// (veuLeitura) e desenhado por cima, fora desta funcao.
+static void detalheFundo(float s) {
   if (!detail_cobre_tela() && !carDesenhaFundo()) {
     GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, s);   // #0d0d0d, o fundo do web
@@ -5945,18 +5946,6 @@ void detail_desenhar(Uint32 agora) {
   // ganhando opacidade sobre a arte identica que ja estava la, o que dava um
   // clarao no meio da transicao.
   GfxRect alvo; float aEntrada;
-  // TRAILER EM TELA CHEIA: a tela inteira e furo, nada da pagina por cima.
-  // No .tpk, ate o recorte do zoom assentar (trailer_mostra_video, #178),
-  // preto opaco no lugar do furo: o plano ja pode ter o quadro inteiro com
-  // tarja, e ele e que nao deve aparecer. Na LG e no .wgt, o furo de sempre.
-  if (trailer_cheia()) {
-    GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-    if (trailer_mostra_video()) gfx_furo(tela);
-    else gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
-    { const CatItem *ct = cat_item(idx);
-      trailer_osd_desenhar(ct ? ct->titulo : "", 1.0f); }
-    return;
-  }
   backdropRect(&alvo, &aEntrada);
   const char *arte = arteDe(idx);
   if (carDesenhaFundo()) carFundo();
@@ -5989,6 +5978,33 @@ void detail_desenhar(Uint32 agora) {
                      tex ? aEntrada * (1.0f - 0.85f * pg) : 1.0f, pg);
   }
 
+
+}
+
+void detail_desenhar(Uint32 agora) {
+  if (!aberto) return;
+  // COR VIVA: a pagina do titulo manda na cor, acima da home que pode estar
+  // desenhada por baixo (a prioridade resolve o mesmo quadro). A chave e a
+  // MESMA arte que o fundo pede em tela cheia logo abaixo.
+  { const char *cv = arteDe(idx), *lg = logoDe(idx);
+    if (cv) corviva_definir(cv, CORVIVA_DETALHE);
+    if (lg) corviva_definir_logo(lg, CORVIVA_DETALHE); }
+  float s = suave(t), a2 = fase2();
+
+  // TRAILER EM TELA CHEIA: a tela inteira e furo, nada da pagina por cima.
+  // No .tpk, ate o recorte do zoom assentar (trailer_mostra_video, #178),
+  // preto opaco no lugar do furo: o plano ja pode ter o quadro inteiro com
+  // tarja, e ele e que nao deve aparecer. Na LG e no .wgt, o furo de sempre.
+  if (trailer_cheia()) {
+    GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+    gfx_sem_recorte();
+    if (trailer_mostra_video()) gfx_furo(tela);
+    else gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    { const CatItem *ct = cat_item(idx);
+      trailer_osd_desenhar(ct ? ct->titulo : "", 1.0f); }
+    return;
+  }
+  detalheFundo(s);
 
   // O hero ROLA com o documento: ele nao some nem e substituido por um
   // cabecalho fixo. Era isso que fazia a pagina do port parecer outra tela em
