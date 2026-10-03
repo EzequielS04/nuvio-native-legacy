@@ -1,4 +1,6 @@
 #include "trailer.h"
+#include "plrui.h"
+#include "text.h"
 #include "layout.h"
 #include "ajustes.h"
 #include "trailerfonte.h"
@@ -527,3 +529,55 @@ void trailer_atualizar(Uint32 agora) {
 }
 
 int trailer_falhou(void) { return falhouUltima; }
+
+// O OSD DO TRAILER EM TELA CHEIA (Glass UI, mockup de 03/10, proposta
+// aprovada): so com o trailer PAUSADO — o trailer e o proprio heroi. A pilula
+// da ilha diz o que e ("Trailer · titulo"), a barra fina do player embaixo e
+// o tempo; o unico botao e Continuar (o que o OK faz). Quem desenha a tela
+// cheia (detail.c) chama isto por cima do furo.
+int trailer_pausado(void) {
+#ifdef __EMSCRIPTEN__
+  return aberto && cheia && trailer_js_pausado();
+#else
+  return aberto && cheia && pausado;
+#endif
+}
+void trailer_osd_desenhar(const char *titulo, float a) {
+  double pos = video_pos(), dur = video_duracao();
+  if (!trailer_pausado() || a < 0.01f) return;
+  gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 260.0f }, 1, 1.38f, 1.0f, 0.52f * a);
+  gfx_veu_css((GfxRect){ 0, NV_TELA_H - 300.0f, NV_TELA_W, 300.0f }, 0, 1.0f, 1.0f, 0.60f * a);
+  { TxtLinha l1 = txt_linha(TXT_ILHA_NOME, "Trailer", 243, 242, 239, 255);
+    TxtLinha l2 = txt_linha_corta(TXT_ILHA_CORPO, titulo ? titulo : "", 243, 242, 239, 179, 900.0f);
+    float w = 24.0f + 24.0f + 12.0f + (float)l1.w + (l2.w ? 12.0f + 1.0f + 12.0f + (float)l2.w : 0.0f) + 24.0f;
+    GfxRect p = { 96.0f, 48.0f, w, 56.0f };
+    float x = p.x + 24.0f, yc = p.y + 28.0f;
+    plrui_material(p, 28.0f, 0, a);
+    gfx_icone((GfxRect){ x, yc - 12.0f, 24.0f, 24.0f }, "pl_clapperboard", 1, 1, 1, a);
+    x += 36.0f;
+    txt_desenhar_alpha(l1, x, yc - (float)l1.h * 0.5f, a);
+    x += (float)l1.w + 12.0f;
+    if (l2.w) { plrui_sep(x, yc, a); txt_desenhar_alpha(l2, x + 13.0f, yc - (float)l2.h * 0.5f, a); } }
+  if (dur > 1.0) {
+    char t1[24], d[24], t2[32];
+    plrui_barra(96.0f, 1000.0f, NV_TELA_W - 192.0f, (float)(pos / dur),
+                (float)(video_buffer_fim() / dur), 0, NULL, 0, a);
+    plrui_tempo(t1, sizeof t1, pos); plrui_tempo(d, sizeof d, dur);
+    snprintf(t2, sizeof t2, "/ %s", d);
+    { TxtLinha l2 = txt_linha(TXT_ILHA_NOME, t2, 243, 242, 239, 128);
+      TxtLinha l1 = txt_linha(TXT_ILHA_NOME, t1, 243, 242, 239, 235);
+      float xr = NV_TELA_W - 96.0f - l2.w;
+      txt_desenhar_alpha(l2, xr, 916.0f, a);
+      txt_desenhar_alpha(l1, xr - 8.0f - l1.w, 916.0f, a); }
+  }
+  { TxtLinha l = txt_linha(TXT_G21B, "Continuar", 0, 0, 0, 255);
+    GfxRect b = { 96.0f, 896.0f, 22.0f + 28.0f + 12.0f + (float)l.w + 28.0f, 68.0f };
+    float k = plrui_tinta() / 255.0f;
+    plrui_pilula_foco(b, a);
+    gfx_icone((GfxRect){ b.x + 22.0f, b.y + 20.0f, 28.0f, 28.0f }, "pl_play-f", k, k, k, a);
+    l = txt_linha(TXT_G21B, "Continuar", plrui_tinta(), plrui_tinta(), plrui_tinta(), 255);
+    txt_desenhar_alpha(l, b.x + 22.0f + 28.0f + 12.0f, b.y + (68.0f - (float)l.h) * 0.5f, a); }
+}
+#ifdef NV_SHOT_HOOKS
+void trailer_shot_pausado(int sim) { aberto = cheia = sim; pausado = sim; }
+#endif

@@ -22,6 +22,7 @@
 #include "recomenda.h"
 #include "salvosintro.h"
 #include "text.h"
+#include "plrui.h"
 #include "idioma.h"
 #include "idiomacod.h"
 #include <math.h>
@@ -1075,9 +1076,11 @@ static float layoutModalAviso(GfxRect m, float a, int desenha) {
   { float x = ax;
     for (i = 0; i < nBotoes(); i++) {
       const char *rot = rotuloBotao(i), *ic = iconeBotao(i);
-      float w = botao_largura(rot, ic, i == 0);
+      float w = plrui_botao_largura(rot, ic);
       GfxRect r = { x, by, w, BOTAO_H_SECUNDARIO };
-      botao_pilula(r, rot, ic, modalFocoA[i], i == 0, 0, a);
+      // O BOTAO DE ILHA do Glass UI (plrui_botao): repouso branco 8% (solido
+      // #24262C), foco cheio no acento com a luz, sem aro.
+      plrui_botao(x, by + (BOTAO_H_SECUNDARIO - 60.0f) * 0.5f, rot, ic, modalFocoA[i], a);
       if (a > 0.3f) ponteiro_alvo(r.x, r.y, r.w, r.h, pontFoco, NULL, i, 0);
       x += w + BOTAO_GAP;
     } }
@@ -1156,14 +1159,12 @@ static void desenharModal(GfxRect m, float a) {
       else gfx_cor((GfxRect){ cx, sy + (float)t.h * 0.5f - 5.0f, 10.0f, 10.0f }, 0.5f, cr, cg, cb, a);
       txt_desenhar_alpha(t, cx + 20.0f, sy, a);
     } else {
-      float bx = cx + (float)t.w + 18.0f, bw = cx + cw - bx;
+      // O trilho de 220 primeiro e o tempo depois (mockup do player, 03/10).
       float pr = c->progresso < 0.0f ? 0.0f : c->progresso > 1.0f ? 1.0f : c->progresso;
-      txt_desenhar_alpha(t, cx, sy, a);
-      if (bw > 40.0f) {
-        GfxRect tr = { bx, sy + (float)t.h * 0.5f - 2.0f, bw, 4.0f };
-        gfx_cor(tr, 0.5f, 1.0f, 1.0f, 1.0f, 0.14f * a);
-        if (tr.w * pr > 4.0f) gfx_cor((GfxRect){ tr.x, tr.y, tr.w * pr, 4.0f }, 0.5f, cr, cg, cb, a);
-      }
+      GfxRect tr = { cx, sy + (float)t.h * 0.5f - 2.0f, 220.0f, 4.0f };
+      gfx_cor(tr, 0.5f, 1.0f, 1.0f, 1.0f, 0.16f * a);
+      if (tr.w * pr > 4.0f) gfx_cor((GfxRect){ tr.x, tr.y, tr.w * pr, 4.0f }, 0.5f, cr, cg, cb, a);
+      txt_desenhar_alpha(t, cx + 220.0f + 14.0f, sy, a);
     } }
   if (c->sinopse[0]) {
     int linhas = (int)((sy - 12.0f - y) / 30.0f);
@@ -1180,9 +1181,11 @@ static void desenharModal(GfxRect m, float a) {
   { float x = ax;
     for (i = 0; i < nBotoes(); i++) {
       const char *rot = rotuloBotao(i), *ic = iconeBotao(i);
-      float w = botao_largura(rot, ic, i == 0);
+      float w = plrui_botao_largura(rot, ic);
       GfxRect r = { x, by, w, BOTAO_H_SECUNDARIO };
-      botao_pilula(r, rot, ic, modalFocoA[i], i == 0, 0, a);
+      // O BOTAO DE ILHA do Glass UI (plrui_botao): repouso branco 8% (solido
+      // #24262C), foco cheio no acento com a luz, sem aro.
+      plrui_botao(x, by + (BOTAO_H_SECUNDARIO - 60.0f) * 0.5f, rot, ic, modalFocoA[i], a);
       if (a > 0.3f) ponteiro_alvo(r.x, r.y, r.w, r.h, pontFoco, NULL, i, 0);
       x += w + BOTAO_GAP;
     } }
@@ -1371,6 +1374,13 @@ void ilha_desenhar(Uint32 agora) {
   if (mostra < 0) { mostra = alvo; conteudoA = 0.0f; }
   { const char *ch = alvo == M_AVISO ? cur.chave : alvo == M_CARTAO ? cartoes[cartaoVez].chave : "";
     trocando = mostra != alvo || strcmp(mostraChave, ch);
+    // EM VOO a pilula ja esta aberta com o cartao esperando o quadro (mockup
+    // do player, "saida-voo"): a troca de conteudo nao espera o fade.
+    if (trocando && voo && alvo == M_CARTAO) {
+      mostra = alvo; conteudoA = 1.0f; trocando = 0;
+      snprintf(mostraChave, sizeof mostraChave, "%s", ch);
+      mostraC = cartoes[cartaoVez]; mostraQual = cartaoVez;
+    }
     if (trocando) {
       conteudoA = ajustes_animacoes_reduzidas() ? 0.0f : anim_mola(conteudoA, 0.0f, dt, 26.0f);
       if (conteudoA < 0.06f) {
@@ -1466,6 +1476,12 @@ void ilha_desenhar(Uint32 agora) {
     }
     ultRect = R; ultRectOk = 1;
     if (coberta) { coberta = 0; return; }
+    // O MODAL ESCURECE A TELA DE TRAS (veu do mockup, 40% / solido 42%): a
+    // ilha crescida e a coisa na frente, a home fica atras.
+    if (modalT > 0.0f) {
+      float k = modalT > 1.0f ? 1.0f : modalT;
+      gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, (ajustes_vidro() ? 0.40f : 0.42f) * k * A);
+    }
     // Sombra caida, curta: separa a pilula de arte clara sem virar halo. No
     // modal ela cresce junto (e o tamanho dele + folga, nunca a tela).
     { float k = modalT > 0.0f ? (modalT > 1.0f ? 1.0f : modalT) : 0.0f;

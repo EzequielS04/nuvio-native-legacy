@@ -58,4 +58,8 @@ int  posplay_indice(void);
 // proximo episodio (temporada/episodio) ou titulo relacionado (indice).
 int  posplay_pediu_episodio(int *temporada, int *episodio);
 int  posplay_pediu_titulo(void);
+#ifdef NV_SHOT_HOOKS
+void posplay_shot(int idxCatalogo, int ehSerie, int t, int e, Uint32 fecha);
+#endif
+
 #endif

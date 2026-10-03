@@ -72,7 +72,10 @@ typedef struct {
   char res[16];                      // "4K", "1080p", "720p" (viram marca), "SD" ou ""
   const char *aspecto;               // rotulo do modo de proporcao em vigor
   int infoAberta, nInfo;
-  char info[AV_INFO_LINHAS][72];
+  char info[AV_INFO_LINHAS][72];     // "Rotulo: valor"
+  // As MESMAS marcas do OSD de filme (FormatoMarca) no topo do painel de
+  // Informacoes, no lugar de "Imagem: HDR10" em texto.
+  int nMarcas, marcas[4];
 } AoVivoOsd;
 // Foco, barra e botoes leem o acento de ajustes_acento() (via botoes.c), como
 // o guia: o OSD nao recebe cor de quem chama.
@@ -87,6 +90,9 @@ typedef struct {
 void aovivo_banner_desenhar(const AoVivoBanner *b, float a);
 
 // Cartao de erro no estilo do modo ao vivo (causas do provedor / da conta).
+// Os botoes do modal do erro do canal (Recarregar, Fonte, Guia): `foco` em
+// 0..2. Quem trata a tecla e player.c.
+void aovivo_erro_foco(int foco);
 void aovivo_erro_desenhar(const char *nome, const char *logo, const char *titulo,
                           const char *dica, float a);
 

@@ -47,6 +47,14 @@ GLuint seekr_quadro(double posSeg, double *cueSeg);
 // texs[0..2] e cueSeg[0..2] nessa ordem (0 / -1 onde nao ha). 1 quando ha a
 // atual (ou a anterior a ela, enquanto a nova nao chega).
 int seekr_quadros(double posSeg, int n, GLuint *texs, double *cueSeg);
+// 1 quando a atual do ultimo seekr_quadros e a ULTIMA USADA, no lugar da que
+// ainda esta chegando (a tela mostra que esta carregando).
+int seekr_quadro_velho(void);
+#ifdef NV_SHOT_HOOKS
+// Capturas: `est` (SEEKR_*), os quadros anterior/atual/seguinte fixos e se a
+// atual e a "ultima usada".
+void seekr_shot(int est, const GLuint *t, const double *cue, int velho);
+#endif
 // Fim do avanco: solta a folha DECODIFICADA (3200x1800, ~22 MB medidos) e fica
 // so o JPEG, para a proxima busca na mesma folha nao ir a rede.
 void seekr_ocioso(void);

@@ -15,7 +15,10 @@
 #include "video.h"
 #include "vistoep.h"
 #include "player.h"
+#include "plrui.h"
+#include "plrilha.h"
 #include <stdio.h>
+#include <math.h>
 #include <string.h>
 
 // Constantes do web 1.0.6 (postPlayRecommendationController), nao escolhidas
@@ -37,7 +40,7 @@
 #define PP_CARD_W  212.0f
 #define PP_CARD_H  318.0f
 #define PP_GAP      24.0f
-#define PP_MAX       5
+#define PP_MAX       8    // quantos cartazes cabem na ilha de 1728 (182 + 30)
 #define PP_PAD      32.0f
 #define PP_ROTULO_H 44.0f
 // Cartao do proximo episodio, no molde do de episodios.c (thumb 184x130),
@@ -49,16 +52,6 @@
 #define PP_EP_RAIO    24.0f
 // PASSO entre linhas, nao vao: txt_bloco poe a linha i em y + i*leading.
 #define PP_LD_SIN     28.0f
-
-static void corFocoPosplay(float *r, float *g, float *b) {
-  float ar, ag, ab, lum, k = 0.74f;
-  ajustes_acento(&ar, &ag, &ab);
-  lum = 0.2126f * ar + 0.7152f * ag + 0.0722f * ab;
-  if (lum > 0.88f) k = 0.88f;
-  *r = 0.055f + (ar - 0.055f) * k;
-  *g = 0.058f + (ag - 0.058f) * k;
-  *b = 0.068f + (ab - 0.068f) * k;
-}
 
 static int    visivel, serie, idx = -1, foco;
 // O titulo de `idx` (#190). O catalogo e refeito com o player aberto e a mesma
@@ -395,164 +388,147 @@ int posplay_desfocar_thumb(int idxCatalogo, int temporada, int episodio) {
   return !(ci && vistoep_estado(ci->imdb, temporada, episodio) == 1);
 }
 
+// O ANEL DA CONTAGEM (26, traco 3): o trilho a 16% e o que resta no acento,
+// em pontos ao longo do circulo (nao ha arco no gfx).
+static void anelContagem(float cx, float cy, float frac, float a) {
+  float ar, ag, ab;
+  int k, n = 36;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_anel((GfxRect){ cx - 12.0f, cy - 12.0f, 24.0f, 24.0f }, 0.5f, 3.0f, 1, 1, 1, 0.16f * a);
+  for (k = 0; k < n; k++) {
+    float t = (float)k / (float)n, ang = t * 6.2831853f;
+    if (t > frac) break;
+    gfx_cor((GfxRect){ cx + sinf(ang) * 10.5f - 1.5f, cy - cosf(ang) * 10.5f - 1.5f, 3.0f, 3.0f }, 0.5f, ar, ag, ab, a);
+  }
+}
+
+// GLASS UI (mockup de 03/10, "proximo" e "mais-como-este"): o video ja
+// encolheu para 52% no topo (player.c); embaixo dele, UMA ILHA. Na serie, o
+// cartao do proximo episodio sem o retangulo de acento que fingia contorno:
+// still grande com "T1E4 · 56 min", "A seguir em 8 s" com o anel da
+// contagem, nome, data e duracao, sinopse e "Comecar agora" (o que o OK faz);
+// as dicas de Baixo/Voltar vao DENTRO da ilha (caiam em y~1046, overscan).
+// No filme, os relacionados na margem de 96 (era 64), o cartaz focado sobe
+// com escala e sombra (saiu o anel de 4 px) e o nome dele vai ao cabecalho.
 void posplay_desenhar(Uint32 agora, float baseY) {
-  float a = anim, x = NV_DETP_X;
+  float a = anim, x = 96.0f;
+  (void)baseY;
   if (a < 0.01f) return;
   { int i = cat_indice_vivo(idx, idTitulo);
     if (i < 0) return;
     idx = i; }
 
   if (serie) {
-    // CARTAO DE EPISODIO, e nao a caixa com texto solto da primeira versao. O
-    // dono pediu "igual o card de episodios": still a esquerda, selo T#E# sobre
-    // ele, nome e estado a direita. As medidas sao as de episodios.c (thumb
-    // 184x130) multiplicadas para a distancia de um painel de fim de episodio.
     const CatItem *ci = cat_item(idx);
     const CatEp *px = NULL;
     int i, n = cat_n_episodios(idx);
-    float cardW = PP_EP_W, cardH = PP_EP_H;
-    float cy = baseY - cardH;
     float sobe = (1.0f - a) * 20.0f;
+    GfxRect ilha = { x, 660.0f + sobe, 1180.0f, 308.0f }, tr;
     int resta = fecharEm > agora ? (int)((fecharEm - agora + 999) / 1000) : 0;
-    char cab[64], num[40];
-    GfxRect card, tr;
-
+    char cab[64], num[64], dur[32];
     for (i = 0; i < n; i++) {
       const CatEp *e = cat_episodio(idx, i);
       if (e && e->temporada == proxT && e->episodio == proxE) { px = e; break; }
     }
-    cy += sobe;
-
-    { TxtLinha t;
-      if (resta > 0) snprintf(cab, sizeof cab, i18n("A seguir em %d s"), resta);
-      else           snprintf(cab, sizeof cab, "A seguir");
-      t = txt_linha(TXT_DET_META2, cab, 214, 216, 222, 255);
-      txt_desenhar_alpha(t, x, cy - t.h - 12.0f, a * 0.92f); }
-
-    // O cartao SEMPRE tem foco: ele e o unico alvo desta tela. Sem o anel ele
-    // nao se le como algo que responde ao OK — o "nao ta pra clicar" do
-    // relatorio era metade dado (o OK ja funcionava) e metade aparencia.
-    card.x = x; card.y = cy; card.w = cardW; card.h = cardH;
-    { float fr, fg, fb;
-      GfxRect anel = { card.x - 3, card.y - 3, card.w + 6, card.h + 6 };
-      corFocoPosplay(&fr, &fg, &fb);
-      gfx_cor(anel, PP_EP_RAIO / anel.h, fr, fg, fb, a); }
-    gfx_cor(card, PP_EP_RAIO / cardH, .085f, .085f, .095f, a);
-
-    tr.x = card.x + PP_EP_PAD; tr.y = card.y + PP_EP_PAD;
-    tr.w = PP_EP_THUMB_W; tr.h = cardH - PP_EP_PAD * 2.0f;
-    { const char *arte = (px && px->thumb[0]) ? px->thumb
-                       : (ci ? ci->backdrop : "");
+    plrui_material(ilha, 36.0f, 0, a);
+    tr = (GfxRect){ ilha.x + 28.0f, ilha.y + 28.0f, 448.0f, 252.0f };
+    { const char *arte = (px && px->thumb[0]) ? px->thumb : (ci ? ci->backdrop : "");
       GLuint t = arte[0] ? tex_obter_larg(arte, tr.w) : 0;
-      // DESFOCAR NAO ASSISTIDOS (blurUnwatchedEpisodes, #177). O cartao do
-      // fim do episodio mostrava o still nitido do proximo — justo o spoiler
-      // que o ajuste esconde no detalhe e na folha. Mesma regra deles: so o
-      // que o mapa afirma como visto fica nitido; o "nao sei" desfoca. Sem
-      // copia pronta o fundo cinza fica por um quadro, nunca a arte nitida.
-      if (t && ajustes_desfocar_nao_assistidos() &&
-          !(ci && vistoep_estado(ci->imdb, proxT, proxE) == 1))
-        t = gfx_desfocado(t, arte);
-      gfx_cor(tr, PP_EP_RAIO / tr.h, .19f, .19f, .20f, a);
+      gfx_cor(tr, 22.0f / tr.h, 0.102f, 0.106f, 0.125f, a);
+      // DESFOCAR NAO ASSISTIDOS (#177): o proximo e o que a pessoa nao viu.
       // Sem copia desfocada pronta, gfx_desfocado devolve 0 e fica o fundo.
       if (t && posplay_desfocar_thumb(idx, proxT, proxE)) t = gfx_desfocado(t, arte);
       if (t) {
         gfx_tex_aspect_atual = tex_aspecto(arte);
-        gfx_rect(tr, t, GFX_CARD, 0, 0, 0, PP_EP_RAIO / tr.h, 0, 0, 0, a);
+        gfx_rect(tr, t, GFX_CARD, 0, 0, 0, 22.0f / tr.h, 0, 0, 0, a);
         gfx_tex_aspect_atual = 0.0f;
       } }
+    dur[0] = 0;
+    if (px) desc_duracao_txt(px->duracao, dur, sizeof dur);
     snprintf(num, sizeof num, i18n("T%dE%d"), proxT, proxE);
-    { GfxRect selo = { tr.x + 10.0f, tr.y + tr.h - 44.0f, 96.0f, 34.0f };
-      gfx_cor(selo, 0.2f, .025f, .025f, .03f, 0.92f * a);
-      txt_desenhar_alpha(txt_linha(TXT_MINI, num, 240, 240, 242, 255),
-                         selo.x + 14.0f, selo.y + 6.0f, a); }
-
-    { float tx = tr.x + tr.w + 28.0f;
-      float tw = card.w - (tx - card.x) - PP_EP_PAD;
-      float ty = card.y + PP_EP_PAD + 4.0f;
-      TxtLinha t = txt_linha_corta(TXT_TITULO3,
-                                   (px && px->nome[0]) ? px->nome : num,
-                                   255, 255, 255, 255, tw);
-      txt_desenhar_alpha(t, tx, ty, a);
-      ty += t.h + 8.0f;
-      if (px && (px->data[0] || px->duracao[0])) {
+    if (dur[0]) { size_t k = strlen(num); snprintf(num + k, sizeof num - k, " \xc2\xb7 %s", dur); }
+    { TxtLinha l = txt_linha(TXT_MINI, num, 243, 242, 239, 255);
+      GfxRect chip = { tr.x + 14.0f, tr.y + tr.h - 14.0f - 32.0f, (float)l.w + 24.0f, 32.0f };
+      if (ajustes_vidro()) gfx_cor(chip, 0.5f, 0.055f, 0.059f, 0.071f, 0.80f * a);
+      else gfx_cor(chip, 0.5f, 0.082f, 0.086f, 0.102f, a);
+      txt_desenhar_alpha(l, chip.x + 12.0f, chip.y + (32.0f - (float)l.h) * 0.5f, a); }
+    { float tx = tr.x + tr.w + 30.0f, tw = ilha.x + ilha.w - 28.0f - tx, ty = ilha.y + 28.0f;
+      if (resta > 0) snprintf(cab, sizeof cab, i18n("A seguir em %d s"), resta);
+      else snprintf(cab, sizeof cab, "%s", i18n("A seguir"));
+      anelContagem(tx + 13.0f, ty + 13.0f, resta > 0 ? (float)resta / (float)PP_CONTAGEM_S : 1.0f, a);
+      plrui_kicker(cab, tx + 26.0f + 12.0f, ty + 4.0f, 243, 242, 239, a * 0.62f);
+      ty += 26.0f + 12.0f;
+      { TxtLinha t = txt_linha_corta(TXT_ILHA_TITULO, (px && px->nome[0]) ? px->nome : num, 243, 242, 239, 255, tw);
+        txt_desenhar_alpha(t, tx, ty, a); ty += (float)t.h + 6.0f; }
+      if (px && (px->data[0] || dur[0])) {
         char est[96];
-        snprintf(est, sizeof est, "%s%s%s", px->data,
-                 px->data[0] && px->duracao[0] ? " · " : "", px->duracao);
-        { TxtLinha l = txt_linha_corta(TXT_PG_FIM, est, 186, 188, 194, 255, tw);
-          txt_desenhar_alpha(l, tx, ty, a * 0.92f);
-          ty += l.h + 8.0f; } }
+        snprintf(est, sizeof est, "%s%s%s", px->data, px->data[0] && dur[0] ? " \xc2\xb7 " : "", dur);
+        { TxtLinha l = txt_linha_corta(TXT_ILHA_SUB, est, 243, 242, 239, 140, tw);
+          txt_desenhar_alpha(l, tx, ty, a); ty += (float)l.h + 10.0f; } }
       if (px && px->sinopse[0])
-        txt_bloco(TXT_PG_FIM, px->sinopse, 186, 188, 194, tx, ty, tw,
-                  PP_LD_SIN, a * 0.88f, 2); }
-
-    { TxtLinha t = txt_linha(TXT_DET_META2,
-                             "OK para começar agora  ·  Baixo para o player  ·  Voltar para ficar",
-                             150, 154, 163, 255);
-      txt_desenhar_alpha(t, x, card.y + cardH + 14.0f, a * 0.85f); }
+        txt_bloco_corta(TXT_ILHA_SUB, px->sinopse, 243, 242, 239, tx, ty, tw, 28.5f, a * 0.68f, 2);
+      { float by = ilha.y + ilha.h - 28.0f - 60.0f;
+        float bw = plrui_botao(tx, by, "Começar agora", "pl_play-f", 1.0f, a);
+        const char *k[2] = { "\xe2\x86\x93", "Voltar" }, *r[2] = { "Voltar ao player", "Ficar nos créditos" };
+        plrui_dicas(k, r, 2, tx + bw + 22.0f, by + 30.0f, 0, a); } }
     return;
   }
 
   // FILME: os relacionados que o Trakt ja deu ao abrir o titulo.
   { int n = extras_n_relacionados(), i;
-    float y, sobe = (1.0f - a) * 20.0f;
-    TxtLinha cab;
+    float sobe = (1.0f - a) * 20.0f;
+    GfxRect ilha = { x, 636.0f + sobe, NV_TELA_W - 192.0f, NV_TELA_H - 40.0f - 636.0f };
+    float y = ilha.y + 26.0f, cx;
     if (n > PP_MAX) n = PP_MAX;
-    cab = txt_linha(TXT_ROW_TITULO, "Mais como este", 255, 255, 255, 255);
-    y = baseY - PP_CARD_H - PP_ROTULO_H - (float)cab.h - 18.0f + sobe;
-
-    // FUNDO PROPRIO. O gradiente do rodape e forte so na base, e esta fileira
-    // vive acima dele: sobre uma cena clara os cartazes e os nomes sumiam. Um
-    // painel com preenchimento proprio nao depende do que esta atras — mesma
-    // decisao do painel de pausa.
-    { GfxRect fundo = { x - PP_PAD, y - PP_PAD,
-                        NV_TELA_W - (x - PP_PAD) * 2.0f,
-                        (float)cab.h + 18.0f + PP_CARD_H + PP_ROTULO_H + PP_PAD * 2.0f };
-      gfx_cor(fundo, PP_EP_RAIO / fundo.h, .04f, .04f, .05f, 0.86f * a); }
-
-    txt_desenhar_alpha(cab, x, y, a);
-    y += (float)cab.h + 18.0f;
-    for (i = 0; i < n; i++) {
-      float cx = x + (float)i * (PP_CARD_W + PP_GAP);
-      const char *po = extras_relacionado_poster(i);
-      GLuint t = po[0] ? tex_obter_larg(po, PP_CARD_W) : 0;
-      float raio = ajustes_raio_poster_px() / PP_CARD_W;
-      int sel = (i == foco);
-      GfxRect r = { cx, y, PP_CARD_W, PP_CARD_H };
-      if (sel) {
-        float fr, fg, fb;
-        GfxRect anel = { cx - 4, y - 4, PP_CARD_W + 8, PP_CARD_H + 8 };
-        corFocoPosplay(&fr, &fg, &fb);
-        gfx_cor(anel, ajustes_raio_poster_px() / (PP_CARD_W + 8.0f), fr, fg, fb, a);
+    plrui_material(ilha, 36.0f, 0, a);
+    { float kx = ilha.x + 34.0f, yc = y + 15.0f;
+      kx += plrui_kicker("Mais como este", kx, yc - 9.0f, 243, 242, 239, a * 0.45f) + 16.0f;
+      if (foco < n) {
+        TxtLinha t = txt_linha_corta(TXT_ILHA_SECAO, extras_relacionado_titulo(foco), 243, 242, 239, 255, 700.0f);
+        txt_desenhar_alpha(t, kx, yc - (float)t.h * 0.5f, a);
+        kx += (float)t.w + 16.0f;
+        if (extras_relacionado_ano(foco)[0]) {
+          TxtLinha l = txt_linha(TXT_G18R, extras_relacionado_ano(foco), 243, 242, 239, 128);
+          txt_desenhar_alpha(l, kx, yc - (float)l.h * 0.5f + 2.0f, a);
+        }
       }
+      { const char *k[3] = { "OK", "\xe2\x86\x93", "Voltar" }, *r[3] = { "Abrir", "Voltar ao player", "Dispensar" };
+        plrui_dicas(k, r, 3, ilha.x + ilha.w - 34.0f, yc, 1, a); } }
+    y += 30.0f + 22.0f;
+    cx = ilha.x + 34.0f;
+    gfx_recorte(ilha.x, ilha.y - 40.0f, ilha.w, ilha.h + 40.0f);
+    for (i = 0; i < n; i++) {
+      const char *po = extras_relacionado_poster(i);
+      GLuint t = po[0] ? tex_obter_larg(po, 200.0f) : 0;
+      int sel = (i == foco);
+      float k = sel ? 1.08f : 1.0f, w = 182.0f * k, h = 273.0f * k;
+      GfxRect r = { cx + (182.0f - w) * 0.5f, y + 273.0f - h, w, h };
+      if (cx + 182.0f > ilha.x + ilha.w - 20.0f) break;
+      if (sel) gfx_rect((GfxRect){ r.x - 20.0f, r.y + 4.0f, r.w + 40.0f, r.h + 40.0f }, 0, GFX_SOMBRA,
+                        1.0f, 0, 0, 0.5f, 0, 0, 0, 0.55f * a);
       if (t) {
         gfx_tex_aspect_atual = tex_aspecto(po);
-        gfx_rect(r, t, GFX_CARD, sel ? 1.0f : 0.0f, 0, 0, raio, 0, 0, 0, a);
+        gfx_rect(r, t, GFX_CARD, 0, 0, 0, 14.0f / r.h, 0, 0, 0, a * (sel ? 1.0f : 0.82f));
         gfx_tex_aspect_atual = 0.0f;
-      } else {
-        // ESCURO, e o mesmo 0.133 que a pagina de titulo usa para o cartaz que
-        // ainda nao chegou. O esqueleto claro que estava aqui virava um bloco
-        // BRANCO no meio da cena — o dono fotografou cinco deles.
-        gfx_cor(r, raio, .133f, .133f, .133f, a);
-      }
-      { int c = sel ? 255 : 214;
-        TxtLinha l = txt_linha_corta(TXT_DET_META2, extras_relacionado_titulo(i),
-                                     c, c, c, 255, PP_CARD_W);
-        txt_desenhar_alpha(l, cx, y + PP_CARD_H + 10.0f, a * (sel ? 1.0f : 0.86f)); }
+      } else gfx_cor(r, 14.0f / r.h, .133f, .133f, .133f, a);
+      cx += 182.0f + 30.0f + (sel ? 8.0f : 0.0f);
     }
-    { TxtLinha t = txt_linha(TXT_DET_META2,
-                             "OK para abrir  ·  Baixo para o player  ·  Voltar para dispensar",
-                             150, 154, 163, 255);
-      txt_desenhar_alpha(t, x, y + PP_CARD_H + PP_ROTULO_H - 4.0f, a * 0.85f); } }
+    gfx_sem_recorte(); }
 }
 
 // O TOPO do que o painel ocupa, para quem empilha acima dele (o cartao de
 // reacao, reacao.h). As contas sao as de posplay_desenhar, sem a mola.
 float posplay_topo(float baseY) {
   if (anim < 0.01f) return baseY;
-  if (serie) {
-    TxtLinha t = txt_linha(TXT_DET_META2, "A seguir", 214, 216, 222, 255);
-    return baseY - PP_EP_H - (float)t.h - 12.0f - 16.0f;
-  }
-  { TxtLinha cab = txt_linha(TXT_ROW_TITULO, "Mais como este", 255, 255, 255, 255);
-    return baseY - PP_CARD_H - PP_ROTULO_H - (float)cab.h - 18.0f - PP_PAD - 16.0f; }
+  return serie ? 660.0f - 16.0f : 636.0f - 16.0f;
 }
+
+#ifdef NV_SHOT_HOOKS
+// Capturas: o cartao de proximo episodio (serie) ou os relacionados (filme)
+// no ar, sem esperar o fim do titulo. `fecha` = o instante da contagem.
+void posplay_shot(int idxCatalogo, int ehSerie, int t, int e, Uint32 fecha) {
+  fixarTitulo(idxCatalogo);
+  visivel = 1; anim = 1.0f; serie = ehSerie; foco = 0; dispensado = 0;
+  proxT = t; proxE = e; fecharEm = fecha;
+}
+#endif

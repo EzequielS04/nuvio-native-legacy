@@ -1117,6 +1117,15 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  c = mix(c, uFundo, uPar.x);\n"
   "  gl_FragColor = nv_dither(c, uCor.a * m);\n"
   "}\n",
+
+  // GFX_VEU_CSS — degrade de uma borda a outra (ver gfx.h). Sem SDF: o veu e
+  // sempre um retangulo de borda de tela.
+  "void main(){\n"
+  "  float d = uPar.x < 0.5 ? 1.0 - vUv.y : uPar.x < 1.5 ? vUv.y : uPar.x < 2.5 ? vUv.x : 1.0 - vUv.x;\n"
+  "  d = clamp(d / max(uPar.y, 0.001), 0.0, 1.0);\n"
+  "  float g = uFoco > 0.0 ? pow(1.0 - d, uFoco) : 1.0 - smoothstep(0.0, 1.0, d);\n"
+  "  gl_FragColor = nv_dither(uCor.rgb, uCor.a * g);\n"
+  "}\n",
 };
 
 // Cada corpo declara o que usa; montar so o necessario mantem o shader enxuto.
@@ -1149,7 +1158,8 @@ static const struct { int sdf, cover; } PRECISA[GFX_NMODOS] = {
   {0,0},   /* GFX_COPIA — so a leitura da textura */
   {0,1},   /* GFX_HERO_CAM */
   {0,1},   /* GFX_HERO_CHEIO_CAM */
-  {1,0}    /* GFX_JANELA — SDF da abertura; o cover e o do quadro da tela */
+  {1,0},   /* GFX_JANELA — SDF da abertura; o cover e o do quadro da tela */
+  {0,0}    /* GFX_VEU_CSS — degrade puro, sem SDF */
 };
 
 static GLuint compila(GLenum tipo, const char *src) {
@@ -1361,6 +1371,10 @@ void gfx_brilho_topo(GfxRect r, float raio, float alcance,
   f = (GfxRect){ r.x, r.y, r.w, h2 };
   // O mesmo raio em pixels, agora em fracao da altura DESTE retangulo.
   gfx_rect(f, 0, GFX_BRILHO_TOPO, 0, r.h * alcance / h2, 0, rpx / h2, cr, cg, cb, ca);
+}
+void gfx_veu_css(GfxRect r, int borda, float curva, float fim, float a) {
+  if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.002f) return;
+  gfx_rect(r, 0, GFX_VEU_CSS, curva, (float)borda, fim > 0.0f ? fim : 1.0f, 0.0f, 0, 0, 0, a);
 }
 static int efeitosMinimos = 0;
 void gfx_definir_efeitos_minimos(int m) { efeitosMinimos = m ? 1 : 0; }

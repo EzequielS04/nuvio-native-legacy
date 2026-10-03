@@ -146,7 +146,10 @@ static unsigned  sessao;
 
 #if defined(__APPLE__)
 // No Mac nao existe barramento nem plano de video. Os cotos deixam o resto do
-// app compilar e rodar igual, so sem imagem em movimento.
+// app compilar e rodar igual, so sem imagem em movimento. As capturas podem
+// simular um video (video_simular, video.h); zerado e o coto mudo.
+static VideoSimulacao SIM;
+void video_simular(const VideoSimulacao *s) { if (s) SIM = *s; else memset(&SIM, 0, sizeof SIM); }
 int  video_iniciar(void) { return 0; }
 int  video_iniciar_auto(void) { return 0; }
 int  video_registro_negado(void) { return 0; }
@@ -169,16 +172,16 @@ void video_janela_fonte(int sx,int sy,int sw,int sh,int dx,int dy,int dw,int dh)
 }
 void video_recorte_reaplicar(void) {}
 void video_escala_definir(int sw, int sh) { (void)sw; (void)sh; }
-double video_pos(void) { return 0; }
-double video_duracao(void) { return 0; }
+double video_pos(void) { return SIM.pos; }
+double video_duracao(void) { return SIM.duracao; }
 // Sem pipeline nao ha arquivo para ler capitulos: no Mac o pos-reproducao cai
 // no plano B dos ultimos minutos, que e o mesmo caminho de um MKV sem
 // capitulos. Melhor um stub honesto que um numero inventado.
 double video_creditos(void) { return 0.0; }
-double video_buffer_fim(void) { return 0; }
+double video_buffer_fim(void) { return SIM.bufferFim; }
 void video_definir_dv(int dv) { (void)dv; }
 int  video_tocando(void) { return 0; }
-int  video_pronto(void) { return 0; }
+int  video_pronto(void) { return SIM.pronto; }
 int  video_ativo(void) { return 0; }
 int  video_falhou(void) { return 0; }
 const char *video_erro_texto(void) { return ""; }
@@ -186,16 +189,16 @@ int  video_decoder_anunciou(void) { return 1; }
 int  video_audio_nao_suportado(void) { return 0; }
 int  video_terminou(void) { return 0; }
 int  video_conflito_recurso(void) { return 0; }
-unsigned video_bufferando_ms(void) { return 0; }
-int  video_n_audio(void) { return 0; }
-int  video_n_legenda(void) { return 0; }
-const VideoFaixa *video_audio(int i) { (void)i; return 0; }
-const VideoFaixa *video_legenda(int i) { (void)i; return 0; }
+unsigned video_bufferando_ms(void) { return SIM.bufferandoMs; }
+int  video_n_audio(void) { return SIM.nAudio; }
+int  video_n_legenda(void) { return SIM.nLeg; }
+const VideoFaixa *video_audio(int i) { return i >= 0 && i < SIM.nAudio ? &SIM.audio[i] : 0; }
+const VideoFaixa *video_legenda(int i) { return i >= 0 && i < SIM.nLeg ? &SIM.leg[i] : 0; }
 int video_legenda_ordinal_mkv(int i) { (void)i; return -1; }
 int  video_mkv_sondado(void) { return 2; }
 void video_sondar_mkv_agora(void) {}
-int  video_audio_atual(void) { return 0; }
-int  video_legenda_atual(void) { return -1; }
+int  video_audio_atual(void) { return SIM.audioAtual; }
+int  video_legenda_atual(void) { return SIM.nLeg ? SIM.legAtual : -1; }
 void video_escolher_audio(int i) { (void)i; }
 void video_escolher_legenda(int i) { (void)i; }
 int  video_legenda_nativa(char *d, int t) { (void)t; if (d) d[0] = 0; return 0; }
@@ -203,15 +206,15 @@ void video_legenda_externa(const char *u) { (void)u; }
 void video_legenda_estilo(const VideoLegendaEstilo *e) { (void)e; }
 void video_definir_mp4(int m) { (void)m; }
 void video_definir_reconexao(int sim) { (void)sim; }
-int  video_reconectando(void) { return 0; }
+int  video_reconectando(void) { return SIM.reconectando; }
 // No Mac quem toca e o pipeline do sistema por outro caminho; os cabecalhos do
 // addon so tem efeito no payload do load da webOS. Stub para o alvo linkar.
 void video_definir_cabecalhos(const char *cabs) { (void)cabs; }
-int  video_tem_atmos(void) { return 0; }
-int  video_tem_dolby_vision(void) { return 0; }
-const char *video_hdr(void) { return "none"; }
-int  video_largura(void) { return 0; }
-int  video_altura(void) { return 0; }
+int  video_tem_atmos(void) { return SIM.atmos; }
+int  video_tem_dolby_vision(void) { return SIM.dv; }
+const char *video_hdr(void) { return SIM.hdr[0] ? SIM.hdr : "none"; }
+int  video_largura(void) { return SIM.largura; }
+int  video_altura(void) { return SIM.altura; }
 int  video_pode_forcar_sdr(void) { return 0; }
 // No Mac nao ha plano de video: 1 para que a tela de aspecto ofereca todos os
 // modos ao desenvolver, que e o mesmo que a LG faz.

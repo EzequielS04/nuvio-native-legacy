@@ -457,4 +457,8 @@ int ajustes_mesclar_blob(const char *base, char **saida);
 // TMDB, de onde vem (ajuste desta TV) e o tmdb_language cru da conta.
 void ajustes_tmdb_idioma_relatar(const char *blob);
 
+#ifdef NV_SHOT_HOOKS
+int ajustes_shot_valor(const char *chave, int v);   // capturas: opcao pela chave
+#endif
+
 #endif

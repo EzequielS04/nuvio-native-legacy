@@ -31,4 +31,15 @@ static inline void relogio_fim(char *fim, size_t tam, time_t agora, double falta
   snprintf(fim, tam, i18n("Termina \xc3\xa0" "s %s"), h2);
 }
 
+// A MESMA FRASE NA PILULA DA ILHA DO PLAYER (plrilha.c): "termina as 22:41",
+// em minuscula depois da hora, como no mockup do Glass UI. Mesmo buffer.
+static inline void relogio_fim_ilha(char *fim, size_t tam, time_t agora, double falta) {
+  time_t t2 = agora + (time_t)(falta > 0.0 ? falta : 0.0);
+  struct tm lf;
+  char h2[16];
+  localtime_r(&t2, &lf);
+  strftime(h2, sizeof h2, "%H:%M", &lf);
+  snprintf(fim, tam, i18n("termina \xc3\xa0" "s %s"), h2);
+}
+
 #endif

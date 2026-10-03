@@ -88,6 +88,25 @@ typedef enum {
   TXT_AJ_VALOR18, TXT_AJ_NUM58, TXT_AJ_NUM64, TXT_AJ_NUM110, TXT_AJ_TIT28,
   TXT_AJ_MINI12, TXT_AJ_MINI13, TXT_AJ_MINI14, TXT_AJ_16B,
   TXT_AJ_SUB, TXT_AJ_SEG, TXT_AJ_18, TXT_AJ_SECAO, TXT_AJ_TEXTO, TXT_AJ_NOME,
+  // ESCALA DO PLAYER NO GLASS UI (mockup aprovado em 03/10, player-mockup.html):
+  // corpo e peso do CSS, com 600/800 em Bold pela regra optica de text.c.
+  // TXT_G<corpo><R|M|B> = Regular, Medium, Bold. No FIM do enum, como manda o
+  // comentario do TXT_RANK_GRANDE.
+  TXT_G14B,   // kbd das dicas                    14 / 700
+  TXT_G16B,   // rosto do idioma, rotulo da grade 16 / 600-800
+  TXT_G18R,   // apoio a direita ("AIOStreams")   18 / 400
+  TXT_G18M,   // o que falta no Seekr             18 / 500
+  TXT_G19M,   // "termina as" da pilula           19 / 500
+  TXT_G20B,   // tempo dos vizinhos no Seekr      20 / 600
+  TXT_G20M,   // valor a direita na linha         20 / 500
+  TXT_G21B,   // rotulo de botao (.pb, .btn)      21 / 600
+  TXT_G22M,   // linha do guia parental           22 / 500
+  TXT_G23B,   // linha do menu de visto           23 / 600
+  TXT_G26B,   // tempo do Seekr, "Abrindo fonte"  26 / 600-700
+  TXT_G28B,   // titulo do lembrete               28 / 700
+  TXT_G30B,   // "T1 E3" do OSD                   30 / 600
+  TXT_G30M,   // "· The Head" do OSD              30 / 500
+  TXT_G52B,   // programa no OSD do canal         52 / 700
   TXT_NFONTES
 } TxtEstilo;
 

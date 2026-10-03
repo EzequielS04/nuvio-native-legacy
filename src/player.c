@@ -90,6 +90,8 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "progresso.h"
 #include "fontevolta.h"
 #include "marco.h"
+#include "plrui.h"
+#include "plrilha.h"
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -123,80 +125,26 @@ static void avisarCascaAberto(int v) { (void)v; }
 // 1h54 e so um numero plausivel para o layout ter o que mostrar — assim que o
 // video real entrar, a duracao vem do decodificador e esta constante morre.
 #define PLR_DUR_PADRAO   (114.0f * 60.0f)
-// Geometria do bloco de controles, de baixo para cima. Tudo ancorado na BASE
-// da tela: e ela que nao se mexe quando o bloco desliza para dentro.
-// ---------------------------------------------------------------------------
-// MEDIDAS DO PLAYER DO APP WEB
-//
-// Esta tela nao segue mais o player do app da Apple: segue o nosso app web, que
-// e a referencia desta variante legacy. Os valores sao os do CSS resolvidos em
-// 1920x1080, que e onde o app roda — no arquivo eles sao min(Xvw, Ypx) e a TV
-// cai sempre no teto. A origem de cada um esta anotada para poder conferir.
-//
-//   #playerUiRoot        --player-controls-x/y      64 / 48
-//   .player-control-btn  --player-control-size      96   (gap 4px)
-//   .player-progress-track  height 6 -> 10 com foco, radius 3
-//   .player-progress-shell  margin-top 12
-//   .player-controls-row    margin-top 16
-//   .player-controls-gradient-top/bottom   150 / 200
-//
-// MAS ESSES SAO OS VALORES BASE, E NAO OS DESTA TELA. O bloco `#playerUiRoot`
-// (components.css:15251) e o port do player do Android TV e refaz quase todos
-// com a conversao x2 que o repositorio usa para o canvas de 1920 ("ATV 6dp ->
-// 12px"). O que estava aqui era metade do tamanho certo em quase tudo — a
-// barra, o vao dos botoes, o respiro da fileira e os dois degrades. Os que o
-// bloco ATV NAO refaz (padding 64/48, margin-top 12 da barra) ficam como estao.
-//
-//   .player-progress-track  12 -> 20 com foco, radius 6
-//   .player-control-buttons gap 8
-//   .player-controls-row    margin-top 32
-//   .player-control-icon    48
-//   gradientes              300 (topo) / 400 (base)
-// 96 e nao 64 (revisao de proporcao, 30/09): o relogio, os selos e o guia
-// parental ficavam a 64 da borda enquanto titulo, botoes e tempo ficam a 96 —
-// duas margens no mesmo quadro. Agora e uma so, a de PLR_MARGEM.
+// GEOMETRIA DO OSD — GLASS UI (mockup aprovado em 03/10, player-mockup.html).
+// Uma margem so, 96, para titulo, barra, botoes, tempo, selos e a ilha da hora
+// (era 64 em parte disso e a barra ia de ponta a ponta). A barra tem cantos
+// redondos (plrui_barra, a mesma da pausa e do ao vivo), os botoes sao discos
+// de 68 no material da ilha e o focado vira a pilula no acento com o nome.
 #define PLR_PAD_X         96.0f
 #define PLR_PAD_Y         48.0f
-// Margem lateral do CONTEUDO do rodape (titulo, botoes, relogio). O trilho da
-// barra continua em 0..largura; so o conteudo recua, para nao cair na zona que
-// a TV corta por overscan. Mesmo valor do gutter da pagina de titulo.
 #define PLR_MARGEM        96.0f
-#define PLR_BTN_D         76.0f
-// 12 e nao 8: com 8 os circulos de 76 ficavam mais juntos que a meta da barra
-// (12), e a fileira lia como uma peca so.
+#define PLR_BTN_D         68.0f
 #define PLR_BTN_GAP       12.0f
-// 12px em repouso, 20px com foco — as duas do bloco ATV. A barra PASSOU a receber
-// foco (CIMA a partir da fileira de botoes); antes so os botoes recebiam, e por
-// isso nao havia como procurar no filme pela barra.
-// BARRA MINIMALISTA, DE PONTA A PONTA. Era 12px de altura com 64px de margem
-// de cada lado e raio 6 — e o raio era o defeito: nesta API ele e FRACAO do
-// menor lado (ver gfx.h), no maximo 0.5, entao 6.0 degenerava o SDF. O efeito
-// era o preenchimento inicial virar uma bolha em vez de uma barra crescendo, e
-// so "aparecer" depois de muitos minutos de filme, quando ja era largo o
-// bastante para a forma se resolver. Foi o que o dono descreveu: "demora muito
-// para mostrar ela encher, nao ta bem calibrada".
-//
-// Agora e um fio reto de canto vivo (raio 0), colado nas bordas da tela. Sem
-// raio nao ha SDF para degenerar e o primeiro pixel de progresso ja aparece.
-#define PLR_TRILHO_H       4.0f
-// 20px com foco (`min(1.04vw, 20px)` em .player-progress-shell.focused).
-#define PLR_TRILHO_H_FOCO  8.0f
-#define PLR_TRILHO_R       0.0f   // canto vivo: ver a nota acima
-#define PLR_GAP_BARRA     12.0f   // meta -> barra
-#define PLR_GAP_ROW       32.0f   // barra -> fileira de botoes
-#define PLR_GRAD_BAIXO   400.0f
-#define PLR_GRAD_TOPO    300.0f
-// #f5f5f5 = --secondary-color, que e o que preenche a barra no web.
-#define PLR_FILL_C      (245.0f / 255.0f)
-
-#define PLR_ICONE_H       48.0f
+#define PLR_GAP_ROW       38.0f   // topo da barra -> topo dos botoes
+// Onde a barra fica (topo do trilho): com o OSD inteiro, e na busca so com a
+// barra (#128) — mais baixa, sem nada embaixo dela alem do tempo. Com o Seekr
+// ligado a busca deixa 30 px a mais para a ilha da miniatura.
+#define PLR_BARRA_Y      902.0f
+#define PLR_BARRA_Y_SO   960.0f
+#define PLR_BARRA_Y_SEEKR 930.0f
 // De quanto o bloco desliza para baixo quando escondido. Pequeno de proposito:
 // o que faz o movimento ser lido nao e a distancia, e a mola somada ao fade.
 #define PLR_DESLIZE       46.0f
-// Guia parental (.player-parental-*): barra de 6, lista recuada 20, linha de
-// 36 com 4 de vao. Nao passam pela conversao x2 do bloco ATV — a regra base
-// nao e refeita la.
-#define PG_BARRA_W         6.0f
 // Quanto tempo a guia parental fica na tela, contando do primeiro quadro com
 // imagem, e quanto dura o esmaecimento final. Depois disso ela nao volta nesta
 // reproducao.
@@ -216,14 +164,11 @@ static void avisarCascaAberto(int v) { (void)v; }
 // resposta pode chegar tarde. Ver a nota no desenho.
 #define PG_LIMITE_SEG     45.0f
 #define PG_SEG_SAIDA       0.8f
-#define PG_LISTA_PADX     20.0f
-#define PG_LINHA_H        36.0f
-#define PG_LINHA_GAP       4.0f
-// O veu virou os dois degrades do web (PLR_GRAD_TOPO/BAIXO). Ele existe para o
-// texto ler sobre a imagem — sem ele, uma cena clara apaga o nome do titulo.
 
 // Transporte compacto. Os saltos continuam acessiveis pelas setas na barra.
-enum { PLR_PLAY, PLR_ASPECTO, PLR_CC, PLR_AUDIO,
+// A ORDEM DO MOCKUP APROVADO (03/10): Play, Legendas, Audio, Proporcao,
+// Fontes, Episodios/Relacionados — o que se usa junto fica junto.
+enum { PLR_PLAY, PLR_CC, PLR_AUDIO, PLR_ASPECTO,
        PLR_FONTES, PLR_EPISODIOS, PLR_NBTNS };
 
 // Avanco em curso: enquanto vale, posSeg e do DONO e nao do pipeline.
@@ -290,37 +235,11 @@ static Uint32 ultimoInput = 0;
 static int skipFoco = 0;
 static int trechoPulavel(double *fim);
 
-// O player fica sobre a imagem e precisa de um foco que sobreviva tanto a uma
-// cena clara quanto a uma escura. A cor configurada continua sendo a fonte,
-// mas o miolo recebe a mesma mistura suave usada nos outros paineis: assim o
-// controle e reconhecivel sem virar um adesivo neon sobre o filme.
-// A conta mora em botoes.c desde 29/09/2026 (botao_cor_foco): o foco do
-// player de filme e o de todo botao do app passaram a ser a mesma cor.
-static void corFocoPlayer(float *r, float *g, float *b) { botao_cor_foco(r, g, b); }
+// UMA COR DE ACENTO SO NO PLAYER (Glass UI): ajustes_acento(), a mesma das
+// ilhas. Havia duas contas (botao_cor_foco aqui, a mistura de 74% no
+// pos-reproducao e nas faixas) e o mesmo tema saia em dois tons na mesma tela.
+static void corFocoPlayer(float *r, float *g, float *b) { ajustes_acento(r, g, b); }
 
-static void superficieFocoPlayer(GfxRect r, float raio, float mola, float a) {
-  float fr, fg, fb;
-  GfxRect luz;
-  if (ajustes_vidro()) {
-    // Referencia: controle em foco = o mesmo disco escuro com aro branco; o
-    // glifo continua branco. Nada de preenchimento na cor de realce.
-    // O aro segue a cor do realce (branco no padrao).
-    ajustes_acento(&fr, &fg, &fb);
-    gfx_cor(r, raio, 0.16f, 0.16f, 0.17f, 0.70f * a);
-    gfx_anel(r, raio, 2.5f, fr, fg, fb, 0.96f * a);
-    return;
-  }
-  corFocoPlayer(&fr, &fg, &fb);
-  if (mola > 0.01f) {
-    luz.x = r.x - r.h * 0.85f; luz.y = r.y - r.h * 0.85f;
-    luz.w = r.w + r.h * 1.7f; luz.h = r.h + r.h * 1.7f;
-    gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
-             fr, fg, fb, 0.16f * mola * a);
-  }
-  gfx_cor(r, raio, fr, fg, fb, a);
-  gfx_rect(r, 0, GFX_BRILHO_TOPO, raio, 0.20f, 0, 0.5f,
-           1, 1, 1, 0.10f * a);
-}
 // Instante em que a IMAGEM comecou (nao a abertura da tela: entre uma coisa e
 // outra ha a busca de fonte, que pode levar segundos). Zero enquanto nao houve.
 // A guia parental se apoia nisto para aparecer UMA vez, no comeco, e sumir.
@@ -330,6 +249,11 @@ static Uint32 pgDesde;
 // AS DUAS VARIAVEIS DE MIDIA. Todo o resto do arquivo le so daqui — quando o
 // video real entrar, sao elas que passam a ser preenchidas pelo decodificador.
 static int   comVideo = 0;
+#ifdef NV_SHOT_HOOKS
+static int   shotSemFuro, shotBusca;
+static int   shotEpgOk, shotNumero, shotAtras;
+static AoVivoEpg shotEpg;
+#endif
 static int   pedFaixas = 0;
 static int   esperandoFonte = 0;   // aberto sem URL, esperando o addon responder
 // Pre-busca da legenda ASS segurando o video (ver player_definir_fonte): a url
@@ -480,6 +404,7 @@ static int pedGuia, pedZap, pedGuiaCheio;   // pedidos de canal: overlay do guia
 static AoVivoZap zapEst;
 static float bannerAV;         // 0..1, a entrada do banner do zapping
 static int botaoAV, infoAV, pedRecarregar;
+static int avErroFoco;   // o botao em foco no modal do erro do canal
 // ATRAS DO AO VIVO (29/09/2026). Canal com janela de tempo (DVR do provedor)
 // pausa; quem pausa fica atras da transmissao, e o OSD diz quanto e oferece
 // "Voltar ao vivo". A conta NAO e `duracao - posicao` crua: na borda do ao vivo
@@ -541,8 +466,14 @@ const CatEp *player_proximo_episodio(void) {
 // este canal agora"). Vazio = as frases genericas. Ja traduzido por quem
 // chama; txt_linha tenta traduzir de novo, nao acha chave e deixa como esta.
 static char erroTitulo[160], erroDica[160];
+// "Fonte 2 de 3": a tentativa do automatico VOD (app.c, tentarProximaFonteVOD).
+static int tentativaN, tentativaM;
+// O botao em foco no modal do erro: 0 = Abrir Fontes, 1 = Voltar.
+static int erroBotao;
+void player_definir_tentativa(int n, int max) { tentativaN = n; tentativaM = max; }
 void player_erro_fonte(void) {
-  esperandoFonte = 0; erroFonte = 1; visivel = 1; tocando = 0; soBarra = 0;
+  esperandoFonte = 0; erroFonte = 1; visivel = 0; tocando = 0; soBarra = 0;
+  erroBotao = 0;
   prebuscaUrl[0] = 0;                // erro no meio da pre-busca: o video nao sai
   erroTitulo[0] = erroDica[0] = 0;   // erro sem motivo nao herda o do anterior
 }
@@ -753,6 +684,9 @@ static Uint32 toastAte = 0;      // ate quando o aviso de modo fica de pe
 // Texto do aviso quando NAO e o modo de proporcao (vazio = rotulo do modo).
 // Hoje so o audio nao suportado usa: um aviso por fonte, ver player_atualizar.
 static char   toastTexto[160];
+// O icone do aviso (art/icones) e a cor dele: 0 branco, 1 ambar (aviso).
+static char   toastIcone[32];
+static int    toastCor;
 static int    avisouAudio;
 static char   dirPrefs[512];
 
@@ -1110,11 +1044,14 @@ static int modoDisponivel(int modo) {
   return !modoPrecisaRecorte(modo);
 }
 
-void player_toast(const char *texto, unsigned ms) {
+void player_toast_ex(const char *texto, unsigned ms, const char *icone, int ambar) {
   if (!texto || !*texto) return;
   snprintf(toastTexto, sizeof toastTexto, "%s", texto);
+  snprintf(toastIcone, sizeof toastIcone, "%s", icone && *icone ? icone : "aj_info");
+  toastCor = ambar ? 1 : 0;
   toastAte = SDL_GetTicks() + ms;
 }
+void player_toast(const char *texto, unsigned ms) { player_toast_ex(texto, ms, NULL, 0); }
 
 void player_aspecto_ciclar(void) {
   int m = aspecto, i;
@@ -1634,10 +1571,14 @@ int player_retomar_retido(const char *imdb, int t, int e) {
 // tela cheia e instantaneo porque o fluxo nunca parou. So canal entra: um
 // filme no canto tem progresso, episodio e fim para cuidar; um canal ao vivo
 // nao perde nada.
-#define PLR_PIP_W  460.0f
-#define PLR_PIP_H  259.0f
-#define PLR_PIP_X  (NV_TELA_W - PLR_PIP_W - 56.0f)
-#define PLR_PIP_Y  (NV_TELA_H - PLR_PIP_H - 96.0f)
+// O CANAL NO CANTO (Glass UI): um cartaz-ilha de 500 a 40 das bordas — o
+// video 480x270 com raio 22 dentro do miolo, e embaixo a faixa com AO VIVO,
+// o canal e o programa, e as dicas. PLR_PIP_* e o retangulo do VIDEO.
+#define PLR_PIP_ILHA_H 368.0f
+#define PLR_PIP_W  480.0f
+#define PLR_PIP_H  270.0f
+#define PLR_PIP_X  (NV_TELA_W - 40.0f - 500.0f + 10.0f)
+#define PLR_PIP_Y  (NV_TELA_H - 40.0f - PLR_PIP_ILHA_H + 10.0f)
 
 // O destino em miniatura: a caixa e 16:9 e a proporcao do quadro e respeitada
 // DENTRO dela — um canal 4:3 letterboxa na caixa em vez de esticar.
@@ -1786,54 +1727,37 @@ void player_mini_desenhar(Uint32 agora) {
   // No guia quem desenha e o guia (furo no preview, selo, bordas).
   if (miniGuia) return;
   f = (GfxRect){ r.x, r.y, r.w, r.h };
-  corFocoPlayer(&fr, &fg, &fb);
-  // Furo com o MESMO raio do anel: sem ele o plano de video e retangular e
-  // os cantos do quadro escapam por fora da moldura arredondada.
-  gfx_furo_raio(f, 0.14f);
-  // Espessura em pixels (gfx_anel): NV_ANEL_FOCO / f.w dava 2,25 px num
-  // quadro 16:9, porque o anel mede em fracao da ALTURA.
-  gfx_anel(f, 0.14f, NV_ANEL_FOCO, fr, fg, fb, 0.85f);
-  // A etiqueta e UMA linha so dentro do furo: ponto vermelho + AO VIVO +
-  // canal + programa do ar, cortada na borda direita do quadro para nomes
-  // longos nao vazarem por cima do anel.
-  gfx_cor((GfxRect){ f.x, f.y + f.h - 50.0f, f.w, 50.0f },
-          0.0f, 0.02f, 0.02f, 0.03f, 0.78f);
-  { char rot[160];
-    TxtLinha lv, nm;
-    float lx2 = f.x + 16.0f, ly2;
+  (void)fr; (void)fg; (void)fb;
+  // A ILHA em volta (sem o anel de acento de 4 px), o furo com raio 22.
+  { GfxRect il = { f.x - 10.0f, f.y - 10.0f, 500.0f, PLR_PIP_ILHA_H };
+    char rot[160];
     EpgProg ag;
-    snprintf(rot, sizeof rot, "%s", itemCanal.titulo[0] ? itemCanal.titulo
-                                                        : i18n("Canal"));
+    float x = il.x + 20.0f, yc = f.y + f.h + 14.0f + 14.0f;
+    plrui_material(il, 30.0f, 0, 1.0f);
+    gfx_furo_raio(f, 22.0f / f.h);
+    // AO VIVO em vermelho (estado da transmissao) e "Canal · programa".
+    { TxtLinha l = txt_linha(TXT_MINI, "AO VIVO", 255, 255, 255, 255);
+      float w = 12.0f + 8.0f + 8.0f + (float)l.w + 12.0f;
+      gfx_cor((GfxRect){ x, yc - 14.0f, w, 28.0f }, 0.5f, 0.898f, 0.282f, 0.302f, 1.0f);
+      gfx_cor((GfxRect){ x + 12.0f, yc - 4.0f, 8.0f, 8.0f }, 0.5f, 1, 1, 1, 1.0f);
+      txt_tracking(TXT_MINI, "AO VIVO", 255, 255, 255, x + 28.0f, yc - (float)l.h * 0.5f, 1.0f, 1.3f);
+      x += w + 12.0f; }
+    snprintf(rot, sizeof rot, "%s", itemCanal.titulo[0] ? itemCanal.titulo : i18n("Canal"));
     if (pAgora(epgIdx, time(NULL), &ag)) {
       size_t u = strlen(rot);
-      snprintf(rot + u, sizeof rot - u, "  \xc2\xb7  %s", ag.titulo);
+      snprintf(rot + u, sizeof rot - u, " \xc2\xb7 %s", ag.titulo);
     }
-    lv = txt_linha(TXT_MINI, i18n("AO VIVO"), 255, 120, 120, 255);
-    nm = txt_linha(TXT_CAPTION, rot, 246, 247, 252, 255);
-    ly2 = f.y + f.h - 50.0f + (50.0f - nm.h) * 0.5f;
-    gfx_recorte(f.x + 1.0f, f.y + f.h - 50.0f, f.w - 2.0f, 49.0f);
-    gfx_cor((GfxRect){ lx2, ly2 + (nm.h - 10.0f) * 0.5f, 10.0f, 10.0f },
-            0.5f, 0.96f, 0.24f, 0.24f, 1.0f);
-    lx2 += 18.0f;
-    txt_desenhar_alpha(lv, lx2, ly2 + (nm.h - lv.h) * 0.5f, 1.0f);
-    lx2 += lv.w + 14.0f;
-    txt_desenhar_alpha(nm, lx2, ly2, 0.96f);
-    gfx_sem_recorte(); }
-  // A dica de teclas mora num pill escuro sob o quadro: texto solto sobre a
-  // home se perdia no fundo, e "flutuava" quando a miniatura cobria outra
-  // tela.
-  { TxtLinha l = txt_linha(TXT_MINI,
+    plrui_limpar_sep(rot);
+    { TxtLinha nm = txt_linha_corta(TXT_G18M, rot, 243, 242, 239, 255, il.x + il.w - 20.0f - x);
+      txt_desenhar_alpha(nm, x, yc - (float)nm.h * 0.5f, 1.0f); }
+    { const char *k[2] = {
 #ifdef NV_ANDROID
-        i18n("CH+: tela cheia · Voltar: fechar")
+        "CH+",
 #else
-        i18n("Azul: tela cheia · Voltar: fechar")
+        "Azul",
 #endif
-        , 205, 208, 216, 255);
-    gfx_cor((GfxRect){ f.x, PLR_PIP_Y + PLR_PIP_H + 10.0f,
-                       l.w + 30.0f, l.h + 14.0f },
-            0.14f, 0.02f, 0.02f, 0.03f, 0.72f);
-    txt_desenhar_alpha(l, f.x + 15.0f,
-                       PLR_PIP_Y + PLR_PIP_H + 10.0f + 7.0f, 0.9f); }
+        "Voltar" }, *rt[2] = { "Tela cheia", "Fechar" };
+      plrui_dicas(k, rt, 2, il.x + 20.0f, yc + 14.0f + 8.0f + 15.0f, 0, 1.0f); } }
 }
 
 // O ultimo botao da fileira: "Episodios" numa serie, "Relacionados" num filme
@@ -2066,12 +1990,12 @@ static int avBotoes(int *ids) {
   ids[n++] = AV_B_ANT;
   ids[n++] = AV_B_PROX;
   if (guia_info_canal(player_id_canal(), NULL, NULL, NULL, 0)) ids[n++] = AV_B_FAV;
-  ids[n++] = AV_B_ASPECTO;
   ids[n++] = AV_B_AUDIO;
   ids[n++] = AV_B_LEGENDA;
   ids[n++] = AV_B_INFO;
   ids[n++] = AV_B_RECARREGAR;
   ids[n++] = AV_B_FONTE;
+  ids[n++] = AV_B_ASPECTO;   // no fim, como no mockup do Glass UI
   return n;
 }
 
@@ -2124,12 +2048,18 @@ static void avMontarOsd(AoVivoOsd *o) {
   }
   if (id[0] && xtream_e_id(id)) { xtepg_querer(id); xtepg_passo(); }
   aovivo_epg_montar(epgIdx, id, time(NULL), &o->epg);
+#ifdef NV_SHOT_HOOKS
+  if (shotEpgOk) { o->epg = shotEpg; o->numero = shotNumero; }
+#endif
   for (i = 0; i < n; i++) o->botoes[i] = ids[i];
   o->nBotoes = n;
   o->foco = (botaoAV < n) ? botaoAV : n - 1;
   o->favorito = guia_e_favorito(id);
   o->pausado = !tocando && avPodePausar();
   o->atrasoS = avAtrasoS(SDL_GetTicks());
+#ifdef NV_SHOT_HOOKS
+  if (shotEpgOk && shotAtras) { o->atrasoS = shotAtras; o->pausado = 0; }
+#endif
   o->pausaS = (o->pausado && avPausaDesde) ? (int)((SDL_GetTicks() - avPausaDesde) / 1000u) : 0;
   o->janelaS = avPodePausar() ? (int)video_duracao() : 0;
   o->bufferando = comVideo && video_bufferando_ms() > 1500u;
@@ -2155,6 +2085,13 @@ static void avMontarOsd(AoVivoOsd *o) {
     else snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Buffer: estável"));
     snprintf(o->info[k++], sizeof o->info[0], "%s", i18n("Codec, quadros e taxa: a TV não informa"));
     o->nInfo = k;
+    // As marcas do OSD de filme no topo do painel (pela mesma regra de
+    // medida: o que o pipeline confirma).
+    { int fm = marca_resolucao(o->res);
+      if (fm >= 0) o->marcas[o->nMarcas++] = fm;
+      if (video_tem_dolby_vision()) o->marcas[o->nMarcas++] = FMT_DV;
+      else if (!strcasecmp(video_hdr(), "HDR10")) o->marcas[o->nMarcas++] = FMT_HDR10;
+      if (video_tem_atmos()) o->marcas[o->nMarcas++] = FMT_ATMOS; }
   }
 }
 
@@ -2162,6 +2099,14 @@ static void avMontarOsd(AoVivoOsd *o) {
 static void avTecla(SDL_Keycode k) {
   int ids[AV_B_N], n = avBotoes(ids);
   int ok = (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE);
+  // CANAL QUE NAO ABRIU: a tecla e do modal (Recarregar, Fonte, Guia).
+  if (erroFonte) {
+    if (k == SDLK_LEFT && avErroFoco > 0) avErroFoco--;
+    else if (k == SDLK_RIGHT && avErroFoco < 2) avErroFoco++;
+    else if (ok) avAtivar(avErroFoco == 0 ? AV_B_RECARREGAR : avErroFoco == 1 ? AV_B_FONTE : AV_B_GUIA);
+    aovivo_erro_foco(avErroFoco);
+    return;
+  }
   if (botaoAV >= n) botaoAV = n - 1;
   if (botaoAV < 0) botaoAV = 0;
   if (!visivel) {
@@ -2242,6 +2187,19 @@ void player_evento(const SDL_Event *e) {
   if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE ||
       k == SDLK_DELETE) {
     saindo = 1; pediuSair = 1;
+    return;
+  }
+
+  // A FONTE NAO ABRIU (filme/serie): a tecla e do MODAL da ilha. ESQUERDA e
+  // DIREITA escolhem entre Abrir Fontes e Voltar; OK aciona. Voltar fecha o
+  // player como o BACK (tratado acima).
+  if (erroFonte && !ehCanal()) {
+    if (k == SDLK_LEFT) erroBotao = 0;
+    else if (k == SDLK_RIGHT) erroBotao = 1;
+    else if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
+      if (erroBotao == 0) pedFontes = 1;
+      else { saindo = 1; pediuSair = 1; }
+    }
     return;
   }
 
@@ -2440,6 +2398,7 @@ void player_atualizar(float dt, Uint32 agora) {
     avisouAudio = 1;
     snprintf(toastTexto, sizeof toastTexto, "%s",
              i18n("Esta TV não toca o áudio desta fonte. Troque a fonte ou o áudio."));
+    snprintf(toastIcone, sizeof toastIcone, "aj_triangle-alert"); toastCor = 1;
     toastAte = agora + 6000;
   }
   // REDE CAIU no meio do video (video_reconexao.h): um aviso por tentativa.
@@ -2447,6 +2406,7 @@ void player_atualizar(float dt, Uint32 agora) {
     int t = comVideo ? video_reconectando() : 0;
     if (t && t != reconVisto) {
       snprintf(toastTexto, sizeof toastTexto, "%s", i18n("Conexão caiu, reconectando…"));
+      snprintf(toastIcone, sizeof toastIcone, "aj_wifi-off"); toastCor = 1;
       toastAte = agora + 5000;
     }
     reconVisto = t; }
@@ -2538,6 +2498,9 @@ void player_atualizar(float dt, Uint32 agora) {
 
   // Fim do avanco por inatividade: o controle nao manda KEYUP confiavel, entao
   // quem decide que a pessoa soltou e o silencio.
+#ifdef NV_SHOT_HOOKS
+  if (shotBusca) { scrubbing = 1; posVisSolto = 1; scrubUltimo = agora; }
+#endif
   if (scrubbing && agora - scrubUltimo > PLR_SCRUB_FIM_MS) terminarSalto();
 
   if (comVideo && video_ativo()) {
@@ -2764,60 +2727,80 @@ void player_atualizar(float dt, Uint32 agora) {
   }
 }
 
-// hh:mm:ss so quando passa de uma hora — "0:03:12" num episodio curto le como
-// erro de formatacao, nao como tempo.
-static void fmtTempo(char *b, size_t n, float seg, int negativo);
-// MINIATURA DO SEEKR acima da barra, so enquanto a pessoa procura (o avanco
-// em curso ou a barra ainda deslizando ate o alvo). Centrada na cabeca da
-// barra e presa as margens do conteudo. O tempo embaixo e o do QUADRO (cue),
-// nao o da posicao crua: o quadro existe a cada ~10 s, e chamar de 18:29 o
-// quadro das 18:30 seria uma pequena mentira (seekrvtt.h).
+// MINIATURA DO SEEKR: UMA ILHA acima da barra (Glass UI), so enquanto a
+// pessoa procura. 384x216 com raio 17 dentro do miolo (raio 26) e o tempo do
+// QUADRO na base da propria ilha, com o que falta ao lado — saiu a chapa
+// preta, o anel branco de 2 px e a pilula preta sobre a imagem. Na fita, a
+// anterior e a seguinte (256x144, apagadas) ficam centradas na altura da
+// atual, cada uma com o seu tempo. Sem quadro pronto a ilha ja nasce no lugar
+// com o tempo certo e o anel de 12 pontos: o Seekr nao parece desligado.
+// O tempo e o do QUADRO (cue), nao a posicao crua (seekrvtt.h).
 static void seekrMiniatura(float bx, float bw, float frac, float yBarra, float a) {
   GLuint t[3] = { 0, 0, 0 };
   double cue[3] = { -1, -1, -1 };
-  int fita, n, k;
-  const float w = 384.0f, h = 216.0f, ws = 256.0f, hs = 144.0f, vao = 16.0f;
-  float x, y, xs[3], tot;
-  if (ehCanal() || !(scrubbing || posVisSolto) || a < 0.05f) return;
+  int fita, n, k, est;
+  const float w = 384.0f, h = 216.0f, ws = 256.0f, hs = 144.0f, vao = 12.0f, linha = 52.0f;
+  float x, y, tot, xs[3];
+  Uint32 agora = SDL_GetTicks();
+  if (ehCanal() || !(scrubbing || posVisSolto) || a < 0.05f || !ajustes_seekr_ligado()) return;
+  est = seekr_estado();
+  if (est != SEEKR_PRONTO && est != SEEKR_BUSCANDO) return;
   seekr_definir_ajuste_ms((long)ajustes_seekr_ajuste_s() * 1000L);
   fita = ajustes_seekr_fita();
   n = fita ? 3 : 1;
-  if (!seekr_quadros(posSeg, n, t, cue)) return;
-  // A fita: anterior e seguinte menores dos lados da atual. A largura total e
-  // o que se prende as margens, para a fita nunca sair da tela.
-  tot = fita ? w + 2.0f * (ws + vao) : w;
+  if (est == SEEKR_PRONTO) seekr_quadros(posSeg, n, t, cue);
+  // A sincronia ja entra no tempo do quadro; sem cue ainda (a folha chegando),
+  // a posicao com o mesmo ajuste.
+  if (cue[n == 1 ? 0 : 1] < 0.0) cue[n == 1 ? 0 : 1] = posSeg + ajustes_seekr_ajuste_s();
+  tot = fita ? 20.0f + ws * 2.0f + w + vao * 2.0f : w + 20.0f;
   x = bx + bw * frac - tot * 0.5f;
   if (x < PLR_MARGEM) x = PLR_MARGEM;
-  if (x + tot > bx + bw - PLR_MARGEM) x = bx + bw - PLR_MARGEM - tot;
-  y = yBarra - 28.0f - h;
-  if (fita) { xs[0] = x; xs[1] = x + ws + vao; xs[2] = xs[1] + w + vao; }
-  else xs[0] = x;
+  if (x + tot > bx + bw) x = bx + bw - tot;
+  y = yBarra - 24.0f - (10.0f + h + linha);
+  plrui_material((GfxRect){ x, y, tot, 10.0f + h + linha }, 26.0f, 0, a);
+  if (fita) { xs[0] = x + 10.0f; xs[1] = xs[0] + ws + vao; xs[2] = xs[1] + w + vao; }
+  else xs[0] = x + 10.0f;
   for (k = 0; k < n; k++) {
     int atual = (n == 1 || k == 1);
     float qw = atual ? w : ws, qh = atual ? h : hs;
-    float qx = xs[k], qy = atual ? y : y + (h - hs);
+    float qx = xs[k], qy = y + 10.0f + (h - qh) * 0.5f, ca = atual ? 1.0f : 0.6f;
+    GfxRect q = { qx, qy, qw, qh };
     char rot[32];
-    if (!t[k] || cue[k] < 0) continue;
-    gfx_cor((GfxRect){ qx - 3.0f, qy - 3.0f, qw + 6.0f, qh + 6.0f }, 10.0f / (qh + 6.0f),
-            0.0f, 0.0f, 0.0f, 0.55f * a);
-    gfx_textura((GfxRect){ qx, qy, qw, qh }, t[k]);
-    gfx_anel((GfxRect){ qx, qy, qw, qh }, 0.0f, atual ? 2.0f : 1.0f, 1.0f, 1.0f, 1.0f,
-             (atual ? 0.85f : 0.35f) * a);
-    // O tempo e o do QUADRO, nao o da posicao (ver seekrvtt.h).
-    fmtTempo(rot, sizeof rot, (float)cue[k], 0);
-    { TxtLinha lt = txt_linha_corta(TXT_PLR_CORPO, rot, 255, 255, 255, atual ? 255 : 200, qw);
-      gfx_cor((GfxRect){ qx + (qw - lt.w) * 0.5f - 10.0f, qy + qh - lt.h - 12.0f, lt.w + 20.0f, lt.h + 6.0f },
-              0.5f, 0.0f, 0.0f, 0.0f, 0.60f * a);
-      txt_desenhar_alpha(lt, qx + (qw - lt.w) * 0.5f, qy + qh - lt.h - 9.0f, a); }
+    if (cue[k] < 0.0) continue;
+    if (t[k]) {
+      gfx_tex_aspect_atual = 16.0f / 9.0f;
+      gfx_rect(q, t[k], GFX_CARD, 0, 0, 0, 17.0f / qh, 0, 0, 0, a * ca);
+      gfx_tex_aspect_atual = 0.0f;
+      // A atual ainda chegando (seekr da a ultima usada no lugar): o anel por
+      // cima, para nao parecer que o quadro e deste ponto.
+      if (atual && seekr_quadro_velho()) {
+        gfx_cor(q, 17.0f / qh, 1, 1, 1, 0.05f * a);
+        plrui_anel(qx + qw * 0.5f, qy + qh * 0.5f, 44.0f, 1, agora, a);
+      }
+    } else {
+      if (ajustes_vidro()) gfx_cor(q, 17.0f / qh, 1, 1, 1, 0.05f * a);
+      else gfx_cor(q, 17.0f / qh, 0.125f, 0.129f, 0.149f, a);
+      if (atual) plrui_anel(qx + qw * 0.5f, qy + qh * 0.5f, 44.0f, 1, agora, a);
+    }
+    plrui_tempo(rot, sizeof rot, cue[k]);
+    { float yc = y + 10.0f + h + linha * 0.5f;
+      if (atual) {
+        TxtLinha lt = txt_linha(TXT_G26B, rot, 243, 242, 239, 255), lr = { 0 };
+        float tw = (float)lt.w;
+        if (!fita) {
+          char r[32], d[24];
+          plrui_tempo(d, sizeof d, duracaoSeg - cue[k]);
+          snprintf(r, sizeof r, "\xe2\x88\x92%s", d);
+          lr = txt_linha(TXT_G18M, r, 243, 242, 239, 128);
+          tw += 10.0f + (float)lr.w;
+        }
+        txt_desenhar_alpha(lt, qx + (qw - tw) * 0.5f, yc - (float)lt.h * 0.5f, a);
+        if (lr.w) txt_desenhar_alpha(lr, qx + (qw - tw) * 0.5f + lt.w + 10.0f, yc - (float)lr.h * 0.5f + 2.0f, a);
+      } else {
+        TxtLinha lt = txt_linha(TXT_G20B, rot, 243, 242, 239, 140);
+        txt_desenhar_alpha(lt, qx + (qw - (float)lt.w) * 0.5f, yc - (float)lt.h * 0.5f, a);
+      } }
   }
-}
-static void fmtTempo(char *b, size_t n, float seg, int negativo) {
-  if (seg < 0.0f) seg = 0.0f;
-  int t = (int)(seg + 0.5f);
-  int h = t / 3600, m = (t / 60) % 60, s = t % 60;
-  const char *sinal = negativo ? "-" : "";
-  if (h > 0) snprintf(b, n, "%s%d:%02d:%02d", sinal, h, m, s);
-  else       snprintf(b, n, "%s%d:%02d", sinal, m, s);
 }
 
 // --- icones -----------------------------------------------------------------
@@ -2830,35 +2813,27 @@ static void fmtTempo(char *b, size_t n, float seg, int negativo) {
 // do ALPHA do arquivo, entao o mesmo PNG serve escuro sobre o circulo branco do
 // foco e claro sobre o circulo translucido.
 //
-static void iconeArquivo(float cx, float cy, float a, float lum,
-                         const char *nome, float tam) {
-  GfxRect r = { cx - tam * 0.5f, cy - tam * 0.5f, tam, tam };
-  gfx_icone(r, nome, lum, lum, lum, a * 0.94f);
+// O icone e o rotulo de cada botao do OSD (os icones do mockup, pl_*). O
+// rotulo vai DENTRO da pilula de foco; o do Play diz o que o OK vai fazer.
+static const char *iconeBotao(int i) {
+  switch (i) {
+    case PLR_PLAY:      return tocando ? "pl_pause-f" : "pl_play-f";
+    case PLR_CC:        return "pl_captions";
+    case PLR_AUDIO:     return "pl_audio-lines";
+    case PLR_ASPECTO:   return "pl_ratio";
+    case PLR_FONTES:    return "pl_layers";
+    default:            return epT > 0 ? "pl_list-video" : "pl_film";
+  }
 }
-
-static void iconePlayPause(float cx, float cy, float a, int pausar, float lum) {
-  iconeArquivo(cx, cy, a, lum, pausar ? "pause" : "play", PLR_ICONE_H * 1.15f);
-}
-
-static void iconeLegendas(float cx, float cy, float a, float lum) {
-  iconeArquivo(cx, cy, a, lum, "legenda", PLR_ICONE_H * 1.15f);
-}
-
-static void iconeAudio(float cx, float cy, float a, float lum) {
-  iconeArquivo(cx, cy, a, lum, "audio", PLR_ICONE_H * 1.15f);
-}
-
-static void iconeAspecto(float cx, float cy, float a, float lum) {
-  iconeArquivo(cx, cy, a, lum, "aspecto", PLR_ICONE_H * 1.15f);
-}
-
-// Um botao circular do transporte: translucido quando solto, na cor do tema
-// quando em foco, e o glifo sempre com o contraste certo contra o fundo dele.
-static void botaoCirculo(float cx, float cy, float f, float a, int sel) {
-  float d = PLR_BTN_D * (1.0f + 0.09f * f);
-  GfxRect r = { cx - d * 0.5f, cy - d * 0.5f, d, d };
-  if (sel) superficieFocoPlayer(r, 0.5f, f, 0.96f * a);
-  else     gfx_cor(r, 0.5f, 0.05f, 0.05f, 0.06f, 0.42f * a);
+static const char *rotuloBotao(int i) {
+  switch (i) {
+    case PLR_PLAY:      return tocando ? "Pausar" : "Continuar";
+    case PLR_CC:        return "Legendas";
+    case PLR_AUDIO:     return "\xc3\x81udio";
+    case PLR_ASPECTO:   return "Propor\xc3\xa7\xc3\xa3o";
+    case PLR_FONTES:    return "Fontes";
+    default:            return ehCanal() ? "Guia" : epT > 0 ? "Epis\xc3\xb3""dios" : "Relacionados";
+  }
 }
 
 static void corLegenda(int i,int *r,int *g,int *b){
@@ -3157,46 +3132,96 @@ static void desenharAcoesEpisodio(void){
   (void)prox;
   if(!trecho){skipFoco=0;return;}
   {
-    // .player-skip-intro: left 64, bottom 60; com controles em pe sobe para
-    // cima deles (.is-raised). O deslize acompanha `anim`, a mesma mola dos
-    // controles, para o botao nao pular de lugar.
-    const char *rot=tipo==INTRO_RESUMO?i18n("Pular resumo"):
-                    tipo==INTRO_CREDITOS?i18n("Pular créditos"):
-                    i18n("Pular abertura");
-    int sel=skipFoco&&visivel;
-    int tinta = ajustes_vidro() ? 250 : ajustes_tinta_foco();   // vidro: o miolo continua escuro
-    TxtLinha t=sel?txt_linha(TXT_BODY,rot,tinta,tinta,tinta,255):txt_linha(TXT_BODY,rot,250,250,252,255);
-    // Com controles visiveis, ancora em 664: deixa 72 px de ar ate o titulo
-    // (que comeca em ~808) e o botao compacto de 72 px nao invade essa area.
-    const float h=72.0f, lado=28.0f, ladoIcone=36.0f, intervalo=16.0f;
-    float w=t.w+lado*2.0f+ladoIcone+intervalo;
-    float y=(NV_TELA_H-60.0f-h)-anim*(NV_TELA_H-60.0f-h-664.0f);
-    GfxRect p={64,y,w,h};
+    // PULAR ABERTURA/RESUMO/CREDITOS (Glass UI): pilula de verdade no material
+    // da ilha, na margem de 96 (era 64). Com o OSD escondido ela fica sozinha
+    // embaixo a esquerda, ja cheia no acento — OK pula direto; com o OSD de pe
+    // sobe para a direita, acima da barra, e so e cheia com o foco nela.
+    const char *rot=tipo==INTRO_RESUMO?"Pular resumo":
+                    tipo==INTRO_CREDITOS?"Pular cr\xc3\xa9" "ditos":"Pular abertura";
+    int sel=(skipFoco&&visivel)||!visivel;
+    TxtLinha t=txt_linha(TXT_G21B,rot,255,255,255,255);
+    const float h=64.0f;
+    float w=22.0f+26.0f+12.0f+(float)t.w+28.0f;
+    float k=anim, xa=PLR_MARGEM, ya=960.0f;
+    float xb=NV_TELA_W-PLR_MARGEM-w, yb=PLR_BARRA_Y-36.0f-h;
+    GfxRect p={xa+(xb-xa)*k,ya+(yb-ya)*k,w,h};
+    int tinta=sel?plrui_tinta():243;
+    float kt=tinta/255.0f;
     if (ponteiroNoPlayer()) ponteiro_alvo(p.x, p.y, p.w, p.h, ponteiroSkip, NULL, 0, 0);
-    if(sel) superficieFocoPlayer(p,.27f,1.0f,.96f*entrada);
-    else gfx_cor(p,.27f,.118f,.118f,.118f,.85f*entrada);
-    { float tintaIcone = (sel && !ajustes_vidro()) ? ajustes_acento_tinta(NULL, NULL, NULL) : 1.0f;
-      gfx_icone((GfxRect){64.0f+lado,y+(h-ladoIcone)*0.5f,ladoIcone,ladoIcone},
-                "avancar",tintaIcone,tintaIcone,tintaIcone,entrada); }
-    // O icone e o texto formam um unico grupo: padding simetrico e cada um
-    // centralizado pela propria caixa evitam o aspecto de icone solto na pilula.
-    txt_desenhar_alpha(t,64.0f+lado+ladoIcone+intervalo,
-                       y+(h-t.h)*0.5f,entrada);
+    if(!visivel) gfx_veu_css((GfxRect){0,NV_TELA_H-300.0f,NV_TELA_W,300.0f},0,1.0f,1.0f,0.60f*entrada*(1.0f-anim));
+    if(sel) plrui_pilula_foco(p,entrada);
+    else plrui_disco_osd(p,entrada);
+    gfx_icone((GfxRect){p.x+22.0f,p.y+(h-26.0f)*0.5f,26.0f,26.0f},"pl_skip-forward",kt,kt,kt,entrada);
+    t=txt_linha(TXT_G21B,rot,tinta,tinta,tinta,255);
+    txt_desenhar_alpha(t,p.x+22.0f+26.0f+12.0f,p.y+(h-(float)t.h)*0.5f,entrada);
   }
 }
 
-// O anel de "carregando", o mesmo da abertura da fonte e do rebuffer (#182).
-static void anelCarregando(Uint32 agora, float alfa) {
-  float fr, fg, fb;
-  int k;
-  corFocoPlayer(&fr, &fg, &fb);
-  for (k = 0; k < 12; k++) {
-    float ang = k * 6.2831853f / 12.0f + agora * .006f;
-    float br = .18f + .82f * k / 11.0f;
-    GfxRect pt = {NV_TELA_W*.5f + cosf(ang)*24 - 4,
-                  NV_TELA_H*.5f + sinf(ang)*24 - 4,8,8};
-    gfx_cor(pt,.5f,fr,fg,fb,br*alfa);
+// --- O CORPO DA ILHA AO ABRIR A FONTE E NO ERRO ------------------------------
+static float alturaCarregando(void) { return 22.0f + 32.0f + 6.0f + 24.0f + 18.0f + 52.0f + 18.0f + 4.0f + 22.0f; }
+static void corpoCarregando(GfxRect r, float a, void *u) {
+  float x = r.x + 18.0f, w = r.w - 36.0f, y = r.y + 22.0f;
+  Uint32 agora = SDL_GetTicks();
+  const Stream *st = stream_item(stream_atual());
+  (void)u;
+  plrui_respira(x + 6.0f + 5.0f, y + 16.0f, 10.0f, agora, a);
+  { TxtLinha l = txt_linha(TXT_G26B, "Abrindo fonte", 243, 242, 239, 255);
+    txt_desenhar_alpha(l, x + 6.0f + 10.0f + 16.0f, y + 16.0f - (float)l.h * 0.5f, a); }
+  y += 32.0f + 6.0f;
+  if (linhaEp[0]) {
+    TxtLinha l = txt_linha_corta(TXT_ILHA_SUB, linhaEp, 243, 242, 239, 153, w - 32.0f);
+    txt_desenhar_alpha(l, x + 32.0f, y, a);
   }
+  y += 24.0f + 18.0f;
+  { GfxRect cx = { x, y, w, 52.0f };
+    if (ajustes_vidro()) gfx_cor(cx, 20.0f / 52.0f, 1, 1, 1, 0.05f * a);
+    else gfx_cor(cx, 20.0f / 52.0f, 0.118f, 0.122f, 0.141f, a);
+    if (st) {
+      char d[160];
+      float lw = 0.0f;
+      if (st->badges) lw = badges_desenhar_tom(st->badges, x + 18.0f, y + 14.0f, w * 0.55f, 24.0f, .52f, .52f, .52f, a);
+      (void)lw;
+      if (st->tamanhoMB > 0)
+        snprintf(d, sizeof d, "%s \xc2\xb7 %.1f GB", st->provedor, st->tamanhoMB / 1024.0);
+      else snprintf(d, sizeof d, "%s", st->provedor);
+      plrui_decimal(d); plrui_limpar_sep(d);
+      { TxtLinha l = txt_linha_corta(TXT_G18R, d, 243, 242, 239, 140, w * 0.4f);
+        txt_desenhar_alpha(l, x + w - 18.0f - l.w, y + 26.0f - (float)l.h * 0.5f, a); }
+    } }
+  y += 52.0f + 18.0f;
+  // O TRILHO CORRE (nao ha porcentagem de abertura para mostrar): um trecho
+  // de 34% indo e voltando; com Animacoes reduzidas ele fica parado.
+  { float t = ajustes_animacoes_reduzidas() ? 0.0f : (float)(agora % 1800u) / 1800.0f;
+    float k = t < 0.5f ? t * 2.0f : 2.0f - t * 2.0f, seg = 0.34f, ar, ag, ab;
+    GfxRect tr = { x, y, w, 4.0f };
+    ajustes_acento(&ar, &ag, &ab);
+    gfx_cor(tr, 0.5f, 1, 1, 1, 0.16f * a);
+    gfx_cor((GfxRect){ x + (w * (1.0f - seg)) * k, y, w * seg, 4.0f }, 0.5f, ar, ag, ab, a); }
+}
+
+// O MODAL DO ERRO: o motivo (36/700), a dica e os dois botoes. ESQUERDA e
+// DIREITA andam, OK aciona (player_evento).
+static float alturaErro(void) {
+  TxtLinha t = txt_linha(TXT_ILHA_PERGUNTA, "Ag", 0, 0, 0, 255);
+  float h = 18.0f + 4.0f;
+  const char *tit = erroTitulo[0] ? erroTitulo : "Não foi possível abrir a fonte";
+  const char *dica = erroDica[0] ? erroDica : "Abra Fontes para escolher outra opção ou recarregar.";
+  h += txt_bloco_corta(TXT_ILHA_PERGUNTA, tit, 0, 0, 0, 0, 0, 880.0f - 72.0f, (float)t.h + 7.0f, 0.0f, 3);
+  h += 14.0f + txt_bloco_corta(TXT_ILHA_TEXTO, dica, 0, 0, 0, 0, 0, 880.0f - 72.0f, 30.0f, 0.0f, 3);
+  return h + 28.0f + 60.0f + 34.0f;
+}
+static void corpoErro(GfxRect r, float a, void *u) {
+  float x = r.x + 36.0f, w = r.w - 72.0f, y = r.y + 18.0f + 4.0f;
+  TxtLinha t = txt_linha(TXT_ILHA_PERGUNTA, "Ag", 0, 0, 0, 255);
+  const char *tit = erroTitulo[0] ? erroTitulo : "Não foi possível abrir a fonte";
+  const char *dica = erroDica[0] ? erroDica : "Abra Fontes para escolher outra opção ou recarregar.";
+  (void)u;
+  y += txt_bloco_corta(TXT_ILHA_PERGUNTA, tit, 243, 242, 239, x, y, w, (float)t.h + 7.0f, a, 3);
+  y += 14.0f;
+  y += txt_bloco_corta(TXT_ILHA_TEXTO, dica, 158, 157, 155, x, y, w, 30.0f, a, 3);
+  y += 28.0f;
+  x += plrui_botao(x, y, "Abrir Fontes", "pl_layers", erroBotao == 0 ? 1.0f : 0.0f, a) + 12.0f;
+  plrui_botao(x, y, "Voltar", NULL, erroBotao == 1 ? 1.0f : 0.0f, a);
 }
 
 void player_desenhar(Uint32 agora) {
@@ -3227,6 +3252,9 @@ void player_desenhar(Uint32 agora) {
   // a arte 16:9 de esticar quando a tela nao for exatamente 16:9.
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
   int furar = player_com_video();
+#ifdef NV_SHOT_HOOKS
+  if (shotSemFuro && encolhe > 0.999f) furar = 0;   // capturas: a arte faz de video
+#endif
 #ifdef NV_TPK
   // O FURO SO COM IMAGEM (#188). O host manda `pronto` ANTES do Start (Video.cs,
   // Abrir), e o primeiro quadro so vem depois do buffer: furo aberto nesse vao
@@ -3278,9 +3306,39 @@ void player_desenhar(Uint32 agora) {
       GfxRect fa = { janAgora.x, janAgora.y, janAgora.w, janAgora.h };
       gfx_furo_raio(fa, (16.0f * (1.0f - janT)) / (fa.h > 1.0f ? fa.h : 1.0f));
     } else {
-      if (furo.w < NV_TELA_W - 0.5f || furo.h < NV_TELA_H - 0.5f)
-        gfx_cor(tela, 0.0f, 0, 0, 0, 1.0f);
-      if (furo.w > 0.0f && furo.h > 0.0f) gfx_furo(furo);
+      // VIDEO RECUADO PARA O "A SEGUIR" / "MAIS COMO ESTE" (Glass UI): em
+      // volta dele, a arte do titulo tao desfocada que so a cor fica (a
+      // textura pequena esticada) e escurecida, em vez do preto; o video ganha
+      // raio de cartaz e sombra.
+      int recuado = encolhe < 0.999f;
+      if (furo.w < NV_TELA_W - 0.5f || furo.h < NV_TELA_H - 0.5f) {
+        const char *arte = (recuado && c && c->backdrop[0]) ? artehero_url(c) : NULL;
+        GLuint tb = arte ? tex_obter_larg(arte, 480) : 0;
+        if (tb) tb = gfx_desfocado(tb, arte);   // a copia 96x54 desfocada (#133)
+        gfx_cor(tela, 0.0f, 0.043f, 0.047f, 0.055f, 1.0f);
+        if (tb) {
+          gfx_tex_aspect_atual = tex_aspecto(arte);
+          gfx_rect(tela, tb, GFX_CARD, 0, 0, 0, 0.0f, 0, 0, 0, 1.0f);
+          gfx_tex_aspect_atual = 0.0f;
+          gfx_cor(tela, 0.0f, 0, 0, 0, 0.58f);
+        }
+        if (recuado)
+          gfx_rect((GfxRect){ furo.x - 40.0f, furo.y - 10.0f, furo.w + 80.0f, furo.h + 90.0f }, 0, GFX_SOMBRA,
+                   1.0f, 0, 0, 0.5f, 0, 0, 0, 0.5f);
+      }
+#ifdef NV_SHOT_HOOKS
+      if (shotSemFuro) {
+        const char *arte = c && c->backdrop[0] ? artehero_url(c) : NULL;
+        GLuint tv = arte ? tex_obter_hero(arte) : 0;
+        if (tv) { gfx_tex_aspect_atual = tex_aspecto(arte);
+                  gfx_rect(furo, tv, GFX_CARD, 0, 0, 0, recuado ? 22.0f / furo.h : 0.0f, 0, 0, 0, 1.0f);
+                  gfx_tex_aspect_atual = 0.0f; }
+      } else
+#endif
+      if (furo.w > 0.0f && furo.h > 0.0f) {
+        if (recuado) gfx_furo_raio(furo, 22.0f / furo.h);
+        else gfx_furo(furo);
+      }
     }
   } else {
     // CANAL NAO TEM BACKDROP, TEM LOGO. O addon de canais manda a MESMA imagem
@@ -3293,6 +3351,9 @@ void player_desenhar(Uint32 agora) {
     // no catalogo e o do card, e aqui ele ocupa 1920.
     const char *arte = (c && c->backdrop[0] && !player_id_canal()[0])
                      ? artehero_url(c) : NULL;
+#ifdef NV_SHOT_HOOKS
+    if (shotSemFuro && c && c->backdrop[0]) arte = c->backdrop;   // capturas: o "video" do canal
+#endif
     GLuint tex = arte ? tex_obter_hero(arte) : 0;   // ocupa a tela inteira
     if (tex) {
       gfx_tex_aspect_atual = tex_aspecto(arte);
@@ -3308,87 +3369,95 @@ void player_desenhar(Uint32 agora) {
     }
   }
 
-  // Indicador de abertura: pontos pulsando no centro, sobre a arte escurecida.
-  // Um giro exigiria rotacao no shader; tres pontos em contrafase dizem a mesma
-  // coisa com o que ja existe, e leem bem de longe.
+  // ABRINDO A FONTE (Glass UI): a arte escurece, o logo fica no centro e o
+  // estado mora na ILHA do canto, crescida como a atividade da ilha do
+  // relogio — o ponto que respira, "Abrindo fonte", a linhaEp, a fonte
+  // escolhida (marcas, addon e tamanho) e um trilho que corre. Na ponta do
+  // cabecalho, "Fonte 2 de 3" quando o automatico ja esta na segunda.
   if (player_carregando()) {
-    GfxRect escuro = { 0, 0, NV_TELA_W, NV_TELA_H };
-    gfx_cor(escuro, 0.0f, 0, 0, 0, 0.55f * entrada);
-    // A MARCA DO CANAL VEM DO BACKDROP QUANDO NAO HA `logo`. O FrostView (e os
-    // addons de canal em geral) nao preenche `logo`: manda a marca em poster e
-    // background. Sem esta linha caia-se no nome em texto — que e justamente o
-    // texto que o dono pediu para trocar pela marca.
     const char *marca = c ? artehero_logo_sessao(c) : NULL;
+    GLuint logo;
     if (!marca && c && player_id_canal()[0] && c->backdrop[0]) marca = c->backdrop;
-    // Home/detalhe já normalizam logos TMDB; o player era o único consumidor
-    // que usava c->logo cru e criava uma segunda chave para a mesma arte.
-    GLuint logo = marca ? tex_obter_larg_qualquer(marca, 520) : 0;
+    logo = marca ? tex_obter_larg_qualquer(marca, 560) : 0;
+    gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * entrada);
+    gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 360.0f }, 1, 1.0f, 1.0f, 0.40f * entrada);
+    gfx_veu_css((GfxRect){ 0, NV_TELA_H - 360.0f, NV_TELA_W, 360.0f }, 0, 1.0f, 1.0f, 0.40f * entrada);
     if (logo) {
-      float ar = tex_aspecto(marca), w = 520, h = ar > 0 ? w / ar : 120;
-      if (h > 160) { h = 160; w = h * ar; }
-      gfx_rect((GfxRect){(NV_TELA_W-w)*.5f,NV_TELA_H*.5f-h-60,w,h},logo,
-               tex_marca_escura(marca)?GFX_MARCA:GFX_TEXTO,0,0,0,0,.95f,.95f,.97f,entrada);
-    } else {
-      TxtLinha t = txt_linha_corta(TXT_PLR_TITULO,c?c->titulo:"Reproduzindo",240,241,244,255,680);
-      txt_desenhar_alpha(t,(NV_TELA_W-t.w)*.5f,NV_TELA_H*.5f-150,entrada);
+      float ar = tex_aspecto(marca), w = 560, h = ar > 0 ? w / ar : 120;
+      if (h > 170) { h = 170; w = h * ar; }
+      gfx_rect((GfxRect){ (NV_TELA_W - w) * .5f, (NV_TELA_H - h) * .5f, w, h }, logo,
+               tex_marca_escura(marca) ? GFX_MARCA : GFX_TEXTO, 0, 0, 0, 0, .95f, .95f, .97f, entrada);
+    } else if (c && c->titulo[0]) {
+      TxtLinha t = txt_linha_corta(TXT_PLR_TITULO, c->titulo, 240, 241, 244, 255, 900);
+      txt_desenhar_alpha(t, (NV_TELA_W - t.w) * .5f, (NV_TELA_H - t.h) * .5f, entrada);
     }
-    // Anel com cauda luminosa, animado sem novas texturas por quadro.
-    anelCarregando(agora, entrada);
-    { TxtLinha lc = txt_linha(TXT_CALLOUT, "Abrindo fonte", 236, 237, 242, 255);
-      txt_desenhar_alpha(lc, NV_TELA_W * 0.5f - lc.w * 0.5f,
-                         NV_TELA_H * 0.5f + 50, 0.85f * entrada); }
-    if (linhaEp[0]) {
-      TxtLinha le = txt_linha_corta(TXT_PG_FIM,linhaEp,196,198,204,255,680);
-      txt_desenhar_alpha(le,(NV_TELA_W-le.w)*.5f,NV_TELA_H*.5f+94,entrada);
-    }
+    { PlrIlhaPedido pd;
+      char dir[48] = "";
+      memset(&pd, 0, sizeof pd);
+      pd.semFim = 1;
+      if (tentativaN >= 2 && tentativaM >= tentativaN) {
+        snprintf(dir, sizeof dir, i18n("Fonte %d de %d"), tentativaN, tentativaM);
+        pd.direita = dir;
+      }
+      pd.w = 680.0f; pd.h = alturaCarregando();
+      pd.corpo = corpoCarregando;
+      plrilha_pedir(&pd); }
   }
   // REBUFFER (#182 pediu um indicador): com o video ja rodando, o buffer que
-  // esvazia congelava a imagem sem nenhum sinal. So o anel, sem veu nem texto,
-  // e so depois de 600 ms parado — o vai-e-volta curto de um seek nao acende.
-  else if (comVideo && !erroFonte && !saindo && video_bufferando_ms() >= 600)
-    anelCarregando(agora, entrada);
+  // esvazia congelava a imagem sem nenhum sinal. So o anel, num disco da ilha
+  // (para nao sumir em cena clara), e so depois de 600 ms parado — o
+  // vai-e-volta curto de um seek nao acende.
+  else if (comVideo && !erroFonte && !saindo && video_bufferando_ms() >= 600) {
+    GfxRect d = { NV_TELA_W * 0.5f - 48.0f, NV_TELA_H * 0.5f - 48.0f, 96.0f, 96.0f };
+    plrui_material(d, 48.0f, 0, entrada);
+    plrui_anel(NV_TELA_W * 0.5f, NV_TELA_H * 0.5f, 56.0f, 0, agora, entrada);
+  }
   if (erroFonte && ehCanal()) {
     // Cartao no estilo do ao vivo: a marca do canal e a causa (provedor, conta)
     // que o app ja calculou em erroTitulo/erroDica.
     aovivo_erro_desenhar(itemCanal.titulo, itemCanal.poster, erroTitulo, erroDica, entrada);
   } else if (erroFonte) {
-    gfx_cor(tela,0,.02f,.02f,.025f,.65f);
-    // Cortadas na largura: o motivo leva o nome do addon, que e da pessoa.
-    TxtLinha er=txt_linha_corta(TXT_CALLOUT,erroTitulo[0]?erroTitulo:"Não foi possível abrir a fonte",240,241,243,255,NV_TELA_W-240);
-    txt_desenhar_alpha(er,(NV_TELA_W-er.w)*.5f,400,entrada);
-    TxtLinha aj=txt_linha_corta(TXT_PG_FIM,erroDica[0]?erroDica:"Abra Fontes para escolher outra opção ou recarregar.",192,194,200,255,NV_TELA_W-240);
-    txt_desenhar_alpha(aj,(NV_TELA_W-aj.w)*.5f,448,entrada);
+    // A FONTE NAO ABRIU: a ilha do canto vira o MODAL (o mesmo das
+    // confirmacoes), com o motivo real e as duas saidas que o proprio texto
+    // manda fazer — Abrir Fontes e Voltar. Era um veu .65 com duas linhas e
+    // nenhum botao, e o Ao vivo ja tinha cartao: dois tratamentos.
+    PlrIlhaPedido pd;
+    // O video apagado (brightness .6 no mockup) com o veu da ilha por cima.
+    gfx_cor(tela, 0, 0, 0, 0, (ajustes_vidro() ? 0.58f : 0.65f) * entrada);
+    memset(&pd, 0, sizeof pd);
+    pd.icone = "aj_triangle-alert"; pd.corIcone = 1;
+    pd.texto = i18n("Fonte");
+    pd.w = 880.0f; pd.h = alturaErro();
+    pd.corpo = corpoErro; pd.modal = 1;
+    plrilha_pedir(&pd);
   }
 
-  // --- aviso de troca de modo de proporcao ---------------------------------
-  // O #playerAspectToast do web, com as medidas do bloco de TV do CSS:
-  //   top min(8.33vw,160px)=160  altura min(6.67vw,128px)=128
-  //   padding lateral min(3.33vw,64px)=64  fonte min(2.92vw,56px)=56
-  //   fundo rgba(9,13,20,0.88), borda rgba(255,255,255,0.18), raio 999 (pilula)
-  // Ele e desenhado ANTES do corte por `a`: a tecla de proporcao funciona com
-  // os controles escondidos, e um aviso que so aparecesse com a barra em pe
-  // deixaria a troca sem nenhuma confirmacao no caso mais comum.
+  // --- avisos do player: a PILULA DA ILHA que abre (plrilha.h) --------------
+  // Era uma pilula de 128 px cheia de acento no meio da tela (o acento como
+  // decoracao). Agora o aviso abre a pilula do canto para 64, com o icone do
+  // tipo e a frase curta antes da hora — o mesmo lugar e material da ilha do
+  // relogio fora do player. A proporcao leva tambem os pontos do ciclo: a
+  // posicao do modo entre os disponiveis, para saber quantas vezes apertar.
+  // Desenhado ANTES do corte por `a`: a tecla de proporcao funciona com os
+  // controles escondidos, e o aviso e a unica confirmacao da troca.
   if (toastAte > agora) {
-    // Some com fade nos ultimos 200ms, que e a `transition: opacity 200ms` do
-    // bloco de TV. Aparecer e sumir de estalo le como falha de desenho.
-    float resta = (float)(toastAte - agora);
-    float at = (resta < 200.0f ? resta / 200.0f : 1.0f) * entrada;
-    int tinta = ajustes_tinta_foco();
-    float fr, fg, fb;
-    corFocoPlayer(&fr, &fg, &fb);
-    TxtLinha l = toastTexto[0]
-        ? txt_linha_corta(TXT_PLR_TITULO, toastTexto, tinta, tinta, tinta, 242,
-                          NV_TELA_W - 256.0f)
-        : txt_linha(TXT_PLR_TITULO, player_aspecto_rotulo(aspecto),
-                    tinta, tinta, tinta, 242);
-    float pw = (float)l.w + 128.0f, ph = 128.0f;
-    GfxRect pil = { (NV_TELA_W - pw) * 0.5f, 160.0f, pw, ph };
-    // Raio e FRACAO do menor lado (ver gfx.h): 0.5 e a pilula completa.
-    gfx_cor(pil, 0.5f, fr, fg, fb, 0.88f * at);
-    gfx_rect(pil, 0, GFX_BRILHO_TOPO, 0.5f, 0.20f, 0, 0.5f,
-             1, 1, 1, 0.10f * at);
-    txt_desenhar_alpha(l, pil.x + (pw - l.w) * 0.5f,
-                       pil.y + (ph - (float)l.h) * 0.5f, at);
+    PlrIlhaPedido pd;
+    memset(&pd, 0, sizeof pd);
+    pd.aberta = 1; pd.semFim = 1;
+    if (toastTexto[0]) {
+      pd.texto = toastTexto;
+      pd.icone = toastIcone[0] ? toastIcone : "aj_info";
+      pd.corIcone = toastCor;
+    } else {
+      int m, n = 0, k = 0;
+      for (m = 0; m < PLR_ASP_N; m++) if (modoDisponivel(m)) { if (m == aspecto) k = n; n++; }
+      pd.texto = i18n(player_aspecto_rotulo(aspecto));
+      pd.icone = "pl_ratio";
+      pd.pontos = n > 1 ? n : 0; pd.ponto = k;
+    }
+    plrilha_pedir(&pd);
+    // Sem o OSD, o veu de cima do mockup segura a pilula em cena clara.
+    gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 260.0f }, 1, 1.38f, 1.0f, 0.52f * entrada * (1.0f - anim));
   }
 
   // ANTES do corte por `a`: desenha-lo depois do `return` de "tocando limpo"
@@ -3421,7 +3490,14 @@ void player_desenhar(Uint32 agora) {
   posplay_desenhar(agora, NV_TELA_H - PLR_PAD_Y);
   // Acima do pos-reproducao quando ele esta no ar (posplay_topo), senao na
   // mesma margem inferior.
-  reacao_desenhar(agora, posplay_topo(NV_TELA_H - PLR_PAD_Y));
+  // "O que achou?" na margem de 96 (mockup) ou acima do pos-reproducao.
+  { float base = posplay_visivel() ? posplay_topo(NV_TELA_H) : NV_TELA_H - 96.0f;
+    if (reacao_visivel()) {
+      // O video um degrau mais escuro e o veu leve de baixo, sob o cartao.
+      gfx_cor(tela, 0, 0, 0, 0, 0.25f * entrada);
+      gfx_veu_css((GfxRect){ 0, NV_TELA_H - 300.0f, NV_TELA_W, 300.0f }, 0, 1.0f, 1.0f, 0.60f * entrada);
+    }
+    reacao_desenhar(agora, base); }
 
   // GUIA PARENTAL, canto superior esquerdo (.player-parental-guide).
   //
@@ -3503,51 +3579,61 @@ void player_desenhar(Uint32 agora) {
         (float)(agora - pgDesde) / 1000.0f < PG_SEG_TOTAL) {
       tg = (float)(agora - pgDesde) / 1000.0f;
       float saida = anim_clamp((PG_SEG_TOTAL - tg) / PG_SEG_SAIDA, 0.0f, 1.0f);
-      float lin = PG_LINHA_H, gap = PG_LINHA_GAP;
-      float alt = np * lin + (np - 1) * gap;
-      float y0 = PLR_PAD_Y;
-      // A barra so cresce depois que a primeira linha entrou, senao ela aparece
-      // sozinha apontando para o vazio.
-      float eB = anim_clamp((tg - 0.10f) / 0.34f, 0.0f, 1.0f);
-      eB = 1.0f - (1.0f - eB) * (1.0f - eB);
-      float fr, fg, fb;
-      corFocoPlayer(&fr, &fg, &fb);
-      { GfxRect barra = { PLR_PAD_X, y0, PG_BARRA_W, alt * eB };
-        if (eB > 0.01f)
-          gfx_cor(barra, 0.5f * (PG_BARRA_W / (alt * eB)),
-                  fr, fg, fb, entrada * saida); }
-      float xt = PLR_PAD_X + PG_BARRA_W + PG_LISTA_PADX;
+      // UMA ILHA DISCRETA NO CANTO (Glass UI): kicker com a classificacao e
+      // as linhas "categoria ......... gravidade" com fio entre elas. A barra
+      // de acento que crescia pela lateral saiu (era decoracao); a gravidade
+      // Severo leva o ambar, que e estado. Com a pilula da hora no mesmo
+      // canto, a ilha desce para baixo dela.
+      float eI = anim_clamp(tg / 0.30f, 0.0f, 1.0f);
+      float aI = entrada * saida * (1.0f - (1.0f - eI) * (1.0f - eI));
+      float x0 = plrilha_direita() ? NV_TELA_W - PLR_MARGEM - 520.0f : PLR_MARGEM, y0 = PLR_PAD_Y;
+      float hI = 26.0f + 18.0f + 8.0f + np * 50.0f + 26.0f;
+      { GfxRect ir;
+        if (plrilha_rect(&ir) && ir.y < y0 + hI && fabsf(ir.x - x0) < 600.0f) y0 = ir.y + ir.h + 14.0f; }
+      gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 260.0f }, 1, 1.38f, 1.0f, 0.52f * aI * (1.0f - anim));
+      plrui_material((GfxRect){ x0, y0, 520.0f, hI }, 30.0f, 0, aI);
+      { char k[48];
+        const CatItem *ci = item();
+        if (ci && ci->classificacao[0]) snprintf(k, sizeof k, i18n("Guia parental \xc2\xb7 %s"), ci->classificacao);
+        else snprintf(k, sizeof k, "%s", i18n("Guia parental"));
+        plrui_kicker(k, x0 + 30.0f, y0 + 26.0f, 243, 242, 239, aI * 0.45f); }
       for (int i = 0; i < np; i++) {
-        float yl = y0 + i * (lin + gap);
+        float yl = y0 + 26.0f + 18.0f + 8.0f + i * 50.0f;
         float ts = anim_clamp((tg - 0.18f - i * 0.10f) / 0.30f, 0.0f, 1.0f);
-        float ee = 1.0f - (1.0f - ts) * (1.0f - ts);   // desaceleracao
-        float ag = entrada * saida * ee;
-        float dx = (1.0f - ee) * 18.0f;                // entra deslizando da esquerda
-        TxtLinha lr, ls, lg;
-        float cy, x;
+        float ee = 1.0f - (1.0f - ts) * (1.0f - ts);
+        float ag = aI * ee;
+        const char *gv = parental_gravidade(i);
+        int forte = gv && !strcmp(gv, "Severo");
+        TxtLinha lr, lg;
         if (ag <= 0.004f) continue;
-        lr = txt_linha(TXT_PG_ROTULO, parental_rotulo(i), 255, 255, 255, 255);
-        ls = txt_linha(TXT_PG_GRAV, "\xc2\xb7",
-                       (int)(fr * 255.0f + 0.5f),
-                       (int)(fg * 255.0f + 0.5f),
-                       (int)(fb * 255.0f + 0.5f), 255);
-        lg = txt_linha(TXT_PG_GRAV, parental_gravidade(i), 255, 255, 255, 255);
-        cy = yl + (lin - lr.h) * 0.5f;
-        x  = xt - dx;
-        txt_desenhar_alpha(lr, x, cy, ag * 0.85f);  x += lr.w;
-        txt_desenhar_alpha(ls, x, yl + (lin - ls.h) * 0.5f, ag * 0.40f); x += ls.w;
-        txt_desenhar_alpha(lg, x, yl + (lin - lg.h) * 0.5f, ag * 0.50f);
+        if (i) gfx_cor((GfxRect){ x0 + 30.0f, yl, 460.0f, 1.0f }, 0.0f, 1, 1, 1, 0.07f * ag);
+        lr = txt_linha_corta(TXT_G22M, parental_rotulo(i), 243, 242, 239, 255, 300.0f);
+        lg = forte ? txt_linha(TXT_ILHA_SUB, gv, 240, 185, 74, 255)
+                   : txt_linha(TXT_ILHA_SUB, gv, 243, 242, 239, 140);
+        txt_desenhar_alpha(lr, x0 + 30.0f, yl + 25.0f - (float)lr.h * 0.5f, ag);
+        txt_desenhar_alpha(lg, x0 + 490.0f - (float)lg.w, yl + 25.0f - (float)lg.h * 0.5f, ag);
       }
     }
   }
 
+  // O "termina as" da pilula vale tambem sem o OSD (a ilha crescida das
+  // faixas, os avisos): o tempo que falta e dado a ilha a cada quadro.
+  plrilha_relogio(0.0f, ehCanal() ? -1.0 : (double)(duracaoSeg - posSeg));
   float a = anim * entrada;
   // FOLHA ABERTA, OSD APAGADO. A folha de Fontes e a de Legendas sao vidro
   // translucido: o relogio, os selos 4K/HDR e o tempo do player apareciam
   // atraves dela, encavalados nos botoes da folha (foto do dono, 30/09).
-  { float fa = stream_folha_anim(), fx = faixas_anim();
+  { float fa = stream_folha_anim(), fx = faixas_anim(), fe = episodios_anim();
     float cob = fa > fx ? fa : fx;
-    a *= 1.0f - anim_clamp(cob, 0.0f, 1.0f); }
+    if (fe > cob) cob = fe;
+    a *= 1.0f - anim_clamp(cob, 0.0f, 1.0f);
+    // A folha de episodios fica com a pilula da hora no canto (mockup): o OSD
+    // sai, a ilha nao.
+    if (fe > 0.02f && episodios_aberto() && !episodios_menu_aberto_qualquer()) {
+      PlrIlhaPedido pd;
+      memset(&pd, 0, sizeof pd);
+      plrilha_pedir(&pd);
+    } }
   // O que NAO e barra nem tempo (titulo, meta, botoes, relogio, selos, veu de
   // cima) segue `ac`: some na busca so com a barra (#128).
   float ac = a * cheio;
@@ -3574,7 +3660,7 @@ void player_desenhar(Uint32 agora) {
         aovivo_banner_desenhar(&bn, entrada * bannerAV);
       }
     }
-    if (a > 0.005f) {
+    if (a > 0.005f && !erroFonte) {
       AoVivoOsd o;
       desenharLegendaExterna();
       if (!zapEst.pend) {
@@ -3594,20 +3680,14 @@ void player_desenhar(Uint32 agora) {
     desenharAcoesEpisodio(); return;
   }   // tocando limpo
 
-  // Dois degrades, como no web: .player-controls-gradient-top (150px, 0.7 -> 0)
-  // e .player-controls-gradient-bottom (200px, 0 -> 0.8). O de baixo sustenta o
-  // titulo e a barra; o de cima existe porque os selos e a classificacao ficam
-  // no alto e sem ele sumiriam sobre cena clara. Ambos acompanham a animacao
-  // dos controles: fixos, deixariam sombra permanente em toda cena.
-  GfxRect veu = { 0, NV_TELA_H - PLR_GRAD_BAIXO, NV_TELA_W, PLR_GRAD_BAIXO };
-  // GFX_VEU_BAIXO e nao GFX_VEU: aquele escurece tambem a ESQUERDA (feito para
-  // o hero da home) e deixava o canto superior esquerdo deste retangulo escuro
-  // com o direito transparente — a borda entre os dois lia como uma placa.
-  // Na busca so com a barra o veu de baixo fica mais leve: sustenta o tempo
-  // sem escurecer o rodape do video que a pessoa esta procurando.
-  gfx_rect(veu, 0, GFX_VEU_BAIXO, 0, 0, 0, 0.0f, 0, 0, 0, 0.86f * a * (0.5f + 0.5f * cheio));
-  { GfxRect topo = { 0, 0, NV_TELA_W, PLR_GRAD_TOPO };
-    gfx_rect(topo, 0, GFX_VEU_TOPO, 0, 0, 0, 0.0f, 0, 0, 0, 0.70f * ac); }
+  // OS VEUS DO GLASS UI (mockup aprovado em 03/10): so dois degrades, o de
+  // cima (260, preto .52 -> 0) e o de baixo (520, .80 -> 0), pelo shader com
+  // dither (GFX_VEU_CSS): no painel de 8 bits da OLED um degrade escuro longo
+  // em faixas de gfx_cor sai em degraus. Na busca so com a barra o de baixo
+  // fica no leve (300, .60), o .veu-b.leve do mockup.
+  gfx_veu_css((GfxRect){ 0, NV_TELA_H - 520.0f, NV_TELA_W, 520.0f }, 0, 1.25f, 1.0f, 0.80f * a * cheio);
+  gfx_veu_css((GfxRect){ 0, NV_TELA_H - 300.0f, NV_TELA_W, 300.0f }, 0, 1.0f, 1.0f, 0.60f * a * (1.0f - cheio));
+  gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 260.0f }, 1, 1.38f, 1.0f, 0.52f * ac);
 
   /*
    * Legenda e conteudo, enquanto o degrade e chrome do player. Ela precisa
@@ -3619,208 +3699,188 @@ void player_desenhar(Uint32 agora) {
    */
   desenharLegendaExterna();
 
-  // O bloco inteiro desliza junto: titulo, barra e icones sao UM objeto que
-  // sobe. Animar cada linha por conta propria produz um escalonamento que o
-  // aparelho nao tem.
-  // O deslize acompanha as DUAS coisas: o OSD aparecendo/sumindo (`anim`) e a
-  // TELA abrindo (`entrada`). Antes so o primeiro entrava aqui, entao abrir o
-  // player era um fade seco — os controles nasciam no lugar final, so que
-  // transparentes. Com a abertura tambem deslizando, o bloco entra de baixo e a
-  // tela deixa de "piscar" para o estado final.
-  //
-  // A curva da abertura e uma desaceleracao (1-(1-t)^3) e nao a mola crua: a
-  // mola passa do ponto e volta, e num bloco de 200px de altura esse repique le
-  // como tremida.
+  // O bloco inteiro desliza junto: titulo, barra e botoes sao UM objeto que
+  // sobe, acompanhando o OSD (`anim`) e a abertura da tela (`entrada`, numa
+  // desaceleracao: a mola crua repica e num bloco alto isso le como tremida).
   float eEnt  = 1.0f - (1.0f - entrada) * (1.0f - entrada) * (1.0f - entrada);
   float desce = (1.0f - anim) * PLR_DESLIZE
               + (1.0f - eEnt) * PLR_DESLIZE * 1.8f;
 
-  // Ancoragem de baixo para cima, na ordem da coluna .player-controls-bottom do
-  // web lida ao contrario: a fileira de botoes encosta na margem inferior, a
-  // barra fica 16px acima dela e a meta 12px acima da barra. A margem e
-  // --player-controls-y (48), nao a margem geral do app.
-  float yRowTopo = NV_TELA_H - PLR_PAD_Y - PLR_BTN_D + desce;
+  // GEOMETRIA DO MOCKUP: a barra no y 902 (960 na busca so com a barra), os
+  // botoes 38 abaixo dela, o tempo na linha dos botoes, o titulo 36 acima.
+  // Tudo entre as margens de 96: a barra deixou de ir de ponta a ponta.
+  float ySo = ajustes_seekr_ligado() ? PLR_BARRA_Y_SEEKR : PLR_BARRA_Y_SO;
+  float yBarra   = (PLR_BARRA_Y + (ySo - PLR_BARRA_Y) * (1.0f - cheio)) + desce;
+  float yRowTopo = yBarra + PLR_GAP_ROW;
   float cyBotoes = yRowTopo + PLR_BTN_D * 0.5f;
-  float yBarra   = yRowTopo - PLR_GAP_ROW - PLR_TRILHO_H;
-
-  // --- barra de progresso ---
-  // A barra ocupa a largura util inteira, entre as margens do player. Sem
-  // marcador na cabeca: o web nao tem um — a barra engorda de 6 para 10px
-  // quando recebe foco, e e isso que diz que ela e operavel. Aqui o foco anda
-  // so pelos botoes, entao ela fica sempre em 6.
-  // DE PONTA A PONTA: encosta nas duas bordas da tela. Com margem ela lia como
-  // um componente solto no meio do rodape; encostada, ela e a borda do video.
-  float bx = 0.0f, bw = NV_TELA_W;
-  // MARGEM DE SEGURANCA para o CONTEUDO (titulo, meta, botoes, relogio).
-  //
-  // O trilho continua de ponta a ponta de proposito — encostado, ele le como a
-  // borda do video. O que nao pode encostar e o TEXTO: em x=0 ele cai na zona
-  // que a TV corta por overscan, e o dono viu o titulo e o tempo cortados nas
-  // duas beiradas. Sao dois papeis diferentes que estavam compartilhando o
-  // mesmo x so porque nasceram juntos.
-  //
-  // 96 e a mesma margem lateral da pagina de titulo (NV_DETP_X, o
-  // --tv-safe-gutter-width do web), entao o player deixa de ser o unico lugar
-  // do app com uma regra propria de borda. Fica como constante local porque
-  // player.c nao inclui detail.h — e nao deve incluir so por um numero.
-  float cx = bx + PLR_MARGEM;
-  float cw = bw - PLR_MARGEM * 2.0f;
+  float bx = PLR_MARGEM, bw = NV_TELA_W - PLR_MARGEM * 2.0f;
+  float cx = PLR_MARGEM;
+  float cw = bw;
   float frac = ehCanal()
              ? fracCanal()
              : (duracaoSeg > 0.0f ? anim_clamp(posVis / duracaoSeg, 0.0f, 1.0f) : 0.0f);
-  // Com foco o trilho engorda de 6 para 10 e clareia de 0.30 para 0.45, e ele
-  // cresce para BAIXO a partir da mesma linha de base — subir moveria tambem a
-  // meta e o titulo, que estao ancorados nela.
-  // O trilho cresce para BAIXO a partir da mesma linha de base — subir moveria
-  // tambem o titulo, que esta ancorado nela.
-  float hTrilho = barraFoco ? PLR_TRILHO_H_FOCO : PLR_TRILHO_H;
-  GfxRect trilho = { bx, yBarra, bw, hTrilho };
-  GfxRect andado = { bx, yBarra, bw * frac, hTrilho };
-  float fr, fg, fb;
-  corFocoPlayer(&fr, &fg, &fb);
-  gfx_cor(trilho, PLR_TRILHO_R, 1, 1, 1, (barraFoco ? 0.34f : 0.22f) * a);
-  // A area clicavel da barra e mais alta que o trilho de 4-8 px: um fio desse
-  // tamanho nao se acerta com a mao no ar.
+
+  // --- barra de progresso: a MESMA de todo o player (plrui_barra) -----------
   barraPtrX = bx; barraPtrW = bw;
-  // Com dedo (#216) a faixa cresce para 44 px de cada lado: o trilho tem 4 px
-  // logicos, menos de meio milimetro num celular. Os botoes, registrados
-  // depois, continuam ganhando onde a faixa encosta neles.
   if (ponteiroNoPlayer() && a > 0.3f) {
     float folga = ponteiro_tem_toque() ? 44.0f : 14.0f;
-    ponteiro_alvo(bx, yBarra - folga, bw, hTrilho + folga * 2.0f, ponteiroBarra, ponteiroBuscar, 0, 0);
+    ponteiro_alvo(bx, yBarra - folga, bw, 6.0f + folga * 2.0f, ponteiroBarra, ponteiroBuscar, 0, 0);
     ponteiro_alvo_arrastavel();
   }
-  // O buffer do pipeline, entre o andado e o fim: e o que mostra que o video
-  // esta a frente do relogio. Sem dado do pipeline o segmento nao existe —
-  // inventar "quase todo carregado" seria pior que a barra simples. No web ele
-  // e a MESMA cor do preenchimento a 0.35 (.player-progress-buffered).
   { float bufFrac = (!ehCanal() && duracaoSeg > 0.0f) ? anim_clamp(video_buffer_fim() / duracaoSeg, 0.0f, 1.0f) : 0.0f;
-    if (bufFrac > frac + 0.004f) {
-      GfxRect buf = { bx + bw * frac, yBarra, bw * (bufFrac - frac), hTrilho };
-      gfx_cor(buf, PLR_TRILHO_R, PLR_FILL_C, PLR_FILL_C, PLR_FILL_C, 0.35f * a);
-    } }
-  // Meio pixel ja conta: com o teste em 1.0 o inicio do filme nao desenhava
-  // nada, e a barra parecia so comecar a andar depois de um tempo.
-  if (andado.w > 0.5f)
-    gfx_cor(andado, PLR_TRILHO_R, fr, fg, fb, a);
-
-  // Filme: somente nome. Serie: nome seguido de T/E e titulo do episodio.
-  // O arquivo e o provedor pertencem a folha de fontes, nao ao transporte.
-  float yMetaBase = yBarra - PLR_GAP_BARRA;
-  if (ehCanal()) {
-    // Canal: no lugar do "T/E · episodio" vai a programacao — o que esta no
-    // ar e o que vem depois, que e a parte do guia que interessa enquanto
-    // toca. A mesma informacao que o overlay abre com BAIXO.
-    char l1[300], l2[300];
-    linhasCanal(l1, sizeof l1, l2, sizeof l2);
-    { TxtLinha le = txt_linha_corta(TXT_PLR_CORPO, l1, 218,220,224,255, cw*.67f);
-      yMetaBase -= le.h;
-      txt_desenhar_alpha(le, cx, yMetaBase, ac);
-      yMetaBase -= 6; }
-    if (l2[0]) {
-      TxtLinha l2t = txt_linha_corta(TXT_PG_FIM, l2, 160,162,170,255, cw*.67f);
-      yMetaBase -= l2t.h;
-      txt_desenhar_alpha(l2t, cx, yMetaBase, ac);
-      yMetaBase -= 6;
+    // OS CORTES DO TheIntroDB (abertura, resumo, creditos) que o player ja
+    // tem: onde cada trecho comeca e acaba, discretos sobre o trilho.
+    float caps[16];
+    int nCaps = 0;
+    if (!ehCanal() && duracaoSeg > 0.0f) {
+      IntroTrecho tr[8];
+      int nt = intro_trechos(tr, 8), i;
+      for (i = 0; i < nt && nCaps < 15; i++) {
+        caps[nCaps++] = (float)(tr[i].inicio / duracaoSeg);
+        if (tr[i].fim > 0.0) caps[nCaps++] = (float)(tr[i].fim / duracaoSeg);
+      }
+      for (i = 0; i < nCaps; i++) if (caps[i] <= 0.0f || caps[i] >= 1.0f) caps[i--] = caps[--nCaps];
     }
-  } else if (linhaEp[0]) {
-    TxtLinha le=txt_linha_corta(TXT_PLR_CORPO,linhaEp,218,220,224,255,cw*.67f);
-    yMetaBase-=le.h;
-    txt_desenhar_alpha(le,cx,yMetaBase,ac);
-    yMetaBase-=6;
-  }
+    plrui_barra(bx, yBarra, bw, frac, bufFrac, barraFoco, caps, nCaps, a); }
 
-  // O NOME DO FILME, EM TEXTO. Aqui o player preferia o LOGO do titulo quando
-  // havia um, e caia no texto so na falta dele. Duas coisas davam errado: o
-  // logo tem altura e proporcao proprias, entao o bloco pulava de titulo para
-  // titulo; e quando o TMDB entregava a variante escura o nome sumia sobre a
-  // cena. O dono pediu direto: "o titulo do filme que aparece no player pode
-  // deixar escrito como tava antes... so o nome do filme".
-  //
-  // Texto tambem e o que o resto da tela usa (o relogio, o tempo, os selos),
-  // entao o canto passa a ter UMA gramatica so.
-  float hTit, yTit;
-  { const char *nome = canalSessao ? (itemCanal.titulo[0] ? itemCanal.titulo : "Canal")
-                                 : (c && c->titulo[0]) ? c->titulo : "Reproduzindo";
-    TxtLinha lt = txt_linha_corta(TXT_PLR_TITULO, nome, 255, 255, 255, 255,
-                                  cw * 0.62f);
-    hTit = (float)lt.h;
-    yTit = yMetaBase - hTit;
-    txt_desenhar_alpha(lt, cx, yTit, ac); }
+  // --- O TITULO: o LOGO, e o texto so na falta dele -------------------------
+  // (O dono tinha pedido texto em 2026-09; o mockup aprovado em 03/10 volta ao
+  // logo, que e o que o resto do app mostra. Logo escuro sai tingido de
+  // claro, GFX_MARCA, como no detalhe.) Embaixo do logo, a linha do episodio
+  // ("T1E3 · The Head", o codigo em negrito e o nome apagado) ou, num filme,
+  // a meta do catalogo com pontos entre os campos.
+  { float yBase = yBarra - 36.0f;
+    const char *marca = (!canalSessao && c) ? artehero_logo_sessao(c) : NULL;
+    GLuint logo = marca ? tex_obter_larg_qualquer(marca, 480) : 0;
+    if (!canalSessao && linhaEp[0]) {
+      const char *sep = strstr(linhaEp, " \xc2\xb7 ");
+      char cod[64];
+      size_t nc = sep ? (size_t)(sep - linhaEp) : strlen(linhaEp);
+      if (nc >= sizeof cod) nc = sizeof cod - 1;
+      memcpy(cod, linhaEp, nc); cod[nc] = 0;
+      { TxtLinha l1 = txt_linha(TXT_G30B, cod, 243, 242, 239, 255);
+        TxtLinha l2 = sep ? txt_linha_corta(TXT_G30M, sep + 1, 243, 242, 239, 153, cw * 0.6f - l1.w)
+                          : (TxtLinha){ 0 };
+        yBase -= (float)l1.h;
+        txt_desenhar_alpha(l1, cx, yBase, ac);
+        if (sep) txt_desenhar_alpha(l2, cx + l1.w + 8.0f, yBase, ac);
+        yBase -= 16.0f; }
+    } else if (!canalSessao && c && c->meta[0]) {
+      // "2026 · 2h 37min · Aventura": os campos do catalogo separados por um
+      // ponto de 4 px a 40%, 21/400 a 66%.
+      char m[sizeof c->meta];
+      char *q = m, *fimp;
+      float x = cx, h = (float)txt_linha(TXT_CAPTION2, "Ag", 243, 242, 239, 168).h;
+      int prim = 1;
+      snprintf(m, sizeof m, "%s", c->meta);
+      yBase -= h;
+      while (q && *q) {
+        fimp = strstr(q, " \xc2\xb7 ");
+        if (fimp) *fimp = 0;
+        if (!*q) { q = fimp ? fimp + 4 : NULL; continue; }   // campo vazio: sem ponto solto
+        if (!prim) {
+          gfx_cor((GfxRect){ x + 10.0f, yBase + h * 0.5f - 2.0f, 4.0f, 4.0f }, 0.5f, 0.953f, 0.949f, 0.937f, 0.40f * ac);
+          x += 24.0f;
+        }
+        { TxtLinha l = txt_linha(TXT_CAPTION2, q, 243, 242, 239, 168);
+          if (x + l.w > cx + cw * 0.6f) break;
+          txt_desenhar_alpha(l, x, yBase, ac); x += l.w; }
+        prim = 0;
+        q = fimp ? fimp + 4 : NULL;
+      }
+      yBase -= 12.0f;
+    }
+    if (logo) {
+      float ar = tex_aspecto(marca), w = 480.0f, h = ar > 0.0f ? w / ar : 150.0f;
+      if (h > 150.0f) { h = 150.0f; w = h * ar; }
+      gfx_rect((GfxRect){ cx, yBase - h, w, h }, logo,
+               tex_marca_escura(marca) ? GFX_MARCA : GFX_TEXTO, 0, 0, 0, 0, .95f, .95f, .97f, ac);
+    } else {
+      const char *nome = canalSessao ? itemCanal.titulo : (c ? c->titulo : "");
+      if (nome && nome[0]) {
+        TxtLinha lt = txt_linha_corta(TXT_PLR_TITULO, nome, 255, 255, 255, 255, cw * 0.62f);
+        txt_desenhar_alpha(lt, cx, yBase - (float)lt.h, ac);
+      }
+    } }
   // Depois do titulo: a miniatura fica POR CIMA dele enquanto a pessoa procura.
   seekrMiniatura(bx, bw, frac, yBarra, a);
 
-  // --- fileira de BOTOES: o transporte do aparelho --------------------------
-  // Sem botoes redundantes de salto. O foco percorre so as acoes visiveis.
+  // --- fileira de BOTOES ---------------------------------------------------
+  // Discos de 68 no material da ilha; o focado vira PILULA cheia no acento com
+  // o NOME DENTRO (o rotulo solto embaixo caia em y~1042, zona de overscan). A
+  // largura acompanha a mola do foco, entao os vizinhos andam junto.
   {
-    // .player-controls-row e space-between: o grupo de botoes a ESQUERDA, com
-    // gap de 4px entre eles, e o rotulo de tempo empurrado para a direita por
-    // margin-left:auto. Nao e o transporte centralizado do app da Apple.
-    float passo = PLR_BTN_D + PLR_BTN_GAP;
-    float x0    = cx + PLR_BTN_D * 0.5f;
-    float cxs[PLR_NBTNS];
-    for (int i=0;i<PLR_NBTNS;i++) cxs[i]=x0+i*passo;
+    float x = cx;
     for (int i = 0; i < PLR_NBTNS - (temUltimoBotao() ? 0 : 1); i++) {
       float f = focoB[i];
       int sel = (botao == i && !barraFoco);
-      botaoCirculo(cxs[i], cyBotoes, f, ac, sel);
+      const char *ic = iconeBotao(i), *rot = rotuloBotao(i);
+      TxtLinha lr = txt_linha(TXT_G21B, rot, 0, 0, 0, 255);
+      float wCheio = 22.0f + 30.0f + 12.0f + (float)lr.w + 28.0f;
+      float w = PLR_BTN_D + (wCheio - PLR_BTN_D) * f;
+      GfxRect r = { x, yRowTopo, w, PLR_BTN_D };
+      int tinta = (int)(242.0f + (plrui_tinta() - 242.0f) * f);
+      float k = tinta / 255.0f;
+      if (f > 0.02f) plrui_pilula_foco(r, ac * f);
+      if (f < 0.98f) plrui_disco_osd(r, ac * (1.0f - f));
       if (ponteiroNoPlayer() && ac > 0.3f)
-        ponteiro_alvo(cxs[i] - PLR_BTN_D * 0.5f, cyBotoes - PLR_BTN_D * 0.5f,
-                      PLR_BTN_D, PLR_BTN_D, ponteiroBotao, NULL, i, 0);
-      float lum = (sel && !ajustes_vidro()) ? ajustes_acento_tinta(NULL, NULL, NULL) : 0.94f;
-      switch (i) {
-        case PLR_PLAY:    iconePlayPause(cxs[i], cyBotoes, ac, tocando, lum); break;
-        case PLR_CC:      iconeLegendas(cxs[i], cyBotoes, ac, lum); break;
-        case PLR_ASPECTO: iconeAspecto(cxs[i], cyBotoes, ac, lum); break;
-        case PLR_FONTES: iconeArquivo(cxs[i],cyBotoes,ac,lum,"fontes",44); break;
-        // O icone e o mesmo nos dois papeis: "uma lista de coisas para
-        // escolher" serve para episodios e para relacionados, e desenhar um
-        // icone novo para uma acao que aparece so em filme nao se paga.
-        case PLR_EPISODIOS: iconeArquivo(cxs[i],cyBotoes,ac,lum,"episodios",44); break;
-        default:          iconeAudio(cxs[i], cyBotoes, ac, lum); break;
+        ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroBotao, NULL, i, 0);
+      { float ix = x + (PLR_BTN_D - 30.0f) * 0.5f + (22.0f - (PLR_BTN_D - 30.0f) * 0.5f) * f;
+        gfx_icone((GfxRect){ ix, cyBotoes - 15.0f, 30.0f, 30.0f }, ic, k, k, k, ac * 0.96f);
+        if (f > 0.05f) {
+          TxtLinha l = txt_linha(TXT_G21B, rot, tinta, tinta, tinta, 255);
+          gfx_recorte(r.x, r.y, r.w, r.h);
+          txt_desenhar_alpha(l, ix + 30.0f + 12.0f, cyBotoes - (float)l.h * 0.5f, ac * f * (sel ? 1.0f : 0.0f));
+          gfx_sem_recorte();
+        } }
+      x += w + PLR_BTN_GAP;
+    }
+  }
+
+  // --- tempo -----------------------------------------------------------------
+  // Com o OSD inteiro: "1:12:40 / 2:37:00" na linha dos botoes, o decorrido
+  // claro (24/600 a 92%) e "/ total" apagado. Na busca so com a barra: o
+  // decorrido a esquerda e, a direita, o que falta ("-1:16:40") — ou o total,
+  // com o Seekr, cuja ilha ja diz o que falta.
+  {
+    char t1[24], t2[32], d[24];
+    if (ehCanal()) {
+      TxtLinha l = txt_linha(TXT_ILHA_NOME, "AO VIVO", 243, 242, 239, 235);
+      txt_desenhar_alpha(l, cx + cw - l.w, cyBotoes - (float)l.h * 0.5f, a);
+    } else {
+      plrui_tempo(t1, sizeof t1, posSeg);
+      plrui_tempo(d, sizeof d, duracaoSeg);
+      snprintf(t2, sizeof t2, "/ %s", d);
+      if (cheio > 0.01f) {
+        TxtLinha l2 = txt_linha(TXT_ILHA_NOME, t2, 243, 242, 239, 128);
+        TxtLinha l1 = txt_linha(TXT_ILHA_NOME, t1, 243, 242, 239, 235);
+        float xr = cx + cw - l2.w, y = cyBotoes - (float)l1.h * 0.5f;
+        txt_desenhar_alpha(l2, xr, y, a * cheio);
+        txt_desenhar_alpha(l1, xr - 8.0f - l1.w, y, a * cheio);
+      }
+      if (cheio < 0.99f) {
+        char r[32];
+        TxtLinha l1 = txt_linha(TXT_ILHA_NOME, t1, 243, 242, 239, 235), l2;
+        if (ajustes_seekr_ligado()) snprintf(r, sizeof r, "%s", d);
+        else { char f[24]; plrui_tempo(f, sizeof f, duracaoSeg - posSeg); snprintf(r, sizeof r, "\xe2\x88\x92%s", f); }
+        l2 = txt_linha(TXT_ILHA_NOME, r, 243, 242, 239, 128);
+        txt_desenhar_alpha(l1, cx, yBarra + 32.0f, a * (1.0f - cheio));
+        txt_desenhar_alpha(l2, cx + cw - l2.w, yBarra + 32.0f, a * (1.0f - cheio));
       }
     }
-    if (!barraFoco) {
-      const char *rotulos[]={"Reproduzir / pausar","Proporção","Legendas","Áudio","Fontes","Episódios"};
-      const char *rot = (botao==PLR_EPISODIOS && epT<=0)
-                        ? (ehCanal() ? "Guia" : "Relacionados") : rotulos[botao];
-      TxtLinha label=txt_linha(TXT_PG_FIM,rot,210,212,218,255);
-      txt_desenhar_alpha(label,cxs[botao]-label.w*.5f,cyBotoes+PLR_BTN_D*.5f+10,ac);
-    }
   }
 
-  // --- rotulo de tempo, na ponta direita da mesma fileira --------------------
-  // Um rotulo so, "decorrido / total", como o #playerTimeLabel do web. Aqui
-  // eram DOIS — decorrido a esquerda da barra e restante NEGATIVO a direita —
-  // que e a convencao do app da Apple, nao a nossa. Centrado na vertical com os
-  // circulos porque no web ele e um item de uma flex row com align-items:center.
-  {
-    char t1[24], t2[24], tudo[52];
-    if (ehCanal()) {
-      // "AO VIVO" e nao "1:12:00 / 1:54:00": a duracao reserva nao existe para
-      // quem esta assistindo, e um tempo crescente leria como gravacao.
-      snprintf(tudo, sizeof tudo, "%s", i18n("AO VIVO"));
-    } else {
-      fmtTempo(t1, sizeof t1, posSeg, 0);
-      fmtTempo(t2, sizeof t2, duracaoSeg, 0);
-      snprintf(tudo, sizeof tudo, "%s / %s", t1, t2);
-    }
-    { TxtLinha l = txt_linha(TXT_PLR_CORPO, tudo, 255, 255, 255, 230);
-      txt_desenhar_alpha(l, cx + cw - l.w,
-                         cyBotoes - (float)l.h * 0.5f, a * 0.9f); }
-  }
+  // A PILULA DA ILHA (plrilha.h): a hora e "termina as" moram nela agora, no
+  // canto da Posicao do relogio. O canal nao tem fim.
+  plrilha_relogio(ac, ehCanal() ? -1.0 : (double)(duracaoSeg - posSeg));
 
-  // Selos de formato no alto a direita. Vem do FLUXO, nao de constante: os
-  // dois estavam fixos e anunciavam Dolby Vision em arquivo HDR10 e Atmos em
-  // faixa estereo. Selo que mente e pior que selo ausente, porque e nele que o
-  // dono confia para saber se pegou a versao boa.
+  // Selos de formato no alto, no canto OPOSTO ao da ilha. Vem do FLUXO, nao
+  // de constante: selo que mente e pior que selo ausente, porque e nele que o
+  // dono confia para saber se pegou a versao boa. Brancos e soltos, sem chapa.
   {
-    // Cada selo e uma MARCA de formato (badges.h), nao a palavra — a mesma
-    // familia do guia e do player ao vivo (marca_resolucao). A classe sai da
-    // LARGURA primeiro: filme 2.39:1 em 1080p chega como 1920x800, e pela
-    // altura viraria 720p. A altura so desempata quando a largura e estranha.
-    // A faixa do 1440p (2560) fica SEM selo: 4K afirmaria mais do que se
-    // mediu e 1080p menos — ausente e mais honesto que errado.
+    // A classe sai da LARGURA primeiro: filme 2.39:1 em 1080p chega como
+    // 1920x800. A faixa do 1440p (2560) fica SEM selo: ausente e mais honesto
+    // que errado.
     FormatoMarca selos[3];
     int nSelos = 0;
     { int w = video_largura(), h = video_altura();
@@ -3829,81 +3889,35 @@ void player_desenhar(Uint32 agora) {
       else if (w >= 1800 || h >= 1000)  selos[nSelos++] = FMT_1080;
       else if (w >= 1200 || h >= 700)   selos[nSelos++] = FMT_720;
       else if (w > 0)                   selos[nSelos++] = FMT_SD; }
-    // MEDIDO nesta TV, linha do proprio log durante a reproducao de um MKV que
-    // o addon anunciava como Dolby Vision:
-    //   [video] HDR do pipeline: HDR10 (fonte afirmava DV=1)
-    // Era exatamente esse o caso em que o selo mentia.
-    //
-    // "Dolby Vision" so quando o PIPELINE devolveu DolbyVision no videoInfo —
-    // video_tem_dolby_vision nao le mais a afirmacao do addon. Esta MEDIDO que
-    // nesta TV um MKV anunciado como DV volta HDR10; o selo dizia Dolby Vision
-    // por cima de um fluxo HDR10, e o dono confia nele justamente para saber se
-    // pegou a versao boa. Quando o pipeline diz HDR10, o selo diz HDR10 — calar
-    // seria esconder metade da resposta.
+    // "Dolby Vision" so quando o PIPELINE devolveu DolbyVision no videoInfo
+    // (MEDIDO: um MKV anunciado como DV volta HDR10 nesta TV).
     if (video_tem_dolby_vision())                  selos[nSelos++] = FMT_DV;
     else if (!strcasecmp(video_hdr(), "HDR10"))    selos[nSelos++] = FMT_HDR10;
 #if defined(__EMSCRIPTEN__) || defined(NV_TPK)
     else {
-      // AVPlay nao confirma HDR ativo. Identifica apenas a fonte selecionada.
-      // No .tpk o player nativo tambem nao devolve o modo (video_hdr() e
-      // "none"), entao vale o mesmo rotulo de FONTE. Nunca "Dolby Vision":
-      // TV Samsung nao tem DV, toca a camada HDR10 do arquivo — por isso
-      // badges_fonte_hdr so conhece HDR10+/HDR10/HDR e fonte so-DV fica sem selo.
+      // AVPlay nao confirma HDR ativo: o selo e o da FONTE, nunca Dolby Vision
+      // (TV Samsung nao tem DV; badges_fonte_hdr so conhece HDR10+/HDR10/HDR).
       const Stream *fonte = stream_item(stream_atual());
       int hdr = fonte ? badges_fonte_hdr_marca(fonte->badges) : -1;
       if (hdr >= 0) selos[nSelos++] = (FormatoMarca)hdr;
     }
 #endif
     if (video_tem_atmos())        selos[nSelos++] = FMT_ATMOS;
-
-    // RELOGIO e "Termina as", que sao o que o web poe neste canto
-    // (.player-controls-top, playerScreen.js:5846). Os selos de qualidade sao
-    // acrescimo do port e passam a ficar ABAIXO deles, nao no lugar.
-    //
-    //   .player-clock    26/600 branco 96%
-    //   .player-ends-at  20/400 branco 78%, logo abaixo
-    float yRel = PLR_PAD_Y + desce;
-    {
-      time_t agoraT = time(NULL);
-      struct tm lt;
-      char hora[8], fim[RELOGIO_FIM_MAX];
-      localtime_r(&agoraT, &lt);
-      strftime(hora, sizeof hora, "%H:%M", &lt);
-      // fim[32] cortava o russo em "Заканчивается в 1" (issue #213).
-      relogio_fim(fim, sizeof fim, agoraT, duracaoSeg - posSeg);
-      TxtLinha lh = txt_linha(TXT_PG_RELOGIO, hora, 255, 255, 255, 255);
-      TxtLinha lf = txt_linha(TXT_PG_FIM, fim, 255, 255, 255, 255);
-      txt_desenhar_alpha(lh, NV_TELA_W - PLR_PAD_X - lh.w, yRel, ac * 0.96f);
-      txt_desenhar_alpha(lf, NV_TELA_W - PLR_PAD_X - lf.w, yRel + lh.h + 2.0f,
-                         ac * 0.78f);
-      yRel += lh.h + 2.0f + lf.h;
-    }
-
-    { float sy = yRel + 16.0f;
-      int i;
-      // ENTRADA ESCALONADA. Estes selos ja apareciam um a um, mas por acidente:
-      // o rasterizador de texto faz no maximo TXT_POR_QUADRO linhas por quadro
-      // (text.c:40, e ha razao medida para isso), entao o terceiro selo chegava
-      // dois quadros depois do primeiro. Lido na TV isso e um defeito — "vai
-      // aparecendo e mostrando um por um", nas palavras do dono.
-      //
-      // A correcao nao e apressar o rasterizador: e ASSUMIR o escalonamento e
-      // dar a ele uma curva. Cada selo entra 90 ms depois do anterior, subindo
-      // 10px e ganhando opacidade. O que era artefato vira cadencia, e o atraso
-      // do raster fica escondido dentro da propria animacao.
+    { const float mh = 34.0f;
+      float w[3], tot = 0.0f, x;
+      int i, esq = plrilha_direita();
+      // ENTRADA ESCALONADA: o rasterizador faz poucas linhas por quadro e os
+      // selos ja chegariam um a um; a curva assume a cadencia (90 ms, 10 px).
       float t0 = (float)(agora - ultimoInput) / 1000.0f;
+      for (i = 0; i < nSelos; i++) { w[i] = marca_formato_largura(selos[i], mh); tot += w[i] + (i ? 22.0f : 0.0f); }
+      x = esq ? PLR_MARGEM : NV_TELA_W - PLR_MARGEM - tot;
       for (i = 0; i < nSelos; i++) {
         float ts = anim_clamp((t0 - i * 0.09f) / 0.26f, 0.0f, 1.0f);
-        float e  = 1.0f - (1.0f - ts) * (1.0f - ts);   // desaceleracao
-        // Caixa de 44 px por selo: a marca de duas linhas do Dolby precisa dela
-        // para o "VISION"/"ATMOS" ler a 3 m; o "HDR10" segue uma faixa fina.
-        const float mh = 44.0f;
-        if (e > 0.004f) {
-          float mw = marca_formato_largura(selos[i], mh);
-          marca_formato(selos[i], NV_TELA_W - PLR_PAD_X - mw, sy + (1.0f - e) * 10.0f, mh,
-                        0.93f, 0.93f, 0.95f, ac * 0.92f * e);
-        }
-        sy += mh + 6.0f;
+        float e  = 1.0f - (1.0f - ts) * (1.0f - ts);
+        if (e > 0.004f)
+          marca_formato(selos[i], x, 58.0f + desce + (1.0f - e) * 10.0f, mh,
+                        0.953f, 0.949f, 0.937f, ac * 0.82f * e);
+        x += w[i] + 22.0f;
       } }
   }
 
@@ -3919,3 +3933,34 @@ void player_desenhar(Uint32 agora) {
   // acompanha `anim` (sobe acima dos controles), era so a chamada que faltava.
   desenharAcoesEpisodio();
 }
+
+#ifdef NV_SHOT_HOOKS
+// CAPTURAS (tests/player_glass_shot.c): poe o player num estado de tela sem
+// pipeline. `agora` e o relogio do harness (o mesmo passado a desenhar).
+void player_shot_video(int sim) { comVideo = sim; shotSemFuro = sim; }
+void player_shot_canal(const AoVivoEpg *e, int numero, int atrasS, int botaoFoco, int info) {
+  shotEpgOk = e != NULL; if (e) shotEpg = *e; shotNumero = numero; shotAtras = atrasS;
+  botaoAV = botaoFoco; infoAV = info;
+}
+void player_shot_estado(Uint32 agora, float pos, float dur, int toca, int bt,
+                        int barra, int so) {
+  posSeg = posVis = pos; posVisSolto = 0;
+  if (dur > 0.0f) duracaoSeg = dur;
+  tocando = toca; botao = bt; barraFoco = barra; soBarra = so;
+  cheio = so ? 0.0f : 1.0f;
+  visivel = 1; ultimoInput = agora; anim = 1.0f; entrada = 1.0f;
+  esperandoFonte = 0; erroFonte = 0;
+}
+void player_shot_toast(Uint32 agora, const char *texto, const char *icone, int ambar, int modo) {
+  if (texto) {
+    snprintf(toastTexto, sizeof toastTexto, "%s", texto);
+    snprintf(toastIcone, sizeof toastIcone, "%s", icone ? icone : "aj_info");
+    toastCor = ambar;
+  } else { toastTexto[0] = 0; aspecto = modo; }
+  toastAte = agora + 60000u;
+  visivel = 0; anim = 0.0f; ultimoInput = agora;
+}
+void player_shot_esconder(void) { visivel = 0; anim = 0.0f; }
+void player_shot_carregando(int sim) { esperandoFonte = sim; erroFonte = 0; }
+void player_shot_buscando(int sim) { shotBusca = sim; scrubbing = sim; posVisSolto = sim; }
+#endif

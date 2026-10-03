@@ -82,4 +82,13 @@ int  trailer_continuar(GfxRect r, int som);
 int  trailer_evento(const SDL_Event *e);
 void trailer_atualizar(Uint32 agora);
 
+// O trailer em tela cheia esta pausado (o OSD so aparece entao).
+int  trailer_pausado(void);
+// O OSD minimo do trailer em tela cheia, por cima do furo: pilula "Trailer ·
+// titulo", barra fina, tempo e Continuar. So desenha com o trailer pausado.
+void trailer_osd_desenhar(const char *titulo, float a);
+#ifdef NV_SHOT_HOOKS
+void trailer_shot_pausado(int sim);
+#endif
+
 #endif

@@ -4019,9 +4019,9 @@ static void desenhaTemporada(GfxRect r, int c, float f, float a) {
   // escolhida em repouso, #222 na que nao e nada.
   float fr, fg, fb, ti = ajustes_acento_tinta(&fr, &fg, &fb);
   if (ajustes_vidro()) {
-    // Vidro: repouso = fio; a escolhida leva a lavagem e o aro do realce; a
-    // focada e a pilula cheia no realce. Os tres degraus seguem existindo.
-    if (sel) gfx_vidro_painel_acento(r, raio, 0.5f, a); else gfx_vidro_painel(r, raio, 0.4f, a);
+    // Vidro (Glass UI): os degraus do segmentado — repouso branco 6%, a
+    // escolhida 14%, a focada cheia no acento. Sem aro nem lavagem de acento.
+    gfx_cor(r, raio, 1, 1, 1, (sel ? 0.14f : 0.06f) * a);
     gfx_vidro_pilula_cheia(r, raio, f, a);
   } else
   { float br = sel ? fr * 0.6f : 0.133f, bg = sel ? fg * 0.6f : 0.133f,
@@ -4138,13 +4138,11 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
   // nenhuma (`transform: none`). A cor acompanha o accent escolhido — o anel
   // branco fixo fazia esta fileira destoar justamente quando o resto da tela
   // ja seguia o tema.
-  if (f > 0.01f) {
-    GfxRect anel = { th.x - NV_DETP_ANEL, th.y - NV_DETP_ANEL,
-                     th.w + NV_DETP_ANEL * 2, th.h + NV_DETP_ANEL * 2 };
-    float ar, ag, ab;
-    ajustes_acento(&ar, &ag, &ab);
-    gfx_cor(anel, raioTh, ar, ag, ab, f * a);
-  }
+  // FOCO SEM ANEL (Glass UI, mockup do player de 03/10, "detalhe-retomar"):
+  // o card focado sobe com sombra caida; o anel de acento de 4 px saiu.
+  if (f > 0.01f)
+    gfx_rect((GfxRect){ th.x - 24.0f, th.y + 6.0f, th.w + 48.0f, th.h + 50.0f }, 0, GFX_SOMBRA,
+             1.0f, 0, 0, 0.5f, 0, 0, 0, 0.60f * f * a);
 
   const CatItem *serie = cat_item(idx);
   const char *arte = (ep && ep->thumb[0]) ? ep->thumb
@@ -4185,7 +4183,6 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
     gfx_esqueleto(th, raioTh, 0.133f, 0.133f, 0.133f, a);
   else gfx_cor(th, raioTh, 0.133f, 0.133f, 0.133f, a);
   veuEpisodio(th, a);
-  if (ajustes_vidro()) gfx_vidro_aro(th, raioTh, 1.5f, 1, 1, 1, 0.14f * a);   // vidro: aro fino na miniatura
 
   // A mesma fonte que o menu modifica: desconhecido (-1) nao recebe selo.
   // A lavagem e leve para preservar a arte; texto e estado sao desenhados depois.
@@ -5956,6 +5953,8 @@ void detail_desenhar(Uint32 agora) {
     GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     if (trailer_mostra_video()) gfx_furo(tela);
     else gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    { const CatItem *ct = cat_item(idx);
+      trailer_osd_desenhar(ct ? ct->titulo : "", 1.0f); }
     return;
   }
   backdropRect(&alvo, &aEntrada);

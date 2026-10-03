@@ -234,7 +234,15 @@ typedef enum {
   // Cor com r < 0.5 = SO O VEU (cor do fundo com alpha, sem a arte): por cima
   // do furo do trailer que toca no cartao.
   GFX_JANELA = 39,
-  GFX_NMODOS = 40
+  // VEU EM DEGRADE DE CSS (Glass UI do player, 03/10): o preto (ou uCor.rgb)
+  // cheio numa borda do rect e zero na outra, pelo dither de nv_dither. Os
+  // veus do mockup sao linear-gradient de varias paradas; aqui viram uma curva
+  // so: (1-d)^uFoco com uFoco > 0, ou 1-smoothstep(d) com uFoco = 0. `d` e a
+  // distancia da borda cheia, em fracao do rect, dividida por uPar.y (o ponto
+  // em que o veu zera; 1 = a borda oposta). uPar.x escolhe a borda cheia:
+  // 0 = baixo, 1 = cima, 2 = esquerda, 3 = direita. Use por gfx_veu_css.
+  GFX_VEU_CSS = 40,
+  GFX_NMODOS = 41
 } GfxModo;
 
 typedef struct {
@@ -414,6 +422,10 @@ void gfx_veu_base(GfxRect card, float raio, float fracao, float alfa);
 // preenchimento (ver gfx.c).
 void gfx_brilho_topo(GfxRect r, float raio, float alcance,
                      float cr, float cg, float cb, float ca);
+// Veu em degrade (GFX_VEU_CSS): `borda` 0 = cheio embaixo, 1 = em cima,
+// 2 = a esquerda, 3 = a direita; `curva` > 0 e o expoente de (1-d), 0 = a
+// queda suave; `fim` (0..1] e onde zera. Preto a `a`.
+void gfx_veu_css(GfxRect r, int borda, float curva, float fim, float a);
 void gfx_definir_efeitos_leves(int leves);
 int  gfx_efeitos_leves(void);
 // EFEITOS MINIMOS (nivel 2 de gpunivel.h), por cima dos leves: sem a luz de

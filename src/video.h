@@ -304,4 +304,21 @@ void video_forcar_sdr(void);
 
 void video_encerrar(void);
 
+// SO NO MAC (capturas tests/*_shot.c): o coto do pipeline passa a responder o
+// que estiver aqui — faixas, tamanho, HDR, Atmos, buffer — para as telas do
+// player serem desenhadas com dados de um video "de verdade". Zerado (o padrao)
+// e o mesmo coto mudo de sempre. Nos alvos de TV a funcao nao existe.
+#if defined(__APPLE__)
+typedef struct {
+  int nAudio, nLeg, audioAtual, legAtual;
+  VideoFaixa audio[8], leg[8];
+  int largura, altura, atmos, dv;
+  char hdr[16];
+  int pronto, reconectando;
+  unsigned bufferandoMs;
+  double pos, duracao, bufferFim;
+} VideoSimulacao;
+void video_simular(const VideoSimulacao *s);
+#endif
+
 #endif

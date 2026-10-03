@@ -7,8 +7,10 @@
 // de volta para o relogio. Um lugar so para o app falar, em vez de cada coisa
 // abrir o proprio cartao num canto diferente.
 //
-// O QUE ELA NAO FAZ: nao aparece por cima do player (quem decide e app.c, que
-// so a desenha com o player fechado), nao pega teclado fora do modal (o
+// O QUE ELA NAO FAZ: dentro do player quem desenha a pilula e plrilha.c (a
+// MESMA pilula, no mesmo canto, com a hora e o "termina as" do titulo, e os
+// componentes pequenos do player nascendo dela — Glass UI, 03/10); app.c so
+// desenha ESTA com o player fechado. Nao pega teclado fora do modal (o
 // AZUL/CH+ da central continua em avisos_evento; o do modal, ver abaixo) e
 // nao e camada de tela cheia — e uma sombra pequena, uma pilula e o texto,
 // mesmo durante a mola, e o modal e a mesma pilula crescida.
