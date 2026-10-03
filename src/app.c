@@ -1541,7 +1541,7 @@ void app_evento(const SDL_Event *e) {
   // Relogio desligado: o de sempre.
   if(e->type==SDL_KEYDOWN && !e->key.repeat &&
      (e->key.keysym.sym==SDLK_s || e->key.keysym.scancode==NV_SCANCODE_BLUE ||
-      (ilha_cartao_na_tela() && !spainel_aberto() &&
+      ((ilha_cartao_na_tela() || ilha_atividade_expansivel()) && !spainel_aberto() &&
        (e->key.keysym.scancode==NV_SCANCODE_CH_UP || e->key.keysym.sym==SDLK_PAGEUP))) &&
      tela==TELA_HOME && !player_aberto() && !player_mini_ativo() &&
      !detail_aberto() && !vertudo_aberta() && !menu_aberto()) {
@@ -1551,7 +1551,7 @@ void app_evento(const SDL_Event *e) {
     if (agoraTecla - ultimoToque < 400) return;   // repeticao do firmware
     ultimoToque = agoraTecla;
     if(spainel_aberto())spainel_fechar();
-    else if (ilha_cartao_na_tela() && ilha_modal_abrir()) {}
+    else if ((ilha_cartao_na_tela() || ilha_atividade_expansivel()) && ilha_modal_abrir()) {}
     else if (ajustes_relogio_ligado() && ilha_rect(&ix, &iy, &iw, &ih)) spainel_abrir_de(ix, iy, iw, ih);
     else spainel_abrir();
     return;
@@ -3723,6 +3723,23 @@ void app_desenhar(Uint32 agora) {
   // A ILHA DO RELOGIO (ilha.h): mesmas guardas da central — com a pessoa
   // dentro do app e nunca sobre o player. No Guia ela vai para o topo direito
   // (o titulo do guia ocupa o esquerdo), o mesmo canto do toast de antes.
+  if (tela == TELA_HOME && !detail_aberto()) {
+    DescHomeCarga load; desc_home_carga(&load);
+    if (load.ativo || ilha_modal_aberto()) {
+      char details[640];
+      const char *stage = !load.ativo ? i18n("Home atualizada") :
+        load.fase == 2 ? i18n("Carregando fileiras…") : i18n("Sincronizando a Home…");
+      snprintf(details, sizeof details,
+        i18n("%s\nTempo: %u s · Add-ons consultados: %d de %d\nFileiras atualizadas: %d · Falhas: %d\nVocê pode continuar navegando enquanto a Home atualiza."),
+        stage, load.ms / 1000u, load.addonsProntos, load.addonsTotal, load.fileiras, load.falhas);
+      ilha_atividade_detalhes(i18n("Carregamento da Home"), details);
+      if (load.ativo) {
+        char shortStatus[160];
+        snprintf(shortStatus, sizeof shortStatus, "%s · %s", i18n("Carregando fileiras…"), i18n("Detalhes"));
+        ilha_atividade(shortStatus, -1.0f);
+      }
+    } else ilha_atividade_detalhes(NULL, NULL);
+  } else ilha_atividade_detalhes(NULL, NULL);
   if (guia_atualizando_lista()) ilha_atividade(i18n("Atualizando a lista de canais…"), -1.0f);
   if (!registro_aberto() && !player_aberto() && sessao_logada() &&
       tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL) {

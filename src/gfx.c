@@ -1098,7 +1098,9 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  a = 1.0 - (1.0 - a) * (1.0 - ab);\n"
   // No estado de CARTAO o veu e so o canto de baixo a esquerda, sob o texto
   // (uPar.y = 0); na pagina cheia, a vinheta do GFX_DETALHE (uPar.y = 1).
-  "  float ac = (1.0 - smoothstep(0.0, 0.66, u.x)) * smoothstep(0.22, 0.92, u.y);\n"
+  "  float ac = (1.0 - smoothstep(0.18, 0.72, u.x)) * smoothstep(0.18, 0.68, u.y);\n"
+  "  float base = smoothstep(0.56, 1.0, u.y) * 0.60;\n"
+  "  ac = 1.0 - (1.0 - ac) * (1.0 - base);\n"
   "  a = mix(ac, a, uPar.y);\n"
   // SO O VEU (uCor.r < 0.5): o trailer toca no cartao, atras do canvas, pelo
   // furo; o veu fica por cima com alpha, para o texto seguir no mesmo escuro.

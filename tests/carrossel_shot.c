@@ -27,6 +27,7 @@
 // o numero de retangulos do quadro — o que da para medir no Mac do custo de
 // desenho; o custo em ms de GPU so existe na TV.
 #include "ajustes.h"
+#include "agenda.h"
 #include "artehero.h"
 #include "catalogo.h"
 #include "colecoes.h"
@@ -304,6 +305,13 @@ int main(int argc, char **argv) {
     }
     assert(col_definir_json(js) == 4);
   }
+  if (getenv("NV_AGENDA")) {
+    agenda_iniciar(); agenda_definir_hoje("2026-10-03");
+    for (int j = 0; j < total; j++) if (!strcmp(itens[j].tipo, "series"))
+      agenda_registrar(itens[j].imdb, itens[j].titulo, itens[j].poster,
+                        "Returning Series", 2, 5, "Episódio de ensaio",
+                        "2026-10-07", "2026-09-30");
+  }
   cat_definir_tudo(itens, total, fils, NF);
   quadros(90, NULL);
   {
@@ -330,7 +338,7 @@ int main(int argc, char **argv) {
     for (q = 0; q < 5; q++) { quadros(4, NULL); FOTO("andando2"); }
     quadros(90, NULL); FOTO("titulo3");
     // TELA CHEIA: a primeira seta para baixo so estica o cartao (o texto
-    // fica onde estava); a segunda desce para a pagina.
+    // vai para a margem); a segunda desce para a pagina.
     tecla(SDLK_DOWN);
     for (q = 0; q < 6; q++) { quadros(3, NULL); FOTO("esticando"); }
     quadros(90, NULL); FOTO("tela-cheia");

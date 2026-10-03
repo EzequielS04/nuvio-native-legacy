@@ -595,21 +595,21 @@ void menu_desenhar(Uint32 agora) {
 //   circulo atras do icone (icone de linha 28 a 85%), rotulo 25 Regular,
 //   passo 79, foco = pilula BRANCA cheia de 74; "Streaming" 22 cinza medio;
 //   logo da pasta em circulo de 48.
-#define TV_PAINEL_X     38.0f
+#define TV_PAINEL_X     54.0f
 #define TV_PAINEL_Y     38.0f
-#define TV_PAINEL_W    355.0f
+#define TV_PAINEL_W    384.0f
 #define TV_RAIO         40.0f
-#define TV_CAB_H        96.0f    // cabecalho: avatar, nome, relogio
+#define TV_CAB_H       120.0f    // cabecalho: avatar, nome, relogio
 #define TV_LINHA_H      79.0f
 #define TV_PILULA_H     74.0f
-#define TV_PAD_X        10.0f    // pilula da linha por dentro do painel
+#define TV_PAD_X        18.0f    // pilula da linha por dentro do painel
 #define TV_PAD_BASE     14.0f
 #define TV_ICONE        28.0f
 #define TV_COL_CX       32.0f    // centro da coluna de icones, a partir da pilula
 #define TV_ROT_X        66.0f    // x do rotulo, a partir da pilula
 #define TV_LOGO         48.0f    // circulo da pasta de Streaming
 #define TV_AVATAR       44.0f
-#define TV_ROTULO_H     48.0f    // rotulo da secao "Streaming"
+#define TV_ROTULO_H     60.0f    // rotulo da secao "Streaming"
 // Pilula fechada: mais baixa e com a letra do item (25), nao a de titulo.
 #define TV_PIL_CIRC     46.0f
 #define TV_ALTURA_MAX  (NV_TELA_H - 2.0f * TV_PAINEL_Y)
@@ -834,8 +834,9 @@ static void tvSombra(float a) {
   // fim do painel e caindo a zero em ~300 px.
   // Degraus de 20 px e ~0,014 de alfa: com 50 px os degraus apareciam como
   // faixas verticais sobre ceu claro (captura no Mac).
-  gfx_cor((GfxRect){ 0, 0, 400, NV_TELA_H }, 0.0f, 0, 0, 0, 0.22f * a);
-  x = 400.0f;
+  float edge = TV_PAINEL_X + TV_PAINEL_W + 12.0f;
+  gfx_cor((GfxRect){ 0, 0, edge, NV_TELA_H }, 0.0f, 0, 0, 0, 0.22f * a);
+  x = edge;
   for (i = 1; i <= 15; i++, x += 20.0f)
     gfx_cor((GfxRect){ x, 0, 20, NV_TELA_H }, 0.0f, 0, 0, 0, 0.22f * a * (1.0f - i / 16.0f));
 }
@@ -881,13 +882,13 @@ static void tvDesenhar(void) {
     ponteiro_alvo(Q.x, Q.y, Q.w, Q.h, NULL, NULL, 0, 0);
   }
 
-  // Superficie de vidro: escuro translucido, tingido de leve pela cor de
-  // realce (a arte aparece por tras), com aro fino e claro bem sutil.
-  // Alfa 0,82: a 0,72 os titulos das fileiras da home atravessavam o painel e
-  // disputavam com os rotulos (captura da C9, 01/10).
-  { float vr = 0.100f + ar * 0.05f, vg = 0.104f + ag * 0.05f, vb = 0.118f + ab * 0.05f;
-    gfx_cor(R, raioPx / R.h, vr, vg, vb, 0.82f * A);
-    gfx_anel(R, raioPx / R.h, 1.2f, 1.0f, 1.0f, 1.0f, 0.12f * A); }
+  // Neutral smoked glass keeps underlying text from competing with labels.
+  // One surface and a restrained highlight; no extra blur pass on TV GPUs.
+  {
+    gfx_cor(R, raioPx / R.h, 0.085f, 0.090f, 0.105f, 0.90f * A);
+    gfx_brilho_topo(R, raioPx / R.h, 0.38f, 0.88f, 0.92f, 1.0f, 0.05f * A);
+    gfx_vidro_aro(R, raioPx / R.h, 1.0f, 1, 1, 1, 0.10f * A);
+  }
 
   // Conteudo da pilula fechada: some no comeco da abertura.
   { float ap = A * (1.0f - s * 3.0f);
@@ -952,7 +953,7 @@ static void tvDesenhar(void) {
 
     // Rotulo da secao de Streaming: 22 Regular, cinza medio, no recuo do icone.
     if (np && yRot >= 0.0f) {
-      TxtLinha l = txt_linha(TXT_CAPTION, "Streaming", 150, 152, 160, 255);
+      TxtLinha l = txt_linha(TXT_CAPTION, "Streaming", 218, 221, 229, 255);
       txt_desenhar_alpha(l, Q.x + TV_PAD_X + TV_COL_CX - TV_ICONE * 0.5f,
                          topo + yRot + TV_ROTULO_H - l.h - 6.0f, ac);
     }

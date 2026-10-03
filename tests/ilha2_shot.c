@@ -20,7 +20,7 @@
 
 static SDL_Window *win;
 static const char *base;
-static int direita;
+static int direita, homeLoading;
 // RELOGIO FALSO (> 0): cada quadro vale 16 ms, por mais que a captura demore.
 // Sem ele o glReadPixels de cada marco come quadros da mola do voo.
 static Uint32 falso;
@@ -70,6 +70,7 @@ static void quadros(int n, const char *nome) {
     fundo = tex_obter("deploy/app/art/00.jpg");
     if (fundo) gfx_rect((GfxRect){ 0, 0, 1920, 1080 }, fundo, GFX_SNAP, 0, 0, 0, 0, 1, 1, 1, 1);
     if (spainel_visivel()) spainel_desenhar(agora);
+    if (homeLoading) ilha_atividade("Carregando fileiras…", -1);
     ilha_relogio_visivel(ajustes_relogio_ligado());
     if (direita) ilha_ancorar(1920 - 64, 36, 1);
     { float x = 0, y = 0, w = 0, h = 0;
@@ -125,6 +126,23 @@ int main(int argc, char **argv) {
   tex_iniciar(64);
   gfx_icones_dir("deploy/app/art");
   ajustes_definir_vidro(1);
+
+  // Synthetic loading counters for visual review, never live TV evidence.
+  homeLoading = 1;
+  ilha_atividade_detalhes("Carregamento da Home",
+    "Carregando fileiras…\nTempo: 8 s · Add-ons consultados: 4 de 6\nFileiras atualizadas: 3 · Falhas: 0\nVocê pode continuar navegando enquanto a Home atualiza.");
+  quadros(45, "home-loading");
+  assert(ilha_atividade_expansivel());
+  assert(ilha_modal_abrir());
+  quadros(70, "home-loading-details");
+  tecla(SDLK_RIGHT);
+  assert(ilha_modal_aberto());
+  { IlhaCartao ignored; int qual; assert(!ilha_pediu(&ignored, &qual)); }
+  tecla(SDLK_RETURN);
+  assert(!ilha_modal_aberto());
+  homeLoading = 0;
+  ilha_atividade_detalhes(NULL, NULL);
+  quadros(45, NULL);
 
   memset(&vivo, 0, sizeof vivo);
   snprintf(vivo.chave, sizeof vivo.chave, "vivo:tt12637874:1:3");

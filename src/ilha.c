@@ -38,7 +38,8 @@ static Aviso cur;               // o da tela (valido se temCur)
 static int temCur;
 static Uint32 curAte;           // 0 = ainda nao apareceu (o prazo conta do 1o quadro)
 
-static char atvTexto[160];
+static char atvTexto[160], atvTitulo[96], atvDetalhes[640];
+static int modalAtividade;
 static float atvProg = -1.0f;
 static Uint32 atvVisto;         // SDL_GetTicks da ultima renovacao
 
@@ -155,6 +156,12 @@ void ilha_atividade(const char *texto, float progresso) {
   if (!atvVisto) atvVisto = 1;
 }
 
+void ilha_atividade_detalhes(const char *titulo, const char *texto) {
+  snprintf(atvTitulo, sizeof atvTitulo, "%s", titulo ? titulo : "");
+  snprintf(atvDetalhes, sizeof atvDetalhes, "%s", texto ? texto : "");
+}
+int ilha_atividade_expansivel(void) { return atvDetalhes[0] && atvVisto && SDL_GetTicks() - atvVisto < 400u; }
+
 void ilha_relogio_visivel(int visivel) { relogioQuer = visivel; }
 
 void ilha_cartao(int qual, const IlhaCartao *c) {
@@ -210,7 +217,7 @@ int ilha_rect(float *x, float *y, float *w, float *h) {
 }
 
 // --- o modal ---------------------------------------------------------------------
-static int nBotoes(void) { return 3; }
+static int nBotoes(void) { return modalAtividade ? 1 : 3; }
 static const char *rotuloBotao(int i) {
   if (i == 0) return modalQual == ILHA_ESTREIA ? "Assistir" : "Retomar";
   if (i == 1) return "Detalhes";
@@ -223,10 +230,12 @@ static const char *iconeBotao(int i) {
 }
 
 int ilha_modal_abrir(void) {
-  if (modalAberto || cartaoVez < 0 || !relogioQuer) return 0;
+  if (modalAberto || !relogioQuer) return 0;
+  modalAtividade = ilha_atividade_expansivel();
+  if (!modalAtividade && cartaoVez < 0) return 0;
   modalAberto = 1;
   modalQual = cartaoVez;
-  modalC = cartoes[cartaoVez];
+  if (!modalAtividade) modalC = cartoes[cartaoVez];
   modalFoco = 0;
   modalDesde = SDL_GetTicks();
   memset(modalFocoA, 0, sizeof modalFocoA);
@@ -255,6 +264,7 @@ int ilha_pediu(IlhaCartao *c, int *qual) {
 }
 
 static void acionar(int i) {
+  if (modalAtividade) { ilha_modal_fechar(0); return; }
   if (i == 0) { pedir(ILHA_PEDIU_TOCAR); ilha_modal_fechar(0); }
   else if (i == 1) { pedir(ILHA_PEDIU_DETALHES); ilha_modal_fechar(0); }
   else {
@@ -283,13 +293,14 @@ int ilha_evento(const SDL_Event *e) {
   // mora a direita da tela.
   if (k == SDLK_RIGHT) {
     if (modalFoco + 1 < nBotoes()) modalFoco++;
-    else pedir(ILHA_PEDIU_SALVOS);
+    else if (!modalAtividade) pedir(ILHA_PEDIU_SALVOS);
     return 1;
   }
   // A MESMA JANELA DE 400 ms do atalho em app.c: o controle manda a AZUL
   // segurada como KEYDOWNs separados, e o segundo levaria direto ao painel.
   if (k == SDLK_s || sc == NV_SCANCODE_BLUE) {
-    if (SDL_GetTicks() - modalDesde >= 400u) pedir(ILHA_PEDIU_SALVOS);
+    if (modalAtividade) ilha_modal_fechar(0);
+    else if (SDL_GetTicks() - modalDesde >= 400u) pedir(ILHA_PEDIU_SALVOS);
     return 1;
   }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) { acionar(modalFoco); return 1; }
@@ -582,6 +593,26 @@ static void desenharModal(GfxRect m, float a) {
   int i;
   if (a < 0.01f) return;
   ajustes_acento(&cr, &cg, &cb);
+  if (modalAtividade) {
+    GfxRect box = {ax, ay, 120, 120};
+    gfx_cor(box, 0.22f, 0.14f, 0.15f, 0.17f, a);
+    TxtLinha mark = txt_linha(TXT_TITULO3, "…", 190, 200, 220, 255);
+    txt_desenhar_alpha(mark, ax + (120 - mark.w) * 0.5f, ay + 30, a);
+    float tx = ax + 152, width = m.w - MD_PAD * 2 - 152;
+    TxtLinha title = txt_linha_corta(TXT_TITULO3, atvTitulo, 246, 247, 252, 255, width);
+    txt_desenhar_alpha(title, tx, ay, a);
+    txt_bloco_corta(TXT_CAPTION, atvDetalhes, 190, 194, 204,
+                    tx, ay + title.h + 18, width, 32, a, 6);
+    GfxRect button = { ax, by, botao_largura("Fechar", NULL, 1), BOTAO_H_SECUNDARIO };
+    botao_pilula(button, "Fechar", NULL, modalFocoA[0], 1, 0, a);
+    if (a > 0.3f) {
+      ponteiro_camada();
+      ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, pontFora, 0, 0);
+      ponteiro_alvo(m.x, m.y, m.w, m.h, NULL, NULL, 0, 0);
+      ponteiro_alvo(button.x, button.y, button.w, button.h, NULL, pontFora, 0, 0);
+    }
+    return;
+  }
   // A arte: o still do episodio quando ha, senao o fundo do titulo, senao o cartaz.
   { const char *arte = c->arte[0] ? c->arte : c->poster;
     GfxRect ra = { ax, ay, MD_ARTE_W, MD_ARTE_H };
@@ -942,6 +973,6 @@ void ilha_desenhar(Uint32 agora) {
     if (aMod > 0.0f) desenharModal(modalAlvo(r, dir), A * aMod);
     gfx_sem_recorte();
     // Magic Remote: o clique na pilula com um cartao abre o modal.
-    if (modalT <= 0.0f && mostra == M_CARTAO && A > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontPilula, 0, 0);
+    if (modalT <= 0.0f && (mostra == M_CARTAO || (mostra == M_ATIVIDADE && ilha_atividade_expansivel())) && A > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontPilula, 0, 0);
     if (voo) desenharVoo(vooPf, 1); }
 }

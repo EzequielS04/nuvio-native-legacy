@@ -41,6 +41,9 @@ int  ilha_tem(const char *chave);
 // ATIVIDADE em andamento: chame A CADA QUADRO enquanto durar; sem renovacao
 // por ~0,4 s ela sai sozinha. `progresso` de 0 a 1, ou < 0 quando nao ha numero.
 void ilha_atividade(const char *texto, float progresso);
+// Optional live details: NULL removes the activity's expandable panel.
+void ilha_atividade_detalhes(const char *titulo, const char *texto);
+int ilha_atividade_expansivel(void);
 
 // Onde o relogio pode ficar, decidido por quadro por app.c (a home tem o topo
 // esquerdo livre; Ajustes e Explorar tem titulo ali).
