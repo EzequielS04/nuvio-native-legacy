@@ -94,6 +94,7 @@ int main(int argc, char **argv) {
   dados_iniciar(dir);
   assert(!strcmp(dados_dir(), dir));
   ajustes_iniciar();
+  if (getenv("NUVIO_SHOT_SOLIDO")) ajustes_aplicar_blob("{\"vidro\":false}");
   busca_iniciar();
 
   snprintf(nome, sizeof nome, "%s-vazio.bmp", saida);
@@ -187,6 +188,13 @@ int main(int argc, char **argv) {
   capturaEm(nome, 170);
   snprintf(nome, sizeof nome, "%s-resultados.bmp", saida);
   capturaEm(nome, 1200);
+  // Foco no melhor resultado e depois num cartaz da fileira de baixo.
+  { int i; for (i = 0; i < 6; i++) tecla(SDLK_RIGHT); }
+  snprintf(nome, sizeof nome, "%s-resultados-foco.bmp", saida);
+  capturaEm(nome, 500);
+  tecla(SDLK_DOWN); tecla(SDLK_RIGHT);
+  snprintf(nome, sizeof nome, "%s-resultados-foco2.bmp", saida);
+  capturaEm(nome, 500);
   // ANDROID (sistexto em modo de teste): CIMA da primeira fileira foca o campo,
   // direita o Falar; OK no campo chama o teclado do sistema e o texto dele
   // substitui o campo; Concluir leva aos resultados.
