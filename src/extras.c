@@ -1,3 +1,4 @@
+#include "imdbnota.h"
 #include "extras.h"
 #include "marco.h"
 #include "vistoep.h"
@@ -643,7 +644,10 @@ static void *buscar(void *arg) {
         if (v >= 0.0) {
           int c = emDecimos(v);
           pthread_mutex_lock(&trava);
-          if (!strcmp(id, idPedido)) notas[k] = c;
+          if (!strcmp(id, idPedido)) {
+            notas[k] = c;
+            if (k == EX_IMDB) { imdbnota_publicar(id,c); imdbnota_alias_tmdb(id,tmdbId,serie); }
+          }
           pthread_mutex_unlock(&trava);
         } }
     }
@@ -774,6 +778,7 @@ static void *buscar(void *arg) {
         free(corpo);
       }
     }
+    if (idT > 0) imdbnota_alias_tmdb(id,idT,serie);
     // Nao buscar quando nao ha NADA ligado que saia desta viagem: economiza o
     // pedido quando o dono desligou ficha, trailers, produtoras e recomenda-
     // coes de uma vez — o toggle de cada uma ja diz que nao vale ir.

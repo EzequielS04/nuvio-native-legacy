@@ -1,3 +1,4 @@
+#include "imdbnota.h"
 // Home nativa compatível com a interface moderna do Nuvio 1.0.1 legacy:
 // hero no topo, rail fixa à esquerda e fileiras horizontais de posters. A
 // infraestrutura nativa cuida de cache assíncrono, foco e transições.
@@ -1181,8 +1182,9 @@ static void desenhaFaixaAberta(const CatItem *ci, int r, float px, float py,
   // Sem ID nao ha como atribuir a nota ao IMDb; em itens `tmdb:` a nota pode
   // ser do TMDB e o rotulo amarelo seria enganoso. O restante da faixa segue
   // independente e continua aparecendo quando existe.
-  if (ci->nota > 0 && ci->imdb[0] && strncmp(ci->imdb, "tmdb:", 5) != 0) {
-    float bw = badge_imdb_largura(ci->nota);
+  int imdbRating = imdbnota_obter(ci->imdb, ci->nota, !strcmp(ci->tipo,"series"));
+  if (imdbRating > 0) {
+    float bw = badge_imdb_largura(imdbRating);
     float xMin = px + pad + (ci->logo[0] ? w * 0.34f : 0.0f);
     float badgeX = cx - bw;
     // O logo ocupa a esquerda da mesma faixa. Se os outros chips consumirem
@@ -1190,7 +1192,7 @@ static void desenhaFaixaAberta(const CatItem *ci, int r, float px, float py,
     // arredondado do card.
     if (badgeX >= xMin) {
       cx = badgeX;
-      badge_imdb(cx, cy + (ch - BADGE_H) * 0.5f, ci->nota, 0, a);
+      badge_imdb(cx, cy + (ch - BADGE_H) * 0.5f, imdbRating, 0, a);
     }
   }
   // 5. Progresso em andamento: fio na base, dentro do raio do card.
@@ -2958,7 +2960,8 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
   const char *selo = (ci && ci->classificacao[0] && !contHero && !seguirHero) ? ci->classificacao : NULL;
   char nota[8];
   nota[0] = 0;
-  if (ci && ci->nota > 0) snprintf(nota, sizeof nota, "%.1f", ci->nota / 10.0f);
+  int imdbRating = ci ? imdbnota_obter(ci->imdb, ci->nota, !strcmp(ci->tipo,"series")) : 0;
+  if (imdbRating > 0) snprintf(nota, sizeof nota, "%.1f", imdbRating / 10.0f);
   int temSec = (destaque[0] || selo || nota[0]);
 
   const char *sinopse = (ci && ci->sinopse[0]) ? ci->sinopse : "";
@@ -3083,11 +3086,11 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
         cx += badge_desenhar(cx, ySec + (NV_LD_HERO_SEC - BADGE_H) * 0.5f,
                              selo, BADGE_NEUTRO, a) + 14.0f;
     }
-    if (nota[0] && ci && ci->nota > 0) {
-      float bw = badge_imdb_largura(ci->nota);
+    if (nota[0] && imdbRating > 0) {
+      float bw = badge_imdb_largura(imdbRating);
       if (cx + bw <= x + sinW)
         badge_imdb(cx, ySec + (NV_LD_HERO_SEC - BADGE_H) * 0.5f,
-                   ci->nota, 0, a);
+                   imdbRating, 0, a);
     }
   }
 
@@ -4498,12 +4501,13 @@ static void desenhaEditorialCard(const CatItem *cItem, TipoFileira tipo, float p
   // Continuar, faixa do card aberto), e nao com uma estrela solta —
   // um so vocabulario de nota. Com o selo, a classificacao etaria sai
   // da linha (a referencia nao a tem); sem nota atribuivel ao IMDb
-  // (sem ID, ou `tmdb:`), a classificacao volta como antes.
+  // (sem ID, ou `tmdb:` sem vínculo IMDb verificado), a classificacao volta como antes.
   int notaFeita = 0;
-  if (orig && ci && ci->nota > 0 && ci->imdb[0] && strncmp(ci->imdb, "tmdb:", 5) != 0) {
+  int imdbRating = orig && ci ? imdbnota_obter(ci->imdb, ci->nota, !strcmp(ci->tipo,"series")) : 0;
+  if (imdbRating > 0) {
     float bx = px + pad + tg.w + (genero ? 14.0f : 0.0f);
-    if (bx + badge_imdb_largura(ci->nota) < px + w - pad) {
-      badge_imdb(bx, yMeta + (tg.h - BADGE_H) * 0.5f, ci->nota, 0, 1.0f);
+    if (bx + badge_imdb_largura(imdbRating) < px + w - pad) {
+      badge_imdb(bx, yMeta + (tg.h - BADGE_H) * 0.5f, imdbRating, 0, 1.0f);
       notaFeita = 1;
     }
   }

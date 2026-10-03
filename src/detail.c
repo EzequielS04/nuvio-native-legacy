@@ -1,3 +1,4 @@
+#include "imdbnota.h"
 // Tela de detalhe do titulo, no layout do APP WEB (sessao LOGADA).
 //
 // O port comecou copiando o app da Apple TV, e cada pedaco dessa heranca foi
@@ -829,7 +830,7 @@ static const char *ABA_ROTULO[ABA_NFIXAS] = {
 // Nota do IMDb do titulo aberto, 0 quando nao ha.
 static int notaDe(int i) {
   const CatItem *ci = cat_item(i);
-  return ci ? ci->nota : 0;
+  return ci ? imdbnota_obter(ci->imdb, ci->nota, !strcmp(ci->tipo,"series")) : 0;
 }
 // O que a secao "Notas" e a linha do titulo sabem do titulo aberto: as notas de
 // cada fonte (as que a pessoa escondeu em Ajustes ja chegam zeradas, e o IMDb
