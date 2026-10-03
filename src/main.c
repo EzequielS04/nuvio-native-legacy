@@ -770,6 +770,19 @@ int main(int argc, char **argv) {
   glViewport(0, 0, dw, dh);
   gfx_tamanho_alvo(dw, dh);
   capW = dw; capH = dh;
+#ifdef NV_ANDROID
+  // QUADRO DE ESPERA NA COR DA SPLASH. A SurfaceView do SDL fura a janela: com
+  // ela no ar, o fundo da janela (drawable/abertura.xml) some atras do furo e o
+  // que aparece e PRETO ate o primeiro SwapWindow — medido no emulador Android
+  // TV, ~700 ms entre a splash do sistema e a abertura; a TCL da #223 levou
+  // 2,8 s para o primeiro quadro. Um clear + swap aqui, antes dos shaders, troca
+  // esse preto pela cor da arte (#190819, a mesma de values/cores.xml). So no
+  // Android: na LG o sistema segura o splash.png ate o primeiro quadro, e uma
+  // cor lisa aqui apagaria a marca.
+  glClearColor(25.0f / 255.0f, 8.0f / 255.0f, 25.0f / 255.0f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  SDL_GL_SwapWindow(win);
+#endif
 
   // O relogio dos marcos comeca AQUI e nao no topo do main: o que vem antes e
   // parse de argumento e SDL_Init, que nao dependem de nada nosso.
@@ -1210,6 +1223,7 @@ int main(int argc, char **argv) {
     if (abertura_ativa()) {
       int pend = 0;
       tex_estatisticas(NULL, &pend, NULL, NULL, NULL);
+      abertura_fundo_fica(app_no_login());
       abertura_desenhar(agora, dt, pend);
     }
     ponteiro_desenhar();

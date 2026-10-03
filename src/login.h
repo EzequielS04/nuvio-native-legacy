@@ -8,6 +8,10 @@
 #define NV_LOGIN_H
 #include <SDL2/SDL.h>
 
+// Pasta da arte (o fundo da tela vem de art/marcas/login-fundo.jpg).
+void login_recursos(const char *dirArte);
+// Solta a textura do fundo; chamado quando o login termina.
+void login_soltar(void);
 void login_iniciar(void);
 void login_evento(const SDL_Event *e);
 void login_atualizar(float dt, Uint32 agora);

@@ -1281,6 +1281,7 @@ static int homePronta;
 
 int app_iniciar(const char *dirArte) {
   ajustes_recursos(dirArte);
+  login_recursos(dirArte);
   diagnostico_recuperar_checkpoint();
   homePronta = home_iniciar(dirArte);
   novidades148_dir(dirArte);
@@ -1434,6 +1435,8 @@ static void spotAtender(void) {
   printf("[spotlight] escolheu tipo=%d\n", p.tipo);
   fflush(stdout);
 }
+
+int app_no_login(void) { return tela == TELA_LOGIN; }
 
 int app_na_home(void) {
   return tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() &&
@@ -1839,6 +1842,7 @@ void app_atualizar(float dt, Uint32 agora) {
     // instante em que o servidor respondeu. Assim a home nunca abre com uma
     // sessao pela metade.
     if (login_concluido()) {
+      login_soltar();
       // Logo apos entrar, o primeiro ciclo de sync: e ele que descobre quantos
       // perfis a conta tem, e sem isso a tela de escolha nao teria o que
       // mostrar.

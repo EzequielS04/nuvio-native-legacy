@@ -10,6 +10,7 @@
 #include "ponteiro.h"
 #include "ajustes.h"
 #include "idioma.h"
+#include <SDL2/SDL_image.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -118,7 +119,45 @@ static void ptFocoEmail(int i, int b) { (void)b; if (modo == LG_EMAIL) foco = i;
 static void ptFocoQr(int i, int b) { (void)b; if (modo == LG_QR) focoQr = i; }
 
 static GLuint texQr;
-static char   qrDe[512];   // conteudo ja desenhado, para nao refazer por quadro
+static char   qrDe[512];
+
+// FUNDO (1.7.2): a arte das listras, a mesma familia do splash. A abertura
+// dissolve o logo por cima dela (abertura_fundo_fica), entao a tela de login
+// nasce do splash sem corte. 1280x720 ampliada: e fundo, nao precisa de mais.
+// Carregada no primeiro desenho e solta ao entrar (login_soltar).
+static char   fundoCam[600];
+static GLuint texFundo;
+static int    tentouFundo;
+
+void login_recursos(const char *dirArte) {
+  snprintf(fundoCam, sizeof fundoCam, "%s/marcas/login-fundo.jpg", dirArte ? dirArte : ".");
+}
+
+static void carregarFundo(void) {
+  SDL_Surface *s, *c;
+  tentouFundo = 1;
+  if (!fundoCam[0]) return;
+  s = IMG_Load(fundoCam);
+  if (!s) { printf("[login] sem o fundo (%s)\n", fundoCam); return; }
+  c = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_ABGR8888, 0);   // RGBA em bytes
+  SDL_FreeSurface(s);
+  if (!c) return;
+  glGenTextures(1, &texFundo);
+  glBindTexture(GL_TEXTURE_2D, texFundo);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, c->w, c->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, c->pixels);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  gfx_tex_esquecer(0);   // o gfx guarda a ultima textura ligada
+  SDL_FreeSurface(c);
+}
+
+void login_soltar(void) {
+  if (texFundo) { gfx_tex_esquecer(texFundo); glDeleteTextures(1, &texFundo); texFundo = 0; }
+  tentouFundo = 0;
+}   // conteudo ja desenhado, para nao refazer por quadro
 
 // Sobe o simbolo como textura em vez de desenhar um retangulo por modulo: a
 // versao 4 tem 33x33 = 1089 modulos, e mil chamadas de desenho por quadro
@@ -332,7 +371,11 @@ void login_desenhar(Uint32 agora) {
   (void)agora;
 
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-    gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f); }
+    if (!tentouFundo) carregarFundo();
+    if (texFundo) {
+      gfx_tex_aspect_atual = 0.0f;
+      gfx_rect(tela, texFundo, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, 1.0f);
+    } else gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f); }
   // A tela inteira e a camada: nada de tras recebe toque.
   ponteiro_camada();
   ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, NULL, 0, 0);

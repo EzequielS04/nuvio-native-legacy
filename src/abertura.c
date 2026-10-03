@@ -24,6 +24,14 @@
 
 static GLuint marca;
 static float marcaAsp;
+// ARTE CHEIA (splash 1.7.2): a mesma imagem do splash.png da LG e do fundo da
+// janela no Android, em 1280x720 (decodifica em ~1/2 do tempo da 1920 e some em
+// menos de 1,5 s, entao a ampliacao nao chega a ser vista). Com ela, a marca e
+// o fundo liso ficam de fora: a arte ja tem os dois.
+static int arteCheia;
+static int fundoFica;
+
+void abertura_fundo_fica(int sim) { fundoFica = sim; }
 static int estado;          // 0 nao iniciou, 1 parada, 2 saindo, 3 acabou
 static Uint32 inicio, saidaEm;
 static float escala = 1.0f, escalaVel;
@@ -32,8 +40,14 @@ void abertura_iniciar(const char *dirArte) {
   char cam[600];
   SDL_Surface *s, *c;
   estado = 0;
-  snprintf(cam, sizeof cam, "%s/marcas/nuvio_wordmark.png", dirArte ? dirArte : ".");
+  arteCheia = 0;
+  snprintf(cam, sizeof cam, "%s/marcas/abertura.jpg", dirArte ? dirArte : ".");
   s = IMG_Load(cam);
+  if (s) arteCheia = 1;
+  else {
+    snprintf(cam, sizeof cam, "%s/marcas/nuvio_wordmark.png", dirArte ? dirArte : ".");
+    s = IMG_Load(cam);
+  }
   if (!s) { printf("[abertura] sem a marca (%s)\n", cam); return; }
   c = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_ABGR8888, 0);   // RGBA em bytes
   SDL_FreeSurface(s);
@@ -93,6 +107,17 @@ int abertura_desenhar(Uint32 agora, float dt, int pendentes) {
   }
   // Reduzidas: so o esvanecimento, sem crescer.
   escala = anim_politica_reduzida ? 1.0f : anim_mola2(&escalaVel, escala, alvo, dt, 9.0f);
+  if (marca && arteCheia) {
+    // A arte inteira cresce a partir do centro e sai junto com o veu. Sobre o
+    // login ela fica parada: o fundo de baixo continua as listras, e quem
+    // some e o logo.
+    float k = fundoFica ? 1.0f : escala;
+    float w = NV_TELA_W * k, h = NV_TELA_H * k;
+    gfx_tex_aspect_atual = 0.0f;
+    gfx_rect((GfxRect){ (NV_TELA_W - w) * 0.5f, (NV_TELA_H - h) * 0.5f, w, h },
+             marca, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, veu);
+    return 1;
+  }
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f,
           AB_FUNDO_R, AB_FUNDO_G, AB_FUNDO_B, veu);
   if (marca && alfaMarca > 0.004f) {
