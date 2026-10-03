@@ -1205,6 +1205,7 @@ static void chamarEm(const char *servico, const char *metodo,
   lsChamar(uri, carga, cb, NULL, rot);
 }
 
+static void protegerScreensaver(void);
 static int modoLoad;   // video_modo_live_consumir do load em curso
 static int aoCarregar(LSHandle *h, LSMessage *m, void *u) {
   const char *p = lsPayload(m), *q;
@@ -1233,6 +1234,7 @@ static int aoCarregar(LSHandle *h, LSMessage *m, void *u) {
     if (!f || f - q >= (int)sizeof midia) return 1;
     memcpy(midia, q, f - q); midia[f - q] = 0; }
 
+  protegerScreensaver();
   snprintf(b, sizeof b, "{\"connectionId\":\"%s\"}", midia);
   chamar("notifyForeground", b, soLog);
   snprintf(b, sizeof b, "{\"mediaId\":\"%s\"}", midia);
@@ -1260,20 +1262,22 @@ static void *rodarLaco(void *u) { (void)u; loopRodar(laco); return NULL; }
 // nao segurar o screensaver normal da TV.
 static int protetorLigado;
 static int aoPedidoScreensaver(LSHandle *h, LSMessage *m, void *u) {
-  const char *p = lsPayload(m), *t;
-  char ts[64], b[160];
-  int n = 0, segurar;
+  const char *p = lsPayload(m);
+  char estado[24], ts[64], b[192];
+  int segurar;
   (void)h; (void)u;
-  if (!p || !strstr(p, "\"Active\"")) return 1;
-  t = strstr(p, "\"timestamp\"");
-  if (!t) return 1;
-  t = strchr(t, ':');
-  if (!t) return 1;
-  for (t++; *t == ' '; t++) {}
-  while (*t && *t != ',' && *t != '}' && n < (int)sizeof ts - 1) ts[n++] = *t++;
-  ts[n] = 0;
-  if (!n) return 1;
-  segurar = midia[0] && !pausaPedida;
+  if (!ligado || !bus || !p ||
+      !js_texto_raiz(p, "state", estado, sizeof estado) || strcmp(estado, "Active")) return 1;
+  // Preserva o token recebido, inclusive quando string, sem arredondar numeros
+  // grandes ou responder com timestamp truncado.
+  if (!js_bruto(p, NULL, "timestamp", ts, sizeof ts)) return 1;
+  if (ts[0] != '"') {
+    char *fim;
+    if (!isdigit((unsigned char)ts[0]) && ts[0] != '-') return 1;
+    strtod(ts, &fim);
+    if (*fim) return 1;
+  }
+  segurar = midia[0] && tocando && !pausaPedida && !terminou && !falhou;
   snprintf(b, sizeof b, "{\"clientName\":\"space.nuvio.native.legacy\",\"ack\":%s,\"timestamp\":%s}",
            segurar ? "false" : "true", ts);
   printf("[video] screensaver pedido: %s\n", segurar ? "seguro (filme tocando)" : "liberado");
@@ -1283,9 +1287,8 @@ static int aoPedidoScreensaver(LSHandle *h, LSMessage *m, void *u) {
   return 1;
 }
 static void protegerScreensaver(void) {
-  if (protetorLigado) return;
-  protetorLigado = 1;
-  lsChamar("luna://com.webos.service.tvpower/power/registerScreenSaverRequest",
+  if (protetorLigado || !ligado || !bus) return;
+  protetorLigado = lsChamar("luna://com.webos.service.tvpower/power/registerScreenSaverRequest",
            "{\"subscribe\":true,\"clientName\":\"space.nuvio.native.legacy\"}",
            aoPedidoScreensaver, NULL, "registerScreenSaverRequest");
 }
@@ -1317,7 +1320,6 @@ static int iniciar(int automatico) {
   if (!lsreg_pode_tentar(&regEstado, SDL_GetTicks(), automatico)) {
     if (lsreg_desistiu(&regEstado) && !regAvisouDesistir) {
       regAvisouDesistir = 1;
-  protegerScreensaver();
       printf("[video] registro recusado %d vez(es) (%s): o trailer para de tentar "
              "nesta sessao; play ainda tenta\n", regEstado.falhas,
              lsreg_nome_codigo(regEstado.ultimoCodigo)
@@ -2557,6 +2559,7 @@ void video_encerrar(void) {
     erroLimpar();
     bus = NULL;
   }
+  protetorLigado = 0;
   ligado = 0;
 }
 // O uMS desenha a legenda embutida sozinho: nada para o app pintar.

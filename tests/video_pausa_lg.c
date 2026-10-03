@@ -24,11 +24,19 @@
 #undef __APPLE__
 #include "../src/video.c"
 
-static int pedidos, aceita = 1;
+static int pedidos, aceita = 1, assinaturas, respostas;
+static char resposta[256];
+static Filtro screensaverCallback;
 static int fakeCall(LSHandle *h, const char *uri, const char *carga, Filtro cb,
                     void *ctx, unsigned long *tok, void *erro) {
   (void)h; (void)uri; (void)carga; (void)cb; (void)ctx; (void)tok; (void)erro;
-  pedidos++; return aceita;
+  pedidos++;
+  if (strstr(uri, "registerScreenSaverRequest")) {
+    assinaturas++; screensaverCallback = cb;
+  } else if (strstr(uri, "responseScreenSaverRequest")) {
+    respostas++; snprintf(resposta, sizeof resposta, "%s", carga);
+  }
+  return aceita;
 }
 static const char *fakePayload(LSMessage *m) { return (const char *)m; }
 static void evento(const char *p, unsigned geracao) {
@@ -55,4 +63,48 @@ int main(void) {
   evento("{\"paused\":true}", 7); assert(!video_pausa_confirmada());
   aceita = 0; video_pausar(1); assert(!video_pausa_confirmada());
   puts("video_pausa_lg: intencao, ack, geracao, play, erro e unload ok");
+
+  // Registro no caminho real de um load valido, nunca no caminho de erro LS2.
+  aceita = 1; sessao = 17; bus = (LSHandle *)(uintptr_t)1;
+  midia[0] = 0; tocando = pausaPedida = terminou = falhou = 0;
+  aoCarregar(NULL, (LSMessage *)"{\"mediaId\":\"fixture-load\"}",
+             (void *)(uintptr_t)sessao);
+  assert(assinaturas == 1 && protetorLigado && screensaverCallback);
+  protegerScreensaver(); assert(assinaturas == 1); // sem duplicar assinatura
+  const char *active = "{\"state\":\"Active\",\"timestamp\":1700000000123456}";
+  tocando = 1;
+  screensaverCallback(NULL, (LSMessage *)active, NULL);
+  assert(respostas == 1 && strstr(resposta, "\"ack\":false") &&
+         strstr(resposta, "\"timestamp\":1700000000123456}"));
+  pausaPedida = 1;
+  screensaverCallback(NULL, (LSMessage *)active, NULL);
+  assert(strstr(resposta, "\"ack\":true"));
+  pausaPedida = 0; tocando = 0; // pausa enviada pelo pipeline
+  screensaverCallback(NULL, (LSMessage *)active, NULL);
+  assert(strstr(resposta, "\"ack\":true"));
+  tocando = 1; terminou = 1;
+  screensaverCallback(NULL, (LSMessage *)active, NULL);
+  assert(strstr(resposta, "\"ack\":true"));
+  terminou = 0; falhou = 1;
+  screensaverCallback(NULL, (LSMessage *)active, NULL);
+  assert(strstr(resposta, "\"ack\":true"));
+  falhou = 0; midia[0] = 0;
+  screensaverCallback(NULL, (LSMessage *)active, NULL);
+  assert(strstr(resposta, "\"ack\":true"));
+  int antes = respostas;
+  screensaverCallback(NULL, (LSMessage *)"{\"state\":\"Inactive\",\"text\":\"Active\",\"timestamp\":1}", NULL);
+  screensaverCallback(NULL, (LSMessage *)"{\"state\":\"Active\"}", NULL);
+  screensaverCallback(NULL, (LSMessage *)"{\"state\":\"Active\",\"timestamp\":null}", NULL);
+  screensaverCallback(NULL, (LSMessage *)"{\"state\":\"Active\",\"timestamp\":\"1234567890123456789012345678901234567890123456789012345678901234567890\"}", NULL);
+  assert(respostas == antes);
+  screensaverCallback(NULL, (LSMessage *)"{ \"state\" : \"Active\", \"timestamp\" : \"exact,stamp\" }", NULL);
+  assert(strstr(resposta, "\"timestamp\":\"exact,stamp\"}"));
+  protetorLigado = 0; aceita = 0;
+  protegerScreensaver(); assert(!protetorLigado && assinaturas == 2);
+  aceita = 1; protegerScreensaver(); assert(protetorLigado && assinaturas == 3);
+  // Fechar LS2 permite uma nova assinatura no proximo ciclo do backend.
+  video_encerrar(); assert(!protetorLigado);
+  antes = respostas;
+  screensaverCallback(NULL, (LSMessage *)active, NULL); assert(respostas == antes);
+  puts("video_screensaver_lg: load, assinatura, timestamp, pausas, fim, erro e ciclo ok");
 }
