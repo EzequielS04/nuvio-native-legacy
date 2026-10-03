@@ -15,6 +15,9 @@
 #include "ajustes.h"
 #include "progresso.h"
 #include "salvos.h"
+#include "ilhasalvar.h"
+#include "ilhaacao.h"
+#include "ilha.h"
 #include "recomenda.h"
 #include "atividade.h"
 #include "recenviar.h"
@@ -556,6 +559,35 @@ int ctx_pediu_detalhes(void) { int v = pedDetalhes; pedDetalhes = -1; return v; 
 // O ESPELHO LOCAL DE "ASSISTIDO", separado de quem confirma: com Trakt ele
 // roda depois do 2xx (ctx_atualizar); sem Trakt roda na hora (aplicar), porque
 // nao ha resposta nenhuma a esperar.
+
+// --- ILHA: a confirmacao de assistido / nao assistido (ilhaacao.h) -----------------
+// Desfazer so quando ha inverso de verdade: DESMARCAR e puro (nada some), e
+// MARCAR so quando o titulo nao tinha posicao de retomada — marcar apaga o
+// ponto de retomada local e nas contas, e esse nao volta.
+typedef struct { CatItem ci; int intencao; } AssistidoCtx;
+static CatItem opItem;      // copia do titulo da operacao em curso (o bloco do catalogo troca)
+static int opTinhaRetomada;
+static void desfazerAssistido(const void *p) {
+  const AssistidoCtx *c = p;
+  int volta = !c->intencao;
+  visto_titulo(c->ci.imdb, c->ci.tipo, c->ci.temporadas, c->ci.nTemporadas, volta, visto_destinos());
+  if (trakt_ativo()) trakt_assistido_tipo(c->ci.imdb, c->ci.tipo, volta);
+  cat_historico_definir_id(c->ci.imdb, c->ci.tipo, volta);
+  desc_remontar_fileiras();
+}
+static void anunciarAssistido(int intencao) {
+  static AssistidoCtx c;
+  IlhaAcao a;
+  if (!opItem.imdb[0]) return;
+  c.ci = opItem; c.intencao = intencao;
+  memset(&a, 0, sizeof a);
+  a.icone = intencao ? "check" : "aj_x";
+  a.frase = intencao ? i18n("Marcado como assistido") : i18n("Marcado como não assistido");
+  a.titulo = opItem.titulo; a.thumb = opItem.poster;
+  a.tipo = intencao ? ILHA_OK : ILHA_INFO;
+  if (!(intencao && opTinhaRetomada)) { a.desfazer = desfazerAssistido; a.ctx = &c; a.ctxN = sizeof c; }
+  ilhaacao_feita(&a);
+}
 static void espelharAssistido(int atual, const CatItem *ci, int intencao) {
   cat_historico_definir_id(ci->imdb, ci->tipo, intencao);
   // MARCAR COMO ASSISTIDO APAGA A POSICAO DE RETOMADA.
@@ -652,6 +684,9 @@ static void aplicar(void) {
       // Captura a intencao ANTES de qualquer escrita. O mesmo valor segue para
       // o POST e so chega ao espelho local depois de uma resposta 2xx.
       intencao = !tituloSalvo(ci);
+      // Primeira vez: a ilha pergunta onde o + salva; o menu sai e o titulo e
+      // gravado depois da resposta (ilhasalvar.c).
+      if (ilhasalvar_perguntar(ci, intencao)) { aberto = 0; return; }
       snprintf(operacaoImdb, sizeof operacaoImdb, "%s", ci->imdb);
       operacao = CTX_OP_LISTA;
       fecharAoConfirmar = doPainel && !intencao;
@@ -664,6 +699,8 @@ static void aplicar(void) {
       // e o unico destino que sobrevive ao fechamento do app.
       salvos_definir(ci, intencao);
       atividade_salvo(ci, intencao);   // ev=salvo para o Social (atividade.h)
+      ilhasalvar_aviso(ci, intencao);  // voo da capa + "Salvo em ..." / "Removido da lista"
+
       // TRAKT ESCOLHIDO E SEM VINCULO cai no ramo local, como o Simkl sem
       // vinculo ja caia. Antes era CTX_FALHA com a lista local JA escrita: o
       // titulo saia do arquivo, a marca do catalogo ficava, e o "Remover" do
@@ -704,6 +741,7 @@ static void aplicar(void) {
       // Progresso e posicao de retomada, nao historico. So um retrato de
       // historico confirmado pode inverter a acao para "desmarcar".
       intencao = historicoDe(ci) == 1 ? 0 : 1;
+      opItem = *ci; opTinhaRetomada = ci->progresso > 0 || ci->restanteMin > 0;
       snprintf(operacaoImdb, sizeof operacaoImdb, "%s", ci->imdb);
       operacao = CTX_OP_HISTORICO;
       opSimkl = 0;
@@ -731,6 +769,7 @@ static void aplicar(void) {
         estadoOperacao = CTX_CONFIRMADA;
         espelhoAplicado = 1;
         desc_remontar_fileiras();
+        anunciarAssistido(intencao);
       }
       montar();
       break;
@@ -753,7 +792,9 @@ static void aplicar(void) {
       char imdb[sizeof ci->imdb];
       int temp = ci->temporada, ep = ci->episodio;
       pthread_t t;
+      char tit[sizeof ci->titulo];
       snprintf(imdb, sizeof imdb, "%s", ci->imdb);
+      snprintf(tit, sizeof tit, "%s", ci->titulo);
       // Efeito local e imediato, ANTES da rede: zera o que a legenda desenha
       // neste indice (o card pode estar numa fileira de catalogo com barra) e
       // desc_tirar_continuar apaga o registro, carimba a remocao e tira o card
@@ -786,6 +827,14 @@ static void aplicar(void) {
       // O Simkl tambem guarda o pausado (issue #110). Ja sai em fio proprio;
       // sem id conhecido (item que nao veio do Simkl) nao faz nada.
       simkl_playback_remover(imdb);
+      // SEM DESFAZER: o ponto de retomada foi apagado aqui e nas contas, e nao
+      // ha como restaura-lo; por isso a confirmacao do menu continua.
+      { IlhaAcao a;
+        memset(&a, 0, sizeof a);
+        a.icone = "aj_x"; a.frase = i18n("Removido de Continuar assistindo");
+        a.titulo = tit;
+        a.tipo = ILHA_INFO;
+        ilhaacao_feita(&a); }
       aberto = 0;
       pagina = 0;
       break;
@@ -911,6 +960,7 @@ void ctx_atualizar(float dt, Uint32 agora) {
             cat_definir_na_lista_imdb(operacaoImdb, intencao);
           } else {
             espelharAssistido(atual, ci, intencao);
+            anunciarAssistido(intencao);
           }
         }
         espelhoAplicado = 1;

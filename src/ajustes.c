@@ -1661,6 +1661,12 @@ void ajustes_definir_salvos_no_trakt(int noTrakt) {
   valor[AJ_SALVOS_DEST] = noTrakt ? 1 : 0;
   gravar();
 }
+void ajustes_definir_salvos_destino(int destino) {
+  if (destino < AJ_SALVOS_LOCAL || destino > AJ_SALVOS_SIMKL) return;
+  valor[AJ_SALVOS_DEST] = destino;
+  gravar();
+  desc_repetir();   // o mesmo que a linha de Ajustes faz ao mudar
+}
 int ajustes_data_completa(void)       { return lig(AJ_DET_DATA_CHEIA); }
 float ajustes_detalhe_veu(void)       { int v = valor[AJ_DET_VEU]; return (v < 0 ? 0 : v > 100 ? 100 : v) / 100.0f; }
 int   ajustes_trailer_auto(void)      { return lig(AJ_DET_TRAILER_AUTO); }

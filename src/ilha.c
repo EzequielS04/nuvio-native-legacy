@@ -40,7 +40,7 @@ typedef struct {
   int conta;                    // quantos avisos este representa ("N avisos novos")
   unsigned ms, ordem;           // ordem: chegada, para o FIFO dentro da prioridade
   char rosto[256], rostoNome[64], capa[512], meta[64];
-  int temModal;
+  int temModal, abrir;
   IlhaModal modal;
   char titulo[120], kicker[48], dica[64];   // o aviso v2 (ilha.h, IlhaAvisoEx)
   int acao;
@@ -117,6 +117,13 @@ static char vooArte[1024], vooCapa[1024];
 // TCL, 02/10: lento demais para a saida.)
 #define VOO_DISSOLVE_MS 150u
 static int vooDissolve;
+// SALVAR (ilha_salvar): a capa voa ate o icone do aviso "salvar-aviso".
+#define SALVAR_CHAVE ILHA_ACAO_CHAVE
+static int svooQuer, svoo;           // quer = pedido a espera do aviso na tela
+static float svooT, svooIconeA = 1.0f;
+static Uint32 svooDesde;
+static GfxRect svooDe;
+static char svooPoster[1024];
 static Uint32 pousouEm;          // o pulso da pilula conta daqui
 static Uint32 altBase;           // a alternancia dos cartoes conta daqui
 
@@ -193,7 +200,7 @@ void ilha_avisar_ex(const IlhaAvisoEx *e) {
   a.prior = e->prior ? e->prior : priorDoTipo(e->tipo);
   a.grupo = e->grupo; a.vivo = e->vivo; a.cartao = e->cartao; a.conta = 1;
   a.tecla = e->tecla || e->modal || e->cartao;
-  if (e->modal) { a.temModal = 1; a.modal = *e->modal; }
+  if (e->modal) { a.temModal = 1; a.modal = *e->modal; a.abrir = e->abrir; }
   snprintf(a.titulo, sizeof a.titulo, "%s", e->titulo ? e->titulo : "");
   snprintf(a.kicker, sizeof a.kicker, "%s", e->kicker ? e->kicker : "");
   snprintf(a.dica, sizeof a.dica, "%s", e->dica ? e->dica : "");
@@ -283,6 +290,25 @@ int ilha_aviso_pediu(char *chave, size_t tam) {
   avPedido = 0;
   if (chave && tam) snprintf(chave, tam, "%s", avPedidoChave);
   return o;
+}
+
+void ilha_acao(const char *icone, const char *texto, int tipo, const char *poster,
+               const GfxRect *de, const IlhaModal *modal) {
+  IlhaAvisoEx e;
+  if (!texto || !texto[0]) return;
+  memset(&e, 0, sizeof e);
+  e.chave = SALVAR_CHAVE; e.icone = icone && icone[0] ? icone : "check"; e.texto = texto;
+  e.tipo = tipo;
+  e.ms = 6000u;
+  e.modal = modal;
+  ilha_avisar_ex(&e);
+  svoo = 0; svooIconeA = 1.0f;
+  svooQuer = 0;
+  if (poster && poster[0] && !anim_politica_reduzida && !ajustes_animacoes_reduzidas()) {
+    snprintf(svooPoster, sizeof svooPoster, "%s", poster);
+    svooDe = de ? *de : (GfxRect){ NV_TELA_W * 0.5f - 75.0f, 520.0f, 150.0f, 225.0f };
+    svooQuer = 1;
+  }
 }
 
 void ilha_atividade_ex(const char *texto, float progresso, const char *icone) {
@@ -726,6 +752,8 @@ static void desenharLead(const Aviso *v, float x, float yc, float a) {
   }
   if (v->capa[0]) { capaEm((GfxRect){ x, yc - MINI_H * 0.5f, MINI_W, MINI_H }, v->capa, a); return; }
   corDoTipo(v->tipo, &cr, &cg, &cb);
+  // A capa que voa (ilha_salvar) pousa AQUI: o icone nasce por baixo dela.
+  if (!strcmp(v->chave, SALVAR_CHAVE)) a *= svooIconeA;
   gfx_icone((GfxRect){ x, yc - ICONE * 0.5f, ICONE, ICONE }, iconeDo(v), cr, cg, cb,
             v->tipo == ILHA_INFO ? a * 0.86f : a);
 }
@@ -1529,6 +1557,36 @@ static void vooPasso(Uint32 agora) {
   if (vooT >= 1.0f) vooFim("pousou", agora);
 }
 
+// A capa de ilha_salvar em voo ate o icone do aviso. O relogio do voo comeca
+// no primeiro quadro DESENHADO com o aviso na pilula (como o minimizar), e a
+// capa se dissolve no icone nos ultimos 30% enquanto ele aparece por baixo.
+static void salvarVoo(Uint32 agora, float x, float y, int dir) {
+  LinhasAviso L;
+  float cw, pw, f, raioPx;
+  GfxRect pf, alvo, q;
+  if (svooQuer && mostra == M_AVISO && !strcmp(mostraA.chave, SALVAR_CHAVE)) {
+    svooQuer = 0; svoo = 1; svooT = 0.0f; svooDesde = 0; svooIconeA = 0.0f;
+  }
+  if (!svoo) { svooIconeA = 1.0f; return; }
+  if (mostra != M_AVISO || strcmp(mostraA.chave, SALVAR_CHAVE)) { svoo = 0; svooIconeA = 1.0f; return; }
+  if (!svooDesde) svooDesde = agora ? agora : 1;
+  svooT = ilha_voo_fracao(agora - svooDesde);
+  cw = larguraAviso(&mostraA, 0, &L);
+  pw = PAD_E + PAD_D + cw;
+  pf = (GfxRect){ dir ? x - pw : x, y, pw, NV_ILHA_H_ABERTA };
+  alvo = (GfxRect){ pf.x + (pf.w - cw) * 0.5f, pf.y + pf.h * 0.5f - ICONE * 0.5f, ICONE, ICONE };
+  q = ilha_voo_rect_de(svooDe, svooDe.w / svooDe.h, alvo, svooT, &f);
+  svooIconeA = suave01(0.70f, 1.0f, svooT);
+  raioPx = 12.0f + (ICONE * 0.25f - 12.0f) * f;
+  if (svooT < 1.0f) {
+    // Sombra caida curta, para a capa se descolar da tela de baixo.
+    gfx_rect((GfxRect){ q.x - 10.0f, q.y - 2.0f, q.w + 20.0f, q.h + 22.0f }, 0, GFX_SOMBRA,
+             1.0f, 0, 0, 0.5f, 0, 0, 0, 0.30f * (1.0f - svooIconeA));
+    vooArteEm(svooPoster, q, raioPx / (q.h > 1.0f ? q.h : 1.0f), 1.0f - svooIconeA);
+  }
+  if (svooT >= 1.0f) { svoo = 0; svooIconeA = 1.0f; pousouEm = agora ? agora : 1; }
+}
+
 static void ilha_desenharCorpo_(Uint32 agora);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void ilha_desenhar(Uint32 agora) {
@@ -1548,6 +1606,8 @@ static void ilha_desenharCorpo_(Uint32 agora) {
   // Aviso vencido sai; o prazo so comeca a contar quando ele aparece.
   if (temCur && curAte && (Sint32)(agora - curAte) >= 0) proximo();
   if (temCur && !curAte) curAte = agora + cur.ms;
+  // Aviso que pediu `abrir`: a pilula cresce ate o modal no primeiro quadro.
+  if (temCur && cur.abrir && curAte) { cur.abrir = 0; abrirDoAviso(); }
   atualizarHora();
 
   cartaoVez = cartaoDaVez(agora);
@@ -1727,5 +1787,6 @@ static void ilha_desenharCorpo_(Uint32 agora) {
     // E num aviso com modal (ou que abre um cartao), o mesmo clique abre o dele.
     if (modalT <= 0.0f && mostra == M_AVISO && temCur && (cur.temModal || cur.cartao || cur.acao) && A > 0.5f)
       ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontAviso, 0, 0);
-    if (voo) desenharVoo(vooPf, 1); }
+    if (voo) desenharVoo(vooPf, 1);
+    salvarVoo(agora, x, y, dir); }
 }

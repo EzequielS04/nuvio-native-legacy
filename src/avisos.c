@@ -1,5 +1,6 @@
 #include "avisos.h"
 #include "ilha.h"
+#include "ilhasalvar.h"
 #define AV_ILHA_CHAVE "avisos"   // o "N avisos novos" da central na ilha (ilha.c junta)
 #include "dados.h"
 #include "rede.h"
@@ -1088,10 +1089,13 @@ void avisos_ilha_acao(const char *chave, int botao) {
         snprintf(tmp.poster, sizeof tmp.poster, "%s", recDaIlha.poster);
         ci = &tmp;
       }
-      salvos_definir(ci, 1);
-      // O Trakt so se a pessoa pediu (o mesmo criterio do "+", app.c).
-      if (ajustes_salvos_no_trakt()) trakt_watchlist(ci->imdb, 1);
-      ilha_avisar("salvo", ILHA_OK, NULL, i18n("Salvo"), 3000u, 0);
+      // Primeira vez: a ilha pergunta onde o + salva e grava depois (ilhasalvar.c).
+      if (!ilhasalvar_perguntar(ci, 1)) {
+        salvos_definir(ci, 1);
+        // O Trakt so se a pessoa pediu (o mesmo criterio do "+", app.c).
+        if (ajustes_salvos_no_trakt()) trakt_watchlist(ci->imdb, 1);
+        ilhasalvar_aviso(ci, 1);
+      }
     }
     // As tres respondem a recomendacao: o selo apaga (o mesmo que abrir Salvos).
     recomenda_marcar_vistas();

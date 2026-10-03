@@ -297,6 +297,8 @@ int   ajustes_data_completa(void);      // showFullReleaseDate
 // nos DOIS valores — ver a nota de V_SALVOS em ajustes.c e a abertura de salvos.h.
 int   ajustes_salvos_no_trakt(void);
 void  ajustes_definir_salvos_no_trakt(int noTrakt);
+// O mesmo, para os tres destinos (AJ_SALVOS_*): a pergunta da ilha (ilhasalvar.c).
+void  ajustes_definir_salvos_destino(int destino);
 // 1 = o "+" tambem publica no Plan to Watch do Simkl (#110).
 int   ajustes_salvos_no_simkl(void);
 // Os INDICES GRAVADOS de "Onde o + salva" (salvosDestino) e da fonte do

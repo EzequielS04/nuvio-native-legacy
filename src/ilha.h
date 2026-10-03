@@ -24,6 +24,7 @@
 #ifndef NV_ILHA_MODULO_H
 #define NV_ILHA_MODULO_H
 #include <SDL2/SDL.h>
+#include "gfx.h"
 
 enum { ILHA_INFO = 0, ILHA_OK, ILHA_ERRO, ILHA_ACENTO };
 
@@ -118,6 +119,9 @@ typedef struct {
   // 1 = a tecla (AZUL/CH+, ou o clique) ENTREGA o aviso a quem o pos, sem
   // modal: ilha_aviso_pediu devolve 1 com a chave, e o aviso sai da fila.
   int acao;
+  // 1 = a pilula cresce ate o modal sozinha, sem esperar a AZUL (a pergunta de
+  // primeira vez do "+", ilhasalvar.c). Precisa de `modal`.
+  int abrir;
 } IlhaAvisoEx;
 void ilha_avisar_ex(const IlhaAvisoEx *a);
 // Embrulha `s` em ILHA_FORTE em `dst` (devolve dst), para passar como %s.
@@ -134,6 +138,19 @@ int  ilha_aviso_pediu(char *chave, size_t tam);
 // vez ("" sem aviso) e quantos esperam atras dele (o numero do "+N").
 const char *ilha_aviso_vez(void);
 int  ilha_esperando(void);
+
+// AVISO DE ACAO FEITA (pedido do dono, 03/10: "toda confirmacao tem que
+// aparecer na ilha; se clicar, mostra o que foi feito e se quer desfazer").
+// Um aviso com `icone` e `texto` ja traduzido ("Salvo em Lista do Nuvio",
+// "Marcado como assistido"). Com `poster`, a capa do titulo VOA ate a pilula
+// (mesma mola do ilha_minimizar, ilha_voo.h) e pousa virando o icone; `de` =
+// de onde ela parte (NULL = o meio da tela, 150x225). `modal` (ou NULL) e o que
+// a AZUL/OK/clique abre: o que foi feito e os botoes (ilha_aviso_pediu com a
+// chave ILHA_ACAO_CHAVE). Animacoes reduzidas: so o aviso, sem voo. Quem posta
+// e ilhaacao.c; as telas chamam ilhaacao_feita.
+#define ILHA_ACAO_CHAVE "acao-aviso"
+void ilha_acao(const char *icone, const char *texto, int tipo, const char *poster,
+               const GfxRect *de, const IlhaModal *modal);
 
 // ATIVIDADE em andamento: chame A CADA QUADRO enquanto durar; sem renovacao
 // por ~0,4 s ela sai sozinha. `progresso` de 0 a 1, ou < 0 quando nao ha numero.
