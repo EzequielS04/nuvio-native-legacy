@@ -145,10 +145,6 @@ static void avisarCascaAberto(int v) { (void)v; }
 // De quanto o bloco desliza para baixo quando escondido. Pequeno de proposito:
 // o que faz o movimento ser lido nao e a distancia, e a mola somada ao fade.
 #define PLR_DESLIZE       46.0f
-// Guia parental (.player-parental-*): barra de 6, lista recuada 20, linha de
-// 36 com 4 de vao. Nao passam pela conversao x2 do bloco ATV — a regra base
-// nao e refeita la.
-#define PG_BARRA_W         6.0f
 // Quanto tempo a guia parental fica na tela, contando do primeiro quadro com
 // imagem, e quanto dura o esmaecimento final. Depois disso ela nao volta nesta
 // reproducao.
@@ -168,9 +164,6 @@ static void avisarCascaAberto(int v) { (void)v; }
 // resposta pode chegar tarde. Ver a nota no desenho.
 #define PG_LIMITE_SEG     45.0f
 #define PG_SEG_SAIDA       0.8f
-#define PG_LISTA_PADX     20.0f
-#define PG_LINHA_H        36.0f
-#define PG_LINHA_GAP       4.0f
 
 // Transporte compacto. Os saltos continuam acessiveis pelas setas na barra.
 // A ORDEM DO MOCKUP APROVADO (03/10): Play, Legendas, Audio, Proporcao,
@@ -242,37 +235,11 @@ static Uint32 ultimoInput = 0;
 static int skipFoco = 0;
 static int trechoPulavel(double *fim);
 
-// O player fica sobre a imagem e precisa de um foco que sobreviva tanto a uma
-// cena clara quanto a uma escura. A cor configurada continua sendo a fonte,
-// mas o miolo recebe a mesma mistura suave usada nos outros paineis: assim o
-// controle e reconhecivel sem virar um adesivo neon sobre o filme.
-// A conta mora em botoes.c desde 29/09/2026 (botao_cor_foco): o foco do
-// player de filme e o de todo botao do app passaram a ser a mesma cor.
-static void corFocoPlayer(float *r, float *g, float *b) { botao_cor_foco(r, g, b); }
+// UMA COR DE ACENTO SO NO PLAYER (Glass UI): ajustes_acento(), a mesma das
+// ilhas. Havia duas contas (botao_cor_foco aqui, a mistura de 74% no
+// pos-reproducao e nas faixas) e o mesmo tema saia em dois tons na mesma tela.
+static void corFocoPlayer(float *r, float *g, float *b) { ajustes_acento(r, g, b); }
 
-static void superficieFocoPlayer(GfxRect r, float raio, float mola, float a) {
-  float fr, fg, fb;
-  GfxRect luz;
-  if (ajustes_vidro()) {
-    // Referencia: controle em foco = o mesmo disco escuro com aro branco; o
-    // glifo continua branco. Nada de preenchimento na cor de realce.
-    // O aro segue a cor do realce (branco no padrao).
-    ajustes_acento(&fr, &fg, &fb);
-    gfx_cor(r, raio, 0.16f, 0.16f, 0.17f, 0.70f * a);
-    gfx_anel(r, raio, 2.5f, fr, fg, fb, 0.96f * a);
-    return;
-  }
-  corFocoPlayer(&fr, &fg, &fb);
-  if (mola > 0.01f) {
-    luz.x = r.x - r.h * 0.85f; luz.y = r.y - r.h * 0.85f;
-    luz.w = r.w + r.h * 1.7f; luz.h = r.h + r.h * 1.7f;
-    gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
-             fr, fg, fb, 0.16f * mola * a);
-  }
-  gfx_cor(r, raio, fr, fg, fb, a);
-  gfx_rect(r, 0, GFX_BRILHO_TOPO, raio, 0.20f, 0, 0.5f,
-           1, 1, 1, 0.10f * a);
-}
 // Instante em que a IMAGEM comecou (nao a abertura da tela: entre uma coisa e
 // outra ha a busca de fonte, que pode levar segundos). Zero enquanto nao houve.
 // A guia parental se apoia nisto para aparecer UMA vez, no comeco, e sumir.
@@ -3154,45 +3121,28 @@ static void desenharAcoesEpisodio(void){
   (void)prox;
   if(!trecho){skipFoco=0;return;}
   {
-    // .player-skip-intro: left 64, bottom 60; com controles em pe sobe para
-    // cima deles (.is-raised). O deslize acompanha `anim`, a mesma mola dos
-    // controles, para o botao nao pular de lugar.
-    const char *rot=tipo==INTRO_RESUMO?i18n("Pular resumo"):
-                    tipo==INTRO_CREDITOS?i18n("Pular créditos"):
-                    i18n("Pular abertura");
-    int sel=skipFoco&&visivel;
-    int tinta = ajustes_vidro() ? 250 : ajustes_tinta_foco();   // vidro: o miolo continua escuro
-    TxtLinha t=sel?txt_linha(TXT_BODY,rot,tinta,tinta,tinta,255):txt_linha(TXT_BODY,rot,250,250,252,255);
-    // Com controles visiveis, ancora em 664: deixa 72 px de ar ate o titulo
-    // (que comeca em ~808) e o botao compacto de 72 px nao invade essa area.
-    const float h=72.0f, lado=28.0f, ladoIcone=36.0f, intervalo=16.0f;
-    float w=t.w+lado*2.0f+ladoIcone+intervalo;
-    float y=(NV_TELA_H-60.0f-h)-anim*(NV_TELA_H-60.0f-h-664.0f);
-    GfxRect p={64,y,w,h};
+    // PULAR ABERTURA/RESUMO/CREDITOS (Glass UI): pilula de verdade no material
+    // da ilha, na margem de 96 (era 64). Com o OSD escondido ela fica sozinha
+    // embaixo a esquerda, ja cheia no acento — OK pula direto; com o OSD de pe
+    // sobe para a direita, acima da barra, e so e cheia com o foco nela.
+    const char *rot=tipo==INTRO_RESUMO?"Pular resumo":
+                    tipo==INTRO_CREDITOS?"Pular cr\xc3\xa9" "ditos":"Pular abertura";
+    int sel=(skipFoco&&visivel)||!visivel;
+    TxtLinha t=txt_linha(TXT_G21B,rot,255,255,255,255);
+    const float h=64.0f;
+    float w=22.0f+26.0f+12.0f+(float)t.w+28.0f;
+    float k=anim, xa=PLR_MARGEM, ya=960.0f;
+    float xb=NV_TELA_W-PLR_MARGEM-w, yb=PLR_BARRA_Y-36.0f-h;
+    GfxRect p={xa+(xb-xa)*k,ya+(yb-ya)*k,w,h};
+    int tinta=sel?plrui_tinta():243;
+    float kt=tinta/255.0f;
     if (ponteiroNoPlayer()) ponteiro_alvo(p.x, p.y, p.w, p.h, ponteiroSkip, NULL, 0, 0);
-    if(sel) superficieFocoPlayer(p,.27f,1.0f,.96f*entrada);
-    else gfx_cor(p,.27f,.118f,.118f,.118f,.85f*entrada);
-    { float tintaIcone = (sel && !ajustes_vidro()) ? ajustes_acento_tinta(NULL, NULL, NULL) : 1.0f;
-      gfx_icone((GfxRect){64.0f+lado,y+(h-ladoIcone)*0.5f,ladoIcone,ladoIcone},
-                "avancar",tintaIcone,tintaIcone,tintaIcone,entrada); }
-    // O icone e o texto formam um unico grupo: padding simetrico e cada um
-    // centralizado pela propria caixa evitam o aspecto de icone solto na pilula.
-    txt_desenhar_alpha(t,64.0f+lado+ladoIcone+intervalo,
-                       y+(h-t.h)*0.5f,entrada);
-  }
-}
-
-// O anel de "carregando", o mesmo da abertura da fonte e do rebuffer (#182).
-static void anelCarregando(Uint32 agora, float alfa) {
-  float fr, fg, fb;
-  int k;
-  corFocoPlayer(&fr, &fg, &fb);
-  for (k = 0; k < 12; k++) {
-    float ang = k * 6.2831853f / 12.0f + agora * .006f;
-    float br = .18f + .82f * k / 11.0f;
-    GfxRect pt = {NV_TELA_W*.5f + cosf(ang)*24 - 4,
-                  NV_TELA_H*.5f + sinf(ang)*24 - 4,8,8};
-    gfx_cor(pt,.5f,fr,fg,fb,br*alfa);
+    if(!visivel) gfx_veu_css((GfxRect){0,NV_TELA_H-300.0f,NV_TELA_W,300.0f},0,1.0f,1.0f,0.60f*entrada*(1.0f-anim));
+    if(sel) plrui_pilula_foco(p,entrada);
+    else plrui_disco_osd(p,entrada);
+    gfx_icone((GfxRect){p.x+22.0f,p.y+(h-26.0f)*0.5f,26.0f,26.0f},"pl_skip-forward",kt,kt,kt,entrada);
+    t=txt_linha(TXT_G21B,rot,tinta,tinta,tinta,255);
+    txt_desenhar_alpha(t,p.x+22.0f+26.0f+12.0f,p.y+(h-(float)t.h)*0.5f,entrada);
   }
 }
 
@@ -3578,40 +3528,39 @@ void player_desenhar(Uint32 agora) {
         (float)(agora - pgDesde) / 1000.0f < PG_SEG_TOTAL) {
       tg = (float)(agora - pgDesde) / 1000.0f;
       float saida = anim_clamp((PG_SEG_TOTAL - tg) / PG_SEG_SAIDA, 0.0f, 1.0f);
-      float lin = PG_LINHA_H, gap = PG_LINHA_GAP;
-      float alt = np * lin + (np - 1) * gap;
-      float y0 = PLR_PAD_Y;
-      // A barra so cresce depois que a primeira linha entrou, senao ela aparece
-      // sozinha apontando para o vazio.
-      float eB = anim_clamp((tg - 0.10f) / 0.34f, 0.0f, 1.0f);
-      eB = 1.0f - (1.0f - eB) * (1.0f - eB);
-      float fr, fg, fb;
-      corFocoPlayer(&fr, &fg, &fb);
-      { GfxRect barra = { PLR_PAD_X, y0, PG_BARRA_W, alt * eB };
-        if (eB > 0.01f)
-          gfx_cor(barra, 0.5f * (PG_BARRA_W / (alt * eB)),
-                  fr, fg, fb, entrada * saida); }
-      float xt = PLR_PAD_X + PG_BARRA_W + PG_LISTA_PADX;
+      // UMA ILHA DISCRETA NO CANTO (Glass UI): kicker com a classificacao e
+      // as linhas "categoria ......... gravidade" com fio entre elas. A barra
+      // de acento que crescia pela lateral saiu (era decoracao); a gravidade
+      // Severo leva o ambar, que e estado. Com a pilula da hora no mesmo
+      // canto, a ilha desce para baixo dela.
+      float eI = anim_clamp(tg / 0.30f, 0.0f, 1.0f);
+      float aI = entrada * saida * (1.0f - (1.0f - eI) * (1.0f - eI));
+      float x0 = plrilha_direita() ? NV_TELA_W - PLR_MARGEM - 520.0f : PLR_MARGEM, y0 = PLR_PAD_Y;
+      float hI = 26.0f + 18.0f + 8.0f + np * 50.0f + 26.0f;
+      { GfxRect ir;
+        if (plrilha_rect(&ir) && ir.y < y0 + hI && fabsf(ir.x - x0) < 600.0f) y0 = ir.y + ir.h + 14.0f; }
+      gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 260.0f }, 1, 1.38f, 1.0f, 0.52f * aI * (1.0f - anim));
+      plrui_material((GfxRect){ x0, y0, 520.0f, hI }, 30.0f, 0, aI);
+      { char k[48];
+        const CatItem *ci = item();
+        if (ci && ci->classificacao[0]) snprintf(k, sizeof k, i18n("Guia parental \xc2\xb7 %s"), ci->classificacao);
+        else snprintf(k, sizeof k, "%s", i18n("Guia parental"));
+        plrui_kicker(k, x0 + 30.0f, y0 + 26.0f, 243, 242, 239, aI * 0.45f); }
       for (int i = 0; i < np; i++) {
-        float yl = y0 + i * (lin + gap);
+        float yl = y0 + 26.0f + 18.0f + 8.0f + i * 50.0f;
         float ts = anim_clamp((tg - 0.18f - i * 0.10f) / 0.30f, 0.0f, 1.0f);
-        float ee = 1.0f - (1.0f - ts) * (1.0f - ts);   // desaceleracao
-        float ag = entrada * saida * ee;
-        float dx = (1.0f - ee) * 18.0f;                // entra deslizando da esquerda
-        TxtLinha lr, ls, lg;
-        float cy, x;
+        float ee = 1.0f - (1.0f - ts) * (1.0f - ts);
+        float ag = aI * ee;
+        const char *gv = parental_gravidade(i);
+        int forte = gv && !strcmp(gv, "Severo");
+        TxtLinha lr, lg;
         if (ag <= 0.004f) continue;
-        lr = txt_linha(TXT_PG_ROTULO, parental_rotulo(i), 255, 255, 255, 255);
-        ls = txt_linha(TXT_PG_GRAV, "\xc2\xb7",
-                       (int)(fr * 255.0f + 0.5f),
-                       (int)(fg * 255.0f + 0.5f),
-                       (int)(fb * 255.0f + 0.5f), 255);
-        lg = txt_linha(TXT_PG_GRAV, parental_gravidade(i), 255, 255, 255, 255);
-        cy = yl + (lin - lr.h) * 0.5f;
-        x  = xt - dx;
-        txt_desenhar_alpha(lr, x, cy, ag * 0.85f);  x += lr.w;
-        txt_desenhar_alpha(ls, x, yl + (lin - ls.h) * 0.5f, ag * 0.40f); x += ls.w;
-        txt_desenhar_alpha(lg, x, yl + (lin - lg.h) * 0.5f, ag * 0.50f);
+        if (i) gfx_cor((GfxRect){ x0 + 30.0f, yl, 460.0f, 1.0f }, 0.0f, 1, 1, 1, 0.07f * ag);
+        lr = txt_linha_corta(TXT_G22M, parental_rotulo(i), 243, 242, 239, 255, 300.0f);
+        lg = forte ? txt_linha(TXT_ILHA_SUB, gv, 240, 185, 74, 255)
+                   : txt_linha(TXT_ILHA_SUB, gv, 243, 242, 239, 140);
+        txt_desenhar_alpha(lr, x0 + 30.0f, yl + 25.0f - (float)lr.h * 0.5f, ag);
+        txt_desenhar_alpha(lg, x0 + 490.0f - (float)lg.w, yl + 25.0f - (float)lg.h * 0.5f, ag);
       }
     }
   }

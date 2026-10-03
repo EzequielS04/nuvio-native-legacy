@@ -27,6 +27,7 @@
 #include "extras.h"
 #include "badges.h"
 #include "seekr.h"
+#include "parental.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -357,6 +358,34 @@ int main(int argc, char **argv) {
       quadros(30);
     }
     ajustes_shot_valor("seekrChave", 0);
+  }
+  if (quer(argc, argv, "guia-parental")) {
+    static const char *rot[4] = { "Viol\xc3\xaancia", "Linguagem Impr\xc3\xb3pria", "Conte\xc3\xba" "do Assustador", "Drogas/\xc3\x81lcool" };
+    static const char *gr[4] = { "Moderado", "Leve", "Severo", "Leve" };
+    CatItem f = filme;
+    snprintf(f.classificacao, sizeof f.classificacao, "12");
+    abrir(&f); simular(3840, 1606, "", 1, 1);
+    { VideoSimulacao v; memset(&v, 0, sizeof v);
+      v.largura = 3840; v.altura = 1606; v.pronto = 1; v.duracao = 9420; v.pos = 30;
+      video_simular(&v); }
+    player_shot_video(1);
+    parental_shot(rot, gr, 4);
+    quadros(20);
+    player_shot_esconder();
+    quadros(80);
+    salvar("guia-parental");
+    player_shot_video(0); parental_shot(NULL, NULL, 0);
+  }
+  if (quer(argc, argv, "pular-abertura")) {
+    IntroTrecho tr[1] = { { 60.0, 140.0, INTRO_ABERTURA } };
+    abrir(&serie); simular(3840, 2160, "HDR10", 0, 1);
+    intro_shot_definir(tr, 1);
+    quadros(10);
+    player_shot_estado(relogio, 90.0f, 3360.0f, 1, 0, 0, 0);
+    player_shot_esconder();
+    quadros(60);
+    salvar("pular-abertura");
+    intro_shot_definir(NULL, 0);
   }
   puts("player_glass_shot: ok");
   return 0;
