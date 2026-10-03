@@ -48,6 +48,13 @@ int main(void) {
   e.key.keysym.sym = SDLK_RIGHT; detail_evento(&e);
   e.key.keysym.sym = SDLK_ESCAPE; detail_evento(&e);
   assert(!maisAcoes && !saindo && botao == 0);
+  carro=0; pessoaAberta=1; saindo=0;
+  e.type=SDL_KEYDOWN; e.key.keysym.sym=SDLK_ESCAPE;
+  detail_evento(&e); assert(!pessoaAberta && !saindo);
+  pessoaAberta=1; e.key.keysym.sym=SDLK_AC_BACK;
+  detail_evento(&e); assert(!pessoaAberta && !saindo);
+  pessoaAberta=1; e.key.keysym.sym=SDLK_BACKSPACE;
+  detail_evento(&e); assert(!pessoaAberta && !saindo);
   puts("PASS: title/navigation and focus-only action group");
   return 0;
 }

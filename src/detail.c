@@ -1930,28 +1930,27 @@ void detail_evento(const SDL_Event *e) {
           // linhas cabem na tela; a terceira em diante entra empurrando.
           if (pessoaFoco / PES_POR_LINHA > pessoaLinha + 1) pessoaLinha++;
           return;
+        case SDLK_ESCAPE:
+        case SDLK_BACKSPACE:
+        case SDLK_DELETE:
         case SDLK_AC_BACK: pessoaAberta = 0; return;
         case SDLK_RETURN:
         case SDLK_KP_ENTER: {
           // Abre o titulo, quando ele for um dos que o catalogo ja tem meta.
           // Quem troca de fato e o roteador (app.c) — daqui so sai o pedido.
           //
-          // Um credito que NAO esta no catalogo nao abre nada, de proposito:
-          // sem meta nao ha episodios, elenco nem fonte, e uma tela de detalhe
-          // vazia e pior que o botao nao responder. Buscar meta sob demanda e
-          // trabalho a parte.
+          // Keep the person page visible until the router opens the title.
           const char *id = pessoa_credito_imdb(pessoaFoco);
           int alvo = id[0] ? cat_indice_por_imdb(id) : -1;
-          if (alvo >= 0) { pedAbrir = alvo; pessoaAberta = 0; }
+          if (alvo >= 0) { pedAbrir = alvo; }
           // Nao esta no catalogo: busca o meta e abre quando chegar. Quem
           // termina o trabalho e o roteador, que ja acompanha o resultado.
           // O credito quase nunca traz imdb_id, entao o caminho normal e pelo
           // id do TMDB.
-          else if (id[0]) { desc_pedir_titulo(id); pessoaAberta = 0; }
+          else if (id[0]) { desc_pedir_titulo(id); }
           else if (pessoa_credito_tmdb(pessoaFoco) > 0) {
             desc_pedir_titulo_tmdb(pessoa_credito_tmdb(pessoaFoco),
                                    pessoa_credito_tipo(pessoaFoco));
-            pessoaAberta = 0;
           }
           return; }
         default: break;
@@ -4633,7 +4632,7 @@ static void desenhaElenco(float x, float y, int c, float f, float a) {
     GfxRect info = {x-12,top,NV_DETP_EL_W+24,76};
     gfx_cor(info,18.0f/info.h,.19f,.21f,.23f,.6f*f*a);
   }
-  GfxRect av = { x, y, NV_DETP_EL_AVATAR, NV_DETP_EL_AVATAR };
+  GfxRect av = { x + (NV_DETP_EL_W-NV_DETP_EL_AVATAR)*.5f, y, NV_DETP_EL_AVATAR, NV_DETP_EL_AVATAR };
   if (f > 0.01f) {
     GfxRect anel = { av.x - NV_DETP_ANEL, av.y - NV_DETP_ANEL,
                      av.w + NV_DETP_ANEL * 2, av.h + NV_DETP_ANEL * 2 };
@@ -4666,11 +4665,11 @@ static void desenhaElenco(float x, float y, int c, float f, float a) {
   }
   float yn = y + NV_DETP_EL_AVATAR + NV_DETP_EL_NOME_DY;
   TxtLinha ln = txt_linha_corta(TXT_CALLOUT, nome, epApple()?238:179, epApple()?240:179, epApple()?244:179, 255, NV_DETP_EL_W);
-  txt_desenhar_alpha(ln, x, yn, a);
+  txt_desenhar_alpha(ln, x + (NV_DETP_EL_W-ln.w)*.5f, yn, a);
   if (papel && papel[0]) {
     TxtLinha lp = txt_linha_corta(TXT_CAPTION2, papel, epApple()?166:128, epApple()?172:128, epApple()?180:128, 255,
                                   NV_DETP_EL_W);
-    txt_desenhar_alpha(lp, x, yn + NV_DETP_EL_PAPEL_DY, a * 0.95f);
+    txt_desenhar_alpha(lp, x + (NV_DETP_EL_W-lp.w)*.5f, yn + NV_DETP_EL_PAPEL_DY, a * 0.95f);
   }
 }
 
@@ -5917,7 +5916,7 @@ static void desenhaEsqueletoElenco(float a) {
     txt_desenhar_alpha(lc, NV_DETP_X, y - lc.h - NV_DETF_CAB_GAP, a); }
   for (int c = 0; c < 6; c++) {
     float x = NV_DETP_X + c * NV_DETP_EL_PASSO;
-    GfxRect av = { x, y, NV_DETP_EL_AVATAR, NV_DETP_EL_AVATAR };
+    GfxRect av = { x + (NV_DETP_EL_W-NV_DETP_EL_AVATAR)*.5f, y, NV_DETP_EL_AVATAR, NV_DETP_EL_AVATAR };
     GfxRect nome = { x, y + NV_DETP_EL_AVATAR + NV_DETP_EL_NOME_DY + 4.0f,
                      c % 2 ? 150.0f : 184.0f, 20.0f };
     GfxRect papel = { x, nome.y + NV_DETP_EL_PAPEL_DY, 110.0f, 16.0f };
