@@ -1274,6 +1274,25 @@ static void *fioFontes(void *u) {
   }
 }
 
+// --- saude por addon (ver addons_fora_do_ar) ------------------------------------
+static pthread_mutex_t foraTrava = PTHREAD_MUTEX_INITIALIZER;
+static char foraNome[64];
+static unsigned foraSeq;
+static void foraAnotar(const char *nome) {
+  pthread_mutex_lock(&foraTrava);
+  snprintf(foraNome, sizeof foraNome, "%s", nome ? nome : "");
+  foraSeq++;
+  pthread_mutex_unlock(&foraTrava);
+}
+unsigned addons_fora_do_ar(char *nome, unsigned tam) {
+  unsigned s;
+  pthread_mutex_lock(&foraTrava);
+  s = foraSeq;
+  if (nome && tam) snprintf(nome, tam, "%s", foraNome);
+  pthread_mutex_unlock(&foraTrava);
+  return s;
+}
+
 // O segundo nome de tipo de canal ao vivo; "" para os demais. Ver fioFontes.
 static const char *tipoAlternativo(const char *tipo) {
   if (!strcmp(tipo, "tv"))      return "channel";
@@ -1408,7 +1427,16 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
     for (q = 0; q < c.nBaldes; q++) {
       int k = c.baldes[q].n;
       if (c.baldes[q].respondeu) addon[c.baldes[q].idx].mudoSeg = 0;
-      else addon[c.baldes[q].idx].mudoSeg++;
+      else {
+        addon[c.baldes[q].idx].mudoSeg++;
+        // ADDON FORA DO AR (ilha, 02/10): a busca de verdade (rs) terminou e
+        // ESTE addon nao respondeu nem na segunda chance — transporte ou HTTP,
+        // nunca "respondeu sem fonte", que e `respondeu` com n = 0. Uma vez por
+        // queda: so na PRIMEIRA consulta muda (mudoSeg 0 -> 1); responder de
+        // novo zera e rearma. Cancelada no meio nao conta.
+        if (rs && addon[c.baldes[q].idx].mudoSeg == 1 && !(c.cancelado && c.cancelado(c.ctx)))
+          foraAnotar(addon[c.baldes[q].idx].nome);
+      }
       if (rs) {
         const char *nome = addon[c.baldes[q].idx].nome;
         rs->consultados++;

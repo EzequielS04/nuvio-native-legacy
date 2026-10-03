@@ -220,6 +220,13 @@ void rede_vazao_espera(unsigned long ms);
 // resposta voltava 401. O callback recebe a URL e decide se a recusa e dele.
 void rede_avisar_401(void (*f)(const char *url));
 
+// Registra quem OUVE o fim de cada pedido, para a saude da rede (redesaude.h:
+// "sem internet" / "internet de volta" na ilha, 02/10). O callback recebe o
+// CURLcode (0 = ok; no Tizen-wasm 0 = respondeu, 6 = sem resposta) e a URL, e
+// roda no fio do pedido. Ponteiro e nao chamada direta para os testes que
+// compilam rede.c sozinho nao precisarem do modulo.
+void rede_avisar_saude(void (*f)(int codigo, const char *url));
+
 // Carrega a libcurl AGORA, no fio que chamar. Existe para o arranque fazer isso
 // no fio principal, antes de qualquer fio de rede nascer: `curl_global_init`
 // nao e seguro entre fios, e a trava interna e a segunda linha de defesa, nao a

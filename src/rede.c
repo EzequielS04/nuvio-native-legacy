@@ -204,6 +204,9 @@ static char *juntarCabs(const char *const *cab, const char *extra) {
 // Ouvinte unico dos 401 — ver rede_avisar_401 no cabecalho.
 static void (*aviso401)(const char *url);
 void rede_avisar_401(void (*f)(const char *url)) { aviso401 = f; }
+// Ouvinte da saude da rede — ver rede_avisar_saude no cabecalho.
+static void (*avisoSaude)(int codigo, const char *url);
+void rede_avisar_saude(void (*f)(int codigo, const char *url)) { avisoSaude = f; }
 
 static char *pedir2(const char *metodo, const char *url, const char *const *cab,
                     const char *extraCab, const char *corpo,
@@ -218,6 +221,9 @@ static char *pedir2(const char *metodo, const char *url, const char *const *cab,
                       redeFinalDst, (int)redeFinalTam, etag, (int)tamEtag);
   free(cabs);
   if (status) *status = http;
+  // XHR sem status e sem corpo = nao houve resposta (rede, DNS, CORS): para a
+  // saude da rede e o "6" do curl. Qualquer status e transporte que funcionou.
+  if (avisoSaude) avisoSaude(corpoResp || http ? 0 : 6, url);
   if (http == 401 && aviso401) aviso401(url);
   if (!corpoResp) { char seg[120];
     printf("[rede] falhou em %s\n", rede_url_publica(url, seg, sizeof seg));
@@ -557,6 +563,9 @@ static _Thread_local int redeParcialOk;
 // compilam separado.)
 static void (*aviso401)(const char *url);
 void rede_avisar_401(void (*f)(const char *url)) { aviso401 = f; }
+// Ouvinte da saude da rede — ver rede_avisar_saude no cabecalho.
+static void (*avisoSaude)(int codigo, const char *url);
+void rede_avisar_saude(void (*f)(int codigo, const char *url)) { avisoSaude = f; }
 
 static void *(*curl_init)(void);
 static int   (*curl_setopt)(void *, int, ...);
@@ -697,6 +706,9 @@ static void *pegarHandle(const char *url) {
 // reaproveitado (e o ganho de 0,5-0,8 s por imagem). Conexao que fica anota o
 // host (e o do fim dos redirecionamentos) para o limite de ociosidade.
 static void soltarHandleR(void *c, int r, const char *url) {
+  // TODO pedido da libcurl passa por aqui com o CURLcode: e o ponto unico da
+  // saude da rede (redesaude.h decide o que e transporte).
+  if (avisoSaude) avisoSaude(r, url);
   if (!curl_reset) { curl_cleanup(c); return; }
   if (r != 0) {
     curl_cleanup(c);
