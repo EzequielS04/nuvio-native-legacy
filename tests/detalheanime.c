@@ -20,6 +20,7 @@
 //
 //   bash tests/detalheanime.sh
 #include "../src/descoberta.c"
+Uint32 SDL_GetTicks(void) { return 0; }
 #include "../src/progresso.h"
 #include <assert.h>
 #include <stdio.h>

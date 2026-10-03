@@ -1237,6 +1237,7 @@ void detail_mostrar_pessoa(long tmdb, const char *nome, const char *foto) {
 }
 
 void detail_abrir(const HomeItem *it) {
+  int replacing = aberto && !saindo;
   maisAcoes = 0;
   int pos = -1, n = 0;
   // CARROSSEL: so quando a pagina NASCE de um cartaz de fileira da Dinamica
@@ -1255,6 +1256,7 @@ void detail_abrir(const HomeItem *it) {
     printf("[carrossel] abre %d/%d da fileira\n", pos + 1, n); fflush(stdout);
   }
   abrirInterno(it);
+  if (replacing) t = pg = 1.0f; // Switch titles directly without exposing Home.
 }
 
 // Monta a pagina do titulo que a tira deixou em cena. Adiada ate a tira

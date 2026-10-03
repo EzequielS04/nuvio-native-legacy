@@ -484,6 +484,11 @@ int main(int argc, char **argv) {
     snprintf(nome,sizeof nome,"%s-apple-episodes.png",saida); gravar(nome);
     foco.fileira=SEC_ELENCO; foco.coluna=0; quadros(120);
     snprintf(nome,sizeof nome,"%s-apple-cast.png",saida); gravar(nome);
+    HomeItem replacement={0}; replacement.indice=0;
+    replacement.rect=(GfxRect){0,0,NV_TELA_W,NV_TELA_H};
+    replacement.titulo=itens[0].titulo;
+    assert(aberto && !saindo);
+    detail_abrir(&replacement); assert(t==1.0f && pg==1.0f);
     carro=0; nivel=0; botao=0; maisAcoes=0;
     assert(acoesAgrupadas() && nBotoes()==2+(temInicio()?1:0));
     assert(acaoEm(1+(temInicio()?1:0))==ACAO_LISTA);

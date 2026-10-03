@@ -93,19 +93,53 @@ DisEstado discord_estado(void) {
   pthread_mutex_lock(&trava); e = estado; pthread_mutex_unlock(&trava);
   return e;
 }
+#ifdef NV_TPK40
+// Tizen 4/5's manual ELF loader cannot initialize compiler TLS. Use the same
+// per-thread snapshot lifetime with pthread keys, as the network layer does.
+typedef struct { char codigo[32], endereco[256], mensagem[160]; } DisCopia;
+static pthread_key_t copiaKey;
+static pthread_once_t copiaOnce = PTHREAD_ONCE_INIT;
+static int copiaKeyOk;
+static void copiaCriar(void) { copiaKeyOk = pthread_key_create(&copiaKey, free) == 0; }
+static DisCopia *copiaDoFio(void) {
+  pthread_once(&copiaOnce, copiaCriar);
+  if (!copiaKeyOk) return NULL;
+  DisCopia *p = pthread_getspecific(copiaKey);
+  if (!p) {
+    p = calloc(1, sizeof *p);
+    if (p && pthread_setspecific(copiaKey,p)) { free(p); p = NULL; }
+  }
+  return p;
+}
+#endif
 const char *discord_codigo(void) {
+#ifdef NV_TPK40
+  DisCopia *p = copiaDoFio(); if (!p) return "";
+  char *copia = p->codigo;
+#else
   static _Thread_local char copia[sizeof userCode];
-  pthread_mutex_lock(&trava); memcpy(copia, userCode, sizeof copia); pthread_mutex_unlock(&trava);
+#endif
+  pthread_mutex_lock(&trava); memcpy(copia, userCode, sizeof userCode); pthread_mutex_unlock(&trava);
   return copia;
 }
 const char *discord_url(void) {
+#ifdef NV_TPK40
+  DisCopia *p = copiaDoFio(); if (!p) return "";
+  char *copia = p->endereco;
+#else
   static _Thread_local char copia[sizeof url];
-  pthread_mutex_lock(&trava); memcpy(copia, url, sizeof copia); pthread_mutex_unlock(&trava);
+#endif
+  pthread_mutex_lock(&trava); memcpy(copia, url, sizeof url); pthread_mutex_unlock(&trava);
   return copia;
 }
 const char *discord_erro(void) {
+#ifdef NV_TPK40
+  DisCopia *p = copiaDoFio(); if (!p) return "";
+  char *copia = p->mensagem;
+#else
   static _Thread_local char copia[sizeof erro];
-  pthread_mutex_lock(&trava); memcpy(copia, erro, sizeof copia); pthread_mutex_unlock(&trava);
+#endif
+  pthread_mutex_lock(&trava); memcpy(copia, erro, sizeof erro); pthread_mutex_unlock(&trava);
   return copia;
 }
 

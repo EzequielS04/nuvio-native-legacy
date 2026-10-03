@@ -16,6 +16,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include "../src/descoberta.c"
+Uint32 SDL_GetTicks(void) { return 0; }
 
 // ------------------------------------------------------------------ o addon
 #define BASE "https://xperience.example/abc"

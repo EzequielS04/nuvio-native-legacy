@@ -206,7 +206,7 @@ static void cenaHome(float x,float y,float t,float a) {
   previewTitle(x,y,"Você sabe o que está acontecendo",
     "A ilha acompanha o carregamento da Home e abre mais informações.",a);
   float p=passo(t,.4f,3.0f);
-  const char *label=i18n(p>.98f?"Home carregada":"Carregando fileiras");
+  const char *label=i18n(p>.98f?"Home carregada":"Carregando fileiras…");
   TxtLinha text=txt_linha(TXT_CALLOUT,label,CREME_I,255);
   GfxRect island={x+(N174_PV_W-text.w-88)*.5f,y+340,text.w+88,64};
   gfx_cor(island,.5f,.16f,.17f,.20f,a);
