@@ -307,12 +307,13 @@ void ilha_ancorar(float x, float y, int daDireita) {
 }
 
 // Canto escolhido em Ajustes > Aparencia > Posicao do relogio. O Guia tem o
-// titulo a esquerda e fica sempre a direita. Fora dele: 2 = Direita; 1 =
-// Esquerda, que no layout Dinamica vai AO LADO da pilula da barra (o canto
-// dela); 0 = Automatica, o padrao de sempre (ver ilha_desenhar).
+// titulo a esquerda e fica sempre a direita. Fora dele: 0 = Automatica e 2 =
+// Direita vao a DIREITA em qualquer layout (padrao do dono desde a 1.7.2; era
+// esquerda, e direita so na Dinamica); 1 = Esquerda, que no layout Dinamica
+// vai AO LADO da pilula da barra (o canto dela).
 void ilha_posicionar(int guia) {
   int pos = ajustes_relogio_pos();
-  if (guia || pos == 2) ilha_ancorar(NV_TELA_W - NV_ILHA_MARGEM_D, NV_ILHA_Y, 1);
+  if (guia || pos != 1) ilha_ancorar(NV_TELA_W - NV_ILHA_MARGEM_D, NV_ILHA_Y, 1);
   else if (pos == 1 && ajustes_home_layout() == HOME_LAYOUT_DINAMICA) {
     float px, py, pw, ph;
     if (menu_pilula_rect(&px, &py, &pw, &ph))
@@ -862,10 +863,9 @@ void ilha_desenhar(Uint32 agora) {
   if (!modalAberto && modalT < 0.01f) { modalT = 0.0f; modalV = 0.0f; }
   for (int i = 0; i < 3; i++)
     modalFocoA[i] = anim_mola(modalFocoA[i], modalAberto && i == modalFoco ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
-  // POSICAO, num ponto so (ilha_ancorar ou o padrao).
+  // POSICAO, num ponto so (ilha_ancorar ou o padrao, que e a direita).
   if (ancDef) { x = ancX; y = ancY; dir = ancDir; }
-  else if (ajustes_home_layout() == HOME_LAYOUT_DINAMICA) { x = NV_TELA_W - NV_ILHA_MARGEM_D; y = NV_ILHA_Y; dir = 1; }
-  else { x = ajustes_conteudo_x(); y = NV_ILHA_Y; dir = 0; }
+  else { x = NV_TELA_W - NV_ILHA_MARGEM_D; y = NV_ILHA_Y; dir = 1; }
   // O alvo do voo e a pilula ASSENTADA (a mola da forma e mais rapida que a
   // do voo: quando o quadro pousa, ela ja esta la).
   { LinhasCartao Lv;

@@ -937,7 +937,7 @@
   T("Em produção", "Kuriama"),
   T("Em produção · sem data anunciada", "Kuriama · data nepaskelbta"),
   T("Em pós-produção", "Pogamybos stadijoje"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Kuriame viršutiniame kampe yra laikrodžio ir pranešimų tabletė. Automatinė yra įprasta: kairė arba dešinė išdėstyme Dinaminis. Kairė išdėstyme Dinaminis yra šalia meniu tabletės."),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Kuriame viršutiniame kampe yra laikrodžio ir pranešimų tabletė. Automatinė yra dešinėje, bet kuriame išdėstyme. Kairė išdėstyme Dinaminis yra šalia meniu tabletės."),
   T("Emirados Árabes Unidos", "Jungtiniai Arabų Emyratai"),
   T("Emissora", "Tinklas"),
   T("Encerrada", "Baigėsi"),

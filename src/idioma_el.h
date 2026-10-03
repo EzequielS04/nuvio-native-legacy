@@ -937,7 +937,7 @@
   T("Em produção", "Σε παραγωγή"),
   T("Em produção · sem data anunciada", "Σε παραγωγή · χωρίς ανακοινωμένη ημερομηνία"),
   T("Em pós-produção", "Στη μεταπαραγωγή"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Σε ποια πάνω γωνία βρίσκεται το χάπι του ρολογιού και των ειδοποιήσεων. Το Αυτόματο είναι το συνηθισμένο: αριστερά, ή δεξιά στη διάταξη Δυναμική. Αριστερά στη διάταξη Δυναμική βρίσκεται δίπλα στο χάπι του μενού."),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Σε ποια πάνω γωνία βρίσκεται το χάπι του ρολογιού και των ειδοποιήσεων. Το Αυτόματο είναι δεξιά, σε κάθε διάταξη. Αριστερά στη διάταξη Δυναμική βρίσκεται δίπλα στο χάπι του μενού."),
   T("Emirados Árabes Unidos", "Ηνωμένα Αραβικά Εμιράτα"),
   T("Emissora", "Δίκτυο"),
   T("Encerrada", "Ολοκληρώθηκε"),

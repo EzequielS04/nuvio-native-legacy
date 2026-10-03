@@ -936,7 +936,7 @@
   T("Em produção", "В производстве"),
   T("Em produção · sem data anunciada", "В производстве · дата не объявлена"),
   T("Em pós-produção", "На постпродакшене"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "В каком верхнем углу таблетка часов и уведомлений. Автоматически — как обычно: слева, или справа в макете «Динамичный». Слева в макете «Динамичный» стоит рядом с таблеткой меню."),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "В каком верхнем углу таблетка часов и уведомлений. Автоматически — справа, в любом макете. Слева в макете «Динамичный» стоит рядом с таблеткой меню."),
   T("Emirados Árabes Unidos", "Объединённые Арабские Эмираты"),
   T("Emissora", "Телеканал"),
   T("Encerrada", "Завершён"),

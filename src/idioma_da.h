@@ -937,7 +937,7 @@
   T("Em produção", "I produktion"),
   T("Em produção · sem data anunciada", "I produktion · ingen dato annonceret"),
   T("Em pós-produção", "I efterproduktion"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "I hvilket øverste hjørne pillen med ur og notifikationer sidder. Automatisk er den sædvanlige: venstre, eller højre i layoutet Dynamisk. Venstre i layoutet Dynamisk sidder ved siden af menupillen."),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "I hvilket øverste hjørne pillen med ur og notifikationer sidder. Automatisk er højre, i alle layout. Venstre i layoutet Dynamisk sidder ved siden af menupillen."),
   T("Emirados Árabes Unidos", "Forenede Arabiske Emirater"),
   T("Emissora", "Netværk"),
   T("Encerrada", "Afsluttet"),

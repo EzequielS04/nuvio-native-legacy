@@ -937,7 +937,7 @@
   T("Em produção", "制作中"),
   T("Em produção · sem data anunciada", "制作中 · 公開日は未発表"),
   T("Em pós-produção", "ポストプロダクション中"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "時計とお知らせのカプセルを上のどちらの隅に置くか。自動はいつもの位置で、左、またはレイアウトがダイナミックのときは右です。ダイナミックで左にすると、メニューのカプセルの隣になります。"),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "時計とお知らせのカプセルを上のどちらの隅に置くか。自動は、どのレイアウトでも右です。ダイナミックで左にすると、メニューのカプセルの隣になります。"),
   T("Emirados Árabes Unidos", "アラブ首長国連邦"),
   T("Emissora", "放送局"),
   T("Encerrada", "終了"),

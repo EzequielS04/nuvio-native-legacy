@@ -936,7 +936,7 @@
   { "Em produção", "In production" },
   { "Em produção · sem data anunciada", "In production · no date announced" },
   { "Em pós-produção", "In post-production" },
-  { "Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Which top corner holds the clock and notices pill. Automatic is the usual: left, or right in the Dynamic layout. Left in the Dynamic layout sits beside the menu pill." },
+  { "Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Which top corner holds the clock and notices pill. Automatic is the right side, in any layout. Left in the Dynamic layout sits beside the menu pill." },
   { "Emirados Árabes Unidos", "United Arab Emirates" },
   { "Emissora", "Network" },
   { "Encerrada", "Ended" },

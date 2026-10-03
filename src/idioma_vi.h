@@ -937,7 +937,7 @@
   T("Em produção", "Đang sản xuất"),
   T("Em produção · sem data anunciada", "Đang sản xuất · chưa công bố ngày"),
   T("Em pós-produção", "Đang hậu kỳ"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Viên đồng hồ và thông báo nằm ở góc trên nào. Tự động là mặc định: trái, hoặc phải ở bố cục Động. Trái ở bố cục Động nằm cạnh viên menu."),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Viên đồng hồ và thông báo nằm ở góc trên nào. Tự động nằm bên phải, ở mọi bố cục. Trái ở bố cục Động nằm cạnh viên menu."),
   T("Emirados Árabes Unidos", "Các Tiểu vương quốc Ả Rập Thống nhất"),
   T("Emissora", "Kênh phát sóng"),
   T("Encerrada", "Đã kết thúc"),

@@ -937,7 +937,7 @@
   T("Em produção", "製作中"),
   T("Em produção · sem data anunciada", "製作中 · 尚未公布日期"),
   T("Em pós-produção", "後期製作中"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "時鐘和通知藥丸位於頂部哪個角。自動為預設：左，或在「動態」版面中為右。動態版面中選左，則位於選單藥丸旁邊。"),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "時鐘和通知藥丸位於頂部哪個角。自動在任何版面中皆為右側。動態版面中選左，則位於選單藥丸旁邊。"),
   T("Emirados Árabes Unidos", "阿拉伯聯合大公國"),
   T("Emissora", "電視網"),
   T("Encerrada", "已完結"),

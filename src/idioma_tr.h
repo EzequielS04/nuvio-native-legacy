@@ -937,7 +937,7 @@
   T("Em produção", "Yapım aşamasında"),
   T("Em produção · sem data anunciada", "Yapım aşamasında · tarih açıklanmadı"),
   T("Em pós-produção", "Post prodüksiyonda"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Saat ve uyarı hapının üstteki hangi köşede durduğu. Otomatik her zamankidir: sol, ya da Dinamik düzende sağ. Dinamik düzende Sol, menü hapının yanında durur."),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Saat ve uyarı hapının üstteki hangi köşede durduğu. Otomatik, her düzende sağdır. Dinamik düzende Sol, menü hapının yanında durur."),
   T("Emirados Árabes Unidos", "Birleşik Arap Emirlikleri"),
   T("Emissora", "Kanal"),
   T("Encerrada", "Bitti"),

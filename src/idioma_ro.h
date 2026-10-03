@@ -936,7 +936,7 @@
   T("Em produção", "În producție"),
   T("Em produção · sem data anunciada", "În producție · fără dată anunțată"),
   T("Em pós-produção", "În postproducție"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "În ce colț de sus stă pastila cu ceasul și notificările. Automat e cea obișnuită: stânga, sau dreapta în aspectul Dinamic. Stânga în aspectul Dinamic stă lângă pastila meniului."),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "În ce colț de sus stă pastila cu ceasul și notificările. Automat e în dreapta, în orice aspect. Stânga în aspectul Dinamic stă lângă pastila meniului."),
   T("Emirados Árabes Unidos", "Emiratele Arabe Unite"),
   T("Emissora", "Canal TV"),
   T("Encerrada", "Încheiat"),

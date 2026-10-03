@@ -937,7 +937,7 @@
   T("Em produção", "Gyártás alatt"),
   T("Em produção · sem data anunciada", "Gyártás alatt · dátumot nem jelentettek be"),
   T("Em pós-produção", "Utómunkálatok alatt"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Melyik felső sarokban van az óra és az értesítések pirulája. Az Automatikus a megszokott: bal, vagy jobb a Dinamikus elrendezésben. A bal a Dinamikus elrendezésben a menü pirulája mellett van."),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Melyik felső sarokban van az óra és az értesítések pirulája. Az Automatikus jobb oldalt van, minden elrendezésben. A bal a Dinamikus elrendezésben a menü pirulája mellett van."),
   T("Emirados Árabes Unidos", "Egyesült Arab Emírségek"),
   T("Emissora", "Csatorna"),
   T("Encerrada", "Befejeződött"),

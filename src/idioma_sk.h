@@ -937,7 +937,7 @@
   T("Em produção", "Vo výrobe"),
   T("Em produção · sem data anunciada", "Vo výrobe · dátum nebol oznámený"),
   T("Em pós-produção", "Postprodukcia"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "V ktorom hornom rohu je pilulka s hodinami a upozorneniami. Automaticky je obvyklé: vľavo, alebo vpravo v rozložení Dynamické. Vľavo v rozložení Dynamické je vedľa pilulky ponuky."),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "V ktorom hornom rohu je pilulka s hodinami a upozorneniami. Automaticky je vpravo, v každom rozložení. Vľavo v rozložení Dynamické je vedľa pilulky ponuky."),
   T("Emirados Árabes Unidos", "Spojené arabské emiráty"),
   T("Emissora", "Televízia"),
   T("Encerrada", "Ukončené"),

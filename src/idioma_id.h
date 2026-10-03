@@ -937,7 +937,7 @@
   T("Em produção", "Dalam produksi"),
   T("Em produção · sem data anunciada", "Dalam produksi · belum ada tanggal diumumkan"),
   T("Em pós-produção", "Pascaproduksi"),
-  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática é a de sempre: esquerda, ou direita no layout Dinâmica. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Di sudut atas mana pil jam dan pemberitahuan berada. Otomatis adalah yang biasa: kiri, atau kanan pada tata letak Dinamis. Kiri pada tata letak Dinamis berada di samping pil menu."),
+  T("Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.", "Di sudut atas mana pil jam dan pemberitahuan berada. Otomatis ada di kanan, pada tata letak apa pun. Kiri pada tata letak Dinamis berada di samping pil menu."),
   T("Emirados Árabes Unidos", "Uni Emirat Arab"),
   T("Emissora", "Jaringan"),
   T("Encerrada", "Tamat"),
