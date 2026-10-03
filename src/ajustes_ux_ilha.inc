@@ -37,6 +37,10 @@ static int ajDicasDe(int op, AjDica *d) {
     d[2] = (AjDica){ "←", "Categorias" };
     return 3;
   }
+  if (op == AJ_TEMA && ajEditandoLinha(op)) {
+    d[0] = (AjDica){ "← →", "Escolher" }; d[1] = (AjDica){ "OK", "Confirmar" };
+    return 2;
+  }
   if (op >= 0 && ajEditandoLinha(op)) {
     d[0] = (AjDica){ "← →", "Escolher" }; d[1] = (AjDica){ "OK", "Confirmar" };
     d[2] = (AjDica){ "Voltar", "Cancelar" };
@@ -61,17 +65,56 @@ static int ajDicasDe(int op, AjDica *d) {
     d[n++] = (AjDica){ "←", "Categorias" };
     return n; }
 }
+// O inspetor da v2 (infoV2): padding 36, a previa no alto (612 a 100%),
+// kicker 18 com icone 24, titulo 40/700, ajuda 26 (linha 1,45), meta 24 e as
+// dicas 22 (tecla 18) no rodape.
+static float aj2Meta(const char *k, const char *v, float x, float y, float w, float a) {
+  TxtLinha lk = ajTxt(TXT_V2_26, k);
+  TxtLinha lv = ajTxtC(TXT_V2_26, v, w - lk.w - 24);
+  gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * a);
+  txt_desenhar_alpha(lk, x, y + 14 + (29 - lk.h) * 0.5f, 0.45f * a);
+  txt_desenhar_alpha(lv, x + w - lv.w, y + 14 + (29 - lv.h) * 0.5f, 0.85f * a);
+  return 14 + 29 + 14;
+}
+static float aj2Ef(const char *icone, const char *s, float x, float y, float w, float a) {
+  float tw = w - 22 - 26 - 14 - 22, h;
+  h = txt_bloco(TXT_V2_26, s, 0, 0, 0, x, -4000, tw, 34.8f, 0, 6);
+  ajNeutro((GfxRect){ x, y, w, h + 40 }, 22, 0.05f, 0.106f, 0.110f, 0.129f, a);
+  ajIcone(icone, x + 22, y + 22, 26, 0.55f * a);
+  ajBloco(TXT_V2_26, s, x + 22 + 26 + 14, y + 20, tw, 34.8f, 0.72f * a, 6);
+  return h + 40;
+}
+// Rodape de dicas: fio de 7% e as teclas (quebram linha se nao couberem).
+static void aj2Dicas(const AjDica *d, int n, float x, float yBase, float w, float a) {
+  float wl = aj2DicasLinha(d, n, x, 0, TXT_V2_KBD18, 36, 40, 11, TXT_V2_24, 10, 24, 0, a);
+  if (wl > w - 12.0f && n > 1) {
+    gfx_cor((GfxRect){ x, yBase - 36.0f * 2 - 12.0f - 20.0f, w, 1 }, 0, 1, 1, 1, 0.07f * a);
+    aj2DicasLinha(d, n - 1, x + 6.0f, yBase - 36.0f - 12.0f - 18.0f, TXT_V2_KBD18, 36, 40, 11, TXT_V2_24, 10, 24, 1, a);
+    aj2DicasLinha(d + n - 1, 1, x + 6.0f, yBase - 18.0f, TXT_V2_KBD18, 36, 40, 11, TXT_V2_24, 10, 24, 1, a);
+    return;
+  }
+  gfx_cor((GfxRect){ x, yBase - 36.0f - 20.0f, w, 1 }, 0, 1, 1, 1, 0.07f * a);
+  aj2DicasLinha(d, n, x + 6.0f, yBase - 18.0f, TXT_V2_KBD18, 36, 40, 11, TXT_V2_24, 10, 24, 1, a);
+}
+static float aj2Previa(int op, float x, float y, float w) {
+  if (op == AJ_TEMA) return aj2PreviaCor(x, y, w);
+  if (op == AJ_FUNDO) {
+    int m = ajEditandoLinha(op) ? uxPendente : valor[op];
+    aj2MiniFundo(m, x, y, w, 1);
+    return w * 9.0f / 16.0f;
+  }
+  return ajPrevia(op, x, y, w);
+}
 static void ajDesenharInspetor(void) {
-  GfxRect ir = ajInspR();
-  if (!ajTemInspetor()) return;
-  float x = ir.x + 32.0f, w = ir.w - 64.0f, y = ir.y + 32.0f;
+  GfxRect ir = aj2InspR();
+  float x = ir.x + 36.0f, w = ir.w - 72.0f, y = ir.y + 36.0f;
   int categoria = focoIndice || uxCabecalho;
   int op = categoria ? -1 : focoOp;
   AjDica d[4];
   int nd;
-  ajIlha(ir, 36.0f, 1, 0);
+  if (!aj2TemInsp()) return;
+  ajIlha(ir, 40.0f, 1, 0);
   if (op == AJ_GUIA) { guiaInspetorAjustes(ir); return; }
-  if (op < 0 && !categoria) op = -1;
   { int opPv = op >= 0 ? op : -1;
     if (opPv < 0) {   // categoria: a previa da primeira opcao dela
       int it = primeiroDaSecao(secAtual);
@@ -81,31 +124,41 @@ static void ajDesenharInspetor(void) {
       // Editando na linha, a previa ja mostra o valor PENDENTE (so desenho).
       int salvo = valor[opPv], ed = ajEditandoLinha(opPv);
       float ph;
-      if (ed) valor[opPv] = uxPendente;
-      ph = ajPrevia(opPv, x, y, w);
+      if (ed && opPv != AJ_TEMA && opPv != AJ_FUNDO) valor[opPv] = uxPendente;
+      ajMiniRotuloV2 = 1;
+      ph = aj2Previa(opPv, x, y, w);
+      ajMiniRotuloV2 = 0;
       if (ed) valor[opPv] = salvo;
       if (ph > 0) y += ph;
     } }
   x += 6.0f; w -= 12.0f;
-  y += 26.0f;
+  y += 28.0f;
   { const char *tipo = categoria ? "Categoria" : ajTipoRotulo(op);
     const char *ic = categoria ? TELA[secIni[secAtual]].icone : ajIconeOpcao(op);
-    ajIcone(ic, x, y - 1, 20, 0.45f);
-    ajCaps(TXT_MINI, tipo, 2.1f, x + 30, y, 0.45f);
-    y += 18.0f + 10.0f; }
+    ajIcone(ic, x, y, 24, 0.45f);
+    ajCaps(TXT_V2_KICK, tipo, 2.52f, x + 36, y + (24 - 23.0f) * 0.5f, 0.45f);
+    y += 24.0f + 10.0f; }
   { const char *t = categoria ? TELA[secIni[secAtual]].titulo : rotuloOpcao(op);
-    y += ajBloco(TXT_AJ_INSP, t, x, y, w, 38.4f, 1, 2); }
+    y += ajBloco(TXT_V2_INSP, t, x, y, w, 48.0f, 1, 2); }
   y += 12.0f;
-  y += ajBloco(TXT_AJ_SUB, categoria ? SECAO_AJUDA[secAtual] : uxResumo(op), x, y, w, 28.5f, 0.62f, 7);
+  nd = ajDicasDe(op, d);
+  // O que nao cabe acima das dicas fica de fora (o rodape e fixo): a ajuda
+  // perde linhas, o "o que muda" e o "Vale para / Padrão" so entram inteiros.
+  { float fim = ir.y + ir.h - 36.0f - 36.0f - 20.0f - 6.0f;
+    int maxL = (int)((fim - y) / 37.7f);
+    if (maxL > 7) maxL = 7;
+    if (maxL < 1) maxL = 1;
+    y += ajBloco(TXT_V2_28, categoria ? SECAO_AJUDA[secAtual] : uxResumo(op), x, y, w, 37.7f, 0.66f, maxL);
   if (!categoria) {
     const char *ef = efeitoOpcao(op);
-    if (ef && ef[0]) { y += 18.0f; y += ajEf("aj_info", i18n(ef), x, y, w, 1); }
-    if (uxTemPadrao(op)) {
+    if (ef && ef[0] && y + 18.0f + txt_bloco(TXT_V2_26, i18n(ef), 0, 0, 0, x, -4000, w - 84, 34.8f, 0, 6) + 40 <= fim) {
+      y += 18.0f; y += aj2Ef("aj_info", i18n(ef), x, y, w, 1); }
+    if (uxTemPadrao(op) && op != AJ_TEMA && y + 18.0f + 2 * 57.0f <= fim) {
       char padrao[160];
       uxValorTexto(op, uxValorPadrao(op), padrao, sizeof padrao);
       y += 18.0f;
-      y += ajMeta(i18n("Vale para"), i18n(uxEscopo(op)), x, y, w, 1);
-      y += ajMeta(i18n("Padrão"), padrao, x, y, w, 1);
+      y += aj2Meta(i18n("Vale para"), i18n(uxEscopo(op)), x, y, w, 1);
+      y += aj2Meta(i18n("Padrão"), padrao, x, y, w, 1);
     }
     // ENVIAR REGISTRO: o ultimo envio, o ultimo codigo e o destino.
     if (op == AJ_ENVIAR_LOG) {
@@ -124,7 +177,7 @@ static void ajDesenharInspetor(void) {
         else snprintf(ha, sizeof ha, i18n("há %ld h"), s / 3600);
         snprintf(v, sizeof v, "%s · %s", ha, autom ? i18n("automático") : i18n("manual"));
       } else snprintf(v, sizeof v, "%s", i18n("nenhum nesta sessão"));
-      y += ajMeta(i18n("Último envio"), v, x, y, w, 1);
+      y += aj2Meta(i18n("Último envio"), v, x, y, w, 1);
       if (env.ultimoCodigo[0]) {
         struct tm a, b;
         time_t agora = time(NULL);
@@ -135,50 +188,59 @@ static void ajDesenharInspetor(void) {
         else if (b.tm_yday - a.tm_yday == 1 && a.tm_year == b.tm_year)
           snprintf(v, sizeof v, i18n("%s · ontem %02d:%02d"), env.ultimoCodigo, a.tm_hour, a.tm_min);
         else snprintf(v, sizeof v, i18n("%s · %02d/%02d %02d:%02d"), env.ultimoCodigo, a.tm_mday, a.tm_mon + 1, a.tm_hour, a.tm_min);
-        y += ajMeta(i18n("Último código"), v, x, y, w, 1);
+        y += aj2Meta(i18n("Último código"), v, x, y, w, 1);
       }
-      y += ajMeta(i18n("Destino"), env.disponivel ? i18n("servidor de registros do app") : i18n("indisponível nesta versão"), x, y, w, 1);
+      y += aj2Meta(i18n("Destino"), env.disponivel ? i18n("servidor de registros do app") : i18n("indisponível nesta versão"), x, y, w, 1);
     }
-  }
-  nd = ajDicasDe(op, d);
-  ajDicas(d, nd, x - 6.0f, ir.y + ir.h - 32.0f, w + 12.0f, 1);
+  } }
+  aj2Dicas(d, nd, x - 6.0f, ir.y + ir.h - 36.0f, w + 12.0f, 1);
 }
 
-// --- ALTURAS DA LISTA ------------------------------------------------------------
-// Tem de casar com o laco de desenho: e o que a rolagem (ajustes_atualizar) usa.
-static int ajPrimeiroVisivel(int i) {
-  int j;
-  for (j = i - 1; j > secIni[secDoItem[i]]; j--) if (visivel(j)) return 0;
-  return 1;
-}
 static float ajAlturaItem(int i) {
   if (!visivel(i)) return 0.0f;
   switch (TELA[i].tipo) {
     case IT_SEC: return 0.0f;
-    case IT_ROT: return (ajPrimeiroVisivel(i) ? 14.0f : 16.0f) + 38.0f + 6.0f;
-    case IT_GRP: return AJI_LN_H + AJI_LN_GAP;
-    default: return ajLinhaH(i) + AJI_LN_GAP;
+    case IT_ROT: return AJ2_GRUPO_H;
+    case IT_GRP: return AJ2_LN_GAP + AJ2_LN_H;
+    default: return AJ2_LN_GAP + ajLinhaH(i);
   }
 }
 
-// --- A FOLHA ---------------------------------------------------------------------
-// Alfa da mascara da lista: some nos ultimos 80 px de baixo e, rolada, nos 60
+// --- A LISTA (v2) -------------------------------------------------------------------
+// Alfa da mascara da lista: some nos ultimos 90 px de baixo e, rolada, nos 60
 // de cima (o mask-image do mockup), medido no centro da peca.
 static float ajMascara(float yc, float topo, float base) {
   float a = 1.0f;
-  if (yc > base - 80.0f) a = (base - yc) / 80.0f;
+  if (yc > base - 90.0f) a = (base - yc) / 90.0f;
   if (scrollY > 1.0f && yc < topo + 60.0f) { float b = (yc - topo) / 60.0f; if (b < a) a = b; }
   return a < 0 ? 0 : a > 1 ? 1 : a;
 }
+// Cabecalho da lista (listaV2): padding 42 46 18 50; kicker 18/700, titulo
+// 52/700 com 4 de margem, sub 24 com 8. Devolve onde a lista comeca.
+static float aj2Cabecalho(GfxRect fr, const char *kick, const char *titulo, const char *sub,
+                          float reservaDir, float a) {
+  float x = fr.x + 50.0f, y = fr.y + 42.0f;
+  ajCaps(TXT_V2_KICK, kick, 2.52f, x, y + (21.8f - 19.0f * 1.21f) * 0.5f, 0.45f * a);
+  y += 21.8f + 4.0f;
+  { TxtLinha t = ajTxtC(TXT_V2_TIT, titulo, fr.w - 96.0f - reservaDir);
+    txt_desenhar_alpha(t, x, y + (62.9f - t.h) * 0.5f, a); }
+  y += 62.9f + 8.0f;
+  if (sub && sub[0]) {
+    TxtLinha t = ajTxtC(TXT_V2_26, sub, fr.w - 96.0f);
+    txt_desenhar_alpha(t, x, y + (29.0f - t.h) * 0.5f, 0.55f * a);
+    y += 29.0f;
+  }
+  return y + 18.0f;
+}
 static void ajDesenharFolha(void) {
-  GfxRect fr = ajFolhaR();
+  GfxRect fr = aj2ListaR();
   int sec = secAtual, i;
-  float topo, base, y, aPag = anim_suave(paginaA);
+  float topo, base, y, aPag = anim_suave(paginaA) * aj2TextoLista;
   const Item *s = &TELA[secIni[sec]];
   float wChip = 0;
-  ajIlha(fr, 36.0f, 1, 0);
-  wChip = ajChipAvancados(fr.x + fr.w - 32.0f, fr.y + 34.0f, uxCabecalho && !focoIndice, aPag);
-  topo = ajCabecalhoFolha(fr, "Ajustes", s->titulo, s->sub, wChip + 20.0f, aPag);
+  ajIlha(fr, 40.0f, 1, 0);
+  wChip = ajChipAvancados(fr.x + fr.w - 36.0f, fr.y + 38.0f, uxCabecalho && !focoIndice, aPag);
+  aj2Cabecalho(fr, "Ajustes", s->titulo, s->sub, wChip + 20.0f, aPag);
   topo = AJ_TOPO;
   base = AJ_BASE;
   gfx_recorte(fr.x, topo, fr.w, base - topo);
@@ -188,134 +250,17 @@ static void ajDesenharFolha(void) {
     if (h <= 0.0f) continue;
     if (y + h >= topo - 4 && y <= base + 4) {
       if (TELA[i].tipo == IT_ROT) {
-        float yy = y + (ajPrimeiroVisivel(i) ? 14.0f : 16.0f);
-        ajDesenharGrupo(i, yy, ajMascara(yy + 19, topo, base) * aPag);
+        ajDesenharGrupo(i, y, ajMascara(y + 26.0f + 15.6f, topo, base) * aPag);
       } else if (TELA[i].tipo == IT_OPC) {
-        float lh = ajLinhaH(i);
-        ajDesenharLinha(i, y, animItem[i], ajMascara(y + (lh > 150 ? 38 : lh * 0.5f), topo, base) * aPag);
+        float lh = ajLinhaH(i), yy = y + AJ2_LN_GAP;
+        // A superficie de foco nao some com o texto (editor por cima): o
+        // alfa da mascara vai inteiro, o do texto em ajDesenharLinha.
+        ajDesenharLinha(i, yy, animItem[i], ajMascara(yy + (lh > 102 ? 35.2f : lh * 0.5f), topo, base) * anim_suave(paginaA));
       }
     }
     y += h;
   }
   gfx_sem_recorte();
-}
-
-// "Buscar ajuste" e "Diferentes do padrao" no lugar da lista.
-static void ajDesenharEspecial(void) {
-  GfxRect fr = ajFolhaR(), ir = ajInspR();
-  float topo;
-  ajIlha(fr, 36.0f, 1, 0);
-  if (uxIndice == 0) {
-    topo = ajCabecalhoFolha(fr, "Ajustes", "Buscar ajuste",
-      "Encontre pelo nome ou pelo que quer mudar. Experimente “legenda”, “trailer” ou “TV lenta”.", 0, 1);
-    { TxtLinha t = ajTxt(TXT_AJ_SEG, "Buscar nos ajustes desta TV");
-      GfxRect b = { fr.x + 44, topo + 10, 22 + 22 + 10 + t.w + 22, 56 };
-      if (focoIndice) ajNeutro(b, 28, 0.08f, AJ_CHIP_SOL, 1);
-      else ajPilulaAcento(b, 28, 1);
-      ajIcone("aj_search", b.x + 22, b.y + 17, 22, 0.85f);
-      txt_desenhar_alpha(t, b.x + 54, b.y + (56 - t.h) * 0.5f, 0.85f); }
-    if (!ajTemInspetor()) return;
-    ajIlha(ir, 36.0f, 1, 0);
-    { AjDica d[3] = { { "OK", "Buscar" }, { "↑ ↓", "Navegar" }, { "Voltar", "Sair" } };
-      ajDicas(d, 3, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1); }
-    return;
-  }
-  topo = ajCabecalhoFolha(fr, "Ajustes", "Diferentes do padrão",
-    "Valores diferentes da configuração de fábrica. Podem ter vindo da conta ou de outra versão do app.", 0, 1);
-  { float y = topo, base = AJ_BASE;
-    int primeiro = uxDifFoco > 8 ? uxDifFoco - 8 : 0, i;
-    float x = fr.x + 18, w = fr.w - 36;
-    gfx_recorte(fr.x, topo, fr.w, base - topo);
-    if (!uxNDifs) {
-      TxtLinha t = ajTxt(TXT_AJ_ROTULO, "Tudo está no padrão");
-      txt_desenhar(t, x + 22, y + 20);
-      y += 76;
-    }
-    for (i = primeiro; i < uxNDifs; i++) {
-      char atual[160], padrao[160], det[300];
-      int op = uxDifs[i], foco = !focoIndice && i == uxDifFoco;
-      GfxRect r = { x, y, w, 80 };
-      float xd = x + w - 22, a = ajMascara(y + 40, topo, base);
-      TxtLinha la, lp, lr, ls;
-      if (y > base) break;
-      if (foco) ajFocoLinha(r, 22, 1, a);
-      uxValorTexto(op, uxValorAtual(op), atual, sizeof atual);
-      uxValorTexto(op, uxValorPadrao(op), padrao, sizeof padrao);
-      la = ajTxtC(TXT_AJ_VALOR18, atual, 200);
-      lp = ajTxtC(TXT_AJ_VALOR18, padrao, 200);
-      txt_desenhar_alpha(la, xd - la.w, y + 40 - la.h * 0.5f, (foco ? 1.0f : 0.8f) * a);
-      xd -= la.w + 10;
-      { float sr, sg, sb; int sw = op == AJ_TEMA;
-        if (sw) {
-          ajustes_acento(&sr, &sg, &sb);
-          gfx_cor((GfxRect){ xd - 22, y + 29, 22, 22 }, 0.5f, sr, sg, sb, a);
-          xd -= 32;
-        } }
-      ajIcone("aj_chevron-right", xd - 18, y + 31, 18, 0.35f * a);
-      xd -= 18 + 12;
-      txt_desenhar_alpha(lp, xd - lp.w, y + 40 - lp.h * 0.5f, 0.4f * a);
-      gfx_cor((GfxRect){ xd - lp.w, y + 40, lp.w, 1.5f }, 0, 0.953f, 0.949f, 0.937f, 0.25f * a);
-      xd -= lp.w;
-      if (op == AJ_TEMA) {
-        float pr = TEMA_ACENTO[uxValorPadrao(op) % AJ_N_TEMAS].r, pg = TEMA_ACENTO[uxValorPadrao(op) % AJ_N_TEMAS].g, pb = TEMA_ACENTO[uxValorPadrao(op) % AJ_N_TEMAS].b;
-        gfx_cor((GfxRect){ xd - 32, y + 29, 22, 22 }, 0.5f, pr, pg, pb, 0.4f * a);
-        xd -= 32;
-      }
-      lr = ajTxtC(TXT_AJ_ROTULO, rotuloOpcao(op), xd - x - 44);
-      snprintf(det, sizeof det, "%s · %s", i18n(uxCaminho(op)), i18n(uxEscopo(op)));
-      ls = ajTxtC(TXT_ILHA_GENERO, det, xd - x - 44);
-      txt_desenhar_alpha(lr, x + 22, y + 40 - (lr.h + 4 + ls.h) * 0.5f, (foco ? 1.0f : 0.86f) * a);
-      txt_desenhar_alpha(ls, x + 22, y + 40 - (lr.h + 4 + ls.h) * 0.5f + lr.h + 4, 0.42f * a);
-      y += 84;
-    }
-    if (y < base - 40) {
-      TxtLinha n = ajTxt(TXT_ILHA_GENERO, "Seus serviços e credenciais não entram nesta lista.");
-      txt_desenhar_alpha(n, x + 22, y + 20, 0.42f);
-    }
-    gfx_sem_recorte(); }
-  // Inspetor: a opcao em foco, padrao e atual lado a lado.
-  if (!ajTemInspetor()) return;
-  ajIlha(ir, 36.0f, 1, 0);
-  if (uxNDifs) {
-    int op = uxDifs[uxDifFoco], salvo = valor[op], i;
-    float x = ir.x + 32, w = ir.w - 64, y = ir.y + 32, cw = (w - 14) * 0.5f, ph = 0;
-    char padrao[160], atual[160], t[220];
-    uxValorTexto(op, uxValorPadrao(op), padrao, sizeof padrao);
-    uxValorTexto(op, salvo, atual, sizeof atual);
-    for (i = 0; i < 2; i++) {
-      float h;
-      valor[op] = i == 0 ? uxValorPadrao(op) : salvo;
-      h = ajPreviaCompacta(op, x + i * (cw + 14), y, cw);
-      if (h > ph) ph = h;
-    }
-    valor[op] = salvo;
-    if (ph > 0) {
-      TxtLinha c;
-      snprintf(t, sizeof t, i18n("Padrão · %s"), padrao);
-      c = ajTxtC(TXT_ILHA_APOIO, t, cw);
-      txt_desenhar_alpha(c, x, y + ph + 10, 0.45f);
-      snprintf(t, sizeof t, i18n("Atual · %s"), atual);
-      c = ajTxtC(TXT_ILHA_APOIO, t, cw);
-      txt_desenhar(c, x + cw + 14, y + ph + 10);
-      y += ph + 10 + 20;
-    }
-    x += 6; w -= 12; y += 26;
-    { char k[40];
-      snprintf(k, sizeof k, i18n("%d de %d"), uxDifFoco + 1, uxNDifs);
-      ajIcone("aj_rotate-ccw-clock", x, y - 1, 20, 0.45f);
-      ajCaps(TXT_MINI, k, 2.1f, x + 30, y, 0.45f);
-      y += 28; }
-    y += ajBloco(TXT_AJ_INSP, rotuloOpcao(op), x, y, w, 38.4f, 1, 2) + 12;
-    y += ajBloco(TXT_AJ_SUB, uxResumo(op), x, y, w, 28.5f, 0.62f, 6) + 18;
-    y += ajMeta(i18n("Vale para"), i18n(uxEscopo(op)), x, y, w, 1);
-    { const char *b = uxBloco(op);
-      char sb[200];
-      if (b[0]) snprintf(sb, sizeof sb, "%s › %s", i18n(uxCaminho(op)), i18n(b));
-      else snprintf(sb, sizeof sb, "%s", i18n(uxCaminho(op)));
-      ajMeta(i18n("Seção"), sb, x, y, w, 1); }
-  }
-  { AjDica d[3] = { { "OK", "Revisar" }, { "↑ ↓", "Navegar" }, { "←", "Categorias" } };
-    ajDicas(d, 3, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1); }
 }
 
 // --- MODAIS ----------------------------------------------------------------------
@@ -350,42 +295,16 @@ static float ajChip(const char *rot, const char *icone, float x, float y, int fo
   txt_desenhar_alpha(t, x + 22 + (icone ? 30 : 0), y + (56 - t.h) * 0.5f, (foco ? 1.0f : 0.85f) * a);
   return w;
 }
-// Rodape dos editores: fio, "Restaurar padrao" a esquerda e as dicas a direita.
-static void ajRodapeEditor(GfxRect m, const AjDica *d, int n) {
-  float y = m.y + m.h - 44 - 56;
-  gfx_cor((GfxRect){ m.x + 44, y - 22, m.w - 88, 1 }, 0, 1, 1, 1, 0.08f);
-  if (uxTemPadrao(uxOp)) ajChip("Restaurar padrão", "aj_rotate-ccw-clock", m.x + 44, y, uxRodape, 1);
-  { float w = ajDicasLargura(d, n);
-    ajDicasLinha(d, n, m.x + m.w - 44 - w, y + 13, 1); }
-}
-// Cabecalho dos editores: "Secao · Bloco", o nome da opcao e "Escopo · Padrao: x".
-static float ajCabecalhoEditor(GfxRect m) {
-  char k[200], linha[320], padrao[160];
-  const char *b = uxBloco(uxOp);
-  float x = m.x + 44, y = m.y + 44;
-  if (b[0]) snprintf(k, sizeof k, "%s · %s", i18n(uxCaminho(uxOp)), i18n(b));
-  else snprintf(k, sizeof k, "%s", i18n(uxCaminho(uxOp)));
-  ajKicker(k, x, y, 1);
-  y += 18 + 8;
-  { TxtLinha t = ajTxtC(TXT_ILHA_TITULO, rotuloOpcao(uxOp), m.w - 88);
-    txt_desenhar(t, x, y); y += 48; }
-  if (ajPadraoVisual(uxOp) >= 0) uxValorTexto(uxOp, ajPadraoVisual(uxOp), padrao, sizeof padrao);
-  if (ajPadraoVisual(uxOp) >= 0) snprintf(linha, sizeof linha, i18n("%s · Padrão: %s"), i18n(uxEscopoValor(uxOp, uxPendente)), padrao);
-  else snprintf(linha, sizeof linha, "%s", i18n(uxEscopoValor(uxOp, uxPendente)));
-  { TxtLinha t = ajTxtC(TXT_AJ_SUB, linha, m.w - 88);
-    txt_desenhar_alpha(t, x, y + 8, 0.55f); }
-  return y + 8 + 27;
-}
 // A previa da opcao com o valor PENDENTE (so o desenho; nada e gravado).
-static float ajPreviaPendente(float x, float y, float w) {
+static float aj2PreviaEditor(int op, float x, float y, float w);
+static float aj2PreviaPendente(float x, float y, float w) {
   int salvo = valor[uxOp];
   float h;
   valor[uxOp] = uxPendente;
-  h = ajPreviaEditor(uxOp, x, y, w);
+  h = aj2PreviaEditor(uxOp, x, y, w);
   valor[uxOp] = salvo;
   return h;
 }
-
 // Modal centrado na tela virtual, e no maximo do tamanho dela menos 40 de cada
 // lado (escala.h). Em 100% os numeros fixos de cada modal ja sao os centrados.
 static void ajCentraModal(GfxRect *m) {
@@ -394,143 +313,6 @@ static void ajCentraModal(GfxRect *m) {
   if (m->h > NV_VTELA_H - 80.0f) m->h = NV_VTELA_H - 80.0f;
   m->x = (NV_VTELA_W - m->w) * 0.5f;
   m->y = (NV_VTELA_H - m->h) * 0.5f;
-}
-
-// Largura da previa ao lado dos editores: 440 em 100%. No modal mais baixo da
-// tela virtual (escala.h) a previa nao cabe entre o cabecalho e o rodape (as
-// legendas dela tem altura fixa): ela encolhe um pouco e, faltando mais de 10%
-// da altura, SAI — o valor e o trilho ficam com a largura toda.
-static float ajPreviaEditorW(GfxRect m, float hNormal) {
-  float f;
-  if (gfx_escala_ui() == 1.0f || m.h >= hNormal) return 440.0f;
-  f = (m.h - 297.0f) / (hNormal - 297.0f);
-  return f < 0.9f ? 0.0f : 440.0f * f;
-}
-
-// Editor de escolha com lista longa.
-static void ajEditorEscolha(void) {
-  GfxRect m = { 360, 170, 1200, 740 };
-  const Opcao *o = &OPCOES[uxOp];
-  ajCentraModal(&m);
-  int n = nValores(uxOp), i, primeiro, vis;
-  float y, lx, lw, pw;
-  ajIlha(m, 36, 1, 1);
-  y = ajCabecalhoEditor(m) + 30;
-  pw = ajPreviaEditorW(m, 740.0f);
-  lx = m.x + 44; lw = pw > 0 ? m.w - 88 - pw - 44 : m.w - 88;
-  vis = (int)((m.y + m.h - 44 - 56 - 22 - 20 - y) / 82.0f);
-  if (vis < 3) vis = 3;
-  primeiro = uxPendente - vis / 2;
-  if (primeiro + vis > n) primeiro = n - vis;
-  if (primeiro < 0) primeiro = 0;
-  for (i = primeiro; i < n && i < primeiro + vis; i++) {
-    char t[160];
-    int foco = !uxRodape && i == uxPendente;
-    GfxRect r = { lx, y, lw, 76 };
-    int fv;
-    uxValorTexto(uxOp, i, t, sizeof t);
-    if (foco) ajFocoLinha(r, 22, 1, 1);
-    fv = marcaDoValor(uxOp, o->valores ? o->valores[i] : NULL);
-    if (fv >= 0) marca_formato((FormatoMarca)fv, r.x + 22, r.y + 18, 40, 1, 1, 1, foco ? 0.9f : 0.6f);
-    else {
-      TxtLinha l = ajTxtC(TXT_AJ_ROTULO, t, lw - 200);
-      txt_desenhar_alpha(l, r.x + 22, r.y + (76 - l.h) * 0.5f, foco ? 1.0f : 0.86f);
-    }
-    if (i == uxOriginal) {
-      TxtLinha s = ajTxt(TXT_AJ_18, "Salvo");
-      float sx = r.x + r.w - 22 - s.w;
-      txt_desenhar_alpha(s, sx, r.y + (76 - s.h) * 0.5f, 0.55f);
-      ajIcone("aj_check", sx - 9 - 20, r.y + 28, 20, 0.55f);
-    }
-    y += 82;
-  }
-  if (pw > 0) { float px = m.x + m.w - 44 - pw, py = ajCabecalhoEditor(m) + 30;
-    ajPreviaPendente(px, py, pw); }
-  { AjDica d[3] = { { "↑ ↓", "Escolher" }, { "OK", "Confirmar" }, { "Voltar", "Cancelar" } };
-    ajRodapeEditor(m, d, 3); }
-}
-
-// Editor numerico: numero grande, trilho com o padrao e a faixa vigiada.
-static void ajEditorNumero(void) {
-  GfxRect m = { 300, 0, 1320, 0 };
-  const Opcao *o = &OPCOES[uxOp];
-  float y, lx, lw, ar, ag, ab, pw;
-  char v[64], salvo[64], uni[64];
-  int risco = uxOp == AJ_FIL_LIMITE ? FIL_LIMITE_SEGURO : -1;
-  m.h = uxOp == AJ_FIL_LIMITE ? 830 : 760; m.y = (NV_VTELA_H - m.h) * 0.5f;
-  ajCentraModal(&m);
-  ajustes_acento(&ar, &ag, &ab);
-  ajIlha(m, 36, 1, 1);
-  y = ajCabecalhoEditor(m) + 26;
-  pw = ajPreviaEditorW(m, uxOp == AJ_FIL_LIMITE ? 830.0f : 760.0f);
-  lx = m.x + 44; lw = pw > 0 ? m.w - 88 - pw - 50 : m.w - 88;
-  snprintf(v, sizeof v, "%d", uxPendente);
-  uxValorTexto(uxOp, uxOriginal, salvo, sizeof salvo);
-  if (uxOp == AJ_FIL_LIMITE) snprintf(uni, sizeof uni, "%s", i18n("fileiras"));
-  else snprintf(uni, sizeof uni, "%s", o->sufixo ? o->sufixo + (o->sufixo[0] == ' ') : "");
-  { GfxRect r = { lx, y, lw, 240 };
-    float fr = ajFracao(uxOp, uxPendente), fp = ajPadraoVisual(uxOp) >= 0 ? ajFracao(uxOp, ajPadraoVisual(uxOp)) : -1;
-    float tx = r.x + 34, tw = r.w - 68, ty = r.y + 30 + 120 + 34;
-    TxtLinha big = ajTxt(TXT_AJ_NUM110, v), u = ajTxt(TXT_PG_RELOGIO, uni);
-    char sv[96];
-    TxtLinha ls;
-    if (uxOp == AJ_HERO_TRAILER_ESPERA) { snprintf(v, sizeof v, "%d,%d", uxPendente / 10, uxPendente % 10); big = ajTxt(TXT_AJ_NUM110, v); }
-    ajFocoLinha(r, 22, uxRodape ? 0 : 1, 1);
-    txt_desenhar(big, tx, r.y + 30 + (120 - big.h) * 0.5f);
-    snprintf(sv, sizeof sv, i18n("salvo: %s"), salvo);
-    ls = ajTxt(TXT_AJ_ESTADO, sv);
-    txt_desenhar(u, tx + big.w + 26, r.y + 30 + 60 - (u.h + 4 + ls.h) * 0.5f);
-    txt_desenhar_alpha(ls, tx + big.w + 26, r.y + 30 + 60 - (u.h + 4 + ls.h) * 0.5f + u.h + 4, 0.5f);
-    ajIcone("aj_plus", r.x + r.w - 34 - 30, r.y + 30 + 60 - 30 - 3, 30, 0.7f);
-    gfx_cor((GfxRect){ r.x + r.w - 34 - 30, r.y + 30 + 60, 30, 1 }, 0, 1, 1, 1, 0.15f);
-    ajIcone("aj_minus", r.x + r.w - 34 - 30, r.y + 30 + 60 + 3, 30, 0.7f);
-    gfx_cor((GfxRect){ tx, ty, tw, 8 }, 0.5f, 1, 1, 1, 0.12f);
-    if (fr > 0) gfx_cor((GfxRect){ tx, ty, tw * (fr > 1 ? 1 : fr), 8 }, 0.5f, ar, ag, ab, 1);
-    if (risco >= o->min && risco < o->max) {
-      float fx = ajFracao(uxOp, risco), sx;
-      // Faixa vigiada: listras ambar (o repeating-linear-gradient do mockup).
-      gfx_recorte(tx + tw * fx, ty, tw * (1 - fx), 8);
-      for (sx = tx + tw * fx - 8; sx < tx + tw; sx += 12.0f) {
-        int q;
-        for (q = 0; q < 4; q++) gfx_cor((GfxRect){ sx + q * 2.0f, ty + q * 2.0f, 6, 2 }, 0, 0.961f, 0.784f, 0.298f, 0.32f);
-      }
-      gfx_sem_recorte();
-    }
-    if (fp >= 0) gfx_cor((GfxRect){ tx + tw * fp - 1, ty - 9, 2, 26 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.6f);
-    { char t[64]; TxtLinha l;
-      float ly = ty + 18;
-      snprintf(t, sizeof t, "%d", o->min); l = ajTxt(TXT_ILHA_APOIO, t); txt_desenhar_alpha(l, tx, ly, 0.45f);
-      snprintf(t, sizeof t, "%d", o->max); l = ajTxt(TXT_ILHA_APOIO, t); txt_desenhar_alpha(l, tx + tw - l.w, ly, 0.45f);
-      if (fp >= 0) {
-        char pv[64];
-        uxValorTexto(uxOp, ajPadraoVisual(uxOp), pv, sizeof pv);
-        snprintf(t, sizeof t, i18n("padrão %s"), pv); l = ajTxt(TXT_ILHA_APOIO, t);
-        txt_desenhar_alpha(l, tx + tw * fp - l.w * 0.5f, ly, 0.45f);
-      }
-      if (risco >= o->min && risco < o->max) {
-        snprintf(t, sizeof t, "%d", risco);
-        l = txt_linha(TXT_ILHA_APOIO, t, 245, 200, 76, 255);
-        txt_desenhar(l, tx + tw * ajFracao(uxOp, risco) - l.w * 0.5f, ly);
-      } }
-    y += r.h; }
-  // Modal mais baixo (escala.h): os dois avisos so entram se couberem acima
-  // do rodape; o inspetor da linha ja mostra os mesmos textos.
-  { float rodape = m.y + m.h - 44 - 56 - 22 - 12;
-    if (gfx_escala_ui() != 1.0f && uxOp == AJ_FIL_LIMITE && y + 20 + 60 > rodape) goto semAvisos;
-    if (gfx_escala_ui() != 1.0f && y + 12 + 60 > rodape) goto semAvisos; }
-  if (uxOp == AJ_FIL_LIMITE) {
-    char t[400];
-    snprintf(t, sizeof t, i18n("Mais fileiras usam mais memória e rede: em TV com 1 GB de memória a Home pode ficar lenta ou fechar. Acima de %d a TV pede confirmação, e se o app fechar ele volta sozinho ao valor anterior."), FIL_LIMITE_SEGURO);
-    y += 20; y += ajEf("aj_triangle-alert", t, lx, y, lw, 1);
-  }
-  { const char *ef = efeitoOpcao(uxOp);
-    if (ef && ef[0] && (gfx_escala_ui() == 1.0f || y + 12 + 60 <= m.y + m.h - 44 - 56 - 22 - 12)) {
-      y += 12; y += ajEf("aj_info", i18n(ef), lx, y, lw, 1); } }
-  semAvisos:
-  if (pw > 0) { float px = m.x + m.w - 44 - pw, py = ajCabecalhoEditor(m) + 26;
-    ajPreviaPendente(px, py, pw); }
-  { AjDica d[3] = { { "↑ ↓", "Ajustar" }, { "OK", "Confirmar" }, { "Voltar", "Cancelar" } };
-    ajRodapeEditor(m, d, 3); }
 }
 
 // Confirmacao: kicker com o alerta ambar, pergunta 36/700, texto e "de › para".
@@ -591,6 +373,9 @@ static void ajDependencia(void) {
 
 static void ajDesenharModais(void) {
   if (!uxEditor || ajEditandoLinha(uxOp)) return;
+  // v2: os editores sao o terceiro degrau da pilha (aj2DesenharEditor); aqui
+  // ficam so as perguntas — confirmar, restaurar e a dependencia.
+  if (!uxRestaurar && !uxAvisoRisco && uxEditor != 2) return;
   ajVeuModal();
   if (uxRestaurar || uxAvisoRisco) {
     char padrao[160], de[96], para[96], texto[500];
@@ -615,8 +400,6 @@ static void ajDesenharModais(void) {
       ajConfirmacao(rotuloOpcao(uxOp), 0, "Restaurar este ajuste?", texto, de, padrao, "Restaurar", "Cancelar", uxConfirmar);
     }
   } else if (uxEditor == 2) ajDependencia();
-  else if (OPCOES[uxOp].tipo == OP_NUMERO) ajEditorNumero();
-  else ajEditorEscolha();
   if (uxAviso[0]) {
     TxtLinha t = ajTxtC(TXT_AJ_SUB, uxAviso, 1100);
     txt_desenhar_alpha(t, (NV_VTELA_W - t.w) * 0.5f, NV_VTELA_H - 70, 0.8f);
@@ -704,25 +487,355 @@ static int ajVinculoAtivo(void) {
          sa == SMK_PEDINDO || sa == SMK_AGUARDANDO || sa == SMK_ERRO;
 }
 
+// --- O EDITOR (v2: terceiro degrau) ------------------------------------------------
+// Desliza por cima da lista ate x = 300, com o miolo modal (88%): kicker 18,
+// titulo 52, "Escopo · Padrão", e o conteudo em duas colunas — o editor a
+// esquerda e a previa (520) a direita. Rodape: "Restaurar padrão" (64) e as
+// dicas 22.
+static int aj2EdVisto;
+static float aj2CabecalhoEditor(GfxRect m) {
+  char k[200], linha[320], padrao[160];
+  const char *b = uxBloco(uxOp);
+  float x = m.x + 52, y = m.y + 40;
+  if (b[0]) snprintf(k, sizeof k, "%s · %s", i18n(uxCaminho(uxOp)), i18n(b));
+  else snprintf(k, sizeof k, "%s", i18n(uxCaminho(uxOp)));
+  ajCaps(TXT_V2_KICK, k, 2.52f, x, y + (21.8f - 19.0f * 1.21f) * 0.5f, 0.45f);
+  y += 21.8f + 4.0f;
+  { TxtLinha t = ajTxtC(TXT_V2_TIT, rotuloOpcao(uxOp), m.w - 104);
+    txt_desenhar(t, x, y + (62.9f - t.h) * 0.5f); y += 62.9f + 8.0f; }
+  if (ajPadraoVisual(uxOp) >= 0) uxValorTexto(uxOp, ajPadraoVisual(uxOp), padrao, sizeof padrao);
+  if (ajPadraoVisual(uxOp) >= 0) snprintf(linha, sizeof linha, i18n("%s · Padrão: %s"), i18n(uxEscopoValor(uxOp, uxPendente)), padrao);
+  else snprintf(linha, sizeof linha, "%s", i18n(uxEscopoValor(uxOp, uxPendente)));
+  { TxtLinha t = ajTxtC(TXT_V2_26, linha, m.w - 104);
+    txt_desenhar_alpha(t, x, y + (29.0f - t.h) * 0.5f, 0.55f); }
+  return y + 29.0f + 30.0f;
+}
+static void aj2RodapeEditor(GfxRect m, float colW, const AjDica *d, int n) {
+  float y = m.y + m.h - 40 - 64;
+  if (uxTemPadrao(uxOp)) {
+    TxtLinha t = uxRodape ? ajTxtT(TXT_V2_SEG, "Restaurar padrão") : ajTxt(TXT_V2_SEG, "Restaurar padrão");
+    float w = 24 + 24 + 10 + t.w + 24;
+    if (uxRodape) ajPilulaAcento((GfxRect){ m.x + 52, y, w, 64 }, 32, 1);
+    else ajNeutro((GfxRect){ m.x + 52, y, w, 64 }, 32, 0.08f, AJ_CHIP_SOL, 1);
+    if (uxRodape) ajIconeT("aj_rotate-ccw-clock", m.x + 52 + 24, y + 20, 24, 1);
+    else ajIcone("aj_rotate-ccw-clock", m.x + 52 + 24, y + 20, 24, 0.85f);
+    txt_desenhar_alpha(t, m.x + 52 + 58, y + (64 - t.h) * 0.5f, uxRodape ? 1.0f : 0.85f);
+  }
+  { float w = aj2DicasLinha(d, n, 0, 0, TXT_V2_KBD18, 36, 40, 11, TXT_V2_24, 10, 24, 0, 1);
+    aj2DicasLinha(d, n, m.x + 52 + colW - w, y + 32, TXT_V2_KBD18, 36, 40, 11, TXT_V2_24, 10, 24, 1, 1); }
+}
+// A ordem real da Home ao lado do limite (gr-wrap: padding 20 24, linhas de
+// 44, nome 22, posicao 17, cartazes 24 x 36).
+static float aj2OrdemHome(float x, float y, float w) {
+  int ordem[40], n = 0, i, salvo = uxOriginal;
+  int pend = valor[AJ_FIL_LIMITE], lim, corte;
+  float h;
+  for (i = 0; i < fil_n() && n < 40; i++) if (fil_estado(i) != FIL_FORA) ordem[n++] = i;
+  lim = pend > salvo ? pend : salvo;
+  if (lim > n) lim = n;
+  if (lim > 13) lim = 13;
+  corte = pend < salvo ? pend : salvo;
+  h = 20 * 2 + lim * 44 + (corte < lim ? 40 : 0);
+  ajCaps(TXT_V2_KICK, "Ordem da Home", 2.52f, x, y + (21.8f - 19.0f * 1.21f) * 0.5f, 0.45f);
+  y += 21.8f + 14.0f;
+  ajNeutro((GfxRect){ x, y, w, h }, 16, 0.04f, 0.106f, 0.110f, 0.129f, 1);
+  y += 20;
+  for (i = 0; i < lim; i++) {
+    int f = ordem[i], k, novo = pend > salvo && i >= salvo && i < pend, sai = pend < salvo && i >= pend;
+    char num[8];
+    TxtLinha l;
+    float rx = x + 24, rw = w - 48;
+    if (i == corte && corte < lim) {
+      char t[64];
+      snprintf(t, sizeof t, pend > salvo ? i18n("Entram com %d") : i18n("Saem com %d"), pend);
+      { float dw = ajCaps(TXT_G16B, t, 1.92f, -1, 0, 0), cx = rx + (rw - dw) * 0.5f;
+        gfx_cor((GfxRect){ rx, y + 20, cx - 12 - rx, 1 }, 0, 1, 1, 1, 0.14f);
+        gfx_cor((GfxRect){ cx + dw + 12, y + 20, rx + rw - cx - dw - 12, 1 }, 0, 1, 1, 1, 0.14f);
+        ajCaps(TXT_G16B, t, 1.92f, cx, y + 20 - 10, 0.4f); }
+      y += 40;
+    }
+    snprintf(num, sizeof num, "%d", i + 1);
+    l = ajTxt(TXT_V2_18, num);
+    txt_desenhar_alpha(l, rx + 26 - l.w, y + (44 - l.h) * 0.5f, 0.35f);
+    ajIcone(fil_origem_icone(fil_linha_origem(f)), rx + 26 + 14, y + 11, 22, 0.45f);
+    l = ajTxtC(TXT_V2_24, fil_titulo(f)[0] ? fil_titulo(f) : fil_chave(f), rw - 26 - 14 - 22 - 14 - 3 * 24 - 2 * 6 - 14);
+    txt_desenhar_alpha(l, rx + 26 + 14 + 22 + 14, y + (44 - l.h) * 0.5f, sai ? 0.35f : (novo || i >= salvo) ? 1.0f : 0.62f);
+    for (k = 0; k < 3; k++)
+      ajImg(ajPosterFileira(f, k), (GfxRect){ rx + rw - 3 * 24 - 2 * 14 + k * 38, y + 4, 24, 36 }, 4, (sai ? 0.4f : 1.0f));
+    y += 44;
+  }
+  return 21.8f + 14.0f + h;
+}
+static float aj2PreviaEditor(int op, float x, float y, float w) {
+  if (op == AJ_FIL_LIMITE) return aj2OrdemHome(x, y, w);
+  return ajPreviaEditor(op, x, y, w);
+}
+static void aj2EditorNumero(GfxRect m) {
+  const Opcao *o = &OPCOES[uxOp];
+  float y, lx, lw, ar, ag, ab, pw = 520.0f;
+  char v[64], salvo[64], uni[64];
+  int risco = uxOp == AJ_FIL_LIMITE ? FIL_LIMITE_SEGURO : -1;
+  ajustes_acento(&ar, &ag, &ab);
+  y = aj2CabecalhoEditor(m);
+  if (m.w - 104 - pw - 56 < 560) pw = 0;
+  lx = m.x + 52; lw = pw > 0 ? m.w - 104 - pw - 56 : m.w - 104;
+  snprintf(v, sizeof v, "%d", uxPendente);
+  uxValorTexto(uxOp, uxOriginal, salvo, sizeof salvo);
+  if (uxOp == AJ_FIL_LIMITE) snprintf(uni, sizeof uni, "%s", i18n("fileiras"));
+  else snprintf(uni, sizeof uni, "%s", o->sufixo ? o->sufixo + (o->sufixo[0] == ' ') : "");
+  { GfxRect r = { lx, y, lw, 34 + 150 + 40 + 10 + 14 + 40 + 34 };
+    float fr = ajFracao(uxOp, uxPendente), fp = ajPadraoVisual(uxOp) >= 0 ? ajFracao(uxOp, ajPadraoVisual(uxOp)) : -1;
+    float tx = r.x + 40, tw = r.w - 80, ty = r.y + 34 + 150 + 40, cy = r.y + 34 + 75;
+    TxtLinha big, u = ajTxt(TXT_V2_36B, uni), ls;
+    char sv[96];
+    if (uxOp == AJ_HERO_TRAILER_ESPERA) snprintf(v, sizeof v, "%d,%d", uxPendente / 10, uxPendente % 10);
+    big = ajTxt(TXT_V2_NUM150, v);
+    if (ajVid()) gfx_cor(r, 30.0f / r.h, 1, 1, 1, uxRodape ? 0.0f : 0.12f);
+    else ajFocoLinha(r, 30, uxRodape ? 0 : 1, 1);
+    txt_desenhar(big, tx - 4, cy - big.h * 0.5f);
+    snprintf(sv, sizeof sv, i18n("salvo: %s"), salvo);
+    ls = ajTxt(TXT_V2_26, sv);
+    { float bx = tx - 4 + big.w + 30, bh = 43.6f + 6 + 29;
+      txt_desenhar(u, bx, cy - bh * 0.5f + (43.6f - u.h) * 0.5f);
+      txt_desenhar_alpha(ls, bx, cy - bh * 0.5f + 43.6f + 6 + (29 - ls.h) * 0.5f, 0.5f); }
+    ajIcone("aj_plus", r.x + r.w - 40 - 40, cy - 6 - 40, 40, 0.75f);
+    ajIcone("aj_minus", r.x + r.w - 40 - 40, cy + 6, 40, 0.75f);
+    gfx_cor((GfxRect){ tx, ty, tw, 10 }, 0.5f, 1, 1, 1, 0.12f);
+    if (fr > 0) gfx_cor((GfxRect){ tx, ty, tw * (fr > 1 ? 1 : fr), 10 }, 0.5f, ar, ag, ab, 1);
+    if (risco >= o->min && risco < o->max) {
+      float fx = ajFracao(uxOp, uxPendente > risco ? uxPendente : risco), sx;
+      // Faixa vigiada: listras ambar a 135 graus (repeating-linear-gradient).
+      gfx_recorte(tx + tw * fx, ty, tw * (1 - fx), 10);
+      for (sx = tx + tw * fx - 10; sx < tx + tw; sx += 14.0f) {
+        int q;
+        for (q = 0; q < 5; q++) gfx_cor((GfxRect){ sx + q * 2.0f, ty + q * 2.0f, 7, 2 }, 0, 0.91f, 0.722f, 0.29f, 0.32f);
+      }
+      gfx_sem_recorte();
+    }
+    if (fp >= 0) gfx_cor((GfxRect){ tx + tw * fp - 1.5f, ty - 11, 3, 32 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.6f);
+    { char t[64]; TxtLinha l;
+      float lc = ty + 10 + 14 + 13.5f;
+      snprintf(t, sizeof t, "%d", o->min); l = ajTxt(TXT_V2_24, t); txt_desenhar_alpha(l, tx, lc - l.h * 0.5f, 0.5f);
+      snprintf(t, sizeof t, "%d", o->max); l = ajTxt(TXT_V2_24, t); txt_desenhar_alpha(l, tx + tw - l.w, lc - l.h * 0.5f, 0.5f);
+      if (fp >= 0) {
+        char pv[64];
+        uxValorTexto(uxOp, ajPadraoVisual(uxOp), pv, sizeof pv);
+        snprintf(t, sizeof t, i18n("padrão %s"), pv); l = ajTxt(TXT_V2_24, t);
+        txt_desenhar_alpha(l, tx + tw * fp - l.w * 0.5f, lc - l.h * 0.5f, 0.5f);
+      }
+      if (risco >= o->min && risco < o->max && uxPendente > uxValorAtual(uxOp)) {
+        snprintf(t, sizeof t, "%d", uxPendente);
+        l = txt_linha(TXT_G23B, t, 232, 184, 74, 255);
+        txt_desenhar(l, tx + tw * fr - l.w * 0.5f, lc - l.h * 0.5f);
+      } }
+    y += r.h; }
+  if (uxOp == AJ_FIL_LIMITE) {
+    char t[400];
+    snprintf(t, sizeof t, i18n("Mais fileiras usam mais memória e rede: em TV com 1 GB a Home pode ficar lenta ou fechar. Acima de %d a TV pede confirmação."), FIL_LIMITE_SEGURO);
+    y += 22; y += aj2Ef("aj_triangle-alert", t, lx, y, lw, 1);
+  }
+  { const char *ef = uxOp == AJ_FIL_LIMITE ? NULL : efeitoOpcao(uxOp);
+    if (ef && ef[0] && y + 12 + 80 <= m.y + m.h - 40 - 64 - 20) {
+      y += 12; y += aj2Ef("aj_info", i18n(ef), lx, y, lw, 1); } }
+  if (pw > 0) aj2PreviaPendente(m.x + m.w - 52 - pw, aj2CabecalhoEditor(m), pw);
+  { AjDica d[3] = { { "↑ ↓", "Ajustar" }, { "OK", "Confirmar" }, { "Voltar", "Cancelar" } };
+    aj2RodapeEditor(m, lw, d, 3); }
+}
+static void aj2EditorEscolha(GfxRect m) {
+  const Opcao *o = &OPCOES[uxOp];
+  int n = nValores(uxOp), i, primeiro, vis;
+  float y, lx, lw, pw = 520.0f, y0;
+  y = aj2CabecalhoEditor(m);
+  y0 = y;
+  if (m.w - 104 - pw - 56 < 560) pw = 0;
+  lx = m.x + 52; lw = pw > 0 ? m.w - 104 - pw - 56 : m.w - 104;
+  vis = (int)((m.y + m.h - 40 - 64 - 24 - y) / 100.0f);
+  if (vis < 3) vis = 3;
+  primeiro = uxPendente - vis / 2;
+  if (primeiro + vis > n) primeiro = n - vis;
+  if (primeiro < 0) primeiro = 0;
+  for (i = primeiro; i < n && i < primeiro + vis; i++) {
+    char t[160];
+    int foco = !uxRodape && i == uxPendente;
+    GfxRect r = { lx, y, lw, 96 };
+    int fv;
+    uxValorTexto(uxOp, i, t, sizeof t);
+    if (foco) ajFocoLinha(r, 28, 1, 1);
+    fv = marcaDoValor(uxOp, o->valores ? o->valores[i] : NULL);
+    if (fv >= 0) marca_formato((FormatoMarca)fv, r.x + 30, r.y + 26, 44, 1, 1, 1, foco ? 0.9f : 0.6f);
+    else {
+      TxtLinha l = ajTxtC(TXT_V2_ROT, t, lw - 240);
+      txt_desenhar_alpha(l, r.x + 30, r.y + (96 - l.h) * 0.5f, foco ? 1.0f : 0.88f);
+    }
+    if (i == uxOriginal) {
+      TxtLinha s = ajTxt(TXT_V2_28, "Salvo");
+      float sx = r.x + r.w - 30 - s.w;
+      txt_desenhar_alpha(s, sx, r.y + (96 - s.h) * 0.5f, 0.55f);
+      ajIcone("aj_check", sx - 12 - 26, r.y + 35, 26, 0.55f);
+    }
+    y += 100;
+  }
+  if (pw > 0) aj2PreviaPendente(m.x + m.w - 52 - pw, y0, pw);
+  { AjDica d[3] = { { "↑ ↓", "Escolher" }, { "OK", "Confirmar" }, { "Voltar", "Cancelar" } };
+    aj2RodapeEditor(m, lw, d, 3); }
+}
+static int aj2EditorPainel(void) {
+  return uxEditor == 1 && uxOp >= 0 && !ajEmLinha(uxOp);
+}
+static void aj2DesenharEditor(void) {
+  GfxRect m = aj2EditorR();
+  ajIlhaMiolo(m, 40, 0.88f);
+  if (OPCOES[uxOp].tipo == OP_NUMERO) aj2EditorNumero(m);
+  else aj2EditorEscolha(m);
+}
+
+// --- DIFERENTES DO PADRAO (degrau 1) ------------------------------------------------
+static void aj2DesenharDiferencas(void) {
+  GfxRect fr = aj2ListaR();
+  float topo = AJ_TOPO, base = AJ_BASE, y = topo + 26.0f;
+  int primeiro = uxDifFoco > 6 ? uxDifFoco - 6 : 0, i;
+  float x = fr.x + 22, w = fr.w - 44;
+  ajIlha(fr, 40.0f, 1, 0);
+  aj2Cabecalho(fr, "Ajustes", "Diferentes do padrão", "Valores fora da configuração de fábrica", 0, 1);
+  gfx_recorte(fr.x, topo, fr.w, base - topo);
+  if (!uxNDifs) {
+    TxtLinha t = ajTxt(TXT_V2_ROT, "Tudo está no padrão");
+    txt_desenhar(t, x + 30, y + 20);
+    y += 96;
+  }
+  for (i = primeiro; i < uxNDifs; i++) {
+    char atual[160], padrao[160], det[300];
+    int op = uxDifs[i], foco = !focoIndice && i == uxDifFoco;
+    GfxRect r = { x, y, w, 104 };
+    float xd = x + w - 30, a = ajMascara(y + 52, topo, base), yc = y + 52;
+    TxtLinha la, lp, lr, ls;
+    if (y > base) break;
+    if (foco) ajFocoLinha(r, 28, 1, a);
+    uxValorTexto(op, uxValorAtual(op), atual, sizeof atual);
+    uxValorTexto(op, uxValorPadrao(op), padrao, sizeof padrao);
+    la = ajTxtC(TXT_V2_28, atual, 260);
+    lp = ajTxtC(TXT_V2_28, padrao, 260);
+    txt_desenhar_alpha(la, xd - la.w, yc - la.h * 0.5f, (foco ? 1.0f : 0.8f) * a);
+    xd -= la.w + 12;
+    if (op == AJ_TEMA) {
+      float sr, sg, sb;
+      ajustes_acento(&sr, &sg, &sb);
+      gfx_cor((GfxRect){ xd - 26, yc - 13, 26, 26 }, 0.5f, sr, sg, sb, a);
+      xd -= 38;
+    }
+    ajIcone("aj_chevron-right", xd - 24, yc - 12, 24, 0.35f * a);
+    xd -= 24 + 14;
+    txt_desenhar_alpha(lp, xd - lp.w, yc - lp.h * 0.5f, 0.4f * a);
+    gfx_cor((GfxRect){ xd - lp.w, yc, lp.w, 2 }, 0, 0.953f, 0.949f, 0.937f, 0.25f * a);
+    xd -= lp.w;
+    lr = ajTxtC(TXT_V2_ROT, rotuloOpcao(op), xd - x - 60);
+    snprintf(det, sizeof det, "%s · %s", i18n(uxCaminho(op)), i18n(uxEscopo(op)));
+    ls = ajTxtC(TXT_V2_24, det, xd - x - 60);
+    txt_desenhar_alpha(lr, x + 30, y + 16 + (38.4f - lr.h) * 0.5f, (foco ? 1.0f : 0.88f) * a);
+    txt_desenhar_alpha(ls, x + 30, y + 16 + 38.4f + 5 + (26.4f - ls.h) * 0.5f, 0.45f * a);
+    y += 108;
+  }
+  if (y < base - 60) {
+    TxtLinha n = ajTxt(TXT_V2_24, "Seus serviços e credenciais não entram nesta lista.");
+    txt_desenhar_alpha(n, x + 30, y + 24, 0.42f);
+  }
+  gfx_sem_recorte();
+}
+static void aj2InspetorDiferencas(void) {
+  GfxRect ir = aj2InspR();
+  if (!aj2TemInsp()) return;
+  ajIlha(ir, 40.0f, 1, 0);
+  if (uxNDifs) {
+    int op = uxDifs[uxDifFoco], salvo = valor[op], i;
+    float x = ir.x + 36, w = ir.w - 72, y = ir.y + 36, cw = (w - 16) * 0.5f, ph = 0;
+    char padrao[160], atual[160], t[220];
+    uxValorTexto(op, uxValorPadrao(op), padrao, sizeof padrao);
+    uxValorTexto(op, salvo, atual, sizeof atual);
+    for (i = 0; i < 2; i++) {
+      float h;
+      valor[op] = i == 0 ? uxValorPadrao(op) : salvo;
+      h = ajPreviaCompacta(op, x + i * (cw + 16), y, cw);
+      if (h > ph) ph = h;
+    }
+    valor[op] = salvo;
+    if (ph > 0) {
+      TxtLinha c;
+      snprintf(t, sizeof t, i18n("Padrão · %s"), padrao);
+      c = ajTxtC(TXT_V2_24, t, cw);
+      txt_desenhar_alpha(c, x, y + ph + 10, 0.45f);
+      snprintf(t, sizeof t, i18n("Atual · %s"), atual);
+      c = ajTxtC(TXT_V2_24, t, cw);
+      txt_desenhar(c, x + cw + 16, y + ph + 10);
+      y += ph + 10 + 26;
+    }
+    x += 6; w -= 12; y += 28;
+    { char k[40];
+      snprintf(k, sizeof k, i18n("%d de %d"), uxDifFoco + 1, uxNDifs);
+      ajIcone("aj_rotate-ccw-clock", x, y, 24, 0.45f);
+      ajCaps(TXT_V2_KICK, k, 2.52f, x + 36, y + 0.5f, 0.45f);
+      y += 34; }
+    y += ajBloco(TXT_V2_INSP, rotuloOpcao(op), x, y, w, 48, 1, 2) + 12;
+    y += ajBloco(TXT_V2_28, uxResumo(op), x, y, w, 37.7f, 0.66f, 6) + 18;
+    y += aj2Meta(i18n("Vale para"), i18n(uxEscopo(op)), x, y, w, 1);
+    { const char *b = uxBloco(op);
+      char sb[200];
+      if (b[0]) snprintf(sb, sizeof sb, "%s › %s", i18n(uxCaminho(op)), i18n(b));
+      else snprintf(sb, sizeof sb, "%s", i18n(uxCaminho(op)));
+      aj2Meta(i18n("Seção"), sb, x, y, w, 1); }
+  }
+  { AjDica d[3] = { { "OK", "Revisar" }, { "↑ ↓", "Navegar" }, { "←", "Categorias" } };
+    aj2Dicas(d, 3, ir.x + 36, ir.y + ir.h - 36, ir.w - 72, 1); }
+}
+
 // --- A TELA ---------------------------------------------------------------------
 static int ajModalAberto(void) {
-  return (uxEditor && !ajEditandoLinha(uxOp)) || riscoFolha || ajVinculoAtivo() || teclado_aberto() ||
-         registro_envio_aberto();
+  return (uxEditor && (uxRestaurar || uxAvisoRisco || uxEditor == 2)) || riscoFolha || ajVinculoAtivo() ||
+         teclado_aberto() || registro_envio_aberto();
 }
 static void ajDesenharTela(void) {
   int modal = ajModalAberto();
+  Aj2Pose p = aj2PoseAgora();
+  float g0;
   ajFundo();
   if (filAberta) return;   // a folha de fileiras ocupa a tela (desenhada depois)
   if (modal) gfx_opacidade_grupo = 0.16f;
-  ajDesenharIndice();
-  if (uxIndice < 2) ajDesenharEspecial();
-  else { ajDesenharFolha(); ajDesenharInspetor(); }
+  g0 = gfx_opacidade_grupo;
+  aj2DesenharMenu(&p);
+  if (p.rA > 0.003f) aj2DesenharResumo(p.rA);
+  // A LISTA nasce da linha da categoria: escala em torno dela.
+  if (p.lA > 0.003f && uxIndice >= 1) {
+    GfxRect fr = aj2ListaR(), mr = aj2MenuR();
+    float oy = p.lOy > 0 ? p.lOy
+             : mr.y + AJ2_MENU_PAD + aj2MenuY(uxIndice) - aj2MRol + AJ2_MENU_LN * 0.5f;
+    gfx_opacidade_grupo = g0 * p.lA;
+    gfx_transformar(fr.x, oy, p.lS, p.lDx, 0);
+    aj2TextoLista = p.lTxt;
+    if (uxIndice >= 2) ajDesenharFolha(); else aj2DesenharDiferencas();
+    gfx_sem_transformar();
+  }
+  if (p.iA > 0.003f && uxIndice >= 1) {
+    GfxRect ir = aj2InspR();
+    gfx_opacidade_grupo = g0 * p.iA;
+    gfx_transformar(ir.x, ir.y, 1, p.iDx, 0);
+    if (uxIndice >= 2) ajDesenharInspetor(); else aj2InspetorDiferencas();
+    gfx_sem_transformar();
+  }
+  if (aj2EditorPainel()) aj2EdVisto = 1;
+  else if (p.eA <= 0.003f) aj2EdVisto = 0;
+  if (p.eA > 0.003f && aj2EdVisto && uxOp >= 0) {
+    GfxRect m = aj2EditorR(), fr = aj2ListaR();
+    float oy = fr.y + fr.h * 0.5f;
+    gfx_opacidade_grupo = g0 * p.eA;
+    gfx_transformar(m.x, oy, p.eS, p.eDx, 0);
+    aj2DesenharEditor();
+    gfx_sem_transformar();
+  }
   gfx_opacidade_grupo = 1.0f;
-  if (modal && !(uxEditor && !ajEditandoLinha(uxOp)) && !riscoFolha && !teclado_aberto()) ajVeuModal();
-  if (!uxEditor && uxAviso[0]) {
-    GfxRect fr = ajFolhaR();
-    TxtLinha t = ajTxtC(TXT_ILHA_GENERO, uxAviso, fr.w - 88);
-    txt_desenhar_alpha(t, fr.x + 44, fr.y + fr.h - 30, 0.7f);
+  if (modal && !(uxEditor && (uxRestaurar || uxAvisoRisco || uxEditor == 2)) && !riscoFolha && !teclado_aberto()) ajVeuModal();
+  if (uxAviso[0] && !(uxEditor && (uxRestaurar || uxAvisoRisco || uxEditor == 2))) {
+    GfxRect fr = aj2EdVisto ? aj2EditorR() : aj2ListaR();
+    TxtLinha t = ajTxtC(TXT_V2_24, uxAviso, fr.w - 100);
+    txt_desenhar_alpha(t, fr.x + 50, fr.y + fr.h - 30, 0.7f);
   }
   ajDesenharModais();
   if (registro_envio_aberto()) registro_envio_desenhar();

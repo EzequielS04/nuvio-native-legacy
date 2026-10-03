@@ -121,8 +121,8 @@ static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foc
 #define AJ_PAD           24.0f    // borda da linha ao texto
 // A janela da LISTA dentro da folha (Glass UI): abaixo do cabecalho da folha
 // (kicker, titulo e sub) ate 18 px da base da ilha.
-#define AJ_TOPO        199.0f
-#define AJ_BASE        (NV_VTELA_H - 58.0f)   // 1022 na tela de 1080
+#define AJ_TOPO        (112.0f / gfx_escala_ui() + 185.7f)   // Ajustes v2: fim do cabecalho da lista
+#define AJ_BASE        (NV_VTELA_H - 40.0f / gfx_escala_ui())   // 1040 na tela de 1080 (esvanece nos ultimos 90)
 // Raio da linha em fracao do menor lado (o SDF do shader e normalizado):
 // 12px sobre 88 de altura.
 #define AJ_RAIO           0.14f
@@ -307,6 +307,12 @@ typedef enum {
   // ficam como estao. LOCAL (o tamanho e da tela, nao da conta). No fim pelo
   // mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_TAMANHO_UI,
+  // FUNDO (Aparencia, Ajustes v2): o que fica atras dos paineis — a arte do
+  // titulo (o de sempre), a mesma arte borrada (a luz assada da Imersiva) ou o
+  // Frost (superficie fria tingida pelo acento). LOCAL: o desfoque custa GPU e
+  // o Frost depende do acento desta TV. No fim pelo mesmo motivo: valor[] e
+  // CHAVE[] sao posicionais.
+  AJ_FUNDO,
   AJ_N
 } OpcaoId;
 
@@ -326,6 +332,8 @@ static const char *V_RELOGIO_POS[] = { "Automática", "Esquerda", "Direita" };
 static const char *V_FONTE_PRAZO[] = { "3 s", "5 s", "8 s", "Todos os add-ons" };
 // Indice gravado em tamanhoUiLocal; o fator sai de ajustes_tamanho_ui.
 static const char *V_TAMANHO_UI[] = { "100%", "120%", "130%", "150%" };
+// Indice gravado em fundoLocal (ajustes_fundo).
+static const char *V_FUNDO[] = { "Arte", "Arte borrada", "Frost" };
 static const char *V_SAIDA_PLAYER[] = { "Voltar para a home (minimizar na ilha)",
                                         "Voltar para a página do título" };
 static const char *V_LIVETV_MODO[] = { "A (padrão)", "B (sem seleção de faixa)", "C (payload de live)" };
@@ -916,6 +924,7 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Adicionar pacote de selos"),
   ACAO("Remover pacote"),
   ESC("Tamanho da interface",            V_TAMANHO_UI, 4),    // local: tamanhoUiLocal
+  ESC("Fundo",                           V_FUNDO, 3),         // local: fundoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1087,6 +1096,7 @@ static const char *CHAVE[] = {
   // "-": a escolha mora em selos-p<N>.txt (por perfil), nao em ajustes.txt.
   "-selosPacote", "-selosPacoteAdd", "-selosPacoteRem",
   "tamanhoUiLocal",
+  "fundoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1438,6 +1448,7 @@ int ajustes_cor_logo(void) { return lig(AJ_COR_LOGO); }
 int ajustes_vidro(void) { return 1; }
 #else
 int ajustes_vidro(void) { return lig(AJ_VIDRO) && !SEGURO; }
+int ajustes_fundo(void) { int v = valor[AJ_FUNDO]; return v >= 0 && v < 3 ? v : 0; }
 int ajustes_vidro_contorno(void) { return lig(AJ_VIDRO_CONTORNO); }
 int ajustes_addons_do_principal(void) { return lig(AJ_ADDONS_PRINCIPAL); }
 #endif
@@ -3081,6 +3092,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
     case AJ_MEDIDOR:        /* o medidor e da GPU desta TV; o web nao tem */
     case AJ_TAMANHO_UI:     /* o tamanho e desta tela, e o web nao tem */
+    case AJ_FUNDO:          /* o desfoque custa GPU desta TV; o web nao tem */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
     case AJ_REACAO_CREDITOS: /* o web nao tem a pergunta */
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: /* o web nao tem o Seekr */
@@ -3993,7 +4005,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_GPU_EFEITOS: return "Automático mede a TV nos primeiros segundos e, se ela não der conta, tira os efeitos mais pesados. Completos mantém tudo; Leves tira desfoque e brilho para deixar a navegação mais lisa.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
     case AJ_TAMANHO_UI: return "Aumenta os Ajustes, os controles do player, os menus, os painéis e os avisos — bom para TVs grandes ou para quem assiste de longe. A tela inicial e a página do título continuam do mesmo tamanho. Vale na hora.";
-    case AJ_TEMA: return "Cor dos botões em foco e das marcas de estado. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena e ficam só nesta TV.";
+    case AJ_TEMA: return "Cor dos botões em foco e das marcas de estado. No fundo Frost, ela também tinge a superfície atrás dos painéis.";
+    case AJ_FUNDO: return "O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.";
     case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
     case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
     case AJ_DEBRID_AD: return "Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.";
@@ -4011,7 +4024,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_POSTER_CHAVE: return "Sua chave do RPDB (ratingposterdb.com). Fica só nesta TV e nunca aparece nos registros.";
     case AJ_POSTER_MODELO: return "Endereço com {imdb}, {tmdb}, {type} (movie ou series) e {tipo_tmdb} (movie ou tv), por exemplo https://meu.servidor/{type}/{imdb}.jpg. Quem não tiver o dado que o modelo pede fica com o cartaz normal.";
     case AJ_POSTER_TESTAR: return "Baixa o cartaz de um filme conhecido com a configuração atual e mostra se deu certo. O primeiro cartaz de cada título é montado no servidor e pode levar alguns segundos.";
-    case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras, como sempre foi. Padrão: destaque num banner no topo e as fileiras num fundo liso. Dinâmica: estilo Apple TV, com destaques grandes e Top 10 com numerais.";
+    case AJ_HOME_LAYOUT: return "Moderna: destaque atrás das fileiras. Padrão: destaque num banner no topo. Dinâmica: estilo Apple TV, com destaques grandes e Top 10.";
     case AJ_VIDRO: return "Painéis, botões e menus viram ilhas translúcidas que deixam a arte aparecer. Desligado, as mesmas ilhas ficam opacas. Só muda o visual; nada muda de lugar.";
     case AJ_ADDONS_PRINCIPAL: return "Os outros perfis desta conta usam os addons do perfil principal. Desligado, cada perfil usa os seus — a não ser que a conta já diga para usar os do principal.";
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
@@ -4952,6 +4965,7 @@ static void eventoTela(const SDL_Event *e) {
 
 }
 
+static void aj2Atualizar(float dt);
 void ajustes_atualizar(float dt, Uint32 agora) {
   guiaAtualizar(dt);
   if (uxAviso[0] && SDL_TICKS_PASSED(agora, uxAvisoAte)) uxAviso[0] = 0;
@@ -5044,6 +5058,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
   // (O "cabecalho inteiro ou nenhum" saiu: o cabecalho agora e fixo na folha.)
   scrollY = anim_mola2_reduzida(&velY, scrollY, alvo, dt, NV_MOLA2_SCROLL,
                                 ajustes_animacoes_reduzidas());
+  aj2Atualizar(dt);
 }
 
 // Leva a escolha da linha para linguas.c. "Da conta" (indice 0) manda string
@@ -5545,7 +5560,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER:
-    case AJ_TAMANHO_UI:
+    case AJ_TAMANHO_UI: case AJ_FUNDO:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL:
@@ -5753,6 +5768,32 @@ int ajustes_teste_quadro(const char *id) {
   focarSecao(0); focoIndice = 1;
   ajArteFundoN = 12; ajMemFixa = 0; ajQuadroAddons = 0; ajVinculoTeste = 0;
   if (teclado_aberto()) { SDL_Event e = { 0 }; e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_ESCAPE; teclado_evento(&e); }
+  aj2PoseFixa = 0;
+  if (!strncmp(id, "v2-", 3)) {   // Ajustes v2 (ajustes-v2.html): os quadros do mockup
+    valor[AJ_TEMA] = getenv("NUVIO_SHOT_TEMA") ? tema : 2;   // Oceano, como o mockup
+    valor[AJ_LANDSCAPE] = 1;   // o mockup: "Pôsteres horizontais" desligado
+    ajArteFundoN = 12;
+    if (!strcmp(id, "v2-menu")) { focarSecao(0); uxIndice = 2; focoIndice = 1; }
+    else if (!strcmp(id, "v2-menu-passando")) { ajArteFundoN = 13; focarSecao(1); uxIndice = 3; focoIndice = 1; }
+    else if (!strcmp(id, "v2-aberto") || !strcmp(id, "v2-130")) focarOpcao(AJ_HOME_LAYOUT);
+    else if (!strcmp(id, "v2-transicao")) {
+      focarOpcao(AJ_HOME_LAYOUT);
+      aj2PoseFixa = 1;
+      aj2PoseTeste = (Aj2Pose){ 0.975f, -5.0f, 0.70f, 0.45f,  0.92f, 380.0f, AJ2_TOPO + 0.30f * (NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM), 0.62f, 1.0f,
+                                184.0f, 0.28f,  0.0f,  1.0f, 0.0f, 0.0f };
+    }
+    else if (!strcmp(id, "v2-editor")) { int k; focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); for (k = 0; k < 5; k++) uxEvento(SDLK_DOWN); }
+    else if (!strcmp(id, "v2-fundo-opcao")) { ajArteFundoN = 7; focarOpcao(AJ_FUNDO); uxAbrirEditor(AJ_FUNDO); uxPendente = 2; uxAvancados[secAtual] = 0; }
+    else if (!strncmp(id, "v2-fundo-", 9)) {
+      ajArteFundoN = 7;
+      valor[AJ_FUNDO] = !strcmp(id, "v2-fundo-borrada") ? 1 : !strncmp(id, "v2-fundo-frost", 14) ? 2 : 0;
+      if (!strcmp(id, "v2-fundo-frost-ambar")) valor[AJ_TEMA] = 5;
+      focarOpcao(AJ_TEMA); uxAbrirEditor(AJ_TEMA);
+    }
+    else return 0;
+    scrollY = velY = 0;
+    return 1;
+  }
   if (!strncmp(id, "op:", 3)) {   // qualquer opcao, pela chave do disco
     int op, k;
     for (op = -1, k = 0; k < AJ_N; k++) if (CHAVE[k] && !strcmp(CHAVE[k], id + 3)) op = k;
