@@ -1128,7 +1128,7 @@ static float encaixa(float v) {
 void txt_desenhar_alpha(TxtLinha l, float x, float y, float alpha) {
   if (!l.tex) return;
   GfxRect r = { encaixa(x), encaixa(y), (float)l.w, (float)l.h };
-  gfx_rect(r, l.tex, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, alpha);
+  gfx_rect(r, l.tex, GFX_TEXTO, 1.0f, 0, 0, 0.0f, 1, 1, 1, alpha);
 }
 
 float txt_tracking(TxtEstilo estilo, const char *s, int r, int g, int b,

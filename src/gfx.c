@@ -441,7 +441,16 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // GFX_TEXTO — a forma da letra vem do ALPHA da textura, nunca do RGB
   "void main(){\n"
   "  vec4 g = NV_ARTE(vUv);\n"
-  "  gl_FragColor = vec4(g.rgb, g.a * uCor.a);\n"
+  // CURVA DE COBERTURA DO GLIFO (uFoco = 1, so texto de txt_desenhar_alpha;
+  // logo e marca passam 0 e saem intactos). A mistura e em sRGB: borda de
+  // letra clara com cobertura 0,5 vira 128, que o olho le como ~22% de luz, e
+  // o traco claro sobre fundo escuro afina — e depois da ampliacao 2x da TV
+  // ainda espalha. a^0,8 e o "contraste de texto" do Skia/DirectWrite:
+  // MEDIDO na bancada, +9% de tinta no 15/400 (8,22 -> 8,95, mesmo gradiente
+  // RMS), contra +25% de trocar Regular por Medium. Custo: um pow por
+  // fragmento de texto, so na area das letras.
+  "  float a = uFoco > 0.5 ? pow(g.a, 0.8) : g.a;\n"
+  "  gl_FragColor = vec4(g.rgb, a * uCor.a);\n"
   "}\n",
 
   // GFX_FUNDO — arte desfocada por mipmap (uFoco carrega o bias), com o
