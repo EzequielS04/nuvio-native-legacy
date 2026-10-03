@@ -5222,6 +5222,11 @@ int desc_tmdb_notas_temporada_ex(const char *json, CatEp *eps, int n,
           double v = js_num(p, f, "vote_average", 0.0);
           char sin[sizeof eps[i].sinopse], nome[sizeof eps[i].nome];
           int mudou = 0, soVazio = (textos & DESC_EPT_SO_VAZIO) != 0;
+          int runtime = (int)js_num(p, f, "runtime", 0);
+          if (!eps[i].duracao[0] && runtime > 0 && runtime < 1440) {
+            snprintf(eps[i].duracao, sizeof eps[i].duracao, "%d min", runtime);
+            mudou = 1;
+          }
           if (v > 0.0) { eps[i].nota = (int)(v * 10.0 + 0.5); mudou = 1; }
           // SINOPSE NO IDIOMA ESCOLHIDO (#150). O pedido ja vai com
           // language=desc_tmdb_idioma(), e o `overview` vinha sendo jogado
@@ -5331,6 +5336,12 @@ static int parsearEpisodios(const char *corpo, CatEp *eps, int max) {
       js_texto(p, f, "overview", e->sinopse, sizeof e->sinopse);
       if (!e->sinopse[0]) js_texto(p, f, "description", e->sinopse, sizeof e->sinopse);
       js_texto(p, f, "thumbnail", e->thumb, sizeof e->thumb);
+      js_texto(p, f, "runtime", e->duracao, sizeof e->duracao);
+      if (!e->duracao[0]) {
+        int runtime = (int)js_num(p, f, "runtime", 0);
+        if (runtime > 0 && runtime < 1440)
+          snprintf(e->duracao, sizeof e->duracao, "%d min", runtime);
+      }
       js_texto(p, f, "released", d, sizeof d);
       desc_data_extenso(d, e->data, sizeof e->data);
       n++;
