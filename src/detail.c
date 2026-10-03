@@ -1818,7 +1818,10 @@ static int nBotoesTodos(void) {
          + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0);
 }
 
-static int acoesAgrupadas(void) { return carro || epApple(); }
+static int acoesAgrupadas(void) {
+  return carro || ajustes_home_layout() == HOME_LAYOUT_DINAMICA ||
+         ajustes_home_layout() == HOME_LAYOUT_MODERNA;
+}
 
 static int nBotoes(void) {
   return acoesAgrupadas() && !maisAcoes ? 2 + (temInicio() ? 1 : 0) : nBotoesTodos();

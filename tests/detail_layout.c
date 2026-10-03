@@ -48,6 +48,13 @@ int main(void) {
   e.key.keysym.sym = SDLK_RIGHT; detail_evento(&e);
   e.key.keysym.sym = SDLK_ESCAPE; detail_evento(&e);
   assert(!maisAcoes && !saindo && botao == 0);
+  carro=0; maisAcoes=0; nivel=0; botao=0;
+  assert(ajustes_home_layout()==HOME_LAYOUT_MODERNA);
+  assert(acoesAgrupadas() && nBotoes()==2);
+  e.type=SDL_KEYDOWN; e.key.keysym.sym=SDLK_RIGHT;
+  detail_evento(&e); assert(maisAcoes && acaoEm(botao)==ACAO_LISTA);
+  e.key.keysym.sym=SDLK_ESCAPE; detail_evento(&e);
+  assert(!maisAcoes && !saindo);
   carro=0; pessoaAberta=1; saindo=0;
   e.type=SDL_KEYDOWN; e.key.keysym.sym=SDLK_ESCAPE;
   detail_evento(&e); assert(!pessoaAberta && !saindo);
