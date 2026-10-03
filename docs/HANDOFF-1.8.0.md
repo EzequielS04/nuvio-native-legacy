@@ -16,7 +16,6 @@ A 1.8.0 precisa das duas linhas: primeiro trazer o master para dentro do Glass U
 
 Juntar antes da release se ficarem prontos, ou deixar de fora e citar nas notas:
 
-- `agente/escala-telas` (`/private/tmp/nv-esc2`): Biblioteca com topo a max(1,2; Tamanho), barra de segurar OK no cartão da Biblioteca, Spotlight a max(1,3; Tamanho) com a lista de resultados descendo até perto do fim da tela, helper `ESCALA_MIN_*` em `escala.h`.
 - `agente/codex-ajustes-arte` (`/private/tmp/nv-codex-aj`, merge `6cdc8517`): ilustrações das categorias dos Ajustes, toggles animados, barras crescendo na horizontal. **Aguarda decisão do dono** (esqueleto cinza x arte real do catálogo). Não juntar sem ok.
 - `agente/codex-contexto` (`/private/tmp/nv-codex-ctx`): só documentação (`docs/glass-ui-contexto.md`).
 
