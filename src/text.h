@@ -107,6 +107,8 @@ typedef enum {
   TXT_G30B,   // "T1 E3" do OSD                   30 / 600
   TXT_G30M,   // "· The Head" do OSD              30 / 500
   TXT_G52B,   // programa no OSD do canal         52 / 700
+  TXT_G28R,   // "Você está na" do cartao da atualizacao (mockup 26/400; a
+              // InterDisplay e ~9% mais estreita que a Inter do navegador)
   TXT_NFONTES
 } TxtEstilo;
 
