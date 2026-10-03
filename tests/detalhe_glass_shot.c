@@ -141,7 +141,7 @@ int fx_colecao_nota(int i) { return 70 + i * 5; }
 static const char *const EST_NOME[] = { "20th Century Studios", "Wendy Finerman Productions", "Fox 2000" };
 int fx_n_estudios(void)       { return 3; }
 const char *fx_estudio_nome(int i) { return EST_NOME[i]; }
-const char *fx_estudio_logo(int i) { (void)i; return ""; }
+const char *fx_estudio_logo(int i) { static const char *const L[] = { "deploy/app/art/logo/00.png", "deploy/app/art/logo/07.png", "" }; return L[i]; }
 
 static const char *const TR_NOME[] = { "Trailer oficial", "Teaser", "Por trás das câmeras", "Entrevista com o elenco" };
 static const char *const TR_MINI[] = { A "07.jpg", A "13.jpg", A "30.jpg", A "22.jpg" };
