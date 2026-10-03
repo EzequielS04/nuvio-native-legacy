@@ -171,8 +171,6 @@ int main(int argc, char **argv) {
   fil_remover(12);  // Animes
 
   ajustes_iniciar();
-  // NUVIO_TAMANHO_UI=1.2|1.3|1.5: o "Tamanho da interface" (escala.h).
-  if (getenv("NUVIO_TAMANHO_UI")) gfx_escala_ui_definir((float)atof(getenv("NUVIO_TAMANHO_UI")));
   // NUVIO_SHOT_TEMA=<indice> (0 branco, 12 Dinamica) e NUVIO_SHOT_VIDRO=1: o
   // foco no acento claro com e sem vidro (#202).
   if (getenv("NUVIO_SHOT_TEMA") || getenv("NUVIO_SHOT_VIDRO"))

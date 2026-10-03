@@ -81,7 +81,8 @@ void gfx_tamanho_alvo(int w, int h) { telaW = w; telaH = h; }
 // As passadas internas de tela cheia (luz assada, snapshot, desfoques) desligam
 // o fator: elas falam em tela real, nao em layout de camada.
 static float escUi = 1.0f, escAtiva = 1.0f, miniEscAnt = 1.0f;
-void gfx_escala_ui_definir(float s) { escUi = (s >= 1.0f && s <= 2.0f) ? s : 1.0f; }
+static int escUiFixa;   // NUVIO_TAMANHO_UI (capturas): Ajustes nao sobrescreve
+void gfx_escala_ui_definir(float s) { if (!escUiFixa) escUi = (s >= 1.0f && s <= 2.0f) ? s : 1.0f; }
 float gfx_escala_ui(void) { return escUi; }
 float gfx_escala(void) { return escAtiva; }
 float gfx_escala_entrar(void) { float a = escAtiva; escAtiva = escUi; return a; }
@@ -1205,7 +1206,7 @@ int gfx_iniciar(void) {
   GLuint vs = compila(GL_VERTEX_SHADER, VS);
   // Capturas (tests/*_shot): NUVIO_TAMANHO_UI=1.2 liga o "Tamanho da
   // interface" sem passar por Ajustes. No app quem define e ajustes.c.
-  { const char *t = getenv("NUVIO_TAMANHO_UI"); if (t && *t) gfx_escala_ui_definir((float)atof(t)); }
+  { const char *t = getenv("NUVIO_TAMANHO_UI"); if (t && *t) { gfx_escala_ui_definir((float)atof(t)); escUiFixa = 1; } }
   char fonte[12000];   // cabeca + sdf/cover + corpo; o maior (camadas) passa de 6000
   for (int m = 0; m < GFX_NMODOS; m++) {
     snprintf(fonte, sizeof fonte, "%s%s%s%s", FS_CABECA,
