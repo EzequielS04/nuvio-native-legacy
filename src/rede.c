@@ -207,6 +207,9 @@ void rede_avisar_401(void (*f)(const char *url)) { aviso401 = f; }
 // Ouvinte da saude da rede — ver rede_avisar_saude no cabecalho.
 static void (*avisoSaude)(int codigo, const char *url);
 void rede_avisar_saude(void (*f)(int codigo, const char *url)) { avisoSaude = f; }
+// Ouvinte do pedido por host (o painel de registro, aba Rede) — ver rede.h.
+static void (*avisoHost)(const char *url, int codigo, int http, unsigned ms);
+void rede_avisar_host(void (*f)(const char *url, int codigo, int http, unsigned ms)) { avisoHost = f; }
 
 static char *pedir2(const char *metodo, const char *url, const char *const *cab,
                     const char *extraCab, const char *corpo,
@@ -224,6 +227,7 @@ static char *pedir2(const char *metodo, const char *url, const char *const *cab,
   // XHR sem status e sem corpo = nao houve resposta (rede, DNS, CORS): para a
   // saude da rede e o "6" do curl. Qualquer status e transporte que funcionou.
   if (avisoSaude) avisoSaude(corpoResp || http ? 0 : 6, url);
+  if (avisoHost) avisoHost(url, corpoResp || http ? 0 : 6, http, 0);
   if (http == 401 && aviso401) aviso401(url);
   if (!corpoResp) { char seg[120];
     printf("[rede] falhou em %s\n", rede_url_publica(url, seg, sizeof seg));
@@ -570,6 +574,8 @@ static _Thread_local int redeParcialOk;
 #define OPT_CUSTOMREQUEST   10036
 // CURLINFO_RESPONSE_CODE = CURLINFO_LONG (0x200000) + 2.
 #define INFO_RESPONSE_CODE   2097154
+// CURLINFO_TOTAL_TIME = CURLINFO_DOUBLE (0x300000) + 3: segundos do pedido.
+#define INFO_TEMPO_TOTAL     3145731
 // Cabecalhos de RESPOSTA. So rede_baixar_etag os pede; ver a nota la.
 #define OPT_HEADERFUNCTION  20079
 #define OPT_HEADERDATA      10029
@@ -599,6 +605,9 @@ void rede_avisar_401(void (*f)(const char *url)) { aviso401 = f; }
 // Ouvinte da saude da rede — ver rede_avisar_saude no cabecalho.
 static void (*avisoSaude)(int codigo, const char *url);
 void rede_avisar_saude(void (*f)(int codigo, const char *url)) { avisoSaude = f; }
+// Ouvinte do pedido por host (o painel de registro, aba Rede) — ver rede.h.
+static void (*avisoHost)(const char *url, int codigo, int http, unsigned ms);
+void rede_avisar_host(void (*f)(const char *url, int codigo, int http, unsigned ms)) { avisoHost = f; }
 
 static void *(*curl_init)(void);
 static int   (*curl_setopt)(void *, int, ...);
@@ -742,6 +751,12 @@ static void soltarHandleR(void *c, int r, const char *url) {
   // TODO pedido da libcurl passa por aqui com o CURLcode: e o ponto unico da
   // saude da rede (redesaude.h decide o que e transporte).
   if (avisoSaude) avisoSaude(r, url);
+  if (avisoHost) {
+    long http = 0;
+    double seg = 0;
+    if (curl_getinfo) { curl_getinfo(c, INFO_RESPONSE_CODE, &http); curl_getinfo(c, INFO_TEMPO_TOTAL, &seg); }
+    avisoHost(url, r, (int)http, seg > 0 ? (unsigned)(seg * 1000.0 + 0.5) : 0u);
+  }
   if (!curl_reset) { curl_cleanup(c); return; }
   if (r != 0) {
     curl_cleanup(c);

@@ -922,6 +922,7 @@ static void desenharCartao(const IlhaCartao *c, int qual, GfxRect r, float a) {
 #define MD_W      1120.0f
 #define MD_H       414.0f
 #define MD_PAD      32.0f
+#define MC_W       880.0f   // modal com cabecalho (layoutModalCabecalho)
 #define MD_ARTE_W  480.0f
 #define MD_ARTE_H  270.0f
 #define MD_RAIO     30.0f
@@ -929,7 +930,8 @@ static void desenharCartao(const IlhaCartao *c, int qual, GfxRect r, float a) {
 #define MD_LOGO_H   80.0f
 
 static GfxRect modalAlvo(GfxRect p, int dir) {
-  GfxRect m = { dir ? p.x + p.w - MD_W : p.x, p.y, MD_W, modalAviso ? modalAvisoH : MD_H };
+  float mw = modalAviso && modalM.cabecalho ? MC_W : MD_W;
+  GfxRect m = { dir ? p.x + p.w - mw : p.x, p.y, mw, modalAviso ? modalAvisoH : MD_H };
   if (m.x + m.w > NV_TELA_W - 40.0f) m.x = NV_TELA_W - 40.0f - m.w;
   if (m.x < 40.0f) m.x = 40.0f;
   return m;
@@ -945,8 +947,62 @@ static GfxRect modalAlvo(GfxRect p, int dir) {
 // vez por abertura (desenha = 0) antes da mola, para a pilula crescer direto
 // para o tamanho certo.
 #define MG_LADO   150.0f
+// A variante com cabecalho (IlhaModal.cabecalho): a ilha do relogio crescida.
+static float layoutModalCabecalho(GfxRect m, float a, int desenha) {
+  const IlhaModal *c = &modalM;
+  float x = m.x + 36.0f, cw = m.w - 80.0f, y = m.y, th, by;
+  float ad = desenha ? a : 0.0f;
+  int i;
+  th = txt_bloco_corta(TXT_AJ_TEXTO, c->texto, 0, 0, 0, x, -4000, cw, 30.0f, 0.0f, 3);
+  if (desenha) {
+    float cr, cg, cb, hx = m.x + 28.0f;
+    char hora[16];
+    time_t tt = time(NULL);
+    struct tm tmv;
+    localtime_r(&tt, &tmv);
+    snprintf(hora, sizeof hora, "%02d:%02d", tmv.tm_hour, tmv.tm_min);
+    corDoTipo(c->tipo == ILHA_ERRO ? ILHA_ERRO : ILHA_ACENTO, &cr, &cg, &cb);
+    if (c->icone[0]) {
+      gfx_icone((GfxRect){ hx, y + 20.0f, 24.0f, 24.0f }, c->icone, cr, cg, cb, ad);
+      hx += 24.0f + 12.0f;
+    }
+    if (c->kicker[0]) {
+      TxtLinha k = txt_linha(TXT_ILHA_NOME, c->kicker, 243, 242, 239, 255);
+      txt_desenhar_alpha(k, hx, y + 32.0f - (float)k.h * 0.5f, ad);
+      hx += (float)k.w + 12.0f;
+      gfx_cor((GfxRect){ hx, y + 21.0f, 1.0f, 22.0f }, 0, 1, 1, 1, 0.18f * ad);
+      hx += 1.0f + 12.0f;
+    }
+    { TxtLinha h = txt_linha(TXT_ILHA_NOME, hora, 243, 242, 239, 255);
+      txt_desenhar_alpha(h, hx, y + 32.0f - (float)h.h * 0.5f, ad); }
+    gfx_cor((GfxRect){ m.x, y + 63.0f, m.w, 1.0f }, 0, 1, 1, 1, 0.07f * ad);
+  }
+  y += 64.0f + 26.0f;
+  { TxtLinha t = txt_linha_corta(TXT_LOG_T34, c->titulo, 243, 242, 239, 255, cw);
+    if (desenha) txt_desenhar_alpha(t, x, y, ad);
+    y += 41.0f + 14.0f; }
+  if (desenha) txt_bloco_corta(TXT_AJ_TEXTO, c->texto, 243, 242, 239, x, y, cw, 30.0f, 0.62f * ad, 3);
+  y += th + 28.0f;
+  by = y;
+  if (!desenha) return by + 60.0f + 32.0f - m.y;
+  if (a > 0.3f) {
+    ponteiro_camada();
+    ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, pontFora, 0, 0);
+    ponteiro_alvo(m.x, m.y, m.w, m.h, NULL, NULL, 0, 0);
+  }
+  { float bx = x;
+    for (i = 0; i < nBotoes(); i++) {
+      const char *rot = rotuloBotao(i), *ic = iconeBotao(i);
+      float w = plrui_botao_largura(rot, ic);
+      plrui_botao(bx, by, rot, ic, modalFocoA[i], a);
+      if (a > 0.3f) ponteiro_alvo(bx, by, w, 60.0f, pontFoco, NULL, i, 0);
+      bx += w + BOTAO_GAP;
+    } }
+  return by + 60.0f + 32.0f - m.y;
+}
 static float layoutModalAviso(GfxRect m, float a, int desenha) {
   const IlhaModal *c = &modalM;
+  if (c->cabecalho) return layoutModalCabecalho(m, a, desenha);
   float ax = m.x + MD_PAD, ay = m.y + MD_PAD;
   int arte = c->arte[0] != 0, rosto = !arte && (c->rosto[0] || c->rostoNome[0]);
   int tile = !arte && !rosto && c->icone[0];
@@ -1362,7 +1418,7 @@ void ilha_desenhar(Uint32 agora) {
     // Linha que o orcamento de texto do quadro recusou mede 0: mede de novo
     // no quadro seguinte, senao o modal nasceria curto para sempre.
     int antes = txt_pendentes;
-    modalAvisoH = layoutModalAviso((GfxRect){ 0, 0, MD_W, MD_H }, 0.0f, 0);
+    modalAvisoH = layoutModalAviso((GfxRect){ 0, 0, modalM.cabecalho ? MC_W : MD_W, MD_H }, 0.0f, 0);
     modalAvisoMedido = txt_pendentes == antes;
   }
   alvo = temCur ? M_AVISO : atividadeViva(agora) ? M_ATIVIDADE

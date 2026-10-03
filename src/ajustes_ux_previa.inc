@@ -661,6 +661,10 @@ static float ajPrevia(int op, float x, float y, float w) {
     case AJ_TEMA: case AJ_COR_LOGO: return ajPreviaCor(x, y, w);
     case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: return ajPreviaPlayer(x, y, w);
     case AJ_TRAKT: case AJ_SIMKL: return ajPreviaServico(op, x, y, w);
+    // O fim do log de verdade, no mesmo mono do painel (mockup quadro 7).
+    case AJ_ENVIAR_LOG: case AJ_VER_REGISTRO: case AJ_ENVIO_AUTO:
+      registro_pacote(x, y, w, 300, 9, i18n("últimos 200 KB"), 1);
+      return 300;
     default: break;
   }
   switch ((int)familiaPreviaOpcao(op)) {

@@ -10,6 +10,7 @@
 // e-mail, IP. A identidade e um identificador estavel e um nome de exibicao.
 
 import { rotaXtream } from "./xtream.js";
+import { codigoRegistro } from "./codigo.js";
 import { rotaTrailerImdb, rotaTrailerYoutube } from "./trailer.js";
 import { rotaNoticia, rotaNoticiaImg } from "./noticia.js";
 import { rotaAmigos, limpezaAmigos, despublicar, garantirPerfil, avatarPublico, limitar } from "./amigos.js";
@@ -559,6 +560,7 @@ async function rotaVisto(env, quem, corpo) {
 // sem credencial (rede_url_publica no cliente) e e cortado aqui em 200 KB de
 // qualquer jeito; fica 30 dias e sai na limpeza diaria.
 const REGISTRO_MAX = 200 * 1024;
+// codigoRegistro (o codigo de seis caracteres do recibo): ver src/codigo.js.
 const REGISTRO_RETENCAO = 30 * 24 * 3600;
 async function rotaRegistro(env, quem, corpo) {
   const versao = String(corpo?.versao || "").slice(0, 32);
@@ -574,6 +576,7 @@ async function rotaRegistro(env, quem, corpo) {
   // registro dizia "HTTP 200 (sem recibo desta execucao)" com o envio feito.
   // execucao_id volta ecoado para a TV casar o recibo com a execucao dela.
   const recibo = { ok: 1, bytes: texto.length, registro_id: res?.meta?.last_row_id ?? null };
+  if (recibo.registro_id != null) recibo.codigo = codigoRegistro(recibo.registro_id);
   const exec = String(corpo?.execucao_id ?? "").replace(/[^\w-]/g, "").slice(0, 64);
   if (exec) recibo.execucao_id = exec;
   return json(recibo);

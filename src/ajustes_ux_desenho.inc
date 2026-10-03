@@ -535,6 +535,17 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
       gfx_cor((GfxRect){ rx + 12, tyc - 3.5f, 7, 7 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.45f * aT);
       rx += 19;
     }
+    // "NOVO" no acento (e estado) ate a pessoa abrir o registro uma vez.
+    if (op == AJ_VER_REGISTRO && !registro_ja_aberto()) {
+      int r8, g8, b8;
+      float w = ajCaps(TXT_AJ_CAPS13, "Novo", 1.56f, -1, 0, 0);
+      ajAcento8(&r8, &g8, &b8);
+      if (rx + 16 + w < tx + maxW) {
+        char up[40];
+        idioma_maiusc_em(ajustes_idioma(), up, sizeof up, i18n("Novo"));
+        txt_tracking(TXT_AJ_CAPS13, up, r8, g8, b8, rx + 16, tyc - 8, aT, 1.56f);
+      }
+    }
     if (uxAvancada(op)) {
       float w = ajCaps(TXT_AJ_CAPS13, "Avançado", 1.56f, -1, 0, 0);
       if (rx + 16 + w < tx + maxW) ajCaps(TXT_AJ_CAPS13, "Avançado", 1.56f, rx + 16, tyc - 8, 0.38f * aT);
@@ -598,7 +609,7 @@ static void ajDesenharGrupo(int item, float y, float a) {
   if (a <= 0.004f) return;
   snprintf(q, sizeof q, "%d", ajContaGrupo(item));
   t = ajTxt(TXT_AJ_SECAO, TELA[item].titulo);
-  c = ajTxt(TXT_ILHA_GENERO, q);
+  c = ajTxt(TXT_ILHA_GENERO, TELA[item].sub ? TELA[item].sub : q);
   txt_desenhar_alpha(t, x + 22, y + 14 - t.h * 0.5f + 0.0f, a);
   txt_desenhar_alpha(c, x + w - 22 - c.w, y + 16 - c.h * 0.5f, 0.38f * a);
   gfx_cor((GfxRect){ x, y + 37, w, 1 }, 0, 1, 1, 1, 0.08f * a);

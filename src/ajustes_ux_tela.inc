@@ -103,11 +103,13 @@ static const Item TELA[] = {
 #if defined(NV_TPK) || defined(NV_ANDROID)
     OPC(AJ_GPU_EFEITOS),
 #endif
-    OPC(AJ_NAV_RAPIDA), OPC(AJ_DIAGNOSTICO), OPC(AJ_VELOCIDADE), OPC(AJ_ESPACO),
+    OPC(AJ_NAV_RAPIDA), OPC(AJ_MEDIDOR), OPC(AJ_DIAGNOSTICO), OPC(AJ_VELOCIDADE), OPC(AJ_ESPACO),
     OPC(AJ_TEX_MB),
 
   SEC("Sobre e ajuda", "Versão, atualização e envio de registros", "aj_info"),
-    OPC(AJ_VERSAO_I), OPC(AJ_ATUALIZAR), OPC(AJ_ENVIAR_LOG), OPC(AJ_ENVIO_AUTO),
+    ROTS("App", ""), OPC(AJ_VERSAO_I), OPC(AJ_ATUALIZAR),
+    ROTS("Registro", "para quem faz o app"),
+      OPC(AJ_VER_REGISTRO), OPC(AJ_ENVIAR_LOG), OPC(AJ_ENVIO_AUTO),
 };
 #define AJ_N_TELA (int)(sizeof TELA / sizeof *TELA)
 #define AJ_MAX_SECOES 16

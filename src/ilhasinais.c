@@ -23,7 +23,7 @@ static int pediuTrakt;
 static char pedidoPub[REC_PEDIDOS_MAX][16];
 static int nPedidoVisto;
 
-void ilhasinais_iniciar(void) { rede_avisar_saude(rede_saude_nota); }
+void ilhasinais_iniciar(void) { rede_avisar_saude(rede_saude_nota); rede_avisar_host(rede_hosts_nota); }
 
 int ilhasinais_pediu_trakt(void) { int p = pediuTrakt; pediuTrakt = 0; return p; }
 

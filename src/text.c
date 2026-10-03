@@ -65,6 +65,12 @@ static char           caminhoPeso[TXT_FAMILIA_N][3][512];
 // compartilhado, a fonte nao pode fecha-lo) e alguem tem de fechar em
 // txt_encerrar.
 static SDL_RWops     *rwFonte[TXT_FAMILIA_N][TXT_NFONTES];
+// A JetBrains Mono do registro (PESO_MONO_R/B): dois arquivos lidos uma vez, na
+// primeira familia que abrir um estilo TXT_MONO*, e vivos ate txt_encerrar.
+static char           caminhoMono[2][512];
+static unsigned char *bytesMono[2];
+static size_t         tamMono[2];
+static int            monoTentada[2];
 
 // Le o arquivo inteiro para um buffer novo. NULL se nao abrir.
 static unsigned char *lerTudo(const char *caminho, size_t *tam) {
@@ -193,7 +199,13 @@ int    txt_pendentes = 0;
 // Sao dois destinos diferentes para o mesmo 600 de propósito, e nao um
 // descuido — sem a regra escrita aqui, a proxima pessoa "conserta" um dos dois
 // e desalinha a tela.
-enum { PESO_REGULAR, PESO_MEDIUM, PESO_BOLD };
+enum { PESO_REGULAR, PESO_MEDIUM, PESO_BOLD,
+       // A MONO DO REGISTRO (JetBrains Mono, OFL, fonts/JetBrainsMonoNL-*.ttf, a variante SEM ligaduras: o "->" do log tem de sair como dois caracteres).
+       // Nao e uma familia escolhivel: e a mesma em toda familia, porque so as
+       // linhas do log a usam e uma coluna de log so alinha em monoespacada.
+       // Sem o arquivo, o estilo cai no Regular/Bold da familia (ver
+       // carregarFamilia) — o texto continua legivel, so desalinha.
+       PESO_MONO_R, PESO_MONO_B };
 static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { NV_FT_TITULO1,  PESO_BOLD   },   // titulo do filme na tela de detalhe
   // ERA PESO_REGULAR, pelo cabecalho espacado da pagina de titulo do app da
@@ -312,6 +324,21 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 30, PESO_BOLD    },   // TXT_G30B
   { 30, PESO_MEDIUM  },   // TXT_G30M
   { 52, PESO_BOLD    },   // TXT_G52B
+  // Registro do app (text.h, TXT_MONO* e TXT_LOG*), na mesma ordem do enum.
+  { 18, PESO_MONO_R  },   // TXT_MONO18
+  { 18, PESO_MONO_B  },   // TXT_MONO18B
+  { 16, PESO_MONO_R  },   // TXT_MONO16
+  { 15, PESO_MONO_R  },   // TXT_MONO15
+  { 14, PESO_MONO_R  },   // TXT_MONO14
+  { 13, PESO_MONO_R  },   // TXT_MONO13
+  { 19, PESO_MONO_R  },   // TXT_MONO19
+  { 44, PESO_BOLD    },   // TXT_LOG_N44
+  { 35, PESO_BOLD    },   // TXT_LOG_T34 (34 no CSS; a InterDisplay e mais estreita)
+  { 88, PESO_BOLD    },   // TXT_LOG_COD
+  { 19, PESO_BOLD    },   // TXT_LOG_19B
+  { 18, PESO_BOLD    },   // TXT_LOG_18B
+  { 14, PESO_MONO_B  },   // TXT_MONO14B
+  { 31, PESO_BOLD    },   // TXT_LOG_T31
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.
@@ -711,8 +738,20 @@ static int carregarFamilia(TxtFamilia familia) {
   }
   for (int i = 0; i < TXT_NFONTES; i++) {
     int peso = ESTILOS[i].peso;
-    SDL_RWops *rw = SDL_RWFromConstMem(bytesPeso[familia][peso],
-                                       (int)tamPeso[familia][peso]);
+    const unsigned char *buf;
+    size_t tam;
+    SDL_RWops *rw;
+    if (peso >= PESO_MONO_R) {
+      int m = peso - PESO_MONO_R;
+      if (!monoTentada[m]) {
+        monoTentada[m] = 1;
+        bytesMono[m] = lerTudo(caminhoMono[m], &tamMono[m]);
+        if (!bytesMono[m]) printf("fonte mono indisponivel: %s\n", caminhoMono[m]);
+      }
+      if (bytesMono[m]) { buf = bytesMono[m]; tam = tamMono[m]; }
+      else { peso = m ? PESO_BOLD : PESO_REGULAR; buf = bytesPeso[familia][peso]; tam = tamPeso[familia][peso]; }
+    } else { buf = bytesPeso[familia][peso]; tam = tamPeso[familia][peso]; }
+    rw = SDL_RWFromConstMem(buf, (int)tam);
     fontes[familia][i] = rw
       ? TTF_OpenFontRW(rw, 0, (int)(ESTILOS[i].corpo * escalaTxt + 0.5f))
       : NULL;
@@ -758,6 +797,8 @@ int txt_iniciar(const char *dirRecursos, float escala) {
   snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][0], 512, "%sfonts/AtkinsonHyperlegibleNext-Regular.ttf", base);
   snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][1], 512, "%sfonts/AtkinsonHyperlegibleNext-Medium.ttf", base);
   snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][2], 512, "%sfonts/AtkinsonHyperlegibleNext-Bold.ttf", base);
+  snprintf(caminhoMono[0], 512, "%sfonts/JetBrainsMonoNL-Regular.ttf", base);
+  snprintf(caminhoMono[1], 512, "%sfonts/JetBrainsMonoNL-SemiBold.ttf", base);
 #ifdef NV_ANDROID
   // Android: nao ha LG_Display nem /usr/share/fonts. A "LG" vira Roboto do
   // sistema e a "Droid" a DroidSans (so nas versoes antigas) ou Roboto.
@@ -877,6 +918,7 @@ void txt_encerrar(void) {
   memset(familiaTentada, 0, sizeof familiaTentada);
   memset(avisoFallback, 0, sizeof avisoFallback);
   memset(caminhoReserva, 0, sizeof caminhoReserva);
+  for (int m = 0; m < 2; m++) { free(bytesMono[m]); bytesMono[m] = NULL; tamMono[m] = 0; monoTentada[m] = 0; }
   TTF_Quit();
 }
 

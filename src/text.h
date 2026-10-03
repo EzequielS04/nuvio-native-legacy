@@ -107,6 +107,26 @@ typedef enum {
   TXT_G30B,   // "T1 E3" do OSD                   30 / 600
   TXT_G30M,   // "· The Head" do OSD              30 / 500
   TXT_G52B,   // programa no OSD do canal         52 / 700
+  // REGISTRO DO APP NO GLASS UI (logs-mockup.html, 03/10). TXT_MONO* sao a
+  // JetBrains Mono embarcada (fonts/JetBrainsMonoNL-*.ttf, a variante SEM ligaduras: o "->" do log tem de sair como dois caracteres): SO as linhas do log
+  // e o que a pessoa digita/le como codigo usam. Sem o arquivo, caem na fonte
+  // da interface. Os corpos sao os do CSS: a mono e a mesma fonte do mockup,
+  // entao nao leva o +8% da InterDisplay. TXT_LOG* sao os corpos Inter que a
+  // escala acima nao tinha. No FIM do enum, como manda o TXT_RANK_GRANDE.
+  TXT_MONO18,   // linha do log (.lgl)              18 / 400
+  TXT_MONO18B,  // numero da linha "quadros"        18 / 600
+  TXT_MONO16,   // area do log (.ar 15,5/500), host 16 / 400
+  TXT_MONO15,   // tempo da etapa, linha [tv]       15 / 400
+  TXT_MONO14,   // log no pacote (.pacote .lgl)     14 / 400
+  TXT_MONO13,   // area no pacote, etiquetas [tex]  13 / 400
+  TXT_MONO19,   // comando no painel vazio          19 / 400
+  TXT_LOG_N44,  // fps no inspetor                  44 / 800
+  TXT_LOG_T34,  // titulo do vazio e das dicas      34 / 700
+  TXT_LOG_COD,  // codigo do registro (ladrilhos)   88 / 800
+  TXT_LOG_19B,  // chip "Enviar agora", contagem    18 / 600
+  TXT_LOG_18B,  // numero forte no medidor          17 / 600
+  TXT_MONO14B,  // numero da linha "quadros" no pacote 14 / 600
+  TXT_LOG_T31,  // "Registro do app" ao lado do relogio 30 / 700
   TXT_NFONTES
 } TxtEstilo;
 

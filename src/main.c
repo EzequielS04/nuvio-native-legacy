@@ -52,6 +52,7 @@
 #include "simklauth.h"
 #include "app.h"
 #include "registro.h"
+#include "desempenho.h"
 #include "atualizacao.h"
 #include "avisos.h"
 #include "seguro.h"
@@ -1321,6 +1322,10 @@ int main(int argc, char **argv) {
              tex_cache_disco_bytes() / 1048576.0,
              rssMB(),
              dados_persistente() ? "" : "  <<< SEM PERSISTENCIA");
+      // O medidor de desempenho na tela (desempenho.h) le os mesmos numeros.
+      desempenho_amostra((float)(quadros * 1000.0 / (double)(agora - ultRelato)), (float)pior, janks,
+                         quentes, (float)(bytesQ / 1048576.0), pend, tex_despejos, tex_despejos_quentes,
+                         (float)rssMB());
       avisos_sinal(NULL, (float)rssMB());   // batida: no maximo 1 a cada 60 s
       seguro_batida(SDL_GetTicks() / 1000); // confirma mudancas arriscadas depois de 3 min
       corviva_gravar_se_preciso(0);          // corviva.txt: no maximo 1 a cada 20 s

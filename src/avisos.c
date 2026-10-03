@@ -16,6 +16,8 @@
 #include "atualizacao.h"
 #include "salvosintro.h"
 #include "registro.h"
+#include "regcodigo.h"
+#include "redesaude.h"
 #include <math.h>
 #include "agenda.h"
 #include "catalogo.h"
@@ -132,6 +134,17 @@ static void lerLogAnterior(void) {
 }
 #endif
 static int   envioEstado;       // 0 nada, 1 enviando, 2 ok, 3 falhou
+// O RECIBO E O MOTIVO do ultimo envio MANUAL (o automatico so atualiza
+// envAuto*): o painel de envio do registro (registro.c) mostra o codigo, o
+// HTTP, o tamanho e, na falha, por que falhou — servidor, TV sem internet ou
+// prazo. Escritos pelo fio de envio, lidos pelo de desenho; inteiros e
+// strings curtas atras de `trava`.
+static int    envMotivo, envHttp, envLinhas, envPendenteRede;
+static long   envBytes;
+static time_t envQuando, envAutoQuando;
+static int    envAutoHttp;
+static char   envCodigo[8];
+static Uint32 envAutoProximo;
 static pthread_t fioEnvio;
 
 // O CARTAO DO CRASH, na reabertura: uma pergunta, dois botoes. Abre uma vez
@@ -454,7 +467,8 @@ static void *enviarRegistro(void *u) {
     } }
 #endif
   if (!idHead(cab, aut, sizeof aut, via, sizeof via, chave, sizeof chave)) {
-    free(texto); envioEstado = 3; return NULL;
+    if (!automatico) { pthread_mutex_lock(&trava); envMotivo = AVISOS_ENVIO_CONTA; envHttp = 0; pthread_mutex_unlock(&trava); }
+    free(texto); envioEstado = automatico ? 0 : 3; return NULL;
   }
   corpo = malloc(nTexto * 2 + 512);
   if (!corpo) { free(texto); envioEstado = 3; return NULL; }
@@ -479,10 +493,48 @@ static void *enviarRegistro(void *u) {
              u == &AUTO_ANTERIOR ? agoraTextoAuto("anterior") :
              manual ? agoraTexto() : crashQuando, esc);
     free(esc); }
+  { long linhas = 0; size_t k;
+    for (k = 0; texto && k < nTexto; k++) if (texto[k] == '\n') linhas++;
+    if (!automatico) { pthread_mutex_lock(&trava); envBytes = (long)nTexto; envLinhas = (int)linhas; pthread_mutex_unlock(&trava); } }
   free(texto);
   { char url[300];
+    Uint32 t0 = SDL_GetTicks();
     snprintf(url, sizeof url, "%s/v1/registro", NV_REC_URL);
-    resp = rede_postar_st(url, 30, cab, corpo, &status); }
+    resp = rede_postar_st(url, 30, cab, corpo, &status);
+    if (!automatico) {
+      char id[32], cod[8] = "";
+      int ok = status >= 200 && status < 300;
+      // O codigo: o do recibo quando o servidor ja manda ("codigo"), senao o
+      // derivado do registro_id (regcodigo.h) — os dois dao o mesmo.
+      if (ok && resp) {
+        const char *c = strstr(resp, "\"codigo\"");
+        if (c && (c = strchr(c, ':')) != NULL) {
+          int j = 0;
+          c++;
+          while (*c == ' ' || *c == '"') c++;
+          while (j < 6 && ((*c >= '0' && *c <= '9') || (*c >= 'A' && *c <= 'Z'))) cod[j++] = *c++;
+          cod[j] = 0;
+          if (j != 6) cod[0] = 0;
+        }
+        if (!cod[0] && extrairRegistroId(resp, id, sizeof id)) regcodigo_de_id(id, cod);
+      }
+      pthread_mutex_lock(&trava);
+      envHttp = status;
+      snprintf(envCodigo, sizeof envCodigo, "%s", cod);
+      envMotivo = ok ? AVISOS_ENVIO_OK
+                : status > 0 ? AVISOS_ENVIO_SERVIDOR
+                : rede_saude_offline() ? AVISOS_ENVIO_OFFLINE
+                : SDL_GetTicks() - t0 >= 29000u ? AVISOS_ENVIO_PRAZO : AVISOS_ENVIO_CONEXAO;
+      envPendenteRede = envMotivo == AVISOS_ENVIO_OFFLINE;
+      pthread_mutex_unlock(&trava);
+      if (cod[0]) {
+        char linha[48];
+        snprintf(linha, sizeof linha, "%s %ld\n", cod, (long)time(NULL));
+        dados_gravar("registro-codigo.txt", linha);
+      }
+    } else {
+      pthread_mutex_lock(&trava); envAutoQuando = time(NULL); envAutoHttp = status; pthread_mutex_unlock(&trava);
+    } }
   free(corpo);
   free(resp);
   envioEstado = automatico ? 0 : (status >= 200 && status < 300) ? 2 : 3;
@@ -970,11 +1022,15 @@ static void anunciarItem(const Aviso *it) {
       if (ajustes_envio_auto()) return;
       snprintf(txt, sizeof txt, "%s", i18n("O app fechou sozinho da última vez"));
       e.tipo = ILHA_ERRO; e.prior = ILHA_P2; e.icone = "aj_triangle-alert"; e.ms = 9000u;
-      snprintf(m.titulo, sizeof m.titulo, "%s", it->titulo);
+      // O titulo do modal e a frase inteira (mockup do registro, quadro 14).
+      snprintf(m.titulo, sizeof m.titulo, "%s", txt);
       snprintf(m.texto, sizeof m.texto, "%s", it->texto);
       snprintf(m.icone, sizeof m.icone, "aj_triangle-alert");
       m.tipo = ILHA_ERRO; m.nBotoes = 2;
       snprintf(m.botao[0], sizeof m.botao[0], "%s", i18n("Enviar registro"));
+      snprintf(m.botaoIcone[0], sizeof m.botaoIcone[0], "aj_send");
+      snprintf(m.kicker, sizeof m.kicker, "%s", i18n("Aviso"));
+      m.cabecalho = 1;
       snprintf(m.botao[1], sizeof m.botao[1], "%s", i18n("Agora não"));
       e.modal = &m;
       break;
@@ -1304,6 +1360,14 @@ static void lerLogAtual(void) {
 void avisos_envio_auto_passo(Uint32 agora) {
   static int anteriorFeito;
   static Uint32 proximo;
+  // "O registro fica guardado e sai assim que a rede voltar" (painel de envio,
+  // TV sem internet): o envio manual que caiu por falta de rede sai sozinho
+  // no primeiro quadro com a rede de volta, com ou sem o envio automatico.
+  if (envPendenteRede && envioEstado != 1 && !rede_saude_offline()) {
+    envPendenteRede = 0;
+    avisos_enviar_registro_atual();
+    return;
+  }
   if (!ajustes_envio_auto() || !NV_REC_URL[0] || envioEstado == 1) return;
   if (!anteriorFeito) {
     anteriorFeito = 1;
@@ -1315,6 +1379,7 @@ void avisos_envio_auto_passo(Uint32 agora) {
 #else
       { FILE *f = fopen(AV_LOG_ANTERIOR, "rb"); tem = f != NULL; if (f) fclose(f); }
 #endif
+    envAutoProximo = proximo;
     if (tem) {
       envioEstado = 1;
       if (pthread_create(&fioEnvio, NULL, enviarRegistro, (void *)&AUTO_ANTERIOR) == 0) pthread_detach(fioEnvio);
@@ -1334,6 +1399,7 @@ void avisos_envio_auto_passo(Uint32 agora) {
 #else
   proximo = agora + 300000;
 #endif
+  envAutoProximo = proximo;
   lerLogAtual();
   fflush(stdout);
   envioEstado = 1;
@@ -1343,7 +1409,21 @@ void avisos_envio_auto_passo(Uint32 agora) {
 
 void avisos_enviar_registro_atual(void) {
   if (envioEstado == 1) return;
-  if (!NV_REC_URL[0]) { envioEstado = 3; return; }
+  envQuando = time(NULL);
+  envCodigo[0] = 0; envHttp = 0;
+  if (!NV_REC_URL[0]) { envMotivo = AVISOS_ENVIO_INDISPONIVEL; envioEstado = 3; return; }
+  // Sem internet (redesaude.h) nem tenta: diz o porque e espera a rede voltar.
+  if (rede_saude_offline()) {
+    envMotivo = AVISOS_ENVIO_OFFLINE; envPendenteRede = 1; envioEstado = 3;
+    { FILE *f; const char *arq = registro_arquivo();
+      envBytes = 0; envLinhas = 0;
+      if (arq && (f = fopen(arq, "rb")) != NULL) {
+        fseek(f, 0, SEEK_END); envBytes = ftell(f); fclose(f);
+        if (envBytes > AV_REGISTRO_MAX) envBytes = AV_REGISTRO_MAX;
+      } }
+    return;
+  }
+  envMotivo = 0; envPendenteRede = 0;
 #ifdef __EMSCRIPTEN__
   // Fio principal: e o unico com localStorage. O shell grava nv-log a cada
   // 10 s, entao o que vai e o log ate a ultima gravacao.
@@ -1366,3 +1446,48 @@ void avisos_enviar_registro_atual(void) {
   if (pthread_create(&fioEnvio, NULL, enviarRegistro, (void *)&ATUAL) == 0) pthread_detach(fioEnvio);
   else envioEstado = 3;
 }
+
+int avisos_envio_info(AvisosEnvio *o) {
+  char *s;
+  memset(o, 0, sizeof *o);
+  o->disponivel = NV_REC_URL[0] != 0;
+  pthread_mutex_lock(&trava);
+  o->estado = envioEstado; o->motivo = envMotivo; o->http = envHttp;
+  o->bytes = envBytes; o->linhas = envLinhas; o->quando = envQuando;
+  o->autoQuando = envAutoQuando; o->autoHttp = envAutoHttp;
+  o->pendenteRede = envPendenteRede;
+  snprintf(o->codigo, sizeof o->codigo, "%s", envCodigo);
+  pthread_mutex_unlock(&trava);
+  o->autoProximoMs = envAutoProximo;
+  s = dados_ler("registro-codigo.txt");
+  if (s) {
+    long t = 0;
+    char c[8] = "";
+    if (sscanf(s, "%7s %ld", c, &t) == 2 && strlen(c) == 6) {
+      snprintf(o->ultimoCodigo, sizeof o->ultimoCodigo, "%s", c);
+      o->ultimoCodigoQuando = (time_t)t;
+    }
+    free(s);
+  }
+  return o->estado;
+}
+
+#ifdef AVISOS_TESTE_ENVIO
+// A queda da sessao anterior na ilha, como o arranque a anunciaria.
+void avisos_teste_queda(const char *texto) {
+  Aviso a;
+  memset(&a, 0, sizeof a);
+  snprintf(a.id, sizeof a.id, "teste:crash");
+  a.tipo = AV_CRASH;
+  snprintf(a.titulo, sizeof a.titulo, "%s", i18n("O app fechou sozinho"));
+  snprintf(a.texto, sizeof a.texto, "%s", texto);
+  anunciarItem(&a);
+}
+void avisos_teste_envio(int estado, int motivo, int http, const char *codigo, long bytes, int linhas) {
+  envioEstado = estado; envMotivo = motivo; envHttp = http; envBytes = bytes; envLinhas = linhas;
+  envQuando = time(NULL);
+  snprintf(envCodigo, sizeof envCodigo, "%s", codigo ? codigo : "");
+  envPendenteRede = motivo == AVISOS_ENVIO_OFFLINE;
+}
+void avisos_teste_envio_auto(long haSeg, int http) { envAutoQuando = time(NULL) - haSeg; envAutoHttp = http; envAutoProximo = SDL_GetTicks() + 240000u; }
+#endif

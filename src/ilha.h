@@ -80,6 +80,10 @@ typedef struct {
   int  nBotoes;
   char botao[ILHA_MODAL_BOTOES][40];       // rotulo JA traduzido
   char botaoIcone[ILHA_MODAL_BOTOES][32];  // "" = sem icone
+  // A ILHA DO RELOGIO CRESCIDA (mockup do registro, quadro 14): 880 de largura,
+  // cabecalho de 64 com o icone, o `kicker` e a hora, e embaixo titulo, texto
+  // e botoes, sem ladrilho. A queda da sessao anterior usa.
+  int  cabecalho;
 } IlhaModal;
 
 // O aviso completo. `texto` aceita ENFASE: o trecho entre dois ILHA_FORTE sai

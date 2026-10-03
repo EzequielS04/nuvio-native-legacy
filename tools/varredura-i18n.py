@@ -28,7 +28,13 @@ RAIZ = pathlib.Path(__file__).resolve().parent.parent
 # lista de proposito: ela mede E desenha, e nao passava por i18n.
 DESENHO = ("txt_linha", "txt_linha_corta", "txt_linha_familia",
            "txt_linha_corta_familia", "txt_bloco", "txt_bloco_dir",
-           "txt_tracking")
+           "txt_tracking",
+           # Os atalhos do registro do app (registro_ilha.inc, registro_envio.inc,
+           # desempenho.c, telemetria.c): todos passam o texto por txt_linha /
+           # txt_bloco / txt_tracking, que traduzem.
+           "rgT", "rgTC", "rgTT", "rgBloco", "rgKicker", "rgK2", "rgCaps",
+           "rgStat", "rgCartNota", "rgBotao", "rgKbdTexto", "rgCabecalho",
+           "rgSeguindo", "rgBlocoAltura", "dsT", "tlT", "tlCaps", "tlBotao")
 
 # Um literal em C pode vir partido ("abc" "def") e com escapes. Junta e decodifica.
 LIT = re.compile(r'"((?:[^"\\]|\\.)*)"(?:\s*"((?:[^"\\]|\\.)*)")*')
@@ -252,6 +258,11 @@ def contexto(txt, i):
 # "nao sei o que e": sem esta lista a ferramenta nao pode virar teste, e sem
 # virar teste ela nao impede a proxima regressao.
 IGNORAR = {
+    # Registro do app (03/10): etiquetas de area do log ([fonte], [legendas])
+    # que registro.c procura para agrupar as linhas, icones passados aos
+    # atalhos de desenho, e nomes proprios/arquivos que nao se traduzem.
+    "fonte", "legendas", "aj_info", "aj_rotate-cw", "nuvio.log", "libcurl",
+    "Mac", "webOS", "Samsung .wgt", "Samsung",
     # Ajustes no Glass UI (03/10): a unidade "Mbps" e universal (mesma em
     # todas as linguas); a chave de fileira de mentira da captura de Ajustes
     # (ajustes_teste_quadro) e a subpasta da arte embarcada (ajArte) nao sao
@@ -448,7 +459,8 @@ def varrer():
     src = RAIZ / "src"
     arquivos = sorted(src.glob("*.c")) + [
         src / nome for nome in ("ajustes_ux_tela.inc", "ajustes_ux_interacao.inc",
-                                "ajustes_ux_desenho.inc") if (src / nome).exists()
+                                "ajustes_ux_desenho.inc", "ajustes_ux_ilha.inc",
+                                "registro_ilha.inc", "registro_envio.inc") if (src / nome).exists()
     ]
     for arq in sorted(arquivos):
         if arq.name == "idioma.c":
