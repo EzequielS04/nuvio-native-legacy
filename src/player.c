@@ -1751,11 +1751,13 @@ void player_mini_desenhar(Uint32 agora) {
     plrui_material(il, 30.0f, 0, 1.0f);
     gfx_furo_raio(f, 22.0f / f.h);
     // AO VIVO em vermelho (estado da transmissao) e "Canal · programa".
-    { TxtLinha l = txt_linha(TXT_MINI, "AO VIVO", 255, 255, 255, 255);
-      float w = 12.0f + 8.0f + 8.0f + (float)l.w + 12.0f;
+    { const char *av = i18n("AO VIVO");
+      TxtLinha l = txt_linha(TXT_MINI, av, 255, 255, 255, 255);
+      float tw = txt_tracking(TXT_MINI, av, 255, 255, 255, -1.0f, 0.0f, 1.0f, 1.3f);   // medido COM o tracking
+      float w = 12.0f + 8.0f + 8.0f + tw + 12.0f;
       gfx_cor((GfxRect){ x, yc - 14.0f, w, 28.0f }, 0.5f, 0.898f, 0.282f, 0.302f, 1.0f);
       gfx_cor((GfxRect){ x + 12.0f, yc - 4.0f, 8.0f, 8.0f }, 0.5f, 1, 1, 1, 1.0f);
-      txt_tracking(TXT_MINI, "AO VIVO", 255, 255, 255, x + 28.0f, yc - (float)l.h * 0.5f, 1.0f, 1.3f);
+      txt_tracking(TXT_MINI, av, 255, 255, 255, x + 28.0f, yc - (float)l.h * 0.5f, 1.0f, 1.3f);
       x += w + 12.0f; }
     snprintf(rot, sizeof rot, "%s", itemCanal.titulo[0] ? itemCanal.titulo : i18n("Canal"));
     if (pAgora(epgIdx, time(NULL), &ag)) {
@@ -3291,7 +3293,7 @@ void player_desenhar(Uint32 agora) {
   // raio 0 e o quad de tela inteira: o recorte (cover) do shader e o que impede
   // a arte 16:9 de esticar quando a tela nao for exatamente 16:9.
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  int furar = player_com_video();
+  int furar = player_com_video() && !esperandoFonte;   // abrindo a fonte: sem furo, so preto
 #ifdef NV_SHOT_HOOKS
   if (shotSemFuro && encolhe > 0.999f) furar = 0;   // capturas: a arte faz de video
 #endif
@@ -3406,7 +3408,12 @@ void player_desenhar(Uint32 agora) {
       // PRETO de verdade no canal, e nao o quase-preto da interface: com o
       // video entrando por tras da pagina, qualquer tinta aqui e uma camada a
       // mais sobre o plano de hardware.
-      gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, entrada);
+      // ABRINDO: opaco DESDE O PRIMEIRO QUADRO. Com `entrada` (mola de 0 a 1) o
+      // preto nascia transparente e a arte do detalhe/cartao, que continua
+      // desenhada por baixo do player, aparecia atras da ilha enquanto ele
+      // abria — e a cada troca de fonte/tentativa.
+      gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f,
+              (player_carregando() && !player_id_canal()[0] && !saindo) ? 1.0f : entrada);
     } else {
       gfx_cor(tela, 0.0f, 0.04f, 0.04f, 0.05f, entrada);
     }
@@ -3889,7 +3896,7 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
   {
     char t1[24], t2[32], d[24];
     if (ehCanal()) {
-      TxtLinha l = txt_linha(TXT_ILHA_NOME, "AO VIVO", 243, 242, 239, 235);
+      TxtLinha l = txt_linha(TXT_ILHA_NOME, i18n("AO VIVO"), 243, 242, 239, 235);
       txt_desenhar_alpha(l, cx + cw - l.w, cyBotoes - (float)l.h * 0.5f, a);
     } else {
       plrui_tempo(t1, sizeof t1, posSeg);

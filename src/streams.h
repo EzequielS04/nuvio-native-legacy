@@ -94,6 +94,10 @@ void stream_folha_nome(const char *nome);
 // Indice no catalogo do conteudo da folha (-1: canal ou nenhum), para a logo
 // do titulo no lugar do nome (Ajustes > Texto das fontes > Logo do titulo).
 void stream_folha_item(int indice);
+// Folha de um CANAL ao vivo: a resolucao e o codec saem do nome (UHD/FHD/HD/SD,
+// H.265...) e entram no agrupamento e nos selos. Filme nao muda.
+void stream_folha_canal(int sim);
+void stream_canal_enriquecer(Stream *s);
 int stream_folha_recarregar(void);
 // Abertura animada da folha (0..1): o player apaga o OSD por baixo dela.
 float stream_folha_anim(void);
