@@ -249,7 +249,11 @@ typedef enum {
   // "Textura"). Nao se pede direto: gfx_rect troca para ele todo GFX_COR
   // cheio na cor exata do destaque enquanto gfx_textura_definir tem textura.
   GFX_TEXTURA = 42,
-  GFX_NMODOS = 43
+  // GFX_FOSCO — a luz assada (320x180, a arte borrada do fundo) lida em
+  // COORDENADA DE TELA (vAmb) e recortada pelos cantos do painel: o vidro
+  // fosco. uTex = o assado; uCor.a = alfa. Use gfx_vidro_fosco.
+  GFX_FOSCO = 43,
+  GFX_NMODOS = 44
 } GfxModo;
 
 typedef struct {
@@ -502,6 +506,12 @@ int gfx_hero_camadas(GfxRect r, GfxModo modo, GLuint texA, float aspA, float alf
 // e zero nos outros temas. main.c chama logo depois do glClear.
 // Assa a luz imersiva no quadro pequeno. Chamar ANTES do clear da tela (ver gfx.c).
 void gfx_ambiente_preparar(void);
+// Vidro fosco (Ajustes > Vidro fosco): desenha, dentro do painel, a arte borrada
+// do fundo (o assado de gfx_ambiente_preparar) alinhada a tela. Nada se este
+// quadro nao assou fundo nenhum. Chamado por gfx_vidro_folha/painel, ANTES da tinta.
+void gfx_vidro_fosco(GfxRect r, float raio, float a);
+// Fator da opacidade do vidro: 1,0 = os 78% de sempre (ajustes_vidro_opacidade / 0,78).
+float gfx_vidro_opacidade(void);
 void gfx_ambiente(float alfa);
 // Pinta a luz que gfx_ambiente deixou pendente, se ainda houver (ver a nota
 // em gfx.c). main.c chama no fim do desenho do quadro; e inofensivo repetir.

@@ -118,6 +118,8 @@ void corviva_anotar(const char *chave, const CorvivaPaleta *p);
 // E o que a previa do cartao da 1.4.8 (novidades148.c) usa para mostrar tres
 // titulos com as cores de cada um sem trocar a cor da interface.
 int  corviva_paleta(const char *chave, CorvivaPaleta *p);
+// A paleta do titulo em cena (o que corviva_definir assentou), do fio de desenho.
+int  corviva_cena_paleta(CorvivaPaleta *p);
 // Diz qual arte esta em cena neste quadro. Do fio de desenho. Barato: um hash
 // de string e uma comparacao; chamar todo quadro e o uso esperado.
 void corviva_definir(const char *chave, int prioridade);

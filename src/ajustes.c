@@ -314,6 +314,10 @@ typedef enum {
   // o Frost depende do acento desta TV. No fim pelo mesmo motivo: valor[] e
   // CHAVE[] sao posicionais.
   AJ_FUNDO,
+  // TESTE DO VIDRO (03/10): quanto de opacidade tem o miolo dos paineis de vidro e
+  // se ele leva a arte borrada atras ("fosco"). LOCAIS, avancados. No fim pelo
+  // mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_VIDRO_OPAC, AJ_VIDRO_FOSCO,
   AJ_N
 } OpcaoId;
 
@@ -335,6 +339,8 @@ static const char *V_FONTE_PRAZO[] = { "3 s", "5 s", "8 s", "Todos os add-ons" }
 static const char *V_TAMANHO_UI[] = { "100%", "120%", "130%", "150%" };
 // Indice gravado em fundoLocal (ajustes_fundo).
 static const char *V_FUNDO[] = { "Arte", "Arte borrada", "Frost" };
+static const char *V_VIDRO_OPAC[] = { "60%", "70%", "78%", "86%", "92%" };
+static const char *V_VIDRO_FOSCO[] = { "Desligado", "Ligado" };
 static const char *V_SAIDA_PLAYER[] = { "Voltar para a home (minimizar na ilha)",
                                         "Voltar para a página do título" };
 static const char *V_LIVETV_MODO[] = { "A (padrão)", "B (sem seleção de faixa)", "C (payload de live)" };
@@ -973,6 +979,8 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Remover pacote"),
   ESC("Tamanho da interface",            V_TAMANHO_UI, 4),    // local: tamanhoUiLocal
   ESC("Fundo",                           V_FUNDO, 3),         // local: fundoLocal
+  ESC("Opacidade do vidro",              V_VIDRO_OPAC, 5),    // local: vidroOpacLocal
+  ESC("Vidro fosco",                     V_VIDRO_FOSCO, 2),   // local: vidroFoscoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1145,6 +1153,7 @@ static const char *CHAVE[] = {
   "-selosPacote", "-selosPacoteAdd", "-selosPacoteRem",
   "tamanhoUiLocal",
   "fundoLocal",
+  "vidroOpacLocal", "vidroFoscoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1507,6 +1516,20 @@ int ajustes_fundo(void) { int v = valor[AJ_FUNDO]; return v >= 0 && v < 3 ? v : 
 int ajustes_vidro_contorno(void) { return lig(AJ_VIDRO_CONTORNO); }
 int ajustes_addons_do_principal(void) { return lig(AJ_ADDONS_PRINCIPAL); }
 #endif
+float ajustes_vidro_opacidade(void) {
+  static const float F[] = { 0.60f, 0.70f, 0.78f, 0.86f, 0.92f };
+  int v = valor[AJ_VIDRO_OPAC];
+  return v >= 0 && v < 5 ? F[v] : 0.78f;
+}
+int ajustes_vidro_fosco(void) { return valor[AJ_VIDRO_FOSCO] == 1; }
+// Capturas do teste do vidro: NUVIO_SHOT_VIDRO_OPAC=60|70|78|86|92 e
+// NUVIO_SHOT_VIDRO_FOSCO=1 (sem gravar nada).
+void ajustes_teste_vidro_env(void) {
+  const char *o = getenv("NUVIO_SHOT_VIDRO_OPAC"), *f = getenv("NUVIO_SHOT_VIDRO_FOSCO");
+  if (o && *o) { int n = atoi(o); valor[AJ_VIDRO_OPAC] = n <= 60 ? 0 : n <= 70 ? 1 : n <= 78 ? 2 : n <= 86 ? 3 : 4; }
+  if (f && *f) valor[AJ_VIDRO_FOSCO] = atoi(f) ? 1 : 0;
+  if ((o && *o) || (f && *f)) valor[AJ_VIDRO] = 0;   // o teste e do vidro: liga
+}
 int ajustes_relogio_ligado(void) { return lig(AJ_RELOGIO); }
 int ajustes_relogio_pos(void) { return valor[AJ_RELOGIO_POS]; }
 float ajustes_tamanho_ui(void) {
@@ -3220,6 +3243,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_MEDIDOR:        /* o medidor e da GPU desta TV; o web nao tem */
     case AJ_TAMANHO_UI:     /* o tamanho e desta tela, e o web nao tem */
     case AJ_FUNDO:          /* o desfoque custa GPU desta TV; o web nao tem */
+    case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: /* teste do vidro: visual desta TV */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
     case AJ_REACAO_CREDITOS: /* o web nao tem a pergunta */
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: /* o web nao tem o Seekr */
@@ -3796,7 +3820,7 @@ static const char *textoLeitura(int op) {
 // de a linha sumir.
 static int inativa(int op) {
   switch (op) {
-    case AJ_VIDRO_CONTORNO: return !lig(AJ_VIDRO);
+    case AJ_VIDRO_CONTORNO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: return !lig(AJ_VIDRO);
     case AJ_RAIL:         return ajustes_rail_moderna();
     case AJ_RAIL_BLUR:    return !ajustes_rail_moderna();
     case AJ_HERO_CATALOGOS: return !ajustes_hero_ligado();
@@ -3950,6 +3974,7 @@ static void focarOpcao(int op) {
 static const char *ajudaOpcao(int op) {
   if (inativa(op)) {
     if (op == AJ_VIDRO_CONTORNO) return "Ative a interface de vidro para ajustar o contorno.";
+    if (op == AJ_VIDRO_OPAC || op == AJ_VIDRO_FOSCO) return "Ative a interface de vidro para ajustar o vidro.";
     if (op == AJ_RAIL) return "Desative a barra lateral moderna para escolher entre recolhida e fixa.";
     if (op == AJ_RAIL_BLUR) return "Ative a barra lateral moderna para usar o desfoque.";
     if (op == AJ_HERO_CATALOGOS) return "Ative Mostrar destaque para exibir os catálogos no topo da Home.";
@@ -4133,6 +4158,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
     case AJ_TAMANHO_UI: return "Aumenta os Ajustes, os controles do player, os menus, os painéis e os avisos — bom para TVs grandes ou para quem assiste de longe. A tela inicial e a página do título continuam do mesmo tamanho. Vale na hora.";
     case AJ_TEMA: return "Cor do botão em foco e das marcas de estado. Os claros levam texto escuro, os profundos texto branco — sempre a 4,5:1 ou mais.";
+    case AJ_VIDRO_OPAC: return "Teste: quanto os painéis de vidro deixam a arte aparecer. O valor do meio é o de hoje; menos é mais transparente, mais é mais escuro e fácil de ler.";
+    case AJ_VIDRO_FOSCO: return "Teste: põe a arte borrada atrás de cada painel de vidro, como um vidro jateado. Onde não há arte borrada, o vidro fica como sempre.";
     case AJ_FUNDO: return "O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.";
     case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
     case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
@@ -5687,7 +5714,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER:
-    case AJ_TAMANHO_UI: case AJ_FUNDO:
+    case AJ_TAMANHO_UI: case AJ_FUNDO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL:
@@ -5810,6 +5837,7 @@ int ajustes_teste_focar_opcao(int op) {
 
 void ajustes_teste_ux_captura(int cenario) {
   memcpy(valor, valorPadrao, sizeof valor);
+  ajustes_teste_vidro_env();   // o memcpy acima apagaria NUVIO_SHOT_VIDRO_*
   valor[AJ_IDIOMA] = IDIOMA_PT + 1;
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
   memset(uxAvancados, 0, sizeof uxAvancados);

@@ -28,6 +28,7 @@
 #endif
 #include <unistd.h>   // dup2 (o stderr no mesmo descritor do log)
 #include "gfx.h"
+#include "fundo.h"
 #include "gpunivel.h"
 #include "text.h"
 #include "marco.h"
@@ -1201,6 +1202,7 @@ int main(int argc, char **argv) {
     gfx_sem_recorte();
     fPrep = NV_DT(t0);
     gfx_ambiente_preparar();
+    fundo_fosco_quadro();   // vidro fosco: a arte borrada do titulo em cena
     fPrep = NV_DT(t0) - fPrep;
     // Nivel 2: o quadro inteiro vai para o alvo interno de 1280x720 (o clear
     // abaixo ja limpa ele); gpun_quadro_fim amplia para a janela.

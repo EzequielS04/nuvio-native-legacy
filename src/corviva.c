@@ -549,6 +549,12 @@ static double ultGravacao = -1e9;
 // chega junto com a arte, nem antes nem muito depois.
 #define CV_DURACAO_S   0.45f
 
+int corviva_cena_paleta(CorvivaPaleta *p) {
+  if (!p || !temCena || !cena.ok) return 0;
+  *p = cena;
+  return 1;
+}
+
 void corviva_definir(const char *chave, int prioridade) {
   if (!chave || !chave[0] || prioridade <= pedidoPrio) return;
   pedidoH = hashDe(chave);

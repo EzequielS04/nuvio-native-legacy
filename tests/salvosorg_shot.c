@@ -21,6 +21,7 @@
 #include "ctxmenu.h"
 #include "dados.h"
 #include "gfx.h"
+#include "vidro_fundo.h"
 #include "home.h"
 #include "layout.h"
 #include "salvos.h"
@@ -70,6 +71,7 @@ static void quadro(void) {
   ctx_atualizar(1.0f / 60.0f, agora);
   spainel_atualizar(1.0f / 60.0f, agora);
   spainel_fundo(!ctx_aberto() || ctx_do_painel(), cat_revisao(), homeFundo, NULL);
+  vidroFundoDesenhar();   // so com NUVIO_SHOT_VIDRO_*: arte de verdade atras do vidro
   if (spainel_visivel()) { spainel_desenhar(agora); ctx_desenhar(agora); }
   else ctx_desenhar(agora);
 }
@@ -272,6 +274,7 @@ int main(int argc, char **argv) {
     fprintf(f, "idioma 0\nselected_theme 2\n");   // portugues, acento oceano
     fclose(f); }
   ajustes_dir(dir);
+  ajustes_teste_vidro_env();   // NUVIO_SHOT_VIDRO_OPAC / _FOSCO
 
   SDL_SetHint("SDL_MAC_BACKGROUND_APP", "1");
   assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) == 0);
@@ -298,6 +301,7 @@ int main(int argc, char **argv) {
   tex_iniciar(192);
   gfx_icones_dir("deploy/app/art");
   gfx_snap_iniciar(1920, 1080);
+  vidroFundoPreparar();
   glBindFramebuffer(GL_FRAMEBUFFER, fbo);
   assert(home_iniciar("deploy/app/art"));
   salvos_iniciar();
@@ -480,6 +484,7 @@ int main(int argc, char **argv) {
   toques(SDLK_UP, 8);
   toque(SDLK_RIGHT);                      // Social
   toque(SDLK_DOWN);                       // barra da Social
+  if (vidroFundoAtivo()) ajustes_definir_vidro(1);   // o teste compara VIDRO
   foto("28-social-barra.png");
   toque(SDLK_RETURN);
   foto("29-social-escolha.png");

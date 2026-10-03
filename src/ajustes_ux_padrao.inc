@@ -198,3 +198,5 @@
   0, 0, 0,          /* pacote de selos (espelho de selospacote_ativo), adicionar e remover: o embutido */
   0,                /* tamanho da interface: 100%, o de sempre */
   0,                /* fundo: Arte, o de sempre */
+  2,                /* opacidade do vidro: 78%, a de sempre */
+  0,                /* vidro fosco: desligado */

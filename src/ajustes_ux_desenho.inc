@@ -113,7 +113,10 @@ static void ajIlha(GfxRect r, float raioPx, float a, int modal) {
   gfx_rect((GfxRect){ r.x - 20, r.y - 6, r.w + 40, r.h + 46 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
            0, 0, 0, (ajVid() ? 0.36f : 0.45f) * a);
   if (ajVid()) {
-    gfx_cor(r, raio, 0.055f, 0.059f, 0.071f, (modal ? 0.86f : 0.80f) * a);
+    // Teste do vidro: opacidade (78% = 0.80/0.86 de sempre) e fosco.
+    float miolo = (modal ? 0.86f : 0.80f) * gfx_vidro_opacidade();
+    gfx_vidro_fosco(r, raio, a);
+    gfx_cor(r, raio, 0.055f, 0.059f, 0.071f, (miolo > 1.0f ? 1.0f : miolo) * a);
     gfx_vidro_matiz(r, raio, a);
     gfx_luz_canto(r, raio, r.w * 0.22f, -r.h * 0.40f, r.h * 0.62f, 1, 1, 1, 0.10f * a);
   } else {
@@ -126,7 +129,9 @@ static void ajIlhaMiolo(GfxRect r, float raioPx, float miolo) {
   gfx_rect((GfxRect){ r.x - 20, r.y - 6, r.w + 40, r.h + 46 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
            0, 0, 0, ajVid() ? 0.36f : 0.45f);
   if (ajVid()) {
-    gfx_cor(r, raio, 0.055f, 0.059f, 0.071f, miolo);
+    float m = miolo * gfx_vidro_opacidade();
+    gfx_vidro_fosco(r, raio, 1);
+    gfx_cor(r, raio, 0.055f, 0.059f, 0.071f, m > 1.0f ? 1.0f : m);
     gfx_vidro_matiz(r, raio, 1);
     gfx_luz_canto(r, raio, r.w * 0.22f, -r.h * 0.40f, r.h * 0.62f, 1, 1, 1, 0.10f);
   } else gfx_cor(r, raio, 0.082f, 0.086f, 0.102f, 1);
