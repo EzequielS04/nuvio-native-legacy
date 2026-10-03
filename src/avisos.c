@@ -1,6 +1,6 @@
 #include "avisos.h"
 #include "ilha.h"
-#define AV_ILHA_CHAVE "avisos"   // o toast da central na ilha (toastNaIlha)
+#define AV_ILHA_CHAVE "avisos"   // o "N avisos novos" da central na ilha (ilha.c junta)
 #include "dados.h"
 #include "rede.h"
 #include "js.h"
@@ -18,6 +18,8 @@
 #include "registro.h"
 #include <math.h>
 #include "agenda.h"
+#include "catalogo.h"
+#include "salvos.h"
 #include "sessao.h"
 #include "trakt.h"
 #include "marco.h"
@@ -71,6 +73,7 @@ typedef struct {
   char texto[420];
   char alvo[24];        // imdb (agenda) ou versao (update)
   int  visto;
+  int  anunciar;        // novo: a ilha ainda nao disse o assunto (anunciarNaIlha)
 } Aviso;
 
 static Aviso itens[AV_MAX];
@@ -86,9 +89,8 @@ static int  nVistos, vistosLidos;
 // Painel e toast.
 static int   aberto, foco;
 static float entrada, rol;
-static float toastAte;          // SDL_GetTicks em que o toast some; 0 = sem toast
 static int   toastN;
-static float toastA;
+static long long recAnunciada = -1;   // id da ultima recomendacao dita na ilha
 static int   vistosSujos;
 
 // Acoes entregues a app.c.
@@ -205,6 +207,7 @@ static int por(const char *id, int tipo, const char *titulo, const char *texto, 
   snprintf(itens[n].texto, sizeof itens[n].texto, "%s", texto);
   if (alvo) snprintf(itens[n].alvo, sizeof itens[n].alvo, "%s", alvo);
   itens[n].visto = foiVisto(id);
+  itens[n].anunciar = !itens[n].visto;
   n++;
   return !itens[n - 1].visto;
 }
@@ -743,9 +746,21 @@ static void colherLocais(void) {
   { int k = recomenda_ativo() ? recomenda_n_novas() : 0;
     if (k > 0) {
       char txt[200];
+      RecItem r;
       snprintf(txt, sizeof txt, k == 1 ? i18n("%d recomendação nova de um amigo. Abra Salvos para ver.")
                                        : i18n("%d recomendações novas de amigos. Abra Salvos para ver."), k);
       novos += por("rec", AV_REC, i18n("Recomendação de amigo"), txt, NULL);
+      // UMA VEZ POR RECOMENDACAO, nao por item da lista: o item "rec" e um so
+      // (a contagem troca no lugar), mas cada recomendacao nova que chega e um
+      // assunto novo para a ilha ("Ana recomendou Fallout"). Guarda o id da
+      // ultima anunciada; a mais nova diferente dela e ainda nao vista anuncia.
+      if (recomenda_item(0, &r) && !r.visto && r.id != recAnunciada) {
+        int i;
+        recAnunciada = r.id;
+        for (i = 0; i < n; i++) if (!strcmp(itens[i].id, "rec")) {
+          if (!itens[i].anunciar) { itens[i].anunciar = 1; novos++; }
+        }
+      }
     } else tirar("rec"); }
   // Atualizacao
   { const char *v = atualizacao_nova();
@@ -786,15 +801,15 @@ void avisos_atualizar(float dt, Uint32 agora) {
     if (pthread_create(&fioCanal, NULL, fioCanalFn, NULL) == 0) pthread_detach(fioCanal);
     else canalVivo = 0;
   }
-  { float alvo = (toastAte > 0.0f && (float)agora < toastAte && !aberto) ? 1.0f : 0.0f;
-    toastA = ajustes_animacoes_reduzidas() ? alvo : anim_mola(toastA, alvo, dt, NV_MOLA_TELA);
-    if (alvo == 0.0f && toastA < 0.01f && toastAte > 0.0f && (float)agora >= toastAte) { toastAte = 0.0f; toastN = 0; } }
+
   if (vistosSujos && !aberto) vistosGravar();
   avisos_envio_auto_passo(agora);
 }
 
 int  avisos_aberto(void) { return aberto; }
-void avisos_abrir(void)  { aberto = 1; foco = 0; rol = 0.0f; toastAte = 0.0f; toastN = 0; ilha_retirar(AV_ILHA_CHAVE); }
+// A CENTRAL ABERTA LE TUDO: os avisos dela saem da ilha (os que diziam o
+// assunto e o "N avisos novos" que juntou o resto).
+void avisos_abrir(void)  { aberto = 1; foco = 0; rol = 0.0f; toastN = 0; ilha_retirar_grupo(); }
 const char *avisos_pediu_abrir(void) {
   static char saida[24];
   if (!pediuAbrir[0]) return NULL;
@@ -816,9 +831,11 @@ int avisos_evento(const SDL_Event *e) {
   if (e->type != SDL_KEYDOWN) return aberto;
   k = e->key.keysym.sym; sc = e->key.keysym.scancode;
   if (!aberto) {
-    // O TOAST NA TELA e a unica hora em que AZUL/CH+ vem para ca: fora dela
-    // as duas teclas continuam sendo o que sempre foram (Salvos, secao do guia).
-    if (toastA > 0.5f && !e->key.repeat &&
+    // O AVISO DA CENTRAL NA ILHA e a unica hora em que AZUL/CH+ vem para ca:
+    // fora dela as duas teclas continuam sendo o que sempre foram (Salvos,
+    // secao do guia). Aviso com modal proprio (recomendacao, versao nova) ja
+    // foi atendido antes, em ilha_evento: a pilula cresce para ele.
+    if (ilha_tecla_central() && !e->key.repeat &&
         (k == SDLK_s || sc == NV_SCANCODE_BLUE || sc == NV_SCANCODE_CH_UP || k == SDLK_PAGEUP)) {
       avisos_abrir();
       return 1;
@@ -853,16 +870,187 @@ static const char *icone(int tipo) {
   }
 }
 
-// O TOAST MORA NA ILHA (01/10/2026, pedido do dono): o bloco proprio no canto
-// superior direito (sino que respirava + "Central de avisos" + contagem + a
-// tecla) virou um aviso da ilha do relogio — o mesmo sino na cor de realce, a
-// contagem e a tecla com "abre". A regra de tempo continua toda aqui (toastAte,
-// toastA para o AZUL/CH+ em avisos_evento); a ilha so desenha. Mesma chave
-// enquanto o toast vive: um aviso novo no meio troca a contagem no lugar.
-static void toastNaIlha(void) {
-  char txt[120];
-  snprintf(txt, sizeof txt, toastN == 1 ? i18n("%d aviso novo") : i18n("%d avisos novos"), toastN);
-  ilha_avisar(AV_ILHA_CHAVE, ILHA_ACENTO, "sino", txt, AV_TOAST_MS, 1);
+// O TOAST MORA NA ILHA (01/10/2026, pedido do dono), e desde 02/10 ele DIZ O
+// ASSUNTO (mockup aprovado): em vez de "1 aviso novo", "Ana recomendou
+// Fallout", "Saiu T2E5 de The Bear", "Versão 1.7.2 chegou". Cada item novo
+// entra na ilha como um aviso da CENTRAL (grupo = 1, chave "av:<id>"); quando
+// chegam varios juntos, ilha.c deixa o primeiro dizer o seu e junta os que
+// esperam num "N avisos novos" que abre esta lista — o mesmo toast de antes,
+// so que para o resto. A regra de "quando" continua aqui: so com a central
+// fechada e sem o cartao do crash na frente (avisos_desenhar).
+//
+// Os que tem para onde ir levam o MODAL da ilha (a pilula cresce, AZUL/CH+):
+// recomendacao (Ver / Salvar / Dispensar), versao nova (Atualizar / Depois),
+// queda (Enviar registro / Agora não) e o aviso do dono (o texto inteiro). O
+// episodio novo abre o modal do cartao de estreia (ilhacart.c), quando ele
+// esta na pilula. Quem executa o botao e avisos_ilha_acao.
+static RecItem recDaIlha;              // a recomendacao que o modal mostra
+static void anunciarItem(const Aviso *it) {
+  char chave[96], txt[240], f1[200], f2[200];
+  IlhaAvisoEx e;
+  static IlhaModal m;
+  memset(&e, 0, sizeof e);
+  memset(&m, 0, sizeof m);
+  snprintf(chave, sizeof chave, "av:%s", it->id);
+  e.chave = chave; e.grupo = 1; e.texto = txt;
+  switch (it->tipo) {
+    case AV_REC: {
+      RecItem *r = &recDaIlha;
+      int idx;
+      if (!recomenda_item(0, r) || !r->titulo[0]) { snprintf(txt, sizeof txt, "%s", it->texto); e.tipo = ILHA_ACENTO; e.icone = "recomendar"; e.tecla = 1; e.ms = 8000u; break; }
+      snprintf(txt, sizeof txt, i18n("%s recomendou %s"),
+               ilha_forte(f1, sizeof f1, r->deNome[0] ? r->deNome : "?"), ilha_forte(f2, sizeof f2, r->titulo));
+      e.tipo = ILHA_ACENTO; e.ms = 8000u;
+      e.rosto = r->deAvatar; e.rostoNome = r->deNome[0] ? r->deNome : "?"; e.capa = r->poster;
+      snprintf(m.kicker, sizeof m.kicker, i18n("Recomendação de %s"), r->deNome[0] ? r->deNome : "?");
+      snprintf(m.titulo, sizeof m.titulo, "%s", r->titulo);
+      { char nota[24] = "";
+        if (r->nota > 0) snprintf(nota, sizeof nota, " · IMDb %d,%d", r->nota / 10, r->nota % 10);
+        snprintf(m.linha, sizeof m.linha, "%s%s%s%s", i18n(!strncmp(r->tipo, "series", 6) ? "Série" : "Filme"),
+                 r->ano[0] ? " · " : "", r->ano, nota); }
+      { const char *fr = rec_frase(r);
+        if (fr && fr[0]) snprintf(m.fala, sizeof m.fala, "\xe2\x80\x9c%s\xe2\x80\x9d", fr); }
+      if (r->criado > 0) rec_quando_texto(m.estado, sizeof m.estado, r->criado);
+      // A ARTE 16:9 do titulo quando ele esta no catalogo; senao o cartaz.
+      idx = r->imdb[0] ? cat_indice_por_imdb(r->imdb) : -1;
+      { const CatItem *ci = idx >= 0 ? cat_item(idx) : NULL;
+        snprintf(m.arte, sizeof m.arte, "%s", ci && ci->backdrop[0] ? ci->backdrop : r->poster); }
+      snprintf(m.rosto, sizeof m.rosto, "%s", r->deAvatar);
+      snprintf(m.rostoNome, sizeof m.rostoNome, "%s", r->deNome[0] ? r->deNome : "?");
+      m.salvos = 1; m.nBotoes = 3;
+      snprintf(m.botao[0], sizeof m.botao[0], "%s", i18n("Ver"));
+      snprintf(m.botaoIcone[0], sizeof m.botaoIcone[0], "play");
+      snprintf(m.botao[1], sizeof m.botao[1], "%s", i18n("Salvar"));
+      snprintf(m.botaoIcone[1], sizeof m.botaoIcone[1], "aj_bookmark");
+      snprintf(m.botao[2], sizeof m.botao[2], "%s", i18n("Dispensar"));
+      e.modal = &m;
+      break; }
+    case AV_AGENDA: {
+      const AgItem *ag = it->alvo[0] ? agenda_registro(it->alvo) : NULL;
+      const char *tit = ag && ag->titulo[0] ? ag->titulo : it->texto;
+      e.tipo = ILHA_ACENTO;
+      // ESTREIA HOJE (o episodio vai ao ar hoje) e SAIU (ja foi): o mesmo
+      // aviso de agenda, com a frase do dia. O de hoje e mais curto e nao
+      // leva a tecla: ainda nao ha o que assistir.
+      if (ag && agenda_dias(ag->dataProx) == 0) {
+        snprintf(txt, sizeof txt, i18n("%s estreia hoje"), ilha_forte(f1, sizeof f1, tit));
+        e.icone = "aj_calendar"; e.ms = 6000u;
+      } else {
+        if (ag && ag->temporada > 0 && ag->episodio > 0)
+          snprintf(txt, sizeof txt, i18n("Saiu T%dE%d de %s"), ag->temporada, ag->episodio, ilha_forte(f1, sizeof f1, tit));
+        else snprintf(txt, sizeof txt, i18n("Episódio novo de %s"), ilha_forte(f1, sizeof f1, tit));
+        e.icone = "aj_tv-minimal-play"; e.ms = 8000u;
+        e.cartao = ILHA_ESTREIA + 1;
+        e.tecla = 1;
+      }
+      break; }
+    case AV_UPDATE: {
+      char itensNotas[3][96];
+      int k, q;
+      snprintf(txt, sizeof txt, i18n("Versão %s chegou"), it->alvo);
+      e.tipo = ILHA_ACENTO; e.icone = "aj_download"; e.ms = 10000u;
+      snprintf(m.kicker, sizeof m.kicker, "%s", i18n("Versão nova"));
+      snprintf(m.titulo, sizeof m.titulo, "Nuvio %s", it->alvo);
+      snprintf(m.nota, sizeof m.nota, i18n("Você está na %s"), NV_VERSAO);
+      q = atualizacao_notas_itens(itensNotas, 3);
+      for (k = 0; k < q; k++) snprintf(m.lista[k], sizeof m.lista[k], "%s", itensNotas[k]);
+      snprintf(m.icone, sizeof m.icone, "aj_download");
+      m.nBotoes = 2;
+      snprintf(m.botao[0], sizeof m.botao[0], "%s", i18n("Atualizar"));
+      snprintf(m.botaoIcone[0], sizeof m.botaoIcone[0], "aj_download");
+      snprintf(m.botao[1], sizeof m.botao[1], "%s", i18n("Depois"));
+      e.modal = &m;
+      break; }
+    case AV_CRASH:
+      // O DONO TIROU O CARTAO DO ARRANQUE em 23/09 ("tira a mensagem de enviar
+      // o log quando entra no app, ja temos os logs") e aprovou este aviso em
+      // 02/10. As duas coisas cabem juntas assim: com o envio automatico
+      // ligado o registro ja foi (ou vai) sozinho e a ilha nao pergunta nada;
+      // desligado, ela diz uma vez, sem cartao, e AZUL leva ao envio.
+      if (ajustes_envio_auto()) return;
+      snprintf(txt, sizeof txt, "%s", i18n("O app fechou sozinho da última vez"));
+      e.tipo = ILHA_ERRO; e.prior = ILHA_P2; e.icone = "aj_triangle-alert"; e.ms = 9000u;
+      snprintf(m.titulo, sizeof m.titulo, "%s", it->titulo);
+      snprintf(m.texto, sizeof m.texto, "%s", it->texto);
+      snprintf(m.icone, sizeof m.icone, "aj_triangle-alert");
+      m.tipo = ILHA_ERRO; m.nBotoes = 2;
+      snprintf(m.botao[0], sizeof m.botao[0], "%s", i18n("Enviar registro"));
+      snprintf(m.botao[1], sizeof m.botao[1], "%s", i18n("Agora não"));
+      e.modal = &m;
+      break;
+    default:
+      // AV_CANAL: o aviso do dono (e os de idioma e modo seguro, que usam o
+      // mesmo tipo). A pilula diz o titulo; o texto inteiro fica no modal.
+      snprintf(txt, sizeof txt, "%s", it->titulo);
+      e.tipo = ILHA_INFO; e.icone = "aj_megaphone"; e.ms = 10000u;
+      if (it->texto[0]) {
+        snprintf(m.kicker, sizeof m.kicker, "%s", i18n("Aviso"));
+        snprintf(m.titulo, sizeof m.titulo, "%s", it->titulo);
+        snprintf(m.texto, sizeof m.texto, "%s", it->texto);
+        snprintf(m.icone, sizeof m.icone, "aj_megaphone");
+        m.nBotoes = 1;
+        snprintf(m.botao[0], sizeof m.botao[0], "%s", i18n("Fechar"));
+        e.modal = &m;
+      }
+      break;
+  }
+  ilha_avisar_ex(&e);
+}
+
+// Os itens com `anunciar` vao para a ilha, cada um uma vez. Sem nenhum
+// marcado e com contagem (o toast(N) dos testes), o "N avisos novos" de antes.
+static void anunciarNaIlha(void) {
+  static Aviso copia[AV_MAX];
+  int i, k = 0;
+  pthread_mutex_lock(&trava);
+  for (i = 0; i < n; i++) if (itens[i].anunciar) { itens[i].anunciar = 0; copia[k++] = itens[i]; }
+  pthread_mutex_unlock(&trava);
+  for (i = 0; i < k; i++) anunciarItem(&copia[i]);
+  if (!k && toastN > 0) {
+    char txt[120];
+    snprintf(txt, sizeof txt, toastN == 1 ? i18n("%d aviso novo") : i18n("%d avisos novos"), toastN);
+    { IlhaAvisoEx e;
+      memset(&e, 0, sizeof e);
+      e.chave = AV_ILHA_CHAVE; e.tipo = ILHA_ACENTO; e.icone = "sino"; e.texto = txt;
+      e.ms = (unsigned)AV_TOAST_MS; e.tecla = 1; e.grupo = 1;
+      ilha_avisar_ex(&e); }
+  }
+  toastN = 0;
+}
+
+void avisos_ilha_acao(const char *chave, int botao) {
+  const char *id;
+  if (!chave || strncmp(chave, "av:", 3)) return;
+  id = chave + 3;
+  if (!strcmp(id, "rec")) {
+    if (botao == 1 && recDaIlha.imdb[0]) snprintf(pediuAbrir, sizeof pediuAbrir, "%s", recDaIlha.imdb);
+    else if (botao == 2 && recDaIlha.imdb[0]) {
+      // SALVAR: o titulo do catalogo quando existe, senao o que a
+      // recomendacao trouxe (o mesmo minimo que salvos.c guarda).
+      int idx = cat_indice_por_imdb(recDaIlha.imdb);
+      const CatItem *ci = idx >= 0 ? cat_item(idx) : NULL;
+      static CatItem tmp;
+      if (!ci) {
+        memset(&tmp, 0, sizeof tmp);
+        snprintf(tmp.imdb, sizeof tmp.imdb, "%s", recDaIlha.imdb);
+        snprintf(tmp.tipo, sizeof tmp.tipo, "%s", recDaIlha.tipo);
+        snprintf(tmp.titulo, sizeof tmp.titulo, "%s", recDaIlha.titulo);
+        snprintf(tmp.poster, sizeof tmp.poster, "%s", recDaIlha.poster);
+        ci = &tmp;
+      }
+      salvos_definir(ci, 1);
+      // O Trakt so se a pessoa pediu (o mesmo criterio do "+", app.c).
+      if (ajustes_salvos_no_trakt()) trakt_watchlist(ci->imdb, 1);
+      ilha_avisar("salvo", ILHA_OK, NULL, i18n("Salvo"), 3000u, 0);
+    }
+    // As tres respondem a recomendacao: o selo apaga (o mesmo que abrir Salvos).
+    recomenda_marcar_vistas();
+  } else if (!strncmp(id, "update:", 7)) {
+    if (botao == 1) pediuCodigo = AVISOS_ABRIR_ATUALIZACAO;
+  } else if (!strncmp(id, "crash:", 6)) {
+    if (botao == 1) enviarAgora();
+  }
+  avisos_marcar_visto(id);
 }
 
 // A LISTA, desenhada dentro de qualquer caixa: o painel proprio usa, e a aba
@@ -1021,10 +1209,11 @@ void avisos_marcar_lidos(void) {
 }
 
 void avisos_desenhar(Uint32 agora) {
+  (void)agora;
   float a = anim_clamp(entrada, 0.0f, 1.0f), dx;
   if (toastPendente && !aberto && !cartao) {
-    toastPendente = 0; toastAte = (float)agora + AV_TOAST_MS;
-    toastNaIlha();
+    toastPendente = 0;
+    anunciarNaIlha();
   }
   if (a < 0.01f) { cartaoDesenhar(); return; }
   dx = (1.0f - a) * 80.0f;

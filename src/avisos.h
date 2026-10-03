@@ -111,4 +111,10 @@ void  avisos_marcar_lidos(void);
 int  avisos_estreia_pendente(char *id, size_t tamId, char *imdb, size_t tamImdb);
 void avisos_marcar_visto(const char *id);
 
+// Botao do MODAL DA ILHA de um aviso da central (chave "av:<id>", ver
+// anunciarItem em avisos.c): `botao` 1..3, o que ilha_aviso_pediu entregou.
+// Executa (abrir o titulo, salvar, enviar o registro, abrir a atualizacao) e
+// marca o item como lido.
+void avisos_ilha_acao(const char *chave, int botao);
+
 #endif
