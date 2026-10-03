@@ -105,5 +105,10 @@ int  debrid_eh_sem_plano(int st, const char *corpo);
 int  debrid_sem_plano(void);
 int  debrid_sem_plano_novo(void);
 const char *debrid_sem_plano_frase(int mascara);
+// O NOME do servico quando a mascara tem um so e e caso de PLANO (nao a chave
+// do AllDebrid recusada): "TorBox", "Premiumize", "Real-Debrid", "AllDebrid".
+// NULL nos outros casos — quem chama usa a frase longa de cima. Para a frase
+// curta da ilha ("Seu TorBox está sem plano...").
+const char *debrid_sem_plano_nome(int mascara);
 
 #endif

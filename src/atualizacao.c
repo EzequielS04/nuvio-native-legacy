@@ -260,6 +260,23 @@ static float rolar, rolarAlvo, notasH, vistaH;
 static SDL_Thread *fioInst;
 
 const char *atualizacao_nova(void) { return tagNova; }
+
+int atualizacao_notas_itens(char (*dst)[96], int max) {
+  const char *p = notas, *bola = "\xe2\x80\xa2 ";
+  int k = 0;
+  while (*p && k < max) {
+    const char *fim = strchr(p, '\n');
+    size_t n = fim ? (size_t)(fim - p) : strlen(p);
+    if (n > 4 && !strncmp(p, bola, 4)) {
+      size_t c = n - 4 < 95 ? n - 4 : 95;
+      memcpy(dst[k], p + 4, c);
+      dst[k][c] = 0;
+      k++;
+    }
+    p = fim ? fim + 1 : p + n;
+  }
+  return k;
+}
 int atualizacao_aberta(void) { return aberto; }
 
 // "1.0.54" > "1.0.53"? Compara numero a numero; o que nao e numero vale 0.

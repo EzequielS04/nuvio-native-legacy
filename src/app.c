@@ -76,6 +76,7 @@
 #include "avisos.h"
 #include "ilha.h"
 #include "ilhacart.h"
+#include "ilhasinais.h"
 #include "recintro.h"
 #include "atualizacao.h"
 #include "pipintro.h"
@@ -984,6 +985,11 @@ static void processarTorrentJob(void) {
         snprintf(titulo, sizeof titulo, i18n("O %s está baixando este torrent"), serv);
       player_erro_fonte_motivo(titulo,
           i18n("Ele fica na sua conta: escolha esta fonte de novo em alguns minutos."));
+      // E A ILHA DIZ DE NOVO NA HOME (02/10, mockup "Fonte baixando no
+      // debrid"): o cartao do player some com o Voltar, e o aviso espera na
+      // fila da ilha ate a pilula voltar a aparecer.
+      { const CatItem *pc = cat_item(player_indice());
+        ilhasinais_debrid_baixando(serv, pc ? pc->titulo : NULL); }
     } else if (j->resultado == STREAM_P2P_FALHOU) {
       // O SERVIDOR P2P respondeu por ultimo (o debrid nao resolveu ou nao
       // existe), entao o motivo que a pessoa precisa e o dele: cada um tem um
@@ -1184,6 +1190,7 @@ int app_iniciar(const char *dirArte) {
   // existir catalogo e antes de a rede responder. Isto nao abre conexao — quem
   // faz isso e recomenda_verificar, la embaixo, com a home ja de pe.
   recomenda_iniciar();
+  ilhasinais_iniciar();  // a saude da rede passa a ouvir os pedidos (ilha, 02/10)
   atividade_iniciar();   // a fila de POST /v1/atividade que nao saiu (atividade.h)
   // O envio da atividade segue o nivel de privacidade (alcance) do Social: a
   // funcao e chamada agora e a cada mudanca; "nao perguntado" chega como 0.
@@ -1814,6 +1821,7 @@ void app_atualizar(float dt, Uint32 agora) {
         // Os ajustes DESTE perfil nesta TV (ou os do principal, na primeira
         // visita), e o blob da conta dele por cima. Ver sync_trocar_perfil.
         sync_trocar_perfil(perfilAntes);
+        ilhasinais_perfil_trocado();   // "Agora no perfil Lia" na ilha (02/10)
         // AS COLECOES DO PERFIL ANTERIOR SAEM JA. col_definir_json so roda
         // quando a conta manda linhas, entao um perfil sem colecoes ficava
         // com as do anterior para sempre.
@@ -1885,7 +1893,9 @@ void app_atualizar(float dt, Uint32 agora) {
                   9000u, 0);
       avisado = 1;
     } else if (!fora && avisado) {
-      ilha_retirar("conta-fora");
+      // A CONTA VOLTOU (02/10, mockup): antes so retirava o aviso. Agora diz,
+      // com a MESMA chave — se o "fora" ainda estiver na pilula, troca no lugar.
+      ilha_avisar("conta-fora", ILHA_OK, "aj_cloud", i18n("A conta voltou. Addons atualizados."), 4000u, 0);
       avisado = 0;
     } }
 
@@ -2118,6 +2128,13 @@ void app_atualizar(float dt, Uint32 agora) {
     IlhaCartao ic;
     int qual = 0, o;
     ilhacart_atualizar(agora, ab && ab->imdb[0] ? ab->imdb : NULL);
+    ilhasinais_passo(agora);
+    // O "Reconectar" do Trakt (modal da ilha): Ajustes, na linha do Trakt.
+    if (ilhasinais_pediu_trakt() && !player_aberto()) {
+      if (detail_aberto()) detail_fechar_seco();
+      ajustes_abrir_no_trakt();
+      trocarTela(TELA_AJUSTES); menu_definir_destino(MENU_AJUSTES);
+    }
     o = ilha_pediu(&ic, &qual);
     if (o == ILHA_PEDIU_SALVOS) {
       // O PAINEL NASCE DO MODAL: o retangulo de agora e o do modal, que some

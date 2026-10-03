@@ -269,6 +269,7 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 16, PESO_REGULAR },   // TXT_ILHA_APOIO: meta das linhas, dicas do rodape
   { 36, PESO_BOLD    },   // TXT_ILHA_PERGUNTA: a pergunta da confirmacao
   { 20, PESO_REGULAR },   // TXT_ILHA_TEXTO: o texto corrido da confirmacao
+  { NV_FT_BODY, PESO_BOLD },           // destaque na frase da ilha (TXT_ILHA_FORTE)
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.

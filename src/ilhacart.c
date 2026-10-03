@@ -7,8 +7,10 @@
 #include "catalogo.h"
 #include "home.h"
 #include "idioma.h"
+#include "recomenda.h"
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #define VIVO_OCIOSO_MS (30u * 60u * 1000u)
 #define ESTREIA_SONDA_MS 1000u
@@ -69,8 +71,89 @@ void ilhacart_player_saiu(int indice, double posSeg, double durSeg, int t, int e
 
 void ilhacart_tecla(Uint32 agora) { ultimaTecla = agora; }
 
+// --- AMIGO VENDO AGORA (02/10, mockup aprovado) ------------------------------------
+// O evento de INICIO mais novo do feed, de um AMIGO (grau 1), com menos de 15
+// min — a mesma regra de RecAmigo.temAgora (recomenda.h). Vira duas coisas:
+// um AVISO uma vez por evento ("Ana está vendo Severance · T2E4", com o rosto
+// e a capa) e o TERCEIRO CARTAO ao lado do relogio enquanto o evento valer.
+// "Fechar" no modal tira o cartao deste evento; um evento novo volta a por.
+// O feed e relido pelo proprio recomenda.c a cada 10 min (ou ao abrir o
+// Social): esta sonda so le a copia em memoria, sem rede.
+#define AMIGO_AGORA_S   (15 * 60)
+#define AMIGO_SONDA_MS  5000u
+static IlhaCartao amigo;
+static int temAmigo;
+static char amigoDispensado[96], amigoAnunciado[96];
+static Uint32 amigoSonda;
+
+static void amigoAtualizar(Uint32 agora) {
+  RecEvento ev;
+  int i, n, achou = 0;
+  long long t = (long long)time(NULL);
+  char chave[96];
+  if (amigoSonda && agora - amigoSonda < AMIGO_SONDA_MS) return;
+  amigoSonda = agora ? agora : 1;
+  n = recomenda_ativo() ? recomenda_feed_n() : 0;
+  for (i = 0; i < n && i < 12; i++) {
+    if (!recomenda_feed_item(i, &ev)) continue;
+    if (ev.acao != REC_ACAO_INICIO || ev.grau > 1 || !ev.imdb[0] || ev.quando <= 0) continue;
+    if (t - ev.quando > AMIGO_AGORA_S || t - ev.quando < -60) continue;
+    achou = 1;
+    break;
+  }
+  if (!achou) {
+    if (temAmigo) { temAmigo = 0; ilha_cartao(ILHA_AMIGO, NULL); }
+    return;
+  }
+  snprintf(chave, sizeof chave, "amigo:%.40s:%.24s:%lld", ev.pessoa, ev.imdb, ev.quando);
+  // O AVISO, uma vez por evento.
+  if (strcmp(amigoAnunciado, chave)) {
+    char txt[240], f1[96], f2[200], meta[24] = "";
+    IlhaAvisoEx e;
+    snprintf(amigoAnunciado, sizeof amigoAnunciado, "%s", chave);
+    snprintf(txt, sizeof txt, i18n("%s está vendo %s"),
+             ilha_forte(f1, sizeof f1, ev.pessoaNome[0] ? ev.pessoaNome : "?"), ilha_forte(f2, sizeof f2, ev.titulo));
+    if (ev.temporada > 0 && ev.episodio > 0) snprintf(meta, sizeof meta, i18n("T%dE%d"), ev.temporada, ev.episodio);
+    memset(&e, 0, sizeof e);
+    e.chave = "amigo-vendo"; e.tipo = ILHA_INFO; e.texto = txt; e.ms = 6000u;
+    e.rosto = ev.pessoaAvatar; e.rostoNome = ev.pessoaNome[0] ? ev.pessoaNome : "?";
+    e.capa = ev.poster[0] ? ev.poster : "-"; e.meta = meta; e.vivo = 1;
+    ilha_avisar_ex(&e);
+    printf("[ilha] amigo vendo agora: %s %s\n", ev.pessoa, ev.imdb);
+  }
+  // O CARTAO, como os outros, so com o relogio na tela (Ajustes > Relogio).
+  if (!strcmp(amigoDispensado, chave) || !ajustes_relogio_ligado()) {
+    if (temAmigo) { temAmigo = 0; ilha_cartao(ILHA_AMIGO, NULL); }
+    return;
+  }
+  { int idx = cat_indice_por_imdb(ev.imdb);
+    const CatItem *ci = idx >= 0 ? cat_item(idx) : NULL;
+    memset(&amigo, 0, sizeof amigo);
+    snprintf(amigo.chave, sizeof amigo.chave, "%s", chave);
+    snprintf(amigo.imdb, sizeof amigo.imdb, "%s", ev.imdb);
+    if (ci) doTitulo(ci, &amigo);
+    snprintf(amigo.titulo, sizeof amigo.titulo, "%s", ev.titulo[0] ? ev.titulo : amigo.titulo);
+    if (ev.poster[0]) snprintf(amigo.poster, sizeof amigo.poster, "%s", ev.poster);
+    amigo.serie = !strcmp(ev.midia, "series");
+    amigo.t = ev.temporada; amigo.e = ev.episodio;
+    if (ci) {
+      snprintf(amigo.arte, sizeof amigo.arte, "%s", ci->backdrop);
+      snprintf(amigo.sinopse, sizeof amigo.sinopse, "%s", ci->sinopse);
+    }
+    amigo.progresso = -1.0f;
+    snprintf(amigo.pessoa, sizeof amigo.pessoa, "%s", ev.pessoaNome);
+    snprintf(amigo.rosto, sizeof amigo.rosto, "%s", ev.pessoaAvatar);
+    temAmigo = 1;
+    ilha_cartao(ILHA_AMIGO, &amigo); }
+}
+
 void ilhacart_dispensar(int qual) {
   if (qual == ILHA_VIVO) { temVivo = 0; ilha_cartao(ILHA_VIVO, NULL); return; }
+  if (qual == ILHA_AMIGO) {
+    snprintf(amigoDispensado, sizeof amigoDispensado, "%s", amigo.chave);
+    temAmigo = 0; ilha_cartao(ILHA_AMIGO, NULL);
+    return;
+  }
   if (temEstreia) avisos_marcar_visto(estreia.avisoId);
   temEstreia = 0;
   ilha_cartao(ILHA_ESTREIA, NULL);
@@ -108,6 +191,7 @@ void ilhacart_atualizar(Uint32 agora, const char *imdbAberto) {
     temVivo = 0;
     ilha_cartao(ILHA_VIVO, NULL);
   }
+  amigoAtualizar(agora);
   if (ultimaSonda && agora - ultimaSonda < ESTREIA_SONDA_MS) return;
   ultimaSonda = agora ? agora : 1;
   { char id[72], imdb[64];

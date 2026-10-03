@@ -3284,6 +3284,11 @@ static void recCorDoId(const char *id, float *r, float *g, float *b) {
 
 void rec_avatar(GfxRect a, const char *url, const char *nome, const char *id,
                 float alfa) {
+  rec_avatar_estilo(a, url, nome, id, alfa, -1);
+}
+
+void rec_avatar_estilo(GfxRect a, const char *url, const char *nome, const char *id,
+                       float alfa, int estilo) {
   GLuint foto = (url && url[0]) ? tex_obter_larg(url, a.w) : 0;
   // SOQUETE ESCURO POR BAIXO SEMPRE, como perfilsel.c: enquanto a foto nao
   // chega da rede, o lugar dela e um disco e nao um buraco com o fundo do
@@ -3301,7 +3306,8 @@ void rec_avatar(GfxRect a, const char *url, const char *nome, const char *id,
     recCorDoId(id && id[0] ? id : nome, &cr, &cg, &cb);
     gfx_rect(a, 0, GFX_DISCO, 0, 0, 0, 0, cr, cg, cb, alfa);
     recInicial(nome, ini, sizeof ini);
-    l = txt_linha(a.w >= 48.0f ? TXT_CALLOUT : TXT_CAPTION2, ini, 255, 255, 255, 255);
+    l = txt_linha(estilo >= 0 ? (TxtEstilo)estilo : a.w >= 48.0f ? TXT_CALLOUT : TXT_CAPTION2,
+                  ini, 255, 255, 255, 255);
     txt_desenhar_alpha(l, a.x + (a.w - l.w) * 0.5f, a.y + (a.h - l.h) * 0.5f, alfa); }
 }
 

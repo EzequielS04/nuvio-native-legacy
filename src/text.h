@@ -70,6 +70,11 @@ typedef enum {
   // A CONFIRMACAO da ilha (mockup tela 7): a pergunta em 36/700 e o texto
   // corrido em 20/400. PERGUNTA e nao TITULO: o 40/700 do Social ja tem o nome.
   TXT_ILHA_PERGUNTA, TXT_ILHA_TEXTO,
+  // O TRECHO EM DESTAQUE da frase da ilha do relogio ("Ana recomendou
+  // Fallout", ilha.c): o corpo do TXT_BODY (25) em Bold, porque o 600 do
+  // mockup em texto claro sobre o miolo escuro e Bold pela regra optica de
+  // text.c. No FIM, pela mesma razao do TXT_RANK_GRANDE.
+  TXT_ILHA_FORTE,
   TXT_NFONTES
 } TxtEstilo;
 

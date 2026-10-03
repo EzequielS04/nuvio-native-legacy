@@ -264,6 +264,11 @@ void rec_quando_texto(char *dst, size_t tam, long long quandoS);
 // cima, foto ou letra), sem a parte de GIF — a foto do Trakt nao anima.
 void rec_avatar(GfxRect a, const char *url, const char *nome, const char *id,
                 float alfa);
+// O mesmo disco com o ESTILO da letra escolhido por quem chama (-1 = a regra
+// de rec_avatar). A ilha do relogio usa: rosto de 36 com a inicial em negrito
+// pequeno, e o de 150 do modal com a letra grande (mockup de 02/10).
+void rec_avatar_estilo(GfxRect a, const char *url, const char *nome, const char *id,
+                       float alfa, int estilo);
 
 // Altura unica dos dois selos, e o vao entre eles. Ficam aqui porque quem
 // desenha a linha precisa deles para centrar o texto ao lado.

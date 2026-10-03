@@ -187,6 +187,11 @@ int addons_catalogos_canal(int i, AddCatCanal *saida, int max);
 // addon trouxe fonte). Chamar do fio da UI, depois de addons_estado() sair de
 // ADD_BUSCANDO.
 int addons_motivo_vazio(char *dst, unsigned n);
+// ADDON FORA DO AR (ilha do relogio, 02/10): sobe 1 cada vez que um addon NAO
+// RESPONDEU a uma busca de fontes de verdade (nem na segunda chance), e so na
+// primeira consulta seguida que falha — responder de novo rearma. Copia o nome
+// dele em `nome`. Quem avisa compara o numero com o ultimo que viu.
+unsigned addons_fora_do_ar(char *nome, unsigned tam);
 
 AddEstado addons_estado(void);
 // HA BUSCA DE FONTES EM ANDAMENTO? Leitura pura, sem os efeitos de
