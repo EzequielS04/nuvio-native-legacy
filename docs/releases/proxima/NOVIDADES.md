@@ -26,7 +26,7 @@ As mudanças acima têm verificações em ambiente Mac. Isso não confirma repro
 
 #### Linha condicional — Discord (incluir somente após confirmação de prontidão)
 
-- **Discord:** mostre no seu perfil o título que está assistindo no Nuvio, sem precisar abrir o aplicativo do Discord. A integração ainda está em endurecimento e não está pronta para anúncio.
+- **Discord:** mostre no seu perfil o título que está assistindo no Nuvio, sem precisar abrir o aplicativo do Discord. A integração está na candidata e passou nos testes locais; vínculo da conta e presença nas TVs ainda precisam de validação antes do anúncio.
 
 ## English
 
@@ -52,4 +52,4 @@ The changes above have Mac-host checks. These do not confirm playback on a physi
 
 #### Conditional line — Discord (include only after readiness is confirmed)
 
-- **Discord:** show the title you're watching in Nuvio on your profile, without opening the Discord app. The integration is still being hardened and is not ready to announce.
+- **Discord:** show the title you're watching in Nuvio on your profile, without opening the Discord app. The integration is in the candidate and local tests pass; account linking and TV presence still need validation before announcement.
