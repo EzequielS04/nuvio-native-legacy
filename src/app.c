@@ -15,6 +15,7 @@
 #include "ponteiro.h"
 #include "app.h"
 #include "registro.h"
+#include "desempenho.h"
 #include "addonsui.h"
 #include "login.h"
 #include "sessao.h"
@@ -1493,6 +1494,9 @@ void app_evento(const SDL_Event *e) {
   // mais importa. Enquanto aberto ele engole todo o teclado, incluindo o KEYUP
   // do toque que o abriu ou fechou (ver a nota da armadilha em registro.c).
   if (registro_evento(e)) return;
+  // O painel de envio do registro (Ajustes > Enviar registro, ou o "Enviar
+  // agora" do painel): modal, come o teclado enquanto aberto.
+  if (registro_envio_evento(e)) return;
   // O MODAL DA ILHA (ilha.h) e uma camada: aberto, come o teclado todo.
   if (ilha_evento(e)) return;
   // A CENTRAL DE AVISOS vem logo depois do painel de log: com o toast na tela
@@ -3688,7 +3692,7 @@ void app_desenhar(Uint32 agora) {
   // refeita quando o catalogo muda e em 0,4 / 1,5 / 4 s, para a arte que
   // ainda chegava aparecer. Nada de congelar com video no ar (o PiP pinta o
   // furo) nem com o painel de Salvos, que usa o mesmo FBO.
-  { static int pronto, refeitas;
+  { static int pronto, refeitas, regCongelado;
     static unsigned revPronta;
     static Uint32 desde;
     static const Uint32 REFAZ[] = { 400, 1500, 4000 };
@@ -3714,7 +3718,24 @@ void app_desenhar(Uint32 agora) {
       if (!refeitas) desde = SDL_GetTicks();
       pronto = 1; revPronta = cat_revisao();
       spotVeuPronto = 1;
-    } else if (!registro_aberto()) desenharTelas(agora); }
+    } else if (registro_aberto()) {
+      // O PAINEL DE REGISTRO E VIDRO (03/10): a tela de tras e pintada UMA vez
+      // no FBO do snapshot ao abrir e os quadros seguintes so copiam. Com o
+      // video no ar (o furo do plano de video nao vai para a textura) ou sem
+      // FBO, fica a cor de limpeza, como antes.
+      if (!regCongelado && gfx_snap_ok() && !player_aberto() && !player_mini_ativo()) {
+        gfx_snap_comecar();
+        gfx_sem_recorte();
+        glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        desenharTelas(agora);
+        gfx_sem_recorte();
+        gfx_snap_terminar();
+        regCongelado = 1;
+      }
+      if (regCongelado) gfx_snap_desenhar();
+    } else desenharTelas(agora);
+    if (!registro_aberto()) regCongelado = 0; }
   // O explicador fica ACIMA de qualquer tela (menos do painel de log, que e
   // ferramenta de diagnostico): ele e a primeira coisa que a pessoa ve depois
   // desta atualizacao, e nada pode aparecer por cima dele.
@@ -3799,8 +3820,17 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto()) celb_desenhar();
   CAMADA_SE(diagnostico_intro_aberto());
   if (!registro_aberto()) diagnostico_intro_desenhar(agora);
+  // O MEDIDOR DE DESEMPENHO (Ajustes > Desempenho desta TV): ilha nas telas,
+  // pilula durante o video.
+  if (!registro_aberto() && ajustes_medidor_desempenho()) desempenho_desenhar(agora, player_aberto());
   CAMADA_SE(registro_aberto());
   registro_desenhar();
+  // A ilha do relogio fica acima do painel de registro, no canto de sempre.
+  if (registro_aberto() && sessao_logada()) {
+    ilha_relogio_visivel(ajustes_relogio_ligado());
+    ilha_ancorar(48.0f, NV_ILHA_Y, 0);
+    ilha_desenhar(agora);
+  }
 }
 
 int app_quer_sair(void) { return sair; }

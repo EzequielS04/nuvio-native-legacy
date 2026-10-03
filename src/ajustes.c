@@ -15,6 +15,7 @@
 #include "fileiras.h"
 #include "listas.h"
 #include "idioma.h"
+#include "idiomacod.h"
 #include "idiomaauto.h"
 #include "linguas.h"
 #include "addons.h"
@@ -33,6 +34,7 @@
 #include "qr.h"
 #include "atualizacao.h"
 #include "avisos.h"
+#include "registro.h"
 #include "seguro.h"
 #include "botoes.h"
 #include <time.h>
@@ -283,6 +285,11 @@ typedef enum {
   // Quanto a escolha automatica de fonte espera os addons lentos (#221). LOCAL.
   // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_FONTE_PRAZO,
+  // REGISTRO DO APP NO GLASS UI (03/10): "Ver o registro na tela" (Sobre e
+  // ajuda; abre o painel do botao vermelho, que nem todo controle LG tem) e o
+  // "Medidor de desempenho" (Desempenho desta TV; desempenho.h). LOCAIS. No
+  // fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_VER_REGISTRO, AJ_MEDIDOR,
   AJ_N
 } OpcaoId;
 
@@ -880,6 +887,8 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Ao sair do player",               V_SAIDA_PLAYER, 2),  // local: saidaPlayerLocal
   ESC("Perguntar o que achou nos créditos", V_LIGA, 2),     // local: reacaoCreditosLocal
   ESC("Espera pelos add-ons",            V_FONTE_PRAZO, 4),   // local: fontePrazoLocal
+  ACAO("Ver o registro na tela"),
+  ESC("Medidor de desempenho",           V_LIGA, 2),          // local: medidorDesempenhoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1045,6 +1054,8 @@ static const char *CHAVE[] = {
   // LOCAL e SEM o "-": o web nao tem a pergunta.
   "reacaoCreditosLocal",
   "fontePrazoLocal",
+  // "-": acao, nao grava. O medidor e LOCAL e SEM o "-": e desta TV.
+  "-verRegistro", "medidorDesempenhoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1103,6 +1114,8 @@ typedef struct {
 #define SEC(t, s, ic) { IT_SEC, -1, t, s, ic }
 #define GRP(t, s, ic) { IT_GRP, -1, t, s, ic }
 #define ROT(t)        { IT_ROT, -1, t, NULL, NULL }
+// Rotulo com a nota a direita no lugar da contagem ("para quem faz o app").
+#define ROTS(t, s)    { IT_ROT, -1, t, s, NULL }
 #define OPC(o)        { IT_OPC, o, NULL, NULL, NULL }
 
 #include "ajustes_ux_tela.inc"
@@ -1301,6 +1314,7 @@ int ajustes_dolby_vision(void)        { return lig(AJ_DV); }
 int ajustes_dolby_atmos(void)         { return lig(AJ_ATMOS); }
 int ajustes_pausa_overlay(void)       { return lig(AJ_PAUSA_OVERLAY); }
 int ajustes_reacao_creditos(void)     { return lig(AJ_REACAO_CREDITOS); }
+int ajustes_medidor_desempenho(void)  { return lig(AJ_MEDIDOR); }
 int ajustes_fonte_manual(void)        { return lig(AJ_FONTE_MANUAL); }
 int ajustes_fonte_primeira(void)      { return valor[AJ_FONTE_AUTO] == 1; }
 int ajustes_fonte_texto_addon(void)   { return valor[AJ_FONTE_TEXTO] == 1; }
@@ -2945,6 +2959,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
+    case AJ_MEDIDOR:        /* o medidor e da GPU desta TV; o web nao tem */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
     case AJ_REACAO_CREDITOS: /* o web nao tem a pergunta */
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: /* o web nao tem o Seekr */
@@ -3373,13 +3388,24 @@ static const char *textoLeitura(int op) {
   if (debIdx(op) >= 0) return debValor(op);
   if (op == AJ_DEBRID_AD_TESTAR) return adTesteTexto();
   if (op == AJ_ENVIAR_LOG) {
-    switch (avisos_envio_estado()) {
+    static char b[48];
+    AvisosEnvio env;
+    switch (avisos_envio_info(&env)) {
       case 1:  return i18n("enviando…");
-      case 2:  return i18n("enviado. Obrigado.");
+      case 2:
+        // O codigo fica na linha ate a sessao acabar (mockup quadro 9).
+        if (env.codigo[0]) { snprintf(b, sizeof b, i18n("enviado · %s"), env.codigo); return b; }
+        return i18n("enviado. Obrigado.");
       case 3:  return i18n("não foi possível enviar");
       default: return i18n("OK envia");
     }
   }
+  if (op == AJ_VER_REGISTRO)
+#ifdef NV_ANDROID
+    return i18n("ou botão Info");
+#else
+    return i18n("ou botão vermelho");
+#endif
   if (op == AJ_ATUALIZAR && !atualizacao_nova()[0]) {
     // "Procurar atualização": a resposta da ultima consulta (a automatica
     // tambem conta — ela e tao verdadeira quanto a pedida).
@@ -3871,6 +3897,8 @@ static const char *ajudaOpcao(int op) {
       return atualizacao_nova()[0]
         ? "Abre o cartão da versão nova, com o que mudou e o botão de instalar."
         : "Procura agora uma versão nova do Nuvio. Se houver, abre o cartão com o que mudou e o botão de instalar. O app também confere sozinho a cada 6 horas.";
+    case AJ_VER_REGISTRO: return "Abre o registro do app por cima desta tela, ao vivo: o mesmo painel do botão vermelho do controle, para quem não tem esse botão.";
+    case AJ_MEDIDOR: return "Mostra quadros por segundo, o pior quadro, a memória e as imagens num canto da tela, atualizados a cada 3 s. Durante o vídeo vira uma pílula pequena.";
     case AJ_ENVIAR_LOG: return "Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.";
     case AJ_ENVIO_AUTO: return "Ligado, o app manda o registro sozinho: o da sessão anterior ao abrir e o desta a cada minuto. Sem senhas nem chaves; serve para achar o que trava a Samsung. Desligue quando quiser.";
     case AJ_DIAGNOSTICO: return "Testa manifestos, fontes e artes dos addons, mede os tempos e aplica um perfil seguro de Qualidade ou Desempenho. O teste não marca títulos como assistidos.";
@@ -4657,7 +4685,10 @@ static void eventoTela(const SDL_Event *e) {
       else if (atualizacao_busca() != ATUALIZACAO_BUSCA_PROCURANDO) atualizacao_procurar_agora();
       return;
     }
-    if (focoOp == AJ_ENVIAR_LOG) { avisos_enviar_registro_atual(); return; }
+    // O painel de envio (registro.h) dispara o envio e mostra o codigo ou o
+    // motivo da falha; antes so o texto da linha mudava.
+    if (focoOp == AJ_ENVIAR_LOG) { registro_envio_abrir(); return; }
+    if (focoOp == AJ_VER_REGISTRO) { registro_abrir(); return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
     if (focoOp == AJ_DIAGNOSTICO) { pediuDiagnostico = 1; return; }
     if (focoOp == AJ_HERO_CATALOGOS) { if (!inativa(focoOp)) heroFonteCiclar(+1); return; }
@@ -5358,7 +5389,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL:
       return AJPV_RASTREIO;
     case AJ_VERSAO_I: case AJ_ATUALIZAR: case AJ_ENVIAR_LOG:
-    case AJ_ENVIO_AUTO:
+    case AJ_ENVIO_AUTO: case AJ_VER_REGISTRO:
       return AJPV_ABOUT;
     case AJ_TMDB_LIGADO: case AJ_TMDB_IDIOMA: case AJ_TMDB_ARTE:
     case AJ_TMDB_BASICO: case AJ_TMDB_FICHA: case AJ_TMDB_DATAS:
