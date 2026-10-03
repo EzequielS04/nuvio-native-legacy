@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Οι λίστες μου"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Μίνι οδηγός πάνω από το βίντεο και υπενθυμίσεις για επερχόμενες σειρές."),
   T("Miniatura do episódio", "Μικρογραφία επεισοδίου"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Μικρογραφίες καθώς μετακινείσαι στη γραμμή χρόνου. Ρυθμίσεις › Αναπαραγωγή › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Μικρογραφίες στη γραμμή χρόνου του player."),
   T("Miniaturas na barra de tempo", "Μικρογραφίες στη γραμμή χρόνου"),
   T("Mistério", "Μυστήριο"),

@@ -1468,6 +1468,7 @@
   T("Minhas listas", "我的清單"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "影片上方的迷你指南，以及節目提醒。"),
   T("Miniatura do episódio", "集數縮圖"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "拖動時間軸時顯示縮圖。設定 › 播放 › Seekr。"),
   T("Miniaturas da barra de tempo no player.", "播放器時間軸上的縮圖。"),
   T("Miniaturas na barra de tempo", "時間軸縮圖"),
   T("Mistério", "懸疑"),

@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Le mie liste"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Mini guida sopra il video e promemoria per le serie in arrivo."),
   T("Miniatura do episódio", "Miniatura dell'episodio"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Miniature scorrendo la barra del tempo. Impostazioni › Riproduzione › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Miniature sulla barra del tempo nel player."),
   T("Miniaturas na barra de tempo", "Miniature sulla barra del tempo"),
   T("Mistério", "Mistero"),

@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Mina listor"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Miniguide över videon och påminnelse om program."),
   T("Miniatura do episódio", "Avsnittsminiatyr"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Miniatyrer när du spolar i tidslinjen. Inställningar › Uppspelning › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Miniatyrer i tidsfältet i spelaren."),
   T("Miniaturas na barra de tempo", "Miniatyrer i tidsfältet"),
   T("Mistério", "Mysterium"),

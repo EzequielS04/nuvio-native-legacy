@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Saját listáim"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Mini útmutató a videó fölött és emlékeztetők a közelgő sorozatokról."),
   T("Miniatura do episódio", "Epizód miniatűr"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Bélyegképek az idősávon léptetve. Beállítások › Lejátszás › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Miniatűrök az idősávon a lejátszóban."),
   T("Miniaturas na barra de tempo", "Miniatűrök az idősávon"),
   T("Mistério", "Rejtély"),

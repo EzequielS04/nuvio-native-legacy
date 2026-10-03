@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Moje liste"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Mini vodič preko videa i podsjetnici za nadolazeće serije."),
   T("Miniatura do episódio", "Sličica epizode"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Sličice dok premotavaš traku vremena. Postavke › Reprodukcija › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Sličice na traci vremena u playeru."),
   T("Miniaturas na barra de tempo", "Sličice na traci vremena"),
   T("Mistério", "Misterija"),

@@ -1467,6 +1467,7 @@
   { "Minhas listas", "My lists" },
   { "Mini guia por cima do vídeo e lembrete de programa.", "Mini guide over the video and reminders for upcoming shows." },
   { "Miniatura do episódio", "Episode thumbnail" },
+  { "Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Thumbnails as you scrub the seek bar. Settings › Playback › Seekr." },
   { "Miniaturas da barra de tempo no player.", "Seek bar thumbnails in the player." },
   { "Miniaturas na barra de tempo", "Seek bar thumbnails" },
   { "Mistério", "Mystery" },

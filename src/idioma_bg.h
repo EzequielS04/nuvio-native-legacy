@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Моите списъци"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Мини ръководство над видеото и напомняния за предстоящи сериали."),
   T("Miniatura do episódio", "Миниатюра на епизода"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Миниатюри при превъртане на лентата за време. Настройки › Възпроизвеждане › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Миниатюри на лентата за време в плейъра."),
   T("Miniaturas na barra de tempo", "Миниатюри на лентата за време"),
   T("Mistério", "Мистерия"),

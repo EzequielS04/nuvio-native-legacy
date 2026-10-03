@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Daftarku"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Panduan mini di atas video dan pengingat untuk serial mendatang."),
   T("Miniatura do episódio", "Thumbnail episode"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Gambar mini saat menggeser bilah waktu. Pengaturan › Pemutaran › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Thumbnail di bilah waktu pemutar."),
   T("Miniaturas na barra de tempo", "Thumbnail di bilah waktu"),
   T("Mistério", "Misteri"),

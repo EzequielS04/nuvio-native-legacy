@@ -1467,6 +1467,7 @@
   T("Minhas listas", "Listele mele"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Mini ghid peste videoclip și memento pentru emisiuni."),
   T("Miniatura do episódio", "Miniatura episodului"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Miniaturi când derulezi bara de timp. Setări › Redare › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Miniaturi pe bara de timp din player."),
   T("Miniaturas na barra de tempo", "Miniaturi pe bara de timp"),
   T("Mistério", "Mister"),

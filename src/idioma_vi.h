@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Danh sách của tôi"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Hướng dẫn thu nhỏ phía trên video và nhắc nhở cho các phim bộ sắp chiếu."),
   T("Miniatura do episódio", "Ảnh thu nhỏ tập"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Ảnh thu nhỏ khi tua trên thanh thời gian. Cài đặt › Phát lại › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Ảnh thu nhỏ trên thanh thời gian của trình phát."),
   T("Miniaturas na barra de tempo", "Ảnh thu nhỏ trên thanh thời gian"),
   T("Mistério", "Bí ẩn"),

@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Mano sąrašai"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Mini vadovas virš vaizdo įrašo ir priminimai apie būsimus serialus."),
   T("Miniatura do episódio", "Epizodo miniatiūra"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Miniatiūros slenkant laiko juosta. Nustatymai › Atkūrimas › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Miniatiūros grotuvo laiko juostoje."),
   T("Miniaturas na barra de tempo", "Miniatiūros laiko juostoje"),
   T("Mistério", "Paslaptis"),

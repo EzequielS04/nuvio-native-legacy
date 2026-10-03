@@ -1468,6 +1468,7 @@
   T("Minhas listas", "マイリスト"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "動画の上に表示するミニガイドと、番組のリマインダー。"),
   T("Miniatura do episódio", "エピソードのサムネイル"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "シークバーを動かすとサムネイルを表示。設定 › 再生 › Seekr。"),
   T("Miniaturas da barra de tempo no player.", "プレーヤーのタイムバーにサムネイルを表示します。"),
   T("Miniaturas na barra de tempo", "タイムバーのサムネイル"),
   T("Mistério", "ミステリー"),

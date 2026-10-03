@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Listelerim"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Videonun üzerinde mini rehber ve yaklaşan diziler için hatırlatıcılar."),
   T("Miniatura do episódio", "Bölüm küçük resmi"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Zaman çubuğunda gezinirken küçük resimler. Ayarlar › Oynatma › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Oynatıcıdaki zaman çubuğunda küçük resimler."),
   T("Miniaturas na barra de tempo", "Zaman çubuğunda küçük resimler"),
   T("Mistério", "Gizem"),

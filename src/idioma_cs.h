@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Moje seznamy"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Mini průvodce nad videem a připomínky nadcházejících seriálů."),
   T("Miniatura do episódio", "Náhled epizody"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Náhledy při posouvání časové osy. Nastavení › Přehrávání › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Náhledy na časové ose v přehrávači."),
   T("Miniaturas na barra de tempo", "Náhledy na časové ose"),
   T("Mistério", "Záhada"),

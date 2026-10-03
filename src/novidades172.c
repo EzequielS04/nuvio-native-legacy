@@ -80,7 +80,7 @@
 #define LARANJA_I  246, 140,  52
 
 enum { B_DEPOIS = 0, B_OK = 1, B_N };
-enum { ID_NADA = 0, ID_VISUAL, ID_EMAIL, ID_FONTES, ID_AJUSTES, ID_RETOMAR, ID_CONSERTOS };
+enum { ID_NADA = 0, ID_VISUAL, ID_EMAIL, ID_FONTES, ID_SEEKR, ID_AJUSTES, ID_RETOMAR, ID_CONSERTOS };
 
 static int   aberto, decidido, foco = B_OK, naPrevia;
 static int   cena, cenaAntiga;
@@ -345,6 +345,8 @@ static const Item ITENS[] = {
     "Sem celular por perto: e-mail e senha direto na TV, embaixo do QR." },
   { ID_FONTES,    "fontes",        "Fontes na hora",
     "A lista enche conforme cada addon responde e a escolha não espera o mais lento." },
+  { ID_SEEKR,     "aj_images",     "Seekr",
+    "Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr." },
   { ID_AJUSTES,   "menu_settings", "Ajustes",
     "Em categorias, com busca e as opções avançadas à parte." },
   { ID_RETOMAR,   "play",          "Retomar",

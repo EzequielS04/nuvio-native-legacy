@@ -1468,6 +1468,7 @@
   T("Minhas listas", "Mijn lijsten"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Miniguide over de video en herinneringen voor komende series."),
   T("Miniatura do episódio", "Afleveringsminiatuur"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Miniaturen bij het scrollen door de tijdbalk. Instellingen › Afspelen › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Miniaturen op de tijdbalk in de speler."),
   T("Miniaturas na barra de tempo", "Miniaturen op de tijdbalk"),
   T("Mistério", "Mysterie"),

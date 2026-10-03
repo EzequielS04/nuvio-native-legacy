@@ -1467,6 +1467,7 @@
   T("Minhas listas", "Meine Listen"),
   T("Mini guia por cima do vídeo e lembrete de programa.", "Mini-Programm über dem Video und Erinnerung an Sendungen."),
   T("Miniatura do episódio", "Vorschaubild der Folge"),
+  T("Miniaturas ao percorrer a barra de tempo. Ajustes › Reprodução › Seekr.", "Vorschaubilder beim Spulen in der Zeitleiste. Einstellungen › Wiedergabe › Seekr."),
   T("Miniaturas da barra de tempo no player.", "Vorschaubilder auf der Zeitleiste im Player."),
   T("Miniaturas na barra de tempo", "Vorschaubilder auf der Zeitleiste"),
   T("Mistério", "Mystery"),
