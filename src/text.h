@@ -49,6 +49,14 @@ typedef enum {
   // Numeral do Top 10 da home Dinamica (NV_TOP10_NUM_CORPO). No FIM, depois das
   // legendas: TXT_LEG_* e contado por aritmetica a partir de TXT_LEG_50.
   TXT_RANK_GRANDE,
+  // ESCALA DAS ILHAS (Glass UI, mockup "ilha" telas 6 e 7): os corpos do
+  // Spotlight e do menu do cartaz que nenhum estilo acima tem — o nome no
+  // cabecalho da ilha (24/700), o nome numa linha de resultado (22/600, em
+  // Bold: a Inter embarcada nao tem 600 e o Medium afinava o nome ao lado do
+  // mockup), a meta do melhor resultado (19/400), o genero (17/400) e o apoio
+  // das linhas e dicas (16/400). No FIM pelo mesmo motivo dos outros: a
+  // tabela ESTILOS e indexada por esta ordem.
+  TXT_ILHA_NOME, TXT_ILHA_ITEM, TXT_ILHA_META, TXT_ILHA_GENERO, TXT_ILHA_APOIO,
   TXT_NFONTES
 } TxtEstilo;
 

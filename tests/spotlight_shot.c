@@ -46,6 +46,7 @@
 #include "addons.h"
 #include "descoberta.h"
 #include "sistexto.h"
+#include "shot_arte.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -92,10 +93,14 @@ static void paraLista(void) { tecla(SDLK_DOWN); }
 // Voltar desfaz em ordem (lista -> campo -> limpa -> fecha): aperta ate fechar.
 static void fechar(void) { int i; for (i = 0; i < 5 && spot_aberto(); i++) tecla(SDLK_ESCAPE); }
 
-// O "fundo": fileiras de posteres do pacote, como uma home.
+// O "fundo": a arte de tela cheia de tests/shot_arte.h, para o vidro das
+// duas ilhas ser julgado sobre uma imagem de verdade (o mockup "ilha" tela 6
+// e assim); com NUVIO_SHOT_ARTE=- as fileiras de posteres, como uma home.
 static void fundo(void) {
   int r, c;
   char cam[700];
+  const char *sa = getenv("NUVIO_SHOT_ARTE");
+  if (!(sa && !strcmp(sa, "-"))) { shot_arte_desenhar(0.0f); return; }
   gfx_cor((GfxRect){ 0, 0, 1920, 1080 }, 0, 0.07f, 0.07f, 0.08f, 1.0f);
   for (r = 0; r < 3; r++)
     for (c = 0; c < 8; c++) {
@@ -188,6 +193,16 @@ int main(int argc, char **argv) {
   dados_iniciar(dir);
   assert(!strcmp(dados_dir(), dir));
   ajustes_iniciar();
+  // NUVIO_SHOT_PT=1: interface em portugues (a lingua dos mockups), para a
+  // comparacao lado a lado medir o mesmo texto.
+  if (getenv("NUVIO_SHOT_PT")) {
+    char aj[700];
+    FILE *f;
+    snprintf(aj, sizeof aj, "%s/ajustes.txt", dados_dir());
+    if ((f = fopen(aj, "w"))) { fprintf(f, "idioma 0\n"); fclose(f); }
+    ajustes_dir(dados_dir());
+  }
+  ajustes_definir_vidro(0);   // as capturas comuns sao do solido; -vidro* liga
 
   // Catalogo do pacote em duas fileiras "de addon" (base preenchida: e o que
   // faz a primeira virar "Em alta").
@@ -339,6 +354,7 @@ int main(int argc, char **argv) {
   spot_abrir(0);
   digitar("the");
   paraLista();
+  captura(saida, "vidro-foco");
   tecla(SDLK_DOWN);
   captura(saida, "vidro");
   ajustes_definir_vidro(0);

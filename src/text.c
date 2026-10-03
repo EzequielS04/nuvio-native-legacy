@@ -252,6 +252,11 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 68, PESO_REGULAR }, { 72, PESO_REGULAR }, { 76, PESO_REGULAR },
   { 80, PESO_REGULAR },
   { NV_TOP10_NUM_CORPO, PESO_BOLD },   // numeral do Top 10 da Dinamica
+  { 24, PESO_BOLD    },             // TXT_ILHA_NOME: nome no cabecalho do menu do cartaz
+  { 22, PESO_BOLD    },             // TXT_ILHA_ITEM: nome numa linha de resultado (600)
+  { 19, PESO_REGULAR },             // TXT_ILHA_META: ano · duracao · tipo do melhor resultado
+  { 17, PESO_REGULAR },             // TXT_ILHA_GENERO: generos do melhor resultado
+  { 16, PESO_REGULAR },             // TXT_ILHA_APOIO: meta das linhas, dicas do rodape
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.
