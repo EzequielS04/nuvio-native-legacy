@@ -174,7 +174,7 @@
   1, 1, 1, 1,       /* posteres, fundo, logo do addon; arte das pastas da conta */
   // LIGADO: e o que o oficial mostra com o pacote de selos da wiki importado,
   // e o pedido do #198. Quem prefere a fileira branca de antes desliga.
-  0,                /* selos coloridos: LIGADO (V_LIGA: 0 = Ligado) */
+  1,                /* selos coloridos: DESLIGADO (V_LIGA: 1 = Desligado); Glass UI = todos brancos */
   1,                /* som do trailer na pagina do titulo: DESLIGADO (V_LIGA: 1 = Desligado) */
   0, 0, 0,          /* Live TV: resolucao, formato do Xtream e espera automaticos */
   0,                /* diagnostico da Live TV: acao */

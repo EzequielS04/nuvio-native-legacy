@@ -110,7 +110,9 @@ int main(int argc, char **argv) {
       { const char *t = getenv("NUVIO_SHOT_TEXTO");
         if (t && *t == '1') fprintf(f, "fonteTextoLocal 1\n");
         // NUVIO_SHOT_LOGO=1: Texto das fontes > Logo do titulo.
-        if (getenv("NUVIO_SHOT_LOGO")) fprintf(f, "fonteTextoLocal 2\n"); }
+        if (getenv("NUVIO_SHOT_LOGO")) fprintf(f, "fonteTextoLocal 2\n");
+        // NUVIO_SHOT_SELOS=1: Selos coloridos ligado.
+        if (getenv("NUVIO_SHOT_SELOS")) fprintf(f, "selosColoridosLocal 0\n"); }
       // Material: NUVIO_SHOT_VIDRO=0 desliga a Interface de vidro (folha solida).
       { const char *v = getenv("NUVIO_SHOT_VIDRO");
         fprintf(f, "vidroLocal %d\n", v && *v == '0' ? 1 : 0); }
