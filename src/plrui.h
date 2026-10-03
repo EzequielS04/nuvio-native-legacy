@@ -78,6 +78,11 @@ void plrui_tempo(char *b, size_t n, double seg);
 // (idioma_ponto_decimal): "18.2 GB" -> "18,2 GB", "+0.25 s" -> "+0,25 s".
 void plrui_decimal(char *s);
 
+// Tira separadores " · " soltos nas pontas (e espacos), e junta os
+// repetidos: um campo vazio no meio de "a · b · c" nunca deixa "a ·" ou
+// "· b". Edita no lugar.
+void plrui_limpar_sep(char *s);
+
 // Tinta do texto sobre a pilula de foco (0..255).
 int plrui_tinta(void);
 

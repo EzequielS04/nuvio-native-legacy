@@ -750,6 +750,7 @@ static void partirRotulo(const char *r, char *nome, size_t tn, char *sub, size_t
   memcpy(nome, r, n); nome[n] = 0;
   sub[0] = 0;
   if (p) { p += 2; while (*p == ' ') p++; snprintf(sub, ts, "%s", p); }
+  plrui_limpar_sep(nome); plrui_limpar_sep(sub);
 }
 
 // O "rosto" do idioma: o codigo em caixa alta num quadrado de 52.

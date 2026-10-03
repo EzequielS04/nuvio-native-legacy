@@ -1747,6 +1747,7 @@ void player_mini_desenhar(Uint32 agora) {
       size_t u = strlen(rot);
       snprintf(rot + u, sizeof rot - u, " \xc2\xb7 %s", ag.titulo);
     }
+    plrui_limpar_sep(rot);
     { TxtLinha nm = txt_linha_corta(TXT_G18M, rot, 243, 242, 239, 255, il.x + il.w - 20.0f - x);
       txt_desenhar_alpha(nm, x, yc - (float)nm.h * 0.5f, 1.0f); }
     { const char *k[2] = {
@@ -3183,7 +3184,7 @@ static void corpoCarregando(GfxRect r, float a, void *u) {
       if (st->tamanhoMB > 0)
         snprintf(d, sizeof d, "%s \xc2\xb7 %.1f GB", st->provedor, st->tamanhoMB / 1024.0);
       else snprintf(d, sizeof d, "%s", st->provedor);
-      plrui_decimal(d);
+      plrui_decimal(d); plrui_limpar_sep(d);
       { TxtLinha l = txt_linha_corta(TXT_G18R, d, 243, 242, 239, 140, w * 0.4f);
         txt_desenhar_alpha(l, x + w - 18.0f - l.w, y + 26.0f - (float)l.h * 0.5f, a); }
     } }
@@ -3776,6 +3777,7 @@ void player_desenhar(Uint32 agora) {
       while (q && *q) {
         fimp = strstr(q, " \xc2\xb7 ");
         if (fimp) *fimp = 0;
+        if (!*q) { q = fimp ? fimp + 4 : NULL; continue; }   // campo vazio: sem ponto solto
         if (!prim) {
           gfx_cor((GfxRect){ x + 10.0f, yBase + h * 0.5f - 2.0f, 4.0f, 4.0f }, 0.5f, 0.953f, 0.949f, 0.937f, 0.40f * ac);
           x += 24.0f;

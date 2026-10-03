@@ -246,3 +246,27 @@ void plrui_tempo(char *b, size_t n, double seg) {
   if (h > 0) snprintf(b, n, "%d:%02d:%02d", h, m, s);
   else snprintf(b, n, "%d:%02d", m, s);
 }
+
+void plrui_limpar_sep(char *s) {
+  static const char PONTO[] = "\xc2\xb7";
+  char *r, *w, *p;
+  int mudou = 1;
+  if (!s) return;
+  while (mudou) {
+    size_t n;
+    mudou = 0;
+    // pontas: espacos e o ponto medio
+    while (*s == ' ' || !strncmp(s, PONTO, 2)) { memmove(s, s + (*s == ' ' ? 1 : 2), strlen(s) - (*s == ' ' ? 1 : 2) + 1); mudou = 1; }
+    n = strlen(s);
+    while (n && (s[n - 1] == ' ' || (n >= 2 && !strncmp(s + n - 2, PONTO, 2)))) {
+      n -= s[n - 1] == ' ' ? 1 : 2; s[n] = 0; mudou = 1;
+    }
+    // "· ·" (com espacos no meio) vira um so
+    for (p = strstr(s, PONTO); p; p = strstr(p + 2, PONTO)) {
+      char *q = p + 2;
+      while (*q == ' ') q++;
+      if (!strncmp(q, PONTO, 2)) { memmove(p, q, strlen(q) + 1); mudou = 1; break; }
+    }
+  }
+  (void)r; (void)w;
+}

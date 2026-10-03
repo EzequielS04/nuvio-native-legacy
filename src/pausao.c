@@ -141,6 +141,7 @@ static float metaPontos(const char *meta, float x, float y, float maxW, float a)
     TxtLinha l;
     f = strstr(q, " \xc2\xb7 ");
     if (f) *f = 0;
+    if (!*q) { q = f ? f + 4 : NULL; continue; }   // campo vazio: sem ponto solto
     l = txt_linha(TXT_CAPTION2, q, 243, 242, 239, 168);
     if (!prim) {
       gfx_cor((GfxRect){ x + 10.0f, y + l.h * 0.5f - 2.0f, 4.0f, 4.0f }, 0.5f, 0.953f, 0.949f, 0.937f, 0.40f * a);
