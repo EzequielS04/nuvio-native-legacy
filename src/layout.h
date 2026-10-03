@@ -21,6 +21,16 @@
 // layouts — e `collapseSidebar` em layoutPreferences.js, que o perfil do dono
 // tem em true. Com ela recolhida a home comeca em 104.
 #define NV_CONTENT_PAD          104.0f
+// O MENU DOS LAYOUTS CLASSICOS com a rail fixa (menu.c, mockup Glass UI
+// "ilha"): a borda direita da pilula de icones, em px da tela REAL (o menu
+// desenha em escala fixa, nao segue o Tamanho da interface), e o vao ate o
+// conteudo. Moderna: ilha de 88
+// em x 48 (borda 136; o titulo do mockup 2 comeca em 200 = 136 + 64). Padrao:
+// a mesma pilula colada na borda (borda 88). ajustes_rail_largura_fixa
+// reserva borda + vao - NV_CONTENT_PAD, e o conteudo comeca 64 px depois dela.
+#define NV_MENU_RAIL_BORDA_MODERNA 136.0f
+#define NV_MENU_RAIL_BORDA_PADRAO   88.0f
+#define NV_MENU_RAIL_VAO            64.0f
 
 // Hero em TELA CHEIA (`modernHeroFullScreenBackdropEnabled`, tambem true no
 // perfil do dono). MEDIDO: .home-modern-hero-media 1920x1062 em (0,0), imagem

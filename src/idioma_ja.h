@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "プレビューを切り替え"),
   T("Trocar arte", "アートワークを変更"),
   T("Trocar de aba", "タブを切り替え"),
+  T("Trocar de perfil", "プロフィールを切り替え"),
   T("Trocar de usuário", "ユーザーを切り替え"),
   T("Trocar o card", "カードを変更"),
   T("Trocar o tamanho", "サイズを変更"),

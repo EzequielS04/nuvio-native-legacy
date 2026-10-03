@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Αλλαγή προεπισκόπησης"),
   T("Trocar arte", "Αλλαγή εικαστικών"),
   T("Trocar de aba", "Αλλαγή καρτέλας"),
+  T("Trocar de perfil", "Αλλαγή προφίλ"),
   T("Trocar de usuário", "Αλλαγή χρήστη"),
   T("Trocar o card", "Αλλαγή κάρτας"),
   T("Trocar o tamanho", "Αλλαγή μεγέθους"),

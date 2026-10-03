@@ -3304,6 +3304,7 @@
   T("Trocar a prévia", "Schimbă previzualizarea"),
   T("Trocar arte", "Schimbă imaginea"),
   T("Trocar de aba", "Schimbă fila"),
+  T("Trocar de perfil", "Schimbă profilul"),
   T("Trocar de usuário", "Schimbă utilizatorul"),
   T("Trocar o card", "Schimbă cardul"),
   T("Trocar o tamanho", "Schimbă dimensiunea"),

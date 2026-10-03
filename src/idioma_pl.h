@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Zmień podgląd"),
   T("Trocar arte", "Zmień grafikę"),
   T("Trocar de aba", "Zmień kartę"),
+  T("Trocar de perfil", "Zmień profil"),
   T("Trocar de usuário", "Zmień użytkownika"),
   T("Trocar o card", "Zmień kartę"),
   T("Trocar o tamanho", "Zmień rozmiar"),

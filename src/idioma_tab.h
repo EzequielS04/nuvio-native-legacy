@@ -3304,6 +3304,7 @@
   { "Trocar a prévia", "Switch the preview" },
   { "Trocar arte", "Change artwork" },
   { "Trocar de aba", "Switch tab" },
+  { "Trocar de perfil", "Switch profile" },
   { "Trocar de usuário", "Switch user" },
   { "Trocar o card", "Change the card" },
   { "Trocar o tamanho", "Change the size" },

@@ -560,16 +560,15 @@ void ilha_posicionar(int guia) {
     if (menu_pilula_rect(&px, &py, &pw, &ph))
       ilha_ancorar((px + pw) / e + NV_MENU_PILULA_VAO, (py + ph * 0.5f) / e - NV_ILHA_H * 0.5f, 0);
     else ilha_ancorar(ajustes_conteudo_x() / e, NV_ILHA_Y, 0);   // sem pilula na tela: canto livre
-  } else if (ajustes_home_layout() != HOME_LAYOUT_DINAMICA && menu_barra_borda() > 0.0f) {
-    // GLASS UI, barra de altura inteira (dono, 02/10): o menu dos layouts
-    // classicos ocupa a borda esquerda de cima a baixo, entao o relogio nao
-    // pode mais ficar "em cima dele" na mesma margem — ficaria POR CIMA da
-    // barra. Fica a direita dela: no x do conteudo (alinhado aos titulos,
-    // como sem rail) ou, com a barra aberta e mais larga que esse recuo, 24
-    // px depois da borda. ilha.c desliza o x entre os dois.
-    float e = gfx_escala_ui();
-    float x = ajustes_conteudo_x() / e, borda = menu_barra_borda() / e + 24.0f;
-    ilha_ancorar(x > borda ? x : borda, NV_ILHA_Y, 0);
+  } else if (ajustes_home_layout() == HOME_LAYOUT_MODERNA && menu_barra_borda() > 0.0f) {
+    // MODERNA (dono, 03/10; mockup Glass UI "ilha", telas 1 e 2): o menu e uma
+    // ilha logo ABAIXO do relogio, na mesma margem. Com a rail na tela (fixa,
+    // ou o painel aberto) o relogio vai para essa margem e os dois formam a
+    // coluna da esquerda; ilha.c desliza o x entre o conteudo e ela.
+    // Na PADRAO o painel e centrado na altura, colado na borda: o canto de
+    // cima fica livre e o relogio segue no x do conteudo (o padrao abaixo).
+    // NV_MENU_MODERNA_X e px da tela REAL; a ilha mede pela virtual.
+    ilha_ancorar(NV_MENU_MODERNA_X / gfx_escala_ui(), NV_ILHA_Y, 0);
   } else if (pos == 1) ilha_ancorar(ajustes_conteudo_x() / gfx_escala_ui(), NV_ILHA_Y, 0);
 }
 

@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Előnézet váltása"),
   T("Trocar arte", "Grafika módosítása"),
   T("Trocar de aba", "Fül váltása"),
+  T("Trocar de perfil", "Profilváltás"),
   T("Trocar de usuário", "Felhasználóváltás"),
   T("Trocar o card", "Kártya cseréje"),
   T("Trocar o tamanho", "Méret cseréje"),

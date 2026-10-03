@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Önizlemeyi değiştir"),
   T("Trocar arte", "Görseli değiştir"),
   T("Trocar de aba", "Sekme değiştir"),
+  T("Trocar de perfil", "Profil değiştir"),
   T("Trocar de usuário", "Kullanıcı değiştir"),
   T("Trocar o card", "Kartı değiştir"),
   T("Trocar o tamanho", "Boyutu değiştir"),

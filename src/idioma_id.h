@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Ganti pratinjau"),
   T("Trocar arte", "Ganti gambar"),
   T("Trocar de aba", "Ganti tab"),
+  T("Trocar de perfil", "Ganti profil"),
   T("Trocar de usuário", "Ganti pengguna"),
   T("Trocar o card", "Ganti kartu"),
   T("Trocar o tamanho", "Ganti ukuran"),

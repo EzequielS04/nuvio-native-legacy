@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Bytt forhåndsvisning"),
   T("Trocar arte", "Bytt bilde"),
   T("Trocar de aba", "Bytt fane"),
+  T("Trocar de perfil", "Bytt profil"),
   T("Trocar de usuário", "Bytt bruker"),
   T("Trocar o card", "Bytt kort"),
   T("Trocar o tamanho", "Bytt størrelse"),

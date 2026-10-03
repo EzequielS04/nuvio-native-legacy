@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Voorbeeld wisselen"),
   T("Trocar arte", "Artwork wijzigen"),
   T("Trocar de aba", "Van tabblad wisselen"),
+  T("Trocar de perfil", "Wissel van profiel"),
   T("Trocar de usuário", "Van gebruiker wisselen"),
   T("Trocar o card", "Kaart wisselen"),
   T("Trocar o tamanho", "Grootte wisselen"),

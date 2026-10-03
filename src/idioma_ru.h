@@ -3304,6 +3304,7 @@
   T("Trocar a prévia", "Сменить превью"),
   T("Trocar arte", "Сменить изображение"),
   T("Trocar de aba", "Сменить вкладку"),
+  T("Trocar de perfil", "Сменить профиль"),
   T("Trocar de usuário", "Сменить пользователя"),
   T("Trocar o card", "Сменить карточку"),
   T("Trocar o tamanho", "Сменить размер"),
