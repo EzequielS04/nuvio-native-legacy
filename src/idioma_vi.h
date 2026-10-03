@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Đổi bản xem trước"),
   T("Trocar arte", "Đổi hình ảnh"),
   T("Trocar de aba", "Đổi thẻ"),
+  T("Trocar de perfil", "Đổi hồ sơ"),
   T("Trocar de usuário", "Đổi người dùng"),
   T("Trocar o card", "Đổi thẻ"),
   T("Trocar o tamanho", "Đổi kích cỡ"),

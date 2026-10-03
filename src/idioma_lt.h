@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Keisti peržiūrą"),
   T("Trocar arte", "Keisti vaizdus"),
   T("Trocar de aba", "Keisti skirtuką"),
+  T("Trocar de perfil", "Keisti profilį"),
   T("Trocar de usuário", "Keisti naudotoją"),
   T("Trocar o card", "Keisti kortelę"),
   T("Trocar o tamanho", "Keisti dydį"),

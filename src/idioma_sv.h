@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Byt förhandsvisning"),
   T("Trocar arte", "Byt omslag"),
   T("Trocar de aba", "Byt flik"),
+  T("Trocar de perfil", "Byt profil"),
   T("Trocar de usuário", "Byt användare"),
   T("Trocar o card", "Byt kort"),
   T("Trocar o tamanho", "Byt storlek"),

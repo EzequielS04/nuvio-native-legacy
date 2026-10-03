@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Skift forhåndsvisning"),
   T("Trocar arte", "Skift billede"),
   T("Trocar de aba", "Skift fane"),
+  T("Trocar de perfil", "Skift profil"),
   T("Trocar de usuário", "Skift bruger"),
   T("Trocar o card", "Skift kort"),
   T("Trocar o tamanho", "Skift størrelse"),

@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Přepnout náhled"),
   T("Trocar arte", "Změnit artwork"),
   T("Trocar de aba", "Přepnout kartu"),
+  T("Trocar de perfil", "Přepnout profil"),
   T("Trocar de usuário", "Přepnout uživatele"),
   T("Trocar o card", "Změnit kartu"),
   T("Trocar o tamanho", "Změnit velikost"),

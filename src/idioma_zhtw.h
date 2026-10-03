@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "切換預覽"),
   T("Trocar arte", "更換圖片"),
   T("Trocar de aba", "切換分頁"),
+  T("Trocar de perfil", "切換個人檔案"),
   T("Trocar de usuário", "切換使用者"),
   T("Trocar o card", "更換卡片"),
   T("Trocar o tamanho", "更換大小"),

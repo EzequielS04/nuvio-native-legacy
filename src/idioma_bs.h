@@ -3305,6 +3305,7 @@
   T("Trocar a prévia", "Promijeni pregled"),
   T("Trocar arte", "Promijeni slike"),
   T("Trocar de aba", "Promijeni karticu"),
+  T("Trocar de perfil", "Promijeni profil"),
   T("Trocar de usuário", "Promijeni korisnika"),
   T("Trocar o card", "Promijeni karticu"),
   T("Trocar o tamanho", "Promijeni veličinu"),
