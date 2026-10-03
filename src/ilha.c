@@ -250,7 +250,10 @@ void ilha_retirar_grupo(void) {
 }
 
 int ilha_tecla_central(void) {
-  return temCur && curAte && cur.tecla && !cur.temModal && !cur.cartao && A > 0.5f;
+  // O episodio novo abre o modal da ESTREIA; sem o cartao na pilula (relogio
+  // desligado), a mesma tecla cai na central, onde o item esta.
+  int cartaoNaPilula = cur.cartao > 0 && cur.cartao <= ILHA_N_CARTOES && temCartao[cur.cartao - 1];
+  return temCur && curAte && cur.tecla && !cur.temModal && !cartaoNaPilula && A > 0.5f;
 }
 
 int ilha_aviso_pediu(char *chave, size_t tam) {
@@ -916,10 +919,11 @@ static float layoutModalAviso(GfxRect m, float a, int desenha) {
   float y, colH, corpoH, y0, by;
   float ad = desenha ? a : 0.0f;
   int i, passo;
-  // Dois passos: o primeiro mede a coluna (alfa 0), o segundo desenha com o
-  // deslocamento certo (rosto: coluna centrada nele; arte e ladrilho: no topo).
+  // Com o ROSTO a coluna fica centrada nele, e para isso ela e medida antes
+  // (passo 0, alfa 0); com arte ou ladrilho ela vai no topo e o desenho e um
+  // passo so.
   y0 = ay; colH = 0.0f;
-  for (passo = desenha ? 0 : 1; passo < 2; passo++) {
+  for (passo = desenha && rosto ? 0 : 1; passo < 2; passo++) {
     float aa = passo == 0 ? 0.0f : ad;
     int vale = passo == 1 && desenha;
     y = y0;
@@ -1105,12 +1109,15 @@ static void desenharModal(GfxRect m, float a) {
     if (modalQual == ILHA_VIVO) {
       int mi = c->restanteMin < 1 ? 1 : c->restanteMin;
       snprintf(b, sizeof b, i18n("%d min restantes"), mi);
-    } else if (c->quando[0]) snprintf(b, sizeof b, "%s · %s", i18n("Episódio novo"), c->quando);
+    } else if (modalQual == ILHA_AMIGO) snprintf(b, sizeof b, i18n("%s · agora"), c->pessoa);
+    else if (c->quando[0]) snprintf(b, sizeof b, "%s · %s", i18n("Episódio novo"), c->quando);
     else snprintf(b, sizeof b, "%s", i18n("Episódio novo"));
     t = txt_linha(TXT_CAPTION, b, 200, 204, 212, 255);
     sy = ay + MD_ARTE_H - (float)t.h;
-    if (modalQual == ILHA_ESTREIA) {
-      gfx_cor((GfxRect){ cx, sy + (float)t.h * 0.5f - 5.0f, 10.0f, 10.0f }, 0.5f, cr, cg, cb, a);
+    if (modalQual == ILHA_ESTREIA || modalQual == ILHA_AMIGO) {
+      // O ponto: acento no episodio novo, vermelho de "agora" no amigo.
+      if (modalQual == ILHA_AMIGO) gfx_cor((GfxRect){ cx, sy + (float)t.h * 0.5f - 5.0f, 10.0f, 10.0f }, 0.5f, 1.0f, 0.353f, 0.322f, a);
+      else gfx_cor((GfxRect){ cx, sy + (float)t.h * 0.5f - 5.0f, 10.0f, 10.0f }, 0.5f, cr, cg, cb, a);
       txt_desenhar_alpha(t, cx + 20.0f, sy, a);
     } else {
       float bx = cx + (float)t.w + 18.0f, bw = cx + cw - bx;
@@ -1286,8 +1293,11 @@ void ilha_desenhar(Uint32 agora) {
   // em qualquer tela fora do player, e o modal dele tambem.
   if (!relogioQuer && !modalAviso && (modalAberto || modalT > 0.0f)) ilha_modal_fechar(1);
   if (modalAviso && modalAberto && !modalAvisoMedido) {
+    // Linha que o orcamento de texto do quadro recusou mede 0: mede de novo
+    // no quadro seguinte, senao o modal nasceria curto para sempre.
+    int antes = txt_pendentes;
     modalAvisoH = layoutModalAviso((GfxRect){ 0, 0, MD_W, MD_H }, 0.0f, 0);
-    modalAvisoMedido = 1;
+    modalAvisoMedido = txt_pendentes == antes;
   }
   alvo = temCur ? M_AVISO : atividadeViva(agora) ? M_ATIVIDADE
        : (relogioQuer && cartaoVez >= 0) ? M_CARTAO : M_RELOGIO;
