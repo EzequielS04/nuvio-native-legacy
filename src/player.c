@@ -3197,14 +3197,30 @@ static void corpoCarregando(GfxRect r, float a, void *u) {
         txt_desenhar_alpha(l, x + w - 18.0f - l.w, y + 26.0f - (float)l.h * 0.5f, a); }
     } }
   y += 52.0f + 18.0f;
-  // O TRILHO CORRE (nao ha porcentagem de abertura para mostrar): um trecho
-  // de 34% indo e voltando; com Animacoes reduzidas ele fica parado.
-  { float t = ajustes_animacoes_reduzidas() ? 0.0f : (float)(agora % 1800u) / 1800.0f;
-    float k = t < 0.5f ? t * 2.0f : 2.0f - t * 2.0f, seg = 0.34f, ar, ag, ab;
+  // O TRILHO E INDETERMINADO, DE PROPOSITO. O pipeline nao da porcentagem
+  // de abertura: video.h so diz ativo/pronto (loadCompleted), e o buffer_fim
+  // antes do pronto e contra uma duracao que ainda nao existe. Uma barra que
+  // "enche" com o tempo ou com as duas etapas mentiria sobre quanto falta.
+  // Entao um brilho atravessa o trilho da esquerda para a direita e recomeca;
+  // com Animacoes reduzidas o trilho fica inteiro no acento apagado, parado.
+  { float ar, ag, ab;
     GfxRect tr = { x, y, w, 4.0f };
     ajustes_acento(&ar, &ag, &ab);
     gfx_cor(tr, 0.5f, 1, 1, 1, 0.16f * a);
-    gfx_cor((GfxRect){ x + (w * (1.0f - seg)) * k, y, w * seg, 4.0f }, 0.5f, ar, ag, ab, a); }
+    if (ajustes_animacoes_reduzidas()) gfx_cor(tr, 0.5f, ar, ag, ab, 0.45f * a);
+    else {
+      float t = (float)(agora % 1600u) / 1600.0f, seg = 0.30f;
+      float x0 = x + (w * (1.0f + seg)) * t - w * seg, x1 = x0 + w * seg;
+      if (x0 < x) x0 = x;
+      if (x1 > x + w) x1 = x + w;
+      if (x1 - x0 > 1.0f) {
+        // Pontas suaves: o miolo cheio e duas abas a 45% de cada lado.
+        float aba = (x1 - x0) * 0.22f;
+        gfx_cor((GfxRect){ x0, y, x1 - x0, 4.0f }, 0.5f, ar, ag, ab, 0.45f * a);
+        if (x1 - x0 > aba * 2.0f + 4.0f)
+          gfx_cor((GfxRect){ x0 + aba, y, x1 - x0 - aba * 2.0f, 4.0f }, 0.5f, ar, ag, ab, a);
+      }
+    } }
 }
 
 // O MODAL DO ERRO: o motivo (36/700), a dica e os dois botoes. ESQUERDA e
@@ -3363,11 +3379,14 @@ void player_desenhar(Uint32 agora) {
     if (shotSemFuro && c && c->backdrop[0]) arte = c->backdrop;   // capturas: o "video" do canal
 #endif
     GLuint tex = arte ? tex_obter_hero(arte) : 0;   // ocupa a tela inteira
+    // ABRINDO A FONTE A TELA E PRETA (pedido do dono, 03/10): sem a arte e sem
+    // o logo; quem conta o que acontece e so a ilha do canto.
+    if (player_carregando()) tex = 0;
     if (tex) {
       gfx_tex_aspect_atual = tex_aspecto(arte);
       gfx_rect(tela, tex, GFX_CARD, 0, 0, 0, 0.0f, 0, 0, 0, entrada);
       gfx_tex_aspect_atual = 0.0f;
-    } else if (player_id_canal()[0]) {
+    } else if (player_id_canal()[0] || player_carregando()) {
       // PRETO de verdade no canal, e nao o quase-preto da interface: com o
       // video entrando por tras da pagina, qualquer tinta aqui e uma camada a
       // mais sobre o plano de hardware.
@@ -3377,28 +3396,13 @@ void player_desenhar(Uint32 agora) {
     }
   }
 
-  // ABRINDO A FONTE (Glass UI): a arte escurece, o logo fica no centro e o
-  // estado mora na ILHA do canto, crescida como a atividade da ilha do
-  // relogio — o ponto que respira, "Abrindo fonte", a linhaEp, a fonte
-  // escolhida (marcas, addon e tamanho) e um trilho que corre. Na ponta do
-  // cabecalho, "Fonte 2 de 3" quando o automatico ja esta na segunda.
+  // ABRINDO A FONTE (Glass UI, revisto pelo dono em 03/10): fundo PRETO, sem
+  // a arte, sem o logo e sem anel no meio da tela. O estado mora so na ILHA
+  // do canto, crescida como a atividade da ilha do relogio — o ponto que
+  // respira, "Abrindo fonte", a linhaEp, a fonte escolhida (marcas, addon e
+  // tamanho) e o trilho dentro dela. Na ponta do cabecalho, "Fonte 2 de 3"
+  // quando o automatico ja esta na segunda.
   if (player_carregando()) {
-    const char *marca = c ? artehero_logo_sessao(c) : NULL;
-    GLuint logo;
-    if (!marca && c && player_id_canal()[0] && c->backdrop[0]) marca = c->backdrop;
-    logo = marca ? tex_obter_larg_qualquer(marca, 560) : 0;
-    gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * entrada);
-    gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 360.0f }, 1, 1.0f, 1.0f, 0.40f * entrada);
-    gfx_veu_css((GfxRect){ 0, NV_TELA_H - 360.0f, NV_TELA_W, 360.0f }, 0, 1.0f, 1.0f, 0.40f * entrada);
-    if (logo) {
-      float ar = tex_aspecto(marca), w = 560, h = ar > 0 ? w / ar : 120;
-      if (h > 170) { h = 170; w = h * ar; }
-      gfx_rect((GfxRect){ (NV_TELA_W - w) * .5f, (NV_TELA_H - h) * .5f, w, h }, logo,
-               tex_marca_escura(marca) ? GFX_MARCA : GFX_TEXTO, 0, 0, 0, 0, .95f, .95f, .97f, entrada);
-    } else if (c && c->titulo[0]) {
-      TxtLinha t = txt_linha_corta(TXT_PLR_TITULO, c->titulo, 240, 241, 244, 255, 900);
-      txt_desenhar_alpha(t, (NV_TELA_W - t.w) * .5f, (NV_TELA_H - t.h) * .5f, entrada);
-    }
     { PlrIlhaPedido pd;
       char dir[48] = "";
       memset(&pd, 0, sizeof pd);
