@@ -882,7 +882,7 @@ int stream_automatico(void) {
 }
 
 
-static int grupo, filtro, soMp4;
+static int grupo, filtro, soMp4, soCache, soDub;
 
 // BOTOES DO CABECALHO. "Sem HDR" so existe onde ha o que renegociar (webOS);
 // ver o bloco "TELA PRETA COM AUDIO TOCANDO" em video.h. Oferecer um botao que
@@ -890,58 +890,50 @@ static int grupo, filtro, soMp4;
 // a duvidar dos outros. "Só MP4" (#91) filtra a lista — permanece na folha.
 // Ordem visivel, da esquerda: [Sem HDR] e MP4 como pilulas com rotulo,
 // Recarregar e Fechar como discos de icone (Lucide rotate-cw e x).
-enum { BT_RECARREGAR, BT_SEM_HDR, BT_SO_MP4, BT_FECHAR };
+//
+// "EM CACHE" E "DUBLADO" (dono, 02/10, escolheu entre tres): filtros como o
+// MP4, e nao grupos — resolucao x HDR/SDR ja da ate 8 grupos, e mais um eixo
+// picotaria a lista em grupos de 1 ou 2 fontes. Em cache = o debrid ja tem o
+// arquivo (Stream.foraCache e 0), toca agora; Dublado = audio em portugues.
+enum { BT_RECARREGAR, BT_SEM_HDR, BT_SO_MP4, BT_CACHE, BT_DUB, BT_FECHAR };
 static int botaoDe(int i) {
   if (!video_pode_forcar_sdr()) i++;
   if (i == 0) return BT_SEM_HDR;
   if (i == 1) return BT_SO_MP4;
-  if (i == 2) return BT_RECARREGAR;
+  if (i == 2) return BT_CACHE;
+  if (i == 3) return BT_DUB;
+  if (i == 4) return BT_RECARREGAR;
   return BT_FECHAR;
 }
-static int nBotoes(void) { return video_pode_forcar_sdr() ? 4 : 3; }
+static int nBotoes(void) { return video_pode_forcar_sdr() ? 6 : 5; }
 static const char *rotuloBotao(int b) {
   if (b == BT_SEM_HDR) return "Sem HDR";
   if (b == BT_SO_MP4)  return "Só MP4";
+  if (b == BT_CACHE)   return "Em cache";
+  if (b == BT_DUB)     return "Dublado";
   return NULL;
+}
+static int botaoLigado(int b) {
+  return (b == BT_SO_MP4 && soMp4) || (b == BT_CACHE && soCache) || (b == BT_DUB && soDub);
 }
 static const char *iconeBotao(int b) {
   return b == BT_RECARREGAR ? "aj_rotate-cw" : b == BT_FECHAR ? "aj_x" : NULL;
 }
-// TEXTO DE ADDON LIMPO, GUARDADO POR LISTA (#144). nv_limpar_texto percorre o
-// texto e consulta tabelas: barato, mas a folha desenha ~10 linhas por quadro a
-// 60 Hz. Cada fonte e limpa na primeira vez que aparece e o resultado fica ate
-// a lista mudar (listaGeracao sobe a cada stream_definir_lista). O texto CRU
-// continua em Stream: deteccao de selo, preferencia lembrada e o
-// .mkv/.mp4 leem o original e nao podem mudar por causa de um enfeite.
-typedef struct { char nome[208]; char desc[1024]; char pronto; } TextoLimpo;
-static TextoLimpo *limpos;
-static unsigned limposGeracao;
-static int limposN;
-
-static void limpo(int i, const char **nome, const char **desc) {
-  const Stream *s = &lista[i];
-  TextoLimpo *t;
-  if (!limpos || limposGeracao != listaGeracao || limposN != n) {
-    free(limpos);
-    limpos = n > 0 ? calloc((size_t)n, sizeof *limpos) : NULL;
-    limposGeracao = listaGeracao;
-    limposN = limpos ? n : 0;
-  }
-  if (!limpos || i < 0 || i >= limposN) { *nome = s->rotulo; *desc = s->descricao; return; }
-  t = &limpos[i];
-  if (!t->pronto) {
-    nv_limpar_texto(s->rotulo, t->nome, sizeof t->nome, NV_LIMPA_UMA_LINHA);
-    nv_limpar_texto(s->descricao, t->desc, sizeof t->desc, NV_LIMPA_UMA_LINHA);
-    t->pronto = 1;
-  }
-  *nome = t->nome; *desc = t->desc;
-}
-
 static char provedores[13][96];
 static int nProvedores;
 
+static int temAudioPt(const Stream *s);
+// Os chips (MP4, cache, dublado) valem para a lista E para a contagem de cada
+// aba; o addon so para a lista.
+static int passaChips(int i) {
+  if (soMp4 && !lista[i].mp4) return 0;
+  if (soCache && lista[i].foraCache) return 0;
+  if (soDub && !temAudioPt(&lista[i])) return 0;
+  return 1;
+}
 static int passaFiltro(int i) {
-  if (soMp4 && !lista[i].mp4) return 0;  if (filtro && strcmp(lista[i].provedor, provedores[filtro])) return 0;
+  if (!passaChips(i)) return 0;
+  if (filtro && strcmp(lista[i].provedor, provedores[filtro])) return 0;
   return 1;
 }
 
@@ -989,6 +981,7 @@ static int automaticaDaFolha(void) {
 #define FOLHA_RES    4
 #define FOLHA_GRUPOS (FOLHA_RES * 2)
 static const char *const GRUPO_NOME[FOLHA_RES] = { "4K", "1080p", "720p", "Outras" };
+static const char *const GRUPO_SUB[FOLHA_RES]  = { "ULTRA HD", "FULL HD", "HD", "" };
 static int ehHdr(const Stream *s) {
   return s->dolbyVision ||
          (s->badges & (badges_bit("v-dv") | badges_bit("v-hdr10plus") | badges_bit("v-hdr10") |
@@ -1080,11 +1073,19 @@ static int temNoTexto(const Stream *s, const char *p) {
 }
 // O IDIOMA nao tem logo no pacote de selos, entao vai como texto no fim da
 // fileira. Lido por palavra no nome, na descricao e no arquivo.
+// Portugues na LISTA DE IDIOMAS do formatador (o "⚑ English | ... |
+// Portuguese" do AIOStreams e a lista de AUDIO do arquivo) conta como dual:
+// tem a faixa em portugues mesmo sem a palavra "dublado".
 static const char *idiomaDa(const Stream *s) {
   if (temNoTexto(s, "dublado") || temNoTexto(s, "dub")) return "Dublado";
-  if (temNoTexto(s, "dual")) return "Dual áudio";
+  if (temNoTexto(s, "dual") || temNoTexto(s, "portuguese") || temNoTexto(s, "português") ||
+      temNoTexto(s, "pt-br") || temNoTexto(s, "ptbr")) return "Dual áudio";
   if (temNoTexto(s, "legendado") || temNoTexto(s, "leg")) return "Legendado";
   return NULL;
+}
+static int temAudioPt(const Stream *s) {
+  const char *id = idiomaDa(s);
+  return id && strcmp(id, "Legendado");
 }
 
 // O TITULO DA LINHA, modo "Do Nuvio": o NOME DO CONTEUDO (dono, 02/10: "deixar
@@ -1110,14 +1111,6 @@ static void tituloConteudo(const Stream *s, char *nome, size_t tn, char *ep, siz
     snprintf(ep, te, i18n("Temporada %d Episódio %d"), atoi(c1 + 1), atoi(c2 + 1));
 }
 
-static uint64_t FOLHA_PREMIUM_IMG(void) {
-  return badges_bit("v-dv") | badges_bit("v-hdr10plus") | badges_bit("v-hdr10") | badges_bit("v-hdr") | badges_bit("v-hlg") |
-         badges_bit("v-imax-enhanced") | badges_bit("v-imax");
-}
-static uint64_t FOLHA_PREMIUM_AUD(void) {
-  return badges_bit("a-atmos") | badges_bit("a-atmos-dv") | badges_bit("a-truehd") | badges_bit("a-truehd-dv") |
-         badges_bit("a-dtsx") | badges_bit("a-dtshdma");
-}
 // A fileira mostra TODOS os logos, inclusive o que tambem esta no titulo
 // (dono, 02/10: "tem que colocar as badges do dolby vision tb" — o titulo e
 // para ler, o logo e a marca que o olho reconhece de longe). Sai so a
@@ -1271,7 +1264,7 @@ static void desenharAudioBars(float x, float y, float alt, float alfa, Uint32 ag
 
 void stream_folha_abrir(void) {
   int excl, aut, alvo;
-  aberta=1; escolha=-1; grupo=1; filtro=0; soMp4=0; recarregar=0;
+  aberta=1; escolha=-1; grupo=1; filtro=0; soMp4=0; soCache=0; soDub=0; recarregar=0;
   atualizarProvedores();
   // A FOLHA ABRE NA FONTE QUE IMPORTA: a que esta tocando, senao a que o
   // automatico tocaria. Com a lista agrupada por resolucao a primeira linha ja
@@ -1385,6 +1378,8 @@ void stream_folha_evento(const SDL_Event *e) {
         // player, e deixar a folha aberta em cima esconderia o resultado.
         case BT_SEM_HDR:    video_forcar_sdr(); aberta=0; break;
         case BT_SO_MP4:     soMp4 = !soMp4; rolagem=0;velRol=0; break;
+        case BT_CACHE:      soCache = !soCache; rolagem=0;velRol=0; break;
+        case BT_DUB:        soDub = !soDub; rolagem=0;velRol=0; break;
         default:            aberta=0; break;
       }
     }
@@ -1518,16 +1513,16 @@ void stream_folha_desenhar(Uint32 agora) {
       txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,"Buscando mais fontes…",ai,(int)(ag*255),(int)(ab*255),255,rw-360-cw),tx+cw,66,anim);
     } }
   txt_desenhar_alpha(txt_linha(TXT_TITULO3,"Fontes",242,242,240,255),tx,94,anim);
-  { int nbt=nBotoes(); float bw[4], bx=lx+rw;
+  { int nbt=nBotoes(); float bw[6], bx=lx+rw;
     for(int i=nbt-1;i>=0;i--){
       int b=botaoDe(i);
-      bw[i]=iconeBotao(b)?FOLHA_CHIP_H:(float)txt_linha(TXT_HERO_META,rotuloBotao(b),255,255,255,255).w+48.0f;
+      bw[i]=iconeBotao(b)?FOLHA_CHIP_H:(float)txt_linha(TXT_HERO_META,rotuloBotao(b),255,255,255,255).w+40.0f;
       bx-=bw[i]; if(i) bx-=10.0f; }
     for(int i=0;i<nbt;i++){
       int b=botaoDe(i);
       GfxRect r={bx,100,bw[i],FOLHA_CHIP_H};
       if (ptr) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroFolhaBotao, NULL, i, 0);
-      chipFolha(r,rotuloBotao(b),iconeBotao(b),grupo==-1&&foco==i,b==BT_SO_MP4&&soMp4,anim);
+      chipFolha(r,rotuloBotao(b),iconeBotao(b),grupo==-1&&foco==i,botaoLigado(b),anim);
       bx+=bw[i]+10.0f; } }
   // A LINHA DE AJUDA so aparece com o cabecalho em foco: "Sem HDR" nao se
   // explica pelo rotulo, e o rotulo nao pode crescer sem estourar a pilula.
@@ -1537,6 +1532,14 @@ void stream_folha_desenhar(Uint32 agora) {
       ajuda="Imagem preta com o áudio tocando? Recarrega esta fonte sem HDR nem Dolby Vision.";
     else if(botaoDe(foco)==BT_RECARREGAR)
       ajuda="Pergunta as fontes de novo a todos os addons.";
+    else if(botaoDe(foco)==BT_CACHE)
+      ajuda=soCache
+        ? "Mostrando só fontes que o debrid já tem: tocam na hora. OK tira o filtro."
+        : "Filtra para fontes que o debrid já tem (tocam na hora, sem baixar antes). OK liga o filtro.";
+    else if(botaoDe(foco)==BT_DUB)
+      ajuda=soDub
+        ? "Mostrando só fontes com áudio em português. OK tira o filtro."
+        : "Filtra para fontes dubladas ou com áudio em português. OK liga o filtro.";
     else if(botaoDe(foco)==BT_SO_MP4)
       ajuda=soMp4
         ? "Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro."
@@ -1547,7 +1550,7 @@ void stream_folha_desenhar(Uint32 agora) {
   // no acento. Quantas fontes cada addon tem, ao lado do nome.
   { int cnt[13]={0}; float iw[13], sx, segY=grupo==-1?204.0f:186.0f, maxW=rw+4.0f;
     TxtLinha nome[13], num[13];
-    for(int i=0;i<n;i++){ if(soMp4&&!lista[i].mp4) continue; cnt[0]++;
+    for(int i=0;i<n;i++){ if(!passaChips(i)) continue; cnt[0]++;
       for(int j=1;j<nProvedores;j++) if(!strcmp(provedores[j],lista[i].provedor)){cnt[j]++;break;} }
     for(int i=0;i<nProvedores;i++){
       int sel=i==filtro, foc=sel&&grupo==0, c=foc?ajustes_tinta_foco():sel?250:150;
@@ -1586,9 +1589,19 @@ void stream_folha_desenhar(Uint32 agora) {
     if(y+FOLHA_SEC_H<FOLHA_TOPO-8||y>NV_TELA_H) continue;
     { TxtLinha l=txt_linha(TXT_PAINEL_ITEM,GRUPO_NOME[g/2],242,242,240,255);
       txt_desenhar_alpha(l,tx,y+8,anim);
-      // HDR no acento (e o que liga o modo da TV), SDR no cinza.
-      if(g%2==0) caixaAlta("HDR",ai,(int)(ag*255),(int)(ab*255),tx+l.w+16,y+15,anim);
-      else       caixaAlta("SDR",120,120,118,tx+l.w+16,y+15,anim); }
+      // "4K  ULTRA HD  HDR": o nome da resolucao fica (dono gostou), e o
+      // HDR vem no acento (e o que liga o modo da TV), o SDR no cinza.
+      // Mesmo peso pequeno e espacado do "ULTRA HD" (dono, 02/10: "com o
+      // mesmo peso menor e outra cor, que tava elegante"): o HDR num tom
+      // champanhe — o acento puxado 60% para o cinza da legenda, para nao
+      // gritar como selo — e o SDR num cinza um degrau mais claro.
+      float hx=tx+l.w+16;
+      if(GRUPO_SUB[g/2][0]) {
+        hx+=caixaAlta(GRUPO_SUB[g/2],120,120,118,hx,y+15,anim)+10;
+        hx+=caixaAlta("·",90,90,88,hx,y+15,anim)+10;
+      }
+      if(g%2==0) caixaAlta("HDR",(int)(120+(ai-120)*.45f),(int)(120+(ag*255-120)*.45f),(int)(118+(ab*255-118)*.45f)+18,hx,y+15,anim);
+      else       caixaAlta("SDR",150,150,148,hx,y+15,anim); }
     snprintf(q,sizeof q,i18n(secN[g]==1?"%d fonte":"%d fontes"),secN[g]);
     { TxtLinha l=txt_linha(TXT_PG_FIM,q,110,110,108,255);
       txt_desenhar_alpha(l,tr-l.w,y+12,anim); }
@@ -1698,15 +1711,11 @@ void stream_folha_desenhar(Uint32 agora) {
       int ehMp4=!strcmp(containerDa(s),"MP4");
       TxtLinha mp;
       if(ehMp4){ mp=txt_linha(TXT_HERO_META,"MP4",ai,(int)(ag*255),(int)(ab*255),255); mpW=mp.w+18; }
-      // COR SO NO PREMIUM (dono, 02/10): imagem (DV, HDR, IMAX) no acento,
-      // audio de cinema (Atmos, TrueHD, DTS:X, DTS-HD MA) no acento clareado,
-      // o resto no cinza. Desenhados nessa ordem, o premium vem primeiro.
-      if(logos){ uint64_t img=logos&FOLHA_PREMIUM_IMG(), aud=logos&FOLHA_PREMIUM_AUD(), resto=logos&~(img|aud);
-        float k=sel?1.0f:.82f, w;
-        if(img){ w=badges_desenhar_tom(img,tx+lw,cy,txtW-mpW-lw,FOLHA_SELO_H,ar*k,ag*k,ab*k,anim); lw+=w+18; }
-        if(aud){ w=badges_desenhar_tom(aud,tx+lw,cy,txtW-mpW-lw,FOLHA_SELO_H,(ar*.45f+.55f)*k,(ag*.45f+.55f)*k,(ab*.45f+.55f)*k,anim); lw+=w+18; }
-        if(resto){ w=badges_desenhar_tom(resto,tx+lw,cy,txtW-mpW-lw,FOLHA_SELO_H,t,t,t,anim); lw+=w+18; }
-        if(lw>0) lw-=18; }
+      // TODOS OS LOGOS NA MESMA TINTA (dono, 02/10: "podemos deixar elas
+      // todas brancas"). A rodada de "cor so no premium" deixava uns logos no
+      // acento e outros brancos, e na TV isso lia como inconsistencia, nao
+      // como hierarquia. O peso vem do brilho: apagado fora do foco, claro nele.
+      if(logos) lw=badges_desenhar_tom(logos,tx,cy,txtW-mpW,FOLHA_SELO_H,t,t,t,anim);
       else if(!ehMp4){ char d[sizeof s->descricao];
         snprintf(d,sizeof d,"%s",s->descricao);
         for(char *p=d;*p;p++)if((unsigned char)*p<32)*p=' ';
@@ -1717,7 +1726,13 @@ void stream_folha_desenhar(Uint32 agora) {
       { const char *id=idiomaDa(s);
         if(id){ int c=sel?230:190;
           TxtLinha li=txt_linha(TXT_HERO_META,id,c,c,c,255);
-          if(lw+18+li.w<=txtW) txt_desenhar_alpha(li,tx+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-li.h)*.5f,anim); } } }
+          if(lw+18+li.w<=txtW){ txt_desenhar_alpha(li,tx+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-li.h)*.5f,anim); lw+=(lw>0?18:0)+li.w; } } }
+      // FORA DO CACHE: o debrid ainda vai baixar; tocar agora da o clipe de
+      // aviso (ver o toast em app.c). Discreto, no fim da fileira — e uma
+      // condicao da fonte, nao um defeito dela.
+      if(s->foraCache){ int c=sel?185:140;
+        TxtLinha lf=txt_linha(TXT_HERO_META,"Fora do cache",c,c-6,c-14,255);
+        if(lw+18+lf.w<=txtW) txt_desenhar_alpha(lf,tx+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-lf.h)*.5f,anim); } }
     cy+=FOLHA_SELO_H+12;
     // O ARQUIVO, so na linha em foco: e o que distingue duas fontes iguais
     // (grupo de release, versao), e em toda linha era ruido.
