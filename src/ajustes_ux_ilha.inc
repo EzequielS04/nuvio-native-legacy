@@ -802,6 +802,14 @@ static void ajDesenharTela(void) {
   g0 = gfx_opacidade_grupo;
   aj2DesenharMenu(&p);
   if (p.rA > 0.003f) aj2DesenharResumo(p.rA);
+  // O inspetor antes da lista: na transicao a lista desliza por cima dele.
+  if (p.iA > 0.003f && uxIndice >= 1) {
+    GfxRect ir = aj2InspR();
+    gfx_opacidade_grupo = g0 * p.iA;
+    gfx_transformar(ir.x, ir.y, 1, p.iDx, 0);
+    if (uxIndice >= 2) ajDesenharInspetor(); else aj2InspetorDiferencas();
+    gfx_sem_transformar();
+  }
   // A LISTA nasce da linha da categoria: escala em torno dela.
   if (p.lA > 0.003f && uxIndice >= 1) {
     GfxRect fr = aj2ListaR(), mr = aj2MenuR();
@@ -811,13 +819,6 @@ static void ajDesenharTela(void) {
     gfx_transformar(fr.x, oy, p.lS, p.lDx, 0);
     aj2TextoLista = p.lTxt;
     if (uxIndice >= 2) ajDesenharFolha(); else aj2DesenharDiferencas();
-    gfx_sem_transformar();
-  }
-  if (p.iA > 0.003f && uxIndice >= 1) {
-    GfxRect ir = aj2InspR();
-    gfx_opacidade_grupo = g0 * p.iA;
-    gfx_transformar(ir.x, ir.y, 1, p.iDx, 0);
-    if (uxIndice >= 2) ajDesenharInspetor(); else aj2InspetorDiferencas();
     gfx_sem_transformar();
   }
   if (aj2EditorPainel()) aj2EdVisto = 1;

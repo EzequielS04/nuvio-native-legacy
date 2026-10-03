@@ -383,7 +383,7 @@ static float aj2PreviaCor(float x, float y, float w) {
   { TxtLinha l = ajTxtT(TXT_V2_SEG, "Reproduzir"), m;
     float bw = 28 + 20 + 10 + l.w + 28, cw;
     ajPilulaAcento((GfxRect){ x, cy, bw, 64 }, 32, 1);
-    gfx_rect((GfxRect){ x + 32, cy + 22, 16, 20 }, 0, GFX_PLAY, 0, 0, 0, 0, ti / 255.0f, ti / 255.0f, ti / 255.0f, 1);
+    gfx_icone((GfxRect){ x + 28, cy + 22, 20, 20 }, "aj_play", ti / 255.0f, ti / 255.0f, ti / 255.0f, 1);
     txt_desenhar(l, x + 58, cy + (64 - l.h) * 0.5f);
     m = txt_linha(TXT_G20B, "Só MP4", (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255);
     cw = 20 + 8 + 9 + m.w + 20;
