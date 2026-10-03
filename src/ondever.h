@@ -53,7 +53,8 @@ int  ondever_n(const char *imdb);
 int  ondever_item(const char *imdb, int i, OndeVer *dst);
 
 // Rele os apps instalados (a pessoa pode ter acabado de instalar um). Do fio
-// principal; a resposta chega depois.
+// principal; a resposta chega depois. Android usa um unico fio e publica a
+// lista completa; enquanto a primeira consulta chega, o estado e ONDE_INFO.
 void ondever_apps_atualizar(void);
 // ONDE_* para o servico `nome`.
 int  ondever_estado(const char *nome);

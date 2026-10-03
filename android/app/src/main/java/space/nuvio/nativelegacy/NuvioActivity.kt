@@ -158,7 +158,7 @@ class NuvioActivity : SDLActivity() {
     // primeiro (e o que a TV mostra), LAUNCHER como reserva para app de
     // celular instalado na TV. Precisa do <queries> do manifesto: sem ele o
     // Android 11+ esconde os outros apps e a lista volta vazia.
-    fun listarApps(): String {
+    fun listarApps(): String? {
         return try {
             val pm = packageManager
             val vistos = LinkedHashMap<String, String>()
@@ -171,7 +171,7 @@ class NuvioActivity : SDLActivity() {
                 }
             }
             vistos.entries.joinToString("\n") { it.key + "\t" + it.value }
-        } catch (e: Exception) { "" }
+        } catch (e: Exception) { null }
     }
 
     fun abrirApp(pacote: String): Boolean {
