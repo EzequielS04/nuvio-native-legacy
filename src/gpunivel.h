@@ -11,7 +11,7 @@
 //
 // QUATRO NIVEIS, um degrau por vez:
 //   0 = como sempre (1080p nativo, efeitos cheios).
-//   1 = EFEITOS LEVES (gfx_definir_efeitos_leves): sem o dither highp dos
+//   1 = EFEITOS LEVES (gfx_definir_efeitos_leves): dither Bayer barato no lugar do highp dos
 //       degrades e sem os realces decorativos (brilho no alto do card, luz de
 //       canto). Resolucao nativa.
 //   2 = EFEITOS MINIMOS (gfx_definir_efeitos_minimos): nivel 1 + sem a luz de

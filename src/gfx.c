@@ -213,25 +213,29 @@ static const char *FS_CABECA =
   // Ruido: interleaved gradient noise (Jimenez) sobre gl_FragCoord, parado no
   // tempo — ruido temporal cintilaria. Precisa de highp (o fract de 52,98*x
   // em fp16 vira padrao); sem highp, Bayer 4x4, exato em fp16. Custo: ~6 ALU.
+  "float nv_bayer2(vec2 a){ a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }\n"
+  "float nv_ruido_bayer(){\n"
+  "  vec2 p = mod(gl_FragCoord.xy, 4.0);\n"
+  "  return nv_bayer2(p * 0.5) * 0.25 + nv_bayer2(p) + 0.03125;\n"
+  "}\n"
   "#if defined(GL_FRAGMENT_PRECISION_HIGH) || !defined(GL_ES)\n"
   "float nv_ruido(){\n"
   "  highp float f = fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)));\n"
   "  return fract(52.9829189 * f);\n"
   "}\n"
   "#else\n"
-  "float nv_bayer2(vec2 a){ a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }\n"
-  "float nv_ruido(){\n"
-  "  vec2 p = mod(gl_FragCoord.xy, 4.0);\n"
-  "  return nv_bayer2(p * 0.5) * 0.25 + nv_bayer2(p) + 0.03125;\n"
-  "}\n"
+  "float nv_ruido(){ return nv_ruido_bayer(); }\n"
   "#endif\n"
-  // uLeve > 0.5 = EFEITOS LEVES (gpunivel.h, nivel 1): a cor sai sem o ruido.
-  // O desvio e uniforme para o desenho inteiro, entao todo fragmento toma o
-  // mesmo lado e o ruido (o highp e o fract) nao e executado.
+  // uLeve > 0.5 = EFEITOS LEVES (gpunivel.h, nivel 1): o ruido passa a ser o
+  // BAYER 4x4 (mediump, exato em fp16, poucas ALU) em vez do highp. Antes a
+  // cor saia SEM ruido nenhum, e as faixas de 8 bits voltavam justamente nas
+  // TVs mais fracas — MEDIDO na TCL Smart TV Pro (Mali-G52, fica no nivel 1:
+  // "[gpu-nivel] decidido: fica no nivel 1", 40 fps), dono 02/10: "o fundo
+  // ta com o degrade ruim na TCL". O desvio e uniforme para o desenho
+  // inteiro, entao todo fragmento toma o mesmo lado.
   "uniform float uLeve;\n"
   "vec4 nv_dither(vec3 c, float a){\n"
-  "  if (uLeve > 0.5) return vec4(c, a);\n"
-  "  float n = (nv_ruido() - 0.5) * (1.0 / 255.0);\n"
+  "  float n = ((uLeve > 0.5 ? nv_ruido_bayer() : nv_ruido()) - 0.5) * (1.0 / 255.0);\n"
   "  return vec4(clamp(c + n / max(a, 0.004), 0.0, 1.0), a);\n"
   "}\n"
   // uAlt = altura do rect em PIXELS DO ALVO. O SDF mede em fracao da altura,
