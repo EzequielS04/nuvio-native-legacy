@@ -67,7 +67,9 @@ static const Item TELA[] = {
     ROT("Imagem e som"), OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS),
     ROT("Durante e depois"),
       OPC(AJ_PAUSA_OVERLAY), OPC(AJ_CW_CONCLUIDO), OPC(AJ_SAIDA_PLAYER),
-    ROT("Miniaturas na barra de tempo"),
+    // O NOME DO SERVICO volta ao titulo (como na 1.7.1): quem procura o Seekr
+    // procura pelo nome, e "Miniaturas na barra de tempo" nao o dizia.
+    GRP("Seekr", "Miniaturas da barra de tempo no player.", "aj_images"),
       OPC(AJ_SEEKR_LIGADO), OPC(AJ_SEEKR_CHAVE), OPC(AJ_SEEKR_TESTAR),
       OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
 
