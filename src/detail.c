@@ -1277,6 +1277,7 @@ static void carAplicar(void) {
   printf("[carrossel] titulo %d/%d: %s\n", carPos + 1, carN, ci->titulo); fflush(stdout);
 }
 static void carPasso(int d) {
+  if (carCheia || nivel > 0) return;
   int novo = carPos + d;
   if (novo < 0 || novo >= carN) return;
   carPos = novo;
@@ -1842,7 +1843,7 @@ void detail_evento(const SDL_Event *e) {
   // CARROSSEL ANDANDO: as setas laterais continuam andando pela fileira (a
   // pagina do titulo do meio do caminho nem chegou a ser montada); qualquer
   // outra tecla monta a pagina do titulo em cena antes de agir nela.
-  if (carro && carAplicado != carPos && e->type == SDL_KEYDOWN && nivel == 0) {
+  if (carro && !carCheia && carAplicado != carPos && e->type == SDL_KEYDOWN && nivel == 0) {
     SDL_Keycode kc = e->key.keysym.sym;
     if (kc == SDLK_RIGHT) { carPasso(1); return; }
     if (kc == SDLK_LEFT)  { carPasso(-1); return; }
@@ -2246,15 +2247,15 @@ void detail_evento(const SDL_Event *e) {
       // Carrossel: mais um direita na ponta da linha de botoes e o PROXIMO
       // titulo da fileira (o mesmo gesto do app da Apple).
       if (botao < nBotoes() - 1) botao++;
-      else if (carro) carPasso(1);
+      else if (carro && !carCheia) carPasso(1);
     }
     else if (k == SDLK_LEFT)  {
       // ESQUERDA no primeiro botao fecha a pagina e pede a barra lateral
       // (app.c abre quando a mola de saida terminar). Um toque so. No
       // carrossel ela e o titulo ANTERIOR; so no primeiro da fileira fecha.
       if (botao > 0) botao--;
-      else if (carro && carPos > 0) carPasso(-1);
-      else { saindo = 1; pediuMenu = 1; }
+      else if (carro && !carCheia && carPos > 0) carPasso(-1);
+      else if (!(carro && carCheia)) { saindo = 1; pediuMenu = 1; }
     }
     return;
   }
@@ -3291,6 +3292,22 @@ static void esqueletoSinopse(float x, float y, float a) {
 #pragma push_macro("NV_DETW2_X")
 #undef NV_DETW2_X
 #define NV_DETW2_X (96.0f + heroDx)
+// Unknown language is not evidence of a mismatch. Keep a loaded logo clean;
+// only a confirmed foreign image needs a caption. Missing images keep text.
+static int mostrarNomeLogo(const CatItem *ci, const char *url, int loaded,
+                           const char *language) {
+  if (!loaded) return !url || !url[0];
+  if (!ci || !url || !language || !ci->logoIdiomaUrl[0] ||
+      !ci->logoIdioma[0] || !strcmp(ci->logoIdioma, "und")) return 0;
+  const char *actual = strrchr(url, '/');
+  const char *known = strrchr(ci->logoIdiomaUrl, '/');
+  // TMDB size variants share the same image path; other hosts do not.
+  int same = !strcmp(url, ci->logoIdiomaUrl) ||
+    (!strncmp(url, "https://image.tmdb.org/t/p/", 27) &&
+     !strncmp(ci->logoIdiomaUrl, "https://image.tmdb.org/t/p/", 27) &&
+     actual && known && !strcmp(actual, known));
+  return same && strncmp(ci->logoIdioma, language, 2) != 0;
+}
 static void heroWeb(float a, float desloc) {
   if (a <= 0.005f) return;
   const CatItem *ci = cat_item(idx);
@@ -3299,12 +3316,6 @@ static void heroWeb(float a, float desloc) {
   partirMeta(fichaDe(idx), ano, sizeof ano, dur, sizeof dur);
   { char cru[64]; snprintf(cru, sizeof cru, "%s", dur);
     desc_duracao_txt(cru, dur, sizeof dur); }   // "142 min" -> forma do idioma da UI
-
-  // Em serie o web escreve "Roteirista:"/"Criador:"; em filme, "Diretor:".
-  char sup[192] = "";
-  if (ehSerie() && ci && ci->direcao[0])
-    snprintf(sup, sizeof sup, "%s: %s", i18n(ehSerie() ? "Roteirista" : "Diretor"),
-             ci->direcao);
 
   const char *sin = sinopseDe(idx);
 
@@ -3393,8 +3404,7 @@ static void heroWeb(float a, float desloc) {
   float yMeta2 = NV_DETW2_BASE - NV_DETW2_SELO_H;
   float yMeta1 = yMeta2 - NV_DETW2_META_GAP - NV_DETW2_M1_H;
   float ySin   = yMeta1 - NV_DETW2_GAP_SIN - hSin;
-  float ySup   = sup[0] ? ySin - NV_DETW2_GAP_SUP : ySin;
-  float yAcoes = ySup - NV_DETW2_GAP_ACOES - NV_DETW2_BTN_H;
+  float yAcoes = ySin - NV_DETW2_GAP_ACOES - NV_DETW2_BTN_H;
   // BLOCO DE LINHAS DE ESTADO, empilhado de baixo para cima logo acima dos
   // botoes. Sao duas, e a ordem tem razao: a retomada explica o BOTAO e fica
   // colada nele; a agenda ("Próximo episódio T2E5 · em 3 dias") explica o
@@ -3415,7 +3425,7 @@ static void heroWeb(float a, float desloc) {
   // Sobe alguns pixels enquanto entra: continua o movimento da arte em vez de
   // aparecer pronto no lugar. `desloc` e a rolagem do documento.
   float sobe = (1.0f - a) * 26.0f + desloc;
-  yMeta2 += sobe; yMeta1 += sobe; ySin += sobe; ySup += sobe;
+  yMeta2 += sobe; yMeta1 += sobe; ySin += sobe;
   yRetom += sobe; yAgenda += sobe; yAcoes += sobe; yEstado += sobe;
 
   // --- logo -----------------------------------------------------------------
@@ -3430,16 +3440,8 @@ static void heroWeb(float a, float desloc) {
   // pedido. Pedindo o teto, o logo sumia por um instante ao abrir o titulo;
   // pedindo a largura real, aparece na hora e troca pela nitida em seguida.
   GLuint texLogo = arqLogo ? tex_obter_larg_qualquer(arqLogo, NV_DETW_LOGO_MAXW) : 0;
-  // Hide the caption only with language evidence for the actual displayed
-  // logo. Frozen/session/manual logos must not inherit another image's tag.
-  int logoLocal = 0;
-  if (ci && arqLogo && ci->logoIdiomaUrl[0] && ci->logoIdioma[0]) {
-    const char *actual = strrchr(arqLogo, '/');
-    const char *known = strrchr(ci->logoIdiomaUrl, '/');
-    logoLocal = actual && known && !strcmp(actual, known) &&
-                !strncmp(ci->logoIdioma, desc_tmdb_idioma(), 2);
-  }
-  const char *nome = (!texLogo || !logoLocal) ? tituloDe(idx) : NULL;
+  const char *nome = mostrarNomeLogo(ci, arqLogo && tex_falhou(arqLogo) ? NULL : arqLogo, texLogo != 0,
+                                     desc_tmdb_idioma()) ? tituloDe(idx) : NULL;
   float baseLogo = (temRetom > 0.0f || agLinha[0] ? yEstado : yAcoes)
                    - NV_DETW_LOGO_GAP;
   float hNome = nome ? txt_bloco(TXT_DET_META2, nome, 255, 255, 255,
@@ -3603,17 +3605,6 @@ static void heroWeb(float a, float desloc) {
     TxtLinha l = txt_linha(TXT_CAPTION, ln, 255, 255, 255, 255);
     txt_desenhar_alpha(l, NV_DETW2_X, yRetom + (NV_DETW_RETOM_H - l.h) * 0.5f,
                        a * 0.82f);
-  }
-
-  // --- "Roteirista: ..." / "Diretor: ..." ------------------------------------
-  // Mesmo CORPO da sinopse, e nao um menor: na referencia o "R" de "Roteirista"
-  // e o "C" da sinopse medem os mesmos 20 de altura de caixa alta. Estava em
-  // TXT_DET_META (25) contra TXT_DET_SIN (26) por uma medida do web, onde as
-  // duas linhas de fato divergem.
-  if (sup[0]) {
-    TxtLinha l = txt_linha_corta(TXT_DET_SIN, sup, 179, 179, 179, 255,
-                                 NV_DETW2_TEXTO_W);
-    txt_desenhar_alpha(l, NV_DETW2_X, ySup, a);
   }
 
   // --- sinopse --------------------------------------------------------------
@@ -3814,7 +3805,7 @@ static void heroWeb(float a, float desloc) {
       txt_desenhar_alpha(lp, x, yc - lp.h * 0.5f, a);
       x += lp.w; algo = 1;
     }
-    if (!ehSerie() && ci && ci->direcao[0]) {
+    if (ci && ci->direcao[0]) {
       float gap = algo ? NV_DETW2_SEP * 2 + NV_DETW2_PONTO_D : 0;
       float remaining = NV_DETW2_X + NV_DETW2_TEXTO_W - x - gap;
       if (remaining > 100.0f) {

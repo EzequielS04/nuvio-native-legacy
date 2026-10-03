@@ -12,3 +12,8 @@ Validation: `tests/detail_remonta.sh`, `tests/heroidentidade.sh`, and `NUVIO_SHO
 O usuário confirmou o Discord funcionando e pediu título textual somente como fallback de idioma. O detalhe oculta o nome quando o logo efetivamente mostrado tem idioma TMDB confirmado igual ao idioma configurado; arte sem idioma conhecido, estrangeira, ausente ou ainda carregando mantém o nome legível. A evidência de idioma acompanha a URL exata, preservada no catálogo, para não atribuir o idioma de um logo novo ao snapshot anterior. O cache antigo do catálogo será refeito por mudança no tamanho de CatItem.
 
 Em filmes, direção passa para a linha técnica ao lado do país e o espaço anterior desaparece, aproximando os botões da sinopse. Na Dinâmica (Apple TV), expandir o card para tela cheia agora leva texto e logo para a margem da página já no primeiro passo; a segunda seta continua abrindo o corpo rolável. A volta restaura a posição dentro do card.
+
+
+### Correção após segunda verificação na TV
+
+Idioma desconhecido não significa estrangeiro: logo carregado sem idioma conhecido não recebe título duplicado. Durante o carregamento não se mostra título provisório que desapareceria depois; ausência ou falha real da imagem permite o nome textual. A linha de direção/roteiro foi movida também nas séries. Em tela cheia do layout Apple TV, as pontas da linha de botões não mudam de título nem fecham a página pela esquerda; Voltar retorna ao carrossel, onde as setas podem trocar o título novamente. Teste dedicado cobre idioma conhecido/desconhecido, URL diferente, imagem carregando/ausente e navegação nos dois estados.
