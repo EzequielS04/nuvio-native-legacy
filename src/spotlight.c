@@ -58,31 +58,43 @@
 #include <string.h>
 
 // --- Geometria (1920x1080) ----------------------------------------------------
-#define SP_BW        1240.0f
+// AS MEDIDAS SAO AS DO MOCKUP "ilha" tela 6 (dono, 02/10: "o mockup ta bem
+// mais polido que a build, nao podemos errar"): duas ilhas de 980 px
+// centradas, a barra com 76 px de altura a 120 do topo e a dos resultados 20
+// abaixo dela, raio 36 e 22 px de ar por dentro. Com o teclado do app aberto
+// as duas alargam para 1240 (a mola do teclado): o teclado ocupa 500 px a
+// esquerda e em 980 a lista ficaria com menos de 460.
+#define SP_BW_BASE   980.0f
+#define SP_BW_KB     1240.0f
+static float spBW = SP_BW_BASE;
+#define SP_BW        spBW
 #define SP_BX        ((NV_TELA_W - SP_BW) * 0.5f)
-#define SP_BY        116.0f
-#define SP_BH        104.0f
-#define SP_RAIO      34.0f          // px do corpo aberto; a barra sozinha e pilula
+#define SP_BY        120.0f
+#define SP_BH        76.0f
+#define SP_RAIO      36.0f          // px do corpo aberto; a barra sozinha e pilula
 #define SP_CORPO_Y   (SP_BY + SP_BH)
 #define SP_CORPO_MAX (1024.0f - SP_CORPO_Y)
 // DUAS ILHAS (Glass UI, mockup "ilha" tela 6): o campo e uma pilula sozinha e
 // os resultados moram numa segunda ilha SP_ILHA_VAO abaixo dela. O recuo de
-// cima do corpo conta o vao e o ar de dentro da ilha de baixo.
-#define SP_ILHA_VAO  18.0f
-#define SP_CPAD_T    (SP_ILHA_VAO + 22.0f)
-#define SP_CPAD_B    10.0f
-#define SP_RODAPE_H  56.0f
-#define SP_MIC_D     64.0f
+// cima do corpo conta o vao e o ar de dentro da ilha de baixo: 22 de padding
+// menos os 15 que o cabecalho de grupo (50 px, texto colado embaixo) ja traz,
+// para o "MELHOR RESULTADO" cair onde o mockup o poe.
+#define SP_ILHA_VAO  20.0f
+#define SP_ILHA_PAD  22.0f
+#define SP_CPAD_T    (SP_ILHA_VAO + 7.0f)
+#define SP_CPAD_B    0.0f
+#define SP_RODAPE_H  58.0f          // 14 + a dica + 4, e os 22 de ar da ilha
+#define SP_MIC_D     52.0f
 #define SP_TECLA     62.0f
 #define SP_TECLA_GAP 10.0f
 #define SP_KB_COLS   6
 #define SP_KB_PASSO  (SP_TECLA + SP_TECLA_GAP)
 #define SP_KB_X      (SP_BX + 36.0f)
-#define SP_KB_Y      (SP_CORPO_Y + SP_CPAD_T + 8.0f)
+#define SP_KB_Y      (SP_CORPO_Y + SP_ILHA_VAO + SP_ILHA_PAD + 8.0f)
 #define SP_KB_W      (SP_KB_COLS * SP_TECLA + (SP_KB_COLS - 1) * SP_TECLA_GAP)
-#define SP_LISTA_X0  (SP_BX + 26.0f)                 // sem o teclado do app
+#define SP_LISTA_X0  (SP_BX + SP_ILHA_PAD)            // sem o teclado do app
 #define SP_LISTA_X1  (SP_KB_X + SP_KB_W + 44.0f)     // com ele
-#define SP_LISTA_XF  (SP_BX + SP_BW - 26.0f)
+#define SP_LISTA_XF  (SP_BX + SP_BW - SP_ILHA_PAD)
 #define SP_MAX_TXT   48             // = BUSCASREC_TERMO
 #define SP_MAX_LIN   48
 #define SP_KB_MAX_FIL 8
@@ -105,7 +117,9 @@ enum {
   L_RECENTE,
   L_LIMPAR,
 };
-static const float ALTURA[] = { 50, 64, 210, 92, 92, 92, 92, 80, 80, 72, 72 };
+// Alturas SEM vao entre as linhas, como as .row do mockup: o melhor resultado
+// e 140 de arte + 16 em cima e embaixo, a linha de titulo 62 de cartaz + 12.
+static const float ALTURA[] = { 50, 64, 172, 86, 86, 86, 86, 72, 72, 64, 64 };
 
 typedef struct {
   int  tipo;
@@ -172,9 +186,11 @@ static int ditadoDisponivel(void) { return st_voz_disponivel(); }
 // DIGITAR PELO CELULAR (celbotao.h): o disco no fim da barra, depois do Falar.
 static int celDisponivel(void) { return celb_disponivel(); }
 // Largura que os botoes da direita (Falar, Celular) tiram da barra.
+// Largura dos botoes da ponta direita da barra (microfone, celular), com o
+// vao de 10 entre eles e os 12 da borda; 0 sem nenhum.
 static float botoesW(void) {
-  return (ditadoDisponivel() ? SP_MIC_D + 14.0f : 0.0f) + (celDisponivel() ? SP_MIC_D + 14.0f : 0.0f) +
-         (ditadoDisponivel() || celDisponivel() ? 12.0f : 0.0f);
+  int n = ditadoDisponivel() + celDisponivel();
+  return n ? n * SP_MIC_D + (n - 1) * 10.0f + 12.0f : 0.0f;
 }
 static int imeDisponivel(void) { return st_ime_disponivel(); }
 static int ouvindo(void) {
@@ -264,10 +280,13 @@ static const char *rotuloTipo(const char *tipo) {
 static void metaTitulo(const CatItem *ci, char *dst, size_t n) {
   const char *tp = rotuloTipo(ci->tipo);
   char nota[24] = "";
-  if (ci->nota > 0) snprintf(nota, sizeof nota, "\xe2\x98\x85 %d.%d", ci->nota / 10, ci->nota % 10);
+  // A nota com a virgula do idioma ("8,5"), como o resto do app; o ponto so
+  // em ingles (ajustes.h).
+  if (ci->nota > 0) snprintf(nota, sizeof nota, "\xe2\x98\x85 %d%c%d", ci->nota / 10,
+                             ajustes_idioma_ingles() ? '.' : ',', ci->nota % 10);
   snprintf(dst, n, "%s%s%s%s%s", ci->meta,
-           ci->meta[0] && tp[0] ? "  \xc2\xb7  " : "", tp,
-           (ci->meta[0] || tp[0]) && nota[0] ? "  \xc2\xb7  " : "", nota);
+           ci->meta[0] && tp[0] ? " \xc2\xb7 " : "", tp,
+           (ci->meta[0] || tp[0]) && nota[0] ? " \xc2\xb7 " : "", nota);
 }
 
 static const char *arteDe(const CatItem *ci, int paisagem) {
@@ -562,7 +581,8 @@ static void remontar(void) {
     for (i = 0; i < nLin; i++) {
       lin[i].h = ALTURA[lin[i].tipo];
       if (lin[i].tipo == L_AVISO && lin[i].t2[0]) lin[i].h += 30.0f;
-      if (lin[i].tipo == L_CAB && i > 0) y += 14.0f;
+      // Sem vao extra antes de um grupo: os 50 px do cabecalho ja sao o
+      // "22 em cima, 10 embaixo" do kicker do mockup.
       lin[i].y = y; y += lin[i].h;
       entraLin[i] = 0.0f;
       for (j = 0; j < nAntes; j++)
@@ -675,7 +695,7 @@ void spot_abrir(int voz) {
   guia_preparar_busca();
   aberto = 1;
   painel = P_CAMPO; kbF = 0; kbC = 0;
-  kbAberto = 0; kbAnim = 0.0f;
+  kbAberto = 0; kbAnim = 0.0f; spBW = SP_BW_BASE;
   corpoH = corpoV = 0.0f; animMic = 0.0f; nivelVoz = 0.0f;
   nConsulta = 0; consulta[0] = 0; montada[0] = 0;
   scrollY = scrollAlvo = velY = 0.0f;
@@ -975,7 +995,17 @@ void spot_evento(const SDL_Event *e) {
 static float alturaLista(void) { return nLin ? lin[nLin - 1].y + lin[nLin - 1].h : 0.0f; }
 static float alturaTeclado(void) { return (kbFil + 1) * SP_KB_PASSO - SP_TECLA_GAP + 52.0f; }
 static float corpoAlvo(void) {
-  float h = alturaLista();
+  float h = alturaLista(), teto = SP_CORPO_MAX - SP_CPAD_T - SP_CPAD_B - SP_RODAPE_H;
+  int i;
+  // LISTA MAIOR QUE A ILHA: a janela termina no fim de uma linha inteira, e
+  // nao no meio da proxima — a linha cortada encostava no rodape ("The
+  // Terminal List" pela metade sobre o "OK Abrir", captura de 02/10).
+  if (h > teto) {
+    float fim = 0.0f;
+    for (i = 0; i < nLin; i++)
+      if (lin[i].y + lin[i].h <= teto) fim = lin[i].y + lin[i].h;
+    h = fim > 0.0f ? fim : teto;
+  }
   if (kbAberto && alturaTeclado() > h) h = alturaTeclado();
   if (h <= 0.0f) return 0.0f;
   h += SP_CPAD_T + SP_CPAD_B + SP_RODAPE_H;
@@ -1017,6 +1047,7 @@ void spot_atualizar(float dt, Uint32 agora) {
   corpoH = molaIlha(&corpoV, corpoH, corpoAlvo(), dt);
   if (corpoH < 0.0f) { corpoH = 0.0f; if (corpoV < 0.0f) corpoV = 0.0f; }
   kbAnim = anim_mola(kbAnim, kbAberto ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
+  spBW = anim_mistura(SP_BW_BASE, SP_BW_KB, anim_suave(kbAnim));
   nivelVoz = anim_mola(nivelVoz, st_nivel(), dt, 18.0f);
   animMic = anim_mola(animMic, painel == P_MIC ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
   for (f = 0; f <= kbFil && f <= SP_KB_MAX_FIL; f++)
@@ -1048,10 +1079,11 @@ void spot_atualizar(float dt, Uint32 agora) {
 }
 
 // --- Desenho -----------------------------------------------------------------------
-static float listaX = SP_LISTA_X0, listaW = SP_LISTA_XF - SP_LISTA_X0;
+static float listaX = (NV_TELA_W - SP_BW_BASE) * 0.5f + SP_ILHA_PAD, listaW = SP_BW_BASE - 2.0f * SP_ILHA_PAD;
 
 void spot_veu(void) {
-  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0.0f, 0.0f, 0.01f, 0.62f);
+  // O veu do mockup: preto a 55 % sobre a tela de tras.
+  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0.0f, 0.0f, 0.01f, 0.55f);
 }
 
 // O MATERIAL DA ILHA, o mesmo da folha de Fontes, do menu e da ilha do relogio:
@@ -1066,9 +1098,10 @@ static void ilhaSpot(GfxRect p, float raioPx, float a) {
   raio = raioPx / p.h;
   gfx_rect((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f }, 0, GFX_SOMBRA,
            1.0f, 0, 0, 0.5f, 0, 0, 0, .42f * a);
-  // No vidro a folha sozinha deixa os cartazes de tras competirem com o texto
-  // (captura de 01/10): um miolo escuro por baixo dela.
-  if (vid) { gfx_cor(p, raio, 0.03f, 0.032f, 0.04f, 0.55f * a); gfx_vidro_folha(p, raio, a); }
+  // No vidro, a folha sozinha (78 %), como a do mockup (80 %): o miolo escuro
+  // extra que havia por baixo dela (01/10, sobre cartazes) fechava a ilha a
+  // ponto de a arte de tras sumir — o oposto do que o vidro e.
+  if (vid) gfx_vidro_folha(p, raio, a);
   else gfx_cor(p, raio, .071f, .075f, .086f, .98f * a);
   gfx_luz_canto(p, raio, p.w * .22f, -120.0f, p.w * .6f, 1, 1, 1, (vid ? .06f : .04f) * a);
 }
@@ -1084,50 +1117,68 @@ static void desenhaSuperficie(GfxRect p, float a) {
   }
 }
 
+// Texto claro do mockup (#f3f2ef) com a opacidade do papel dele: a cor
+// fica a mesma e quem gradua e o alfa, como o CSS (rgba(243,242,239,.62)).
+#define SP_TINTA 243, 242, 239
+
+// Uma dica "tecla acao" (o mesmo par do rodape) e a largura dela.
+static float dicaPar(float x, float y, const char *tecla, const char *acao, float a) {
+  char t[96];
+  snprintf(t, sizeof t, "%s %s", tecla, acao);
+  { TxtLinha l = txt_linha(TXT_ILHA_APOIO, t, SP_TINTA, 255);
+    if (x >= 0.0f) txt_desenhar_alpha(l, x, y, a);
+    return (float)l.w; }
+}
+
 static void desenhaCampo(float dy, float a, Uint32 agora) {
   GfxRect barra = { SP_BX, SP_BY + dy, SP_BW, SP_BH };
-  float ar, ag, ab, tx, xMax;
+  float ar, ag, ab, tx, xMax, ty = barra.y + barra.h * 0.5f;
   int ouve = ouvindo(), comMic = ditadoDisponivel();
   const char *av = st_dono() == ST_SPOT || !st_dono() ? st_aviso() : "";
   ajustes_acento(&ar, &ag, &ab);
-  // Foco no campo: a superficie um degrau mais clara por dentro da barra
-  // (regra do Glass UI: foco de linha sem contorno). O acento fica no cursor.
-  if (animCampo > 0.01f) {
-    GfxRect r = { barra.x + 8.0f, barra.y + 8.0f, barra.w - botoesW() - 16.0f,
-                  barra.h - 16.0f };
-    if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .12f * animCampo * a);
-    else gfx_cor(r, 0.5f, .17f, .176f, .204f, animCampo * a);
-  }
+  // FOCO NO CAMPO E O CURSOR, so ele: a barra inteira ja e o campo, e um
+  // segundo degrau claro por dentro dela (como era) fazia a pilula parecer
+  // um botao dentro de outro. O mockup nao tem: lupa, texto e o cursor no
+  // acento. Com o foco no microfone/celular o cursor some e o botao acende.
   if (ponteiro_ativo()) {
     ponteiro_alvo(barra.x, barra.y, barra.w - botoesW(), barra.h,
                   focarCampo, NULL, 0, 0);
   }
-  gfx_icone((GfxRect){ barra.x + 40.0f, barra.y + (barra.h - 40.0f) * 0.5f, 40.0f, 40.0f },
-            "menu_search", 0.78f, 0.79f, 0.83f, a);
-  tx = barra.x + 40.0f + 40.0f + 24.0f;
-  xMax = barra.x + barra.w - (botoesW() > 0.0f ? botoesW() + 16.0f : 40.0f) - (ouve ? 170.0f : 0.0f);
+  gfx_icone((GfxRect){ barra.x + 30.0f, ty - 14.0f, 28.0f, 28.0f },
+            "menu_search", .95f, .95f, .94f, a);
+  tx = barra.x + 30.0f + 28.0f + 18.0f;
+  xMax = barra.x + barra.w - (botoesW() > 0.0f ? botoesW() + 12.0f : 30.0f) - (ouve ? 170.0f : 0.0f);
+  // Sem botao a direita, a dica do campo mora la, apagada (o "Voz: segure
+  // OK" do mockup — aqui o que o OK faz de verdade no campo).
+  if (botoesW() <= 0.0f && painel == P_CAMPO && !ouve) {
+    float w = dicaPar(-1.0f, 0, "OK", i18n("Digitar"), a);
+    TxtLinha l = txt_linha(TXT_ILHA_APOIO, "OK", SP_TINTA, 255);
+    dicaPar(barra.x + barra.w - 30.0f - w, ty - l.h * 0.5f, "OK", i18n("Digitar"), .45f * a);
+    xMax -= w + 24.0f;
+  }
   if (nConsulta) {
-    TxtLinha l = txt_linha_corta(TXT_HEADLINE, consulta, 246, 247, 251, 255, xMax - tx - 10.0f);
-    txt_desenhar_alpha(l, tx, barra.y + (barra.h - l.h) * 0.5f, a);
-    tx += l.w + 6.0f;
+    TxtLinha l = txt_linha_corta(TXT_CALLOUT, consulta, SP_TINTA, 255, xMax - tx - 10.0f);
+    txt_desenhar_alpha(l, tx, ty - l.h * 0.5f, a);
+    tx += l.w + 2.0f;
   } else {
     const char *ph = ouve ? i18n(st_estado() == ST_PERMISSAO ? "Permita o microfone para falar…" : "Ouvindo…")
                    : av[0] ? i18n(av)
                    : i18n(comMic ? "Buscar ou falar: filmes, séries, pessoas, canais"
                                  : "Buscar filmes, séries, pessoas e canais");
     int amb = !ouve && av[0];
-    TxtLinha l = txt_linha_corta(amb ? TXT_BODY : TXT_HEADLINE, ph, amb ? 240 : 255, amb ? 190 : 255,
-                                 amb ? 130 : 255, 255, xMax - tx - 10.0f);
-    txt_desenhar_alpha(l, tx, barra.y + (barra.h - l.h) * 0.5f, (amb ? 0.95f : 0.45f) * a);
+    TxtLinha l = amb ? txt_linha_corta(TXT_ILHA_META, ph, 240, 190, 130, 255, xMax - tx - 10.0f)
+                     : txt_linha_corta(TXT_CALLOUT, ph, SP_TINTA, 255, xMax - tx - 10.0f);
+    txt_desenhar_alpha(l, tx, ty - l.h * 0.5f, (amb ? 0.95f : 0.45f) * a);
   }
-  // Cursor: com o foco no campo ou com o teclado do sistema aberto para ele.
+  // Cursor: 2 x 30 no acento (o do mockup), com o foco no campo ou com o
+  // teclado do sistema aberto para ele.
   if ((painel == P_CAMPO || painel == P_TECLADO || digitandoSis()) && (agora / 500) % 2 == 0 &&
       (nConsulta > 0 || digitandoSis()))
-    gfx_cor((GfxRect){ tx, barra.y + 28.0f, 3.0f, barra.h - 56.0f }, 0.5f, ar, ag, ab, 0.95f * a);
+    gfx_cor((GfxRect){ tx, ty - 15.0f, 2.0f, 30.0f }, 0.5f, ar, ag, ab, 0.95f * a);
   // MICROFONE: botao focavel a direita, so onde ha voz (nao se promete o que a
   // TV nao faz). Ouvindo, acende na cor do tema e um anel cresce com o som.
   if (comMic) {
-    float d = SP_MIC_D, cx = barra.x + barra.w - 26.0f - d - (celDisponivel() ? d + 14.0f : 0.0f);
+    float d = SP_MIC_D, cx = barra.x + barra.w - 12.0f - d - (celDisponivel() ? d + 10.0f : 0.0f);
     float cy = barra.y + (barra.h - d) * 0.5f;
     float k = animMic;
     if (ponteiro_ativo()) ponteiro_alvo(cx - 8, barra.y, d + 16, barra.h, focarCampo, NULL, 1, 0);
@@ -1150,17 +1201,20 @@ static void desenhaCampo(float dy, float a, Uint32 agora) {
       if (k > 0.01f)
         gfx_rect((GfxRect){ cx - 14, cy - 14, d + 28, d + 28 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
                  ar, ag, ab, 0.30f * k * a);
-      gfx_cor((GfxRect){ cx, cy, d, d }, 0.5f, anim_mistura(0.2f, ar, k), anim_mistura(0.205f, ag, k),
-              anim_mistura(0.225f, ab, k), a);
+      // Em repouso o disco do mockup (.dsc): branco a 8 % no vidro, cinza
+      // opaco no solido; o foco e a pilula cheia no acento (foco de botao).
+      if (ajustes_vidro()) gfx_cor((GfxRect){ cx, cy, d, d }, 0.5f, 1, 1, 1, .08f * (1.0f - k) * a);
+      else gfx_cor((GfxRect){ cx, cy, d, d }, 0.5f, .125f, .13f, .153f, (1.0f - k) * a);
+      if (k > 0.01f) gfx_cor((GfxRect){ cx, cy, d, d }, 0.5f, ar, ag, ab, k * a);
     }
     { int t = (ouve || k > 0.5f) ? ajustes_tinta_foco() : 224;
-      gfx_icone((GfxRect){ cx + 17, cy + 17, d - 34, d - 34 }, "aj_mic",
+      gfx_icone((GfxRect){ cx + 14, cy + 14, d - 28, d - 28 }, "aj_mic",
                 t / 255.0f, t / 255.0f, t / 255.0f, a); }
   }
   // CELULAR: o ultimo da barra, sempre na mesma ponta.
   if (celDisponivel()) {
     float d = SP_MIC_D;
-    celb_botao(CELB_SPOT, (GfxRect){ barra.x + barra.w - 26.0f - d, barra.y + (barra.h - d) * 0.5f, d, d },
+    celb_botao(CELB_SPOT, (GfxRect){ barra.x + barra.w - 12.0f - d, barra.y + (barra.h - d) * 0.5f, d, d },
                painel == P_CEL, focarCampo, 2, 0, a);
   }
 }
@@ -1222,68 +1276,77 @@ static void arte(GfxRect r, const char *url, float raio, int circulo, float a) {
   else gfx_cor(r, circulo ? 0.5f : raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
 }
 
+// CABECALHO DE GRUPO: o kicker das ilhas ("MELHOR RESULTADO", "TITULOS"):
+// 15/700 em caixa alta, espacado (.14em), branco a 45 %, colado embaixo.
+static void kicker(const char *t, float x, float yBase, float a) {
+  char up[200];
+  idioma_maiusc_em(ajustes_idioma(), up, sizeof up, t);
+  { TxtLinha l = txt_linha(TXT_MINI, "M", SP_TINTA, 255);
+    txt_tracking(TXT_MINI, up, SP_TINTA, x, yBase - l.h, .45f * a, 2.1f); }
+}
+
 static void desenhaLinha(int i, float x, float y, float a) {
   Linha *l = &lin[i];
-  float f = animLin[i], w = listaW, ar, ag, ab;
+  float f = animLin[i], w = listaW;
   int vidro = ajustes_vidro();
-  int t1 = 246, t2 = 168;
-  GfxRect r = { x, y, w, l->h - 8.0f };
-  ajustes_acento(&ar, &ag, &ab);
+  float a1, a2;                 // alfa do nome e da linha de apoio
+  GfxRect r = { x, y, w, l->h };
   if (l->tipo == L_CAB) {
-    TxtLinha t = txt_linha(TXT_CW_BADGE, l->t1, 150, 156, 168, 255);
-    txt_desenhar_alpha(t, x + 18.0f, y + l->h - t.h - 10.0f, a);
+    kicker(l->t1, x + 12.0f, y + l->h - 11.0f, a);
     return;
   }
   if (l->tipo == L_AVISO) {
-    TxtLinha t = txt_linha_corta(TXT_PAINEL_ITEM, l->t1, 220, 222, 228, 255, w - 36.0f);
-    txt_desenhar_alpha(t, x + 18.0f, y + 16.0f, a);
+    TxtLinha t = txt_linha_corta(TXT_PG_ROTULO, l->t1, SP_TINTA, 255, w - 32.0f);
+    txt_desenhar_alpha(t, x + 16.0f, y + 16.0f, .88f * a);
     if (l->t2[0]) {
-      TxtLinha s = txt_linha_corta(TXT_CAPTION, l->t2, 160, 164, 175, 255, w - 36.0f);
-      txt_desenhar_alpha(s, x + 18.0f, y + 16.0f + t.h + 8.0f, a);
+      TxtLinha s = txt_linha_corta(TXT_ILHA_APOIO, l->t2, SP_TINTA, 255, w - 32.0f);
+      txt_desenhar_alpha(s, x + 16.0f, y + 16.0f + t.h + 6.0f, .48f * a);
     }
     return;
   }
   if (ponteiro_ativo()) ponteiro_alvo(r.x, r.y, r.w, r.h, focarLinha, NULL, i, 0);
-  // Foco: SUPERFICIE UM DEGRAU MAIS CLARA (Glass UI): branco a 12 % no vidro,
-  // cinza opaco no solido. Era o bloco cheio no acento (solido) e o contorno
-  // branco (vidro) — o dono pediu foco sem contorno, so superficie. O texto
-  // nao inverte: so clareia um pouco.
+  // Foco: SUPERFICIE UM DEGRAU MAIS CLARA (Glass UI, a .row.foco do mockup):
+  // branco a 12 % no vidro, cinza opaco no solido, raio 22. Sem contorno e sem
+  // bloco cheio no acento — o dono pediu foco so por superficie. O texto nao
+  // inverte: o nome vai de 88 % a cheio.
   if (f > 0.01f) {
     float rr = 22.0f / r.h;
     if (vidro) gfx_cor(r, rr, 1, 1, 1, .12f * f * a);
     else gfx_cor(r, rr, .17f, .176f, .204f, f * a);
-    t1 = (int)anim_mistura(232.0f, 255.0f, f);
-    t2 = (int)anim_mistura(160.0f, 190.0f, f);
-  } else { t1 = 232; t2 = 160; }
-  (void)ar; (void)ag; (void)ab;
+  }
+  a1 = anim_mistura(.88f, 1.0f, f);
+  a2 = anim_mistura(.48f, .58f, f);
   if (l->tipo == L_TOPO) {
     const CatItem *ci = cat_item(l->ref);
-    GfxRect art = { r.x + 14.0f, r.y + 14.0f, 0, r.h - 28.0f };
-    float tx;
-    art.w = art.h * 16.0f / 9.0f;
+    GfxRect art = { r.x + 16.0f, r.y + 16.0f, 250.0f, r.h - 32.0f };
+    float tx, ty, bloco, dw = 0.0f;
     // Sem paisagem, o cartaz em pe ocupa o mesmo lugar (e a caixa encolhe).
     if (!(ci && ci->backdrop[0])) art.w = art.h * 2.0f / 3.0f;
-    arte(art, l->arte, 16.0f / art.h, 0, a);
-    tx = art.x + art.w + 28.0f;
-    { TxtLinha t = txt_linha_corta(TXT_ROW_TITULO, l->t1, t1, t1, t1, 255, r.x + r.w - tx - 24.0f);
-      TxtLinha m = txt_linha_corta(TXT_CAPTION, l->t2, t2, t2, t2, 255, r.x + r.w - tx - 24.0f);
-      float ty = r.y + 34.0f;
+    arte(art, l->arte, 14.0f / art.h, 0, a);
+    tx = art.x + art.w + 24.0f;
+    // "OK Abrir" a direita, no meio da altura: so com o foco nela.
+    if (f > 0.02f) {
+      TxtLinha o = txt_linha(TXT_ILHA_APOIO, "OK", SP_TINTA, 255);
+      dw = dicaPar(-1.0f, 0, "OK", i18n("Abrir"), a);
+      dicaPar(r.x + r.w - 26.0f - dw, r.y + (r.h - o.h) * 0.5f, "OK", i18n("Abrir"), .5f * f * a);
+      dw += 40.0f;
+    }
+    { float tw = r.x + r.w - tx - 26.0f - dw;
+      TxtLinha t = txt_linha_corta(TXT_ROW_TITULO, l->t1, SP_TINTA, 255, tw);
+      TxtLinha m = txt_linha_corta(TXT_ILHA_META, l->t2, SP_TINTA, 255, tw);
+      TxtLinha g = { 0, 0, 0 };
+      if (ci && ci->genero[0]) g = txt_linha_corta(TXT_ILHA_GENERO, ci->genero, SP_TINTA, 255, tw);
+      bloco = t.h + 6.0f + m.h + (g.h ? 6.0f + g.h : 0.0f);
+      ty = r.y + (r.h - bloco) * 0.5f;
       txt_desenhar_alpha(t, tx, ty, a);
-      txt_desenhar_alpha(m, tx, ty + t.h + 10.0f, a);
-      if (ci && ci->genero[0]) {
-        TxtLinha g = txt_linha_corta(TXT_CAPTION2, ci->genero, t2, t2, t2, 255, r.x + r.w - tx - 24.0f);
-        txt_desenhar_alpha(g, tx, ty + t.h + 10.0f + m.h + 8.0f, 0.85f * a);
-      }
-      if (f > 0.5f) {
-        TxtLinha o = txt_linha(TXT_CAPTION2, i18n("OK   Abrir"), t2, t2, t2, 255);
-        txt_desenhar_alpha(o, tx, r.y + r.h - o.h - 22.0f, (f - 0.5f) * 2.0f * a);
-      } }
+      txt_desenhar_alpha(m, tx, ty + t.h + 6.0f, .62f * a);
+      if (g.h) txt_desenhar_alpha(g, tx, ty + t.h + 6.0f + m.h + 6.0f, .42f * a); }
     return;
   }
-  { GfxRect ic = { r.x + 14.0f, r.y + 8.0f, 0, r.h - 16.0f };
+  { GfxRect ic = { r.x + 16.0f, r.y + 12.0f, 0, r.h - 24.0f };
     float tx;
     switch (l->tipo) {
-      case L_TITULO:  ic.w = ic.h * 2.0f / 3.0f; arte(ic, l->arte, 8.0f / ic.h, 0, a); break;
+      case L_TITULO:  ic.w = 42.0f; arte(ic, l->arte, 8.0f / ic.h, 0, a); break;
       case L_PESSOA:
         ic.w = ic.h;
         if (l->arte[0]) arte(ic, l->arte, 0.5f, 1, a);
@@ -1294,43 +1357,43 @@ static void desenhaLinha(int i, float x, float y, float a) {
                     "aj_user-round", 0.78f, 0.79f, 0.82f, a);
         }
         break;
-      case L_COLECAO: ic.w = ic.h * 16.0f / 9.0f; arte(ic, l->arte, 10.0f / ic.h, 0, a); break;
+      case L_COLECAO: ic.w = ic.h * 16.0f / 9.0f; arte(ic, l->arte, 8.0f / ic.h, 0, a); break;
       case L_CANAL:
         ic.w = ic.h * 16.0f / 9.0f;
-        gfx_cor(ic, 10.0f / ic.h, 0.16f, 0.165f, 0.185f, a);
+        gfx_cor(ic, 8.0f / ic.h, 0.16f, 0.165f, 0.185f, a);
         guia_logo_desenhar(l->arte, l->t1, ic, ic.w - 16.0f, ic.h - 16.0f, 0.965f, a);
         break;
       default: {
         // Icone num disco: recente, limpar, catalogo, addon.
-        float d = 46.0f;
-        GfxRect dc = { r.x + 18.0f, r.y + (r.h - d) * 0.5f, d, d };
+        float d = 42.0f;
+        GfxRect dc = { r.x + 16.0f, r.y + (r.h - d) * 0.5f, d, d };
         int tt = 210;
-        gfx_cor(dc, 0.5f, 1.0f, 1.0f, 1.0f, (0.08f + 0.06f * (1.0f - f)) * a);
-        gfx_icone((GfxRect){ dc.x + 11, dc.y + 11, d - 22, d - 22 },
+        gfx_cor(dc, 0.5f, 1.0f, 1.0f, 1.0f, (0.08f + 0.04f * (1.0f - f)) * a);
+        gfx_icone((GfxRect){ dc.x + 10, dc.y + 10, d - 20, d - 20 },
                   l->icone[0] ? l->icone : "aj_rotate-ccw-clock",
                   tt / 255.0f, tt / 255.0f, tt / 255.0f, l->icone[0] ? a : 0.6f * a);
-        ic.w = d + 4.0f;
+        ic.w = d;
         break; }
     }
-    tx = ic.x + ic.w + 24.0f;
+    tx = ic.x + ic.w + 18.0f;
     if (l->tipo == L_RECENTE || l->tipo == L_LIMPAR) {
-      TxtLinha t = txt_linha_corta(l->tipo == L_LIMPAR ? TXT_CAPTION : TXT_PAINEL_ITEM, l->t1,
-                                   t1, t1, t1, 255, r.x + r.w - tx - 24.0f);
-      txt_desenhar_alpha(t, tx, r.y + (r.h - t.h) * 0.5f, l->tipo == L_LIMPAR ? 0.8f * a : a);
+      TxtLinha t = txt_linha_corta(l->tipo == L_LIMPAR ? TXT_ILHA_META : TXT_PG_ROTULO, l->t1,
+                                   SP_TINTA, 255, r.x + r.w - tx - 16.0f);
+      txt_desenhar_alpha(t, tx, r.y + (r.h - t.h) * 0.5f, (l->tipo == L_LIMPAR ? .62f : a1) * a);
       // A barra da pressao longa: solte antes de encher e nao apaga.
       if (painel == P_LISTA && i == focoL && okPress && !okLongo) {
         float p = anim_clamp((SDL_GetTicks() - okDesde) / (float)NV_HOLD_MS, 0.0f, 1.0f);
         if (p > 0.02f) gfx_cor((GfxRect){ r.x + 18.0f, r.y + r.h - 8.0f, (r.w - 36.0f) * p, 4.0f },
-                               0.5f, t1 / 255.0f, t1 / 255.0f, t1 / 255.0f, 0.9f * a);
+                               0.5f, 1, 1, 1, 0.9f * a);
       }
       return;
     }
-    { TxtLinha t = txt_linha_corta(TXT_PAINEL_ITEM, l->t1, t1, t1, t1, 255, r.x + r.w - tx - 24.0f);
-      TxtLinha m = txt_linha_corta(TXT_CAPTION, l->t2, t2, t2, t2, 255, r.x + r.w - tx - 24.0f);
-      float bloco = t.h + 6.0f + (l->t2[0] ? m.h : 0);
+    { TxtLinha t = txt_linha_corta(TXT_ILHA_ITEM, l->t1, SP_TINTA, 255, r.x + r.w - tx - 16.0f);
+      TxtLinha m = txt_linha_corta(TXT_ILHA_APOIO, l->t2, SP_TINTA, 255, r.x + r.w - tx - 16.0f);
+      float bloco = t.h + (l->t2[0] ? 3.0f + m.h : 0);
       float ty = r.y + (r.h - bloco) * 0.5f;
-      txt_desenhar_alpha(t, tx, ty, a);
-      if (l->t2[0]) txt_desenhar_alpha(m, tx, ty + t.h + 6.0f, a); }
+      txt_desenhar_alpha(t, tx, ty, a1 * a);
+      if (l->t2[0]) txt_desenhar_alpha(m, tx, ty + t.h + 3.0f, a2 * a); }
   }
 }
 
@@ -1350,18 +1413,14 @@ static void desenhaLista(float dy, float a) {
   gfx_sem_recorte();
 }
 
-// Dicas do controle em pares tecla + acao, cada uma desenhada separada: a
-// frase inteira numa linha so perdia os espacos entre os pares.
+// Dicas do controle em pares tecla + acao, numa cor so (branco a 42 %, o
+// rodape do mockup), 24 px entre um par e o outro.
 static float dica(float x, float y, const char *tecla, const char *acao, float a) {
-  TxtLinha t = txt_linha(TXT_CAPTION2, tecla, 222, 224, 230, 255);
-  TxtLinha r = txt_linha(TXT_CAPTION2, acao, 150, 154, 163, 255);
-  txt_desenhar_alpha(t, x, y, a);
-  txt_desenhar_alpha(r, x + t.w + 12.0f, y, a);
-  return x + t.w + 12.0f + r.w + 44.0f;
+  return x + dicaPar(x, y, tecla, acao, .42f * a) + 24.0f;
 }
 
 static void desenhaRodape(float dy, float a) {
-  float x = SP_BX + 40.0f, y = SP_CORPO_Y + corpoH - SP_RODAPE_H + 14.0f + dy;
+  float x = SP_LISTA_X0 + 16.0f, y = SP_CORPO_Y + corpoH - SP_RODAPE_H + 14.0f + dy;
   int recente = painel == P_LISTA && focoL >= 0 && focoL < nLin && lin[focoL].tipo == L_RECENTE;
   a *= anim_clamp((corpoH - 80.0f) / 80.0f, 0.0f, 1.0f);
   if (a < 0.01f) return;
@@ -1374,7 +1433,9 @@ static void desenhaRodape(float dy, float a) {
     if (recente) x = dica(x, y, i18n("Segure OK"), i18n("Remover"), a);
     dica(x, y, i18n("Voltar"), i18n("Campo"), a);
   } else {
-    x = dica(x, y, "OK", i18n(painel == P_MIC ? "Falar" : painel == P_CEL ? "Digitar pelo celular" : "Digitar"), a);
+    // O "OK Digitar" do campo sem botoes ja esta na ponta da barra.
+    if (botoesW() > 0.0f || painel != P_CAMPO)
+      x = dica(x, y, "OK", i18n(painel == P_MIC ? "Falar" : painel == P_CEL ? "Digitar pelo celular" : "Digitar"), a);
     x = dica(x, y, "\xe2\x86\x93", i18n("Resultados"), a);
     dica(x, y, i18n("Voltar"), i18n(nConsulta > 0 ? "Limpar" : "Fechar"), a);
   }

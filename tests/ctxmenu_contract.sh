@@ -49,4 +49,13 @@ rg -q 'ops\[nOps\]\.rot = rot' src/ctxmenu.c
 # enquanto o laco de animacao vai so ate CTX_MAX foi exatamente o defeito.
 rg -q 'for \(i = 0; i < CTX_MAX; i\+\+\)' src/ctxmenu.c
 
+# TIRAR DE CONTINUAR PEDE CONFIRMACAO (dono, 02/10): em aplicar() o desvio
+# para a pagina 2 vem ANTES da remocao, e a pagina 2 so chama aplicar() com o
+# foco no primeiro botao. O caminho de eventos e coberto em tests/hold.c.
+linha_conf=$(rg -n 'acao == OP_TIRAR_CONTINUAR && pagina != 2' src/ctxmenu.c | cut -d: -f1)
+linha_tirar=$(rg -n 'desc_tirar_continuar\(imdb, temp, ep\)' src/ctxmenu.c | cut -d: -f1)
+[ -n "$linha_conf" ] && [ "$linha_conf" -lt "$linha_tirar" ] || {
+  echo 'ctxmenu: tirar de Continuar sem a confirmacao antes' >&2; exit 1; }
+rg -q 'if \(confFoco == 0\) aplicar\(\); else pagina = 0;' src/ctxmenu.c
+
 echo 'ctxmenu contract: PASS'

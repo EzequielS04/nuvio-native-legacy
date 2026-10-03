@@ -250,6 +250,10 @@ def contexto(txt, i):
 # "nao sei o que e": sem esta lista a ferramenta nao pode virar teste, e sem
 # virar teste ela nao impede a proxima regressao.
 IGNORAR = {
+    # Palavra que a folha de Fontes PROCURA no nome/descricao do arquivo para
+    # saber se ha audio em portugues (streams.c, idiomaDa). Dado de comparacao,
+    # nunca texto desenhado.
+    "português",
     # Hosts de provedor de poster/meta que levam a config no caminho
     # (redeurl.c, rede_url_log): dado de comparacao, nunca tela. "com" casou
     # com a lista de palavras de portugues.

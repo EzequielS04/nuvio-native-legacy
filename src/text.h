@@ -56,13 +56,20 @@ typedef enum {
   // ta bem mais polido que a build"). No FIM, pela mesma razao do RANK_GRANDE.
   TXT_ILHA_TITULO,   // .ttl            40 / 700  ("Social")
   TXT_ILHA_SECAO,    // .sec b          22 / 800  ("Hoje", "Esta semana")
-  TXT_ILHA_NOME,     // nome na linha   24 / 600
+  TXT_ILHA_NOME,     // nome na linha / cabecalho do menu do cartaz 24 / 600-700
   TXT_ILHA_CORPO,    // verbo na linha  24 / 400  ("te mandou")
   TXT_ILHA_SEG,      // .sg             19 / 600  (abas segmentadas)
   TXT_ILHA_SUB,      // titulo da linha 19 / 400
   TXT_ILHA_NUM,      // .sg .n          16 / 400  (contagem da aba)
   TXT_ILHA_HORA,     // quando          15 / 400  ("há 15 min")
   TXT_ILHA_INICIAL,  // .av             20 / 700  (inicial no disco de 52)
+  // Spotlight e menu do cartaz (mockup telas 6 e 7): o nome numa linha de
+  // resultado (22/600, em Bold: a Inter embarcada nao tem 600), a meta do
+  // melhor resultado (19/400), o genero (17/400) e o apoio das linhas (16/400).
+  TXT_ILHA_ITEM, TXT_ILHA_META, TXT_ILHA_GENERO, TXT_ILHA_APOIO,
+  // A CONFIRMACAO da ilha (mockup tela 7): a pergunta em 36/700 e o texto
+  // corrido em 20/400. PERGUNTA e nao TITULO: o 40/700 do Social ja tem o nome.
+  TXT_ILHA_PERGUNTA, TXT_ILHA_TEXTO,
   TXT_NFONTES
 } TxtEstilo;
 
