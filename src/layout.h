@@ -594,6 +594,21 @@
 #define NV_RAIO_PILL     0.5f
 #define NV_RAIO_BADGE    0.18f
 
+// MATERIAL DA ILHA — GLASS UI (02/10/2026, mockups em design/glass-ilha e
+// design/ilha; regras completas no DESIGN.md). Todo painel e uma ilha no
+// material da ilha do relogio. Os valores moram no desenho de cada tela
+// (streams.c e o modelo); estes sao os que todas repetem:
+//   miolo   vidro: gfx_vidro_folha (~80%)   solido: .071/.075/.086 a ~0.98
+//   luz     gfx_luz_canto fraca no canto de cima (~5% vidro, ~4% solido)
+//   sombra  GFX_SOMBRA curta; NENHUM contorno; raio NV_FOLHA_RAIO
+//   veu     tela atras da folha: preto 30% (vidro) / 42% (solido)
+//   foco    LINHA = superficie um degrau mais clara (vidro branco 12-14%,
+//           solido .17/.176/.204); BOTAO/CHIP = pilula cheia no acento
+//   chip    NV_CTRL_H, branco 8% (solido .14/.148/.17); segmentado: trilho
+//           branco 5%, selecionado 12-14%
+//   acento  so para estado e elemento-chave; logos de qualidade todos brancos
+//   degrade so por shader com nv_dither (painel de 8 bits), nunca faixas
+//
 // ILHA DO RELOGIO (ilha.h). Topo a 36 px: dentro da area segura de acao das
 // TVs (5 % de 1080 = 54 px para o TEXTO; a pilula comeca antes, o texto dela
 // fica em ~50). Fechada ela mede 52 de altura; aberta para um aviso, 64.
