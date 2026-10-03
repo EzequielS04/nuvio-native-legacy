@@ -49,6 +49,11 @@ typedef enum {
   // Numeral do Top 10 da home Dinamica (NV_TOP10_NUM_CORPO). No FIM, depois das
   // legendas: TXT_LEG_* e contado por aritmetica a partir de TXT_LEG_50.
   TXT_RANK_GRANDE,
+  // O TRECHO EM DESTAQUE da frase da ilha do relogio ("Ana recomendou
+  // Fallout", ilha.c): o corpo do TXT_BODY (25) em Bold, porque o 600 do
+  // mockup em texto claro sobre o miolo escuro e Bold pela regra optica de
+  // text.c. No FIM, pela mesma razao do TXT_RANK_GRANDE.
+  TXT_ILHA_FORTE,
   TXT_NFONTES
 } TxtEstilo;
 

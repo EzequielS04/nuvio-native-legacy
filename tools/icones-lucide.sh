@@ -48,7 +48,12 @@ circle-play database file-text folders gallery-vertical-end house
 images info layout-dashboard list-checks monitor-cog palette panel-top plug puzzle
 rotate-ccw-clock rows-3 scan star user-round mic keyboard smartphone
 rotate-cw x
+clock triangle-alert tv-minimal-play calendar download wifi-off wifi link-2-off
+cloud megaphone bookmark
 "
+# A ultima linha e da ILHA DO RELOGIO (02/10, mockup aprovado em design/ilha):
+# os icones dos avisos (alerta, wifi, debrid baixando, Trakt desconectado...) e
+# dos botoes dos modais (Depois, Salvar, Reconectar).
 # Conferencia: todo aj_* citado em src/ tem de estar em NOMES, e todo NOMES
 # tem de ser citado — senao sobra PNG morto no pacote ou falta icone na tela
 # (gfx_icone falha em silencio).

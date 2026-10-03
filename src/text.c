@@ -252,6 +252,7 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 68, PESO_REGULAR }, { 72, PESO_REGULAR }, { 76, PESO_REGULAR },
   { 80, PESO_REGULAR },
   { NV_TOP10_NUM_CORPO, PESO_BOLD },   // numeral do Top 10 da Dinamica
+  { NV_FT_BODY, PESO_BOLD },           // destaque na frase da ilha (TXT_ILHA_FORTE)
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.

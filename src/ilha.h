@@ -38,6 +38,85 @@ void ilha_retirar(const char *chave);
 // 1 enquanto o aviso desta chave esta na tela ou na fila.
 int  ilha_tem(const char *chave);
 
+// --- PRIORIDADE, CONTADOR E A CENTRAL (mockup aprovado em 02/10) ------------------
+//
+// A FILA ERA FIFO e um erro esperava atras de tres avisos informativos — ate
+// 4 x 20 s se fossem toasts da central (mapa.md, secao 10). Agora:
+//   - P1 (erro que trava a pessoa) FURA A FILA: entra ja, e o que estava na
+//     tela volta para a frente da fila e reaparece depois, com o prazo inteiro
+//     (o da central nao: ele continua na lista de avisos);
+//   - dentro da mesma prioridade, ordem de chegada;
+//   - com dois ou mais esperando, a pilula mostra "+N" na ponta;
+//   - os avisos DA CENTRAL (grupo = 1) nao passam um por um: o primeiro diz o
+//     assunto ("Ana recomendou Fallout"); chegando outro enquanto ele ainda
+//     espera, os que esperam viram UM so, "N avisos novos", que abre a central.
+// Prioridade 0 = pelo tipo: ERRO e P1, ACENTO e P2, OK e INFO sao P3.
+enum { ILHA_P1 = 1, ILHA_P2, ILHA_P3 };
+
+// MODAL GENERICO: a mesma pilula crescida (o "a pilula cresce" dos cartoes),
+// com 1 a 3 botoes e, no lugar da arte 16:9, o ROSTO de alguem (pedido de
+// amizade) ou um ICONE num ladrilho (versao nova, Trakt, aviso do dono). Todos
+// os campos sao opcionais menos `titulo` e um botao; vazio = a linha some.
+#define ILHA_MODAL_BOTOES 3
+typedef struct {
+  char kicker[80];          // linha pequena em maiusculas acima do titulo
+  char titulo[160];         // grande (a "logo" do modal)
+  char linha[160];          // logo abaixo do titulo ("Série · 2022 · IMDb 8,7")
+  char nota[120];           // apagada, logo abaixo ("Você está na 1.7.1")
+  char texto[420];          // corrido, ate 3 linhas (bio, explicacao)
+  char fala[240];           // citacao com fio a esquerda (o recado do amigo)
+  char lista[3][96];        // itens com bolinha (notas da versao)
+  char chips[3][32];        // generos, em pilulas
+  char estado[80];          // na base da coluna ("há 12 min")
+  char rodape[120];         // a direita dos botoes ("Recusar não avisa a pessoa.")
+  char arte[1024];          // 480x270; com `rosto`, ele vai no canto da arte
+  char rosto[256];          // url do avatar (vazio = so a inicial de rostoNome)
+  char rostoNome[64];
+  char icone[32];           // sem arte nem rosto: ladrilho 150 com este icone
+  int  tipo;                // a luz do canto (ILHA_ERRO no Trakt), como na pilula
+  int  salvos;              // 1 = "Salvos ›" na ponta, como nos cartoes
+  int  nBotoes;
+  char botao[ILHA_MODAL_BOTOES][40];       // rotulo JA traduzido
+  char botaoIcone[ILHA_MODAL_BOTOES][32];  // "" = sem icone
+} IlhaModal;
+
+// O aviso completo. `texto` aceita ENFASE: o trecho entre dois ILHA_FORTE sai
+// em negrito (o nome da pessoa, o titulo) — use ilha_forte para embrulhar o
+// argumento, nunca o formato traduzido.
+#define ILHA_FORTE "\x02"
+typedef struct {
+  const char *chave;
+  int tipo;
+  const char *icone;        // NULL = o do tipo; ignorado com rosto/capa
+  const char *texto;
+  unsigned ms;
+  int tecla;                // 1 = a tecla AZUL com "abre" (vira 1 sozinho com modal)
+  int prior;                // ILHA_P1..P3; 0 = pelo tipo
+  int grupo;                // 1 = item da central (ver acima)
+  const char *rosto;        // avatar 36 (url; "" = a inicial de rostoNome)
+  const char *rostoNome;
+  const char *capa;         // mini capa 30x44; com rosto vira o "duo"
+  const char *meta;         // sufixo apagado depois da frase ("T2E4")
+  int vivo;                 // ponto vermelho de "agora"
+  int cartao;               // AZUL abre o modal deste cartao (ILHA_VIVO + 1 ...); 0 = nao
+  const IlhaModal *modal;   // AZUL abre este modal; NULL = nao
+} IlhaAvisoEx;
+void ilha_avisar_ex(const IlhaAvisoEx *a);
+// Embrulha `s` em ILHA_FORTE em `dst` (devolve dst), para passar como %s.
+const char *ilha_forte(char *dst, size_t tam, const char *s);
+// A central abriu: os avisos dela (grupo = 1) saem da tela e da fila.
+void ilha_retirar_grupo(void);
+// 1 = o aviso na tela leva a tecla e ela e da CENTRAL (sem modal nem cartao):
+// e quando AZUL/CH+ abre a lista de avisos (avisos_evento).
+int  ilha_tecla_central(void);
+// Botao escolhido num modal de AVISO, entregue uma vez: devolve 1..3 (o
+// indice + 1) e copia a chave do aviso em `chave`; 0 = nada. Voltar nao conta.
+int  ilha_aviso_pediu(char *chave, size_t tam);
+// Para o teste da fila (tests/ilhafila.c) e para o log: a chave do aviso da
+// vez ("" sem aviso) e quantos esperam atras dele (o numero do "+N").
+const char *ilha_aviso_vez(void);
+int  ilha_esperando(void);
+
 // ATIVIDADE em andamento: chame A CADA QUADRO enquanto durar; sem renovacao
 // por ~0,4 s ela sai sozinha. `progresso` de 0 a 1, ou < 0 quando nao ha numero.
 void ilha_atividade(const char *texto, float progresso);
@@ -71,7 +150,10 @@ int  ilha_ocupada(void);
 // avisos e a atividade continuam passando na frente; dois cartoes alternam a
 // cada ILHA_ALTERNA_MS. AZUL/CH+ com um cartao na pilula abre o MODAL — a
 // pilula cresce ate um cartao maior com a arte e os botoes (ilha_evento).
-enum { ILHA_VIVO = 0, ILHA_ESTREIA, ILHA_N_CARTOES };
+// ILHA_AMIGO (02/10, mockup aprovado): o terceiro cartao, "Ana · Severance ·
+// agora", com o rosto dela e a capa — o evento de inicio mais novo do feed
+// enquanto ele tiver menos de 15 min (a regra de RecAmigo.temAgora).
+enum { ILHA_VIVO = 0, ILHA_ESTREIA, ILHA_AMIGO, ILHA_N_CARTOES };
 #define ILHA_ALTERNA_MS 6000u
 typedef struct {
   char chave[80];        // muda = outro conteudo (a pilula remorfa)
@@ -83,6 +165,7 @@ typedef struct {
   int  restanteMin;      // ILHA_VIVO
   char quando[24];       // ILHA_ESTREIA: "hoje" (ja traduzido) ou ""
   char avisoId[72];      // ILHA_ESTREIA: id do aviso em avisos.c
+  char pessoa[64], rosto[256];   // ILHA_AMIGO: nome e avatar de quem esta vendo
 } IlhaCartao;
 // NULL tira o cartao. A copia e da ilha; quem chama pode descartar o seu.
 void ilha_cartao(int qual, const IlhaCartao *c);
