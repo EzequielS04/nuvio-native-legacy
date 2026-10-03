@@ -35,6 +35,7 @@ typedef struct {
   GLint jan;     // uJan: janela do GFX_JANELA
   GLint leve;    // uLeve: 1 = efeitos leves (sem dither), ver gfx_definir_efeitos_leves
   float altAtual, margemAtual, leveAtual;  // o ultimo valor enviado: so chama o GL se mudar
+  float telaAtual[2];       // o uTela enviado (muda so dentro de uma miniatura)
 } Programa;
 static Programa progs[GFX_NMODOS];
 static int progAtual = -1;
@@ -67,6 +68,11 @@ float gfx_opacidade_grupo = 1.0f;
 // Tamanho real do alvo da tela (em retina, maior que 1920x1080). Guardado aqui
 // porque toda volta de FBO precisa restaurar o viewport com ele.
 static int telaW = (int)NV_TELA_W, telaH = (int)NV_TELA_H;
+// MINIATURA (gfx_mini_*): o espaco de layout que o VS mapeia no viewport e a
+// escala do alvo. Fora dela, a tela cheia de sempre.
+static float uTelaW = NV_TELA_W, uTelaH = NV_TELA_H;
+static int   miniAtiva, miniPxW, miniPxH;
+static float miniX0, miniY0, miniEsc;
 void gfx_tamanho_alvo(int w, int h) { telaW = w; telaH = h; }
 
 static GLuint snapFbo = 0, snapTex = 0;
@@ -1126,6 +1132,15 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float g = uFoco > 0.0 ? pow(1.0 - d, uFoco) : 1.0 - smoothstep(0.0, 1.0, d);\n"
   "  gl_FragColor = nv_dither(uCor.rgb, uCor.a * g);\n"
   "}\n",
+
+  // GFX_MINI — o alvo de uma miniatura (gfx_mini_*): a textura e um FBO
+  // (origem embaixo), recortada pelos cantos.
+  "void main(){\n"
+  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  if (m <= 0.001) discard;\n"
+  "  vec4 t = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y));\n"
+  "  gl_FragColor = vec4(t.rgb, uCor.a * m);\n"
+  "}\n",
 };
 
 // Cada corpo declara o que usa; montar so o necessario mantem o shader enxuto.
@@ -1159,7 +1174,8 @@ static const struct { int sdf, cover; } PRECISA[GFX_NMODOS] = {
   {0,1},   /* GFX_HERO_CAM */
   {0,1},   /* GFX_HERO_CHEIO_CAM */
   {1,0},   /* GFX_JANELA — SDF da abertura; o cover e o do quadro da tela */
-  {0,0}    /* GFX_VEU_CSS — degrade puro, sem SDF */
+  {0,0},   /* GFX_VEU_CSS — degrade puro, sem SDF */
+  {1,0}    /* GFX_MINI — SDF dos cantos; a textura e um FBO */
 };
 
 static GLuint compila(GLenum tipo, const char *src) {
@@ -1221,6 +1237,7 @@ int gfx_iniciar(void) {
     progs[m].leve   = glGetUniformLocation(p, "uLeve");
     progs[m].jan    = glGetUniformLocation(p, "uJan");
     progs[m].altAtual = -1.0f;
+    progs[m].telaAtual[0] = NV_TELA_W; progs[m].telaAtual[1] = NV_TELA_H;
     progs[m].margemAtual = 0.0f;   // o default de um uniform recem-linkado e 0
     progs[m].leveAtual = 0.0f;
     glUseProgram(p);
@@ -1598,7 +1615,11 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   // duas linhas a meia forca — borrados. So a curva precisa de antialias.
   // Os dois valores ficam em cache por programa: fileira de cartoes iguais
   // nao repete a chamada.
-  { float alt = r.h * (float)telaH / NV_TELA_H, mg = 0.0f;
+  if (P->tela >= 0 && (P->telaAtual[0] != uTelaW || P->telaAtual[1] != uTelaH)) {
+    glUniform2f(P->tela, uTelaW, uTelaH);
+    P->telaAtual[0] = uTelaW; P->telaAtual[1] = uTelaH;
+  }
+  { float alt = r.h * (miniAtiva ? miniEsc : (float)telaH / NV_TELA_H), mg = 0.0f;
     if (PRECISA[modo].sdf) {
       if (raio > 0.0f) mg = 1.0f; else alt = 8192.0f;
     }
@@ -2208,6 +2229,11 @@ void gfx_recorte(float x, float y, float w, float h) {
   //    primeiros itens e os rotulos saiam cortados no meio da palavra.
   float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
   int yy = (int)((NV_TELA_H - (y + h)) * ey);
+  if (miniAtiva) {   // layout -> pixel do alvo da miniatura
+    ex = ey = miniEsc;
+    x -= miniX0;
+    yy = (int)((float)miniPxH - (y + h - miniY0) * miniEsc);
+  }
   glEnable(GL_SCISSOR_TEST);
   glScissor((int)(x * ex), yy, (int)(w * ex), (int)(h * ey));
   recorteAtivo = 1;
@@ -2453,4 +2479,75 @@ static void desfEncerrar(void) {
   }
   if (desfFbo) { glDeleteFramebuffers(1, &desfFbo); desfFbo = 0; }
   if (desfTmp) { gfx_tex_esquecer(desfTmp); glDeleteTextures(1, &desfTmp); desfTmp = 0; }
+}
+
+// --- MINIATURA ---------------------------------------------------------------------
+// Uma tela de verdade desenhada num alvo proprio e mostrada reduzida (a previa
+// das Novidades, o inspetor do Guia de uso). O desenho continua em coordenadas
+// de layout: o uTela e o viewport fazem a reducao, como no snapshot, e a
+// regiao [x0, x0 + w/esc] x [y0, y0 + h/esc] do layout cobre o alvo inteiro.
+static GLint miniFboAnt, miniVpAnt[4];
+static int miniRecAnt;
+int gfx_mini_alvo(GfxMini *m, int w, int h) {
+  GLint ant;
+  GLenum st;
+  if (m->fbo && m->w == w && m->h == h) return 1;
+  gfx_mini_liberar(m);
+  glGenTextures(1, &m->tex);
+  glBindTexture(GL_TEXTURE_2D, m->tex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  gfx_tex_esquecer(0);
+  glGenFramebuffers(1, &m->fbo);
+  ant = fboLigado();
+  glBindFramebuffer(GL_FRAMEBUFFER, m->fbo);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m->tex, 0);
+  st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant);
+  m->w = w; m->h = h;
+  if (st != GL_FRAMEBUFFER_COMPLETE) { gfx_mini_liberar(m); return 0; }
+  return 1;
+}
+void gfx_mini_comecar(GfxMini *m, float x0, float y0, float esc) {
+  if (!m->fbo || miniAtiva || esc <= 0.0f) return;
+  GFX_OUTRO_INI();
+  glGetIntegerv(GL_FRAMEBUFFER_BINDING, &miniFboAnt);
+  glGetIntegerv(GL_VIEWPORT, miniVpAnt);
+  miniRecAnt = recorteAtivo;
+  glBindFramebuffer(GL_FRAMEBUFFER, m->fbo);
+  glDisable(GL_SCISSOR_TEST);
+  recorteAtivo = 0;
+  glClearColor(0, 0, 0, 0);
+  glClear(GL_COLOR_BUFFER_BIT);
+  miniAtiva = 1; miniPxW = m->w; miniPxH = m->h;
+  miniX0 = x0; miniY0 = y0; miniEsc = esc;
+  uTelaW = x0 + (float)m->w / esc;
+  uTelaH = y0 + (float)m->h / esc;
+  glViewport((GLint)(-x0 * esc), 0, (GLsizei)(uTelaW * esc + 0.5f), (GLsizei)(uTelaH * esc + 0.5f));
+  GFX_OUTRO_FIM();
+}
+void gfx_mini_terminar(void) {
+  if (!miniAtiva) return;
+  GFX_OUTRO_INI();
+  miniAtiva = 0;
+  uTelaW = NV_TELA_W; uTelaH = NV_TELA_H;
+  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)miniFboAnt);
+  glViewport(miniVpAnt[0], miniVpAnt[1], miniVpAnt[2], miniVpAnt[3]);
+  glDisable(GL_SCISSOR_TEST);
+  if (miniRecAnt) { glEnable(GL_SCISSOR_TEST); glScissor(recorteBox[0], recorteBox[1], recorteBox[2], recorteBox[3]); }
+  recorteAtivo = miniRecAnt;
+  GFX_OUTRO_FIM();
+}
+void gfx_mini_desenhar(const GfxMini *m, GfxRect r, float raioPx, float a) {
+  if (!m->tex || r.w < 1.0f || r.h < 1.0f) return;
+  gfx_tex_aspect_atual = 0.0f;
+  gfx_rect(r, m->tex, GFX_MINI, 0, 0, 0, raioPx / r.h, 1, 1, 1, a);
+}
+void gfx_mini_liberar(GfxMini *m) {
+  if (m->fbo) glDeleteFramebuffers(1, &m->fbo);
+  if (m->tex) { glDeleteTextures(1, &m->tex); gfx_tex_esquecer(m->tex); }
+  m->fbo = m->tex = 0; m->w = m->h = 0;
 }

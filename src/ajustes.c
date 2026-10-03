@@ -1204,6 +1204,9 @@ void ajustes_abrir_na_fonte(void) { abrirNaFonte = 1; }
 void ajustes_abrir_no_layout(void) { abrirNoLayout = 1; }
 void ajustes_abrir_no_vidro(void) { abrirNoVidro = 1; }
 void ajustes_abrir_no_trakt(void) { abrirNoTrakt = 1; }
+static int abrirNoGuia, guiaDaNovidades, pediuNovidades;
+void ajustes_abrir_no_guia(int daNovidades) { abrirNoGuia = 1; guiaDaNovidades = daNovidades ? 1 : 0; }
+int  ajustes_pediu_novidades(void) { int v = pediuNovidades; pediuNovidades = 0; return v; }
 int  ajustes_opcao_em_foco(void) { return focoOp; }
 // Categoria mostrada na lista. Com o foco no indice ela e a categoria em foco
 // la; com o foco na lista, a do item.

@@ -107,6 +107,9 @@ typedef enum {
   TXT_G30B,   // "T1 E3" do OSD                   30 / 600
   TXT_G30M,   // "· The Head" do OSD              30 / 500
   TXT_G52B,   // programa no OSD do canal         52 / 700
+  // NOVIDADES DA 1.8.0 E GUIA DE USO (mockups aprovados em 03/10). No FIM,
+  // como manda o comentario do TXT_RANK_GRANDE.
+  TXT_NOV_TITULO,   // .c-tit do cartao de novidades  50 / 700
   TXT_NFONTES
 } TxtEstilo;
 

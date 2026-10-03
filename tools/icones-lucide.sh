@@ -54,6 +54,7 @@ cloud megaphone bookmark
 clapperboard languages search chevron-right check plus minus memory-stick delete
 activity gauge zap database
 arrow-up-down
+panel-left list-x bell audio-lines layers type sliders-horizontal book-open user-plus
 "
 # A penultima linha e da ILHA DO RELOGIO (02/10, mockup aprovado em design/ilha):
 # os icones dos avisos (alerta, wifi, debrid baixando, Trakt desconectado...) e
@@ -61,6 +62,8 @@ arrow-up-down
 # A ultima e dos AJUSTES no Glass UI (03/10, mockup aprovado): Trailers e
 # Idiomas com desenho proprio, a lupa e a seta das linhas, o "Salvo", o mais e
 # o menos do editor numerico e a memoria de imagens.
+# A penultima linha e do cartao de NOVIDADES DA 1.8.0 (03/10, mockup aprovado):
+# os discos da lista e as pecas da previa.
 # Conferencia: todo aj_* citado em src/ tem de estar em NOMES, e todo NOMES
 # tem de ser citado — senao sobra PNG morto no pacote ou falta icone na tela
 # (gfx_icone falha em silencio).

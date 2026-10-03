@@ -818,20 +818,33 @@ float ajustes_ui_antes_depois(const char *rot, int a, int b, const char *unid, i
   return pad + lr.h + (compacto ? 7.0f : 10.0f) + 6 + pad * 0.5f;
 }
 // O grafico de pressao da memoria (os ultimos 2 min) sem o painel em volta.
+// O historico de EXEMPLO (o do mockup): sobe, passa do teto e volta. Usado
+// pelas capturas e pela previa do cartao de novidades da 1.8.0.
+static void ajMemExemplo(long *hist, long teto) {
+  int i;
+  for (i = 0; i < 120; i++) {
+    double v = i < 30 ? .30 + i * .009 + sin(i * .9) * .01 : i < 52 ? .58 + (i - 30) * .0165 + sin(i * 1.3) * .012
+             : i < 74 ? (i % 5 < 3 ? .91 : .80) + sin(i) * .015 : .66 - (i - 74) * .0008 + sin(i * .7) * .012;
+    hist[i] = (long)(v * teto);
+  }
+}
+static void ajGraficoMemoria(const long *hist, int nh, long teto, float x, float y, float w, float h);
 void ajustes_ui_grafico_memoria(float x, float y, float w, float h) {
   long hist[120], teto = tex_orcamento_bytes();
-  int nh = tex_historico(hist, 120), i;
-  float pw = w / 120.0f;
+  int nh = tex_historico(hist, 120);
 #ifdef AJUSTES_TESTE
-  if (ajMemFixa) {
-    teto = 240L << 20; nh = 120;
-    for (i = 0; i < 120; i++) {
-      double v = i < 30 ? .30 + i * .009 + sin(i * .9) * .01 : i < 52 ? .58 + (i - 30) * .0165 + sin(i * 1.3) * .012
-               : i < 74 ? (i % 5 < 3 ? .91 : .80) + sin(i) * .015 : .66 - (i - 74) * .0008 + sin(i * .7) * .012;
-      hist[i] = (long)(v * teto);
-    }
-  }
+  if (ajMemFixa) { teto = 240L << 20; nh = 120; ajMemExemplo(hist, teto); }
 #endif
+  ajGraficoMemoria(hist, nh, teto, x, y, w, h);
+}
+void ajustes_ui_grafico_exemplo(float x, float y, float w, float h) {
+  long hist[120];
+  ajMemExemplo(hist, 240L << 20);
+  ajGraficoMemoria(hist, 120, 240L << 20, x, y, w, h);
+}
+static void ajGraficoMemoria(const long *hist, int nh, long teto, float x, float y, float w, float h) {
+  int i;
+  float pw = w / 120.0f;
   if (teto <= 0) teto = 1;
   gfx_cor((GfxRect){ x, y, w, h }, 12.0f / h, 0, 0, 0, 0.18f);
   for (i = 0; i < nh; i++) {
