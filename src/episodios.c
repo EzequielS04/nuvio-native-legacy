@@ -18,16 +18,24 @@
 #include "ponteiro.h"
 #include "plrui.h"
 #include "progresso.h"
+#include "plrilha.h"
 
-// A FOLHA DAS FONTES NO PLAYER (Glass UI, mockup de 03/10): 820 de largura,
-// flutuando a 40 das bordas, raio 36. A lista comeca em EP_TOP e termina no
-// rodape (EP_PE); cada linha tem a still 240x135 com recuo de 14.
-#define EP_W 820.0f
-#define EP_MARGEM 40.0f
-#define EP_RAIO 36.0f
-#define EP_ROW 167.0f
-#define EP_TOP 248.0f
-#define EP_PE  (NV_TELA_H - EP_MARGEM - 62.0f)
+// OS EPISODIOS NO PLAYER NASCEM DA ILHA DO RELOGIO (pedido do dono, 03/10),
+// como Audio e Legendas (faixas.c, plrilha.h): a pilula da hora cresce ate a
+// lista e a linha dela fica de cabecalho. Era uma folha colada na direita.
+// Corpo de EP_W: kicker com a serie + "Episodios" e o disco de fechar, o
+// segmentado das temporadas, EP_VIS linhas de EP_ROW (still 240x135 com o
+// progresso e o disco de assistido sobre ela) e o rodape com a posicao e a
+// dica do "Segure OK". O menu de visto continua MODAL, dentro da ilha.
+#define EP_W     820.0f
+#define EP_PAD_X  18.0f
+#define EP_PAD_Y  22.0f
+#define EP_TIT_H  64.0f
+#define EP_SEG_H  54.0f
+#define EP_ROW   160.0f
+#define EP_VIS    4
+#define EP_PE_H   47.0f
+#define EP_VAZIO 120.0f
 static int aberto, titulo, atualT, atualE, temporada, foco, grupo;
 static int pedidoT, pedidoE;
 static float anim, scroll;
@@ -293,18 +301,27 @@ static void ponteiroVmFora(int a, int b) { (void)a; (void)b; vmAberto = 0; }
 
 // O MENU DE VISTO (segurar OK) vira uma ILHA MODAL: still + kicker +
 // "T1E4 · nome", e as acoes em linhas de folha (foco = superficie), nao
-// pilulas empilhadas. Sobre a folha ele se alinha a ela; sozinho (detalhe),
-// fica no centro da tela.
-static void menuDesenhar(float x, float larg, float anim) {
-  const float PAD = 44.0f, MW = 800.0f, TH_W = 224.0f, TH_H = 126.0f, OPT_H = 62.0f, OPT_PASSO = 66.0f;
-  float mh, optTop;
+// pilulas empilhadas. No player ele fica DENTRO da ilha dos episodios
+// (`area` e o retangulo dela, que o desenho ja recorta), logo abaixo do
+// cabecalho; sozinho (detalhe), no centro da tela.
+#define VM_PAD 44.0f
+#define VM_TH_H 126.0f
+#define VM_OPT_PASSO 66.0f
+static float menuAltura(void) {
+  float optTop = VM_PAD + VM_TH_H + 26.0f;
+  if (vmFeito) return optTop + 60.0f + VM_PAD;
+  return optTop + (float)vmOpcoes() * VM_OPT_PASSO - 4.0f + 22.0f + 30.0f + VM_PAD;
+}
+#define VM_TOPO_ILHA 104.0f   // do topo da ilha ao modal: o cabecalho (64) + 40
+static void menuDesenhar(GfxRect area, float anim) {
+  const float PAD = VM_PAD, TH_W = 224.0f, TH_H = VM_TH_H, OPT_H = 62.0f, OPT_PASSO = VM_OPT_PASSO;
+  float mh, optTop, MW = area.w - 40.0f < 800.0f ? area.w - 40.0f : 800.0f;
   char cab[160];
   int i;
   if (!vmAberto) return;
   optTop = PAD + TH_H + 26.0f;
-  mh = optTop + (float)vmOpcoes() * OPT_PASSO - 4.0f + 22.0f + 30.0f + PAD;
-  if (vmFeito) mh = optTop + 60.0f + PAD;
-  { GfxRect m = { x + (larg - MW) * 0.5f, 230.0f, MW, mh };
+  mh = menuAltura();
+  { GfxRect m = { area.x + (area.w - MW) * 0.5f, area.y + VM_TOPO_ILHA, MW, mh };
     if (vmSo) m.y = (NV_TELA_H - mh) * 0.5f;
     if (ponteiro_ativo() && anim > .5f) {
       ponteiro_camada();
@@ -558,7 +575,7 @@ void episodios_atualizar(float dt) {
   // O ALVO SEGUE O FOCO enquanto a lista existe — e assim que andar com o
   // direcional (ou trocar de aba) atualiza o que sera reencontrado depois.
   if (n) { const CatEp *l = epLinha(foco); if (l) alvoE = l->episodio; }
-  float area = EP_PE - EP_TOP;
+  float area = EP_VIS * EP_ROW;
   float max = n * EP_ROW - area;
   float alvo = scroll;
   if(foco*EP_ROW<scroll) alvo=foco*EP_ROW;
@@ -585,12 +602,10 @@ static void ponteiroEpTemporada(int i, int b) {
   desc_episodios(titulo, numTemporada(temporada));
 }
 
-// A FOLHA: a mesma ilha das Fontes (streams.c) — veu de 30/42%, sombra curta,
-// miolo de vidro ou solido, luz no canto de cima, SEM contorno. Cabecalho com
-// kicker (a serie) + "Episodios" e o disco de fechar; as temporadas no
-// segmentado com a contagem; cada linha com a still (barra de progresso e o
-// disco de assistido sobre ela), "EPISODIO n", o nome e a linha de estado; so
-// a focada abre a sinopse. O que esta tocando leva o equalizador no acento.
+// O CORPO DA ILHA: o mesmo desenho que a folha tinha — material, foco e
+// segmentado de plrui.h, sem contorno —, agora dentro do retangulo que a ilha
+// da. O que esta tocando leva o equalizador no acento; so a linha focada abre
+// a sinopse.
 static void equalizador(float x, float yb, float a) {
   float ar, ag, ab;
   static const float H[3] = { 6.0f, 12.0f, 8.0f };
@@ -599,145 +614,184 @@ static void equalizador(float x, float yb, float a) {
   for (i = 0; i < 3; i++) gfx_cor((GfxRect){ x + i * 5.0f, yb - H[i], 3.0f, H[i] }, 0.0f, ar, ag, ab, a);
 }
 
-void episodios_desenhar(void) {
-  if (anim < .005f) return;
-  revalidar();
-  float x = NV_TELA_W - EP_W - EP_MARGEM + (1 - anim) * (EP_W + EP_MARGEM);
-  float lx = x + 26.0f, lw = EP_W - 52.0f;   // a coluna das linhas
-  const int vid = ajustes_vidro();
-  const CatItem *ci = cat_item(titulo);
-  int ptr = aberto && anim > .5f && !vmAberto && ponteiro_ativo();
-  GfxRect corpo = { x, EP_MARGEM, EP_W, NV_TELA_H - 2.0f * EP_MARGEM };
-  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, 0, 0, 0, (vid ? .30f : .42f) * anim);
-  plrui_material(corpo, EP_RAIO, 0, anim);
-  if (ptr) {
-    ponteiro_alvo(0, 0, x, NV_TELA_H, NULL, ponteiroEpFora, 0, 0);
-    ponteiro_alvo(x, 0, EP_W, NV_TELA_H, NULL, NULL, 0, 0);
-    ponteiro_alvo(x + EP_W - 48.0f - 56.0f, 92.0f, 56.0f, 56.0f, ponteiroEpFechar, NULL, 0, 0);
+static float alturaLista(void) {
+  int n = nLinhas(), v = n < EP_VIS ? n : EP_VIS;
+  return v > 0 ? v * EP_ROW : EP_VAZIO;
+}
+static float alturaCorpo(void) {
+  float h = EP_PAD_Y + EP_TIT_H + 14.0f + EP_SEG_H + 14.0f + alturaLista() + 14.0f + EP_PE_H + EP_PAD_Y;
+  // Com o menu de visto aberto a ilha tem de caber o modal inteiro.
+  if (vmAberto && !vmSo) {
+    float m = VM_TOPO_ILHA - 64.0f + menuAltura() + 40.0f;
+    if (m > h) h = m;
   }
-  // CABECALHO: kicker com a serie, "Episodios" 40/700; o fechar e um disco.
-  plrui_kicker(ci ? ci->titulo : "", lx + 22.0f, 80.0f, 243, 242, 239, anim * 0.45f);
-  txt_desenhar_alpha(txt_linha(TXT_ILHA_TITULO, "Episódios", 243, 242, 239, 255), lx + 22.0f, 100.0f, anim);
-  { GfxRect d = { x + EP_W - 48.0f - 56.0f, 92.0f, 56.0f, 56.0f };
+  return h;
+}
+
+static void linhaEp(int i, const CatItem *ci, float lx, float lw, float y, float topo, float base,
+                    int ptr, float a) {
+  const CatEp *ep = epLinha(i);
+  int sel = grupo == 1 && i == foco, vid = ajustes_vidro();
+  GfxRect row = { lx, y, lw, EP_ROW - 4.0f };
+  // A LISTA SOME NA BASE (mask-image do mockup): as linhas que entram no
+  // rodape apagam nos ultimos 70 px em vez de cortar seco.
+  float fade = anim_clamp((base - (y + 30.0f)) / 70.0f, 0.0f, 1.0f), ra = a * fade;
+  if (!ep) return;
+  if (ptr) {
+    float t = y < topo ? topo : y;
+    float b = y + row.h > base ? base : y + row.h;
+    if (b > t) ponteiro_alvo(row.x, t, row.w, b - t, ponteiroEpLinha, NULL, i, 0);
+  }
+  if (sel) plrui_linha_foco(row, 22.0f, ra);
+  const char *arte = ep->thumb[0] ? ep->thumb : (ci ? ci->backdrop : "");
+  GLuint tex = tex_obter_larg(arte, 240);
+  // Still que nao existe (nem metahub nem TMDB): o fundo da serie.
+  if (!tex && ep->thumb[0] && tex_falhou(ep->thumb) && ci) {
+    const char *res = ci->backdrop[0] ? ci->backdrop : ci->poster;
+    GLuint t3 = res[0] ? tex_obter_larg(res, 240) : 0;
+    if (t3) { arte = res; tex = t3; }
+  }
+  GfxRect tr = { lx + 12.0f, y + 10.0f, 240.0f, 135.0f };
+  int atual = ep->temporada == atualT && ep->episodio == atualE;
+  int visto = ci ? vistoep_estado(ci->imdb, ep->temporada, ep->episodio) : -1;
+  if (vid) gfx_cor(tr, 16.0f / 135.0f, 1, 1, 1, 0.06f * ra);
+  else gfx_cor(tr, 16.0f / 135.0f, 0.125f, 0.129f, 0.153f, ra);
+  // DESFOCAR NAO ASSISTIDOS (#133): so o que o mapa afirma como visto fica
+  // nitido — e o que esta tocando agora, que a pessoa ja esta vendo.
+  if (tex && ajustes_desfocar_nao_assistidos() && !atual && visto != 1) tex = gfx_desfocado(tex, arte);
+  if (tex) { gfx_tex_aspect_atual = tex_aspecto(arte); gfx_rect(tr, tex, GFX_CARD, 0, 0, 0, 16.0f / 135.0f, 0, 0, 0, ra); gfx_tex_aspect_atual = 0; }
+  // O PROGRESSO NA STILL: o ponto salvo deste episodio, branco; no que esta
+  // tocando, no acento.
+  { char chave[96]; ProgRegistro pr;
+    if (ci && visto != 1) {
+      prog_chave(chave, sizeof chave, ci->imdb, ep->temporada, ep->episodio);
+      if (prog_por_chave(chave, &pr) && pr.durSeg > 1.0 && pr.posSeg > 1.0) {
+        float f = (float)(pr.posSeg / pr.durSeg), ar, ag, ab;
+        if (f > 1.0f) f = 1.0f;
+        if (atual) ajustes_acento(&ar, &ag, &ab); else ar = ag = ab = 1.0f;
+        plrui_trilho((GfxRect){ tr.x + 10.0f, tr.y + tr.h - 14.0f, tr.w - 20.0f, 4.0f }, f, ar, ag, ab, ra);
+      } } }
+  // O ASSISTIDO e um disco com o check sobre a still.
+  if (visto == 1) {
+    GfxRect d = { tr.x + tr.w - 44.0f, tr.y + 10.0f, 34.0f, 34.0f };
+    if (vid) gfx_cor(d, 0.5f, 0.055f, 0.059f, 0.071f, 0.78f * ra);
+    else gfx_cor(d, 0.5f, 0.082f, 0.086f, 0.102f, ra);
+    gfx_icone((GfxRect){ d.x + 8.0f, d.y + 8.0f, 18.0f, 18.0f }, "pl_check", 1, 1, 1, ra);
+  }
+  { float tx = tr.x + tr.w + 20.0f, w = row.x + row.w - 16.0f - tx, ty = y + 14.0f;
+    char num[48], estado[96], dur[32];
+    snprintf(num, sizeof num, i18n("Episódio %d"), ep->episodio);
+    plrui_kicker(num, tx, ty, 243, 242, 239, ra * 0.42f);
+    ty += 22.0f;
+    { TxtLinha l = txt_linha_corta(TXT_ILHA_NOME, ep->nome[0] ? ep->nome : num, 243, 242, 239, sel ? 255 : 224, w);
+      txt_desenhar_alpha(l, tx, ty, ra); ty += (float)l.h + 6.0f; }
+    desc_duracao_txt(ep->duracao, dur, sizeof dur);   // "45 min" -> forma do idioma da UI
+    if (atual) {
+      float ar, ag, ab;
+      ajustes_acento(&ar, &ag, &ab);
+      equalizador(tx, ty + 15.0f, ra);
+      plrui_kicker("Reproduzindo agora", tx + 22.0f, ty + 1.0f, (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), ra);
+    } else {
+      if (visto == 1) snprintf(estado, sizeof estado, "%s%s%s", i18n("Assistido"), dur[0] ? " \xc2\xb7 " : "", dur);
+      else snprintf(estado, sizeof estado, "%s%s%s", ep->data, ep->data[0] && dur[0] ? " \xc2\xb7 " : "", dur);
+      txt_desenhar_alpha(txt_linha_corta(TXT_ILHA_APOIO, estado, 243, 242, 239, 128, w), tx, ty, ra);
+    }
+    ty += 20.0f + 8.0f;
+    if (sel && ep->sinopse[0])
+      txt_bloco_corta(TXT_ILHA_APOIO, ep->sinopse, 243, 242, 239, tx, ty, w, 23.0f, ra * 0.5f, 2);
+  }
+}
+
+static void corpoIlha(GfxRect c, float a, void *u) {
+  const CatItem *ci;
+  GfxRect ilha = { c.x, c.y - 64.0f, c.w, c.h + 64.0f };
+  float x0 = c.x + EP_PAD_X, w = c.w - EP_PAD_X * 2.0f, y = c.y + EP_PAD_Y, topo, base;
+  int ptr, n, i;
+  (void)u;
+  revalidar();
+  ci = cat_item(titulo);
+  ptr = aberto && a > .5f && !vmAberto && ponteiro_ativo();
+  plrilha_rect(&ilha);
+  if (ptr) {
+    ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, ponteiroEpFora, 0, 0);
+    ponteiro_alvo(ilha.x, ilha.y, ilha.w, ilha.h, NULL, NULL, 0, 0);
+  }
+  // CABECALHO: kicker com a serie, "Episodios"; o fechar e um disco (grupo -1).
+  plrui_kicker(ci ? ci->titulo : "", x0 + 10.0f, y, 115, 115, 113, a);
+  txt_desenhar_alpha(txt_linha(TXT_ILHA_PERGUNTA, "Episódios", 243, 242, 239, 255), x0 + 10.0f, y + 22.0f, a);
+  { GfxRect d = { x0 + w - 10.0f - 56.0f, y + 4.0f, 56.0f, 56.0f };
     int f = grupo == -1;
     float k = f ? plrui_tinta() / 255.0f : 0.85f;
-    if (f) plrui_pilula_foco(d, anim); else plrui_botao_repouso(d, anim);
-    gfx_icone((GfxRect){ d.x + 16.0f, d.y + 16.0f, 24.0f, 24.0f }, "pl_x", k, k, k, anim); }
+    if (f) plrui_pilula_foco(d, a); else plrui_botao_repouso(d, a);
+    gfx_icone((GfxRect){ d.x + 16.0f, d.y + 16.0f, 24.0f, 24.0f }, "pl_x", k, k, k, a);
+    if (ptr) ponteiro_alvo(d.x, d.y, d.w, d.h, ponteiroEpFechar, NULL, 0, 0); }
+  y += EP_TIT_H + 14.0f;
   // TEMPORADAS no segmentado, com a contagem de episodios das que a lista ja
-  // tem; uma janela que cabe na folha, comecando antes da selecionada.
+  // tem; uma janela que cabe na ilha, comecando antes da selecionada.
   { const char *rot[8];
     char nomes[8][40];
-    int cont[8], n = 0, ini = temporada > 1 ? temporada - 1 : 0, i;
-    for (i = ini; i < nTemporadas() && n < 4; i++) {
-      int t = numTemporada(i), k, c = 0;
-      snprintf(nomes[n], sizeof nomes[n], i18n("Temporada %d"), t);
-      for (k = 0; k < cat_n_episodios(titulo); k++) { const CatEp *e = cat_episodio(titulo, k); if (e && e->temporada == t) c++; }
-      rot[n] = nomes[n]; cont[n] = c > 0 ? c : -1;
-      if (plrui_seg(rot, cont, n + 1, -1, 0, -1.0f, 0, anim) > lw - 32.0f) break;
-      n++;
+    int cont[8], ns = 0, ini = temporada > 1 ? temporada - 1 : 0;
+    for (i = ini; i < nTemporadas() && ns < 4; i++) {
+      int t = numTemporada(i), k, cc = 0;
+      snprintf(nomes[ns], sizeof nomes[ns], i18n("Temporada %d"), t);
+      for (k = 0; k < cat_n_episodios(titulo); k++) { const CatEp *e = cat_episodio(titulo, k); if (e && e->temporada == t) cc++; }
+      rot[ns] = nomes[ns]; cont[ns] = cc > 0 ? cc : -1;
+      if (plrui_seg(rot, cont, ns + 1, -1, 0, -1.0f, 0, a) > w - 20.0f) break;
+      ns++;
     }
-    { float sx = lx + 16.0f, xx = sx + 5.0f;
-      plrui_seg(rot, cont, n, temporada - ini, grupo == 0, sx, 170.0f, anim);
-      if (ptr) for (i = 0; i < n; i++) {
-        float w = plrui_seg(&rot[i], &cont[i], 1, -1, 0, -1.0f, 0, anim) - 10.0f;
-        ponteiro_alvo(xx, 175.0f, w, 44.0f, NULL, ponteiroEpTemporada, ini + i, 0);
-        xx += w + 4.0f;
+    { float sx = x0 + 10.0f, xx = sx + 5.0f;
+      plrui_seg(rot, cont, ns, temporada - ini, grupo == 0, sx, y, a);
+      if (ptr) for (i = 0; i < ns; i++) {
+        float sw = plrui_seg(&rot[i], &cont[i], 1, -1, 0, -1.0f, 0, a) - 10.0f;
+        ponteiro_alvo(xx, y + 5.0f, sw, 44.0f, NULL, ponteiroEpTemporada, ini + i, 0);
+        xx += sw + 4.0f;
       } } }
-  gfx_recorte(x, EP_TOP - 4.0f, EP_W, EP_PE - EP_TOP + 4.0f);
-  int n = nLinhas();
-  for (int i = 0; i < n; i++) {
-    float y = EP_TOP + i * EP_ROW - scroll;
-    if (y + EP_ROW < EP_TOP || y > EP_PE) continue;
-    const CatEp *ep = epLinha(i);
-    int sel = grupo == 1 && i == foco;
-    GfxRect row = { lx, y, lw, EP_ROW - 4.0f };
-    // A LISTA SOME NA BASE (mask-image do mockup): as linhas que entram no
-    // rodape apagam nos ultimos 70 px em vez de cortar seco.
-    float fade = anim_clamp((EP_PE - (y + 30.0f)) / 70.0f, 0.0f, 1.0f), ra = anim * fade;
-    if (ptr) {
-      float t = y < EP_TOP ? EP_TOP : y;
-      float b = y + row.h > EP_PE ? EP_PE : y + row.h;
-      if (b > t) ponteiro_alvo(row.x, t, row.w, b - t, ponteiroEpLinha, NULL, i, 0);
-    }
-    if (sel) plrui_linha_foco(row, 24.0f, ra);
-    const char *arte = ep->thumb[0] ? ep->thumb : (ci ? ci->backdrop : "");
-    GLuint tex = tex_obter_larg(arte, 240);
-    // Still que nao existe (nem metahub nem TMDB): o fundo da serie.
-    if (!tex && ep->thumb[0] && tex_falhou(ep->thumb) && ci) {
-      const char *res = ci->backdrop[0] ? ci->backdrop : ci->poster;
-      GLuint t3 = res[0] ? tex_obter_larg(res, 240) : 0;
-      if (t3) { arte = res; tex = t3; }
-    }
-    GfxRect tr = { lx + 14.0f, y + 14.0f, 240.0f, 135.0f };
-    int atual = ep->temporada == atualT && ep->episodio == atualE;
-    int visto = ci ? vistoep_estado(ci->imdb, ep->temporada, ep->episodio) : -1;
-    if (vid) gfx_cor(tr, 16.0f / 135.0f, 0.102f, 0.106f, 0.125f, ra);
-    else gfx_cor(tr, 16.0f / 135.0f, 0.102f, 0.106f, 0.125f, ra);
-    // DESFOCAR NAO ASSISTIDOS (#133): so o que o mapa afirma como visto fica
-    // nitido — e o que esta tocando agora, que a pessoa ja esta vendo.
-    if (tex && ajustes_desfocar_nao_assistidos() && !atual && visto != 1) tex = gfx_desfocado(tex, arte);
-    if (tex) { gfx_tex_aspect_atual = tex_aspecto(arte); gfx_rect(tr, tex, GFX_CARD, 0, 0, 0, 16.0f / 135.0f, 0, 0, 0, ra); gfx_tex_aspect_atual = 0; }
-    // O PROGRESSO NA STILL (nao existia na folha): o ponto salvo deste
-    // episodio, branco; no que esta tocando, no acento.
-    { char chave[96]; ProgRegistro pr;
-      if (ci && visto != 1) {
-        prog_chave(chave, sizeof chave, ci->imdb, ep->temporada, ep->episodio);
-        if (prog_por_chave(chave, &pr) && pr.durSeg > 1.0 && pr.posSeg > 1.0) {
-          float f = (float)(pr.posSeg / pr.durSeg), ar, ag, ab;
-          if (f > 1.0f) f = 1.0f;
-          if (atual) ajustes_acento(&ar, &ag, &ab); else ar = ag = ab = 1.0f;
-          plrui_trilho((GfxRect){ tr.x + 10.0f, tr.y + tr.h - 14.0f, tr.w - 20.0f, 4.0f }, f, ar, ag, ab, ra);
-        } } }
-    // O ASSISTIDO e um disco com o check sobre a still (era "✓ Assistido").
-    if (visto == 1) {
-      GfxRect d = { tr.x + tr.w - 44.0f, tr.y + 10.0f, 34.0f, 34.0f };
-      if (vid) gfx_cor(d, 0.5f, 0.055f, 0.059f, 0.071f, 0.78f * ra);
-      else gfx_cor(d, 0.5f, 0.082f, 0.086f, 0.102f, ra);
-      gfx_icone((GfxRect){ d.x + 8.0f, d.y + 8.0f, 18.0f, 18.0f }, "pl_check", 1, 1, 1, ra);
-    }
-    { float tx = tr.x + tr.w + 20.0f, w = row.x + row.w - 14.0f - tx, ty = y + 18.0f;
-      char num[48], estado[96], dur[32];
-      snprintf(num, sizeof num, i18n("Episódio %d"), ep->episodio);
-      plrui_kicker(num, tx, ty, 243, 242, 239, ra * 0.42f);
-      ty += 22.0f;
-      { TxtLinha l = txt_linha_corta(TXT_ILHA_NOME, ep->nome[0] ? ep->nome : num, 243, 242, 239, sel ? 255 : 224, w);
-        txt_desenhar_alpha(l, tx, ty, ra); ty += (float)l.h + 6.0f; }
-      desc_duracao_txt(ep->duracao, dur, sizeof dur);   // "45 min" -> forma do idioma da UI
-      if (atual) {
-        float ar, ag, ab;
-        ajustes_acento(&ar, &ag, &ab);
-        equalizador(tx, ty + 15.0f, ra);
-        plrui_kicker("Reproduzindo agora", tx + 22.0f, ty + 1.0f, (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), ra);
-      } else {
-        if (visto == 1) snprintf(estado, sizeof estado, "%s%s%s", i18n("Assistido"), dur[0] ? " \xc2\xb7 " : "", dur);
-        else snprintf(estado, sizeof estado, "%s%s%s", ep->data, ep->data[0] && dur[0] ? " \xc2\xb7 " : "", dur);
-        txt_desenhar_alpha(txt_linha_corta(TXT_ILHA_APOIO, estado, 243, 242, 239, 128, w), tx, ty, ra);
-      }
-      ty += 20.0f + 8.0f;
-      if (sel && ep->sinopse[0])
-        txt_bloco_corta(TXT_ILHA_APOIO, ep->sinopse, 243, 242, 239, tx, ty, w, 23.0f, ra * 0.5f, 2);
-    }
+  y += EP_SEG_H + 14.0f;
+  topo = y; base = y + alturaLista();
+  n = nLinhas();
+  gfx_recorte(c.x, topo - 4.0f, c.w, base - topo + 4.0f);
+  for (i = 0; i < n; i++) {
+    float yl = topo + i * EP_ROW - scroll;
+    if (yl + EP_ROW < topo || yl > base) continue;
+    linhaEp(i, ci, x0, w, yl, topo, base, ptr, a);
   }
   if (!n) txt_bloco(TXT_ILHA_TEXTO, desc_episodios_carregando(titulo) ?
     "Carregando episódios…" : "Episódios indisponíveis. Selecione a temporada e pressione OK para tentar novamente.",
-    196, 198, 204, lx + 22.0f, EP_TOP + 30.0f, lw - 44.0f, 30, anim, 4);
-  gfx_sem_recorte();
+    196, 198, 204, x0 + 10.0f, topo + 12.0f, w - 20.0f, 30, a, 3);
+  gfx_recorte(ilha.x, ilha.y, ilha.w, ilha.h);   // de volta ao recorte da ilha
+  y = base + 14.0f;
   // RODAPE sob um fio: "4 de 8 episodios" e a dica do gesto (pressao longa
   // nao se descobre sozinha num D-pad).
-  gfx_cor((GfxRect){ lx, EP_PE, lw, 1.0f }, 0.0f, 1, 1, 1, 0.07f * anim);
-  { float yc = EP_PE + 14.0f + 11.0f;
+  gfx_cor((GfxRect){ x0, y, w, 1.0f }, 0.0f, 1, 1, 1, 0.07f * a);
+  { float yc = y + 16.0f + 15.0f;
     if (n) {
       char contador[48];
       snprintf(contador, sizeof contador, i18n("%d de %d episódios"), foco + 1, n);
       { TxtLinha l = txt_linha(TXT_ILHA_APOIO, contador, 243, 242, 239, 115);
-        txt_desenhar_alpha(l, lx + 22.0f, yc - (float)l.h * 0.5f, anim); }
+        txt_desenhar_alpha(l, x0 + 10.0f, yc - (float)l.h * 0.5f, a); }
     }
     if (!vmAberto && (grupo == 0 || (n && grupo == 1))) {
       const char *k[1] = { "Segure OK" };
       const char *rt[1] = { grupo == 0 ? "Marcar a temporada" : "Marcar como assistido" };
-      plrui_dicas(k, rt, 1, lx + lw - 22.0f, yc, 1, anim);
+      plrui_dicas(k, rt, 1, x0 + w - 10.0f, yc, 1, a);
     } }
-  menuDesenhar(x, EP_W, anim);
+  // O MENU DE VISTO: modal dentro da ilha, por cima da lista.
+  if (vmAberto && !vmSo) menuDesenhar(ilha, a);
+}
+
+void episodios_desenhar(void) {
+  if (anim < .005f) return;
+  revalidar();
+  // O video fica sem veu cheio: so o degrade do lado da ilha, como nas faixas.
+  gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, plrilha_direita() ? 3 : 2, 1.38f, 1.0f, 0.42f * anim);
+  if (!aberto) return;   // fechando: a ilha encolhe com o ultimo corpo
+  { PlrIlhaPedido p;
+    memset(&p, 0, sizeof p);
+    p.w = EP_W;
+    p.h = alturaCorpo();
+    p.corpo = corpoIlha;
+    p.modal = vmAberto && !vmSo;
+    plrilha_pedir(&p); }
 }
 
 // --- O MENU SOZINHO, SOBRE OUTRA TELA ----------------------------------------
@@ -763,7 +817,7 @@ void episodios_menu_evento(const SDL_Event *e) {
 }
 void episodios_menu_desenhar(void) {
   if (vmAberto && vmSo) revalidar();
-  if (vmAberto && vmSo) menuDesenhar(0.0f, (float)NV_TELA_W, 1.0f);
+  if (vmAberto && vmSo) menuDesenhar((GfxRect){ 0.0f, 0.0f, (float)NV_TELA_W, (float)NV_TELA_H }, 1.0f);
 }
 int  episodios_menu_pediu_fontes(void) { int v = vmFontesPed; vmFontesPed = 0; return v; }
 
