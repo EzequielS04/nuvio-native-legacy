@@ -160,11 +160,13 @@ static void caixaLogo(const char *logo, const char *nome, GfxRect r, float a) {
 
 // Pilula vermelha AO VIVO: 34 de altura, ponto branco, 15/800.
 static float seloAoVivo(float x, float y, float h, float a) {
-  TxtLinha l = txt_linha(TXT_MINI, "AO VIVO", 255, 255, 255, 255);
-  float w = 14.0f + 8.0f + 8.0f + (float)l.w + 14.0f;
+  const char *av = i18n("AO VIVO");
+  TxtLinha l = txt_linha(TXT_MINI, av, 255, 255, 255, 255);
+  float tw = txt_tracking(TXT_MINI, av, 255, 255, 255, -1.0f, 0.0f, 1.0f, 1.5f);   // medido COM o tracking
+  float w = 14.0f + 8.0f + 8.0f + tw + 14.0f;
   gfx_cor((GfxRect){ x, y, w, h }, 0.5f, 0.898f, 0.282f, 0.302f, a);
   gfx_cor((GfxRect){ x + 14.0f, y + h * 0.5f - 4.0f, 8.0f, 8.0f }, 0.5f, 1, 1, 1, a);
-  txt_tracking(TXT_MINI, "AO VIVO", 255, 255, 255, x + 30.0f, y + (h - (float)l.h) * 0.5f, a, 1.5f);
+  txt_tracking(TXT_MINI, av, 255, 255, 255, x + 30.0f, y + (h - (float)l.h) * 0.5f, a, 1.5f);
   return w;
 }
 
