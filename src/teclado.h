@@ -60,6 +60,9 @@ void teclado_tipo(int tipo);
 // Senha: pontos (1) ou texto (0). Quem abre pode comecar mostrando; quem
 // fecha le o que a pessoa escolheu.
 void teclado_mascarar(int liga);
+// Linha de contexto da PROXIMA modal ("Contas e serviços · Chaves"), em caixa
+// alta acima do titulo. Consumida pela abertura seguinte.
+void teclado_contexto(const char *kicker);
 int  teclado_mascarado(void);
 int  teclado_aberto(void);
 // Para testes: foco na barra do campo (1 campo, 2 Falar, 0 no teclado).
