@@ -638,7 +638,7 @@ int main(int argc, char **argv) {
   // NV_PEDIR_4K continua existindo para a build de medicao, que precisa pedir
   // sem depender de ajuste gravado.
   { int quer4k = ajustes_4k();
-#if defined(NV_PEDIR_4K) || defined(NV_AMPLIA_4K)
+#ifdef NV_PEDIR_4K
     quer4k = 1;
     printf("[4k] build de medicao: pedindo 3840x2160\n");
 #endif
@@ -794,13 +794,6 @@ int main(int argc, char **argv) {
   // NIVEL DE GPU (gpunivel.h): le GL_*, marca a GPU fraca no perfil e decide
   // o nivel de partida ANTES de tex_iniciar, que tira o perfil do aparelho.
   gpun_iniciar(dw, dh);
-#ifdef NV_AMPLIA_4K
-  // Prototipo: superficie 4K, desenho em 1080 e ampliacao propria (gpunivel.h).
-  if (dw > (int)NV_TELA_W) {
-    gpun_ampliar_1080(NV_AMPLIA_4K);
-    printf("[4k] ampliacao propria 1920x1080 -> %dx%d, filtro %d\n", dw, dh, NV_AMPLIA_4K);
-  }
-#endif
   int gpuPref = ajustes_gpu_efeitos();
   if (gpuPref) gpun_preferencia(gpuPref);
   if (ajustes_720p()) gpun_forcar_720();
@@ -828,19 +821,12 @@ int main(int argc, char **argv) {
   snprintf(dirRec, sizeof dirRec, "%s", dirArte);
   char *barra = strrchr(dirRec, '/');
   if (barra) *barra = 0;
-  // Com a ampliacao propria (NV_AMPLIA_4K) tudo desenha no alvo de 1080:
-  // texto e arte na escala 1, mesmo com a superficie em 4K.
-#ifdef NV_AMPLIA_4K
-  float escalaDesenho = 1.0f;
-#else
-  float escalaDesenho = (float)dw / NV_TELA_W;
-#endif
-  txt_iniciar(dirRec, escalaDesenho);
+  txt_iniciar(dirRec, (float)dw / NV_TELA_W);
   // A MESMA escala vai para o cache de texturas: e ela que decide o teto de
   // decodificacao de cada arte a partir da largura com que o card a desenha.
   // Sem isto todo card decodificava com o teto unico de 640 e o cache batia no
   // orcamento com ~40 texturas.
-  tex_escala(escalaDesenho);
+  tex_escala((float)dw / NV_TELA_W);
   marco("fontes+tex prontos");
   // 192 slots, nao 96. O teto de slots so faz sentido junto com o tamanho de
   // cada textura: com o teto unico de 640 cada uma custava 2,4 MB e 96 slots ja

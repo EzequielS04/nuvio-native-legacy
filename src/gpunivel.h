@@ -64,13 +64,6 @@ void gpun_preferencia(int p);
 // 1280x720) e desliga a medida e o "Efeitos visuais" ate o fim da sessao.
 void gpun_forcar_720(void);
 
-// PROTOTIPO "1080 AMPLIADO PELO APP" (so com -DNV_AMPLIA_4K=filtro, main.c):
-// a superficie e 3840x2160, mas o app inteiro desenha num alvo interno de
-// 1920x1080 (texto e arte na escala 1, o mesmo custo do 1080) e uma copia
-// final amplia 2x com `filtro`: 0 bilinear, 1 vizinho (pixel dobrado),
-// 2 Catmull-Rom. Existe para comparar na TV contra o escalonador dela.
-void gpun_ampliar_1080(int filtro);
-
 // Laco de quadro: _inicio ANTES do glClear da tela (liga o alvo interno no
 // nivel 2), _fim depois do ultimo desenho e antes do swap (amplia e descarta).
 void gpun_quadro_inicio(void);

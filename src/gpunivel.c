@@ -44,10 +44,6 @@ static int telaW = 1920, telaH = 1080;
 // Alvo interno do nivel 3 (720p).
 static GLuint intFbo, intTex;
 static int intW, intH, intFalhou, intLigado;
-// AMPLIACAO 1080 -> 4K PROPRIA (build de teste NV_AMPLIA_4K, gpunivel.h):
-// -1 desligada; senao o filtro da copia (0 bilinear, 1 vizinho, 2 Catmull-Rom).
-static int ampliaFiltro = -1;
-void gpun_ampliar_1080(int filtro) { ampliaFiltro = filtro; }
 // Descarte (glInvalidateFramebuffer ou glDiscardFramebufferEXT).
 typedef void (*PfnDescarte)(GLenum, GLsizei, const GLenum *);
 static PfnDescarte descarte;
@@ -293,13 +289,12 @@ static int intPreparar(void) {
   if (intFalhou) return 0;
   intW = (telaW * 2 + 1) / 3;
   intH = (telaH * 2 + 1) / 3;
-  if (ampliaFiltro >= 0) { intW = (int)NV_TELA_W; intH = (int)NV_TELA_H; }
   glGenTextures(1, &intTex);
   glBindTexture(GL_TEXTURE_2D, intTex);
   // RGBA: o alpha e o canal do furo do video (gfx_furo) e tem de chegar a janela.
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, intW, intH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, ampliaFiltro == 1 ? GL_NEAREST : GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, ampliaFiltro == 1 ? GL_NEAREST : GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   gfx_tex_esquecer(0);
@@ -323,7 +318,7 @@ static int intPreparar(void) {
 
 void gpun_quadro_inicio(void) {
   intLigado = 0;
-  if ((nivel < 3 && ampliaFiltro < 0) || !intPreparar()) return;
+  if (nivel < 3 || !intPreparar()) return;
   glBindFramebuffer(GL_FRAMEBUFFER, intFbo);
   glViewport(0, 0, intW, intH);
   gfx_tamanho_alvo(intW, intH);
@@ -348,7 +343,7 @@ void gpun_quadro_fim(void) {
     glDisable(GL_BLEND);   // copia RGB E alpha exatos (o furo do video)
     gfx_tex_aspect_atual = 0.0f;
     gfx_opacidade_grupo = 1.0f;
-    gfx_rect(tela, intTex, GFX_COPIA, ampliaFiltro == 2 ? 1.0f : 0.0f, 0.0f, 1.0f, 0.0f, 1, 1, 1, 1);
+    gfx_rect(tela, intTex, GFX_COPIA, 0, 0.0f, 1.0f, 0.0f, 1, 1, 1, 1);
     // Solta a textura do alvo: no quadro seguinte ela volta a ser o alvo de
     // desenho, e ficar ligada para leitura ao mesmo tempo e o laco de
     // realimentacao que o GLES deixa indefinido.

@@ -269,11 +269,7 @@ static void ajDesenharIndice(void) {
     const char *titulo = j == 0 ? "Buscar ajuste" : j == 1 ? "Diferentes do padrão" : TELA[secIni[j - 2]].titulo;
     const char *icone = j == 0 ? "aj_search" : j == 1 ? "aj_rotate-ccw-clock" : TELA[secIni[j - 2]].icone;
     GfxRect r;
-    // 0,86 e nao 0,66: o .66 do CSS do mockup sai do Chrome com pico 215
-    // (MEDIDO em png/principal-vidro.png, "Cartazes e arte"), e e esse PNG o
-    // aprovado; a 0,66 o app chegava a 167 e a coluna lia apagada e mole na
-    // TV ampliada. Rotulo e subtitulo ja batiam (211/213, 143/145).
-    float al = (foco || sel) ? 1.0f : 0.86f;
+    float al = (foco || sel) ? 1.0f : 0.66f;
     if (j == 2) {
       gfx_cor((GfxRect){ ilha.x + 32.0f, y + 8.0f, ilha.w - 64.0f, 1 }, 0, 1, 1, 1, 0.08f);
       y += 21.0f;

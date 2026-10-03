@@ -997,24 +997,6 @@ static TxtLinha linhaFamilia(TxtEstilo estilo, const char *s, int r, int g,
   SDL_Surface *cv = SDL_ConvertSurfaceFormat(sf, SDL_PIXELFORMAT_ABGR8888, 0);
   SDL_FreeSurface(sf);
   if (!cv) return vazia;
-  // EM 2x A LINHA TEM DE TER LARGURA PAR. A medida guardada e cv->w / escala
-  // ARREDONDADA, e o desenho e essa medida vezes a escala: uma linha de 301 px
-  // virava 151 de layout e era desenhada em 302 px — a textura inteira
-  // reamostrada 0,3% maior, meio pixel de deriva no fim da linha, borrao em
-  // tudo que fica a direita do meio. Completa com colunas/linhas transparentes
-  // (na cor do texto, como o resto do Blended) ate o multiplo da escala.
-  { int ie = (int)(escalaTxt + 0.5f);
-    if (ie >= 2 && escalaTxt > ie - 0.01f && escalaTxt < ie + 0.01f &&
-        (cv->w % ie || cv->h % ie)) {
-      SDL_Surface *pd = SDL_CreateRGBSurfaceWithFormat(0, (cv->w + ie - 1) / ie * ie,
-                          (cv->h + ie - 1) / ie * ie, 32, SDL_PIXELFORMAT_ABGR8888);
-      if (pd) {
-        SDL_FillRect(pd, NULL, SDL_MapRGBA(pd->format, cor.r, cor.g, cor.b, 0));
-        SDL_SetSurfaceBlendMode(cv, SDL_BLENDMODE_NONE);
-        SDL_BlitSurface(cv, NULL, pd, NULL);
-        SDL_FreeSurface(cv); cv = pd;
-      }
-    } }
 
   GLuint t; glGenTextures(1, &t); glBindTexture(GL_TEXTURE_2D, t);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, cv->w, cv->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, cv->pixels);
@@ -1146,7 +1128,7 @@ static float encaixa(float v) {
 void txt_desenhar_alpha(TxtLinha l, float x, float y, float alpha) {
   if (!l.tex) return;
   GfxRect r = { encaixa(x), encaixa(y), (float)l.w, (float)l.h };
-  gfx_rect(r, l.tex, GFX_TEXTO, 1.0f, 0, 0, 0.0f, 1, 1, 1, alpha);
+  gfx_rect(r, l.tex, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, alpha);
 }
 
 float txt_tracking(TxtEstilo estilo, const char *s, int r, int g, int b,

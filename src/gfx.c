@@ -136,16 +136,6 @@ static const char *FS_CABECA =
   "varying mediump vec2 vAmb;\n"
   "#endif\n"
   "uniform sampler2D uTex;\n"
-  // AMOSTRA DE ARTE COM LOD -0,5 (nitidez, 03/10/2026). O cache sobe arte de
-  // card, logo e icone com GL_LINEAR_MIPMAP_NEAREST, que escolhe o nivel da
-  // piramide MAIS PROXIMO: passando de 0,707x do decodificado (lambda > 0,5)
-  // ele pula para o nivel de METADE e AMPLIA. MEDIDO na bancada a 1080: icone
-  // de 128 desenhado a 20/22 px lia o nivel de 16 px (ampliado 1,25-1,4x) e a
-  // 38/44 o de 32 — borda maxima 160-166 contra 215-242 nos tamanhos que
-  // caem num nivel maior. Com -0,5 a escolha vira floor(lambda): o nivel lido
-  // e sempre >= o desenho, so reduzido. Custo: zero ALU, a mesma UMA leitura
-  // (nao e trilinear); em textura sem piramide (texto, arte >= 1024) nada muda.
-  "#define NV_ARTE(uv) texture2D(uTex, uv, -0.5)\n"
   "uniform float uFoco;\n"
   "uniform float uBorda;\n"
   "uniform float uVarre;\n"
@@ -336,7 +326,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  vec2 uv = uv0;\n"
   "  vec3 cor = (contem > 0.5 && (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0))\n"
   "    ? vec3(0.173)\n"
-  "    : NV_ARTE(clamp(uv, 0.0, 1.0)).rgb;\n"
+  "    : texture2D(uTex, clamp(uv, 0.0, 1.0)).rgb;\n"
   "  if (uFoco > 0.004) {\n"
   // uVarre = a LUZ ENTRANDO (revela.h): a faixa nasce fora do canto
   // inferior esquerdo e desliza ate o repouso; em 0 e o especular de sempre.
@@ -440,17 +430,8 @@ static const char *FS_CORPO[GFX_NMODOS] = {
 
   // GFX_TEXTO — a forma da letra vem do ALPHA da textura, nunca do RGB
   "void main(){\n"
-  "  vec4 g = NV_ARTE(vUv);\n"
-  // CURVA DE COBERTURA DO GLIFO (uFoco = 1, so texto de txt_desenhar_alpha;
-  // logo e marca passam 0 e saem intactos). A mistura e em sRGB: borda de
-  // letra clara com cobertura 0,5 vira 128, que o olho le como ~22% de luz, e
-  // o traco claro sobre fundo escuro afina — e depois da ampliacao 2x da TV
-  // ainda espalha. a^0,8 e o "contraste de texto" do Skia/DirectWrite:
-  // MEDIDO na bancada, +9% de tinta no 15/400 (8,22 -> 8,95, mesmo gradiente
-  // RMS), contra +25% de trocar Regular por Medium. Custo: um pow por
-  // fragmento de texto, so na area das letras.
-  "  float a = uFoco > 0.5 ? pow(g.a, 0.8) : g.a;\n"
-  "  gl_FragColor = vec4(g.rgb, a * uCor.a);\n"
+  "  vec4 g = texture2D(uTex, vUv);\n"
+  "  gl_FragColor = vec4(g.rgb, g.a * uCor.a);\n"
   "}\n",
 
   // GFX_FUNDO — arte desfocada por mipmap (uFoco carrega o bias), com o
@@ -701,7 +682,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
 
   // GFX_MARCA — a forma vem do ALPHA, a cor de uCor. Ver a nota em gfx.h.
   "void main(){\n"
-  "  float m = NV_ARTE(vUv).a;\n"
+  "  float m = texture2D(uTex, vUv).a;\n"
   "  gl_FragColor = vec4(uCor.rgb, uCor.a * m);\n"
   "}\n",
 
@@ -734,7 +715,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // Era smoothstep(0.500,0.486): 1,4% da altura, 0,4 px num disco de 27.
   "  float m=clamp((0.5-d)*uAlt,0.0,1.0);\n"
   "  if(m<=0.001) discard;\n"
-  "  vec3 c=NV_ARTE(clamp(cover(vUv),0.0,1.0)).rgb;\n"
+  "  vec3 c=texture2D(uTex,clamp(cover(vUv),0.0,1.0)).rgb;\n"
   "  gl_FragColor=vec4(c,m*uCor.a);\n"
   "}\n",
 
@@ -757,7 +738,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float localX=clamp((vUv.x-x0)/dispW,0.0,1.0);\n"
   "  vec2 uv=vec2(localX,cropY+vUv.y*cropH);\n"
   "  float inside=step(x0,vUv.x)*step(vUv.x,1.0);\n"
-  "  vec4 pix=NV_ARTE(clamp(uv,0.0,1.0));\n"
+  "  vec4 pix=texture2D(uTex,clamp(uv,0.0,1.0));\n"
   "  vec3 c=pix.rgb;\n"
   // Dissolve amplo nas quatro bordas: o retrato se mistura com o banner em
   // vez de denunciar um retangulo cinza. O centro continua inteiro para o
@@ -836,7 +817,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "void main(){\n"
   "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
   "  if (m <= 0.001) discard;\n"
-  "  vec4 t = NV_ARTE(vUv);\n"
+  "  vec4 t = texture2D(uTex, vUv);\n"
   "  gl_FragColor = vec4(t.rgb, t.a * uCor.a * m);\n"
   "}\n",
 
@@ -1044,34 +1025,9 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // GFX_COPIA — ampliacao do alvo interno (gpunivel.c). RGB E ALPHA da
   // textura, que e o que diferencia do GFX_SNAP (la o alpha vem de uCor): o
   // furo de alpha 0 por onde o plano de video aparece tem de sobreviver.
-  //
-  // uFoco > 0,5 = CATMULL-ROM (gpun_ampliar_1080, so a build de teste
-  // NV_AMPLIA_4K): o alvo interno de 1920x1080 ampliado 2x para a superficie
-  // 4K com o bicubico de 5 leituras bilineares (a forma de 9 sem os cantos),
-  // em vez do bilinear — que e o que o escalonador da TV ja faz. Bancada
-  // (texto 15-16/400 ampliado 2x, gradiente RMS): bilinear 16,2, Catmull-Rom
-  // 20,4, nativo 4K 25,9. O tamanho do alvo e o layout (NV_TELA_W/H).
   "void main(){\n"
   "  vec2 uv = (uPar.y > 0.5) ? vec2(vUv.x, 1.0 - vUv.y) : vUv;\n"
-  "  if (uFoco > 0.5) {\n"
-  "    NV_HP vec2 tam = vec2(1920.0, 1080.0);\n"
-  "    NV_HP vec2 pos = uv * tam;\n"
-  "    NV_HP vec2 c = floor(pos - 0.5) + 0.5;\n"
-  "    vec2 f = pos - c;\n"
-  "    vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));\n"
-  "    vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);\n"
-  "    vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));\n"
-  "    vec2 w3 = f * f * (-0.5 + 0.5 * f);\n"
-  "    vec2 w12 = w1 + w2;\n"
-  "    NV_HP vec2 t0 = (c - 1.0) / tam, t3 = (c + 2.0) / tam, t12 = (c + w2 / w12) / tam;\n"
-  "    vec4 r = texture2D(uTex, vec2(t12.x, t0.y)) * (w12.x * w0.y)\n"
-  "           + texture2D(uTex, vec2(t0.x, t12.y)) * (w0.x * w12.y)\n"
-  "           + texture2D(uTex, t12) * (w12.x * w12.y)\n"
-  "           + texture2D(uTex, vec2(t3.x, t12.y)) * (w3.x * w12.y)\n"
-  "           + texture2D(uTex, vec2(t12.x, t3.y)) * (w12.x * w3.y);\n"
-  "    float n = w12.x * w0.y + w0.x * w12.y + w12.x * w12.y + w3.x * w12.y + w12.x * w3.y;\n"
-  "    gl_FragColor = clamp(r / n, 0.0, 1.0);\n"
-  "  } else gl_FragColor = texture2D(uTex, uv);\n"
+  "  gl_FragColor = texture2D(uTex, uv);\n"
   "}\n",
 
   // GFX_HERO_CAM / GFX_HERO_CHEIO_CAM — AS CAMADAS DO DESTAQUE NUMA PASSADA
@@ -2233,16 +2189,6 @@ void gfx_icone(GfxRect r, const char *nome, float cr, float cg, float cb, float 
     t = tex_obter_larg(cam, r.w);
   }
   if (!t) return;
-  // ICONE NO PIXEL, como o texto (encaixa, text.c). O icone vem centrado na
-  // linha (`yc - ICONE * 0.5f`, `cx - s * .5f`) e caia em meio pixel: o traco
-  // de 2 px do Lucide virava duas colunas a meia forca. Bancada a 1080, mesmo
-  // icone deslocado 0,4 px cai de 242 para 136 de borda maxima (32 px); com o
-  // encaixe as duas posicoes dao o mesmo pixel. Arredonda na grade do
-  // ALVO (em 2x meio pixel de layout ja e um pixel inteiro).
-  { float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
-    float pw = floorf(r.w * ex + 0.5f), ph = floorf(r.h * ey + 0.5f);
-    r.x = floorf(r.x * ex + 0.5f) / ex; r.y = floorf(r.y * ey + 0.5f) / ey;
-    if (pw >= 1.0f && ph >= 1.0f) { r.w = pw / ex; r.h = ph / ey; } }
   gfx_tex_aspect_atual = 0.0f;   // o arquivo ja e quadrado
   gfx_rect(r, t, GFX_MARCA, 0, 0, 0, 0.0f, cr, cg, cb, ca);
 }
