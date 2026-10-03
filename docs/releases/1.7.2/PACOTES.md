@@ -1,51 +1,56 @@
 # Pacotes locais 1.7.2
 
-Não publicados. Artefatos em `/Volumes/ExternalSSD/nuvio-rel-172`; desenvolvimento continua em `/private/tmp/nv-172` (`release/1.7.2`). Cópias limpas de build no SSD externo. Nenhuma instalação ou abertura em TV nesta rodada.
+Candidata técnica local concluída, sem publicação ou instalação nesta rodada. Todos os pacotes derivam da fonte congelada `b71471bc20e36806de9665145e4898c5e8e67884`, incluindo a fila durável de addons e a correção de identidade do cartão da ilha. Desenvolvimento em `/private/tmp/nv-172`, branch `release/1.7.2`; eventual commit posterior só de documentação não altera a origem compilada.
 
-## Candidata intermediária
+## Conjunto atual
 
-Fonte `32e70e48b8325bf7fc7e7310273ffe446fd7faf2`. LG normal/highcache, WGT, quatro TPKs, dois núcleos de autoatualização, APK dualABI e HBrepo passaram na compilação e conferência. Preservados em `intermediaria-32e70e48/`. Esta candidata ainda não inclui a fila durável de addons após fechar/reabrir e não é o conjunto final.
+Pasta de anexos: `/Volumes/ExternalSSD/nuvio-rel-172/final`. São 12 arquivos de produto/metadados e `SHA256SUMS`, totalizando 13 anexos. Compilação, conferência e os 12 checksums passaram. Manifesto de evidência fora da pasta de anexos: `/Volumes/ExternalSSD/nuvio-rel-172/FINAL-MANIFEST.json`.
 
-Android: versão1.7.2/10702, certificado esperado e seis bibliotecas exigidas em cada ABI; configuração efetiva conferida sem expor valores. LG: versão1.7.2/ARM, libass e configuração efetiva presentes, ausência de arquivos pessoais, marcador300MB só no highcache; HBrepo confere hash/tamanho do normal. Samsung: manifesto1.7.2, pacote sem arquivos pessoais; núcleos anexos idênticos aos empacotados; Tizen4/5 semPT_TLS/relocaçõesTLS, comDT_HASH e semdrminfo; WGT comproveniência de configuração/WASM e compatibilidadeChrome69 conferidas pelo script.
+- Android: versão 1.7.2/10702, certificado fixo esperado, duas ABIs com seis bibliotecas cada; configuração efetiva conferida apenas como presença e nenhum arquivo pessoal/snapshot/temporário.
+- LG normal/highcache: versão 1.7.2 no manifesto/control, ARM32/libass e configuração efetiva presentes; marcador de cache ampliado somente no highcache. Metadados Homebrew conferem hash/tamanho do IPK normal.
+- Samsung: WGT e quatro TPKs 1.7.2; dois núcleos anexos idênticos aos respectivos núcleos empacotados. Tizen 4/5 sem PT_TLS/relocações TLS, com DT_HASH e sem dependência drminfo; proveniência da configuração/WASM e compatibilidade Chrome69 do WGT conferidas pelo script. Listagem completa dos ZIPs sem arquivos pessoais/snapshots/temporários. WGT distribuído sem assinatura; quem instala o assina com o certificado da própria TV.
+- Cópias de build Android/LG/Samsung no SSD externo, limpas e na mesma fonte. Nenhuma TV foi controlada para gerar estas evidências.
 
-## Temporários e espaço
+Relatórios locais sem valores de configuração:
 
-A primeira compilação Samsung produziu os TPKs, mas a extração de conferência falhou por disco cheio. Não foi aprovada. No Mac desta rodada, `/usr/bin/mktemp` sem template escolheu o diretório temporário do sistema mesmo com `TMPDIR` no SSD (reproduzido em bash filho). Segunda execução forçou templates explícitos sob `TMPDIR` via função shell exportada e concluiu. A função não altera fonte nem identidade da build. A correção permanente agora usa templates explícitos em Android, TPK e conferência Samsung; a regressão de caminho temporário passou em um bash filho. ARM também usa template explícito. Correção comum em `fc711f6b`.
+- `/Volumes/ExternalSSD/nv172-b71471bc-android-verification.json`
+- `/Volumes/ExternalSSD/nv172-b71471bc-lg-verification.json`
+- `/Volumes/ExternalSSD/nv172-b71471bc-samsung-verification.json`
 
-Builds antigos da worktree já publicada/mesclada `nv-166b` foram preservados em `/Volumes/ExternalSSD/nuvio-build-170-preservado`; `build/ass-wasm` permaneceu na origem para não quebrar referências. Builds descartáveis1.7.1/abrirrapido removidos conforme handoff. Gradle e temporários da build Android ficam no SSD; memória/swap do sistema ainda pressionavam o Mac na primeira rodada. O cache dos pacotes publicados da 1.7.1 foi transferido com conferência SHA256 para `/Volumes/ExternalSSD/nuvio-rel-171-cache`; os dez caminhos originais permanecem acessíveis por links válidos. Após a recuperação de espaço, o Mac tinha cerca de 10 GB disponíveis; essa disponibilidade é variável.
-
-## Gates da release
-
-Conferência de pacote não comprova controle remoto, reprodução, GPU, HDR nem latência nas TVs. Dono precisa validar C9/TCL/Samsung e os casos em VALIDACAO-LOCAL.md. Issues dependentes de fonte/configuração/aparelho não são declaradas resolvidas só por build. Nenhum push/tag/publicação/comentário autorizado nesta rodada.
-
-## Conjunto final local
-
-Geração a partir de `fc711f6b6231400416dadf102de99f5bcc8987d6`, incluindo a fila durável `d8402e54`. Worktrees limpas e separadas para Android, LG e Samsung. Destino: `/Volumes/ExternalSSD/nuvio-rel-172/final`; logs e relatórios ficam fora da pasta de anexos. Concluído: 13 anexos, com `SHA256SUMS` consolidado e conferido. Sem instalação nas TVs.
-
-A verificação standalone TPK recebeu ainda `06d915f6`: `grep -q` encerrava cedo e SIGPIPE podia mascarar a presença de arquivo pessoal sob pipefail. Fixture com 12.000 entradas reproduziu retorno 141; leitura completa da listagem agora passa tanto no caso limpo quanto no contaminado. É uma correção da ferramenta de conferência, sem alterar o código compilado. Todos os ZIPs finais também foram conferidos por leitura completa no relatório Samsung.
-
-### Resultado final
-
-- Android: versão 1.7.2/10702, assinatura fixa, duas ABIs e seis bibliotecas em cada uma, configuração presente e nenhum arquivo pessoal.
-- LG normal/highcache: versão 1.7.2 no manifesto e control, ARM32/libass, configuração presente; marcador de cache ampliado apenas no highcache. Metadados Homebrew conferem hash e tamanho do normal.
-- Samsung: WGT e quatro TPKs 1.7.2; anexos de núcleo idênticos aos empacotados; Tizen 4/5 sem TLS e com DT_HASH. Script de release e conferência completa de ZIP/configuração/manifestações aprovados.
-- Todas as worktrees de build ficaram limpas. Nenhum pacote foi instalado nem publicado nesta rodada.
-
-Manifesto e relatórios privados apenas no disco local: `/Volumes/ExternalSSD/nuvio-rel-172/FINAL-MANIFEST.json`, `/Volumes/ExternalSSD/nv172-final-android-verification.json`, `/Volumes/ExternalSSD/nv172-final-lg-verification.json`, `/Volumes/ExternalSSD/nv172-final-samsung-verification.json`. Contêm identidade e resultados booleanos, sem valores de configuração.
+Logs: `/Volumes/ExternalSSD/nv172-b71471bc-android-build.log`, `/Volumes/ExternalSSD/nv172-b71471bc-lg-normal-build.log`, `/Volumes/ExternalSSD/nv172-b71471bc-lg-highcache-build.log` e `/Volumes/ExternalSSD/nuvio-rel-172/build-samsung-b71471bc.log`. A conferência consolidada foi executada por `verify-final-b71471bc.py`, ao lado do manifesto.
 
 | Anexo | Bytes | SHA256 |
 |---|---:|---|
-| `Nuvio-1.7.2-NuvioTpk.tpk` | 27489219 | `b7b46caf6e9317b0c8ad4b2b6d23bd48fbfcb07f651ae70146ecd031cab82e8f` |
-| `Nuvio-1.7.2-NuvioTpk40.tpk` | 27493537 | `23269e47f5c360d6b7c1138ff8d13103a9986adc19cc4102e6921b0e349bdcc9` |
-| `Nuvio-1.7.2-NuvioTpk60.tpk` | 27488264 | `8d10d35ca9c1dabc4f8b59b8dc1d305db00447315a64a374492f4b1517df6578` |
-| `Nuvio-1.7.2-NuvioTpk65.tpk` | 27488447 | `638e01fe17afa8ed0a78f16d37b5b66b956b6658d06704d82c3167189a9c222b` |
-| `Nuvio-1.7.2-android.apk` | 43557763 | `04510610fb86363b52fc707ce4b7db7eccd6e81802c75913cacef3fbb3c7a4df` |
-| `NuvioTV-1.7.2-tizen.wgt` | 27096640 | `8060de75819de9c039e2c8d25bdf4834af2fd3097eea3e3ddf0e252f940d80b2` |
-| `libnuvio-1.7.2-tpk-arm.so` | 9862820 | `9f8704f7c7426f39f1af9a6c450ade3d291909c647f1c684249613d6b7ae1222` |
-| `libnuvio-1.7.2-tpk40-arm.so` | 9862804 | `e71fbf6149471ff2f95e856ccf5d820a8d58f7aa65d56e78c22660c9c179cb16` |
-| `repo.json` | 1310 | `137f217d698e09bdaa3fd4d964400ce1093f75b49e8940bd79b78ba09ee85b5c` |
-| `space.nuvio.native.legacy_1.7.2_arm-highcache.ipk` | 51056930 | `3acc12cfcf0a6952a32cd82f3df1d29a047f2652f4cc28b985903fcba9b2085b` |
-| `space.nuvio.native.legacy_1.7.2_arm.ipk` | 51056632 | `e994e90fd260e9418f7b341178a68dfc994b8305b9ab05b5d6902308802942ff` |
-| `webosbrew.manifest.json` | 633 | `33b6687ed9a63812ce8fd2471bafc5e1460c7fee4230c71491949b772d75145e` |
+| `Nuvio-1.7.2-NuvioTpk.tpk` | 27489770 | `d648e295306db06adea2508231bd9820063227e2aa8dc9bdeabd862814a422a4` |
+| `Nuvio-1.7.2-NuvioTpk40.tpk` | 27494227 | `667a0c290b3943ccb24fb8a24c558e1ecf3a9d72f40cf546021c9612f33b1d1d` |
+| `Nuvio-1.7.2-NuvioTpk60.tpk` | 27488809 | `b0834d29d166713a3847071ad6e30f3d654f219dd75f86167187b878afa42dee` |
+| `Nuvio-1.7.2-NuvioTpk65.tpk` | 27488999 | `6c4242e32091ae6af8b6cedc4d0dc8f453e9d7a3a259277276626a7874787182` |
+| `Nuvio-1.7.2-android.apk` | 43558895 | `f876c7dd44418d224826905c9a46148424f200281e59b6add08c8d0c33c4740f` |
+| `NuvioTV-1.7.2-tizen.wgt` | 27097119 | `b760399947a36804e85e7e9b3c0f8bf361eea885328c219e8667e315931621bc` |
+| `libnuvio-1.7.2-tpk-arm.so` | 9863240 | `a448c376baa8fef0d3dd3bb0e6590126e43609783daf35da492530a0658944c8` |
+| `libnuvio-1.7.2-tpk40-arm.so` | 9867320 | `9e4f1d7d46d23bc13c49fd3c83ba1fdd7c3be1abda6f7b49324106a84a0de834` |
+| `repo.json` | 1310 | `f2236e5e040791ded28a6e3aaaa8465c66ebaa963a08dc9a405c0db17686becf` |
+| `space.nuvio.native.legacy_1.7.2_arm-highcache.ipk` | 51056670 | `44836dfc39b459b51903bb46cce350357ff6e585d1bbdf1f7bf8f56a156b894a` |
+| `space.nuvio.native.legacy_1.7.2_arm.ipk` | 51056254 | `edcb17a9393f85363e4ee14b5b1e45c5a0062a923da7ec1ce3f09c6d434b42a4` |
+| `webosbrew.manifest.json` | 633 | `d56446fa0e1fc45dcbf596ec97b19a28b4ac1ce5be83cbad4715a67e9e699813` |
 
-O décimo terceiro anexo é `SHA256SUMS`; a conferência de todos os 12 arquivos listados nele passou. Logs de build ficam fora de `final/`.
+O décimo terceiro anexo é `SHA256SUMS`; `shasum -a 256 -c SHA256SUMS` aprovou os 12 arquivos. Logs, relatórios e configurações não são anexos públicos.
+
+## Conjuntos intermediários preservados
+
+- `intermediaria-32e70e48/`: primeira candidata conferida, anterior à fila durável entre processos.
+- `intermediaria-fc711f6b/`: 13 anexos conferidos, com fila durável; substituídos após a revisão da ilha encontrar isolamento incompleto entre conta/perfil. Manifesto, hashes e evidências próprios estão nessa pasta.
+
+Nenhum conjunto intermediário deve substituir a candidata `b71471bc` nos testes finais.
+
+## Temporários e espaço
+
+A primeira compilação Samsung produziu os TPKs, mas a extração de conferência falhou por disco cheio; essa tentativa não foi aprovada. No Mac, mktemp sem template ignorou TMPDIR mesmo em bash filho. Templates explícitos sob TMPDIR corrigiram Android/ARM/TPK/conferência Samsung (`fc711f6b`, com ajuste ARM já integrado). A regressão de caminho no SSD passou.
+
+O guard standalone TPK recebeu `06d915f6`: grep -q encerrava cedo e SIGPIPE podia mascarar arquivo pessoal sob pipefail. Fixture com 12 mil entradas reproduziu retorno141; consumo completo da lista aprova o caso limpo e rejeita o contaminado. A candidata atual já inclui essa ferramenta; todos os ZIPs Samsung também foram conferidos pela leitura completa da listagem.
+
+Builds antigos da worktree publicada/mesclada nv-166b foram preservados em `/Volumes/ExternalSSD/nuvio-build-170-preservado`; ass-wasm permaneceu na origem para conservar referências. Builds descartáveis1.7.1/abrirrapido removidos conforme handoff. Gradle, novas builds e temporários estão no SSD. Cache dos dez pacotes publicados1.7.1 transferido com SHA256 para `/Volumes/ExternalSSD/nuvio-rel-171-cache`; caminhos originais continuam acessíveis por links válidos.
+
+## Gates restantes
+
+Conferência técnica de pacote não comprova controle remoto, reprodução, GPU, HDR nem latência nas TVs. Dono precisa validar C9/TCL/Samsung e os casos de VALIDACAO-LOCAL.md. A correção da ilha passou em fixture ASan/UBSan e revisão independente; propostas de UX do mockup continuam separadas e não foram implementadas nesses pacotes. Issues dependentes de fonte/configuração/aparelho precisam de reprodução específica. Nenhum push/tag/publicação/comentário autorizado nesta rodada.
