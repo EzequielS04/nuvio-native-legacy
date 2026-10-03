@@ -335,6 +335,8 @@ int   ajustes_720p(void);
 // continuam saindo dela). _pos: 0 automatica, 1 esquerda, 2 direita.
 int   ajustes_relogio_ligado(void);
 int   ajustes_relogio_pos(void);
+// Tamanho da interface: 1, 1.2, 1.3 ou 1.5 (gfx_escala_ui). LOCAL.
+float ajustes_tamanho_ui(void);
 // Sair do player no meio vai para a HOME, minimizando o titulo na ilha (o
 // relogio ligado e Ao sair do player = home). 0 = a pagina do titulo, como antes.
 int   ajustes_saida_player_home(void);

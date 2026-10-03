@@ -35,6 +35,8 @@
 #include "botoes.h"
 #include "socialvis.h"
 #include "svdesenho.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,7 +46,7 @@
 // Mesma pegada do painel "Sua atividade" que ele substitui (perfil.c desenhava
 // em x=1120, 776x1032): quem ja tinha o gesto na memoria muscular encontra a
 // camada no mesmo lugar, so com outro conteudo.
-#define SP_X          1120.0f
+#define SP_X          (NV_TELA_W - 800.0f)   // 1120 em 1080; tela virtual (escala.h)
 #define SP_W           776.0f
 // A ILHA FLUTUA A NV_FOLHA_MARGEM das tres bordas e com o raio da folha de
 // Fontes (streams.c): as duas camadas da direita sao o mesmo objeto, e uma
@@ -3020,8 +3022,12 @@ static int veuNoFundo;
 // O veu usa a rampa CRUA e o painel a suavizada, pelo mesmo motivo do menu
 // lateral: a medida da referencia para o escurecimento e uma reta, e um bloco
 // deste tamanho parando de vez no fim do percurso le como corte.
+// Tela REAL inteira: o veu vai tambem para a copia parada (spainel_fundo), que
+// e pintada fora da camada ampliada.
 static void veuInteiro(void) {
-  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, SP_VEU * entrada);
+  ESCALA_REAL_INI();
+  gfx_cor((GfxRect){ 0, 0, 1920.0f, 1080.0f }, 0.0f, 0, 0, 0, SP_VEU * entrada);
+  ESCALA_REAL_FIM();
 }
 
 // O FUNDO PARADO. Com o painel inteiro na tela (a entrada terminou), o que
@@ -3109,7 +3115,14 @@ static float voltaSuave(float t) {
 }
 
 static void desenharPainel(Uint32 agora);
+static void spainel_desenharCorpo_(Uint32 agora);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void spainel_desenhar(Uint32 agora) {
+  ESCALA_INI();
+  spainel_desenharCorpo_(agora);
+  ESCALA_FIM();
+}
+static void spainel_desenharCorpo_(Uint32 agora) {
   desenharPainel(agora);
   if (entrada < 0.002f) return;
   // POR CIMA DE TUDO DO PAINEL: a escolha aberta e o teclado de nome.

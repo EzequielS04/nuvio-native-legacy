@@ -117,10 +117,12 @@ void registro_pacote(float x, float y, float w, float h, int n, const char *rotD
 }
 
 // --- O MODAL ---------------------------------------------------------------------
-#define RE_X 300.0f
-#define RE_Y 250.0f
-#define RE_W 1320.0f
+// Centrado na tela virtual (escala.h) e no maximo da largura dela menos 80:
+// 300, 250, 1320 e 580 em 100%.
+#define RE_W (NV_TELA_W - 80.0f < 1320.0f ? NV_TELA_W - 80.0f : 1320.0f)
 #define RE_H 580.0f
+#define RE_X ((NV_TELA_W - RE_W) * 0.5f)
+#define RE_Y ((NV_TELA_H - RE_H) * 0.5f)
 static void rgKbdTexto(const char *k, const char *l, float xDir, float yc) {
   TxtLinha kt = rgT(TXT_AJ_KBD, k), lt = rgT(TXT_ILHA_APOIO, l);
   float kw = kt.w + 18 < 34 ? 34 : kt.w + 18, x = xDir - lt.w - 9 - kw;
@@ -155,7 +157,14 @@ static void rgMilhar(char *d, size_t tam, long n) {
   d[j] = 0;
 }
 
+static void registro_envio_desenharCorpo_(void);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void registro_envio_desenhar(void) {
+  ESCALA_INI();
+  registro_envio_desenharCorpo_();
+  ESCALA_FIM();
+}
+static void registro_envio_desenharCorpo_(void) {
   AvisosEnvio env;
   float x, y, w, base = RE_Y + RE_H - 56;
   char kb[32], v[200], a[96], s[160];

@@ -91,6 +91,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "fontevolta.h"
 #include "marco.h"
 #include "plrui.h"
+#include "escala.h"
 #include "plrilha.h"
 #include <time.h>
 #include <stdio.h>
@@ -139,9 +140,11 @@ static void avisarCascaAberto(int v) { (void)v; }
 // Onde a barra fica (topo do trilho): com o OSD inteiro, e na busca so com a
 // barra (#128) — mais baixa, sem nada embaixo dela alem do tempo. Com o Seekr
 // ligado a busca deixa 30 px a mais para a ilha da miniatura.
-#define PLR_BARRA_Y      902.0f
-#define PLR_BARRA_Y_SO   960.0f
-#define PLR_BARRA_Y_SEEKR 930.0f
+// Ancoradas na BASE da tela do OSD: o OSD e camada ampliada (escala.h) e mede
+// pela tela virtual. Em 1080 sao 902, 960 e 930, como no mockup.
+#define PLR_BARRA_Y      (NV_VTELA_H - 178.0f)
+#define PLR_BARRA_Y_SO   (NV_VTELA_H - 120.0f)
+#define PLR_BARRA_Y_SEEKR (NV_VTELA_H - 150.0f)
 // De quanto o bloco desliza para baixo quando escondido. Pequeno de proposito:
 // o que faz o movimento ser lido nao e a distancia, e a mola somada ao fade.
 #define PLR_DESLIZE       46.0f
@@ -901,7 +904,11 @@ static PlrRect aspectoVisivel(int modo) {
 // de 1080 e 48 de respiro no topo, ele termina em 609 e sobram 471 ate a
 // margem inferior — o painel entra inteiro ABAIXO da imagem, que era o pedido.
 // Subir para 0.62 devolve 346 de espaco e os cartoes voltam a cobrir o filme.
-#define PLR_ENC_ALVO      0.52f   // fracao da tela que o video ocupa recuado
+#define PLR_ENC_ALVO_100  0.52f   // fracao da tela que o video ocupa recuado
+// "Tamanho da interface" (escala.h): a ilha de baixo do pos-play cresce por s e
+// continua precisando dos ~470 px de 1080 em unidades dela; o video recua o que
+// ela ganha. Em 100% e 0,52 exato.
+#define PLR_ENC_ALVO (PLR_ENC_ALVO_100 - (gfx_escala_ui() - 1.0f) * 470.0f / 1080.0f)
 #define PLR_ENC_TOPO      48.0f   // respiro acima do video quando recuado
 // Mais degraus e mais curtos que a primeira versao (eram 6 x 70 ms), e com
 // CURVA em vez de passo constante: o dono viu e pediu mais fluidez. O custo
@@ -3108,7 +3115,8 @@ static void ponteiroBuscar(int a, int b) {
   (void)a; (void)b;
   acordar();
   if (ehCanal() || duracaoSeg <= 0.0f || barraPtrW <= 0.0f) return;
-  f = anim_clamp((ponteiro_x() - barraPtrX) / barraPtrW, 0.0f, 1.0f);
+  // A barra mora na tela virtual do OSD; o ponteiro, na real.
+  f = anim_clamp((ponteiro_x() / gfx_escala_ui() - barraPtrX) / barraPtrW, 0.0f, 1.0f);
   if (ponteiro_toque()) {
     // ARRASTAR NA BARRA (#216): o mesmo avanco das setas (saltar) — video
     // pausado, posSeg na mao do dedo, UMA busca no fim (terminarSalto, depois
@@ -3127,7 +3135,14 @@ static void ponteiroBuscar(int a, int b) {
 }
 static void ponteiroSkip(int a, int b) { (void)a; (void)b; skipFoco = 1; barraFoco = 1; acordar(); }
 
+static void desenharAcoesEpisodioCorpo(void);
+// O botao de pular e OSD: camada ampliada (escala.h), na tela virtual.
 static void desenharAcoesEpisodio(void){
+  ESCALA_INI();
+  desenharAcoesEpisodioCorpo();
+  ESCALA_FIM();
+}
+static void desenharAcoesEpisodioCorpo(void){
   const CatEp *prox=player_proximo_episodio();double fim;int tipo=0;
   int trecho=intro_ativo(posSeg,&fim,&tipo);
   // A CAIXA DE "Próximo episódio" QUE FICAVA AQUI FOI APAGADA. Era um retangulo
@@ -3150,13 +3165,13 @@ static void desenharAcoesEpisodio(void){
     TxtLinha t=txt_linha(TXT_G21B,rot,255,255,255,255);
     const float h=64.0f;
     float w=22.0f+26.0f+12.0f+(float)t.w+28.0f;
-    float k=anim, xa=PLR_MARGEM, ya=960.0f;
-    float xb=NV_TELA_W-PLR_MARGEM-w, yb=PLR_BARRA_Y-36.0f-h;
+    float k=anim, xa=PLR_MARGEM, ya=NV_VTELA_H-120.0f;
+    float xb=NV_VTELA_W-PLR_MARGEM-w, yb=PLR_BARRA_Y-36.0f-h;
     GfxRect p={xa+(xb-xa)*k,ya+(yb-ya)*k,w,h};
     int tinta=sel?plrui_tinta():243;
     float kt=tinta/255.0f;
     if (ponteiroNoPlayer()) ponteiro_alvo(p.x, p.y, p.w, p.h, ponteiroSkip, NULL, 0, 0);
-    if(!visivel) gfx_veu_css((GfxRect){0,NV_TELA_H-300.0f,NV_TELA_W,300.0f},0,1.0f,1.0f,0.60f*entrada*(1.0f-anim));
+    if(!visivel) gfx_veu_css((GfxRect){0,NV_VTELA_H-300.0f,NV_VTELA_W,300.0f},0,1.0f,1.0f,0.60f*entrada*(1.0f-anim));
     if(sel) plrui_pilula_foco(p,entrada);
     else plrui_disco_osd(p,entrada);
     gfx_icone((GfxRect){p.x+22.0f,p.y+(h-26.0f)*0.5f,26.0f,26.0f},"pl_skip-forward",kt,kt,kt,entrada);
@@ -3248,6 +3263,7 @@ static void corpoErro(GfxRect r, float a, void *u) {
   plrui_botao(x, y, "Voltar", NULL, erroBotao == 1 ? 1.0f : 0.0f, a);
 }
 
+static void desenharOsd(Uint32 agora, float a, float ac, const CatItem *c);
 void player_desenhar(Uint32 agora) {
   (void)agora;
   if (!aberto) return;
@@ -3420,9 +3436,11 @@ void player_desenhar(Uint32 agora) {
   // (para nao sumir em cena clara), e so depois de 600 ms parado — o
   // vai-e-volta curto de um seek nao acende.
   else if (comVideo && !erroFonte && !saindo && video_bufferando_ms() >= 600) {
-    GfxRect d = { NV_TELA_W * 0.5f - 48.0f, NV_TELA_H * 0.5f - 48.0f, 96.0f, 96.0f };
+    GfxRect d = { NV_VTELA_W * 0.5f - 48.0f, NV_VTELA_H * 0.5f - 48.0f, 96.0f, 96.0f };
+    ESCALA_INI();
     plrui_material(d, 48.0f, 0, entrada);
-    plrui_anel(NV_TELA_W * 0.5f, NV_TELA_H * 0.5f, 56.0f, 0, agora, entrada);
+    plrui_anel(NV_VTELA_W * 0.5f, NV_VTELA_H * 0.5f, 56.0f, 0, agora, entrada);
+    ESCALA_FIM();
   }
   if (erroFonte && ehCanal()) {
     // Cartao no estilo do ao vivo: a marca do canal e a causa (provedor, conta)
@@ -3499,11 +3517,11 @@ void player_desenhar(Uint32 agora) {
   // BASE NA MARGEM INFERIOR: com o video recuado, o painel ocupa o espaco que
   // se abriu. Ancorar acima da barra desperdicaria a faixa que o recuo existe
   // para criar.
-  posplay_desenhar(agora, NV_TELA_H - PLR_PAD_Y);
+  posplay_desenhar(agora, NV_VTELA_H - PLR_PAD_Y);   // camada ampliada: tela virtual
   // Acima do pos-reproducao quando ele esta no ar (posplay_topo), senao na
   // mesma margem inferior.
   // "O que achou?" na margem de 96 (mockup) ou acima do pos-reproducao.
-  { float base = posplay_visivel() ? posplay_topo(NV_TELA_H) : NV_TELA_H - 96.0f;
+  { float base = posplay_visivel() ? posplay_topo(NV_VTELA_H) : NV_VTELA_H - 96.0f;
     if (reacao_visivel()) {
       // O video um degrau mais escuro e o veu leve de baixo, sob o cartao.
       gfx_cor(tela, 0, 0, 0, 0, 0.25f * entrada);
@@ -3598,11 +3616,12 @@ void player_desenhar(Uint32 agora) {
       // canto, a ilha desce para baixo dela.
       float eI = anim_clamp(tg / 0.30f, 0.0f, 1.0f);
       float aI = entrada * saida * (1.0f - (1.0f - eI) * (1.0f - eI));
-      float x0 = plrilha_direita() ? NV_TELA_W - PLR_MARGEM - 520.0f : PLR_MARGEM, y0 = PLR_PAD_Y;
+      float x0 = plrilha_direita() ? NV_VTELA_W - PLR_MARGEM - 520.0f : PLR_MARGEM, y0 = PLR_PAD_Y;
       float hI = 26.0f + 18.0f + 8.0f + np * 50.0f + 26.0f;
+      ESCALA_INI();   // a ilha do guia parental e OSD: tela virtual
       { GfxRect ir;
         if (plrilha_rect(&ir) && ir.y < y0 + hI && fabsf(ir.x - x0) < 600.0f) y0 = ir.y + ir.h + 14.0f; }
-      gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 260.0f }, 1, 1.38f, 1.0f, 0.52f * aI * (1.0f - anim));
+      gfx_veu_css((GfxRect){ 0, 0, NV_VTELA_W, 260.0f }, 1, 1.38f, 1.0f, 0.52f * aI * (1.0f - anim));
       plrui_material((GfxRect){ x0, y0, 520.0f, hI }, 30.0f, 0, aI);
       { char k[48];
         const CatItem *ci = item();
@@ -3625,6 +3644,7 @@ void player_desenhar(Uint32 agora) {
         txt_desenhar_alpha(lr, x0 + 30.0f, yl + 25.0f - (float)lr.h * 0.5f, ag);
         txt_desenhar_alpha(lg, x0 + 490.0f - (float)lg.w, yl + 25.0f - (float)lg.h * 0.5f, ag);
       }
+      ESCALA_FIM();
     }
   }
 
@@ -3691,9 +3711,14 @@ void player_desenhar(Uint32 agora) {
   // dither (GFX_VEU_CSS): no painel de 8 bits da OLED um degrade escuro longo
   // em faixas de gfx_cor sai em degraus. Na busca so com a barra o de baixo
   // fica no leve (300, .60), o .veu-b.leve do mockup.
-  gfx_veu_css((GfxRect){ 0, NV_TELA_H - 520.0f, NV_TELA_W, 520.0f }, 0, 1.25f, 1.0f, 0.80f * a * cheio);
-  gfx_veu_css((GfxRect){ 0, NV_TELA_H - 300.0f, NV_TELA_W, 300.0f }, 0, 1.0f, 1.0f, 0.60f * a * (1.0f - cheio));
-  gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 260.0f }, 1, 1.38f, 1.0f, 0.52f * ac);
+  // OSD = CAMADA AMPLIADA (escala.h): veus, barra, titulo, botoes, tempo e
+  // selos na tela virtual. A legenda logo abaixo e conteudo do filme: ela
+  // sai da escala e fica no tamanho escolhido para ela.
+  { ESCALA_INI();
+    gfx_veu_css((GfxRect){ 0, NV_VTELA_H - 520.0f, NV_VTELA_W, 520.0f }, 0, 1.25f, 1.0f, 0.80f * a * cheio);
+    gfx_veu_css((GfxRect){ 0, NV_VTELA_H - 300.0f, NV_VTELA_W, 300.0f }, 0, 1.0f, 1.0f, 0.60f * a * (1.0f - cheio));
+    gfx_veu_css((GfxRect){ 0, 0, NV_VTELA_W, 260.0f }, 1, 1.38f, 1.0f, 0.52f * ac);
+    ESCALA_FIM(); }
 
   /*
    * Legenda e conteudo, enquanto o degrade e chrome do player. Ela precisa
@@ -3704,7 +3729,18 @@ void player_desenhar(Uint32 agora) {
    * quando o chrome some, o retorno acima ja desenhou a legenda sozinha.
    */
   desenharLegendaExterna();
+  desenharOsd(agora, a, ac, c);
+}
 
+// O CORPO DO OSD (barra, titulo, Seekr, botoes, tempo, selos e o botao de
+// pular), na camada ampliada: tudo aqui mede pela tela virtual.
+static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c);
+static void desenharOsd(Uint32 agora, float a, float ac, const CatItem *c) {
+  ESCALA_INI();
+  desenharOsdCorpo(agora, a, ac, c);
+  ESCALA_FIM();
+}
+static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) {
   // O bloco inteiro desliza junto: titulo, barra e botoes sao UM objeto que
   // sobe, acompanhando o OSD (`anim`) e a abertura da tela (`entrada`, numa
   // desaceleracao: a mola crua repica e num bloco alto isso le como tremida).
@@ -3719,7 +3755,7 @@ void player_desenhar(Uint32 agora) {
   float yBarra   = (PLR_BARRA_Y + (ySo - PLR_BARRA_Y) * (1.0f - cheio)) + desce;
   float yRowTopo = yBarra + PLR_GAP_ROW;
   float cyBotoes = yRowTopo + PLR_BTN_D * 0.5f;
-  float bx = PLR_MARGEM, bw = NV_TELA_W - PLR_MARGEM * 2.0f;
+  float bx = PLR_MARGEM, bw = NV_VTELA_W - PLR_MARGEM * 2.0f;
   float cx = PLR_MARGEM;
   float cw = bw;
   float frac = ehCanal()
@@ -3918,7 +3954,7 @@ void player_desenhar(Uint32 agora) {
       // selos ja chegariam um a um; a curva assume a cadencia (90 ms, 10 px).
       float t0 = (float)(agora - ultimoInput) / 1000.0f;
       for (i = 0; i < nSelos; i++) { w[i] = marca_formato_largura(selos[i], mh); tot += w[i] + (i ? 22.0f : 0.0f); }
-      x = esq ? PLR_MARGEM : NV_TELA_W - PLR_MARGEM - tot;
+      x = esq ? PLR_MARGEM : NV_VTELA_W - PLR_MARGEM - tot;
       for (i = 0; i < nSelos; i++) {
         float ts = anim_clamp((t0 - i * 0.09f) / 0.26f, 0.0f, 1.0f);
         float e  = 1.0f - (1.0f - ts) * (1.0f - ts);

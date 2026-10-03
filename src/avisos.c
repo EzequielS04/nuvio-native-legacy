@@ -25,6 +25,8 @@
 #include "sessao.h"
 #include "trakt.h"
 #include "marco.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1289,7 +1291,14 @@ void avisos_marcar_lidos(void) {
   pthread_mutex_unlock(&trava);
 }
 
+static void avisos_desenharCorpo_(Uint32 agora);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void avisos_desenhar(Uint32 agora) {
+  ESCALA_INI();
+  avisos_desenharCorpo_(agora);
+  ESCALA_FIM();
+}
+static void avisos_desenharCorpo_(Uint32 agora) {
   (void)agora;
   float a = anim_clamp(entrada, 0.0f, 1.0f), dx;
   if (toastPendente && !aberto && !cartao) {

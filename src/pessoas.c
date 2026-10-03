@@ -15,6 +15,8 @@
 #include "idioma.h"
 #include "tex_cache.h"
 #include "botoes.h"
+#define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -603,7 +605,14 @@ static void textoGeneros(char *dst, size_t tam, unsigned m) {
     }
 }
 
+static void pessoas_desenharCorpo_(Uint32 agora);
+// Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
 void pessoas_desenhar(Uint32 agora) {
+  ESCALA_SE_COUBER_INI(PE_W, 700.0f);
+  pessoas_desenharCorpo_(agora);
+  ESCALA_SE_COUBER_FIM();
+}
+static void pessoas_desenharCorpo_(Uint32 agora) {
   float a = anim_suave(anim), alt, x, y, cab, hx, hy, hw;
   int i, vis;
   const char *chapeu, *titulo, *sub;

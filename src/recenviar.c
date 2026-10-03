@@ -19,6 +19,8 @@
 #include "tex_cache.h"
 #include "logotitulo.h"
 #include "botoes.h"
+#define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -430,7 +432,14 @@ static void desenhaLinha(float x, float y, const char *rot, float f,
     txt_desenhar_alpha(t, tx, y + (RE_LINHA - t.h) * 0.5f, a); }
 }
 
+static void recenviar_desenharCorpo_(Uint32 agora);
+// Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
 void recenviar_desenhar(Uint32 agora) {
+  ESCALA_SE_COUBER_INI(RE_W, 700.0f);
+  recenviar_desenharCorpo_(agora);
+  ESCALA_SE_COUBER_FIM();
+}
+static void recenviar_desenharCorpo_(Uint32 agora) {
   float a = anim_suave(anim), alt, x, y, cab, cabTopo, hx, hy, hw;
   int i, n, vis;
   const char *titulo, *chapeu, *pergunta, *rodape, *logo;

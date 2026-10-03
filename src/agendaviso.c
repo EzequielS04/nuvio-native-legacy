@@ -9,6 +9,8 @@
 #include "layout.h"
 #include "ajustes.h"
 #include "idioma.h"
+#define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -91,7 +93,14 @@ void agendaviso_atualizar(float dt, Uint32 agora) {
                        aberto ? AV_ABRIR_MS : AV_FECHAR_MS);
 }
 
+static void agendaviso_desenharCorpo_(Uint32 agora);
+// Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
 void agendaviso_desenhar(Uint32 agora) {
+  ESCALA_SE_COUBER_INI(AV_W, 860.0f);
+  agendaviso_desenharCorpo_(agora);
+  ESCALA_SE_COUBER_FIM();
+}
+static void agendaviso_desenharCorpo_(Uint32 agora) {
   float a = anim_suave(entrada), dy, x, y, h;
   int i;
   if (entrada < 0.002f) return;

@@ -11,6 +11,8 @@
 #include "layout.h"
 #include "text.h"
 #include "relogiofim.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -172,7 +174,14 @@ static void desenharLinha(const PlrIlhaPedido *p, const Linha *L, float x, float
   }
 }
 
+static void plrilha_desenharCorpo_(Uint32 agora);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void plrilha_desenhar(Uint32 agora) {
+  ESCALA_INI();
+  plrilha_desenharCorpo_(agora);
+  ESCALA_FIM();
+}
+static void plrilha_desenharCorpo_(Uint32 agora) {
   float dt = ultQuadro ? (float)(agora - ultQuadro) / 1000.0f : 1.0f / 60.0f;
   const PlrIlhaPedido *p;
   PlrIlhaPedido vazio;

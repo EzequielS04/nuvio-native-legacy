@@ -1,5 +1,6 @@
 // Ver teclado.h para por que esta modal existe e o que ela NAO tenta ser.
 #include "teclado.h"
+#include "escala.h"
 #include "gfx.h"
 #include "text.h"
 #include "anim.h"
@@ -491,7 +492,15 @@ static void teDica(float *x, float y, const char *k, const char *l, float a) {
   *x += kw + 9 + tl.w + 20;
 }
 
+static void teDesenhar(Uint32 agora);
+// O teclado fica em 1080p em qualquer "Tamanho da interface": em 100% ele ja
+// ocupa a largura da tela (ver a conta no alto), e ampliado nao caberia.
 void teclado_desenhar(Uint32 agora) {
+  ESCALA_REAL_INI();
+  teDesenhar(agora);
+  ESCALA_REAL_FIM();
+}
+static void teDesenhar(Uint32 agora) {
   float a = anim_suave(anim), dy, x, y, ew;
   int f, c, i;
   if (anim < 0.01f) return;

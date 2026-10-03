@@ -46,6 +46,8 @@
 #include "tex_cache.h"
 #include "text.h"
 #include "textogate.h"
+#define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
+#include "escala.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1415,7 +1417,14 @@ static void ponteiroFoco(int b, int nada) { (void)nada; foco = b; naPrevia = 0; 
 static void focarSelo(int nada, int nada2) { (void)nada; (void)nada2; naPrevia = 1; }
 static void ponteiroSelo(int nada, int nada2) { (void)nada; (void)nada2; naPrevia = 1; mudarCena(cena + 1); }
 
+static void novidades170_desenharCorpo_(Uint32 agora);
+// Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
 void novidades170_desenhar(Uint32 agora) {
+  ESCALA_SE_COUBER_INI(N170_W, N170_H);
+  novidades170_desenharCorpo_(agora);
+  ESCALA_SE_COUBER_FIM();
+}
+static void novidades170_desenharCorpo_(Uint32 agora) {
   float a = anim_suave(entrada), dy, y0, ar, ag, ab;
   GfxRect card;
   (void)agora;

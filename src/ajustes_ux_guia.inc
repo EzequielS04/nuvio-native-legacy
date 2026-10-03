@@ -162,12 +162,26 @@ static void guiaSair(void) {
 #define GU_INSP_X 1176.0f
 #define GU_GE_H     96.0f
 #define GU_GE_GAP    2.0f
-static GfxRect guiaIdxR(void) { return (GfxRect){ ajX0(), AJI_TOPO, GU_IDX_W, NV_TELA_H - AJI_TOPO - AJI_MARGEM }; }
+static GfxRect guiaIdxR(void) { return (GfxRect){ ajX0(), AJI_TOPO, GU_IDX_W, NV_VTELA_H - AJI_TOPO - AJI_MARGEM }; }
+// Tela virtual menor (escala.h): a lista fica com pelo menos 560 e a proporcao
+// de 1080p (700:704); o inspetor fica com o resto e sai abaixo de 440 (130% e 150%).
+// Em 100% e o 1176 de sempre.
+static float guiaInspX(void) {
+  float x = ajX0() + GU_IDX_W + 24.0f, total, lista;
+  if (gfx_escala_ui() == 1.0f) return GU_INSP_X;
+  total = NV_VTELA_W - AJI_MARGEM - x - 24.0f;
+  lista = total * (700.0f / 1428.0f);
+  if (lista < 560.0f) lista = 560.0f;
+  if (total - lista < 440.0f) return NV_VTELA_W;   // sem inspetor
+  return x + lista + 24.0f;
+}
+static int guiaTemInsp(void) { return guiaInspX() < NV_VTELA_W; }
 static GfxRect guiaListaR(void) {
   float x = ajX0() + GU_IDX_W + 24.0f;
-  return (GfxRect){ x, AJI_MARGEM, GU_INSP_X - 24.0f - x, NV_TELA_H - 2 * AJI_MARGEM };
+  float fim = guiaTemInsp() ? guiaInspX() - 24.0f : NV_VTELA_W - AJI_MARGEM;
+  return (GfxRect){ x, AJI_MARGEM, fim - x, NV_VTELA_H - 2 * AJI_MARGEM };
 }
-static GfxRect guiaInspR(void) { return (GfxRect){ GU_INSP_X, AJI_MARGEM, NV_TELA_W - AJI_MARGEM - GU_INSP_X, NV_TELA_H - 2 * AJI_MARGEM }; }
+static GfxRect guiaInspR(void) { return (GfxRect){ guiaInspX(), AJI_MARGEM, NV_VTELA_W - AJI_MARGEM - guiaInspX(), NV_VTELA_H - 2 * AJI_MARGEM }; }
 
 // --- PECAS ---------------------------------------------------------------------------
 // "• NOVO": a marca de estado (acento), 12/800 em caixa alta.
@@ -715,6 +729,7 @@ static void guiaRolar(void) {
 // --- INSPETOR -----------------------------------------------------------------------
 static void guiaDesenharInspetor(const GuiaVista *v, float a) {
   GfxRect ir = guiaInspR();
+  if (!guiaTemInsp()) return;
   float x = ir.x + 32, w = ir.w - 64, y = ir.y + 32, ph = 0;
   AjDica d[5];
   int nd = 0, e = v->col == GC_INDICE ? -1 : v->ent;
@@ -816,9 +831,9 @@ static void guiaDesenharExemplo(void) {
   if (c == GX_N180_FONTES || c == GX_N180_ILHA) { esc = 0.72f; cw = N180_CENA_W * esc; ch = N180_CENA_H * esc; }
   else { esc = 1.0f; cw = N170_PREVIA_W; ch = N170_PREVIA_H; }
   ajVeuModal();
-  m = (GfxRect){ (NV_TELA_W - (cw + 80)) * 0.5f, (NV_TELA_H - (ch + 150)) * 0.5f, cw + 80, ch + 150 };
-  if (m.y < 24) { float k = (NV_TELA_H - 48 - 150) / ch; esc *= k; cw *= k; ch *= k;
-                  m = (GfxRect){ (NV_TELA_W - (cw + 80)) * 0.5f, 24, cw + 80, ch + 150 }; }
+  m = (GfxRect){ (NV_VTELA_W - (cw + 80)) * 0.5f, (NV_VTELA_H - (ch + 150)) * 0.5f, cw + 80, ch + 150 };
+  if (m.y < 24) { float k = (NV_VTELA_H - 48 - 150) / ch; esc *= k; cw *= k; ch *= k;
+                  m = (GfxRect){ (NV_VTELA_W - (cw + 80)) * 0.5f, 24, cw + 80, ch + 150 }; }
   ajIlha(m, 36, 1, 1);
   ajKicker("Ver exemplo", m.x + 40, m.y + 32, 1);
   { TxtLinha t = ajTxtC(TXT_AJ_NOME, tit, m.w - 80); txt_desenhar(t, m.x + 40, m.y + 56); }

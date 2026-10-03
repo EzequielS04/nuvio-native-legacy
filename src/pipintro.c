@@ -22,6 +22,8 @@
 #include "anim.h"
 #include "layout.h"
 #include "player.h"
+#define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
+#include "escala.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -152,7 +154,14 @@ static void desenhaBotao(GfxRect r, const char *txt, int foco, int prim, float a
                        r.y + (r.h - t.h) * 0.5f, a); }
 }
 
+static void pipintro_desenharCorpo_(Uint32 agora);
+// Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
 void pipintro_desenhar(Uint32 agora) {
+  ESCALA_SE_COUBER_INI(PI_W, PI_H);
+  pipintro_desenharCorpo_(agora);
+  ESCALA_SE_COUBER_FIM();
+}
+static void pipintro_desenharCorpo_(Uint32 agora) {
   float a = anim_suave(entrada), dy, y;
   (void)agora;
   if (entrada < 0.002f) return;

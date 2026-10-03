@@ -14,6 +14,8 @@
 #include "player.h"
 #include "ponteiro.h"
 #include "text.h"
+#define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
+#include "escala.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -452,7 +454,14 @@ static void desenhoCena(int c, float x, float y, float a) {
   else desenhoCorrecoes(x, y, a);
 }
 
+static void novidades151_desenharCorpo_(Uint32 agora);
+// Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
 void novidades151_desenhar(Uint32 agora) {
+  ESCALA_SE_COUBER_INI(N151_W, N151_H);
+  novidades151_desenharCorpo_(agora);
+  ESCALA_SE_COUBER_FIM();
+}
+static void novidades151_desenharCorpo_(Uint32 agora) {
   float a = anim_suave(entrada), dy, top;
   float ar, ag, ab;
   const char *btnAgora = i18n("Agora não");

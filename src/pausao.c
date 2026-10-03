@@ -11,6 +11,8 @@
 #include "plrilha.h"
 #include "artehero.h"
 #include "tex_cache.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -31,7 +33,7 @@
 #define PAUSAO_LD_SIN     36.0f    // 23 px x 1,55
 #define PAUSAO_SIN_LINHAS     3
 #define PAUSAO_CHIP_H     56.0f
-#define PAUSAO_BARRA_Y   990.0f
+#define PAUSAO_BARRA_Y   (NV_TELA_H - 90.0f)   // 990 em 1080; tela virtual (escala.h)
 
 // Quantos nomes de elenco cabem. O web para em oito (:568); aqui o teto e o do
 // dado, nao o do layout: CatItem guarda seis.
@@ -155,7 +157,14 @@ static float metaPontos(const char *meta, float x, float y, float maxW, float a)
   return (float)txt_linha(TXT_CAPTION2, "Ag", 0, 0, 0, 255).h;
 }
 
+static void pausao_desenharCorpo_(Uint32 agora, const PausaoCena *cena);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void pausao_desenhar(Uint32 agora, const PausaoCena *cena) {
+  ESCALA_INI();
+  pausao_desenharCorpo_(agora, cena);
+  ESCALA_FIM();
+}
+static void pausao_desenharCorpo_(Uint32 agora, const PausaoCena *cena) {
   const CatItem *c;
   float a = anim, y, sobe, alt = 0.0f, hSin = 0.0f, hMeta = 0.0f, lw = 0.0f, lh = 0.0f;
   const char *marca;

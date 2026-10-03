@@ -135,7 +135,9 @@ typedef enum {
   TXT_NFONTES
 } TxtEstilo;
 
-typedef struct { GLuint tex; int w, h; } TxtLinha;
+// w/h em unidades de layout. pw/ph = tamanho da textura em pixels, preenchido
+// so para linhas da camada ampliada (gfx_escala); 0 no caminho normal.
+typedef struct { GLuint tex; int w, h; int pw, ph; } TxtLinha;
 
 // A selecao de interface e legenda usa IDs compartilhados, mas preferencias
 // independentes. Preserve os IDs legados: ficam gravados em dados existentes.

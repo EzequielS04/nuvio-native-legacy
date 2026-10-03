@@ -9,6 +9,8 @@
 #include "avisos.h"
 #include "redesaude.h"
 #include "tex_cache.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -586,7 +588,14 @@ int registro_evento(const SDL_Event *e) {
 #include "registro_ilha.inc"
 #include "registro_envio.inc"
 
+static void registro_desenharCorpo_(void);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void registro_desenhar(void) {
+  ESCALA_INI();
+  registro_desenharCorpo_();
+  ESCALA_FIM();
+}
+static void registro_desenharCorpo_(void) {
   if (!aberto && !aviso) return;
   // RECORTE DESLIGADO ANTES DE DESENHAR: se uma tela esquecer o recorte ligado,
   // o unico sintoma seria o painel de DIAGNOSTICO nao aparecer.

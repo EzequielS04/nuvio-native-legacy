@@ -26,6 +26,8 @@
 #include "layout.h"
 #include "idioma.h"
 #include "ponteiro.h"
+#define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
+#include "escala.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -318,7 +320,14 @@ static void destaque(float x, float y, float w, int i, float a) {
 
 static void ponteiroFoco(int b, int nada) { (void)nada; foco = b; }
 
+static void novidades142_desenharCorpo_(Uint32 agora);
+// Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
 void novidades142_desenhar(Uint32 agora) {
+  ESCALA_SE_COUBER_INI(N142_W, N142_H);
+  novidades142_desenharCorpo_(agora);
+  ESCALA_SE_COUBER_FIM();
+}
+static void novidades142_desenharCorpo_(Uint32 agora) {
   float a = anim_suave(entrada), dy;
   float ar, ag, ab;
   (void)agora;

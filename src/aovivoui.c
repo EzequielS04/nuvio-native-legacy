@@ -34,6 +34,8 @@
 #include "layout.h"
 #include "idioma.h"
 #include "plrui.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -115,7 +117,7 @@ static const char *iconeDe(const AoVivoOsd *o, int b) {
 // descricao e A SEGUIR —, a MESMA barra do player e a fileira: os botoes com
 // nome (Guia, Canal -, Canal +) em pilula, os de icone em disco 68 no material
 // da ilha, o focado vira a pilula no acento com o nome dentro.
-#define AV_BTN_Y   950.0f
+#define AV_BTN_Y   (NV_TELA_H - 130.0f)   // 950 em 1080; tela virtual (escala.h)
 #define AV_BTN_D    68.0f
 
 // Com nome em repouso: os sem icone (Canal -/+) e o Guia, a porta principal.
@@ -166,7 +168,14 @@ static float seloAoVivo(float x, float y, float h, float a) {
   return w;
 }
 
+static void aovivo_osd_desenharCorpo_(const AoVivoOsd *o, float a);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
+  ESCALA_INI();
+  aovivo_osd_desenharCorpo_(o, a);
+  ESCALA_FIM();
+}
+static void aovivo_osd_desenharCorpo_(const AoVivoOsd *o, float a) {
   int i;
   time_t agoraT = time(NULL);
   if (a <= 0.004f || !o) return;
@@ -325,7 +334,14 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
 // ZAPPING: ilha na margem (era um cartao 900x132 opaco), com a marca, o
 // numero, o nome, o programa que entra e "Trocando de canal…" com o ponto que
 // respira; "+3 canais" ao saltar varios.
+static void aovivo_banner_desenharCorpo_(const AoVivoBanner *b, float a);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void aovivo_banner_desenhar(const AoVivoBanner *b, float a) {
+  ESCALA_INI();
+  aovivo_banner_desenharCorpo_(b, a);
+  ESCALA_FIM();
+}
+static void aovivo_banner_desenharCorpo_(const AoVivoBanner *b, float a) {
   float w = 900.0f, h = 132.0f, x = AV_X, y = NV_TELA_H - 96.0f - h, tx;
   char s[64];
   if (a <= 0.004f || !b) return;
@@ -362,7 +378,16 @@ void aovivo_banner_desenhar(const AoVivoBanner *b, float a) {
 // Fonte, Guia — e a dica de CH+/CH-. player.c leva o foco (aovivo_erro_foco).
 static int erroFoco;
 void aovivo_erro_foco(int foco) { erroFoco = foco; }
+static void aovivo_erro_desenharCorpo_(const char *nome, const char *logo, const char *titulo,
+                          const char *dica, float a);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void aovivo_erro_desenhar(const char *nome, const char *logo, const char *titulo,
+                          const char *dica, float a) {
+  ESCALA_INI();
+  aovivo_erro_desenharCorpo_(nome, logo, titulo, dica, a);
+  ESCALA_FIM();
+}
+static void aovivo_erro_desenharCorpo_(const char *nome, const char *logo, const char *titulo,
                           const char *dica, float a) {
   const float w = 960.0f, pad = 44.0f, tw = w - 2.0f * pad;
   const char *tit = titulo && titulo[0] ? titulo : "Não foi possível abrir a fonte";

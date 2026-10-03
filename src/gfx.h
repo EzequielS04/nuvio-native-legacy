@@ -371,6 +371,21 @@ void gfx_mini_desenhar(const GfxMini *m, GfxRect r, float raioPx, float a);
 void gfx_mini_liberar(GfxMini *m);
 // Dentro da miniatura: a base de `r` some ate `alfa` (o .gv.fade do mockup).
 void gfx_mini_esvanecer(GfxRect r, float alfa);   // drawable real, para restaurar viewport
+// TAMANHO DA INTERFACE (Ajustes > Aparencia). As camadas que nao sao a home
+// nem o detalhe (Ajustes, player, folhas, ilhas, menus, modais) desenham numa
+// TELA VIRTUAL de 1920/s x 1080/s, e o gfx amplia tudo por s na hora de
+// rasterizar: retangulos, recortes, furos e alvos do ponteiro. O texto dessas
+// camadas e rasterizado JA no tamanho ampliado (text.c), nunca esticado.
+//   gfx_escala_ui      o fator configurado (1, 1.2, 1.3, 1.5)
+//   gfx_escala         o fator ATIVO agora (1 fora de uma camada ampliada)
+//   gfx_escala_entrar  liga o fator configurado; devolve o anterior
+//   gfx_escala_sair    devolve o anterior (aninhar e seguro: nao multiplica)
+// Com s = 1 nenhum caminho muda: e o mesmo pixel de antes.
+void  gfx_escala_ui_definir(float s);
+float gfx_escala_ui(void);
+float gfx_escala(void);
+float gfx_escala_entrar(void);
+void  gfx_escala_sair(float anterior);
 int  gfx_iniciar(void);
 void gfx_encerrar(void);
 

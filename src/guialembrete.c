@@ -11,6 +11,8 @@
 #include "anim.h"
 #include "layout.h"
 #include "idioma.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -112,7 +114,14 @@ int glem_pediu_assistir(char *id, size_t tam, char *nome, size_t tamNome,
   return 1;
 }
 
+static void glem_desenharCorpo_(Uint32 agora);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void glem_desenhar(Uint32 agora) {
+  ESCALA_INI();
+  glem_desenharCorpo_(agora);
+  ESCALA_FIM();
+}
+static void glem_desenharCorpo_(Uint32 agora) {
   float a = anim, ar, ag, ab;
   (void)agora;
   if (a < 0.01f) return;

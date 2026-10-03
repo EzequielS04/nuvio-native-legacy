@@ -28,6 +28,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ponteiro.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 
 // Mantem o header publico de Trakt estavel: estas leituras sao o contrato
 // interno entre a modal e as escritas assincronas do proprio port.
@@ -394,6 +396,13 @@ static void montar(void) {
 }
 
 static void abrirComum(int indice);
+// O cartaz vem da HOME, em pixels da tela real; o menu e camada ampliada e
+// mede pela tela virtual (escala.h). Desenhado na virtual ele cai no mesmo
+// lugar e no mesmo tamanho da tela.
+static GfxRect ctxDaHome(GfxRect r) {
+  float e = gfx_escala_ui();
+  return (GfxRect){ r.x / e, r.y / e, r.w / e, r.h / e };
+}
 void ctx_abrir(int indice) {
   if (holdCancelado) {
     holdCancelado = 0;
@@ -408,9 +417,9 @@ void ctx_abrir(int indice) {
     // So um CARTAZ: o destaque tambem e "item focado", mas o retangulo dele e
     // a arte de tela cheia, e ao lado dela nao ha lugar.
     if (home_item_focado(&hi) && hi.indice == indice && hi.rect.w > 8.0f && hi.rect.h > 8.0f &&
-        hi.rect.w < NV_TELA_W * 0.5f && hi.rect.h < NV_TELA_H * 0.7f) {
+        hi.rect.w < 1920.0f * 0.5f && hi.rect.h < 1080.0f * 0.7f) {
       temCartaz = 1;
-      cartazRect = hi.rect;
+      cartazRect = ctxDaHome(hi.rect);
       snprintf(cartazArte, sizeof cartazArte, "%s", hi.arte ? hi.arte : "");
     }
   }
@@ -1150,7 +1159,14 @@ static void desenhaConfirmar(const CatItem *ci, float a) {
   botaoConf(1, bx, y, i18n("Cancelar"), confAnim[1], a);
 }
 
+static void ctx_desenharCorpo_(Uint32 agora);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void ctx_desenhar(Uint32 agora) {
+  ESCALA_INI();
+  ctx_desenharCorpo_(agora);
+  ESCALA_FIM();
+}
+static void ctx_desenharCorpo_(Uint32 agora) {
   const CatItem *ci;
   const char *mensagem = NULL;
   float a = anim, alt, x, y, cab;
@@ -1202,7 +1218,7 @@ void ctx_desenhar(Uint32 agora) {
   if (temCartaz && !doPainel) {
     HomeItem hi;
     if (home_item_focado(&hi) && hi.indice == idx && hi.rect.w > 8.0f && hi.rect.h > 8.0f)
-      cartazRect = hi.rect;
+      cartazRect = ctxDaHome(hi.rect);
   }
 
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
@@ -1236,9 +1252,9 @@ void ctx_desenhar(Uint32 agora) {
   // O POSTER POR CIMA DO VEU, na mesma caixa e no mesmo raio do cartao da
   // home (ajustes_raio_poster_px): com `a` ele so desvela o que ja estava la.
   if (temCartaz && !doPainel && cartazArte[0]) {
-    GLuint t = tex_obter_larg(cartazArte, cartazRect.w);
+    GLuint t = tex_obter_larg(cartazArte, cartazRect.w * gfx_escala_ui());
     if (t) {
-      float raio = ajustes_raio_poster_px() / cartazRect.h, teto = 0.5f * cartazRect.w / cartazRect.h;
+      float raio = ajustes_raio_poster_px() / gfx_escala_ui() / cartazRect.h, teto = 0.5f * cartazRect.w / cartazRect.h;
       if (raio > teto) raio = teto;
       gfx_tex_aspect_atual = tex_aspecto(cartazArte);
       gfx_rect(cartazRect, t, GFX_CARD, 0, 0, 0, raio, 0, 0, 0, a);

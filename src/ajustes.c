@@ -20,6 +20,7 @@
 #include "linguas.h"
 #include "addons.h"
 #include "gfx.h"
+#include "escala.h"
 #include "text.h"
 #include "tex_cache.h"
 #include "badges.h"
@@ -121,7 +122,7 @@ static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foc
 // A janela da LISTA dentro da folha (Glass UI): abaixo do cabecalho da folha
 // (kicker, titulo e sub) ate 18 px da base da ilha.
 #define AJ_TOPO        199.0f
-#define AJ_BASE        1022.0f
+#define AJ_BASE        (NV_VTELA_H - 58.0f)   // 1022 na tela de 1080
 // Raio da linha em fracao do menor lado (o SDF do shader e normalizado):
 // 12px sobre 88 de altura.
 #define AJ_RAIO           0.14f
@@ -301,6 +302,11 @@ typedef enum {
   // selos-p<N>.txt (nao em ajustes.txt: o valor so espelha). No fim pelo mesmo
   // motivo: valor[] e CHAVE[] sao posicionais.
   AJ_SELOS_PACOTE, AJ_SELOS_PACOTE_ADD, AJ_SELOS_PACOTE_REM,
+  // TAMANHO DA INTERFACE (gfx.h: gfx_escala_ui): Ajustes, player, folhas, ilhas,
+  // menus e modais ampliados por 1,2 / 1,3 / 1,5; a home e a pagina do titulo
+  // ficam como estao. LOCAL (o tamanho e da tela, nao da conta). No fim pelo
+  // mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_TAMANHO_UI,
   AJ_N
 } OpcaoId;
 
@@ -318,6 +324,8 @@ static const char *V_LIVETV_ESPERA[] = { "Automática", "25 s", "45 s" };
 static const char *V_RELOGIO_POS[] = { "Automática", "Esquerda", "Direita" };
 // Indice gravado em fontePrazoLocal; ver ajustes_fonte_prazo_ms.
 static const char *V_FONTE_PRAZO[] = { "3 s", "5 s", "8 s", "Todos os add-ons" };
+// Indice gravado em tamanhoUiLocal; o fator sai de ajustes_tamanho_ui.
+static const char *V_TAMANHO_UI[] = { "100%", "120%", "130%", "150%" };
 static const char *V_SAIDA_PLAYER[] = { "Voltar para a home (minimizar na ilha)",
                                         "Voltar para a página do título" };
 static const char *V_LIVETV_MODO[] = { "A (padrão)", "B (sem seleção de faixa)", "C (payload de live)" };
@@ -907,6 +915,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Pacote de selos",                 V_SELOS_PACOTE, 4),   // por perfil: selospacote.c
   ACAO("Adicionar pacote de selos"),
   ACAO("Remover pacote"),
+  ESC("Tamanho da interface",            V_TAMANHO_UI, 4),    // local: tamanhoUiLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1077,6 +1086,7 @@ static const char *CHAVE[] = {
   "-guiaUso",
   // "-": a escolha mora em selos-p<N>.txt (por perfil), nao em ajustes.txt.
   "-selosPacote", "-selosPacoteAdd", "-selosPacoteRem",
+  "tamanhoUiLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1433,6 +1443,11 @@ int ajustes_addons_do_principal(void) { return lig(AJ_ADDONS_PRINCIPAL); }
 #endif
 int ajustes_relogio_ligado(void) { return lig(AJ_RELOGIO); }
 int ajustes_relogio_pos(void) { return valor[AJ_RELOGIO_POS]; }
+float ajustes_tamanho_ui(void) {
+  static const float F[] = { 1.0f, 1.2f, 1.3f, 1.5f };
+  int v = valor[AJ_TAMANHO_UI];
+  return v >= 0 && v < 4 ? F[v] : 1.0f;
+}
 int ajustes_saida_player_home(void) { return lig(AJ_RELOGIO) && valor[AJ_SAIDA_PLAYER] == 0; }
 int ajustes_selo_visto(void) { return lig(AJ_SELO_VISTO); }
 static void riscoNotar(int op, int antes);
@@ -2341,6 +2356,7 @@ void ajustes_dir(const char *dir) {
   aplicarIdioma(AJ_LEG_LINGUA);
   aplicarIdioma(AJ_AUD_LINGUA);
   txt_definir_fonte_interface((TxtFamilia)valor[AJ_FONTE_UI]);
+  gfx_escala_ui_definir(ajustes_tamanho_ui());
   // O teto de imagens escolhido vale desde o arranque, nao so quando a tela
   // de Ajustes e aberta. tex_iniciar ja rodou (main.c); isto so o corrige.
   if (valor[AJ_TEX_MB] > 0) tex_definir_orcamento_mb(ajustes_tex_mb());
@@ -3064,6 +3080,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
     case AJ_MEDIDOR:        /* o medidor e da GPU desta TV; o web nao tem */
+    case AJ_TAMANHO_UI:     /* o tamanho e desta tela, e o web nao tem */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
     case AJ_REACAO_CREDITOS: /* o web nao tem a pergunta */
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: /* o web nao tem o Seekr */
@@ -3975,6 +3992,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_IDIOMA: return "Idioma de toda a interface. Automático segue a sua conta e, sem ela, o idioma da TV. Não muda o idioma das legendas nem do áudio.";
     case AJ_GPU_EFEITOS: return "Automático mede a TV nos primeiros segundos e, se ela não der conta, tira os efeitos mais pesados. Completos mantém tudo; Leves tira desfoque e brilho para deixar a navegação mais lisa.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
+    case AJ_TAMANHO_UI: return "Aumenta os Ajustes, os controles do player, os menus, os painéis e os avisos — bom para TVs grandes ou para quem assiste de longe. A tela inicial e a página do título continuam do mesmo tamanho. Vale na hora.";
     case AJ_TEMA: return "Cor dos botões em foco e das marcas de estado. Os doze temas são os do app web e seguem a conta. Os dinâmicos tiram a cor do título em cena e ficam só nesta TV.";
     case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
     case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
@@ -4703,6 +4721,7 @@ static int definirValorDireto(int op, int novo) {
   if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) aplicarIdioma(op);
   if (op == AJ_IDIOMA) { idiomaEscolhido(); desc_repetir(); }
   if (op == AJ_FONTE_UI) txt_definir_fonte_interface((TxtFamilia)novo);
+  if (op == AJ_TAMANHO_UI) gfx_escala_ui_definir(ajustes_tamanho_ui());
   if (op == AJ_CW_FONTE || op == AJ_SALVOS_DEST) desc_repetir();
   if (op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS || op == AJ_CW_CONCLUIDO)
     desc_refazer_continuar();
@@ -5526,6 +5545,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_IDIOMA: case AJ_ANIM: case AJ_TEMA:
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER:
+    case AJ_TAMANHO_UI:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL:
@@ -5577,7 +5597,15 @@ void teclado_teste_texto(const char *t);
 void teclado_teste_foco(int f, int c);
 static int ajQuadroAddons;   // captura: a tela de addons no lugar de Ajustes
 #endif
+static void ajDesenharTudo(Uint32 agora);
+// "Tamanho da interface": Ajustes e uma camada ampliada (escala.h). O layout
+// das ilhas mede pela tela virtual e o desenho inteiro sai ampliado.
 void ajustes_desenhar(Uint32 agora) {
+  ESCALA_INI();
+  ajDesenharTudo(agora);
+  ESCALA_FIM();
+}
+static void ajDesenharTudo(Uint32 agora) {
   // A TELA E DONA DO PROPRIO FUNDO (Glass UI): a arte do titulo com o veu, e
   // as tres ilhas por cima. Ver ajustes_ux_desenho.inc.
 #ifdef AJUSTES_TESTE
@@ -5589,7 +5617,11 @@ void ajustes_desenhar(Uint32 agora) {
 
   // A folha de fileiras cobre a lista; o vinculo cobre as duas, porque ele e a
   // unica coisa aqui com prazo (o codigo do dispositivo expira).
-  if (filAberta) desenhaFileiras();
+  // A folha de fileiras fica em 1080p em qualquer "Tamanho da interface": e
+  // uma tabela de quatro colunas com o painel de previa ao lado, desenhada
+  // para a largura inteira; na tela virtual de 150% (1280) as colunas se
+  // atropelam. Ela ja ocupa a tela toda em 100%.
+  if (filAberta) { ESCALA_REAL_INI(); desenhaFileiras(); ESCALA_REAL_FIM(); }
   if (riscoFolha) desenhaRiscoFolha();
 
   // Por cima de tudo: enquanto um vinculo esta em andamento, ele e a pergunta

@@ -15,6 +15,8 @@
 #include "linguas.h"
 #include "plrui.h"
 #include "plrilha.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -731,7 +733,14 @@ static void ajustarRolagem(void) {
 #define IL_LN_H      88.0f
 #define IL_LN_VAO     4.0f
 #define IL_PE_H      47.0f
-#define IL_VIS        6
+// Linhas da lista a vista: 6, ou menos se a ilha nao couber na altura da tela
+// virtual (escala.h; em 150% sao 4). A conta: o miolo fixo da ilha (183), a
+// pilula da hora por cima (~60) e as margens de cima e de baixo.
+static int ilVis(void) {
+  int n = (int)((NV_TELA_H - 48.0f - 40.0f - 60.0f - 183.0f + 4.0f) / (88.0f + 4.0f));
+  return n > 6 ? 6 : n < 2 ? 2 : n;
+}
+#define IL_VIS        ilVis()
 #define IL_EST_CEL_H 92.0f
 #define IL_EST_TOPO  56.0f
 
@@ -938,7 +947,14 @@ static void corpoIlha(GfxRect c, float a, void *u) {
   else corpoLista(c, a);
 }
 
+static void faixas_desenharCorpo_(Uint32 agora);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void faixas_desenhar(Uint32 agora) {
+  ESCALA_INI();
+  faixas_desenharCorpo_(agora);
+  ESCALA_FIM();
+}
+static void faixas_desenharCorpo_(Uint32 agora) {
   (void)agora;
   if (anim < .01f) return;
   { int dir = plrilha_direita(), est = faixas_estilo_topo();

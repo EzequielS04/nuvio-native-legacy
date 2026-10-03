@@ -44,6 +44,8 @@
 #include "anim.h"
 #include "layout.h"
 #include "idioma.h"
+#define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -380,7 +382,14 @@ static void pontos(float x, float y, float a) {
   }
 }
 
+static void recintro_desenharCorpo_(Uint32 agora);
+// Cartao de tela quase cheia: ampliado so se ainda couber (escala.h).
 void recintro_desenhar(Uint32 agora) {
+  ESCALA_SE_COUBER_INI(RI_W, RI_H);
+  recintro_desenharCorpo_(agora);
+  ESCALA_SE_COUBER_FIM();
+}
+static void recintro_desenharCorpo_(Uint32 agora) {
   float a = anim_suave(entrada), dy, y, ap, dx;
   (void)agora;
   if (entrada < 0.002f) return;
