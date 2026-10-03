@@ -24,6 +24,7 @@
 #include "gfx.h"
 #include "text.h"
 #include "tex_cache.h"
+#include "socialvis.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -177,6 +178,12 @@ int main(int argc, char **argv) {
     ajustes_dir(dados_dir()); }
 
   montar(&d);
+  // O CARTAO DE AMIGOS le socialvis. Com -DNV_SOCIALVIS_DEMO (perfil_shot.sh)
+  // entram os amigos de exemplo de socialvis.c — tres, um vendo agora —, que
+  // e o caso do mockup; sem a flag o cartao sai no estado sem amigos.
+#ifdef NV_SOCIALVIS_DEMO
+  socialvis_demo(4);
+#endif
 
   // 1. CARREGANDO: o esqueleto tem de cair nas mesmas caixas do conteudo real.
   //    Compare esta captura com a seguinte — nada pode saltar de lugar.

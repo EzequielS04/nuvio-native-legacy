@@ -133,9 +133,8 @@ static int bibTinta2(void) { return 205; }
 // tres metros, e "Display·Artwork" vira uma palavra colada. O ponto continua
 // sendo o separador visual, nao uma virgula nem um segundo rotulo.
 #define BIB_PICK_SEP_GAP 7.0f
-// Onde a grade de titulos/listas comeca com os seletores compactos: 212 + 56 +
-// 32 de respiro. NV_BIB_GRADE_Y (354) era o valor com as caixas de 110.
-#define BIB_GRADE_Y_TITULOS 300.0f
+// Onde a grade de titulos/listas comeca: ver BIB_GRADE_Y (o mockup).
+#define BIB_GRADE_Y_TITULOS BIB_GRADE_Y
 
 // LISTA (a exibicao alternativa): uma linha por titulo, cartaz 2:3 a
 // esquerda, titulo + meta rica no meio e a COLUNA DA NOTA a direita.
@@ -218,9 +217,43 @@ static int bibTinta2(void) { return 205; }
 #define BIB_LC_PAD       16.0f
 #define BIB_LC_ENTRE     32.0f    // entrelinha do titulo de duas linhas
 
-// Onde a grade comeca em cada estado. Com uma lista aberta nao ha a faixa de
-// seletores, entao a grade sobe.
-#define BIB_GRADE_Y_ABERTA 264.0f
+// --- O MOCKUP APROVADO (Glass UI "ilha", tela 9; out/2026) ---------------
+//
+// Dono, ao lado da captura: "o mockup ta bem mais polido que a build, nao
+// podemos errar". A pagina passa a ser a do glass-ilha.html, em pixel de
+// 1920x1080:
+//   - titulo 56/800 em y 64 e, logo abaixo, o resumo ("14 titulos · sua
+//     watchlist") no lugar de subtitulo; o selo da origem a direita, na linha
+//     de base do resumo;
+//   - UMA faixa em y 193: o seletor segmentado dos modos COM A CONTAGEM de
+//     cada um, um fio vertical, e os tres filtros como chips de vidro "rotulo
+//     cinza + valor branco";
+//   - grade de cartazes de 220x330 com 26 de vao em ate SETE colunas, a 36 da
+//     faixa; o cartaz em foco sobe (escala 1,08 a partir do centro) com sombra
+//     longa, e o titulo dele clareia e abre em ate duas linhas.
+// Corpos calibrados pela LARGURA medida na captura do mockup (ver a mesma nota
+// em agendaui.c, escTitulo): a Inter variavel do navegador e ~9% mais larga
+// abaixo de 24 px que a Inter estatica daqui.
+#define BIB_TOPO          64.0f
+#define BIB_FAIXA_Y      193.0f
+#define BIB_SEG_H         55.0f   // .seg: 5 + (23 + 2 x 11) + 5
+#define BIB_SEG_PAD        5.0f
+#define BIB_SEG_ITEM_PADX 20.0f
+#define BIB_SEG_ITEM_GAP   4.0f
+#define BIB_CHIP_H        45.0f   // .vid dos filtros: 12 + 21 + 12
+#define BIB_CHIP_PADX     20.0f
+#define BIB_FAIXA_GAP     16.0f   // entre seletor, fio e chips
+#define BIB_GRADE_Y      284.0f   // faixa + 36
+#define BIB_COLUNAS_MAX      7
+#define BIB_CARD_W       220.0f
+#define BIB_POSTER_H     330.0f
+#define BIB_CARD_GAP      26.0f
+#define BIB_TIT_GAP       10.0f
+#define BIB_LINHA_PASSO  422.0f   // 284 -> 706 no mockup
+#define BIB_FOCO_ESCALA    0.08f
+// Onde a grade comeca em cada estado: o mesmo y, com ou sem lista aberta — as
+// acoes da lista ocupam a faixa dos filtros.
+#define BIB_GRADE_Y_ABERTA BIB_GRADE_Y
 
 // "Salvos" = QUERO VER, e ele tem DUAS fontes que caem na mesma marca
 // (CatItem.naLista): a watchlist do Trakt, posta ali pela descoberta, e a
@@ -268,12 +301,15 @@ static float recadoAte;
 static int filtro[CAT_MAX + SALVOS_MAX];
 static int nFiltro = 0;
 static int totalModo = 0;
+// Quantos titulos cada modo de titulos tem (Salvos, Colecao), para a contagem
+// do seletor segmentado. Refeito em reconstruir(), nunca por quadro.
+static int contaModo[2];
 static Foco foco;
 static float animModo[BIB_N_MODOS];
 static float animPick[3];
-static float animFoco[BIB_MAX_LINHAS][NV_BIB_COLUNAS];
+static float animFoco[BIB_MAX_LINHAS][BIB_COLUNAS_MAX];
 // Arte chegando, a mesma da home (revela.h): um registro por celula da grade.
-static RevelaArte revArte[BIB_MAX_LINHAS][NV_BIB_COLUNAS];
+static RevelaArte revArte[BIB_MAX_LINHAS][BIB_COLUNAS_MAX];
 // A ONDA da grade (revela.h): armada quando a grade e refeita do zero
 // (remapear sem preservar: entrar, trocar modo/filtro/ordem) e disparada no
 // primeiro quadro com celulas. Pagina que chega pela rede preserva o foco e
@@ -377,9 +413,12 @@ static float bibW(void) {
 // Cartoes de lista: continuam CINCO e estreitam (326 -> 297). O cartao e texto
 // em duas linhas, nao arte, e a densidade de cinco foi o pedido dele (ver
 // BIB_LC_COLS).
+// GLASS UI: cartaz de 220 com 26 de vao, ate sete colunas. A coluna e 1fr no
+// mockup (o cartaz de 220 encostado a esquerda de uma celula de 224,6), entao
+// o passo e a largura util dividida pelas colunas: 250,6 nos 1728.
 static int colunasCartaz(void) {
-  int n = (int)((bibW() + NV_BIB_CARD_GAP) / (NV_BIB_CARD_W + NV_BIB_CARD_GAP));
-  return n < 1 ? 1 : n > NV_BIB_COLUNAS ? NV_BIB_COLUNAS : n;
+  int n = (int)((bibW() + BIB_CARD_GAP) / (BIB_CARD_W + BIB_CARD_GAP));
+  return n < 1 ? 1 : n > BIB_COLUNAS_MAX ? BIB_COLUNAS_MAX : n;
 }
 static float larguraCartaoLista(void) {
   float w = (bibW() - (BIB_LC_COLS - 1) * (BIB_LC_PASSO - BIB_LC_W)) / BIB_LC_COLS;
@@ -391,7 +430,7 @@ static int colunas(void) {
 }
 static float passoColuna(void) {
   return estado() == EST_LISTAS ? larguraCartaoLista() + (BIB_LC_PASSO - BIB_LC_W)
-                                : (NV_BIB_CARD_W + NV_BIB_CARD_GAP);
+                                : (bibW() + BIB_CARD_GAP) / (float)colunasCartaz();
 }
 // A ALTURA DA LINHA E A DA ROLAGEM: alturaLinha/passoLinha sao a UNICA fonte
 // para o laco de desenho e para o calculo de scrollY em biblioteca_atualizar.
@@ -400,13 +439,13 @@ static float passoColuna(void) {
 static float alturaLinha(void) {
   if (exibicao == VIS_LISTA) return estado() == EST_LISTAS ? BIB_LL_H : BIB_LIN_H;
   if (estado() == EST_LISTAS) return BIB_LC_H;
-  // poster + gap + titulo (32/500, lh 1.18 -> 37.8)
-  return NV_BIB_POSTER_H + NV_BIB_TIT_GAP + 37.8f;
+  // poster + 10 + o titulo em ate duas linhas (o focado abre a segunda)
+  return BIB_POSTER_H + BIB_TIT_GAP + 14.0f + 52.0f;
 }
 static float passoLinha(void) {
   if (exibicao == VIS_LISTA) return estado() == EST_LISTAS ? BIB_LL_PASSO : BIB_LIN_PASSO;
   if (estado() == EST_LISTAS) return BIB_LC_LINHA;
-  return NV_BIB_LINHA_PASSO;
+  return BIB_LINHA_PASSO;
 }
 static float gradeY(void) {
   return estado() == EST_ITENS ? BIB_GRADE_Y_ABERTA : BIB_GRADE_Y_TITULOS;
@@ -518,10 +557,36 @@ static int jaNoFiltro(const char *id) {
   return 0;
 }
 
+// QUANTOS TITULOS o modo `m` tem, sem filtro de tipo: a contagem do seletor
+// segmentado ("Salvos 14"). A MESMA regra de entrada e de "um cartaz por
+// titulo" de reconstruir — contar diferente do que a grade mostra seria o
+// numero mentindo. Usa `contados` como rascunho; reconstruir zera depois.
+static int contarModo(int m) {
+  int n = cat_n(), total = 0;
+  if (n > CAT_MAX) n = CAT_MAX;
+  nContados = 0;
+  for (int i = 0; i < n; i++) {
+    const CatItem *ci = cat_item(i);
+    if (!ci) continue;
+    if (!(m == MODO_SALVOS ? ci->naLista : (ci->naColecao || comprado[i]))) continue;
+    if (jaNoFiltro(ci->imdb)) continue;
+    if (nContados < CAT_MAX) contados[nContados++] = i;
+    total++;
+  }
+  if (m == MODO_SALVOS)
+    for (int k = salvos_n() - 1; k >= 0; k--) {
+      const SalvoItem *sv = salvos_item(k);
+      if (sv && sv->id[0] && cat_indice_por_imdb(sv->id) < 0) total++;
+    }
+  return total;
+}
+
 // Refaz a lista visivel de TITULOS (modos Salvos e Coleção).
 static void reconstruir(void) {
   int n = cat_n();
   if (n > CAT_MAX) n = CAT_MAX;
+  contaModo[0] = contarModo(MODO_SALVOS);
+  contaModo[1] = contarModo(MODO_NUVEM);
   nFiltro = 0;
   totalModo = 0;
   nContados = 0;
@@ -890,7 +955,7 @@ void biblioteca_atualizar(float dt, Uint32 agora) {
   linhas = nLinhas();
   if (linhas > BIB_MAX_LINHAS) linhas = BIB_MAX_LINHAS;
   for (r = 0; r < linhas; r++)
-    for (c = 0; c < colunas() && c < NV_BIB_COLUNAS; c++) {
+    for (c = 0; c < colunas() && c < BIB_COLUNAS_MAX; c++) {
       float alvo = focus_indice(&foco, ini + r, c) ? 1.0f : 0.0f;
       animFoco[r][c] = anim_mola(animFoco[r][c], alvo, dt,
                                  alvo > animFoco[r][c] ? NV_MOLA_FOCO : NV_MOLA_DESFOCO);
@@ -1008,14 +1073,14 @@ static int pilula(GfxRect r, float raio, float f, int escolhida) {
   float ar, ag, ab, v = anim_clamp(f, 0.0f, 1.0f);
   ajustes_acento(&ar, &ag, &ab);
   if (escolhida) gfx_cor(r, raio, ar, ag, ab, .22f * (1.0f - v));
-  else if (ajustes_vidro()) gfx_cor(r, raio, 1, 1, 1, .08f * (1.0f - v));
-  else gfx_cor(r, raio, .14f, .148f, .17f, 1.0f - v);
+  else if (ajustes_vidro()) gfx_cor(r, raio, 1, 1, 1, .06f * (1.0f - v));
+  else gfx_cor(r, raio, .082f, .086f, .102f, 1.0f - v);
   if (v > 0.01f) {
     if (ajustes_vidro()) gfx_vidro_pilula_cheia(r, raio, v, 1.0f);
     else { brilhoFoco(r, 0.9f, v, 1.0f); gfx_cor(r, raio, ar, ag, ab, v); }
   }
   if (v > 0.5f) return ajustes_tinta_foco();
-  return escolhida ? 250 : 220;
+  return escolhida ? 250 : 245;
 }
 
 // A SUPERFICIE DE UMA LINHA DA LISTA: em repouso um degrau acima da pagina
@@ -1076,40 +1141,90 @@ static float marcaTrakt(float x, float y, float h, int tinta, float alpha) {
   return w;
 }
 
-// AS ABAS SAO UM SELETOR SEGMENTADO (Glass UI; o mesmo das Fontes e do
-// Social): conteiner pilula a 5 % (solido: cinza opaco) atras dos tres modos,
-// o modo aberto num segmento um degrau mais claro e, com o foco nele, a pilula
-// cheia no acento. As posicoes dos modos nao mudam (NV_BIB_MODO_PASSO).
-static void desenhaModos(void) {
-  GfxRect c = { bibX() - 8.0f, NV_BIB_MODO_Y - 6.0f,
-                (BIB_N_MODOS - 1) * NV_BIB_MODO_PASSO + NV_BIB_MODO_W + 16.0f,
-                NV_BIB_MODO_H + 12.0f };
-  if (ajustes_vidro()) gfx_cor(c, 0.5f, 1, 1, 1, .05f);
-  else gfx_cor(c, 0.5f, .113f, .118f, .137f, 1.0f);
+// TEXTO REDUZIDO: a textura de um estilo desenhada em `esc` do tamanho. O
+// mockup usa corpos que o text.c nao tem (17, 18, 19,5); um estilo novo la seria
+// conflito com quem mexe em text.c em paralelo, entao se rasteriza no estilo
+// mais proximo ACIMA e reduz — reduzir 5-15% com GL_LINEAR nao borra.
+static void txtEsc(TxtLinha l, float x, float y, float esc, float a) {
+  GfxRect r;
+  if (!l.tex || a <= 0.001f) return;
+  r.x = floorf(x + 0.5f); r.y = floorf(y + 0.5f);
+  r.w = (float)l.w * esc; r.h = (float)l.h * esc;
+  gfx_rect(r, l.tex, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, a);
 }
-static void desenhaModo(int a, float f) {
-  float centro = bibX() + a * NV_BIB_MODO_PASSO + NV_BIB_MODO_W * 0.5f;
-  int sel = (a == modo);
-  TxtLinha l = txt_linha(TXT_CALLOUT, ROT_MODO[a], 150, 150, 150, 255);
-  if (sel) {
-    float ar, ag, ab, v = anim_clamp(f, 0.0f, 1.0f);
-    int t = v > 0.5f ? ajustes_tinta_foco() : 250;
-    GfxRect r = { centro - ((float)l.w + 40.0f) * 0.5f, NV_BIB_MODO_Y,
-                  (float)l.w + 40.0f, NV_BIB_MODO_H };
-    ajustes_acento(&ar, &ag, &ab);
-    if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .12f * (1.0f - v));
-    else gfx_cor(r, 0.5f, .204f, .212f, .243f, 1.0f - v);
-    if (v > 0.01f) {
-      if (ajustes_vidro()) gfx_vidro_pilula_cheia(r, 0.5f, v, 1.0f);
-      else { brilhoFoco(r, 0.9f, v, 1.0f); gfx_cor(r, 0.5f, ar, ag, ab, v); }
+// Corpos da faixa (medidos no mockup, ver BIB_TOPO): rotulo e valor dos chips
+// 18,5 (17 no CSS), nome do modo 20,5 (19), contagem 17,5 (16), titulo do
+// cartaz 19,5 (18). Os 600 do CSS (valor do chip, nome do modo) saem em BOLD,
+// pela regra de text.c para 600 sobre escuro: o Bold de 18 para o valor e o de
+// 33 reduzido para o nome do modo — o Medium deixava o seletor magro ao lado do
+// mockup.
+#define BIB_ESC_ROT  (18.5f / NV_FT_CAPTION2)
+#define BIB_ESC_VAL  1.0f   /* TXT_HERO_SEC, 18 bold */
+#define BIB_ESC_MODO (20.5f / NV_FT_ROW_TITULO)
+#define BIB_ESC_N    (17.5f / NV_FT_CAPTION2)
+#define BIB_ESC_TIT  (19.5f / NV_FT_HERO_META)
+
+// O SELETOR SEGMENTADO DOS MODOS (.seg do mockup, o mesmo das Fontes e do
+// Social): conteiner pilula com 5 de recuo, cada modo com 20 de recuo e a
+// CONTAGEM em cinza ao lado ("Salvos 14"), o modo aberto num segmento um
+// degrau mais claro e, com o foco nele, a pilula cheia no acento. As larguras
+// saem do texto. A contagem de Listas so aparece quando o modulo ja tem as
+// listas da fonte; antes disso um "0" seria mentira.
+static void textoModo(int a, char *num, size_t n) {
+  int v = a == MODO_LISTAS ? lst_n() : contaModo[a];
+  num[0] = 0;
+  if (a != MODO_LISTAS || v > 0) snprintf(num, n, "%d", v);
+}
+static float larguraModo(int a) {
+  char num[16];
+  float w = (float)txt_linha(TXT_ROW_TITULO, ROT_MODO[a], 140, 140, 140, 255).w * BIB_ESC_MODO;
+  textoModo(a, num, sizeof num);
+  if (num[0]) w += 9.0f + (float)txt_linha(TXT_CAPTION2, num, 93, 93, 93, 255).w * BIB_ESC_N;
+  return w + BIB_SEG_ITEM_PADX * 2.0f;
+}
+static float larguraSeletor(void) {
+  float w = BIB_SEG_PAD * 2.0f + BIB_SEG_ITEM_GAP * (BIB_N_MODOS - 1);
+  for (int a = 0; a < BIB_N_MODOS; a++) w += larguraModo(a);
+  return w;
+}
+static void desenhaModos(void) {
+  GfxRect c = { bibX(), BIB_FAIXA_Y, larguraSeletor(), BIB_SEG_H };
+  float x = c.x + BIB_SEG_PAD, ar, ag, ab;
+  ajustes_acento(&ar, &ag, &ab);
+  if (ajustes_vidro()) gfx_cor(c, 0.5f, 1, 1, 1, .06f);
+  else gfx_cor(c, 0.5f, .113f, .118f, .137f, 1.0f);          // #1d1e23
+  for (int a = 0; a < BIB_N_MODOS; a++) {
+    float w = larguraModo(a), v = anim_clamp(animModo[a], 0.0f, 1.0f);
+    GfxRect r = { x, c.y + BIB_SEG_PAD, w, BIB_SEG_H - BIB_SEG_PAD * 2.0f };
+    int sel = a == modo, t, tn;
+    char num[16];
+    TxtLinha l, ln;
+    if (sel) {
+      if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .14f * (1.0f - v));
+      else gfx_cor(r, 0.5f, .204f, .212f, .243f, 1.0f - v);  // #34363e
+      if (v > 0.01f) {
+        if (ajustes_vidro()) gfx_vidro_pilula_cheia(r, 0.5f, v, 1.0f);
+        else { brilhoFoco(r, 0.9f, v, 1.0f); gfx_cor(r, 0.5f, ar, ag, ab, v); }
+      }
     }
-    l = txt_linha(TXT_CALLOUT, ROT_MODO[a], t, t, t, 255);
-    txt_desenhar_alpha(l, r.x + (r.w - l.w) * 0.5f,
-                       r.y + (r.h - l.h) * 0.5f, 1.0f);
-  } else {
-    txt_desenhar_alpha(l, centro - l.w * 0.5f,
-                       NV_BIB_MODO_Y + (NV_BIB_MODO_H - l.h) * 0.5f, 1.0f);
+    t  = sel ? (v > 0.5f ? ajustes_tinta_foco() : 255) : 140;
+    tn = sel && v > 0.5f ? ajustes_tinta_foco2() : sel ? 118 : 93;
+    l = txt_linha(TXT_ROW_TITULO, ROT_MODO[a], t, t, t, 255);
+    txtEsc(l, r.x + BIB_SEG_ITEM_PADX, r.y + (r.h - (float)l.h * BIB_ESC_MODO) * 0.5f,
+           BIB_ESC_MODO, 1.0f);
+    textoModo(a, num, sizeof num);
+    if (num[0]) {
+      // Na linha de BASE do nome (align-items: baseline), nao no meio dele.
+      ln = txt_linha(TXT_CAPTION2, num, tn, tn, tn, 255);
+      txtEsc(ln, r.x + BIB_SEG_ITEM_PADX + (float)l.w * BIB_ESC_MODO + 9.0f,
+             r.y + (r.h + (float)l.h * BIB_ESC_MODO) * 0.5f - (float)ln.h * BIB_ESC_N - 1.0f,
+             BIB_ESC_N, 1.0f);
+    }
+    x += w + BIB_SEG_ITEM_GAP;
   }
+  // O fio vertical entre o seletor e os filtros (1 x 34, branco a 12%).
+  gfx_cor((GfxRect){ c.x + c.w + BIB_FAIXA_GAP, c.y + (c.h - 34.0f) * 0.5f, 1.0f, 34.0f },
+          0.0f, 1, 1, 1, .12f);
 }
 
 static void pickerTexto(int p, const char **rot, const char **val) {
@@ -1122,58 +1237,64 @@ static void pickerTexto(int p, const char **rot, const char **val) {
   }
 }
 
+// O CHIP DE FILTRO (.vid do mockup, raio 24, 12/20 de recuo): o rotulo em
+// cinza e o valor em branco 600, separados por um espaco — o "·" que existia
+// aqui saiu com o mockup. A largura sai do texto.
 static float pickerLargura(int p) {
   const char *rot, *val;
-  TxtLinha tr, tv, sep;
   pickerTexto(p, &rot, &val);
-  tr = txt_linha(TXT_CAPTION2, rot, 0, 0, 0, 255);
-  tv = txt_linha(TXT_CALLOUT, val, 0, 0, 0, 255);
-  sep = txt_linha(TXT_CAPTION2, "·", 0, 0, 0, 255);
-  return (float)tr.w + (float)sep.w + (float)tv.w + BIB_PICK_PADX * 2.0f
-       + BIB_PICK_SEP_GAP * 2.0f;
+  return (float)txt_linha(TXT_CAPTION2, rot, 117, 117, 117, 255).w * BIB_ESC_ROT + 6.0f
+       + (float)txt_linha(TXT_HERO_SEC, val, 245, 245, 245, 255).w * BIB_ESC_VAL
+       + BIB_CHIP_PADX * 2.0f;
 }
 
 static float pickerX(int p) {
-  float x = bibX();
+  float x = bibX() + larguraSeletor() + BIB_FAIXA_GAP * 2.0f + 1.0f;
   int i;
-  for (i = 0; i < p; i++) x += pickerLargura(i) + BIB_PICK_GAP;
+  for (i = 0; i < p; i++) x += pickerLargura(i) + BIB_FAIXA_GAP;
   return x;
 }
 
-// Seletor: largura real do rotulo + separador + valor + 48 px de respiro.
-// Os dois textos dividem a mesma linha; a dica de OK fica uma unica vez abaixo
-// da faixa, e nao dentro de cada pilula.
 static void desenhaPicker(int p, float f) {
   const char *rot, *val;
   float w = pickerLargura(p);
-  GfxRect r = { pickerX(p), NV_BIB_PICK_Y, w, BIB_PICK_H };
-  (void)pilula(r, raioPx(BIB_PICK_RAIO, r.w, r.h), f, 0);
-  { int valor = f > 0.5f ? ajustes_tinta_foco() : 235;
-    int rotulo = f > 0.5f ? ajustes_tinta_foco2() : 150;
-    int sepCor = f > 0.5f ? ajustes_tinta_foco2() : 150;
-    TxtLinha tr, tv, sep;
-    float x, y;
+  GfxRect r = { pickerX(p), BIB_FAIXA_Y + (BIB_SEG_H - BIB_CHIP_H) * 0.5f, w, BIB_CHIP_H };
+  float v = anim_clamp(f, 0.0f, 1.0f);
+  // Repouso: o vidro dos filtros (branco a 6%) ou, no solido, o #15161a do
+  // .vid; foco: a pilula cheia no acento, como todo botao do app.
+  if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .06f * (1.0f - v));
+  else gfx_cor(r, 0.5f, .082f, .086f, .102f, 1.0f - v);
+  if (v > 0.01f) {
+    float ar, ag, ab;
+    ajustes_acento(&ar, &ag, &ab);
+    if (ajustes_vidro()) gfx_vidro_pilula_cheia(r, 0.5f, v, 1.0f);
+    else { brilhoFoco(r, 0.9f, v, 1.0f); gfx_cor(r, 0.5f, ar, ag, ab, v); }
+  }
+  { int valor = v > 0.5f ? ajustes_tinta_foco() : 245;
+    int rotulo = v > 0.5f ? ajustes_tinta_foco2() : 117;
+    TxtLinha tr, tv;
+    float x = r.x + BIB_CHIP_PADX;
     pickerTexto(p, &rot, &val);
     tr = txt_linha(TXT_CAPTION2, rot, rotulo, rotulo, rotulo, 255);
-    sep = txt_linha(TXT_CAPTION2, "·", sepCor, sepCor, sepCor, 255);
-    tv = txt_linha(TXT_CALLOUT, val, valor, valor, valor, 255);
-    x = r.x + BIB_PICK_PADX;
-    y = r.y + (r.h - (float)tv.h) * 0.5f;
-    txt_desenhar_alpha(tr, x, r.y + (r.h - (float)tr.h) * 0.5f, 1.0f);
-    x += tr.w + BIB_PICK_SEP_GAP;
-    txt_desenhar_alpha(sep, x, r.y + (r.h - (float)sep.h) * 0.5f, 1.0f);
-    x += sep.w + BIB_PICK_SEP_GAP;
-    txt_desenhar_alpha(tv, x, y, 1.0f); }
+    tv = txt_linha(TXT_HERO_SEC, val, valor, valor, valor, 255);
+    txtEsc(tr, x, r.y + (r.h - (float)tr.h * BIB_ESC_ROT) * 0.5f, BIB_ESC_ROT, 1.0f);
+    x += (float)tr.w * BIB_ESC_ROT + 6.0f;
+    txtEsc(tv, x, r.y + (r.h - (float)tv.h * BIB_ESC_VAL) * 0.5f, BIB_ESC_VAL, 1.0f); }
 }
 
-// Barra de acoes de uma lista aberta. Tres pilulas largas: fixar, levar para a
-// Home e trocar o tipo de midia.
+// Barra de acoes de uma lista aberta: fixar, levar para a Home e trocar o tipo
+// de midia. Na faixa dos filtros, como CHIPS do mesmo corpo deles (a largura sai
+// do texto) — eram tres pilulas de 520/520/300 x 72, o dobro de qualquer botao
+// do mockup.
+static float larguraAcao(const char *rot) {
+  return (float)txt_linha(TXT_HERO_SEC, rot, 245, 245, 245, 255).w * BIB_ESC_VAL
+       + BIB_CHIP_PADX * 2.0f + 8.0f;
+}
 static void desenhaAcoes(void) {
-  static const float W[3] = { 520.0f, 520.0f, 300.0f };
   float x = bibX();
   int a;
   for (a = 0; a < 3; a++) {
-    GfxRect r = { x, NV_BIB_MODO_Y, W[a], 72.0f };
+    GfxRect r = { x, BIB_FAIXA_Y + (BIB_SEG_H - BIB_CHIP_H) * 0.5f, 0.0f, BIB_CHIP_H };
     const char *rot;
     int ligada;
     int cor;
@@ -1185,10 +1306,12 @@ static void desenhaAcoes(void) {
                            : ligada ? "Na Home" : "Adicionar à Home"; }
     else             { ligada = 0;
                        rot = strcasecmp(abertaMidia, "TV") ? "Filmes" : "Séries"; }
-    cor = pilula(r, NV_RAIO_PILL, animPick[a], ligada);
-    { TxtLinha l = txt_linha(TXT_CAPTION2, rot, cor, cor, cor, 255);
-      txt_desenhar_alpha(l, r.x + (r.w - l.w) * 0.5f, r.y + (r.h - l.h) * 0.5f, 1.0f); }
-    x += W[a] + 24.0f;
+    r.w = larguraAcao(rot);
+    cor = pilula(r, 0.5f, animPick[a], ligada);
+    { TxtLinha l = txt_linha(TXT_HERO_SEC, rot, cor, cor, cor, 255);
+      txtEsc(l, r.x + (r.w - (float)l.w * BIB_ESC_VAL) * 0.5f,
+             r.y + (r.h - (float)l.h * BIB_ESC_VAL) * 0.5f, BIB_ESC_VAL, 1.0f); }
+    x += r.w + BIB_FAIXA_GAP;
   }
 }
 
@@ -1264,28 +1387,31 @@ static void desenhaVazio(void) {
       txt_desenhar(d, cx - d.w * 0.5f, y + t1.h + t2.h + 58.0f); } }
 }
 
-// Um TITULO, na exibicao de cartaz. Continua sendo o que a tela sempre
-// desenhou: o contorno de foco e por DENTRO do poster e obedece Ajustes.
+// Um TITULO, na exibicao de cartaz (mockup: 220x330, canto 14, titulo 18/500 a
+// 62% a 10 do cartaz). O FOCO LEVANTA O CARTAZ: escala 1,08 a partir do
+// CENTRO (transform: scale do CSS) com a sombra longa embaixo (0 22 50 a 55%),
+// e o titulo clareia, ganha peso e abre em ate duas linhas, descendo os 14 que
+// o cartaz cresceu.
+//
+// O CONTORNO: o mockup nao tem. Ele so aparece se Ajustes > Foco no cartaz
+// ("Borda no cartaz em foco") estiver ligado — o ajuste e da pessoa e e
+// respeitado aqui como na Home. O padrao de fabrica dele e LIGADO (ajustes.c,
+// valor[]), entao quem quer o Glass UI do mockup desliga la.
 static void desenhaCartaz(const CatItem *ci, GfxRect base, float f, float a,
                           RevelaArte *rv, Uint32 agora) {
-  float esc = 1.0f + NV_BIB_FOCO_ESCALA * f;
+  float esc = 1.0f + BIB_FOCO_ESCALA * f;
   float bw = base.w * esc, bh = base.h * esc;
-  GfxRect card = { base.x - (bw - base.w) * 0.5f, base.y, bw, bh };
-  // 24 px de canto, como a folha do web manda — e NAO `24/NV_BIB_CARD_W`, que
-  // era a conta antiga. Dividir pela LARGURA sobre um cartaz 268x402 pedia
-  // 0,0896 da ALTURA, ou seja 36 px: meia vez mais redondo do que o medido, e
-  // diferente do canto de toda peca vizinha. Ver raioPx.
-  float raio = raioPx(24.0f, base.w, base.h);
+  GfxRect card = { base.x - (bw - base.w) * 0.5f, base.y - (bh - base.h) * 0.5f, bw, bh };
+  float raio = raioPx(14.0f * esc, card.w, card.h);
   const char *arte = ci ? posterprov_card_addon(ci->origem, ci->imdb, ci->tmdb, ci->tipo, ci->poster) : NULL;
   if (arte && !arte[0]) arte = NULL;
-  GLuint tex = arte ? tex_obter_larg(arte, NV_BIB_CARD_W) : 0;
+  // O teto de decodificacao sai da largura pedida: a do cartaz EM FOCO (238),
+  // para a arte nao amolecer quando ele sobe.
+  GLuint tex = arte ? tex_obter_larg(arte, BIB_CARD_W * (1.0f + BIB_FOCO_ESCALA)) : 0;
   // Arte chegando esvanece sobre o esqueleto (revela.h), como na home.
   float aArte = rv ? revela_arte(rv, tex != 0, agora) : 1.0f;
-  // O FOCO LEVANTA O CARTAZ (Glass UI, mockup tela 9): alem da escala, uma
-  // sombra curta embaixo dele, a mesma das ilhas. O contorno continua so se
-  // Ajustes > Foco no cartaz pedir.
   if (f > 0.01f)
-    gfx_rect((GfxRect){ card.x - 18.0f, card.y - 4.0f, card.w + 36.0f, card.h + 44.0f }, 0,
+    gfx_rect((GfxRect){ card.x - 50.0f, card.y + 22.0f - 50.0f, card.w + 100.0f, card.h + 100.0f }, 0,
              GFX_SOMBRA, 1.0f, 0, 0, 0.5f, 0, 0, 0, .55f * f * a);
   if (tex) {
     if (aArte < 0.999f)
@@ -1305,22 +1431,24 @@ static void desenhaCartaz(const CatItem *ci, GfxRect base, float f, float a,
       gfx_cor(card, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G,
               NV_COR_ESQUELETO_B, a);
   }
-  // A borda de foco do web e de 4px POR DENTRO do poster, e nao um halo por
-  // fora. Arte e o unico lugar onde o contorno sobrevive a regra de 16/09: nao
-  // da para preencher um cartaz. Ele obedece Ajustes > Foco no cartaz e sai na
-  // cor de realce, como nos outros treze pontos do app.
   if (f > 0.01f && ajustes_borda_foco()) {
     float ar, ag, ab;
     ajustes_acento(&ar, &ag, &ab);
-    // Espessura em PIXELS: era NV_BIB_POSTER_BORDA / card.w, mas o anel mede
-    // em fracao da ALTURA, e num cartaz 2:3 isso dava 6 px e nao 4.
     if (ajustes_vidro()) gfx_vidro_cartao(card, raio, f, a);
     else gfx_anel(card, raio, NV_BIB_POSTER_BORDA, ar, ag, ab, f * a);
   }
   if (ci) {
-    TxtLinha tl = txt_linha_corta(TXT_CALLOUT, ci->titulo, 255, 255, 255, 255,
-                                  base.w);
-    txt_desenhar_alpha(tl, base.x, base.y + base.h + NV_BIB_TIT_GAP, a * 0.98f);
+    float ty = base.y + base.h + BIB_TIT_GAP + 14.0f * f;
+    if (f > 0.5f) {
+      // Em foco: 18/600 branco (o Bold de 18, sem reducao), em ate duas
+      // linhas — "Killers of the Flower Moon" inteiro, como no mockup.
+      txt_bloco_corta(TXT_HERO_SEC, ci->titulo, 255, 255, 255, base.x, ty, base.w,
+                      22.0f, a, 2);
+    } else {
+      TxtLinha tl = txt_linha_corta(TXT_HERO_META, ci->titulo, 156, 156, 156, 255,
+                                    base.w / BIB_ESC_TIT);
+      txtEsc(tl, base.x, ty, BIB_ESC_TIT, a);
+    }
   }
 }
 
@@ -1720,8 +1848,8 @@ static void desenhaCabecalho(void) {
       }
     } else {
       TxtLinha t = txt_linha_corta(TXT_TITULO2, tit,
-                                   255, 255, 255, 255, bibW() - 320.0f);
-      txt_desenhar(t, bibX(), NV_BIB_Y);
+                                   245, 245, 243, 255, bibW() - 320.0f);
+      txt_desenhar(t, bibX(), BIB_TOPO);
     } }
 
   // Selo de origem, alinhado a direita da area util. Espacado de proposito: no
@@ -1754,17 +1882,23 @@ static void desenhaCabecalho(void) {
     // ficam em ~22 px, na mesma presenca do texto antigo, e os ~100 px de
     // largura ainda cabem folgados na margem direita.
     //
-    // Branco, que e a cor do PROPRIO arquivo, sobre o fundo escuro da pagina.
-    if (!strcmp(f, "TRAKT")) {
-      float w = marcaTraktLargura(38.0f);
-      if (w > 0.0f) {
-        marcaTrakt(NV_BIB_DIR - w, NV_BIB_Y + 4.0f, 38.0f, 255, 0.92f);
-        return;
+    // GLASS UI (mockup tela 9): o selo e uma etiqueta discreta (16/700,
+    // espacamento .14em, branco a 40%) na LINHA DE BASE do resumo, e nao mais
+    // um logo de 38 ao lado do titulo. O wordmark do Trakt fica, no tamanho em
+    // que as letras dele medem o mesmo que as do selo de texto (caixa de 24 ->
+    // ~13 px de letra) e na mesma tinta apagada.
+    { float yBase = BIB_TOPO + 81.0f;   // o fim da caixa do resumo
+      if (!strcmp(f, "TRAKT")) {
+        float w = marcaTraktLargura(24.0f);
+        if (w > 0.0f) {
+          marcaTrakt(NV_BIB_DIR - w, yBase - 24.0f + 3.0f, 24.0f, 255, 0.42f);
+          return;
+        }
       }
-    }
-    { float w = txt_tracking(TXT_CALLOUT, f, 128, 128, 128, -1.0f, 0.0f, 0.0f, 4.0f);
-      txt_tracking(TXT_CALLOUT, f, 128, 128, 128,
-                   NV_BIB_DIR - w, NV_BIB_Y + 10.0f, 0.9f, 4.0f); } }
+      { TxtLinha m = txt_linha(TXT_HERO_SEC, "Hg", 104, 104, 104, 255);
+        float w = txt_tracking(TXT_HERO_SEC, f, 104, 104, 104, -1.0f, 0.0f, 0.0f, 2.2f);
+        txt_tracking(TXT_HERO_SEC, f, 104, 104, 104,
+                     NV_BIB_DIR - w, yBase - (float)m.h, 1.0f, 2.2f); } } }
 }
 
 // Resumo a direita da barra de modos, e o recado da ultima acao quando houver.
@@ -1808,18 +1942,14 @@ static void desenhaResumo(void) {
              resumo);
     snprintf(resumo, sizeof resumo, "%s", comDica);
   }
-  { float linhaY = temAberta ? NV_BIB_MODO_Y : NV_BIB_PICK_Y;
-    float linhaH = temAberta ? 72.0f : BIB_PICK_H;
-    // O resumo divide a faixa com os seletores (ou as acoes): com a rail fixa
-    // eles andaram 144 para a direita e os 760 de antes caiam em cima do
-    // ultimo. O teto passa a ser o que sobra ate a borda, com 40 de fresta.
-    float fim = temAberta ? bibX() + 520.0f + 520.0f + 300.0f + 2.0f * 24.0f
-                          : pickerX(2) + pickerLargura(2);
-    float teto = NV_BIB_DIR - fim - 40.0f;
-    TxtLinha info = txt_linha_corta(TXT_CAPTION2, txt, 150, 153, 162, 255,
-                                    teto < 760.0f ? (teto > 0.0f ? teto : 0.0f) : 760.0f);
-    txt_desenhar(info, NV_BIB_DIR - info.w,
-                 linhaY + (linhaH - info.h) * 0.5f); }
+  // GLASS UI: o resumo e o SUBTITULO da pagina (mockup: "14 titulos · sua
+  // watchlist do Trakt", 19 a 55% logo abaixo do titulo) e nao mais um texto
+  // espremido a direita da faixa dos filtros. 21 aqui, pela medida de BIB_TOPO.
+  // O teto deixa a margem direita para o selo de origem.
+  { TxtLinha t = txt_linha(TXT_TITULO2, "Hg", 255, 255, 255, 255);
+    TxtLinha info = txt_linha_corta(TXT_CAPTION2, txt, 140, 140, 140, 255,
+                                    bibW() - 280.0f);
+    txt_desenhar(info, bibX(), BIB_TOPO + (float)t.h + 2.0f); }
 }
 
 void biblioteca_desenhar(Uint32 agora) {
@@ -1838,7 +1968,6 @@ void biblioteca_desenhar(Uint32 agora) {
   if (temAberta) desenhaAcoes();
   else {
     desenhaModos();
-    for (int a = 0; a < BIB_N_MODOS; a++) desenhaModo(a, animModo[a]);
     for (int p = 0; p < 3; p++)           desenhaPicker(p, animPick[p]);
   }
   desenhaResumo();
@@ -1878,7 +2007,7 @@ void biblioteca_desenhar(Uint32 agora) {
         int i = r * nc + c;
         float f, entra, ac, ty;
         if (i >= nCelulas) break;
-        f = (c < NV_BIB_COLUNAS) ? animFoco[r][c] : 0.0f;
+        f = (c < BIB_COLUNAS_MAX) ? animFoco[r][c] : 0.0f;
         if ((passe == 0) == (f > 0.01f)) continue;
         // ONDA: atraso pela coluna e pela fileira visiveis (revela.h).
         entra = ondaEm ? revela_entra(ondaEm, revela_onda_atraso(c, r - lin0), agora)
@@ -1900,8 +2029,8 @@ void biblioteca_desenhar(Uint32 agora) {
           else                       ci = itemFiltro(filtro[i], &tmp);
           if (exibicao == VIS_LISTA) desenhaLinhaTitulo(ci, ty, f, ac);
           else desenhaCartaz(ci, (GfxRect){ bibX() + c * passoC, ty,
-                                            NV_BIB_CARD_W, NV_BIB_POSTER_H }, f, ac,
-                             (r < BIB_MAX_LINHAS && c < NV_BIB_COLUNAS)
+                                            BIB_CARD_W, BIB_POSTER_H }, f, ac,
+                             (r < BIB_MAX_LINHAS && c < BIB_COLUNAS_MAX)
                                ? &revArte[r][c] : NULL, agora); }
       }
     }

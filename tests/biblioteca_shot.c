@@ -287,7 +287,20 @@ int main(int argc, char **argv) {
   // A interface em PORTUGUES, que e a lingua em que estas telas sao escritas e
   // revisadas. Sem ajustes_iniciar, `valor[AJ_IDIOMA]` fica no default estatico
   // e a captura sai em ingles com as chaves novas cruas no meio.
+  // NUVIO_SHOT_BORDA=0: "Borda no cartaz em foco" DESLIGADA, o foco do mockup
+  // Glass UI (o cartaz sobe, sem contorno). Sem a variavel vale o padrao de
+  // fabrica (ligada). Lido por ajustes_dir.
+  { const char *bv = getenv("NUVIO_SHOT_BORDA");
+    if (bv && *bv == '0') {
+      char cam[700];
+      FILE *fa;
+      snprintf(cam, sizeof cam, "%s/ajustes.txt", dados_dir());
+      fa = fopen(cam, "a");
+      if (fa) { fprintf(fa, "bordaFocoCartaz 1\n"); fclose(fa); }
+    } }
   ajustes_iniciar();
+  { const char *bv = getenv("NUVIO_SHOT_BORDA");
+    if (bv && *bv == '0') ajustes_dir(dados_dir()); }
   // NUVIO_SHOT_VIDRO=0: o material solido (Interface de vidro desligada).
   { const char *v = getenv("NUVIO_SHOT_VIDRO");
     ajustes_definir_vidro(!(v && *v == '0')); }
