@@ -76,13 +76,19 @@ int  menu_pediu_colecao(void);
 // OK SEGURADO em "Buscar": abrir o Spotlight. Consome a flag.
 int  menu_pediu_spotlight(void);
 
-// --- A BARRA DO MENU (layouts classicos) ------------------------------------
-// Nos layouts Moderna e Padrao o menu e uma barra de ALTURA INTEIRA colada na
-// borda esquerda (fina so com icones na rail, larga com rotulos aberta). Ela
-// ocupa o canto de cima a esquerda, entao a ilha do relogio se posiciona FORA
-// dela: x >= menu_barra_borda() + um vao. Devolve a borda direita da barra em
-// px (0 sem barra na tela, ou no layout Dinamica, que tem a pilula abaixo).
-// Abrindo ja devolve a largura aberta; fechando, a que ainda esta na tela.
+// --- O MENU DOS LAYOUTS CLASSICOS -------------------------------------------
+// MODERNA: uma ilha flutuante na margem da ilha do relogio (x NV_MENU_MODERNA_X,
+// logo abaixo dela): fechada a pilula vertical de icones, aberta o painel com
+// rotulos. PADRAO: o mesmo painel colado na borda esquerda e centrado na
+// altura (fechado, a mesma pilula estreita na borda). Na Moderna a ilha do
+// relogio se posiciona na margem do menu (ilha_posicionar). Devolve a borda
+// direita do menu em px da tela REAL (0 sem menu na tela, ou no layout
+// Dinamica, que tem a pilula abaixo). Abrindo ja devolve a largura aberta;
+// fechando, a que ainda esta na tela. A largura que o CONTEUDO reserva para a
+// rail fixa e ajustes_rail_largura_fixa (NV_MENU_RAIL_BORDA_* em layout.h).
+// O menu inteiro desenha em escala FIXA de 90 % (menu.c), nao no Tamanho da
+// interface; tudo o que esta API devolve ja vem em px da tela REAL.
+#define NV_MENU_MODERNA_X 48.0f   // px da tela REAL
 float menu_barra_borda(void);
 
 // --- PILULA DO LAYOUT DINAMICA (barra estilo Apple TV) ----------------------

@@ -1810,14 +1810,19 @@ float ajustes_raio_poster_px(void)    { return (float)valor[AJ_RAIO_DP] * 2.0f; 
 float ajustes_conteudo_x(void) {
   return ajustes_rail_largura_fixa() + NV_CONTENT_PAD;
 }
-// A barra MODERNA nao tem desenho proprio de rail fixa: com ela ligada
-// ajustes_rail_recolhida() responde 0 (a precedencia do web, acima) e o menu
-// pinta os mesmos 144 de desenhaRailFixa. Por isso um numero so para os dois
-// modos — conferido nas capturas de tests/*_shot.sh com NUVIO_RAIL=moderna.
+// A RAIL FIXA segue a pilula de icones que o menu desenha (menu.c, layouts
+// Moderna e Padrao do Glass UI): o conteudo comeca NV_MENU_RAIL_VAO depois da
+// borda direita dela — sem sobrepor e sem o vao largo da rail antiga de 144.
+// O menu desenha numa escala FIXA (90 %, menu.c), que nao segue o Tamanho da
+// interface: a borda ja esta em px da tela REAL.
 float ajustes_rail_largura_fixa(void) {
+  float borda;
   // Layout Dinamica: a barra e a pilula da Apple TV (menu.c), sem rail fixa.
   if (ajustes_home_layout() == HOME_LAYOUT_DINAMICA) return 0.0f;
-  return ajustes_rail_recolhida() ? 0.0f : NV_LEGACY_RAIL_W;
+  if (ajustes_rail_recolhida()) return 0.0f;
+  borda = ajustes_home_layout() == HOME_LAYOUT_PADRAO ? NV_MENU_RAIL_BORDA_PADRAO
+                                                      : NV_MENU_RAIL_BORDA_MODERNA;
+  return borda + NV_MENU_RAIL_VAO - NV_CONTENT_PAD;
 }
 void ajustes_area_conteudo(float padEsq, float padDir, float *x, float *w) {
   float x0 = ajustes_rail_largura_fixa() + padEsq;

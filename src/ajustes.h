@@ -269,10 +269,11 @@ void  ajustes_ui_grafico_memoria(float x, float y, float w, float h);
 // O mesmo grafico com o historico de exemplo (previa das Novidades da 1.8.0).
 void  ajustes_ui_grafico_exemplo(float x, float y, float w, float h);
 int   ajustes_relogio_cabe(void);
-// A FAIXA QUE A RAIL FIXA COBRE na borda esquerda, em px de tela: 144 com ela
-// presa (classica OU moderna — as duas pintam o mesmo desenhaRailFixa, e a
-// moderna desliga o recolhimento), 0 recolhida. E a UNICA fonte desse numero:
-// tela nenhuma deve somar NV_LEGACY_RAIL_W por conta propria.
+// A FAIXA QUE A RAIL FIXA RESERVA na borda esquerda, em px de tela: com ela
+// presa, a borda da pilula de icones do menu (Moderna 136, Padrao 88, vezes o
+// Tamanho da interface) + 64 de vao - os 104 do recuo do conteudo; 0 recolhida
+// ou no layout Dinamica. E a UNICA fonte desse numero: tela nenhuma deve somar
+// a largura da rail por conta propria.
 float ajustes_rail_largura_fixa(void);
 // Area util de uma tela que nasceu desenhada para a tela inteira (#rail fixa,
 // 26/09): `padEsq` e `padDir` sao os recuos que ela ja usava (80, 96, 104...).
