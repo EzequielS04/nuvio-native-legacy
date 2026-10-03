@@ -641,6 +641,20 @@ int main(int argc, char **argv) {
     salvar("aovivo-zap");
     extra = NULL;
   }
+  if (quer(argc, argv, "ilha-crescendo")) {
+    // Tres instantes da MESMA superficie: a pilula, o meio da mola e a lista.
+    abrir(&filme); simularFaixas();
+    quadros(10);
+    player_shot_estado(relogio, 4360.0f, 9420.0f, 1, 0, 0, 0);
+    quadros(40);
+    salvar("ilha-crescendo-1");
+    faixas_abrir_em(0);
+    teclaFaixas(SDLK_DOWN);
+    quadros(6);
+    salvar("ilha-crescendo-2");
+    quadros(90);
+    salvar("ilha-crescendo-3");
+  }
   puts("player_glass_shot: ok");
   return 0;
 }

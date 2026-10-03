@@ -205,7 +205,7 @@ void plrilha_desenhar(Uint32 agora) {
   // Corpo: entra quando a forma chegou perto do tamanho final, sai antes de ela
   // encolher (a lista nunca e espremida dentro da pilula).
   { float alvoC = 0.0f;
-    if (corpo && fabsf(H - alvoH) < 0.18f * alvoH && fabsf(W - alvoW) < 0.18f * alvoW) alvoC = 1.0f;
+    if (corpo && fabsf(H - alvoH) < 0.35f * alvoH && fabsf(W - alvoW) < 0.35f * alvoW) alvoC = 1.0f;
     corpoA = (anim_politica_reduzida || ajustes_animacoes_reduzidas())
            ? alvoC : anim_mola(corpoA, alvoC, dt, alvoC > corpoA ? 10.0f : 26.0f);
     if (!corpo && corpoA < 0.02f) { corpoA = 0.0f; temUlt = 0; } }
