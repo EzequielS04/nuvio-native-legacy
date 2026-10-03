@@ -80,13 +80,9 @@ static void corColecao(float *r,float *g,float *b) {
 // Mantem o acento reconhecivel, mas o mistura ao fundo para nao virar uma
 // faixa azul/branca solta sobre a arte. A excecao para tons quase brancos
 // preserva a leitura da tinta escura nos temas Branco e Grafite.
+// Desde os acentos de 03/10 e o proprio acento (ver botao_cor_foco).
 static void corFocoFonte(float *r, float *g, float *b) {
-  float ar, ag, ab, k = 0.74f;
-  ajustes_acento(&ar, &ag, &ab);
-  if (0.2126f * ar + 0.7152f * ag + 0.0722f * ab > 0.88f) k = 0.88f;
-  *r = 0.055f + (ar - 0.055f) * k;
-  *g = 0.058f + (ag - 0.058f) * k;
-  *b = 0.068f + (ab - 0.068f) * k;
+  ajustes_acento(r, g, b);
 }
 
 static void focoAbaFonte(GfxRect r, float f, float a) {
