@@ -1,6 +1,4 @@
-# Draft release notes — 1.7.3
-
-Local candidate; these notes do not announce publication.
+Where to watch in the source picker, cleaner Settings and reliability fixes.
 
 ## Added
 
@@ -20,7 +18,7 @@ Local candidate; these notes do not announce publication.
 
 ## Notes
 
-Availability comes from TMDB / JustWatch. Opening a service opens its app; it does not promise title-specific playback or subscription access. App launching and performance still require physical-TV validation.
+Availability comes from TMDB / JustWatch. Opening a service opens its app; it does not promise title-specific playback or subscription access. Streaming-app handoff and final LG/Samsung device validation remain pending. Android installation and startup were checked on a TCL TV; the Android 11 blank-launch report (#223) remains unresolved. Samsung Home autoplay (#228) and rating consistency (#229) are not claimed fixed. No universal performance gain is promised.
 
 New subtitle/audio sync and personal media servers remain planned for 1.8.
 
@@ -35,6 +33,9 @@ New subtitle/audio sync and personal media servers remain planned for 1.8.
 | Samsung 2022–2023 | Tizen 6.5 / 7.0 | `Nuvio-1.7.3-NuvioTpk65.tpk` |
 | Samsung 2024 and newer | Tizen 8.0 / 9.0 | `Nuvio-1.7.3-NuvioTpk.tpk` |
 | Samsung 2020 and newer | Tizen 5.5 or newer | `NuvioTV-1.7.3-tizen.wgt` |
+| Android TV / Google TV | Android 7 or newer | `Nuvio-1.7.3-android.apk` |
 
 Samsung native is optional. The WGT uses the TV's installation/signing workflow. Update libraries and Homebrew metadata are generated locally; users do not install those manually.
 
+
+Validation: 225 complete regression checks passed, with a pre-existing anime-detail failure, one partial account test and one service-dependent skip documented. Additional Android background-query and sanitizer checks passed. Package integrity and update libraries were verified.
