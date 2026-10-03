@@ -43,9 +43,9 @@ static void ilhaMat(GfxRect r, float raioPx) {
     gfx_luz_canto(r, raio, r.w * 0.22f, -r.h * 0.40f, r.h * 0.62f, 1, 1, 1, 0.10f);
   } else gfx_cor(r, raio, 0.082f, 0.086f, 0.102f, 1);
 }
-static TxtLinha t(TxtEstilo e, const char *s) { return txt_linha(e, s, DS_TX, 255); }
+static TxtLinha dsT(TxtEstilo e, const char *s) { return txt_linha(e, s, DS_TX, 255); }
 static float stat(const char *k, const char *v, float x, float y, float w) {
-  TxtLinha lk = t(TXT_AJ_ESTADO, k), lv = t(TXT_AJ_ESTADO, v);
+  TxtLinha lk = dsT(TXT_AJ_ESTADO, k), lv = dsT(TXT_AJ_ESTADO, v);
   gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f);
   txt_desenhar_alpha(lk, x, y + 12, 0.45f);
   txt_desenhar_alpha(lv, x + w - lv.w, y + 12, 0.88f);
@@ -61,8 +61,8 @@ static void pilula(void) {
   { char q[40]; snprintf(q, sizeof q, "%s fps", a); snprintf(a, sizeof a, "%s", q); }
   { char p[16]; num(p, sizeof p, uPior, 0); snprintf(b, sizeof b, i18n("pior %s ms"), p); }
   snprintf(c, sizeof c, "%.0f MB", uRss);
-  la = lento ? txt_linha(TXT_G23B, a, 232, 184, 74, 255) : t(TXT_G23B, a);
-  lb = t(TXT_G22M, b); lc = t(TXT_G22M, c);
+  la = lento ? txt_linha(TXT_G23B, a, 232, 184, 74, 255) : dsT(TXT_G23B, a);
+  lb = dsT(TXT_G22M, b); lc = dsT(TXT_G22M, c);
   w = 24 + 9 + 14 + la.w + 14 + 1 + 14 + lb.w + 14 + 1 + 14 + lc.w + 24;
   x = NV_TELA_W - 48 - w;
   ilhaMat((GfxRect){ x, y, w, h }, 28);
@@ -87,12 +87,12 @@ static void ilha(void) {
   ilhaMat((GfxRect){ x0, y0, w, h }, 36);
   // cabecalho
   gfx_icone((GfxRect){ x, y0 + 20, 24, 24 }, "aj_activity", 0.953f, 0.949f, 0.937f, 0.85f);
-  { TxtLinha l = t(TXT_ILHA_NOME, "Desempenho"); txt_desenhar(l, x + 36, y0 + 32 - l.h * 0.5f); }
-  { TxtLinha l = t(TXT_G18M, "a cada 3 s"); txt_desenhar_alpha(l, x0 + w - 28 - l.w, y0 + 32 - l.h * 0.5f, 0.5f); }
+  { TxtLinha l = dsT(TXT_ILHA_NOME, "Desempenho"); txt_desenhar(l, x + 36, y0 + 32 - l.h * 0.5f); }
+  { TxtLinha l = dsT(TXT_G18M, "a cada 3 s"); txt_desenhar_alpha(l, x0 + w - 28 - l.w, y0 + 32 - l.h * 0.5f, 0.5f); }
   gfx_cor((GfxRect){ x0, y0 + 63, w, 1 }, 0, 1, 1, 1, 0.07f);
   y = y0 + 64 + 22;
   num(v, sizeof v, uFps, 1);
-  { TxtLinha n = lento ? txt_linha(TXT_AJ_NUM64, v, 232, 184, 74, 255) : t(TXT_AJ_NUM64, v), f = t(TXT_AJ_TEXTO, "fps");
+  { TxtLinha n = lento ? txt_linha(TXT_AJ_NUM64, v, 232, 184, 74, 255) : dsT(TXT_AJ_NUM64, v), f = dsT(TXT_AJ_TEXTO, "fps");
     float base = y + n.h * 0.8f;
     txt_desenhar(n, x, y);
     txt_desenhar_alpha(f, x + n.w + 12, base - f.h * 0.78f, 0.55f);
@@ -104,8 +104,8 @@ static void ilha(void) {
       snprintf(b, sizeof b, "%d", uJanks);
       // A linha de texto perde os espacos das pontas quando tem acento ou
       // "·": os espacos entram a mao.
-      l1 = t(TXT_AJ_ESTADO, i18n("pior")); l2 = t(TXT_LOG_18B, p); l3 = t(TXT_AJ_ESTADO, "·");
-      l4 = t(TXT_LOG_18B, b); l5 = t(TXT_AJ_ESTADO, i18n("janks"));
+      l1 = dsT(TXT_AJ_ESTADO, i18n("pior")); l2 = dsT(TXT_LOG_18B, p); l3 = dsT(TXT_AJ_ESTADO, "·");
+      l4 = dsT(TXT_LOG_18B, b); l5 = dsT(TXT_AJ_ESTADO, i18n("janks"));
       xd -= l5.w; txt_desenhar_alpha(l5, xd, base - l5.h * 0.78f, 0.6f); xd -= esp;
       xd -= l4.w; txt_desenhar(l4, xd, base - l4.h * 0.78f); xd -= esp;
       xd -= l3.w; txt_desenhar_alpha(l3, xd, base - l3.h * 0.78f, 0.6f); xd -= esp;
@@ -123,14 +123,14 @@ static void ilha(void) {
       else gfx_cor((GfxRect){ bx, gy + gh - hh, pw - 2, hh }, 0, 0.953f, 0.949f, 0.937f, 0.18f);
     }
     for (dx = 0; dx < gw; dx += 10) gfx_cor((GfxRect){ gx + dx, ly, 4, 1 }, 0, 1, 1, 1, 0.22f);
-    { TxtLinha l = t(TXT_AJ_MINI12, "33 ms"); txt_desenhar_alpha(l, gx + 4, ly - 6 - l.h, 0.45f); }
+    { TxtLinha l = dsT(TXT_AJ_MINI12, "33 ms"); txt_desenhar_alpha(l, gx + 4, ly - 6 - l.h, 0.45f); }
     y += 90 + 6; }
   { char ha[48];
     TxtLinha a, b;
     int seg = nSerie * 3;
     if (seg < 60) snprintf(ha, sizeof ha, i18n("pior quadro · há %d s"), seg);
     else snprintf(ha, sizeof ha, i18n("pior quadro · há %d min"), (seg + 30) / 60);
-    a = t(TXT_AJ_MINI14, ha); b = t(TXT_AJ_MINI14, "agora");
+    a = dsT(TXT_AJ_MINI14, ha); b = dsT(TXT_AJ_MINI14, "agora");
     txt_desenhar_alpha(a, x, y, 0.4f); txt_desenhar_alpha(b, x + cw - b.w, y, 0.4f);
     y += 16 + 14; }
   snprintf(v, sizeof v, "%.0f MB", uRss);
@@ -143,10 +143,10 @@ static void ilha(void) {
   y += stat(i18n("Despejadas"), v, x, y, cw);
   gfx_cor((GfxRect){ x, y, cw, 1 }, 0, 1, 1, 1, 0.07f);
   y += 12;
-  { TxtLinha k = t(TXT_ILHA_GENERO, "Cache de imagens"), l;
+  { TxtLinha k = dsT(TXT_ILHA_GENERO, "Cache de imagens"), l;
     float fr = teto > 0 ? (float)bytes / (float)teto : 0;
     snprintf(v, sizeof v, "%ld / %ld MB", bytes >> 20, teto >> 20);
-    l = t(TXT_ILHA_GENERO, v);
+    l = dsT(TXT_ILHA_GENERO, v);
     txt_desenhar_alpha(k, x, y, 0.45f);
     txt_desenhar_alpha(l, x + cw - l.w, y, 0.88f);
     y += 20 + 9;

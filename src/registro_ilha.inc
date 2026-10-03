@@ -243,14 +243,14 @@ static float rgLinhaFpsE(const RegLinha *L, float x, float y, float al, TxtEstil
 #define DT() { PC(en, "·", dt); pc[np - 1].antes = esp; pc[np - 1].depois = esp; }
   rgNum(v, sizeof v, f.fps, 1); PC(eb, v, f.fps < 45.0f ? lento : b); PC(en, " fps", n);
   DT();
-  PC(en, i18n("pior "), n); rgNum(v, sizeof v, f.pior, 1); PC(eb, v, b); PC(en, " ms", n);
+  PC(en, i18n("pior"), n); PC(en, " ", n); rgNum(v, sizeof v, f.pior, 1); PC(eb, v, b); PC(en, " ms", n);
   DT();
   snprintf(v, sizeof v, "%d", f.janks); PC(eb, v, b); PC(en, " janks", n);
   DT();
-  PC(en, i18n("texturas na tela "), n); snprintf(v, sizeof v, "%d", f.tela); PC(eb, v, b);
+  PC(en, i18n("texturas na tela"), n); PC(en, " ", n); snprintf(v, sizeof v, "%d", f.tela); PC(eb, v, b);
   PC(en, " · ", n); snprintf(v, sizeof v, "%.0f", f.telaMb); PC(eb, v, b); PC(en, " MB", n);
   DT();
-  PC(en, i18n("memória "), n); snprintf(v, sizeof v, "%.0f", f.rss); PC(eb, v, b); PC(en, " MB", n);
+  PC(en, i18n("memória"), n); PC(en, " ", n); snprintf(v, sizeof v, "%.0f", f.rss); PC(eb, v, b); PC(en, " MB", n);
 #undef PC
 #undef DT
   for (i = 0; i < np; i++) {
