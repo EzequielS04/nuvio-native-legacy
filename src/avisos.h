@@ -114,6 +114,7 @@ int  avisos_envio_info(AvisosEnvio *o);
 #ifdef AVISOS_TESTE_ENVIO
 void avisos_teste_envio(int estado, int motivo, int http, const char *codigo, long bytes, int linhas);
 void avisos_teste_envio_auto(long haSeg, int http);
+void avisos_teste_queda(const char *texto);
 #endif
 
 // A LISTA COMO COMPONENTE, para a aba AVISOS do painel de Salvos: quem hospeda

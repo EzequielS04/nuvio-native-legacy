@@ -1022,11 +1022,15 @@ static void anunciarItem(const Aviso *it) {
       if (ajustes_envio_auto()) return;
       snprintf(txt, sizeof txt, "%s", i18n("O app fechou sozinho da última vez"));
       e.tipo = ILHA_ERRO; e.prior = ILHA_P2; e.icone = "aj_triangle-alert"; e.ms = 9000u;
-      snprintf(m.titulo, sizeof m.titulo, "%s", it->titulo);
+      // O titulo do modal e a frase inteira (mockup do registro, quadro 14).
+      snprintf(m.titulo, sizeof m.titulo, "%s", txt);
       snprintf(m.texto, sizeof m.texto, "%s", it->texto);
       snprintf(m.icone, sizeof m.icone, "aj_triangle-alert");
       m.tipo = ILHA_ERRO; m.nBotoes = 2;
       snprintf(m.botao[0], sizeof m.botao[0], "%s", i18n("Enviar registro"));
+      snprintf(m.botaoIcone[0], sizeof m.botaoIcone[0], "aj_send");
+      snprintf(m.kicker, sizeof m.kicker, "%s", i18n("Aviso"));
+      m.cabecalho = 1;
       snprintf(m.botao[1], sizeof m.botao[1], "%s", i18n("Agora não"));
       e.modal = &m;
       break;
@@ -1469,6 +1473,16 @@ int avisos_envio_info(AvisosEnvio *o) {
 }
 
 #ifdef AVISOS_TESTE_ENVIO
+// A queda da sessao anterior na ilha, como o arranque a anunciaria.
+void avisos_teste_queda(const char *texto) {
+  Aviso a;
+  memset(&a, 0, sizeof a);
+  snprintf(a.id, sizeof a.id, "teste:crash");
+  a.tipo = AV_CRASH;
+  snprintf(a.titulo, sizeof a.titulo, "%s", i18n("O app fechou sozinho"));
+  snprintf(a.texto, sizeof a.texto, "%s", texto);
+  anunciarItem(&a);
+}
 void avisos_teste_envio(int estado, int motivo, int http, const char *codigo, long bytes, int linhas) {
   envioEstado = estado; envMotivo = motivo; envHttp = http; envBytes = bytes; envLinhas = linhas;
   envQuando = time(NULL);

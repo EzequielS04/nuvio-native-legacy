@@ -61,8 +61,8 @@ static void pilula(void) {
   { char q[40]; snprintf(q, sizeof q, "%s fps", a); snprintf(a, sizeof a, "%s", q); }
   { char p[16]; num(p, sizeof p, uPior, 0); snprintf(b, sizeof b, i18n("pior %s ms"), p); }
   snprintf(c, sizeof c, "%.0f MB", uRss);
-  la = lento ? txt_linha(TXT_ILHA_ITEM, a, 232, 184, 74, 255) : t(TXT_ILHA_ITEM, a);
-  lb = t(TXT_PG_ROTULO, b); lc = t(TXT_PG_ROTULO, c);
+  la = lento ? txt_linha(TXT_G23B, a, 232, 184, 74, 255) : t(TXT_G23B, a);
+  lb = t(TXT_G22M, b); lc = t(TXT_G22M, c);
   w = 24 + 9 + 14 + la.w + 14 + 1 + 14 + lb.w + 14 + 1 + 14 + lc.w + 24;
   x = NV_TELA_W - 48 - w;
   ilhaMat((GfxRect){ x, y, w, h }, 28);
@@ -98,17 +98,18 @@ static void ilha(void) {
     txt_desenhar_alpha(f, x + n.w + 12, base - f.h * 0.78f, 0.55f);
     // "pior 21 ms · 0 janks" a direita, numeros em branco forte
     { char a[16], b[16];
-      TxtLinha l1, l2, l3, l4;
-      float xd = x + cw;
+      TxtLinha l1, l2, l3, l4, l5;
+      float xd = x + cw, esp = (float)(txt_largura(TXT_AJ_ESTADO, "a a") - txt_largura(TXT_AJ_ESTADO, "aa"));
       num(a, sizeof a, uPior, 0); snprintf(p, sizeof p, "%s ms", a);
       snprintf(b, sizeof b, "%d", uJanks);
-      l1 = t(TXT_AJ_ESTADO, i18n("pior ")); l2 = t(TXT_LOG_18B, p); l3 = t(TXT_AJ_ESTADO, " · "); 
-      l4 = t(TXT_LOG_18B, b);
-      { TxtLinha l5 = t(TXT_AJ_ESTADO, " janks");
-        xd -= l5.w; txt_desenhar_alpha(l5, xd, base - l5.h * 0.78f, 0.6f); }
-      xd -= l4.w; txt_desenhar(l4, xd, base - l4.h * 0.78f);
-      xd -= l3.w; txt_desenhar_alpha(l3, xd, base - l3.h * 0.78f, 0.6f);
-      xd -= l2.w; txt_desenhar(l2, xd, base - l2.h * 0.78f);
+      // A linha de texto perde os espacos das pontas quando tem acento ou
+      // "·": os espacos entram a mao.
+      l1 = t(TXT_AJ_ESTADO, i18n("pior")); l2 = t(TXT_LOG_18B, p); l3 = t(TXT_AJ_ESTADO, "·");
+      l4 = t(TXT_LOG_18B, b); l5 = t(TXT_AJ_ESTADO, i18n("janks"));
+      xd -= l5.w; txt_desenhar_alpha(l5, xd, base - l5.h * 0.78f, 0.6f); xd -= esp;
+      xd -= l4.w; txt_desenhar(l4, xd, base - l4.h * 0.78f); xd -= esp;
+      xd -= l3.w; txt_desenhar_alpha(l3, xd, base - l3.h * 0.78f, 0.6f); xd -= esp;
+      xd -= l2.w; txt_desenhar(l2, xd, base - l2.h * 0.78f); xd -= esp;
       xd -= l1.w; txt_desenhar_alpha(l1, xd, base - l1.h * 0.78f, 0.6f); }
     y += 64 + 16; }
   // grafico do pior quadro: uma barra por amostra, ambar acima de 33 ms

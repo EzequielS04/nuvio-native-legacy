@@ -21,6 +21,7 @@
 #include <assert.h>
 
 extern int  ajustes_teste_quadro(const char *id);
+extern void telemetria_teste_abrir(void);
 
 static GLuint fbo, fboTex;
 static const char *saida;
@@ -262,5 +263,34 @@ int main(int argc, char **argv) {
   registro_teste_aviso(1);
   captura("aviso", CENA_AVISO);
   registro_teste_aviso(0);
+
+  // --- a queda da sessao anterior, na ilha do relogio ---------------------------
+  if (quer("queda")) {
+    int k;
+    ajustes_definir_envio_auto(0);
+    avisos_teste_queda("Em 2026-10-02 22:41 o Nuvio parou sem avisar. Se quiser, envie o registro daquela sessão para ajudar a encontrar a causa.");
+    for (k = 0; k < 30; k++) { ilha_desenhar(SDL_GetTicks()); SDL_Delay(10); }
+    { SDL_Event e = { 0 };   // AZUL/CH+: a pilula cresce no modal do aviso
+      e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_PAGEUP; e.key.keysym.scancode = SDL_SCANCODE_PAGEUP;
+      ilha_evento(&e);
+      e.type = SDL_KEYUP; ilha_evento(&e); }
+    for (k = 0; k < 90; k++) { txt_novo_quadro(); ilha_desenhar(SDL_GetTicks()); SDL_Delay(10); }   // a mola assenta
+    captura("queda", CENA_QUEDA);
+    ilha_modal_fechar(1);
+    ajustes_definir_envio_auto(1);
+  }
+
+  // --- consentimento do envio automatico (Samsung) ------------------------------
+  telemetria_teste_abrir();
+  captura("consentimento", CENA_TEL);
+  telemetria_desenhar(0);
+
+  // --- medidor de desempenho ----------------------------------------------------
+  { static const float PIOR[36] = { 21,19,22,24,20,18,22,26,21,19,20,23,31,38,61,44,33,24,20,19,21,22,20,25,19,18,20,21,22,19,18,20,23,19,18,18 };
+    desempenho_amostra(59.8f, 21, 0, 38, 96, 2, 41, 0, 212);
+    desempenho_teste_serie(PIOR, 36);
+    captura("hud", CENA_HUD);
+    desempenho_amostra(38.0f, 61, 4, 41, 99, 0, 44, 0, 241);
+    captura("hud-pilula", CENA_HUD_PILULA); }
   return 0;
 }

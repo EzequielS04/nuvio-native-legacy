@@ -24,7 +24,7 @@ for source in src/*.c; do
   sources+=("$source")
 done
 cc "${sources[@]}" tests/registro_shot.c -Isrc -Itests -o "$B" \
-  -DREGISTRO_TESTE -DAVISOS_TESTE_ENVIO -DNV_VERSAO='"1.7.2"' -DNV_REC_URL='"https://registro.exemplo"' -DDESEMPENHO_TESTE -DAJUSTES_TESTE \
+  -DREGISTRO_TESTE -DAVISOS_TESTE_ENVIO -DNV_VERSAO='"1.7.2"' -DNV_REC_URL='"https://registro.exemplo"' -DDESEMPENHO_TESTE -DTELEMETRIA_TESTE -DAJUSTES_TESTE \
   -O1 -g -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
   -L/opt/homebrew/lib -lSDL2 -lSDL2_image -lSDL2_ttf -lz -framework OpenGL \
   -Wno-deprecated-declarations -Wno-macro-redefined
