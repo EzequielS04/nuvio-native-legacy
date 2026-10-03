@@ -268,6 +268,11 @@ IGNORAR = {
     # (ajustes_teste_quadro) e a subpasta da arte embarcada (ajArte) nao sao
     # texto de tela.
     "Mbps", "com.linvo.cinemeta_movie_top", "poster/",
+    # Guia de uso (03/10): ids dos quadros do mockup em ajustesTesteGuia e o
+    # id de entrada do guia.json que eles apontam. So a captura usa; nunca
+    # vao para a tela.
+    "guia-fontes", "guia-fileiras", "guia-legendas", "guia-vindo-do-whatsnew",
+    "h-fileiras",
     # Palavra que a folha de Fontes PROCURA no nome/descricao do arquivo para
     # saber se ha audio em portugues (streams.c, idiomaDa). Dado de comparacao,
     # nunca texto desenhado.

@@ -1204,6 +1204,18 @@ int novidades170_item_largura(int i, int *limite, const char **nome) {
 }
 
 int novidades170_cenas(void) { return N170_NC; }
+static float tempoDe(int c, float t);
+float novidades170_previa_altura(void) { return N170_PV_H; }
+void novidades170_cena_desenhar(int c, float x, float y, float t) {
+  if (c < 0 || c >= N170_NC) return;
+  if (!arq[0][0]) montarCaminhos();
+  pedirArtes();
+  clipCena = (GfxRect){ x, y, N170_PV_W, N170_PV_H };
+  recorte(clipCena);
+  gfx_cor(clipCena, rr(N170_PV_RAIO, clipCena), 0.062f, 0.066f, 0.080f, 1);
+  CENAS[c].desenhar(x, y, tempoDe(c, t), 1.0f);
+  gfx_sem_recorte();
+}
 int novidades170_cena(void) { return cena; }
 int novidades170_aberto(void) { return aberto; }
 int novidades170_foco_na_previa(void) { return naPrevia; }

@@ -127,6 +127,9 @@ typedef enum {
   TXT_LOG_18B,  // numero forte no medidor          17 / 600
   TXT_MONO14B,  // numero da linha "quadros" no pacote 14 / 600
   TXT_LOG_T31,  // "Registro do app" ao lado do relogio 30 / 700
+  // NOVIDADES DA 1.8.0 E GUIA DE USO (mockups aprovados em 03/10). No FIM,
+  // como manda o comentario do TXT_RANK_GRANDE.
+  TXT_NOV_TITULO,   // .c-tit do cartao de novidades  50 / 700
   TXT_NFONTES
 } TxtEstilo;
 

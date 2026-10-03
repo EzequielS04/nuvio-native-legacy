@@ -55,15 +55,20 @@ clapperboard languages search chevron-right check plus minus memory-stick delete
 activity gauge zap database
 arrow-up-down
 pause send scroll-text server-crash shield-check cpu log-out
+panel-left list-x bell audio-lines layers type sliders-horizontal book-open user-plus
+alarm-clock badge-check captions chart-column chevrons-down circle-check circle-dot compass droplet feather film funnel globe image image-plus inbox key key-round layout-list life-buoy link list-ordered list-video loader log-in map maximize-2 menu message-square monitor-play mouse-pointer move-horizontal pause picture-in-picture-2 play quote send server settings-2 shield sparkle stethoscope telescope thumbs-up unlink wand sparkles corner-up-left book-open-text
 "
-# A penultima linha e da ILHA DO RELOGIO (02/10, mockup aprovado em design/ilha):
+# A linha que comeca em "clock" e da ILHA DO RELOGIO (02/10, mockup aprovado em design/ilha):
 # os icones dos avisos (alerta, wifi, debrid baixando, Trakt desconectado...) e
 # dos botoes dos modais (Depois, Salvar, Reconectar).
-# A anterior a ultima e dos AJUSTES no Glass UI (03/10, mockup aprovado): Trailers e
+# A antepenultima e dos AJUSTES no Glass UI (03/10, mockup aprovado): Trailers e
 # Idiomas com desenho proprio, a lupa e a seta das linhas, o "Salvo", o mais e
 # o menos do editor numerico e a memoria de imagens.
-# A ultima e do REGISTRO DO APP no Glass UI (03/10, logs-mockup.html): pausa,
+# A penultima e do REGISTRO DO APP no Glass UI (03/10, logs-mockup.html): pausa,
 # envio, painel vazio, erro do servidor, consentimento e o rastro de etapas.
+# As duas ultimas sao do cartao de NOVIDADES DA 1.8.0 e do GUIA DE USO
+# (ajustes_ux_guia_dados.inc, um icone por capitulo e por recurso) (03/10, mockup aprovado):
+# os discos da lista, as pecas da previa, capitulos e recursos do guia.
 # Conferencia: todo aj_* citado em src/ tem de estar em NOMES, e todo NOMES
 # tem de ser citado — senao sobra PNG morto no pacote ou falta icone na tela
 # (gfx_icone falha em silencio).

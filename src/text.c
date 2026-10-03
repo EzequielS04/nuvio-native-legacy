@@ -339,6 +339,7 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 18, PESO_BOLD    },   // TXT_LOG_18B
   { 14, PESO_MONO_B  },   // TXT_MONO14B
   { 31, PESO_BOLD    },   // TXT_LOG_T31
+  { 51, PESO_BOLD    },   // TXT_NOV_TITULO (mockup 50/700)
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.

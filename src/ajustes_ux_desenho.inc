@@ -10,6 +10,9 @@
 // lado ache cada peca.
 
 #include "home.h"
+// A linha e o inspetor do "Guia de uso" moram com o guia (ajustes_ux_guia.inc).
+static void guiaInspetorAjustes(GfxRect ir);
+static int guiaTotal(void);
 static char uxDirArte[1024];
 void ajustes_recursos(const char *dirArte) {
   snprintf(uxDirArte, sizeof uxDirArte, "%s", dirArte ? dirArte : "");
@@ -252,6 +255,7 @@ static float ajLinhaH(int i) {
   int op = TELA[i].op;
   float h = AJI_LN_H;
   if (inativa(op) && uxRequisito(op) >= 0) h = 96.0f;
+  if (op == AJ_GUIA) h = 80.0f;   // a linha do guia leva o subtitulo
   if (op == AJ_TEMA && i == focoItem && !focoIndice && uxIndice >= 2) h += AJ_REGUA_H;
   return h;
 }
@@ -423,6 +427,7 @@ static const char *ajEstadoAcao(int op) {
     else snprintf(b, sizeof b, i18n("%d na Home"), home);
     return b;
   }
+  if (op == AJ_GUIA) { snprintf(b, sizeof b, i18n("%d recursos"), guiaTotal()); return b; }
   return textoLeitura(op);
 }
 
@@ -438,7 +443,7 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
   int desligada = inativa(op), emFoco = f > 0.5f, ed = ajEditandoLinha(op);
   int sub = desligada && uxRequisito(op) >= 0;
   float aT = a * (desligada ? 0.45f : 1.0f);
-  float xDir = ln.x + ln.w - 22.0f, yc = y + (sub ? h : AJI_LN_H) * 0.5f;
+  float xDir = ln.x + ln.w - 22.0f, yc = y + ((sub || op == AJ_GUIA) ? h : AJI_LN_H) * 0.5f;
   if (h > AJI_LN_H + 30) yc = y + 28.0f;   // linha que abre: o rotulo fica no alto
   float cauda = 0;
   if (a <= 0.004f) return;
@@ -520,7 +525,11 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
   { float tx = ln.x + 22.0f, maxW = ln.w - 44.0f - cauda - 20.0f, tyc = yc;
     TxtLinha r = ajTxtC(TXT_AJ_ROTULO, rotuloOpcao(op), maxW);
     float rx;
-    if (sub) tyc = y + h * 0.5f - 12.0f;
+    if (sub || op == AJ_GUIA) tyc = y + h * 0.5f - 12.0f;
+    if (op == AJ_GUIA) {
+      TxtLinha s = ajTxtC(TXT_ILHA_GENERO, "Tudo o que o app faz, por assunto", maxW);
+      txt_desenhar_alpha(s, tx, tyc + r.h * 0.5f + 4, 0.42f * aT);
+    }
     txt_desenhar_alpha(r, tx, tyc - r.h * 0.5f, (emFoco ? 1.0f : 0.86f) * aT);
     rx = tx + r.w;
     { int fm = marcaDaOpcao(op);
@@ -712,3 +721,4 @@ static float ajEf(const char *icone, const char *s, float x, float y, float w, f
 #include "ajustes_ux_previa.inc"
 #include "ajustes_ux_ilha.inc"
 #include "ajustes_ux_fileiras.inc"
+#include "ajustes_ux_guia.inc"

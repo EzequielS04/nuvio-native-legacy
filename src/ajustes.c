@@ -290,6 +290,10 @@ typedef enum {
   // "Medidor de desempenho" (Desempenho desta TV; desempenho.h). LOCAIS. No
   // fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_VER_REGISTRO, AJ_MEDIDOR,
+  // GUIA DE USO (Ajustes › Sobre e ajuda, a primeira linha): abre a tela do
+  // guia (ajustes_ux_guia.inc). Acao. No fim pelo mesmo motivo: valor[] e
+  // CHAVE[] sao posicionais.
+  AJ_GUIA,
   AJ_N
 } OpcaoId;
 
@@ -889,6 +893,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Espera pelos add-ons",            V_FONTE_PRAZO, 4),   // local: fontePrazoLocal
   ACAO("Ver o registro na tela"),
   ESC("Medidor de desempenho",           V_LIGA, 2),          // local: medidorDesempenhoLocal
+  ACAO("Guia de uso"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1056,6 +1061,7 @@ static const char *CHAVE[] = {
   "fontePrazoLocal",
   // "-": acao, nao grava. O medidor e LOCAL e SEM o "-": e desta TV.
   "-verRegistro", "medidorDesempenhoLocal",
+  "-guiaUso",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1217,6 +1223,16 @@ void ajustes_abrir_na_fonte(void) { abrirNaFonte = 1; }
 void ajustes_abrir_no_layout(void) { abrirNoLayout = 1; }
 void ajustes_abrir_no_vidro(void) { abrirNoVidro = 1; }
 void ajustes_abrir_no_trakt(void) { abrirNoTrakt = 1; }
+static int abrirNoGuia, guiaDaNovidades, pediuNovidades;
+void ajustes_abrir_no_guia(int daNovidades) { abrirNoGuia = 1; guiaDaNovidades = daNovidades ? 1 : 0; }
+int  ajustes_pediu_novidades(void) { int v = pediuNovidades; pediuNovidades = 0; return v; }
+// A tela do Guia de uso (ajustes_ux_guia.inc), aberta por cima das ilhas.
+static void guiaAbrir(int daNov);
+static void guiaFechar(void);
+static void guiaEvento(const SDL_Event *e);
+static void guiaDesenhar(void);
+static void guiaAtualizar(float dt);
+static int guiaAberto;
 int  ajustes_opcao_em_foco(void) { return focoOp; }
 // Categoria mostrada na lista. Com o foco no indice ela e a categoria em foco
 // la; com o foco na lista, a do item.
@@ -3310,6 +3326,10 @@ int ajustes_iniciar(void) {
   if (abrirNoLayout) { abrirNoLayout = 0; focarOpcao(AJ_HOME_LAYOUT); }
   if (abrirNoVidro) { abrirNoVidro = 0; focarOpcao(AJ_VIDRO); }
   if (abrirNoTrakt) { abrirNoTrakt = 0; focarOpcao(AJ_TRAKT); }
+  // "Abrir o guia" do cartao da 1.8.0: a linha do guia em Sobre e ajuda e o
+  // guia aberto por cima dela (Voltar devolve ao cartao).
+  guiaFechar();
+  if (abrirNoGuia) { abrirNoGuia = 0; focarOpcao(AJ_GUIA); guiaAbrir(guiaDaNovidades); guiaDaNovidades = 0; }
   if (uxAbrirOp >= 0) { int op = uxAbrirOp; uxAbrirOp = -1; focarOpcao(op); }
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
   filAberta = 0; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
@@ -3321,7 +3341,7 @@ int ajustes_iniciar(void) {
   rotulosDeIdioma();
   return 1;
 }
-void ajustes_encerrar(void) { uxCancelar(); uxRetornarOp = -1; }
+void ajustes_encerrar(void) { uxCancelar(); uxRetornarOp = -1; guiaFechar(); }
 int ajustes_quer_sair(void) { return sair; }
 
 // Valor das linhas so de leitura. O espaco em disco NAO e um numero inventado:
@@ -3777,7 +3797,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_RAIL_BLUR: return "Desfoca a arte atrás da barra lateral moderna em vez de usar um fundo sólido.";
     case AJ_HERO: return "O bloco grande no topo da Home, com a arte e o nome de um título em destaque.";
     case AJ_HERO_CATALOGOS: return "De onde vêm os títulos do destaque: os primeiros do catálogo, um sorteio, ou uma fileira da Home. OK troca.";
-    case AJ_PS_FUNDO: return "A tela \"Quem está assistindo?\" mostra arte do catálogo atrás dos perfis. Desligado volta à tela lisa de antes.";
+    case AJ_PS_FUNDO: return "A tela \"Quem está assistindo?\" mostra arte do catálogo atrás dos perfis. Desligado, fica o fundo de listras do login.";
     case AJ_DESCOBRIR: return "Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.";
     case AJ_SELO_VISTO: return "Um check pequeno no canto de cima do pôster dos títulos que você já assistiu, pelo Trakt, pela conta ou marcados nesta TV.";
     case AJ_ROTULOS: return "Escreve o nome do título abaixo do cartaz. A maior parte da arte já traz o nome impresso.";
@@ -3903,6 +3923,7 @@ static const char *ajudaOpcao(int op) {
         : "Procura agora uma versão nova do Nuvio. Se houver, abre o cartão com o que mudou e o botão de instalar. O app também confere sozinho a cada 6 horas.";
     case AJ_VER_REGISTRO: return "Abre o registro do app por cima desta tela, ao vivo: o mesmo painel do botão vermelho do controle, para quem não tem esse botão.";
     case AJ_MEDIDOR: return "Mostra quadros por segundo, o pior quadro, a memória e as imagens num canto da tela, atualizados a cada 3 s. Durante o vídeo vira uma pílula pequena.";
+    case AJ_GUIA: return "O que o Nuvio faz, em 12 capítulos. Cada recurso diz onde fica e tem um atalho para ele.";
     case AJ_ENVIAR_LOG: return "Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.";
     case AJ_ENVIO_AUTO: return "Ligado, o app manda o registro sozinho: o da sessão anterior ao abrir e o desta a cada minuto. Sem senhas nem chaves; serve para achar o que trava a Samsung. Desligue quando quiser.";
     case AJ_DIAGNOSTICO: return "Testa manifestos, fontes e artes dos addons, mede os tempos e aplica um perfil seguro de Qualidade ou Desempenho. O teste não marca títulos como assistidos.";
@@ -4624,6 +4645,7 @@ static const char *uxCaminho(int op);
 static const char *uxBloco(int op);
 static void eventoTela(const SDL_Event *e);
 void ajustes_evento(const SDL_Event *e) {
+  if (guiaAberto) { guiaEvento(e); return; }
   eventoTela(e);
   // FIM DA EDICAO DO LIMITE (issue #197): qualquer tecla que solte a linha
   // (OK, Voltar, cima/baixo, sair da tela) confirma a rajada. Sem rajada em
@@ -4693,6 +4715,7 @@ static void eventoTela(const SDL_Event *e) {
     // motivo da falha; antes so o texto da linha mudava.
     if (focoOp == AJ_ENVIAR_LOG) { registro_envio_abrir(); return; }
     if (focoOp == AJ_VER_REGISTRO) { registro_abrir(); return; }
+    if (focoOp == AJ_GUIA) { guiaAbrir(0); return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
     if (focoOp == AJ_DIAGNOSTICO) { pediuDiagnostico = 1; return; }
     if (focoOp == AJ_HERO_CATALOGOS) { if (!inativa(focoOp)) heroFonteCiclar(+1); return; }
@@ -4803,6 +4826,7 @@ static void eventoTela(const SDL_Event *e) {
 }
 
 void ajustes_atualizar(float dt, Uint32 agora) {
+  guiaAtualizar(dt);
   if (uxAviso[0] && SDL_TICKS_PASSED(agora, uxAvisoAte)) uxAviso[0] = 0;
   montarTela();
   valor[AJ_PERFIL_PESQ] = recomenda_pesquisavel() ? 0 : 1;   // V_LIGA: 0 = Ligado
@@ -5392,7 +5416,7 @@ static AjPreview familiaPreviaOpcao(int op) {
       return AJPV_CONTA;
     case AJ_SALVOS_DEST: case AJ_TRAKT: case AJ_SIMKL:
       return AJPV_RASTREIO;
-    case AJ_VERSAO_I: case AJ_ATUALIZAR: case AJ_ENVIAR_LOG:
+    case AJ_VERSAO_I: case AJ_ATUALIZAR: case AJ_ENVIAR_LOG: case AJ_GUIA:
     case AJ_ENVIO_AUTO: case AJ_VER_REGISTRO:
       return AJPV_ABOUT;
     case AJ_TMDB_LIGADO: case AJ_TMDB_IDIOMA: case AJ_TMDB_ARTE:
@@ -5443,6 +5467,7 @@ void ajustes_desenhar(Uint32 agora) {
   if (ajQuadroAddons) { ajustes_desenhar_addons(ajQuadroAddons - 1); return; }
 #endif
   montarTela();
+  if (guiaAberto) { guiaDesenhar(); return; }
   ajDesenharTela();
 
   // A folha de fileiras cobre a lista; o vinculo cobre as duas, porque ele e a
@@ -5540,6 +5565,33 @@ void ajustes_teste_tema(int tema, int vidro) {
 // OS QUADROS DO MOCKUP (ajustes-mockup.html), um por id, para a captura lado
 // a lado (tests/ajustes_shot.sh com NUVIO_AJ_QUADROS). Tema e vidro ficam os
 // que a captura escolheu.
+// Os quadros do mockup do Guia de uso (guia-mockup.html).
+static int ajustesTesteGuia(const char *id) {
+  static const struct { const char *id; int arte, idx, col; const char *ent; int daNov; } Q[] = {
+    { "guia-capitulos", 13, GI_CAP0 + 1, GC_INDICE, NULL, 0 },
+    { "guia-fontes", 15, GI_CAP0 + 3, GC_LISTA, "f-folha", 0 },
+    { "guia-ilha", 0, GI_CAP0 + 5, GC_LISTA, "i-avisos", 0 },
+    { "guia-fileiras", 2, GI_CAP0 + 1, GC_BOTOES, "h-fileiras", 0 },
+    { "guia-legendas", 21, GI_CAP0 + 4, GC_LISTA, "l-ass", 0 },
+    { "guia-novo", 7, GI_NOVO, GC_LISTA, "a-vidro", 0 },
+    { "guia-vindo-do-whatsnew", 7, GI_CAP0, GC_LISTA, "c-guia", 1 },
+    { "guia-busca", 21, GI_BUSCA, GC_INDICE, NULL, 0 },
+  };
+  int i, k;
+  guiaFechar();
+  if (!strcmp(id, "guia")) { ajArteFundoN = 12; focarOpcao(AJ_GUIA); return 1; }
+  for (i = 0; i < (int)(sizeof Q / sizeof *Q); i++) {
+    if (strcmp(id, Q[i].id)) continue;
+    ajArteFundoN = Q[i].arte;
+    focarOpcao(AJ_GUIA);
+    guiaAbrir(Q[i].daNov);
+    gv.idx = Q[i].idx; gv.col = Q[i].col; gv.ent = -1; gv.botao = 0;
+    if (Q[i].ent) for (k = 0; k < GUIA_NENT; k++) if (!strcmp(GUIA_ENT[k].id, Q[i].ent)) gv.ent = k;
+    guiaRolar(); guiaRol = guiaRolAlvo;
+    return 1;
+  }
+  return 0;
+}
 int ajustes_teste_quadro(const char *id) {
   int tema = valor[AJ_TEMA], vidro = valor[AJ_VIDRO];
   memcpy(valor, valorPadrao, sizeof valor);
@@ -5558,6 +5610,7 @@ int ajustes_teste_quadro(const char *id) {
     if (op < 0) return 0;
     focarOpcao(op);
   }
+  else if (!strncmp(id, "guia", 4)) { if (!ajustesTesteGuia(id)) return 0; }
   else if (!strcmp(id, "principal")) { focarOpcao(AJ_HOME_LAYOUT); }
   else if (!strcmp(id, "cartazes")) { ajArteFundoN = 13; valor[AJ_LARGURA_DP] = 128; focarOpcao(AJ_LARGURA_DP); }
   else if (!strcmp(id, "memoria")) { ajArteFundoN = 21; ajMemFixa = 1; focarOpcao(AJ_ESPACO); uxAvancados[secAtual] = 1; }

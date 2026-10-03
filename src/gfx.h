@@ -242,7 +242,10 @@ typedef enum {
   // em que o veu zera; 1 = a borda oposta). uPar.x escolhe a borda cheia:
   // 0 = baixo, 1 = cima, 2 = esquerda, 3 = direita. Use por gfx_veu_css.
   GFX_VEU_CSS = 40,
-  GFX_NMODOS = 41
+  // GFX_MINI — o alvo de uma miniatura (gfx_mini_desenhar): FBO lido de cabeca
+  // para cima, cantos por SDF.
+  GFX_MINI = 41,
+  GFX_NMODOS = 42
 } GfxModo;
 
 typedef struct {
@@ -353,7 +356,21 @@ void gfx_snap_terminar(void);  // volta para a tela
 void gfx_snap_desenhar(void);  // pinta o snapshot ocupando a tela toda
 void gfx_snap_encerrar(void);
 
-void gfx_tamanho_alvo(int w, int h);   // drawable real, para restaurar viewport
+void gfx_tamanho_alvo(int w, int h);
+
+// MINIATURA: uma tela DE VERDADE desenhada num alvo proprio e mostrada
+// reduzida (previa das Novidades da 1.8.0, inspetor do Guia de uso). Entre
+// comecar e terminar o desenho segue em coordenadas de layout: o ponto
+// (x0, y0) cai no canto de cima do alvo e cada unidade vale `esc` pixels.
+// Nada de gfx_desfocado/gfx_ambiente/snapshot la dentro.
+typedef struct { GLuint fbo, tex; int w, h; } GfxMini;
+int  gfx_mini_alvo(GfxMini *m, int w, int h);   // cria ou recria; 0 = sem FBO
+void gfx_mini_comecar(GfxMini *m, float x0, float y0, float esc);
+void gfx_mini_terminar(void);
+void gfx_mini_desenhar(const GfxMini *m, GfxRect r, float raioPx, float a);
+void gfx_mini_liberar(GfxMini *m);
+// Dentro da miniatura: a base de `r` some ate `alfa` (o .gv.fade do mockup).
+void gfx_mini_esvanecer(GfxRect r, float alfa);   // drawable real, para restaurar viewport
 int  gfx_iniciar(void);
 void gfx_encerrar(void);
 
