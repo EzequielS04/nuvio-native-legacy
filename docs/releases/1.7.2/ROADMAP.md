@@ -109,6 +109,10 @@ Os títulos Codex abaixo foram preservados exatamente como retornados pelo app. 
 
 O registro externo no M3 também relata APK Social instalado na TCL e aprovação do dono; essa instalação não foi checada nesta auditoria. Portanto, o pacote atualmente presente na TCL não está comprovado como o APK estável puro. O que está demonstrado nesta rodada é que **nenhuma build 1.7.2 desta release foi instalada ou validada na TCL**. Para teste futuro, conferir pacote/núcleo/host reais antes de interpretar o resultado. O relato externo de Discord diz instalação Android e uma build C9 anterior ao rebase, sem presença observada na TV; não equivale a validação desta candidata.
 
+## Destino posterior da Glass UI
+
+O dono indicou `feat/glass-ilha` para 1.8. Ponta `c5269ed4`, baseada em `feat/social` (`46e9b24f`), com 12 commits não-merge de camada visual adicionais. Inclui Fontes, menu/rail, Salvos/Social, menus, Spotlight, Agenda, Biblioteca e Perfil/stats; não é apenas relógio. Sem merge na 1.7.2. Revisar delta visual após Social, preservar os fluxos mais novos e validar por plataforma. Conteúdo/dependências no [roadmap geral](../../ROADMAP.md). O mockup HTML rejeitado continua fora. Esse é um acréscimo ao inventário histórico abaixo, não uma atualização retroativa da contagem 29.
+
 ## Inventário de branches soltas
 
 Método: ancestralidade e `git cherry` contra a fonte da release. `+` significa patch sem equivalência exata; `-` significa equivalência de patch, mesmo sem o mesmo hash. Patch adaptado pode aparecer como `+` apesar de correção semanticamente presente. Worktree limpa significa apenas ausência de alterações sem commit no momento da leitura. Não significa teste ou autorização de merge.

@@ -12,7 +12,7 @@ O dono rejeitou o mockup da ilha e pediu continuidade no roadmap. As quatro func
 |---|---|---|
 | **1.7.2** | Correções, resiliência, consistência, retomada em dois minutos, Ajustes funcionais, toque/login, fontes incrementais e otimizações já implementadas. Investigar os relatos atuais de arranque, reprodução, catálogo e proporção antes de declarar os cenários resolvidos. | Código integrado e pacotes locais conferidos; validação física e triagem dos novos relatos ainda pendentes. Não é uma release publicada. |
 | **1.7.3 — proposta** | Social/recomendações/reações, Discord, TopN configurável e portabilidade dos scripts Linux. Melhorias pequenas de player podem ser selecionadas por custo e compatibilidade. | Existem branches para Social/Discord; os demais itens não são implementação pronta. Selecionar escopo e revisar sobre a base estabilizada. Nenhum merge adicional autorizado apenas por este planejamento. |
-| **1.8 — plugins/P2P já direcionados** | Integrar `plugins2` e `p2p2`, cancelamento por chamada, orçamento de disco/memória, limites do scraper e capacidades explícitas de cada backend. | Branches candidatas, não features aceitas. Provar LG/Android/TPK; WGT não recebe motor P2P de sockets. |
+| **1.8 — plugins, P2P e Glass UI** | Integrar `plugins2` e `p2p2`, cancelamento por chamada e orçamento de disco/memória; candidata visual `feat/glass-ilha`, com superfícies vidro/sólido e reorganização de Fontes/menu/painéis. | Branches candidatas, não features aceitas. Provar LG/Android/TPK; WGT não recebe motor P2P de sockets. |
 | **Portes e exploração — sem versão prometida** | VIDAA, webOS3 e experimentos NaCl/Tizen 4; ideias visuais/launcher ainda não escolhidas. | Cada porte precisa aparelho/testador e matriz própria. Experimentos históricos não são pendências de merge da 1.7.2. |
 
 1.7.3 é uma recomendação de agrupamento, não compromisso de publicar todos os candidatos juntos. Não há datas inventadas. Correção comprovada que impeça usar uma plataforma suportada continua sendo estabilização da 1.7.2; não empurrar automaticamente um bug para a versão de features.
@@ -58,14 +58,30 @@ Consulta direcionada aos logs Android 19066/19107/19164 foi somente leitura (`ro
 
 Ícones/launcher (`agente/icones`) e alternativas A/B (`agente/ajustesvisual`) continuam sem direção aprovada; não são entregas prometidas da 1.7.3. O mockup rejeitado da ilha não volta como dependência desses itens.
 
-## 1.8 — plugins e P2P
+## 1.8 — plugins, P2P e Glass UI
 
 | Frente | Candidato | Escopo e critério |
 |---|---|---|
+| **Glass UI / painéis como ilhas** | `feat/glass-ilha` (`c5269ed4`) | Destino 1.8 indicado pelo dono. Portar a camada visual sobre a base estabilizada, preservando Ajustes funcionais, fontes incrementais #221, enum/defaults e identidade. Vidro/sólido, D-pad/toque, contraste, movimento reduzido e orçamento GPU/memória em C9/TCL/Samsung. |
 | **Plugins — #134** | `agente/plugins2` | Integração incremental sem repetir #221; scraper cancelável, prazo/limite de resposta, isolamento de perfil e matriz LG/Android/TPK/WGT conforme capacidade. |
 | **P2P — #171** | `agente/p2p2` | Motor e fallback nos alvos que o suportem; cancelamento real, cache/disco limitado, limpeza, memória e validação TPK real. WGT fica fora do motor de sockets. |
 | **Pré-cache e abertura normal em paralelo** | Trabalho futuro, não novo merge demonstrado | Depende de cancelamento por chamada, efeito do GETRange/debrid e orçamento. Última fonte guardada já abre em paralelo na 1.7.2. Nenhuma garantia de nova mídia instantânea. |
 | **Media server/thumbnails — pedidos #195** | Avaliação, sem código demonstrado nesta auditoria | Definir contrato, fonte dos frames, custo de rede/disco/GPU e cancelamento. Pode aproveitar essa infraestrutura, mas não é promessa automática da 1.8. |
+
+### Glass UI: conteúdo e unidade de integração
+
+Em 02/10/2026 o dono indicou `feat/glass-ilha` para 1.8. Conferência Git nesta rodada: ponta `c5269ed4`, com `feat/social` (`46e9b24f`) como ancestral. Há **12 commits não-merge próprios sobre Social**, alterando 59 arquivos; o diff amplo contra 1.7.2 também inclui Social e não representa somente a camada visual.
+
+Conteúdo demonstrado nos commits:
+
+- Folha de Fontes como ilha: grupos por resolução/HDR/SDR, filtros Em cache/Dublado, Melhor para esta TV, navegação entre abas e título do conteúdo.
+- Menu/rail e painel Salvos/Social como superfícies vidro/sólido; abas segmentadas e foco por superfície.
+- Menu do cartaz, estilo de fileira, Spotlight, Agenda, Biblioteca, Perfil/estatísticas no mesmo padrão.
+- Arte/ícones, traduções e fixtures de captura associados.
+
+**Dependência:** se Social entrar na 1.7.3, revisar depois somente o delta visual sobre essa base. Se Social não entrar, separar/revisar a parte que depende de Salvos/Social antes de integrar; não puxar Social/servidor automaticamente pelo merge dessa branch. Também não substituir os arquivos atuais por cópias da árvore 1.7.1: a 1.7.2 tem Ajustes, sincronização, fonte parcial e isolamento mais novos.
+
+O destino 1.8 é planejamento, sem merge nesta rodada. Exige revisão visual do dono e prova nas TVs; relato externo de folha de Fontes na TCL não valida toda essa UI nem LG/Samsung. Este trabalho nativo é distinto do mockup HTML da ilha do relógio rejeitado; aquele mockup permanece fora da fila.
 
 Não usar `agente/plugins` nem `agente/p2p`: são versões antigas supersedidas pelos candidatos2. Preservar seus commits; não mesclar novamente.
 
@@ -88,7 +104,7 @@ Não usar `agente/plugins` nem `agente/p2p`: são versões antigas supersedidas 
 1. Investigar arranque/login novos e reproduções pendentes da 1.7.2; preservar candidata atual e seus hashes enquanto não há fix novo comprovado.
 2. Fechar matriz curta nos aparelhos. Fix novo recebe teste focado e novo pacote identificado; sem refazer suíte longa sem necessidade.
 3. Dono escolhe o conjunto da 1.7.3; revisar unidades de integração Social/Discord separadamente e conservar o servidor externo atual.
-4. Preparar contratos e provas da 1.8 antes de mesclar plugins/P2P.
+4. Preparar contratos e provas da 1.8 para plugins/P2P; portar/revisar Glass UI após resolver a dependência de Social e conservar os fluxos da 1.7.2.
 5. Publicar/responder issues somente após validação e autorização. Tudo deste planejamento permanece local.
 
 Não há merge pendente de `abrirrapido`, `ilhavolta`, `i221`, `i216`, `ajustesux`, `offline`, `i212`, `i213a`, `i213b`, `quedas171`: integração já conferida na auditoria. Mapeamento detalhado das 29 refs e sessões está no documento de auditoria; não contar as branches Social agregadas ou experimentos equivalentes mais de uma vez.
