@@ -9,6 +9,8 @@ Local candidate; these notes do not announce publication.
 
 ## Fixed
 
+- Android queries installed streaming apps in the background, preserving the last complete list while refreshing.
+
 - Streaming-service cards keep readable text when selected.
 - Cleaner Settings explanations without placeholder pictures; glass outline is easier to find.
 - Collections snapshots now handle object responses and stay available after network failures.

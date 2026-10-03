@@ -5,7 +5,7 @@ The candidate is packaged and locally tested. This review does not publish or ap
 ## Evidence available
 
 - Final binaries and integrity evidence: [PACOTES.md](PACOTES.md). Android release APK is installed on the TCL; package manager confirms 1.7.3 / 10703 and the activity launched successfully. This establishes installation and startup on that TV, not all manual playback workflows.
-- Regression coverage and known exclusions: [REGRESSAO.md](REGRESSAO.md). No new runtime patch was made from the issue review: suspected causes were not sufficiently supported.
+- Regression coverage and known exclusions: [REGRESSAO.md](REGRESSAO.md). A subsequent Android patch moves installed-app enumeration off the SDL thread; see [FIX-ANDROID-APPS.md](FIX-ANDROID-APPS.md). It does not establish the root cause of #223 or the entire 995.6ms stall.
 - Read-only open issue review: [ISSUES.md](ISSUES.md).
 - Recent uploaded diagnostics retrieved from the Worker D1 database: [WORKER-LOGS.md](WORKER-LOGS.md). Raw data is private and outside Git. The SELECT returned rows_written=0, changes=0 and changed_db=false.
 

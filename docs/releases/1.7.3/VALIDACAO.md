@@ -25,3 +25,7 @@ Captura final de serviços: [Onde ver](imagens/onde-ver.png) e [Onde ver com vid
 Host falso ARM Samsung executou o núcleo final 4ffb8a23 com EGL/GLES llvmpipe: dlopen/config/contexto válidos e 60 trocas de quadro concluídas, com tela de login renderizada. Comando: NV_HOST_LOCALE='' bash tools/tpk-testa.sh 60. Sem a variável, o wrapper antigo tem expansão não definida; definir explicitamente contornou o problema; o wrapper foi corrigido para inicializar esse valor quando ausente. Simulação QEMU/Mesa não mede FPS ou comportamento do firmware Samsung. A captura de login contém pairing temporário e não foi anexada ao repositório.
 
 Resultado final da suíte ampla: [regressão e casos não validados](REGRESSAO.md). Os testes das alterações passaram; a suíte completa mantém uma falha anterior à 1.7.3 e casos não executados, conforme o relatório.
+
+## Subsequent Android installed-app fix
+
+[FIX-ANDROID-APPS.md](FIX-ANDROID-APPS.md) records runtime 0d7ae4e6, additional concurrency/sanitizer tests, clean signed two-ABI rebuild, exact installed APK hash and startup/query evidence on the TCL. These checks supplement the earlier full regression rather than claim that entire suite was rerun on the new commit.
