@@ -85,8 +85,12 @@
 
 // Tinta do texto sobre o foco: em vidro o foco e so contorno sobre superficie
 // escura, entao o texto fica CLARO mesmo com realce branco (que pede escuro).
-static int bibTinta(void) { return ajustes_vidro() ? 255 : ajustes_tinta_foco(); }
-static int bibTinta2(void) { return ajustes_vidro() ? 205 : ajustes_tinta_foco2(); }
+// GLASS UI (dono, 02/10, mockup "ilha" tela 9): o foco de LINHA e superficie
+// clara nos dois materiais, entao o texto da linha focada e sempre claro (255 /
+// 205). So o foco de BOTAO (chips, abas) e pilula cheia no acento, e la a tinta
+// e a de ajustes_tinta_foco (tintaBotao).
+static int bibTinta(void) { return 255; }
+static int bibTinta2(void) { return 205; }
 #include "catalogo.h"
 #include "dados.h"
 #include "perfis.h"
@@ -989,60 +993,43 @@ static void brilhoFoco(GfxRect r, float folga, float f, float a) {
   float ar, ag, ab;
   GfxRect luz;
   if (f <= 0.01f) return;
-  if (ajustes_vidro()) return;   // vidro: foco e contorno branco, sem mancha
+  if (ajustes_vidro()) return;   // vidro: a pilula cheia sem mancha
   ajustes_acento(&ar, &ag, &ab);
   luz.x = r.x - r.h * folga; luz.y = r.y - r.h * folga;
   luz.w = r.w + r.h * folga * 2.0f; luz.h = r.h * (1.0f + folga * 2.0f);
   gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * f * a);
 }
 
+// CHIP (filtro, acao de lista): o chipFolha da folha de Fontes. Repouso em
+// branco a 8 % (vidro) ou cinza opaco (solido); `escolhida` (estado ligado:
+// "Fixada", "Na Home") no acento a 22 % com o texto no acento; FOCO = pilula
+// cheia no acento com a tinta de foco. Devolve a tinta do texto.
 static int pilula(GfxRect r, float raio, float f, int escolhida) {
-  float ar, ag, ab;
+  float ar, ag, ab, v = anim_clamp(f, 0.0f, 1.0f);
   ajustes_acento(&ar, &ag, &ab);
-  if (ajustes_vidro()) {
-    // Pilula de filtro da referencia: vidro escuro; em foco, contorno branco;
-    // a escolhida (aba ativa) fica um degrau mais clara.
-    // A escolhida leva a lavagem e o aro do realce (o tema segue visivel).
-    if (escolhida) gfx_vidro_painel_acento(r, raio, 0.62f, 1.0f);
-    else gfx_vidro_painel(r, raio, 0.62f, 1.0f);
-    gfx_vidro_foco(r, raio, f, 1.0f);
-    return escolhida || f > 0.5f ? 255 : 220;
+  if (escolhida) gfx_cor(r, raio, ar, ag, ab, .22f * (1.0f - v));
+  else if (ajustes_vidro()) gfx_cor(r, raio, 1, 1, 1, .08f * (1.0f - v));
+  else gfx_cor(r, raio, .14f, .148f, .17f, 1.0f - v);
+  if (v > 0.01f) {
+    if (ajustes_vidro()) gfx_vidro_pilula_cheia(r, raio, v, 1.0f);
+    else { brilhoFoco(r, 0.9f, v, 1.0f); gfx_cor(r, raio, ar, ag, ab, v); }
   }
-  brilhoFoco(r, 0.9f, f, 1.0f);
-  if (escolhida) {
-    // Uma unica pilula, com a cor interpolando entre o realce a 60% e o realce
-    // cheio conforme a mola do foco. Sem duas camadas sobrepostas: a de baixo
-    // aparecia pelas bordas do anti-aliasing enquanto a de cima subia.
-    float m = anim_clamp(f, 0.0f, 1.0f);
-    float k = BIB_ESCOLHIDA_DIM + (1.0f - BIB_ESCOLHIDA_DIM) * m;
-    gfx_cor(r, raio, ar * k, ag * k, ab * k, 1.0f);
-    return bibTinta();
-  }
-  if (f > 0.01f) gfx_cor(r, raio, ar, ag, ab, f);
-  gfx_cor(r, raio, 0.133f, 0.133f, 0.133f, 1.0f - f);
-  // A troca claro -> escuro e no MEIO da mola: texto ja rasterizado nao muda de
-  // cor, e virar no fim deixaria texto claro sobre pilula clara por meio
-  // caminho — que e o defeito "light-on-light" ja visto neste app.
-  return f > 0.5f ? bibTinta() : 200;
+  if (v > 0.5f) return ajustes_tinta_foco();
+  return escolhida ? 250 : 220;
 }
 
-// A SUPERFICIE DE UMA LINHA DA LISTA: em repouso 0.10/0.11/0.13 (um azul-cinza
-// um degrau acima do fundo #0D0D0D, e nao o #222 dos botoes — a linha e
-// conteudo, nao controle, e o #222 em 168 px de altura pesava como uma
-// prateleira); em foco a cor de realce cheia com o brilho atras. Devolve a
-// tinta principal do texto, pela mesma regra de pilula().
+// A SUPERFICIE DE UMA LINHA DA LISTA: em repouso um degrau acima da pagina
+// (branco a 5 % no vidro, 0.10/0.11/0.13 no solido); em foco a superficie um
+// degrau mais clara (branco 12 % / cinza opaco), sem realce nem brilho. Devolve
+// a tinta principal do texto (clara nos dois estados).
 static int superficieLinha(GfxRect r, float raio, float f, float a) {
-  float ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
-  if (ajustes_vidro()) {
-    gfx_vidro_painel(r, raio, 0.5f, a);
-    gfx_vidro_foco(r, raio, f, a);
-    return 240;
+  float v = anim_clamp(f, 0.0f, 1.0f);
+  if (ajustes_vidro()) gfx_cor(r, raio, 1, 1, 1, (.05f + .07f * v) * a);
+  else {
+    gfx_cor(r, raio, 0.10f, 0.11f, 0.13f, a);
+    if (v > 0.01f) gfx_cor(r, raio, .17f, .176f, .204f, v * a);
   }
-  brilhoFoco(r, 0.3f, f, a);
-  if (f > 0.01f) gfx_cor(r, raio, ar, ag, ab, f * a);
-  if (f < 0.99f) gfx_cor(r, raio, 0.10f, 0.11f, 0.13f, (1.0f - f) * a);
-  return f > 0.5f ? bibTinta() : 235;
+  return v > 0.5f ? bibTinta() : 235;
 }
 
 // O WORDMARK DO TRAKT, no lugar da palavra "TRAKT" composta com a fonte da
@@ -1089,30 +1076,39 @@ static float marcaTrakt(float x, float y, float h, int tinta, float alpha) {
   return w;
 }
 
+// AS ABAS SAO UM SELETOR SEGMENTADO (Glass UI; o mesmo das Fontes e do
+// Social): conteiner pilula a 5 % (solido: cinza opaco) atras dos tres modos,
+// o modo aberto num segmento um degrau mais claro e, com o foco nele, a pilula
+// cheia no acento. As posicoes dos modos nao mudam (NV_BIB_MODO_PASSO).
+static void desenhaModos(void) {
+  GfxRect c = { bibX() - 8.0f, NV_BIB_MODO_Y - 6.0f,
+                (BIB_N_MODOS - 1) * NV_BIB_MODO_PASSO + NV_BIB_MODO_W + 16.0f,
+                NV_BIB_MODO_H + 12.0f };
+  if (ajustes_vidro()) gfx_cor(c, 0.5f, 1, 1, 1, .05f);
+  else gfx_cor(c, 0.5f, .113f, .118f, .137f, 1.0f);
+}
 static void desenhaModo(int a, float f) {
   float centro = bibX() + a * NV_BIB_MODO_PASSO + NV_BIB_MODO_W * 0.5f;
   int sel = (a == modo);
-  TxtLinha l = txt_linha(TXT_CALLOUT, ROT_MODO[a], 235, 235, 235, 255);
+  TxtLinha l = txt_linha(TXT_CALLOUT, ROT_MODO[a], 150, 150, 150, 255);
   if (sel) {
-    float ar, ag, ab, k = 0.60f + 0.40f * anim_clamp(f, 0.0f, 1.0f);
+    float ar, ag, ab, v = anim_clamp(f, 0.0f, 1.0f);
+    int t = v > 0.5f ? ajustes_tinta_foco() : 250;
     GfxRect r = { centro - ((float)l.w + 40.0f) * 0.5f, NV_BIB_MODO_Y,
                   (float)l.w + 40.0f, NV_BIB_MODO_H };
     ajustes_acento(&ar, &ag, &ab);
-    brilhoFoco(r, 0.9f, f, 1.0f);
-    if (ajustes_vidro()) {
-      // aba ativa: vidro um degrau mais claro; com o foco, contorno branco
-      gfx_vidro_painel_acento(r, 0.5f, 0.62f, 1.0f);
-      gfx_vidro_foco(r, 0.5f, f, 1.0f);
-    } else
-    gfx_cor(r, 0.5f, ar * k, ag * k, ab * k, 1.0f);
-    l = txt_linha(TXT_CALLOUT, ROT_MODO[a], bibTinta(),
-                  bibTinta(), bibTinta(), 255);
+    if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .12f * (1.0f - v));
+    else gfx_cor(r, 0.5f, .204f, .212f, .243f, 1.0f - v);
+    if (v > 0.01f) {
+      if (ajustes_vidro()) gfx_vidro_pilula_cheia(r, 0.5f, v, 1.0f);
+      else { brilhoFoco(r, 0.9f, v, 1.0f); gfx_cor(r, 0.5f, ar, ag, ab, v); }
+    }
+    l = txt_linha(TXT_CALLOUT, ROT_MODO[a], t, t, t, 255);
     txt_desenhar_alpha(l, r.x + (r.w - l.w) * 0.5f,
                        r.y + (r.h - l.h) * 0.5f, 1.0f);
   } else {
-    // Aba inativa e texto solto: nenhuma pilula cinza compete com a ativa.
     txt_desenhar_alpha(l, centro - l.w * 0.5f,
-                       NV_BIB_MODO_Y + (NV_BIB_MODO_H - l.h) * 0.5f, 0.92f);
+                       NV_BIB_MODO_Y + (NV_BIB_MODO_H - l.h) * 0.5f, 1.0f);
   }
 }
 
@@ -1152,9 +1148,9 @@ static void desenhaPicker(int p, float f) {
   float w = pickerLargura(p);
   GfxRect r = { pickerX(p), NV_BIB_PICK_Y, w, BIB_PICK_H };
   (void)pilula(r, raioPx(BIB_PICK_RAIO, r.w, r.h), f, 0);
-  { int valor = f > 0.5f ? bibTinta() : 235;
-    int rotulo = f > 0.5f ? bibTinta2() : 150;
-    int sepCor = f > 0.5f ? bibTinta2() : 150;
+  { int valor = f > 0.5f ? ajustes_tinta_foco() : 235;
+    int rotulo = f > 0.5f ? ajustes_tinta_foco2() : 150;
+    int sepCor = f > 0.5f ? ajustes_tinta_foco2() : 150;
     TxtLinha tr, tv, sep;
     float x, y;
     pickerTexto(p, &rot, &val);
@@ -1285,6 +1281,12 @@ static void desenhaCartaz(const CatItem *ci, GfxRect base, float f, float a,
   GLuint tex = arte ? tex_obter_larg(arte, NV_BIB_CARD_W) : 0;
   // Arte chegando esvanece sobre o esqueleto (revela.h), como na home.
   float aArte = rv ? revela_arte(rv, tex != 0, agora) : 1.0f;
+  // O FOCO LEVANTA O CARTAZ (Glass UI, mockup tela 9): alem da escala, uma
+  // sombra curta embaixo dele, a mesma das ilhas. O contorno continua so se
+  // Ajustes > Foco no cartaz pedir.
+  if (f > 0.01f)
+    gfx_rect((GfxRect){ card.x - 18.0f, card.y - 4.0f, card.w + 36.0f, card.h + 44.0f }, 0,
+             GFX_SOMBRA, 1.0f, 0, 0, 0.5f, 0, 0, 0, .55f * f * a);
   if (tex) {
     if (aArte < 0.999f)
       gfx_cor(card, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G,
@@ -1467,7 +1469,7 @@ static void desenhaNota(const CatItem *ci, float xDir, float yCentro,
   if (ci && ci->nota > 0) {
     float w = badge_imdb_largura(ci->nota);
     badge_imdb(xDir - w, yCentro - BADGE_H * 0.5f, ci->nota,
-               f > 0.5f && !ajustes_vidro(), a);
+               0, a);
     return;
   }
   if (f > 0.5f) {
@@ -1835,6 +1837,7 @@ void biblioteca_desenhar(Uint32 agora) {
   desenhaCabecalho();
   if (temAberta) desenhaAcoes();
   else {
+    desenhaModos();
     for (int a = 0; a < BIB_N_MODOS; a++) desenhaModo(a, animModo[a]);
     for (int p = 0; p < 3; p++)           desenhaPicker(p, animPick[p]);
   }

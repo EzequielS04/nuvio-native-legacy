@@ -1807,27 +1807,46 @@ static float focoVisual(float f) {
   return f * f * (3.0f - 2.0f * f);
 }
 
-// Uma unica receita para a lateral: neutro em repouso; no foco, fill accent
-// solido, tinta por contraste e halo curto para destacar sem aureola excessiva.
-// No VIDRO o texto do foco nao inverte: a linha segue translucida (aro na cor do
-// realce, gfx_vidro_foco) e o texto fica nas cores de repouso.
-static float focoTexto(float f) { return ajustes_vidro() ? 0.0f : focoVisual(f); }
+// GLASS UI (dono, 02/10, mockup "ilha" tela 3): FOCO DE LINHA = SUPERFICIE UM
+// DEGRAU MAIS CLARA, nos dois materiais — branco a 12 % sobre o vidro, cinza
+// opaco sobre o solido. Sem aro, sem bloco cheio no acento e por isso SEM
+// inverter o texto: a linha focada segue com as cores de repouso, e o acento
+// fica para o estado (a barra de "nao lida", o ponto ao vivo, o selo da aba).
+// Em repouso a linha nao tem superficie nenhuma: ela mora direto na ilha, como
+// as linhas da folha de Fontes. focoTexto continua existindo para os chips e
+// botoes (botaoSup), que sao FOCO DE BOTAO e esses sim invertem.
+static float focoTexto(float f) { (void)f; return 0.0f; }
 
 static void superficieItem(GfxRect r, float raio, float f, float a) {
-  float cr, cg, cb, v = focoVisual(f);
-  if (ajustes_vidro()) {
-    gfx_vidro_superficie(r, raio, a);
-    if (v > .001f) gfx_vidro_foco(r, raio, v, a);
-    return;
-  }
-  ajustes_acento(&cr, &cg, &cb);
-  gfx_cor(r, raio, .062f, .066f, .079f, .92f * a);
-  if (v > .001f) {
-    // Cartoes sao bem mais altos que botoes; reduzir a luz evita que o halo
-    // invada a linha acima e a abaixo durante a rolagem.
-    botao_luz(r, v * .5f, a);
-    gfx_cor(r, raio, cr, cg, cb, v * a);
-  }
+  float v = focoVisual(f);
+  if (v <= .001f || a <= .001f) return;
+  if (ajustes_vidro()) gfx_cor(r, raio, 1, 1, 1, .12f * v * a);
+  else gfx_cor(r, raio, .17f, .176f, .204f, v * a);
+}
+
+// CAIXA DE AJUSTE (o interruptor de aparecer, nivel e nome): precisa de um
+// fundo em repouso, senao o interruptor boia sem dizer onde a linha comeca.
+// Um degrau abaixo do foco: branco a 5 % no vidro, cinza opaco no solido.
+static void superficieCaixa(GfxRect r, float raio, float f, float a) {
+  if (ajustes_vidro()) gfx_cor(r, raio, 1, 1, 1, .05f * a);
+  else gfx_cor(r, raio, .098f, .102f, .118f, a);
+  superficieItem(r, raio, f, a);
+}
+
+// FOCO DE BOTAO (chips da barra, "Adicionar um amigo", as respostas do
+// consentimento): o mesmo chipFolha da folha de Fontes. Repouso em branco a
+// 8 % (vidro) ou cinza opaco (solido); foco = pilula CHEIA no acento — no
+// vidro gfx_vidro_pilula_cheia, no solido com a luz de botao atras — e o texto
+// vai para ajustes_tinta_foco (quem chama usa focoVisual, nao focoTexto).
+static void botaoSup(GfxRect r, float raio, float f, float a) {
+  float v = focoVisual(f), ar, ag, ab;
+  if (ajustes_vidro()) gfx_cor(r, raio, 1, 1, 1, .08f * (1.0f - v) * a);
+  else gfx_cor(r, raio, .14f, .148f, .17f, (1.0f - v) * a);
+  if (v <= .001f) return;
+  if (ajustes_vidro()) { gfx_vidro_pilula_cheia(r, raio, v, a); return; }
+  ajustes_acento(&ar, &ag, &ab);
+  botao_luz(r, v * .55f, a);
+  gfx_cor(r, raio, ar, ag, ab, v * a);
 }
 
 // As duas cores ja ficam no cache de texto. O que muda por quadro e somente a
@@ -2218,7 +2237,7 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a) {
   // As DUAS linhas de baixo invertem junto com o titulo: com a pilula clara,
   // cinza-claro sobre claro fica ilegivel — foi o que a captura mostrou antes
   // de isto existir.
-  { int esc = f > 0.5f;
+  { int esc = focoTexto(f) > 0.5f;
     int c2 = esc ? ajustes_tinta_foco2() : 168;
     int c3 = esc ? ajustes_tinta_foco2() : 214;
     // O DISCO DA FOTO ANTES DO NOME. Com quatro recomendacoes na tela, a cara
@@ -2267,76 +2286,85 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a) {
 // NAO E DESENHADA (ver a nota longa em ctxmenu.c). O foco aparece no anel, que
 // e geometria e nao custa texto.
 // Largura da faixa de abas, para a contagem do cabecalho parar antes dela.
+// AS ABAS SAO UM SELETOR SEGMENTADO (Glass UI, mockup "ilha" tela 3; o mesmo
+// seletor de addon da folha de Fontes): um conteiner pilula em branco a 5 %
+// (solido: cinza opaco), a aba aberta num segmento um degrau mais claro e, com
+// o D-pad na faixa, esse segmento vira a pilula cheia no acento (foco de botao).
+// Era rotulo solto com um traco de acento embaixo da aba aberta: lia como
+// texto, nao como controle, e o traco gastava o acento num estado que a
+// superficie ja diz.
+#define SP_SEG_PAD   6.0f
+#define SP_SEG_VAO   4.0f
+#define SP_SEG_TXT  18.0f
+#define SP_SEG_SELO 34.0f
+static const char *rotuloAba(int i) {
+  return i == SP_ABA_SALVOS ? "Salvos" : i == SP_ABA_ATIVIDADE ? "Atividade"
+       : i == SP_ABA_SOCIAL ? "Amigos" : "Avisos";
+}
+static int novasDaAba(int i, int ativa) {
+  int n = i == SP_ABA_SOCIAL ? recomenda_n_novas() : i == SP_ABA_AVISOS ? avisos_n_novos() : 0;
+  // O selo so aparece na aba que NAO esta aberta. Ele responde "ha algo novo
+  // la?"; com a aba na tela, a propria lista responde isso.
+  return ativa ? 0 : n;
+}
+static float segLargura(int i, TxtLinha *t, int cor) {
+  *t = txt_linha(TXT_HERO_META, i18n(rotuloAba(i)), cor, cor, cor, 255);
+  return (float)t->w + SP_SEG_TXT * 2.0f + (novasDaAba(i, i == aba) > 0 ? SP_SEG_SELO : 0.0f);
+}
 static float abasLargura(void) {
-  const char *rot[SP_ABA_N]; int i; float w = 0.0f;
-  int novasRec = recomenda_n_novas(), novasAv = avisos_n_novos();
-  rot[SP_ABA_SALVOS] = "Salvos"; rot[SP_ABA_ATIVIDADE] = "Atividade";
-  rot[SP_ABA_SOCIAL] = "Amigos"; rot[SP_ABA_AVISOS] = "Avisos";
+  float w = SP_SEG_PAD * 2.0f - SP_SEG_VAO;
+  int i;
   for (i = 0; i < SP_ABA_N; i++) {
-    int ativa = (i == aba);
-    int novas = i == SP_ABA_SOCIAL ? novasRec : i == SP_ABA_AVISOS ? novasAv : 0;
     TxtLinha t;
     if (!abaExiste(i)) continue;
-    t = txt_linha(TXT_CALLOUT, i18n(rot[i]), 176, 176, 176, 255);
-    w += t.w + (ativa ? 20.0f : 0.0f) + ((!ativa && novas > 0) ? 34.0f : 0.0f) + SP_ABA_GAP;
+    w += segLargura(i, &t, 176) + SP_SEG_VAO;
   }
   return w;
 }
 
 static void desenhaAbas(float dx, float a) {
-  const char *rot[SP_ABA_N];
-  float x = SP_X + dx + SP_PAD;
-  int i, novasRec = recomenda_n_novas(), novasAv = avisos_n_novos();
-  rot[SP_ABA_SALVOS] = "Salvos";
-  rot[SP_ABA_ATIVIDADE] = "Atividade";
-  rot[SP_ABA_SOCIAL] = "Amigos";
-  rot[SP_ABA_AVISOS] = "Avisos";
+  float x = SP_X + dx + SP_PAD, ar, ag, ab;
+  int i;
+  GfxRect caixa = { x, SP_ABAS_Y, abasLargura(), SP_ABAS_H };
+  ajustes_acento(&ar, &ag, &ab);
+  if (ajustes_vidro()) gfx_cor(caixa, 0.5f, 1, 1, 1, .05f * a);
+  else gfx_cor(caixa, 0.5f, .113f, .118f, .137f, a);
+  x += SP_SEG_PAD;
   for (i = 0; i < SP_ABA_N; i++) {
     int ativa = (i == aba);
     int focada = ativa && foco == SP_FOCO_ABAS;
-    int cor = focada ? ajustes_tinta_foco() : ativa ? 245 : 176;
-    int novas = i == SP_ABA_SOCIAL ? novasRec : i == SP_ABA_AVISOS ? novasAv : 0;
+    int cor = focada ? ajustes_tinta_foco() : ativa ? 250 : 150;
+    int novas = novasDaAba(i, ativa);
     TxtLinha t;
+    float w;
+    GfxRect p;
     if (!abaExiste(i)) continue;
-    t = txt_linha(TXT_CALLOUT, i18n(rot[i]), cor, cor, cor, 255);
-    // O selo so aparece na aba que NAO esta aberta. Ele responde "ha algo
-    // novo la?"; com a aba Social na tela, a propria lista responde isso, e o
-    // numero ficaria repetido a dois centimetros da contagem do cabecalho.
-    // O SELO E PEQUENO E MORA DENTRO DA PILULA (dono, 20/09/2026: "o numero
-    // ta feio, menos amador"): 24 px, numeral TXT_MINI, 10 px depois do
-    // rotulo, e a pilula cresce para ele — antes eram 32 px encostados na
-    // borda, e a contagem do cabecalho vinha logo atras sem folga.
-    float selo = (!ativa && novas > 0) ? 34.0f : 0.0f;
-    float margem = ativa ? 20.0f : 0.0f;
-    GfxRect p = { x, SP_ABAS_Y, t.w + margem + selo, SP_ABAS_H };
-    // Aba ativa fica como rotulo e indicador curto quando a lista tem foco;
-    // so vira pilula accent quando o D-pad esta realmente na faixa de abas.
-    if (focada) superficieItem(p, NV_RAIO_PILL, 1.0f, a);
-    else if (ativa) {
-      float ar, ag, ab;
-      ajustes_acento(&ar, &ag, &ab);
-      gfx_cor((GfxRect){x + 6.0f, SP_ABAS_Y + SP_ABAS_H - 3.0f,
-                         t.w + 8.0f, 3.0f}, 0.5f, ar, ag, ab, a);
+    w = segLargura(i, &t, cor);
+    p = (GfxRect){ x, SP_ABAS_Y + SP_SEG_PAD, w, SP_ABAS_H - SP_SEG_PAD * 2.0f };
+    if (focada) {
+      if (ajustes_vidro()) gfx_vidro_pilula_cheia(p, 0.5f, 1.0f, a);
+      else { botao_luz(p, .55f, a); gfx_cor(p, 0.5f, ar, ag, ab, a); }
+    } else if (ativa) {
+      if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, .12f * a);
+      else gfx_cor(p, 0.5f, .204f, .212f, .243f, a);
     }
-    txt_desenhar_alpha(t, x + (ativa ? 10.0f : 0.0f),
-                       SP_ABAS_Y + (SP_ABAS_H - t.h) * 0.5f, a);
-    if (selo > 0.0f) {
+    txt_desenhar_alpha(t, x + SP_SEG_TXT, p.y + (p.h - t.h) * 0.5f, a);
+    // O SELO E PEQUENO E MORA DENTRO DO SEGMENTO (dono, 20/09/2026: "o numero
+    // ta feio, menos amador"): 24 px, numeral TXT_MINI, no acento — e estado.
+    if (novas > 0) {
       char n[16];
       GfxRect b;
       TxtLinha tn;
-      float br, bg, bb;
+      int ink = ajustes_tinta_foco();
       snprintf(n, sizeof n, "%d", novas > 99 ? 99 : novas);
-      ajustes_acento(&br, &bg, &bb);
-      { int ink = ajustes_tinta_foco();
-        tn = txt_linha(TXT_MINI, n, ink, ink, ink, 255); }
+      tn = txt_linha(TXT_MINI, n, ink, ink, ink, 255);
       b.w = 24.0f; b.h = 24.0f;
-      b.x = x + t.w + 10.0f;
-      b.y = SP_ABAS_Y + (SP_ABAS_H - b.h) * 0.5f;
-      gfx_rect(b, 0, GFX_DISCO, 0, 0, 0, 0, br, bg, bb, a);
-      txt_desenhar_alpha(tn, b.x + (b.w - tn.w) * 0.5f,
-                         b.y + (b.h - tn.h) * 0.5f, a);
+      b.x = x + SP_SEG_TXT + t.w + 10.0f;
+      b.y = p.y + (p.h - b.h) * 0.5f;
+      gfx_rect(b, 0, GFX_DISCO, 0, 0, 0, 0, ar, ag, ab, a);
+      txt_desenhar_alpha(tn, b.x + (b.w - tn.w) * 0.5f, b.y + (b.h - tn.h) * 0.5f, a);
     }
-    x += p.w + SP_ABA_GAP;
+    x += w + SP_SEG_VAO;
   }
 }
 
@@ -2371,7 +2399,7 @@ static void desenhaBarra(float dx, float a) {
   for (k = 0; k < n; k++) {
     const char *cap, *val, *icone;
     char buf[24];
-    float f = animBarra[k], v = focoTexto(f), w, ix;
+    float f = animBarra[k], v = focoVisual(f), w, ix;
     TxtLinha vr, vf, cr, cf;
     GfxRect r;
     chipTextos(k, &cap, &val, &icone, buf, sizeof buf);
@@ -2385,11 +2413,9 @@ static void desenhaBarra(float dx, float a) {
     }
     w += 40.0f + (icone ? 30.0f : 0.0f);
     r = (GfxRect){ x, SP_OPC_Y, w, SP_OPC_H };
-    // Em repouso a pilula precisa existir: a superficie neutra das linhas
-    // some sobre o painel escuro, e uma opcao invisivel nao se le como botao.
-    superficieItem(r, 18.0f / SP_OPC_H, f, a);
-    if (!ajustes_vidro())
-      gfx_cor(r, 18.0f / SP_OPC_H, 1.0f, 1.0f, 1.0f, 0.07f * (1.0f - focoVisual(f)) * a);
+    // Em repouso a pilula precisa existir: uma opcao invisivel nao se le como
+    // botao. E chip (foco de botao), entao o foco e a pilula cheia no acento.
+    botaoSup(r, 0.5f, f, a);
     ix = x + 20.0f;
     if (icone) {
       float ic = anim_mistura(220.0f / 255.0f, tinta, v);
@@ -2424,12 +2450,15 @@ static void desenhaPop(float a) {
   x = SP_X + 40.0f;
   y = SP_Y + (SP_H - h) * 0.42f + (1.0f - e) * 18.0f;
   gfx_cor((GfxRect){ SP_X, SP_Y, SP_W, SP_H }, 28.0f / SP_H, 0.0f, 0.0f, 0.0f, 0.50f * e);
+  // A ESCOLHA E UMA ILHA por cima da ilha do painel: o mesmo material, um
+  // degrau mais clara no solido para se separar dele sem aro.
   { GfxRect r = { x, y, w, h };
-    if (ajustes_vidro()) gfx_vidro_folha(r, 26.0f / h, e);
-    else {
-      gfx_cor(r, 26.0f / h, 0.085f, 0.089f, 0.104f, e);
-      gfx_cor((GfxRect){ x, y, w, 1.0f }, 0.0f, 1, 1, 1, 0.06f * e);
-    } }
+    const int vid = ajustes_vidro();
+    gfx_rect((GfxRect){ x - 18.0f, y - 8.0f, w + 36.0f, h + 40.0f }, 0, GFX_SOMBRA,
+             1.0f, 0, 0, 0.5f, 0, 0, 0, .42f * e);
+    if (vid) gfx_vidro_folha(r, 28.0f / h, e);
+    else gfx_cor(r, 28.0f / h, .098f, .102f, .118f, .99f * e);
+    gfx_luz_canto(r, 28.0f / h, w * .25f, -h * .25f, w * .9f, 1, 1, 1, (vid ? .06f : .04f) * e); }
   { TxtLinha t = txt_linha_corta(TXT_CALLOUT, popTitulo, 246, 247, 252, 255, w - 64.0f);
     txt_desenhar_alpha(t, x + 32.0f, y + 26.0f, e); }
   if (popSub[0]) {
@@ -2566,7 +2595,7 @@ static void desenhaBotaoLinha(int i, float dx, float y, float alt, float a,
                               const char *titulo, const char *sub,
                               const char *icone, int primario) {
   float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f;
-  float v = focoTexto(f), tinta = ajustes_acento_tinta(NULL, NULL, NULL);
+  float v = focoVisual(f), tinta = ajustes_acento_tinta(NULL, NULL, NULL);
   int tintaFoco = ajustes_tinta_foco();
   float h = primario ? BOTAO_H_PRIMARIO : BOTAO_H_SECUNDARIO;
   float w = botao_largura(titulo, icone, primario);
@@ -2575,7 +2604,7 @@ static void desenhaBotaoLinha(int i, float dx, float y, float alt, float a,
   TxtLinha repouso, foco;
   (void)sub;
   if (r.w > SP_INTERNO) r.w = SP_INTERNO;
-  superficieItem(r, 0.5f, f, a);
+  botaoSup(r, 0.5f, f, a);
   repouso = txt_linha(TXT_DET_BOTAO, titulo, 220, 220, 224, 255);
   foco = txt_linha(TXT_DET_BOTAO, titulo, tintaFoco, tintaFoco, tintaFoco, 255);
   grupo = (float)repouso.w + ((icone && icone[0]) ? BOTAO_ICONE + BOTAO_ICONE_GAP : 0.0f);
@@ -2641,7 +2670,7 @@ static void desenhaAparecer(int i, float dx, float y, float alt, float a) {
   GfxRect trilho, bola;
   float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f;
   float ar, ag, ab, ti = ajustes_acento_tinta(&ar, &ag, &ab);
-  int esc = f >= 0.5f;
+  int esc = focoTexto(f) >= 0.5f;
   int c1 = esc ? ajustes_tinta_foco() : 240;
   int c2 = esc ? ajustes_tinta_foco2() : 168;
   // Clamp de seguranca: animSw nasce em -1 e so assenta na primeira
@@ -2669,7 +2698,7 @@ static void desenhaAparecer(int i, float dx, float y, float alt, float a) {
       ? "Quem te conhece te acha nas sugestões"
       : "Você continua trocando recomendações";
 
-  superficieItem(r, 14.0f / alt, f, a);
+  superficieCaixa(r, 14.0f / alt, f, a);
 
   { TxtLinha t = txt_linha_corta(TXT_CALLOUT, "Aparecer para outras pessoas",
                                  c1, c1, c1, 255, largTexto);
@@ -2764,7 +2793,7 @@ static void desenhaAjusteSocial(int i, float dx, float y, float alt, float a) {
 #else
   (void)buf;
 #endif
-  superficieItem(r, 14.0f / alt, f, a);
+  superficieCaixa(r, 14.0f / alt, f, a);
   { TxtLinha t = txt_linha_corta(TXT_CALLOUT, titulo, 240, 240, 240, 255, SP_INTERNO - 64.0f);
     TxtLinha tF = txt_linha_corta(TXT_CALLOUT, titulo, tf, tf, tf, 255, SP_INTERNO - 64.0f);
     TxtLinha s2 = txt_linha_corta(TXT_CAPTION, valor, 168, 172, 182, 255, SP_INTERNO - 64.0f);
@@ -2786,7 +2815,7 @@ static void desenhaSugLinha(int i, int idx, float dx, float y, float a) {
   float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f;
   float px = SP_X + dx + SP_PAD;
   char origem[128];
-  int esc = f > 0.5f;
+  int esc = focoTexto(f) > 0.5f;
 
   { GfxRect p = { px - 12.0f, y - SP_FOCO_PADY, SP_INTERNO + 24.0f,
                   SPS_H_SUG + SP_FOCO_PADY * 2.0f };
@@ -3124,10 +3153,17 @@ static void desenharPainel(Uint32 agora) {
   // uma luz decorativa colorida competindo com posters e selos.
   { GfxRect p = { SP_X + x, SP_Y, SP_W, SP_H };
     float as = a;
+    const int vid = ajustes_vidro();
     if (deIlha) { p = forma; as = entrada > 0.08f ? 1.0f : entrada / 0.08f; }
-    // Vidro: folha translucida sem contorno, como o menu e Fontes (dono, 30/09).
-    if (ajustes_vidro()) gfx_vidro_folha(p, raioForma, as);
-    else gfx_cor(p, raioForma, 0.055f, 0.058f, 0.068f, 0.94f * as);
+    // O PAINEL E UMA ILHA (Glass UI, mockup tela 3), no material da folha de
+    // Fontes: sombra curta, miolo de vidro (gfx_vidro_folha) ou solido e uma
+    // luz larga e fraca no canto de cima. Sem aro. Nascendo da pilula do
+    // relogio a forma e a mesma, so o retangulo muda.
+    gfx_rect((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f }, 0, GFX_SOMBRA,
+             1.0f, 0, 0, 0.5f, 0, 0, 0, .38f * as);
+    if (vid) gfx_vidro_folha(p, raioForma, as);
+    else gfx_cor(p, raioForma, .071f, .075f, .086f, .98f * as);
+    gfx_luz_canto(p, raioForma, p.w * .25f, -p.h * .25f, p.w * .9f, 1, 1, 1, (vid ? .06f : .04f) * as);
   }
 
   // Tudo daqui para baixo fica preso ao painel: sem o recorte, a lista rolada

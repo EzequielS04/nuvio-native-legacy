@@ -218,7 +218,8 @@ int main(int argc, char **argv) {
   snprintf(cache, sizeof cache, "%s/cache", dirDados);
   tex_cache_dir(cache);
   gfx_icones_dir("deploy/app/art");
-  ajusta(2, 0);
+  // NUVIO_SHOT_VIDRO=1: Interface de vidro ligada (o padrao desta captura e o solido).
+  ajusta(2, getenv("NUVIO_SHOT_VIDRO") && !strcmp(getenv("NUVIO_SHOT_VIDRO"), "1"));
   assert(home_iniciar("deploy/app/art"));
 
   memset(itens, 0, sizeof itens);
@@ -318,6 +319,20 @@ int main(int argc, char **argv) {
 #define FOTO(nome) do { snprintf(bmp, sizeof bmp, "%s-%02d-%s.bmp", saida, n++, nome); quadros(1, bmp); \
     printf("[shot] %s: fill=%.2f vis=%.2f rects=%d\n", nome, fillUlt, fillVisUlt, rectUlt); } while (0)
     FOTO("home");
+    // NV_CTX=1: so o MENU DO CARTAZ (segurar OK), a segunda opcao em foco e a
+    // folha de estilo da fileira — as ilhas modais do Glass UI — e para.
+    if (getenv("NV_CTX")) {
+      int alvo = getenv("NV_FIL") ? atoi(getenv("NV_FIL")) : 3;
+      segurarOk();
+      quadros(60, NULL); FOTO("ctx");
+      teclaCtx(SDLK_DOWN);
+      quadros(40, NULL); FOTO("ctx-foco2");
+      teclaCtx(SDLK_ESCAPE);
+      quadros(40, NULL);
+      ctx_abrir_fileira(fils[alvo].chave, fils[alvo].titulo);
+      quadros(60, NULL); FOTO("estilos");
+      goto fim;
+    }
     // ABRIR: OK (keydown + keyup na home), quadros a cada 3.
     tecla(SDLK_RETURN);
     for (q = 0; q < 8; q++) { quadros(2, NULL); FOTO("abrindo"); }
@@ -348,6 +363,7 @@ int main(int argc, char **argv) {
     quadros(90, NULL); FOTO("fileira");
     printf("[shot] detalhe aberto no fim: %d\n", detail_aberto());
   }
+fim:
 
   tex_encerrar();
   txt_encerrar();

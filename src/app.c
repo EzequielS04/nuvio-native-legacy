@@ -3426,7 +3426,10 @@ static void desenharTelas(Uint32 agora) {
 static int spotVeuPronto;   // o veu do Spotlight ja esta na copia congelada
 static int relogioCabe(void) {
   if (tela != TELA_HOME || !homePronta) return 0;
-  if (detail_aberto() || vertudo_aberta() || menu_aberto() || ctx_aberto()) return 0;
+  // O MENU ABERTO NAO ESCONDE MAIS O RELOGIO (Glass UI, mockup "ilha" tela 1):
+  // a ilha do menu nasce logo abaixo da do relogio, na mesma margem
+  // (ilha_posicionar), e as duas formam a coluna da esquerda.
+  if (detail_aberto() || vertudo_aberta() || ctx_aberto()) return 0;
   if (sintro_aberto() || novidades_aberto() || novidades11_aberto() || novidades12_aberto() ||
       novidades13_aberto() || novidades131_aberto() || novidades132_aberto() ||
       novidades133_aberto() || novidades134_aberto() || novidades139_aberto() ||

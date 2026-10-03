@@ -76,6 +76,13 @@ int  menu_pediu_colecao(void);
 // OK SEGURADO em "Buscar": abrir o Spotlight. Consome a flag.
 int  menu_pediu_spotlight(void);
 
+// --- A ILHA DO MENU (layouts classicos) -------------------------------------
+// O menu e uma ilha flutuante na MESMA margem esquerda da ilha do relogio e
+// logo abaixo dela (NV_ILHA_Y + NV_ILHA_H + 24). ilha.c ancora o relogio neste
+// x quando a rail fixa ou o menu aberto estao na tela, para os dois ornarem.
+#define NV_MENU_ILHA_X       48.0f
+#define NV_MENU_ILHA_Y      112.0f
+
 // --- PILULA DO LAYOUT DINAMICA (barra estilo Apple TV) ----------------------
 // No layout Dinamica da home nao ha rail: fechada, a barra e uma pilula
 // "‹ (icone) Secao" no topo esquerdo, por cima do conteudo. Este canto e DELA.

@@ -67,6 +67,7 @@
 #include "ajustes.h"
 #include "rail_shot.h"
 #include "perfis.h"
+#include "shot_arte.h"
 #include "gfx.h"
 #include "text.h"
 #include "tex_cache.h"
@@ -103,6 +104,7 @@ static void ajustesDeTeste(int idiomaIngles, int animReduzidas) {
   f = fopen(caminho, "w");
   if (!f) return;
   fprintf(f, "idioma %d\nanimacoes %d\n", idiomaIngles, animReduzidas);
+  shot_arte_material(f);   // NUVIO_SHOT_VIDRO=0: o material solido
   if (temaEnv && *temaEnv) {
     char *fim;
     long tema = strtol(temaEnv, &fim, 10);

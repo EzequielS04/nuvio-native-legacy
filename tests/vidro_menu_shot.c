@@ -11,6 +11,8 @@
 #include "text.h"
 #include "tex_cache.h"
 #include "ajustes.h"
+#include "ilha.h"
+#include "shot_arte.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -19,6 +21,7 @@
 #include <string.h>
 
 static int qual = 0;   // 0 = menu lateral, 1 = folha de faixas
+static int nq = 50;   // quadros por captura (poucos = a barra no meio da abertura)
 static void tecla(SDL_Keycode k) {
   SDL_Event e;
   memset(&e, 0, sizeof e);
@@ -29,16 +32,27 @@ static void tecla(SDL_Keycode k) {
 
 static void captura(const char *nome, SDL_Window *win) {
   int i;
-  for (i = 0; i < 50; i++) {
+  // A ilha mede o passo pelo relogio de parede (SDL_GetTicks): sem a espera
+  // os 50 quadros passam em poucos ms e o texto dela ainda nao entrou.
+  for (i = 0; i < nq; i++) {
     SDL_PumpEvents();
+    if (!qual) SDL_Delay(16);
     txt_novo_quadro();
     tex_novo_quadro();
     tex_bombear(6);
     if (qual) faixas_atualizar(1.0f / 60.0f, SDL_GetTicks()); else menu_atualizar(1.0f / 60.0f, SDL_GetTicks());
     glClearColor(0.05f, 0.05f, 0.06f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+    // Glass UI: a arte atras (shot_arte.h) e a ilha do relogio por cima, nas
+    // mesmas guardas de app.c (ilha_posicionar decide o canto com o menu).
+    if (!qual) shot_arte_desenhar(.30f);
     if (qual) faixas_desenhar(SDL_GetTicks()); else menu_desenhar(SDL_GetTicks());
-    if (i == 49) {
+    if (!qual) {
+      ilha_relogio_visivel(1);
+      ilha_posicionar(0);
+      ilha_desenhar(SDL_GetTicks());
+    }
+    if (i == nq - 1) {
       unsigned char *pix = malloc(1920 * 1080 * 4);
       SDL_Surface *s;
       int y;
@@ -73,7 +87,12 @@ int main(int argc, char **argv) {
       if (tema < 0 || tema >= 16) tema = 2;
       snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dir);
       f = fopen(caminho, "w"); assert(f);
-      fprintf(f, "idioma 0\nselected_theme %d\ncollapseSidebar 1\n", tema);
+      // NUVIO_SHOT_RAIL=recolhida: sem a rail de icones (collapseSidebar 0 =
+      // "Recolhida" na ordem de V_RAIL); o padrao da captura e a rail fixa.
+      { const char *rail = getenv("NUVIO_SHOT_RAIL");
+        fprintf(f, "idioma 0\nselected_theme %d\ncollapseSidebar %d\n", tema,
+                rail && !strcmp(rail, "recolhida") ? 0 : 1); }
+      shot_arte_material(f);
       fclose(f);
       ajustes_dir(dir);
     } }
@@ -101,6 +120,11 @@ int main(int argc, char **argv) {
   captura(nome, w);
   menu_abrir();
   tecla(SDLK_DOWN); tecla(SDLK_DOWN);
+  // A ilha do menu no meio da abertura: a largura cresce, o rotulo entra.
+  nq = 8;
+  snprintf(nome, sizeof nome, "%s-abrindo.bmp", saida);
+  captura(nome, w);
+  nq = 50;
   snprintf(nome, sizeof nome, "%s-menu.bmp", saida);
   captura(nome, w);
   menu_fechar();

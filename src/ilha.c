@@ -284,6 +284,13 @@ void ilha_posicionar(int guia) {
     if (menu_pilula_rect(&px, &py, &pw, &ph))
       ilha_ancorar(px + pw + NV_MENU_PILULA_VAO, py + (ph - NV_ILHA_H) * 0.5f, 0);
     else ilha_ancorar(ajustes_conteudo_x(), NV_ILHA_Y, 0);   // sem pilula na tela: canto livre
+  } else if (ajustes_home_layout() != HOME_LAYOUT_DINAMICA &&
+             (menu_aberto() || !ajustes_rail_recolhida())) {
+    // GLASS UI (mockups "ilha", telas 1 e 2): com a rail fixa ou o menu aberto
+    // a ilha do relogio fica EM CIMA da ilha do menu, na mesma margem — as
+    // duas leem como uma coluna so. Sem rail na tela ela volta ao x do
+    // conteudo (o canto livre de sempre).
+    ilha_ancorar(NV_MENU_ILHA_X, NV_ILHA_Y, 0);
   } else if (pos == 1) ilha_ancorar(ajustes_conteudo_x(), NV_ILHA_Y, 0);
 }
 
@@ -805,6 +812,13 @@ void ilha_desenhar(Uint32 agora) {
   if (ancDef) { x = ancX; y = ancY; dir = ancDir; }
   else if (ajustes_home_layout() == HOME_LAYOUT_DINAMICA) { x = NV_TELA_W - NV_ILHA_MARGEM_D; y = NV_ILHA_Y; dir = 1; }
   else { x = ajustes_conteudo_x(); y = NV_ILHA_Y; dir = 0; }
+  // O CANTO MUDA COM O MENU (ilha_posicionar): abrir a barra com a rail
+  // recolhida leva o relogio de x do conteudo para a margem do menu. Desliza,
+  // em vez de saltar; troca de lado (esquerda/direita) ou ilha apagada assenta
+  // seco, porque ali nao ha caminho que faca sentido.
+  { static float xSuave; static int xDir = -1;
+    if (dir != xDir || A < 0.01f || fabsf(xSuave - x) < 0.5f) { xSuave = x; xDir = dir; }
+    else { xSuave = anim_mola(xSuave, x, dt, NV_MOLA_TELA); x = xSuave; } }
   // O alvo do voo e a pilula ASSENTADA (a mola da forma e mais rapida que a
   // do voo: quando o quadro pousa, ela ja esta la).
   { LinhasCartao Lv;

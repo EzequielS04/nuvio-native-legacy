@@ -832,6 +832,40 @@ static void ponteiroEstOk(int i, int b) {
   aplicarEstilo();
 }
 
+// GLASS UI (dono, 02/10, mockup "ilha" tela 7): TODO MODAL E UMA ILHA — o
+// material da folha de Fontes e da ilha do relogio. Sombra curta, miolo de
+// vidro (gfx_vidro_folha) ou solido, uma luz larga e fraca BRANCA no canto de
+// cima (era a luz na cor do realce: o acento agora so marca estado) e sem aro.
+static void ilhaCtx(GfxRect p, float raioPx, float a) {
+  const int vid = ajustes_vidro();
+  float raio = raioPx / p.h;
+  gfx_rect((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f }, 0, GFX_SOMBRA,
+           1.0f, 0, 0, 0.5f, 0, 0, 0, .42f * a);
+  if (vid) gfx_vidro_folha(p, raio, a);
+  else gfx_cor(p, raio, .071f, .075f, .086f, .98f * a);
+  gfx_luz_canto(p, raio, p.w * .25f, -p.h * .25f, p.w * .9f, 1, 1, 1, (vid ? .06f : .04f) * a);
+}
+
+// UMA LINHA DE LISTA dentro da ilha (as opcoes do cartaz, as formas da
+// fileira): icone e rotulo, e o FOCO = SUPERFICIE UM DEGRAU MAIS CLARA (branco
+// a 12 % no vidro, cinza opaco no solido), sem pilula cheia nem contorno —
+// como o menu e o painel de Salvos. A pilula cheia no acento fica para botao.
+#define CTX_ICONE 28.0f
+static void linhaCtx(GfxRect r, const char *rot, const char *icone, float f, float a) {
+  float lum = 0.80f + 0.20f * (f < 0.0f ? 0.0f : f > 1.0f ? 1.0f : f);
+  int c = (int)(lum * 255.0f + 0.5f);
+  if (f > 0.01f) {
+    if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, .12f * f * a);
+    else gfx_cor(r, 0.5f, .17f, .176f, .204f, f * a);
+  }
+  if (icone && icone[0])
+    gfx_icone((GfxRect){ r.x + 26.0f, r.y + (r.h - CTX_ICONE) * 0.5f, CTX_ICONE, CTX_ICONE },
+              icone, lum, lum, lum, a);
+  { TxtLinha t = txt_linha_corta(TXT_BODY, rot, c, c, c, 255, r.w - 100.0f);
+    txt_desenhar_alpha(t, r.x + 26.0f + CTX_ICONE + 20.0f, r.y + (r.h - t.h) * 0.5f, a); }
+}
+
+
 // --- O MODAL DE ESTILO ------------------------------------------------------
 //
 // O mesmo cartao flutuante do menu (vidro ou folha com a luz do realce), mais
@@ -855,7 +889,10 @@ static void ponteiroEstOk(int i, int b) {
 #define EST_SEG_GAP  6.0f
 static void desenhaTamanhos(GfxRect r, int i, int atual, float a) {
   float fr, fg, fb, ti = botao_cor_foco(&fr, &fg, &fb);
-  int aceso = estAnim[i] >= 0.5f, j, n = estLin[i].n;
+  // A linha agora acende por SUPERFICIE (linhaCtx), nunca no acento: a tinta
+  // e sempre a clara de repouso.
+  int aceso = 0, j, n = estLin[i].n;
+  (void)estAnim;
   // A tinta e a do rotulo da pilula (botao_pilula): a de botao_cor_foco acesa,
   // clara em repouso. A letra escolhida vai no fundo da pilula — o realce
   // aceso, o escuro do cartao em repouso — sobre um disco na tinta.
@@ -903,13 +940,8 @@ static void desenhaEstilos(float a) {
   }
   y += (1.0f - a) * 40.0f;
   ajustes_acento(&ar_, &ag_, &ab_);
-  { GfxRect p = { x, y, EST_W, alt };
-    float raio = 28.0f / alt;
-    if (ajustes_vidro()) gfx_vidro_folha(p, raio, a);
-    else {
-      gfx_cor(p, raio, 0.055f, 0.058f, 0.068f, 0.94f * a);
-      gfx_luz_canto(p, raio, EST_W * 0.1f, -EST_W * 0.1f, EST_W * 0.4f, ar_, ag_, ab_, 0.22f * a);
-    } }
+  ilhaCtx((GfxRect){ x, y, EST_W, alt }, 36.0f, a);
+  (void)ar_; (void)ag_; (void)ab_;
   { TxtLinha t = txt_linha(TXT_CAPTION2, "FILEIRA SELECIONADA", 174, 178, 188, 255);
     txt_desenhar_alpha(t, x + CTX_PAD, y + CTX_PAD, a * 0.95f); }
   { TxtLinha t = txt_linha_corta(TXT_HEADLINE, filTitulo, 245, 248, 255, 255,
@@ -926,7 +958,7 @@ static void desenhaEstilos(float a) {
     for (j = 0; j < estLin[i].n; j++) if (estLin[i].tipos[j] == atual) temAtual = 1;
     if (aberto && a > 0.5f)
       ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroEstFoco, ponteiroEstOk, i, 0);
-    botao_pilula(r, estLin[i].rotulo, temAtual ? "check" : "", estAnim[i], 1, 1, a);
+    linhaCtx(r, estLin[i].rotulo, temAtual ? "check" : "", estAnim[i], a);
     if (estLin[i].n > 1) desenhaTamanhos(r, i, atual, a);
   }
 
@@ -949,8 +981,8 @@ static void desenhaEstilos(float a) {
   { GfxRect palco = { dx, topo + EST_PALCO_Y, dw, corpo - EST_PALCO_Y };
     TxtLinha tl;
     GfxRect area;
-    gfx_cor(palco, 22.0f / palco.h, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 0.96f * a);
-    gfx_anel(palco, 22.0f / palco.h, 1.5f, 1, 1, 1, 0.08f * a);
+    // O palco e uma superficie dentro da ilha, sem aro (regra 1 do Glass UI).
+    gfx_cor(palco, 26.0f / palco.h, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 0.96f * a);
     tl = txt_linha_corta(TXT_ROW_TITULO, filTitulo, 245, 246, 249, 255, palco.w - 64.0f);
     txt_desenhar_alpha(tl, palco.x + 32.0f, palco.y + 28.0f, a);
     area = (GfxRect){ palco.x + 32.0f, palco.y + 28.0f + tl.h + 20.0f,
@@ -1056,14 +1088,8 @@ void ctx_desenhar(Uint32 agora) {
   // cartao (GFX_LUZ). Com o veu de tela cheia ja pago, e a ultima camada
   // grande daqui — e mede o cartao, nao a tela.
   float ar_, ag_, ab_; ajustes_acento(&ar_, &ag_, &ab_);
-  { GfxRect p = { x, y, CTX_W, alt };
-    float menor = alt < CTX_W ? alt : CTX_W, raio = 28.0f / menor;
-    if (ajustes_vidro()) {
-      // Folha de vidro sem contorno (gfx_vidro_folha), sem luz colorida.
-      gfx_vidro_folha(p, raio, a);
-    } else {
-    gfx_cor(p, raio, 0.055f, 0.058f, 0.068f, 0.94f * a);
-    gfx_luz_canto(p, raio, CTX_W * 0.1f, -CTX_W * 0.1f, CTX_W * 0.65f, ar_, ag_, ab_, 0.22f * a); } }
+  ilhaCtx((GfxRect){ x, y, CTX_W, alt }, 36.0f, a);
+  (void)ar_; (void)ag_; (void)ab_;
 
   { TxtLinha t = txt_linha(TXT_CAPTION2, "TÍTULO SELECIONADO",
                            174, 178, 188, 255);
@@ -1120,7 +1146,7 @@ void ctx_desenhar(Uint32 agora) {
       case OP_CATEGORIA:  icone = "aj_folders"; break;
       default: break;
     }
-    botao_pilula(r, ops[i].rot, icone, f, 1, 1, a);
+    linhaCtx(r, ops[i].rot, icone, f, a);
   }
 
   { const char *rodape = estadoOperacao == CTX_PENDENTE

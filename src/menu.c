@@ -24,19 +24,37 @@
 #include "home.h"
 #include "colecoes.h"
 
-// Larguras: a recolhida cabe so o icone; a aberta e a da barra do tvOS, larga o
-// bastante para o rotulo mais comprido ("Biblioteca") nao encostar na borda.
-#define NV_MENU_W_ICONE   NV_LEGACY_RAIL_W
-#define NV_MENU_W_ABERTO  392.0f
-#define NV_MENU_LINHA_H    88.0f
-#define NV_MENU_ICONE      38.0f
+// O MENU E UMA ILHA (dono, 02/10, mockups "Glass UI — ilha", telas 1 e 2).
+// Nao ha mais faixa de 144 px colada na borda nem painel de altura cheia: a
+// barra e um bloco flutuante NA MESMA MARGEM ESQUERDA da ilha do relogio
+// (NV_MENU_ILHA_X, menu.h) e logo ABAIXO dela, no mesmo material (miolo
+// escuro translucido ou solido, luz larga no canto de cima, sombra curta, sem
+// aro). Recolhida ela e uma pilula vertical so de icones; aberta, a MESMA
+// pilula alarga ate caber o rotulo — a altura nao muda (itens e rodape tem a
+// mesma altura nas duas larguras), entao abrir e so a ilha crescendo para a
+// direita, como a do relogio cresce para o modal.
+//
 // O centro do icone e o mesmo nas duas larguras: no aparelho o icone NAO anda
 // quando a barra abre, so o rotulo entra ao lado dele. Se o icone deslizasse
 // junto, a abertura viraria um empurrao lateral em vez de uma revelacao.
-#define NV_MENU_ICONE_CX  (NV_MENU_W_ICONE * 0.5f)
-#define NV_MENU_ROTULO_X  112.0f
-#define NV_MENU_PILL_PAD   20.0f
-#define NV_MENU_RAIO_PILL  0.20f
+//
+// A rail fixa (collapseSidebar desligado) continua reservando os 144 px do
+// conteudo (ajustes_rail_largura_fixa): a pilula de 48 + 88 = 136 cabe neles.
+#define NV_MENU_ILHA_PAD   12.0f
+#define NV_MENU_ITEM_H     64.0f
+#define NV_MENU_ITEM_VAO    4.0f
+#define NV_MENU_W_ICONE   (NV_MENU_ILHA_PAD * 2.0f + NV_MENU_ITEM_H)   // 88
+// Larga o bastante para "Perfil e Stats" e o nome do perfil no corpo 25.
+#define NV_MENU_W_ABERTO  344.0f
+#define NV_MENU_ICONE      32.0f
+#define NV_MENU_ICONE_CX  (NV_MENU_ILHA_X + NV_MENU_ILHA_PAD + NV_MENU_ITEM_H * 0.5f)
+#define NV_MENU_ROTULO_X  (NV_MENU_ICONE_CX + 38.0f)
+// Raio da ilha em px: recolhida e pilula (meia largura); aberta, o raio dos
+// paineis do mockup (32). As linhas sao sempre pilula (0,5 da altura).
+#define NV_MENU_RAIO_ABERTO 32.0f
+#define NV_MENU_RAIO_PILL   0.5f
+// Fio entre os destinos e o rodape do perfil: 10 de vao, 1 de fio, 10 de vao.
+#define NV_MENU_SEP_H      21.0f
 // Quanto o conteudo a direita escurece com a barra aberta. Sem isso o menu
 // disputa atencao com a arte do hero, que e clara e ocupa a tela toda.
 #define NV_MENU_VEU        0.58f
@@ -85,18 +103,21 @@ static int mostra(int i) {
     default:            return 1;
   }
 }
-static float topoLinhas(void) {
+static int visiveis(void) {
   int i, n = 0;
   for (i = 0; i < MENU_N; i++) n += mostra(i);
-  return (NV_TELA_H - n * NV_MENU_LINHA_H) * 0.5f;
+  return n;
 }
-
+// Topo da k-esima linha VISIVEL (k conta so os itens mostrados).
+static float linhaY(int k) {
+  return NV_MENU_ILHA_Y + NV_MENU_ILHA_PAD + k * (NV_MENU_ITEM_H + NV_MENU_ITEM_VAO);
+}
 // RODAPE: quem esta usando o app, e a porta para trocar. Ele e um item de
 // FOCO a mais, no indice MENU_N — nao entrou no enum de proposito, porque
 // trocar de perfil nao e uma aba do app e ninguem deve poder "navegar" para
 // ela como destino.
-#define NV_MENU_RODAPE_H   112.0f
-#define NV_MENU_AVATAR      56.0f
+#define NV_MENU_RODAPE_H    72.0f
+#define NV_MENU_AVATAR      44.0f
 #define NV_MENU_FOCOS      (MENU_N + 1)
 #define MENU_RODAPE         MENU_N
 // Layout Dinamica: as pastas de Streaming entram como focos depois do rodape
@@ -127,39 +148,27 @@ static int  tvAtivo(void);
 static int  tvOrdem(int *lista);
 static void tvAtualizar(float dt);
 static void tvDesenhar(void);
-// Tinta de texto e icone sobre o accent vem da mesma regra dos botoes.
-static void desenhaRodape(float px, float w, float alpha, float foco);
+static void desenhaRodape(GfxRect ilha, float alpha, float foco, float aTexto);
 
-// A rail mantem o estado atual em tom baixo; o foco navegavel ganha a mesma
-// pilula solida de accent e a mesma luz macia dos botoes primarios.
-static void corFocoMenu(float *r, float *g, float *b) {
-  float ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
-  if (ajustes_acento_tinta(NULL, NULL, NULL) < 0.5f) {
-    *r = 0.105f; *g = 0.112f; *b = 0.132f;
-  } else {
-    *r = 0.088f + ar * 0.055f;
-    *g = 0.075f + ag * 0.035f;
-    *b = 0.090f + ab * 0.045f;
-  }
+static float rodapeY(void) {
+  return linhaY(visiveis()) - NV_MENU_ITEM_VAO + NV_MENU_SEP_H;
+}
+// A ilha inteira: do primeiro destino ao rodape, com o recuo dos dois lados.
+static GfxRect ilhaRect(float w) {
+  GfxRect r = { NV_MENU_ILHA_X, NV_MENU_ILHA_Y, w, 0 };
+  r.h = rodapeY() + NV_MENU_RODAPE_H + NV_MENU_ILHA_PAD - NV_MENU_ILHA_Y;
+  return r;
 }
 
-// Foco solido na cor do tema; so a luz macia do botao primario aparece atras.
-static void focoMenu(GfxRect pill, float f, float alpha) {
-  float cr, cg, cb;
+// FOCO DE LINHA = SUPERFICIE UM DEGRAU MAIS CLARA (regra 2 do Glass UI):
+// branco a 12 % sobre o vidro, cinza opaco sobre o solido. Sem anel, sem bloco
+// cheio no acento — o acento fica para o ESTADO (o ponto da pagina ativa).
+// Some por OPACIDADE (a mola `f`), nunca por cor: misturar duas cores com alpha
+// cheio deixava a pilula que perdeu o foco como placa arrastada (25/09, C9).
+static void focoLinha(GfxRect r, float f, float alpha) {
   if (f <= 0.01f || alpha <= 0.01f) return;
-  // Vidro: so a pilula cheia no realce (branca no padrao), sem luz atras.
-  if (ajustes_vidro()) { gfx_vidro_pilula_cheia(pill, NV_MENU_RAIO_PILL, f, alpha); return; }
-  ajustes_acento_tinta(&cr, &cg, &cb);
-  botao_luz(pill, f, alpha);
-  // SOME POR OPACIDADE, e nao por cor (25/09, C9: "no settings e muito mais
-  // rapido"). Misturar o realce com o cinza 0.14 do BT_REP com alpha cheio
-  // deixava a pilula que perdeu o foco na tela como uma placa cinza ate a
-  // mola chegar a 0.01 — no Settings a linha fica sobre uma superficie dessa
-  // mesma cor e a transicao some; aqui o fundo da barra e outro, e a placa
-  // aparecia arrastada atras do foco. Com a cor fixa e a opacidade na mola,
-  // a pilula antiga simplesmente esmaece.
-  gfx_cor(pill, NV_MENU_RAIO_PILL, cr, cg, cb, alpha * f);
+  if (ajustes_vidro()) gfx_cor(r, NV_MENU_RAIO_PILL, 1, 1, 1, .12f * f * alpha);
+  else gfx_cor(r, NV_MENU_RAIO_PILL, .17f, .176f, .204f, f * alpha);
 }
 
 // O legacy deixa a rail de 144px sempre visível. O menu expandido é uma
@@ -175,48 +184,90 @@ static void ponteiroLinha(int i, int b) {
   linha = i;
 }
 static void ponteiroFora(int a, int b) { (void)a; (void)b; menu_fechar(); }
-static void alvosDasLinhas(float x, float w) {
-  float y = topoLinhas();
+static void alvosDasLinhas(GfxRect ilha) {
+  int k = 0;
   if (!ponteiro_ativo()) return;
   for (int i = 0; i < MENU_N; i++) {
     if (!mostra(i)) continue;
-    ponteiro_alvo(x, y, w, NV_MENU_LINHA_H, ponteiroLinha, NULL, i, 0);
-    y += NV_MENU_LINHA_H;
+    ponteiro_alvo(ilha.x, linhaY(k++), ilha.w, NV_MENU_ITEM_H, ponteiroLinha, NULL, i, 0);
   }
-  ponteiro_alvo(x, NV_TELA_H - NV_MARGEM_Y - NV_MENU_RODAPE_H, w, NV_MENU_RODAPE_H,
-                ponteiroLinha, NULL, MENU_RODAPE, 0);
+  ponteiro_alvo(ilha.x, rodapeY(), ilha.w, NV_MENU_RODAPE_H, ponteiroLinha, NULL, MENU_RODAPE, 0);
 }
 
-static void desenhaRailFixa(void) {
-  GfxRect painel = { 0, 0, NV_LEGACY_RAIL_W, NV_TELA_H };
-  int vidro = ajustes_vidro();
-  // Vidro: a rail e so um veu fino, sem o fio da direita (nada de contorno).
-  if (vidro) {
-    gfx_cor(painel, 0.0f, 0.055f, 0.058f, 0.064f, 0.72f);
-  } else
-  gfx_cor(painel, 0.0f, 0.055f, 0.058f, 0.064f, 1.0f);
-  float sr, sg, sb;
-  corFocoMenu(&sr, &sg, &sb);
-  float y = topoLinhas() - NV_MENU_LINHA_H;
+// O MATERIAL DA ILHA, igual ao da folha de Fontes (stream_folha_desenhar) e ao
+// da ilha do relogio: sombra curta, miolo de vidro (gfx_vidro_folha) ou solido
+// (Interface de vidro desligada) e uma luz larga e fraca entrando pelo canto
+// de cima. `raioPx` em pixels; gfx_cor quer a fracao da altura.
+static void desenhaMaterial(GfxRect r, float raioPx, float a) {
+  const int vid = ajustes_vidro();
+  float raio = raioPx / r.h;
+  if (a <= 0.01f) return;
+  gfx_rect((GfxRect){ r.x - 18.0f, r.y - 8.0f, r.w + 36.0f, r.h + 40.0f }, 0, GFX_SOMBRA,
+           1.0f, 0, 0, 0.5f, 0, 0, 0, .38f * a);
+  if (vid) gfx_vidro_folha(r, raio, a);
+  else gfx_cor(r, raio, .071f, .075f, .086f, .98f * a);
+  // A luz nasce acima do canto esquerdo e morre a ~1/3 da altura: na pilula
+  // estreita da rail o alcance pela largura (como na folha) seria um ponto.
+  gfx_luz_canto(r, raio, r.w * .22f, -120.0f, r.w * .9f > 300.0f ? r.w * .9f : 300.0f,
+                1, 1, 1, (vid ? .06f : .04f) * a);
+}
+
+// A ILHA DO MENU nas duas larguras. `e` vai de 0 (rail: so icones) a 1 (aberta,
+// com rotulos); `a` e a opacidade da ilha toda; `focos` diz se as molas de foco
+// valem (a rail parada nao tem foco: a primeira tecla abre a barra).
+static void desenhaIlha(float e, float a, int focos) {
+  float ar, ag, ab;
+  float w = anim_mistura(NV_MENU_W_ICONE, NV_MENU_W_ABERTO, e);
+  GfxRect ilha = ilhaRect(w);
+  float raioPx = anim_mistura(NV_MENU_W_ICONE * 0.5f, NV_MENU_RAIO_ABERTO, e);
+  // O rotulo entra com a largura, nao antes dela: `e` ao quadrado segura a
+  // palavra ate a barra ter espaco de verdade, senao ela nasce espremida
+  // contra o icone.
+  float aRot = e * e * a;
+  int k = 0;
+  ajustes_acento(&ar, &ag, &ab);
+  desenhaMaterial(ilha, raioPx, a);
+
+  // Tudo daqui para baixo fica preso a ilha. Sem o recorte, o rotulo — que e
+  // desenhado no x fixo do texto — vaza para o conteudo enquanto a barra ainda
+  // esta estreita, e ve-se a palavra aparecendo fora dela.
+  gfx_recorte(ilha.x, ilha.y, ilha.w, ilha.h);
   for (int i = 0; i < MENU_N; i++) {
     if (!mostra(i)) continue;
-    y += NV_MENU_LINHA_H;
+    float y = linhaY(k++);
+    float f = focos ? animFoco[i] : 0.0f;
+    float cy = y + NV_MENU_ITEM_H * 0.5f;
+    GfxRect linhaR = { ilha.x + NV_MENU_ILHA_PAD, y, w - NV_MENU_ILHA_PAD * 2.0f, NV_MENU_ITEM_H };
     int atual = (i == destino);
-    float lum = atual ? 0.94f : NV_MENU_INATIVO;
+    focoLinha(linhaR, f, a);
+    // ONDE VOCE ESTA: um ponto no acento (regra 4: acento so para estado). Na
+    // rail ele fica embaixo do icone; aberta, na ponta esquerda da linha — o
+    // ponto anda entre os dois lugares junto com a largura.
     if (atual) {
-      GfxRect marca = { 18.0f, y + 12.0f, NV_LEGACY_RAIL_W - 36.0f,
-                        NV_MENU_LINHA_H - 24.0f };
-      // A tela ativa precisa continuar legivel quando a rail esta recolhida:
-      // o realce e o mesmo acento usado pelo foco expandido e pelos demais
-      // controles, em vez de uma pilula cinza que parece inerte.
-      if (vidro) gfx_vidro_painel_acento(marca, NV_MENU_RAIO_PILL, 0.55f, 1.0f);
-      else
-      gfx_cor(marca, NV_MENU_RAIO_PILL, sr, sg, sb, 0.92f);
+      float px = anim_mistura(NV_MENU_ICONE_CX - 3.0f, linhaR.x + 9.0f, e);
+      float py = anim_mistura(y + NV_MENU_ITEM_H - 13.0f, cy - 3.0f, e);
+      gfx_cor((GfxRect){ px, py, 6.0f, 6.0f }, 0.5f, ar, ag, ab, a);
     }
-    icone(i, NV_MENU_ICONE_CX, y + NV_MENU_LINHA_H * 0.5f,
-          NV_MENU_ICONE, lum, lum, lum, 0.95f);
+    // Tres tons, e os tres precisam existir: em foco (branco cheio), destino
+    // em vigor (quase branco) e o resto. Com so dois, abrir o menu apaga a
+    // indicacao de onde voce estava.
+    { float lum = anim_mistura(atual ? 0.94f : NV_MENU_INATIVO, 1.0f, f);
+      float dy = atual ? anim_mistura(-4.0f, 0.0f, e) : 0.0f;   // abre espaco para o ponto
+      icone(i, NV_MENU_ICONE_CX, cy + dy, NV_MENU_ICONE, lum, lum, lum, a);
+      if (aRot > 0.01f) {
+        // Texto ja rasterizado nao muda de cor: troca no meio da mola.
+        int c = f > 0.5f ? 255 : atual ? 238 : (int)(NV_MENU_INATIVO * 255.0f + 0.5f);
+        TxtLinha l = txt_linha_corta(TXT_BODY, ROTULOS[i], c, c, c, 255,
+                                     NV_MENU_ILHA_X + NV_MENU_W_ABERTO - NV_MENU_ROTULO_X - 24.0f);
+        txt_desenhar_alpha(l, NV_MENU_ROTULO_X, cy - l.h * 0.5f, aRot);
+      } }
   }
-  desenhaRodape(0.0f, NV_LEGACY_RAIL_W, 0.95f, 0.0f);
+  // O fio do rodape encolhe com a ilha: na rail ele e um traco curto centrado.
+  { float fw = anim_mistura(40.0f, w - NV_MENU_ILHA_PAD * 2.0f - 28.0f, e);
+    gfx_cor((GfxRect){ ilha.x + (w - fw) * 0.5f, rodapeY() - NV_MENU_SEP_H * 0.5f - 0.5f, fw, 1.0f },
+            0, 1, 1, 1, (ajustes_vidro() ? .10f : .08f) * a); }
+  desenhaRodape(ilha, a, focos ? animFoco[MENU_RODAPE] : 0.0f, aRot);
+  gfx_sem_recorte();
 }
 
 int menu_iniciar(void) {
@@ -391,29 +442,20 @@ static void inicialDe(const char *nome, char *dst, size_t tam) {
 }
 
 // Rodape: quem esta usando, e a porta para trocar. Desenha nas DUAS larguras —
-// recolhida mostra so o avatar (e a unica coisa que cabe em 144px), aberta
-// mostra nome e a acao.
-static void desenhaRodape(float px, float w, float alpha, float foco) {
+// na rail so o avatar, aberta o nome e a acao (aTexto, a mesma rampa dos
+// rotulos). Foco = a mesma superficie clara das linhas.
+static void desenhaRodape(GfxRect ilha, float alpha, float foco, float aTexto) {
   const ContaPerfil *p = perfis_item_ativo();
-  // Acima da area segura, nao colado na base: numa TV os ultimos 60px podem
-  // estar fora do painel (overscan), e o nome do usuario e justamente o que
-  // some primeiro.
-  float y = NV_TELA_H - NV_MARGEM_Y - NV_MENU_RODAPE_H;
-  float cx = px + NV_MENU_ICONE_CX;
+  float y = rodapeY();
+  float cx = NV_MENU_ICONE_CX;
   float cy = y + NV_MENU_RODAPE_H * 0.5f;
   float cr, cg, cb;
   char ini[4];
   GfxRect av;
 
   if (alpha <= 0.01f) return;
-
-  // Foco = pilula na COR DE REALCE com texto escuro, sem anel — a mesma regra
-  // dos itens do menu (ver a nota la) e das linhas de Ajustes.
-  if (foco > 0.01f) {
-    GfxRect pill = { px + NV_MENU_PILL_PAD, y + 8.0f,
-                     w - NV_MENU_PILL_PAD * 2.0f, NV_MENU_RODAPE_H - 16.0f };
-    focoMenu(pill, foco, alpha);
-  }
+  focoLinha((GfxRect){ ilha.x + NV_MENU_ILHA_PAD, y, ilha.w - NV_MENU_ILHA_PAD * 2.0f, NV_MENU_RODAPE_H },
+            foco, alpha);
 
   av.x = cx - NV_MENU_AVATAR * 0.5f;
   av.y = cy - NV_MENU_AVATAR * 0.5f;
@@ -429,129 +471,53 @@ static void desenhaRodape(float px, float w, float alpha, float foco) {
       corAvatar(p ? p->corHex : NULL, &cr, &cg, &cb);
       gfx_cor(av, 0.5f, cr, cg, cb, alpha);
       inicialDe(p ? p->nome : NULL, ini, sizeof ini);
-      { TxtLinha l = txt_linha(TXT_HEADLINE, ini, 255, 255, 255, 255);
+      { TxtLinha l = txt_linha(TXT_CALLOUT, ini, 255, 255, 255, 255);
         txt_desenhar_alpha(l, av.x + (av.w - l.w) * 0.5f,
                            av.y + (av.h - l.h) * 0.5f, alpha); } } }
 
-  // Nome e acao so aparecem com a barra aberta: em 144px nao cabe texto, e
-  // espremer o nome ali seria pior que nao mostrar.
-  { float aTexto = expande * expande * alpha;
-    if (aTexto > 0.01f) {
-      // Texto ja rasterizado nao muda de cor: troca no meio da mola.
-      int emFoco = foco > 0.5f;
-      float tinta = ajustes_acento_tinta(NULL, NULL, NULL);
-      int c = emFoco ? (int)(tinta * 255.0f + 0.5f) : 184;
-      int c2 = emFoco ? ajustes_tinta_foco2() : 150;
-      TxtLinha nome = txt_linha_corta(TXT_BODY, p ? p->nome : "Sua conta",
-                                      c, c, c, 255,
-                                      NV_MENU_W_ABERTO - NV_MENU_ROTULO_X - 28.0f);
-      TxtLinha acao = txt_linha(TXT_CAPTION, "Trocar de usuário", c2, c2, c2 + (emFoco ? 0 : 10), 255);
-      txt_desenhar_alpha(nome, px + NV_MENU_ROTULO_X, cy - nome.h - 2.0f, aTexto);
-      txt_desenhar_alpha(acao, px + NV_MENU_ROTULO_X, cy + 4.0f, aTexto);
-    } }
+  if (aTexto > 0.01f) {
+    int emFoco = foco > 0.5f;
+    int c = emFoco ? 255 : 238, c2 = emFoco ? 175 : 128;
+    TxtLinha nome = txt_linha_corta(TXT_BODY, p ? p->nome : "Sua conta", c, c, c, 255,
+                                    NV_MENU_ILHA_X + NV_MENU_W_ABERTO - NV_MENU_ROTULO_X - 24.0f);
+    TxtLinha acao = txt_linha(TXT_CAPTION2, "Trocar de usuário", c2, c2, c2 + 2, 255);
+    txt_desenhar_alpha(nome, NV_MENU_ROTULO_X, cy - nome.h + 1.0f, aTexto);
+    txt_desenhar_alpha(acao, NV_MENU_ROTULO_X, cy + 3.0f, aTexto);
+  }
 }
 
 void menu_desenhar(Uint32 agora) {
   (void)agora;
   if (tvAtivo()) { tvDesenhar(); return; }
-  // Rail fixa sempre presente, como no shell legacy. O overlay expandido só
-  // entra em cena quando o menu foi solicitado.
-  // `collapseSidebar`: com a barra RECOLHIDA o web nao desenha rail nenhuma —
-  // `.home-nav-list` fica com largura 0 e nao ocupa fluxo; ela so aparece como
-  // camada quando ganha foco. O port ja movia o conteudo para 104 nesse caso
-  // (ajustes_conteudo_x), mas continuava pintando os 144px da rail por baixo
-  // dele: uma faixa escura sob o primeiro card, sem nada em cima.
-  if (!aberto && desliza < .002f && !ajustes_rail_recolhida()) desenhaRailFixa();
+  // Rail fixa sempre presente, como no shell legacy: a ilha estreita, so
+  // icones. `collapseSidebar`: com a barra RECOLHIDA o web nao desenha rail
+  // nenhuma — `.home-nav-list` fica com largura 0 e nao ocupa fluxo; ela so
+  // aparece como camada quando ganha foco.
+  int fixa = !ajustes_rail_recolhida();
   if (!aberto && desliza < 0.002f) {
+    if (fixa) desenhaIlha(0.0f, 1.0f, 0);
     // Recolhida, a rail nao existe na tela; uma faixa na borda faz o papel
     // dela para o ponteiro, como o ESQUERDA na primeira coluna.
-    alvosDasLinhas(0.0f, ajustes_rail_recolhida() ? 28.0f : NV_MENU_W_ICONE);
+    if (fixa) alvosDasLinhas(ilhaRect(NV_MENU_W_ICONE));
+    else alvosDasLinhas((GfxRect){ 0, 0, 28.0f, 0 });
     return;
   }
 
-  float w = anim_mistura(NV_MENU_W_ICONE, NV_MENU_W_ABERTO, anim_suave(expande));
   // O VEU usa a rampa CRUA: a medida da referencia e uma reta (ver
-  // NV_MENU_ABRIR_MS). A POSICAO do painel usa a mesma rampa suavizada — um
-  // bloco desse tamanho parando de vez no fim do percurso le como corte, e a
-  // referencia comeca devagar em tudo que desliza (ver anim_mola2 em anim.h).
+  // NV_MENU_ABRIR_MS). A LARGURA usa a rampa suavizada e atrasada (`expande`):
+  // um bloco parando de vez no fim do percurso le como corte.
   float entrada = anim_suave(desliza);
-  float px = -w * (1.0f - entrada);
-
-  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  gfx_cor(tela, 0.0f, 0, 0, 0, NV_MENU_VEU * desliza);
-
-  // Painel quase opaco e um pouco mais escuro que NV_COR_FUNDO: encostado no
-  // fundo da home ele precisa de uma aresta propria, senao a barra parece um
-  // pedaco da tela que escureceu sozinho.
-  // Painel flutuante neutro, com o acento reservado a selecao. Assim a cor
-  // do tema nao tinge a tela toda enquanto a pessoa percorre as secoes.
-  GfxRect painel = { px, 24.0f, w, NV_TELA_H - 48.0f };
-  float ar_, ag_, ab_; ajustes_acento(&ar_, &ag_, &ab_);
+  float e = anim_suave(expande);
+  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, NV_MENU_VEU * desliza);
   if (aberto) {
+    GfxRect ilha = ilhaRect(anim_mistura(NV_MENU_W_ICONE, NV_MENU_W_ABERTO, e));
     ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, ponteiroFora, 0, 0);
-    ponteiro_alvo(painel.x, painel.y, painel.w, painel.h, NULL, NULL, 0, 0);
-    alvosDasLinhas(px, w);
+    ponteiro_alvo(ilha.x, ilha.y, ilha.w, ilha.h, NULL, NULL, 0, 0);
+    alvosDasLinhas(ilha);
   }
-  if (ajustes_vidro()) {
-    // Folha de vidro sem contorno (gfx_vidro_folha); o veu de tras fica mais
-    // leve para a home aparecer.
-    gfx_vidro_folha(painel, 28.0f / painel.h, entrada);
-  } else
-  gfx_cor(painel, 28.0f / painel.h, 0.055f, 0.058f, 0.068f, 0.965f * entrada);
-
-  // Tudo daqui para baixo fica preso ao painel. Sem o recorte, o rotulo — que e
-  // desenhado no x fixo do texto — vaza para o conteudo enquanto a barra ainda
-  // esta estreita, e ve-se a palavra aparecendo fora dela.
-  gfx_recorte(px, 0, w, NV_TELA_H);
-
-  float y = topoLinhas() - NV_MENU_LINHA_H;
-  for (int i = 0; i < MENU_N; i++) {
-    if (!mostra(i)) continue;
-    y += NV_MENU_LINHA_H;
-    float f = animFoco[i];
-    float cy = y + NV_MENU_LINHA_H * 0.5f;
-
-    if (i == destino && f < .99f) {
-      // ONDE VOCE ESTA: um traco na cor de realce a esquerda do icone, em vez
-      // da pilula cinza — le como "aba ativa" e nao como um segundo foco.
-      GfxRect traco = { px + 20.0f, cy - 16.0f, 4.0f, 32.0f };
-      gfx_cor(traco, 0.5f, ar_, ag_, ab_, .68f * (1-f) * desliza);
-    }
-    if (f > 0.01f) {
-      GfxRect pill = { px + NV_MENU_PILL_PAD, y + 7.0f,
-                       w - NV_MENU_PILL_PAD * 2.0f, NV_MENU_LINHA_H - 14.0f };
-      // Preenchimento accent como no primario, com glow de botao por tras.
-      focoMenu(pill, f, desliza);
-    }
-
-    // Tres estados, e os tres precisam existir: em foco, destino em vigor e
-    // o resto (cinza). Com so dois
-    // estados, abrir o menu apaga a indicacao de onde voce estava.
-    //
-    // Sobre accent colorido a tinta e branca; so o branco pede tinta escura.
-    int atual = (i == destino);
-    int emFoco = f > 0.5f;
-    float tinta = ajustes_acento_tinta(NULL, NULL, NULL);
-    float lum = emFoco ? tinta : (atual ? 0.92f : NV_MENU_INATIVO);
-    float alpha = desliza * anim_mistura(atual ? 1.0f : 0.85f, 1.0f, f);
-
-    icone(i, px + NV_MENU_ICONE_CX, cy, NV_MENU_ICONE, lum, lum, lum, alpha);
-
-    // O rotulo entra com a largura, nao antes dela: `expande` ao quadrado
-    // segura a palavra ate a barra ter espaco de verdade, senao ela nasce
-    // espremida contra o icone.
-    float aRot = expande * expande * entrada;
-    if (aRot > 0.01f) {
-      int c = (int)(lum * 255.0f + 0.5f);
-      TxtLinha l = txt_linha_corta(TXT_BODY, ROTULOS[i], c, c, c, 255,
-                                   NV_MENU_W_ABERTO - NV_MENU_ROTULO_X - 28);
-      txt_desenhar_alpha(l, px + NV_MENU_ROTULO_X, cy - l.h * 0.5f, aRot);
-    }
-  }
-
-  desenhaRodape(px, w, entrada, animFoco[MENU_RODAPE]);
-
-  gfx_sem_recorte();
+  // Com a rail fixa a ilha ja esta na tela e so alarga; recolhida ela nasce
+  // (e some) pela opacidade, no mesmo lugar.
+  desenhaIlha(e, fixa ? 1.0f : entrada, 1);
 }
 
 // ===========================================================================

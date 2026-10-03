@@ -141,21 +141,17 @@ static void brilhoFoco(GfxRect r, float f, float a) {
 // Uma lista de conteudo usa superficie baixa em repouso e preenchimento de
 // realce em foco. O anel antigo deixava a linha com o mesmo cinza pesado das
 // telas legadas e, em foco, parecia um botao sem estado intermediario.
+// GLASS UI (dono, 02/10, mockup "ilha" tela 11): CARTAO DE VIDRO e o focado so
+// um degrau mais claro, nos dois materiais — sem aro, sem preenchimento de
+// realce e sem inverter o texto. Vidro: branco a 5,5 % em repouso, 13 % em
+// foco; solido: 0.10/0.11/0.13 em repouso e o cinza opaco da regra 2 em foco.
 static int superficieLinha(GfxRect r, float raio, float f, float a) {
-  float ar, ag, ab;
-  // Vidro (dono, 30/09: "Perfil e Stats nao esta aplicando o glass"): veu
-  // claro sem aro em repouso, aro na cor do realce no foco, texto sem inverter.
-  if (ajustes_vidro()) {
-    gfx_vidro_superficie(r, raio, a);
-    if (f > 0.01f) gfx_vidro_foco(r, raio, f, a);
-    return PF_FORTE;
+  if (ajustes_vidro()) gfx_cor(r, raio, 1, 1, 1, (.055f + .075f * f) * a);
+  else {
+    gfx_cor(r, raio, 0.10f, 0.11f, 0.13f, a);
+    if (f > 0.01f) gfx_cor(r, raio, .17f, .176f, .204f, f * a);
   }
-  ajustes_acento(&ar, &ag, &ab);
-  brilhoFoco(r, f, a);
-  if (f > 0.01f) gfx_cor(r, raio, ar, ag, ab, f * a);
-  if (f < 0.99f)
-    gfx_cor(r, raio, 0.10f, 0.11f, 0.13f, (1.0f - f) * a);
-  return f > 0.5f ? ajustes_tinta_foco() : PF_FORTE;
+  return f > 0.5f ? 255 : PF_FORTE;
 }
 static void numero(char *s, size_t n, int v) { snprintf(s, n, "%d", v < 0 ? 0 : v); }
 static void tempo(char *s, size_t n, int minutos) {
@@ -487,13 +483,11 @@ static void desenharAtividade(float a) {
       } else {
         cr = PF_AC_R; cg = PF_AC_G; cb = PF_AC_B; ca = 1.0f;
       }
-      brilhoFoco(dc, f, a);
-      if (f > 0.01f) {
-        float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
-        gfx_cor(dc,NV_RAIO_BADGE,ar,ag,ab,f*a);
-      }
+      // O DIA EM FOCO fica BRANCO CHEIO (o "hoje" do mockup), sem a luz do
+      // realce: o acento continua sendo so o dado (o violeta das celulas).
       if (f < 0.99f)
         gfx_cor(dc,NV_RAIO_BADGE,cr,cg,cb,ca*(1.0f-f)*a);
+      if (f > 0.01f) gfx_cor(dc,NV_RAIO_BADGE,.94f,.94f,.93f,f*a);
     }
   }
   if(dados.nDias)snprintf(b,sizeof(b),i18n("Dia %d: %u reproduções"),dia+1,dados.atividade[dia]);
@@ -546,7 +540,7 @@ static void desenharDestaques(float a) {
     // cinza antigo. A tinta acompanha a mola para nunca piscar claro sobre
     // claro no meio da transicao.
     int tintaTitulo = superficieLinha(r,NV_RAIO_CARD,f,a);
-    int tintaMeta = (f > 0.5f && !ajustes_vidro()) ? ajustes_tinta_foco2() : PF_FRACO;
+    int tintaMeta = f > 0.5f ? PF_MEDIO : PF_FRACO;
     if(tex){gfx_tex_aspect_atual=tex_aspecto(art);
             gfx_rect(mini,tex,GFX_CARD,f,0,0,NV_RAIO_CARD,1,1,1,a);
             gfx_tex_aspect_atual=0;}

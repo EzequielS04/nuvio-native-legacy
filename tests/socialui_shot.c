@@ -25,6 +25,7 @@
 #include "socialvis.h"
 #include "tex_cache.h"
 #include "text.h"
+#include "shot_arte.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include "gl_compat.h"
@@ -34,13 +35,9 @@
 #include <string.h>
 #include <time.h>
 
-// A API de mentira do alcance/nome (ver tests/socialv2_stub.h).
-static int stubAlcance = REC_ALCANCE_NAO_PERGUNTADO;
-int  recomenda_alcance(void) { return stubAlcance; }
-void recomenda_responder_alcance(int n) { stubAlcance = n; }
-const char *recomenda_meu_nome(void) { return "Henrique"; }
-const char *recomenda_minha_exibicao(void) { return ""; }
-int  recomenda_definir_nome(const char *nome) { (void)nome; return 1; }
+// O ALCANCE E O NOME sao os de verdade de recomenda.c (a ponte V2 ligou, e os
+// stubs que moravam aqui passaram a redefinir as funcoes dela). O nome do
+// perfil e semeado direto na estatica, como os contatos.
 
 static SDL_Window *janela;
 static const char *dirDados;
@@ -105,6 +102,7 @@ static void ajusta(void) {
           getenv("NUVIO_SHOT_EN") ? 1 : 0,
           getenv("NV_LAYOUT") ? atoi(getenv("NV_LAYOUT")) : 1,
           getenv("NV_TEMA") ? atoi(getenv("NV_TEMA")) : 9);
+  shot_arte_material(a);   // NUVIO_SHOT_VIDRO=0: o painel no material solido
   fclose(a);
   ajustes_dir(dirDados);
 }
@@ -184,6 +182,7 @@ int main(int argc, char **argv) {
   assert(home_iniciar("deploy/app/art"));
   recomenda_iniciar();
   aparecer = REC_APARECER_SIM;
+  snprintf(meuNome, sizeof meuNome, "%s", "Henrique");
   snprintf(meuCodigo, sizeof meuCodigo, "%s", "uv8scv");
 
   // Duas fileiras de catalogo: Continuar e Populares. A de amigos entra
@@ -263,7 +262,7 @@ int main(int argc, char **argv) {
     spainel_evento(&e);
     e.key.keysym.sym = SDLK_RETURN;
     spainel_evento(&e); }               // "So meus amigos"
-  printf("alcance respondido: %d\n", stubAlcance);
+  printf("alcance respondido: %d\n", recomenda_alcance());
   quadros(90, NULL);
   snprintf(bmp, sizeof bmp, "%s-painel-amigos.bmp", saida);
   quadros(1, bmp);
