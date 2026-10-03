@@ -2402,8 +2402,25 @@ void detail_evento(const SDL_Event *e) {
 
 // Pilulas de "Producao": largura pelo nome; quebram linha na largura da
 // coluna da secao (no filme, a metade direita da linha Ficha | Producao).
+// Logo da produtora/rede: altura fixa na pilula; a largura sai da proporcao do
+// arquivo (3:1 ate baixar) e e limitada. 0 = sem logo, a pilula leva o nome.
+#define EST_LOGO_H 30.0f
+#define EST_LOGO_WMAX 190.0f
+static int estLogoDim(int c, float *w, float *h) {
+  const char *logo = extras_estudio_logo(c);
+  float ap;
+  if (!logo[0]) return 0;
+  ap = tex_aspecto(logo);
+  if (ap <= 0.0f) ap = 3.0f;
+  *h = EST_LOGO_H; *w = *h * ap;
+  if (*w > EST_LOGO_WMAX) { *w = EST_LOGO_WMAX; *h = *w / ap; }
+  return 1;
+}
 static float estLargura(int c) {
-  int w = txt_largura(TXT_G18M, extras_estudio_nome(c));
+  float lw, lh;
+  int w;
+  if (estLogoDim(c, &lw, &lh)) return lw + EST_PAD * 2.0f;
+  w = txt_largura(TXT_G18M, extras_estudio_nome(c));
   if (w > 420) w = 420;
   return (float)w + EST_PAD * 2.0f;
 }
@@ -4450,10 +4467,26 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
   if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, 0.06f * a);
   else gfx_cor(r, 0.5f, 0.141f, 0.149f, 0.173f, a);
   if (f > 0.01f) plrui_pilula_foco(r, f * a);
-  { int c = f > 0.5f ? plrui_tinta() : 243;
-    TxtLinha ln = txt_linha_corta(TXT_G18M, extras_estudio_nome(i), c, c, c,
-                                  f > 0.5f ? 255 : 204, r.w - EST_PAD * 2.0f);
-    txt_desenhar_alpha(ln, x + EST_PAD, y + (EST_CARD_H - (float)ln.h) * 0.5f, a); }
+  { const char *logo = extras_estudio_logo(i);
+    GLuint t = logo[0] ? tex_obter(logo) : 0;
+    float lw, lh;
+    if (t && estLogoDim(i, &lw, &lh)) {
+      float fr, fg, fb, tom = f > 0.5f ? (float)plrui_tinta() / 255.0f : 0.93f;
+      GfxRect rl = { x + (r.w - lw) * 0.5f, y + (EST_CARD_H - lh) * 0.5f, lw, lh };
+      gfx_tex_aspect_atual = 0.0f;
+      // Logo recortado (borda transparente) sempre numa cor so, como o guia:
+      // branco em repouso, tinta do botao no foco. Logo com placa propria
+      // segue como veio.
+      if (tex_cor_fundo(logo, &fr, &fg, &fb) != 1)
+        gfx_rect(rl, t, GFX_MARCA, 0, 0, 0, 0.0f, tom, tom, tom, a);
+      else
+        gfx_rect(rl, t, GFX_ARTE, 0, 0, 0, 6.0f / lh, 1, 1, 1, a);
+    } else {
+      int c = f > 0.5f ? plrui_tinta() : 243;
+      TxtLinha ln = txt_linha_corta(TXT_G18M, extras_estudio_nome(i), c, c, c,
+                                    f > 0.5f ? 255 : 204, r.w - EST_PAD * 2.0f);
+      txt_desenhar_alpha(ln, x + EST_PAD, y + (EST_CARD_H - (float)ln.h) * 0.5f, a);
+    } }
 }
 
 // "1999–2003" (ou so "1999") a partir dos anos das partes; "" sem ano nenhum.
