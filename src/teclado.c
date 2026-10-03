@@ -137,13 +137,33 @@ static float gradeH(void) {
 #define TE_ILHA_PY   48.0f
 #define TE_COL_GAP   56.0f
 #define TE_EXTRA_H   56.0f
-static float teEsqW(void) {
+static float teEsqW0(void) {
   float w = 1340.0f - 2 * TE_ILHA_PX - TE_COL_GAP - gradeW();
   float teto = NV_TELA_W - 80.0f - 2 * TE_ILHA_PX - TE_COL_GAP - gradeW();
   if (w > teto) w = teto;
   if (w < 420.0f) w = 420.0f;
   return w;
 }
+
+// LAYOUT MEDIDO DA COLUNA DA ESQUERDA. Nada aqui e largura fixa: o segmentado
+// (teclado da TV | falar | celular), as dicas da base e o rotulo de caixa alta
+// tem a largura do texto JA TRADUZIDO, e a coluna e a modal se ajustam a ele.
+// A captura do dono (TCL, ingles, chave do Seekr) mostrou "Type on your phone"
+// saindo da pilula e entrando na grade, e as dicas do alemao passando da coluna.
+//   1. a coluna alarga ate o teto da tela;
+//   2. se ainda nao cabe: folga interna menor, depois UM degrau de tamanho de
+//      letra, depois o segmentado quebra em fileiras (cada uma sua pilula);
+//   3. as dicas da base quebram em fileiras.
+// Medido em teMedir(), a cada quadro desenhado (a ponte de texto guarda as
+// linhas em cache, medir e barato); antes do primeiro quadro valem os numeros
+// de antes.
+#define TE_SEG_PAD     20.0f
+#define TE_SEG_PAD_MIN 12.0f
+#define TE_FILA_GAP     8.0f
+static int   medido, segNFilas = 1, dicasFilas = 1, segFila[3];
+static float ewMed, esqHMed, segPad = TE_SEG_PAD;
+static TxtEstilo segEst = TXT_AJ_SEG;
+static float teEsqW(void) { return medido ? ewMed : teEsqW0(); }
 static float teW(void) { return 2 * TE_ILHA_PX + teEsqW() + TE_COL_GAP + gradeW(); }
 static float teX(void) { return (NV_TELA_W - teW()) * 0.5f; }
 static float teGradeX(void) { return teX() + TE_ILHA_PX + teEsqW() + TE_COL_GAP; }
@@ -152,7 +172,7 @@ static float teH(void) {
   // A coluna da esquerda tem altura propria (titulo, dica, campo, modos e
   // as dicas na base): com um alfabeto curto (hexadecimal, 3 fileiras) a
   // grade sozinha deixaria as dicas em cima do texto.
-  float esq = 22 + 48 + 10 + 57 + 30 + 76 + 22 + 55 + 16 + 50 + 40 + 30;
+  float esq = medido ? esqHMed : 22 + 48 + 10 + 57 + 30 + 76 + 22 + 55 + 16 + 50 + 40 + 30;
   return 2 * TE_ILHA_PY + (grade > esq ? grade : esq);
 }
 static float teY(void) { return (NV_TELA_H - teH()) * 0.5f; }
@@ -478,10 +498,22 @@ static void teAcento(GfxRect r, float raioPx, float k, float a) {
   gfx_rect((GfxRect){ r.x - 12, r.y - 2, r.w + 24, r.h + 26 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * k * a);
   gfx_cor(r, raioPx / r.h, ar, ag, ab, k * a);
 }
-static float teCaps(const char *s, float x, float y, float a) {
+// Rotulo em caixa alta: se o texto traduzido passa da coluna, o espacamento
+// entre letras diminui, e se ainda passar o recorte para na borda da coluna.
+static float teCaps(const char *s, float x, float y, float ew, float a) {
   char up[200];
+  float trk = 2.1f, w;
   idioma_maiusc_em(ajustes_idioma(), up, sizeof up, i18n(s));
-  return txt_tracking(TXT_MINI, up, 243, 242, 239, x, y, 0.45f * a, 2.1f);
+  w = txt_tracking(TXT_MINI, up, 243, 242, 239, -1, 0, 0, trk);
+  if (w > ew) { trk = 0.8f; w = txt_tracking(TXT_MINI, up, 243, 242, 239, -1, 0, 0, trk); }
+  if (w > ew) {
+    float r;
+    gfx_recorte(x, y - 4, ew, 30);
+    r = txt_tracking(TXT_MINI, up, 243, 242, 239, x, y, 0.45f * a, trk);
+    gfx_sem_recorte();
+    return r;
+  }
+  return txt_tracking(TXT_MINI, up, 243, 242, 239, x, y, 0.45f * a, trk);
 }
 static void teDica(float *x, float y, const char *k, const char *l, float a) {
   TxtLinha tk = txt_linha(TXT_AJ_KBD, k, 243, 242, 239, 255), tl = txt_linha(TXT_ILHA_APOIO, l, 243, 242, 239, 255);
@@ -490,6 +522,103 @@ static void teDica(float *x, float y, const char *k, const char *l, float a) {
   txt_desenhar_alpha(tk, *x + (kw - tk.w) * 0.5f, y + (30 - tk.h) * 0.5f, 0.82f * a);
   txt_desenhar_alpha(tl, *x + kw + 9, y + (30 - tl.h) * 0.5f, 0.45f * a);
   *x += kw + 9 + tl.w + 20;
+}
+
+static const char *TE_FRASE_CEL = "Pelo celular, o texto chega aqui para você conferir antes de concluir.";
+// Os modos que existem agora: rotulo e coluna de foco de cada um.
+static int teModos(const char **rot, int *col) {
+  int k = 0;
+  if (st_ime_disponivel()) { rot[k] = "Teclado da TV"; col[k++] = 0; }
+  if (st_voz_disponivel()) { rot[k] = "Falar"; col[k++] = 1; }
+  if (celOk()) { rot[k] = "Digitar pelo celular"; col[k++] = 2; }
+  return k;
+}
+static float teDicaLarg(const char *k, const char *l) {
+  TxtLinha tk = txt_linha(TXT_AJ_KBD, k, 243, 242, 239, 255), tl = txt_linha(TXT_ILHA_APOIO, l, 243, 242, 239, 255);
+  float kw = tk.w + 18.0f < 34.0f ? 34.0f : tk.w + 18.0f;
+  return kw + 9 + tl.w + 20;
+}
+// Fileiras que n dicas de largura w[] ocupam em ew (a ultima nao paga o vao).
+static int teDicasFilas(const float *w, int n, float ew) {
+  int i, filas = 1;
+  float x = 0;
+  for (i = 0; i < n; i++) {
+    if (x > 0 && x + w[i] - 20.0f > ew) { filas++; x = 0; }
+    x += w[i];
+  }
+  return filas;
+}
+static float teChipsLarg(TxtEstilo e, float pad, const char **rot, int a, int b) {
+  float w = 10.0f;
+  int i;
+  for (i = a; i < b; i++) w += txt_linha(e, rot[i], 0, 0, 0, 255).w + 2 * pad + (i > a ? 4.0f : 0.0f);
+  return w;
+}
+static void teMedir(void) {
+  const char *rot[3];
+  int col[3], k = teModos(rot, col), i;
+  float base = teEsqW0(), teto = NV_TELA_W - 80.0f - 2 * TE_ILHA_PX - TE_COL_GAP - gradeW();
+  float ew, segNeed = k ? teChipsLarg(TXT_AJ_SEG, TE_SEG_PAD, rot, 0, k) : 0.0f;
+  float wA[3], wB[3], dicaMax = 0, h;
+  const char *lc[3] = { "Digitar pelo celular", "Falar", "Teclado da TV" };
+  // Dicas: a fileira com o foco na barra (OK muda de rotulo: vale o maior) e a
+  // das teclas.
+  for (i = 0; i < 3; i++) { float w = teDicaLarg("OK", lc[i]); if (w > dicaMax) dicaMax = w; }
+  wA[0] = dicaMax; wA[1] = teDicaLarg("↓", "Teclado"); wA[2] = teDicaLarg("Voltar", "Cancelar");
+  wB[0] = teDicaLarg("Setas", "Navegar"); wB[1] = teDicaLarg("OK", "Digitar"); wB[2] = wA[2];
+  { float na = wA[0] + wA[1] + wA[2] - 20.0f, nb = wB[0] + wB[1] + wB[2] - 20.0f;
+    float need = segNeed > na ? segNeed : na;
+    if (nb > need) need = nb;
+    ew = need > base ? need : base;
+    if (ew > teto) ew = teto; }
+  ewMed = ew;
+  // O segmentado: folga, degrau de letra, depois fileiras.
+  segEst = TXT_AJ_SEG; segPad = TE_SEG_PAD; segNFilas = 1;
+  for (i = 0; i < 3; i++) segFila[i] = 0;
+  if (k && segNeed > ew) {
+    if (teChipsLarg(TXT_AJ_SEG, TE_SEG_PAD_MIN, rot, 0, k) <= ew) segPad = TE_SEG_PAD_MIN;
+    else if (teChipsLarg(TXT_ILHA_SEG, TE_SEG_PAD_MIN, rot, 0, k) <= ew) { segEst = TXT_ILHA_SEG; segPad = TE_SEG_PAD_MIN; }
+    else {
+      int ini = 0;
+      for (i = 1; i <= k; i++)
+        if (i == k || teChipsLarg(TXT_AJ_SEG, TE_SEG_PAD, rot, ini, i + 1) > ew) {
+          int j;
+          for (j = ini; j < i; j++) segFila[j] = segNFilas - 1;
+          if (i < k) { segNFilas++; ini = i; }
+        }
+    }
+  }
+  dicasFilas = teDicasFilas(wA, 3, ew);
+  { int fb = teDicasFilas(wB, 3, ew); if (fb > dicasFilas) dicasFilas = fb; }
+  // Altura da coluna, somada na ordem em que ela e desenhada.
+  h = 0;
+  if (kickerAtual[0]) h += 22.0f;
+  h += 48.0f;
+  if (dicaAtual[0]) h += 10.0f + txt_bloco(TXT_AJ_SUB, dicaAtual, 243, 242, 239, 0, 0, ew, 28.5f, 0.0f, 3);
+  h += 30.0f;
+  h += (!mascarar && maxN > 0 && (ew - (float)(maxN - 1) * TE_CGAP) / (float)maxN >= TE_CX_MIN) ? TE_CY : 76.0f;
+  if (k) {
+    h += 22.0f + 55.0f + (float)(segNFilas - 1) * (55.0f + TE_FILA_GAP);
+    if (celOk()) h += 16.0f + txt_bloco(TXT_ILHA_GENERO, TE_FRASE_CEL, 243, 242, 239, 0, 0, ew, 25.0f, 0.0f, 3);
+  }
+  h += 24.0f + 30.0f + (float)(dicasFilas - 1) * (30.0f + TE_FILA_GAP);
+  esqHMed = h;
+  medido = 1;
+}
+// Desenha n dicas (rotulo da tecla, texto) quebrando em fileiras de largura ew;
+// a ultima fileira fica em `by`, as outras acima dela.
+static void teDicas(const char **ks, const char **ls, int n, float x0, float by, float ew, float a) {
+  float w[4], x;
+  int i, filas, f = 0;
+  for (i = 0; i < n; i++) w[i] = teDicaLarg(ks[i], ls[i]);
+  filas = teDicasFilas(w, n, ew);
+  x = x0;
+  for (i = 0; i < n; i++) {
+    if (x > x0 && x + w[i] - 20.0f > x0 + ew) { f++; x = x0; }
+    { float xx = x;
+      teDica(&xx, by - (float)(filas - 1 - f) * (30.0f + TE_FILA_GAP), ks[i], ls[i], a); }
+    x += w[i];
+  }
 }
 
 static void teDesenhar(Uint32 agora);
@@ -503,13 +632,14 @@ void teclado_desenhar(Uint32 agora) {
 static void teDesenhar(Uint32 agora) {
   float a = anim_suave(anim), dy, x, y, ew;
   int f, c, i;
+  teMedir();
   if (anim < 0.01f) return;
   dy = (1.0f - a) * 36.0f;
   if (aberto && ponteiro_ativo()) {
     ponteiro_camada();
     ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, NULL, 0, 0);
   }
-  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, (ajustes_vidro() ? 0.40f : 0.42f) * anim);
+  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0, 0, 0, 0.84f * anim);
   { GfxRect p = { teX(), teY() + dy, teW(), teH() };
     float raio = 36.0f / p.h;
     gfx_rect((GfxRect){ p.x - 20, p.y - 6, p.w + 40, p.h + 46 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, 0, 0, 0, 0.40f * a);
@@ -521,7 +651,7 @@ static void teDesenhar(Uint32 agora) {
   // COLUNA DA ESQUERDA
   x = teX() + TE_ILHA_PX; ew = teEsqW();
   y = teY() + dy + TE_ILHA_PY;
-  if (kickerAtual[0]) { teCaps(kickerAtual, x, y + 2, a); y += 22.0f; }
+  if (kickerAtual[0]) { teCaps(kickerAtual, x, y + 2, ew, a); y += 22.0f; }
   { TxtLinha t = txt_linha_corta(TXT_ILHA_TITULO, tituloAtual, 243, 242, 239, 255, ew);
     txt_desenhar_alpha(t, x, y, a); y += 48.0f; }
   if (dicaAtual[0]) {
@@ -580,37 +710,39 @@ static void teDesenhar(Uint32 agora) {
       y += 76.0f;
     } }
   // MODOS: teclado da TV, falar e celular, num segmentado (o que existir).
-  { const char *rot[3]; int col[3], k = 0;
-    if (st_ime_disponivel()) { rot[k] = "Teclado da TV"; col[k++] = 0; }
-    if (st_voz_disponivel()) { rot[k] = "Falar"; col[k++] = 1; }
-    if (celOk()) { rot[k] = "Digitar pelo celular"; col[k++] = 2; }
+  { const char *rot[3]; int col[3], k = teModos(rot, col);
     if (k) {
-      float sx = x, sw = 10.0f, h = 55.0f, ih = 45.0f;
+      float h = 55.0f, ih = 45.0f;
+      int fila, ini = 0;
       y += 22.0f;
-      for (i = 0; i < k; i++) sw += txt_linha(TXT_AJ_SEG, rot[i], 0, 0, 0, 255).w + 40.0f + (i ? 4.0f : 0.0f);
-      teNeutro((GfxRect){ sx, y, sw, h }, h * 0.5f, 0.06f, 0.114f, 0.118f, 0.137f, a);
-      sx += 5.0f;
-      for (i = 0; i < k; i++) {
-        int foco = aberto && fileira < 0 && coluna == col[i];
-        int ti = foco ? ajustes_tinta_foco() : 243;
-        TxtLinha t = txt_linha(TXT_AJ_SEG, rot[i], ti, ti, ti, 255);
-        GfxRect r = { sx, y + 5.0f, t.w + 40.0f, ih };
-        if (aberto && ponteiro_ativo()) ponteiro_alvo(r.x, r.y, r.w, r.h, focarBarra, NULL, col[i], 0);
-        if (foco) teAcento(r, ih * 0.5f, animBarra[col[i]] > 0.5f ? 1.0f : animBarra[col[i]] * 2.0f, a);
-        else if (col[i] == 2 && celRecebido) teNeutro(r, ih * 0.5f, 0.14f, 0.204f, 0.212f, 0.243f, a);
-        txt_desenhar_alpha(t, r.x + 20, r.y + (ih - t.h) * 0.5f, (foco ? 1.0f : 0.55f) * a);
-        sx += r.w + 4.0f;
+      for (fila = 0; fila < segNFilas; fila++) {
+        int fim = ini;
+        float sx = x, py = y + (float)fila * (h + TE_FILA_GAP);
+        while (fim < k && segFila[fim] == fila) fim++;
+        teNeutro((GfxRect){ sx, py, teChipsLarg(segEst, segPad, rot, ini, fim), h }, h * 0.5f, 0.06f, 0.114f, 0.118f, 0.137f, a);
+        sx += 5.0f;
+        for (i = ini; i < fim; i++) {
+          int foco = aberto && fileira < 0 && coluna == col[i];
+          int ti = foco ? ajustes_tinta_foco() : 243;
+          TxtLinha t = txt_linha(segEst, rot[i], ti, ti, ti, 255);
+          GfxRect r = { sx, py + 5.0f, t.w + 2 * segPad, ih };
+          if (aberto && ponteiro_ativo()) ponteiro_alvo(r.x, r.y, r.w, r.h, focarBarra, NULL, col[i], 0);
+          if (foco) teAcento(r, ih * 0.5f, animBarra[col[i]] > 0.5f ? 1.0f : animBarra[col[i]] * 2.0f, a);
+          else if (col[i] == 2 && celRecebido) teNeutro(r, ih * 0.5f, 0.14f, 0.204f, 0.212f, 0.243f, a);
+          txt_desenhar_alpha(t, r.x + segPad, r.y + (ih - t.h) * 0.5f, (foco ? 1.0f : 0.55f) * a);
+          sx += r.w + 4.0f;
+        }
+        ini = fim;
       }
-      y += h;
+      y += h + (float)(segNFilas - 1) * (h + TE_FILA_GAP);
       if (celOk()) {
         y += 16.0f;
-        txt_bloco(TXT_ILHA_GENERO, "Pelo celular, o texto chega aqui para você conferir antes de concluir.",
-                  243, 242, 239, x, y, ew, 25.0f, 0.45f * a, 2);
+        txt_bloco(TXT_ILHA_GENERO, TE_FRASE_CEL, 243, 242, 239, x, y, ew, 25.0f, 0.45f * a, 3);
       }
     } }
   // Dicas na base da coluna.
   { const char *av = st_dono() == ST_TECLADO ? st_aviso() : "";
-    float dx = x, by = teY() + dy + teH() - TE_ILHA_PY - 30.0f;
+    float by = teY() + dy + teH() - TE_ILHA_PY - 30.0f;
     if (av[0]) {
       TxtLinha t = txt_linha_corta(TXT_ILHA_GENERO, av, 240, 196, 140, 255, ew);
       txt_desenhar_alpha(t, x, by + (30 - t.h) * 0.5f, a);
@@ -618,13 +750,13 @@ static void teDesenhar(Uint32 agora) {
       TxtLinha t = txt_linha_corta(TXT_ILHA_GENERO, "Recebido do celular. Confira e aperte Concluir.", 243, 242, 239, 255, ew);
       txt_desenhar_alpha(t, x, by + (30 - t.h) * 0.5f, 0.62f * a);
     } else if (fileira < 0) {
-      teDica(&dx, by, "OK", coluna == 2 ? "Digitar pelo celular" : coluna == 1 ? "Falar" : "Teclado da TV", a);
-      teDica(&dx, by, "↓", "Teclado", a);
-      teDica(&dx, by, "Voltar", "Cancelar", a);
+      const char *ks[3] = { "OK", "↓", "Voltar" };
+      const char *ls[3] = { coluna == 2 ? "Digitar pelo celular" : coluna == 1 ? "Falar" : "Teclado da TV", "Teclado", "Cancelar" };
+      teDicas(ks, ls, 3, x, by, ew, a);
     } else {
-      teDica(&dx, by, "Setas", "Navegar", a);
-      teDica(&dx, by, "OK", "Digitar", a);
-      teDica(&dx, by, "Voltar", "Cancelar", a);
+      const char *ks[3] = { "Setas", "OK", "Voltar" };
+      const char *ls[3] = { "Navegar", "Digitar", "Cancelar" };
+      teDicas(ks, ls, 3, x, by, ew, a);
     } }
 
   // COLUNA DA DIREITA: a grade.

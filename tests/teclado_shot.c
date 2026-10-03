@@ -53,6 +53,17 @@ static void quadro(void) {
   celb_atualizar(1.0f / 60.0f);
   glClearColor(0.051f, 0.051f, 0.051f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
+  // NUVIO_SHOT_FUNDO=1: texto claro de Ajustes por tras, para ver se a modal
+  // deixa vazar o que esta atras dela.
+  { static int fundo = -1;
+    if (fundo < 0) { const char *e = getenv("NUVIO_SHOT_FUNDO"); fundo = e && *e == '1'; }
+    if (fundo) {
+      int i;
+      for (i = 0; i < 14; i++) {
+        TxtLinha t = txt_linha(TXT_AJ_TIT28, "When leaving the player  Seekr key  Thumbnail strip", 243, 242, 239, 255);
+        txt_desenhar_alpha(t, 220 + (i % 3) * 330, 120 + i * 70, 1.0f);
+      }
+    } }
   teclado_desenhar(SDL_GetTicks());
   celb_desenhar();
   SDL_GL_SwapWindow(janela);
@@ -110,6 +121,16 @@ int main(int argc, char **argv) {
   tex_iniciar(96);
   gfx_icones_dir("deploy/app/art");
   dados_iniciar(dir);
+  { char caminho[700];
+    const char *li = getenv("NUVIO_SHOT_IDIOMA");   // 0 pt, 1 en, 4 ru, 6 de
+    const char *v = getenv("NUVIO_SHOT_VIDRO");
+    FILE *f;
+    snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dir);
+    f = fopen(caminho, "w");
+    assert(f);
+    fprintf(f, "idioma %d\nvidroLocal %d\n", li && *li ? atoi(li) : 0, v && *v == '0' ? 1 : 0);
+    fclose(f);
+    ajustes_dir(dir); }
   ajustes_iniciar();
 
   // 1. PROVA DE ALCANCE, sem supor a geometria da grade: para cada fileira f,
@@ -229,6 +250,23 @@ int main(int argc, char **argv) {
     fechar();
     assert(celular_estado() == CEL_PARADO);
     puts("ok: texto do celular chegou no campo e Pronto confirmou"); }
+
+  // MODOS NO ANDROID/TV com tudo ligado (teclado da TV, falar, celular): o
+  // segmentado tem de caber na coluna da esquerda em qualquer idioma.
+  st_teste_ligar(1);
+  { static const char *SK2 =
+      "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
+    teclado_abrir_com("Chave do Seekr", "Chave pessoal: seekr.tv. Vazio apaga.", 90, SK2, NULL);
+    captura(saida, "modos-seekr");
+    fechar();
+    teclado_abrir_com("Portal Stalker (MAC)", "Endereço e porta, sem http://", 48, PORTAL, "meu-portal.tv:8080");
+    tecla(SDLK_UP);
+    captura(saida, "modos-portal");
+    fechar();
+    teclado_abrir("Código do amigo", "Peça o código que aparece na tela dele", 6);
+    captura(saida, "modos-padrao");
+    fechar(); }
+  st_teste_ligar(0);
 
   if (falhou) { puts("FAIL: capturas gravadas, mas ha simbolo inalcancavel."); return 1; }
   puts("PASS: capturas do teclado gravadas.");
