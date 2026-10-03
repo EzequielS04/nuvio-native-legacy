@@ -380,6 +380,7 @@ static void limparFonteVOD(void) {
   voltaAtiva = 0;
   fonteVODTentativas = 0;
   fonteVODDesde = 0;
+  player_definir_tentativa(0, 0);
 }
 static int iniciarFonteJob(int tipo, unsigned geracao, const char *id, int renovando) {
   FonteJob *job = &fonteJob;
@@ -1224,6 +1225,7 @@ static void tentarProximaFonteVOD(void) {
     return;
   }
   if (!pedirProximaFonteVOD()) return;
+  player_definir_tentativa(fonteVODTentativas + 1, VOD_FONTE_MAX_TENTATIVAS);
   printf("[fonte] automatico VOD descartou %d; verificando proxima (%d/%d)\n",
          atual, fonteVODTentativas + 1, VOD_FONTE_MAX_TENTATIVAS);
   marco("fonte VOD travou; tentando proxima");
@@ -2872,6 +2874,8 @@ void app_atualizar(float dt, Uint32 agora) {
           fonteVODAutomatica = 1;
           fonteVODTentativas++;
           fonteVODDesde = SDL_GetTicks();
+          // "Fonte 2 de 3" na ilha do player: a troca deixa de ser muda.
+          player_definir_tentativa(fonteVODTentativas, VOD_FONTE_MAX_TENTATIVAS);
         }
         // Armado so em sessao de canal: o indice passa a responder ao
         // watchdog de fonte morta ate a lista acabar ou o canal trocar.
@@ -2887,6 +2891,7 @@ void app_atualizar(float dt, Uint32 agora) {
                stream_automatico() >= 0) {
         printf("[fonte] primeira da lista nao serviu; conferindo a seguinte (%d/%d)\n",
                fonteVODTentativas + 1, VOD_FONTE_MAX_TENTATIVAS);
+        player_definir_tentativa(fonteVODTentativas + 1, VOD_FONTE_MAX_TENTATIVAS);
         (void)pedirProximaFonteVOD();
       }
       else { limparFonteVOD(); erroSemFonte(); }

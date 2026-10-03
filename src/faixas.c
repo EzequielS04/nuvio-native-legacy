@@ -301,7 +301,7 @@ static void valorEstilo(int linha, char *dst, size_t tam) {
     case 7: {
       int a = e->atrasoMs;
       if (!a) snprintf(dst, tam, "0 s");
-      else    snprintf(dst, tam, "%+.2f s", a / 1000.0f);
+      else    { snprintf(dst, tam, "%+.2f s", a / 1000.0f); plrui_decimal(dst); }
       break; }
     // Negrito vale para o que o app desenha (OpenSubtitles e legenda externa);
     // a faixa que o player da TV desenha segue o peso do aparelho.

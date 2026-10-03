@@ -61,6 +61,9 @@ void player_toast(const char *texto, unsigned ms);
 // pilula da ilha abre com ele (plrilha.h). player_toast e o informativo.
 void player_toast_ex(const char *texto, unsigned ms, const char *icone, int ambar);
 void player_limpar_erro_fonte(void);   // fonte "morta" que voltou a entregar
+// A tentativa do automatico de fontes ("Fonte 2 de 3" na ilha ao abrir):
+// `n` = qual (1 = a primeira), `max` = o teto. 0, 0 = nenhuma.
+void player_definir_tentativa(int n, int max);
 // 1 quando a fonte atual falhou. O app usa no watchdog de canal: stream de TV
 // ao vivo que nao abre troca sozinho para o proximo da lista.
 int  player_fonte_falhou(void);
@@ -244,6 +247,7 @@ void player_shot_toast(Uint32 agora, const char *texto, const char *icone, int a
 void player_shot_esconder(void);
 void player_shot_carregando(int sim);
 void player_shot_buscando(int sim);
+void player_shot_video(int sim);   // comVideo sem furo: a arte faz de video
 #endif
 
 #endif

@@ -282,6 +282,9 @@ static Uint32 pgDesde;
 // AS DUAS VARIAVEIS DE MIDIA. Todo o resto do arquivo le so daqui — quando o
 // video real entrar, sao elas que passam a ser preenchidas pelo decodificador.
 static int   comVideo = 0;
+#ifdef NV_SHOT_HOOKS
+static int   shotSemFuro;
+#endif
 static int   pedFaixas = 0;
 static int   esperandoFonte = 0;   // aberto sem URL, esperando o addon responder
 // Pre-busca da legenda ASS segurando o video (ver player_definir_fonte): a url
@@ -493,8 +496,14 @@ const CatEp *player_proximo_episodio(void) {
 // este canal agora"). Vazio = as frases genericas. Ja traduzido por quem
 // chama; txt_linha tenta traduzir de novo, nao acha chave e deixa como esta.
 static char erroTitulo[160], erroDica[160];
+// "Fonte 2 de 3": a tentativa do automatico VOD (app.c, tentarProximaFonteVOD).
+static int tentativaN, tentativaM;
+// O botao em foco no modal do erro: 0 = Abrir Fontes, 1 = Voltar.
+static int erroBotao;
+void player_definir_tentativa(int n, int max) { tentativaN = n; tentativaM = max; }
 void player_erro_fonte(void) {
-  esperandoFonte = 0; erroFonte = 1; visivel = 1; tocando = 0; soBarra = 0;
+  esperandoFonte = 0; erroFonte = 1; visivel = 0; tocando = 0; soBarra = 0;
+  erroBotao = 0;
   prebuscaUrl[0] = 0;                // erro no meio da pre-busca: o video nao sai
   erroTitulo[0] = erroDica[0] = 0;   // erro sem motivo nao herda o do anterior
 }
@@ -2203,6 +2212,19 @@ void player_evento(const SDL_Event *e) {
     return;
   }
 
+  // A FONTE NAO ABRIU (filme/serie): a tecla e do MODAL da ilha. ESQUERDA e
+  // DIREITA escolhem entre Abrir Fontes e Voltar; OK aciona. Voltar fecha o
+  // player como o BACK (tratado acima).
+  if (erroFonte && !ehCanal()) {
+    if (k == SDLK_LEFT) erroBotao = 0;
+    else if (k == SDLK_RIGHT) erroBotao = 1;
+    else if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
+      if (erroBotao == 0) pedFontes = 1;
+      else { saindo = 1; pediuSair = 1; }
+    }
+    return;
+  }
+
   // PAINEL DE PAUSA: com ele de pe, a tecla e DELE. Vem antes de tudo o que
   // sobra (inclusive da tecla de proporcao) porque e o que o web faz — la o
   // ramo `if (this.pauseOverlayVisible)` engole o evento inteiro
@@ -3151,6 +3173,73 @@ static void anelCarregando(Uint32 agora, float alfa) {
   }
 }
 
+// --- O CORPO DA ILHA AO ABRIR A FONTE E NO ERRO ------------------------------
+static float alturaCarregando(void) { return 22.0f + 32.0f + 6.0f + 24.0f + 18.0f + 52.0f + 18.0f + 4.0f + 22.0f; }
+static void corpoCarregando(GfxRect r, float a, void *u) {
+  float x = r.x + 18.0f, w = r.w - 36.0f, y = r.y + 22.0f;
+  Uint32 agora = SDL_GetTicks();
+  const Stream *st = stream_item(stream_atual());
+  (void)u;
+  plrui_respira(x + 6.0f + 5.0f, y + 16.0f, 10.0f, agora, a);
+  { TxtLinha l = txt_linha(TXT_G26B, "Abrindo fonte", 243, 242, 239, 255);
+    txt_desenhar_alpha(l, x + 6.0f + 10.0f + 16.0f, y + 16.0f - (float)l.h * 0.5f, a); }
+  y += 32.0f + 6.0f;
+  if (linhaEp[0]) {
+    TxtLinha l = txt_linha_corta(TXT_ILHA_SUB, linhaEp, 243, 242, 239, 153, w - 32.0f);
+    txt_desenhar_alpha(l, x + 32.0f, y, a);
+  }
+  y += 24.0f + 18.0f;
+  { GfxRect cx = { x, y, w, 52.0f };
+    if (ajustes_vidro()) gfx_cor(cx, 20.0f / 52.0f, 1, 1, 1, 0.05f * a);
+    else gfx_cor(cx, 20.0f / 52.0f, 0.118f, 0.122f, 0.141f, a);
+    if (st) {
+      char d[160];
+      float lw = 0.0f;
+      if (st->badges) lw = badges_desenhar_tom(st->badges, x + 18.0f, y + 14.0f, w * 0.55f, 24.0f, .52f, .52f, .52f, a);
+      (void)lw;
+      if (st->tamanhoMB > 0)
+        snprintf(d, sizeof d, "%s \xc2\xb7 %.1f GB", st->provedor, st->tamanhoMB / 1024.0);
+      else snprintf(d, sizeof d, "%s", st->provedor);
+      plrui_decimal(d);
+      { TxtLinha l = txt_linha_corta(TXT_G18R, d, 243, 242, 239, 140, w * 0.4f);
+        txt_desenhar_alpha(l, x + w - 18.0f - l.w, y + 26.0f - (float)l.h * 0.5f, a); }
+    } }
+  y += 52.0f + 18.0f;
+  // O TRILHO CORRE (nao ha porcentagem de abertura para mostrar): um trecho
+  // de 34% indo e voltando; com Animacoes reduzidas ele fica parado.
+  { float t = ajustes_animacoes_reduzidas() ? 0.0f : (float)(agora % 1800u) / 1800.0f;
+    float k = t < 0.5f ? t * 2.0f : 2.0f - t * 2.0f, seg = 0.34f, ar, ag, ab;
+    GfxRect tr = { x, y, w, 4.0f };
+    ajustes_acento(&ar, &ag, &ab);
+    gfx_cor(tr, 0.5f, 1, 1, 1, 0.16f * a);
+    gfx_cor((GfxRect){ x + (w * (1.0f - seg)) * k, y, w * seg, 4.0f }, 0.5f, ar, ag, ab, a); }
+}
+
+// O MODAL DO ERRO: o motivo (36/700), a dica e os dois botoes. ESQUERDA e
+// DIREITA andam, OK aciona (player_evento).
+static float alturaErro(void) {
+  TxtLinha t = txt_linha(TXT_ILHA_PERGUNTA, "Ag", 0, 0, 0, 255);
+  float h = 18.0f + 4.0f;
+  const char *tit = erroTitulo[0] ? erroTitulo : "Não foi possível abrir a fonte";
+  const char *dica = erroDica[0] ? erroDica : "Abra Fontes para escolher outra opção ou recarregar.";
+  h += txt_bloco_corta(TXT_ILHA_PERGUNTA, tit, 0, 0, 0, 0, 0, 880.0f - 72.0f, (float)t.h + 7.0f, 0.0f, 3);
+  h += 14.0f + txt_bloco_corta(TXT_ILHA_TEXTO, dica, 0, 0, 0, 0, 0, 880.0f - 72.0f, 30.0f, 0.0f, 3);
+  return h + 28.0f + 60.0f + 34.0f;
+}
+static void corpoErro(GfxRect r, float a, void *u) {
+  float x = r.x + 36.0f, w = r.w - 72.0f, y = r.y + 18.0f + 4.0f;
+  TxtLinha t = txt_linha(TXT_ILHA_PERGUNTA, "Ag", 0, 0, 0, 255);
+  const char *tit = erroTitulo[0] ? erroTitulo : "Não foi possível abrir a fonte";
+  const char *dica = erroDica[0] ? erroDica : "Abra Fontes para escolher outra opção ou recarregar.";
+  (void)u;
+  y += txt_bloco_corta(TXT_ILHA_PERGUNTA, tit, 243, 242, 239, x, y, w, (float)t.h + 7.0f, a, 3);
+  y += 14.0f;
+  y += txt_bloco_corta(TXT_ILHA_TEXTO, dica, 158, 157, 155, x, y, w, 30.0f, a, 3);
+  y += 28.0f;
+  x += plrui_botao(x, y, "Abrir Fontes", "pl_layers", erroBotao == 0 ? 1.0f : 0.0f, a) + 12.0f;
+  plrui_botao(x, y, "Voltar", NULL, erroBotao == 1 ? 1.0f : 0.0f, a);
+}
+
 void player_desenhar(Uint32 agora) {
   (void)agora;
   if (!aberto) return;
@@ -3179,6 +3268,9 @@ void player_desenhar(Uint32 agora) {
   // a arte 16:9 de esticar quando a tela nao for exatamente 16:9.
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
   int furar = player_com_video();
+#ifdef NV_SHOT_HOOKS
+  if (shotSemFuro) furar = 0;   // capturas: a arte faz de video
+#endif
 #ifdef NV_TPK
   // O FURO SO COM IMAGEM (#188). O host manda `pronto` ANTES do Start (Video.cs,
   // Abrir), e o primeiro quadro so vem depois do buffer: furo aberto nesse vao
@@ -3260,56 +3352,67 @@ void player_desenhar(Uint32 agora) {
     }
   }
 
-  // Indicador de abertura: pontos pulsando no centro, sobre a arte escurecida.
-  // Um giro exigiria rotacao no shader; tres pontos em contrafase dizem a mesma
-  // coisa com o que ja existe, e leem bem de longe.
+  // ABRINDO A FONTE (Glass UI): a arte escurece, o logo fica no centro e o
+  // estado mora na ILHA do canto, crescida como a atividade da ilha do
+  // relogio — o ponto que respira, "Abrindo fonte", a linhaEp, a fonte
+  // escolhida (marcas, addon e tamanho) e um trilho que corre. Na ponta do
+  // cabecalho, "Fonte 2 de 3" quando o automatico ja esta na segunda.
   if (player_carregando()) {
-    GfxRect escuro = { 0, 0, NV_TELA_W, NV_TELA_H };
-    gfx_cor(escuro, 0.0f, 0, 0, 0, 0.55f * entrada);
-    // A MARCA DO CANAL VEM DO BACKDROP QUANDO NAO HA `logo`. O FrostView (e os
-    // addons de canal em geral) nao preenche `logo`: manda a marca em poster e
-    // background. Sem esta linha caia-se no nome em texto — que e justamente o
-    // texto que o dono pediu para trocar pela marca.
     const char *marca = c ? artehero_logo_sessao(c) : NULL;
+    GLuint logo;
     if (!marca && c && player_id_canal()[0] && c->backdrop[0]) marca = c->backdrop;
-    // Home/detalhe já normalizam logos TMDB; o player era o único consumidor
-    // que usava c->logo cru e criava uma segunda chave para a mesma arte.
-    GLuint logo = marca ? tex_obter_larg_qualquer(marca, 520) : 0;
+    logo = marca ? tex_obter_larg_qualquer(marca, 560) : 0;
+    gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * entrada);
+    gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 360.0f }, 1, 1.0f, 1.0f, 0.40f * entrada);
+    gfx_veu_css((GfxRect){ 0, NV_TELA_H - 360.0f, NV_TELA_W, 360.0f }, 0, 1.0f, 1.0f, 0.40f * entrada);
     if (logo) {
-      float ar = tex_aspecto(marca), w = 520, h = ar > 0 ? w / ar : 120;
-      if (h > 160) { h = 160; w = h * ar; }
-      gfx_rect((GfxRect){(NV_TELA_W-w)*.5f,NV_TELA_H*.5f-h-60,w,h},logo,
-               tex_marca_escura(marca)?GFX_MARCA:GFX_TEXTO,0,0,0,0,.95f,.95f,.97f,entrada);
-    } else {
-      TxtLinha t = txt_linha_corta(TXT_PLR_TITULO,c?c->titulo:"Reproduzindo",240,241,244,255,680);
-      txt_desenhar_alpha(t,(NV_TELA_W-t.w)*.5f,NV_TELA_H*.5f-150,entrada);
+      float ar = tex_aspecto(marca), w = 560, h = ar > 0 ? w / ar : 120;
+      if (h > 170) { h = 170; w = h * ar; }
+      gfx_rect((GfxRect){ (NV_TELA_W - w) * .5f, (NV_TELA_H - h) * .5f, w, h }, logo,
+               tex_marca_escura(marca) ? GFX_MARCA : GFX_TEXTO, 0, 0, 0, 0, .95f, .95f, .97f, entrada);
+    } else if (c && c->titulo[0]) {
+      TxtLinha t = txt_linha_corta(TXT_PLR_TITULO, c->titulo, 240, 241, 244, 255, 900);
+      txt_desenhar_alpha(t, (NV_TELA_W - t.w) * .5f, (NV_TELA_H - t.h) * .5f, entrada);
     }
-    // Anel com cauda luminosa, animado sem novas texturas por quadro.
-    anelCarregando(agora, entrada);
-    { TxtLinha lc = txt_linha(TXT_CALLOUT, "Abrindo fonte", 236, 237, 242, 255);
-      txt_desenhar_alpha(lc, NV_TELA_W * 0.5f - lc.w * 0.5f,
-                         NV_TELA_H * 0.5f + 50, 0.85f * entrada); }
-    if (linhaEp[0]) {
-      TxtLinha le = txt_linha_corta(TXT_PG_FIM,linhaEp,196,198,204,255,680);
-      txt_desenhar_alpha(le,(NV_TELA_W-le.w)*.5f,NV_TELA_H*.5f+94,entrada);
-    }
+    { PlrIlhaPedido pd;
+      char dir[48] = "";
+      memset(&pd, 0, sizeof pd);
+      pd.semFim = 1;
+      if (tentativaN >= 2 && tentativaM >= tentativaN) {
+        snprintf(dir, sizeof dir, i18n("Fonte %d de %d"), tentativaN, tentativaM);
+        pd.direita = dir;
+      }
+      pd.w = 680.0f; pd.h = alturaCarregando();
+      pd.corpo = corpoCarregando;
+      plrilha_pedir(&pd); }
   }
   // REBUFFER (#182 pediu um indicador): com o video ja rodando, o buffer que
-  // esvazia congelava a imagem sem nenhum sinal. So o anel, sem veu nem texto,
-  // e so depois de 600 ms parado — o vai-e-volta curto de um seek nao acende.
-  else if (comVideo && !erroFonte && !saindo && video_bufferando_ms() >= 600)
-    anelCarregando(agora, entrada);
+  // esvazia congelava a imagem sem nenhum sinal. So o anel, num disco da ilha
+  // (para nao sumir em cena clara), e so depois de 600 ms parado — o
+  // vai-e-volta curto de um seek nao acende.
+  else if (comVideo && !erroFonte && !saindo && video_bufferando_ms() >= 600) {
+    GfxRect d = { NV_TELA_W * 0.5f - 48.0f, NV_TELA_H * 0.5f - 48.0f, 96.0f, 96.0f };
+    plrui_material(d, 48.0f, 0, entrada);
+    plrui_anel(NV_TELA_W * 0.5f, NV_TELA_H * 0.5f, 56.0f, 0, agora, entrada);
+  }
   if (erroFonte && ehCanal()) {
     // Cartao no estilo do ao vivo: a marca do canal e a causa (provedor, conta)
     // que o app ja calculou em erroTitulo/erroDica.
     aovivo_erro_desenhar(itemCanal.titulo, itemCanal.poster, erroTitulo, erroDica, entrada);
   } else if (erroFonte) {
-    gfx_cor(tela,0,.02f,.02f,.025f,.65f);
-    // Cortadas na largura: o motivo leva o nome do addon, que e da pessoa.
-    TxtLinha er=txt_linha_corta(TXT_CALLOUT,erroTitulo[0]?erroTitulo:"Não foi possível abrir a fonte",240,241,243,255,NV_TELA_W-240);
-    txt_desenhar_alpha(er,(NV_TELA_W-er.w)*.5f,400,entrada);
-    TxtLinha aj=txt_linha_corta(TXT_PG_FIM,erroDica[0]?erroDica:"Abra Fontes para escolher outra opção ou recarregar.",192,194,200,255,NV_TELA_W-240);
-    txt_desenhar_alpha(aj,(NV_TELA_W-aj.w)*.5f,448,entrada);
+    // A FONTE NAO ABRIU: a ilha do canto vira o MODAL (o mesmo das
+    // confirmacoes), com o motivo real e as duas saidas que o proprio texto
+    // manda fazer — Abrir Fontes e Voltar. Era um veu .65 com duas linhas e
+    // nenhum botao, e o Ao vivo ja tinha cartao: dois tratamentos.
+    PlrIlhaPedido pd;
+    // O video apagado (brightness .6 no mockup) com o veu da ilha por cima.
+    gfx_cor(tela, 0, 0, 0, 0, (ajustes_vidro() ? 0.58f : 0.65f) * entrada);
+    memset(&pd, 0, sizeof pd);
+    pd.icone = "aj_triangle-alert"; pd.corIcone = 1;
+    pd.texto = i18n("Fonte");
+    pd.w = 880.0f; pd.h = alturaErro();
+    pd.corpo = corpoErro; pd.modal = 1;
+    plrilha_pedir(&pd);
   }
 
   // --- avisos do player: a PILULA DA ILHA que abre (plrilha.h) --------------
@@ -3802,6 +3905,7 @@ void player_desenhar(Uint32 agora) {
 #ifdef NV_SHOT_HOOKS
 // CAPTURAS (tests/player_glass_shot.c): poe o player num estado de tela sem
 // pipeline. `agora` e o relogio do harness (o mesmo passado a desenhar).
+void player_shot_video(int sim) { comVideo = sim; shotSemFuro = sim; }
 void player_shot_estado(Uint32 agora, float pos, float dur, int toca, int bt,
                         int barra, int so) {
   posSeg = posVis = pos; posVisSolto = 0;

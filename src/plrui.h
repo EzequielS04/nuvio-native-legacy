@@ -74,6 +74,10 @@ void plrui_sep(float x, float yc, float a);
 // Tempo "1:12:40" / "32:28" (sem hora quando menor que uma hora).
 void plrui_tempo(char *b, size_t n, double seg);
 
+// Troca o ponto decimal pela virgula nas linguas que escrevem com virgula
+// (idioma_ponto_decimal): "18.2 GB" -> "18,2 GB", "+0.25 s" -> "+0,25 s".
+void plrui_decimal(char *s);
+
 // Tinta do texto sobre a pilula de foco (0..255).
 int plrui_tinta(void);
 

@@ -237,9 +237,14 @@ int main(int argc, char **argv) {
   if (quer(argc, argv, "reconectando")) {
     abrir(&filme); simular(3840, 1606, "", 1, 1);
     quadros(10);
+    { VideoSimulacao v; memset(&v, 0, sizeof v);
+      v.largura = 3840; v.altura = 1606; v.pronto = 1; v.bufferandoMs = 900; v.duracao = 9420; v.pos = 4360;
+      video_simular(&v); }
+    player_shot_video(1);
     player_shot_toast(relogio, "Conex\xc3\xa3o caiu, reconectando\xe2\x80\xa6", "aj_wifi-off", 1, 0);
     quadros(90);
     salvar("reconectando");
+    player_shot_video(0); simular(0, 0, "", 0, 0);
   }
   if (quer(argc, argv, "audio") || quer(argc, argv, "audio-direita")) {
     int dir;
@@ -276,6 +281,32 @@ int main(int argc, char **argv) {
     if (quer(argc, argv, "legenda-estilo")) salvar("legenda-estilo");
     faixas_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
     quadros(60);
+  }
+  if (quer(argc, argv, "carregando")) {
+    Stream st;
+    memset(&st, 0, sizeof st);
+    snprintf(st.rotulo, sizeof st.rotulo, "Fallout S01E03 2160p");
+    snprintf(st.provedor, sizeof st.provedor, "AIOStreams");
+    snprintf(st.url, sizeof st.url, "http://exemplo/fallout.mkv");
+    st.tamanhoMB = (long)(18.2 * 1024);
+    st.badges = badges_bit("r-4k") | badges_bit("v-hdr10") | badges_bit("a-atmos");
+    stream_definir_lista(&st, 1);
+    abrir(&serie); simular(0, 0, "", 0, 0);
+    stream_definir_atual(0);
+    player_definir_tentativa(2, 3);
+    player_shot_carregando(1);
+    quadros(120);
+    salvar("carregando");
+    player_definir_tentativa(0, 0);
+  }
+  if (quer(argc, argv, "erro")) {
+    abrir(&filme); simular(3840, 1606, "", 1, 1);
+    quadros(10);
+    player_erro_fonte_motivo("As fontes torrent desta lista n\xc3\xa3o est\xc3\xa3o no cache do debrid",
+                             "Abra Fontes e escolha uma: o servi\xc3\xa7o come\xc3\xa7" "a a baixar.");
+    quadros(120);
+    salvar("erro");
+    player_limpar_erro_fonte();
   }
   puts("player_glass_shot: ok");
   return 0;
