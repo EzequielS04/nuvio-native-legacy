@@ -5,6 +5,7 @@
 #include "dados.h"
 #include "js.h"
 #include "jsw.h"
+#include "idioma.h"
 #include "perfis.h"
 #include "player.h"
 #include "rede.h"
@@ -13,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/stat.h>
 
 #ifndef NV_DISCORD_CLIENT_ID
 #define NV_DISCORD_CLIENT_ID ""
@@ -44,13 +46,23 @@ static int geracao;                   // invalida o fio de um perfil que ja saiu
 
 static long agoraSeg(void) { return (long)time(NULL); }
 
-static int ligado(void) { return estado == DIS_LIGADO && token[0]; }
+static int ligadoSemTrava(void) { return estado == DIS_LIGADO && token[0]; }
+static int ligado(void) {
+  int r;
+  pthread_mutex_lock(&trava); r = ligadoSemTrava(); pthread_mutex_unlock(&trava);
+  return r;
+}
+
+static void restringirArquivo(const char *nome) {
+  char caminho[600];
+  if (dados_caminho(caminho, sizeof caminho, nome)) chmod(caminho, 0600);
+}
 
 static void gravar(void) {
   char nome[32], buf[700];
   snprintf(nome, sizeof nome, DIS_ARQ_FMT, perfil);
   snprintf(buf, sizeof buf, "%s\t%s\t%ld\n", token, refresh, expiraEm);
-  dados_gravar(nome, buf);
+  if (dados_gravar(nome, buf)) restringirArquivo(nome);
 }
 
 static void carregar(int p) {
@@ -60,6 +72,7 @@ static void carregar(int p) {
   estado = DIS_PARADO;
   perfil = p;
   snprintf(nome, sizeof nome, DIS_ARQ_FMT, p);
+  restringirArquivo(nome);
   b = dados_ler(nome);
   if (!b) return;
   c1 = strchr(b, '\t');
@@ -75,17 +88,33 @@ static void carregar(int p) {
 }
 
 int discord_disponivel(void) { return NV_DISCORD_CLIENT_ID[0] != 0; }
-DisEstado discord_estado(void) { return estado; }
-const char *discord_codigo(void) { return userCode; }
-const char *discord_url(void) { return url; }
-const char *discord_erro(void) { return erro; }
+DisEstado discord_estado(void) {
+  DisEstado e;
+  pthread_mutex_lock(&trava); e = estado; pthread_mutex_unlock(&trava);
+  return e;
+}
+const char *discord_codigo(void) {
+  static _Thread_local char copia[sizeof userCode];
+  pthread_mutex_lock(&trava); memcpy(copia, userCode, sizeof copia); pthread_mutex_unlock(&trava);
+  return copia;
+}
+const char *discord_url(void) {
+  static _Thread_local char copia[sizeof url];
+  pthread_mutex_lock(&trava); memcpy(copia, url, sizeof copia); pthread_mutex_unlock(&trava);
+  return copia;
+}
+const char *discord_erro(void) {
+  static _Thread_local char copia[sizeof erro];
+  pthread_mutex_lock(&trava); memcpy(copia, erro, sizeof copia); pthread_mutex_unlock(&trava);
+  return copia;
+}
 
 // ---------------------------------------------------------- HTTP (em fio)
 static char *postarForm(const char *caminho, const char *corpo, int *st) {
   static const char *cab[] = { "Content-Type: application/x-www-form-urlencoded", NULL };
   char u[160];
   snprintf(u, sizeof u, DIS_API "%s", caminho);
-  return rede_postar_st(u, 20, cab, corpo, st);
+  return rede_postar_seguro_st(u, 20, cab, corpo, st);
 }
 
 // Resposta de token: access_token, refresh_token, expires_in. Grava com a trava.
@@ -93,7 +122,9 @@ static int lerToken(const char *r, int ger) {
   char tk[256], rf[256];
   double exp;
   if (!r || !js_texto_raiz(r, "access_token", tk, sizeof tk) || !tk[0]) return 0;
+  if (strlen(tk) == sizeof tk - 1) return 0; // Reject possible truncation.
   if (!js_texto_raiz(r, "refresh_token", rf, sizeof rf)) rf[0] = 0;
+  if (strlen(rf) == sizeof rf - 1) return 0;
   exp = js_num(r, NULL, "expires_in", 0);
   pthread_mutex_lock(&trava);
   if (ger == geracao) {
@@ -107,7 +138,7 @@ static int lerToken(const char *r, int ger) {
   return 1;
 }
 
-typedef struct { int ger; char a[300]; } Pedido;
+typedef struct { int ger; char a[1024], autorizacao[sizeof token]; } Pedido;
 
 static void *fioPedir(void *u) {
   Pedido *p = (Pedido *)u;
@@ -134,7 +165,7 @@ static void *fioPedir(void *u) {
     } else {
       char e[100] = "";
       if (r) js_texto_raiz(r, "error", e, sizeof e);
-      printf("[discord] codigo: HTTP %d %s\n", st, e);
+      printf("[discord] authorization: HTTP %d\n", st);
       snprintf(erro, sizeof erro, st ? "o Discord recusou o pedido (%d)" : "sem conexão com o Discord", st);
       estado = DIS_ERRO;
     }
@@ -146,18 +177,32 @@ static void *fioPedir(void *u) {
   return NULL;
 }
 
+// OAuth values are opaque: '+' and '&' must survive form encoding.
+static void formValor(const char *in, char *out, size_t tam) {
+  static const char hex[] = "0123456789ABCDEF";
+  size_t n = 0;
+  while (*in && n + 3 < tam) {
+    unsigned char c = (unsigned char)*in++;
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') out[n++] = c;
+    else { out[n++] = '%'; out[n++] = hex[c >> 4]; out[n++] = hex[c & 15]; }
+  }
+  out[n] = 0;
+}
+
 static void *fioPoll(void *u) {
   Pedido *p = (Pedido *)u;
-  char corpo[600], e[64] = "";
+  char corpo[1100], codificado[sizeof deviceCode * 3], e[64] = "";
   int st = 0;
   char *r;
+  formValor(p->a, codificado, sizeof codificado);
   snprintf(corpo, sizeof corpo,
            "grant_type=urn%%3Aietf%%3Aparams%%3Aoauth%%3Agrant-type%%3Adevice_code"
-           "&device_code=%s&client_id=%s", p->a, NV_DISCORD_CLIENT_ID);
+           "&device_code=%s&client_id=%s", codificado, NV_DISCORD_CLIENT_ID);
   r = postarForm("/oauth2/token", corpo, &st);
   if (r && st == 200 && lerToken(r, p->ger)) {
     pthread_mutex_lock(&trava);
-    if (p->ger == geracao) { deviceCode[0] = userCode[0] = 0; printf("[discord] vinculado\n"); }
+    if (p->ger == geracao) { deviceCode[0] = userCode[0] = 0; printf("[discord] linked\n"); }
   } else {
     if (r) js_texto_raiz(r, "error", e, sizeof e);
     pthread_mutex_lock(&trava);
@@ -168,7 +213,7 @@ static void *fioPoll(void *u) {
                  ? "autorização negada no Discord" : "o código expirou — OK pede outro");
         estado = DIS_ERRO;
       } else if (strcmp(e, "authorization_pending") != 0 && st) {
-        printf("[discord] poll: HTTP %d %s\n", st, e);
+        printf("[discord] poll: HTTP %d\n", st);
       }
     }
   }
@@ -181,21 +226,22 @@ static void *fioPoll(void *u) {
 
 static void *fioRenovar(void *u) {
   Pedido *p = (Pedido *)u;
-  char corpo[600], e[64] = "";
+  char corpo[1100], codificado[sizeof refresh * 3], e[64] = "";
   int st = 0;
   char *r;
+  formValor(p->a, codificado, sizeof codificado);
   snprintf(corpo, sizeof corpo, "grant_type=refresh_token&refresh_token=%s&client_id=%s",
-           p->a, NV_DISCORD_CLIENT_ID);
+           codificado, NV_DISCORD_CLIENT_ID);
   r = postarForm("/oauth2/token", corpo, &st);
   if (!(r && st == 200 && lerToken(r, p->ger))) {
     if (r) js_texto_raiz(r, "error", e, sizeof e);
-    printf("[discord] renovar: HTTP %d %s\n", st, e);
+    printf("[discord] refresh: HTTP %d\n", st);
     pthread_mutex_lock(&trava);
     // So 400 invalid_grant e vinculo morto. Sem rede, tenta de novo depois.
-    if (p->ger == geracao && st == 400) { token[0] = 0; estado = DIS_INVALIDO; gravar(); }
+    if (p->ger == geracao && st == 400 && !strcmp(e, "invalid_grant")) { token[0] = 0; estado = DIS_INVALIDO; gravar(); }
   } else {
     pthread_mutex_lock(&trava);
-    printf("[discord] token renovado\n");
+    if (p->ger == geracao) printf("[discord] token refreshed\n");
   }
   fioVivo = 0;
   pthread_mutex_unlock(&trava);
@@ -207,6 +253,7 @@ static void *fioRenovar(void *u) {
 // Arte: o Discord so mostra imagem de fora pelo proxy dele ("mp:external/...").
 static char arteUrl[1024], arteMp[600];
 static int arteVivo;
+static unsigned proxArte;
 
 static void *fioArte(void *u) {
   Pedido *p = (Pedido *)u;
@@ -225,21 +272,26 @@ static void *fioArte(void *u) {
   corpo = strdup(jsw_texto_final(&w));
   jsw_livre(&w);
   pthread_mutex_lock(&trava);
-  snprintf(cab, sizeof cab, "Authorization: Bearer %s", token);
+  if (p->ger != geracao || !ligadoSemTrava()) {
+    arteVivo = 0; pthread_mutex_unlock(&trava);
+    free(corpo); free(p); return NULL;
+  }
   pthread_mutex_unlock(&trava);
+  // Capture the original profile token when scheduling; never use a new one.
+  snprintf(cab, sizeof cab, "Authorization: Bearer %s", p->autorizacao);
   cabs[0] = cab; cabs[1] = NULL;
   snprintf(ender, sizeof ender, "https://discord.com/api/v9/applications/%s/external-assets",
            NV_DISCORD_CLIENT_ID);
-  r = corpo ? rede_postar_st(ender, 15, cabs, corpo, &st) : NULL;
+  r = corpo ? rede_postar_seguro_st(ender, 15, cabs, corpo, &st) : NULL;
   caminho[0] = 0;
   if (r && st == 200) {
     const char *el = js_raiz_array(r);
     if (el) js_texto(el, js_fim(el), "external_asset_path", caminho, sizeof caminho);
   } else {
-    printf("[discord] arte: HTTP %d\n", st);
+    printf("[discord] artwork: HTTP %d\n", st);
   }
   pthread_mutex_lock(&trava);
-  if (!strcmp(arteUrl, p->a)) {
+  if (p->ger == geracao && !strcmp(arteUrl, p->a)) {
     // O proximo montar() pega e mudou() ve a arte nova: reenvia sozinho.
     if (caminho[0]) snprintf(arteMp, sizeof arteMp, "mp:%s", caminho);
   }
@@ -256,6 +308,7 @@ static void soltar(void *(*rotina)(void *), const char *arg, int *vivo) {
   Pedido *p = (Pedido *)calloc(1, sizeof *p);
   if (!p) return;
   p->ger = geracao;
+  snprintf(p->autorizacao, sizeof p->autorizacao, "%s", token);
   snprintf(p->a, sizeof p->a, "%s", arg ? arg : "");
   *vivo = 1;
   if (pthread_create(&f, NULL, rotina, p) == 0) pthread_detach(f);
@@ -277,7 +330,7 @@ void discord_comecar(void) {
 void discord_cancelar(void) {
   pthread_mutex_lock(&trava);
   geracao++;
-  deviceCode[0] = userCode[0] = 0;
+  deviceCode[0] = userCode[0] = url[0] = 0;
   estado = token[0] ? DIS_LIGADO : DIS_PARADO;
   pthread_mutex_unlock(&trava);
 }
@@ -301,19 +354,23 @@ static Presenca enviada, querida;
 static int temEnviada;
 
 static void gatewayFechar(const char *porque) {
-  if (ws) { printf("[discord] gateway fechado: %s\n", porque); dws_fechar(ws); }
+  if (ws) { printf("[discord] gateway closed: %s\n", porque); dws_fechar(ws); }
   ws = NULL;
   g = G_FORA;
   temEnviada = 0;
   seq = -1;
+  hbIntervalo = 0; hbSemAck = 0;
 }
 
 void discord_esquecer(void) {
   char nome[32];
-  gatewayFechar("desvinculado");
+  gatewayFechar("unlinked");
   pthread_mutex_lock(&trava);
   geracao++;
   token[0] = refresh[0] = 0;
+  deviceCode[0] = userCode[0] = url[0] = erro[0] = 0;
+  arteUrl[0] = arteMp[0] = 0;
+  proxArte = 0;
   expiraEm = 0;
   estado = DIS_PARADO;
   snprintf(nome, sizeof nome, DIS_ARQ_FMT, perfil);
@@ -321,10 +378,17 @@ void discord_esquecer(void) {
   pthread_mutex_unlock(&trava);
 }
 
-void discord_encerrar(void) { gatewayFechar("app encerrando"); }
+void discord_encerrar(void) {
+  gatewayFechar("app shutting down");
+  pthread_mutex_lock(&trava);
+  geracao++;
+  deviceCode[0] = userCode[0] = url[0] = 0;
+  estado = token[0] ? DIS_LIGADO : DIS_PARADO;
+  pthread_mutex_unlock(&trava);
+}
 
 static void mandar(const char *json) {
-  if (ws && dws_enviar(ws, json) != 0) gatewayFechar("envio falhou");
+  if (ws && dws_enviar(ws, json) != 0) gatewayFechar("send failed");
 }
 
 static void mandarHeartbeat(void) {
@@ -402,7 +466,7 @@ static void mandarPresenca(const Presenca *p) {
 }
 
 // Mensagem do gateway. op: 0 evento, 1 pede heartbeat, 7 reconectar,
-// 9 sessao invalida, 10 hello, 11 ack.
+// 9 invalid session, 10 hello, 11 ack.
 static void tratar(const char *m, unsigned agora) {
   int op = (int)js_num(m, NULL, "op", -1);
   double s = js_num(m, NULL, "s", -1);
@@ -420,13 +484,13 @@ static void tratar(const char *m, unsigned agora) {
     }
     case 11: hbSemAck = 0; break;
     case 1: mandarHeartbeat(); break;
-    case 7: gatewayFechar("o Discord pediu reconexao"); proxTentativa = agora + 1000; break;
-    case 9: gatewayFechar("sessao invalida"); proxTentativa = agora + 5000; break;
+    case 7: gatewayFechar("Discord requested reconnect"); proxTentativa = agora + 1000; break;
+    case 9: gatewayFechar("invalid session"); proxTentativa = agora + 5000; break;
     case 0: {
       char t[32] = "";
       js_texto_raiz(m, "t", t, sizeof t);
       if (!strcmp(t, "READY")) {
-        printf("[discord] gateway pronto\n");
+        printf("[discord] gateway ready\n");
         g = G_PRONTO;
         recuoMs = 5000;
         temEnviada = 0;
@@ -442,6 +506,14 @@ static long long agoraMsEpoca(void) {
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
   return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+// Only known public artwork CDNs are eligible for third-party presence.
+// A configured add-on poster can contain a personal API key in its path/query.
+static int posterPublico(const char *u) {
+  return u && !strchr(u, '?') &&
+      (!strncmp(u, "https://image.tmdb.org/", 23) ||
+       !strncmp(u, "https://images.metahub.space/", 29));
 }
 
 // 1 se ha algo para mostrar; preenche `p`.
@@ -461,7 +533,7 @@ static int montar(Presenca *p) {
   if (player_pausado()) {
     // Pausado: sem relogio (o Discord contaria sozinho) e o estado diz.
     char t[128];
-    snprintf(t, sizeof t, "%s%s%s", p->estadoTxt, p->estadoTxt[0] ? " · " : "", "Pausado");
+    snprintf(t, sizeof t, "%s%s%s", p->estadoTxt, p->estadoTxt[0] ? " · " : "", i18n("Pausado"));
     snprintf(p->estadoTxt, sizeof p->estadoTxt, "%s", t);
   } else if (!player_eh_canal()) {
     long long agora = agoraMsEpoca();
@@ -472,13 +544,17 @@ static int montar(Presenca *p) {
   }
   // Arte: cartaz do titulo pelo proxy do Discord. So https publico serve.
   pthread_mutex_lock(&trava);
-  if (strncmp(ci->poster, "https://", 8) == 0) {
+  if (posterPublico(ci->poster)) {
     if (strcmp(arteUrl, ci->poster) != 0) {
       snprintf(arteUrl, sizeof arteUrl, "%s", ci->poster);
       arteMp[0] = 0;
+      proxArte = 0;
       if (!arteVivo) soltar(fioArte, arteUrl, &arteVivo);
     }
     snprintf(p->arte, sizeof p->arte, "%s", arteMp);
+  } else {
+    arteUrl[0] = arteMp[0] = 0;
+    proxArte = 0;
   }
   pthread_mutex_unlock(&trava);
   snprintf(p->arteTxt, sizeof p->arteTxt, "%s", ci->titulo);
@@ -500,9 +576,13 @@ void discord_passo(unsigned agora) {
   int tem;
   if (!discord_disponivel()) return;
   if (perfis_ativo() != perfil) {
-    gatewayFechar("troca de perfil");
+    gatewayFechar("profile changed");
     pthread_mutex_lock(&trava);
     geracao++;
+    proxTentativa = proxRenovar = proxArte = 0;
+    hbIntervalo = hbSemAck = 0;
+    deviceCode[0] = userCode[0] = url[0] = erro[0] = 0;
+    arteUrl[0] = arteMp[0] = 0;
     carregar(perfis_ativo());
     pthread_mutex_unlock(&trava);
   }
@@ -518,8 +598,14 @@ void discord_passo(unsigned agora) {
       soltar(fioPoll, deviceCode, &fioVivo);
     }
   }
+  // Retry artwork skipped while an older profile/title job was still active.
+  if (ligadoSemTrava() && player_com_video() && arteUrl[0] && !arteMp[0] && !arteVivo &&
+      (!proxArte || (int)(agora - proxArte) >= 0)) {
+    proxArte = agora + 60000;
+    soltar(fioArte, arteUrl, &arteVivo);
+  }
   // Token perto de vencer (1 h antes): renova em segundo plano.
-  if (ligado() && !fioVivo && refresh[0] && expiraEm && agoraSeg() > expiraEm - 3600 &&
+  if (ligadoSemTrava() && !fioVivo && refresh[0] && expiraEm && agoraSeg() > expiraEm - 3600 &&
       (!proxRenovar || (int)(agora - proxRenovar) >= 0)) {
     proxRenovar = agora + 60000;   // sem rede: tenta de novo em 1 min
     soltar(fioRenovar, refresh, &fioVivo);
@@ -532,14 +618,14 @@ void discord_passo(unsigned agora) {
 
   // Nada tocando por um minuto: fecha (o Discord apaga a atividade).
   if (!tem && ws && ociosoDesde && agora - ociosoDesde > DIS_OCIOSO_MS) {
-    gatewayFechar("nada tocando");
+    gatewayFechar("nothing playing");
     return;
   }
 
   // Conectar quando ha o que mostrar.
   if (!ws) {
     if (!tem || (proxTentativa && (int)(agora - proxTentativa) < 0)) return;
-    printf("[discord] conectando ao gateway\n");
+    printf("[discord] connecting to gateway\n");
     ws = dws_abrir(DIS_GATEWAY);
     g = G_CONECTANDO;
     return;
@@ -548,7 +634,7 @@ void discord_passo(unsigned agora) {
   { int e = dws_estado(ws);
     if (e == DWS_CAIU) {
       int cod = dws_codigo_fechamento(ws);
-      gatewayFechar("conexao caiu");
+      gatewayFechar("connection lost");
       // 4004 = token recusado. Renova; se nao der, o fio marca INVALIDO.
       if (cod == 4004) {
         pthread_mutex_lock(&trava);
@@ -569,7 +655,7 @@ void discord_passo(unsigned agora) {
   if (!ws) return;
 
   if (hbIntervalo && (int)(agora - proxHb) >= 0) {
-    if (hbSemAck) { gatewayFechar("heartbeat sem resposta"); proxTentativa = agora + 2000; return; }
+    if (hbSemAck) { gatewayFechar("heartbeat unacknowledged"); proxTentativa = agora + 2000; return; }
     hbSemAck = 1;
     mandarHeartbeat();
     proxHb = agora + hbIntervalo;

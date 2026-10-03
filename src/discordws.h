@@ -18,7 +18,8 @@ enum { DWS_CAIU = -1, DWS_CONECTANDO = 0, DWS_ABERTO = 1 };
 // "wss://host/caminho?query". NULL so se faltar memoria.
 DiscordWs *dws_abrir(const char *url);
 int dws_estado(DiscordWs *w);
-// 0 = mandou, -1 = conexao nao esta aberta ou caiu.
+// 0 = queued/sent, -1 = closed or bounded queue full. Partial writes drain
+// through dws_receber; sends never wait for socket writability.
 int dws_enviar(DiscordWs *w, const char *texto);
 // Proxima mensagem de texto completa (malloc, o chamador libera) ou NULL.
 char *dws_receber(DiscordWs *w);

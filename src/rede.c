@@ -376,6 +376,15 @@ char *rede_postar_st(const char *url, int segundos, const char *const *cab,
   return r;
 }
 
+void rede_discord_ca(const char *caminho) { (void)caminho; }
+
+char *rede_postar_seguro_st(const char *url, int segundos, const char *const *cab,
+                            const char *corpo, int *status) {
+  if (status) *status = 0;
+  if (!url || strncmp(url, "https://", 8)) return NULL;
+  return rede_postar_st(url, segundos, cab, corpo, status);
+}
+
 // Sonda sem corpo atravessando a ponte. O XHR ainda recebe o corpo inteiro se
 // o servidor ignorar Range, mas nao aloca essa copia no heap do WASM.
 EM_JS(int, nv_url_sonda, (const char *url, const char *cabs, char *dst,
@@ -530,6 +539,7 @@ int rede_medir_vazao(const char *url, const char *const *cab, int segundos,
 // proprio navegador (discordws.c); estes existem para o modulo linkar.
 RedeTls *rede_tls_abrir(const char *url, int segundos) { (void)url; (void)segundos; return NULL; }
 int rede_tls_enviar(RedeTls *t, const void *buf, size_t n) { (void)t; (void)buf; (void)n; return -1; }
+int rede_tls_tentar_enviar(RedeTls *t, const void *buf, size_t n, size_t *foi) { (void)t; (void)buf; (void)n; if (foi) *foi = 0; return -1; }
 int rede_tls_receber(RedeTls *t, void *buf, size_t n, int esperaMs) { (void)t; (void)buf; (void)n; (void)esperaMs; return -1; }
 void rede_tls_fechar(RedeTls *t) { (void)t; }
 
@@ -1461,19 +1471,33 @@ char *rede_apagar(const char *url, int segundos, const char *const *cab,
   return baldeFinal(&b);
 }
 
-char *rede_postar_st(const char *url, int segundos, const char *const *cab,
-                     const char *corpo, int *status) {
+// Set once at startup before OAuth/WebSocket workers begin.
+static char discordCa[600];
+void rede_discord_ca(const char *caminho) {
+  snprintf(discordCa, sizeof discordCa, "%s", caminho ? caminho : "");
+}
+#define OPT_CAINFO 10065
+
+static char *postarNativo(const char *url, int segundos, const char *const *cab,
+                          const char *corpo, int *status, int seguro) {
   Balde b = {0};
   void *c, *lista = NULL;
   int r;
   if (status) *status = 0;
   if (!url || !*url || !abrir()) return NULL;
-  c = pegarHandle(url);
+  c = seguro ? curl_init() : pegarHandle(url);
   if (!c) return NULL;
   curl_setopt(c, OPT_URL, url);
   curl_setopt(c, OPT_WRITEFUNCTION, receber);
   curl_setopt(c, OPT_WRITEDATA, &b);
   opcoesComuns(c, (unsigned long)(segundos > 0 ? segundos : 20) * 1000UL);
+  if (seguro) {
+    // OAuth credentials require authenticated TLS and never follow redirects.
+    curl_setopt(c, OPT_SSL_VERIFYPEER, (long)1);
+    curl_setopt(c, OPT_SSL_VERIFYHOST, (long)2);
+    if (discordCa[0]) curl_setopt(c, OPT_CAINFO, discordCa);
+    curl_setopt(c, OPT_FOLLOWLOCATION, (long)0);
+  }
   curl_setopt(c, OPT_POST, (long)1);
   curl_setopt(c, OPT_POSTFIELDS, corpo ? corpo : "");
   if (slist_append) {
@@ -1493,12 +1517,24 @@ char *rede_postar_st(const char *url, int segundos, const char *const *cab,
     if (status) *status = (int)codigo;
     if (codigo == 401 && aviso401) aviso401(url); }
   if (lista) { curl_setopt(c, OPT_HTTPHEADER, (void *)0); if (slist_free) slist_free(lista); }
-  soltarHandleR(c, r, url);
+  if (seguro) curl_cleanup(c); else soltarHandleR(c, r, url);
   // Falha de TRANSPORTE (r != 0) continua sendo NULL — ai nao houve resposta
   // nenhuma. O corpo de um 4xx, ao contrario, e devolvido: e nele que o
   // PostgREST explica o que faltou.
   if (r != 0) { free(b.p); return NULL; }
   return b.p ? baldeFinal(&b) : strdup("");
+}
+
+char *rede_postar_st(const char *url, int segundos, const char *const *cab,
+                     const char *corpo, int *status) {
+  return postarNativo(url, segundos, cab, corpo, status, 0);
+}
+
+char *rede_postar_seguro_st(const char *url, int segundos, const char *const *cab,
+                            const char *corpo, int *status) {
+  if (status) *status = 0;
+  if (!url || strncmp(url, "https://", 8)) return NULL;
+  return postarNativo(url, segundos, cab, corpo, status, 1);
 }
 
 // ------------------------------------------------------------ VAZAO (curl)
@@ -1723,7 +1759,7 @@ struct RedeTls { void *c; int fd; };
 static int tlsEsperar(int fd, int escrever, int ms) {
   fd_set f;
   struct timeval tv;
-  if (fd < 0) return -1;
+  if (fd < 0 || fd >= FD_SETSIZE) return -1;
   FD_ZERO(&f);
   FD_SET(fd, &f);
   tv.tv_sec = ms / 1000;
@@ -1752,10 +1788,10 @@ RedeTls *rede_tls_abrir(const char *url, int segundos) {
   curl_setopt(c, OPT_TCP_KEEPALIVE, (long)1);
   curl_setopt(c, OPT_TCP_KEEPIDLE, (long)15);
   curl_setopt(c, OPT_TCP_KEEPINTVL, (long)5);
-  // Mesma escolha de opcoesComuns: o pacote de CAs de fabrica das TVs nao se
-  // atualiza. Ver a nota la.
-  curl_setopt(c, OPT_SSL_VERIFYPEER, (long)0);
-  curl_setopt(c, OPT_SSL_VERIFYHOST, (long)0);
+  // Presence sends OAuth credentials: fail closed if the CA store is stale.
+  curl_setopt(c, OPT_SSL_VERIFYPEER, (long)1);
+  curl_setopt(c, OPT_SSL_VERIFYHOST, (long)2);
+  if (discordCa[0]) curl_setopt(c, OPT_CAINFO, discordCa);
   r = curl_perform(c);
   if (r == 0 && curl_getinfo) curl_getinfo(c, INFO_LASTSOCKET, &fd);
   if (r != 0 || fd < 0) {
@@ -1768,6 +1804,15 @@ RedeTls *rede_tls_abrir(const char *url, int segundos) {
   t->c = c;
   t->fd = (int)fd;
   return t;
+}
+
+int rede_tls_tentar_enviar(RedeTls *t, const void *buf, size_t n, size_t *foi) {
+  int r;
+  if (foi) *foi = 0;
+  if (!t || !foi) return -1;
+  r = curl_send(t->c, buf, n, foi);
+  if (r == CURLE_AGAIN_) { *foi = 0; return 0; }
+  return r == 0 ? 0 : -1;
 }
 
 int rede_tls_enviar(RedeTls *t, const void *buf, size_t n) {

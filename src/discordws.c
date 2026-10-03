@@ -103,19 +103,23 @@ void dws_fechar(DiscordWs *w) {
 #else
 // ---------------------------------------------------------------- nativo
 #include <pthread.h>
+#include <stdatomic.h>
 #include "rede.h"
 
 struct DiscordWs {
   pthread_mutex_t trava;
   RedeTls *tls;
   char host[128], caminho[512];
-  volatile int estado;
+  atomic_int estado;
   int abandonado;          // dws_fechar chegou com o fio ainda conectando
   int codigo;
   unsigned char *rx;       // bytes crus ainda nao consumidos
   size_t nRx, capRx;
   unsigned char *msg;      // mensagem fragmentada em montagem
   size_t nMsg, capMsg;
+  unsigned char *tx;
+  size_t nTx, offTx, capTx;
+  unsigned txDesde;
 };
 
 static int crescer(unsigned char **p, size_t *cap, size_t precisa) {
@@ -131,9 +135,35 @@ static int crescer(unsigned char **p, size_t *cap, size_t precisa) {
 }
 
 static unsigned aleatorio(void) {
-  static int semeado;
-  if (!semeado) { srand((unsigned)time(NULL) ^ (unsigned)(size_t)&semeado); semeado = 1; }
-  return ((unsigned)rand() << 16) ^ (unsigned)rand();
+  unsigned n = 0;
+  FILE *f = fopen("/dev/urandom", "rb");
+  if (f) { if (fread(&n, sizeof n, 1, f) != 1) n = 0; fclose(f); }
+  return n;
+}
+
+static unsigned agoraWs(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (unsigned)(t.tv_sec * 1000u + t.tv_nsec / 1000000u);
+}
+
+// The render thread never waits for socket writability. Retain partial frames
+// in order, cap memory and abandon a stalled connection after ten seconds.
+static int descarregar(DiscordWs *w) {
+  int i;
+  if (w->offTx == w->nTx) return 0;
+  if (agoraWs() - w->txDesde >= 10000u) { w->estado = DWS_CAIU; return -1; }
+  for (i = 0; i < 4 && w->offTx < w->nTx; i++) {
+    size_t foi = 0;
+    if (rede_tls_tentar_enviar(w->tls, w->tx + w->offTx,
+                              w->nTx - w->offTx, &foi) != 0) {
+      w->estado = DWS_CAIU; return -1;
+    }
+    if (!foi) break;
+    w->offTx += foi;
+  }
+  if (w->offTx == w->nTx) w->offTx = w->nTx = 0;
+  return 0;
 }
 
 static void base64(const unsigned char *in, int n, char *out) {
@@ -163,6 +193,7 @@ static void liberar(DiscordWs *w) {
   if (w->tls) rede_tls_fechar(w->tls);
   free(w->rx);
   free(w->msg);
+  free(w->tx);
   pthread_mutex_destroy(&w->trava);
   free(w);
 }
@@ -185,7 +216,7 @@ static int apertarMao(DiscordWs *w) {
   for (i = 0; i < 100; i++) {
     unsigned char *fim;
     int r;
-    if (crescer(&w->rx, &w->capRx, w->nRx + 2048) != 0) return -1;
+    if (crescer(&w->rx, &w->capRx, w->nRx + 2048 + 1) != 0) return -1;
     r = rede_tls_receber(w->tls, w->rx + w->nRx, 2048, 100);
     if (r < 0) return -1;
     w->nRx += (size_t)r;
@@ -196,7 +227,7 @@ static int apertarMao(DiscordWs *w) {
       // Sec-WebSocket-Accept nao e conferido: o servidor e fixo, a conexao e
       // TLS e o pior caso de um 101 falso seria o IDENTIFY ser recusado.
       if (strncmp((char *)w->rx, "HTTP/1.1 101", 12) != 0) {
-        printf("[discord] ws: aperto de mao recusado: %.40s\n", (char *)w->rx);
+        printf("[discord] ws: handshake rejected: %.40s\n", (char *)w->rx);
         return -1;
       }
       memmove(w->rx, w->rx + cab, w->nRx - cab);
@@ -233,6 +264,7 @@ DiscordWs *dws_abrir(const char *url) {
   w = (DiscordWs *)calloc(1, sizeof *w);
   if (!w) return NULL;
   pthread_mutex_init(&w->trava, NULL);
+  atomic_init(&w->estado, DWS_CONECTANDO);
   if (!url || strncmp(url, "wss://", 6) != 0) { w->estado = DWS_CAIU; return w; }
   h = url + 6;
   barra = h + strcspn(h, "/?");
@@ -265,13 +297,24 @@ static int mandarQuadro(DiscordWs *w, int opcode, const unsigned char *p, size_t
   }
   cab[h++] = (unsigned char)(m >> 24); cab[h++] = (unsigned char)(m >> 16);
   cab[h++] = (unsigned char)(m >> 8);  cab[h++] = (unsigned char)m;
+  if (h + n > 65536u) { w->estado = DWS_CAIU; return -1; }
   q = (unsigned char *)malloc(h + n);
   if (!q) return -1;
   memcpy(q, cab, h);
   for (i = 0; i < n; i++) q[h + i] = p[i] ^ cab[h - 4 + (i & 3)];
-  r = rede_tls_enviar(w->tls, q, h + n);
+  if (w->offTx) {
+    memmove(w->tx, w->tx + w->offTx, w->nTx - w->offTx);
+    w->nTx -= w->offTx; w->offTx = 0;
+  }
+  if (h + n > 65536u || w->nTx > 65536u - (h + n) ||
+      crescer(&w->tx, &w->capTx, w->nTx + h + n) != 0) {
+    free(q); w->estado = DWS_CAIU; return -1;
+  }
+  if (!w->nTx) w->txDesde = agoraWs();
+  memcpy(w->tx + w->nTx, q, h + n);
+  w->nTx += h + n;
   free(q);
-  if (r != 0) w->estado = DWS_CAIU;
+  r = descarregar(w);
   return r;
 }
 
@@ -297,7 +340,7 @@ static int tirarQuadro(DiscordWs *w, int *fin, int *opcode, unsigned char **dado
     unsigned long long l = 0;
     if (w->nRx < 10) return 0;
     for (i = 0; i < 8; i++) l = (l << 8) | p[2 + i];
-    if (l > 64u * 1024u * 1024u) return -1;  // READY tem dezenas de KB; 64 MB e lixo
+    if (l > 1024u * 1024u) return -1;  // READY tem dezenas de KB; 1 MB is the connection limit
     len = (size_t)l;
     h = 10;
   }
@@ -315,11 +358,15 @@ static int tirarQuadro(DiscordWs *w, int *fin, int *opcode, unsigned char **dado
 char *dws_receber(DiscordWs *w) {
   int voltas;
   if (!w || w->estado != DWS_ABERTO) return NULL;
+  if (descarregar(w) != 0) return NULL;
   // Puxa o que ja chegou, sem esperar. Teto de voltas para um fluxo grande nao
   // segurar o quadro do app.
   for (voltas = 0; voltas < 16; voltas++) {
     int r;
-    if (crescer(&w->rx, &w->capRx, w->nRx + 16384 + 1) != 0) break;
+    if (w->nRx > 1024u * 1024u - 16384u ||
+        crescer(&w->rx, &w->capRx, w->nRx + 16384 + 1) != 0) {
+      w->estado = DWS_CAIU; return NULL;
+    }
     r = rede_tls_receber(w->tls, w->rx + w->nRx, 16384, 0);
     if (r == 0) break;
     if (r < 0) {
@@ -330,7 +377,7 @@ char *dws_receber(DiscordWs *w) {
     }
     w->nRx += (size_t)r;
   }
-  for (;;) {
+  for (voltas = 0; voltas < 32; voltas++) {
     int fin, op, t;
     unsigned char *d = NULL;
     size_t n = 0;
@@ -340,19 +387,21 @@ char *dws_receber(DiscordWs *w) {
     if (op == 9) {                 // ping -> pong com o mesmo conteudo
       if (w->estado == DWS_ABERTO) mandarQuadro(w, 10, d, n);
       free(d);
+      if (w->estado != DWS_ABERTO) return NULL;
       continue;
     }
     if (op == 10) { free(d); continue; }
     if (op == 8) {                 // fechamento: codigo nos 2 primeiros bytes
       w->codigo = n >= 2 ? (d[0] << 8) | d[1] : 0;
-      printf("[discord] ws: servidor fechou (%d)\n", w->codigo);
+      printf("[discord] ws: server closed (%d)\n", w->codigo);
       free(d);
       w->estado = DWS_CAIU;
       return NULL;
     }
     if (op == 1 || op == 2 || op == 0) {
       if (op != 0) w->nMsg = 0;
-      if (crescer(&w->msg, &w->capMsg, w->nMsg + n + 1) != 0) { free(d); w->estado = DWS_CAIU; return NULL; }
+      if (n > 1024u * 1024u || w->nMsg > 1024u * 1024u - n ||
+          crescer(&w->msg, &w->capMsg, w->nMsg + n + 1) != 0) { free(d); w->estado = DWS_CAIU; return NULL; }
       memcpy(w->msg + w->nMsg, d, n);
       w->nMsg += n;
       free(d);
@@ -368,6 +417,7 @@ char *dws_receber(DiscordWs *w) {
     }
     free(d);
   }
+  return NULL; // Remaining control/fragment frames continue next app tick.
 }
 
 void dws_fechar(DiscordWs *w) {
@@ -380,10 +430,7 @@ void dws_fechar(DiscordWs *w) {
     return;
   }
   pthread_mutex_unlock(&w->trava);
-  if (w->tls && w->estado == DWS_ABERTO) {
-    unsigned char c[2] = { 1000 >> 8, 1000 & 0xFF };
-    mandarQuadro(w, 8, c, 2);
-  }
+  // Closing the TLS transport clears presence without waiting to drain writes.
   liberar(w);
 }
 
