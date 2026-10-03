@@ -5321,6 +5321,7 @@ static float cabecalhoComentarios(float x, float y, float a) {
         else if (sel)   ls = (0.2126f*ar + 0.7152f*ag + 0.0722f*ab) * 0.6f;
         else            ls = 0.176f;
         cor = (ls > 0.55f) ? 17 : 255;
+        if (f > 0.5f) cor = ajustes_tinta_foco();   // a tinta do acento (claros: escura)
         if (ajustes_vidro()) cor = f > 0.5f ? gfx_vidro_tinta(1.0f) : 255;   // so o foco e cheio
         { TxtLinha l = txt_linha(TXT_PLR_CORPO, rotuloPilulaCom(k), cor, cor, cor, 255);
           txt_peso(l, r.x + (r.w - l.w) * 0.5f, r.y + (r.h - l.h) * 0.5f, a, 0.5f); } }

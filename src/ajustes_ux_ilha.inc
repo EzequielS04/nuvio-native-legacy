@@ -38,8 +38,9 @@ static int ajDicasDe(int op, AjDica *d) {
     return 3;
   }
   if (op == AJ_TEMA && ajEditandoLinha(op)) {
-    d[0] = (AjDica){ "← →", "Escolher" }; d[1] = (AjDica){ "OK", "Confirmar" };
-    return 2;
+    d[0] = (AjDica){ "← →", "Escolher" }; d[1] = (AjDica){ "↑ ↓", "Fileira" };
+    d[2] = (AjDica){ "OK", "Confirmar" };
+    return 3;
   }
   if (op >= 0 && ajEditandoLinha(op)) {
     d[0] = (AjDica){ "← →", "Escolher" }; d[1] = (AjDica){ "OK", "Confirmar" };
@@ -124,7 +125,7 @@ static void ajDesenharInspetor(void) {
       // Editando na linha, a previa ja mostra o valor PENDENTE (so desenho).
       int salvo = valor[opPv], ed = ajEditandoLinha(opPv);
       float ph;
-      if (ed && opPv != AJ_TEMA && opPv != AJ_FUNDO) valor[opPv] = uxPendente;
+      if (ed && opPv != AJ_FUNDO) valor[opPv] = uxPendente;
       ajMiniRotuloV2 = 1;
       ph = aj2Previa(opPv, x, y, w);
       ajMiniRotuloV2 = 0;
@@ -132,13 +133,17 @@ static void ajDesenharInspetor(void) {
       if (ph > 0) y += ph;
     } }
   x += 6.0f; w -= 12.0f;
-  y += 28.0f;
+  y += op == AJ_TEMA ? 20.0f : 28.0f;
   { const char *tipo = categoria ? "Categoria" : ajTipoRotulo(op);
     const char *ic = categoria ? TELA[secIni[secAtual]].icone : ajIconeOpcao(op);
     ajIcone(ic, x, y, 24, 0.45f);
     ajCaps(TXT_V2_KICK, tipo, 2.52f, x + 36, y + (24 - 23.0f) * 0.5f, 0.45f);
     y += 24.0f + 10.0f; }
-  { const char *t = categoria ? TELA[secIni[secAtual]].titulo : rotuloOpcao(op);
+  // Cor de destaque: o titulo e o NOME da cor (a pendente, editando), como
+  // no acentos-mockup.html; a opcao ja esta no rotulo da linha.
+  { const char *t = categoria ? TELA[secIni[secAtual]].titulo
+                  : op == AJ_TEMA ? V_TEMA[ajEditandoLinha(op) ? uxPendente : valor[AJ_TEMA]]
+                  : rotuloOpcao(op);
     y += ajBloco(TXT_V2_INSP, t, x, y, w, 48.0f, 1, 2); }
   y += 12.0f;
   nd = ajDicasDe(op, d);
@@ -148,7 +153,18 @@ static void ajDesenharInspetor(void) {
     int maxL = (int)((fim - y) / 37.7f);
     if (maxL > 7) maxL = 7;
     if (maxL < 1) maxL = 1;
+    if (op == AJ_TEMA) {   // as medidas da cor vem embaixo: a ajuda em 24 e ate 3 linhas
+      if (maxL > 3) maxL = 3;
+      y += ajBloco(TXT_V2_26, uxResumo(op), x, y, w, 32.0f, 0.62f, maxL);
+    } else
     y += ajBloco(TXT_V2_28, categoria ? SECAO_AJUDA[secAtual] : uxResumo(op), x, y, w, 37.7f, 0.66f, maxL);
+    if (op == AJ_TEMA) {   // a cor PENDENTE, como a previa
+      int salvo = valor[AJ_TEMA];
+      if (ajEditandoLinha(AJ_TEMA)) valor[AJ_TEMA] = uxPendente;
+      y += 18.0f;
+      y += aj2CorMedidas(x, y, w, fim, 1);
+      valor[AJ_TEMA] = salvo;
+    }
   if (!categoria) {
     const char *ef = efeitoOpcao(op);
     if (ef && ef[0] && y + 18.0f + txt_bloco(TXT_V2_26, i18n(ef), 0, 0, 0, x, -4000, w - 84, 34.8f, 0, 6) + 40 <= fim) {

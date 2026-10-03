@@ -55,17 +55,18 @@ static int borrada(GfxRect r, float raioPx, const char *c, float a) {
   gfx_cor(r, raioPx / r.h, 0.024f, 0.027f, 0.035f, 0.28f * a);
   return 1;
 }
+// FROST (acentos-mockup.html, quadro 6): a luz NAO e o acento cru, e o mesmo
+// matiz com L 0,42 e croma <= 0,11 (ajustes_acento_luz) — Branco vira nevoa
+// neutra e Jade nao acende a tela. Fundo linear(165deg, #15161A, #0B0C0E 70%)
+// e as tres luzes a 70%, 45% e 18%.
 static void frost(GfxRect r, float raioPx, float a) {
   float ar, ag, ab, rr = raioPx / r.h;
-  ajustes_acento(&ar, &ag, &ab);
-  gfx_cor(r, rr, 0.039f, 0.043f, 0.051f, a);   // #0A0B0D
-  // linear-gradient(160deg, acento 18% sobre #111216, #0A0B0D 75%)
-  gfx_rect(r, 0, GFX_VEU_CSS, 1.0f, 1.0f, 0.75f, rr,
-           0.067f + (ar - 0.067f) * 0.18f, 0.071f + (ag - 0.071f) * 0.18f,
-           0.086f + (ab - 0.086f) * 0.18f, a);
-  gfx_luz_canto(r, rr, r.w * 0.12f, 0.0f, r.h * 1.05f, ar, ag, ab, 0.58f * a);
-  gfx_luz_canto(r, rr, r.w, r.h, r.h * 0.90f, ar, ag, ab, 0.38f * a);
-  gfx_luz_canto(r, rr, r.w * 0.70f, r.h * 0.30f, r.h * 0.75f, ar, ag, ab, 0.14f * a);
+  ajustes_acento_luz(&ar, &ag, &ab);
+  gfx_cor(r, rr, 0.043f, 0.047f, 0.055f, a);   // #0B0C0E
+  gfx_rect(r, 0, GFX_VEU_CSS, 1.0f, 1.0f, 0.70f, rr, 0.082f, 0.086f, 0.102f, a);   // #15161A em cima
+  gfx_luz_canto(r, rr, r.w * 0.14f, r.h * 0.08f, r.h * 1.05f, ar, ag, ab, 0.70f * a);
+  gfx_luz_canto(r, rr, r.w * 0.92f, r.h * 0.96f, r.h * 0.90f, ar, ag, ab, 0.45f * a);
+  gfx_luz_canto(r, rr, r.w * 0.70f, r.h * 0.30f, r.h * 0.60f, ar, ag, ab, 0.18f * a);
 }
 void fundo_desenhar_modo(int modo, GfxRect r, float raioPx, const char *c, float a) {
   if (r.w < 1 || r.h < 1 || a <= 0.003f) return;

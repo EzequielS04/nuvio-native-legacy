@@ -43,6 +43,7 @@
 #include "artehero.h"
 #include "artereserva.h"
 #include "corviva.h"
+#include "fundo.h"
 #include "p2p.h"
 #include "pessoas.h"
 #include "recomenda.h"
@@ -539,42 +540,89 @@ _Static_assert(sizeof V_IDIOMA / sizeof *V_IDIOMA == IDIOMA_N + 1,
 // para refaze-la. O anel, ao contrario, e sempre branco hoje: tingi-lo nao
 // depende de recalibrar nada e e o elemento que o olho segue no sofa.
 //
-// Os valores sao os `--focus-color` de themeColors.js do app web, copiados,
-// nao escolhidos — e por isso a TV mostra a mesma cor que a pessoa viu la.
-static const struct { float r, g, b; } TEMA_ACENTO[] = {
-  { 1.000f, 1.000f, 1.000f },   // WHITE        #ffffff
-  { 1.000f, 0.322f, 0.322f },   // CRIMSON      #ff5252
-  { 0.259f, 0.647f, 0.961f },   // OCEAN        #42a5f5
-  { 0.671f, 0.278f, 0.737f },   // VIOLET       #ab47bc
-  { 0.400f, 0.733f, 0.416f },   // EMERALD      #66bb6a
-  { 1.000f, 0.655f, 0.149f },   // AMBER        #ffa726
-  { 0.925f, 0.251f, 0.478f },   // ROSE         #ec407a
-  { 1.000f, 0.831f, 0.361f },   // GOLD         #ffd45c
-  { 0.482f, 0.941f, 0.553f },   // JADE         #7bf08d
-  { 1.000f, 0.702f, 0.478f },   // ROSE_GOLD    #ffb37a
-  { 0.302f, 0.890f, 1.000f },   // ARCTIC_BLUE  #4de3ff
-  { 0.953f, 0.961f, 0.969f },   // GRAPHITE     #f3f5f7
+// OS ACENTOS DE 03/10/2026 (acentos-mockup.html, aprovado pelo dono). Os doze
+// de antes eram os `--focus-color` de themeColors.js do app web, copiados — e
+// medidos aqui, dez de doze deixavam o rotulo da pilula abaixo de 4,5:1 (texto
+// branco a 1,4:1 no Dourado). Agora sao DUAS familias, cada cor saida de uma
+// especificacao em OKLCH com duas travas medidas (tests/acentos.sh):
+//   CLAROS    (tinta escura #121316): a pilula a 8-16:1;
+//   PROFUNDOS (tinta branca): o maior L em que o branco ainda le a 4,6:1.
+// Cada uma traz as outras tres cores que o acento pinta: a MARCA sobre o
+// escuro (nos profundos, a versao clara do matiz, L 0,84), o "HDR" de grupo e
+// a LUZ do Frost/Imersiva (L 0,42, croma <= 0,11). O chip ligado e o
+// preenchimento a 22% sobre a ilha, desenhado com alfa.
+//
+// SO NA TV (decisao do dono): o web segue com os hex antigos, e o INDICE e o
+// mesmo — a conta continua guardando "OCEAN", e a TV desenha o Oceano dela.
+// Os seis novos entram DEPOIS dos dinamicos (16-21), para o ajustes.txt de
+// quem ja escolheu continuar lendo igual; sao locais como os dinamicos.
+// Esmeralda e Carmesim ficam onde estao, perto das cores de aviso OK/erro
+// (ilha.c): o icone do aviso diferencia (decisao do dono).
+typedef struct { unsigned fill, marca, hdr, luz; char fam; } AcentoFixo;   // fam: 'c' claro, 'p' profundo, 0 dinamico
+static const AcentoFixo TEMA_ACENTO[] = {
+  { 0xf4f2ee, 0xf4f2ee, 0xcccac5, 0x4e4d49, 'c' },   //  0 Branco       (WHITE)
+  { 0xd53b45, 0xfeb5b1, 0xd0aba7, 0x7e2f31, 'p' },   //  1 Carmesim     (CRIMSON)
+  { 0x1276ce, 0xa5cffe, 0xa4b8cd, 0x154e87, 'p' },   //  2 Oceano       (OCEAN)
+  { 0x9b54c8, 0xe0b8fe, 0xc1accd, 0x5f3979, 'p' },   //  3 Violeta      (VIOLET)
+  { 0x218649, 0x92e0a7, 0x9ac0a1, 0x015d2d, 'p' },   //  4 Esmeralda    (EMERALD)
+  { 0xb85a09, 0xffb88e, 0xd1ad95, 0x783904, 'p' },   //  5 Âmbar        (AMBER)
+  { 0xc93c87, 0xfeafd1, 0xd1a8b7, 0x782f53, 'p' },   //  6 Rosa         (ROSE)
+  { 0xf2cd64, 0xf2cd64, 0xcbb780, 0x5f4a06, 'c' },   //  7 Dourado      (GOLD)
+  { 0x83e5bc, 0x83e5bc, 0x93c3ac, 0x065b41, 'c' },   //  8 Jade         (JADE)
+  { 0xf1bdab, 0xf1bdab, 0xcaafa4, 0x6b4031, 'c' },   //  9 Ouro rosé    (ROSE_GOLD)
+  { 0x88e0f6, 0x88e0f6, 0x96c1c9, 0x025766, 'c' },   // 10 Azul ártico  (ARCTIC_BLUE)
+  { 0xa6abb2, 0xa6abb2, 0xa4a6a7, 0x494d54, 'c' },   // 11 Grafite      (GRAPHITE)
+  { 0, 0, 0, 0, 0 },                                 // 12 Da arte
+  { 0, 0, 0, 0, 0 },                                 // 13 (Estilizada: vira Da arte + Frost)
+  { 0, 0, 0, 0, 0 },                                 // 14 Gradiente
+  { 0, 0, 0, 0, 0 },                                 // 15 Imersiva
+  { 0xe6d3b5, 0xe6d3b5, 0xc4baa9, 0x5a4a30, 'c' },   // 16 Champagne
+  { 0xb2d5b8, 0xb2d5b8, 0xaabbaa, 0x37563d, 'c' },   // 17 Sálvia
+  { 0xc7bbf0, 0xc7bbf0, 0xb5aec6, 0x504472, 'c' },   // 18 Lavanda
+  { 0xaa5e68, 0xfdb4bc, 0xd0abac, 0x7a323e, 'p' },   // 19 Vinho
+  { 0x038191, 0x89d9e8, 0x96bdc2, 0x045762, 'p' },   // 20 Petróleo
+  { 0x6468d9, 0xbec6fe, 0xb0b4cd, 0x404488, 'p' },   // 21 Índigo
+  { 0, 0, 0, 0, 0 },                                 // 22 Textura
+  { 0, 0, 0, 0, 0 },                                 // 23 Textura sutil
 };
-#define AJ_N_TEMAS (int)(sizeof TEMA_ACENTO / sizeof *TEMA_ACENTO)
-// OS DOIS TEMAS DINAMICOS (cor viva, corviva.h) vem DEPOIS dos doze da conta,
-// e a posicao nao e acaso: os indices 0..11 continuam sendo os de W_TEMA, e o
-// ajustes.txt de quem ja escolheu um tema le igual. 12 = "Dinâmica" (o destaque
-// segue a arte do titulo em cena), 13 = "Dinâmica estilizada" (e o fundo
-// tambem, de leve).
+#define AJ_N_TEMAS 12   // os da conta (W_TEMA)
+// OS DINAMICOS (cor viva, corviva.h) vem DEPOIS dos doze da conta, e a posicao
+// nao e acaso: os indices 0..11 continuam sendo os de W_TEMA, e o ajustes.txt
+// de quem ja escolheu um tema le igual. 12 = "Da arte" (era "Dinâmica"; o
+// destaque segue a arte do titulo em cena). 13 era "Dinâmica estilizada": saiu
+// (03/10) e quem a tinha gravada abre em Da arte + Fundo Frost
+// (na leitura do ajustes.txt). 14/15 depois do relato do dono de 25/09 ("quero algo
+// mais imersivo ainda"); 22/23 = Textura (o material do titulo na pilula).
 #define AJ_TEMA_DINAMICA    AJ_N_TEMAS
 #define AJ_TEMA_ESTILIZADA  (AJ_N_TEMAS + 1)
-// Depois do relato do dono de 25/09 ("quero algo mais imersivo ainda"): o
-// degrade nas superficies de destaque e a cor da arte vazando como luz.
 #define AJ_TEMA_GRADIENTE   (AJ_N_TEMAS + 2)
 #define AJ_TEMA_IMERSIVA    (AJ_N_TEMAS + 3)
-#define AJ_N_TEMAS_OPC      (AJ_N_TEMAS + 4)
+#define AJ_TEMA_TEXTURA     22
+#define AJ_TEMA_TEXTURA_SUTIL 23
+#define AJ_N_TEMAS_OPC      24
+_Static_assert(sizeof TEMA_ACENTO / sizeof *TEMA_ACENTO == AJ_N_TEMAS_OPC,
+               "TEMA_ACENTO: uma linha por indice de V_TEMA");
 static const char *V_TEMA[] = {
   "Branco", "Carmesim", "Oceano", "Violeta", "Esmeralda", "Âmbar",
   "Rosa", "Dourado", "Jade", "Ouro rosé", "Azul ártico", "Grafite",
-  "Dinâmica", "Dinâmica estilizada", "Dinâmica gradiente", "Dinâmica imersiva"
+  "Da arte", "Dinâmica estilizada", "Gradiente", "Imersiva",
+  "Champagne", "Sálvia", "Lavanda", "Vinho", "Petróleo", "Índigo",
+  "Textura", "Textura sutil"
 };
 _Static_assert(sizeof V_TEMA / sizeof *V_TEMA == AJ_N_TEMAS_OPC,
-               "V_TEMA: os doze temas da conta e os dois dinamicos");
+               "V_TEMA: um nome por indice de TEMA_ACENTO");
+// A REGUA (Ajustes › Aparência › Cor de destaque): nove claros e nove
+// profundos em ordem de matiz, e as dinamicas. E a ordem da TELA; o indice
+// gravado continua o de V_TEMA.
+static const int REGUA_CLAROS[9]    = { 0, 16, 7, 9, 17, 8, 10, 18, 11 };
+static const int REGUA_PROFUNDOS[9] = { 1, 19, 6, 5, 4, 20, 2, 21, 3 };
+static const int REGUA_DIN[5]       = { AJ_TEMA_DINAMICA, AJ_TEMA_GRADIENTE, AJ_TEMA_IMERSIVA,
+                                        AJ_TEMA_TEXTURA, AJ_TEMA_TEXTURA_SUTIL };
+static void corDeHex(unsigned h, float *r, float *g, float *b) {
+  if (r) *r = ((h >> 16) & 255) / 255.0f;
+  if (g) *g = ((h >> 8) & 255) / 255.0f;
+  if (b) *b = (h & 255) / 255.0f;
+}
 // MESMA ORDEM de TEMA_ACENTO e de V_TEMA: e o indice que liga os tres.
 //
 // SEM LITERAL PARA OS DINAMICOS, de proposito: o app web nao tem esse tema, e
@@ -1429,15 +1477,22 @@ int ajustes_idioma(void) {
 int ajustes_idioma_ingles(void)       { return ajustes_idioma() == IDIOMA_EN; }
 
 // 1 = o tema escolhido e um dos dinamicos (cor viva), que so existem nesta TV.
-static int temaDinamico(void) {
-  return valor[AJ_TEMA] >= AJ_TEMA_DINAMICA && valor[AJ_TEMA] < AJ_N_TEMAS_OPC;
+static int temaEhDinamico(int v) {
+  return v >= 0 && v < AJ_N_TEMAS_OPC && v >= AJ_N_TEMAS && !TEMA_ACENTO[v].fam;
 }
+static int temaDinamico(void) { return temaEhDinamico(valor[AJ_TEMA]); }
+// LOCAL = nao existe no app web: os dinamicos e os seis fixos de 03/10. Nao
+// sobe para a conta e a conta nao o desfaz (ajustes_aplicar_blob,
+// ajustes_mesclar_blob).
+static int temaLocal(void) { return valor[AJ_TEMA] >= AJ_N_TEMAS && valor[AJ_TEMA] < AJ_N_TEMAS_OPC; }
 int ajustes_cor_viva(void) {
   if (SEGURO) return CORVIVA_DESLIGADA;   // qualquer tema dinamico: a cor viva anima a arte inteira
   return valor[AJ_TEMA] == AJ_TEMA_DINAMICA   ? CORVIVA_SIMPLES
-       : valor[AJ_TEMA] == AJ_TEMA_ESTILIZADA ? CORVIVA_ESTILIZADA
+       : valor[AJ_TEMA] == AJ_TEMA_ESTILIZADA ? CORVIVA_SIMPLES   // so ate o arranque migrar
        : valor[AJ_TEMA] == AJ_TEMA_GRADIENTE  ? CORVIVA_GRADIENTE
        : valor[AJ_TEMA] == AJ_TEMA_IMERSIVA   ? CORVIVA_IMERSIVA
+       : valor[AJ_TEMA] == AJ_TEMA_TEXTURA    ? CORVIVA_TEXTURA
+       : valor[AJ_TEMA] == AJ_TEMA_TEXTURA_SUTIL ? CORVIVA_TEXTURA_SUTIL
        : CORVIVA_DESLIGADA;
 }
 int ajustes_cor_logo(void) { return lig(AJ_COR_LOGO); }
@@ -1475,28 +1530,85 @@ void ajustes_acento(float *r, float *g, float *b) {
   int i = valor[AJ_TEMA];
   if (SEGURO && temaDinamico()) i = 0;    // sem cor viva, o realce fixo padrao
   else if (temaDinamico()) { corviva_acento(r, g, b); return; }
-  if (i < 0 || i >= AJ_N_TEMAS) i = 0;   // arquivo de outra versao: branco
-  if (r) *r = TEMA_ACENTO[i].r;
-  if (g) *g = TEMA_ACENTO[i].g;
-  if (b) *b = TEMA_ACENTO[i].b;
+  if (i < 0 || i >= AJ_N_TEMAS_OPC || !TEMA_ACENTO[i].fam) i = 0;   // arquivo de outra versao: branco
+  corDeHex(TEMA_ACENTO[i].fill, r, g, b);
+}
+// As cores derivadas de um acento DINAMICO (marca, HDR, luz, tinta) sairiam
+// de contas em OKLCH a cada chamada; o destaque so muda numa transicao, entao
+// a ultima conta fica guardada pela cor.
+static const CorvivaTokens *tokensVivos(void) {
+  static float ult[3] = { -1, -1, -1 };
+  static CorvivaTokens t;
+  float c[3];
+  corviva_acento(&c[0], &c[1], &c[2]);
+  if (memcmp(c, ult, sizeof c)) { memcpy(ult, c, sizeof c); corviva_tokens(c, &t); }
+  return &t;
+}
+static int temaFixoAtual(void) {
+  int i = valor[AJ_TEMA];
+  if (SEGURO && temaDinamico()) return 0;
+  if (temaDinamico()) return -1;
+  return (i < 0 || i >= AJ_N_TEMAS_OPC || !TEMA_ACENTO[i].fam) ? 0 : i;
+}
+static int texturaAtiva(void) {
+  return !SEGURO && (valor[AJ_TEMA] == AJ_TEMA_TEXTURA || valor[AJ_TEMA] == AJ_TEMA_TEXTURA_SUTIL) &&
+         nv_textura_viva.ok;
 }
 
+#define AJ_TINTA_ESCURA (18.0f / 255.0f)   // #121316
 float ajustes_acento_tinta(float *r, float *g, float *b) {
-  float cr, cg, cb, lum;
-  ajustes_acento(&cr, &cg, &cb);
-  if (r) *r = cr;
-  if (g) *g = cg;
-  if (b) *b = cb;
-  lum = 0.2126f * cr + 0.7152f * cg + 0.0722f * cb;
-  // So o realce BRANCO (ou quase) leva tinta escura; qualquer cor leva
-  // branco. Regra do dono (21/09/2026), no lugar do corte a 0,55 que punha
-  // texto escuro sobre o rosa e o amarelo.
-  return lum > 0.88f ? 0.067f : 1.0f;
+  int i = temaFixoAtual();
+  ajustes_acento(r, g, b);
+  // TINTA ESCURA NOS CLAROS (dono, 03/10/2026), no lugar da regra de 21/09 ("se
+  // nao for branco o accent, a cor de texto tem que ser branca"), que punha
+  // branco a 1,4:1 no Dourado. A familia de cada fixo esta na tabela; a de um
+  // dinamico e a tinta que contrasta mais (corviva_tokens) — a mesma conta.
+  if (texturaAtiva()) return nv_textura_viva.tintaBranca ? 1.0f : AJ_TINTA_ESCURA;
+  if (i >= 0) return TEMA_ACENTO[i].fam == 'c' ? AJ_TINTA_ESCURA : 1.0f;
+  return tokensVivos()->tintaBranca ? 1.0f : AJ_TINTA_ESCURA;
 }
-int ajustes_tinta_foco(void)  { return ajustes_acento_tinta(NULL, NULL, NULL) > 0.5f ? 255 : 20; }
+int ajustes_tinta_foco(void)  { return ajustes_acento_tinta(NULL, NULL, NULL) > 0.5f ? 255 : 18; }
 // Secundario sobre realce colorido: 238, nao 225 — a 3 m, sobre rosa, 225
 // ja lia como cinza (dono, 21/09/2026).
 int ajustes_tinta_foco2(void) { return ajustes_acento_tinta(NULL, NULL, NULL) > 0.5f ? 238 : 60; }
+void ajustes_acento_marca(float *r, float *g, float *b) {
+  int i = temaFixoAtual();
+  if (i >= 0) { corDeHex(TEMA_ACENTO[i].marca, r, g, b); return; }
+  { const CorvivaTokens *t = tokensVivos();
+    if (r) *r = t->marca[0];
+    if (g) *g = t->marca[1];
+    if (b) *b = t->marca[2]; }
+}
+void ajustes_acento_hdr(float *r, float *g, float *b) {
+  int i = temaFixoAtual();
+  if (i >= 0) { corDeHex(TEMA_ACENTO[i].hdr, r, g, b); return; }
+  { const CorvivaTokens *t = tokensVivos();
+    if (r) *r = t->hdr[0];
+    if (g) *g = t->hdr[1];
+    if (b) *b = t->hdr[2]; }
+}
+void ajustes_acento_luz(float *r, float *g, float *b) {
+  int i = temaFixoAtual();
+  if (i >= 0) { corDeHex(TEMA_ACENTO[i].luz, r, g, b); return; }
+  { const CorvivaTokens *t = tokensVivos();
+    if (r) *r = t->luz[0];
+    if (g) *g = t->luz[1];
+    if (b) *b = t->luz[2]; }
+}
+// TEXTURA: a textura do titulo em cena vai ao gfx, que a usa em todo
+// GFX_COR cheio pintado exatamente com o destaque (gfx_rect). Sem titulo, sem
+// textura decodificada ou fora da Textura: desliga, e a pilula fica no Da arte.
+void ajustes_textura_quadro(void) {
+  const CorvivaTextura *T = &nv_textura_viva;
+  GLuint tex = 0;
+  float asp = 0.0f;
+  if (texturaAtiva() && T->url[0]) {
+    tex = T->logo ? tex_obter_larg_qualquer(T->url, 640.0f) : tex_obter_hero(T->url);
+    asp = tex_aspecto(T->url);
+  }
+  if (!tex || asp <= 0.0f) { gfx_textura_definir(0, NULL, 0, 0, 0, 0); return; }
+  gfx_textura_definir(tex, T->janela, asp, T->forca, T->veu, !T->tintaBranca);
+}
 
 // `collapseSidebar: modernSidebar ? false : Boolean(collapseSidebar)` — a barra
 // moderna DESLIGA o recolhimento, e nao o contrario. Copiado de
@@ -2316,6 +2428,15 @@ void ajustes_dir(const char *dir) {
   if (valor[AJ_IDIOMA] == 0 && viuIdioma) idiomaEfetivo = idiomaGravado;
   }
   fclose(f);
+  // "DINAMICA ESTILIZADA" SAIU (03/10/2026): a base tingida virou o Fundo
+  // Frost, que vale para qualquer acento. Quem a tinha abre em Da arte + Frost
+  // — a mesma cor viva, o mesmo fundo de um matiz so — e o arquivo e regravado.
+  if (valor[AJ_TEMA] == AJ_TEMA_ESTILIZADA) {
+    valor[AJ_TEMA] = AJ_TEMA_DINAMICA;
+    valor[AJ_FUNDO] = FUNDO_FROST;
+    printf("[ajustes] tema estilizado -> Da arte + Fundo Frost\n");
+    gravar();
+  }
   // MIGRACAO UNICA (1.5.1, #149): religa o envio automatico. Ate a 1.5.0 a
   // abertura da tela de Ajustes desligava o envio e a gravacao seguinte
   // levava o "desligado" ao disco — quem o tem no arquivo, na maioria, nao
@@ -2993,8 +3114,8 @@ int ajustes_aplicar_blob(const char *json) {
     // aplica-lo sobre "Dinâmica" trocaria, a cada sincronizacao, a escolha que
     // a pessoa fez aqui pela que ela fez no celular. Com um tema FIXO aqui, a
     // conta continua mandando como sempre mandou.
-    if (i == AJ_TEMA && temaDinamico()) {
-      printf("[ajustes] selected_theme da conta mantido na conta: tema dinamico e local\n");
+    if (i == AJ_TEMA && temaLocal()) {
+      printf("[ajustes] selected_theme da conta mantido na conta: tema desta TV e local\n");
       continue;
     }
     novo = limita(i, novo);
@@ -3291,7 +3412,7 @@ int ajustes_mesclar_blob(const char *base, char **saida) {
     // celular viraria branco porque ela ligou o dinamico na TV. O valor da
     // conta fica exatamente como esta (a costura nao toca a chave), que e o
     // "padrao" certo: o ultimo tema fixo que a conta conhece.
-    if (i == AJ_TEMA && temaDinamico()) continue;
+    if (i == AJ_TEMA && temaLocal()) continue;
     camelParaSnake(CHAVE[i], snake, sizeof snake);
     if (!acharValor(base, fim, snake, &vi, &vf) &&
         !acharValor(base, fim, CHAVE[i], &vi, &vf)) continue;
@@ -4005,7 +4126,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_GPU_EFEITOS: return "Automático mede a TV nos primeiros segundos e, se ela não der conta, tira os efeitos mais pesados. Completos mantém tudo; Leves tira desfoque e brilho para deixar a navegação mais lisa.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
     case AJ_TAMANHO_UI: return "Aumenta os Ajustes, os controles do player, os menus, os painéis e os avisos — bom para TVs grandes ou para quem assiste de longe. A tela inicial e a página do título continuam do mesmo tamanho. Vale na hora.";
-    case AJ_TEMA: return "Cor dos botões em foco e das marcas de estado. No fundo Frost, ela também tinge a superfície atrás dos painéis.";
+    case AJ_TEMA: return "Cor do botão em foco e das marcas de estado. Os claros levam texto escuro, os profundos texto branco — sempre a 4,5:1 ou mais.";
     case AJ_FUNDO: return "O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.";
     case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
     case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";

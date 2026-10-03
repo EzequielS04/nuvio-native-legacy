@@ -1,5 +1,5 @@
 #!/bin/bash
-# Home e pagina de titulo com o tema "Dinâmica" e "Dinâmica estilizada", em BMP,
+# Home e pagina de titulo com "Da arte", "Gradiente", "Imersiva" e "Textura", em BMP,
 # sem rede (artes de deploy/app/art). Nao entra na suite (testa-tudo.sh pula
 # *_shot.sh): precisa de janela GL e de olho humano.
 #

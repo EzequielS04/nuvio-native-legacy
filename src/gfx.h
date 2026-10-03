@@ -245,12 +245,27 @@ typedef enum {
   // GFX_MINI — o alvo de uma miniatura (gfx_mini_desenhar): FBO lido de cabeca
   // para cima, cantos por SDF.
   GFX_MINI = 41,
-  GFX_NMODOS = 42
+  // GFX_TEXTURA — o recorte do titulo numa pilula/barra (cor de destaque
+  // "Textura"). Nao se pede direto: gfx_rect troca para ele todo GFX_COR
+  // cheio na cor exata do destaque enquanto gfx_textura_definir tem textura.
+  GFX_TEXTURA = 42,
+  GFX_NMODOS = 43
 } GfxModo;
 
 typedef struct {
   float x, y, w, h;
 } GfxRect;
+
+// A textura do titulo para o modo Textura (ajustes_textura_quadro): `janela`
+// e o recorte (x, y, w, h em fracao da imagem), `aspecto` o w/h da textura,
+// `forca` 1 ou 0,35 (sutil), `veu` o alfa do veu atras do rotulo e
+// `veuBranco` 1 quando a tinta e escura. tex 0 desliga.
+void gfx_textura_definir(GLuint tex, const float janela[4], float aspecto,
+                         float forca, float veu, int veuBranco);
+int  gfx_textura_ativa(void);
+// O matiz da Imersiva por cima de um miolo de vidro (16% da luz do destaque,
+// com a forca da luz ambiente). gfx_vidro_painel/folha ja o chamam.
+void gfx_vidro_matiz(GfxRect r, float raio, float a);
 
 // Proporcao (w/h) da textura a desenhar. 0 = mapeia direto (texto, veu).
 // Definir ANTES de gfx_rect para que a arte seja recortada, nunca esticada.

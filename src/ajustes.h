@@ -150,10 +150,11 @@ void ajustes_idioma_auto_tick(void);
 // ajustes.c para o motivo de nao ser a paleta inteira. Branco e o padrao, que
 // e exatamente o anel que sempre existiu.
 void ajustes_acento(float *r, float *g, float *b);
-// 0 = tema fixo; CORVIVA_SIMPLES ("Dinâmica") ou CORVIVA_ESTILIZADA ("Dinâmica
-// estilizada"): o destaque segue a arte do titulo em cena (corviva.h). Os dois
-// sao LOCAIS: nao sobem para a conta e a conta nao os desfaz (ver
-// ajustes_aplicar_blob / ajustes_mesclar_blob).
+// 0 = tema fixo; CORVIVA_SIMPLES ("Da arte"), _GRADIENTE, _IMERSIVA,
+// _TEXTURA ou _TEXTURA_SUTIL: o destaque segue a arte do titulo em cena
+// (corviva.h). Sao LOCAIS: nao sobem para a conta e a conta nao os desfaz (ver
+// ajustes_aplicar_blob / ajustes_mesclar_blob) — como os seis acentos fixos
+// novos de 03/10, que o app web ainda nao tem.
 int  ajustes_cor_viva(void);
 // "Cor da logo": 1 = com tema dinamico, o destaque sai do logo do titulo.
 int  ajustes_cor_logo(void);
@@ -177,16 +178,30 @@ const char *ajustes_p2p_url(void);
 // Normaliza e grava; texto vazio esquece. 0 se o texto nao e um endereco (nada
 // muda), 1 se gravou.
 int  ajustes_definir_p2p_url(const char *texto);
-// A MESMA cor mais a TINTA que contrasta com ela: devolve 0.067 (#111) sobre
-// realce claro e 1.0 (branco) sobre realce escuro, luminancia Rec.709 com o
-// degrau em 0,55. E a regra de FOCO de layout.h (preenchimento na cor de
+// A MESMA cor mais a TINTA que contrasta com ela (acentos-mockup.html, 03/10):
+// 0.071 (#121316) sobre os CLAROS e 1.0 (branco) sobre os PROFUNDOS — a que
+// le a 4,5:1 ou mais (tests/acentos.sh). Com Textura e um titulo em cena, a
+// tinta do recorte. E a regra de FOCO de layout.h (preenchimento na cor de
 // realce, sem anel) em uma chamada, para todo botao usar a mesma conta.
 float ajustes_acento_tinta(float *r, float *g, float *b);
-// A MESMA TINTA EM 0..255, para quem monta txt_linha: principal (255 ou 20)
-// e secundaria (um degrau abaixo: 225 ou 60). Toda superficie pintada de
+// A MESMA TINTA EM 0..255, para quem monta txt_linha: principal (255 ou 18)
+// e secundaria (um degrau abaixo: 238 ou 60). Toda superficie pintada de
 // ajustes_acento() escreve com estas duas — nunca com um 20 cravado.
 int   ajustes_tinta_foco(void);
 int   ajustes_tinta_foco2(void);
+// A COR DO ACENTO COMO TEXTO/SELO SOBRE O ESCURO (a ilha, o vidro): nos claros
+// e o proprio preenchimento; nos profundos, a versao clara do mesmo matiz (L
+// 0,84) — o profundo sobre #121316 fica abaixo de 4,5:1 para letra pequena.
+// Use em "Ligado", "Só MP4", "4K", pontos de estado: tudo que e COR SOBRE O
+// ESCURO, e nao superficie cheia.
+void  ajustes_acento_marca(float *r, float *g, float *b);
+// O "HDR" de grupo: metade marca, metade cinza (DESIGN.md §3).
+void  ajustes_acento_hdr(float *r, float *g, float *b);
+// A luz do Frost e da Imersiva: o matiz do acento com L 0,42 e croma <= 0,11.
+void  ajustes_acento_luz(float *r, float *g, float *b);
+// Uma vez por quadro, depois de corviva_quadro: com Textura, entrega ao gfx a
+// textura do titulo em cena (gfx_textura_definir); senao a desliga.
+void  ajustes_textura_quadro(void);
 // "Automática", "4K", "1080p" ou "720p" — o rotulo exibido, para quem seleciona
 // a fonte de video mostrar exatamente o que o usuario escolheu.
 const char *ajustes_qualidade(void);

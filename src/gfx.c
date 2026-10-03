@@ -44,6 +44,18 @@ static int progAtual = -1;
 // imediato: quem chama define antes de cada rect com textura.
 float gfx_tex_aspect_atual = 0.0f;
 float gfx_janela_atual[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+// TEXTURA (cor de destaque "Textura"): a do titulo em cena, posta uma vez por
+// quadro por ajustes_textura_quadro. 0 = desligada.
+static GLuint txTex;
+static float txJan[4], txAsp, txForca, txVeu, txVeuBranco, txUv[4];
+void gfx_textura_definir(GLuint tex, const float janela[4], float aspecto,
+                         float forca, float veu, int veuBranco) {
+  txTex = tex;
+  if (!tex || !janela) return;
+  memcpy(txJan, janela, sizeof txJan);
+  txAsp = aspecto; txForca = forca; txVeu = veu; txVeuBranco = veuBranco ? 1.0f : 0.0f;
+}
+int gfx_textura_ativa(void) { return txTex != 0; }
 float gfx_card_forcar_cover_atual = 0.0f;
 // Camadas do destaque (gfx_hero_camadas): a camada B e o fundo, lidos por
 // gfx_rect no desenho imediato que a funcao dispara.
@@ -1169,6 +1181,24 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  vec4 t = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y));\n"
   "  gl_FragColor = vec4(t.rgb / max(t.a, 0.004), t.a * uCor.a * m);\n"
   "}\n",
+
+  // GFX_TEXTURA — a pilula/barra feita do MATERIAL do titulo (cor de destaque
+  // "Textura", acentos-mockup.html quadros 8-10). uJan = recorte da textura em
+  // UV (origem xy, tamanho zw) ja em "cover" para este rect; uCor.rgb = a cor
+  // lisa por baixo (o transparente do logo mostra ela) e uCor.a o alfa; uFoco
+  // = forca da textura (1 Textura, 0,35 sutil); uPar.x = alfa do veu atras do
+  // rotulo (elipse 62% x 78% em 56%/50%, como o radial-gradient do mockup) e
+  // uPar.y = 1 veu branco (tinta escura), 0 preto. Cantos pelo SDF, grao pelo
+  // nv_dither.
+  "void main(){\n"
+  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  if (m <= 0.001) discard;\n"
+  "  vec4 t = texture2D(uTex, uJan.xy + vUv * uJan.zw);\n"
+  "  vec3 c = mix(uCor.rgb, t.rgb, t.a * uFoco);\n"
+  "  vec2 q = (vUv - vec2(0.56, 0.5)) / vec2(0.62, 0.78);\n"
+  "  c = mix(c, vec3(uPar.y), uPar.x * clamp(1.0 - length(q), 0.0, 1.0));\n"
+  "  gl_FragColor = nv_dither(c, uCor.a * m);\n"
+  "}\n",
 };
 
 // Cada corpo declara o que usa; montar so o necessario mantem o shader enxuto.
@@ -1203,7 +1233,8 @@ static const struct { int sdf, cover; } PRECISA[GFX_NMODOS] = {
   {0,1},   /* GFX_HERO_CHEIO_CAM */
   {1,0},   /* GFX_JANELA — SDF da abertura; o cover e o do quadro da tela */
   {0,0},   /* GFX_VEU_CSS — degrade puro, sem SDF */
-  {1,0}    /* GFX_MINI — SDF dos cantos; a textura e um FBO */
+  {1,0},   /* GFX_MINI — SDF dos cantos; a textura e um FBO */
+  {1,0}    /* GFX_TEXTURA — SDF dos cantos; o recorte vem pronto em uJan */
 };
 
 static GLuint compila(GLenum tipo, const char *src) {
@@ -1495,6 +1526,23 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   if (nv_grad_ativo && (modo == GFX_COR || modo == GFX_ANEL) &&
       cr == nv_acento_viva[0] && cg == nv_acento_viva[1] && cb == nv_acento_viva[2])
     modo = modo == GFX_COR ? GFX_COR_GRAD : GFX_ANEL_GRAD;
+  // TEXTURA, pela mesma assinatura: todo GFX_COR CHEIO (alfa >= 0,9) na cor
+  // exata do destaque e superficie de foco/estado — pilula em foco, barra de
+  // progresso, disco do aviso — e vira o recorte do titulo. Chip ligado (22%)
+  // e lavagem de foco nao casam: ficam na cor lisa, que e o Da arte.
+  // O recorte entra em "cover" no rect: a janela do titulo (3,2:1) inteira
+  // numa pilula, uma faixa dela numa barra fina.
+  else if (txTex && modo == GFX_COR && ca * gfx_opacidade_grupo >= 0.9f && r.w > 0.0f && r.h > 0.0f &&
+           cr == nv_acento_viva[0] && cg == nv_acento_viva[1] && cb == nv_acento_viva[2]) {
+    float A = r.w / r.h, vw = txJan[2], vh;
+    if (vw * txAsp / txJan[3] > A) vw = txJan[3] * A / txAsp;   // recorte mais largo que o rect
+    vh = vw * txAsp / A;
+    txUv[0] = txJan[0] + (txJan[2] - vw) * 0.5f; txUv[1] = txJan[1] + (txJan[3] - vh) * 0.5f;
+    txUv[2] = vw; txUv[3] = vh;
+    modo = GFX_TEXTURA; tex = txTex; foco = txForca;
+    parx = r.h >= 30.0f ? txVeu : 0.0f;   // o veu e atras do ROTULO: barra e disco nao tem
+    pary = txVeuBranco;
+  }
   // Efeitos leves: os dois realces que so enfeitam (brilho no alto do card,
   // luz de canto de painel) nao sao desenhados. Nenhum carrega informacao — o
   // foco continua marcado pelo anel e pelo especular do GFX_CARD.
@@ -1595,8 +1643,10 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   if (P->raio >= 0)   glUniform1f(P->raio, raio);
   if (P->asp >= 0)    glUniform1f(P->asp, r.h > 0 ? r.w / r.h : 1.0f);
   if (P->texAsp >= 0) glUniform1f(P->texAsp, gfx_tex_aspect_atual);
-  if (P->jan >= 0)    glUniform4f(P->jan, gfx_janela_atual[0], gfx_janela_atual[1],
-                                  gfx_janela_atual[2], gfx_janela_atual[3]);
+  if (P->jan >= 0) {
+    const float *j = modo == GFX_TEXTURA ? txUv : gfx_janela_atual;
+    glUniform4f(P->jan, j[0], j[1], j[2], j[3]);
+  }
   if (P->forcarCover >= 0) glUniform1f(P->forcarCover, gfx_card_forcar_cover_atual);
   if (P->borda >= 0)  glUniform1f(P->borda, gfx_borda_foco_atual);
   if (P->varre >= 0)  glUniform1f(P->varre, gfx_varre_atual);
@@ -1966,12 +2016,22 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
 void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a) {
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
   gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, fundo * a);
+  gfx_vidro_matiz(r, raio, a);
+}
+// IMERSIVA NO VIDRO (acentos-mockup.html, quadro 5): a ilha leva 16% da luz
+// do destaque (L 0,42, croma <= 0,11), entrando e saindo com a luz ambiente.
+// Fora da Imersiva nv_ambiente_forca e 0 e isto nao desenha nada.
+void gfx_vidro_matiz(GfxRect r, float raio, float a) {
+  float f = 0.16f * nv_ambiente_forca * a;
+  if (f <= 0.002f || r.w <= 0.0f || r.h <= 0.0f) return;
+  gfx_cor(r, raio, nv_luz_viva[0], nv_luz_viva[1], nv_luz_viva[2], f);
 }
 // Painel lateral/flutuante (menu, Fontes, Salvos): miolo frio translucido e um
 // brilho largo no alto, sem aro.
 void gfx_vidro_folha(GfxRect r, float raio, float a) {
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
   gfx_cor(r, raio, 0.085f, 0.088f, 0.10f, 0.78f * a);
+  gfx_vidro_matiz(r, raio, a);
   gfx_brilho_topo(r, raio, 0.38f, 0.88f, 0.92f, 1.0f, 0.06f * a);
 }
 void gfx_vidro_aro(GfxRect r, float raio, float esp, float cr, float cg, float cb, float ca) {

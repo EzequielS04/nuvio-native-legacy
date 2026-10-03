@@ -114,6 +114,7 @@ static void ajIlha(GfxRect r, float raioPx, float a, int modal) {
            0, 0, 0, (ajVid() ? 0.36f : 0.45f) * a);
   if (ajVid()) {
     gfx_cor(r, raio, 0.055f, 0.059f, 0.071f, (modal ? 0.86f : 0.80f) * a);
+    gfx_vidro_matiz(r, raio, a);
     gfx_luz_canto(r, raio, r.w * 0.22f, -r.h * 0.40f, r.h * 0.62f, 1, 1, 1, 0.10f * a);
   } else {
     gfx_cor(r, raio, 0.082f, 0.086f, 0.102f, a);
@@ -126,6 +127,7 @@ static void ajIlhaMiolo(GfxRect r, float raioPx, float miolo) {
            0, 0, 0, ajVid() ? 0.36f : 0.45f);
   if (ajVid()) {
     gfx_cor(r, raio, 0.055f, 0.059f, 0.071f, miolo);
+    gfx_vidro_matiz(r, raio, 1);
     gfx_luz_canto(r, raio, r.w * 0.22f, -r.h * 0.40f, r.h * 0.62f, 1, 1, 1, 0.10f);
   } else gfx_cor(r, raio, 0.082f, 0.086f, 0.102f, 1);
 }
@@ -152,9 +154,11 @@ static void ajPilulaAcento(GfxRect r, float raioPx, float a) {
   gfx_cor(r, raioPx / r.h, ar, ag, ab, a);
 }
 static int ajTinta(void) { return ajustes_tinta_foco(); }
+// O acento como TEXTO sobre a ilha: a marca (ajustes_acento_marca), que nos
+// profundos e a versao clara do matiz.
 static void ajAcento8(int *r, int *g, int *b) {
   float ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
+  ajustes_acento_marca(&ar, &ag, &ab);
   *r = (int)(ar * 255.0f + 0.5f); *g = (int)(ag * 255.0f + 0.5f); *b = (int)(ab * 255.0f + 0.5f);
 }
 // O branco do texto do mockup (#F3F2EF). A opacidade vai no DESENHO
@@ -342,19 +346,126 @@ static int ajEditandoLinha(int op) {
 // 20 de vao (o gap do flex que quebra) e o que vem embaixo — a regua da cor
 // de destaque editando, os tres cartoes do Fundo em foco e, sem inspetor
 // (120% ou mais), a ajuda da opcao em foco.
-#define AJ_REGUA_H 118.0f
+// A REGUA (acentos-mockup.html, quadro 1): quatro fileiras de 72 — claros,
+// profundos, dinamicas e a Textura —, o mockup a 1,15x (a linha da v2 e
+// mais larga que a do mockup das cores).
+#define AJ_REGUA_FILA 72.0f
+#define AJ_REGUA_H (4.0f * AJ_REGUA_FILA + 4.0f)
 #define AJ2_FUNDO_BAIXO 237.75f   // 4 + cartao (10 + 150,75 + 10 + 29 + 10) + 24
 static int aj2FocoNaLista(int i) { return i == focoItem && !focoIndice && !uxCabecalho && uxIndice >= 2; }
 static float aj2AjudaAltura(int op, float w) {
   return txt_bloco(TXT_V2_28, uxResumo(op), 0, 0, 0, 0, -4000, w, 36.4f, 0, 4);
+}
+// A REGUA EM FILEIRAS: a ordem da TELA (ajustes.c, REGUA_*); o valor gravado
+// continua o indice de V_TEMA. ← → anda na fileira, ↑ ↓ troca de fileira na
+// mesma coluna.
+static const int *ajReguaFila(int f, int *n) {
+  static const int TX[2] = { AJ_TEMA_TEXTURA, AJ_TEMA_TEXTURA_SUTIL };
+  switch (f) {
+    case 0:  *n = 9; return REGUA_CLAROS;
+    case 1:  *n = 9; return REGUA_PROFUNDOS;
+    case 2:  *n = 3; return REGUA_DIN;
+    default: *n = 2; return TX;
+  }
+}
+static int ajReguaOnde(int v, int *col) {
+  int f, k, n;
+  for (f = 0; f < 4; f++) {
+    const int *L = ajReguaFila(f, &n);
+    for (k = 0; k < n; k++) if (L[k] == v) { *col = k; return f; }
+  }
+  *col = 0; return 0;
+}
+static int ajReguaMover(int v, int dx, int dy) {
+  int col, f = ajReguaOnde(v, &col), n;
+  const int *L;
+  f += dy;
+  if (f < 0) f = 0;
+  if (f > 3) f = 3;
+  L = ajReguaFila(f, &n);
+  col += dx;
+  if (col < 0) col = 0;
+  if (col >= n) col = n - 1;
+  return L[col];
+}
+static int ajTemaNovo(int v) { return v >= 16 && v <= 21; }
+// Bolinha de um acento fixo: 56 (o mockup a 1,15x); a em foco 1,18x com o
+// anel escuro de 3 e o claro de 2 por fora; a gravada leva o visto na tinta.
+static void aj2Bolinha(int v, float cx, float cy, int foco, int gravada, float a) {
+  float r, g, b, d = foco ? 66.0f : 56.0f;
+  corDeHex(TEMA_ACENTO[v].fill, &r, &g, &b);
+  if (foco) {
+    gfx_rect((GfxRect){ cx - d * 0.5f - 14, cy - d * 0.5f, d + 28, d + 34 }, 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.5f * a);
+    gfx_cor((GfxRect){ cx - d * 0.5f - 6, cy - d * 0.5f - 6, d + 12, d + 12 }, 0.5f, 0.953f, 0.949f, 0.937f, 0.92f * a);
+    gfx_cor((GfxRect){ cx - d * 0.5f - 3.5f, cy - d * 0.5f - 3.5f, d + 7, d + 7 }, 0.5f, 0.055f, 0.059f, 0.071f, a);
+  }
+  gfx_cor((GfxRect){ cx - d * 0.5f, cy - d * 0.5f, d, d }, 0.5f, r, g, b, a);
+  if (gravada) {
+    float k = TEMA_ACENTO[v].fam == 'c' ? 18.0f / 255.0f : 1.0f;
+    gfx_icone((GfxRect){ cx - 12, cy - 12, 24, 24 }, "aj_check", k, k, k, a);
+  }
+  if (ajTemaNovo(v)) {   // as seis novas: o ponto claro no canto
+    float px = cx + d * 0.5f * 0.707f, py = cy - d * 0.5f * 0.707f;
+    gfx_cor((GfxRect){ px - 8.5f, py - 8.5f, 17, 17 }, 0.5f, 0.055f, 0.059f, 0.071f, 0.95f * a);
+    gfx_cor((GfxRect){ px - 6, py - 6, 12, 12 }, 0.5f, 0.953f, 0.949f, 0.937f, a);
+  }
+}
+// Cor que a dinamica `v` tiraria da arte `url` agora (a paleta, se ja ha);
+// sem paleta, a da cena.
+static void aj2CorDin(int v, const char *url, float c1[3], float c2[3]) {
+  CorvivaPaleta p;
+  if (url && url[0] && corviva_paleta(url, &p) && p.ok) {
+    memcpy(c1, p.acento, sizeof p.acento);
+    memcpy(c2, v == AJ_TEMA_GRADIENTE ? p.grad[2] : p.acento, sizeof p.acento);
+    return;
+  }
+  memcpy(c1, nv_acento_viva, sizeof nv_acento_viva);
+  memcpy(c2, v == AJ_TEMA_GRADIENTE ? nv_grad_viva[2] : nv_acento_viva, sizeof nv_acento_viva);
+}
+static void aj2Regua(GfxRect ln, float y, float a) {
+  static const char *const KICK[4][2] = {
+    { "Claros", "Tinta escura" }, { "Profundos", "Tinta branca" },
+    { "Dinâmicas", "Só nesta TV" }, { "Textura", "Do título" } };
+  int sel = valor[AJ_TEMA], alvo = uxPendente, f, k, n;
+  float kx = ln.x + 30.0f, bx = kx + 150.0f;
+  for (f = 0; f < 4; f++) {
+    const int *L = ajReguaFila(f, &n);
+    float cy = y + f * AJ_REGUA_FILA + 32.0f, px = bx;
+    ajCaps(TXT_AJ_CAPS13, KICK[f][0], 1.82f, kx, cy - 18.0f, 0.45f * a);
+    ajCaps(TXT_AJ_CAPS13, KICK[f][1], 1.82f, kx, cy + 1.0f, 0.45f * a);
+    for (k = 0; k < n; k++) {
+      int v = L[k];
+      if (f < 2) { aj2Bolinha(v, bx + 28.0f + k * 72.0f, cy, v == alvo, v == sel && v != alvo, a); continue; }
+      { const char *nome = V_TEMA[v], *url = ajFundoArte();
+        TxtLinha t = ajTxt(TXT_V2_SEG, nome);
+        float w = 7 + 42 + 12 + t.w + 12 + 15 + 20, c1[3], c2[3];
+        GfxRect p = { px, cy - 28.0f, w, 56 };
+        int foc = v == alvo;
+        if (foc) {
+          gfx_cor(p, 0.5f, 1, 1, 1, 0.16f * a);
+          gfx_anel_fora(p, 28.0f / 56.0f, 2.0f, 3.0f, 0.953f, 0.949f, 0.937f, 0.92f * a);
+        } else ajNeutro(p, 28, 0.07f, AJ_CHIP_SOL, a);
+        ajImg(url, (GfxRect){ px + 7, cy - 21, 42, 42 }, 21, a);
+        if (v == sel && !foc) gfx_icone((GfxRect){ px + 16, cy - 12, 24, 24 }, "aj_check", 1, 1, 1, a);
+        txt_desenhar_alpha(t, px + 61, cy - t.h * 0.5f, (foc ? 1.0f : 0.78f) * a);
+        aj2CorDin(v, url, c1, c2);
+        { float dx = px + 61 + t.w + 12;
+          if (v == AJ_TEMA_GRADIENTE) {
+            gfx_cor((GfxRect){ dx - 3, cy - 7.5f, 15, 15 }, 0.5f, c2[0], c2[1], c2[2], a);
+            gfx_cor((GfxRect){ dx - 7, cy - 7.5f, 15, 15 }, 0.5f, c1[0], c1[1], c1[2], a);
+          } else gfx_cor((GfxRect){ dx, cy - 7.5f, 15, 15 }, 0.5f, c1[0], c1[1], c1[2], a); }
+        px += w + 12.0f; }
+    }
+  }
 }
 static float ajLinhaH(int i) {
   int op = TELA[i].op;
   float h = AJ2_LN_H, baixo = 0;
   GfxRect fr = aj2ListaR();
   if ((inativa(op) && uxRequisito(op) >= 0) || op == AJ_GUIA) h = 101.8f;
-  // A regua de cores so entra sem inspetor: com ele, as amostras estao na previa.
-  if (op == AJ_TEMA && ajEditandoLinha(op) && aj2FocoNaLista(i) && !aj2TemInsp()) baixo += AJ_REGUA_H;
+  // A regua de cores abre NA LINHA, com e sem inspetor: o inspetor mostra a
+  // previa viva e as medidas da cor (aj2PreviaCor).
+  if (op == AJ_TEMA && ajEditandoLinha(op) && aj2FocoNaLista(i)) baixo += AJ_REGUA_H;
   if (op == AJ_FUNDO && aj2FocoNaLista(i)) baixo += AJ2_FUNDO_BAIXO;
   if (!aj2TemInsp() && aj2FocoNaLista(i) && op != AJ_FUNDO && !(op == AJ_TEMA && ajEditandoLinha(op)))
     baixo += aj2AjudaAltura(op, fr.w - 44.0f - 60.0f) + 20.0f;
@@ -550,13 +661,14 @@ static void aj2Chevron(float xDir, float yc, float al) {
 }
 static float aj2ChipLiga(float xDir, float yc, int ligado, float a) {
   TxtLinha t;
-  float w, ar, ag, ab;
+  float w, ar, ag, ab, mr, mg, mb;
   ajustes_acento(&ar, &ag, &ab);
-  if (ligado) {
-    t = txt_linha(TXT_V2_CHIP, "Ligado", (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255);
+  ajustes_acento_marca(&mr, &mg, &mb);
+  if (ligado) {   // chip ligado: o acento a 22% e o texto na MARCA
+    t = txt_linha(TXT_V2_CHIP, "Ligado", (int)(mr * 255 + 0.5f), (int)(mg * 255 + 0.5f), (int)(mb * 255 + 0.5f), 255);
     w = 22 + 9 + 10 + t.w + 22;
     gfx_cor((GfxRect){ xDir - w, yc - 24, w, 48 }, 0.5f, ar, ag, ab, 0.22f * a);
-    gfx_cor((GfxRect){ xDir - w + 22, yc - 4.5f, 9, 9 }, 0.5f, ar, ag, ab, a);
+    gfx_cor((GfxRect){ xDir - w + 22, yc - 4.5f, 9, 9 }, 0.5f, mr, mg, mb, a);
     txt_desenhar_alpha(t, xDir - w + 41, yc - t.h * 0.5f, a);
   } else {
     t = ajTxt(TXT_V2_CHIP, "Desligado");
@@ -758,39 +870,8 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
     else if (!aj2TemInsp() && aj2FocoNaLista(item) && !(op == AJ_TEMA && ed))
       ajBloco(TXT_V2_28, uxResumo(op), ln.x + 30.0f, by, ln.w - 60.0f, 36.4f, 0.62f * aTx, 4);
   }
-  // A REGUA DA COR DE DESTAQUE (editando): os doze temas e os quatro dinamicos.
-  if (op == AJ_TEMA && abre && ed && !aj2TemInsp()) {
-    int sel = valor[op], i, alvo = uxPendente;
-    float sx = ln.x + 30.0f, sy = y + AJ2_LN_LINHA1 + 20.0f;
-    for (i = 0; i < AJ_N_TEMAS; i++) {
-      float s = (i == alvo) ? 1.2f : 1.0f, d = 44.0f * s;
-      float cx = sx + i * 56.0f + 22.0f, cy = sy + 22.0f;
-      float cr = TEMA_ACENTO[i].r, cg = TEMA_ACENTO[i].g, cb = TEMA_ACENTO[i].b;
-      float lum = 0.2126f * cr + 0.7152f * cg + 0.0722f * cb;
-      if (s > 1.0f) gfx_rect((GfxRect){ cx - d * 0.5f - 12, cy - d * 0.5f - 2, d + 24, d + 30 }, 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.55f * a);
-      gfx_cor((GfxRect){ cx - d * 0.5f, cy - d * 0.5f, d, d }, 0.5f, cr, cg, cb, a);
-      if (i == sel) {
-        float k = lum > 0.5f ? 0.05f : 1.0f;
-        gfx_icone((GfxRect){ cx - 11 * s, cy - 11 * s, 22 * s, 22 * s }, "aj_check", k, k, k, a);
-      }
-    }
-    sy += 60.0f;
-    { float px = sx + ajCaps(TXT_AJ_CAPS13, "Dinâmicas", 1.82f, sx, sy + 12, 0.45f * a) + 18.0f;
-      static const int ARTE[4] = { 7, 12, 15, 0 };
-      static const char *const NOME[4] = { "Dinâmica", "Estilizada", "Gradiente", "Imersiva" };
-      for (i = 0; i < 4; i++) {
-        int k = AJ_TEMA_DINAMICA + i, foc = alvo == k;
-        TxtLinha t = foc ? ajTxtT(TXT_MINI, NOME[i]) : ajTxt(TXT_MINI, NOME[i]);
-        float w = 44 + t.w + 16;
-        GfxRect p = { px, sy, w, 40 };
-        if (foc) ajPilulaAcento(p, 20, a);
-        else ajNeutro(p, 20, 0.07f, AJ_CHIP_SOL, a);
-        ajImg(ajArte(AJA_FUNDO, ARTE[i]), (GfxRect){ px + 6, sy + 6, 28, 28 }, 14, a);
-        if (k == sel) gfx_icone((GfxRect){ px + 11, sy + 11, 18, 18 }, "aj_check", 1, 1, 1, a);
-        txt_desenhar_alpha(t, px + 44, sy + (40 - t.h) * 0.5f, (foc ? 1.0f : 0.75f) * a);
-        px += w + 10.0f;
-      } }
-  }
+  // A REGUA DA COR DE DESTAQUE (editando): claros, profundos, dinamicas, Textura.
+  if (op == AJ_TEMA && abre && ed) aj2Regua(ln, y + AJ2_LN_LINHA1 + 20.0f, a);
 }
 
 // Cabecalho de grupo (grpV2): nome 26/800, contagem 22 a direita, fio de 1 px.
