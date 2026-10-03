@@ -337,7 +337,7 @@ IGNORAR = {
     # de categoria do Xtream para achar o pais da grade (guia.c).
     "a?b?de?ghijklmn?o?prtuw", "românia",
     # Nome proprio e sigla: iguais nos dois idiomas.
-    "IMDb", "Trakt", "YouTube", "PIN", "AI-powered",
+    "IMDb", "Trakt", "YouTube", "PIN", "AI-powered", "NUVIO",
     # Tabela de acentos -> letra base da normalizacao de titulo (trailerapple.c):
     # dado, nao rotulo.
     "ÀÁÂÃÄÅàáâãäåÈÉÊËèéêëÌÍÎÏìíîïÒÓÔÕÖØòóôõöøÙÚÛÜùúûüÝýÿÑñÇç",

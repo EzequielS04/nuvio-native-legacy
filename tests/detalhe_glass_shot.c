@@ -171,6 +171,22 @@ int fx_agenda_episodio(void)  { return 0; }
 const char *fx_agenda_data(void) { return ""; }
 const char *fx_agenda_status(void) { return ehSerieDeEnsaio() ? "returning series" : "Released"; }
 
+// --- FRASES (cache de disco, o formato de seriefrases.c; sem rede) ---------
+static void cacheFrases(void) {
+  char buf[2048];
+  size_t k = 0;
+  k += (size_t)snprintf(buf + k, sizeof buf - k, "# nuvio seriefrases v1\n");
+  k += (size_t)snprintf(buf + k, sizeof buf - k, "%lld\tO Diabo Veste Prada 2\t1\n",
+                        (long long)time(NULL));
+  k += (size_t)snprintf(buf + k, sizeof buf - k, "F\tIdioma original\tInglês\n");
+  k += (size_t)snprintf(buf + k, sizeof buf - k, "F\tOrçamento\tUS$ 100 milhões\n");
+  k += (size_t)snprintf(buf + k, sizeof buf - k, "Q\tMiranda Priestly\tPor favor, não confunda isto "
+                        "com uma volta. É uma correção de rota.\n");
+  for (int i = 2; i <= 6; i++)
+    k += (size_t)snprintf(buf + k, sizeof buf - k, "Q\tAndy Sachs\tFrase de ensaio %d.\n", i);
+  assert(dados_gravar_leve("frases-" IMDB_FILME ".txt", buf));
+}
+
 // --- CATALOGO ----------------------------------------------------------------
 static CatItem itens[2];
 static CatEp episodios[16];
@@ -363,6 +379,7 @@ int main(int argc, char **argv) {
   // As marcas das notas (IMDb, Rotten Tomatoes, Trakt) vem da pasta de arte.
   { char ar[1024]; if (realpath("deploy/app/art", ar)) extras_carregar(ar); }
   montarCatalogo();
+  cacheFrases();
 
   if (quer(argc, argv, "filme-topo")) { abrir(1, 0, 0, 0); gravar("filme-topo"); }
   if (quer(argc, argv, "filme-trailers")) { abrir(1, 1, SEC_TRAILERS, 0); gravar("filme-trailers"); }

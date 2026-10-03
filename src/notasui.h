@@ -42,6 +42,9 @@ typedef struct {
 // fonte com o resumo, e a grade de episodios. Numa fileira so, a grade ficava
 // abaixo da dobra sem nenhum jeito de o foco chegar nela.
 int   notasui_fontes_tem(const NotasSecao *s);
+// A "nota Nuvio": a media 0..100 das fontes (a do anel da secao), ou -1 com
+// menos de duas fontes.
+int   notasui_media(const NotasSecao *s);
 int   notasui_grade_tem(const NotasSecao *s);
 // Alturas do CONTEUDO (sem o cabecalho que detail.c desenha). Baratas: nao
 // rasterizam nada.

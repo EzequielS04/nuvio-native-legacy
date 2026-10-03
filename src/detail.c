@@ -1651,7 +1651,7 @@ static float alturaSecao(int r) {
       if (!audAberta) return CHAMADA_H;
       return audAlt[b] > AUD_PISO[b] ? audAlt[b] : AUD_PISO[b];
     }
-    case SEC_FRASES:    return frasesAberta ? frasesAlt : CHAMADA_H;
+    case SEC_FRASES:    return !ehSerie() ? COL_CARD_H : frasesAberta ? frasesAlt : CHAMADA_H;
     case SEC_NOTAS:     return notasui_fontes_altura(notasDados());
     case SEC_NOTAS_EP:  return notasui_grade_altura(notasDados());
   }
@@ -2092,8 +2092,16 @@ void detail_evento(const SDL_Event *e) {
   // colecao, e o que impede a ultima secao do documento de virar uma armadilha
   // de onde so se sai pelo Voltar.
 
+  // FILME (Glass UI): o bloco mostra UMA frase ("1 de 6"); esquerda/direita
+  // andam entre elas e, na primeira, a esquerda volta para a Colecao.
   if (e->type == SDL_KEYDOWN && nivel >= 1 && foco.fileira == SEC_FRASES &&
-      !pessoaAberta && seriefrases_n() > 0) {
+      !pessoaAberta && !ehSerie() && seriefrases_n() > 0) {
+    int i = seriefrases_selecionado(), n = seriefrases_n();
+    if (e->key.keysym.sym == SDLK_RIGHT && i + 1 < n) { seriefrases_selecionar(i + 1); return; }
+    if (e->key.keysym.sym == SDLK_LEFT && i > 0)      { seriefrases_selecionar(i - 1); return; }
+  }
+  if (e->type == SDL_KEYDOWN && nivel >= 1 && foco.fileira == SEC_FRASES &&
+      !pessoaAberta && ehSerie() && seriefrases_n() > 0) {
     int i = seriefrases_selecionado(), n = seriefrases_n();
     if (e->key.keysym.sym == SDLK_DOWN && i + 1 < n) {
       seriefrases_selecionar(i + 1); return;
@@ -2372,9 +2380,21 @@ void detail_evento(const SDL_Event *e) {
   // Nao e mais preciso: secaoN devolve a contagem DA ABA ATIVA, entao a fileira
   // ou tem colunas de verdade (e o foco pousa no que esta desenhado) ou tem
   // zero, e focus_mover pula sozinho.
-  if (k == SDLK_RIGHT)      focus_mover(&foco, 1, 0);
+  if (k == SDLK_RIGHT) {
+    if (!focus_mover(&foco, 1, 0) && !ehSerie() && parDir(foco.fileira) >= 0 &&
+        foco.nColunas[parDir(foco.fileira)] > 0) {
+      foco.colunaLembrada[foco.fileira] = foco.coluna;
+      foco.fileira = parDir(foco.fileira); foco.coluna = 0;
+    }
+  }
   else if (k == SDLK_LEFT)  {
-    if (!focus_mover(&foco, -1, 0)) { pediuMenu = 1;   /* nao sai: o app abre o menu por cima (dono, 03/10) */ }
+    if (!focus_mover(&foco, -1, 0)) {
+      int e2 = ehSerie() ? -1 : parEsq(foco.fileira);
+      if (e2 >= 0 && foco.nColunas[e2] > 0) {
+        foco.fileira = e2;
+        foco.coluna = foco.nColunas[e2] - 1;
+      } else pediuMenu = 1;   /* nao sai: o app abre o menu por cima (dono, 03/10) */
+    }
   }
   else if (k == SDLK_DOWN)  moverFileira(1);
   else if (k == SDLK_UP)    { if (!moverFileira(-1)) nivel = 0; }
@@ -2440,14 +2460,14 @@ static float larguraItem(int r, int c) {
     case SEC_NOTAS:
     case SEC_NOTAS_EP:
     case SEC_FRASES:      return NV_TELA_W - NV_DETP_X * 2;
-    case SEC_COLECAO:     return COL_CARD_W;
+    case SEC_COLECAO:     return ehSerie() ? COL_CARD_W : wSec[SEC_COLECAO];
     default:              return NV_DETP_EL_W;
   }
 }
 // x do item `c` DENTRO da fileira (antes da rolagem horizontal).
 static float xItem(int r, int c) {
   // O segmentado de temporadas tem 5 px de trilho antes do primeiro item.
-  float x = NV_DETP_X + (r == SEC_TEMPORADAS ? DET_SEG_PAD : 0.0f);
+  float x = NV_DETP_X + ((r == SEC_TEMPORADAS || r == SEC_ABAS_INFO) ? DET_SEG_PAD : 0.0f);
   for (int k = 0; k < c; k++) {
     if (r == SEC_EPISODIOS) { x += NV_DETP_EP_PASSO; continue; }
     if (r == SEC_ELENCO)    { x += NV_DETP_EL_PASSO; continue; }
@@ -2471,7 +2491,7 @@ static float xItem(int r, int c) {
     // Frases idem, com a coluna unica.
     if (EH_AUD(r) || r == SEC_FRASES || r == SEC_NOTAS || r == SEC_NOTAS_EP) continue;
     if (r == SEC_TEMPORADAS) x += larguraTemporada(k) + NV_DETP_TEMP_GAP;
-    else x += larguraAbaInfo(k) + NV_DETP_ABA_SEP * 2 + 9.0f;  // 9 = largura do "|"
+    else x += larguraAbaInfo(k) + DET_SEG_PAD;
   }
   return x;
 }
@@ -2857,7 +2877,11 @@ void detail_atualizar(float dt, Uint32 agora) {
       if (t >= 0) { ratTemp = t; ratSinc = 1; }
     }
   }
-  if (nivel >= 1 && foco.fileira == SEC_FRASES) {
+  // No filme a linha Colecao | Frases aparece com a pagina rolando ate ela:
+  // a consulta sai quando o foco chega a "Mais como este" ou abaixo.
+  if (nivel >= 1 && (foco.fileira == SEC_FRASES ||
+      (!ehSerie() && (foco.fileira == SEC_RELACIONADOS || foco.fileira == SEC_COLECAO ||
+                      foco.fileira == SEC_DETALHES || foco.fileira == SEC_ESTUDIOS)))) {
     const CatItem *ci = cat_item(idx);
     if (ci && ci->imdb[0]) { seriefrases_abrir(ci->imdb); frasesAberta = 1; }
   }
@@ -3411,7 +3435,23 @@ static void heroWeb(float a, float desloc) {
         if (algo) { gfx_cor((GfxRect){ x + 12.0f, yc - 2.5f, 5.0f, 5.0f }, 0.5f, 1, 1, 1, 0.40f * aM);
                     x += 29.0f; }
         x = notasui_desenhar_linha(&plano, x, yc, aM);
-      } }
+        algo = 1;
+      }
+      // "• 87 nota Nuvio" (mockup): a media das fontes, a mesma do anel.
+      { int med = notasui_media(notasDados());
+        if (med >= 0) {
+          char nb[8]; snprintf(nb, sizeof nb, "%d", med);
+          TxtLinha ln = txt_linha(TXT_G20B, nb, 243, 242, 239, 255);
+          TxtLinha lr = txt_linha(TXT_ILHA_META, i18n("nota Nuvio"), 243, 242, 239, 191);
+          if (x + 29.0f + (float)ln.w + 8.0f + (float)lr.w < NV_DETW2_X + 1100.0f) {
+            if (algo) { gfx_cor((GfxRect){ x + 12.0f, yc - 2.5f, 5.0f, 5.0f }, 0.5f, 1, 1, 1, 0.40f * aM);
+                        x += 29.0f; }
+            txt_desenhar_alpha(ln, x, yc - (float)ln.h * 0.5f, aM);
+            x += (float)ln.w + 8.0f;
+            txt_desenhar_alpha(lr, x, yc - (float)lr.h * 0.5f, aM);
+            x += (float)lr.w;
+          } } }
+    }
     y += 24.0f + 34.0f;
   } else y += 30.0f;
 
@@ -3546,6 +3586,36 @@ static void heroWeb(float a, float desloc) {
       algo = 1;
     }
     (void)algo; }
+
+  // --- quem te recomendou (mockup: o chip com os rostos) ----------------------
+  // As recomendacoes RECEBIDAS deste titulo (recomenda.h): ate dois rostos de
+  // 40 encavalados e "Marina te recomendou" / "Marina, Pedro te recomendou".
+  if (ci && ci->imdb[0] && recomenda_ativo()) {
+    RecItem it[2];
+    int n = 0, i, tot = recomenda_n();
+    char nomes[140] = "", frase[200];
+    for (i = 0; i < tot && n < 2; i++) {
+      RecItem ri;
+      if (recomenda_item(i, &ri) && !strcmp(ri.imdb, ci->imdb)) it[n++] = ri;
+    }
+    if (n > 0) {
+      float yl = y + 22.0f + 22.0f + 30.0f, px;
+      snprintf(nomes, sizeof nomes, "%s%s%s", it[0].deNome, n > 1 ? ", " : "", n > 1 ? it[1].deNome : "");
+      snprintf(frase, sizeof frase, i18n("%s te recomendou"), nomes);
+      { TxtLinha l = txt_linha_corta(TXT_G18R, frase, 243, 242, 239, 179, 700.0f);
+        float w = 10.0f + 40.0f + (n > 1 ? 30.0f : 0.0f) + 14.0f + (float)l.w + 20.0f;
+        GfxRect pl = { NV_DETW2_X, yl, w, 60.0f };
+        if (ajustes_vidro()) gfx_cor(pl, 0.5f, 0.055f, 0.059f, 0.071f, 0.60f * a);
+        else gfx_cor(pl, 0.5f, 0.082f, 0.086f, 0.102f, a);
+        px = pl.x + 10.0f;
+        for (i = 0; i < n; i++) {
+          GfxRect d = { px + 30.0f * (float)i, yl + 10.0f, 40.0f, 40.0f };
+          gfx_cor((GfxRect){ d.x - 3.0f, d.y - 3.0f, 46.0f, 46.0f }, 0.5f, 0.082f, 0.086f, 0.102f, a);
+          rec_avatar(d, it[i].deAvatar, it[i].deNome, it[i].de, a);
+        }
+        txt_desenhar_alpha(l, px + 40.0f + (n > 1 ? 30.0f : 0.0f) + 14.0f, yl + (60.0f - (float)l.h) * 0.5f, a); }
+    }
+  }
 }
 #pragma pop_macro("NV_DETW2_X")
 
@@ -3587,9 +3657,10 @@ static float larguraTemporada(int c) {
   if (q > 0) { snprintf(num, sizeof num, "%d", q); w += 9.0f + (float)txt_largura(TXT_ILHA_NUM, num); }
   return w;
 }
+// As abas da serie no SEGMENTADO do Glass UI (DESIGN.md §5: substitui abas
+// com separador), o mesmo das temporadas: 19/600, 20 de cada lado.
 static float larguraAbaInfo(int i) {
-  TxtLinha l = txt_linha(TXT_PLR_CORPO, ABA_ROTULO[abaIdDe(i)], 255, 255, 255, 255);
-  return l.w;
+  return (float)txt_largura(TXT_ILHA_SEG, ABA_ROTULO[abaIdDe(i)]) + NV_DETP_TEMP_PADX * 2;
 }
 
 // ESTE EPISODIO AINDA NAO FOI AO AR?
@@ -3872,10 +3943,22 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
 // `transform: scale(1.03)` — o unico lugar desta tela que escala.
 static void desenhaAbaInfo(float x, float y, int i, float f, float a) {
   int sel = (i == abaInfo);
-  int base = sel ? 255 : 128;
-  int cor = (int)(base + (255 - base) * f);
-  TxtLinha l = txt_linha(TXT_PLR_CORPO, ABA_ROTULO[abaIdDe(i)], cor, cor, cor, 255);
-  txt_peso(l, x, y + (NV_DETP_ABA_H - l.h) * 0.5f, a, 0.5f + f * 0.6f);
+  GfxRect r = { x, y + (NV_DETP_ABA_H - NV_DETP_TEMP_H) * 0.5f, larguraAbaInfo(i), NV_DETP_TEMP_H };
+  if (i == 0) {   // o trilho do segmentado, uma vez, por baixo de todos
+    float w = DET_SEG_PAD * 2.0f;
+    for (int k = 0; k < secaoN(SEC_ABAS_INFO); k++) w += larguraAbaInfo(k) + (k ? DET_SEG_PAD : 0.0f);
+    GfxRect tr = { x - DET_SEG_PAD, r.y - DET_SEG_PAD, w, r.h + DET_SEG_PAD * 2.0f };
+    if (ajustes_vidro()) gfx_cor(tr, 0.5f, 1, 1, 1, 0.06f * a);
+    else gfx_cor(tr, 0.5f, 0.114f, 0.118f, 0.137f, a);
+  }
+  if (f > 0.5f) plrui_pilula_foco(r, a * f);
+  else if (sel) {
+    if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, 0.14f * a);
+    else gfx_cor(r, 0.5f, 0.204f, 0.212f, 0.243f, a);
+  }
+  { int cor = f > 0.5f ? plrui_tinta() : 243;
+    TxtLinha l = txt_linha(TXT_ILHA_SEG, ABA_ROTULO[abaIdDe(i)], cor, cor, cor, (f > 0.5f || sel) ? 255 : 140);
+    txt_desenhar_alpha(l, r.x + NV_DETP_TEMP_PADX, r.y + (r.h - (float)l.h) * 0.5f, a); }
 }
 
 // Elenco: avatar redondo de 140 ALINHADO A ESQUERDA do card de 220 (nao
@@ -4427,55 +4510,59 @@ static void cartazColecao(GfxRect r, const char *po, float a) {
 // cartazes das primeiras partes em ESCADA a direita. Sem backdrop, a escada
 // sozinha sobre a superficie neutra ja diz "isto e uma saga". O foco e o da
 // miniatura de trailer (anel na cor de realce) ou o contorno do vidro.
+// GLASS UI (mockup "Detalhe", "Coleção"): bloco .gl de 300 com a arte da
+// colecao por baixo de um veu que escurece a esquerda (110deg, 92% ate 35%),
+// o nome em 40/800, a meta a 60%, a pilula "Ver coleção" e dois cartazes de
+// 130x195 em leque a direita. Foco: a pilula vira o botao no acento (o OK
+// abre a lista da saga) e o bloco sobe um degrau, sem anel.
 static void desenhaColecao(float x, float y, float f, float a) {
-  GfxRect r = { x, y, COL_CARD_W, COL_CARD_H };
-  float raio = COL_CARD_RAIO / COL_CARD_H;
+  float w = ehSerie() ? COL_CARD_W : wSec[SEC_COLECAO];
+  GfxRect r = { x, y, w, COL_CARD_H };
+  float raio = 26.0f / COL_CARD_H;
   const char *fundo = extras_colecao_fundo();
-  GLuint t = fundo[0] ? tex_obter_larg(fundo, COL_CARD_W) : 0;
+  GLuint t = fundo[0] ? tex_obter_larg(fundo, w) : 0;
   int n = extras_n_colecao(), k, nCapas;
-  float capaX = x + COL_CARD_W - COL_CARD_PAD - COL_CAPA_W, textoW;
-
-  if (f > 0.01f && !ajustes_vidro()) {
-    GfxRect anel = { r.x - NV_DETP_ANEL, r.y - NV_DETP_ANEL,
-                     r.w + NV_DETP_ANEL * 2, r.h + NV_DETP_ANEL * 2 };
-    float ar, ag, ab;
-    ajustes_acento(&ar, &ag, &ab);
-    gfx_cor(anel, (COL_CARD_RAIO + NV_DETP_ANEL) / anel.h, ar, ag, ab, f * a);
-  }
+  float leque = 130.0f + 90.0f, textoW;
+  blocoGl(r, 26.0f, f, a);
   if (t) {
     gfx_tex_aspect_atual = tex_aspecto(fundo);
-    gfx_rect(r, t, GFX_VITRINE, 1.0f, 0.5f, 0.0f, raio, 0.30f, 0, 0, a);
+    // O veu de leitura da vitrine forcado (1,2: 96% na borda) e um chapado de
+    // 40% por cima, com os cantos: o 110deg do mockup sem degrau.
+    gfx_rect(r, t, GFX_VITRINE, 1.2f, 0.5f, 0.0f, raio, 0.999f, 0, 0, a);
     gfx_tex_aspect_atual = 0.0f;
-  } else {
-    moldura(r, COL_CARD_RAIO, a);
-    if (fundo[0] && !tex_falhou(fundo)) gfx_esqueleto(r, raio, 0.12f, 0.12f, 0.13f, a * 0.6f);
-  }
-  if (f > 0.01f && ajustes_vidro()) gfx_vidro_cartao(r, raio, f, a);
+    gfx_cor(r, raio, 0.055f, 0.059f, 0.071f, 0.40f * a);
+  } else if (fundo[0] && !tex_falhou(fundo)) gfx_esqueleto(r, raio, 0.12f, 0.12f, 0.13f, a * 0.6f);
 
-  // Escada: de tras para a frente, para a primeira parte ficar por cima.
-  nCapas = n < 3 ? n : 3;
-  for (k = nCapas - 1; k >= 0; k--) {
-    float esc = 1.0f - 0.10f * (float)k;
-    float w = COL_CAPA_W * esc, h = COL_CAPA_H * esc;
-    GfxRect c = { capaX - COL_CAPA_DX * (float)k + (COL_CAPA_W - w),
-                  y + (COL_CARD_H - h) * 0.5f, w, h };
-    GfxRect sombra = { c.x - 3.0f, c.y - 3.0f, c.w + 6.0f, c.h + 6.0f };
-    gfx_cor(sombra, raioCartaz(sombra.w, sombra.h), 0, 0, 0, a * 0.45f);
-    cartazColecao(c, extras_colecao_poster(k), a * (1.0f - 0.18f * (float)k));
+  // O leque: o primeiro atras, o segundo 90 a direita e 20 abaixo, por cima.
+  nCapas = n < 2 ? n : 2;
+  for (k = 0; k < nCapas; k++) {
+    GfxRect c = { x + w - 40.0f - leque + 90.0f * (float)k,
+                  y + (COL_CARD_H - 215.0f) * 0.5f + 20.0f * (float)k, 130.0f, 195.0f };
+    gfx_rect((GfxRect){ c.x - 30.0f, c.y - 2.0f, c.w + 60.0f, c.h + 64.0f }, 0, GFX_SOMBRA,
+             1.0f, 0, 0, 0.5f, 0, 0, 0, 0.5f * a);
+    cartazColecao(c, extras_colecao_poster(k), a);
   }
 
-  // Texto a esquerda, centrado na vertical do cartao.
-  textoW = capaX - COL_CAPA_DX * (float)(nCapas > 1 ? nCapas - 1 : 0)
-         - 28.0f - (x + COL_CARD_PAD);
+  textoW = w - 40.0f - leque - 30.0f - 40.0f;
   { char meta[64];
-    TxtLinha lm;
-    float yt = y + COL_CARD_PAD + 34.0f;
+    TxtLinha lt = txt_linha_corta(TXT_ILHA_TITULO, extras_colecao_nome(), 243, 242, 239, 255, textoW);
+    TxtLinha lm, lb;
+    float bw, alt, yt;
     metaColecao(meta, sizeof meta);
-    lm = txt_linha_corta(TXT_DET_META2, meta, 205, 210, 220, 255, textoW);
-    { float h = txt_bloco_corta(TXT_TITULO3, extras_colecao_nome(),
-                                250, 251, 255, x + COL_CARD_PAD, yt, textoW,
-                                52.0f, a, 3);
-      txt_desenhar_alpha(lm, x + COL_CARD_PAD, yt + h + 14.0f, a * 0.95f); } }
+    lm = txt_linha_corta(TXT_G18R, meta, 243, 242, 239, 153, textoW);
+    lb = txt_linha(TXT_G18M, i18n("Ver coleção"), f > 0.5f ? plrui_tinta() : 243,
+                   f > 0.5f ? plrui_tinta() : 243, f > 0.5f ? plrui_tinta() : 243,
+                   f > 0.5f ? 255 : 204);
+    bw = (float)lb.w + 44.0f;
+    alt = (float)lt.h + 8.0f + (float)lm.h + 22.0f + 46.0f;
+    yt = y + (COL_CARD_H - alt) * 0.5f;
+    txt_desenhar_alpha(lt, x + 40.0f, yt, a);
+    txt_desenhar_alpha(lm, x + 40.0f, yt + (float)lt.h + 8.0f, a);
+    { GfxRect p = { x + 40.0f, yt + (float)lt.h + 8.0f + (float)lm.h + 22.0f, bw, 46.0f };
+      if (ajustes_vidro()) gfx_cor(p, 0.5f, 1, 1, 1, 0.06f * a);
+      else gfx_cor(p, 0.5f, 0.141f, 0.149f, 0.173f, a);
+      if (f > 0.01f) plrui_pilula_foco(p, f * a);
+      txt_desenhar_alpha(lb, p.x + 22.0f, p.y + (p.h - (float)lb.h) * 0.5f, a); } }
 }
 
 // TELA DE LISTA DA COLECAO. A saga inteira, na ordem de lancamento (extras ja
@@ -4894,10 +4981,12 @@ static void desenhaComentarios(float x, float y, float a) {
 // com o seletor "Série | Episódio", que tambem so busca quando escolhido.
 static float desenhaChamada(float x, float y, const char *titulo,
                             const char *fonte, const char *custo, float a) {
-  TxtLinha lt = txt_linha(TXT_HEADLINE, i18n(titulo), 255, 255, 255, 255);
-  TxtLinha lf = txt_linha_corta(TXT_DET_META2, i18n(fonte), 150, 153, 162, 255,
+  // No Glass UI o titulo e o do cabecalho de secao (34/700) e as duas linhas
+  // de apoio em 18 a 55% e 40%.
+  TxtLinha lt = txt_linha(TXT_LOG_T34, i18n(titulo), 243, 242, 239, 255);
+  TxtLinha lf = txt_linha_corta(TXT_G18R, i18n(fonte), 243, 242, 239, 140,
                                 NV_TELA_W - NV_DETP_X * 2);
-  TxtLinha lc = txt_linha_corta(TXT_DET_META2, i18n(custo), 108, 111, 120, 255,
+  TxtLinha lc = txt_linha_corta(TXT_G18R, i18n(custo), 243, 242, 239, 102,
                                 NV_TELA_W - NV_DETP_X * 2);
   txt_desenhar_alpha(lt, x, y, a);
   txt_desenhar_alpha(lf, x, y + lt.h + 6.0f, a * 0.95f);
@@ -4933,7 +5022,40 @@ static float desenhaAudiencia(int banda, float x, float y, float a) {
 // 12 series; a ficha do Wikidata quase sempre tem algum campo —, e e por isso
 // que elas ficam lado a lado e nao uma sob a outra: a coluna da direita e o que
 // impede a secao de ser uma tela inteira com uma linha de "nao tem" no meio.
+// GLASS UI (mockup "Detalhe", "Frases"): um bloco .gl de 300 com UMA frase
+// em 30/500, quem disse embaixo a 55% e "1 de 6" a direita a 40%.
+static float desenhaFrasesBloco(float x, float y, float a) {
+  float w = wSec[SEC_FRASES];
+  GfxRect r = { x, y, w, COL_CARD_H };
+  float f = (nivel >= 1 && foco.fileira == SEC_FRASES) ? animFoco[SEC_FRASES][0] : 0.0f;
+  int n = frasesAberta ? seriefrases_n() : 0;
+  blocoGl(r, 26.0f, f, a);
+  if (n <= 0) {
+    const char *msg = !frasesAberta ? "Carrega quando você desce até aqui"
+                    : seriefrases_carregando() ? "Carregando…"
+                    : "Este título não tem página de frases no Wikiquote";
+    TxtLinha l = txt_linha_corta(TXT_G18R, i18n(msg), 243, 242, 239, 140, w - 72.0f);
+    txt_desenhar_alpha(l, x + 36.0f, y + 36.0f, a);
+    return COL_CARD_H;
+  }
+  { int i = seriefrases_selecionado();
+    char q[600], cont[32];
+    const char *quem = seriefrases_quem(i);
+    if (i < 0 || i >= n) i = 0;
+    snprintf(q, sizeof q, "\xe2\x80\x9c%s\xe2\x80\x9d", seriefrases_texto(i));
+    txt_bloco_corta(TXT_G30M, q, 243, 242, 239, x + 36.0f, y + 36.0f, w - 72.0f, 40.5f, a, 4);
+    if (quem && quem[0]) {
+      char b[160]; snprintf(b, sizeof b, "\xe2\x80\x94 %s", quem);
+      { TxtLinha l = txt_linha_corta(TXT_ILHA_GENERO, b, 243, 242, 239, 140, w - 220.0f);
+        txt_desenhar_alpha(l, x + 36.0f, y + COL_CARD_H - 36.0f - (float)l.h, a); } }
+    snprintf(cont, sizeof cont, i18n("%d de %d"), i + 1, n);
+    { TxtLinha l = txt_linha(TXT_ILHA_HORA, cont, 243, 242, 239, 102);
+      txt_desenhar_alpha(l, x + w - 36.0f - (float)l.w, y + COL_CARD_H - 36.0f - (float)l.h, a); } }
+  return COL_CARD_H;
+}
+
 static float desenhaFrases(float x, float y, float a) {
+  if (!ehSerie()) return desenhaFrasesBloco(x, y, a);
   GfxRect q = { x, y, FR_COL_W, 0.0f };
   GfxRect f = { x + FR_COL_W + FR_COL_GAP, y,
                 NV_TELA_W - NV_DETP_X * 2 - FR_COL_W - FR_COL_GAP, 0.0f };
@@ -5006,6 +5128,9 @@ static int moverFileira(int dy) {
   if (pos < 0) return focus_mover(&foco, 0, dy);
   for (o = pos + dy; o >= 0 && o < N_ORDEM; o += dy) {
     int r = ORDEM_FILME[o];
+    // O par da mesma linha (Colecao | Frases, Ficha | Producao) e esquerda/
+    // direita, nao cima/baixo.
+    if (parEsq(r) == foco.fileira || parDir(r) == foco.fileira) continue;
     if (foco.nColunas[r] > 0) {
       int alvo = foco.colunaLembrada[r];
       foco.colunaLembrada[foco.fileira] = foco.coluna;
@@ -5132,11 +5257,6 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
       }
       case SEC_ABAS_INFO: {
         desenhaAbaInfo(x, y, c, f, a);
-        if (c + 1 < n) {
-          TxtLinha d = txt_linha(TXT_PLR_CORPO, "|", 128, 128, 128, 255);
-          txt_peso(d, x + w + NV_DETP_ABA_SEP,
-                   y + (NV_DETP_ABA_H - d.h) * 0.5f, a, 1.4f);
-        }
         break;
       }
       case SEC_TRAILERS: desenhaTrailer(x, y, c, f, a); break;

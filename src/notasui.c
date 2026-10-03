@@ -335,6 +335,13 @@ static void medir(const NotasSecao *s, Medidas *m) {
   }
 }
 
+int notasui_media(const NotasSecao *s) {
+  Medidas m; NfResumo r;
+  medir(s, &m);
+  if (!m.nFontes) return -1;
+  nf_resumo(m.fontes, m.norm, m.nFontes, &r);
+  return r.n > 1 ? r.media : -1;
+}
 int notasui_fontes_tem(const NotasSecao *s) { Medidas m; medir(s, &m); return m.algumaNota; }
 int notasui_grade_tem(const NotasSecao *s)  { Medidas m; medir(s, &m); return m.comGrade; }
 float notasui_fontes_altura(const NotasSecao *s) { Medidas m; medir(s, &m); return m.hA; }
