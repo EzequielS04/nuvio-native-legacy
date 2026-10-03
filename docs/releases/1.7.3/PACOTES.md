@@ -1,3 +1,5 @@
+> Publication update: v1.7.3 was published on 2026-10-03 with explicit user authorization. See [PUBLICACAO.md](PUBLICACAO.md); the validation limits below remain applicable.
+
 # Pacotes locais 1.7.3
 
 Runtime LG/Samsung: `4ffb8a23abdf80347ba0cf11150957e511ff8ebb`. APK Android atualizado no commit `0d7ae4e67929d1a9bd7eba4dd43b751bb7b001a1`, com enumeração de apps em segundo plano. Todos em `/Volumes/ExternalSSD/nuvio-173-final/`. Nenhum publicado; o APK foi instalado na TCL preservando os dados e seu hash instalado foi conferido.

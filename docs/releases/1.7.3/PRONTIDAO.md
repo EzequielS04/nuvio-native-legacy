@@ -1,3 +1,5 @@
+> Publication update: v1.7.3 was published on 2026-10-03 with explicit user authorization. See [PUBLICACAO.md](PUBLICACAO.md); the validation limits below remain applicable.
+
 # 1.7.3 — release review, 2026-10-03
 
 The candidate is packaged and locally tested. This review does not publish or approve a stable release. The current published stable release remains v1.7.2 (2026-10-03 03:26:27 UTC).
