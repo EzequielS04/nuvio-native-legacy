@@ -172,6 +172,7 @@
 #include "vistoep.h"
 #include "textogate.h"
 #include "layout.h"
+#include "escala.h"
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
@@ -179,18 +180,14 @@
 #include <math.h>
 
 // TAMANHO DA INTERFACE, COM PISO DE 120% (pedido do dono: a Agenda nasce a
-// 120%). A escala efetiva e max(1,2; Tamanho da interface): 120% no padrao,
+// 120%). A escala efetiva e escala_min(1,2) (escala.h): 120% no padrao,
 // acompanha o ajuste acima disso. A tela virtual da Agenda e sempre 1920/s x
 // 1080/s, na medida, no evento e no desenho, e e so o desenho publico que liga
-// a escala (AG_ESC_INI/FIM), como escala.h manda. Piso local: o helper de
-// "escala minima" da branch do player ainda nao esta aqui.
+// a escala (AG_ESC_INI/FIM), como escala.h manda.
 #define AG_ESCALA_MIN 1.2f
-static float agEscala(void) {
-  float s = gfx_escala_ui();
-  return s < AG_ESCALA_MIN ? AG_ESCALA_MIN : s;
-}
-#define AG_ESC_INI() float escAgAnt_ = gfx_escala(); gfx_escala_sair(agEscala())
-#define AG_ESC_FIM() gfx_escala_sair(escAgAnt_)
+static float agEscala(void) { return escala_min(AG_ESCALA_MIN); }
+#define AG_ESC_INI() ESCALA_MIN_INI(AG_ESCALA_MIN)
+#define AG_ESC_FIM() ESCALA_MIN_FIM()
 #undef NV_TELA_W
 #undef NV_TELA_H
 #define NV_TELA_W (1920.0f / agEscala())
