@@ -3429,11 +3429,15 @@ static void heroWeb(float a, float desloc) {
   // pedido. Pedindo o teto, o logo sumia por um instante ao abrir o titulo;
   // pedindo a largura real, aparece na hora e troca pela nitida em seguida.
   GLuint texLogo = arqLogo ? tex_obter_larg_qualquer(arqLogo, NV_DETW_LOGO_MAXW) : 0;
-  // O NOME ESCRITO E SO RESERVA. Enquanto o logo ainda esta a caminho a caixa
-  // fica vazia, e o logo entra num fade curto — em vez de o nome aparecer e
-  // ser trocado pelo logo um instante depois, a cada abertura ("nao ta suave
-  // como o fundo do hero", dono, 21/09/2026). O nome so sai quando NAO ha logo
-  // para esperar: o titulo nao tem, ou o cache ja tentou e falhou.
+  // The live catalog title remains readable even if the logo is in another
+  // language, loading, or unavailable. Wrap the complete name above the logo.
+  const char *nome = tituloDe(idx);
+  float baseLogo = (temRetom > 0.0f || agLinha[0] ? yEstado : yAcoes)
+                   - NV_DETW_LOGO_GAP;
+  float hNome = nome ? txt_bloco(TXT_DET_META2, nome, 255, 255, 255,
+                                -1, 0, NV_DETW_LOGO_MAXW, 34, 0, 0) : 0;
+  float espacoLogo = baseLogo - 110.0f - hNome - (nome ? 16.0f : 0);
+  if (espacoLogo < 0) espacoLogo = 0;
   static char  logoVisto[600];
   static Uint32 logoDesde;
   float aLogo = a;
@@ -3445,27 +3449,15 @@ static void heroWeb(float a, float desloc) {
     { float f = (float)(SDL_GetTicks() - logoDesde) / 260.0f;
       if (f < 1.0f) aLogo *= f < 0.0f ? 0.0f : f; }
   } else logoVisto[0] = 0;
-  int mostraNome = !texLogo && (!arqLogo || tex_falhou(arqLogo));
   if (texLogo) {
     float asp = tex_aspecto(arqLogo);
     if (asp <= 0.0f) asp = 2.5f;
-    float h = NV_DETW_LOGO_H, w = h * asp;
+    float h = fminf(NV_DETW_LOGO_H, espacoLogo), w = h * asp;
     if (w > NV_DETW_LOGO_MAXW) { w = NV_DETW_LOGO_MAXW; h = w / asp; }
-    // O logo assenta acima do TOPO DO BLOCO DE ESTADO, seja ele qual for.
-    //
-    // DEFEITO CORRIGIDO em 16/09, visto pelo dono numa serie encerrada: esta
-    // linha olhava so `temRetom`. Com logo na tela, sem progresso e COM linha
-    // de agenda ("Show ended · last episode on 13 November 2025"), o logo se
-    // ancorava em `yAcoes` enquanto a agenda era desenhada uma linha acima
-    // disso — ou seja, DENTRO da caixa do logo. As duas coisas saiam uma por
-    // cima da outra.
-    //
-    // `yEstado` ja e o topo do bloco depois de empilhar retomada e agenda (zero,
-    // uma ou as duas), que e exatamente a ancora que o ramo SEM logo, dez linhas
-    // abaixo, sempre usou. Os dois ramos agora concordam, que e o que impede de
-    // o defeito voltar no proximo estado novo.
-    float baseLogo = (temRetom > 0.0f || agLinha[0] ? yEstado : yAcoes)
-                     - NV_DETW_LOGO_GAP;
+    // Keep the caption and logo above both agenda and resume rows.
+    if (nome) txt_bloco(TXT_DET_META2, nome, 255, 255, 255,
+                         NV_DETW2_X, baseLogo - h - 16.0f - hNome,
+                         NV_DETW_LOGO_MAXW, 34, a, 0);
     GfxRect r = { NV_DETW2_X, baseLogo - h, w, h };
     gfx_tex_aspect_atual = 0.0f;   // o logo ja vem na proporcao certa
     // LOGO PRETO VIRA BRANCO. O TMDB serve a mesma marca em versao clara e
@@ -3483,23 +3475,12 @@ static void heroWeb(float a, float desloc) {
     // -1 = ainda carregando: trata como clara e nao tinge. Errar para o lado de
     // nao mexer na arte e o certo enquanto nao se sabe.
     { GfxModo m = tex_marca_escura(arqLogo) ? GFX_MARCA : GFX_TEXTO;
-      gfx_rect(r, texLogo, m, 0, 0, 0, 0.0f, 1, 1, 1, aLogo); }
-  } else if (mostraNome) {
-    // Sem logo, o NOME. A altura da caixa continua sendo a do logo, para que a
-    // linha de botoes nao pule entre um titulo com logo e outro sem.
-    const char *nome = tituloDe(idx);
-    if (nome) {
-      TxtLinha t2 = txt_linha_corta(TXT_TITULO1, nome, 255, 255, 255, 255,
-                                    NV_DETW_LOGO_MAXW);
-      // Mesma ancora do logo: acima da retomada quando ha, senao das acoes. A
-      // altura da CAIXA continua sendo a do logo, para que a linha de acoes nao
-      // pule entre um titulo com logo e outro sem.
-      float baseLogo = (temRetom > 0.0f || agLinha[0] ? yEstado : yAcoes)
-                       - NV_DETW_LOGO_GAP;
-      txt_desenhar_alpha(t2, NV_DETW2_X,
-                         baseLogo - NV_DETW_LOGO_H
-                                  + (NV_DETW_LOGO_H - t2.h) * 0.5f, a);
-    }
+      if (r.w > 0 && r.h > 0)
+        gfx_rect(r, texLogo, m, 0, 0, 0, 0.0f, 1, 1, 1, aLogo); }
+  } else if (nome) {
+    txt_bloco(TXT_DET_META2, nome, 255, 255, 255, NV_DETW2_X,
+              baseLogo - fminf(NV_DETW_LOGO_H, espacoLogo) - hNome,
+              NV_DETW_LOGO_MAXW, 34, a, 0);
   }
 
   // --- botoes ---------------------------------------------------------------

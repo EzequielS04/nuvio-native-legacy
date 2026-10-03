@@ -73,7 +73,26 @@
 // verdade no GL — a captura mostra o resultado, o espiao prova a regra.
 #define gfx_desfocado fx_desfocado
 
+#include "text.h"
+static const char *fxTituloEsperado;
+static int fxTituloDesenhado;
+static float fx_titulo_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
+                            float x, float y, float larg, float leading,
+                            float alpha, int maxLinhas);
+#define txt_bloco fx_titulo_bloco
 #include "../src/detail.c"
+#undef txt_bloco
+static float fx_titulo_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
+                            float x, float y, float larg, float leading,
+                            float alpha, int maxLinhas) {
+  float height = txt_bloco(estilo,s,r,g,b,x,y,larg,leading,alpha,maxLinhas);
+  if (fxTituloEsperado && s && !strcmp(s,fxTituloEsperado) && alpha > 0.3f) {
+    assert(maxLinhas == 0); // The complete name is wrapped, never ellipsized.
+    assert(y >= 109.0f && y + height < NV_TELA_H);
+    fxTituloDesenhado++;
+  }
+  return height;
+}
 
 #undef gfx_desfocado
 GLuint gfx_desfocado(GLuint src, const char *chave);
@@ -454,6 +473,32 @@ int main(int argc, char **argv) {
     ajustes_dir(dados_dir()); }
 
   montarCatalogo();
+  if (getenv("NUVIO_SHOT_TITULO")) {
+    CatFileira fil=filEnsaio;
+    snprintf(itens[1].titulo,sizeof itens[1].titulo,"O Senhor dos Anéis: A Sociedade do Anel");
+    snprintf(itens[1].logo,sizeof itens[1].logo,"deploy/app/art/logo/01.png");
+    cat_definir_tudo(itens,2,&fil,1);
+    fxTituloEsperado=NULL;abrir(1,0);nivel=0;SDL_Delay(400);quadros(120);
+    fxTituloEsperado=itens[1].titulo;fxTituloDesenhado=0;quadros(3);
+    assert(fxTituloDesenhado>0);assert(tex_obter_larg_qualquer(logoDe(idx),NV_DETW_LOGO_MAXW));
+    snprintf(nome,sizeof nome,"%s-localizado.png",saida);gravar(nome);
+    // Metadata can localize after opening; read the live catalog every frame.
+    snprintf(itens[1].titulo,sizeof itens[1].titulo,"Uma história extraordinariamente longa sobre a viagem de volta para casa e os amigos que encontramos pelo caminho através de mundos desconhecidos");
+    cat_definir_tudo(itens,2,&fil,1);fxTituloDesenhado=0;quadros(120);
+    assert(fxTituloDesenhado>0);
+    snprintf(nome,sizeof nome,"%s-longo.png",saida);gravar(nome);
+    // A new opening resets the frozen artwork session, like a real title.
+    itens[1].logo[0]=0;
+    snprintf(itens[1].imdb,sizeof itens[1].imdb,"tt99887766");
+    cat_definir_tudo(itens,2,&fil,1);fxTituloEsperado=NULL;
+    abrir(1,0);nivel=0;SDL_Delay(400);quadros(120);
+    fxTituloEsperado=itens[1].titulo;fxTituloDesenhado=0;quadros(3);
+    assert(!logoDe(idx));
+    assert(fxTituloDesenhado>0);
+    snprintf(nome,sizeof nome,"%s-sem-logo.png",saida);gravar(nome);
+    puts("detail title: live localized caption, complete wrapping and no-logo rendering passed");
+    return 0;
+  }
 
   // --- 1. HISTORICO NAO CHEGOU. Nada foi semeado: vistoep_estado devolve -1
   //        em tudo. Nenhum check, e a temporada nao pode afirmar "0 vistos".
