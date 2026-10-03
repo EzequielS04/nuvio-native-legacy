@@ -21,7 +21,7 @@ int  detail_aberto(void);
 void detail_fechar(void);
 // Fecha sem a mola de saida (o player saiu para a home: ilha_minimizar).
 void detail_fechar_seco(void);
-int  detail_pediu_menu(void);   // ESQUERDA na borda fechou a pagina pedindo a barra
+int  detail_pediu_menu(void);   // 1 uma vez: ESQUERDA na borda pediu o menu lateral (a pagina NAO fecha; Voltar e quem sai)
 // 0..1 de quanto o detalhe tomou a tela; a home usa para descer as fileiras.
 float detail_progresso(void);        // 1 enquanto a tela existe, inclusive saindo
 // 1 quando o cartao ja cobre a tela inteira e desenhar a home por baixo e
@@ -401,10 +401,10 @@ int  detail_pediu_do_inicio(void);
 // A chave alinha a esquerda em NV_DETP_X; o valor comeca numa coluna FIXA, e
 // nao depois do texto da chave — senao a segunda coluna serrilha de linha em
 // linha.
-#define NV_DETF_DET_LINHA      68.0f   // passo vertical de uma linha
+#define NV_DETF_DET_LINHA      57.0f   // passo vertical de uma linha (.ficha do Glass UI)
 #define NV_DETF_DET_W        1040.0f   // largura da tabela e da divisoria
-#define NV_DETF_DET_CHAVE_W   254.0f   // 24,4% de NV_DETF_DET_W (proporcao do Mac)
-#define NV_DETF_DET_MAXL          6    // Status, Lancamento, Duracao, Classif., Pais
+#define NV_DETF_DET_CHAVE_W   220.0f   // a coluna da chave da .ficha do Glass UI
+#define NV_DETF_DET_MAXL         10    // Status, Lancamento, Duracao, Classif., Pais + Wikidata
 
 void detail_evento(const SDL_Event *e);
 void detail_atualizar(float dt, Uint32 agora);

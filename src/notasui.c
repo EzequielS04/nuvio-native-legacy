@@ -24,13 +24,17 @@ static int tintaSobre(float r, float g, float b) {
 
 // Painel da secao: o mesmo degrau acima do fundo que as outras superficies da
 // pagina de titulo (detail.c: moldura), ou o vidro quando a pessoa o ligou.
+// GLASS UI (mockup "Detalhe", 03/10): o bloco .gl — branco a 5,5% no vidro,
+// #15161A com a sombra curta no solido. Sem contorno.
 static void painel(GfxRect r, float raio, float a) {
   float rf = r.h > 0.0f ? raio / r.h : 0.0f;
   float teto = r.h > 0.0f ? 0.5f * r.w / r.h : 0.5f;
   if (rf > 0.5f) rf = 0.5f;
   if (rf > teto) rf = teto;
-  if (ajustes_vidro()) { gfx_vidro_painel(r, rf, 0.5f, a); return; }
-  gfx_cor(r, rf, 0.082f, 0.094f, 0.118f, 0.92f * a);
+  if (ajustes_vidro()) { gfx_cor(r, rf, 1, 1, 1, 0.055f * a); return; }
+  gfx_rect((GfxRect){ r.x - 26.0f, r.y - 4.0f, r.w + 52.0f, r.h + 52.0f }, 0, GFX_SOMBRA,
+           1.0f, 0, 0, 0.5f, 0, 0, 0, 0.45f * a);
+  gfx_cor(r, rf, 0.082f, 0.086f, 0.102f, a);
 }
 
 static void pilula(float x, float yc, float w, float h, const char *txt,
@@ -248,21 +252,18 @@ float notasui_marca_cartao(int f, int cru, float xc, float yc, float h, float a)
 // SECAO "NOTAS"
 // ---------------------------------------------------------------------------
 #define SEC_W       1728.0f      // NV_TELA_W - 2 * NV_DETP_X
-#define ROWS_W      1000.0f      // coluna do heatmap por fonte
-#define PAINEL_X    1056.0f      // coluna do resumo (largura SEC_W - 1056)
-#define LEG_H       46.0f        // legenda da escala
-#define LINHA_H     46.0f        // uma fonte
-#define SUB_H       40.0f        // frase de apoio no alto
-#define MARCA_COL   72.0f
-#define NOME_X      88.0f
-#define TRILHO_X    346.0f
-#define TRILHO_W    480.0f
-#define TRILHO_H    24.0f
-#define PISO_COR    45           // abaixo disso a cor trava no escuro
 #define GRADE_ROT_W 64.0f
 #define GRADE_MED_W 96.0f
 #define GRADE_MAX_H 560.0f
-#define SUMARIO_H   300.0f
+// Os blocos .gl das notas (mockup "Detalhe"): grade 1fr 1fr com vao de 28,
+// padding 34, anel de 170 (traco 15), linhas 150 | barra | 54 a 17 px.
+#define GL_VAO       28.0f
+#define GL_PAD       34.0f
+#define GL_ANEL     170.0f
+#define GL_TRACO     15.0f
+#define GL_LINHA     37.0f
+#define GL_ROT_W    150.0f
+#define GL_VAL_W     54.0f
 
 static TextoGate gateFontes, gateGrade;
 void notasui_reiniciar(void) {
@@ -300,8 +301,10 @@ static void medir(const NotasSecao *s, Medidas *m) {
   }
   m->algumaNota = m->nFontes > 0;
   if (m->nFontes) {
-    m->hRows = SUB_H + (float)m->nFontes * LINHA_H + LEG_H;
-    m->hA = m->hRows > SUMARIO_H ? m->hRows : SUMARIO_H;
+    // Os dois blocos do mockup lado a lado, na mesma altura: 34 de padding em
+    // volta do anel de 170 ou das linhas (21 + 16 de vao cada), o que for maior.
+    m->hRows = (float)m->nFontes * GL_LINHA - (GL_LINHA - 21.0f);
+    m->hA = GL_PAD * 2.0f + (m->hRows > GL_ANEL ? m->hRows : GL_ANEL);
   }
   if (s->nTemp > 0 && s->nEps && s->epNota && s->tempNum && s->epNum) {
     int comNota = 0;
@@ -337,23 +340,6 @@ int notasui_grade_tem(const NotasSecao *s)  { Medidas m; medir(s, &m); return m.
 float notasui_fontes_altura(const NotasSecao *s) { Medidas m; medir(s, &m); return m.hA; }
 float notasui_grade_altura(const NotasSecao *s)  { Medidas m; medir(s, &m); return m.hGrade; }
 
-// Marca de uma fonte NA LINHA do heatmap: caixa de MARCA_COL x 32, centrada.
-static void marcaLinha(int f, int cru, float x, float yc, float a) {
-  if (marcaNativa(f)) {
-    const char *t; float r, g, b, w;
-    corNativa(f, &r, &g, &b, &t);
-    w = larguraNativa(f);
-    pilula(x + (MARCA_COL - w) * 0.5f, yc, w, 26.0f, t, r, g, b, a);
-    return;
-  }
-  { Png p = pngDe(f, cru, 0);
-    float h = f == EX_IMDB ? 26.0f : 30.0f, w;
-    if (!p.nome) return;
-    w = larguraPng(p.nome, p.asp, h);
-    if (w > MARCA_COL) { h = h * MARCA_COL / w; w = MARCA_COL; }
-    desenhaPng(p.nome, (GfxRect){ x + (MARCA_COL - w) * 0.5f, yc - h * 0.5f, w, h }, a); }
-}
-
 static const char *rotulo(int f) {
   if (f == EX_METAUSER) return i18n("Metacritic (usuários)");
   if (f == EX_MDBSCORE) return i18n("Nota do MDBList");
@@ -363,134 +349,6 @@ static const char *rotulo(int f) {
 // Texto de uma linha, com a cor e a posicao pedidas.
 static TxtLinha texto(TxtEstilo e, const char *s, int c) {
   return txt_linha(e, s, c, c, c, 255);
-}
-
-static void desenhaSumario(const Medidas *m, float x, float y, float h, float a) {
-  NfResumo r;
-  GfxRect box = { x, y, SEC_W - PAINEL_X, h };   // h: a altura PROPRIA do painel
-  float px = x + 32.0f, py = y + 28.0f, largura = box.w - 64.0f;
-  char buf[96];
-  float ar, ag, ab;
-  nf_resumo(m->fontes, m->norm, m->nFontes, &r);
-  painel(box, 20.0f, a);
-  ajustes_acento(&ar, &ag, &ab);
-  if (r.n == 0) {
-    // So a nota agregada do MDBList (ou nenhuma que conte): nada a comparar.
-    TxtLinha l = texto(TXT_DET_META2, i18n("Só a nota agregada chegou; não há o que comparar."), 179);
-    txt_desenhar_alpha(l, px, py, a);
-    return;
-  }
-  // MEDIA, grande, com a frase ao lado da linha de base.
-  { char n[8]; TxtLinha big, sub;
-    snprintf(n, sizeof n, "%d", r.media);
-    big = texto(TXT_TITULO2, n, 245);
-    txt_desenhar_alpha(big, px, py, a);
-    if (r.n > 1) snprintf(buf, sizeof buf, i18n("Média de %d fontes"), r.n);
-    else         snprintf(buf, sizeof buf, "%s", i18n("Só uma fonte tem nota"));
-    sub = texto(TXT_DET_META2, buf, 179);
-    txt_desenhar_alpha(sub, px + (float)big.w + 18.0f,
-                       py + (float)big.h - (float)sub.h - 6.0f, a);
-    py += (float)big.h + 18.0f; }
-  // BARRA DE VARIACAO: 0..100 numa linha, com a faixa min..max pintada na
-  // rampa e um ponto na media (na cor de realce).
-  if (r.n > 1) {
-    GfxRect tr = { px, py, largura, 10.0f };
-    float x0 = px + largura * (float)r.min / 100.0f;
-    float x1 = px + largura * (float)r.max / 100.0f;
-    int k, seg = 24;
-    gfx_cor(tr, 0.5f, 1, 1, 1, 0.08f * a);
-    for (k = 0; k < seg; k++) {
-      float t0 = (float)k / (float)seg, t1 = (float)(k + 1) / (float)seg;
-      float cr, cg, cb, tn;
-      float sx = x0 + (x1 - x0) * t0, ex = x0 + (x1 - x0) * t1;
-      nf_cor_nota(r.min + (int)((float)(r.max - r.min) * (t0 + t1) * 0.5f),
-                  PISO_COR, &cr, &cg, &cb, &tn);
-      gfx_cor((GfxRect){ sx, py, ex - sx + 0.5f, 10.0f }, 0, cr, cg, cb, a);
-    }
-    gfx_cor((GfxRect){ px + largura * (float)r.media / 100.0f - 8.0f, py - 3.0f,
-                       16.0f, 16.0f }, 0.5f, ar, ag, ab, a);
-    py += 34.0f;
-    snprintf(buf, sizeof buf, i18n("Menor: %s %d  ·  Maior: %s %d"),
-             r.fonteMin == EX_METAUSER ? "Metacritic" : nf_nome(r.fonteMin), r.min,
-             r.fonteMax == EX_METAUSER ? "Metacritic" : nf_nome(r.fonteMax), r.max);
-    { TxtLinha l = texto(TXT_DET_META2, buf, 200);
-      txt_desenhar_alpha(l, px, py, a); py += (float)l.h + 14.0f; }
-  }
-  // CRITICA x PUBLICO, so quando os dois lados existem.
-  if (r.temDiff) {
-    int d = r.diff < 0 ? -r.diff : r.diff;
-    const char *veredito;
-    snprintf(buf, sizeof buf, i18n("Crítica %d  ·  Público %d"), r.criticos, r.publico);
-    { TxtLinha l = texto(TXT_DET_META2, buf, 235);
-      txt_desenhar_alpha(l, px, py, a); py += (float)l.h + 6.0f; }
-    if (d <= 3) veredito = i18n("Crítica e público estão de acordo");
-    else if (r.diff > 0) { snprintf(buf, sizeof buf, i18n("O público dá %d pontos a mais que a crítica"), d); veredito = buf; }
-    else { snprintf(buf, sizeof buf, i18n("A crítica dá %d pontos a mais que o público"), d); veredito = buf; }
-    { TxtLinha l = texto(TXT_DET_META2, veredito, 179);
-      txt_desenhar_alpha(l, px, py, a); }
-  }
-}
-
-static void desenhaLinhas(const NotasSecao *s, const Medidas *m, float x, float y, float a) {
-  int i;
-  NfResumo r;
-  float yy = y;
-  nf_resumo(m->fontes, m->norm, m->nFontes, &r);
-  { TxtLinha l = texto(TXT_DET_META2, i18n("Notas convertidas para 0–100. A marca clara é a média."), 150);
-    txt_desenhar_alpha(l, x, yy, a); }
-  yy += SUB_H;
-  for (i = 0; i < m->nFontes; i++) {
-    int f = m->fontes[i], n = m->norm[i], cru = s->cru[f];
-    float yc = yy + LINHA_H * 0.5f, cr, cg, cb, tn;
-    float fw = TRILHO_W * (float)n / 100.0f;
-    char v[24];
-    TxtLinha lnome, lv;
-    marcaLinha(f, cru, x, yc, a);
-    lnome = texto(TXT_DET_META2, rotulo(f), 225);
-    txt_desenhar_alpha(lnome, x + NOME_X, yc - (float)lnome.h * 0.5f, a);
-    // Trilho + preenchimento na rampa: a cor repete o comprimento, para a
-    // leitura nao depender de enxergar so um dos dois.
-    gfx_cor((GfxRect){ x + TRILHO_X, yc - TRILHO_H * 0.5f, TRILHO_W, TRILHO_H },
-            0.5f, 1, 1, 1, 0.07f * a);
-    nf_cor_nota(n, PISO_COR, &cr, &cg, &cb, &tn);
-    if (fw < TRILHO_H) fw = TRILHO_H;           // raio inteiro no valor pequeno
-    gfx_cor((GfxRect){ x + TRILHO_X, yc - TRILHO_H * 0.5f, fw, TRILHO_H },
-            0.5f, cr, cg, cb, a);
-    nf_texto(f, cru, virgula(), 1, v, sizeof v);
-    lv = texto(TXT_DET_META2, v, 245);
-    txt_desenhar_alpha(lv, x + TRILHO_X + TRILHO_W + 20.0f, yc - (float)lv.h * 0.5f, a);
-    // Desvio da media (a agregada nao entra na conta, entao nao leva desvio).
-    if (r.n > 1 && nf_grupo(f) != NF_AGREGADA) {
-      int d = n - r.media;
-      char dl[12];
-      TxtLinha ld;
-      snprintf(dl, sizeof dl, d > 0 ? "+%d" : "%d", d);
-      ld = texto(TXT_CAPTION2, dl, d == 0 ? 130 : 160);
-      txt_desenhar_alpha(ld, x + TRILHO_X + TRILHO_W + 20.0f + 118.0f,
-                         yc - (float)ld.h * 0.5f, a);
-    }
-    yy += LINHA_H;
-  }
-  // A marca da media, por cima de todas as barras: um risco de 2 px com
-  // contorno escuro (branco puro sumiria sobre o amarelo do topo da rampa).
-  if (r.n > 1) {
-    float mx = x + TRILHO_X + TRILHO_W * (float)r.media / 100.0f;
-    float top = y + SUB_H + 4.0f, alt = (float)m->nFontes * LINHA_H - 8.0f;
-    gfx_cor((GfxRect){ mx - 2.5f, top, 5.0f, alt }, 0, 0.05f, 0.05f, 0.06f, 0.55f * a);
-    gfx_cor((GfxRect){ mx - 1.0f, top, 2.0f, alt }, 0, 1, 1, 1, 0.92f * a);
-  }
-  // Legenda: a rampa de 30 a 100.
-  { int k, seg = 14;
-    float lx = x + TRILHO_X, ly = yy + 14.0f, sw = TRILHO_W / (float)seg;
-    for (k = 0; k < seg; k++) {
-      float cr, cg, cb, tn;
-      nf_cor_nota(PISO_COR + (int)((float)(100 - PISO_COR) * ((float)k + 0.5f) / (float)seg),
-                  PISO_COR, &cr, &cg, &cb, &tn);
-      gfx_cor((GfxRect){ lx + sw * (float)k, ly, sw + 0.5f, 10.0f }, 0, cr, cg, cb, a);
-    }
-    { TxtLinha l0 = texto(TXT_MINI, "45", 150), l1 = texto(TXT_MINI, "100", 150);
-      txt_desenhar_alpha(l0, lx, ly + 14.0f, a);
-      txt_desenhar_alpha(l1, lx + TRILHO_W - (float)l1.w, ly + 14.0f, a); } }
 }
 
 // Grade temporadas x episodios: uma celula por episodio, cor = nota.
@@ -594,16 +452,140 @@ static float portao(TextoGate *g, float a, int *aberto) {
   return *aberto ? a * textogate_passo(g, 0, SDL_GetTicks()) : NV_TXTGATE_AQUECER;
 }
 
+// Cor de marca da barra de cada fonte (o mockup pinta a barra na cor da casa,
+// nao na rampa da nota): IMDb amarelo, Rotten vermelho-tomate, Metacritic
+// verde, Trakt vermelho, Letterboxd azul. Sem marca propria: o acento.
+static void corMarca(int f, float *r, float *g, float *b) {
+  switch (f) {
+    case EX_IMDB:       *r = 0.961f; *g = 0.773f; *b = 0.094f; return;   // #f5c518
+    case EX_TOMATOES:   *r = 0.980f; *g = 0.353f; *b = 0.235f; return;   // #fa5a3c
+    case EX_AUDIENCE:   *r = 0.980f; *g = 0.553f; *b = 0.235f; return;
+    case EX_METACRITIC: case EX_METAUSER:
+                        *r = 0.400f; *g = 0.800f; *b = 0.200f; return;   // #66cc33
+    case EX_TRAKT:      *r = 0.929f; *g = 0.110f; *b = 0.141f; return;   // #ed1c24
+    case EX_LETTERBOXD: *r = 0.251f; *g = 0.737f; *b = 0.957f; return;   // #40bcf4
+    case EX_TMDB:       *r = 0.004f; *g = 0.706f; *b = 0.894f; return;   // #01b4e4
+    case EX_MAL:        *r = 0.180f; *g = 0.318f; *b = 0.635f; return;
+    case EX_MDBSCORE:   *r = 0.122f; *g = 0.710f; *b = 0.659f; return;
+    default: ajustes_acento(r, g, b); return;
+  }
+}
+
+// Anel de progresso: o trilho continuo (GFX_ANEL) e o arco no acento como
+// discos encostados (nao ha modo de arco; 3 px de passo o deixa liso).
+static void anelNota(float cx, float cy, float d, float traco, int pct, float a) {
+  float ar, ag, ab, raio = (d - traco) * 0.5f;
+  int k, n;
+  gfx_rect((GfxRect){ cx - d * 0.5f, cy - d * 0.5f, d, d }, 0, GFX_ANEL, 0, traco / d, 0.0f,
+           0.5f, 1, 1, 1, 0.08f * a);
+  if (pct <= 0) return;
+  if (pct > 100) pct = 100;
+  ajustes_acento(&ar, &ag, &ab);
+  n = (int)(2.0f * 3.14159265f * raio * (float)pct / 100.0f / 3.0f) + 1;
+  for (k = 0; k <= n; k++) {
+    float t = (float)pct / 100.0f * (float)k / (float)n;
+    float ang = -1.57079633f + t * 6.28318531f;
+    float px = cx + cosf(ang) * raio, py = cy + sinf(ang) * raio;
+    gfx_cor((GfxRect){ px - traco * 0.5f, py - traco * 0.5f, traco, traco }, 0.5f, ar, ag, ab, a);
+  }
+}
+
+// Bloco da esquerda: o anel com a media ("87 NUVIO") e as fontes em linhas
+// de rotulo | barra na cor da marca | valor.
+static void blocoFontes(const NotasSecao *s, const Medidas *m, GfxRect b, float a) {
+  NfResumo r;
+  int i;
+  float cx = b.x + GL_PAD + GL_ANEL * 0.5f, cy = b.y + b.h * 0.5f;
+  float lx = b.x + GL_PAD + GL_ANEL + 40.0f, lw = b.x + b.w - GL_PAD - lx;
+  float ly = b.y + (b.h - m->hRows) * 0.5f;
+  nf_resumo(m->fontes, m->norm, m->nFontes, &r);
+  painel(b, 26.0f, a);
+  anelNota(cx, cy, GL_ANEL, GL_TRACO, r.n > 0 ? r.media : m->norm[0], a);
+  { char n[8]; TxtLinha big, rot;
+    snprintf(n, sizeof n, "%d", r.n > 0 ? r.media : m->norm[0]);
+    big = texto(TXT_G52B, n, 243);
+    rot = txt_linha(TXT_AJ_CAPS13, "NUVIO", 243, 242, 239, 115);
+    { float alt = (float)big.h + (float)rot.h - 8.0f, y0 = cy - alt * 0.5f;
+      txt_desenhar_alpha(big, cx - (float)big.w * 0.5f, y0, a);
+      txt_desenhar_alpha(rot, cx - (float)rot.w * 0.5f, y0 + (float)big.h - 8.0f, a); } }
+  for (i = 0; i < m->nFontes; i++) {
+    int f = m->fontes[i], n = m->norm[i];
+    float yc = ly + (float)i * GL_LINHA + 10.5f, br, bg, bb;
+    float tx = lx + GL_ROT_W + 14.0f, tw = lw - GL_ROT_W - 14.0f - 14.0f - GL_VAL_W;
+    char v[24];
+    TxtLinha lr = txt_linha_corta(TXT_ILHA_GENERO, rotulo(f), 243, 242, 239, 153, GL_ROT_W);
+    txt_desenhar_alpha(lr, lx, yc - (float)lr.h * 0.5f, a);
+    gfx_cor((GfxRect){ tx, yc - 4.0f, tw, 8.0f }, 0.5f, 1, 1, 1, 0.08f * a);
+    corMarca(f, &br, &bg, &bb);
+    { float fw = tw * (float)n / 100.0f;
+      if (fw < 8.0f) fw = 8.0f;
+      gfx_cor((GfxRect){ tx, yc - 4.0f, fw, 8.0f }, 0.5f, br, bg, bb, a); }
+    nf_texto(f, s->cru[f], virgula(), 0, v, sizeof v);
+    { TxtLinha lv = txt_linha(TXT_LOG_18B, v, 243, 242, 239, 255);
+      txt_desenhar_alpha(lv, lx + lw - (float)lv.w, yc - (float)lv.h * 0.5f, a); }
+  }
+}
+
+// Bloco da direita: o resumo das fontes no mesmo material — a media e de
+// quantas, a crítica contra o publico, a faixa menor..maior com o ponto da
+// media. (No mockup este lugar e "Entre os amigos"; sem notas de amigos, o
+// app mostra o que sabe das fontes, com o mesmo cabecalho de bloco.)
+static void blocoResumo(const Medidas *m, GfxRect b, float a) {
+  NfResumo r;
+  char buf[96];
+  float px = b.x + GL_PAD, pw = b.w - GL_PAD * 2.0f, py = b.y + GL_PAD;
+  nf_resumo(m->fontes, m->norm, m->nFontes, &r);
+  painel(b, 26.0f, a);
+  if (r.n == 0) {
+    TxtLinha l = texto(TXT_ILHA_GENERO, i18n("Só a nota agregada chegou; não há o que comparar."), 179);
+    txt_desenhar_alpha(l, px, py, a);
+    return;
+  }
+  if (r.n > 1) snprintf(buf, sizeof buf, i18n("Média de %d fontes"), r.n);
+  else         snprintf(buf, sizeof buf, "%s", i18n("Só uma fonte tem nota"));
+  { TxtLinha lt = txt_linha_corta(TXT_G26B, buf, 243, 242, 239, 255, pw * 0.6f);
+    txt_desenhar_alpha(lt, px, py, a);
+    if (r.temDiff) {
+      snprintf(buf, sizeof buf, i18n("Crítica %d  ·  Público %d"), r.criticos, r.publico);
+      { TxtLinha ld = txt_linha(TXT_ILHA_APOIO, buf, 243, 242, 239, 115);
+        txt_desenhar_alpha(ld, px + pw - (float)ld.w, py + (float)lt.h - (float)ld.h - 3.0f, a); }
+    }
+    py += (float)lt.h + 26.0f; }
+  if (r.n > 1) {
+    float ar, ag, ab, x0 = px + pw * (float)r.min / 100.0f, x1 = px + pw * (float)r.max / 100.0f;
+    ajustes_acento(&ar, &ag, &ab);
+    gfx_cor((GfxRect){ px, py, pw, 8.0f }, 0.5f, 1, 1, 1, 0.08f * a);
+    gfx_cor((GfxRect){ x0, py, x1 - x0 > 8.0f ? x1 - x0 : 8.0f, 8.0f }, 0.5f, 1, 1, 1, 0.30f * a);
+    gfx_cor((GfxRect){ px + pw * (float)r.media / 100.0f - 8.0f, py - 4.0f, 16.0f, 16.0f },
+            0.5f, ar, ag, ab, a);
+    py += 8.0f + 22.0f;
+    snprintf(buf, sizeof buf, i18n("Menor: %s %d  ·  Maior: %s %d"),
+             r.fonteMin == EX_METAUSER ? "Metacritic" : nf_nome(r.fonteMin), r.min,
+             r.fonteMax == EX_METAUSER ? "Metacritic" : nf_nome(r.fonteMax), r.max);
+    { TxtLinha l = txt_linha_corta(TXT_ILHA_GENERO, buf, 243, 242, 239, 153, pw);
+      txt_desenhar_alpha(l, px, py, a); py += (float)l.h + 18.0f; }
+  }
+  if (r.temDiff) {
+    int d = r.diff < 0 ? -r.diff : r.diff;
+    const char *veredito;
+    if (d <= 3) veredito = i18n("Crítica e público estão de acordo");
+    else if (r.diff > 0) { snprintf(buf, sizeof buf, i18n("O público dá %d pontos a mais que a crítica"), d); veredito = buf; }
+    else { snprintf(buf, sizeof buf, i18n("A crítica dá %d pontos a mais que o público"), d); veredito = buf; }
+    { TxtLinha l = txt_linha_corta(TXT_G20B, veredito, 243, 242, 239, 255, pw);
+      txt_desenhar_alpha(l, px, py, a); }
+  }
+}
+
 float notasui_fontes_desenhar(const NotasSecao *s, float x, float y, float a) {
   Medidas m;
   int pend0 = txt_pendentes, aberto;
-  float aa;
+  float aa, w = (SEC_W - GL_VAO) * 0.5f;
   medir(s, &m);
   if (!m.algumaNota) return 0.0f;
   if (y >= NV_TELA_H || y + m.hA <= 0.0f) return m.hA;
   aa = portao(&gateFontes, a, &aberto);
-  desenhaLinhas(s, &m, x, y, aa);
-  desenhaSumario(&m, x + PAINEL_X, y, SUMARIO_H, aa);
+  blocoFontes(s, &m, (GfxRect){ x, y, w, m.hA }, aa);
+  blocoResumo(&m, (GfxRect){ x + w + GL_VAO, y, w, m.hA }, aa);
   if (!aberto) textogate_passo(&gateFontes, txt_pendentes - pend0, SDL_GetTicks());
   return m.hA;
 }

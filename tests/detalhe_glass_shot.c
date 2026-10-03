@@ -274,6 +274,9 @@ static void gravar(const char *id) {
   SDL_FreeSurface(s);
   free(pix);
   printf("captura: %s\n", nome);
+  // A rolagem do documento, para montar a pagina inteira (lado a lado com o
+  // quadro alto do mockup, 1920x4230).
+  printf("rolagem %s %.0f\n", id, scrollY);
 }
 
 static void quadros(int n) {
@@ -353,6 +356,8 @@ int main(int argc, char **argv) {
     if (getenv("NUVIO_SHOT_VIDRO") && atoi(getenv("NUVIO_SHOT_VIDRO")))
       fputs("vidroLocal 0\n", f);
     else fputs("vidroLocal 1\n", f);
+    // Ajustes > Aparencia > Fundo: 0 Arte, 1 Arte borrada, 2 Frost.
+    if (getenv("NUVIO_SHOT_FUNDO")) fprintf(f, "fundoLocal %d\n", atoi(getenv("NUVIO_SHOT_FUNDO")));
     fclose(f);
     ajustes_dir(dd); }
   // As marcas das notas (IMDb, Rotten Tomatoes, Trakt) vem da pasta de arte.

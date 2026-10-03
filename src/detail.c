@@ -62,9 +62,11 @@
 #include "recenviar.h"
 #include "serieaud.h"
 #include "seriefrases.h"
+#include "fundo.h"
 #include "notasui.h"
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <math.h>
 #include "ponteiro.h"
 #include "plrui.h"
@@ -89,9 +91,10 @@ static void heroReiniciar(void);
 // Cartao de "Recomendacoes" e de "Comentarios". Ficavam junto das funcoes que
 // os desenham, la embaixo; subiram porque larguraItem e xItem, no topo,
 // precisam deles para posicionar as SECOES novas.
-#define REL_CARD_W   212.0f
-#define REL_CARD_H   318.0f
-#define REL_CARD_GAP  32.0f
+// Glass UI (mockup "Detalhe", "Mais como este"): cartaz 218x327, vao 24.
+#define REL_CARD_W   218.0f
+#define REL_CARD_H   327.0f
+#define REL_CARD_GAP  24.0f
 
 // MINI CARD DA COLECAO (#194, 2a volta). Um cartao UNICO deitado, e nao uma
 // fileira de cartazes: o dono viu a lista de nomes e pediu algo que "nao fique
@@ -117,17 +120,22 @@ static void heroReiniciar(void);
 
 // Cartao de produtora/rede: o dobro aproximado do `.detail-company-card` do web
 // (180x70 em px de CSS) — na TV 1080p os cards medem em torno disto.
-#define EST_CARD_W   240.0f
-#define EST_CARD_H   100.0f
-#define EST_GAP       18.0f
+// Glass UI (mockup "Detalhe", "Producao"): o .estu e uma pilula de 52 com o
+// nome em 18/500 a 80%, padding 22, vao 12, quebrando linha na largura da
+// coluna.
+#define EST_CARD_H    52.0f
+#define EST_GAP       12.0f
+#define EST_PAD       22.0f
 // MEDIDO na referencia (TCL, 1920x1080): cartao 722x466, vao 25, canto 20.
 // 722x466 era o MEDIDO na TCL; o dono, olhando a C9 em 19/09/2026, mandou
 // encolher ("ta gigante") — o mesmo veredito dos botoes do detalhe na 1.3.2.
 // 600x340 mantem a proporcao e as seis linhas de texto com leading de 30.
-#define COM_CARD_W   600.0f
-#define COM_CARD_H   340.0f
-#define COM_PAD       24.0f
-#define COM_CARD_GAP  22.0f
+// Glass UI (mockup "Detalhe", "O que estao dizendo"): tres blocos .gl de
+// 560x230 com vao de 24, padding 28, raio 26.
+#define COM_CARD_W   560.0f
+#define COM_CARD_H   230.0f
+#define COM_PAD       28.0f
+#define COM_CARD_GAP  24.0f
 // Altura da CHAMADA das duas secoes sob demanda: a linha do titulo (TXT_HEADLINE,
 // 38), a da procedencia e a do custo (TXT_DET_META2, 23), com os mesmos vaos
 // que o cabecalho dos proprios modulos usa. Constante e nao medida por txt_linha
@@ -519,6 +527,8 @@ static const int ORDEM_FILME[] = {
 // porque recalcularLayout, cabecalhoDe e nAvaliaveis, todas acima dela,
 // precisam separar serie de filme.
 static int ehSerie(void);
+static float estAltura(void);
+static float yItem(int r, int c);
 static const NotasSecao *notasDados(void);
 static float alturaCabComentarios(void);
 static int temporadaEm(int c);
@@ -597,6 +607,9 @@ static float alturaSecao(int r);
 // `conteudoSec`, e e ELE o alvo da rolagem — o web mira o topo do TRILHO, nao
 // o do grupo (focusInList, metaDetailsScreen.js:7936).
 static float topoSec[N_SECOES], conteudoSec[N_SECOES], alvoSec[N_SECOES];
+// Filme: deslocamento horizontal e largura de cada secao (os pares do mockup
+// dividem a linha; o resto ocupa a faixa inteira de 1728).
+static float dxSec[N_SECOES], wSec[N_SECOES];
 static float docFim = NV_DETP_FIM;
 
 // Cabecalho de secao: so o filme tem. Na serie o rotulo "Temporadas" e desenhado
@@ -608,7 +621,9 @@ static const char *cabecalhoDe(int r) {
   // ESTUDIOS TAMBEM (serie): o titulo era uma linha cinza pequena desenhada
   // DENTRO da secao, e ao lado do "Trailers" e do "Estúdios" do filme parecia
   // de outra pagina. Agora e o mesmo TXT_HEADLINE, com o mesmo vao.
-  if (r == SEC_NOTAS) return "Notas";
+  // No filme os dois blocos de notas nao tem cabecalho (mockup "Detalhe"):
+  // o anel com "NUVIO" ja diz o que sao.
+  if (r == SEC_NOTAS) return ehSerie() ? "Notas" : NULL;
   if (r == SEC_NOTAS_EP) return "Notas por episódio";
   if (ehSerie()) {
     if (r == SEC_TRAILERS) return "Trailers";
@@ -632,10 +647,10 @@ static const char *cabecalhoDe(int r) {
     // abaixo, que e a parte que nao pode ser separada do titulo). Um cabecalho
     // externo seria o mesmo nome duas vezes, como ja acontecia com os
     // comentarios.
+    case SEC_FRASES:       return "Frases";
     case SEC_AUD_ARCO:
     case SEC_AUD_RADAR:
-    case SEC_AUD_DIGITAL:
-    case SEC_FRASES:       return NULL;
+    case SEC_AUD_DIGITAL:  return NULL;
     default:           return NULL;
   }
 }
@@ -707,6 +722,33 @@ static void desenhaEsqueletoRelacionados(float y, float a);
 
 static int relacionadosCarregando(void) {
   return !ehSerie() && extras_n_relacionados() == 0 && extras_carregando();
+}
+
+// O PAR DA LINHA (filme, Glass UI): quem divide a linha com quem.
+static int parEsq(int r) {
+  return r == SEC_FRASES ? SEC_COLECAO : r == SEC_ESTUDIOS ? SEC_DETALHES : -1;
+}
+static int parDir(int r) {
+  return r == SEC_COLECAO ? SEC_FRASES : r == SEC_DETALHES ? SEC_ESTUDIOS : -1;
+}
+static int secaoPresente(int r) {
+  return secaoN(r) > 0 || (r == SEC_ELENCO && elencoCarregando()) ||
+         (r == SEC_RELACIONADOS && relacionadosCarregando());
+}
+// O VAO ANTES DE CADA SECAO, medido no quadro "Detalhe" do mockup (as
+// posicoes absolutas dos blocos .dt): 87 antes do elenco, 60 antes das notas,
+// 44 antes dos comentarios, 83 antes de "Mais como este", 52 antes da linha
+// Colecao | Frases e 73 antes da Ficha | Producao.
+static float vaoAntes(int r) {
+  switch (r) {
+    case SEC_ELENCO:       return 87.0f;
+    case SEC_NOTAS:        return 60.0f;
+    case SEC_COMENTARIOS:  return 44.0f;
+    case SEC_RELACIONADOS: return 83.0f;
+    case SEC_COLECAO: case SEC_FRASES:    return 52.0f;
+    case SEC_DETALHES: case SEC_ESTUDIOS: return 73.0f;
+    default:               return NV_DETF_SEC_GAP;
+  }
 }
 
 static void recalcularLayout(void) {
@@ -797,27 +839,57 @@ static void recalcularLayout(void) {
     }
     return;
   }
-  { float y = NV_DETF_HERO_FIM;
+  { float y = NV_DETF_HERO_FIM, rowTopo = 0.0f, rowFim = 0.0f;
+    int primeira = 1, anterior = -1;
     for (int o = 0; o < N_ORDEM; o++) {
       float h;
       r = ORDEM_FILME[o];
       topoSec[r] = conteudoSec[r] = y;
       alvoSec[r] = NV_DETP_ALVO_FILEIRA;
+      dxSec[r] = 0.0f; wSec[r] = NV_TELA_W - NV_DETP_X * 2;
       // Secao ausente nao ocupa altura — salvo o ELENCO enquanto o meta do
       // filme carrega: a fileira reserva o lugar e recebe o esqueleto, para a
       // pagina nao pular quando os atores chegarem.
-      if (secaoN(r) <= 0 && !(r == SEC_ELENCO && elencoCarregando()) &&
-          !(r == SEC_RELACIONADOS && relacionadosCarregando())) continue;
+      if (!secaoPresente(r)) continue;
+      // PARES DO MOCKUP: Colecao | Frases (1.1fr 1fr, vao 28) e Ficha tecnica
+      // | Producao (1fr 1fr, vao 80) dividem a mesma linha. O da direita nasce
+      // no topo do da esquerda; a linha termina no mais alto dos dois.
+      { int e = parEsq(r);
+        if (e >= 0 && e == anterior) {
+          float vao = (r == SEC_FRASES) ? 28.0f : 80.0f;
+          float le = (r == SEC_FRASES) ? (NV_TELA_W - NV_DETP_X * 2 - vao) * 1.1f / 2.1f
+                                       : (NV_TELA_W - NV_DETP_X * 2 - vao) * 0.5f;
+          dxSec[r] = le + vao;
+          wSec[r] = NV_TELA_W - NV_DETP_X * 2 - le - vao;
+          topoSec[r] = conteudoSec[r] = rowTopo;
+          if (cabecalhoDe(r)) conteudoSec[r] = rowTopo + NV_DETF_CAB_H + NV_DETF_CAB_GAP;
+          { float fim = conteudoSec[r] + alturaSecao(r);
+            y = fim > rowFim ? fim : rowFim; }
+          anterior = r;
+          continue;
+        } }
+      if (!primeira) y += vaoAntes(r);
+      else y += 100.0f;   // o .dt dos trailers esta em 1180: 100 abaixo do hero
+      primeira = 0;
+      topoSec[r] = conteudoSec[r] = y;
+      if (parDir(r) >= 0 && secaoPresente(parDir(r)))
+        wSec[r] = (r == SEC_COLECAO) ? (NV_TELA_W - NV_DETP_X * 2 - 28.0f) * 1.1f / 2.1f
+                                     : (NV_TELA_W - NV_DETP_X * 2 - 80.0f) * 0.5f;
+      else if (r == SEC_FRASES)
+        wSec[r] = (NV_TELA_W - NV_DETP_X * 2 - 28.0f) * 1.1f / 2.1f;
+      rowTopo = y;
       if (cabecalhoDe(r)) {
         conteudoSec[r] = y + NV_DETF_CAB_H + NV_DETF_CAB_GAP;
         y = conteudoSec[r];
       }
       h = alturaSecao(r);
-      y += h + NV_DETF_SEC_GAP;
+      y += h;
+      rowFim = y;
+      anterior = r;
     }
     // Fim REAL do documento, nao os 2473 da serie: um filme e bem mais curto e
     // copiar aquele numero deixaria a pagina rolar para muito depois do fim.
-    docFim = y - NV_DETF_SEC_GAP + NV_DETF_PAD_FIM;
+    docFim = y + NV_DETF_PAD_FIM;
     if (docFim < NV_TELA_H) docFim = NV_TELA_H; }
 }
 
@@ -1040,7 +1112,9 @@ static void desenhaArteDetalhe(GfxRect alvo, GLuint tex, const char *arte,
   if (!poster) {
     // uFoco = forca da vinheta: cai com a rolagem (pg) e pelo ajuste
     // "Escurecimento do fundo" (0 = arte limpa).
-    float veu = (1.0f - pg) * ajustes_detalhe_veu();
+    // Os veus do mockup sao desenhados por veuLeitura, por cima de qualquer
+    // fundo; a arte entra limpa (a vinheta fundida do shader fica em 0).
+    float veu = 0.0f; (void)pg;
     // TRAILER TOCANDO ATRAS DO CANVAS: abre o furo, a arte se apaga por cima
     // dele (trailerFade) e a vinheta fica como veu com alpha, para o texto
     // continuar apoiado no mesmo escuro. Poster reserva nao entra aqui: o
@@ -1513,9 +1587,12 @@ static int montarDetalhes(LinhaDet *o, int max) {
 
   // Status cru do TMDB/Trakt ("Released", "returning series") -> rotulo no
   // idioma da interface; valor que a tabela nao conhece sai como veio.
+  // Filme ja lancado: o mockup nao traz a linha (o "Lançado" nao diz nada a
+  // quem esta olhando o titulo no catalogo); os outros estados ficam.
   { const char *st = extras_ficha_status();
     const char *k = desc_status_chave(st, ehSerie());
-    DET_POE("Status", k ? i18n(k) : st); }
+    if (ehSerie() || !st || strcasecmp(st, "Released") != 0)
+      DET_POE("Status", k ? i18n(k) : st); }
   { char dt[48]; desc_data_extenso(extras_ficha_lancamento(), dt, sizeof dt);
     DET_POE("Lançamento", dt); }
   { char d[32]; duracaoTexto(extras_ficha_duracao(), d, sizeof d);
@@ -1531,7 +1608,11 @@ static int montarDetalhes(LinhaDet *o, int max) {
   if (!v || !v[0]) v = (ci && ci->pais[0]) ? ci->pais : NULL;
   { char pais[168]; desc_pais_txt(v, pais, sizeof pais);   // nomes em ingles -> idioma da UI
     DET_POE("País de Origem", pais); }
-  DET_POE("Direção", (ci && ci->direcao[0]) ? ci->direcao : NULL);
+  // A direcao ja esta no hero ("Direção David Frankel"), como no mockup.
+  // Os campos do Wikidata (orcamento, bilheteria...) entram na ficha quando a
+  // consulta das frases ja voltou: no mockup e a mesma tabela.
+  { int i, nf = seriefrases_n_fatos();
+    for (i = 0; i < nf; i++) DET_POE(seriefrases_fato_rotulo(i), seriefrases_fato_valor(i)); }
 
   #undef DET_POE
   return n;
@@ -1552,13 +1633,13 @@ static float alturaSecao(int r) {
     case SEC_ABAS_INFO:  return NV_DETP_ABA_H;
     case SEC_ELENCO:     return NV_DETF_EL_ALT;
     case SEC_TRAILERS:     return NV_DETF_TR_ALT;
-    case SEC_RELACIONADOS: return 318.0f + 46.0f;   // cartaz + titulo/ano
+    case SEC_RELACIONADOS: return REL_CARD_H + 56.0f;   // cartaz + titulo/ano
     // Um mini card so, qualquer que seja o tamanho da saga.
     case SEC_COLECAO:      return COL_CARD_H;
     // + o cabecalho: sem ele a secao seguinte ("Detalhes do Filme") era
     // empilhada usando so a altura dos cartoes e saia POR CIMA deles.
     case SEC_COMENTARIOS:  return alturaCabComentarios() + COM_CARD_H;
-    case SEC_ESTUDIOS:     return EST_CARD_H;
+    case SEC_ESTUDIOS:     return estAltura();
     case SEC_DETALHES:     return nLinhasDetalhe() * NV_DETF_DET_LINHA;
     // As duas sob demanda: a CHAMADA enquanto ninguem entrou (titulo +
     // procedencia + custo, tres linhas) e a altura MEDIDA no ultimo desenho
@@ -2197,7 +2278,6 @@ void detail_evento(const SDL_Event *e) {
       // a folha so abre de dentro do player. Quem estava na pagina de detalhe —
       // que e onde qualquer um iria procurar — segurava o card e via as fontes.
       const CatEp *ep = cat_episodio(idx, epAbsoluto(foco.coluna));
-      const CatItem *ci = cat_item(idx);
       if (dur >= NV_HOLD_MS && ep)
         episodios_menu_visto(idx, ep->temporada, ep->episodio, ep->nome);
       else
@@ -2238,7 +2318,7 @@ void detail_evento(const SDL_Event *e) {
       k == SDLK_DELETE) {
     if (nivel > 0) nivel = 0;
     else if (carro && carCheia) carCheia = 0;   // tela cheia no topo -> cartao
-    else saindo = 1;
+    else { saindo = 1; pediuMenu = 0; }   // Voltar nao abre um menu pedido antes
     return;
   }
   if (nivel == 0) {
@@ -2280,7 +2360,7 @@ void detail_evento(const SDL_Event *e) {
       // carrossel ela e o titulo ANTERIOR; so no primeiro da fileira fecha.
       if (botao > 0) botao--;
       else if (carro && carPos > 0) carPasso(-1);
-      else { saindo = 1; pediuMenu = 1; }
+      else { pediuMenu = 1;   /* nao sai: o app abre o menu por cima (dono, 03/10) */ }
     }
     return;
   }
@@ -2294,10 +2374,44 @@ void detail_evento(const SDL_Event *e) {
   // zero, e focus_mover pula sozinho.
   if (k == SDLK_RIGHT)      focus_mover(&foco, 1, 0);
   else if (k == SDLK_LEFT)  {
-    if (!focus_mover(&foco, -1, 0)) { saindo = 1; pediuMenu = 1; }
+    if (!focus_mover(&foco, -1, 0)) { pediuMenu = 1;   /* nao sai: o app abre o menu por cima (dono, 03/10) */ }
   }
   else if (k == SDLK_DOWN)  moverFileira(1);
   else if (k == SDLK_UP)    { if (!moverFileira(-1)) nivel = 0; }
+}
+
+// Pilulas de "Producao": largura pelo nome; quebram linha na largura da
+// coluna da secao (no filme, a metade direita da linha Ficha | Producao).
+static float estLargura(int c) {
+  int w = txt_largura(TXT_G18M, extras_estudio_nome(c));
+  if (w > 420) w = 420;
+  return (float)w + EST_PAD * 2.0f;
+}
+static float estColuna(void) {
+  return ehSerie() ? NV_TELA_W - NV_DETP_X * 2 : wSec[SEC_ESTUDIOS];
+}
+static void estPosicao(int c, float *x, float *y) {
+  float px = 0.0f, py = 0.0f, lim = estColuna();
+  for (int k = 0; k <= c; k++) {
+    float w = estLargura(k);
+    if (px > 0.0f && px + w > lim) { px = 0.0f; py += EST_CARD_H + EST_GAP; }
+    if (k == c) break;
+    px += w + EST_GAP;
+  }
+  *x = px; *y = py;
+}
+static float estAltura(void) {
+  int n = extras_n_estudios();
+  float x, y;
+  if (n <= 0) return 0.0f;
+  if (n > N_ITENS) n = N_ITENS;
+  estPosicao(n - 1, &x, &y);
+  return y + EST_CARD_H;
+}
+// Deslocamento vertical do item dentro da secao (so as pilulas quebram linha).
+static float yItem(int r, int c) {
+  if (r == SEC_ESTUDIOS) { float x, y; estPosicao(c, &x, &y); return y; }
+  return 0.0f;
 }
 
 // Largura do item e passo horizontal de cada fileira. Temporada e aba de
@@ -2315,7 +2429,7 @@ static float larguraItem(int r, int c) {
     // A tabela e um bloco so, da largura da divisoria. Cair no `default` daria
     // a ela a largura de um avatar de elenco, e o culling horizontal cortaria
     // a tabela fora da tela.
-    case SEC_ESTUDIOS:    return EST_CARD_W;
+    case SEC_ESTUDIOS:    return estLargura(c);
     case SEC_DETALHES:    return NV_DETF_DET_W;
     // Bloco unico da largura do conteudo: os graficos e os dois paineis de
     // frases ocupam a faixa inteira. Cair no `default` daria a eles a largura
@@ -2339,7 +2453,7 @@ static float xItem(int r, int c) {
     if (r == SEC_ELENCO)    { x += NV_DETP_EL_PASSO; continue; }
     if (r == SEC_TRAILERS)  { x += NV_DETF_TR_PASSO;  continue; }
     if (r == SEC_RELACIONADOS) { x += REL_CARD_W + REL_CARD_GAP; continue; }
-    if (r == SEC_ESTUDIOS)     { x += EST_CARD_W + EST_GAP; continue; }
+    if (r == SEC_ESTUDIOS)     { float ex, ey; estPosicao(c, &ex, &ey); return NV_DETP_X + ex; }
     if (r == SEC_COMENTARIOS) {
       // As pilulas somam largura + vao; os CARTOES recomecam em NV_DETP_X
       // porque ficam numa LINHA de baixo. xItem deixa de ser monotonico nesta
@@ -3137,16 +3251,29 @@ static void discoHero(GfxRect r, const char *icone, int focado, float a) {
 // .dt-cobre / o degrade da serie: zero a 30-52% da altura, ~90% no pe).
 // Degrade so por GFX_VEU_CSS, que passa pelo nv_dither (painel de 8 bits).
 static void veuLeitura(float desloc, float a) {
+  a *= ajustes_detalhe_veu();   // Ajustes > "Escurecimento do fundo" (0 = arte limpa)
   if (a <= 0.005f) return;
+  int modo = fundo_modo();
   if (ehSerie()) {
-    // linear-gradient(90deg, .88, .35 a 60%, .10): a vinheta do fundo ja
-    // escurece a borda, entao aqui so o miolo da rampa.
-    gfx_veu_css((GfxRect){ 0, desloc, NV_TELA_W, NV_TELA_H }, 2, 1.4f, 1.0f, 0.62f * a);
+    // detalhe-retomar: linear-gradient(90deg, .88, .35 a 60%, .10) e
+    // linear-gradient(180deg, 0 a 30%, .92 a 72%), em rgb(8,8,10). O 90deg e
+    // um chapado de 10% e, por cima, (1-x)^1.24 a 87% (passa por .35 a 60%).
+    gfx_cor((GfxRect){ 0, desloc, NV_TELA_W, NV_TELA_H }, 0.0f, 0.031f, 0.031f, 0.039f, 0.10f * a);
+    gfx_veu_css((GfxRect){ 0, desloc, NV_TELA_W, NV_TELA_H }, 2, 1.24f, 1.0f, 0.867f * a);
     gfx_veu_css((GfxRect){ 0, desloc + 324.0f, NV_TELA_W, 454.0f }, 0, 0.0f, 1.0f, 0.92f * a);
-    gfx_cor((GfxRect){ 0, desloc + 778.0f, NV_TELA_W, 302.0f }, 0.0f, 0.031f, 0.031f, 0.039f, 0.92f * a);
+    gfx_cor((GfxRect){ 0, desloc + 778.0f, NV_TELA_W, NV_TELA_H }, 0.0f, 0.031f, 0.031f, 0.039f, 0.92f * a);
   } else {
-    gfx_veu_css((GfxRect){ 0, desloc, NV_TELA_W, NV_TELA_H }, 2, 0.0f, 0.68f, 0.90f * a);
-    gfx_veu_css((GfxRect){ 0, desloc + 560.0f, NV_TELA_W, 520.0f }, 0, 0.0f, 1.0f, 0.88f * a);
+    // .vedet: 90deg .94, .82 a 30%, .35 a 52%, 0 a 68% = duas passadas da
+    // queda suave ate 76% a 80% (erro < 0,05 nas paradas).
+    GfxRect tela = { 0, desloc, NV_TELA_W, NV_TELA_H };
+    gfx_veu_css(tela, 2, 0.0f, 0.76f, 0.80f * a);
+    gfx_veu_css(tela, 2, 0.0f, 0.76f, 0.80f * a);
+    // Na Arte, a esquerda do mockup e a arte borrada a 55% sob a mascara do
+    // .hero (0 a 38%): aqui a arte e nitida, entao o que falta de escuro.
+    if (modo == FUNDO_ARTE) gfx_veu_css(tela, 2, 0.0f, 0.38f, 0.45f * a);
+    // .dt-cobre: zero ate 560, .88 a 1040 (o imersivo so vai a 50%).
+    gfx_veu_css((GfxRect){ 0, desloc + 560.0f, NV_TELA_W, 520.0f }, 0, 0.0f, 1.0f,
+                (modo == FUNDO_BORRADA ? 0.50f : 0.92f) * a);
   }
 }
 
@@ -3814,21 +3941,23 @@ static void desenhaTrailer(float x, float y, int c, float f, float a) {
 // Recebe `f` so para saber se a secao esta focada: a tabela nao tem item a
 // item, entao o foco nela e a propria secao, e o realce e sutil de proposito —
 // nao ha o que escolher aqui, so o que ler.
+// GLASS UI (mockup "Detalhe", .ficha): chave 17 a 45% numa coluna de 220,
+// valor 20 a 100%, linha de 57 com o fio de 1 px a 7% embaixo de cada uma.
 static void desenhaDetalhes(float x, float y, float f, float a) {
   LinhaDet l[NV_DETF_DET_MAXL];
   int n = montarDetalhes(l, NV_DETF_DET_MAXL), i;
+  float w = ehSerie() ? NV_DETF_DET_W : wSec[SEC_DETALHES];
+  (void)f;
   for (i = 0; i < n; i++) {
     float ly = y + i * NV_DETF_DET_LINHA;
     float yc = ly + NV_DETF_DET_LINHA * 0.5f;
-    TxtLinha lk = txt_linha(TXT_DET_META2, l[i].chave, 150, 154, 163, 255);
-    TxtLinha lv = txt_linha_corta(TXT_DET_META, l[i].valor, 235, 238, 245, 255,
-                                  NV_DETF_DET_W - NV_DETF_DET_CHAVE_W);
-    txt_desenhar_alpha(lk, x, yc - lk.h * 0.5f, a * 0.9f);
+    TxtLinha lk = txt_linha_corta(TXT_ILHA_GENERO, l[i].chave, 243, 242, 239, 115,
+                                  NV_DETF_DET_CHAVE_W - 16.0f);
+    TxtLinha lv = txt_linha_corta(TXT_ILHA_TEXTO, l[i].valor, 243, 242, 239, 255,
+                                  w - NV_DETF_DET_CHAVE_W);
+    txt_desenhar_alpha(lk, x, yc - lk.h * 0.5f + 1.5f, a);
     txt_desenhar_alpha(lv, x + NV_DETF_DET_CHAVE_W, yc - lv.h * 0.5f, a);
-    if (i < n - 1) {
-      GfxRect d = { x, ly + NV_DETF_DET_LINHA - 1.0f, NV_DETF_DET_W, 1.0f };
-      gfx_cor(d, 0.0f, 1, 1, 1, a * (0.10f + 0.06f * f));
-    }
+    gfx_cor((GfxRect){ x, ly + NV_DETF_DET_LINHA - 1.0f, w, 1.0f }, 0.0f, 1, 1, 1, 0.07f * a);
   }
 }
 
@@ -3953,6 +4082,47 @@ static void moldura(GfxRect r, float raio, float a) {
   // ("tirar esse contorno daqui tb"), e ele estava contra a regra: nesta tela
   // contorno so aparece onde preencher e impossivel, e aqui o preenchimento
   // #151820 ja separa o cartao do fundo sozinho.
+}
+
+// BLOCO .gl DO MOCKUP "Detalhe" (Glass UI, 03/10): notas, comentarios,
+// colecao, frases. Vidro: branco a 5,5% (13% no foco, com a sombra larga);
+// solido: #15161A com a sombra curta (#2B2D34 no foco). Sem contorno.
+static void blocoGl(GfxRect r, float raioPx, float f, float a) {
+  float rf = r.h > 0.0f ? raioPx / r.h : 0.0f, teto = r.h > 0.0f ? 0.5f * r.w / r.h : 0.5f;
+  if (rf > 0.5f) rf = 0.5f;
+  if (rf > teto) rf = teto;
+  if (f > 1.0f) f = 1.0f;
+  if (f < 0.0f) f = 0.0f;
+  if (ajustes_vidro()) {
+    if (f > 0.01f)
+      gfx_rect((GfxRect){ r.x - 40.0f, r.y + 2.0f, r.w + 80.0f, r.h + 76.0f }, 0, GFX_SOMBRA,
+               1.0f, 0, 0, 0.5f, 0, 0, 0, 0.42f * f * a);
+    gfx_cor(r, rf, 1, 1, 1, (0.055f + 0.075f * f) * a);
+    return;
+  }
+  gfx_rect((GfxRect){ r.x - 26.0f, r.y - 4.0f, r.w + 52.0f, r.h + 52.0f }, 0, GFX_SOMBRA,
+           1.0f, 0, 0, 0.5f, 0, 0, 0, (0.45f + 0.10f * f) * a);
+  gfx_cor(r, rf, 0.082f + 0.086f * f, 0.086f + 0.090f * f, 0.102f + 0.102f * f, a);
+}
+
+// Disco com a inicial (o .av do mockup), na cor que o nome sorteia.
+static void avatarInicial(GfxRect d, const char *nome, TxtEstilo e, float a) {
+  static const float COR[6][3] = { { 0.239f, 0.545f, 0.761f }, { 0.761f, 0.239f, 0.420f },
+    { 0.478f, 0.498f, 0.569f }, { 0.541f, 0.361f, 0.761f }, { 0.761f, 0.439f, 0.239f },
+    { 0.239f, 0.639f, 0.420f } };
+  unsigned h = 5381u; const unsigned char *p;
+  char ini[8] = "?";
+  for (p = (const unsigned char *)(nome ? nome : ""); *p; p++) h = h * 33u + *p;
+  if (nome && nome[0]) {
+    int n = 1;
+    if ((unsigned char)nome[0] >= 0xC0) while (n < 4 && ((unsigned char)nome[n] & 0xC0) == 0x80) n++;
+    memcpy(ini, nome, (size_t)n); ini[n] = 0;
+    if (n == 1 && ini[0] >= 'a' && ini[0] <= 'z') ini[0] = (char)(ini[0] - 32);
+  }
+  { const float *c = COR[h % 6u];
+    gfx_cor(d, 0.5f, c[0], c[1], c[2], a); }
+  { TxtLinha l = txt_linha(e, ini, 255, 255, 255, 255);
+    txt_desenhar_alpha(l, d.x + (d.w - (float)l.w) * 0.5f, d.y + (d.h - (float)l.h) * 0.5f, a); }
 }
 
 // Cartao de nota: a MARCA em cima e o valor embaixo, como o .movie-rating-card
@@ -4132,36 +4302,37 @@ static void desenhaRelacionados(float x, float y, float a) {
     GLuint t = po[0] ? tex_obter_larg(po, REL_CARD_W) : 0;
     float raio = raioCartaz(REL_CARD_W, REL_CARD_H);
     if (cx + REL_CARD_W > NV_TELA_W - NV_DETP_X) break;
-    // O mesmo cartao de vidro/accent das produtoras envolve arte e legenda;
-    // o poster permanece intacto por cima, sem ganhar tinta nem moldura.
-    if (aceso) {
-      float ar, ag, ab;
-      float alturaLegenda = 12.0f + 22.0f + (ano[0] ? 6.0f + 18.0f : 0.0f) + 8.0f;
-      GfxRect cartao = { cx - 8.0f, y - 8.0f,
-                         REL_CARD_W + 16.0f, REL_CARD_H + alturaLegenda + 16.0f };
-      ajustes_acento(&ar, &ag, &ab);
-      gfx_cartao_foco_vidro(cartao, 12.0f / cartao.h, 1.0f, a, ar, ag, ab);
+    // FOCO SEM CONTORNO (DESIGN.md §3): o cartaz sobe com escala ~1.06 e
+    // ganha a sombra caida; a legenda clareia. Nada de cartao no acento.
+    float f = ehSerie() ? (aceso ? 1.0f : 0.0f) : animFoco[SEC_RELACIONADOS][i];
+    if (f > 0.01f) {
+      float esc = 1.0f + 0.06f * f;
+      r = (GfxRect){ cx - REL_CARD_W * (esc - 1.0f) * 0.5f, y - REL_CARD_H * (esc - 1.0f),
+                     REL_CARD_W * esc, REL_CARD_H * esc };
+      gfx_rect((GfxRect){ r.x - 28.0f, r.y + 8.0f, r.w + 56.0f, r.h + 56.0f }, 0, GFX_SOMBRA,
+               1.0f, 0, 0, 0.5f, 0, 0, 0, 0.6f * f * a);
     }
     { float aArte = revela_arte(&revRel[i], t != 0, SDL_GetTicks());
       if (t) {
         if (aArte < 0.999f) gfx_cor(r, raio, 0.133f, 0.133f, 0.133f, a);
         gfx_tex_aspect_atual = tex_aspecto(po);
-        gfx_rect(r, t, GFX_CARD, 0, 0, 0, raio, 0, 0, 0, a * aArte);
+        // GFX_ARTE: o cartaz inteiro, sem os 20% de escuro do GFX_CARD fora
+        // do foco (o mockup nao apaga os vizinhos).
+        gfx_rect(r, t, GFX_ARTE, 0, 0, 0, raio, 1, 1, 1, a * aArte);
         gfx_tex_aspect_atual = 0.0f;
       } else if (po[0] && !tex_falhou(po)) {
         gfx_esqueleto(r, raio, 0.133f, 0.133f, 0.133f, a);
       } else {
         gfx_cor(r, raio, 0.133f, 0.133f, 0.133f, a);
       } }
-    { int c = aceso ? 255 : 225;
-      TxtLinha lt = txt_linha_corta(TXT_DET_META2, extras_relacionado_titulo(i),
-                                    c, c, c, 255, REL_CARD_W);
+    // Titulo 18/500 a 80% (branco no foco) e o ano 15 a 42%.
+    { TxtLinha lt = txt_linha_corta(TXT_G18M, extras_relacionado_titulo(i),
+                                    243, 242, 239, (int)(204.0f + 51.0f * (aceso ? 1.0f : 0.0f)),
+                                    REL_CARD_W);
       txt_desenhar_alpha(lt, cx, y + REL_CARD_H + 12.0f, a);
       if (ano[0]) {
-        int cy = aceso ? 174 : 156;
-        TxtLinha la = txt_linha(TXT_MINI, ano, cy, cy + 2, cy + 9, 255);
-        txt_desenhar_alpha(la, cx, y + REL_CARD_H + 12.0f + lt.h + 6.0f,
-                           a * 0.95f);
+        TxtLinha la = txt_linha(TXT_ILHA_HORA, ano, 243, 242, 239, 107);
+        txt_desenhar_alpha(la, cx, y + REL_CARD_H + 12.0f + lt.h + 2.0f, a);
       } }
   }
 }
@@ -4189,55 +4360,17 @@ static void desenhaRelacionados(float x, float y, float a) {
 // GFX_MARCA; como a superficie em foco permanece escura, a marca segue clara
 // enquanto o cartao recebe o accent configuravel.
 static void desenhaEstudio(float x, float y, int i, float f, float a) {
-  GfxRect r = { x, y, EST_CARD_W, EST_CARD_H };
-  const char *logo = extras_estudio_logo(i);
-  float ar, ag, ab;
-  GLuint t;
-  // REPOUSO = a MESMA superficie neutra dos outros cartoes da pagina (moldura:
-  // navy escuro, ou o vidro neutro com a Interface de vidro). Antes o repouso
-  // com vidro ligado passava por gfx_cartao_foco_vidro com foco 0, que ainda
-  // lava o cartao na cor do realce — com tema Dinamico o cartao ficava num
-  // degrade amarelado que nenhum outro cartao tem (dono, 29/09/2026). O foco e
-  // o mesmo de "Mais como este": o cartao de realce por cima.
-  moldura(r, 14.0f, a);
-  if (f > 0.001f) {
-    ajustes_acento(&ar, &ag, &ab);
-    if (ajustes_vidro()) gfx_vidro_cartao(r, 14.0f / EST_CARD_H, f, a);
-    else gfx_cartao_foco_vidro(r, 14.0f / EST_CARD_H, f, a, ar, ag, ab);
-  }
-  t = logo[0] ? tex_obter(logo) : 0;
-  if (t) {
-    float ap = tex_aspecto(logo), w, h, fr, fg, fb;
-    int recorte;
-    if (ap <= 0.0f) ap = 3.0f;
-    h = 52.0f; w = h * ap;
-    if (w > EST_CARD_W - 36.0f) { w = EST_CARD_W - 36.0f; h = w / ap; }
-    // RECORTE = a borda da imagem e transparente (tex_cor_fundo devolve 2).
-    // E a mesma medida que o guia usa para decidir entre tingir e desenhar, e
-    // ela olha o ARQUIVO, nao adivinha pelo nome.
-    recorte = tex_cor_fundo(logo, &fr, &fg, &fb) != 1;
-    { GfxRect rl = { x + (EST_CARD_W - w) * 0.5f,
-                     y + (EST_CARD_H - h) * 0.5f, w, h };
-      gfx_tex_aspect_atual = 0.0f;
-      // LOGO RECORTADO SEMPRE BRANCO (dono: "a logo nao fica branca e fica
-      // ruim de ler"). So o logo escuro era pintado; o colorido ia com a cor
-      // do arquivo e o escuro medio (o "T-STREET" preto a 80%) escapava da
-      // medida de tex_marca_escura e sumia no cartao. Logo com fundo proprio
-      // (sem recorte) continua como veio: ali a placa faz parte da marca.
-      if (recorte) {
-        float tom = 0.93f;
-        gfx_rect(rl, t, GFX_MARCA, 0, 0, 0, 0.0f, tom, tom, tom, a);
-      } else {
-        gfx_rect(rl, t, GFX_ARTE, 0, 0, 0, 8.0f / h, 1, 1, 1, a);
-      } }
-  } else {
-    int c = 208;
-    TxtLinha ln = txt_linha_corta(TXT_DET_META2, extras_estudio_nome(i),
-                                  c, c, 220, 255,
-                                  EST_CARD_W - 28.0f);
-    txt_desenhar_alpha(ln, x + (EST_CARD_W - ln.w) * 0.5f,
-                       y + (EST_CARD_H - ln.h) * 0.5f, a * 0.95f);
-  }
+  GfxRect r = { x, y, estLargura(i), EST_CARD_H };
+  // REPOUSO: a pilula do .estu (branco 6% no vidro, #24262C no solido). FOCO:
+  // a pilula cheia no acento, como todo botao (o OK abre o browse da
+  // entidade, a mesma pasta sintetica TMDB das colecoes).
+  if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, 0.06f * a);
+  else gfx_cor(r, 0.5f, 0.141f, 0.149f, 0.173f, a);
+  if (f > 0.01f) plrui_pilula_foco(r, f * a);
+  { int c = f > 0.5f ? plrui_tinta() : 243;
+    TxtLinha ln = txt_linha_corta(TXT_G18M, extras_estudio_nome(i), c, c, c,
+                                  f > 0.5f ? 255 : 204, r.w - EST_PAD * 2.0f);
+    txt_desenhar_alpha(ln, x + EST_PAD, y + (EST_CARD_H - (float)ln.h) * 0.5f, a); }
 }
 
 // "1999–2003" (ou so "1999") a partir dos anos das partes; "" sem ano nenhum.
@@ -4532,7 +4665,7 @@ static float baseDaAbaAtiva(void) {
 }
 
 static float alturaCabComentarios(void) {
-  return 46.0f + 44.0f + (ehSerie() ? COM_PILL_H : 0.0f) + 28.0f;
+  return NV_DETF_CAB_H + NV_DETF_CAB_GAP + (ehSerie() ? COM_PILL_H + 28.0f : 0.0f);
 }
 
 // Rotulos do seletor, em escopo de arquivo: a contagem de colunas e a largura
@@ -4576,53 +4709,22 @@ static float larguraPilulaCom(const char *rot) {
 // Desenha o cabecalho e devolve o Y onde os CARTOES comecam.
 static float cabecalhoComentarios(float x, float y, float a) {
   float yy = y;
-  // Wordmark. A marca ja esta em art/marcas/trakt.png, a mesma que a fileira de
-  // notas usa — nao ha texto "trakt" desenhado com fonte, porque o logotipo tem
-  // desenho proprio e escrever a palavra sairia diferente da referencia.
-  //
-  // GFX_CARD e nao GFX_MARCA/GFX_TEXTO, pelo mesmo motivo do cartao de nota: os
-  // modos de forma pintam com a cor dada e descartam o RGB da textura, e o
-  // wordmark viraria uma silhueta. gfx_icone tambem nao serve — ele monta o
-  // caminho a partir de art/icones/, e a marca mora em art/marcas/.
-  //
-  // art/marcas/trakt_wordmark.png (282x106, com alfa) — o wordmark de verdade,
-  // fornecido pelo dono. Antes eu desenhava aqui o LOGOMARK circular
-  // (trakt.png, 96x96) esticado ate a largura de um wordmark, e saia um selo
-  // vermelho deformado que nao era nem uma coisa nem outra.
-  //
-  // GFX_MARCA, e nao GFX_CARD: o modo de cartao IGNORA O ALFA da textura e
-  // pinta o retangulo inteiro, entao saia uma CAIXA atras das letras — com o
-  // arquivo antigo (captura de tela, fundo chapado) e com o vetorial tambem,
-  // porque ali o fundo e transparente e o RGB por baixo e preto.
-  //
-  // GFX_MARCA existe exatamente para isto: a forma vem do ALFA e a cor vem de
-  // uCor. Serve porque o wordmark e de UMA COR SO. Nao serviria para o selo do
-  // IMDb, que e amarelo e preto e precisa do RGB do arquivo — e por isso o
-  // cartao de nota continua em GFX_CARD.
-  //
-  // A altura manda e a largura sai do aspecto REAL do arquivo — cravar a
-  // largura deformaria o desenho se a arte for trocada.
-  float larguraMarca = 0.0f;
-  { const char *cam = extras_caminho_marca_nome("trakt_wordmark");
-    GLuint t = tex_obter_larg(cam, 160.0f);
-    if (t) {
-      float ap = tex_aspecto(cam);
-      float h = 34.0f;
-      if (ap <= 0.0f) ap = 282.0f / 106.0f;
-      larguraMarca = h * ap;
-      { GfxRect m = { x, yy + 6.0f, larguraMarca, h };
-        gfx_tex_aspect_atual = 0.0f;
-        gfx_rect(m, t, GFX_MARCA, 0, 0, 0, 0.0f, 1, 1, 1, a); }
-      larguraMarca += 14.0f;
-    } }
-  // Sem a palavra "Comentários" ao lado do wordmark: o logo do trakt ja diz de
-  // quem sao, e o subtitulo logo abaixo ja diz o que sao. Eram tres rotulos
-  // para uma coisa so.
-  (void)larguraMarca;
-  yy += 46.0f;
-  { TxtLinha ls = txt_linha(TXT_DET_META2, "Avaliações do Trakt", 179, 179, 179, 255);
-    txt_desenhar_alpha(ls, x, yy, a * 0.95f); }
-  yy += 44.0f;
+  // O cabecalho .dh do mockup: "O que estão dizendo" em 34/700, o complemento
+  // "avaliações no Trakt" a 45% e a contagem a direita a 40%. Era o wordmark
+  // do Trakt com o subtitulo embaixo — dois titulos para uma coisa so.
+  { int daSerie = !(ehSerie() && comentEp);
+    int n = daSerie ? extras_n_comentarios() : extras_n_comentarios_ep();
+    TxtLinha lc = txt_linha(TXT_LOG_T34, i18n("O que estão dizendo"), 243, 242, 239, 255);
+    TxtLinha ls = txt_linha(TXT_G18R, i18n("avaliações no Trakt"), 243, 242, 239, 115);
+    float base = yy + NV_DETF_CAB_H, yl = base - (float)lc.h;
+    txt_desenhar_alpha(lc, x, yl, a);
+    txt_desenhar_alpha(ls, x + (float)lc.w + 16.0f, yl + (float)lc.h - (float)ls.h - 4.0f, a);
+    if (n > 0) {
+      char b[12]; snprintf(b, sizeof b, "%d", n);
+      { TxtLinha ln = txt_linha(TXT_ILHA_NUM, b, 243, 242, 239, 102);
+        txt_desenhar_alpha(ln, NV_TELA_W - NV_DETP_X - (float)ln.w,
+                           yl + (float)lc.h - (float)ln.h - 4.0f, a); } }
+    yy = base + NV_DETF_CAB_GAP; }
 
   // As duas pilulas. Em FILME so existe a da serie — nao ha episodio —, entao a
   // fileira inteira some em vez de mostrar um controle morto.
@@ -4700,9 +4802,9 @@ static float cabecalhoComentarios(float x, float y, float a) {
           txt_peso(l, r.x + (r.w - l.w) * 0.5f, r.y + (r.h - l.h) * 0.5f, a, 0.5f); } }
       px += w + COM_PILL_GAP;
     }
-    yy += COM_PILL_H;
+    yy += COM_PILL_H + 28.0f;
   }
-  return yy + 28.0f;
+  return yy;
 }
 
 static void desenhaComentarios(float x, float y, float a) {
@@ -4733,72 +4835,49 @@ static void desenhaComentarios(float x, float y, float a) {
     // pintar os que ninguem ve custa preenchimento num aparelho onde ele e o
     // recurso escasso.
     if (cx > NV_TELA_W || cx + COM_CARD_W < 0.0f) continue;
-    char rodape[64];
     px = cx + COM_PAD; larg = COM_CARD_W - COM_PAD * 2;
-    // FOCO PREENCHIDO, NAO CONTORNADO. Era um anel na cor de realce em volta
-    // do cartao; o dono mandou tirar o contorno daqui tambem. O cartao em foco
-    // vira a superficie clara #F5F5F5 e as tres linhas de texto invertem —
-    // mesma lingua do resto do app (folha de fontes, painel lateral, Agenda).
-    //
-    // A troca e em DEGRAU e nao interpolada: `txt_linha` guarda a linha ja
-    // rasterizada na cor pedida, entao uma cor que varia por quadro seria uma
-    // entrada nova de cache por quadro.
-    moldura(card, 20.0f, a);
-    int tintaEsc = 1;   // tinta escura sobre o foco (realce claro); 0 = clara
-    // Vidro: o cartao em foco segue translucido (contorno no realce), entao o
-    // texto NAO inverte; `focCor` e o "foco cheio" das cores abaixo.
-    const int focCor = foc && !ajustes_vidro();
-    if (foc && ajustes_vidro())
-      gfx_vidro_foco(card, 20.0f / (COM_CARD_W < COM_CARD_H ? COM_CARD_W : COM_CARD_H), 1.0f, a);
-    else if (foc) { float fr, fg, fb; tintaEsc = ajustes_acento_tinta(&fr, &fg, &fb) < 0.5f;
-      gfx_cor(card, 20.0f / (COM_CARD_W < COM_CARD_H ? COM_CARD_W
-                                                     : COM_CARD_H),
-              fr, fg, fb, a); }
+    // FOCO = SUPERFICIE UM DEGRAU MAIS CLARA (DESIGN.md §3), sem inverter o
+    // texto e sem bloco no acento.
+    blocoGl(card, 26.0f, foc ? animFoco[SEC_COMENTARIOS][foco.coluna] : 0.0f, a);
+    const char *usu = daSerie ? extras_comentario_usuario(i) : extras_comentario_ep_usuario(i);
+    int nota = daSerie ? extras_comentario_nota(i) : extras_comentario_ep_nota(i);
+    int cur  = daSerie ? extras_comentario_curtidas(i) : extras_comentario_ep_curtidas(i);
+    float yl = y + COM_PAD, direita = px + larg;
+    // Linha de cima: disco de 38 com a inicial, o nome 19/600, a nota 18/700
+    // a direita e, antes dela, a etiqueta de idioma ("EN") quando o
+    // comentario nao esta no idioma da interface (o texto e de uma pessoa e
+    // nao se traduz; os do idioma dela vem primeiro, extras.c).
+    avatarInicial((GfxRect){ px, yl, 38.0f, 38.0f }, usu, TXT_ILHA_HORA, a);
+    if (nota > 0) {
+      char nb[16]; snprintf(nb, sizeof nb, "%d/10", nota);
+      { TxtLinha ln = txt_linha(TXT_LOG_18B, nb, 243, 242, 239, 255);
+        direita -= (float)ln.w;
+        txt_desenhar_alpha(ln, direita, yl + (38.0f - (float)ln.h) * 0.5f, a);
+        direita -= 14.0f; } }
+    { const char *lingCom = daSerie ? extras_comentario_lingua(i) : extras_comentario_ep_lingua(i);
+      if (lingCom[0]) {
+        char tag[8]; size_t q;
+        for (q = 0; q < sizeof tag - 1 && lingCom[q]; q++)
+          tag[q] = (char)((lingCom[q] >= 'a' && lingCom[q] <= 'z') ? lingCom[q] - 32 : lingCom[q]);
+        tag[q] = 0;
+        { TxtLinha lt = txt_linha(TXT_AJ_CAPS13, tag, 243, 242, 239, 115);
+          direita -= (float)lt.w;
+          txt_desenhar_alpha(lt, direita, yl + (38.0f - (float)lt.h) * 0.5f, a);
+          direita -= 14.0f; } } }
+    { float ux = px + 38.0f + 12.0f;
+      TxtLinha lu = txt_linha_corta(TXT_ILHA_SEG, usu, 243, 242, 239, 255, direita - ux);
+      txt_desenhar_alpha(lu, ux, yl + (38.0f - (float)lu.h) * 0.5f, a); }
 
-    // ETIQUETA DE IDIOMA ("EN") quando o comentario NAO esta no idioma da
-    // interface: o texto e de uma pessoa e nao se traduz, mas a pessoa fica
-    // sabendo por que ele esta em outra lingua. Os do idioma dela vem primeiro
-    // (extras.c) e nao levam etiqueta.
-    const char *lingCom = daSerie ? extras_comentario_lingua(i)
-                                  : extras_comentario_ep_lingua(i);
-    float larguraTag = 0.0f;
-    if (lingCom[0]) {
-      char tag[8]; size_t q;
-      for (q = 0; q < sizeof tag - 1 && lingCom[q]; q++)
-        tag[q] = (char)((lingCom[q] >= 'a' && lingCom[q] <= 'z') ? lingCom[q] - 32 : lingCom[q]);
-      tag[q] = 0;
-      { TxtLinha lt = txt_linha(TXT_CAPTION2, tag,
-                                foc ? (tintaEsc ? 88 : 215) : 132, foc ? (tintaEsc ? 90 : 216) : 138,
-                                foc ? (tintaEsc ? 96 : 222) : 150, 255);
-        txt_desenhar_alpha(lt, px + larg - lt.w, y + COM_PAD + 6.0f, a * 0.9f);
-        larguraTag = lt.w + 14.0f; }
-    }
-    { TxtLinha lu = txt_linha_corta(TXT_ROW_TITULO,
-                                    daSerie ? extras_comentario_usuario(i)
-                                            : extras_comentario_ep_usuario(i),
-                                    focCor ? (tintaEsc ? 17 : 255) : 238, focCor ? (tintaEsc ? 17 : 255) : 241,
-                                    focCor ? (tintaEsc ? 20 : 255) : 248, 255, larg - larguraTag);
-      txt_desenhar_alpha(lu, px, y + COM_PAD, a); }
+    // O texto (18, entrelinha 27, a 72%) para ANTES do rodape: tres linhas.
+    txt_bloco_corta(TXT_ILHA_META, daSerie ? extras_comentario_texto(i)
+                                : extras_comentario_ep_texto(i),
+              243, 242, 239, px, yl + 38.0f + 14.0f, larg, 27.0f, a * 0.72f, 3);
 
-    // O texto para ANTES do rodape: sem o teto de linhas ele passava por cima
-    // das curtidas. 6 linhas de 30 terminam em 246; o rodape comeca em 288.
-    txt_bloco(TXT_DET_META2, daSerie ? extras_comentario_texto(i)
-                                     : extras_comentario_ep_texto(i),
-              focCor ? (tintaEsc ? 45 : 235) : 190, focCor ? (tintaEsc ? 47 : 236) : 195, focCor ? (tintaEsc ? 52 : 240) : 205,
-              px, y + COM_PAD + 42.0f, larg, 30.0f, a * 0.95f, 6);
-
-    { int nota = daSerie ? extras_comentario_nota(i)
-                         : extras_comentario_ep_nota(i);
-      int cur  = daSerie ? extras_comentario_curtidas(i)
-                         : extras_comentario_ep_curtidas(i);
-      if (nota > 0)
-        snprintf(rodape, sizeof rodape, i18n("%d/10   %d curtidas"), nota, cur);
-      else
-        snprintf(rodape, sizeof rodape, i18n("%d curtidas"), cur);
-      { TxtLinha lr = txt_linha(TXT_CAPTION2, rodape,
-                                foc ? (tintaEsc ? 88 : 215) : 132, foc ? (tintaEsc ? 90 : 216) : 138,
-                                foc ? (tintaEsc ? 96 : 222) : 150, 255);
-        txt_desenhar_alpha(lr, px, y + COM_CARD_H - COM_PAD - lr.h, a * 0.9f); } }
+    // Rodape: "6 curtidas" a 40%.
+    { char rodape[64];
+      snprintf(rodape, sizeof rodape, i18n(cur == 1 ? "%d curtida" : "%d curtidas"), cur);
+      { TxtLinha lr = txt_linha(TXT_ILHA_HORA, rodape, 243, 242, 239, 102);
+        txt_desenhar_alpha(lr, px, y + COM_CARD_H - COM_PAD - (float)lr.h, a); } }
   }
 }
 
@@ -4899,13 +4978,14 @@ static float alturaAlvo(int r) {
 // CABECALHO DE SECAO do Glass UI (.dh do mockup): o nome em 34/700, um
 // complemento em 17 a 45% logo depois ("e equipe") e a contagem a direita em
 // 16 a 40%. `base` e a BASE da linha (o conteudo comeca NV_DETF_CAB_GAP abaixo).
-static void cabecalhoSecao(int r, const char *cab, float base, float a) {
+static void cabecalhoSecao(int r, const char *cab, float x, float base, float a) {
   TxtLinha lc = txt_linha(TXT_LOG_T34, cab, 243, 242, 239, 255);
   float yl = base - (float)lc.h;
-  txt_desenhar_alpha(lc, NV_DETP_X, yl, a);
-  if (r == SEC_ELENCO) {
-    TxtLinha ls = txt_linha(TXT_ILHA_GENERO, i18n("e equipe"), 243, 242, 239, 115);
-    txt_desenhar_alpha(ls, NV_DETP_X + (float)lc.w + 16.0f, yl + (float)lc.h - (float)ls.h - 4.0f, a);
+  const char *comp = r == SEC_ELENCO ? "e equipe" : r == SEC_FRASES ? "Wikiquote" : NULL;
+  txt_desenhar_alpha(lc, x, yl, a);
+  if (comp) {
+    TxtLinha ls = txt_linha(TXT_G18R, i18n(comp), 243, 242, 239, 115);
+    txt_desenhar_alpha(ls, x + (float)lc.w + 16.0f, yl + (float)lc.h - (float)ls.h - 4.0f, a);
   }
   { int n = r == SEC_TRAILERS ? secaoN(r) : 0;
     if (n > 0) {
@@ -5002,6 +5082,8 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
     default:             y = NV_DETP_EL_Y;   break;
   }
   y -= scrollY;
+  // Filme: a coluna da secao (os pares do mockup dividem a linha).
+  const float dx = ehSerie() ? 0.0f : dxSec[r];
 
   // TITULO DA SECAO ("Temporadas", "Elenco"), como a referencia. O port nao
   // tinha cabecalho nenhum e as fileiras apareciam soltas, sem dizer o que
@@ -5021,7 +5103,7 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
   // linhas seguidas. No FILME cada secao continua carregando o proprio nome,
   // porque la nao existe a barra de abas para dizer o que e o que.
   { const char *cab = cabecalhoDe(r);   // na serie: Trailers e Estudios
-    if (cab) cabecalhoSecao(r, cab, y - NV_DETF_CAB_GAP, a); }
+    if (cab) cabecalhoSecao(r, cab, NV_DETP_X + dx, y - NV_DETF_CAB_GAP, a); }
   { float alt = alturaSecao(r);
     if (y > NV_TELA_H || y + alt < -40.0f) return; }
 
@@ -5033,11 +5115,11 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
 
   for (int c = 0; c < n && c < N_ITENS; c++) {
     float f = animFoco[r][c];
-    float x = xItem(r, c) - scrollSec[r];
-    float w = larguraItem(r, c);
+    float x = xItem(r, c) - scrollSec[r] + dx;
+    float w = larguraItem(r, c), yi = y + yItem(r, c);
     if (x > NV_TELA_W || x + w < -w) continue;
     if (ponteiro_ativo() && a > 0.3f && c < secaoColunas(r) && alturaAlvo(r) > 0.0f)
-      ponteiro_alvo(x, y,
+      ponteiro_alvo(x, yi,
                     w, alturaAlvo(r), ponteiroDetalhe, NULL, r, c);
     switch (r) {
       case SEC_TEMPORADAS: {
@@ -5063,13 +5145,13 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
       case SEC_RELACIONADOS:
         if (c == 0) {
           if (relacionadosCarregando()) desenhaEsqueletoRelacionados(y, a);
-          else                          desenhaRelacionados(NV_DETP_X, y, a);
+          else                          desenhaRelacionados(NV_DETP_X + dx, y, a);
         }
         break;
       case SEC_COLECAO:
         if (c == 0) desenhaColecao(x, y, f, a);
         break;
-      case SEC_COMENTARIOS:  desenhaComentarios(NV_DETP_X, y, a); break;
+      case SEC_COMENTARIOS:  desenhaComentarios(NV_DETP_X + dx, y, a); break;
       // UMA VEZ SO, e nao uma por coluna: as colunas destas duas sao posicoes
       // dentro de um desenho unico (o episodio em destaque, a frase em
       // destaque), como os cartazes de "Mais como este" no filme. A altura
@@ -5082,7 +5164,7 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
               desenhaAudiencia(r - SEC_AUD_ARCO, NV_DETP_X, y, a);
         break;
       case SEC_FRASES:
-        if (c == 0) frasesAlt = desenhaFrases(NV_DETP_X, y, a);
+        if (c == 0) frasesAlt = desenhaFrases(NV_DETP_X + dx, y, a);
         break;
       case SEC_NOTAS:
         if (c == 0) notasui_fontes_desenhar(notasDados(), NV_DETP_X, y, a);
@@ -5091,7 +5173,7 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
         if (c == 0) notasui_grade_desenhar(notasDados(), NV_DETP_X, y, a);
         break;
       case SEC_ESTUDIOS:
-        desenhaEstudio(x, y, c, f, a);
+        desenhaEstudio(x, yi, c, f, a);
         break;
       case SEC_DETALHES: desenhaDetalhes(x, y, f, a); break;
       default: desenhaElenco(x, y, c, f, a); break;
@@ -5329,59 +5411,53 @@ static void detalheFundo(float s) {
   gfx_sem_recorte();
 
   // --- backdrop full-bleed --------------------------------------------------
-  // A tela de detalhe e uma imagem de 1920x1080 em (0,0) com a vinheta por cima;
-  // nao ha cartao, nem moldura, nem titulos vizinhos.
-  //
-  // O BACKDROP NAO CRESCE A PARTIR DO CARD. Era o ultimo resto do voo do app da
-  // Apple: o retangulo saia de item.rect e se abria ate a tela. O dono descreveu
-  // o comportamento certo — "so os posters descem e mantem o background, e o
-  // background e a arte do filme selecionado" — e voar o retangulo e o oposto
-  // disso: a arte entra pequena e cresce, em vez de ja estar la.
-  //
-  // Agora a arte ocupa a tela desde o primeiro quadro e so ganha opacidade. Quem
-  // se move sao as fileiras da home, que descem (ver home_desenhar, que le o
+  // A arte ocupa a tela desde o primeiro quadro e so ganha opacidade (o hero
+  // da home ja mostrava a mesma arte: o fundo CONTINUA, nao troca). Quem se
+  // move sao as fileiras da home, que descem (home_desenhar le
   // detail_progresso).
-  // O FUNDO NAO TROCA: ele CONTINUA. O hero da home ja mostrava a arte deste
-  // mesmo titulo, entao o backdrop do detalhe nasce no rect exato em que ela
-  // estava e cresce dali ate a tela cheia, sem piscar e sem crossfade — com o
-  // hero em tela cheia os dois rects sao praticamente o mesmo e o olho nao ve
-  // movimento nenhum, so o texto se rearranjando. Antes a arte entrava do zero
-  // ganhando opacidade sobre a arte identica que ja estava la, o que dava um
-  // clarao no meio da transicao.
+  //
+  // AJUSTES > FUNDO (fundo.h), como no mockup Glass UI (quadro "Detalhe"):
+  //   Arte          a arte nitida; ao rolar ela SAI (o mockup rola a arte para
+  //                 fora e o resto da pagina fica no #0b0c0e liso);
+  //   Arte borrada  so as cores da arte atras de tudo, e a arte nitida no topo
+  //                 a direita, vazando nas bordas (a mascara do .hero); ao
+  //                 rolar as cores ficam, sob um veu (o .dt-cobre do imersivo);
+  //   Frost         a superficie fosca no acento, com a mesma arte no topo.
+  // Os tres levam o veu de leitura por cima (veuLeitura, fora daqui).
   GfxRect alvo; float aEntrada;
   backdropRect(&alvo, &aEntrada);
   const char *arte = arteDe(idx);
-  if (carDesenhaFundo()) carFundo();
-  else {
+  if (carDesenhaFundo()) { carFundo(); return; }
   int artePoster = arteDetalheEhPoster(idx);
-  // Backdrop em tela cheia: pede o teto de 1920. Com o teto comum de 960 a arte
-  // era decodificada com metade da resolucao e ampliada ao dobro na tela.
+  int modo = fundo_modo();
+  // Com o trailer de fundo tocando, o video e o hero: o caminho de sempre.
+  int comTrailer = trailerFade > 0.005f && trailer_aberto() && !trailer_cheia();
+  // Backdrop em tela cheia: pede o teto de 1920.
   GLuint tex = arte ? tex_obter_hero(arte) : 0;
-  // Ao rolar, o web NAO desfoca a arte: ele a APAGA. Medido em
-  // `.series-detail-shell.detail-scrolled` — o backdrop vai a `opacity: 0.15` e
-  // a vinheta a 0, ambos em 0.8s cubic-bezier(.4,0,.2,1).
-  //
-  // O VEU E DE TELA CHEIA e custava caro numa GPU que ja estava afogada em
-  // preenchimento (medido: clr=38,3ms com a CPU ociosa). Mas ele pinta
-  // #0d0d0d — que e EXATAMENTE a cor com que main.c limpa o quadro
-  // (NV_COR_FUNDO_*). Com a tela ja coberta pelo detalhe, embaixo dele nao ha
-  // home nem outra tela: ha o glClear. Pintar #0d0d0d sobre #0d0d0d nao muda
-  // um pixel, e a camada inteira sai.
-  //
-  // Fica quando a tela NAO esta coberta: ai embaixo ha a home, e o veu e o que
-  // a apaga.
   if (pg > 0.01f && !detail_cobre_tela()) {
     GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, pg);
   }
-  // 4o parametro = forca da VINHETA, nao "foco". Vai a 0 junto com a rolagem,
-  // que e o par que faltava: o web apaga a arte para 15% E some com a vinheta
-  // ao mesmo tempo. Poster reserva usa composição contida, sem crop de capa.
-  desenhaArteDetalhe(alvo, tex, arte, artePoster,
-                     tex ? aEntrada * (1.0f - 0.85f * pg) : 1.0f, pg);
+  if (modo == FUNDO_ARTE || comTrailer || artePoster || !tex) {
+    desenhaArteDetalhe(alvo, tex, arte, artePoster,
+                       tex ? aEntrada * (1.0f - pg) : 1.0f, pg);
+    return;
   }
-
-
+  { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+    fundo_desenhar_modo(modo, tela, 0.0f, arte, aEntrada);
+    // Ao rolar: o veu do .dt-cobre do imersivo (50-60%) por cima das cores.
+    if (pg > 0.005f) gfx_cor(tela, 0.0f, 0.043f, 0.047f, 0.055f, 0.55f * pg * aEntrada); }
+  // A arte nitida do topo, vazando nas bordas (o GFX_DETALHE com o caminho
+  // "vazar": alfa = 1 - vinheta, em vez de misturar no #0d0d0d).
+  if ((1.0f - pg) * aEntrada > 0.005f) {
+    float salva = nv_ambiente_forca;
+    nv_ambiente_forca = 1.0f;
+    gfx_tex_aspect_atual = tex_aspecto(arte);
+    gfx_rect(alvo, tex, GFX_DETALHE, 1.0f, 0, 0, 0.0f, 0, 0, 0,
+             fminf(aEntrada * (1.0f - pg), 0.998f));
+    gfx_tex_aspect_atual = 0.0f;
+    nv_ambiente_forca = salva;
+  }
 }
 
 void detail_desenhar(Uint32 agora) {
