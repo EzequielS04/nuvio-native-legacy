@@ -211,7 +211,7 @@ static float ajFolhaX(void) { return ajX0() + AJI_IDX_W + 24.0f; }
 // inspetor fica com o resto, e SAI quando o resto e menor que AJI_INSP_MIN —
 // a folha ocupa o lugar dele. Em 100% e a conta fixa de sempre (1276).
 #define AJI_FOLHA_MIN  600.0f
-#define AJI_INSP_MIN   360.0f
+#define AJI_INSP_MIN   440.0f   // as dicas do rodape do inspetor nao cabem em menos
 static float ajInspX(void) {
   float total, folha;
   if (gfx_escala_ui() == 1.0f) return AJI_INSP_X;

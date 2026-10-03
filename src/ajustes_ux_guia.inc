@@ -164,7 +164,7 @@ static void guiaSair(void) {
 #define GU_GE_GAP    2.0f
 static GfxRect guiaIdxR(void) { return (GfxRect){ ajX0(), AJI_TOPO, GU_IDX_W, NV_VTELA_H - AJI_TOPO - AJI_MARGEM }; }
 // Tela virtual menor (escala.h): a lista fica com pelo menos 560 e a proporcao
-// de 1080p (700:704); o inspetor fica com o resto e sai abaixo de 400 (150%).
+// de 1080p (700:704); o inspetor fica com o resto e sai abaixo de 440 (130% e 150%).
 // Em 100% e o 1176 de sempre.
 static float guiaInspX(void) {
   float x = ajX0() + GU_IDX_W + 24.0f, total, lista;
@@ -172,7 +172,7 @@ static float guiaInspX(void) {
   total = NV_VTELA_W - AJI_MARGEM - x - 24.0f;
   lista = total * (700.0f / 1428.0f);
   if (lista < 560.0f) lista = 560.0f;
-  if (total - lista < 400.0f) return NV_VTELA_W;   // sem inspetor
+  if (total - lista < 440.0f) return NV_VTELA_W;   // sem inspetor
   return x + lista + 24.0f;
 }
 static int guiaTemInsp(void) { return guiaInspX() < NV_VTELA_W; }
