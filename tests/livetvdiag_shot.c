@@ -11,6 +11,8 @@
 //   4. captura com o teste no meio.
 #include "../src/livetvdiag.c"
 #include "rail_shot.h"
+#include "ilha.h"
+#include "ajustes_ux.h"
 #include "../src/dados.h"
 #include "../src/tex_cache.h"
 #include <SDL2/SDL_image.h>
@@ -31,6 +33,9 @@ static void captura(const char *nome) {
     glClear(GL_COLOR_BUFFER_BIT);
     livetvdiag_desenhar(SDL_GetTicks());
     rail_shot_desenhar(MENU_AJUSTES);
+    if (getenv("NUVIO_SHOT_ILHA")) {
+      ilha_relogio_visivel(1); ilha_ancorar(ajustes_ilha_x(), 36, 0); ilha_desenhar(SDL_GetTicks()); SDL_Delay(12);
+    }
     if (i == 39) {
       unsigned char *pix = malloc(1920 * 1080 * 4);
       SDL_Surface *s;
@@ -67,7 +72,10 @@ int main(int argc, char **argv) {
   IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG);
   dados_iniciar(dir);
   { char c[600]; FILE *f; snprintf(c, sizeof c, "%s/ajustes.txt", dir);
-    f = fopen(c, "w"); fprintf(f, "idioma %d\nanimacoes 0\n", pt ? 0 : 1); fclose(f); }
+    f = fopen(c, "w"); fprintf(f, "idioma %d\nanimacoes 0\n", pt ? 0 : 1);
+    if (getenv("NUVIO_SHOT_TEMA")) fprintf(f, "selected_theme %s\n", getenv("NUVIO_SHOT_TEMA"));
+    if (getenv("NUVIO_SHOT_VIDRO")) fprintf(f, "vidroLocal %d\n", *getenv("NUVIO_SHOT_VIDRO") == '0' ? 1 : 0);
+    fclose(f); }
   ajustes_dir(dir);
 
   // --- 1. rede contra o servidor falso ---
@@ -127,6 +135,8 @@ int main(int argc, char **argv) {
   assert(txt_iniciar("deploy/app", 1));
   tex_iniciar(64);
   gfx_icones_dir("deploy/app/art");
+  ajustes_recursos("deploy/app/art");
+  ajustes_ui_arte(15);
 
   snprintf(nome, sizeof nome, "%s-1-mac-servidor-falso.bmp", saida);
   captura(nome);
