@@ -175,8 +175,8 @@
 // CHIPS e nao pilulas: 40 px de altura e 22 px de fonte, contra os 48/25 de
 // antes. O dono (21/09): "os botoes estao muito grandes perto do resto". A
 // linha do cabecalho e navegacao secundaria; o que pesa na tela e o heroi.
-#define G_TOPO_Y     40.0f
-#define G_TOPO_H     40.0f
+#define G_TOPO_Y     32.0f
+#define G_TOPO_H     48.0f
 #define G_CHIP_PAD   20.0f
 // CATEGORIAS e o primeiro chip: a porta VISIVEL do painel de categorias,
 // que antes so abria segurando a seta (ninguem descobre gesto que nao se ve).
@@ -3171,7 +3171,8 @@ static float desenharTopo(float a) {
   seg0 = xs[G_TOPO_CARTOES];
   // Trilho do controle segmentado.
   { GfxRect tr = { seg0, G_TOPO_Y, w[G_TOPO_CARTOES] + w[G_TOPO_LISTA], G_TOPO_H };
-    gfx_cor(tr, 0.5f, 1, 1, 1, 0.07f * a); }
+    if (ajustes_vidro()) gfx_cor(tr, 0.5f, 1, 1, 1, 0.06f * a);
+    else gfx_cor(tr, 0.5f, 0.114f, 0.118f, 0.137f, a); }
 
   for (i = 0; i < G_TOPO_N; i++) {
     float f = animTopo[i];
@@ -3183,23 +3184,29 @@ static float desenharTopo(float a) {
     int ct;
     if (seg) {
       // Segmento: so o escolhido tem superficie, 3 px para dentro do trilho.
-      if (sel) gfx_cor((GfxRect){ r.x + 3.0f, r.y + 3.0f, r.w - 6.0f, r.h - 6.0f },
-                       0.5f, 1, 1, 1, 0.17f * a);
+      GfxRect ir = { r.x + 3.0f, r.y + 3.0f, r.w - 6.0f, r.h - 6.0f };
+      if (f > 0.5f) plrui_pilula_foco(ir, a);
+      else if (sel) {
+        if (ajustes_vidro()) gfx_cor(ir, 0.5f, 1, 1, 1, 0.14f * a);
+        else gfx_cor(ir, 0.5f, 0.204f, 0.212f, 0.243f, a);
+      }
     } else {
-      gfx_cor(r, 0.5f, 1, 1, 1, (sel ? 0.14f : 0.07f) * a);
+      // CHIP do Glass UI: branco 8% em repouso, ligado 14%, foco = pilula
+      // cheia no acento (sem anel).
+      if (f > 0.5f) plrui_pilula_foco(r, a);
+      else if (sel) { if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, 0.14f * a);
+                      else gfx_cor(r, 0.5f, 0.204f, 0.212f, 0.243f, a); }
+      else plrui_botao_repouso(r, a);
     }
-    if (f > 0.01f) {
-      gfx_cor(r, 0.5f, 1, 1, 1, 0.10f * f * a);
-      gfx_anel_fora(r, 0.5f, 0.0f, 3.0f, ar, ag, ab, f * a);
-    }
-    ct = (f > 0.5f || sel) ? 245 : 168;
+    ct = f > 0.5f ? ajustes_tinta_foco() : sel ? 245 : 168;
     { TxtLinha t = txt_linha(TXT_PG_ROTULO, rot[i], ct, ct + 1, ct + 5 > 255 ? 255 : ct + 5, 255);
       float tx = r.x + (r.w - (float)t.w) * 0.5f;
       if (i == G_TOPO_PREVIEW) {
         // Ponto de estado: verde ligado, cinza desligado. O texto ja diz,
         // o ponto e o que se le de relance.
         GfxRect d = { r.x + G_CHIP_PAD, r.y + (r.h - 10.0f) * 0.5f, 10.0f, 10.0f };
-        if (previewLigado) gfx_cor(d, 0.5f, 0.30f, 0.84f, 0.46f, a);
+        if (f > 0.5f) { float k = (float)ct / 255.0f; gfx_cor(d, 0.5f, k, k, k, a); }
+        else if (previewLigado) gfx_cor(d, 0.5f, 0.30f, 0.84f, 0.46f, a);
         else               gfx_cor(d, 0.5f, 0.42f, 0.43f, 0.47f, a);
         tx = d.x + 20.0f;
       } else if (i == G_TOPO_BUSCAR) {
@@ -3304,7 +3311,7 @@ static void desenharLinhaLista(GCanal *c, float y, int focada, float a,
                                time_t agoraT, time_t ini, time_t tFoco,
                                int passo, float agoraX, GfxRect *alvo) {
   float h = gCel;
-  float raioC = 12.0f / h, raioB = 10.0f / h;
+  float raioB = 10.0f / h;
   time_t fimJ = ini + (time_t)G_L_JANELA_MIN * 60;
   float ppm = G_L_FAIXA_W / (float)G_L_JANELA_MIN;
   GfxRect col = { G_AREA_X, y, G_L_COL, h };
@@ -3312,40 +3319,35 @@ static void desenharLinhaLista(GCanal *c, float y, int focada, float a,
   int epg = (epgDo(c) >= 0 || (xtCurta(c) && xtepg_tem(c->id))) ? 0 : -1;
 
   if (passo == 0) {
-    float l = focada ? G_SUP_COL_FOCO : G_SUP_COL;
-    gfx_cor(col, raioC, l, l, l, a);   // cinza NEUTRO: sem desvio de cor
+    // GLASS UI: a coluna do canal nao tem superficie propria; o foco e a
+    // superficie da LINHA inteira (desenhada por quem chama). So o logo
+    // ganha uma placa.
+    GfxRect pl = { G_AREA_X + 8.0f, y + (h - 52.0f) * 0.5f, 96.0f, 52.0f };
+    gfx_cor(pl, 0.28f, 1, 1, 1, (focada ? 0.12f : 0.07f) * a);
     if (gIdNoAr[0] && !strcmp(c->id, gIdNoAr)) {
       float ar, ag, ab;
       ajustes_acento(&ar, &ag, &ab);
-      gfx_cor((GfxRect){ col.x - 14.0f, col.y + (h - 28.0f) * 0.5f, 4.0f, 28.0f }, 0.5f,
+      gfx_cor((GfxRect){ col.x - 4.0f, col.y + (h - 28.0f) * 0.5f, 4.0f, 28.0f }, 0.5f,
               ar, ag, ab, a);
     }
   } else {
     char num[16];
     TxtLinha n;
-    int cn = focada ? 196 : 128;
     snprintf(num, sizeof num, "%d", (int)(c - canais) + 1);
-    n = txt_linha(TXT_DET_META2, num, cn, cn + 2, cn + 8, 255);
-    // Numero alinhado pela DIREITA a 48 px: 1, 12 e 312 terminam na mesma
-    // coluna, como na grade impressa.
-    txt_desenhar_alpha(n, G_AREA_X + 48.0f - (float)n.w, y + (h - (float)n.h) * 0.5f, a);
-    { GfxRect cx = { G_AREA_X + 62.0f, y + 10.0f, 92.0f, h - 20.0f };
-      logoNaCaixa(c, cx, 84.0f, 42.0f, G_LOGO_CLARO, a); }
-    { float nx = G_AREA_X + 168.0f;
-      float tw = G_L_COL - 168.0f - 16.0f - (c->fav ? 30.0f : 0.0f);
-      int ct = focada ? 250 : 212, cb = ct + 4 > 255 ? 255 : ct + 4;
-      // Nome em ATE DUAS linhas: "Canal Recortado HD" cortado em "Canal…"
-      // nao diz qual canal e. Uma linha quando cabe, centrada na celula.
-      TxtLinha t = txt_linha(TXT_CW_TITULO, c->nome, ct, ct, cb, 255);
-      if ((float)t.w <= tw)
-        txt_desenhar_alpha(t, nx, y + (h - (float)t.h) * 0.5f, a);
-      else
-        txt_bloco(TXT_CW_TITULO, c->nome, ct, ct, cb, nx, y + (h - 60.0f) * 0.5f - 2.0f,
-                  tw, 30.0f, a, 2);
+    n = txt_linha(TXT_ILHA_HORA, num, 115, 114, 113, 255);
+    { GfxRect cx = { G_AREA_X + 14.0f, y + (h - 44.0f) * 0.5f, 84.0f, 44.0f };
+      logoNaCaixa(c, cx, 76.0f, 36.0f, G_LOGO_CLARO, a); }
+    { float nx = G_AREA_X + 120.0f;
+      float tw = G_L_COL - 120.0f - 16.0f - (c->fav ? 30.0f : 0.0f);
+      int ct = focada ? 255 : 222;
+      TxtLinha t = txt_linha_corta(TXT_ILHA_NOME, c->nome, ct, ct, ct - 4, 255, tw);
+      float bloco = (float)t.h + (float)n.h - 2.0f;
+      txt_desenhar_alpha(t, nx, y + (h - bloco) * 0.5f, a);
+      txt_desenhar_alpha(n, nx, y + (h - bloco) * 0.5f + (float)t.h - 2.0f, a);
       if (c->fav) {
-        TxtLinha s = txt_linha(TXT_DET_META2, "\xe2\x98\x85", 255, 214, 90, 255);
-        txt_desenhar_alpha(s, G_AREA_X + G_L_COL - 16.0f - (float)s.w,
-                           y + (h - (float)s.h) * 0.5f, a);
+        TxtLinha st = txt_linha(TXT_DET_META2, "\xe2\x98\x85", 255, 214, 90, 255);
+        txt_desenhar_alpha(st, G_AREA_X + G_L_COL - 16.0f - (float)st.w,
+                           y + (h - (float)st.h) * 0.5f, a);
       } }
   }
   if (alvo) *alvo = col;
@@ -3366,15 +3368,23 @@ static void desenharLinhaLista(GCanal *c, float y, int focada, float a,
       desenhou = 1;
       if (foc && alvo) *alvo = b;
       if (passo == 0) {
-        float l = foc ? G_SUP_FOCO : atual ? G_SUP_NO_AR : G_SUP_FUTURO;
-        if (focada && !foc) l += 0.018f;
-        gfx_cor(b, raioB, l, l, l, a);
+        // Superficie branca em alfa: foco 18%, no ar 8%, futuro 4%.
+        float l = foc ? 0.18f : atual ? 0.08f : 0.04f;
+        gfx_cor(b, raioB, 1, 1, 1, l * a);
+        if (atual && ps[k].fim > ps[k].ini) {
+          float f = anim_clamp((float)(agoraT - ps[k].ini) / (float)(ps[k].fim - ps[k].ini), 0.0f, 1.0f);
+          float ar3, ag3, ab3, bw = b.w - 28.0f;
+          ajustes_acento(&ar3, &ag3, &ab3);
+          gfx_cor((GfxRect){ b.x + 14.0f, b.y + h - 5.0f, bw, 3.0f }, 0.5f, 1, 1, 1, 0.14f * a);
+          if (bw * f > 1.0f)
+            gfx_cor((GfxRect){ b.x + 14.0f, b.y + h - 5.0f, bw * f, 3.0f }, 0.5f, ar3, ag3, ab3, a);
+        }
         continue;
       }
       // Rotulo so onde cabe: a regra da casa e desenhar MENOS rotulos, nunca
       // fonte menor. Titulo acima de 64 px, horario acima de 150.
       if (b.w > 64.0f) {
-        int ct = foc ? 255 : atual ? 238 : 204;
+        int ct = foc ? 255 : atual ? 238 : 150;
         // O titulo do programa que comecou antes da janela comeca na borda
         // visivel dela. Texto vem DEPOIS do veu do passado, entao o do
         // programa no ar continua claro mesmo nascendo antes da linha agora.
@@ -3397,12 +3407,6 @@ static void desenharLinhaLista(GCanal *c, float y, int focada, float a,
           // Celula baixa (faixa): so o titulo, centrado, e a barra do quanto
           // ja passou no programa do ar — a regua em cima diz os horarios.
           txt_desenhar_alpha(t, tx, y + (h - (float)t.h) * 0.5f - 2.0f, a);
-          if (atual && ps[k].fim > ps[k].ini) {
-            float f = anim_clamp((float)(agoraT - ps[k].ini) / (float)(ps[k].fim - ps[k].ini), 0.0f, 1.0f);
-            float bw = b.w - 28.0f;
-            gfx_cor((GfxRect){ tx, y + h - 9.0f, bw, 3.0f }, 0.5f, 1, 1, 1, 0.16f * a);
-            gfx_cor((GfxRect){ tx, y + h - 9.0f, bw * f, 3.0f }, 0.5f, 1, 1, 1, 0.75f * a);
-          }
         } else
         txt_desenhar_alpha(t, tx, y + 7.0f, a);
         if (b.w > 120.0f && h >= 70.0f) {
@@ -3602,7 +3606,7 @@ static void desenharPainelAddons(float a) {
 // O anel que desliza. `alvo` em coordenadas de CONTEUDO (y + rolagem): a mola
 // persegue o alvo com o dt do relogio do desenho, e a rolagem e subtraida so
 // na hora de pintar — rolar a grade nao faz o anel "correr atras" da celula.
-static void desenharAnelFoco(float a, Uint32 agora, float rol) {
+__attribute__((unused)) static void desenharAnelFoco(float a, Uint32 agora, float rol) {
   float dt, ar, ag, ab;
   GfxRect r;
   if (!focoAnelTem) { focoAnelOk = 0; return; }
@@ -3988,11 +3992,14 @@ void guia_desenhar(Uint32 agora) {
   // que agora sao do heroi.
   { float chipsX = desenharTopo(a);
     char sub[160];
-    TxtLinha t = txt_linha(TXT_HEADLINE,
+    TxtLinha t = txt_linha(TXT_ILHA_TITULO,
                            overlay ? i18n("Guia de canais") : i18n("Guia TV"),
-                           242, 243, 247, 255);
-    float sx = G_AREA_X + (float)t.w + 24.0f;
+                           243, 242, 239, 255);
+    float sx = G_AREA_X + (float)t.w + 20.0f;
     txt_desenhar_alpha(t, G_AREA_X, G_TOPO_Y + (G_TOPO_H - (float)t.h) * 0.5f, a);
+    // KICKER do contexto, como o "HOJE" do mockup do guia por cima do canal.
+    sx += plrui_kicker("Ao vivo", sx, G_TOPO_Y + (G_TOPO_H - 18.0f) * 0.5f + 2.0f,
+                       115, 114, 113, a) + 22.0f;
     if (estado == G_BAIXANDO && nCanais > 0)   // lista do cache na tela, rede atras
       snprintf(sub, sizeof sub, i18n("%d canais · %d categorias · atualizando…"), nCanais, nCats);
     else if (estado == G_BAIXANDO)
@@ -4050,6 +4057,10 @@ void guia_desenhar(Uint32 agora) {
     float ar, ag, ab;
     ajustes_acento(&ar, &ag, &ab);
     if (fimY > G_L_BASE) fimY = G_L_BASE;
+    // A GRADE E UMA ILHA (Glass UI, extrapolada do mockup aovivo-guia): o
+    // mesmo material, regua e linhas dentro, foco = superficie da linha.
+    plrui_material((GfxRect){ G_AREA_X - 40.0f, G_TOPO - 18.0f, G_AREA_W + 80.0f,
+                              G_L_BASE + 6.0f - (G_TOPO - 18.0f) }, 28.0f, 0, a);
     desenharRegua(a, ini);
     gfx_recorte(0.0f, G_L_TOPO - 8.0f, NV_TELA_W, G_L_BASE - G_L_TOPO + 8.0f);
     for (passo = 0; passo < 2; passo++) {
@@ -4076,6 +4087,9 @@ void guia_desenhar(Uint32 agora) {
           int foc = l == focoLin && i == focoCol && !focoTopo;
           GfxRect alvo;
           if (y + G_L_ROW < G_L_TOPO - 8.0f || y > G_L_BASE) continue;
+          if (foc && passo == 0)
+            plrui_linha_foco((GfxRect){ G_AREA_X - 14.0f, y - 4.0f, G_AREA_W + 28.0f, G_L_CEL + 8.0f },
+                             22.0f, a * dim);
           desenharLinhaLista(linhaItem(l, i), y, foc, a * dim, agoraT, ini, tFoco,
                              passo, agoraX, foc ? &alvo : NULL);
           if (foc && passo == 0) {
@@ -4089,15 +4103,12 @@ void guia_desenhar(Uint32 agora) {
       // tambem por baixo do texto: por cima, ela riscava o titulo do
       // programa no ar bem no meio.
       if (passo == 0 && agoraVis) {
-        if (agoraX > G_L_FAIXA_X)
-          gfx_cor((GfxRect){ G_L_FAIXA_X, G_L_TOPO - 8.0f, agoraX - G_L_FAIXA_X,
-                             fimY - G_L_TOPO + 8.0f }, 0.0f,
-                  NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 0.50f * a);
         gfx_cor((GfxRect){ agoraX - 1.0f, G_L_TOPO - 8.0f, 2.0f, fimY - G_L_TOPO + 8.0f },
                 0.0f, ar, ag, ab, 0.85f * a);
       }
     }
-    desenharAnelFoco(a, agora, rolL);
+    focoAnelOk = 0;   // Glass UI: foco e superficie, sem anel
+    (void)agora;
     // A grade SOME nas bordas em vez de ser cortada a faca, e so do lado em
     // que ha mais canal: tres faixas da cor do fundo, 12 px cada. Sao tres
     // retangulos pequenos por borda, nao um degrade de tela.
@@ -4105,13 +4116,15 @@ void guia_desenhar(Uint32 agora) {
       float fa = (overlay ? 0.94f : 1.0f) * a;
       for (k = 0; k < 3; k++) {
         float al = (0.25f + 0.25f * (float)k) * fa;
+        float fr = ajustes_vidro() ? 0.054f : 0.082f, fg = ajustes_vidro() ? 0.058f : 0.086f,
+              fb = ajustes_vidro() ? 0.069f : 0.102f;
         if (maisAbaixo)
-          gfx_cor((GfxRect){ 0.0f, G_L_BASE - G_L_FADE + 12.0f * (float)k, NV_TELA_W, 12.0f },
-                  0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, al);
+          gfx_cor((GfxRect){ G_AREA_X - 40.0f, G_L_BASE - G_L_FADE + 12.0f * (float)k, G_AREA_W + 80.0f, 12.0f },
+                  0.0f, fr, fg, fb, al);
         if (maisAcima)
-          gfx_cor((GfxRect){ 0.0f, G_L_TOPO - 8.0f + G_L_FADE - 12.0f * (float)(k + 1),
-                             NV_TELA_W, 12.0f },
-                  0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, al);
+          gfx_cor((GfxRect){ G_AREA_X - 40.0f, G_L_TOPO - 8.0f + G_L_FADE - 12.0f * (float)(k + 1),
+                             G_AREA_W + 80.0f, 12.0f },
+                  0.0f, fr, fg, fb, al);
       } }
     gfx_sem_recorte();
     // A cabeca da linha "agora": a hora numa pilula na regua.
