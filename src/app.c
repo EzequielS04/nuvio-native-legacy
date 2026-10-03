@@ -1842,7 +1842,6 @@ void app_atualizar(float dt, Uint32 agora) {
     // instante em que o servidor respondeu. Assim a home nunca abre com uma
     // sessao pela metade.
     if (login_concluido()) {
-      login_soltar();
       // Logo apos entrar, o primeiro ciclo de sync: e ele que descobre quantos
       // perfis a conta tem, e sem isso a tela de escolha nao teria o que
       // mostrar.
@@ -2005,6 +2004,10 @@ void app_atualizar(float dt, Uint32 agora) {
     }
     return;
   }
+
+  // O fundo das listras (login e escolha de perfil) sai da memoria quando a
+  // pessoa passa das duas telas. Sem textura carregada, e um teste e nada mais.
+  login_soltar();
 
   // Um ciclo por vez, e so quando a conta existe. O passo e barato: sem fio
   // terminado ele nao faz nada.

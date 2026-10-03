@@ -154,6 +154,15 @@ static void carregarFundo(void) {
   SDL_FreeSurface(c);
 }
 
+int login_fundo_desenhar(float alfa) {
+  if (!tentouFundo) carregarFundo();
+  if (!texFundo) return 0;
+  gfx_tex_aspect_atual = 0.0f;
+  gfx_rect((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, texFundo, GFX_TEXTO,
+           0, 0, 0, 0.0f, 1, 1, 1, alfa);
+  return 1;
+}
+
 void login_soltar(void) {
   if (texFundo) { gfx_tex_esquecer(texFundo); glDeleteTextures(1, &texFundo); texFundo = 0; }
   tentouFundo = 0;
@@ -371,11 +380,8 @@ void login_desenhar(Uint32 agora) {
   (void)agora;
 
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-    if (!tentouFundo) carregarFundo();
-    if (texFundo) {
-      gfx_tex_aspect_atual = 0.0f;
-      gfx_rect(tela, texFundo, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, 1.0f);
-    } else gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f); }
+    if (!login_fundo_desenhar(1.0f))
+      gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f); }
   // A tela inteira e a camada: nada de tras recebe toque.
   ponteiro_camada();
   ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, NULL, 0, 0);
