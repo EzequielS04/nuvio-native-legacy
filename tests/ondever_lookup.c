@@ -6,12 +6,34 @@
 static pthread_mutex_t gate=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t wake=PTHREAD_COND_INITIALIZER;
 static int firstWaiting, releaseFirst;
+#if defined(NV_TPK)
+static int launches, stores;
+static char launched[96];
+static void mockList(void) {}
+static void mockLaunch(const char *id) { launches++;snprintf(launched,sizeof launched,"%s",id); }
+static void mockStore(const char *id) { (void)id;stores++; }
+static void actions(void) {
+  nv_tpk_apps_registrar(mockList,mockLaunch,mockStore);
+  ondever_apps_limpar();
+  assert(ondever_estado("Netflix")==ONDE_LOJA);
+  assert(ondever_abrir("Netflix")==ONDE_LOJA && stores==1);
+  ondever_app_visto("installed.netflix","Netflix");
+  assert(ondever_abrir("Netflix")==ONDE_ABRIR && launches==1);
+  assert(!strcmp(launched,"installed.netflix"));
+  assert(ondever_abrir("HBO Max Amazon Channel")==ONDE_INFO);
+  assert(ondever_abrir("Paramount Plus Apple TV Channel")==ONDE_INFO);
+  assert(launches==1 && stores==1);
+  assert(ondever_abrir("Unknown Service")==ONDE_PROCURAR && stores==2);
+}
+#endif
 const char *desc_chave_tmdb_reserva(void) { return "test-only"; }
 const char *ajustes_tmdb_idioma(void) { return "pt-BR"; }
 char *dados_ler(const char *name) { (void)name; return NULL; }
 int dados_gravar_leve(const char *name,const char *body) { (void)name;(void)body; return 1; }
 char *rede_baixar(const char *url,int timeout) {
   (void)timeout;
+  if(strstr(url,"/movie/3/")) return NULL;
+  if(strstr(url,"/movie/4/")) return strdup("{\"results\":{}}");
   if(strstr(url,"/movie/1/")) {
     pthread_mutex_lock(&gate);firstWaiting=1;pthread_cond_broadcast(&wake);
     while(!releaseFirst)pthread_cond_wait(&wake,&gate);
@@ -57,5 +79,15 @@ static void generation(void) {
   assert(ondever_estado("HBO Max Amazon Channel")==ONDE_INFO);
   assert(ondever_estado("Paramount Plus Apple TV Channel")==ONDE_INFO);
   char app[96];assert(appDo("Netflix",app,sizeof app));assert(!strcmp(app,"com.netflix.ninja"));
+  pthread_mutex_lock(&trava);geracao=3;snprintf(pedido,sizeof pedido,"tt3");consultando=1;pthread_mutex_unlock(&trava);
+  fioLista(request("tt3",3,3));
+  assert(ondever_status("tt3")==ONDE_FALHOU && ondever_n("tt3")==0);
+  pthread_mutex_lock(&trava);geracao=4;snprintf(pedido,sizeof pedido,"tt4");consultando=1;pthread_mutex_unlock(&trava);
+  fioLista(request("tt4",4,4));
+  assert(ondever_status("tt4")==ONDE_PRONTO && ondever_n("tt4")==0);
 }
-int main(void) { parser();generation();puts("ondever lookup: parser, entitlement and stale-response tests passed");return 0; }
+int main(void) { parser();generation();
+#if defined(NV_TPK)
+  actions();
+#endif
+  puts("ondever lookup: parser, entitlement and stale-response tests passed");return 0; }

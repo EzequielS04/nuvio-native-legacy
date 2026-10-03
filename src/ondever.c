@@ -562,6 +562,7 @@ int ondever_abrir(const char *nome) {
          e == ONDE_ABRIR ? "launch" : e == ONDE_LOJA ? "store" : e == ONDE_PROCURAR ? "search-store" : "information",
          e == ONDE_ABRIR ? id : loja);
   fflush(stdout);
+  if (e == ONDE_INFO) return ONDE_INFO;
 #if defined(__APPLE__) && !defined(NV_TPK)
   return ONDE_INFO;
 #elif defined(__EMSCRIPTEN__)
