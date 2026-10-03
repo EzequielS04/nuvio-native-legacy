@@ -1,5 +1,7 @@
 # Ilha do relógio — inventário e proposta
 
+**Decisão posterior do dono:** mockup rejeitado. As quatro evoluções abaixo não estão na fila de integração. Preservado como inventário/histórico; a ilha existente e seu bugfix de identidade permanecem. Continuidade em [roadmap geral](../../ROADMAP.md).
+
 Proposta UX local, solicitada pelo dono em 02/10/2026. O inventário abaixo foi feito na release 1.7.2 `fc711f6b` (referências de linhas desse snapshot). A correção de identidade foi integrada depois em `b71471bc`. Este documento e o mockup não alteram o runtime ou os pacotes. O lote de pacotes `fc711f6b` passou a intermediário durante a revisão final de isolamento do cartão descrita abaixo. Nenhuma TV foi controlada ou usada como evidência de desempenho.
 
 A recomendação é fazer da ilha o ponto de continuidade da sessão: mostrar quando a retomada está pronta, manter essa ação estável e oferecer contexto somente ao expandir. O teto de retenção permanece em **dois minutos**.
