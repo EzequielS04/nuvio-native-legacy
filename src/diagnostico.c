@@ -968,6 +968,7 @@ static void montarRelatorio(void) {
     d.streamMs, texItens, texPend, texQuentes, texBytes, texLimite, texMb,
     memTotal, fios, fiosMax, gargaloPrincipal(), aplicacaoNome(d.aplicacao),
     d.coberturaParcial ? "parcial" : "completa");
+  ACRESCENTA("platform=%s\n", ptv_plataforma_nome(ptv_plataforma()));
   ACRESCENTA("perfil_antes=%d|%d|%d\nperfil_candidato=%d|%d|%d\ntravado_mb=%d\n",
              d.perfAntes.texMb, d.perfAntes.fiosRede, d.perfAntes.heroiLarg,
              d.perfCand.texMb, d.perfCand.fiosRede, d.perfCand.heroiLarg, d.travadoMb);

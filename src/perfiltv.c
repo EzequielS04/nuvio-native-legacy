@@ -100,9 +100,23 @@ PtvPlataforma ptv_plataforma(void) {
   return PTV_TIZEN;
 #elif defined(NV_TPK)
   return PTV_TPK;
+#elif defined(NV_ANDROID)
+  return PTV_ANDROID;
 #else
   return PTV_LG;
 #endif
+}
+
+// Android previously used PTV_LG. Preserve its budgets and mode behavior
+// until physical-device measurements justify a separate resource policy.
+const char *ptv_plataforma_nome(PtvPlataforma p) {
+  switch (p) {
+    case PTV_LG: return "lg";
+    case PTV_TIZEN: return "tizen_wgt";
+    case PTV_TPK: return "tizen_tpk";
+    case PTV_ANDROID: return "android";
+    default: return "unknown";
+  }
 }
 
 int ptv_tex_auto_mb(PtvPlataforma p, long mem) {
@@ -146,7 +160,7 @@ int ptv_fios_rede_max(PtvPlataforma p) { return p == PTV_TIZEN ? 2 : 4; }
 // (4), e LGs de 658 MB aprovaram 64 MB com 4 fios (diagnostico de campo,
 // pessoas 80cd1a98 e f9f204be) — os 4 corpos em voo que a tabela evita.
 static int fiosTeto(PtvPlataforma p, long mem) {
-  if ((p == PTV_LG || p == PTV_TPK) && mem && mem < 1200) return 2;
+  if ((p == PTV_LG || p == PTV_ANDROID || p == PTV_TPK) && mem && mem < 1200) return 2;
   return ptv_fios_rede_max(p);
 }
 
@@ -178,7 +192,7 @@ void ptv_candidato(PtvPlataforma p, long mem, PtvModo modo, int travado,
   if (!out) return;
   if (modo == PTV_DESEMPENHO) {
     ptv_padrao(p, mem, out);
-    if (p == PTV_LG && out->fiosRede > 2) out->fiosRede = 2;
+    if ((p == PTV_LG || p == PTV_ANDROID) && out->fiosRede > 2) out->fiosRede = 2;
     out->heroiLarg = 1280;
   } else {
     out->texMb = ptv_tex_teto_mb(p, mem);

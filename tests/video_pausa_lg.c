@@ -42,7 +42,25 @@ static const char *fakePayload(LSMessage *m) { return (const char *)m; }
 static void evento(const char *p, unsigned geracao) {
   aoEvento(NULL, (LSMessage *)p, (void *)(uintptr_t)geracao);
 }
+static int windowCalls;
+static int fakeWindow(long handle, long x, long y, long w, long h, int full, long *task) {
+  (void)handle; (void)x; (void)y; (void)w; (void)h; (void)full; (void)task;
+  ++windowCalls; return 0;
+}
+
 int main(void) {
+  // Exercise the production LG path: settled geometry must not call ACB
+  // every frame; PiP/fullscreen transitions must still reach the backend.
+  acbJanela = fakeWindow; acb = 1; ligado = 1;
+  snprintf(midia, sizeof midia, "fixture-window");
+  video_janela(100, 100, 640, 360);
+  for (int i = 0; i < 1000; ++i) video_janela(100, 100, 640, 360);
+  assert(windowCalls == 1);
+  video_janela(0, 0, 1920, 1080); assert(windowCalls == 2);
+  video_janela(1400, 700, 480, 270); assert(windowCalls == 3);
+  acb = 0; midia[0] = 0;
+  puts("video_window_lg: 1001 stable requests -> 1 native call; transitions preserved");
+
   lsCall = fakeCall; lsPayload = fakePayload;
   ligado = pronto = tocando = 1; sessao = 7;
   snprintf(midia, sizeof midia, "fixture-media-id");

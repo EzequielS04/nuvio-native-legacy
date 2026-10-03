@@ -20,6 +20,7 @@
     <Compile Include="../Program.cs" />
     <Compile Include="../Apps.cs" />
     <Compile Include="../Video.cs" />
+    <Compile Include="../VideoWindowMetrics.cs" />
     <Compile Include="../Carga.cs" />
     <Compile Include="../Texto.cs" Condition="'$(NvTextoCanario)' == '1'" />
     <PackageReference Include="Tizen.NET" Version="8.0.*"><ExcludeAssets>Runtime</ExcludeAssets></PackageReference>

@@ -8,6 +8,7 @@
 # "Resultado geral" apareceram em portugues com o app em ingles (C9, 22/09).
 set -eu
 cd "$(dirname "$0")/.."
+bash tests/diagnostico_dispatch.sh
 
 cc tests/diagnostico.c src/perfiltv.c -Isrc -o /tmp/nuvio-diagnostico \
   -O1 -g -Wall -Wextra

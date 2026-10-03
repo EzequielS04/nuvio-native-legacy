@@ -9,6 +9,8 @@
 // o numero guardado, sem esperar ninguem.
 using System;
 using System.IO;
+using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Tizen.Multimedia;
 
@@ -86,6 +88,7 @@ namespace NuvioTpk
         // Referencias vivas: o C guarda os ponteiros, o GC nao pode recolher.
         FnAbrir fAbrir; FnSemArg fParar; FnInt fPausar, fBuscar, fVolume; FnRet fJanela; FnPos fPos; FnEscolher fEscolher;
 
+        readonly VideoWindowMetrics windowMetrics = new VideoWindowMetrics();
         Player player;
         int sessao;
         volatile int posMs;
@@ -222,6 +225,7 @@ namespace NuvioTpk
                 int nAudio = Faixas(p);
                 NvVid.Evento(EV_PRONTO, dur, 0);
                 p.Start();
+                windowMetrics.Invalidate();
                 NvVid.Evento(EV_TOCANDO, 0, 0);
                 // Alguns contêineres/HLS so publicam as faixas de audio depois
                 // que a reproducao comeca: le de novo, uma vez.
@@ -300,8 +304,22 @@ namespace NuvioTpk
             Log("[audio] prime released");
         }
 
+        void ReportWindowMetrics()
+        {
+            if (windowMetrics.Requests > 0)
+            {
+                double scale = 1000.0 / Stopwatch.Frequency;
+                Log(string.Format(CultureInfo.InvariantCulture,
+                    "[video-window] requests={0} repeated={1} applied={2} failed={3} native_ms={4:F3} max_ms={5:F3}",
+                    windowMetrics.Requests, windowMetrics.RepeatedRequests, windowMetrics.Applied,
+                    windowMetrics.Failed, windowMetrics.ElapsedTicks * scale, windowMetrics.MaxTicks * scale));
+            }
+            windowMetrics.Reset();
+        }
+
         public void Parar()
         {
+            ReportWindowMetrics();
             SoltaPrimer();
             sessao++;
             var p = player;
@@ -318,6 +336,7 @@ namespace NuvioTpk
         // por passo no log. Cada passo isolado: nenhum segura a saida.
         public void Encerrar()
         {
+            ReportWindowMetrics();
             SoltaPrimer();
             sessao++;
             var p = player;
@@ -338,7 +357,7 @@ namespace NuvioTpk
             try
             {
                 if (pausa && player.State == PlayerState.Playing) { player.Pause(); NvVid.Evento(EV_PAUSADO, 0, 0); }
-                else if (!pausa && player.State == PlayerState.Paused) { player.Start(); NvVid.Evento(EV_TOCANDO, 0, 0); }
+                else if (!pausa && player.State == PlayerState.Paused) { player.Start(); windowMetrics.Invalidate(); NvVid.Evento(EV_TOCANDO, 0, 0); }
             }
             catch (Exception e) { Log("pausar: " + e.Message); }
         }
@@ -346,6 +365,7 @@ namespace NuvioTpk
         async void Buscar(int ms)
         {
             if (player == null) return;
+            windowMetrics.Invalidate();
             try { posMs = ms; await player.SetPlayPositionAsync(ms, false); }
             catch (Exception e) { Log("buscar: " + e.Message); }
         }
@@ -353,6 +373,9 @@ namespace NuvioTpk
         void Janela(int x, int y, int w, int h)
         {
             if (player == null) return;
+            bool applied = false, fullscreen = x == 0 && y == 0 && w == telaW && h == telaH;
+            windowMetrics.Begin(player, x, y, w, h, fullscreen);
+            long started = Stopwatch.GetTimestamp(), ended = 0;
             try
             {
                 // QUADRO CHEIO SEM ZOOM: LetterBox, o mesmo caminho da reproducao
@@ -368,11 +391,13 @@ namespace NuvioTpk
                 // zoom. Agora so o quadro EXATO da tela vira LetterBox; qualquer
                 // ROI de zoom (origem negativa OU maior que a tela) passa cru ao
                 // SetRoi.
-                if (x == 0 && y == 0 && w == telaW && h == telaH) { player.DisplaySettings.Mode = PlayerDisplayMode.LetterBox; return; }
+                if (fullscreen) { player.DisplaySettings.Mode = PlayerDisplayMode.LetterBox; applied = true; return; }
                 player.DisplaySettings.Mode = PlayerDisplayMode.Roi;
                 player.DisplaySettings.SetRoi(new Rectangle(x, y, w, h));
+                applied = true;
             }
-            catch (Exception e) { Log("janela: " + e.Message); }
+            catch (Exception e) { ended = Stopwatch.GetTimestamp(); Log("[video-window] apply failed: " + e.Message); }
+            finally { windowMetrics.Complete(applied, (ended != 0 ? ended : Stopwatch.GetTimestamp()) - started); }
         }
     }
 }

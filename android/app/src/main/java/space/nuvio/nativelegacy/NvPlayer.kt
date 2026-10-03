@@ -372,20 +372,27 @@ object NvPlayer {
         val y0 = Math.round(jy * ey)
         val x1 = Math.round((jx + jw) * ex)
         val y1 = Math.round((jy + jh) * ey)
-        val lp = FrameLayout.LayoutParams(maxOf(1, x1 - x0), maxOf(1, y1 - y0))
-        lp.gravity = Gravity.TOP or Gravity.START
+        val largura = maxOf(1, x1 - x0)
+        val altura = maxOf(1, y1 - y0)
+        val gravidade = Gravity.TOP or Gravity.START
+        val antes = sv.layoutParams as? FrameLayout.LayoutParams
+        // Inspect the current SurfaceView, not a cached rectangle: resize or
+        // replacing the surface must still apply its actual layout. Avoid both
+        // allocation and requestLayout when repeated requests change nothing.
+        if (antes != null && antes.width == largura && antes.height == altura &&
+            antes.leftMargin == x0 && antes.topMargin == y0 &&
+            antes.rightMargin == 0 && antes.bottomMargin == 0 && antes.gravity == gravidade) return
+        val lp = FrameLayout.LayoutParams(largura, altura)
+        lp.gravity = gravidade
         lp.leftMargin = x0
         lp.topMargin = y0
-        val antes = sv.layoutParams as? FrameLayout.LayoutParams
-        val mudou = antes == null || antes.width != lp.width || antes.height != lp.height ||
-            antes.leftMargin != lp.leftMargin || antes.topMargin != lp.topMargin
         sv.layoutParams = lp
         // A TCL PRENDE A GEOMETRIA DO PLANO DE VIDEO: aplica o primeiro tamanho
         // e posicao da superficie e ignora as mudancas seguintes (o dono: "entra
         // recortado e nao sai; entra no esticar e fica esticado"). Recriar a
         // Surface (GONE -> VISIBLE) faz o compositor montar camada nova com a
         // geometria nova; o ExoPlayer troca a saida do decoder sem recarregar.
-        if (mudou) recriarSuperficie(RECRIA_ESPERA_MS)
+        recriarSuperficie(RECRIA_ESPERA_MS)
     }
 
     // Recriar a Surface custa um quadro preto e, em rajada (aspecto apertado

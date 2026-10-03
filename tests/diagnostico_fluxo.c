@@ -170,6 +170,7 @@ int main(void) {
   d.fonte[PTV_FONTE_APPLE].downloadOkMs = 2718;
   d.fonte[PTV_FONTE_APPLE].downloadPiorMs = 6000;
   montarRelatorio();
+  assert(strstr(d.relatorio, "platform=lg\n"));
   assert(strstr(d.relatorio, "arte_fonte=apple|ok=2|falhas=1|resolve_ms=0|download_ms=8718|"));
   assert(strstr(d.relatorio, "|download_medio_ms=1359|download_pior_ms=6000\narte_fonte=fanart"));
   assert(strstr(d.relatorio, "arte_fonte=fanart|ok=0|falhas=0|") &&
