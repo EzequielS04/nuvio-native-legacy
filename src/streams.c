@@ -37,14 +37,14 @@
 #define FOLHA_PAD_D     56.0f
 #define FOLHA_TXT       26.0f  // do cartao ao texto
 #define FOLHA_TOPO     286.0f  // onde a lista comeca
-#define FOLHA_LINHA_H  120.0f  // linha sem marca e sem arquivo
+#define FOLHA_LINHA_H  112.0f  // linha sem marca e sem arquivo
 #define FOLHA_MARCA_H   30.0f  // "SUA ESCOLHA ANTERIOR" / "REPRODUZINDO AGORA"
 #define FOLHA_ARQ_H     34.0f  // nome do arquivo, so na linha em foco
 #define FOLHA_LINHA_GAP  4.0f
 #define FOLHA_SEC_H     64.0f  // cabecalho "4K  ULTRA HD ... 3 fontes"
 #define FOLHA_SEC_GAP   26.0f
 #define FOLHA_RAIO      22.0f
-#define FOLHA_SELO_H    32.0f
+#define FOLHA_SELO_H    24.0f  // logos menores (dono, 02/10: "ficaram muito grande")
 #define FOLHA_AUDIO_W  60.0f
 #define FOLHA_AUDIO_N   8
 #define FOLHA_AUDIO_BAR 4.0f
@@ -979,14 +979,29 @@ static int automaticaDaFolha(void) {
 // arquivo (so na linha em foco, abrindo por mola) somam altura. Montado a cada
 // quadro em atualizar e em desenhar: n e da ordem de dezenas, e guardar entre
 // quadros exigiria invalidar em cada filtro, recarga e troca de lista.
-#define FOLHA_GRUPOS 4
-static const char *const GRUPO_NOME[FOLHA_GRUPOS] = { "4K", "1080p", "720p", "Outras" };
-static const char *const GRUPO_SUB[FOLHA_GRUPOS]  = { "ULTRA HD", "FULL HD", "HD", "" };
+//
+// CADA RESOLUCAO SE PARTE EM HDR E SDR (dono, 02/10: "alem de 4K como
+// categoria, colocar HDR e SDR"). Grupo = resolucao*2 + (SDR ? 1 : 0), entao a
+// ordem fica 4K HDR, 4K SDR, 1080p HDR, 1080p SDR... — numa TV HDR, a fonte
+// que liga o modo vem antes da que nao liga, dentro da mesma resolucao. HDR e
+// qualquer sinal de imagem estendida: Dolby Vision (inclusive o que so chega
+// pelo bit do audio combinado), HDR10+, HDR10, HDR e HLG.
+#define FOLHA_RES    4
+#define FOLHA_GRUPOS (FOLHA_RES * 2)
+static const char *const GRUPO_NOME[FOLHA_RES] = { "4K", "1080p", "720p", "Outras" };
+static int ehHdr(const Stream *s) {
+  return s->dolbyVision ||
+         (s->badges & (badges_bit("v-dv") | badges_bit("v-hdr10plus") | badges_bit("v-hdr10") |
+                       badges_bit("v-hdr") | badges_bit("v-hlg") | badges_bit("a-atmos-dv") |
+                       badges_bit("a-truehd-dv") | badges_bit("a-dd-dv"))) != 0;
+}
 static int grupoRes(const Stream *s) {
-  if (s->altura >= 1800 || (s->badges & badges_bit("r-4k"))) return 0;
-  if (s->altura >= 1000 || (s->badges & badges_bit("r-1080"))) return 1;
-  if (s->altura >= 700  || (s->badges & badges_bit("r-720"))) return 2;
-  return 3;
+  int r;
+  if (s->altura >= 1800 || (s->badges & badges_bit("r-4k"))) r = 0;
+  else if (s->altura >= 1000 || (s->badges & badges_bit("r-1080"))) r = 1;
+  else if (s->altura >= 700  || (s->badges & badges_bit("r-720"))) r = 2;
+  else r = 3;
+  return r * 2 + (ehHdr(s) ? 0 : 1);
 }
 static int *ordem;
 static float *linhaY, *linhaH;
@@ -1348,7 +1363,10 @@ void stream_folha_evento(const SDL_Event *e) {
     else if(grupo==0) {grupo=1;foco=0;}
     else if(foco<nf-1) foco++;
   }
-  if(grupo==0 && (k==SDLK_LEFT || k==SDLK_RIGHT)) {
+  // ESQUERDA/DIREITA NUMA FONTE TROCAM A ABA DE ADDON (dono, 02/10), como no
+  // seletor: a lista nao tem nada na horizontal, e subir ate as abas para
+  // trocar de addon eram duas teclas a mais a cada troca.
+  if(grupo>=0 && (k==SDLK_LEFT || k==SDLK_RIGHT)) {
     filtro+=k==SDLK_RIGHT?1:-1;
     if(filtro<0) filtro=0;
     if(filtro>=nProvedores) filtro=nProvedores-1;
@@ -1566,9 +1584,11 @@ void stream_folha_desenhar(Uint32 agora) {
     if(!secN[g]) continue;
     y=FOLHA_TOPO+secY[g]-rolagem;
     if(y+FOLHA_SEC_H<FOLHA_TOPO-8||y>NV_TELA_H) continue;
-    { TxtLinha l=txt_linha(TXT_PAINEL_ITEM,GRUPO_NOME[g],242,242,240,255);
+    { TxtLinha l=txt_linha(TXT_PAINEL_ITEM,GRUPO_NOME[g/2],242,242,240,255);
       txt_desenhar_alpha(l,tx,y+8,anim);
-      if(GRUPO_SUB[g][0]) caixaAlta(GRUPO_SUB[g],120,120,118,tx+l.w+16,y+15,anim); }
+      // HDR no acento (e o que liga o modo da TV), SDR no cinza.
+      if(g%2==0) caixaAlta("HDR",ai,(int)(ag*255),(int)(ab*255),tx+l.w+16,y+15,anim);
+      else       caixaAlta("SDR",120,120,118,tx+l.w+16,y+15,anim); }
     snprintf(q,sizeof q,i18n(secN[g]==1?"%d fonte":"%d fontes"),secN[g]);
     { TxtLinha l=txt_linha(TXT_PG_FIM,q,110,110,108,255);
       txt_desenhar_alpha(l,tr-l.w,y+12,anim); }
