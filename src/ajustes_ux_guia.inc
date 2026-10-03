@@ -576,31 +576,31 @@ static void guiaDesenharIndice(const GuiaVista *v, float a) {
     const char *ic = j == GI_BUSCA ? "aj_search" : j == GI_NOVO ? "aj_sparkles" : GUIA_CAPS[j - GI_CAP0].icone;
     GfxRect r;
     float al = foco || at ? 1.0f : 0.66f;
-    if (j == GI_CAP0) { gfx_cor((GfxRect){ il.x + 30, y + 6, il.w - 60, 1 }, 0, 1, 1, 1, 0.08f * a); y += 9; }
+    if (j == GI_CAP0) { gfx_cor((GfxRect){ il.x + 30, y + 6, il.w - 60, 1 }, 0, 1, 1, 1, 0.08f * a); y += 15; }
     r = (GfxRect){ il.x + 14, y, il.w - 28, 54 };
     if (foco) ajNeutro(r, 27, 0.14f, 0.169f, 0.176f, 0.204f, a);
     else if (at) gfx_cor((GfxRect){ r.x + 7, r.y + 24.5f, 5, 5 }, 0.5f, ar, ag, ab, a);
     ajIcone(ic, r.x + 18, r.y + 15, 24, (foco || at ? 1.0f : 0.55f) * a);
-    { float cw = 0;
-      char n[16];
-      if (j == GI_NOVO) {
-        TxtLinha q;
-        int r8, g8, b8;
-        ajAcento8(&r8, &g8, &b8);
-        snprintf(n, sizeof n, "%d", guiaNovos());
-        q = txt_linha(TXT_AJ_16B, n, r8, g8, b8, 255);
-        txt_desenhar_alpha(q, r.x + r.w - 18 - q.w, r.y + (54 - q.h) * 0.5f, a);
-        gfx_cor((GfxRect){ r.x + r.w - 18 - q.w - 14, r.y + 23.5f, 7, 7 }, 0.5f, ar, ag, ab, a);
-        cw = q.w + 14;
-      } else if (j >= GI_CAP0) {
-        TxtLinha q;
-        snprintf(n, sizeof n, "%d", guiaNoCap(j - GI_CAP0));
-        q = ajTxt(TXT_ILHA_GENERO, n);
-        txt_desenhar_alpha(q, r.x + r.w - 18 - q.w, r.y + (54 - q.h) * 0.5f, (foco ? 0.6f : 0.34f) * a);
-        cw = q.w;
-      }
-      { TxtLinha l = ajTxtC(TXT_G20M, t, r.w - 56 - 18 - cw - 8);
-        txt_desenhar_alpha(l, r.x + 56, r.y + (54 - l.h) * 0.5f, al * a); } }
+    { char n[16];
+      TxtLinha q = { 0 }, l;
+      float qx, lmax;
+      int r8, g8, b8;
+      ajAcento8(&r8, &g8, &b8);
+      if (j == GI_NOVO) { snprintf(n, sizeof n, "%d", guiaNovos()); q = txt_linha(TXT_AJ_16B, n, r8, g8, b8, 255); }
+      else if (j >= GI_CAP0) { snprintf(n, sizeof n, "%d", guiaNoCap(j - GI_CAP0)); q = ajTxt(TXT_ILHA_GENERO, n); }
+      // O nome inteiro sempre que couber: a contagem anda para a direita (o
+      // flex do mockup), e so corta com reticencias quando nem assim cabe.
+      lmax = r.w - 56 - (q.w ? q.w + (j == GI_NOVO ? 14 : 0) + 12 : 0) - 4;
+      l = ajTxtC(TXT_AJ_VALOR, t, lmax);
+      txt_desenhar_alpha(l, r.x + 56, r.y + (54 - l.h) * 0.5f, al * a);
+      if (q.w) {
+        qx = r.x + r.w - 18 - q.w;
+        if (qx < r.x + 56 + l.w + 12 + (j == GI_NOVO ? 14 : 0)) qx = r.x + 56 + l.w + 12 + (j == GI_NOVO ? 14 : 0);
+        if (j == GI_NOVO) {
+          txt_desenhar_alpha(q, qx, r.y + (54 - q.h) * 0.5f, a);
+          gfx_cor((GfxRect){ qx - 14, r.y + 23.5f, 7, 7 }, 0.5f, ar, ag, ab, a);
+        } else txt_desenhar_alpha(q, qx, r.y + (54 - q.h) * 0.5f, (foco ? 0.6f : 0.34f) * a);
+      } }
     y += 56;
   }
 }

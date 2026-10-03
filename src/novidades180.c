@@ -391,14 +391,20 @@ static void cenaAjustes(float t) {
   // A caixa de busca.
   ajustes_ui_ilha(b, 38.0f, 0);
   icone("aj_search", (GfxRect){ b.x + 28, b.y + 24, 28, 28 }, 1, 1);
-  { TxtLinha q = txt(TXT_CALLOUT, "memória"), n = txt(TXT_ILHA_GENERO, i18n("2 ajustes"));
+  { char na[48];
+    TxtLinha q, n;
+    snprintf(na, sizeof na, i18n("%d ajustes"), 2);
+    q = txt(TXT_CALLOUT, i18n("memória"));
+    n = txt(TXT_ILHA_GENERO, na);
     txt_desenhar(q, b.x + 72, b.y + (76 - q.h) * 0.5f);
     if (fmodf(t, 1.0f) < 0.6f) gfx_cor((GfxRect){ b.x + 72 + q.w + 3, b.y + 23, 2, 30 }, 0, ar, ag, ab, 1);
     txt_desenhar_alpha(n, b.x + b.w - 28 - n.w, b.y + (76 - n.h) * 0.5f, 0.45f); }
   // Os dois resultados.
   ajustes_ui_ilha(res, 32.0f, 0);
-  linhaAj("aj_memory-stick", "Memória usada por imagens", "Desempenho desta TV", "151 de 240 MB", 1,
-          res.x + 14, res.y + 14, res.w - 28);
+  { char v[48];
+    snprintf(v, sizeof v, i18n("%d de %d MB"), 151, 240);
+    linhaAj("aj_memory-stick", "Memória usada por imagens", "Desempenho desta TV", v, 1,
+            res.x + 14, res.y + 14, res.w - 28); }
   { char sb[120];
     snprintf(sb, sizeof sb, "%s · %s", i18n("Desempenho desta TV"), i18n("Avançado"));
     linhaAj("aj_sliders-horizontal", "Memória para imagens", sb, "Automático", 0,
@@ -407,7 +413,10 @@ static void cenaAjustes(float t) {
   ajustes_ui_ilha(pm, 32.0f, 0);
   x = pm.x + 26; y = pm.y + 26;
   caps(TXT_MINI, "Memória para imagens agora", 2.1f, x, y, TX, 0.45f);
-  { TxtLinha n = txt(TXT_AJ_NUM64, "151,4"), d = txt(TXT_ILHA_CORPO, i18n("de 240 MB"));
+  { char dm[48];
+    TxtLinha n = txt(TXT_AJ_NUM64, ajustes_idioma_ingles() ? "151.4" : "151,4"), d;
+    snprintf(dm, sizeof dm, i18n("de %d MB"), 240);
+    d = txt(TXT_ILHA_CORPO, dm);
     char p[64];
     TxtLinha pc;
     snprintf(p, sizeof p, i18n("%d%% do teto"), 63);
@@ -435,14 +444,14 @@ static void cenaAjustes(float t) {
   y += 40.0f;
   ajustes_ui_grafico_exemplo(x, y, iw - 52, 180);
   y += 188.0f;
-  { TxtLinha a = txt(TXT_AJ_MINI13, i18n("há 2 min")), b2 = txt(TXT_AJ_MINI13, i18n("agora"));
+  { TxtLinha a = txt(TXT_AJ_MINI13, "há 2 min"), b2 = txt(TXT_AJ_MINI13, "agora");
     txt_desenhar_alpha(a, x, y, 0.42f);
     txt_desenhar_alpha(b2, x + iw - 52 - b2.w, y, 0.42f); }
   y += 31.0f;
   { static const char *const K[3] = { "Na tela agora", "No cache", "Teto" };
     char v[3][96];
     int i;
-    snprintf(v[0], sizeof v[0], i18n("%d imagens · %s MB"), 38, "96,2");
+    snprintf(v[0], sizeof v[0], i18n("%d imagens · %s MB"), 38, ajustes_idioma_ingles() ? "96.2" : "96,2");
     snprintf(v[1], sizeof v[1], i18n("%d imagens"), 64);
     snprintf(v[2], sizeof v[2], "240 MB · %s", i18n("pela RAM da TV"));
     for (i = 0; i < 3; i++) {
@@ -805,7 +814,7 @@ void novidades180_desenhar(Uint32 agora) {
     float ta = fechado > 0.0f ? NV_TXTGATE_AQUECER : a * textogate_passo(&gateLista, 0, SDL_GetTicks());
     float y = COL_Y + dy;
     if (boasVindas) {
-      snprintf(kick, sizeof kick, i18n("Nuvio %s"), N180_VERSAO);
+      snprintf(kick, sizeof kick, "Nuvio %s", N180_VERSAO);
       snprintf(tit, sizeof tit, "%s", i18n("Boas-vindas ao Nuvio"));
     } else {
       snprintf(kick, sizeof kick, "%s", i18n("Glass UI"));
