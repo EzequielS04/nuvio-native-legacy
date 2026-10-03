@@ -50,68 +50,75 @@
 #include <string.h>
 #include <stdio.h>
 
-// --- Cabecalho: geometria MEDIDA no web -------------------------------------
-// .search-header y=22 h=110, padding lateral 104.
-//   .search-discover-btn 110x110 em (104,22)   bg #222, borda 1px #333, raio 22
-//   .search-voice-btn    110x110 em (262,22)   -> passo 158 (gap 48)
-//   .search-input-field  1396x110 em (420,22)  bg #222, raio 22, 34/500,
-//                        padding lateral 32, placeholder "Buscar filmes e séries"
-//
-// Descobrir nao aparece: nao ha acao de descoberta nesta tela nativa. O campo
-// ocupa toda a largura disponivel. ONDE HA TECLADO E VOZ DO SISTEMA (Android,
-// sistexto.h) o campo vira alvo de foco — CIMA da primeira fileira do teclado
-// — e OK nele chama o teclado da TV; o microfone (Falar) entra no fim do
-// campo. Na LG e na Samsung nada disso existe e a tela fica como era.
-#define BU_HEAD_Y      34.0f
-#define BU_HEAD_H      82.0f
-#define BU_DIR       (NV_TELA_W - NV_CONTENT_PAD)   // 1816
-#define BU_CAMPO_PADX 28.0f
+// --- GLASS UI "ILHA" (mockup aprovado, secao 10 de design/glass-ilha) ---------
+// Campo e teclado sao DUAS ILHAS na coluna da esquerda (520 de largura); a
+// direita ficam o melhor resultado, os titulos e as buscas recentes. Margem 96
+// (a .pg do mockup), rail fixa entra antes. Sem contorno: foco = superficie
+// mais clara (linhas, cartoes) ou pilula no acento (tecla, chip).
+//   campo   520 x 76, raio 38, padding 28, lupa 28, texto 28/500
+//   teclado ilha 520, raio 32, padding 20, teclas 62 (raio 18) com vao 12
+//   dica    16, a 16 abaixo do teclado
+// Descobrir nao aparece: nao ha acao de descoberta nesta tela nativa. ONDE HA
+// TECLADO E VOZ DO SISTEMA (Android, sistexto.h) o campo vira alvo de foco —
+// CIMA da primeira fileira do teclado — e OK nele chama o teclado da TV; o
+// microfone (Falar) e o celular entram dentro do campo, no fim.
+#define BU_MARG        96.0f
+#define BU_COL_W      520.0f
+#define BU_COL_GAP     56.0f
+#define BU_CAMPO_H     76.0f
+#define BU_ILHA_GAP    22.0f
+#define BU_KB_PAD      20.0f
+#define BU_CAMPO_PADX  28.0f
+static float buX(void)   { return ajustes_rail_largura_fixa() + BU_MARG; }
+static float buDir(void) { return NV_TELA_W - BU_MARG; }
+// A coluna da esquerda desce quando a pilula da Dinamica ocupa o canto.
+static float buTopoEsq(void) {
+  float px, py, pw, ph;
+  if (menu_pilula_rect(&px, &py, &pw, &ph) && py + ph + 20.0f > 64.0f) return py + ph + 20.0f;
+  return 64.0f;
+}
 
-// --- Teclado (divergencia deliberada; ver o topo) ----------------------------
-#define BU_TECLA_W     74.0f
-#define BU_TECLA_GAP   13.0f
+// --- Teclado -----------------------------------------------------------------
+#define BU_TECLA_W     62.0f
+#define BU_TECLA_GAP   12.0f
 #define BU_KB_COLS      6
 // FILEIRAS DE TECLAS DE LETRA, no maximo (o layout latino usa 6; o cirilico, 7)
 // mais a de baixo (espaco/apagar/limpar/layout). O numero vivo e kbFil.
 #define BU_KB_MAX_FIL   8
 #define BU_KB_PASSO   (BU_TECLA_W + BU_TECLA_GAP)
 #define BU_KB_W       (BU_KB_COLS * BU_TECLA_W + (BU_KB_COLS - 1) * BU_TECLA_GAP)
-#define BU_KB_Y       NV_BUSCA_VAZIO_Y   // 148: a faixa do estado vazio do web
-// Crescimento da tecla em foco. Menor que o do poster de proposito: a tecla e
-// pequena e vizinha imediata das outras, e com 14% ela invade o gap de 12px.
-#define BU_TECLA_ESCALA 0.08f
-#define BU_TECLA_RAIO   0.14f
+#define BU_KB_X       buX()
+#define BU_KB_Y       (buTopoEsq() + BU_CAMPO_H + BU_ILHA_GAP)   // topo da ilha do teclado
+#define BU_TECLA_RAIO   18.0f
 #define BU_MAX_CONSULTA 48
 
-// --- Fileiras de resultado (geometria do web) --------------------------------
-#define BU_RES_X       (BU_KB_X + BU_KB_W + 64.0f)
-#define BU_RES_Y       NV_BUSCA_VAZIO_Y
-#define BU_RES_AREA_H  (NV_TELA_H - NV_MARGEM_Y - BU_RES_Y)
+// --- Coluna da direita --------------------------------------------------------
+#define BU_RES_X       (buX() + BU_COL_W + BU_COL_GAP)
+#define BU_RES_Y       64.0f
+#define BU_DIR         buDir()
+#define BU_RES_AREA_H  (NV_TELA_H - 48.0f - BU_RES_Y)
 // 32 fixas, e nao FOCUS_MAX_FILEIRAS: aquele teto subiu para a grade da
 // Biblioteca caber inteira, e a busca nao precisa de mais fileiras por isso.
 #define BU_MAX_FILEIRAS 32
 #define BU_MAX_POR_FIL  12
-
-// O teclado (e tudo a direita dele, que sai de BU_KB_X) parte do mesmo x da
-// home: 104 recolhida, 248 com a rail fixa. Era NV_CONTENT_PAD cravado, e com a
-// rail presa a primeira coluna de teclas ficava embaixo dela (26/09). As
-// fileiras de resultado so perdem largura — elas ja rolam na horizontal.
-#define BU_KB_X        ajustes_conteudo_x()
+// Rotulo em caixa alta (15/700) 18 acima do conteudo; melhor resultado 226 de
+// altura (capa 330x186 + padding 20); cartaz 180x270, nome 17 a 10 abaixo.
+#define BU_KICK_H       34.0f
+#define BU_MELHOR_H    226.0f
+#define BU_CARTAZ_W    180.0f
+#define BU_CARTAZ_H    270.0f
+#define BU_NOME_ALT     30.0f
+#define BU_SECAO_GAP    34.0f
 
 // --- Buscas recentes (campo vazio; regras em buscasrec.h) ---------------------
-// Pilulas de 56 (a altura do SECUNDARIO de botoes.h e das pilulas da Biblioteca)
-// com o corpo TXT_DET_BOTAO 25/500 dos botoes: a 3 m e o menor corpo que este
-// app usa em controle, e o termo e um controle, nao legenda. Correm em LINHAS
-// que quebram na borda direita (BU_DIR), porque dez termos de tamanho livre nao
-// cabem numa fileira rolavel sem esconder o "Limpar" no fim.
-//   titulo "Buscas recentes" TXT_TITULO3 em BU_RES_Y (o topo das fileiras de
-//   resultado, entao a tela nao pula quando a primeira letra entra);
-//   pilulas a partir de +84, passo vertical 56 + 20, gap horizontal 16.
-#define BU_REC_Y       (BU_RES_Y + 84.0f)
-#define BU_REC_H       BOTAO_H_SECUNDARIO
-#define BU_REC_PADX    BOTAO_PAD_X2
-#define BU_REC_GAP     BOTAO_GAP
-#define BU_REC_LINHA   (BU_REC_H + 20.0f)
+// Chips de 56 (o .chip do mockup) a partir de BU_RES_Y + 34, em LINHAS que
+// quebram na borda direita, porque dez termos de tamanho livre nao cabem numa
+// fileira rolavel sem esconder o "Limpar" no fim.
+#define BU_REC_Y       (BU_RES_Y + BU_KICK_H)
+#define BU_REC_H       56.0f
+#define BU_REC_PADX    22.0f
+#define BU_REC_GAP     14.0f
+#define BU_REC_LINHA   (BU_REC_H + 16.0f)
 #define BU_REC_ITENS   (BUSCASREC_MAX + 1)   // termos + "Limpar"
 
 // --- Estado ------------------------------------------------------------------
@@ -129,6 +136,7 @@ static struct {
   const char *origem;      // "from <addon>"; vazio quando nao se sabe
   int itens[BU_MAX_POR_FIL];
   int n;
+  int melhor;              // 1 = a entrada do MELHOR RESULTADO (1 item, tile grande)
 } fil[BU_MAX_FILEIRAS];
 static int nFil = 0;
 static int sair = 0;
@@ -361,6 +369,20 @@ static void refiltrar(void) {
     nFil++;
   }
 
+  // O MELHOR RESULTADO (mockup): o primeiro titulo da primeira fileira sai dela
+  // e vira uma entrada propria, de um item, desenhada como o tile grande. Foco,
+  // abertura e onda tratam essa entrada como qualquer fileira.
+  for (int i = 0; i < nFil; i++) fil[i].melhor = 0;
+  if (nFil > 0 && nFil < BU_MAX_FILEIRAS && fil[0].n > 0) {
+    int melhorIdx = fil[0].itens[0];
+    memmove(&fil[1], &fil[0], (size_t)nFil * sizeof fil[0]);
+    nFil++;
+    fil[0].titulo = NULL; fil[0].origem = NULL;
+    fil[0].itens[0] = melhorIdx; fil[0].n = 1; fil[0].melhor = 1;
+    memmove(&fil[1].itens[0], &fil[1].itens[1], (size_t)(fil[1].n - 1) * sizeof(int));
+    if (--fil[1].n == 0) { memmove(&fil[1], &fil[2], (size_t)(nFil - 2) * sizeof fil[0]); nFil--; }
+  }
+
   // Quem ja estava na tela herda o estado da onda; quem nao estava e nova.
   { char chaveAntes[BU_MAX_FILEIRAS][96];
     Uint32 entraAntes[BU_MAX_FILEIRAS];
@@ -425,7 +447,7 @@ static void recentesAjustarFoco(void) {
 // da tecla em foco — a mesma continuidade que a ponte teclado->resultados tem.
 // Sem geometria ainda (primeiro quadro), a primeira pilula.
 static void recentesEntrar(void) {
-  float ky = BU_KB_Y + focoKb.fileira * BU_KB_PASSO + BU_TECLA_W * 0.5f;
+  float ky = BU_KB_Y + BU_KB_PAD + focoKb.fileira * BU_KB_PASSO + BU_TECLA_W * 0.5f;
   float melhor = 1e9f;
   int i;
   painel = 2;
@@ -543,15 +565,17 @@ static void aplicarTecla(void) {
 
 static GfxRect retanguloTecla(int fileira, int coluna) {
   GfxRect r;
-  r.y = BU_KB_Y + fileira * (BU_TECLA_W + BU_TECLA_GAP);
+  // A grade de teclas fica centrada na ilha (o justify-content:center do mockup).
+  float gx = BU_KB_X + (BU_COL_W - BU_KB_W) * 0.5f;
+  r.y = BU_KB_Y + BU_KB_PAD + fileira * BU_KB_PASSO;
   r.h = BU_TECLA_W;
   if (fileira < kbFil) {
-    r.x = BU_KB_X + coluna * BU_KB_PASSO;
+    r.x = gx + coluna * BU_KB_PASSO;
     r.w = BU_TECLA_W;
   } else {
     int n = KB_COLUNAS[kbFil];
     r.w = (BU_KB_W - (n - 1) * BU_TECLA_GAP) / (float)n;
-    r.x = BU_KB_X + coluna * (r.w + BU_TECLA_GAP);
+    r.x = gx + coluna * (r.w + BU_TECLA_GAP);
   }
   return r;
 }
@@ -764,6 +788,21 @@ void busca_evento(const SDL_Event *e) {
   }
 }
 
+// --- Geometria das entradas da direita ---------------------------------------
+// Passo e largura do cartaz: 5 colunas iguais com vao 22 na largura da coluna
+// (o grid de 5 do mockup); mais estreita (rail fixa), o cartaz encolhe 2:3.
+static float buPasso(void) { return ((BU_DIR - BU_RES_X) - 4.0f * 22.0f) / 5.0f + 22.0f; }
+static float buCartazW(void) { float w = buPasso() - 22.0f; return w < BU_CARTAZ_W ? w : BU_CARTAZ_W; }
+static float filAlt(int r) {
+  if (fil[r].melhor) return BU_KICK_H + BU_MELHOR_H;
+  return BU_KICK_H + buCartazW() * 1.5f + BU_NOME_ALT;
+}
+static float filTopo(int r) {
+  float y = 0.0f;
+  for (int i = 0; i < r; i++) y += filAlt(i) + BU_SECAO_GAP;
+  return y;
+}
+
 void busca_atualizar(float dt, Uint32 agora) {
   // TECLADO/VOZ DO SISTEMA (sistexto.h): o texto vem inteiro e substitui o campo.
   { char t[BU_MAX_CONSULTA * 2];
@@ -831,16 +870,17 @@ void busca_atualizar(float dt, Uint32 agora) {
   // rolagem proporcional ao indice esconderia a primeira fileira antes de o
   // usuario ter chegado nela.
   if (painel == 1 && nFil > 0) {
-    float topo = focoRes.fileira * NV_BUSCA_ROW_PASSO;
-    float base = topo + NV_BUSCA_ROW_TRILHO + NV_BUSCA_POSTER_H + 70.0f;
+    int r = focoRes.fileira;
+    float topo = filTopo(r);
+    float base = topo + filAlt(r);
     if (topo - scrollAlvo < 0.0f)             scrollAlvo = topo;
     if (base - scrollAlvo > BU_RES_AREA_H)    scrollAlvo = base - BU_RES_AREA_H;
 
     // Rolagem horizontal da fileira em foco, mesma regra da home.
-    int r = focoRes.fileira;
     float util = BU_DIR - BU_RES_X;
-    float esq = focoRes.coluna * NV_BUSCA_CARD_PASSO;
-    float dir = esq + NV_BUSCA_CARD_W;
+    float passo = buPasso();
+    float esq = focoRes.coluna * passo;
+    float dir = esq + buCartazW();
     float alvoX = scrollX[r];
     if (dir - alvoX > util) alvoX = dir - util;
     if (esq - alvoX < 0.0f) alvoX = esq;
@@ -854,131 +894,127 @@ void busca_atualizar(float dt, Uint32 agora) {
 }
 
 // --- Desenho -----------------------------------------------------------------
-// Campo de consulta: nenhum botao decorativo que nao possa receber foco.
-static void desenhaCabecalho(Uint32 agora) {
-  float x = BU_KB_X;
-  float raio = 0.5f;
-  GfxRect campo = { x, BU_HEAD_Y, BU_DIR - x, BU_HEAD_H };
-  // Layout Dinamica: a pilula da barra fica no canto; o campo comeca depois
-  // dela, centrado na mesma linha.
-  { float px, py, pw, ph;
-    if (menu_pilula_rect(&px, &py, &pw, &ph)) {
-      campo.x = px + pw + NV_MENU_PILULA_VAO;
-      campo.w = BU_DIR - campo.x;
-      campo.y = py + (ph - campo.h) * 0.5f;
-    } }
+// Tudo no material da ilha (ajustes_ui_*): vidro ou solido pela escolha do dono.
+// Sem contorno em lugar nenhum: foco = superficie mais clara (campo, tile) ou
+// pilula no acento (tecla, chip). O corpo do texto e o #F3F2EF do mockup.
+#define BU_TX 243, 242, 239, 255
+
+static void buPilulaAcento(GfxRect r, float raioPx, float a) {
+  float ar, ag, ab;
+  if (a <= 0.003f) return;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_rect((GfxRect){ r.x - 14, r.y - 2, r.w + 28, r.h + 30 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
+           ar, ag, ab, 0.32f * a);
+  gfx_cor(r, raioPx / r.h, ar, ag, ab, a);
+}
+
+// Neutro da tecla/chip em repouso: branco 7-8% no vidro, #202127/#24262C no solido.
+static void buNeutro(GfxRect r, float raioPx, float vidA, float a) {
+  const float g = gfx_opacidade_grupo;
+  gfx_opacidade_grupo = g * a;
+  ajustes_ui_neutro(r, raioPx, vidA);
+  gfx_opacidade_grupo = g;
+}
+
+static void buArte(GfxRect r, const char *url, float raioPx, float a) {
+  float raio = raioPx / r.h;
+  GLuint tex = (url && url[0]) ? tex_obter_larg(url, r.w) : 0;
+  if (tex) {
+    gfx_tex_aspect_atual = tex_aspecto(url);
+    gfx_rect(r, tex, GFX_CARD, 0.0f, 0.0f, 0.0f, raio, 0, 0, 0, a);
+    gfx_tex_aspect_atual = 0.0f;
+  } else if (url && url[0] && !tex_falhou(url))
+    gfx_esqueleto(r, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
+  else
+    gfx_cor(r, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
+}
+
+// Ilha do campo: lupa, texto 28/500, cursor no acento; com teclado/voz do
+// sistema (Android) o campo e alvo de foco e o microfone/celular entram no fim.
+static void desenhaCampo(Uint32 agora) {
+  GfxRect c = { buX(), buTopoEsq(), BU_COL_W, BU_CAMPO_H };
   float ar, ag, ab;
   ajustes_acento(&ar, &ag, &ab);
-  // O campo e uma unica superficie baixa, nao uma caixa que compete com os
-  // resultados. Quando o teclado esta ativo, uma luz curta da cor de realce
-  // substitui a borda e comunica o estado sem acrescentar outro controle.
-  if (animCampo > 0.01f) {
-    GfxRect luz = { campo.x - 38.0f, campo.y - 26.0f,
-                    campo.w + 76.0f, campo.h + 52.0f };
-    gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
-             ar, ag, ab, 0.22f * animCampo);
-  }
-  { float lum = 0.105f + 0.035f * animCampo;
-    gfx_cor(campo, raio, lum, lum + 0.004f, lum + 0.014f, 1.0f); }
-  // CAMPO E FALAR COMO ALVOS (so com teclado/voz do sistema): aro na cor do
-  // tema no foco, e o microfone num disco no fim do campo.
+  ajustes_ui_ilha(c, 38.0f, 0);
   { int temIme = st_ime_disponivel(), temVoz = st_voz_disponivel(), temCel = celb_disponivel();
-    float d = campo.h - 20.0f, my = campo.y + 10.0f;
-    // Da direita para a esquerda: Celular (sempre na ponta), Falar.
-    float cx = campo.x + campo.w - 10.0f - d;
+    float d = c.h - 20.0f, my = c.y + 10.0f;
+    float cx = c.x + c.w - 10.0f - d;
     float mx = temCel ? cx - 10.0f - d : cx;
-    float fim = temVoz ? mx - 10.0f : temCel ? cx - 10.0f : campo.x + campo.w;
-    if (temIme && animFocoCampo > 0.01f)
-      gfx_vidro_aro((GfxRect){ campo.x + 3, campo.y + 3, fim - campo.x - 6,
-                               campo.h - 6 }, 0.5f, 2.5f, ar, ag, ab, 0.9f * animFocoCampo);
-    if (temIme && ponteiro_ativo()) {
-      ponteiro_alvo(campo.x, campo.y, fim + 4.0f - campo.x, campo.h,
-                    focarCampoPonteiro, NULL, 1, 0);
+    float fim = temVoz ? mx - 10.0f : temCel ? cx - 10.0f : c.x + c.w;
+    if (temIme && animFocoCampo > 0.01f) {
+      const float g = gfx_opacidade_grupo;
+      gfx_opacidade_grupo = g * animFocoCampo;
+      ajustes_ui_foco_linha(c, 38.0f);
+      gfx_opacidade_grupo = g;
     }
+    if (temIme && ponteiro_ativo())
+      ponteiro_alvo(c.x, c.y, fim + 4.0f - c.x, c.h, focarCampoPonteiro, NULL, 1, 0);
     if (temCel)
       celb_botao(CELB_BUSCA, (GfxRect){ cx, my, d, d }, painel == 0 && campoFoco == 3,
                  focarCampoPonteiro, 3, 0, 1.0f);
     if (temVoz) {
       int ouve = vozBusca();
       float k = ouve ? 1.0f : animMic;
-      if (ponteiro_ativo()) ponteiro_alvo(mx - 4, campo.y, d + 14, campo.h, focarCampoPonteiro, NULL, 2, 0);
-      if (k > 0.01f)
-        gfx_rect((GfxRect){ mx - 12, my - 12, d + 24, d + 24 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
-                 ar, ag, ab, (ouve ? 0.25f + 0.4f * st_nivel() : 0.3f) * k);
-      gfx_cor((GfxRect){ mx, my, d, d }, 0.5f, anim_mistura(0.18f, ar, k), anim_mistura(0.185f, ag, k),
-              anim_mistura(0.205f, ab, k), 1.0f);
+      GfxRect m = { mx, my, d, d };
+      if (ponteiro_ativo()) ponteiro_alvo(mx - 4, c.y, d + 14, c.h, focarCampoPonteiro, NULL, 2, 0);
+      buNeutro(m, d * 0.5f, 0.08f, 1.0f - k);
+      if (k > 0.01f) {
+        if (ouve) gfx_rect((GfxRect){ mx - 12, my - 12, d + 24, d + 24 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
+                           ar, ag, ab, 0.4f * st_nivel() * k);
+        buPilulaAcento(m, d * 0.5f, k);
+      }
       { int t = k > 0.5f ? ajustes_tinta_foco() : 220;
         gfx_icone((GfxRect){ mx + d * 0.27f, my + d * 0.27f, d * 0.46f, d * 0.46f }, "aj_mic",
                   t / 255.0f, t / 255.0f, t / 255.0f, 1.0f); }
-    } }
-  // A LUPA, dentro do campo: e o que diz "isto e uma busca" sem o placeholder,
-  // que some assim que a primeira letra entra.
-  { float ci = 0.48f + 0.16f * animCampo;
-    gfx_icone((GfxRect){ campo.x + BU_CAMPO_PADX,
-                         campo.y + (campo.h - 32.0f) * 0.5f, 32.0f, 32.0f },
-              "menu_search", ci, ci, ci + 0.02f, 1.0f); }
-
-  float tx = campo.x + BU_CAMPO_PADX + 32.0f + 20.0f;
-  if (nConsulta) {
-    TxtLinha l = txt_linha_corta(TXT_HEADLINE, consulta, 245, 246, 250, 255,
-                                campo.w - 2 * BU_CAMPO_PADX - 12 - 56 -
-                                (celb_disponivel() ? campo.h : 0.0f));
-    txt_desenhar(l, tx, campo.y + (campo.h - l.h) * 0.5f);
-    tx += l.w + 6.0f;
-  } else {
-    // Mesmo texto do placeholder do web. Ouvindo, diz que ouve; com aviso do
-    // sistema (sem voz, sem permissao), o aviso.
-    const char *av = st_dono() == ST_BUSCA ? st_aviso() : "";
-    const char *ph = vozBusca() ? i18n("Ouvindo…") : av[0] ? i18n(av) : "Buscar filmes e séries";
-    TxtLinha l = txt_linha_corta(av[0] && !vozBusca() ? TXT_BODY : TXT_HEADLINE, ph,
-                                 255, av[0] && !vozBusca() ? 200 : 255, av[0] && !vozBusca() ? 140 : 255, 255,
-                                 campo.w - 2 * BU_CAMPO_PADX - 140);
-    txt_desenhar_alpha(l, tx, campo.y + (campo.h - l.h) * 0.5f, av[0] ? 0.9f : 0.40f);
-  }
-  // O cursor pulsa na mesma cor do realce, e nao em branco fixo. O brilho
-  // pisca so quando a entrada esta ativa, portanto e feedback e nao ornamento.
-  if (painel == 0 && (nConsulta > 0 || campoFoco == 1) && (agora / 500) % 2 == 0) {
-    GfxRect cur = { nConsulta ? tx : tx - 8.0f, campo.y + 18.0f, 3.0f, campo.h - 36.0f };
-    gfx_cor(cur, 0.5f, ar, ag, ab, 0.95f);
+    }
+    { float ci = 0.62f + 0.30f * animCampo;
+      gfx_icone((GfxRect){ c.x + BU_CAMPO_PADX, c.y + (c.h - 28.0f) * 0.5f, 28.0f, 28.0f },
+                "menu_search", ci, ci, ci + 0.01f, 1.0f); }
+    { float tx = c.x + BU_CAMPO_PADX + 28.0f + 16.0f;
+      float maxW = fim - tx - 14.0f;
+      if (nConsulta) {
+        TxtLinha l = txt_linha_corta(TXT_CALLOUT, consulta, BU_TX, maxW);
+        txt_desenhar(l, tx, c.y + (c.h - l.h) * 0.5f);
+        tx += l.w + 2.0f;
+      } else {
+        const char *av = st_dono() == ST_BUSCA ? st_aviso() : "";
+        const char *ph = vozBusca() ? i18n("Ouvindo…") : av[0] ? i18n(av) : "Buscar filmes e séries";
+        TxtLinha l = txt_linha_corta(TXT_CALLOUT, ph, 255, av[0] && !vozBusca() ? 200 : 243,
+                                     av[0] && !vozBusca() ? 140 : 239, 255, maxW);
+        txt_desenhar_alpha(l, tx, c.y + (c.h - l.h) * 0.5f, av[0] ? 0.9f : 0.42f);
+      }
+      if (painel == 0 && (nConsulta > 0 || campoFoco == 1) && (agora / 500) % 2 == 0)
+        gfx_cor((GfxRect){ nConsulta ? tx + 2.0f : tx - 6.0f, c.y + (c.h - 30.0f) * 0.5f, 2.0f, 30.0f }, 0.5f, ar, ag, ab, 1.0f);
+    }
   }
 }
 
+// Ilha do teclado: teclas de 62 (raio 18), a focada na pilula do acento.
 static void desenhaTeclado(void) {
   char rotulo[8];
+  int linhas = kbFil + 1;
+  GfxRect ilha = { BU_KB_X, BU_KB_Y, BU_COL_W,
+                   2.0f * BU_KB_PAD + linhas * BU_TECLA_W + (linhas - 1) * BU_TECLA_GAP };
+  ajustes_ui_ilha(ilha, 32.0f, 0);
   for (int f = 0; f <= kbFil; f++) {
     for (int c = 0; c < KB_COLUNAS[f]; c++) {
       float k = animTecla[f][c];
-      GfxRect base = retanguloTecla(f, c);
-      float esc = 1.0f + BU_TECLA_ESCALA * k;
-      GfxRect t = { base.x - base.w * (esc - 1.0f) * 0.5f,
-                    base.y - base.h * (esc - 1.0f) * 0.5f,
-                    base.w * esc, base.h * esc };
-      // Repouso e uma superficie fria, quase do tom do fundo. Ao ganhar foco,
-      // a tecla recebe a cor do tema, escala pouco e ganha uma unica mancha
-      // difusa; a grade continua leve mesmo com 38 alvos visiveis.
-      { float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
-        gfx_cor(t, BU_TECLA_RAIO, 0.105f, 0.112f, 0.130f, 0.96f);
-        if (k > 0.01f) {
-          GfxRect luz = { t.x - 13.0f, t.y - 13.0f, t.w + 26.0f, t.h + 26.0f };
-          gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
-                   ar, ag, ab, 0.28f * k);
-          gfx_cor(t, BU_TECLA_RAIO, ar, ag, ab, k);
-        } }
+      GfxRect t = retanguloTecla(f, c);
+      buNeutro(t, BU_TECLA_RAIO, 0.07f, 1.0f - k);
+      buPilulaAcento(t, BU_TECLA_RAIO, k);
       const char *s;
       if (f < kbFil) {
         snprintf(rotulo, sizeof rotulo, "%s", kbTeclas[f * BU_KB_COLS + c]);
         s = rotulo;
       } else s = (c == 0) ? i18n("espaço") : (c == 1 ? i18n("apagar")
                : (c == 2 ? i18n("limpar") : (layoutCir ? "ABC" : "\xd0\x90\xd0\x91\xd0\x92")));
-      int tom = (int)anim_mistura(224.0f, (float)ajustes_tinta_foco(), k);
-      TxtEstilo est = (f < kbFil) ? TXT_TITULO3 : TXT_HEADLINE;
-      TxtLinha l = txt_linha(est, s, tom, tom, tom, 255);
+      int tom = (int)anim_mistura(243.0f, (float)ajustes_tinta_foco(), k);
+      TxtLinha l = txt_linha(f < kbFil ? TXT_G26B : TXT_AJ_SEG, s, tom, tom, tom, 255);
       txt_desenhar(l, t.x + (t.w - l.w) * 0.5f, t.y + (t.h - l.h) * 0.5f);
     }
   }
-  // Dicas do controle, uma por linha, no mesmo tom apagado das de Ajustes —
-  // a linha unica com bolinhas competia com as teclas logo acima.
-  { float y = BU_KB_Y + (kbFil + 1) * BU_KB_PASSO + 28.0f;
+  // Dicas do controle, 16 px a 16 abaixo da ilha (o texto mudo do mockup).
+  { float y = ilha.y + ilha.h + 16.0f;
     const char *d1 = campoFoco == 1 ? i18n("OK   Teclado da TV")
                    : campoFoco == 2 ? i18n("OK   Falar")
                    : campoFoco == 3 ? i18n("OK   Digitar pelo celular")
@@ -988,89 +1024,65 @@ static void desenhaTeclado(void) {
                    : celb_disponivel() ? i18n("↑   Digitar pelo celular")
                    : i18n("OK   Digitar");
     const char *d2 = i18n("Voltar   Menu");
-    TxtLinha a1 = txt_linha(TXT_CAPTION2, d1, 150, 154, 163, 255);
-    TxtLinha a2 = txt_linha(TXT_CAPTION2, d2, 150, 154, 163, 255);
-    txt_desenhar_alpha(a1, BU_KB_X, y, 0.9f);
-    txt_desenhar_alpha(a2, BU_KB_X, y + a1.h + 8.0f, 0.9f); }
+    TxtLinha a1 = txt_linha(TXT_ILHA_APOIO, d1, BU_TX);
+    TxtLinha a2 = txt_linha(TXT_ILHA_APOIO, d2, BU_TX);
+    txt_desenhar_alpha(a1, BU_KB_X + 12.0f, y, 0.42f);
+    txt_desenhar_alpha(a2, BU_KB_X + 12.0f, y + a1.h + 6.0f, 0.42f); }
 }
 
-// Estado vazio do web: titulo 56/600 e apoio 24/400 rgb(179,179,179). Aqui ele
-// fica a DIREITA, no lugar das fileiras, porque a faixa central esta com o
-// teclado.
 static void desenhaVazio(void) {
   const char *t1 = nConsulta >= 2 ? "Nenhum título recebido" : "O que vamos assistir?";
   const char *t2 = nConsulta >= 2 ? "Os resultados dos addons aparecem aqui."
                              : "Digite ao menos 2 letras de um filme ou série.";
-  TxtLinha l1 = txt_linha(TXT_TITULO2, t1, 255, 255, 255, 255);
-  TxtLinha l2 = txt_linha(TXT_BODY, t2, 179, 179, 179, 255);
+  TxtLinha l1 = txt_linha(TXT_ILHA_TITULO, t1, BU_TX);
+  TxtLinha l2 = txt_linha(TXT_ILHA_CORPO, t2, BU_TX);
   float cx = BU_RES_X + (BU_DIR - BU_RES_X) * 0.5f;
-  float y = BU_RES_Y + 180.0f;
-  txt_desenhar_alpha(l1, cx - l1.w * 0.5f, y, 0.96f);
-  txt_desenhar_alpha(l2, cx - l2.w * 0.5f, y + l1.h + 18.0f, 0.85f);
+  float y = BU_RES_Y + 220.0f;
+  txt_desenhar(l1, cx - l1.w * 0.5f, y);
+  txt_desenhar_alpha(l2, cx - l2.w * 0.5f, y + l1.h + 14.0f, 0.55f);
   if (nConsulta >= 2) {
-    TxtLinha ajuda = txt_linha(TXT_CAPTION2,
-        "Se não aparecerem, confira a conexão ou tente outro nome.", 179, 183, 190, 255);
-    txt_desenhar(ajuda, cx - ajuda.w * 0.5f, y + l1.h + l2.h + 42);
+    TxtLinha ajuda = txt_linha(TXT_ILHA_GENERO,
+        "Se não aparecerem, confira a conexão ou tente outro nome.", BU_TX);
+    txt_desenhar_alpha(ajuda, cx - ajuda.w * 0.5f, y + l1.h + l2.h + 36.0f, 0.42f);
   }
 }
 
-// Buscas recentes, no lugar do estado vazio. Termo: superficie de repouso
-// 0.10/0.11/0.13 (a das linhas da Biblioteca — e conteudo do dono, nao um
-// comando) e realce cheio no foco, com a luz difusa de botoes.h por tras e a
-// tinta de ajustes_tinta_foco(). "Limpar": o SECUNDARIO de botoes.h (so
-// contorno em repouso), para nao ser lido como mais um termo a um metro dele.
-// A dica embaixo diz o que o OK e o OK segurado fazem — sem ela a remocao e
-// invisivel. Durante a pressao, um filete na base da pilula enche ate
-// NV_HOLD_MS: e o aviso de "solte agora e nao apaga".
+// Buscas recentes: chips de 56 (o .chip do mockup), em linhas que quebram na
+// borda; foco = pilula no acento; o filete enche enquanto o OK segura.
 static void desenhaRecentes(Uint32 agora) {
   int n = buscasrec_n(), i, lin = 0;
   float x = BU_RES_X, y = BU_REC_Y, maxW = BU_DIR - BU_RES_X;
   const char *limpar = i18n("Limpar");
-  TxtLinha tt = txt_linha(TXT_TITULO3, i18n("Buscas recentes"), 255, 255, 255, 255);
-  txt_desenhar(tt, BU_RES_X, BU_RES_Y);
+  ajustes_ui_kicker(i18n("Buscas recentes"), BU_RES_X, BU_RES_Y, 1.0f);
   nRecLayout = 0;
   for (i = 0; i <= n && i < BU_REC_ITENS; i++) {
     float f = animRec[i];
     int tinta = f > 0.5f ? ajustes_tinta_foco() : 235;
     float w;
-    TxtLinha l = { 0 };
-    if (i < n) {
-      l = txt_linha_corta(TXT_DET_BOTAO, buscasrec_termo(i), tinta, tinta, tinta, 255,
-                          maxW - 2.0f * BU_REC_PADX);
-      w = (float)l.w + 2.0f * BU_REC_PADX;
-    } else {
-      w = botao_largura(limpar, NULL, 0);
-    }
+    TxtLinha l = i < n
+      ? txt_linha_corta(TXT_AJ_SEG, buscasrec_termo(i), tinta, tinta, tinta, 255, maxW - 2.0f * BU_REC_PADX)
+      : txt_linha(TXT_AJ_SEG, limpar, tinta, tinta, tinta, 255);
+    w = (float)l.w + 2.0f * BU_REC_PADX;
     if (x > BU_RES_X && x + w > BU_DIR) { x = BU_RES_X; y += BU_REC_LINHA; lin++; }
     recRect[i] = (GfxRect){ x, y, w, BU_REC_H };
     recLin[i] = lin;
     nRecLayout = i + 1;
-    if (i < n) {
-      float ar, ag, ab;
-      ajustes_acento(&ar, &ag, &ab);
-      botao_luz(recRect[i], f, 1.0f);
-      if (f > 0.01f) gfx_cor(recRect[i], NV_RAIO_PILL, ar, ag, ab, f);
-      if (f < 0.99f) gfx_cor(recRect[i], NV_RAIO_PILL, 0.10f, 0.11f, 0.13f, 1.0f - f);
-      txt_desenhar(l, x + BU_REC_PADX, y + (BU_REC_H - l.h) * 0.5f);
-    } else {
-      botao_pilula(recRect[i], limpar, NULL, f, 0, 0, 1.0f);
-    }
+    buNeutro(recRect[i], 28.0f, 0.08f, 1.0f - f);
+    buPilulaAcento(recRect[i], 28.0f, f);
+    txt_desenhar_alpha(l, x + BU_REC_PADX, y + (BU_REC_H - l.h) * 0.5f, i < n || f > 0.5f ? 1.0f : 0.85f);
     if (painel == 2 && i == focoRec && okPress && !okLongo) {
       float p = anim_clamp((agora - okDesde) / (float)NV_HOLD_MS, 0.0f, 1.0f);
       int t = ajustes_tinta_foco();
-      GfxRect barra = { x + BU_REC_PADX, y + BU_REC_H - 10.0f,
-                        (w - 2.0f * BU_REC_PADX) * p, 4.0f };
+      GfxRect barra = { x + BU_REC_PADX, y + BU_REC_H - 10.0f, (w - 2.0f * BU_REC_PADX) * p, 4.0f };
       if (barra.w > 1.0f) gfx_cor(barra, 0.5f, t / 255.0f, t / 255.0f, t / 255.0f, 0.9f);
     }
     x += w + BU_REC_GAP;
   }
-  { TxtLinha d = txt_linha(TXT_CAPTION2, i18n("OK   Buscar de novo      Segure OK   Remover"),
-                           150, 153, 162, 255);
-    txt_desenhar_alpha(d, BU_RES_X, y + BU_REC_H + 32.0f, 0.9f); }
+  { TxtLinha d = txt_linha(TXT_ILHA_APOIO, i18n("OK   Buscar de novo      Segure OK   Remover"), BU_TX);
+    txt_desenhar_alpha(d, BU_RES_X, y + BU_REC_H + 22.0f, 0.42f); }
 }
 
 static void desenhaResultados(Uint32 agora) {
-  // Uma varredura por foco novo na grade de resultados (revela.h).
   float varreFoco = revela_varre(&revVarre, painel == 1
                                  ? focoRes.fileira * 64 + focoRes.coluna : -1, agora);
   temItemFoco = 0;
@@ -1078,18 +1090,17 @@ static void desenhaResultados(Uint32 agora) {
   nRecLayout = 0;
   if (nFil == 0) { desenhaVazio(); return; }
 
-  gfx_recorte(BU_RES_X - 8.0f, BU_RES_Y - 30.0f,
-              (BU_DIR - BU_RES_X) + 16.0f, BU_RES_AREA_H + 30.0f);
-
+  gfx_recorte(BU_RES_X - 30.0f, BU_RES_Y - 20.0f,
+              (BU_DIR - BU_RES_X) + 60.0f, BU_RES_AREA_H + 40.0f);
   const float grupo = gfx_opacidade_grupo;
+  const float larg = BU_DIR - BU_RES_X;
   int ordemFil = 0;
   for (int r = 0; r < nFil; r++) {
-    float ry = BU_RES_Y + r * NV_BUSCA_ROW_PASSO - scrollY;
-    if (ry > NV_TELA_H + 100.0f || ry + NV_BUSCA_ROW_PASSO < -100.0f) {
+    float ry = BU_RES_Y + filTopo(r) - scrollY;
+    if (ry > NV_TELA_H + 100.0f || ry + filAlt(r) < -100.0f) {
       filNova[r] = 0; filEntraEm[r] = 0;   // assenta fora da tela
       continue;
     }
-    // A fileira nova entra com a onda, uma fileira visivel depois da outra.
     if (filNova[r]) {
       filEntraEm[r] = anim_politica_reduzida ? 0u
                     : (agora ? agora : 1u) + (Uint32)(ordemFil * NV_ENTRA_FIL_MS);
@@ -1099,114 +1110,115 @@ static void desenhaResultados(Uint32 agora) {
     if (filEntraEm[r] && revela_onda_fim(filEntraEm[r], agora)) filEntraEm[r] = 0;
     gfx_opacidade_grupo = grupo * revela_entra(filEntraEm[r], 0.0f, agora);
 
-    // Titulo do catalogo 48/600 e a origem 20/400 logo abaixo (margin-top 4).
-    TxtLinha tt = txt_linha_corta(TXT_TITULO3, fil[r].titulo, 255, 255, 255, 255,
-                                  BU_DIR - BU_RES_X);
-    txt_desenhar(tt, BU_RES_X, ry);
-    if (fil[r].origem) {
-      char org[96];
-      snprintf(org, sizeof org, i18n("de %s"), fil[r].origem);
-      TxtLinha ts = txt_linha_corta(TXT_CAPTION2, org, 179, 179, 179, 255,
-                                   BU_DIR - BU_RES_X);
-      txt_desenhar_alpha(ts, BU_RES_X, ry + NV_BUSCA_ROW_SUB, 0.95f);
-    }
-
+    // Rotulo da entrada: "Melhor resultado" ou o nome do catalogo (+ origem).
+    { float kw = ajustes_ui_kicker(fil[r].melhor ? i18n("Melhor resultado") : fil[r].titulo,
+                                   BU_RES_X, ry + 4.0f, 1.0f);
+      if (!fil[r].melhor && fil[r].origem) {
+        char org[96];
+        snprintf(org, sizeof org, i18n("de %s"), fil[r].origem);
+        TxtLinha ts = txt_linha_corta(TXT_ILHA_APOIO, org, BU_TX, larg - kw - 16.0f);
+        txt_desenhar_alpha(ts, BU_RES_X + kw + 16.0f, ry + 4.0f, 0.36f);
+      } }
     gfx_opacidade_grupo = grupo;
-    float cardY = ry + NV_BUSCA_ROW_TRILHO;
-    int c0 = (int)(scrollX[r] / NV_BUSCA_CARD_PASSO);
-    // Dois passes: o item em foco tem de ficar POR CIMA dos vizinhos, senao a
-    // borda do poster ao lado corta o anel de foco.
-    for (int passe = 0; passe < 2; passe++)
-      for (int c = 0; c < fil[r].n && c < BU_MAX_POR_FIL; c++) {
-        float f = animRes[r][c];
-        if ((passe == 1) != (f > 0.01f)) continue;
-        const CatItem *ci = cat_item(fil[r].itens[c]);
-        if (!ci) continue;
+    float cy = ry + BU_KICK_H;
 
-        float px = BU_RES_X + c * NV_BUSCA_CARD_PASSO - scrollX[r];
-        if (px > BU_DIR || px + NV_BUSCA_CARD_W < BU_RES_X - NV_BUSCA_CARD_W) continue;
-        float escala = 1.0f + 0.055f * f;
-        float pw = NV_BUSCA_CARD_W * escala;
-        float ph = NV_BUSCA_POSTER_H * escala;
-        // ONDA: atraso pela coluna visivel (revela.h); o card sobe e acende.
-        float entra = filEntraEm[r]
-                    ? revela_entra(filEntraEm[r], revela_onda_atraso(c - c0, 0), agora)
-                    : 1.0f;
+    if (fil[r].melhor) {
+      // O MELHOR RESULTADO: tile de 226 (ilha), capa 330x186, titulo 40/700.
+      const CatItem *ci = cat_item(fil[r].itens[0]);
+      float f = animRes[r][0];
+      float entra = filEntraEm[r] ? revela_entra(filEntraEm[r], 0.0f, agora) : 1.0f;
+      if (!ci) continue;
+      GfxRect t = { BU_RES_X, cy + (1.0f - entra) * NV_ENTRA_DY, larg, BU_MELHOR_H };
+      gfx_opacidade_grupo = grupo * entra;
+      ajustes_ui_ilha(t, 26.0f, 0);
+      if (f > 0.01f) {
+        gfx_opacidade_grupo = grupo * entra * f;
+        ajustes_ui_foco_linha(t, 26.0f);
         gfx_opacidade_grupo = grupo * entra;
-        GfxRect poster = { px - (pw - NV_BUSCA_CARD_W) * 0.5f,
-                           cardY - (ph - NV_BUSCA_POSTER_H) * 0.5f - 5.0f * f
-                             + (1.0f - entra) * NV_ENTRA_DY,
-                           pw, ph };
-        float ar, ag, ab;
-        // O foco e uma aproximacao curta, nao um salto de tamanho: o poster
-        // chega para frente com a cor do tema e a legenda acompanha o movimento.
-        //
-        // O DIVISOR E A ALTURA. Estava `/ NV_BUSCA_CARD_W`, e num cartaz
-        // (retrato) a largura e o MENOR lado — mas o `r` do FS_SDF e medido
-        // contra a meia-ALTURA, entao 22/248 pedia 0,089 de 372, ou seja 33 px
-        // em vez dos 22 do web. Mesmo erro que estava em home.c e detail.c.
-        float raio = NV_BUSCA_RAIO / NV_BUSCA_POSTER_H;
-        if (f > 0.01f) {
-          GfxRect luz = { poster.x - 22.0f, poster.y - 22.0f,
-                          poster.w + 44.0f, poster.h + 44.0f };
-          ajustes_acento(&ar, &ag, &ab);
-          gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
-                   ar, ag, ab, 0.24f * f);
-          // 3 px encostados no cartaz e CONCENTRICOS: o anel crescia 3 px de
-          // cada lado mas reusava o raio normalizado do cartaz, entao o canto
-          // dele fechava ~3 px antes do que devia.
-          gfx_anel_fora(poster, raio, 0.0f, 3.0f, ar, ag, ab, f);
-        }
-
-        const char *arte = posterprov_card_addon(ci->origem, ci->imdb, ci->tmdb, ci->tipo, ci->poster);
-        if (!arte[0]) arte = ci->backdrop[0] ? ci->backdrop : NULL;
-        GLuint tex = arte ? tex_obter_larg(arte, poster.w) : 0;
-        float aArte = revela_arte(&revRes[r][c], tex != 0, agora);
-        if (tex) {
-          // Sem o aspecto a arte 2:3 estica; e o poster e justamente onde isso
-          // salta aos olhos, porque todos ficam lado a lado.
-          if (aArte < 0.999f)
-            gfx_cor(poster, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G,
-                    NV_COR_ESQUELETO_B, 1.0f);
-          gfx_tex_aspect_atual = tex_aspecto(arte);
-          if (painel == 1 && focoRes.fileira == r && focoRes.coluna == c)
-            gfx_varre_atual = varreFoco;
-          gfx_rect(poster, tex, GFX_CARD, f, 0.0f, 0.0f, raio, 0, 0, 0, aArte);
-          gfx_varre_atual = 0.0f;
-          gfx_tex_aspect_atual = 0.0f;
-        } else {
-          // Esqueleto VISIVEL, o mesmo da home: #2C2C2C. Ver a nota la — placeholder
-          // do tom do fundo le como card quebrado, nao como carregando. Com a
-          // luz passando enquanto a arte ainda pode chegar.
-          if (arte && !tex_falhou(arte))
-            gfx_esqueleto(poster, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G,
-                          NV_COR_ESQUELETO_B, 1.0f);
-          else
-            gfx_cor(poster, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G,
-                    NV_COR_ESQUELETO_B, 1.0f);
-        }
-
-        // Nome 28/500 branco a 8 do poster; ano 20/400 rgb(179) a 4 do nome.
-        TxtLinha tn = txt_linha_corta(TXT_CALLOUT, ci->titulo, 255, 255, 255, 255,
-                                      poster.w);
-        float ny = poster.y + poster.h + NV_BUSCA_NOME_GAP;
-        txt_desenhar_alpha(tn, poster.x, ny, anim_mistura(0.82f, 1.0f, f));
-        if (ci->meta[0]) {
-          TxtLinha td = txt_linha_corta(TXT_CAPTION2, ci->meta, 179, 179, 179, 255,
-                                        poster.w);
-          txt_desenhar_alpha(td, poster.x, ny + tn.h + NV_BUSCA_DATA_GAP, 0.92f);
-        }
-
-        if (painel == 1 && focus_indice(&focoRes, r, c)) {
-          itemFoco.indice = fil[r].itens[c];
-          itemFoco.rect   = poster;
+      }
+      { const char *url = ci->backdrop[0] ? ci->backdrop : ci->poster;
+        GfxRect art = { t.x + 20.0f, t.y + 20.0f, 330.0f, t.h - 40.0f };
+        float tx, ty, bloco;
+        if (!ci->backdrop[0]) art.w = art.h * 2.0f / 3.0f;
+        buArte(art, ci->backdrop[0] ? url : posterprov_card_addon(ci->origem, ci->imdb, ci->tmdb, ci->tipo, url),
+               14.0f, 1.0f);
+        tx = art.x + art.w + 28.0f;
+        { float tw = t.x + t.w - tx - 26.0f;
+          TxtLinha nome = txt_linha_corta(TXT_ILHA_TITULO, ci->titulo, BU_TX, tw);
+          TxtLinha meta = txt_linha_corta(TXT_ILHA_META, ci->meta, BU_TX, tw);
+          TxtLinha gen = { 0, 0, 0 };
+          if (ci->genero[0]) gen = txt_linha_corta(TXT_ILHA_GENERO, ci->genero, BU_TX, tw);
+          bloco = nome.h + 6.0f + (ci->meta[0] ? meta.h + 6.0f : 0.0f) + gen.h;
+          ty = t.y + (t.h - bloco) * 0.5f;
+          txt_desenhar(nome, tx, ty);
+          ty += nome.h + 6.0f;
+          if (ci->meta[0]) { txt_desenhar_alpha(meta, tx, ty, 0.62f); ty += meta.h + 6.0f; }
+          if (gen.h) txt_desenhar_alpha(gen, tx, ty, 0.42f); }
+        if (painel == 1 && focus_indice(&focoRes, r, 0)) {
+          itemFoco.indice = fil[r].itens[0];
+          itemFoco.rect   = art;
           itemFoco.arte   = ci->backdrop[0] ? ci->backdrop : ci->poster;
           itemFoco.titulo = ci->titulo;
           itemFoco.genero = ci->genero;
           itemFoco.meta   = ci->meta;
           temItemFoco = 1;
+        } }
+      gfx_opacidade_grupo = grupo;
+      continue;
+    }
+
+    // TITULOS: cartazes 180x270 (raio 14), nome 17/400 a 10 abaixo. O foco
+    // levanta o cartaz com sombra, sem contorno.
+    { float passo = buPasso(), cw = buCartazW(), ch = cw * 1.5f;
+      int c0 = (int)(scrollX[r] / passo);
+      for (int passe = 0; passe < 2; passe++)
+        for (int c = 0; c < fil[r].n && c < BU_MAX_POR_FIL; c++) {
+          float f = animRes[r][c];
+          if ((passe == 1) != (f > 0.01f)) continue;
+          const CatItem *ci = cat_item(fil[r].itens[c]);
+          if (!ci) continue;
+          float px = BU_RES_X + c * passo - scrollX[r];
+          if (px > BU_DIR + 30.0f || px + cw < BU_RES_X - passo) continue;
+          float entra = filEntraEm[r]
+                      ? revela_entra(filEntraEm[r], revela_onda_atraso(c - c0, 0), agora) : 1.0f;
+          float esc = 1.0f + 0.05f * f;
+          GfxRect p = { px - cw * (esc - 1.0f) * 0.5f, cy - ch * (esc - 1.0f) * 0.5f - 6.0f * f
+                          + (1.0f - entra) * NV_ENTRA_DY, cw * esc, ch * esc };
+          float raio = 14.0f / p.h;
+          gfx_opacidade_grupo = grupo * entra;
+          if (f > 0.01f)
+            gfx_rect((GfxRect){ p.x - 16, p.y - 4, p.w + 32, p.h + 40 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
+                     0, 0, 0, 0.50f * f);
+          { const char *arte = posterprov_card_addon(ci->origem, ci->imdb, ci->tmdb, ci->tipo, ci->poster);
+            if (!arte[0]) arte = ci->backdrop[0] ? ci->backdrop : NULL;
+            GLuint tex = arte ? tex_obter_larg(arte, p.w) : 0;
+            float aArte = revela_arte(&revRes[r][c], tex != 0, agora);
+            if (tex) {
+              if (aArte < 0.999f)
+                gfx_cor(p, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, 1.0f);
+              gfx_tex_aspect_atual = tex_aspecto(arte);
+              if (painel == 1 && focoRes.fileira == r && focoRes.coluna == c)
+                gfx_varre_atual = varreFoco;
+              gfx_rect(p, tex, GFX_CARD, 0.0f, 0.0f, 0.0f, raio, 0, 0, 0, aArte);
+              gfx_varre_atual = 0.0f;
+              gfx_tex_aspect_atual = 0.0f;
+            } else if (arte && !tex_falhou(arte))
+              gfx_esqueleto(p, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, 1.0f);
+            else
+              gfx_cor(p, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, 1.0f); }
+          { TxtLinha tn = txt_linha_corta(TXT_ILHA_GENERO, ci->titulo, BU_TX, cw);
+            txt_desenhar_alpha(tn, p.x, p.y + p.h + 10.0f, anim_mistura(0.62f, 1.0f, f)); }
+          if (painel == 1 && focus_indice(&focoRes, r, c)) {
+            itemFoco.indice = fil[r].itens[c];
+            itemFoco.rect   = p;
+            itemFoco.arte   = ci->backdrop[0] ? ci->backdrop : ci->poster;
+            itemFoco.titulo = ci->titulo;
+            itemFoco.genero = ci->genero;
+            itemFoco.meta   = ci->meta;
+            temItemFoco = 1;
+          }
         }
-      }
+    }
     gfx_opacidade_grupo = grupo;
   }
   gfx_opacidade_grupo = grupo;
@@ -1214,16 +1226,13 @@ static void desenhaResultados(Uint32 agora) {
 }
 
 void busca_desenhar(Uint32 agora) {
-  // Fundo #0d0d0d, medido no .search-screen-shell do web — mais escuro que o
-  // cinza da home, e o web usa o mesmo tom nas duas.
-  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  // A tela ja foi limpa com ESTA MESMA COR por glClearColor/glClear em
-  // main.c antes de app_desenhar. Pintar por cima era uma camada de tela
-  // cheia jogada fora por quadro — e o custo dominante nesta GPU e fill
-  // rate (gfx.c registra que DUAS camadas de tela cheia derrubavam a
-  // Mali-G71 para ~40fps). Nao repor sem antes mudar a cor do clear.
-  (void)tela;
-  desenhaCabecalho(agora);
+  ajustes_ui_fundo();
+  // O .fundo da pagina no mockup (preto 70% em cima, 92% a 60%): os resultados
+  // e o teclado leem sobre a arte sem competir com ela.
+  { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+    gfx_cor(tela, 0, 0, 0, 0, 0.45f);
+    gfx_veu_css(tela, 0, 1.0f, 1.0f, 0.60f); }
+  desenhaCampo(agora);
   desenhaTeclado();
   desenhaResultados(agora);
 }
