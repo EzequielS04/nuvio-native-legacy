@@ -210,6 +210,8 @@ static void ajMiniHome(AjMini o, float ox, float oy, float W) {
 }
 
 // Fileira de miniaturas com rotulo embaixo; a escolhida acesa, as outras a 55%.
+// ajMiniRotuloV2: o rotulo do inspetor da v2 (22/600, ponto de 8, margem 10).
+static int ajMiniRotuloV2;
 static float ajOpcoesMini(const AjMini *m, const char *const *nome, int n, int sel, float x, float y, float w) {
   float gap = 14.0f, mw = (w - gap * (n - 1)) / n, mh = mw * 9.0f / 16.0f;
   float ar, ag, ab;
@@ -218,15 +220,22 @@ static float ajOpcoesMini(const AjMini *m, const char *const *nome, int n, int s
   for (i = 0; i < n; i++) {
     AjMini o = m[i];
     float px = x + i * (mw + gap);
-    TxtLinha lb = txt_linha_corta(TXT_AJ_16B, nome[i], AJ_TX, mw - (i == sel ? 15 : 0));
+    TxtLinha lb = txt_linha_corta(ajMiniRotuloV2 ? TXT_G23B : TXT_AJ_16B, nome[i], AJ_TX, mw - (i == sel ? 16 : 0));
     o.alfa = i == sel ? 1.0f : 0.55f;
     ajMiniHome(o, px, y, mw);
+    if (ajMiniRotuloV2) {
+      if (i == sel) {
+        gfx_cor((GfxRect){ px, y + mh + 10 + (26.4f - 8) * 0.5f, 8, 8 }, 0.5f, ar, ag, ab, 1);
+        txt_desenhar(lb, px + 16, y + mh + 10 + (26.4f - lb.h) * 0.5f);
+      } else txt_desenhar_alpha(lb, px, y + mh + 10 + (26.4f - lb.h) * 0.5f, 0.5f);
+      continue;
+    }
     if (i == sel) {
       gfx_cor((GfxRect){ px, y + mh + 10 + (lb.h - 7) * 0.5f, 7, 7 }, 0.5f, ar, ag, ab, 1);
       txt_desenhar(lb, px + 15, y + mh + 10);
     } else txt_desenhar_alpha(lb, px, y + mh + 10, 0.5f);
   }
-  return mh + 10 + 20;
+  return mh + 10 + (ajMiniRotuloV2 ? 26.4f : 20);
 }
 
 // --- PREVIAS POR OPCAO -------------------------------------------------------------
@@ -240,12 +249,13 @@ static AjMini ajMiniPadrao(void) {
 static float ajPreviaLayout(float x, float y, float w) {
   AjMini m = ajMiniPadrao(), o[3];
   static const char *const N[3] = { "Moderna", "Padrão", "Dinâmica (Apple TV)" };
+  static const char *const N2[3] = { "Moderna", "Padrão", "Dinâmica" };   // v2: o nome inteiro esta no titulo
   int i, sel = valor[AJ_HOME_LAYOUT];
   if (ajEditandoLinha(AJ_HOME_LAYOUT)) sel = uxPendente;
   m.lay = sel;
   ajMiniHome(m, x, y, w);
   for (i = 0; i < 3; i++) { o[i] = m; o[i].lay = i; }
-  return w * 9.0f / 16.0f + 16.0f + ajOpcoesMini(o, N, 3, sel, x, y + w * 9.0f / 16.0f + 16.0f, w);
+  return w * 9.0f / 16.0f + 16.0f + ajOpcoesMini(o, ajMiniRotuloV2 ? N2 : N, 3, sel, x, y + w * 9.0f / 16.0f + 16.0f, w);
 }
 static float ajPreviaRelogio(float x, float y, float w) {
   AjMini m = ajMiniPadrao(), o[3];

@@ -280,6 +280,12 @@ int  gfx_veu_card_por(float fracao, float alfa);
 void gfx_veu_card_limpar(void);
 // Opacidade de grupo: deve voltar a 1 ao terminar o grupo.
 extern float gfx_opacidade_grupo;
+// Transformacao de grupo (Ajustes v2: a lista que cresce por cima do menu):
+// todo retangulo e recorte desenhado ate gfx_sem_transformar sai escalado por
+// `s` em torno de (ox, oy) e deslocado por (dx, dy), em coordenadas de layout.
+// Nao aninha. Miniaturas e passadas internas ficam de fora.
+void gfx_transformar(float ox, float oy, float s, float dx, float dy);
+void gfx_sem_transformar(void);
 // Janela do GFX_JANELA: x, y, w, h do rect no quadro da arte em tela cheia,
 // em fracao (0..1). Quem desenha devolve a {0,0,1,1}.
 extern float gfx_janela_atual[4];
