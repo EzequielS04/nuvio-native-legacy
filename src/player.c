@@ -3490,6 +3490,9 @@ void player_desenhar(Uint32 agora) {
     }
   }
 
+  // O "termina as" da pilula vale tambem sem o OSD (a ilha crescida das
+  // faixas, os avisos): o tempo que falta e dado a ilha a cada quadro.
+  plrilha_relogio(0.0f, ehCanal() ? -1.0 : (double)(duracaoSeg - posSeg));
   float a = anim * entrada;
   // FOLHA ABERTA, OSD APAGADO. A folha de Fontes e a de Legendas sao vidro
   // translucido: o relogio, os selos 4K/HDR e o tempo do player apareciam

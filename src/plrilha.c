@@ -220,7 +220,7 @@ void plrilha_desenhar(Uint32 agora) {
   if (A < 0.01f) { ultOk = 0; W = H = 0.0f; vW = vH = 0.0f; return; }
 
   x = dir ? NV_TELA_W - X_ESQ : X_ESQ;
-  { float w = W < H ? H : W, h = H < 8.0f ? 8.0f : H;
+  { float w = (W < H && H <= CAB_H) ? H : W, h = H < 8.0f ? 8.0f : H;
     GfxRect R = { dir ? x - w : x, Y_TOPO, w, h };
     float raioPx = h * 0.5f;
     cresce = anim_clamp((h - pilH) / 120.0f, 0.0f, 1.0f);

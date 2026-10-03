@@ -7370,3 +7370,17 @@ void ajustes_teste_fonte_interface(int familia) {
   txt_definir_fonte_interface((TxtFamilia)familia);
 }
 #endif
+
+#ifdef NV_SHOT_HOOKS
+// Capturas: muda uma opcao pela chave do ajustes.txt ("relogioPosLocal") sem
+// gravar. 0 = nao achou.
+int ajustes_shot_valor(const char *chave, int v) {
+  int i;
+  for (i = 0; i < AJ_N; i++) {
+    const char *c = CHAVE[i];
+    if (c && c[0] == '-') c++;
+    if (c && !strcmp(c, chave)) { valor[i] = v; return 1; }
+  }
+  return 0;
+}
+#endif

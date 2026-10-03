@@ -133,15 +133,15 @@ float plrui_seg(const char *const *rotulos, const int *contagem, int n, int sel,
   if (n > 8) n = 8;
   for (i = 0; i < n; i++) {
     int s = i == sel, f = s && ed;
-    int cor = f ? tinta : s ? 255 : 140;
-    t[i] = txt_linha(TXT_ILHA_SEG, rotulos[i], cor, cor, cor, 255);
+    int cor = f ? tinta : 243;
+    t[i] = txt_linha(TXT_ILHA_SEG, rotulos[i], cor, cor, cor, f || s ? 255 : 140);
     memset(&c[i], 0, sizeof c[i]);
     w[i] = (float)t[i].w + 40.0f;
     if (contagem && contagem[i] >= 0) {
       char b[16];
-      int cc = f ? tinta : 89;
+      int cc = f ? tinta : 243;
       snprintf(b, sizeof b, "%d", contagem[i]);
-      c[i] = txt_linha(TXT_ILHA_NUM, b, cc, cc, cc, f ? 150 : 255);
+      c[i] = txt_linha(TXT_ILHA_NUM, b, cc, cc, cc, f ? 150 : 89);
       w[i] += 9.0f + (float)c[i].w;
     }
     tot += w[i] + (i ? SEG_VAO : 0.0f);

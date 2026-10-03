@@ -55,7 +55,7 @@ static void salvar(const char *id) {
   snprintf(nome, sizeof nome, "%s/%s-%s.bmp", saida, id, material);
   assert(SDL_SaveBMP(s, nome) == 0);
   SDL_FreeSurface(s);
-  printf("captura: %s\n", nome);
+  fprintf(stderr, "captura: %s\n", nome);
 }
 
 static Uint32 relogio = 100000;
@@ -121,6 +121,39 @@ static void simular(int largura, int altura, const char *hdr, int dv, int atmos)
   v.largura = largura; v.altura = altura; v.dv = dv; v.atmos = atmos;
   snprintf(v.hdr, sizeof v.hdr, "%s", hdr ? hdr : "");
   video_simular(&v);
+}
+
+
+static void faixa(VideoFaixa *f, const char *rot, const char *idioma, const char *codec) {
+  memset(f, 0, sizeof *f);
+  snprintf(f->rotulo, sizeof f->rotulo, "%s", rot);
+  snprintf(f->idioma, sizeof f->idioma, "%s", idioma);
+  snprintf(f->codec, sizeof f->codec, "%s", codec);
+  f->ordinalMkv = -1;
+}
+// O filme com as faixas do mockup (4 de audio, 6 de legenda).
+static void simularFaixas(void) {
+  VideoSimulacao v;
+  memset(&v, 0, sizeof v);
+  v.largura = 3840; v.altura = 1606; v.dv = 1; v.atmos = 1;
+  v.nAudio = 4; v.audioAtual = 0;
+  faixa(&v.audio[0], "Ingl\xc3\xaas  \xc2\xb7  Dolby Atmos \xc2\xb7 TrueHD \xc2\xb7 7.1", "en", "");
+  faixa(&v.audio[1], "Portugu\xc3\xaas (Brasil)  \xc2\xb7  E-AC3 \xc2\xb7 5.1", "pt", "");
+  faixa(&v.audio[2], "Espanhol (Am\xc3\xa9rica Latina)  \xc2\xb7  E-AC3 \xc2\xb7 5.1", "es", "");
+  faixa(&v.audio[3], "Ingl\xc3\xaas \xe2\x80\x94 Coment\xc3\xa1rio do diretor  \xc2\xb7  AAC \xc2\xb7 2.0", "en", "");
+  v.nLeg = 6; v.legAtual = 0;
+  faixa(&v.leg[0], "Portugu\xc3\xaas (Brasil)", "pt", "S_TEXT/UTF8");
+  faixa(&v.leg[1], "Portugu\xc3\xaas (Brasil) \xe2\x80\x94 Letreiros", "pt", "S_TEXT/UTF8");
+  faixa(&v.leg[2], "Ingl\xc3\xaas", "en", "S_TEXT/UTF8");
+  faixa(&v.leg[3], "Ingl\xc3\xaas \xe2\x80\x94 SDH", "en", "S_TEXT/UTF8");
+  faixa(&v.leg[4], "Espanhol", "es", "S_TEXT/UTF8");
+  faixa(&v.leg[5], "Franc\xc3\xaas", "fr", "S_TEXT/UTF8");
+  video_simular(&v);
+}
+static void teclaFaixas(SDL_Keycode k) {
+  SDL_Event ev; memset(&ev, 0, sizeof ev);
+  ev.type = SDL_KEYDOWN; ev.key.keysym.sym = k; faixas_evento(&ev);
+  quadros(2);
 }
 
 static int quer(int argc, char **argv, const char *id) {
@@ -207,6 +240,42 @@ int main(int argc, char **argv) {
     player_shot_toast(relogio, "Conex\xc3\xa3o caiu, reconectando\xe2\x80\xa6", "aj_wifi-off", 1, 0);
     quadros(90);
     salvar("reconectando");
+  }
+  if (quer(argc, argv, "audio") || quer(argc, argv, "audio-direita")) {
+    int dir;
+    for (dir = 0; dir < 2; dir++) {
+      if (!quer(argc, argv, dir ? "audio-direita" : "audio")) continue;
+      ajustes_shot_valor("relogioPosLocal", dir ? 2 : 1);
+      abrir(&filme); simularFaixas();
+      quadros(10);
+      player_shot_estado(relogio, 4360.0f, 9420.0f, 1, 0, 0, 0);
+      player_shot_esconder();
+      faixas_abrir_em(0);
+      teclaFaixas(SDLK_DOWN);
+      quadros(90);
+      salvar(dir ? "audio-direita" : "audio");
+      faixas_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
+      quadros(60);
+    }
+    ajustes_shot_valor("relogioPosLocal", 1);
+  }
+  if (quer(argc, argv, "legendas") || quer(argc, argv, "legenda-estilo")) {
+    abrir(&filme); simularFaixas();
+    quadros(10);
+    player_shot_estado(relogio, 4360.0f, 9420.0f, 1, 0, 0, 0);
+    player_shot_esconder();
+    faixas_abrir_em(1);
+    teclaFaixas(SDLK_DOWN);
+    quadros(90);
+    if (quer(argc, argv, "legendas")) salvar("legendas");
+    { VideoLegendaEstilo *e = player_leg_estilo();
+      e->fundo = 2; e->borda = 2; e->atrasoMs = 250; player_leg_estilo_mudou(); }
+    teclaFaixas(SDLK_RIGHT);
+    teclaFaixas(SDLK_DOWN); teclaFaixas(SDLK_RIGHT); teclaFaixas(SDLK_RIGHT);
+    quadros(90);
+    if (quer(argc, argv, "legenda-estilo")) salvar("legenda-estilo");
+    faixas_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
+    quadros(60);
   }
   puts("player_glass_shot: ok");
   return 0;
