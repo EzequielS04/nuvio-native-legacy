@@ -1267,14 +1267,13 @@ static void desenhaSino(float cx, float cy, int ligado, int emFoco, float a) {
   GfxRect disco = { cx - AG_SINO * 0.5f, cy - AG_SINO * 0.5f, AG_SINO, AG_SINO };
   GfxRect ic = { cx - g * 0.5f, cy - g * 0.5f, g, g };
   float cr, cg, cb;
-  if (ligado && emFoco) {
-    gfx_cor(disco, 0.5f, tinta, tinta, tinta, a);
-    cr = ar; cg = ag; cb = ab;
-  } else if (ligado) {
+  // Lembrete ligado e ESTADO: o disco no acento, com ou sem foco (o cartao
+  // focado nao e mais realce, entao nao ha o que inverter).
+  if (ligado) {
     gfx_cor(disco, 0.5f, ar, ag, ab, a);
     cr = cg = cb = tinta;
   } else if (emFoco) {
-    cr = cg = cb = (float)ajustes_tinta_foco2() / 255.0f;
+    cr = cg = cb = 215.0f / 255.0f;
   } else {
     cr = cg = cb = 170.0f / 255.0f;
   }
@@ -1309,9 +1308,10 @@ static void desenhaConteudo(const AgItem *it, float xCont, float xDir,
   const CatItem *ci = agendaCatalogoItem(it);
   int noticia = 0, temExtra;
   int emFoco = f > 0.5f;
-  int c  = emFoco ? ajustes_tinta_foco()  : 246;
-  int c2 = emFoco ? ajustes_tinta_foco2() : 190;
-  int c3 = emFoco ? ajustes_tinta_foco2() : 170;
+  // Glass UI: o foco e superficie, nao realce — o texto nao inverte, so clareia.
+  int c  = emFoco ? 255 : 246;
+  int c2 = emFoco ? 205 : 190;
+  int c3 = emFoco ? 185 : 170;
   float x = xCont, tx = m.xTexto, textW = m.wTexto;
   float yb, blocoH, apoioW, selosW = 0.0f, imdbW = 0.0f, l3h;
   TxtLinha t, l2, l3;
@@ -1319,14 +1319,15 @@ static void desenhaConteudo(const AgItem *it, float xCont, float xDir,
 
   // A SUPERFICIE. O canto e o dos selos e do menu (20 px sobre a altura
   // base) e fica em pixels: com a linha crescendo, `20 / h` mantem o raio.
-  gfx_cor(card, 20.0f / h, 0.10f, 0.11f, 0.13f, 1.0f);
-  if (f > 0.01f) {
-    float ar, ag, ab;
-    GfxRect luz = { card.x - card.h * 0.6f, card.y - card.h * 0.6f,
-                    card.w + card.h * 1.2f, card.h * 2.2f };
-    ajustes_acento(&ar, &ag, &ab);
-    gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * f);
-    gfx_cor(card, 20.0f / h, ar, ag, ab, f);
+  // GLASS UI (mockup "ilha" tela 8): CARTAO DE VIDRO, e o focado so um degrau
+  // mais claro — sem a pilula na cor de realce nem a luz colorida atras. No
+  // vidro o cartao e branco a 5,5 % (a pagina aparece por ele) e o foco sobe a
+  // 13 %; no solido, o cinza dos selos e o foco no cinza opaco da regra 2. O
+  // canto passa de 20 para 26 px, o raio dos cartoes do mockup.
+  if (ajustes_vidro()) gfx_cor(card, 26.0f / h, 1, 1, 1, .055f + .075f * f);
+  else {
+    gfx_cor(card, 26.0f / h, 0.10f, 0.11f, 0.13f, 1.0f);
+    if (f > 0.01f) gfx_cor(card, 26.0f / h, .17f, .176f, .204f, f);
   }
 
   { GfxRect cz = { x, y + (AG_LINHA_H - AG_CARTAZ_H) * 0.5f,
@@ -1377,7 +1378,7 @@ static void desenhaConteudo(const AgItem *it, float xCont, float xDir,
     float sx = tx;
     yb += 6.0f;
     if (l3.h) { txt_desenhar(l3, tx, yb + (l3h - (float)l3.h) * 0.5f); sx += (float)l3.w + BADGE_GAP; }
-    if (imdbW > 0.0f) badge_imdb(sx, yb, ci->nota, emFoco, 1.0f);
+    if (imdbW > 0.0f) badge_imdb(sx, yb, ci->nota, 0, 1.0f);
     yb += l3h;
   }
 
@@ -1393,7 +1394,7 @@ static void desenhaConteudo(const AgItem *it, float xCont, float xDir,
   // borda e nunca passa dela, em nenhum quadro nem em nenhuma fonte.
   temExtra = emFoco && linhaExtra(it, extra, sizeof extra, &noticia);
   if (temExtra) {
-    int qc = ajustes_tinta_foco2();
+    int qc = 200;
     float yq = y + AG_LINHA_H - AG_EXTRA_SOBE + 12.0f;
     float y0 = card.y > listaTopo() ? card.y : listaTopo();
     float y1 = card.y + card.h < listaBase() ? card.y + card.h : listaBase();
@@ -1426,7 +1427,7 @@ static void desenhaConteudo(const AgItem *it, float xCont, float xDir,
     if (mostra) {
       char lin[AG_SIN_MAX][512];
       const char *resto = "";
-      int nl = 0, k, cl = ajustes_tinta_foco2();
+      int nl = 0, k, cl = it->lembrete ? 235 : 190;
       float alt = AG_SINO, yl;
       if (emFoco && pode)
         nl = agQuebra(TXT_CAPTION2, it->lembrete ? i18n("Lembrete ativo") : i18n("Lembrar-me"),
@@ -1568,44 +1569,31 @@ static void desenhaEixo(float xEixo, float y0, float y1, int tracejado) {
 #define AGL_IMG_W   560.0f
 #define AGL_QR      176.0f
 
+// GLASS UI: os paineis flutuantes (o modal da linha, as manchetes, a noticia)
+// sao ILHAS — sombra curta, miolo de vidro ou solido, luz larga e fraca
+// BRANCA no canto de cima (era a luz na cor do realce), sem fio. No vidro
+// continua o apoio escuro por baixo: atras ha TEXTO (as linhas da Agenda), e
+// texto atras de texto le como sujeira (captura -fx-modal-vidro, 29/09/2026).
 static void painelFlutuante(GfxRect r, float ar, float ag, float ab, float a) {
-  // Vidro a 0,92 e nao aos 0,78 dos paineis sobre arte: aqui atras ha TEXTO
-  // (as linhas da Agenda), e texto atras de texto le como sujeira — captura
-  // -fx-modal-vidro, 29/09/2026. O fio de cabelo e o canto continuam os do
-  // vidro; o veu de desenhaContexto tambem escurece mais com ele ligado.
-  if (ajustes_vidro()) {
-    // Um apoio ESCURO por baixo do vidro: o miolo translucido deixava as
-    // linhas da Agenda (texto) aparecerem nitidas atras das acoes, mesmo com o
-    // veu (captura -fx-modal-vidro, 2a rodada). O vidro continua sendo o
-    // desenho da superficie (miolo mais claro, fio de 1,5 px); so nao e mais
-    // uma janela para texto concorrente.
-    gfx_cor(r, 28.0f / r.h, 0.05f, 0.052f, 0.06f, 0.94f * a);
-    gfx_vidro_painel(r, 28.0f / r.h, 0.92f, a);
-    return;
-  }
-  // 0,99 e nao 0,96: nos paineis grandes (a noticia ocupa 1640x900) os 4% de
-  // transparencia deixavam as linhas da Agenda aparecerem atras do texto
-  // (captura -fx-noticia-qr). A luz de canto e o que da a profundidade.
-  gfx_cor(r, 28.0f / r.h, 0.055f, 0.058f, 0.068f, 0.99f * a);
-  gfx_luz_canto(r, 28.0f / r.h, r.w * 0.5f, 0.0f, r.w * 0.9f, ar, ag, ab, 0.22f * a);
+  const int vid = ajustes_vidro();
+  float raio = 36.0f / r.h;
+  (void)ar; (void)ag; (void)ab;
+  gfx_rect((GfxRect){ r.x - 18.0f, r.y - 8.0f, r.w + 36.0f, r.h + 40.0f }, 0, GFX_SOMBRA,
+           1.0f, 0, 0, 0.5f, 0, 0, 0, .42f * a);
+  if (vid) { gfx_cor(r, raio, 0.05f, 0.052f, 0.06f, 0.94f * a); gfx_vidro_folha(r, raio, a); }
+  else gfx_cor(r, raio, .071f, .075f, .086f, .99f * a);
+  gfx_luz_canto(r, raio, r.w * .25f, -r.h * .25f, r.w * .9f, 1, 1, 1, (vid ? .06f : .04f) * a);
 }
-// A pilula de foco das linhas dos paineis: luz atras, pilula na cor de realce
-// por cima. O raio e 16 px sobre a altura da linha, como era.
+// A LINHA EM FOCO dos paineis (acoes do modal, manchete aberta): superficie
+// um degrau mais clara, como o menu e o Social — sem pilula no realce.
 static void pilulaFoco(GfxRect lr, float ar, float ag, float ab, float a) {
-  if (ajustes_vidro()) { gfx_vidro_pilula_cheia(lr, 16.0f / lr.h, 1.0f, a); return; }
-  { GfxRect luz = { lr.x - lr.h * 0.9f, lr.y - lr.h * 0.9f, lr.w + lr.h * 1.8f, lr.h * 2.8f };
-    // Luz mais contida em linha larga (DESIGN.md secao 4): a mancha de uma
-    // pilula de 1100 px com a folga do menu viraria meia tela.
-    if (lr.w > 800.0f) { luz.x = lr.x - lr.h * 0.5f; luz.w = lr.w + lr.h; }
-    gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * a); }
-  gfx_cor(lr, 16.0f / lr.h, ar, ag, ab, a);
+  (void)ar; (void)ag; (void)ab;
+  if (ajustes_vidro()) gfx_cor(lr, 0.5f > 22.0f / lr.h ? 22.0f / lr.h : 0.5f, 1, 1, 1, .12f * a);
+  else gfx_cor(lr, 0.5f > 22.0f / lr.h ? 22.0f / lr.h : 0.5f, .17f, .176f, .204f, a);
 }
-// Tinta sobre a pilula de foco (principal e secundaria).
-static int tintaF(void)  { return ajustes_vidro() ? gfx_vidro_tinta(1.0f) : ajustes_tinta_foco(); }
-static int tintaF2(void) {
-  if (ajustes_vidro()) { int t = gfx_vidro_tinta(1.0f); return t > 128 ? 205 : 70; }
-  return ajustes_tinta_foco2();
-}
+// Tinta do texto sobre a linha em foco: clara, a superficie nao e realce.
+static int tintaF(void)  { return 255; }
+static int tintaF2(void) { return 200; }
 
 // "12 set" / "12 Sep" / "12 вер" de uma data ISO. "" quando nao e data.
 static void dataCurtaIso(const char *iso, char *dst, size_t tam) {
