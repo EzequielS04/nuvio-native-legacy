@@ -40,6 +40,7 @@
 // `pendPronto` e o fio de desenho copia para os vetores publicados. Leitores
 // nunca tocam no staging — mesma disciplina do epg.c.
 #include "guia.h"
+#include "plrui.h"
 #include "badges.h"   /* marcas de resolucao no heroi */
 #include "aovivo.h"
 #include "fontecache.h"
@@ -3671,10 +3672,12 @@ static void desenharBanda(float a, Uint32 agora) {
   // criavam emendas horizontais por definicao. GFX_VEU_BAIXO aplica nv_dither por
   // fragmento; manter a mesma cor e o teto de alfa (0,94). O plano de video
   // continua visivel no topo, e a base sustenta o texto da grade.
-  { float y = topo - 160.0f;
-    gfx_rect((GfxRect){ 0.0f, y, NV_TELA_W, NV_TELA_H - y }, 0,
-             GFX_VEU_BAIXO, 0, 0, 0, 0,
-             0.02f, 0.02f, 0.025f, 0.94f * a); }
+  // GLASS UI (mockup do player de 03/10, "aovivo-guia"): a banda vira uma
+  // ILHA baixa a 40 das bordas sobre o veu leve (era um veu de 94% da
+  // metade da tela), com o titulo, as dicas em teclas e a linha focada em
+  // superficie — o anel de acento em volta da celula sai.
+  gfx_veu_css((GfxRect){ 0, NV_TELA_H - 300.0f, NV_TELA_W, 300.0f }, 0, 1.0f, 1.0f, 0.60f * a);
+  plrui_material((GfxRect){ 40.0f, topo - 26.0f, NV_TELA_W - 80.0f, NV_TELA_H - 40.0f - (topo - 26.0f) }, 36.0f, 0, a);
 
   // Quem entra: sobe ate dois a partir do foco e completa descendo.
   { int l = focoLin, c = focoCol;
@@ -3689,21 +3692,25 @@ static void desenharBanda(float a, Uint32 agora) {
       ll[0] = l2; cc[0] = c2; n++;
     } }
 
-  { TxtLinha t = txt_linha(TXT_PG_ROTULO, i18n("Guia de canais"), 200, 202, 210, 255);
-    TxtLinha d = txt_linha(TXT_CAPTION,
+  { TxtLinha t = txt_linha(TXT_G30B, "Guia de canais", 243, 242, 239, 255);
+    const char *k[3] = { "OK",
 #ifdef NV_ANDROID
-        i18n("OK troca de canal  ·  CH+: guia completo  ·  Voltar fecha")
+      "CH+",
 #else
-        i18n("OK troca de canal  ·  Azul: guia completo  ·  Voltar fecha")
+      "Azul",
 #endif
-        , 150, 153, 162, 255);
-    txt_desenhar_alpha(t, G_AREA_X, topo + 6.0f, a);
-    txt_desenhar_alpha(d, G_AREA_DIR - (float)d.w, topo + 6.0f, a); }
+      "Voltar" }, *r[3] = { "Troca de canal", "Guia completo", "Fechar" };
+    txt_desenhar_alpha(t, G_AREA_X, topo - 2.0f, a);
+    plrui_dicas(k, r, 3, G_AREA_DIR, topo - 2.0f + (float)t.h * 0.5f, 1, a); }
   desenharReguaEm(a, ini, yR);
 
   gCel = G_B_CEL;
   gIdNoAr = player_id_canal();
   focoAnelTem = 0;
+  for (k = 0; k < n; k++)
+    if (ll[k] == focoLin && cc[k] == focoCol)
+      plrui_linha_foco((GfxRect){ G_AREA_X - 14.0f, y0 + (float)k * G_B_ROW - 5.0f,
+                                  G_AREA_W + 28.0f, G_B_ROW - 2.0f }, 22.0f, a);
   for (passo = 0; passo < 2; passo++) {
     for (k = 0; k < n; k++) {
       int foc = ll[k] == focoLin && cc[k] == focoCol;
@@ -3723,7 +3730,8 @@ static void desenharBanda(float a, Uint32 agora) {
   }
   gCel = G_L_CEL;
   gIdNoAr = "";
-  desenharAnelFoco(a, agora, 0.0f);
+  (void)agora;
+  focoAnelOk = 0;   // na banda o foco e a superficie da linha, sem anel
   if (agoraVis) {
     char hora[8];
     int tf = ajustes_tinta_foco();
