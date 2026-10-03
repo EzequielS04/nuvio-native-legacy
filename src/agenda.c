@@ -279,12 +279,8 @@ void agenda_apoio(const AgItem *it, char *dst, size_t tam) {
     u += (size_t)snprintf(dst + u, tam - u, "%s", u ? " \xc2\xb7 " : "");
   if (it->duracao > 0 && u < tam)
     u += (size_t)snprintf(dst + u, tam - u, i18n("%d min"), it->duracao);
-  if (it->temporadas > 0 && u + 1 < tam)
-    u += (size_t)snprintf(dst + u, tam - u, "%s", u ? " \xc2\xb7 " : "");
-  if (it->temporadas > 0 && u < tam)
-    snprintf(dst + u, tam - u,
-             it->temporadas == 1 ? i18n("%d temporada") : i18n("%d temporadas"),
-             it->temporadas);
+  // A CONTAGEM DE TEMPORADAS SAIU (mockup, tela 8): a meta do cartao e "rede ·
+  // duracao". O campo continua no registro e no disco.
 }
 
 // ---------------------------------------------------------------------------

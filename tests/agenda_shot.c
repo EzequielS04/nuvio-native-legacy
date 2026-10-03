@@ -146,6 +146,20 @@ static void teclaDet(SDL_Keycode k) {
   detail_evento(&e);
 }
 
+// A ARTE DO MOCKUP ATRAS (so com NUVIO_SHOT_ARTE): o fundo do quadro 8 e a arte
+// com o veu em gradiente do .fundo do glass-ilha.html (preto a 70% no topo, 92%
+// dos 60% para baixo). Sem a variavel, o fundo liso de sempre.
+static void arteDeFundo(void) {
+  int y;
+  if (!getenv("NUVIO_SHOT_ARTE") || !*getenv("NUVIO_SHOT_ARTE")) return;
+  shot_arte_desenhar(0.0f);
+  for (y = 0; y < 1080; y += 6) {
+    float t = y / 648.0f, a;
+    a = t >= 1.0f ? 0.92f : 0.70f + 0.22f * t;
+    gfx_cor((GfxRect){ 0, (float)y, 1920, 6 }, 0, 0.0235f, 0.0275f, 0.035f, a);
+  }
+}
+
 static void captura(const char *nome, SDL_Window *win) {
   int i;
   rail_shot_aplicar();
@@ -167,6 +181,7 @@ static void captura(const char *nome, SDL_Window *win) {
     }
     glClearColor(0.051f, 0.051f, 0.051f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+    arteDeFundo();
     switch (oQue) {
       case DES_AVISO:   agendaviso_desenhar(SDL_GetTicks()); break;
       case DES_MENU:    menu_desenhar(SDL_GetTicks());       break;
@@ -439,9 +454,11 @@ int main(int argc, char **argv) {
   poeLinha(cache, sizeof cache, "tt10255564", "Foundation",
            "deploy/app/art/00.jpg", AG_VOLTANDO, 3, 9, "The Last Empress",
            "2026-09-16", "2026-09-12",
-           "Gaal and Salvor reach Trantor on the day the Empire announces the "
-           "end of the genetic dynasty, and the Foundation has to decide whether "
-           "the Plan is still worth anything after three hundred years.",
+           getenv("NUVIO_SHOT_SO")
+             ? "Gaal e Salvor chegam a Trantor no dia em que o Império anuncia o fim da linhagem genética."
+             : "Gaal and Salvor reach Trantor on the day the Empire announces the "
+               "end of the genetic dynasty, and the Foundation has to decide whether "
+               "the Plan is still worth anything after three hundred years.",
            "finale", "Apple TV+", 58, 3);
   poeLinha(cache, sizeof cache, "tt1520211", "The Last of Us",
            "deploy/app/art/01.jpg", AG_VOLTANDO, 2, 4, "Day One",
@@ -517,6 +534,11 @@ int main(int argc, char **argv) {
   agendaui_iniciar();
   snprintf(nome, sizeof nome, "%s-hoje.bmp", saida);
   captura(nome, w);
+  // So a captura comparada ao mockup (iteracao rapida): NUVIO_SHOT_SO=hoje.
+  if (getenv("NUVIO_SHOT_SO") && !strcmp(getenv("NUVIO_SHOT_SO"), "hoje")) {
+    printf("PASS: captura -hoje gravada.\n");
+    return 0;
+  }
 
   // --- 2b. A ULTIMA NOTICIA como citacao, o menu de contexto e o painel ------
   // Rede de verdade (Google News): espera ate 8 s pela resposta da primeira
