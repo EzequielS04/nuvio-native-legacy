@@ -1779,10 +1779,15 @@ void stream_folha_desenhar(Uint32 agora) {
   // O TOPO DA LISTA ESMAECE em vez de cortar seco embaixo do seletor: a linha
   // que sobe some aos poucos, na cor da folha. So com a lista rolada: parada
   // no topo, o esmaecido apagaria o cabecalho "4K" do primeiro grupo.
-  if (rolagem > 1.0f) { const int N=6; float e=rolagem>30.0f?1.0f:rolagem/30.0f;
-    for(int k=0;k<N;k++)
-      gfx_cor((GfxRect){x,FOLHA_TOPO-8+k*5,FOLHA_W,5},0,
-              .071f,.075f,.086f,(1.0f-(float)k/N)*(ajustes_vidro()?.78f:.98f)*e*anim); }
+  // Um degrade so no shader (GFX_BRILHO_TOPO, rampa de cima para baixo na
+  // cor da folha) e NAO faixas empilhadas: o painel de 8 bits da OLED mostra
+  // cada degrau de 1/255 como contorno num escuro de pouco contraste (medido
+  // na C9 em 25/09, ver nv_dither em gfx.c), e faixas solidas sao degraus por
+  // construcao. O modo passa pelo nv_dither; cor escura, entao nao sai no
+  // nivel de efeitos leves.
+  if (rolagem > 1.0f) { float e=rolagem>30.0f?1.0f:rolagem/30.0f;
+    gfx_rect((GfxRect){x,FOLHA_TOPO-8,FOLHA_W,34},0,GFX_BRILHO_TOPO,0,1.0f,0,0,
+             .071f,.075f,.086f,(ajustes_vidro()?.78f:.98f)*e*anim); }
   if(!nFiltrados()) {
     // A FOLHA VAZIA DIZ A CAUSA (B6/#107, D5). So quando a lista esta vazia
     // de verdade (n == 0): lista cheia com filtro de provedor que nao casa
