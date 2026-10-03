@@ -2016,12 +2016,22 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
 void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a) {
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
   gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, fundo * a);
+  gfx_vidro_matiz(r, raio, a);
+}
+// IMERSIVA NO VIDRO (acentos-mockup.html, quadro 5): a ilha leva 16% da luz
+// do destaque (L 0,42, croma <= 0,11), entrando e saindo com a luz ambiente.
+// Fora da Imersiva nv_ambiente_forca e 0 e isto nao desenha nada.
+void gfx_vidro_matiz(GfxRect r, float raio, float a) {
+  float f = 0.16f * nv_ambiente_forca * a;
+  if (f <= 0.002f || r.w <= 0.0f || r.h <= 0.0f) return;
+  gfx_cor(r, raio, nv_luz_viva[0], nv_luz_viva[1], nv_luz_viva[2], f);
 }
 // Painel lateral/flutuante (menu, Fontes, Salvos): miolo frio translucido e um
 // brilho largo no alto, sem aro.
 void gfx_vidro_folha(GfxRect r, float raio, float a) {
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
   gfx_cor(r, raio, 0.085f, 0.088f, 0.10f, 0.78f * a);
+  gfx_vidro_matiz(r, raio, a);
   gfx_brilho_topo(r, raio, 0.38f, 0.88f, 0.92f, 1.0f, 0.06f * a);
 }
 void gfx_vidro_aro(GfxRect r, float raio, float esp, float cr, float cg, float cb, float ca) {

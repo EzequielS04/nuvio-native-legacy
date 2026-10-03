@@ -263,6 +263,9 @@ typedef struct {
 void gfx_textura_definir(GLuint tex, const float janela[4], float aspecto,
                          float forca, float veu, int veuBranco);
 int  gfx_textura_ativa(void);
+// O matiz da Imersiva por cima de um miolo de vidro (16% da luz do destaque,
+// com a forca da luz ambiente). gfx_vidro_painel/folha ja o chamam.
+void gfx_vidro_matiz(GfxRect r, float raio, float a);
 
 // Proporcao (w/h) da textura a desenhar. 0 = mapeia direto (texto, veu).
 // Definir ANTES de gfx_rect para que a arte seja recortada, nunca esticada.
