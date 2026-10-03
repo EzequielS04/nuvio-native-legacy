@@ -695,6 +695,7 @@ static void nomeParaFolha(void) {
   const CatItem *c = player_id_canal()[0] ? NULL
                    : cat_item(player_aberto() ? player_indice() : detail_indice());
   stream_folha_nome(c ? c->titulo : "");
+  stream_folha_canal(player_id_canal()[0] != 0);
   stream_folha_item(c ? (player_aberto() ? player_indice() : detail_indice()) : -1);
 }
 
@@ -1406,6 +1407,31 @@ static void spotAbrir(int voz) {
 #define SPOT_PESSOA_PRAZO_MS 20000u
 static SpotPedido spotPessoaDepois;
 static Uint32 spotPessoaDesde;
+// Abre a filmografia da pessoa: do Spotlight e da Busca (busca_pediu_pessoa).
+static void abrirPessoa(const SpotPedido *pp) {
+  SpotPedido p = *pp;
+  // A pagina do titulo de onde a pessoa veio, com a filmografia por cima.
+  if (p.indice >= 0) {
+    abrirPorIndice(p.indice);
+    detail_mostrar_pessoa(p.tmdb, p.nome, p.arte);
+    return;
+  }
+  // Pessoa do TMDB (spotpessoa.h): a filmografia mora na pagina de um
+  // titulo, entao abre a do primeiro titulo pelo qual ela e conhecida.
+  // No catalogo ja abre agora; fora dele a descoberta busca o meta e
+  // trocaDeTituloSeSolicitada mostra a pessoa quando a pagina abrir.
+  { int i, idx = -1;
+    for (i = 0; i < cat_n() && idx < 0; i++) {
+      const CatItem *ci = cat_item(i);
+      if (ci && ci->tmdb == p.tituloTmdb && strcmp(ci->tipo, "channel")) idx = i;
+    }
+    if (idx >= 0) { abrirPorIndice(idx); detail_mostrar_pessoa(p.tmdb, p.nome, p.arte); }
+    else if (p.tituloTmdb > 0) {
+      spotPessoaDepois = p;
+      spotPessoaDesde = SDL_GetTicks();
+      desc_pedir_titulo_tmdb(p.tituloTmdb, p.tituloTipo);
+    } }
+}
 // O que a pessoa escolheu no Spotlight, ja com a caixa fechada.
 static void spotAtender(void) {
   SpotPedido p;
@@ -1415,27 +1441,7 @@ static void spotAtender(void) {
       abrirPorIndice(p.indice);
       break;
     case SPOT_PESSOA:
-      // A pagina do titulo de onde a pessoa veio, com a filmografia por cima.
-      if (p.indice >= 0) {
-        abrirPorIndice(p.indice);
-        detail_mostrar_pessoa(p.tmdb, p.nome, p.arte);
-        break;
-      }
-      // Pessoa do TMDB (spotpessoa.h): a filmografia mora na pagina de um
-      // titulo, entao abre a do primeiro titulo pelo qual ela e conhecida.
-      // No catalogo ja abre agora; fora dele a descoberta busca o meta e
-      // trocaDeTituloSeSolicitada mostra a pessoa quando a pagina abrir.
-      { int i, idx = -1;
-        for (i = 0; i < cat_n() && idx < 0; i++) {
-          const CatItem *ci = cat_item(i);
-          if (ci && ci->tmdb == p.tituloTmdb && strcmp(ci->tipo, "channel")) idx = i;
-        }
-        if (idx >= 0) { abrirPorIndice(idx); detail_mostrar_pessoa(p.tmdb, p.nome, p.arte); }
-        else if (p.tituloTmdb > 0) {
-          spotPessoaDepois = p;
-          spotPessoaDesde = SDL_GetTicks();
-          desc_pedir_titulo_tmdb(p.tituloTmdb, p.tituloTipo);
-        } }
+      abrirPessoa(&p);
       break;
     case SPOT_COLECAO: {
       const ColFolder *f = col_folder(p.indice);
@@ -2576,6 +2582,7 @@ void app_atualizar(float dt, Uint32 agora) {
   if (!detail_aberto() && !player_aberto()) {
     int idx = -1;
     HomeItem it;
+    SpotPedido pedPessoa;
     if (tela == TELA_HOME && home_pediu_abrir()) {
       if (home_item_focado(&it)) abrirTitulo(&it);
     } else if (tela == TELA_EXPLORAR && explorar_pediu_abrir(&idx)) {
@@ -2626,6 +2633,8 @@ void app_atualizar(float dt, Uint32 agora) {
         abrirTitulo(&it);
         if (tocar) detail_pedir_reproduzir();
       }
+    } else if (tela == TELA_BUSCA && busca_pediu_pessoa(&pedPessoa)) {
+      abrirPessoa(&pedPessoa);
     } else if (tela == TELA_BUSCA && busca_pediu_abrir(&idx)) {
       if (busca_item_focado(&it)) abrirTitulo(&it); else abrirPorIndice(idx);
     } else if (tela == TELA_BIBLIOTECA && biblioteca_pediu_abrir(&idx)) {

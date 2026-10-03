@@ -1219,8 +1219,32 @@ static int ehHdr(const Stream *s) {
                        badges_bit("v-hdr") | badges_bit("v-hlg") | badges_bit("a-atmos-dv") |
                        badges_bit("a-truehd-dv") | badges_bit("a-dd-dv"))) != 0;
 }
+// CANAL AO VIVO (dono, 03/10): a folha de Fontes de um canal nao trazia
+// resolucao nenhuma — o parser de filme le "1080p" de nome de arquivo, e as
+// listas M3U/Xtream dizem "UHD", "FHD", "HD", "SD", "H.265", "50fps" no nome do
+// canal. So para canal (stream_folha_canal): a altura vem do texto (rotulo,
+// descricao) e os selos de resolucao/codec entram no mesmo caminho do filme,
+// entao o grupo e os selos saem iguais. Idempotente. Filme nao passa aqui.
+static int canalFolha;
+void stream_folha_canal(int sim) { canalFolha = sim != 0; }
+void stream_canal_enriquecer(Stream *s) {
+  static const char *const HEVC[] = { "hevc", "h265", "h.265", "x265", NULL };
+  int a, k;
+  if (!s) return;
+  a = alturaCanal(s);
+  if (!s->altura) s->altura = a;
+  if (a >= 1800)      s->badges |= badges_bit("r-4k");
+  else if (a >= 1000) s->badges |= badges_bit("r-1080");
+  else if (a >= 700)  s->badges |= badges_bit("r-720");
+  else if (a > 0)     s->badges |= badges_bit("r-sd");
+  for (k = 0; HEVC[k]; k++)
+    if (nv_res_tem(s->rotulo, HEVC[k]) || nv_res_tem(s->descricao, HEVC[k])) {
+      s->badges |= badges_bit("co-x265"); break;
+    }
+}
 static int grupoRes(const Stream *s) {
   int r;
+  if (canalFolha) stream_canal_enriquecer((Stream *)s);
   if (s->altura >= 1800 || (s->badges & badges_bit("r-4k"))) r = 0;
   else if (s->altura >= 1000 || (s->badges & badges_bit("r-1080"))) r = 1;
   else if (s->altura >= 700  || (s->badges & badges_bit("r-720"))) r = 2;

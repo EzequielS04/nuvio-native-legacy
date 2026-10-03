@@ -29,6 +29,16 @@
 // (o teclado, que ja ocupa a largura da tela em 100%).
 #define ESCALA_REAL_INI() float escalaAnt_ = gfx_escala(); gfx_escala_sair(1.0f)
 #define ESCALA_REAL_FIM() gfx_escala_sair(escalaAnt_)
+// ESCALA COM PISO: telas que nascem maiores que 100% (Agenda 120%, topo da
+// Biblioteca 120%, Spotlight 130%). O fator e max(piso, Tamanho da interface):
+// acompanha o ajuste acima do piso. escala_min(m) devolve o fator e
+// ESCALA_MIN_INI(m)/FIM() ligam e devolvem a escala, como ESCALA_INI/FIM.
+static inline float escala_min(float m) {
+  float s = gfx_escala_ui();
+  return s < m ? m : s;
+}
+#define ESCALA_MIN_INI(m) float escalaMinAnt_ = gfx_escala(); gfx_escala_sair(escala_min(m))
+#define ESCALA_MIN_FIM() gfx_escala_sair(escalaMinAnt_)
 // So amplia se um cartao de w x h (em px de 1080p) ainda couber na tela real
 // com 16 px de folga em cada borda; senao desenha em 1080p. Para os cartoes
 // grandes de tela quase cheia (novidades, explicadores), que ja foram

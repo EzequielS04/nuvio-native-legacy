@@ -38,6 +38,7 @@ typedef struct {
 } HomeItem;
 
 int  home_iniciar(const char *dirArte);
+int  home_cartao_foco_por_cima(int indice); // repinta o cartao focado (menu do cartaz)
 int  home_item_focado(HomeItem *out);      // 0 se o foco ainda nao foi desenhado
 int  home_n_artes(void);                   // acervo de backdrops, usado pelo detalhe
 // Ha fileira montada? Serve para o app saber que o catalogo CHEGOU depois do

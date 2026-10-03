@@ -241,6 +241,7 @@ int main(int argc, char **argv) {
   SDL_GL_SetSwapInterval(0);
   glViewport(0, 0, 1920, 1080);
   gfx_tamanho_alvo(1920, 1080);
+  if (getenv("NUVIO_SHOT_VIDRO")) ajustes_definir_vidro(1);
   assert(gfx_iniciar());
   assert(txt_iniciar("deploy/app", 1));
   tex_iniciar(64);
