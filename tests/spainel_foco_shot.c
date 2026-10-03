@@ -20,6 +20,7 @@
 #include "gfx.h"
 #include "text.h"
 #include "tex_cache.h"
+#include "shot_arte.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -52,6 +53,9 @@ static void captura(const char *nome, SDL_Window *win) {
     glViewport(0, 0, 1920, 1080);
     glClearColor(0.20f, 0.24f, 0.32f, 1.0f);   // fundo claro: o vidro deixa ver o corte
     glClear(GL_COLOR_BUFFER_BIT);
+    // Com NUVIO_SHOT_ARTE=<jpg> a arte vai atras, para julgar o vidro; sem ela
+    // o fundo liso, que e o que a MEDIDA do corte (primeiroDesenhado) precisa.
+    if (getenv("NUVIO_SHOT_ARTE")) shot_arte_desenhar(.30f);
     spainel_desenhar(SDL_GetTicks());
     if (i == 149) {
       unsigned char *pix = (unsigned char *)malloc(1920 * 1080 * 4);
