@@ -1,5 +1,6 @@
 #include "ctxmenu.h"
 #include "catalogo.h"
+#include "logotitulo.h"
 #include "descoberta.h"
 #include "syncprog.h"
 #include "visto.h"
@@ -46,13 +47,20 @@ enum { CTX_PENDENTE = 1, CTX_CONFIRMADA = 2, CTX_FALHA = 3 };
 // O MENU DO CARTAZ E UMA ILHA AO LADO DO POSTER (dono, 02/10, mockup "ilha"
 // tela 7): 420 de largura, raio 32, 14 de ar; cabecalho com o nome (24/700) e
 // a linha "Serie · 2024 · ..." (16 a 50 %); linhas de 60 em pilula, 4 entre
-// elas. Era um dialogo de 720 no meio da tela, com logo, selos de estado e
-// rodape de teclas — o mockup tirou os tres: o rotulo de cada opcao ja diz o
-// estado ("Remover dos Salvos", "Desmarcar como assistido").
+// elas. Era um dialogo de 720 no meio da tela, com selos de estado e rodape de
+// teclas — os dois sairam com o mockup: o rotulo de cada opcao ja diz o
+// estado ("Remover dos Salvos", "Desmarcar como assistido"). O logo ficou.
 #define CTX_W        420.0f
 #define CTX_ILHA_PAD  14.0f
 #define CTX_ILHA_RAIO 32.0f
 #define CTX_CAB       75.0f     // 12 + nome + 4 + meta + 10
+// O LOGO DO TITULO NO LUGAR DO NOME (pedido do dono, 01/10, reafirmado em
+// 02/10 sobre o mockup): uma caixa de 300 x 52 reservada sempre que o titulo
+// TEM logo (logotitulo_url), carregado ou nao — o cabecalho nao pula quando o
+// arquivo chega. Sem logo nenhum, o nome em texto e o cabecalho curto.
+#define CTX_LOGO_W   300.0f
+#define CTX_LOGO_H    52.0f
+#define CTX_CAB_LOGO (12.0f + CTX_LOGO_H + 6.0f + 19.0f + 10.0f)
 #define CTX_LINHA     60.0f
 #define CTX_GAP        4.0f
 #define CTX_AO_LADO   30.0f     // do poster a ilha
@@ -209,7 +217,13 @@ static char pedCategoriaImdb[24];
 // uma pasta — e abre direto na pagina 1 (soFileira).
 static char filChave[192], filTitulo[96];
 static int  pagina, soFileira;
-// A PAGINA DE ESTILOS E UM MODAL PROPRIO (dono, 01/10/2026: "tem todos os
+// PAGINA 2: A CONFIRMACAO de "Tirar de Continuar assistindo" (dono, 02/10:
+// modal de ilha do mockup "ilha" tela 7). Tirar apaga o ponto de retomada
+// aqui e nas contas ligadas — nao se desfaz com um Voltar —, entao a acao so
+// roda depois de um OK em "Tirar da fileira". O foco nasce nele (confFoco 0);
+// Voltar e "Cancelar" (1) devolvem ao menu, com o foco na mesma opcao.
+static int   confFoco;
+static float confAnim[2];// A PAGINA DE ESTILOS E UM MODAL PROPRIO (dono, 01/10/2026: "tem todos os
 // estilos? ... coloque ao lado o preview de como seria os cards"): a lista de
 // formas a esquerda, com a atual marcada, e a direita a fileira desenhada na
 // forma em foco com as artes dela (home_previa_fileira). As formas nao passam
@@ -556,6 +570,13 @@ static void aplicar(void) {
   // Enquanto a requisicao esta no ar continua valendo esperar: duas escritas
   // simultaneas na mesma superficie e que nao podem acontecer.
   if (acao != OP_DETALHES && estadoOperacao == CTX_PENDENTE) return;
+  // Tirar so depois da confirmacao: o primeiro OK abre a pagina 2, e e ela
+  // que chama aplicar() de novo, com a pagina ainda em 2.
+  if (acao == OP_TIRAR_CONTINUAR && pagina != 2) {
+    pagina = 2; confFoco = 0;
+    confAnim[0] = confAnim[1] = 0.0f;
+    return;
+  }
   switch (acao) {
     case OP_DETALHES:
       // O painel resolve pelo IMDb (spainel_pediu_abrir -> app.c), porque o
@@ -702,6 +723,7 @@ static void aplicar(void) {
       // sem id conhecido (item que nao veio do Simkl) nao faz nada.
       simkl_playback_remover(imdb);
       aberto = 0;
+      pagina = 0;
       break;
     }
   }
@@ -729,6 +751,7 @@ void ctx_evento(const SDL_Event *e) {
     // Da pagina de estilos, Voltar volta ao menu do titulo — com o foco na
     // entrada de onde a pessoa veio. Sem titulo por tras (colecao), fecha.
     // Voltar CANCELA: nada foi gravado ao mover o foco, so a previa mudou.
+    if (pagina == 2) { pagina = 0; return; }   // Voltar = Cancelar
     if (pagina == 1 && !soFileira) {
       pagina = 0; montar();
       for (foco = 0; foco < nOps && ops[foco].acao != OP_ESTILO; foco++) {}
@@ -736,6 +759,16 @@ void ctx_evento(const SDL_Event *e) {
       return;
     }
     aberto = 0; return;
+  }
+  // CONFIRMACAO: os dois botoes lado a lado; OK no primeiro tira, no
+  // segundo cancela. Cima/baixo nao fazem nada (nao ha para onde ir).
+  if (pagina == 2) {
+    if (k == SDLK_LEFT)  { confFoco = 0; return; }
+    if (k == SDLK_RIGHT) { confFoco = 1; return; }
+    if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
+      if (confFoco == 0) aplicar(); else pagina = 0;
+    }
+    return;
   }
   // Pagina de estilos: cima/baixo trocam a forma, esquerda/direita o tamanho
   // (so nas linhas que tem tamanhos); nada disso grava. OK grava.
@@ -779,6 +812,10 @@ void ctx_atualizar(float dt, Uint32 agora) {
       ? (aberto && foco == i ? 1.0f : 0.0f)
       : anim_mola(focoAnim[i], aberto && foco == i ? 1.0f : 0.0f,
                   dt, NV_MOLA_FOCO);
+  for (i = 0; i < 2; i++)
+    confAnim[i] = ajustes_animacoes_reduzidas()
+      ? (pagina == 2 && confFoco == i ? 1.0f : 0.0f)
+      : anim_mola(confAnim[i], pagina == 2 && confFoco == i ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
   // Pagina de estilos: o foco da lista e a troca da previa. So aqui, e so com
   // a pagina aberta — fechada, nada disto anda nem desenha.
   if (aberto && pagina == 1) {
@@ -840,6 +877,11 @@ void ctx_atualizar(float dt, Uint32 agora) {
 // PONTEIRO (#99): passar por cima de uma opcao a foca (a mesma variavel de
 // cima/baixo); o clique e o OK. Clicar fora do cartao fecha, como o Voltar.
 static void ponteiroCtxOpcao(int i, int b) { (void)b; if (i >= 0 && i < nOps) foco = i; }
+static void ponteiroConfFoco(int i, int b) { (void)b; confFoco = i; }
+static void ponteiroConfOk(int i, int b) {
+  (void)b; confFoco = i;
+  if (i == 0) aplicar(); else pagina = 0;
+}
 static void ponteiroCtxFora(int a, int b) { (void)a; (void)b; aberto = 0; }
 // `b` > 0 e o segmento de tamanho b-1 da linha (o alvo menor, por cima dela).
 static void ponteiroEstFoco(int i, int b) {
@@ -1041,11 +1083,78 @@ static void desenhaEstilos(float a) {
     txt_desenhar_alpha(t, x + CTX_PAD, y + alt - CTX_PAD - t.h, a * 0.42f); }
 }
 
+// --- A CONFIRMACAO (pagina 2) -----------------------------------------------
+//
+// A ilha centralizada do mockup "ilha" tela 7: 720 de largura, raio 36, 44 de
+// ar; kicker "CONTINUAR ASSISTINDO", a pergunta em 36/700, o texto em 20/400 a
+// 62 % com entrelinha 1,5, e os botoes de 60 em pilula a 34 do texto. Botao em
+// foco = pilula cheia no acento, o mesmo do chip das Fontes (streams.c); o
+// outro, a pilula de vidro (branco a 8 %).
+//
+// O TEXTO DIZ O QUE ACONTECE DE VERDADE (desc_tirar_continuar e os DELETE de
+// aplicar): o ponto de retomada e apagado aqui, no Trakt, no Simkl e na conta
+// — nao "fica guardado" —, e o carimbo prog_marcar_removido segura o card fora
+// ate haver um registro MAIS NOVO que a remocao, isto e, ate a pessoa assistir
+// de novo (aqui ou em outro aparelho). Episodio novo sozinho nao o traz.
+#define CONF_W     720.0f
+#define CONF_PAD    44.0f
+#define CONF_BOT_H  60.0f
+static float botaoConf(int i, float x, float y, const char *rot, float f, float a) {
+  TxtLinha t = txt_linha(TXT_HERO_META, rot, 243, 242, 239, 255);
+  GfxRect r = { x, y, t.w + 56.0f, CONF_BOT_H };
+  float ar, ag, ab;
+  int tinta = ajustes_tinta_foco();
+  int c = (int)(243.0f + ((float)tinta - 243.0f) * (f > 0.5f ? 1.0f : 0.0f));
+  ajustes_acento(&ar, &ag, &ab);
+  if (ajustes_vidro()) gfx_cor(r, .5f, 1, 1, 1, .08f * (1.0f - f) * a);
+  else gfx_cor(r, .5f, .125f, .13f, .153f, (1.0f - f) * a);
+  if (f > 0.01f) {
+    if (ajustes_vidro()) gfx_vidro_pilula_cheia(r, .5f, f, a);
+    else { botao_luz(r, .55f * f, a); gfx_cor(r, .5f, ar, ag, ab, f * a); }
+  }
+  t = txt_linha(TXT_HERO_META, rot, c, c, c, 255);
+  txt_desenhar_alpha(t, r.x + 28.0f, r.y + (r.h - t.h) * 0.5f, (f > 0.5f ? 1.0f : .88f) * a);
+  if (aberto && a > 0.5f && ponteiro_ativo())
+    ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroConfFoco, ponteiroConfOk, i, 0);
+  return r.w;
+}
+
+static void desenhaConfirmar(const CatItem *ci, float a) {
+  char pergunta[240];
+  const char *texto = i18n("O ponto onde você parou é apagado. O título volta para a fileira se você assistir de novo.");
+  float tw = CONF_W - 2.0f * CONF_PAD, hTit, hTxt, alt, x, y, bx;
+  snprintf(pergunta, sizeof pergunta, i18n("Tirar %s da fileira?"), ci->titulo);
+  { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+    gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * a); }
+  // Medir antes de desenhar (alfa 0): a pergunta pode quebrar com um nome
+  // longo, e o texto ocupa mais linhas em alemao que em portugues.
+  hTit = txt_bloco_corta(TXT_ILHA_TITULO, pergunta, 243, 242, 239, 0, 0, tw, 44.0f, 0.0f, 2);
+  hTxt = txt_bloco_corta(TXT_ILHA_TEXTO, texto, 243, 242, 239, 0, 0, tw, 30.0f, 0.0f, 4);
+  alt = CONF_PAD + 18.0f + 8.0f + hTit + 14.0f + hTxt + 34.0f + CONF_BOT_H + CONF_PAD;
+  x = (NV_TELA_W - CONF_W) * 0.5f;
+  y = (NV_TELA_H - alt) * 0.5f;
+  if (aberto && a > 0.5f && ponteiro_ativo()) {
+    ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, ponteiroCtxFora, 0, 0);
+    ponteiro_alvo(x, y, CONF_W, alt, NULL, NULL, 0, 0);
+  }
+  ilhaCtx((GfxRect){ x, y, CONF_W, alt }, 36.0f, a);
+  y += CONF_PAD;
+  kickerCtx("Continuar assistindo", x + CONF_PAD, y, a);
+  y += 18.0f + 8.0f;
+  txt_bloco_corta(TXT_ILHA_TITULO, pergunta, 243, 242, 239, x + CONF_PAD, y, tw, 44.0f, a, 2);
+  y += hTit + 14.0f;
+  txt_bloco_corta(TXT_ILHA_TEXTO, texto, 243, 242, 239, x + CONF_PAD, y, tw, 30.0f, .62f * a, 4);
+  y += hTxt + 34.0f;
+  bx = x + CONF_PAD;
+  bx += botaoConf(0, bx, y, i18n("Tirar da fileira"), confAnim[0], a) + 12.0f;
+  botaoConf(1, bx, y, i18n("Cancelar"), confAnim[1], a);
+}
+
 void ctx_desenhar(Uint32 agora) {
   const CatItem *ci;
   const char *mensagem = NULL;
-  float a = anim, alt, x, y;
-  int i;
+  float a = anim, alt, x, y, cab;
+  int i, comLogo;
   (void)agora;
   if (!aberto && holdAtivo) {
     float p = (float)(SDL_GetTicks() - holdDesde) / (float)NV_HOLD_MS;
@@ -1074,6 +1183,7 @@ void ctx_desenhar(Uint32 agora) {
   if (pagina == 1) { desenhaEstilos(a); return; }
   ci = itemAtual();
   if (!ci) return;
+  if (pagina == 2) { desenhaConfirmar(ci, a); return; }
   if (estadoOperacao == CTX_PENDENTE)
     mensagem = operacao == CTX_OP_LISTA ? "Atualizando biblioteca..."
                                         : (intencao ? "Marcando como assistido..."
@@ -1098,7 +1208,9 @@ void ctx_desenhar(Uint32 agora) {
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * a); }
 
-  alt = CTX_ILHA_PAD * 2.0f + CTX_CAB + (float)nOps * (CTX_LINHA + CTX_GAP);
+  comLogo = logotitulo_url(ci, CTX_LOGO_W) != NULL;
+  cab = comLogo ? CTX_CAB_LOGO : CTX_CAB;
+  alt = CTX_ILHA_PAD * 2.0f + cab + (float)nOps * (CTX_LINHA + CTX_GAP);
   // AO LADO DO POSTER, alinhada ao topo dele: a direita, ou a esquerda quando
   // nao cabe (cartao na ponta direita da fileira); sem lugar dos dois lados,
   // no meio. Sem poster: no meio da tela, ou do painel de Salvos (dicaCx).
@@ -1144,17 +1256,25 @@ void ctx_desenhar(Uint32 agora) {
     char meta[200];
     const char *tp = !strcmp(ci->tipo, "movie") ? i18n("Filme")
                    : !strcmp(ci->tipo, "series") ? i18n("Série") : "";
-    TxtLinha n = txt_linha_corta(TXT_ILHA_NOME, ci->titulo, 243, 242, 239, 255, hw);
     TxtLinha m;
+    float my;
     int falha = estadoOperacao == CTX_FALHA;
     if (mensagem) snprintf(meta, sizeof meta, "%s", i18n(mensagem));
     else snprintf(meta, sizeof meta, "%s%s%s", tp, tp[0] && ci->meta[0] ? " \xc2\xb7 " : "", ci->meta);
     m = txt_linha_corta(TXT_ILHA_APOIO, meta, falha ? 240 : 243, falha ? 190 : 242, falha ? 130 : 239, 255, hw);
-    txt_desenhar_alpha(n, hx, hy, a);
-    txt_desenhar_alpha(m, hx, hy + n.h + 4.0f, (mensagem ? .8f : .5f) * a); }
+    if (comLogo) {
+      // Logo (ou, enquanto ele chega, o nome) na caixa reservada.
+      logotitulo_desenhar(ci, ci->titulo, TXT_ILHA_NOME, hx, hy, CTX_LOGO_W, CTX_LOGO_H, hw, a);
+      my = hy + CTX_LOGO_H + 6.0f;
+    } else {
+      TxtLinha n = txt_linha_corta(TXT_ILHA_NOME, ci->titulo, 243, 242, 239, 255, hw);
+      txt_desenhar_alpha(n, hx, hy, a);
+      my = hy + n.h + 4.0f;
+    }
+    txt_desenhar_alpha(m, hx, my, (mensagem ? .8f : .5f) * a); }
 
   for (i = 0; i < nOps; i++) {
-    float by = y + CTX_ILHA_PAD + CTX_CAB + CTX_GAP + (float)i * (CTX_LINHA + CTX_GAP);
+    float by = y + CTX_ILHA_PAD + cab + CTX_GAP + (float)i * (CTX_LINHA + CTX_GAP);
     GfxRect r = { x + CTX_ILHA_PAD, by, CTX_W - CTX_ILHA_PAD * 2.0f, CTX_LINHA };
     float f = focoAnim[i];
     if (aberto && a > 0.5f)

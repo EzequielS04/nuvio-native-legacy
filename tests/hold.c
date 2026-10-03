@@ -76,8 +76,25 @@ int main(void) {
   tecla(SDL_KEYDOWN, SDLK_DOWN, 0);
   tecla(SDL_KEYDOWN, SDLK_DOWN, 0);   // Ver detalhes -> biblioteca -> assistido -> retomada
   tecla(SDL_KEYDOWN, SDLK_RETURN, 0);
+  // 5. TIRAR SO DEPOIS DA CONFIRMACAO (dono, 02/10). O OK na opcao abre a
+  //    pergunta e nada e apagado; Voltar e "Cancelar" devolvem ao menu sem
+  //    tocar na retomada; so o OK em "Tirar da fileira" (o foco inicial) tira.
+  assert(ctx_aberto() && cat_item(0)->progresso == 42);
+  tecla(SDL_KEYDOWN, SDLK_ESCAPE, 0);                  // Voltar = cancelar
+  assert(ctx_aberto() && cat_item(0)->progresso == 42);
+  tecla(SDL_KEYDOWN, SDLK_RETURN, 0);                  // de volta a pergunta
+  tecla(SDL_KEYDOWN, SDLK_RIGHT, 0);                   // "Cancelar"
+  tecla(SDL_KEYDOWN, SDLK_RETURN, 0);
+  assert(ctx_aberto() && cat_item(0)->progresso == 42);
+  tecla(SDL_KEYDOWN, SDLK_RETURN, 0);                  // pergunta de novo
+  tecla(SDL_KEYDOWN, SDLK_RETURN, 1);                  // repeticao nao confirma
+  assert(ctx_aberto() && cat_item(0)->progresso == 42);
+  tecla(SDL_KEYDOWN, SDLK_RIGHT, 0);
+  tecla(SDL_KEYDOWN, SDLK_LEFT, 0);                    // "Tirar da fileira"
+  tecla(SDL_KEYDOWN, SDLK_RETURN, 0);
   assert(!ctx_aberto());
   assert(cat_item(0)->progresso == 0);
+  puts("ok  tirar de Continuar so depois do OK em \"Tirar da fileira\"");
   puts("ok  a ultima opcao do modal responde ao OK");
 
   puts("hold: tudo ok");

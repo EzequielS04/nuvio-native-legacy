@@ -257,6 +257,8 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 19, PESO_REGULAR },             // TXT_ILHA_META: ano · duracao · tipo do melhor resultado
   { 17, PESO_REGULAR },             // TXT_ILHA_GENERO: generos do melhor resultado
   { 16, PESO_REGULAR },             // TXT_ILHA_APOIO: meta das linhas, dicas do rodape
+  { 36, PESO_BOLD    },             // TXT_ILHA_TITULO: a pergunta da confirmacao
+  { 20, PESO_REGULAR },             // TXT_ILHA_TEXTO: o texto corrido da confirmacao
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.

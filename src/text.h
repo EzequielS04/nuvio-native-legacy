@@ -57,6 +57,9 @@ typedef enum {
   // das linhas e dicas (16/400). No FIM pelo mesmo motivo dos outros: a
   // tabela ESTILOS e indexada por esta ordem.
   TXT_ILHA_NOME, TXT_ILHA_ITEM, TXT_ILHA_META, TXT_ILHA_GENERO, TXT_ILHA_APOIO,
+  // A CONFIRMACAO da ilha (mockup tela 7): a pergunta em 36/700 e o texto
+  // corrido em 20/400.
+  TXT_ILHA_TITULO, TXT_ILHA_TEXTO,
   TXT_NFONTES
 } TxtEstilo;
 

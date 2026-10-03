@@ -241,7 +241,8 @@ int main(int argc, char **argv) {
       snprintf(c->backdrop, sizeof c->backdrop, "deploy/app/art/%02d.jpg", a);
       snprintf(c->backdropCatalogo, sizeof c->backdropCatalogo, "%s", c->backdrop);
       snprintf(c->poster, sizeof c->poster, "deploy/app/art/poster/%02d.jpg", a);
-      if (a < 10) snprintf(c->logo, sizeof c->logo, "deploy/app/art/logo/%02d.png", a);
+      // NV_SEM_LOGO=1: nenhum titulo com logo (o cabecalho em texto do menu).
+      if (a < 10 && !getenv("NV_SEM_LOGO")) snprintf(c->logo, sizeof c->logo, "deploy/app/art/logo/%02d.png", a);
       // NV_ARTE_ADDON=1: todo item vem de um addon (origem; inclusive o da
       // primeira fileira, que abre o destaque) e tambem traz um fundo "do
       // TMDB" — outra foto, local —, para a captura separar "Background do
@@ -421,6 +422,9 @@ int main(int argc, char **argv) {
     for (r = 0; r < 14; r++) tecla(SDLK_UP);
     quadros(60, NULL);
     for (r = 0; r < alvo; r++) { tecla(SDLK_DOWN); quadros(40, NULL); }
+    // NV_CTX_DIR=<n>: n cartoes a direita antes de segurar (um com logo).
+    { int d = getenv("NV_CTX_DIR") ? atoi(getenv("NV_CTX_DIR")) : 0;
+      for (r = 0; r < d; r++) { tecla(SDLK_RIGHT); quadros(8, NULL); } }
     quadros(80, NULL);
     snprintf(bmp, sizeof bmp, "%s-ctx-0-antes.bmp", saida); quadros(1, bmp);
     segurarOk();
@@ -431,6 +435,18 @@ int main(int argc, char **argv) {
     quadros(60, NULL);
     snprintf(bmp, sizeof bmp, "%s-ctx-1-menu.bmp", saida); quadros(1, bmp);
     printf("[shot] ctx aberto=%d\n", ctx_aberto());
+    // NV_CTX_CONF=<n>: desce n linhas ate "Tirar de Continuar assistindo", OK
+    // abre a confirmacao (capturada), e Voltar cancela de volta ao menu.
+    if (getenv("NV_CTX_CONF")) {
+      int d = atoi(getenv("NV_CTX_CONF"));
+      for (r = 0; r < d; r++) teclaCtx(SDLK_DOWN);
+      teclaCtx(SDLK_RETURN);
+      quadros(60, NULL);
+      snprintf(bmp, sizeof bmp, "%s-ctx-1b-confirma.bmp", saida); quadros(1, bmp);
+      printf("[shot] confirmacao: menu aberto=%d\n", ctx_aberto());
+      teclaCtx(SDLK_ESCAPE);
+      quadros(20, NULL);
+    }
     // Ja na pagina de estilos (colecao) o OK escolhe; no titulo, desce ate
     // "Estilo da fileira" (a ultima) e entra.
     if (!getenv("NV_CTX_COL")) {
