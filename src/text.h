@@ -130,6 +130,8 @@ typedef enum {
   // NOVIDADES DA 1.8.0 E GUIA DE USO (mockups aprovados em 03/10). No FIM,
   // como manda o comentario do TXT_RANK_GRANDE.
   TXT_NOV_TITULO,   // .c-tit do cartao de novidades  50 / 700
+  TXT_G28R,   // "Você está na" do cartao da atualizacao (mockup 26/400; a
+              // InterDisplay e ~9% mais estreita que a Inter do navegador)
   TXT_NFONTES
 } TxtEstilo;
 

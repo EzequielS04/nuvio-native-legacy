@@ -996,23 +996,15 @@ static void anunciarItem(const Aviso *it) {
         e.tecla = 1;
       }
       break; }
-    case AV_UPDATE: {
-      char itensNotas[3][96];
-      int k, q;
-      snprintf(txt, sizeof txt, i18n("Versão %s chegou"), it->alvo);
+    case AV_UPDATE:
+      // GLASS UI v2 (mockup ajustes-v2 "v2-upd-aviso", 03/10): o aviso de duas
+      // linhas, e a tecla nao abre mais um modal da ilha — o proprio CARTAO DA
+      // ATUALIZACAO nasce da pilula (atualizacao.c), pela acao do aviso.
+      snprintf(txt, sizeof txt, "%s", it->texto);
+      e.titulo = it->titulo;
       e.tipo = ILHA_ACENTO; e.icone = "aj_download"; e.ms = 10000u;
-      snprintf(m.kicker, sizeof m.kicker, "%s", i18n("Versão nova"));
-      snprintf(m.titulo, sizeof m.titulo, "Nuvio %s", it->alvo);
-      snprintf(m.nota, sizeof m.nota, i18n("Você está na %s"), NV_VERSAO);
-      q = atualizacao_notas_itens(itensNotas, 3);
-      for (k = 0; k < q; k++) snprintf(m.lista[k], sizeof m.lista[k], "%s", itensNotas[k]);
-      snprintf(m.icone, sizeof m.icone, "aj_download");
-      m.nBotoes = 2;
-      snprintf(m.botao[0], sizeof m.botao[0], "%s", i18n("Atualizar"));
-      snprintf(m.botaoIcone[0], sizeof m.botaoIcone[0], "aj_download");
-      snprintf(m.botao[1], sizeof m.botao[1], "%s", i18n("Depois"));
-      e.modal = &m;
-      break; }
+      e.acao = 1; e.dica = i18n("Ver o que mudou");
+      break;
     case AV_CRASH:
       // O DONO TIROU O CARTAO DO ARRANQUE em 23/09 ("tira a mensagem de enviar
       // o log quando entra no app, ja temos os logs") e aprovou este aviso em

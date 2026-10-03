@@ -38,9 +38,9 @@ int  atualizacao_aberta(void);
 void atualizacao_abrir(void);
 // Versao nova conhecida ("" se nenhuma) — para a linha de versao dos Ajustes.
 const char *atualizacao_nova(void);
-// Os primeiros `max` itens ("- ...") das notas da versao nova, ja limpos e sem
-// a bolinha, para a lista do modal da ilha. Devolve quantos copiou.
-int  atualizacao_notas_itens(char (*dst)[96], int max);
+// 1 enquanto o cartao esta na tela (ou recolhendo): ele E a ilha crescida, e
+// a pilula de baixo nao se desenha (app.c: ilha_coberta).
+int  atualizacao_cobre_ilha(void);
 void atualizacao_evento(const SDL_Event *e);
 void atualizacao_atualizar(float dt, Uint32 agora);
 void atualizacao_desenhar(Uint32 agora);

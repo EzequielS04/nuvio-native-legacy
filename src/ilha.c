@@ -40,6 +40,8 @@ typedef struct {
   char rosto[256], rostoNome[64], capa[512], meta[64];
   int temModal;
   IlhaModal modal;
+  char titulo[120], kicker[48], dica[64];   // o aviso v2 (ilha.h, IlhaAvisoEx)
+  int acao;
 } Aviso;
 
 #define FILA 6
@@ -53,6 +55,8 @@ static unsigned ordemSeq;
 
 static char atvTexto[160];
 static float atvProg = -1.0f;
+static int  atvV2;              // ilha_atividade_ex: o desenho de 72
+static char atvIcone[32];       // "" = o ponto que respira
 static Uint32 atvVisto;         // SDL_GetTicks da ultima renovacao
 
 static int relogioQuer;
@@ -188,6 +192,11 @@ void ilha_avisar_ex(const IlhaAvisoEx *e) {
   a.grupo = e->grupo; a.vivo = e->vivo; a.cartao = e->cartao; a.conta = 1;
   a.tecla = e->tecla || e->modal || e->cartao;
   if (e->modal) { a.temModal = 1; a.modal = *e->modal; }
+  snprintf(a.titulo, sizeof a.titulo, "%s", e->titulo ? e->titulo : "");
+  snprintf(a.kicker, sizeof a.kicker, "%s", e->kicker ? e->kicker : "");
+  snprintf(a.dica, sizeof a.dica, "%s", e->dica ? e->dica : "");
+  a.acao = e->acao;
+  if (a.acao) a.tecla = 1;
   a.ordem = ++ordemSeq;
   // Mesma chave na tela: troca no lugar e renova o prazo.
   if (temCur && !strcmp(cur.chave, a.chave)) {
@@ -263,7 +272,7 @@ int ilha_tecla_central(void) {
   // O episodio novo abre o modal da ESTREIA; sem o cartao na pilula (relogio
   // desligado), a mesma tecla cai na central, onde o item esta.
   int cartaoNaPilula = cur.cartao > 0 && cur.cartao <= ILHA_N_CARTOES && temCartao[cur.cartao - 1];
-  return temCur && curAte && cur.tecla && !cur.temModal && !cartaoNaPilula && A > 0.5f;
+  return temCur && curAte && cur.tecla && !cur.temModal && !cur.acao && !cartaoNaPilula && A > 0.5f;
 }
 
 int ilha_aviso_pediu(char *chave, size_t tam) {
@@ -274,9 +283,17 @@ int ilha_aviso_pediu(char *chave, size_t tam) {
   return o;
 }
 
+void ilha_atividade_ex(const char *texto, float progresso, const char *icone) {
+  ilha_atividade(texto, progresso);
+  if (!icone) return;
+  atvV2 = 1;
+  snprintf(atvIcone, sizeof atvIcone, "%s", icone);
+}
+
 void ilha_atividade(const char *texto, float progresso) {
   snprintf(atvTexto, sizeof atvTexto, "%s", texto ? texto : "");
   atvProg = progresso;
+  atvV2 = 0; atvIcone[0] = 0;
   atvVisto = SDL_GetTicks();
   if (!atvVisto) atvVisto = 1;
 }
@@ -384,6 +401,14 @@ static int abrirDoAviso(void) {
   if (modalAberto || !temCur || !curAte) return 0;
   if (cur.cartao > 0 && cur.cartao <= ILHA_N_CARTOES && temCartao[cur.cartao - 1]) {
     abrirCartao(cur.cartao - 1);
+    proximo();
+    return 1;
+  }
+  // AVISO COM ACAO (a atualizacao: o cartao dela nasce da propria pilula):
+  // quem pos decide, pelo contrato dos botoes do modal (ilha_aviso_pediu).
+  if (cur.acao) {
+    avPedido = 1;
+    snprintf(avPedidoChave, sizeof avPedidoChave, "%s", cur.chave);
     proximo();
     return 1;
   }
@@ -700,10 +725,83 @@ static void desenharLead(const Aviso *v, float x, float yc, float a) {
             v->tipo == ILHA_INFO ? a * 0.86f : a);
 }
 
+// --- o aviso v2 (duas linhas / com marca) e a atividade v2 ------------------------
+// Mockup ajustes-v2 (03/10), quadros v2-upd-aviso, v2-upd-em-dia, v2-upd-ilha e
+// v2-upd-procurando. Os recuos sao os do mockup, e nao PAD_E/PAD_D: a largura
+// devolvida ja desconta a diferenca, para alvoW = PAD_E + PAD_D + largura dar a
+// pilula certa e o desenho centrar o bloco inteiro (recuos inclusos).
+#define V2_AV_H   84.0f
+#define V2_ATV_H  72.0f
+#define V2_BARRA 180.0f
+static int avisoV2(const Aviso *v) { return v->titulo[0] || v->kicker[0]; }
+static float v2PadE(const Aviso *v) { return v->titulo[0] ? 16.0f : 22.0f; }
+#define V2_PAD_D 30.0f
+// Verde e vermelho do mockup v2 (#4cc38a, #e5534b) para o disco e a marca.
+static void corV2(int tipo, float *r, float *g, float *b) {
+  if (tipo == ILHA_OK)   { *r = 0.298f; *g = 0.765f; *b = 0.541f; return; }
+  if (tipo == ILHA_ERRO) { *r = 0.898f; *g = 0.325f; *b = 0.294f; return; }
+  corDoTipo(tipo, r, g, b);
+}
+static float kickerV2(const char *s, float x, float y, float cr, float cg, float cb, float a) {
+  char up[96];
+  idioma_maiusc(up, sizeof up, s);
+  return txt_tracking(TXT_AJ_CAPS13, up, (int)(cr * 255.0f), (int)(cg * 255.0f), (int)(cb * 255.0f),
+                      x < 0.0f ? -10000.0f : x, y, x < 0.0f ? 0.0f : a, 2.0f);
+}
+typedef struct { TxtLinha t1, t2, dica; float kw; } LinhasV2;
+static float larguraAvisoV2(const Aviso *v, LinhasV2 *L) {
+  float disco = v->titulo[0] ? 56.0f : 40.0f, vao = v->titulo[0] ? 18.0f : 16.0f, col, w;
+  memset(L, 0, sizeof *L);
+  if (v->titulo[0]) {
+    L->t1 = txt_linha_corta(TXT_G28B, v->titulo, 243, 242, 239, 255, NV_ILHA_TEXTO_MAX);
+    L->t2 = txt_linha_corta(TXT_AJ_TEXTO, v->texto, 243, 242, 239, 255, NV_ILHA_TEXTO_MAX);
+    col = (float)(L->t1.w > L->t2.w ? L->t1.w : L->t2.w);
+  } else {
+    float cr, cg, cb;
+    corV2(v->tipo, &cr, &cg, &cb);
+    L->kw = kickerV2(v->kicker, -1.0f, 0.0f, cr, cg, cb, 0.0f);
+    L->t2 = txt_linha_corta(TXT_G28B, v->texto, 243, 242, 239, 255, NV_ILHA_TEXTO_MAX);
+    col = (float)L->t2.w > L->kw ? (float)L->t2.w : L->kw;
+  }
+  w = disco + vao + col;
+  if (v->tecla) {
+    L->dica = txt_linha(TXT_AJ_TEXTO, v->dica[0] ? v->dica : i18n("abre"), 243, 242, 239, 255);
+    w += 22.0f + TECLA + 10.0f + (float)L->dica.w;
+  }
+  return w + (v2PadE(v) - PAD_E) + (V2_PAD_D - PAD_D);
+}
+static void desenharAvisoV2(const Aviso *v, GfxRect r, float a) {
+  LinhasV2 L;
+  float pe = v2PadE(v), tot = larguraAvisoV2(v, &L) + PAD_E + PAD_D;
+  float x = r.x + (r.w - tot) * 0.5f + pe, yc = r.y + r.h * 0.5f, cr, cg, cb;
+  float disco = v->titulo[0] ? 56.0f : 40.0f, ic = v->titulo[0] ? 26.0f : 22.0f;
+  corV2(v->tipo, &cr, &cg, &cb);
+  gfx_cor((GfxRect){ x, yc - disco * 0.5f, disco, disco }, 0.5f, cr, cg, cb,
+          (v->tipo == ILHA_OK || v->tipo == ILHA_ERRO ? 0.18f : 0.22f) * a);
+  gfx_icone((GfxRect){ x + (disco - ic) * 0.5f, yc - ic * 0.5f, ic, ic }, iconeDo(v), cr, cg, cb, a);
+  x += disco + (v->titulo[0] ? 18.0f : 16.0f);
+  if (v->titulo[0]) {
+    txt_desenhar_alpha(L.t1, x, yc - 13.0f - (float)L.t1.h * 0.5f, a);
+    txt_desenhar_alpha(L.t2, x, yc + 17.0f - (float)L.t2.h * 0.5f, a * 0.62f);
+    x += (float)(L.t1.w > L.t2.w ? L.t1.w : L.t2.w);
+  } else {
+    TxtLinha k = txt_linha(TXT_AJ_CAPS13, "M", 255, 255, 255, 255);
+    kickerV2(v->kicker, x, yc - 16.0f - (float)k.h * 0.5f, cr, cg, cb, a);
+    txt_desenhar_alpha(L.t2, x, yc + 8.5f - (float)L.t2.h * 0.5f, a);
+    x += (float)L.t2.w > L.kw ? (float)L.t2.w : L.kw;
+  }
+  if (v->tecla) {
+    x += 22.0f;
+    sintro_tecla_atalho(x, yc - TECLA * 0.5f, TECLA, a);
+    txt_desenhar_alpha(L.dica, x + TECLA + 10.0f, yc - (float)L.dica.h * 0.5f, a * 0.60f);
+  }
+}
+
 typedef struct { Frase f; TxtLinha meta, mais, abre; int nMais; } LinhasAviso;
 // Largura do aviso (sem o recuo) e as linhas dele. `nMais` = quantos esperam.
 static float larguraAviso(const Aviso *v, int nMais, LinhasAviso *L) {
   float w = larguraLead(v) + VAO;
+  if (avisoV2(v)) { LinhasV2 L2; memset(L, 0, sizeof *L); return larguraAvisoV2(v, &L2); }
   memset(&L->meta, 0, sizeof L->meta); memset(&L->mais, 0, sizeof L->mais);
   memset(&L->abre, 0, sizeof L->abre);
   fraseMontar(&L->f, v->texto, NV_ILHA_TEXTO_MAX);
@@ -731,7 +829,9 @@ static float larguraAviso(const Aviso *v, int nMais, LinhasAviso *L) {
 
 static void desenharAviso(const Aviso *v, GfxRect r, float a) {
   LinhasAviso L;
-  float cw = larguraAviso(v, esperando(), &L);
+  float cw;
+  if (avisoV2(v)) { desenharAvisoV2(v, r, a); return; }
+  cw = larguraAviso(v, esperando(), &L);
   float x = r.x + (r.w - cw) * 0.5f, yc = r.y + r.h * 0.5f;
   desenharLead(v, x, yc, a);
   x += larguraLead(v) + VAO;
@@ -769,6 +869,23 @@ static float larguraConteudo(int m, TxtLinha *t1, TxtLinha *t2) {
     *t1 = txt_linha(TXT_PG_RELOGIO, hora, 244, 245, 248, 255);
     return (float)t1->w;
   }
+  if (atvV2) {
+    // v2: recuo de 30 dos dois lados (a diferenca para PAD_E/PAD_D entra aqui).
+    float extra = (30.0f - PAD_E) + (30.0f - PAD_D);
+    if (!atvIcone[0]) {
+      *t1 = txt_linha_corta(TXT_G28B, atvTexto, 243, 242, 239, 255, NV_ILHA_TEXTO_MAX);
+      return 12.0f + 16.0f + (float)t1->w + extra;
+    }
+    *t1 = txt_linha_corta(TXT_G26B, atvTexto, 243, 242, 239, 255, NV_ILHA_TEXTO_MAX);
+    w = 24.0f + 18.0f + (float)t1->w;
+    if (atvProg >= 0.0f) {
+      char n[8];
+      snprintf(n, sizeof n, "%d%%", (int)(atvProg * 100.0f + 0.5f));
+      *t2 = txt_linha(TXT_ILHA_CORPO, n, 243, 242, 239, 255);
+      w += 18.0f + V2_BARRA + 18.0f + (float)t2->w;
+    }
+    return w + extra;
+  }
   *t1 = txt_linha_corta(TXT_BODY, atvTexto, 236, 238, 244, 255, NV_ILHA_TEXTO_MAX);
   w = 12.0f + VAO + (float)t1->w;
   if (atvProg >= 0.0f) {
@@ -789,6 +906,27 @@ static void desenharConteudo(int m, GfxRect r, float a, Uint32 agora) {
   // Centrado na pilula: durante a mola o conteudo nao fica grudado num lado.
   x = r.x + (r.w - cw) * 0.5f;
   if (m == M_RELOGIO) { txt_desenhar_alpha(t1, x, yc - (float)t1.h * 0.5f, a); return; }
+  if (atvV2) {
+    float cr, cg, cb;
+    x += ((30.0f - PAD_E) + (30.0f - PAD_D)) * 0.5f;   // o bloco medido inclui os recuos v2
+    ajustes_acento(&cr, &cg, &cb);
+    if (!atvIcone[0]) {
+      plrui_respira(x + 6.0f, yc, 12.0f, agora, a);
+      txt_desenhar_alpha(t1, x + 28.0f, yc - (float)t1.h * 0.5f, a);
+      return;
+    }
+    gfx_icone((GfxRect){ x, yc - 12.0f, 24.0f, 24.0f }, atvIcone, cr, cg, cb, a);
+    x += 24.0f + 18.0f;
+    txt_desenhar_alpha(t1, x, yc - (float)t1.h * 0.5f, a);
+    x += (float)t1.w;
+    if (atvProg >= 0.0f) {
+      x += 18.0f;
+      plrui_trilho((GfxRect){ x, yc - 3.0f, V2_BARRA, 6.0f }, atvProg, -1.0f, 0, 0, a);
+      x += V2_BARRA + 18.0f;
+      txt_desenhar_alpha(t2, x, yc - (float)t2.h * 0.5f, a * 0.70f);
+    }
+    return;
+  }
   { float cr, cg, cb, p;
     ajustes_acento(&cr, &cg, &cb);
     // Ponto que respira: "esta acontecendo", sem girar nada. O halo fraco em
@@ -1450,6 +1588,8 @@ void ilha_desenhar(Uint32 agora) {
   }
 
   alvoH = alvo == M_RELOGIO ? NV_ILHA_H : NV_ILHA_H_ABERTA;
+  if (alvo == M_AVISO && avisoV2(&cur)) alvoH = V2_AV_H;
+  if (alvo == M_ATIVIDADE && atvV2) alvoH = V2_ATV_H;
   if (alvo == M_CARTAO) { LinhasCartao L; alvoW = PAD_E + PAD_D + larguraCartao(&cartoes[cartaoVez], cartaoVez, &L); }
   else if (alvo == M_AVISO) { LinhasAviso L; alvoW = PAD_E + PAD_D + larguraAviso(&cur, esperando(), &L); }
   else alvoW = PAD_E + PAD_D + larguraConteudo(alvo, &t1, &t2);
@@ -1573,7 +1713,7 @@ void ilha_desenhar(Uint32 agora) {
     // Magic Remote: o clique na pilula com um cartao abre o modal.
     if (modalT <= 0.0f && mostra == M_CARTAO && A > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontPilula, 0, 0);
     // E num aviso com modal (ou que abre um cartao), o mesmo clique abre o dele.
-    if (modalT <= 0.0f && mostra == M_AVISO && temCur && (cur.temModal || cur.cartao) && A > 0.5f)
+    if (modalT <= 0.0f && mostra == M_AVISO && temCur && (cur.temModal || cur.cartao || cur.acao) && A > 0.5f)
       ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontAviso, 0, 0);
     if (voo) desenharVoo(vooPf, 1); }
 }
