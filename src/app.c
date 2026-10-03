@@ -3661,7 +3661,7 @@ static int relogioCabe(void) {
       novidades133_aberto() || novidades134_aberto() || novidades139_aberto() ||
       novidades1312_aberto() || novidades142_aberto() || novidades148_aberto() ||
       novidades170_aberto() || telemetria_aberto() || recintro_aberto() ||
-      atualizacao_aberta() || agendaviso_aberto() || avisos_cartao_aberto() ||
+      agendaviso_aberto() || avisos_cartao_aberto() ||
       glem_cartao_aberto() || recenviar_aberto() || pessoas_aberto() ||
       recomenda_aberta() || pipintro_aberto() || diagnostico_intro_aberto())
     return 0;
@@ -3780,7 +3780,9 @@ void app_desenhar(Uint32 agora) {
     { float ix = 0, iy = 0, iw = 0, ih = 0;
       int ok = ajustes_relogio_ligado() && ilha_rect(&ix, &iy, &iw, &ih);
       spainel_recolher_para(ok, ix, iy, iw, ih); }
-    ilha_coberta(spainel_da_ilha());
+    // O CARTAO DA ATUALIZACAO e a pilula crescida (atualizacao.c): enquanto
+    // ele esta na tela, ela fica por baixo, medindo, sem se desenhar.
+    ilha_coberta(spainel_da_ilha() || atualizacao_cobre_ilha());
     ilha_desenhar(agora);
   }
   // O cartao do lembrete fica acima do player e da tela: e um aviso com hora.
