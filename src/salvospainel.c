@@ -98,9 +98,9 @@
 // embaixo, a mesma altura de ritmo das linhas do feed (capa 52x76 e 114). O
 // cartaz de 92x138 de antes fazia a aba Salvos parecer outra tela ao lado da
 // Atividade.
-#define SP_POSTER_W     64.0f
-#define SP_POSTER_H     96.0f
-#define SP_LINHA_PADY   18.0f
+#define SP_POSTER_W     76.0f   // 64 antes: a lista com capa +19 % (pedido do dono, 03/10)
+#define SP_POSTER_H    114.0f   // 96 antes; 2:3 mantido
+#define SP_LINHA_PADY   21.0f   // 18 antes
 #define SP_LINHA_SALVO (SP_POSTER_H + SP_LINHA_PADY * 2.0f)
 // As linhas se encostam, como no mockup: so uma tem superficie (a focada), e
 // o recuo de 18 de cada uma ja e o ar entre os textos.
@@ -115,13 +115,13 @@
 #define SP_SECAO_TXT    27.0f   // a altura da linha de 22 px
 #define SP_SECAO_H     (SP_SECAO_AR + SP_SECAO_TXT + 10.0f + 1.0f + 6.0f)
 #define SP_SECAO_H1    (SP_SECAO_AR1 + SP_SECAO_TXT + 10.0f + 1.0f + 6.0f)
-#define SP_TEXTO_X    (SP_PAD + SP_POSTER_W + 18.0f)
-#define SP_TEXTO_W    (SP_INTERNO - SP_POSTER_W - 18.0f)
+#define SP_TEXTO_X    (SP_PAD + SP_POSTER_W + 21.0f)
+#define SP_TEXTO_W    (SP_INTERNO - SP_POSTER_W - 21.0f)
 // Barra de progresso do card de retomada: o trilho fino do mockup, com o que
 // FALTA ao lado ("T3E4 · 43 min restantes"), que e o dado que importa.
-#define SP_BARRA_W     200.0f
+#define SP_BARRA_W     230.0f
 #define SP_BARRA_LABEL_GAP 14.0f
-#define SP_BARRA_H       4.0f
+#define SP_BARRA_H       5.0f
 // A LINHA DA ILHA (ver linhaIlhaRet e andaresIlha, mais abaixo).
 #define SPI_H         114.0f   // 18 + 29 + 4 + 23 + 4 + 18 + 18
 #define SPI_H2         92.0f   // dois andares: 18 + 29 + 4 + 23 + 18
@@ -1964,10 +1964,10 @@ static GfxRect linhaIlhaRet(float dx, float y, float h) {
 }
 // Nome + verbo na mesma linha de base. O nome atravessa de 88 % para branco
 // cheio com o foco, como ".row.foco" do mockup; o verbo fica a 55 %.
-static float nomeVerbo(const char *nome, const char *verbo, float x, float y, float larg,
-                       float v, float a) {
-  TxtLinha n = txtIlha(TXT_ILHA_NOME, nome, larg * 0.6f);
-  TxtLinha nb = txt_linha_corta(TXT_ILHA_NOME, nome, 255, 255, 255, 255, larg * 0.6f);
+static float nomeVerboEst(TxtEstilo es, const char *nome, const char *verbo, float x, float y,
+                          float larg, float v, float a) {
+  TxtLinha n = txtIlha(es, nome, larg * 0.6f);
+  TxtLinha nb = txt_linha_corta(es, nome, 255, 255, 255, 255, larg * 0.6f);
   txt_desenhar_alpha(n, x, y, a * 0.88f * (1.0f - v));
   txt_desenhar_alpha(nb, x, y, a * v);
   if (verbo && verbo[0] && larg - (float)n.w - 7.0f > 40.0f) {
@@ -1975,6 +1975,10 @@ static float nomeVerbo(const char *nome, const char *verbo, float x, float y, fl
     txt_desenhar_alpha(vb, x + (float)n.w + 7.0f, y, a * 0.55f);
   }
   return (float)n.w;
+}
+static float nomeVerbo(const char *nome, const char *verbo, float x, float y, float larg,
+                       float v, float a) {
+  return nomeVerboEst(TXT_ILHA_NOME, nome, verbo, x, y, larg, v, a);
 }
 // Os tres andares a partir de `tx`, centrados na altura `h` da linha quando
 // faltam andares (o mockup centra o bloco ao lado do rosto, align-items).
@@ -2165,7 +2169,7 @@ static void desenhaLinha(int i, float dx, float y, float a) {
   // tex_obter em qualquer arte de lista".
   // Esqueleto VISIVEL (#2C2C2C) enquanto nao chega, o mesmo da home: um
   // retangulo da cor do fundo le como card quebrado, nao como carregando.
-  capaArte(poster, l->poster, 9.0f, a);
+  capaArte(poster, l->poster, 10.0f, a);
 
   meta[0] = 0;
   juntar(meta, sizeof meta, i18n(tipoRotulo(l)));
@@ -2178,19 +2182,19 @@ static void desenhaLinha(int i, float dx, float y, float a) {
   if (l->cat && grupoAtual != SORG_GRUPO_CATEGORIA)
     juntar(meta, sizeof meta, sorg_categoria_nome_id(l->cat));
 
-  { float ty = y + SP_LINHA_PADY + (SP_POSTER_H - 78.0f) * 0.5f;
-    nomeVerbo(l->titulo, NULL, tx, ty, SP_TEXTO_W / 0.6f, v, a);
-    txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB, meta, SP_TEXTO_W), tx, ty + 33.0f, a * 0.62f);
-    ty += 60.0f;
+  { float ty = y + SP_LINHA_PADY + (SP_POSTER_H - 92.0f) * 0.5f;
+    nomeVerboEst(TXT_ILHA_NOME_L, l->titulo, NULL, tx, ty, SP_TEXTO_W / 0.6f, v, a);
+    txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB_L, meta, SP_TEXTO_W), tx, ty + 39.0f, a * 0.62f);
+    ty += 71.0f;
     if (l->progresso > 0) {
       // O TRILHO DA HOME em miniatura: branco a 18 % e o preenchimento no
       // acento (e estado — o quanto falta). Ao lado, o que FALTA ("T3E4 · 43
       // min restantes") a 62 %, e o ja visto, contexto, a 38 %.
       float p = anim_clamp(l->progresso / 100.0f, 0.0f, 1.0f), pr, pg, pb;
       float lx = tx + SP_BARRA_W + SP_BARRA_LABEL_GAP;
-      GfxRect trilho = { tx, ty + (18.0f - SP_BARRA_H) * 0.5f, SP_BARRA_W, SP_BARRA_H };
+      GfxRect trilho = { tx, ty + (21.0f - SP_BARRA_H) * 0.5f, SP_BARRA_W, SP_BARRA_H };
       GfxRect cheio = trilho;
-      TxtLinha r = txtIlha(TXT_ILHA_HORA, l->txtRestante, SP_TEXTO_W - SP_BARRA_W - SP_BARRA_LABEL_GAP);
+      TxtLinha r = txtIlha(TXT_ILHA_HORA_L, l->txtRestante, SP_TEXTO_W - SP_BARRA_W - SP_BARRA_LABEL_GAP);
       ajustes_acento(&pr, &pg, &pb);
       cheio.w = trilho.w * p;
       gfx_cor(trilho, 0.5f, 1.0f, 1.0f, 1.0f, 0.18f * a);
@@ -2198,12 +2202,12 @@ static void desenhaLinha(int i, float dx, float y, float a) {
       txt_desenhar_alpha(r, lx, ty, a * 0.62f);
       if (l->txtVisto[0] && lx + (float)r.w + 20.0f < tx + SP_TEXTO_W) {
         snprintf(buf, sizeof buf, "\xc2\xb7 %s", l->txtVisto);
-        txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA, buf, tx + SP_TEXTO_W - lx - (float)r.w - 7.0f),
+        txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA_L, buf, tx + SP_TEXTO_W - lx - (float)r.w - 7.0f),
                            lx + (float)r.w + 7.0f, ty, a * 0.38f);
       }
     } else {
       quandoTexto(buf, sizeof buf, l->quandoS);
-      if (buf[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA, buf, SP_TEXTO_W), tx, ty, a * 0.38f);
+      if (buf[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA_L, buf, SP_TEXTO_W), tx, ty, a * 0.38f);
     } }
 }
 
