@@ -2743,9 +2743,21 @@ void diagnostico_desenhar(Uint32 agora) {
       else dgVazaoGenerico(agora);
       return;
     }
-    if (est == 0) { dgObjetivo(); if (d.intro) dgApresentacao(0); return; }
+    if (est == 0) {
+      if (d.intro) gfx_opacidade_grupo = 0.16f;   // a tela RECUA atras do modal
+      dgObjetivo();
+      gfx_opacidade_grupo = 1.0f;
+      if (d.intro) dgApresentacao(0);
+      return;
+    }
     if (est == 1) { dgAndamento(agora); return; }
-    if (est == 2) { dgResultado(); if (d.intro) dgApresentacao(0); return; }
+    if (est == 2) {
+      if (d.intro) gfx_opacidade_grupo = 0.16f;
+      dgResultado();
+      gfx_opacidade_grupo = 1.0f;
+      if (d.intro) dgApresentacao(0);
+      return;
+    }
   }
   diagnosticoAntigo(agora);
 }

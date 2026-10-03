@@ -147,6 +147,11 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-1-inicio.bmp", saida);
   captura(nome, w, 0);
 
+  d.intro = 1;
+  snprintf(nome, sizeof nome, "%s-0-intro.bmp", saida);
+  captura(nome, w, 0);
+  d.intro = 0;
+
   focoModo = 1;
   snprintf(nome, sizeof nome, "%s-2-inicio-desempenho.bmp", saida);
   captura(nome, w, 0);

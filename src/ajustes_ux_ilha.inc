@@ -575,7 +575,7 @@ static void desenhaVinculo(const char *servico, const char *codigo,
   x = m.x + 56 + 356 + 56; y = m.y + 50;
   ajKicker("Contas e serviços", x, y, 1);
   y += 22 + 4;
-  snprintf(t, sizeof t, i18n("Conectar %s"), i18n(servico));
+  snprintf(t, sizeof t, i18n("Conectar %s"), servico);
   { TxtLinha l = ajTxtC(TXT_ILHA_TITULO, t, m.x + m.w - 56 - x); txt_desenhar(l, x, y); y += 48; }
   if (falha && falha[0]) {
     TxtLinha l = txt_linha_corta(TXT_AJ_NOME, falha, 236, 108, 108, 255, m.x + m.w - 56 - x);
@@ -769,7 +769,13 @@ void ajustes_ui_ilha(GfxRect r, float raioPx, int modal) { ajIlha(r, raioPx, 1, 
 void ajustes_ui_veu(void) { ajVeuModal(); }
 float ajustes_ui_kicker(const char *s, float x, float y, float a) { return ajKicker(s, x, y, a); }
 float ajustes_ui_meta(const char *k, const char *v, float x, float y, float w) { return ajMeta(k, v, x, y, w, 1); }
-float ajustes_ui_ef(const char *icone, const char *s, float x, float y, float w) { return ajEf(icone, s, x, y, w, 1); }
+float ajustes_ui_ef(const char *icone, const char *s, float x, float y, float w) {
+  float h = ajEf(icone, s, x, y, w, 1);
+  // O alerta das telas vizinhas e AMBAR (aviso de consumo de dados).
+  if (!strcmp(icone, "aj_triangle-alert"))
+    gfx_icone((GfxRect){ x + 16, y + 16, 20, 20 }, icone, 0.910f, 0.722f, 0.290f, 1);
+  return h;
+}
 float ajustes_ui_botao(const char *rot, const char *icone, float x, float y, int foco) { return ajBotao(rot, icone, x, y, foco, 1); }
 float ajustes_ui_dicas(const char *const *teclas, const char *const *rotulos, int n, float x, float y, int desenha) {
   AjDica d[6];

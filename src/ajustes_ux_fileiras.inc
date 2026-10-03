@@ -366,7 +366,7 @@ static void ajFilPainel(GfxRect pr, int n, int lim) {
         }
         gfx_sem_recorte();
         y += 178 + 24; }
-      ajKicker("Card · proporções de home.c", x, y, 1);
+      ajKicker("Card · proporções da Home", x, y, 1);
       y += 18 + 12;
       ajFormas(x, y, w, tipo, idx);
     }
