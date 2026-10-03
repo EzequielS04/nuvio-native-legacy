@@ -191,9 +191,9 @@ static void ajFundo(void) {
   HomeItem hi;
   const char *c = (cat_n() > 0 && home_item_focado(&hi) && hi.indice >= 0)
                     ? ajArte(AJA_FUNDO, hi.indice) : ajArte(AJA_FUNDO, ajArteFundoN);
-  if (!ajImg(c, (GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, 1.0f))
-    gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1);
-  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, 0, 0, 0, 0.50f);
+  if (!ajImg(c, (GfxRect){ 0, 0, NV_VTELA_W, NV_VTELA_H }, 0, 1.0f))
+    gfx_cor((GfxRect){ 0, 0, NV_VTELA_W, NV_VTELA_H }, 0, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1);
+  gfx_cor((GfxRect){ 0, 0, NV_VTELA_W, NV_VTELA_H }, 0, 0, 0, 0, 0.50f);
 }
 
 // --- GEOMETRIA ------------------------------------------------------------------
@@ -205,9 +205,28 @@ static void ajFundo(void) {
 #define AJI_LN_GAP        4.0f
 static float ajX0(void) { return 48.0f + ajustes_rail_largura_fixa(); }
 static float ajFolhaX(void) { return ajX0() + AJI_IDX_W + 24.0f; }
-static float ajFolhaW(void) { return AJI_INSP_X - 24.0f - ajFolhaX(); }
-static GfxRect ajFolhaR(void) { return (GfxRect){ ajFolhaX(), AJI_MARGEM, ajFolhaW(), NV_TELA_H - 2 * AJI_MARGEM }; }
-static GfxRect ajInspR(void) { return (GfxRect){ AJI_INSP_X, AJI_MARGEM, NV_TELA_W - AJI_MARGEM - AJI_INSP_X, NV_TELA_H - 2 * AJI_MARGEM }; }
+// TAMANHO DA INTERFACE (escala.h): na tela virtual menor as tres ilhas nao
+// cabem com as larguras de 1080p. A folha fica com pelo menos AJI_FOLHA_MIN (o
+// segmentado de 460 e o rotulo ao lado) e a proporcao de 1080p (820:604); o
+// inspetor fica com o resto, e SAI quando o resto e menor que AJI_INSP_MIN —
+// a folha ocupa o lugar dele. Em 100% e a conta fixa de sempre (1276).
+#define AJI_FOLHA_MIN  600.0f
+#define AJI_INSP_MIN   360.0f
+static float ajInspX(void) {
+  float total, folha;
+  if (gfx_escala_ui() == 1.0f) return AJI_INSP_X;
+  total = NV_VTELA_W - AJI_MARGEM - ajFolhaX() - 24.0f;
+  folha = total * (820.0f / 1424.0f);
+  if (folha < AJI_FOLHA_MIN) folha = AJI_FOLHA_MIN;
+  if (total - folha < AJI_INSP_MIN) return NV_VTELA_W;   // sem inspetor
+  return ajFolhaX() + folha + 24.0f;
+}
+static int ajTemInspetor(void) { return ajInspX() < NV_VTELA_W; }
+static float ajFolhaW(void) {
+  return ajTemInspetor() ? ajInspX() - 24.0f - ajFolhaX() : NV_VTELA_W - AJI_MARGEM - ajFolhaX();
+}
+static GfxRect ajFolhaR(void) { return (GfxRect){ ajFolhaX(), AJI_MARGEM, ajFolhaW(), NV_VTELA_H - 2 * AJI_MARGEM }; }
+static GfxRect ajInspR(void) { return (GfxRect){ ajInspX(), AJI_MARGEM, NV_VTELA_W - AJI_MARGEM - ajInspX(), NV_VTELA_H - 2 * AJI_MARGEM }; }
 
 // --- CLASSIFICACAO DAS LINHAS -----------------------------------------------------
 enum { AJL_TOG = 0, AJL_ESC, AJL_NUM, AJL_ACAO, AJL_LER };
@@ -238,6 +257,10 @@ static int ajSegmentada(int op) {
   n = nValores(op);
   if (n < 2 || n > 3 || !OPCOES[op].valores) return 0;
   for (i = 0; i < n; i++) w += (float)txt_largura(TXT_AJ_SEG, ajRotSeg(op, i)) + 44.0f;
+  // Folha mais estreita (escala.h): o segmentado so fica na linha se o nome
+  // da opcao cabe ao lado dele; senao a escolha abre no editor.
+  if (gfx_escala_ui() != 1.0f &&
+      w + (float)txt_largura(TXT_AJ_ROTULO, rotuloOpcao(op)) + 96.0f > ajFolhaW()) return 0;
   return w < 460.0f;
 }
 // O editor desta opcao acontece NA LINHA (segmentado, interruptor, cor), e nao
@@ -262,12 +285,27 @@ static float ajLinhaH(int i) {
 
 // --- INDICE (ilha de categorias) -------------------------------------------------
 static void ajDesenharIndice(void) {
-  GfxRect ilha = { ajX0(), AJI_TOPO, AJI_IDX_W, NV_TELA_H - AJI_TOPO - AJI_MARGEM };
+  GfxRect ilha = { ajX0(), AJI_TOPO, AJI_IDX_W, NV_VTELA_H - AJI_TOPO - AJI_MARGEM };
   float y = ilha.y + 14.0f;
-  int j;
+  int j, indRecorte = 0;
+  float indFim = 0.0f;
   float ar, ag, ab;
   ajustes_acento(&ar, &ag, &ab);
   ajIlha(ilha, 32.0f, 1, 0);
+  // TELA VIRTUAL MENOR (escala.h): as categorias nao cabem acima do rodape do
+  // perfil. A lista vira uma janela recortada que acompanha a categoria
+  // escolhida; em 100% tudo cabe e nada disso acontece.
+  { float topoL = ilha.y + 8.0f, fimL = ilha.y + ilha.h - 14.0f - 6.0f - 21.0f - 20.0f - 12.0f;
+    float tot = (float)(nSecoes + 2) * 62.0f + 21.0f + 14.0f;
+    if (gfx_escala_ui() != 1.0f && tot > fimL - topoL) {
+      float jan = fimL - topoL, sy = 14.0f + uxIndice * 62.0f + (uxIndice >= 2 ? 21.0f : 0.0f) + 29.0f;
+      float off = sy - jan * 0.5f;
+      if (off > tot - jan) off = tot - jan;
+      if (off < 0.0f) off = 0.0f;
+      y -= off;
+      indRecorte = 1; indFim = fimL;
+      gfx_recorte(ilha.x, topoL, ilha.w, jan);
+    } }
   for (j = 0; j < nSecoes + 2; j++) {
     int sel = j == uxIndice, foco = sel && focoIndice;
     const char *titulo = j == 0 ? "Buscar ajuste" : j == 1 ? "Diferentes do padrão" : TELA[secIni[j - 2]].titulo;
@@ -279,6 +317,9 @@ static void ajDesenharIndice(void) {
       y += 21.0f;
     }
     r = (GfxRect){ ilha.x + 14.0f, y, ilha.w - 28.0f, 58.0f };
+    // Na janela recortada so entram categorias inteiras: meia linha cortada
+    // pelo recorte parece defeito, nao rolagem.
+    if (indRecorte && (r.y < ilha.y + 7.0f || r.y + 58.0f > indFim + 1.0f)) { y += 62.0f; continue; }
     if (foco) ajNeutro(r, 29.0f, 0.14f, 0.169f, 0.176f, 0.204f, 1);
     else if (sel) gfx_cor((GfxRect){ r.x + 7.0f, r.y + 26.5f, 5, 5 }, 0.5f, ar, ag, ab, 1);
     ajIcone(icone, r.x + 20.0f, r.y + 16.0f, 26.0f, al);
@@ -286,6 +327,7 @@ static void ajDesenharIndice(void) {
       txt_desenhar_alpha(t, r.x + 62.0f, r.y + (58.0f - t.h) * 0.5f, al); }
     y += 62.0f;
   }
+  if (indRecorte) gfx_sem_recorte();
   // Rodape: quem esta usando (as preferencias "Conta/perfil" sao dele).
   { const ContaPerfil *p = perfis_item_ativo();
     const char *nome = p && p->nome[0] ? p->nome : NULL;
