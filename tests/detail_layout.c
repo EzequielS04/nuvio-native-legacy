@@ -2,6 +2,7 @@
 #include "../src/detail.c"
 #include <assert.h>
 int main(void) {
+  assert(SDL_Init(SDL_INIT_TIMER) == 0);
   CatItem c = {0};
   const char *u = "https://image.tmdb.org/t/p/w500/image.png";
   assert(!mostrarNomeLogo(&c, u, 1, "pt-BR"));
@@ -33,9 +34,15 @@ int main(void) {
   carCheia = 1; carPos = 1; maisAcoes = 0; botao = 0;
   assert(nBotoes() == 2);
   e.key.keysym.sym = SDLK_RIGHT; detail_evento(&e);
-  assert(maisAcoes && acaoEm(botao) == ACAO_MAIS && nBotoes() > 2);
+  assert(maisAcoes && acaoEm(botao) == ACAO_LISTA && nBotoes() > 2);
+  assert(acaoEm(0) == ACAO_PRIMARIO);
+  pedMarcar = 0;
+  SDL_Delay(2);
+  e.key.keysym.sym = SDLK_RETURN; e.type = SDL_KEYDOWN; detail_evento(&e);
+  e.type = SDL_KEYUP; detail_evento(&e); assert(pedMarcar);
+  e.type = SDL_KEYDOWN;
   e.key.keysym.sym = SDLK_RIGHT; detail_evento(&e);
-  assert(acaoEm(botao) == ACAO_LISTA);
+  assert(acaoEm(botao) == ACAO_ASSISTIDO);
   e.key.keysym.sym = SDLK_LEFT; detail_evento(&e); detail_evento(&e);
   assert(!maisAcoes && botao == 0 && nBotoes() == 2);
   e.key.keysym.sym = SDLK_RIGHT; detail_evento(&e);

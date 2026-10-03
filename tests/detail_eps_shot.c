@@ -469,10 +469,28 @@ int main(int argc, char **argv) {
     // NUVIO_SHOT_IDIOMA=N troca o idioma das capturas que nao sao as das notas
     // da release (0 pt ... 7 es; ver idiomacod.h): serve a conferir traducao.
     fprintf(f, "idioma %d\n", getenv("NUVIO_SHOT_IDIOMA") ? atoi(getenv("NUVIO_SHOT_IDIOMA")) : 0);
+    if (getenv("NV_APPLE_EP")) fprintf(f,"homeLayoutLocal %d\n",HOME_LAYOUT_DINAMICA);
     fclose(f);
     ajustes_dir(dados_dir()); }
 
   montarCatalogo();
+  if (getenv("NV_APPLE_EP")) {
+    semear(1,T1_N,T1_N); abrir(0,0); nosEpisodios(0);
+    snprintf(nome,sizeof nome,"%s-apple-episodes.png",saida); gravar(nome);
+    foco.fileira=SEC_ELENCO; foco.coluna=0; quadros(120);
+    snprintf(nome,sizeof nome,"%s-apple-cast.png",saida); gravar(nome);
+    carro=1; carCheia=0; nivel=0; botao=0; maisAcoes=0;
+    for (int step=0;step<25;step++) {SDL_Delay(16);quadros(1);}
+    snprintf(nome,sizeof nome,"%s-actions-closed.png",saida); gravar(nome);
+    botao=1+(temInicio()?1:0);
+    for (int step=0;step<28;step++) {
+      SDL_Delay(16);quadros(1);
+      if (step==3 || step==10 || step==27) {
+        snprintf(nome,sizeof nome,"%s-actions-open-%d.png",saida,step);gravar(nome);
+      }
+    }
+    puts("PASS: Apple episode/cast and Add reveal captures"); return 0;
+  }
   if (getenv("NUVIO_SHOT_TITULO")) {
     CatFileira fil=filEnsaio;
     snprintf(itens[1].titulo,sizeof itens[1].titulo,"O Senhor dos Anéis: A Sociedade do Anel");
