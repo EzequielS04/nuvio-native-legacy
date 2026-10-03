@@ -52,30 +52,31 @@ static float difMatiz(float a, float b) {
   return d > 180.0f ? 360.0f - d : d;
 }
 
-static const float BRANCO[3] = { 1, 1, 1 }, FUNDO[3] = { 0.051f, 0.051f, 0.051f };
+// O acento Branco (#f4f2ee): sem titulo, arte cinza ou modo desligado.
+static const float BRANCO[3] = { 0xf4 / 255.0f, 0xf2 / 255.0f, 0xee / 255.0f };
+static const float BRANCO_PURO[3] = { 1, 1, 1 }, FUNDO[3] = { 0.051f, 0.051f, 0.051f };
+static const float TINTA[3] = { 0x12 / 255.0f, 0x13 / 255.0f, 0x16 / 255.0f };
 
+// AS TRAVAS DOS ACENTOS (03/10/2026): a tinta que corviva_tokens escolhe (a
+// que contrasta mais) le a 4,5:1 ou mais no destaque e nas duas pontas do
+// degrade, e as duas pontas sao da MESMA familia (a tinta nao troca no meio da
+// pilula). Profundo: o branco a >= 4,6.
 static void regraDeContraste(const CorvivaPaleta *p, const char *nome) {
-  char m[160];
-  float cb = corviva_contraste(p->acento, BRANCO), cf = corviva_contraste(p->acento, FUNDO);
-  float lumGama = 0.2126f * p->acento[0] + 0.7152f * p->acento[1] + 0.0722f * p->acento[2];
-  // 3,2:1 e o piso de TEXTO GRANDE do WCAG (3:1) com folga: o texto sobre o
-  // realce e rotulo de botao e de linha em foco, 26-30 px a 1080p. Ver
-  // CV_TEXTO_MIN em corviva.c para o porque de ter saido do 4,5.
-  snprintf(m, sizeof m, "%s: texto branco sobre o destaque %.2f:1 (>= 3,2)", nome, cb);
-  ok(cb >= 3.2f, m);
-  { int k; for (k = 0; k < 3; k++) {
-      float cg = corviva_contraste(p->grad[k], BRANCO);
-      snprintf(m, sizeof m, "%s: texto branco na parada %d do degrade %.2f:1", nome, k, cg);
-      ok(cg >= 3.0f, m); } }
-  snprintf(m, sizeof m, "%s: destaque sobre #0D0D0D %.2f:1 (>= 3, anel de foco)", nome, cf);
-  ok(cf >= 3.0f, m);
-  // ajustes_acento_tinta: tinta escura so acima de 0,88 — o destaque tem de
-  // cair no ramo da tinta BRANCA, senao o 4,5:1 acima nao e o que aparece.
-  snprintf(m, sizeof m, "%s: cai no ramo da tinta branca (lum %.2f <= 0,88)", nome, lumGama);
-  ok(lumGama <= 0.88f, m);
-  { float c = corviva_contraste(p->base, FUNDO);
-    snprintf(m, sizeof m, "%s: base tingida perto do #0D0D0D (%.2f:1 <= 1,25)", nome, c);
-    ok(c <= 1.25f, m); }
+  char m[200];
+  CorvivaTokens t, t2;
+  float c;
+  corviva_tokens(p->acento, &t);
+  c = corviva_contraste(p->acento, t.tintaBranca ? BRANCO_PURO : TINTA);
+  snprintf(m, sizeof m, "%s: tinta %s sobre o destaque %.2f:1 (>= %s)", nome,
+           t.tintaBranca ? "branca" : "escura", c, t.tintaBranca ? "4,6" : "4,5");
+  ok(c >= (t.tintaBranca ? 4.58f : 4.5f), m);
+  corviva_tokens(p->grad[2], &t2);
+  c = corviva_contraste(p->grad[2], t.tintaBranca ? BRANCO_PURO : TINTA);
+  snprintf(m, sizeof m, "%s: a mesma tinta na 2a parada do degrade %.2f:1", nome, c);
+  ok(c >= 4.5f && t2.tintaBranca == t.tintaBranca, m);
+  c = corviva_contraste(t.marca, TINTA);
+  snprintf(m, sizeof m, "%s: marca sobre a ilha %.2f:1 (>= 7)", nome, c);
+  ok(c >= 7.0f, m);
 }
 
 static void quadros(int n, float dt, int modo, int red, const char *chave, int prio) {
@@ -104,7 +105,6 @@ int main(void) {
   { float fonte[3] = { 30 / 255.0f, 80 / 255.0f, 180 / 255.0f };
     snprintf(m, sizeof m, "azul: matiz a %.1f graus do da arte (<= 12)", difMatiz(matiz(azul.acento), matiz(fonte)));
     ok(difMatiz(matiz(azul.acento), matiz(fonte)) <= 12.0f, m); }
-  ok(azul.base[2] >= azul.base[0], "azul: a base puxa para o azul");
   regraDeContraste(&azul, "azul");
 
   // [2] tons de cinza: sem cor, cai no padrao.
@@ -162,7 +162,7 @@ int main(void) {
   corviva_zerar();
   corviva_anotar("https://arte/azul", &azul);
   corviva_anotar("https://arte/laranja", &laranja);
-  quadros(1, 1 / 60.0f, CORVIVA_SIMPLES, 0, NULL, 0);          // arranque: branco
+  quadros(1, 1 / 60.0f, CORVIVA_SIMPLES, 0, NULL, 0);          // arranque: Branco
   { float a[3]; corviva_acento(&a[0], &a[1], &a[2]);
     ok(igual3(a, BRANCO, 0.001f), "sem titulo: destaque padrao (branco)"); }
   // alternando a cada 100 ms (rolagem rapida): nenhuma troca
@@ -200,11 +200,10 @@ int main(void) {
   { float a[3]; quadros(120, 1 / 60.0f, CORVIVA_SIMPLES, 0, NULL, 0);
     corviva_acento(&a[0], &a[1], &a[2]);
     ok(igual3(a, azul.acento, 0.002f), "tela sem titulo: fica a cor do ultimo"); }
-  // estilizado: o fundo passa a ser a base; simples: volta ao #0D0D0D
-  quadros(40, 1 / 60.0f, CORVIVA_ESTILIZADA, 0, NULL, 0);
-  ok(igual3(nv_cor_fundo_viva, azul.base, 0.002f), "estilizado: fundo = base tingida da arte");
+  // o estilizado saiu (virou o Fundo Frost): o fundo nunca e tingido
+  quadros(40, 1 / 60.0f, CORVIVA_IMERSIVA, 0, NULL, 0);
+  ok(igual3(nv_cor_fundo_viva, FUNDO, 0.002f), "fundo fica #0D0D0D em qualquer modo");
   quadros(40, 1 / 60.0f, CORVIVA_SIMPLES, 0, NULL, 0);
-  ok(igual3(nv_cor_fundo_viva, FUNDO, 0.002f), "simples: fundo volta a #0D0D0D");
   // animacoes reduzidas: troca no primeiro quadro depois do assentar
   { float a[3];
     quadros(10, 1 / 60.0f, CORVIVA_SIMPLES, 1, "https://arte/laranja", CORVIVA_PLAYER);
@@ -252,12 +251,11 @@ int main(void) {
     pinta(W, H, 20, 90, 250, 140, 25, 60, 205, 255, 0);      // azul-marinho
     pinta(W, H, 90, 45, 200, 60, 255, 255, 255, 255, 0);     // letras brancas
     ok(corviva_extrair(img, W, H, W * 4, &pl) == 1 && pl.transparente, "logo: tem cor e e transparente");
-    { float Lc, Le, lab[3];
-      corviva_srgb_para_oklab(pl.grad[0], lab); Lc = lab[0];
-      corviva_srgb_para_oklab(pl.grad[2], lab); Le = lab[0];
-      snprintf(m, sizeof m, "logo: degrade do claro (L %.2f) ao escuro (L %.2f)", Lc, Le);
-      ok(Lc - Le >= 0.10f, m);
-      ok(matiz(pl.grad[0]) < -60.0f && matiz(pl.grad[2]) < -60.0f, "logo: as duas paradas sao azuis"); }
+    { float d = difMatiz(matiz(pl.grad[0]), matiz(pl.grad[2]));
+      snprintf(m, sizeof m, "logo: as duas paradas sao analogas (%.0f graus, 20-60)", d);
+      ok(d >= 19.0f && d <= 61.0f, m);
+      ok(matiz(pl.grad[0]) < -60.0f && matiz(pl.grad[2]) < -60.0f, "logo: as duas paradas sao azuis");
+      ok(pl.txOk && pl.tx[2] > 0.19f && pl.tx[2] < 0.21f, "logo: recorte da textura a 20% da largura"); }
     // Logo BRANCO: sem cor (cai na arte).
     pinta(W, H, 0, 0, W, H, 0, 0, 0, 0, 0);
     pinta(W, H, 40, 60, 280, 120, 250, 250, 250, 255, 0);
@@ -307,6 +305,45 @@ int main(void) {
     ok(!nv_grad_ativo && nv_ambiente_forca < 0.001f, "simples: degrade e luz desligados");
   }
 
+  // [14] DA ARTE: amarelo vira CLARO (tinta escura), nao oliva; o resto e
+  // PROFUNDO com o branco a 4,6:1; arte de croma baixo = Branco.
+  { float f[3], lab[3]; CorvivaTokens t;
+    const float amarelo[3] = { 0.95f, 0.80f, 0.20f }, vermelho[3] = { 0.76f, 0.03f, 0.02f },
+                cinza[3] = { 0.5f, 0.5f, 0.52f };
+    corviva_da_arte(amarelo, f); corviva_tokens(f, &t); corviva_srgb_para_oklab(f, lab);
+    snprintf(m, sizeof m, "da arte: amarelo vira claro (L %.2f) com tinta escura %.1f:1", lab[0], corviva_contraste(f, TINTA));
+    ok(!t.tintaBranca && lab[0] > 0.84f && corviva_contraste(f, TINTA) >= 4.5f, m);
+    corviva_da_arte(vermelho, f); corviva_tokens(f, &t);
+    snprintf(m, sizeof m, "da arte: vermelho e profundo, branco %.2f:1", corviva_contraste(f, BRANCO_PURO));
+    ok(t.tintaBranca && corviva_contraste(f, BRANCO_PURO) >= 4.6f && corviva_contraste(f, BRANCO_PURO) < 5.0f, m);
+    corviva_da_arte(cinza, f);
+    ok(igual3(f, BRANCO, 0.002f), "da arte: arte cinza = Branco");
+    // as cores reais medidas no mockup (acentos-mockup.html, ARTES): o hex
+    // que o mockup mostra, a 2/255.
+    { static const struct { float raw[3]; float hex[3]; const char *n; } R[] = {
+        { { 0xad/255.f, 0x65/255.f, 0x3b/255.f }, { 0xb1/255.f, 0x5e/255.f, 0x2b/255.f }, "Perdido em Marte" },
+        { { 0x3a/255.f, 0x72/255.f, 0x77/255.f }, { 0x2a/255.f, 0x80/255.f, 0x87/255.f }, "O Nevoeiro" },
+        { { 0xfc/255.f, 0xd0/255.f, 0x40/255.f }, { 0xf1/255.f, 0xce/255.f, 0x65/255.f }, "logo do Fallout" } };
+      int k;
+      for (k = 0; k < 3; k++) {
+        corviva_da_arte(R[k].raw, f);
+        snprintf(m, sizeof m, "da arte (%s): #%02x%02x%02x", R[k].n,
+                 (int)(f[0] * 255 + .5f), (int)(f[1] * 255 + .5f), (int)(f[2] * 255 + .5f));
+        ok(igual3(f, R[k].hex, 2.5f / 255.0f), m);
+      } } }
+
+  // [15] TEXTURA: tinta pelo pior pixel e veu so quando falta contraste.
+  { int b; float v, c; const float base[3] = { 0.85f, 0.60f, 0.20f };
+    corviva_textura_tinta(0.62f, 0.67f, base, 1.0f, &b, &v, &c);
+    snprintf(m, sizeof m, "textura clara chapada: tinta escura sem veu (%.1f:1)", c);
+    ok(!b && v < 0.001f && c >= 4.5f, m);
+    corviva_textura_tinta(0.006f, 0.50f, base, 1.0f, &b, &v, &c);
+    snprintf(m, sizeof m, "textura de alto contraste: veu %.0f%% ate %.1f:1", v * 100, c);
+    ok(v > 0.0f && c >= 4.5f, m);
+    corviva_textura_tinta(0.006f, 0.50f, base, 0.35f, &b, &v, &c);
+    snprintf(m, sizeof m, "textura sutil (35%%): %.1f:1 com veu %.0f%%", c, v * 100);
+    ok(c >= 4.5f, m); }
+
   // [9] corviva.txt: o arranque seguinte ja nasce com a cor da ultima cena.
   corviva_zerar();
   corviva_anotar("https://arte/azul", &azul);
@@ -315,10 +352,12 @@ int main(void) {
   ok(arquivo && strstr(arquivo, "cena ") != NULL, "corviva.txt gravado");
   corviva_zerar();
   corviva_carregar();
-  quadros(1, 1 / 60.0f, CORVIVA_ESTILIZADA, 0, NULL, 0);
+  quadros(1, 1 / 60.0f, CORVIVA_TEXTURA, 0, NULL, 0);
   { float a[3]; corviva_acento(&a[0], &a[1], &a[2]);
     ok(igual3(a, azul.acento, 1.0f / 255.0f + 0.001f), "arranque: primeiro quadro ja com a cor da ultima cena");
-    ok(igual3(nv_cor_fundo_viva, azul.base, 1.0f / 255.0f + 0.001f), "arranque: e com a base dela");
+    ok(nv_textura_viva.ok && !strcmp(nv_textura_viva.url, "https://arte/azul") &&
+       fabsf(nv_textura_viva.janela[2] - azul.tx[2]) < 0.001f,
+       "arranque: a textura (url e recorte) tambem volta do arquivo");
     { CorvivaPaleta lida; (void)lida; }
     quadros(1, 1 / 60.0f, CORVIVA_GRADIENTE, 1, NULL, 0);
     ok(igual3(nv_grad_viva[0], azul.grad[0], 1.0f / 255.0f + 0.001f), "arranque: o degrade tambem volta do arquivo"); }
