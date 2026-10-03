@@ -80,7 +80,7 @@ void gfx_tamanho_alvo(int w, int h) { telaW = w; telaH = h; }
 // e uAlt sai da altura JA ampliada — a rampa de borda segue com 1 px do alvo.
 // As passadas internas de tela cheia (luz assada, snapshot, desfoques) desligam
 // o fator: elas falam em tela real, nao em layout de camada.
-static float escUi = 1.0f, escAtiva = 1.0f;
+static float escUi = 1.0f, escAtiva = 1.0f, miniEscAnt = 1.0f;
 void gfx_escala_ui_definir(float s) { escUi = (s >= 1.0f && s <= 2.0f) ? s : 1.0f; }
 float gfx_escala_ui(void) { return escUi; }
 float gfx_escala(void) { return escAtiva; }
@@ -2558,6 +2558,9 @@ void gfx_mini_comecar(GfxMini *m, float x0, float y0, float esc) {
   recorteAtivo = 0;
   glClearColor(0, 0, 0, 0);
   glClear(GL_COLOR_BUFFER_BIT);
+  // A miniatura e uma tela REAL de 1920x1080 reduzida: dentro dela nao ha
+  // camada ampliada (escala.h), venha de onde vier quem a desenha.
+  miniEscAnt = escAtiva; escAtiva = 1.0f;
   miniAtiva = 1; miniPxW = m->w; miniPxH = m->h;
   miniX0 = x0; miniY0 = y0; miniEsc = esc;
   uTelaW = x0 + (float)m->w / esc;
@@ -2569,6 +2572,7 @@ void gfx_mini_terminar(void) {
   if (!miniAtiva) return;
   GFX_OUTRO_INI();
   miniAtiva = 0;
+  escAtiva = miniEscAnt;
   uTelaW = NV_TELA_W; uTelaH = NV_TELA_H;
   glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)miniFboAnt);
   glViewport(miniVpAnt[0], miniVpAnt[1], miniVpAnt[2], miniVpAnt[3]);
