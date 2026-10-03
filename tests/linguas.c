@@ -26,6 +26,16 @@ int main(void) {
   ok("en casa com eng",   ling_casa("eng", "en"));
   ok("es NAO casa com pt", !ling_casa("spa", "pt"));
 
+  // Subs.ro emits ISO 639-2/T ron; MKV often uses bibliographic rum.
+  ok("ro accepts Subs.ro ron", ling_casa("ron", "ro"));
+  ok("rum accepts ron", ling_casa("ron", "rum"));
+  ok("ron accepts ro", ling_casa("ro", "ron"));
+  ok("ron does not accept English", !ling_casa("eng", "ron"));
+  ok("ron display name", !strcmp(ling_nome("ron"), "Romeno"));
+  { const char *roAddon[] = { "ron" };
+    ok("auto selects Subs.ro Romanian", ling_legenda_auto("ro", NULL, 0, 1, roAddon, 1, 1) == 0);
+  }
+
   // Codigo desconhecido pelos dois lados: comparacao crua, sem inventar.
   ok("glg casa com glg",  ling_casa("glg", "glg"));
   ok("glg nao casa cat",  !ling_casa("glg", "cat"));
