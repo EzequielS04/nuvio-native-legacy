@@ -444,7 +444,8 @@ static void cenaAjustes(float t) {
   y += 40.0f;
   ajustes_ui_grafico_exemplo(x, y, iw - 52, 180);
   y += 188.0f;
-  { TxtLinha a = txt(TXT_AJ_MINI13, "há 2 min"), b2 = txt(TXT_AJ_MINI13, "agora");
+  { char ha[48]; snprintf(ha, sizeof ha, i18n("há %d min"), 2);
+    TxtLinha a = txt(TXT_AJ_MINI13, ha), b2 = txt(TXT_AJ_MINI13, "Agora");
     txt_desenhar_alpha(a, x, y, 0.42f);
     txt_desenhar_alpha(b2, x + iw - 52 - b2.w, y, 0.42f); }
   y += 31.0f;
@@ -755,6 +756,17 @@ static float pilula(const char *rot, const char *ic, int pri, int f, float xDir,
     txt_desenhar_alpha(t, r.x + 28 + (ic ? 34 : 0), y + (60 - t.h) * 0.5f, (f || pri ? 1.0f : 0.88f) * a); }
   return w;
 }
+// Largura da fileira de dicas, sem desenhar: em lingua longa (ru, de) as tres
+// pilulas avancam sobre a dica, e ai a dica sai em vez de ficar por baixo.
+static float dicasLargura(const char *const *k, const char *const *l, int n) {
+  float w = 0.0f;
+  int i;
+  for (i = 0; i < n; i++) {
+    float kw = (float)txt_largura(TXT_AJ_KBD, i18n(k[i])) + 18.0f;
+    w += (kw < 34.0f ? 34.0f : kw) + 9 + (float)txt_largura(TXT_ILHA_GENERO, i18n(l[i])) + 18.0f;
+  }
+  return w - 18.0f;
+}
 static float dicas(const char *const *k, const char *const *l, int n, float x, float y, float a) {
   int i;
   for (i = 0; i < n; i++) {
@@ -849,19 +861,16 @@ void novidades180_desenhar(Uint32 agora) {
     GfxRect r[B_N];
     static const char *const ROT[B_N] = { "Agora não", "Abrir o guia", "Vidro ou sólido" };
     static const char *const IC[B_N] = { NULL, "aj_book-open", "aj_palette" };
+    static const char *const K2[2] = { "← →", "↓" }, *const L2[2] = { "Trocar", "Botões" };
+    static const char *const K1[1] = { "↑" }, *const L1[1] = { "Trocar a prévia" };
     int i;
-    if (naPrevia) {
-      static const char *const K[2] = { "← →", "↓" }, *const L[2] = { "Trocar", "Botões" };
-      dicas(K, L, 2, COL_X, y + 15.0f, a);
-    } else {
-      static const char *const K[1] = { "↑" }, *const L[1] = { "Trocar a prévia" };
-      dicas(K, L, 1, COL_X, y + 15.0f, a);
-    }
     for (i = B_N - 1; i >= 0; i--) {
       float w = pilula(ROT[i], IC[i], i == B_VIDRO, !naPrevia && foco == i, xd, y, a);
       r[i] = (GfxRect){ xd - w, y, w, 60 };
       xd -= w + 12.0f;
     }
+    if (COL_X + dicasLargura(naPrevia ? K2 : K1, naPrevia ? L2 : L1, naPrevia ? 2 : 1) <= xd - 12.0f)
+      dicas(naPrevia ? K2 : K1, naPrevia ? L2 : L1, naPrevia ? 2 : 1, COL_X, y + 15.0f, a);
     if (aberto)
       for (i = 0; i < B_N; i++) ponteiro_alvo(r[i].x, r[i].y, r[i].w, r[i].h, ponteiroFoco, ponteiroOk, i, 0);
   }

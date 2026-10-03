@@ -131,7 +131,6 @@ static const char *guiaIcTela(int t) {
     default: return "aj_chart-column";
   }
 }
-static int guiaCapNum(int idx) { return idx - GI_CAP0 + 1; }
 
 static void guiaAbrir(int daNov) {
   guiaAberto = 1;
