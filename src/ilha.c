@@ -164,6 +164,31 @@ void ilha_cartao(int qual, const IlhaCartao *c) {
   temCartao[qual] = 1;
 }
 
+void ilha_cartao_invalidar(int qual) {
+  if (qual < 0 || qual >= ILHA_N_CARTOES) return;
+  temCartao[qual] = 0;
+  memset(&cartoes[qual], 0, sizeof cartoes[qual]);
+  if (cartaoVez == qual) cartaoVez = -1;
+  // A pilula conserva uma copia durante a troca de conteudo. Ela tambem
+  // pertence a quem saiu e nao pode dissolver sobre a tela da outra pessoa.
+  if (mostraQual == qual) {
+    if (mostra == M_CARTAO) { mostra = -1; conteudoA = 0.0f; mostraChave[0] = 0; }
+    memset(&mostraC, 0, sizeof mostraC);
+  }
+  if (modalQual == qual) {
+    ilha_modal_fechar(1);
+    memset(&modalC, 0, sizeof modalC);
+  }
+  if (pedido && pedidoQual == qual) {
+    pedido = 0;
+    memset(&pedidoC, 0, sizeof pedidoC);
+  }
+  if (qual == ILHA_VIVO) {
+    voo = vooDissolve = vooAlvoOk = 0; pousouEm = 0;
+    vooArte[0] = vooCapa[0] = 0;
+  }
+}
+
 // QUAL CARTAO E O DA VEZ. Com os dois, alternam a cada ILHA_ALTERNA_MS: a
 // sessao interrompida e a estreia sao as duas "o que eu faco agora", e nenhuma
 // deve esconder a outra para sempre. Um so: ele.

@@ -7,6 +7,8 @@
 #include "catalogo.h"
 #include "home.h"
 #include "idioma.h"
+#include "perfis.h"
+#include "sessao.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -17,8 +19,31 @@ static IlhaCartao vivo, estreia;
 static int temVivo, temEstreia;
 static Uint32 ultimaTecla, ultimaSonda;
 static unsigned vivoSeq;
+static char vivoConta[96];
+static int vivoPerfil;
 
 unsigned ilhacart_vivo_seq(void) { return vivoSeq; }
+
+void ilhacart_esquecer_vivo(void) {
+  temVivo = 0; vivoConta[0] = 0; vivoPerfil = 0;
+  memset(&vivo, 0, sizeof vivo);
+  ilha_cartao_invalidar(ILHA_VIVO);
+}
+
+void ilhacart_validar_identidade(void) {
+  // O modal/pedido pode ainda ter a copia depois de a pilula ficar ociosa.
+  // A identidade capturada continua valendo ate sua invalidacao explicita.
+  if (vivoConta[0] && (!sessao_logada() || vivoPerfil != perfis_ativo() ||
+                  strcmp(vivoConta, sessao_usuario())))
+    ilhacart_esquecer_vivo();
+}
+
+int ilhacart_vivo_vale(const IlhaCartao *c) {
+  ilhacart_validar_identidade();
+  return c && vivoConta[0] && !strcmp(c->chave, vivo.chave) &&
+         !strcmp(c->imdb, vivo.imdb) && c->serie == vivo.serie &&
+         c->t == vivo.t && c->e == vivo.e;
+}
 
 // O episodio (T, E) na lista que o catalogo ja tem desse titulo: nome, sinopse
 // e o still. Sem lista (serie que nunca abriu nesta sessao), fica o do titulo.
@@ -44,7 +69,9 @@ static void doTitulo(const CatItem *ci, IlhaCartao *c) {
 }
 
 void ilhacart_player_saiu(int indice, double posSeg, double durSeg, int t, int e) {
-  const CatItem *ci = home_retorno_vale(indice, posSeg, durSeg) ? cat_item(indice) : NULL;
+  ilhacart_validar_identidade();
+  const CatItem *ci = sessao_logada() && sessao_usuario()[0] &&
+                     home_retorno_vale(indice, posSeg, durSeg) ? cat_item(indice) : NULL;
   if (!ci || !ci->imdb[0]) { temVivo = 0; ilha_cartao(ILHA_VIVO, NULL); return; }
   memset(&vivo, 0, sizeof vivo);
   doTitulo(ci, &vivo);
@@ -58,9 +85,13 @@ void ilhacart_player_saiu(int indice, double posSeg, double durSeg, int t, int e
   if (!vivo.sinopse[0]) snprintf(vivo.sinopse, sizeof vivo.sinopse, "%s", ci->sinopse);
   vivo.progresso = (float)(posSeg / durSeg);
   vivo.restanteMin = (int)((durSeg - posSeg) / 60.0 + 0.5);
-  snprintf(vivo.chave, sizeof vivo.chave, "vivo:%s:%d:%d", vivo.imdb, vivo.t, vivo.e);
-  temVivo = 1;
   vivoSeq++;
+  // A copia do modal e desta instancia, nao apenas do IMDb/episodio. Duas
+  // contas vendo o mesmo episodio nunca tornam um pedido antigo valido.
+  snprintf(vivo.chave, sizeof vivo.chave, "vivo:%u", vivoSeq);
+  temVivo = 1;
+  snprintf(vivoConta, sizeof vivoConta, "%s", sessao_usuario());
+  vivoPerfil = perfis_ativo();
   ultimaTecla = SDL_GetTicks();
   ilha_cartao(ILHA_VIVO, &vivo);
   printf("[ilha] atividade ao vivo: %s T%dE%d %.0f%%, faltam %d min\n", vivo.imdb, vivo.t,
@@ -103,6 +134,7 @@ static void montarEstreia(const char *id, const char *imdb) {
 }
 
 void ilhacart_atualizar(Uint32 agora, const char *imdbAberto) {
+  ilhacart_validar_identidade();
   if (temVivo && agora - ultimaTecla > VIVO_OCIOSO_MS) {
     printf("[ilha] atividade ao vivo saiu: 30 min sem tecla\n");
     temVivo = 0;

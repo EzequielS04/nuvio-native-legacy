@@ -19,8 +19,15 @@
 #ifndef NV_ILHACART_H
 #define NV_ILHACART_H
 #include <SDL2/SDL.h>
+#include "ilha.h"
 
 void ilhacart_player_saiu(int indice, double posSeg, double durSeg, int t, int e);
+// A atividade ao vivo pertence a conta/perfil que encerrou o player. So
+// compara identidade em RAM; chamar antes de eventos/quadro, mesmo no login.
+void ilhacart_validar_identidade(void);
+void ilhacart_esquecer_vivo(void);
+// Valida tambem uma copia devolvida pelo modal antes de retomar/abrir titulo.
+int ilhacart_vivo_vale(const IlhaCartao *cartao);
 // Toda tecla ou clique (app_evento): o relogio da ociosidade recomeca.
 void ilhacart_tecla(Uint32 agora);
 // Sobe a cada saida do player que POS o cartao: compare antes e depois de

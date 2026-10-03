@@ -86,6 +86,9 @@ typedef struct {
 } IlhaCartao;
 // NULL tira o cartao. A copia e da ilha; quem chama pode descartar o seu.
 void ilha_cartao(int qual, const IlhaCartao *c);
+// Troca de identidade: apaga este cartao e suas copias no modal, no pedido e
+// na animacao. Os outros cartoes, avisos e atividade nao sao alterados.
+void ilha_cartao_invalidar(int qual);
 // 1 quando ha cartao e o relogio esta na tela: e quando AZUL/CH+ abre o modal.
 int  ilha_cartao_na_tela(void);
 

@@ -294,6 +294,7 @@ static void *carregarPerfil(void *u) {
   return NULL;
 }
 static void invalidarPerfil(void) {
+  ilhacart_esquecer_vivo();
   atomic_fetch_add_explicit(&perfilGeracao,1,memory_order_acq_rel);
   atomic_store_explicit(&perfilCarga,0,memory_order_release);
   pthread_mutex_lock(&perfilTrava);memset(&perfilPendente,0,sizeof perfilPendente);perfilSucesso=0;pthread_mutex_unlock(&perfilTrava);
@@ -1441,6 +1442,7 @@ int app_na_home(void) {
 
 void app_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
+  ilhacart_validar_identidade();
   // Qualquer gesto da pessoa: a atividade ao vivo da ilha conta 30 min daqui.
   if (e->type == SDL_KEYDOWN || e->type == SDL_MOUSEBUTTONDOWN || e->type == SDL_MOUSEWHEEL)
     ilhacart_tecla(SDL_GetTicks());
@@ -1795,6 +1797,9 @@ static void trocaDeTituloSeSolicitada(void) {
 }
 
 void app_atualizar(float dt, Uint32 agora) {
+  // Login e escolha de perfil retornam cedo; a atividade da conta anterior
+  // precisa sair antes deles, junto de qualquer modal/pedido ja enfileirado.
+  ilhacart_validar_identidade();
   // Animacoes reduzidas valem para TODA mola e rampa do app (anim.h), nao so
   // para as telas que lembravam de perguntar. Uma leitura por quadro.
   anim_politica_reduzida = ajustes_animacoes_reduzidas();
@@ -2258,6 +2263,7 @@ void app_atualizar(float dt, Uint32 agora) {
     int qual = 0, o;
     ilhacart_atualizar(agora, ab && ab->imdb[0] ? ab->imdb : NULL);
     o = ilha_pediu(&ic, &qual);
+    if (o && qual == ILHA_VIVO && !ilhacart_vivo_vale(&ic)) o = ILHA_PEDIU_NADA;
     if (o == ILHA_PEDIU_SALVOS) {
       // O PAINEL NASCE DO MODAL: o retangulo de agora e o do modal, que some
       // seco no mesmo quadro — o painel toma a forma dele e cresce.
