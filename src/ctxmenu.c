@@ -71,6 +71,8 @@ enum { CTX_PENDENTE = 1, CTX_CONFIRMADA = 2, CTX_FALHA = 3 };
 #define CTX_LINHA     60.0f
 #define CTX_GAP        4.0f
 #define CTX_AO_LADO   30.0f     // do poster a ilha
+#define CTX_CARTAO_LARGO 480.0f // cartao a partir daqui: a ilha entra nele
+#define CTX_DENTRO    24.0f
 #define CTX_BORDA     48.0f     // margem minima da tela
 
 // SALVO E UM FATO DO TITULO, NAO DO CARTAO. Segurar OK num cartao do
@@ -1425,13 +1427,23 @@ void ctx_desenhar(Uint32 agora) {
   ctx_desenharCorpo_(agora);
   ESCALA_FIM();
 }
+// O cartao da home e em pixels reais; o menu desenha na tela virtual.
+static int cartaoDaHome(void) {
+  int ok;
+  ESCALA_REAL_INI();
+  ok = home_cartao_foco_por_cima(idx);
+  ESCALA_REAL_FIM();
+  return ok;
+}
 static void ctx_desenharCorpo_(Uint32 agora) {
   const CatItem *ci;
   const char *mensagem = NULL;
   float a = anim, alt, x, y, cab;
-  int i, comLogo;
+  int i, comLogo, sobreArte = 0;
   (void)agora;
-  if (!aberto && holdAtivo) {
+  // So no painel de Salvos (dicaCx): na home o cartao pressionado ja tem a
+  // propria barra (home.c), e esta, no meio da tela, era a sobra duplicada.
+  if (!aberto && holdAtivo && dicaCx >= 0.0f) {
     float p = (float)(SDL_GetTicks() - holdDesde) / (float)NV_HOLD_MS;
     TxtLinha t;
     // O centro e o da tela, ou o do painel de Salvos quando e nele que o dedo
@@ -1497,6 +1509,14 @@ static void ctx_desenharCorpo_(Uint32 agora) {
     if (d + CTX_W <= NV_TELA_W - CTX_BORDA) x = d;
     else if (e >= CTX_BORDA) x = e;
     y = cartazRect.y;
+    // CARTAO LARGO (4:3 grande, card aberto, deitado): ao lado dele so ha o
+    // VIZINHO, e a ilha ficava em cima do cartao errado. Ancorada DENTRO do
+    // cartao focado, no canto de cima a direita.
+    if (cartazRect.w >= CTX_CARTAO_LARGO && cartazRect.x + cartazRect.w - CTX_W - CTX_DENTRO >= cartazRect.x) {
+      x = cartazRect.x + cartazRect.w - CTX_W - CTX_DENTRO;
+      y = cartazRect.y + CTX_DENTRO;
+      sobreArte = 1;
+    }
   }
   if (x < 0.0f) {
     float cx = doPainel && dicaCx >= 0.0f ? dicaCx : NV_TELA_W * 0.5f;
@@ -1511,6 +1531,13 @@ static void ctx_desenharCorpo_(Uint32 agora) {
 
   // O POSTER POR CIMA DO VEU, na mesma caixa e no mesmo raio do cartao da
   // home (ajustes_raio_poster_px): com `a` ele so desvela o que ja estava la.
+  // DA HOME: o proprio cartao, pintado pela mesma funcao da fileira (arte,
+  // recorte, veus, rotulo, logo, anel), em pixels reais — nada de refazer a
+  // arte aqui com outro aspecto. So o que nao e da home (Biblioteca) cai na
+  // arte solta abaixo.
+  if (temCartaz && !doPainel && !cartazFixo && cartaoDaHome()) {
+    /* feito */
+  } else
   if (temCartaz && !doPainel && cartazArte[0]) {
     GLuint t = tex_obter_larg(cartazArte, cartazRect.w * gfx_escala_ui());
     if (t) {
@@ -1524,6 +1551,10 @@ static void ctx_desenharCorpo_(Uint32 agora) {
 
   // Entra deslizando 16 px a partir do lado do poster, como as folhas do app.
   x += (1.0f - a) * (temCartaz && !doPainel && x < cartazRect.x ? 16.0f : -16.0f);
+  // SOBRE A ARTE: a mesma regra dos outros modais — o que passa por tras nao
+  // compete com as opcoes. Um fundo escuro por baixo do vidro/solido.
+  if (sobreArte)
+    gfx_cor((GfxRect){ x, y, CTX_W, alt }, CTX_ILHA_RAIO / alt, .03f, .032f, .04f, .80f * a);
   ilhaCtx((GfxRect){ x, y, CTX_W, alt }, CTX_ILHA_RAIO, a);
 
   // CABECALHO: o nome e, embaixo, o que o titulo e ("Serie · 2024 · ...") —

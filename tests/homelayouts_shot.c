@@ -115,13 +115,20 @@ static void quadros(int n, const char *bmp) {
 
 // SEGURAR OK de verdade: KEYDOWN, quadros ate passar NV_HOLD_MS (o relogio e o
 // SDL_GetTicks real), KEYUP. E o caminho da home que abre o menu do cartaz.
+static char meioBmp[512];   // se preenchido: captura no meio do segurar
 static void segurarOk(void) {
   SDL_Event e;
   Uint32 ini = SDL_GetTicks();
+  int meioFeito = 0;
   memset(&e, 0, sizeof e);
   e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_RETURN;
   home_evento(&e);
-  while (SDL_GetTicks() - ini < NV_HOLD_MS + 150) quadros(1, NULL);
+  while (SDL_GetTicks() - ini < NV_HOLD_MS + 150) {
+    quadros(1, NULL);
+    if (meioBmp[0] && !meioFeito && SDL_GetTicks() - ini > NV_HOLD_MS / 2) {
+      meioFeito = 1; quadros(1, meioBmp); meioBmp[0] = 0;
+    }
+  }
   e.type = SDL_KEYUP;
   if (ctx_aberto()) ctx_evento(&e); else home_evento(&e);
 }
@@ -467,6 +474,39 @@ int main(int argc, char **argv) {
     quadros(120, NULL);
     printf("[shot] ctx depois da escolha aberto=%d\n", ctx_aberto());
     snprintf(bmp, sizeof bmp, "%s-ctx-4-depois.bmp", saida); quadros(1, bmp);
+  }
+
+  // NV_CTX_EXP=<n>: o menu do cartaz com a EXPANSAO do cartaz ligada (atraso de
+  // 4 s). Captura: foco antes do menu, menu logo ao abrir, menu depois de o
+  // atraso passar, logo apos fechar e fechado com o atraso cumprido.
+  // NV_CTX_DIR=<n> cartoes a direita. Quadros no relogio real (SDL_GetTicks).
+  if (getenv("NV_CTX_EXP")) {
+    int r, alvo = atoi(getenv("NV_CTX_EXP"));
+    Uint32 t0;
+    setenv("NV_AJ", "focusedPosterBackdropExpandEnabled 1\nfocusedPosterBackdropExpandDelaySeconds 4", 1);
+    ajusta(camadas[0] - '0', 0);
+    for (r = 0; r < 14; r++) tecla(SDLK_UP);
+    quadros(60, NULL);
+    for (r = 0; r < alvo; r++) { tecla(SDLK_DOWN); quadros(40, NULL); }
+    { int d = getenv("NV_CTX_DIR") ? atoi(getenv("NV_CTX_DIR")) : 0;
+      for (r = 0; r < d; r++) { tecla(SDLK_RIGHT); quadros(8, NULL); } }
+    quadros(30, NULL);
+    snprintf(bmp, sizeof bmp, "%s-exp-a-foco.bmp", saida); quadros(1, bmp);
+    snprintf(meioBmp, sizeof meioBmp, "%s-exp-a2-meio-hold.bmp", saida);
+    segurarOk();
+    quadros(30, NULL);
+    snprintf(bmp, sizeof bmp, "%s-exp-b-menu-logo.bmp", saida); quadros(1, bmp);
+    printf("[shot] exp aberto=%d\n", ctx_aberto());
+    t0 = SDL_GetTicks();
+    while (SDL_GetTicks() - t0 < 6500u) quadros(1, NULL);
+    snprintf(bmp, sizeof bmp, "%s-exp-c-menu-apos-atraso.bmp", saida); quadros(1, bmp);
+    teclaCtx(SDLK_ESCAPE); teclaCtx(SDLK_BACKSPACE);
+    quadros(20, NULL);
+    printf("[shot] exp fechado=%d\n", !ctx_aberto());
+    snprintf(bmp, sizeof bmp, "%s-exp-d-fechado.bmp", saida); quadros(1, bmp);
+    t0 = SDL_GetTicks();
+    while (SDL_GetTicks() - t0 < 6500u) quadros(1, NULL);
+    snprintf(bmp, sizeof bmp, "%s-exp-e-fechado-expandido.bmp", saida); quadros(1, bmp);
   }
 
   // NV_VISTO_CTX=<n> (#212): segurar OK no PRIMEIRO cartaz da fileira n (um

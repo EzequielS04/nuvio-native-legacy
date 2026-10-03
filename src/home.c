@@ -2716,6 +2716,13 @@ void home_atualizar(float dt, Uint32 agora) {
       expDesde = agora;
       expAbre = 0.0f;            // fecha na hora; abrir e que e gradual
     }
+    // MENU DO CARTAZ ABERTO = O CARTAO NAO EXPANDE (dono, 03/10: "se esta com
+    // o menu contextual aberto ele nao expande"). O relogio nao anda e a mola
+    // fica onde esta: o que ja abriu continua aberto, o que nao abriu espera.
+    // Ao fechar, a contagem do atraso recomeca do zero — sem salto.
+    if (ctx_aberto() || (okPressionando && okHold > 0.0f)) {
+      if (expAbre < 0.999f) expDesde = agora;
+    } else
     { float atraso = ajustes_expandir_poster_atraso();
       int pronto = expDesde && (agora - expDesde) >= (Uint32)(atraso * 1000.0f);
       // Fileira DEITADA (e a de continuar assistindo) ja mostra a arte larga:
@@ -4661,6 +4668,192 @@ int home_previa_fileira(const char *chave, int filTipo, int refTipo, GfxRect are
   return 1;
 }
 
+// O CARTAO FOCADO, PINTADO DE UM LUGAR SO. A home o pinta na fileira e o menu do
+// cartaz (ctxmenu.c) o pinta DE NOVO por cima do veu: a mesma funcao, com os
+// mesmos parametros, para o cartao nao mudar de arte, recorte, rotulo ou logo
+// quando o menu abre (home_cartao_foco_por_cima).
+typedef struct {
+  int r, c; TipoFileira tipo; const CatItem *cItem; const char *caminho; GLuint t;
+  float aArte; int deitado, rotuloFora; float abre, esc, f, px, py, w, h, varre;
+} CartaoFoco;
+static CartaoFoco cartaoFoco; static float cartaoFocoRaio; static int temCartaoFoco;
+// O caminho da arte mora num buffer que o proximo cartao sobrescreve: copia propria.
+static char cartaoFocoArte[1024];
+static void pintarCartao(const CartaoFoco *k, float raio) {
+  const int r = k->r, c = k->c; const TipoFileira tipo = k->tipo; const CatItem *cItem = k->cItem;
+  const char *caminho = k->caminho; const GLuint t = k->t; const float aArte = k->aArte;
+  const int deitado = k->deitado, rotuloFora = k->rotuloFora;
+  const float abre = k->abre, esc = k->esc, f = k->f, px = k->px, py = k->py, w = k->w, h = k->h;
+  const float varreFoco = k->varre;
+          if (f > 0.01f && ajustes_borda_foco()) {
+            GfxRect borda = { px - NV_ANEL_FOCO, py - NV_ANEL_FOCO,
+                              w + NV_ANEL_FOCO * 2, h + NV_ANEL_FOCO * 2 };
+            float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
+            // RAIO DE FORA = raio do cartaz + espessura do anel, em pixels,
+            // normalizado pelo lado menor DA BORDA. Passar o `raio` do cartaz
+            // direto dava um canto de fora mais fechado que o de dentro — as
+            // "pontas feias" da foto do dono (21/09/2026); e a conta que a
+            // fileira de colecoes ja fazia.
+            { float menor = w < h ? w : h;
+              if (ajustes_vidro()) gfx_vidro_cartao((GfxRect){px, py, w, h}, raio * menor / h, f, 1.0f);
+              else
+              gfx_cor(borda, (raio * menor + NV_ANEL_FOCO) / (menor + 2 * NV_ANEL_FOCO),
+                      ar, ag, ab, f); }
+          }
+          GfxRect card = { px, py, w, h };
+          // CARD SEM ARTE: superficie solida, nao o vazio. Sem isto o card
+          // ficava da cor do fundo — MEDIDO: #242429 sobre #252629, diferenca
+          // de (1,2,0), contraste 1,0:1. Era literalmente invisivel, e foi a
+          // origem da queixa "nao aparecem todos os posteres": eles apareciam,
+          // do tom exato do fundo. A referencia desenha #2C2C2C na caixa exata.
+          gfx_veu_card_limpar();
+          if (t) veusDoCard(cItem, tipo, deitado, abre, 1);
+          desenhaArteCard(card, tipo, caminho, t, cItem, f, raio, aArte,
+                          varreFoco);
+          if (t) gfx_veu_na_arte = 1; else gfx_veu_card_limpar();
+          // SELO DE ASSISTIDO: disco branco com um "v" escuro, no canto
+          // superior direito do poster. A referencia o tem e nos nao tinhamos
+          // indicador nenhum na home — sem ele nao da para varrer uma fileira e
+          // ver o que ja foi visto, que e o principal uso da tela.
+          //
+          // >= 90% e "visto", nao 100%: quase ninguem assiste os creditos, e o
+          // proprio player ja arredonda para o fim quando falta menos de um
+          // minuto (player_encerrar). Marcar so em 100% deixaria de fora
+          // justamente o que acabou de ser assistido.
+          //
+          // MEDIDO no web (.title-watched-badge, components.css:4744): disco de
+          // 34 px a 14 px do canto, fundo na COR DE REALCE (--secondary-color),
+          // icone de 28 px em on-secondary. Tamanho FIXO, nao proporcional ao
+          // card: era `w * 0.16`, e no card aberto (w ~730) virava um disco de
+          // 117 px — a "badge" que o dono fotografou e perguntou o que era.
+          //
+          // O "v" e o icone check.png (art/icones, com o .svg ao lado), nao
+          // dois retangulos: gfx_rect nao gira, e os dois tracos horizontais
+          // liam como um traco "—", nao como um check. Nao e o visto.png: esse
+          // e um OLHO, o do botao "marcar como visto" do detalhe, e no disco
+          // de 34 px virava um olho sobre o poster.
+          //
+          // O ESTADO E cat_visto (#212), nao mais `progresso >= 90`: o
+          // progresso so existe para o que esta pausado, entao filme visto
+          // no Trakt (ou marcado pelo menu, que zera o progresso) nunca
+          // ganhava o selo. Leitura O(1) por cartaz (hash em catalogo.c),
+          // sem pedido de rede: o mapa ja veio no ciclo da descoberta.
+          if (cItem && tipo != FILEIRA_CONTINUE && tipo != FILEIRA_RETORNO &&
+              ajustes_selo_visto() && cat_visto(cItem)) {
+            float d = 34.0f;
+            float mx = px + w - d - 14.0f, my = py + 14.0f;
+            GfxRect disco = { mx, my, d, d };
+            float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
+            // Sombra rasa (box-shadow 0 14px 24px .3 na referencia): separa o
+            // disco claro de um poster claro sem virar halo.
+            { GfxRect sombra = { mx, my + 3.0f, d, d };
+              gfx_cor(sombra, 0.5f, 0, 0, 0, 0.28f); }
+            gfx_cor(disco, 0.5f, ar, ag, ab, 1.0f);
+            { float ic = 22.0f;
+              GfxRect g = { mx + (d - ic) * 0.5f, my + (d - ic) * 0.5f, ic, ic };
+              gfx_icone(g, "check", 0.08f, 0.08f, 0.09f, 1.0f); }
+          }
+
+          // `cardDepthEnabled` mais o interruptor por secao: `cardDepthPosters`
+          // nas fileiras de catalogo, `cardDepthContinueWatching` na primeira.
+          desenhaProfundidade(card, raio,
+                              tipo == FILEIRA_CONTINUE ? ajustes_profundidade_cw()
+                                                       : ajustes_profundidade_posters());
+
+          // --- posterLabelsEnabled ---------------------------------------
+          // Card DEITADO: a legenda vai DENTRO da moldura, sobre um degrade que
+          // cobre 54% da altura, com 14 de recuo lateral e 12 da base
+          // (.home-poster-landscape-copy). Card EM PE: vai ABAIXO do poster, num
+          // bloco de 74 de altura com 8 de padding no topo (.home-poster-copy).
+          // A faixa deitada da Dinamica SEMPRE leva o titulo dentro do cartao (a
+          // Apple TV nao deixa cartao sem nome), com o rotulo ligado ou nao.
+          desenhaRotuloCard(cItem, tipo, deitado, rotuloFora, px, py, w, h, raio);
+
+          if(tipo==FILEIRA_TOP10) desenhaRankPequeno(c+1, px, py, h);
+
+          if (tipo == FILEIRA_CONTINUE)
+            continuar_desenhar(cItem, (GfxRect){px, py, w, h}, raio);
+          if (tipo == FILEIRA_RETORNO)
+            continuar_desenhar(cItem, (GfxRect){px, py, w, h}, raio);
+
+          // 4. DESTAQUE: titulo e metadados DENTRO da arte, sobre um veu
+          // escuro na base — como o Apple TV faz. O titulo faz o papel do logo
+          // embutido na arte-chave, que nos nao temos (o TMDB nem sempre tem
+          // logo; quando tiver, entra aqui no lugar do texto).
+          // CARD ABERTO: veu na base e o LOGO do titulo, como na TCL.
+          //
+          // O logo e nao o nome escrito com a fonte da interface: cada producao
+          // tem tipografia propria, e escrever "The Pitt" em Inter apaga
+          // justamente o que faz o titulo ser reconhecido de longe. Sem logo no
+          // catalogo o card fica so com a arte — melhor que um nome generico
+          // por cima dela.
+          // FAIXA DE DECISAO no card aberto (pedido do dono, 20/09/2026:
+          // "quando abrir o card, mais informacoes — nota, se subiu ou caiu
+          // no trending, coisas uteis para tomada de decisao"). Canto INFERIOR
+          // DIREITO, oposto ao logo, sobre o mesmo veu: selo IMDb + nota,
+          // ano/temporadas, classificacao e a VARIACAO na fileira desde a
+          // ultima visita (tendencia.h): ↑n verde, ↓n vermelho, "Novo" na cor
+          // de realce. Sem historico ainda, sem chip — nada de inventar.
+          // Progresso em andamento vira um fio na base do card.
+          if (abre > 0.01f && cItem) desenhaFaixaAberta(cItem, r, px, py, w, h, esc, abre);
+          if (abre > 0.01f && cItem && cItem->logo[0]) {
+            // Largura pedida pela tela, nao o teto generico de 640: o logo
+            // nunca passa de ~65% do card, e decodificar o arquivo inteiro
+            // so para encolher depois era cache e tempo jogados fora.
+            const char *urlL = artehero_logo_sessao_larg(cItem, w * 0.65f);
+            GLuint tl = tex_obter_larg(urlL, w * 0.65f);
+            if (tl) {
+              float pad = 34.0f * esc;
+              float ap = tex_aspecto(urlL);
+              float hL, wL, maxW;
+              // O veu ja saiu em desenhaFaixaAberta, o mesmo para o logo e
+              // para a faixa.
+              // SEM CHUTE DE ASPECTO. O fallback de 4.0 que estava aqui
+              // desenhava um retangulo mais largo que a imagem, e o modo de
+              // cartao RECORTA o que sobra — o "REACHER" saia com as duas
+              // pontas cortadas. Sem medida do arquivo, nao desenha.
+              if (ap <= 0.0f) { tl = 0; }
+              // Largura MANDA, altura sai dela: assim o retangulo tem sempre o
+              // aspecto da imagem e o recorte nunca acontece.
+              //
+              // MEDIDO na TCL no card aberto: logo de 163 px num card de 565
+              // (29% da largura) e 66 de altura num card de 320 (21%). O teto de
+              // altura existe para logo quadrado nao virar um bloco.
+              maxW = w * 0.30f;
+              wL = maxW; hL = wL / ap;
+              if (hL > h * 0.22f) { hL = h * 0.22f; wL = hL * ap; }
+              // GFX_MARCA/GFX_TEXTO, NAO GFX_CARD. O modo de cartao e para
+              // ARTE: ele faz cover com 3% de over-scan de proposito (a margem
+              // de parallax) e descarta o alfa da textura. Num logo isso corta
+              // as duas pontas — o "REACHER" saia como "EACHE" — e ainda pinta
+              // de preto onde deveria ser transparente.
+              //
+              // O par certo ja existia no projeto, na fileira de destaque:
+              // tex_marca_escura decide se a forma vem do alfa (logo claro) ou
+              // do desenho (logo escuro). Reusado aqui em vez de reinventado.
+              if (tl) { GfxRect rl = { px + pad, py + h - pad - hL, wL, hL };
+                GfxModo m = tex_marca_escura(urlL) ? GFX_MARCA : GFX_TEXTO;
+                gfx_tex_aspect_atual = 0.0f;
+                gfx_rect(rl, tl, m, 0, 0, 0, 0.0f, 1, 1, 1, abre); }
+            }
+          }
+  if (editorial(tipo)) desenhaEditorialCard(cItem, tipo, px, py, w, h, raio);
+  gfx_veu_card_limpar();
+}
+
+// Chamado pelo menu do cartaz, DEPOIS do veu: repinta o cartao focado inteiro
+// (anel, arte, veus, rotulo, logo) onde a home o pintou neste quadro. 0 se o
+// cartao focado nao foi pintado (destaque, pasta, pilha).
+int home_cartao_foco_por_cima(int indice) {
+  float og;
+  if (!temCartaoFoco || !temItemFoco || itemFoco.indice != indice) return 0;
+  og = gfx_opacidade_grupo;
+  gfx_opacidade_grupo = 1.0f;
+  pintarCartao(&cartaoFoco, cartaoFocoRaio);
+  gfx_opacidade_grupo = og;
+  return 1;
+}
+
 void home_desenhar(Uint32 agora) {
   // O REBORDO DO CARTAZ EM FOCO e ajuste da pessoa, e ele mora no shader do
   // GFX_CARD (nao e um retangulo desenhado por cima): por isso vai por uma
@@ -4729,6 +4922,7 @@ void home_desenhar(Uint32 agora) {
   if (reentra) heroAutoDesligado = 0;   // outra visita a home: o carrossel volta
   int ordemFil = 0;
   fileirasVistasEm = agora ? agora : 1u;
+  temCartaoFoco = 0;
   // A LUZ DO FOCO: uma varredura por foco novo, nenhuma com a tecla presa.
   float varreFoco = revela_varre(&revVarre,
                                  focoHero ? -1 : foco.fileira * 64 + foco.coluna, agora);
@@ -5080,162 +5274,14 @@ void home_desenhar(Uint32 agora) {
           // valor aparece em card de episodio e botao de detalhe na referencia:
           // e UM numero para o app inteiro (NV_DETW_ANEL ja valia 4 e so era
           // usado no detalhe).
-          float raio = raioDe(w, h);
-          if (f > 0.01f && ajustes_borda_foco()) {
-            GfxRect borda = { px - NV_ANEL_FOCO, py - NV_ANEL_FOCO,
-                              w + NV_ANEL_FOCO * 2, h + NV_ANEL_FOCO * 2 };
-            float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
-            // RAIO DE FORA = raio do cartaz + espessura do anel, em pixels,
-            // normalizado pelo lado menor DA BORDA. Passar o `raio` do cartaz
-            // direto dava um canto de fora mais fechado que o de dentro — as
-            // "pontas feias" da foto do dono (21/09/2026); e a conta que a
-            // fileira de colecoes ja fazia.
-            { float menor = w < h ? w : h;
-              if (ajustes_vidro()) gfx_vidro_cartao((GfxRect){px, py, w, h}, raio * menor / h, f, 1.0f);
-              else
-              gfx_cor(borda, (raio * menor + NV_ANEL_FOCO) / (menor + 2 * NV_ANEL_FOCO),
-                      ar, ag, ab, f); }
-          }
-          GfxRect card = { px, py, w, h };
-          // CARD SEM ARTE: superficie solida, nao o vazio. Sem isto o card
-          // ficava da cor do fundo — MEDIDO: #242429 sobre #252629, diferenca
-          // de (1,2,0), contraste 1,0:1. Era literalmente invisivel, e foi a
-          // origem da queixa "nao aparecem todos os posteres": eles apareciam,
-          // do tom exato do fundo. A referencia desenha #2C2C2C na caixa exata.
-          gfx_veu_card_limpar();
-          if (t) veusDoCard(cItem, tipo, deitado, abre, 1);
-          desenhaArteCard(card, tipo, caminho, t, cItem, f, raio, aArte,
-                          (!focoHero && focus_indice(&foco, r, c)) ? varreFoco : 0.0f);
-          if (t) gfx_veu_na_arte = 1; else gfx_veu_card_limpar();
-          // SELO DE ASSISTIDO: disco branco com um "v" escuro, no canto
-          // superior direito do poster. A referencia o tem e nos nao tinhamos
-          // indicador nenhum na home — sem ele nao da para varrer uma fileira e
-          // ver o que ja foi visto, que e o principal uso da tela.
-          //
-          // >= 90% e "visto", nao 100%: quase ninguem assiste os creditos, e o
-          // proprio player ja arredonda para o fim quando falta menos de um
-          // minuto (player_encerrar). Marcar so em 100% deixaria de fora
-          // justamente o que acabou de ser assistido.
-          //
-          // MEDIDO no web (.title-watched-badge, components.css:4744): disco de
-          // 34 px a 14 px do canto, fundo na COR DE REALCE (--secondary-color),
-          // icone de 28 px em on-secondary. Tamanho FIXO, nao proporcional ao
-          // card: era `w * 0.16`, e no card aberto (w ~730) virava um disco de
-          // 117 px — a "badge" que o dono fotografou e perguntou o que era.
-          //
-          // O "v" e o icone check.png (art/icones, com o .svg ao lado), nao
-          // dois retangulos: gfx_rect nao gira, e os dois tracos horizontais
-          // liam como um traco "—", nao como um check. Nao e o visto.png: esse
-          // e um OLHO, o do botao "marcar como visto" do detalhe, e no disco
-          // de 34 px virava um olho sobre o poster.
-          //
-          // O ESTADO E cat_visto (#212), nao mais `progresso >= 90`: o
-          // progresso so existe para o que esta pausado, entao filme visto
-          // no Trakt (ou marcado pelo menu, que zera o progresso) nunca
-          // ganhava o selo. Leitura O(1) por cartaz (hash em catalogo.c),
-          // sem pedido de rede: o mapa ja veio no ciclo da descoberta.
-          if (cItem && tipo != FILEIRA_CONTINUE && tipo != FILEIRA_RETORNO &&
-              ajustes_selo_visto() && cat_visto(cItem)) {
-            float d = 34.0f;
-            float mx = px + w - d - 14.0f, my = py + 14.0f;
-            GfxRect disco = { mx, my, d, d };
-            float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
-            // Sombra rasa (box-shadow 0 14px 24px .3 na referencia): separa o
-            // disco claro de um poster claro sem virar halo.
-            { GfxRect sombra = { mx, my + 3.0f, d, d };
-              gfx_cor(sombra, 0.5f, 0, 0, 0, 0.28f); }
-            gfx_cor(disco, 0.5f, ar, ag, ab, 1.0f);
-            { float ic = 22.0f;
-              GfxRect g = { mx + (d - ic) * 0.5f, my + (d - ic) * 0.5f, ic, ic };
-              gfx_icone(g, "check", 0.08f, 0.08f, 0.09f, 1.0f); }
-          }
+          const float raio = raioDe(w, h);
+          CartaoFoco ck = { r, c, tipo, cItem, caminho, t, aArte, deitado, rotuloFora, abre, esc, f,
+                            px, py, w, h, (!focoHero && focus_indice(&foco, r, c)) ? varreFoco : 0.0f };
+          pintarCartao(&ck, raio);
+          if (!focoHero && focus_indice(&foco, r, c)) { cartaoFoco = ck; cartaoFocoRaio = raio; temCartaoFoco = 1;
+            snprintf(cartaoFocoArte, sizeof cartaoFocoArte, "%s", caminho ? caminho : "");
+            cartaoFoco.caminho = caminho ? cartaoFocoArte : NULL; }
 
-          // `cardDepthEnabled` mais o interruptor por secao: `cardDepthPosters`
-          // nas fileiras de catalogo, `cardDepthContinueWatching` na primeira.
-          desenhaProfundidade(card, raio,
-                              tipo == FILEIRA_CONTINUE ? ajustes_profundidade_cw()
-                                                       : ajustes_profundidade_posters());
-
-          // --- posterLabelsEnabled ---------------------------------------
-          // Card DEITADO: a legenda vai DENTRO da moldura, sobre um degrade que
-          // cobre 54% da altura, com 14 de recuo lateral e 12 da base
-          // (.home-poster-landscape-copy). Card EM PE: vai ABAIXO do poster, num
-          // bloco de 74 de altura com 8 de padding no topo (.home-poster-copy).
-          // A faixa deitada da Dinamica SEMPRE leva o titulo dentro do cartao (a
-          // Apple TV nao deixa cartao sem nome), com o rotulo ligado ou nao.
-          desenhaRotuloCard(cItem, tipo, deitado, rotuloFora, px, py, w, h, raio);
-
-          if(tipo==FILEIRA_TOP10) desenhaRankPequeno(c+1, px, py, h);
-
-          if (tipo == FILEIRA_CONTINUE)
-            continuar_desenhar(cItem, (GfxRect){px, py, w, h}, raio);
-          if (tipo == FILEIRA_RETORNO)
-            continuar_desenhar(cItem, (GfxRect){px, py, w, h}, raio);
-
-          // 4. DESTAQUE: titulo e metadados DENTRO da arte, sobre um veu
-          // escuro na base — como o Apple TV faz. O titulo faz o papel do logo
-          // embutido na arte-chave, que nos nao temos (o TMDB nem sempre tem
-          // logo; quando tiver, entra aqui no lugar do texto).
-          // CARD ABERTO: veu na base e o LOGO do titulo, como na TCL.
-          //
-          // O logo e nao o nome escrito com a fonte da interface: cada producao
-          // tem tipografia propria, e escrever "The Pitt" em Inter apaga
-          // justamente o que faz o titulo ser reconhecido de longe. Sem logo no
-          // catalogo o card fica so com a arte — melhor que um nome generico
-          // por cima dela.
-          // FAIXA DE DECISAO no card aberto (pedido do dono, 20/09/2026:
-          // "quando abrir o card, mais informacoes — nota, se subiu ou caiu
-          // no trending, coisas uteis para tomada de decisao"). Canto INFERIOR
-          // DIREITO, oposto ao logo, sobre o mesmo veu: selo IMDb + nota,
-          // ano/temporadas, classificacao e a VARIACAO na fileira desde a
-          // ultima visita (tendencia.h): ↑n verde, ↓n vermelho, "Novo" na cor
-          // de realce. Sem historico ainda, sem chip — nada de inventar.
-          // Progresso em andamento vira um fio na base do card.
-          if (abre > 0.01f && cItem) desenhaFaixaAberta(cItem, r, px, py, w, h, esc, abre);
-          if (abre > 0.01f && cItem && cItem->logo[0]) {
-            // Largura pedida pela tela, nao o teto generico de 640: o logo
-            // nunca passa de ~65% do card, e decodificar o arquivo inteiro
-            // so para encolher depois era cache e tempo jogados fora.
-            const char *urlL = artehero_logo_sessao_larg(cItem, w * 0.65f);
-            GLuint tl = tex_obter_larg(urlL, w * 0.65f);
-            if (tl) {
-              float pad = 34.0f * esc;
-              float ap = tex_aspecto(urlL);
-              float hL, wL, maxW;
-              // O veu ja saiu em desenhaFaixaAberta, o mesmo para o logo e
-              // para a faixa.
-              // SEM CHUTE DE ASPECTO. O fallback de 4.0 que estava aqui
-              // desenhava um retangulo mais largo que a imagem, e o modo de
-              // cartao RECORTA o que sobra — o "REACHER" saia com as duas
-              // pontas cortadas. Sem medida do arquivo, nao desenha.
-              if (ap <= 0.0f) { tl = 0; }
-              // Largura MANDA, altura sai dela: assim o retangulo tem sempre o
-              // aspecto da imagem e o recorte nunca acontece.
-              //
-              // MEDIDO na TCL no card aberto: logo de 163 px num card de 565
-              // (29% da largura) e 66 de altura num card de 320 (21%). O teto de
-              // altura existe para logo quadrado nao virar um bloco.
-              maxW = w * 0.30f;
-              wL = maxW; hL = wL / ap;
-              if (hL > h * 0.22f) { hL = h * 0.22f; wL = hL * ap; }
-              // GFX_MARCA/GFX_TEXTO, NAO GFX_CARD. O modo de cartao e para
-              // ARTE: ele faz cover com 3% de over-scan de proposito (a margem
-              // de parallax) e descarta o alfa da textura. Num logo isso corta
-              // as duas pontas — o "REACHER" saia como "EACHE" — e ainda pinta
-              // de preto onde deveria ser transparente.
-              //
-              // O par certo ja existia no projeto, na fileira de destaque:
-              // tex_marca_escura decide se a forma vem do alfa (logo claro) ou
-              // do desenho (logo escuro). Reusado aqui em vez de reinventado.
-              if (tl) { GfxRect rl = { px + pad, py + h - pad - hL, wL, hL };
-                GfxModo m = tex_marca_escura(urlL) ? GFX_MARCA : GFX_TEXTO;
-                gfx_tex_aspect_atual = 0.0f;
-                gfx_rect(rl, tl, m, 0, 0, 0, 0.0f, 1, 1, 1, abre); }
-            }
-          }
-
-          if (editorial(tipo)) desenhaEditorialCard(cItem, tipo, px, py, w, h, raio);
-          gfx_veu_card_limpar();
 
           // Feedback progressivo do gesto, sem duplicar o menu contextual. A
           // barra aparece somente enquanto o mesmo item esta sob pressao;
