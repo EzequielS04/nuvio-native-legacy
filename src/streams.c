@@ -1166,9 +1166,41 @@ static int temMarca(int i, int automatica) {
   (void)automatica;
   return i >= 0 && (i == atual || i == preferida || (i == melhorFolha && nFiltrados() > 1));
 }
+// Altura de uma linha: base, marca, e o nome do arquivo que abre por mola na
+// linha em foco. Usa nOrdem como o indice que a linha vai receber.
+static float alturaLinha(int i, int automatica) {
+  float h = FOLHA_LINHA_H + (temMarca(i, automatica) ? FOLHA_MARCA_H : 0);
+  if (ajustes_fonte_texto_addon()) {
+    char tmp[FOLHA_ADDON_LINHAS][192];
+    int nl = linhasAddon(&lista[i], tmp, FOLHA_ADDON_LINHAS);
+    h = 20 + 40 + nl * FOLHA_ADDON_LD + 18 + (temMarca(i, automatica) ? FOLHA_MARCA_H : 0);
+    if (h < 96) h = 96;
+  } else if (!arquivoDa(&lista[i])[0]) ;
+  else if (grupo == 1 && nOrdem == foco) h += FOLHA_ARQ_H * abreFoco;
+  else if (nOrdem == linhaAnt)           h += FOLHA_ARQ_H * abreAnt;
+  return h;
+}
+static void porLinha(int i, float *y, int automatica) {
+  float h = alturaLinha(i, automatica);
+  ordem[nOrdem] = i;
+  linhaY[nOrdem] = *y;
+  linhaH[nOrdem] = h;
+  *y += h + FOLHA_LINHA_GAP;
+  nOrdem++;
+}
+// Tamanho para ordenar: desconhecido (0) vai para o fim do grupo.
+static long tamanhoOrdem(int i) { return lista[i].tamanhoMB > 0 ? lista[i].tamanhoMB : -1; }
+
+// A LISTA (dono, 02/10): a fonte "Melhor para esta TV" e a PRIMEIRA linha,
+// sozinha e sem cabecalho — o selo dela ja diz o que ela e —, e cada grupo
+// vem do MAIOR arquivo para o menor. Tamanho e o que mais separa duas fontes
+// do mesmo grupo de qualidade (Remux de 60 GB contra encode de 4 GB), e a
+// ordem do addon nao e a de ninguem que esta escolhendo.
+static int *grupoTmp;
+static int grupoTmpCap;
 static void montar(int automatica) {
   float y = 0;
-  int g, i;
+  int g, i, k, m = -1, nt;
   if (ordemCap < n) {
     int cap = n + 32;
     int *o = realloc(ordem, cap * sizeof *o);
@@ -1180,33 +1212,34 @@ static void montar(int automatica) {
     if (!o || !a || !b) { nOrdem = 0; return; }
     ordemCap = cap;
   }
+  if (grupoTmpCap < n) {
+    int *t = realloc(grupoTmp, (n + 32) * sizeof *t);
+    if (!t) { nOrdem = 0; return; }
+    grupoTmp = t; grupoTmpCap = n + 32;
+  }
   nOrdem = 0;
+  if (melhorFolha >= 0 && melhorFolha < n && passaFiltro(melhorFolha) && nFiltrados() > 1) {
+    m = melhorFolha;
+    porLinha(m, &y, automatica);
+    y += FOLHA_SEC_GAP - FOLHA_LINHA_GAP;
+  }
   for (g = 0; g < FOLHA_GRUPOS; g++) {
     secN[g] = 0;
-    for (i = 0; i < n; i++) {
-      float h;
-      if (!passaFiltro(i) || grupoRes(&lista[i]) != g) continue;
-      if (!secN[g]) {
-        if (nOrdem) y += FOLHA_SEC_GAP;
-        secY[g] = y;
-        y += FOLHA_SEC_H;
-      }
-      secN[g]++;
-      h = FOLHA_LINHA_H + (temMarca(i, automatica) ? FOLHA_MARCA_H : 0);
-      if (ajustes_fonte_texto_addon()) {
-        char tmp[FOLHA_ADDON_LINHAS][192];
-        int nl = linhasAddon(&lista[i], tmp, FOLHA_ADDON_LINHAS);
-        h = 20 + 40 + nl * FOLHA_ADDON_LD + 18 + (temMarca(i, automatica) ? FOLHA_MARCA_H : 0);
-        if (h < 96) h = 96;
-      } else if (!arquivoDa(&lista[i])[0]) ;
-      else if (grupo == 1 && nOrdem == foco) h += FOLHA_ARQ_H * abreFoco;
-      else if (nOrdem == linhaAnt)           h += FOLHA_ARQ_H * abreAnt;
-      ordem[nOrdem] = i;
-      linhaY[nOrdem] = y;
-      linhaH[nOrdem] = h;
-      y += h + FOLHA_LINHA_GAP;
-      nOrdem++;
+    nt = 0;
+    for (i = 0; i < n; i++)
+      if (i != m && passaFiltro(i) && grupoRes(&lista[i]) == g) grupoTmp[nt++] = i;
+    // Insercao estavel: em tamanho igual vale a ordem do addon.
+    for (k = 1; k < nt; k++) {
+      int v = grupoTmp[k], j = k - 1;
+      while (j >= 0 && tamanhoOrdem(grupoTmp[j]) < tamanhoOrdem(v)) { grupoTmp[j + 1] = grupoTmp[j]; j--; }
+      grupoTmp[j + 1] = v;
     }
+    if (!nt) continue;
+    if (nOrdem) y += FOLHA_SEC_GAP;
+    secY[g] = y;
+    y += FOLHA_SEC_H;
+    secN[g] = nt;
+    for (k = 0; k < nt; k++) porLinha(grupoTmp[k], &y, automatica);
   }
   alturaTotal = y;
 }
