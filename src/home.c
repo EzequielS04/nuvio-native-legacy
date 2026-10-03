@@ -4742,6 +4742,19 @@ void home_desenhar(Uint32 agora) {
       float meia = 0.5f * (NV_LEGACY_ROW_HEAD_H + alturaTotalFil(r));
       fade = anim_clamp((y + meia) / meia, 0, 1);
     }
+    // A FILEIRA DE CIMA ESPIA (dono: "quando desce, a fileira de cima some —
+    // nao deveria mostrar um pedaco dela?"). O esvanecer acima se mede pelo
+    // CENTRO da fileira (Dinamica). Se a de
+    // cima e ALTA (destaque 4:3, ranking), o centro dela ja esta fora da tela
+    // quando a de baixo ganha o foco e a metade de baixo — que continua na
+    // tela — saia com opacidade zero: um vazio preto no alto. Medido pela BASE,
+    // a fatia que sobra aparece, mais fraca quanto menos sobra (0 com a base
+    // fora da tela). Nunca escurece o que o calculo de cima ja deixava claro.
+    if (layoutHome() == HOME_LAYOUT_DINAMICA) {
+      float base = y + NV_LEGACY_ROW_HEAD_H + alturaTotalFil(r);
+      float fatia = anim_clamp(base / 480.0f, 0, 1);
+      if (fatia > fade) fade = fatia;
+    }
     gfx_opacidade_grupo=fade*fade*(3-2*fade)*(1.0f-cinema);
     const float grupoFil = gfx_opacidade_grupo;
     { int n = fileiras[r].n;
