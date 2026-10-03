@@ -5956,6 +5956,8 @@ void detail_desenhar(Uint32 agora) {
     GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     if (trailer_mostra_video()) gfx_furo(tela);
     else gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    { const CatItem *ct = cat_item(idx);
+      trailer_osd_desenhar(ct ? ct->titulo : "", 1.0f); }
     return;
   }
   backdropRect(&alvo, &aEntrada);

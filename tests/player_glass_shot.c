@@ -32,6 +32,7 @@
 #include "progresso.h"
 #include "posplay.h"
 #include "reacao.h"
+#include "trailer.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -65,6 +66,8 @@ static void salvar(const char *id) {
 }
 
 static Uint32 relogio = 100000;
+// Telas fora do player (trailer, ao vivo, home): desenhadas por cima.
+static void (*extra)(void);
 static void quadros(int n) {
   int i;
   for (i = 0; i < n; i++) {
@@ -81,6 +84,7 @@ static void quadros(int n) {
     faixas_desenhar(relogio);
     if (stream_folha_anim() > 0.02f) plrilha_esconder();
     plrilha_desenhar(relogio);
+    if (extra) extra();
     SDL_Delay(1);
   }
 }
@@ -214,6 +218,20 @@ static CatItem serieComEps(void) {
     vistoep_definir(f.imdb, 1, 1, 1); vistoep_definir(f.imdb, 1, 2, 1);
     prog_gravar_local(f.imdb, 1, 3, 1948.0, 3360.0);
     return f;
+}
+
+// Uma arte do mockup em tela cheia, como o video atras.
+static void arteCheia(const char *rel, float escuro) {
+  const char *u = img(rel);
+  GLuint t = tex_obter_hero(u);
+  if (t) { gfx_tex_aspect_atual = tex_aspecto(u);
+           gfx_rect((GfxRect){ 0, 0, 1920, 1080 }, t, GFX_CARD, 0, 0, 0, 0, 0, 0, 0, 1);
+           gfx_tex_aspect_atual = 0.0f; }
+  if (escuro > 0.0f) gfx_cor((GfxRect){ 0, 0, 1920, 1080 }, 0, 0, 0, 0, escuro);
+}
+static void desenhaTrailer(void) {
+  arteCheia("img/bd/03.jpg", 0.0f);
+  trailer_osd_desenhar("One Battle After Another", 1.0f);
 }
 
 static int quer(int argc, char **argv, const char *id) {
@@ -533,6 +551,15 @@ int main(int argc, char **argv) {
     stream_folha_abrir();
     quadros(90);
     salvar("fontes");
+  }
+  if (quer(argc, argv, "trailer")) {
+    VideoSimulacao v; memset(&v, 0, sizeof v);
+    v.pos = 52; v.duracao = 144; v.bufferFim = 86.4; video_simular(&v);
+    trailer_shot_pausado(1);
+    extra = desenhaTrailer;
+    quadros(60);
+    salvar("trailer");
+    extra = NULL; trailer_shot_pausado(0);
   }
   puts("player_glass_shot: ok");
   return 0;
