@@ -224,7 +224,19 @@ object NvPlayer {
             val renderizadores = androidx.media3.exoplayer.DefaultRenderersFactory(act)
                 .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
                 .setEnableDecoderFallback(true)
+            // TETO DO BUFFER EM BYTES (03/10, TCL C755: dois OutOfMemoryError
+            // tocando filme). O DefaultLoadControl aceita ate ~144 MB de video e
+            // audio, e esses bytes moram no heap JAVA, que nesta TV para em
+            // 192 MB: um remux 4K enchia o buffer e derrubava o app. Um quarto
+            // do heap, entre 32 e 96 MB, ainda segura dezenas de segundos de 4K.
+            val tetoBuffer = (Runtime.getRuntime().maxMemory() / 4)
+                .coerceIn(32L shl 20, 96L shl 20).toInt()
+            val carga = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+                .setTargetBufferBytes(tetoBuffer)
+                .setPrioritizeTimeOverSizeThresholds(false)
+                .build()
             val p = ExoPlayer.Builder(act, renderizadores)
+                .setLoadControl(carga)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(act)
                     // DefaultDataSource e nao so http: o trailer da Apple chega como
                     // file:// (master reduzido a uma variante em dados/trailer, trailerapple.c).

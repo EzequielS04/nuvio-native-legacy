@@ -32,6 +32,7 @@
         android:icon="@mipmap/ic_launcher"
         android:banner="@drawable/banner"
         android:allowBackup="false"
+        android:largeHeap="true"
         android:usesCleartextTraffic="true"
         android:hasCode="true"
         android:extractNativeLibs="true"
