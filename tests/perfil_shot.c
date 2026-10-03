@@ -170,7 +170,9 @@ int main(int argc, char **argv) {
     assert(f);
     fprintf(f, "idioma 0\nselected_theme 2\n");
     // NUVIO_SHOT_VIDRO=1: Interface de vidro ligada (V_LIGA: 0 = Ligado).
-    if (getenv("NUVIO_SHOT_VIDRO")) fprintf(f, "vidroLocal 0\n");
+    // NUVIO_SHOT_VIDRO=0: o material solido (vidroLocal 1).
+    if (getenv("NUVIO_SHOT_VIDRO"))
+      fprintf(f, "vidroLocal %d\n", *getenv("NUVIO_SHOT_VIDRO") == '0' ? 1 : 0);
     fclose(f);
     ajustes_dir(dados_dir()); }
 
