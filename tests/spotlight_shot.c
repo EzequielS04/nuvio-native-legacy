@@ -269,7 +269,9 @@ int main(int argc, char **argv) {
     capturaQuadros(saida, "crescendo", 7);
     h1 = spot_altura_corpo();
     printf("corpo: vazio %.0f -> crescendo %.0f\n", h0, h1);
-    assert(h1 > h0 + 20.0f && h1 < 780.0f); }
+    // A 150% a ilha ja nasce quase no teto da tela virtual (menor), entao o
+    // crescimento que sobra e curto: o piso acompanha o Tamanho da interface.
+    assert(h1 > h0 + (gfx_escala_ui() > 1.2f ? 5.0f : 20.0f) && h1 < 780.0f); }
   captura(saida, "digitado");
   assert(spot_altura_corpo() > 300.0f);
   assert(achar(T_TOPO, NULL) >= 0);

@@ -83,6 +83,7 @@
 #include "layout.h"
 #include "ajustes.h"
 #include "ctxmenu.h"
+#include "escala.h"
 
 // Tinta do texto sobre o foco: em vidro o foco e so contorno sobre superficie
 // escura, entao o texto fica CLARO mesmo com realce branco (que pede escuro).
@@ -408,6 +409,17 @@ static float bibW(void) {
   ajustes_area_conteudo(NV_BIB_X, NV_TELA_W - NV_BIB_DIR, NULL, &w);
   return w;
 }
+// O TOPO (modos, chips, botoes, titulo, resumo e selo) NASCE A 120% E ACOMPANHA
+// o Tamanho da interface acima disso (dono, 03/10); a GRADE de cartazes fica no
+// tamanho de sempre. O topo e medido e desenhado numa tela virtual de 1920/hs x
+// 1080/hs (escala.h): hdrX/hdrW sao a area util em unidades virtuais — o mesmo
+// canto esquerdo e a mesma largura reais de bibX/bibW — e a grade comeca
+// DEPOIS do topo ampliado (gradeYBase). So biblioteca_desenhar liga a escala.
+#define BIB_TOPO_ESCALA_MIN 1.2f
+static float bibHS(void) { return escala_min(BIB_TOPO_ESCALA_MIN); }
+static float hdrX(void) { return bibX() / bibHS(); }
+static float hdrW(void) { return bibW() / bibHS(); }
+static float hdrDir(void) { return NV_BIB_DIR / bibHS(); }
 // Cartazes: o cartaz fica nos 268 medidos e sai uma coluna (6 -> 5 com a rail
 // fixa: 5 x 268 + 4 x 24 = 1436 nos 1584). Encolher o cartaz para manter seis
 // mudaria o raio, a borda e a arte pedida — e o dono ja aprovou esse tamanho.
@@ -449,7 +461,7 @@ static float passoLinha(void) {
   return BIB_LINHA_PASSO;
 }
 static float gradeY(void) {
-  return estado() == EST_ITENS ? BIB_GRADE_Y_ABERTA : BIB_GRADE_Y_TITULOS;
+  return (estado() == EST_ITENS ? BIB_GRADE_Y_ABERTA : BIB_GRADE_Y_TITULOS) * bibHS();
 }
 static int nLinhas(void) { return (nCelulas + colunas() - 1) / colunas(); }
 
@@ -816,14 +828,14 @@ static int ctxListaIdx;   // a lista de onde o menu saiu; "Abrir" volta para ela
 static int colunaSobFaixa(void) {
   float cx, passo = passoColuna();
   if (foco.fileira == BIB_FIL_MODO) {
-    float x = bibX() + BIB_SEG_PAD;
+    float x = hdrX() + BIB_SEG_PAD;
     for (int a = 0; a < foco.coluna && a < BIB_N_MODOS; a++) x += larguraModo(a) + BIB_SEG_ITEM_GAP;
     cx = x + larguraModo(foco.coluna < BIB_N_MODOS ? foco.coluna : 0) * 0.5f;
   } else {
     cx = pickerX(foco.coluna) + pickerLargura(foco.coluna) * 0.5f;
   }
   if (passo < 1.0f) return 0;
-  return (int)((cx - bibX()) / passo);
+  return (int)((cx * bibHS() - bibX()) / passo);  // cx e virtual do topo
 }
 
 static void descerDaFaixa(void) {
@@ -1320,7 +1332,7 @@ static float larguraSeletor(void) {
   return w;
 }
 static void desenhaModos(void) {
-  GfxRect c = { bibX(), BIB_FAIXA_Y, larguraSeletor(), BIB_SEG_H };
+  GfxRect c = { hdrX(), BIB_FAIXA_Y, larguraSeletor(), BIB_SEG_H };
   float x = c.x + BIB_SEG_PAD, ar, ag, ab;
   ajustes_acento(&ar, &ag, &ab);
   if (ajustes_vidro()) gfx_cor(c, 0.5f, 1, 1, 1, .06f);
@@ -1383,7 +1395,7 @@ static float pickerLargura(int p) {
 }
 
 static float pickerX(int p) {
-  float x = bibX() + larguraSeletor() + BIB_FAIXA_GAP * 2.0f + 1.0f;
+  float x = hdrX() + larguraSeletor() + BIB_FAIXA_GAP * 2.0f + 1.0f;
   int i;
   for (i = 0; i < p; i++) x += pickerLargura(i) + BIB_FAIXA_GAP;
   return x;
@@ -1425,7 +1437,7 @@ static float larguraAcao(const char *rot) {
        + BIB_CHIP_PADX * 2.0f + 8.0f;
 }
 static void desenhaAcoes(void) {
-  float x = bibX();
+  float x = hdrX();
   int a;
   for (a = 0; a < 3; a++) {
     GfxRect r = { x, BIB_FAIXA_Y + (BIB_SEG_H - BIB_CHIP_H) * 0.5f, 0.0f, BIB_CHIP_H };
@@ -1974,16 +1986,19 @@ static void desenhaCabecalho(void) {
   // aberta sobra o nome dela, ao lado da pilula e centrado nela.
   { float px, py, pw, ph;
     if (menu_pilula_rect(&px, &py, &pw, &ph)) {
+      // A pilula do menu e medida em px reais; o topo desenha na tela virtual.
+      float hs = bibHS();
+      px /= hs; py /= hs; pw /= hs; ph /= hs;
       if (temAberta) {
-        float x0 = px + pw + NV_MENU_PILULA_VAO;
+        float x0 = px + pw + NV_MENU_PILULA_VAO / hs;
         TxtLinha t = txt_linha_corta(TXT_HEADLINE, aberta.titulo, 255, 255, 255, 255,
-                                     bibX() + bibW() - 320.0f - x0);
+                                     hdrX() + hdrW() - 320.0f - x0);
         txt_desenhar(t, x0, py + (ph - t.h) * 0.5f);
       }
     } else {
       TxtLinha t = txt_linha_corta(TXT_TITULO2, tit,
-                                   245, 245, 243, 255, bibW() - 320.0f);
-      txt_desenhar(t, bibX(), BIB_TOPO);
+                                   245, 245, 243, 255, hdrW() - 320.0f);
+      txt_desenhar(t, hdrX(), BIB_TOPO);
     } }
 
   // Selo de origem, alinhado a direita da area util. Espacado de proposito: no
@@ -2025,14 +2040,14 @@ static void desenhaCabecalho(void) {
       if (!strcmp(f, "TRAKT")) {
         float w = marcaTraktLargura(24.0f);
         if (w > 0.0f) {
-          marcaTrakt(NV_BIB_DIR - w, yBase - 24.0f + 3.0f, 24.0f, 255, 0.42f);
+          marcaTrakt(hdrDir() - w, yBase - 24.0f + 3.0f, 24.0f, 255, 0.42f);
           return;
         }
       }
       { TxtLinha m = txt_linha(TXT_HERO_SEC, "Hg", 104, 104, 104, 255);
         float w = txt_tracking(TXT_HERO_SEC, f, 104, 104, 104, -1.0f, 0.0f, 0.0f, 2.2f);
         txt_tracking(TXT_HERO_SEC, f, 104, 104, 104,
-                     NV_BIB_DIR - w, yBase - (float)m.h, 1.0f, 2.2f); } } }
+                     hdrDir() - w, yBase - (float)m.h, 1.0f, 2.2f); } } }
 }
 
 // Resumo a direita da barra de modos, e o recado da ultima acao quando houver.
@@ -2082,8 +2097,28 @@ static void desenhaResumo(void) {
   // O teto deixa a margem direita para o selo de origem.
   { TxtLinha t = txt_linha(TXT_TITULO2, "Hg", 255, 255, 255, 255);
     TxtLinha info = txt_linha_corta(TXT_CAPTION2, txt, 140, 140, 140, 255,
-                                    bibW() - 280.0f);
-    txt_desenhar(info, bibX(), BIB_TOPO + (float)t.h + 2.0f); }
+                                    hdrW() - 280.0f);
+    txt_desenhar(info, hdrX(), BIB_TOPO + (float)t.h + 2.0f); }
+}
+
+// BARRA DE PRESSAO LONGA NO CARTAO, a mesma da Home (home.c: trilho de 4 px
+// perto da base, preenchimento claro e a dica "Segure para opcoes"): enche em
+// NV_HOLD_MS, o mesmo relogio que abre o menu em biblioteca_atualizar. So no
+// cartao em foco que o OK esta segurando; desarma junto com okDesde.
+static void barraHold(GfxRect r, float a) {
+  float h;
+  if (!okDesde || ctx_aberto()) return;
+  h = anim_clamp((float)(SDL_GetTicks() - okDesde) / (float)NV_HOLD_MS, 0.0f, 1.0f);
+  if (h <= 0.0f) return;
+  { float g = r.w > 400.0f ? 28.0f : 16.0f;
+    float bx = r.x + g, bw = r.w - g * 2.0f;
+    GfxRect trilho = { bx, r.y + r.h - 16.0f, bw, 4.0f };
+    gfx_cor(trilho, 0.5f, 0.18f, 0.19f, 0.22f, 0.92f * a);
+    gfx_cor((GfxRect){ bx, trilho.y, bw * h, trilho.h }, 0.5f, 0.92f, 0.93f, 0.96f, a);
+    { TxtLinha dica = txt_linha(TXT_MINI, h >= 1.0f ? "Solte para abrir opções"
+                                                     : "Segure para opções",
+                                225, 228, 235, 255);
+      txt_desenhar_alpha(dica, bx, trilho.y - 8.0f - (float)dica.h, 0.92f * a); } }
 }
 
 void biblioteca_desenhar(Uint32 agora) {
@@ -2098,13 +2133,15 @@ void biblioteca_desenhar(Uint32 agora) {
   // fora por quadro — e o custo dominante nesta GPU e fill rate (gfx.c registra
   // que DUAS camadas de tela cheia derrubavam a Mali-G71 para ~40fps).
 
-  desenhaCabecalho();
-  if (temAberta) desenhaAcoes();
-  else {
-    desenhaModos();
-    for (int p = 0; p < 3; p++)           desenhaPicker(p, animPick[p]);
-  }
-  desenhaResumo();
+  { ESCALA_MIN_INI(BIB_TOPO_ESCALA_MIN);   // so o topo; a grade fica a 100%
+    desenhaCabecalho();
+    if (temAberta) desenhaAcoes();
+    else {
+      desenhaModos();
+      for (int p = 0; p < 3; p++)           desenhaPicker(p, animPick[p]);
+    }
+    desenhaResumo();
+    ESCALA_MIN_FIM(); }
 
   if (nCelulas == 0) {
     desenhaVazio();
@@ -2152,20 +2189,33 @@ void biblioteca_desenhar(Uint32 agora) {
 
         if (estado() == EST_LISTAS) {
           const LstLista *l = lst_lista(i);
-          if (exibicao == VIS_LISTA) desenhaLinhaLista(l, ty, f, ac);
-          else desenhaCartaoLista(l, (GfxRect){ bibX() + c * passoC, ty,
-                                                larguraCartaoLista(), BIB_LC_H }, f, ac);
+          if (exibicao == VIS_LISTA) {
+            desenhaLinhaLista(l, ty, f, ac);
+            if (i == celulaEmFoco()) barraHold((GfxRect){ bibX(), ty, bibW(), BIB_LL_H }, ac);
+          } else {
+            GfxRect rc = { bibX() + c * passoC, ty, larguraCartaoLista(), BIB_LC_H };
+            desenhaCartaoLista(l, rc, f, ac);
+            if (i == celulaEmFoco()) barraHold(rc, ac);
+          }
           continue;
         }
         { CatItem tmp;
           const CatItem *ci;
           if (estado() == EST_ITENS) ci = lst_item(i, &tmp) ? &tmp : NULL;
           else                       ci = itemFiltro(filtro[i], &tmp);
-          if (exibicao == VIS_LISTA) desenhaLinhaTitulo(ci, ty, f, ac);
-          else desenhaCartaz(ci, (GfxRect){ bibX() + c * passoC, ty,
-                                            BIB_CARD_W, BIB_POSTER_H }, f, ac,
-                             (r < BIB_MAX_LINHAS && c < BIB_COLUNAS_MAX)
-                               ? &revArte[r][c] : NULL, agora); }
+          if (exibicao == VIS_LISTA) {
+            desenhaLinhaTitulo(ci, ty, f, ac);
+            if (i == celulaEmFoco()) barraHold((GfxRect){ bibX(), ty, bibW(), BIB_LIN_H }, ac);
+          } else {
+            GfxRect rp = { bibX() + c * passoC, ty, BIB_CARD_W, BIB_POSTER_H };
+            desenhaCartaz(ci, rp, f, ac,
+                          (r < BIB_MAX_LINHAS && c < BIB_COLUNAS_MAX)
+                            ? &revArte[r][c] : NULL, agora);
+            if (i == celulaEmFoco()) {
+              float e = 1.0f + BIB_FOCO_ESCALA * f, bw = rp.w * e, bh = rp.h * e;
+              barraHold((GfxRect){ rp.x - (bw - rp.w) * 0.5f, rp.y - (bh - rp.h) * 0.5f, bw, bh }, ac);
+            }
+          } }
       }
     }
   }

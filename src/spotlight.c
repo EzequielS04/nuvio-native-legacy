@@ -56,6 +56,14 @@
 #include "celbotao.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
+// ESCALA COM PISO (dono, 03/10): o Spotlight inteiro nasce a 130% e acompanha o
+// Tamanho da interface acima disso. A tela virtual do arquivo e a do fator
+// efetivo, e e so o desenho publico que liga a escala (ESCALA_MIN_INI/FIM).
+#define SP_ESCALA_MIN 1.3f
+#undef NV_TELA_W
+#undef NV_TELA_H
+#define NV_TELA_W (1920.0f / escala_min(SP_ESCALA_MIN))
+#define NV_TELA_H (1080.0f / escala_min(SP_ESCALA_MIN))
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -76,7 +84,11 @@ static float spBW = SP_BW_BASE;
 #define SP_BH        76.0f
 #define SP_RAIO      36.0f          // px do corpo aberto; a barra sozinha e pilula
 #define SP_CORPO_Y   (SP_BY + SP_BH)
-#define SP_CORPO_MAX (NV_TELA_H - 56.0f - SP_CORPO_Y)   // 1024 em 1080; tela virtual (escala.h)
+// A ilha dos resultados desce ate perto do fim da tela (dono, 03/10: "a lista
+// debaixo descer mais ate o final, que ta muito curta"): 40 de margem embaixo,
+// como as outras ilhas, e nao os 56 de antes. Tela virtual (escala.h).
+#define SP_MARGEM_B  40.0f
+#define SP_CORPO_MAX (NV_TELA_H - SP_MARGEM_B - SP_CORPO_Y)
 // DUAS ILHAS (Glass UI, mockup "ilha" tela 6): o campo e uma pilula sozinha e
 // os resultados moram numa segunda ilha SP_ILHA_VAO abaixo dela. O recuo de
 // cima do corpo conta o vao e o ar de dentro da ilha de baixo: 22 de padding
@@ -1214,16 +1226,11 @@ static float alturaLista(void) { return nLin ? lin[nLin - 1].y + lin[nLin - 1].h
 static float alturaTeclado(void) { return (kbFil + 1) * SP_KB_PASSO - SP_TECLA_GAP + 52.0f; }
 static float corpoAlvo(void) {
   float h = alturaLista(), teto = SP_CORPO_MAX - SP_CPAD_T - SP_CPAD_B - SP_RODAPE_H;
-  int i;
-  // LISTA MAIOR QUE A ILHA: a janela termina no fim de uma linha inteira, e
-  // nao no meio da proxima — a linha cortada encostava no rodape ("The
-  // Terminal List" pela metade sobre o "OK Abrir", captura de 02/10).
-  if (h > teto) {
-    float fim = 0.0f;
-    for (i = 0; i < nLin; i++)
-      if (lin[i].y + lin[i].h <= teto) fim = lin[i].y + lin[i].h;
-    h = fim > 0.0f ? fim : teto;
-  }
+  // LISTA MAIOR QUE A ILHA: a ilha desce ate a margem e a janela mostra o
+  // maximo de linhas; a ultima, se nao couber, e cortada pelo recorte da lista
+  // (e a pista de que ha mais para rolar). Antes a janela terminava na ultima
+  // linha INTEIRA e a ilha parava um pedaco acima do fim da tela.
+  if (h > teto) h = teto;
   if (kbAberto && alturaTeclado() > h) h = alturaTeclado();
   if (h <= 0.0f) return 0.0f;
   h += SP_CPAD_T + SP_CPAD_B + SP_RODAPE_H;
@@ -1303,9 +1310,9 @@ static float listaX = (1920.0f - SP_BW_BASE) * 0.5f + SP_ILHA_PAD,   // refeito 
 static void spot_veuCorpo_(void);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void spot_veu(void) {
-  ESCALA_INI();
+  ESCALA_MIN_INI(SP_ESCALA_MIN);
   spot_veuCorpo_();
-  ESCALA_FIM();
+  ESCALA_MIN_FIM();
 }
 static void spot_veuCorpo_(void) {
   // O veu do mockup: preto a 55 % sobre a tela de tras.
@@ -1779,7 +1786,7 @@ static void desenhaLista(float dy, float a) {
   float topo = SP_CORPO_Y + SP_CPAD_T + dy;
   float vis = corpoH - SP_CPAD_T - SP_CPAD_B - SP_RODAPE_H;
   if (vis <= 2.0f) return;
-  gfx_recorte(listaX - 30.0f, topo - 8.0f, listaW + 60.0f, vis + 12.0f);
+  gfx_recorte(listaX - 30.0f, topo - 8.0f, listaW + 60.0f, vis + 4.0f);
   for (i = 0; i < nLin; i++) {
     float y = topo + lin[i].y - scrollY;
     float e = entraLin[i];
@@ -1821,9 +1828,9 @@ static void desenhaRodape(float dy, float a) {
 static void spot_desenharCorpo_(Uint32 agora, int veuPronto);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void spot_desenhar(Uint32 agora, int veuPronto) {
-  ESCALA_INI();
+  ESCALA_MIN_INI(SP_ESCALA_MIN);
   spot_desenharCorpo_(agora, veuPronto);
-  ESCALA_FIM();
+  ESCALA_MIN_FIM();
 }
 static void spot_desenharCorpo_(Uint32 agora, int veuPronto) {
   float a, dy;
