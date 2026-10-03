@@ -178,6 +178,24 @@
 #include <string.h>
 #include <math.h>
 
+// TAMANHO DA INTERFACE, COM PISO DE 120% (pedido do dono: a Agenda nasce a
+// 120%). A escala efetiva e max(1,2; Tamanho da interface): 120% no padrao,
+// acompanha o ajuste acima disso. A tela virtual da Agenda e sempre 1920/s x
+// 1080/s, na medida, no evento e no desenho, e e so o desenho publico que liga
+// a escala (AG_ESC_INI/FIM), como escala.h manda. Piso local: o helper de
+// "escala minima" da branch do player ainda nao esta aqui.
+#define AG_ESCALA_MIN 1.2f
+static float agEscala(void) {
+  float s = gfx_escala_ui();
+  return s < AG_ESCALA_MIN ? AG_ESCALA_MIN : s;
+}
+#define AG_ESC_INI() float escAgAnt_ = gfx_escala(); gfx_escala_sair(agEscala())
+#define AG_ESC_FIM() gfx_escala_sair(escAgAnt_)
+#undef NV_TELA_W
+#undef NV_TELA_H
+#define NV_TELA_W (1920.0f / agEscala())
+#define NV_TELA_H (1080.0f / agEscala())
+
 // --- AS MEDIDAS DO MOCKUP APROVADO (Glass UI "ilha", tela 8; out/2026) -----
 //
 // Dono, olhando a captura ao lado do mockup: "o mockup ta bem mais polido que a
@@ -188,7 +206,12 @@
 // 90x130 em foco; 14 entre cartoes. O cartao vai ate a margem direita — o
 // mockup aprovado (02/10) e posterior ao pedido de cartao estreito (21/09).
 #define AG_TOPO         64.0f
-#define AG_LISTA_Y     203.0f   // topo do primeiro cartao
+// A MARGEM DO MOCKUP e 96 (padding 64/96 da .pg), nao os 104 do recuo do app.
+// A rail fixa (144 reais) entra dividida pela escala: a tela virtual e menor.
+#define AG_MARGEM 96.0f
+static float agX(void) { return ajustes_rail_largura_fixa() / agEscala() + AG_MARGEM; }
+static float agFim(void) { return NV_TELA_W - AG_MARGEM; }
+#define AG_LISTA_Y     200.0f   // topo do primeiro cartao
 #define AG_EST_W        96.0f   // coluna de datas
 #define AG_EIXO_GAP     28.0f
 #define AG_EIXO_W        2.0f
@@ -924,14 +947,14 @@ static void desenhaEstacao(const AgItem *it, float xDir, float yTopo, int hoje) 
 
   { char semM[20], num[16], falta[64];
     const char *hj = agenda_hoje();
-    float w, escN = 39.5f / NV_FT_TITULO3, escF = 16.5f / NV_FT_CAPTION2;
+    float w, escN = 39.5f / NV_FT_TITULO3, escF = 15.8f / NV_FT_CAPTION2;
     int cK = hoje ? ai : 123, cKg = hoje ? agi : 123, cKb = hoje ? abi : 125;
     TxtLinha dia, fal;
     maiusc(semM, sizeof semM,
            i18n(agenda_semana_nome(agenda_semana(it->dataProx))));
     w = kicker(semM, cK, cKg, cKb, -1.0f, 0.0f, 1.0f);
     kicker(semM, cK, cKg, cKb, xDir - w, y, 1.0f);
-    y += altLinha(TXT_MINI, 123);
+    y += altLinha(TXT_MINI, 123) - 3.0f;
     if (hj && (agenda_mes(hj) != agenda_mes(it->dataProx) ||
                agenda_ano(hj) != agenda_ano(it->dataProx)))
       snprintf(num, sizeof num, "%d/%d", d, agenda_mes(it->dataProx));
@@ -942,7 +965,7 @@ static void desenhaEstacao(const AgItem *it, float xDir, float yTopo, int hoje) 
     // 36/800 no CSS; 39,5 aqui pela mesma medida dos corpos do cartao (ver
     // escTitulo). A caixa reduzida do TITULO3 tem a folga do line-height normal.
     txtEsc(dia, xDir - (float)dia.w * escN, y, escN, 1.0f);
-    y += (float)dia.h * escN;
+    y += (float)dia.h * escN - 4.0f;
     agenda_falta(it->dataProx, falta, sizeof falta);
     fal = txtCortaEsc(TXT_CAPTION2, falta, 116, AG_EST_W + 40.0f, escF);
     txtEsc(fal, xDir - (float)fal.w * escF, y, escF, 1.0f);
@@ -954,9 +977,9 @@ static void linhaEpisodio(const AgItem *it, char *dst, size_t tam) {
   dst[0] = 0;
   if (it->dataProx[0] && it->temporada > 0 && it->episodio > 0) {
     if (it->nomeEp[0])
-      snprintf(dst, tam, i18n("T%dE%d · %s"), it->temporada, it->episodio, it->nomeEp);
+      snprintf(dst, tam, "T%d E%d \xc2\xb7 %s", it->temporada, it->episodio, it->nomeEp);
     else
-      snprintf(dst, tam, i18n("T%dE%d"), it->temporada, it->episodio);
+      snprintf(dst, tam, "T%d E%d", it->temporada, it->episodio);
     return;
   }
   if (it->dataUlt[0]) {
@@ -1023,8 +1046,8 @@ typedef struct {
 
 static AgMedidas medidasDaTela(void) {
   AgMedidas m;
-  float x = ajustes_conteudo_x();
-  float fim = NV_TELA_W - NV_LEGACY_CONTENT_RIGHT;
+  float x = agX();
+  float fim = agFim();
   m.xEst  = x + AG_EST_W;
   m.xEixo = m.xEst + AG_EIXO_GAP + AG_EIXO_W * 0.5f;
   m.xCard = m.xEst + AG_EIXO_GAP * 2.0f + AG_EIXO_W;
@@ -1047,10 +1070,14 @@ static float altLinha(TxtEstilo e, int c) {
 // 8-10% a mais que a Inter estatica daqui (subtitulo: 436 x 399 px). Entao os
 // corpos sao os que dao a MESMA largura na tela: titulo 27,5 -> 32 (26 -> 30
 // no CSS), episodio 21 (19), meta 17,5 (16), sinopse 18,5 (17).
-static float escTitulo(float f) { return (27.5f + 4.5f * f) / NV_FT_ROW_TITULO; }
-#define AG_ESC_EP   1.0f
-#define AG_ESC_META (17.5f / NV_FT_CAPTION2)
-#define AG_ESC_SIN  (18.5f / NV_FT_CAPTION2)
+static float escTitulo(float f) { return (26.3f + 3.9f * f) / NV_FT_ROW_TITULO; }
+// Vao entre as linhas do cartao, medido na captura (margin-top 4 / 6 do CSS,
+// mas a caixa da linha daqui e maior que a do navegador).
+#define AG_GAP_EP    1.0f
+#define AG_GAP_META  4.0f
+#define AG_ESC_EP   (19.7f / NV_FT_CAPTION2)
+#define AG_ESC_META (16.55f / NV_FT_CAPTION2)
+#define AG_ESC_SIN  (17.6f / NV_FT_CAPTION2)
 
 // O CHIP DO LEMBRETE (mockup: 44 de altura, 18 de recuo, sino de traco de 20,
 // 8 de vao, 16/600 — 17 aqui, pela medida de escTitulo, e em BOLD: 600 sobre
@@ -1061,7 +1088,7 @@ static float escTitulo(float f) { return (27.5f + 4.5f * f) / NV_FT_ROW_TITULO; 
 static float chipLembrete(float xDir, float cy, int ligado, float a, int desenhar) {
   const char *rot = ligado ? i18n("Lembrete ativo") : i18n("Lembrar-me");
   int ai, agi, abi, c;
-  float esc = 17.0f / NV_FT_HERO_SEC, w;
+  float esc = 16.3f / NV_FT_HERO_SEC, w;
   TxtLinha l;
   acentoInt(&ai, &agi, &abi);
   c = 160;
@@ -1135,8 +1162,8 @@ static float alturaBloco(const AgItem *it, float f, float extra) {
   float h = altLinha(TXT_ROW_TITULO, 245) * escTitulo(f);
   linhaEpisodio(it, ep, sizeof ep);
   linhaApoio(it, apoio, sizeof apoio);
-  if (ep[0])    h += 4.0f + altLinha(TXT_CAPTION2, 176) * AG_ESC_EP;
-  if (apoio[0]) h += 6.0f + altLinha(TXT_CAPTION2, 120) * AG_ESC_META;
+  if (ep[0])    h += AG_GAP_EP + altLinha(TXT_CAPTION2, 176) * AG_ESC_EP;
+  if (apoio[0]) h += AG_GAP_META + altLinha(TXT_CAPTION2, 120) * AG_ESC_META;
   return h + extra * f;
 }
 
@@ -1158,8 +1185,14 @@ static float alturaFoco(const AgItem *it) {
 // repouso e ~#34353a em foco. O solido e o do mockup: #15161a e #2b2d34.
 static void cartaoMaterial(GfxRect r, float f) {
   float raio = AG_CARD_RAIO / r.h;
-  if (ajustes_vidro()) gfx_cor(r, raio, .92f, .93f, 1.0f, .03f + .14f * f);
-  else {
+  // A SOMBRA do .vid: 0 14px 40px preto a 30% (45% no solido, 0 10px 30px).
+  gfx_rect((GfxRect){ r.x - 30.0f, r.y - 10.0f, r.w + 60.0f, r.h + 64.0f }, 0, GFX_SOMBRA,
+           1.0f, 0, 0, 0.5f, 0, 0, 0, ajustes_vidro() ? .80f : .90f);
+  if (ajustes_vidro()) {
+    gfx_cor(r, raio, .055f, .059f, .071f, .72f);   // rgba(14,15,18,.72)
+    // O focado do mockup: rgba(52,54,60,.82) — frio, um degrau acima do repouso.
+    if (f > 0.01f) gfx_cor(r, raio, .204f, .212f, .235f, .82f * f);
+  } else {
     gfx_cor(r, raio, .082f, .086f, .102f, 1.0f);
     if (f > 0.01f) gfx_cor(r, raio, .169f, .176f, .204f, f);
   }
@@ -1215,9 +1248,9 @@ static void desenhaConteudo(const AgItem *it, const AgMedidas *m, float y,
   yb = y + (h - alturaBloco(it, f, extra)) * 0.5f;
   txtEsc(t, tx, yb, escT, 1.0f);
   yb += altLinha(TXT_ROW_TITULO, 245) * escT;
-  if (l2.tex) { yb += 4.0f; txtEsc(l2, tx, yb, AG_ESC_EP, 1.0f);
+  if (l2.tex) { yb += AG_GAP_EP; txtEsc(l2, tx, yb, AG_ESC_EP, 1.0f);
                 yb += altLinha(TXT_CAPTION2, 176) * AG_ESC_EP; }
-  if (l3.tex) { yb += 6.0f; txtEsc(l3, tx, yb, AG_ESC_META, 1.0f);
+  if (l3.tex) { yb += AG_GAP_META; txtEsc(l3, tx, yb, AG_ESC_META, 1.0f);
                 yb += altLinha(TXT_CAPTION2, 120) * AG_ESC_META; }
 
   // RECORTADA PELO CARTAO: a sinopse entra junto com a mola da altura, e nos
@@ -1242,8 +1275,10 @@ static void desenhaEixo(float xEixo, float y0, float y1, int tracejado) {
   if (y1 > NV_TELA_H + AG_TRACO * 2.0f) y1 = NV_TELA_H + AG_TRACO * 2.0f;
   if (y1 <= y0) return;
   if (!tracejado) {
-    gfx_cor((GfxRect){ xEixo - AG_EIXO_W * 0.5f, y0, AG_EIXO_W, y1 - y0 }, 0.5f,
-            1, 1, 1, 0.09f);
+    // Raio por pixel: o do gfx_cor e fracao da ALTURA, e 0,5 num fio de 600 px
+    // pedia um canto de 300 px (o fio sumia, so a ponta aparecia).
+    gfx_cor((GfxRect){ xEixo - AG_EIXO_W * 0.5f, y0, AG_EIXO_W, y1 - y0 },
+            (AG_EIXO_W * 0.5f) / (y1 - y0), 1, 1, 1, 0.08f);
     return;
   }
   { float y = y0;
@@ -1251,7 +1286,7 @@ static void desenhaEixo(float xEixo, float y0, float y1, int tracejado) {
       float h = AG_TRACO;
       if (y + h > y1) h = y1 - y;
       gfx_cor((GfxRect){ xEixo - AG_EIXO_W * 0.5f, y, AG_EIXO_W, h }, 0.0f,
-              1, 1, 1, 0.09f);
+              1, 1, 1, 0.08f);
       y += AG_TRACO * 2.0f;
     } }
 }
@@ -1915,10 +1950,10 @@ static void desenhaContexto(float a) {
   desenhaModalSerie(it, a);
 }
 
-void agendaui_desenhar(Uint32 agora) {
+static void desenharNaEscala(Uint32 agora) {
   AgMedidas m = medidasDaTela();
-  float x = ajustes_conteudo_x();
-  float xDir = NV_TELA_W - NV_LEGACY_CONTENT_RIGHT;
+  float x = agX();
+  float xDir = agFim();
   int n = agenda_n(), i, sep = indiceSeparador();
   float topo = listaTopo(), base = listaBase();
   float yc = AG_TOPO;
@@ -1933,11 +1968,11 @@ void agendaui_desenhar(Uint32 agora) {
   // o app nao tem vista de mes, e um seletor que nao troca nada e enfeite.
   { TxtLinha t = txt_linha(TXT_TITULO2, i18n("Agenda"), 245, 245, 243, 255);
     if (!menu_pilula_titulo()) txt_desenhar(t, x, yc);   // Dinamica: na pilula
-    yc += (float)t.h + 2.0f; }
+    yc += (float)t.h + 4.0f; }
 
   { char sub[200];
     int comData = 0;
-    float esc = 1.0f;   // 19 no CSS, 21 aqui: ver escTitulo
+    float esc = 19.4f / NV_FT_CAPTION2;   // 19 no CSS, medido na captura
     for (i = 0; i < n; i++)
       if (temData(agenda_lista(i))) comData++;
     if (n == 0)
@@ -2024,4 +2059,12 @@ void agendaui_desenhar(Uint32 agora) {
   }
   gfx_sem_recorte();
   if (ctxA > 0.01f) desenhaContexto(ctxA);
+}
+
+// O desenho publico liga a escala (piso de 120%) e o layout mede pela tela
+// virtual — o mesmo modulo que mede e o que liga, como pede escala.h.
+void agendaui_desenhar(Uint32 agora) {
+  AG_ESC_INI();
+  desenharNaEscala(agora);
+  AG_ESC_FIM();
 }
