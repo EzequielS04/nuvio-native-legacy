@@ -64,6 +64,7 @@ static void ajDesenharInspetor(void) {
   AjDica d[4];
   int nd;
   ajIlha(ir, 36.0f, 1, 0);
+  if (op == AJ_GUIA) { guiaInspetorAjustes(ir); return; }
   if (op < 0 && !categoria) op = -1;
   { int opPv = op >= 0 ? op : -1;
     if (opPv < 0) {   // categoria: a previa da primeira opcao dela

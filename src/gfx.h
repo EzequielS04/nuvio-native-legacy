@@ -368,7 +368,9 @@ int  gfx_mini_alvo(GfxMini *m, int w, int h);   // cria ou recria; 0 = sem FBO
 void gfx_mini_comecar(GfxMini *m, float x0, float y0, float esc);
 void gfx_mini_terminar(void);
 void gfx_mini_desenhar(const GfxMini *m, GfxRect r, float raioPx, float a);
-void gfx_mini_liberar(GfxMini *m);   // drawable real, para restaurar viewport
+void gfx_mini_liberar(GfxMini *m);
+// Dentro da miniatura: a base de `r` some ate `alfa` (o .gv.fade do mockup).
+void gfx_mini_esvanecer(GfxRect r, float alfa);   // drawable real, para restaurar viewport
 int  gfx_iniciar(void);
 void gfx_encerrar(void);
 

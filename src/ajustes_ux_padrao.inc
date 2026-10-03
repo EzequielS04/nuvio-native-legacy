@@ -192,3 +192,4 @@
   0,                /* ao sair do player: a home, minimizando na ilha (com o relogio) */
   0,                /* perguntar o que achou nos creditos: LIGADO (V_LIGA: 0 = Ligado) */
   1,                /* espera pelos add-ons: 5 s (#221) */
+  0,                /* guia de uso: acao */

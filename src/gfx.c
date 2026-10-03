@@ -1139,7 +1139,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
   "  if (m <= 0.001) discard;\n"
   "  vec4 t = texture2D(uTex, vec2(vUv.x, 1.0 - vUv.y));\n"
-  "  gl_FragColor = vec4(t.rgb, uCor.a * m);\n"
+  "  gl_FragColor = vec4(t.rgb / max(t.a, 0.004), t.a * uCor.a * m);\n"
   "}\n",
 };
 
@@ -2545,6 +2545,15 @@ void gfx_mini_desenhar(const GfxMini *m, GfxRect r, float raioPx, float a) {
   if (!m->tex || r.w < 1.0f || r.h < 1.0f) return;
   gfx_tex_aspect_atual = 0.0f;
   gfx_rect(r, m->tex, GFX_MINI, 0, 0, 0, raioPx / r.h, 1, 1, 1, a);
+}
+// Dentro da miniatura: a imagem some no retangulo `r` (layout), de nada no
+// alto a `alfa` na base — o mask-image do mockup. Multiplica cor e alfa do
+// alvo (o GFX_MINI desfaz a cor na leitura).
+void gfx_mini_esvanecer(GfxRect r, float alfa) {
+  if (!miniAtiva) return;
+  glBlendFuncSeparate(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE_MINUS_SRC_ALPHA);
+  gfx_veu_css(r, 0, 1.0f, 1.0f, alfa);
+  glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 }
 void gfx_mini_liberar(GfxMini *m) {
   if (m->fbo) glDeleteFramebuffers(1, &m->fbo);

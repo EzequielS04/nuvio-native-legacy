@@ -14,6 +14,7 @@
 #include "atualizacao.h"
 #include "badges.h"
 #include "rail_shot.h"
+#include "spotlight.h"
 #include "fileiras.h"
 #include "gfx.h"
 #include "ilha.h"
@@ -88,6 +89,10 @@ static void captura(const char *nome, SDL_Window *win) {
     glClear(GL_COLOR_BUFFER_BIT);
     ajustes_desenhar(SDL_GetTicks());
     rail_shot_desenhar(MENU_AJUSTES);
+    if (spot_visivel()) {   // "Buscar no guia" (o Spotlight no modo guia)
+      spot_atualizar(1.0f / 60.0f, SDL_GetTicks());
+      spot_desenhar(SDL_GetTicks(), 0);   // o veu de 55% e do proprio Spotlight
+    }
     if (getenv("NUVIO_AJ_QUADROS")) {   // a ilha do relogio, como o app poe
       ilha_relogio_visivel(ajustes_relogio_cabe());
       ilha_ancorar(ajustes_ilha_x(), 36, 0);
@@ -179,8 +184,17 @@ int main(int argc, char **argv) {
     snprintf(lista, sizeof lista, "%s", getenv("NUVIO_AJ_QUADROS"));
     for (id = strtok_r(lista, " ,", &ctx); id; id = strtok_r(NULL, " ,", &ctx)) {
       if (!ajustes_teste_quadro(id)) { printf("quadro desconhecido: %s\n", id); continue; }
+      if (!strcmp(id, "guia-busca")) {
+        int k;
+        SDL_Event e = { 0 };
+        spot_abrir_guia();
+        spot_texto_externo("legenda");
+        e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_DOWN;
+        for (k = 0; k < 4 && spot_linha_focada() < 0; k++) spot_evento(&e);
+      }
       snprintf(nome, sizeof nome, "%s-%s.png", saida, id);
       captura(nome, w);
+      if (spot_aberto()) spot_fechar();
     }
     goto fim_capturas;
   }
