@@ -89,6 +89,32 @@ int  avisos_enviar_diagnostico(const char *execucao_id, const char *relatorio,
 // Envio automatico (ajuste "Enviar registros sozinho"): chamado por quadro.
 void avisos_envio_auto_passo(Uint32 agora);
 int  avisos_envio_estado(void);
+// O ULTIMO ENVIO, para o painel de envio do registro (registro.c) e o
+// inspetor de Ajustes. `motivo` diz por que o manual falhou: o servidor
+// respondeu com erro (http), a TV esta sem internet (redesaude.h; nem tenta,
+// e manda sozinho quando a rede volta), o prazo de 30 s acabou, a conexao
+// caiu, falta login, ou esta compilacao nao tem servidor.
+enum { AVISOS_ENVIO_OK = 1, AVISOS_ENVIO_SERVIDOR, AVISOS_ENVIO_OFFLINE,
+       AVISOS_ENVIO_PRAZO, AVISOS_ENVIO_CONEXAO, AVISOS_ENVIO_CONTA,
+       AVISOS_ENVIO_INDISPONIVEL };
+#include <time.h>
+typedef struct {
+  int    disponivel;          // ha servidor de registros nesta compilacao
+  int    estado, motivo, http, linhas, pendenteRede;
+  long   bytes;
+  time_t quando;              // inicio do ultimo envio manual
+  char   codigo[8];           // codigo do ultimo envio manual (vazio sem recibo)
+  time_t autoQuando;          // ultimo envio automatico (0 = nenhum)
+  int    autoHttp;
+  Uint32 autoProximoMs;       // SDL_GetTicks do proximo automatico (0 = nao marcado)
+  char   ultimoCodigo[8];     // o ultimo codigo recebido, de qualquer sessao
+  time_t ultimoCodigoQuando;
+} AvisosEnvio;
+int  avisos_envio_info(AvisosEnvio *o);
+#ifdef AVISOS_TESTE_ENVIO
+void avisos_teste_envio(int estado, int motivo, int http, const char *codigo, long bytes, int linhas);
+void avisos_teste_envio_auto(long haSeg, int http);
+#endif
 
 // A LISTA COMO COMPONENTE, para a aba AVISOS do painel de Salvos: quem hospeda
 // desenha na caixa que tem, guarda o proprio foco e chama _ok no OK. _ok

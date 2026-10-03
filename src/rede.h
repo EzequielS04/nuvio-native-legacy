@@ -235,6 +235,11 @@ void rede_avisar_401(void (*f)(const char *url));
 // roda no fio do pedido. Ponteiro e nao chamada direta para os testes que
 // compilam rede.c sozinho nao precisarem do modulo.
 void rede_avisar_saude(void (*f)(int codigo, const char *url));
+// Cada pedido que terminou, com o host, o CURLcode (0 = transporte ok), o
+// HTTP e quantos ms levou (0 = nao medido, no wasm). E de onde a aba Rede do
+// painel de registro tira pedidos, falhas e tempo tipico por host
+// (redesaude.h: rede_hosts_*). Um ouvinte so; chamado de qualquer fio.
+void rede_avisar_host(void (*f)(const char *url, int codigo, int http, unsigned ms));
 
 // Carrega a libcurl AGORA, no fio que chamar. Existe para o arranque fazer isso
 // no fio principal, antes de qualquer fio de rede nascer: `curl_global_init`

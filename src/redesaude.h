@@ -55,4 +55,23 @@ void rede_saude_nota(int codigo, const char *url);
 int      rede_saude_offline(void);
 unsigned rede_saude_seq(void);
 
+// PEDIDOS POR HOST (a aba Rede do painel de registro, 03/10). Cada pedido que
+// terminou conta para o host dele: pedidos, falhas (transporte ou HTTP >= 400)
+// e o tempo dos ultimos 16 (o "tipico" e a mediana). So o HOST e guardado: o
+// caminho pode levar a chave do debrid. Enderecos locais ficam de fora.
+#define REDE_HOSTS_MAX 24
+typedef struct {
+  char host[64];
+  int pedidos, falhas;
+  unsigned tipicoMs;       // mediana dos ultimos medidos; 0 = sem medida
+} RedeHost;
+void rede_hosts_nota(const char *url, int codigo, int http, unsigned ms);
+// Copia ate `max` hosts, os de mais pedidos primeiro. Devolve quantos.
+int  rede_hosts_ler(RedeHost *dst, int max);
+// Para a tela "sem internet" do envio de registro: falhas de transporte
+// seguidas e em quantos hosts (ate 4), o ultimo host que respondeu e ha quanto
+// tempo. Devolve 0 se nenhum pedido respondeu ainda nesta sessao.
+#include <stddef.h>
+int  rede_saude_resumo(int *falhas, int *hosts, char *ultHost, size_t tam, unsigned *haMs);
+
 #endif
