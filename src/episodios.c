@@ -549,7 +549,10 @@ void episodios_atualizar(float dt) {
     }
     // SEM MOLA no quadro em que a linha e encontrada: a lista chegou depois da
     // folha abrir, e animar daqui e o salto que o relato descreve.
+    // A PRIMEIRA LINHA E A ANTERIOR A QUE TOCA (mockup do Glass UI): a pessoa
+    // ve de onde veio e o que vem, e o foco fica na segunda linha.
     localizarAtual = 0; semMolaScroll = 1;
+    scroll = foco > 0 ? (float)(foco - 1) * EP_ROW : 0.0f;
   }
   if (foco >= n) foco = n > 0 ? n - 1 : 0;
   // O ALVO SEGUE O FOCO enquanto a lista existe — e assim que andar com o
