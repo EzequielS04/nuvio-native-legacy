@@ -11,3 +11,17 @@ Compilações de hosts não são pacotes instaláveis nem prova em aparelho. Fal
 Logs de execução locais ficam em /tmp/nuvio-merge-audit; builds C# em /Volumes/ExternalSSD/nuvio-173-host-checks. Os logs remotos foram consultados somente para leitura e estão resumidos em LOGS.md, sem dados pessoais ou URLs privadas.
 
 Capturas de fixture no Mac: [Settings sem placeholder](imagens/settings-sem-placeholder.png) e [Vidro/contorno acessíveis](imagens/aparencia-contorno.png). Estas capturas não são de uma TV.
+
+## Segunda rodada: serviços e pacotes
+
+Netflix e demais serviços estão na aba Onde ver da mesma folha de fontes. Inventário de app instalado abre o ID real; ausente oferece loja; canais Amazon/Apple informativos não dispararam app/loja nos testes. Foram conferidos parser, região, erro offline, catálogo vazio, geração/resposta atrasada e foco durante fontes parciais, com ASan/UBSan.
+
+Pacotes locais efetivamente gerados e conferidos: [artefatos e hashes](PACOTES.md). O resultado da suíte ampla é registrado separadamente após sua conclusão; casos pulados não são validação de plataforma. LG não respondeu ao acesso de diagnóstico; TCL estava dormindo. Nenhuma TV foi acordada ou atualizada.
+
+Referências oficiais conferidas para descoberta/abertura Samsung: [Application API](https://developer.samsung.com/smarttv/develop/api-references/tizen-web-device-api-references/application-api.html) e [ApplicationManager .NET](https://docs.tizen.org/application/dotnet/api/TizenFX/latest/api/Tizen.Applications.ApplicationManager.html). A verificação documental não comprova permissões e respostas do firmware em aparelho.
+
+Captura final de serviços: [Onde ver](imagens/onde-ver.png) e [Onde ver com vidro](imagens/onde-ver-vidro.png). Fixtures offline no Mac, sem logos ou launcher nativo. Revelaram e permitiram corrigir o contraste do cartão selecionado. Nomes e ações conferidos em PT/EN, com foco Netflix/Disney e modo vidro.
+
+Host falso ARM Samsung executou o núcleo final 4ffb8a23 com EGL/GLES llvmpipe: dlopen/config/contexto válidos e 60 trocas de quadro concluídas, com tela de login renderizada. Comando: NV_HOST_LOCALE='' bash tools/tpk-testa.sh 60. Sem a variável, o wrapper antigo tem expansão não definida; definir explicitamente contornou o problema; o wrapper foi corrigido para inicializar esse valor quando ausente. Simulação QEMU/Mesa não mede FPS ou comportamento do firmware Samsung. A captura de login contém pairing temporário e não foi anexada ao repositório.
+
+Resultado final da suíte ampla: [regressão e casos não validados](REGRESSAO.md). Os testes das alterações passaram; a suíte completa mantém uma falha anterior à 1.7.3 e casos não executados, conforme o relatório.

@@ -135,3 +135,7 @@ Corpus temporal: offsets ±0,25/1/5/30s; edição incompatível/corte no meio; e
 Performance: tempo startup até primeiro frame, seek dentro/fora cache e keyframe, rebuffer por hora, frames/menu p95, pico RAM, CPU, watts se disponível e bytes adicionais. Comparar baseline1.8 sem feature versus cada feature isolada e conjunto. Toda medição deve incluir codec/HDR/passthrough/storage/rede. Escolher o método com menor latência ENTRE os que passam efetividade e não degradam playback; não premiar correção rápida e errada.
 
 Testes determinísticos necessários: geração/cancelamento; offset independente e manual; quota50 com concorrência/restart/clock rollback/perfil/chave; cache ENOSPC/cancelamento/crash/Range; stable partition com metadados ausentes e chegada incremental; isolamento da mesma conta em duasTVs; rollback otimizador e overrides. Provas físicas: vídeo segue responsivo durante análise, seek realmente melhora sob cobertura, áudio não clipa/muda rota, overlay ASS/segunda língua não colidem.
+
+## Servidores pessoais
+
+Jellyfin, Emby e Plex devem compartilhar negociação de capacidades, bitrate, idiomas e progresso com este player: [pesquisa e sequência](../media-servers-1.8/README.md). Servidores são um escopo futuro separado; ainda não implementados.

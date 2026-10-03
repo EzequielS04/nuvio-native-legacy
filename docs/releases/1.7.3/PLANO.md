@@ -19,6 +19,8 @@ O patch 30b2c079 de Continuar assistindo não será reaplicado: player_encerrar 
 
 Social/Discord, Plugins/P2P, Glass UI e o novo pacote AutoSync/áudio, segundo idioma, buffer de seek, boost, ajuste de fontes pela conexão, Seekr 50/dia e chave pessoal, perfis de desempenho por aparelho, diagnósticos/speed test e seletor simplificado de legendas. Especificação: ../../plans/player-1.8/README.md. Chave pessoal Seekr e limite ficam juntos nesse escopo, para não reabrir uso sem a política solicitada.
 
+Servidores pessoais Jellyfin, Emby e Plex também entram na investigação da 1.8: [proposta de integração](../../plans/media-servers-1.8/README.md).
+
 ## Publicação e aparelhos
 
 Esta árvore prepara uma candidata local. Nenhuma alteração ao servidor, publicação, tag, instalação ou controle de TV faz parte desta rodada. Testes no Mac e compilação não comprovam comportamento LG C9, Samsung ou Android TV real. Registrar separadamente fonte, build, versão, host/núcleo e cenário antes de validar aparelhos. O appinfo.json é a versão canônica para Android e env; scripts TPK reescrevem manifest de build e restauram o original.
