@@ -22,7 +22,7 @@ static void uxListarDiferencas(void) {
 }
 static int uxRequisito(int op) {
   switch (op) {
-    case AJ_VIDRO_CONTORNO: return AJ_VIDRO;
+    case AJ_VIDRO_CONTORNO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: return AJ_VIDRO;
     case AJ_RAIL: case AJ_RAIL_BLUR: return AJ_RAIL_MODERNA;
     case AJ_HERO_CHEIO: return AJ_HOME_LAYOUT;
     case AJ_HERO_CATALOGOS: return AJ_HERO;

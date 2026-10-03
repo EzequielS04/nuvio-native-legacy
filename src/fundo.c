@@ -30,19 +30,39 @@ static void tingir(const float *q, float *o) {
 static int telaCheia(GfxRect r) {
   return r.x <= 0.5f && r.y <= 0.5f && r.w >= NV_TELA_W / gfx_escala() - 1 && r.h >= NV_TELA_H / gfx_escala() - 1;
 }
+// Assa (so assa) a arte borrada no quadro pequeno; pinta se alfa > 0. O mesmo
+// assado serve ao vidro fosco (gfx_vidro_fosco): a luz da arte, em tela.
+static void assar(const CorvivaPaleta *p, float alfa) {
+  float amb[4][3], forca = nv_ambiente_forca, tempo = nv_tempo_viva;
+  int i;
+  memcpy(amb, nv_ambiente_viva, sizeof amb);
+  for (i = 0; i < 4; i++) tingir(p->regiao[i], nv_ambiente_viva[i]);
+  nv_ambiente_forca = 1.0f; nv_tempo_viva = 0.0f;   // parado: o assado nao refaz
+  gfx_ambiente_preparar();
+  if (alfa > 0.0f) gfx_ambiente(alfa * 0.998f);   // < 1: pinta agora, nao fica pendente para o clear
+  memcpy(nv_ambiente_viva, amb, sizeof amb);
+  nv_ambiente_forca = forca; nv_tempo_viva = tempo;
+}
+// Fundo de arte nitida/Frost com "Vidro fosco" ligado: o assado existe so para
+// o vidro. Com a Imersiva a luz real ja e o assado, entao nada a fazer.
+static void foscoPreparar(GfxRect r, float raioPx, const char *c) {
+  CorvivaPaleta p;
+  if (!ajustes_vidro() || !ajustes_vidro_fosco() || nv_ambiente_forca > 0.001f ||
+      !telaCheia(r) || raioPx > 0.0f || !c || !c[0] || !corviva_paleta(c, &p) || !p.ok) return;
+  assar(&p, 0.0f);
+}
+void fundo_fosco_quadro(void) {
+  CorvivaPaleta p;
+  if (!ajustes_vidro() || !ajustes_vidro_fosco() || nv_ambiente_forca > 0.001f ||
+      !corviva_cena_paleta(&p)) return;
+  assar(&p, 0.0f);
+}
 static int borrada(GfxRect r, float raioPx, const char *c, float a) {
   CorvivaPaleta p;
   int i;
   if (!c || !c[0] || !corviva_paleta(c, &p) || !p.ok) return 0;
   if (telaCheia(r) && raioPx <= 0.0f) {
-    float amb[4][3], forca = nv_ambiente_forca, tempo = nv_tempo_viva;
-    memcpy(amb, nv_ambiente_viva, sizeof amb);
-    for (i = 0; i < 4; i++) tingir(p.regiao[i], nv_ambiente_viva[i]);
-    nv_ambiente_forca = 1.0f; nv_tempo_viva = 0.0f;   // parado: o assado nao refaz
-    gfx_ambiente_preparar();
-    gfx_ambiente(a * 0.998f);   // < 1: pinta agora, nao fica pendente para o clear
-    memcpy(nv_ambiente_viva, amb, sizeof amb);
-    nv_ambiente_forca = forca; nv_tempo_viva = tempo;
+    assar(&p, a);
   } else {
     static const float PX[4][2] = { { 0.0f, 0.5f }, { 1.0f, 0.5f }, { 0.5f, 0.0f }, { 0.5f, 1.0f } };
     gfx_cor(r, raioPx / r.h, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a);
@@ -70,8 +90,9 @@ static void frost(GfxRect r, float raioPx, float a) {
 }
 void fundo_desenhar_modo(int modo, GfxRect r, float raioPx, const char *c, float a) {
   if (r.w < 1 || r.h < 1 || a <= 0.003f) return;
-  if (modo == FUNDO_FROST) { frost(r, raioPx, a); return; }
+  if (modo == FUNDO_FROST) { foscoPreparar(r, raioPx, c); frost(r, raioPx, a); return; }
   if (modo == FUNDO_BORRADA && borrada(r, raioPx, c, a)) return;
+  foscoPreparar(r, raioPx, c);
   arte(r, raioPx, c, a);
   if (raioPx > 0.0f) { gfx_cor(r, raioPx / r.h, 0, 0, 0, 0.42f * a); return; }
   // O veu do mockup: linear-gradient(90deg, 62%, 40% no meio, 50%). Um

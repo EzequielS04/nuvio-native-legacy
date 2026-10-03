@@ -79,6 +79,7 @@ static const Item TELA[] = {
     OPC(AJ_TEMA), OPC(AJ_FUNDO), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_FONTE_UI),
     OPC(AJ_TAMANHO_UI),
     OPC(AJ_ANIM), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS), OPC(AJ_VIDRO_CONTORNO),
+    OPC(AJ_VIDRO_OPAC), OPC(AJ_VIDRO_FOSCO),
 
   SEC("TV ao vivo", "Provedor e solução de problemas ao assistir canais", "aj_tv-minimal-play"),
     ROT("Provedor"),
@@ -158,7 +159,7 @@ static int uxAvancada(int op) {
     case AJ_TMDB_MAIS: case AJ_TMDB_COL: case AJ_TMDB_CW:
     case AJ_SELOS_CORES:
     case AJ_SELOS_PACOTE: case AJ_SELOS_PACOTE_ADD: case AJ_SELOS_PACOTE_REM:
-    case AJ_VIDRO_CONTORNO:
+    case AJ_VIDRO_CONTORNO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
     case AJ_LIVETV_FORMATO: case AJ_LIVETV_MODO: case AJ_LIVETV_PROXY:
     case AJ_P2P_LIGADO: case AJ_P2P_URL: case AJ_P2P_TESTAR:
     case AJ_TEX_MB:

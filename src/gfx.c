@@ -1199,6 +1199,13 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  c = mix(c, vec3(uPar.y), uPar.x * clamp(1.0 - length(q), 0.0, 1.0));\n"
   "  gl_FragColor = nv_dither(c, uCor.a * m);\n"
   "}\n",
+
+  // GFX_FOSCO — o assado lido em coordenada de tela, so dentro dos cantos.
+  "void main(){\n"
+  "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
+  "  if (m <= 0.001) discard;\n"
+  "  gl_FragColor = nv_dither(texture2D(uTex, vAmb).rgb, uCor.a * m);\n"
+  "}\n",
 };
 
 // Cada corpo declara o que usa; montar so o necessario mantem o shader enxuto.
@@ -1234,7 +1241,8 @@ static const struct { int sdf, cover; } PRECISA[GFX_NMODOS] = {
   {1,0},   /* GFX_JANELA — SDF da abertura; o cover e o do quadro da tela */
   {0,0},   /* GFX_VEU_CSS — degrade puro, sem SDF */
   {1,0},   /* GFX_MINI — SDF dos cantos; a textura e um FBO */
-  {1,0}    /* GFX_TEXTURA — SDF dos cantos; o recorte vem pronto em uJan */
+  {1,0},   /* GFX_TEXTURA — SDF dos cantos; o recorte vem pronto em uJan */
+  {1,0}    /* GFX_FOSCO — SDF dos cantos; a textura e o assado, lido por vAmb */
 };
 
 static GLuint compila(GLenum tipo, const char *src) {
@@ -1468,6 +1476,7 @@ static int ambLado;
 int gfx_n_assados;
 static float ambChave[20];
 static int ambPendente, ambIntacta;
+static int foscoOk;   // este quadro assou fundo (gfx_ambiente_preparar): o vidro fosco tem fonte
 void gfx_novo_quadro(void) {
   gfx_n_rect = gfx_n_prog = gfx_n_bind = gfx_n_outros = 0;
   gfx_ms_rect = gfx_ms_outros = 0.0;
@@ -1475,7 +1484,7 @@ void gfx_novo_quadro(void) {
   memcpy(gfx_fill_modo_ult, gfx_fill_modo, sizeof gfx_fill_modo);
   memset(gfx_fill_modo, 0, sizeof gfx_fill_modo);
   desfGeradosQuadro = 0;
-  ambPendente = 0; ambIntacta = 0;
+  ambPendente = 0; ambIntacta = 0; foscoOk = 0;
   gfx_n_assados = 0;
 }
 // Relogio dos pontos de GL que NAO sao gfx_rect: recorte, FBO do snapshot e as
@@ -1878,6 +1887,7 @@ static void ambAssar(void) {
 void gfx_ambiente_preparar(void) {
   if (nv_ambiente_forca <= 0.003f || efeitosMinimos || snapAtivo || !ambPreparar()) return;
   ambAssar();
+  foscoOk = 1;
 }
 
 void gfx_ambiente(float alfa) {
@@ -2013,9 +2023,24 @@ void gfx_cartao_foco_vidro(GfxRect r, float raio, float foco, float alfa,
 // VIDRO SEM CONTORNO (dono, 29-30/09: "tirar o contorno", "bem glass mesmo").
 // O fio de 1,5 px fazia cada componente ler como caixa desenhada; a separacao
 // vem do miolo translucido e, no foco, do aro na cor do realce.
+// VIDRO FOSCO (teste de 03/10): a arte borrada do fundo, a mesma luz assada de
+// 320x180 que a Imersiva e a "Arte borrada" usam, desenhada DENTRO do painel em
+// coordenada de tela — alinha com o que esta atras, como vidro jateado de
+// verdade. Um quad texturizado por painel, sem desfoque por quadro. Sem assado
+// neste quadro (player, fundo liso) nao desenha nada e o vidro fica normal.
+void gfx_vidro_fosco(GfxRect r, float raio, float a) {
+  if (!ajustes_vidro_fosco() || !foscoOk || !ambTex || ambChave[0] < 0.0f ||
+      efeitosMinimos || snapAtivo || r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
+  gfx_rect(r, ambTex, GFX_FOSCO, 0, 0, 0, raio, 1, 1, 1, a);
+}
+// 78% e o vidro de sempre: o fator escala o alfa do miolo (folha e painel).
+float gfx_vidro_opacidade(void) { return ajustes_vidro_opacidade() / 0.78f; }
 void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a) {
+  float k = gfx_vidro_opacidade(), al;
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
-  gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, fundo * a);
+  al = fundo * k; if (al > 1.0f) al = 1.0f;
+  gfx_vidro_fosco(r, raio, a);
+  gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, al * a);
   gfx_vidro_matiz(r, raio, a);
 }
 // IMERSIVA NO VIDRO (acentos-mockup.html, quadro 5): a ilha leva 16% da luz
@@ -2030,7 +2055,8 @@ void gfx_vidro_matiz(GfxRect r, float raio, float a) {
 // brilho largo no alto, sem aro.
 void gfx_vidro_folha(GfxRect r, float raio, float a) {
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
-  gfx_cor(r, raio, 0.085f, 0.088f, 0.10f, 0.78f * a);
+  gfx_vidro_fosco(r, raio, a);
+  gfx_cor(r, raio, 0.085f, 0.088f, 0.10f, ajustes_vidro_opacidade() * a);
   gfx_vidro_matiz(r, raio, a);
   gfx_brilho_topo(r, raio, 0.38f, 0.88f, 0.92f, 1.0f, 0.06f * a);
 }

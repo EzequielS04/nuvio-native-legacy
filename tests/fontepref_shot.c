@@ -18,6 +18,7 @@
 #include "tex_cache.h"
 #include "ajustes.h"
 #include "selospacote.h"
+#include "vidro_fundo.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -51,13 +52,17 @@ static void captura(const char *nome, SDL_Window *win) {
     stream_folha_atualizar(1.0f / 60.0f, SDL_GetTicks());
     glClearColor(0.025f, 0.025f, 0.03f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+    gfx_novo_quadro();
     // UMA ARTE DE MENTIRA atras da folha: sem ela o vidro (corpo translucido)
     // e o degrade da borda nao tem o que deixar passar, e a captura nao
     // prova se o texto fica sobre fundo. Faixas quentes e um bloco claro que
     // atravessa a borda da folha, o pior caso de contraste.
+    if (vidroFundoAtivo()) vidroFundoDesenhar();
+    else {
     gfx_cor((GfxRect){ 0, 0, 1920, 1080 }, 0, .26f, .17f, .12f, 1);
     gfx_cor((GfxRect){ 0, 0, 1920, 360 }, 0, .55f, .36f, .22f, 1);
     gfx_cor((GfxRect){ 900, 420, 900, 260 }, 0, .82f, .78f, .70f, 1);
+    }
     stream_folha_desenhar(SDL_GetTicks());
     if (i == 59) {
       unsigned char *pix = malloc(1920 * 1080 * 4);
@@ -119,6 +124,7 @@ int main(int argc, char **argv) {
         fprintf(f, "vidroLocal %d\n", v && *v == '0' ? 1 : 0); }
       fclose(f);
       ajustes_dir(dir);
+      ajustes_teste_vidro_env();   // NUVIO_SHOT_VIDRO_OPAC / _FOSCO
     } }
 
   assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) == 0);
@@ -137,6 +143,7 @@ int main(int argc, char **argv) {
   assert(gfx_iniciar());
   assert(txt_iniciar("deploy/app", 1));
   tex_iniciar(64);
+  vidroFundoPreparar();
   gfx_icones_dir("deploy/app/art");
   badges_carregar("deploy/app/art");   // quem faz isto no app e home.c
   // NUVIO_SHOT_PACOTE=<json>: um pacote de selos do Nuvio (3 formas aceitas)

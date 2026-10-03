@@ -66,6 +66,7 @@ extern int ajustes_teste_op_atualizar(void);
 extern int ajustes_teste_familia_previa(int op);
 extern void ajustes_teste_fonte_interface(int familia);
 extern void ajustes_teste_tema(int tema, int vidro);
+extern void ajustes_teste_vidro_env(void);
 extern int ajustes_teste_quadro(const char *id);
 static int quadrosCaptura = 60;
 
@@ -171,6 +172,7 @@ int main(int argc, char **argv) {
   fil_remover(12);  // Animes
 
   ajustes_iniciar();
+  ajustes_teste_vidro_env();   // NUVIO_SHOT_VIDRO_OPAC / _FOSCO
   // NUVIO_SHOT_TEMA=<indice> (0 branco, 12 Dinamica) e NUVIO_SHOT_VIDRO=1: o
   // foco no acento claro com e sem vidro (#202).
   if (getenv("NUVIO_SHOT_TEMA") || getenv("NUVIO_SHOT_VIDRO"))
