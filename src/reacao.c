@@ -15,6 +15,8 @@
 #include "trakt.h"
 #include "plrui.h"
 #include "recomenda.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -306,7 +308,14 @@ static void linhaOrigem(char *dst, size_t n) {
 // pergunta 36/700, as tres respostas em pilulas (a focada cheia no acento) e
 // a contagem de 8 s como trilho DENTRO da ilha, ao lado de "Ana vai ver sua
 // resposta" — nao mais um fio colado na borda.
+static void reacao_desenharCorpo_(Uint32 agora, float baseY);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void reacao_desenhar(Uint32 agora, float baseY) {
+  ESCALA_INI();
+  reacao_desenharCorpo_(agora, baseY);
+  ESCALA_FIM();
+}
+static void reacao_desenharCorpo_(Uint32 agora, float baseY) {
   float a = c.anim, w = 760.0f, h, x, y, lead, hp, pw = 0.0f;
   char perg[256], orig[160], ver[160];
   static const char *const ICONE[3] = { "pl_thumbs-up", NULL, "pl_thumbs-down" };

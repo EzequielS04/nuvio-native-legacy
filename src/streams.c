@@ -30,6 +30,8 @@
 #include "video.h"
 #include "botoes.h"
 #include "ponteiro.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 
 // A FOLHA DE FONTES (dono, 02/10: "muito infantil, nao ta polida como o
 // resto"; aprovou o mockup "E" num canvas de tres rodadas). A folha encosta na
@@ -1844,7 +1846,14 @@ static int medirCabecalho(void) {
   return dois;
 }
 
+static void stream_folha_desenharCorpo_(Uint32 agora);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void stream_folha_desenhar(Uint32 agora) {
+  ESCALA_INI();
+  stream_folha_desenharCorpo_(agora);
+  ESCALA_FIM();
+}
+static void stream_folha_desenharCorpo_(Uint32 agora) {
   float ar, ag, ab;
   int ai, nf, automatica, melhor;
   if(anim<.005f) return;

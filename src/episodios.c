@@ -19,6 +19,8 @@
 #include "plrui.h"
 #include "progresso.h"
 #include "plrilha.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 
 // OS EPISODIOS NO PLAYER NASCEM DA ILHA DO RELOGIO (pedido do dono, 03/10),
 // como Audio e Legendas (faixas.c, plrilha.h): a pilula da hora cresce ate a
@@ -33,7 +35,14 @@
 #define EP_TIT_H  64.0f
 #define EP_SEG_H  54.0f
 #define EP_ROW   160.0f
-#define EP_VIS    4
+// Linhas a vista: 4, ou menos quando a ilha nao cabe na altura da tela virtual
+// (escala.h: 3 em 120%, 2 em 150%). O miolo fixo da ilha sao 251, a pilula da
+// hora por cima ~60, e as margens de cima e de baixo.
+static int epVis(void) {
+  int n = (int)((NV_TELA_H - 48.0f - 40.0f - 60.0f - 251.0f) / 160.0f);
+  return n > 4 ? 4 : n < 2 ? 2 : n;
+}
+#define EP_VIS    epVis()
 #define EP_PE_H   47.0f
 #define EP_VAZIO 120.0f
 static int aberto, titulo, atualT, atualE, temporada, foco, grupo;
@@ -779,7 +788,14 @@ static void corpoIlha(GfxRect c, float a, void *u) {
   if (vmAberto && !vmSo) menuDesenhar(ilha, a);
 }
 
+static void episodios_desenharCorpo_(void);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void episodios_desenhar(void) {
+  ESCALA_INI();
+  episodios_desenharCorpo_();
+  ESCALA_FIM();
+}
+static void episodios_desenharCorpo_(void) {
   if (anim < .005f) return;
   revalidar();
   // O video fica sem veu cheio: so o degrade do lado da ilha, como nas faixas.
@@ -815,7 +831,14 @@ int  episodios_menu_aberto_qualquer(void) { return vmAberto; }
 void episodios_menu_evento(const SDL_Event *e) {
   if (vmAberto && vmSo) { revalidar(); menuEvento(e); }
 }
+static void episodios_menu_desenharCorpo_(void);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void episodios_menu_desenhar(void) {
+  ESCALA_INI();
+  episodios_menu_desenharCorpo_();
+  ESCALA_FIM();
+}
+static void episodios_menu_desenharCorpo_(void) {
   if (vmAberto && vmSo) revalidar();
   if (vmAberto && vmSo) menuDesenhar((GfxRect){ 0.0f, 0.0f, (float)NV_TELA_W, (float)NV_TELA_H }, 1.0f);
 }

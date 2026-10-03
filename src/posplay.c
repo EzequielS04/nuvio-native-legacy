@@ -17,6 +17,8 @@
 #include "player.h"
 #include "plrui.h"
 #include "plrilha.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -410,7 +412,14 @@ static void anelContagem(float cx, float cy, float frac, float a) {
 // as dicas de Baixo/Voltar vao DENTRO da ilha (caiam em y~1046, overscan).
 // No filme, os relacionados na margem de 96 (era 64), o cartaz focado sobe
 // com escala e sombra (saiu o anel de 4 px) e o nome dele vai ao cabecalho.
+static void posplay_desenharCorpo_(Uint32 agora, float baseY);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void posplay_desenhar(Uint32 agora, float baseY) {
+  ESCALA_INI();
+  posplay_desenharCorpo_(agora, baseY);
+  ESCALA_FIM();
+}
+static void posplay_desenharCorpo_(Uint32 agora, float baseY) {
   float a = anim, x = 96.0f;
   (void)baseY;
   if (a < 0.01f) return;
@@ -423,9 +432,13 @@ void posplay_desenhar(Uint32 agora, float baseY) {
     const CatEp *px = NULL;
     int i, n = cat_n_episodios(idx);
     float sobe = (1.0f - a) * 20.0f;
-    GfxRect ilha = { x, 660.0f + sobe, 1180.0f, 308.0f }, tr;
+    // Ancorada na base da tela virtual (escala.h): 660 em 1080.
+    GfxRect ilha = { x, NV_TELA_H - 420.0f + sobe, 1180.0f, 308.0f }, tr;
     int resta = fecharEm > agora ? (int)((fecharEm - agora + 999) / 1000) : 0;
     char cab[64], num[64], dur[32];
+    // Na tela virtual estreita (150%: 1280) a margem de 96 nao deixa os 1180
+    // da ilha: ela centra, com a largura inteira (as dicas vao ate a borda).
+    if (ilha.x + ilha.w > NV_TELA_W - 40.0f) ilha.x = (NV_TELA_W - ilha.w) * 0.5f;
     for (i = 0; i < n; i++) {
       const CatEp *e = cat_episodio(idx, i);
       if (e && e->temporada == proxT && e->episodio == proxE) { px = e; break; }
@@ -477,7 +490,7 @@ void posplay_desenhar(Uint32 agora, float baseY) {
   // FILME: os relacionados que o Trakt ja deu ao abrir o titulo.
   { int n = extras_n_relacionados(), i;
     float sobe = (1.0f - a) * 20.0f;
-    GfxRect ilha = { x, 636.0f + sobe, NV_TELA_W - 192.0f, NV_TELA_H - 40.0f - 636.0f };
+    GfxRect ilha = { x, NV_TELA_H - 444.0f + sobe, NV_TELA_W - 192.0f, 444.0f - 40.0f };   // 636 em 1080
     float y = ilha.y + 26.0f, cx;
     if (n > PP_MAX) n = PP_MAX;
     plrui_material(ilha, 36.0f, 0, a);
@@ -520,7 +533,7 @@ void posplay_desenhar(Uint32 agora, float baseY) {
 // reacao, reacao.h). As contas sao as de posplay_desenhar, sem a mola.
 float posplay_topo(float baseY) {
   if (anim < 0.01f) return baseY;
-  return serie ? 660.0f - 16.0f : 636.0f - 16.0f;
+  return serie ? NV_TELA_H - 420.0f - 16.0f : NV_TELA_H - 444.0f - 16.0f;
 }
 
 #ifdef NV_SHOT_HOOKS

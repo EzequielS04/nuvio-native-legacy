@@ -343,6 +343,8 @@ int main(int argc, char **argv) {
     ajustes_dir(getenv("NUVIO_DADOS")); }
   ajustes_iniciar();
   if (!strcmp(material, "vidro")) ajustes_definir_vidro(1);
+  // NUVIO_TAMANHO_UI=1.2|1.3|1.5: o "Tamanho da interface" (escala.h).
+  if (getenv("NUVIO_TAMANHO_UI")) gfx_escala_ui_definir((float)atof(getenv("NUVIO_TAMANHO_UI")));
   { struct tm lt; time_t t = time(NULL);
     localtime_r(&t, &lt); lt.tm_hour = 20; lt.tm_min = 19; lt.tm_sec = 0;
     plrilha_shot_hora(mktime(&lt)); }

@@ -25,6 +25,8 @@
 #include "plrui.h"
 #include "idioma.h"
 #include "idiomacod.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -1524,7 +1526,14 @@ static void vooPasso(Uint32 agora) {
   if (vooT >= 1.0f) vooFim("pousou", agora);
 }
 
+static void ilha_desenharCorpo_(Uint32 agora);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void ilha_desenhar(Uint32 agora) {
+  ESCALA_INI();
+  ilha_desenharCorpo_(agora);
+  ESCALA_FIM();
+}
+static void ilha_desenharCorpo_(Uint32 agora) {
   float dt = ultQuadro ? (float)(agora - ultQuadro) / 1000.0f : 1.0f / 60.0f;
   int alvo, vis, dir, trocando = 0;
   float alvoW, alvoH, x, y;
