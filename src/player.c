@@ -240,6 +240,7 @@ static int   aberto = 0, saindo = 0, pediuSair = 0;
 static int   idx = 0;
 #define PLR_SCR_TOCOU_S 5.0f   // #179: reproducao continua antes do /scrobble/start
 static int   tocando = 1;
+static int retomandoSalto; // seek requested playback; buffering is not user pause
 // Uma unica sessao VOD pausada, por no maximo dois minutos. Nao abre conexao
 // especulativa: e o pipeline que ja estava exibindo este titulo.
 //
@@ -1175,7 +1176,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
     // A grade EPG comeca a baixar ja: o banner "agora/a seguir" do OSD e o
     // overlay do guia dependem dela. Idempotente.
     if (canalSessao) { guia_carregar(); epg_iniciar(); } }
-  tocando = 1; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f;
+  tocando = 1; retomandoSalto = 0; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f;
   pedFontes = erroFonte = pedFaixas = pedProxT = pedProxE = 0; inicioImagem = 0;
   erroTitulo[0] = erroDica[0] = 0;
   pedGuia = pedZap = pedGuiaCheio = 0;
@@ -2010,6 +2011,7 @@ static void alternarTocando(void) {
   // Canal sem janela de tempo nao pausa (ver avPodePausar): a tecla fisica de
   // Pause tambem cai aqui, e congelar um ao vivo so desincroniza o som.
   if (ehCanal() && !avPodePausar()) return;
+  retomandoSalto = 0;
   tocando = !tocando;
   if (comVideo) video_pausar(!tocando);
 }
@@ -2200,7 +2202,8 @@ static void saltar(int dir) {
   if (!scrubbing) {
     scrubbing = 1;
     scrubPassos = 0;
-    scrubTocava = tocando;
+    scrubTocava = tocando || retomandoSalto;
+    pausao_fechar();
     if (tocando && comVideo) { video_pausar(1); tocando = 0; }
   }
   scrubPassos++;
@@ -2216,6 +2219,8 @@ static void saltar(int dir) {
 static void terminarSalto(void) {
   if (!scrubbing) return;
   scrubbing = 0;
+  retomandoSalto = scrubTocava;
+  pausao_fechar();
   seekr_ocioso();   // solta a folha decodificada (~22 MB), fica o JPEG
   if (comVideo) {
     video_buscar(posSeg);
@@ -2573,6 +2578,7 @@ void player_atualizar(float dt, Uint32 agora) {
 #endif
     }
     tocando = video_tocando();
+    if (tocando && !scrubbing) retomandoSalto = 0;
     { const CatItem *ci = ehCanal() ? NULL : item();
       // "ASSISTINDO AGORA" para os amigos, SO se a pessoa ligou o nivel 2 em
       // Ajustes (recomenda.c decide; com tudo desligado isto nao faz nada).
@@ -2706,7 +2712,7 @@ void player_atualizar(float dt, Uint32 agora) {
                    // esta condicao o painel subia sozinho no meio de um avanco
                    // longo — o "componente que aparece quando ta pausado
                    // piscando" do relato.
-                   !ehCanal() && !tocando && !scrubbing && !saindo && !erroFonte &&
+                   !ehCanal() && !tocando && !scrubbing && !retomandoSalto && !saindo && !erroFonte &&
                    !player_carregando() &&
                    !episodios_aberto() && !stream_folha_aberta() &&
                    !faixas_aberta() && !ofertaProximo() && !posplay_visivel(),
@@ -3102,7 +3108,8 @@ static void ponteiroBuscar(int a, int b) {
     // pausado, posSeg na mao do dedo, UMA busca no fim (terminarSalto, depois
     // de PLR_SCRUB_FIM_MS sem movimento).
     if (!scrubbing) {
-      scrubbing = 1; scrubPassos = 0; scrubTocava = tocando;
+      scrubbing = 1; scrubPassos = 0; scrubTocava = tocando || retomandoSalto;
+    pausao_fechar();
       if (tocando && comVideo) { video_pausar(1); tocando = 0; }
     }
     barraFoco = 1; skipFoco = 0;
@@ -3142,16 +3149,17 @@ static void desenharAcoesEpisodio(void){
     const float h=72.0f, lado=28.0f, ladoIcone=36.0f, intervalo=16.0f;
     float w=t.w+lado*2.0f+ladoIcone+intervalo;
     float y=(NV_TELA_H-60.0f-h)-anim*(NV_TELA_H-60.0f-h-664.0f);
-    GfxRect p={64,y,w,h};
+    float xSkip = posplay_visivel() ? NV_TELA_W - PLR_PAD_X - w : 64.0f;
+    GfxRect p={xSkip,y,w,h};
     if (ponteiroNoPlayer()) ponteiro_alvo(p.x, p.y, p.w, p.h, ponteiroSkip, NULL, 0, 0);
     if(sel) superficieFocoPlayer(p,.27f,1.0f,.96f*entrada);
     else gfx_cor(p,.27f,.118f,.118f,.118f,.85f*entrada);
     { float tintaIcone = (sel && !ajustes_vidro()) ? ajustes_acento_tinta(NULL, NULL, NULL) : 1.0f;
-      gfx_icone((GfxRect){64.0f+lado,y+(h-ladoIcone)*0.5f,ladoIcone,ladoIcone},
+      gfx_icone((GfxRect){xSkip+lado,y+(h-ladoIcone)*0.5f,ladoIcone,ladoIcone},
                 "avancar",tintaIcone,tintaIcone,tintaIcone,entrada); }
     // O icone e o texto formam um unico grupo: padding simetrico e cada um
     // centralizado pela propria caixa evitam o aspecto de icone solto na pilula.
-    txt_desenhar_alpha(t,64.0f+lado+ladoIcone+intervalo,
+    txt_desenhar_alpha(t,xSkip+lado+ladoIcone+intervalo,
                        y+(h-t.h)*0.5f,entrada);
   }
 }
