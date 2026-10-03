@@ -12,7 +12,8 @@
 // chamada do app, de outra tela ou de um teste de captura.
 //
 // Um arquivo inteiro na tela virtual define NV_ESCALA_TELA antes do include:
-// NV_TELA_W/H passam a ser os virtuais ali dentro.
+// NV_TELA_W/H passam a ser os virtuais ali dentro. NV_ESCALA_TELA_ATIVA: a
+// tela do fator ATIVO no momento (para ESCALA_SE_COUBER).
 #ifndef NV_ESCALA_H
 #define NV_ESCALA_H
 #include "layout.h"
@@ -28,7 +29,24 @@
 // (o teclado, que ja ocupa a largura da tela em 100%).
 #define ESCALA_REAL_INI() float escalaAnt_ = gfx_escala(); gfx_escala_sair(1.0f)
 #define ESCALA_REAL_FIM() gfx_escala_sair(escalaAnt_)
+// So amplia se um cartao de w x h (em px de 1080p) ainda couber na tela real
+// com 16 px de folga em cada borda; senao desenha em 1080p. Para os cartoes
+// grandes de tela quase cheia (novidades, explicadores), que ja foram
+// desenhados para ocupar a tela em 100%. Quem usa mede pela tela ATIVA
+// (NV_ESCALA_TELA_ATIVA abaixo), porque o fator depende do cartao.
+#define ESCALA_SE_COUBER_INI(w, h) \
+  float escalaAnt_ = gfx_escala(); \
+  gfx_escala_sair(((w) * gfx_escala_ui() <= 1888.0f && (h) * gfx_escala_ui() <= 1048.0f) \
+                  ? gfx_escala_ui() : 1.0f)
+#define ESCALA_SE_COUBER_FIM() gfx_escala_sair(escalaAnt_)
 
+#endif
+
+#ifdef NV_ESCALA_TELA_ATIVA
+#undef NV_TELA_W
+#undef NV_TELA_H
+#define NV_TELA_W (1920.0f / gfx_escala())
+#define NV_TELA_H (1080.0f / gfx_escala())
 #endif
 
 #ifdef NV_ESCALA_TELA

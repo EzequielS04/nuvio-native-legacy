@@ -23,6 +23,8 @@
 #include "ponteiro.h"
 #include "home.h"
 #include "colecoes.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 
 // O MENU E UMA BARRA DE ALTURA INTEIRA (dono, 02/10, revisao dos mockups
 // "Glass UI — ilha", telas 1 e 2). A primeira versao do Glass UI fez dele uma
@@ -568,12 +570,20 @@ float menu_barra_borda(void) {
   if (tvAtivo()) return 0.0f;
   atual = (aberto || desliza >= 0.002f)
         ? anim_mistura(NV_MENU_W_RAIL, NV_MENU_W_ABERTO, anim_suave(expande)) : 0.0f;
-  if (aberto) return NV_MENU_W_ABERTO;
+  if (aberto) return NV_MENU_W_ABERTO * gfx_escala_ui();
   if (!ajustes_rail_recolhida() && atual < NV_MENU_W_RAIL) atual = NV_MENU_W_RAIL;
-  return atual;
+  // Em pixels da tela REAL: a barra e camada ampliada (escala.h).
+  return atual * gfx_escala_ui();
 }
 
+static void menu_desenharCorpo_(Uint32 agora);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void menu_desenhar(Uint32 agora) {
+  ESCALA_INI();
+  menu_desenharCorpo_(agora);
+  ESCALA_FIM();
+}
+static void menu_desenharCorpo_(Uint32 agora) {
   (void)agora;
   if (tvAtivo()) { tvDesenhar(); return; }
   // Rail fixa sempre presente, como no shell legacy: a barra estreita, so
@@ -738,11 +748,14 @@ int menu_pilula_rect(float *x, float *y, float *w, float *h) {
   GfxRect r;
   if (!tvAtivo()) { if (x) *x = 0; if (y) *y = 0; if (w) *w = 0; if (h) *h = 0; return 0; }
   r = tvPilula();
-  // O retangulo devolvido INCLUI a seta, que fica a esquerda da pilula.
-  if (x) *x = NV_MENU_PILULA_X;
-  if (y) *y = r.y;
-  if (w) *w = r.x + r.w - NV_MENU_PILULA_X;
-  if (h) *h = r.h;
+  // O retangulo devolvido INCLUI a seta, que fica a esquerda da pilula. Em
+  // pixels da tela REAL: a pilula e camada ampliada (escala.h), e quem pergunta
+  // (Busca, Biblioteca, a ilha) converte para a tela dele.
+  { float e = gfx_escala_ui();
+    if (x) *x = NV_MENU_PILULA_X * e;
+    if (y) *y = r.y * e;
+    if (w) *w = (r.x + r.w - NV_MENU_PILULA_X) * e;
+    if (h) *h = r.h * e; }
   return 1;
 }
 int menu_pilula_titulo(void) { return tvAtivo(); }

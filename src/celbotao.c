@@ -7,6 +7,8 @@
 #include "ajustes.h"
 #include "idioma.h"
 #include "qr.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,7 +50,9 @@ void celb_botao(int d, GfxRect r, int focado, PonteiroFn focar, int a, int b, fl
   GfxRect c;
   int t;
   if (d <= CELB_NENHUM || d >= CELB_N || !celular_disponivel()) return;
-  ancora[d] = r;
+  // Guardado na tela REAL: o botao pode estar numa camada ampliada (Spotlight)
+  // ou nao (Busca, teclado); o cartao converte para a dele (escala.h).
+  { float e = gfx_escala(); ancora[d] = (GfxRect){ r.x * e, r.y * e, r.w * e, r.h * e }; }
   // A mola anda em celb_atualizar; com o cartao aberto o botao fica aceso.
   focoBotao[d] = focado;
   k = animBotao[d];
@@ -167,7 +171,14 @@ static float alturaCartao(int temQr) {
          3 * CB_LINHA_H + CB_PAD - 6.0f;
 }
 
+static void celb_desenharCorpo_(void);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void celb_desenhar(void) {
+  ESCALA_INI();
+  celb_desenharCorpo_();
+  ESCALA_FIM();
+}
+static void celb_desenharCorpo_(void) {
   float a, x, y, w, h, ar, ag, ab;
   GfxRect r;
   int est, temQr;
@@ -178,6 +189,7 @@ void celb_desenhar(void) {
   u = celular_url();
   temQr = est == CEL_ESPERANDO && u[0];
   r = ancora[dono];
+  { float e = gfx_escala_ui(); r.x /= e; r.y /= e; r.w /= e; r.h /= e; }
   w = CB_W; h = alturaCartao(temQr);
   // ANCORADO NO BOTAO: abaixo dele, com a borda direita alinhada a dele; sem
   // espaco embaixo, em cima; nunca fora da tela.

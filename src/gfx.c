@@ -6,6 +6,7 @@
 #include "layout.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <math.h>
 #include "anim.h"
 #include "corviva.h"
@@ -1202,6 +1203,9 @@ static GLuint compila(GLenum tipo, const char *src) {
 
 int gfx_iniciar(void) {
   GLuint vs = compila(GL_VERTEX_SHADER, VS);
+  // Capturas (tests/*_shot): NUVIO_TAMANHO_UI=1.2 liga o "Tamanho da
+  // interface" sem passar por Ajustes. No app quem define e ajustes.c.
+  { const char *t = getenv("NUVIO_TAMANHO_UI"); if (t && *t) gfx_escala_ui_definir((float)atof(t)); }
   char fonte[12000];   // cabeca + sdf/cover + corpo; o maior (camadas) passa de 6000
   for (int m = 0; m < GFX_NMODOS; m++) {
     snprintf(fonte, sizeof fonte, "%s%s%s%s", FS_CABECA,

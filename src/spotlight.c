@@ -54,6 +54,8 @@
 #include "ponteiro.h"
 #include "sistexto.h"
 #include "celbotao.h"
+#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
+#include "escala.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,7 +76,7 @@ static float spBW = SP_BW_BASE;
 #define SP_BH        76.0f
 #define SP_RAIO      36.0f          // px do corpo aberto; a barra sozinha e pilula
 #define SP_CORPO_Y   (SP_BY + SP_BH)
-#define SP_CORPO_MAX (1024.0f - SP_CORPO_Y)
+#define SP_CORPO_MAX (NV_TELA_H - 56.0f - SP_CORPO_Y)   // 1024 em 1080; tela virtual (escala.h)
 // DUAS ILHAS (Glass UI, mockup "ilha" tela 6): o campo e uma pilula sozinha e
 // os resultados moram numa segunda ilha SP_ILHA_VAO abaixo dela. O recuo de
 // cima do corpo conta o vao e o ar de dentro da ilha de baixo: 22 de padding
@@ -1295,9 +1297,17 @@ void spot_atualizar(float dt, Uint32 agora) {
 }
 
 // --- Desenho -----------------------------------------------------------------------
-static float listaX = (NV_TELA_W - SP_BW_BASE) * 0.5f + SP_ILHA_PAD, listaW = SP_BW_BASE - 2.0f * SP_ILHA_PAD;
+static float listaX = (1920.0f - SP_BW_BASE) * 0.5f + SP_ILHA_PAD,   // refeito a cada quadro
+             listaW = SP_BW_BASE - 2.0f * SP_ILHA_PAD;
 
+static void spot_veuCorpo_(void);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void spot_veu(void) {
+  ESCALA_INI();
+  spot_veuCorpo_();
+  ESCALA_FIM();
+}
+static void spot_veuCorpo_(void) {
   // O veu do mockup: preto a 55 % sobre a tela de tras.
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 0.0f, 0.0f, 0.01f, 0.55f);
 }
@@ -1808,7 +1818,14 @@ static void desenhaRodape(float dy, float a) {
   }
 }
 
+static void spot_desenharCorpo_(Uint32 agora, int veuPronto);
+// Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void spot_desenhar(Uint32 agora, int veuPronto) {
+  ESCALA_INI();
+  spot_desenharCorpo_(agora, veuPronto);
+  ESCALA_FIM();
+}
+static void spot_desenharCorpo_(Uint32 agora, int veuPronto) {
   float a, dy;
   GfxRect sup;
   if (entrada < 0.004f) return;

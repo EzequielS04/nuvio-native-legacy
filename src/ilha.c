@@ -528,10 +528,12 @@ void ilha_posicionar(int guia) {
   int pos = ajustes_relogio_pos();
   if (guia || pos == 2) ilha_ancorar(NV_TELA_W - NV_ILHA_MARGEM_D, NV_ILHA_Y, 1);
   else if (pos == 1 && ajustes_home_layout() == HOME_LAYOUT_DINAMICA) {
-    float px, py, pw, ph;
+    // A pilula e o recuo do conteudo chegam em pixels da tela REAL; a ilha
+    // mede pela virtual (escala.h).
+    float px, py, pw, ph, e = gfx_escala_ui();
     if (menu_pilula_rect(&px, &py, &pw, &ph))
-      ilha_ancorar(px + pw + NV_MENU_PILULA_VAO, py + (ph - NV_ILHA_H) * 0.5f, 0);
-    else ilha_ancorar(ajustes_conteudo_x(), NV_ILHA_Y, 0);   // sem pilula na tela: canto livre
+      ilha_ancorar((px + pw) / e + NV_MENU_PILULA_VAO, (py + ph * 0.5f) / e - NV_ILHA_H * 0.5f, 0);
+    else ilha_ancorar(ajustes_conteudo_x() / e, NV_ILHA_Y, 0);   // sem pilula na tela: canto livre
   } else if (ajustes_home_layout() != HOME_LAYOUT_DINAMICA && menu_barra_borda() > 0.0f) {
     // GLASS UI, barra de altura inteira (dono, 02/10): o menu dos layouts
     // classicos ocupa a borda esquerda de cima a baixo, entao o relogio nao
@@ -539,9 +541,10 @@ void ilha_posicionar(int guia) {
     // barra. Fica a direita dela: no x do conteudo (alinhado aos titulos,
     // como sem rail) ou, com a barra aberta e mais larga que esse recuo, 24
     // px depois da borda. ilha.c desliza o x entre os dois.
-    float x = ajustes_conteudo_x(), borda = menu_barra_borda() + 24.0f;
+    float e = gfx_escala_ui();
+    float x = ajustes_conteudo_x() / e, borda = menu_barra_borda() / e + 24.0f;
     ilha_ancorar(x > borda ? x : borda, NV_ILHA_Y, 0);
-  } else if (pos == 1) ilha_ancorar(ajustes_conteudo_x(), NV_ILHA_Y, 0);
+  } else if (pos == 1) ilha_ancorar(ajustes_conteudo_x() / gfx_escala_ui(), NV_ILHA_Y, 0);
 }
 
 // COM SINAL: quem renova a atividade chama SDL_GetTicks DEPOIS de o quadro ter
@@ -1624,7 +1627,7 @@ static void ilha_desenharCorpo_(Uint32 agora) {
   // POSICAO, num ponto so (ilha_ancorar ou o padrao).
   if (ancDef) { x = ancX; y = ancY; dir = ancDir; }
   else if (ajustes_home_layout() == HOME_LAYOUT_DINAMICA) { x = NV_TELA_W - NV_ILHA_MARGEM_D; y = NV_ILHA_Y; dir = 1; }
-  else { x = ajustes_conteudo_x(); y = NV_ILHA_Y; dir = 0; }
+  else { x = ajustes_conteudo_x() / gfx_escala_ui(); y = NV_ILHA_Y; dir = 0; }   // real -> virtual
   // O CANTO MUDA COM O MENU (ilha_posicionar): abrir a barra com a rail
   // recolhida leva o relogio de x do conteudo para a margem do menu. Desliza,
   // em vez de saltar; troca de lado (esquerda/direita) ou ilha apagada assenta
