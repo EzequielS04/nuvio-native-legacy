@@ -1,6 +1,6 @@
 # Ilha do relógio — inventário e proposta
 
-Proposta UX local, solicitada pelo dono em 02/10/2026. A base de runtime é a release 1.7.2 (`fc711f6b`, mesmo runtime de `d8402e54`). Este documento e o mockup não acrescentam funções aos 13 pacotes prontos. Nenhuma TV foi controlada ou usada como evidência de desempenho.
+Proposta UX local, solicitada pelo dono em 02/10/2026. A base de runtime é a release 1.7.2 (`fc711f6b`, mesmo runtime de `d8402e54`). Este documento e o mockup não alteram o runtime ou os pacotes. O lote de pacotes `fc711f6b` passou a intermediário durante a revisão final de isolamento do cartão descrita abaixo. Nenhuma TV foi controlada ou usada como evidência de desempenho.
 
 A recomendação é fazer da ilha o ponto de continuidade da sessão: mostrar quando a retomada está pronta, manter essa ação estável e oferecer contexto somente ao expandir. O teto de retenção permanece em **dois minutos**.
 
@@ -70,7 +70,7 @@ A primeira evolução é a mais valiosa e deve vir sozinha antes das demais. A s
 2. A disponibilidade “Pronto” deriva de identidade e pausa confirmadas, nunca apenas da existência de um cartão. Tempo restante de retenção pode aparecer ao expandir se necessário, sem countdown frenético em repouso.
 3. O filme retido não alterna com estreia a cada 6 s. Foco/expansão preservam o cartão e a ação; outras entradas ficam acessíveis depois da ação principal.
 4. Em120s o backend é liberado e o cartão mantém somente o ponto/progresso. O texto não promete retorno instantâneo. A regra atual de 30 min de inatividade do cartão continua independente.
-5. Conta/perfil trocado deve invalidar também o cartão, não só o backend. Na leitura atual, `ilhacart.c` mantém seu cartão em memória sem identidade própria de conta/perfil nem reset explícito nos callers encontrados. É ponto para regressão focada, não reprodução de vazamento em TV.
+5. Conta/perfil trocado deve invalidar também o cartão, não só o backend. A revisão estreita confirmou por cadeia de chamadas um defeito P2: `ilhacart.c` mantém seu cartão em memória sem identidade própria de conta/perfil/reset explícito, podendo oferecer o IMDb anterior no fallback após troca/logout. O backend retido já bloqueia a sessão anterior. Correção e regressão focada estão sendo feitas separadamente pelo agente responsável pelo isolamento, dentro do escopo da 1.7.2; o mockup não implementa esse conserto. Não há reprodução em TV. O root atualizará hash e prova quando concluídos.
 6. A ilha não rouba espaço do player, do teclado ou do QR. Deve retirar sua camada diante dessas superfícies. Atividades concorrentes precisam ser arbitradas por sessão/tipo, não por ordem de chamadas.
 7. Nunca expor URL, credencial, nome de conta, endereço de LAN ou código de pareamento no estado compacto.
 
