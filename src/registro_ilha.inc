@@ -24,9 +24,9 @@
 #define RI_X (NV_TELA_W - 558.0f)
 #define RI_W  518.0f
 #define RL_TOPO   208.0f   // lghead: 26 + 56 + 14
-#define RL_BASE   937.0f   // acima do "seguindo" (30) e do rodape (72 + fio)
+#define RL_BASE   (NV_TELA_H - 143.0f)   // 937 em 1080: acima do "seguindo" (30) e do rodape (72 + fio)
 #define RL_X       66.0f   // lgw: 18 de recuo na ilha
-#define RL_W     1254.0f
+#define RL_W     (RP_W - 36.0f)   // 1254 em 1080
 #define RL_H       32.0f
 #define RL_AREA_X (RL_X + 26.0f)
 #define RL_MSG_X  (RL_AREA_X + 136.0f)
