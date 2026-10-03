@@ -449,6 +449,8 @@ static void *buscar(void *arg) {
   int serie;
   long tmdbId;
   int parte = (int)(intptr_t)arg;
+  unsigned long long historicoGeracao = cat_historico_geracao();
+  unsigned long long credencialGeracao = trakt_credencial_geracao();
 
   pthread_mutex_lock(&trava);
   snprintf(id, sizeof id, "%s", idEmCurso);
@@ -545,7 +547,7 @@ static void *buscar(void *arg) {
       // historico de titulo (cat_visto), e /sync/history nunca diz "serie
       // vista" — so episodios. Os contadores do topo dizem: tudo o que ja foi
       // ao ar foi visto. Com 0 exibidos nao se afirma nada.
-      if (exib > 0) cat_historico_definir_id(id, "series", vist >= exib);
+      if (exib > 0) trakt_historico_aplicar(id, "series", vist >= exib, historicoGeracao, credencialGeracao);
       fflush(stdout);
       int pt = 0, pe = 0;
       const char *prox = strstr(corpo, "\"next_episode\"");

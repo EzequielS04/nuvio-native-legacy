@@ -16,6 +16,11 @@
 void player_abrir(int indiceCatalogo, const char *url);
 void player_definir_episodio(int temporada, int episodio);
 void player_do_inicio(void);
+// Posicao confiavel para preparar o Android: registro com duracao conhecida,
+// coerente com o percentual escolhido. Zero mantem a retomada normal depois
+// da duracao real; metadados/reservas nao servem para converter percentual.
+double player_regra_retomada_inicial(double posSalva, double durSalva,
+                                     int percentual, int concluido);
 void player_episodio_atual(int *temporada, int *episodio);
 int player_indice(void);
 const char *player_linha_episodio(void);
@@ -82,6 +87,11 @@ float player_posicao_seg(void);
 // no ultimo instante (ver stream_idade_ms), entao a tela abre antes de haver
 // URL e o video entra quando chega.
 void player_definir_fonte(const char *url);
+// Desfaz a fonte em curso SEM fechar a tela: o video para e a sessao volta a
+// "abrindo fonte", como logo depois de player_abrir. E o recuo da fonte
+// guardada (fontevolta.h) para a busca normal, sem a pessoa ver o player
+// fechar e abrir.
+void player_voltar_a_esperar(void);
 
 int  player_aberto(void);   // 1 enquanto a tela existe, inclusive durante o fade de saida
 // Pedidos que so existem com um CANAL no ar (tipo "channel"/"tv"):

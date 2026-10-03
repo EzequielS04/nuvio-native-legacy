@@ -382,23 +382,56 @@ char *rede_postar_st(const char *url, int segundos, const char *const *cab,
   return r;
 }
 
-int rede_url_final(const char *url, int segundos, char *dst, unsigned tam) {
-  const char *cab[2];
-  char *corpo;
-  int n = 0, http = 0;
+// Sonda sem corpo atravessando a ponte. O XHR ainda recebe o corpo inteiro se
+// o servidor ignorar Range, mas nao aloca essa copia no heap do WASM.
+EM_JS(int, nv_url_sonda, (const char *url, const char *cabs, char *dst,
+                         int tam, int *status), {
+  var xhr = new XMLHttpRequest();
+  if (status) HEAP32[status >> 2] = 0;
+  try {
+    xhr.open("GET", UTF8ToString(url), false);
+    if (cabs) UTF8ToString(cabs).split("\n").forEach(function (linha) {
+      var i = linha.indexOf(":");
+      if (i <= 0) return;
+      try { xhr.setRequestHeader(linha.slice(0, i).trim(), linha.slice(i + 1).trim()); } catch (e) {}
+    });
+    xhr.setRequestHeader("Range", "bytes=0-63");
+    xhr.send(null);
+  } catch (e) { return 0; }
+  if (status) HEAP32[status >> 2] = xhr.status;
+  var finalUrl = xhr.responseURL || "";
+  var bytes = 0;
+  for (var k = 0; k < finalUrl.length; k++) {
+    var code = finalUrl.charCodeAt(k);
+    if (code >= 0xD800 && code <= 0xDBFF && k + 1 < finalUrl.length) { bytes += 4; k++; }
+    else bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : 3;
+  }
+  if (xhr.status < 200 || xhr.status >= 300 || !finalUrl || bytes >= tam) return 0;
+  stringToUTF8(finalUrl, dst, tam);
+  return 1;
+});
+
+int rede_url_final_cab(const char *url, int segundos, const char *const *cab,
+                       char *dst, unsigned tam, int *status) {
   char *cabs;
+  int ok, http = 0;
   (void)segundos;
-  if (!url || !*url || !dst || tam == 0) return 0;
-  dst[0] = 0;
+  if (status) *status = 0;
+  if (dst && tam) dst[0] = 0;
+  if (!url || !*url || !dst || !tam || tam > INT_MAX) return 0;
   // Um pedaco minusculo em vez de HEAD, pelo mesmo motivo do outro caminho:
   // servidores de debrid respondem HEAD com 405 ou mentem no redirecionamento,
   // mas honram Range.
-  cab[0] = "Range: bytes=0-64"; cab[1] = NULL;
   cabs = juntarCabs(cab, NULL);
-  corpo = nv_http("GET", url, cabs, NULL, &n, &http, dst, (int)tam, NULL, 0);
+  if (cab && cab[0] && !cabs) return 0;
+  ok = nv_url_sonda(url, cabs, dst, (int)tam, &http);
   free(cabs);
-  free(corpo);
-  return dst[0] ? 1 : 0;
+  if (status) *status = http;
+  return ok;
+}
+
+int rede_url_final(const char *url, int segundos, char *dst, unsigned tam) {
+  return rede_url_final_cab(url, segundos, NULL, dst, tam, NULL);
 }
 
 // VAZAO NO TIZEN (ver rede_medir_vazao em rede.h). XHR sincrono so devolve
@@ -1313,41 +1346,77 @@ static char *rede_baixar_interno3(const char *url, int segundos, long *tam,
   return baldeFinal(&b);
 }
 
-int rede_url_final(const char *url, int segundos, char *dst, unsigned tam) {
-  Balde b = {0};
-  void *c;
+typedef struct { size_t n; int limitado; } UrlSonda;
+static size_t receberSonda(void *dados, size_t tam, size_t qtd, void *u) {
+  UrlSonda *s = u;
+  size_t bytes;
+  (void)dados;
+  if (tam && qtd > SIZE_MAX / tam) return 0;
+  if (redeCancelLocal && *redeCancelLocal) { redeCancelouLocal = 1; return 0; }
+  bytes = tam * qtd;
+  if (bytes > 64 - s->n) { s->n = 64; s->limitado = 1; return 0; }
+  s->n += bytes;
+  return bytes;
+}
+
+int rede_url_final_cab(const char *url, int segundos, const char *const *cab,
+                       char *dst, unsigned tam, int *status) {
+  UrlSonda s = {0};
+  Vigia vigia;
+  void *c, *lista = NULL;
   char *fim = NULL;
-  int r;
-  if (!url || !*url || !abrir() || !curl_getinfo) return 0;
+  long http = 0;
+  unsigned long prazoMs;
+  int r, ok, k;
+  if (status) *status = 0;
+  if (dst && tam) dst[0] = 0;
+  if (!url || !*url || !dst || !tam || tam > INT_MAX || !abrir() || !curl_getinfo) return 0;
+  if (cab && cab[0] && (!slist_append || !slist_free)) return 0;
   c = pegarHandle(url);
   if (!c) return 0;
   curl_setopt(c, OPT_URL, url);
-  curl_setopt(c, OPT_WRITEFUNCTION, receber);
-  curl_setopt(c, OPT_WRITEDATA, &b);
+  curl_setopt(c, OPT_WRITEFUNCTION, receberSonda);
+  curl_setopt(c, OPT_WRITEDATA, &s);
   curl_setopt(c, OPT_FOLLOWLOCATION, (long)1);
-  opcoesComuns(c, (unsigned long)(segundos > 0 ? segundos : 20) * 1000UL);
+  prazoMs = (unsigned long)(segundos > 0 ? segundos : 20) * 1000UL;
+  opcoesComuns(c, prazoMs);
+  ligarVigia(c, &vigia, prazoMs);
   // Um pedaco minusculo em vez de HEAD: varios servidores de debrid respondem
   // HEAD com 405 ou mentem no redirecionamento, mas honram Range.
-  curl_setopt(c, OPT_RANGE, "0-64");
+  curl_setopt(c, OPT_RANGE, "0-63");
+  for (k = 0; cab && cab[k]; k++) {
+    void *nova = slist_append(lista, cab[k]);
+    if (!nova) { if (lista) slist_free(lista); soltarHandleR(c, 1, url); return 0; }
+    lista = nova;
+  }
+  if (lista) curl_setopt(c, OPT_HTTPHEADER, lista);
   r = curl_perform(c);
-  if (!r) curl_getinfo(c, INFO_URL_FINAL, &fim);
-  if (!r && fim) snprintf(dst, tam, "%s", fim);
+  curl_getinfo(c, INFO_RESPONSE_CODE, &http);
+  curl_getinfo(c, INFO_URL_FINAL, &fim);
+  if (status) *status = (int)http;
+  // Curl23 so vale quando NOS cortamos o corpo apos o teto. Um corpo cortado
+  // pelo servidor (curl18/56) ou outro erro continua falha de transporte.
+  ok = (!r || (r == 23 && s.limitado)) && !redeCancelouLocal &&
+       http >= 200 && http < 300 && fim && *fim && strlen(fim) < tam;
+  if (ok) memcpy(dst, fim, strlen(fim) + 1);
   // DIZER POR QUE FALHOU. Quem chama (streams.c) so imprimia "N nao resolveu",
   // e "nao resolveu" cobre coisas muito diferentes: host que nao existe (6),
   // recusa de conexao (7), estouro de tempo (28), TLS (35, 60) e HTTP 4xx/5xx
   // do proprio servidor da fonte. Sem separar, todo relato de "nao toca" vira
   // adivinhacao — e foi exatamente onde este ficou parado.
-  if (r || !fim) {
-    long http = 0;
+  if (!ok) {
     char seg[120];
-    curl_getinfo(c, INFO_RESPONSE_CODE, &http);
     printf("[rede] url final falhou: curl %d, HTTP %ld em %s\n", r, http,
            rede_url_publica(url, seg, sizeof seg));
     fflush(stdout);
   }
+  if (lista) { curl_setopt(c, OPT_HTTPHEADER, (void *)0); slist_free(lista); }
   soltarHandleR(c, r, url);
-  free(b.p);
-  return (!r && fim) ? 1 : 0;
+  return ok;
+}
+
+int rede_url_final(const char *url, int segundos, char *dst, unsigned tam) {
+  return rede_url_final_cab(url, segundos, NULL, dst, tam, NULL);
 }
 
 char *rede_postar(const char *url, int segundos, const char *const *cab,

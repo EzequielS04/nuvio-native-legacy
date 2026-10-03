@@ -375,10 +375,24 @@ class NuvioActivity : SDLActivity() {
     }
 
     // Chamado pelo C (android_st_teclado). Nao bloqueia.
-    fun abrirTeclado(inicial: String, max: Int): Boolean {
+    // `pedido` = max | tipo << 16 (tipo: 0 texto, 1 e-mail, 2 senha; ST_IME_* em
+    // src/sistexto.h). Senha: teclado sem sugestao e sem aprender o texto.
+    fun abrirTeclado(inicial: String, pedido: Int): Boolean {
+        val max = pedido and 0xFFFF
+        val tipo = (pedido ushr 16) and 0xFF
         runOnUiThread {
             val c = criarCampo()
             ignorarMudanca = true
+            c.inputType = when (tipo) {
+                1 -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+                2 -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                else -> InputType.TYPE_CLASS_TEXT
+            }
+            c.setSingleLine(true)
+            // E-mail: a tecla do teclado diz "Proximo" (o app abre a senha em
+            // seguida); senha e texto: "Concluido". As duas fecham o campo.
+            val flags = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_FULLSCREEN
+            c.imeOptions = (if (tipo == 1) EditorInfo.IME_ACTION_NEXT else EditorInfo.IME_ACTION_DONE) or flags
             c.filters = arrayOf(InputFilter.LengthFilter(if (max > 0) max else 400))
             c.setText(inicial)
             c.setSelection(c.text.length)

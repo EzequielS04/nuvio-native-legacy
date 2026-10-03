@@ -34,6 +34,13 @@ int  video_registro_negado(void);
 // o transporte sai do prefixo da URL, e mandar o campo faz o load aceitar,
 // devolver mediaId e nunca buscar o arquivo — falha silenciosa.
 int  video_tocar(const char *url);
+#ifdef NV_ANDROID
+// Posicao absoluta em segundos, zero = inicio/default. O Kotlin configura o
+// MediaItem antes de prepare; o ack e da geracao desta abertura. Estado:
+// 0 aguardando, 1 aceito, -1 abertura normal (seek tardio como fallback).
+int  video_tocar_posicao(const char *url, double segundos);
+int  video_retomada_inicial_estado(void);
+#endif
 
 // Chamar UMA VEZ POR QUADRO. Hoje serve ao prazo do recuo de Dolby Vision
 // (ver o comentario em video.c): sem esta batida, um arquivo que a TV recusa

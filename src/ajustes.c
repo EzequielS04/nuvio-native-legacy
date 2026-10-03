@@ -1,17 +1,9 @@
-// Ajustes: lista vertical em secoes, rotulo a esquerda e valor a direita.
-//
-// A regra que organiza a tela inteira: existem TRES naturezas de linha e elas
-// TEM que parecer diferentes. Linha de escolha ganha foco e setas ao redor do
-// valor; linha NUMERICA acrescenta uma barra de
-// preenchimento sob o valor, porque "28%" sem barra nao diz onde fica no
-// intervalo; linha so de leitura ganha um realce apagado, sem setas. Com o mesmo
-// desenho nas tres, o usuario aperta esquerda e direita em cima da versao do app
-// esperando que algo aconteca — foi por isso que a distincao virou requisito.
-//
-// As chaves e os agrupamentos seguem a tela de Layout do app web
-// (js/ui/screens/settings/settingsScreen.js), inclusive os rotulos em portugues
-// lidos da tela rodando.
+// Ajustes por intencao: categorias, blocos e avancados da sessao.
+// Todas as preferencias abrem um seletor com rascunho; OK confirma e Voltar
+// cancela. A lista mostra valor e chevron, a ficha explica alcance e padrao.
+// IDs, chaves persistidas e indices de valores continuam os legados.
 #include "ajustes.h"
+#include "ajustes_ux.h"
 #include "trailerfonte.h"   // NV_TRAILER_CONTINUA_DETALHE, nas ajudas do trailer
 #include "dados.h"
 #include "stalker.h"
@@ -77,23 +69,22 @@
 // ajustes_acento_tinta, que todos os modulos usam.
 #define AJ_TEXTO_ESCURO  (tintaFoco())
 #define AJ_TEXTO_ESCURO2 (tintaFoco() > 128 ? 232 : 50)   // valor, um degrau abaixo
-// Vidro: a linha em foco continua TRANSLUCIDA (so ganha contorno), entao o texto
-// fica claro seja qual for o realce.
-static int tintaFoco(void) { return ajustes_vidro() || ajustes_acento_tinta(NULL, NULL, NULL) > 0.5f ? 255 : 20; }
+// Ajustes usa superficies opacas: contraste vem do acento, inclusive com Vidro.
+static int tintaFoco(void) { return ajustes_acento_tinta(NULL, NULL, NULL) > 0.5f ? 255 : 20; }
 static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foco e clara?
 // PILULA SOLIDA NO ACENTO (coluna de categorias, abas e botoes da folha de
 // fileiras): ela e opaca COM e SEM vidro, entao o atalho do vidro acima nao
 // vale — com acento branco/Dinamica (que nasce branco) e vidro ligado, o texto
 // saia branco sobre branco (#202). Aqui manda so a tinta por contraste.
 #define AJ_TEXTO_SOLIDO  (ajustes_tinta_foco())
-#define AJ_LINHA_H       88.0f
+#define AJ_LINHA_H       80.0f
 #define AJ_LINHA_GAP      8.0f
 // Cabecalho da categoria no topo da lista: titulo + subtitulo, o
 // `settings-content-header` do web. 38 do headline + 12 + 22 do caption, e o
 // respiro ate a primeira linha.
 #define AJ_SEC_CABEC    112.0f
 // Rotulo de BLOCO no meio da categoria (ROT em TELA), sem foco.
-#define AJ_SUB_CABEC     50.0f
+#define AJ_SUB_CABEC     46.0f
 // GRUPO RECOLHIVEL: linha de duas alturas, titulo e descricao — a mesma
 // composicao das linhas de addon do guia (TXT_BODY em cima, TXT_CAPTION a 36
 // px), porque a descricao e o que diz o que ha dentro antes de abrir.
@@ -117,14 +108,14 @@ static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foc
 // coluna e o titulo da lista sao a mesma string. A lista perde 40 px e o
 // painel de ajuda fica exatamente onde estava (1320).
 #define AJ_IDX_X        ajustes_conteudo_x()
-#define AJ_IDX_W        280.0f
-#define AJ_IDX_GAP       24.0f
-#define AJ_IDX_H         76.0f
+#define AJ_IDX_W        310.0f
+#define AJ_IDX_GAP       48.0f
+#define AJ_IDX_H         52.0f
 #define AJ_IDX_ICONE     32.0f    // lado do icone dentro da linha da categoria
 #define AJ_LISTA_X      (AJ_IDX_X + AJ_IDX_W + AJ_IDX_GAP)
-#define AJ_LISTA_W      860.0f
-#define AJ_PAD           34.0f    // borda da linha ao texto
-#define AJ_TOPO        (NV_MARGEM_Y + 118.0f)   // abaixo do titulo da tela
+#define AJ_LISTA_W      866.0f
+#define AJ_PAD           24.0f    // borda da linha ao texto
+#define AJ_TOPO        (NV_MARGEM_Y + 140.0f)   // abaixo do titulo da tela
 #define AJ_BASE        (NV_TELA_H - NV_MARGEM_Y - 48.0f)
 // Raio da linha em fracao do menor lado (o SDF do shader e normalizado):
 // 12px sobre 88 de altura.
@@ -287,6 +278,9 @@ typedef enum {
   // "O que achou?" nos creditos (reacao.h). LOCAL. No fim pelo mesmo motivo:
   // valor[] e CHAVE[] sao posicionais.
   AJ_REACAO_CREDITOS,
+  // Quanto a escolha automatica de fonte espera os addons lentos (#221). LOCAL.
+  // No fim pelo mesmo motivo: valor[] e CHAVE[] sao posicionais.
+  AJ_FONTE_PRAZO,
   AJ_N
 } OpcaoId;
 
@@ -299,6 +293,8 @@ static const char *V_LIVETV_ESPERA[] = { "Automática", "25 s", "45 s" };
 // Dinamica, onde a pilula da barra lateral ocupa o canto esquerdo). 1 e 2 sao
 // escolha explicita; Esquerda no layout Dinamica fica AO LADO da pilula.
 static const char *V_RELOGIO_POS[] = { "Automática", "Esquerda", "Direita" };
+// Indice gravado em fontePrazoLocal; ver ajustes_fonte_prazo_ms.
+static const char *V_FONTE_PRAZO[] = { "3 s", "5 s", "8 s", "Todos os add-ons" };
 static const char *V_SAIDA_PLAYER[] = { "Voltar para a home (minimizar na ilha)",
                                         "Voltar para a página do título" };
 static const char *V_LIVETV_MODO[] = { "A (padrão)", "B (sem seleção de faixa)", "C (payload de live)" };
@@ -881,6 +877,7 @@ static const Opcao OPCOES[AJ_N] = {
   NUM("Sincronia da miniatura",          -60, 60, 1, " s"),   // local: seekrAjusteLocal
   ESC("Ao sair do player",               V_SAIDA_PLAYER, 2),  // local: saidaPlayerLocal
   ESC("Perguntar o que achou nos créditos", V_LIGA, 2),     // local: reacaoCreditosLocal
+  ESC("Espera pelos add-ons",            V_FONTE_PRAZO, 4),   // local: fontePrazoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1045,6 +1042,7 @@ static const char *CHAVE[] = {
   "saidaPlayerLocal",
   // LOCAL e SEM o "-": o web nao tem a pergunta.
   "reacaoCreditosLocal",
+  "fontePrazoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1105,165 +1103,7 @@ typedef struct {
 #define ROT(t)        { IT_ROT, -1, t, NULL, NULL }
 #define OPC(o)        { IT_OPC, o, NULL, NULL, NULL }
 
-// Os titulos e subtitulos sao os do web em pt-BR (res/i18n/pt-br.json:
-// settings_*_subtitle, layout_section_*), ajustados onde o conteudo daqui e
-// outro — "Aparencia" nao tem fonte do app, "Conteudo" tem os portais IPTV.
-//
-// ICONES SO NAS CATEGORIAS E NOS GRUPOS, todos Lucide (aj_*, ISC, rasterizados
-// por tools/icones-lucide.sh — nunca forma desenhada a mao, ver gfx_icone).
-// As linhas NAO tem icone: com um desenho por linha a lista de 51 opcoes do
-// Layout virava uma coluna de figurinhas que o olho tinha de pular para ler o
-// rotulo (a arquitetura do web tambem nao tem). O desenho fica onde ele ajuda a
-// ACHAR: a coluna de categorias e o cabecalho de cada bloco recolhivel. Nenhum
-// se repete entre categorias.
-static const Item TELA[] = {
-  SEC("Conta", "Conta e status de sincronização", "aj_user-round"),
-    OPC(AJ_PERFIL_ATIVO), OPC(AJ_SYNC), OPC(AJ_ADDONS_PRINCIPAL),
-    OPC(AJ_PERFIL_PESQ), OPC(AJ_PERFIL_EDITAR),
-    OPC(AJ_SAIR),
-
-  // "Cor da logo" logo abaixo da cor: so vale com um tema dinamico, e e a
-  // mesma decisao (de onde sai o destaque).
-  SEC("Aparência", "Cor de destaque, idioma e animações", "aj_palette"),
-    OPC(AJ_TEMA), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_VIDRO_CONTORNO), OPC(AJ_IDIOMA), OPC(AJ_ANIM),
-    OPC(AJ_FONTE_UI), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS), OPC(AJ_SAIDA_PLAYER),
-
-  SEC("Layout", "Estrutura da página inicial e estilos de pôster", "aj_layout-dashboard"),
-    GRP("Layout da Home", "Escolha a estrutura e a fonte do destaque.", "aj_panel-top"),
-      OPC(AJ_HOME_LAYOUT), OPC(AJ_LANDSCAPE), OPC(AJ_HERO_CHEIO), OPC(AJ_HERO_FUNDO),
-      OPC(AJ_HERO_ARTE_DIF), OPC(AJ_HERO_TRAILER), OPC(AJ_HERO_TRAILER_SOM),
-      OPC(AJ_HERO_TRAILER_ESPERA), OPC(AJ_HERO_TRANSICAO),
-    GRP("Conteúdo da Home", "Controle o que aparece na home e na busca.", "aj_rows-3"),
-      OPC(AJ_FIL_LIMITE), OPC(AJ_ITENS_FILEIRA), OPC(AJ_FIL_ORDEM),
-      OPC(AJ_RAIL), OPC(AJ_RAIL_MODERNA), OPC(AJ_RAIL_BLUR),
-      OPC(AJ_MENU_EXPLORAR), OPC(AJ_MENU_GUIA), OPC(AJ_MENU_AGENDA),
-      OPC(AJ_MENU_PERFIL),
-      OPC(AJ_HERO), OPC(AJ_HERO_CATALOGOS), OPC(AJ_DESCOBRIR),
-      OPC(AJ_GRAD_CLASSICO), OPC(AJ_ROTULOS), OPC(AJ_SELO_VISTO), OPC(AJ_NOME_ADDON),
-      OPC(AJ_SUFIXO_TIPO), OPC(AJ_OCULTAR_NLANC), OPC(AJ_NOTAS_HOME),
-      OPC(AJ_PS_FUNDO),
-    GRP("Continuar assistindo", "Configure os próximos episódios e a ordem.", "aj_rotate-ccw-clock"),
-      OPC(AJ_CW_LIGADO), OPC(AJ_CW_OK), OPC(AJ_CW_FONTE), OPC(AJ_CW_ESTILO),
-      OPC(AJ_CW_THUMB), OPC(AJ_CW_BLUR_PROX), OPC(AJ_CW_FURTHEST),
-      OPC(AJ_CW_NAO_EXIBIDOS), OPC(AJ_CW_ORDEM), OPC(AJ_CW_CONCLUIDO),
-    GRP("Página de detalhes", "Personalize as telas de títulos e episódios.", "aj_file-text"),
-      OPC(AJ_DET_BLUR_NAO_VISTOS), OPC(AJ_DET_TRAILER), OPC(AJ_DET_META_EXT),
-      OPC(AJ_DET_SO_CINEMETA),
-      OPC(AJ_DET_DATA_CHEIA), OPC(AJ_DET_VEU), OPC(AJ_DET_TRAILER_AUTO),
-      OPC(AJ_DET_TRAILER_SOM),
-      OPC(AJ_TRAILER_QUAL), OPC(AJ_TRAILER_ASPECTO), OPC(AJ_TRAILER_FONTE),
-    GRP("Foco no pôster", "Defina o comportamento ao selecionar um título.", "aj_scan"),
-      OPC(AJ_EXPANDIR), OPC(AJ_EXPANDIR_ATRASO), OPC(AJ_FOCO_TRAILER), OPC(AJ_BORDA_FOCO),
-    GRP("Estilo dos cartões", "Largura, arredondamento e efeito de profundidade.", "aj_gallery-vertical-end"),
-      OPC(AJ_LARGURA_DP), OPC(AJ_RAIO_DP),
-      OPC(AJ_PROF), OPC(AJ_PROF_BORDA), OPC(AJ_PROF_BRILHO),
-      OPC(AJ_PROF_COBERTURA), OPC(AJ_PROF_POSTERS), OPC(AJ_PROF_CW),
-      OPC(AJ_PROF_EPS), OPC(AJ_PROF_ELENCO), OPC(AJ_PROF_TRAILERS),
-    GRP("Pôsteres personalizados", "Cartazes prontos de um serviço externo, com notas e selos.", "aj_images"),
-      OPC(AJ_POSTER_PROV), OPC(AJ_POSTER_INST), OPC(AJ_POSTER_TOKEN),
-      OPC(AJ_POSTER_EXTRA), OPC(AJ_POSTER_CHAVE), OPC(AJ_POSTER_MODELO),
-      OPC(AJ_POSTER_TESTAR),
-    GRP("Arte do addon", "Pôster, fundo e logo que o próprio addon manda.", "aj_folders"),
-      OPC(AJ_ADDON_POSTER), OPC(AJ_ADDON_FUNDO), OPC(AJ_ADDON_LOGO),
-      OPC(AJ_COL_ARTE_CONTA),
-
-  // O "Content & Discovery" do web (addons e plugins). Os portais IPTV moram
-  // aqui porque sao exatamente isto: mais uma fonte de conteudo, e nao dados
-  // da conta — estavam em "Interface e conta" entre o perfil e o Trakt.
-  SEC("Conteúdo", "Addons e portais de TV ao vivo", "aj_puzzle"),
-    OPC(AJ_ADDONS),
-    ROT("Portal Stalker"),
-      OPC(AJ_STALKER_PORTAL), OPC(AJ_STALKER_MAC), OPC(AJ_STALKER_LIMPAR),
-    ROT("Xtream Codes"),
-      OPC(AJ_XTREAM_SERVIDOR), OPC(AJ_XTREAM_USUARIO), OPC(AJ_XTREAM_SENHA),
-      OPC(AJ_XTREAM_LIMPAR), OPC(AJ_XTREAM_CONTA),
-    ROT("Guia TV"),
-      OPC(AJ_EPG_PAIS),
-    ROT("Live TV"),
-      OPC(AJ_LIVETV_RES), OPC(AJ_LIVETV_FORMATO), OPC(AJ_LIVETV_ESPERA),
-      OPC(AJ_LIVETV_DIAG),
-
-  SEC("Integrações", "Serviços de metadados e de notas", "aj_plug"),
-    GRP("TMDB", "Metadados, arte, elenco e trailers vindos do TMDB.", "aj_database"),
-      OPC(AJ_TMDB_LIGADO), OPC(AJ_TMDB_IDIOMA), OPC(AJ_TMDB_ARTE),
-      OPC(AJ_TMDB_BASICO), OPC(AJ_TMDB_FICHA), OPC(AJ_TMDB_DATAS),
-      OPC(AJ_TMDB_ELENCO), OPC(AJ_TMDB_PROD), OPC(AJ_TMDB_REDES),
-      OPC(AJ_TMDB_EPS), OPC(AJ_TMDB_TRAILERS), OPC(AJ_TMDB_MAIS),
-      OPC(AJ_TMDB_COL), OPC(AJ_TMDB_CW),
-    GRP("MDBList", "Quais fontes de nota aparecem na página do título.", "aj_star"),
-      OPC(AJ_MDB_LIGADO), OPC(AJ_MDB_CHAVE), OPC(AJ_MDB_TRAKT),
-      OPC(AJ_MDB_IMDB), OPC(AJ_MDB_TMDB), OPC(AJ_MDB_LETTER),
-      OPC(AJ_MDB_TOMATES), OPC(AJ_MDB_AUDIENCIA), OPC(AJ_MDB_META),
-      OPC(AJ_MDB_MAL),
-    GRP("Notas no título", "Quais notas aparecem na linha do título.", "aj_star"),
-      OPC(AJ_NT_IMDB), OPC(AJ_NT_TOMATES), OPC(AJ_NT_AUDIENCIA), OPC(AJ_NT_META),
-      OPC(AJ_NT_METAUSER), OPC(AJ_NT_TRAKT), OPC(AJ_NT_TMDB), OPC(AJ_NT_LETTER),
-      OPC(AJ_NT_MAL), OPC(AJ_NT_EBERT), OPC(AJ_NT_SCORE),
-    GRP("fanart.tv", "Chave pessoal para a arte do destaque.", "aj_images"),
-      OPC(AJ_FANART_CHAVE),
-    GRP("Seekr", "Miniaturas da barra de tempo no player.", "aj_images"),
-      OPC(AJ_SEEKR_LIGADO), OPC(AJ_SEEKR_CHAVE), OPC(AJ_SEEKR_TESTAR),
-      OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
-    GRP("Debrid", "Chaves de API para tocar torrents pelo seu serviço.", "aj_plug"),
-      OPC(AJ_DEBRID_AD), OPC(AJ_DEBRID_AD_TESTAR), OPC(AJ_DEBRID_RD),
-      OPC(AJ_DEBRID_TB), OPC(AJ_DEBRID_PM),
-
-  // Os blocos do web (playback_section_*) como ROTULOS e nao grupos: sao nove
-  // linhas, e as mais usadas do app (qualidade, idiomas) nao podem ficar atras
-  // de um OK a mais.
-  SEC("Reprodução", "Player, fontes, áudio e legendas", "aj_circle-play"),
-    OPC(AJ_PAUSA_OVERLAY), OPC(AJ_REACAO_CREDITOS),
-    ROT("Player e seleção de fontes"),
-      OPC(AJ_FONTE_MANUAL), OPC(AJ_FONTE_AUTO), OPC(AJ_FONTE_REPOR), OPC(AJ_FONTE_TEXTO),
-      OPC(AJ_SELOS_CORES),
-    ROT("Áudio e vídeo"),
-      OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS),
-    ROT("Idiomas"),
-      OPC(AJ_AUD_LINGUA), OPC(AJ_LEG_LINGUA),
-
-  // O "Tracking" do web. "Onde o + salva" vem junto porque so tem sentido com
-  // um dos dois vinculado.
-  SEC("Trakt e Simkl", "Histórico, progresso e listas", "aj_list-checks"),
-    OPC(AJ_TRAKT), OPC(AJ_SIMKL), OPC(AJ_SALVOS_DEST),
-
-  // O "Advanced" do web: desempenho, navegacao, cache e diagnostico. Tudo aqui
-  // descreve ESTA TV, nao o gosto da pessoa — por isso a navegacao rapida
-  // (que o web tambem poe em Avancado) saiu de "Foco no poster".
-  // O teste de velocidade mora colado no diagnostico: e a mesma tela, aberta
-  // ja no teste (ver AJ_VELOCIDADE), e o rotulo junta os dois para quem procura
-  // "o que ha de errado com esta TV".
-  SEC("Avançado", "Desempenho, navegação, cache e diagnósticos", "aj_monitor-cog"),
-    OPC(AJ_NAV_RAPIDA), OPC(AJ_RESOLUCAO), OPC(AJ_QUALIDADE_IMG),
-#if defined(NV_TPK) || defined(NV_ANDROID)
-    OPC(AJ_GPU_EFEITOS),
-#endif
-    OPC(AJ_TEX_MB), OPC(AJ_ESPACO),
-    ROT("Diagnóstico"),
-      OPC(AJ_DIAGNOSTICO), OPC(AJ_VELOCIDADE),
-    ROT("Experimental"),
-      OPC(AJ_LIVETV_PROXY), OPC(AJ_LIVETV_MODO),
-      OPC(AJ_P2P_LIGADO), OPC(AJ_P2P_URL), OPC(AJ_P2P_TESTAR),
-
-  SEC("Sobre", "Versão, atualizações e registros", "aj_info"),
-    OPC(AJ_VERSAO_I), OPC(AJ_ATUALIZAR), OPC(AJ_ENVIAR_LOG), OPC(AJ_ENVIO_AUTO),
-};
-#define AJ_N_TELA (int)(sizeof TELA / sizeof *TELA)
-#define AJ_MAX_SECOES 16
-
-// O QUE A CATEGORIA CONTEM, em uma frase, no painel da direita quando o foco
-// esta na coluna de categorias. Mesma ordem dos SEC() de TELA; conferirTela()
-// confere a contagem.
-static const char *SECAO_AJUDA[] = {
-  "O perfil em uso, o estado da sincronização com a sua conta e a saída.",
-  "A cor de destaque do foco, o idioma da interface e as animações.",
-  "Tudo o que a tela inicial mostra, o Continuar assistindo, a página de um título e a aparência dos cartazes.",
-  "Os addons instalados e os portais de TV ao vivo (Stalker e Xtream).",
-  "Serviços de metadados: o que o TMDB enriquece na interface e quais fontes de nota o MDBList mostra.",
-  "Como o player escolhe a fonte, qualidade e formatos de áudio, e os idiomas preferidos de áudio e legenda.",
-  "Vincular o Trakt e o Simkl, e onde o + guarda o que você salva.",
-  "Ajustes desta TV: navegação, resolução, memória para imagens, o diagnóstico e o teste de velocidade.",
-  "A versão instalada, a atualização e o envio de registros para quem mantém o app.",
-};
+#include "ajustes_ux_tela.inc"
 
 // Derivados de TELA uma vez, no arranque (montarTela). Sao so indices: nada
 // aqui e estado de usuario.
@@ -1315,7 +1155,7 @@ static void pstDefinir(int op, const char *texto);
 static void pstAtivar(int op);
 static void pstTesteRecolher(void);
 static const char *pstTexto(int op);
-static void gravar(void);
+static int gravar(void);
 static void aplicarIdioma(int op);
 static int somenteDesteAparelho(int op);
 // Segundos restantes antes de refazer a busca de legendas. Declarada aqui, e
@@ -1328,199 +1168,10 @@ static float legendaEspera;
 // opcoes ficavam no zero. Foi o que aconteceu com as sete linhas do Stalker e
 // do Xtream (#149, ver a nota delas abaixo).
 static int valor[] = {
-  0, 0, 0,          /* qualidade, DV, Atmos */
-  0,                /* idioma de legenda: 0 = seguir a conta */
-  // AUDIO NO ORIGINAL POR PADRAO (LING_OPC_ORIGINAL, o ULTIMO item de
-  // OPCOES_COD em linguas.c — ele fica no fim porque este arquivo grava o
-  // INDICE da opcao, e inserir no meio reinterpreta ajustes.txt ja salvo).
-  // Pedido do dono: "o que eu quero que seja padrao e tocar o audio na
-  // linguagem original". Antes era 0 = "Da conta", e uma conta com "Portugues"
-  // salvo fazia o app pular para a dublagem sem ninguem ter pedido naquele
-  // filme.
-  //
-  // SO VALE PARA INSTALACAO NOVA: quem ja tem ajustes.txt continua com o que
-  // esta gravado la, porque o arquivo ganha do padrao — de proposito, senao
-  // toda atualizacao desfaria escolha de usuario.
-  LING_OPC_ORIGINAL, /* idioma de audio: Original do titulo */
-  0,                /* painel ao pausar: ligado (o default do web) */
-  1,                /* escolher a fonte ao reproduzir: DESLIGADO (V_LIGA: 1 = Desligado) */
-  0,                /* fonte automatica: melhor fonte (a regra de sempre) */
-  2,                /* outra fonte se falhar: ate 2 (eram 7 fixas ate a 1.4.3) */
-  0,                /* texto das fontes: do Nuvio */
-
-  0,                /* posteres deitados: LIGADO (perfil do dono; fabrica: desligado) */
-  0,                /* fundo em tela cheia: LIGADO (perfil; fabrica: desligado) */
-  0,                /* background do hero: seleção automática */
-  1,                /* destaque com outra arte: DESLIGADO (mesma foto do card, 19/09) */
-  1,                /* trailer no destaque: DESLIGADO (V_LIGA: 1 = Desligado) */
-
-  FIL_LIMITE_PADRAO,/* limite de fileiras: 7, o pedido do dono (espelho de fileiras.c) */
-  0,                /* ordenar fileiras: acao */
-  // AQUI HAVIA `1, /* resetar foco ao iniciar */`, UMA OPCAO QUE NAO EXISTE
-  // no enum (entrou em 876742e so neste vetor). Esta lista e POSICIONAL: cada
-  // padrao de AJ_RAIL ate AJ_RESOLUCAO caia na opcao SEGUINTE, e so voltava
-  // a alinhar porque faltava o de AJ_TEMA la embaixo. Quem instalava do zero
-  // nascia com barra fixa, barra moderna ligada, animacoes reduzidas e o
-  // cartao com largura 0 e ARREDONDAMENTO 126 dp — a "pilula" que o dono viu
-  // na janela do tests/heroarte_shot.sh (22/09), que roda sem ajustes.txt.
-  // Quem ja tem ajustes.txt nao muda: o arquivo ganha do padrao.
-  // tests/ajustes_padroes.sh confere os padroes desta faixa um a um.
-
-  0,                /* barra lateral: recolhida (perfil; fabrica: fixa) */
-  1,                /* barra lateral moderna: desligada */
-  0,                /* desfoque da barra moderna: ligado (perfil) */
-  0,                /* mostrar destaque: ligado */
-  0,                /* catalogos do destaque: leitura */
-  0,                /* fundo da escolha de perfil: automatico (padrao de fabrica, #90) */
-  0,                /* local do descobrir: na busca */
-  // DESLIGADO por padrao: o cartaz ja traz o titulo impresso na arte, e repetir
-  // o nome logo abaixo e a mesma informacao duas vezes ocupando altura de
-  // fileira. Continua sendo ajuste — quem quiser o rotulo liga em Ajustes.
-  1,                /* rotulos nos posteres: desligado */
-  0,                /* nome do addon: ligado */
-  0,                /* tipo de conteudo: ligado */
-  1,                /* ocultar nao lancados: desligado */
-  0,                /* avaliacoes gerais: mostrar (SHOW_ALL) */
-  1,                /* gradiente de foco classico: desligado */
-
-  0,                /* continuar assistindo: ligado */
-  0,                /* OK no card: retomar (cwOkLocal; 1 = abrir pagina) */
-  0,                /* fonte do continuar: ambas (o comportamento de sempre) */
-  0,                /* estilo: card */
-  0,                /* miniatura do episodio: ligada */
-  1,                /* desfocar proximo: desligado */
-  0,                /* proximo do episodio mais alto: ligado */
-  0,                /* mostrar nao exibidos: ligado */
-  0,                /* ordenacao: padrao */
-
-  1,                /* desfocar nao assistidos: desligado */
-  0,                /* botao de trailer: ligado */
-  0,                /* metadados externos: ligado */
-  0,                /* data completa: ligada */
-  100,              /* escurecimento do fundo do titulo: vinheta inteira */
-  0,                /* trailer automatico na pagina de titulo: ligado */
-  0,                /* qualidade do trailer: maxima */
-  0,                /* proporcao do trailer: zoom cinema */
-  0,                /* fonte do trailer: automatico (Apple -> IMDb -> YouTube) */
-
-  0,                /* expandir poster ao focar: ligado (DEFAULT do web) */
-  3,                /* atraso: 3s */
-  1,                /* navegacao horizontal rapida: desligada (fabrica) */
-  0,                /* borda no cartaz em foco: ligada (o foco de sempre) */
-
-  1,                /* efeito de profundidade: desligado (fabrica) */
-  28,               /* brilho da borda */
-  10,               /* reflexo */
-  0,                /* cobertura da borda */
-  0, 0, 0, 0, 0,    /* profundidade em posters, cw, episodios, elenco, trailers */
-
-  126,              /* largura do item, dp (fabrica; o perfil do dono usa 120) */
-  12,               /* arredondamento, dp */
-  1,                /* qualidade da imagem: Padrão (0 Baixa, 1 Padrão, 2 Alta) */
-
-  // Idioma 0 = Automatico: a conta (tmdb_language, depois o idioma de legenda),
-  // depois o idioma da TV, depois English. O padrao NAO e o do dono do pacote:
-  // quem instala vem do release publico, e ler uma interface em portugues sem
-  // ter escolhido e pior do que ler em ingles sem ter escolhido — por isso o
-  // ultimo degrau e o ingles. Quem prefere outro troca em Ajustes -> Interface,
-  // e a escolha fica gravada (e desliga o automatico).
-  0, 0, 0,          /* idioma, animacoes, resolucao (0 = 1080p) */
-  0,                /* tema (cor de destaque): o primeiro, o de sempre */
-  0,                /* cor da logo (so com tema dinamico): ligada */
-  // O COMENTARIO ANTIGO AQUI ESTAVA ERRADO, e o erro so nao machucou por sorte.
-  // Ele dizia `0, 0, /* versao, espaco */` logo depois do idioma, mas esta
-  // lista e POSICIONAL: entre AJ_ANIM e AJ_VERSAO_I existem SETE opcoes de
-  // conta (perfil, sync, addons, onde o + salva, trakt, simkl, sair). Aqueles
-  // dois zeros caiam em AJ_PERFIL_ATIVO e AJ_SYNC, nao em versao e espaco — e
-  // versao e espaco ficavam com o zero da inicializacao parcial, que por acaso
-  // e o valor certo para uma linha de leitura. A primeira opcao com padrao
-  // DIFERENTE de zero nesta faixa (a de agora) teria caido no lugar errado.
-  // Explicitados um a um, e nao contados de cabeca.
-  0, 0, 0,          /* perfil, sincronizacao, addons: linhas de leitura/acao */
-  // AS SETE DO STALKER E DO XTREAM FALTAVAM AQUI (#149). Elas entraram no enum
-  // entre os addons e "onde o + salva" sem entrar nesta lista, e dali para
-  // baixo cada padrao caiu sete casas antes: o 1 de "envio sozinho" pousava em
-  // "onde o + salva" (que por acaso tambem nasce 1, e por isso nada se viu), e
-  // o envio ficava no 0 da inicializacao parcial. O remendo que forcava o
-  // desligado em ajustes_iniciar apagava a escolha da pessoa a cada abertura
-  // da tela, que e o #149.
-  0, 0, 0,          /* portal Stalker, MAC, remover: acoes */
-  0, 0, 0, 0,       /* servidor, usuario, senha Xtream, remover: acoes */
-  0, 0,             /* conta Xtream (leitura); grade: automatica */
-  1,                /* onde o + salva: watchlist do Trakt (ver V_SALVOS) */
-  0, 0, 0,          /* trakt, simkl, sair: acoes */
-  // ENVIO SOZINHO LIGADO DE FABRICA (dono, 26/09/2026: "melhor deixar
-  // automatico o log, isso que ajuda a gente"). O registro nao leva senha nem
-  // chave, e e dele que sai a triagem. No Tizen o cartao de consentimento
-  // (telemetria.c) continua perguntando na primeira abertura, e o nao grava.
-  0, 0, 0, 0,       /* versao, atualizar, registro, envio sozinho: LIGADO */
-  0,                /* espaco */
-  0,                /* memoria para imagens: automatico */
-
-  // Integracoes — TMDB. Tudo LIGADO de fabrica neste app: o enriquecimento por
-  // TMDB sempre foi incondicional aqui, e nascer desligado removeria da tela
-  // dados que o usuario ja ve (elenco com foto, ficha, trailers). A escolha da
-  // conta continua mandando quando a chave chega no blob — este e so o ponto
-  // de partida de quem nunca abriu o ajuste em lugar nenhum.
-  0,                /* tmdb ligado */
-  0,                /* idioma: da interface */
-  0, 0, 0, 0, 0, 0, 0, /* arte, basico, ficha, datas, elenco, produtoras, redes */
-  0, 0, 0, 0,       /* episodios, trailers, mais como este, colecoes */
-  0,                /* enriquecer continuar assistindo */
-  // MDBList: idem — a conta que traz a chave, e a consulta sempre correu.
-  0,                /* mdblist ligado */
-  0,                /* chave: leitura */
-  0, 0, 0, 0, 0, 0, 0, 0, /* trakt, imdb, tmdb, letterboxd, tomatoes,
-                           audiencia, metacritic, mal */
-  0,                /* chave do fanart.tv: acao (o valor mora em fanart.txt) */
-  0,                /* diagnostico */
-  0,                /* teste de velocidade: acao */
-  0, 0, 0, 0,       /* explorar, guia, agenda, perfil na barra lateral: ligados */
-  1,                /* trailer do cartaz em foco: desligado (DEFAULT do web) */
-  0,                /* itens por fileira: 12, como sempre foi (ver V_ITENS_FIL) */
-  TXT_FAMILIA_INTER,/* fonte da interface: independente da legenda */
-  0,                /* efeitos visuais do .tpk: automatico (adaptativo, ate o nivel 1) */
-  1,                /* interface de vidro: DESLIGADA (V_LIGA: 1 = Desligado) */
-  1,                /* servidor P2P: DESLIGADO (V_LIGA: 1 = Desligado) */
-  0, 0,             /* endereco, testar: acoes */
-  0,                /* posteres personalizados: DESLIGADO (indice 0) */
-  0, 0, 0, 0, 0, 0,/* endereco, token, parametros, chave, modelo, testar: acoes */
-  0,                /* layout da home: Moderna (a de sempre) */
-  0, 0, 0, 0, 0,    /* chaves de debrid (AllDebrid, testar, RD, TB, PM): acoes */
-  1,                /* usar sempre o Cinemeta: DESLIGADO (V_LIGA: 1 = Desligado) -> catalogo primeiro */
-  // Notas na linha do titulo: de fabrica so o que a linha ja mostrava antes de
-  // existir a escolha (IMDb, Rotten Tomatoes, Trakt). V_LIGA: 0 = Ligado.
-  0, 0, 1, 1, 1,   /* imdb, tomates, popcornmeter, metacritic, metacritic usuarios */
-  0, 1, 1, 1, 1, 1,/* trakt, tmdb, letterboxd, mal, ebert, nota do mdblist */
-  1,                /* perfil pesquisavel: DESLIGADO (V_LIGA: 1 = Desligado). Padrao de todo mundo. */
-  0,                /* meu perfil publico: acao */
-  0,                /* contorno do vidro: LIGADO (V_LIGA: 0 = Ligado), o visual de antes */
-  1,                /* som do trailer no destaque: DESLIGADO (V_LIGA: 1 = Desligado) */
-  22,               /* espera do trailer no destaque: 2,2 s (em decimos de segundo) */
-  90,               /* percentual assistido: 90%, o numero fixo de antes */
-  0,                /* addons do perfil principal: LIGADO (V_LIGA: 0 = Ligado) */
-  0,                /* transicao do destaque: Deslizar */
-  // Arte do addon: todas DESLIGADAS (V_LIGA: 1 = Desligado) — o visual de antes.
-  1, 1, 1, 1,       /* posteres, fundo, logo do addon; arte das pastas da conta */
-  // LIGADO: e o que o oficial mostra com o pacote de selos da wiki importado,
-  // e o pedido do #198. Quem prefere a fileira branca de antes desliga.
-  0,                /* selos coloridos: LIGADO (V_LIGA: 0 = Ligado) */
-  1,                /* som do trailer na pagina do titulo: DESLIGADO (V_LIGA: 1 = Desligado) */
-  0, 0, 0,          /* Live TV: resolucao, formato do Xtream e espera automaticos */
-  0,                /* diagnostico da Live TV: acao */
-  0,                /* modo do player da Live TV: A, o load de sempre */
-  0,                /* proxy de TS da Live TV: LIGADO (V_LIGA: 0 = Ligado) */
-  0,                /* relogio na tela: LIGADO (V_LIGA: 0 = Ligado), o de sempre */
-  0,                /* posicao do relogio: Automatica, a de sempre */
-  0,                /* selo de assistido nos posteres: LIGADO (V_LIGA: 0 = Ligado) */
-  // Seekr DESLIGADO (V_LIGA: 1 = Desligado): sem chave nao ha o que mostrar, e
-  // cada titulo aberto gasta uma consulta da cota diaria da pessoa.
-  1,                /* miniaturas do Seekr */
-  0, 0,             /* chave e teste do Seekr: acoes */
-  1,                /* fita de miniaturas: DESLIGADA (V_LIGA: 1 = Desligado), uma so */
-  0,                /* sincronia da miniatura: 0 s (a documentacao: nada automatico) */
-  0,                /* ao sair do player: a home, minimizando na ilha (com o relogio) */
-  0,                /* perguntar o que achou nos creditos: LIGADO (V_LIGA: 0 = Ligado) */
+#include "ajustes_ux_padrao.inc"
+};
+static const int valorPadrao[] = {
+#include "ajustes_ux_padrao.inc"
 };
 _Static_assert(sizeof valor / sizeof *valor == AJ_N,
                "valor[]: um padrao por opcao do enum AJ_*, na ordem dele");
@@ -1603,6 +1254,29 @@ static float velY = 0.0f;
 static float paginaA = 1.0f;   // entrada da pagina da categoria (0..1)
 static int sair = 0;
 
+// Rascunho e navegação separados dos valores persistentes.
+static int uxIndice = 2, uxCabecalho, uxAvancados[AJ_MAX_SECOES];
+static int uxUltimoItem[AJ_MAX_SECOES];
+static int uxAbrirOp = -1, uxPediuBusca, uxVeioBusca, uxRetornarOp = -1;
+static int uxDifs[AJ_N], uxNDifs, uxDifFoco;
+static int uxEditor, uxOp, uxPendente, uxOriginal, uxRodape;
+static int uxRestaurar, uxConfirmar, uxAvisoRisco;
+static char uxAviso[160];
+static Uint32 uxAvisoAte;
+static const char *textoValor(int op);
+static int uxTemPadrao(int op);
+static int uxDiferente(int op);
+static void uxCancelar(void);
+static void uxDesenharEditor(void);
+static void uxDesenharEspecial(void);
+
+int ajustes_pediu_busca(void) { int p = uxPediuBusca; uxPediuBusca = 0; return p; }
+void ajustes_abrir_opcao(int op) {
+  if (op < 0 || op >= AJ_N) return;
+  uxAbrirOp = op; uxVeioBusca = 1;
+}
+
+
 // Rotulo da fonte do destaque (fil_hero_fonte). Definida junto da folha de
 // fileiras, mais abaixo.
 static const char *heroFonteRotulo(void);
@@ -1630,6 +1304,19 @@ int ajustes_reacao_creditos(void)     { return lig(AJ_REACAO_CREDITOS); }
 int ajustes_fonte_manual(void)        { return lig(AJ_FONTE_MANUAL); }
 int ajustes_fonte_primeira(void)      { return valor[AJ_FONTE_AUTO] == 1; }
 int ajustes_fonte_texto_addon(void)   { return valor[AJ_FONTE_TEXTO] == 1; }
+// PRAZO DA ESCOLHA AUTOMATICA COM A LISTA AINDA ENCHENDO (#221), em ms; 0 =
+// esperar todos os addons (o comportamento ate a 1.7.0). 5 s de fabrica:
+// medido no D1 da 1.7.0 (.tpk), a primeira fonte chega em 0,85 s no p90 e o
+// ultimo addon em 12 s — o prazo cobre a cauda dos rapidos sem pagar a dos
+// mudos.
+int ajustes_fonte_prazo_ms(void) {
+  switch (valor[AJ_FONTE_PRAZO]) {
+    case 0: return 3000;
+    case 2: return 8000;
+    case 3: return 0;
+    default: return 5000;
+  }
+}
 int ajustes_fonte_repor(void) {
   int v = valor[AJ_FONTE_REPOR];
   return v < 0 ? 0 : v > 3 ? 3 : v;     // arquivo editado a mao: dentro da tabela
@@ -2546,15 +2233,15 @@ void ajustes_dir(const char *dir) {
   pstAplicar();
 }
 
-static void gravar(void) {
+static int gravar(void) {
   char caminho[600], tmp[600];
   FILE *f;
   int i;
-  if (!dirAjustes[0]) return;
+  if (!dirAjustes[0]) return 0;
   snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dirAjustes);
   snprintf(tmp, sizeof tmp, "%s/ajustes.tmp", dirAjustes);
   f = fopen(tmp, "w");
-  if (!f) return;
+  if (!f) return 0;
   for (i = 0; i < AJ_N; i++) {
     // "-" marca linha local (versao, espaco, conta): nao tem valor para
     // guardar. Acao tambem nao. E chave ausente NUNCA vai para o arquivo — foi
@@ -2570,8 +2257,9 @@ static void gravar(void) {
     }
     fprintf(f, "%s %d\n", CHAVE[i], valor[i]);
   }
-  fclose(f);
-  rename(tmp, caminho);
+  { int erro = ferror(f);
+    if (fclose(f)) erro = 1;
+    if (erro || rename(tmp, caminho)) { remove(tmp); return 0; } }
   // SAMSUNG (#85, 21/09/2026): o arquivo fica no IDBFS, e o IDBFS so vai ao
   // IndexedDB quando alguem marca o sistema de arquivos como sujo. Este
   // gravador escreve por fora de dados_gravar e nunca marcava: qualquer
@@ -2583,6 +2271,7 @@ static void gravar(void) {
   // Provedor de poster ou idioma da interface mudaram? So reconfigura se a
   // configuracao final for outra (reconfigurar zera a memoria de falhas).
   pstAplicar();
+  return 1;
 }
 
 
@@ -3255,6 +2944,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
+    case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
     case AJ_REACAO_CREDITOS: /* o web nao tem a pergunta */
     case AJ_SEEKR_LIGADO: case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: /* o web nao tem o Seekr */
@@ -3516,6 +3206,9 @@ static void conferirTela(void) {
     if (TELA[i].tipo == IT_OPC && TELA[i].op >= 0 && TELA[i].op < AJ_N)
       vezes[TELA[i].op]++;
   for (i = 0; i < AJ_N; i++)
+#if !defined(NV_TPK) && !defined(NV_ANDROID)
+    if (i != AJ_GPU_EFEITOS)
+#endif
     if (vezes[i] != 1)
       printf("[ajustes] opcao %d (\"%s\") aparece %d vez(es) em TELA\n",
              i, OPCOES[i].rotulo, vezes[i]);
@@ -3559,6 +3252,7 @@ static void conferirPadroes(void) {
 }
 
 int ajustes_iniciar(void) {
+  uxVeioBusca = uxAbrirOp >= 0;
   montarTela();
   conferirTela();
   // ANTES de conferir: e rotulosDeIdioma quem preenche nLingua.
@@ -3597,6 +3291,8 @@ int ajustes_iniciar(void) {
   if (abrirNoLayout) { abrirNoLayout = 0; focarOpcao(AJ_HOME_LAYOUT); }
   if (abrirNoVidro) { abrirNoVidro = 0; focarOpcao(AJ_VIDRO); }
   if (abrirNoTrakt) { abrirNoTrakt = 0; focarOpcao(AJ_TRAKT); }
+  if (uxAbrirOp >= 0) { int op = uxAbrirOp; uxAbrirOp = -1; focarOpcao(op); }
+  uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
   filAberta = 0; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
   emEdicao = 0;
   fil_confirmar_limite();   // rajada de uma visita anterior que nao fechou
@@ -3606,7 +3302,7 @@ int ajustes_iniciar(void) {
   rotulosDeIdioma();
   return 1;
 }
-void ajustes_encerrar(void) { }
+void ajustes_encerrar(void) { uxCancelar(); uxRetornarOp = -1; }
 int ajustes_quer_sair(void) { return sair; }
 
 // Valor das linhas so de leitura. O espaco em disco NAO e um numero inventado:
@@ -3804,6 +3500,7 @@ static const char *textoLeitura(int op) {
 // de a linha sumir.
 static int inativa(int op) {
   switch (op) {
+    case AJ_VIDRO_CONTORNO: return !lig(AJ_VIDRO);
     case AJ_RAIL:         return ajustes_rail_moderna();
     case AJ_RAIL_BLUR:    return !ajustes_rail_moderna();
     case AJ_HERO_CATALOGOS: return !ajustes_hero_ligado();
@@ -3823,6 +3520,8 @@ static int inativa(int op) {
     case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: return !lig(AJ_SEEKR_LIGADO);
     // Sem o relogio nao ha ilha para onde minimizar: sai para a pagina, como antes.
     case AJ_SAIDA_PLAYER: return !lig(AJ_RELOGIO);
+    // Escolhendo a mao, a folha abre com o que chegou: nao ha escolha a apressar.
+    case AJ_FONTE_PRAZO: return lig(AJ_FONTE_MANUAL);
     // Som: na Samsung (.wgt) o trailer e sempre mudo (trailerfonte_com_som).
     case AJ_HERO_TRAILER_SOM:
       return !lig(AJ_HERO_TRAILER) || !trailerfonte_com_som(trailerfonte_tizen());
@@ -3882,18 +3581,19 @@ static int mutavel(int op)   { return OPCOES[op].tipo != OP_LEITURA &&
 // Item desenhado agora? Opcao de grupo fechado nao e — nem desenhada, nem
 // alcancada pelo cima/baixo.
 static int visivel(int i) {
-  int g = grupoDoItem[i];
-  // SEM O SERVICO SOCIAL NA BUILD, as duas linhas do perfil publico nao
-  // existem: um interruptor que nao liga nada e pior que interruptor nenhum
-  // (a mesma regra da aba Social, ver recomenda_ativo).
-  if (TELA[i].tipo == IT_OPC &&
-      (TELA[i].op == AJ_PERFIL_PESQ || TELA[i].op == AJ_PERFIL_EDITAR) &&
-      !recomenda_ativo())
+  if (i < 0 || i >= AJ_N_TELA) return 0;
+  if (TELA[i].tipo == IT_ROT) {
+    int j;
+    for (j = i + 1; j < AJ_N_TELA && TELA[j].tipo == IT_OPC; j++)
+      if (visivel(j)) return 1;
     return 0;
-  // Contorno do vidro so tem o que mudar com o vidro ligado.
-  if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_VIDRO_CONTORNO && !lig(AJ_VIDRO))
-    return 0;
-  return g < 0 || grupoAberto[secDoItem[i]] == g;
+  }
+  if (TELA[i].tipo == IT_OPC) {
+    int op = TELA[i].op;
+    if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) return 0;
+    if (uxAvancada(op) && !uxAvancados[secDoItem[i]]) return 0;
+  }
+  return 1;
 }
 static int focavel(int i) {
   return (TELA[i].tipo == IT_GRP || TELA[i].tipo == IT_OPC) && visivel(i);
@@ -3903,6 +3603,8 @@ static void focar(int i) {
   focoItem = i;
   focoOp = TELA[i].tipo == IT_OPC ? TELA[i].op : -1;
   secAtual = secDoItem[i];
+  uxIndice = secAtual + 2; uxCabecalho = 0;
+  uxUltimoItem[secAtual] = i;
   emEdicao = 0;
   sairArmado = 0;
 }
@@ -3915,7 +3617,8 @@ static int primeiroDaSecao(int s) {
 }
 static void focarSecao(int s) {
   if (s < 0 || s >= nSecoes) return;
-  focar(primeiroDaSecao(s));
+  { int i = uxUltimoItem[s];
+    focar(i > secIni[s] && i < secFim(s) && focavel(i) ? i : primeiroDaSecao(s)); }
 }
 static void abrirGrupo(int g) {
   int s = secDoItem[g];
@@ -3927,7 +3630,7 @@ static void focarOpcao(int op) {
   int i;
   for (i = 0; i < AJ_N_TELA; i++) {
     if (TELA[i].tipo != IT_OPC || TELA[i].op != op) continue;
-    if (grupoDoItem[i] >= 0) grupoAberto[secDoItem[i]] = grupoDoItem[i];
+    if (uxAvancada(op)) uxAvancados[secDoItem[i]] = 1;
     focar(i);
     focoIndice = 0;
     return;
@@ -3948,6 +3651,7 @@ static void focarOpcao(int op) {
 // paragrafo que ninguem le do sofa.
 static const char *ajudaOpcao(int op) {
   if (inativa(op)) {
+    if (op == AJ_VIDRO_CONTORNO) return "Ative a interface de vidro para ajustar o contorno.";
     if (op == AJ_RAIL) return "Desative a barra lateral moderna para escolher entre recolhida e fixa.";
     if (op == AJ_RAIL_BLUR) return "Ative a barra lateral moderna para usar o desfoque.";
     if (op == AJ_HERO_CATALOGOS) return "Ative Mostrar destaque para exibir os catálogos no topo da Home.";
@@ -4011,6 +3715,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_FONTE_MANUAL: return "Ao mandar reproduzir, abre a lista de fontes em vez de escolher sozinho. Canal ao vivo não pergunta.";
     case AJ_FONTE_AUTO: return "Melhor fonte: prefere 4K, Dolby Vision e MP4 e confere uma fonte por vez. Primeira da lista: toca a primeira que o addon mandou e não confere nenhuma outra — para quem já filtra e ordena no AIOStreams.";
     case AJ_FONTE_TEXTO: return "Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams.";
+    case AJ_FONTE_PRAZO: return "As fontes aparecem na lista assim que cada add-on responde. A escolha automática não espera o mais lento: sai quando já há uma fonte boa ou depois deste tempo. Com uma fonte escolhida antes neste título, o add-on dela é sempre esperado.";
     case AJ_FONTE_REPOR: return "Quantas outras fontes o automático tenta quando a escolhida não abre. Cada tentativa pode adicionar um arquivo na sua conta de debrid.";
 
     // --- Home
@@ -4864,70 +4569,39 @@ static void desenhaRiscoFolha(void) {
 // tem de disparar, e a gravacao. Um lugar so para as setas do modo edicao e
 // para o OK do interruptor: dois caminhos para o mesmo valor eram duas listas
 // de efeitos colaterais para manter iguais.
-static void mudarValorDireto(int op, int dir) {
-  const Opcao *o = &OPCOES[op];
-  // O PERFIL PESQUISAVEL NAO GIRA valor[]: liga/desliga de verdade em
-  // recomenda.c (que grava, avisa o servidor e, sem apelido, pede um).
-  if (op == AJ_PERFIL_PESQ) { pessoas_definir_pesquisavel(!recomenda_pesquisavel()); return; }
-  if (o->tipo == OP_NUMERO) {
-    // Numero NAO circula: passar de 100% para 0% com um toque a mais e um
-    // salto que ninguem pede, e no controle da TV a seta repete sozinha.
-    int v = valor[op] + dir * o->passo;
-    valor[op] = limita(op, v);
-    // O limite de fileiras nao vive em valor[]: quem grava e consulta e
-    // fileiras.c. Sem esta linha o numero mudaria na tela e a home nao.
-    // E um PASSO de rajada: quem ficou alem do limite so vai para "Fora da
-    // Home" quando a edicao termina, pelo valor final (issue #197; ver
-    // fil_ajustar_limite e o fim de ajustes_evento).
-    if (op == AJ_FIL_LIMITE) {
-      fil_ajustar_limite(valor[op]);
-      valor[op] = fil_limite_gravado();
-    }
-  } else {
-    // Escolha circula: a lista e curta e voltar do fim ao inicio poupa
-    // toques no controle. Sem circular, o ultimo valor vira um beco.
-    { int n = nValores(op);
-      valor[op] = (valor[op] + (dir > 0 ? 1 : n - 1)) % n; }
-    // A escolha de idioma so vale quando chega em linguas.c; guardar o indice
-    // e desenhar o rotulo deixaria o ajuste bonito e inerte, que foi
-    // exatamente o defeito do seletor de idioma da interface.
-    if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) aplicarIdioma(op);
-    // O rotulo de tipo e os generos das fileiras sao montados na entrada do
-    // catalogo, ja no idioma da interface; trocar o idioma remonta.
-    if (op == AJ_IDIOMA) { idiomaEscolhido(); desc_repetir(); }
-    if (op == AJ_FONTE_UI)
-      txt_definir_fonte_interface((TxtFamilia)valor[op]);
-    // A FONTE DO CONTINUAR tambem remonta, e por um motivo diferente do
-    // idioma: quem monta aquela fileira e montarContinuar (descoberta.c), e
-    // o conteudo dela nao e refeito por desc_remontar_fileiras — essa so
-    // reordena e filtra FILEIRAS, nao os itens de uma. Sem o ciclo, trocar a
-    // fonte so teria efeito no proximo sync, e para quem apertou parece que
-    // o ajuste nao faz nada.
-    if (op == AJ_CW_FONTE) desc_repetir();
-    // A ORDENACAO E OS NAO EXIBIDOS (issue #127) tambem sao decididos em
-    // montarContinuar; aqui basta refazer so a retomada, sem o ciclo
-    // inteiro — o conjunto de itens e o mesmo, muda a ordem e quem fica.
-    if (op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS) desc_refazer_continuar();
-    // O PERCENTUAL ASSISTIDO decide quem entra em montarContinuar (1% ate ele).
-    if (op == AJ_CW_CONCLUIDO) desc_refazer_continuar();
-    // O DESTINO DO "+" tambem: com "Plan to Watch do Simkl" o Plan to Watch
-    // entra nos Salvos pela descoberta (descoberta.c), e sem o ciclo ele so
-    // apareceria no proximo sync.
-    if (op == AJ_SALVOS_DEST) desc_repetir();
-    // O teto de imagens vale NA HORA: subir e so deixar entrar mais; descer
-    // despeja pelo LRU de sempre no proximo quadro.
-    if (op == AJ_TEX_MB) tex_definir_orcamento_mb(ajustes_tex_mb());
-    // DE ONDE VEM A LISTA DE ADDONS mudou: so um ciclo novo le a do perfil
-    // certo. Com um ciclo no ar, a lista nova chega no proximo.
-    if (op == AJ_ADDONS_PRINCIPAL) sync_iniciar();
+// Uma escolha final: persiste uma vez antes dos efeitos externos. Navegar no
+// seletor nunca passa por aqui, inclusive para idiomas e limite de fileiras.
+static int definirValorDireto(int op, int novo) {
+  int antes;
+  if (op < 0 || op >= AJ_N ||
+      (OPCOES[op].tipo != OP_ESCOLHA && OPCOES[op].tipo != OP_NUMERO)) return 0;
+  novo = limita(op, novo);
+  if (op == AJ_PERFIL_PESQ) {
+    pessoas_definir_pesquisavel(novo == 0);
+    return 1;
   }
-  gravar();   // grava a cada mudanca: nao ha botao de "salvar" nesta tela
-  // #85 (resto): a TV le o blob de layout da conta mas nao o escreve. Sem
-  // isto, o proximo arranque reaplicava o blob antigo e desfazia largura,
-  // arredondamento, profundidade e cor de destaque mudados so na TV.
-  // NAO vai dentro de gravar(): o blob da conta tambem chama gravar() e
-  // nao pode marcar a TV como "fonte da verdade" por ter recebido a conta.
+  antes = valor[op];
+  if (novo == antes) return 1;
+  valor[op] = novo;
+  if (!gravar()) { valor[op] = antes; return 0; }
+  if (op == AJ_FIL_LIMITE) {
+    fil_ajustar_limite(novo);
+    valor[op] = fil_limite_gravado();
+    fil_confirmar_limite();
+  }
+  if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) aplicarIdioma(op);
+  if (op == AJ_IDIOMA) { idiomaEscolhido(); desc_repetir(); }
+  if (op == AJ_FONTE_UI) txt_definir_fonte_interface((TxtFamilia)novo);
+  if (op == AJ_CW_FONTE || op == AJ_SALVOS_DEST) desc_repetir();
+  if (op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS || op == AJ_CW_CONCLUIDO)
+    desc_refazer_continuar();
+  if (op == AJ_TEX_MB) tex_definir_orcamento_mb(ajustes_tex_mb());
+  if (op == AJ_ADDONS_PRINCIPAL) sync_iniciar();
   sync_proteger_ajustes_locais();
+  return 1;
+}
+static void mudarValorDireto(int op, int dir) {
+  definirValorDireto(op, passoAdiante(op, dir));
 }
 
 // A porta de entrada: pede a folha de aviso quando a mudanca passa do que sempre
@@ -4948,6 +4622,9 @@ static int ehInterruptor(int op) {
   return op >= 0 && OPCOES[op].tipo == OP_ESCOLHA && OPCOES[op].valores == V_LIGA;
 }
 
+#include "ajustes_ux_dados.inc"
+#include "ajustes_ux_interacao.inc"
+
 static void eventoTela(const SDL_Event *e);
 void ajustes_evento(const SDL_Event *e) {
   eventoTela(e);
@@ -4964,6 +4641,7 @@ static void eventoTela(const SDL_Event *e) {
   if (teclado_aberto()) { teclado_evento(e); return; }
   if (e->type != SDL_KEYDOWN) return;
   SDL_Keycode k = e->key.keysym.sym;
+  if (e->key.repeat && (k == SDLK_RETURN || k == SDLK_KP_ENTER)) return;
   montarTela();   // barato depois da primeira vez; ver ajustes_iniciar
 
   // Vinculo em andamento e uma pergunta: enquanto ele esta em pe, nada mais na
@@ -4988,66 +4666,13 @@ static void eventoTela(const SDL_Event *e) {
   if (riscoFolha) { riscoFolhaEvento(k); return; }
   // A folha de fileiras e modal, como a do vinculo acima.
   if (filAberta) { eventoFileiras(k); return; }
+  if (uxEvento(k)) return;
 
-  { int voltar = (k == SDLK_ESCAPE || k == SDLK_AC_BACK ||
-                  k == SDLK_BACKSPACE || k == SDLK_DELETE);
-    // NAVEGAR ENTRE CATEGORIAS COM A TECLA QUE O CONTROLE TEM.
-    //
-    // O atalho de secoes era PgUp/PgDn, e num controle de TV essas duas teclas
-    // NAO EXISTEM. As coloridas nao servem — no webOS so a azul tem scancode
-    // conhecido e no Tizen a vermelha e o painel de diagnostico do shell.
-    // Sobram as que todo controle tem: Voltar e a seta para a ESQUERDA, que
-    // levam da lista ao indice de categorias, como no web (a navegacao lateral
-    // fica a esquerda do conteudo). Do indice, Voltar sai dos Ajustes; a
-    // direita ou OK entram na categoria.
-    if (focoIndice) {
-      if (voltar || k == SDLK_LEFT) { sair = 1; return; }
-      if (k == SDLK_DOWN)  { if (secAtual < nSecoes - 1) focarSecao(secAtual + 1); return; }
-      if (k == SDLK_UP)    { if (secAtual > 0)           focarSecao(secAtual - 1); return; }
-      if (k == SDLK_RIGHT || k == SDLK_RETURN || k == SDLK_KP_ENTER) { focoIndice = 0; return; }
-      return;
-    }
-    // VOLTAR SOBE UM NIVEL POR VEZ: solta a edicao; de uma opcao dentro de um
-    // grupo, fecha o grupo e devolve o foco ao cabecalho dele; da lista, vai
-    // para o indice. Cada toque desfaz exatamente o ultimo "entrar".
-    if (voltar) {
-      if (emEdicao) { emEdicao = 0; return; }
-      if (focoOp >= 0 && grupoDoItem[focoItem] >= 0) {
-        int g = grupoDoItem[focoItem];
-        grupoAberto[secAtual] = -1;
-        focar(g);
-        return;
-      }
-      focoIndice = 1; sairArmado = 0;
-      return;
-    } }
-
-  if (k == SDLK_DOWN || k == SDLK_UP) {
-    // Navegar CONFIRMA a edicao (o valor ja foi gravado a cada toque) — como
-    // o OK, e nao como um cancelamento que a lista nao tem. focar() solta.
-    // Anda so dentro da categoria: passar para a seguinte e no indice, e a
-    // lista mostra uma categoria por vez.
-    int dir = (k == SDLK_DOWN) ? 1 : -1, i;
-    for (i = focoItem + dir; i > secIni[secAtual] && i < secFim(secAtual); i += dir)
-      if (focavel(i)) { focar(i); break; }
-    emEdicao = 0;
-  }
-  else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
+  if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
     // OK NUM GRUPO abre ou fecha (sanfona: abrir um fecha o outro). O foco
     // fica no cabecalho; baixo entra nas opcoes.
     if (focoOp < 0) { if (TELA[focoItem].tipo == IT_GRP) abrirGrupo(focoItem); return; }
-    // OK em linha de valor: LIGA/DESLIGA troca na hora, como o toggle do web
-    // — nao ha o que escolher entre dois estados, e o modo edicao ali era um
-    // OK a mais para cada interruptor. Lista de valores e numero entram no
-    // modo edicao; acao age; leitura nao faz nada.
-    if (OPCOES[focoOp].tipo != OP_ACAO) {
-      if (!mutavel(focoOp)) return;
-      if (ehInterruptor(focoOp)) { mudarValor(focoOp, 1); return; }
-      // OK alterna: entra no modo edicao e, de dentro dele, confirma — o valor
-      // ja foi gravado a cada toque de seta, nao ha o que desfazer.
-      emEdicao = !emEdicao;
-      return;
-    }
+    if (OPCOES[focoOp].tipo != OP_ACAO) { uxAbrirEditor(focoOp); return; }
     if (focoOp == AJ_FIL_ORDEM) {
       filAberta = 1; filFoco = 0; filCampo = 0; filPegou = 0; filTopo = 0;
       filAba = 0; filNaBarra = 0; filAviso[0] = 0;
@@ -5169,18 +4794,11 @@ static void eventoTela(const SDL_Event *e) {
     int s = secAtual + (k == SDLK_PAGEDOWN ? 1 : -1);
     if (s >= 0 && s < nSecoes) focarSecao(s);
   }
-  else if (k == SDLK_LEFT || k == SDLK_RIGHT) {
-    // Fora do modo edicao as setas nao tocam em valor nenhum — OK e a porta
-    // de entrada (ver a nota de emEdicao). A ESQUERDA, fora da edicao, volta
-    // ao indice de categorias, que esta a esquerda na tela.
-    if (!emEdicao) { if (k == SDLK_LEFT) { focoIndice = 1; sairArmado = 0; } return; }
-    if (!mutavel(focoOp)) return;
-    mudarValor(focoOp, (k == SDLK_RIGHT) ? 1 : -1);
-  }
+
 }
 
 void ajustes_atualizar(float dt, Uint32 agora) {
-  (void)agora;
+  if (uxAviso[0] && SDL_TICKS_PASSED(agora, uxAvisoAte)) uxAviso[0] = 0;
   montarTela();
   valor[AJ_PERFIL_PESQ] = recomenda_pesquisavel() ? 0 : 1;   // V_LIGA: 0 = Ligado
   p2pTesteRecolher();
@@ -5220,7 +4838,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
     // Com o foco na coluna de categorias a linha DESCANSA: o preenchimento
     // de realce e o do foco, e o foco esta na categoria — duas superficies
     // claras ao mesmo tempo diriam "voce esta em dois lugares".
-    float alvo = (i == focoItem && !focoIndice) ? 1.0f : 0.0f;
+    float alvo = (i == focoItem && !focoIndice && !uxCabecalho && uxIndice >= 2) ? 1.0f : 0.0f;
     animItem[i] = ajustes_animacoes_reduzidas() ? alvo : anim_mola(animItem[i], alvo, dt,
                             alvo > animItem[i] ? NV_MOLA_FOCO : NV_MOLA_DESFOCO);
   }
@@ -5243,6 +4861,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       if (fim - topo > AJ_BASE - AJ_TOPO) fim = topo + (AJ_BASE - AJ_TOPO);
       if (fim > base) base = fim; }
   }
+  if (uxCabecalho) topo = base = 0.0f;
   float alvo = scrollY;
   // PAGINA NOVA: a lista passa a ser outra categoria. A rolagem nao anima de
   // uma lista para a outra — recomeca do topo, e a pagina entra por
@@ -5354,28 +4973,16 @@ static const char *textoValor(int op) {
 // aj_* do Lucide de TELA[]. O mapa por opcao (iconeOpcao, 99 casos, merge da
 // 1.5) saiu junto: sem linha que o desenhe ele so segurava PNG no pacote.
 
-// A MESMA SUPERFICIE PARA LINHA E GRUPO: card-rest em repouso; no foco, o
-// preenchimento no acento com o halo macio atras (DESIGN.md: "Foco = linha
-// preenchida com a cor de realce, sem anel"). `f` e a mola do foco (0..1).
+// Superficies calmas como no prototipo: o foco tem borda precisa, sem halo.
+// Opacas para manter o contraste dos textos mesmo com Vidro ligado na Home.
 static void desenhaSuperficie(GfxRect r, float raio, float f, float a) {
   float ar, ag, ab;
-  if (ajustes_vidro()) {
-    // Referencia: linha em foco = retangulo arredondado com contorno branco de
-    // 2 px e miolo um pouco mais claro; as outras ficam quase sem superficie.
-    gfx_cor(r, raio, 1, 1, 1, 0.035f * a);
-    gfx_vidro_foco(r, raio, f, a);
-    return;
-  }
   ajustes_acento(&ar, &ag, &ab);
-  gfx_cor(r, raio, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B, 0.34f * a);
-  // Brilho difuso por tras da linha em foco (0,9x a altura de folga em cima
-  // e embaixo, alpha 0,35 x mola): a mesma luz da pilula do menu lateral
-  // (21/09/2026). SEM folga lateral: a lista e recortada a 4 px da linha
-  // (ajustes_desenhar), e uma luz que vazasse para os lados seria cortada reta.
+  if (ar > 0.97f && ag > 0.97f && ab > 0.97f) { ar = 0.933f; ag = 0.949f; ab = 0.98f; }
+  gfx_cor(r, raio, 0.090f, 0.106f, 0.137f, a);
   if (f > 0.01f) {
-    GfxRect luz = { r.x, r.y - r.h * 0.9f, r.w, r.h * 2.8f };
-    gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f * f * a);
     gfx_cor(r, raio, ar, ag, ab, f * a);
+    gfx_anel_fora(r, raio, 4, 2, 0.82f, 0.87f, 0.98f, f * a);
   }
 }
 
@@ -5459,46 +5066,21 @@ static void desenhaLinha(int item, float y, float f, float dx, float aPag) {
   float xDir = linha.x + linha.w - AJ_PAD;
   float cauda;   // largura ocupada pela cauda, para o rotulo cortar antes dela
 
-  if (ehInterruptor(op)) {
-    desenhaInterruptor(xDir, y, AJ_LINHA_H, lig(op), emFoco, aTexto);
-    cauda = AJ_PILULA_W;
-  } else {
+  {
     const char *v = textoValor(op);
-    int cv = emFoco ? AJ_TEXTO_ESCURO2 : (podeMudar ? 220 : 176);
+    int cv = emFoco ? AJ_TEXTO_ESCURO2 : (podeMudar ? 184 : 168);
     // O "›" so onde o OK leva a algum lugar: escolha, numero e acao. Numa linha
     // inativa ele sai, porque ali o OK nao faz nada.
     int chevron = !desligada && (podeMudar || acao);
     TxtLinha chv = txt_linha(TXT_HEADLINE, "\xe2\x80\xba", cv, cv, cv, 255);
     float valorDir = chevron ? xDir - chv.w - 16.0f : xDir;
-    TxtLinha val = txt_linha_corta(TXT_CALLOUT, v, cv, cv, cv, 255, 340.0f);
+    TxtLinha val = txt_linha_corta(TXT_CAPTION, v, cv, cv, cv, 255, 340.0f);
     float vy = y + (AJ_LINHA_H - val.h) * 0.5f;
     // "4K", "1080p" e "720p" da qualidade maxima saem como MARCA. A largura da
     // marca substitui a do texto para o resto da conta (cauda, pilula de edicao).
     int fv = marcaDoValor(op, v);
     if (fv >= 0) val.w = (int)(marca_formato_largura((FormatoMarca)fv, AJ_MARCA_VALOR_H) + 0.5f);
     cauda = xDir - (valorDir - val.w);
-
-    // Barra de preenchimento da linha numerica. Sem ela, "28%" nao diz nada
-    // sobre onde 28 fica no intervalo — e o web mostra um slider por isso.
-    if (OPCOES[op].tipo == OP_NUMERO) {
-      const Opcao *o = &OPCOES[op];
-      float t = (o->max > o->min)
-              ? (float)(valor[op] - o->min) / (float)(o->max - o->min) : 0.0f;
-      float bw = 200.0f, bh = 4.0f;
-      float bx = valorDir - bw;
-      // O valor e o chevron ficam no centro da linha, na altura do rotulo; a
-      // barra desce para o respiro de baixo em vez de empurrar o valor para
-      // cima (ele subia 8 px e ficava fora da linha de leitura do rotulo).
-      float by = y + AJ_LINHA_H - 12.0f;
-      GfxRect trilho = { bx, by, bw, bh };
-      GfxRect cheio  = { bx, by, bw * anim_clamp(t, 0.0f, 1.0f), bh };
-      // Sobre o preenchimento claro do foco a barra tem de ser escura.
-      float cb = (emFoco && focoEscuro()) ? 0.08f : 0.94f;
-      gfx_cor(trilho, 0.5f, cb, cb, cb + 0.02f, 0.22f * aTexto);
-      if (cheio.w > 0.5f)
-        gfx_cor(cheio, 0.5f, cb, cb, cb + 0.02f, 0.92f * aTexto);
-      if (bw > val.w) cauda = xDir - bx;
-    }
 
     // MODO EDICAO: as setas trocam de lugar com o chevron. "◀ valor ▶" e o
     // sinal de que agora esquerda e direita mudam o valor, e so existe
@@ -5522,9 +5104,13 @@ static void desenhaLinha(int item, float y, float f, float dx, float aPag) {
     }
   }
 
-  TxtLinha rot = txt_linha_corta(TXT_CALLOUT, rotuloOpcao(op), cr, cr, cr, 255,
+  TxtLinha rot = txt_linha_corta(TXT_BODY, rotuloOpcao(op), cr, cr, cr, 255,
                                  linha.w - AJ_PAD * 2.0f - cauda - 28.0f);
   txt_desenhar_alpha(rot, linha.x + AJ_PAD, y + (AJ_LINHA_H - rot.h) * 0.5f, aTexto);
+  if (uxDiferente(op) && rot.w + cauda + AJ_PAD * 2 + 48 < linha.w) {
+    gfx_cor((GfxRect){linha.x + AJ_PAD + rot.w + 12, y + AJ_LINHA_H * 0.5f - 3, 6, 6},
+            0.5f, 0.56f, 0.65f, 0.80f, aTexto);
+  }
   // A MARCA AO LADO DO TITULO: "Dolby Vision" e "Dolby Atmos" mostram o logo
   // que a opcao liga. Fica depois do texto, centrada na linha, e so entra se
   // couber antes da cauda (a marca some antes de cortar o rotulo).
@@ -5697,49 +5283,23 @@ static void desenhaVinculo(const char *servico, const char *codigo,
 // aconteceu com PgUp/PgDn.
 static void desenhaIndice(void) {
   float y = AJ_TOPO;
-  float raio = 14.0f / AJ_IDX_H;
-  int s;
-  for (s = 0; s < nSecoes; s++) {
-    const Item *sec = &TELA[secIni[s]];
-    GfxRect r = { AJ_IDX_X, y, AJ_IDX_W, AJ_IDX_H };
-    int atual = (s == secAtual);
-    int emFoco = (atual && focoIndice);
-    int c = emFoco ? AJ_TEXTO_SOLIDO : (atual ? 240 : 168);
-    float ci = emFoco ? (AJ_TEXTO_SOLIDO < 128 ? 0.10f : 1.0f) : (atual ? 0.94f : 0.62f);
-    GfxRect ic = { AJ_IDX_X + 20.0f, y + (AJ_IDX_H - AJ_IDX_ICONE) * 0.5f,
-                   AJ_IDX_ICONE, AJ_IDX_ICONE };
-    float tx = ic.x + AJ_IDX_ICONE + 16.0f;
-    TxtLinha t;
-    float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
-    // A categoria EM FOCO e o preenchimento de realce com a tinta dele, como
-    // as linhas — mesma regra da lista, sem anel. A categoria ATUAL (foco na
-    // lista) e a superficie mais clara com o INDICADOR CURTO no acento a
-    // esquerda: e a "aba ativa" do DESIGN.md, e diz onde a lista esta sem
-    // competir com o foco, que esta na lista.
-    if (emFoco) {
-      // Brilho difuso atras da categoria em foco, como na lista. O indice
-      // nao tem mola de foco, entao a luz acende com a pilula.
-      GfxRect luz = { r.x - r.h * 0.9f, r.y - r.h * 0.9f, r.w + r.h * 1.8f, r.h * 2.8f };
-      gfx_rect(luz, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.35f);
-      gfx_cor(r, raio, ar, ag, ab, 1.0f);
-    } else {
-      gfx_cor(r, raio, NV_COR_FOCO_R, NV_COR_FOCO_G, NV_COR_FOCO_B,
-              atual ? 0.60f : 0.26f);
-      // 4 x 28, centrado na altura do rotulo, dentro do respiro esquerdo do
-      // cartao (o icone comeca em +20). O raio do shader e fracao da ALTURA:
-      // 0,5 aqui virava um raio de 14 px num traco de 4 e o SDF o reduzia a
-      // uma lasca — 2/28 da as pontas arredondadas de 2 px.
-      if (atual)
-        gfx_cor((GfxRect){ r.x + 8.0f, r.y + (r.h - 28.0f) * 0.5f, 4.0f, 28.0f },
-                2.0f / 28.0f, ar, ag, ab, 1.0f);
+  int j;
+  for (j = 0; j < nSecoes + 2; j++) {
+    if (j == 2) {
+      gfx_cor((GfxRect){AJ_IDX_X + 14, y + 6, AJ_IDX_W - 28, 1}, 0, 0.16f, 0.18f, 0.22f, 1);
+      y += 24;
     }
-    // O ICONE E A ANCORA da varredura de olho: a 3 m o nome da categoria e
-    // texto pequeno, e o simbolo e o que se reconhece antes de ler.
-    gfx_icone(ic, sec->icone, ci, ci, ci, 1.0f);
-    t = txt_linha_corta(TXT_CALLOUT, sec->titulo, c, c, c, 255,
-                        AJ_IDX_X + AJ_IDX_W - 16.0f - tx);
-    txt_desenhar(t, tx, y + (AJ_IDX_H - t.h) * 0.5f);
-    y += AJ_IDX_H + 6.0f;
+    int selecionado = j == uxIndice, foco = selecionado && focoIndice;
+    const char *titulo = j == 0 ? "Buscar ajuste" : j == 1 ? "Diferentes do padrão" : TELA[secIni[j - 2]].titulo;
+    const char *icone = j == 0 ? "menu_search" : j == 1 ? "aj_rotate-ccw-clock" : TELA[secIni[j - 2]].icone;
+    GfxRect r = { AJ_IDX_X, y, AJ_IDX_W, AJ_IDX_H };
+    float c = foco ? (focoEscuro() ? 0.10f : 1.0f) : selecionado ? 0.94f : 0.67f;
+    if (foco) desenhaSuperficie(r, 0.20f, 1, 1);
+    else if (selecionado) gfx_cor(r, 0.20f, 0.114f, 0.145f, 0.204f, 1);
+    gfx_icone((GfxRect){r.x + 14, y + 13, 28, 28}, icone, c, c, c, 1);
+    TxtLinha t = txt_linha_corta(TXT_CAPTION, titulo, (int)(c * 255), (int)(c * 255), (int)(c * 255), 255, r.w - 66);
+    txt_desenhar(t, r.x + 54, y + (r.h - t.h) * 0.5f);
+    y += AJ_IDX_H + 4;
   }
 }
 
@@ -6814,15 +6374,17 @@ static float desenhaPreviaGrupo(int grupo, float x, float y, float w) {
 
 static float desenhaPreviaCategoria(int sec, float x, float y, float w) {
   switch (sec) {
-    case 0: return ajudaFluxoSobre(x, y, w);            // Perfil/conta
-    case 1: return ajudaFluxoAparencia(x, y, w);        // Cor, idioma, movimento
-    case 2: return desenhaPrevia(AJ_LANDSCAPE, x, y, w);// Home em miniatura
-    case 3: return ajudaFluxoCatalogos(x, y, w);        // Addon -> fileiras
-    case 4: return ajudaFluxoIntegracoes(x, y, w);      // Fontes -> detalhes
-    case 5: return ajudaFluxoReproducao(x, y, w);       // Fonte/qualidade/trilhas
-    case 6: return ajudaFluxoHistorico(x, y, w);        // Servicos -> historico
-    case 7: return ajudaFluxoAvancado(x, y, w);         // Ajustes da TV -> tela
-    case 8: {                                           // Versao e suporte
+    case 0: return desenhaPrevia(AJ_LANDSCAPE, x, y, w);
+    case 1: return desenhaPrevia(AJ_LARGURA_DP, x, y, w);
+    case 2: return desenhaPrevia(AJ_HERO_TRAILER, x, y, w);
+    case 3: return ajudaFluxoMetadata(x, y, w);
+    case 4: return ajudaFluxoReproducao(x, y, w);
+    case 5: return ajudaFluxoReproducao(x, y, w);
+    case 6: return ajudaFluxoAparencia(x, y, w);
+    case 7: return ajudaFluxoCatalogos(x, y, w);
+    case 8: return ajudaFluxoHistorico(x, y, w);
+    case 9: return ajudaFluxoAvancado(x, y, w);
+    case 10: {                                           // Versao e suporte
       float ar, ag, ab, h = 170.0f;
       ajustes_acento(&ar, &ag, &ab);
       ajudaMiniCaixa(x, y, w, h, 0, ar, ag, ab);
@@ -6859,6 +6421,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES:
     case AJ_REACAO_CREDITOS:
+    case AJ_FONTE_PRAZO:
       return AJPV_REPRO;
     case AJ_HOME_LAYOUT:
     case AJ_LANDSCAPE: case AJ_HERO_CHEIO: case AJ_HERO_FUNDO:
@@ -7649,6 +7212,8 @@ static float previaOpcao(int op, float x, float y, float w) {
   }
 }
 
+#include "ajustes_ux_desenho.inc"
+
 void ajustes_desenhar(Uint32 agora) {
   // Fundo opaco proprio: a tela cobre tudo e nao pode depender de quem desenhou
   // antes dela — sem isto a home aparece entre as linhas da lista.
@@ -7661,133 +7226,17 @@ void ajustes_desenhar(Uint32 agora) {
   (void)tela;
   montarTela();
 
-  // O cabecalho fica na borda do CONTEUDO (a do indice, agora a coluna mais a
-  // esquerda), e nao na da lista: a nota em AJ_LISTA_X existe porque esta tela
-  // ja foi a unica desalinhada das outras.
-  //
-  // SEM A LINHA "Categoria 3 de 8 · ... · opção 1 de 9" ao lado do titulo.
-  // Ela repetia o que a coluna de categorias ja mostra (onde se esta) e
-  // acrescentava uma contagem que ninguem usa para decidir nada; foi o
-  // primeiro texto que o olho encontrava na tela, antes das categorias.
-  TxtLinha tit = txt_linha(TXT_TITULO1, "Ajustes", 255, 255, 255, 255);
-  // Layout Dinamica: "Ajustes" esta na pilula da barra (menu_pilula_titulo).
-  if (ajustes_home_layout() != HOME_LAYOUT_DINAMICA) txt_desenhar(tit, AJ_IDX_X, NV_MARGEM_Y);
-
+  uxDesenharCabecalho();
   int sec = secAtual;
   const Item *itSec = &TELA[secIni[sec]];
-  const Item *itFoco = &TELA[focoItem];
-  int noGrupo = !focoIndice && itFoco->tipo == IT_GRP;
-
   desenhaIndice();
+  gfx_cor((GfxRect){AJ_LISTA_X - 26, AJ_TOPO, 1, AJ_BASE - AJ_TOPO},
+          0, 0.145f, 0.165f, 0.204f, 1);
+  if (uxIndice < 2) { uxDesenharEspecial(); uxDesenharRodape(); uxDesenharEditor(); return; }
+  uxDesenharInspetor();
 
-  float hx = AJ_LISTA_X + AJ_LISTA_W + 52.0f;
-  float hw = NV_TELA_W - NV_LEGACY_CONTENT_RIGHT - hx;   // mesma margem direita de Perfil e da home (era 80)
-  if (hw > 240.0f) {
-    // O icone de categoria reaparece enquanto se personaliza uma opcao, ligando
-    // o contexto da coluna esquerda ao painel de ajuda. No indice, o cabecalho
-    // central ja da esse contexto e o painel fica reduzido a orientacao util.
-    GfxRect gi = { hx, AJ_TOPO + 4.0f, 42.0f, 42.0f };
-    float hy;
-    if (!focoIndice) {
-      gfx_icone(gi, itSec->icone, 0.88f, 0.89f, 0.93f, 1.0f);
-      { TxtLinha tipo = txt_linha(TXT_CAPTION, noGrupo ? "Grupo"
-                            : inativa(focoOp) ? "Indisponível agora"
-                            : soLeitura(focoOp) ? "Informação"
-                            : OPCOES[focoOp].tipo == OP_ACAO ? "Abre uma tela"
-                            : "Personalizar", 168, 171, 180, 255);
-        txt_desenhar(tipo, gi.x + gi.w + 14.0f,
-                     gi.y + (gi.h - tipo.h) * 0.5f); }
-      hy = gi.y + gi.h + 22.0f;
-      // PITCH 44 para o headline, o mesmo do painel do explorar: o `leading`
-      // do txt_bloco e a distancia de uma linha a outra, e nao o vao.
-      hy += txt_bloco(TXT_HEADLINE,
-                     noGrupo ? itFoco->titulo : rotuloOpcao(focoOp),
-                     237, 238, 242, hx, hy, hw, 44, 1, 3);
-      hy += 18.0f;
-      hy += txt_bloco(TXT_CAPTION,
-                     noGrupo ? itFoco->sub : ajudaOpcao(focoOp),
-                     183, 186, 194, hx, hy, hw, 32, 1, 8);
-      // O QUE MUDA NA PRATICA. A frase de ajuda diz o que a opcao E; esta diz
-      // o que acontece quando ela muda, que e a pergunta de quem esta com o
-      // controle na mao. Vazia quando nao ha nada honesto a dizer.
-      { const char *ef = noGrupo ? NULL : efeitoOpcao(focoOp);
-        if (ef) {
-          hy += 16.0f;
-          hy += txt_bloco(TXT_CAPTION, ef, 150, 176, 150, hx, hy, hw, 32, 1, 4);
-        } }
-    } else {
-      // O cabecalho central ja identifica categoria e titulo. No indice, a
-      // coluna lateral usa so a explicacao curta, sem repetir icone, tipo e
-      // titulo no painel de ajuda.
-      hy = AJ_TOPO + 8.0f;
-      hy += txt_bloco(TXT_CAPTION, SECAO_AJUDA[sec], 183, 186, 194,
-                      hx, hy, hw, 32, 1, 6);
-      hy += 22.0f;
-      hy += desenhaPreviaCategoria(sec, hx, hy, hw);
-    }
-    if (!focoIndice && noGrupo) {
-      float ph;
-      hy += 22.0f;
-      ph = desenhaPreviaGrupo(focoItem, hx, hy, hw);
-      hy += ph > 0.0f ? ph : -22.0f;
-    } else if (!focoIndice && !noGrupo) {
-      float ph;
-      hy += 22.0f;
-      ph = previaOpcao(focoOp, hx, hy, hw);
-      hy += ph > 0.0f ? ph : -22.0f;
-    }
-    hy += 34.0f;
-    // O RODAPE DE AJUDA DIZ O QUE FUNCIONA NO CONTROLE, e nao o que funciona no
-    // teclado do Mac. Uma linha por dica, desenhada a mao: ver desenhaDicas.
-    // E O UNICO: havia um segundo rodape no pe da tela ("Voltar Categorias ·
-    // Voltar de novo Sair dos ajustes") dizendo a mesma coisa noutro lugar.
-    //
-    // i18n() AQUI, embora text.c ja traduza tudo o que desenha: estas linhas
-    // vivem num VETOR e chegam ao desenho por ponteiro, e a varredura de
-    // tools/varredura-i18n.py so as reconhece como tela pelo i18n( escrito.
-    { const char *dIdx[] = { i18n("↑ ↓   Escolher categoria"),
-                             i18n("OK ou →   Entrar na categoria"),
-                             i18n("Voltar   Sair dos ajustes") };
-      const char *dGrp[] = { i18n("↑ ↓   Navegar"),
-                             i18n("OK   Abrir ou fechar o grupo"),
-                             i18n("← ou Voltar   Categorias") };
-      const char *dAcao[] = { i18n("↑ ↓   Navegar"),
-                              i18n("OK   Abrir"),
-                              i18n("← ou Voltar   Categorias") };
-      const char *dTog[] = { i18n("↑ ↓   Navegar"),
-                             i18n("OK   Ligar ou desligar"),
-                             i18n("← ou Voltar   Categorias") };
-      const char *dVal[] = { i18n("↑ ↓   Navegar"),
-                             i18n("OK   Alterar o valor"),
-                             i18n("← ou Voltar   Categorias") };
-      const char *dEdi[] = { i18n("← →   Alterar o valor"),
-                             i18n("OK   Confirmar"),
-                             i18n("Voltar   Confirmar") };
-      const char *dSair[] = { i18n("↑ ↓   Navegar"),
-                              i18n("OK   Sair da conta"),
-                              i18n("← ou Voltar   Categorias") };
-      const char *dRem[] = { i18n("↑ ↓   Navegar"),
-                             i18n("OK   Remover"),
-                             i18n("← ou Voltar   Categorias") };
-      // Dentro de um grupo o Voltar sobe para o cabecalho do grupo, e a dica
-      // tem de dizer isso — senao a pessoa espera o indice e cai no grupo.
-      const char *dentro = i18n("Voltar   Fechar o grupo");
-      const char *d3[3];
-      const char *const *d = focoIndice ? dIdx
-                           : noGrupo ? dGrp
-                           : emEdicao ? dEdi
-                           : (focoOp == AJ_SAIR && sairArmado == focoOp) ? dSair
-                           : (pedeConfirmacao(focoOp) && sairArmado == focoOp) ? dRem
-                           : OPCOES[focoOp].tipo == OP_ACAO ? dAcao
-                           : ehInterruptor(focoOp) ? dTog : dVal;
-      memcpy(d3, d, sizeof d3);
-      if (!focoIndice && !noGrupo && !emEdicao && grupoDoItem[focoItem] >= 0)
-        d3[2] = dentro;
-      desenhaDicas(d3, 3, hx, hy, hw, 155, 159, 169); }
-  }
-
-  gfx_recorte(AJ_LISTA_X - NV_ANEL_FOCO, AJ_TOPO,
-               AJ_LISTA_W + NV_ANEL_FOCO * 2, AJ_BASE - AJ_TOPO);
+  gfx_recorte(AJ_LISTA_X - 8, AJ_TOPO - 8,
+               AJ_LISTA_W + 16, AJ_BASE - AJ_TOPO + 8);
   float y = AJ_TOPO - scrollY;
   float aPag = anim_suave(paginaA), dxPag = (1.0f - aPag) * 28.0f;
   { int i;
@@ -7796,29 +7245,22 @@ void ajustes_desenhar(Uint32 agora) {
     // descer por ela.
     float aC = anim_clamp((y - (AJ_TOPO - 70.0f)) / 60.0f, 0.0f, 1.0f) * aPag;
     if (aC > 0.005f && y < AJ_BASE) {
-      TxtLinha ts = txt_linha(TXT_HEADLINE, itSec->titulo, 236, 238, 242, 255);
-      TxtLinha tsub = txt_linha_corta(TXT_CAPTION, itSec->sub, 160, 163, 172, 255,
-                                      AJ_LISTA_W - AJ_PAD * 2.0f);
-      txt_desenhar_alpha(ts, AJ_LISTA_X + AJ_PAD + dxPag, y, aC);
-      txt_desenhar_alpha(tsub, AJ_LISTA_X + AJ_PAD + dxPag, y + ts.h + 8.0f, aC);
+      TxtLinha ts = txt_linha_corta(TXT_HEADLINE, itSec->titulo, 236, 240, 248, 255, AJ_LISTA_W - 170);
+      txt_desenhar_alpha(ts, AJ_LISTA_X + dxPag, y, aC);
+      txt_bloco(TXT_CAPTION, itSec->sub, 165, 173, 189,
+                AJ_LISTA_X + dxPag, y + ts.h + 8, AJ_LISTA_W - 176, 29, aC, 2);
     }
+    uxDesenharAvancados(y);
     y += AJ_SEC_CABEC;
     for (i = secIni[sec] + 1; i < secFim(sec); i++) {
       const Item *it = &TELA[i];
       if (!visivel(i)) continue;
       if (it->tipo == IT_ROT) {
-        // Rotulo do bloco mais um fio: sem o fio, um rotulo cinza no meio de
-        // linhas escuras se le como mais uma linha desligada.
         float aS = anim_clamp((y - (AJ_TOPO - 70.0f)) / 60.0f, 0.0f, 1.0f) * aPag;
         if (aS > 0.005f && y < AJ_BASE) {
-          TxtLinha tsub = txt_linha(TXT_CAPTION, it->titulo, 156, 159, 168, 255);
-          GfxRect fio = { AJ_LISTA_X + AJ_PAD + tsub.w + 18.0f + dxPag,
-                          y + AJ_SUB_CABEC - 22.0f,
-                          AJ_LISTA_W - AJ_PAD * 2.0f - tsub.w - 18.0f, 1.0f };
-          txt_desenhar_alpha(tsub, AJ_LISTA_X + AJ_PAD + dxPag,
-                             y + AJ_SUB_CABEC - tsub.h - 12.0f, aS);
-          if (fio.w > 20.0f)
-            gfx_cor(fio, 0.5f, 0.60f, 0.62f, 0.68f, 0.20f * aS);
+          TxtLinha tsub = txt_linha(TXT_CAPTION, it->titulo, 142, 153, 174, 255);
+          txt_desenhar_alpha(tsub, AJ_LISTA_X + 16 + dxPag,
+                             y + AJ_SUB_CABEC - tsub.h - 12, aS);
         }
       } else if (it->tipo == IT_GRP) {
         desenhaGrupo(i, y, animItem[i], dxPag, aPag);
@@ -7835,14 +7277,16 @@ void ajustes_desenhar(Uint32 agora) {
   if (total > janela) {
     float altura = janela * janela / total;
     float sy = AJ_TOPO + (janela - altura) * anim_clamp(scrollY / (total - janela), 0, 1);
-    gfx_cor((GfxRect){ AJ_LISTA_X + AJ_LISTA_W + 18, AJ_TOPO, 3, janela },
-            0.5f, 0.60f, 0.62f, 0.66f, 0.14f);
-    gfx_cor((GfxRect){ AJ_LISTA_X + AJ_LISTA_W + 18, sy, 3, altura },
-            0.5f, 0.80f, 0.82f, 0.86f, 0.8f);
+    gfx_cor((GfxRect){ AJ_LISTA_X + AJ_LISTA_W + 20, AJ_TOPO, 2, janela },
+            1.0f / janela, 0.20f, 0.23f, 0.29f, 0.35f);
+    gfx_cor((GfxRect){ AJ_LISTA_X + AJ_LISTA_W + 20, sy, 2, altura },
+            1.0f / altura, 0.44f, 0.49f, 0.58f, 0.65f);
   }
 
   // A folha de fileiras cobre a lista; o vinculo cobre as duas, porque ele e a
   // unica coisa aqui com prazo (o codigo do dispositivo expira).
+  uxDesenharRodape();
+  uxDesenharEditor();
   if (filAberta) desenhaFileiras();
   if (riscoFolha) desenhaRiscoFolha();
 
@@ -7869,14 +7313,34 @@ int ajustes_teste_focar_opcao(int op) {
   if (op < 0 || op >= AJ_N) return 0;
   for (i = 0; i < AJ_N_TELA; i++) {
     if (TELA[i].tipo != IT_OPC || TELA[i].op != op) continue;
-    secAtual = secDoItem[i];
-    if (grupoDoItem[i] >= 0) grupoAberto[secAtual] = grupoDoItem[i];
-    focar(i);
-    focoIndice = 0;
-    scrollY = velY = 0.0f;
+    focarOpcao(op); scrollY = velY = 0.0f;
     return 1;
   }
   return 0;
+}
+
+void ajustes_teste_ux_captura(int cenario) {
+  memcpy(valor, valorPadrao, sizeof valor);
+  valor[AJ_IDIOMA] = IDIOMA_PT + 1;
+  uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
+  memset(uxAvancados, 0, sizeof uxAvancados);
+  scrollY = velY = 0; paginaA = 1;
+  focarSecao(0); focoIndice = 1;
+  if (cenario == 1 || cenario == 2) focarOpcao(AJ_HOME_LAYOUT);
+  if (cenario == 2) { uxAbrirEditor(AJ_HOME_LAYOUT); uxEvento(SDLK_DOWN); }
+  if (cenario == 3) { focarOpcao(AJ_HERO_TRAILER_ESPERA); uxAbrirEditor(AJ_HERO_TRAILER_ESPERA); }
+  if (cenario == 4 || cenario == 5) {
+    valor[AJ_TEMA] = 1; valor[AJ_RELOGIO] = 1;
+    uxListarDiferencas(); uxIndice = 1; focoIndice = 0; uxDifFoco = 0;
+    if (cenario == 5) { uxAbrirEditor(AJ_TEMA); uxRodape = uxRestaurar = 1; }
+  }
+  if (cenario == 6) focarOpcao(AJ_TEX_MB);
+  if (cenario == 7) { focarOpcao(AJ_LARGURA_DP); uxAbrirEditor(AJ_LARGURA_DP); uxEvento(SDLK_DOWN); }
+  if (cenario == 8) { focarOpcao(AJ_HOME_LAYOUT); uxCabecalho = 1; }
+  if (cenario == 9) { valor[AJ_IDIOMA] = IDIOMA_EN + 1; focarOpcao(AJ_HOME_LAYOUT); uxAbrirEditor(AJ_HOME_LAYOUT); }
+  if (cenario == 21) focarOpcao(AJ_FOCO_TRAILER);
+  if (cenario == 22) { focarOpcao(AJ_FOCO_TRAILER); uxAbrirEditor(AJ_FOCO_TRAILER); }
+  if (cenario >= 10 && cenario < 21) { focarSecao(cenario - 10); focoIndice = 1; }
 }
 
 // O numero da opcao pela chave do disco/da conta ("idioma", "tmdb_language"): as

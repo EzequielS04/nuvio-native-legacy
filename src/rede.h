@@ -104,11 +104,20 @@ extern _Thread_local long rede_teto;
 extern long rede_teto;
 #endif
 
-// Segue os redirecionamentos e devolve o endereco FINAL, sem baixar o corpo.
+// Segue os redirecionamentos com GET Range de 64 bytes e devolve o endereco
+// FINAL somente em HTTP2xx, sem truncar o destino. Nativo descarta o corpo e
+// aborta ao passar de 64 bytes; XHR sincrono do WGT recebe a resposta inteira,
+// mas nao a copia para o heap WASM (nao pode abortar durante o recebimento).
 // Serve para saber se um link de debrid leva ao arquivo ou a um video de aviso
 // ("downloading.mp4", "slate.mp4") — que TOCA NORMALMENTE e por isso nao da
 // erro nenhum. 1 se conseguiu resolver.
 int rede_url_final(const char *url, int segundos, char *dst, unsigned tam);
+// Igual, com os cabecalhos exigidos pelo addon e status HTTP final (0 quando
+// nao houve resposta). Falha de transporte, HTTP nao2xx ou destino pequeno
+// deixam dst vazio. Quem chama no WGT deve distinguir recusa por cabecalho
+// controlado pelo navegador de fonte morta: AVPlay pode enviar esse cabecalho.
+int rede_url_final_cab(const char *url, int segundos, const char *const *cabecalhos,
+                       char *dst, unsigned tam, int *status);
 
 // POST de JSON. Existe para o Trakt, que so aceita escrita por POST.
 char *rede_postar(const char *url, int segundos, const char *const *cabecalhos,

@@ -4108,6 +4108,24 @@ static float desenhaNotaEpisodio(float x, float y, const char *fonte,
 }
 
 
+// Estado concluido: material escuro proprio para sobreviver a qualquer still,
+// circulo jade com check branco e rotulo legivel. O foco pertence a miniatura inteira.
+static void desenhaAssistidoEpisodio(GfxRect th, float a) {
+  const float h = 46, pad = 12, icone = 28, gap = 10;
+  TxtLinha texto = txt_linha_corta(TXT_CAPTION2, "Assistido", 255, 255, 255, 255,
+                                  th.w * .5f - pad * 2 - icone - gap);
+  float w = pad * 2 + icone + gap + texto.w;
+  GfxRect selo = {th.x + th.w - w - 18, th.y + 18, w, h};
+  gfx_cor(selo, .5f, .055f, .068f, .09f, .96f * a);
+  gfx_anel(selo, .5f, 1, .68f, .75f, .86f, .30f * a);
+  GfxRect disco = {selo.x + pad, selo.y + (h - icone) * .5f, icone, icone};
+  gfx_cor(disco, .5f, .451f, .839f, .694f, a);
+  gfx_icone((GfxRect){disco.x + 5, disco.y + 5, icone - 10, icone - 10},
+             "check", 1, 1, 1, a);
+  txt_desenhar_alpha(texto, disco.x + icone + gap,
+                     selo.y + (h - texto.h) * .5f, a);
+}
+
 // Card de episodio: 640x422, com a miniatura de 640x414 e TODO o texto dentro
 // dela, sobre o degrade. E a diferenca estrutural com o que estava aqui antes
 // (miniatura em cima, texto embaixo, que e o app da Apple TV).
@@ -4169,41 +4187,12 @@ static void desenhaEpisodio(GfxRect r, int c, float f, float a, Uint32 agora) {
   veuEpisodio(th, a);
   if (ajustes_vidro()) gfx_vidro_aro(th, raioTh, 1.5f, 1, 1, 1, 0.14f * a);   // vidro: aro fino na miniatura
 
-  // EPISODIO JA ASSISTIDO, segundo o Trakt: mascara escura sobre a miniatura e
-  // um check no canto. Pedido do dono, e resolve uma pergunta que a lista nao
-  // respondia — onde ele parou.
-  //
-  // A mascara vem DEPOIS do veu de texto de proposito: ela precisa cobrir a
-  // miniatura inteira, inclusive a parte ja escurecida, senao o card visto e o
-  // nao visto ficam parecidos justo em cima do texto.
-  //
-  // A FONTE E O MAPA (vistoep), e nao mais a matriz de extras.c. Era o defeito
-  // que o dono relatou assim: "se eu desmarcar ou marcar como assistido ele nao
-  // atualiza os cards". O menu de visto escreve em vistoep_marcar_lote e este
-  // card lia extras_ep_visto — duas verdades diferentes, e a que a pessoa
-  // acabava de mudar nao era a desenhada.
-  //
-  // O aviso ja estava escrito, em episodios.c, quando a FOLHA passou pelo mesmo
-  // conserto: "desenhar de uma fonte e agir sobre outra faria a linha nao mudar
-  // depois do gesto". A folha foi arrumada, esta copia nao — e nada apontava de
-  // uma para a outra.
-  //
-  // A matriz tambem so guarda o "sim": ela nao distingue "nao viu" de "nao
-  // sei", e cortava em silencio a temporada 21 e o episodio 40.
+  // A mesma fonte que o menu modifica: desconhecido (-1) nao recebe selo.
+  // A lavagem e leve para preservar a arte; texto e estado sao desenhados depois.
   if (ep && serie && serie->imdb[0] &&
       vistoep_estado(serie->imdb, ep->temporada, ep->episodio) == 1) {
-    float d = 36.0f;
-    GfxRect selo = { th.x + th.w - d - 16.0f, th.y + 16.0f, d, d };
-    gfx_cor(th, raioTh, 0.0f, 0.0f, 0.0f, 0.22f * a);
-    if (ajustes_vidro()) gfx_vidro_painel(selo, 0.5f, 0.7f, a);
-    else
-    gfx_cor(selo, 0.5f, 1, 1, 1, 0.92f * a);
-    // O check e o icone (art/icones/check.png, o mesmo do card da home), nao
-    // mais dois tracos feitos de quadradinhos em degrau — a 36 px isso era o
-    // "tick de baixa resolucao" do #74.
-    { float ck = ajustes_vidro() ? 1.0f : 0.05f;
-    gfx_icone((GfxRect){ selo.x + 7.0f, selo.y + 7.0f, d - 14.0f, d - 14.0f }, "check",
-              ck, ck, ck, a); }
+    gfx_cor(th, raioTh, 0, 0, 0, .12f * a);
+    desenhaAssistidoEpisodio(th, a);
   }
 
   // NADA DE RESERVA INVENTADA. Aqui as quatro linhas caiam numa tabela de

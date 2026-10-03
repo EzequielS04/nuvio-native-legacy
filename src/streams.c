@@ -14,6 +14,7 @@
 #include "ajustes.h"   /* ajustes_qualidade: o teto de "Qualidade maxima" */
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <stdlib.h>
 #include <math.h>
 #include "addons.h"
@@ -55,6 +56,16 @@
 
 static Stream *lista;
 static int n = 0;
+// ORDEM DE EXIBICAO (#221). `lista` so cresce no fim (stream_lista_acrescentar)
+// e e por isso que os indices dela nao mudam com a busca em andamento: a
+// verificacao, a fonte tocando, a preferida e as excluidas sao todas indices.
+// O que a pessoa ve, e a ordem que o automatico usa para desempatar, e por
+// `chave` = (addon << 16) | posicao dentro da resposta dele: a mesma ordem da
+// lista inteira de antes, montada na ordem dos addons. `exib[k]` e o indice
+// da k-esima na tela. Lista inteira (stream_definir_lista): chave = indice.
+static unsigned *chave;
+static int *exib;
+#define ORD(k) (exib ? exib[k] : (k))
 #define AUTO_EXCL_MAX 32
 static int automaticasExcluidas[AUTO_EXCL_MAX];
 static int nAutomaticasExcluidas;
@@ -206,6 +217,13 @@ void stream_definir_lista_idade(const Stream *l, int qtd, Uint32 idade) {
   descartadosSemDebrid = nova ? qtd - k : 0;
   pthread_mutex_lock(&verTrava);
   free(lista); lista = nova; n = nova ? k : 0; atual = -1;
+  free(chave); free(exib); chave = NULL; exib = NULL;
+  if (n > 0) {
+    chave = malloc(sizeof *chave * (size_t)n);
+    exib = malloc(sizeof *exib * (size_t)n);
+    if (!chave || !exib) { free(chave); free(exib); chave = NULL; exib = NULL; }
+    else for (i = 0; i < n; i++) { chave[i] = (unsigned)i; exib[i] = i; }
+  }
   recebidaEm = SDL_GetTicks() - idade;
   temRecebidaEm = 1;
   listaGeracao++;
@@ -233,6 +251,73 @@ void stream_invalidar(const char *porque) {
   }
   stream_definir_lista(NULL, 0);
   alvoLista[0] = 0;
+}
+
+static int filtrado(int linha);
+static int nOrdem, focoFixo = -1;
+static float *linhaY, focoFixoY;
+static void atualizarProvedores(void);
+static int aberta, foco, grupo;
+static float rolagem, velRol;
+
+void stream_lista_acrescentar(const Stream *l, int qtd, int ordemAddon) {
+  int i, k = 0, focoIdx = -1, linhaAntes = -1, total;
+  Stream *nova, *tmp;
+  unsigned *c2;
+  int *e2;
+  if (!l || qtd <= 0) return;
+  nova = malloc(sizeof(Stream) * (size_t)qtd);
+  if (!nova) return;
+  for (i = 0; i < qtd; i++)
+    if (l[i].url[0] || debrid_ativo() || p2p_ativo()) nova[k++] = l[i];
+  if (qtd - k) printf("[fonte] %d torrents sem debrid descartados\n", qtd - k);
+  descartadosSemDebrid += qtd - k;
+  if (!k) { free(nova); return; }
+  // O CARTAO EM FOCO E O QUE FICA PARADO. Guardado pelo indice da lista (que
+  // nao muda), e nao pela linha (que muda quando entra coisa acima).
+  if (aberta && grupo == 1 && n > 0) {
+    linhaAntes = foco;
+    focoIdx = filtrado(foco);
+    if (focoIdx < 0) linhaAntes = -1;
+  }
+  pthread_mutex_lock(&verTrava);
+  total = n + k;
+  tmp = realloc(lista, sizeof(Stream) * (size_t)total);
+  c2 = realloc(chave, sizeof *c2 * (size_t)total);
+  e2 = realloc(exib, sizeof *e2 * (size_t)total);
+  if (tmp) lista = tmp;
+  if (c2) chave = c2;
+  if (e2) exib = e2;
+  if (!tmp || !c2 || !e2) {
+    pthread_mutex_unlock(&verTrava);
+    free(nova);
+    printf("[fonte] memoria insuficiente para %d fontes\n", k);
+    return;
+  }
+  memcpy(lista + n, nova, sizeof(Stream) * (size_t)k);
+  for (i = 0; i < k; i++)
+    chave[n + i] = ((unsigned)(ordemAddon < 0 ? 0 : ordemAddon) << 16) | (unsigned)(i & 0xFFFF);
+  // Insercao ordenada das novas em `exib`: as de antes ja estao em ordem, e
+  // uma nova entra depois de toda chave menor OU IGUAL (estavel).
+  for (i = 0; i < k; i++) {
+    int idx = n + i, pos = n + i;
+    while (pos > 0 && chave[exib[pos - 1]] > chave[idx]) { exib[pos] = exib[pos - 1]; pos--; }
+    exib[pos] = idx;
+  }
+  n = total;
+  if (!temRecebidaEm) { recebidaEm = SDL_GetTicks(); temRecebidaEm = 1; }
+  pthread_mutex_unlock(&verTrava);
+  free(nova);
+  printf("[fonte] +%d de %s (lista com %d)\n", k, l[0].provedor, n);
+  fflush(stdout);
+  if (aberta) atualizarProvedores();
+  // A linha em foco muda de lugar quando entra fonte acima dela (os grupos tem
+  // altura variavel): guardada aqui e reposta no proximo montar().
+  if (focoIdx >= 0) { focoFixo = focoIdx; focoFixoY = linhaAntes < nOrdem ? linhaY[linhaAntes] : 0; }
+}
+
+int stream_ordem_addon(int i) {
+  return i >= 0 && i < n && chave ? (int)(chave[i] >> 16) : 0;
 }
 
 int stream_n(void) {
@@ -444,8 +529,41 @@ static int playlistVazia(const char *url, const char *cabecalhos) {
 // do episodio seguinte.
 typedef struct { unsigned geracao; int abortou; } Conferencia;
 
+static int resolverUrl(const char *url, const char *cabecalhos, int segundos,
+                        char *fim, unsigned tam) {
+  const char *vetor[8];
+  char copia[512];
+  int nc = 0, http = 0;
+#ifdef __EMSCRIPTEN__
+  int restrito = 0;
+#endif
+  if (cabecalhos && *cabecalhos) {
+    char *l, *ctx = NULL;
+    snprintf(copia, sizeof copia, "%s", cabecalhos);
+    for (l = strtok_r(copia, "\n", &ctx); l && nc < 7; l = strtok_r(NULL, "\n", &ctx)) {
+      vetor[nc++] = l;
+#ifdef __EMSCRIPTEN__
+      if (!strncasecmp(l, "Referer:", 8) || !strncasecmp(l, "Origin:", 7) ||
+          !strncasecmp(l, "User-Agent:", 11)) restrito = 1;
+#endif
+    }
+  }
+  vetor[nc] = NULL;
+  if (rede_url_final_cab(url, segundos, nc ? vetor : NULL, fim, tam, &http)) return 1;
+#ifdef __EMSCRIPTEN__
+  // XHR nao manda estes cabecalhos; AVPlay manda. A recusa nao prova que a
+  // fonte morreu (mesmo contrato de playlistVazia). 5xx nao entram aqui.
+  if ((http == 401 || http == 403) && restrito && strlen(url) < tam) {
+    memcpy(fim, url, strlen(url) + 1);
+    printf("[fonte] sonda HTTP %d com cabecalho controlado pelo navegador: quem decide e o player\n", http);
+    return 1;
+  }
+#endif
+  return 0;
+}
+
 static int verificarUma(int i, Conferencia *c) {
-  char fim[900], url[4096], cab[512];
+  char fim[4096], url[4096], cab[512];
   int fileIdx, ok = 0;
   char infoHash[48];
   pthread_mutex_lock(&verTrava);
@@ -475,7 +593,7 @@ static int verificarUma(int i, Conferencia *c) {
     } else printf("[fonte] %d torrent nao resolveu no debrid\n", i);
   } else if (!url[0]) {
     ok = 0;
-  } else if (!rede_url_final(url, 10, fim, sizeof fim)) {
+  } else if (!resolverUrl(url, cab, 10, fim, sizeof fim)) {
     printf("[fonte] %d nao resolveu\n", i);
   } else if (enderecoDeAviso(fim)) {
     printf("[fonte] %d e aviso (%.60s)\n", i, fim);
@@ -483,6 +601,19 @@ static int verificarUma(int i, Conferencia *c) {
     printf("[fonte] %d tem playlist vazia (canal fora do ar)\n", i);
   } else ok = 1;
   return ok;
+}
+
+// A MESMA CONFERENCIA de verificarUma, para uma URL avulsa (fontevolta.c):
+// segue os redirecionamentos com um GET de 64 bytes e recusa o endereco de
+// aviso do debrid e a playlist sem segmento. 5 s e nao 10: quem chama ja esta
+// tocando a URL em paralelo e so quer saber cedo se ela morreu.
+int stream_url_serve(const char *url, const char *cabecalhos) {
+  char fim[4096];
+  if (!url || !*url) return 0;
+  if (!resolverUrl(url, cabecalhos, 5, fim, sizeof fim)) return 0;
+  if (enderecoDeAviso(fim)) return 0;
+  if (playlistVazia(fim, cabecalhos)) return 0;
+  return 1;
 }
 
 // fonteauto_primeira nao sabe de lista trocada: depois de uma conferencia
@@ -589,13 +720,27 @@ int stream_primeira_boa(int tentativas) {
     free(pts); free(acima); free(excl);
     return -1;
   }
-  for (q = 0; q < total; q++) {
-    pts[q] = pontos(&lista[q]);
-    acima[q] = (unsigned char)!cabeNoTeto(&lista[q]);
-    excl[q] = (unsigned char)automaticaExcluida(q);
-  }
-  pthread_mutex_unlock(&verTrava);
-  nf = fonteauto_fila(modo, total, pref, pts, acima, excl, tentativas, fila);
+  // A FILA E MONTADA NA ORDEM DE EXIBICAO (#221) e traduzida de volta para
+  // indice: o desempate de fonteauto_fila ("o de menor indice, que e a ordem
+  // do addon") so vale se a posicao for a da lista inteira, e nao a de chegada.
+  { int *ordem = malloc(sizeof *ordem * (size_t)total), posPref = -1;
+    if (!ordem) {
+      pthread_mutex_unlock(&verTrava);
+      free(pts); free(acima); free(excl);
+      return -1;
+    }
+    for (q = 0; q < total; q++) {
+      int i = ORD(q);
+      ordem[q] = i;
+      if (i == pref) posPref = q;
+      pts[q] = pontos(&lista[i]);
+      acima[q] = (unsigned char)!cabeNoTeto(&lista[i]);
+      excl[q] = (unsigned char)automaticaExcluida(i);
+    }
+    pthread_mutex_unlock(&verTrava);
+    nf = fonteauto_fila(modo, total, posPref, pts, acima, excl, tentativas, fila);
+    for (q = 0; q < nf; q++) fila[q] = ordem[fila[q]];
+    free(ordem); }
   free(pts); free(acima); free(excl);
   if (nf < 1) return -1;
 
@@ -608,6 +753,63 @@ int stream_primeira_boa(int tentativas) {
          tocadas, nf, c.abortou ? ", lista trocada no meio" : "");
   if (escolhida >= 0) printf("[fonte] %d ok\n", escolhida);
   return escolhida;
+}
+
+// BOA O SUFICIENTE PARA NAO ESPERAR O RESTO (#221): dentro do teto, em cache
+// no debrid, com link (nao P2P) e na resolucao do teto — 4K quando o teto e
+// "Automatica". E a faixa de cima da pontuacao: um addon que ainda nao
+// respondeu so passaria na frente dela com MP4/Dolby Vision/Atmos, que sao
+// desempates dentro da mesma resolucao.
+static int boaParaJa(const Stream *s) {
+  int teto = alturaMax();
+  if (!cabeNoTeto(s) || s->foraCache || soP2P(s)) return 0;
+  return s->altura >= (teto ? teto : 2160);
+}
+
+static int pendenteAntesCb(int addon, void *u) { (void)u; return addons_pendente_antes(addon); }
+
+int stream_auto_pode_decidir(int preferida, int prefPendente, int prazoPassou) {
+  FonteautoParcial p;
+  long *pts; unsigned char *acima, *excl, *boa; int *ad;
+  int q, total, r, posPref = -1;
+  memset(&p, 0, sizeof p);
+  pthread_mutex_lock(&verTrava);
+  total = n;
+  if (total < 1) { pthread_mutex_unlock(&verTrava); return 0; }
+  pts = malloc(sizeof *pts * (size_t)total);
+  acima = calloc((size_t)total, 1); excl = calloc((size_t)total, 1);
+  boa = calloc((size_t)total, 1); ad = malloc(sizeof *ad * (size_t)total);
+  if (!pts || !acima || !excl || !boa || !ad) {
+    pthread_mutex_unlock(&verTrava);
+    free(pts); free(acima); free(excl); free(boa); free(ad);
+    return 0;
+  }
+  for (q = 0; q < total; q++) {
+    int i = ORD(q);
+    if (i == preferida) posPref = q;
+    pts[q] = pontos(&lista[i]);
+    acima[q] = (unsigned char)!cabeNoTeto(&lista[i]);
+    excl[q] = (unsigned char)automaticaExcluida(i);
+    boa[q] = (unsigned char)boaParaJa(&lista[i]);
+    ad[q] = chave ? (int)(chave[i] >> 16) : 0;
+  }
+  pthread_mutex_unlock(&verTrava);
+  p.modo = ajustes_fonte_primeira() ? FONTEAUTO_PRIMEIRA : FONTEAUTO_MELHOR;
+  p.total = total; p.preferida = posPref; p.prefPendente = prefPendente;
+  p.prazoPassou = prazoPassou; p.algumPendente = addons_faltam(NULL, 0) > 0;
+  p.pontos = pts; p.acimaTeto = acima; p.excluida = excl; p.boa = boa;
+  p.addon = ad; p.pendenteAntes = pendenteAntesCb;
+  r = fonteauto_pode_decidir(&p);
+  free(pts); free(acima); free(excl); free(boa); free(ad);
+  return r;
+}
+
+int stream_n_candidatas(void) {
+  int i, k = 0;
+  pthread_mutex_lock(&verTrava);
+  for (i = 0; i < n; i++) if (!automaticaExcluida(i)) k++;
+  pthread_mutex_unlock(&verTrava);
+  return k;
 }
 
 // A PRIMEIRA FONTE DE CANAL QUE ESTA VIVA, conferida em paralelo e por
@@ -869,15 +1071,16 @@ int stream_automatico(void) {
   if (!stream_n()) return -1;
   int melhor = -1;
   long maior = 0;
-  for (int i = 1; i < n; i++) {
+  // NA ORDEM DE EXIBICAO (#221), que e a da lista inteira: com a lista
+  // enchendo por addon o indice e a ordem de CHEGADA, nao a dos addons.
+  for (int k = 0; k < n; k++) {
+    int i = ORD(k);
     if (automaticaExcluida(i)) continue;
     long p = pontos(&lista[i]);
     // `>` e nao `>=`: em empate fica o PRIMEIRO da lista, que e a ordem em que
     // o addon devolveu — e ele costuma saber algo que a pontuacao nao ve.
     if (melhor < 0 || p > maior) { maior = p; melhor = i; }
   }
-  if (!automaticaExcluida(0) && (melhor < 0 || pontos(&lista[0]) > maior))
-    melhor = 0;
   return melhor;
 }
 
@@ -937,14 +1140,23 @@ static int passaFiltro(int i) {
   return 1;
 }
 
+// Abas na ORDEM DE EXIBICAO (a dos addons), e a aba escolhida segue pelo
+// NOME: com a lista enchendo (#221) um addon novo pode entrar antes dela.
 static void atualizarProvedores(void) {
+  char escolhido[96];
+  snprintf(escolhido, sizeof escolhido, "%s", filtro > 0 && filtro < nProvedores ? provedores[filtro] : "");
   nProvedores = 1;
   snprintf(provedores[0],sizeof provedores[0],"Todos");
-  for (int i=0;i<n;i++) {
-    int j;
+  for (int k=0;k<n;k++) {
+    int i=ORD(k), j;
     for(j=1;j<nProvedores;j++) if(!strcmp(provedores[j],lista[i].provedor)) break;
     if(j==nProvedores && nProvedores<13)
       snprintf(provedores[nProvedores++],96,"%s",lista[i].provedor);
+  }
+  if (escolhido[0]) {
+    int j;
+    for (j = 1; j < nProvedores; j++) if (!strcmp(provedores[j], escolhido)) break;
+    filtro = j < nProvedores ? j : 0;
   }
   if(filtro>=nProvedores) filtro=0;
 }
@@ -1226,8 +1438,12 @@ static void montar(int automatica) {
   for (g = 0; g < FOLHA_GRUPOS; g++) {
     secN[g] = 0;
     nt = 0;
-    for (i = 0; i < n; i++)
+    // Na ordem dos addons (ORD), nao na de chegada: a lista enche addon a
+    // addon (#221) e o empate de tamanho fica com a ordem do addon.
+    for (k = 0; k < n; k++) {
+      i = ORD(k);
       if (i != m && passaFiltro(i) && grupoRes(&lista[i]) == g) grupoTmp[nt++] = i;
+    }
     // Insercao estavel: em tamanho igual vale a ordem do addon.
     for (k = 1; k < nt; k++) {
       int v = grupoTmp[k], j = k - 1;
@@ -1441,6 +1657,11 @@ void stream_folha_atualizar(float dt, Uint32 agora) {
   abreAnt  = anim_mola(abreAnt, 0, dt, NV_MOLA_TELA);
   melhorFolha = stream_automatico();
   montar(automaticaDaFolha());
+  if (focoFixo >= 0) {
+    int r = grupo == 1 ? linhaDe(focoFixo) : -1;
+    if (r >= 0) { rolagem += linhaY[r] - focoFixoY; foco = r; focoVisto = r; }
+    focoFixo = -1;
+  }
   rolagem=anim_mola2(&velRol,rolagem,alvoRolagem(),dt,NV_MOLA2_SCROLL);
 }
 int stream_folha_escolheu(int *out) {

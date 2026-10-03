@@ -39,6 +39,8 @@ void app_encerrar(void);
 // 1 = a home e o que esta na frente (sem detalhe, player, login ou escolha de
 // perfil por cima). E a amostra do nivel de GPU (gpunivel.h).
 int  app_na_home(void);
+// A tela atual e o login (a abertura dissolve o logo sobre o fundo dele).
+int  app_no_login(void);
 
 // Porta de teste: abre o titulo (imdb) como se viesse de uma recomendacao.
 void app_abrir_titulo(const char *imdb);

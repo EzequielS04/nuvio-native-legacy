@@ -33,6 +33,11 @@ static char erro[240];
 
 static unsigned pollMs = POLL_MS;
 
+// Login por e-mail (#216). Os dois textos vivem so ate o pedido sair.
+static char emailPend[256], senhaPend[256];
+static int  emailPedido;          // pedido guardado ate o fio do QR acabar
+static char erroEmail[240];
+
 static pthread_t fio;
 static int fioVivo;
 static int passoPronto;           // o fio terminou; a proxima etapa pode ir
@@ -367,11 +372,11 @@ static void *fioPedir(void *u) {
     else if (msg[0]) snprintf(erro, sizeof erro, "o servidor recusou: %s", msg);
     else snprintf(erro, sizeof erro,
                   i18n("O servidor da conta Nuvio recusou o pedido do código (HTTP %d). Tente de novo em alguns minutos."), st);
-    estado = SES_ERRO;
+    if (!emailPedido && estado != SES_EMAIL) estado = SES_ERRO;
   } else {
     if (!urlLogin[0])
       snprintf(urlLogin, sizeof urlLogin, "%s?code=%s", nuvem_base_login(), codigo);
-    estado = SES_AGUARDANDO;
+    if (!emailPedido && estado != SES_EMAIL) estado = SES_AGUARDANDO;
   }
   free(resp);
   passoPronto = 1;
@@ -438,6 +443,100 @@ static void *fioPoll(void *u) {
   return NULL;
 }
 
+// ---------------------------------------------------------------- e-mail
+
+
+static void apagar(volatile char *p, size_t n) { while (n--) *p++ = 0; }
+
+// A FRASE, nunca o corpo cru: o corpo de erro do GoTrue nao traz segredo, mas
+// vem em ingles e com codigo interno. Dois formatos convivem: o antigo
+// {"error":"invalid_grant","error_description":"Invalid login credentials"} e
+// o novo {"error_code":"invalid_credentials","msg":"..."}.
+void sessao_email_erro_de(int st, const char *corpo, char *dst, unsigned tam) {
+  char cod[80], desc[200];
+  const char *fim;
+  cod[0] = desc[0] = 0;
+  if (corpo) {
+    fim = corpo + strlen(corpo);
+    js_texto(corpo, fim, "error_code", cod, sizeof cod);
+    if (!cod[0]) js_texto(corpo, fim, "error", cod, sizeof cod);
+    js_texto(corpo, fim, "error_description", desc, sizeof desc);
+    if (!desc[0]) js_texto(corpo, fim, "msg", desc, sizeof desc);
+    if (!desc[0]) js_texto(corpo, fim, "message", desc, sizeof desc);
+  }
+  if (st == 0 || st >= 500) {
+    if (st) snprintf(dst, tam, i18n("O servidor da conta Nuvio não respondeu (HTTP %d). Tente de novo em alguns minutos."), st);
+    else    snprintf(dst, tam, "%s", i18n("O servidor da conta Nuvio não respondeu. Tente de novo em alguns minutos."));
+  } else if (st == 429 || !strcmp(cod, "over_request_rate_limit") ||
+             !strcmp(cod, "over_email_send_rate_limit")) {
+    snprintf(dst, tam, "%s", i18n("Muitas tentativas. Espere um minuto e tente de novo."));
+  } else if (!strcmp(cod, "email_not_confirmed") || strstr(desc, "not confirmed")) {
+    snprintf(dst, tam, "%s", i18n("Este e-mail ainda não foi confirmado. Abra o link que a Nuvio mandou e tente de novo."));
+  } else if (!strcmp(cod, "invalid_credentials") || !strcmp(cod, "invalid_grant") ||
+             strstr(desc, "Invalid login credentials") || st == 400) {
+    snprintf(dst, tam, "%s", i18n("E-mail ou senha incorretos."));
+  } else {
+    snprintf(dst, tam, i18n("O servidor da conta Nuvio recusou o login (HTTP %d)."), st);
+  }
+}
+
+static void *fioEmail(void *u) {
+  Jsw w;
+  char *resp;
+  int st = 0;
+  (void)u;
+  jsw_iniciar(&w);
+  jsw_obj_ini(&w);
+  jsw_cs(&w, "email", emailPend);
+  jsw_cs(&w, "password", senhaPend);
+  jsw_obj_fim(&w);
+  apagar(senhaPend, sizeof senhaPend);
+  resp = nuvem_post("/auth/v1/token?grant_type=password", jsw_texto_final(&w), NULL, &st);
+  { char *t = (char *)jsw_texto_final(&w); if (t) apagar(t, strlen(t)); }
+  jsw_livre(&w);
+  apagar(emailPend, sizeof emailPend);
+  if (resp && st >= 200 && st < 300 && guardarTokens(resp, 0)) {
+    erroEmail[0] = 0;
+    codigo[0] = 0;
+    estado = SES_LOGADO;
+    printf("[sessao] logado por e-mail como %s\n", sub[0] ? sub : "(sem sub)");
+  } else {
+    // So o status vai para o log: o corpo de erro do GoTrue repete o e-mail
+    // em algumas versoes ("User with email x not found").
+    printf("[sessao] login por e-mail: HTTP %d\n", st);
+    sessao_email_erro_de(st == 200 ? 0 : st, resp, erroEmail, sizeof erroEmail);
+    if (st >= 200 && st < 300)
+      snprintf(erroEmail, sizeof erroEmail, "%s", i18n("O servidor da conta Nuvio não respondeu. Tente de novo em alguns minutos."));
+    estado = SES_DESLOGADO;
+  }
+  if (resp) { apagar(resp, strlen(resp)); free(resp); }
+  passoPronto = 1;
+  return NULL;
+}
+
+static void soltar(void *(*rotina)(void *));
+
+void sessao_login_email(const char *email, const char *senha) {
+  if (!nuvem_pronta()) {
+    snprintf(erroEmail, sizeof erroEmail, "%s", i18n("Este pacote foi montado sem servidor."));
+    return;
+  }
+  if (estado == SES_EMAIL || emailPedido) return;
+  snprintf(emailPend, sizeof emailPend, "%s", email ? email : "");
+  snprintf(senhaPend, sizeof senhaPend, "%s", senha ? senha : "");
+  erroEmail[0] = 0;
+  // O QR para aqui: com o estado fora de AGUARDANDO o poll nao e reagendado.
+  // Um pedido de codigo ou poll ja em voo termina antes (sessao_passo so
+  // solta o fio do e-mail com fioVivo em 0) — dois fios nunca escrevem os
+  // tokens ao mesmo tempo.
+  codigo[0] = 0;
+  estado = SES_EMAIL;
+  emailPedido = 1;
+  sessao_passo(0);
+}
+
+const char *sessao_erro_email(void) { return erroEmail; }
+
 static void soltar(void *(*rotina)(void *)) {
   if (fioVivo) return;
   passoPronto = 0;
@@ -490,7 +589,8 @@ void sessao_login_comecar(void) {
     estado = SES_ERRO;
     return;
   }
-  if (estado == SES_PEDINDO || estado == SES_AGUARDANDO || estado == SES_TROCANDO) return;
+  if (estado == SES_PEDINDO || estado == SES_AGUARDANDO || estado == SES_TROCANDO ||
+      estado == SES_EMAIL || emailPedido) return;
   erro[0] = 0;
   codigo[0] = 0;
   estado = SES_PEDINDO;
@@ -501,6 +601,22 @@ void sessao_login_comecar(void) {
 void sessao_passo(unsigned agoraMs) {
   if (fioVivo && passoPronto) { fioVivo = 0; passoPronto = 0; }
   if (fioVivo) return;
+  if (emailPedido) {
+    emailPedido = 0;
+    // Um fio do QR que acabou depois do pedido pode ter mexido no estado.
+    if (sessao_logada() && estado == SES_LOGADO) {
+      apagar(emailPend, sizeof emailPend); apagar(senhaPend, sizeof senhaPend);
+      return;
+    }
+    estado = SES_EMAIL;
+    soltar(fioEmail);
+    if (!fioVivo) {
+      apagar(emailPend, sizeof emailPend); apagar(senhaPend, sizeof senhaPend);
+      snprintf(erroEmail, sizeof erroEmail, "%s", i18n("O servidor da conta Nuvio não respondeu. Tente de novo em alguns minutos."));
+      estado = SES_DESLOGADO;
+    }
+    return;
+  }
 
   if (estado == SES_AGUARDANDO) {
     if (!loginComecouMs) loginComecouMs = agoraMs;

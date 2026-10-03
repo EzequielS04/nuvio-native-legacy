@@ -77,6 +77,24 @@ void addons_buscar(const char *imdb, const char *tipo);
 // quando a lista atual esta vazia ou foi filtrada por falta de debrid.
 void addons_buscar_renovar(const char *imdb, const char *tipo);
 
+// --- busca em andamento, addon a addon (#221) --------------------------------
+// A busca real de filme/serie publica cada addon que responde, sem esperar os
+// outros: a folha enche aos poucos e a escolha automatica pode sair antes do
+// fim (app.c). addons_estado ja drena; addons_drenar e so a drenagem, para o
+// app.c chamar enquanto a verificacao roda (sem tocar no resto do estado).
+void addons_drenar(void);
+// 1 enquanto a busca real de VOD esta no ar publicando por addon.
+int  addons_busca_parcial(void);
+// Milissegundos desde o disparo dessa busca; 0 fora dela.
+unsigned addons_busca_ms(void);
+// Quantos addons ainda nao responderam (contando quem espera a segunda chance)
+// e, em `nomes`, os nomes deles separados por virgula. 0 fora da busca.
+int  addons_faltam(char *nomes, unsigned tam);
+// Algum addon de indice menor que `idx` (ordem de instalacao) ainda falta?
+int  addons_pendente_antes(int idx);
+// O addon com este nome (Stream.provedor) ainda falta?
+int  addons_pendente_nome(const char *nome);
+
 // A mesma consulta, SINCRONA E REENTRANTE, e addons_consultar — declarada em
 // fontecache.h, e nao aqui, porque a assinatura precisa de Stream (streams.h,
 // que puxa SDL) e este cabecalho e incluido por modulos que os testes compilam

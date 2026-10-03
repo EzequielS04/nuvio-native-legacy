@@ -109,6 +109,7 @@ int cat_blocos_aposentados(void) {
 
 // Alocado conforme chega, nao dimensionado por um numero chutado.
 static CatItem *itens;
+static int n;
 static CatFileira fils[CAT_FIL_MAX];
 static int nFils;
 static int nAlocado;
@@ -182,12 +183,40 @@ typedef struct {
 // INDICE POR HASH (#212): o selo de visto e lido por cartaz, por quadro, e a
 // busca linear de antes (ate HIST_MAX strcmp por cartaz) custaria fps numa
 // fileira cheia. Endereçamento aberto, 2x a capacidade; cada balde guarda
-// posicao+1 (0 = vazio). A entrada e escrita inteira ANTES de o balde ser
-// publicado, entao o fio de desenho nunca le uma entrada pela metade.
+// posicao+1 (0 = vazio). Leitura, insercao e reset compartilham histTrava,
+// entao nenhum consumidor observa uma chave pela metade.
 #define HIST_BALDES (HIST_MAX * 2)
 static CatHistorico historico[HIST_MAX];
 static int nHistorico;
 static int histBalde[HIST_BALDES];
+// O hash continua O(1), mas a tabela e mutavel: escritores concorrentes e
+// troca de identidade nao podem publicar a chave enquanto outro fio a limpa.
+static pthread_mutex_t histTrava = PTHREAD_MUTEX_INITIALIZER;
+static unsigned long long histGeracao = 1;
+static char histUsuario[128];
+static int histPerfil;
+
+void cat_historico_contexto(const char *usuario, int perfil) {
+  const char *u = usuario ? usuario : "";
+  pthread_mutex_lock(&histTrava);
+  if (histPerfil != perfil || strcmp(histUsuario, u)) {
+    snprintf(histUsuario, sizeof histUsuario, "%s", u);
+    histPerfil = perfil;
+    if (!++histGeracao) ++histGeracao;
+    nHistorico = 0;
+    memset(histBalde, 0, sizeof histBalde);
+    mudou();
+  }
+  pthread_mutex_unlock(&histTrava);
+}
+
+unsigned long long cat_historico_geracao(void) {
+  unsigned long long g;
+  pthread_mutex_lock(&histTrava);
+  g = histGeracao;
+  pthread_mutex_unlock(&histTrava);
+  return g;
+}
 
 static void id_base(const char *origem, char *destino, size_t tam) {
   size_t n = 0;
@@ -221,7 +250,7 @@ static int historico_pos(const char *imdb, const char *tipo, int criar) {
   if (!id[0]) return -1;
   b = hist_hash(id, tb) % HIST_BALDES;
   for (k = 0; k < HIST_BALDES; k++, b = (b + 1) % HIST_BALDES) {
-    int v = __atomic_load_n(&histBalde[b], __ATOMIC_ACQUIRE);
+    int v = histBalde[b];
     if (!v) break;
     if (!strcmp(historico[v - 1].imdb, id) && !strcmp(historico[v - 1].tipo, tb))
       return v - 1;
@@ -231,39 +260,62 @@ static int historico_pos(const char *imdb, const char *tipo, int criar) {
   snprintf(historico[nHistorico].tipo, sizeof historico[nHistorico].tipo, "%s", tb);
   historico[nHistorico].conhecido = 0;
   historico[nHistorico].visto = 0;
-  __atomic_store_n(&histBalde[b], nHistorico + 1, __ATOMIC_RELEASE);
+  histBalde[b] = nHistorico + 1;
   return nHistorico++;
 }
 
 // Leitura interna da modal: -1 = historico ainda nao consultado, 0 = nao
 // visto confirmado, 1 = visto confirmado.
-int cat_historico_estado_id(const char *imdb, const char *tipo);
 int cat_historico_estado_item(int indice) {
-  const CatItem *it = cat_item(indice);
-  if (!it || !it->imdb[0]) return -1;
-  return cat_historico_estado_id(it->imdb, it->tipo);
+  char id[64], tipo[16];
+  pthread_mutex_lock(&pubTrava);
+  if (!itens || indice < 0 || indice >= n || !itens[indice].imdb[0]) {
+    pthread_mutex_unlock(&pubTrava);
+    return -1;
+  }
+  snprintf(id, sizeof id, "%s", itens[indice].imdb);
+  snprintf(tipo, sizeof tipo, "%s", itens[indice].tipo);
+  pthread_mutex_unlock(&pubTrava);
+  return cat_historico_estado_id(id, tipo);
 }
 
-// A MESMA LEITURA POR ID, para quem nao tem indice: o menu aberto pelo painel
-// de Salvos fala de um titulo que pode nao estar no catalogo (veio so da lista
-// local, ver salvospainel.c). A tabela ja e por IMDb + tipo; o indice acima so
-// servia para chegar nesses dois campos.
+// O hash e consultado sob uma trava curta: nenhum ponteiro da tabela escapa,
+// e reset de perfil e insercao de outro fio nunca deixam chave pela metade.
 int cat_historico_estado_id(const char *imdb, const char *tipo) {
-  int p;
+  int p, estado;
   if (!imdb || !imdb[0]) return -1;
+  pthread_mutex_lock(&histTrava);
   p = historico_pos(imdb, tipo ? tipo : "movie", 0);
-  return p >= 0 && historico[p].conhecido ? historico[p].visto : -1;
+  estado = p >= 0 && historico[p].conhecido ? historico[p].visto : -1;
+  pthread_mutex_unlock(&histTrava);
+  return estado;
 }
 
-// Atualiza o retrato de historico somente depois de uma resposta 2xx do
-// Trakt. A chave e o IMDb sem sufixo de episodio, nunca o indice do vetor.
-void cat_historico_definir_id(const char *imdb, const char *tipo, int visto) {
+// Sob histTrava. Ausencia num snapshot Trakt nao apaga uma marca que veio
+// da conta ou de acao local: cada fonte continua acrescentando suas provas.
+static void historico_definir(const char *imdb, const char *tipo, int visto) {
   int p = historico_pos(imdb, tipo, 1);
   if (p < 0) return;
   if (historico[p].conhecido && historico[p].visto == (visto ? 1 : 0)) return;
   historico[p].visto = visto ? 1 : 0;
   historico[p].conhecido = 1;
-  mudou();   // a home e o detalhe redesenham o selo (cat_revisao_itens)
+  mudou();
+}
+
+void cat_historico_definir_id(const char *imdb, const char *tipo, int visto) {
+  pthread_mutex_lock(&histTrava);
+  historico_definir(imdb, tipo, visto);
+  pthread_mutex_unlock(&histTrava);
+}
+
+int cat_historico_definir_se_geracao(const char *imdb, const char *tipo,
+                                     int visto, unsigned long long geracao) {
+  int atual;
+  pthread_mutex_lock(&histTrava);
+  atual = geracao == histGeracao;
+  if (atual) historico_definir(imdb, tipo, visto);
+  pthread_mutex_unlock(&histTrava);
+  return atual;
 }
 
 // O ESTADO "VISTO" DE UM TITULO INTEIRO, para o selo do cartaz e o olho do
@@ -337,7 +389,6 @@ static void zerarFaixas(int quantos) {
   nFaixas = 0;
   garantirFaixas(quantos);
 }
-static int n = 0;
 
 // Copia o campo ate o proximo '|' (ou fim de linha), sem estourar o destino.
 static const char *campo(const char *p, char *destino, size_t tam) {
@@ -1414,46 +1465,63 @@ int cat_copiar_fileira(const char *chave, CatItem *saida, int max,
 //     valendo e nao precisam ser derrubadas;
 //   - `n` NAO e zerado: subir a contagem depois que o bloco novo ja esta
 //     publicado e seguro, e zerar faria a home piscar a cada titulo aberto.
-void cat_definir_na_lista(int i, int naLista) {
+// Sob pubTrava; as APIs publicas nao chamam umas as outras com a trava presa.
+static void definir_na_lista(int i, int naLista) {
   if (!itens || n <= 0 || i < 0 || i >= n) return;
-  // SO SOBE A REVISAO SE MUDOU DE FATO: os reconciliadores (salvos.c,
-  // contalib.c) remarcam o que ja estava marcado, e uma revisao que sobe sem
-  // mudanca faria o painel de Salvos reconstruir a toa.
   if (itens[i].naLista == (naLista ? 1 : 0)) return;
   itens[i].naLista = naLista ? 1 : 0;
   mudou();
 }
 
-// O MESMO TITULO VIVE EM VARIAS FILEIRAS, cada uma com a sua copia do CatItem
-// (a watchlist do Trakt, "Trending", uma colecao). Marcar so a copia do cartao
-// segurado deixava as outras dizendo o contrario: salvar pelo Trending nao
-// acendia o da watchlist, e remover pelo Trending deixava a copia da watchlist
-// marcada — o menu seguinte voltava a oferecer "Remover" para algo ja removido.
+void cat_definir_na_lista(int i, int naLista) {
+  CAT_TESTE_ANTES_TRAVA();
+  pthread_mutex_lock(&pubTrava);
+  definir_na_lista(i, naLista);
+  pthread_mutex_unlock(&pubTrava);
+}
+
+// Um mesmo titulo vive em varias fileiras. A contagem, o ponteiro e cada
+// marca pertencem ao mesmo bloco publicado durante toda a varredura.
 int cat_definir_na_lista_imdb(const char *imdb, int naLista) {
   int i, k = 0;
-  if (!itens || n <= 0 || !imdb || !imdb[0]) return 0;
-  for (i = 0; i < n; i++)
-    if (!strcmp(itens[i].imdb, imdb)) {
-      if (itens[i].naLista != (naLista ? 1 : 0)) { itens[i].naLista = naLista ? 1 : 0; mudou(); }
-      k++;
-    }
+  char id[64];
+  if (!imdb || !imdb[0]) return 0;
+  snprintf(id, sizeof id, "%s", imdb);
+  CAT_TESTE_ANTES_TRAVA();
+  pthread_mutex_lock(&pubTrava);
+  for (i = 0; itens && i < n; i++)
+    if (!strcmp(itens[i].imdb, id)) { definir_na_lista(i, naLista); k++; }
+  pthread_mutex_unlock(&pubTrava);
   return k;
 }
 int cat_imdb_na_lista(const char *imdb) {
-  int i;
-  if (!itens || n <= 0 || !imdb || !imdb[0]) return 0;
-  for (i = 0; i < n; i++) if (itens[i].naLista && !strcmp(itens[i].imdb, imdb)) return 1;
-  return 0;
+  int i, achou = 0;
+  char id[64];
+  if (!imdb || !imdb[0]) return 0;
+  snprintf(id, sizeof id, "%s", imdb);
+  CAT_TESTE_ANTES_TRAVA();
+  pthread_mutex_lock(&pubTrava);
+  for (i = 0; itens && i < n; i++)
+    if (itens[i].naLista && !strcmp(itens[i].imdb, id)) { achou = 1; break; }
+  pthread_mutex_unlock(&pubTrava);
+  return achou;
 }
 
-// Atualiza um espelho de item somente quando o indice ainda pertence ao bloco
-// atualmente publicado. A modal pode receber a resposta do worker depois que
-// a descoberta trocou o catalogo; nesse caso ignorar e seguro, escrever por um
-// indice antigo poderia alterar outro titulo.
+// O indice so e valido se ainda aponta ao titulo da resposta. Copiar a
+// resposta antes da trava tambem aceita um item pertencente ao bloco atual.
 void cat_atualizar_item(int i, const CatItem *item) {
-  if (!item || !itens || n <= 0 || i < 0 || i >= n) return;
-  itens[i] = *item;
-  mudou();
+  CatItem copia;
+  if (!item) return;
+  copia = *item;
+  CAT_TESTE_ANTES_TRAVA();
+  pthread_mutex_lock(&pubTrava);
+  if (itens && i >= 0 && i < n &&
+      !strcmp(itens[i].imdb, copia.imdb) &&
+      !strcmp(tipo_base(itens[i].tipo), tipo_base(copia.tipo))) {
+    itens[i] = copia;
+    mudou();
+  }
+  pthread_mutex_unlock(&pubTrava);
 }
 
 // Acrescenta N de UMA VEZ. cat_acrescentar copia o catalogo inteiro a cada

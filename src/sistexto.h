@@ -57,6 +57,10 @@ int   st_voz_disponivel(void);
 int   st_abre_sozinho(void);
 // Abre o teclado do sistema com `inicial` no campo (max em bytes). 1 = abriu.
 int   st_ime_abrir(int dono, const char *inicial, int max);
+// Tipo do PROXIMO st_ime_abrir (consumido nele): o Android abre o teclado de
+// e-mail ou o de senha (sem sugestao, sem aprender o que foi digitado).
+enum { ST_IME_TEXTO = 0, ST_IME_EMAIL = 1, ST_IME_SENHA = 2 };
+void  st_ime_tipo(int tipo);
 // Comeca o ditado (permissao, reconhecedor do app, ou os degraus de reserva).
 int   st_voz_iniciar(int dono);
 // Fecha o teclado e para a voz, se forem desse dono.

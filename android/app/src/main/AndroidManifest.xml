@@ -37,12 +37,20 @@
         android:extractNativeLibs="true"
         android:theme="@style/Tema.Nuvio">
 
+        <!-- configChanges cobre TODA mudanca que a Activity aguenta sem nascer de
+             novo. O nucleo C nao sobrevive a uma recriacao: medido no emulador
+             Android 11 com a 1.7.0, trocar font_scale com o app aberto deu
+             onDestroy, o main terminou, um segundo main subiu no mesmo processo
+             e o app sumiu. fontScale/colorMode/touchscreen/mcc/mnc faltavam na
+             lista; uma TV que muda o modo de cor ao abrir cai nisso (#223 e a
+             suspeita, sem prova). O segundo onCreate ainda e tratado em
+             NuvioActivity, como rede de seguranca. -->
         <activity
             android:name=".NuvioActivity"
             android:exported="true"
             android:screenOrientation="landscape"
             android:launchMode="singleTask"
-            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode|navigation|density|locale|layoutDirection"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode|navigation|density|locale|layoutDirection|fontScale|colorMode|touchscreen|mcc|mnc|fontWeightAdjustment|grammaticalGender"
             android:resizeableActivity="false">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

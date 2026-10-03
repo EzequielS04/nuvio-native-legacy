@@ -9,10 +9,10 @@ cd "$(dirname "$0")/.."
 flags=(-O1 -g -Isrc -pthread -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
        -Wall -Wno-deprecated-declarations -Wno-macro-redefined)
 if [ "${SANITIZE:-0}" = 1 ]; then flags+=(-fsanitize=address,undefined -fno-omit-frame-pointer); fi
-bin=/tmp/nuvio-syncordem-tests
+bin="${TMPDIR:-/tmp}/nuvio-syncordem-tests"
 cc "${flags[@]}" src/sync.c src/catordem.c src/catordemcache.c src/contacache.c src/js.c src/jsw.c \
   tests/syncordem.c -o "$bin"
-dir="$(mktemp -d)"
+dir="$(mktemp -d "${TMPDIR:-/tmp}/nuvio-syncordem.XXXXXXXX")"
 trap 'rm -rf "$dir"' EXIT
 export NV_T_DIR="$dir"
 
@@ -52,4 +52,18 @@ echo "$SAIDA" | grep -qF '[sync] ciclo do perfil 1 descartado' \
 sessao credencial
 echo "$SAIDA" | grep -qF 'nao tento de novo nesta sessao' \
   || { echo "FALHOU: sessao 8 nao anotou a recusa"; exit 1; }
+sessao addons
+# Fila de addon entre PROCESSOS: uma sessao cai em 500 e termina; a seguinte
+# parte so do disco. O nome vazio e estado desligado tambem devem sobreviver.
+export NV_T_DIR="$dir/addons-boot"; mkdir "$NV_T_DIR"
+sessao addons-gravar
+sessao addons-reabrir
+sessao addons-boot-leitura
+sessao addons-ack
+sessao addons-limpo
+for caso in identidade ack-perfil disco ram8 teto; do
+  export NV_T_DIR="$dir/addons-$caso"; mkdir "$NV_T_DIR"
+  sessao "addons-$caso"
+done
+echo "$SAIDA" | grep -q 'FALHOU' && exit 1
 echo "syncordem.sh: ok"

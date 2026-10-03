@@ -26,6 +26,7 @@
 // sonda MKV segue "nao ha sonda", como no .tpk); capitulos do MKV para
 // video_creditos; passthrough fino de AC3/EAC3 por AudioCapabilities.
 #ifdef NV_ANDROID
+#include "marco.h"
 #include "video.h"
 #include "video_reconexao.h"
 #include "idioma.h"
@@ -34,12 +35,16 @@
 #include <jni.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
+#include <limits.h>
+#include <pthread.h>
 
 // --- ponte JNI ---------------------------------------------------------------
 #define NV_CLASSE "space/nuvio/nativelegacy/NvPlayer"
 
 static jclass    gCls;      // GlobalRef: FindClass de fio do SDL nao acha classe do app
 static jmethodID mAbrir, mParar, mPausar, mBuscar, mVolume, mJanela, mEscolher;
+static jmethodID mAbrirPosicao;
 
 static int resolverMetodos(JNIEnv *env) {
   mAbrir    = (*env)->GetStaticMethodID(env, gCls, "abrir", "(Ljava/lang/String;Ljava/lang/String;)V");
@@ -50,6 +55,10 @@ static int resolverMetodos(JNIEnv *env) {
   mJanela   = (*env)->GetStaticMethodID(env, gCls, "janela", "(IIIII)V");
   mEscolher = (*env)->GetStaticMethodID(env, gCls, "escolher", "(II)V");
   if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); return 0; }
+  // Opcional: uma casca anterior ainda abre normalmente e recebe o seek
+  // depois da duracao. A ausencia deste metodo nao derruba a ponte inteira.
+  mAbrirPosicao = (*env)->GetStaticMethodID(env, gCls, "abrirPosicao", "(Ljava/lang/String;Ljava/lang/String;II)V");
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); mAbrirPosicao = NULL; }
   return mAbrir && mParar && mPausar && mBuscar && mVolume && mJanela && mEscolher;
 }
 
@@ -174,11 +183,17 @@ static char cabecalhos[2048];
 // video_pronto() so e 1 com imagem (ver o cabecalho).
 static volatile int ativo, prontoLoad, primeiroQuadro, falhou, terminou, tocando, largura, altura;
 static volatile int conflito, semDecoderAudio;
+// PAUSA CONFIRMADA (player_suspender): o pedido daqui e o evento 3 do Kotlin
+// DEPOIS dele. O evento chega do fio principal ~3 ms depois (medido na TCL,
+// 02/10); um evento 2 (tocando) no meio desfaz a confirmacao.
+static volatile int pausaPedida, pausaVista;
 static volatile int durMs, bufferando, posMs;
 static volatile Uint32 bufferDesde, tocandoDesde;
 static volatile const char *hdrAtual = "none";
 static volatile int dvAtual, atmosAtual;
 static unsigned sessao;
+static int retomadaInicialEstado = -1;
+static pthread_mutex_t travaRetomada = PTHREAD_MUTEX_INITIALIZER;
 #define ANDROID_FURO_PRAZO_MS 3000u   // sem quadro (so audio): abre 3 s depois de tocar
 
 // RECONEXAO (video_reconexao.h): igual ao .tpk. O evento 5 so ANOTA; a
@@ -287,6 +302,33 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativePos(JNIEnv *
   posMs = ms;
 }
 
+JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeRetomada(JNIEnv *env, jclass cls, jint geracao, jint aceita) {
+  (void)env; (void)cls;
+  pthread_mutex_lock(&travaRetomada);
+  if ((unsigned)geracao == sessao) retomadaInicialEstado = aceita ? 1 : -1;
+  pthread_mutex_unlock(&travaRetomada);
+}
+int video_retomada_inicial_estado(void) {
+  int estado;
+  pthread_mutex_lock(&travaRetomada);
+  estado = retomadaInicialEstado;
+  pthread_mutex_unlock(&travaRetomada);
+  return estado;
+}
+static unsigned novaRetomada(int estado) {
+  unsigned geracao;
+  pthread_mutex_lock(&travaRetomada);
+  if (++sessao == 0) sessao++;
+  geracao = sessao; retomadaInicialEstado = estado;
+  pthread_mutex_unlock(&travaRetomada);
+  return geracao;
+}
+static void estadoRetomada(int estado) {
+  pthread_mutex_lock(&travaRetomada);
+  retomadaInicialEstado = estado;
+  pthread_mutex_unlock(&travaRetomada);
+}
+
 JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeHdr(JNIEnv *env, jclass cls, jstring hdr, jint dv, jint atmos) {
   char h[24];
   (void)cls;
@@ -306,9 +348,9 @@ enum { EV_PRONTO = 1, EV_TOCANDO = 2, EV_PAUSADO = 3, EV_FIM = 4, EV_ERRO = 5,
 JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeEvento(JNIEnv *env, jclass cls, jint tipo, jint a, jint b) {
   (void)env; (void)cls;
   switch (tipo) {
-    case EV_PRONTO:  durMs = a; prontoLoad = 1; break;
-    case EV_TOCANDO: tocando = 1; bufferando = 0; if (!tocandoDesde) tocandoDesde = SDL_GetTicks() | 1; break;
-    case EV_PAUSADO: tocando = 0; break;
+    case EV_PRONTO:  if (!prontoLoad) marco("video: pronto (android)"); durMs = a; prontoLoad = 1; break;
+    case EV_TOCANDO: tocando = 1; bufferando = 0; pausaVista = 0; if (!tocandoDesde) tocandoDesde = SDL_GetTicks() | 1; break;
+    case EV_PAUSADO: tocando = 0; if (pausaPedida) pausaVista = 1; break;
     case EV_FIM:     terminou = 1; tocando = 0; break;
     // Sem `falhou` aqui: o video_bombear decide entre reconectar e desistir.
     case EV_ERRO:    reconErroCod = a; reconErroPend = 1; tocando = 0;
@@ -319,7 +361,7 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeEvento(JNIEn
       if (a < 100 && !bufferando) { bufferando = 1; bufferDesde = SDL_GetTicks(); }
       else if (a >= 100) bufferando = 0;
       break;
-    case EV_PRIMEIRO_QUADRO: primeiroQuadro = 1; break;
+    case EV_PRIMEIRO_QUADRO: marco("video: primeiro quadro (android)"); primeiroQuadro = 1; break;
     case EV_AUDIO_SEM_DECODER: semDecoderAudio = 1; break;
     default: break;
   }
@@ -337,21 +379,35 @@ int  video_iniciar_auto(void) { return video_iniciar(); }
 int  video_registro_negado(void) { return 0; }
 
 // Abre urlAtual no Kotlin. Serve a fonte nova e ao recarregar da reconexao.
-static int abrirSessao(void) {
+static int abrirSessao(int inicioMs) {
   JNIEnv *env;
   ativo = 1; prontoLoad = primeiroQuadro = falhou = terminou = tocando = 0;
   largura = altura = durMs = posMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
   tocandoDesde = 0; semDecoderAudio = 0; erroTxt[0] = 0;
+  pausaPedida = pausaVista = 0;
   hdrAtual = "none"; dvAtual = atmosAtual = 0;
   nAudio = nLeg = 0; audioAtual = 0; legAtual = -1; legAte = 0;
   nNovasA = nNovasL = 0;
   if (!travaLeg) travaLeg = SDL_CreateMutex();
-  sessao++;
+  unsigned geracao = novaRetomada(-1);
   env = ambiente();
   if (!env) { falhou = 1; printf("[video] android: NvPlayer indisponivel\n"); fflush(stdout); return 0; }
   {
     jstring u = paraJString(env, urlAtual), c = paraJString(env, cabecalhos);
-    (*env)->CallStaticVoidMethod(env, gCls, mAbrir, u, c);
+    if (!u || !c) {
+      if (u) (*env)->DeleteLocalRef(env, u);
+      if (c) (*env)->DeleteLocalRef(env, c);
+      fimChamada(env); falhou = 1; return 0;
+    }
+    if (inicioMs > 0 && mAbrirPosicao) {
+      estadoRetomada(0);
+      (*env)->CallStaticVoidMethod(env, gCls, mAbrirPosicao, u, c, (jint)inicioMs, (jint)geracao);
+      if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+        estadoRetomada(-1);
+        (*env)->CallStaticVoidMethod(env, gCls, mAbrir, u, c);
+      }
+    } else (*env)->CallStaticVoidMethod(env, gCls, mAbrir, u, c);
     (*env)->DeleteLocalRef(env, u);
     (*env)->DeleteLocalRef(env, c);
   }
@@ -359,14 +415,17 @@ static int abrirSessao(void) {
   return 1;
 }
 
-int video_tocar(const char *u) {
+int video_tocar_posicao(const char *u, double segundos) {
+  int inicioMs = isfinite(segundos) && segundos > 0.0 && segundos <= INT_MAX / 1000.0
+    ? (int)(segundos * 1000.0) : 0;
   snprintf(urlAtual, sizeof urlAtual, "%s", u ? u : "");
   nv_recon_zerar(&recon);
   reconPermitida = reconProxima; reconProxima = 0;
   reconIniciou = 0; reconErroPend = 0;
   reconAudio = reconLeg = -1; reconFaixasPend = 0; reconBuscarMs = -1;
-  return abrirSessao();
+  return abrirSessao(inicioMs);
 }
+int video_tocar(const char *u) { return video_tocar_posicao(u, 0.0); }
 
 void video_definir_reconexao(int sim) { reconProxima = sim ? 1 : 0; }
 int  video_reconectando(void) {
@@ -408,17 +467,23 @@ void video_bombear(void) {
     fflush(stdout);
     reconFaixasPend = 1;
     reconBuscarMs = recon.alvo > 1.0 ? (int)(recon.alvo * 1000.0) : -1;
-    if (!abrirSessao()) { reconErroCod = -1; reconErroPend = 1; }
+    if (!abrirSessao(0)) { reconErroCod = -1; reconErroPend = 1; }
   }
 }
 void video_parar(void) {
+  novaRetomada(-1);
   nv_recon_zerar(&recon);
   reconErroPend = 0; reconFaixasPend = 0; reconBuscarMs = -1;
   if (ativo) kSemArg(mParar);
   ativo = prontoLoad = primeiroQuadro = tocando = 0;
+  pausaPedida = pausaVista = 0;
 }
-void video_pausar(int p) { kInt(mPausar, p ? 1 : 0); }
-int video_pausa_confirmada(void) { return 0; } // JNI nao fornece ack por sessao
+void video_pausar(int p) { pausaVista = 0; pausaPedida = p ? 1 : 0; kInt(mPausar, p ? 1 : 0); }
+int video_pausa_confirmada(void) {
+  return pausaPedida && pausaVista && !tocando && ativo && prontoLoad && primeiroQuadro &&
+         !falhou && !terminou && !video_reconectando();
+}
+
 void video_volume(int pct) { kInt(mVolume, pct); }
 void video_buscar(double s) {
   posMs = (int)(s * 1000.0);   // a barra nao pode voltar enquanto o seek corre

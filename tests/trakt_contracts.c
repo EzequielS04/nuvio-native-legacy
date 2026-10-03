@@ -13,7 +13,9 @@ extern int trakt_assistido_tipo(const char *imdb, const char *tipo, int marcar);
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 static char ultimaUrl[160], ultimoCorpo[320];
-static int chamadas, proximoStatus;
+static int chamadas, proximoStatus, bloquear, liberar;
+static unsigned long long geracaoMapa = 1;
+static int marcas;
 
 char *rede_postar_st(const char *url, int segundos, const char *const *cab,
                      const char *corpo, int *status) {
@@ -24,6 +26,7 @@ char *rede_postar_st(const char *url, int segundos, const char *const *cab,
   chamadas++;
   if (status) *status = proximoStatus;
   pthread_cond_broadcast(&cond);
+  while (bloquear && !liberar) pthread_cond_wait(&cond, &lock);
   pthread_mutex_unlock(&lock);
   return strdup("");
 }
@@ -33,7 +36,19 @@ void cat_definir_na_lista(int indice, int naLista) { (void)indice; (void)naLista
 const char *cat_tipo_por_imdb(const char *imdb) { (void)imdb; return "movie"; }
 void cat_historico_definir_id(const char *imdb, const char *tipo, int visto) {
   (void)imdb; (void)tipo; (void)visto;
+  marcas++;
 }
+
+unsigned long long cat_historico_geracao(void) {
+  return __atomic_load_n(&geracaoMapa, __ATOMIC_ACQUIRE);
+}
+int cat_historico_definir_se_geracao(const char *id, const char *tipo, int visto,
+                                     unsigned long long geracao) {
+  if (geracao != cat_historico_geracao()) return 0;
+  cat_historico_definir_id(id, tipo, visto);
+  return 1;
+}
+void rede_avisar_401(void (*callback)(const char *url)) { (void)callback; }
 
 static void espera(int esperado) {
   pthread_mutex_lock(&lock);
@@ -65,6 +80,21 @@ int main(void) {
   assert(trakt_operacao_estado(2) == 2);
   assert(strstr(ultimaUrl, "/sync/history"));
   assert(strstr(ultimoCorpo, "movies") && !strstr(ultimoCorpo, "shows"));
+  assert(marcas == 1);
+  bloquear = 1; liberar = 0;
+  while (!trakt_assistido_tipo("tt7654321", "movie", 0)) sched_yield();
+  espera(4);
+  __atomic_add_fetch(&geracaoMapa, 1, __ATOMIC_RELEASE);
+  pthread_mutex_lock(&lock); liberar = 1; pthread_cond_broadcast(&cond); pthread_mutex_unlock(&lock);
+  while (trakt_operacao_estado(2) == 1) sched_yield();
+  assert(trakt_operacao_estado(2) == 3 && marcas == 1);
+  bloquear = 1; liberar = 0;
+  while (!trakt_assistido_tipo("tt7654321", "movie", 1)) sched_yield();
+  espera(5);
+  trakt_esquecer();
+  pthread_mutex_lock(&lock); liberar = 1; pthread_cond_broadcast(&cond); pthread_mutex_unlock(&lock);
+  while (trakt_operacao_estado(2) == 1) sched_yield();
+  assert(trakt_operacao_estado(2) == 3 && marcas == 1);
   puts("trakt contracts: PASS (intenção, escopo, falha e retry confirmados)");
   return 0;
 }

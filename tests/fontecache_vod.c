@@ -63,6 +63,19 @@ void stream_definir_lista_idade(const Stream *l, int n, Uint32 idade) {
   snprintf(listaAlvo, sizeof listaAlvo, "%s", pedidoAlvo);
 }
 void stream_definir_lista(const Stream *l, int n) { stream_definir_lista_idade(l, n, 0); }
+// #221: a busca real publica por addon; a lista cresce sem ser trocada.
+void stream_lista_acrescentar(const Stream *l, int n, int o) {
+  Stream *t;
+  (void)o;
+  if (n <= 0) return;
+  t = realloc(listaAtiva, sizeof(Stream) * (size_t)(nLista + n));
+  assert(t);
+  listaAtiva = t;
+  memcpy(listaAtiva + nLista, l, sizeof(Stream) * (size_t)n);
+  if (!nLista) { idadeLista = 0; snprintf(listaAlvo, sizeof listaAlvo, "%s", pedidoAlvo); }
+  nLista += n;
+}
+void stream_invalidar(const char *p) { (void)p; stream_definir_lista(NULL, 0); listaAlvo[0] = 0; }
 int stream_n(void) { return nLista; }
 int stream_lista_do_alvo(const char *id) { return nLista > 0 && !strcmp(listaAlvo, id); }
 

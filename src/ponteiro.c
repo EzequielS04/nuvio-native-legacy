@@ -95,7 +95,11 @@ static float toqueX, toqueY;
 static Ident toqueAlvo;
 static int toqueSemAlvos;
 
+static void pararInercia(void);
+static int arrModo;
 static void cancelarToque(void) {
+  pararInercia();
+  arrModo = 0;
   nDedos = dedosExcedentes = 0;
   toqueCancelado = 1;
   toqueAlvo.ok = 0;
@@ -344,22 +348,85 @@ static int converterToque(const SDL_TouchFingerEvent *e) {
   return 1;
 }
 
+// ARRASTAR (#216, segunda volta). Um dedo que passa do limiar deixa de ser
+// toque e vira um destes dois gestos:
+//   - ROLAGEM: o eixo e decidido no limiar (o maior deslocamento) e cada
+//     PONT_PASSO_* px logicos andados vira UMA seta, como a rodinha — a tela
+//     rola pelo mesmo caminho das setas, sem saber que houve dedo. Sentido
+//     "natural" do celular: dedo para cima = conteudo sobe = seta para BAIXO.
+//     Soltar com velocidade continua andando (inercia), freando sozinho.
+//   - ARRASTO DE ALVO: alvo marcado por ponteiro_alvo_arrastavel (a barra de
+//     tempo do player) recebe o `ativar` a cada movimento, com ponteiro_x()
+//     atualizado e ponteiro_toque() = 1. Nao rola nada.
+#define PONT_PASSO_V      150.0f   // px logicos por seta, vertical
+#define PONT_PASSO_H      210.0f   // px logicos por seta, horizontal
+#define PONT_INERCIA_MIN  0.45f    // px/ms para a soltura ganhar inercia
+#define PONT_INERCIA_PARA 0.06f    // px/ms abaixo disto a inercia acaba
+#define PONT_INERCIA_TAU  260.0f   // ms: constante do freio exponencial
+#define PONT_INERCIA_MAXP 2        // setas por quadro, no maximo
+enum { ARR_NADA = 0, ARR_ROLA, ARR_ALVO };
+static int arrEixoY;
+static float arrAcum, arrUltX, arrUltY, arrVel;
+static Uint32 arrUltMs;
+static PonteiroAlvo arrAlvo;
+static int inercia;
+static float inVel, inAcum;
+static int inEixoY;
+static Uint32 inUltMs;
+static void (*entregarToque)(const SDL_Event *);
+static int porToque;   // 1 durante focar/ativar disparados por dedo
+
+int ponteiro_toque(void) { return porToque; }
+int ponteiro_tem_toque(void) { return toqueDisponivel; }
+
+static void alvoPorToque(const PonteiroAlvo *al, int focar, int ativar) {
+  porToque = 1;
+  if (focar && al->focar) al->focar(al->a, al->b);
+  if (ativar && al->ativar) al->ativar(al->a, al->b);
+  porToque = 0;
+}
+
+// Anda o acumulado em setas. Positivo = o dedo andou para a direita/baixo.
+static float rolarPassos(float acum, int eixoY, int teto) {
+  float passo = eixoY ? PONT_PASSO_V : PONT_PASSO_H;
+  int n = 0;
+  while ((acum >= passo || acum <= -passo) && (!teto || n < teto)) {
+    SDL_Keycode k = eixoY ? (acum > 0 ? SDLK_UP : SDLK_DOWN)
+                          : (acum > 0 ? SDLK_LEFT : SDLK_RIGHT);
+    acum += acum > 0 ? -passo : passo;
+    if (entregarToque) {
+      tecla(entregarToque, SDL_KEYDOWN, k);
+      tecla(entregarToque, SDL_KEYUP, k);
+    }
+    n++;
+  }
+  return acum;
+}
+
+static void pararInercia(void) { inercia = 0; inVel = inAcum = 0.0f; }
+
 static int eventoToque(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
   const SDL_TouchFingerEvent *t = &e->tfinger;
   int dedo = dedoIndice(t);
+  Uint32 agora = agoraMs();
   toqueDisponivel = 1;
+  entregarToque = entregar;
   if (e->type == SDL_FINGERDOWN) {
     if (dedo >= 0) return 1;
+    // Dedo novo segura a lista que ainda corria: e o gesto de parar a rolagem.
+    pararInercia();
     if (nDedos == PONT_DEDOS_MAX) { dedosExcedentes++; toqueCancelado = 1; return 1; }
     dedos[nDedos++] = (Dedo){t->touchId, t->fingerId};
-    if (nDedos > 1 || dedosExcedentes) { toqueCancelado = 1; return 1; }
+    if (nDedos > 1 || dedosExcedentes) { toqueCancelado = 1; arrModo = ARR_NADA; return 1; }
     toqueCancelado = !converterToque(t);
     toqueX = px; toqueY = py;
+    arrUltX = px; arrUltY = py; arrUltMs = agora; arrVel = 0.0f; arrAcum = 0.0f;
+    arrModo = ARR_NADA;
     toqueAlvo.ok = 0;
     toqueSemAlvos = nLista[pronto] == 0;
     if (!toqueCancelado) {
       int i = ponteiro_achar(lista[pronto], nLista[pronto], px, py);
-      if (i >= 0) guardar(&toqueAlvo, &lista[pronto][i]);
+      if (i >= 0) { guardar(&toqueAlvo, &lista[pronto][i]); arrAlvo = lista[pronto][i]; }
     }
     // Nao foca nem entrega OK no DOWN: arrastar nao pode abrir um titulo.
     return 1;
@@ -368,22 +435,48 @@ static int eventoToque(const SDL_Event *e, void (*entregar)(const SDL_Event *)) 
     if (e->type == SDL_FINGERUP && dedosExcedentes) dedosExcedentes--;
     return 1;
   }
-  if (!converterToque(t)) toqueCancelado = 1;
-  else {
+  if (!converterToque(t)) { toqueCancelado = 1; arrModo = ARR_NADA; }
+  else if (!toqueCancelado && nDedos == 1 && !dedosExcedentes) {
     float dx = px - toqueX, dy = py - toqueY;
-    if (dx * dx + dy * dy > PONT_TOQUE_LIMIAR * PONT_TOQUE_LIMIAR) toqueCancelado = 1;
+    if (arrModo == ARR_NADA &&
+        dx * dx + dy * dy > PONT_TOQUE_LIMIAR * PONT_TOQUE_LIMIAR) {
+      if (toqueAlvo.ok && arrAlvo.arrasta) {
+        arrModo = ARR_ALVO;
+        alvoPorToque(&arrAlvo, 1, 0);
+      } else {
+        arrModo = ARR_ROLA;
+        arrEixoY = fabsf(dy) >= fabsf(dx);
+        arrAcum = 0.0f;
+        arrUltX = toqueX; arrUltY = toqueY;
+      }
+    }
+    if (arrModo == ARR_ROLA) {
+      float d = arrEixoY ? py - arrUltY : px - arrUltX;
+      Uint32 dt = agora - arrUltMs;
+      arrAcum = rolarPassos(arrAcum + d, arrEixoY, 0);
+      // Velocidade suavizada: o ultimo trecho pesa mais, mas um evento
+      // isolado (dois no mesmo ms) nao vira um pico infinito.
+      if (dt > 0) arrVel = 0.6f * (d / (float)dt) + 0.4f * arrVel;
+      arrUltX = px; arrUltY = py; arrUltMs = agora;
+    } else if (arrModo == ARR_ALVO) {
+      alvoPorToque(&arrAlvo, 0, 1);
+    }
   }
   if (e->type != SDL_FINGERUP) return 1;
   // Um segundo dedo cancela o gesto inteiro, mesmo se ele sair primeiro.
-  if (nDedos == 1 && !dedosExcedentes && !toqueCancelado) {
+  if (nDedos == 1 && !dedosExcedentes && !toqueCancelado && arrModo == ARR_ROLA) {
+    // Parado antes de soltar (mais de 90 ms sem andar) nao tem inercia.
+    if (fabsf(arrVel) >= PONT_INERCIA_MIN && agora - arrUltMs < 90) {
+      inercia = 1; inVel = arrVel; inAcum = arrAcum; inEixoY = arrEixoY; inUltMs = agora;
+    }
+  } else if (nDedos == 1 && !dedosExcedentes && !toqueCancelado && arrModo == ARR_NADA) {
     int i = ponteiro_achar(lista[pronto], nLista[pronto], px, py);
     PonteiroAlvo al;
     if (i >= 0 && mesmo(&toqueAlvo, &lista[pronto][i])) {
       al = lista[pronto][i];
       rastro("toque", &al, nLista[pronto]);
-      if (al.focar) al.focar(al.a, al.b);
-      if (al.ativar) al.ativar(al.a, al.b);
-      else if (al.focar) {
+      alvoPorToque(&al, 1, 1);
+      if (!al.ativar && al.focar) {
         tecla(entregar, SDL_KEYDOWN, SDLK_RETURN);
         tecla(entregar, SDL_KEYUP, SDLK_RETURN);
       }
@@ -393,8 +486,21 @@ static int eventoToque(const SDL_Event *e, void (*entregar)(const SDL_Event *)) 
     }
   }
   memmove(dedos + dedo, dedos + dedo + 1, (size_t)(--nDedos - dedo) * sizeof *dedos);
-  if (!nDedos && !dedosExcedentes) toqueAlvo.ok = 0;
+  if (!nDedos && !dedosExcedentes) { toqueAlvo.ok = 0; arrModo = ARR_NADA; }
   return 1;
+}
+
+// Inercia da rolagem: chamada por quadro (ponteiro_quadro).
+static void inerciaQuadro(Uint32 agora) {
+  Uint32 dt;
+  if (!inercia) return;
+  dt = agora - inUltMs;
+  if (dt > 100) dt = 100;   // quadro travado nao vira um salto de dez setas
+  inUltMs = agora;
+  inAcum += inVel * (float)dt;
+  inVel *= expf(-(float)dt / PONT_INERCIA_TAU);
+  inAcum = rolarPassos(inAcum, inEixoY, PONT_INERCIA_MAXP);
+  if (fabsf(inVel) < PONT_INERCIA_PARA) pararInercia();
 }
 
 int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
@@ -555,6 +661,7 @@ int ponteiro_evento(const SDL_Event *e, void (*entregar)(const SDL_Event *)) {
 
 void ponteiro_quadro(Uint32 agora) {
   nLista[escreve] = 0;
+  inerciaQuadro(agora);
   // No webOS o relogio proprio so vale com SDL_webOSCursorVisibility: e ela
   // que apaga a seta do sistema junto (esconder). Sem ela, desligar o hover
   // aqui deixaria a seta na tela sem funcionar; ai fica o sono do sistema,
@@ -599,6 +706,11 @@ void ponteiro_alvo(float x, float y, float w, float h,
   al = &lista[escreve][nLista[escreve]++];
   al->x = x; al->y = y; al->w = w; al->h = h;
   al->focar = focar; al->ativar = ativar; al->a = a; al->b = b;
+  al->arrasta = 0;
+}
+
+void ponteiro_alvo_arrastavel(void) {
+  if (nLista[escreve] > 0) lista[escreve][nLista[escreve] - 1].arrasta = 1;
 }
 
 void ponteiro_camada(void) {

@@ -1,0 +1,271 @@
+/* Busca e comparacao locais: nao inicia UI, rede ou sincronizacao. */
+#include "../src/ajustes.c"
+#include <assert.h>
+#include <limits.h>
+#include <unistd.h>
+
+static AjusteBuscaResultado resultados[AJ_N];
+
+static int indiceResultado(int op, int n) {
+  int i;
+  for (i = 0; i < n; i++) if (resultados[i].op == op) return i;
+  return -1;
+}
+
+/* #221 sobreviveu a reorganizacao da tela: default, escopo local, prazo
+ * efetivo, entrada unica em Reproducao e descoberta pela busca. */
+static void prazoDosAddonsIntegrado(void) {
+  int prazoAntes = valor[AJ_FONTE_PRAZO], manualAntes = valor[AJ_FONTE_MANUAL];
+  int idiomaAntes = valor[AJ_IDIOMA], vezes = 0, n, indice;
+  const char *categoria = "", *grupo = "";
+  char texto[80];
+  assert(valor[AJ_FONTE_PRAZO] == 1 && valorPadrao[AJ_FONTE_PRAZO] == 1);
+  assert(ajustes_fonte_prazo_ms() == 5000);
+  assert(!dePerfil(AJ_FONTE_PRAZO));
+  assert(!strcmp(uxEscopo(AJ_FONTE_PRAZO), "Só nesta TV"));
+  assert(uxTemPadrao(AJ_FONTE_PRAZO) && !uxDiferente(AJ_FONTE_PRAZO));
+  assert(OPCOES[AJ_FONTE_PRAZO].n == 4);
+  assert(!strcmp(OPCOES[AJ_FONTE_PRAZO].valores[1], "5 s"));
+  assert(familiaPreviaOpcao(AJ_FONTE_PRAZO) == AJPV_REPRO);
+  for (int i = 0; i < AJ_N_TELA; i++) {
+    if (TELA[i].tipo == IT_SEC) { categoria = TELA[i].titulo; grupo = ""; }
+    if (TELA[i].tipo == IT_ROT) grupo = TELA[i].titulo;
+    if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_FONTE_PRAZO) {
+      vezes++;
+      assert(!strcmp(categoria, "Reprodução"));
+      assert(!strcmp(grupo, "Escolha da fonte"));
+    }
+  }
+  assert(vezes == 1);
+  valor[AJ_IDIOMA] = IDIOMA_PT + 1;
+  valor[AJ_FONTE_MANUAL] = 1; // escolha automatica habilita o prazo
+  n = ajustes_buscar("Espera pelos add-ons", resultados, AJ_N);
+  indice = indiceResultado(AJ_FONTE_PRAZO, n);
+  assert(indice >= 0 && !resultados[indice].bloqueado);
+  assert(strstr(resultados[indice].caminho, "Reprodução"));
+  assert(!strcmp(resultados[indice].valor, "5 s"));
+  vezes = 0;
+  for (int i = 0; i < n; i++) if (resultados[i].op == AJ_FONTE_PRAZO) vezes++;
+  assert(vezes == 1);
+  static const int esperado[] = {3000, 5000, 8000, 0};
+  for (int i = 0; i < 4; i++) {
+    valor[AJ_FONTE_PRAZO] = i;
+    assert(ajustes_fonte_prazo_ms() == esperado[i]);
+    uxValorTexto(AJ_FONTE_PRAZO, i, texto, sizeof texto);
+    assert(!strcmp(texto, i18n(V_FONTE_PRAZO[i])));
+  }
+  valor[AJ_FONTE_PRAZO] = prazoAntes;
+  valor[AJ_FONTE_MANUAL] = manualAntes;
+  valor[AJ_IDIOMA] = idiomaAntes;
+  assert(ajustes_fonte_prazo_ms() == 5000);
+}
+
+static void escoposPorValor(void) {
+  int copia[AJ_N], v, temaSalvo = valor[AJ_TEMA];
+  int seguroAntes = SEGURO, corAntes = ajustes_cor_viva();
+  float legendaAntes = legendaEspera;
+  char audioAntes[32], legAntes[32];
+  snprintf(audioAntes, sizeof audioAntes, "%s", ling_audio());
+  snprintf(legAntes, sizeof legAntes, "%s", ling_legenda());
+  memcpy(copia, valor, sizeof copia);
+  assert(dePerfil(AJ_TEMA));
+  for (v = 0; v < AJ_N_TEMAS_OPC; v++)
+    assert(!strcmp(uxEscopoValor(AJ_TEMA, v),
+      v >= AJ_TEMA_DINAMICA ? "Só nesta TV" : "Conta/perfil"));
+  assert(!strcmp(uxEscopoValor(AJ_TMDB_IDIOMA, 0), "Só nesta TV"));
+  assert(!strcmp(uxEscopoValor(AJ_TMDB_IDIOMA, 1), "Conta/perfil"));
+  /* "Da conta" muda a origem efetiva, nao retira a escolha do perfil. */
+  assert(dePerfil(AJ_LEG_LINGUA) && dePerfil(AJ_AUD_LINGUA));
+  assert(!strcmp(uxEscopoValor(AJ_LEG_LINGUA, 0), "Conta/perfil"));
+  assert(!strcmp(uxEscopoValor(AJ_AUD_LINGUA, 0), "Conta/perfil"));
+  assert(!strcmp(uxEscopoValor(AJ_LEG_LINGUA, LING_OPC_ORIGINAL), "Conta/perfil"));
+  assert(!strcmp(uxEscopoValor(AJ_AUD_LINGUA, LING_OPC_ORIGINAL), "Conta/perfil"));
+  assert(!strcmp(uxEscopo(-1), "Só nesta TV"));
+  assert(!strcmp(uxEscopo(AJ_N), "Só nesta TV"));
+  /* Consultar candidatos/padrao nao restaura, aplica ou altera preferencias. */
+  assert(!memcmp(copia, valor, sizeof copia));
+  assert(SEGURO == seguroAntes && ajustes_cor_viva() == corAntes);
+  assert(legendaEspera == legendaAntes);
+  assert(!strcmp(audioAntes, ling_audio()) && !strcmp(legAntes, ling_legenda()));
+  valor[AJ_TEMA] = AJ_TEMA_DINAMICA;
+  assert(!strcmp(uxEscopo(AJ_TEMA), "Só nesta TV"));
+  assert(!strcmp(uxEscopoValor(AJ_TEMA, uxValorPadrao(AJ_TEMA)), "Conta/perfil"));
+  assert(valor[AJ_TEMA] == AJ_TEMA_DINAMICA);
+  valor[AJ_TEMA] = AJ_TEMA_DINAMICA - 1;
+  assert(!strcmp(uxEscopo(AJ_TEMA), "Conta/perfil"));
+  valor[AJ_TEMA] = temaSalvo;
+  assert(!memcmp(copia, valor, sizeof copia));
+}
+
+static void padroesEValores(void) {
+  int op, copia[AJ_N];
+  char texto[160], pequeno[4], normal[80];
+  assert(sizeof valor == sizeof valorPadrao);
+  assert(!memcmp(valor, valorPadrao, sizeof valor));
+  for (op = 0; op < AJ_N; op++) {
+    assert(!uxDiferente(op));
+    if (OPCOES[op].tipo == OP_ACAO || OPCOES[op].tipo == OP_LEITURA ||
+        CHAVE[op][0] == '-' || op == AJ_PERFIL_PESQ)
+      assert(!uxTemPadrao(op));
+    else {
+      assert(uxTemPadrao(op));
+      assert(uxValorPadrao(op) == valorPadrao[op]);
+    }
+  }
+  assert(!uxTemPadrao(-1) && !uxTemPadrao(AJ_N));
+  assert(!uxDiferente(-1) && !uxDiferente(AJ_N));
+  valor[AJ_FOCO_TRAILER] = 1 - valorPadrao[AJ_FOCO_TRAILER];
+  assert(uxDiferente(AJ_FOCO_TRAILER));
+  assert(uxValorPadrao(AJ_FOCO_TRAILER) == 1);
+  valor[AJ_FOCO_TRAILER] = valorPadrao[AJ_FOCO_TRAILER];
+  /* Um valor que o modo seguro suspende continua sendo a preferencia salva. */
+  valor[AJ_RESOLUCAO] = 1;
+  SEGURO = 1;
+  assert(uxDiferente(AJ_RESOLUCAO));
+  assert(!ajustes_4k());
+  uxValorTexto(AJ_RESOLUCAO, valor[AJ_RESOLUCAO], texto, sizeof texto);
+  assert(strstr(texto, "4K"));
+  SEGURO = 0;
+  valor[AJ_RESOLUCAO] = valorPadrao[AJ_RESOLUCAO];
+  assert(!strcmp(uxEscopo(AJ_IDIOMA), "Só nesta TV"));
+  assert(!strcmp(uxEscopo(AJ_RESOLUCAO), "Só nesta TV"));
+  assert(!strcmp(uxEscopo(AJ_VIDRO), "Só nesta TV"));
+  assert(!strcmp(uxEscopo(AJ_AUD_LINGUA), "Conta/perfil"));
+  assert(!strcmp(uxEscopo(AJ_FOCO_TRAILER), "Conta/perfil"));
+  assert(!strstr(uxEscopo(AJ_FOCO_TRAILER), "sincronizado"));
+
+  memcpy(copia, valor, sizeof copia);
+  uxValorTexto(AJ_FOCO_TRAILER, 0, texto, sizeof texto);
+  assert(!strcmp(texto, i18n("Ligado")));
+  uxValorTexto(AJ_AUD_LINGUA, LING_OPC_ORIGINAL, texto, sizeof texto);
+  assert(!strcmp(texto, i18n("Original do título")));
+  uxValorTexto(AJ_HERO_TRAILER_ESPERA, 22, texto, sizeof texto);
+  assert(strstr(texto, "2,2") || strstr(texto, "2.2"));
+  uxValorTexto(AJ_SEEKR_AJUSTE, -5, texto, sizeof texto);
+  assert(!strcmp(texto, "-5 s"));
+  uxValorTexto(AJ_FIL_LIMITE, 12, texto, sizeof texto);
+  assert(!strcmp(texto, "12"));
+  uxValorTexto(AJ_FOCO_TRAILER, INT_MAX, texto, sizeof texto);
+  assert(!strcmp(texto, i18n("Ligado")));
+  uxValorTexto(AJ_N, 0, texto, sizeof texto);
+  assert(!texto[0]);
+  uxValorTexto(AJ_IDIOMA, 0, NULL, 0);
+  assert(!memcmp(copia, valor, sizeof copia));
+  uxTextoCopiar(pequeno, sizeof pequeno, "áéí");
+  assert(!strcmp(pequeno, "á"));
+  uxNormalizar("  MEMO\xCC\x81RIA / ÁUDIO · AÇÃO  ", normal, sizeof normal);
+  assert(!strcmp(normal, "memoria audio acao"));
+  uxNormalizar("\xF0\x9F", normal, sizeof normal);
+  assert(!normal[0]);
+}
+
+static void buscaECaminhos(void) {
+  int n, i, copia[AJ_N];
+  AjusteBuscaResultado primeiro, limitado[2];
+  char longa[2048];
+  valor[AJ_IDIOMA] = IDIOMA_PT + 1;
+  memcpy(copia, valor, sizeof copia);
+  n = ajustes_buscar("MEMÓRIA PARA IMAGENS", resultados, AJ_N);
+  assert(n > 0 && resultados[0].op == AJ_TEX_MB);
+  assert(resultados[0].avancado);
+  assert(strstr(resultados[0].caminho, "Desempenho desta TV"));
+  primeiro = resultados[0];
+  n = ajustes_buscar("memo\xCC\x81ria para imagens", resultados, AJ_N);
+  assert(n > 0 && !memcmp(&primeiro, &resultados[0], sizeof primeiro));
+  n = ajustes_buscar("DUBLADO", resultados, AJ_N);
+  assert(n > 0 && resultados[0].op == AJ_AUD_LINGUA);
+  assert(strstr(resultados[0].caminho, "Idiomas e legendas"));
+  n = ajustes_buscar("CC", resultados, AJ_N);
+  assert(n > 0 && resultados[0].op == AJ_LEG_LINGUA);
+  n = ajustes_buscar("subtitle", resultados, AJ_N);
+  assert(n > 0 && resultados[0].op == AJ_LEG_LINGUA);
+  n = ajustes_buscar("travando", resultados, AJ_N);
+  assert(indiceResultado(AJ_VIDRO, n) >= 0);
+  assert(indiceResultado(AJ_TEX_MB, n) >= 0);
+  n = ajustes_buscar("trailer", resultados, AJ_N);
+  assert(indiceResultado(AJ_HERO_TRAILER, n) >= 0);
+  assert(indiceResultado(AJ_FOCO_TRAILER, n) >= 0);
+  assert(indiceResultado(AJ_TRAILER_QUAL, n) >= 0);
+  for (i = 0; i < n; i++) {
+    int j;
+    assert(resultados[i].titulo[0] && resultados[i].caminho[0]);
+    for (j = 0; j < i; j++) assert(resultados[i].op != resultados[j].op);
+  }
+  memset(limitado, 0xa5, sizeof limitado);
+  primeiro = limitado[1];
+  assert(ajustes_buscar("trailer", limitado, 1) == 1);
+  assert(!memcmp(&primeiro, &limitado[1], sizeof primeiro));
+  assert(ajustes_buscar("trailer", NULL, AJ_N) == 0);
+  assert(ajustes_buscar("trailer", resultados, 0) == 0);
+  assert(ajustes_buscar("trailer", resultados, -5) == 0);
+  assert(ajustes_buscar("", resultados, AJ_N) == 0);
+  assert(ajustes_buscar("  \t  ", resultados, AJ_N) == 0);
+  assert(ajustes_buscar(NULL, resultados, AJ_N) == 0);
+  assert(ajustes_buscar("\xF0\x9F", resultados, AJ_N) == 0);
+  memset(longa, 'z', sizeof longa - 1); longa[sizeof longa - 1] = 0;
+  assert(ajustes_buscar(longa, resultados, AJ_N) == 0);
+  assert(!memcmp(copia, valor, sizeof copia));
+}
+
+static void bloqueadosESegredos(void) {
+  int n, i, copia[AJ_N];
+  const char *marcador = "sentinelaqzprivadaux2026";
+  char texto[160];
+  valor[AJ_HERO_TRAILER] = 1;
+  valor[AJ_TMDB_LIGADO] = 1;
+  memcpy(copia, valor, sizeof copia);
+  n = ajustes_buscar("som do trailer no destaque", resultados, AJ_N);
+  i = indiceResultado(AJ_HERO_TRAILER_SOM, n);
+  assert(i >= 0 && resultados[i].bloqueado);
+  assert(strstr(resultados[i].caminho, "Trailers"));
+  n = ajustes_buscar("idioma dos metadados", resultados, AJ_N);
+  i = indiceResultado(AJ_TMDB_IDIOMA, n);
+  assert(i >= 0 && resultados[i].bloqueado);
+  /* A build de teste nao configura o servico social. */
+  assert(!recomenda_ativo());
+  n = ajustes_buscar("perfil", resultados, AJ_N);
+  assert(indiceResultado(AJ_PERFIL_PESQ, n) < 0);
+  assert(indiceResultado(AJ_PERFIL_EDITAR, n) < 0);
+
+  snprintf(fanartChave, sizeof fanartChave, "%s", marcador);
+  snprintf(seekrChave, sizeof seekrChave, "%s", marcador);
+  snprintf(pstToken, sizeof pstToken, "%s", marcador);
+  snprintf(pstInst, sizeof pstInst, "https://%s.example.invalid", marcador);
+  snprintf(pstModelo, sizeof pstModelo, "https://%s.example.invalid/{imdb}", marcador);
+  snprintf(p2pEndereco, sizeof p2pEndereco, "http://%s.example.invalid", marcador);
+  xtream_definir_usuario(marcador);
+  /* Prova que a ajuda legada realmente contem um valor privado nesta fixture. */
+  assert(strstr(ajudaOpcao(AJ_XTREAM_USUARIO), marcador));
+  assert(ajustes_buscar(marcador, resultados, AJ_N) == 0);
+  n = ajustes_buscar("usuário Xtream", resultados, AJ_N);
+  i = indiceResultado(AJ_XTREAM_USUARIO, n);
+  assert(i >= 0 && !strcmp(resultados[i].valor, "Abrir"));
+  n = ajustes_buscar("chave", resultados, AJ_N);
+  assert(indiceResultado(AJ_FANART_CHAVE, n) >= 0);
+  assert(indiceResultado(AJ_SEEKR_CHAVE, n) >= 0);
+  for (i = 0; i < n; i++) {
+    assert(!strstr(resultados[i].valor, marcador));
+    assert(!strstr(resultados[i].titulo, marcador));
+    assert(!strstr(resultados[i].caminho, marcador));
+  }
+  uxValorTexto(AJ_XTREAM_USUARIO, 0, texto, sizeof texto);
+  assert(!strcmp(texto, "Abrir"));
+  uxValorTexto(AJ_PERFIL_ATIVO, 0, texto, sizeof texto);
+  assert(!strcmp(texto, "Ver detalhes"));
+  assert(!memcmp(copia, valor, sizeof copia));
+  xtream_esquecer();
+}
+
+int main(void) {
+  char dir[] = "/tmp/nuvio-aj-ux-dados-XXXXXX";
+  prazoDosAddonsIntegrado();
+  padroesEValores();
+  escoposPorValor();
+  assert(mkdtemp(dir));
+  assert(setenv("NUVIO_DADOS", dir, 1) == 0);
+  dados_iniciar(dir);
+  buscaECaminhos();
+  bloqueadosESegredos();
+  puts("ajustes_ux_dados: busca, padroes, escopo, dependencias e segredos ok");
+  return 0;
+}

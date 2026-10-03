@@ -19,6 +19,7 @@
 #include "login.h"
 #include "sessao.h"
 #include "perfis.h"
+#include "fontevolta.h"
 #include "perfilsel.h"
 #include "sync.h"
 #include "traktauth.h"
@@ -84,6 +85,7 @@
 #include "amigoperfil.h"
 #include "amigosfil.h"
 #include "ajustes.h"
+#include "ajustes_ux.h"
 #include "anim.h"
 #include "diagnostico.h"
 #include "debrid.h"
@@ -136,6 +138,45 @@ void app_abrir_titulo(const char *imdb) {
 }
 
 static int aguardandoFonte;
+// ESCOLHA AUTOMATICA COM A LISTA AINDA ENCHENDO (#221). A busca publica cada
+// addon que responde (addons.c); a escolha de VOD nao espera mais o ultimo.
+// Ela sai quando a lista ja tem uma fonte boa o bastante pelos criterios de
+// sempre (fonteauto_pode_decidir) ou quando passa o prazo de Ajustes ("Espera
+// pelos add-ons"). Com fonte LEMBRADA neste titulo, o addon dela e esperado
+// sem prazo: a escolha da pessoa nao e trocada por pressa.
+//
+// `autoEsperaN` > 0: a verificacao da lista parcial nao achou nenhuma que
+// sirva e a busca ainda esta no ar; a proxima tentativa so sai quando a
+// lista crescer alem disso (senao reconferia as mesmas a cada quadro).
+static int autoEsperaN;
+static void idBaseDoTitulo(char *dst, size_t tam);
+static int prefFolhaN = -1;
+static int autoParcialPronto(void) {
+  char base[24];
+  const FontePref *fp;
+  int prazo, lembrada = -1, prefPendente = 0;
+  static int ultN = -1, ultLembrada = -1;
+  static unsigned ultGeracao;
+  if (!addons_busca_parcial() || player_id_canal()[0]) return 0;
+  if (stream_n() < 1 || stream_n() <= autoEsperaN) return 0;
+  if (stream_n_candidatas() < 1) return 0;
+  idBaseDoTitulo(base, sizeof base);
+  fp = base[0] ? fontepref_do_titulo(base) : NULL;
+  if (fp) {
+    // fontepref_escolher escreve no log: uma vez por tamanho de lista.
+    if (stream_n() != ultN || stream_lista_geracao() != ultGeracao) {
+      ultN = stream_n(); ultGeracao = stream_lista_geracao();
+      ultLembrada = fontepref_escolher(base);
+    }
+    lembrada = ultLembrada;
+    prefPendente = lembrada < 0 && addons_pendente_nome(fp->provedor);
+  }
+  // Escolher a mao: a folha abre com o que ja chegou e continua enchendo.
+  if (ajustes_fonte_manual() && lembrada < 0) return !prefPendente;
+  prazo = ajustes_fonte_prazo_ms();
+  return stream_auto_pode_decidir(lembrada, prefPendente,
+                                  prazo > 0 && addons_busca_ms() >= (unsigned)prazo);
+}
 // Episodio que o card de "Continuar assistindo" ANUNCIAVA quando o OK pediu
 // para tocar (issue #93). Armado no ramo home_pediu_tocar e consumido pelo
 // ramo de detail_pediu_reproduzir, no lugar do episodioAlvo — que neste
@@ -200,6 +241,9 @@ static Uint32 canalFonteDesde;            // quando a fonte atual foi pedida
 // do dono e nao pode ser trocada por outra fonte por tras da tela.
 static int    fonteVODAutomatica;
 static int    fonteVODTentativas;
+// Retomar pela fonte guardada em curso (tocarFonteGuardada); 0 = caminho normal.
+static int    voltaAtiva;
+static Uint32 voltaDesde;
 static Uint32 fonteVODDesde;
 static void limparFonteVOD(void);
 #define CANAL_FONTE_PRAZO_MS 25000
@@ -254,6 +298,7 @@ static void *carregarPerfil(void *u) {
   return NULL;
 }
 static void invalidarPerfil(void) {
+  ilhacart_esquecer_vivo();
   atomic_fetch_add_explicit(&perfilGeracao,1,memory_order_acq_rel);
   atomic_store_explicit(&perfilCarga,0,memory_order_release);
   pthread_mutex_lock(&perfilTrava);memset(&perfilPendente,0,sizeof perfilPendente);perfilSucesso=0;pthread_mutex_unlock(&perfilTrava);
@@ -331,6 +376,7 @@ static void limparFontePendente(void) {
 }
 static void limparFonteVOD(void) {
   fonteVODAutomatica = 0;
+  voltaAtiva = 0;
   fonteVODTentativas = 0;
   fonteVODDesde = 0;
 }
@@ -474,6 +520,7 @@ static int ltdDoGuia;
 
 static void trocarTela(Tela nova) {
   if (nova == tela) return;
+  if (tela == TELA_AJUSTES) ajustes_encerrar();
   if (tela == TELA_LIVETV_DIAG) livetvdiag_encerrar();
   tela = nova;
   // Cada tela zera o proprio estado ao ser aberta: voltar para a busca com o
@@ -509,6 +556,7 @@ static void buscarParaPlayerModo(int renovar) {
   // Episodio novo abre um ciclo novo de fontes. A fonte automatica do
   // episodio anterior nao pode contaminar o watchdog nem a lista de exclusao.
   limparFonteVOD();
+  autoEsperaN = 0;
   // CARIMBA O ALVO ANTES DE PEDIR (issue #101). A lista que voltar passa a
   // saber de que episodio ela e; sem isto ninguem consegue distinguir "a lista
   // do E6" de "a lista do E5 que ninguem invalidou". Ver streams.h.
@@ -526,6 +574,96 @@ static void buscarParaPlayerModo(int renovar) {
   }
 }
 static void buscarParaPlayer(void) { buscarParaPlayerModo(0); }
+
+// RENOVA POR IDADE **E POR DONO** (issue #101).
+//
+// O alvo tambem mudou: era idDoAlvo(), o episodio EM FOCO na pagina, e
+// quem toca nem sempre e ele — "Retomar" e o card de Continuar assistindo
+// abrem outro episodio (cwTocar/episodioDoDetalhe), e a busca saia para um id
+// diferente do que ia reproduzir. alvoPlayer le o episodio ja definitivo,
+// depois de player_abrir.
+//
+// E a condicao deixou de ser so o relogio: a lista podia ter 3 s de vida
+// e ser do episodio anterior, e ai nada a refazia. Idade cobre o link
+// assinado que expira; o dono cobre o episodio errado. Sao duas coisas.
+static void renovarListaDoPlayer(void) {
+  const CatItem *ci = cat_item(player_indice());
+  char alvoP[64]; alvoPlayer(alvoP, sizeof alvoP);
+  if (ci && ci->imdb[0] && alvoP[0] &&
+      (stream_idade_ms() > NV_LINK_VALIDO_MS || !stream_lista_do_alvo(alvoP))) {
+    printf("fonte: lista com %ums%s, renovando (%s)\n",
+           (unsigned)stream_idade_ms(),
+           stream_lista_do_alvo(alvoP) ? "" : " e de outro alvo", alvoP);
+    stream_definir_alvo(alvoP);
+    addons_buscar(alvoP, ci->tipo);
+  }
+}
+
+// RETOMAR PELA FONTE QUE ESTAVA TOCANDO (fontevolta.h).
+//
+// O caminho de sempre e: busca em todos os addons, verificacao, abertura. Com
+// a fonte da ultima sessao boa deste titulo/episodio guardada (mesma conta,
+// mesmo perfil, link dentro da validade), a abertura vai DIRETO nela — o seek
+// para o ponto salvo e o mesmo de qualquer abertura (retomarPct no player).
+// A busca nos addons continua saindo, mas em segundo plano: e ela que enche a
+// folha de Fontes e que fica pronta para o recuo abaixo.
+//
+// O RECUO e silencioso: conferencia em paralelo que falha (4xx/5xx, endereco
+// de aviso), erro do player, clipe curto no lugar do titulo, ou o prazo
+// FONTEVOLTA_PRAZO_MS sem abrir — o video para, a tela continua em "abrindo
+// fonte" e a escolha normal assume (aguardandoFonte = 1), com a lista que a
+// busca de fundo ja trouxe ou esta trazendo.
+static int tocarFonteGuardada(void) {
+  Stream s;
+  char alvo[64];
+  if (player_id_canal()[0] || !player_aberto()) return 0;
+  alvoPlayer(alvo, sizeof alvo);
+  if (!alvo[0] || !fontevolta_pegar(alvo, sessao_usuario(), perfis_ativo(), SDL_GetTicks(), &s))
+    return 0;
+  marco("abrir: fonte guardada, sem busca");
+  stream_definir_atual(-1);
+  video_definir_dv(s.dolbyVision);
+  video_definir_cabecalhos(s.cabecalhos);
+  video_definir_mp4(s.mp4 || strstr(s.url, ".mp4") != NULL);
+  fontevolta_conferir(s.url, s.cabecalhos);
+  player_definir_fonte(s.url);
+  voltaAtiva = 1;
+  voltaDesde = SDL_GetTicks();
+  return 1;
+}
+static void vigiarFonteGuardada(void) {
+  const char *motivo = NULL;
+  Uint32 desde;
+  if (!voltaAtiva) return;
+  if (!player_aberto() || player_quer_sair() || player_id_canal()[0] || aguardandoFonte) {
+    voltaAtiva = 0; return;
+  }
+  { FontevoltaSinais g;
+    int d;
+    g.falhou = video_falhou() || player_fonte_falhou();
+    g.pronto = video_pronto();
+    g.duracao = video_duracao();
+    g.carregando = player_carregando();
+    g.conferencia = fontevolta_conferencia();
+    g.desdeMs = desde = SDL_GetTicks() - voltaDesde;
+    d = fontevolta_decidir(&g, &motivo);
+    if (d == FV_ABRIU) {
+      printf("[voltafonte] abriu em %u ms sem busca\n", (unsigned)desde);
+      fflush(stdout);
+      voltaAtiva = 0;
+      return;
+    } }
+  if (!motivo) return;
+  printf("[voltafonte] recuo para a busca: %s (%u ms)\n", motivo, (unsigned)desde);
+  fflush(stdout);
+  marco("abrir: fonte guardada falhou, busca normal");
+  voltaAtiva = 0;
+  fontevolta_esquecer(motivo);
+  player_voltar_a_esperar();
+  limparFonteVOD();
+  renovarListaDoPlayer();
+  aguardandoFonte = 1;
+}
 // ID BASE DO TITULO EM JOGO, sem ":temporada:episodio".
 //
 // E a chave da preferencia de fonte, e ela e DO TITULO de proposito: o issue
@@ -1160,6 +1298,8 @@ static void guiaComCanalNoAr(void) {
 static int homePronta;
 
 int app_iniciar(const char *dirArte) {
+  ajustes_recursos(dirArte);
+  login_recursos(dirArte);
   diagnostico_recuperar_checkpoint();
   homePronta = home_iniciar(dirArte);
   novidades148_dir(dirArte);
@@ -1302,6 +1442,13 @@ static void spotAtender(void) {
       addonsui_abrir();
       trocarTela(TELA_ADDONS);
       break;
+    case SPOT_AJUSTE:
+      detail_fechar();
+      ajustes_abrir_opcao(p.indice);
+      if (tela == TELA_AJUSTES) ajustes_iniciar();
+      else trocarTela(TELA_AJUSTES);
+      menu_definir_destino(MENU_AJUSTES);
+      break;
     case SPOT_CANAL: {
       CatItem it;
       if (aguardandoFonte != 2 && guia_item_do_canal(p.id, p.nome, p.base, &it)) tocarCanal(&it);
@@ -1312,6 +1459,8 @@ static void spotAtender(void) {
   fflush(stdout);
 }
 
+int app_no_login(void) { return tela == TELA_LOGIN; }
+
 int app_na_home(void) {
   return tela == TELA_HOME && homePronta && !player_aberto() && !detail_aberto() &&
          !novidades170_aberto();
@@ -1319,6 +1468,7 @@ int app_na_home(void) {
 
 void app_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
+  ilhacart_validar_identidade();
   // Qualquer gesto da pessoa: a atividade ao vivo da ilha conta 30 min daqui.
   if (e->type == SDL_KEYDOWN || e->type == SDL_MOUSEBUTTONDOWN || e->type == SDL_MOUSEWHEEL)
     ilhacart_tecla(SDL_GetTicks());
@@ -1673,6 +1823,9 @@ static void trocaDeTituloSeSolicitada(void) {
 }
 
 void app_atualizar(float dt, Uint32 agora) {
+  // Login e escolha de perfil retornam cedo; a atividade da conta anterior
+  // precisa sair antes deles, junto de qualquer modal/pedido ja enfileirado.
+  ilhacart_validar_identidade();
   // Animacoes reduzidas valem para TODA mola e rampa do app (anim.h), nao so
   // para as telas que lembravam de perguntar. Uma leitura por quadro.
   anim_politica_reduzida = ajustes_animacoes_reduzidas();
@@ -1875,6 +2028,10 @@ void app_atualizar(float dt, Uint32 agora) {
     }
     return;
   }
+
+  // O fundo das listras (login e escolha de perfil) sai da memoria quando a
+  // pessoa passa das duas telas. Sem textura carregada, e um teste e nada mais.
+  login_soltar();
 
   // Um ciclo por vez, e so quando a conta existe. O passo e barato: sem fio
   // terminado ele nao faz nada.
@@ -2099,7 +2256,17 @@ void app_atualizar(float dt, Uint32 agora) {
   salvos_reconciliar();
 
   // Durante a verificacao nao substituir a lista que os workers consultam.
+  // ACRESCENTAR pode (#221): os indices de quem ja estava nao mudam.
+  addons_drenar();
   if (aguardandoFonte != 2) addons_estado();
+  // A marca "Sua escolha anterior" na folha que abriu antes de o addon da
+  // lembrada responder: confere de novo quando a lista cresce.
+  if (stream_folha_aberta() && stream_preferida() < 0 && stream_n() != prefFolhaN) {
+    char base[24];
+    prefFolhaN = stream_n();
+    idBaseDoTitulo(base, sizeof base);
+    if (base[0] && fontepref_tem(base)) stream_preferir(fontepref_escolher(base));
+  } else if (!stream_folha_aberta()) prefFolhaN = -1;
   trocaDeTituloSeSolicitada();
   marcarAssistidoSeSolicitado();
   if (atomic_load_explicit(&perfilCarga, memory_order_acquire) == 2) {
@@ -2136,6 +2303,7 @@ void app_atualizar(float dt, Uint32 agora) {
       trocarTela(TELA_AJUSTES); menu_definir_destino(MENU_AJUSTES);
     }
     o = ilha_pediu(&ic, &qual);
+    if (o && qual == ILHA_VIVO && !ilhacart_vivo_vale(&ic)) o = ILHA_PEDIU_NADA;
     if (o == ILHA_PEDIU_SALVOS) {
       // O PAINEL NASCE DO MODAL: o retangulo de agora e o do modal, que some
       // seco no mesmo quadro — o painel toma a forma dele e cresce.
@@ -2226,6 +2394,11 @@ void app_atualizar(float dt, Uint32 agora) {
   } else if (tela == TELA_ADDONS && addonsui_quer_sair()) {
     trocarTela(TELA_AJUSTES); menu_definir_destino(MENU_AJUSTES);
   }
+  if (tela == TELA_AJUSTES) {
+    int buscaAjustes = ajustes_pediu_busca();
+    if (buscaAjustes == 2) spot_reabrir_ajustes();
+    else if (buscaAjustes == 1) spot_abrir_ajustes(0);
+  }
   if (tela == TELA_AJUSTES && ajustes_pediu_addons()) {
     addonsui_abrir();
     trocarTela(TELA_ADDONS);
@@ -2304,6 +2477,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // mudar de aba.
   if (menu_pediu_trocar()) {
     player_descartar_retido();
+    fontevolta_esquecer("troca de usuario");
     invalidarPerfil();
     tela = TELA_ESCOLHA_PERFIL;
     perfilAntes = perfis_ativo();
@@ -2484,6 +2658,7 @@ void app_atualizar(float dt, Uint32 agora) {
     // player_definir_episodio.
     int doInicio = detail_pediu_do_inicio();
     if ((detail_pediu_reproduzir() || doInicio) && aguardandoFonte != 2) {
+      marco("abrir: reproduzir pedido");
       // A tela abre JA, no estado "abrindo fonte", e a escolha acontece depois.
       // Escolher antes deixaria o botao sem resposta por segundos, e escolher
       // sem verificar entregava o video de aviso do debrid — que toca normal e
@@ -2508,27 +2683,10 @@ void app_atualizar(float dt, Uint32 agora) {
         char alvoLeg[64]; alvoPlayer(alvoLeg, sizeof alvoLeg);
         addons_buscar_legendas(alvoLeg, ci->tipo);
       }
-      // RENOVA POR IDADE **E POR DONO** (issue #101).
-      //
-      // O alvo tambem mudou: era idDoAlvo(), o episodio EM FOCO na pagina, e
-      // quem toca nem sempre e ele — "Retomar" e o card de Continuar assistindo
-      // abrem outro episodio (cwTocar/episodioDoDetalhe, logo acima), e a busca
-      // saia para um id diferente do que ia reproduzir. alvoPlayer le o
-      // episodio ja definitivo, depois de player_abrir.
-      //
-      // E a condicao deixou de ser so o relogio: a lista podia ter 3 s de vida
-      // e ser do episodio anterior, e ai nada a refazia. Idade cobre o link
-      // assinado que expira; o dono cobre o episodio errado. Sao duas coisas.
-      { char alvoP[64]; alvoPlayer(alvoP, sizeof alvoP);
-        if (ci && ci->imdb[0] && alvoP[0] &&
-            (stream_idade_ms() > NV_LINK_VALIDO_MS || !stream_lista_do_alvo(alvoP))) {
-          printf("fonte: lista com %ums%s, renovando (%s)\n",
-                 (unsigned)stream_idade_ms(),
-                 stream_lista_do_alvo(alvoP) ? "" : " e de outro alvo", alvoP);
-          stream_definir_alvo(alvoP);
-          addons_buscar(alvoP, ci->tipo);
-        } }
-      aguardandoFonte = 1;
+      // A busca de fontes sai SEMPRE (renovarListaDoPlayer): com a fonte
+      // guardada ela corre em segundo plano e so serve a folha e ao recuo.
+      renovarListaDoPlayer();
+      if (!tocarFonteGuardada()) aguardandoFonte = 1;
     }
     if (detail_pediu_marcar()) {
       // Alterna no Trakt E no espelho local. O estado de partida vem de
@@ -2577,8 +2735,17 @@ void app_atualizar(float dt, Uint32 agora) {
   // duas ficariam presas no mesmo pipeline.
   // A busca disparada por Reproduzir terminou: agora VERIFICA as fontes, em
   // ordem, ate achar uma que leve ao arquivo — e so entao liga o video.
-  if (aguardandoFonte == 1 && addons_estado() != ADD_BUSCANDO) {
+  if (aguardandoFonte == 1 &&
+      (addons_estado() != ADD_BUSCANDO || autoParcialPronto())) {
     unsigned geracao = novaGeracaoFonte();
+    if (addons_busca_parcial()) {
+      char faltam[160];
+      int k = addons_faltam(faltam, sizeof faltam);
+      printf("[fonte] escolha com %d fontes aos %u ms; faltam %d addon(s): %s\n",
+             stream_n(), addons_busca_ms(), k, faltam);
+      marco("fonte: escolha antes do ultimo addon");
+    }
+    autoEsperaN = 0;
     aguardandoFonte = 2;
     fontePedidoGeracao = geracao;
     limparFontePendente();
@@ -2668,12 +2835,28 @@ void app_atualizar(float dt, Uint32 agora) {
     // Anuncia o CONTENTOR pelo mesmo caminho: e o que dispensa a sonda de
     // Matroska num arquivo que nunca teria um cabecalho desses.
     if (s) video_definir_mp4(s->mp4 || strstr(s->url, ".mp4") != NULL);
-    marco(s ? "fonte escolhida" : "nenhuma fonte serve");
+    { int esperarMais = !s && !player_id_canal()[0] && !ajustes_fonte_primeira() &&
+                        addons_busca_parcial();
+      marco(s ? "fonte escolhida" : esperarMais ? "fonte: nenhuma das parciais serve"
+                                                : "nenhuma fonte serve"); }
     // Nenhuma fonte e um debrid recusou a CONTA (403 de plano/limite, registro
     // 1541): diz qual no log, que e onde se separa "o addon nao tinha" de "o
     // TorBox nao deixou". Ver debrid_recusa em debrid.h.
     if (!s) { char rec[64];
       if (debrid_recusa(rec, sizeof rec)) printf("[fonte] o debrid recusou (%s)\n", rec); }
+    // NENHUMA DAS QUE JA CHEGARAM SERVE, MAS A BUSCA AINDA ESTA NO AR (#221):
+    // nao e "nenhuma fonte serve" — e esperar os addons que faltam. As que
+    // falharam ja sairam da fila (stream_automatico_excluir); a proxima
+    // escolha so sai com lista maior. "Primeira da lista" segue o caminho dela
+    // abaixo (uma conferida por vez, dentro do orcamento de tentativas).
+    if (!s && !player_id_canal()[0] && !ajustes_fonte_primeira() &&
+        addons_busca_parcial() && (player_aberto() || player_mini_ativo()) &&
+        !player_quer_sair()) {
+      printf("[fonte] nenhuma das %d que chegaram serve; esperando os addons que faltam\n",
+             stream_n());
+      autoEsperaN = stream_n();
+      aguardandoFonte = 1;
+    } else {
     // PiP conta como sessao viva: o zap dentro da miniatura depende desta
     // fonte chegar — com a guarda antiga ela seria descartada.
     if ((player_aberto() || player_mini_ativo()) && !player_quer_sair()) {
@@ -2706,6 +2889,7 @@ void app_atualizar(float dt, Uint32 agora) {
         (void)pedirProximaFonteVOD();
       }
       else { limparFonteVOD(); erroSemFonte(); }
+    }
     }
   }
 
@@ -2867,6 +3051,7 @@ void app_atualizar(float dt, Uint32 agora) {
     }
   }
 
+  vigiarFonteGuardada();
   tentarProximaFonteVOD();
   processarTorrentJob();
 
@@ -3096,6 +3281,11 @@ void app_atualizar(float dt, Uint32 agora) {
         trocarTela(TELA_HOME);
         menu_definir_destino(MENU_INICIO);
         ilha_minimizar(ci ? ci->backdrop : NULL);
+#ifdef NV_ANDROID
+        // A sessao ficou pausada atras da home: o voo comeca DISSOLVENDO a
+        // partir do proprio video parado (ilha_minimizar_dissolver).
+        ilha_minimizar_dissolver(player_retido());
+#endif
       } }
     }
   }

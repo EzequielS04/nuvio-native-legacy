@@ -26,6 +26,7 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import java.util.concurrent.atomic.AtomicInteger
 
 // Player do Nuvio no Android TV: Media3 ExoPlayer numa SurfaceView ATRAS da
 // SDLSurface (o C abre um furo transparente por onde ela aparece, ver
@@ -71,6 +72,12 @@ object NvPlayer {
     // Tudo abaixo so no fio principal.
     private var player: ExoPlayer? = null
     private var sessao = 0
+    // Invalida um abrir/seek ainda na fila antes de o fio principal executa-lo.
+    // A sessao acima segue protegendo os callbacks do ExoPlayer liberado.
+    private val pedidos = AtomicInteger()
+    private var pedidoAtivo = 0
+    private var inicioAtualMs = 0
+    private var geracaoNative = 0
     private var urlAtual = ""
     private var cabAtual = ""
     private var abriuEm = 0L
@@ -102,6 +109,13 @@ object NvPlayer {
     @JvmStatic external fun nativeLegenda(texto: String, durMs: Int)
     @JvmStatic external fun nativePos(ms: Int)
     @JvmStatic external fun nativeHdr(hdr: String, dv: Int, atmos: Int)
+    @JvmStatic external fun nativeRetomada(geracao: Int, aceita: Int)
+
+    private fun atual(minha: Int) = minha == sessao && pedidoAtivo == pedidos.get()
+    private fun confirmarRetomada(geracao: Int, aceita: Boolean) {
+        if (geracao != 0) try { nativeRetomada(geracao, if (aceita) 1 else 0) }
+        catch (e: UnsatisfiedLinkError) { Log.w(TAG, "retomada sem lib: $e") }
+    }
 
     private fun ev(tipo: Int, a: Int = 0, b: Int = 0) {
         try { nativeEvento(tipo, a, b) } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "evento $tipo sem lib: $e") }
@@ -137,6 +151,7 @@ object NvPlayer {
     // onDestroy: solta player e superficie.
     @JvmStatic
     fun encerrar() {
+        pedidos.incrementAndGet()
         liberar()
         val sv = superficie
         if (sv != null) (sv.parent as? FrameLayout)?.removeView(sv)
@@ -147,24 +162,41 @@ object NvPlayer {
 
     // --- chamadas do C (qualquer fio) -----------------------------------------
 
-    @JvmStatic fun abrir(url: String, cabecalhos: String) { principal.post { abrirMain(url, cabecalhos, false) } }
-    @JvmStatic fun parar() { principal.post { liberar() } }
+    @JvmStatic fun abrir(url: String, cabecalhos: String) { abrirPosicao(url, cabecalhos, 0, 0) }
+    @JvmStatic fun abrirPosicao(url: String, cabecalhos: String, inicioMs: Int, geracao: Int) {
+        val pedido = pedidos.incrementAndGet()
+        principal.post {
+            if (pedido == pedidos.get()) abrirMain(url, cabecalhos, false, inicioMs.coerceAtLeast(0), geracao, pedido)
+        }
+    }
+    @JvmStatic fun parar() {
+        val pedido = pedidos.incrementAndGet()
+        principal.post { if (pedido == pedidos.get()) liberar() }
+    }
     @JvmStatic fun pausar(p: Int) { principal.post { player?.playWhenReady = (p == 0) } }
-    @JvmStatic fun buscar(ms: Int) { principal.post { player?.seekTo(ms.toLong()) } }
+    @JvmStatic fun buscar(ms: Int) {
+        val pedido = pedidos.get()
+        principal.post { if (pedido == pedidos.get()) player?.seekTo(ms.coerceAtLeast(0).toLong()) }
+    }
     @JvmStatic fun volume(pct: Int) { principal.post { player?.volume = pct.coerceIn(0, 100) / 100f } }
     @JvmStatic fun janela(x: Int, y: Int, w: Int, h: Int, encaixa: Int) { principal.post { definirJanela(x, y, w, h, encaixa != 0) } }
     @JvmStatic fun escolher(tipo: Int, idx: Int) { principal.post { escolherMain(tipo, idx) } }
 
     // --- abrir / liberar ------------------------------------------------------
 
-    private fun abrirMain(url: String, cabecalhos: String, reabrindo: Boolean) {
-        val act = activity ?: return
+    private fun abrirMain(url: String, cabecalhos: String, reabrindo: Boolean,
+                          inicioMs: Int, geracao: Int, pedido: Int) {
+        val act = activity
+        if (act == null) { confirmarRetomada(geracao, false); return }
         liberar()
+        pedidoAtivo = pedido
         hdrRecriado = false; quadroVisto = false
         principal.removeCallbacks(recriar)
         val minha = sessao
         urlAtual = url
         cabAtual = cabecalhos
+        inicioAtualMs = inicioMs
+        geracaoNative = geracao
         abriuEm = SystemClock.elapsedRealtime()
         if (!reabrindo) retentou = false
         try {
@@ -220,11 +252,25 @@ object NvPlayer {
             val baixa = url.lowercase()
             if (baixa.contains(".m3u8") || baixa.contains("m3u8?")) item.setMimeType(MimeTypes.APPLICATION_M3U8)
             else if (baixa.contains(".mpd")) item.setMimeType(MimeTypes.APPLICATION_MPD)
-            p.setMediaItem(item.build())
+            val mediaItem = item.build()
+            var inicioAceito = false
+            if (inicioMs > 0) {
+                try {
+                    // Media3 recebe o ponto antes de prepare: nao carrega o
+                    // inicio so para o C pedir outro Range/seek logo depois.
+                    p.setMediaItem(mediaItem, inicioMs.toLong())
+                    inicioAceito = true
+                } catch (e: Exception) {
+                    Log.w(TAG, "posicao inicial recusada; usando retomada normal: $e")
+                    p.setMediaItem(mediaItem)
+                }
+            } else p.setMediaItem(mediaItem)
+            confirmarRetomada(geracao, inicioAceito)
             p.playWhenReady = true
             p.prepare()
             principal.postDelayed(tique(minha), TIQUE_MS)
         } catch (e: Exception) {
+            confirmarRetomada(geracao, false)
             Log.w(TAG, "abrir: $e")
             ev(EV_ERRO, -1, 0)
         }
@@ -256,7 +302,7 @@ object NvPlayer {
     // Tique de 250 ms: a posicao que o C le sem esperar ninguem.
     private fun tique(minha: Int): Runnable = object : Runnable {
         override fun run() {
-            if (minha != sessao) return
+            if (!atual(minha)) return
             val p = player ?: return
             try { nativePos(p.currentPosition.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()) } catch (e: UnsatisfiedLinkError) { }
             principal.postDelayed(this, TIQUE_MS)
@@ -396,7 +442,7 @@ object NvPlayer {
 
     private fun ouvinte(minha: Int) = object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
-            if (minha != sessao) return
+            if (!atual(minha)) return
             val p = player ?: return
             when (state) {
                 Player.STATE_BUFFERING -> ev(EV_BUFFER, 0)
@@ -414,8 +460,16 @@ object NvPlayer {
             }
         }
 
+        // Pausa pedida com o player em buffer nao passa por onIsPlayingChanged
+        // (ele ja estava parado): a confirmacao do C sai daqui.
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            if (!atual(minha)) return
+            val p = player ?: return
+            if (!playWhenReady && !p.isPlaying && p.playbackState != Player.STATE_ENDED) ev(EV_PAUSADO)
+        }
+
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (minha != sessao) return
+            if (!atual(minha)) return
             val p = player ?: return
             if (isPlaying) { if (pronto) ev(EV_TOCANDO) }
             // Parar de tocar por buffer nao e pausa (o evento 7 ja disse).
@@ -423,21 +477,21 @@ object NvPlayer {
         }
 
         override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-            if (minha != sessao || !pronto) return
+            if (!atual(minha) || !pronto) return
             val p = player ?: return
             val d = duracaoMs(p)
             if (d != duracaoEnviada) { duracaoEnviada = d; ev(EV_PRONTO, d) }   // so a duracao muda
         }
 
         override fun onRenderedFirstFrame() {
-            if (minha != sessao) return
+            if (!atual(minha)) return
             ev(EV_PRIMEIRO_QUADRO)
             quadroVisto = true
             hdrNaSuperficie()
         }
 
         override fun onVideoSizeChanged(v: VideoSize) {
-            if (minha != sessao) return
+            if (!atual(minha)) return
             // Pixel anamorfico entra na largura: e a proporcao que o zoom do C usa.
             videoW = (v.width * v.pixelWidthHeightRatio + 0.5f).toInt()
             videoH = v.height
@@ -446,26 +500,26 @@ object NvPlayer {
         }
 
         override fun onTracksChanged(tracks: Tracks) {
-            if (minha != sessao) return
+            if (!atual(minha)) return
             publicarFaixas(tracks)
             publicarHdr(tracks)
         }
 
         override fun onCues(cueGroup: CueGroup) {
-            if (minha != sessao) return
+            if (!atual(minha)) return
             val texto = cueGroup.cues.mapNotNull { it.text?.toString()?.trim() }
                 .filter { it.isNotEmpty() }.joinToString("\n")
             // O Media3 nao diz quando o cue acaba: estimativa pelo tamanho, e o
             // proximo grupo (inclusive o vazio) substitui antes disso.
             val dur = if (texto.isEmpty()) 0 else (800 + texto.length * 60).coerceIn(2000, 7000)
             val entregar = Runnable {
-                if (minha == sessao) try { nativeLegenda(texto, dur) } catch (e: UnsatisfiedLinkError) { }
+                if (atual(minha)) try { nativeLegenda(texto, dur) } catch (e: UnsatisfiedLinkError) { }
             }
             if (atrasoMs > 0) principal.postDelayed(entregar, atrasoMs.toLong()) else entregar.run()
         }
 
         override fun onPlayerError(error: PlaybackException) {
-            if (minha != sessao) return
+            if (!atual(minha)) return
             Log.w(TAG, "erro ${error.errorCodeName} (${error.errorCode}): ${error.message}")
             // Decoder que falha nos primeiros 5 s: o recurso pode estar sendo
             // solto por outro app (ResourceConflict do Tizen); reabre uma vez.
@@ -476,7 +530,11 @@ object NvPlayer {
                 retentou = true
                 val u = urlAtual
                 val c = cabAtual
-                principal.postDelayed({ if (minha == sessao) abrirMain(u, c, true) }, 400)
+                val inicio = player?.currentPosition?.takeIf { it > 0 }?.coerceAtMost(Int.MAX_VALUE.toLong())?.toInt()
+                    ?: inicioAtualMs
+                val geracao = geracaoNative
+                val pedido = pedidoAtivo
+                principal.postDelayed({ if (atual(minha)) abrirMain(u, c, true, inicio, geracao, pedido) }, 400)
                 return
             }
             ev(EV_ERRO, error.errorCode, 0)
@@ -488,7 +546,7 @@ object NvPlayer {
             eventTime: AnalyticsListener.EventTime, decoderName: String,
             initializedTimestampMs: Long, initializationDurationMs: Long
         ) {
-            if (minha != sessao) return
+            if (!atual(minha)) return
             // DV so conta com decoder DV de verdade: OMX.dolby.* / c2.dolby.* e,
             // na MediaTek, c2.mtk.dvhe.* / c2.mtk.dvav.* (TCL Smart TV Pro: o
             // painel engatou Dolby Vision e o selo dizia HDR10, 30/09/2026).

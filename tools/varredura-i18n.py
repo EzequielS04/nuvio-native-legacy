@@ -204,7 +204,9 @@ NAO_E_TELA = ("printf", "fprintf", "puts", "fputs", "perror", "marco",
               "strcmp", "strncmp", "strcasecmp", "strstr", "strchr", "strrchr",
               "getenv", "setenv", "fopen", "unlink", "remove", "rename",
               "mkdir", "system", "dlopen", "dlsym", "js_", "jsw_", "rede_",
-              "curl_", "SDL_Log", "addons_buscar", "cat_indice_por",
+              "curl_", "SDL_Log",
+              # motivo de log da fonte guardada (fontevolta.h): nunca tela
+              "fontevolta_", "addons_buscar", "cat_indice_por",
               "idioma_registrar", "assert", "_Static_assert",
               "EM_ASM", "MAIN_THREAD",
               # NOME DE ICONE NAO E TEXTO. gfx_icone recebe o basename do SVG
@@ -254,11 +256,17 @@ IGNORAR = {
     # saber se ha audio em portugues (streams.c, idiomaDa). Dado de comparacao,
     # nunca texto desenhado.
     "português",
+    # Motivos do vigia da fonte guardada (fontevolta.c, fontevolta_decidir):
+    # vao so para o log "[voltafonte] recuo para a busca: <motivo>".
+    "erro do player", "clipe curto", "conferencia falhou",
     # Hosts de provedor de poster/meta que levam a config no caminho
     # (redeurl.c, rede_url_log): dado de comparacao, nunca tela. "com" casou
     # com a lista de palavras de portugues.
     "elfhosted.com", "ratingposterdb.com", "top-poster", "top-posters.com",
     "toposters.com",
+    # Atalhos de e-mail do teclado (teclado.c, #216): digitam o pedaco de
+    # endereco, igual em toda lingua.
+    ".com", "@gmail.com", "@hotmail.com", "@outlook.com",
     # Pedaco do printf "[tmdb] idioma dos metadados" (ajustes.c,
     # ajustes_tmdb_idioma_relatar): o ternario fica numa linha sem o printf,
     # entao NAO_E_TELA nao o ve. So log.
@@ -331,6 +339,7 @@ IGNORAR = {
     "servidor da conta fora do ar (HTTP %d) · usando a cópia de %s",
     "servidor da conta fora do ar (HTTP %d) · sem cópia salva",
     "conta-%s-p%d.json", "conta-fora",
+    "conta-addons-pend-",  # prefixo de arquivo da fila offline, nunca texto de tela
     "hdr do pipeline: %s (fonte DV=%d)",
     # Tres marcos de video.c/video_tizen.c. O buffer e montado numa instrucao
     # e entregue a marco() na SEGUINTE, entao marco — que ja esta em
@@ -431,7 +440,12 @@ def varrer():
     chaves = chaves_da_tabela()
     faltando_tabela, faltando_i18n = {}, {}
     faltando_funcao = {}
-    for arq in sorted((RAIZ / "src").glob("*.c")):
+    src = RAIZ / "src"
+    arquivos = sorted(src.glob("*.c")) + [
+        src / nome for nome in ("ajustes_ux_tela.inc", "ajustes_ux_interacao.inc",
+                                "ajustes_ux_desenho.inc") if (src / nome).exists()
+    ]
+    for arq in sorted(arquivos):
         if arq.name == "idioma.c":
             continue
         txt = arq.read_text(encoding="utf-8")

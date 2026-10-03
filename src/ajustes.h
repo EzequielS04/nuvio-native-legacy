@@ -94,6 +94,9 @@ int ajustes_fonte_texto_addon(void);
 // escolhida nao abre (0..3; 0 = nenhuma). Nao vale para escolha manual nem
 // para canal ao vivo, que tem o watchdog proprio em app.c.
 int ajustes_fonte_repor(void);
+// Prazo, em ms, da escolha automatica com a lista ainda enchendo (#221); 0 =
+// esperar todos os addons. "Espera pelos add-ons" em Ajustes.
+int ajustes_fonte_prazo_ms(void);
 
 // Idioma da interface: um IDIOMA_* de idiomacod.h (pt, en, ro, uk, ru, fr, de, es). Valor
 // gravado fora do intervalo (arquivo editado a mao) cai em portugues.

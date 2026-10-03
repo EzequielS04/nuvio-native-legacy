@@ -3,7 +3,7 @@
   <profile name="tv" />
   <ui-application appid="NuvioTV002.Nuvio" exec="NuvioTpk60.dll" type="dotnet"
                   multiple="false" taskmanage="true" nodisplay="false" launch_mode="single">
-    <label>Nuvio</label>
+    <label>Nuvio Legacy</label>
     <icon>NuvioTpk60.png</icon>
   </ui-application>
   <privileges>

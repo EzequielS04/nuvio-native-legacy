@@ -1,4 +1,5 @@
 #include "perfilsel.h"
+#include "login.h"
 #include "idioma.h"
 #include "perfis.h"
 #include "sync.h"
@@ -915,8 +916,10 @@ static void giro(GfxRect av, Uint32 agora, float alfa, int reduzida) {
 
 static void desenhaFundo(void) {
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
-  // Esta tela usa preto real em todos os estados. O mural e o unico fundo;
-  // perfis sem catalogo ainda recebem particulas e a selecao continua util.
+  // Com o mural (Ajustes, AJ_PS_FUNDO ligado) a tela e preto real e o mural e
+  // o unico fundo; perfis sem catalogo ainda recebem particulas. Desligado, o
+  // fundo e o das listras do login (1.7.2) — a mesma familia da abertura.
+  if (!ajustes_ps_fundo_automatico() && login_fundo_desenhar(1.0f)) return;
   gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
 }
 
@@ -1015,7 +1018,9 @@ void perfilsel_desenhar(Uint32 agora) {
 
   // As capas sao contexto em baixa opacidade; a fileira de perfis continua
   // sendo a primeira coisa que o olhar encontra e recebe toda a legibilidade.
-  muralDesenhar(a * (pinDe >= 0 ? 0.30f : 1.0f), reduzida);
+  // AJ_PS_FUNDO desligado: sem mural. O ajuste existia e nao era lido.
+  if (ajustes_ps_fundo_automatico())
+    muralDesenhar(a * (pinDe >= 0 ? 0.30f : 1.0f), reduzida);
 
   { TxtLinha t = txt_linha(TXT_TITULO1, "Quem está assistindo?", 255, 255, 255, 255);
     TxtLinha sombra = txt_linha(TXT_TITULO1, "Quem está assistindo?", 0, 0, 0, 230);

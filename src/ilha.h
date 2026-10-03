@@ -169,6 +169,9 @@ typedef struct {
 } IlhaCartao;
 // NULL tira o cartao. A copia e da ilha; quem chama pode descartar o seu.
 void ilha_cartao(int qual, const IlhaCartao *c);
+// Troca de identidade: apaga este cartao e suas copias no modal, no pedido e
+// na animacao. Os outros cartoes, avisos e atividade nao sao alterados.
+void ilha_cartao_invalidar(int qual);
 // 1 quando ha cartao e o relogio esta na tela: e quando AZUL/CH+ abre o modal.
 int  ilha_cartao_na_tela(void);
 
@@ -193,6 +196,9 @@ int  ilha_pediu(IlhaCartao *c, int *qual);
 // posto. Animacoes reduzidas: nada voa, a pilula ja aparece com o cartao.
 // 0 = sem cartao ou sem relogio: nada a fazer.
 int  ilha_minimizar(const char *fundoReserva);
+// Logo depois do ilha_minimizar: 1 = o video pausado segue no plano de baixo
+// (sessao retida, Android) e o voo nasce dissolvendo a partir dele.
+void ilha_minimizar_dissolver(int sim);
 int  ilha_minimizando(void);
 
 // Retangulo da pilula (ou do modal, enquanto ele esta na tela) no ultimo

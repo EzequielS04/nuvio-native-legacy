@@ -83,7 +83,7 @@ if [ ! -f "$CACHE/prefix/lib/libSDL2.a" ] || [ ! -f "$CACHE/prefix/lib/libSDL2_t
 fi
 
 echo "[1/3] libnuvio.so (ARMv7 softfp, glibc <= 2.28)"
-ENVF=$(mktemp); trap 'rm -f "$ENVF"' EXIT
+ENVF=$(mktemp "${TMPDIR:-/tmp}/nuvio-tpk-env.XXXXXXXX"); trap 'rm -f "$ENVF"' EXIT
 tools/env.sh --env-file "$ENVF"
 docker run --rm --platform linux/arm/v5 --env-file "$ENVF" \
   -e NUVIO_EXTRA_CFLAGS="${NUVIO_EXTRA_CFLAGS:-}" \
@@ -210,12 +210,17 @@ done
 echo "[3/3] conferindo"
 for T in "$SAIDA"/*.tpk; do
   L=$(unzip -l "$T")
+  # Consumir a lista inteira: grep -q fecha cedo e SIGPIPE mascara o match
+  # sob pipefail quando o pacote tem muitas entradas.
+  if unzip -Z1 "$T" | grep -E '(^|/)conta-[^/]*\.txt(\.tmp)?$' >/dev/null; then
+    echo "tpk.sh: $T leva arquivo privado da conta — abortado" >&2; exit 1
+  fi
   grep -qE " lib/libnuvio.so$" <<<"$L" || { echo "$T sem lib/libnuvio.so" >&2; exit 1; }
   grep -qE " res/art/" <<<"$L" || { echo "$T sem res/art" >&2; exit 1; }
   echo "  $T ($(du -h "$T" | cut -f1))"
 done
 # O NuvioTpk40 tem de levar a .so SEM TLS, e os outros a de sempre (bytes iguais).
-D=$(mktemp -d); trap 'rm -rf "$D" "$ENVF"' EXIT
+D=$(mktemp -d "${TMPDIR:-/tmp}/nuvio-tpk-stage.XXXXXXXX"); trap 'rm -rf "$D" "$ENVF"' EXIT
 for T in "$SAIDA"/*.tpk; do
   unzip -qo "$T" lib/libnuvio.so -d "$D/$(basename "$T" .tpk)"
   case "$T" in

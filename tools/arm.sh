@@ -61,7 +61,7 @@ echo "==> compilando para ARM"
 LIXO=""
 limpar() { [ -n "$LIXO" ] && rm -rf $LIXO; }
 trap limpar EXIT
-ENVF=$(mktemp); LIXO="$LIXO $ENVF"
+ENVF=$(mktemp "${TMPDIR:-/tmp}/nuvio-arm-env.XXXXXXXX"); LIXO="$LIXO $ENVF"
 tools/env.sh --env-file "$ENVF"
 # NUVIO_EXTRA_CFLAGS: bandeiras a mais para uma build de teste, sem tocar no
 # codigo. Nasceu para o -DNV_PEDIR_4K do issue #28, que so existe para uma
@@ -161,7 +161,7 @@ ARQ_DE_PESSOA="trakt.txt addons.txt tmdb.txt mdblist.txt ajustes.txt
 # trakt-p*/trakt-fluxo*/simkl*: o vinculo do Trakt e do Simkl passou a ser um
 # arquivo POR PERFIL (traktauth.c, simklauth.c) — o trakt.txt da lista de nomes
 # acima deixou de alcancar o token quando a pasta de dados cai na da arte.
-GLOB_DE_PESSOA="stalker-p*.txt xtream-p*.txt listas-p*.txt trakt-p*.txt trakt-fluxo*.txt simkl*.txt"
+GLOB_DE_PESSOA="stalker-p*.txt xtream-p*.txt listas-p*.txt trakt-p*.txt trakt-fluxo*.txt simkl*.txt conta-*.txt conta-*.txt.tmp"
 
 # O ACERVO DE QUEM EMPACOTOU, que nao e credencial de login e vaza igual.
 #
@@ -206,7 +206,7 @@ DIR_DE_PESSOA="collections"
 
 if [ "$1" = "--ipk" ]; then
   echo "==> empacotando (sem credenciais)"
-  PALCO=$(mktemp -d); LIXO="$LIXO $PALCO"
+  PALCO=$(mktemp -d "${TMPDIR:-/tmp}/nuvio-arm-pacote.XXXXXXXX"); LIXO="$LIXO $PALCO"
   cp -R deploy/app "$PALCO/app"
   # cache/ e cache de EXECUCAO, nao arte do pacote: sao megabytes de imagem
   # baixada que o app rebaixa sozinho.
@@ -214,6 +214,13 @@ if [ "$1" = "--ipk" ]; then
   for f in $ARQ_DE_PESSOA $ACERVO_DE_PESSOA; do rm -f "$PALCO/app/art/$f"; done
   for g in $GLOB_DE_PESSOA; do rm -f "$PALCO"/app/art/$g; done
   for d in $DIR_DE_PESSOA; do rm -rf "$PALCO/app/art/$d"; done
+  # MODO DO BINARIO: o ares-package copia o modo do arquivo, e o `cp` la de cima
+  # SOBRESCREVE um deploy/app/nuvio-proto existente mantendo o modo ANTIGO dele.
+  # A 1.7.1 saiu assim com -rwx---r--: o app roda como uid 5152, que nao e dono
+  # nem grupo, entao sem x para "outros" o webOS nao executa e o app fecha ao
+  # abrir em toda TV (#224, #225). A C9 do dono nao pegou porque la o binario e
+  # trocado com chmod 755 a mao.
+  chmod 755 "$PALCO/app/nuvio-proto"
 
   "$ARES" "$PALCO/app" -o .
   IPK=$(ls -t ./*.ipk | head -1)
@@ -249,6 +256,7 @@ if [ "$1" = "--ipk" ]; then
     printf '%s\n' "$LISTA" | grep -qE "art/$pre[0-9]+\.txt$" && VAZOU="$VAZOU $pre*.txt"
   done
   printf '%s\n' "$LISTA" | grep -qE "art/(trakt-fluxo|simkl)\.txt$" && VAZOU="$VAZOU trakt-fluxo.txt/simkl.txt"
+  printf '%s\n' "$LISTA" | grep -qE '(^|/)conta-[^/]*\.txt(\.tmp)?$' && VAZOU="$VAZOU conta-*.txt/conta-*.txt.tmp"
   # Diretorio: qualquer caminho DENTRO dele conta como vazamento, nao so a
   # entrada da pasta — o tar pode listar os arquivos sem listar o diretorio.
   for d in $DIR_DE_PESSOA; do
@@ -256,6 +264,13 @@ if [ "$1" = "--ipk" ]; then
   done
   if [ -n "$VAZOU" ]; then
     echo "    ABORTADO: o pacote leva credencial ->$VAZOU"
+    rm -f "$IPK"
+    exit 1
+  fi
+  # O chmod acima e a intencao; o modo DENTRO do pacote e o fato (#224).
+  MODO=$(cd "$PALCO" && tar tvzf data.tar.gz 2>/dev/null | awk '/\/nuvio-proto$/ {print $1}')
+  if [ "$MODO" != "-rwxr-xr-x" ]; then
+    echo "    ABORTADO: nuvio-proto no pacote com modo '${MODO:-ausente}', esperado -rwxr-xr-x (o webOS nao executa)"
     rm -f "$IPK"
     exit 1
   fi
@@ -310,10 +325,10 @@ STAMP=${STAMP:0:8}
 [ -n "$VARIANTE" ] && STAMP="$STAMP high cache"
 # CARIMBO POR ACRESCIMO, e nao por substituicao de "(BUILD)".
 #
-# O titulo do pacote publicado e so "Nuvio" — e o nome que a pessoa ve na TV, e
+# O titulo do pacote publicado e so "Nuvio Legacy" — e o nome que a pessoa ve na TV, e
 # nele nao cabe nome de build. Mas a INSTALACAO DE DESENVOLVIMENTO precisa dizer
 # qual binario esta ali, entao o carimbo entra ao lado do nome so no caminho do
-# deploy por ssh: "Nuvio (08cd72a3)". O pacote de release nunca passa por aqui.
+# deploy por ssh: "Nuvio Legacy (08cd72a3)". O pacote de release nunca passa por aqui.
 #
 # A conferencia de verdade continua sendo /proc/<pid>/exe: o app manager cacheia
 # o appinfo ate reinstalar, e ja aconteceu de o titulo mostrar a build anterior.

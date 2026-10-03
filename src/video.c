@@ -1205,6 +1205,7 @@ static void chamarEm(const char *servico, const char *metodo,
   lsChamar(uri, carga, cb, NULL, rot);
 }
 
+static void protegerScreensaver(void);
 static int modoLoad;   // video_modo_live_consumir do load em curso
 static int aoCarregar(LSHandle *h, LSMessage *m, void *u) {
   const char *p = lsPayload(m), *q;
@@ -1233,6 +1234,7 @@ static int aoCarregar(LSHandle *h, LSMessage *m, void *u) {
     if (!f || f - q >= (int)sizeof midia) return 1;
     memcpy(midia, q, f - q); midia[f - q] = 0; }
 
+  protegerScreensaver();
   snprintf(b, sizeof b, "{\"connectionId\":\"%s\"}", midia);
   chamar("notifyForeground", b, soLog);
   snprintf(b, sizeof b, "{\"mediaId\":\"%s\"}", midia);
@@ -1250,6 +1252,46 @@ static int aoCarregar(LSHandle *h, LSMessage *m, void *u) {
 }
 
 static void *rodarLaco(void *u) { (void)u; loopRodar(laco); return NULL; }
+
+// SCREENSAVER DA LG DURANTE O FILME. O buraco de video composto por GL nao conta
+// como "video em tela cheia" para o tvpower, entao o timer de inatividade do
+// remoto dispara o screensaver no meio do filme (relato C1, 1.7.0: a cada ~20
+// min). API nao documentada: assina registerScreenSaverRequest; quando o
+// screensaver vai ativar chega state "Active" + timestamp, e responder ack:false
+// com o MESMO timestamp o cancela. Sem filme tocando respondemos ack:true para
+// nao segurar o screensaver normal da TV.
+static int protetorLigado;
+static int aoPedidoScreensaver(LSHandle *h, LSMessage *m, void *u) {
+  const char *p = lsPayload(m);
+  char estado[24], ts[64], b[192];
+  int segurar;
+  (void)h; (void)u;
+  if (!ligado || !bus || !p ||
+      !js_texto_raiz(p, "state", estado, sizeof estado) || strcmp(estado, "Active")) return 1;
+  // Preserva o token recebido, inclusive quando string, sem arredondar numeros
+  // grandes ou responder com timestamp truncado.
+  if (!js_bruto(p, NULL, "timestamp", ts, sizeof ts)) return 1;
+  if (ts[0] != '"') {
+    char *fim;
+    if (!isdigit((unsigned char)ts[0]) && ts[0] != '-') return 1;
+    strtod(ts, &fim);
+    if (*fim) return 1;
+  }
+  segurar = midia[0] && tocando && !pausaPedida && !terminou && !falhou;
+  snprintf(b, sizeof b, "{\"clientName\":\"space.nuvio.native.legacy\",\"ack\":%s,\"timestamp\":%s}",
+           segurar ? "false" : "true", ts);
+  printf("[video] screensaver pedido: %s\n", segurar ? "seguro (filme tocando)" : "liberado");
+  fflush(stdout);
+  lsChamar("luna://com.webos.service.tvpower/power/responseScreenSaverRequest",
+           b, NULL, NULL, "responseScreenSaverRequest");
+  return 1;
+}
+static void protegerScreensaver(void) {
+  if (protetorLigado || !ligado || !bus) return;
+  protetorLigado = lsChamar("luna://com.webos.service.tvpower/power/registerScreenSaverRequest",
+           "{\"subscribe\":true,\"clientName\":\"space.nuvio.native.legacy\"}",
+           aoPedidoScreensaver, NULL, "registerScreenSaverRequest");
+}
 
 // O ACB EXIGE um callback de verdade. Passar NULL nao e ignorado: no primeiro
 // evento ele salta para o endereco 0 e o app morre com SIGSEGV em pc=0x0, longe
@@ -2517,6 +2559,7 @@ void video_encerrar(void) {
     erroLimpar();
     bus = NULL;
   }
+  protetorLigado = 0;
   ligado = 0;
 }
 // O uMS desenha a legenda embutida sozinho: nada para o app pintar.

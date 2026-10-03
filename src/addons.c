@@ -99,6 +99,57 @@ static int pendRenovar;
 // de repetir. addons_estado e quem colhe. Ver addons_buscar.
 static int adotado;
 static void dispararBusca(void);
+static void progDrenar(void);
+
+// A FOLHA ENCHE A CADA ADDON QUE RESPONDE (#221). Medido no D1 (1.7.0,
+// tizen-tpk, 1186 consultas): a primeira fonte chega em 0,85 s (p90), a lista
+// so era publicada no fim — p90 de 12,2 s, maximo de 34,7 s —, porque
+// consultar() esperava o ultimo addon, e o que nao respondia em 12 s ainda
+// ganhava a segunda chance de 20 s ANTES da publicacao. Na TV do relato
+// (UE55RU7170, Tizen 5.0): Torrentio com 29 fontes em 0,2 s e a lista na tela
+// aos 32,9 s, segurada por um StreamViX mudo nas duas rodadas.
+//
+// Agora a busca real (so VOD; canal continua de uma vez, a lista dele e de um
+// addon so) deixa cada resposta nesta fila, no fio de rede, e addons_estado /
+// addons_drenar publicam no fio da UI com stream_lista_acrescentar. A lista
+// final continua sendo montada por consultar() NA ORDEM DOS ADDONS para o
+// cache; a da tela e a mesma ordem (streams.c ordena a exibicao por addon).
+//
+// `progEstado` diz quem falta, para a folha: 1 = esperando, 2 = respondeu,
+// 3 = desistiu (sem resposta e sem segunda chance pela frente).
+typedef struct { int idx; Stream *a; int n; } Chegada;
+static pthread_mutex_t progTrava = PTHREAD_MUTEX_INITIALIZER;
+static unsigned char progEstado[ADD_MAX];
+static Chegada progFila[ADD_MAX * 2];
+static int progN;
+static int progLigado, progPublicou;
+static Uint32 progInicio;
+
+static void progMarcar(int i, const Stream *a, int n, int estadoNovo) {
+  Stream *copia = NULL;
+  if (i < 0 || i >= ADD_MAX) return;
+  if (a && n > 0) {
+    copia = malloc(sizeof(Stream) * (size_t)n);
+    if (copia) memcpy(copia, a, sizeof(Stream) * (size_t)n);
+  }
+  pthread_mutex_lock(&progTrava);
+  progEstado[i] = (unsigned char)estadoNovo;
+  if (copia && progN < (int)(sizeof progFila / sizeof *progFila)) {
+    progFila[progN].idx = i; progFila[progN].a = copia; progFila[progN].n = n;
+    progN++; copia = NULL;
+  }
+  pthread_mutex_unlock(&progTrava);
+  free(copia);
+}
+
+static void progLimpar(void) {
+  int q;
+  pthread_mutex_lock(&progTrava);
+  for (q = 0; q < progN; q++) free(progFila[q].a);
+  progN = 0;
+  memset(progEstado, 0, sizeof progEstado);
+  pthread_mutex_unlock(&progTrava);
+}
 
 static void capturarEscopo(FontecacheEscopo *e) {
   memset(e, 0, sizeof *e);
@@ -357,25 +408,37 @@ int addons_tem_catalogo(int i) {
 }
 AddEstado addons_estado(void) {
   AddEstado e = atomic_load(&estado);
+  // As respostas que ja chegaram vao para a folha antes de tudo (#221).
+  progDrenar();
   // Publica no fio da UI: nenhum desenho observa uma lista parcialmente escrita.
   if (fioVivo && e != ADD_BUSCANDO) {
     pthread_join(fio, NULL);
     fioVivo = 0;
+    // O que o fio deixou na fila depois da ultima drenagem.
+    progDrenar();
     if (alvoVod() && !escopoAindaAtual(&fioEscopo)) {
       // Conta/perfil/configuracao mudaram durante a rede. Essa resposta nao
       // pertence mais a tela, nem pode recriar o cache depois do logout.
       free(resultado); resultado = NULL; nResultado = 0;
       estado = ADD_PARADO;
+      if (progPublicou && !pendId[0]) stream_invalidar("account or profile changed during the search");
     } else {
       if (alvoVod() && resultadoCacheavel)
         fontecache_vod_guardar(alvoId, alvoTipo, fioBase, &fioEscopo,
                               resultado, nResultado, resultadoQuando);
-      if (!pendId[0]) {
+      // PUBLICADA AOS POUCOS, a lista da tela ja e a inteira: substitui-la
+      // agora zeraria o foco da folha, a fonte tocando e a verificacao em
+      // curso — exatamente o que a publicacao por addon existe para preservar.
+      if (!pendId[0] && !progPublicou) {
         if (alvoVod())
           stream_definir_lista_idade(resultado, nResultado, SDL_GetTicks() - resultadoQuando);
         else stream_definir_lista(resultado, nResultado);
       }
+      if (progPublicou)
+        printf("[addons] busca completa em %u ms\n", (unsigned)(SDL_GetTicks() - progInicio));
     }
+    progLigado = 0; progPublicou = 0;
+    progLimpar();
     free(resultado); resultado = NULL; nResultado = 0;
     if (pendId[0]) {
       char id[64], tipo[16];
@@ -410,6 +473,79 @@ AddEstado addons_estado(void) {
   // Busca principal ociosa: e a vez do prefetch pendente, se houver.
   if (e != ADD_BUSCANDO && !fioVivo) fontecache_avancar();
   return e;
+}
+
+// --- publicacao por addon (#221) ---------------------------------------------
+// No fio da UI. Resposta de busca que ja nao e a da tela (pedido novo na fila,
+// conta/perfil trocados) e jogada fora aqui, sem nunca chegar a lista.
+static void progDrenar(void) {
+  Chegada local[ADD_MAX * 2];
+  int q, k;
+  if (!progLigado) return;
+  pthread_mutex_lock(&progTrava);
+  k = progN;
+  memcpy(local, progFila, sizeof(Chegada) * (size_t)k);
+  progN = 0;
+  pthread_mutex_unlock(&progTrava);
+  for (q = 0; q < k; q++) {
+    if (!pendId[0] && escopoAindaAtual(&fioEscopo)) {
+      if (!progPublicou)
+        printf("[addons] primeira resposta em %u ms: %s\n",
+               (unsigned)(SDL_GetTicks() - progInicio), addon[local[q].idx].nome);
+      stream_lista_acrescentar(local[q].a, local[q].n, local[q].idx);
+      progPublicou = 1;
+    }
+    free(local[q].a);
+  }
+}
+
+void addons_drenar(void) { progDrenar(); }
+
+int addons_busca_parcial(void) {
+  return fioVivo && progLigado && atomic_load(&estado) == ADD_BUSCANDO;
+}
+
+unsigned addons_busca_ms(void) {
+  return addons_busca_parcial() ? SDL_GetTicks() - progInicio : 0;
+}
+
+int addons_faltam(char *nomes, unsigned tam) {
+  int i, k = 0;
+  size_t usado = 0;
+  if (nomes && tam) nomes[0] = 0;
+  if (!addons_busca_parcial()) return 0;
+  pthread_mutex_lock(&progTrava);
+  for (i = 0; i < nAddon && i < ADD_MAX; i++) {
+    if (progEstado[i] != 1) continue;
+    if (nomes && tam && usado + 1 < tam) {
+      int w = snprintf(nomes + usado, tam - usado, "%s%s", k ? ", " : "", addon[i].nome);
+      if (w > 0) usado += (size_t)w;
+      if (usado >= tam) usado = tam - 1;
+    }
+    k++;
+  }
+  pthread_mutex_unlock(&progTrava);
+  return k;
+}
+
+int addons_pendente_antes(int idx) {
+  int i, r = 0;
+  if (!addons_busca_parcial()) return 0;
+  pthread_mutex_lock(&progTrava);
+  for (i = 0; i < idx && i < nAddon && i < ADD_MAX; i++)
+    if (progEstado[i] == 1) { r = 1; break; }
+  pthread_mutex_unlock(&progTrava);
+  return r;
+}
+
+int addons_pendente_nome(const char *nome) {
+  int i, r = 0;
+  if (!nome || !*nome || !addons_busca_parcial()) return 0;
+  pthread_mutex_lock(&progTrava);
+  for (i = 0; i < nAddon && i < ADD_MAX; i++)
+    if (progEstado[i] == 1 && !strcasecmp(addon[i].nome, nome)) { r = 1; break; }
+  pthread_mutex_unlock(&progTrava);
+  return r;
 }
 
 int addons_ocupado(void) {
@@ -1115,7 +1251,12 @@ void addons_buscar_legendas(const char *imdb, const char *tipo) {
 // e quem separa.
 #define ADD_FIOS 2
 #else
-#define ADD_FIOS 4
+// UM FIO POR ADDON (#221), ate 12. Com 4, a quinta consulta so saia quando um
+// dos quatro primeiros soltasse — e um addon mudo segura o fio dele os 12 s
+// inteiros. No D1 da 1.7.0 o .tpk tem de 4 a 13 addons de fonte por consulta;
+// com fila, o addon rapido instalado por ultimo esperava o lento da frente.
+// O fio passa a vida esperando socket (ver acima): doze nao custam CPU.
+#define ADD_FIOS 12
 #endif
 
 typedef struct {
@@ -1161,6 +1302,9 @@ typedef struct {
   int (*cancelado)(void *);   // NULL = nunca cancela
   void *ctx;
   int timeout;                // segundos por requisicao (12 na 1a rodada)
+  int progresso;              // 1 = a busca real que publica aos poucos (#221)
+  int rodada;                 // 0/1 = primeira, 2 = segunda chance
+  Uint32 inicio;              // SDL_GetTicks do disparo, para o log por addon
   pthread_mutex_t trava;
 } Consulta;
 
@@ -1248,12 +1392,25 @@ static void *fioFontes(void *u) {
         } else { free(a2); free(alt); }
       }
     }
-    if (!corpo) { free(achados); printf("[addons] %s: sem resposta\n", addon[i].nome); continue; }
+    if (!corpo) {
+      free(achados);
+      printf("[addons] %s: sem resposta (%u ms)\n", addon[i].nome,
+             (unsigned)(SDL_GetTicks() - c->inicio));
+      // Desistiu de vez quando nao ha segunda chance pela frente: a mesma regra
+      // de segundaChance (mudoSeg ainda e o da consulta anterior aqui).
+      if (c->progresso)
+        progMarcar(i, NULL, 0, c->rodada == 2 || addon[i].mudoSeg >= 2 ? 3 : 1);
+      continue;
+    }
+    if (c->progresso) progMarcar(i, achados, n, 2);
     c->baldes[meu].respondeu = 1;
     c->baldes[meu].n = n;
     c->baldes[meu].achados = achados;
-    printf("[addons] %s: %d fontes (%u bytes)\n",
-           addon[i].nome, c->baldes[meu].n, (unsigned)strlen(corpo));
+    // O TEMPO DE CADA ADDON NO LOG (#221): sem ele o D1 so dava o total da
+    // consulta, e "quem segura" tinha de ser adivinhado pela ordem das linhas.
+    printf("[addons] %s: %d fontes (%u bytes, %u ms)\n",
+           addon[i].nome, c->baldes[meu].n, (unsigned)strlen(corpo),
+           (unsigned)(SDL_GetTicks() - c->inicio));
     // RESPOSTA CURTA SEM FONTE VAI PARA O LOG. No registro 1504 havia
     // "Torrentio TB: 0 fontes (75 bytes)": 75 bytes nao sao {"streams":[]}
     // (14), e provavelmente e o addon dizendo por que (chave de debrid
@@ -1328,6 +1485,7 @@ static void segundaChance(Consulta *c, int fios) {
     c2.id = c->id; c2.tipo = c->tipo; c2.tipoAlt = c->tipoAlt;
     c2.nBaldes = m; c2.cancelado = c->cancelado; c2.ctx = c->ctx;
     c2.timeout = 20;
+    c2.progresso = c->progresso; c2.rodada = 2; c2.inicio = c->inicio;
     pthread_mutex_init(&c2.trava, NULL);
     printf("[addons] %d sem resposta: segunda tentativa (20 s)\n", m);
     fflush(stdout);
@@ -1348,7 +1506,7 @@ static void segundaChance(Consulta *c, int fios) {
 
 static int consultar(const char *id, const char *tipo, const char *base, int fios,
                      int (*cancelado)(void *), void *ctx, Stream **saida,
-                     Resumo *rs) {
+                     Resumo *rs, int progresso) {
   Consulta c;
   Stream *achados = NULL;
   int n = 0, i, q;
@@ -1357,6 +1515,8 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
   memset(&c, 0, sizeof c);
   c.id = id; c.tipo = tipo; c.tipoAlt = tipoAlternativo(tipo);
   c.cancelado = cancelado; c.ctx = ctx;
+  c.progresso = progresso;
+  c.inicio = SDL_GetTicks();
   pthread_mutex_init(&c.trava, NULL);
   c.baldes = calloc((size_t)nAddon, sizeof(BaldeFonte));
   if (c.baldes) {
@@ -1414,6 +1574,13 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
       fflush(stdout);
     } }
 
+  if (progresso && c.baldes) {
+    pthread_mutex_lock(&progTrava);
+    for (q = 0; q < c.nBaldes; q++)
+      if (c.baldes[q].idx < ADD_MAX) progEstado[c.baldes[q].idx] = 1;
+    pthread_mutex_unlock(&progTrava);
+  }
+
   if (c.baldes && c.nBaldes > 0) {
     pthread_t f[ADD_FIOS];
     int criados = 0;
@@ -1465,7 +1632,7 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
 
 int addons_consultar(const char *id, const char *tipo, const char *base, int fios,
                      int (*cancelado)(void *), void *ctx, Stream **saida) {
-  return consultar(id, tipo, base, fios, cancelado, ctx, saida, NULL);
+  return consultar(id, tipo, base, fios, cancelado, ctx, saida, NULL, 0);
 }
 
 // Contagens da LISTA (nao da consulta), para "nao ha a quem perguntar".
@@ -1524,7 +1691,8 @@ static void *buscar(void *u) {
   Resumo rs;
   marco("addons: consulta inicio");
   resumoDaLista(&rs);
-  n = consultar(alvoId, alvoTipo, fioBase, ADD_FIOS, NULL, NULL, &achados, &rs);
+  n = consultar(alvoId, alvoTipo, fioBase, ADD_FIOS, NULL, NULL, &achados, &rs,
+                progLigado);
   resultadoQuando = SDL_GetTicks();
   resultadoCacheavel = n > 0 && rs.semResposta == 0;
   if (n < 0) n = 0;
@@ -1547,10 +1715,14 @@ static void dispararBusca(void) {
   fontecache_ceder();
   estado = ADD_BUSCANDO;
   fioVivo = 1;
+  progLimpar();
+  progLigado = alvoVod();
+  progPublicou = 0;
+  progInicio = SDL_GetTicks();
   capturarEscopo(&fioEscopo);
   snprintf(fioBase, sizeof fioBase, "%s", alvoBase);
   alvoBase[0] = 0;   // consumida: origem e do pedido, nao de sessao
-  if (pthread_create(&fio, NULL, buscar, NULL) != 0) { fioVivo = 0; estado = ADD_PARADO; }
+  if (pthread_create(&fio, NULL, buscar, NULL) != 0) { fioVivo = 0; progLigado = 0; estado = ADD_PARADO; }
 }
 
 // Diz de que addon o PROXIMO alvo veio. Chamar ANTES de addons_buscar; a
@@ -1646,6 +1818,8 @@ void addons_encerrar(void) {
   adotado = 0;
   if (fioVivo) pthread_join(fio, NULL);
   fioVivo = 0;
+  progLigado = 0; progPublicou = 0;
+  progLimpar();
   pthread_mutex_lock(&legTrava);
   legParar = 1; legGeracao++; juntarLeg = fioLegCriado;
   pthread_mutex_unlock(&legTrava);

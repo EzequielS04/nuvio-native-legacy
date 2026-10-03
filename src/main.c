@@ -307,6 +307,30 @@ static void teclasInjetadas(void (*entregar)(const SDL_Event *)) {
       continue;
     }
 
+    // "tocar:960,540" e "arrastar:x0,y0,x1,y1" fazem o papel do DEDO (#216),
+    // em coordenadas do layout: SDL_FINGER* normalizados, pelo mesmo
+    // ponteiro_evento do toque de verdade.
+    if (dp && (!strncmp(linha, "tocar:", 6) || !strncmp(linha, "arrastar:", 9))) {
+      float x0 = 0, y0 = 0, x1, y1;
+      int n = sscanf(dp + 1, "%f,%f,%f,%f", &x0, &y0, &x1, &y1), passos, i;
+      if (n < 2) continue;
+      if (n < 4) { x1 = x0; y1 = y0; }
+      passos = n < 4 ? 0 : 12;
+      { SDL_Event t; SDL_zero(t);
+        t.tfinger.touchId = 1; t.tfinger.fingerId = 1;
+        t.type = SDL_FINGERDOWN; t.tfinger.x = x0 / NV_TELA_W; t.tfinger.y = y0 / NV_TELA_H;
+        ponteiro_evento(&t, entregar);
+        for (i = 1; i <= passos; i++) {
+          t.type = SDL_FINGERMOTION;
+          t.tfinger.x = (x0 + (x1 - x0) * i / passos) / NV_TELA_W;
+          t.tfinger.y = (y0 + (y1 - y0) * i / passos) / NV_TELA_H;
+          ponteiro_evento(&t, entregar);
+        }
+        t.type = SDL_FINGERUP; t.tfinger.x = x1 / NV_TELA_W; t.tfinger.y = y1 / NV_TELA_H;
+        ponteiro_evento(&t, entregar); }
+      continue;
+    }
+
     SDL_Keycode k = codigoDaTecla(linha);
     if (!k) continue;
     SDL_Event e; SDL_zero(e);
@@ -746,6 +770,19 @@ int main(int argc, char **argv) {
   glViewport(0, 0, dw, dh);
   gfx_tamanho_alvo(dw, dh);
   capW = dw; capH = dh;
+#ifdef NV_ANDROID
+  // QUADRO DE ESPERA NA COR DA SPLASH. A SurfaceView do SDL fura a janela: com
+  // ela no ar, o fundo da janela (drawable/abertura.xml) some atras do furo e o
+  // que aparece e PRETO ate o primeiro SwapWindow — medido no emulador Android
+  // TV, ~700 ms entre a splash do sistema e a abertura; a TCL da #223 levou
+  // 2,8 s para o primeiro quadro. Um clear + swap aqui, antes dos shaders, troca
+  // esse preto pela cor da arte (#190819, a mesma de values/cores.xml). So no
+  // Android: na LG o sistema segura o splash.png ate o primeiro quadro, e uma
+  // cor lisa aqui apagaria a marca.
+  glClearColor(25.0f / 255.0f, 8.0f / 255.0f, 25.0f / 255.0f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+  SDL_GL_SwapWindow(win);
+#endif
 
   // O relogio dos marcos comeca AQUI e nao no topo do main: o que vem antes e
   // parse de argumento e SDL_Init, que nao dependem de nada nosso.
@@ -1186,6 +1223,7 @@ int main(int argc, char **argv) {
     if (abertura_ativa()) {
       int pend = 0;
       tex_estatisticas(NULL, &pend, NULL, NULL, NULL);
+      abertura_fundo_fica(app_no_login());
       abertura_desenhar(agora, dt, pend);
     }
     ponteiro_desenhar();

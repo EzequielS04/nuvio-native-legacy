@@ -66,6 +66,43 @@ static int reproduzir(Cena *c, int modo, int repor, const int *tocaNoPlayer,
   }
 }
 
+// #221: addons 0 e 2 faltam; a lista parcial tem fontes dos addons 1 e 3.
+static int faltaAntes(int addon, void *u) { (void)u; return addon > 0; }
+static void parcial(void) {
+  long pt[3] = { 1080, 2160, 720 };
+  unsigned char ac[3] = { 0, 0, 0 }, ex[3] = { 0, 0, 0 }, bo[3] = { 0, 1, 0 };
+  int ad[3] = { 1, 1, 3 };
+  FonteautoParcial p;
+  memset(&p, 0, sizeof p);
+  p.modo = FONTEAUTO_MELHOR; p.total = 3; p.preferida = -1; p.algumPendente = 1;
+  p.pontos = pt; p.acimaTeto = ac; p.excluida = ex; p.boa = bo; p.addon = ad;
+  p.pendenteAntes = faltaAntes;
+  CONFERE(fonteauto_pode_decidir(&p), "melhor: a 4K boa ja presente nao decide");
+  bo[1] = 0;
+  CONFERE(!fonteauto_pode_decidir(&p), "melhor: sem boa decidiu antes do prazo");
+  p.prazoPassou = 1;
+  CONFERE(fonteauto_pode_decidir(&p), "melhor: prazo passou e nao decidiu");
+  p.prefPendente = 1;
+  CONFERE(!fonteauto_pode_decidir(&p), "lembrada pendente: o prazo nao vale");
+  p.preferida = 2;
+  CONFERE(fonteauto_pode_decidir(&p), "lembrada presente nao decidiu");
+  p.preferida = -1; p.prefPendente = 0; p.prazoPassou = 0;
+  p.modo = FONTEAUTO_PRIMEIRA;
+  CONFERE(!fonteauto_pode_decidir(&p), "primeira: o addon 0 falta e decidiu");
+  ad[0] = ad[1] = 0;
+  p.pendenteAntes = NULL;
+  CONFERE(fonteauto_pode_decidir(&p), "primeira: nada antes falta e nao decidiu");
+  ac[0] = 1;   // a primeira (pela ordem) passa a estar acima do teto
+  CONFERE(fonteauto_pode_decidir(&p), "primeira: a de dentro do teto (1) e a da fila");
+  ac[1] = ac[2] = 1;
+  CONFERE(!fonteauto_pode_decidir(&p), "primeira: so acima do teto e alguem falta");
+  ex[0] = ex[1] = ex[2] = 1;
+  p.prazoPassou = 1;
+  CONFERE(!fonteauto_pode_decidir(&p), "sem candidata nao excluida decidiu");
+  p.algumPendente = 0; ex[0] = 0;
+  CONFERE(fonteauto_pode_decidir(&p), "ninguem falta e nao decidiu");
+}
+
 int main(void) {
   Cena c;
   int e, tocadas, i;
@@ -156,6 +193,8 @@ int main(void) {
 
   CONFERE(fonteauto_tentativas(FONTEAUTO_PRIMEIRA, 8) == 1, "primeira pede mais de 1");
   CONFERE(fonteauto_tentativas(FONTEAUTO_MELHOR, 8) == 8, "melhor mudou de 8");
+
+  parcial();
 
   if (falhas) { printf("fonteauto: %d falha(s)\n", falhas); return 1; }
   printf("fonteauto: tudo ok\n");

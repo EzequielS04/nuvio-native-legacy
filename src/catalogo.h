@@ -320,6 +320,17 @@ void cat_zerar_progresso(int indice);
 // conhecido (Trakt, conta, acao da pessoa) manda; sem ele, progresso >= 90 so
 // em filme. O(1), pode ser chamada por cartaz em todo quadro.
 int cat_visto(const CatItem *c);
+// A fronteira efetiva de conta/perfil troca o mapa em O(HIST_BALDES), uma
+// vez; repetir a mesma identidade conserva provas locais e de outras fontes.
+void cat_historico_contexto(const char *usuario, int perfil);
+unsigned long long cat_historico_geracao(void);
+int cat_historico_estado_id(const char *imdb, const char *tipo);
+int cat_historico_estado_item(int indice);
+void cat_historico_definir_id(const char *imdb, const char *tipo, int visto);
+// Worker captura geracao ANTES da rede. A resposta so pertence ao mapa se a
+// identidade ainda for a mesma; verificacao e escrita compartilham a trava.
+int cat_historico_definir_se_geracao(const char *imdb, const char *tipo,
+                                     int visto, unsigned long long geracao);
 
 void cat_salvar_progresso(int indice, double posSeg, double durSeg);
 void cat_salvar_progresso_ep(int indice, double posSeg, double durSeg, int temporada, int episodio);

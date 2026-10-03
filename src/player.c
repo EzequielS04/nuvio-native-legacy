@@ -87,6 +87,9 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "proxyts.h"
 #include "perfis.h"
 #include "sessao.h"
+#include "progresso.h"
+#include "fontevolta.h"
+#include "marco.h"
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -241,9 +244,23 @@ static int   idx = 0;
 static int   tocando = 1;
 // Uma unica sessao VOD pausada, por no maximo dois minutos. Nao abre conexao
 // especulativa: e o pipeline que ja estava exibindo este titulo.
+//
+// O PRECO DE RETER MAIS: o pipeline e um so. Enquanto a sessao esta retida o
+// trailer do destaque da home nao toca (home_trailer_passo exige
+// !player_retido(), app.c) — sao ate 2 min de home sem trailer
+// depois de sair para a ilha. Abrir uma pagina de titulo, outro video, trocar
+// de perfil/conta ou dispensar a ilha soltam na hora, como antes. Passado o
+// prazo, o Retomar ainda evita a busca nos addons pela fonte guardada
+// (fontevolta.h).
 #define PLR_RETIDO_MS 120000u
 static int retido, prepararRetencao, retidoPerfil, retomarMkv;
 static Uint32 retidoDesde;
+// SAIDA PARA A ILHA SEM O FADE DO PLAYER (Android): o voo comeca assim que a
+// pausa foi confirmada (evento 3, ~3 ms na TCL), em vez de ~430 ms de OSD
+// apagando sobre o video parado antes de a home aparecer. Sem confirmacao no
+// teto, segue sem reter (fechamento normal).
+#define PLR_SAIDA_ILHA_TETO_MS 220u
+static Uint32 saidaIlhaDesde;
 static char retidoConta[96], retidoUrl[4096];
 // Botao em foco na fileira de transporte. Comeca no PLAY porque e a resposta
 // que nove de cada dez aberturas quer: o dedo para no centro e o OK decide.
@@ -483,6 +500,10 @@ static int credAvisado, credFimAvisado, semProxAvisado;
 static double credAvisadoEm;
 static int introIdx=-1, introT=-1, introE=-1;
 static int retomadaAplicada, retomarPct;
+#ifdef NV_ANDROID
+static double retomarSeg;
+static int retomadaNaPreparacao;
+#endif
 // "Assistir do comeco" (issue #46): trava da sessao, armada por
 // player_do_inicio depois de player_abrir. Tem de sobreviver as CHAMADAS
 // REPETIDAS de player_definir_episodio — uma delas dispara quando o nome do
@@ -554,7 +575,24 @@ int  player_tem_video(void) { return comVideo && !retido; }
 // sessao ignora o ponto salvo, inclusive nas re-chamadas tardias de
 // player_definir_episodio. O progresso gravado NAO e apagado — comecar do
 // zero nao desmarca nada (mesma regra do web: startOver so pula o seek).
-void player_do_inicio(void) { semRetomada = 1; retomarPct = 0; }
+double player_regra_retomada_inicial(double posSalva, double durSalva,
+                                     int percentual, int concluido) {
+  double pct;
+  if (percentual <= 0 || percentual >= concluido ||
+      !isfinite(posSalva) || !isfinite(durSalva) || durSalva <= 1.0 ||
+      posSalva <= 0.0 || posSalva >= durSalva || posSalva > 2147483.647)
+    return 0.0;
+  pct = posSalva * 100.0 / durSalva;
+  // Catalogo guarda percentual inteiro. Uma discrepancia maior que o
+  // arredondamento e dado velho/novo: espera a duracao do pipeline.
+  return fabs(pct - percentual) < 1.0 ? posSalva : 0.0;
+}
+void player_do_inicio(void) {
+  semRetomada = 1; retomarPct = 0;
+#ifdef NV_ANDROID
+  retomarSeg = 0.0;
+#endif
+}
 void player_definir_episodio(int t, int e) {
   const CatItem *c = item();
   epT = t; epE = e; linhaEp[0] = 0;
@@ -563,6 +601,17 @@ void player_definir_episodio(int t, int e) {
   // "progresso" lido ali seria de outro titulo qualquer.
   if (c && !canalSessao && !semRetomada && c->progresso > 0 && c->progresso < ajustes_cw_concluido() &&
       (strcmp(c->tipo,"series") || (t==c->temporada && e==c->episodio))) retomarPct=c->progresso;
+#ifdef NV_ANDROID
+  retomarSeg = 0.0;
+  if (c && retomarPct > 0) {
+    char chave[48]; ProgRegistro r;
+    int serie = !strcmp(c->tipo, "series");
+    prog_chave(chave, sizeof chave, c->imdb, serie ? t : 0, serie ? e : 0);
+    if (prog_por_chave(chave, &r))
+      retomarSeg = player_regra_retomada_inicial(r.posSeg, r.durSeg,
+                                                retomarPct, ajustes_cw_concluido());
+  }
+#endif
   // FILME TAMBEM PEDE MARCADOR, e ate agora nao pedia: esta linha desligava o
   // modulo e voltava. Fazia sentido enquanto a fonte era o api.introdb.app, que
   // e indexado por episodio; o TheIntroDB responde por imdb sozinho e devolve os
@@ -1136,6 +1185,9 @@ void player_abrir(int indiceCatalogo, const char *url) {
   memset(&zapEst, 0, sizeof zapEst); bannerAV = 0.0f; botaoAV = 0; infoAV = 0; pedRecarregar = 0;
   avLat0 = -1.0; avAtraso = 0.0; avPausaDesde = 0;
   retomadaAplicada=0; semRetomada=0;
+#ifdef NV_ANDROID
+  retomarSeg = 0.0; retomadaNaPreparacao = 0;
+#endif
   botao = PLR_PLAY;
   memset(focoB, 0, sizeof focoB);
   posSeg = 0.0f; relogio_zerar(&relLeg);
@@ -1224,10 +1276,21 @@ static int prebuscaCabe(const char *url) {
 #endif
 
 static void tocarFonte(const char *url) {
+  marco("abrir: url ao pipeline");
   video_definir_reconexao(!ehCanal());
   video_definir_modo_live(ehCanal() ? ajustes_livetv_modo() : 0);
   { char px[96];
-    comVideo = video_tocar(proxyts_resolver(url, px, sizeof px)); }
+#ifdef NV_ANDROID
+    // app.c define episodio e "do inicio" antes de entregar a fonte. O
+    // instante viaja junto da URL, nunca numa variavel pendente do Kotlin.
+    retomadaNaPreparacao = !ehCanal() && !semRetomada && retomarSeg > 0.0;
+    comVideo = video_tocar_posicao(proxyts_resolver(url, px, sizeof px),
+                                   retomadaNaPreparacao ? retomarSeg : 0.0);
+    if (!comVideo) retomadaNaPreparacao = 0;
+#else
+    comVideo = video_tocar(proxyts_resolver(url, px, sizeof px));
+#endif
+  }
   mkvass_video_aberto(comVideo);
   if (!comVideo) erroSemVideo();
   // No PiP a fonte nova retoca o mesmo canto — o destino de tela cheia do
@@ -1258,6 +1321,19 @@ void player_definir_fonte(const char *url) {
   tocarFonte(url);
 }
 
+void player_voltar_a_esperar(void) {
+  if (!aberto) return;
+  if (comVideo) { video_parar(); comVideo = 0; }
+  mkvass_parar();
+  mkvass_video_aberto(0);
+#ifndef __EMSCRIPTEN__
+  prebuscaUrl[0] = 0;
+#endif
+  esperandoFonte = 1; erroFonte = 0; tocando = 1;
+  erroTitulo[0] = erroDica[0] = 0;
+  retomadaAplicada = 0; inicioImagem = 0;
+}
+
 // Consome o pedido de abrir a folha de faixas: quem le, zera.
 int  player_pediu_faixas(void) { int v = pedFaixas; pedFaixas = 0; return v; }
 
@@ -1280,8 +1356,42 @@ static void idTrakt(const CatItem *ci, char *dst, size_t n) {
   else snprintf(dst, n, "%s", base);
 }
 
+// O ALVO DO STREAM desta sessao, no formato que app.c usa para pedir fontes
+// (alvoPlayer): "tt1" no filme, o id do episodio na serie.
+static void alvoStream(char *dst, unsigned tam) {
+  const CatItem *c = item();
+  dst[0] = 0;
+  if (!c || !c->imdb[0]) return;
+  if (epT > 0 && epE > 0) cat_id_stream(idxAtual(), epT, epE, dst, tam);
+  else snprintf(dst, tam, "%s", c->imdb);
+}
+
+// A FONTE PARA O PROXIMO RETOMAR (fontevolta.h). Roda uma vez por sessao, no
+// fechamento de verdade ou na suspensao — nunca no descarte da retida, que ja
+// passou por aqui. So a sessao que TOCOU guarda: pronto, sem erro, duracao de
+// titulo (o clipe de aviso de 30 s do debrid nao conta) e sem ter terminado.
+// Falhou ou terminou: apaga, para o Retomar nao reabrir o que nao serve.
+static void lembrarFonte(void) {
+  const Stream *s = stream_item(stream_atual());
+  const char *url = video_url_atual();
+  double cred;
+  char alvo[64];
+  if (ehCanal() || !comVideo) return;
+  if (erroFonte || video_falhou()) { fontevolta_esquecer("sessao falhou"); return; }
+  if (!video_pronto() || duracaoSeg < 120.0f) return;
+  cred = video_creditos();
+  if (cred <= 1.0) cred = intro_creditos_seg();
+  if (player_regra_concluiu(posSeg, duracaoSeg, cred)) { fontevolta_esquecer("titulo concluido"); return; }
+  // A lista pode ter sido trocada por baixo (a busca de fundo do Retomar que
+  // abriu pela fonte guardada): quem toca e a entrada que ja existe.
+  if (!s || strcmp(s->url, url)) return;
+  alvoStream(alvo, sizeof alvo);
+  fontevolta_guardar(alvo, sessao_usuario(), perfis_ativo(), s, stream_idade_ms(), SDL_GetTicks());
+}
+
 static void fecharSessao(int manter) {
   int jaRetido = retido;
+  if (!jaRetido) lembrarFonte();
   // Salvar ANTES de parar: video_parar descarrega o pipeline e a posicao some
   // junto. Titulo quase no fim conta como visto por inteiro — voltar a um card
   // marcando "2 min restantes" que na verdade acabou e pior que arredondar.
@@ -1419,7 +1529,7 @@ static void fecharSessao(int manter) {
            (unsigned)(tv - t0), (unsigned)(SDL_GetTicks() - tv));
     fflush(stdout); }
   if (!manter) comVideo = 0;
-  retido = manter; prepararRetencao = 0;
+  retido = manter; prepararRetencao = 0; saidaIlhaDesde = 0;
   esperandoFonte = 0; aberto = 0; saindo = 0; pediuSair = 0;
   mini = 0; querMini = 0; miniGuia = 0; janAtiva = 0;
   avisarCascaAberto(0);
@@ -1450,6 +1560,9 @@ void player_preparar_retencao(void) {
   // player. Sem confirmacao na saida, o app usa o fechamento normal.
   if (prepararRetencao || retido || !podeReter()) return;
   prepararRetencao = 1;
+#ifdef NV_ANDROID
+  saidaIlhaDesde = SDL_GetTicks() | 1u;
+#endif
   video_pausar(1);
 }
 
@@ -2354,7 +2467,8 @@ void player_atualizar(float dt, Uint32 agora) {
       long ped = 0, bytes = 0; int col = 0, tot = 0;
       mkvass_estatisticas(&ped, &bytes, &col, &tot);
       printf("[player] pre-busca da legenda: video solto apos %u ms (%s; %d/%d blocos, %ld Ranges, %ld KB)\n",
-             (unsigned)esperou, fase == 1 ? "teto vencido, o resto segue em segundo plano"
+             (Sint32)esperou < 0 ? 0u : (unsigned)esperou,
+             fase == 1 ? "teto vencido, o resto segue em segundo plano"
              : "a pre-busca acabou", col, tot, ped, bytes / 1024);
       fflush(stdout);
       snprintf(u, sizeof u, "%s", prebuscaUrl);
@@ -2380,7 +2494,15 @@ void player_atualizar(float dt, Uint32 agora) {
   // enquanto o app ainda procurava fonte, e ela sumiria antes de o filme
   // aparecer.
   if (!inicioImagem && comVideo && video_pronto()) { inicioImagem = agora; acordar(); }
-  if (saindo && entrada < 0.02f) { aberto = 0; saindo = 0; entrada = 0.0f; avisarCascaAberto(0); return; }
+  if (saindo && saidaIlhaDesde && prepararRetencao &&
+      (video_pausa_confirmada() ||
+       (Sint32)(SDL_GetTicks() - saidaIlhaDesde) >= (Sint32)PLR_SAIDA_ILHA_TETO_MS)) {
+    printf("[player] saida para a ilha em %d ms (pausa %d)\n",
+           (int)(Sint32)(SDL_GetTicks() - saidaIlhaDesde), video_pausa_confirmada());
+    fflush(stdout);
+    entrada = 0.0f;
+  }
+  if (saindo && entrada < 0.02f) { aberto = 0; saindo = 0; entrada = 0.0f; saidaIlhaDesde = 0; avisarCascaAberto(0); return; }
 
   // Havendo pipeline, posicao e duracao vem DELE; o dt so serve para as
   // animacoes. O relogio somado continua existindo para quando nao ha video
@@ -2440,8 +2562,21 @@ void player_atualizar(float dt, Uint32 agora) {
                     strcmp(cs->tipo, "series") ? 0 : epE, (long)(d * 1000.0));
     }
     if (!retomadaAplicada && video_pronto() && d>1.0) {
+#ifdef NV_ANDROID
+      // O ack chega antes do prepare. Se a ponte/Media3 recusou a posicao,
+      // recua ao seek de sempre; pendente nunca vira um segundo seek.
+      int estado = retomadaNaPreparacao ? video_retomada_inicial_estado() : -1;
+      if (estado != 0) {
+        retomadaAplicada = 1;
+        if (estado > 0) marco("abrir: ponto salvo na preparacao");
+        if (estado < 0 && retomarPct > 0) {
+          marco("abrir: seek para o ponto salvo"); video_buscar(d * retomarPct / 100.0);
+        }
+      }
+#else
       retomadaAplicada=1;
-      if(retomarPct>0) video_buscar(d*retomarPct/100.0);
+      if(retomarPct>0) { marco("abrir: seek para o ponto salvo"); video_buscar(d*retomarPct/100.0); }
+#endif
     }
     tocando = video_tocando();
     { const CatItem *ci = ehCanal() ? NULL : item();
@@ -2962,9 +3097,18 @@ static int ponteiroNoPlayer(void) {
   return ponteiro_ativo() && aberto && !saindo &&
          !posplay_visivel() && !pausao_visivel();
 }
-static void ponteiroAcordar(int a, int b) { (void)a; (void)b; soBarra = 0; acordar(); }
+// DEDO (#216): tocar no video com os controles escondidos so os mostra (o
+// gesto de todo player de celular); com eles na tela, tocar no video os
+// esconde. Play/Pause por dedo e o botao. O Magic Remote segue como antes.
+static int visivelAntesDoToque;
+static void ponteiroAcordar(int a, int b) {
+  (void)a; (void)b;
+  if (ponteiro_toque()) visivelAntesDoToque = visivel;
+  soBarra = 0; acordar();
+}
 static void ponteiroPlayPause(int a, int b) {
   (void)a; (void)b;
+  if (ponteiro_toque()) { if (visivelAntesDoToque) visivel = 0; return; }
   botao = PLR_PLAY; barraFoco = 0; skipFoco = 0;
   alternarTocando(); acordar();
 }
@@ -2982,6 +3126,19 @@ static void ponteiroBuscar(int a, int b) {
   acordar();
   if (ehCanal() || duracaoSeg <= 0.0f || barraPtrW <= 0.0f) return;
   f = anim_clamp((ponteiro_x() - barraPtrX) / barraPtrW, 0.0f, 1.0f);
+  if (ponteiro_toque()) {
+    // ARRASTAR NA BARRA (#216): o mesmo avanco das setas (saltar) — video
+    // pausado, posSeg na mao do dedo, UMA busca no fim (terminarSalto, depois
+    // de PLR_SCRUB_FIM_MS sem movimento).
+    if (!scrubbing) {
+      scrubbing = 1; scrubPassos = 0; scrubTocava = tocando;
+      if (tocando && comVideo) { video_pausar(1); tocando = 0; }
+    }
+    barraFoco = 1; skipFoco = 0;
+    posSeg = f * duracaoSeg;
+    scrubUltimo = SDL_GetTicks();
+    return;
+  }
   posSeg = f * duracaoSeg;
   if (comVideo) video_buscar(posSeg);
 }
@@ -3525,8 +3682,14 @@ void player_desenhar(Uint32 agora) {
   // A area clicavel da barra e mais alta que o trilho de 4-8 px: um fio desse
   // tamanho nao se acerta com a mao no ar.
   barraPtrX = bx; barraPtrW = bw;
-  if (ponteiroNoPlayer() && a > 0.3f)
-    ponteiro_alvo(bx, yBarra - 14.0f, bw, hTrilho + 28.0f, ponteiroBarra, ponteiroBuscar, 0, 0);
+  // Com dedo (#216) a faixa cresce para 44 px de cada lado: o trilho tem 4 px
+  // logicos, menos de meio milimetro num celular. Os botoes, registrados
+  // depois, continuam ganhando onde a faixa encosta neles.
+  if (ponteiroNoPlayer() && a > 0.3f) {
+    float folga = ponteiro_tem_toque() ? 44.0f : 14.0f;
+    ponteiro_alvo(bx, yBarra - folga, bw, hTrilho + folga * 2.0f, ponteiroBarra, ponteiroBuscar, 0, 0);
+    ponteiro_alvo_arrastavel();
+  }
   // O buffer do pipeline, entre o andado e o fim: e o que mostra que o video
   // esta a frente do relogio. Sem dado do pipeline o segmento nao existe —
   // inventar "quase todo carregado" seria pior que a barra simples. No web ele
