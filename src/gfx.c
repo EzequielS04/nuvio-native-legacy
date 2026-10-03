@@ -136,6 +136,16 @@ static const char *FS_CABECA =
   "varying mediump vec2 vAmb;\n"
   "#endif\n"
   "uniform sampler2D uTex;\n"
+  // AMOSTRA DE ARTE COM LOD -0,5 (nitidez, 03/10/2026). O cache sobe arte de
+  // card, logo e icone com GL_LINEAR_MIPMAP_NEAREST, que escolhe o nivel da
+  // piramide MAIS PROXIMO: passando de 0,707x do decodificado (lambda > 0,5)
+  // ele pula para o nivel de METADE e AMPLIA. MEDIDO na bancada a 1080: icone
+  // de 128 desenhado a 20/22 px lia o nivel de 16 px (ampliado 1,25-1,4x) e a
+  // 38/44 o de 32 — borda maxima 160-166 contra 215-242 nos tamanhos que
+  // caem num nivel maior. Com -0,5 a escolha vira floor(lambda): o nivel lido
+  // e sempre >= o desenho, so reduzido. Custo: zero ALU, a mesma UMA leitura
+  // (nao e trilinear); em textura sem piramide (texto, arte >= 1024) nada muda.
+  "#define NV_ARTE(uv) texture2D(uTex, uv, -0.5)\n"
   "uniform float uFoco;\n"
   "uniform float uBorda;\n"
   "uniform float uVarre;\n"
@@ -326,7 +336,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  vec2 uv = uv0;\n"
   "  vec3 cor = (contem > 0.5 && (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0))\n"
   "    ? vec3(0.173)\n"
-  "    : texture2D(uTex, clamp(uv, 0.0, 1.0)).rgb;\n"
+  "    : NV_ARTE(clamp(uv, 0.0, 1.0)).rgb;\n"
   "  if (uFoco > 0.004) {\n"
   // uVarre = a LUZ ENTRANDO (revela.h): a faixa nasce fora do canto
   // inferior esquerdo e desliza ate o repouso; em 0 e o especular de sempre.
@@ -430,7 +440,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
 
   // GFX_TEXTO — a forma da letra vem do ALPHA da textura, nunca do RGB
   "void main(){\n"
-  "  vec4 g = texture2D(uTex, vUv);\n"
+  "  vec4 g = NV_ARTE(vUv);\n"
   "  gl_FragColor = vec4(g.rgb, g.a * uCor.a);\n"
   "}\n",
 
@@ -682,7 +692,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
 
   // GFX_MARCA — a forma vem do ALPHA, a cor de uCor. Ver a nota em gfx.h.
   "void main(){\n"
-  "  float m = texture2D(uTex, vUv).a;\n"
+  "  float m = NV_ARTE(vUv).a;\n"
   "  gl_FragColor = vec4(uCor.rgb, uCor.a * m);\n"
   "}\n",
 
@@ -715,7 +725,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   // Era smoothstep(0.500,0.486): 1,4% da altura, 0,4 px num disco de 27.
   "  float m=clamp((0.5-d)*uAlt,0.0,1.0);\n"
   "  if(m<=0.001) discard;\n"
-  "  vec3 c=texture2D(uTex,clamp(cover(vUv),0.0,1.0)).rgb;\n"
+  "  vec3 c=NV_ARTE(clamp(cover(vUv),0.0,1.0)).rgb;\n"
   "  gl_FragColor=vec4(c,m*uCor.a);\n"
   "}\n",
 
@@ -738,7 +748,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float localX=clamp((vUv.x-x0)/dispW,0.0,1.0);\n"
   "  vec2 uv=vec2(localX,cropY+vUv.y*cropH);\n"
   "  float inside=step(x0,vUv.x)*step(vUv.x,1.0);\n"
-  "  vec4 pix=texture2D(uTex,clamp(uv,0.0,1.0));\n"
+  "  vec4 pix=NV_ARTE(clamp(uv,0.0,1.0));\n"
   "  vec3 c=pix.rgb;\n"
   // Dissolve amplo nas quatro bordas: o retrato se mistura com o banner em
   // vez de denunciar um retangulo cinza. O centro continua inteiro para o
@@ -817,7 +827,7 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "void main(){\n"
   "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
   "  if (m <= 0.001) discard;\n"
-  "  vec4 t = texture2D(uTex, vUv);\n"
+  "  vec4 t = NV_ARTE(vUv);\n"
   "  gl_FragColor = vec4(t.rgb, t.a * uCor.a * m);\n"
   "}\n",
 
