@@ -200,7 +200,7 @@ int    txt_pendentes = 0;
 // descuido — sem a regra escrita aqui, a proxima pessoa "conserta" um dos dois
 // e desalinha a tela.
 enum { PESO_REGULAR, PESO_MEDIUM, PESO_BOLD,
-       // A MONO DO REGISTRO (JetBrains Mono, OFL, fonts/JetBrainsMono-*.ttf).
+       // A MONO DO REGISTRO (JetBrains Mono, OFL, fonts/JetBrainsMonoNL-*.ttf, a variante SEM ligaduras: o "->" do log tem de sair como dois caracteres).
        // Nao e uma familia escolhivel: e a mesma em toda familia, porque so as
        // linhas do log a usam e uma coluna de log so alinha em monoespacada.
        // Sem o arquivo, o estilo cai no Regular/Bold da familia (ver
@@ -333,10 +333,12 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 13, PESO_MONO_R  },   // TXT_MONO13
   { 19, PESO_MONO_R  },   // TXT_MONO19
   { 44, PESO_BOLD    },   // TXT_LOG_N44
-  { 34, PESO_BOLD    },   // TXT_LOG_T34
+  { 35, PESO_BOLD    },   // TXT_LOG_T34 (34 no CSS; a InterDisplay e mais estreita)
   { 88, PESO_BOLD    },   // TXT_LOG_COD
   { 19, PESO_BOLD    },   // TXT_LOG_19B
   { 18, PESO_BOLD    },   // TXT_LOG_18B
+  { 14, PESO_MONO_B  },   // TXT_MONO14B
+  { 31, PESO_BOLD    },   // TXT_LOG_T31
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.
@@ -795,8 +797,8 @@ int txt_iniciar(const char *dirRecursos, float escala) {
   snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][0], 512, "%sfonts/AtkinsonHyperlegibleNext-Regular.ttf", base);
   snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][1], 512, "%sfonts/AtkinsonHyperlegibleNext-Medium.ttf", base);
   snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][2], 512, "%sfonts/AtkinsonHyperlegibleNext-Bold.ttf", base);
-  snprintf(caminhoMono[0], 512, "%sfonts/JetBrainsMono-Regular.ttf", base);
-  snprintf(caminhoMono[1], 512, "%sfonts/JetBrainsMono-SemiBold.ttf", base);
+  snprintf(caminhoMono[0], 512, "%sfonts/JetBrainsMonoNL-Regular.ttf", base);
+  snprintf(caminhoMono[1], 512, "%sfonts/JetBrainsMonoNL-SemiBold.ttf", base);
 #ifdef NV_ANDROID
   // Android: nao ha LG_Display nem /usr/share/fonts. A "LG" vira Roboto do
   // sistema e a "Droid" a DroidSans (so nas versoes antigas) ou Roboto.

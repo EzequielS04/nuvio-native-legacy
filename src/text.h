@@ -108,7 +108,7 @@ typedef enum {
   TXT_G30M,   // "· The Head" do OSD              30 / 500
   TXT_G52B,   // programa no OSD do canal         52 / 700
   // REGISTRO DO APP NO GLASS UI (logs-mockup.html, 03/10). TXT_MONO* sao a
-  // JetBrains Mono embarcada (fonts/JetBrainsMono-*.ttf): SO as linhas do log
+  // JetBrains Mono embarcada (fonts/JetBrainsMonoNL-*.ttf, a variante SEM ligaduras: o "->" do log tem de sair como dois caracteres): SO as linhas do log
   // e o que a pessoa digita/le como codigo usam. Sem o arquivo, caem na fonte
   // da interface. Os corpos sao os do CSS: a mono e a mesma fonte do mockup,
   // entao nao leva o +8% da InterDisplay. TXT_LOG* sao os corpos Inter que a
@@ -125,6 +125,8 @@ typedef enum {
   TXT_LOG_COD,  // codigo do registro (ladrilhos)   88 / 800
   TXT_LOG_19B,  // chip "Enviar agora", contagem    18 / 600
   TXT_LOG_18B,  // numero forte no medidor          17 / 600
+  TXT_MONO14B,  // numero da linha "quadros" no pacote 14 / 600
+  TXT_LOG_T31,  // "Registro do app" ao lado do relogio 30 / 700
   TXT_NFONTES
 } TxtEstilo;
 
