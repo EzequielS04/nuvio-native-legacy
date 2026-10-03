@@ -214,6 +214,13 @@ if [ "$1" = "--ipk" ]; then
   for f in $ARQ_DE_PESSOA $ACERVO_DE_PESSOA; do rm -f "$PALCO/app/art/$f"; done
   for g in $GLOB_DE_PESSOA; do rm -f "$PALCO"/app/art/$g; done
   for d in $DIR_DE_PESSOA; do rm -rf "$PALCO/app/art/$d"; done
+  # MODO DO BINARIO: o ares-package copia o modo do arquivo, e o `cp` la de cima
+  # SOBRESCREVE um deploy/app/nuvio-proto existente mantendo o modo ANTIGO dele.
+  # A 1.7.1 saiu assim com -rwx---r--: o app roda como uid 5152, que nao e dono
+  # nem grupo, entao sem x para "outros" o webOS nao executa e o app fecha ao
+  # abrir em toda TV (#224, #225). A C9 do dono nao pegou porque la o binario e
+  # trocado com chmod 755 a mao.
+  chmod 755 "$PALCO/app/nuvio-proto"
 
   "$ARES" "$PALCO/app" -o .
   IPK=$(ls -t ./*.ipk | head -1)
@@ -257,6 +264,13 @@ if [ "$1" = "--ipk" ]; then
   done
   if [ -n "$VAZOU" ]; then
     echo "    ABORTADO: o pacote leva credencial ->$VAZOU"
+    rm -f "$IPK"
+    exit 1
+  fi
+  # O chmod acima e a intencao; o modo DENTRO do pacote e o fato (#224).
+  MODO=$(cd "$PALCO" && tar tvzf data.tar.gz 2>/dev/null | awk '/\/nuvio-proto$/ {print $1}')
+  if [ "$MODO" != "-rwxr-xr-x" ]; then
+    echo "    ABORTADO: nuvio-proto no pacote com modo '${MODO:-ausente}', esperado -rwxr-xr-x (o webOS nao executa)"
     rm -f "$IPK"
     exit 1
   fi
