@@ -650,3 +650,17 @@ static float ajPreviaEditor(int op, float x, float y, float w) {
   }
   return ajPrevia(op, x, y, w);
 }
+
+// O melhor resultado da busca: a arte do titulo em cena com o valor atual da
+// opcao numa tarja, como a legenda aparece no player.
+void ajustes_previa_busca(int op, float x, float y, float w, float h, float a) {
+  char v[160];
+  TxtLinha l;
+  if (op < 0 || op >= AJ_N) return;
+  ajImg(ajArte(AJA_FUNDO, 21), (GfxRect){ x, y, w, h }, 14, a);
+  uxValorTexto(op, uxValorAtual(op), v, sizeof v);
+  if (!v[0]) return;
+  l = txt_linha_corta(TXT_MINI, v, 255, 255, 255, 255, w - 40);
+  gfx_cor((GfxRect){ x + (w - l.w) * 0.5f - 10, y + h - 14 - l.h - 8, l.w + 20, l.h + 8 }, 6.0f / (l.h + 8), 0, 0, 0, 0.72f * a);
+  txt_desenhar_alpha(l, x + (w - l.w) * 0.5f, y + h - 14 - l.h - 4, a);
+}

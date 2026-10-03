@@ -353,6 +353,16 @@ int main(int argc, char **argv) {
     spot_abrir_ajustes(0);
     assert(!spot_consulta()[0] && achar(T_AJUSTE, NULL) >= 0);
     tecla(SDLK_ESCAPE);
+    // Buscar nos ajustes (mockup de Ajustes, quadro "busca"): solido e vidro.
+    spot_abrir_ajustes(0);
+    spot_texto_externo("legenda");
+    paraLista();
+    if (spot_linha_focada() > 1) tecla(SDLK_UP);   // o melhor resultado
+    captura(saida, "ajustes-solido");
+    ajustes_definir_vidro(1);
+    captura(saida, "ajustes-vidro");
+    ajustes_definir_vidro(0);
+    tecla(SDLK_ESCAPE);
     ajustes_abrir_opcao(p.indice);
     ajustes_iniciar();
     assert(ajustes_opcao_em_foco() == p.indice);
