@@ -3242,7 +3242,7 @@ void player_desenhar(Uint32 agora) {
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
   int furar = player_com_video();
 #ifdef NV_SHOT_HOOKS
-  if (shotSemFuro) furar = 0;   // capturas: a arte faz de video
+  if (shotSemFuro && encolhe > 0.999f) furar = 0;   // capturas: a arte faz de video
 #endif
 #ifdef NV_TPK
   // O FURO SO COM IMAGEM (#188). O host manda `pronto` ANTES do Start (Video.cs,
@@ -3295,9 +3295,39 @@ void player_desenhar(Uint32 agora) {
       GfxRect fa = { janAgora.x, janAgora.y, janAgora.w, janAgora.h };
       gfx_furo_raio(fa, (16.0f * (1.0f - janT)) / (fa.h > 1.0f ? fa.h : 1.0f));
     } else {
-      if (furo.w < NV_TELA_W - 0.5f || furo.h < NV_TELA_H - 0.5f)
-        gfx_cor(tela, 0.0f, 0, 0, 0, 1.0f);
-      if (furo.w > 0.0f && furo.h > 0.0f) gfx_furo(furo);
+      // VIDEO RECUADO PARA O "A SEGUIR" / "MAIS COMO ESTE" (Glass UI): em
+      // volta dele, a arte do titulo tao desfocada que so a cor fica (a
+      // textura pequena esticada) e escurecida, em vez do preto; o video ganha
+      // raio de cartaz e sombra.
+      int recuado = encolhe < 0.999f;
+      if (furo.w < NV_TELA_W - 0.5f || furo.h < NV_TELA_H - 0.5f) {
+        const char *arte = (recuado && c && c->backdrop[0]) ? artehero_url(c) : NULL;
+        GLuint tb = arte ? tex_obter_larg(arte, 480) : 0;
+        if (tb) tb = gfx_desfocado(tb, arte);   // a copia 96x54 desfocada (#133)
+        gfx_cor(tela, 0.0f, 0.043f, 0.047f, 0.055f, 1.0f);
+        if (tb) {
+          gfx_tex_aspect_atual = tex_aspecto(arte);
+          gfx_rect(tela, tb, GFX_CARD, 0, 0, 0, 0.0f, 0, 0, 0, 1.0f);
+          gfx_tex_aspect_atual = 0.0f;
+          gfx_cor(tela, 0.0f, 0, 0, 0, 0.58f);
+        }
+        if (recuado)
+          gfx_rect((GfxRect){ furo.x - 40.0f, furo.y - 10.0f, furo.w + 80.0f, furo.h + 90.0f }, 0, GFX_SOMBRA,
+                   1.0f, 0, 0, 0.5f, 0, 0, 0, 0.5f);
+      }
+#ifdef NV_SHOT_HOOKS
+      if (shotSemFuro) {
+        const char *arte = c && c->backdrop[0] ? artehero_url(c) : NULL;
+        GLuint tv = arte ? tex_obter_hero(arte) : 0;
+        if (tv) { gfx_tex_aspect_atual = tex_aspecto(arte);
+                  gfx_rect(furo, tv, GFX_CARD, 0, 0, 0, recuado ? 22.0f / furo.h : 0.0f, 0, 0, 0, 1.0f);
+                  gfx_tex_aspect_atual = 0.0f; }
+      } else
+#endif
+      if (furo.w > 0.0f && furo.h > 0.0f) {
+        if (recuado) gfx_furo_raio(furo, 22.0f / furo.h);
+        else gfx_furo(furo);
+      }
     }
   } else {
     // CANAL NAO TEM BACKDROP, TEM LOGO. O addon de canais manda a MESMA imagem

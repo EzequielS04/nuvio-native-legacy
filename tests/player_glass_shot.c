@@ -30,6 +30,7 @@
 #include "parental.h"
 #include "vistoep.h"
 #include "progresso.h"
+#include "posplay.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -179,6 +180,39 @@ static GLuint texDe(const char *rel) {
   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
   SDL_FreeSurface(t);
   return tex;
+}
+
+static CatItem serieComEps(void) {
+    static const char *nm[8] = { "The End", "The Target", "The Head", "The Ghouls", "The Past", "The Trap", "The Radio", "The Beginning" };
+    static const char *sn[8] = { "Lucy deixa o Ref\xc3\xbagio 33 pela primeira vez, atr\xc3\xa1s do pai levado na invas\xc3\xa3o.",
+      "Na superf\xc3\xad" "cie, Lucy descobre que a Wasteland tem as pr\xc3\xb3prias regras.",
+      "Lucy, Maximus e o Ghoul disputam a mesma recompensa no deserto.",
+      "Um acordo com o Ghoul cobra um pre\xc3\xa7o que Lucy n\xc3\xa3o esperava.",
+      "Em Filly, cada um enfrenta o que deixou para tr\xc3\xa1s.",
+      "No Ref\xc3\xbagio 32, Norm encontra o que ningu\xc3\xa9m deveria ver.",
+      "Uma transmiss\xc3\xa3o muda o rumo de todos os que est\xc3\xa3o na estrada.",
+      "Griffith Observatory guarda a resposta que Lucy procurava." };
+    CatEp eps[16];
+  CatItem f = serie;
+    int i;
+    snprintf(f.imdb, sizeof f.imdb, "tt99999990");
+    f.nTemporadas = 2; f.temporadas[0] = 1; f.temporadas[1] = 2;
+    memset(eps, 0, sizeof eps);
+    for (i = 0; i < 16; i++) {
+      char r[40];
+      eps[i].temporada = i < 8 ? 1 : 2; eps[i].episodio = i % 8 + 1;
+      snprintf(eps[i].nome, sizeof eps[i].nome, "%s", nm[i % 8]);
+      snprintf(eps[i].sinopse, sizeof eps[i].sinopse, "%s", sn[i % 8]);
+      snprintf(eps[i].duracao, sizeof eps[i].duracao, "56 min");
+      snprintf(eps[i].data, sizeof eps[i].data, "10 de abril de 2024");
+      snprintf(r, sizeof r, "img/ep/00_1_0%d.jpg", i % 8 + 1);
+      snprintf(eps[i].thumb, sizeof eps[i].thumb, "%s", img(r));
+    }
+    { CatItem lista[1]; lista[0] = f; cat_definir(lista, 1); }
+    cat_definir_episodios(0, eps, 16);
+    vistoep_definir(f.imdb, 1, 1, 1); vistoep_definir(f.imdb, 1, 2, 1);
+    prog_gravar_local(f.imdb, 1, 3, 1948.0, 3360.0);
+    return f;
 }
 
 static int quer(int argc, char **argv, const char *id) {
@@ -414,35 +448,7 @@ int main(int argc, char **argv) {
       plrilha_shot_hora(mktime(&lt)); }
   }
   if (quer(argc, argv, "episodios") || quer(argc, argv, "episodios-marcar")) {
-    static const char *nm[8] = { "The End", "The Target", "The Head", "The Ghouls", "The Past", "The Trap", "The Radio", "The Beginning" };
-    static const char *sn[8] = { "Lucy deixa o Ref\xc3\xbagio 33 pela primeira vez, atr\xc3\xa1s do pai levado na invas\xc3\xa3o.",
-      "Na superf\xc3\xad" "cie, Lucy descobre que a Wasteland tem as pr\xc3\xb3prias regras.",
-      "Lucy, Maximus e o Ghoul disputam a mesma recompensa no deserto.",
-      "Um acordo com o Ghoul cobra um pre\xc3\xa7o que Lucy n\xc3\xa3o esperava.",
-      "Em Filly, cada um enfrenta o que deixou para tr\xc3\xa1s.",
-      "No Ref\xc3\xbagio 32, Norm encontra o que ningu\xc3\xa9m deveria ver.",
-      "Uma transmiss\xc3\xa3o muda o rumo de todos os que est\xc3\xa3o na estrada.",
-      "Griffith Observatory guarda a resposta que Lucy procurava." };
-    CatEp eps[16];
-    CatItem f = serie;
-    int i;
-    snprintf(f.imdb, sizeof f.imdb, "tt12637874");
-    f.nTemporadas = 2; f.temporadas[0] = 1; f.temporadas[1] = 2;
-    memset(eps, 0, sizeof eps);
-    for (i = 0; i < 16; i++) {
-      char r[40];
-      eps[i].temporada = i < 8 ? 1 : 2; eps[i].episodio = i % 8 + 1;
-      snprintf(eps[i].nome, sizeof eps[i].nome, "%s", nm[i % 8]);
-      snprintf(eps[i].sinopse, sizeof eps[i].sinopse, "%s", sn[i % 8]);
-      snprintf(eps[i].duracao, sizeof eps[i].duracao, "56 min");
-      snprintf(eps[i].data, sizeof eps[i].data, "10 de abril de 2024");
-      snprintf(r, sizeof r, "img/ep/00_1_0%d.jpg", i % 8 + 1);
-      snprintf(eps[i].thumb, sizeof eps[i].thumb, "%s", img(r));
-    }
-    { CatItem lista[1]; lista[0] = f; cat_definir(lista, 1); }
-    cat_definir_episodios(0, eps, 16);
-    vistoep_definir(f.imdb, 1, 1, 1); vistoep_definir(f.imdb, 1, 2, 1);
-    prog_gravar_local(f.imdb, 1, 3, 1948.0, 3360.0);
+    CatItem f = serieComEps();
     player_abrir(0, NULL); player_definir_episodio(1, 3);
     player_erro_fonte(); player_limpar_erro_fonte();
     simular(3840, 2160, "HDR10", 0, 1);
@@ -462,6 +468,32 @@ int main(int argc, char **argv) {
     { struct tm lt; time_t t = time(NULL);
       localtime_r(&t, &lt); lt.tm_hour = 20; lt.tm_min = 19; lt.tm_sec = 0;
       plrilha_shot_hora(mktime(&lt)); }
+  }
+  if (quer(argc, argv, "proximo")) {
+    serieComEps();
+    player_abrir(0, NULL); player_definir_episodio(1, 3);
+    player_erro_fonte(); player_limpar_erro_fonte();
+    { VideoSimulacao v; memset(&v, 0, sizeof v);
+      v.largura = 3840; v.altura = 2160; v.pronto = 1; v.duracao = 3360; v.pos = 3300;
+      video_simular(&v); }
+    player_shot_video(1);
+    quadros(5);
+    posplay_shot(0, 1, 1, 4, relogio + 8000u + 120u * 16u);
+    quadros(120);
+    salvar("proximo");
+    posplay_fechar(); player_shot_video(0); quadros(30);
+  }
+  if (quer(argc, argv, "mais-como-este")) {
+    abrir(&filme);
+    { VideoSimulacao v; memset(&v, 0, sizeof v);
+      v.largura = 3840; v.altura = 2160; v.pronto = 1; v.duracao = 9420; v.pos = 9300;
+      video_simular(&v); }
+    player_shot_video(1);
+    quadros(5);
+    posplay_shot(0, 0, 0, 0, 0);
+    quadros(120);
+    salvar("mais-como-este");
+    posplay_fechar(); player_shot_video(0); quadros(30);
   }
   puts("player_glass_shot: ok");
   return 0;
