@@ -47,6 +47,8 @@
 #include "sistexto.h"
 #include "ponteiro.h"
 #include "celbotao.h"
+#include "spotpessoa.h"
+#include "spotlight.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -137,7 +139,30 @@ static struct {
   int itens[BU_MAX_POR_FIL];
   int n;
   int melhor;              // 1 = a entrada do MELHOR RESULTADO (1 item, tile grande)
+  int pessoas;             // 1 = fileira de PESSOAS: itens[] indexa pess[], nao o catalogo
 } fil[BU_MAX_FILEIRAS];
+// PESSOAS: atores e diretores que casam com a consulta. O elenco dos titulos ja
+// carregados entra primeiro; o TMDB (spotpessoa.h, a mesma busca do Spotlight)
+// completa quando a resposta chega. Abrir uma pessoa devolve o MESMO pedido que
+// o Spotlight devolve (SpotPedido), e o app abre a filmografia pelo mesmo caminho.
+#define BU_MAX_PESS 8
+static struct {
+  long tmdb, tituloTmdb;
+  char tituloTipo[8];
+  int  ref2;               // indice de catalogo de onde veio do elenco; -1 = TMDB
+  char nome[96];
+  char foto[200];
+} pess[BU_MAX_PESS];
+static int nPess = 0;
+static unsigned gerPessoa = 0;
+// 1 = campo vazio (ou 1 letra): fil[] guarda SUGESTOES (Populares), nao
+// resultados. Os dois usam a mesma maquina de foco, rolagem e abertura.
+static int sugestao = 0;
+// Altura que o bloco de buscas recentes ocupa acima das sugestoes (preenchida
+// pelo desenho, lida pela rolagem).
+static float sugDesloc = 0.0f;
+static int   pedidoPessoa = 0;
+static SpotPedido pedidoP;
 static int nFil = 0;
 static int sair = 0;
 static int pedido = -1;             // indice de catalogo escolhido, -1 = nenhum
@@ -252,6 +277,89 @@ static void kbMontar(void) {
 // Vive em buscanorm.c (testada sozinha). Aqui so o nome curto.
 #define normalizar busca_normalizar
 
+// --- Pessoas e sugestoes -------------------------------------------------------
+// O nome casa quando a consulta e o inicio do nome ou de alguma palavra dele
+// (nome ou sobrenome), como o Spotlight. Os dois ja vem normalizados.
+static int nomeCasa(const char *nome, const char *alvo) {
+  const char *p;
+  size_t n = strlen(alvo);
+  if (!n) return 0;
+  if (!strncmp(nome, alvo, n)) return 1;
+  for (p = nome; (p = strstr(p, alvo)) != NULL; p++)
+    if (p > nome && (p[-1] == ' ' || p[-1] == '-' || p[-1] == ':')) return 1;
+  return 0;
+}
+
+static int pessoaJa(long tmdb) {
+  for (int i = 0; i < nPess; i++) if (pess[i].tmdb == tmdb) return 1;
+  return 0;
+}
+
+static void pessoaAcrescentar(long tmdb, const char *nome, const char *foto, int ref2,
+                              long tituloTmdb, const char *tituloTipo) {
+  if (nPess >= BU_MAX_PESS) return;
+  pess[nPess].tmdb = tmdb;
+  pess[nPess].tituloTmdb = tituloTmdb;
+  snprintf(pess[nPess].tituloTipo, sizeof pess[nPess].tituloTipo, "%s", tituloTipo ? tituloTipo : "");
+  pess[nPess].ref2 = ref2;
+  snprintf(pess[nPess].nome, sizeof pess[nPess].nome, "%s", nome);
+  snprintf(pess[nPess].foto, sizeof pess[nPess].foto, "%s", foto ? foto : "");
+  nPess++;
+}
+
+// Quem casa: primeiro o elenco dos titulos que ja estao no catalogo (abre na
+// hora), depois o TMDB na ordem de popularidade dele (spotpessoa.h). Sem
+// resposta ainda (debounce, rede) ficam so as do elenco, e a fileira se refaz
+// quando a resposta chega (busca_atualizar vigia spotpessoa_geracao).
+static void montarPessoas(const char *alvo) {
+  int n = cat_n(), i, j, deElenco = 0;
+  char nome[160];
+  nPess = 0;
+  for (i = 0; i < n && deElenco < 4; i++) {
+    const CatItem *ci = cat_item(i);
+    if (!ci || ci->nElenco <= 0) continue;
+    for (j = 0; j < ci->nElenco && deElenco < 4; j++) {
+      if (ci->elenco[j].tmdb <= 0 || !ci->elenco[j].nome[0] || pessoaJa(ci->elenco[j].tmdb)) continue;
+      busca_normalizar(ci->elenco[j].nome, nome, sizeof nome);
+      if (!nomeCasa(nome, alvo)) continue;
+      pessoaAcrescentar(ci->elenco[j].tmdb, ci->elenco[j].nome, ci->elenco[j].foto, i, 0, NULL);
+      deElenco++;
+    }
+  }
+  { int nt = spotpessoa_n(consulta);
+    for (i = 0; i < nt && nPess < SPP_MAX && nPess < BU_MAX_PESS; i++) {
+      SpotPessoa sp;
+      if (!spotpessoa_item(consulta, i, &sp)) break;
+      if (pessoaJa(sp.tmdb)) continue;
+      pessoaAcrescentar(sp.tmdb, sp.nome, sp.foto, -1, sp.tituloTmdb, sp.tituloTipo);
+    } }
+}
+
+// CAMPO VAZIO: nada de vazio no meio da tela. Os POPULARES sao as primeiras
+// fileiras de filme/serie que o catalogo ja tem (as mesmas da home), com a
+// mesma maquina dos resultados — foco, rolagem, abrir. A primeira leva o rotulo
+// "Populares"; a segunda, o nome do proprio catalogo.
+static void montarSugestoes(void) {
+  int nCat = cat_n_fileiras(), r;
+  for (r = 0; r < nCat && nFil < 2; r++) {
+    const CatFileira *cf = cat_fileira(r);
+    int achou = 0, i;
+    if (!cf || !cf->titulo[0] || !strcmp(cf->tipo, "channel") || !strcmp(cf->tipo, "tv")) continue;
+    for (i = 0; i < cf->n && achou < BU_MAX_POR_FIL; i++) {
+      const CatItem *ci = cat_item(cf->ini + i);
+      if (!ci || !ci->titulo[0] || (!ci->poster[0] && !ci->backdrop[0])) continue;
+      if (!strcmp(ci->tipo, "channel")) continue;
+      fil[nFil].itens[achou++] = cf->ini + i;
+    }
+    if (achou < 3) continue;
+    fil[nFil].titulo = nFil == 0 ? i18n("Populares") : cf->titulo;
+    fil[nFil].origem = NULL;
+    fil[nFil].n = achou;
+    fil[nFil].melhor = 0; fil[nFil].pessoas = 0;
+    nFil++;
+  }
+}
+
 // --- Filtro ------------------------------------------------------------------
 // Uma fileira por CATALOGO, exatamente como o web monta `.search-results-row`.
 // Antes isto era uma lista plana do acervo inteiro, o que perdia a informacao de
@@ -260,17 +368,25 @@ static void kbMontar(void) {
 static void refiltrar(void) {
   char alvo[BU_MAX_CONSULTA * 2];
   int anterior = -1, mesmaConsulta = !strcmp(consultaFiltrada, consulta);
-  if (mesmaConsulta && painel == 1 && focoRes.fileira < nFil &&
+  if (mesmaConsulta && painel == 1 && focoRes.fileira < nFil && !fil[focoRes.fileira].pessoas &&
       focoRes.coluna < fil[focoRes.fileira].n)
     anterior = fil[focoRes.fileira].itens[focoRes.coluna];
   snprintf(consultaFiltrada, sizeof consultaFiltrada, "%s", consulta);
   normalizar(consulta, alvo, sizeof alvo);
-  nFil = 0;
+  nFil = 0; nPess = 0;
   // Menos de 2 caracteres = estado vazio, como o web ("Digite ao menos 2
   // caracteres"). Buscar com uma letra devolve o acervo inteiro e nao ajuda.
-  // So derruba o painel de RESULTADOS: o de buscas recentes vive justamente
-  // com o campo vazio.
-  if (busca_codepoints(alvo) < 2) { if (painel == 1) painel = 0; return; }
+  // Em vez do vazio, as SUGESTOES (Populares). So derruba o painel de
+  // RESULTADOS: o de buscas recentes vive justamente com o campo vazio.
+  if (busca_codepoints(alvo) < 2) {
+    if (painel == 1 && !sugestao) painel = 0;
+    sugestao = 1;
+    montarSugestoes();
+    goto montado;
+  }
+  sugestao = 0;
+  spotpessoa_pedir(consulta, SDL_GetTicks());
+  gerPessoa = spotpessoa_geracao();
 
   // BUSCA NA REDE. A tela so filtrava o que ja estava em memoria — as ~12
   // primeiras linhas de cada catalogo da home — entao qualquer titulo fora
@@ -372,7 +488,7 @@ static void refiltrar(void) {
   // O MELHOR RESULTADO (mockup): o primeiro titulo da primeira fileira sai dela
   // e vira uma entrada propria, de um item, desenhada como o tile grande. Foco,
   // abertura e onda tratam essa entrada como qualquer fileira.
-  for (int i = 0; i < nFil; i++) fil[i].melhor = 0;
+  for (int i = 0; i < nFil; i++) { fil[i].melhor = 0; fil[i].pessoas = 0; }
   if (nFil > 0 && nFil < BU_MAX_FILEIRAS && fil[0].n > 0) {
     int melhorIdx = fil[0].itens[0];
     memmove(&fil[1], &fil[0], (size_t)nFil * sizeof fil[0]);
@@ -383,6 +499,20 @@ static void refiltrar(void) {
     if (--fil[1].n == 0) { memmove(&fil[1], &fil[2], (size_t)(nFil - 2) * sizeof fil[0]); nFil--; }
   }
 
+  // PESSOAS (mockup): a fileira entra logo depois da primeira de titulos.
+  montarPessoas(alvo);
+  if (nPess > 0 && nFil < BU_MAX_FILEIRAS) {
+    int pos = nFil < (fil[0].melhor ? 2 : 1) ? nFil : (fil[0].melhor ? 2 : 1);
+    if (nFil == 0) pos = 0;
+    memmove(&fil[pos + 1], &fil[pos], (size_t)(nFil - pos) * sizeof fil[0]);
+    nFil++;
+    memset(&fil[pos], 0, sizeof fil[pos]);
+    fil[pos].titulo = i18n("Pessoas");
+    fil[pos].pessoas = 1;
+    fil[pos].n = nPess;
+    for (int i = 0; i < nPess; i++) fil[pos].itens[i] = i;
+  }
+montado:
   // Quem ja estava na tela herda o estado da onda; quem nao estava e nova.
   { char chaveAntes[BU_MAX_FILEIRAS][96];
     Uint32 entraAntes[BU_MAX_FILEIRAS];
@@ -415,13 +545,16 @@ static void refiltrar(void) {
           encontrado = 1; break;
         }
   }
-  if (nFil == 0) painel = 0;
+  if (nFil == 0 && painel == 1) painel = 0;
   memset(animRes, 0, sizeof animRes); memset(revRes, 0, sizeof revRes);
   if (!mesmaConsulta) {
     memset(scrollX, 0, sizeof scrollX); memset(velX, 0, sizeof velX);
     scrollY = scrollAlvo = 0.0f; velY = 0.0f;
   }
 }
+
+static float buPasso(void);
+static float buCartazW(void);
 
 // --- Buscas recentes --------------------------------------------------------
 // QUANDO UMA BUSCA CONTA COMO FEITA. Nao a cada letra: refiltrar roda por
@@ -435,6 +568,8 @@ static void registrarConsulta(void) {
 }
 
 static int recentesVisiveis(void) { return nConsulta == 0 && buscasrec_n() > 0; }
+// Resultados DE VERDADE (e nao as sugestoes do campo vazio).
+static int temResultados(void) { return !sugestao && nFil > 0; }
 
 static void recentesAjustarFoco(void) {
   int n = buscasrec_n();
@@ -475,6 +610,15 @@ static void recentesVertical(int dy) {
     if (d < melhor) { melhor = d; melhorI = i; }
   }
   if (melhorI >= 0) focoRec = melhorI;
+  // Abaixo da ultima linha de pilulas: a fileira de Populares, na coluna mais
+  // proxima. Acima da primeira, nada (o teclado fica a esquerda).
+  else if (dy > 0 && sugestao && nFil > 0) {
+    float passo = buPasso();
+    int c = (int)((cx - BU_RES_X + scrollX[0]) / passo);
+    if (c < 0) c = 0;
+    if (c >= fil[0].n) c = fil[0].n - 1;
+    painel = 1; focoRes.fileira = 0; focoRes.coluna = c;
+  }
 }
 
 // OK curto: refaz a busca com o termo (e ele sobe para o topo), ou, no
@@ -585,7 +729,8 @@ int busca_iniciar(void) {
   layoutCir = 0;
   kbMontar();
   focus_iniciar(&focoKb, kbFil + 1, KB_COLUNAS);
-  painel = 0; sair = 0; pedido = -1;
+  painel = 0; sair = 0; pedido = -1; pedidoPessoa = 0;
+  sugestao = 0; nPess = 0; sugDesloc = 0.0f;
   nConsulta = 0; consulta[0] = 0;
   consultaFiltrada[0] = 0;
   scrollY = scrollAlvo = 0.0f; velY = 0.0f;
@@ -611,6 +756,13 @@ int busca_pediu_abrir(int *indiceCatalogo) {
   if (pedido < 0) return 0;
   if (indiceCatalogo) *indiceCatalogo = pedido;
   pedido = -1;
+  return 1;
+}
+
+int busca_pediu_pessoa(SpotPedido *p) {
+  if (!pedidoPessoa) return 0;
+  pedidoPessoa = 0;
+  if (p) *p = pedidoP;
   return 1;
 }
 
@@ -724,8 +876,9 @@ void busca_evento(const SDL_Event *e) {
       }
       return;
     }
-    if (k == SDLK_TAB && nFil > 0) { registrarConsulta(); painel = 1; return; }
+    if (k == SDLK_TAB && temResultados()) { registrarConsulta(); painel = 1; return; }
     if (k == SDLK_TAB && recentesVisiveis()) { recentesEntrar(); return; }
+    if (k == SDLK_TAB && nFil > 0) { painel = 1; return; }
     switch (k) {
       case SDLK_LEFT:
         if (!focus_mover_grade(&focoKb, -1, 0)) { registrarConsulta(); sair = 1; }
@@ -737,8 +890,9 @@ void busca_evento(const SDL_Event *e) {
         // Com o campo vazio a ponte leva as buscas recentes, que ocupam o
         // mesmo lugar das fileiras.
         if (focoKb.coluna >= KB_COLUNAS[focoKb.fileira] - 1) {
-          if (nFil > 0) { registrarConsulta(); painel = 1; }
+          if (temResultados()) { registrarConsulta(); painel = 1; }
           else if (recentesVisiveis()) recentesEntrar();
+          else if (nFil > 0) painel = 1;   // Populares
         } else focus_mover_grade(&focoKb, 1, 0);
         break;
       // GRADE, e nao fileiras: ver focus_mover_grade. Era daqui que saia o
@@ -776,12 +930,36 @@ void busca_evento(const SDL_Event *e) {
         focus_mover(&focoRes, 1, 0);
       }
       break;
-    case SDLK_UP:   focus_mover(&focoRes, 0, -1); break;
+    case SDLK_UP:
+      if (!focus_mover(&focoRes, 0, -1) && sugestao && focoRes.fileira == 0 && recentesVisiveis()) {
+        // Do primeiro Populares de volta as pilulas: a mais proxima em x.
+        float cx = BU_RES_X + focoRes.coluna * buPasso() - scrollX[0] + buCartazW() * 0.5f;
+        float melhor = 1e9f;
+        int i;
+        painel = 2; focoRec = 0;
+        for (i = 0; i < nRecLayout; i++) {
+          float d = recRect[i].x + recRect[i].w * 0.5f - cx;
+          if (recLin[i] != recLin[nRecLayout - 1]) continue;
+          if (d < 0) d = -d;
+          if (d < melhor) { melhor = d; focoRec = i; }
+        }
+        recentesAjustarFoco();
+      }
+      break;
     case SDLK_DOWN: focus_mover(&focoRes, 0,  1); break;
     case SDLK_RETURN: case SDLK_KP_ENTER:
       if (focoRes.fileira < nFil && focoRes.coluna < fil[focoRes.fileira].n) {
         registrarConsulta();
-        pedido = fil[focoRes.fileira].itens[focoRes.coluna];
+        if (fil[focoRes.fileira].pessoas) {
+          int q = fil[focoRes.fileira].itens[focoRes.coluna];
+          memset(&pedidoP, 0, sizeof pedidoP);
+          pedidoP.tipo = SPOT_PESSOA; pedidoP.indice = pess[q].ref2; pedidoP.tmdb = pess[q].tmdb;
+          pedidoP.tituloTmdb = pess[q].tituloTmdb;
+          snprintf(pedidoP.tituloTipo, sizeof pedidoP.tituloTipo, "%s", pess[q].tituloTipo);
+          snprintf(pedidoP.nome, sizeof pedidoP.nome, "%s", pess[q].nome);
+          snprintf(pedidoP.arte, sizeof pedidoP.arte, "%s", pess[q].foto);
+          pedidoPessoa = 1;
+        } else pedido = fil[focoRes.fileira].itens[focoRes.coluna];
       }
       break;
     default: break;
@@ -793,12 +971,20 @@ void busca_evento(const SDL_Event *e) {
 // (o grid de 5 do mockup); mais estreita (rail fixa), o cartaz encolhe 2:3.
 static float buPasso(void) { return ((BU_DIR - BU_RES_X) - 4.0f * 22.0f) / 5.0f + 22.0f; }
 static float buCartazW(void) { float w = buPasso() - 22.0f; return w < BU_CARTAZ_W ? w : BU_CARTAZ_W; }
+// PESSOAS: avatar 64 + 14 + nome (18), vao 26 entre pessoas (o .av do mockup).
+#define BU_PESS_AV     64.0f
+#define BU_PESS_GAP    26.0f
+#define BU_PESS_NOMEMAX 230.0f
+// x (relativo a coluna) e largura de cada pessoa, preenchidos pelo desenho (a
+// largura do nome vem do texto rasterizado) e lidos pela rolagem.
+static float pessX[BU_MAX_PESS], pessW[BU_MAX_PESS];
 static float filAlt(int r) {
+  if (fil[r].pessoas) return BU_KICK_H + BU_PESS_AV;
   if (fil[r].melhor) return BU_KICK_H + BU_MELHOR_H;
   return BU_KICK_H + buCartazW() * 1.5f + BU_NOME_ALT;
 }
 static float filTopo(int r) {
-  float y = 0.0f;
+  float y = sugestao ? sugDesloc : 0.0f;
   for (int i = 0; i < r; i++) y += filAlt(i) + BU_SECAO_GAP;
   return y;
 }
@@ -816,20 +1002,27 @@ void busca_atualizar(float dt, Uint32 agora) {
       memset(t, 0, sizeof t);
       refiltrar();
       campoFoco = 0;
-      if (nFil > 0) { registrarConsulta(); painel = 1; }
+      if (temResultados()) { registrarConsulta(); painel = 1; }
     }
     r = st_ler(ST_BUSCA, t, sizeof t);
     if (r == ST_PEDE_TECLADO) { campoFoco = 1; st_ime_abrir(ST_BUSCA, consulta, BU_MAX_CONSULTA - 1); }
     else if (r == ST_TEXTO || r == ST_FIM) {
       campoDefinir(t, voz || r == ST_FIM);
       refiltrar();
-      if (r == ST_FIM && nFil > 0) { registrarConsulta(); painel = 1; campoFoco = 0; }
+      if (r == ST_FIM && temResultados()) { registrarConsulta(); painel = 1; campoFoco = 0; }
     } }
   // O RESULTADO DA REDE CHEGA DEPOIS DA TECLA. refiltrar() so roda quando o
   // dono digita, entao sem isto a resposta do Cinemeta chegava, ficava guardada
   // e NUNCA aparecia — a tela seguia mostrando o filtro local do momento em que
   // a ultima letra foi apertada. Aqui a contagem do termo corrente e vigiada
   // por quadro, e uma mudanca remonta a lista uma vez so.
+  // PESSOAS: o pedido ao TMDB sai quando o texto assenta (debounce); a resposta
+  // refaz a fileira. Com o campo vazio, o catalogo que chega depois da abertura
+  // refaz os Populares.
+  { static int ultimoCat = -1;
+    spotpessoa_atualizar(agora);
+    if (!sugestao && spotpessoa_geracao() != gerPessoa) refiltrar();
+    if (sugestao && cat_n() != ultimoCat) { ultimoCat = cat_n(); refiltrar(); } }
   { char alvo[BU_MAX_CONSULTA * 2];
     static int ultimoRemoto = -1;
     normalizar(consulta, alvo, sizeof alvo);
@@ -881,6 +1074,9 @@ void busca_atualizar(float dt, Uint32 agora) {
     float passo = buPasso();
     float esq = focoRes.coluna * passo;
     float dir = esq + buCartazW();
+    if (fil[r].pessoas && focoRes.coluna < BU_MAX_PESS) {
+      esq = pessX[focoRes.coluna]; dir = esq + pessW[focoRes.coluna];
+    }
     float alvoX = scrollX[r];
     if (dir - alvoX > util) alvoX = dir - util;
     if (esq - alvoX < 0.0f) alvoX = esq;
@@ -1018,8 +1214,9 @@ static void desenhaTeclado(void) {
     const char *d1 = campoFoco == 1 ? i18n("OK   Teclado da TV")
                    : campoFoco == 2 ? i18n("OK   Falar")
                    : campoFoco == 3 ? i18n("OK   Digitar pelo celular")
-                   : nFil ? i18n("→   Resultados")
+                   : temResultados() ? i18n("→   Resultados")
                    : recentesVisiveis() ? i18n("→   Buscas recentes")
+                   : nFil ? i18n("→   Populares")
                    : st_ime_disponivel() ? i18n("↑   Campo de busca")
                    : celb_disponivel() ? i18n("↑   Digitar pelo celular")
                    : i18n("OK   Digitar");
@@ -1049,11 +1246,11 @@ static void desenhaVazio(void) {
 
 // Buscas recentes: chips de 56 (o .chip do mockup), em linhas que quebram na
 // borda; foco = pilula no acento; o filete enche enquanto o OK segura.
-static void desenhaRecentes(Uint32 agora) {
+static void desenhaRecentes(Uint32 agora, float dy) {
   int n = buscasrec_n(), i, lin = 0;
-  float x = BU_RES_X, y = BU_REC_Y, maxW = BU_DIR - BU_RES_X;
+  float x = BU_RES_X, y = BU_REC_Y + dy, maxW = BU_DIR - BU_RES_X;
   const char *limpar = i18n("Limpar");
-  ajustes_ui_kicker(i18n("Buscas recentes"), BU_RES_X, BU_RES_Y, 1.0f);
+  ajustes_ui_kicker(i18n("Buscas recentes"), BU_RES_X, BU_RES_Y + dy, 1.0f);
   nRecLayout = 0;
   for (i = 0; i <= n && i < BU_REC_ITENS; i++) {
     float f = animRec[i];
@@ -1079,19 +1276,25 @@ static void desenhaRecentes(Uint32 agora) {
     x += w + BU_REC_GAP;
   }
   { TxtLinha d = txt_linha(TXT_ILHA_APOIO, i18n("OK   Buscar de novo      Segure OK   Remover"), BU_TX);
-    txt_desenhar_alpha(d, BU_RES_X, y + BU_REC_H + 22.0f, 0.42f); }
+    txt_desenhar_alpha(d, BU_RES_X, y + BU_REC_H + 22.0f, 0.42f);
+    // Onde as sugestoes comecam (relativo ao topo da coluna, sem a rolagem).
+    sugDesloc = (y - dy) + BU_REC_H + 22.0f + d.h + BU_SECAO_GAP - BU_RES_Y; }
 }
 
 static void desenhaResultados(Uint32 agora) {
   float varreFoco = revela_varre(&revVarre, painel == 1
                                  ? focoRes.fileira * 64 + focoRes.coluna : -1, agora);
   temItemFoco = 0;
-  if (nFil == 0 && recentesVisiveis()) { desenhaRecentes(agora); return; }
+  if (nFil == 0 && recentesVisiveis()) { sugDesloc = 0.0f; desenhaRecentes(agora, 0.0f); return; }
   nRecLayout = 0;
   if (nFil == 0) { desenhaVazio(); return; }
 
   gfx_recorte(BU_RES_X - 30.0f, BU_RES_Y - 20.0f,
               (BU_DIR - BU_RES_X) + 60.0f, BU_RES_AREA_H + 40.0f);
+  // CAMPO VAZIO: as pilulas das buscas recentes em cima e os Populares logo
+  // abaixo, na mesma coluna e na mesma rolagem.
+  if (sugestao && recentesVisiveis()) desenhaRecentes(agora, -scrollY);
+  else sugDesloc = 0.0f;
   const float grupo = gfx_opacidade_grupo;
   const float larg = BU_DIR - BU_RES_X;
   int ordemFil = 0;
@@ -1121,6 +1324,42 @@ static void desenhaResultados(Uint32 agora) {
       } }
     gfx_opacidade_grupo = grupo;
     float cy = ry + BU_KICK_H;
+
+    if (fil[r].pessoas) {
+      // PESSOAS (mockup): avatar redondo de 64, nome 18 a 14 ao lado, vao 26.
+      // O foco e a pilula de superficie mais clara em volta do conjunto.
+      float x = 0.0f;
+      for (int c = 0; c < fil[r].n && c < BU_MAX_PESS; c++) {
+        int q = fil[r].itens[c];
+        float f = animRes[r][c];
+        float entra = filEntraEm[r] ? revela_entra(filEntraEm[r], revela_onda_atraso(c, 0), agora) : 1.0f;
+        TxtLinha nm = txt_linha_corta(TXT_ILHA_META, pess[q].nome, BU_TX, BU_PESS_NOMEMAX);
+        float w = BU_PESS_AV + 14.0f + (float)nm.w;
+        float px = BU_RES_X + x - scrollX[r];
+        GfxRect av = { px, cy + (1.0f - entra) * NV_ENTRA_DY, BU_PESS_AV, BU_PESS_AV };
+        pessX[c] = x; pessW[c] = w;
+        x += w + BU_PESS_GAP;
+        if (px > BU_DIR + 30.0f || px + w < BU_RES_X - 30.0f) continue;
+        gfx_opacidade_grupo = grupo * entra;
+        if (f > 0.01f) {
+          GfxRect pil = { av.x - 12.0f, av.y - 8.0f, w + 30.0f, BU_PESS_AV + 16.0f };
+          gfx_opacidade_grupo = grupo * entra * f;
+          ajustes_ui_foco_linha(pil, pil.h * 0.5f);
+          gfx_opacidade_grupo = grupo * entra;
+        }
+        if (pess[q].foto[0] && !tex_falhou(pess[q].foto)) buArte(av, pess[q].foto, BU_PESS_AV * 0.5f, 1.0f);
+        else {
+          // Sem foto no TMDB: o disco com o icone de pessoa, nao um buraco.
+          gfx_cor(av, 0.5f, 0.20f, 0.205f, 0.225f, 1.0f);
+          gfx_icone((GfxRect){ av.x + av.w * 0.25f, av.y + av.h * 0.25f, av.w * 0.5f, av.h * 0.5f },
+                    "aj_user-round", 0.78f, 0.79f, 0.82f, 1.0f);
+        }
+        txt_desenhar_alpha(nm, av.x + BU_PESS_AV + 14.0f, av.y + (BU_PESS_AV - nm.h) * 0.5f,
+                           anim_mistura(0.75f, 1.0f, f));
+      }
+      gfx_opacidade_grupo = grupo;
+      continue;
+    }
 
     if (fil[r].melhor) {
       // O MELHOR RESULTADO: tile de 226 (ilha), capa 330x186, titulo 40/700.
