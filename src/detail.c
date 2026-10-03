@@ -199,6 +199,7 @@ static int  ratSinc;
 #define PES_CARD_GAP  32.0f
 #define PES_POR_LINHA  6
 
+static int maisAcoes;
 static int  botao = 0;      // botao em foco no hero
 static int  pedReproduzir = 0, pedMarcar = 0, pedFontes = 0;
 // Marcar como ASSISTIDO. Separado de pedMarcar, que e "adicionar a lista".
@@ -1234,6 +1235,7 @@ void detail_mostrar_pessoa(long tmdb, const char *nome, const char *foto) {
 }
 
 void detail_abrir(const HomeItem *it) {
+  maisAcoes = 0;
   int pos = -1, n = 0;
   // CARROSSEL: so quando a pagina NASCE de um cartaz de fileira da Dinamica
   // (o item aberto e o focado na home). Trocar de titulo por dentro (credito,
@@ -1801,8 +1803,9 @@ static int temArte(void) {
   return !strcmp(ci->tipo, "movie") || !strcmp(ci->tipo, "series");
 }
 static int nBotoes(void) {
+  if (carro && !maisAcoes) return 2 + (temInicio() ? 1 : 0);
   return (ehSerie() ? 3 : 4) + (temInicio() ? 1 : 0) + (temLembrar() ? 1 : 0)
-         + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0);
+         + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0) + (carro ? 1 : 0);
 }
 
 // Que ACAO esta na posicao `n` da linha. As acoes tem numeros fixos (0
@@ -1812,8 +1815,13 @@ static int nBotoes(void) {
 // "marcar assistido". Quando temInicio, a posicao 1 e o secundario de texto
 // e os circulares escorregam um para a direita.
 enum { ACAO_PRIMARIO = 0, ACAO_LISTA = 1, ACAO_ASSISTIDO = 2, ACAO_FONTES = 3,
-       ACAO_INICIO = 4, ACAO_RECOMENDAR = 5, ACAO_LEMBRAR = 6, ACAO_ARTE = 7 };
+       ACAO_INICIO = 4, ACAO_RECOMENDAR = 5, ACAO_LEMBRAR = 6, ACAO_ARTE = 7, ACAO_MAIS = 8 };
 static int acaoEm(int n) {
+  if (carro) {
+    int grupo = 1 + (temInicio() ? 1 : 0);
+    if (n == grupo) return ACAO_MAIS;
+    if (n > grupo) n--;
+  }
   if (temInicio()) {
     if (n == 1) return ACAO_INICIO;
     n--;
@@ -2029,6 +2037,8 @@ void detail_evento(const SDL_Event *e) {
       int acao = acaoEm(botao);
       if (acao == ACAO_PRIMARIO) {
         if (dur >= NV_HOLD_MS) pedFontes = 1; else pedReproduzir = 1;
+      } else if (acao == ACAO_MAIS) {
+        maisAcoes = 1;
       } else if (acao == ACAO_INICIO) {
         // "Assistir do comeco" (issue #46): mesmo caminho do primario, mas o
         // roteador zera a retomada DESTA sessao depois de armar o episodio.
@@ -2215,7 +2225,8 @@ void detail_evento(const SDL_Event *e) {
 
   if (k == SDLK_ESCAPE || k == SDLK_AC_BACK || k == SDLK_BACKSPACE ||
       k == SDLK_DELETE) {
-    if (nivel > 0) nivel = 0;
+    if (carro && maisAcoes && nivel == 0) { maisAcoes = 0; botao = temInicio() ? 1 : 0; }
+    else if (nivel > 0) nivel = 0;
     else if (carro && carCheia) carCheia = 0;   // tela cheia no topo -> cartao
     else saindo = 1;
     return;
@@ -2257,6 +2268,7 @@ void detail_evento(const SDL_Event *e) {
       else if (carro && !carCheia && carPos > 0) carPasso(-1);
       else if (!(carro && carCheia)) { saindo = 1; pediuMenu = 1; }
     }
+    if (carro) maisAcoes = nivel == 0 && botao >= 1 + (temInicio() ? 1 : 0);
     return;
   }
   // A guarda que existia aqui bloqueava DESCER das abas sempre que a aba
@@ -2950,6 +2962,9 @@ static void desenhaBotao(GfxRect r, const char *rot, int icone, int focado, floa
       // so `progresso >= 90`, e filme visto em outro aparelho (ou marcado pelo
       // menu do cartaz, que zera o progresso) ficava com o olho riscado.
       gfx_icone(ig, cat_visto(cat_item(idx)) ? "visto" : "naovisto", ic, ic, ic, a);
+    } else if (icone == ACAO_MAIS) {
+      for (int dot = -1; dot <= 1; dot++)
+        gfx_cor((GfxRect){cx+dot*10-2.5f,cy-2.5f,5,5},.5f,ic,ic,ic,a);
     } else if (icone == ACAO_ARTE) {
       // MOLDURA COM MONTANHA: o glifo universal de "imagem". PNG de
       // deploy/app/art/icones como os vizinhos; arte.svg descreve o desenho.
@@ -3521,6 +3536,10 @@ static void heroWeb(float a, float desloc) {
 
   float larguraAcoes = 0;
   { float cyBtn = yAcoes + NV_DETW2_BTN_H * 0.5f;
+    if (carro) {
+      int grupo = 1 + (temInicio() ? 1 : 0);
+      maisAcoes = nivel == 0 && botao >= grupo;
+    }
     int nb = 0, n = nBotoes();
     // Trocar de titulo com o foco no ultimo circular de um FILME e cair numa
     // serie deixaria `botao` = 3 numa linha de 3 botoes: nenhum apareceria
@@ -3568,7 +3587,13 @@ static void heroWeb(float a, float desloc) {
       bx += rs.w + NV_DETW2_BTN_GAP; nb++;
     }
     larguraAcoes = larguraPrimario(rot);
-    if (temLembrar()) {
+    if (carro) {
+      GfxRect more = {bx, cyBtn-NV_DETW2_CIRC*.5f, NV_DETW2_CIRC, NV_DETW2_CIRC};
+      desenhaBotao(more, NULL, ACAO_MAIS, nivel == 0 && botao == nb, a);
+      if (a > .3f) ponteiro_alvo(more.x,more.y,more.w,more.h,ponteiroDetalhe,NULL,-1,nb);
+      bx += NV_DETW2_CIRC + NV_DETW2_BTN_GAP; nb++;
+    }
+    if (temLembrar() && (!carro || maisAcoes)) {
       const CatItem *ciL = cat_item(idx);
       GfxRect rs = { bx, cyBtn - NV_DETW2_CIRC * 0.5f,
                      NV_DETW2_CIRC, NV_DETW2_CIRC };

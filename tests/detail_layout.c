@@ -30,6 +30,17 @@ int main(void) {
   carCheia = 0;
   botao = nBotoes() - 1; e.key.keysym.sym = SDLK_RIGHT;
   detail_evento(&e); assert(carPos == 2);
-  puts("PASS: logo language fallback and fullscreen navigation");
+  carCheia = 1; carPos = 1; maisAcoes = 0; botao = 0;
+  assert(nBotoes() == 2);
+  e.key.keysym.sym = SDLK_RIGHT; detail_evento(&e);
+  assert(maisAcoes && acaoEm(botao) == ACAO_MAIS && nBotoes() > 2);
+  e.key.keysym.sym = SDLK_RIGHT; detail_evento(&e);
+  assert(acaoEm(botao) == ACAO_LISTA);
+  e.key.keysym.sym = SDLK_LEFT; detail_evento(&e); detail_evento(&e);
+  assert(!maisAcoes && botao == 0 && nBotoes() == 2);
+  e.key.keysym.sym = SDLK_RIGHT; detail_evento(&e);
+  e.key.keysym.sym = SDLK_ESCAPE; detail_evento(&e);
+  assert(!maisAcoes && !saindo && botao == 0);
+  puts("PASS: title/navigation and focus-only action group");
   return 0;
 }
