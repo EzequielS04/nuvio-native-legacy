@@ -3420,7 +3420,7 @@ static void heroWeb(float a, float desloc) {
   float yEstado = yAcoes - NV_DETW_GAP_RETOM;
   float yRetom = yEstado, yAgenda = yEstado;
   if (temRetom > 0.0f) { yEstado -= NV_DETW_RETOM_H; yRetom = yEstado; }
-  if (agLinha[0] && !carro) { yEstado -= NV_DETW_RETOM_H; yAgenda = yEstado; }
+  if (agLinha[0]) { yEstado -= carro ? 56.0f : NV_DETW_RETOM_H; yAgenda = yEstado; }
 
   // Sobe alguns pixels enquanto entra: continua o movimento da arte em vez de
   // aparecer pronto no lugar. `desloc` e a rolagem do documento.
@@ -3442,13 +3442,11 @@ static void heroWeb(float a, float desloc) {
   GLuint texLogo = arqLogo ? tex_obter_larg_qualquer(arqLogo, NV_DETW_LOGO_MAXW) : 0;
   const char *nome = mostrarNomeLogo(ci, arqLogo && tex_falhou(arqLogo) ? NULL : arqLogo, texLogo != 0,
                                      desc_tmdb_idioma()) ? tituloDe(idx) : NULL;
-  float baseLogo = (temRetom > 0.0f || (agLinha[0] && !carro) ? yEstado : yAcoes)
+  float baseLogo = ((temRetom > 0.0f || agLinha[0]) ? yEstado : yAcoes)
                    - NV_DETW_LOGO_GAP;
   float hNome = nome ? txt_bloco(TXT_DET_META2, nome, 255, 255, 255,
                                 -1, 0, NV_DETW_LOGO_MAXW, 34, 0, 0) : 0;
-  float espacoLogo = baseLogo - 110.0f - hNome - (nome ? 16.0f : 0)
-                    - (carro && agLinha[0] ? BADGE_H + 12.0f : 0);
-  float logoTopo = baseLogo;
+  float espacoLogo = baseLogo - 110.0f - hNome - (nome ? 16.0f : 0);
   if (espacoLogo < 0) espacoLogo = 0;
   static char  logoVisto[600];
   static Uint32 logoDesde;
@@ -3466,7 +3464,6 @@ static void heroWeb(float a, float desloc) {
     if (asp <= 0.0f) asp = 2.5f;
     float h = fminf(NV_DETW_LOGO_H, espacoLogo), w = h * asp;
     if (w > NV_DETW_LOGO_MAXW) { w = NV_DETW_LOGO_MAXW; h = w / asp; }
-    logoTopo = baseLogo - h - (nome ? hNome + 16.0f : 0);
     // Keep the caption and logo above both agenda and resume rows.
     if (nome) txt_bloco(TXT_DET_META2, nome, 255, 255, 255,
                          NV_DETW2_X, baseLogo - h - 16.0f - hNome,
@@ -3491,7 +3488,6 @@ static void heroWeb(float a, float desloc) {
       if (r.w > 0 && r.h > 0)
         gfx_rect(r, texLogo, m, 0, 0, 0, 0.0f, 1, 1, 1, aLogo); }
   } else if (nome) {
-    logoTopo = baseLogo - fminf(NV_DETW_LOGO_H, espacoLogo) - hNome;
     txt_bloco(TXT_DET_META2, nome, 255, 255, 255, NV_DETW2_X,
               baseLogo - fminf(NV_DETW_LOGO_H, espacoLogo) - hNome,
               NV_DETW_LOGO_MAXW, 34, a, 0);
@@ -3523,6 +3519,7 @@ static void heroWeb(float a, float desloc) {
     else if (ci && ci->progresso > 0) snprintf(rot, sizeof rot, "Retomar");
     else snprintf(rot, sizeof rot, "Reproduzir"); }
 
+  float larguraAcoes = 0;
   { float cyBtn = yAcoes + NV_DETW2_BTN_H * 0.5f;
     int nb = 0, n = nBotoes();
     // Trocar de titulo com o foco no ultimo circular de um FILME e cair numa
@@ -3558,7 +3555,9 @@ static void heroWeb(float a, float desloc) {
       desenhaBotao(rc, NULL, acaoEm(nb), nivel == 0 && botao == nb, a);
       if (a > 0.3f) ponteiro_alvo(rc.x, rc.y, rc.w, rc.h, ponteiroDetalhe, NULL, -1, nb);
       bx += NV_DETW2_CIRC + NV_DETW2_BTN_GAP;
-    } }
+    }
+    larguraAcoes = bx - NV_DETW2_X - NV_DETW2_BTN_GAP;
+  }
 
   // --- linha da AGENDA ------------------------------------------------------
   // Cor de realce e nao branco: e a unica linha do hero que fala de uma data
@@ -3588,9 +3587,17 @@ static void heroWeb(float a, float desloc) {
       snprintf(leg, sizeof leg, "%s", agLinha);
     }
     if (carro && !emFoco) {
-      const char *label = badge_largura(leg) <= NV_DETW2_TEXTO_W ? leg : i18n("Próximo episódio");
-      badge_desenhar(NV_DETW2_X, logoTopo - BADGE_H - 12.0f,
-                    label, BADGE_REALCE, a);
+      TxtLinha label = txt_linha_corta(TXT_CAPTION, leg, 255, 255, 255, 255,
+                                      NV_DETW2_TEXTO_W - 40.0f);
+      float w = label.w + 40.0f, h = 44.0f;
+      GfxRect pill = {NV_DETW2_X + (larguraAcoes - w) * .5f, yAgenda, w, h};
+      if (pill.x < NV_DETW2_X) pill.x = NV_DETW2_X;
+      ajustes_acento(&ar, &ag, &ab);
+      gfx_cor(pill, .5f, ar, ag, ab, a);
+      gfx_cor((GfxRect){pill.x+2, pill.y+2, pill.w-4, pill.h-4}, .5f,
+              .045f, .05f, .06f, .96f*a);
+      txt_desenhar_alpha(label, pill.x + 20.0f,
+                        pill.y + (h-label.h)*.5f, a);
     } else {
     // SEMPRE BRANCA (dono, 21/09/2026: "mantenha o texto sempre em branco").
     // Era a cor de realce — rosa sobre cascalho laranja nao se le.
