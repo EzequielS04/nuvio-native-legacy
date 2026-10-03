@@ -449,12 +449,11 @@ void posplay_desenhar(Uint32 agora, float baseY) {
       // que o ajuste esconde no detalhe e na folha. Mesma regra deles: so o
       // que o mapa afirma como visto fica nitido; o "nao sei" desfoca. Sem
       // copia pronta o fundo cinza fica por um quadro, nunca a arte nitida.
-      if (t && ajustes_desfocar_nao_assistidos() &&
-          !(ci && vistoep_estado(ci->imdb, proxT, proxE) == 1))
+      if (t && posplay_desfocar_thumb(idx, proxT, proxE))
         t = gfx_desfocado(t, arte);
       gfx_cor(tr, PP_EP_RAIO / tr.h, .19f, .19f, .20f, a);
       // Sem copia desfocada pronta, gfx_desfocado devolve 0 e fica o fundo.
-      if (t && posplay_desfocar_thumb(idx, proxT, proxE)) t = gfx_desfocado(t, arte);
+      // A textura retornada ja esta desfocada: nunca a envie de novo ao cache.
       if (t) {
         gfx_tex_aspect_atual = tex_aspecto(arte);
         gfx_rect(tr, t, GFX_CARD, 0, 0, 0, PP_EP_RAIO / tr.h, 0, 0, 0, a);

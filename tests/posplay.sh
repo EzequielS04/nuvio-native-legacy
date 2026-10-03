@@ -21,3 +21,13 @@ cc ${flags[@]+"${flags[@]}"} "${sources[@]}" tests/posplay.c -Isrc -o /tmp/nuvio
 grep -q 'ajustes_desfocar_nao_assistidos()' src/posplay.c
 grep -q 'gfx_desfocado(t, arte)' src/posplay.c
 echo "posplay: desfoque do proximo episodio presente (#177)"
+
+# #232: do not feed an already blurred texture back into the blur cache.
+python3 - <<'PYTEST'
+from pathlib import Path
+s = Path('src/posplay.c').read_text()
+draw = s.split('void posplay_desenhar(', 1)[1]
+assert draw.count('gfx_desfocado(t, arte)') == 1
+assert 'if (t && posplay_desfocar_thumb(idx, proxT, proxE))' in draw
+print('posplay: next episode thumbnail uses one guarded blur pass (#232)')
+PYTEST
