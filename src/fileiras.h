@@ -179,6 +179,7 @@ void fil_confirmar_limite(void);
 // outro jeito — e e assim que a fila sobrevive byte a byte ao arquivo antigo.
 typedef enum { FIL_NA_HOME = 0, FIL_NA_FILA, FIL_FORA } FilEstado;
 int  fil_estado(int i);
+int  fil_estado_chave(const char *chave);   // -1 = desconhecida
 int  fil_n_na_home(void);
 int  fil_n_fila(void);
 // Liga e poe no fim do bloco ligado. Devolve o indice NOVO (a linha se move) e

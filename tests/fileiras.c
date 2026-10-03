@@ -972,6 +972,23 @@ int main(void) {
     usaArquivo = 0; }
   puts("ok  #197 limpeza: marca no arquivo; fora do padrao nao mexe");
 
+  // A HOME LE O MESMO ESTADO DO EDITOR (fil_estado_chave). Limite 3, quatro
+  // ligadas: "d" e a fila e a home nao pode desenha-la; "z" desligada esta fora;
+  // chave que a tabela nao conhece devolve -1 (a home nao a barra).
+  fil_esquecer();
+  fil_definir_limite(3);
+  { const char *n[] = { "a", "b", "c", "d", "z" };
+    int j;
+    for (j = 0; j < 5; j++) fil_registrar(n[j], n[j], "X", "movie", 1);
+    fil_remover(4);
+    assert(fil_estado_chave("a") == FIL_NA_HOME && fil_estado_chave("c") == FIL_NA_HOME);
+    assert(fil_estado_chave("d") == FIL_NA_FILA);
+    assert(fil_estado_chave("z") == FIL_FORA);
+    assert(fil_estado_chave("nunca") == -1 && fil_estado_chave("") == -1);
+    fil_remover(0);                              // abre vaga: d entra sozinha
+    assert(fil_estado_chave("d") == FIL_NA_HOME); }
+  puts("ok  estado por chave: fila e fora nao entram na home");
+
   puts("fileiras: tudo ok");
   return 0;
 }
