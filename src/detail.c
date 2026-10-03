@@ -280,11 +280,11 @@ static int   carEsperaRect;         // quadros de home desenhada para ler o cart
 static float carOff, carVel;        // posicao da tira, em titulos
 static float cartao = 1.0f, cartaoVel;  // 1 = cartao, 0 = pagina cheia
 // TELA CHEIA NO TOPO (dono, 01/10): a PRIMEIRA seta para baixo so estica o
-// cartao ate a tela inteira — a arte (ou o trailer) toma a tela e o texto fica
-// onde estava, sem rolar; a SEGUNDA desce para a pagina (nivel 1). Voltar
+// cartao ate a tela inteira — arte e texto vao para as margens, sem rolar;
+// a SEGUNDA desce para a pagina (nivel 1). Voltar
 // desfaz na ordem inversa: pagina -> tela cheia no topo -> cartao -> fileira.
 // `carTxt` e a mola do texto: 1 na posicao do cartao, 0 na da pagina; ela so
-// vai a 0 com a pagina rolada (nivel >= 1).
+// vai a 0 tambem quando o cartao se expande para tela cheia.
 static int   carCheia;
 static float carTxt = 1.0f, carTxtVel;
 static GfxRect carOrigem;           // cartaz da fileira (abrir e fechar)
@@ -2728,8 +2728,8 @@ void detail_atualizar(float dt, Uint32 agora) {
     int k;
     carOff = anim_mola2(&carVel, carOff, (float)carPos, dt, CAR_MOLA);
     cartao = anim_mola2(&cartaoVel, cartao, (nivel >= 1 || carCheia) ? 0.0f : 1.0f, dt, CAR_MOLA_PAG);
-    carTxt = anim_mola2(&carTxtVel, carTxt, nivel >= 1 ? 0.0f : 1.0f, dt, CAR_MOLA_PAG);
-    if (ajustes_animacoes_reduzidas()) { carTxt = nivel >= 1 ? 0.0f : 1.0f; carTxtVel = 0.0f; }
+    carTxt = anim_mola2(&carTxtVel, carTxt, (nivel >= 1 || carCheia) ? 0.0f : 1.0f, dt, CAR_MOLA_PAG);
+    if (ajustes_animacoes_reduzidas()) { carTxt = (nivel >= 1 || carCheia) ? 0.0f : 1.0f; carTxtVel = 0.0f; }
     // Monta a pagina do titulo novo quando a tira esta chegando: o texto dele
     // entra enquanto o cartao assenta, e nao depois.
     if (carAplicado != carPos && fabsf(carOff - (float)carPos) < 0.25f && !saindo)
@@ -3302,7 +3302,7 @@ static void heroWeb(float a, float desloc) {
 
   // Em serie o web escreve "Roteirista:"/"Criador:"; em filme, "Diretor:".
   char sup[192] = "";
-  if (ci && ci->direcao[0])
+  if (ehSerie() && ci && ci->direcao[0])
     snprintf(sup, sizeof sup, "%s: %s", i18n(ehSerie() ? "Roteirista" : "Diretor"),
              ci->direcao);
 
@@ -3430,9 +3430,16 @@ static void heroWeb(float a, float desloc) {
   // pedido. Pedindo o teto, o logo sumia por um instante ao abrir o titulo;
   // pedindo a largura real, aparece na hora e troca pela nitida em seguida.
   GLuint texLogo = arqLogo ? tex_obter_larg_qualquer(arqLogo, NV_DETW_LOGO_MAXW) : 0;
-  // The live catalog title remains readable even if the logo is in another
-  // language, loading, or unavailable. Wrap the complete name above the logo.
-  const char *nome = tituloDe(idx);
+  // Hide the caption only with language evidence for the actual displayed
+  // logo. Frozen/session/manual logos must not inherit another image's tag.
+  int logoLocal = 0;
+  if (ci && arqLogo && ci->logoIdiomaUrl[0] && ci->logoIdioma[0]) {
+    const char *actual = strrchr(arqLogo, '/');
+    const char *known = strrchr(ci->logoIdiomaUrl, '/');
+    logoLocal = actual && known && !strcmp(actual, known) &&
+                !strncmp(ci->logoIdioma, desc_tmdb_idioma(), 2);
+  }
+  const char *nome = (!texLogo || !logoLocal) ? tituloDe(idx) : NULL;
   float baseLogo = (temRetom > 0.0f || agLinha[0] ? yEstado : yAcoes)
                    - NV_DETW_LOGO_GAP;
   float hNome = nome ? txt_bloco(TXT_DET_META2, nome, 255, 255, 255,
@@ -3805,6 +3812,17 @@ static void heroWeb(float a, float desloc) {
       desc_pais_txt(ci->pais, paisTxt, sizeof paisTxt);
       TxtLinha lp = txt_linha(TXT_DET_META2, paisTxt, 255, 255, 255, 255);
       txt_desenhar_alpha(lp, x, yc - lp.h * 0.5f, a);
+      x += lp.w; algo = 1;
+    }
+    if (!ehSerie() && ci && ci->direcao[0]) {
+      float gap = algo ? NV_DETW2_SEP * 2 + NV_DETW2_PONTO_D : 0;
+      float remaining = NV_DETW2_X + NV_DETW2_TEXTO_W - x - gap;
+      if (remaining > 100.0f) {
+        if (algo) desenhaPonto(x + NV_DETW2_SEP, yc, 0.502f, a);
+        TxtLinha ld = txt_linha_corta(TXT_DET_META2, ci->direcao,
+                                     255, 255, 255, 255, remaining);
+        txt_desenhar_alpha(ld, x + gap, yc - ld.h * 0.5f, a);
+      }
     }
   }
 }
@@ -5984,8 +6002,8 @@ void detail_desenhar(Uint32 agora) {
           GfxRect hb = carBuraco(&raio);
           passo = hb.w + CAR_VAO;
           // hb.x - CAR_X*cartao e so o voo da abertura (0 assentado); o lugar
-          // do texto segue carTxt, e nao o tamanho do cartao: esticado para a
-          // tela cheia ele nao se mexe.
+          // do texto segue carTxt: expandir leva a coluna para a margem
+          // da pagina, junto com a arte.
           heroDx = (hb.x - CAR_X * cartao) + ((float)carAplicado - carOff) * passo +
                    (CAR_X + CAR_TEXTO_PAD - 96.0f) * carTxt;
           dyCar = -CAR_TEXTO_SOBE * carTxt;

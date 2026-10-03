@@ -460,9 +460,13 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
         int manterAddon = ajustes_logo_addon() && d->origem[0] && logoAntes[0] &&
                           !ehSvg(logoAntes) && strcmp(logoAntes, d->poster);
         { const char *esc = local[0] ? local : neutro[0] ? neutro : en;
-          if (esc[0] && !manterAddon)
+          if (esc[0] && !manterAddon) {
             snprintf(d->logo, sizeof d->logo,
-                     "https://image.tmdb.org/t/p/w500%s", esc); }
+                     "https://image.tmdb.org/t/p/w500%s", esc);
+            snprintf(d->logoIdioma, sizeof d->logoIdioma, "%s",
+                     local[0] ? base : neutro[0] ? "und" : "en");
+            snprintf(d->logoIdiomaUrl, sizeof d->logoIdiomaUrl, "%s", d->logo);
+          } }
         // LIMPA O QUE JA ESTAVA ENVENENADO: item do cache do catalogo pode ter
         // entrado com logo .svg (desta funcao antes do filtro, ou de um addon
         // que mande svg em `logo` — ver deMeta). Sem uso possivel, fora.

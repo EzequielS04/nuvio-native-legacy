@@ -40,6 +40,9 @@ typedef struct {
   // Mesmo teto do cache de textura (NV_TEX_URL_MAX, tex_cache.h).
   char poster[1024];
   char logo[512];      // vazio quando o titulo nao tem logo
+  // Language evidence belongs to this exact logo, never to another selection.
+  char logoIdioma[8];
+  char logoIdiomaUrl[512];
   char titulo[160];
   char genero[160];    // "Programa de TV · Drama · Misterio"
   char meta[96];       // "2022 · 3 temporadas"
