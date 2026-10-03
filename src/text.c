@@ -270,6 +270,22 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 36, PESO_BOLD    },   // TXT_ILHA_PERGUNTA: a pergunta da confirmacao
   { 20, PESO_REGULAR },   // TXT_ILHA_TEXTO: o texto corrido da confirmacao
   { NV_FT_BODY, PESO_BOLD },           // destaque na frase da ilha (TXT_ILHA_FORTE)
+  // Escala do player no Glass UI (text.h, TXT_G*), na mesma ordem do enum.
+  { 14, PESO_BOLD    },   // TXT_G14B
+  { 16, PESO_BOLD    },   // TXT_G16B
+  { 18, PESO_REGULAR },   // TXT_G18R
+  { 18, PESO_MEDIUM  },   // TXT_G18M
+  { 19, PESO_MEDIUM  },   // TXT_G19M
+  { 20, PESO_BOLD    },   // TXT_G20B
+  { 20, PESO_MEDIUM  },   // TXT_G20M
+  { 21, PESO_BOLD    },   // TXT_G21B
+  { 22, PESO_MEDIUM  },   // TXT_G22M
+  { 23, PESO_BOLD    },   // TXT_G23B
+  { 26, PESO_BOLD    },   // TXT_G26B
+  { 28, PESO_BOLD    },   // TXT_G28B
+  { 30, PESO_BOLD    },   // TXT_G30B
+  { 30, PESO_MEDIUM  },   // TXT_G30M
+  { 52, PESO_BOLD    },   // TXT_G52B
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.

@@ -246,5 +246,9 @@ const char *extras_relacionado_imdb(int i);
 // Poster do relacionado (URL). Vem de `extended=images` do Trakt, que devolve o
 // caminho sem esquema — o https e acrescentado aqui.
 const char *extras_relacionado_poster(int i);
+#ifdef NV_SHOT_HOOKS
+void extras_shot_relacionados(const char *const *titulo, const char *const *ano,
+                              const char *const *poster, int n);
+#endif
 
 #endif

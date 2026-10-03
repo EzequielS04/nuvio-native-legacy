@@ -102,3 +102,19 @@ double intro_creditos_seg(void){
     if(trechos[i].tipo==INTRO_CREDITOS&&trechos[i].inicio>s)s=trechos[i].inicio;
   pthread_mutex_unlock(&trava);return s;
 }
+
+// Os trechos conhecidos, para a barra do player marcar onde comecam e acabam
+// (os cortes discretos do mockup do Glass UI). Copia sob a trava.
+int intro_trechos(IntroTrecho *saida,int max){
+  int n;pthread_mutex_lock(&trava);
+  n=nTrechos<max?nTrechos:max;
+  if(n>0)memcpy(saida,trechos,(size_t)n*sizeof *saida);
+  pthread_mutex_unlock(&trava);return n;
+}
+#ifdef NV_SHOT_HOOKS
+void intro_shot_definir(const IntroTrecho *v,int n){
+  pthread_mutex_lock(&trava);geracao++;
+  nTrechos=n<8?n:8;if(nTrechos>0)memcpy(trechos,v,(size_t)nTrechos*sizeof *v);
+  pthread_mutex_unlock(&trava);
+}
+#endif

@@ -1918,3 +1918,18 @@ int extras_proximo_episodio(int *t, int *e) {
   pthread_mutex_unlock(&trava);
   return ok;
 }
+
+#ifdef NV_SHOT_HOOKS
+// Capturas: relacionados fixos (titulo, ano, imdb e poster por item).
+void extras_shot_relacionados(const char *const *titulo, const char *const *ano,
+                              const char *const *poster, int n) {
+  int i;
+  nRel = n < EX_REL_MAX ? n : EX_REL_MAX;
+  for (i = 0; i < nRel; i++) {
+    snprintf(rel[i].titulo, sizeof rel[i].titulo, "%s", titulo[i]);
+    snprintf(rel[i].ano, sizeof rel[i].ano, "%s", ano[i]);
+    snprintf(rel[i].imdb, sizeof rel[i].imdb, "tt%07d", 100 + i);
+    snprintf(rel[i].poster, sizeof rel[i].poster, "%s", poster[i]);
+  }
+}
+#endif

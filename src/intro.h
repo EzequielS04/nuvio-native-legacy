@@ -36,4 +36,9 @@ int  intro_ativo(double posSeg,double *fim,int *tipo);
 // posplay.c, que precisa do INSTANTE e nao de "estou dentro".
 double intro_creditos_seg(void);
 int  intro_extrair(const char *json,IntroTrecho *saida,int max);
+// Copia ate `max` trechos conhecidos; devolve quantos.
+int  intro_trechos(IntroTrecho *saida,int max);
+#ifdef NV_SHOT_HOOKS
+void intro_shot_definir(const IntroTrecho *v,int n);   // capturas: trechos fixos
+#endif
 #endif
