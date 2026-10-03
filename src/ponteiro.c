@@ -704,6 +704,9 @@ void ponteiro_alvo(float x, float y, float w, float h,
   if (!ponteiro_ativo()) return;
   if (w <= 0 || h <= 0 || nLista[escreve] >= PONT_MAX_ALVOS) return;
   al = &lista[escreve][nLista[escreve]++];
+  // Alvo registrado de dentro de uma camada ampliada (gfx_escala): a lista
+  // guarda a tela REAL, a mesma em que o cursor anda.
+  { float e = gfx_escala(); x *= e; y *= e; w *= e; h *= e; }
   al->x = x; al->y = y; al->w = w; al->h = h;
   al->focar = focar; al->ativar = ativar; al->a = a; al->b = b;
   al->arrasta = 0;

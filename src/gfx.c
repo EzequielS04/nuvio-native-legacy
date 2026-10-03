@@ -74,6 +74,19 @@ static float uTelaW = NV_TELA_W, uTelaH = NV_TELA_H;
 static int   miniAtiva, miniPxW, miniPxH;
 static float miniX0, miniY0, miniEsc;
 void gfx_tamanho_alvo(int w, int h) { telaW = w; telaH = h; }
+// Tamanho da interface (gfx.h). escAtiva multiplica o retangulo de layout
+// antes de tudo: o SDF, os raios e as espessuras sao fracoes do proprio rect,
+// e uAlt sai da altura JA ampliada — a rampa de borda segue com 1 px do alvo.
+// As passadas internas de tela cheia (luz assada, snapshot, desfoques) desligam
+// o fator: elas falam em tela real, nao em layout de camada.
+static float escUi = 1.0f, escAtiva = 1.0f;
+void gfx_escala_ui_definir(float s) { escUi = (s >= 1.0f && s <= 2.0f) ? s : 1.0f; }
+float gfx_escala_ui(void) { return escUi; }
+float gfx_escala(void) { return escAtiva; }
+float gfx_escala_entrar(void) { float a = escAtiva; escAtiva = escUi; return a; }
+void gfx_escala_sair(float anterior) { escAtiva = anterior; }
+#define ESC_REAL_INI() float escGuard_ = escAtiva; escAtiva = 1.0f
+#define ESC_REAL_FIM() escAtiva = escGuard_
 
 static GLuint snapFbo = 0, snapTex = 0;
 static int snapW = 0, snapH = 0;
@@ -1453,6 +1466,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
               float cr, float cg, float cb, float ca) {
   int comAmb = 0, opaco = 0, cheia, clearCor, duplo = 0;
   if ((int)modo < 0 || (int)modo >= GFX_NMODOS) return;
+  if (escAtiva != 1.0f) { r.x *= escAtiva; r.y *= escAtiva; r.w *= escAtiva; r.h *= escAtiva; }
   // A COR DO DESTAQUE E A ASSINATURA. Com o degrade ligado, todo retangulo ou
   // anel pintado EXATAMENTE com o destaque vivo (os tres floats que
   // ajustes_acento devolveu, sem conta no meio) e superficie de destaque, e
@@ -1782,7 +1796,9 @@ static void ambAssar(void) {
     glViewport(0, 0, AMB_W, AMB_H);
     glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-    gfx_rect(tela, 0, GFX_AMBIENTE, 0, 0, 0, 0, 1, 1, 1, nv_ambiente_forca);
+    { ESC_REAL_INI();
+      gfx_rect(tela, 0, GFX_AMBIENTE, 0, 0, 0, 0, 1, 1, 1, nv_ambiente_forca);
+      ESC_REAL_FIM(); }
     telaW = twAnt; telaH = thAnt;
     glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
     glViewport(vpAnt[0], vpAnt[1], vpAnt[2], vpAnt[3]);
@@ -1803,7 +1819,9 @@ void gfx_ambiente(float alfa) {
   // Dentro de um snapshot (outro FBO ativo) ou sem FBO: o caminho antigo.
   if (snapAtivo || !ambPreparar() || ambChave[0] < 0.0f) {
     gfx_ambiente_descarregar();
-    gfx_rect(tela, 0, GFX_AMBIENTE, 0, 0, 0, 0, 1, 1, 1, a);
+    { ESC_REAL_INI();
+      gfx_rect(tela, 0, GFX_AMBIENTE, 0, 0, 0, 0, 1, 1, 1, a);
+      ESC_REAL_FIM(); }
     return;
   }
   // O pedido de main.c (alfa 1, logo depois do clear): fica pendente ate o
@@ -1826,6 +1844,7 @@ static void ambPintar(float alfa) {
   // "Dinamica imersiva"; circulos viravam elipses no tests/homelayouts_shot).
   float aspAnt = gfx_tex_aspect_atual, deslAnt = gfx_desliza_atual,
         coverAnt = gfx_card_forcar_cover_atual;
+  ESC_REAL_INI();
   gfx_desliza_atual = 0.0f; gfx_card_forcar_cover_atual = 0.0f;
   // O assado mora em gfx_ambiente_preparar, ANTES do clear da tela: trocar de
   // alvo com a tela ja limpa obriga a GPU de ladrilhos a gravar e reler a tela.
@@ -1849,6 +1868,7 @@ static void ambPintar(float alfa) {
   }
   gfx_tex_aspect_atual = aspAnt; gfx_desliza_atual = deslAnt;
   gfx_card_forcar_cover_atual = coverAnt;
+  ESC_REAL_FIM();
 }
 // --- FUNDO DA HOME DINAMICA ---------------------------------------------------
 //
@@ -1861,9 +1881,11 @@ static void ambPintar(float alfa) {
 void gfx_fundo_din_desenhar(const float topo[3], float queda) {
   GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
   gfx_tex_aspect_atual = 0.0f;
+  ESC_REAL_INI();
   gfxBlend(0);   // substitui o clear: a GPU nao le a tela para misturar
   gfx_rect(tela, 0, GFX_FUNDO_DIN, queda, 0, 0, 0.0f, topo[0], topo[1], topo[2], 1.0f);
   gfxBlend(1);
+  ESC_REAL_FIM();
 }
 
 void gfx_anel(GfxRect r, float raio, float esp,
@@ -2016,6 +2038,7 @@ static GLint recorteBox[4];
 void gfx_furo(GfxRect r) {
   float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
   int x0, x1, y0, y1, cheia;
+  if (escAtiva != 1.0f) { r.x *= escAtiva; r.y *= escAtiva; r.w *= escAtiva; r.h *= escAtiva; }
   if (r.w <= 0.0f || r.h <= 0.0f) return;
   if (gfx_modos_desligados && ((gfx_modos_desligados >> (unsigned)GFX_COR) & 1ull)) return;
   cheia = r.x <= 0.0f && r.y <= 0.0f && r.x + r.w >= NV_TELA_W && r.y + r.h >= NV_TELA_H;
@@ -2056,7 +2079,9 @@ void gfx_dissolver_tela(float a) {
   if (a >= 0.999f) return;
   if (a < 0.0f) a = 0.0f;
   glBlendFuncSeparate(GL_ZERO, GL_SRC_ALPHA, GL_ZERO, GL_SRC_ALPHA);
-  gfx_rect(t, 0, GFX_COR, 0, 0, 0, 0.0f, 0, 0, 0, a);
+  { ESC_REAL_INI();
+    gfx_rect(t, 0, GFX_COR, 0, 0, 0, 0.0f, 0, 0, 0, a);
+    ESC_REAL_FIM(); }
   glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 }
 
@@ -2133,7 +2158,9 @@ void gfx_snap_desenhar(void) {
   if (!snapTex) return;
   GfxRect r = { 0, 0, NV_TELA_W, NV_TELA_H };
   gfx_tex_aspect_atual = 0.0f;
-  gfx_rect(r, snapTex, GFX_SNAP, 0, 0.0f, 1.0f, 0.0f, 0, 0, 0, 1.0f);
+  { ESC_REAL_INI();
+    gfx_rect(r, snapTex, GFX_SNAP, 0, 0.0f, 1.0f, 0.0f, 0, 0, 0, 1.0f);
+    ESC_REAL_FIM(); }
 }
 
 void gfx_snap_encerrar(void) {
@@ -2207,7 +2234,7 @@ void gfx_icone(GfxRect r, const char *nome, float cr, float cg, float cb, float 
     snprintf(cam, sizeof cam, "%s/%s.png", dirIcones, nome);
     // Pede pela largura de desenho: um icone de 38px nao precisa dos 128 do
     // arquivo, e o teto por uso e o que mantem o cache fora do vermelho.
-    t = tex_obter_larg(cam, r.w);
+    t = tex_obter_larg(cam, r.w * escAtiva);
   }
   if (!t) return;
   gfx_tex_aspect_atual = 0.0f;   // o arquivo ja e quadrado
@@ -2228,6 +2255,7 @@ void gfx_recorte(float x, float y, float w, float h) {
   //    cobria um quarto da area pedida — o menu lateral perdia os dois
   //    primeiros itens e os rotulos saiam cortados no meio da palavra.
   float ex = (float)telaW / NV_TELA_W, ey = (float)telaH / NV_TELA_H;
+  if (escAtiva != 1.0f) { x *= escAtiva; y *= escAtiva; w *= escAtiva; h *= escAtiva; }
   int yy = (int)((NV_TELA_H - (y + h)) * ey);
   if (miniAtiva) {   // layout -> pixel do alvo da miniatura
     ex = ey = miniEsc;
@@ -2280,6 +2308,7 @@ void gfx_borrao_gerar(int via, unsigned int tex, float texAspecto) {
   if (!borFbo[a0] || !tex) return;
   GfxRect cheio = { 0, 0, NV_TELA_W, NV_TELA_H };
   gfx_ambiente_descarregar();   // pendente e da tela, nao deste alvo
+  ESC_REAL_INI();
   GFX_OUTRO_INI();
   GLint fboAnt = fboLigado(), vpAnt[4];
   glGetIntegerv(GL_VIEWPORT, vpAnt);
@@ -2309,6 +2338,7 @@ void gfx_borrao_gerar(int via, unsigned int tex, float texAspecto) {
   glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt);
   glViewport(vpAnt[0], vpAnt[1], vpAnt[2], vpAnt[3]);
   GFX_OUTRO_FIM();
+  ESC_REAL_FIM();
 }
 
 void gfx_borrao_desenhar(int via, GfxRect r, float alpha) {
@@ -2440,6 +2470,7 @@ GLuint gfx_desfocado(GLuint src, const char *chave) {
     if (!desfPreparar()) { glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)fboAnt); return 0; }
     if (!desf[vago].tex) desf[vago].tex = desfNovaTex();
     dst = desf[vago].tex;
+    ESC_REAL_INI();
     GFX_OUTRO_INI();
     glDisable(GL_SCISSOR_TEST);
     gfxBlend(0);
@@ -2464,6 +2495,7 @@ GLuint gfx_desfocado(GLuint src, const char *chave) {
     gfxBlend(mistura);
     if (tesoura) glEnable(GL_SCISSOR_TEST);
     GFX_OUTRO_FIM();
+    ESC_REAL_FIM();
   }
   desf[vago].src = src;
   desf[vago].chave = h;
