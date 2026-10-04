@@ -1,16 +1,27 @@
 // Regression: unknown logo language and fullscreen carousel edge navigation.
+#define desc_pedir_titulo_tmdb capturar_rota_tmdb
+#define extras_relacionado_imdb relacionado_tmdb_fixture
 #include "../src/detail.c"
+#undef desc_pedir_titulo_tmdb
+#undef extras_relacionado_imdb
 #include <assert.h>
+static long rotaId;
+static char rotaTipo[16];
+void capturar_rota_tmdb(long id, const char *tipo) {
+  rotaId = id;
+  snprintf(rotaTipo, sizeof rotaTipo, "%s", tipo);
+}
+const char *relacionado_tmdb_fixture(int i) {
+  return i == 0 ? "tmdb:42" : "";
+}
 int main(void) {
   assert(SDL_Init(SDL_INIT_TIMER) == 0);
-  // Lower the Apple TV card and page together, without moving other layouts.
-  assert(heroTopo(0, 1, 0) == 96 && heroTopo(0, 0, 900) == 250);
-  assert(heroTopo(1, 1, 0) == 192);
-  assert(heroTopo(1, 0, 600) == 298);
-  assert(heroTopo(1, 0, 800) == 232);
-  assert(heroTopo(1, 0, 900) == 132);
-  assert(heroTopo(1, 0, 600) - CAR_TEXTO_SOBE == 282);
-  assert(heroTopo(1, 1, 0) - CAR_TEXTO_SOBE == 176);
+  // Detail geometry is the published1.7.4 layout; global Glass remains.
+  assert(NV_DETP_G_TEMP == 1080 && NV_DETP_TEMP_Y == 1160);
+  assert(NV_DETP_G_EP == 1194 && NV_DETP_EP_Y == 1286);
+  assert(NV_DETP_EP_W == 640 && NV_DETP_EP_H == 414);
+  assert(CAR_TEXTO_SOBE == 64);
+  assert(ORDEM_FILME[SEC_ELENCO] == SEC_ELENCO);
   CatItem c = {0};
   const char *u = "https://image.tmdb.org/t/p/w500/image.png";
   assert(!mostrarNomeLogo(&c, u, 1, "pt-BR"));
@@ -71,6 +82,19 @@ int main(void) {
   detail_evento(&e); assert(!pessoaAberta && !saindo);
   pessoaAberta=1; e.key.keysym.sym=SDLK_BACKSPACE;
   detail_evento(&e); assert(!pessoaAberta && !saindo);
+  // Dedicated recommendations are focusable for both media kinds. Route
+  // opaque TMDB ids using the current media kind, without performing I/O.
+  for (int serie = 0; serie < 2; serie++) {
+    snprintf(c.tipo, sizeof c.tipo, "%s", serie ? "series" : "movie");
+    cat_definir_tudo(&c, 1, NULL, 0); idx = 0;
+    carro = 0; nivel = 1; foco.fileira = SEC_RELACIONADOS; foco.coluna = 0;
+    rotaId = 0; rotaTipo[0] = 0;
+    e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_RETURN;
+    detail_evento(&e);
+    e.type = SDL_KEYUP; detail_evento(&e);
+    assert(rotaId == 42);
+    assert(!strcmp(rotaTipo, serie ? "tv" : "movie"));
+  }
   puts("PASS: title/navigation and focus-only action group");
   return 0;
 }

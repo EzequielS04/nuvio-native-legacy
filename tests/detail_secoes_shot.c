@@ -159,16 +159,17 @@ int         fx_ficha_duracao(void)       { return 136; }
 const char *fx_ficha_paises(void)        { return "United States of America, Australia"; }
 const char *fx_ficha_classificacao(void) { return "R"; }
 static int extrasCardsLigados;
+static int relacionadosFixtureN = 3;
 static const char *const REL_TIT[] = { "The Second Chapter", "Night Archive", "The Glass Shore" };
 static const char *const REL_ANO[] = { "2024", "2025", "2026" };
 static const char *const REL_PO[] = {
   "deploy/app/art/poster/00.jpg", "deploy/app/art/poster/07.jpg",
   "deploy/app/art/poster/19.jpg" };
 static const char *const EST_NOME[] = { "Northlight Pictures", "A24 Television", "Nuvio Studios" };
-int fx_n_relacionados(void)   { return extrasCardsLigados ? 3 : 0; }
-const char *fx_relacionado_titulo(int i) { return REL_TIT[i]; }
-const char *fx_relacionado_ano(int i) { return REL_ANO[i]; }
-const char *fx_relacionado_poster(int i) { return REL_PO[i]; }
+int fx_n_relacionados(void)   { return extrasCardsLigados ? relacionadosFixtureN : 0; }
+const char *fx_relacionado_titulo(int i) { return REL_TIT[i % 3]; }
+const char *fx_relacionado_ano(int i) { return REL_ANO[i % 3]; }
+const char *fx_relacionado_poster(int i) { return REL_PO[i % 3]; }
 // COLECAO DE ENSAIO (#194): so a captura 18 liga. Tres partes, o proprio
 // filme entre elas, como o TMDB devolve.
 static int colecaoLigada;
@@ -534,6 +535,41 @@ int main(int argc, char **argv) {
       ajustes_dir(dd); } }
 
   montarCatalogo();
+
+  if (getenv("NV_ROWS_ONLY")) {
+    extrasCardsLigados = 1; relacionadosFixtureN = 10;
+    for (int item = 0; item < 2; item++) {
+      abrir(item, SEC_ELENCO, 0);
+      assert(!abaDisponivel(ABA_RELACIONADOS));
+      assert(secaoN(SEC_ELENCO) > 0 && secaoN(SEC_RELACIONADOS) == 10);
+      float castBottom = item == 0 ? baseDaAbaAtiva()
+          : conteudoSec[SEC_ELENCO] + alturaSecao(SEC_ELENCO);
+      assert(topoSec[SEC_RELACIONADOS] >= castBottom);
+      for (int q = 0; q < 20; q++) { SDL_Delay(16); quadros(1); }
+      snprintf(nome, sizeof nome, "%s-%s-cast.png", saida, item ? "movie" : "series");
+      gravar(nome);
+      SDL_Event ev = {0}; ev.type = SDL_KEYDOWN; ev.key.keysym.sym = SDLK_DOWN;
+      detail_evento(&ev);
+      assert(foco.fileira == SEC_RELACIONADOS);
+      assert(relNaLista());
+      for (int q = 0; q < 45; q++) { SDL_Delay(16); quadros(1); }
+      snprintf(nome, sizeof nome, "%s-%s-recommendations.png", saida, item ? "movie" : "series");
+      gravar(nome);
+      ev.key.keysym.sym = SDLK_RIGHT;
+      for (int q = 0; q < 8; q++) detail_evento(&ev);
+      assert(foco.coluna == 8);
+      for (int q = 0; q < 45; q++) { SDL_Delay(16); quadros(1); }
+      assert(scrollSec[SEC_RELACIONADOS] > 0);
+      assert(alturaAlvo(SEC_RELACIONADOS) >= REL_CARD_H);
+      snprintf(nome, sizeof nome, "%s-%s-recommendations-scrolled.png", saida, item ? "movie" : "series");
+      gravar(nome);
+      ev.key.keysym.sym = SDLK_UP; detail_evento(&ev);
+      assert(foco.fileira == SEC_ELENCO);
+      assert(!relNaLista());
+    }
+    puts("PASS: cast and recommendations have separate stacked rows and D-pad focus");
+    SDL_GL_DeleteContext(gl); SDL_DestroyWindow(janela); SDL_Quit(); return 0;
+  }
 
   // --- 1. SERIE, foco nas ABAS: a banda de audiencia aparece logo abaixo e
   //        mostra a CHAMADA, porque ninguem entrou nela ainda.

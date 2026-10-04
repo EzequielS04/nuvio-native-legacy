@@ -2993,15 +2993,52 @@ void home_hero_rect(float *x, float *y, float *w, float *h) {
   *x = r.x; *y = r.y; *w = r.w; *h = r.h;
 }
 
+// Only a language attached to this exact image confirms a foreign logo.
+// An unknown language or a pending decode keeps the artwork slot stable.
+static int heroNomeLogo(const CatItem *ci, const char *url, int loaded,
+                        const char *language) {
+  if (!url || !url[0]) return !loaded;
+  if (!ci || !language || !ci->logoIdiomaUrl[0] || !ci->logoIdioma[0] ||
+      !strcmp(ci->logoIdioma, "und")) return 0;
+  const char *actual = strrchr(url, '/');
+  const char *known = strrchr(ci->logoIdiomaUrl, '/');
+  int same = !strcmp(url, ci->logoIdiomaUrl) ||
+    (!strncmp(url, "https://image.tmdb.org/t/p/", 27) &&
+     !strncmp(ci->logoIdiomaUrl, "https://image.tmdb.org/t/p/", 27) &&
+     actual && known && !strcmp(actual, known));
+  return same && strncmp(ci->logoIdioma, language, 2) != 0;
+}
+
+typedef struct {
+  float logo, logoHeight, action, caption, meta, secondary, synopsis;
+} HeroCopyLayout;
+
+// One bottom boundary, measured text and the same order for every layout.
+// Reserve the action slot while it fades; neither decode nor focus can make
+// the button overlap the information underneath it.
+static HeroCopyLayout heroCopyLayout(float base, float hSin, int hasMeta,
+                                     int hasSec, float captionH, float logoH,
+                                     float btnH, float btnGap, float minTop) {
+  HeroCopyLayout p;
+  p.synopsis = base - hSin;
+  p.secondary = p.synopsis - (hasSec ? (hSin > 0 ? NV_HERO_COPY_LINHA : 0) + NV_LD_HERO_SEC : 0);
+  p.meta = p.secondary - (hasMeta ? ((hasSec || hSin > 0) ? NV_HERO_COPY_LINHA : 0) + NV_LD_HERO_META : 0);
+  p.caption = p.meta - (captionH > 0 ? NV_HERO_COPY_LINHA + captionH : 0);
+  p.action = p.caption - NV_HERO_COPY_LINHA - btnH;
+  p.logoHeight = fminf(logoH, fmaxf(48.0f, p.action - btnGap - minTop));
+  p.logo = p.action - btnGap - p.logoHeight;
+  return p;
+}
+
 // O BLOCO DE TEXTO DE UM TITULO do destaque (logo, meta, selos, sinopse),
 // ancorado pela base em `base` e a partir de `x`. Separado de desenhaHero para
 // a troca deslizada desenhar DOIS: o do titulo que sai e o do que entra, cada
 // um andando com a sua arte. `principal` 0 = o que sai: nao observa a selecao
 // de logo da sessao nem manda na cor viva.
-static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
+static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
                              float base, int lay, int cheio, float logoH,
                              float sinW, int sinLinhas, float aTexto,
-                             float aCopy, float cin) {
+                             float aCopy, float cin, float btnH, float btnGap) {
   int contHero = (ci && ci->progresso > 0 && ci->restanteMin > 0);
   int seguirHero = (ci && ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb) || cwo_conta_a_seguir(ci->imdb)));
 
@@ -3056,16 +3093,9 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
 
   const char *sinopse = (ci && ci->sinopse[0]) ? ci->sinopse : "";
 
-  float hSin = sinopse[0] ? txt_bloco(TXT_HERO_SIN, sinopse, 255, 255, 255, -1, 0,
-                                      sinW, NV_LD_HERO_SIN, 0.0f, sinLinhas)
+  float hSin = sinopse[0] ? txt_bloco_corta(TXT_HERO_SIN, sinopse, 255, 255, 255, -1, 0,
+                                            sinW, NV_LD_HERO_SIN, 0.0f, sinLinhas)
                           : 0.0f;
-  float ySin  = base - hSin;
-  float ySec  = temSec ? (ySin - (sinopse[0] ? NV_HERO_COPY_LINHA : 0.0f)
-                          - NV_LD_HERO_SEC) : ySin;
-  float yMeta = ySec - ((temSec || sinopse[0]) ? NV_HERO_COPY_LINHA : 0.0f)
-                - (metaLinha[0] ? NV_LD_HERO_META : 0.0f);
-  // O logo NAO desce com o bloco: ele faz o caminho ate o canto de baixo (abaixo).
-  float logoY = yMeta - NV_HERO_COPY_LINHA - logoH - cin * NV_CINEMA_DESCE;
 
   // Logo do titulo, ou o nome em texto quando nao ha logo
   // (.home-hero-title-text, 56/600 no modern — nao os 76 do TXT_TITULO1).
@@ -3096,14 +3126,31 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
   // Igual ao detalhe: nome escrito so quando nao ha logo ou o cache ja falhou.
   // Antes, qualquer decode pendente caia no ramo de texto — ao voltar do
   // detalhe (catalogo com url nova do TMDB) parecia "sumiu a arte do titulo".
-  int mostraNomeLogo = !tlogo && (!urlLogo || tex_falhou(urlLogo));
+  int mostraNomeLogo = heroNomeLogo(ci, urlLogo && tex_falhou(urlLogo) ? NULL : urlLogo,
+                                    tlogo != 0, desc_tmdb_idioma());
+  int caption = mostraNomeLogo && urlLogo && !tex_falhou(urlLogo) && ci && ci->titulo[0];
+  float captionH = caption ? txt_bloco_corta(TXT_HERO_META, ci->titulo, 255, 255, 255,
+                                            -1, 0, sinW, NV_LD_HERO_META, 0, 1) : 0;
+  // Padrão has a shorter banner: fit the logo into the measured remaining
+  // space when every real information line exists, including a caption.
+  float minTop = 24.0f;
+  if (lay == HOME_LAYOUT_PADRAO)
+    minTop = base - (NV_PAD_BANNER_H - NV_PAD_TEXTO_BASE) + 24.0f;
+  else if (lay == HOME_LAYOUT_DINAMICA)
+    minTop = base - (NV_DIN_HERO_H - NV_DIN_TEXTO_BASE) + 54.0f;
+  HeroCopyLayout copy = heroCopyLayout(base, hSin, metaLinha[0] != 0, temSec,
+                                      captionH, logoH, btnH, btnGap, minTop);
+  logoH = copy.logoHeight;
+  float ySin = copy.synopsis, ySec = copy.secondary, yMeta = copy.meta;
+  float logoY = copy.logo - cin * NV_CINEMA_DESCE;
   if (tlogo) {
     float ap = tex_aspecto(urlLogo);
     if (ap <= 0.0f) ap = 4.0f;
     float hTit = logoH, wTit = hTit * ap;
     if (wTit > maxWLogo) { wTit = maxWLogo; hTit = wTit / ap; }
-    // object-position: left top — a arte encosta no TOPO da caixa.
-    GfxRect rl = { x, logoY, wTit, hTit };
+    // Align the image to the slot base so actions sit directly below even
+    // when a wide logo uses less than the maximum reserved height.
+    GfxRect rl = { x, logoY + logoH - hTit, wTit, hTit };
     // MODO CINEMA: o logo ENCOLHE e ANDA ate o canto inferior esquerdo (o do
     // detalhe cruza-apaga, mas la o logo pequeno e outro desenho; aqui e o mesmo
     // logo, entao o caminho e continuo). Mesmas medidas de trailercinema.h.
@@ -3113,7 +3160,7 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
       fim = trailercinema_base();
       rl.w = anim_mistura(wTit, wc, cin);
       rl.h = anim_mistura(hTit, hc, cin);
-      rl.y = anim_mistura(logoY + hTit, fim, cin) - rl.h;
+      rl.y = anim_mistura(logoY + logoH, fim, cin) - rl.h;
     }
     gfx_tex_aspect_atual = 0.0f;
     // Logo escuro vira branco. Mesma regra da tela de detalhe: o TMDB nao marca
@@ -3124,7 +3171,7 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
       // da tecla a arte antiga ainda estava a 85% e o logo JA tinha sumido por
       // inteiro; ele so reaparece no mesmo quadro em que a arte nova entra.
       gfx_rect(rl, tlogo, m, 0, 0, 0, 0.0f, 1, 1, 1, aTexto * heroEntra); }
-  } else if (mostraNomeLogo) {
+  } else if (mostraNomeLogo && !caption) {
     // .legacy-webos .home-hero-title-text: 76px (components.css:19164), nao os
     // 56 do tema padrao.
     // Sem titulo NAO se inventa titulo. Aqui havia uma lista de demonstracao
@@ -3134,7 +3181,7 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
     // que ja sairam do detalhe. Sem nome, o hero fica so com a arte, que ja
     // basta, e o texto aparece quando o dado chegar.
     if (ci && ci->titulo[0]) {
-      TxtLinha tit = txt_linha(TXT_TITULO1, ci->titulo, 255, 255, 255, 255);
+      TxtLinha tit = txt_linha_corta(TXT_TITULO1, ci->titulo, 255, 255, 255, 255, maxWLogo);
       txt_desenhar_alpha(tit, x, logoY + logoH - (float)tit.h,
                          aTexto * (1.0f - cin));
       // Sem logo, o nome pequeno entra embaixo (o mesmo do detalhe).
@@ -3145,6 +3192,10 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
       }
     }
   }
+
+  if (caption && aCopy > 0.004f)
+    txt_bloco_corta(TXT_HERO_META, ci->titulo, 255, 255, 255, x, copy.caption,
+                    sinW, NV_LD_HERO_META, aCopy, 1);
 
   if (metaLinha[0] && aCopy > 0.004f) {
     float badgeW=ci?badges_desenhar(badges_provedor(ci->provNome),x,yMeta,150,24,aCopy):0;
@@ -3185,8 +3236,9 @@ static void desenhaCopiaHero(const CatItem *ci, int principal, float x,
   }
 
   if (sinopse[0] && aCopy > 0.004f)
-    txt_bloco(TXT_HERO_SIN, sinopse, 255, 255, 255, x, ySin, sinW,
-              NV_LD_HERO_SIN, aCopy, sinLinhas);
+    txt_bloco_corta(TXT_HERO_SIN, sinopse, 255, 255, 255, x, ySin, sinW,
+                    NV_LD_HERO_SIN, aCopy, sinLinhas);
+  return copy.action;
 }
 
 // `saida` = 0..1 de quanto o detalhe ja tomou a tela. So o TEXTO do hero sai
@@ -3667,45 +3719,21 @@ static void desenhaHero(Uint32 agora, float saida) {
   float descidaCopy = saida * NV_TELA_H * 0.06f + cin * NV_CINEMA_DESCE;
   if (aTexto <= 0.004f) return;
 
-  // BLOCO DE TEXTO DO HERO — transcrito do CSS do app web, nao deduzido de
-  // captura. `.home-modern-hero-copy` e um flex column com justify-content
-  // flex-end e gap 16, ancorado numa base fixa; os filhos, na ordem:
-  //   .home-hero-brand         caixa do logo, 440x200, arte no topo-esquerda
-  //   .home-modern-hero-meta-line   21/500 #b3b3b3, tokens separados por •
-  //   .home-modern-hero-secondary   18/600 branco 88%, com selos e o IMDb
-  //   .home-hero-description        22/400 branco, largura 560, leading 30
-  // Cada bloco vazio some (`.is-empty { display: none }`), e e por isso que a
-  // altura do conjunto muda de titulo para titulo — nao por posicao absoluta.
-  //
-  // O conteudo de cada linha vem de buildModernHeroPresentation
-  // (homeScreen.js:2497), que separa o caso "continuar assistindo" do resto.
-  // --- empilhamento de baixo para cima, como o flex-end do CSS ---
-  //
-  // O BLOCO DESCE JUNTO COM AS FILEIRAS. Pedido do dono: "deixar as informacoes
-  // mais para baixo e subir so quando descer para a fileira". Ele nao ganha uma
-  // animacao propria: anda exatamente o que `scrollY` empurrou, entao a
-  // distancia entre a ultima linha do texto e o titulo da primeira fileira e a
-  // mesma nos dois estados — e nao ha duas molas para descasar.
-  //
-  // A RESERVA e o que impede o botao de cair em cima do titulo da fileira. O
-  // bloco e ancorado pela BASE (flex-end), entao pendurar o botao abaixo dele
-  // sem descontar a altura seria desenhar 94px para dentro do espaco da fileira
-  // — e a colisao so apareceria no estado empurrado, que e justamente o que a
-  // foto do sofa mostra primeiro.
+  // Logo, actions, then the real information and compact synopsis. Keep
+  // each layout's bottom boundary; use the measured copy for the action Y.
   float empurra = scrollY < 0.0f ? -scrollY : 0.0f;
   float aBotao = anim_clamp(empurra / NV_HOME_HERO_EMPURRA, 0.0f, 1.0f);
-  float reservaBotao = aBotao * (NV_HOME_HERO_BOTAO_GAP + NV_HERO_BOTAO_H + 24.0f);
   float base = NV_SHELF_TOP - NV_HERO_COPY_GAP + descidaCopy
-             + empurra - reservaBotao;
+             + empurra - 24.0f;
   // Padrao e Dinamica ancoram o bloco na BASE DO PROPRIO DESTAQUE (e o botao
   // sempre existe, com o foco ou sem ele): o texto anda com a arte, e nao com
   // as fileiras como na Moderna.
   if (lay == HOME_LAYOUT_PADRAO) {
     aBotao = 1.0f;
-    base = r.y + r.h - NV_PAD_TEXTO_BASE - btnH - btnGap + descidaCopy;
+    base = r.y + r.h - NV_PAD_TEXTO_BASE + descidaCopy;
   } else if (lay == HOME_LAYOUT_DINAMICA) {
     aBotao = aVis;
-    base = r.y + NV_DIN_HERO_H - NV_DIN_TEXTO_BASE - btnH - btnGap + descidaCopy;
+    base = r.y + NV_DIN_HERO_H - NV_DIN_TEXTO_BASE + descidaCopy;
   }
   base += bordaPag.x;   // retorno de borda do Cima no destaque
   float x = ajustes_conteudo_x();
@@ -3713,9 +3741,9 @@ static void desenhaHero(Uint32 agora, float saida) {
   // do que entra vem colado atras, na mesma distancia (a largura da arte).
   if (deslizando && cAnt && cAnt != ci)
     desenhaCopiaHero(cAnt, 0, x + dAnt * r.w, base, lay, cheio, logoH, sinW,
-                     sinLinhas, aTexto, aCopy, cin);
-  desenhaCopiaHero(ci, 1, x + dAtu * r.w, base, lay, cheio, logoH, sinW,
-                   sinLinhas, aTexto, aCopy, cin);
+                     sinLinhas, aTexto, aCopy, cin, btnH, btnGap);
+  float actionY = desenhaCopiaHero(ci, 1, x + dAtu * r.w, base, lay, cheio, logoH, sinW,
+                   sinLinhas, aTexto, aCopy, cin, btnH, btnGap);
 
   // O BOTAO E A POSICAO, que so existem enquanto o destaque tem o foco.
   //
@@ -3741,7 +3769,7 @@ static void desenhaHero(Uint32 agora, float saida) {
         TxtLinha lb = txt_linha(TXT_CALLOUT, rot, tb, tb, tb, 255);
         float bh = btnH;
         float bw = lb.w + 96.0f;
-        float by = base + btnGap;
+        float by = actionY;
         GfxRect bt = { x, by, bw, bh };
         // Brilho difuso por tras do botao (0,9x a altura de folga, alpha 0,35):
         // a luz da pilula em foco do menu lateral (21/09/2026). Uma mancha de

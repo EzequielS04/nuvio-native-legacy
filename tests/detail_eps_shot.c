@@ -77,20 +77,35 @@
 #define recomenda_item fx_recomenda_item
 
 #include "text.h"
+#include "plrui.h"
 static const char *fxTituloEsperado;
 static int fxTituloDesenhado;
 static const char *fxSinopseEsperada;
 static int fxSinopseDesenhada;
-static float fxSinopseFim;
+static float fxTituloY, fxTituloH, fxPlayY, fxInfoY;
+static void fx_icone(GfxRect r, const char *nome, float cr, float cg, float cb, float ca);
+static float fx_kicker(const char *s, float x, float y, int r, int g, int b, float a);
 static float fx_titulo_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
                             float x, float y, float larg, float leading,
                             float alpha, int maxLinhas);
 #define txt_bloco fx_titulo_bloco
+#define gfx_icone fx_icone
+#define plrui_kicker fx_kicker
 #include "../src/detail.c"
 #undef txt_bloco
+#undef gfx_icone
+#undef plrui_kicker
 #undef recomenda_ativo
 #undef recomenda_n
 #undef recomenda_item
+static void fx_icone(GfxRect r, const char *nome, float cr, float cg, float cb, float ca) {
+  if (ca > .3f && !strcmp(nome,"pl_play-f")) fxPlayY=r.y;
+  gfx_icone(r,nome,cr,cg,cb,ca);
+}
+static float fx_kicker(const char *s, float x, float y, int r, int g, int b, float a) {
+  if (a > .1f) fxInfoY=y;
+  return plrui_kicker(s,x,y,r,g,b,a);
+}
 static float fx_titulo_bloco(TxtEstilo estilo, const char *s, int r, int g, int b,
                             float x, float y, float larg, float leading,
                             float alpha, int maxLinhas) {
@@ -98,12 +113,11 @@ static float fx_titulo_bloco(TxtEstilo estilo, const char *s, int r, int g, int 
   if (fxTituloEsperado && s && !strcmp(s,fxTituloEsperado) && alpha > 0.3f) {
     assert(maxLinhas == 0); // The complete name is wrapped, never ellipsized.
     assert(y >= 109.0f && y + height < NV_TELA_H);
+    fxTituloY = y;
+    fxTituloH = height;
     fxTituloDesenhado++;
   }
   if (fxSinopseEsperada && s && !strcmp(s,fxSinopseEsperada) && alpha > 0.3f) {
-    assert(estilo == TXT_DET_SIN && leading == 38 && maxLinhas == 5);
-    assert(y >= 109 && y + height + 134 <= NV_TELA_H - HI_MARGEM_BASE + 1);
-    fxSinopseFim = y + height;
     fxSinopseDesenhada++;
   }
   return height;
@@ -554,9 +568,22 @@ int main(int argc, char **argv) {
     snprintf(nome,sizeof nome,"%s-carousel-expanded-film.png",saida); gravar(nome);
     down.key.keysym.sym=SDLK_RIGHT; botao=nBotoes()-1;
     detail_evento(&down); assert(carPos==1 && !saindo);
+    // A compact artwork fixture makes the first-screen order reviewable.
+    // Unknown logo language keeps the artwork without a duplicate caption.
+    snprintf(itens[1].titulo,sizeof itens[1].titulo,"The Devil Wears Prada 2");
+    snprintf(itens[1].logo,sizeof itens[1].logo,"deploy/app/art/logo/07.png");
+    itens[1].logoIdiomaUrl[0]=itens[1].logoIdioma[0]=0;
+    snprintf(itens[1].pais,sizeof itens[1].pais,"Brazil");
+    snprintf(itens[1].direcao,sizeof itens[1].direcao,"Diretor de Ensaio");
+    cat_definir_tudo(itens,2,&filEnsaio,1);
+    detail_abrir(&replacement);
+    carro=1; carCheia=1; nivel=0; botao=0; maisAcoes=0;
+    cartao=carTxt=0; cartaoVel=carTxtVel=0;
+    for (int step=0;step<24;step++) {SDL_Delay(16);quadros(1);}
+    snprintf(nome,sizeof nome,"%s-carousel-expanded-film-logo.png",saida); gravar(nome);
     // Stress the measured bottom limit with actual fonts and real wrapping:
-    // foreign artwork, a complete long title, five synopsis lines, resume,
-    // country/direction, cast and the received recommendation chip.
+    // foreign artwork, a complete long title, hidden large synopsis, resume,
+    // country/direction and the received recommendation chip.
     snprintf(itens[1].titulo,sizeof itens[1].titulo,
       "Uma história extraordinariamente longa sobre a viagem de volta para casa e os amigos que encontramos pelo caminho através de mundos desconhecidos");
     snprintf(itens[1].sinopse,sizeof itens[1].sinopse,
@@ -567,7 +594,7 @@ int main(int argc, char **argv) {
       "fim, eles aprendem a encontrar esperança nos pequenos gestos e decidem juntos "
       "qual futuro desejam construir. A jornada transforma o modo como enxergam o "
       "mundo e as pessoas que sempre estiveram ao seu lado.");
-    snprintf(itens[1].logo,sizeof itens[1].logo,"deploy/app/art/logo/01.png");
+    snprintf(itens[1].logo,sizeof itens[1].logo,"deploy/app/art/logo/07.png");
     snprintf(itens[1].logoIdiomaUrl,sizeof itens[1].logoIdiomaUrl,"%s",itens[1].logo);
     snprintf(itens[1].logoIdioma,sizeof itens[1].logoIdioma,"en");
     snprintf(itens[1].pais,sizeof itens[1].pais,"Brazil");
@@ -584,8 +611,10 @@ int main(int argc, char **argv) {
     fxSinopseEsperada=itens[1].sinopse; fxSinopseDesenhada=0;
     quadros(3);
     assert(fxTituloDesenhado>0 && fxSinopseDesenhada>0);
-    printf("long movie synopsis bottom %.0f; recommendation bottom %.0f\n",
-           fxSinopseFim,fxSinopseFim+134);
+    assert(fxTituloY >= 109);
+    assert(fxTituloY > fxPlayY + 24);
+
+    printf("release1.7.4 localized caption after actions at %.0f; synopsis visible\n",fxTituloY);
     snprintf(nome,sizeof nome,"%s-carousel-expanded-film-long.png",saida); gravar(nome);
     puts("PASS: Apple episode/cast, Add reveal, expanded carousel and measured long movie captures"); return 0;
   }

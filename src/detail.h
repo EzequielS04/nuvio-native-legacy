@@ -83,7 +83,7 @@ int  detail_pediu_do_inicio(void);
 // "elenco + padding" a rolagem batia no teto em 1064 e a fileira de elenco
 // ficava em y=693 em vez de y=364 — meio ecra fora do lugar, e foi assim que
 // apareceu na primeira captura do aparelho.
-#define NV_DETP_FIM         1913.0f
+#define NV_DETP_FIM         2473.0f
 // Regra de rolagem do web, achada no fonte e conferida com quatro medidas:
 // o topo do GRUPO focado vai para 33% da altura util (40% nas abas). Constantes
 // DETAIL_ROW_FOCUS_TARGET / DETAIL_TAB_FOCUS_TARGET de metaDetailsScreen.js.
@@ -97,23 +97,17 @@ int  detail_pediu_do_inicio(void);
 #define NV_DETP_SEP           38.0f
 
 // Topo de cada GRUPO focavel, em coordenada de documento.
-//
-// GLASS UI (mockup "detalhe-retomar", 03/10): temporadas e episodios SUBIRAM
-// para a primeira tela da serie — o segmentado em y=520 e os cartoes de
-// 400x225 em y=620, com o texto ABAIXO da still. As abas e o elenco sobem
-// junto (560 px), logo abaixo da dobra. As medidas antigas (pilula 269x83 em
-// 1160, cartao 640x414 com texto sobre a still em 1286) eram do app web.
-#define NV_DETP_G_TEMP      520.0f
-#define NV_DETP_G_EP        620.0f
-#define NV_DETP_G_ABAS      1120.0f
-#define NV_DETP_G_ELENCO    1189.0f
+#define NV_DETP_G_TEMP      1080.0f
+#define NV_DETP_G_EP        1194.0f
+#define NV_DETP_G_ABAS      1680.0f
+#define NV_DETP_G_ELENCO    1749.0f
 
 // Abas de temporada: 269x80 em x=96, passo 321 (gap 52), raio 40, fonte 32/500.
 // A largura sai do texto + padding, e nao e constante: "Especiais" mede 219.
-#define NV_DETP_TEMP_Y      525.0f
-#define NV_DETP_TEMP_H        44.0f   // MEDIDO na referencia (era 80)
-#define NV_DETP_TEMP_PADX     20.0f
-#define NV_DETP_TEMP_GAP      4.0f
+#define NV_DETP_TEMP_Y      1160.0f
+#define NV_DETP_TEMP_H        60.0f   // Compact season selector
+#define NV_DETP_TEMP_PADX     26.0f
+#define NV_DETP_TEMP_GAP      20.0f
 // Base do resumo da temporada ("12 episódios · 5 assistidos") ao TOPO das
 // pilulas. A folga vive na vaga do cabecalho "Temporadas" que foi retirado: o
 // grupo comeca em NV_DETP_G_TEMP (1080) e a pilula so em 1160, entao ha 80 px
@@ -124,7 +118,7 @@ int  detail_pediu_do_inicio(void);
 // Episodio: card 640x422 em x=96, passo 726, raio 32. A diferenca estrutural
 // com o port anterior (que era do app da Apple TV) e que o TEXTO FICA DENTRO da
 // miniatura, sobre um degrade vertical, e nao abaixo dela.
-#define NV_DETP_EP_Y        620.0f
+#define NV_DETP_EP_Y        1286.0f
 // AS MEDIDAS DO CARD FORAM REFEITAS NO APARELHO (TCL, 1920x1080, serie
 // "Furious", 2026-09-01), porque as do web erravam em quase todas: o passo era
 // 726 contra os 671 medidos (o card ficava com 86px de vao em vez de 31) e o
@@ -132,11 +126,11 @@ int  detail_pediu_do_inicio(void);
 //
 // Referencia lida: card focado com anel de 4px em x=94..737 e y=245..662, ou
 // seja caixa 96..735 x 247..660 — 640x414. O card seguinte comeca em x=767.
-#define NV_DETP_EP_W         400.0f
-#define NV_DETP_EP_H         335.0f   // a caixa E a miniatura: o texto fica dentro
-#define NV_DETP_EP_PASSO     428.0f   // 767 - 96 = 671, arredondado para 640+32
-#define NV_DETP_EP_THUMB_H   225.0f
-#define NV_DETP_EP_RAIO       20.0f
+#define NV_DETP_EP_W         640.0f
+#define NV_DETP_EP_H         414.0f   // a caixa E a miniatura: o texto fica dentro
+#define NV_DETP_EP_PASSO     672.0f   // 767 - 96 = 671, arredondado para 640+32
+#define NV_DETP_EP_THUMB_H   414.0f
+#define NV_DETP_EP_RAIO       32.0f
 #define NV_DETP_EP_PAD        32.0f   // margem do texto dentro da miniatura
 #define NV_DETP_EP_TEXTO_W   576.0f
 // Selo "EPISÓDIO n": caixa 152x43 em (32,155) dentro do card, tinta do texto
@@ -172,19 +166,19 @@ int  detail_pediu_do_inicio(void);
 // Abas "Criador e elenco | Avaliacoes | Mais como este | Trailer": fonte 32/500,
 // selecionada branca, as outras #808080; o divisor "|" e 32/700 #808080, com 20
 // de folga de cada lado.
-#define NV_DETP_ABA_Y       1198.0f
+#define NV_DETP_ABA_Y       1758.0f
 #define NV_DETP_ABA_H         51.0f
 #define NV_DETP_ABA_SEP       20.0f
 
 // Elenco: card de 220 de largura, passo 270; avatar 140x140 ALINHADO A
 // ESQUERDA do card (nao centralizado); nome 26/500 rgb(179,179,179) e papel
 // 21/400 rgb(128,128,128) abaixo.
-#define NV_DETP_EL_Y        1257.0f
-#define NV_DETP_EL_W         150.0f
-#define NV_DETP_EL_PASSO     180.0f
-#define NV_DETP_EL_AVATAR    132.0f
-#define NV_DETP_EL_NOME_DY    12.0f   // base do avatar -> topo do nome
-#define NV_DETP_EL_PAPEL_DY   26.0f   // topo do nome -> topo do papel
+#define NV_DETP_EL_Y        1817.0f
+#define NV_DETP_EL_W         220.0f
+#define NV_DETP_EL_PASSO     270.0f
+#define NV_DETP_EL_AVATAR    140.0f
+#define NV_DETP_EL_NOME_DY    10.0f   // base do avatar -> topo do nome
+#define NV_DETP_EL_PAPEL_DY   43.0f   // topo do nome -> topo do papel
 // Altura de uma linha de texto do cartao de elenco (nome ou papel), e o vao
 // MEDIDO entre a base do elenco e o topo do wordmark do Trakt na captura da
 // referencia (~105 px em 1920). Existem para o empilhamento da secao de
@@ -335,14 +329,14 @@ int  detail_pediu_do_inicio(void);
 // (DetailSectionContainer(horizontalPadding, contentMaxWidth, bottomPadding)),
 // entao nao ha uma constante unica para ler no bytecode.
 #define NV_DETF_HERO_FIM     1080.0f   // o hero ocupa 0..1080, igual a serie
-#define NV_DETF_CAB_H          42.0f   // titulo de secao 34/700 (TXT_LOG_T34), Glass UI
-#define NV_DETF_CAB_GAP        26.0f   // cabecalho -> conteudo (.dh margin-bottom)
-#define NV_DETF_SEC_GAP        88.0f   // fim de uma secao -> cabecalho da proxima (mockup)
+#define NV_DETF_CAB_H          46.0f   // linha do cabecalho (TXT_HEADLINE, 38)
+#define NV_DETF_CAB_GAP        20.0f   // cabecalho -> conteudo
+#define NV_DETF_SEC_GAP        64.0f   // fim de uma secao -> cabecalho da proxima
 #define NV_DETF_PAD_FIM       130.0f   // padding-bottom do scroller (clamp(116,12vh,168))
 
 // ELENCO. Card 220x193, passo 270, avatar 140 alinhado a ESQUERDA do card.
 // Medido no web (.movie-cast-card / .movie-cast-track).
-#define NV_DETF_EL_ALT        206.0f
+#define NV_DETF_EL_ALT        193.0f
 #define NV_DETF_EL_MAX           18    // .slice(0, 18) do web
 // QUANTOS CABEM NA LINHA, medido na captura tests/detail_secoes_shot.sh
 // (/tmp/nuvio-detsec-10-filme-chamada.png): a fileira comeca no gutter
@@ -363,19 +357,16 @@ int  detail_pediu_do_inicio(void);
 // dentro de desenhaElenco. Rosto fora da tela nao pede textura; a foto entra
 // quando a coluna entra. Subir o teto nao baixa mais fotos de uma vez.
 
-// GLASS UI (mockup "Detalhe", 03/10): trailer 410x230 raio 22 com o disco
-// de play de 58 no canto de baixo a esquerda; elenco em circulo de 132
-// centrado numa coluna de 150, passo 180, nome 18/600 e papel 15 a 45%.
-// TRAILERS (antes). Card 520 de largura, miniatura 520x292 raio 24, passo 582.
+// TRAILERS. Card520 de largura, miniatura520x292 raio24, passo582.
 // O selo de play e um circulo de 96 a rgba(0,0,0,.48) com o triangulo de 44.
-#define NV_DETF_TR_W          410.0f
-#define NV_DETF_TR_PASSO      434.0f
-#define NV_DETF_TR_VIDEO_H    230.0f
-#define NV_DETF_TR_RAIO        22.0f
-#define NV_DETF_TR_NOME_DY    242.0f   // topo do card -> nome (28/500 branco)
-#define NV_DETF_TR_TIPO_DY    270.0f   // topo do card -> subrotulo (24/400 cinza)
-#define NV_DETF_TR_ALT        296.0f
-#define NV_DETF_TR_PLAY_D      58.0f
+#define NV_DETF_TR_W          520.0f
+#define NV_DETF_TR_PASSO      582.0f
+#define NV_DETF_TR_VIDEO_H    292.0f
+#define NV_DETF_TR_RAIO        24.0f
+#define NV_DETF_TR_NOME_DY    302.0f   // topo do card -> nome (28/500 branco)
+#define NV_DETF_TR_TIPO_DY    344.6f   // topo do card -> subrotulo (24/400 cinza)
+#define NV_DETF_TR_ALT        377.0f
+#define NV_DETF_TR_PLAY_D      96.0f
 
 // DETALHES DO FILME. Tabela de duas colunas com divisoria por linha.
 //
@@ -401,9 +392,9 @@ int  detail_pediu_do_inicio(void);
 // A chave alinha a esquerda em NV_DETP_X; o valor comeca numa coluna FIXA, e
 // nao depois do texto da chave — senao a segunda coluna serrilha de linha em
 // linha.
-#define NV_DETF_DET_LINHA      57.0f   // passo vertical de uma linha (.ficha do Glass UI)
+#define NV_DETF_DET_LINHA      68.0f   // passo vertical de uma linha
 #define NV_DETF_DET_W        1040.0f   // largura da tabela e da divisoria
-#define NV_DETF_DET_CHAVE_W   220.0f   // a coluna da chave da .ficha do Glass UI
+#define NV_DETF_DET_CHAVE_W   254.0f   // 24,4% de NV_DETF_DET_W (proporcao do Mac)
 #define NV_DETF_DET_MAXL         10    // Status, Lancamento, Duracao, Classif., Pais + Wikidata
 
 void detail_evento(const SDL_Event *e);

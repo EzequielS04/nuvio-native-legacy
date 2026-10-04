@@ -51,6 +51,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../src/detail.c" // Capture exact background endpoints without changing the public app API.
 
 #define NA 40
 static const char *NOMES[] = {
@@ -77,6 +78,7 @@ static const Fil FILS[] = {
 static SDL_Window *janela;
 static const char *dirDados;
 static double fillUlt, fillVisUlt, modoUlt[GFX_NMODOS]; static int rectUlt;
+static float fundoShotCartao = -1.0f;
 
 static void gravar(const char *bmp) {
   unsigned char *pix = malloc(1920 * 1080 * 4);
@@ -104,6 +106,10 @@ static void quadros(int n, const char *bmp) {
       if (home_item_focado(&it)) detail_abrir(&it);
     }
     detail_atualizar(1.0f / 60.0f, agora);
+    if (fundoShotCartao >= 0.0f) {
+      cartao = fundoShotCartao; cartaoVel = 0;
+      pg = getenv("NV_CAR_PG") ? atof(getenv("NV_CAR_PG")) : 0; t = 1;
+    }
     corviva_quadro(1.0f / 60.0f, ajustes_cor_viva(), ajustes_cor_logo(), ajustes_animacoes_reduzidas());
     txt_novo_quadro();
     tex_novo_quadro();
@@ -113,7 +119,8 @@ static void quadros(int n, const char *bmp) {
     glClear(GL_COLOR_BUFFER_BIT);
     gfx_ambiente(1.0f);
     if (!detail_cobre_tela()) home_desenhar(agora);
-    detail_desenhar(agora);
+    if (fundoShotCartao >= 0.0f) detalheFundo(1.0f);
+    else detail_desenhar(agora);
     ctx_atualizar(1.0f / 60.0f, agora);
     ctx_desenhar(agora);
     if (i == n - 1) { fillUlt = gfx_fill; fillVisUlt = gfx_fill_vis; rectUlt = gfx_n_rect;
@@ -357,6 +364,30 @@ int main(int argc, char **argv) {
     tecla(SDLK_RETURN);
     for (q = 0; q < 8; q++) { quadros(2, NULL); FOTO("abrindo"); }
     quadros(90, NULL); FOTO("cartao");
+    if (getenv("NV_CAR_LIMIAR")) {
+      static const float passos[] = {1.0f, .5f, .1f, .02f, .0021f, .0019f, 0.0f};
+      carOff = (float)carAplicado; carCheia = 1;
+      if (getenv("NV_CAR_SEM_ARTE")) {
+        CatItem *c = (CatItem *)cat_item(idx);
+        c->backdrop[0] = c->poster[0] = c->imdb[0] = arteFixa[0] = 0;
+        // O fixture remove a identidade junto com a arte: nao deixar o
+        // reconciliador reencontrar uma copia do titulo com imagem no catalogo.
+        idxImdb[0] = 0;
+        arteFixaPoster = 0;
+      } else if (getenv("NV_CAR_POSTER")) {
+        const CatItem *c = cat_item(idx);
+        snprintf(arteFixa, sizeof arteFixa, "%s", c->poster);
+        arteFixaPoster = 1;
+      }
+      for (size_t j=0; j<sizeof passos/sizeof passos[0]; j++) {
+        fundoShotCartao = passos[j];
+        snprintf(bmp, sizeof bmp, "%s-limiar-%zu.bmp", saida, j);
+        quadros(1, bmp);
+        printf("[carousel-background] card=%.5f branch=%s fill=%.3f rects=%d\n",
+               cartao, carDesenhaFundo() ? "window" : "detail", fillUlt, rectUlt);
+      }
+      goto fim;
+    }
     // ANDAR: direita ate a ponta dos botoes e mais uma = proximo titulo.
     for (r = 0; r < 8; r++) { tecla(SDLK_RIGHT); quadros(2, NULL); }
     for (q = 0; q < 8; q++) { quadros(3, NULL); FOTO("andando1"); }
