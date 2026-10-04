@@ -1,3 +1,4 @@
+void jellyfin_perfil_trocou(void);   // jellyfin.c: cancel in-flight work, load this profile
 #include "perfis.h"
 #include "sessao.h"
 #include "nuvem.h"
@@ -366,6 +367,7 @@ void plugins_perfil_mudou(void);
 
 void perfis_definir_ativo(int indice) {
   char linha[32];
+  int ativoAntes = ativo;
   if (indice <= 0) return;
   ativo = indice;
   fil_definir_perfil(indice);
@@ -374,6 +376,9 @@ void perfis_definir_ativo(int indice) {
   // O estado dos plugins e da conta+perfil: trocar avanca a geracao, corta os
   // scrapers em voo e relê o liga/desliga e os repositorios do perfil novo.
   plugins_perfil_mudou();
+  // Personal servers are per profile: drop the previous profile's in-flight
+  // requests and load this profile's connection (jellyfin.h).
+  if (indice != ativoAntes) jellyfin_perfil_trocou();
   escolhido = 1;
   gravado = 1;
   snprintf(linha, sizeof linha, "%d\n", indice);

@@ -1,4 +1,5 @@
 // Ver discord.h.
+#include "jfid.h"
 #include "discord.h"
 #include "discordws.h"
 #include "catalogo.h"
@@ -559,6 +560,8 @@ static int montar(Presenca *p) {
   if (!player_com_video()) return 0;
   ci = cat_item(player_indice());
   if (!ci || !ci->titulo[0]) return 0;
+  // Personal-server titles are private media: never published to Discord.
+  if (jfid_e(ci->imdb)) return 0;
   snprintf(p->detalhes, sizeof p->detalhes, "%s", ci->titulo);
   ep = player_linha_episodio();
   if (player_eh_canal()) snprintf(p->estadoTxt, sizeof p->estadoTxt, "TV ao vivo");

@@ -440,6 +440,7 @@ static int pedirFonteJob(int tipo, unsigned geracao, const char *id, int renovan
 #include "gfx.h"
 #include "catalogo.h"
 #include "layout.h"
+#include "jellyfin.h"
 #include <stdio.h>
 
 static Tela tela = TELA_HOME;
@@ -2148,6 +2149,21 @@ void app_atualizar(float dt, Uint32 agora) {
   // mesmo com a pessoa ja tendo autorizado no celular.
   traktauth_passo((unsigned)agora);
   discord_passo((unsigned)agora);
+  // PERSONAL SERVERS (jellyfin.h): the module fetches on its own workers; the
+  // Home is rebuilt when its row snapshot changes or the option flips. One
+  // integer compare per frame, no network here.
+  { static int jfLigado = -1;
+    static unsigned jfVersao;
+    int lig = ajustes_jellyfin_ligado();
+    if (lig != jfLigado) {
+      if (lig) jellyfin_carregar();
+      if (jfLigado >= 0) desc_repetir_silencioso();
+      jfLigado = lig;
+    }
+    if (lig) {
+      unsigned v = jellyfin_fileiras_versao();
+      if (v != jfVersao) { jfVersao = v; desc_repetir_silencioso(); }
+    } }
   simklauth_passo((unsigned)agora);
 
   if (tela == TELA_ESCOLHA_PERFIL) {

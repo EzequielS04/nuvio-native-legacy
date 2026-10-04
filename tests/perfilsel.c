@@ -24,6 +24,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+void jellyfin_perfil_trocou(void) {}   // jellyfin.c is not linked here
+void plugins_perfil_mudou(void) {}     // plugins.c is not linked here
 
 // --- pasta de dados de mentira ----------------------------------------------
 static const char *pasta(void) {

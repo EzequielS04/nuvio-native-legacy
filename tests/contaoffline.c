@@ -152,6 +152,7 @@ int  col_definir_json(const char *j) { if (j && strstr(j, "colecao-conta")) colC
 int  contalib_ler_biblioteca(const char *j) { if (j && strstr(j, "bib-conta")) bibConta++; return 0; }
 int  contalib_ler_vistos(const char *j) { if (j && strstr(j, "visto-conta")) vistoConta++; return 0; }
 void desc_remontar_fileiras(void) {}
+void desc_repetir_silencioso(void) {}
 void desc_repetir(void) {}
 void desc_repetir_addons(void) {}
 void desc_refazer_continuar(void) {}
@@ -201,6 +202,7 @@ void trakt_esquecer(void) {}
 TraEstado traktauth_estado(void) { return TRA_LIGADO; }
 void vistoep_esquecer(void) {}
 void xtream_esquecer(void) {}
+void jellyfin_esquecer_todos(void) {}
 
 // ------------------------------------------------------------ roteiro
 

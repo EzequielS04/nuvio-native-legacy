@@ -230,6 +230,7 @@ void desc_remontar_fileiras(void) {
   snprintf(primeiraNaRemontagem, sizeof primeiraNaRemontagem, "%s", catordem_chave(0));
 }
 static int repeticoes;
+void desc_repetir_silencioso(void) {}
 void desc_repetir(void) { repeticoes++; }
 void desc_repetir_addons(void) { repeticoes++; }
 void desc_refazer_continuar(void) {}
@@ -312,6 +313,7 @@ void trakt_esquecer(void) {}
 TraEstado traktauth_estado(void) { return TRA_LIGADO; }
 void vistoep_esquecer(void) {}
 void xtream_esquecer(void) {}
+void jellyfin_esquecer_todos(void) {}
 
 // ------------------------------------------------------------ roteiro
 

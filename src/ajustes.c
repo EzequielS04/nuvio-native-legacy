@@ -43,6 +43,7 @@
 #include <time.h>
 #include "js.h"
 #include "artehero.h"
+#include "jellyfin.h"
 #include "artereserva.h"
 #include "corviva.h"
 #include "fundo.h"
@@ -358,6 +359,10 @@ typedef enum {
   AJ_TRAILER_ZOOM_TPK,
   // Plugins Nuvio (F09): abre a tela; o liga/desliga mora em plugins.c.
   AJ_PLUGINS,
+  // Servidores pessoais (F11, jellyfin.h). Append-only: valor[] e CHAVE[]
+  // sao posicionais. O ligado e LOCAL; endereco/token moram em
+  // jellyfin-p<N>.txt (por perfil, 0600), nunca em ajustes.txt nem na conta.
+  AJ_JF_LIGADO, AJ_JF_SERVIDOR, AJ_JF_ENTRAR, AJ_JF_SAIR,
   AJ_N
 } OpcaoId;
 
@@ -762,6 +767,12 @@ static const char *ST_ALFA_MAC = "0123456789abcdef:";
 // digitos e uns poucos sinais. Sem espaco — nenhum painel Xtream o aceita.
 static const char *XT_ALFA_CONTA =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-@!#$%&*+=";
+// Endereco do Jellyfin: esquema e prefixo de proxy reverso (https://x/jellyfin).
+static const char *JF_ALFA_URL =
+  "abcdefghijklmnopqrstuvwxyz0123456789.:-/_";
+// Senha do Jellyfin: o servidor aceita espaco.
+static const char *JF_ALFA_SENHA =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-@!#$%&*+=?/ ";
 
 static const Opcao OPCOES[AJ_N] = {
   ESC("Qualidade máxima",           V_QUALIDADE, 4),
@@ -1051,6 +1062,10 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Cache de seek em disco",          V_CACHE_SEEK, 4),
   ESC("Zoom do trailer (experimental)",  V_LIGA, 2),   // local: trailerZoomTpkLocal (.tpk)
   ACAO("Plugins"),
+  ESC("Servidores pessoais (experimental)", V_LIGA, 2),   // local: jellyfinLocal
+  ACAO("Endereço do Jellyfin"),
+  ACAO("Entrar no Jellyfin"),
+  ACAO("Sair do Jellyfin"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1233,6 +1248,8 @@ static const char *CHAVE[] = {
   "cacheSeekLocal",
   "trailerZoomTpkLocal",
   "-plugins",
+  // LOCAL e SEM o "-" (sobrevive ao fechamento); o resto e acao/estado.
+  "jellyfinLocal", "-jellyfinServidor", "-jellyfinEntrar", "-jellyfinSair",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1423,7 +1440,7 @@ int ajustes_foco_no_indice(void) { return focoIndice; }
 // e a opcao 0 do enum).
 static int sairArmado;
 static int pedeConfirmacao(int op) {
-  return op == AJ_SAIR || op == AJ_STALKER_LIMPAR || op == AJ_XTREAM_LIMPAR;
+  return op == AJ_SAIR || op == AJ_STALKER_LIMPAR || op == AJ_XTREAM_LIMPAR || op == AJ_JF_SAIR;
 }
 
 // --- folha "Ordenar e ativar fileiras" --------------------------------------
@@ -1651,6 +1668,8 @@ void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO
 // (decisao do dono, a8e7685d). Nem um "p2p" ligado de ajustes.txt antigo vale.
 int ajustes_p2p_ligado(void) { return 0; }
 #else
+// Servidores pessoais: ligado E com HTTP estrito neste backend (o WGT nao tem).
+int ajustes_jellyfin_ligado(void) { return lig(AJ_JF_LIGADO) && jellyfin_disponivel(); }
 int ajustes_p2p_ligado(void) { return lig(AJ_P2P_LIGADO) && !SEGURO; }
 #endif
 void ajustes_definir_p2p_ligado(int ligado) { int a = valor[AJ_P2P_LIGADO]; valor[AJ_P2P_LIGADO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_P2P_LIGADO, a); }
@@ -3416,6 +3435,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_PERFIL_PESQ:    /* estado em recomenda.c, por conta: nunca no blob */
     case AJ_PERFIL_EDITAR:
     case AJ_P2P_LIGADO:     /* o servidor P2P e um aparelho da rede desta casa */
+    case AJ_JF_LIGADO:
     case AJ_POSTER_PROV:    /* servico e rede desta casa: nao segue a conta */
     case AJ_DET_SO_CINEMETA: /* o web nao tem esta escolha */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
@@ -3809,6 +3829,71 @@ static const char *rotuloOpcao(int op) {
   return OPCOES[op].rotulo;
 }
 
+// SERVIDORES PESSOAIS (jellyfin.h). Texto das linhas: so dado de exibicao
+// (host sem esquema, nome do usuario, codigo do Quick Connect); token e senha
+// nunca chegam aqui. A falha vem como codigo e e traduzida aqui.
+static char jfUsuario[128];   // entre o teclado do usuario e o da senha
+static const char *jfTexto(int op) {
+  static char buf[192];
+  char det[160];
+  JfEstado e;
+  if (!jellyfin_disponivel()) return i18n("Indisponível nesta plataforma");
+  e = jellyfin_estado(det, sizeof det);
+  if (op == AJ_JF_SERVIDOR) {
+    const char *s = jellyfin_servidor_curto();
+    if (e == JF_EST_VERIFICANDO) return i18n("Conferindo o servidor…");
+    if (e == JF_EST_ERRO && jellyfin_ultimo_erro() == JF_ERR_FORMATO) return i18n("Não é um servidor Jellyfin");
+    if (e == JF_EST_ERRO && jellyfin_ultimo_erro() == JF_ERR_ENTRADA) return i18n("Falhou");
+    if (e == JF_EST_ERRO && jellyfin_ultimo_erro() == JF_ERR_REDE && !s[0])
+      return i18n("O servidor não respondeu dentro do prazo.");
+    return s[0] ? s : i18n("Não configurado");
+  }
+  if (op == AJ_JF_ENTRAR) {
+    switch (e) {
+      case JF_EST_CONECTADO:
+        snprintf(buf, sizeof buf, i18n("Conectado: %s"), jellyfin_usuario());
+        return buf;
+      case JF_EST_QC_CODIGO:
+        snprintf(buf, sizeof buf, i18n("Código %s · aprove no Quick Connect"), det);
+        return buf;
+      case JF_EST_ENTRANDO: return i18n("Entrando…");
+      case JF_EST_EXPIROU: return i18n("expirou — reconectar");
+      case JF_EST_ERRO:
+        switch (jellyfin_ultimo_erro()) {
+          case JF_ERR_AUTH: return i18n("Usuário ou senha incorretos");
+          case JF_ERR_EXPIRADO: return i18n("o código expirou — OK pede outro");
+          case JF_ERR_REDE: return i18n("O servidor não respondeu dentro do prazo.");
+          default: return i18n("Falhou");
+        }
+      case JF_EST_SERVIDOR_OK: return det[0] ? (snprintf(buf, sizeof buf, "%s", det), buf) : "";
+      default: return i18n("Não configurado");
+    }
+  }
+  return "";
+}
+static void jfAtivar(int op) {
+  JfEstado e;
+  if (!ajustes_jellyfin_ligado()) return;
+  e = jellyfin_estado(NULL, 0);
+  if (op == AJ_JF_SERVIDOR) {
+    stCampo = op;
+    teclado_abrir_com("Endereço do Jellyfin",
+                      "IP e porta do servidor, como 192.168.1.5:8096, ou o endereço com https://",
+                      120, JF_ALFA_URL, jellyfin_servidor_curto()[0] ? jellyfin_servidor_curto() : NULL);
+    return;
+  }
+  if (op == AJ_JF_SAIR) { jellyfin_esquecer(); desc_repetir_silencioso(); return; }
+  if (op != AJ_JF_ENTRAR) return;
+  if (e == JF_EST_QC_CODIGO || e == JF_EST_ENTRANDO) { jellyfin_cancelar_entrada(); return; }
+  if (e == JF_EST_CONECTADO) { jellyfin_recarregar_bibliotecas(); return; }
+  if (e == JF_EST_SEM_SERVIDOR || e == JF_EST_VERIFICANDO) return;
+  // Quick Connect when the server allows it: nothing is typed on the TV.
+  if (jellyfin_qc_permitido() == 1 && jellyfin_entrar_quick_connect()) return;
+  stCampo = AJ_JF_ENTRAR;
+  jfUsuario[0] = 0;
+  teclado_abrir_com("Usuário do Jellyfin", "", 64, XT_ALFA_CONTA, NULL);
+}
+
 static const char *textoLeitura(int op) {
   static char buf[64];
   // MASCARADO, sempre. Esta tela e fotografada e colada em issue — foi assim
@@ -3875,6 +3960,8 @@ static const char *textoLeitura(int op) {
   }
   if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco
                              : p2pmotor_disponivel() ? i18n("Nesta TV") : i18n("Não configurado");
+  if (op >= AJ_JF_SERVIDOR && op <= AJ_JF_SAIR) return jfTexto(op);
+  if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco : i18n("Não configurado");
   if (op == AJ_P2P_TESTAR) return p2pTesteTexto();
   if (op >= AJ_POSTER_INST && op <= AJ_POSTER_TESTAR) return pstTexto(op);
   if (debIdx(op) >= 0) return debValor(op);
@@ -4412,6 +4499,10 @@ static const char *ajudaOpcao(int op) {
       if (p2pmotor_disponivel())
         return "Opcional. Vazio, a TV baixa sozinha. Com o IP e a porta de um servidor de streaming do Stremio na sua rede (por exemplo 192.168.1.5:11470), quem baixa é ele e a TV só toca.";
       return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
+    case AJ_JF_LIGADO: return "Experimental. Mostra na Home os filmes e séries do seu servidor Jellyfin e toca por ele. O token fica só nesta TV e neste perfil; a senha nunca é guardada.";
+    case AJ_JF_SERVIDOR: return "IP e porta do servidor, como 192.168.1.5:8096, ou o endereço com https://";
+    case AJ_JF_ENTRAR: return "Usa o Quick Connect se o servidor permitir: aprove o código em outro app do Jellyfin. Senão, pede usuário e senha.";
+    case AJ_JF_SAIR: return "Pede o OK duas vezes. Encerra a sessão no servidor e apaga o token desta TV.";
     case AJ_DEBRID_AD: return "Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.";
     case AJ_DEBRID_AD_TESTAR: return "Pergunta ao AllDebrid se a chave vale e até quando a conta é premium. Não mostra seu usuário nem e-mail.";
     case AJ_DEBRID_RD: return "Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.";
@@ -5350,6 +5441,7 @@ static void eventoTela(const SDL_Event *e) {
                         64, ST_ALFA_PORTAL, p2pEndereco[0] ? p2pEndereco : NULL);
       return;
     }
+    if (focoOp >= AJ_JF_SERVIDOR && focoOp <= AJ_JF_SAIR) { jfAtivar(focoOp); return; }
     if (focoOp == AJ_PERFIL_EDITAR) { pessoas_abrir_perfil(); return; }
     if (focoOp == AJ_P2P_TESTAR) { p2pTesteIniciar(); return; }
     if (focoOp >= AJ_POSTER_INST && focoOp <= AJ_POSTER_TESTAR) { pstAtivar(focoOp); return; }
@@ -5429,11 +5521,29 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       else if (stCampo == AJ_SEEKR_CHAVE)     { seekrDefinir(teclado_texto()); atomic_store_explicit(&skTeste, 0, memory_order_release); }
       else if (stCampo == AJ_SELOS_PACOTE_ADD) spAdicionar(teclado_texto());
       else if (stCampo == AJ_P2P_URL)         ajustes_definir_p2p_url(teclado_texto());
+      else if (stCampo == AJ_JF_SERVIDOR)     jellyfin_definir_servidor(teclado_texto());
+      else if (stCampo == AJ_JF_ENTRAR && !jfUsuario[0] && teclado_texto()[0]) {
+        // Username typed: the password modal opens next, masked. The keyboard
+        // buffer is wiped as soon as each value is handed over.
+        snprintf(jfUsuario, sizeof jfUsuario, "%s", teclado_texto());
+        teclado_esquecer();
+        teclado_abrir_com("Senha do Jellyfin", "", 128, JF_ALFA_SENHA, NULL);
+        teclado_tipo(TECLADO_TIPO_SENHA);
+        teclado_mascarar(1);
+        r = TECLADO_NADA;   // stay on this field: next result is the password
+      } else if (stCampo == AJ_JF_ENTRAR && jfUsuario[0]) {
+        char senha[160];
+        snprintf(senha, sizeof senha, "%s", teclado_texto());
+        teclado_esquecer();
+        jellyfin_entrar_senha(jfUsuario, senha);   // wipes senha
+        memset(jfUsuario, 0, sizeof jfUsuario);
+      }
       else if (stCampo >= AJ_POSTER_INST && stCampo <= AJ_POSTER_MODELO) pstDefinir(stCampo, teclado_texto());
       else if (debIdx(stCampo) >= 0)          debDefinir(stCampo, teclado_texto());
-      else                           stalker_definir_portal(teclado_texto());
-      stCampo = 0;
+      else if (stCampo != AJ_JF_ENTRAR) stalker_definir_portal(teclado_texto());
+      if (r == TECLADO_PRONTO) stCampo = 0;
     } else if (r == TECLADO_CANCELOU) {
+      if (stCampo == AJ_JF_ENTRAR) { teclado_esquecer(); memset(jfUsuario, 0, sizeof jfUsuario); }
       stCampo = 0;
     } }
   // Repouso da escolha de idioma de legenda: ver aplicarIdioma.
@@ -6032,6 +6142,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_XTREAM_CONTA:
     case AJ_DIAGNOSTICO: case AJ_VELOCIDADE: case AJ_LIVETV_DIAG:
     case AJ_P2P_URL: case AJ_P2P_TESTAR:
+    case AJ_JF_SERVIDOR: case AJ_JF_ENTRAR: case AJ_JF_SAIR:
     case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
     case AJ_POSTER_CHAVE: case AJ_POSTER_MODELO: case AJ_POSTER_TESTAR:
     case AJ_DEBRID_AD: case AJ_DEBRID_AD_TESTAR: case AJ_DEBRID_RD:

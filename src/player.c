@@ -98,6 +98,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "cacheboost.h"
 #include "legendasui.h"   /* F04: second subtitle band */
 #include <time.h>
+#include "jellyfin.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>   // strcasecmp, para comparar o hdrType do pipeline
@@ -1374,6 +1375,10 @@ static void fecharSessao(int manter) {
   int jaRetido = retido;
   legsync_encerrar();   // F05: cancela leitura/analise da sessao; join so no fim do app
   if (!jaRetido) lembrarFonte();
+  // JELLYFIN END OF SESSION: stop check-in (and transcode release) for the
+  // URL this session played; addon URLs never match. Before video_parar so the
+  // last position is still the pipeline's.
+  if (!jaRetido && comVideo) jellyfin_reproducao_fim(video_url_atual(), posSeg, duracaoSeg);
   // Salvar ANTES de parar: video_parar descarrega o pipeline e a posicao some
   // junto. Titulo quase no fim conta como visto por inteiro — voltar a um card
   // marcando "2 min restantes" que na verdade acabou e pior que arredondar.
@@ -1429,7 +1434,9 @@ static void fecharSessao(int manter) {
     cat_salvar_progresso_ep(ia, pos, duracaoSeg,epT,epE);
     // E tambem para o Trakt, que e de onde o "continue assistindo" vem: gravar
     // so aqui deixaria este app discordando dos outros aparelhos do dono.
-    if (ci && ci->imdb[0]) {
+    // Personal-server items stay private: no Trakt, friends feed or social
+    // activity (jfid.h). The server got its own stop check-in above.
+    if (ci && ci->imdb[0] && !jfid_e(ci->imdb)) {
       char id[64];
       idTrakt(ci, id, sizeof id);
       trakt_marcar(id, pos, duracaoSeg);
@@ -2608,6 +2615,13 @@ void player_atualizar(float dt, Uint32 agora) {
     tocando = video_tocando();
     if (tocando && !scrubbing) retomandoSalto = 0;
     { const CatItem *ci = ehCanal() ? NULL : item();
+      if (ci && jfid_e(ci->imdb)) {
+        // Jellyfin check-ins instead of the social feed: start once playback
+        // really runs, progress every 10 s, pause/resume immediately.
+        jellyfin_reproducao_tick(video_url_atual(), posSeg, duracaoSeg,
+                                 video_pronto() && tocando && !scrubbing);
+        ci = NULL;
+      }
       // "ASSISTINDO AGORA" para os amigos, SO se a pessoa ligou o nivel 2 em
       // Ajustes (recomenda.c decide; com tudo desligado isto nao faz nada).
       // Filme/episodio de verdade, nunca o clipe curto de erro do provedor.
@@ -2664,6 +2678,7 @@ void player_atualizar(float dt, Uint32 agora) {
              duracaoSeg >= 120.0f;
     static float tocouS;
     const CatItem *cs = item();
+    if (cs && jfid_e(cs->imdb)) cs = NULL;   // never scrobble personal-server items
     if (ok && cs && cs->imdb[0]) {
       char id[64];
       if (epT > 0 && epE > 0) snprintf(id, sizeof id, "%.*s:%d:%d", (int)strcspn(cs->imdb,":"), cs->imdb, epT, epE);

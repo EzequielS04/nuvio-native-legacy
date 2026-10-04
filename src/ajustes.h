@@ -173,6 +173,7 @@ int  ajustes_addons_do_principal(void);
 void ajustes_definir_vidro(int ligado);
 // P2P EXPERIMENTAL (p2p.h). Desligado de fabrica. O endereco (o servidor de
 // streaming do Stremio na rede local) e por aparelho, em p2p.txt.
+int  ajustes_jellyfin_ligado(void);   // F11: personal servers on AND strict HTTP here
 int  ajustes_p2p_ligado(void);
 void ajustes_definir_p2p_ligado(int ligado);
 // Endereco ja normalizado ("http://192.168.1.5:11470"); "" quando nao ha.
