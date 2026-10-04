@@ -2155,6 +2155,9 @@ void biblioteca_desenhar(Uint32 agora) {
   passoC = passoColuna(); passoL = passoLinha(); gy = gradeY();
   if (ondaArmada) { ondaEm = agora ? agora : 1u; ondaArmada = 0; }
   if (ondaEm && revela_onda_fim(ondaEm, agora)) ondaEm = 0;
+  // Keep the visible part of the previous row until it leaves the grid.
+  // The renderer maps this layout clip to the drawable (including Retina).
+  gfx_recorte(0.0f, gy, NV_TELA_W, BIB_GRADE_BASE - gy);
   { int lin0 = passoL > 0.0f ? (int)(scrollY / passoL) : 0;
 
   // Dois passes: o item focado escala 2% e precisa ser desenhado por ULTIMO,
@@ -2164,14 +2167,9 @@ void biblioteca_desenhar(Uint32 agora) {
       float topo = gy + r * passoL - scrollY;
       float a;
       if (topo > NV_TELA_H || topo + alturaLinha() < -80.0f) continue;
-      // O que sobe para baixo do cabecalho some antes de cruza-lo: sem o
-      // esmaecimento, cartaz e seletor se leem um sobre o outro.
-      //
-      // O LIMIAR E `gy - BIB_FADE`, e isso importa: com qualquer outro valor a
-      // PRIMEIRA linha ja nasce esmaecida com a tela parada no topo. Foi
-      // exatamente o que a captura mostrou — a linha do CODA cinza enquanto as
-      // de baixo estavam brancas, sem nenhuma rolagem acontecendo.
-      a = anim_clamp((topo - (gy - BIB_FADE)) / BIB_FADE, 0.0f, 1.0f);
+      // Fade only the final visible strip, not the entire row as its top
+      // crosses the header. The clip above protects the header itself.
+      a = anim_clamp((topo + alturaLinha() - gy) / BIB_FADE, 0.0f, 1.0f);
       if (a <= 0.005f) continue;
 
       for (c = 0; c < nc; c++) {
@@ -2219,6 +2217,7 @@ void biblioteca_desenhar(Uint32 agora) {
       }
     }
   }
+  gfx_sem_recorte();
   if (teclado_aberto()) teclado_desenhar(agora);
   gfx_borda_foco_atual = 1.0f;
 }

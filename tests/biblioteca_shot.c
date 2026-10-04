@@ -401,6 +401,12 @@ int main(int argc, char **argv) {
   captura(nome);
   medir(comecaLista ? "lista (frio)" : "cartazes (frio)");
 
+  // The previous row remains partially visible below the header while
+  // moving to the next row; its top crossing the header must not erase it.
+  tecla(SDLK_DOWN);
+  snprintf(nome, sizeof nome, "%s-salvos-cartaz-rolado.bmp", saida);
+  captura(nome);
+
   // 2. A BARRA DE MODOS COM O FOCO NELA: escolhido + em foco, realce cheio.
   AO_TOPO();
   snprintf(nome, sizeof nome, "%s-modos-foco.bmp", saida);
