@@ -6,6 +6,7 @@
 #include "lembrete.h"
 #include "dados.h"
 #include "addons.h"
+#include "plugins.h"
 #include "debrid.h"
 #include "stalker.h"
 #include "xtream.h"
@@ -583,6 +584,74 @@ static void empurrarAddons(void) {
     if (contacache_falha_transitoria(st)) falhaServidor(st);
   } else addonsConfirmar();
   free(r);
+}
+
+// ---------------------------------------------------------------- plugins
+// Repositorios de plugins Nuvio (F09): tabela `plugins`, o mesmo caminho do web
+// (select por user_id/profile_id, ordem por sort_order) e o mesmo perfil dos
+// addons (uses_primary_plugins le o do perfil 1). ACK por revisao: ver
+// plugins.h. Pendencia local primeiro sobe (inclusive lista VAZIA, quando a
+// pessoa removeu o ultimo repositorio) e so com 2xx e confirmada; push falho
+// mantem a pendencia e nao deixa a leitura passar por cima.
+static void sincronizarPlugins(void) {
+  static PlugRetrato s;            // fio do sync e unico; 24 KB fora da pilha
+  static PlugRepo l[PLUG_REPOS_MAX];
+  char consulta[400], dono[80];
+  char *r;
+  int st = 0, k, perfil = perfis_ativo_addons();
+  if (!perfis_dono()[0]) return;
+  plugins_retrato(&s);
+  if (s.pendente) {
+    Jsw w;
+    int i;
+    jsw_iniciar(&w);
+    jsw_obj_ini(&w);
+    jsw_ci(&w, "p_profile_id", perfil);
+    jsw_chave(&w, "p_plugins");
+    jsw_arr_ini(&w);
+    for (i = 0; i < s.n; i++) {
+      jsw_obj_ini(&w);
+      jsw_cs(&w, "url", s.lista[i].url);
+      jsw_cs(&w, "name", s.lista[i].nome);
+      jsw_cb(&w, "enabled", s.lista[i].ativo);
+      jsw_ci(&w, "sort_order", i);
+      // O tipo que veio da conta volta igual: o repositorio DEX do Android
+      // nao roda aqui, mas nao pode sumir da conta por isso.
+      jsw_cs(&w, "repo_type", s.lista[i].tipo[0] ? s.lista[i].tipo : "NUVIO_JS");
+      jsw_obj_fim(&w);
+    }
+    jsw_arr_fim(&w);
+    jsw_obj_fim(&w);
+    r = sessao_rpc("sync_push_plugins", jsw_texto_final(&w), &st);
+    jsw_livre(&w);
+    if (ok2xx(r, st) && perfilDoCicloAtual()) {
+      int ok = plugins_confirmar(s.rev, s.geracao);
+      printf("[sync] plugins: %d repositorio(s) enviados%s\n", s.n,
+             ok ? "" : " (edicao nova ou perfil trocado: pendencia mantida)");
+    } else {
+      printf("[sync] push de plugins falhou (HTTP %d): edicao local mantida\n", st);
+      free(r);
+      return;
+    }
+    free(r);
+    plugins_retrato(&s);
+    if (s.pendente) return;        // editou de novo durante o push: proximo ciclo
+  }
+  nuvem_url_escapar(perfis_dono(), dono, sizeof dono);
+  snprintf(consulta, sizeof consulta,
+           "user_id=eq.%s&profile_id=eq.%d&select=*&order=sort_order.asc", dono, perfil);
+  r = sessao_tabela("plugins", consulta, &st);
+  if (!ok2xx(r, st) || !perfilDoCicloAtual() || perfil != perfis_ativo_addons()) {
+    if (r && nuvem_erro_ausente(r)) printf("[sync] tabela plugins ausente\n");
+    else if (st && !ok2xx(r, st)) printf("[sync] leitura de plugins: HTTP %d\n", st);
+    free(r);
+    return;
+  }
+  k = plugins_ler_conta(r, l, PLUG_REPOS_MAX);
+  free(r);
+  if (k < 0) { printf("[sync] plugins: resposta nao e lista, ignorada\n"); return; }
+  printf("[sync] plugins: perfil %d -> %d repositorio(s)\n", perfil, k);
+  plugins_definir_da_conta(l, k, s.geracao);
 }
 
 // ---------------------------------------------------------------- credenciais
@@ -1209,6 +1278,7 @@ static void *rodar(void *u) {
   // DEPOIS de puxarSoLeitura, pelo mesmo motivo dos addons e com um agravante:
   // a base da costura e o blob que acabou de chegar. Ver empurrarAjustes.
   empurrarAjustes();
+  sincronizarPlugins();
   // Sempre, nao so quando `sujoProgresso`: linhas migradas do formato antigo
   // nascem pendentes sem ninguem ter marcado nada.
   if (syncprog_empurrar() >= 0) sujoProgresso = 0;
@@ -1254,6 +1324,7 @@ static void restaurarOrdemLocal(void) {
 }
 
 void sync_iniciar(void) {
+  plugins_perfil_mudou();   // conta/perfil novos: estado e geracao dos plugins
   colfileiras_contexto();
   cat_historico_contexto(sessao_logada() ? sessao_usuario() : "",
                          sessao_logada() ? perfis_ativo() : 0);
@@ -1779,6 +1850,7 @@ void sync_esquecer_usuario(void) {
   // as aplicaria na sessao seguinte.
   free(colBlob);    colBlob = NULL;    temColBlob = 0;
   addons_esquecer();
+  plugins_esquecer();
   desc_esquecer();   // solta a cache de manifestos da conta que saiu
   debrid_esquecer();
   // O portal IPTV vai junto, e tem de ir: o MAC autentica a assinatura de

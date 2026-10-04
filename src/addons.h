@@ -72,6 +72,20 @@ int  addons_tem_catalogo(int i);  // 1 quando o addon fornece catalogo
 // Origem do proximo alvo (base do addon que publicou o canal). Com ela a busca
 // pergunta SO a esse addon; vazia, pergunta a todos. Ver alvoBase em addons.c.
 void addons_definir_origem(const char *base);
+
+// Origem extra de fontes (os plugins Nuvio, plugins.h — F09), consultada em
+// paralelo com os addons e somada depois deles. `ativa` diz se vale perguntar.
+// CADA PARTE DA ORIGEM EXTRA E MAIS UMA ORIGEM NA FOLHA (#221): `aviso` (pode
+// ser NULL) e chamado do fio da origem para a parte `k` (o scraper, na ordem do
+// manifesto) com estado 1 = vai rodar, 2 = terminou (com `n` fontes em
+// `fontes`, um Stream *; copiadas na hora), 3 = desistiu.
+typedef void (*OrigemAviso)(void *u, int k, const char *nome, int estado,
+                            const void *fontes /* const Stream * */, int n);
+typedef int (*OrigemExtra)(const char *id, const char *tipo, int (*cancelado)(void *),
+                           void *ctx, OrigemAviso aviso, void *avisoU,
+                           void *saida /* Stream ** */);
+void addons_definir_origem_extra(OrigemExtra f, int (*ativa)(void));
+int  addons_origem_extra_ativa(void);
 void addons_buscar(const char *imdb, const char *tipo);
 // Recarregar explicito: descarta a resposta anterior e vai a rede, inclusive
 // quando a lista atual esta vazia ou foi filtrada por falta de debrid.
@@ -90,6 +104,8 @@ unsigned addons_busca_ms(void);
 // Quantos addons ainda nao responderam (contando quem espera a segunda chance)
 // e, em `nomes`, os nomes deles separados por virgula. 0 fora da busca.
 int  addons_faltam(char *nomes, unsigned tam);
+// O mesmo contando tambem os scrapers de plugin; *plugins = quantos deles.
+int  addons_faltam_tipo(char *nomes, unsigned tam, int *plugins);
 // Algum addon de indice menor que `idx` (ordem de instalacao) ainda falta?
 int  addons_pendente_antes(int idx);
 // O addon com este nome (Stream.provedor) ainda falta?

@@ -100,7 +100,7 @@ class H(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
-            if p == "/manifest":
+            if p in ("/manifest", "/manifest.json"):
                 return self.corpo(b'{"name":"Repo Teste","scrapers":['
                                   b'{"id":"bom","name":"Bom","filename":"prov/bom.js","supportedTypes":["movie","tv"]},'
                                   b'{"id":"lento","name":"Lento","filename":"prov/lento.js","supportedTypes":["movie"]}]}')
