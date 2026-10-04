@@ -72,7 +72,17 @@ tools/env.sh --env-file "$ENVF"
 # bandeira de compilacao nao e uma string do binario. Posta la, ela derrubava a
 # build com "ABORTADO: NUVIO_EXTRA_CFLAGS nao entrou no binario ARM", que e a
 # guarda funcionando sobre a coisa errada.
-docker run --rm --platform linux/arm64 --env-file "$ENVF" \
+# NUVIO_P2P_MOTOR=<pasta>: liga o motor P2P embutido (src/p2pmotor.h). A pasta
+# e a de trabalho de tools/p2p-motor/build-arm.sh (nuvio-engine + libtorrent +
+# OpenSSL ja compilados para ARM). Sem a variavel o binario sai igual a antes.
+P2P_VOL=""
+if [ -n "${NUVIO_P2P_MOTOR:-}" ]; then
+  [ -f "$NUVIO_P2P_MOTOR/build-arm/libnuvio_engine.a" ] || {
+    echo "NUVIO_P2P_MOTOR sem build: rode tools/p2p-motor/build-arm.sh $NUVIO_P2P_MOTOR" >&2; exit 2; }
+  P2P_VOL="-v $NUVIO_P2P_MOTOR:/p2p"
+fi
+docker run --rm --platform linux/arm64 --env-file "$ENVF" $P2P_VOL \
+  -e NUVIO_P2P_MOTOR="${NUVIO_P2P_MOTOR:+1}" \
   -e NUVIO_EXTRA_CFLAGS="${NUVIO_EXTRA_CFLAGS:-}" \
   -e NUVIO_ASS_LIBASS="${NUVIO_ASS_LIBASS:-1}" \
   -v "$PWD":/work nuvio-webos-sdk sh -c '
@@ -89,7 +99,15 @@ docker run --rm --platform linux/arm64 --env-file "$ENVF" \
   # webos define __linux__ igual a qualquer Linux e a toolchain nao tem macro
   # propria (src/ajustes.c separa o locale da TV por ela, como NV_TPK e
   # NV_ANDROID fazem nos outros alvos).
-  arm-webos-linux-gnueabi-gcc src/*.c -o nuvio-proto.arm -O2 -DNV_WEBOS $NUVIO_EXTRA_CFLAGS $ASS_CFLAGS \
+  P2P_CFLAGS=""
+  P2P_LIBS=""
+  if [ "${NUVIO_P2P_MOTOR:-}" = "1" ]; then
+    P2P_CFLAGS="-DNV_P2P_MOTOR -I/p2p/nuvio-engine/include"
+    # C++, libatomic e libgcc estaticos: o firmware da TV tem libstdc++ de outra
+    # versao (ou nenhuma), e libatomic.so.1 nao e garantida.
+    P2P_LIBS="/p2p/build-arm/libnuvio_engine.a /p2p/build-arm/_deps/nuvio_libtorrent-build/libtorrent-rasterbar.a $SR/usr/lib/libssl.a $SR/usr/lib/libcrypto.a -static-libgcc -Wl,-Bstatic -lstdc++ -latomic -Wl,-Bdynamic -lrt -Wl,--gc-sections"
+  fi
+  arm-webos-linux-gnueabi-gcc src/*.c -o nuvio-proto.arm -O2 -DNV_WEBOS $NUVIO_EXTRA_CFLAGS $ASS_CFLAGS $P2P_CFLAGS \
     -DNV_SUPABASE_URL="\"$NV_SUPABASE_URL\"" \
     -DNV_SUPABASE_ANON_KEY="\"$NV_SUPABASE_ANON_KEY\"" \
     -DNV_TV_LOGIN_BASE="\"$NV_TV_LOGIN_BASE\"" \
@@ -103,7 +121,7 @@ docker run --rm --platform linux/arm64 --env-file "$ENVF" \
     -DNV_DISCORD_CLIENT_ID="\"${NV_DISCORD_CLIENT_ID:-}\"" \
     -DNV_VERSAO="\"$NV_VERSAO\"" \
     -I$SR/usr/include -I$SR/usr/include/SDL2 \
-    -lSDL2 -lSDL2_image -lSDL2_ttf -lGLESv2 -lEGL -ldl -lpthread -lz -lm $ASS_LIBS'
+    -lSDL2 -lSDL2_image -lSDL2_ttf -lGLESv2 -lEGL $P2P_LIBS -ldl -lpthread -lz -lm $ASS_LIBS'
 
 # CONFERE que a configuracao entrou MESMO no binario. Sem isto o unico sintoma
 # e a tela de login dizendo que o pacote saiu sem servidor, ja na TV.

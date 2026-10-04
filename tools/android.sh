@@ -2,6 +2,7 @@
 # Build do Nuvio para Android TV (SDL2 + GLES2, nucleo C em libmain.so).
 #
 #   tools/android.sh            -> APK debug em build/android/Nuvio-<v>-android-debug.apk
+#   NUVIO_P2P_MOTOR=<pasta> tools/android.sh -> com o motor P2P (tools/p2p-motor/build-android.sh)
 #   NUVIO_KEYSTORE=... NUVIO_KEYSTORE_PASS=... NUVIO_KEY_ALIAS=... NUVIO_KEY_PASS=... tools/android.sh
 #                               -> tambem o release assinado, Nuvio-<v>-android.apk
 #
@@ -70,6 +71,12 @@ done
 
 echo "[4/5] gradle"
 GR=(android/gradlew -p android --console=plain -Pnuvio.sdlSrc="$CACHE/src" -Pnuvio.estagio="$EST")
+# Motor P2P embutido (opcional): pasta de tools/p2p-motor/build-android.sh.
+if [ -n "${NUVIO_P2P_MOTOR:-}" ]; then
+  [ -f "$NUVIO_P2P_MOTOR/lib/arm64-v8a/libnuvio_engine.a" ] || {
+    echo "android.sh: NUVIO_P2P_MOTOR sem build: rode tools/p2p-motor/build-android.sh $NUVIO_P2P_MOTOR" >&2; exit 2; }
+  GR+=(-Pnuvio.p2pMotor="$NUVIO_P2P_MOTOR")
+fi
 TAREFAS=(assembleDebug)
 # Chave de release FIXA (o Android so atualiza por cima com a mesma
 # assinatura): ~/.nuvio-android/release.env, fora do repo, chmod 600. A copia

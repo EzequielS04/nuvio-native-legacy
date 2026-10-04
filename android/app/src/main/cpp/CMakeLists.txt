@@ -9,6 +9,7 @@ project(nuvio C)
 set(NUVIO_RAIZ "" CACHE PATH "raiz do repositorio")
 set(NUVIO_SDL_SRC "$ENV{HOME}/.cache/nuvio-android/src" CACHE PATH "fontes do SDL")
 set(NUVIO_ENV_CMAKE "" CACHE FILEPATH "chaves -D geradas por tools/android.sh (fora do git)")
+set(NUVIO_P2P_MOTOR "" CACHE PATH "motor P2P de tools/p2p-motor/build-android.sh (vazio = sem motor)")
 
 set(SDL_DIR   "${NUVIO_SDL_SRC}/SDL2-2.30.9")
 set(IMG_DIR   "${NUVIO_SDL_SRC}/SDL2_image-2.8.2")
@@ -98,3 +99,20 @@ target_link_libraries(main PRIVATE SDL2::SDL2 SDL2_image SDL2_ttf webpdemux webp
 # sem atributo de pilha, o fio nasce com 8 MB como no glibc da LG/Tizen, e nao
 # com o ~1 MB do bionic. O nucleo tem vetores grandes na pilha dos fios.
 target_link_options(main PRIVATE "-Wl,--wrap=pthread_create")
+
+# Motor P2P embutido (src/p2pmotor.h): nuvio-engine + libtorrent + OpenSSL,
+# estaticos e ja compilados por tools/p2p-motor/build-android.sh. C++ dentro de
+# um nucleo C: liga com o driver C++ e o libc++ estatico do ANDROID_STL.
+if(NUVIO_P2P_MOTOR)
+  set(P2P_LIB "${NUVIO_P2P_MOTOR}/lib/${ANDROID_ABI}")
+  if(NOT EXISTS "${P2P_LIB}/libnuvio_engine.a")
+    message(FATAL_ERROR "motor P2P ausente em ${P2P_LIB} (rode tools/p2p-motor/build-android.sh)")
+  endif()
+  enable_language(CXX)
+  set_target_properties(main PROPERTIES LINKER_LANGUAGE CXX)
+  target_compile_definitions(main PRIVATE NV_P2P_MOTOR)
+  target_include_directories(main PRIVATE "${NUVIO_P2P_MOTOR}/include")
+  target_link_libraries(main PRIVATE "${P2P_LIB}/libnuvio_engine.a"
+    "${P2P_LIB}/libtorrent-rasterbar.a" "${P2P_LIB}/libssl.a" "${P2P_LIB}/libcrypto.a" c++experimental)
+  target_link_options(main PRIVATE "-Wl,--gc-sections")
+endif()

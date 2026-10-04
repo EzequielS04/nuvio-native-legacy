@@ -100,7 +100,10 @@ static const Item TELA[] = {
     ROT("Chaves"),
       OPC(AJ_DEBRID_RD), OPC(AJ_DEBRID_TB), OPC(AJ_DEBRID_PM), OPC(AJ_DEBRID_AD),
       OPC(AJ_DEBRID_AD_TESTAR), OPC(AJ_MDB_CHAVE), OPC(AJ_FANART_CHAVE),
+#ifndef __EMSCRIPTEN__
+    // .wgt: sem socket TCP/UDP no navegador, sem motor; P2P escondido (a8e7685d).
     ROT("P2P"), OPC(AJ_P2P_LIGADO), OPC(AJ_P2P_URL), OPC(AJ_P2P_TESTAR),
+#endif
 
   SEC("Desempenho desta TV", "Resolução, imagens, efeitos e diagnóstico", "aj_monitor-cog"),
     OPC(AJ_RESOLUCAO), OPC(AJ_QUALIDADE_IMG),

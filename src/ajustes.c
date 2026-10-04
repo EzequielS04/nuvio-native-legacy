@@ -46,6 +46,7 @@
 #include "corviva.h"
 #include "fundo.h"
 #include "p2p.h"
+#include "p2pmotor.h"
 #include "pessoas.h"
 #include "recomenda.h"
 #include "posterprov.h"
@@ -1600,7 +1601,14 @@ int ajustes_saida_player_home(void) { return lig(AJ_RELOGIO) && valor[AJ_SAIDA_P
 int ajustes_selo_visto(void) { return lig(AJ_SELO_VISTO); }
 static void riscoNotar(int op, int antes);
 void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_VIDRO, a); }
+#ifdef __EMSCRIPTEN__
+// .wgt: o navegador nao abre socket TCP/UDP (motor impossivel) e o P2P fica
+// escondido la (ajustes_ux_tela.inc), inclusive o do servidor Stremio
+// (decisao do dono, a8e7685d). Nem um "p2p" ligado de ajustes.txt antigo vale.
+int ajustes_p2p_ligado(void) { return 0; }
+#else
 int ajustes_p2p_ligado(void) { return lig(AJ_P2P_LIGADO) && !SEGURO; }
+#endif
 void ajustes_definir_p2p_ligado(int ligado) { int a = valor[AJ_P2P_LIGADO]; valor[AJ_P2P_LIGADO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_P2P_LIGADO, a); }
 
 // Cor do ANEL DE FOCO. Ver TEMA_ACENTO: um tema aqui e so isto.
@@ -2234,15 +2242,29 @@ static void p2pTesteRecolher(void) {
   }
 }
 static const char *p2pTesteTexto(void) {
-  static char buf[64];
+  static char buf[192];
   int e = atomic_load_explicit(&p2pTeste, memory_order_acquire);
   if (e == 0) return i18n("OK testa");
   if (e == 1 || e == 3) return i18n("testando…");
   switch (p2pTesteErro) {
     case P2P_OK:
-      snprintf(buf, sizeof buf, i18n("conectado · versão %s"), p2pTesteVersao);
+      // Sem endereco o teste fala do motor embutido (p2p_testar ->
+      // p2pmotor_resumo): versao e o teto DURO de disco que ele teria agora.
+      if (!p2pEndereco[0] && p2pmotor_disponivel()) {
+        char v[64], d[96];
+        snprintf(v, sizeof v, "%s", p2pTesteVersao);
+        { char *b = strstr(v, " /"); if (b) *b = 0; }   // "0.1.3 / libtorrent ..." -> "0.1.3"
+        snprintf(d, sizeof d, "%s · %u MB", v, p2pmotor_teto_mb());
+        snprintf(buf, sizeof buf, i18n("motor desta TV · versão %s"), d);
+      } else
+        snprintf(buf, sizeof buf, i18n("conectado · versão %s"), p2pTesteVersao);
       return buf;
-    case P2P_ERR_DESLIGADO:   return i18n("informe o endereço primeiro");
+    case P2P_ERR_SEM_ESPACO:  return i18n("Falta espaço livre na TV para o P2P");
+    case P2P_ERR_DISCO:       return i18n("Não foi possível medir o espaço livre da TV");
+    case P2P_ERR_DESLIGADO:
+      // Sem endereco e sem motor neste pacote: dizer as duas coisas.
+      return p2pmotor_disponivel() ? i18n("informe o endereço primeiro")
+                                   : i18n("sem motor neste pacote · informe o endereço");
     case P2P_ERR_NAO_STREMIO: return i18n("respondeu, mas não é um servidor Stremio");
     default:                  return i18n("sem resposta do servidor");
   }
@@ -3804,7 +3826,8 @@ static const char *textoLeitura(int op) {
     recomenda_perfil(&pf);
     return pf.apelido[0] ? pf.apelido : i18n("Não configurado");
   }
-  if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco : i18n("Não configurado");
+  if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco
+                             : p2pmotor_disponivel() ? i18n("Nesta TV") : i18n("Não configurado");
   if (op == AJ_P2P_TESTAR) return p2pTesteTexto();
   if (op >= AJ_POSTER_INST && op <= AJ_POSTER_TESTAR) return pstTexto(op);
   if (debIdx(op) >= 0) return debValor(op);
@@ -4305,8 +4328,16 @@ static const char *ajudaOpcao(int op) {
     case AJ_VIDRO_OPAC: return "Teste: quanto os painéis de vidro deixam a arte aparecer. O valor do meio é o de hoje; menos é mais transparente, mais é mais escuro e fácil de ler.";
     case AJ_VIDRO_FOSCO: return "Teste: põe a arte borrada atrás de cada painel de vidro, como um vidro jateado. Onde não há arte borrada, o vidro fica como sempre.";
     case AJ_FUNDO: return "O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.";
-    case AJ_P2P_LIGADO: return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
-    case AJ_P2P_URL: return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
+    case AJ_P2P_LIGADO:
+      // Com o motor neste pacote o aviso diz o que a TV passa a fazer (baixar
+      // e COMPARTILHAR), o teto de disco e o risco legal.
+      if (p2pmotor_disponivel())
+        return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P). Sem endereço de servidor, a própria TV baixa o torrent e compartilha pedaços com outras pessoas enquanto toca, guardando o que baixa no armazenamento (nunca mais que metade do espaço livre) e apagando tudo ao fechar o player. O automático nunca escolhe P2P. Baixar ou compartilhar conteúdo sem autorização pode ser ilegal no seu país: a responsabilidade é sua.";
+      return "Experimental. Deixa escolher, na lista de fontes, torrents que o addon manda sem link (P2P), tocando-os por um servidor de streaming do Stremio que você roda na sua rede (PC, NAS ou Docker). A TV não baixa nada. O automático nunca escolhe P2P. Sem servidor na rede, deixe desligado.";
+    case AJ_P2P_URL:
+      if (p2pmotor_disponivel())
+        return "Opcional. Vazio, a TV baixa sozinha. Com o IP e a porta de um servidor de streaming do Stremio na sua rede (por exemplo 192.168.1.5:11470), quem baixa é ele e a TV só toca.";
+      return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
     case AJ_DEBRID_AD: return "Sua chave de API do AllDebrid (alldebrid.com/apikeys). Com ela os torrents das fontes tocam pelo AllDebrid, que precisa de conta premium. Fica só nesta TV, aparece mascarada e vale no lugar da que vier da conta Nuvio.";
     case AJ_DEBRID_AD_TESTAR: return "Pergunta ao AllDebrid se a chave vale e até quando a conta é premium. Não mostra seu usuário nem e-mail.";
     case AJ_DEBRID_RD: return "Chave de API do Real-Debrid (real-debrid.com/apitoken). Só precisa se a sua conta Nuvio não a traz. Fica só nesta TV e aparece mascarada.";

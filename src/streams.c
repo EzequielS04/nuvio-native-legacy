@@ -29,6 +29,7 @@
 #include "marco.h"
 #include "debrid.h"
 #include "p2p.h"
+#include "p2pmotor.h"
 #include "fonteauto.h"
 #include "video.h"
 #include "botoes.h"
@@ -882,9 +883,11 @@ int stream_resolver_escolhida(int i, unsigned geracao, char *url, unsigned nu,
   }
   if (r == 1) {
     pthread_mutex_lock(&verTrava);
-    if (listaGeracao == geracao && i < n)
-      snprintf(lista[i].url, sizeof lista[i].url, "%s", url);
-    else r = -1;
+    // A url do motor embutido NAO fica na lista: ela morre quando outro
+    // torrent e pedido (um por vez) ou o player fecha, e escolher esta fonte
+    // de novo tem de passar pelo motor outra vez.
+    if (listaGeracao != geracao || i >= n) r = -1;
+    else if (!p2pmotor_e_url(url)) snprintf(lista[i].url, sizeof lista[i].url, "%s", url);
     pthread_mutex_unlock(&verTrava);
     if (r < 0) url[0] = 0;
   } else if (r == STREAM_P2P_FALHOU) {

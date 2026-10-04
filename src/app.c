@@ -96,6 +96,7 @@
 #include "diagnostico.h"
 #include "debrid.h"
 #include "p2p.h"
+#include "p2pmotor.h"
 #include "player.h"
 #include "legsync.h"
 #include "streams.h"
@@ -1181,10 +1182,41 @@ static void pedirTorrentEscolhido(int indice) {
   }
   // Sem debrid, quem responde e o servidor P2P, que espera peers: dizer que
   // pode levar meio minuto evita a pessoa achar que travou.
-  if (!debrid_ativo() && p2p_ativo())
+  if (!debrid_ativo() && p2p_usa_motor())
+    player_toast_ex(i18n("Baixando o torrent nesta TV… pode levar até um minuto"), 30000, "aj_download", 0);
+  else if (!debrid_ativo() && p2p_ativo())
     player_toast_ex(i18n("Pedindo o torrent ao servidor P2P… pode levar até um minuto"), 30000, "aj_download", 0);
   else
     player_toast_ex(i18n("Pedindo o torrent ao serviço de debrid…"), 5000, "aj_download", 0);
+}
+// MOTOR P2P EMBUTIDO (p2pmotor.h), a cada quadro e ANTES de qualquer return
+// de app_atualizar (login, perfis e outras telas saem cedo de la). So le
+// atomicos e pega a trava curta do motor: a vigia (disco/RAM/statvfs) e o
+// destroy rodam em fios proprios.
+static void vigiarMotorP2p(void) {
+  int m;
+  // Sem p2pmotor_disponivel() aqui: no .tpk ele abre a libnuvio_engine.so
+  // (dlopen), e isso so deve acontecer quando alguem pede P2P. ativo() e
+  // motivo_parada() so leem estado.
+  // Player fechado (nem cheio nem mini): nada de baixar/compartilhar com
+  // ninguem assistindo. Pedido em curso e cancelado (sai em <= 20 ms); depois
+  // que ele sai, o motor para em fio solto e o cache e apagado.
+  if (!p2pmotor_segurado() && !player_aberto() && !player_mini_ativo() && p2pmotor_ativo()) {
+    if (fioTorrentVivo) p2pmotor_cancelar();
+    else p2pmotor_parar_fundo();
+  }
+  // A vigia parou o motor com o filme tocando: dizer por que.
+  if ((m = p2pmotor_motivo_parada()) && player_aberto()) {
+    if (m == P2P_ERR_RAM)
+      player_erro_fonte_motivo(i18n("O P2P passou do limite de memória"),
+          i18n("O vídeo parou para proteger o app. Abra Fontes para escolher outra opção."));
+    else if (m == P2P_ERR_DISCO)
+      player_erro_fonte_motivo(i18n("Não foi possível medir o espaço livre da TV"),
+          i18n("Sem essa medida o P2P não baixa nada. Abra Fontes para escolher outra opção."));
+    else
+      player_erro_fonte_motivo(i18n("O P2P encheu o espaço livre da TV"),
+          i18n("O vídeo parou para não lotar a TV. Escolha uma fonte menor."));
+  }
 }
 static void processarTorrentJob(void) {
   TorrentJob *j = &torrentJob;
@@ -1239,6 +1271,20 @@ static void processarTorrentJob(void) {
           player_erro_fonte_motivo(i18n("Este torrent não tem arquivo de vídeo"),
               i18n("Abra Fontes para escolher outra opção."));
           break;
+        case P2P_ERR_MOTOR:
+          player_erro_fonte_motivo(i18n("O P2P desta TV não iniciou"),
+              i18n("Abra Fontes para escolher outra opção."));
+          break;
+        case P2P_ERR_SEM_ESPACO:
+          player_erro_fonte_motivo(i18n("Falta espaço livre na TV para o P2P"),
+              i18n("O P2P precisa de 256 MB livres. Abra Fontes para escolher outra opção."));
+          break;
+        case P2P_ERR_DISCO:
+          player_erro_fonte_motivo(i18n("Não foi possível medir o espaço livre da TV"),
+              i18n("Sem essa medida o P2P não baixa nada. Abra Fontes para escolher outra opção."));
+          break;
+        case P2P_ERR_CANCELADO:
+          break;   // outra escolha/fechamento ja cuidou da tela
         default:
           player_erro_fonte_motivo(i18n("O servidor P2P não abriu este torrent"),
               i18n("Abra Fontes para escolher outra opção."));
@@ -1998,6 +2044,7 @@ void app_atualizar(float dt, Uint32 agora) {
   // Animacoes reduzidas valem para TODA mola e rampa do app (anim.h), nao so
   // para as telas que lembravam de perguntar. Uma leitura por quadro.
   anim_politica_reduzida = ajustes_animacoes_reduzidas();
+  vigiarMotorP2p();
   diagnostico_intro_atualizar(dt, agora);
   // Spotlight: a mola de entrada/saida e o ditado correm em qualquer tela; o
   // OK segurado em "Buscar" (menu.c) abre por aqui, no quadro em que cruza.
@@ -3300,11 +3347,16 @@ void app_atualizar(float dt, Uint32 agora) {
       player_abrir(titulo,NULL);
       player_definir_episodio(t,e);
       stream_definir_atual(fonte);
-      // Qualquer escolha nova invalida a resposta de um torrent anterior.
+      // Qualquer escolha nova invalida a resposta de um torrent anterior; o
+      // motor P2P corta o pedido velho ja (sem isso a escolha nova esperaria
+      // ate 55 s na fila do fio unico).
       torrentSessao++;
+      p2pmotor_cancelar();
       if (!s->url[0] && s->infoHash[0]) {
         pedirTorrentEscolhido(fonte);
       } else {
+        // Fonte direta: o torrent do motor (se havia) para de baixar.
+        p2pmotor_parar_fundo();
         player_definir_fonte(s->url);
         // FONTE QUE O ADDON MARCA COMO FORA DE CACHE ("⏳", "[TB download]"):
         // tocar o link e o que manda o servico baixar, e o que o addon devolve

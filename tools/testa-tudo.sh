@@ -18,12 +18,19 @@ LOGS=$(mktemp -d "${TMPDIR:-/tmp}/nuvio-testes.XXXXXX") || exit 1
 falhou=0
 passaram=0
 pulados=0
+semProva=0
 for f in tests/*.sh; do
   n=$(basename "$f")
   case "$n" in
     *_shot.sh|cinematic.sh|director.sh|webp-tizen.sh|tizen-clock.sh|salvospainel_perf.sh) pulados=$((pulados + 1)); continue;;
   esac
   if bash "$f" >"$LOGS/$n.log" 2>&1; then
+    # SKIP (ex.: p2pmotor_real.sh sem o motor compilado) sai com 0 mas NAO
+    # provou nada: nao conta como passou.
+    if grep -Eq '(^|[^A-Za-z])SKIP([^A-Za-z]|$)' "$LOGS/$n.log"; then
+      echo "SKIP  $n (NAO verificado: $(grep -Em1 'SKIP' "$LOGS/$n.log" | cut -c1-90))"
+      semProva=$((semProva + 1)); continue
+    fi
     if grep -Eq 'PULADO|pulados|sem resultado' "$LOGS/$n.log"; then
       echo "ok*   $n (ver casos pulados no log)"
     else
@@ -34,5 +41,5 @@ for f in tests/*.sh; do
     echo "FALHA $n"; tail -15 "$LOGS/$n.log"; falhou=$((falhou + 1))
   fi
 done
-echo "testes: $passaram passaram, $falhou falharam, $pulados fora da suite; logs: $LOGS"
+echo "testes: $passaram passaram, $falhou falharam, $semProva SKIP sem prova, $pulados fora da suite; logs: $LOGS"
 [ "$falhou" -eq 0 ]
