@@ -3941,6 +3941,7 @@ static const char *textoLeitura(int op) {
     int itens = 0; long bytes = 0;
     tex_estatisticas(&itens, NULL, &bytes, NULL, NULL);
     snprintf(buf, sizeof buf, i18n("%.1f MB · %d imagens"), bytes / 1048576.0, itens);
+    idioma_decimal_texto(buf, ajustes_idioma());
     return buf;
   }
   // ACAO SEM VALOR PROPRIO. Este `return` era o da memoria de imagens, e toda
