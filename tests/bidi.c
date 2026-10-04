@@ -39,6 +39,17 @@ static void esperar(const char *nome, const char *in, int ret, const unsigned *e
 #define ESP(nome, in, ret, ...) do { static const unsigned e[] = { __VA_ARGS__ }; \
   esperar(nome, in, ret, e, (int)(sizeof e / sizeof e[0])); } while (0)
 
+static int nega(unsigned cp, void *u) { (void)cp; (void)u; return 0; }
+static int permite(unsigned cp, void *u) { (void)cp; (void)u; return 1; }
+static int sem_lig(unsigned cp, void *u) { (void)u; return !(cp >= 0xFEF5 && cp <= 0xFEFC); }
+static void esperar_ex(const char *nome, const char *in, int (*cb)(unsigned, void *), const unsigned *exp, int nexp) {
+  char out[512]; unsigned cp[64]; int n, r = bidi_visual_utf8_ex(in, out, sizeof out, cb, NULL);
+  n = dec(out, cp, 64);
+  if (r != 1 || n != nexp || memcmp(cp, exp, sizeof(unsigned) * (size_t)nexp)) {
+    fprintf(stderr, "FAIL %s (ret %d)\n", nome, r); mostra("got ", out); falhas++;
+  }
+}
+
 int main(void) {
   char out[2048];
   // Latin / CJK / empty: byte-identical, return 0.
@@ -84,6 +95,19 @@ int main(void) {
   ESP("hebrew", "\xd7\xa9\xd7\x9c\xd7\x95\xd7\x9d", 1, 0x05DD, 0x05D5, 0x05DC, 0x05E9);
   // Hebrew + Latin
   ESP("hebrew-mixed", "\xd7\xa9\xd7\x9c\xd7\x95\xd7\x9d ok", 1, 'o', 'k', ' ', 0x05DD, 0x05D5, 0x05DC, 0x05E9);
+
+  // --- font coverage callback ---
+  // Font without presentation forms: base U+06xx codepoints, still visual order.
+  { static const unsigned e1[] = { 0x0645, 0x0627, 0x0644, 0x0633 };            // "سلام" reordered, unshaped
+    esperar_ex("deny-all", "\xd8\xb3\xd9\x84\xd8\xa7\xd9\x85", nega, e1, 4);
+    // allow-all callback == no callback
+    { static const unsigned e2[] = { 0xFEE1, 0xFEFC, 0xFEB3 };
+      esperar_ex("allow-all", "\xd8\xb3\xd9\x84\xd8\xa7\xd9\x85", permite, e2, 3); }
+    // font has the forms but not the lam-alef ligature: lam and alef shaped separately
+    { static const unsigned e3[] = { 0xFEE1, 0xFE8E, 0xFEE0, 0xFEB3 };
+      esperar_ex("no-ligature", "\xd8\xb3\xd9\x84\xd8\xa7\xd9\x85", sem_lig, e3, 4); }
+    // Latin untouched whatever the callback says
+    { char o[64]; CHECK(bidi_visual_utf8_ex("Hello", o, sizeof o, nega, NULL) == 0 && !strcmp(o, "Hello")); } }
 
   // --- safety ---
   { char p[16]; const char *a = "\xd8\xb3\xd9\x84\xd8\xa7\xd9\x85";  // result is 9 bytes

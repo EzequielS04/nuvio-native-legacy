@@ -21,4 +21,11 @@
 // boundary. Never writes past tam; tam == 0 writes nothing.
 int bidi_visual_utf8(const char *in, char *out, size_t tam);
 
+// Same, but shaping only uses a Presentation Forms codepoint (and the lam-alef
+// ligature) when tem_glifo(cp, ctx) returns non-zero for it; a letter whose form
+// the font lacks keeps its original U+06xx codepoint (the line is still put in
+// visual order). tem_glifo == NULL means "everything is available".
+int bidi_visual_utf8_ex(const char *in, char *out, size_t tam,
+                        int (*tem_glifo)(unsigned cp, void *ctx), void *ctx);
+
 #endif

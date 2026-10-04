@@ -108,14 +108,19 @@ static int lamalef(unsigned alef, unsigned *iso, unsigned *fin) {
 }
 
 // Shapes src[0..n) into dst, returns the new length (<= n).
-static int moldar(const unsigned *src, int n, unsigned *dst) {
+typedef int (*TemGlifo)(unsigned cp, void *ctx);
+static unsigned forma(unsigned cp, unsigned orig, TemGlifo tem, void *ctx) {
+  return (!tem || cp == orig || tem(cp, ctx)) ? cp : orig;
+}
+
+static int moldar(const unsigned *src, int n, unsigned *dst, TemGlifo tem, void *ctx) {
   int i, m = 0;
   for (i = 0; i < n; i++) {
     const Letra *l = letra(src[i]);
     int prevD = 0, nextOk = 0, j;
     unsigned c = src[i];
     if (!l) { dst[m++] = c; continue; }
-    if (!l->tipo) { dst[m++] = l->iso; continue; }
+    if (!l->tipo) { dst[m++] = forma(l->iso, c, tem, ctx); continue; }
     // previous non-transparent letter: does it join forward into this one?
     for (j = i - 1; j >= 0 && marca_arabe(src[j]); j--) {}
     if (j >= 0) { const Letra *p = letra(src[j]); prevD = p && p->tipo == J_D; }
@@ -124,7 +129,7 @@ static int moldar(const unsigned *src, int n, unsigned *dst) {
     if (j < n) { const Letra *q = letra(src[j]); nextOk = q && q->tipo != 0; }
     if (src[i] == 0x0644 && j < n) {
       unsigned iso, fin;
-      if (lamalef(src[j], &iso, &fin)) {
+      if (lamalef(src[j], &iso, &fin) && (!tem || tem(prevD ? fin : iso, ctx))) {
         int k;
         dst[m++] = prevD ? fin : iso;
         for (k = i + 1; k < j; k++) dst[m++] = src[k];  // harakat stay after the ligature
@@ -137,7 +142,7 @@ static int moldar(const unsigned *src, int n, unsigned *dst) {
     else if (prevD) c = l->fin;
     else if (nextOk) c = l->ini;
     else c = l->iso;
-    dst[m++] = c;
+    dst[m++] = forma(c, src[i], tem, ctx);
   }
   return m;
 }
@@ -175,6 +180,10 @@ static unsigned espelho(unsigned c) {
 }
 
 int bidi_visual_utf8(const char *in, char *out, size_t tam) {
+  return bidi_visual_utf8_ex(in, out, tam, NULL, NULL);
+}
+
+int bidi_visual_utf8_ex(const char *in, char *out, size_t tam, TemGlifo tem, void *ctx) {
   static const unsigned char vazio[1] = { 0 };
   const unsigned char *s = in ? (const unsigned char *)in : vazio;
   unsigned cp[BIDI_MAX], sh[BIDI_MAX];
@@ -198,7 +207,7 @@ int bidi_visual_utf8(const char *in, char *out, size_t tam) {
   if (n > BIDI_MAX) goto cru;
   n = 0;
   for (i = 0; s[i];) { cp[n++] = decodificar(s + i, &len); i += len; }
-  n = moldar(cp, n, sh);
+  n = moldar(cp, n, sh, tem, ctx);
   // Clusters: a base plus the combining marks that follow it.
   for (i = 0; i < n; i++)
     if (i == 0 || !marca(sh[i])) ini[ncl++] = i;
