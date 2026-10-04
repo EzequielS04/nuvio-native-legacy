@@ -285,6 +285,9 @@ void desc_pedir_titulo(const char *imdb);
 // `tipo` e "movie" ou "tv". Resolve o IMDb por external_ids antes de pedir o
 // meta — uma chamada a mais, so quando o dono abre o credito.
 void desc_pedir_titulo_tmdb(long tmdbId, const char *tipo);
+// Abre JA, com o que o clique sabia (nome, ano, cartaz); a ficha chega depois.
+void desc_pedir_titulo_semente(const char *imdb, long tmdb, const char *tipo,
+                               const char *titulo, const char *ano, const char *poster);
 // Indice do titulo que acabou de entrar, ou -1. CONSOME o resultado.
 int  desc_titulo_pronto(void);
 int  desc_titulo_buscando(void);

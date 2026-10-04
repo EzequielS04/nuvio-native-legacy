@@ -2097,10 +2097,16 @@ void detail_evento(const SDL_Event *e) {
           // termina o trabalho e o roteador, que ja acompanha o resultado.
           // O credito quase nunca traz imdb_id, entao o caminho normal e pelo
           // id do TMDB.
-          else if (id[0]) { desc_pedir_titulo(id); }
+          else if (id[0]) {
+            desc_pedir_titulo_semente(id, 0, pessoa_credito_tipo(pessoaFoco),
+                                      pessoa_credito_titulo(pessoaFoco), pessoa_credito_ano(pessoaFoco),
+                                      pessoa_credito_poster(pessoaFoco));
+          }
           else if (pessoa_credito_tmdb(pessoaFoco) > 0) {
-            desc_pedir_titulo_tmdb(pessoa_credito_tmdb(pessoaFoco),
-                                   pessoa_credito_tipo(pessoaFoco));
+            desc_pedir_titulo_semente("", pessoa_credito_tmdb(pessoaFoco),
+                                      pessoa_credito_tipo(pessoaFoco),
+                                      pessoa_credito_titulo(pessoaFoco), pessoa_credito_ano(pessoaFoco),
+                                      pessoa_credito_poster(pessoaFoco));
           }
           return; }
         default: break;
@@ -2140,11 +2146,15 @@ void detail_evento(const SDL_Event *e) {
           // "tmdb:<id>" = recomendacao do TMDB (tmdb_use_more_like_this): nao
           // tem imdb ate a meta chegar, entao abre pelo id do TMDB direto.
           if (!strncmp(id, "tmdb:", 5))
-            desc_pedir_titulo_tmdb(atol(id + 5), ehSerie() ? "tv" : "movie");
+            desc_pedir_titulo_semente("", atol(id + 5), ehSerie() ? "tv" : "movie",
+                                      extras_relacionado_titulo(relFoco), extras_relacionado_ano(relFoco),
+                                      extras_relacionado_poster(relFoco));
           else {
             int alvo = cat_indice_por_imdb(id);
             if (alvo >= 0) pedAbrir = alvo;
-            else if (id[0]) desc_pedir_titulo(id);
+            else if (id[0]) desc_pedir_titulo_semente(id, 0, ehSerie() ? "series" : "movie", extras_relacionado_titulo(relFoco),
+                                                      extras_relacionado_ano(relFoco),
+                                                      extras_relacionado_poster(relFoco));
           }
         }
         return; }
@@ -2240,11 +2250,15 @@ void detail_evento(const SDL_Event *e) {
       // termina quando chegar. "tmdb:<id>" = recomendacao do TMDB.
       const char *id = extras_relacionado_imdb(foco.coluna);
       if (!strncmp(id, "tmdb:", 5))
-        desc_pedir_titulo_tmdb(atol(id + 5), ehSerie() ? "tv" : "movie");
+        desc_pedir_titulo_semente("", atol(id + 5), ehSerie() ? "tv" : "movie",
+                                  extras_relacionado_titulo(foco.coluna), extras_relacionado_ano(foco.coluna),
+                                  extras_relacionado_poster(foco.coluna));
       else {
         int alvo = id[0] ? cat_indice_por_imdb(id) : -1;
         if (alvo >= 0) pedAbrir = alvo;
-        else if (id[0]) desc_pedir_titulo(id);
+        else if (id[0]) desc_pedir_titulo_semente(id, 0, ehSerie() ? "series" : "movie", extras_relacionado_titulo(foco.coluna),
+                                                  extras_relacionado_ano(foco.coluna),
+                                                  extras_relacionado_poster(foco.coluna));
       }
     } else if (foco.fileira == SEC_COLECAO) {
       // O mini card abre a LISTA da saga; e la que se escolhe a parte.

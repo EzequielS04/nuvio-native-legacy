@@ -2989,7 +2989,8 @@ void app_atualizar(float dt, Uint32 agora) {
         if (!strcmp(alvo, ultimoAlvo)) printf("[addons] lista mudou: refazendo a busca de fontes de %s\n", alvo);
         snprintf(ultimoAlvo, sizeof ultimoAlvo, "%s", alvo);
         ultimaVersao = addons_versao();
-        { stream_definir_alvo(alvo); addons_buscar(alvo, ci->tipo); }
+        // A FICHA (meta) SAI ANTES DAS FONTES (R2): a pagina espera a ficha, nao
+        // a lista de streams; o pedido de fontes segue logo depois, em paralelo.
         // Episodios do titulo aberto, na temporada onde o dono parou. Sai da
         // rede na hora: guardar a lista de episodios de 40 titulos no pacote
         // envelhecia a cada temporada nova.
@@ -2999,6 +3000,7 @@ void app_atualizar(float dt, Uint32 agora) {
         // e serie, mesmo quando o catalogo ja trouxe elenco.
         if (!strcmp(ci->tipo, "series") || strcmp(ci->tipo, "movie") ||
             ci->nElenco == 0) desc_episodios(i, 0);
+        { stream_definir_alvo(alvo); addons_buscar(alvo, ci->tipo); }
         // Legendas do OpenSubtitles junto: sao dezenas por titulo e a busca
         // leva segundos. Pedir so quando o dono abre a folha de faixas faria
         // ele esperar de olho numa lista vazia.

@@ -5573,15 +5573,19 @@ void desc_mesclar_episodios(CatEp *base, int nb, const CatEp *outro, int no, int
 // titulo iam parar em outro. epAlvo re-resolve pelo id antes de cada escrita;
 // -1 = o titulo saiu do catalogo e nada e escrito. Um fio por vez (fioEpVivo).
 static char epAlvoId[64];
-static int epAlvo(int alvoItem) {
-  int i = cat_indice_vivo(alvoItem, epAlvoId);
+// Com o id do PROPRIO fio: a cauda do buscarEps (notas por temporada do TMDB,
+// dezenas de pedidos em serie longa) roda depois de fioEpVivo ser solto, e o
+// proximo titulo ja reescreveu epAlvoId (sem _Thread_local no Tizen 4/5).
+static int epAlvoDe(int alvoItem, const char *id) {
+  int i = cat_indice_vivo(alvoItem, id);
   if (i != alvoItem) {
     printf("[desc] episodios de %s: catalogo remontou no meio do pedido (%d -> %d)\n",
-           epAlvoId, alvoItem, i);
+           id, alvoItem, i);
     fflush(stdout);
   }
   return i;
 }
+static int epAlvo(int alvoItem) { return epAlvoDe(alvoItem, epAlvoId); }
 
 static int publicarEpisodios(const char *corpo, int alvoItem, const char *titulo,
                              const char *sobre, int modo) {
@@ -6087,12 +6091,14 @@ static void *buscarEps(void *u) {
   const CatItem *it;
   char *corpo = NULL;
   char serie[64];
+  char meuId[64];
   MetaFontes mf;
-  int viaCatalogo = 0;
+  int viaCatalogo = 0, solto = 0;
   (void)u;
   memset(&mf, 0, sizeof mf);
   if (!orig || !orig->imdb[0]) { fioEpVivo = 0; return NULL; }
   snprintf(epAlvoId, sizeof epAlvoId, "%s", orig->imdb);
+  snprintf(meuId, sizeof meuId, "%s", orig->imdb);
   // COPIA AGORA (#190): o ponteiro de cat_item so vale ate o fim do quadro, e
   // este fio vai para a rede antes de ler o resto dele.
   base = *orig;
@@ -6323,6 +6329,15 @@ static void *buscarEps(void *u) {
     // Publica texto, generos e temporadas antes do enriquecimento de imagens.
     if ((alvoItem = epAlvo(alvoItem)) >= 0) cat_atualizar_item(alvoItem, &edit);
     marco("detalhe: meta basico na tela");
+    // A FICHA ESTA NA TELA: ESTE FIO JA NAO SEGURA O PROXIMO TITULO (R2). O que
+    // resta (fotos do elenco e as notas por temporada do TMDB, uma viagem por
+    // temporada: 20+ numa serie longa, segundos) so ENFEITA a pagina. Com
+    // fioEpVivo ligado ate o fim, abrir outro titulo nesse meio (uma
+    // recomendacao dos detalhes) deixava o pedido da ficha dele guardado em
+    // pendItem ate a cauda inteira acabar — pagina aberta e vazia. A cauda
+    // escreve pelo id guardado em meuId (epAlvoDe), nao pelo global.
+    solto = 1;
+    fioEpVivo = 0;
     { char idBase[24];
       const char *dp;
       snprintf(idBase, sizeof idBase, "%s", it->imdb);
@@ -6334,7 +6349,7 @@ static void *buscarEps(void *u) {
       // sobrescreveriam os dela.
       if (idbase_e_imdb(it->imdb))
         fotosDoElenco(&edit, idBase, !strcmp(it->tipo, "series"), manter); }
-    if (alvoItem >= 0 && (alvoItem = epAlvo(alvoItem)) >= 0) cat_atualizar_item(alvoItem, &edit);
+    if (alvoItem >= 0 && (alvoItem = epAlvoDe(alvoItem, meuId)) >= 0) cat_atualizar_item(alvoItem, &edit);
     printf("[desc] %s: %d atores, dir='%s', %d temporadas\n",
            edit.titulo, edit.nElenco, edit.direcao, edit.nTemporadas);
     fflush(stdout);
@@ -6360,7 +6375,7 @@ static void *buscarEps(void *u) {
           free(c3);
         }
       }
-      if (chave2[0] && tmdbId > 0 && alvoItem >= 0 && (alvoItem = epAlvo(alvoItem)) >= 0) {
+      if (chave2[0] && tmdbId > 0 && alvoItem >= 0 && (alvoItem = epAlvoDe(alvoItem, meuId)) >= 0) {
         int neps = cat_n_episodios(alvoItem);
         if (neps > 0) {
           CatEp *tmp = malloc(sizeof(CatEp) * (size_t)neps);
@@ -6391,7 +6406,7 @@ static void *buscarEps(void *u) {
                   free(c4);
                 } }
             }
-            if (preenchidas > 0 && (alvoItem = epAlvo(alvoItem)) >= 0 &&
+            if (preenchidas > 0 && (alvoItem = epAlvoDe(alvoItem, meuId)) >= 0 &&
                 cat_n_episodios(alvoItem) == neps) {
               cat_definir_episodios(alvoItem, tmp, neps);
               printf("[desc] %s: nota/sinopse TMDB em %d episodios\n",
@@ -6407,7 +6422,7 @@ static void *buscarEps(void *u) {
 
   free(corpo);
   metaFontesLiberar(&mf);
-  fioEpVivo = 0;
+  if (!solto) fioEpVivo = 0;   // solto antes: um fio mais novo pode estar vivo
   return NULL;
 }
 
@@ -6857,6 +6872,10 @@ static char sobTipo[8];
 static int  sobIndice = -1;   // resultado, consumido por desc_titulo_pronto
 static int  sobFioVivo;
 static pthread_t sobFio;
+// SEMENTE (R2): o que o clique ja sabia do titulo (nome, ano, cartaz). Com ela
+// a pagina abre NA HORA, com o layout normal, e o buscarEps preenche o resto.
+static CatItem sobSemente;
+static int  sobTemSemente;
 
 static void *buscarTitulo(void *arg) {
   char url[200], id[24], *corpo;
@@ -6886,6 +6905,19 @@ static void *buscarTitulo(void *arg) {
     // Ja temos? Entao e so abrir.
     { int j = cat_indice_por_imdb(id);
       if (j >= 0) { sobIndice = j; sobFioVivo = 0; return NULL; } }
+    // Com a semente, o /meta NAO e esperado aqui: o titulo entra no catalogo
+    // so com o que o clique sabia, a pagina abre, e o buscarEps (disparado na
+    // abertura) busca a ficha uma vez so — e a cache dele evita repetir.
+    if (sobTemSemente) {
+      CatItem s = sobSemente;
+      snprintf(s.imdb, sizeof s.imdb, "%s", id);
+      s.tmdb = sobTmdb;
+      sobIndice = cat_acrescentar(&s);
+      printf("[desc] sob demanda tmdb %ld -> %s com semente, indice %d\n", sobTmdb, id, sobIndice);
+      fflush(stdout);
+      sobFioVivo = 0;
+      return NULL;
+    }
   }
 
   for (passo = 0; passo < 2 && achou < 0; passo++) {
@@ -6909,8 +6941,9 @@ static void *buscarTitulo(void *arg) {
   return NULL;
 }
 
-void desc_pedir_titulo_tmdb(long tmdbId, const char *tipo) {
+static void pedirTmdb(long tmdbId, const char *tipo, int semente) {
   if (tmdbId <= 0 || sobFioVivo) return;
+  sobTemSemente = semente;
   sobTmdb = tmdbId;
   snprintf(sobTipo, sizeof sobTipo, "%s", tipo ? tipo : "movie");
   sobId[0] = 0;
@@ -6919,6 +6952,7 @@ void desc_pedir_titulo_tmdb(long tmdbId, const char *tipo) {
   if (pthread_create(&sobFio, NULL, buscarTitulo, NULL) != 0) sobFioVivo = 0;
   else pthread_detach(sobFio);
 }
+void desc_pedir_titulo_tmdb(long tmdbId, const char *tipo) { pedirTmdb(tmdbId, tipo, 0); }
 
 void desc_pedir_titulo(const char *imdb) {
   char id[24];
@@ -6931,12 +6965,59 @@ void desc_pedir_titulo(const char *imdb) {
             memcpy(id, imdb, k); id[k] = 0; }
   else snprintf(id, sizeof id, "%s", imdb);
   if (cat_indice_por_imdb(id) >= 0) return;   // ja temos
+  sobTemSemente = 0;
   snprintf(sobId, sizeof sobId, "%s", id);
   sobTmdb = 0;
   sobIndice = -1;
   sobFioVivo = 1;
   if (pthread_create(&sobFio, NULL, buscarTitulo, NULL) != 0) sobFioVivo = 0;
   else pthread_detach(sobFio);
+}
+
+// Como desc_pedir_titulo/_tmdb, mas com o que o clique ja sabia. Sem cartaz ou
+// sem nome cai no caminho de sempre (a pagina espera o /meta).
+//   imdb "tt...": o titulo entra no catalogo AGORA e o roteador abre no proximo
+//   quadro. `tipo` e o do clique ("movie"/"series"; "tv" tambem serve) e DEVE
+//   ser certo: o catalogo recusa atualizar um item de filme para serie
+//   (cat_atualizar_item compara tipo_base), entao "incerto" nao e opcao aqui.
+//   tmdb > 0: um pedido so (external_ids) para achar o IMDb, depois o mesmo.
+void desc_pedir_titulo_semente(const char *imdb, long tmdb, const char *tipo,
+                               const char *titulo, const char *ano, const char *poster) {
+  CatItem s;
+  char id[24];
+  const char *dp;
+  if (sobFioVivo) return;
+  if (!titulo || !*titulo || !poster || !*poster || !tipo ||
+      (strcmp(tipo, "tv") && strcmp(tipo, "series") && strcmp(tipo, "movie"))) {
+    if (tmdb > 0) desc_pedir_titulo_tmdb(tmdb, tipo);
+    else desc_pedir_titulo(imdb);
+    return;
+  }
+  memset(&s, 0, sizeof s);
+  snprintf(s.titulo, sizeof s.titulo, "%s", titulo);
+  snprintf(s.meta, sizeof s.meta, "%.4s", ano ? ano : "");
+  snprintf(s.poster, sizeof s.poster, "%s", poster);
+  snprintf(s.backdrop, sizeof s.backdrop, "%s", poster);
+  if (tipo && (!strcmp(tipo, "tv") || !strcmp(tipo, "series"))) snprintf(s.tipo, sizeof s.tipo, "series");
+  else if (tipo && !strcmp(tipo, "movie")) snprintf(s.tipo, sizeof s.tipo, "movie");
+  if (s.tipo[0]) snprintf(s.genero, sizeof s.genero, "%s", i18n(rotuloTipoSing(s.tipo)));
+  s.tmdb = tmdb > 0 ? tmdb : 0;
+  if (tmdb > 0) {
+    sobSemente = s;
+    pedirTmdb(tmdb, tipo, 1);
+    return;
+  }
+  if (!imdb || imdb[0] != 't') { desc_pedir_titulo(imdb); return; }
+  dp = strchr(imdb, ':');
+  { size_t k = dp ? (size_t)(dp - imdb) : strlen(imdb);
+    if (k >= sizeof id) k = sizeof id - 1;
+    memcpy(id, imdb, k); id[k] = 0; }
+  { int j = cat_indice_por_imdb(id);
+    if (j >= 0) { sobIndice = j; return; } }
+  snprintf(s.imdb, sizeof s.imdb, "%s", id);
+  sobIndice = cat_acrescentar(&s);
+  printf("[desc] sob demanda %s com semente, indice %d\n", id, sobIndice);
+  fflush(stdout);
 }
 
 int desc_titulo_pronto(void) { int v = sobIndice; sobIndice = -1; return v; }
