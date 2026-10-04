@@ -1209,6 +1209,7 @@ static void desenhaVazio(void) {
 
 static void desenhaPainel(void) {
   int etap = temEtapas(), vazio = semFonte || !nLin;
+  float segFim;
   char t[160];
   // O veu da tela congelada (DESIGN.md §2): 30% vidro, 42% solido.
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, 0, 0, 0, rgVid() ? 0.30f : 0.42f);
@@ -1220,7 +1221,7 @@ static void desenhaPainel(void) {
     rgCabecalho(t);
   } else rgCabecalho(i18n("O que o app fez nesta sessão"));
   rgIlha((GfxRect){ RP_X, RP_Y, RP_W, RP_H }, 36, 0.88f, 0.051f, 0.055f, 0.067f);
-  rgSeg(!vazio, RP_X + 30, RP_Y + 26 + 28);
+  segFim = RP_X + 30 + rgSeg(!vazio, RP_X + 30, RP_Y + 26 + 28);
   if (vazio) {
     RgDica d[2] = { { "OK", "Ler de novo" }, { "Voltar", "Fechar" } };
     desenhaVazio();
@@ -1240,6 +1241,14 @@ static void desenhaPainel(void) {
       else snprintf(p, sizeof p, "%s", i18n("Pausado"));
       l = txt_linha(TXT_AJ_CHIP, p, (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255);
       pw = 16 + 18 + 10 + l.w + 16;
+      // Never on top of the area tabs: when it does not fit to their right it
+      // moves to the header row (right end, clear of the clock island).
+      if (xd - pw < segFim + 16.0f) {
+        xd = RP_X + RP_W - 30; if (xd > NV_TELA_W - 200.0f) xd = NV_TELA_W - 200.0f;
+        yc = 64.0f;
+        // over the wallpaper, not the panel: a dark backing keeps it legible
+        gfx_cor((GfxRect){ xd - pw, yc - 20, pw, 40 }, 0.5f, 0.05f, 0.055f, 0.067f, 0.82f);
+      }
       gfx_cor((GfxRect){ xd - pw, yc - 20, pw, 40 }, 0.5f, ar, ag, ab, 0.20f);
       rgIconeCor("aj_pause", xd - pw + 16, yc - 9, 18, ar, ag, ab, 1);
       txt_desenhar(l, xd - pw + 16 + 28, yc - l.h * 0.5f);
