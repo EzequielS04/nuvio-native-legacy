@@ -53,10 +53,26 @@ static float escalaTxt = 1.0f;
 // textura de 1x esticada. A camada 0 e o caminho de sempre, intocado; a 1 tem
 // as proprias fontes, abertas sob demanda sobre os mesmos bytes, e as proprias
 // linhas no cache (a chave leva o fator).
+//
+// VARIAS CAMADAS AO MESMO TEMPO (04/10). Eram duas (1x e "a ampliada"), e a
+// ampliada fechava tudo quando o fator mudava. Mas um mesmo quadro pode
+// desenhar em DOIS fatores diferentes de 1: Ajustes a 80% e, por cima, a
+// pilula do menu no fator fixo dele (0,9, layout Dinamica). Cada quadro
+// trocava 0,8 -> 0,9 -> 0,8, fechava as fontes e despejava as linhas da
+// outra: 62 linhas rasterizadas de novo POR QUADRO (tests/ajustes_shot.c,
+// NUVIO_SHOT_TXT). No Mac cabe no orcamento; na TV o orcamento por quadro
+// (TXT_MS_QUADRO) acaba antes, e o que vem depois na ordem do desenho (os
+// chips do resumo, as dicas, o rotulo da pilula) ficava sem texto para
+// sempre. Agora cada fator tem a sua casa (TXT_NCAM - 1 fatores vivos); a
+// casa menos usada so e reaproveitada quando aparece um fator novo.
+#define TXT_NCAM 4
 static int camada;
-static float escCam = 1.0f;          // o fator com que a camada 1 foi aberta
+static float escCamSlot[TXT_NCAM];   // o fator de cada casa (0 = livre; a 0 e sempre 1x)
+static unsigned long usoCam[TXT_NCAM];
+static unsigned long relogioCam;
+#define escCam (escCamSlot[camada])
 #define ESC_T (camada ? escalaTxt * escCam : escalaTxt)
-static TTF_Font *fontesCam[2][TXT_FAMILIA_N][TXT_NFONTES];
+static TTF_Font *fontesCam[TXT_NCAM][TXT_FAMILIA_N][TXT_NFONTES];
 #define fontes (fontesCam[camada])
 static TxtFamilia fonteInterface = TXT_FAMILIA_INTER;
 static TxtFamilia fonteInterfaceFallback = TXT_FAMILIA_INTER;
@@ -75,7 +91,7 @@ static char           caminhoPeso[TXT_FAMILIA_N][3][512];
 // O RWops de cada estilo. Guardado porque abrimos com freesrc=0 (o buffer e
 // compartilhado, a fonte nao pode fecha-lo) e alguem tem de fechar em
 // txt_encerrar.
-static SDL_RWops     *rwFonteCam[2][TXT_FAMILIA_N][TXT_NFONTES];
+static SDL_RWops     *rwFonteCam[TXT_NCAM][TXT_FAMILIA_N][TXT_NFONTES];
 #define rwFonte (rwFonteCam[camada])
 // A JetBrains Mono do registro (PESO_MONO_R/B): dois arquivos lidos uma vez, na
 // primeira familia que abrir um estilo TXT_MONO*, e vivos ate txt_encerrar.
@@ -105,10 +121,10 @@ static unsigned char *lerTudo(const char *caminho, size_t *tam) {
 // Pesos de fontes legadas que não têm três faces reais usam síntese. Fontes
 // novas e Inter carregam as faces reais, uma família por vez e sob demanda.
 #define TXT_LEG_N (TXT_LEG_200 - TXT_LEG_50 + 1)
-static TTF_Font *fontesLegendaLGCam[2][TXT_LEG_N];
+static TTF_Font *fontesLegendaLGCam[TXT_NCAM][TXT_LEG_N];
 #define fontesLegendaLG (fontesLegendaLGCam[camada])
 static int avisoFallback[TXT_FAMILIA_N];
-static unsigned char tentouLegendaLGCam[2][TXT_LEG_N];
+static unsigned char tentouLegendaLGCam[TXT_NCAM][TXT_LEG_N];
 #define tentouLegendaLG (tentouLegendaLGCam[camada])
 const char *const TXT_FAMILIAS_PT[TXT_FAMILIA_N] = {
   "Inter", "LG Display", "Droid Sans", "Montserrat", "Roboto",
@@ -373,6 +389,9 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 172, PESO_BOLD    },   // TXT_V2_NUM150
   { 36, PESO_BOLD    },   // TXT_V2_36B
   { 18, PESO_REGULAR },   // TXT_V2_18
+  { 26, PESO_MEDIUM  },   // TXT_V2_LN
+  { 26, PESO_BOLD    },   // TXT_V2_LN_B
+  { 48, PESO_BOLD    },   // TXT_V2_A3TIT
   { 28, PESO_BOLD    },   // TXT_ILHA_NOME_L (24 + 17 %)
   { 22, PESO_REGULAR },   // TXT_ILHA_SUB_L (19 + 16 %)
   { 17, PESO_REGULAR },   // TXT_ILHA_HORA_L (15 + 13 %)
@@ -410,8 +429,8 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
 // DroidSansFallback (que os tem) logo ali ao lado.
 typedef enum { ESC_CJK, ESC_CJK_SC, ESC_CJK_TC, ESC_ARABE, ESC_CIRILICO_ETC, ESC_N } Escrita;
 #define RES_CAND 9
-static TTF_Font *reservasCam[2][ESC_N][RES_CAND][TXT_NFONTES];
-static unsigned char reservaFalhouCam[2][ESC_N][RES_CAND][TXT_NFONTES];
+static TTF_Font *reservasCam[TXT_NCAM][ESC_N][RES_CAND][TXT_NFONTES];
+static unsigned char reservaFalhouCam[TXT_NCAM][ESC_N][RES_CAND][TXT_NFONTES];
 #define reservas (reservasCam[camada])
 #define reservaFalhou (reservaFalhouCam[camada])
 static char caminhoReserva[ESC_N][RES_CAND][512];
@@ -745,7 +764,7 @@ static TTF_Font *fonteLegendaDe(TxtEstilo estilo, const char *s,
 
 static void liberarFamilia(TxtFamilia familia) {
   fdEsquecer();
-  for (int c = 0; c < 2; c++)
+  for (int c = 0; c < TXT_NCAM; c++)
     for (int i = 0; i < TXT_NFONTES; i++) {
       if (fontesCam[c][familia][i]) TTF_CloseFont(fontesCam[c][familia][i]);
       fontesCam[c][familia][i] = NULL;
@@ -854,48 +873,60 @@ static void abrirEstiloCamada(TxtFamilia familia, int i) {
 
 // Fecha tudo o que a camada ampliada abriu e esquece as linhas dela: o fator
 // mudou (o ajuste foi trocado) e as fontes daquele tamanho nao servem mais.
-static void fecharCamadaAmpliada(void) {
+static void fecharCamadaAmpliada(int k) {
+  char pre[16];
+  size_t np;
+  if (k <= 0 || k >= TXT_NCAM) return;
   for (int f = 0; f < TXT_FAMILIA_N; f++)
     for (int i = 0; i < TXT_NFONTES; i++) {
-      if (fontesCam[1][f][i]) TTF_CloseFont(fontesCam[1][f][i]);
-      fontesCam[1][f][i] = NULL;
-      if (rwFonteCam[1][f][i]) SDL_FreeRW(rwFonteCam[1][f][i]);
-      rwFonteCam[1][f][i] = NULL;
+      if (fontesCam[k][f][i]) TTF_CloseFont(fontesCam[k][f][i]);
+      fontesCam[k][f][i] = NULL;
+      if (rwFonteCam[k][f][i]) SDL_FreeRW(rwFonteCam[k][f][i]);
+      rwFonteCam[k][f][i] = NULL;
     }
   for (int i = 0; i < TXT_LEG_N; i++) {
-    if (fontesLegendaLGCam[1][i]) TTF_CloseFont(fontesLegendaLGCam[1][i]);
-    fontesLegendaLGCam[1][i] = NULL;
+    if (fontesLegendaLGCam[k][i]) TTF_CloseFont(fontesLegendaLGCam[k][i]);
+    fontesLegendaLGCam[k][i] = NULL;
   }
-  memset(tentouLegendaLGCam[1], 0, sizeof tentouLegendaLGCam[1]);
+  memset(tentouLegendaLGCam[k], 0, sizeof tentouLegendaLGCam[k]);
   for (int e = 0; e < ESC_N; e++)
     for (int c = 0; c < RES_CAND; c++)
       for (int i = 0; i < TXT_NFONTES; i++)
-        if (reservasCam[1][e][c][i]) { TTF_CloseFont(reservasCam[1][e][c][i]); reservasCam[1][e][c][i] = NULL; }
-  memset(reservaFalhouCam[1], 0, sizeof reservaFalhouCam[1]);
+        if (reservasCam[k][e][c][i]) { TTF_CloseFont(reservasCam[k][e][c][i]); reservasCam[k][e][c][i] = NULL; }
+  memset(reservaFalhouCam[k], 0, sizeof reservaFalhouCam[k]);
+  // So as linhas DESTE fator: a chave da camada comeca por "E<fator*100>:".
+  snprintf(pre, sizeof pre, "E%d:", (int)(escCamSlot[k] * 100.0f + 0.5f));
+  np = strlen(pre);
   for (int i = 0; i < MAX_LINHAS; i++)
-    if (cache[i].ocupado && cache[i].chave[0] == 'E') {
+    if (cache[i].ocupado && escCamSlot[k] > 0.0f && !strncmp(cache[i].chave, pre, np)) {
       if (cache[i].linha.tex) {
         gfx_tex_esquecer(cache[i].linha.tex);
         glDeleteTextures(1, &cache[i].linha.tex);
       }
       memset(&cache[i], 0, sizeof cache[i]);
     }
+  escCamSlot[k] = 0.0f;
   fdEsquecer();
 }
 
-// Qual camada vale agora: a do gfx (gfx_escala). Barata — uma comparacao — e
-// chamada na entrada de quem rasteriza, mede ou desenha.
+// Qual camada vale agora: a casa do fator do gfx (gfx_escala). Barata — uma
+// comparacao por casa — e chamada na entrada de quem rasteriza, mede ou desenha.
 static void camadaAtualizar(void) {
   float e = gfx_escala();
+  int k, livre = -1, velha = 1;
   if (e == 1.0f) { camada = 0; return; }
-  if (e != escCam) {
-    int ant = camada;
-    camada = 1;
-    fecharCamadaAmpliada();
-    camada = ant;
-    escCam = e;
+  if (camada > 0 && escCamSlot[camada] == e) { usoCam[camada] = ++relogioCam; return; }
+  for (k = 1; k < TXT_NCAM; k++) {
+    if (escCamSlot[k] == e) { camada = k; usoCam[k] = ++relogioCam; return; }
+    if (escCamSlot[k] <= 0.0f && livre < 0) livre = k;
+    if (usoCam[k] < usoCam[velha]) velha = k;
   }
-  camada = 1;
+  // Fator novo: uma casa livre, ou a menos usada (fechada antes de reusar).
+  k = livre > 0 ? livre : velha;
+  if (livre < 0) fecharCamadaAmpliada(k);
+  escCamSlot[k] = e;
+  usoCam[k] = ++relogioCam;
+  camada = k;
 }
 
 int txt_iniciar(const char *dirRecursos, float escala) {
@@ -1038,7 +1069,7 @@ void txt_encerrar(void) {
       for (int c = 0; c < RES_CAND; c++)
         if (reservas[e][c][i]) { TTF_CloseFont(reservas[e][c][i]); reservas[e][c][i] = NULL; }
   memset(reservaFalhou, 0, sizeof reservaFalhou);
-  { int ant = camada; camada = 1; fecharCamadaAmpliada(); camada = ant; }
+  for (int k = 1; k < TXT_NCAM; k++) fecharCamadaAmpliada(k);
   fdEsquecer();
   memset(familiaTentada, 0, sizeof familiaTentada);
   memset(avisoFallback, 0, sizeof avisoFallback);
