@@ -466,6 +466,8 @@ static void escolherLegenda(int i) {
 
 static void aplicar(void) {
   if (coluna == 0) {
+    // F06: outra faixa de audio = outras falas; a escuta em curso nao vale mais.
+    if (video_audio_atual() != foco[0]) legsync_audio_trocou();
     video_escolher_audio(foco[0]);
   } else {
     // A pessoa escolheu: a automatica nao mexe mais nesta sessao, nem se a

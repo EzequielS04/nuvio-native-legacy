@@ -342,6 +342,12 @@ typedef enum {
   // principal ("Da conta" segue subtitle_secondary_language do perfil). No fim
   // pelo mesmo motivo dos outros: valor[] e CHAVE[] sao posicionais.
   AJ_LEG_LINGUA2,
+  // SINCRONIA POR AUDIO (F06, 1.8): oferece "Por audio" na linha de
+  // sincronizacao automatica do seletor de legendas, onde o backend entrega o
+  // PCM decodificado (hoje so Android). LOCAL (o PCM e o passthrough sao desta
+  // TV), padrao DESLIGADO. No fim pelo mesmo motivo: valor[] e CHAVE[] sao
+  // posicionais.
+  AJ_LEG_SYNC_AUDIO,
   AJ_N
 } OpcaoId;
 
@@ -1019,6 +1025,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Tamanho dos ajustes", V_TAMANHO_AJUSTES, 3),
   ESC("Esconder logo durante o trailer", V_LIGA, 2),
   ESC("Idioma da legenda secundária",    V_LINGUA, 2),
+  ESC("Sincronia por áudio",             V_LIGA, 2),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1197,6 +1204,7 @@ static const char *CHAVE[] = {
   "tamanhoAjustesLocal",
   "logoTrailerLocal",
   "legendaSecundariaIdioma",
+  "legendaSyncAudioLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1595,6 +1603,7 @@ float ajustes_tamanho_ajustes(void) {
   return v >= 0 && v < 3 ? F[v] : 0.8f;
 }
 int ajustes_esconder_logo_trailer(void) { return lig(AJ_LOGO_TRAILER); }
+int ajustes_legenda_sync_audio(void) { return lig(AJ_LEG_SYNC_AUDIO); }
 int ajustes_icone_app(void) { return valor[AJ_ICONE_APP]; }
 int ajustes_saida_player_home(void) { return lig(AJ_RELOGIO) && valor[AJ_SAIDA_PLAYER] == 0; }
 int ajustes_selo_visto(void) { return lig(AJ_SELO_VISTO); }
@@ -3360,6 +3369,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_TAMANHO_UI:     /* o tamanho e desta tela, e o web nao tem */
     case AJ_TAMANHO_AJUSTES:
     case AJ_LOGO_TRAILER:   /* so a protecao de OLED desta TV */
+    case AJ_LEG_SYNC_AUDIO: /* PCM e passthrough sao desta TV; o web nao tem */
     case AJ_FUNDO:          /* o desfoque custa GPU desta TV; o web nao tem */
     case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: /* teste do vidro: visual desta TV */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
@@ -4172,6 +4182,7 @@ static const char *ajudaOpcao(int op) {
     // --- Reproducao
     case AJ_QUALIDADE: return "Define a preferência de resolução. A disponibilidade depende das fontes do addon.";
     case AJ_DV: case AJ_ATMOS: return "Preferência para fontes compatíveis. O formato disponível também depende do arquivo e da TV.";
+    case AJ_LEG_SYNC_AUDIO: return "Compara as falas do áudio com a legenda externa para acertar o atraso. Só onde o player entrega o áudio decodificado e sem passthrough; vale só nesta TV.";
     case AJ_LEG_LINGUA2: return "Segunda legenda, mostrada no alto da tela junto com a principal. Só arquivos SRT/VTT dos addons. \"Da conta\" segue o que está no seu perfil.";
     case AJ_LEG_LINGUA: return "Idioma ligado sozinho quando o vídeo começa. Legendas dos addons aparecem em inglês e no idioma escolhido aqui. \"Da conta\" segue o que está no seu perfil.";
     case AJ_AUD_LINGUA: return "Faixa de áudio escolhida quando o arquivo tem mais de uma. Se o idioma não existir no arquivo, o player usa a primeira.";

@@ -2563,6 +2563,8 @@ void player_atualizar(float dt, Uint32 agora) {
     { double bf = video_buffer_fim();
       mkvass_folga(bf > 0.5 ? bf - (double)posSeg : -1.0);
       // F05: troca de fonte, seek e buffer curto cancelam/pausam o AutoSync.
+      // F06: o ajuste local decide se "Por audio" existe (padrao desligado).
+      legsync_audio_habilitar(ajustes_legenda_sync_audio());
       legsync_passo(video_url_atual(), posSeg, bf > 0.5 ? bf - (double)posSeg : -1.0,
                     scrubbing || video_bufferando_ms() > 0, agora); }
     if (d > 1.0) duracaoSeg = (float)d;
