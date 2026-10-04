@@ -89,6 +89,10 @@ void plrilha_pedir(const PlrIlhaPedido *p) {
     temCen = 1;
     return;
   }
+  // BAIXA PRIORIDADE (guia parental): nunca derruba um pedido que ja esta no
+  // quadro, e qualquer outro pedido a derruba, venha antes ou depois dela.
+  if (p->baixa && temPed) return;
+  if (temPed && ped.baixa) temPed = 0;
   // Quem tem corpo vence quem e so aviso: a lista aberta nao vira toast.
   if (temPed && ped.w > 0.0f && p->w <= 0.0f) return;
   copiar(&ped, p, pedTexto, pedDir, pedIcone);
