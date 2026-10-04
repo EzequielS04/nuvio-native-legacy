@@ -37,6 +37,16 @@ typedef struct {
   int alvo, tela, exemplo, visual;
 } GuiaEnt;
 #include "ajustes_ux_guia_dados.inc"
+#include "p2pmotor.h"
+
+// O cartao do P2P (gerado de guia.json) descreve so o servidor da rede. Num
+// pacote com o motor embutido (p2pmotor.h) isso seria falso: a TV baixa e
+// compartilha. A busca continua sobre o texto gerado (nao abre o motor).
+static const char *guiaTxt(const GuiaEnt *g) {
+  if (g->alvo == AJ_P2P_LIGADO && p2pmotor_disponivel())
+    return "Toca torrents sem link. Sem servidor na rede, o próprio aparelho baixa e compartilha enquanto toca, com teto de disco, e apaga tudo ao fechar o player. O automático nunca escolhe P2P.";
+  return g->txt;
+}
 
 // A frase de cada capitulo no inspetor, com o foco no indice.
 static const char *const GUIA_CAP_TXT[GUIA_NCAPS] = {
@@ -645,7 +655,7 @@ static void guiaDesenharEnt(int e, float x, float y, float w, int foco, int sel,
     float nx = tx + t.w + 12;
     txt_desenhar_alpha(t, tx, y + 20.7f + (28 - t.h) * 0.5f, (foco ? 1.0f : 0.88f) * a);
     if (g->novo && !semNovo && nx + 60 < tx + tw) guiaNovoMarca("Novo", nx, y + 34.7f, a); }
-  { TxtLinha s = ajTxtC(TXT_ILHA_GENERO, guiaFrase(g->txt), tw);
+  { TxtLinha s = ajTxtC(TXT_ILHA_GENERO, guiaFrase(guiaTxt(g)), tw);
     txt_desenhar_alpha(s, tx, y + 53.7f + (21.6f - s.h) * 0.5f, (foco ? 0.62f : 0.45f) * a); }
   ajChevron(x + w - 22, y + 48, (foco ? 0.7f : 0.32f) * a);
 }
@@ -744,7 +754,7 @@ static void guiaDesenharInspetor(const GuiaVista *v, float a) {
     y += 17 + 8;
     y += ajBloco(TXT_AJ_INSP, g->titulo, x, y, w, 38.4f, a, 2);
     y += 10;
-    y += ajBloco(TXT_AJ_SUB, g->txt, x, y, w, 28.5f, 0.66f * a, 5);
+    y += ajBloco(TXT_AJ_SUB, guiaTxt(g), x, y, w, 28.5f, 0.66f * a, 5);
     y += 18;
     gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * a);
     y += 17;
@@ -987,7 +997,7 @@ int ajustes_guia_buscar(const char *consulta, int *out, int max) {
   return n;
 }
 const char *ajustes_guia_titulo(int e) { return e >= 0 && e < GUIA_NENT ? GUIA_ENT[e].titulo : ""; }
-const char *ajustes_guia_texto(int e) { return e >= 0 && e < GUIA_NENT ? GUIA_ENT[e].txt : ""; }
+const char *ajustes_guia_texto(int e) { return e >= 0 && e < GUIA_NENT ? guiaTxt(&GUIA_ENT[e]) : ""; }
 const char *ajustes_guia_icone(int e) { return e >= 0 && e < GUIA_NENT ? GUIA_ENT[e].icone : ""; }
 const char *ajustes_guia_capitulo(int e) { return e >= 0 && e < GUIA_NENT ? GUIA_CAPS[GUIA_ENT[e].cap].titulo : ""; }
 const char *ajustes_guia_onde(int e) { return e >= 0 && e < GUIA_NENT ? GUIA_ENT[e].onde : ""; }

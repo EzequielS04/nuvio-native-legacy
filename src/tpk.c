@@ -160,6 +160,9 @@ int nv_tpk_iniciar(const char *arte, const char *dados, int w, int h) {
   if (tpk_egl_carregar() != 0) { snprintf(erro, sizeof erro, "libEGL nao encontrada na TV"); return -1; }
   if (w > 0 && h > 0) { telaW = w; telaH = h; }
   snprintf(dirArte, sizeof dirArte, "%s", arte);
+  // <pacote>/res/art: o motor P2P (p2pmotor_motor.c) acha a libnuvio_engine.so
+  // em <pacote>/lib mesmo quando esta libnuvio.so e a encenada em data/.
+  setenv("NUVIO_TPK_ARTE", arte, 1);
   snprintf(log, sizeof log, "%s/nuvio.log", dados);
   { char ant[600];
     snprintf(ant, sizeof ant, "%s/nuvio-anterior.log", dados);

@@ -85,7 +85,19 @@ fi
 echo "[1/3] libnuvio.so (ARMv7 softfp, glibc <= 2.28)"
 ENVF=$(mktemp "${TMPDIR:-/tmp}/nuvio-tpk-env.XXXXXXXX"); trap 'rm -f "$ENVF"' EXIT
 tools/env.sh --env-file "$ENVF"
-docker run --rm --platform linux/arm/v5 --env-file "$ENVF" \
+# NUVIO_P2P_MOTOR_TPK=<pasta de tools/p2p-motor/build-tpk.sh>: liga o motor P2P
+# embutido (src/p2pmotor.h) SO na libnuvio.so dos hosts 6+, por dlopen
+# (-DNV_P2P_MOTOR_DLOPEN: sem NEEDED, a auto-atualizacao de uma libnuvio.so
+# num pacote sem o motor continua abrindo), e poe a libnuvio_engine.so no
+# lib/ desses pacotes. O NuvioTpk40 (Tizen 4/5) nunca leva motor.
+P2P_VOL=""
+if [ -n "${NUVIO_P2P_MOTOR_TPK:-}" ]; then
+  [ -f "$NUVIO_P2P_MOTOR_TPK/libnuvio_engine.so" ] && [ -f "$NUVIO_P2P_MOTOR_TPK/include/nuvio_engine/nuvio_engine.h" ] || {
+    echo "NUVIO_P2P_MOTOR_TPK sem build: rode tools/p2p-motor/build-tpk.sh $NUVIO_P2P_MOTOR_TPK" >&2; exit 2; }
+  P2P_VOL="-v $NUVIO_P2P_MOTOR_TPK:/p2p"
+fi
+docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
+  -e NUVIO_P2P_MOTOR="${NUVIO_P2P_MOTOR_TPK:+1}" \
   -e NUVIO_EXTRA_CFLAGS="${NUVIO_EXTRA_CFLAGS:-}" \
   -v "$RAIZ":/work -v "$CACHE/prefix":/deps -w /work nuvio-tpk-sdk sh -c '
   set -e
@@ -105,8 +117,10 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" \
     v=$(printf "%s" "$v" | sed "s/[\\\\\"]/\\\\&/g")
     printf "%s\n" "-D$k=\\\"$v\\\""
   done > /tmp/flags
+  P2P_CFLAGS=""
+  [ "${NUVIO_P2P_MOTOR:-}" = "1" ] && P2P_CFLAGS="-DNV_P2P_MOTOR -DNV_P2P_MOTOR_DLOPEN -I/p2p/include"
   ls src/*.c | grep -v "src/video_tizen.c" | xargs -P 6 -I{} sh -c \
-    "gcc $CFLAGS -c {} -o /tmp/o/\$(basename {} .c).o -DNV_TPK -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS @/tmp/flags -I/deps/include -I/deps/include/SDL2" 
+    "gcc $CFLAGS -c {} -o /tmp/o/\$(basename {} .c).o -DNV_TPK -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS $P2P_CFLAGS @/tmp/flags -I/deps/include -I/deps/include/SDL2" 
   # SDL e zlib ESTATICOS: a TV nao tem libSDL2 garantida, e a libz entra junto
   # para nao depender da versao do aparelho. GLES/EGL/dl/pthread/m sao do
   # sistema (API nativa publica do Tizen). libwebp tambem estatica (o Tizen nao
@@ -166,7 +180,11 @@ for p in $PACOTES; do
   mkdir -p "$H/lib" "$H/res" "$H/shared/res"
   # O NuvioTpk40 leva a .so propria (1b/3); o nome dentro do pacote e o mesmo.
   if [ "$p" = NuvioTpk40 ]; then cp "$SAIDA/libnuvio-tpk40.so" "$H/lib/libnuvio.so"
-  else cp "$SAIDA/libnuvio.so" "$H/lib/"; fi
+  else
+    cp "$SAIDA/libnuvio.so" "$H/lib/"
+    # Motor P2P (6+): a .so ao lado da libnuvio.so, aberta por dlopen.
+    [ -n "${NUVIO_P2P_MOTOR_TPK:-}" ] && cp "$NUVIO_P2P_MOTOR_TPK/libnuvio_engine.so" "$H/lib/"
+  fi
   cp -R "$ARTE" "$H/res/art"
   # Versao EMPACOTADA para a auto-atualizacao (tizen-tpk/Carga.cs): o host so
   # aplica uma libnuvio.so encenada em data/ se ela for mais nova que isto.
