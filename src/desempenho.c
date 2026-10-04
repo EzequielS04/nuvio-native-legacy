@@ -6,9 +6,6 @@
 #include "idioma.h"
 #include "idiomacod.h"
 #include "tex_cache.h"
-#include "layout.h"
-#define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
-#include "escala.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -18,6 +15,10 @@ static float piorSerie[DS_N];
 static int   nSerie;
 static float uFps, uPior, uTelaMb, uRss;
 static int   uJanks, uTela, uFila, uDesp, uDespTela, temAmostra;
+#ifdef DESEMPENHO_TESTE
+static int formaFixa = -1;
+void desempenho_teste_forma(int forma) { formaFixa = forma; }
+#endif
 
 void desempenho_amostra(float fps, float piorMs, int janks, int texTela, float texTelaMb,
                         int filaTex, int despejos, int despejosTela, float rssMb) {
@@ -28,147 +29,187 @@ void desempenho_amostra(float fps, float piorMs, int janks, int texTela, float t
   temAmostra = 1;
 }
 
+int desempenho_forma(void) {
+  int f = ajustes_medidor_desempenho();
+#ifdef DESEMPENHO_TESTE
+  if (formaFixa >= 0) f = formaFixa;
+#endif
+  if (!temAmostra || f < DS_MINIMO || f > DS_GRANDE) return DS_DESLIGADO;
+  return f;
+}
+
 #define DS_TX 243, 242, 239
 #define DS_AMBAR 0.910f, 0.722f, 0.290f
-static int vid(void) { return ajustes_vidro(); }
+#define DS_VERDE 0.298f, 0.765f, 0.541f
+#define DS_VAO   14.0f     // o CT_VAO da ilha: hora | fio | conteudo
+#define DS_PONTO 9.0f
+static int lento(void) { return uFps < 45.0f; }
 static void num(char *d, size_t t, double v, int casas) {
   char *p;
   snprintf(d, t, "%.*f", casas, v);
   if ((p = strchr(d, '.')) != NULL) *p = idioma_ponto_decimal(ajustes_idioma()) ? '.' : ',';
 }
-static void ilhaMat(GfxRect r, float raioPx) {
-  float raio = raioPx / r.h;
-  gfx_rect((GfxRect){ r.x - 20, r.y - 6, r.w + 40, r.h + 46 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
-           0, 0, 0, vid() ? 0.36f : 0.45f);
-  if (vid()) {
-    gfx_cor(r, raio, 0.055f, 0.059f, 0.071f, 0.80f);
-    gfx_luz_canto(r, raio, r.w * 0.22f, -r.h * 0.40f, r.h * 0.62f, 1, 1, 1, 0.10f);
-  } else gfx_cor(r, raio, 0.082f, 0.086f, 0.102f, 1);
-}
 static TxtLinha dsT(TxtEstilo e, const char *s) { return txt_linha(e, s, DS_TX, 255); }
-static float stat(const char *k, const char *v, float x, float y, float w) {
-  TxtLinha lk = dsT(TXT_AJ_ESTADO, k), lv = dsT(TXT_AJ_ESTADO, v);
-  gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f);
-  txt_desenhar_alpha(lk, x, y + 12, 0.45f);
-  txt_desenhar_alpha(lv, x + w - lv.w, y + 12, 0.88f);
-  return 1 + 11 + 20.6f + 11;
-}
 
-static void pilula(void) {
-  char a[32], b[48], c[32];
-  int lento = uFps < 45.0f;
-  TxtLinha la, lb, lc;
-  float w, x, y = 36, h = 56;
+// --- a linha da hora ---------------------------------------------------------------
+// Numeros em mono (tabulares): o trecho nao danca de largura a cada amostra.
+typedef struct { TxtLinha fps, pior, ram; } Linha;
+static float montar(int forma, Linha *L) {
+  char a[24], b[24], c[24];
+  float w;
   num(a, sizeof a, uFps, 0);
-  { char q[40]; snprintf(q, sizeof q, "%s fps", a); snprintf(a, sizeof a, "%s", q); }
-  { char p[16]; num(p, sizeof p, uPior, 0); snprintf(b, sizeof b, i18n("pior %s ms"), p); }
-  snprintf(c, sizeof c, "%.0f MB", uRss);
-  la = lento ? txt_linha(TXT_G23B, a, 232, 184, 74, 255) : dsT(TXT_G23B, a);
-  lb = dsT(TXT_G22M, b); lc = dsT(TXT_G22M, c);
-  w = 24 + 9 + 14 + la.w + 14 + 1 + 14 + lb.w + 14 + 1 + 14 + lc.w + 24;
-  x = NV_TELA_W - 48 - w;
-  ilhaMat((GfxRect){ x, y, w, h }, 28);
-  x += 24;
-  if (lento) gfx_cor((GfxRect){ x, y + 28 - 4.5f, 9, 9 }, 0.5f, DS_AMBAR, 1);
-  else gfx_cor((GfxRect){ x, y + 28 - 4.5f, 9, 9 }, 0.5f, 0.298f, 0.765f, 0.541f, 1);
-  x += 9 + 14;
-  txt_desenhar(la, x, y + 28 - la.h * 0.5f); x += la.w + 14;
-  gfx_cor((GfxRect){ x, y + 17, 1, 22 }, 0, 1, 1, 1, 0.18f); x += 1 + 14;
-  txt_desenhar_alpha(lb, x, y + 28 - lb.h * 0.5f, 0.7f); x += lb.w + 14;
-  gfx_cor((GfxRect){ x, y + 17, 1, 22 }, 0, 1, 1, 1, 0.18f); x += 1 + 14;
-  txt_desenhar_alpha(lc, x, y + 28 - lc.h * 0.5f, 0.7f);
+  snprintf(b, sizeof b, "%s fps", a);
+  L->fps = lento() ? txt_linha(TXT_MONO18B, b, 232, 184, 74, 255) : dsT(TXT_MONO18B, b);
+  w = DS_VAO + 1.5f + DS_VAO + DS_PONTO + 10.0f + (float)L->fps.w;
+  L->pior.w = L->ram.w = 0;
+  if (forma == DS_MINIMO) {
+    num(a, sizeof a, uPior, 0);
+    snprintf(b, sizeof b, "%s ms", a);
+    snprintf(c, sizeof c, "%.0f MB", uRss);
+    L->pior = dsT(TXT_MONO16, b);
+    L->ram = dsT(TXT_MONO16, c);
+    w += 16.0f + (float)L->pior.w + 14.0f + (float)L->ram.w;
+  }
+  return w;
 }
 
-static void ilha(void) {
-  float w = 520, x0 = NV_TELA_W - 48 - w, y0 = 36, x = x0 + 28, cw = w - 56, y, h;
+float desempenho_linha_w(int forma) {
+  Linha L;
+  if (forma <= DS_DESLIGADO || !temAmostra) return 0.0f;
+  return montar(forma, &L);
+}
+
+void desempenho_linha(int forma, float x, float yc, float a) {
+  Linha L;
+  if (forma <= DS_DESLIGADO || !temAmostra || a < 0.01f) return;
+  montar(forma, &L);
+  x += DS_VAO;
+  // O fio entre a hora e o medidor: o mesmo do cartao ao lado do relogio.
+  gfx_cor((GfxRect){ x, yc - 13.0f, 1.5f, 26.0f }, 0.0f, 1.0f, 1.0f, 1.0f, 0.22f * a);
+  x += 1.5f + DS_VAO;
+  if (lento()) gfx_cor((GfxRect){ x, yc - DS_PONTO * 0.5f, DS_PONTO, DS_PONTO }, 0.5f, DS_AMBAR, a);
+  else gfx_cor((GfxRect){ x, yc - DS_PONTO * 0.5f, DS_PONTO, DS_PONTO }, 0.5f, DS_VERDE, a);
+  x += DS_PONTO + 10.0f;
+  txt_desenhar_alpha(L.fps, x, yc - (float)L.fps.h * 0.5f, a);
+  x += (float)L.fps.w;
+  if (forma == DS_MINIMO) {
+    x += 16.0f;
+    txt_desenhar_alpha(L.pior, x, yc - (float)L.pior.h * 0.5f, a * 0.7f);
+    x += (float)L.pior.w + 14.0f;
+    txt_desenhar_alpha(L.ram, x, yc - (float)L.ram.h * 0.5f, a * 0.7f);
+  }
+}
+
+// --- Menor: a segunda linha --------------------------------------------------------
+#define MN_PAD 24.0f
+#define MN_H   38.0f
+static TxtLinha linhaMenor(void) {
+  char p[16], s[160], q[48], t[48];
+  num(p, sizeof p, uPior, 0);
+  snprintf(q, sizeof q, i18n("pior %s ms"), p);
+  snprintf(t, sizeof t, i18n("%d texturas"), uTela);
+  snprintf(s, sizeof s, "%s · %d %s · %.0f MB · %s", q, uJanks, i18n("janks"), uRss, t);
+  return dsT(TXT_MONO16, s);
+}
+
+// --- Grande: o painel ---------------------------------------------------------------
+#define GR_W   520.0f
+#define GR_PAD 28.0f
+#define GR_STAT (1 + 11 + 20.6f + 11)
+#define GR_H   (18 + 22 + 14 + 96 + 30 + 4 * GR_STAT + 12 + 29 + 8 + 24)
+static float stat(const char *k, const char *v, float x, float y, float w, float a) {
+  TxtLinha lk = dsT(TXT_AJ_ESTADO, k), lv = dsT(TXT_AJ_ESTADO, v);
+  gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * a);
+  txt_desenhar_alpha(lk, x, y + 12, 0.45f * a);
+  txt_desenhar_alpha(lv, x + w - lv.w, y + 12, 0.88f * a);
+  return GR_STAT;
+}
+
+static void painel(GfxRect r, float a) {
+  float x = r.x + GR_PAD, cw = r.w - 2 * GR_PAD, y = r.y;
   char v[64], p[32];
-  int i, lento = uFps < 45.0f, itens, pend, quentes;
+  int i, itens, pend, quentes;
   long bytes, bytesQ, teto = tex_orcamento_bytes();
   tex_estatisticas(&itens, &pend, &bytes, &quentes, &bytesQ);
-  h = 64 + 22 + 64 + 16 + 90 + 6 + 16 + 14 + 4 * 43.6f + 12 + 20 + 9 + 8 + 26;
-  ilhaMat((GfxRect){ x0, y0, w, h }, 36);
-  // cabecalho
-  gfx_icone((GfxRect){ x, y0 + 20, 24, 24 }, "aj_activity", 0.953f, 0.949f, 0.937f, 0.85f);
-  { TxtLinha l = dsT(TXT_ILHA_NOME, "Desempenho"); txt_desenhar(l, x + 36, y0 + 32 - l.h * 0.5f); }
-  { TxtLinha l = dsT(TXT_G18M, "a cada 3 s"); txt_desenhar_alpha(l, x0 + w - 28 - l.w, y0 + 32 - l.h * 0.5f, 0.5f); }
-  gfx_cor((GfxRect){ x0, y0 + 63, w, 1 }, 0, 1, 1, 1, 0.07f);
-  y = y0 + 64 + 22;
-  num(v, sizeof v, uFps, 1);
-  { TxtLinha n = lento ? txt_linha(TXT_AJ_NUM64, v, 232, 184, 74, 255) : dsT(TXT_AJ_NUM64, v), f = dsT(TXT_AJ_TEXTO, "fps");
-    float base = y + n.h * 0.8f;
-    txt_desenhar(n, x, y);
-    txt_desenhar_alpha(f, x + n.w + 12, base - f.h * 0.78f, 0.55f);
-    // "pior 21 ms · 0 janks" a direita, numeros em branco forte
-    { char a[16], b[16];
-      TxtLinha l1, l2, l3, l4, l5;
-      float xd = x + cw, esp = (float)(txt_largura(TXT_AJ_ESTADO, "a a") - txt_largura(TXT_AJ_ESTADO, "aa"));
-      num(a, sizeof a, uPior, 0); snprintf(p, sizeof p, "%s ms", a);
-      snprintf(b, sizeof b, "%d", uJanks);
-      // A linha de texto perde os espacos das pontas quando tem acento ou
-      // "·": os espacos entram a mao.
-      l1 = dsT(TXT_AJ_ESTADO, i18n("pior")); l2 = dsT(TXT_LOG_18B, p); l3 = dsT(TXT_AJ_ESTADO, "·");
-      l4 = dsT(TXT_LOG_18B, b); l5 = dsT(TXT_AJ_ESTADO, i18n("janks"));
-      xd -= l5.w; txt_desenhar_alpha(l5, xd, base - l5.h * 0.78f, 0.6f); xd -= esp;
-      xd -= l4.w; txt_desenhar(l4, xd, base - l4.h * 0.78f); xd -= esp;
-      xd -= l3.w; txt_desenhar_alpha(l3, xd, base - l3.h * 0.78f, 0.6f); xd -= esp;
-      xd -= l2.w; txt_desenhar(l2, xd, base - l2.h * 0.78f); xd -= esp;
-      xd -= l1.w; txt_desenhar_alpha(l1, xd, base - l1.h * 0.78f, 0.6f); }
-    y += 64 + 16; }
+  // Fio sob a linha da hora: o cabecalho da ilha crescida (plrilha faz igual).
+  gfx_cor((GfxRect){ r.x, r.y, r.w, 1 }, 0, 1, 1, 1, 0.07f * a);
+  y += 18;
+  // "pior 21 ms · 0 janks" a esquerda, numeros em branco forte; "a cada 3 s"
+  // na ponta. A linha de texto perde os espacos das pontas quando tem acento
+  // ou "·": os espacos entram a mao.
+  { char nb[16], b[16];
+    TxtLinha l1, l2, l3, l4, l5, d;
+    float xd = x, base = y + 18, esp = (float)(txt_largura(TXT_AJ_ESTADO, "a a") - txt_largura(TXT_AJ_ESTADO, "aa"));
+    num(nb, sizeof nb, uPior, 0); snprintf(p, sizeof p, "%s ms", nb);
+    snprintf(b, sizeof b, "%d", uJanks);
+    l1 = dsT(TXT_AJ_ESTADO, i18n("pior")); l2 = dsT(TXT_LOG_18B, p); l3 = dsT(TXT_AJ_ESTADO, "·");
+    l4 = dsT(TXT_LOG_18B, b); l5 = dsT(TXT_AJ_ESTADO, i18n("janks"));
+    d = dsT(TXT_G18M, i18n("a cada 3 s"));
+    txt_desenhar_alpha(l1, xd, base - l1.h * 0.78f, 0.6f * a); xd += l1.w + esp;
+    txt_desenhar_alpha(l2, xd, base - l2.h * 0.78f, a);        xd += l2.w + esp;
+    txt_desenhar_alpha(l3, xd, base - l3.h * 0.78f, 0.6f * a); xd += l3.w + esp;
+    txt_desenhar_alpha(l4, xd, base - l4.h * 0.78f, a);        xd += l4.w + esp;
+    txt_desenhar_alpha(l5, xd, base - l5.h * 0.78f, 0.6f * a);
+    txt_desenhar_alpha(d, x + cw - d.w, base - d.h * 0.78f, 0.5f * a);
+    y += 22 + 14; }
   // grafico do pior quadro: uma barra por amostra, ambar acima de 33 ms
   { float gx = x + 10, gy = y + 10, gw = cw - 20, gh = 74, pw = gw / DS_N, ly = gy + gh * (1 - 33.0f / 70.0f), dx;
-    gfx_cor((GfxRect){ x, y, cw, 90 }, 12.0f / 90, 0, 0, 0, 0.18f);
+    gfx_cor((GfxRect){ x, y, cw, 90 }, 12.0f / 90, 0, 0, 0, 0.18f * a);
     for (i = 0; i < nSerie; i++) {
       float vv = piorSerie[i] / 70.0f, hh, bx = gx + gw - (nSerie - i) * pw;
       if (vv > 1) vv = 1;
       hh = gh * vv; if (hh < 3) hh = 3;
-      if (piorSerie[i] > 33) gfx_cor((GfxRect){ bx, gy + gh - hh, pw - 2, hh }, 0, DS_AMBAR, 0.6f);
-      else gfx_cor((GfxRect){ bx, gy + gh - hh, pw - 2, hh }, 0, 0.953f, 0.949f, 0.937f, 0.18f);
+      if (piorSerie[i] > 33) gfx_cor((GfxRect){ bx, gy + gh - hh, pw - 2, hh }, 0, DS_AMBAR, 0.6f * a);
+      else gfx_cor((GfxRect){ bx, gy + gh - hh, pw - 2, hh }, 0, 0.953f, 0.949f, 0.937f, 0.18f * a);
     }
-    for (dx = 0; dx < gw; dx += 10) gfx_cor((GfxRect){ gx + dx, ly, 4, 1 }, 0, 1, 1, 1, 0.22f);
-    { TxtLinha l = dsT(TXT_AJ_MINI12, "33 ms"); txt_desenhar_alpha(l, gx + 4, ly - 6 - l.h, 0.45f); }
+    for (dx = 0; dx < gw; dx += 10) gfx_cor((GfxRect){ gx + dx, ly, 4, 1 }, 0, 1, 1, 1, 0.22f * a);
+    { TxtLinha l = dsT(TXT_AJ_MINI12, "33 ms"); txt_desenhar_alpha(l, gx + 4, ly - 6 - l.h, 0.45f * a); }
     y += 90 + 6; }
   { char ha[48];
-    TxtLinha a, b;
+    TxtLinha la, lb;
     int seg = nSerie * 3;
     if (seg < 60) snprintf(ha, sizeof ha, i18n("pior quadro · há %d s"), seg);
     else snprintf(ha, sizeof ha, i18n("pior quadro · há %d min"), (seg + 30) / 60);
-    a = dsT(TXT_AJ_MINI14, ha); b = dsT(TXT_AJ_MINI14, "agora");
-    txt_desenhar_alpha(a, x, y, 0.4f); txt_desenhar_alpha(b, x + cw - b.w, y, 0.4f);
+    la = dsT(TXT_AJ_MINI14, ha); lb = dsT(TXT_AJ_MINI14, i18n("agora"));
+    txt_desenhar_alpha(la, x, y, 0.4f * a); txt_desenhar_alpha(lb, x + cw - lb.w, y, 0.4f * a);
     y += 16 + 14; }
   snprintf(v, sizeof v, "%.0f MB", uRss);
-  y += stat(i18n("Memória do app"), v, x, y, cw);
+  y += stat(i18n("Memória do app"), v, x, y, cw, a);
   snprintf(v, sizeof v, "%d · %.0f MB", uTela, uTelaMb);
-  y += stat(i18n("Texturas na tela"), v, x, y, cw);
+  y += stat(i18n("Texturas na tela"), v, x, y, cw, a);
   snprintf(v, sizeof v, "%d", uFila);
-  y += stat(i18n("Fila de texturas"), v, x, y, cw);
+  y += stat(i18n("Fila de texturas"), v, x, y, cw, a);
   snprintf(v, sizeof v, i18n("%d · %d da tela"), uDesp, uDespTela);
-  y += stat(i18n("Despejadas"), v, x, y, cw);
-  gfx_cor((GfxRect){ x, y, cw, 1 }, 0, 1, 1, 1, 0.07f);
+  y += stat(i18n("Despejadas"), v, x, y, cw, a);
+  gfx_cor((GfxRect){ x, y, cw, 1 }, 0, 1, 1, 1, 0.07f * a);
   y += 12;
-  { TxtLinha k = dsT(TXT_ILHA_GENERO, "Cache de imagens"), l;
+  { TxtLinha k = dsT(TXT_ILHA_GENERO, i18n("Cache de imagens")), l;
     float fr = teto > 0 ? (float)bytes / (float)teto : 0;
     snprintf(v, sizeof v, "%ld / %ld MB", bytes >> 20, teto >> 20);
     l = dsT(TXT_ILHA_GENERO, v);
-    txt_desenhar_alpha(k, x, y, 0.45f);
-    txt_desenhar_alpha(l, x + cw - l.w, y, 0.88f);
+    txt_desenhar_alpha(k, x, y, 0.45f * a);
+    txt_desenhar_alpha(l, x + cw - l.w, y, 0.88f * a);
     y += 20 + 9;
     if (fr > 1) fr = 1;
-    gfx_cor((GfxRect){ x, y, cw, 8 }, 0.5f, 1, 1, 1, 0.07f);
-    if (fr > 0.005f) gfx_cor((GfxRect){ x, y, cw * fr, 8 }, 0.5f, 0.298f, 0.765f, 0.541f, 0.8f); }
+    gfx_cor((GfxRect){ x, y, cw, 8 }, 0.5f, 1, 1, 1, 0.07f * a);
+    if (fr > 0.005f) gfx_cor((GfxRect){ x, y, cw * fr, 8 }, 0.5f, DS_VERDE, 0.8f * a); }
 }
 
-static void desempenho_desenharCorpo_(Uint32 agora, int forma);
-// Camada ampliada (escala.h): o corpo desenha na tela virtual.
-void desempenho_desenhar(Uint32 agora, int forma) {
-  ESCALA_INI();
-  desempenho_desenharCorpo_(agora, forma);
-  ESCALA_FIM();
+void desempenho_corpo_tam(int forma, float *w, float *h) {
+  float cw = 0.0f, ch = 0.0f;
+  if (temAmostra && forma == DS_MENOR) { TxtLinha l = linhaMenor(); cw = (float)l.w + 2 * MN_PAD; ch = MN_H; }
+  else if (temAmostra && forma == DS_GRANDE) { cw = GR_W; ch = GR_H; }
+  if (w) *w = cw;
+  if (h) *h = ch;
 }
-static void desempenho_desenharCorpo_(Uint32 agora, int forma) {
-  (void)agora;
-  if (!temAmostra) return;
-  gfx_sem_recorte();
-  if (forma) pilula(); else ilha();
+
+void desempenho_corpo(int forma, GfxRect r, float a) {
+  if (!temAmostra || a < 0.01f) return;
+  if (forma == DS_MENOR) {
+    TxtLinha l = linhaMenor();
+    // A segunda linha fica sob a primeira, centrada na ilha, mais apagada.
+    txt_desenhar_alpha(l, r.x + (r.w - (float)l.w) * 0.5f, r.y + 12.0f - (float)l.h * 0.5f, 0.7f * a);
+  } else if (forma == DS_GRANDE) painel(r, a);
 }
 
 #ifdef DESEMPENHO_TESTE

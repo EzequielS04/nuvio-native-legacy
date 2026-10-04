@@ -95,7 +95,8 @@ int ajustes_dolby_atmos(void);
 int ajustes_pausa_overlay(void);
 // "O que achou?" nos creditos (reacao.h). Ligado de fabrica.
 int ajustes_reacao_creditos(void);
-// Medidor de desempenho na tela (desempenho.h): Desempenho desta TV, local.
+// Medidor de desempenho na ilha do relogio (desempenho.h): Desempenho desta TV,
+// local. 0 = desligado, 1 = Minimo, 2 = Menor, 3 = Grande (DS_* de desempenho.h).
 int ajustes_medidor_desempenho(void);
 // 1 = ao mandar Reproduzir, ABRIR A FOLHA DE FONTES em vez de escolher
 // sozinho. Padrao 0: quem nunca entrou em Ajustes continua com a escolha

@@ -13,9 +13,9 @@ cd "$(dirname "$0")/.."
 [ $# -ge 1 ] || { echo "uso: $0 <pasta> [ids...]" >&2; exit 1; }
 mkdir -p "$1"
 
-NUVIO_DADOS=$(mktemp -d /tmp/nuvio-registro-shot.XXXXXX)
+NUVIO_DADOS=$(mktemp -d ${TMPDIR:-/tmp}/nuvio-registro-shot.XXXXXX)
 export NUVIO_DADOS
-B=$(mktemp /tmp/nuvio-registro-shot-bin.XXXXXX)
+B=$(mktemp ${TMPDIR:-/tmp}/nuvio-registro-shot-bin.XXXXXX)
 trap 'rm -rf "$NUVIO_DADOS" "$B"' EXIT
 
 sources=()

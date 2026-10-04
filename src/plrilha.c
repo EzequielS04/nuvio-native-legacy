@@ -11,6 +11,7 @@
 #include "layout.h"
 #include "text.h"
 #include "relogiofim.h"
+#include "desempenho.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <math.h>
@@ -41,6 +42,10 @@ static GfxRect ultRect;
 static int ultOk;
 static Uint32 ultQuadro;
 static int dir;
+// MEDIDOR DE DESEMPENHO (desempenho.h): so na pilula da HORA sozinha (sem
+// pedido nem corpo saindo). dsP = a forma deste quadro; dsA = o corpo dele.
+static int dsP;
+static float dsA;
 #ifdef NV_SHOT_HOOKS
 static time_t horaFixa;
 void plrilha_shot_hora(time_t t) { horaFixa = t; }
@@ -93,6 +98,7 @@ float plrilha_corpo_alfa(void) { return temUlt ? corpoA : 0.0f; }
 typedef struct {
   TxtLinha txt, hora, fim, dir;
   float w;                 // largura do conteudo (sem o recuo)
+  float ds;                // o trecho do medidor no fim da linha (0 = nada)
   int temIcone, temTxt, temFim;
 } Linha;
 
@@ -130,6 +136,8 @@ static float montar(const PlrIlhaPedido *p, Linha *L) {
     w += 12.0f + 1.0f + 12.0f + (float)L->fim.w;
   }
   if (p && p->direita) L->dir = txt_linha(TXT_G19M, p->direita, 243, 242, 239, 140);
+  L->ds = dsP ? desempenho_linha_w(dsP) : 0.0f;
+  w += L->ds;
   L->w = w;
   return w;
 }
@@ -168,7 +176,9 @@ static void desenharLinha(const PlrIlhaPedido *p, const Linha *L, float x, float
     plrui_sep(x, yc, a);
     x += 1.0f + 12.0f;
     txt_desenhar_alpha(L->fim, x, yc - (float)L->fim.h * 0.5f + 1.0f, a);
+    x += (float)L->fim.w;
   }
+  if (L->ds > 0.0f) desempenho_linha(dsP, x, yc, a);
 }
 
 static void plrilha_desenharCorpo_(Uint32 agora);
@@ -198,11 +208,19 @@ static void plrilha_desenharCorpo_(Uint32 agora) {
   // O que a linha da pilula mostra: o pedido, ou (encolhendo depois de um
   // corpo) a linha dele ate o corpo apagar — a hora volta com a forma.
   if (!temPed && temUlt && corpoA > 0.02f) p = &ult;
+  // O medidor entra so na hora sozinha: aviso, lista ou carregamento na ilha
+  // o tiram (e ele volta quando ela fica so com a hora).
+  dsP = p == &vazio && quer ? desempenho_forma() : DS_DESLIGADO;
   pilH = p->aberta || corpo ? CAB_H : PIL_H;
   pad = pilH > PIL_H + 0.5f ? 28.0f : 24.0f;
   conteudoW = montar(p, &L);
   alvoW = corpo ? ped.w : conteudoW + pad * 2.0f;
   alvoH = corpo ? CAB_H + ped.h : pilH;
+  { float bw = 0.0f, bh = 0.0f;
+    desempenho_corpo_tam(dsP, &bw, &bh);
+    if (bh > 0.0f) { if (bw > alvoW) alvoW = bw; alvoH = CAB_H + bh; }
+    dsA = (anim_politica_reduzida || ajustes_animacoes_reduzidas()) ? (bh > 0.0f ? 1.0f : 0.0f)
+        : anim_mola(dsA, bh > 0.0f && fabsf(H - alvoH) < 0.2f * alvoH ? 1.0f : 0.0f, dt, 12.0f); }
   if (!quer) { alvoW = PIL_H * 0.6f; alvoH = PIL_H * 0.6f; }
   if (W <= 0.0f) { W = alvoW; H = alvoH; }
   W = mola(&vW, W, alvoW, dt);
@@ -242,11 +260,13 @@ static void plrilha_desenharCorpo_(Uint32 agora) {
       if (p->direita && k > 0.0f)
         txt_desenhar_alpha(L.dir, R.x + R.w - 28.0f - (float)L.dir.w, yc - (float)L.dir.h * 0.5f + 1.0f, A * k);
       // Fio de 1 px sob o cabecalho, so com o corpo de pe.
-      if (h > CAB_H + 4.0f)
+      if (h > CAB_H + 4.0f && dsP == DS_DESLIGADO)
         gfx_cor((GfxRect){ R.x, R.y + CAB_H, R.w, 1.0f }, 0.0f, 1, 1, 1, 0.07f * A * cresce); }
     if (temUlt && corpoA > 0.01f && ult.corpo && h > CAB_H + 4.0f) {
       GfxRect c = { R.x, R.y + CAB_H, R.w, h - CAB_H };
       ult.corpo(c, A * corpoA, ult.u);
     }
+    if (dsP != DS_DESLIGADO && dsA > 0.01f && h > CAB_H + 4.0f)
+      desempenho_corpo(dsP, (GfxRect){ R.x, R.y + CAB_H, R.w, h - CAB_H }, A * dsA);
     gfx_sem_recorte(); }
 }
