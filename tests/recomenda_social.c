@@ -370,6 +370,83 @@ int main(void) {
     CONFERE(socialvis_n_eventos() == 1, "new source generation publishes Social again");
   }
 
+  // --- F08: identidade unificada -------------------------------------------
+  // ids ligados num contato; servidor antigo sem o campo = nenhum.
+  { const char *j = "{\"id\":\"nuvio:aaa\",\"nome\":\"Ana\",\"ids\":[\"trakt:ana-t\",\"lixo\",\"simkl:42\"]}";
+    const char *v = "{\"id\":\"nuvio:bbb\",\"nome\":\"Bia\"}";
+    RecContato c[2]; char d[96] = "";
+    memset(c, 0, sizeof c);
+    snprintf(c[0].id, sizeof c[0].id, "nuvio:aaa"); snprintf(c[1].id, sizeof c[1].id, "nuvio:bbb");
+    CONFERE(rec_contato_ids(j, j + strlen(j), &c[0]) == 2, "ids: two valid linked ids, junk skipped");
+    CONFERE(!strcmp(c[0].ids[0], "trakt:ana-t") && !strcmp(c[0].ids[1], "simkl:42"), "ids parsed in order");
+    CONFERE(rec_contato_ids(v, v + strlen(v), &c[1]) == 0, "old server: no ids, no crash");
+    CONFERE(rec_contatos_canonica(c, 2, "trakt:ana-t", d, sizeof d) && !strcmp(d, "nuvio:aaa"),
+            "trakt person maps to the canonical contact");
+    CONFERE(!rec_contatos_canonica(c, 2, "trakt:outro", d, sizeof d), "unknown trakt person stays as is");
+  }
+  // Feed unido: o mesmo fato do Trakt e do nosso servidor vira UMA linha
+  // quando o contato provou ser a mesma pessoa.
+  { CatItem tk[1]; RecEvento out[8]; int n;
+    long long t = (long long)time(NULL);
+    SDL_LockMutex(mtx);
+    memset(&contatos[0], 0, sizeof contatos[0]);
+    snprintf(contatos[0].id, sizeof contatos[0].id, "nuvio:aaa");
+    snprintf(contatos[0].nome, sizeof contatos[0].nome, "Ana");
+    snprintf(contatos[0].ids[0], sizeof contatos[0].ids[0], "trakt:ana-t"); contatos[0].nIds = 1;
+    nContatos = 1;
+    memset(&feedN[0], 0, sizeof feedN[0]);
+    feedN[0].fonte = REC_FONTE_NUVIO; feedN[0].acao = REC_ACAO_FIM; feedN[0].quando = t - 60;
+    snprintf(feedN[0].pessoa, sizeof feedN[0].pessoa, "nuvio:aaa");
+    snprintf(feedN[0].imdb, sizeof feedN[0].imdb, "tt777"); snprintf(feedN[0].midia, sizeof feedN[0].midia, "movie");
+    nFeedN = 1;
+    SDL_UnlockMutex(mtx);
+    memset(tk, 0, sizeof tk);
+    snprintf(tk[0].imdb, sizeof tk[0].imdb, "tt777"); snprintf(tk[0].tipo, sizeof tk[0].tipo, "movie");
+    snprintf(tk[0].socialSlug, sizeof tk[0].socialSlug, "ana-t");
+    snprintf(tk[0].socialNome, sizeof tk[0].socialNome, "ANA TRAKT");
+    snprintf(tk[0].socialAcao, sizeof tk[0].socialAcao, "assistiu");
+    n = recomenda_feed_unido(out, 8, tk, NULL, 1);
+    CONFERE(n == 1 && !strcmp(out[0].pessoa, "nuvio:aaa"), "trakt + nuvio fact of the same person deduplicated (n=%d)", n);
+    SDL_LockMutex(mtx); contatos[0].nIds = 0; SDL_UnlockMutex(mtx);
+    n = recomenda_feed_unido(out, 8, tk, NULL, 1);
+    CONFERE(n == 2, "without linked ids (old server) both stay, as before (n=%d)", n);
+    SDL_LockMutex(mtx); nContatos = 0; nFeedN = 0; SDL_UnlockMutex(mtx);
+  }
+  // Comparacao: o detalhe so dentro de "gosto" (o "mes" tambem tem "filmes").
+  { RecAmigo a;
+    const char *j = "{\"id\":\"nuvio:x\",\"compartilha\":1,\"mes\":{\"mes\":\"2026-10\",\"seg\":60,\"filmes\":9,\"series\":1},"
+      "\"gosto\":{\"total\":6,\"iguais\":3,\"pct\":50,\"filmes\":{\"total\":4,\"iguais\":3},"
+      "\"series\":{\"total\":2,\"iguais\":0},\"comum\":{\"filmes\":2,\"series\":0},\"cobertura\":{\"eu\":8,\"ele\":7},\"generos\":null}}";
+    const char *velho = "{\"id\":\"nuvio:x\",\"compartilha\":1,\"gosto\":{\"total\":6,\"iguais\":3,\"pct\":50}}";
+    SvCmpDados d; SvCmp c[SV_CMP_N]; char txt[96]; int ok;
+    CONFERE(amigoParse(j, &a) && a.temCmp && a.filmesTotal == 4 && a.filmesIguais == 3 &&
+            a.seriesTotal == 2 && a.comumFilmes == 2 && a.cobEu == 8, "comparison detail parsed inside gosto only");
+    memset(&d, 0, sizeof d);
+    d.temDados = 1; d.compartilha = 1; d.euCompartilho = 1; d.temGosto = a.temGosto; d.total = a.gostoTotal;
+    d.iguais = a.gostoIguais; d.temCmp = 1; d.filmesTotal = 4; d.filmesIguais = 3; d.seriesTotal = 2;
+    d.comumFilmes = 2;
+    socialvis_comparar(&d, c);
+    CONFERE(c[SV_CMP_MATCH].estado == SV_CMPE_OK && c[SV_CMP_MATCH].pct == 50, "match with 6 pairs is shown");
+    CONFERE(c[SV_CMP_FILMES].estado == SV_CMPE_POUCOS && c[SV_CMP_SERIES].estado == SV_CMPE_POUCOS,
+            "below %d pairs is 'not enough data', never a percentage", SV_CMP_MIN);
+    CONFERE(c[SV_CMP_COMUM].estado == SV_CMPE_OK && c[SV_CMP_COMUM].filmes == 2, "watched by both counted");
+    CONFERE(c[SV_CMP_GENEROS].estado == SV_CMPE_SEM_FONTE, "genres: no source, explicit");
+    socialvis_cmp_texto(SV_CMP_FILMES, &c[SV_CMP_FILMES], txt, sizeof txt, &ok);
+    CONFERE(!ok && strstr(txt, "4"), "poucos dados text carries the sample (%s)", txt);
+    d.euCompartilho = 0; socialvis_comparar(&d, c);
+    CONFERE(c[SV_CMP_MATCH].estado == SV_CMPE_EU_PRIVADO, "viewer not sharing is explicit");
+    d.euCompartilho = 1; d.compartilha = 0; socialvis_comparar(&d, c);
+    CONFERE(c[SV_CMP_MATCH].estado == SV_CMPE_PRIVADO && c[SV_CMP_COMUM].estado == SV_CMPE_PRIVADO, "private friend");
+    CONFERE(amigoParse(velho, &a) && !a.temCmp, "old server: no detail");
+    memset(&d, 0, sizeof d); d.temDados = 1; d.compartilha = 1; d.euCompartilho = 1;
+    d.temGosto = a.temGosto; d.total = a.gostoTotal; d.iguais = a.gostoIguais;
+    socialvis_comparar(&d, c);
+    CONFERE(c[SV_CMP_MATCH].estado == SV_CMPE_OK && c[SV_CMP_FILMES].estado == SV_CMPE_DESCONHECIDO,
+            "old server: match only, per-media unknown");
+    memset(&d, 0, sizeof d); d.carregando = 1; d.compartilha = -1; socialvis_comparar(&d, c);
+    CONFERE(c[SV_CMP_MATCH].estado == SV_CMPE_CARREGANDO, "loading without cache");
+  }
+
   printf(falhas ? "recomenda_social: %d falhas\n" : "recomenda_social: ok\n", falhas);
   return falhas ? 1 : 0;
 }

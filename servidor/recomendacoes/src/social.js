@@ -17,6 +17,7 @@ const GOSTOU_MAX = 10;
 const RECS_MAX = 20;
 const DEDUPE_S = 600;               // mesmo evento do mesmo titulo em 10 min = um so
 const NOME_MAX = 32;
+const DEDUPE_FEED_S = 3600;          // mesmo fato da mesma pessoa em 1 h = uma linha no feed
 
 // NOME: letras (qualquer alfabeto), numeros, espaco, apostrofo e hifen. Sem
 // ponto, arroba, barra ou dois-pontos — nao cabe e-mail, link nem @usuario.
@@ -234,7 +235,18 @@ export async function rotaFeed(env, quem, url, req, h, garantirPerfil) {
   if (req.headers.get("if-none-match") === etag)
     return new Response(null, { status: 304, headers: { etag } });
   const itens = [];
+  // DEDUPE DO FEED (F08): o mesmo fato da mesma pessoa contado duas vezes perto
+  // no tempo — tipicamente duas TVs dela (uma antiga pelo Trakt, outra pela conta
+  // Nuvio, ja fundidas na mesma pessoa) mandando "inicio" do mesmo episodio —
+  // vira uma linha so, a mais nova. A escrita ja deduplica 10 min por pessoa;
+  // aqui a janela e de 1 h, a mesma do merge no cliente (rec_eventos_unir).
+  const ultimo = new Map();
   for (const x of linhas) {
+    const chave = [x.pessoa, x.ev, x.imdb, x.midia, x.temporada, x.episodio,
+                   x.ev === "reacao" ? x.reacao : ""].join("|");
+    const t0 = ultimo.get(chave);
+    if (t0 !== undefined && Math.abs(t0 - x.criado) <= DEDUPE_FEED_S) continue;
+    ultimo.set(chave, x.criado);
     itens.push({
       id: x.id, de: await idPublico(env, x, garantirPerfil),
       deNome: x.nome || "", deAvatar: x.grau === 1 ? (x.avatar || "") : "",
@@ -327,14 +339,40 @@ export async function rotaAmigo(env, quem, url, h, garantirPerfil) {
     const eu = await env.DB.prepare("SELECT alcance FROM pessoa WHERE id = ?").bind(quem.id).first();
     if (nivelDe(eu) >= 1) {
       const ULT = (q) =>
-        `SELECT imdb, reacao FROM evento WHERE id IN (SELECT MAX(id) FROM evento ` +
-        `WHERE pessoa = ${q} AND ev = 'reacao' GROUP BY imdb)`;
-      const s = await env.DB.prepare(
-        `SELECT COUNT(*) AS total, COALESCE(SUM(a.reacao = b.reacao), 0) AS iguais ` +
-        `FROM (${ULT("?1")}) a JOIN (${ULT("?2")}) b ON a.imdb = b.imdb`
-      ).bind(quem.id, alvo).first();
-      const total = s?.total || 0, iguais = s?.iguais || 0;
-      saida.gosto = { total, iguais, pct: total ? Math.round((100 * iguais) / total) : 0 };
+        `SELECT imdb, midia, reacao FROM evento WHERE id IN (SELECT MAX(id) FROM evento ` +
+        `WHERE pessoa = ${q} AND ev = 'reacao' AND criado > ?3 GROUP BY imdb)`;
+      // POR MIDIA (F08): a midia da reacao mais nova de quem esta olhando.
+      const r = await env.DB.prepare(
+        `SELECT a.midia AS midia, COUNT(*) AS total, COALESCE(SUM(a.reacao = b.reacao), 0) AS iguais ` +
+        `FROM (${ULT("?1")}) a JOIN (${ULT("?2")}) b ON a.imdb = b.imdb GROUP BY a.midia`
+      ).bind(quem.id, alvo, t - RETENCAO).all();
+      const por = { movie: { total: 0, iguais: 0 }, series: { total: 0, iguais: 0 } };
+      for (const x of r.results || []) {
+        const k = x.midia === "series" ? "series" : "movie";
+        por[k].total += x.total || 0; por[k].iguais += x.iguais || 0;
+      }
+      const total = por.movie.total + por.series.total, iguais = por.movie.iguais + por.series.iguais;
+      // COBERTURA: quantas reacoes cada um tem na janela. E o que separa "pouco
+      // em comum" de "um dos dois quase nao reage".
+      const cob = await env.DB.prepare(
+        "SELECT pessoa, COUNT(DISTINCT imdb) AS n FROM evento WHERE pessoa IN (?1, ?2) AND ev = 'reacao' " +
+        "AND criado > ?3 GROUP BY pessoa").bind(quem.id, alvo, t - RETENCAO).all();
+      const nDe = (id) => (cob.results || []).find((x) => x.pessoa === id)?.n || 0;
+      // EM COMUM: titulos que os dois concluiram na janela (filme visto; serie
+      // com pelo menos um episodio concluido pelos dois).
+      const FIM = (q) => `SELECT DISTINCT imdb, midia FROM evento WHERE pessoa = ${q} AND ev = 'fim' AND criado > ?3`;
+      const cm = await env.DB.prepare(
+        `SELECT a.midia AS midia, COUNT(*) AS n FROM (${FIM("?1")}) a JOIN (${FIM("?2")}) b ` +
+        `ON a.imdb = b.imdb AND a.midia = b.midia GROUP BY a.midia`).bind(quem.id, alvo, t - RETENCAO).all();
+      const comum = { filmes: 0, series: 0 };
+      for (const x of cm.results || []) comum[x.midia === "series" ? "series" : "filmes"] += x.n || 0;
+      saida.gosto = {
+        total, iguais, pct: total ? Math.round((100 * iguais) / total) : 0,
+        filmes: por.movie, series: por.series, comum,
+        cobertura: { eu: nDe(quem.id), ele: nDe(alvo) },
+        // Generos nao existem nos eventos: a TV mostra "sem dados", nunca um chute.
+        generos: null,
+      };
     }
   }
 

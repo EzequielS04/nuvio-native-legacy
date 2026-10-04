@@ -355,7 +355,22 @@ static int svPerfilDoServidor(const char *id, SvPerfil *p) {
     case REC_SOC_NEGADO: p->estado = SV_PERFIL_NEGADO; break;
     default: p->estado = SV_PERFIL_NADA; break;
   }
-  if (!recomenda_amigo(&ra) || strcmp(ra.id, id)) return 0;
+  { SvCmpDados d;
+    int tem = recomenda_amigo(&ra) && !strcmp(ra.id, id);
+    memset(&d, 0, sizeof d);
+    d.temDados = tem;
+    d.carregando = p->estado == SV_PERFIL_INDO;
+    d.compartilha = tem ? ra.compartilha : -1;
+    d.euCompartilho = recomenda_alcance() >= 1;
+    if (tem) {
+      d.temGosto = ra.temGosto; d.total = ra.gostoTotal; d.iguais = ra.gostoIguais;
+      d.temCmp = ra.temCmp;
+      d.filmesTotal = ra.filmesTotal; d.filmesIguais = ra.filmesIguais;
+      d.seriesTotal = ra.seriesTotal; d.seriesIguais = ra.seriesIguais;
+      d.comumFilmes = ra.comumFilmes; d.comumSeries = ra.comumSeries;
+    }
+    socialvis_comparar(&d, p->cmp);
+    if (!tem) return 0; }
   p->compartilha = ra.compartilha;
   p->desde = ra.desde;
   p->porOnde = !strcmp(ra.origem, "trakt") ? SV_FONTE_TRAKT : SV_FONTE_NUVIO;
@@ -617,6 +632,8 @@ int socialvis_perfil(const char *id, SvPerfil *p) {
   p->gostoPct = p->emComum = p->gostoTotal = -1;
   p->minutosMes = p->filmesMes = p->seriesCurso = -1;
   p->recsVistas = p->recsTotal = -1;
+  { SvCmpDados nada; memset(&nada, 0, sizeof nada); nada.compartilha = -1;
+    socialvis_comparar(&nada, p->cmp); }
   // O SERVIDOR PRIMEIRO (com NV_SOCIAL_V2): ele e a verdade e muda; o extra
   // guardado e o que valia na ultima leitura (ou os dados de exemplo).
   servidor = svPerfilDoServidor(id, p);
@@ -730,6 +747,75 @@ int socialvis_meu_estado(const char *imdb, int *pct, int *t, int *e) {
 }
 
 // --- textos -----------------------------------------------------------------
+
+// --- comparacao (F08) --------------------------------------------------------
+
+static void cmpPct(SvCmp *c, int total, int iguais) {
+  c->total = total; c->iguais = iguais;
+  if (total < SV_CMP_MIN) { c->estado = SV_CMPE_POUCOS; c->pct = -1; return; }
+  c->estado = SV_CMPE_OK;
+  c->pct = (100 * iguais + total / 2) / total;
+}
+
+void socialvis_comparar(const SvCmpDados *d, SvCmp out[SV_CMP_N]) {
+  int i, todos;
+  memset(out, 0, sizeof(SvCmp) * SV_CMP_N);
+  for (i = 0; i < SV_CMP_N; i++) out[i].pct = -1;
+  // GENEROS: os eventos nao carregam genero em fonte nenhuma. Sempre explicito.
+  out[SV_CMP_GENEROS].estado = SV_CMPE_SEM_FONTE;
+  if (!d) return;
+  todos = !d->temDados ? (d->carregando ? SV_CMPE_CARREGANDO : SV_CMPE_DESCONHECIDO)
+        : d->compartilha == 0 ? SV_CMPE_PRIVADO
+        : d->compartilha < 0 ? SV_CMPE_DESCONHECIDO
+        : !d->euCompartilho ? SV_CMPE_EU_PRIVADO : -1;
+  if (todos >= 0) {
+    for (i = 0; i < SV_CMP_GENEROS; i++) out[i].estado = todos;
+    return;
+  }
+  // Servidor novo: o objeto vem sempre que os dois compartilham, mesmo com
+  // zero pares. Antigo: so ha o total geral, e so quando ha algum par.
+  if (d->temCmp || d->temGosto) cmpPct(&out[SV_CMP_MATCH], d->total, d->iguais);
+  if (d->temCmp) {
+    cmpPct(&out[SV_CMP_FILMES], d->filmesTotal, d->filmesIguais);
+    cmpPct(&out[SV_CMP_SERIES], d->seriesTotal, d->seriesIguais);
+    out[SV_CMP_COMUM].estado = SV_CMPE_OK;
+    out[SV_CMP_COMUM].filmes = d->comumFilmes;
+    out[SV_CMP_COMUM].series = d->comumSeries;
+  }
+}
+
+const char *socialvis_cmp_rotulo(int qual) {
+  switch (qual) {
+    case SV_CMP_MATCH:  return i18n("Match");
+    case SV_CMP_FILMES: return i18n("Filmes");
+    case SV_CMP_SERIES: return i18n("Séries");
+    case SV_CMP_COMUM:  return i18n("Vistos pelos dois");
+    default:            return i18n("Gêneros");
+  }
+}
+
+void socialvis_cmp_texto(int qual, const SvCmp *c, char *dst, size_t tam, int *ok) {
+  if (ok) *ok = 0;
+  if (!dst || !tam) return;
+  dst[0] = 0;
+  if (!c) return;
+  switch (c->estado) {
+    case SV_CMPE_OK:
+      if (ok) *ok = 1;
+      if (qual == SV_CMP_COMUM)
+        snprintf(dst, tam, i18n("%d filmes · %d séries"), c->filmes, c->series);
+      else snprintf(dst, tam, i18n("%d%% · %d de %d iguais"), c->pct, c->iguais, c->total);
+      return;
+    case SV_CMPE_POUCOS:
+      snprintf(dst, tam, i18n("Poucos dados · %d de %d"), c->total, SV_CMP_MIN);
+      return;
+    case SV_CMPE_PRIVADO:    snprintf(dst, tam, "%s", i18n("Privado")); return;
+    case SV_CMPE_EU_PRIVADO: snprintf(dst, tam, "%s", i18n("Ative sua atividade para comparar")); return;
+    case SV_CMPE_SEM_FONTE:  snprintf(dst, tam, "%s", i18n("Sem dados de gênero")); return;
+    case SV_CMPE_CARREGANDO: snprintf(dst, tam, "%s", i18n("Carregando…")); return;
+    default:                 snprintf(dst, tam, "%s", i18n("Desconhecido")); return;
+  }
+}
 
 void socialvis_ep(const SvEvento *ev, char *dst, size_t tam) {
   dst[0] = 0;
