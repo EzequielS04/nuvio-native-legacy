@@ -115,10 +115,13 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
     v=$(printf "%s" "$v" | sed "s/[\\\\\"]/\\\\&/g")
     printf "%s\n" "-D$k=\\\"$v\\\""
   done > /tmp/flags
+  # p2pmotor_motor.c usa dladdr (Dl_info), que o glibc so declara com _GNU_SOURCE, e o
+  # -include src/tpk.h puxa os headers antes de qualquer #define do proprio arquivo:
+  # o -D tem de ir na linha de comando, SO para esse arquivo.
   P2P_CFLAGS=""
   [ "${NUVIO_P2P_MOTOR:-}" = "1" ] && P2P_CFLAGS="-DNV_P2P_MOTOR -DNV_P2P_MOTOR_DLOPEN -I/p2p/include"
   ls src/*.c | grep -v "src/video_tizen.c" | xargs -P 6 -I{} sh -c \
-    "gcc $CFLAGS -c {} -o /tmp/o/\$(basename {} .c).o -DNV_TPK -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS $P2P_CFLAGS @/tmp/flags -I/deps/include -I/deps/include/SDL2" 
+    "gcc $CFLAGS -c {} -o /tmp/o/\$(basename {} .c).o -DNV_TPK -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS $P2P_CFLAGS \$(case {} in src/p2pmotor_motor.c) echo -D_GNU_SOURCE;; esac) @/tmp/flags -I/deps/include -I/deps/include/SDL2" 
   # SDL e zlib ESTATICOS: a TV nao tem libSDL2 garantida, e a libz entra junto
   # para nao depender da versao do aparelho. GLES/EGL/dl/pthread/m sao do
   # sistema (API nativa publica do Tizen). libwebp tambem estatica (o Tizen nao
