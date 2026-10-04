@@ -69,6 +69,18 @@ static inline int idioma_ponto_decimal(int idioma) {
          idioma == IDIOMA_ZHTW;
 }
 
+// Troca, NO LUGAR, o ponto decimal de um texto ja montado por virgula quando o
+// idioma escreve com virgula: "24.1 mi" -> "24,1 mi". So mexe em ponto entre
+// dois digitos, entao "E1. Piloto" e "1.5" distinguem-se. snprintf("%.1f") sai
+// sempre com ponto (main.c fixa LC_NUMERIC "C"); toda frase de tela com decimal
+// passa por aqui depois do snprintf.
+static inline void idioma_decimal_texto(char *s, int idioma) {
+  char *p;
+  if (!s || idioma_ponto_decimal(idioma)) return;
+  for (p = s; *p; p++)
+    if (*p == '.' && p > s && p[-1] >= '0' && p[-1] <= '9' && p[1] >= '0' && p[1] <= '9') *p = ',';
+}
+
 // 1 = a data escreve o ANO PRIMEIRO e o mes em numero + 月 ("2026年9月21日"): o
 // japones e os dois chineses. Ai a data nao passa pelo modelo "%d %s %d" das
 // outras linguas, que e o que as tabelas traduzem.

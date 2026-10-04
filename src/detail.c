@@ -5125,7 +5125,7 @@ static void desenhaNotasEpisodio(float x, float y, float a) {
       gfx_cor((GfxRect){ gx, gy, RAT_PIL_W, RAT_PIL_H }, 14.0f / RAT_PIL_H,
               cr, cg, cb, a);
       snprintf(ep, sizeof ep, "E%d", extras_ep_numero(ratTemp, i));
-      if (nd > 0) snprintf(nv, sizeof nv, "%.1f", nd / 10.0f);
+      if (nd > 0) { snprintf(nv, sizeof nv, "%.1f", nd / 10.0f); idioma_decimal_texto(nv, ajustes_idioma()); }
       else        snprintf(nv, sizeof nv, "-");
       // 14/700 no rotulo e 28/800 no valor, do web
       // (.series-episode-rating-ep e .series-episode-rating-val). TXT_TITULO3 e
@@ -5530,7 +5530,7 @@ static void desenhaListaColecao(float a) {
         char nb[8];
         GfxRect ic = { mx, ty + 3.0f, 22.0f, 22.0f };
         TxtLinha ln;
-        snprintf(nb, sizeof nb, "%d.%d", nota / 10, nota % 10);
+        snprintf(nb, sizeof nb, idioma_ponto_decimal(ajustes_idioma()) ? "%d.%d" : "%d,%d", nota / 10, nota % 10);
         ln = txt_linha(TXT_DET_META2, nb, 175, 180, 190, 255);
         gfx_icone(ic, "aj_star", 0.96f, 0.77f, 0.09f, a);
         txt_desenhar_alpha(ln, mx + 30.0f, ty, a);

@@ -361,7 +361,7 @@ static void painel(float a) {
   int imdbRating = imdbnota_obter(it.imdb, it.nota, !strcmp(it.tipo,"series"));
   if (imdbRating > 0) {
     char n[16];
-    snprintf(n, sizeof n, "%.1f", imdbRating / 10.0f);
+    snprintf(n, sizeof n, "%.1f", imdbRating / 10.0f); idioma_decimal_texto(n, ajustes_idioma());
     { TxtLinha t = txt_linha(TXT_CAPTION, n, 23, 19, 10, 255);
       GfxRect r = { VT_PAN_X, y + 8.0f, t.w + 26.0f, t.h + 8.0f };
       gfx_cor(r, 8.0f / (t.h + 8.0f), 0.961f, 0.773f, 0.094f, 0.92f * a);
