@@ -317,7 +317,9 @@ int main(void) {
     tecla(SDLK_RETURN);
     assert(syncExec[1] == 2 && syncExec[0] == -1);
     subDe("sync|s", sub, sizeof sub);
-    assert(strstr(sub, "[Tentar outra referência]"));
+    // F05 row: title is fixed, the provider's state is the line below; the
+    // chosen action is drawn between < > (not in the text).
+    assert(strstr(sub, "Sincronizada (+1,2 s)") && !strstr(sub, "["));
     legendasui_definir_sync(NULL);
     montarLinhas();
     assert(linhaDe("sync|p") < 0 && linhaDe("sync|s") < 0); }

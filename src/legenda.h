@@ -46,6 +46,11 @@ typedef struct {
 
 /* OpenSubtitles e desenhado pela UI, acima do plano de video. */
 void legenda_carregar(const char *url);
+/* O mesmo, avisando `pronto` no fio do download (corpo UTF-8 ou NULL, a
+ * geracao do pedido e se ela ainda e a dona do overlay). `pronto` e chamado
+ * exatamente uma vez, inclusive em falha, e nao pode tocar a UI. */
+typedef void (*LegendaBaixada)(const char *corpo, unsigned geracao, int vigente, void *u);
+unsigned legenda_carregar_com(const char *url, LegendaBaixada pronto, void *u);
 void legenda_desligar(void);
 // Liga com um corpo ja em memoria (parser sincrono). Ver a nota em legenda.c.
 void legenda_definir_corpo(const char *corpo);

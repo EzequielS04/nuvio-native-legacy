@@ -88,6 +88,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "proxyts.h"
 #include "perfis.h"
 #include "sessao.h"
+#include "legsync.h"   // F05 AutoSync: lifecycle + offset (hunks marcados F05)
 #include "progresso.h"
 #include "fontevolta.h"
 #include "marco.h"
@@ -1159,6 +1160,8 @@ void player_abrir(int indiceCatalogo, const char *url) {
   { char px[96];
     comVideo = (url && *url && video_tocar(proxyts_resolver(url, px, sizeof px))); }
   mkvass_video_aberto(comVideo);
+  legsync_iniciar(comVideo ? video_url_atual() : "");   // F05: geracao nova, sem rede nem espera
+  legsync_ui_ligar();   // F05: a linha de AutoSync do seletor de legendas (legendasui.c)
   aplicarAspecto();
 
   const CatItem *c = item();
@@ -1361,6 +1364,7 @@ static void lembrarFonte(void) {
 
 static void fecharSessao(int manter) {
   int jaRetido = retido;
+  legsync_encerrar();   // F05: cancela leitura/analise da sessao; join so no fim do app
   if (!jaRetido) lembrarFonte();
   // Salvar ANTES de parar: video_parar descarrega o pipeline e a posicao some
   // junto. Titulo quase no fim conta como visto por inteiro — voltar a um card
@@ -2557,7 +2561,10 @@ void player_atualizar(float dt, Uint32 agora) {
     // Folga do buffer de video para a VARREDURA pausar (webOS informa o fim
     // do buffer; no Tizen video_buffer_fim e 0 = desconhecido, sem pausa).
     { double bf = video_buffer_fim();
-      mkvass_folga(bf > 0.5 ? bf - (double)posSeg : -1.0); }
+      mkvass_folga(bf > 0.5 ? bf - (double)posSeg : -1.0);
+      // F05: troca de fonte, seek e buffer curto cancelam/pausam o AutoSync.
+      legsync_passo(video_url_atual(), posSeg, bf > 0.5 ? bf - (double)posSeg : -1.0,
+                    scrubbing || video_bufferando_ms() > 0, agora); }
     if (d > 1.0) duracaoSeg = (float)d;
     // MINIATURAS DO SEEKR: so com a duracao REAL (o servico escolhe a versao
     // da folha por ela) e uma vez por titulo — seekr_pedir ignora o repetido.
@@ -3110,6 +3117,9 @@ static void desenharLegendaExterna(void){
    * apagava o karaoke e as placas coloridas. A folha mostra essas linhas como
    * preservadas (faixas.c). */
   int r, g, b;
+  // F05: manual + automatico aceito, UMA vez, so para o documento dono do
+  // overlay (sem ele, o manual intacto). Positivo adianta, como sempre.
+  int atraso = legsync_offset_ms(legEstilo.atrasoMs);
   /* F04: SECOND SUBTITLE (legendasui.h). Before every primary early return
    * (libass, no cues) so both show in every branch; its own document and
    * offset, in the top band. Geometry is passed explicitly. */
@@ -3124,12 +3134,12 @@ static void desenharLegendaExterna(void){
                    legEstilo.opacidade==1?.75f:1.f) * entrada;
     assrender_definir_layout(area.x, area.y, area.w, area.h,
                              video_largura(), video_altura(), escalaFonteAss());
-    assrender_desenhar(posLegenda(), legEstilo.atrasoMs, alpha,
+    assrender_desenhar(posLegenda(), atraso, alpha,
                         0, 0, NV_TELA_W, NV_TELA_H);
     return;
   }
   LegendaCue cues[LEGENDA_SIMULTANEAS];
-  int n = legenda_cues(posLegenda(), legEstilo.atrasoMs, cues, LEGENDA_SIMULTANEAS), i;
+  int n = legenda_cues(posLegenda(), atraso, cues, LEGENDA_SIMULTANEAS), i;
   // Sem legenda externa, a EMBUTIDA que o player nativo nao desenha (#122):
   // o mesmo overlay, com a mesma folha de estilo da pessoa.
   if (n <= 0 && comVideo && player_texto_legenda_nativa(cues[0].texto, sizeof cues[0].texto)) {

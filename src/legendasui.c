@@ -499,15 +499,12 @@ static void textoLinha(const LuiLinha *l, char *nome, size_t tn, char *sub, size
       *icone = "pl_layers";
       break;
     case LR_SYNC: {
-      const char *rot[4], *s = estadoSync(l->slot);
-      int n = nAcoes(l->slot, rot, 4), i;
-      snprintf(nome, tn, "%s", s ? s : "");
-      for (i = 0; i < n; i++) {
-        char b[96];
-        snprintf(b, sizeof b, i == syncAcao ? "[%s]" : "%s", rot[i]);
-        juntar(sub, ts, b);
-      }
-      *icone = "pl_rotate-ccw";
+      // Title + the provider's state below; the chosen action is drawn
+      // between < > on the right when the row has focus (desenharLinha).
+      const char *s = estadoSync(l->slot);
+      snprintf(nome, tn, "%s", i18n("Sincronização automática"));
+      snprintf(sub, ts, "%s", s ? s : "");
+      *icone = "aj_wand";
       break; }
     case LR_ALVO:
       snprintf(nome, tn, "%s", i18n("Usar como"));
@@ -574,10 +571,29 @@ static void desenharLinha(const LuiLinha *l, int sel, float x, float y, float w,
     float sw = plrui_seg(rot, cont, 2, alvo, sel, -1.0f, 0, a);
     plrui_seg(rot, cont, 2, alvo, sel, dir - sw, y + (LU_LN_H - 54.0f) * 0.5f, a);
     dir -= sw + 12.0f;
-  } else if (!mais && (l->tipo == LR_CAND || l->tipo == LR_NENHUMA || l->tipo == LR_SYNC)) {
+  } else if (!mais && (l->tipo == LR_CAND || l->tipo == LR_NENHUMA)) {
+    // (No pill on the AutoSync row: only the primary syncs, and the title
+    // needs the width next to the < action > discs.)
     // In "Mais opções" the slot is the "Usar como" row at the top: no pill per
     // row, so the details (release name) get the width.
     dir -= pilulaSlot(l->slot, dir, y + LU_LN_H * 0.5f, sel, aL) + 12.0f;
+  }
+  if (l->tipo == LR_SYNC && sel) {
+    // The chosen action between < > discs; a disc dims with nothing beyond it.
+    const char *rot[4];
+    int n = nAcoes(l->slot, rot, 4);
+    if (n > 0) {
+      int k = syncAcao < n ? syncAcao : 0;
+      TxtLinha t = txt_linha(TXT_G16B, rot[k], 243, 242, 239, 255);
+      float cy = y + LU_LN_H * 0.5f, dw = 30.0f, ad = k < n - 1 ? 1.0f : 0.3f, ae = k > 0 ? 1.0f : 0.3f;
+      dir -= dw; gfx_cor((GfxRect){ dir, cy - 15.0f, dw, 30.0f }, 0.5f, 1, 1, 1, 0.10f * ad * a);
+      gfx_icone((GfxRect){ dir + 6.0f, cy - 9.0f, 18.0f, 18.0f }, "pl_chevron-right", 1, 1, 1, ad * a);
+      dir -= 10.0f + (float)t.w;
+      txt_desenhar_alpha(t, dir, cy - (float)t.h * 0.5f, a);
+      dir -= 10.0f + dw; gfx_cor((GfxRect){ dir, cy - 15.0f, dw, 30.0f }, 0.5f, 1, 1, 1, 0.10f * ae * a);
+      gfx_icone((GfxRect){ dir + 6.0f, cy - 9.0f, 18.0f, 18.0f }, "pl_chevron-left", 1, 1, 1, ae * a);
+      dir -= 12.0f;
+    }
   }
   if (l->tipo == LR_ATRASO && sel) {
     // < > discs: LEFT/RIGHT change 0.25 s, like the Estilo bar.
@@ -630,10 +646,22 @@ void legendasui_corpo(GfxRect c, float a) {
       char q[32];
       const char *k[3] = { "OK", "\xe2\x86\x92", "Voltar" };
       const char *rt[3] = { "Usar", "Estilo", mais ? "Voltar" : "Fechar" };
-      snprintf(q, sizeof q, i18n("%d de %d"), nLinhasV ? foco + 1 : 0, nLinhasV);
-      { TxtLinha l = txt_linha(TXT_ILHA_APOIO, q, 243, 242, 239, 115);
-        txt_desenhar_alpha(l, x0 + 10.0f, yc - (float)l.h * 0.5f, a); }
-      plrui_dicas(k, rt, 3, x0 + w - 10.0f, yc, 1, a);
+      int naSync = nLinhasV && linhas[foco].tipo == LR_SYNC, nf = 0, pf = 0;
+      // The AutoSync row is not a choice: it is left out of "N de M", which
+      // disappears on it, and the hints say what OK does there.
+      for (i = 0; i < nLinhasV; i++) if (linhas[i].tipo != LR_SYNC) { nf++; if (i <= foco) pf = nf; }
+      if (!naSync) {
+        snprintf(q, sizeof q, i18n("%d de %d"), nf ? pf : 0, nf);
+        { TxtLinha l = txt_linha(TXT_ILHA_APOIO, q, 243, 242, 239, 115);
+          txt_desenhar_alpha(l, x0 + 10.0f, yc - (float)l.h * 0.5f, a); }
+        plrui_dicas(k, rt, 3, x0 + w - 10.0f, yc, 1, a);
+      } else {
+        const char *rot[4], *ks[3] = { "OK", "\xe2\x86\x90 \xe2\x86\x92", "Voltar" };
+        int n = nAcoes(linhas[foco].slot, rot, 4);
+        const char *rs[3] = { n ? rot[syncAcao < n ? syncAcao : 0] : "", "Op\xc3\xa7\xc3\xa3o", "Fechar" };
+        if (n) plrui_dicas(ks, rs, 3, x0 + w - 10.0f, yc, 1, a);
+        else plrui_dicas(ks + 2, rs + 2, 1, x0 + w - 10.0f, yc, 1, a);
+      }
     } }
 }
 

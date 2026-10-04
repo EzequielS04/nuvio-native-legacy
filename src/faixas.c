@@ -16,6 +16,7 @@
 #include "plrui.h"
 #include "plrilha.h"
 #include "legendasui.h"
+#include "legsync.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <stdio.h>
@@ -413,10 +414,12 @@ static void escolherLegenda(int i) {
     // aqui jogaria isso fora.
     if (!vaiAoApp) mkvass_parar();
     legOverlay = -1; legOverlayEsperando = -1; legOverlayRetomar = 0; legOverlayTV = 0;
-    if (i < 0)        { video_escolher_legenda(-1); legenda_desligar(); legExterna = -1; legExternaId[0] = 0; }
+    if (i < 0)        { video_escolher_legenda(-1); legenda_desligar(); legExterna = -1; legExternaId[0] = 0;
+                        legsync_primaria_outra(0); }   // F05: sem externa, sem AutoSync
     else if (i < emb) {
       const VideoFaixa *f = video_legenda(i);
       int ord = video_legenda_ordinal_mkv(i);
+      legsync_primaria_outra(1);   // F05: a embutida ja acompanha o video
       legenda_desligar(); legExterna = -1; legExternaId[0] = 0;
       // FAIXA ASS: o overlay do app assume (#92). O pipeline fica com a legenda
       // desligada e o mkvass colhe o texto do MKV a frente do playhead; se ele
@@ -453,7 +456,8 @@ static void escolherLegenda(int i) {
       // nada, e a folha diria "ativa" sobre uma legenda que nunca subiu.
       if (l) {
         /* A fonte e os 16 tamanhos agora sao nossos, nao do firmware webOS. */
-        video_escolher_legenda(-1); legenda_carregar(l->url); legExterna = i;
+        // F05: legsync carrega pelo mesmo legenda.c e guarda o documento.
+        video_escolher_legenda(-1); legsync_primaria_externa(l->url, l->idioma, l->provedor); legExterna = i;
         legendasui_id_addon(l, legExternaId);
       }
     }
@@ -1012,7 +1016,7 @@ void faixas_escolher_externa(const Legenda *l) {
   mkvass_parar();
   legOverlay = -1; legOverlayEsperando = -1; legOverlayRetomar = 0; legOverlayTV = 0;
   video_escolher_legenda(-1);
-  legenda_carregar(l->url);
+  legsync_primaria_externa(l->url, l->idioma, l->provedor);   // F05: carrega e vira documento do AutoSync
   legendasui_id_addon(l, id);
   legExterna = -1;
   n = addons_legendas_copiar(v, LEG_MAX, NULL, NULL);
