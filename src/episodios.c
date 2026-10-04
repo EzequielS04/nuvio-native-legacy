@@ -529,7 +529,11 @@ void episodios_evento(const SDL_Event *ev) {
   if (k == SDLK_UP) { if (grupo == 1 && foco > 0) foco--; else grupo--; }
   if (k == SDLK_DOWN) { if (grupo < 1) grupo++; else if (foco < n - 1) foco++; }
   if (grupo < -1) grupo = -1;
-  if (grupo == 0 && (k == SDLK_LEFT || k == SDLK_RIGHT)) {
+  // ESQUERDA/DIREITA TROCAM DE TEMPORADA TAMBEM COM O FOCO NUM EPISODIO (dono,
+  // 03/10): a lista e vertical, entao os lados nao tem outro uso ali. O foco
+  // continua na lista (no primeiro episodio da temporada nova); nas pontas
+  // (primeira/ultima temporada) nada acontece.
+  if (grupo >= 0 && (k == SDLK_LEFT || k == SDLK_RIGHT)) {
     int nova = temporada + (k == SDLK_RIGHT ? 1 : -1);
     if (nova >= 0 && nova < nt) {
       temporada = nova; foco = 0; scroll = 0;

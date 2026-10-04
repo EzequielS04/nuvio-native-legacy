@@ -715,6 +715,27 @@ static void irParaTemporada(int c, int moverFoco) {
   if (moverFoco && epVisiveis() > 0) { foco.fileira = SEC_EPISODIOS; foco.coluna = 0; }
 }
 
+// Troca de temporada pela PONTA da fileira de episodios (dir=+1 direita,
+// -1 esquerda). Devolve 1 se trocou. So age quando o foco ja esta na ultima
+// (dir>0) ou primeira (dir<0) coluna e existe temporada do outro lado.
+static int detail_ep_borda(int dir) {
+  const CatItem *ci = cat_item(idx);
+  int nt = ci && ci->nTemporadas > 0 ? ci->nTemporadas : 1, nova = temporada + dir, q, col;
+  if (nova < 0 || nova >= nt) return 0;
+  if (dir > 0 ? foco.coluna < foco.nColunas[SEC_EPISODIOS] - 1 : foco.coluna > 0) return 0;
+  temporada = nova;
+  irParaTemporada(temporada, 0);
+  q = epVisiveis();
+  col = dir > 0 || q < 1 ? 0 : q - 1;
+  foco.nColunas[SEC_EPISODIOS] = q;
+  foco.fileira = SEC_EPISODIOS; foco.coluna = col;
+  epAncora = col; foco.colunaLembrada[SEC_EPISODIOS] = col;
+  foco.colunaLembrada[SEC_TEMPORADAS] = temporada;
+  { const CatEp *ep = cat_episodio(idx, epAbsoluto(col));
+    comEpT = ep ? ep->temporada : 0; comEpE = ep ? ep->episodio : 0; }
+  return 1;
+}
+
 // Filme sem elenco ainda, com o meta em voo. E o unico caso em que uma secao
 // vazia ocupa altura (ver recalcularLayout) e recebe esqueleto.
 static int elencoCarregando(void) {
@@ -2397,6 +2418,14 @@ void detail_evento(const SDL_Event *e) {
   // Nao e mais preciso: secaoN devolve a contagem DA ABA ATIVA, entao a fileira
   // ou tem colunas de verdade (e o foco pousa no que esta desenhado) ou tem
   // zero, e focus_mover pula sozinho.
+  // FILEIRA DE EPISODIOS DE SERIE: a fileira e horizontal, entao esquerda/
+  // direita ANDAM pelos episodios e, na PONTA, passam para a temporada vizinha
+  // (dono, 03/10: trocar de temporada so apertando para os lados em cima do
+  // episodio). Direita no ultimo -> primeiro da proxima; esquerda no primeiro
+  // -> ultimo da anterior. Na primeira/ultima temporada nada muda (esquerda no
+  // primeiro da T1 continua pedindo o menu lateral).
+  if (ehSerie() && foco.fileira == SEC_EPISODIOS && (k == SDLK_LEFT || k == SDLK_RIGHT) &&
+      detail_ep_borda(k == SDLK_RIGHT ? 1 : -1)) return;
   if (k == SDLK_RIGHT) {
     if (!focus_mover(&foco, 1, 0) && !ehSerie() && parDir(foco.fileira) >= 0 &&
         foco.nColunas[parDir(foco.fileira)] > 0) {
