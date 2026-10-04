@@ -208,3 +208,4 @@
   1, /* hide corner logo during trailer: Desligado (V_LIGA: 1 = Desligado) */
   0, /* second subtitle language: Da conta (F04) */
   1, /* subtitle sync by audio: Desligado (V_LIGA: 1 = Desligado) (F06) */
+  0, /* seek cache on disk: Desligado (F07; free disk is unknown until the player opens) */

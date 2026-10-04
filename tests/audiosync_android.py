@@ -29,14 +29,16 @@ with tempfile.TemporaryDirectory(prefix="nuvio-audiosync-", dir=os.environ.get("
     tmp = Path(tmp)
     deps = [sdk, stdlib]
     for name in ("media3-common", "media3-datasource", "media3-exoplayer", "media3-decoder",
-                 "media3-extractor", "media3-container"):
+                 "media3-extractor", "media3-container", "media3-database"):
         deps.append(aar_jar("androidx.media3", name, "1.8.0", tmp))
     deps.append(aar_jar("androidx.core", "core", "1.13.1", tmp))
     deps.append(jar("androidx.annotation", "annotation-jvm", "1.6.0"))
     deps.append(aar_jar("androidx.annotation", "annotation-experimental", "1.4.0", tmp))
     deps.append(jar("com.google.guava", "guava", "33.3.1-android"))
     sources = [kt / "NvPlayer.kt", kt / "ParaleloDataSource.kt", kt / "PassivoMedidor.kt",
-               kt / "AudioSyncTap.kt", kt / "AudioSyncSink.kt"]
+               kt / "AudioSyncTap.kt", kt / "AudioSyncSink.kt",
+               # F07: NvPlayer layers the seek cache and the gain processor
+               kt / "CacheSessao.kt", kt / "CacheMidia.kt", kt / "GanhoMath.kt", kt / "GanhoAudioProcessor.kt"]
     kotlinc(sources, tmp / "app", os.pathsep.join(map(str, deps)))
     print("compile-check: NvPlayer/AudioSyncSink/AudioSyncTap against android-35 + Media3 1.8.0: OK")
 

@@ -6,6 +6,7 @@
 #include "idioma.h"
 #include "idiomacod.h"
 #include "tex_cache.h"
+#include "cacheboost.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -116,7 +117,8 @@ static TxtLinha linhaMenor(void) {
 #define GR_W   520.0f
 #define GR_PAD 28.0f
 #define GR_STAT (1 + 11 + 20.6f + 11)
-#define GR_H   (18 + 22 + 14 + 96 + 30 + 4 * GR_STAT + 12 + 29 + 8 + 24)
+// F07: one more stat line ("Cache de seek") where the player has the cache.
+#define GR_H   (18 + 22 + 14 + 96 + 30 + (4 + (cacheboost_suportado() ? 1 : 0)) * GR_STAT + 12 + 29 + 8 + 24)
 static float stat(const char *k, const char *v, float x, float y, float w, float a) {
   TxtLinha lk = dsT(TXT_AJ_ESTADO, k), lv = dsT(TXT_AJ_ESTADO, v);
   gfx_cor((GfxRect){ x, y, w, 1 }, 0, 1, 1, 1, 0.07f * a);
@@ -181,6 +183,13 @@ static void painel(GfxRect r, float a) {
   y += stat(i18n("Fila de texturas"), v, x, y, cw, a);
   snprintf(v, sizeof v, i18n("%d · %d da tela"), uDesp, uDespTela);
   y += stat(i18n("Despejadas"), v, x, y, cw, a);
+  // F07: what the player's seek cache holds now / its effective limit, or why
+  // it is off. Reported by the backend every 2 s; free to read here.
+  if (cacheboost_suportado()) {
+    char c[48];
+    cacheboost_cache_texto(c, sizeof c);
+    y += stat(i18n("Cache de seek"), i18n(c), x, y, cw, a);
+  }
   gfx_cor((GfxRect){ x, y, cw, 1 }, 0, 1, 1, 1, 0.07f * a);
   y += 12;
   { TxtLinha k = dsT(TXT_ILHA_GENERO, i18n("Cache de imagens")), l;

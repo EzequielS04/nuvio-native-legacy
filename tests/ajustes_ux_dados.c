@@ -256,9 +256,37 @@ static void bloqueadosESegredos(void) {
   xtream_esquecer();
 }
 
+/* F07: seek cache option. Appended, local, default off; on a TV without an
+ * app-controlled disk cache (this host build, LG, Samsung) the row is
+ * inactive, says so and the accessor never asks the backend for a cache. */
+static void cacheSeek(void) {
+  int antes = valor[AJ_CACHE_SEEK], vezes = 0, n, i;
+  const char *categoria = "";
+  assert(!strcmp(CHAVE[AJ_CACHE_SEEK], "cacheSeekLocal"));
+  assert(valorPadrao[AJ_CACHE_SEEK] == 0 && OPCOES[AJ_CACHE_SEEK].n == 4);
+  assert(!strcmp(OPCOES[AJ_CACHE_SEEK].valores[0], "Desligado"));
+  assert(!strcmp(OPCOES[AJ_CACHE_SEEK].valores[3], "1 GB"));
+  assert(!dePerfil(AJ_CACHE_SEEK) && somenteDesteAparelho(AJ_CACHE_SEEK));
+  assert(!strcmp(uxEscopo(AJ_CACHE_SEEK), "Só nesta TV"));
+  assert(familiaPreviaOpcao(AJ_CACHE_SEEK) == AJPV_REPRO);
+  for (i = 0; i < AJ_N_TELA; i++) {
+    if (TELA[i].tipo == IT_SEC) categoria = TELA[i].titulo;
+    if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_CACHE_SEEK) { vezes++; assert(!strcmp(categoria, "Reprodução")); }
+  }
+  assert(vezes == 1);
+  assert(inativa(AJ_CACHE_SEEK));
+  assert(!strcmp(textoValor(AJ_CACHE_SEEK), "Não disponível nesta TV"));
+  assert(strstr(ajudaOpcao(AJ_CACHE_SEEK), "Não disponível nesta TV"));
+  for (i = 0; i < 4; i++) { valor[AJ_CACHE_SEEK] = i; assert(ajustes_cache_seek_mb() == 0); }
+  valor[AJ_CACHE_SEEK] = antes;
+  n = ajustes_buscar("cache de seek", resultados, AJ_N);
+  i = indiceResultado(AJ_CACHE_SEEK, n);
+  assert(i >= 0 && resultados[i].bloqueado);
+}
+
 int main(void) {
   char dir[] = "/tmp/nuvio-aj-ux-dados-XXXXXX";
-  assert(AJ_DISCORD == AJ_ICONE_APP + 1 && AJ_TAMANHO_AJUSTES == AJ_DISCORD + 1 && AJ_LOGO_TRAILER == AJ_TAMANHO_AJUSTES + 1 && AJ_LEG_LINGUA2 == AJ_LOGO_TRAILER + 1 && AJ_LEG_SYNC_AUDIO == AJ_LEG_LINGUA2 + 1 && AJ_LEG_SYNC_AUDIO == AJ_N - 1);
+  assert(AJ_DISCORD == AJ_ICONE_APP + 1 && AJ_TAMANHO_AJUSTES == AJ_DISCORD + 1 && AJ_LOGO_TRAILER == AJ_TAMANHO_AJUSTES + 1 && AJ_LEG_LINGUA2 == AJ_LOGO_TRAILER + 1 && AJ_LEG_SYNC_AUDIO == AJ_LEG_LINGUA2 + 1 && AJ_CACHE_SEEK == AJ_LEG_SYNC_AUDIO + 1 && AJ_CACHE_SEEK == AJ_N - 1);
   assert(!strcmp(CHAVE[AJ_DISCORD], "-discord"));
   assert(!uxTemPadrao(AJ_DISCORD));
   assert(familiaPreviaOpcao(AJ_DISCORD) == AJPV_RASTREIO);
@@ -267,6 +295,7 @@ int main(void) {
   int discordCount=0;
   for (int i=0;i<AJ_N_TELA;i++) if(TELA[i].tipo==IT_OPC && TELA[i].op==AJ_DISCORD) discordCount++;
   assert(discordCount==1);
+  cacheSeek();
   prazoDosAddonsIntegrado();
   padroesEValores();
   escoposPorValor();

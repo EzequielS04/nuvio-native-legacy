@@ -33,6 +33,7 @@
 #include "linguas.h"
 #include "streamfitpassiva.h"
 #include "audsync.h"
+#include "cacheboost.h"
 #include <SDL2/SDL.h>
 #include <jni.h>
 #include <stdio.h>
@@ -47,6 +48,9 @@
 static jclass    gCls;      // GlobalRef: FindClass de fio do SDL nao acha classe do app
 static jmethodID mAbrir, mParar, mPausar, mBuscar, mVolume, mJanela, mEscolher;
 static jmethodID mAbrirPosicao;
+// F07 (optional, like abrirPosicao): cache(mb) and ganho(pct). A shell without
+// them simply has no seek cache and no boost.
+static jmethodID mCache, mGanho;
 
 static int resolverMetodos(JNIEnv *env) {
   mAbrir    = (*env)->GetStaticMethodID(env, gCls, "abrir", "(Ljava/lang/String;Ljava/lang/String;)V");
@@ -61,6 +65,10 @@ static int resolverMetodos(JNIEnv *env) {
   // depois da duracao. A ausencia deste metodo nao derruba a ponte inteira.
   mAbrirPosicao = (*env)->GetStaticMethodID(env, gCls, "abrirPosicao", "(Ljava/lang/String;Ljava/lang/String;II)V");
   if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); mAbrirPosicao = NULL; }
+  mCache = (*env)->GetStaticMethodID(env, gCls, "cache", "(I)V");
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); mCache = NULL; }
+  mGanho = (*env)->GetStaticMethodID(env, gCls, "ganho", "(I)V");
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); mGanho = NULL; }
   return mAbrir && mParar && mPausar && mBuscar && mVolume && mJanela && mEscolher;
 }
 
@@ -82,6 +90,17 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeAudioEstado(
   (void)env; (void)cls;
   if (!registrado) { registrado = 1; audsync_backend(ligarTap); }
   audsync_formato((int)fmt);
+  // F07: the same sink-input format decides the boost. AudioSyncTap FMT_*
+  // (0 none, 1 PCM, 2 bitstream) maps 1:1 to CB_GANHO_* (unknown, PCM,
+  // passthrough): with bitstream the gain processor never sees samples.
+  { static int ultimoGanho = -1;
+    int g = fmt == 1 ? CB_GANHO_PCM : fmt == 2 ? CB_GANHO_PASSTHROUGH : CB_GANHO_DESCONHECIDO;
+    cacheboost_ganho_relato(g);
+    if (g != ultimoGanho && g != CB_GANHO_DESCONHECIDO) {
+      printf("[video] android audio: %s\n", g == CB_GANHO_PASSTHROUGH ? "passthrough (sem reforco)" : "PCM (reforco disponivel)");
+      fflush(stdout);
+    }
+    ultimoGanho = g; }
 }
 // Fio de reproducao do ExoPlayer. Copia para a pilha e entrega ao anel
 // limitado do audsync.c: nenhuma alocacao, nunca espera o analisador.
@@ -223,6 +242,11 @@ static volatile Uint32 bufferDesde, tocandoDesde;
 static volatile const char *hdrAtual = "none";
 static volatile int dvAtual, atmosAtual;
 static unsigned sessao;
+// F07: the player arms the next video_tocar with its cache limit
+// (cacheboost_backend_cache); trailers never arm, so they stay uncached and
+// at 100%. `cacheSessao` survives the reconnection reopens of that video.
+static int cacheArmado = -1, cacheSessao, cacheEnviado, playerSessao;
+static int ganhoEnviado = CB_VOL_NORMAL;
 static int retomadaInicialEstado = -1;
 static pthread_mutex_t travaRetomada = PTHREAD_MUTEX_INITIALIZER;
 #define ANDROID_FURO_PRAZO_MS 3000u   // sem quadro (so audio): abre 3 s depois de tocar
@@ -382,6 +406,20 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeHdr(JNIEnv *
   fflush(stdout);
 }
 
+// F07: what the Kotlin player did with the seek cache in this open. Kotlin
+// main thread; cacheboost locks. (The audio output state for the boost comes
+// from F06's nativeAudioEstado, below: one detection for both features.)
+JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeCache(JNIEnv *env, jclass cls, jint estado, jint pedidoMb, jint limiteMb, jint usadoMb) {
+  static int ultimo = -1;
+  (void)env; (void)cls;
+  cacheboost_cache_relato(estado, pedidoMb, limiteMb, usadoMb);
+  if (estado != ultimo) {
+    ultimo = estado;
+    printf("[video] android cache: estado %d, pedido %d MB, limite %d MB\n", (int)estado, (int)pedidoMb, (int)limiteMb);
+    fflush(stdout);
+  }
+}
+
 enum { EV_PRONTO = 1, EV_TOCANDO = 2, EV_PAUSADO = 3, EV_FIM = 4, EV_ERRO = 5,
        EV_TAMANHO = 6, EV_BUFFER = 7, EV_PRIMEIRO_QUADRO = 8, EV_AUDIO_SEM_DECODER = 9 };
 
@@ -432,6 +470,14 @@ static int abrirSessao(int inicioMs) {
   unsigned geracao = novaRetomada(-1);
   env = ambiente();
   if (!env) { falhou = 1; printf("[video] android: NvPlayer indisponivel\n"); fflush(stdout); return 0; }
+  // F07: the cache limit is sticky in Kotlin (read at each open), so it only
+  // crosses JNI when it changes. Posted before the open on the same main
+  // thread queue, it is in place when the open runs.
+  if (mCache && cacheSessao != cacheEnviado) {
+    (*env)->CallStaticVoidMethod(env, gCls, mCache, (jint)cacheSessao);
+    fimChamada(env);
+    cacheEnviado = cacheSessao;
+  }
   {
     jstring u = paraJString(env, urlAtual), c = paraJString(env, cabecalhos);
     if (!u || !c) {
@@ -455,6 +501,10 @@ static int abrirSessao(int inicioMs) {
     (*env)->DeleteLocalRef(env, c);
   }
   fimChamada(env);
+  // Every Kotlin open starts at 100%: a player session re-applies its volume
+  // (source change, reconnection) after the open in the same queue.
+  ganhoEnviado = CB_VOL_NORMAL;
+  if (playerSessao && cacheboost_volume() != CB_VOL_NORMAL) cacheboost_backend_ganho(cacheboost_volume());
   return 1;
 }
 
@@ -466,7 +516,19 @@ int video_tocar_posicao(const char *u, double segundos) {
   reconPermitida = reconProxima; reconProxima = 0;
   reconIniciou = 0; reconErroPend = 0;
   reconAudio = reconLeg = -1; reconFaixasPend = 0; reconBuscarMs = -1;
+  playerSessao = cacheArmado >= 0;
+  cacheSessao = cacheArmado > 0 ? cacheArmado : 0;
+  cacheArmado = -1;
   return abrirSessao(inicioMs);
+}
+
+void cacheboost_backend_cache(int mb) { cacheArmado = mb > 0 ? mb : 0; }
+void cacheboost_backend_ganho(int pct) {
+  if (pct < CB_VOL_MIN) pct = CB_VOL_MIN;
+  if (pct > CB_VOL_MAX) pct = CB_VOL_MAX;
+  if (!mGanho || !ativo || pct == ganhoEnviado) return;
+  ganhoEnviado = pct;
+  kInt(mGanho, pct);
 }
 int video_tocar(const char *u) { return video_tocar_posicao(u, 0.0); }
 
