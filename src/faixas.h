@@ -10,6 +10,7 @@
 #ifndef NV_FAIXAS_H
 #define NV_FAIXAS_H
 #include <SDL2/SDL.h>
+#include "addons.h"
 
 // Zera o que e da SESSAO e nao do aparelho — hoje, qual legenda externa esta
 // valendo. Chamada pelo player quando uma reproducao nova comeca.
@@ -30,5 +31,16 @@ float faixas_anim(void);
 void faixas_evento(const SDL_Event *e);
 void faixas_atualizar(float dt, Uint32 agora);
 void faixas_desenhar(Uint32 agora);
+
+// F04: what the subtitle selector (legendasui.c) needs from the primary.
+// Combined index of the active primary (embedded first, then addons; -1 none).
+int  faixas_legenda_ativa(void);
+// Opaque identity of the active external primary ("" = none).
+const char *faixas_legenda_externa_id(void);
+// Choose the primary: embedded track `i` (-1 = off) / an addon entry COPY.
+void faixas_escolher_embutida(int i);
+void faixas_escolher_externa(const Legenda *copia);
+// The ASS/collector state label of embedded track `i` (NULL = nothing to say).
+const char *faixas_legenda_marca(int i);
 
 #endif

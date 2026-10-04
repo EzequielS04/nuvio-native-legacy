@@ -206,3 +206,4 @@
   0, /* Discord action; appended to preserve option indices */
   0, /* Settings size: 80%, independent of global UI zoom */
   1, /* hide corner logo during trailer: Desligado (V_LIGA: 1 = Desligado) */
+  0, /* second subtitle language: Da conta (F04) */

@@ -57,6 +57,8 @@ void ling_conta_audio(const char *v);
 
 // Vindas dos AJUSTES desta TV. "" volta a seguir a conta.
 void ling_local_legenda(const char *v);
+// Second subtitle language chosen on THIS TV (F04). "" = follow the account.
+void ling_local_legenda2(const char *v);
 void ling_local_audio(const char *v);
 
 // Lista fixa oferecida em Ajustes. O indice 0 e "seguir a conta" e o 1 e "sem
