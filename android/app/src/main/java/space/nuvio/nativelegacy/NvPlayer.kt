@@ -111,6 +111,15 @@ object NvPlayer {
     @JvmStatic external fun nativeHdr(hdr: String, dv: Int, atmos: Int)
     @JvmStatic external fun nativeRetomada(geracao: Int, aceita: Int)
     @JvmStatic external fun nativeFitPassiva(rede: Long, geracao: Int, origem: String, kbps: IntArray, fimMs: Long)
+    @JvmStatic external fun nativeAudioPcm(pcm: ShortArray, n: Int, ptsUs: Long)
+    @JvmStatic external fun nativeAudioEstado(fmt: Int)
+
+    // F06 sincronia por audio (AudioSyncTap.kt / AudioSyncSink.kt). Fio de
+    // reproducao; o C so copia para um anel limitado (src/audsync.c).
+    private val tap = AudioSyncTap(
+        { pcm, n, pts -> try { nativeAudioPcm(pcm, n, pts) } catch (t: UnsatisfiedLinkError) { } },
+        { fmt -> try { nativeAudioEstado(fmt) } catch (t: UnsatisfiedLinkError) { } }
+    )
 
     // StreamFit passivo (PassivoMedidor.kt). Entrega de qualquer fio (os
     // pedacos baixam em fios proprios); o C so trava um mutex curto.
@@ -240,7 +249,13 @@ object NvPlayer {
 
             // ON (e nao PREFER): o decodificador da plataforma e o passthrough
             // continuam primeiro; o FFmpeg so entra no codec que a TV nao tem.
-            val renderizadores = androidx.media3.exoplayer.DefaultRenderersFactory(act)
+            // F06: o sink de sempre, com a escuta de PCM na entrada (so le; nao
+            // muda passthrough/offload). Ver AudioSyncSink.kt.
+            val renderizadores = object : androidx.media3.exoplayer.DefaultRenderersFactory(act) {
+                override fun buildAudioSink(context: android.content.Context, enableFloatOutput: Boolean,
+                                            enableAudioTrackPlaybackParams: Boolean): androidx.media3.exoplayer.audio.AudioSink? =
+                    super.buildAudioSink(context, enableFloatOutput, enableAudioTrackPlaybackParams)?.let { AudioSyncSink(it, tap) }
+            }
                 .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
                 .setEnableDecoderFallback(true)
             // TETO DO BUFFER EM BYTES (03/10, TCL C755: dois OutOfMemoryError
@@ -328,6 +343,8 @@ object NvPlayer {
             try { p.clearVideoSurface() } catch (e: Exception) { }
             try { p.release() } catch (e: Exception) { Log.w(TAG, "release: $e") }
         }
+        // Depois do release (o fio de reproducao ja parou): sem audio decodificado.
+        tap.encerrar()
         superficie?.visibility = View.GONE
     }
 
@@ -458,6 +475,7 @@ object NvPlayer {
 
     private fun escolherMain(tipo: Int, idx: Int) {
         if (tipo == 2) { atrasoMs = idx; return }
+        if (tipo == 3) { tap.ligado = idx != 0; return }   // F06: escuta de PCM liga/desliga
         val p = player ?: return
         try {
             val par = p.trackSelectionParameters.buildUpon()

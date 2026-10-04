@@ -32,6 +32,7 @@
 #include "idioma.h"
 #include "linguas.h"
 #include "streamfitpassiva.h"
+#include "audsync.h"
 #include <SDL2/SDL.h>
 #include <jni.h>
 #include <stdio.h>
@@ -70,6 +71,27 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeIniciar(JNIE
   if (!resolverMetodos(env)) { gCls = NULL; printf("[video] android: metodos do NvPlayer nao achados\n"); }
   else printf("[video] android: ponte do NvPlayer pronta\n");
   fflush(stdout);
+}
+
+// --- F06: PCM do audio tocando (AudioSyncTap.kt) -----------------------------
+// O tap so existe numa casca que o anuncia: o primeiro nativeAudioEstado
+// registra o backend. Casca antiga = plataforma sem PCM (o ajuste diz isso).
+static void ligarTap(int on);
+JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeAudioEstado(JNIEnv *env, jclass cls, jint fmt) {
+  static int registrado;
+  (void)env; (void)cls;
+  if (!registrado) { registrado = 1; audsync_backend(ligarTap); }
+  audsync_formato((int)fmt);
+}
+// Fio de reproducao do ExoPlayer. Copia para a pilha e entrega ao anel
+// limitado do audsync.c: nenhuma alocacao, nunca espera o analisador.
+JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeAudioPcm(JNIEnv *env, jclass cls, jshortArray pcm, jint n, jlong ptsUs) {
+  jshort b[2048];
+  (void)cls;
+  if (!pcm || n <= 0 || n > (jint)(sizeof b / sizeof *b)) return;
+  (*env)->GetShortArrayRegion(env, pcm, 0, n, b);
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); return; }
+  audsync_pcm((const int16_t *)b, (int)n, (int64_t)ptsUs);
 }
 
 // Plano B se o Kotlin nao chamou nativeIniciar antes do primeiro uso (lib
@@ -167,6 +189,14 @@ static void kInt(jmethodID m, int v) {
   JNIEnv *env = ambiente();
   if (!env) return;
   (*env)->CallStaticVoidMethod(env, gCls, m, (jint)v);
+  fimChamada(env);
+}
+
+// escolher(3, on): liga/desliga o tap no Kotlin (so posta ao fio principal).
+static void ligarTap(int on) {
+  JNIEnv *env = ambiente();
+  if (!env) return;
+  (*env)->CallStaticVoidMethod(env, gCls, mEscolher, (jint)3, (jint)(on ? 1 : 0));
   fimChamada(env);
 }
 
