@@ -1668,10 +1668,12 @@ void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO
 // (decisao do dono, a8e7685d). Nem um "p2p" ligado de ajustes.txt antigo vale.
 int ajustes_p2p_ligado(void) { return 0; }
 #else
-// Servidores pessoais: ligado E com HTTP estrito neste backend (o WGT nao tem).
-int ajustes_jellyfin_ligado(void) { return lig(AJ_JF_LIGADO) && jellyfin_disponivel(); }
 int ajustes_p2p_ligado(void) { return lig(AJ_P2P_LIGADO) && !SEGURO; }
 #endif
+// Servidores pessoais: ligado E com HTTP estrito neste backend (o WGT nao tem:
+// jellyfin_disponivel() e 0 la). Fica FORA do #ifdef acima: dentro do #else ela
+// sumia do WASM e o link do .wgt falhava (app.c e descoberta.c a chamam).
+int ajustes_jellyfin_ligado(void) { return lig(AJ_JF_LIGADO) && jellyfin_disponivel(); }
 void ajustes_definir_p2p_ligado(int ligado) { int a = valor[AJ_P2P_LIGADO]; valor[AJ_P2P_LIGADO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_P2P_LIGADO, a); }
 
 // Cor do ANEL DE FOCO. Ver TEMA_ACENTO: um tema aqui e so isto.
