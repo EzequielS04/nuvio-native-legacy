@@ -524,6 +524,7 @@
   T("Apple TV", "Apple TV"),
   T("Apple TV e Moderno", "Apple TV and Modern"),
   T("Aqui está o que esta versão trouxe. O resto do app está explicado no Guia de uso.", "Đây là những gì phiên bản này mang lại. Phần còn lại của ứng dụng được giải thích trong Hướng dẫn sử dụng."),
+  T("Aqui só aparece o que %s compartilha.", "Ở đây chỉ hiện những gì %s chia sẻ."),
   T("Arcade N", "Arcade N"),
   T("Arco", "Arc"),
   T("Arco de qualidade", "Cung chất lượng"),

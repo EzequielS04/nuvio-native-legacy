@@ -6403,6 +6403,24 @@ static void reacaoPendente(float s) {
 // juntarem, a troca e AQUI e em mais lugar nenhum. O conteudo da pagina nao
 // depende da arte nitida para ter contraste — o veu de leitura do heroi
 // (veuLeitura) e desenhado por cima, fora desta funcao.
+// A BANDA DE CIMA, onde mora a ilha do relogio (layout.h: pilula em y 36..88).
+// 0 com a pagina no topo; cresce com a rolagem ate NV_ILHA_Y + NV_ILHA_H + 8
+// em 80 px de rolagem, para o corte nao saltar. Devolve o y do recorte.
+static float detalheBandaTopo(void) {
+  float k = scrollY / 80.0f;
+  if (scrollY < 1.0f) return 0.0f;
+  if (k > 1.0f) k = 1.0f;
+  return (NV_ILHA_Y + NV_ILHA_H + 8.0f) * k;
+}
+// Veu da banda: preto opaco ate o corte e um degrade curto para baixo, para o
+// documento nao parecer cortado a faca. So o canto de cima; a arte sob ele ja
+// esta a ~15% com a pagina rolada.
+static void detalheVeuBanda(float banda) {
+  float k = banda / (NV_ILHA_Y + NV_ILHA_H + 8.0f);
+  gfx_cor((GfxRect){ 0, 0, NV_TELA_W, banda }, 0.0f, 0, 0, 0, 0.90f * k);
+  gfx_rect((GfxRect){ 0, banda, NV_TELA_W, 84.0f * k }, 0, GFX_VEU_TOPO, 0, 0, 0, 0, 0, 0, 0, 0.90f * k);
+}
+
 static void detalheFundo(float s) {
   if (!detail_cobre_tela() && !carDesenhaFundo()) {
     GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
@@ -6505,6 +6523,15 @@ void detail_desenhar(Uint32 agora) {
   // O conteudo SOBE para o lugar enquanto aparece, no lugar de so surgir: e a
   // contraparte do texto da home, que desce e apaga. Junto, le como um bloco
   // trocando de arranjo, que e o que o dono pediu.
+  // BANDA DA ILHA DO RELOGIO (M sweep, 04/10/2026): rolada a pagina, o
+  // documento sobe por baixo da pilula do relogio (canto de cima, y 36..88) e o
+  // texto dos episodios e do elenco passava atras da hora. Como na Home (que
+  // recorta as fileiras em corteFileiras), o documento e RECORTADO abaixo da
+  // banda assim que rola, e um veu escuro suaviza a borda do corte (veu da
+  // banda, no fim desta funcao). Sem rolagem nada muda: o heroi sobe ate o topo
+  // com a arte inteira.
+  const float banda = detalheBandaTopo();
+  if (banda > 0.0f) gfx_recorte(0.0f, banda, NV_TELA_W, NV_TELA_H - banda);
   { float c = trailercinema_t(&trailerCinema);
     // Modo cinema: o bloco desce 220 px enquanto apaga; o logo pequeno entra
     // no canto de baixo. As duas molas sao a mesma, entao o cruzamento e limpo.
@@ -6559,6 +6586,10 @@ void detail_desenhar(Uint32 agora) {
     for (int r = 0; r < N_SECOES; r++)
       desenhaSecao(r, (ehSerie() && (r == SEC_TEMPORADAS || r == SEC_EPISODIOS))
                       ? (aTopo > pg ? aTopo : pg) : pg, agora); }
+  if (banda > 0.0f) {
+    gfx_sem_recorte();
+    detalheVeuBanda(banda);
+  }
   // POR CIMA de tudo: a ficha e outra tela, nao uma secao desta.
   // O ponteiro (#99) nao alcanca a pagina por baixo de nenhuma das duas.
   if (pessoaAberta) { ponteiro_camada(); desenhaPessoa(s); }

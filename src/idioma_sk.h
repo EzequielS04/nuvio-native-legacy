@@ -524,6 +524,7 @@
   T("Apple TV", "Apple TV"),
   T("Apple TV e Moderno", "Apple TV and Modern"),
   T("Aqui está o que esta versão trouxe. O resto do app está explicado no Guia de uso.", "Toto priniesla táto verzia. Zvyšok aplikácie je vysvetlený v Sprievodcovi používaním."),
+  T("Aqui só aparece o que %s compartilha.", "Tu sa zobrazuje len to, čo zdieľa %s."),
   T("Arcade N", "Arcade N"),
   T("Arco", "Arc"),
   T("Arco de qualidade", "Oblúk kvality"),

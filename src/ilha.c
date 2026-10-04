@@ -1895,7 +1895,17 @@ static void ilha_desenharCorpo_(Uint32 agora) {
                           R.w + 32.0f + 48.0f * k, R.h + 34.0f + 50.0f * k }, 0, GFX_SOMBRA,
                1.0f, 0, 0, 0.5f, 0, 0, 0, (0.34f + 0.16f * k) * A); }
     if (ajustes_vidro()) gfx_vidro_painel(R, raio, fundo, A);
-    else gfx_cor(R, raio, 0.055f, 0.058f, 0.068f, solido * A);
+    else {
+      // MATERIAL SOLIDO: a pilula em repouso tem de LER como pilula em paginas
+      // escuras. Com 0,055 de cinza ela ficava igual ao fundo da pagina (0,051)
+      // e ao escurecido da arte (perfil do amigo, pagina do titulo na TV do
+      // dono: "o relogio nao tem pilula aqui"): fica no cinza dos cartoes
+      // (~0,12) mais um fio claro, e volta ao escuro do modal ao crescer.
+      float em = modalT > 0.0f ? 1.0f - (modalT > 1.0f ? 1.0f : modalT) : 1.0f;
+      float c0 = 0.055f + 0.065f * em, c1 = 0.058f + 0.066f * em, c2 = 0.068f + 0.075f * em;
+      gfx_cor(R, raio, c0, c1, c2, (solido + 0.06f * em) * A);
+      if (em > 0.01f) gfx_anel(R, raio, 1.5f, 1.0f, 1.0f, 1.0f, 0.085f * em * A);
+    }
     // O "vidro": um brilho largo e fraco por cima, branco no relogio e na cor
     // do aviso quando ele abre.
     // INFO fica com a luz BRANCA do relogio, parada: e estado, nao novidade

@@ -524,6 +524,7 @@
   T("Apple TV", "Apple TV"),
   T("Apple TV e Moderno", "Apple TV and Modern"),
   T("Aqui está o que esta versão trouxe. O resto do app está explicado no Guia de uso.", "Eis o que esta versão trouxe. O resto da app está explicado no Guia de utilização."),
+  T("Aqui só aparece o que %s compartilha.", "Aqui só aparece o que o %s partilha."),
   T("Arcade N", "Arcade N"),
   T("Arco", "Arc"),
   T("Arco de qualidade", "Arco de qualidade"),

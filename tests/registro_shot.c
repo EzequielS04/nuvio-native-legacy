@@ -70,7 +70,7 @@ static void arte(int qual, float veu) {
   if (veu > 0) gfx_cor((GfxRect){ 0, 0, 1920, 1080 }, 0, 0, 0, 0, veu);
 }
 
-enum { CENA_PAINEL, CENA_AVISO, CENA_AJ, CENA_TEL, CENA_QUEDA, CENA_HUD, CENA_HUD_ATV, CENA_HUD_PLAYER };
+enum { CENA_PAINEL_AJ, CENA_PAINEL, CENA_AVISO, CENA_AJ, CENA_TEL, CENA_QUEDA, CENA_HUD, CENA_HUD_ATV, CENA_HUD_PLAYER };
 // O medidor e conteudo da ilha do relogio (desempenho.h): a ilha no canto de
 // sempre, sem ancora, como app.c a desenha na home.
 static void relogioPadrao(void) { ilha_relogio_visivel(1); ilha_desenhar(SDL_GetTicks()); }
@@ -96,6 +96,13 @@ static void captura(const char *id, int cena) {
     glClear(GL_COLOR_BUFFER_BIT);
     switch (cena) {
       case CENA_PAINEL: arte(0, 0); registro_desenhar(); relogio(48); break;
+      // The panel over the REAL previous screen (Settings), as app.c composes it:
+      // Settings is drawn first and the panel's veil goes over it. Nothing of
+      // Settings may show between the two panels (M sweep, 04/10/2026).
+      case CENA_PAINEL_AJ:
+        ajustes_atualizar(1.0f / 60.0f, SDL_GetTicks());
+        ajustes_desenhar(SDL_GetTicks());
+        registro_desenhar(); relogio(48); break;
       case CENA_AVISO:  arte(1, 0.30f); registro_desenhar(); break;
       case CENA_AJ:
         ajustes_atualizar(1.0f / 60.0f, SDL_GetTicks());
@@ -180,6 +187,8 @@ int main(int argc, char **argv) {
     f = fopen(caminho, "w");
     assert(f);
     fprintf(f, "idioma 0\nanimacoes 0\n");
+    // NUVIO_SHOT_FONTE=3: Montserrat, the interface font of the owner's TV.
+    if (getenv("NUVIO_SHOT_FONTE")) fprintf(f, "fonteInterface %d\n", atoi(getenv("NUVIO_SHOT_FONTE")));
     // Oceano (#42a5f5), o acento do mockup; NUVIO_SHOT_TEMA=<indice> troca.
     fprintf(f, "selected_theme %s\n", getenv("NUVIO_SHOT_TEMA") ? getenv("NUVIO_SHOT_TEMA") : "2");
     shot_arte_material(f);
@@ -216,6 +225,10 @@ int main(int argc, char **argv) {
   hostsDeMentira();
   avisos_teste_envio_auto(40, 200);
   registro_teste_estado(RG_TUDO, 0, 0, 0, 0, 0);
+  if (quer("painel-sobre-ajustes")) {
+    ajustes_teste_quadro("op:-registro");
+    captura("painel-sobre-ajustes", CENA_PAINEL_AJ);
+  }
   captura("painel", CENA_PAINEL);
   registro_teste_estado(RG_TUDO, 0, 1, registro_teste_achar("decode falhou", 1), 1, 12);
   captura("pausado", CENA_PAINEL);
