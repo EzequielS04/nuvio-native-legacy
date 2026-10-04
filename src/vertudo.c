@@ -211,6 +211,11 @@ void vertudo_abrir(const char *base, const char *tipo, const char *catId,
 int vertudo_aberta(void) { return aberta; }
 void vertudo_fechar_seco(void) { aberta = 0; anim = 0.0f; }
 int vertudo_pediu_abrir(void) { int v = pedAbrir; pedAbrir = -1; return v; }
+// ESQUERDA na coluna 0 da grade (ou na primeira aba da colecao): a barra
+// lateral abre POR CIMA da lista (dono, 03/10). Antes a coluna 0 voltava para
+// o ultimo da linha de cima. app.c le no mesmo evento.
+static int pedMenu;
+int vertudo_pediu_menu(void) { int v = pedMenu; pedMenu = 0; return v; }
 
 static int nItens(void) { return desc_vertudo_n(); }
 
@@ -221,7 +226,7 @@ void vertudo_evento(const SDL_Event *e) {
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
       e->key.keysym.scancode == NV_SCANCODE_BACK) { aberta = 0; return; }
   if(collection&&tabFocus) {
-    if(k==SDLK_LEFT&&tabCursor>0)tabCursor--;
+    if(k==SDLK_LEFT){ if(tabCursor>0)tabCursor--; else pedMenu=1; }
     if(k==SDLK_RIGHT&&tabCursor+1<collection->nSources)tabCursor++;
     if(k==SDLK_RETURN||k==SDLK_KP_ENTER){source=tabCursor;openSource();tabFocus=0;}
     if(k==SDLK_DOWN&&n>0)tabFocus=0;
@@ -229,9 +234,10 @@ void vertudo_evento(const SDL_Event *e) {
   }
   if(k==SDLK_UP&&foco<VT_COLS&&collection){tabFocus=1;tabCursor=source;return;}
   if((k==SDLK_RETURN||k==SDLK_KP_ENTER)&&desc_vertudo_erro()){desc_vertudo_mais();return;}
+  if (k == SDLK_LEFT && (n < 1 || foco % VT_COLS == 0)) { pedMenu = 1; return; }
   if (n < 1) return;
   if (k == SDLK_RIGHT && foco + 1 < n) foco++;
-  else if (k == SDLK_LEFT && foco > 0) foco--;
+  else if (k == SDLK_LEFT) foco--;
   else if (k == SDLK_DOWN) { if (foco + VT_COLS < n) foco += VT_COLS;
                              else foco = n - 1; }
   else if (k == SDLK_UP) { if (foco >= VT_COLS) foco -= VT_COLS; }

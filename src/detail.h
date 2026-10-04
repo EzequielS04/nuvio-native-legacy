@@ -22,6 +22,10 @@ void detail_fechar(void);
 // Fecha sem a mola de saida (o player saiu para a home: ilha_minimizar).
 void detail_fechar_seco(void);
 int  detail_pediu_menu(void);   // 1 uma vez: ESQUERDA na borda pediu o menu lateral (a pagina NAO fecha; Voltar e quem sai)
+// app.c, a cada quadro: 1 enquanto a barra lateral esta aberta POR CIMA da
+// pagina. O trailer do fundo fica mudo (sem fechar) e recupera o som depois.
+void detail_sob_menu(int sim);
+int  detail_sob_menu_ativo(void);
 // 0..1 de quanto o detalhe tomou a tela; a home usa para descer as fileiras.
 float detail_progresso(void);        // 1 enquanto a tela existe, inclusive saindo
 // 1 quando o cartao ja cobre a tela inteira e desenhar a home por baixo e

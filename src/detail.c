@@ -247,11 +247,16 @@ static int    trailerTentado = 0;
 // proximo degrau uma vez.
 static int    trailerEtapa = 0;
 static Uint32 trailerPrazo = 0;
-// ESQUERDA no comeco de QUALQUER fileira da pagina: fecha o detalhe e o app abre
-// a barra lateral assim que a mola de saida termina (app.c, detail_pediu_menu).
-// Havia `pediuMenu = 1` sem `saindo`: o detalhe seguia aberto e o app so le o
-// pedido com ele fechado, entao a tecla nao fazia nada (dono, 03/10).
-static int    pediuMenu = 0;   // ESQUERDA na borda: fechar E abrir a barra (ver app.c)
+// ESQUERDA no comeco de QUALQUER fileira da pagina (e na coluna 0 da
+// filmografia, e na lista da colecao): o app abre a barra lateral POR CIMA da
+// pagina, que continua viva embaixo — mesmo foco, rolagem e trailer (dono,
+// 03/10: "pode abrir por cima"). Antes a tecla ligava `saindo` junto e a
+// pagina fechava para a barra abrir sobre a tela de baixo. Voltar/DIREITA na
+// barra devolvem o foco aqui; um destino escolhido fecha a pagina (app.c).
+static int    pediuMenu = 0;   // ESQUERDA na borda: abrir a barra por cima (ver app.c)
+// A barra esta aberta por cima (detail_sob_menu): o trailer segue tocando,
+// MUDO, e o som volta quando ela fecha. `somAntesMenu` lembra se tinha som.
+static int    sobMenu = 0, somAntesMenu = 0;
 static float  trailerFade = 0.0f;
 
 // --- CARROSSEL DA DINAMICA (layout "Dinâmica (Apple TV)" da home) ----------
@@ -2036,7 +2041,12 @@ void detail_evento(const SDL_Event *e) {
     if (e->type != SDL_KEYDOWN) return;
     { int n = pessoa_n_creditos();
       switch (e->key.keysym.sym) {
-        case SDLK_LEFT:  if (pessoaFoco > 0) pessoaFoco--; return;
+        // Coluna 0 da filmografia: a barra lateral por cima (dono, 03/10);
+        // antes a ESQUERDA voltava para o ultimo da linha de cima.
+        case SDLK_LEFT:
+          if (pessoaFoco % PES_POR_LINHA == 0) pediuMenu = 1;
+          else pessoaFoco--;
+          return;
         case SDLK_RIGHT: if (pessoaFoco + 1 < n) pessoaFoco++; return;
         case SDLK_UP:
           if (pessoaFoco >= PES_POR_LINHA) pessoaFoco -= PES_POR_LINHA;
@@ -2397,12 +2407,12 @@ void detail_evento(const SDL_Event *e) {
       else if (carro && !carCheia) carPasso(1);
     }
     else if (k == SDLK_LEFT)  {
-      // ESQUERDA no primeiro botao fecha a pagina e pede a barra lateral
-      // (app.c abre quando a mola de saida terminar). Um toque so. No
-      // carrossel ela e o titulo ANTERIOR; so no primeiro da fileira fecha.
+      // ESQUERDA no primeiro botao pede a barra lateral, que abre POR CIMA
+      // da pagina (app.c). Um toque so. No carrossel ela e o titulo
+      // ANTERIOR; so no primeiro da fileira pede a barra.
       if (botao > 0) botao--;
       else if (carro && !carCheia && carPos > 0) carPasso(-1);
-      else if (!(carro && carCheia)) { saindo = 1; pediuMenu = 1; }
+      else if (!(carro && carCheia)) pediuMenu = 1;
     }
     if (acoesAgrupadas()) maisAcoes = nivel == 0 && botao >= 1 + (temInicio() ? 1 : 0);
     return;
@@ -2436,7 +2446,7 @@ void detail_evento(const SDL_Event *e) {
       if (e2 >= 0 && foco.nColunas[e2] > 0) {
         foco.fileira = e2;
         foco.coluna = foco.nColunas[e2] - 1;
-      } else { saindo = 1; pediuMenu = 1; }
+      } else pediuMenu = 1;
     }
   }
   else if (k == SDLK_DOWN)  moverFileira(1);
@@ -5361,6 +5371,9 @@ static void eventoListaColecao(const SDL_Event *e) {
   k = e->key.keysym.sym;
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
       e->key.keysym.scancode == NV_SCANCODE_BACK) { colListaAberta = 0; return; }
+  // A lista e vertical: ESQUERDA nao tinha uso e agora pede a barra lateral
+  // por cima, como a borda de qualquer fileira da pagina (dono, 03/10).
+  if (k == SDLK_LEFT) { pediuMenu = 1; return; }
   if (k == SDLK_DOWN && colListaFoco + 1 < n) colListaFoco++;
   else if (k == SDLK_UP && colListaFoco > 0) colListaFoco--;
   else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
@@ -6529,3 +6542,21 @@ int detail_pediu_do_inicio(void)  { int v = pedDoInicio;   pedDoInicio = 0;   re
 // Uma vez por pedido: a pagina saiu por ESQUERDA e quer a barra lateral no
 // lugar. app.c le depois de detail_aberto() virar 0.
 int detail_pediu_menu(void) { int v = pediuMenu; pediuMenu = 0; return v; }
+// A barra lateral abriu/fechou por cima da pagina. O trailer no fundo NAO fecha
+// (fecharia e so voltaria do comeco, com a espera inteira): fica mudo enquanto
+// a barra esta aberta e recupera o som que tinha quando ela fecha.
+// trailer_continuar so troca volume/retangulo da MESMA fonte, sem reabrir.
+void detail_sob_menu(int sim) {
+  sim = sim && aberto;
+  if (sim == sobMenu) return;
+  sobMenu = sim;
+  if (!trailer_aberto() || trailer_cheia()) { if (sim) somAntesMenu = 0; return; }
+  if (sim) {
+    somAntesMenu = trailer_com_som();
+    if (somAntesMenu) trailer_continuar(trailer_retangulo(), 0);
+  } else if (somAntesMenu) {
+    trailer_continuar(trailer_retangulo(), 1);
+    somAntesMenu = 0;
+  }
+}
+int detail_sob_menu_ativo(void) { return sobMenu; }

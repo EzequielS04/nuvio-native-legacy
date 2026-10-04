@@ -95,6 +95,37 @@ int main(void) {
     assert(rotaId == 42);
     assert(!strcmp(rotaTipo, serie ? "tv" : "movie"));
   }
+  // MENU OVER THE TITLE PAGE (owner 03/10, "pode abrir por cima"): Left at the
+  // start of a row asks for the side menu WITHOUT closing the page, and the
+  // menu being open on top keeps focus/scroll as they were.
+  snprintf(c.tipo, sizeof c.tipo, "movie");
+  cat_definir_tudo(&c, 1, NULL, 0); idx = 0; aberto = 1;
+  carro = 0; maisAcoes = 0; nivel = 0; botao = 0; saindo = 0; pediuMenu = 0;
+  pessoaAberta = 0; colListaAberta = 0;
+  e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_LEFT;
+  detail_evento(&e);
+  assert(!saindo && detail_pediu_menu() && !detail_pediu_menu());
+  nivel = 1; foco.fileira = SEC_RELACIONADOS; foco.coluna = 0; scrollY = 321.0f;
+  detail_evento(&e);
+  assert(!saindo && detail_pediu_menu());
+  detail_sob_menu(1); assert(detail_sob_menu_ativo());
+  detail_sob_menu(0); assert(!detail_sob_menu_ativo());
+  assert(!saindo && nivel == 1 && foco.fileira == SEC_RELACIONADOS &&
+         foco.coluna == 0 && scrollY == 321.0f);
+  // Person filmography grid: column 0 asks for the menu, other columns walk.
+  pessoaAberta = 1; pessoaFoco = PES_POR_LINHA;   // row 2, column 0
+  detail_evento(&e);
+  assert(pessoaAberta && pessoaFoco == PES_POR_LINHA && !saindo && detail_pediu_menu());
+  pessoaFoco = 1; detail_evento(&e);
+  assert(pessoaFoco == 0 && !detail_pediu_menu());
+  pessoaAberta = 0;
+  // Collection list (vertical): Left asks for the menu, the list stays open.
+  colListaAberta = 1; detail_evento(&e);
+  assert(colListaAberta && !saindo && detail_pediu_menu());
+  colListaAberta = 0;
+  // Back never carries a menu request.
+  nivel = 0; e.key.keysym.sym = SDLK_ESCAPE; detail_evento(&e);
+  assert(saindo && !detail_pediu_menu());
   puts("PASS: title/navigation and focus-only action group");
   return 0;
 }

@@ -427,6 +427,7 @@ int trailer_continuar(GfxRect r, int som) {
 }
 
 int trailer_aberto(void)  { return aberto; }
+int trailer_com_som(void) { return aberto && comSom; }
 int trailer_cheia(void)   { return aberto && cheia; }
 int trailer_tocando(void) {
 #ifdef __EMSCRIPTEN__

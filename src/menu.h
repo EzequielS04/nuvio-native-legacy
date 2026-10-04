@@ -44,6 +44,17 @@ int  menu_iniciar(void);
 void menu_abrir(void);
 // Fecha sem escolher: o destaque volta para o destino atual.
 void menu_fechar(void);
+// ABRE POR CIMA DE UMA CAMADA que continua viva embaixo (a pagina do titulo):
+// DIREITA/Voltar so devolvem o foco a ela; OK num destino (mesmo o atual) fica
+// em menu_escolheu para o app fechar a camada e navegar. `semRailFixa` 1 quando
+// a camada nao mostra a rail (a pagina do titulo): o painel nasce sem ela.
+void menu_abrir_sobre(int semRailFixa);
+// 1 desde menu_abrir_sobre ate a saida da barra assentar: e o que o app usa
+// para desenhar a barra por cima da camada (inclusive recolhendo).
+int  menu_sobre(void);
+// 1 uma vez quando a pessoa ESCOLHEU algo na barra (destino, rodape, pasta;
+// o Spotlight nao, ele abre por cima) — ao contrario de Voltar/DIREITA por cima. Consome a flag.
+int  menu_escolheu(void);
 
 // 1 enquanto a barra e dona do D-pad. Vira 0 no instante da escolha, ainda com
 // a animacao de saida rodando — e esse o sinal que o conteudo deve usar para

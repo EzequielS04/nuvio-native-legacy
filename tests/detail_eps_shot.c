@@ -92,6 +92,8 @@ static float fx_titulo_bloco(TxtEstilo estilo, const char *s, int r, int g, int 
 #define gfx_icone fx_icone
 #define plrui_kicker fx_kicker
 #include "../src/detail.c"
+#include "menu.h"
+#include "ilha.h"
 #undef txt_bloco
 #undef gfx_icone
 #undef plrui_kicker
@@ -418,7 +420,7 @@ static void gravar(const char *nome) {
 // Um quadro so nao basta: text.c rasteriza no maximo TXT_POR_QUADRO linhas por
 // quadro, e tex.c ainda esta decodificando a arte de fundo. Repetir e o que o
 // aparelho faz nos primeiros quadros da tela.
-static int parado;
+static int parado, comMenu;
 static void quadros(int n) {
   int i;
   for (i = 0; i < n; i++) {
@@ -437,6 +439,15 @@ static void quadros(int n) {
     glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     detail_desenhar(SDL_GetTicks());
+    // MENU OVER THE PAGE (NV_MENU_SOBRE): the same order as app.c — page,
+    // side menu on top, clock island last (always top-right).
+    if (comMenu) {
+      menu_atualizar(1.0f / 60.0f, SDL_GetTicks());
+      if (menu_sobre()) { menu_pilula_mostrar(-1.0f); menu_desenhar(SDL_GetTicks()); }
+      ilha_relogio_visivel(1);
+      ilha_posicionar(1);
+      ilha_desenhar(SDL_GetTicks());
+    }
   }
 }
 
@@ -644,6 +655,40 @@ int main(int argc, char **argv) {
     assert(fxTituloDesenhado>0);
     snprintf(nome,sizeof nome,"%s-sem-logo.png",saida);gravar(nome);
     puts("detail title: live localized caption, complete wrapping and no-logo rendering passed");
+    return 0;
+  }
+
+  // --- MENU OVER THE TITLE PAGE (owner 03/10, "pode abrir por cima"): Left
+  //     on the first episode of S1 asks for the side menu; it opens ON TOP and
+  //     the page keeps its focus/scroll; Right hands the focus back.
+  //     NV_MENU_SOBRE=1 bash tests/detail_eps_shot.sh /Volumes/ExternalSSD/nv-ui-w14-shots/det
+  if (getenv("NV_MENU_SOBRE")) {
+    SDL_Event ev = {0};
+    int f0, c0; float s0;
+    semear(1, T1_N, 3);
+    progVis = 3; progExib = T1_N + T2_N + (T3_PROX_EP - 1);
+    abrir(0, 0); nosEpisodios(0);
+    for (int step = 0; step < 20; step++) { SDL_Delay(16); quadros(1); }
+    f0 = foco.fileira; c0 = foco.coluna; s0 = scrollY;
+    ev.type = SDL_KEYDOWN; ev.key.keysym.sym = SDLK_LEFT;
+    detail_evento(&ev);
+    assert(!saindo && detail_pediu_menu());
+    comMenu = 1;
+    menu_abrir_sobre(1);
+    detail_sob_menu(1);
+    for (int step = 0; step < 6; step++) { SDL_Delay(16); quadros(1); }
+    snprintf(nome, sizeof nome, "%s-menu-sobre-abrindo.png", saida); gravar(nome);
+    for (int step = 0; step < 40; step++) { SDL_Delay(16); quadros(1); }
+    snprintf(nome, sizeof nome, "%s-menu-sobre-aberto.png", saida); gravar(nome);
+    assert(aberto && !saindo && foco.fileira == f0 && foco.coluna == c0 && scrollY == s0);
+    ev.key.keysym.sym = SDLK_RIGHT; menu_evento(&ev);
+    assert(!menu_aberto() && !menu_escolheu());
+    detail_sob_menu(0);
+    for (int step = 0; step < 50; step++) { SDL_Delay(16); quadros(1); }
+    assert(!menu_sobre());
+    snprintf(nome, sizeof nome, "%s-menu-sobre-voltou.png", saida); gravar(nome);
+    assert(aberto && !saindo && foco.fileira == f0 && foco.coluna == c0 && scrollY == s0);
+    puts("menu over detail: page kept alive under the menu, Right returns");
     return 0;
   }
 

@@ -28,4 +28,6 @@ void vertudo_desenhar(Uint32 agora);
 // Indice no catalogo global do titulo que o dono abriu, ou -1. Consumido uma
 // vez: o roteador chama, abre o detalhe e a tela se fecha.
 int  vertudo_pediu_abrir(void);
+// 1 uma vez: ESQUERDA na coluna 0 pediu a barra lateral (abre por cima).
+int  vertudo_pediu_menu(void);
 #endif

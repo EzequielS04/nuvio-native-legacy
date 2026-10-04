@@ -1754,7 +1754,20 @@ void app_evento(const SDL_Event *e) {
   if (e->type == SDL_KEYDOWN) saiuPorEsquerda = (e->key.keysym.sym == SDLK_LEFT);
   if (spotAtalho(e) && spotPode()) { spotAbrir(e->key.keysym.sym == SPOT_TECLA_VOZ); return; }
   if (player_aberto()) { player_evento(e); return; }
-  if (detail_aberto()) { detail_evento(e); return; }
+  // A BARRA LATERAL POR CIMA DA PAGINA DO TITULO (dono, 03/10: "pode abrir por
+  // cima"): ESQUERDA no comeco de uma fileira pede a barra e a pagina fica
+  // viva embaixo. Aberta, a tecla e dela; recolhendo, ja volta para a pagina.
+  if (detail_aberto() && menu_aberto()) { menu_evento(e); return; }
+  if (detail_aberto()) {
+    detail_evento(e);
+    // No MESMO evento, como a home: diferido um quadro, as teclas seguintes
+    // do controle ainda cairiam na pagina.
+    if (detail_aberto() && detail_pediu_menu() && sidebar_permitida()) {
+      menu_abrir_sobre(1);
+      saiuPorEsquerda = 0;
+    }
+    return;
+  }
   // O MENU DO CARTAZ ABERTO PELO PAINEL (segurar OK numa linha de Salvos)
   // fica por cima dele: com os dois no ar, a tecla e do menu.
   if (spainel_aberto()) {
@@ -1766,7 +1779,16 @@ void app_evento(const SDL_Event *e) {
   // cobre ela. Por isso vem depois do detalhe e antes do roteamento por tela.
   // O menu do cartaz fica ACIMA de tudo que a home mostra: ele e modal.
   if (ctx_aberto())     { ctx_evento(e);     return; }
-  if (vertudo_aberta()) { vertudo_evento(e); return; }
+  if (vertudo_aberta()) {
+    vertudo_evento(e);
+    // ESQUERDA na coluna 0 de "Ver tudo"/colecao: a barra por cima dela.
+    // Por cima: DIREITA/Voltar voltam para a lista, um destino a fecha.
+    if (vertudo_aberta() && vertudo_pediu_menu() && sidebar_permitida()) {
+      menu_abrir_sobre(0);
+      saiuPorEsquerda = 0;
+    }
+    return;
+  }
 
   switch (tela) {
     case TELA_EXPLORAR:   explorar_evento(e);   break;
@@ -2548,6 +2570,15 @@ void app_atualizar(float dt, Uint32 agora) {
   // Trocar de usuario, pedido pelo rodape da barra lateral. Vem ANTES do
   // destino: as duas coisas saem do mesmo menu, e quem pediu troca nao quer
   // mudar de aba.
+  // UM DESTINO ESCOLHIDO NA BARRA ABERTA POR CIMA DA PAGINA fecha a pagina,
+  // como qualquer navegacao (mesmo o destino atual: "Inicio" com a pagina
+  // aberta sobre a home e voltar para a home). Voltar/DIREITA nao passam aqui.
+  // "Ver tudo" idem: a barra tambem abre por cima dela (coluna 0), e sem isto
+  // a lista ficaria cobrindo a tela nova.
+  if (menu_escolheu()) {
+    if (detail_aberto()) detail_fechar_seco();
+    if (vertudo_aberta()) vertudo_fechar_seco();
+  }
   if (menu_pediu_trocar()) {
     player_descartar_retido();
     fontevolta_esquecer("troca de usuario");
@@ -3360,17 +3391,12 @@ void app_atualizar(float dt, Uint32 agora) {
   }
 
   player_atualizar(dt, agora);
+  // A barra por cima da pagina: o trailer do fundo fica mudo enquanto ela
+  // esta aberta (detail_sob_menu). O pedido de barra da pagina e lido em
+  // app_evento, no mesmo evento da ESQUERDA, e abre por cima dela.
+  detail_sob_menu(detail_aberto() && menu_aberto());
   detail_atualizar(dt, agora);
   menu_atualizar(dt, agora);
-  // A PAGINA DE TITULO saiu por ESQUERDA (detail_pediu_menu): a barra entra
-  // quando a mola de saida terminou e a tela de baixo voltou a ser dona do
-  // foco. Era `saiuPorEsquerda` cru aqui — e isso abria a barra em QUALQUER
-  // ESQUERDA de qualquer tela, inclusive andando numa fileira da home.
-  if (!detail_aberto() && detail_pediu_menu() && sidebar_permitida() &&
-      !menu_aberto()) {
-    menu_abrir();
-    saiuPorEsquerda = 0;
-  }
   // PÓS-REPRODUÇÃO. O proximo episodio reabre a busca de fonte com o id novo;
   // o titulo relacionado sai do player e abre o detalhe, que e onde o dono
   // escolhe se quer mesmo assistir.
@@ -3602,13 +3628,15 @@ static void desenharAtrasDoPainel(void *ctx) {
   // o defeito relatado como "nao ta mostrando o menu e nao tem os ajustes".
   // Guarda repetida em dois lugares para a mesma regra: no de dentro ela
   // significa "nao pinte a faixa", no de fora significava "nao exista".
-  if (menu_visivel() && sidebar_permitida() && !detail_aberto()) {
+  // Com a pagina do titulo aberta, so a barra aberta POR CIMA dela
+  // (menu_sobre), ate recolher; a rail fixa nao aparece na pagina.
+  if (menu_visivel() && sidebar_permitida() && (!detail_aberto() || menu_sobre())) {
     // Layout Dinamica: a pilula da barra fica no canto das telas do menu, no
     // lugar do titulo delas (que nao e desenhado: menu_pilula_titulo). Na
     // home some com a pagina rolada. Telas fora do menu (Addons, Social,
     // diagnosticos) tem titulo proprio nesse canto: la ela some na hora, e a
     // barra abre pelo ESQUERDA na borda e pela faixa do ponteiro.
-    menu_pilula_mostrar(vertudo_aberta() ? -1.0f   // "Ver tudo"/colecao tem cabecalho proprio
+    menu_pilula_mostrar(vertudo_aberta() || detail_aberto() ? -1.0f   // "Ver tudo"/colecao/pagina tem cabecalho proprio
                         : tela == TELA_HOME ? home_topo_fracao()
                         : (tela == TELA_EXPLORAR || tela == TELA_BUSCA ||
                            tela == TELA_BIBLIOTECA || tela == TELA_AGENDA ||
