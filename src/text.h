@@ -153,6 +153,10 @@ typedef enum {
   TXT_V2_NUM150,   // numero do editor (150/800)
   TXT_V2_36B,      // unidade do editor (34/600)
   TXT_V2_18,       // posicao na ordem da Home (17/400)
+  // Ajustes A3 (04/10): a lista compacta e o titulo da coluna da arte.
+  TXT_V2_LN,       // rotulo da linha compacta (24/500)
+  TXT_V2_LN_B,     // rotulo da linha em foco (24/600)
+  TXT_V2_A3TIT,    // titulo da opcao sob a arte (46/700)
   // LISTA COM CAPA dos Salvos (painel lateral), ~17 % acima da escala da ilha.
   TXT_ILHA_NOME_L, TXT_ILHA_SUB_L, TXT_ILHA_HORA_L,
   TXT_NFONTES

@@ -94,6 +94,13 @@ static void captura(const char *nome, SDL_Window *win) {
     glClear(GL_COLOR_BUFFER_BIT);
     ajustes_desenhar(SDL_GetTicks());
     rail_shot_desenhar(MENU_AJUSTES);
+    // NUVIO_SHOT_MENU=1: the app menu drawn in its own fixed factor (0.9) on
+    // top, as app.c does every frame on the TV.
+    if (getenv("NUVIO_SHOT_MENU")) {
+      menu_definir_destino(MENU_AJUSTES);
+      menu_pilula_mostrar(1.0f);
+      menu_desenhar(SDL_GetTicks());
+    }
     if (spot_visivel()) {   // "Buscar no guia" (o Spotlight no modo guia)
       spot_atualizar(1.0f / 60.0f, SDL_GetTicks());
       spot_desenhar(SDL_GetTicks(), 0);   // o veu de 55% e do proprio Spotlight
@@ -102,6 +109,16 @@ static void captura(const char *nome, SDL_Window *win) {
       ilha_relogio_visivel(ajustes_relogio_cabe());
       ilha_posicionar(1);
       ilha_desenhar(SDL_GetTicks());
+    }
+    // NUVIO_SHOT_TXT=1: text lines rasterized per frame once the screen has
+    // settled. A static screen must reach 0; a steady non-zero count starves
+    // later lines on a slow TV (the 4-lines-per-frame floor).
+    if (getenv("NUVIO_SHOT_TXT") && i >= quadrosCaptura - 4) {
+      static int r0, p0, d0;
+      if (i > quadrosCaptura - 4)
+        printf("txt %s quadro %d: +%d rasterizadas +%d pendentes +%d despejos\n", nome, i,
+               txt_rasterizadas - r0, txt_pendentes - p0, txt_despejos - d0);
+      r0 = txt_rasterizadas; p0 = txt_pendentes; d0 = txt_despejos;
     }
     if (i == quadrosCaptura - 1) {
       unsigned char *pix = malloc(1920 * 1080 * 4);
@@ -234,6 +251,9 @@ int main(int argc, char **argv) {
     snprintf(lista, sizeof lista, "%s", getenv("NUVIO_AJ_QUADROS"));
     for (id = strtok_r(lista, " ,", &ctx); id; id = strtok_r(NULL, " ,", &ctx)) {
       if (!ajustes_teste_quadro(id)) { printf("quadro desconhecido: %s\n", id); continue; }
+      // NUVIO_SHOT_FONTE=3 (TXT_FAMILIA_*): the interface font the TV uses
+      // (Montserrat on the owner's Android TV), so truncation shows like there.
+      if (getenv("NUVIO_SHOT_FONTE")) ajustes_teste_fonte_interface(atoi(getenv("NUVIO_SHOT_FONTE")));
       if (!strcmp(id, "guia-busca")) {
         int k;
         SDL_Event e = { 0 };

@@ -35,7 +35,7 @@ static float aj2Rampa(float p, float alvo, float dt, float ms) {
 }
 
 // --- O ESTADO DA PILHA ----------------------------------------------------------------
-static float aj2N1, aj2V1, aj2N2, aj2V2;     // degraus 1 e 2 (molas)
+static float aj2V1, aj2N2, aj2V2;     // degraus 1 e 2 (molas); aj2N1 mora na geometria (desenho.inc)
 static float aj2Rot = 1.0f;                  // rotulos do menu (some em 120 ms)
 static float aj2Miolo = 1.0f;                // ilha do menu: 1, 0,42, 0,16
 static float aj2ListaA, aj2EdA, aj2ResumoA = 1.0f;
@@ -215,7 +215,7 @@ static void aj2DesenharMenu(const Aj2Pose *p) {
   // As duas pilulas do alto. Recolhido (rotulos a 0) viram so o icone, lado a
   // lado, para caberem na coluna de icones.
   { float cy = topo - aj2MRol, cx = m.x + AJ2_MENU_PAD, mkc = aj2MenuMascara(cy + AJ2_MENU_CHIP * 0.5f, base);
-    float livre = m.w - 2 * AJ2_MENU_PAD, rot = p->mRot < 0 ? 0 : p->mRot > 1 ? 1 : p->mRot;
+    float livre = AJ2_MENU_W - 2 * AJ2_MENU_PAD, rot = p->mRot < 0 ? 0 : p->mRot > 1 ? 1 : p->mRot;
     float fio = aj2MenuMascara(cy + AJ2_MENU_CHIP + 12.0f, base);
     int c;
     for (c = 0; c < 2 && n >= 2; c++) {
@@ -266,7 +266,12 @@ static void aj2DesenharMenu(const Aj2Pose *p) {
       char qn[16];
       snprintf(qn, sizeof qn, "%d", aj2ContaOpcoes(j - 2));
       cn = ajTxt(TXT_V2_28, qn);
-      t = ajTxtC(ativa ? TXT_V2_MENU_B : TXT_V2_MENU, aj2MenuTitulo(j), m.w - 2 * AJ2_MENU_PAD - 28 - AJ2_MENU_ICO - AJ2_MENU_ICO_GAP - 20 - cn.w - 16);
+      { float livre = AJ2_MENU_W - 2 * AJ2_MENU_PAD - 28 - AJ2_MENU_ICO - AJ2_MENU_ICO_GAP - 20 - cn.w - 16;
+        TxtEstilo e = ativa ? TXT_V2_MENU_B : TXT_V2_MENU;
+        // Nome que nao cabe inteiro (idiomas longos): um corpo menor antes do
+        // corte com reticencias.
+        if ((float)txt_largura(e, aj2MenuTitulo(j)) > livre) e = TXT_V2_ROT;
+        t = ajTxtC(e, aj2MenuTitulo(j), livre); }
       txt_desenhar_alpha(cn, m.x + m.w - AJ2_MENU_PAD - 28.0f - cn.w, lc - cn.h * 0.5f, 0.5f * mk * p->mRot);
       txt_desenhar_alpha(t, rx + 28 + AJ2_MENU_ICO + AJ2_MENU_ICO_GAP, lc - t.h * 0.5f, al * mk * p->mRot);
       if (aj2MDesc[j] > 0.003f && h > AJ2_MENU_LN + 4) {

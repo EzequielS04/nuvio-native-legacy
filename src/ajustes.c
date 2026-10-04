@@ -133,8 +133,13 @@ static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foc
 #define AJ_PAD           24.0f    // borda da linha ao texto
 // A janela da LISTA dentro da folha (Glass UI): abaixo do cabecalho da folha
 // (kicker, titulo e sub) ate 18 px da base da ilha.
-#define AJ_TOPO        (112.0f / ajustes_tamanho_ajustes() + 185.7f)
-#define AJ_BASE        (NV_VTELA_H - 40.0f / ajustes_tamanho_ajustes())
+// A3 (04/10): o cabecalho compacto da lista (titulo da categoria + chip
+// Avancados, 96) e o rodape proprio (dicas e o aviso "Ajuste salvo", 72) que o
+// aviso nao cubra mais a ultima linha.
+#define AJ_TOPO        (112.0f / ajustes_tamanho_ajustes() + AJ_A3_CAB)
+#define AJ_BASE        (NV_VTELA_H - 40.0f / ajustes_tamanho_ajustes() - AJ_A3_RODAPE)
+#define AJ_A3_CAB       96.0f
+#define AJ_A3_RODAPE    72.0f
 // Raio da linha em fracao do menor lado (o SDF do shader e normalizado):
 // 12px sobre 88 de altura.
 #define AJ_RAIO           0.14f
@@ -6079,6 +6084,9 @@ int ajustes_teste_quadro(const char *id) {
   valor[AJ_IDIOMA] = IDIOMA_PT + 1;
   // NUVIO_SHOT_IDIOMA=N (IDIOMA_*: 1 en, 4 ru, 6 de...): o quadro sai nesse idioma.
   if (getenv("NUVIO_SHOT_IDIOMA") && *getenv("NUVIO_SHOT_IDIOMA")) valor[AJ_IDIOMA] = atoi(getenv("NUVIO_SHOT_IDIOMA")) + 1;
+  // NUVIO_SHOT_LAYOUT=2 (HOME_LAYOUT_*): the owner's Dinamica layout, whose menu
+  // pill sits in the Settings corner (with NUVIO_SHOT_MENU in the capture).
+  if (getenv("NUVIO_SHOT_LAYOUT") && *getenv("NUVIO_SHOT_LAYOUT")) valor[AJ_HOME_LAYOUT] = atoi(getenv("NUVIO_SHOT_LAYOUT"));
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
   memset(uxAvancados, 0, sizeof uxAvancados);
   scrollY = velY = 0; paginaA = 1;
@@ -6092,6 +6100,11 @@ int ajustes_teste_quadro(const char *id) {
     valor[AJ_LANDSCAPE] = 1;   // o mockup: "Pôsteres horizontais" desligado
     ajArteFundoN = 12;
     if (!strcmp(id, "v2-menu")) { focarSecao(0); uxIndice = 2; focoIndice = 1; }
+    else if (!strncmp(id, "v2-menu-", 8) && id[8] >= '0' && id[8] <= '9') {   // index on category N
+      int sN = atoi(id + 8);
+      if (sN >= nSecoes) return 0;
+      focarSecao(sN); uxIndice = 2 + sN; focoIndice = 1;
+    }
     else if (!strcmp(id, "v2-menu-passando")) { ajArteFundoN = 13; focarSecao(1); uxIndice = 3; focoIndice = 1; }
     else if (!strcmp(id, "v2-aberto") || !strcmp(id, "v2-130")) focarOpcao(AJ_HOME_LAYOUT);
     else if (!strcmp(id, "v2-transicao")) {
@@ -6120,6 +6133,9 @@ int ajustes_teste_quadro(const char *id) {
   }
   else if (!strncmp(id, "guia", 4)) { if (!ajustesTesteGuia(id)) return 0; }
   else if (!strcmp(id, "principal")) { focarOpcao(AJ_HOME_LAYOUT); }
+  // O aviso "Ajuste salvo nesta TV." logo depois de mudar uma opcao (foto do
+  // dono, 04/10: o aviso cobria a ultima linha).
+  else if (!strcmp(id, "aviso")) { focarOpcao(AJ_TAMANHO_AJUSTES); uxNotificar("Ajuste salvo nesta TV."); }
   else if (!strcmp(id, "cartazes")) { ajArteFundoN = 13; valor[AJ_LARGURA_DP] = 128; focarOpcao(AJ_LARGURA_DP); }
   else if (!strcmp(id, "memoria")) { ajArteFundoN = 21; ajMemFixa = 1; focarOpcao(AJ_ESPACO); uxAvancados[secAtual] = 1; }
   else if (!strcmp(id, "cor")) { ajArteFundoN = 9; focarOpcao(AJ_TEMA); uxAbrirEditor(AJ_TEMA); }
