@@ -3,6 +3,7 @@
 // hero no topo, rail fixa à esquerda e fileiras horizontais de posters. A
 // infraestrutura nativa cuida de cache assíncrono, foco e transições.
 #include "home.h"
+#include "cwretido.h"
 #include "focoprof.h"
 #include "posterprov.h"
 #include "corviva.h"
@@ -2030,7 +2031,7 @@ static void sincronizarFileiras(void) {
   // direto (cat_revisao); cat_revisao e bumpado em cat_definir_tudo,
   // cat_trocar_continuar E cat_republicar_fileiras, cobrindo todo caminho
   // que troca fils[].
-  static unsigned ultCatRev, ultFilRev, ultColRev, ultFilLim, ultCwoRev, ultOrdemRev;
+  static unsigned ultCatRev, ultFilRev, ultColRev, ultFilLim, ultCwoRev, ultOrdemRev, ultRetRev;
   unsigned catRev = cat_revisao(), filRev = fil_revisao();
   int filLim = fil_limite();
   unsigned colRev = col_revisao();
@@ -2042,7 +2043,7 @@ static void sincronizarFileiras(void) {
       catRev == ultCatRev && filRev == ultFilRev &&
       colRev == ultColRev && ordemRev == ultOrdemRev &&
       filLim == ultFilLim && cwoRev == ultCwoRev &&
-      retomarAplicada == retomarRev &&
+      retomarAplicada == retomarRev && cw_retido_rev() == ultRetRev &&
       ultCatRev) {   // ultCatRev=0: primeira chamada, cai no hash
     ultFilRev = filRev; ultColRev = colRev; ultFilLim = (unsigned)filLim;
     return;
@@ -2055,6 +2056,7 @@ static void sincronizarFileiras(void) {
   ultCatRev = catRev; ultFilRev = filRev; ultColRev = colRev; ultFilLim = (unsigned)filLim;
   ultCwoRev = cwoRev;
   ultOrdemRev = ordemRev;
+  ultRetRev = cw_retido_rev();
   unsigned revisao = 2166136261u;
   // A escolha LOCAL de fileiras entra na mesma assinatura do catalogo: ordem,
   // liga/desliga, forma, tamanho e limite mudam a lista tanto quanto uma
@@ -2078,6 +2080,8 @@ static void sincronizarFileiras(void) {
   // Quem a montagem publicou como futuro (issue #127): so pesa em "Separar
   // futuros", mas e um inteiro — mais barato perguntar sempre que ramificar.
   revisao = (revisao ^ cwo_revisao()) * 16777619u;
+  // O titulo retido pelo cartao/faixa (cwretido.h) muda a fileira desenhada.
+  revisao = (revisao ^ cw_retido_rev()) * 16777619u;
   for (r = 0; r < nCat; r++) {
     const CatFileira *cf = cat_fileira(r);
     if (!cf) break;
@@ -2163,16 +2167,25 @@ static void sincronizarFileiras(void) {
     snprintf(fileiras[destino].catTipo, sizeof fileiras[destino].catTipo, "%s", cf->tipo);
     fileiras[destino].ini = cf->ini;
     if(!strcmp(cf->chave,"social_activity"))fileiras[destino].tipo=FILEIRA_SOCIAL;
-    if (!strcmp(cf->chave, "continue_watching") && ajustes_cw_ordem() == CWO_SEPARAR) {
+    // UM TITULO, UM LUGAR (cwretido.h): o que o cartao da ilha ou a faixa
+    // "Retomar agora" segura nao entra aqui. So a lista desenhada muda; o
+    // catalogo continua com o item. Passa pela janela INTEIRA (cf->n), nao so
+    // pelo teto ja cortado, para a fileira nao encolher um card a toa.
+    if (!strcmp(cf->chave, "continue_watching") &&
+        (ajustes_cw_ordem() == CWO_SEPARAR || cw_retido()[0])) {
       Fileira *cw = &fileiras[destino];
-      int c, nm = 0;
-      for (c = 0; c < cw->n && nProxHome < MAX_CARDS; c++) {
+      int c, nm = 0, tirou = 0, teto = cw->n;
+      for (c = 0; c < cf->n && nm < teto && nm < MAX_CARDS; c++) {
         int idx = cf->ini + c;
         const CatItem *it = cat_item(idx);
-        if (it && cwo_e_futuro(it->imdb)) proxHome[nProxHome++] = idx;
-        else cw->itens[nm++] = idx;
+        if (it && cw_retido_exclui(it->imdb)) { tirou = 1; continue; }
+        if (it && ajustes_cw_ordem() == CWO_SEPARAR && cwo_e_futuro(it->imdb)) {
+          if (nProxHome < MAX_CARDS) proxHome[nProxHome++] = idx;
+          continue;
+        }
+        cw->itens[nm++] = idx;
       }
-      if (nProxHome) { cw->usaItens = 1; cw->n = nm; }
+      if (nProxHome || tirou) { cw->usaItens = 1; cw->n = nm; }
     }
     snprintf(fileiras[destino].chave, sizeof fileiras[destino].chave,
              "%s", cf->chave);
@@ -4410,7 +4423,12 @@ static void desenhaArteCard(GfxRect card, TipoFileira tipo, const char *caminho,
     // fallback contain para posters servidos por catálogos deitados;
     // aqui a forma já foi escolhida como editorial, então o recorte
     // cover é intencional e fica limitado a esta opção.
-    gfx_card_forcar_cover_atual = tipo == FILEIRA_DESTAQUE_QUADRADO ? 1.0f : 0.0f;
+    // "RETOMAR AGORA" (680x178, ~3,8:1) TAMBEM: o fallback contain do
+    // GFX_CARD dispara com a moldura 25% fora da arte, e qualquer arte (fundo
+    // 16:9 ou cartaz) ficava no meio do card com faixas cinza dos lados (dono,
+    // 03/10: "tem que colocar uma imagem cropada para preencher tudo").
+    gfx_card_forcar_cover_atual = (tipo == FILEIRA_DESTAQUE_QUADRADO ||
+                                   tipo == FILEIRA_RETORNO) ? 1.0f : 0.0f;
     gfx_tex_aspect_atual = tex_aspecto(caminho);
     // O esqueleto fica por baixo so enquanto a arte esvanece: um
     // desenho do tamanho do card por ~220 ms, e depois nenhum.
@@ -5474,6 +5492,7 @@ void home_registrar_retorno(int indice, double posSeg, double durSeg) {
   const CatItem *c = novo >= 0 ? cat_item_exato(novo) : NULL;
   snprintf(retomarId, sizeof retomarId, "%s", c ? c->imdb : "");
 }
+const char *home_retomar_imdb(void) { return retomarId; }
 int home_quer_sair(void) { return sair; }
 
 int home_item_focado(HomeItem *out) {

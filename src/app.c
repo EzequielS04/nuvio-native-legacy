@@ -82,6 +82,7 @@
 #include "ilhasalvar.h"
 #include "plrilha.h"
 #include "ilhacart.h"
+#include "cwretido.h"
 #include "ilhasinais.h"
 #include "recintro.h"
 #include "atualizacao.h"
@@ -1285,6 +1286,24 @@ static void tocarCanal(const CatItem *it) {
 // guia foca a linha do canal e deixa de seguir o foco com o preview — so OK
 // em outro canal troca o que toca. E o caminho de: Voltar num canal aberto
 // pelo guia, Azul na faixa do mini guia, e Guia na barra com o PiP no ar.
+// UM TITULO, UM LUGAR (cwretido.h). Quem segura o titulo que acabou de sair
+// do player: o cartao da ilha (relogio ligado) ou a faixa "Retomar agora"
+// (desligado). Uma comparacao de string por quadro. O titulo SOLTO (cartao
+// dispensado, vencido, trocado por outro titulo, relogio trocado) volta a
+// valer em "Continuar assistindo" e vai para a FRENTE dela, no mesmo quadro e
+// sem rede (cwfrente.h) — a home so remonta a fileira, sem refazer o resto.
+static void cwRetidoSincronizar(void) {
+  char antes[64];
+  snprintf(antes, sizeof antes, "%s", cw_retido());
+  if (!cw_retido_definir(cw_retido_escolher(ajustes_relogio_ligado(), ilhacart_vivo_imdb(),
+                                            home_retomar_imdb())))
+    return;
+  if (antes[0] && !cw_retido_exclui(antes)) {
+    int i = cat_indice_por_imdb(antes);
+    if (i >= 0) desc_continuar_otimista(i);
+  }
+}
+
 static void guiaComCanalNoAr(void) {
   char id[80];
   float x, y, w, h;
@@ -3367,8 +3386,15 @@ void app_atualizar(float dt, Uint32 agora) {
     snprintf(imdbSaiu, sizeof imdbSaiu, "%s", ci ? ci->imdb : "");
     { unsigned vivoAntes = ilhacart_vivo_seq();
       if (!ajustes_saida_player_home() || !player_suspender()) player_encerrar();
+      // UM LUGAR SO (cwretido.h): o cartao da ilha / a faixa "Retomar agora"
+      // acabaram de pegar o titulo (player_encerrar -> ilhacart_player_saiu,
+      // home_registrar_retorno) e ele NAO entra em "Continuar assistindo"
+      // agora; entra quando sair de la. Sem cartao nem faixa (sem conta, ou
+      // titulo terminado), o de sempre: na frente, local.
+      cwRetidoSincronizar();
       // O indice CORRENTE do titulo (o player grava por ele, idxAtual).
-      if (imdbSaiu[0]) desc_continuar_otimista(cat_indice_vivo(idx, imdbSaiu));
+      if (imdbSaiu[0] && !cw_retido_exclui(imdbSaiu))
+        desc_continuar_otimista(cat_indice_vivo(idx, imdbSaiu));
       // MINIMIZAR NA ILHA (pedido do dono, 02/10): saiu no MEIO (esta saida
       // virou a atividade ao vivo, o criterio de home_retorno_vale) com o
       // relogio ligado e "Ao sair do player" = home. A pagina do titulo e o
@@ -3390,6 +3416,7 @@ void app_atualizar(float dt, Uint32 agora) {
     }
   }
 
+  cwRetidoSincronizar();
   player_atualizar(dt, agora);
   // A barra por cima da pagina: o trailer do fundo fica mudo enquanto ela
   // esta aberta (detail_sob_menu). O pedido de barra da pagina e lido em

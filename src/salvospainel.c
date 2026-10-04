@@ -14,6 +14,7 @@
 // atalho mais rapido do controle abriria vazio por ~20 s toda vez que a TV
 // liga, que e justamente quando alguem aperta.
 #include "salvospainel.h"
+#include "cwretido.h"
 #include "salvos.h"
 #include "salvosorg.h"
 #include "teclado.h"
@@ -452,14 +453,15 @@ static int ehSerie(const char *tipo, int nTemporadas) {
 // reconstrucao andava pelo catalogo inteiro. Com as revisoes a pergunta por
 // quadro e comparar dois inteiros, e a reconstrucao so acontece quando ha o
 // que mostrar de diferente (tests/salvospainel.sh conta quantas vezes).
-static unsigned marcaRevCat, marcaRevSalvos, marcaRevOrg;
+static unsigned marcaRevCat, marcaRevSalvos, marcaRevOrg, marcaRevRet;
 static int reconstrucoes, fundosPintados;
 int spainel_n_reconstrucoes(void) { return reconstrucoes; }
 int spainel_n_fundos(void) { return fundosPintados; }
 static int listaVelha(void) {
   sorg_carregar();   // troca de perfil sobe a revisao da organizacao
   return marcaCatN < 0 || sorg_revisao() != marcaRevOrg || cat_revisao_itens() != marcaRevCat ||
-         salvos_revisao() != marcaRevSalvos || cat_n() != marcaCatN;
+         salvos_revisao() != marcaRevSalvos || cat_n() != marcaCatN ||
+         cw_retido_rev() != marcaRevRet;
 }
 
 // Monta a lista visivel. A uniao (lista local + catalogo) vem de salvos_uniao,
@@ -513,6 +515,9 @@ static void vistosAgora(void) {
       int j, achou = -1;
       SPLinha *l;
       if (!c || !c->imdb[0] || c->progresso <= 0) continue;
+      // UM LUGAR SO (cwretido.h): o que o cartao da ilha / a faixa "Retomar
+      // agora" segura so vira linha daqui quando sair de la.
+      if (cw_retido_exclui(c->imdb)) continue;
       for (j = 0; j < nLinhas && achou < 0; j++)
         if (salvos_mesmo_titulo(linhas[j].id, c->imdb)) achou = j;
       if (achou >= 0) {
@@ -597,6 +602,7 @@ static void reconstruir(void) {
   marcaCatN = catN;
   marcaRevCat = revCat;
   marcaRevSalvos = revSalvos;
+  marcaRevRet = cw_retido_rev();
   // O FOCO DAS ABAS (-1) NAO E UM FOCO FORA DA FAIXA. Sem esta guarda, uma
   // reconstrucao com a lista vazia jogaria o foco de volta para a linha 0, que
   // nao existe, e a linha de abas perderia o anel debaixo do dedo.
