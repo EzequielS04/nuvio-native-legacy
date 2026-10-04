@@ -174,6 +174,10 @@ int    video_terminou(void); // 1 depois do fim de fluxo (endOfStream) da fonte 
 int    video_conflito_recurso(void);
 #ifdef NV_TPK
 void   video_tpk_log_host(const char *linha);   // tpk.c repassa cada linha do host
+// Zoom/recorte do plano de video (ROI), experimental (#241): liga/desliga em
+// execucao; o padrao e NV_TPK_ZOOM_ROI (0). Loga "[trailer] tpk zoom ROI: ...".
+void   video_tpk_zoom_roi_definir(int ligado);
+int    video_tpk_zoom_roi(void);
 #endif
 
 // --- faixas -----------------------------------------------------------------

@@ -73,6 +73,13 @@ int main(void) {
   confere("canario deixa o roi de zoom passar", -803, -191, 3530, 1466);
 #else
   if (video_recorte_fonte()) { printf("FALHA recorte ligado no padrao\n"); falhas++; }
+  // Runtime flag (#241): the Settings toggle flips it, on and back off.
+  video_tpk_zoom_roi_definir(1);
+  if (!video_recorte_fonte() || !video_tpk_zoom_roi()) { printf("FALHA flag em execucao nao liga\n"); falhas++; }
+  video_janela_fonte(872, 208, 2082, 1170, 0, 0, 1920, 1080);
+  confere("flag ligada deixa o roi de zoom passar", -803, -191, 3530, 1466);
+  video_tpk_zoom_roi_definir(0);
+  if (video_recorte_fonte()) { printf("FALHA flag em execucao nao desliga\n"); falhas++; }
   // O mesmo pedido do registro 11875 ("-> roi -803,-191 3530x1466").
   video_janela_fonte(872, 208, 2082, 1170, 0, 0, 1920, 1080);
   naTela("zoom do trailer 3828x1588");

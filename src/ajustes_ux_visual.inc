@@ -64,6 +64,7 @@ static const char *ajVisualIcone(int op) {
     case AJ_HERO_TRAILER: return "aj_clapperboard";
     case AJ_FOCO_TRAILER: return "aj_clapperboard";
     case AJ_DET_TRAILER_AUTO: return "aj_clapperboard";
+    case AJ_TRAILER_ZOOM_TPK: return "aj_clapperboard";
     case AJ_DET_TRAILER: return "aj_clapperboard";
     case AJ_HERO_TRAILER_SOM: return "aj_audio-lines";
     case AJ_DET_TRAILER_SOM: return "aj_audio-lines";

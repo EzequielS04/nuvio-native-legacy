@@ -259,6 +259,19 @@ static void bloqueadosESegredos(void) {
 /* F07: seek cache option. Appended, local, default off; on a TV without an
  * app-controlled disk cache (this host build, LG, Samsung) the row is
  * inactive, says so and the accessor never asks the backend for a cache. */
+static void zoomTpk(void) {
+  int i, vezes = 0;
+  assert(!strcmp(CHAVE[AJ_TRAILER_ZOOM_TPK], "trailerZoomTpkLocal"));
+  assert(valorPadrao[AJ_TRAILER_ZOOM_TPK] == 1);   // Desligado
+  assert(!strcmp(OPCOES[AJ_TRAILER_ZOOM_TPK].valores[1], "Desligado"));
+  assert(somenteDesteAparelho(AJ_TRAILER_ZOOM_TPK) && !dePerfil(AJ_TRAILER_ZOOM_TPK));
+  for (i = 0; i < AJ_N_TELA; i++) if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_TRAILER_ZOOM_TPK) vezes++;
+#ifdef NV_TPK
+  assert(vezes == 1);
+#else
+  assert(vezes == 0);   // hidden outside the native .tpk
+#endif
+}
 static void cacheSeek(void) {
   int antes = valor[AJ_CACHE_SEEK], vezes = 0, n, i;
   const char *categoria = "";
@@ -286,7 +299,7 @@ static void cacheSeek(void) {
 
 int main(void) {
   char dir[] = "/tmp/nuvio-aj-ux-dados-XXXXXX";
-  assert(AJ_DISCORD == AJ_ICONE_APP + 1 && AJ_TAMANHO_AJUSTES == AJ_DISCORD + 1 && AJ_LOGO_TRAILER == AJ_TAMANHO_AJUSTES + 1 && AJ_LEG_LINGUA2 == AJ_LOGO_TRAILER + 1 && AJ_LEG_SYNC_AUDIO == AJ_LEG_LINGUA2 + 1 && AJ_CACHE_SEEK == AJ_LEG_SYNC_AUDIO + 1 && AJ_CACHE_SEEK == AJ_N - 1);
+  assert(AJ_DISCORD == AJ_ICONE_APP + 1 && AJ_TAMANHO_AJUSTES == AJ_DISCORD + 1 && AJ_LOGO_TRAILER == AJ_TAMANHO_AJUSTES + 1 && AJ_LEG_LINGUA2 == AJ_LOGO_TRAILER + 1 && AJ_LEG_SYNC_AUDIO == AJ_LEG_LINGUA2 + 1 && AJ_CACHE_SEEK == AJ_LEG_SYNC_AUDIO + 1 && AJ_TRAILER_ZOOM_TPK == AJ_CACHE_SEEK + 1 && AJ_TRAILER_ZOOM_TPK == AJ_N - 1);
   assert(!strcmp(CHAVE[AJ_DISCORD], "-discord"));
   assert(!uxTemPadrao(AJ_DISCORD));
   assert(familiaPreviaOpcao(AJ_DISCORD) == AJPV_RASTREIO);
@@ -296,6 +309,7 @@ int main(void) {
   for (int i=0;i<AJ_N_TELA;i++) if(TELA[i].tipo==IT_OPC && TELA[i].op==AJ_DISCORD) discordCount++;
   assert(discordCount==1);
   cacheSeek();
+  zoomTpk();
   prazoDosAddonsIntegrado();
   padroesEValores();
   escoposPorValor();

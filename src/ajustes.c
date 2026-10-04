@@ -351,6 +351,9 @@ typedef enum {
   // F07 (1.8): seek cache on disk for the Android player (cacheboost.h). LOCAL
   // (disk and backend are this TV's), append-only like every option above.
   AJ_CACHE_SEEK,
+  // #241 (1.8): experimental zoom of the trailer video plane, native .tpk only.
+  // LOCAL (each Samsung model reacts differently), default Desligado.
+  AJ_TRAILER_ZOOM_TPK,
   AJ_N
 } OpcaoId;
 
@@ -1042,6 +1045,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Idioma da legenda secundária",    V_LINGUA, 2),
   ESC("Sincronia por áudio",             V_LIGA, 2),
   ESC("Cache de seek em disco",          V_CACHE_SEEK, 4),
+  ESC("Zoom do trailer (experimental)",  V_LIGA, 2),   // local: trailerZoomTpkLocal (.tpk)
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1222,6 +1226,7 @@ static const char *CHAVE[] = {
   "legendaSecundariaIdioma",
   "legendaSyncAudioLocal",
   "cacheSeekLocal",
+  "trailerZoomTpkLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1620,6 +1625,7 @@ float ajustes_tamanho_ajustes(void) {
   return v >= 0 && v < 3 ? F[v] : 0.8f;
 }
 int ajustes_esconder_logo_trailer(void) { return lig(AJ_LOGO_TRAILER); }
+int ajustes_trailer_zoom_tpk(void) { return lig(AJ_TRAILER_ZOOM_TPK); }   // 1 = Ligado
 int ajustes_legenda_sync_audio(void) { return lig(AJ_LEG_SYNC_AUDIO); }
 int ajustes_cache_seek_mb(void) {
   static const int MB[] = { 0, 256, 512, 1024 };
@@ -3393,6 +3399,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_LOGO_TRAILER:   /* so a protecao de OLED desta TV */
     case AJ_LEG_SYNC_AUDIO: /* PCM e passthrough sao desta TV; o web nao tem */
     case AJ_CACHE_SEEK:     /* F07: o disco e o player sao desta TV */
+    case AJ_TRAILER_ZOOM_TPK: /* #241: o firmware de cada Samsung reage de um jeito */
     case AJ_FUNDO:          /* o desfoque custa GPU desta TV; o web nao tem */
     case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: /* teste do vidro: visual desta TV */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
@@ -3658,7 +3665,7 @@ static void conferirTela(void) {
       vezes[TELA[i].op]++;
   for (i = 0; i < AJ_N; i++)
 #if !defined(NV_TPK) && !defined(NV_ANDROID)
-    if (i != AJ_GPU_EFEITOS)
+    if (i != AJ_GPU_EFEITOS && i != AJ_TRAILER_ZOOM_TPK)
 #endif
     if (vezes[i] != 1)
       printf("[ajustes] opcao %d (\"%s\") aparece %d vez(es) em TELA\n",
@@ -4385,6 +4392,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
     case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
     case AJ_LOGO_TRAILER: return "Para TVs OLED: não deixa a logo parada na tela enquanto o trailer toca.";
+    case AJ_TRAILER_ZOOM_TPK: return "Tira as barras pretas do trailer ampliando a imagem; em algumas TVs Samsung pode deixar a tela preta ou mostrar a tela inicial da TV.";
     case AJ_CACHE_SEEK: return "Guarda no disco o trecho já baixado do vídeo, para voltar sem baixar de novo. Apagado ao fechar o player.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
     case AJ_RESOLUCAO: return "4K desenha a interface em 4K nas TVs que permitem; muitas ignoram o pedido e continuam em 1080p. 720p desenha em 1280x720 e amplia para a tela: mais leve em TV fraca, com texto um pouco mais suave. Reinicie o app depois de mudar. O vídeo não muda: segue a qualidade da fonte.";
@@ -4491,6 +4499,8 @@ static const char *efeitoOpcao(int op) {
       return "Vale só nesta TV. Ao mudar, a fileira é remontada na hora.";
     case AJ_IDIOMA:
       return "Ao mudar, as fileiras são remontadas para os títulos saírem no idioma novo.";
+    case AJ_TRAILER_ZOOM_TPK:
+      return "Vale a partir do próximo trailer. Se a tela ficar preta ou aparecer a tela inicial da TV, desligue.";
     case AJ_CACHE_SEEK:
       return "Vale a partir do próximo vídeo. Sem espaço livre, o cache fica menor ou desligado.";
     case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2:
@@ -5925,7 +5935,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_DET_SO_CINEMETA:
     case AJ_DET_DATA_CHEIA: case AJ_DET_VEU: case AJ_DET_TRAILER_AUTO:
     case AJ_DET_TRAILER_SOM:
-    case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO: case AJ_TRAILER_FONTE:
+    case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO: case AJ_TRAILER_FONTE: case AJ_TRAILER_ZOOM_TPK:
       return AJPV_DETALHE;
     case AJ_EXPANDIR: case AJ_EXPANDIR_ATRASO: case AJ_NAV_RAPIDA:
     case AJ_BORDA_FOCO:
