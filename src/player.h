@@ -250,6 +250,7 @@ void player_dir(const char *dir);
 // Capturas (tests/player_glass_shot.c): estado de tela sem pipeline.
 void player_shot_estado(Uint32 agora, float pos, float dur, int tocando, int botao,
                         int barraFoco, int soBarra);
+void player_shot_foco(int botao, int barra);
 void player_shot_toast(Uint32 agora, const char *texto, const char *icone, int ambar, int modo);
 void player_shot_esconder(void);
 void player_shot_carregando(int sim);

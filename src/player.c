@@ -2758,7 +2758,8 @@ void player_atualizar(float dt, Uint32 agora) {
   { float alvoF = (barraFoco && !ponteiroNoPlayer()) ? 0.0f : 1.0f;
     fileira = anim_mola(fileira, alvoF, dt, alvoF > fileira ? NV_MOLA_FOCO : NV_MOLA_DESFOCO); }
   for (int i = 0; i < PLR_NBTNS; i++) {
-    float alvo = (visivel && botao == i) ? 1.0f : 0.0f;
+    // Foco na barra: o botao fecha (antes ficava aberto sem texto).
+    float alvo = (visivel && botao == i && !barraFoco) ? 1.0f : 0.0f;
     focoB[i] = anim_mola(focoB[i], alvo, dt,
                          alvo > focoB[i] ? NV_MOLA_FOCO : NV_MOLA_DESFOCO);
   }
@@ -3954,7 +3955,6 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
     float yRow = yRowTopo + dy, cyB = cyBotoes + dy;
     for (int i = 0; i < PLR_NBTNS - (temUltimoBotao() ? 0 : 1); i++) {
       float f = focoB[i];
-      int sel = (botao == i && !barraFoco);
       const char *ic = iconeBotao(i), *rot = rotuloBotao(i);
       TxtLinha lr = txt_linha(TXT_G21B, rot, 0, 0, 0, 255);
       float wCheio = 22.0f + 30.0f + 12.0f + (float)lr.w + 28.0f;
@@ -3971,7 +3971,7 @@ static void desenharOsdCorpo(Uint32 agora, float a, float ac, const CatItem *c) 
         if (f > 0.05f) {
           TxtLinha l = txt_linha(TXT_G21B, rot, tinta, tinta, tinta, 255);
           gfx_recorte(r.x, r.y, r.w, r.h);
-          txt_desenhar_alpha(l, ix + 30.0f + 12.0f, cyB - (float)l.h * 0.5f, af * f * (sel ? 1.0f : 0.0f));
+          txt_desenhar_alpha(l, ix + 30.0f + 12.0f, cyB - (float)l.h * 0.5f, af * f);
           gfx_sem_recorte();
         } }
       x += w + PLR_BTN_GAP;
@@ -4093,6 +4093,8 @@ void player_shot_estado(Uint32 agora, float pos, float dur, int toca, int bt,
   visivel = 1; ultimoInput = agora; anim = 1.0f; entrada = 1.0f;
   esperandoFonte = 0; erroFonte = 0;
 }
+// Move so o foco (sem zerar molas): o que o controle remoto faz de verdade.
+void player_shot_foco(int bt, int barra) { botao = bt; barraFoco = barra; }
 void player_shot_toast(Uint32 agora, const char *texto, const char *icone, int ambar, int modo) {
   if (texto) {
     snprintf(toastTexto, sizeof toastTexto, "%s", texto);
