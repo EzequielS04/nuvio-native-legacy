@@ -94,6 +94,25 @@ static void uxAplicar(void) {
   uxNotificar(uxOp == AJ_PERFIL_PESQ ? "Pedido enviado ao perfil." : "Ajuste salvo nesta TV.");
   // A lista de diferenças permanece estável até sair dela, mesmo após restaurar.
 }
+// Interruptor (Ligado/Desligado): OK troca e grava na hora, sem abrir editor nem
+// pedir confirmacao. Nenhum interruptor tem aviso de risco (so os numeros de
+// memoria tem, e esses continuam passando pelo editor).
+static int uxAlternarDireto(int op) {
+  int antes, novo;
+  if (!ehInterruptor(op) || soLeitura(op) || inativa(op)) return 0;
+  uxCancelar();
+  antes = uxValorAtual(op);
+  novo = antes == 0 ? 1 : 0;
+  uxOp = op;
+  if (uxRiscoFinal(op, novo)) return 0;
+  if (!definirValorDireto(op, novo)) {
+    uxNotificar("Não foi possível salvar. O valor anterior foi mantido.");
+    return 1;
+  }
+  riscoNotar(op, antes);
+  uxNotificar("Ajuste salvo nesta TV.");
+  return 1;
+}
 static int uxEvento(SDL_Keycode k) {
   if (uxEditor) {
     if (uxVoltar(k)) {
@@ -194,7 +213,7 @@ static int uxEvento(SDL_Keycode k) {
     if (uxVoltar(k) || k == SDLK_LEFT) { focoIndice = 1; return 1; }
     if (k == SDLK_UP && uxDifFoco > 0) uxDifFoco--;
     if (k == SDLK_DOWN && uxDifFoco + 1 < uxNDifs) uxDifFoco++;
-    if (uxOk(k) && uxNDifs) uxAbrirEditor(uxDifs[uxDifFoco]);
+    if (uxOk(k) && uxNDifs && !uxAlternarDireto(uxDifs[uxDifFoco])) uxAbrirEditor(uxDifs[uxDifFoco]);
     return 1;
   }
   if (uxVoltar(k) && uxRetornarOp >= 0) {
@@ -223,6 +242,7 @@ static int uxEvento(SDL_Keycode k) {
     return 1;
   }
   if (k == SDLK_RIGHT) return 1;
+  if (uxOk(k) && focoOp >= 0 && uxAlternarDireto(focoOp)) return 1;
   if (uxOk(k) && focoOp >= 0 && inativa(focoOp)) { uxAbrirEditor(focoOp); return 1; }
   return 0; // Ações existentes: conta, teclado, fileiras, diagnóstico.
 }
