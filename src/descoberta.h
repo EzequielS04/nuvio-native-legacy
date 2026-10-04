@@ -75,6 +75,9 @@ void desc_home_carga(DescHomeCarga *estado);
 // A metade LOCAL de "Tirar de Continuar assistindo": progresso, carimbo de
 // remocao e o card fora da fileira no mesmo quadro. Sem rede. Ver descoberta.c.
 int desc_tirar_continuar(const char *imdb, int temporada, int episodio);
+// O titulo que saiu do player no meio vai para a frente do "Continuar
+// assistindo" no mesmo quadro, sem rede (cwfrente.h). 1 = a fileira mudou.
+int desc_continuar_otimista(int indice);
 
 // Quantas fileiras A MAIS a home mostraria se o limite fosse ao maximo. 0
 // quando o limite nao esta cortando nada.
