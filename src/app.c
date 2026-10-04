@@ -307,6 +307,7 @@ static void *carregarPerfil(void *u) {
 }
 static void invalidarPerfil(void) {
   ilhacart_esquecer_vivo();
+  home_retomar_esquecer();
   atomic_fetch_add_explicit(&perfilGeracao,1,memory_order_acq_rel);
   atomic_store_explicit(&perfilCarga,0,memory_order_release);
   pthread_mutex_lock(&perfilTrava);memset(&perfilPendente,0,sizeof perfilPendente);perfilSucesso=0;pthread_mutex_unlock(&perfilTrava);
