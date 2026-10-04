@@ -4786,6 +4786,31 @@ typedef struct {
 static CartaoFoco cartaoFoco; static float cartaoFocoRaio; static int temCartaoFoco;
 // O caminho da arte mora num buffer que o proximo cartao sobrescreve: copia propria.
 static char cartaoFocoArte[1024];
+// SELO DE ASSISTIDO: pilula escura translucida (material da ilha) com um check
+// no acento e a palavra "Assistido". Altura e recuo acompanham a largura do
+// cartao (26..32); abaixo de 150 de largura so o check, num disco da mesma
+// altura. Sombra rasa separa o selo de um poster claro.
+static void desenhaSeloVisto(float px, float py, float w) {
+  float h = w * 0.13f, m = w * 0.06f, ic, pw;
+  float ar, ag, ab;
+  int compacto = w < 150.0f;
+  TxtLinha t = { 0 };
+  if (h < 26.0f) h = 26.0f;
+  if (h > 32.0f) h = 32.0f;
+  if (m < 8.0f) m = 8.0f;
+  if (m > 14.0f) m = 14.0f;
+  ic = h * 0.58f;
+  if (!compacto) t = txt_linha(TXT_CAPTION, i18n("Assistido"), 240, 240, 245, 255);
+  pw = compacto ? h : h * 0.36f + ic + 6.0f + (float)t.w + h * 0.46f;
+  { float mx = px + w - pw - m, my = py + m;
+    ajustes_acento(&ar, &ag, &ab);
+    gfx_cor((GfxRect){ mx, my + 3.0f, pw, h }, 0.5f, 0, 0, 0, 0.28f);
+    gfx_cor((GfxRect){ mx, my, pw, h }, 0.5f, 0.05f, 0.055f, 0.067f, 0.80f);
+    { float ix = compacto ? mx + (h - ic) * 0.5f : mx + h * 0.36f;
+      gfx_icone((GfxRect){ ix, my + (h - ic) * 0.5f, ic, ic }, "check", ar, ag, ab, 1.0f);
+      if (!compacto) txt_desenhar(t, ix + ic + 6.0f, my + (h - t.h) * 0.5f); } }
+}
+
 static void pintarCartao(const CartaoFoco *k, float raio) {
   const int r = k->r, c = k->c; const TipoFileira tipo = k->tipo; const CatItem *cItem = k->cItem;
   const char *caminho = k->caminho; const GLuint t = k->t; const float aArte = k->aArte;
@@ -4847,18 +4872,7 @@ static void pintarCartao(const CartaoFoco *k, float raio) {
           // sem pedido de rede: o mapa ja veio no ciclo da descoberta.
           if (cItem && tipo != FILEIRA_CONTINUE && tipo != FILEIRA_RETORNO &&
               ajustes_selo_visto() && cat_visto(cItem)) {
-            float d = 34.0f;
-            float mx = px + w - d - 14.0f, my = py + 14.0f;
-            GfxRect disco = { mx, my, d, d };
-            float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
-            // Sombra rasa (box-shadow 0 14px 24px .3 na referencia): separa o
-            // disco claro de um poster claro sem virar halo.
-            { GfxRect sombra = { mx, my + 3.0f, d, d };
-              gfx_cor(sombra, 0.5f, 0, 0, 0, 0.28f); }
-            gfx_cor(disco, 0.5f, ar, ag, ab, 1.0f);
-            { float ic = 22.0f;
-              GfxRect g = { mx + (d - ic) * 0.5f, my + (d - ic) * 0.5f, ic, ic };
-              gfx_icone(g, "check", 0.08f, 0.08f, 0.09f, 1.0f); }
+            desenhaSeloVisto(px, py, w);
           }
 
           // `cardDepthEnabled` mais o interruptor por secao: `cardDepthPosters`

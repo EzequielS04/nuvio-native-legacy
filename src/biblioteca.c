@@ -115,6 +115,9 @@ static int bibTinta2(void) { return 205; }
 // de tesoura resolveria, mas gfx_recorte assume alvo 1:1 com a tela e o Mac em
 // retina entrega o dobro; o esmaecimento nao depende do drawable.
 #define BIB_FADE       90.0f
+// How far above the grid origin the clip starts: 284 - 28 = 256, 8 px under
+// the tab pills (193 + 55 = 248).
+#define BIB_CLIP_SOBE  28.0f
 
 // SELETORES COMPACTOS (21/09/2026, foto do dono da aba Salvos em lista:
 // "aumentar o tamanho dos cards, diminuir a largura do botao, usar o espaco
@@ -2125,7 +2128,7 @@ static void barraHold(GfxRect r, float a) {
 
 void biblioteca_desenhar(Uint32 agora) {
   int linhas, r, c, nc = colunas();
-  float passoC, passoL, gy;
+  float passoC, passoL, gy, gcy;
   // Mesmo ajuste, mesma disciplina da home: o rebordo claro do GFX_CARD e
   // ligado aqui e DEVOLVIDO no fim, porque a variavel e global e as outras
   // telas desenham card tambem.
@@ -2159,7 +2162,10 @@ void biblioteca_desenhar(Uint32 agora) {
   if (ondaEm && revela_onda_fim(ondaEm, agora)) ondaEm = 0;
   // Keep the visible part of the previous row until it leaves the grid.
   // The renderer maps this layout clip to the drawable (including Retina).
-  gfx_recorte(0.0f, gy, NV_TELA_W, BIB_GRADE_BASE - gy);
+  // The boundary sits just under the tab pills (faixa ends at y 248), not at
+  // the grid origin (284): art scrolls up close to the buttons, no black band.
+  gcy = gy - BIB_CLIP_SOBE * bibHS();
+  gfx_recorte(0.0f, gcy, NV_TELA_W, BIB_GRADE_BASE - gcy);
   { int lin0 = passoL > 0.0f ? (int)(scrollY / passoL) : 0;
 
   // Dois passes: o item focado escala 2% e precisa ser desenhado por ULTIMO,
@@ -2171,7 +2177,7 @@ void biblioteca_desenhar(Uint32 agora) {
       if (topo > NV_TELA_H || topo + alturaLinha() < -80.0f) continue;
       // Fade only the final visible strip, not the entire row as its top
       // crosses the header. The clip above protects the header itself.
-      a = anim_clamp((topo + alturaLinha() - gy) / BIB_FADE, 0.0f, 1.0f);
+      a = anim_clamp((topo + alturaLinha() - gcy) / BIB_FADE, 0.0f, 1.0f);
       if (a <= 0.005f) continue;
 
       for (c = 0; c < nc; c++) {

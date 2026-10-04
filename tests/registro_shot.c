@@ -219,6 +219,10 @@ int main(int argc, char **argv) {
   captura("painel", CENA_PAINEL);
   registro_teste_estado(RG_TUDO, 0, 1, registro_teste_achar("decode falhou", 1), 1, 12);
   captura("pausado", CENA_PAINEL);
+  // Many new lines: the pill gets wider than the room right of the area tabs
+  // and must move to the header instead of covering them.
+  registro_teste_estado(RG_TUDO, 0, 1, registro_teste_achar("decode falhou", 1), 1, 123456);
+  captura("pausado-largo", CENA_PAINEL);
   registro_teste_estado(RG_PROB, 1, 0, 0, 0, 0);
   captura("filtro-problemas", CENA_PAINEL);
   registro_teste_estado(RG_REDE, 0, 0, 0, 0, 0);
