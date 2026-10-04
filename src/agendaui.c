@@ -1657,22 +1657,22 @@ static void desenhaLista(const AgC1 *L) {
 // o painel e gfx_vidro_painel (translucido, fio de 1,5 px) e a linha em foco e
 // a pilula cheia de gfx_vidro_pilula_cheia — o realce continua sendo o do tema,
 // e a tinta vem de gfx_vidro_tinta. Nenhuma superficie ganha degrade.
-#define AGC_W      1560.0f
-#define AGC_PAD      56.0f
-#define AGC_ACAO_W  540.0f
+#define AGC_W      1320.0f
+#define AGC_PAD      44.0f
+#define AGC_ACAO_W  500.0f
 #define AGC_LINHA    76.0f
 #define AGC_HIST_L   60.0f
-#define AGN_W      1240.0f
+#define AGN_W      1040.0f
 #define AGN_LINHA    96.0f
 #define AGN_FOCO    236.0f
-#define AGL_W      1640.0f
-#define AGL_H       900.0f
+#define AGL_W      1200.0f
+#define AGL_H       700.0f
 // Sem texto (o fallback do QR), o painel encolhe para o que tem: manchete de
 // ate tres linhas, a frase e o QR. Com 900 fixos sobrava meia tela vazia
 // abaixo do QR (captura -fx-noticia-qr, 29/09/2026).
-#define AGL_H_FALHA 660.0f
-#define AGL_IMG_W   560.0f
-#define AGL_QR      176.0f
+#define AGL_H_FALHA 560.0f
+#define AGL_IMG_W   360.0f
+#define AGL_QR      124.0f
 
 // GLASS UI: os paineis flutuantes (o modal da linha, as manchetes, a noticia)
 // sao ILHAS — sombra curta, miolo de vidro ou solido, luz larga e fraca
@@ -1823,13 +1823,13 @@ static void desenhaHistorico(const AgItem *it, const AgModal *m, float x, float 
   // alinha os dias numa reta e deixa o nome com a sobra, cortado com "…".
   // A coluna de ESTADO na largura do maior rotulo DO IDIOMA ATIVO: com 196
   // cravados, "Не просмотрено" (ru) saia "Не…" (captura -fx-ru-modal).
-  { const float wCod = 92.0f, wDia = 104.0f;
+  { const float wCod = 80.0f, wDia = 90.0f;
     float wEst = 0.0f, wNome;
     { const char *R[3] = { i18n("Assistido"), i18n("Não assistido"), i18n("Desconhecido") };
       int k;
       for (k = 0; k < 3; k++) { float lw = (float)txt_largura(TXT_CAPTION2, R[k]); if (lw > wEst) wEst = lw; }
       wEst += 44.0f + 12.0f;
-      if (wEst < 196.0f) wEst = 196.0f;
+      if (wEst < 170.0f) wEst = 170.0f;
       if (wEst > w * 0.34f) wEst = w * 0.34f; }
     wNome = w - wCod - wEst - wDia - 24.0f;
     for (i = 0; i < m->n; i++) {
@@ -1949,7 +1949,7 @@ static void desenhaModalSerie(const AgItem *it, float a) {
                         lr.w - 48.0f);
     txt_desenhar_alpha(t, lr.x + 24.0f, lr.y + (lr.h - (float)t.h) * 0.5f, a);
   }
-  xHist = x + AGC_ACAO_W + 40.0f;
+  xHist = x + AGC_ACAO_W + 32.0f;
   wHist = r.x + r.w - AGC_PAD - xHist;
   desenhaHistorico(it, &m, xHist, yCorpo + 4.0f, wHist, a);
 }
@@ -2126,11 +2126,11 @@ static void desenhaNoticia(const AgItem *it, float a) {
   { float h = notH > 0.0f ? notH : notHAlvo;
     r = (GfxRect){ (NV_TELA_W - AGL_W) * 0.5f, (NV_TELA_H - h) * 0.5f + (1.0f - a) * 24.0f, AGL_W, h }; }
   painelFlutuante(r, ar, ag, ab, a);
-  xL = r.x + 56.0f;
-  xR = xL + AGL_IMG_W + 56.0f;
-  wR = r.x + r.w - 64.0f - xR;
-  yTopo = r.y + 56.0f;
-  yFim = r.y + r.h - 56.0f;
+  xL = r.x + 48.0f;
+  xR = xL + AGL_IMG_W + 44.0f;
+  wR = r.x + r.w - 56.0f - xR;
+  yTopo = r.y + 48.0f;
+  yFim = r.y + r.h - 48.0f;
   noticias_quando(nt, (long long)time(NULL), quando, sizeof quando);
   if (nx && nx->url[0]) { leitura_url_qr(nx->url, qrUrl, sizeof qrUrl); leitura_host(nx->url, host, sizeof host); }
 
@@ -2246,7 +2246,7 @@ static void desenhaNoticia(const AgItem *it, float a) {
                             214, 216, 222, xR, yy, wR, 38.0f, a, 2);
       yy += 36.0f;
       if (q) {
-        float lado = AGL_QR + 64.0f, xq = xR + lado + 40.0f, wq = wR - lado - 40.0f;
+        float lado = AGL_QR + 40.0f, xq = xR + lado + 32.0f, wq = wR - lado - 32.0f;
         GfxRect rq = { xR, yy, lado, lado };
         TxtLinha t;
         gfx_rect(rq, q, GFX_SNAP, 0, 0.0f, 0.0f, 0.0f, 0, 0, 0, a);
@@ -2272,7 +2272,7 @@ static void desenhaNoticia(const AgItem *it, float a) {
   // coluna — diz "tem mais" sem degrade por cima do texto.
   if (notRolMax > 1.0f) {
     float trilho = yFim - yTopo, fr = trilho / (trilho + notRolMax);
-    GfxRect tr = { r.x + r.w - 36.0f, yTopo, 4.0f, trilho };
+    GfxRect tr = { r.x + r.w - 30.0f, yTopo, 4.0f, trilho };
     GfxRect ba = { tr.x, yTopo + (trilho - trilho * fr) * (notRol / notRolMax), 4.0f, trilho * fr };
     // O raio e FRACAO DA ALTURA: 0,5 num trilho de 4 x 700 virava uma lente
     // afilada nas pontas (trilho sumido, barra em dois gomos). 2 px / h e o
