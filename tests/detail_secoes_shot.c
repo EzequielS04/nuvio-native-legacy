@@ -525,12 +525,14 @@ int main(int argc, char **argv) {
   // NUVIO_SHOT_VIDRO=1: Interface de vidro ligada (V_LIGA: 0 = Ligado).
   { const char *lg = getenv("NUVIO_SHOT_IDIOMA");
     const int vidro = getenv("NUVIO_SHOT_VIDRO") != NULL;
-    if ((lg && *lg) || vidro) {
+    const int semAnel = getenv("NUVIO_SHOT_SEM_ANEL") != NULL;
+    if ((lg && *lg) || vidro || semAnel) {
       char caminho[600]; FILE *f;
       snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dd);
       f = fopen(caminho, "w"); assert(f);
       if (lg && *lg) fprintf(f, "idioma %d\n", atoi(lg));
       if (vidro) fprintf(f, "vidroLocal 0\n");
+      if (semAnel) fprintf(f, "bordaFocoCartaz 1\n");   // R3: foco sem anel (V_LIGA: 1 = Desligado)
       fclose(f);
       ajustes_dir(dd); } }
 
@@ -736,6 +738,7 @@ int main(int argc, char **argv) {
     snprintf(caminho, sizeof caminho, "%s/ajustes.txt", dd);
     f = fopen(caminho, "w"); assert(f);
     fputs("selected_theme 2\n", f);
+    if (getenv("NUVIO_SHOT_SEM_ANEL")) fputs("bordaFocoCartaz 1\n", f);
     { const char *lg = getenv("NUVIO_SHOT_IDIOMA");
       if (lg && *lg) fprintf(f, "idioma %d\n", atoi(lg)); }
     fclose(f);

@@ -5255,6 +5255,28 @@ static void desenhaRelacionados(float x, float y, float a, int primeiro, int lim
 // arredondada, sem over-scan e sem ganho. O recorte monocromatico continua no
 // GFX_MARCA; como a superficie em foco permanece escura, a marca segue clara
 // enquanto o cartao recebe o accent configuravel.
+// FOCO SEM ANEL (Ajustes > Foco no cartaz desligado): so o crescimento de 6 %
+// nao diz nada num cartao de texto/logo, e o cartao da colecao nem crescia — o
+// dono: "nao mostra o accent quando esta em foco" (Studios) e "nao da para
+// saber que esta focado" (Colecao), 04/10/2026. O mesmo halo no acento que o
+// cartao de foco das linhas da lista usa (gfx_cartao_foco_vidro), atras do
+// cartao. Com o anel ligado nada muda: o anel ja e o acento.
+static void focoHaloAcento(GfxRect r, float f, float a) {
+  float ar, ag, ab, folga = r.h * 0.38f;
+  if (f <= 0.01f || ajustes_borda_foco()) return;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_rect((GfxRect){ r.x - folga, r.y - folga, r.w + folga * 2.0f, r.h + folga * 2.0f },
+           0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.44f * f * a);
+}
+// Superficie do cartao em foco sem anel: a MESMA do cartao de foco das linhas
+// (gfx_cartao_foco_vidro), cruzada com o repouso por `f`.
+static void focoSuperficieAcento(GfxRect r, float raio, float f, float a) {
+  float ar, ag, ab;
+  if (f <= 0.01f || ajustes_borda_foco()) return;
+  ajustes_acento(&ar, &ag, &ab);
+  gfx_cartao_foco_vidro(r, raio, 1.0f, a * f, ar, ag, ab);
+}
+
 static void desenhaEstudio(float x, float y, int i, float f, float a) {
   GfxRect r0 = { x, y, EST_CARD_W, EST_CARD_H };
   GfxRect r = foco_zoom(r0, f);
@@ -5267,8 +5289,10 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
   // realce) que "Mais como este" e o Elenco nao tem — na Moderna o estudio era
   // o unico cartao da pagina com outra linguagem de foco (dono, 03/10/2026).
   // REPOUSO = a mesma superficie neutra dos demais (moldura).
+  focoHaloAcento(r, f, a);
   if (!ajustes_vidro()) foco_anel(r0, raio, f, a);
   moldura(r, 14.0f, a);
+  focoSuperficieAcento(r, 14.0f / r.h, f, a);
   if (ajustes_vidro()) foco_anel(r0, raio, f, a);
   foco_profundidade(r, raio, ajustes_profundidade_posters(), a);
   t = logo[0] ? tex_obter(logo) : 0;
@@ -5397,13 +5421,28 @@ static void desenhaColecao(float x, float y, float f, float a) {
          - 28.0f - (x + COL_CARD_PAD);
   { char meta[64];
     TxtLinha lm;
-    float yt = y + COL_CARD_PAD + 34.0f;
+    float yt = y + COL_CARD_PAD + 6.0f;
     metaColecao(meta, sizeof meta);
     lm = txt_linha_corta(TXT_DET_META2, meta, 205, 210, 220, 255, textoW);
     { float h = txt_bloco_corta(TXT_TITULO3, extras_colecao_nome(),
                                 250, 251, 255, x + COL_CARD_PAD, yt, textoW,
-                                52.0f, a, 3);
+                                52.0f, a, 2);
       txt_desenhar_alpha(lm, x + COL_CARD_PAD, yt + h + 14.0f, a * 0.95f); } }
+
+  // PILULA "Ver coleção" (mockup Glass UI "Detalhe"): em repouso um vidro
+  // neutro, em foco o botao no ACENTO com a tinta de foco — o sinal de foco que
+  // existe com o anel ligado ou desligado, e o que diz que o OK abre a saga.
+  { float ar, ag, ab, pf = f < 0.0f ? 0.0f : (f > 1.0f ? 1.0f : f);
+    TxtLinha lr = txt_linha(TXT_DET_META2, i18n("Ver coleção"), 235, 238, 245, 255);
+    GfxRect pil = { x + COL_CARD_PAD, y + COL_CARD_H - COL_CARD_PAD - 48.0f,
+                    lr.w + 52.0f, 48.0f };
+    int tin = ajustes_tinta_foco(), cc;
+    ajustes_acento(&ar, &ag, &ab);
+    gfx_cor(pil, 0.5f, 1.0f, 1.0f, 1.0f, 0.14f * (1.0f - pf) * a);
+    if (pf > 0.01f) gfx_cor(pil, 0.5f, ar, ag, ab, pf * a);
+    cc = (int)(235.0f + (float)(tin - 235) * pf);
+    lr = txt_linha(TXT_DET_META2, i18n("Ver coleção"), cc, cc, cc, 255);
+    txt_desenhar_alpha(lr, pil.x + 26.0f, pil.y + (pil.h - lr.h) * 0.5f, a); }
 }
 
 // TELA DE LISTA DA COLECAO. A saga inteira, na ordem de lancamento (extras ja
@@ -5451,11 +5490,17 @@ static void desenhaListaColecao(float a) {
   float lx = COLL_X, lw = NV_TELA_W - NV_DETP_X - COLL_X;
   float passo = COLL_LIN_H + COLL_LIN_GAP;
 
-  gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a);
-  if (tf) {
-    gfx_tex_aspect_atual = tex_aspecto(fundo);
-    gfx_rect(tela, tf, GFX_VITRINE, 1.0f, 0.3f, 1.0f, 0.0f, 0.0f, 0, 0, a * 0.55f);
-    gfx_tex_aspect_atual = 0.0f;
+  // FUNDO DA LISTA: SEMPRE Frost ou arte borrada, nunca a arte crua ("em
+  // colecoes deixa o fundo sempre frost ou blur, ta feio assim", 04/10/2026).
+  // Ajustes > Fundo = Frost fica Frost; qualquer outro vira a arte borrada da
+  // colecao (fundo.c: so as cores da arte), e sem arte/paleta ainda cai no Frost.
+  { CorvivaPaleta pal;
+    int modo = fundo_modo() == FUNDO_FROST ? FUNDO_FROST : FUNDO_BORRADA;
+    (void)tf;
+    if (modo == FUNDO_BORRADA && (!fundo[0] || !corviva_paleta(fundo, &pal) || !pal.ok))
+      modo = FUNDO_FROST;
+    gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a);
+    fundo_desenhar_modo(modo, tela, 0.0f, fundo, a);
   }
 
   // --- coluna da colecao --------------------------------------------------

@@ -15,6 +15,9 @@
 #include "diretor.h"
 #include "addons.h"
 #include "nuvem.h"
+#include "fundo.h"
+#include "focoprof.h"
+#include "corviva.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -398,7 +401,22 @@ static const char *retratoLocal(const ColFolder *folder) {
 // o retrato vertical local quando o pacote ja o tem; o hero horizontal dessa
 // colecao e um placeholder neutro e so acrescenta uma camada sem informacao.
 // Usa os shaders e o cache existentes, sem blur ou novas texturas por frame.
+// FUNDO DA COLECAO: sempre Frost ou a arte borrada da pasta, nunca a arte crua
+// ("em colecoes deixa o fundo sempre frost ou blur", 04/10/2026). Ajustes >
+// Fundo = Frost fica Frost; senao a arte borrada (fundo.c), e sem arte/paleta
+// ainda cai no Frost. A arte de cabecalho (editorial, retrato) vem POR CIMA.
+static void fundoColecao(float a) {
+  CorvivaPaleta pal;
+  GfxRect tela={0,0,NV_TELA_W,NV_TELA_H};
+  const char *art=collection?(collection->editorial&&collection->detailHero[0]
+                              ?collection->detailHero:col_banner(collection)):"";
+  int modo=fundo_modo()==FUNDO_FROST?FUNDO_FROST:FUNDO_BORRADA;
+  if(art&&art[0])tex_obter_hero(art);   /* pede a textura: a paleta sai dela */
+  if(modo==FUNDO_BORRADA&&(!art||!art[0]||!corviva_paleta(art,&pal)||!pal.ok))modo=FUNDO_FROST;
+  fundo_desenhar_modo(modo,tela,0.0f,art,a);
+}
 static void themeBackground(float a) {
+  fundoColecao(a);
   if(collection) {
     if(collection->editorial) {
       GLuint art=tex_obter_hero(collection->detailHero);
@@ -431,13 +449,7 @@ static void themeBackground(float a) {
       }
     } else {
       const char *art=col_banner(collection);
-      GLuint tex=art[0]?tex_obter_hero(art):0;
-      if(tex) {
-        gfx_tex_aspect_atual=tex_aspecto(art);
-        gfx_rect((GfxRect){0,0,NV_TELA_W,620},tex,GFX_HERO_CHEIO,
-                 0,0,0,0,0,0,0,a*.38f);
-        gfx_tex_aspect_atual=0;
-      }
+      (void)art;   /* o banner agora e o fundo borrado (fundoColecao) */
     }
   }
 }
@@ -600,11 +612,25 @@ void vertudo_desenhar(Uint32 agora) {
     cy += (1.0f - entra) * NV_ENTRA_DY;
     if(timeline){timelineCard(i,cy,ac,x0);continue;}
     if (!viewItem(i, &it)) continue;
-    { GfxRect r = { cx, cy, VT_CARD_W, VT_CARD_H };
+    { GfxRect r0 = { cx, cy, VT_CARD_W, VT_CARD_H }, r = r0;
       float aArte;
-      if (sel && !tabFocus) {
-        GfxRect anel = { cx - 4, cy - 4, VT_CARD_W + 8, VT_CARD_H + 8 };
-        gfx_cor(anel, ajustes_raio_poster_px() / (VT_CARD_W + 8.0f), 1, 1, 1, ac);
+      // SEM ANEL: o foco e o crescimento (focoprof.h) e um halo no acento — o
+      // mesmo das outras grades. Antes o anel branco fixo ignorava os Ajustes.
+      if (sel && !tabFocus && !ajustes_borda_foco()) {
+        float ar, ag, ab, folga = r0.h * 0.38f;
+        ajustes_acento(&ar, &ag, &ab);
+        gfx_rect((GfxRect){ cx - folga, cy - folga, r0.w + folga * 2.0f, r0.h + folga * 2.0f },
+                 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.44f * ac);
+        r = foco_zoom(r0, 1.0f);
+      }
+      if (sel && !tabFocus && ajustes_borda_foco()) {
+        // O ANEL DO APP: no acento e so com "Foco no cartaz" ligado (era branco
+        // fixo, a unica grade do app que nao seguia os Ajustes).
+        GfxRect anel = { cx - NV_ANEL_FOCO, cy - NV_ANEL_FOCO,
+                         VT_CARD_W + 2 * NV_ANEL_FOCO, VT_CARD_H + 2 * NV_ANEL_FOCO };
+        float ar, ag, ab; ajustes_acento(&ar, &ag, &ab);
+        if (ajustes_vidro()) gfx_vidro_cartao(r, ajustes_raio_poster_px() / VT_CARD_W, 1.0f, ac);
+        else gfx_cor(anel, (ajustes_raio_poster_px() + NV_ANEL_FOCO) / (VT_CARD_W + 2 * NV_ANEL_FOCO), ar, ag, ab, ac);
       }
       { const char *pp = posterprov_card_addon(it.origem, it.imdb, it.tmdb, it.tipo, it.poster);
         arteCard = pp[0] ? pp : it.backdrop; }
