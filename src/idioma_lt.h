@@ -4039,6 +4039,8 @@
   T("viu", "pažiūrėjo"),
   T("viu o que você mandou", "pažiūrėjo, ką atsiuntėte"),
   T("viu · gostou", "pažiūrėjo · patiko"),
+  T("viu · mais ou menos", "pažiūrėjo · šiaip sau"),
+  T("viu · não gostou", "pažiūrėjo · nepatiko"),
   T("vocês gostaram de %d títulos iguais", "abiem patiko %d tie patys pavadinimai"),
   T("vídeo", "vaizdas"),
   T("webOS 3", "webOS 3"),

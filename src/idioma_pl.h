@@ -4039,6 +4039,8 @@
   T("viu", "obejrzał(a)"),
   T("viu o que você mandou", "obejrzał(a) to, co wysłałeś"),
   T("viu · gostou", "obejrzał(a) · polubił(a)"),
+  T("viu · mais ou menos", "obejrzał(a) · tak sobie"),
+  T("viu · não gostou", "obejrzał(a) · nie spodobało się"),
   T("vocês gostaram de %d títulos iguais", "obojgu wam podobało się %d tych samych tytułów"),
   T("vídeo", "wideo"),
   T("webOS 3", "webOS 3"),

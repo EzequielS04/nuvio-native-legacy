@@ -4039,6 +4039,8 @@
   T("viu", "gezien"),
   T("viu o que você mandou", "keek wat jij stuurde"),
   T("viu · gostou", "gezien · leuk"),
+  T("viu · mais ou menos", "gezien · gaat wel"),
+  T("viu · não gostou", "gezien · vond het niks"),
   T("vocês gostaram de %d títulos iguais", "jullie vonden %d dezelfde titels leuk"),
   T("vídeo", "video"),
   T("webOS 3", "webOS 3"),

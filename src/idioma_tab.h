@@ -4038,6 +4038,8 @@
   { "viu", "watched" },
   { "viu o que você mandou", "watched what you sent" },
   { "viu · gostou", "watched · liked" },
+  { "viu · mais ou menos", "watched · it was okay" },
+  { "viu · não gostou", "watched · didn't like it" },
   { "vocês gostaram de %d títulos iguais", "you both liked %d of the same titles" },
   { "vídeo", "video" },
   { "webOS 3", "webOS 3" },

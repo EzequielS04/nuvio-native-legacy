@@ -4038,6 +4038,8 @@
   T("viu", "gesehen"),
   T("viu o que você mandou", "hat gesehen, was du geschickt hast"),
   T("viu · gostou", "gesehen · gefiel"),
+  T("viu · mais ou menos", "gesehen · ging so"),
+  T("viu · não gostou", "gesehen · gefiel nicht"),
   T("vocês gostaram de %d títulos iguais", "ihr mochtet beide %d gleiche Titel"),
   T("vídeo", "Video"),
   T("webOS 3", "webOS 3"),

@@ -4039,6 +4039,8 @@
   T("viu", "視聴済み"),
   T("viu o que você mandou", "があなたのおすすめを見た"),
   T("viu · gostou", "視聴済み · 気に入った"),
+  T("viu · mais ou menos", "視聴済み · まあまあ"),
+  T("viu · não gostou", "視聴済み · 好みではなかった"),
   T("vocês gostaram de %d títulos iguais", "2人とも気に入った作品が%d本"),
   T("vídeo", "動画"),
   T("webOS 3", "webOS 3"),

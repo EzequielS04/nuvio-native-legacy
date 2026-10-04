@@ -4039,6 +4039,8 @@
   T("viu", "ogledal(a)"),
   T("viu o que você mandou", "je ogledal(a), kar ste poslali"),
   T("viu · gostou", "ogledal(a) · všeč"),
+  T("viu · mais ou menos", "ogledal(a) · tako-tako"),
+  T("viu · não gostou", "ogledal(a) · ni všeč"),
   T("vocês gostaram de %d títulos iguais", "obema je bilo všeč %d enakih naslovov"),
   T("vídeo", "video"),
   T("webOS 3", "webOS 3"),

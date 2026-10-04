@@ -4038,6 +4038,8 @@
   T("viu", "lo vio"),
   T("viu o que você mandou", "vio lo que le enviaste"),
   T("viu · gostou", "vio · le gustó"),
+  T("viu · mais ou menos", "vio · más o menos"),
+  T("viu · não gostou", "vio · no le gustó"),
   T("vocês gostaram de %d títulos iguais", "a los dos les gustaron %d títulos iguales"),
   T("vídeo", "vídeo"),
   T("webOS 3", "webOS 3"),

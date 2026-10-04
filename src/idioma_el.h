@@ -4039,6 +4039,8 @@
   T("viu", "το είδε"),
   T("viu o que você mandou", "είδε αυτό που στείλατε"),
   T("viu · gostou", "το είδε · του άρεσε"),
+  T("viu · mais ou menos", "το είδε · έτσι κι έτσι"),
+  T("viu · não gostou", "το είδε · δεν του άρεσε"),
   T("vocês gostaram de %d títulos iguais", "σας άρεσαν και στους δύο %d ίδιοι τίτλοι"),
   T("vídeo", "βίντεο"),
   T("webOS 3", "webOS 3"),

@@ -150,3 +150,49 @@ test("a direct reply marks the recommendation watched even with activity sharing
   assert.equal((await reply({ id, reacao: -1 }, ME)).body.n, 0, "the sender cannot answer their own rec");
   assert.equal((await reply({ id: 0 })).status, 400);
 });
+
+test("GET /v1/rec returns watched/reply state of every rec, old ids included, and the ETag follows it", async (t) => {
+  const { sqlite, reply } = fixture(t);
+  const { rotaReceber } = await import("./src/index.js");
+  const ins = (de, para, imdb) => Number(sqlite.prepare(
+    "INSERT INTO rec (de, para, criado, imdb, tipo, titulo) VALUES (?, ?, ?, ?, 'movie', 'Movie')"
+  ).run(de, para, NOW, imdb).lastInsertRowid);
+  const old = ins(ME, FRIEND, "tt1"), fresh = ins(ME, FRIEND, "tt2"), mine = ins(FRIEND, ME, "tt3");
+  const DB = {
+    prepare(sql) {
+      const st = sqlite.prepare(sql);
+      return { bind: (...v) => ({ all: async () => ({ results: st.all(...v) }) }) };
+    },
+  };
+  const get = (desde, etag) => rotaReceber({ DB }, { id: FRIEND },
+    new URL(`https://example.test/v1/rec?desde=${desde}`),
+    new Request("https://example.test/v1/rec", { headers: etag ? { "if-none-match": etag } : {} }));
+  let res = await get(0);
+  assert.equal(res.status, 200);
+  const first = await res.json();
+  const etag0 = res.headers.get("etag");
+  assert.deepEqual(first.respostas, [], "nothing answered yet");
+  assert.ok(first.itens.every((x) => x.terminou === 0 && x.respondido === 0 && x.reacao === null));
+  assert.equal((await get(0, etag0)).status, 304, "unchanged state is a 304");
+
+  // answered on ANOTHER device: the old id is behind the client's cursor
+  assert.equal((await reply({ id: old, reacao: -1, texto: "Nao curti" })).body.n, 1);
+  res = await get(fresh);                               // cursor already past `old`
+  assert.equal(res.status, 200, "the reply invalidates the ETag even with no new rec");
+  const body = await res.json();
+  assert.equal(body.itens.length, 0);
+  assert.deepEqual(body.respostas, [
+    { id: old, terminou: 1, reacao: -1, resposta: "nao curti", respondido: NOW },
+  ]);
+  assert.ok(!body.respostas.some((x) => x.id === mine), "only recs sent TO the caller");
+  // the same fields ride on the items themselves
+  const all = await (await get(0)).json();
+  const item = all.itens.find((x) => x.id === old);
+  assert.equal(item.terminou, 1);
+  assert.equal(item.resposta, "nao curti");
+  assert.equal(item.reacao, -1);
+  // a later change moves the ETag again
+  const etag1 = res.headers.get("etag");
+  await reply({ id: fresh });
+  assert.notEqual((await get(fresh)).headers.get("etag"), etag1);
+});

@@ -385,6 +385,8 @@ static int svPerfilDoServidor(const char *id, SvPerfil *p) {
                   : est == REC_REC_ABERTA ? SV_REC_ABRIU : SV_REC_ENTREGUE;
         m->reacao = ra.recs[i].temReacao ? ra.recs[i].reacao : SV_REAC_NADA;
         m->quando = ra.recs[i].criado;
+        snprintf(m->resposta, sizeof m->resposta, "%s", ra.recs[i].resposta);
+        m->respondido = ra.recs[i].respondido;
       }
     }
     if (ra.nRecs > 0) { p->recsVistas = vistas; p->recsTotal = ra.nRecs; } }
@@ -673,6 +675,24 @@ int socialvis_perfil(const char *id, SvPerfil *p) {
   return 1;
 }
 
+const char *socialvis_enviada_rotulo(const SvEnviada *m, int *ok) {
+  int viu = m && m->estado == SV_REC_VIU;
+  if (ok) *ok = viu;
+  if (!m) return i18n("ainda não viu");
+  if (viu)
+    return i18n(m->reacao == SV_REAC_GOSTOU ? "viu · gostou"
+              : m->reacao == SV_REAC_MEIO   ? "viu · mais ou menos"
+              : m->reacao == SV_REAC_NAO    ? "viu · não gostou" : "viu");
+  switch (m->estado) {
+    case SV_REC_COMECOU: return i18n("começou");
+    case SV_REC_REAGIU:
+      return i18n(m->reacao == SV_REAC_GOSTOU ? "Gostou"
+                : m->reacao == SV_REAC_NAO ? "Não gostou" : "Mais ou menos");
+    case SV_REC_ABRIU: return i18n("abriu");
+    default: return i18n("ainda não viu");
+  }
+}
+
 int socialvis_ultima_enviada(const char *id, SvEnviada *saida) {
   int i;
   if (!id) return 0;
@@ -895,15 +915,23 @@ void socialvis_demo(int cenario) {
     p.gostoPct = 78; p.emComum = 14; p.gostoTotal = 18;
     p.minutosMes = 31 * 60; p.filmesMes = 12; p.seriesCurso = 4;
     p.recsVistas = 6; p.recsTotal = 7;
-    p.nMandou = 2;
+    p.nMandou = 3;
     snprintf(p.mandou[0].imdb, sizeof p.mandou[0].imdb, "tt0000102");
     snprintf(p.mandou[0].titulo, sizeof p.mandou[0].titulo, "Duna: Parte Dois");
     snprintf(p.mandou[0].poster, sizeof p.mandou[0].poster, "deploy/app/art/poster/05.jpg");
     p.mandou[0].estado = SV_REC_VIU; p.mandou[0].reacao = SV_REAC_GOSTOU;
+    p.mandou[0].respondido = agora - 3600;
+    snprintf(p.mandou[0].resposta, sizeof p.mandou[0].resposta, "valeu pela dica");
     snprintf(p.mandou[1].imdb, sizeof p.mandou[1].imdb, "tt0000108");
     snprintf(p.mandou[1].titulo, sizeof p.mandou[1].titulo, "A Chegada");
     snprintf(p.mandou[1].poster, sizeof p.mandou[1].poster, "deploy/app/art/poster/17.jpg");
-    p.mandou[1].estado = SV_REC_ENTREGUE; p.mandou[1].reacao = SV_REAC_NADA;
+    p.mandou[1].estado = SV_REC_VIU; p.mandou[1].reacao = SV_REAC_MEIO;
+    p.mandou[1].respondido = agora - 7200;
+    snprintf(p.mandou[1].resposta, sizeof p.mandou[1].resposta, "achei meio lento");
+    snprintf(p.mandou[2].imdb, sizeof p.mandou[2].imdb, "tt0000109");
+    snprintf(p.mandou[2].titulo, sizeof p.mandou[2].titulo, "Blade Runner 2049");
+    snprintf(p.mandou[2].poster, sizeof p.mandou[2].poster, "deploy/app/art/poster/11.jpg");
+    p.mandou[2].estado = SV_REC_ENTREGUE; p.mandou[2].reacao = SV_REAC_NADA;
     socialvis_definir_perfil_extra("nuvio:pedro", &p);
   }
 }

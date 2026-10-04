@@ -139,6 +139,10 @@ int main(void) {
     CONFERE(amigoParse("{\"id\":\"nuvio:p\",\"compartilha\":1,\"recs\":[{\"id\":1,\"estado\":\"reacao\",\"terminou\":1,\"reacao\":1},{\"id\":2,\"estado\":\"reacao\",\"reacao\":1}]}", &a) &&
             a.recs[0].terminou && !a.recs[1].terminou,
             "parse separates completion proof from a reaction-only recommendation");
+    CONFERE(amigoParse("{\"id\":\"nuvio:p\",\"compartilha\":0,\"recs\":[{\"id\":1,\"estado\":\"reacao\",\"terminou\":1,\"reacao\":-1,\"resposta\":\"nao curti\",\"respondido\":123},{\"id\":2,\"estado\":\"entregue\"}]}", &a) &&
+            a.recs[0].respondido == 123 && !strcmp(a.recs[0].resposta, "nao curti") &&
+            a.recs[0].reacao == -1 && a.recs[1].respondido == 0 && !a.recs[1].resposta[0],
+            "amigo: a resposta direta de quem recebeu (mensagem e instante); ausente = sem resposta");
     CONFERE(amigoParse(AMIGO_FECHADO, &a), "amigo fechado: parse");
     CONFERE(!a.compartilha && !a.temMes && !a.temAgora && !a.temGosto && !a.nGostou, "amigo fechado: nada de atividade");
     CONFERE(amigoParse("{\"id\":\"nuvio:p\",\"compartilha\":1,\"gosto\":{\"total\":0,\"iguais\":0,\"pct\":0}}", &a) &&

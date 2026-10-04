@@ -50,6 +50,70 @@ static void transicoes(void) {
   CHECA(r.assistida && r.respondida && r.reacao == RECRESP_SEM_REACAO, "pular = respondida sem reacao");
 }
 
+// O ESTADO DO SERVIDOR (GET /v1/rec) fundido na linha local.
+static void servidor(void) {
+  RecResp r;
+  char corpo[1024];
+  long long rec = 0;
+  unsigned v = 0;
+  memset(&r, 0, sizeof r);
+  r.rec = 21;
+  // Linha nova: assistida em outra TV, sem resposta.
+  CHECA(recresp_mesclar(&r, 1, RECRESP_SEM_REACAO, "", 0, 500), "servidor traz assistida");
+  CHECA(r.assistida && !r.respondida && r.reacao == RECRESP_SEM_REACAO, "so assistida");
+  CHECA(r.versao == r.enviada, "fundida nao fica pendente");
+  CHECA(!recresp_mesclar(&r, 1, RECRESP_SEM_REACAO, "", 0, 501), "o mesmo estado nao muda nada");
+  // Resposta de outra TV, mais nova que a mudanca local.
+  CHECA(recresp_mesclar(&r, 1, -1, "Nao curti", 900, 901), "resposta de outro aparelho");
+  CHECA(r.respondida && r.reacao == -1 && !strcmp(r.texto, "nao curti") && r.quando == 900,
+        "reacao e texto do servidor");
+  // Servidor sem reacao nem texto nao apaga o que ha.
+  CHECA(!recresp_mesclar(&r, 1, RECRESP_SEM_REACAO, "", 900, 902), "null nao apaga");
+  CHECA(r.reacao == -1 && !strcmp(r.texto, "nao curti"), "reacao e texto intactos");
+  // Resposta MAIS VELHA que a local confirmada: o local fica.
+  r.quando = 1000;
+  CHECA(!recresp_mesclar(&r, 1, 1, "amei", 950, 1001) && r.reacao == -1, "servidor velho nao vence");
+  // Servidor mais novo vence.
+  CHECA(recresp_mesclar(&r, 1, 1, "amei", 1100, 1101) && r.reacao == 1 &&
+        !strcmp(r.texto, "amei"), "servidor mais novo vence");
+  // Mudanca local NAO enviada fica ate o ack.
+  memset(&r, 0, sizeof r);
+  r.rec = 22;
+  recresp_aplicar(&r, RECRESP_EV_RESPONDEU, 1, "valeu", 2000);   // versao 1, enviada 0
+  CHECA(!recresp_mesclar(&r, 1, -1, "ruim", 3000, 3001), "pendente local nao e tocado");
+  CHECA(r.reacao == 1 && !strcmp(r.texto, "valeu"), "local pendente intacto");
+  r.enviada = r.versao;   // ack
+  CHECA(recresp_mesclar(&r, 1, -1, "ruim", 3000, 3002) && r.reacao == -1, "depois do ack o servidor entra");
+
+  // Pelo JSON da rede, no arquivo: id velho (atras do cursor) e campos nulos.
+  recresp_esquecer();
+  snprintf(corpo, sizeof corpo,
+    "{\"cursor\":9,\"novas\":0,\"itens\":[],\"respostas\":["
+    "{\"id\":31,\"terminou\":1,\"reacao\":null,\"resposta\":\"\",\"respondido\":0},"
+    "{\"id\":32,\"terminou\":1,\"reacao\":0,\"resposta\":\"mais ou menos\",\"respondido\":777},"
+    "{\"id\":0,\"terminou\":1}]}");
+  recomenda_fundir_respostas(corpo);
+  CHECA(recresp_assistida(31) && !recresp_respondida(31), "31 assistida em outra TV");
+  { RecResp x;
+    CHECA(recresp_ler(32, &x) && x.respondida && x.reacao == 0 &&
+          !strcmp(x.texto, "mais ou menos") && x.quando == 777, "32 respondida em outra TV"); }
+  CHECA(!recresp_pendente(corpo, sizeof corpo, &rec, &v), "o que veio do servidor nao e reenviado");
+  { unsigned rv = recresp_revisao();
+    recomenda_fundir_respostas(corpo);   // o mesmo corpo de novo
+    CHECA(recresp_revisao() == rv, "repetir o corpo nao mexe na revisao"); }
+  // Servidor antigo: sem os campos novos, nada acontece.
+  recomenda_fundir_respostas("{\"cursor\":1,\"novas\":1,\"itens\":[{\"id\":40,\"imdb\":\"tt1\"}]}");
+  CHECA(!recresp_assistida(40), "servidor antigo: sem estado, sem efeito");
+  // Um item novo com os campos dentro do proprio item.
+  recomenda_fundir_respostas("{\"itens\":[{\"id\":41,\"imdb\":\"tt2\",\"terminou\":1,"
+                             "\"reacao\":1,\"resposta\":\"gostei\",\"respondido\":55}]}");
+  CHECA(recresp_respondida(41), "campos no proprio item");
+  // Gesto local depois de fundir sobe a versao e vai ao servidor.
+  recresp_responder(31, 1, "agora sim");
+  CHECA(recresp_pendente(corpo, sizeof corpo, &rec, &v) && rec == 31 && strstr(corpo, "agora sim"),
+        "responder depois de fundir envia");
+}
+
 static void fila(void) {
   char corpo[256];
   long long rec = 0;
@@ -127,6 +191,7 @@ int main(void) {
   dados_iniciar(dir);
   if (strcmp(dados_dir(), dir)) { puts("recresp: dados_dir() nao e NUVIO_DADOS; recusando rodar"); return 1; }
   transicoes();
+  servidor();
   fila();
   fimNoPlayer();
   cartao();

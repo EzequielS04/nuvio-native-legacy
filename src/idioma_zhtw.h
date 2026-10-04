@@ -4039,6 +4039,8 @@
   T("viu", "已看"),
   T("viu o que você mandou", "看了你推薦的"),
   T("viu · gostou", "已看 · 喜歡"),
+  T("viu · mais ou menos", "已看 · 普通"),
+  T("viu · não gostou", "已看 · 不喜歡"),
   T("vocês gostaram de %d títulos iguais", "你們都喜歡的作品有 %d 部"),
   T("vídeo", "影片"),
   T("webOS 3", "webOS 3"),
