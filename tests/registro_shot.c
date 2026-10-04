@@ -16,6 +16,7 @@
 #include "ajustes_ux.h"
 #include "badges.h"
 #include "desempenho.h"
+#include "plrilha.h"
 #include "telemetria.h"
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -69,7 +70,11 @@ static void arte(int qual, float veu) {
   if (veu > 0) gfx_cor((GfxRect){ 0, 0, 1920, 1080 }, 0, 0, 0, 0, veu);
 }
 
-enum { CENA_PAINEL, CENA_AVISO, CENA_AJ, CENA_TEL, CENA_QUEDA, CENA_HUD, CENA_HUD_PILULA };
+enum { CENA_PAINEL, CENA_AVISO, CENA_AJ, CENA_TEL, CENA_QUEDA, CENA_HUD, CENA_HUD_ATV, CENA_HUD_PLAYER };
+// O medidor e conteudo da ilha do relogio (desempenho.h): a ilha no canto de
+// sempre, sem ancora, como app.c a desenha na home.
+static void relogioPadrao(void) { ilha_relogio_visivel(1); ilha_desenhar(SDL_GetTicks()); }
+
 static void relogio(float x) {
   ilha_relogio_visivel(1);
   ilha_posicionar(1); (void)x;
@@ -80,7 +85,7 @@ static void captura(const char *id, int cena) {
   int i;
   if (!quer(id)) return;
   snprintf(nome, sizeof nome, "%s/%s.bmp", saida, id);
-  for (i = 0; i < 40; i++) {
+  for (i = 0; i < 70; i++) {
     SDL_PumpEvents();
     txt_novo_quadro();
     tex_novo_quadro();
@@ -99,11 +104,12 @@ static void captura(const char *id, int cena) {
         break;
       case CENA_TEL: arte(2, 0.30f); telemetria_atualizar(1.0f / 60.0f, SDL_GetTicks()); telemetria_desenhar(SDL_GetTicks()); break;
       case CENA_QUEDA: arte(1, 0.30f); avisos_atualizar(1.0f / 60.0f, SDL_GetTicks()); ilha_relogio_visivel(1); ilha_posicionar(1); ilha_desenhar(SDL_GetTicks()); break;
-      case CENA_HUD: arte(1, 0.30f); relogio(48); desempenho_desenhar(SDL_GetTicks(), 0); break;
-      case CENA_HUD_PILULA: arte(2, 0); gfx_cor((GfxRect){ 0, 0, 1920, 240 }, 0, 0, 0, 0, 0.0f); relogio(48); desempenho_desenhar(SDL_GetTicks(), 1); break;
+      case CENA_HUD: arte(1, 0.30f); relogioPadrao(); break;
+      case CENA_HUD_ATV: arte(1, 0.30f); ilha_atividade("Carregando fileiras…", -1.0f); relogioPadrao(); break;
+      case CENA_HUD_PLAYER: arte(2, 0); plrilha_relogio(1.0f, 2460.0); plrilha_desenhar(SDL_GetTicks()); break;
     }
     SDL_Delay(8);
-    if (i == 39) {
+    if (i == 69) {
       unsigned char *pix = malloc(1920 * 1080 * 4);
       SDL_Surface *s;
       int y;
@@ -289,8 +295,17 @@ int main(int argc, char **argv) {
   { static const float PIOR[36] = { 21,19,22,24,20,18,22,26,21,19,20,23,31,38,61,44,33,24,20,19,21,22,20,25,19,18,20,21,22,19,18,20,23,19,18,18 };
     desempenho_amostra(59.8f, 21, 0, 38, 96, 2, 41, 0, 212);
     desempenho_teste_serie(PIOR, 36);
-    captura("hud", CENA_HUD);
-    desempenho_amostra(38.0f, 61, 4, 41, 99, 0, 44, 0, 241);
-    captura("hud-pilula", CENA_HUD_PILULA); }
+    desempenho_teste_forma(DS_MINIMO);  captura("hud-minimo", CENA_HUD);
+    desempenho_teste_forma(DS_MENOR);   captura("hud-menor", CENA_HUD);
+    desempenho_teste_forma(DS_GRANDE);  captura("hud-grande", CENA_HUD);
+    // Ilha ocupada: a atividade passa na frente e o medidor sai; ela some e ele volta.
+    desempenho_teste_forma(DS_MINIMO);  captura("hud-minimo-atividade", CENA_HUD_ATV);
+    captura("hud-minimo-volta", CENA_HUD);
+    desempenho_teste_forma(DS_GRANDE);  captura("hud-grande-atividade", CENA_HUD_ATV);
+    desempenho_amostra(38.0f, 61, 4, 41, 99, 0, 44, 0, 241);   // lento: ambar
+    desempenho_teste_forma(DS_MINIMO);  captura("hud-player-minimo", CENA_HUD_PLAYER);
+    desempenho_teste_forma(DS_MENOR);   captura("hud-player-menor", CENA_HUD_PLAYER);
+    desempenho_teste_forma(DS_GRANDE);  captura("hud-player-grande", CENA_HUD_PLAYER);
+    desempenho_teste_forma(-1); }
   return 0;
 }

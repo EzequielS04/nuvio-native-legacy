@@ -16,7 +16,6 @@
 #include "app.h"
 #include "iconeapp.h"
 #include "registro.h"
-#include "desempenho.h"
 #include "addonsui.h"
 #include "login.h"
 #include "sessao.h"
@@ -3933,9 +3932,8 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto()) celb_desenhar();
   CAMADA_SE(diagnostico_intro_aberto());
   if (!registro_aberto()) diagnostico_intro_desenhar(agora);
-  // O MEDIDOR DE DESEMPENHO (Ajustes > Desempenho desta TV): ilha nas telas,
-  // pilula durante o video.
-  if (!registro_aberto() && ajustes_medidor_desempenho()) desempenho_desenhar(agora, player_aberto());
+  // O MEDIDOR DE DESEMPENHO (Ajustes > Desempenho desta TV) nao e mais camada
+  // propria: e conteudo da ilha do relogio (ilha.c, plrilha.c; desempenho.h).
   CAMADA_SE(registro_aberto());
   registro_desenhar();
   // A ilha do relogio fica acima do painel de registro, no canto de sempre.

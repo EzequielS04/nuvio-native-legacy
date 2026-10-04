@@ -346,6 +346,9 @@ static const char *V_ICONE_APP[ICONEAPP_N] = {
 };
 static const char *V_QUALIDADE[] = { "Automática", "4K", "1080p", "720p" };
 static const char *V_LIGA[]      = { "Ligado", "Desligado" };
+// Medidor de desempenho NA ILHA DO RELOGIO (desempenho.h, 03/10). O indice e o
+// gravado em "medidorFormaLocal"; a chave antiga (V_LIGA) migra no carregar.
+static const char *V_MEDIDOR[]   = { "Desligado", "Mínimo", "Menor", "Grande" };
 static const char *V_LIVETV_RES[] = { "Automática", "4K", "1080p", "720p", "SD" };
 static const char *V_LIVETV_FMT[] = { "Automático", "HLS (.m3u8)", "TS (.ts)" };
 static const char *V_LIVETV_ESPERA[] = { "Automática", "25 s", "45 s" };
@@ -993,7 +996,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Perguntar o que achou nos créditos", V_LIGA, 2),     // local: reacaoCreditosLocal
   ESC("Espera pelos add-ons",            V_FONTE_PRAZO, 4),   // local: fontePrazoLocal
   ACAO("Ver o registro na tela"),
-  ESC("Medidor de desempenho",           V_LIGA, 2),          // local: medidorDesempenhoLocal
+  ESC("Medidor de desempenho",           V_MEDIDOR, 4),       // local: medidorFormaLocal
   ACAO("Guia de uso"),
   ESC("Pacote de selos",                 V_SELOS_PACOTE, 4),   // por perfil: selospacote.c
   ACAO("Adicionar pacote de selos"),
@@ -1172,7 +1175,7 @@ static const char *CHAVE[] = {
   "reacaoCreditosLocal",
   "fontePrazoLocal",
   // "-": acao, nao grava. O medidor e LOCAL e SEM o "-": e desta TV.
-  "-verRegistro", "medidorDesempenhoLocal",
+  "-verRegistro", "medidorFormaLocal",   // era "medidorDesempenhoLocal" (V_LIGA): ver ajustes_dir
   "-guiaUso",
   // "-": a escolha mora em selos-p<N>.txt (por perfil), nao em ajustes.txt.
   "-selosPacote", "-selosPacoteAdd", "-selosPacoteRem",
@@ -1451,7 +1454,7 @@ int ajustes_dolby_vision(void)        { return lig(AJ_DV); }
 int ajustes_dolby_atmos(void)         { return lig(AJ_ATMOS); }
 int ajustes_pausa_overlay(void)       { return lig(AJ_PAUSA_OVERLAY); }
 int ajustes_reacao_creditos(void)     { return lig(AJ_REACAO_CREDITOS); }
-int ajustes_medidor_desempenho(void)  { return lig(AJ_MEDIDOR); }
+int ajustes_medidor_desempenho(void)  { return valor[AJ_MEDIDOR]; }
 int ajustes_fonte_manual(void)        { return lig(AJ_FONTE_MANUAL); }
 int ajustes_fonte_primeira(void)      { return valor[AJ_FONTE_AUTO] == 1; }
 int ajustes_fonte_texto_addon(void)   { return valor[AJ_FONTE_TEXTO] == 1; }
@@ -2517,6 +2520,7 @@ void ajustes_dir(const char *dir) {
     return;
   }
   { int viuIdioma = 0, viuAuto = 0, idiomaGravado = IDIOMA_EN, autoGravado = 0;
+    int medidorAntigo = -1, viuMedidor = 0;
   while (fgets(linha, sizeof linha, f)) {
     char chave[64]; int v, i;
     if (sscanf(linha, "%63s %d", chave, &v) != 2) continue;
@@ -2527,6 +2531,10 @@ void ajustes_dir(const char *dir) {
       continue;
     }
     if (!strcmp(chave, "idiomaAutoLocal")) { autoGravado = v == 1; viuAuto = 1; continue; }
+    // O MEDIDOR ERA LIGA/DESLIGA ("medidorDesempenhoLocal", V_LIGA: 0 = ligado)
+    // e virou a forma na ilha (V_MEDIDOR). Ligado continua visivel: Grande, o
+    // painel inteiro de antes; desligado continua desligado.
+    if (!strcmp(chave, "medidorDesempenhoLocal")) { medidorAntigo = v; continue; }
     if (!strcmp(chave, "idiomaFonteLocal")) {
       if (v >= IDA_TMDB && v <= IDA_PADRAO) idiomaFonteGravada = v;
       continue;
@@ -2537,9 +2545,11 @@ void ajustes_dir(const char *dir) {
       // Valor fora da faixa (arquivo de outra versao, ou editado a mao) cai no
       // padrao em vez de indexar fora do vetor.
       valor[i] = limita(i, v);
+      if (i == AJ_MEDIDOR) viuMedidor = 1;
       break;
     }
   }
+  if (!viuMedidor && medidorAntigo >= 0) valor[AJ_MEDIDOR] = medidorAntigo == 0 ? 3 : 0;
   // Escolha manual: "idioma" gravado e SEM a marca de automatico (arquivo de
   // antes da marca, ou de quem escolheu). Sem "idioma" nenhum, nunca houve
   // escolha e o automatico vale.
@@ -4324,7 +4334,7 @@ static const char *ajudaOpcao(int op) {
         ? "Abre o cartão da versão nova, com o que mudou e o botão de instalar."
         : "Procura agora uma versão nova do Nuvio. Se houver, abre o cartão com o que mudou e o botão de instalar. O app também confere sozinho a cada 6 horas.";
     case AJ_VER_REGISTRO: return "Abre o registro do app por cima desta tela, ao vivo: o mesmo painel do botão vermelho do controle, para quem não tem esse botão.";
-    case AJ_MEDIDOR: return "Mostra quadros por segundo, o pior quadro, a memória e as imagens num canto da tela, atualizados a cada 3 s. Durante o vídeo vira uma pílula pequena.";
+    case AJ_MEDIDOR: return "Mostra quadros por segundo, o pior quadro e a memória dentro da ilha do relógio, atualizados a cada 3 s. Mínimo fica na linha da hora, Menor ganha uma segunda linha e Grande abre o painel completo. Quando a ilha mostra um aviso, o medidor se recolhe e volta depois.";
     case AJ_GUIA: return "O que o Nuvio faz, em 12 capítulos. Cada recurso diz onde fica e tem um atalho para ele.";
     case AJ_ENVIAR_LOG: return "Manda os últimos 200 KB do registro desta sessão (sem senhas nem chaves) para quem faz o app. Use quando algo estiver errado agora.";
     case AJ_ENVIO_AUTO: return "Ligado, o app manda o registro sozinho: o da sessão anterior ao abrir e o desta a cada minuto. Sem senhas nem chaves; serve para achar o que trava a Samsung. Desligue quando quiser.";

@@ -23,6 +23,7 @@
 #include "salvosintro.h"
 #include "text.h"
 #include "plrui.h"
+#include "desempenho.h"
 #include "idioma.h"
 #include "idiomacod.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
@@ -71,6 +72,12 @@ static float W, vW, H, vH, A;
 static float conteudoA;
 static int   mostra = -1;               // o que esta DESENHADO (pode atrasar o alvo)
 static char  mostraChave[80];
+// MEDIDOR DE DESEMPENHO NA ILHA (desempenho.h): a forma no relogio DESENHADO
+// (dsMostra, troca junto com `mostra`) e a do alvo deste quadro (dsVez). Ao
+// lado de um cartao so cabe o Minimo (dsCartao), e so se a pilula nao passar
+// de DS_CARTAO_MAX.
+static int dsMostra, dsVez, dsCartao;
+#define DS_CARTAO_MAX 1180.0f
 static Uint32 ultQuadro;
 
 // O relogio: troca seco, sem animacao (ver o topo).
@@ -935,7 +942,18 @@ static void desenharConteudo(int m, GfxRect r, float a, Uint32 agora) {
   cw = larguraConteudo(m, &t1, &t2);
   // Centrado na pilula: durante a mola o conteudo nao fica grudado num lado.
   x = r.x + (r.w - cw) * 0.5f;
-  if (m == M_RELOGIO) { txt_desenhar_alpha(t1, x, yc - (float)t1.h * 0.5f, a); return; }
+  if (m == M_RELOGIO) {
+    // Com o medidor: a hora e o trecho dele na mesma linha; em Menor/Grande a
+    // linha sobe para o topo da ilha crescida e o corpo vai embaixo.
+    float dw = desempenho_linha_w(dsMostra), bw, bh;
+    desempenho_corpo_tam(dsMostra, &bw, &bh);
+    if (bh > 0.0f) yc = r.y + NV_ILHA_H * 0.5f;
+    x = dsMostra == DS_GRANDE ? r.x + 28.0f : r.x + (r.w - cw - dw) * 0.5f;
+    txt_desenhar_alpha(t1, x, yc - (float)t1.h * 0.5f, a);
+    desempenho_linha(dsMostra, x + (float)t1.w, yc, a);
+    if (bh > 0.0f) desempenho_corpo(dsMostra, (GfxRect){ r.x, r.y + NV_ILHA_H, r.w, r.h - NV_ILHA_H }, a);
+    return;
+  }
   if (atvV2) {
     float cr, cg, cb;
     x += ((30.0f - PAD_E) + (30.0f - PAD_D)) * 0.5f;   // o bloco medido inclui os recuos v2
@@ -982,7 +1000,7 @@ static void desenharConteudo(int m, GfxRect r, float a, Uint32 agora) {
 #define CT_CAPA_W   30.0f
 #define CT_CAPA_H   44.0f
 #define CT_VAO      14.0f
-typedef struct { TxtLinha hora, tit, meta; } LinhasCartao;
+typedef struct { TxtLinha hora, tit, meta; float ds; } LinhasCartao;
 
 // "T1E3 · 32 min restantes" / "T2E5 · hoje". O FORMATO passa por i18n inteiro
 // quando existe; na estreia sao duas partes ja traduzidas juntadas por " · ",
@@ -1015,7 +1033,10 @@ static float larguraCartao(const IlhaCartao *c, int qual, LinhasCartao *L) {
       (qual == ILHA_VIVO ? CT_CAPA_W : qual == ILHA_AMIGO ? ROSTO + MINI_W - DUO_SOBRE : ICONE) + VAO +
       (float)L->tit.w + 10.0f + (float)L->meta.w;
   if (qual != ILHA_VIVO) w += 12.0f + 10.0f;   // o ponto de nao lido / de "agora"
-  return w;
+  // O medidor em Minimo depois do cartao, so se a pilula ainda couber.
+  L->ds = dsCartao ? desempenho_linha_w(DS_MINIMO) : 0.0f;
+  if (L->ds > 0.0f && PAD_E + PAD_D + w + L->ds > DS_CARTAO_MAX) L->ds = 0.0f;
+  return w + L->ds;
 }
 
 // Onde a mini capa fica numa pilula de retangulo r: o mesmo passo a passo de
@@ -1072,6 +1093,7 @@ static void desenharCartao(const IlhaCartao *c, int qual, GfxRect r, float a) {
     gfx_cor((GfxRect){ x + 12.0f, yc - 5.0f, 10.0f, 10.0f }, 0.5f, cr, cg, cb, a);
   else if (qual == ILHA_AMIGO)   // vermelho de "ao vivo", como no aviso
     gfx_cor((GfxRect){ x + 12.0f, yc - 5.0f, 10.0f, 10.0f }, 0.5f, 1.0f, 0.353f, 0.322f, a);
+  if (L.ds > 0.0f) desempenho_linha(DS_MINIMO, x + (qual != ILHA_VIVO ? 22.0f : 0.0f), yc, a);
   if (barra) {
     // A BARRA FINA vai sob o texto (nao sob a capa): ela mede o titulo.
     float pr = c->progresso > 1.0f ? 1.0f : c->progresso;
@@ -1658,11 +1680,17 @@ static void ilha_desenharCorpo_(Uint32 agora) {
   alvo = temCur ? M_AVISO : atividadeViva(agora) ? M_ATIVIDADE
        : (relogioQuer && cartaoVez >= 0) ? M_CARTAO : M_RELOGIO;
   vis = alvo != M_RELOGIO || relogioQuer || (modalAviso && (modalAberto || modalT > 0.01f));
+  // O MEDIDOR so ocupa a ilha LIVRE: com aviso, atividade, modal ou voo ele
+  // sai (o pouso e os avisos nunca esperam por ele) e volta depois.
+  { int ds = desempenho_forma(), livre = !modalAberto && modalT <= 0.0f && !voo;
+    dsVez = alvo == M_RELOGIO && livre ? ds : DS_DESLIGADO;
+    dsCartao = alvo == M_CARTAO && livre && ds != DS_DESLIGADO; }
   // O que esta desenhado so troca quando o conteudo velho ja apagou: a pilula
   // muda de forma com o texto antigo saindo, e o novo entra com ela perto do
   // tamanho final — a troca nunca acontece com o texto cheio na tela.
-  if (mostra < 0) { mostra = alvo; conteudoA = 0.0f; }
-  { const char *ch = alvo == M_AVISO ? cur.chave : alvo == M_CARTAO ? cartoes[cartaoVez].chave : "";
+  if (mostra < 0) { mostra = alvo; conteudoA = 0.0f; dsMostra = dsVez; }
+  { static const char *const CH_DS[4] = { "", "ds1", "ds2", "ds3" };
+    const char *ch = alvo == M_AVISO ? cur.chave : alvo == M_CARTAO ? cartoes[cartaoVez].chave : CH_DS[dsVez & 3];
     trocando = mostra != alvo || strcmp(mostraChave, ch);
     // EM VOO a pilula ja esta aberta com o cartao esperando o quadro (mockup
     // do player, "saida-voo"): a troca de conteudo nao espera o fade.
@@ -1674,7 +1702,7 @@ static void ilha_desenharCorpo_(Uint32 agora) {
     if (trocando) {
       conteudoA = ajustes_animacoes_reduzidas() ? 0.0f : anim_mola(conteudoA, 0.0f, dt, 26.0f);
       if (conteudoA < 0.06f) {
-        mostra = alvo; conteudoA = 0.0f;
+        mostra = alvo; conteudoA = 0.0f; dsMostra = dsVez;
         snprintf(mostraChave, sizeof mostraChave, "%s", ch);
         if (alvo == M_CARTAO) { mostraC = cartoes[cartaoVez]; mostraQual = cartaoVez; }
         if (alvo == M_AVISO) mostraA = cur;
@@ -1689,6 +1717,14 @@ static void ilha_desenharCorpo_(Uint32 agora) {
   if (alvo == M_CARTAO) { LinhasCartao L; alvoW = PAD_E + PAD_D + larguraCartao(&cartoes[cartaoVez], cartaoVez, &L); }
   else if (alvo == M_AVISO) { LinhasAviso L; alvoW = PAD_E + PAD_D + larguraAviso(&cur, esperando(), &L); }
   else alvoW = PAD_E + PAD_D + larguraConteudo(alvo, &t1, &t2);
+  if (alvo == M_RELOGIO && dsVez != DS_DESLIGADO) {
+    float bw, bh;
+    desempenho_corpo_tam(dsVez, &bw, &bh);
+    alvoW += desempenho_linha_w(dsVez);
+    if (dsVez == DS_GRANDE) alvoW = 28.0f * 2.0f + (float)t1.w + desempenho_linha_w(dsVez);
+    if (bw > alvoW) alvoW = bw;
+    if (bh > 0.0f) alvoH = NV_ILHA_H + bh;
+  }
   // Sumindo, ela encolhe para uma gota antes de apagar (e nasce dela).
   if (!vis) alvoW = alvoH = NV_ILHA_H * 0.6f;
   if (W <= 0.0f) { W = NV_ILHA_H * 0.6f; H = W; }
@@ -1723,7 +1759,7 @@ static void ilha_desenharCorpo_(Uint32 agora) {
     GfxRect pf = { dir ? x - pw : x, y, pw, NV_ILHA_H_ABERTA };
     vooPasso(agora);
     if (A < 0.01f) {
-      if (!vis) { mostra = alvo; conteudoA = 0.0f; W = H = NV_ILHA_H * 0.6f; vW = vH = 0.0f; }
+      if (!vis) { mostra = alvo; dsMostra = dsVez; conteudoA = 0.0f; W = H = NV_ILHA_H * 0.6f; vW = vH = 0.0f; }
       ancDef = 0; ultRectOk = 0; coberta = 0;
       if (voo) { desenharVoo(pf, 0); desenharVoo(pf, 1); }
       return;
@@ -1734,6 +1770,9 @@ static void ilha_desenharCorpo_(Uint32 agora) {
   { float w = W < H ? H : W, h = H < 8.0f ? 8.0f : H;
     GfxRect r = { dir ? x - w : x, y, w, h }, R = r;
     float raio = 0.5f, cr, cg, cb, fundo = 0.80f, solido = 0.86f, aPil = 1.0f, aMod = 0.0f;
+    // Crescida pelo medidor (Menor/Grande), o raio para em 32 px: a pilula
+    // vira um cartao de cantos redondos, nao uma capsula.
+    if (h > NV_ILHA_H_ABERTA) raio = 32.0f / h;
     // O MODAL E A MESMA PILULA CRESCIDA: um retangulo so que vai da forma da
     // pilula ate a do modal na mola subamortecida (o repique e o "pulo" da
     // Dynamic Island), com o raio em pixels indo de meia altura a MD_RAIO. O
