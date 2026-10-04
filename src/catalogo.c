@@ -1451,6 +1451,26 @@ const CatFileira *cat_fileira(int r) {
   return (r >= 0 && r < nFils) ? &fils[r] : NULL;
 }
 
+int cat_home_apenas_fixas(void) {
+  int r, i, inicial = 1;
+  pthread_mutex_lock(&pubTrava);
+  for (r = 0; r < nFils; r++)
+    if (strcmp(fils[r].chave, "continue_watching") &&
+        strcmp(fils[r].chave, "social_activity")) { inicial = 0; break; }
+  /* Lists may have been merged before any catalogue row. Replacing those
+   * items with an early CW/social batch would erase ready watchlist data.
+   * Treat unassigned metadata and collection/list flags conservatively too. */
+  for (i = 0; inicial && i < n; i++) {
+    int dentro = 0;
+    if (!itens || itens[i].naLista || itens[i].naColecao) { inicial = 0; break; }
+    for (r = 0; r < nFils; r++)
+      if (i >= fils[r].ini && i - fils[r].ini < fils[r].n) { dentro = 1; break; }
+    if (!dentro) inicial = 0;
+  }
+  pthread_mutex_unlock(&pubTrava);
+  return inicial;
+}
+
 int cat_copiar_fileira(const char *chave, CatItem *saida, int max,
                        CatFileira *meta) {
   int r, qtd;

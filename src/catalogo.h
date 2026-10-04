@@ -413,6 +413,10 @@ typedef struct {
 
 int cat_n_fileiras(void);
 const CatFileira *cat_fileira(int r);   // NULL fora da faixa
+// Empty or only Continue Watching/social: startup may publish catalogue rows
+// as they arrive. Any other row, saved-list marker or unassigned item is warm.
+// One coherent snapshot under the publication mutex; no transient n==0 read.
+int cat_home_apenas_fixas(void);
 int cat_copiar_fileira(const char *chave, CatItem *itens, int max,
                        CatFileira *meta);
 

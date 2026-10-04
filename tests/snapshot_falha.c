@@ -27,6 +27,7 @@
 int arte_reserva_episodios(const char *imdb, const char *corpo) { (void)imdb; (void)corpo; return 0; }
 
 #include "../src/descoberta.c"
+unsigned recomenda_geracao(void) { return 1; }
 Uint32 SDL_GetTicks(void) { return 0; }
 
 #define BASE "https://addon.example/abc"

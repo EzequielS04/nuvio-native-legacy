@@ -30,6 +30,7 @@ int  cat_tirar_continuar(const char *imdb) { (void)imdb; return 0; }
 int arte_reserva_episodios(const char *imdb, const char *corpo) { (void)imdb; (void)corpo; return 0; }
 
 #include "../src/descoberta.c"
+unsigned recomenda_geracao(void) { return 1; }
 Uint32 SDL_GetTicks(void) { return 0; }
 
 #define BASE "https://addon.example/abc"
@@ -124,6 +125,8 @@ void cat_republicar_fileiras(const CatFileira *f, int n) {
   pthread_mutex_lock(&pubTravaT); pubFileiras(f, n); pthread_mutex_unlock(&pubTravaT);
 }
 int cat_n(void) { return nPub; }
+/* This fixture seeds either a complete package or an empty catalogue. */
+int cat_home_apenas_fixas(void) { return nPub == 0; }
 int cat_n_fileiras(void) { return nPubFils; }
 const CatFileira *cat_fileira(int r) { return (r >= 0 && r < nPubFils) ? &pubFils[r] : NULL; }
 int cat_copiar_fileira(const char *chave, CatItem *saida, int max, CatFileira *meta) {

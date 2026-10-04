@@ -3384,7 +3384,7 @@ static void *montar(void *u) {
   (void)homeestado_geracao();
   homeestado_contexto(&ctxIni);
   snprintf(donoIni, sizeof donoIni, "%s", sessao_usuario() ? sessao_usuario() : "");
-  // PUBLICAR EM PARTES SO COM A TELA VAZIA.
+  // PUBLICAR EM PARTES SO DURANTE O ARRANQUE DO CATALOGO.
   //
   // A publicacao fileira a fileira existe para a PRIMEIRA home aparecer cedo.
   // Numa volta seguinte (sync que trouxe addons, remontagem pedida, ciclo de
@@ -3393,9 +3393,13 @@ static void *montar(void *u) {
   // "[home] 13 fileiras na tela" seguido de "6", "8", "9", "11", "13", "14"...
   // Era o "ela fica recarregando" do dono. Com algo na tela, a volta monta em
   // silencio e publica UMA vez no fim — e so se mudou (ver a assinatura).
-  // Tela PARCIAL (o que uma volta condenada chegou a publicar em partes) conta
-  // como vazia: ver parcialNaTela.
-  int progressivo = (cat_n() == 0) || parcialNaTela;
+  // So CW/social na tela ainda nao e uma home completa. O fio de CW pode
+  // publica-los antes deste ciclo e, com cat_n()>0, segurava a primeira fileira
+  // pronta ate o ultimo catalogo terminar. Leitura coerente sob pubTrava evita
+  // tomar o n==0 transitorio de uma troca de bloco por uma tela vazia. Listas,
+  // colecoes e qualquer catalogo pronto continuam no modo silencioso.
+  // Tela PARCIAL (volta interrompida) continua crescendo: parcialNaTela.
+  int progressivo = cat_home_apenas_fixas() || parcialNaTela;
   // As listas do Trakt ja foram para a tela nesta volta (em partes ou mescladas).
   int listasNaTela = 0;
   // Tamanho do lote na ultima publicacao em partes DESTA volta; -1 = nenhuma.
@@ -3990,7 +3994,8 @@ static void *montar(void *u) {
           // Bandeira propria: `nFil == 1` nunca acontece aqui porque a fileira
           // "Continuar assistindo" ja ocupou a posicao 0 antes do laco.
           if (!marcouPrimeira) { marcouPrimeira = 1;
-                                 marco("primeira fileira da rede na tela"); }
+                                 marco(progressivo ? "primeira fileira da rede na tela"
+                                                  : "primeira fileira da rede pronta (publicacao pendente)"); }
           }
           rodadaSoltar(rod);
         }
