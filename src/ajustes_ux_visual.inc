@@ -206,173 +206,351 @@ static const char *ajVisualIcone(int op) {
   }
 }
 
-// Miniaturas das telas que cada categoria controla, preenchidas com arte real
-// do catalogo/amostras e finalizadas nas superficies Glass, sem contorno.
-// O acento so marca estado (ligado, selecionado, progresso, "agora"). A
-// categoria define a cena; a opcao acrescenta seu proprio glifo e valor.
+// A IMAGEM DE CADA CATEGORIA (indice e coluna da arte da camada 2). A arte real
+// (catalogo da conta, ou a amostra embarcada antes dele) ocupa o quadro 16:9
+// inteiro, e por cima vem a mini-UI que a categoria controla, no material das
+// ilhas, num tamanho que se le. Coordenadas num quadro de 640x360.
+// A ordem dos `case` e a ordem dos SEC em ajustes_ux_tela.inc (AJS_*): a versao
+// anterior tinha Cartazes/Trailers/Titulo/Reproducao/Idiomas/Aparencia
+// trocados, e Reproducao mostrava os chips de idioma.
 #include "perfis.h"
+enum { AJS_HOME = 0, AJS_TITULO, AJS_CARTAZES, AJS_TRAILERS, AJS_APARENCIA, AJS_REPRODUCAO,
+       AJS_IDIOMAS, AJS_TVAOVIVO, AJS_CONTAS, AJS_DESEMPENHO, AJS_SOBRE };
+static float ajPreviaHome(float x, float y, float w);
+static const char *ajTituloN(int n);
+static const char *ajMetaTitulo(int n);
+static void ajTextoMini(const char *s, float px, int forte, float x, float y, int r, int g, int b, float a);
+static TxtEstilo ajEstiloPx(float px, int forte);
+static TxtEstilo ajEstiloPxS(float px, int forte) { return ajEstiloPx(px < 6.0f ? 6.0f : px, forte); }
+// A amostra de arte de cada categoria (o indice de ajArte).
+static int ajCenaArteN(int sec) {
+  static const int N[11] = { 12, 3, 13, 15, 9, 7, 21, 2, 13, 21, 3 };
+  return sec >= 0 && sec < 11 ? N[sec] : 12;
+}
+// Arte cobrindo o quadro (ou o cinza das ilhas se ela ainda nao chegou) e o
+// escurecimento por cima.
+static void ajCenaArte(const char *arte, GfxRect q, float rr, float escuro) {
+  if (!ajImg(arte, q, rr, 1)) gfx_cor(q, rr / q.h, 0.10f, 0.105f, 0.12f, 1);
+  if (escuro > 0.003f) gfx_cor(q, rr / q.h, 0.031f, 0.031f, 0.039f, escuro);
+}
+// Peca de ilha sobre a foto: o miolo escuro do vidro (ou o solido #15161A).
+static void ajCenaVidro(GfxRect r, float raioPx, float a) {
+  if (ajVid()) gfx_cor(r, raioPx / r.h, 0.055f, 0.059f, 0.071f, 0.74f * a);
+  else gfx_cor(r, raioPx / r.h, 0.082f, 0.086f, 0.102f, 0.97f * a);
+}
+// O logo da marca de uma fonte de nota (deploy/app/art/marcas) e a nota de
+// amostra. 0 = a fonte nao tem logo (fica fora da previa).
+static const char *ajNotaMarca(int op, const char **nota) {
+  switch (op) {
+    case AJ_NT_IMDB: case AJ_MDB_IMDB: *nota = "8.1"; return "imdb";
+    case AJ_NT_TOMATES: case AJ_MDB_TOMATES: *nota = "94%"; return "tomatoes_fresh";
+    case AJ_NT_AUDIENCIA: case AJ_MDB_AUDIENCIA: *nota = "89%"; return "audience";
+    case AJ_NT_META: case AJ_MDB_META: *nota = "76"; return "metacritic";
+    case AJ_NT_METAUSER: *nota = "8.0"; return "metacritic";
+    case AJ_NT_TRAKT: case AJ_MDB_TRAKT: *nota = "82%"; return "trakt";
+    case AJ_NT_TMDB: case AJ_MDB_TMDB: *nota = "7.9"; return "tmdb";
+    case AJ_NT_LETTER: case AJ_MDB_LETTER: *nota = "4.1"; return "letterboxd";
+    default: return NULL;
+  }
+}
+// A linha de notas da pagina do titulo: as fontes do grupo do `op` (as notas do
+// titulo ou as do MDBList), ligadas acesas e desligadas a 30%; a do `op` em
+// foco ganha o ponto do acento.
+static void ajCenaNotas(int op, float x, float y, float s, float ar, float ag, float ab) {
+  static const int NT[] = { AJ_NT_IMDB, AJ_NT_TOMATES, AJ_NT_AUDIENCIA, AJ_NT_META, AJ_NT_TRAKT, AJ_NT_TMDB, AJ_NT_LETTER };
+  static const int MDB[] = { AJ_MDB_IMDB, AJ_MDB_TOMATES, AJ_MDB_AUDIENCIA, AJ_MDB_META, AJ_MDB_TRAKT, AJ_MDB_TMDB, AJ_MDB_LETTER };
+  const int *g = (op >= AJ_MDB_TRAKT && op <= AJ_MDB_MAL) || op == AJ_MDB_LIGADO ? MDB : NT;
+  int i, n = 7;
+  float cx = x;
+  for (i = 0; i < n; i++) {
+    const char *nota = "", *m = ajNotaMarca(g[i], &nota);
+    char cam[1200];
+    int on = lig(g[i]) && (g != MDB || lig(AJ_MDB_LIGADO));
+    float al = op < 0 ? 1.0f : on ? 1.0f : 0.3f, lw;
+    TxtEstilo e = ajEstiloPxS(13 * s, 1);
+    TxtLinha l = { 0 };
+    if (!m) continue;
+    if (op < 0 && !on && i > 2) continue;   // a categoria: so as ligadas (e as tres primeiras)
+    snprintf(cam, sizeof cam, "%s/marcas/%s.png", uxDirArte, m);
+    if ((int)e >= 0) l = txt_linha(e, nota, 243, 242, 239, 255);
+    lw = 22 * s + 6 * s + l.w + 20 * s;
+    ajCenaVidro((GfxRect){ cx, y, lw, 30 * s }, 15 * s, al);
+    ajLogo(cam, cx + 10 * s, y + 6 * s, 22 * s, 18 * s, al);
+    if (l.w) txt_desenhar_alpha(l, cx + 10 * s + 22 * s + 6 * s, y + (30 * s - l.h) * 0.5f, al);
+    if (g[i] == op) gfx_cor((GfxRect){ cx + lw * 0.5f - 3 * s, y + 34 * s, 6 * s, 6 * s }, 0.5f, ar, ag, ab, 1);
+    cx += lw + 8 * s;
+  }
+}
+// O tempo de agora (pilula do relogio).
+static void ajCenaHora(char *hora, size_t n) {
+  time_t t = time(NULL);
+  struct tm lt;
+  if (localtime_r(&t, &lt)) strftime(hora, n, "%H:%M", &lt); else snprintf(hora, n, "--:--");
+}
+
 static float ajVisualCena(int sec, int op, float x, float y, float w) {
-  float h = w * 0.5625f, s = w / 600.0f, ox = op >= 0 ? 0.0f : 80.0f, ar, ag, ab;
+  float s = w / 640.0f, h = w * 9.0f / 16.0f, rr = 22.0f, ar, ag, ab;
+  GfxRect q = { x, y, w, h };
   int i, j;
-  const char *ic = op >= 0 ? ajVisualIcone(op) : TELA[secIni[sec]].icone;
-#define PX(a) (x + ((a) + ox) * s)
-#define PY(b) (y + ((b) + 14) * s)
-#define RR(a,b,c,d) (GfxRect){PX(a),PY(b),(c)*s,(d)*s}
-  // degraus: 1 trilho, 2 cartao, 3 cartao claro; r em fracao da altura
-#define SUP(n,a,b,c,d,r) ajNeutro(RR(a,b,c,d),(r)*(d)*s,(n)==1?0.055f:(n)==2?0.095f:0.15f,\
-    (n)==1?0.115f:(n)==2?0.15f:0.20f,(n)==1?0.12f:(n)==2?0.155f:0.21f,(n)==1?0.14f:(n)==2?0.18f:0.24f,1)
-#define PILL(n,a,b,c,d) SUP(n,a,b,c,d,0.5f)
-#define BAR(n,a,b,c) SUP(n,a,b,c,8,0.5f)
-#define ACC(a,b,c,d,al) gfx_cor(RR(a,b,c,d),0.5f,ar,ag,ab,al)
-#define BRI(a,b,c,d,al) gfx_cor(RR(a,b,c,d),0.5f,0.953f,0.949f,0.937f,al)
-#define LUZ(a,b,c,d,r,al) gfx_luz_canto(RR(a,b,c,d),(r),(c)*s*0.3f,0,(d)*s*1.1f,1,1,1,al)
-#define ICON(n,a,b,d,al) ajIcone(n,PX(a),PY(b),(d)*s,al)
+#define PX(a) (x + (a) * s)
+#define PY(b) (y + (b) * s)
+#define RR(a,b,c,d) (GfxRect){ PX(a), PY(b), (c) * s, (d) * s }
+#define VID(a,b,c,d,r) ajCenaVidro(RR(a,b,c,d), (r) * s, 1)
+#define BAR(a,b,c,al) gfx_cor(RR(a,b,c,7), 0.5f, 0.953f, 0.949f, 0.937f, al)
+#define ACC(a,b,c,d,al) gfx_cor(RR(a,b,c,d), 0.5f, ar, ag, ab, al)
+#define ICON(n,a,b,d,al) ajIcone(n, PX(a), PY(b), (d) * s, al)
+#define TXT(t,px,f,a,b,al) ajTextoMini(t, (px) * s, f, PX(a), PY(b), 243, 242, 239, al)
   ajustes_acento(&ar, &ag, &ab);
-  ajNeutro((GfxRect){x,y,w,h},22,0.04f,0.106f,0.110f,0.129f,1);
+  if (sec == AJS_HOME) return ajPreviaHome(x, y, w);   // a Home dela, em miniatura
+  gfx_recorte(x, y, w, h);
   switch (sec) {
-    case 0: {   // Tela inicial: barra lateral, destaque e fileiras de cartazes
-      SUP(1,28,34,46,236,0.2f);
-      for(i=0;i<5;i++) { SUP(i==0?3:2,39,50+i*42,24,24,0.3f); }
-      ACC(31,56,4,12,1);
-      ajImg(ajArte(AJA_FUNDO,12),RR(92,34,340,110),10*s,0.76f);
-      LUZ(92,34,340,110,0.09f,0.10f);
-      ajLogo(ajArte(AJA_LOGO,12),PX(110),PY(48),140*s,34*s,0.95f);
-      BRI(110,86,150,10,0.75f); BAR(3,110,104,110); BAR(2,110,118,80);
-      PILL(3,110,50,56,20);
-      for(i=0;i<5;i++) { float bx=92+i*70; ajImg(ajArte(AJA_POSTER,13+i),RR(bx,160,62,88),7*s,1);
-        LUZ(bx,160,62,88,0.09f,0.07f); }
+    case AJS_TITULO: {   // pagina do titulo: arte, logo, meta, notas e botoes
+      float veu = 0.6f + 0.4f * valor[AJ_DET_VEU] / 100.0f;
+      int ti = ajTinta();
+      ajCenaArte(ajArte(AJA_FUNDO, 3), q, rr, 0);
+      gfx_veu_css((GfxRect){ x, y, w * 0.72f, h }, 2, 0, 1.0f, 0.9f * veu);
+      gfx_veu_css((GfxRect){ x, y + h * 0.45f, w, h * 0.55f }, 0, 0, 1.0f, 0.6f * veu);
+      if (ajLogo(ajArte(AJA_LOGO, 3), PX(36), PY(52), 260 * s, 84 * s, 1) <= 0)
+        TXT(ajTituloN(3), 30, 1, 36, 84, 1);
+      TXT(ajMetaTitulo(3), 13, 0, 36, 150, 0.78f);
+      ajCenaNotas(op >= AJ_NT_IMDB && op <= AJ_NT_SCORE ? op : (op >= AJ_MDB_LIGADO && op <= AJ_MDB_MAL) ? op : -1,
+                  PX(36), PY(186), s, ar, ag, ab);
+      { TxtEstilo e = ajEstiloPxS(15 * s, 1);
+        TxtLinha l = { 0 };
+        float bw;
+        if ((int)e >= 0) l = txt_linha(e, "Reproduzir", ti, ti, ti, 255);
+        bw = 44 * s + l.w + 22 * s;
+        gfx_cor(RR(36, 240, bw / s, 44), 0.5f, ar, ag, ab, 1);
+        gfx_icone((GfxRect){ PX(54), PY(254), 16 * s, 16 * s }, "aj_play", ti / 255.0f, ti / 255.0f, ti / 255.0f, 1);
+        if (l.w) txt_desenhar(l, PX(36) + 44 * s, PY(240) + (44 * s - l.h) * 0.5f);
+        { float bx = 36 + bw / s + 10;
+          if (lig(AJ_DET_TRAILER)) {
+            TxtLinha t = (int)e >= 0 ? txt_linha(e, "Trailer", 243, 242, 239, 255) : (TxtLinha){ 0 };
+            float tw = 22 + t.w / s + 22;
+            VID(bx, 240, tw, 44, 22);
+            if (t.w) txt_desenhar(t, PX(bx + 22), PY(240) + (44 * s - t.h) * 0.5f);
+            bx += tw + 10;
+          }
+          VID(bx, 240, 44, 44, 22); ICON("aj_bookmark", bx + 12, 252, 20, 0.9f); } }
       break; }
-    case 1: {   // Cartazes: tres cartazes (o do meio em foco) e as formas
-      for(i=0;i<3;i++) { float f=i==1, bw=f?112:96, bh=f?172:150, bx=70+i*132-(f?8:0), by=f?34:52;
-        ajImg(ajArte(AJA_POSTER,16+i),RR(bx,by,bw,bh),10*s,f?1.0f:0.82f);
-        LUZ(bx,by,bw,bh,0.07f,f?0.13f:0.08f);
-        BRI(bx+14,by+bh-34,bw*0.6f,8,f?0.7f:0.35f); BAR(3,bx+14,by+bh-18,bw*0.4f); }
-      for(i=0;i<3;i++) { float rr=i==0?0.08f:i==1?0.3f:0.5f; SUP(i==1?3:2,140+i*72,236,52,52,rr); }
-      ACC(228,296,20,4,1); break; }
-    case 2: {   // Trailers: a janela de video com o trailer tocando
-      ajImg(ajArte(AJA_FUNDO,15),RR(42,40,350,196),12*s,0.9f);
-      LUZ(42,40,350,196,0.06f,0.14f);
-      SUP(3,60,56,62,18,0.5f); BRI(70,63,42,4,0.6f);
-      gfx_cor(RR(194,102,62,62),0.5f,0.953f,0.949f,0.937f,0.92f);
-      gfx_icone((GfxRect){PX(209),PY(117),34*s,34*s},"aj_play",0.08f,0.08f,0.09f,0.9f);
-      BAR(3,60,208,314); ACC(60,208,118,8,1);
-      ICON("aj_audio-lines",338,162,26,0.6f);
+    case AJS_CARTAZES: {   // uma fileira de cartazes com o cartaz em foco
+      static const int P[5] = { 12, 13, 15, 2, 21 };
+      int exp = ajustes_expandir_poster(), borda = ajustes_borda_foco(), prof = ajustes_profundidade();
+      float pw = 100, ph = 150, gap = 18, by = 150;
+      ajCenaArte(ajArte(AJA_FUNDO, P[1]), q, rr, 0.25f);
+      gfx_veu_css((GfxRect){ x, y, w * 0.7f, h }, 2, 0, 1.0f, 0.8f);
+      gfx_veu_css((GfxRect){ x, y + h * 0.35f, w, h * 0.65f }, 0, 0, 1.0f, 0.85f);
+      if (ajLogo(ajArte(AJA_LOGO, P[1]), PX(36), PY(28), 180 * s, 54 * s, 1) <= 0) TXT(ajTituloN(P[1]), 22, 1, 36, 40, 1);
+      TXT(ajMetaTitulo(P[1]), 12, 0, 36, 96, 0.7f);
+      for (i = 0; i < 5; i++) {
+        float bx = 36 + i * (pw + gap);
+        GfxRect r = RR(bx, by, pw, ph);
+        float raio = ajustes_raio_poster_px() * r.w / 256.0f;
+        if (i == 1) continue;
+        ajImg(ajArte(AJA_POSTER, P[i]), r, raio, 0.72f);
+      }
+      { float k = exp ? 1.08f : 1.0f, fw = pw * k, fh = ph * k, fx = 36 + pw + gap - (fw - pw) * 0.5f, fy = by - (fh - ph) * 0.5f;
+        GfxRect r = RR(fx, fy, fw, fh);
+        float raio = ajustes_raio_poster_px() * r.w / 256.0f;
+        if (exp) gfx_rect((GfxRect){ r.x - 16 * s, r.y + 6 * s, r.w + 32 * s, r.h + 34 * s }, 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.6f);
+        ajImg(ajArte(AJA_POSTER, P[1]), r, raio, 1);
+        if (prof) gfx_brilho_topo(r, raio / r.h, 0.3f, 1, 1, 1, 0.16f);
+        if (borda) gfx_anel(r, raio / r.h, 3 * s, ar, ag, ab, 1); }
       break; }
-    case 3: {   // Pagina do titulo: capa, titulo, selos e notas
-      ajImg(ajArte(AJA_FUNDO,3),RR(40,36,360,86),10*s,0.88f);
-      LUZ(40,36,360,86,0.1f,0.12f);
-      ajImg(ajArte(AJA_POSTER,8),RR(58,64,70,106),8*s,1);
-      LUZ(58,64,70,106,0.08f,0.10f);
-      ajLogo(ajArte(AJA_LOGO,3),PX(144),PY(54),150*s,46*s,0.96f);
-      BRI(144,128,170,14,0.8f); BAR(3,144,152,120);
-      for(i=0;i<3;i++) PILL(2,144+i*58,170,50,16);
-      for(i=0;i<3;i++) { SUP(2,58+i*128,196,114,36,0.5f); SUP(3,68+i*128,206,16,16,0.5f); BRI(94+i*128,209,i==0?44:34,10,0.7f); }
-      BAR(2,58,248,320); BAR(2,58,266,260); break; }
-    case 4: {   // Reproducao: o player, legenda, e a barra de tempo
-      ajImg(ajArte(AJA_FUNDO,7),RR(38,36,386,222),12*s,0.9f);
-      LUZ(38,36,386,222,0.05f,0.12f);
-      SUP(3,140,176,182,34,0.35f); BRI(156,185,150,6,0.7f); BRI(172,198,118,5,0.5f);
-      PILL(3,62,226,300,8); ACC(62,226,128,8,1); gfx_cor(RR(184,222,16,16),0.5f,1,1,1,0.95f);
-      gfx_cor(RR(204,90,54,54),0.5f,0.953f,0.949f,0.937f,0.92f); gfx_icone((GfxRect){PX(217),PY(103),28*s,28*s},"aj_play",0.08f,0.08f,0.09f,0.9f);
+    case AJS_TRAILERS: {   // o trailer tocando no destaque
+      int semLogo = lig(AJ_LOGO_TRAILER);
+      ajCenaArte(ajArte(AJA_FUNDO, 15), q, rr, 0);
+      gfx_veu_css((GfxRect){ x, y + h * 0.4f, w, h * 0.6f }, 0, 0, 1.0f, 0.8f);
+      { TxtEstilo e = ajEstiloPxS(13 * s, 1);
+        TxtLinha t = (int)e >= 0 ? txt_linha(e, "Trailer", 243, 242, 239, 255) : (TxtLinha){ 0 };
+        float tw = 36 + t.w / s + 16;
+        VID(28, 26, tw, 32, 16);
+        gfx_icone((GfxRect){ PX(40), PY(35), 14 * s, 14 * s }, "aj_play", 0.953f, 0.949f, 0.937f, 0.9f);
+        if (t.w) txt_desenhar(t, PX(60), PY(26) + (32 * s - t.h) * 0.5f); }
+      VID(572, 26, 40, 40, 20); ICON("aj_audio-lines", 581, 35, 22, 0.9f);
+      if (!semLogo && ajLogo(ajArte(AJA_LOGO, 15), PX(36), PY(214), 220 * s, 66 * s, 1) <= 0)
+        TXT(ajTituloN(15), 24, 1, 36, 240, 1);
+      gfx_cor(RR(36, 312, 568, 5), 0.5f, 1, 1, 1, 0.25f);
+      ACC(36, 312, 238, 5, 1);
       break; }
-    case 5: {   // Idiomas e legendas: tres linhas, cada uma com o codigo escolhido
-      static const char *const cod[3] = { "PT", "EN", "ES" };
+    case AJS_APARENCIA: {   // a cor, o vidro, a fonte e o relogio sobre a arte
+      char hora[8], fam[96];
+      int tema = valor[AJ_TEMA];
+      ajCenaArte(ajArte(AJA_FUNDO, 9), q, rr, 0.18f);
+      gfx_rect(RR(26, 50, 320, 290), 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.4f);
+      VID(36, 44, 300, 272, 26);
+      TXT("Aa", 64, 1, 60, 62, 1);
+      uxValorTexto(AJ_FONTE_UI, valor[AJ_FONTE_UI], fam, sizeof fam);
+      TXT(fam, 14, 0, 62, 150, 0.6f);
+      for (i = 0; i < 6; i++) {
+        unsigned c = TEMA_ACENTO[1 + i].fill;
+        GfxRect r = RR(60 + i * 42, 196, 30, 30);
+        gfx_cor(r, 0.5f, ((c >> 16) & 255) / 255.0f, ((c >> 8) & 255) / 255.0f, (c & 255) / 255.0f, 1);
+        if (tema == 1 + i) gfx_anel_fora(r, 0.5f, 3 * s, 2.5f * s, 0.953f, 0.949f, 0.937f, 0.95f);
+      }
+      gfx_cor(RR(60, 258, 52, 28), 0.5f, ar, ag, ab, 1);
+      gfx_cor(RR(88, 262, 20, 20), 0.5f, 1, 1, 1, 1);
+      BAR(128, 268, 120, 0.55f);
+      if (valor[AJ_RELOGIO] == 0) {
+        ajCenaHora(hora, sizeof hora);
+        VID(486, 26, 126, 46, 23);
+        TXT(hora, 20, 1, 506, 35, 1);
+      }
+      ajImg(ajArte(AJA_POSTER, 9), RR(400, 104, 156, 234), 14 * s, 1);
+      VID(400, 262, 156, 76, 14);
+      BAR(416, 282, 100, 0.8f); BAR(416, 300, 70, 0.45f);
+      break; }
+    case AJS_REPRODUCAO: {   // o player: titulo, marcas de imagem e som, barra de tempo
+      static const FormatoMarca M[3] = { FMT_4K, FMT_DV, FMT_ATMOS };
+      int on[3];
+      float bx = 36;
+      on[0] = valor[AJ_QUALIDADE] <= 1; on[1] = lig(AJ_DV); on[2] = lig(AJ_ATMOS);
+      ajCenaArte(ajArte(AJA_FUNDO, 7), q, rr, 0);
+      gfx_veu_css((GfxRect){ x, y + h * 0.35f, w, h * 0.65f }, 0, 0, 1.0f, 0.9f);
+      TXT(ajTituloN(7), 22, 1, 36, 206, 1);
+      TXT(ajMetaTitulo(7), 12, 0, 36, 236, 0.65f);
+      for (i = 0; i < 3; i++) {
+        float mh = 24, mw = marca_formato_largura(M[i], mh * s) / s;
+        int foco = (op == AJ_QUALIDADE && i == 0) || (op == AJ_DV && i == 1) || (op == AJ_ATMOS && i == 2);
+        marca_formato(M[i], PX(bx), PY(262), mh * s, 1, 1, 1, on[i] ? 0.9f : 0.25f);
+        if (foco) gfx_cor(RR(bx + mw * 0.5f - 3, 290, 6, 6), 0.5f, ar, ag, ab, 1);
+        bx += mw + 12;
+      }
+      gfx_cor(RR(36, 306, 568, 5), 0.5f, 1, 1, 1, 0.22f);
+      ACC(36, 306, 216, 5, 1);
+      gfx_cor(RR(245, 301.5f, 14, 14), 0.5f, 1, 1, 1, 1);
+      TXT("21:40", 11, 0, 36, 320, 0.6f);
+      { TxtEstilo e = ajEstiloPxS(11 * s, 0);
+        if ((int)e >= 0) { TxtLinha l = txt_linha(e, "58:12", 243, 242, 239, 255); txt_desenhar_alpha(l, PX(604) - l.w, PY(320) + (11 * s * 1.2f - l.h) * 0.5f, 0.6f); } }
+      break; }
+    case AJS_IDIOMAS: {   // idioma da interface, audio e legenda, cada um com o seu
+      static const int OP3[3] = { AJ_IDIOMA, AJ_AUD_LINGUA, AJ_LEG_LINGUA };
       static const char *const ico[3] = { "aj_languages", "aj_audio-lines", "aj_captions" };
-      ajImg(ajArte(AJA_FUNDO,21),RR(40,40,370,214),12*s,0.45f);
-      for(i=0;i<3;i++) { float by=40+i*76;
-        SUP(2,40,by,370,62,0.3f); SUP(3,54,by+11,40,40,0.5f); ICON(ico[i],61,by+18,26,0.85f);
-        BAR(3,112,by+20,i==0?120:96); BAR(3,112,by+36,70);
-        for(j=0;j<3;j++) { float cx=282+j*40; TxtLinha tl=ajTxt(TXT_MINI,cod[(i+j)%3]);
-          SUP(j==0?3:1,cx,by+14,34,34,0.45f);
-          if(j==0) ACC(cx,by+14,34,34,0.22f);
-          txt_desenhar_alpha(tl,PX(cx+17)-tl.w*0.5f,PY(by+31)-tl.h*0.5f,j==0?1.0f:0.55f); } }
+      static const char *const cod[3] = { "PT", "EN", "ES" };
+      int foco = op == AJ_IDIOMA || op == AJ_TMDB_IDIOMA ? 0 : op == AJ_AUD_LINGUA ? 1 : op == AJ_LEG_LINGUA || op == AJ_LEG_LINGUA2 ? 2 : -1;
+      ajCenaArte(ajArte(AJA_FUNDO, 21), q, rr, 0.45f);
+      for (i = 0; i < 3; i++) {
+        float by = 36 + i * 100;
+        const char *v = textoValor(OP3[i]);
+        float al = foco < 0 || foco == i ? 1.0f : 0.6f;
+        ajCenaVidro(RR(36, by, 568, 88), 24 * s, 1);
+        if (foco == i) gfx_cor(RR(36, by, 568, 88), 24.0f / 88.0f, 1, 1, 1, 0.08f);
+        gfx_cor(RR(56, by + 20, 48, 48), 0.5f, 1, 1, 1, 0.08f);
+        ICON(ico[i], 66, by + 30, 28, 0.9f * al);
+        { TxtLinha l = ajTxtC(ajEstiloPxS(16 * s, 1), rotuloOpcao(OP3[i]), 250 * s);
+          txt_desenhar_alpha(l, PX(122), PY(by + 22), al); }
+        if (v && v[0]) { TxtLinha l = ajTxtC(ajEstiloPxS(13 * s, 0), v, 250 * s); txt_desenhar_alpha(l, PX(122), PY(by + 50), 0.6f * al); }
+        for (j = 0; j < 3; j++) {
+          float cx = 432 + j * 52;
+          TxtEstilo e = ajEstiloPxS(12 * s, 1);
+          gfx_cor(RR(cx, by + 22, 44, 44), 0.5f, 1, 1, 1, j == 0 ? 0.0f : 0.07f);
+          if (j == 0) gfx_cor(RR(cx, by + 22, 44, 44), 0.5f, ar, ag, ab, 0.9f * al);
+          if ((int)e >= 0) { int t = j == 0 ? ajTinta() : 243;
+            TxtLinha l = txt_linha(e, cod[(i + j) % 3], t, t, t, 255);
+            txt_desenhar_alpha(l, PX(cx + 22) - l.w * 0.5f, PY(by + 44) - l.h * 0.5f, j == 0 ? al : 0.55f * al); }
+        }
+      }
       break; }
-    case 6: {   // Aparencia: paleta de cores, vidro, tipo e relogio
-      for(i=0;i<6;i++) { unsigned c=TEMA_ACENTO[1+i].fill;
-        gfx_cor(RR(44+i*40,44,32,32),0.5f,((c>>16)&255)/255.0f,((c>>8)&255)/255.0f,(c&255)/255.0f,0.95f); }
-      SUP(2,44,100,140,120,0.1f); LUZ(44,100,140,120,0.1f,0.14f);
-      ajImg(ajArte(AJA_POSTER,9),RR(100,140,140,96),9*s,1);
-      SUP(3,100,188,140,48,0.2f); BRI(116,198,70,8,0.7f); BAR(2,116,214,98);
-      SUP(2,262,100,150,88,0.1f); 
-      ICON("aj_type",284,114,36,0.9f); BAR(3,330,128,64); BAR(3,330,144,44);
-      PILL(2,262,204,92,36); ICON("aj_clock",274,211,22,0.8f); BRI(302,218,36,8,0.7f);
-      ACC(44,82,32,4,1);
-      PILL(2,364,204,48,36); ACC(374,215,28,14,1);
+    case AJS_TVAOVIVO: {   // o canal tocando em cima e o guia embaixo
+      ajCenaArte(ajArte(AJA_FUNDO, 2), q, rr, 0);
+      gfx_veu_css((GfxRect){ x, y + h * 0.18f, w, h * 0.82f }, 0, 0, 0.62f, 0.96f);
+      VID(28, 26, 92, 32, 16); ACC(42, 37, 10, 10, 1); BAR(60, 38, 44, 0.85f);
+      for (i = 0; i < 4; i++) {
+        float by = 150 + i * 50;
+        char logo[1200];
+        const CatItem *canal = cat_n() > 0 ? cat_item((i * 3) % cat_n()) : NULL;
+        int temLogoCanal = canal && !strcmp(canal->tipo, "channel") && canal->logo[0];
+        VID(28, by, 74, 42, 12);
+        if (temLogoCanal) ajLogo(canal->logo, PX(40), PY(by + 7), 50 * s, 28 * s, 0.95f);
+        else { snprintf(logo, sizeof logo, "%s/logo/%02d.png", uxDirArte, (i * 3) % 8); ajLogo(logo, PX(40), PY(by + 9), 50 * s, 24 * s, 0.95f); }
+        { float bx = 110;
+          for (j = 0; j < 3; j++) {
+            float bw = j == 0 ? (i % 2 ? 170 : 130) : j == 1 ? (i % 2 ? 150 : 200) : 400;
+            if (bx >= 612) break;
+            if (bx + bw > 612) bw = 612 - bx;
+            ajCenaVidro(RR(bx, by, bw, 42), 12 * s, 1);
+            if (j == 0 && i == 1) gfx_cor(RR(bx, by, bw, 42), 12.0f / 42.0f, 1, 1, 1, 0.1f);
+            if (bw > 50) BAR(bx + 14, by + 12, (bw - 28) * 0.6f, j == 0 ? 0.85f : 0.5f);
+            if (bw > 70) BAR(bx + 14, by + 25, (bw - 28) * 0.35f, 0.3f);
+            bx += bw + 6;
+          } }
+      }
+      gfx_cor(RR(258, 140, 3, 216), 0.05f, ar, ag, ab, 0.95f); ACC(253, 134, 13, 13, 1);
       break; }
-    case 7: {   // TV ao vivo: o guia de programacao
-      for(i=0;i<5;i++) { float by=44+i*46;
-        char logo[1200]; const CatItem *canal = cat_n() > 0 ? cat_item((i*3) % cat_n()) : NULL;
-        int temLogoCanal = canal && !strcmp(canal->tipo,"channel") && canal->logo[0];
-        SUP(2,34,by,44,38,0.2f);
-        if(temLogoCanal) ajImg(canal->logo,RR(38,by+4,36,30),5*s,0.92f);
-        else { snprintf(logo,sizeof logo,"%s/logo/%02d.png",uxDirArte,(i*3)%8); ajImg(logo,RR(38,by+4,36,30),5*s,0.92f); }
-        BAR(3,44,by+15,24);
-        for(j=0;j<2;j++) { float bx=j==0?88:88+(i%2?112:84)+8, bw=j==0?(i%2?104:76):(i%3?130:98);
-          if(!temLogoCanal) ajImg(ajArte(AJA_POSTER,22+i*2+j),RR(bx,by,bw,38),7*s,0.82f);
-          if(temLogoCanal) SUP(i==2&&j==0?3:2,bx,by,bw,38,0.2f); BAR(i==2&&j==0?2:3,bx+12,by+15,bw*0.55f); } }
-      gfx_cor(RR(171,38,3,232),0.05f,ar,ag,ab,0.9f); ACC(166,28,13,13,1);
+    case AJS_CONTAS: {   // perfis e servicos conectados
+      const ContaPerfil *ativo = perfis_item_ativo();
+      int n = perfis_n(), qtd = n > 0 ? (n < 3 ? n : 3) : 1;
+      ajCenaArte(ajArte(AJA_FUNDO, 13), q, rr, 0.55f);
+      for (i = 0; i < qtd; i++) {
+        const ContaPerfil *p = n > 0 ? perfis_item(i) : ativo;
+        int f = (p && p->indice == perfis_ativo()) || (n == 0 && i == 0);
+        float d = f ? 96 : 80, cx = 320 + (i - (qtd - 1) * 0.5f) * 140, bx = cx - d * 0.5f, by = f ? 30 : 38;
+        char avatar[1200];
+        snprintf(avatar, sizeof avatar, "%s/icones/mt_perfil.png", uxDirArte);
+        gfx_cor(RR(bx, by, d, d), 0.5f, 0.24f, 0.25f, 0.29f, 1);
+        if (p && p->avatarUrl[0]) ajImg(p->avatarUrl, RR(bx, by, d, d), 0.5f * d * s, f ? 1.0f : 0.6f);
+        else ajLogo(avatar, PX(bx + d * 0.22f), PY(by + d * 0.22f), d * 0.56f * s, d * 0.56f * s, f ? 0.95f : 0.6f);
+        { TxtLinha nm = ajTxtC(ajEstiloPxS(14 * s, f), p && p->nome[0] ? p->nome : "Perfil", 130 * s);
+          txt_desenhar_alpha(nm, PX(cx) - nm.w * 0.5f, PY(142), f ? 1.0f : 0.6f); }
+      }
+      for (i = 0; i < 3; i++) {
+        static const char *const sv[3] = { NULL, "aj_cloud", "aj_key-round" };
+        float bx = 36 + i * 196;
+        VID(bx, 210, 176, 108, 22);
+        if (!sv[i]) { char marca[1200]; snprintf(marca, sizeof marca, "%s/marcas/trakt_wordmark.png", uxDirArte);
+                      if (ajLogo(marca, PX(bx + 20), PY(232), 96 * s, 28 * s, 0.95f) <= 0) ICON("aj_plug", bx + 20, 232, 28, 0.85f); }
+        else ICON(sv[i], bx + 20, 232, 28, 0.85f);
+        BAR(bx + 20, 280, i == 0 ? 90 : 70, 0.5f);
+        if (i < 2) ACC(bx + 146, 238, 12, 12, 1); else gfx_cor(RR(bx + 146, 238, 12, 12), 0.5f, 1, 1, 1, 0.2f);
+      }
       break; }
-    case 8: {   // Contas e servicos: perfis e o que esta conectado
-      { const ContaPerfil *ativo=perfis_item_ativo(); int n=perfis_n(), qtd=n>0?(n<3?n:3):1;
-        for(i=0;i<qtd;i++) { const ContaPerfil *p=n>0?perfis_item(i):ativo;
-          float f=(p && p->indice==perfis_ativo()) || (n==0 && i==0), d=f?66:52, bx=60+i*92+(f?0:7), by=f?40:48;
-          char avatar[1200]; const char *fonte;
-          snprintf(avatar,sizeof avatar,"%s/icones/mt_perfil.png",uxDirArte);
-          fonte=p && p->avatarUrl[0]?p->avatarUrl:avatar;
-          SUP(3,bx,by,d,d,0.5f);
-          if(p && p->avatarUrl[0]) ajImg(fonte,RR(bx,by,d,d),0.5f*d*s,f?0.95f:0.62f);
-          else ajLogo(fonte,PX(bx+d*0.2f),PY(by+d*0.2f),d*0.6f*s,d*0.6f*s,f?0.95f:0.62f);
-          { const char *label=p && p->nome[0]?p->nome:"Perfil";
-            TxtLinha nome=ajTxtC(TXT_MINI,label,98*s);
-            txt_desenhar_alpha(nome,PX(bx+72),PY(by+23),0.9f); }
-        } }
-      for(i=0;i<3;i++) { static const char *const sv[3]={"aj_cloud","aj_plug","aj_key-round"};
-        SUP(2,40,140+i*40,370,34,0.5f);
-        if(i==1) { char marca[1200]; snprintf(marca,sizeof marca,"%s/marcas/trakt.png",uxDirArte); ajLogo(marca,PX(50),PY(146+i*40),48*s,20*s,0.95f); }
-        else ICON(sv[i],54,146+i*40,18,0.8f);
-        BAR(3,106,153+i*40,i==0?110:80);
-        if(i<2) ACC(380,152+i*40,14,14,1); else gfx_cor(RR(380,152+i*40,14,14),0.5f,1,1,1,0.18f); }
+    case AJS_DESEMPENHO: {   // fps e memoria de imagens
+      static const char *const ic9[4] = { "aj_memory-stick", "aj_images", "aj_zap", "aj_database" };
+      static const float pc[4] = { 0.46f, 0.72f, 0.34f, 0.58f };
+      static const float fps[16] = { 58, 60, 60, 59, 60, 54, 60, 60, 60, 57, 60, 60, 59, 60, 60, 60 };
+      ajCenaArte(ajArte(AJA_FUNDO, 21), q, rr, 0.6f);
+      VID(36, 36, 260, 288, 24);
+      TXT("60", 64, 1, 60, 56, 1);
+      TXT("fps", 18, 0, 160, 92, 0.6f);
+      for (i = 0; i < 16; i++) {
+        float bh = 8 + (fps[i] - 50) * 7.0f;
+        gfx_cor(RR(60 + i * 13.5f, 296 - bh, 9, bh), 0.3f, ar, ag, ab, i == 15 ? 1.0f : 0.45f);
+      }
+      VID(312, 36, 292, 288, 24);
+      for (i = 0; i < 4; i++) {
+        float by = 66 + i * 64;
+        ICON(ic9[i], 336, by, 26, 0.8f);
+        gfx_cor(RR(376, by + 9, 204, 9), 0.5f, 1, 1, 1, 0.12f);
+        ACC(376, by + 9, 204 * pc[i], 9, i == 0 ? 1.0f : 0.6f);
+      }
       break; }
-    case 9: {   // Desempenho: o medidor e as barras de uso
-      static const char *const ic9[4]={"aj_memory-stick","aj_zap","aj_images","aj_database"};
-      static const float pc[4]={0.46f,0.72f,0.34f,0.58f};
-      SUP(2,40,50,140,140,0.5f);
-      ICON("aj_gauge",62,72,96,0.85f);
-      SUP(1,80,206,60,20,0.5f); BRI(94,213,32,6,0.6f);
-      for(i=0;i<4;i++) { float by=50+i*52; ICON(ic9[i],208,by+4,22,0.75f);
-        PILL(1,244,by+6,170,12); ACC(244,by+6,170*pc[i],12,i==1?1.0f:0.55f); }
-      break; }
-    default: {  // Sobre e ajuda: o guia, a versao e a atualizacao
-      SUP(2,40,40,180,220,0.06f); SUP(2,228,40,180,220,0.06f);
-      { char marca[1200]; snprintf(marca,sizeof marca,"%s/marcas/nuvio_wordmark.png",uxDirArte);
-        ajLogo(marca,PX(60),PY(52),140*s,44*s,0.96f);
-        TxtLinha versao=ajTxt(TXT_MINI,NV_VERSAO); txt_desenhar_alpha(versao,PX(62),PY(104),0.72f); }
-      for(i=0;i<4;i++) { BAR(3,60,132+i*18,i==3?70:140); }
-      for(i=0;i<5;i++) BAR(3,248,70+i*28,i==2?80:140);
-      PILL(3,60,214,76,26); BRI(74,223,48,8,0.7f);
-      SUP(3,248,206,140,40,0.5f); ICON("aj_download",262,215,22,0.85f); ACC(380,220,10,10,1); BAR(2,292,222,64);
+    default: {   // Sobre e ajuda: marca, versao, atualizacao e o QR do guia
+      static const unsigned QR[21] = { 0x1FC07F, 0x104A41, 0x175B5D, 0x174A5D, 0x1754DD, 0x104C41, 0x1FD57F, 0x000600,
+                                       0x1B6D3A, 0x0A9145, 0x15B6CB, 0x08592A, 0x1D2EB5, 0x0005A2, 0x1FCB4C, 0x1046D3,
+                                       0x175A28, 0x174D97, 0x1752AC, 0x104B55, 0x1FC93A };
+      ajCenaArte(ajArte(AJA_FUNDO, 3), q, rr, 0.6f);
+      VID(36, 36, 344, 288, 24);
+      { char marca[1200]; snprintf(marca, sizeof marca, "%s/marcas/nuvio_wordmark.png", uxDirArte);
+        ajLogo(marca, PX(62), PY(64), 170 * s, 48 * s, 0.96f); }
+      TXT(NV_VERSAO, 18, 1, 62, 132, 0.85f);
+      BAR(62, 172, 220, 0.4f); BAR(62, 190, 170, 0.4f);
+      VID(62, 248, 200, 48, 24); gfx_cor(RR(62, 248, 200, 48), 0.5f, 1, 1, 1, 0.06f);
+      ICON("aj_download", 80, 260, 24, 0.9f); BAR(116, 268, 100, 0.75f); ACC(240, 266, 10, 10, 1);
+      VID(396, 36, 208, 288, 24);
+      gfx_cor(RR(424, 64, 152, 152), 12.0f / 152.0f, 0.953f, 0.949f, 0.937f, 1);
+      for (i = 0; i < 21; i++) for (j = 0; j < 21; j++)
+        if (QR[i] >> (20 - j) & 1) gfx_cor(RR(430 + j * 6.66f, 70 + i * 6.66f, 6.8f, 6.8f), 0, 0.06f, 0.06f, 0.07f, 1);
+      ICON("aj_book-open", 424, 244, 26, 0.85f); BAR(462, 254, 110, 0.6f); BAR(424, 290, 150, 0.35f);
       break; }
   }
-  if (op >= 0) {   // a identidade da opcao (nunca de categoria): uma peca so
-    char v[160];
-    TxtLinha t;
-    SUP(2,462,38,96,96,0.28f); ICON(ic,486,62,48,0.85f);
-    // Valores de acao podem ser URL, usuario ou credencial: nunca na previa.
-    if (OPCOES[op].tipo == OP_ESCOLHA || OPCOES[op].tipo == OP_NUMERO)
-      uxValorTexto(op, valor[op], v, sizeof v);
-    else snprintf(v,sizeof v,"%s",i18n(uxBloco(op)[0]?uxBloco(op):uxCaminho(op)));
-    t = ajTxtC(TXT_V2_24,v,w-48*s);
-    txt_desenhar_alpha(t,x+24*s,y+h-28*s-t.h,0.85f);
-  }
+  gfx_sem_recorte();
 #undef PX
 #undef PY
 #undef RR
-#undef SUP
-#undef PILL
+#undef VID
 #undef BAR
 #undef ACC
-#undef BRI
-#undef LUZ
 #undef ICON
+#undef TXT
   return h;
 }
