@@ -5,11 +5,12 @@
 #
 #   bash tools/p2p-motor/build-arm.sh [pasta-de-trabalho]
 #
-# A pasta de trabalho (padrao /tmp/nv-p2p-motor) recebe o clone do
+# A pasta de trabalho (padrao <raiz>/arm, ver pasta.sh) recebe o clone do
 # nuvio-engine no commit fixado e o build; nada vai para o repositorio.
 set -eu
 cd "$(dirname "$0")/../.."
-W="${1:-/tmp/nv-p2p-motor}"
+. tools/p2p-motor/pasta.sh; nv_p2p_raiz
+W="${1:-${NV_P2P_RAIZ:-/Volumes/ExternalSSD/nuvio-p2p-motor}/arm}"
 COMMIT=02938d7
 mkdir -p "$W"
 if [ ! -d "$W/nuvio-engine/.git" ]; then

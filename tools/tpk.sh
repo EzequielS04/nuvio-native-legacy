@@ -85,19 +85,17 @@ fi
 echo "[1/3] libnuvio.so (ARMv7 softfp, glibc <= 2.28)"
 ENVF=$(mktemp "${TMPDIR:-/tmp}/nuvio-tpk-env.XXXXXXXX"); trap 'rm -f "$ENVF"' EXIT
 tools/env.sh --env-file "$ENVF"
-# NUVIO_P2P_MOTOR_TPK=<pasta de tools/p2p-motor/build-tpk.sh>: liga o motor P2P
+# Motor P2P (<raiz>/tpk de tools/p2p-motor/build-tpk.sh, achada por tools/p2p-motor/pasta.sh): liga o motor P2P
 # embutido (src/p2pmotor.h) SO na libnuvio.so dos hosts 6+, por dlopen
 # (-DNV_P2P_MOTOR_DLOPEN: sem NEEDED, a auto-atualizacao de uma libnuvio.so
 # num pacote sem o motor continua abrindo), e poe a libnuvio_engine.so no
 # lib/ desses pacotes. O NuvioTpk40 (Tizen 4/5) nunca leva motor.
+. tools/p2p-motor/pasta.sh
+nv_p2p_resolver tpk
 P2P_VOL=""
-if [ -n "${NUVIO_P2P_MOTOR_TPK:-}" ]; then
-  [ -f "$NUVIO_P2P_MOTOR_TPK/libnuvio_engine.so" ] && [ -f "$NUVIO_P2P_MOTOR_TPK/include/nuvio_engine/nuvio_engine.h" ] || {
-    echo "NUVIO_P2P_MOTOR_TPK sem build: rode tools/p2p-motor/build-tpk.sh $NUVIO_P2P_MOTOR_TPK" >&2; exit 2; }
-  P2P_VOL="-v $NUVIO_P2P_MOTOR_TPK:/p2p"
-fi
+[ -n "$NV_P2P_DIR" ] && P2P_VOL="-v $NV_P2P_DIR:/p2p"
 docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
-  -e NUVIO_P2P_MOTOR="${NUVIO_P2P_MOTOR_TPK:+1}" \
+  -e NUVIO_P2P_MOTOR="${NV_P2P_DIR:+1}" \
   -e NUVIO_EXTRA_CFLAGS="${NUVIO_EXTRA_CFLAGS:-}" \
   -v "$RAIZ":/work -v "$CACHE/prefix":/deps -w /work nuvio-tpk-sdk sh -c '
   set -e
@@ -140,7 +138,9 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
   # objetos da .so de cima. O link ganha --hash-style=both para o carregador
   # de ELF do Program40.cs achar o DT_HASH (o padrao do gcc daqui e so GNU_HASH).
   mkdir -p /tmp/o40
-  grep -l NV_TPK40 src/*.c | grep -v "src/video_tizen.c" | xargs -P 6 -I{} sh -c \
+  # p2pmotor_motor.c entra sempre aqui: o 4/5 NUNCA leva o motor (a UEP barra
+  # .so de arquivo), entao ele e recompilado SEM -DNV_P2P_MOTOR (sem P2P_CFLAGS).
+  { grep -l NV_TPK40 src/*.c; echo src/p2pmotor_motor.c; } | sort -u | grep -v "src/video_tizen.c" | xargs -P 6 -I{} sh -c \
     "gcc $CFLAGS -c {} -o /tmp/o40/\$(basename {} .c).o -DNV_TPK -DNV_TPK40 -include src/tpk.h -fvisibility=hidden -Wno-unused-result $NUVIO_EXTRA_CFLAGS @/tmp/flags -I/deps/include -I/deps/include/SDL2"
   OBJ40=""
   for o in /tmp/o/*.o; do
@@ -183,13 +183,15 @@ for p in $PACOTES; do
   else
     cp "$SAIDA/libnuvio.so" "$H/lib/"
     # Motor P2P (6+): a .so ao lado da libnuvio.so, aberta por dlopen.
-    [ -n "${NUVIO_P2P_MOTOR_TPK:-}" ] && cp "$NUVIO_P2P_MOTOR_TPK/libnuvio_engine.so" "$H/lib/"
+    [ -n "$NV_P2P_DIR" ] && cp "$NV_P2P_DIR/libnuvio_engine.so" "$H/lib/"
   fi
   cp -R "$ARTE" "$H/res/art"
   # Versao EMPACOTADA para a auto-atualizacao (tizen-tpk/Carga.cs): o host so
   # aplica uma libnuvio.so encenada em data/ se ela for mais nova que isto.
   printf '%s' "$VER" > "$H/res/versao.txt"
   cp -R deploy/app/fonts "$H/res/fonts"
+  # Avisos de licenca de terceiros (libtorrent, Boost, OpenSSL, nuvio-engine).
+  cp -R deploy/app/licencas "$H/res/licencas"
   # Clipe mudo do canario de audio (#137, Video.PrimeAudio); so o host 6+ usa.
   [ "$p" = NuvioTpk40 ] || cp tizen-tpk/silencio.mp4 "$H/res/"
   cp deploy/app/tizen/icon.png "$H/shared/res/$p.png"
@@ -235,6 +237,14 @@ for T in "$SAIDA"/*.tpk; do
   fi
   grep -qE " lib/libnuvio.so$" <<<"$L" || { echo "$T sem lib/libnuvio.so" >&2; exit 1; }
   grep -qE " res/art/" <<<"$L" || { echo "$T sem res/art" >&2; exit 1; }
+  grep -qE " res/licencas/p2p-avisos.txt$" <<<"$L" || { echo "$T sem res/licencas/p2p-avisos.txt" >&2; exit 1; }
+  # Motor pedido (pasta achada) => TODO .tpk 6+ tem de levar a .so dele; o 4/5, nunca.
+  case "$T" in
+    *-NuvioTpk40.tpk) ! grep -qE " lib/libnuvio_engine.so$" <<<"$L" || { echo "$T leva o motor P2P (o 4/5 nao pode)" >&2; exit 1; } ;;
+    *) if [ -n "$NV_P2P_DIR" ]; then
+         grep -qE " lib/libnuvio_engine.so$" <<<"$L" || { echo "$T sem lib/libnuvio_engine.so (motor P2P configurado)" >&2; exit 1; }
+       fi ;;
+  esac
   echo "  $T ($(du -h "$T" | cut -f1))"
 done
 # O NuvioTpk40 tem de levar a .so SEM TLS, e os outros a de sempre (bytes iguais).

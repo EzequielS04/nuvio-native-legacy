@@ -72,17 +72,16 @@ tools/env.sh --env-file "$ENVF"
 # bandeira de compilacao nao e uma string do binario. Posta la, ela derrubava a
 # build com "ABORTADO: NUVIO_EXTRA_CFLAGS nao entrou no binario ARM", que e a
 # guarda funcionando sobre a coisa errada.
-# NUVIO_P2P_MOTOR=<pasta>: liga o motor P2P embutido (src/p2pmotor.h). A pasta
-# e a de trabalho de tools/p2p-motor/build-arm.sh (nuvio-engine + libtorrent +
-# OpenSSL ja compilados para ARM). Sem a variavel o binario sai igual a antes.
+# Motor P2P embutido (src/p2pmotor.h): a pasta <raiz>/arm e a de trabalho de
+# tools/p2p-motor/build-arm.sh (nuvio-engine + libtorrent + OpenSSL ja
+# compilados para ARM), achada por tools/p2p-motor/pasta.sh (NUVIO_P2P_MOTOR,
+# ou a pasta padrao; =none compila sem). Incompleta = erro.
+. tools/p2p-motor/pasta.sh
+nv_p2p_resolver arm
 P2P_VOL=""
-if [ -n "${NUVIO_P2P_MOTOR:-}" ]; then
-  [ -f "$NUVIO_P2P_MOTOR/build-arm/libnuvio_engine.a" ] || {
-    echo "NUVIO_P2P_MOTOR sem build: rode tools/p2p-motor/build-arm.sh $NUVIO_P2P_MOTOR" >&2; exit 2; }
-  P2P_VOL="-v $NUVIO_P2P_MOTOR:/p2p"
-fi
+[ -n "$NV_P2P_DIR" ] && P2P_VOL="-v $NV_P2P_DIR:/p2p"
 docker run --rm --platform linux/arm64 --env-file "$ENVF" $P2P_VOL \
-  -e NUVIO_P2P_MOTOR="${NUVIO_P2P_MOTOR:+1}" \
+  -e NUVIO_P2P_MOTOR="${NV_P2P_DIR:+1}" \
   -e NUVIO_EXTRA_CFLAGS="${NUVIO_EXTRA_CFLAGS:-}" \
   -e NUVIO_ASS_LIBASS="${NUVIO_ASS_LIBASS:-1}" \
   -v "$PWD":/work nuvio-webos-sdk sh -c '
@@ -295,6 +294,21 @@ if [ "$1" = "--ipk" ]; then
     echo "    ABORTADO: nuvio-proto no pacote com modo '${MODO:-ausente}', esperado -rwxr-xr-x (o webOS nao executa)"
     rm -f "$IPK"
     exit 1
+  fi
+  # AVISOS DE LICENCA do motor (libtorrent, Boost, OpenSSL, nuvio-engine).
+  printf '%s\n' "$LISTA" | grep -qE 'licencas/p2p-avisos\.txt$' || {
+    echo "    ABORTADO: o pacote nao leva licencas/p2p-avisos.txt"; rm -f "$IPK"; exit 1; }
+  # MOTOR P2P: pasta achada = o binario DENTRO do pacote tem de te-lo. A guarda
+  # fica no arquivo pronto, nao no flag que se passou ao compilador.
+  if [ -n "$NV_P2P_DIR" ]; then
+    mkdir -p "$PALCO/x" && tar xzf "$PALCO/data.tar.gz" -C "$PALCO/x" 2>/dev/null
+    MOT=$(find "$PALCO/x" -name nuvio-proto -type f | head -1)
+    if [ -z "$MOT" ] || [ "$(strings "$MOT" | grep -c 'nuvio_engine_create')" -lt 1 ]; then
+      echo "    ABORTADO: o nuvio-proto do pacote nao tem o motor P2P (nuvio_engine_create)"; rm -f "$IPK"; exit 1
+    fi
+    echo "    motor P2P dentro do nuvio-proto do pacote"
+  else
+    echo "    ATENCAO: pacote SEM motor P2P (NUVIO_P2P_MOTOR=none ou sem pasta)"
   fi
   echo "    $IPK ($(du -h "$IPK" | cut -f1)) — sem art/{$(echo $ARQ_DE_PESSOA $GLOB_DE_PESSOA $ACERVO_DE_PESSOA $DIR_DE_PESSOA | tr ' ' ',')}"
 fi

@@ -73,6 +73,19 @@ unzip -qo "$OUT/Nuvio-$VER-NuvioTpk40.tpk" lib/libnuvio.so -d "$D/4"
 cmp -s "$D/6/lib/libnuvio.so" "$OUT/libnuvio-$VER-tpk-arm.so"   || { echo "release-samsung: anexo 6+ != .so do pacote" >&2; exit 1; }
 cmp -s "$D/4/lib/libnuvio.so" "$OUT/libnuvio-$VER-tpk40-arm.so" || { echo "release-samsung: anexo 4/5 != .so do pacote" >&2; exit 1; }
 
+# Motor P2P (dono, 1.8): pasta do motor achada => os .tpk 6+ levam libnuvio_engine.so
+# (tpk.sh ja conferiu) e a libnuvio.so deles abre essa .so por dlopen; o 4/5 e o
+# anexo dele nunca. NUVIO_P2P_MOTOR=none faz a release sair sem motor, avisando.
+. tools/p2p-motor/pasta.sh
+nv_p2p_resolver tpk
+if [ -n "$NV_P2P_DIR" ]; then
+  strings "$OUT/libnuvio-$VER-tpk-arm.so" | grep -q 'libnuvio_engine\.so' || { echo "release-samsung: libnuvio-$VER-tpk-arm.so (6+) sem o motor P2P" >&2; exit 1; }
+  if strings "$OUT/libnuvio-$VER-tpk40-arm.so" | grep -q 'libnuvio_engine\.so'; then echo "release-samsung: libnuvio-$VER-tpk40-arm.so (4/5) leva o motor P2P" >&2; exit 1; fi
+  echo "== motor P2P: .tpk 6+ com libnuvio_engine.so, 4/5 sem (como deve)"
+else
+  echo "== ATENCAO: .tpk sem motor P2P (NUVIO_P2P_MOTOR=none ou sem pasta)" >&2
+fi
+
 # 2. .wgt
 if [ "$SO_TPK" = 0 ]; then
   bash tools/tizen.sh
