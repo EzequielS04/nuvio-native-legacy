@@ -3346,11 +3346,14 @@ static void corpoCarregando(GfxRect r, float a, void *u) {
     txt_desenhar_alpha(l, x + 32.0f, y, a);
   }
   y += 24.0f + 18.0f;
+  // Sem fonte escolhida ainda (st NULL) nao ha o que mostrar na caixa: a caixa
+  // vazia era so um retangulo escuro (TV do dono, 04/10). O espaco fica, para o
+  // cartao nao mudar de altura quando a fonte entra.
   { GfxRect cx = { x, y, w, 52.0f };
-    if (ajustes_vidro()) gfx_cor(cx, 20.0f / 52.0f, 1, 1, 1, 0.05f * a);
-    else gfx_cor(cx, 20.0f / 52.0f, 0.118f, 0.122f, 0.141f, a);
     if (st) {
       char d[160];
+      if (ajustes_vidro()) gfx_cor(cx, 20.0f / 52.0f, 1, 1, 1, 0.05f * a);
+      else gfx_cor(cx, 20.0f / 52.0f, 0.118f, 0.122f, 0.141f, a);
       float lw = 0.0f;
       if (st->badges) lw = badges_desenhar_tom(st->badges, x + 18.0f, y + 14.0f, w * 0.55f, 24.0f, .52f, .52f, .52f, a);
       (void)lw;
@@ -3586,7 +3589,11 @@ void player_desenhar(Uint32 agora) {
     else snprintf(lin, sizeof lin, "%s", i18n("Sintonizando…"));
     pd.texto = lin; pd.respira = 1; pd.semFim = 1; pd.aberta = 1;
     plrilha_pedir(&pd);
-  } else if (player_carregando()) {
+  } else if (player_carregando() && !stream_folha_aberta() && stream_folha_anim() < 0.05f) {
+    // COM A FOLHA DE FONTES NA TELA o cartao fica de fora: ela e a escolha que
+    // o player espera, e o cartao no meio tapava a esquerda das primeiras
+    // linhas (foto do dono, 04/10). Escolhida a fonte, a folha sai e o cartao
+    // entra no lugar dela.
     { PlrIlhaPedido pd;
       memset(&pd, 0, sizeof pd);
       pd.semFim = 1;

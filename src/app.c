@@ -257,6 +257,7 @@ static int    fonteVODTentativas;
 static int    voltaAtiva;
 static Uint32 voltaDesde;
 static Uint32 fonteVODDesde;
+static Uint32 fonteManualDesde;   // OK na folha de Fontes: prazo ate o primeiro quadro
 static void limparFonteVOD(void);
 #define CANAL_FONTE_PRAZO_MS 25000
 // PRAZO CURTO para fonte que JA PROVOU estar ruim. A conferencia de playlist
@@ -392,6 +393,7 @@ static void limparFonteVOD(void) {
   voltaAtiva = 0;
   fonteVODTentativas = 0;
   fonteVODDesde = 0;
+  fonteManualDesde = 0;
   player_definir_tentativa(0, 0);
 }
 static int iniciarFonteJob(int tipo, unsigned geracao, const char *id, int renovando) {
@@ -1282,6 +1284,38 @@ static int pedirProximaFonteVOD(void) {
   }
   return 1;
 }
+// ESCOLHA MANUAL QUE NAO ABRE: prazo ate o primeiro quadro (fontevolta.h).
+// Vence -> o erro de fonte do player, com "A fonte nao respondeu" e as saidas
+// de sempre. O automatico ja tem o proprio prazo (tentarProximaFonteVOD).
+static void vigiarAberturaManual(void) {
+  FontevoltaSinais g;
+  Uint32 desde;
+  if (!fonteManualDesde) return;
+  if (!player_aberto() || player_quer_sair() || player_id_canal()[0] ||
+      fonteVODAutomatica || aguardandoFonte != 0 || player_fonte_falhou() || video_pronto()) {
+    fonteManualDesde = 0; return;
+  }
+  desde = SDL_GetTicks() - fonteManualDesde;
+  memset(&g, 0, sizeof g);
+  g.falhou = video_falhou() || player_fonte_falhou();
+  g.pronto = video_pronto();
+  g.carregando = player_carregando();
+  g.desdeMs = desde;
+  // Erro do player no preparo (Media3 2004 etc., video_android.c): sem isto a
+  // tela ficava em "Abrindo fonte" ate o prazo, ou para sempre.
+  if (video_falhou()) {
+    printf("[fonte] escolha manual: erro do player em %u ms (%s)\n", (unsigned)desde, video_erro_texto());
+    fflush(stdout);
+    fonteManualDesde = 0;
+    player_erro_fonte_motivo(i18n("Não foi possível abrir a fonte"), NULL);
+    return;
+  }
+  if (!fontevolta_abertura_vencida(&g, FONTE_MANUAL_PRAZO_MS)) return;
+  printf("[fonte] escolha manual nao abriu em %u ms: erro de fonte\n", (unsigned)desde);
+  fflush(stdout);
+  fonteManualDesde = 0;
+  player_erro_fonte_motivo(i18n("A fonte não respondeu a tempo."), NULL);
+}
 static void tentarProximaFonteVOD(void) {
   Uint32 desde;
   int atual, motivo = 0;
@@ -1309,7 +1343,8 @@ static void tentarProximaFonteVOD(void) {
     printf("[fonte] automatico VOD sem proxima candidata (motivo=%d, %d de %d)\n",
            motivo, fonteVODTentativas, VOD_FONTE_MAX_TENTATIVAS);
     fonteVODAutomatica = 0;
-    player_erro_fonte();
+    if (motivo == 2) player_erro_fonte_motivo(i18n("A fonte não respondeu a tempo."), NULL);
+    else player_erro_fonte();
     return;
   }
   if (!pedirProximaFonteVOD()) return;
@@ -3268,6 +3303,7 @@ void app_atualizar(float dt, Uint32 agora) {
   fitDuracaoMidia();
   fitPassivaPermitir();
   tentarProximaFonteVOD();
+  vigiarAberturaManual();
   processarTorrentJob();
 
   int fonte;
@@ -3306,6 +3342,7 @@ void app_atualizar(float dt, Uint32 agora) {
         pedirTorrentEscolhido(fonte);
       } else {
         player_definir_fonte(s->url);
+        if (!player_id_canal()[0]) fonteManualDesde = SDL_GetTicks();
         // FONTE QUE O ADDON MARCA COMO FORA DE CACHE ("⏳", "[TB download]"):
         // tocar o link e o que manda o servico baixar, e o que o addon devolve
         // enquanto baixa e um clipe de aviso de ~8 s (registros 1136, 2191,

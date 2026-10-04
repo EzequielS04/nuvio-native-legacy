@@ -110,6 +110,19 @@ int main(void) {
     assert(fontevolta_decidir(&g0, &m) == FV_ABRIU);
   }
   puts("ok vigia: erro, clipe curto, sonda e prazo recuam; tocando vence a sonda");
+  // Prazo da escolha manual: sem "pronto" (nenhum Prepared), so vence carregando
+  // e depois do prazo; pronto, erro ja mostrado ou buffering pos-abertura nao.
+  { FontevoltaSinais g1 = {0};
+    g1.carregando = 1; g1.desdeMs = FONTE_MANUAL_PRAZO_MS;
+    assert(!fontevolta_abertura_vencida(&g1, FONTE_MANUAL_PRAZO_MS));
+    g1.desdeMs = FONTE_MANUAL_PRAZO_MS + 1;
+    assert(fontevolta_abertura_vencida(&g1, FONTE_MANUAL_PRAZO_MS));
+    g1.falhou = 1; assert(!fontevolta_abertura_vencida(&g1, FONTE_MANUAL_PRAZO_MS));
+    g1.falhou = 0; g1.pronto = 1; assert(!fontevolta_abertura_vencida(&g1, FONTE_MANUAL_PRAZO_MS));
+    g1.pronto = 0; g1.carregando = 0; assert(!fontevolta_abertura_vencida(&g1, FONTE_MANUAL_PRAZO_MS));
+    assert(!fontevolta_abertura_vencida(NULL, 1));
+  }
+  puts("ok prazo manual: so sem pronto, carregando e vencido");
   puts("fontevolta: tudo ok");
   return 0;
 }

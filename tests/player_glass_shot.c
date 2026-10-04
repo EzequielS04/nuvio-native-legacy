@@ -709,6 +709,39 @@ int main(int argc, char **argv) {
     quadros(40);
     salvar("abrindo-tocou");
   }
+  // ABRINDO COM A FOLHA DE FONTES ABERTA (TV do dono, 04/10, "Continuar
+  // assistindo" > Play com "escolher a fonte ao reproduzir"): o player espera
+  // a escolha e a folha esta aberta. O cartao "Abrindo fonte" nao pode ir por
+  // cima das linhas, nem ter caixa de detalhe vazia (nenhuma fonte escolhida).
+  if (quer(argc, argv, "abrindo-folha")) {
+    static Stream st[4];
+    int i;
+    CatItem l1[1];
+    faixas_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
+    stream_folha_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
+    quadros(60);
+    memset(st, 0, sizeof st);
+    for (i = 0; i < 4; i++) {
+      snprintf(st[i].rotulo, sizeof st[i].rotulo, "Happy Valley");
+      snprintf(st[i].provedor, sizeof st[i].provedor, "AIOStreams");
+      snprintf(st[i].url, sizeof st[i].url, "http://exemplo/hv%d.mkv", i);
+      st[i].tamanhoMB = 1900 + i * 100; st[i].fileIdx = -1;
+      st[i].badges = badges_bit("r-1080") | badges_bit("q-bluray");
+    }
+    stream_definir_lista(st, 4);
+    l1[0] = filme; cat_definir(l1, 1);
+    player_abrir(0, NULL);
+    simular(0, 0, "", 0, 0);
+    stream_definir_atual(-1);
+    player_shot_carregando(1);
+    stream_folha_contexto("Happy Valley \xc2\xb7 T1E2");
+    stream_folha_abrir();
+    quadros(120);
+    salvar("abrindo-folha");
+    player_shot_carregando(0);
+    stream_folha_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
+    quadros(30);
+  }
   // A ABA DE STREAMING ("Onde ver") da folha de Fontes, com dois servicos.
   if (quer(argc, argv, "onde-ver")) {
     static Stream st[2];
