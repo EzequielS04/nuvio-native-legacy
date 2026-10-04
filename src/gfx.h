@@ -270,10 +270,18 @@ int  gfx_textura_ativa(void);
 // O matiz da Imersiva por cima de um miolo de vidro (16% da luz do destaque,
 // com a forca da luz ambiente). gfx_vidro_painel/folha ja o chamam.
 void gfx_vidro_matiz(GfxRect r, float raio, float a);
+// O miolo de cor lisa (cr,cg,cb,ca) E a matiz acima numa passada so — o mesmo
+// pixel que gfx_cor(miolo) + gfx_vidro_matiz(r, raio, a), uma camada a menos.
+void gfx_vidro_miolo(GfxRect r, float raio, float cr, float cg, float cb, float ca, float a);
 
 // Proporcao (w/h) da textura a desenhar. 0 = mapeia direto (texto, veu).
 // Definir ANTES de gfx_rect para que a arte seja recortada, nunca esticada.
 extern float gfx_tex_aspect_atual;
+// 1 = a textura do proximo GFX_ARTE tem alfa 255 em todo pixel (tex_opaca).
+// Com ela, um GFX_ARTE de tela cheia, canto vivo e alfa 1 esconde tudo o que
+// estiver por baixo, e a luz ambiente pendente (gfx_ambiente) nao e pintada.
+// Quem liga desliga logo depois do desenho, como gfx_tex_aspect_atual.
+extern int gfx_arte_opaca_atual;
 // Deslize da arte do destaque dentro do proprio retangulo, em fracao da largura
 // (so GFX_HERO, GFX_HERO_CHEIO e GFX_VITRINE). Quem define devolve a 0.
 extern float gfx_desliza_atual;
@@ -483,6 +491,9 @@ void gfx_brilho_topo(GfxRect r, float raio, float alcance,
 // 2 = a esquerda, 3 = a direita; `curva` > 0 e o expoente de (1-d), 0 = a
 // queda suave; `fim` (0..1] e onde zera. Preto a `a`.
 void gfx_veu_css(GfxRect r, int borda, float curva, float fim, float a);
+// gfx_veu_css com um chapado preto de alfa `base` por baixo, composto na mesma
+// passada (uma tela cheia misturada a menos que gfx_cor + gfx_veu_css).
+void gfx_veu_css_base(GfxRect r, int borda, float curva, float fim, float a, float base);
 void gfx_definir_efeitos_leves(int leves);
 int  gfx_efeitos_leves(void);
 // EFEITOS MINIMOS (nivel 2 de gpunivel.h), por cima dos leves: sem a luz de

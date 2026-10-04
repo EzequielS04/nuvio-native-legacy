@@ -122,6 +122,9 @@ typedef struct {
   // idioma + vote_average), entao a unica forma de saber se um logo e preto e
   // OLHAR os pixels.
   int lum;
+  // 1 = TODO pixel tem alfa 255 (conferido inteiro na thread de decode); 0 =
+  // ha transparencia ou nao se sabe. Ver tex_opaca.
+  int opaca;
   // Quando tentar de novo (ticks) e quantas vezes ja falhou. Ver o enum Estado.
   Uint32 tentarEm;
   int    falhas;
@@ -2363,7 +2366,20 @@ static int threadDecode(void *arg) {
     // 1/16 dos pixels bastam para dizer se uma arte e escura, e a conta inteira
     // num logo de 700x271 seria trabalho sem retorno.
     int lumMedia = -1, cromaMedia = 0, desvio1 = 0;
-    int corR = -1, corG = 0, corB = 0;
+    int corR = -1, corG = 0, corB = 0, opaca = 0;
+    // OPACA DE PONTA A PONTA? Conferido pixel a pixel (para no primeiro alfa <
+    // 255): e o que deixa o desenho dispensar a camada de tela cheia que ficaria
+    // inteira atras desta arte (gfx_arte_opaca_atual). Uma amostra nao basta —
+    // um pixel transparente perdido mostraria o fundo errado. ~2 M leituras num
+    // heroi de 1920x1080, nesta thread de baixa prioridade.
+    if (conv && conv->format->BytesPerPixel == 4 && conv->w > 0 && conv->h > 0) {
+      int yy, xx;
+      opaca = 1;
+      for (yy = 0; yy < conv->h && opaca; yy++) {
+        const unsigned char *ln = (const unsigned char *)conv->pixels + (size_t)yy * conv->pitch;
+        for (xx = 0; xx < conv->w; xx++) if (ln[(size_t)xx * 4 + 3] != 255) { opaca = 0; break; }
+      }
+    }
     if (conv && conv->format->BytesPerPixel == 4) {
       const unsigned char *px = (const unsigned char *)conv->pixels;
       long soma = 0, somaC = 0, n = 0;
@@ -2477,6 +2493,7 @@ static int threadDecode(void *arg) {
       falhou = 1;
     } else if (itens[idx].estado == PENDENTE) {
       itens[idx].lum = lumMedia;
+      itens[idx].opaca = opaca;
       itens[idx].croma = cromaMedia;
       itens[idx].desvio1 = desvio1;
       itens[idx].corR = corR; itens[idx].corG = corG; itens[idx].corB = corB;
@@ -3385,6 +3402,18 @@ float tex_aspecto(const char *caminho) {
     a = (float)itens[i].w / (float)itens[i].h;
   SDL_UnlockMutex(mtx);
   return a;
+}
+
+int tex_opaca(const char *caminho) {
+  int r = 0;
+  unsigned long h;
+  int i;
+  if (!caminho || !*caminho) return 0;
+  h = hashCaminho(caminho);
+  BUSCA_MEDIDA(i, caminho, h);
+  if (i >= 0 && itens[i].tex) r = itens[i].opaca;
+  SDL_UnlockMutex(mtx);
+  return r;
 }
 
 int tex_luminancia(const char *caminho) {

@@ -62,6 +62,12 @@ static float rgK2(const char *s, float x, float y) { return rgCaps(TXT_AJ_CAPS13
 // bits). A do log e DENSA (88%, decisao do dono): texto miudo sobre arte.
 static void rgIlha(GfxRect r, float raioPx, float vidA, float rr, float rg, float rb) {
   float raio = raioPx / r.h;
+  // O vidro daqui fica sobre a tela de tras CONGELADA e sem desfoque (app.c): a
+  // 80-88% de opacidade as linhas de Ajustes apareciam POR BAIXO das linhas do
+  // log ("About and help", "Send log"...). Opaco, o painel mantem o jeito de
+  // vidro (luz de canto, sombra, tom frio) sem texto de outra tela atras do texto
+  // que se esta lendo (medido: ate 98,5% ainda se lia o fantasma de Ajustes).
+  vidA = 1.0f;
   gfx_rect((GfxRect){ r.x - 20, r.y - 6, r.w + 40, r.h + 46 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
            0, 0, 0, rgVid() ? 0.36f : 0.45f);
   if (rgVid()) {
@@ -1220,6 +1226,15 @@ static void desenhaPainel(void) {
     snprintf(t, sizeof t, "%s · %s · .tpk 4/5", strncmp(a, "Samsung", 7) ? a : "Samsung", s);
     rgCabecalho(t);
   } else rgCabecalho(i18n("O que o app fez nesta sessão"));
+  // O VAO ENTRE OS DOIS PAINEIS NAO DEIXA PASSAR A TELA DE TRAS (M sweep,
+  // 04/10/2026: letras soltas de Ajustes — "n", "lly", "c", "e" — apareciam em
+  // x~1340 na TV do dono). O veu de 30%/42% e a tela congelada ficam inteiros
+  // por tras, e so o vao nao tem painel por cima. Um canal escuro e opaco,
+  // 2 px por baixo de cada painel e parado nas bordas retas (as pontas
+  // arredondadas dos paineis ficam de fora): le como o sulco entre duas ilhas.
+  if (!RG_SEM_INSP)
+    gfx_cor((GfxRect){ RP_X + RP_W - 2.0f, RP_Y + 18.0f, RI_X - (RP_X + RP_W) + 4.0f, RP_H - 36.0f },
+            0.0f, 0.030f, 0.032f, 0.040f, 0.97f);
   rgIlha((GfxRect){ RP_X, RP_Y, RP_W, RP_H }, 36, 0.88f, 0.051f, 0.055f, 0.067f);
   segFim = RP_X + 30 + rgSeg(!vazio, RP_X + 30, RP_Y + 26 + 28);
   if (vazio) {

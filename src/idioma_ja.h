@@ -529,6 +529,7 @@
   T("Apple TV", "Apple TV"),
   T("Apple TV e Moderno", "Apple TV and Modern"),
   T("Aqui está o que esta versão trouxe. O resto do app está explicado no Guia de uso.", "このバージョンの新機能です。アプリのほかの部分は使い方ガイドで説明しています。"),
+  T("Aqui só aparece o que %s compartilha.", "ここには %s が共有した内容だけが表示されます。"),
   T("Arcade N", "Arcade N"),
   T("Arco", "Arc"),
   T("Arco de qualidade", "品質の推移"),

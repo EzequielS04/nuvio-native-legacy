@@ -529,6 +529,7 @@
   T("Apple TV", "Apple TV"),
   T("Apple TV e Moderno", "Apple TV and Modern"),
   T("Aqui está o que esta versão trouxe. O resto do app está explicado no Guia de uso.", "Dit bracht deze versie. De rest van de app wordt uitgelegd in de Gebruikersgids."),
+  T("Aqui só aparece o que %s compartilha.", "Hier verschijnt alleen wat %s deelt."),
   T("Arcade N", "Arcade N"),
   T("Arco", "Arc"),
   T("Arco de qualidade", "Kwaliteitsboog"),

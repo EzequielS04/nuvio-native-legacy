@@ -125,15 +125,26 @@ static void cartaz(GfxRect r, const char *url, float f, float a) {
 }
 
 // `estilo` e o MESMO para os quatro rotulos (ver a grade): um corpo por cartao
-// deixaria a grade com dois tamanhos de letra lado a lado.
-static void numero(GfxRect r, const char *valor, const char *rotulo, TxtEstilo estilo, float a) {
-  // Cartao baixo (perfil com "assistindo agora", que empurra a grade): um
-  // corpo menor no numero, para o rotulo nao encostar nele.
-  TxtLinha v = txt_linha(r.h < 108.0f ? TXT_HEADLINE : TXT_TITULO3, valor, 246, 246, 250, 255);
-  TxtLinha l = txt_linha_corta(estilo, rotulo, 167, 164, 178, 255, r.w - 36.0f);
+// deixaria a grade com dois tamanhos de letra lado a lado. O ROTULO QUEBRA em
+// ate duas linhas em vez de virar "recommendatio…" (Montserrat, a fonte da TV
+// do dono, e mais larga que a Inter): quem dimensiona o cartao e quem decide
+// quantas linhas cabem e a grade (rotuloLinhas / alturaCartao).
+static int rotuloLinhas(TxtEstilo estilo, const char *rotulo, float larg) {
+  return (float)txt_largura(estilo, rotulo) > larg ? 2 : 1;
+}
+static void numero(GfxRect r, const char *valor, const char *rotulo, TxtEstilo estilo, int compacto, float a) {
+  // Cartao compacto (rotulo em duas linhas, ou perfil com "assistindo agora"
+  // que empurra a grade): um corpo menor no numero, para o rotulo nao encostar.
+  TxtLinha v = txt_linha(compacto ? TXT_HEADLINE : TXT_TITULO3, valor, 246, 246, 250, 255);
+  float lw = r.w - 36.0f;
+  TxtLinha um = txt_linha(estilo, "Hg", 167, 164, 178, 255);
+  float lead = (float)um.h + 2.0f;
+  int n = rotuloLinhas(estilo, rotulo, lw);
   gfx_cor(r, 18.0f / r.h, 0.118f, 0.114f, 0.141f, 0.94f * a);
-  txt_desenhar_alpha(v, r.x + 20.0f, r.y + (r.h < 108.0f ? 8.0f : 10.0f), a);
-  txt_desenhar_alpha(l, r.x + 20.0f, r.y + r.h - (r.h < 108.0f ? 10.0f : 12.0f) - (float)l.h, a * 0.95f);
+  txt_desenhar_alpha(v, r.x + 20.0f, r.y + (compacto ? 8.0f : 10.0f), a);
+  txt_bloco_corta(estilo, rotulo, 167, 164, 178,
+                  r.x + 20.0f, r.y + r.h - (compacto ? 10.0f : 12.0f) - lead * (float)n + 2.0f,
+                  lw, lead, a * 0.95f, 2);
 }
 
 static void tituloFila(float x, float y, const char *t, float a) {
@@ -146,6 +157,20 @@ static void vazioFila(float x, float y, const char *t, float a) {
   gfx_cor((GfxRect){ x, y, 4.0f * (AP_PW + AP_PGAP) - AP_PGAP, 90.0f }, 18.0f / 90.0f,
           1.0f, 1.0f, 1.0f, 0.04f * a);
   txt_desenhar_alpha(l, x + 24.0f, y + (90.0f - (float)l.h) * 0.5f, a);
+}
+
+// SO O QUE A FONTE DA PESSOA DA: o servidor do Nuvio nao a conhece (404 em
+// /v1/amigo — "trakt:kevin" nao e uma `pessoa` da conta Nuvio), entao so ha o
+// que o feed trouxe daquela fonte. E um estado CORRETO, nao uma falha.
+static int soFonte(void) {
+  return perf.estado == SV_PERFIL_NAO_ACHOU && perf.porOnde != SV_FONTE_NUVIO;
+}
+// Nenhum dos quatro numeros do mes existe e nao vai existir enquanto o estado
+// for este (pessoa fora do servidor, perfil negado ou nao compartilhado).
+static int semNumeros(void) {
+  int final = perf.estado == SV_PERFIL_NAO_ACHOU || perf.estado == SV_PERFIL_NEGADO || perf.compartilha == 0;
+  return final && perf.minutosMes < 0 && perf.filmesMes < 0 && perf.seriesCurso < 0 &&
+         !(perf.recsVistas >= 0 && perf.recsTotal > 0);
 }
 
 static void legenda(float x, float y, const char *t, int r, int g, int b, float a) {
@@ -234,12 +259,23 @@ void amigoperfil_desenhar(Uint32 agora) {
       }
       y += 12.0f; }
     // OS QUATRO NUMEROS DO MES, numa grade 2x2. "—" quando nao ha dado.
-    { char v[4][32];
+    // SEM NENHUM dos quatro e sem ter de onde vir (a pessoa so existe no Trakt,
+    // o servidor nao a conhece, ou ela nao compartilha): a grade some e entra
+    // UMA frase que diz o motivo. Quatro "—" lado a lado nao dizem nada.
+    if (semNumeros()) {
+      const char *msg = soFonte() ? i18n("Aqui só aparece o que %s compartilha.")
+                                  : i18n("Perfil indisponível");
+      if (soFonte()) snprintf(buf, sizeof buf, msg, socialvis_fonte_nome(perf.porOnde));
+      else snprintf(buf, sizeof buf, "%s", msg);
+      { float bh = txt_bloco_corta(TXT_CAPTION, buf, 168, 166, 178, lx, y + 4.0f, lw, 28.0f, a, 3);
+        yBase = y + 4.0f + bh + 18.0f; }
+    } else {
+      char v[4][32];
       const char *rot[4] = { "assistidas neste mês", "filmes vistos", "séries em curso",
                              "recomendações vistas" };
       float bw = (lw - 16.0f) * 0.5f, bh = 108.0f;
       TxtEstilo est = TXT_CAPTION;
-      int i;
+      int i, compacto = 0, k, nl;
       if (perf.minutosMes >= 0) snprintf(v[0], sizeof v[0], i18n("%d h"), perf.minutosMes / 60);
       else snprintf(v[0], sizeof v[0], "\xe2\x80\x94");
       if (perf.filmesMes >= 0) snprintf(v[1], sizeof v[1], "%d", perf.filmesMes);
@@ -249,24 +285,33 @@ void amigoperfil_desenhar(Uint32 agora) {
       if (perf.recsVistas >= 0 && perf.recsTotal > 0)
         snprintf(v[3], sizeof v[3], i18n("%d de %d"), perf.recsVistas, perf.recsTotal);
       else snprintf(v[3], sizeof v[3], "\xe2\x80\x94");
-      // O ROTULO INTEIRO, nao cortado: com Montserrat (a fonte da TV do dono)
-      // "assistidas neste mês" e "recomendações vistas" nao cabiam em 206 px
-      // no corpo de legenda e viravam "assistidas neste…". Se UM nao cabe, os
-      // quatro descem um corpo.
-      for (i = 0; i < 4; i++)
-        if ((float)txt_linha(TXT_CAPTION, i18n(rot[i]), 167, 164, 178, 255).w > bw - 36.0f) est = TXT_MINI;
       if (y < 640.0f) y = 640.0f;
-      // A GRADE CABE ATE y=920 (onde comecam as linhas de estado e de foco, que
-      // nao podem encostar no rodape). Com a linha de "assistindo agora" ela
-      // desce: os cartoes encolhem ate 92 em vez de empurrar o resto.
+      // O ROTULO INTEIRO, em ate duas linhas, no corpo de legenda: com Montserrat
+      // (a fonte da TV do dono) "recomendações vistas" nao cabe em 206 px numa
+      // linha so, e antes virava "recommendatio…". A grade cabe ate y=920 (onde
+      // comecam as linhas de estado e de foco, que nao podem encostar no
+      // rodape); se duas linhas no corpo de legenda nao cabem, os quatro
+      // descem para o corpo pequeno, e so depois o cartao encolhe (minimo 92).
+      for (k = 0; k < 2; k++) {
+        TxtEstilo e = k == 0 ? TXT_CAPTION : TXT_MINI;
+        float lead = (float)txt_linha(e, "Hg", 167, 164, 178, 255).h + 2.0f, need;
+        nl = 1;
+        for (i = 0; i < 4; i++) { int n = rotuloLinhas(e, i18n(rot[i]), bw - 36.0f); if (n > nl) nl = n; }
+        compacto = nl > 1 || k == 1;
+        need = (compacto ? 8.0f + (float)NV_FT_HEADLINE * 1.15f : 10.0f + (float)NV_FT_TITULO3 * 1.15f)
+               + 4.0f + lead * (float)nl + 12.0f;
+        if (need < 108.0f) need = 108.0f;
+        est = e; bh = need;
+        if (y + 2.0f * bh + 12.0f <= 920.0f) break;
+      }
       if (y + 2.0f * bh + 12.0f > 920.0f) {
         bh = (920.0f - 12.0f - y) * 0.5f;
         if (bh < 92.0f) bh = 92.0f;
-        est = TXT_MINI;
+        compacto = 1;
       }
       for (i = 0; i < 4; i++) {
         GfxRect r = { lx + (float)(i % 2) * (bw + 16.0f), y + (float)(i / 2) * (bh + 12.0f), bw, bh };
-        numero(r, v[i], i18n(rot[i]), est, a);
+        numero(r, v[i], i18n(rot[i]), est, compacto, a);
       }
       yBase = y + 2.0f * bh + 12.0f + 18.0f; } }
   if (yBase < 920.0f) yBase = 920.0f;
@@ -329,6 +374,7 @@ void amigoperfil_desenhar(Uint32 agora) {
     if (n == 0) {
       const char *st = f == AP_MANDOU ? "Você ainda não mandou nada para essa pessoa."
                     : perf.estado == SV_PERFIL_INDO ? "Carregando atividade…"
+                    : soFonte() ? "Nada compartilhado por aqui ainda"
                     : (perf.estado == SV_PERFIL_NAO_ACHOU || perf.estado == SV_PERFIL_NEGADO) ? "Perfil indisponível"
                     : perf.estado == SV_PERFIL_FALHA ? (perf.compartilha >= 0 ? "Não foi possível atualizar. Mostrando os dados salvos."
                                                         : "Não foi possível atualizar. Tente novamente.")

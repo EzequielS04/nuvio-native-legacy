@@ -529,6 +529,7 @@
   T("Apple TV", "Apple TV"),
   T("Apple TV e Moderno", "Apple TV and Modern"),
   T("Aqui está o que esta versão trouxe. O resto do app está explicado no Guia de uso.", "Inilah yang dibawa versi ini. Bagian lain aplikasi dijelaskan di Panduan penggunaan."),
+  T("Aqui só aparece o que %s compartilha.", "Di sini hanya muncul yang dibagikan %s."),
   T("Arcade N", "Arcade N"),
   T("Arco", "Arc"),
   T("Arco de qualidade", "Busur kualitas"),
