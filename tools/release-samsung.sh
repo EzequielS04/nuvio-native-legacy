@@ -79,8 +79,11 @@ cmp -s "$D/4/lib/libnuvio.so" "$OUT/libnuvio-$VER-tpk40-arm.so" || { echo "relea
 . tools/p2p-motor/pasta.sh
 nv_p2p_resolver tpk
 if [ -n "$NV_P2P_DIR" ]; then
-  strings "$OUT/libnuvio-$VER-tpk-arm.so" | grep -q 'libnuvio_engine\.so' || { echo "release-samsung: libnuvio-$VER-tpk-arm.so (6+) sem o motor P2P" >&2; exit 1; }
-  if strings "$OUT/libnuvio-$VER-tpk40-arm.so" | grep -q 'libnuvio_engine\.so'; then echo "release-samsung: libnuvio-$VER-tpk40-arm.so (4/5) leva o motor P2P" >&2; exit 1; fi
+  # contagem em vez de `grep -q`: com pipefail o grep -q fecha o pipe cedo e o SIGPIPE derruba o strings.
+  n6=$(strings "$OUT/libnuvio-$VER-tpk-arm.so" | grep -c 'nuvio_engine_api_version' || true)
+  n4=$(strings "$OUT/libnuvio-$VER-tpk40-arm.so" | grep -c 'nuvio_engine_api_version' || true)
+  [ "$n6" -ge 1 ] || { echo "release-samsung: libnuvio-$VER-tpk-arm.so (6+) sem o motor P2P" >&2; exit 1; }
+  [ "$n4" = 0 ] || { echo "release-samsung: libnuvio-$VER-tpk40-arm.so (4/5) leva o motor P2P" >&2; exit 1; }
   echo "== motor P2P: .tpk 6+ com libnuvio_engine.so, 4/5 sem (como deve)"
 else
   echo "== ATENCAO: .tpk sem motor P2P (NUVIO_P2P_MOTOR=none ou sem pasta)" >&2
