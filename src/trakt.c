@@ -6,6 +6,7 @@
 #include "jsw.h"
 #include "idioma.h"
 #include "rede.h"
+#include "metaprov.h"
 #include "js.h"
 #include "nuvem.h"
 #include "cwordem.h"
@@ -19,7 +20,6 @@
 #include <limits.h>
 #include <stdint.h>
 
-#define CINEMETA "https://v3-cinemeta.strem.io"
 
 static char token[128], cliente[80];
 static int  ligado;
@@ -439,10 +439,10 @@ static int enfeitar(CatItem *d, const char *tipo) {
   if (!precisaCinemeta)
     return d->poster[0] != 0;
 
-  snprintf(url, sizeof url, "%s/meta/%s/%s.json", CINEMETA, tipo, serie);
   // 8 s e nao 20: ate oito destes em paralelo antes da primeira fileira.
   // Medido no Mac: 2,1 s no caso bom; com um item lento eram 20 s vazios.
-  corpo = rede_baixar(url, 8);
+  // Catalogo do Nuvio primeiro (5 s, e some por 1 min se cair), Cinemeta depois.
+  corpo = metaprov_meta(tipo, serie, 8, NULL);
   marcarTentada(d->imdb);
   if (!corpo) {
     // "A seguir" sem meta: nao da para confirmar que o episodio existe.
@@ -563,8 +563,14 @@ static int enfeitar(CatItem *d, const char *tipo) {
   if (!d->meta[0] || d->restanteMin <= 0) {
     char r[24] = "", ano[24] = "";
     js_texto(corpo, NULL, "runtime", r, sizeof r);
+    // O catalogo do Nuvio nao tem duracao de SERIE, so por episodio ("25min"):
+    // a do primeiro episodio faz o papel da "54 min" do Cinemeta.
+    if (!r[0]) { const char *v = js_array(corpo, NULL, "videos");
+                 if (v) js_texto(v, js_fim(v), "runtime", r, sizeof r); }
+    metaprov_duracao(r, sizeof r);
     js_texto(corpo, NULL, "releaseInfo", ano, sizeof ano);
     { char *tr = strstr(ano, "\xe2\x80\x93"); if (tr) *tr = 0; }
+    if (ano[0] >= '0' && ano[0] <= '9' && ano[1] && ano[2] && ano[3] && ano[4] == '-') ano[4] = 0;
     if (!d->meta[0])
       snprintf(d->meta, sizeof d->meta, "%.20s%s%.20s", ano,
                (ano[0] && r[0]) ? "  \xc2\xb7  " : "", r);
