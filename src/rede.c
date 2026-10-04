@@ -8,6 +8,92 @@
 #include <dlfcn.h>
 #include <time.h>
 #include <limits.h>
+#include <ctype.h>
+
+/* Jobs nao dependem de TLS nem dos controles antigos por fio. O grupo e
+ * retido pelos jobs, e a requisicao retem seu job ate terminar. */
+struct RedeGrupo {
+  pthread_mutex_t trava;
+  unsigned refs;
+  uint64_t geracao;
+  int cancelado;
+};
+struct RedeJob {
+  RedeGrupo *grupo;
+  unsigned refs;
+  uint64_t geracao;
+  int cancelado; /* protegido pela trava do grupo */
+};
+RedeGrupo *rede_grupo_criar(void) {
+  RedeGrupo *g = calloc(1, sizeof *g);
+  if (!g) return NULL;
+  if (pthread_mutex_init(&g->trava, NULL)) { free(g); return NULL; }
+  g->refs = 1; g->geracao = 1;
+  return g;
+}
+void rede_grupo_soltar(RedeGrupo *g) {
+  if (g && __sync_sub_and_fetch(&g->refs, 1) == 0) {
+    pthread_mutex_destroy(&g->trava); free(g);
+  }
+}
+uint64_t rede_grupo_avancar(RedeGrupo *g) {
+  uint64_t v;
+  if (!g) return 0;
+  pthread_mutex_lock(&g->trava);
+  if (g->geracao == UINT64_MAX) g->cancelado = 1;
+  else g->geracao++;
+  v = g->geracao;
+  pthread_mutex_unlock(&g->trava);
+  return v;
+}
+void rede_grupo_cancelar(RedeGrupo *g) {
+  if (!g) return;
+  pthread_mutex_lock(&g->trava); g->cancelado = 1;
+  pthread_mutex_unlock(&g->trava);
+}
+RedeJob *rede_job_criar(RedeGrupo *g) {
+  RedeJob *j;
+  if (!g) return NULL;
+  j = calloc(1, sizeof *j);
+  if (!j) return NULL;
+  __sync_add_and_fetch(&g->refs, 1);
+  pthread_mutex_lock(&g->trava);
+  j->geracao = g->geracao; j->cancelado = g->cancelado;
+  pthread_mutex_unlock(&g->trava);
+  j->grupo = g; j->refs = 1;
+  return j;
+}
+void rede_job_reter(RedeJob *j) { if (j) __sync_add_and_fetch(&j->refs, 1); }
+void rede_job_soltar(RedeJob *j) {
+  if (j && __sync_sub_and_fetch(&j->refs, 1) == 0) {
+    rede_grupo_soltar(j->grupo); free(j);
+  }
+}
+void rede_job_cancelar(RedeJob *j) {
+  if (!j) return;
+  pthread_mutex_lock(&j->grupo->trava); j->cancelado = 1;
+  pthread_mutex_unlock(&j->grupo->trava);
+}
+RedeErro rede_job_estado(RedeJob *j) {
+  RedeErro e = REDE_OK;
+  if (!j) return e;
+  pthread_mutex_lock(&j->grupo->trava);
+  if (j->cancelado || j->grupo->cancelado) e = REDE_CANCELADO;
+  else if (j->geracao != j->grupo->geracao) e = REDE_GERACAO;
+  pthread_mutex_unlock(&j->grupo->trava);
+  return e;
+}
+#ifndef __EMSCRIPTEN__
+static uint64_t pedidoAgoraMs(void) {
+  struct timespec t;
+  if (clock_gettime(CLOCK_MONOTONIC, &t)) return 0;
+  return (uint64_t)t.tv_sec * 1000u + (unsigned long)t.tv_nsec / 1000000u;
+}
+#endif
+void rede_resposta_limpar(RedeResposta *r) {
+  if (!r) return;
+  free(r->corpo); free(r->cabecalhos); memset(r, 0, sizeof *r);
+}
 
 #if defined(NV_TPK40) && defined(__EMSCRIPTEN__)
 #error "NV_TPK40 e so da libnuvio.so do Tizen 4/5; nunca junto com Emscripten"
@@ -134,7 +220,7 @@ static long redeLimiteAtual(void) {
 EM_JS(char *, nv_http, (const char *metodo, const char *url, const char *cabs,
                         const char *corpo, int *tam, int *status,
                         char *urlFinal, int urlFinalTam,
-                        char *etag, int etagTam), {
+                        char *etag, int etagTam, int *retryAfter), {
   var m = UTF8ToString(metodo), u = UTF8ToString(url);
   var xhr = new XMLHttpRequest();
   try {
@@ -167,6 +253,18 @@ EM_JS(char *, nv_http, (const char *metodo, const char *url, const char *cabs,
   if (etag && etagTam > 0) {
     stringToUTF8(xhr.getResponseHeader("etag") || "", etag, etagTam);
   }
+  if (retryAfter) {
+    // null significa ausente OU oculto pelo CORS, nao um prazo inventado.
+    var raw = "", wait = 0;
+    try { raw = (xhr.getResponseHeader("retry-after") || "").trim(); } catch (e) {}
+    if (/^[0-9]+$/.test(raw)) {
+      wait = Math.min(2147483647, Number(raw));
+    } else if (/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/i.test(raw)) {
+      var until = Date.parse(raw);
+      if (isFinite(until)) wait = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+    }
+    HEAP32[retryAfter >> 2] = Math.min(2147483647, wait);
+  }
 
   var s = xhr.responseText || "";
   var n = s.length;
@@ -184,6 +282,14 @@ static _Thread_local char *redeFinalDst;
 static _Thread_local unsigned redeFinalTam;
 
 void rede_preparar(void) { }   // nao ha biblioteca para carregar
+unsigned rede_pedido_capacidades(void) { return 0; }
+int rede_pedir(const RedePedido *p, RedeResposta *r) {
+  (void)p;
+  if (!r) return 0;
+  memset(r, 0, sizeof *r);
+  r->erro = REDE_INDISPONIVEL;
+  return 0; /* nenhum XHR: nao prometer teto, timeout ou cancel inexistentes */
+}
 
 // Junta o vetor de cabecalhos numa string com uma linha por cabecalho.
 static char *juntarCabs(const char *const *cab, const char *extra) {
@@ -213,15 +319,17 @@ void rede_avisar_host(void (*f)(const char *url, int codigo, int http, unsigned 
 
 static char *pedir2(const char *metodo, const char *url, const char *const *cab,
                     const char *extraCab, const char *corpo,
-                    long *tam, int *status, char *etag, unsigned tamEtag) {
+                    long *tam, int *status, char *etag, unsigned tamEtag,
+                    int *retryAfter) {
   char *cabs, *corpoResp;
   int n = 0, http = 0;
   if (etag && tamEtag) etag[0] = 0;
   if (status) *status = 0;
+  if (retryAfter) *retryAfter = 0;
   if (!url || !*url) return NULL;
   cabs = juntarCabs(cab, extraCab);
   corpoResp = nv_http(metodo, url, cabs, corpo, &n, &http,
-                      redeFinalDst, (int)redeFinalTam, etag, (int)tamEtag);
+                      redeFinalDst, (int)redeFinalTam, etag, (int)tamEtag, retryAfter);
   free(cabs);
   if (status) *status = http;
   // XHR sem status e sem corpo = nao houve resposta (rede, DNS, CORS): para a
@@ -275,13 +383,13 @@ static char *pedir2(const char *metodo, const char *url, const char *const *cab,
 static char *pedir(const char *metodo, const char *url, const char *const *cab,
                    const char *extraCab, const char *corpo,
                    long *tam, int *status) {
-  return pedir2(metodo, url, cab, extraCab, corpo, tam, status, NULL, 0);
+  return pedir2(metodo, url, cab, extraCab, corpo, tam, status, NULL, 0, NULL);
 }
 
 char *rede_baixar_etag(const char *url, int segundos, const char *const *cab,
                        int *status, char *etag, unsigned tamEtag) {
   (void)segundos;
-  return pedir2("GET", url, cab, NULL, NULL, NULL, status, etag, tamEtag);
+  return pedir2("GET", url, cab, NULL, NULL, NULL, status, etag, tamEtag, NULL);
 }
 
 char *rede_baixar(const char *url, int segundos) {
@@ -314,8 +422,8 @@ char *rede_baixar_st(const char *url, int segundos, const char *const *cab,
 }
 char *rede_baixar_st_retry(const char *url, int segundos, const char *const *cab,
                            int *status, int *retryAfter) {
-  if (retryAfter) *retryAfter = 0;   // o XHR do navegador: sem o cabecalho
-  return rede_baixar_st(url, segundos, cab, status);
+  (void)segundos;
+  return pedir2("GET", url, cab, NULL, NULL, NULL, status, NULL, 0, retryAfter);
 }
 
 // UM pedido de Range (o laco em pedacos e rede_baixar_trecho_st, no fim do
@@ -613,6 +721,11 @@ static _Thread_local int redeParcialOk;
 // CURLINFO_NUM_CONNECTS = CURLINFO_LONG + 26: 0 = o pedido foi por conexao
 // REUSADA. So para o log de falha.
 #define INFO_NUM_CONNECTS  2097178
+#define INFO_REDIRECT_URL 1048607
+#define INFO_SIZE_DOWNLOAD 3145736
+#define OPT_CAINFO 10065
+#define OPT_POSTFIELDSIZE 60
+#define OPT_PROTOCOLS 181
 
 // Ouvinte unico dos 401 — ver rede_avisar_401 no cabecalho. (O ramo
 // Emscripten tem a sua propria definicao, porque os dois lados do #ifdef
@@ -635,6 +748,28 @@ static void *(*slist_append)(void *, const char *);
 static void  (*slist_free)(void *);
 static int   (*curl_getinfo)(void *, int, ...);
 static void  (*curl_reset)(void *);
+static time_t (*curl_getdate_fn)(const char *, const time_t *);
+
+static int retrySegundos(const char *s, size_t n) {
+  char b[128], *fim;
+  unsigned long long v;
+  time_t ate, agora;
+  while (n && (*s == ' ' || *s == '\t')) { s++; n--; }
+  while (n && isspace((unsigned char)s[n - 1])) n--;
+  if (!n || n >= sizeof b) return 0;
+  memcpy(b, s, n); b[n] = 0;
+  if (isdigit((unsigned char)b[0])) {
+    size_t i;
+    for (i = 0; i < n; i++) if (!isdigit((unsigned char)b[i])) return 0;
+    v = strtoull(b, &fim, 10);
+    return *fim ? 0 : v > INT_MAX ? INT_MAX : (int)v;
+  }
+  /* curl_getdate conhece as tres formas de HTTP-date, tambem no curl antigo. */
+  if (!curl_getdate_fn) return 0;
+  ate = curl_getdate_fn(b, NULL); agora = time(NULL);
+  if (ate == (time_t)-1 || ate <= agora) return 0;
+  return difftime(ate, agora) > INT_MAX ? INT_MAX : (int)difftime(ate, agora);
+}
 // Conexao crua (CONNECT_ONLY): so rede_tls_* usam. Existem desde a 7.18.2, entao
 // a libcurl 7.53.1 das TVs tem; o que ela NAO tem e websocket (7.86+), e por
 // isso o quadro do websocket e feito a mao em discordws.c.
@@ -902,11 +1037,12 @@ static size_t receberCab(void *dados, size_t tam, size_t qtd, void *u) {
   CacaCab *c = (CacaCab *)u;
   const char *s = (const char *)dados;
   size_t bytes = tam * qtd, n;
-  // RETRY-AFTER (o 429 do painel Xtream, xtepg.c): segundos, ou 0 se vier a
-  // forma de data — quem pediu usa o backoff dele.
+  if (bytes >= 5 && !strncasecmp(s, "HTTP/", 5)) {
+    if (c && c->retry) *c->retry = 0;
+    if (c && c->dst && c->tam) c->dst[0] = 0;
+  }
   if (c && c->retry && bytes > 12 && !strncasecmp(s, "retry-after:", 12)) {
-    int v = atoi(s + 12);
-    *c->retry = v > 0 ? v : 0;
+    *c->retry = retrySegundos(s + 12, bytes - 12);
   }
   if (c && c->dst && c->tam > 1 && bytes > 5 && !strncasecmp(s, "etag:", 5)) {
     s += 5; bytes -= 5;
@@ -1055,20 +1191,20 @@ static void prepararOpenSSL(void) {
 
 static int abrir(void) {
   void *h;
-  int r;
-  // Leitura rapida sem trava para o caso comum (ja carregado). Escrita de int
-  // e atomica nas arquiteturas em que este app roda; o que precisa de trava e a
-  // SEQUENCIA dlopen+global_init, nao a bandeira.
+  int r = __atomic_load_n(&pronto, __ATOMIC_ACQUIRE);
+  // Acquire publica tambem os ponteiros dlsym e o global_init para os outros
+  // fios. Um int alinhado sem atomica ainda seria uma data race em C.
   // So o RESULTADO (1 carregou, -1 falhou de vez) passa sem trava. Enquanto
   // um fio ainda esta no dlopen+global_init a bandeira vale -2, e quem chega
   // nesse instante ESPERA na trava em vez de voltar "sem rede": era o que
   // acontecia — sete fios de noticias partindo juntos, o primeiro carregava a
   // libcurl e os outros cinco falhavam na hora (medido em tests/agenda_shot).
   // No arranque do aparelho os quatro fios de arte partem do mesmo jeito.
-  if (pronto == 1 || pronto == -1) return pronto > 0;
+  if (r == 1 || r == -1) return r > 0;
   pthread_mutex_lock(&abrirTrava);
-  if (pronto == 1 || pronto == -1) { r = pronto > 0; pthread_mutex_unlock(&abrirTrava); return r; }
-  pronto = -2;
+  r = __atomic_load_n(&pronto, __ATOMIC_ACQUIRE);
+  if (r == 1 || r == -1) { pthread_mutex_unlock(&abrirTrava); return r > 0; }
+  __atomic_store_n(&pronto, -2, __ATOMIC_RELEASE);
 #ifdef NV_TPK40
   // Rastro do Tizen 4/5 (#180): qual soname abriu, ou o erro. Ver tpk.c.
   nv_tpk40_etapa("begin libcurl-dlopen");
@@ -1091,7 +1227,7 @@ static int abrir(void) {
   if (!h) h = dlopen("libcurl.4.dylib", RTLD_NOW);   // Mac
   if (!h) h = dlopen("libcurl.dylib", RTLD_NOW);
   if (!h) { printf("[rede] sem libcurl: %s\n", dlerror());
-            pronto = -1; pthread_mutex_unlock(&abrirTrava); return 0; }
+            __atomic_store_n(&pronto, -1, __ATOMIC_RELEASE); pthread_mutex_unlock(&abrirTrava); return 0; }
   *(void **)(&curl_init)    = dlsym(h, "curl_easy_init");
   *(void **)(&curl_setopt)  = dlsym(h, "curl_easy_setopt");
   *(void **)(&curl_perform) = dlsym(h, "curl_easy_perform");
@@ -1100,6 +1236,7 @@ static int abrir(void) {
   *(void **)(&slist_append) = dlsym(h, "curl_slist_append");
   *(void **)(&slist_free)   = dlsym(h, "curl_slist_free_all");
   *(void **)(&curl_getinfo) = dlsym(h, "curl_easy_getinfo");
+  *(void **)(&curl_getdate_fn) = dlsym(h, "curl_getdate");
   *(void **)(&curl_send)    = dlsym(h, "curl_easy_send");
   *(void **)(&curl_recv)    = dlsym(h, "curl_easy_recv");
   // O REUSO NUNCA LIGOU ATE AQUI (23/09/2026). pegarHandle e soltarHandle
@@ -1118,7 +1255,7 @@ static int abrir(void) {
     if (o && *o) ociosoMaxMs = strtoul(o, NULL, 10); }
   if (!curl_init || !curl_setopt || !curl_perform) {
     printf("[rede] libcurl sem os simbolos esperados\n");
-    pronto = -1;
+    __atomic_store_n(&pronto, -1, __ATOMIC_RELEASE);
     pthread_mutex_unlock(&abrirTrava);
     return 0;
   }
@@ -1128,12 +1265,15 @@ static int abrir(void) {
 #ifndef NV_ANDROID   // libcurl do APK nao usa libcrypto 1.0 (e dlopen de libcrypto.so seria do sistema)
   prepararOpenSSL();
 #endif
-  pronto = 1;
+  __atomic_store_n(&pronto, 1, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&abrirTrava);
   return 1;
 }
 
 void rede_preparar(void) { abrir(); }
+
+/* Request novo isolado do handle/controles por fio dos wrappers. */
+#include "rede_pedido.inc"
 
 char *rede_baixar_bin(const char *url, int segundos, long *tam) {
   return rede_baixar_interno(url, segundos, tam, NULL);

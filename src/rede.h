@@ -7,6 +7,86 @@
 #define NV_REDE_H
 
 #include <stddef.h>
+#include <stdint.h>
+
+/* API aditiva para workers/plugins. Nao usa o estado por fio dos wrappers.
+ * O pedido BLOQUEIA; executa-lo fora do desenho. Strings, corpo e callback
+ * ficam validos ate retornar. rede_resposta_limpar libera as duas alocacoes.
+ * max_bytes/max_cabecalhos zero usam limites seguros, nunca "ilimitado".
+ * TLS e verificado; ca_arquivo sobrescreve o bundle confiavel registrado no
+ * arranque (rede_discord_ca), ou usa trust do sistema se nao houver bundle.
+ * Redirects so HTTP(S), sem downgrade HTTPS. Cabecalhos do dono e corpo nao
+ * atravessam origem; 307/308 autenticados entre origens sao recusados.
+ * O XHR sincrono WGT nao oferece este contrato: retorna INDISPONIVEL sem
+ * iniciar I/O. Os wrappers antigos continuam disponiveis com seus limites.
+ */
+typedef struct RedeGrupo RedeGrupo;
+typedef struct RedeJob RedeJob;
+typedef enum {
+  REDE_OK = 0, REDE_ENTRADA, REDE_INDISPONIVEL, REDE_MEMORIA,
+  REDE_TRANSPORTE, REDE_PRAZO, REDE_CANCELADO, REDE_GERACAO,
+  REDE_LIMITE_CORPO, REDE_LIMITE_CABECALHOS, REDE_REDIRECT
+} RedeErro;
+#define REDE_CORPO_PADRAO (8u * 1024u * 1024u)
+#define REDE_CORPO_MAXIMO (32u * 1024u * 1024u)
+#define REDE_CAB_PADRAO 16384u
+#define REDE_CAB_MAXIMO 65536u
+#define REDE_CAP_CORPO 1u
+#define REDE_CAP_JOB 2u
+#define REDE_CAP_REDIRECT 4u
+#define REDE_CAP_INTERVALO 8u
+
+typedef struct {
+  uint64_t bytes;       /* payload no fio, antes da descompressao */
+  unsigned ms;         /* duracao real; nunca inventa janelas de 1 s */
+  unsigned inicio_ms;  /* relativo ao primeiro byte do corpo */
+  int completa;        /* >=1 s; amostra final curta vale 0 */
+} RedeIntervalo;
+typedef struct {
+  const char *metodo;   /* NULL = GET; GET/HEAD/POST/PUT/PATCH/DELETE */
+  const char *url;
+  const char *const *cabecalhos;
+  const void *corpo;
+  size_t n_corpo;       /* binario, nao strlen */
+  unsigned prazo_ms;    /* total, inclusive redirects; 0 = 15 s, max 300 s */
+  size_t max_bytes, max_cabecalhos;
+  int seguir;          /* 0 = devolver 3xx; 1 = ate 5 redirects */
+  const char *ca_arquivo;
+  RedeJob *job;
+  void (*intervalo)(const RedeIntervalo *, void *);
+  void *intervalo_usuario;
+} RedePedido;
+typedef struct {
+  int status, curl_erro;
+  RedeErro erro;        /* HTTP 4xx/5xx e uma resposta, nao erro de transporte */
+  char *corpo, *cabecalhos;
+  size_t n_corpo, n_cabecalhos;
+  char final[4096], host[256], mime[128]; /* final pode ser privado: nunca logar */
+  int retry_after_s;
+  unsigned ms, primeiro_byte_ms, corpo_ms, intervalos_completos;
+  uint64_t bytes_fio;   /* separado de n_corpo (descomprimido) */
+} RedeResposta;
+unsigned rede_pedido_capacidades(void);
+int rede_pedir(const RedePedido *pedido, RedeResposta *resposta);
+void rede_resposta_limpar(RedeResposta *resposta);
+
+/* Grupo vive fora do request: avancar ao trocar conta/perfil/titulo invalida
+ * todos os jobs anteriores. Jobs retidos impedem UAF; nenhuma geracao volta
+ * a ser valida. Cancelar um job nao cancela seus irmaos. Soltar o grupo do
+ * dono nao o cancela; cancelar explicitamente no encerramento. O chamador
+ * deve conferir rede_job_estado tambem ao publicar numa fila da UI: mudar
+ * a geracao DEPOIS do retorno nao consegue retirar um resultado ja entregue.
+ * Sem scheduler/pool: integra os workers atuais. Sem TLS de compilador.
+ */
+RedeGrupo *rede_grupo_criar(void);
+void rede_grupo_soltar(RedeGrupo *grupo);
+uint64_t rede_grupo_avancar(RedeGrupo *grupo);
+void rede_grupo_cancelar(RedeGrupo *grupo);
+RedeJob *rede_job_criar(RedeGrupo *grupo);
+void rede_job_reter(RedeJob *job);
+void rede_job_soltar(RedeJob *job);
+void rede_job_cancelar(RedeJob *job);
+RedeErro rede_job_estado(RedeJob *job);
 
 typedef struct {
   int status;          // 0 = transporte sem resposta
@@ -151,8 +231,8 @@ char *rede_postar_st(const char *url, int segundos, const char *const *cabecalho
 // O corpo de erro e justamente o que o chamador quer ler.
 char *rede_baixar_st(const char *url, int segundos, const char *const *cabecalhos,
                      int *status);
-// O mesmo, e o Retry-After da resposta em segundos (0 = nao veio, ou veio como
-// data). Para o 429 do painel Xtream (xtepg.c).
+// O mesmo, e o Retry-After em segundos (delta ou HTTP-date; 0 = ausente,
+// invalido, vencido ou oculto pelo CORS no WGT). Para os 429 dos provedores.
 char *rede_baixar_st_retry(const char *url, int segundos, const char *const *cabecalhos,
                            int *status, int *retryAfter);
 
