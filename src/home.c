@@ -3,6 +3,7 @@
 // hero no topo, rail fixa à esquerda e fileiras horizontais de posters. A
 // infraestrutura nativa cuida de cache assíncrono, foco e transições.
 #include "home.h"
+#include "focoprof.h"
 #include "posterprov.h"
 #include "corviva.h"
 // NV_LEVE (tools/tizen.sh --leve): build de diagnostico sem a animacao do
@@ -1218,29 +1219,7 @@ static void desenhaFaixaAberta(const CatItem *ci, int r, float px, float py,
 }
 
 static void desenhaProfundidade(GfxRect card, float raio, int ligadaAqui) {
-  if (!ajustes_profundidade() || !ligadaAqui) return;
-  float borda = ajustes_profundidade_borda();
-  float brilho = ajustes_profundidade_brilho();
-  float cobertura = ajustes_profundidade_cobertura();
-  // OS DOIS SAO DEGRADE, e nao retangulo chapado — foi a queixa do dono:
-  // "se ativar o brilho do card ele so coloca uma barra grossa no topo, fica
-  // estranho". Era literalmente isso: um branco solido de 12 a 30 px em cima e
-  // outro cobrindo 28% da altura, os dois com aresta dura embaixo. A propria
-  // nota acima ja dizia que a referencia usa gradiente.
-  //
-  // O retangulo e desenhado com a ALTURA DO CARD e a rampa corta dentro dele
-  // (uPar.x), em vez de um retangulo baixo com raio proprio: assim o realce
-  // segue os cantos arredondados do card, que era o outro defeito visivel —
-  // a faixa passava reta por cima do canto.
-  if (borda > 0.001f) {
-    float alcance = (12.0f + 18.0f * cobertura) / (card.h > 1.0f ? card.h : 1.0f);
-    gfx_brilho_topo(card, raio, alcance, 1.0f, 1.0f, 1.0f, borda * 0.55f);
-  }
-  if (brilho > 0.001f) {
-    // O reflexo vai mais fundo e mais fraco: e o `--card-depth-sheen`, uma
-    // claridade que desce pela parte alta, nao uma segunda borda.
-    gfx_brilho_topo(card, raio, 0.34f, 1.0f, 1.0f, 1.0f, brilho * 0.18f);
-  }
+  foco_profundidade(card, raio, ligadaAqui, 1.0f);   // focoprof.h: o mesmo do Detalhe
 }
 // ZERO. MEDIDO no app web (sessao logada, perfil do dono): o card em foco tem
 // `transform: none`, `scale: none` e o mesmo getBoundingClientRect do card ao
