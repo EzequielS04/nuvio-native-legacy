@@ -1465,6 +1465,15 @@ int main(int argc, char **argv) {
                " upd=%.1f clr=%.1f des=%.1f aux=%.1f swap=%.1f\n",
                pior, pEv, pBomb, pUplN, pUplB / 1048576.0,
                pUpd, pClr, pDes, pAux, pSwap);
+        // O `des` DO PIOR QUADRO REPARTIDO, NO LOG. Ate aqui so ia para
+        // /tmp/nuvio-fps.txt, que no Android nao existe: a TCL do dono
+        // (04/10/2026) mostrava `des=30..45 ms` com texto 0 e upload 0, e nada
+        // dizia se era CPU no gfx_rect, busca de textura, FBO/desfoque (`out`)
+        // ou preenchimento. Mesma condicao do [quadro]: so com jank.
+        // (os relogios de gfx_rect e da busca de textura so existem com
+        // -DNV_PERF_FINO; as contagens e o `out` existem sempre)
+        printf("[quadro-des] rects=%d(p%d,b%d) out=%.1fms/%d fill=%.2fx cheias=%d texto=%.1fms/%d\n",
+               pNRect, pNProg, pNBind, pOutMs, pNOut, pFill, pNCheio, piorTxtMs, piorTxtN);
       }
       // Instrumento de campo (gfx.h, gfx_modos_desligados): a lista em
       // /tmp/nuvio-gfx-off desliga modos de desenho; e o preenchimento do

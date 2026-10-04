@@ -12,7 +12,9 @@ static void arte(GfxRect r, float raioPx, const char *c, float a) {
   GLuint t = (c && c[0]) ? tex_obter_larg(c, r.w > r.h * 1.78f ? r.w : r.h * 1.78f) : 0;
   if (!t) { gfx_cor(r, raioPx / r.h, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a); return; }
   gfx_tex_aspect_atual = tex_aspecto(c);
+  gfx_arte_opaca_atual = tex_opaca(c);   // tela cheia opaca: a luz por baixo nao e pintada
   gfx_rect(r, t, GFX_ARTE, 0, 0, 0, raioPx / r.h, 1, 1, 1, a);
+  gfx_arte_opaca_atual = 0;
   gfx_tex_aspect_atual = 0;
 }
 // A cor de uma regiao da paleta com saturacao +35% e brilho 62%.
@@ -98,9 +100,10 @@ void fundo_desenhar_modo(int modo, GfxRect r, float raioPx, const char *c, float
   // O veu do mockup: linear-gradient(90deg, 62%, 40% no meio, 50%). Um
   // chapado de 40% e, por cima, as duas metades em degrade (GFX_VEU_CSS,
   // nv_dither) com o que falta para chegar a 62% e 50% nas bordas.
-  gfx_cor(r, 0, 0, 0, 0, 0.40f * a);
-  gfx_veu_css((GfxRect){ r.x, r.y, r.w * 0.5f, r.h }, 2, 1.0f, 1.0f, 0.367f * a);
-  gfx_veu_css((GfxRect){ r.x + r.w * 0.5f, r.y, r.w * 0.5f, r.h }, 3, 1.0f, 1.0f, 0.167f * a);
+  // O chapado vai DENTRO das duas metades (gfx_veu_css_base): uma camada de
+  // tela cheia misturada a menos por quadro, o mesmo pixel.
+  gfx_veu_css_base((GfxRect){ r.x, r.y, r.w * 0.5f, r.h }, 2, 1.0f, 1.0f, 0.367f * a, 0.40f * a);
+  gfx_veu_css_base((GfxRect){ r.x + r.w * 0.5f, r.y, r.w * 0.5f, r.h }, 3, 1.0f, 1.0f, 0.167f * a, 0.40f * a);
 }
 void fundo_desenhar(GfxRect area, const char *arteUrl, float a) {
   fundo_desenhar_modo(fundo_modo(), area, 0.0f, arteUrl, a);

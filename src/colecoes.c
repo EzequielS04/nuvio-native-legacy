@@ -432,8 +432,8 @@ static void lerColecaoWeb(const char *c, const char *ce) {
   js_texto_raiz_em(c, ce, "id", groupId, sizeof groupId);
   js_texto_raiz_em(c, ce, "backdropImageUrl", fundo, sizeof fundo);
   if (!group[0]) return;
-  for (const char *p = js_array(c, ce, "folders"); p && count < COL_MAX; p = js_prox(js_fim(p))) {
-    const char *pe = js_fim(p); ColFolder *v = &folders[count]; memset(v, 0, sizeof *v);
+  for (const char *p = js_array(c, ce, "folders"), *pe = NULL; p && count < COL_MAX; p = js_prox(pe)) {
+    pe = js_fim(p); ColFolder *v = &folders[count]; memset(v, 0, sizeof *v);
     snprintf(v->group, sizeof v->group, "%s", group);
     snprintf(v->groupId, sizeof v->groupId, "%s", groupId);
     js_texto_raiz_em(p, pe, "id", v->id, sizeof v->id); js_texto_raiz_em(p, pe, "title", v->title, sizeof v->title);
@@ -467,8 +467,8 @@ static void lerColecaoWeb(const char *c, const char *ce) {
       if (js_bruto(p, pe, "focusGifEnabled", b, sizeof b) && strstr(b, "false")) v->focusGif[0] = 0; }
     const char *src = js_array(p, pe, "sources");
     if (!src) src = js_array(p, pe, "catalogSources");
-    for (const char *s = src; s && v->nSources < COL_SOURCE_MAX; s = js_prox(js_fim(s))) {
-      const char *se = js_fim(s); ColSource *a = &v->sources[v->nSources]; char prov[16] = "";
+    for (const char *s = src, *se = NULL; s && v->nSources < COL_SOURCE_MAX; s = js_prox(se)) {
+      se = js_fim(s); ColSource *a = &v->sources[v->nSources]; char prov[16] = "";
       memset(a, 0, sizeof *a);
       js_texto(s, se, "provider", prov, sizeof prov);
       // Fontes nao-addon (issue #44): o editor do site grava provider "tmdb"
@@ -748,19 +748,26 @@ static int prepararResposta(const char *json, char **solto, const char **arrOut)
   if (*primeiro == ']' && !explicito) return 0;
   // Validate identities and the folder arrays before mutating anything. A
   // response cut between collections must not publish a partial snapshot.
-  for (const char *p = *primeiro == ']' ? NULL : primeiro;
-       p; p = js_prox(js_fim(p))) {
+  //
+  // O FIM DE CADA OBJETO E ACHADO UMA VEZ. js_fim varre o objeto inteiro, e esta
+  // validacao chamava js_fim(p) tres vezes por colecao e por pasta (mais o
+  // valorColecoes repetido): perfil de tests/sync_aplicar_perf.sh, 60% do custo
+  // do ciclo de sync era js_fim. Na TV do dono (Mali-G52, A55) o ciclo inteiro
+  // pesava 59-95 ms num quadro so, a cada cinco minutos.
+  for (const char *p = *primeiro == ']' ? NULL : primeiro, *pFim; p; p = js_prox(pFim)) {
     char id[96] = "", titulo[128] = "";
-    js_texto_raiz_em(p, js_fim(p), "id", id, sizeof id);
-    js_texto_raiz_em(p, js_fim(p), "title", titulo, sizeof titulo);
-    if (!id[0] || !titulo[0] || !arrayCompleto(valorColecoes(p, "\"folders\""))) {
+    pFim = js_fim(p);
+    js_texto_raiz_em(p, pFim, "id", id, sizeof id);
+    js_texto_raiz_em(p, pFim, "title", titulo, sizeof titulo);
+    const char *pastas = valorColecoes(p, "\"folders\"");
+    if (!id[0] || !titulo[0] || !arrayCompleto(pastas)) {
       return 0;
     }
-    const char *pastas = valorColecoes(p, "\"folders\"");
-    for (const char *pf = js_raiz_array(pastas); pf; pf = js_prox(js_fim(pf))) {
+    for (const char *pf = js_raiz_array(pastas), *pfFim; pf; pf = js_prox(pfFim)) {
       id[0] = titulo[0] = 0;
-      js_texto_raiz_em(pf, js_fim(pf), "id", id, sizeof id);
-      js_texto_raiz_em(pf, js_fim(pf), "title", titulo, sizeof titulo);
+      pfFim = js_fim(pf);
+      js_texto_raiz_em(pf, pfFim, "id", id, sizeof id);
+      js_texto_raiz_em(pf, pfFim, "title", titulo, sizeof titulo);
       const char *fontes = valorColecoes(pf, "\"sources\"");
       if (!fontes) fontes = valorColecoes(pf, "\"catalogSources\"");
       if (!id[0] || !titulo[0] || !arrayCompleto(fontes)) return 0;
@@ -822,10 +829,11 @@ static int definirJson(const char *json) {
   count = 0;
   fPulProvedor = fPulSemFonte = fPulSemTitulo = fPulCheio = fGifCortado = 0;
   fPrimeiraPulada[0] = 0;
-  { const char *c = arr;
-    for (; c && *c == '{'; c = js_prox(js_fim(c))) {
+  { const char *c = arr, *cFim;
+    for (; c && *c == '{'; c = js_prox(cFim)) {
+      cFim = js_fim(c);
       if (count >= COL_MAX) { fPulCheio++; continue; }
-      lerColecaoWeb(c, js_fim(c));
+      lerColecaoWeb(c, cFim);
     } }
   novas = count;
   // UMA LINHA QUE RESPONDE "cade a colecao que eu instalei". Cada contagem e um
