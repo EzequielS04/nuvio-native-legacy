@@ -398,12 +398,15 @@ static Uint32 heroTrailerDesde = 0;
 static int    heroTrailerItem = -1, heroTrailerTentado = 0;
 static char   heroTrailerImdb[24];
 static Uint32 heroTrailerPreparandoAte = 0;
-// 0 = ainda sem fonte, 1 = Apple, 2 = YouTube, 3 = falha final. A Apple e o
-// YouTube contam como tentativas separadas; um erro de Apple libera exatamente
-// uma tentativa de fallback sem voltar a abrir a mesma URL.
+// 0 = ainda sem fonte, 1 = Apple, 2 = outra fonte, 3 = falha final.
+// Falhas seguem a ordem real do destaque; nenhuma URL falhada reabre nesta
+// parada de foco, inclusive IMDb -> Apple no TPK.
 static int    heroTrailerFonte = 0, heroTrailerAppleFalhou = 0;
-// TRF_* da fonte aberta (trailerfonte.h), so para o log dizer qual desistiu.
+// TRF_* da fonte aberta, usado pela transicao e pelo diagnostico.
 static int    heroTrailerQual = 0;
+/* Per-focus attempt: a failed source can never reopen while waiting for its
+ * next source. On native TPK the real Home order is IMDb -> Apple (#228). */
+static unsigned heroTrailerFalhas;
 static float  heroTrailerFade = 0.0f;
 // MODO CINEMA no destaque (dono, 29/09/2026: "quando o trailer comecar no hero,
 // deixar ele igual a quando ta no details do titulo: so a arte do titulo
@@ -4050,6 +4053,16 @@ static void heroTrailerGateLog(int motivo, int enabled) {
   }
 }
 
+static void heroTrailerFonteFalhou(void) {
+  if(heroTrailerQual>0&&heroTrailerQual<=TRF_YOUTUBE)
+    heroTrailerFalhas|=1u<<heroTrailerQual;
+  if(heroTrailerQual==TRF_APPLE)heroTrailerAppleFalhou=1;
+  heroTrailerTentado=trailerfonte_depois_destaque(trailerfonte_ajuste(),
+                    trailerfonte_tizen(),heroTrailerQual)==0;
+  heroTrailerFonte=heroTrailerTentado?3:0;
+  heroTrailerPreparandoAte=0;heroTrailerFade=0.0f;
+}
+
 void home_trailer_passo(int topo, float dt, Uint32 agora) {
   const CatItem *ci = NULL;
   int pronto;
@@ -4110,6 +4123,7 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
     heroTrailerItem = -1; heroTrailerDesde = 0; heroTrailerTentado = 0;
     heroTrailerImdb[0] = 0;
     heroTrailerPreparandoAte = 0; heroTrailerFonte = 0; heroTrailerAppleFalhou = 0;
+    heroTrailerFalhas = 0;heroTrailerQual = 0;
     heroTrailerFade = 0.0f;
   } else if (heroTrailerItem != heroAtual || strcmp(heroTrailerImdb, ci->imdb) != 0) {
     // A rotacao do carrossel roda ANTES deste passo (home_atualizar): quando
@@ -4127,6 +4141,7 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
     heroTrailerItem = heroAtual; heroTrailerDesde = agora; heroTrailerTentado = 0;
     snprintf(heroTrailerImdb, sizeof heroTrailerImdb, "%s", ci->imdb);
     heroTrailerPreparandoAte = 0; heroTrailerFonte = 0; heroTrailerAppleFalhou = 0;
+    heroTrailerFalhas = 0;heroTrailerQual = 0;
     heroTrailerFade = 0.0f;
     // Ja tocou nesta sessao: nem consulta/reconsulta fonte para um autoplay
     // que nao vai acontecer. Tambem libera a rotacao se o conjunto ficou sem memoria.
@@ -4162,33 +4177,23 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
       printf("[trailer] hero: sem playing em %d ms (%s, estado %d), %s\n",
              NV_TRAILER_HERO_PREPARA_MS, trailerfonte_nome(heroTrailerQual),
              trailer_estado(),
-             heroTrailerFonte == 1 && trailerfonte_depois(trailerfonte_ajuste(), trailerfonte_tizen(), TRF_APPLE)
+             trailerfonte_depois_destaque(trailerfonte_ajuste(), trailerfonte_tizen(), heroTrailerQual)
                ? "tenta a proxima fonte" : "desiste");
       fflush(stdout);
       trailer_fechar();
-      heroTrailerPreparandoAte = 0;
-      heroTrailerFade = 0.0f;
-      if (heroTrailerFonte == 1) {
-        heroTrailerAppleFalhou = 1;
-        heroTrailerTentado = 0; // a proxima tentativa pode ser YouTube
-      } else {
-        heroTrailerTentado = 1;
-        heroTrailerFonte = 3;
-      }
+      heroTrailerFonteFalhou();
     }
   }
-  // trailer_atualizar fecha o elemento que recebeu erro depois deste passo;
-  // consumir a marca no quadro seguinte transforma somente erro de Apple em
-  // fallback. Um fechamento normal (ended/Voltar) nunca cai no YouTube.
-  if (heroTrailerFonte == 1 && !trailer_aberto() && trailer_falhou() && !heroTrailerAppleFalhou) {
-    printf("[trailer] hero: apple deu erro, %s\n",
-           trailerfonte_depois(trailerfonte_ajuste(), trailerfonte_tizen(), TRF_APPLE)
-             ? "tenta a proxima fonte" : "fonte fixa, fica a arte");
+  // trailer_atualizar fecha a fonte que recebeu erro depois deste passo.
+  // Falha anda na ordem REAL do destaque, diferente no TPK; ended/Voltar
+  // continua sem fallback. A mascara impede reabrir uma fonte recusada.
+  if (heroTrailerQual>0 && heroTrailerFonte>0 && heroTrailerFonte<3 &&
+      !trailer_aberto() && trailer_falhou() && !(heroTrailerFalhas&(1u<<heroTrailerQual))) {
+    printf("[home-trailer] source failed source=%s action=%s\n",trailerfonte_nome(heroTrailerQual),
+           trailerfonte_depois_destaque(trailerfonte_ajuste(), trailerfonte_tizen(), heroTrailerQual)
+             ? "try_next_source" : "keep_art");
     fflush(stdout);
-    heroTrailerAppleFalhou = 1;
-    heroTrailerTentado = 0;
-    heroTrailerPreparandoAte = 0;
-    heroTrailerFade = 0.0f;
+    heroTrailerFonteFalhou();
   }
   decorrido = agora - heroTrailerDesde;
   if (pronto && ci && ci->imdb[0] && heroTrailerItem == heroAtual &&
@@ -4221,6 +4226,8 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
       c.imdb = trailerimdb_url(ci->imdb, NULL);
       c.imdbRespondeu = trailerimdb_respondeu(ci->imdb) || venceu;
     } else c.imdbRespondeu = 1;
+    if(heroTrailerFalhas&(1u<<TRF_APPLE)){c.apple=NULL;c.appleRespondeu=1;c.appleFalhou=1;}
+    if(heroTrailerFalhas&(1u<<TRF_IMDB)){c.imdb=NULL;c.imdbRespondeu=1;}
 #ifdef __EMSCRIPTEN__
     // SEM YOUTUBE NO DESTAQUE DA SAMSUNG (#136). O iframe do embed custa
     // segundos de fio principal nesta TV — registro da AU7000: raf-max=1034
@@ -4241,12 +4248,10 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
     d = trailerfonte_escolher_destaque(trailerfonte_ajuste(), trailerfonte_tizen(), &c, &u, &qual);
     if (d == TRF_ESPERA && !venceu) goto trailer_hero_fim;
     if (d == TRF_ABRE && u) {
-      // 1 = Apple (erro dela libera UMA tentativa da proxima fonte), 2 = a
-      // ultima da fila (YouTube ou IMDb: erro/prazo dela e o fim). O IMDb da LG
-      // contava como 1, e o erro dele reabria o proprio IMDb em laco.
-      int ultima = qual != TRF_APPLE;
+      // The source kind is diagnostic state, not proof it is the last source:
+      // native TPK prefers IMDb, so its Apple fallback may still remain.
       heroTrailerTentado = 1;
-      heroTrailerFonte = ultima ? 2 : 1;
+      heroTrailerFonte = qual==TRF_APPLE?1:2;
       heroTrailerQual = qual;
       heroTrailerPreparandoAte = heroTrailerPrazoPreparacao(agora);
       // SOM: so no destaque (o do cartaz em foco segue mudo) e so com o
@@ -4257,15 +4262,7 @@ void home_trailer_passo(int topo, float dt, Uint32 agora) {
       // browser ainda pode recusar a criacao (canvas ausente). Tratar isso
       // como erro da fonte evita deixar a tentativa marcada para sempre.
       if (!trailer_aberto()) {
-        heroTrailerPreparandoAte = 0;
-        if (ultima) {
-          heroTrailerTentado = 1;
-          heroTrailerFonte = 3;
-        } else {
-          heroTrailerAppleFalhou = 1;
-          heroTrailerTentado = 0;
-          heroTrailerFade = 0.0f;
-        }
+        heroTrailerFonteFalhou();
       }
     } else {
       // Sem fonte depois do orçamento, deixa a arte e o carrossel seguirem.

@@ -237,6 +237,10 @@ int trailer_suportado(void) { return 1; }
 // o quadro ter tamanho — os dois ficam pendentes e trailer_atualizar aplica.
 #include "video.h"
 static int volumePendente, recortePendente, pausado;
+/* Prepared only means metadata/demuxer ready. A trailer must reach Playing
+ * once before autoplay regards it as started. Sticky after that, so a paused
+ * or buffering trailer keeps its existing image instead of closing the hole. */
+static int tocouFonte;
 // O recorte e REPETIDO nos primeiros segundos (ver reaplicarAte): o pipeline
 // desta TV prende o plano em mais de um ponto depois do load (bind do ACB,
 // `playing`), e um recorte pedido cedo demais pode ser engolido por um deles.
@@ -291,6 +295,7 @@ int trailer_suportado(void) {
 }
 static void nativoAplicar(void) {
   if (!aberto) return;
+  if(video_tocando())tocouFonte=1;
   // O uMS setVolume funciona nesta TV (provado ao contrario: sem ele o
   // trailer tocou com som).
   if (volumePendente && video_ativo()) { video_volume(comSom ? 100 : 0); volumePendente = 0; }
@@ -353,6 +358,7 @@ void trailer_abrir(const char *fonte, GfxRect r, int som, int modoCheia) {
 #else
   if (nova) {
     if (!video_tocar(fonte)) return;
+    tocouFonte = 0;
     volumePendente = 1; recortePendente = 1; pausado = 0; reaplicarAte = 0;
     tocandoDesde = 0; quadroInteiroEnviado = 0;
 #ifdef NV_TPK
@@ -394,6 +400,9 @@ void trailer_fechar(void) {
   video_parar();
 #endif
   aberto = 0; cheia = 0; fonteAtual[0] = 0;
+#ifndef __EMSCRIPTEN__
+  tocouFonte = 0;
+#endif
   dono = TRAILER_DONO_NENHUM; donoImdb[0] = 0;
 }
 
@@ -425,8 +434,9 @@ int trailer_tocando(void) {
   int e = aberto ? trailer_js_estado() : -2;
   return e == 1 || e == 3;
 #else
-  return aberto && video_pronto() && !video_falhou() && !video_terminou() &&
-         !video_conflito_recurso();
+  if(!aberto||!video_pronto()||video_falhou()||video_terminou()||video_conflito_recurso())return 0;
+  if(video_tocando())tocouFonte=1;
+  return tocouFonte;
 #endif
 }
 int trailer_mostra_video(void) {
@@ -437,7 +447,7 @@ int trailer_mostra_video(void) {
   if (!imagemVista) {
     if (video_tocando() && !tocandoVisto) tocandoVisto = t | 1;
     if (video_pos() < NV_TRAILER_TPK_POS_MIN &&
-        !(tocandoVisto && t - tocandoVisto >= NV_TRAILER_TPK_POS_PRAZO_MS)) return 0;
+        !(tocandoVisto && (Sint32)(t - tocandoVisto) >= (Sint32)NV_TRAILER_TPK_POS_PRAZO_MS)) return 0;
     imagemVista = 1;
   }
   // "Original", ou o alvo sem recorte (video_tpk.c, o padrao desde #188): nada
@@ -451,9 +461,9 @@ int trailer_mostra_video(void) {
     semCorte = sw >= (video_largura() & ~1) && sh >= (video_altura() & ~1);
   }
   if (semCorte) porque = "sem recorte";
-  else if (recorteEnviadoEm && t - recorteEnviadoEm >= NV_TRAILER_TPK_ROI_ASSENTA_MS) porque = "recorte assentou";
-  else if (tocandoDesde && t - tocandoDesde >= NV_TRAILER_TPK_ROI_PRAZO_MS) porque = "sem recorte em 2 s, mostra assim";
-  else if (!tocandoDesde && abertoEm && t - abertoEm >= NV_TRAILER_TPK_SEM_TOCAR_MS) porque = "sem tocando, mostra assim";
+  else if (recorteEnviadoEm && (Sint32)(t - recorteEnviadoEm) >= NV_TRAILER_TPK_ROI_ASSENTA_MS) porque = "recorte assentou";
+  else if (tocandoDesde && (Sint32)(t - tocandoDesde) >= NV_TRAILER_TPK_ROI_PRAZO_MS) porque = "sem recorte em 2 s, mostra assim";
+  else if (!tocandoDesde && abertoEm && (Sint32)(t - abertoEm) >= NV_TRAILER_TPK_SEM_TOCAR_MS) porque = "sem tocando, mostra assim";
   if (!porque) return 0;
   if (!mostraLogado) {
     mostraLogado = 1;

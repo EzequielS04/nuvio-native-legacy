@@ -38,6 +38,8 @@ static int fonteSetting = TRF_AUTO;
 static int lastSom = -1;
 static int appleReady;
 static int appleOpenFails;
+static int imdbOpenFails;
+static int layoutSetting;
 static int youtubeReady;
 static int imdbReady, imdbAnswered;
 static int opened;
@@ -56,7 +58,7 @@ static int somSetting;
 int ajustes_trailer_hero_som(void) { return somSetting; }
 Uint32 ajustes_trailer_hero_espera_ms(void) { return NV_TRAILER_HERO_ESPERA_MS; }
 int ajustes_tmdb_trailers(void) { return 1; }
-int ajustes_home_layout(void) { return 0; }
+int ajustes_home_layout(void) { return layoutSetting; }
 int ajustes_trailer_cartaz(void) { return posterSetting; }
 float ajustes_expandir_poster_atraso(void) { return 0.5f; }
 int ajustes_animacoes_reduzidas(void) { return 0; }
@@ -82,7 +84,7 @@ void trailer_abrir(const char *source, GfxRect r, int som, int cheia) {
   lastSom = som;
   snprintf(lastSource, sizeof lastSource, "%s", source);
   openedCount++;
-  if (appleOpenFails && strstr(source, "apple")) {
+  if ((appleOpenFails && strstr(source,"apple")) || (imdbOpenFails&&strstr(source,"imdb"))) {
     appleFailure = 1;
     opened = 0;
     playing = 0;
@@ -147,6 +149,7 @@ static void resetState(const char *id) {
   heroTrailerPreparandoAte = 0;
   heroTrailerFonte = 0;
   heroTrailerAppleFalhou = 0;
+  heroTrailerFalhas = 0;heroTrailerQual = 0;
   heroTrailerFade = 0.0f;
   heroTrailerTocouN = 0;   // cada caso reinicia a memoria da sessao no teste
   heroTrailerMemoriaFalhou = 0;
@@ -158,9 +161,11 @@ static void resetState(const char *id) {
   somSetting = 0;
   appleReady = 0;
   appleOpenFails = 0;
+  imdbOpenFails = 0;layoutSetting = HOME_LAYOUT_PADRAO;
   youtubeReady = 0;
   imdbReady = 0; imdbAnswered = 1;
   trailerfonte_definir_imdb_tizen(1);
+  trailerfonte_definir_imdb_primeiro_destaque(0); /* baseline LG/WGT order */
   opened = 0;
   playing = 0;
   openedCount = 0;
@@ -355,8 +360,12 @@ int main(void) {
   appleReady = 1;
   home_trailer_passo(1, 0.016f, start);
   home_trailer_passo(1, 0.016f, start + NV_TRAILER_HERO_ESPERA_MS);
+#ifdef NV_TPK
+  rc |= check("native IMDb needs no browser proxy capability",openedCount==1&&opened&&strstr(lastSource,"imdb"));
+#else
   rc |= check("IMDb fixo sem servico: nada abre", openedCount == 0 && heroTrailerTentado &&
               !heroTrailerSegurando(start + NV_TRAILER_HERO_ESPERA_MS));
+#endif
 
   // Automatico mantem a ordem: com todas prontas, a Apple.
   resetState("tt0000013");
@@ -405,6 +414,45 @@ int main(void) {
     home_trailer_passo(0,0.016f,start+3000);
     rc |= check("overlay gate reported",heroTrailerGateAnterior==HERO_GATE_OVERLAY);
   }
+
+  resetState("tt228poster");
+  focoHero=0;posterSetting=1;trailerSetting=0;nFileiras=1;foco.fileira=0;
+  fileiras[0].tipo=FILEIRA_NORMAL;heroPendente=heroAtual;heroPendenteEm=start;appleReady=1;
+  home_trailer_passo(1,.016f,start+499);
+  rc|=check("focused poster waits for expansion delay",!opened&&heroTrailerGateAnterior==HERO_GATE_POSTER_WAIT);
+  home_trailer_passo(1,.016f,start+500);
+  home_trailer_passo(1,.016f,start+500+NV_TRAILER_HERO_ESPERA_MS);
+  rc|=check("focused content poster starts muted independently of hero setting",opened&&lastSom==0);
+  home_trailer_passo(0,.016f,start+4000);rc|=check("poster overlay closes Home trailer",!opened);
+
+#ifdef NV_TPK
+  resetState("tt228imdb-timeout");trailerfonte_definir_imdb_primeiro_destaque(1);
+  appleReady=imdbReady=1;
+  home_trailer_passo(1,.016f,start);
+  home_trailer_passo(1,.016f,start+NV_TRAILER_HERO_ESPERA_MS);
+  rc|=check("native TPK Home actually selects IMDb first",opened&&strstr(lastSource,"imdb"));
+  home_trailer_passo(1,.016f,start+NV_TRAILER_HERO_ESPERA_MS+NV_TRAILER_HERO_PREPARA_MS);
+  rc|=check("native IMDb timeout falls back to Apple",opened&&strstr(lastSource,"apple")&&openedCount==2);
+  home_trailer_passo(1,.016f,start+NV_TRAILER_HERO_ESPERA_MS+NV_TRAILER_HERO_PREPARA_MS+1);
+  rc|=check("native fallback has a fresh preparation window",opened&&strstr(lastSource,"apple")&&openedCount==2);
+  home_trailer_passo(1,.016f,start+NV_TRAILER_HERO_ESPERA_MS+2*NV_TRAILER_HERO_PREPARA_MS);
+  rc|=check("native second failure stops without reopening either source",!opened&&openedCount==2&&heroTrailerFonte==3);
+  resetState("tt228imdb-open-fail");trailerfonte_definir_imdb_primeiro_destaque(1);
+  appleReady=imdbReady=imdbOpenFails=1;
+  home_trailer_passo(1,.016f,start);home_trailer_passo(1,.016f,start+NV_TRAILER_HERO_ESPERA_MS);
+  home_trailer_passo(1,.016f,start+NV_TRAILER_HERO_ESPERA_MS+1);
+  rc|=check("native rejected IMDb open tries Apple once",opened&&strstr(lastSource,"apple")&&openedCount==2);
+  resetState("tt228imdb-async-fail");trailerfonte_definir_imdb_primeiro_destaque(1);appleReady=imdbReady=1;
+  home_trailer_passo(1,.016f,start);home_trailer_passo(1,.016f,start+NV_TRAILER_HERO_ESPERA_MS);
+  opened=playing=0;appleFailure=1;
+  home_trailer_passo(1,.016f,start+NV_TRAILER_HERO_ESPERA_MS+1);
+  rc|=check("native async IMDb error falls back immediately",opened&&strstr(lastSource,"apple")&&openedCount==2);
+  resetState("tt228fixed-imdb");trailerfonte_definir_imdb_primeiro_destaque(1);fonteSetting=TRF_IMDB;
+  appleReady=imdbReady=imdbOpenFails=1;
+  home_trailer_passo(1,.016f,start);home_trailer_passo(1,.016f,start+NV_TRAILER_HERO_ESPERA_MS);
+  home_trailer_passo(1,.016f,start+NV_TRAILER_HERO_ESPERA_MS+1);
+  rc|=check("native explicit IMDb never silently switches to Apple",!opened&&openedCount==1&&heroTrailerFonte==3);
+#endif
 
   puts(rc ? "home-trailer-timer: FALHOU" : "home-trailer-timer: tudo ok");
   return rc ? 1 : 0;

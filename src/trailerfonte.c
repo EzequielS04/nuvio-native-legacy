@@ -81,6 +81,12 @@ int trailerfonte_ordem_destaque(int ajuste, int tizen, int ordem[3]) {
   return n;
 }
 
+int trailerfonte_depois_destaque(int ajuste,int tizen,int qual) {
+  int ordem[3],n=trailerfonte_ordem_destaque(ajuste,tizen,ordem);
+  for(int i=0;i+1<n;i++)if(ordem[i]==qual)return ordem[i+1];
+  return 0;
+}
+
 static TrailerDecisao escolherNaOrdem(const int *ordem, int n, const TrailerCandidatos *c,
                                       const char **url, int *qual) {
   int i;

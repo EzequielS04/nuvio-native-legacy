@@ -95,6 +95,8 @@ void trailerfonte_definir_imdb_primeiro_cheia(int sim);
 #endif
 #endif
 int  trailerfonte_ordem_destaque(int ajuste, int tizen, int ordem[3]);
+/* Uses the actual Home order (IMDb first on native TPK), unlike depois(). */
+int  trailerfonte_depois_destaque(int ajuste, int tizen, int qual);
 TrailerDecisao trailerfonte_escolher_destaque(int ajuste, int tizen, const TrailerCandidatos *c,
                                               const char **url, int *qual);
 int  trailerfonte_imdb_primeiro_destaque(void);

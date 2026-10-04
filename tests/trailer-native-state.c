@@ -1,0 +1,76 @@
+/* Native production trailer.c, with a deterministic video backend boundary.
+ * Prepared is NOT Playing; buffering/paused after a real start keeps the last
+ * frame visible, and a new source can never inherit that sticky state. */
+#include "trailer.h"
+#include "video.h"
+#include "plrui.h"
+#include "text.h"
+#include "layout.h"
+#include "ajustes.h"
+#include "trailerfonte.h"
+#include <assert.h>
+#include <stdio.h>
+static int pronto,tocando,ativo,falhou,terminou,conflito;
+static double pos;
+static int recorte;
+static Uint32 ticks=100;
+Uint32 SDL_GetTicks(void){return ticks;}
+int ajustes_trailer_fonte(void){return 0;}
+float ajustes_trailer_zoom(void){return 1;}
+int video_iniciar_auto(void){return 1;}
+int video_conflito_recurso(void){return conflito;}
+int video_tocar(const char *u){(void)u;ativo=1;pronto=tocando=falhou=terminou=0;pos=0;return 1;}
+void video_parar(void){ativo=pronto=tocando=0;}
+void video_volume(int p){(void)p;}
+void video_pausar(int p){tocando=!p;}
+int video_ativo(void){return ativo;}
+int video_pronto(void){return pronto;}
+int video_tocando(void){return tocando;}
+int video_falhou(void){return falhou;}
+int video_terminou(void){return terminou;}
+int video_largura(void){return 1920;}
+int video_altura(void){return 1080;}
+double video_pos(void){return pos;}
+void video_bombear(void){}
+int video_recorte_fonte(void){return recorte;}
+void video_recorte_reaplicar(void){}
+void video_janela(int x,int y,int w,int h){(void)x;(void)y;(void)w;(void)h;}
+void video_janela_fonte(int sx,int sy,int sw,int sh,int x,int y,int w,int h){
+  (void)sx;(void)sy;(void)sw;(void)sh;(void)x;(void)y;(void)w;(void)h;
+}
+/* Platform headers above remain the Mac SDK. Only the actual production
+ * trailer implementation below selects its native TPK path in this fixture. */
+#undef __APPLE__
+#include "../src/trailer.c"
+int main(void) {
+  GfxRect r={0,0,1920,1080};
+  trailer_abrir("https://fixture.invalid/a.mp4",r,0,0);assert(trailer_aberto());
+  assert(!trailer_tocando());pronto=1;
+  assert(!trailer_tocando());assert(!trailer_mostra_video());
+  puts("ok native Prepared alone never counts as playback");
+  tocando=1;trailer_atualizar(ticks);assert(trailer_tocando());
+  assert(!trailer_mostra_video());pos=.5;ticks+=800;
+  trailer_atualizar(ticks);assert(trailer_mostra_video());
+  puts("ok native Playing then advancing position reveals the image");
+  tocando=0;trailer_atualizar(++ticks);
+  assert(trailer_tocando()&&trailer_mostra_video());
+  puts("ok pause/buffering after first Playing keeps last image");
+  trailer_fechar();assert(!trailer_tocando());
+  trailer_abrir("https://fixture.invalid/b.mp4",r,0,0);pronto=1;
+  assert(!trailer_tocando()&&!trailer_mostra_video());
+  puts("ok new source never inherits Playing/image from previous source");
+  tocando=1;trailer_atualizar(++ticks);falhou=1;
+  assert(!trailer_tocando());trailer_atualizar(++ticks);
+  assert(!trailer_aberto()&&trailer_falhou());
+  puts("ok native terminal failure closes the trailer");
+  /* Sent at an even SDL tick, t|1 is one millisecond ahead. Unsigned age
+   * subtraction used to wrap and skip the 300 ms ROI settling period. */
+  ticks=2000;recorte=1;r.h=500;
+  trailer_abrir("https://fixture.invalid/c.mp4",r,0,0);pronto=tocando=1;pos=.5;
+  trailer_atualizar(ticks);ticks+=800;trailer_atualizar(ticks);
+  assert(!trailer_mostra_video());ticks+=299;assert(!trailer_mostra_video());
+  ticks+=2;assert(trailer_mostra_video());
+  puts("ok native ROI wait never wraps through a future/even tick");
+  trailer_fechar();
+  return 0;
+}
