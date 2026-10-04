@@ -152,6 +152,23 @@ int  col_definir_json(const char *j) { if (j && strstr(j, "colecao-conta")) colC
 int  contalib_ler_biblioteca(const char *j) { if (j && strstr(j, "bib-conta")) bibConta++; return 0; }
 int  contalib_ler_vistos(const char *j) { if (j && strstr(j, "visto-conta")) vistoConta++; return 0; }
 void desc_remontar_fileiras(void) {}
+// 1.8 sync.c also talks to plugins.c, colfileiras.c and colecoes.c revision/validation;
+// none of them is under test here, so they are inert: no plugin edit pending, no
+// collection-row revision change.
+#include "plugins.h"
+#include "colecoes.h"
+#include "colfileiras.h"
+void plugins_retrato(PlugRetrato *s) { memset(s, 0, sizeof *s); }
+int  plugins_confirmar(unsigned rev, unsigned g) { (void)rev; (void)g; return 1; }
+int  plugins_definir_da_conta(const PlugRepo *l, int n, unsigned g) { (void)l; (void)n; (void)g; return 0; }
+int  plugins_ler_conta(const char *j, PlugRepo *o, int max) { (void)j; (void)o; (void)max; return 0; }
+void plugins_perfil_mudou(void) {}
+void plugins_esquecer(void) {}
+int  col_resposta_valida(const char *j) { return j && *j; }
+unsigned col_revisao(void) { return 0; }
+void colfileiras_sincronizar(void) {}
+int  colfileiras_receber(const char *j) { return col_definir_json(j); }   // real one forwards the blob to colecoes.c
+void colfileiras_contexto(void) {}
 void desc_repetir_silencioso(void) {}
 void desc_repetir(void) {}
 void desc_repetir_addons(void) {}

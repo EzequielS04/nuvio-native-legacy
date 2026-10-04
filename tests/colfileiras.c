@@ -16,6 +16,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include "../src/descoberta.c"
+#include "jellyfin_stub.inc"
 Uint32 SDL_GetTicks(void) { return 0; }
 unsigned recomenda_geracao(void) { return 1; }
 
@@ -141,6 +142,8 @@ void  cat_cache_substituido(void)          { }
 void  cat_definir_episodios(int i, const CatEp *l, int n) { (void)i; (void)l; (void)n; }
 int   cat_do_cache(void)                   { return 0; }
 int   cat_n(void)                          { return 0; }
+int   cat_home_apenas_fixas(void)          { return 0; }   // not a progressive publish here
+int   cat_mesclar_listas(const CatItem *v, int q) { (void)v; (void)q; return 0; }   // no watchlist/collection rows in this fixture
 unsigned long cat_assinatura(void)         { return 0; }
 unsigned long cat_assinatura_de(const CatItem *l, int q, const CatFileira *f, int n) {
   (void)l; (void)q; (void)f; (void)n; return 1; }
