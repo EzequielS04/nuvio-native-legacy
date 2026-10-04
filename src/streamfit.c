@@ -10,6 +10,7 @@ typedef struct {
   char host[STREAMFIT_HOST_MAX];
   int kbps[STREAMFIT_AMOSTRAS_MAX], n;
   uint64_t quando[STREAMFIT_AMOSTRAS_MAX], recente;
+  int origem;
 } Historico;
 static Historico historico[STREAMFIT_HOSTS_MAX];
 static uint64_t redeAtual;
@@ -62,7 +63,7 @@ void streamfit_limpar(void) {
   pthread_mutex_unlock(&trava);
 }
 
-int streamfit_diagnostico(uint64_t rede, const char *url, const int *kbps, int n, uint64_t fim) {
+static int registrar(int origem, uint64_t rede, const char *url, const int *kbps, int n, uint64_t fim) {
   char host[STREAMFIT_HOST_MAX];
   int usados = 0, ix = -1, livre = -1, antigo = 0;
   if (!rede || !fim || !kbps || n < 5 || n > STREAMFIT_AMOSTRAS_MAX ||
@@ -91,9 +92,15 @@ int streamfit_diagnostico(uint64_t rede, const char *url, const int *kbps, int n
   for (int i = 0; i < n; i++) if (kbps[i] >= 0 && kbps[i] <= 10000000) {
     h->kbps[h->n] = kbps[i]; h->quando[h->n++] = fim;
   }
-  h->recente = fim;
+  h->recente = fim; h->origem = origem;
   pthread_mutex_unlock(&trava);
   return usados;
+}
+int streamfit_diagnostico(uint64_t rede, const char *url, const int *kbps, int n, uint64_t fim) {
+  return registrar(SF_ORIGEM_DIAGNOSTICO, rede, url, kbps, n, fim);
+}
+int streamfit_passiva(uint64_t rede, const char *url, const int *kbps, int n, uint64_t fim) {
+  return registrar(SF_ORIGEM_PASSIVA, rede, url, kbps, n, fim);
 }
 
 void streamfit_foto(StreamfitFoto *out, uint64_t agora) {
@@ -116,6 +123,7 @@ void streamfit_foto(StreamfitFoto *out, uint64_t agora) {
     memcpy(d->host, h->host, sizeof d->host);
     d->amostras = r.n; d->otimoKbps = r.otimoKbps;
     d->maximoKbps = r.maximoKbps; d->medianaKbps = r.medianaKbps; d->medidaMs = recente;
+    d->sustentadoKbps = r.p20Kbps; d->origem = h->origem;
   }
   pthread_mutex_unlock(&trava);
 }
@@ -141,6 +149,7 @@ StreamfitClasse streamfit_classificar(const StreamfitFoto *foto, const char *url
     r.necessarioKbps = (double)bytes * 8.0 / segundos / 1000.0;
     r.otimoKbps = h->otimoKbps; r.maximoKbps = h->maximoKbps;
     r.amostras = h->amostras; r.idadeMs = foto->agoraMs - h->medidaMs;
+    r.sustentadoKbps = h->sustentadoKbps; r.origem = h->origem;
     r.razao = SF_BITRATE_ESTIMADO;
     r.classe = r.necessarioKbps <= r.otimoKbps ? SF_ADEQUADA : SF_PESADA;
     break;

@@ -35,6 +35,10 @@ class ParaleloDataSource(
     private val props: Map<String, String>,
     private val conexoes: Int = CONEXOES,
     private val pedaco: Int = PEDACO,
+    // StreamFit passivo (PassivoMedidor.kt): conta os bytes LIDOS DO SOCKET
+    // por estas transferencias, nunca a entrega de memoria ao ExoPlayer.
+    private val medidor: PassivoMedidor? = null,
+    private val token: Long = 0L,
 ) : BaseDataSource(true) {
 
     companion object {
@@ -58,18 +62,21 @@ class ParaleloDataSource(
     }
 
     class Factory(private val ua: String?, private val props: Map<String, String>,
-                  private val unica: HttpDataSource.Factory) : DataSource.Factory {
-        override fun createDataSource(): DataSource = Seletor(ua, props, unica.createDataSource())
+                  private val unica: HttpDataSource.Factory,
+                  private val medidor: PassivoMedidor? = null,
+                  private val token: Long = 0L) : DataSource.Factory {
+        override fun createDataSource(): DataSource = Seletor(ua, props, unica.createDataSource(), medidor, token)
     }
 
     // Escolhe por pedido: paralelo para arquivo progressivo, unica para o resto.
     // Os ouvintes de transferencia (medidor de banda do ExoPlayer) vao para os dois.
     private class Seletor(private val ua: String?, private val props: Map<String, String>,
-                          private val unica: DataSource) : DataSource {
+                          private val unica: DataSource,
+                          private val medidor: PassivoMedidor?, private val token: Long) : DataSource {
         private var atual: DataSource? = null
         private val ouvintes = ArrayList<androidx.media3.datasource.TransferListener>()
         override fun open(dataSpec: DataSpec): Long {
-            val d = if (serve(dataSpec.uri)) ParaleloDataSource(ua, props).also { p ->
+            val d = if (serve(dataSpec.uri)) ParaleloDataSource(ua, props, medidor = medidor, token = token).also { p ->
                 for (o in ouvintes) p.addTransferListener(o)
             } else unica
             atual = d
@@ -99,6 +106,7 @@ class ParaleloDataSource(
     // Conexao unica: servidor sem Range, ou arquivo pequeno.
     private var unicaCon: HttpURLConnection? = null
     private var unicaIn: InputStream? = null
+    private var unicaOrigem: String? = null
     private var aberto = false
 
     private fun conectar1(u: URL, ini: Long, ultimo: Long): HttpURLConnection {
@@ -134,6 +142,13 @@ class ParaleloDataSource(
     }
 
     override fun open(dataSpec: DataSpec): Long {
+        // Conectar, esperar o primeiro byte e baixar o primeiro pedaco e
+        // transferencia ativa (o tempo entra na cobertura do segundo).
+        medidor?.inicio(token)
+        try { return abrir(dataSpec) } finally { medidor?.fim(token) }
+    }
+
+    private fun abrir(dataSpec: DataSpec): Long {
         uri = dataSpec.uri
         transferInitializing(dataSpec)
         Log.i(TAG, "abrindo ${dataSpec.uri.host} a partir de ${dataSpec.position}")
@@ -157,6 +172,7 @@ class ParaleloDataSource(
                 if (uc.responseCode !in 200..299) throw HttpDataSource.InvalidResponseCodeException(
                     uc.responseCode, uc.responseMessage, null, uc.headerFields, dataSpec, ByteArray(0))
                 unicaIn = uc.inputStream
+                unicaOrigem = PassivoMedidor.origemDe(uc.url)
                 if (code == 200 && pos > 0) unicaIn!!.skip(pos)   // servidor ignorou Range
                 aberto = true
                 transferStarted(dataSpec)
@@ -187,9 +203,14 @@ class ParaleloDataSource(
     private fun lerTudo(c: HttpURLConnection): ByteArray {
         val esperado = c.contentLengthLong
         val out = java.io.ByteArrayOutputStream(if (esperado > 0) esperado.toInt() else pedaco)
+        val origem = PassivoMedidor.origemDe(c.url)
         c.inputStream.use { inp ->
             val tmp = ByteArray(64 * 1024)
-            while (true) { val n = inp.read(tmp); if (n < 0) break; out.write(tmp, 0, n) }
+            while (true) {
+                val n = inp.read(tmp); if (n < 0) break
+                out.write(tmp, 0, n)
+                medidor?.bytes(token, origem, n)
+            }
         }
         return out.toByteArray()
     }
@@ -210,7 +231,10 @@ class ParaleloDataSource(
         var ultimoErro: IOException? = null
         repeat(TENTATIVAS) {
             if (Thread.currentThread().isInterrupted) throw IOException("cancelado")
-            val c = conectar(u, ini, ult)
+            // Uma conexao paralela ativa, do connect ao ultimo byte. As outras
+            // somam no mesmo segundo do medidor; nada e contado duas vezes.
+            medidor?.inicio(token)
+            val c = try { conectar(u, ini, ult) } catch (e: IOException) { medidor?.fim(token); throw e }
             try {
                 if (c.responseCode != 206) throw IOException("HTTP ${c.responseCode} no pedaco $ini-$ult")
                 val d = lerTudo(c)
@@ -220,6 +244,7 @@ class ParaleloDataSource(
                 ultimoErro = e
             } finally {
                 c.disconnect()
+                medidor?.fim(token)
             }
         }
         throw ultimoErro ?: IOException("pedaco $ini-$ult falhou")
@@ -228,7 +253,12 @@ class ParaleloDataSource(
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
         if (length == 0) return 0
         unicaIn?.let { inp ->
-            val n = inp.read(buffer, offset, length)
+            // Conexao unica: so o tempo DENTRO do read e transferencia (um
+            // stall bloqueia aqui); o intervalo entre reads e o ExoPlayer
+            // parado com o buffer cheio, e nao conta.
+            medidor?.inicio(token)
+            val n = try { inp.read(buffer, offset, length) } finally { medidor?.fim(token) }
+            if (n > 0) medidor?.bytes(token, unicaOrigem, n)
             if (n < 0) return C.RESULT_END_OF_INPUT
             bytesTransferred(n)
             return n
@@ -263,6 +293,7 @@ class ParaleloDataSource(
         buf = null
         try { unicaIn?.close() } catch (_: IOException) {}
         unicaIn = null
+        unicaOrigem = null
         unicaCon?.disconnect()
         unicaCon = null
         if (aberto) { aberto = false; transferEnded() }

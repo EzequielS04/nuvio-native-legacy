@@ -1,5 +1,6 @@
 #include "imdbnota.h"
 #include "extras.h"
+#include "streams.h"
 #include "marco.h"
 #include "vistoep.h"
 #include "trakt.h"
@@ -878,6 +879,10 @@ static void *buscar(void *arg) {
         js_texto(corpo, fimC, "status", fichaStatus, sizeof fichaStatus);
         js_texto(corpo, fimC, "release_date", fichaLanc, sizeof fichaLanc);
         fichaDur = (int)js_num(corpo, fimC, "runtime", 0.0);
+        // StreamFit (F03): TMDB's movie runtime for THIS id (still under the
+        // trava and the idPedido check above). The movie's stream target is
+        // its imdb id, the same string. Zero/absent says nothing.
+        if (fichaDur > 0 && fichaDur < 1440) stream_fit_duracao(id, fichaDur * 60.0, SF_DUR_METADATA);
 
         // production_countries e um array de objetos; junta os nomes com
         // virgula, como a referencia mostra ("United States of America,

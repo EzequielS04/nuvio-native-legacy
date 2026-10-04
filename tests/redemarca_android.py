@@ -34,6 +34,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.LinkProperties
+object PassivoMedidor { @JvmStatic @Volatile var redeGlobal = 0L }
 class NuvioActivity {
     fun getSystemService(name: String): Any? = null
 """ + block + "}\n")
@@ -43,6 +44,7 @@ class NuvioActivity {
     replay = tmp / "Replay.kt"
     replay.write_text("""
 object Context { const val CONNECTIVITY_SERVICE = "connectivity" }
+object PassivoMedidor { @JvmStatic @Volatile var redeGlobal = 0L }
 data class Network(val id: Int)
 data class LinkProperties(val key: Int) { constructor(other: LinkProperties): this(other.key) }
 class NetworkCapabilities(val mask: Int, val transport: Int = 1, val bandwidth: Int = 10) {
@@ -87,6 +89,7 @@ fun main() {
     cb.onCapabilitiesChanged(first, NetworkCapabilities(15)); check(!a.saida.last().second)
     cb.onLinkPropertiesChanged(first, LinkProperties(1)); check(a.saida.last().second)
     val ready = a.saida.last().first
+    check(PassivoMedidor.redeGlobal == ready) // passive meter shares the epoch
     cb.onCapabilitiesChanged(first, NetworkCapabilities(15, bandwidth=9999))
     cb.onLinkPropertiesChanged(first, LinkProperties(1)); check(a.saida.last().first == ready)
     cb.onLinkPropertiesChanged(first, LinkProperties(2)); check(a.saida.last().first > ready)
@@ -100,7 +103,7 @@ fun main() {
     cb.onCapabilitiesChanged(first, NetworkCapabilities(15)); check(a.saida.size == switched)
     cb.onLinkPropertiesChanged(second, LinkProperties(2)); check(!a.saida.last().second)
     cb.onCapabilitiesChanged(second, NetworkCapabilities(15)); check(a.saida.last().second)
-    cb.onLost(second); check(!a.saida.last().second)
+    cb.onLost(second); check(!a.saida.last().second && PassivoMedidor.redeGlobal == 0L)
     cb.onAvailable(first); cb.onCapabilitiesChanged(first, NetworkCapabilities(15))
     cb.onLinkPropertiesChanged(first, LinkProperties(1)); check(a.saida.last().first > ready)
     a.close(); check(!a.saida.last().second && a.cm.removals == 1)

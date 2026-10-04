@@ -10,6 +10,7 @@
 #include "tex_cache.h"
 #include "catalogo.h"
 #include "limpa.h"
+#include "vazao.h"
 #include <ctype.h>
 #include <strings.h>
 #include <pthread.h>
@@ -72,6 +73,7 @@ static int medirCabecalho(void);
 #define FOLHA_LINHA_H  112.0f  // linha sem marca e sem arquivo
 #define FOLHA_MARCA_H   30.0f  // "SUA ESCOLHA ANTERIOR" / "REPRODUZINDO AGORA"
 #define FOLHA_ARQ_H     34.0f  // nome do arquivo, so na linha em foco
+#define FOLHA_FIT_H     32.0f  // StreamFit: evidencia da conexao, so na linha em foco
 #define FOLHA_LINHA_GAP  4.0f
 #define FOLHA_SEC_H     64.0f  // cabecalho "4K  ULTRA HD ... 3 fontes"
 #define FOLHA_SEC_GAP   26.0f
@@ -115,9 +117,20 @@ static char contexto[320];
 // ids de canal do stalker/xtream, que sao os maiores que passam por aqui.
 static char alvoPedido[64], alvoLista[64];
 static pthread_mutex_t fitMetaTrava = PTHREAD_MUTEX_INITIALIZER;
-static char fitMetaAlvo[64], fitFotoAlvo[64];
-static double fitMetaSeg, fitFotoSeg;
-static StreamfitDuracao fitMetaOrigem;
+// RUNTIME PER EXACT TARGET (F03). A few recent targets, each with its two
+// provenances kept apart: metadata (TMDB/Cinemeta/addon runtime) and the
+// player's real media duration. Media beats metadata of the same target; a
+// target never inherits another's runtime. Different producers (the detail's
+// TMDB sheet, the player) may report for different targets at once, which is
+// why a single slot would lose data.
+#define FIT_DUR_SLOTS 8
+typedef struct { char alvo[64]; double metaSeg, midiaSeg; unsigned uso; } FitDur;
+static FitDur fitDur[FIT_DUR_SLOTS];
+static unsigned fitDurUso;
+static double (*fitMetaFonte)(const char *alvo);
+static char fitFotoAlvo[64];
+static double fitFotoSeg;
+static StreamfitDuracao fitFotoOrigem;
 static StreamfitFoto fitFoto;
 static StreamfitResultado *fitResultados;
 static unsigned char *fitClasses;
@@ -125,24 +138,48 @@ static int fitCap, fitN;
 static int aberta;
 
 void stream_fit_duracao(const char *alvo, double seg, StreamfitDuracao origem) {
-  if (!alvo || !*alvo || strlen(alvo) >= sizeof fitMetaAlvo) return;
-  if (!isfinite(seg) || seg < 1 || seg > 86400 ||
-      (origem != SF_DUR_METADATA && origem != SF_DUR_MEDIA)) { seg = 0; origem = SF_DUR_DESCONHECIDA; }
+  FitDur *d = NULL, *velho = &fitDur[0];
+  if (!alvo || !*alvo || strlen(alvo) >= sizeof fitDur[0].alvo) return;
+  if (!isfinite(seg) || seg < 1 || seg > 86400) seg = 0;
   pthread_mutex_lock(&fitMetaTrava);
-  // Late metadata cannot overwrite a real measured duration of this item.
-  if (origem != SF_DUR_METADATA || fitMetaOrigem != SF_DUR_MEDIA || strcmp(alvo, fitMetaAlvo)) {
-    snprintf(fitMetaAlvo, sizeof fitMetaAlvo, "%s", alvo);
-    fitMetaSeg = seg; fitMetaOrigem = origem;
+  for (int i = 0; i < FIT_DUR_SLOTS; i++) {
+    if (!strcmp(fitDur[i].alvo, alvo)) { d = &fitDur[i]; break; }
+    if (!fitDur[i].alvo[0]) { if (velho->alvo[0]) velho = &fitDur[i]; }
+    else if (velho->alvo[0] && fitDur[i].uso < velho->uso) velho = &fitDur[i];
+  }
+  if (!d && seg > 0 && origem != SF_DUR_DESCONHECIDA) {
+    d = velho; memset(d, 0, sizeof *d);
+    snprintf(d->alvo, sizeof d->alvo, "%s", alvo);
+  }
+  if (d) {
+    // Zero clears only the provenance it names; unknown clears both.
+    if (origem == SF_DUR_MEDIA) d->midiaSeg = seg;
+    else if (origem == SF_DUR_METADATA) d->metaSeg = seg;
+    else d->midiaSeg = d->metaSeg = 0;
+    d->uso = ++fitDurUso;
+    if (!d->midiaSeg && !d->metaSeg) d->alvo[0] = 0;
   }
   pthread_mutex_unlock(&fitMetaTrava);
 }
+void stream_fit_fonte_metadados(double (*fonte)(const char *alvo)) { fitMetaFonte = fonte; }
 
 static void fitAbrir(void) {
+  double meta = 0, midia = 0;
   streamfit_foto(&fitFoto, streamfit_agora_ms());
   snprintf(fitFotoAlvo, sizeof fitFotoAlvo, "%s", alvoPedido);
   pthread_mutex_lock(&fitMetaTrava);
-  fitFotoSeg = fitFotoAlvo[0] && !strcmp(fitMetaAlvo, fitFotoAlvo) ? fitMetaSeg : 0;
+  if (fitFotoAlvo[0])
+    for (int i = 0; i < FIT_DUR_SLOTS; i++)
+      if (!strcmp(fitDur[i].alvo, fitFotoAlvo)) { meta = fitDur[i].metaSeg; midia = fitDur[i].midiaSeg; break; }
   pthread_mutex_unlock(&fitMetaTrava);
+  // The catalog lookup runs on the UI thread (the sheet opens there) and only
+  // answers for this exact target; a mismatch answers 0.
+  if (!midia && !meta && fitFotoAlvo[0] && fitMetaFonte) {
+    double v = fitMetaFonte(fitFotoAlvo);
+    meta = isfinite(v) && v >= 1 && v <= 86400 ? v : 0;
+  }
+  fitFotoSeg = midia ? midia : meta;
+  fitFotoOrigem = midia ? SF_DUR_MEDIA : meta ? SF_DUR_METADATA : SF_DUR_DESCONHECIDA;
   fitN = 0;
 }
 
@@ -174,6 +211,74 @@ StreamfitClasse stream_fit_folha_estado(int indice, StreamfitResultado *saida) {
   if (aberta && indice >= 0 && indice < fitN && indice < n) r = fitResultados[indice];
   if (saida) *saida = r;
   return r.classe;
+}
+// Platforms whose network epoch can become known (redemarca fed by the
+// Android ConnectivityManager monitor). Tests may force it.
+#ifndef STREAMFIT_REDE_EXISTE
+#ifdef NV_ANDROID
+#define STREAMFIT_REDE_EXISTE 1
+#else
+#define STREAMFIT_REDE_EXISTE 0
+#endif
+#endif
+static int fitPesada(int i) { return i >= 0 && i < fitN && fitClasses && fitClasses[i] == SF_PESADA; }
+static void fitMbps(char *dst, size_t n, double kbps) {
+  vazao_fmt_mbps(dst, n, kbps > 2e9 ? 2000000000 : (int)(kbps + .5), '.');
+  plrui_decimal(dst);
+}
+// THE FOCUSED ROW'S CONNECTION LINES (F03). Only real evidence is spelled
+// out: where the number came from and how old it is, the sustained speed of
+// THIS source's host, then the estimated average demand against the budget.
+// Every unknown case says so on one line, with the reason. `l2` may be NULL.
+// Returns the frozen class of raw index `i`.
+static StreamfitClasse fitTexto2(int i, char *l1, size_t n1, char *l2, size_t n2) {
+  StreamfitResultado r;
+  StreamfitClasse c = stream_fit_folha_estado(i, &r);
+  if (l2 && n2) l2[0] = 0;
+  if (r.razao == SF_BITRATE_ESTIMADO) {
+    char idade[48], sust[64], nec[24], orc[24], mb[24];
+    unsigned long min = (unsigned long)(r.idadeMs / 60000u);
+    if (min < 1) snprintf(idade, sizeof idade, "%s", i18n("agora"));
+    else if (min < 60) snprintf(idade, sizeof idade, i18n("há %d min"), (int)min);
+    else snprintf(idade, sizeof idade, i18n("há %d h"), (int)(min / 60));
+    fitMbps(mb, sizeof mb, r.sustentadoKbps);
+    snprintf(sust, sizeof sust, i18n("%s Mbps sustentados"), mb);
+    snprintf(l1, n1, "%s · %s · %s",
+             i18n(r.origem == SF_ORIGEM_PASSIVA ? "Reprodução recente" : "Diagnóstico"), idade, sust);
+    fitMbps(nec, sizeof nec, r.necessarioKbps);
+    fitMbps(orc, sizeof orc, r.otimoKbps);
+    if (l2 && n2) snprintf(l2, n2, i18n("precisa ~%s de %s Mbps disponíveis"), nec, orc);
+    return c;
+  }
+  switch (r.razao) {
+    case SF_SEM_REDE:
+      // Only a platform with a network epoch source (Android) can ever have
+      // data here. LG, Samsung TPK/WGT and desktop never do: no line at all,
+      // instead of a permanent "no data" on every focused row.
+      if (STREAMFIT_REDE_EXISTE) snprintf(l1, n1, "%s", i18n("Conexão: sem dados desta rede"));
+      else if (n1) l1[0] = 0;
+      break;
+    case SF_SEM_TAMANHO: snprintf(l1, n1, "%s", i18n("Conexão: tamanho do arquivo não informado")); break;
+    case SF_SEM_DURACAO: snprintf(l1, n1, "%s", i18n("Conexão: duração do título desconhecida")); break;
+    case SF_SEM_HOST:    snprintf(l1, n1, "%s", i18n("Conexão: servidor só conhecido ao tocar")); break;
+    default:             snprintf(l1, n1, "%s", i18n("Conexão: servidor ainda não medido")); break;
+  }
+  return c;
+}
+// One-line form (tests and logs); the sheet draws the two lines itself.
+__attribute__((unused)) static StreamfitClasse fitTexto(int i, char *dst, size_t n) {
+  char l2[128];
+  StreamfitClasse c = fitTexto2(i, dst, n, l2, sizeof l2);
+  if (l2[0]) { size_t k = strlen(dst); snprintf(dst + k, n - k, " · %s", l2); }
+  return c;
+}
+// Lines the focused row opens for it: two with evidence, one when unknown.
+// Frozen with the snapshot, so a row never changes height while open.
+static int fitLinhas(int i) {
+  StreamfitResultado r;
+  stream_fit_folha_estado(i, &r);
+  if (r.razao == SF_SEM_REDE && !STREAMFIT_REDE_EXISTE) return 0;
+  return r.razao == SF_BITRATE_ESTIMADO ? 2 : 1;
 }
 void stream_definir_alvo(const char *id) {
   snprintf(alvoPedido, sizeof alvoPedido, "%s", id ? id : "");
@@ -1518,7 +1623,9 @@ static const char *arquivoDa(const Stream *s) {
 static int melhorFolha = -1;   // stream_automatico() do quadro, posto antes de montar()
 static int temMarca(int i, int automatica) {
   (void)automatica;
-  return i >= 0 && (i == atual || i == preferida || (i == melhorFolha && nFiltrados() > 1));
+  // StreamFit (F03): a measured-heavy source carries its reason on the mark line.
+  return i >= 0 && (i == atual || i == preferida || (i == melhorFolha && nFiltrados() > 1) ||
+                    fitPesada(i));
 }
 // Altura de uma linha: base, marca, e o nome do arquivo que abre por mola na
 // linha em foco. Usa nOrdem como o indice que a linha vai receber.
@@ -1529,9 +1636,12 @@ static float alturaLinha(int i, int automatica) {
     int nl = linhasAddon(&lista[i], tmp, FOLHA_ADDON_LINHAS);
     h = 20 + 40 + nl * FOLHA_ADDON_LD + 18 + (temMarca(i, automatica) ? FOLHA_MARCA_H : 0);
     if (h < 96) h = 96;
-  } else if (!arquivoDa(&lista[i])[0]) ;
-  else if (grupo == 1 && nOrdem == foco) h += FOLHA_ARQ_H * abreFoco;
-  else if (nOrdem == linhaAnt)           h += FOLHA_ARQ_H * abreAnt;
+  } else {
+    // The connection line opens with the focused row even without a file name.
+    float extra = (arquivoDa(&lista[i])[0] ? FOLHA_ARQ_H : 0) + FOLHA_FIT_H * fitLinhas(i);
+    if (grupo == 1 && nOrdem == foco) h += extra * abreFoco;
+    else if (nOrdem == linhaAnt)      h += extra * abreAnt;
+  }
   return h;
 }
 static void porLinha(int i, float *y, int automatica) {
@@ -1715,13 +1825,18 @@ void stream_folha_abrir(void) {
   printf("[fonte] folha: %d de %d na lista (%d addon(s); %d torrent(s) sem debrid "
          "descartado(s); %d ja recusada(s) pelo automatico, continuam na folha)\n",
          nFiltrados(), n, nProvedores - 1, descartadosSemDebrid, excl);
-  int conhecidos = 0, pesados = 0;
+  int conhecidos = 0, pesados = 0, diag = 0, pass = 0;
   for (int i = 0; i < fitN; i++) {
     conhecidos += fitClasses[i] != SF_DESCONHECIDA;
     pesados += fitClasses[i] == SF_PESADA;
   }
-  printf("[stream_fit] snapshot hosts=%d classified=%d heavy=%d origin=diagnostic\n",
-         fitFoto.n, conhecidos, pesados);
+  for (int i = 0; i < fitFoto.n; i++) {
+    diag += fitFoto.hosts[i].origem == SF_ORIGEM_DIAGNOSTICO;
+    pass += fitFoto.hosts[i].origem == SF_ORIGEM_PASSIVA;
+  }
+  printf("[stream_fit] snapshot hosts=%d diagnostic=%d passive=%d classified=%d heavy=%d runtime=%s\n",
+         fitFoto.n, diag, pass, conhecidos, pesados,
+         fitFotoOrigem == SF_DUR_MEDIA ? "media" : fitFotoOrigem == SF_DUR_METADATA ? "metadata" : "unknown");
   fflush(stdout);
 }
 int stream_folha_aberta(void) { return aberta; }
@@ -2286,7 +2401,18 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
       if(i==melhor && nOrdem>1){
         (void)tf;
         gfx_cor((GfxRect){mx,cy+5,7,7},.5f,ar,ag,ab,anim);
-        caixaAlta("Melhor para esta TV",ai,(int)(ag*255),(int)(ab*255),mx+16,cy,anim);
+        // StreamFit (F03): the automatic pick is NOT changed by the measurement.
+        // When its host was measured too slow for it, the mark keeps naming the
+        // real choice but stops calling it the best for this TV.
+        mx+=16+caixaAlta(fitPesada(i) ? "Escolha automática" : "Melhor para esta TV",
+                         ai,(int)(ag*255),(int)(ab*255),mx+16,cy,anim)+18;
+      }
+      // StreamFit (F03): "above the connection" is a condition of this source on
+      // this network, not a defect: champagne-grey like the HDR label, after any
+      // other mark. It is why the row sits at the end of its group.
+      if(fitPesada(i)){
+        gfx_cor((GfxRect){mx,cy+5,7,7},.5f,.80f,.70f,.52f,anim);
+        caixaAlta("Acima da conexão",204,178,132,mx+16,cy,anim);
       }
       cy+=FOLHA_MARCA_H;
     }
@@ -2373,7 +2499,7 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
       // condicao da fonte, nao um defeito dela.
       if(s->foraCache){ int c=sel?185:140;
         TxtLinha lf=txt_linha(TXT_HERO_META,"Fora do cache",c,c-6,c-14,255);
-        if(lw+18+lf.w<=txtW) txt_desenhar_alpha(lf,tx+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-lf.h)*.5f,anim); } }
+        if(lw+18+lf.w<=txtW) { txt_desenhar_alpha(lf,tx+(lw>0?lw+18:0),cy+(FOLHA_SELO_H-lf.h)*.5f,anim); lw+=(lw>0?18:0)+lf.w; } } }
     cy+=FOLHA_SELO_H+12;
     // O ARQUIVO, so na linha em foco: e o que distingue duas fontes iguais
     // (grupo de release, versao), e em toda linha era ruido.
@@ -2382,7 +2508,16 @@ static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
       if(a>.02f && arq[0]){ char d[512];
         snprintf(d,sizeof d,"%s",arq);
         for(char *p=d;*p;p++)if((unsigned char)*p<32)*p=' ';
-        txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,d,125,125,123,255,tr-tx),tx,cy,anim*a); } }
+        txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,d,125,125,123,255,tr-tx),tx,cy,anim*a); }
+      if(a>.02f){ char f1[160], f2[128]; StreamfitClasse fc=fitTexto2(i,f1,sizeof f1,f2,sizeof f2);
+        if(f1[0]){
+        float fy=cy+(arq[0]?FOLHA_ARQ_H:0);
+        int c=fc==SF_DESCONHECIDA?118:150;
+        txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,f1,c,c,c-2,255,tr-tx),tx,fy,anim*a);
+        if(f2[0]){
+          TxtLinha l2=fc==SF_PESADA ? txt_linha_corta(TXT_PG_FIM,f2,204,178,132,255,tr-tx)
+                                    : txt_linha_corta(TXT_PG_FIM,f2,c,c,c-2,255,tr-tx);
+          txt_desenhar_alpha(l2,tx,fy+FOLHA_FIT_H,anim*a); } } } }
   }
   // O TOPO DA LISTA ESMAECE em vez de cortar seco embaixo do seletor: a linha
   // que sobe some aos poucos, na cor da folha. So com a lista rolada: parada

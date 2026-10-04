@@ -98,6 +98,9 @@
 #include "p2p.h"
 #include "player.h"
 #include "streams.h"
+#include "streamfitdur.h"
+#include "streamfitpassiva.h"
+#include "vazao.h"
 #include "stalker.h"
 #include "xtream.h"
 #include "rede.h"
@@ -560,6 +563,78 @@ static void alvoPlayer(char *alvo, size_t tam) {
   if (t > 0 && e > 0) cat_id_stream(player_indice(), t, e, alvo, (unsigned)tam);
   else snprintf(alvo,tam,"%s",c->imdb);
 }
+// --- StreamFit runtime and passive gate (F03) -------------------------------
+// RUNTIME OF THE EXACT TARGET, from metadata the catalog already parsed. Asked
+// by the sources sheet when it opens (UI thread) with the id it will classify;
+// answers only when that id is the one the player or the detail would request
+// (alvoPlayer / idDoAlvo — the same functions that stamp stream_definir_alvo),
+// so another title or episode never lends its runtime. Movie: the Cinemeta/addon
+// "runtime" kept in CatItem.meta. Episode: that episode's own runtime (the
+// /meta video or TMDB season episode), never the show's or a season total.
+static double fitRuntimeItem(int indice, int t, int e) {
+  const CatItem *c = cat_item(indice);
+  if (!c) return 0;
+  if (t > 0 && e > 0) {
+    int n = cat_n_episodios(indice);
+    for (int k = 0; k < n; k++) {
+      const CatEp *ep = cat_episodio(indice, k);
+      if (ep && ep->temporada == t && ep->episodio == e) return streamfitdur_texto(ep->duracao);
+    }
+    return 0;
+  }
+  return !strcmp(c->tipo, "movie") ? streamfitdur_meta_filme(c->meta) : 0;
+}
+static double fitRuntimeMeta(const char *alvo) {
+  char a[64];
+  int t = 0, e = 0;
+  if (!alvo || !*alvo) return 0;
+  if (player_aberto() && !player_id_canal()[0]) {
+    alvoPlayer(a, sizeof a);
+    if (!strcmp(a, alvo)) { player_episodio_atual(&t, &e); return fitRuntimeItem(player_indice(), t, e); }
+  }
+  { const CatItem *ci = cat_item(detail_indice());
+    idDoAlvo(ci, a, sizeof a);
+    if (ci && !strcmp(a, alvo)) {
+      if (!strcmp(ci->tipo, "series") && !(detail_ep_foco(&t, &e) && t > 0 && e > 0)) return 0;
+      return fitRuntimeItem(detail_indice(), t, e);
+    }
+  }
+  return 0;
+}
+// REAL MEDIA DURATION of the player's own source (player_duracao_midia), for
+// the player's exact target. A new file or target clears the previous media
+// duration first; metadata of that target stays. Every frame, cheap.
+static void fitDuracaoMidia(void) {
+  static char ultAlvo[64];
+  static unsigned long ultUrl;
+  static int enviado;
+  char alvo[64];
+  unsigned long h = 5381;
+  double d;
+  if (!player_aberto() || player_id_canal()[0]) return;
+  alvoPlayer(alvo, sizeof alvo);
+  for (const char *p = video_url_atual(); p && *p; p++) h = h * 33 + (unsigned char)*p;
+  if (strcmp(alvo, ultAlvo) || h != ultUrl) {
+    if (ultAlvo[0] && enviado) stream_fit_duracao(ultAlvo, 0, SF_DUR_MEDIA);
+    snprintf(ultAlvo, sizeof ultAlvo, "%s", alvo);
+    ultUrl = h; enviado = 0;
+  }
+  if (!enviado && alvo[0] && !vazao_url_aviso(video_url_atual()) && player_duracao_midia(&d)) {
+    stream_fit_duracao(alvo, d, SF_DUR_MEDIA);
+    enviado = 1;
+  }
+}
+// PASSIVE TELEMETRY GATE: only the Android backend session that is the
+// player's real source may feed StreamFit. Trailer, channel, warning clip,
+// paused-in-mini or idle pipeline: generation 0, every window is stale.
+static void fitPassivaPermitir(void) {
+#ifdef NV_ANDROID
+  int ok = player_aberto() && !player_id_canal()[0] && player_com_video() &&
+           !vazao_url_aviso(video_url_atual());
+  streamfitpassiva_permitir(ok ? video_android_sessao() : 0);
+#endif
+}
+
 static void buscarParaPlayerModo(int renovar) {
   char alvo[64]; alvoPlayer(alvo,sizeof alvo);
   const char *idC = player_id_canal();
@@ -1335,6 +1410,7 @@ int app_iniciar(const char *dirArte) {
   ajustes_recursos(dirArte);
   login_recursos(dirArte);
   diagnostico_recuperar_checkpoint();
+  stream_fit_fonte_metadados(fitRuntimeMeta);
   homePronta = home_iniciar(dirArte);
   novidades148_dir(dirArte);
   novidades170_dir(dirArte);
@@ -3188,6 +3264,8 @@ void app_atualizar(float dt, Uint32 agora) {
   }
 
   vigiarFonteGuardada();
+  fitDuracaoMidia();
+  fitPassivaPermitir();
   tentarProximaFonteVOD();
   processarTorrentJob();
 
