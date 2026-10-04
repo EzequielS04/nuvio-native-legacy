@@ -289,6 +289,20 @@ int main(int argc, char **argv) {
   quadros(60);
   captura("7d-desfeito", 200);
   limpar();
+  // 7e. Com o fundo (paisagem) do titulo: o modal usa ele na moldura 16:9.
+  snprintf(item.backdrop, sizeof item.backdrop, "deploy/app/art/00.jpg");
+  tex_obter_larg(item.backdrop, 480);
+  quadros(30);
+  salvos_definir(&item, 0);
+  ilhasalvar_executar(&item, 1);
+  quadros(90);
+  tecla(SDLK_s);
+  quadros(80);
+  captura("7e-acao-modal-paisagem", 700);
+  tecla(SDLK_ESCAPE);
+  quadros(30);
+  item.backdrop[0] = 0;
+  limpar();
   // 8. Acao sem Desfazer (Tirar de Continuar): so "Ok".
   { IlhaAcao a;
     memset(&a, 0, sizeof a);

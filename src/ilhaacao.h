@@ -24,7 +24,8 @@ typedef struct {
   const char *frase;     // ja traduzida: "Salvo em Lista do Nuvio"
   const char *titulo;    // do modal: o nome do titulo ("" = sem)
   const char *onde;      // linha apagada do modal ("Lista do Nuvio"), pode ser ""
-  const char *thumb;     // url da capa (modal e voo)
+  const char *thumb;     // url da capa (voo ate a pilula; modal se `arte` vazio)
+  const char *arte;      // opcional: fundo/paisagem do titulo; o modal prefere (senao o cartaz em moldura 2:3)
   int tipo;              // ILHA_ACENTO / ILHA_INFO ...
   int voar;              // 1 = a capa voa ate a pilula
   IlhaDesfazer desfazer; // NULL = sem Desfazer

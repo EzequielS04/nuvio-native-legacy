@@ -1187,13 +1187,20 @@ static float layoutModalCabecalho(GfxRect m, float a, int desenha) {
     } }
   return by + 60.0f + 32.0f - m.y;
 }
+// A moldura da arte do modal segue a PROPORCAO DA IMAGEM: paisagem (still,
+// fundo) nos 480x270 de sempre; cartaz em pe (< 1) numa moldura 2:3 da mesma
+// altura (180x270). Nunca um cartaz espremido/recortado dentro do 16:9.
+static float arteLadoW(const char *url) {
+  float asp = url && url[0] ? tex_aspecto(url) : 0.0f;
+  return asp > 0.05f && asp < 1.0f ? MD_ARTE_H * (2.0f / 3.0f) : MD_ARTE_W;
+}
 static float layoutModalAviso(GfxRect m, float a, int desenha) {
   const IlhaModal *c = &modalM;
   if (c->cabecalho) return layoutModalCabecalho(m, a, desenha);
   float ax = m.x + MD_PAD, ay = m.y + MD_PAD;
   int arte = c->arte[0] != 0, rosto = !arte && (c->rosto[0] || c->rostoNome[0]);
   int tile = !arte && !rosto && c->icone[0];
-  float ladoW = arte ? MD_ARTE_W : (rosto || tile) ? MG_LADO : 0.0f;
+  float ladoW = arte ? arteLadoW(c->arte) : (rosto || tile) ? MG_LADO : 0.0f;
   float ladoH = arte ? MD_ARTE_H : (rosto || tile) ? MG_LADO : 0.0f;
   float cx = ax + (ladoW > 0.0f ? ladoW + 32.0f : 0.0f), cw = m.x + m.w - MD_PAD - cx;
   float y, colH, corpoH, y0, by;
@@ -1286,7 +1293,7 @@ static float layoutModalAviso(GfxRect m, float a, int desenha) {
   if (!desenha) return MD_PAD + corpoH + 24.0f + BOTAO_H_SECUNDARIO + MD_PAD;
   // O lado esquerdo.
   if (arte) {
-    GfxRect ra = { ax, ay, MD_ARTE_W, MD_ARTE_H };
+    GfxRect ra = { ax, ay, ladoW, MD_ARTE_H };
     GLuint tex = tex_obter_larg(c->arte, MD_ARTE_W);
     if (tex) {
       gfx_tex_aspect_atual = tex_aspecto(c->arte);

@@ -2,6 +2,7 @@
 #include "ilhaacao.h"
 #include "ilha.h"
 #include "idioma.h"
+#include "tex_cache.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +27,10 @@ void ilhaacao_feita(const IlhaAcao *a) {
   snprintf(m.titulo, sizeof m.titulo, "%s", a->titulo && a->titulo[0] ? a->titulo : a->frase);
   if (a->titulo && a->titulo[0]) snprintf(m.linha, sizeof m.linha, "%s", a->frase);
   if (a->onde) snprintf(m.nota, sizeof m.nota, "%s", a->onde);
-  if (a->thumb && a->thumb[0]) snprintf(m.arte, sizeof m.arte, "%s", a->thumb);
+  if (a->arte && a->arte[0] && !tex_falhou(a->arte)) {
+    snprintf(m.arte, sizeof m.arte, "%s", a->arte);
+    tex_obter_larg(a->arte, 480.0f);   // aquece: o modal abre depois do voo
+  } else if (a->thumb && a->thumb[0]) snprintf(m.arte, sizeof m.arte, "%s", a->thumb);
   else snprintf(m.icone, sizeof m.icone, "%s", a->icone && a->icone[0] ? a->icone : "check");
   m.tipo = a->tipo;
   if (ultFn) {
