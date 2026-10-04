@@ -209,7 +209,6 @@ int simkl_ler_plantowatch(const char *json, int serie, CatItem *dst, int max) {
     arte_metahub_preencher(d);
     snprintf(d->genero, sizeof d->genero, "%s",
              i18n(serie ? "Programa de TV" : "Filme"));
-    snprintf(d->classificacao, sizeof d->classificacao, "14");
     n++;
   }
   return n;

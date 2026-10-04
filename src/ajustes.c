@@ -5101,6 +5101,8 @@ static int definirValorDireto(int op, int novo) {
   if (op == AJ_TAMANHO_UI) gfx_escala_ui_definir(ajustes_tamanho_ui());
   if (op == AJ_ICONE_APP) iconeapp_aplicar_plataforma();
   if (op == AJ_CW_FONTE || op == AJ_SALVOS_DEST) desc_repetir();
+  // A fonte decide so esta fileira: refaz-la, alem do ciclo completo (#244).
+  if (op == AJ_CW_FONTE) desc_refazer_continuar();
   if (op == AJ_CW_ORDEM || op == AJ_CW_NAO_EXIBIDOS || op == AJ_CW_CONCLUIDO)
     desc_refazer_continuar();
   if (op == AJ_TEX_MB) tex_definir_orcamento_mb(ajustes_tex_mb());

@@ -338,7 +338,14 @@ static void doBlocoTrakt(CatItem *d, const char *bloco, const char *fim,
   // corrigiu a metade dele. Com o app em ingles a linha saia em portugues.
   snprintf(d->genero, sizeof d->genero, "%s",
            i18n((tipo && !strcmp(tipo, "series")) ? "Programa de TV" : "Filme"));
-  if (!d->classificacao[0]) snprintf(d->classificacao, sizeof d->classificacao, "14");
+  // CLASSIFICACAO SO COM VALOR REAL (#243). Aqui havia um "14" cravado: era o
+  // unico selo que sobrava numa linha de Continuar assistindo e nao era o do
+  // titulo. O Trakt manda `certification` no bloco (extended=full); sem ele, vazio.
+  if (!d->classificacao[0]) {
+    char cert[sizeof d->classificacao] = "";
+    if (js_texto(bloco, fim, "certification", cert, sizeof cert) && cert[0])
+      snprintf(d->classificacao, sizeof d->classificacao, "%s", cert);
+  }
 }
 
 // Arte e sinopse por id do IMDb. O Trakt devolve so identificadores e
@@ -373,6 +380,37 @@ static int episodioExiste(const char *corpo, const char *serie, int t, int e) {
   return strstr(corpo, chave) != NULL;
 }
 
+// OBRAS JA TENTADAS NO CINEMETA PARA A NOTA, nesta sessao (#243). Sem isto, quem
+// o Cinemeta nao da nota (ou que estoura o tempo) voltava a rede a cada refacao
+// da fileira. Tentou uma vez (achou, sem nota ou falhou), conta como satisfeito.
+#define TK_TENTADAS_MAX 64
+static char tentadas[TK_TENTADAS_MAX][24];
+static int nTentadas, proxTentada;
+static pthread_mutex_t tentadasTrava = PTHREAD_MUTEX_INITIALIZER;
+static void obraBase(const char *imdb, char *out, size_t n) {
+  size_t i = 0;
+  while (imdb[i] && imdb[i] != ':' && i + 1 < n) { out[i] = imdb[i]; i++; }
+  out[i] = 0;
+}
+static int jaTentada(const char *imdb) {
+  char b[24]; int i, r = 0;
+  obraBase(imdb, b, sizeof b);
+  pthread_mutex_lock(&tentadasTrava);
+  for (i = 0; i < nTentadas && !r; i++) r = !strcmp(tentadas[i], b);
+  pthread_mutex_unlock(&tentadasTrava);
+  return r;
+}
+static void marcarTentada(const char *imdb) {
+  char b[24];
+  obraBase(imdb, b, sizeof b);
+  if (jaTentada(imdb)) return;
+  pthread_mutex_lock(&tentadasTrava);
+  if (nTentadas < TK_TENTADAS_MAX) snprintf(tentadas[nTentadas++], sizeof tentadas[0], "%s", b);
+  else { snprintf(tentadas[proxTentada], sizeof tentadas[0], "%s", b);
+         proxTentada = (proxTentada + 1) % TK_TENTADAS_MAX; }
+  pthread_mutex_unlock(&tentadasTrava);
+}
+
 static int enfeitar(CatItem *d, const char *tipo) {
   char url[300], *corpo;
   char serie[24];
@@ -405,6 +443,7 @@ static int enfeitar(CatItem *d, const char *tipo) {
   // 8 s e nao 20: ate oito destes em paralelo antes da primeira fileira.
   // Medido no Mac: 2,1 s no caso bom; com um item lento eram 20 s vazios.
   corpo = rede_baixar(url, 8);
+  marcarTentada(d->imdb);
   if (!corpo) {
     // "A seguir" sem meta: nao da para confirmar que o episodio existe.
     if (proximo) return 0;
@@ -556,6 +595,15 @@ static int enfeitar(CatItem *d, const char *tipo) {
   return d->poster[0] != 0;
 }
 
+// PRONTO = arte + sinopse + NOTA (#243). Sem a nota o item que veio do Trakt
+// (extended=full traz arte e sinopse) nunca chegava ao Cinemeta, a unica fonte
+// do `nota`, e o selo IMDb ficava em branco. A guarda continua: so pula a rede
+// de quem ja tem tudo.
+static int itemPronto(const CatItem *d) {
+  return d->poster[0] && d->backdrop[0] && d->sinopse[0] &&
+         (d->nota > 0 || jaTentada(d->imdb));
+}
+
 // ENFEITAR EM PARALELO.
 //
 // Arte vem do metahub (sem GET). O Cinemeta so entra quando falta sinopse/
@@ -583,7 +631,7 @@ static void *fioEnfeitar(void *u) {
     { CatItem *d = enfTarefas[meu].d;
       // Pronto = arte + sinopse. Arte so (metahub) ainda pode querer o
       // Cinemeta para texto; `ok` 1 sobrevive a compactacao.
-      if (d->poster[0] && d->backdrop[0] && d->sinopse[0]) enfTarefas[meu].ok = 1;
+      if (itemPronto(d)) enfTarefas[meu].ok = 1;
       else enfTarefas[meu].ok = enfeitar(d, enfTarefas[meu].tipo); }
   }
 }
@@ -604,8 +652,7 @@ int trakt_enfeitar_lote(CatItem *saida, int n) {
   // do progresso LOCAL chega zerado — metahub cobre a arte sem Cinemeta, e o
   // Cinemeta so e tentado para texto. Guarda por CONTEUDO, nao por origem.
   for (q0 = 0; q0 < n; q0++)
-    if (saida[q0].poster[0] && saida[q0].backdrop[0] && saida[q0].sinopse[0])
-      jaFeitos++;
+    if (itemPronto(&saida[q0])) jaFeitos++;
   if (jaFeitos) { printf("[trakt] enfeite: %d de %d ja vieram prontos\n", jaFeitos, n);
                   fflush(stdout); }
   if (jaFeitos == n) return n;
@@ -631,7 +678,7 @@ int trakt_enfeitar_lote(CatItem *saida, int n) {
     // Sem memoria para a fila: em serie, no proprio fio.
     int r, w;
     for (r = 0, w = 0; r < n; r++)
-      if ((saida[r].poster[0] && saida[r].backdrop[0] && saida[r].sinopse[0]) ||
+      if (itemPronto(&saida[r]) ||
           enfeitar(&saida[r], saida[r].tipo)) { if (w != r) saida[w] = saida[r]; w++; }
     n = w;
   }
@@ -656,35 +703,40 @@ int trakt_playback_remover(const char *imdb) {
   char aut[200], chaveCab[140], url[96];
   char *r;
   int i, st = 0, ok;
-  long long id = 0;
+  int achou = 0, todos = 1;
+  long long id;
   if (!ligado || !imdb || !imdb[0]) return 0;
-  for (i = 0; i < nPlay; i++)
-    if (!strcmp(play[i].chave, imdb)) { id = play[i].id; break; }
-  if (!id) {
-    printf("[trakt] playback: sem id para %s (nao veio do Trakt)\n", imdb);
-    fflush(stdout);
-    return 0;
-  }
   snprintf(aut, sizeof aut, "Authorization: Bearer %s", token);
   snprintf(chaveCab, sizeof chaveCab, "trakt-api-key: %s", cliente);
   cab[0] = aut;
   cab[1] = "trakt-api-version: 2";
   cab[2] = chaveCab;
   cab[3] = NULL;
-  snprintf(url, sizeof url, "https://api.trakt.tv/sync/playback/%lld", id);
-  r = rede_apagar(url, 20, cab, &st);
-  ok = st >= 200 && st < 300;
-  free(r);
-  printf("[trakt] playback remover %s (id %lld) -> %s (HTTP %d)\n",
-         imdb, id, ok ? "ok" : "falhou", st);
-  fflush(stdout);
-  // SO ESQUECE O ID SE O SERVIDOR ACEITOU. Apagar a linha da tabela num 5xx
-  // faria a segunda tentativa dizer "sem id" e a pessoa nunca mais conseguiria
-  // remover aquele item sem reabrir o app.
-  if (ok)
-    for (i = 0; i < nPlay; i++)
-      if (!strcmp(play[i].chave, imdb)) { play[i].chave[0] = 0; break; }
-  return ok;
+  // TODOS OS REGISTROS DA CHAVE (#244). /sync/playback guarda um registro por
+  // pausa; apagar so o primeiro deixava os outros devolvendo o item.
+  for (i = 0; i < nPlay; i++) {
+    if (strcmp(play[i].chave, imdb)) continue;
+    id = play[i].id;
+    if (!id) continue;
+    achou++;
+    snprintf(url, sizeof url, "https://api.trakt.tv/sync/playback/%lld", id);
+    r = rede_apagar(url, 20, cab, &st);
+    ok = st >= 200 && st < 300;
+    free(r);
+    printf("[trakt] playback remover %s (id %lld) -> %s (HTTP %d)\n",
+           imdb, id, ok ? "ok" : "falhou", st);
+    fflush(stdout);
+    // SO ESQUECE O ID SE O SERVIDOR ACEITOU. Apagar a linha da tabela num 5xx
+    // faria a segunda tentativa dizer "sem id" e a pessoa nunca mais conseguiria
+    // remover aquele item sem reabrir o app.
+    if (ok) play[i].chave[0] = 0; else todos = 0;
+  }
+  if (!achou) {
+    printf("[trakt] playback: sem id para %s (nao veio do Trakt)\n", imdb);
+    fflush(stdout);
+    return 0;
+  }
+  return todos;
 }
 
 // MARCA OU DESMARCA UM LOTE DE EPISODIOS NO TRAKT.
@@ -1021,6 +1073,38 @@ static void carregarFilmesVistos(const char *const *cab, HistoricoPedido pedido)
 static volatile int continuarFalhou;
 int trakt_continuar_falhou(void) { return continuarFalhou; }
 
+// UMA OBRA, UM CARD (#244). /sync/playback traz um registro por pausa: o mesmo
+// episodio pausado em cinco aparelhos eram cinco CatItem iguais. Fica o de
+// `retomadoMs` mais novo por obra (a mesma regra de continuarLocal), na posicao
+// do primeiro. Os ids dos registros descartados passam para a chave de quem
+// ficou, para trakt_playback_remover apagar TODOS de uma vez.
+static size_t obraLen(const char *imdb) {
+  const char *c = strchr(imdb, ':');
+  return c ? (size_t)(c - imdb) : strlen(imdb);
+}
+static int dedupObras(CatItem *v, int n) {
+  int i, j, w = 0;
+  for (i = 0; i < n; i++) {
+    size_t L = obraLen(v[i].imdb);
+    int achou = -1;
+    for (j = 0; j < w && achou < 0; j++)
+      if (obraLen(v[j].imdb) == L && !strncmp(v[j].imdb, v[i].imdb, L)) achou = j;
+    if (achou < 0) { if (w != i) v[w] = v[i]; w++; continue; }
+    { char velho[sizeof v[0].imdb];
+      int k;
+      if (v[i].retomadoMs > v[achou].retomadoMs) {
+        snprintf(velho, sizeof velho, "%s", v[achou].imdb);
+        v[achou] = v[i];
+      } else snprintf(velho, sizeof velho, "%s", v[i].imdb);
+      for (k = 0; k < nPlay; k++)
+        if (!strcmp(play[k].chave, velho))
+          snprintf(play[k].chave, sizeof play[k].chave, "%s", v[achou].imdb);
+      printf("[trakt] playback repetido de %.*s; fica o mais recente (%s)\n",
+             (int)L, v[achou].imdb, v[achou].imdb); }
+  }
+  return w;
+}
+
 int trakt_continuar(CatItem *saida, int max) {
   const char *cab[4];
   char aut[200], chave[140];
@@ -1111,6 +1195,7 @@ int trakt_continuar(CatItem *saida, int max) {
     p = js_prox(f);
   }
   free(corpo);
+  n = dedupObras(saida, n);
   carregarHistoricoReal(cab, pedido);
   carregarFilmesVistos(cab, pedido);
   printf("[trakt] historico: %d serie(s) com ultimo episodio visto\n", nUlt);
@@ -1523,7 +1608,6 @@ int trakt_lista(const char *qual, CatItem *saida, int max) {
           arte_metahub_preencher(d);
           snprintf(d->genero, sizeof d->genero, "%s",
                    i18n(passo ? "Programa de TV" : "Filme"));
-          snprintf(d->classificacao, sizeof d->classificacao, "14");
           n++;
         }
       }

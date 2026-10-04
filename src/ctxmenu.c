@@ -717,6 +717,10 @@ static void espelharAssistido(int atual, const CatItem *ci, int intencao) {
     trakt_playback_remover(ci->imdb);
     simkl_playback_remover(ci->imdb);
     syncprog_remover(chave);
+    // O CARIMBO DE "TIRAR DE CONTINUAR" (#244). Sem ele a proxima passada
+    // readmitia o item pelo /sync/playback que o servidor ainda devolvia (ou
+    // por uma pausa que o DELETE nao alcancou), so sem a barra.
+    prog_marcar_removido(ci->imdb);
     cat_zerar_progresso(atual);
   }
 }
