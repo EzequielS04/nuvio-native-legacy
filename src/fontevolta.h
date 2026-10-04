@@ -89,4 +89,16 @@ int fontevolta_decidir(const FontevoltaSinais *g, const char **motivo);
 // pelo erro; o prazo so cobre a fonte que trava calada.
 #define FONTEVOLTA_PRAZO_MS 30000u
 
+// PRAZO DA ESCOLHA MANUAL (folha de Fontes, OK numa fonte): sem o automatico
+// nao havia prazo nenhum, e uma fonte que nunca chega ao "pronto" deixava
+// "Abrindo fonte" na tela para sempre (TV do dono, 04/10: Happy Valley S1E2
+// passou de 25 s). Mais curto que o do automatico porque aqui nao ha proxima
+// fonte para a qual recuar: ao vencer, o player mostra o erro, com as saidas
+// de sempre (Abrir Fontes, Voltar). So conta ate o primeiro quadro: depois
+// de pronto, buffering lento nao entra aqui.
+#define FONTE_MANUAL_PRAZO_MS 25000u
+// 1 quando a abertura vencida deve virar erro: carregando, sem "pronto", sem
+// erro ja mostrado, e passou do prazo. Usa os mesmos sinais do vigia acima.
+int fontevolta_abertura_vencida(const FontevoltaSinais *g, unsigned prazoMs);
+
 #endif

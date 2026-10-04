@@ -137,3 +137,8 @@ int fontevolta_decidir(const FontevoltaSinais *g, const char **motivo) {
   if (motivo) *motivo = m;
   return FV_RECUAR;
 }
+
+int fontevolta_abertura_vencida(const FontevoltaSinais *g, unsigned prazoMs) {
+  if (!g || g->falhou || g->pronto || !g->carregando) return 0;
+  return g->desdeMs > prazoMs;
+}
