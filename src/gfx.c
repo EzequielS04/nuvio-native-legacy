@@ -870,6 +870,16 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float m = borda(sdf(vUv, uRaio, uAspect));\n"
   "  if (m <= 0.001) discard;\n"
   "  vec4 t = texture2D(uTex, vUv);\n"
+  // uFoco > 0 = ARTE DE TELA CHEIA COM O VEU DOS AJUSTES NA MESMA PASSADA (so
+  // com arte opaca e alfa 1, ver gfx_arte_veu): preto de alfa V(x), V = uFoco
+  // no meio, subindo ate uFoco + (1-uFoco)*uPar.x na borda esquerda e
+  // uFoco + (1-uFoco)*uPar.y na direita — o mesmo degrade das duas metades de
+  // GFX_VEU_CSS, com o mesmo ruido (so clareia, como o do veu preto).
+  "  if (uFoco > 0.0) {\n"
+  "    float v = uFoco + (1.0 - uFoco) * (vUv.x < 0.5 ? uPar.x * (1.0 - 2.0 * vUv.x) : uPar.y * (2.0 * vUv.x - 1.0));\n"
+  "    gl_FragColor = vec4(t.rgb * (1.0 - v) + nv_dither(vec3(0.0), 1.0).rgb, 1.0);\n"
+  "    return;\n"
+  "  }\n"
   "  gl_FragColor = vec4(t.rgb, t.a * uCor.a * m);\n"
   "}\n",
 
@@ -1475,6 +1485,19 @@ void gfx_brilho_topo(GfxRect r, float raio, float alcance,
   // O mesmo raio em pixels, agora em fracao da altura DESTE retangulo.
   gfx_rect(f, 0, GFX_BRILHO_TOPO, 0, r.h * alcance / h2, 0, rpx / h2, cr, cg, cb, ca);
 }
+// A ARTE DE TELA CHEIA DOS AJUSTES COM O VEU NA MESMA PASSADA. Devolve 0 (e nao
+// desenha nada) quando nao da para garantir o mesmo pixel das duas passadas —
+// arte e veu separados, o caminho de sempre: textura nao opaca, alfa < 1,
+// opacidade de grupo, canto, deslize. `base` = alfa do veu no meio; `aEsq` e
+// `aDir` = o que o degrade soma nas bordas (como em gfx_veu_css_base).
+int gfx_arte_veu(GfxRect r, GLuint tex, float base, float aEsq, float aDir, float a) {
+  if (!tex || !gfx_arte_opaca_atual || gfx_opacidade_grupo < 0.999f || a < 0.999f ||
+      gfx_desliza_atual != 0.0f || snapAtivo || base <= 0.002f || base >= 1.0f) return 0;
+  if (!(r.x <= 0.0f && r.y <= 0.0f && r.x + r.w >= NV_TELA_W && r.y + r.h >= NV_TELA_H)) return 0;
+  if (progs[GFX_ARTE].foco < 0 || progs[GFX_ARTE].par < 0) return 0;
+  gfx_rect(r, tex, GFX_ARTE, base, aEsq, aDir, 0.0f, 1, 1, 1, 1.0f);
+  return 1;
+}
 void gfx_veu_css(GfxRect r, int borda, float curva, float fim, float a) {
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.002f) return;
   gfx_rect(r, 0, GFX_VEU_CSS, curva, (float)borda, fim > 0.0f ? fim : 1.0f, 0.0f, 0, 0, 0, a);
@@ -1611,6 +1634,13 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   else if ((modo == GFX_HERO || modo == GFX_HERO_CHEIO || modo == GFX_DETALHE) &&
            nv_ambiente_forca <= 0.001f && parx <= 0.5f &&
            ca * gfx_opacidade_grupo >= 0.999f && gfx_desliza_atual == 0.0f)
+    opaco = 1;
+  // ARTE OPACA DE TELA CHEIA, canto vivo, alfa 1: o fragmento sai com alfa 1 em
+  // todo pixel do retangulo (que cobre a tela), entao a mistura era um no-op que
+  // ainda lia a tela. Mesma condicao de arteCobre abaixo.
+  else if (modo == GFX_ARTE && gfx_arte_opaca_atual && raio <= 0.0f &&
+           r.x <= 0.0f && r.y <= 0.0f && r.x + r.w >= NV_TELA_W && r.y + r.h >= NV_TELA_H &&
+           ca * gfx_opacidade_grupo >= 0.999f && gfx_desliza_atual == 0.0f && !snapAtivo)
     opaco = 1;
   // Modos cujo alfa de saida e o proprio uCor.a (ou 1): com alfa 1 a mistura
   // tambem era um no-op com leitura da tela. Fundo social, ceu da Explorar,
