@@ -124,12 +124,16 @@ static void cartaz(GfxRect r, const char *url, float f, float a) {
   svd_poster(r, url, raio * r.w / r.h, a);
 }
 
-static void numero(GfxRect r, const char *valor, const char *rotulo, float a) {
-  TxtLinha v = txt_linha(TXT_TITULO3, valor, 246, 246, 250, 255);
-  TxtLinha l = txt_linha_corta(TXT_CAPTION, rotulo, 167, 164, 178, 255, r.w - 36.0f);
+// `estilo` e o MESMO para os quatro rotulos (ver a grade): um corpo por cartao
+// deixaria a grade com dois tamanhos de letra lado a lado.
+static void numero(GfxRect r, const char *valor, const char *rotulo, TxtEstilo estilo, float a) {
+  // Cartao baixo (perfil com "assistindo agora", que empurra a grade): um
+  // corpo menor no numero, para o rotulo nao encostar nele.
+  TxtLinha v = txt_linha(r.h < 108.0f ? TXT_HEADLINE : TXT_TITULO3, valor, 246, 246, 250, 255);
+  TxtLinha l = txt_linha_corta(estilo, rotulo, 167, 164, 178, 255, r.w - 36.0f);
   gfx_cor(r, 18.0f / r.h, 0.118f, 0.114f, 0.141f, 0.94f * a);
-  txt_desenhar_alpha(v, r.x + 20.0f, r.y + 16.0f, a);
-  txt_desenhar_alpha(l, r.x + 20.0f, r.y + r.h - 16.0f - (float)l.h, a * 0.95f);
+  txt_desenhar_alpha(v, r.x + 20.0f, r.y + (r.h < 108.0f ? 8.0f : 10.0f), a);
+  txt_desenhar_alpha(l, r.x + 20.0f, r.y + r.h - (r.h < 108.0f ? 10.0f : 12.0f) - (float)l.h, a * 0.95f);
 }
 
 static void tituloFila(float x, float y, const char *t, float a) {
@@ -155,6 +159,7 @@ void amigoperfil_desenhar(Uint32 agora) {
   float lx = 96.0f + R, lw = 500.0f, rx = lx + lw + 80.0f;
   char buf[200];
   int f, c;
+  float yBase = 920.0f;   // onde comecam as linhas de estado/foco, abaixo da grade
   gfx_cor((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0, NV_COR_FUNDO_R, NV_COR_FUNDO_G,
           NV_COR_FUNDO_B, 1.0f);
   if (!temPerfil) {
@@ -202,29 +207,38 @@ void amigoperfil_desenhar(Uint32 agora) {
       { TxtLinha t = txt_linha_corta(TXT_CAPTION, buf, 163, 230, 186, 255, lw - 26.0f);
         txt_desenhar_alpha(t, lx + 26.0f, y, a); y += (float)t.h + 22.0f; }
     }
-    // GOSTO PARECIDO: so com dado; sem ele a linha nao existe (um "0 %" seria
-    // uma afirmacao falsa sobre duas pessoas).
-    if (perf.gostoPct >= 0) {
-      TxtLinha l = txt_linha(TXT_CALLOUT, i18n("Gosto parecido"), 216, 213, 224, 255);
-      char pc[16];
-      TxtLinha v;
-      snprintf(pc, sizeof pc, "%d%%", perf.gostoPct);
-      v = txt_linha(TXT_CALLOUT, pc, 247, 192, 138, 255);
-      txt_desenhar_alpha(l, lx, y, a);
-      txt_desenhar_alpha(v, lx + (float)l.w + 14.0f, y, a);
-      y += (float)l.h + 4.0f;
-      if (perf.emComum >= 0 && perf.gostoTotal > 0) {
-        snprintf(buf, sizeof buf, i18n("Mesma opinião em %d de %d títulos"), perf.emComum, perf.gostoTotal);
-        { TxtLinha t = txt_linha_corta(TXT_CAPTION, buf, 168, 166, 178, 255, lw);
-          txt_desenhar_alpha(t, lx, y, a); y += (float)t.h; }
+    // COMPARACAO (F08): os cinco cartoes SEMPRE aparecem, cada um com o dado
+    // ou com o motivo de nao haver dado (privado, poucos pares, servidor
+    // antigo, sem fonte). Nada vira zero: "0 %" seria uma afirmacao falsa sobre
+    // duas pessoas. O tamanho da amostra vai junto do numero.
+    { int q;
+      float rotW = 0.0f;
+      TxtLinha tit = txt_linha(TXT_MINI, i18n("Comparação"), 168, 166, 178, 255);
+      txt_desenhar_alpha(tit, lx, y, a);
+      y += (float)tit.h + 6.0f;
+      for (q = 0; q < SV_CMP_N; q++) {
+        TxtLinha l = txt_linha(TXT_CAPTION, socialvis_cmp_rotulo(q), 150, 148, 160, 255);
+        if ((float)l.w > rotW) rotW = (float)l.w;
       }
-      y += 26.0f;
-    }
+      rotW += 20.0f;
+      for (q = 0; q < SV_CMP_N; q++) {
+        char val[96];
+        int ok = 0;
+        TxtLinha l = txt_linha(TXT_CAPTION, socialvis_cmp_rotulo(q), 150, 148, 160, 255), v;
+        socialvis_cmp_texto(q, &perf.cmp[q], val, sizeof val, &ok);
+        v = ok ? txt_linha_corta(TXT_CAPTION, val, 246, 246, 250, 255, lw - rotW)
+               : txt_linha_corta(TXT_CAPTION, val, 128, 126, 138, 255, lw - rotW);
+        txt_desenhar_alpha(l, lx, y, a);
+        txt_desenhar_alpha(v, lx + rotW, y, a);
+        y += (float)l.h + 2.0f;
+      }
+      y += 12.0f; }
     // OS QUATRO NUMEROS DO MES, numa grade 2x2. "—" quando nao ha dado.
     { char v[4][32];
       const char *rot[4] = { "assistidas neste mês", "filmes vistos", "séries em curso",
                              "recomendações vistas" };
-      float bw = (lw - 16.0f) * 0.5f, bh = 116.0f;
+      float bw = (lw - 16.0f) * 0.5f, bh = 108.0f;
+      TxtEstilo est = TXT_CAPTION;
       int i;
       if (perf.minutosMes >= 0) snprintf(v[0], sizeof v[0], i18n("%d h"), perf.minutosMes / 60);
       else snprintf(v[0], sizeof v[0], "\xe2\x80\x94");
@@ -235,11 +249,27 @@ void amigoperfil_desenhar(Uint32 agora) {
       if (perf.recsVistas >= 0 && perf.recsTotal > 0)
         snprintf(v[3], sizeof v[3], i18n("%d de %d"), perf.recsVistas, perf.recsTotal);
       else snprintf(v[3], sizeof v[3], "\xe2\x80\x94");
+      // O ROTULO INTEIRO, nao cortado: com Montserrat (a fonte da TV do dono)
+      // "assistidas neste mês" e "recomendações vistas" nao cabiam em 206 px
+      // no corpo de legenda e viravam "assistidas neste…". Se UM nao cabe, os
+      // quatro descem um corpo.
+      for (i = 0; i < 4; i++)
+        if ((float)txt_linha(TXT_CAPTION, i18n(rot[i]), 167, 164, 178, 255).w > bw - 36.0f) est = TXT_MINI;
       if (y < 640.0f) y = 640.0f;
+      // A GRADE CABE ATE y=920 (onde comecam as linhas de estado e de foco, que
+      // nao podem encostar no rodape). Com a linha de "assistindo agora" ela
+      // desce: os cartoes encolhem ate 92 em vez de empurrar o resto.
+      if (y + 2.0f * bh + 12.0f > 920.0f) {
+        bh = (920.0f - 12.0f - y) * 0.5f;
+        if (bh < 92.0f) bh = 92.0f;
+        est = TXT_MINI;
+      }
       for (i = 0; i < 4; i++) {
-        GfxRect r = { lx + (float)(i % 2) * (bw + 16.0f), y + (float)(i / 2) * (bh + 16.0f), bw, bh };
-        numero(r, v[i], i18n(rot[i]), a);
-      } } }
+        GfxRect r = { lx + (float)(i % 2) * (bw + 16.0f), y + (float)(i / 2) * (bh + 12.0f), bw, bh };
+        numero(r, v[i], i18n(rot[i]), est, a);
+      }
+      yBase = y + 2.0f * bh + 12.0f + 18.0f; } }
+  if (yBase < 920.0f) yBase = 920.0f;
 
   // Cached cards stay visible during refresh, but loading/privacy/network
   // failures are explicit rather than all looking like an empty history.
@@ -249,7 +279,7 @@ void amigoperfil_desenhar(Uint32 agora) {
                                                         : "Não foi possível atualizar. Tente novamente.")
                    : "Esta pessoa não compartilha sua atividade.";
     TxtLinha t = txt_linha_corta(TXT_CAPTION, i18n(st), 168, 166, 178, 255, lw);
-    txt_desenhar_alpha(t, lx, 920.0f, a);
+    txt_desenhar_alpha(t, lx, yBase, a);
   }
 
   // Focus on a shared event compares only the progress that is actually known.
@@ -261,7 +291,7 @@ void amigoperfil_desenhar(Uint32 agora) {
     socialvis_status(e, st, sizeof st);
     snprintf(buf, sizeof buf, "%s: %s", perf.a.nome, st);
     { TxtLinha l = txt_linha_corta(TXT_MINI, buf, 188, 185, 198, 255, lw);
-      txt_desenhar_alpha(l, lx, 956.0f, a); }
+      txt_desenhar_alpha(l, lx, yBase + 36.0f, a); }
     if (m == 2) snprintf(meu, sizeof meu, "%s", i18n("Você viu"));
     else if (m == 1) {
       SvEvento eu = {0}; eu.temporada = t; eu.episodio = epn;
@@ -269,7 +299,7 @@ void amigoperfil_desenhar(Uint32 agora) {
       snprintf(meu, sizeof meu, "%s%s%s · %d%%", i18n("Você está assistindo"), ep[0] ? " · " : "", ep, pct);
     } else snprintf(meu, sizeof meu, "%s", i18n("Seu progresso não está disponível"));
     { TxtLinha l = txt_linha_corta(TXT_MINI, meu, 188, 185, 198, 255, lw);
-      txt_desenhar_alpha(l, lx, 988.0f, a); }
+      txt_desenhar_alpha(l, lx, yBase + 68.0f, a); }
   }
 
   // A RESPOSTA DE QUEM RECEBEU, no cartaz de "Você mandou" em foco: o que ela
@@ -279,11 +309,11 @@ void amigoperfil_desenhar(Uint32 agora) {
     if (m->estado == SV_REC_VIU || m->respondido > 0) {
       snprintf(buf, sizeof buf, "%s: %s", perf.a.nome, socialvis_enviada_rotulo(m, NULL));
       { TxtLinha l = txt_linha_corta(TXT_MINI, buf, 188, 185, 198, 255, lw);
-        txt_desenhar_alpha(l, lx, 956.0f, a); }
+        txt_desenhar_alpha(l, lx, yBase + 36.0f, a); }
       if (m->resposta[0]) {
         snprintf(buf, sizeof buf, "\xe2\x80\x9c%s\xe2\x80\x9d", m->resposta);
         { TxtLinha l = txt_linha_corta(TXT_MINI, buf, 247, 192, 138, 255, lw);
-          txt_desenhar_alpha(l, lx, 988.0f, a); }
+          txt_desenhar_alpha(l, lx, yBase + 68.0f, a); }
       }
     }
   }

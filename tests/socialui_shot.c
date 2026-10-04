@@ -107,6 +107,8 @@ static void ajusta(void) {
           getenv("NUVIO_SHOT_EN") ? 1 : 0,
           getenv("NV_LAYOUT") ? atoi(getenv("NV_LAYOUT")) : 1,
           getenv("NV_TEMA") ? atoi(getenv("NV_TEMA")) : 9);
+  // NUVIO_SHOT_FONTE=3: Montserrat, a fonte da interface da TV do dono.
+  if (getenv("NUVIO_SHOT_FONTE")) fprintf(a, "fonteInterface %d\n", atoi(getenv("NUVIO_SHOT_FONTE")));
   shot_arte_material(a);   // NUVIO_SHOT_VIDRO=0: o painel no material solido
   fclose(a);
   ajustes_dir(dirDados);
@@ -287,6 +289,37 @@ int main(int argc, char **argv) {
   quadros(90, NULL);
   snprintf(bmp, sizeof bmp, "%s-painel-amigos-nome.bmp", saida);
   quadros(1, bmp);
+  // --- F08: o Trakt ligado a este perfil (servidor com "identidade1") ---
+  SDL_LockMutex(mtx);
+  identRecurso = 1;
+  snprintf(identTrakt, sizeof identTrakt, "%s", "rique-trakt");
+  SDL_UnlockMutex(mtx);
+  quadros(10, NULL);
+  { SDL_Event e;
+    int k;
+    memset(&e, 0, sizeof e);
+    e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_DOWN;
+    for (k = 0; k < 2; k++) spainel_evento(&e); }   // "Trakt neste perfil"
+  quadros(90, NULL);
+  snprintf(bmp, sizeof bmp, "%s-painel-ident-unida.bmp", saida);
+  quadros(1, bmp);
+  { SDL_Event e;
+    memset(&e, 0, sizeof e);
+    e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_RETURN;
+    spainel_evento(&e); }                            // 1o OK: pede confirmacao
+  quadros(30, NULL);
+  snprintf(bmp, sizeof bmp, "%s-painel-ident-confirma.bmp", saida);
+  quadros(1, bmp);
+  SDL_LockMutex(mtx);
+  identTrakt[0] = 0; identOp = REC_IDENT_OP_CONFLITO;
+  SDL_UnlockMutex(mtx);
+  quadros(30, NULL);
+  snprintf(bmp, sizeof bmp, "%s-painel-ident-conflito.bmp", saida);
+  quadros(1, bmp);
+  SDL_LockMutex(mtx);
+  identRecurso = 0; identOp = REC_IDENT_OP_NADA;    // servidor antigo: a linha some
+  SDL_UnlockMutex(mtx);
+  quadros(30, NULL);
   // --- W10 (03/10): menu do OK longo nas abas, "Ja assisti" e Assistidas ---
   { SDL_Event e;
     int k;
@@ -376,6 +409,27 @@ int main(int argc, char **argv) {
     quadros(60, NULL);
     snprintf(bmp, sizeof bmp, "%s-perfil-pedro-resposta2.bmp", saida);
     quadros(1, bmp); }
+  // F08: o MESMO perfil com o servidor novo — a comparacao com cobertura
+  // (series abaixo do minimo de pares vira "poucos dados").
+  { char j[1400];
+    long long t = (long long)time(NULL);
+    snprintf(j, sizeof j,
+      "{\"id\":\"nuvio:pedro\",\"nome\":\"Pedro\",\"grau\":1,\"desde\":%lld,\"origem\":\"codigo\","
+      "\"compartilha\":1,\"mes\":{\"mes\":\"2026-10\",\"seg\":111600,\"filmes\":12,\"series\":4},"
+      "\"gostou\":[{\"imdb\":\"tt0000101\",\"midia\":\"movie\",\"titulo\":\"Project Hail Mary\","
+      "\"poster\":\"deploy/app/art/poster/03.jpg\",\"criado\":%lld}],\"recs\":[],"
+      "\"gosto\":{\"total\":12,\"iguais\":9,\"pct\":75,\"filmes\":{\"total\":8,\"iguais\":7},"
+      "\"series\":{\"total\":4,\"iguais\":2},\"comum\":{\"filmes\":5,\"series\":2},"
+      "\"cobertura\":{\"eu\":20,\"ele\":15},\"generos\":null}}",
+      t - 60 * 86400, t - 3600);
+    assert(amigoParse(j, &amigo));
+    assert(amigo.temCmp && amigo.filmesTotal == 8 && amigo.comumSeries == 2);
+    temAmigo = 1; amigoEstado = REC_SOC_OK;
+    amigoperfil_abrir("nuvio:pedro");
+    temAmigo = 1; amigoEstado = REC_SOC_OK; }
+  quadros(90, NULL);
+  snprintf(bmp, sizeof bmp, "%s-perfil-pedro-comparacao.bmp", saida);
+  quadros(1, bmp);
   amigoperfil_abrir("nuvio:marina");
   quadros(90, NULL);
   snprintf(bmp, sizeof bmp, "%s-perfil-marina.bmp", saida);

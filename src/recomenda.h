@@ -42,6 +42,7 @@
 #define REC_SUGESTOES_MAX 20
 // Quantos modelos prontos existem. Texto livre (modelo -1) e etapa posterior.
 #define REC_MODELOS        6
+#define REC_CONTATO_IDS    3
 
 typedef struct {
   long long id;        // id no servidor; e tambem o cursor
@@ -81,6 +82,11 @@ typedef struct {
   char nome[64];
   char avatar[256];    // vazio = desenhar a inicial; ver RecItem.deAvatar
   char origem[8];      // "trakt" | "nuvio"
+  // IDENTIDADES LIGADAS (F08, servidor com migracao 008): "trakt:<slug>" que
+  // este amigo provou ser dele e deixou os amigos verem. E por elas que o feed
+  // do Trakt dele se junta ao nosso. Servidor antigo: nIds = 0.
+  char ids[REC_CONTATO_IDS][80];
+  int  nIds;
 } RecContato;
 
 // GENTE QUE A PESSOA TALVEZ CONHECA, e como o servico chegou ate ela.
@@ -609,6 +615,10 @@ typedef struct {
            char resposta[64]; long long respondido; } recs[REC_AMIGO_RECS];
   // gosto parecido: % de titulos com a MESMA reacao (so se os dois compartilham)
   int  temGosto, gostoTotal, gostoIguais, gostoPct;
+  // F08: o detalhe da comparacao. temCmp = 0 quando o servidor nao o mandou
+  // (antigo) — a tela mostra "desconhecido", nunca zero.
+  int  temCmp, filmesTotal, filmesIguais, seriesTotal, seriesIguais;
+  int  comumFilmes, comumSeries, cobEu, cobEle;
 } RecAmigo;
 
 // Enfileira a leitura. Se o cache em disco for desta pessoa, ele ja fica
@@ -619,5 +629,31 @@ void recomenda_fundir_respostas(const char *corpo);
 int  recomenda_amigo_pedir(const char *id);
 int  recomenda_amigo(RecAmigo *saida);    // 1 = ha dados (cache ou novos)
 int  recomenda_amigo_estado(void);        // REC_SOC_* (NADA/INDO/OK/FALHA/NAO_ACHOU/NEGADO)
+
+// --- IDENTIDADE UNIFICADA (F08) -----------------------------------------------
+// Contrato: docs/releases/1.8.0/F08-SOCIAL-IDENTIDADE.md. A pessoa canonica e o
+// PERFIL Nuvio; o Trakt e uma identidade LIGADA a ele, por pedido explicito, com
+// as duas provas (os dois tokens) no mesmo pedido. Servidor sem o recurso
+// ("identidade1" em /v1/eu): tudo aqui fica em REC_IDENT_INDISPONIVEL e a tela
+// nao oferece nada.
+enum { REC_IDENT_INDISPONIVEL = 0,  // servidor antigo, ou /v1/eu ainda nao respondeu
+       REC_IDENT_SEM_TRAKT,         // nao ha as duas contas no aparelho: nada a unir
+       REC_IDENT_PODE_UNIR,         // Trakt e conta Nuvio aqui; Trakt ainda nao ligado
+       REC_IDENT_UNIDA };           // o Trakt esta ligado a este perfil
+enum { REC_IDENT_OP_NADA = 0, REC_IDENT_OP_INDO, REC_IDENT_OP_OK,
+       REC_IDENT_OP_CONFLITO,       // essa conta Trakt ja e de outro perfil (409)
+       REC_IDENT_OP_FALHA };
+int  recomenda_identidade_situacao(void);
+int  recomenda_identidade_op(void);
+const char *recomenda_identidade_trakt(void);   // slug ligado, "" se nao ha
+int  recomenda_identidade_unir(void);           // 1 = enfileirou
+int  recomenda_identidade_separar(void);        // 1 = enfileirou
+void recomenda_identidade_op_limpar(void);
+// Id de uma pessoa vinda de outra fonte ("trakt:<slug>") -> o id do CONTATO
+// que provou ser ela. 1 quando trocou. Sem ids do servidor (antigo), 0 sempre.
+int  recomenda_pessoa_canonica(const char *id, char *dst, size_t tam);
+int  rec_contatos_canonica(const RecContato *c, int n, const char *id, char *dst, size_t tam);
+// Le "ids":["trakt:x",...] de um contato do servidor em [p,f). Exposta para o teste.
+int  rec_contato_ids(const char *p, const char *f, RecContato *c);
 
 #endif

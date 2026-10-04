@@ -131,7 +131,7 @@ api b POST /v1/alcance '{"nivel":1}' > /dev/null
 ev b '{"ev":"reacao","imdb":"tt0000002","reacao":1}' > /dev/null
 ev a '{"ev":"reacao","imdb":"tt0000003","reacao":1}' > /dev/null
 ev b '{"ev":"reacao","imdb":"tt0000003","reacao":-1}' > /dev/null
-checa "gosto parecido 50% de 2" 1 "$(tem "$(api b GET '/v1/amigo?id=nuvio:aaa')" '"gosto":{"total":2,"iguais":1,"pct":50}')"
+checa "gosto parecido 50% de 2" 1 "$(tem "$(api b GET '/v1/amigo?id=nuvio:aaa')" '"gosto":{"total":2,"iguais":1,"pct":50,')"
 
 # --- nivel 2: amigo de amigo -------------------------------------------------------
 api a POST /v1/alcance '{"nivel":2}' > /dev/null

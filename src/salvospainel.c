@@ -132,6 +132,8 @@
 #define SPI_CAP_W      52.0f
 #define SPI_CAP_H      76.0f
 #define SPI_CAP_RAIO    9.0f
+// A RECOMENDACAO E UM CARTAO DEITADO (dono, F08): arte 16:9 na altura da capa.
+#define SPI_CAPD_W    135.0f
 #define SPI_FG_R 243
 #define SPI_FG_G 242
 #define SPI_FG_B 239
@@ -277,7 +279,10 @@ enum { SPS_CONSENT_NAO = 0, SPS_CONSENT_SIM, SPS_REC, SPS_SUG,
        SPS_ADICIONAR, SPS_APARECER, SPS_AMIGO, SPS_ENCONTRAR,
        // QUEM VE O QUE EU ASSISTO (socialsrv, recomenda_alcance): as tres
        // respostas da pergunta, a linha que reabre a pergunta e o nome.
-       SPS_ALC_0, SPS_ALC_1, SPS_ALC_2, SPS_ALCANCE, SPS_NOME };
+       SPS_ALC_0, SPS_ALC_1, SPS_ALC_2, SPS_ALCANCE, SPS_NOME,
+       // F08: o Trakt ligado a este perfil (unir / separar). So existe com o
+       // servidor que sabe ("identidade1") e com algo a dizer.
+       SPS_IDENT };
 // A API do alcance e do nome so existe no socialsrv (branch agente/socialsrv).
 // Ate o merge as linhas ficam desligadas; NV_SOCIAL_V2_UI liga so a tela (o
 // teste de captura o usa com a API de mentira).
@@ -302,6 +307,12 @@ static int consentEstado = -1;
 // O nivel na ultima reconstrucao, e 1 enquanto a pessoa reabriu a pergunta.
 #if SP_V2
 static int alcEstado = -2, escolhendoAlcance;
+// A linha do Trakt ligado: o que a reconstrucao viu (situacao*8 + op) e o
+// segundo OK que separa (o primeiro so pergunta).
+static int identVisto = -1, identConfirma, identSeparando;
+static int identChave(void) {
+  return recomenda_identidade_situacao() * 8 + recomenda_identidade_op();
+}
 #endif
 #define SPS_ALC_TOPO 205.0f   // medido na captura com o corpo da ilha (19/27)
 
@@ -897,6 +908,7 @@ static float socialAlt(int i) {
     case SPS_APARECER:  return SPS_H_APARECER;
     case SPS_ALCANCE:   return SPS_H_APARECER;
     case SPS_NOME:      return SPS_H_APARECER;
+    case SPS_IDENT:     return SPS_H_APARECER;
     default:            return SPS_H_CONSENT;
   }
 }
@@ -1056,6 +1068,15 @@ static void reconstruirSocial(void) {
     social[nSocial].tipo = SPS_NOME; social[nSocial].idx = 0; nSocial++;
     social[nSocial].tipo = SPS_ALCANCE; social[nSocial].idx = 0; nSocial++;
   }
+  // O TRAKT NESTE PERFIL (F08). Sem servidor novo, ou sem as duas contas no
+  // aparelho e nada ligado, a linha nao existe: nao ha o que oferecer.
+  identVisto = identChave();
+  { int sit = recomenda_identidade_situacao(), op = recomenda_identidade_op();
+    if ((sit == REC_IDENT_PODE_UNIR || sit == REC_IDENT_UNIDA ||
+         op == REC_IDENT_OP_CONFLITO || (op == REC_IDENT_OP_FALHA && sit != REC_IDENT_INDISPONIVEL)) &&
+        nSocial < SP_SOCIAL_MAX) {
+      social[nSocial].tipo = SPS_IDENT; social[nSocial].idx = 0; nSocial++;
+    } }
 #endif
   if (nSocial < SP_SOCIAL_MAX) {
     social[nSocial].tipo = SPS_APARECER; social[nSocial].idx = 0; nSocial++;
@@ -1709,6 +1730,21 @@ static void okSocial(void) {
         scrollY = 0.0f; velY = 0.0f;
         memset(animFoco, 0, sizeof animFoco);
         return; }
+      case SPS_IDENT: {
+        // UNIR E UM OK; SEPARAR SAO DOIS. Separar nao desfaz o que ja foi
+        // fundido (o contrato diz) e e a direcao que da trabalho de voltar.
+        int sit = recomenda_identidade_situacao();
+        if (recomenda_identidade_op() == REC_IDENT_OP_INDO) return;
+        if (sit == REC_IDENT_UNIDA) {
+          if (!identConfirma) { identConfirma = 1; return; }
+          identConfirma = 0; identSeparando = 1;
+          recomenda_identidade_separar();
+        } else if (sit == REC_IDENT_PODE_UNIR) {
+          identSeparando = 0;
+          recomenda_identidade_unir();
+        } else recomenda_identidade_op_limpar();
+        reconstruirSocial();
+        return; }
       case SPS_NOME:
         tecladoPara = TK_NOME_SOCIAL;
         teclado_abrir_com("Como você aparece",
@@ -1716,7 +1752,7 @@ static void okSocial(void) {
                           32, "abcdefghijklmnopqrstuvwxyz0123456789 -'", recomenda_minha_exibicao());
         return;
 #else
-      case SPS_ALC_0: case SPS_ALC_1: case SPS_ALC_2: case SPS_ALCANCE: case SPS_NOME:
+      case SPS_ALC_0: case SPS_ALC_1: case SPS_ALC_2: case SPS_ALCANCE: case SPS_NOME: case SPS_IDENT:
         return;
 #endif
       case SPS_APARECER:
@@ -1937,11 +1973,17 @@ void spainel_atualizar(float dt, Uint32 agora) {
     reconstruirAtividade();
     if (foco >= nAtv) foco = nAtv > 0 ? nAtv - 1 : SP_FOCO_ABAS;
   }
+#if SP_V2
+  // O "OK de novo para separar" vale so enquanto o foco esta na linha.
+  if (identConfirma && !(aberto && aba == SP_ABA_SOCIAL && foco >= 0 && foco < nSocial &&
+                         social[foco].tipo == SPS_IDENT)) identConfirma = 0;
+#endif
   if (aberto && aba == SP_ABA_SOCIAL &&
       (nRecs != recomenda_n() || nSugs != recomenda_n_sugestoes() ||
        consentEstado != recomenda_aparecer() || svRevSocial != socialvis_revisao()
 #if SP_V2
        || (consentEstado != REC_APARECER_NAO_PERGUNTADO && alcEstado != recomenda_alcance())
+       || (consentEstado != REC_APARECER_NAO_PERGUNTADO && identVisto != identChave())
 #endif
        )) {
     reconstruirSocial();
@@ -2244,6 +2286,20 @@ static void capaArte(GfxRect r, const char *url, float raioPx, float a) {
     gfx_cor(r, raio, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
   }
 }
+// A arte DEITADA de uma recomendacao: o fundo do titulo no catalogo, ou o da
+// metahub pelo id do IMDb (a mesma regra de artemetahub.h). Se ela falhar, o
+// cartaz recortado no mesmo quadro — o cartao continua deitado, de proposito.
+static void capaDeitadaIlha(float dx, float y, float h, const char *imdb, const char *poster, float a) {
+  GfxRect c = { SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPI_CAPD_W,
+                y + (h - SPI_CAP_H) * 0.5f, SPI_CAPD_W, SPI_CAP_H };
+  char arte[512] = "";
+  int k = imdb && imdb[0] ? cat_indice_por_imdb(imdb) : -1;
+  const CatItem *it = k >= 0 ? cat_item(k) : NULL;
+  if (it && it->backdrop[0]) snprintf(arte, sizeof arte, "%s", it->backdrop);
+  else if (imdb && !strncmp(imdb, "tt", 2))
+    snprintf(arte, sizeof arte, "https://images.metahub.space/background/medium/%s/img", imdb);
+  capaArte(c, arte[0] && !tex_falhou(arte) ? arte : poster, SPI_CAP_RAIO, a);
+}
 static void capaIlha(float dx, float y, float h, const char *url, float a) {
   GfxRect c = { SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPI_CAP_W,
                 y + (h - SPI_CAP_H) * 0.5f, SPI_CAP_W, SPI_CAP_H };
@@ -2440,7 +2496,7 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a, Uint
   const RecItem *r = &recs[idx];
   float f = (linha >= 0 && linha < SP_MAX) ? animFoco[linha] : 0.0f, v = focoVisual(f);
   float px = SP_X + dx + SP_PAD, tx = px + SPI_AV + SPI_AV_GAP;
-  float larg = SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPI_CAP_W - 18.0f - tx;
+  float larg = SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPI_CAPD_W - 18.0f - tx;
   char l2[256], l3[320], q[64], nota[24];
   int pct, te, ee, est;
   { GfxRect c = linhaIlhaRet(dx, y, SPI_H);
@@ -2460,7 +2516,7 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a, Uint
   // diz a frase do feed — "Gustavo te mandou" — como a primeira do mockup.
   rostoIlha((GfxRect){ px, y + (SPI_H - SPI_AV) * 0.5f, SPI_AV, SPI_AV },
             r->deAvatar, r->deNome, r->de, 0, a, agora);
-  capaIlha(dx, y, SPI_H, r->poster, a);
+  capaDeitadaIlha(dx, y, SPI_H, r->imdb, r->poster, a);
   // TITULO · FILME OU SERIE · NOTA: o tipo e a nota continuam (a linha nao
   // dizia se era um filme de duas horas ou oito temporadas), agora em texto.
   // A nota vem do proprio RecItem: o titulo recomendado costuma NAO estar no
@@ -3049,6 +3105,19 @@ static void desenhaAjusteSocial(int i, float dx, float y, float alt, float a) {
   const char *titulo = "", *valor = "";
   char buf[96];
 #if SP_V2
+  if (social[i].tipo == SPS_IDENT) {
+    int sit = recomenda_identidade_situacao(), op = recomenda_identidade_op();
+    titulo = "Trakt neste perfil";
+    if (op == REC_IDENT_OP_INDO) valor = i18n(identSeparando ? "Separando…" : "Unindo…");
+    else if (op == REC_IDENT_OP_CONFLITO) valor = i18n("Essa conta Trakt já está em outro perfil");
+    else if (op == REC_IDENT_OP_FALHA) valor = i18n("Não foi possível. OK para tentar de novo");
+    else if (sit == REC_IDENT_UNIDA && identConfirma)
+      valor = i18n("OK de novo para separar. O que já foi unido continua aqui");
+    else if (sit == REC_IDENT_UNIDA) {
+      snprintf(buf, sizeof buf, i18n("Unido a %s · amigos e atividade juntos"), recomenda_identidade_trakt());
+      valor = buf;
+    } else valor = i18n("OK para unir amigos e atividade do Trakt a este perfil");
+  } else
   if (social[i].tipo == SPS_NOME) {
     titulo = "Como você aparece";
     snprintf(buf, sizeof buf, "%s", recomenda_meu_nome()[0] ? recomenda_meu_nome()
@@ -3557,6 +3626,7 @@ static void desenharPainel(Uint32 agora) {
             break;
           case SPS_ALCANCE:
           case SPS_NOME:
+          case SPS_IDENT:
             desenhaAjusteSocial(i, x, y, alt, a);
             break;
           default:

@@ -125,6 +125,34 @@ typedef struct {
   long long respondido; // epoch da resposta direta; 0 = nao respondeu
 } SvEnviada;
 
+// COMPARACAO (F08). Cada cartao tem um ESTADO explicito: dado privado,
+// ausente, de amostra pequena ou de servidor antigo nunca vira um numero.
+// Formula do "Match": mesma reacao (gostei/mais ou menos/nao gostei) entre os
+// titulos que OS DOIS reagiram nos ultimos 90 dias; so com SV_CMP_MIN pares.
+enum { SV_CMP_MATCH = 0, SV_CMP_FILMES, SV_CMP_SERIES, SV_CMP_COMUM, SV_CMP_GENEROS, SV_CMP_N };
+enum { SV_CMPE_DESCONHECIDO = 0,  // o servidor nao mandou (antigo, ou sem perfil do servidor)
+       SV_CMPE_CARREGANDO,        // pedindo, e ainda nao ha copia
+       SV_CMPE_OK,
+       SV_CMPE_POUCOS,            // menos de SV_CMP_MIN pares
+       SV_CMPE_PRIVADO,           // a pessoa nao compartilha comigo
+       SV_CMPE_EU_PRIVADO,        // EU nao compartilho: o servidor nao compara
+       SV_CMPE_SEM_FONTE };       // nenhuma fonte tem esse dado (generos)
+#define SV_CMP_MIN 5
+typedef struct { int estado, pct, iguais, total, filmes, series; } SvCmp;
+// O que a comparacao precisa saber, sem depender de recomenda.h.
+typedef struct {
+  int temDados;        // ha resposta do servidor (cache ou nova) para esta pessoa
+  int carregando;
+  int compartilha;     // -1 nao se sabe, 0 nao, 1 sim
+  int euCompartilho;   // meu alcance >= 1
+  int temGosto, total, iguais;          // "gosto" com pelo menos um par
+  int temCmp, filmesTotal, filmesIguais, seriesTotal, seriesIguais, comumFilmes, comumSeries;
+} SvCmpDados;
+void socialvis_comparar(const SvCmpDados *d, SvCmp out[SV_CMP_N]);
+// Texto pronto (traduzido) do valor de um cartao; `ok` = 1 quando e um dado.
+void socialvis_cmp_texto(int qual, const SvCmp *c, char *dst, size_t tam, int *ok);
+const char *socialvis_cmp_rotulo(int qual);
+
 typedef struct {
   SvAmigo a;
   int estado;          // SV_PERFIL_*; refreshing keeps the cached first frame
@@ -139,6 +167,7 @@ typedef struct {
   SvEvento assistindo[SV_FILA_MAX];
   SvEvento gostou[SV_FILA_MAX];
   SvEnviada mandou[SV_FILA_MAX];
+  SvCmp cmp[SV_CMP_N];
 } SvPerfil;
 
 // Por quadro. Barato (ver o topo).

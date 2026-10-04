@@ -118,6 +118,14 @@ static char       etagRec[96];
 static int        registrado;
 static char       meuId[96];
 static char       meuCodigo[16];
+// IDENTIDADE UNIFICADA (F08). `identRecurso` = o /v1/eu desta sessao disse
+// "identidade1"; sem isso nada de unir contas aparece. `identTrakt` = o slug
+// ligado a esta pessoa (verificado). Um pedido de cada vez, como o vinculo
+// por codigo: e sempre um OK numa linha que fica esperando.
+static int  identRecurso;
+static char identTrakt[64];
+static int  identPedido;          // 0 nada, 1 unir, 2 separar
+static int  identOp;              // REC_IDENT_OP_*
 
 // APARECER PARA OUTRAS PESSOAS. `aparecer` e um dos tres REC_APARECER_*;
 // `aparecerPendente` e -1 quando nao ha nada a dizer ao servidor, ou 0/1 para
@@ -491,6 +499,102 @@ int recomenda_contatos(RecContato *saida, int max) {
   SDL_UnlockMutex(mtx);
   return n;
 }
+
+// Fim de uma string JSON que comeca na aspa `p` (logo depois da aspa final).
+static const char *fimCadeia(const char *p) {
+  if (!p || *p != '"') return p;
+  for (p++; *p && *p != '"'; p++) if (*p == '\\' && p[1]) p++;
+  return *p ? p + 1 : p;
+}
+
+int rec_contato_ids(const char *p, const char *f, RecContato *c) {
+  const char *e;
+  if (!c) return 0;
+  c->nIds = 0;
+  e = p ? js_array(p, f, "ids") : NULL;
+  while (e && (!f || e < f) && *e == '"' && c->nIds < REC_CONTATO_IDS) {
+    char v[80] = "";
+    // So "provedor:sujeito"; o resto e ignorado sem derrubar o contato.
+    if (js_cadeia(e, v, sizeof v) && strchr(v, ':') && strchr(v, ':')[1])
+      snprintf(c->ids[c->nIds++], sizeof c->ids[0], "%s", v);
+    e = js_prox(fimCadeia(e));
+  }
+  return c->nIds;
+}
+
+int rec_contatos_canonica(const RecContato *c, int n, const char *id, char *dst, size_t tam) {
+  int i, k;
+  if (!c || !id || !id[0]) return 0;
+  for (i = 0; i < n; i++)
+    for (k = 0; k < c[i].nIds && k < REC_CONTATO_IDS; k++)
+      if (!strcmp(c[i].ids[k], id) && strcmp(c[i].id, id)) {
+        if (dst && tam) snprintf(dst, tam, "%s", c[i].id);
+        return 1;
+      }
+  return 0;
+}
+
+// O contato (copia) que provou ser `id`. 1 quando achou.
+static int contatoCanonico(const char *id, RecContato *saida) {
+  int i, ok = 0;
+  char c[96];
+  if (!recomenda_ativo() || !mtx) return 0;
+  SDL_LockMutex(mtx);
+  if (rec_contatos_canonica(contatos, nContatos, id, c, sizeof c))
+    for (i = 0; i < nContatos; i++)
+      if (!strcmp(contatos[i].id, c)) { *saida = contatos[i]; ok = 1; break; }
+  SDL_UnlockMutex(mtx);
+  return ok;
+}
+
+int recomenda_pessoa_canonica(const char *id, char *dst, size_t tam) {
+  RecContato c;
+  if (!contatoCanonico(id, &c)) return 0;
+  if (dst && tam) snprintf(dst, tam, "%s", c.id);
+  return 1;
+}
+
+int recomenda_identidade_situacao(void) {
+  int r;
+  if (!recomenda_ativo() || !mtx) return REC_IDENT_INDISPONIVEL;
+  SDL_LockMutex(mtx);
+  r = !identRecurso ? REC_IDENT_INDISPONIVEL
+    : identTrakt[0] ? REC_IDENT_UNIDA
+    : (trakt_ativo() && sessao_token()[0]) ? REC_IDENT_PODE_UNIR : REC_IDENT_SEM_TRAKT;
+  SDL_UnlockMutex(mtx);
+  return r;
+}
+int recomenda_identidade_op(void) {
+  int v;
+  if (!mtx) return REC_IDENT_OP_NADA;
+  SDL_LockMutex(mtx); v = identOp; SDL_UnlockMutex(mtx);
+  return v;
+}
+void recomenda_identidade_op_limpar(void) {
+  if (!mtx) return;
+  SDL_LockMutex(mtx);
+  if (identOp != REC_IDENT_OP_INDO) identOp = REC_IDENT_OP_NADA;
+  SDL_UnlockMutex(mtx);
+}
+const char *recomenda_identidade_trakt(void) {
+  // Copia estatica: a tela le por quadro; o fio so troca no /v1/eu.
+  static char c[64];
+  if (!mtx) return "";
+  SDL_LockMutex(mtx); snprintf(c, sizeof c, "%s", identTrakt); SDL_UnlockMutex(mtx);
+  return c;
+}
+static int identEnfileirar(int op) {
+  int ok = 0;
+  if (!recomenda_ativo() || !mtx) return 0;
+  SDL_LockMutex(mtx);
+  if (identRecurso && identOp != REC_IDENT_OP_INDO) {
+    identPedido = op; identOp = REC_IDENT_OP_INDO; pedidoAgora = 1; ok = 1;
+  }
+  SDL_UnlockMutex(mtx);
+  return ok;
+}
+int recomenda_identidade_unir(void)    { return identEnfileirar(1); }
+int recomenda_identidade_separar(void) { return identEnfileirar(2); }
 
 int recomenda_aparecer(void) {
   int v;
@@ -1109,6 +1213,7 @@ void recomenda_esquecer(void) {
   // quando alguem sai da conta voltaria vinculando a pessoa ERRADA — a
   // identidade do cabecalho ja e a da conta seguinte.
   vincCodigo[0] = 0; vincNome[0] = 0; vincEstado = REC_VINC_NADA;
+  identRecurso = 0; identTrakt[0] = 0; identPedido = 0; identOp = REC_IDENT_OP_NADA;
   removerId[0] = 0;
   pedirTrakt = 0; traktEstado = REC_TRAKT_NADA; traktAchados = 0;
   // O PERFIL, OS ACHADOS, OS PEDIDOS E A ATIVIDADE TAMBEM. Nada social de quem
@@ -1216,6 +1321,8 @@ static int registrar(const char **cab) {
   char id[96] = "", codigo[16] = "";
   int st = 0, desc = 0, alc = -1;
   char nome[64] = "", exib[40] = "", corpoEu[800];
+  char slugLigado[64] = "";
+  int recurso = 0;
   // O NOME E A FOTO DO PERFIL ATIVO vao junto: o token da conta Nuvio nao diz
   // nome nenhum (user_metadata vazio), e era por isso que um amigo por codigo
   // aparecia como UUID. Sem perfil na lista, corpo vazio (o servidor mantem).
@@ -1241,6 +1348,25 @@ static int registrar(const char **cab) {
     // ponto onde ele existe: nao ha rota para perguntar "qual e o meu codigo?"
     // depois, porque /v1/eu ja e ela.
     js_texto_raiz(r, "codigo", codigo, sizeof codigo);
+    // DETECCAO DE RECURSO (F08): servidor com a migracao 008 diz "identidade1"
+    // e lista as identidades ligadas. Servidor antigo: nenhum dos dois campos,
+    // e o cliente segue exatamente como antes.
+    { const char *e = js_array(r, NULL, "recursos");
+      while (e && *e == '"') {
+        char v[32] = "";
+        if (js_cadeia(e, v, sizeof v) && !strcmp(v, "identidade1")) recurso = 1;
+        e = js_prox(fimCadeia(e));
+      } }
+    { const char *e = js_array(r, NULL, "identidades");
+      while (e && *e == '{') {
+        const char *f = js_fim(e);
+        char prov[16] = "", suj[64] = "";
+        js_texto(e, f, "provedor", prov, sizeof prov);
+        js_texto(e, f, "sujeito", suj, sizeof suj);
+        if (!strcmp(prov, "trakt") && js_num(e, f, "verificado", 0.0) > 0 && suj[0])
+          snprintf(slugLigado, sizeof slugLigado, "%s", suj);
+        e = js_prox(f);
+      } }
   }
   free(r);
   if (!id[0]) {
@@ -1251,6 +1377,8 @@ static int registrar(const char **cab) {
   SDL_LockMutex(mtx);
   snprintf(meuId, sizeof meuId, "%s", id);
   if (codigo[0]) snprintf(meuCodigo, sizeof meuCodigo, "%s", codigo);
+  identRecurso = recurso;
+  snprintf(identTrakt, sizeof identTrakt, "%s", slugLigado);
   registrado = 1;
   gravarEu();
   socNovoRegistrado(nome, exib, alc);
@@ -1382,6 +1510,7 @@ static void lerContatos(const char **cab) {
     js_texto(p, f, "nome",   novos[n].nome,   sizeof novos[n].nome);
     js_texto(p, f, "avatar", novos[n].avatar, sizeof novos[n].avatar);
     js_texto(p, f, "origem", novos[n].origem, sizeof novos[n].origem);
+    rec_contato_ids(p, f, &novos[n]);
     semTab(novos[n].nome);
     // Contato sem nome nao e contato quebrado: no Trakt vira o slug, e o slug
     // e o que o dono reconhece; na conta Nuvio vira "Amigo #n" — o resto do id
@@ -2079,6 +2208,70 @@ static int lerPedidos(const char **cab) {
   return st;
 }
 
+// POST /v1/identidades/vincular | desvincular (F08). Unir pede as DUAS provas
+// no mesmo pedido: o pedido sai autenticado pela identidade de sempre (o Trakt,
+// quando ligado) e o corpo leva o token da OUTRA conta, que o servidor confere
+// na hora contra o emissor e nao guarda. Depois de qualquer resposta boa o
+// /v1/eu e refeito: e ele que diz o id canonico e o que ficou ligado.
+static void tratarIdentidade(const char **cab) {
+  static char corpo[3600], tok[3300];
+  int op, st = 0, res = REC_IDENT_OP_FALHA;
+  char *r;
+  unsigned g;
+  SDL_LockMutex(mtx);
+  op = identPedido; identPedido = 0; g = geracao;
+  SDL_UnlockMutex(mtx);
+  if (!op) return;
+  corpo[0] = 0;
+  if (op == 1) {
+    if (!strcmp(fioVia, "X-Nuvio-Auth: trakt")) {
+      // Pelo Trakt: a prova e a conta Nuvio, com o PERFIL ativo (o servidor
+      // confere no Supabase que o indice e desta conta).
+      const ContaPerfil *pf = perfis_item_ativo();
+      int indice = (pf && !pf->primario && pf->indice >= 1) ? pf->indice : 0;
+      if (sessao_token()[0]) {
+        jsonEsc(tok, sizeof tok, sessao_token());
+        if (indice) snprintf(corpo, sizeof corpo, "{\"provedor\":\"nuvio\",\"token\":\"%s\",\"perfil\":%d}", tok, indice);
+        else snprintf(corpo, sizeof corpo, "{\"provedor\":\"nuvio\",\"token\":\"%s\"}", tok);
+      }
+    } else {
+      // Pela conta Nuvio: a prova e o token do Trakt.
+      const char *tcab[4];
+      char aut[3200], chave[160];
+      if (trakt_ativo() && trakt_cabecalhos(tcab, aut, sizeof aut, chave, sizeof chave) &&
+          !strncmp(aut, "Authorization: Bearer ", 22)) {
+        jsonEsc(tok, sizeof tok, aut + 22);
+        snprintf(corpo, sizeof corpo, "{\"provedor\":\"trakt\",\"token\":\"%s\"}", tok);
+      }
+    }
+    if (corpo[0]) {
+      url("/v1/identidades/vincular");
+      r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st);
+      free(r);
+      res = (st >= 200 && st < 300) ? REC_IDENT_OP_OK : st == 409 ? REC_IDENT_OP_CONFLITO : REC_IDENT_OP_FALHA;
+    }
+  } else {
+    url("/v1/identidades/desvincular");
+    r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, "{\"provedor\":\"trakt\"}", &st);
+    free(r);
+    res = (st >= 200 && st < 300) ? REC_IDENT_OP_OK : REC_IDENT_OP_FALHA;
+  }
+  memset(tok, 0, sizeof tok); memset(corpo, 0, sizeof corpo);
+  printf("[recomenda] identidade %s HTTP %d\n", op == 1 ? "unir" : "separar", st);
+  fflush(stdout);
+  SDL_LockMutex(mtx);
+  if (g == geracao) {
+    identOp = res;
+    if (res == REC_IDENT_OP_OK) {
+      if (op == 2) identTrakt[0] = 0;
+      registrado = 0;            // o proximo ciclo refaz /v1/eu: id canonico e ligacoes
+      contatosMs = SDL_GetTicks(); // e relê contatos/feed ja fundidos
+      pedidoAgora = 1;
+    }
+  }
+  SDL_UnlockMutex(mtx);
+}
+
 static void tratarSocial(const char **cab) {
   int op, st = 0, estado;
   char arg[400], corpo[1200], esc[420], *r = NULL;
@@ -2469,6 +2662,22 @@ static const char *objeto(const char *r, const char *chave, const char **fim) {
   return *fim ? p : NULL;
 }
 
+// O mesmo, procurando so em [ini, fim).
+static const char *objetoEm(const char *ini, const char *fim, const char *chave, const char **f) {
+  char k[40];
+  const char *p = ini;
+  size_t lk;
+  snprintf(k, sizeof k, "\"%s\":", chave);
+  lk = strlen(k);
+  while ((p = strstr(p, k)) && p < fim) {
+    const char *v = p + lk;
+    while (*v == ' ') v++;
+    if (*v == '{') { *f = js_fim(v); return (*f && *f <= fim) ? v : NULL; }
+    p = v;
+  }
+  return NULL;
+}
+
 static int estadoRecDe(const char *s) {
   if (!strcmp(s, "reacao"))   return REC_REC_REAGIU;
   if (!strcmp(s, "terminou")) return REC_REC_TERMINOU;
@@ -2565,9 +2774,29 @@ static int amigoParse(const char *r, RecAmigo *a) {
     a->gostoIguais = (int)js_num(o, of, "iguais", 0.0);
     a->gostoPct = (int)js_num(o, of, "pct", 0.0);
     a->temGosto = a->compartilha && a->gostoTotal > 0 && a->gostoPct >= 0 && a->gostoPct <= 100;
+    // F08: o detalhe por midia, o em comum e a cobertura, so DENTRO de "gosto"
+    // (o "mes" tambem tem "filmes", e um numero ali nao e este objeto).
+    { const char *so, *sf;
+      if ((so = objetoEm(o, of, "filmes", &sf))) {
+        a->temCmp = 1;
+        a->filmesTotal = (int)js_num(so, sf, "total", 0.0);
+        a->filmesIguais = (int)js_num(so, sf, "iguais", 0.0);
+      }
+      if ((so = objetoEm(o, of, "series", &sf))) {
+        a->seriesTotal = (int)js_num(so, sf, "total", 0.0);
+        a->seriesIguais = (int)js_num(so, sf, "iguais", 0.0);
+      }
+      if ((so = objetoEm(o, of, "comum", &sf))) {
+        a->comumFilmes = (int)js_num(so, sf, "filmes", 0.0);
+        a->comumSeries = (int)js_num(so, sf, "series", 0.0);
+      }
+      if ((so = objetoEm(o, of, "cobertura", &sf))) {
+        a->cobEu = (int)js_num(so, sf, "eu", 0.0);
+        a->cobEle = (int)js_num(so, sf, "ele", 0.0);
+      } }
   }
   // A cached or malformed response must never resurrect withdrawn sharing.
-  if (!a->compartilha) { a->temMes = a->temAgora = a->temGosto = a->nGostou = 0; }
+  if (!a->compartilha) { a->temMes = a->temAgora = a->temGosto = a->nGostou = a->temCmp = 0; }
   return 1;
 }
 
@@ -2871,6 +3100,17 @@ int recomenda_feed_unido(RecEvento *saida, int max, const CatItem *trakt,
   if (!tr) return n;
   for (i = 0; i < nTrakt; i++)
     if (rec_evento_de_trakt(&trakt[i], quandoTrakt ? quandoTrakt[i] : 0, &tr[k])) k++;
+  // A MESMA PESSOA PELAS DUAS FONTES (F08): o amigo que ligou o Trakt ao perfil
+  // Nuvio vem do Trakt como "trakt:<slug>" e do nosso servidor como o id do
+  // contato. Com o id trocado, rec_eventos_unir junta os dois fatos e a fileira
+  // mostra um rosto so. Servidor antigo (sem ids): nada troca.
+  for (i = 0; i < k; i++) {
+    RecContato c;
+    if (!contatoCanonico(tr[i].pessoa, &c)) continue;
+    snprintf(tr[i].pessoa, sizeof tr[i].pessoa, "%s", c.id);
+    if (c.nome[0]) snprintf(tr[i].pessoaNome, sizeof tr[i].pessoaNome, "%s", c.nome);
+    if (c.avatar[0]) snprintf(tr[i].pessoaAvatar, sizeof tr[i].pessoaAvatar, "%s", c.avatar);
+  }
   n = rec_eventos_unir(saida, n, tr, k, max);
   free(tr);
   return n;
@@ -3127,6 +3367,7 @@ static int ciclo(void) {
   enviarPerfil(cab);
   enviarAtividade(cab);
   tratarSocial(cab);
+  tratarIdentidade(cab);
   enviarFila(cab);
   tratarContatos(cab);
   confirmarVistas(cab);

@@ -16,6 +16,8 @@ import { rotaNoticia, rotaNoticiaImg } from "./noticia.js";
 import { rotaAmigos, limpezaAmigos, despublicar, garantirPerfil, avatarPublico, limitar } from "./amigos.js";
 import { rotaEuNome, rotaAlcance, rotaEvento, rotaFeed, rotaAmigo, limpezaSocial,
          limparNome, avatarPerfilOk, resolverNome, rotaRecResposta } from "./social.js";
+import { resolverCanonica, canonizarEntrada, identidadesDe, rotaIdentidades, idSimkl,
+         perfilExiste, RECURSO } from "./identidade.js";
 
 const DIA = 86400;
 const RETENCAO = 90 * DIA;
@@ -245,7 +247,11 @@ const saoContatos = (db, a, b) =>
 
 async function rotaContatosLer(env, quem) {
   const r = await env.DB.prepare(
-    "SELECT p.id AS id, p.nome AS nome, p.avatar AS avatar, c.criado AS desde, c.via AS via FROM contato c " +
+    "SELECT p.id AS id, p.nome AS nome, p.avatar AS avatar, c.criado AS desde, c.via AS via, " +
+    // IDENTIDADES LIGADAS (migracao 008), so as verificadas que a pessoa deixou
+    // amigos verem: a TV junta o feed do Trakt dela com o nosso por elas.
+    "(SELECT GROUP_CONCAT(i.provedor || ':' || i.sujeito, ' ') FROM identidade i " +
+    " WHERE i.pessoa = p.id AND i.verificado = 1 AND i.visivel = 1) AS ids FROM contato c " +
     "JOIN pessoa p ON p.id = c.b WHERE c.a = ? ORDER BY p.nome"
   ).bind(quem.id).all();
   return json({
@@ -256,6 +262,7 @@ async function rotaContatosLer(env, quem) {
       origem: x.id.startsWith("trakt:") ? "trakt" : "nuvio",
       // desde quando e contato e por onde (codigo|trakt|sugestao|pedido|"")
       desde: x.desde || 0, via: x.via || "",
+      ids: x.ids ? String(x.ids).split(" ").filter(Boolean) : [],
     })),
   });
 }
@@ -296,16 +303,23 @@ async function rotaContatoRemover(env, quem, corpo) {
 // respondeu e o servidor vincula os que ja usam este servico. Quem nunca abriu
 // o app nao vira contato — nao ha ninguem para receber.
 async function rotaContatosTrakt(env, quem, corpo) {
-  if (!quem.id.startsWith("trakt:")) return erro("so para conta trakt", 400);
+  // Conta Nuvio com Trakt LIGADO (migracao 008) tambem pode: a pessoa e a mesma.
+  if (!quem.id.startsWith("trakt:") && !String(quem.bruto || "").startsWith("trakt:")) {
+    const ligado = await env.DB.prepare(
+      "SELECT 1 FROM identidade WHERE pessoa = ? AND provedor = 'trakt' AND verificado = 1").bind(quem.id).first();
+    if (!ligado) return erro("so para conta trakt", 400);
+  }
   const slugs = Array.isArray(corpo?.slugs) ? corpo.slugs.slice(0, 200) : [];
   const ids = slugs.map((s) => `trakt:${limparTexto(s).replace(/ /g, "-")}`)
     .filter((s) => s.length > 6 && s !== quem.id);
   if (!ids.length) return json({ vinculados: 0 });
   const marcas = ids.map(() => "?").join(",");
+  // O seguido que ja ligou o Trakt ao perfil Nuvio e achado pela identidade.
   const r = await env.DB.prepare(
-    `SELECT id FROM pessoa WHERE id IN (${marcas}) ` +
+    `SELECT id FROM pessoa WHERE (id IN (${marcas}) OR id IN (SELECT pessoa FROM identidade ` +
+    `WHERE provedor = 'trakt' AND verificado = 1 AND 'trakt:' || sujeito IN (${marcas}))) AND id <> ? ` +
     `AND NOT EXISTS (SELECT 1 FROM bloqueio b WHERE (b.quem = ? AND b.alvo = pessoa.id) OR (b.quem = pessoa.id AND b.alvo = ?))`
-  ).bind(...ids, quem.id, quem.id).all();
+  ).bind(...ids, ...ids, quem.id, quem.id, quem.id).all();
   const t = agora();
   const cmds = [];
   for (const x of r.results || []) {
@@ -411,13 +425,14 @@ async function sugestoesDe(env, quem, corpo) {
     const marcas = ids.map(() => "?").join(",");
     const r = await env.DB.prepare(
       `SELECT ${SEL} FROM pessoa p LEFT JOIN perfil f ON f.pessoa = p.id ` +
-      `WHERE p.id IN (${marcas}) AND p.descobrivel = 1 ` +
+      `WHERE (p.id IN (${marcas}) OR p.id IN (SELECT pessoa FROM identidade WHERE provedor = 'trakt' ` +
+      `AND verificado = 1 AND 'trakt:' || sujeito IN (${marcas}))) AND p.id <> ? AND p.descobrivel = 1 ` +
       // JA E CONTATO NAO E SUGESTAO. Sem este NOT EXISTS a aba abriria pedindo
       // para adicionar quem ja esta na lista de contatos logo acima.
       `AND NOT EXISTS (SELECT 1 FROM contato c WHERE c.a = ? AND c.b = p.id) ` +
       SEM_BLOQUEIO("p.id") +
       `ORDER BY p.nome LIMIT ?`
-    ).bind(...ids, quem.id, quem.id, quem.id, SUG_MAX).all();
+    ).bind(...ids, ...ids, quem.id, quem.id, quem.id, quem.id, SUG_MAX).all();
     for (const x of r.results || []) await empurra(x, "trakt", "");
   }
 
@@ -692,8 +707,11 @@ export default {
         "content-type": "application/rss+xml; charset=utf-8", "cache-control": "public, max-age=3600", ...CORS } });
     }
 
-    const quemBruto = await quemE(req, env);
-    if (!quemBruto) return erro("nao autenticado", 401);
+    const quemToken = await quemE(req, env);
+    if (!quemToken) return erro("nao autenticado", 401);
+    // IDENTIDADE CANONICA (migracao 008): um Trakt ligado a um perfil Nuvio fala
+    // como o perfil. Sem vinculo, nada muda.
+    const quemBruto = await resolverCanonica(env, quemToken);
 
     // Corpo VAZIO e legitimo: `/v1/eu` nao tem nada a dizer alem de quem manda,
     // e o cliente em C nao vai montar um "{}" so para agradar o parser.
@@ -712,11 +730,21 @@ export default {
       const extra = {};
       if (typeof corpo?.nome === "string") extra.nome = corpo.nome;
       if (typeof corpo?.avatar === "string") extra.avatar = corpo.avatar;
-      return json(await registrar(env, quemBruto, Object.keys(extra).length ? extra : undefined));
+      const eu = await registrar(env, quemBruto, Object.keys(extra).length ? extra : undefined);
+      // `recursos` e a deteccao de recurso do cliente: TV nova so oferece unir
+      // contas e so espera `ids` nos contatos quando o servidor diz que sabe.
+      return json({ ...eu, recursos: [RECURSO], autenticado: quemToken.id.startsWith("trakt:") ? "trakt" : "nuvio",
+                    identidades: await identidadesDe(env, eu.id) });
     }
 
-    const quem = await registrar(env, quemBruto);
+    const quem = { ...(await registrar(env, quemBruto)), bruto: quemBruto.bruto || quemBruto.id };
     const h = { json, erro, agora, limparTexto, limpar };
+    // Ids antigos (de antes de uma fusao) que TVs guardaram viram o id vivo.
+    await canonizarEntrada(env, corpo, url);
+
+    const ident = await rotaIdentidades(rota, req.method, env, quem, corpo, h,
+      { idTrakt, idNuvio, idSimkl, perfilExiste, registrar });
+    if (ident) return ident;
 
     if (rota === "/v1/eu/nome" && req.method === "POST") return rotaEuNome(env, quem, corpo, h, () => registrar(env, quemBruto));
     if (rota === "/v1/alcance" && req.method === "POST") return rotaAlcance(env, quem, corpo, h);
