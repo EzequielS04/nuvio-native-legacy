@@ -39,6 +39,8 @@ void ilhacart_tecla(Uint32 agora);
 // Sobe a cada saida do player que POS o cartao: compare antes e depois de
 // player_encerrar para saber se ESTA saida virou atividade ao vivo.
 unsigned ilhacart_vivo_seq(void);
+// O titulo que o cartao ao vivo segura ("" sem cartao). Ver cwretido.h.
+const char *ilhacart_vivo_imdb(void);
 // Por quadro. `imdbAberto` = o titulo com a pagina aberta agora, ou NULL.
 void ilhacart_atualizar(Uint32 agora, const char *imdbAberto);
 // O modal pediu para tirar o cartao (Fechar / Marcar como visto).

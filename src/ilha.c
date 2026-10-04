@@ -1077,8 +1077,12 @@ static void desenharCartao(const IlhaCartao *c, int qual, GfxRect r, float a) {
     if (voo) {
       // Em voo a capa e o quadro que esta pousando: desenhar as duas dobraria.
     } else if (tex) {
+      // COVER FORCADO: cartaz de addon quadrado ou deitado tambem preenche a
+      // mini capa (recorta), nunca fica com faixas dentro dela.
       gfx_tex_aspect_atual = tex_aspecto(c->poster);
+      gfx_card_forcar_cover_atual = 1.0f;
       gfx_rect(capa, tex, GFX_CARD, 0.0f, 0.0f, 0.0f, 6.0f / CT_CAPA_H, 0, 0, 0, a);
+      gfx_card_forcar_cover_atual = 0.0f;
       gfx_tex_aspect_atual = 0.0f;
     } else gfx_cor(capa, 6.0f / CT_CAPA_H, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G, NV_COR_ESQUELETO_B, a);
     x += CT_CAPA_W + VAO;

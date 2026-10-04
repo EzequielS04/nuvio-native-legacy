@@ -16,17 +16,17 @@ cd "$(dirname "$0")/.."
 flags=()
 if [ "${SANITIZE:-0}" = 1 ]; then flags+=(-fsanitize=address,undefined -fno-omit-frame-pointer); fi
 out=/tmp
-cc ${flags[@]+"${flags[@]}"} src/cwordem.c tests/cwordem.c -Isrc \
+cc ${flags[@]+"${flags[@]}"} src/cwordem.c src/cwretido.c tests/cwordem.c -Isrc \
   -o "$out/nuvio-cwordem-tests" -O1 -g -Wall -Wextra
 "$out/nuvio-cwordem-tests"
-cc ${flags[@]+"${flags[@]}"} src/catalogo.c src/progresso.c src/cwordem.c tests/cwordem_desc.c \
+cc ${flags[@]+"${flags[@]}"} src/catalogo.c src/progresso.c src/cwordem.c src/cwretido.c tests/cwordem_desc.c \
   src/cotacat.c src/js.c src/colecoes.c src/redeurl.c src/catordem.c \
   -Isrc -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
   -o "$out/nuvio-cwordem-desc-tests" -O1 -g \
   -Wall -Wno-deprecated-declarations -Wno-macro-redefined -Wno-unused-function
 "$out/nuvio-cwordem-desc-tests"
 cc ${flags[@]+"${flags[@]}"} src/catalogo.c src/progresso.c src/focus.c src/ajustes.c src/posterprov.c src/redeurl.c src/colecoes.c \
-  src/js.c src/catordem.c src/fileiras.c src/artehero.c src/cwordem.c tests/cwordem_home.c tests/amigosfil_stub.c \
+  src/js.c src/catordem.c src/fileiras.c src/artehero.c src/cwordem.c src/cwretido.c tests/cwordem_home.c tests/amigosfil_stub.c \
   -Isrc -o "$out/nuvio-cwordem-home-tests" -O1 -g -ffunction-sections -fdata-sections \
   -Wl,-dead_strip -I/opt/homebrew/include -I/opt/homebrew/include/SDL2 \
   -L/opt/homebrew/lib -lSDL2 -Wno-deprecated-declarations -Wno-macro-redefined

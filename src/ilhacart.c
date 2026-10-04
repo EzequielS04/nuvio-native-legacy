@@ -25,6 +25,7 @@ static char vivoConta[96];
 static int vivoPerfil;
 
 unsigned ilhacart_vivo_seq(void) { return vivoSeq; }
+const char *ilhacart_vivo_imdb(void) { return temVivo ? vivo.imdb : ""; }
 
 void ilhacart_esquecer_vivo(void) {
   temVivo = 0; vivoConta[0] = 0; vivoPerfil = 0;
