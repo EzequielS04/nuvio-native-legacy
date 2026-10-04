@@ -355,13 +355,13 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 31, PESO_BOLD    },   // TXT_LOG_T31
   { 51, PESO_BOLD    },   // TXT_NOV_TITULO (mockup 50/700)
   { 28, PESO_REGULAR },   // TXT_G28R
-  { 39, PESO_MEDIUM  },   // TXT_V2_MENU
-  { 39, PESO_BOLD    },   // TXT_V2_MENU_B
+  { 44, PESO_MEDIUM  },   // TXT_V2_MENU
+  { 44, PESO_BOLD    },   // TXT_V2_MENU_B
   { 26, PESO_REGULAR },   // TXT_V2_26
   { 54, PESO_BOLD    },   // TXT_V2_TIT
   { 19, PESO_BOLD    },   // TXT_V2_KICK
   { 23, PESO_BOLD    },   // TXT_V2_CHIP
-  { 28, PESO_BOLD    },   // TXT_V2_GRUPO
+  { 29, PESO_BOLD    },   // TXT_V2_GRUPO
   { 24, PESO_REGULAR },   // TXT_V2_24
   { 34, PESO_MEDIUM  },   // TXT_V2_ROT
   { 28, PESO_REGULAR },   // TXT_V2_28

@@ -187,7 +187,7 @@ static TxtLinha ajTxt(TxtEstilo e, const char *s) { return txt_linha(e, s, AJ_TX
 static TxtLinha ajTxtC(TxtEstilo e, const char *s, float maxW) { return txt_linha_corta(e, s, AJ_TX, maxW); }
 static TxtLinha ajTxtT(TxtEstilo e, const char *s) { int t = ajTinta(); return txt_linha(e, s, t, t, t, 255); }
 // Caixa alta espacada (kicker): i18n antes, maiusculas (latim + acentos) e tracking.
-static float ajCaps(TxtEstilo e, const char *s, float track, float x, float y, float al) {
+static float ajCapsRGB(TxtEstilo e, const char *s, float track, float x, float y, float al, int cr, int cg, int cb) {
   char up[200];
   size_t k;
   snprintf(up, sizeof up, "%s", i18n(s));
@@ -195,7 +195,10 @@ static float ajCaps(TxtEstilo e, const char *s, float track, float x, float y, f
     if (up[k] >= 'a' && up[k] <= 'z') up[k] = (char)(up[k] - 32);
     else if ((unsigned char)up[k] == 0xC3 && up[k + 1] && (unsigned char)up[k + 1] >= 0xA0 && (unsigned char)up[k + 1] <= 0xBE)
       { up[k + 1] = (char)((unsigned char)up[k + 1] - 0x20); k++; }
-  return txt_tracking(e, up, 243, 242, 239, x, y, al, track);
+  return txt_tracking(e, up, cr, cg, cb, x, y, al, track);
+}
+static float ajCaps(TxtEstilo e, const char *s, float track, float x, float y, float al) {
+  return ajCapsRGB(e, s, track, x, y, al, 243, 242, 239);
 }
 // Como ajCaps, mas cabe em `maxW`: o que passa e cortado por caractere UTF-8 e
 // termina em "…". O kicker da folha de fileiras junta titulo, addon, tipo e
@@ -225,6 +228,14 @@ static float ajCapsC(TxtEstilo e, const char *s, float track, float x, float y, 
 // Kicker padrao: 15/700, tracking .14em, branco a 45%. Devolve a largura.
 static float ajKicker(const char *s, float x, float y, float a) {
   return ajCaps(TXT_MINI, s, 2.1f, x, y, 0.45f * a);
+}
+// Titulo de grupo do indice: o branco com um toque do acento (a marca clara
+// do matiz, 30%), mais legivel que o kicker comum (65% em vez de 45%).
+static float ajKickerAcento(const char *s, float x, float y, float a) {
+  int r, g, b;
+  ajAcento8(&r, &g, &b);
+  r = (243 * 6 + r * 4) / 10; g = (242 * 6 + g * 4) / 10; b = (239 * 6 + b * 4) / 10;
+  return ajCapsRGB(TXT_V2_KICK, s, 2.5f, x, y, 0.70f * a, r, g, b);
 }
 static float ajKickerC(const char *s, float x, float y, float a, float maxW) {
   return ajCapsC(TXT_MINI, s, 2.1f, x, y, 0.45f * a, maxW);
@@ -967,8 +978,8 @@ static void ajDesenharGrupo(int item, float y, float a) {
   t = ajTxt(TXT_V2_GRUPO, TELA[item].titulo);
   c = ajTxt(TXT_V2_24, TELA[item].sub ? TELA[item].sub : q);
   txt_desenhar_alpha(t, x + 30, yc - t.h * 0.5f, a);
-  txt_desenhar_alpha(c, x + w - 30 - c.w, yc - c.h * 0.5f + 1.0f, 0.38f * a);
-  gfx_cor((GfxRect){ x, y + 26.0f + 31.2f + 12.0f, w, 1 }, 0, 1, 1, 1, 0.08f * a);
+  txt_desenhar_alpha(c, x + w - 30 - c.w, yc - c.h * 0.5f + 1.0f, 0.60f * a);
+  gfx_cor((GfxRect){ x, y + 26.0f + 31.2f + 12.0f, w, 2 }, 0, 1, 1, 1, 0.18f * a);
 }
 
 // O chip "Avançados N" do cabecalho da lista (60 de altura, 22/600). Devolve a largura.
