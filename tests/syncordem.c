@@ -231,6 +231,14 @@ void desc_remontar_fileiras(void) {
 }
 static int repeticoes;
 void desc_repetir_silencioso(void) {}
+#include "plugins.h"
+/* sync.c pushes/reads plugin repos (F09); this test has none. */
+void plugins_retrato(PlugRetrato *r) { memset(r, 0, sizeof *r); }
+int  plugins_confirmar(unsigned rev, unsigned geracao) { (void)rev; (void)geracao; return 0; }
+int  plugins_definir_da_conta(const PlugRepo *l, int n, unsigned g) { (void)l; (void)n; (void)g; return 0; }
+int  plugins_ler_conta(const char *json, PlugRepo *saida, int max) { (void)json; (void)saida; (void)max; return -1; }
+void plugins_esquecer(void) {}
+void plugins_perfil_mudou(void) {}
 void desc_repetir(void) { repeticoes++; }
 void desc_repetir_addons(void) { repeticoes++; }
 void desc_refazer_continuar(void) {}
