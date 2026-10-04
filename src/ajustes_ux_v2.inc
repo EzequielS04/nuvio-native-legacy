@@ -311,24 +311,8 @@ static void aj2DesenharResumo(float a) {
 // inicial e a home de verdade em miniatura; Cartazes e arte sao tres cartazes
 // no tamanho da home; as outras usam a previa da primeira opcao, recortada.
 static float aj2PreviaCategoria(int sec, float x, float y, float w, float h) {
-  int it = primeiroDaSecao(sec), op = TELA[it].tipo == IT_OPC ? TELA[it].op : -1;
-  if (op == AJ_HOME_LAYOUT || sec == 0) { ajPreviaHome(x, y, w); return h; }
-  if (familiaPreviaOpcao(op) == AJPV_FOCO || familiaPreviaOpcao(op) == AJPV_CARTAZ || sec == 1) {
-    static const int P[3] = { 13, 12, 15 };
-    float s = w / 1068.0f, cw = 220 * s, ch = 330 * s, fw = 250 * s, fh = 375 * s, gx = 250 * s;
-    int i;
-    ajNeutro((GfxRect){ x, y, w, h }, 16, 0.04f, 0.106f, 0.110f, 0.129f, 1);
-    for (i = 0; i < 3; i += 2)
-      ajImg(ajArte(AJA_POSTER, P[i]), (GfxRect){ x + 190 * s + i * gx, y + 110 * s, cw, ch }, 16 * s, 0.7f);
-    gfx_rect((GfxRect){ x + 190 * s + gx - 20, y + 90 * s + 26 * s, fw + 40, fh + 44 }, 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.55f);
-    ajImg(ajArte(AJA_POSTER, P[1]), (GfxRect){ x + 190 * s + gx, y + 90 * s, fw, fh }, 18 * s, 1);
-    return h;
-  }
-  if (op < 0) return 0;
-  gfx_recorte(x, y, w, h);
-  ajPrevia(op, x, y, w);
-  gfx_sem_recorte();
-  return h;
+  (void)h;
+  return ajVisualCena(sec, -1, x, y, w);
 }
 // A tela de Ajustes da v2 em miniatura no fundo `modo` (cartoes do Fundo e a
 // previa do inspetor): o fundo de verdade e tres ilhas com tracos no lugar do
@@ -505,6 +489,7 @@ static float aj2CorMedidas(float x, float y, float w, float fim, float a) {
 static void aj2Atualizar(float dt) {
   int deg = aj2Degrau(), red = ajustes_animacoes_reduzidas();
   float a1 = deg >= 1 ? 1.0f : 0.0f, a2 = deg >= 2 ? 1.0f : 0.0f;
+  ajMovAtualizar(dt);
   aj2MenuAtualizar(dt);
   if (red) { aj2N1 = a1; aj2N2 = a2; aj2V1 = aj2V2 = 0; }
   else {

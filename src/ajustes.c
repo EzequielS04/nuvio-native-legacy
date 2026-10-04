@@ -3555,7 +3555,9 @@ static void conferirPadroes(void) {
   fflush(stdout);
 }
 
+static void ajMovReiniciar(void);
 int ajustes_iniciar(void) {
+  ajMovReiniciar();
   uxVeioBusca = uxAbrirOp >= 0;
   montarTela();
   conferirTela();
@@ -5840,9 +5842,13 @@ int ajustes_teste_focar_opcao(int op) {
   return 0;
 }
 
+void ajustes_teste_tema(int tema, int vidro);
 void ajustes_teste_ux_captura(int cenario) {
   memcpy(valor, valorPadrao, sizeof valor);
   ajustes_teste_vidro_env();   // o memcpy acima apagaria NUVIO_SHOT_VIDRO_*
+  if (getenv("NUVIO_SHOT_TEMA") || getenv("NUVIO_SHOT_VIDRO"))   // idem NUVIO_SHOT_TEMA / _VIDRO
+    ajustes_teste_tema(getenv("NUVIO_SHOT_TEMA") ? atoi(getenv("NUVIO_SHOT_TEMA")) : -1,
+                       getenv("NUVIO_SHOT_VIDRO") && atoi(getenv("NUVIO_SHOT_VIDRO")));
   valor[AJ_IDIOMA] = IDIOMA_PT + 1;
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
   memset(uxAvancados, 0, sizeof uxAvancados);
@@ -5944,7 +5950,7 @@ int ajustes_teste_quadro(const char *id) {
       aj2PoseTeste = (Aj2Pose){ 0.975f, -5.0f, 0.70f, 0.45f,  0.92f, 380.0f, AJ2_TOPO + 0.30f * (NV_VTELA_H - AJ2_TOPO - AJ2_MARGEM), 0.62f, 1.0f,
                                 184.0f, 0.28f,  0.0f,  1.0f, 0.0f, 0.0f };
     }
-    else if (!strcmp(id, "v2-editor")) { int k; focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); for (k = 0; k < 5; k++) uxEvento(SDLK_DOWN); }
+    else if (!strcmp(id, "v2-editor")) { int k; focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); for (k = 0; k < 5; k++) uxEvento(SDLK_RIGHT); }
     else if (!strcmp(id, "v2-fundo-opcao")) { ajArteFundoN = 7; focarOpcao(AJ_FUNDO); uxAbrirEditor(AJ_FUNDO); uxPendente = 2; uxAvancados[secAtual] = 0; }
     else if (!strncmp(id, "v2-fundo-", 9)) {
       ajArteFundoN = 7;
@@ -5979,7 +5985,7 @@ int ajustes_teste_quadro(const char *id) {
   }
   else if (!strcmp(id, "trakt")) { ajArteFundoN = 13; focarOpcao(AJ_TRAKT); ajVinculoTeste = 1; }
   else if (!strcmp(id, "editor-escolha")) { ajArteFundoN = 15; valor[AJ_QUALIDADE] = 1; focarOpcao(AJ_QUALIDADE); uxAbrirEditor(AJ_QUALIDADE); uxEvento(SDLK_DOWN); }
-  else if (!strcmp(id, "editor-numero")) { focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); { int i; for (i = 0; i < 5; i++) uxEvento(SDLK_DOWN); } }
+  else if (!strcmp(id, "editor-numero")) { focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); { int i; for (i = 0; i < 5; i++) uxEvento(SDLK_RIGHT); } }
   else if (!strcmp(id, "confirmacao")) { focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); uxPendente = 17; uxAvisoRisco = SEG_AVISO_FILEIRAS; uxConfirmar = 1; }
   else if (!strcmp(id, "fileiras") || !strcmp(id, "fileiras-fora")) {
     ajArteFundoN = 2;
