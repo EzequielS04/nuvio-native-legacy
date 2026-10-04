@@ -163,6 +163,10 @@ int tex_bombear(int max_por_quadro);
 extern int    tex_upl_n;
 extern long   tex_upl_bytes;
 extern int    tex_n_busca;
+// PEDIDOS QUE VOLTARAM SEM TEXTURA (arte ainda a caminho; a que falhou de vez
+// nao conta). So sobe, nunca zera: quem desenha uma vez so (o fundo parado do
+// painel de Salvos) compara antes e depois para saber se a copia saiu inteira.
+extern unsigned tex_n_falta;
 extern double tex_ms_busca;
 void tex_novo_quadro(void);
 
