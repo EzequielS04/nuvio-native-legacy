@@ -9,6 +9,12 @@
 // Ligar direto (NEEDED) quebraria a auto-atualizacao do .tpk: uma
 // libnuvio.so nova encenada em data/ num pacote antigo, sem a .so do motor,
 // nao carregaria e o app nao abriria. Com dlopen, sem a .so = "sem motor".
+// dladdr/Dl_info (carregar, abaixo) so existem com _GNU_SOURCE no glibc. No .tpk
+// o -include src/tpk.h puxa os headers do sistema antes deste arquivo, entao o
+// define aqui chega tarde: tools/tpk.sh passa -D_GNU_SOURCE a ESTE arquivo.
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include "p2pmotor.h"
 #include <stddef.h>
 

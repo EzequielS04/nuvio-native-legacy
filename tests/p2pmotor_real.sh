@@ -2,6 +2,7 @@
 # Motor P2P embutido DE VERDADE no Mac (tests/p2pmotor_real.c). Precisa do
 # nuvio-engine compilado: bash tools/p2p-motor/build-mac.sh <pasta>.
 #
+#   bash tests/p2pmotor_real.sh                                         # ciclo, motor da pasta padrao
 #   NV_ENGINE=<pasta>/nuvio-engine bash tests/p2pmotor_real.sh          # ciclo, sem download
 #   NV_ENGINE=... NV_P2P_REDE=1 bash tests/p2pmotor_real.sh [hash] [s]  # torrent real (peers)
 #   SANITIZE=1 / SANITIZE=thread: o nosso C sob sanitizer (o motor nao e instrumentado)
@@ -10,7 +11,11 @@
 # Sem NV_ENGINE: SKIP, e SKIP NAO E PASS do motor.
 set -eu
 cd "$(dirname "$0")/.."
+# Sem NV_ENGINE, usa o motor do Mac na pasta padrao (tools/p2p-motor/pasta.sh:
+# <raiz>/mac/{include, build/mac/*.a}, de tools/p2p-motor/build-mac.sh).
+. tools/p2p-motor/pasta.sh; nv_p2p_raiz
 E="${NV_ENGINE:-}"
+[ -z "$E" ] && [ -n "$NV_P2P_RAIZ" ] && [ -f "$NV_P2P_RAIZ/mac/build/mac/libnuvio_engine.a" ] && E="$NV_P2P_RAIZ/mac"
 B="${NV_ENGINE_BUILD:-$E/build/mac}"
 if [ -z "$E" ] || [ ! -f "$B/libnuvio_engine.a" ]; then
   echo "p2pmotor_real: SKIP (sem NV_ENGINE): o motor real NAO foi testado"; exit 0; fi

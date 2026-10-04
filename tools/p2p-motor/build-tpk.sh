@@ -3,7 +3,7 @@
 # libtorrent, OpenSSL, libstdc++, libgcc e libatomic DENTRO e so a API C
 # (nuvio_engine_*) exportada.
 #
-#   bash tools/p2p-motor/build-tpk.sh [pasta]    # padrao /tmp/nv-p2p-motor-tpk
+#   bash tools/p2p-motor/build-tpk.sh [pasta]    # padrao <raiz>/tpk (ver pasta.sh)
 #
 # POR QUE NAO NO DOCKER DO TPK (tools/tpk/Dockerfile): ele e Debian buster com
 # gcc 8.3, e o nuvio-engine e C++20 (<span>, <stop_token>, std::jthread:
@@ -16,7 +16,8 @@
 # atravessando a fronteira. A .so vai no pacote ao lado do libnuvio.so.
 set -eu
 cd "$(dirname "$0")/../.."
-W="${1:-/tmp/nv-p2p-motor-tpk}"
+. tools/p2p-motor/pasta.sh; nv_p2p_raiz
+W="${1:-${NV_P2P_RAIZ:-/Volumes/ExternalSSD/nuvio-p2p-motor}/tpk}"
 COMMIT=02938d7
 mkdir -p "$W"
 [ -d "$W/nuvio-engine/.git" ] || git clone -q https://github.com/NuvioMedia/nuvio-engine "$W/nuvio-engine"
@@ -58,4 +59,4 @@ T
   arm-webos-linux-gnueabi-readelf -A /w/libnuvio_engine.so | grep -E "Tag_ABI_VFP_args|Tag_FP_arch|Tag_CPU_arch:"
 '
 rm -rf "$W/include"; cp -R "$W/nuvio-engine/include" "$W/include"
-echo "NUVIO_P2P_MOTOR_TPK=$W (libnuvio_engine.so + include/)"
+echo "pronto em $W (libnuvio_engine.so + include/); tools/tpk.sh o acha sozinho"

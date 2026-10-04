@@ -18,7 +18,9 @@
 #   - APK assinado com OUTRA chave que a fixada abaixo (CERT_SHA256);
 #   - versionName diferente da release;
 #   - arquivo de pessoa dentro do APK;
-#   - faltando libmain/libSDL2/libcurl em alguma das duas ABIs.
+#   - faltando libmain/libSDL2/libcurl em alguma das duas ABIs;
+#   - motor P2P configurado (NUVIO_P2P_MOTOR ou a pasta padrao, ver
+#     tools/p2p-motor/pasta.sh) e ausente das libmain.so, ou sem os avisos de licenca.
 set -eo pipefail
 cd "$(dirname "$0")/.."
 
@@ -70,6 +72,22 @@ for abi in arm64-v8a armeabi-v7a; do
     case $'\n'"$LISTA"$'\n' in *$'\n'"lib/$abi/$so"$'\n'*) ;; *) echo "release-android: faltou lib/$abi/$so" >&2; exit 1;; esac
   done
 done
+
+# Motor P2P (dono, 1.8): com a pasta do motor achada, o APK TEM de levar o motor
+# nas duas ABIs e os avisos de licenca; o android.sh ja recusou o contrario, isto
+# e a segunda conferencia sobre o arquivo que vai para a release.
+. tools/p2p-motor/pasta.sh
+nv_p2p_resolver android
+case $'\n'"$LISTA"$'\n' in *$'\n'"assets/licencas/p2p-avisos.txt"$'\n'*) ;; *) echo "release-android: faltou assets/licencas/p2p-avisos.txt" >&2; exit 1;; esac
+if [ -n "$NV_P2P_DIR" ]; then
+  for abi in arm64-v8a armeabi-v7a; do
+    m=$(unzip -p "$A" "lib/$abi/libmain.so" | strings | grep -c 'Nuvio Engine/' || true)
+    [ "$m" -ge 1 ] || { echo "release-android: $A lib/$abi/libmain.so sem o motor P2P" >&2; exit 1; }
+  done
+  echo "release-android: motor P2P (nuvio-engine) nas duas ABIs"
+else
+  echo "release-android: ATENCAO, APK SEM motor P2P (NUVIO_P2P_MOTOR=none ou sem pasta)" >&2
+fi
 
 cp "$A" "$OUT/"
 ( cd "$OUT" && shasum -a 256 Nuvio-*-android.apk > SHA256SUMS-android )

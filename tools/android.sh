@@ -2,7 +2,7 @@
 # Build do Nuvio para Android TV (SDL2 + GLES2, nucleo C em libmain.so).
 #
 #   tools/android.sh            -> APK debug em build/android/Nuvio-<v>-android-debug.apk
-#   NUVIO_P2P_MOTOR=<pasta> tools/android.sh -> com o motor P2P (tools/p2p-motor/build-android.sh)
+#   NUVIO_P2P_MOTOR=<raiz> tools/android.sh -> motor P2P (padrao: pasta achada por tools/p2p-motor/pasta.sh; =none desliga)
 #   NUVIO_KEYSTORE=... NUVIO_KEYSTORE_PASS=... NUVIO_KEY_ALIAS=... NUVIO_KEY_PASS=... tools/android.sh
 #                               -> tambem o release assinado, Nuvio-<v>-android.apk
 #
@@ -46,6 +46,8 @@ rm -rf "$EST/assets"; mkdir -p "$EST/assets"
 NUVIO_ARTE_ESTAGIO="build/android/assets/art" bash tools/tizen-art.sh >/dev/null
 mkdir -p "$EST/assets/fonts"
 cp deploy/app/fonts/* "$EST/assets/fonts/"
+mkdir -p "$EST/assets/licencas"
+cp deploy/app/licencas/* "$EST/assets/licencas/"   # avisos do motor P2P (libtorrent, Boost, OpenSSL, nuvio-engine)
 
 echo "[3/5] chaves (-D) e libs nativas"
 ENVF="$(mktemp "${TMPDIR:-/tmp}/nuvio-android-env.XXXXXXXX")"; trap 'rm -f "$ENVF"' EXIT
@@ -71,12 +73,11 @@ done
 
 echo "[4/5] gradle"
 GR=(android/gradlew -p android --console=plain -Pnuvio.sdlSrc="$CACHE/src" -Pnuvio.estagio="$EST")
-# Motor P2P embutido (opcional): pasta de tools/p2p-motor/build-android.sh.
-if [ -n "${NUVIO_P2P_MOTOR:-}" ]; then
-  [ -f "$NUVIO_P2P_MOTOR/lib/arm64-v8a/libnuvio_engine.a" ] || {
-    echo "android.sh: NUVIO_P2P_MOTOR sem build: rode tools/p2p-motor/build-android.sh $NUVIO_P2P_MOTOR" >&2; exit 2; }
-  GR+=(-Pnuvio.p2pMotor="$NUVIO_P2P_MOTOR")
-fi
+# Motor P2P embutido: pasta achada por tools/p2p-motor/pasta.sh (NUVIO_P2P_MOTOR,
+# ou a pasta padrao); configurada e incompleta = erro, nunca pacote sem motor calado.
+. tools/p2p-motor/pasta.sh
+nv_p2p_resolver android
+[ -n "$NV_P2P_DIR" ] && GR+=(-Pnuvio.p2pMotor="$NV_P2P_DIR")
 TAREFAS=(assembleDebug)
 # Chave de release FIXA (o Android so atualiza por cima com a mesma
 # assinatura): ~/.nuvio-android/release.env, fora do repo, chmod 600. A copia
@@ -108,6 +109,14 @@ for a in "${APKS[@]}"; do
   done
   printf '%s\n' "$L" | grep -q '^assets/art/' || { echo "android.sh: $a sem assets/art" >&2; exit 1; }
   printf '%s\n' "$L" | grep -q '^assets/fonts/' || { echo "android.sh: $a sem assets/fonts" >&2; exit 1; }
+  printf '%s\n' "$L" | grep -q '^assets/licencas/p2p-avisos.txt$' || { echo "android.sh: $a sem assets/licencas" >&2; exit 1; }
+  if [ -n "$NV_P2P_DIR" ]; then   # motor pedido: o simbolo da API C tem de estar nas DUAS libmain.so
+    for abi in arm64-v8a armeabi-v7a; do
+      m=$(unzip -p "$a" "lib/$abi/libmain.so" | strings | grep -c 'Nuvio Engine/' || true)
+      [ "$m" -ge 1 ] || { echo "android.sh: $a lib/$abi/libmain.so SEM o motor P2P (marca "Nuvio Engine/")" >&2; exit 1; }
+    done
+    echo "  motor P2P dentro das duas libmain.so"
+  fi
   n=$(printf '%s\n' "$L" | grep -c -E "$SEGREDO" || true)
   [ "$n" = "0" ] || { echo "android.sh: $a leva $n arquivo(s) de pessoa:" >&2; printf '%s\n' "$L" | grep -E "$SEGREDO" >&2; exit 1; }
   echo "ok: $a ($(du -h "$a" | cut -f1))"

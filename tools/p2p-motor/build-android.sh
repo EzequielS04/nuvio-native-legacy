@@ -2,15 +2,16 @@
 # Motor P2P (nuvio-engine + libtorrent 2.0.12 + OpenSSL 3.5.7, tudo estatico)
 # para o APK, pelo NDK do tools/android.sh, em arm64-v8a e armeabi-v7a.
 #
-#   bash tools/p2p-motor/build-android.sh [pasta]    # padrao /tmp/nv-p2p-motor-android
-#   NUVIO_P2P_MOTOR=<pasta> bash tools/android.sh
+#   bash tools/p2p-motor/build-android.sh [pasta]    # padrao <raiz>/android (ver pasta.sh)
+#   bash tools/android.sh    # acha a raiz sozinho (NUVIO_P2P_MOTOR=none desliga)
 #
 # O OpenSSL sai do script do proprio nuvio-engine (scripts/build-android-openssl.sh,
 # versao e sha256 fixados la), so que nas duas ABIs do APK em vez de quatro.
 # Precisa de cmake >= 3.24 no PATH (o 3.22.1 do SDK nao serve para o motor).
 set -eu
 cd "$(dirname "$0")/../.."
-W="${1:-/tmp/nv-p2p-motor-android}"
+. tools/p2p-motor/pasta.sh; nv_p2p_raiz
+W="${1:-${NV_P2P_RAIZ:-/Volumes/ExternalSSD/nuvio-p2p-motor}/android}"
 COMMIT=02938d7
 SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 NDK="$SDK/ndk/27.2.12479018"
@@ -43,4 +44,4 @@ for abi in arm64-v8a armeabi-v7a; do
 done
 rm -rf "$W/include"; cp -R "$E/include" "$W/include"
 ls -l "$W"/lib/*/
-echo "NUVIO_P2P_MOTOR=$W bash tools/android.sh"
+echo "pronto em $W (a raiz e a pasta de cima; tools/android.sh a acha sozinho)"
