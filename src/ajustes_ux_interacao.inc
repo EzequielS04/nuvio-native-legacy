@@ -165,9 +165,17 @@ static int uxEvento(SDL_Keycode k) {
     uxPediuBusca = 2; uxVeioBusca = 0; return 1;
   }
   if (focoIndice) {
+    // As duas pilulas do alto (0 Buscar, 1 Diferentes) dividem uma linha:
+    // Esquerda/Direita andam entre elas; a Esquerda da primeira sai.
+    static int ultimaPilula = 0;
+    if (uxIndice < 2) ultimaPilula = uxIndice;
+    if (uxIndice == 1 && k == SDLK_LEFT) { uxIndice = 0; uxVeioBusca = 0; return 1; }
+    if (uxIndice == 0 && k == SDLK_RIGHT) { uxIndice = 1; uxVeioBusca = 0; uxListarDiferencas(); return 1; }
     if (uxVoltar(k) || k == SDLK_LEFT) { sair = 1; return 1; }
     if (k == SDLK_UP || k == SDLK_DOWN) {
       int dest = uxIndice + (k == SDLK_DOWN ? 1 : -1);
+      if (uxIndice < 2) { if (k == SDLK_UP) return 1; dest = 2; }
+      else if (dest < 2) dest = ultimaPilula;
       if (dest < 0 || dest >= nSecoes + 2) return 1;
       if (dest >= 2) focarSecao(dest - 2);
       uxIndice = dest; uxVeioBusca = 0;
