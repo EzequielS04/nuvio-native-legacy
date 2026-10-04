@@ -277,6 +277,11 @@ int  col_definir_json(const char *j) {
   if (j && strstr(j, "perfil2")) colDoCerto++;
   return 0;
 }
+unsigned col_revisao(void) { return 0; }
+int col_resposta_valida(const char *j) { return j && *j; }
+void colfileiras_sincronizar(void) {}
+int colfileiras_receber(const char *j) { return col_definir_json(j); }
+void colfileiras_contexto(void) {}
 int  contalib_aplicar_catalogo(void) { return 0; }
 int  contalib_aplicar_vistos(void) { return 0; }
 void contalib_esquecer(void) {}

@@ -35,6 +35,7 @@
 #include "catalogo.h"
 #include "artehero.h"
 #include "colecoes.h"
+#include "colfileiras.h"
 #include "addons.h"   /* addons_nome_por_id: o addon de um grupo de colecoes */
 #include "gif.h"
 #include "gifcolecao.h"
@@ -2047,23 +2048,31 @@ static void sincronizarFileiras(void) {
   // direto (cat_revisao); cat_revisao e bumpado em cat_definir_tudo,
   // cat_trocar_continuar E cat_republicar_fileiras, cobrindo todo caminho
   // que troca fils[].
-  static unsigned ultCatRev, ultFilRev, ultColRev, ultFilLim, ultCwoRev;
+  static unsigned ultCatRev, ultFilRev, ultColRev, ultFilLim, ultCwoRev, ultOrdemRev;
   unsigned catRev = cat_revisao(), filRev = fil_revisao();
   int filLim = fil_limite();
   unsigned colRev = col_revisao();
+  unsigned ordemRev = catordem_revisao();
   // cwo_revisao tambem: o conjunto de futuros pode mudar sem o catalogo mudar
   // (a mesma lista publicada, so a divisao outra), e o hash abaixo ja o pesa.
   unsigned cwoRev = cwo_revisao();
   if (nCat == filsAplicadas && assin == prefsAplicadas &&
       catRev == ultCatRev && filRev == ultFilRev &&
-      colRev == ultColRev && filLim == ultFilLim && cwoRev == ultCwoRev &&
+      colRev == ultColRev && ordemRev == ultOrdemRev &&
+      filLim == ultFilLim && cwoRev == ultCwoRev &&
       retomarAplicada == retomarRev &&
       ultCatRev) {   // ultCatRev=0: primeira chamada, cai no hash
     ultFilRev = filRev; ultColRev = colRev; ultFilLim = (unsigned)filLim;
     return;
   }
+  // Local group visibility changes also change which source rows are wrapped.
+  // Reconcile only after the fast guard fails, never on an unchanged frame.
+  if (filRev != ultFilRev || colRev != ultColRev || ordemRev != ultOrdemRev)
+    colfileiras_sincronizar();
+  filRev = fil_revisao(); colRev = col_revisao();
   ultCatRev = catRev; ultFilRev = filRev; ultColRev = colRev; ultFilLim = (unsigned)filLim;
   ultCwoRev = cwoRev;
+  ultOrdemRev = ordemRev;
   unsigned revisao = 2166136261u;
   // A escolha LOCAL de fileiras entra na mesma assinatura do catalogo: ordem,
   // liga/desliga, forma, tamanho e limite mudam a lista tanto quanto uma
@@ -2083,6 +2092,7 @@ static void sincronizarFileiras(void) {
   // em Ajustes: aquilo bumpa fil_revisao(), a assinatura muda, a home remonta e
   // a colecao aparece. Fechar e reabrir voltava ao mesmo lugar.
   revisao = (revisao ^ colRev) * 16777619u;
+  revisao = (revisao ^ ordemRev) * 16777619u;
   // Quem a montagem publicou como futuro (issue #127): so pesa em "Separar
   // futuros", mas e um inteiro — mais barato perguntar sempre que ramificar.
   revisao = (revisao ^ cwo_revisao()) * 16777619u;
@@ -2104,7 +2114,7 @@ static void sincronizarFileiras(void) {
         revisao = (revisao ^ *s) * 16777619u;
     }
   }
-  if (nCat < 1 || (nCat == filsAplicadas && assin == prefsAplicadas
+  if ((nCat < 1 && !col_n() && !nFileiras) || (nCat == filsAplicadas && assin == prefsAplicadas
       && revisao == ultimaRevisao && retomarAplicada == retomarRev)) return;
   // Guardar o estado por chave: inserir o hub não deve transferir a rolagem
   // horizontal de uma fileira para outra.
@@ -2221,18 +2231,19 @@ static void sincronizarFileiras(void) {
     for(int i=0;i<col_n() && destino<MAX_FIL;i++) {
       const ColFolder *folder=col_folder(i);
       int grupoVisto=0;
+      char chaveGrupo[192];
       if(!folder||!folder->group[0])continue;
+      col_chave_pasta(folder,chaveGrupo,sizeof chaveGrupo);
       for(int j=0;j<destino;j++) {
-        char chave[192];col_chave_grupo(folder->group,chave,sizeof chave);
-        if(!strcmp(fileiras[j].chave,chave)){grupoVisto=1;break;}
+        if(!strcmp(fileiras[j].chave,chaveGrupo)){grupoVisto=1;break;}
       }
       if(grupoVisto)continue;
       { Fileira v={0};
-        v.n=col_grupo(folder->group,v.folders,MAX_CARDS);
+        v.n=col_grupo_chave(chaveGrupo,v.folders,MAX_CARDS);
         if(!v.n)continue;
         v.tipo=FILEIRA_CATALOGOS;
-        v.forma=col_grupo_forma(folder->group);
-        col_chave_grupo(folder->group,v.chave,sizeof v.chave);
+        v.forma=col_grupo_forma_chave(chaveGrupo);
+        snprintf(v.chave,sizeof v.chave,"%s",chaveGrupo);
         snprintf(v.titulo,sizeof v.titulo,"%s",folder->group);
         fileiras[destino++]=v;
       }
@@ -2308,6 +2319,21 @@ static void sincronizarFileiras(void) {
     static Fileira arranjo[MAX_FIL];
     const char *ch[MAX_FIL], *ti[MAX_FIL];
     int ord[MAX_FIL], q, k, w = 0, lim = fil_limite();
+    // Account order includes collection groups, which are assembled here and
+    // never pass through discovery's catalogue ordering. Preserve app rows,
+    // then let the local TV order override this complete account projection.
+    {
+      const char *rem[MAX_FIL];
+      int slots[MAX_FIL], ordenados[MAX_FIL], nr = 0;
+      for (q = 0; q < destino; q++)
+        if (fileiras[q].tipo == FILEIRA_CATALOGOS || fileiras[q].base[0]) {
+          slots[nr] = q; rem[nr++] = fileiras[q].chave;
+        }
+      int n = catordem_unir(rem, nr, ordenados, MAX_FIL);
+      memcpy(arranjo, fileiras, sizeof(Fileira) * (size_t)destino);
+      for (q = 0; q < n; q++) arranjo[slots[q]] = fileiras[slots[ordenados[q]]];
+      memcpy(fileiras, arranjo, sizeof(Fileira) * (size_t)destino);
+    }
     for (q = 0; q < destino; q++) {
       // REGISTRA TAMBEM O QUE VAI SAIR abaixo. E o registro que deixa a tela de
       // Ajustes RELIGAR uma fileira desligada: desligada, ela nao existe mais
@@ -2351,6 +2377,7 @@ static void sincronizarFileiras(void) {
       int j, repetida = 0;
       if (!strcmp(f->chave, "last_session")) continue;
       if (fil_oculta(f->chave)) continue;
+      if (f->tipo == FILEIRA_CATALOGOS && catordem_oculta(f->chave, f->chave)) continue;
       // UMA FILEIRA POR CHAVE (issue #127, "Proximos episodios" duplicada na
       // C9 do dono). A chave e a identidade da fileira em todo o resto — foco,
       // rolagem, registro, ordem —, e duas com a mesma chave desenhariam o
@@ -2403,12 +2430,9 @@ static void sincronizarFileiras(void) {
     { int q2, rede = 0, mantidas = 0;
       for (q2 = 0; q2 < w; q2++) {
         int pedeRede = arranjo[q2].base[0] && arranjo[q2].catId[0];
-        // FILA NAO DESENHA. O editor numera TODAS as linhas ligadas (colecoes e
-        // fixas incluidas) e diz "Na fila" a partir da posicao `limite`; este
-        // corte so conta catalogo e deixava passar um catalogo que o editor
-        // mostrava na fila (FrostView #8, "7 de 7", e estava na home). Catalogo
-        // que o editor conhece como fila ou fora nao entra; entra sozinho
-        // quando abrir vaga, porque o estado e recalculado a cada remontagem.
+        // FILA NAO DESENHA. Editor e Home usam a mesma cota de catalogos;
+        // colecoes e fixas ficam fora dela. Catalogo na fila ou fora nao
+        // entra; abre vaga sozinho quando o estado muda na remontagem.
         if (pedeRede) {
           int est = fil_estado_chave(arranjo[q2].chave);
           if (est == FIL_NA_FILA || est == FIL_FORA) continue;

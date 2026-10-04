@@ -34,6 +34,7 @@
 // Missing configuration preserves the current state. Explicit empty items or
 // legacy arrays clear remote configuration while preserving local TV choices.
 int catordem_ler(const char *respostaJson);
+unsigned catordem_revisao(void);
 
 int         catordem_tem_ordem(void);
 int         catordem_n(void);

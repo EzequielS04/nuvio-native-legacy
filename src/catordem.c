@@ -15,6 +15,8 @@ static char ocultos[CATORD_MAX][CATORD_DESL];
 static int  nOcultos;
 static int  temOrdem;
 static int  temNLanc, valNLanc, temSublinhado, valSublinhado;
+static unsigned revisao;
+unsigned catordem_revisao(void) { return revisao; }
 
 // ---------------------------------------------------------------- leitura
 
@@ -183,6 +185,8 @@ int catordem_ler(const char *resposta) {
   static char antesOrdem[CATORD_MAX][CATORD_CHAVE];
   static char antesOcultos[CATORD_MAX][CATORD_DESL];
   int nAntesOrdem = nOrdem, nAntesOcultos = nOcultos, mudou = 0, i;
+  int nlAntes = temNLanc, vnlAntes = valNLanc;
+  int suAntes = temSublinhado, vsuAntes = valSublinhado;
   const char *fim = NULL, *blob;
   static const char *NOMES_ORDEM[4] = {
     "catalog_order_keys", "home_catalog_order", "catalog_order", "order"
@@ -246,6 +250,9 @@ int catordem_ler(const char *resposta) {
   for (i = 0; !mudou && i < nOcultos; i++)
     if (strcmp(ocultos[i], antesOcultos[i])) mudou = 1;
   temOrdem = nOrdem > 0 || nOcultos > 0;
+  if (nlAntes != temNLanc || vnlAntes != valNLanc ||
+      suAntes != temSublinhado || vsuAntes != valSublinhado) mudou = 1;
+  if (mudou) revisao++;
   // Imprime TAMBEM quando nao mudou nada, e dizendo qual dos dois casos e. Uma
   // conta sem ordem configurada e uma leitura que falhou davam a mesma linha
   // (nenhuma), e "a home nao obedeceu" nao tem como ser respondido assim.
@@ -295,6 +302,7 @@ int catordem_tem_ocultar_sublinhado(void)   { return temSublinhado; }
 int catordem_ocultar_sublinhado(void)       { return valSublinhado; }
 
 void catordem_esquecer(void) {
+  revisao++;
   nOrdem = nOcultos = 0;
   temOrdem = 0;
   temNLanc = valNLanc = temSublinhado = valSublinhado = 0;

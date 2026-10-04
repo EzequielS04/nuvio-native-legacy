@@ -179,9 +179,25 @@ void fil_confirmar_limite(void);
 // outro jeito — e e assim que a fila sobrevive byte a byte ao arquivo antigo.
 typedef enum { FIL_NA_HOME = 0, FIL_NA_FILA, FIL_FORA } FilEstado;
 int  fil_estado(int i);
+// Reconcile the account collection identities immediately, including an empty
+// authoritative snapshot. Only removed collection rows are pruned; local
+// catalogue/app choices and styles on surviving collection IDs remain intact.
+void fil_colecoes_reconciliar(const char *const *chaves,
+                              const char *const *titulos,
+                              const int *ocultas, int n, int autoritativo);
+int fil_copiar_chaves(char (*saida)[FIL_CHAVE], int max);
+// Complete known-row projection of account order/visibility. Personal local
+// order and preferences survive; remote flags are kept only in memory.
+void fil_conta_reconciliar(const char *const *chaves, const int *ocultas,
+                           const int *emColecao, int n);
+void fil_colecao_catalogo_removido(const char *chave);
+void fil_colecao_catalogo_restaurado(const char *chave);
+// Scope only account-derived automatic flags; does not clear personal settings.
+int fil_conta_dono(const char *usuario);
 int  fil_estado_chave(const char *chave);   // -1 = desconhecida
 int  fil_n_na_home(void);
 int  fil_n_fila(void);
+int  fil_n_capacidade(void); // catalogue slots used, excluding app/collections
 // Liga e poe no fim do bloco ligado. Devolve o indice NOVO (a linha se move) e
 // escreve em `estado` onde ela caiu — NA_HOME quando coube, NA_FILA quando a
 // home estava cheia. Quem chama mostra "home cheia" nesse caso.

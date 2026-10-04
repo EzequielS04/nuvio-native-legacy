@@ -75,9 +75,13 @@ int col_extra_definir(const ColFolder *v, int n);
 // web: collections[{id,title,backdropImageUrl,folders[{id,title,coverImageUrl,
 // heroBackdropUrl,titleLogoUrl,hideTitle,sources[{provider,addonBaseUrl,type,
 // catalogId,title,genre}]}]}]. Aceita o array, o objeto {collections}, a linha
-// da RPC ({collections_json}) e collections_json como STRING escapada. Vazio
-// nao apaga as locais (mesma regra dos addons). Devolve quantas pastas entraram.
+// da RPC ({collections_json}) e collections_json como STRING escapada. An
+// explicit empty snapshot clears account/package folders, retaining extras.
+// Missing/null/truncated replies retain the current snapshot. Returns folders;
+// callers use col_revisao(), including deletions and unchanged nonempty pulls.
 int col_definir_json(const char *json);
+// Pure validation, safe on the sync worker before caching an account reply.
+int col_resposta_valida(const char *json);
 // TROCA DE PERFIL: tira da tela as colecoes do perfil anterior (as da conta e
 // as do pacote). As do perfil novo entram quando o sync as trouxer; se ele nao
 // tiver nenhuma, a home fica sem colecoes. As extras (listas fixadas) ficam.
@@ -95,7 +99,13 @@ int col_n(void);
 // Muda sempre que o conjunto de pastas muda. Quem decide remontar a tela deve
 // olhar ISTO e nao col_n(): trocar N pastas por outras N mantem o numero.
 unsigned col_revisao(void);
+// A complete account snapshot was accepted for this profile, even when empty.
+int col_tem_conta(void);
 const ColFolder *col_folder(int i);
+// Identity-based grouping: two collections can have the same display title.
+void col_chave_pasta(const ColFolder *pasta, char *dst, unsigned n);
+int col_grupo_chave(const char *chave, int *indices, int max);
+int col_grupo_forma_chave(const char *chave);
 int col_grupo(const char *nome, int *indices, int max);
 // addonId dominante do grupo (1) ou "" quando as fontes sao de addons
 // diferentes / nao sao de addon (0). Ver a definicao.

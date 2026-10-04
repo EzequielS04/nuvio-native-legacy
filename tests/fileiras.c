@@ -938,7 +938,8 @@ int main(void) {
       if (strstr(k, "_movie_outro_")) assert(fil_oculta(k));
     }
     assert(fil_escolhida(conta[2]) >= 0 && fil_escolhida(conta[8]) >= 0);
-    assert(fil_n_na_home() == 12);   // cw, amigos, 9 da conta, PenguPlay...
+    assert(fil_n_na_home() == 13 && fil_n_capacidade() == 10);
+    assert(fil_n_fila() == 0); // CW/social/collection do not consume catalogue slots
     // UMA VEZ SO: a marca foi gravada no arquivo, e na memoria ja nao roda.
     { static char buf[300000]; size_t n; FILE *g = fopen("/tmp/fileirasui.txt", "r");
       assert(g); n = fread(buf, 1, sizeof buf - 1, g); buf[n] = 0; fclose(g);

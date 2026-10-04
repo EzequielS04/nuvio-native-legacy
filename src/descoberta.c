@@ -1278,11 +1278,11 @@ static int engolidasNaDeclaracao;
 static int dentroDeColecaoVisivelBase(const char *base, const char *tipo,
                                       const char *id) {
   const ColFolder *f;
-  char chaveGrupo[96];
+  char chaveGrupo[192];
   if (!base || !base[0]) return 0;
   f = col_por_catalogo(base, tipo, id);
   if (!f) return 0;
-  col_chave_grupo(f->group, chaveGrupo, sizeof chaveGrupo);
+  col_chave_pasta(f, chaveGrupo, sizeof chaveGrupo);
   if (fil_oculta(chaveGrupo) || catordem_oculta(chaveGrupo, chaveGrupo)) return 0;
   return 1;
 }
@@ -2133,9 +2133,11 @@ static void preservarFileirasAusentes(CatItem **lote, int *n, int *cap,
   // O TETO DE FILEIRAS VALE AQUI TAMBEM (#195). Linha que ficou de fora
   // porque o limite encheu nao e linha ausente: sem isto o substituto de uma
   // fileira que voltou a responder era reanexado e a home passava do limite.
-  int teto = fil_limite();
-  if (teto > CAT_FIL_MAX) teto = CAT_FIL_MAX;
   if (!lote || !*lote || !n || !cap || !fil || !nFil) return;
+  int fixas = 0;
+  for (r = 0; r < *nFil; r++) if (!fil[r].base[0]) fixas++;
+  int teto = fil_limite() + fixas;
+  if (teto > CAT_FIL_MAX) teto = CAT_FIL_MAX;
   for (r = 0; r < cat_n_fileiras() && *nFil < teto; r++) {
     const CatFileira *old = cat_fileira(r);
     int got, need;
@@ -2996,9 +2998,9 @@ static int ordenarCandidatos(Decl *decls, int nDecl, int *ordem, int nFixas,
   // TETO DE FILEIRAS: o numero escolhido em Ajustes (7 de fabrica),
   // limitado pelo CAT_FIL_MAX do vetor. Ele corta o que vai ser PEDIDO pela
   // rede, e nao o desenho: sete fileiras tem de custar sete GET, senao o
-  // ajuste economiza pixel e nao trabalho. `nFil` ja conta "Continuar
-  // assistindo" e "Amigos assistindo" — sao fileiras na tela como as outras.
-  int teto = fil_limite();
+  // ajuste economiza pixel e nao trabalho. As fixas nao fazem GET e nao
+  // consomem a cota de catalogos.
+  int teto = fil_limite() + nFixas;
   if (teto > CAT_FIL_MAX) teto = CAT_FIL_MAX;
   if (tetoSaida) *tetoSaida = teto;
 
@@ -4388,7 +4390,7 @@ void desc_remontar_fileiras(void) {
     nCat = q;
   }
 
-  teto = fil_limite();
+  teto = fil_limite() + nOut;
   if (teto < 1 || teto > CAT_FIL_MAX) teto = CAT_FIL_MAX;
   for (k = 0; k < nCat && nOut < teto && nOut < CAT_FIL_MAX; k++)
     saidaFil[nOut++] = filsMontadas[idxCat[ordem[k]]];

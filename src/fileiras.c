@@ -19,6 +19,7 @@
 // como oculta, que e o mesmo lugar da tela.
 #define OC_PESSOA   1
 #define OC_SUGESTAO 2
+#define OC_COLECAO  3  // removed account collection; Add explicitly releases it
 typedef struct {
   char chave[FIL_CHAVE];
   char titulo[FIL_TITULO];
@@ -41,6 +42,9 @@ typedef struct {
   int  vista;          // registrada nesta sessao (descoberta ou home)
   int  naHome;         // estava na ultima lista que a home montou
   int  doDisco;        // veio do arquivo: o perfil ja viu esta fileira antes
+  int  ocultaConta;    // current account visibility; not a personal preference
+  int  emColecao;      // visible collection owns this source; runtime projection
+  int  visPessoal;     // explicit TV add/remove, persisted as an optional line
 } Linha;
 
 static Linha linhas[FIL_MAX];
@@ -76,6 +80,7 @@ static int   registroSujo;   // ver fil_gravar_registro
 // conta e este arquivo. Em ajustes.txt seria um texto solto que ninguem
 // revisita.
 static char  heroFonte[FIL_CHAVE];
+static char donoAuto[128];
 static unsigned revisao;
 // A leitura acontece no fio da DESCOBERTA (montar) e a escrita no fio de
 // desenho (tela de Ajustes). Sao os dois unicos, e a secao critica e uma varredura
@@ -256,7 +261,7 @@ static void gravar(void) {
   // 64 linhas de ate ~310 bytes (chave 192 + titulo 96 + quatro numeros), mais
   // o cabecalho. Alocado e nao na pilha: sao ~20 KB e esta funcao roda no fio
   // do desenho.
-  size_t cap = 128 + 64 + (size_t)FIL_MAX * (FIL_CHAVE + FIL_TITULO + 40);
+  size_t cap = 128 + 64 + (size_t)FIL_MAX * (2 * FIL_CHAVE + FIL_TITULO + 56);
   char *txt = malloc(cap);
   size_t k;
   int i;
@@ -274,12 +279,17 @@ static void gravar(void) {
   // valendo numa anterior (ela so nao ve o destaque) e vice-versa.
   if (heroFonte[0] && k < cap)
     k += (size_t)snprintf(txt + k, cap - k, "hero %s\n", heroFonte);
+  if (donoAuto[0] && k < cap)
+    k += (size_t)snprintf(txt + k, cap - k, "conta_auto %s\n", donoAuto);
   for (i = 0; i < nLinhas && k < cap; i++)
     // Tabulacao e nao espaco: titulo de catalogo tem espaco dentro ("For You -
     // Filme") e a chave do Xperience carrega o id inteiro do addon.
     k += (size_t)snprintf(txt + k, cap - k, "linha %s\t%d\t%d\t%d\t%d\t%s\n",
                           linhas[i].chave, linhas[i].oculta, linhas[i].tipo,
                           linhas[i].tam, linhas[i].fila, linhas[i].titulo);
+  for (i = 0; i < nLinhas && k < cap; i++)
+    if (linhas[i].visPessoal)
+      k += (size_t)snprintf(txt + k, cap - k, "visibilidade %s\n", linhas[i].chave);
   if (k < cap) dados_gravar(arquivoDoPerfil(), txt);
   free(txt);
   revisao++;
@@ -289,6 +299,7 @@ static void carregar(void) {
   char caminho[600], buf[900];
   FILE *f;
   carregado = 1;
+  donoAuto[0] = 0;
   // ZERA A FONTE DO DESTAQUE ANTES DE LER, e nao so ao achar a linha.
   //
   // `heroFonte` e estatico e carregar() roda de novo na TROCA DE PERFIL. Sem
@@ -325,6 +336,11 @@ static void carregar(void) {
       migrado197 = 1;
     } else if (!strncmp(buf, "hero ", 5)) {
       snprintf(heroFonte, sizeof heroFonte, "%s", buf + 5);
+    } else if (!strncmp(buf, "conta_auto ", 11)) {
+      snprintf(donoAuto, sizeof donoAuto, "%s", buf + 11);
+    } else if (!strncmp(buf, "visibilidade ", 13)) {
+      for (int i = 0; i < nLinhas; i++)
+        if (!strcmp(linhas[i].chave, buf + 13)) linhas[i].visPessoal = 1;
     } else if (!strncmp(buf, "linha ", 6) && nLinhas < FIL_MAX) {
       char *p = buf + 6, *campo[4];
       int c;
@@ -351,7 +367,7 @@ static void carregar(void) {
       linhas[nLinhas].itens = -1;
       snprintf(linhas[nLinhas].chave,  FIL_CHAVE,  "%s", campo[0]);
       snprintf(linhas[nLinhas].titulo, FIL_TITULO, "%s", p);
-      linhas[nLinhas].oculta = limita(atoi(campo[1]), 0, OC_SUGESTAO);
+      linhas[nLinhas].oculta = limita(atoi(campo[1]), 0, OC_COLECAO);
       linhas[nLinhas].tipo   = limita(atoi(campo[2]), 0, FIL_TIPO_N - 1);
       linhas[nLinhas].tam    = limita(atoi(campo[3]), 0, FIL_TAM_N - 1);
       if (!tipoValido(linhas[nLinhas].chave, linhas[nLinhas].tipo))
@@ -423,7 +439,9 @@ void fil_definir_hero_fonte(const char *chave) {
 // fora. Ver fil_estado. Devolve, para a linha i, quantas ligadas ha antes dela.
 static int posicaoLigada(int i) {
   int k, p = 0;
-  for (k = 0; k < i && k < nLinhas; k++) if (!linhas[k].oculta) p++;
+  for (k = 0; k < i && k < nLinhas; k++)
+    if (!linhas[k].oculta && !linhas[k].ocultaConta && !linhas[k].emColecao &&
+        fil_origem_de(linhas[k].chave) == FIL_ORIGEM_CATALOGO) p++;
   return p;
 }
 
@@ -434,7 +452,8 @@ static int posicaoLigada(int i) {
 static void ocultarAlem(int n) {
   int i, p = 0;
   for (i = 0; i < nLinhas; i++) {
-    if (linhas[i].oculta) continue;
+    if (linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao ||
+        fil_origem_de(linhas[i].chave) != FIL_ORIGEM_CATALOGO) continue;
     if (p >= n) { linhas[i].oculta = OC_PESSOA; linhas[i].fila = 0; }
     p++;
   }
@@ -484,8 +503,9 @@ int fil_estado(int i) {
   int r = FIL_FORA;
   pthread_mutex_lock(&trava);
   garantir();
-  if (i >= 0 && i < nLinhas && !linhas[i].oculta)
-    r = posicaoLigada(i) < limite ? FIL_NA_HOME : FIL_NA_FILA;
+  if (i >= 0 && i < nLinhas && !linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao)
+    r = fil_origem_de(linhas[i].chave) != FIL_ORIGEM_CATALOGO ||
+        posicaoLigada(i) < limite ? FIL_NA_HOME : FIL_NA_FILA;
   pthread_mutex_unlock(&trava);
   return r;
 }
@@ -500,26 +520,43 @@ int fil_estado_chave(const char *chave) {
   pthread_mutex_lock(&trava);
   garantir();
   i = achar(chave);
-  if (i >= 0) r = linhas[i].oculta ? FIL_FORA
-                : (posicaoLigada(i) < limite ? FIL_NA_HOME : FIL_NA_FILA);
+  if (i >= 0) r = linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao ? FIL_FORA
+                : (fil_origem_de(linhas[i].chave) != FIL_ORIGEM_CATALOGO ||
+                   posicaoLigada(i) < limite ? FIL_NA_HOME : FIL_NA_FILA);
   pthread_mutex_unlock(&trava);
   return r;
 }
 
 int fil_n_na_home(void) {
-  int i, p = 0;
+  int i, p = 0, livres = 0;
   pthread_mutex_lock(&trava);
   garantir();
-  for (i = 0; i < nLinhas; i++) if (!linhas[i].oculta) p++;
+  for (i = 0; i < nLinhas; i++) if (!linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao) {
+    if (fil_origem_de(linhas[i].chave) == FIL_ORIGEM_CATALOGO) p++;
+    else livres++;
+  }
   pthread_mutex_unlock(&trava);
-  return p < limite ? p : limite;
+  return livres + (p < limite ? p : limite);
+}
+int fil_n_capacidade(void) {
+  int p = 0;
+  pthread_mutex_lock(&trava);
+  garantir();
+  for (int i = 0; i < nLinhas; i++)
+    if (!linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao &&
+        fil_origem_de(linhas[i].chave) == FIL_ORIGEM_CATALOGO) p++;
+  int n = p < limite ? p : limite;
+  pthread_mutex_unlock(&trava);
+  return n;
 }
 
 int fil_n_fila(void) {
   int i, p = 0;
   pthread_mutex_lock(&trava);
   garantir();
-  for (i = 0; i < nLinhas; i++) if (!linhas[i].oculta) p++;
+  for (i = 0; i < nLinhas; i++)
+    if (!linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao &&
+        fil_origem_de(linhas[i].chave) == FIL_ORIGEM_CATALOGO) p++;
   pthread_mutex_unlock(&trava);
   return p > limite ? p - limite : 0;
 }
@@ -536,6 +573,7 @@ int fil_adicionar(int i, int *estado) {
   garantir();
   if (i < 0 || i >= nLinhas) { pthread_mutex_unlock(&trava); if (estado) *estado = FIL_FORA; return i; }
   linhas[i].oculta = 0;
+  linhas[i].visPessoal = 1;
   for (j = nLinhas - 1; j >= 0; j--) if (!linhas[j].oculta && j != i) { ultimo = j; break; }
   // Ja esta depois do ultimo ligado: nao ha para onde ir.
   if (ultimo >= 0 && i < ultimo) {
@@ -545,7 +583,8 @@ int fil_adicionar(int i, int *estado) {
     i = ultimo;
     ordemLocal = 1;
   }
-  linhas[i].fila = posicaoLigada(i) < limite ? 0 : 1;
+  linhas[i].fila = fil_origem_de(linhas[i].chave) != FIL_ORIGEM_CATALOGO ||
+                  posicaoLigada(i) < limite ? 0 : 1;
   if (estado) *estado = linhas[i].fila ? FIL_NA_FILA : FIL_NA_HOME;
   gravar();
   pthread_mutex_unlock(&trava);
@@ -566,7 +605,11 @@ void fil_normalizar(void) {
   pthread_mutex_lock(&trava);
   garantir();
   for (i = 0; i < nLinhas; i++) {
-    if (linhas[i].oculta) continue;
+    if (linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao) continue;
+    if (fil_origem_de(linhas[i].chave) != FIL_ORIGEM_CATALOGO) {
+      if (linhas[i].fila) { linhas[i].fila = 0; mudou = 1; }
+      continue;
+    }
     if (p < limite) { if (linhas[i].fila) { linhas[i].fila = 0; mudou = 1; } }
     else if (!linhas[i].fila && !linhas[i].naHome) { linhas[i].oculta = OC_PESSOA; mudou = 1; continue; }
     p++;
@@ -580,7 +623,7 @@ void fil_normalizar(void) {
 void fil_remover(int i) {
   pthread_mutex_lock(&trava);
   garantir();
-  if (i >= 0 && i < nLinhas && linhas[i].oculta != OC_PESSOA) { linhas[i].oculta = OC_PESSOA; linhas[i].fila = 0; gravar(); }
+  if (i >= 0 && i < nLinhas && linhas[i].oculta != OC_PESSOA) { linhas[i].oculta = OC_PESSOA; linhas[i].visPessoal = 1; linhas[i].fila = 0; gravar(); }
   pthread_mutex_unlock(&trava);
 }
 
@@ -623,7 +666,7 @@ static int doAddon(const char *chave, const char *id, const char *base) {
 }
 
 static int temEscolha(const Linha *l) {
-  return l->oculta == OC_PESSOA || l->fila || l->tipo != FIL_TIPO_AUTO ||
+  return l->visPessoal || l->oculta == OC_PESSOA || l->fila || l->tipo != FIL_TIPO_AUTO ||
          l->tam != FIL_TAM_PADRAO || (heroFonte[0] && !strcmp(heroFonte, l->chave));
 }
 
@@ -870,7 +913,7 @@ int fil_escolhida(const char *chave) {
   pthread_mutex_lock(&trava);
   garantir();
   i = achar(chave);
-  if (i >= 0 && !linhas[i].oculta) {
+  if (i >= 0 && !linhas[i].oculta && !linhas[i].ocultaConta && !linhas[i].emColecao) {
     int p = posicaoLigada(i);
     if (p < limite || linhas[i].fila) r = p;
   }
@@ -878,10 +921,143 @@ int fil_escolhida(const char *chave) {
   return r;
 }
 
+void fil_colecao_catalogo_removido(const char *chave) {
+  // Retain removed collection members as known, selectable rows, without
+  // promoting them into the next free catalogue slots (#233).
+  fil_registrar_se_couber(chave, "", "", "");
+  pthread_mutex_lock(&trava);
+  int i = achar(chave);
+  if (i >= 0 && !temEscolha(&linhas[i]) && !linhas[i].naHome &&
+      !(ordemLocal && linhas[i].doDisco && !linhas[i].oculta &&
+        posicaoLigada(i) < limite) && linhas[i].oculta != OC_COLECAO) {
+    linhas[i].oculta = OC_COLECAO;
+    registroSujo = 1;
+  }
+  pthread_mutex_unlock(&trava);
+}
+
+void fil_colecao_catalogo_restaurado(const char *chave) {
+  pthread_mutex_lock(&trava);
+  garantir();
+  int i = achar(chave);
+  if (i >= 0 && linhas[i].oculta == OC_COLECAO) {
+    linhas[i].oculta = 0;
+    registroSujo = 1;
+  }
+  pthread_mutex_unlock(&trava);
+}
+
+int fil_conta_dono(const char *usuario) {
+  if (!usuario) usuario = "";
+  pthread_mutex_lock(&trava);
+  garantir();
+  int mudou = donoAuto[0] && strcmp(donoAuto, usuario);
+  if (mudou) for (int i = 0; i < nLinhas; i++) {
+    if (linhas[i].oculta == OC_COLECAO) linhas[i].oculta = OC_SUGESTAO;
+    linhas[i].ocultaConta = 0; linhas[i].emColecao = 0;
+  }
+  if (strcmp(donoAuto, usuario)) {
+    snprintf(donoAuto, sizeof donoAuto, "%s", usuario);
+    gravar();
+  }
+  pthread_mutex_unlock(&trava);
+  return mudou;
+}
+
 void fil_gravar_registro(void) {
   pthread_mutex_lock(&trava);
   if (registroSujo) { registroSujo = 0; gravar(); }
   pthread_mutex_unlock(&trava);
+}
+
+void fil_colecoes_reconciliar(const char *const *chaves,
+                              const char *const *titulos,
+                              const int *ocultas, int n, int autoritativo) {
+  int mudou = 0, w = 0;
+  if (n < 0 || n > FIL_MAX || (n && !chaves)) return;
+  pthread_mutex_lock(&trava);
+  garantir();
+  for (int i = 0; i < nLinhas; i++) {
+    int viva = 1;
+    if (autoritativo && fil_origem_de(linhas[i].chave) == FIL_ORIGEM_COLECAO) {
+      viva = 0;
+      for (int j = 0; j < n && !viva; j++)
+        viva = chaves[j] && !strcmp(linhas[i].chave, chaves[j]);
+    }
+    if (viva) { if (w != i) linhas[w] = linhas[i]; w++; }
+    else mudou = 1;
+  }
+  nLinhas = w;
+  if (mudou) registroSujo = 1;
+  pthread_mutex_unlock(&trava);
+  // Register all known collection groups, even while Settings is the active
+  // screen and Home is not drawing. A rename keeps the same local identity.
+  for (int j = 0; j < n; j++) {
+    if (!chaves[j] || fil_origem_de(chaves[j]) != FIL_ORIGEM_COLECAO) continue;
+    fil_registrar(chaves[j], titulos ? titulos[j] : "", "", "", -1);
+    pthread_mutex_lock(&trava);
+    int i = achar(chaves[j]);
+    if (i >= 0) {
+      int o = ocultas && ocultas[j];
+      if (linhas[i].ocultaConta != o) { linhas[i].ocultaConta = o; revisao++; }
+      if (titulos && titulos[j] && strcmp(linhas[i].titulo, titulos[j])) {
+        snprintf(linhas[i].titulo, sizeof linhas[i].titulo, "%s", titulos[j]);
+        registroSujo = 1;
+      }
+      linhas[i].fila = 0;
+    }
+    pthread_mutex_unlock(&trava);
+  }
+  fil_gravar_registro();
+}
+
+int fil_copiar_chaves(char (*saida)[FIL_CHAVE], int max) {
+  int n;
+  if (!saida || max < 1) return 0;
+  pthread_mutex_lock(&trava);
+  garantir();
+  n = nLinhas < max ? nLinhas : max;
+  for (int i = 0; i < n; i++) memcpy(saida[i], linhas[i].chave, FIL_CHAVE);
+  pthread_mutex_unlock(&trava);
+  return n;
+}
+
+void fil_conta_reconciliar(const char *const *chaves, const int *ocultas,
+                           const int *emColecao, int n) {
+  static Linha novo[FIL_MAX];
+  int slots[FIL_MAX], m = 0, k = 0;
+  char usados[FIL_MAX] = {0};
+  if (n < 0 || n > FIL_MAX || (n && !chaves)) return;
+  pthread_mutex_lock(&trava);
+  garantir();
+  for (int i = 0; i < nLinhas; i++) {
+    int o = 0, c = 0;
+    for (int j = 0; j < n; j++)
+      if (chaves[j] && !strcmp(chaves[j], linhas[i].chave)) {
+        o = ocultas && ocultas[j]; c = emColecao && emColecao[j]; break;
+      }
+    if (linhas[i].ocultaConta != o) { linhas[i].ocultaConta = o; revisao++; }
+    if (linhas[i].emColecao != c) { linhas[i].emColecao = c; revisao++; }
+    if (fil_origem_de(linhas[i].chave) != FIL_ORIGEM_APP) slots[m++] = i;
+  }
+  if (!ordemLocal && m) {
+    memcpy(novo, linhas, sizeof(Linha) * (size_t)nLinhas);
+    for (int j = 0; j < n; j++) {
+      int i = chaves[j] ? achar(chaves[j]) : -1;
+      if (i >= 0 && !usados[i] && fil_origem_de(linhas[i].chave) != FIL_ORIGEM_APP) {
+        usados[i] = 1; novo[slots[k++]] = linhas[i];
+      }
+    }
+    for (int i = 0; i < nLinhas; i++)
+      if (!usados[i] && fil_origem_de(linhas[i].chave) != FIL_ORIGEM_APP)
+        novo[slots[k++]] = linhas[i];
+    if (memcmp(novo, linhas, sizeof(Linha) * (size_t)nLinhas)) {
+      memcpy(linhas, novo, sizeof(Linha) * (size_t)nLinhas);
+      registroSujo = 1;
+    }
+  }
+  pthread_mutex_unlock(&trava);
+  fil_gravar_registro();
 }
 
 int fil_n(void) { int v; pthread_mutex_lock(&trava); garantir(); v = nLinhas; pthread_mutex_unlock(&trava); return v; }
@@ -895,7 +1071,7 @@ const char *fil_titulo(int i) {
   if (i < 0 || i >= nLinhas) return "";
   return linhas[i].titulo[0] ? linhas[i].titulo : linhas[i].chave;
 }
-int fil_linha_oculta(int i) { return (i >= 0 && i < nLinhas && linhas[i].oculta) ? 1 : 0; }
+int fil_linha_oculta(int i) { return (i >= 0 && i < nLinhas && (linhas[i].oculta || linhas[i].ocultaConta || linhas[i].emColecao)) ? 1 : 0; }
 int fil_linha_tipo(int i)   { return (i >= 0 && i < nLinhas) ? linhas[i].tipo : FIL_TIPO_AUTO; }
 int fil_linha_tam(int i)    { return (i >= 0 && i < nLinhas) ? linhas[i].tam : FIL_TAM_PADRAO; }
 
@@ -928,7 +1104,7 @@ int fil_aceita_tipo(int i)  { return (i >= 0 && i < nLinhas) && !formaFixa(linha
 
 void fil_alternar(int i) {
   pthread_mutex_lock(&trava);
-  if (i >= 0 && i < nLinhas) { linhas[i].oculta = linhas[i].oculta ? 0 : OC_PESSOA; gravar(); }
+  if (i >= 0 && i < nLinhas) { linhas[i].oculta = linhas[i].oculta ? 0 : OC_PESSOA; linhas[i].visPessoal = 1; gravar(); }
   pthread_mutex_unlock(&trava);
 }
 
@@ -1181,7 +1357,8 @@ int fil_mover(int i, int direcao) {
     // ligada; e o que a home tambem entende, porque ela e as primeiras N
     // ligadas na ordem.
     j = i + dir;
-    while (j >= 0 && j < nLinhas && linhas[j].oculta) j += dir;
+    while (j >= 0 && j < nLinhas &&
+           (linhas[j].oculta || linhas[j].ocultaConta || linhas[j].emColecao)) j += dir;
     if (j >= 0 && j < nLinhas) {
       Linha t = linhas[i]; linhas[i] = linhas[j]; linhas[j] = t;
       // A partir do primeiro movimento a ordem local EXISTE e passa a vencer
@@ -1303,7 +1480,7 @@ int fil_oculta(const char *chave) {
   i = achar(chave);
   // So a escolha da pessoa desliga: sugestao (OC_SUGESTAO) nao e "nao quero",
   // e a ordem da conta ainda pode pedir o catalogo.
-  if (i >= 0) v = linhas[i].oculta == OC_PESSOA;
+  if (i >= 0) v = linhas[i].oculta == OC_PESSOA || linhas[i].oculta == OC_COLECAO || linhas[i].ocultaConta;
   pthread_mutex_unlock(&trava);
   return v;
 }
@@ -1396,6 +1573,7 @@ void fil_esquecer(void) {
   pthread_mutex_lock(&trava);
   nLinhas = 0;
   ordemLocal = 0;
+  donoAuto[0] = 0;
   limite = FIL_LIMITE_PADRAO;
   limiteOrigem = 0;
   carregado = 1;   // nao reler o arquivo de quem saiu

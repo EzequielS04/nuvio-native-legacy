@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include "../src/descoberta.c"
 Uint32 SDL_GetTicks(void) { return 0; }
+unsigned recomenda_geracao(void) { return 1; }
 
 // ------------------------------------------------------------------ o addon
 #define BASE "https://xperience.example/abc"
@@ -64,6 +65,8 @@ void addons_manifesto_lido(int i, const char *corpo) { (void)i; (void)corpo; son
 // ------------------------------------------------------------------ a rede
 static int pedidosDeCatalogo;
 static int snapshotValido, snapshotTem;
+static int preservarFixture;
+static CatFileira antigaFixture;
 char *rede_baixar(const char *url, int t) {
   (void)t;
   if (strstr(url, "/manifest.json")) return strdup(MANIFESTO);
@@ -112,10 +115,15 @@ const char *sessao_usuario(void) { return ""; }
 void homeestado_contexto(HomeContexto *c) { *c = (HomeContexto){0}; c->perfil = 1; }
 int homeestado_mudancas(const HomeContexto *a, const HomeContexto *b) { (void)a; (void)b; return 0; }
 const char *homeestado_mudancas_texto(int m, char *b, unsigned t) { (void)m; if (b && t) b[0] = 0; return b; }
-const CatFileira *cat_fileira(int i) { (void)i; return NULL; }
-int cat_n_fileiras(void) { return 0; }
+const CatFileira *cat_fileira(int i) { return preservarFixture && i == 0 ? &antigaFixture : NULL; }
+int cat_n_fileiras(void) { return preservarFixture; }
 int cat_copiar_fileira(const char *k, CatItem *o, int m, CatFileira *meta) {
-  (void)k; (void)o; (void)m; (void)meta; return 0;
+  (void)meta;
+  if (preservarFixture && m > 0 && !strcmp(k, antigaFixture.chave)) {
+    memset(o, 0, sizeof *o); snprintf(o->imdb, sizeof o->imdb, "tt_preserved");
+    return 1;
+  }
+  return 0;
 }
 int cat_gravar_cache_se_identidade(const char *d, const char *u, int p) {
   (void)d; (void)u; (void)p; return 1;
@@ -233,11 +241,7 @@ static void listar(const char *rotulo) {
 }
 
 static void zerarColecoes(void) {
-  // col_definir_json recusa vazio de proposito (vazio nao apaga). Uma colecao
-  // de um addon que nao existe aqui e o jeito honesto de voltar ao zero.
-  col_definir_json("{\"collections\":[{\"id\":\"z\",\"title\":\"Z\",\"folders\":"
-                   "[{\"id\":\"zf\",\"title\":\"Z\",\"sources\":[{\"provider\":\"addon\","
-                   "\"addonId\":\"nao.instalado\",\"type\":\"movie\",\"catalogId\":\"z\"}]}]}]}");
+  assert(col_definir_json("{\"collections\":[]}") == 0 && col_n() == 0);
 }
 
 int main(void) {
@@ -256,6 +260,28 @@ int main(void) {
     assert(fileiraPodeSerPreservada(&antiga));
     puts("ok  same-source rows are rejected without the current-profile snapshot");
     addonAtivo = 1; snapshotValido = snapshotTem = 0;
+  }
+  {
+    // CW/social do not consume the two catalogue slots, including when a
+    // missing source is recovered from the accepted profile snapshot.
+    CatItem *it = calloc(8, sizeof *it);
+    CatFileira rows[5] = {0};
+    int n = 3, cap = 8, nr = 3;
+    snprintf(rows[0].chave, sizeof rows[0].chave, "continue_watching");
+    snprintf(rows[1].chave, sizeof rows[1].chave, "social_activity");
+    snprintf(rows[2].chave, sizeof rows[2].chave, "current-row");
+    snprintf(rows[2].base, sizeof rows[2].base, "%s", BASE);
+    snprintf(antigaFixture.chave, sizeof antigaFixture.chave, "old-row");
+    snprintf(antigaFixture.base, sizeof antigaFixture.base, "%s", BASE);
+    limiteFileiras = 2; preservarFixture = snapshotValido = snapshotTem = 1;
+    preservarFileirasAusentes(&it, &n, &cap, rows, &nr);
+    assert(nr == 4 && n == 4 && !strcmp(rows[3].chave, "old-row"));
+    assert(!strcmp(it[3].imdb, "tt_preserved"));
+    preservarFileirasAusentes(&it, &n, &cap, rows, &nr);
+    assert(nr == 4 && n == 4); // idempotent and quota remains bounded
+    free(it); preservarFixture = snapshotValido = snapshotTem = 0;
+    limiteFileiras = 16;
+    puts("ok  #233: missing-source preservation keeps catalogue quota independent of fixed rows");
   }
   // ---------------------------------------------------------------- caso 1
   // A colecao chega ANTES do ciclo (o caminho normal: sync em ~2 s, manifestos

@@ -7,6 +7,8 @@
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
+#include <pthread.h>
+static pthread_mutex_t colTrava = PTHREAD_MUTEX_INITIALIZER;
 static ColFolder folders[COL_MAX];
 static int count;
 static ColFolder extras[COL_EXTRA_MAX];
@@ -17,11 +19,12 @@ static int nExtras;
 // continuar vazio — mostrar o pacote ali seria mostrar as colecoes de outro.
 static char dirPacote[600];
 static int semConta;
+static int contaAplicada;
 static void localiza(char *value,size_t cap,const char *dir) {
   if(!value[0]||strstr(value,"://")||value[0]=='/')return;
   char rel[600];snprintf(rel,sizeof rel,"%s",value);snprintf(value,cap,"%s/%s",dir,rel);
 }
-int col_n(void) { return count; }
+int col_n(void) { int n; pthread_mutex_lock(&colTrava); n = count; pthread_mutex_unlock(&colTrava); return n; }
 
 // SOBE A CADA TROCA DO CONJUNTO DE PASTAS. A home decide se remonta por uma
 // assinatura, e ate agora essa assinatura so olhava as fileiras de CATALOGO —
@@ -32,7 +35,8 @@ int col_n(void) { return count; }
 // Contador e nao `count`: trocar quinze pastas por outras quinze deixa o
 // numero igual e a home errada.
 static unsigned revisao;
-unsigned col_revisao(void) { return revisao; }
+unsigned col_revisao(void) { unsigned n; pthread_mutex_lock(&colTrava); n = revisao; pthread_mutex_unlock(&colTrava); return n; }
+int col_tem_conta(void) { int n; pthread_mutex_lock(&colTrava); n = contaAplicada; pthread_mutex_unlock(&colTrava); return n; }
 // Tira as extras que estao em folders[] e poe de volta as de agora. Chamada
 // depois de TODA reconstrucao (pacote ou conta) e a cada troca do conjunto.
 static void aplicarExtras(void) {
@@ -44,6 +48,7 @@ static void aplicarExtras(void) {
 
 int col_extra_definir(const ColFolder *v, int n) {
   int i;
+  pthread_mutex_lock(&colTrava);
   if (n < 0) n = 0;
   if (n > COL_EXTRA_MAX) n = COL_EXTRA_MAX;
   nExtras = 0;
@@ -57,6 +62,7 @@ int col_extra_definir(const ColFolder *v, int n) {
   // A home so remonta quando ESTE numero muda. Sem o bump, fixar uma lista na
   // Home so apareceria no proximo ciclo de rede.
   revisao++;
+  pthread_mutex_unlock(&colTrava);
   return nExtras;
 }
 
@@ -69,8 +75,10 @@ static void resolverBases(ColFolder *v) {
       snprintf(v->sources[s].base, sizeof v->sources[s].base, "%s", addons_base_por_id(v->sources[s].addonId));
 }
 const ColFolder *col_folder(int i) {
-  if (i < 0 || i >= count) return NULL;
+  pthread_mutex_lock(&colTrava);
+  if (i < 0 || i >= count) { pthread_mutex_unlock(&colTrava); return NULL; }
   resolverBases(&folders[i]);
+  pthread_mutex_unlock(&colTrava);
   return &folders[i];
 }
 // O ADDON DE UM GRUPO DE COLECOES, quando ha um so. Um grupo e um conjunto de
@@ -160,11 +168,13 @@ int col_grupo(const char *name,int *indices,int max) {
 // chegou mas ainda nao da para reconhece-la", que produzem o MESMO sintoma.
 int col_fontes_sem_base(void) {
   int i, s, n = 0;
+  pthread_mutex_lock(&colTrava);
   for (i = 0; i < count; i++) {
-    resolverBases(&folders[i]);
     for (s = 0; s < folders[i].nSources; s++)
-      if (!folders[i].sources[s].prov[0] && !folders[i].sources[s].base[0]) n++;
+      if (!folders[i].sources[s].prov[0] && !folders[i].sources[s].base[0] &&
+          !addons_base_por_id(folders[i].sources[s].addonId)[0]) n++;
   }
+  pthread_mutex_unlock(&colTrava);
   return n;
 }
 
@@ -173,6 +183,7 @@ int col_fontes_sem_base(void) {
 void col_despejar_fontes(int max) {
   char seg[120];
   int i, s2, n = 0;
+  pthread_mutex_lock(&colTrava);
   for (i = 0; i < count && n < max; i++) {
     resolverBases(&folders[i]);
     for (s2 = 0; s2 < folders[i].nSources && n < max; s2++, n++) {
@@ -198,6 +209,7 @@ void col_despejar_fontes(int max) {
                v->type, v->catId);
     }
   }
+  pthread_mutex_unlock(&colTrava);
 }
 
 // POR QUE ESTA FILEIRA NAO FOI ENGOLIDA. O despejo de fontes nao respondia
@@ -226,13 +238,14 @@ int col_diagnostico(const char *base, const char *type, const char *id,
   int i, s, melhor = 0;
   if (grupo && n) grupo[0] = 0;
   if (!base || !base[0] || !type || !id) return 0;
+  pthread_mutex_lock(&colTrava);
   for (i = 0; i < count; i++) {
-    resolverBases(&folders[i]);
     for (s = 0; s < folders[i].nSources; s++) {
       const ColSource *v = &folders[i].sources[s];
       int nivel;
       if (v->prov[0]) continue;   // fonte tmdb/trakt nao casa com catalogo de addon
-      if (strcmp(v->base, base)) continue;
+      const char *b = v->base[0] ? v->base : addons_base_por_id(v->addonId);
+      if (strcmp(b, base)) continue;
       nivel = 1;
       if (!strcmp(v->type, type)) {
         nivel = 2;
@@ -241,10 +254,12 @@ int col_diagnostico(const char *base, const char *type, const char *id,
       if (nivel > melhor) {
         melhor = nivel;
         if (grupo && n) snprintf(grupo, n, "%s", folders[i].group);
-        if (melhor == 3) return 3;
+        if (melhor == 3) goto pronto;
       }
     }
   }
+pronto:
+  pthread_mutex_unlock(&colTrava);
   return melhor;
 }
 
@@ -253,11 +268,23 @@ const ColFolder *col_por_catalogo(const char *base,const char *type,const char *
   // com QUALQUER fonte cuja base ainda estivesse vazia — um falso positivo que
   // esconderia a fileira errada.
   if(!base||!base[0]||!type||!id) return NULL;
-  for(int i=0;i<count;i++) { resolverBases(&folders[i]);
+  // Discovery runs concurrently with main-thread account sync. Never let it
+  // observe the cleared/partially parsed builder or keep a pointer that sync
+  // can replace after the lock is released.
+  static __thread ColFolder copia;
+  const ColFolder *resultado = NULL;
+  pthread_mutex_lock(&colTrava);
+  for(int i=0;i<count;i++) {
     for(int s=0;s<folders[i].nSources;s++) {
       const ColSource *v=&folders[i].sources[s];
-      if(!strcmp(v->base,base)&&!strcmp(v->type,type)&&!strcmp(v->catId,id)) return &folders[i];
-    } }return NULL;
+      const char *b = v->base[0] ? v->base : addons_base_por_id(v->addonId);
+      if(!strcmp(b,base)&&!strcmp(v->type,type)&&!strcmp(v->catId,id)) {
+        copia = folders[i]; resolverBases(&copia); resultado = &copia; goto pronto;
+      }
+    } }
+pronto:
+  pthread_mutex_unlock(&colTrava);
+  return resultado;
 }
 /* Arte editorial: JPEG primeiro, PNG depois.
  *
@@ -277,7 +304,7 @@ static int arteEditorial(char *saida,size_t n,const char *dir,const char *sub,
   return !access(saida,R_OK);
 }
 
-int col_carregar(const char *dir) {
+static int carregarPacote(const char *dir) {
   revisao++;
   semConta = 0;
   if (dir && dir != dirPacote) snprintf(dirPacote, sizeof dirPacote, "%s", dir);
@@ -325,6 +352,12 @@ int col_carregar(const char *dir) {
     }
   }free(body);aplicarExtras();return count;
 }
+int col_carregar(const char *dir) {
+  pthread_mutex_lock(&colTrava);
+  int n = carregarPacote(dir);
+  pthread_mutex_unlock(&colTrava);
+  return n;
+}
 const char *col_banner(const ColFolder *f) {
   if (!f) return "";
   if (f->hero[0]) return f->hero;
@@ -368,15 +401,15 @@ static char fPrimeiraPulada[128];
 
 static void lerColecaoWeb(const char *c, const char *ce) {
   char group[64] = "", groupId[64] = "", fundo[512] = "";   // js_texto nao zera o que nao acha
-  js_texto(c, ce, "title", group, sizeof group);
-  js_texto(c, ce, "id", groupId, sizeof groupId);
-  js_texto(c, ce, "backdropImageUrl", fundo, sizeof fundo);
+  js_texto_raiz_em(c, ce, "title", group, sizeof group);
+  js_texto_raiz_em(c, ce, "id", groupId, sizeof groupId);
+  js_texto_raiz_em(c, ce, "backdropImageUrl", fundo, sizeof fundo);
   if (!group[0]) return;
   for (const char *p = js_array(c, ce, "folders"); p && count < COL_MAX; p = js_prox(js_fim(p))) {
     const char *pe = js_fim(p); ColFolder *v = &folders[count]; memset(v, 0, sizeof *v);
     snprintf(v->group, sizeof v->group, "%s", group);
     snprintf(v->groupId, sizeof v->groupId, "%s", groupId);
-    js_texto(p, pe, "id", v->id, sizeof v->id); js_texto(p, pe, "title", v->title, sizeof v->title);
+    js_texto_raiz_em(p, pe, "id", v->id, sizeof v->id); js_texto_raiz_em(p, pe, "title", v->title, sizeof v->title);
     js_texto(p, pe, "coverImageUrl", v->cover, sizeof v->cover);
     js_texto(p, pe, "heroBackdropUrl", v->hero, sizeof v->hero);
     snprintf(v->groupBackdrop, sizeof v->groupBackdrop, "%s", fundo);
@@ -484,42 +517,264 @@ static int arteConta;
 static char *ultimoJson;
 static int ultimoComConta;
 
-int col_definir_json(const char *json) {
-  char *solto = NULL;
-  int fundosXp = 0, arteDaConta = 0;
-  const char *arr, *fim;
-  int antes, novas, recarregou = 0;
-  if (!json || !*json) return 0;
-  { char *copia = strdup(json);
-    free(ultimoJson);
-    ultimoJson = copia; }
-  // Linha da RPC: [{collections_json: ...}] ou {collections_json: ...}.
-  { const char *linha = *json == '[' ? js_raiz_array(json) : json;
-    const char *cj = linha ? strstr(linha, "\"collections_json\"") : NULL;
-    if (cj) {
-      const char *v = strchr(cj + 18, ':');
-      while (v && (*v == ':' || *v == ' ')) v++;
-      if (v && *v == '"') {               // string escapada
-        size_t n = strlen(v);
-        solto = malloc(n + 1);
-        if (!solto) return 0;
-        if (!js_texto(cj, NULL, "collections_json", solto, (unsigned)n + 1)) { free(solto); return 0; }
-        json = solto;
-      } else if (v) json = v;
-    } }
-  fim = json + strlen(json);
+// Only a complete array in a recognized response can replace the account
+// snapshot. A missing RPC row, null, or a truncated response is not a deletion.
+static const char *jsonEspacos(const char *p) {
+  while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+  return p;
+}
+
+static const char *jsonCadeia(const char *p) {
+  if (*p++ != '"') return NULL;
+  while (*p && *p != '"') {
+    if ((unsigned char)*p < 0x20) return NULL;
+    if (*p++ != '\\') continue;
+    if (!*p) return NULL;
+    if (*p == 'u') {
+      p++;
+      for (int i = 0; i < 4; i++, p++)
+        if (!((*p >= '0' && *p <= '9') || (*p >= 'a' && *p <= 'f') ||
+              (*p >= 'A' && *p <= 'F'))) return NULL;
+    } else {
+      if (!strchr("\"\\/bfnrt", *p)) return NULL;
+      p++;
+    }
+  }
+  return *p == '"' ? p + 1 : NULL;
+}
+
+// js_fim locates a closing delimiter, but does not validate JSON grammar.
+// Validate every value, including fields after collections, before accepting
+// an authoritative snapshot or admitting it to the last-good sync cache.
+static const char *jsonValor(const char *p, unsigned profundidade) {
+  p = jsonEspacos(p);
+  if (profundidade > 64) return NULL;
+  if (*p == '"') return jsonCadeia(p);
+  if (*p == '{' || *p == '[') {
+    int objeto = *p++ == '{';
+    char fecha = objeto ? '}' : ']';
+    p = jsonEspacos(p);
+    if (*p == fecha) return p + 1;
+    for (;;) {
+      if (objeto) {
+        if (!(p = jsonCadeia(p))) return NULL;
+        p = jsonEspacos(p);
+        if (*p++ != ':') return NULL;
+      }
+      if (!(p = jsonValor(p, profundidade + 1))) return NULL;
+      p = jsonEspacos(p);
+      if (*p == fecha) return p + 1;
+      if (*p++ != ',') return NULL;
+      p = jsonEspacos(p);
+    }
+  }
+  if (!strncmp(p, "true", 4)) return p + 4;
+  if (!strncmp(p, "false", 5)) return p + 5;
+  if (!strncmp(p, "null", 4)) return p + 4;
+  if (*p == '-') p++;
+  if (*p == '0') p++;
+  else {
+    if (*p < '1' || *p > '9') return NULL;
+    do { p++; } while (*p >= '0' && *p <= '9');
+  }
+  if (*p == '.') {
+    p++;
+    if (*p < '0' || *p > '9') return NULL;
+    do { p++; } while (*p >= '0' && *p <= '9');
+  }
+  if (*p == 'e' || *p == 'E') {
+    p++;
+    if (*p == '+' || *p == '-') p++;
+    if (*p < '0' || *p > '9') return NULL;
+    do { p++; } while (*p >= '0' && *p <= '9');
+  }
+  return p;
+}
+
+static int jsonCompleto(const char *p) {
+  const char *fim = p ? jsonValor(p, 0) : NULL;
+  return fim && !*jsonEspacos(fim);
+}
+
+// The display-text decoder normalizes escaped whitespace. A JSON snapshot
+// needs the exact decoded controls, so invalid controls inside strings cannot
+// become valid spaces and an embedded NUL cannot hide a malformed suffix.
+static int jsonDecodificar(const char *p, char *saida) {
+  p++;
+  while (*p != '"') {
+    if (*p != '\\') { *saida++ = *p++; continue; }
+    p++;
+    if (*p == 'u') {
+      char hex[5], trecho[15], utf8[8];
+      memcpy(hex, p + 1, 4); hex[4] = 0;
+      unsigned cp = (unsigned)strtoul(hex, NULL, 16);
+      int n = 6;
+      if (!cp) return 0;
+      if (cp >= 0xD800 && cp <= 0xDBFF && !strncmp(p + 5, "\\u", 2)) {
+        memcpy(hex, p + 7, 4);
+        unsigned lo = (unsigned)strtoul(hex, NULL, 16);
+        if (lo >= 0xDC00 && lo <= 0xDFFF) n = 12;
+      }
+      trecho[0] = '"'; memcpy(trecho + 1, p - 1, (size_t)n);
+      trecho[n + 1] = '"'; trecho[n + 2] = 0;
+      if (!js_cadeia(trecho, utf8, sizeof utf8)) return 0;
+      size_t k = strlen(utf8); memcpy(saida, utf8, k); saida += k;
+      p += n - 1;
+    } else {
+      char c = *p++;
+      switch (c) {
+        case 'b': c = '\b'; break;
+        case 'f': c = '\f'; break;
+        case 'n': c = '\n'; break;
+        case 'r': c = '\r'; break;
+        case 't': c = '\t'; break;
+      }
+      *saida++ = c;
+    }
+  }
+  *saida = 0;
+  return 1;
+}
+
+static const char *valorColecoes(const char *p, const char *nome) {
+  if (!p || *p++ != '{') return NULL;
+  for (;;) {
+    const char *k;
+    while (*p && (unsigned char)*p <= ' ') p++;
+    if (*p != '"') return NULL;
+    k = p++;
+    while (*p && *p != '"') { if (*p == '\\' && p[1]) p++; p++; }
+    if (!*p) return NULL;
+    p++;
+    int mesma = (size_t)(p - k) == strlen(nome) && !strncmp(k, nome, (size_t)(p - k));
+    while (*p && (unsigned char)*p <= ' ') p++;
+    if (*p++ != ':') return NULL;
+    while (*p && (unsigned char)*p <= ' ') p++;
+    if (mesma) return p;
+    if (*p == '{' || *p == '[') p = js_fim(p);
+    else if (*p == '"') {
+      p++;
+      while (*p && *p != '"') { if (*p == '\\' && p[1]) p++; p++; }
+      if (*p) p++;
+    } else while (*p && *p != ',' && *p != '}') p++;
+    while (*p && (unsigned char)*p <= ' ') p++;
+    if (*p++ != ',') return NULL;
+  }
+}
+
+static int arrayCompleto(const char *p) {
+  const char *f, *v;
+  if (!p || *p != '[') return 0;
+  f = js_fim(p);
+  if (!f || f <= p || f[-1] != ']') return 0;
+  v = p + 1;
+  while (*v && (unsigned char)*v <= ' ') v++;
+  if (*v == ']') return 1;
+  for (;;) {
+    if (*v != '{') return 0;
+    v = js_fim(v);
+    if (!v || v >= f || v[-1] != '}') return 0;
+    while (*v && (unsigned char)*v <= ' ') v++;
+    if (*v == ']') return v == f - 1;
+    if (*v++ != ',') return 0;
+    while (*v && (unsigned char)*v <= ' ') v++;
+  }
+}
+
+static int prepararResposta(const char *json, char **solto, const char **arrOut) {
+  if (!jsonCompleto(json)) return 0;
+  while (*json && (unsigned char)*json <= ' ') json++;
+  const char *f = js_fim(json);
+  if ((*json != '{' && *json != '[') || !f || f <= json ||
+      f[-1] != (*json == '{' ? '}' : ']')) return 0;
+  const char *resto = f;
+  while (*resto && (unsigned char)*resto <= ' ') resto++;
+  if (*resto) return 0;
+  const char *linha = *json == '[' ? js_raiz_array(json) : json;
+  const char *v = linha ? valorColecoes(linha, "\"collections_json\"") : NULL;
+  int embrulhado = v != NULL;
+  if (v) {
+    if (*v == '"') {
+      size_t n = strlen(v);
+      *solto = malloc(n + 1);
+      if (!*solto || !jsonDecodificar(v, *solto)) return 0;
+      json = *solto;
+      if (!jsonCompleto(json)) return 0;
+    } else json = v;
+  }
+  while (*json && (unsigned char)*json <= ' ') json++;
+  f = js_fim(json);
+  if ((*json != '{' && *json != '[') || !f || f <= json ||
+      f[-1] != (*json == '{' ? '}' : ']')) return 0;
+  if (*solto) {
+    resto = f;
+    while (*resto && (unsigned char)*resto <= ' ') resto++;
+    if (*resto) return 0;
+  }
+  const char *array = *json == '[' ? json : valorColecoes(json, "\"collections\"");
+  // An empty outer RPC result contains no saved snapshot. An explicit
+  // collections/collections_json empty array is authoritative.
+  int explicito = *json != '[' || embrulhado;
+  if (!arrayCompleto(array)) return 0;
+  const char *primeiro = array + 1;
+  while (*primeiro && (unsigned char)*primeiro <= ' ') primeiro++;
+  if (*primeiro == ']' && !explicito) return 0;
+  // Validate identities and the folder arrays before mutating anything. A
+  // response cut between collections must not publish a partial snapshot.
+  for (const char *p = *primeiro == ']' ? NULL : primeiro;
+       p; p = js_prox(js_fim(p))) {
+    char id[96] = "", titulo[128] = "";
+    js_texto_raiz_em(p, js_fim(p), "id", id, sizeof id);
+    js_texto_raiz_em(p, js_fim(p), "title", titulo, sizeof titulo);
+    if (!id[0] || !titulo[0] || !arrayCompleto(valorColecoes(p, "\"folders\""))) {
+      return 0;
+    }
+    const char *pastas = valorColecoes(p, "\"folders\"");
+    for (const char *pf = js_raiz_array(pastas); pf; pf = js_prox(js_fim(pf))) {
+      id[0] = titulo[0] = 0;
+      js_texto_raiz_em(pf, js_fim(pf), "id", id, sizeof id);
+      js_texto_raiz_em(pf, js_fim(pf), "title", titulo, sizeof titulo);
+      const char *fontes = valorColecoes(pf, "\"sources\"");
+      if (!fontes) fontes = valorColecoes(pf, "\"catalogSources\"");
+      if (!id[0] || !titulo[0] || !arrayCompleto(fontes)) return 0;
+    }
+  }
   // MEDIDO na conta real: collections_json e o ARRAY direto, nao {collections}.
   // js_raiz_array pula o '[' e para no primeiro elemento, como js_array faz.
-  arr = *json == '[' ? js_raiz_array(json) : js_array(json, fim, "collections");
-  if (!arr) { free(solto); return 0; }
+  *arrOut = *primeiro == ']' ? NULL : primeiro;
+  return 1;
+}
+
+int col_resposta_valida(const char *json) {
+  char *solto = NULL;
+  const char *arr = NULL;
+  int ok = prepararResposta(json, &solto, &arr);
+  free(solto);
+  return ok;
+}
+
+static int definirJson(const char *json) {
+  char *solto = NULL;
+  int fundosXp = 0, arteDaConta = 0;
+  const char *arr = NULL;
+  int antes, novas;
+  const char *original = json;
+  if (!prepararResposta(json, &solto, &arr)) {
+    printf("[collections] missing or incomplete account snapshot retained\n");
+    free(solto); return 0;
+  }
+  int antesTela = count;
+  ColFolder *telaAntes = NULL;
   // Depois de uma troca de perfil folders[] esta vazio: recarrega o pacote para
   // o casamento de arte abaixo ter com quem casar. A revisao volta ao que era —
   // quem decide se a home remonta e o resultado, nao esta recarga.
-  if (semConta && dirPacote[0]) {
+  if (semConta && arr && dirPacote[0]) {
+    telaAntes = malloc(sizeof(ColFolder) * (size_t)(count ? count : 1));
+    if (!telaAntes) { free(solto); return 0; }
+    memcpy(telaAntes, folders, sizeof(ColFolder) * (size_t)count);
     unsigned rev = revisao;
-    col_carregar(dirPacote);
+    carregarPacote(dirPacote);
     revisao = rev;
-    recarregou = 1;
   }
   antes = count;
   // A conta manda o CONJUNTO e a ordem. Mas o pacote traz as mesmas pastas
@@ -528,7 +783,15 @@ int col_definir_json(const char *json) {
   // da pasta e a que fica, com grupo e titulo da conta. Sem isto cada pull
   // trocava a arte curada pela capa crua do CDN.
   ColFolder *antigas = malloc(sizeof(ColFolder) * (size_t)(antes > 0 ? antes : 1));
-  if (antigas) memcpy(antigas, folders, sizeof(ColFolder) * (size_t)antes);
+  if (!antigas) {
+    if (telaAntes) {
+      count = antesTela;
+      memcpy(folders, telaAntes, sizeof(ColFolder) * (size_t)count);
+      semConta = 1;
+    }
+    free(telaAntes); free(solto); return 0;
+  }
+  memcpy(antigas, folders, sizeof(ColFolder) * (size_t)antes);
   count = 0;
   fPulProvedor = fPulSemFonte = fPulSemTitulo = fPulCheio = fGifCortado = 0;
   fPrimeiraPulada[0] = 0;
@@ -558,6 +821,9 @@ int col_definir_json(const char *json) {
       // A FORMA E DA CONTA: e escolha feita no editor do web, e o pacote nem
       // tem o campo.
       v.forma = folders[i].forma;
+      // Preserve artwork, never stale account membership or source ordering.
+      v.nSources = folders[i].nSources;
+      memcpy(v.sources, folders[i].sources, sizeof v.sources);
       // O GIF DA CONTA SO ENTRA ONDE NAO HA SEQUENCIA LOCAL, e isso nao abre
       // excecao na regra acima: a versao local nao tem GIF nenhum para perder.
       // col_carregar nunca preenche focusGif — no pacote o GIF ja virou
@@ -615,25 +881,11 @@ int col_definir_json(const char *json) {
     printf("[colecoes] %d pastas da conta casaram com a arte do pacote, %d com fundo escolhido no Xperience, %d com a arte da conta\n",
            casadas, fundosXp, arteDaConta);
   }
-  free(antigas);
-  if (!novas && recarregou) {
-    // O perfil novo nao tem colecao nenhuma na conta: fica sem, e nao com as do
-    // pacote que so foram carregadas para o casamento de arte.
-    count = 0;
-    semConta = 1;
-    printf("[colecoes] conta veio vazia depois da troca de perfil: sem colecoes\n");
-  }
-  else if (!novas) {
-    count = antes;
-    printf("[colecoes] conta veio vazia; mantendo as locais (%d) | %u bytes, comeca \"%.60s\", arr=%s\n",
-           antes, (unsigned)strlen(json), json, arr ? "sim" : "nao");
-  }
-  else {
+  if (novas) {
     // SO AQUI, e nao na entrada da funcao. Bumpar de saida faria a assinatura
     // da home mudar a CADA ciclo de sync, inclusive quando a conta veio vazia e
     // as pastas locais foram mantidas — uma remontagem por ciclo, de graca, que
     // reinicia animacoes e refaz o foco.
-    revisao++;
     // QUANTAS TEM GIF (#141): "Netflix anima e Apple TV nao" comeca aqui — se
     // a conta so mandou focusGifUrl para uma pasta, o resto nao e defeito de
     // animacao. Capa .gif na URL e so indicio (a decisao e pelos bytes, ver
@@ -650,9 +902,27 @@ int col_definir_json(const char *json) {
         printf("[colecoes] %d URL(s) de capa/GIF passavam de 511 bytes e foram descartadas\n", fGifCortado); }
   }
   aplicarExtras();
+  for (int i = 0; i < count; i++) resolverBases(&folders[i]);
+  int mudou = count != antesTela || memcmp(telaAntes ? telaAntes : antigas, folders,
+                                           sizeof(ColFolder) * (size_t)count);
+  if (mudou) revisao++;
+  free(antigas);
+  free(telaAntes);
+  semConta = novas == 0;
+  contaAplicada = 1;
+  { char *copia = strdup(original);
+    if (copia) { free(ultimoJson); ultimoJson = copia; } }
   ultimoComConta = novas > 0;
+  printf("[collections] account snapshot: %d folders, revision=%u, changed=%d\n",
+         novas, revisao, mudou);
   free(solto);
   return novas;
+}
+int col_definir_json(const char *json) {
+  pthread_mutex_lock(&colTrava);
+  int n = definirJson(json);
+  pthread_mutex_unlock(&colTrava);
+  return n;
 }
 
 void col_arte_conta(int sim) {
@@ -665,19 +935,24 @@ void col_arte_conta(int sim) {
   if (!ultimoJson || !ultimoComConta || !dirPacote[0]) return;
   j = strdup(ultimoJson);
   if (!j) return;
-  col_carregar(dirPacote);
-  col_definir_json(j);
+  pthread_mutex_lock(&colTrava);
+  carregarPacote(dirPacote);
+  definirJson(j);
+  pthread_mutex_unlock(&colTrava);
   free(j);
 }
 
 void col_esquecer_perfil(void) {
+  pthread_mutex_lock(&colTrava);
   free(ultimoJson);
   ultimoJson = NULL;
   ultimoComConta = 0;
+  contaAplicada = 0;
   count = 0;
   semConta = 1;
   aplicarExtras();
   revisao++;
+  pthread_mutex_unlock(&colTrava);
   printf("[colecoes] troca de perfil: colecoes do perfil anterior fora da tela\n");
 }
 
@@ -686,6 +961,35 @@ void col_chave_grupo(const char *group, char *dst, unsigned n) {
     if (!strcasecmp(folders[i].group, group) && folders[i].groupId[0]) {
       snprintf(dst, n, "collection_%s", folders[i].groupId); return; }
   snprintf(dst, n, "collection_%s", group);
+}
+
+void col_chave_pasta(const ColFolder *f, char *dst, unsigned n) {
+  if (!dst || !n) return;
+  snprintf(dst, n, "collection_%s", f ? (f->groupId[0] ? f->groupId : f->group) : "");
+}
+
+int col_grupo_chave(const char *chave, int *indices, int max) {
+  int n = 0;
+  for (int i = 0; i < count && n < max; i++) {
+    char k[192]; col_chave_pasta(&folders[i], k, sizeof k);
+    if (!strcmp(k, chave)) indices[n++] = i;
+  }
+  return n;
+}
+
+int col_grupo_forma_chave(const char *chave) {
+  int conta[COL_FORMA_N] = {0}, primeiro = -1, melhor;
+  for (int i = 0; i < count; i++) {
+    char k[192]; col_chave_pasta(&folders[i], k, sizeof k);
+    int f = folders[i].forma;
+    if (strcmp(k, chave) || f < 0 || f >= COL_FORMA_N) continue;
+    if (primeiro < 0) primeiro = f;
+    conta[f]++;
+  }
+  if (primeiro < 0) return COL_FORMA_PAISAGEM;
+  melhor = primeiro;
+  for (int i = 0; i < COL_FORMA_N; i++) if (conta[i] > conta[melhor]) melhor = i;
+  return melhor;
 }
 
 // Ver colecoes.h. "Cara de id": tem '_' e nenhum espaco — o id cru do

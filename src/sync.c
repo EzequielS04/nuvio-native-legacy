@@ -10,6 +10,7 @@
 #include "stalker.h"
 #include "xtream.h"
 #include "colecoes.h"
+#include "colfileiras.h"
 #include "contalib.h"
 #include "salvosorg.h"
 #include "salvos.h"
@@ -863,7 +864,8 @@ static int guardarOuCopia(const char *sup, int perfil, int n, char **blob) {
   // Collections can be a collections_json object rather than a root array.
   // Preserve that successful response for offline use, including count zero.
   if ((n > 0 || (n == 0 && !strcmp(sup, CC_COLECOES))) &&
-      *blob && ultimoSt >= 200 && ultimoSt < 300)
+      *blob && ultimoSt >= 200 && ultimoSt < 300 &&
+      (strcmp(sup, CC_COLECOES) || col_resposta_valida(*blob)))
     contacache_gravar_geracao(sup, perfil, usuarioDoCiclo, *blob,
                               copiaGeracaoDoCiclo);
   return n;
@@ -1252,6 +1254,7 @@ static void restaurarOrdemLocal(void) {
 }
 
 void sync_iniciar(void) {
+  colfileiras_contexto();
   cat_historico_contexto(sessao_logada() ? sessao_usuario() : "",
                          sessao_logada() ? perfis_ativo() : 0);
   restaurarOrdemLocal();
@@ -1375,6 +1378,7 @@ void sync_passo(unsigned agoraMs) {
   // publica um conjunto diferente do anterior, a home carregava um catalogo,
   // trocava por outro e so entao assentava na ordem final.
   { int remontar = 0, soFileiras = 0, soAddons = 0;
+    int atualizarColecoes = temColBlob || temCatHomeBlob;
   // SO REMONTA QUANDO A LISTA MUDOU DE VERDADE. Ligar `remontar` porque a
   // resposta chegou fazia um ciclo de descoberta completo a cada cinco minutos
   // com a lista identica — ver listaIgual em addons.c.
@@ -1425,9 +1429,14 @@ void sync_passo(unsigned agoraMs) {
     temCatHomeBlob = 0;
   }
   if (temColBlob && colBlob) {
-    if (col_definir_json(colBlob) > 0) soFileiras = 1;
+    unsigned antes = col_revisao();
+    colfileiras_receber(colBlob);
+    if (antes != col_revisao()) soFileiras = 1;
     free(colBlob); colBlob = NULL; temColBlob = 0;
   }
+  // Publish account additions, removals and visibility while Settings is open;
+  // relying on the next Home draw left the editor on an older snapshot (#233).
+  if (atualizarColecoes) colfileiras_sincronizar();
   // A BIBLIOTECA DA CONTA. Ler e aplicar sao passos separados de proposito:
   // contalib_ler_biblioteca pode RECUSAR a resposta (lista remota vazia com
   // lista guardada — secao 1.6, regra 1), e nesse caso o que ja esta no

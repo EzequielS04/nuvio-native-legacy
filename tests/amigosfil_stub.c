@@ -4,6 +4,11 @@
 // redesenho do social (02/10/2026). Zero amigos = a fileira e o convite.
 #include "amigosfil.h"
 #include <SDL2/SDL.h>
+// Account row projection belongs to separate integration tests. A strong
+// implementation overrides this double in tests/colfileiras_home.c.
+__attribute__((weak)) void colfileiras_sincronizar(void) {}
+__attribute__((weak)) void selospacote_conta_do_blob(const char *blob) { (void)blob; }
+__attribute__((weak)) int selospacote_n(void) { return 0; }
 int  amigosfil_n_colunas(void) { return 1; }
 int  amigosfil_convite(void) { return 1; }
 int  amigosfil_indice_cat(int coluna) { (void)coluna; return -1; }

@@ -48,7 +48,7 @@
 //     long long desde;            // epoch s em que viraram amigos; 0 = ?
 //     char porOnde[12];           // "codigo" | "trakt" | "simkl" | "sugestao"
 //     int  gostoTotal;                          // number of paired shared reactions
-  int  gostoPct, emComum;     // -1 = ainda nao ha dado
+//   int  gostoPct, emComum;   // -1 = ainda nao ha dado
 //     int  minutosMes, filmesMes, seriesCurso;   // do mes corrente; -1 = ?
 //     int  recsVistas, recsTotal; // das MINHAS recomendacoes para ele
 //     int  nEnviadas;

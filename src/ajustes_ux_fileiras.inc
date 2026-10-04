@@ -166,7 +166,7 @@ static void desenhaFileiras(void) {
     int fAtualizar = (filAba == 0 && filFoco == n) || (filAba == 1 && filFoco == n + 1);
     int fAgrupar = filAba == 1 && filFoco == n;
     snprintf(a0, sizeof a0, "%s", i18n("Na Home")); snprintf(a1, sizeof a1, "%s", i18n("Fora da Home"));
-    snprintf(n0, sizeof n0, i18n("%d de %d"), fil_n_na_home(), lim);
+    snprintf(n0, sizeof n0, "%d", fil_n_na_home());
     snprintf(n1, sizeof n1, "%d", fil_n() - fil_n_na_home() - fil_n_fila());
     rot[0] = a0; rot[1] = a1; num[0] = n0; num[1] = n1;
     // Atualizar tudo: disco 56 com o icone.
@@ -431,8 +431,8 @@ static void ajFilPainel(GfxRect pr, int n, int lim) {
       { float pw = (w - 36) / 4.0f, ph = pw * 1.5f;
         for (j = 0; j < 8; j++) ajImgFil(idx, j, 0, (GfxRect){ x + (j % 4) * (pw + 12), y + (j / 4) * (ph + 12), pw, ph }, 10, 1);
         y += 2 * ph + 12 + 22; }
-      if (fil_n_na_home() >= lim) {
-        snprintf(sb, sizeof sb, i18n("Home cheia (%d de %d): esta fileira entra na fila e sobe sozinha quando abrir vaga."), fil_n_na_home(), lim);
+      if (fil_linha_origem(idx) == FIL_ORIGEM_CATALOGO && fil_n_capacidade() >= lim) {
+        snprintf(sb, sizeof sb, i18n("Home cheia (%d de %d): esta fileira entra na fila e sobe sozinha quando abrir vaga."), fil_n_capacidade(), lim);
         ajEf("aj_info", sb, x, y, w, 1);
       }
     } else {
