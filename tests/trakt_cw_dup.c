@@ -65,6 +65,7 @@ void cwo_conta_trocar(const char *a, const char *b) { (void)a; (void)b; }
 void cwo_marcar_estreia(const char *id, long long ms) { (void)id; (void)ms; }
 int cwo_virada_aceita(long long e, long long a) { (void)e; (void)a; return 1; }
 int ajustes_tmdb_cw(void) { return 0; }
+const char *ajustes_tmdb_idioma(void) { return "en-US"; }
 const char *desc_chave_tmdb(void) { return ""; }
 const char *desc_tmdb_idioma(void) { return "en"; }
 const char *i18n(const char *s) { return s; }

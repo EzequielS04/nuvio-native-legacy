@@ -8,6 +8,7 @@
 #include "sessao.h"
 #include "colecoes.h"
 #include "marco.h"
+#include "metaprov.h"
 #include <SDL2/SDL.h>
 #include "catalogo.h"
 #include "addons.h"
@@ -33,7 +34,6 @@
 #include <pthread.h>
 #include <time.h>
 
-#define CINEMETA "https://v3-cinemeta.strem.io"
 #define TMDB     "https://api.themoviedb.org/3"
 
 // "2026-07-29" -> "29 de julho de 2026". Formato do web, que usa
@@ -547,7 +547,8 @@ static unsigned hashBaseAddon(const char *b) {
 // Cinemeta e "origem" tambem, mas nao e um addon da lista do usuario (ou e, com
 // outro nome): so o texto "cinemeta" na base o identifica.
 static int baseEhCinemeta(const char *base) {
-  return base && strstr(base, "cinemeta") != NULL;
+  return base && (strstr(base, "cinemeta") != NULL ||
+                  strstr(base, "catalog.nuvio.tv") != NULL);
 }
 
 static void origemDaBase(const char *base, char *dst, size_t n) {
@@ -627,14 +628,11 @@ static void urlEscapar(const char *s, char *dst, size_t tam) {
 
 static int lerBusca(const char *tipo, const char *termo, CatItem *saida,
                     int max) {
-  char url[500], esc[300];
   char *corpo;
   const char *p;
   int n = 0;
-  urlEscapar(termo, esc, sizeof esc);
-  snprintf(url, sizeof url, "%s/catalog/%s/top/search=%s.json",
-           CINEMETA, tipo, esc);
-  corpo = rede_baixar(url, 20);
+  corpo = metaprov_busca_com(tipo, termo, METAPROV_NUVIO_S, 20, metaprov_get_rede,
+                             NULL, NULL);
   if (!corpo) return 0;
   p = js_array(corpo, NULL, "metas");
   while (p && n < max) {
@@ -665,6 +663,7 @@ typedef struct {
   char id[96];
   char titulo[96];
   char addon[64];
+  int  nuvio;           // 1 = catalogo do Nuvio, com o Cinemeta de reserva
 } AlvoBusca;
 
 static AlvoBusca alvos[BUSCA_ALVOS];
@@ -685,18 +684,20 @@ static int  fiosVivos;
 
 void desc_alvos_busca_zerar(void) {
   pthread_mutex_lock(&buscaTrava);
-  // O Cinemeta entra SEMPRE e primeiro: e a unica fonte que nao depende de
-  // addon nenhum, entao a busca continua funcionando numa instalacao limpa.
+  // O catalogo do Nuvio entra SEMPRE e primeiro (o Cinemeta so responde por
+  // ele, quando ele falha): e a fonte que nao depende de addon nenhum, entao a
+  // busca continua funcionando numa instalacao limpa.
   nAlvos = 0;
   { int t; const char *tt[2] = { "movie", "series" };
     const char *rot[2] = { "Filmes", "Séries" };
     for (t = 0; t < 2; t++) {
       AlvoBusca *a = &alvos[nAlvos++];
-      snprintf(a->base,  sizeof a->base,  "%s", CINEMETA);
+      snprintf(a->base,  sizeof a->base,  "%s", METAPROV_NUVIO_HOST);
       snprintf(a->tipo,  sizeof a->tipo,  "%s", tt[t]);
-      snprintf(a->id,    sizeof a->id,    "%s", "top");
+      snprintf(a->id,    sizeof a->id,    "%s", "popular");
       snprintf(a->titulo,sizeof a->titulo,"%s", rot[t]);
-      snprintf(a->addon, sizeof a->addon, "%s", "Cinemeta");
+      snprintf(a->addon, sizeof a->addon, "%s", "Nuvio");
+      a->nuvio = 1;
     } }
   memset(resAlvo, 0, sizeof resAlvo);
   pthread_mutex_unlock(&buscaTrava);
@@ -712,6 +713,7 @@ void desc_alvo_busca(const char *base, const char *tipo, const char *id,
     snprintf(a->id,     sizeof a->id,     "%s", id ? id : "");
     snprintf(a->titulo, sizeof a->titulo, "%s", titulo ? titulo : "");
     snprintf(a->addon,  sizeof a->addon,  "%s", addon ? addon : "");
+    a->nuvio = 0;
   } else {
     // Teto cheio: o alvo NAO sera consultado. Antes era em silencio, e quem
     // tem addons demais via a busca "nao achar" o titulo local sem nenhuma
@@ -729,20 +731,28 @@ static int consultarAlvo(const AlvoBusca *a, const char *termo,
   char *corpo;
   const char *p;
   int n = 0;
-  urlEscapar(termo, esc, sizeof esc);
-  snprintf(url, sizeof url, "%s/catalog/%s/%s/search=%s.json",
-           a->base, a->tipo, a->id, esc);
   // 6 s por alvo, como o web (SEARCH_CATALOG_TIMEOUT 6500). Addon lento nao
   // trava a tela: a fileira dele so aparece quando chegar, e as outras ja
-  // estao la.
-  corpo = rede_baixar(url, 6);
+  // estao la. O alvo do Nuvio tem 5 s e, se falhar, o Cinemeta mais 6.
+  if (a->nuvio) {
+    corpo = metaprov_busca_com(a->tipo, termo, METAPROV_NUVIO_S, 6,
+                               metaprov_get_rede, NULL, NULL);
+  } else {
+    urlEscapar(termo, esc, sizeof esc);
+    snprintf(url, sizeof url, "%s/catalog/%s/%s/search=%s.json",
+             a->base, a->tipo, a->id, esc);
+    corpo = rede_baixar(url, 6);
+  }
   if (!corpo) return 0;
   p = js_array(corpo, NULL, "metas");
   { char orig[96];
     origemDaBase(a->base, orig, sizeof orig);   // o resultado abre pelo addon que o achou
     while (p && n < max) {
       const char *f = js_fim(p);
-      if (deMeta(p, f, a->tipo, &saida[n])) {
+      if (deMeta(p, f, a->tipo, &saida[n]) &&
+          // O Nuvio devolve "tmdb:<id>" para quem nao tem IMDb; o resultado fica
+          // no formato tt... (o Cinemeta de reserva nao entende tmdb:).
+          (!a->nuvio || !strncmp(saida[n].imdb, "tt", 2))) {
         snprintf(saida[n].origem, sizeof saida[n].origem, "%s", orig);
         n++;
       }
@@ -1068,8 +1078,12 @@ static int deMeta(const char *ini, const char *fim, const char *tipo, CatItem *d
   js_texto(ini, fim, "releaseInfo", v, sizeof v);
   { char dur[24] = "";
     js_texto(ini, fim, "runtime", dur, sizeof dur);
-    // "2024–" vira "2024": o travessao de serie em andamento polui a linha.
+    metaprov_duracao(dur, sizeof dur);   // "148m" do catalogo do Nuvio -> "148 min"
+    // "2024–" vira "2024": o travessao de serie em andamento polui a linha. O
+    // catalogo do Nuvio usa hifen ASCII ("2011-2019"): mesmo corte, so depois
+    // de um ano de 4 digitos (data ISO inteira nao chega aqui).
     { char *tr = strstr(v, "\xe2\x80\x93"); if (tr) *tr = 0; }
+    if (v[0] >= '0' && v[0] <= '9' && v[1] && v[2] && v[3] && v[4] == '-') v[4] = 0;
     snprintf(d->meta, sizeof d->meta, "%.20s%s%.20s", v,
              (v[0] && dur[0]) ? "  \xc2\xb7  " : "", dur); }
   js_texto(ini, fim, "description", d->sinopse, sizeof d->sinopse);
@@ -5436,7 +5450,8 @@ int desc_meta_tipos(const char *tipo, const char *saida[2]) {
 
 // Chave do cache de /meta: tipo + id, nunca so o id.
 void desc_meta_chave(char *dst, size_t n, const char *tipo, const char *id) {
-  snprintf(dst, n, "%s/%s", tipo ? tipo : "", id ? id : "");
+  // provedor + idioma + tipo + id: trocar o idioma dos metadados refaz o pedido.
+  metaprov_chave(dst, n, tipo, id);
 }
 
 // Temporada de um video. Addon de anime as vezes manda "episode" sem "season"
@@ -5500,6 +5515,7 @@ static int parsearEpisodios(const char *corpo, CatEp *eps, int max) {
       if (!e->sinopse[0]) js_texto(p, f, "description", e->sinopse, sizeof e->sinopse);
       js_texto(p, f, "thumbnail", e->thumb, sizeof e->thumb);
       js_texto(p, f, "runtime", e->duracao, sizeof e->duracao);
+      metaprov_duracao(e->duracao, sizeof e->duracao);   // "25min" -> "25 min"
       if (!e->duracao[0]) {
         int runtime = (int)js_num(p, f, "runtime", 0);
         if (runtime > 0 && runtime < 1440)
@@ -5837,15 +5853,14 @@ static char *cinemetaMeta(const char *tipoItem, const char *tt, int *ehFilme) {
   int nTipos = desc_meta_tipos(tipoItem, tipos), ti;
   char *corpo = NULL;
   for (ti = 0; ti < nTipos; ti++) {
-    char chave[96], url[300];
+    char chave[96];
     int ultimo = ti == nTipos - 1;
     free(corpo);
     corpo = NULL;
     desc_meta_chave(chave, sizeof chave, tipos[ti], tt);
     corpo = metaCacheObter(chave);
     if (!corpo) {
-      snprintf(url, sizeof url, "%s/meta/%s/%s.json", CINEMETA, tipos[ti], tt);
-      corpo = rede_baixar(url, 10);
+      corpo = metaprov_meta(tipos[ti], tt, 10, NULL);   // Nuvio, depois Cinemeta
       if (!corpo) { if (ultimo) break; continue; }
       metaCacheGuardar(chave, corpo);
     }
@@ -5958,7 +5973,7 @@ static int metaCatalogoResolver(const CatItem *orig, MetaFontes *mf) {
     if (mf->n) metaTipoProprio(mf->corpo[0], tp, sizeof tp);
     cm = cinemetaMeta(tp[0] ? tp : orig->tipo, mf->tt, &fil);
     if (cm) {
-      printf("[desc] ficha do Cinemeta (%s)\n", mf->n ? "complemento" : "por mapeamento");
+      printf("[desc] ficha do catalogo Nuvio/Cinemeta (%s)\n", mf->n ? "complemento" : "por mapeamento");
       fflush(stdout);
       metaFontesAdd(mf, cm, "Cinemeta", 1);
       if (mf->n == 1) mf->ehFilme = fil;
@@ -6070,7 +6085,7 @@ static void *buscarEps(void *u) {
   const CatItem *orig = cat_item(alvoItem);
   CatItem base;
   const CatItem *it;
-  char url[600], *corpo = NULL;
+  char *corpo = NULL;
   char serie[64];
   MetaFontes mf;
   int viaCatalogo = 0;
@@ -6140,19 +6155,18 @@ static void *buscarEps(void *u) {
     ehFilme = mf.ehFilme;
   } else
   for (ti = 0; ti < nTipos; ti++) {
-    char chave[40];
+    char chave[96];
     int ultimo = ti == nTipos - 1;
     // A CHAVE DO CACHE LEVA O TIPO. Era so o id, e /meta/movie/tt13293588 e
     // /meta/series/tt13293588 sao titulos DIFERENTES no Cinemeta: aberto uma
     // vez como filme, o corpo errado ficava no cache e a abertura seguinte,
     // ja como serie, lia "meta do cache" com 0 episodios (log 2043).
     desc_meta_chave(chave, sizeof chave, tipos[ti], serie);
-    snprintf(url, sizeof url, "%s/meta/%s/%s.json", CINEMETA, tipos[ti], serie);
     free(corpo);
     corpo = metaCacheObter(chave);
     marco(corpo ? "episodios: meta do cache" : "episodios: baixando meta");
     if (!corpo) {
-      corpo = rede_baixar(url, 25);
+      corpo = metaprov_meta(tipos[ti], serie, 25, NULL);   // Nuvio, depois Cinemeta
       if (!corpo) { if (ultimo) break; continue; }
       metaCacheGuardar(chave, corpo);
     }
@@ -6876,8 +6890,7 @@ static void *buscarTitulo(void *arg) {
 
   for (passo = 0; passo < 2 && achou < 0; passo++) {
     const char *tipo = passo ? "series" : "movie";
-    snprintf(url, sizeof url, "%s/meta/%s/%s.json", CINEMETA, tipo, id);
-    corpo = rede_baixar(url, 20);
+    corpo = metaprov_meta(tipo, id, 20, NULL);   // Nuvio, depois Cinemeta
     if (!corpo) continue;
     { const char *m = strstr(corpo, "\"meta\"");
       CatItem it;

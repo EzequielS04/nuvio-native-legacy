@@ -6,6 +6,7 @@
 #include "descoberta.h"
 #include "idioma.h"
 #include "rede.h"
+#include "metaprov.h"
 #include "js.h"
 #include "trakt.h"
 #include "vistoep.h"
@@ -973,6 +974,17 @@ static char *baixar(const char *url, const char *const *cab, int *st) {
   return c;
 }
 
+// GET do metaprov (Nuvio, depois Cinemeta) pelo mesmo gancho de teste.
+static char *metaGetAg(const char *url, int seg, int *st, void *ctx) {
+  int s = 0;
+  char *c = baixarTeste ? baixarTeste(url, seg, NULL, &s)
+                        : rede_baixar_st(url, seg, NULL, &s);
+  (void)ctx;
+  if (st) *st = s;
+  if (c && (s < 200 || s >= 300)) { free(c); c = NULL; }
+  return c;
+}
+
 // O que as fontes juntaram para UMA serie, antes de ir ao cache. Mesmos campos
 // de AgReg; `prox`/`ult` = alguma fonte ja AFIRMOU o proximo/ultimo episodio
 // (inclusive "nao ha"), e a seguinte nao mexe mais nele.
@@ -1289,6 +1301,8 @@ static int cinemetaLer(AgBusca *b, const char *corpo, const char *hoje) {
           pT = t; pE = e;
           pNome[0] = 0; pSin[0] = 0;
           js_texto_raiz_em(v, vf, "name", pNome, sizeof pNome);
+          // O catalogo do Nuvio chama o nome do episodio de "title".
+          if (!pNome[0]) js_texto_raiz_em(v, vf, "title", pNome, sizeof pNome);
           js_texto_raiz_em(v, vf, "overview", pSin, sizeof pSin);
         }
       } else if (strcmp(dia, uData) > 0) {
@@ -1321,10 +1335,7 @@ static int cinemetaLer(AgBusca *b, const char *corpo, const char *hoje) {
 }
 
 static void cinemetaBuscar(AgBusca *b, const char *imdb, const char *hoje) {
-  char url[160];
-  char *corpo;
-  snprintf(url, sizeof url, "https://v3-cinemeta.strem.io/meta/series/%s.json", imdb);
-  corpo = baixar(url, NULL, NULL);
+  char *corpo = metaprov_meta_com("series", imdb, AG_REDE_S, metaGetAg, NULL, NULL);
   if (!corpo) return;
   cinemetaLer(b, corpo, hoje);
   free(corpo);
@@ -1585,13 +1596,11 @@ static void *fioHistorico(void *arg) {
   HistPedido *p = arg;
   static AgEp tmp[AG_EPS_MAX];
   for (;;) {
-    char url[160];
     char *corpo;
     char feito[24];
     int n = 0, outra;
     snprintf(feito, sizeof feito, "%s", p->imdb);
-    snprintf(url, sizeof url, "https://v3-cinemeta.strem.io/meta/series/%s.json", p->imdb);
-    corpo = baixar(url, NULL, NULL);
+    corpo = metaprov_meta_com("series", p->imdb, AG_REDE_S, metaGetAg, NULL, NULL);
     if (corpo) n = lerVideos(corpo, tmp, AG_EPS_MAX);
     pthread_mutex_lock(&trava);
     outra = strcmp(histImdb, p->imdb) != 0;
