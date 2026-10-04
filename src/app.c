@@ -1671,6 +1671,29 @@ int app_na_home(void) {
          !novidades170_aberto() && !novidades180_aberto();
 }
 
+// ONDE A AZUL/CH+ ABRE O PAINEL DE SALVOS/AVISOS (dono, 04/10: "tem que dar
+// para abrir as notificacoes e a sidebar social da parte de titulos tambem e em
+// outros lugares"). Antes so na Home. Agora tambem na pagina do titulo (e a
+// ficha da pessoa, que vive nela), "Ver tudo"/colecao e nas telas de menu
+// (Explorar, Busca, Biblioteca, Perfil, Social, Add-ons, Plugins, Agenda).
+// Nunca sobre o player, o guia, Ajustes ou diagnosticos, e nunca com uma
+// folha/menu do cartaz por cima: elas tem a tecla. A tecla "S" de teclado de
+// Mac nao vale com um campo de texto ativo (e a letra, nao a AZUL).
+static int azulPodeAbrirSalvos(const SDL_Event *e) {
+  if (player_aberto() || player_mini_ativo() || menu_aberto() || ctx_aberto() ||
+      faixas_aberta() || episodios_aberto() || stream_folha_aberta() ||
+      guia_overlay_aberta() || pessoas_aberto() || recomenda_aberta() || recenviar_aberto())
+    return 0;
+  if (e->key.keysym.sym == SDLK_s && e->key.keysym.scancode != NV_SCANCODE_BLUE &&
+      SDL_IsTextInputActive()) return 0;
+  switch (tela) {
+    case TELA_HOME: case TELA_EXPLORAR: case TELA_BUSCA: case TELA_BIBLIOTECA:
+    case TELA_PERFIL: case TELA_SOCIAL: case TELA_ADDONS: case TELA_PLUGINS:
+    case TELA_AGENDA: return 1;
+    default: return 0;
+  }
+}
+
 void app_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
   ilhacart_validar_identidade();
@@ -1768,8 +1791,7 @@ void app_evento(const SDL_Event *e) {
      (e->key.keysym.sym==SDLK_s || e->key.keysym.scancode==NV_SCANCODE_BLUE ||
       ((ilha_cartao_na_tela() || ilha_atividade_expansivel()) && !spainel_aberto() &&
        (e->key.keysym.scancode==NV_SCANCODE_CH_UP || e->key.keysym.sym==SDLK_PAGEUP))) &&
-     tela==TELA_HOME && !player_aberto() && !player_mini_ativo() &&
-     !detail_aberto() && !vertudo_aberta() && !menu_aberto()) {
+     azulPodeAbrirSalvos(e)) {
     static Uint32 ultimoToque;
     Uint32 agoraTecla = SDL_GetTicks();
     float ix, iy, iw, ih;
@@ -1939,6 +1961,12 @@ void app_evento(const SDL_Event *e) {
   // A BARRA LATERAL POR CIMA DA PAGINA DO TITULO (dono, 03/10: "pode abrir por
   // cima"): ESQUERDA no comeco de uma fileira pede a barra e a pagina fica
   // viva embaixo. Aberta, a tecla e dela; recolhendo, ja volta para a pagina.
+  // O PAINEL DE SALVOS/AVISOS POR CIMA DA PAGINA DO TITULO: aberto, a tecla e
+  // dele; Voltar fecha e o foco da pagina fica onde estava (ela nao ve nada).
+  if (detail_aberto() && spainel_aberto()) {
+    if (ctx_aberto()) ctx_evento(e); else spainel_evento(e);
+    return;
+  }
   if (detail_aberto() && menu_aberto()) { menu_evento(e); return; }
   if (detail_aberto()) {
     detail_evento(e);
@@ -2608,6 +2636,16 @@ void app_atualizar(float dt, Uint32 agora) {
     } else if (o == ILHA_PEDIU_DISPENSAR) {
       if (qual == ILHA_VIVO) player_descartar_retido();
       ilhacart_dispensar(qual);
+    }
+  }
+  // Da pagina do titulo, um titulo escolhido no painel de Salvos/avisos TROCA a
+  // pagina (a de baixo fecha seca). So esse pedido: os demais seguem de fora.
+  if (detail_aberto() && !player_aberto()) {
+    const char *alvo = spainel_pediu_abrir();
+    if (alvo && alvo[0]) {
+      int k = cat_indice_por_imdb(alvo);
+      detail_fechar_seco();
+      if (k >= 0) abrirPorIndice(k); else desc_pedir_titulo(alvo);
     }
   }
   if (!detail_aberto() && !player_aberto()) {
@@ -3828,7 +3866,7 @@ static void desenharAtrasDoPainel(void *ctx) {
   if (!detail_cobre_tela()) vertudo_desenhar(agora);
   // Com o painel de Salvos na tela o menu do cartaz e desenhado DEPOIS dele
   // (desenharTelas): e o painel que o abre, e por baixo ele ficaria sob o veu.
-  if (!spainel_visivel() || detail_aberto()) {
+  if (!spainel_visivel()) {
     CAMADA_SE(ctx_aberto());
     ctx_desenhar(agora);
   }
@@ -3933,7 +3971,7 @@ static void desenharTelas(Uint32 agora) {
     // Depois do menu: as duas camadas de "Salvos" escurecem a tela inteira e
     // tem de ficar por cima de tudo que a home desenhou, inclusive da rail.
     CAMADA_SE(spainel_aberto());
-    if (spainel_visivel() && !detail_aberto()) {
+    if (spainel_visivel()) {
       spainel_desenhar(agora);
       CAMADA_SE(ctx_aberto());
       ctx_desenhar(agora);
@@ -3971,7 +4009,12 @@ static int relogioCabe(void) {
   // ilha de categorias — a tela nao tem mais titulo ali. Com folha, vinculo ou
   // teclado por cima ele some, como na home com um cartao na frente.
   if (tela == TELA_AJUSTES) return !menu_aberto() && ajustes_relogio_cabe();
-  if (tela == TELA_HOME) { if (!homePronta) return 0; }
+  if (tela == TELA_HOME) {
+    if (!homePronta) return 0;
+    // Carrossel da Apple TV (Dinamica) sem expandir: sem relogio. A pagina do
+    // titulo e "Ver tudo" estao por cima da home e mantem o relogio.
+    if (!detail_aberto() && !vertudo_aberta() && home_relogio_oculto()) return 0;
+  }
   else if (tela != TELA_EXPLORAR && tela != TELA_BUSCA &&
            tela != TELA_BIBLIOTECA && tela != TELA_PERFIL && tela != TELA_SOCIAL &&
            tela != TELA_ADDONS && tela != TELA_PLUGINS && tela != TELA_AGENDA) return 0;
