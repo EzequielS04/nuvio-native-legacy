@@ -4149,7 +4149,24 @@ static const char *ajudaOpcao(int op) {
       return "Sem Pôsteres personalizados ligado o pôster já é o que o addon manda. Escolha um serviço para decidir quem vence.";
     if (op == AJ_ADDON_LOGO)
       return "O logo do addon só é trocado pela Arte localizada do TMDB. Ative TMDB e Arte localizada para escolher.";
-    return "Ative Efeito de profundidade para personalizar este detalhe.";
+    // #238: estas cinco caiam na frase da profundidade, que nao tem nada a ver
+    // com elas ("Espera pelos add-ons" mandava ligar o Efeito de profundidade).
+    if (op == AJ_FONTE_PRAZO)
+      return "Desative Escolher a fonte ao reproduzir para usar a espera: escolhendo à mão, nada é escolhido sozinho.";
+    if (op == AJ_SEEKR_FITA || op == AJ_SEEKR_AJUSTE)
+      return "Ative Miniaturas na barra de tempo para ajustar as miniaturas.";
+    if (op == AJ_SELOS_PACOTE_REM)
+      return "Só dá para remover um pacote que foi adicionado nesta TV.";
+    if (op == AJ_SAIDA_PLAYER)
+      return "Ative Relógio na tela: sem ele o player não tem para onde minimizar.";
+    if (op == AJ_POSTER_INST || op == AJ_POSTER_TOKEN || op == AJ_POSTER_EXTRA ||
+        op == AJ_POSTER_CHAVE || op == AJ_POSTER_MODELO || op == AJ_POSTER_TESTAR)
+      return "Este campo vale para outro serviço. Escolha o serviço em Pôsteres personalizados.";
+    if (op == AJ_PROF_BORDA || op == AJ_PROF_BRILHO || op == AJ_PROF_COBERTURA ||
+        op == AJ_PROF_POSTERS || op == AJ_PROF_CW || op == AJ_PROF_EPS ||
+        op == AJ_PROF_ELENCO || op == AJ_PROF_TRAILERS)
+      return "Ative Efeito de profundidade para personalizar este detalhe.";
+    return "Indisponível com os ajustes atuais.";
   }
   switch (op) {
     // --- Reproducao
