@@ -34,7 +34,7 @@ static void captura(const char *nome) {
     livetvdiag_desenhar(SDL_GetTicks());
     rail_shot_desenhar(MENU_AJUSTES);
     if (getenv("NUVIO_SHOT_ILHA")) {
-      ilha_relogio_visivel(1); ilha_ancorar(ajustes_ilha_x(), 36, 0); ilha_desenhar(SDL_GetTicks()); SDL_Delay(12);
+      ilha_relogio_visivel(1); ilha_posicionar(1); ilha_desenhar(SDL_GetTicks()); SDL_Delay(12);
     }
     if (i == 39) {
       unsigned char *pix = malloc(1920 * 1080 * 4);

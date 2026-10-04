@@ -75,7 +75,7 @@ static void quadros(int n, const char *nome) {
     atualizacao_atualizar(1.0f / 60.0f, agora);
     atualizacao_desenhar(agora);
     ilha_relogio_visivel(1);
-    ilha_ancorar(48.0f, 36.0f, 0);
+    ilha_posicionar(1);
     ilha_coberta(atualizacao_cobre_ilha());
     ilha_desenhar(agora);
     if (i == n - 1 && nome) gravar(nome);

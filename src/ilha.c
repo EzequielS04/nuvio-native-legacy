@@ -562,31 +562,12 @@ void ilha_ancorar(float x, float y, int daDireita) {
   ancDef = 1; ancX = x; ancY = y; ancDir = daDireita;
 }
 
-// Canto escolhido em Ajustes > Aparencia > Posicao do relogio. O Guia tem o
-// titulo a esquerda e fica sempre a direita. Fora dele: 0 = Automatica e 2 =
-// Direita vao a DIREITA em qualquer layout (padrao do dono desde a 1.7.2; era
-// esquerda, e direita so na Dinamica); 1 = Esquerda, que no layout Dinamica
-// vai AO LADO da pilula da barra (o canto dela).
+// O relogio fica SEMPRE no canto de cima a DIREITA, em toda tela e estado (dono,
+// 03/10: ele mudava de lado conforme o que acontecia, e a opcao de lado saiu de
+// Ajustes). `guia` ficou so por compatibilidade com quem chama.
 void ilha_posicionar(int guia) {
-  int pos = ajustes_relogio_pos();
-  if (guia || pos != 1) ilha_ancorar(NV_TELA_W - NV_ILHA_MARGEM_D, NV_ILHA_Y, 1);
-  else if (pos == 1 && ajustes_home_layout() == HOME_LAYOUT_DINAMICA) {
-    // A pilula e o recuo do conteudo chegam em pixels da tela REAL; a ilha
-    // mede pela virtual (escala.h).
-    float px, py, pw, ph, e = gfx_escala_ui();
-    if (menu_pilula_rect(&px, &py, &pw, &ph))
-      ilha_ancorar((px + pw) / e + NV_MENU_PILULA_VAO, (py + ph * 0.5f) / e - NV_ILHA_H * 0.5f, 0);
-    else ilha_ancorar(ajustes_conteudo_x() / e, NV_ILHA_Y, 0);   // sem pilula na tela: canto livre
-  } else if (ajustes_home_layout() == HOME_LAYOUT_MODERNA && menu_barra_borda() > 0.0f) {
-    // MODERNA (dono, 03/10; mockup Glass UI "ilha", telas 1 e 2): o menu e uma
-    // ilha logo ABAIXO do relogio, na mesma margem. Com a rail na tela (fixa,
-    // ou o painel aberto) o relogio vai para essa margem e os dois formam a
-    // coluna da esquerda; ilha.c desliza o x entre o conteudo e ela.
-    // Na PADRAO o painel e centrado na altura, colado na borda: o canto de
-    // cima fica livre e o relogio segue no x do conteudo (o padrao abaixo).
-    // NV_MENU_MODERNA_X e px da tela REAL; a ilha mede pela virtual.
-    ilha_ancorar(NV_MENU_MODERNA_X / gfx_escala_ui(), NV_ILHA_Y, 0);
-  } else if (pos == 1) ilha_ancorar(ajustes_conteudo_x() / gfx_escala_ui(), NV_ILHA_Y, 0);
+  (void)guia;
+  ilha_ancorar(NV_TELA_W - NV_ILHA_MARGEM_D, NV_ILHA_Y, 1);
 }
 
 // COM SINAL: quem renova a atividade chama SDL_GetTicks DEPOIS de o quadro ter
@@ -1729,12 +1710,9 @@ static void ilha_desenharCorpo_(Uint32 agora) {
     modalFocoA[i] = anim_mola(modalFocoA[i], modalAberto && i == modalFoco ? 1.0f : 0.0f, dt, NV_MOLA_FOCO);
   // POSICAO, num ponto so (ilha_ancorar ou o padrao, que e a direita).
   if (ancDef) { x = ancX; y = ancY; dir = ancDir; }
-  else if (ajustes_home_layout() == HOME_LAYOUT_DINAMICA) { x = NV_TELA_W - NV_ILHA_MARGEM_D; y = NV_ILHA_Y; dir = 1; }
-  else { x = ajustes_conteudo_x() / gfx_escala_ui(); y = NV_ILHA_Y; dir = 0; }   // real -> virtual
-  // O CANTO MUDA COM O MENU (ilha_posicionar): abrir a barra com a rail
-  // recolhida leva o relogio de x do conteudo para a margem do menu. Desliza,
-  // em vez de saltar; troca de lado (esquerda/direita) ou ilha apagada assenta
-  // seco, porque ali nao ha caminho que faca sentido.
+  else { x = NV_TELA_W - NV_ILHA_MARGEM_D; y = NV_ILHA_Y; dir = 1; }
+  // Quem ancora em outro x (testes) desliza em vez de saltar; troca de lado ou
+  // ilha apagada assenta seco.
   { static float xSuave; static int xDir = -1;
     if (dir != xDir || A < 0.01f || fabsf(xSuave - x) < 0.5f) { xSuave = x; xDir = dir; }
     else { xSuave = anim_mola(xSuave, x, dt, NV_MOLA_TELA); x = xSuave; } }
