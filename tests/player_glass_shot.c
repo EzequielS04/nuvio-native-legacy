@@ -37,6 +37,7 @@
 #include "aovivo.h"
 #include "ilha.h"
 #include "ondever.h"
+void ponteiro_teste_toque(int ligado);
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -388,6 +389,26 @@ int main(int argc, char **argv) {
     player_shot_estado(relogio, 4820.0f, 9420.0f, 1, 0, 1, 0);
     quadros(60);
     salvar("osd-barra-foco");
+  }
+  // W19: botao focado e CIMA para a barra, com ponteiro/toque ativo (a fileira
+  // fica de pe). Antes: pilula larga sem texto. Depois: icone so.
+  if (quer(argc, argv, "osd-botao-sobe")) {
+    ponteiro_teste_toque(1);
+    abrir(&filme); simular(3840, 1606, "", 1, 1);
+    quadros(10);
+    player_shot_estado(relogio, 4820.0f, 9420.0f, 1, 2, 0, 0);
+    quadros(60);
+    salvar("osd-botao-foco");
+    player_shot_foco(2, 1);
+    quadros(60);
+    salvar("osd-botao-sobe");
+    player_shot_foco(2, 0);
+    quadros(60);
+    salvar("osd-botao-desce");
+    player_shot_foco(3, 0);
+    quadros(60);
+    salvar("osd-botao-dir");
+    ponteiro_teste_toque(0);
   }
   if (quer(argc, argv, "toast-proporcao")) {
     abrir(&filme); simular(3840, 1606, "", 1, 1);
