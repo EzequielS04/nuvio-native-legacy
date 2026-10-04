@@ -132,6 +132,11 @@ static int    mkvPendente;
 static int    fonteMp4;
 static double seekAlvo;
 static Uint32 seekEm;
+// Seek diagnostics (#246): when the last "seek" went out, whether seekDone has
+// come back, and the seekable/trickable flags the uMS reported. Log only.
+static Uint32 seekEnvEm;
+static int    seekEnvAlvo, seekEnvAviso;
+static int    srcSeekable = -1, srcTrickable = -1;
 // Declarada aqui porque video_bombear a chama antes da definicao. O clang do
 // Mac aceita a implicita; o gcc do ARM recusa — e o ARM que esta certo. Terceira
 // vez neste arquivo.
@@ -761,7 +766,16 @@ static int aoEvento(LSHandle *h, LSMessage *m, void *u) {
     if (strstr(p, "\"error") || strstr(p, "rror\"")) logar = 1;   // erro sempre sai
     while (n && (p[n - 1] == '\n' || p[n - 1] == '\r' || p[n - 1] == ' ')) n--;
     if (logar) { printf("[video] ev %.*s\n", (int)n, p); fflush(stdout); } }
+  if (strstr(p, "seekDone") && seekEnvEm) {
+    printf("[video] seek to %ds done in %ums\n", seekEnvAlvo, (unsigned)(SDL_GetTicks() - seekEnvEm));
+    fflush(stdout);
+    seekEnvEm = 0;
+  }
   if (strstr(p, "sourceInfo")) {
+    { const char *q = strstr(p, "\"seekable\":");
+      srcSeekable = q ? (strncmp(q + 11, "true", 4) == 0) : -1;
+      q = strstr(p, "\"trickable\":");
+      srcTrickable = q ? (strncmp(q + 12, "true", 4) == 0) : -1; }
     const char *q;
     nAudio = nLeg = 0;
     vidAtmos = 0;
@@ -1777,6 +1791,12 @@ void video_bombear(void) {
     Uint32 q = seekEm; seekEm = 0; (void)q;
     seekAgora(seekAlvo);
   }
+  if (seekEnvEm && !seekEnvAviso && SDL_GetTicks() - seekEnvEm >= 3000) {
+    seekEnvAviso = 1;
+    printf("[video] seek to %ds: no seekDone after 3000 ms; pipeline at %dms, seekable=%d trickable=%d\n",
+           seekEnvAlvo, (int)(posSeg * 1000.0), srcSeekable, srcTrickable);
+    fflush(stdout);
+  }
   // RECUPERACAO DO PIPELINE, no fio principal. Ver a nota em `recuperando`.
   if (recuperando) {
     double alvo = retomarEm;
@@ -2176,6 +2196,7 @@ static void seekAgora(double segundos) {
   snprintf(b, sizeof b, "{\"mediaId\":\"%s\",\"position\":%d}",
            midia, (int)(segundos * 1000.0));
   chamar("seek", b, soLog);
+  seekEnvEm = SDL_GetTicks() | 1; seekEnvAlvo = (int)segundos; seekEnvAviso = 0;
   { char m[48]; snprintf(m, sizeof m, "seek para %ds", (int)segundos); marco(m); }
 }
 
