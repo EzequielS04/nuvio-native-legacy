@@ -24,6 +24,7 @@
 #include "perfis.h"
 #include "artereserva.h"
 #include "idbase.h"
+#include "cwfrente.h"
 #include <stdint.h>   /* uintptr_t: a geracao viaja no argumento do fio */
 #include <stdio.h>
 #include <string.h>
@@ -1411,10 +1412,11 @@ static Uint32 cargaDesde;
 static void cargaFase(int fase) {
   pthread_mutex_lock(&cargaTrava); carga.fase = fase; pthread_mutex_unlock(&cargaTrava);
 }
+static int cargaDaHome(void);
 void desc_home_carga(DescHomeCarga *estado) {
   if (!estado) return;
   pthread_mutex_lock(&cargaTrava);
-  carga.ativo = desc_montando();
+  carga.ativo = cargaDaHome();
   if (carga.ativo && cargaDesde) carga.ms = SDL_GetTicks() - cargaDesde;
   *estado = carga;
   pthread_mutex_unlock(&cargaTrava);
@@ -2864,6 +2866,46 @@ void desc_refazer_continuar(void) {
   else pthread_detach(t);
 }
 
+// A SAIDA DO PLAYER, LOCAL E NO MESMO QUADRO (cwfrente.h). Substitui o
+// desc_repetir() que app.c pedia quando o titulo nao estava na fileira: o ciclo
+// inteiro (~20 s na TV) publicava a home de novo, o card entrava muito depois
+// do pouso na ilha e a carga dele tomava a pilula. A refacao so do Continuar
+// ja sai de fecharSessao e reconcilia com a conta/Trakt/Simkl.
+//
+// Chamada no fio de desenho, depois de o progresso ir para o item
+// (cat_salvar_progresso_ep): o card nasce com a barra e o episodio de agora.
+// contTrava so por TRYLOCK: um fioContinuar com ela esta na rede, e publica a
+// verdade por cima desta logo depois. Com ela, a geracao anda como numa
+// refacao — um montar() em curso reaplica esta janela em vez de devolver a
+// fileira velha (cwAntesDePublicar).
+int desc_continuar_otimista(int indice) {
+  static CatItem atual[CONT_MAX], saida[CONT_MAX];
+  CatItem novo;
+  const CatItem *ci = cat_item(indice);
+  int n, k, mudou, travou;
+  if (!ci || !ci->imdb[0]) return 0;
+  novo = *ci;
+  if (novo.progresso < 1 || novo.progresso >= ajustes_cw_concluido()) return 0;
+  if (ajustes_cw_fonte() == AJ_CWF_SIMKL && !simkl_ativo()) return 0;
+  if (!strcmp(novo.tipo, "series") && novo.temporada > 0 && novo.episodio > 0) {
+    char base[64];
+    idbase_copiar(ci->imdb, base, sizeof base);
+    snprintf(novo.imdb, sizeof novo.imdb, "%s:%d:%d", base, novo.temporada, novo.episodio);
+  }
+  travou = pthread_mutex_trylock(&contTrava) == 0;
+  n = cat_copiar_fileira("continue_watching", atual, CONT_MAX, NULL);
+  k = cw_frente_compor(atual, n, &novo, saida, CONT_MAX, &mudou);
+  if (mudou) {
+    cat_trocar_continuar(saida, k);
+    if (travou) cwGerNaTela = ++cwGer;
+  }
+  if (travou) pthread_mutex_unlock(&contTrava);
+  printf("[desc] continuar assistindo: %s %s ao sair do player (local; a refacao confirma)\n",
+         novo.imdb, mudou ? "na frente" : "ja estava na frente");
+  fflush(stdout);
+  return mudou;
+}
+
 // AS DUAS METADES DE UMA PUBLICACAO DE montar() (ver cwGer). A primeira toma
 // contTrava e, se uma refacao publicou depois de montar() calcular a fileira,
 // copia a janela da tela; a segunda, depois de publicar, devolve essa janela
@@ -2910,6 +2952,13 @@ static void publicarMontagem(const CatItem *lote, int n, const CatFileira *fils,
 int desc_montando(void) {
   return buscando || repetirAoFim || cwVivo || cwDeNovo;
 }
+// A CARGA DA HOME (o aviso "Carregando fileiras…" da ilha) e o ciclo de
+// descoberta, nao a refacao so do Continuar assistindo: essa nao consulta add-on
+// nenhum, roda a cada saida do player (fecharSessao) e, contada como carga,
+// trocava o cartao da pilula pelo aviso no meio do voo do player ate a ilha
+// (tests/ilha_voo_cw.sh). desc_montando continua com as duas: a troca de perfil
+// espera a fileira certa.
+static int cargaDaHome(void) { return buscando || repetirAoFim; }
 
 int desc_tirar_continuar(const char *imdb, int temporada, int episodio) {
   char chave[192];

@@ -109,6 +109,7 @@
 #include "addons.h"
 #include "idioma.h"
 #include "descoberta.h"
+#include "ilha_voo.h"
 #include "colecoes.h"
 #include "posterprov.h"
 #include "proximo.h"
@@ -3294,23 +3295,18 @@ void app_atualizar(float dt, Uint32 agora) {
     if (player_aberto()) player_erro_fonte();
   }
 
-  // SAIR DO PLAYER PODE PRECISAR REFAZER "CONTINUAR ASSISTINDO".
+  // SAIR DO PLAYER COLOCA O TITULO NA FRENTE DE "CONTINUAR ASSISTINDO".
   //
-  // Relato: "assisto um filme ou episodio, saio do player, e o titulo so
-  // aparece em Continuar assistindo depois de fechar e reabrir o app".
-  // Certissimo: o progresso e gravado na hora, mas a FILEIRA e montada durante
-  // a descoberta (montarContinuar), e nada a refazia ao sair.
+  // Relato antigo: "assisto um filme ou episodio, saio do player, e o titulo so
+  // aparece em Continuar assistindo depois de fechar e reabrir o app". A
+  // resposta foi desc_repetir() quando o titulo nao estava na fileira — o ciclo
+  // inteiro (~20 s nesta TV), que republicava a home e punha "Carregando
+  // fileiras…" na ilha bem no voo do player ate a pilula. E o card so entrava
+  // depois do pouso (dono, 03/10). Hoje fecharSessao ja refaz so o Continuar
+  // num fio (desc_refazer_continuar), e o card entra LOCAL no mesmo quadro
+  // (desc_continuar_otimista, logo depois de player_encerrar/suspender, com o
+  // progresso ja no item): na frente, onde a refacao tambem o poe.
   //
-  // POR QUE desc_repetir() E NAO UMA REMONTAGEM BARATA, que era o meu primeiro
-  // reflexo: montarContinuar chama a rede (trakt_continuar, trakt_enfeitar_lote)
-  // e usa buffers `static` do fio de descoberta — chama-la daqui seria I/O
-  // bloqueante no fio de desenho E corrida com aquele fio. desc_repetir() ja e
-  // a resposta da casa para "esta fileira precisa ser refeita": ajustes.c a usa
-  // quando a FONTE do Continuar assistindo muda, que e o mesmo problema.
-  //
-  // SO QUANDO O TITULO NAO ESTA LA. Continuar algo que ja esta na fileira e o
-  // caso comum, e ali nada mudou de lugar — pagar um ciclo inteiro (~20 s nesta
-  // TV) a cada saida do player seria cobrar do comum o preco do raro.
   // VOLTAR NUM CANAL ABERTO PELO GUIA: o video encolhe para o preview do guia,
   // na hora (sem esperar o fade da interface do player) e sem recarregar. O
   // PiP de canto ficou para os canais abertos fora do guia.
@@ -3334,27 +3330,15 @@ void app_atualizar(float dt, Uint32 agora) {
     } else {
     int idx = player_indice();
     const CatItem *ci = idx >= 0 ? cat_item(idx) : NULL;
-    int naFileira = 0;
-    if (ci && ci->imdb[0]) {
-      int r;
-      for (r = 0; r < cat_n_fileiras() && !naFileira; r++) {
-        const CatFileira *f = cat_fileira(r);
-        if (!f || strcmp(f->chave, "continue_watching")) continue;
-        { int k;
-          for (k = 0; k < f->n; k++) {
-            const CatItem *it = cat_item(f->ini + k);
-            if (it && !strcmp(it->imdb, ci->imdb)) { naFileira = 1; break; }
-          } }
-      }
-      if (!naFileira) {
-        printf("[home] %s nao estava em Continuar assistindo: refazendo\n",
-               ci->imdb);
-        fflush(stdout);
-        desc_repetir();
-      }
-    }
+    // O fundo do voo, copiado ANTES da saida: desc_continuar_otimista troca o
+    // bloco do catalogo e `ci` deixa de valer.
+    char fundoVoo[sizeof ci->backdrop], imdbSaiu[sizeof ci->imdb];
+    snprintf(fundoVoo, sizeof fundoVoo, "%s", ci ? ci->backdrop : "");
+    snprintf(imdbSaiu, sizeof imdbSaiu, "%s", ci ? ci->imdb : "");
     { unsigned vivoAntes = ilhacart_vivo_seq();
       if (!ajustes_saida_player_home() || !player_suspender()) player_encerrar();
+      // O indice CORRENTE do titulo (o player grava por ele, idxAtual).
+      if (imdbSaiu[0]) desc_continuar_otimista(cat_indice_vivo(idx, imdbSaiu));
       // MINIMIZAR NA ILHA (pedido do dono, 02/10): saiu no MEIO (esta saida
       // virou a atividade ao vivo, o criterio de home_retorno_vale) com o
       // relogio ligado e "Ao sair do player" = home. A pagina do titulo e o
@@ -3366,7 +3350,7 @@ void app_atualizar(float dt, Uint32 agora) {
         if (menu_aberto()) menu_fechar();
         trocarTela(TELA_HOME);
         menu_definir_destino(MENU_INICIO);
-        ilha_minimizar(ci ? ci->backdrop : NULL);
+        ilha_minimizar(fundoVoo[0] ? fundoVoo : NULL);
 #ifdef NV_ANDROID
         // A sessao ficou pausada atras da home: o voo comeca DISSOLVENDO a
         // partir do proprio video parado (ilha_minimizar_dissolver).
@@ -3884,7 +3868,18 @@ void app_desenhar(Uint32 agora) {
   // (o titulo do guia ocupa o esquerdo).
   static int homeCarregando;
   static Uint32 homeConcluida;
-  if (tela == TELA_HOME && !detail_aberto()) {
+  // O VOO DO PLAYER ATE A PILULA NAO DIVIDE A ILHA COM A CARGA DA HOME
+  // (ilha_voo_silencio, tests/ilha_voo_cw.sh): calada enquanto voa e logo
+  // depois do pouso; a carga que continuar no ar aparece em seguida.
+  static IlhaVooSilencio vooSilencio;
+  int vooCalado = ilha_voo_silencio(&vooSilencio, ilha_minimizando(), agora);
+  if (tela == TELA_HOME && !detail_aberto() && vooCalado) {
+    // Sem "Home carregada" atrasado depois do pouso por uma carga que acabou
+    // durante o voo: a que ainda estiver no ar volta a contar no quadro seguinte.
+    homeCarregando = 0; homeConcluida = 0;
+    ilha_atividade_detalhes(NULL, NULL);
+  }
+  else if (tela == TELA_HOME && !detail_aberto()) {
     DescHomeCarga load; desc_home_carga(&load);
     if (load.ativo) { homeCarregando = 1; homeConcluida = 0; }
     else if (homeCarregando) { homeCarregando = 0; homeConcluida = agora; }

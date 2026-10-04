@@ -67,4 +67,22 @@ static inline float ilha_voo_pulso(unsigned desdePouso) {
   s = (float)desdePouso / (float)NV_ILHA_PULSO_MS;
   return 1.0f + 0.06f * sinf(3.14159265f * s) * (1.0f - s * 0.35f);
 }
+
+// SILENCIO DA CARGA DA HOME DURANTE O VOO (pedido do dono, 03/10: "quando
+// fecha um filme quebra a animacao do filme indo pra ilha porque quando fecha
+// a fileira de continue watching carrega"). A atividade tem prioridade sobre o
+// cartao na pilula (ilha.c), entao "Carregando fileiras…" no meio do voo troca
+// a pilula de forma e o quadro pousa numa capa que nao esta la
+// (tests/ilha_voo_cw.sh: 428 px de pilula no pouso contra 543 do cartao). Quem
+// alimenta a ilha com a carga (app.c) pergunta aqui: cala enquanto voa e por
+// NV_ILHA_VOO_SILENCIO_MS depois do pouso (o pulso e o cartao assentarem).
+#define NV_ILHA_VOO_SILENCIO_MS 1200u
+typedef struct { int voava; unsigned pousou; } IlhaVooSilencio;
+static inline int ilha_voo_silencio(IlhaVooSilencio *s, int voando, unsigned agora) {
+  if (voando) { s->voava = 1; s->pousou = 0; return 1; }
+  if (s->voava) { s->voava = 0; s->pousou = agora ? agora : 1u; }
+  if (s->pousou && agora - s->pousou < NV_ILHA_VOO_SILENCIO_MS) return 1;
+  s->pousou = 0;
+  return 0;
+}
 #endif
