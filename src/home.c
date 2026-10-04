@@ -4641,7 +4641,7 @@ static void desenhaEditorialCard(const CatItem *cItem, TipoFileira tipo, float p
   // que na home.
   if (!notaFeita && ci && ci->classificacao[0] && tg.w + BADGE_H + 24.0f < w - pad*2) {
     char clas[8];
-    snprintf(clas, sizeof clas, "%s%s", ci->classificacao[0] == 'A' ? "" : "A", ci->classificacao);
+    snprintf(clas, sizeof clas, "%s%s", (ci->classificacao[0] >= '0' && ci->classificacao[0] <= '9') ? "A" : "", ci->classificacao);
     { float bx = px + pad + tg.w + (genero ? 14.0f : 0.0f);
       badge_desenhar(bx, yMeta + (tg.h - BADGE_H) * 0.5f, clas,
                      BADGE_NEUTRO, 0.95f); }
