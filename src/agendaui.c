@@ -854,6 +854,9 @@ void agendaui_evento(const SDL_Event *e) {
           int id = vistaMes ? ordemLista[j] : (j == 0 ? AG_CAB_LISTA : AG_CAB_MES);
           if (id == focoCabecalho) { pos = j; break; }
         }
+        // ESQUERDA no primeiro chip abre a barra lateral por cima da Agenda
+        // (dono, 03/10), em vez de dar a volta ate o ultimo chip.
+        if (k == SDLK_LEFT && pos == 0) { sair = 1; return; }
         pos += k == SDLK_RIGHT ? 1 : -1;
         if (pos < 0) pos = ordemListaN - 1;
         if (pos >= ordemListaN) pos = 0;
@@ -892,8 +895,11 @@ void agendaui_evento(const SDL_Event *e) {
       return;
     }
     if (k == SDLK_UP && calCelula < 7) { focoCabecalho = AG_CAB_HOJE; return; }
+    // COLUNA 0 DA GRADE (domingo): a barra lateral por cima (dono, 03/10).
+    // Antes a ESQUERDA ali pulava para o ultimo dia da semana de cima.
     if (k == SDLK_LEFT) {
-      if (calCelula > 0) selecionaCelula(calCelula - 1);
+      if (calCelula % 7 == 0) sair = 1;
+      else selecionaCelula(calCelula - 1);
       return;
     }
     if (k == SDLK_RIGHT) {
@@ -914,6 +920,7 @@ void agendaui_evento(const SDL_Event *e) {
   if (focoCabecalho) {
     if (volta || k == SDLK_DOWN) { focoCabecalho = 0; return; }
     if (k == SDLK_UP) return;
+    if (k == SDLK_LEFT && focoCabecalho == AG_CAB_LISTA) { sair = 1; return; }
     if (k == SDLK_LEFT || k == SDLK_RIGHT) {
       focoCabecalho = focoCabecalho == AG_CAB_LISTA ? AG_CAB_MES : AG_CAB_LISTA;
       return;

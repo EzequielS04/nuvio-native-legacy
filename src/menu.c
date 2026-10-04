@@ -163,6 +163,14 @@ static int   aberto  = 0;
 static int   destino = MENU_INICIO;
 static int   linha   = MENU_INICIO;   // destaque; so vira destino ao escolher
 static int   mudou   = 0;
+// POR CIMA DE UMA CAMADA (a pagina do titulo, dono 03/10): a barra abre sobre
+// ela sem fecha-la. Ai DIREITA so devolve o foco (nao escolhe o destaque), a
+// rail fixa nao e desenhada (o painel nasce e some pela opacidade) e
+// `escolheu` diz ao app que um destino foi escolhido — mesmo o atual — para
+// ele fechar a camada. `sobre` dura ate a saida assentar (menu_sobre).
+// `semRail`: a camada nao tem rail (a pagina do titulo); a barra nasce e some
+// pela opacidade em vez de crescer da rail fixa.
+static int   sobre   = 0, semRail = 0, escolheu = 0;
 // `desliza`: rampa reta do veu (0 fechado .. 1 aberto). `expande`: a FORMA
 // do painel (rail -> aberto), na mola da ilha; passa de 1 no repique.
 static float desliza = 0.0f;
@@ -409,8 +417,21 @@ void menu_abrir(void) {
   linha = mostra(destino) ? destino : MENU_INICIO;
   aberto = 1;
   buscaOk = buscaLongo = 0;
+  sobre = semRail = 0;   // abertura comum; menu_abrir_sobre liga depois
 }
 void menu_fechar(void) { aberto = 0; linha = destino; }
+void menu_abrir_sobre(int semRailFixa) {
+  if (aberto) return;
+  menu_abrir();
+  sobre = 1;
+  semRail = semRailFixa;
+}
+static int assentado(void);
+int menu_sobre(void) {
+  if (sobre && !aberto && assentado()) sobre = semRail = 0;
+  return sobre;
+}
+int menu_escolheu(void) { int v = escolheu; escolheu = 0; return v; }
 
 int menu_aberto(void)  { return aberto; }
 int menu_visivel(void) { return 1; }
@@ -430,6 +451,7 @@ const char *menu_rotulo(int d) {
 // esta olhando, e desfazer a escolha no caminho de volta seria surpresa.
 static int tvPastaDoFoco(int foco);
 static void escolher(void) {
+  escolheu = 1;
   if (linha >= MENU_ST0) {
     // Pasta de Streaming (layout Dinamica): abre a colecao, sem trocar de aba.
     pediuColecao = tvPastaDoFoco(linha);
@@ -476,6 +498,9 @@ void menu_evento(const SDL_Event *e) {
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
       k == SDLK_DELETE) { menu_fechar(); return; }
 
+  // Por cima da pagina do titulo, DIREITA e o caminho de volta para ela (dono,
+  // 03/10): escolher ali fecharia a pagina so por sair da barra.
+  if (k == SDLK_RIGHT && sobre) { menu_fechar(); return; }
   if (k == SDLK_RIGHT || k == SDLK_RETURN || k == SDLK_KP_ENTER) { escolher(); return; }
   if (tvAtivo()) {
     // Ordem da barra da Apple TV: cabecalho (perfil), Buscar, Inicio, ...
@@ -502,7 +527,7 @@ void menu_evento(const SDL_Event *e) {
 void menu_atualizar(float dt, Uint32 agora) {
   if (buscaOk && !buscaLongo && aberto && agora - buscaDesde >= NV_HOLD_MS) {
     buscaLongo = 1;
-    pediuSpot = 1;
+    pediuSpot = 1;   // o Spotlight abre por cima de tudo: nao fecha a camada
     aberto = 0;
     linha = destino;
   }
@@ -646,7 +671,7 @@ static void desenhaRodape(const MenuGeo *g, float e, float alpha, float foco, fl
 
 // O PAINEL ESTA NA TELA? E com que forma. Fechado e assentado, com a rail
 // fixa, e a rail (e = 0); recolhida e fechada, nada.
-static int railFixa(void) { return !ajustes_rail_recolhida(); }
+static int railFixa(void) { return !ajustes_rail_recolhida() && !(sobre && semRail); }
 
 // Borda direita do menu classico, em px da tela REAL (o menu e camada
 // ampliada, escala.h), para a ilha do relogio. Abrindo, devolve logo a largura
@@ -771,6 +796,12 @@ static void menu_desenharCorpo_(Uint32 agora) {
 #define TV_MOLA_PILULA  10.0f
 
 static float tvAbre = 0.0f, tvAbreV = 0.0f;
+// Nada da barra na tela e nenhuma mola andando (as duas versoes da barra).
+static int assentado(void) {
+  if (aberto) return 0;
+  if (tvAtivo()) return tvAbre < 0.002f && tvAbreV == 0.0f;
+  return desliza < 0.002f && expande <= 0.004f && fabsf(expandeV) < 0.05f;
+}
 static float tvRolar = 0.0f, tvRolarV = 0.0f;
 static float tvPilAlfa = 1.0f, tvPilAlvo = 1.0f;
 

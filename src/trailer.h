@@ -78,6 +78,8 @@ const char *trailer_dono_imdb(void);
 // Leva o trailer aberto (fora da tela cheia) para `r` com `som`, SEM trocar
 // de fonte nem reabrir o player. 0 quando nao ha o que levar.
 int  trailer_continuar(GfxRect r, int som);
+// 1 com o trailer aberto e com som (o `som` efetivo do ultimo trailer_abrir).
+int  trailer_com_som(void);
 // Teclado do modo de tela cheia. 1 quando consumiu.
 int  trailer_evento(const SDL_Event *e);
 void trailer_atualizar(Uint32 agora);
