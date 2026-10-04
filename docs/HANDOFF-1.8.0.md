@@ -16,7 +16,6 @@ A 1.8.0 precisa das duas linhas: primeiro trazer o master para dentro do Glass U
 
 Juntar antes da release se ficarem prontos, ou deixar de fora e citar nas notas:
 
-- `agente/codex-ajustes-arte` (`/private/tmp/nv-codex-aj`, merge `6cdc8517`): ilustrações das categorias dos Ajustes, toggles animados, barras crescendo na horizontal. **Aguarda decisão do dono** (esqueleto cinza x arte real do catálogo). Não juntar sem ok.
 - `agente/codex-contexto` (`/private/tmp/nv-codex-ctx`): só documentação (`docs/glass-ui-contexto.md`).
 
 ## Guia de TV: parcial (já em `feat/glass-ilha`)
@@ -48,7 +47,7 @@ Cabeçalho (kicker, título, chips, Cartões/Lista segmentado) e a grade como il
 ## O que entra na 1.8.0 (para as notas)
 
 - Glass UI: todo painel vira uma ilha no material da ilha do relógio, em vidro ou sólido (Aparência). Opacidade do vidro e Vidro fosco (avançados).
-- Ajustes v2: menu de categorias grande, a categoria em foco abre em duas linhas, lista desliza por cima do menu; Fundo (Arte / Arte borrada / Frost); prévias e gráficos reais (memória, diagnóstico, teste de velocidade); Guia de uso com 87 recursos.
+- Ajustes v2: miniaturas com arte real em cada categoria, toggles animados, barras que crescem na horizontal; menu de categorias grande, a categoria em foco abre em duas linhas, lista desliza por cima do menu; Fundo (Arte / Arte borrada / Frost); prévias e gráficos reais (memória, diagnóstico, teste de velocidade); Guia de uso com 87 recursos.
 - Tamanho da interface (100/120/130/150%); Spotlight mín. 130%, Agenda e topo da Biblioteca mín. 120%, menu lateral fixo em 90%.
 - Menu lateral: Moderna como trilho flutuante que abre em painel; Padrão como painel na borda, centralizado.
 - 18 cores de destaque (6 novas), texto escuro nas cores claras, Da arte / Gradiente / Imersiva, Textura (recorte do logo do título).
