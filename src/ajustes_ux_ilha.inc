@@ -1002,6 +1002,162 @@ static void ajDesenharAddons(int foco) {
     ajDicas(d, 2, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1); }
 }
 
+// --- PLUGINS (pluginsui.c, F09) NO MESMO ARRANJO ----------------------------------
+// Indice com Contas aberta, a folha com o liga/desliga, "Adicionar" e os
+// repositorios (ou os scrapers de um), e o inspetor do item focado. Sem motor
+// neste aparelho, a folha diz isso e nada mais (nunca uma linha que nao faz
+// nada).
+static const char *ajPlugEstado(int i) {
+  switch (plugins_repo_estado(i)) {
+    case 1:  return "manifesto conferido";
+    case -1: return "o manifesto não respondeu";
+    case 2:  return "Extensões CloudStream: só no app Android";
+    default: return "conferindo o manifesto…";
+  }
+}
+static void ajPlugHost(const char *url, char *dst, size_t tam) {
+  const char *p = strstr(url, "://");
+  p = p ? p + 3 : url;
+  snprintf(dst, tam, "%.*s", (int)strcspn(p, "/"), p);
+}
+static void ajDesenharPlugins(const AjPluginsVista *v);
+void ajustes_desenhar_plugins(const AjPluginsVista *v) {
+  AJ_ESCALA_INI();
+  ajDesenharPlugins(v);
+  AJ_ESCALA_FIM();
+}
+static void ajDesenharPlugins(const AjPluginsVista *v) {
+  int disp = plugins_disponivel(), nr = plugins_n_repos(), n, i, salvoIdx = uxIndice, salvoFoco = focoIndice;
+  int foco = v->foco;
+  GfxRect fr, ir;
+  float topo, base = NV_VTELA_H - 40.0f / ajustes_tamanho_ajustes(), y, alvo;
+  char sub[160], linha[200];
+  PlugRepo rp;
+  montarTela();
+  ajFundo();
+  uxIndice = uxSecaoDe(AJ_PLUGINS) + 2; focoIndice = 0;
+  ajDesenharIndice();
+  uxIndice = salvoIdx; focoIndice = salvoFoco;
+  fr = ajFolhaR(); ir = ajInspR();
+  ajIlha(fr, 36, 1, 0);
+  memset(&rp, 0, sizeof rp);
+  if (v->nivel == 1) plugins_repo(v->repo, &rp);
+  if (!disp) snprintf(sub, sizeof sub, "%s", i18n("Indisponível nesta plataforma"));
+  else if (v->nivel == 0) {
+    int ns = 0, k;
+    for (k = 0; k < nr; k++) ns += plugins_repo_scrapers(k, NULL);
+    snprintf(sub, sizeof sub, i18n("%d repositórios · %d scrapers"), nr, ns);
+  } else {
+    int lig, tot = plugins_repo_scrapers(v->repo, &lig);
+    snprintf(sub, sizeof sub, i18n("%d scrapers · %d ligados"), tot, lig);
+  }
+  topo = ajCabecalhoFolha(fr, v->nivel == 1 ? "Plugins" : "Contas e serviços",
+                          v->nivel == 1 ? (rp.nome[0] ? rp.nome : rp.url) : "Plugins", sub, 0, 1);
+  n = !disp ? 1 : v->nivel == 0 ? 2 + nr : 1 + plugins_repo_scrapers(v->repo, NULL);
+  if (foco >= n) foco = n - 1;
+  alvo = foco * 84.0f - (base - topo - 80.0f) * 0.5f;
+  if (alvo > n * 84.0f - (base - topo)) alvo = n * 84.0f - (base - topo);
+  if (alvo < 0) alvo = 0;
+  gfx_recorte(fr.x, topo, fr.w, base - topo);
+  y = topo - alvo;
+  for (i = 0; i < n; i++, y += 84) {
+    GfxRect r = { fr.x + 18, y, fr.w - 36, 80 };
+    float a = ajMascara(y + 40, topo, base), cw = 0;
+    int f = i == foco;
+    const char *nome = "", *apoio = "", *icone = NULL;
+    char nomeBuf[128] = "", apoioBuf[160] = "";
+    int chip = -1;   // -1 sem chip; 0/1 desligado/ligado
+    if (y + 80 < topo || y > base) continue;
+    if (!disp) { nome = "Plugins"; apoio = "O motor de plugins não roda neste aparelho."; icone = "aj_puzzle"; }
+    else if (v->nivel == 0 && i == 0) {
+      nome = "Plugins"; apoio = "Scrapers dos repositórios Nuvio como mais uma fonte, ao lado dos add-ons"; icone = "aj_puzzle"; chip = plugins_ligado();
+    } else if (v->nivel == 0 && i == 1) {
+      nome = "Adicionar repositório"; apoio = "Digite a URL do manifest.json"; icone = "aj_plus";
+    } else if (v->nivel == 0) {
+      PlugRepo q; int lig, tot;
+      plugins_repo(i - 2, &q);
+      tot = plugins_repo_scrapers(i - 2, &lig);
+      snprintf(nomeBuf, sizeof nomeBuf, "%s", q.nome[0] ? q.nome : q.url);
+      nome = nomeBuf;
+      if (plugins_repo_estado(i - 2) == 1) snprintf(apoioBuf, sizeof apoioBuf, i18n("%d scrapers · %d ligados"), tot, lig);
+      else snprintf(apoioBuf, sizeof apoioBuf, "%s", i18n(ajPlugEstado(i - 2)));
+      apoio = apoioBuf; chip = q.ativo;
+    } else if (i == 0) {
+      nome = "Remover repositório"; icone = "aj_x";
+      apoio = v->armado ? "OK de novo remove o repositório" : "OK para remover";
+    } else {
+      PlugScraper s;
+      if (plugins_scraper(v->repo, i - 1, &s)) {
+        snprintf(nomeBuf, sizeof nomeBuf, "%s", s.nome);
+        snprintf(apoioBuf, sizeof apoioBuf, "%s", i18n(s.filme && s.serie ? "Filmes e séries" : s.filme ? "Filmes" : "Séries"));
+        nome = nomeBuf; apoio = apoioBuf; chip = s.ativo;
+      }
+    }
+    if (f) ajFocoLinha(r, 22, 1, a);
+    if (icone) {
+      ajNeutro((GfxRect){ r.x + 22, y + 16, 48, 48 }, 14, 0.09f, 0.141f, 0.149f, 0.173f, a);
+      ajIcone(icone, r.x + 22 + 14, y + 16 + 14, 20, 0.85f * a);
+    } else ajRosto(nome, r.x + 22, y + 16, 48, 14, 0.09f, 0.85f * a, TXT_ILHA_INICIAL);
+    if (chip >= 0) cw = ajChipLiga(r.x + r.w - 22, y + 40, chip, a);
+    else if (v->nivel == 0 && i >= 2) cw = 0;
+    { TxtLinha t = ajTxtC(TXT_AJ_ROTULO, nome, r.w - 22 - 64 - cw - 40);
+      TxtLinha c = ajTxtC(TXT_ILHA_GENERO, apoio, r.w - 22 - 64 - cw - 40);
+      float ty = y + 40 - (t.h + 4 + c.h) * 0.5f;
+      txt_desenhar_alpha(t, r.x + 22 + 48 + 16, ty, (f ? 1.0f : 0.86f) * a);
+      txt_desenhar_alpha(c, r.x + 22 + 48 + 16, ty + t.h + 4, 0.42f * a); }
+  }
+  gfx_sem_recorte();
+  if (v->aviso && v->aviso[0]) {
+    TxtLinha t = ajTxtC(TXT_AJ_SUB, v->aviso, fr.w - 100);
+    txt_desenhar_alpha(t, fr.x + 50, fr.y + fr.h - 30 - t.h, 0.7f);
+  }
+  if (!ajTemInspetor()) return;
+  ajIlha(ir, 36, 1, 0);
+  { float x = ir.x + 32, w = ir.w - 64, py = ir.y + 32, tx = x + 6, tw = w - 12;
+    const char *titulo = "Plugins", *texto =
+      "Scrapers em JavaScript dos repositórios de plugins do Nuvio, como mais uma fonte na lista, ao lado dos add-ons. Os repositórios vêm da sua conta. Desligado por padrão.";
+    char host[160] = "";
+    if (!disp) texto = "O motor de plugins não roda neste aparelho.";
+    else if (v->nivel == 0 && foco == 1) { titulo = "Adicionar repositório"; texto = "A URL do manifest.json. Ex.: raw.githubusercontent.com/usuario/repo/main"; }
+    else if (v->nivel == 0 && foco >= 2 && plugins_repo(foco - 2, &rp)) {
+      int lig, tot = plugins_repo_scrapers(foco - 2, &lig);
+      ajPlugHost(rp.url, host, sizeof host);
+      ajKicker("Repositório", tx, py, 1); py += 30;
+      py += ajBloco(TXT_AJ_INSP, rp.nome[0] ? rp.nome : host, tx, py, tw, 38.4f, 1, 2) + 14;
+      py += ajMeta(i18n("Conta"), i18n(rp.ativo ? "Ligado" : "Desligado"), tx, py, tw, 1) - 4;
+      py += ajMeta(i18n("Estado"), i18n(ajPlugEstado(foco - 2)), tx, py, tw, 1) - 4;
+      snprintf(linha, sizeof linha, i18n("%d scrapers · %d ligados"), tot, lig);
+      py += ajMeta(i18n("Scrapers"), linha, tx, py, tw, 1) - 4;
+      ajMeta(i18n("Endereço"), host, tx, py, tw, 1);
+      titulo = NULL;
+    } else if (v->nivel == 1 && foco >= 1) {
+      PlugScraper s;
+      if (plugins_scraper(v->repo, foco - 1, &s)) {
+        ajKicker("Scraper", tx, py, 1); py += 30;
+        py += ajBloco(TXT_AJ_INSP, s.nome, tx, py, tw, 38.4f, 1, 2) + 14;
+        py += ajMeta(i18n("Nesta TV"), i18n(s.ativo ? "Ligado" : "Desligado"), tx, py, tw, 1) - 4;
+        ajMeta(i18n("Tipo"), i18n(s.filme && s.serie ? "Filmes e séries" : s.filme ? "Filmes" : "Séries"), tx, py, tw, 1);
+        titulo = NULL;
+      }
+    } else if (v->nivel == 1) { titulo = "Remover repositório"; texto = "Remove o repositório desta TV e da sua conta. Remover o último deixa a lista vazia também na conta."; }
+    if (titulo) {
+      ajIcone("aj_puzzle", tx, py - 1, 20, 0.45f);
+      ajCaps(TXT_MINI, "Plugins", 2.1f, tx + 30, py, 0.45f);
+      py += 28;
+      py += ajBloco(TXT_AJ_INSP, titulo, tx, py, tw, 38.4f, 1, 2) + 12;
+      ajBloco(TXT_AJ_SUB, texto, tx, py, tw, 28.5f, 0.62f, 7);
+    } }
+  if (!disp) { AjDica d[1] = { { "Voltar", "Ajustes" } }; ajDicas(d, 1, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1); }
+  else if (v->nivel == 0) {
+    AjDica d[3] = { { "OK", foco == 1 ? "Adicionar" : "Ligar ou desligar" }, { "→", "Scrapers" }, { "Voltar", "Ajustes" } };
+    if (foco < 2) d[1] = d[2];   // sem scrapers para abrir nesta linha
+    ajDicas(d, foco >= 2 ? 3 : 2, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1);
+  } else {
+    AjDica d[2] = { { "OK", foco == 0 ? "Remover" : "Ligar ou desligar" }, { "←", "Repositórios" } };
+    ajDicas(d, 2, ir.x + 32, ir.y + ir.h - 32, ir.w - 64, 1);
+  }
+}
+
 // --- KIT DAS ILHAS PARA AS TELAS VIZINHAS (diagnostico.c, livetvdiag.c) -----------
 // As mesmas pecas de Ajustes, para o diagnostico, o teste de velocidade e o
 // diagnostico da Live TV ornarem com a tela de onde saem. Ver ajustes.h.

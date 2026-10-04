@@ -17,6 +17,7 @@
 #include "iconeapp.h"
 #include "registro.h"
 #include "addonsui.h"
+#include "pluginsui.h"
 #include "login.h"
 #include "sessao.h"
 #include "perfis.h"
@@ -1933,6 +1934,7 @@ void app_evento(const SDL_Event *e) {
     case TELA_PERFIL:     perfil_evento(e);     break;
     case TELA_SOCIAL:     amigoperfil_evento(e); break;
     case TELA_ADDONS:     addonsui_evento(e);   break;
+    case TELA_PLUGINS:    pluginsui_evento(e);  break;
     case TELA_AJUSTES:    ajustes_evento(e);    break;
     case TELA_DIAGNOSTICO: diagnostico_evento(e); break;
     case TELA_LIVETV_DIAG: livetvdiag_evento(e); break;
@@ -2631,6 +2633,14 @@ void app_atualizar(float dt, Uint32 agora) {
   if (tela == TELA_AJUSTES && ajustes_pediu_addons()) {
     addonsui_abrir();
     trocarTela(TELA_ADDONS);
+  }
+  // Plugins (F09): o mesmo caminho da lista de addons (abre de Ajustes, volta a ela).
+  if (tela == TELA_PLUGINS && pluginsui_quer_sair()) {
+    trocarTela(TELA_AJUSTES); menu_definir_destino(MENU_AJUSTES);
+  }
+  if (tela == TELA_AJUSTES && ajustes_pediu_plugins()) {
+    pluginsui_abrir();
+    trocarTela(TELA_PLUGINS);
   }
   if (tela == TELA_AJUSTES && ajustes_pediu_diagnostico()) {
     diagDaHome = 0;
@@ -3708,6 +3718,7 @@ void app_atualizar(float dt, Uint32 agora) {
   pipintro_atualizar(dt, agora);
   if(tela==TELA_SOCIAL) amigoperfil_atualizar(dt, agora);
   if(tela==TELA_ADDONS) addonsui_atualizar(dt, agora);
+  if(tela==TELA_PLUGINS) pluginsui_atualizar(dt, agora);
 }
 
 // O corpo do desenho de TELA. Saiu de app_desenhar para uma funcao propria por
@@ -3738,6 +3749,7 @@ static void desenharAtrasDoPainel(void *ctx) {
       case TELA_PERFIL:     perfil_desenhar(agora);     break;
       case TELA_SOCIAL:     amigoperfil_desenhar(agora);     break;
       case TELA_ADDONS:     addonsui_desenhar(agora);   break;
+      case TELA_PLUGINS:    pluginsui_desenhar(agora);  break;
       case TELA_AJUSTES:    ajustes_desenhar(agora);    break;
       case TELA_DIAGNOSTICO: diagnostico_desenhar(agora); break;
       case TELA_LIVETV_DIAG: livetvdiag_desenhar(agora); break;
@@ -3894,7 +3906,7 @@ static int relogioCabe(void) {
   if (tela == TELA_HOME) { if (!homePronta) return 0; }
   else if (tela != TELA_EXPLORAR && tela != TELA_BUSCA &&
            tela != TELA_BIBLIOTECA && tela != TELA_PERFIL && tela != TELA_SOCIAL &&
-           tela != TELA_ADDONS && tela != TELA_AGENDA) return 0;
+           tela != TELA_ADDONS && tela != TELA_PLUGINS && tela != TELA_AGENDA) return 0;
   // O MENU ABERTO NAO ESCONDE MAIS O RELOGIO (Glass UI, mockup "ilha" tela 1):
   // a ilha do menu nasce logo abaixo da do relogio, na mesma margem
   // (ilha_posicionar), e as duas formam a coluna da esquerda.

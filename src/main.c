@@ -100,6 +100,7 @@ static void aoSinalTerminar(int sig) {
 #include <SDL2/SDL_syswm.h>
 #endif
 #include "layout.h"
+#include "plugins.h"
 
 // RSS DO PROCESSO, em MB, lido de /proc/self/statm. E o numero que responde
 // "da para subir o orcamento de texturas?" — o teto de 96 MB foi escolhido
@@ -916,6 +917,10 @@ int main(int argc, char **argv) {
   // lista de exemplo — nunca fica sem nada para mostrar. addons.c olha a pasta
   // gravavel primeiro: a lista da CONTA e guardada la e sobrevive a recarga.
   addons_carregar(dirArte);
+  // Plugins Nuvio (F09, desligados por padrao): estado da conta+perfil e a
+  // ligacao como mais uma origem da busca de fontes.
+  plugins_iniciar();
+  plugins_ligar_aos_addons();
   // Ajustes tambem sao do USUARIO, nao do pacote.
   ajustes_dir(dirDados);
   // Icone do app (apoiadores): a arte vem do pacote; o alias do launcher do

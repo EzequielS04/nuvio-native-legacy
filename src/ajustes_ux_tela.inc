@@ -96,7 +96,7 @@ static const Item TELA[] = {
 
   SEC("Contas e serviços", "Perfil, sincronização, histórico e serviços conectados", "aj_user-round"),
     ROT("Conta e perfis"),
-      OPC(AJ_PERFIL_ATIVO), OPC(AJ_SYNC), OPC(AJ_ADDONS), OPC(AJ_ADDONS_PRINCIPAL),
+      OPC(AJ_PERFIL_ATIVO), OPC(AJ_SYNC), OPC(AJ_ADDONS), OPC(AJ_PLUGINS), OPC(AJ_ADDONS_PRINCIPAL),
       OPC(AJ_PERFIL_PESQ), OPC(AJ_PERFIL_EDITAR), OPC(AJ_SAIR),
     ROT("Trakt e Simkl"),
       OPC(AJ_TRAKT), OPC(AJ_SIMKL), OPC(AJ_DISCORD), OPC(AJ_SALVOS_DEST), OPC(AJ_CW_FONTE),

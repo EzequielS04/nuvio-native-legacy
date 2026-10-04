@@ -361,6 +361,9 @@ void perfis_carregar_ativo(void) {
   lerCache();
 }
 
+// plugins.h puxa streams.h (SDL); perfis.c compila sem SDL nos testes.
+void plugins_perfil_mudou(void);
+
 void perfis_definir_ativo(int indice) {
   char linha[32];
   if (indice <= 0) return;
@@ -368,6 +371,9 @@ void perfis_definir_ativo(int indice) {
   fil_definir_perfil(indice);
   fontepref_definir_perfil(indice);
   arteesc_definir_perfil(indice);
+  // O estado dos plugins e da conta+perfil: trocar avanca a geracao, corta os
+  // scrapers em voo e relê o liga/desliga e os repositorios do perfil novo.
+  plugins_perfil_mudou();
   escolhido = 1;
   gravado = 1;
   snprintf(linha, sizeof linha, "%d\n", indice);

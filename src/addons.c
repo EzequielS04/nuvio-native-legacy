@@ -118,12 +118,20 @@ static void progDrenar(void);
 //
 // `progEstado` diz quem falta, para a folha: 1 = esperando, 2 = respondeu,
 // 3 = desistiu (sem resposta e sem segunda chance pela frente).
+//
+// OS PLUGINS (F09) SAO MAIS ORIGENS NA MESMA FILA. Cada scraper da origem
+// extra (plugins.c) tem a sua vaga em `progEstadoEx`, com o nome dele, e as
+// fontes dele entram na folha com ordem ADD_MAX + k: depois de todos os
+// addons, na ordem do manifesto.
+#define ADD_EXTRA_MAX 160   // = PLUG_SCRAPERS_MAX (plugins.h)
 typedef struct { int idx; Stream *a; int n; } Chegada;
 static pthread_mutex_t progTrava = PTHREAD_MUTEX_INITIALIZER;
 static unsigned char progEstado[ADD_MAX];
-static Chegada progFila[ADD_MAX * 2];
+static unsigned char progEstadoEx[ADD_EXTRA_MAX];
+static char progNomeEx[ADD_EXTRA_MAX][48];
+static Chegada progFila[ADD_MAX * 2 + ADD_EXTRA_MAX];
 static int progN;
-static int progLigado, progPublicou;
+static int progLigado, progPublicou, progExtraPublicou;
 static Uint32 progInicio;
 
 static void progMarcar(int i, const Stream *a, int n, int estadoNovo) {
@@ -143,12 +151,33 @@ static void progMarcar(int i, const Stream *a, int n, int estadoNovo) {
   free(copia);
 }
 
+// A parte `k` da origem extra (um scraper). Mesmo contrato de progMarcar,
+// com a ordem de exibicao ADD_MAX + k.
+static void progMarcarEx(int k, const char *nome, const Stream *a, int n, int estadoNovo) {
+  Stream *copia = NULL;
+  if (k < 0 || k >= ADD_EXTRA_MAX) return;
+  if (a && n > 0) {
+    copia = malloc(sizeof(Stream) * (size_t)n);
+    if (copia) memcpy(copia, a, sizeof(Stream) * (size_t)n);
+  }
+  pthread_mutex_lock(&progTrava);
+  progEstadoEx[k] = (unsigned char)estadoNovo;
+  if (nome) snprintf(progNomeEx[k], sizeof progNomeEx[k], "%s", nome);
+  if (copia && progN < (int)(sizeof progFila / sizeof *progFila)) {
+    progFila[progN].idx = ADD_MAX + k; progFila[progN].a = copia; progFila[progN].n = n;
+    progN++; copia = NULL;
+  }
+  pthread_mutex_unlock(&progTrava);
+  free(copia);
+}
+
 static void progLimpar(void) {
   int q;
   pthread_mutex_lock(&progTrava);
   for (q = 0; q < progN; q++) free(progFila[q].a);
   progN = 0;
   memset(progEstado, 0, sizeof progEstado);
+  memset(progEstadoEx, 0, sizeof progEstadoEx);
   pthread_mutex_unlock(&progTrava);
 }
 
@@ -438,7 +467,7 @@ AddEstado addons_estado(void) {
       if (progPublicou)
         printf("[addons] busca completa em %u ms\n", (unsigned)(SDL_GetTicks() - progInicio));
     }
-    progLigado = 0; progPublicou = 0;
+    progLigado = 0; progPublicou = 0; progExtraPublicou = 0;
     progLimpar();
     free(resultado); resultado = NULL; nResultado = 0;
     if (pendId[0]) {
@@ -480,7 +509,7 @@ AddEstado addons_estado(void) {
 // No fio da UI. Resposta de busca que ja nao e a da tela (pedido novo na fila,
 // conta/perfil trocados) e jogada fora aqui, sem nunca chegar a lista.
 static void progDrenar(void) {
-  Chegada local[ADD_MAX * 2];
+  Chegada local[ADD_MAX * 2 + ADD_EXTRA_MAX];
   int q, k;
   if (!progLigado) return;
   pthread_mutex_lock(&progTrava);
@@ -492,7 +521,13 @@ static void progDrenar(void) {
     if (!pendId[0] && escopoAindaAtual(&fioEscopo)) {
       if (!progPublicou)
         printf("[addons] primeira resposta em %u ms: %s\n",
-               (unsigned)(SDL_GetTicks() - progInicio), addon[local[q].idx].nome);
+               (unsigned)(SDL_GetTicks() - progInicio),
+               local[q].idx < ADD_MAX ? addon[local[q].idx].nome : local[q].a[0].provedor);
+      if (local[q].idx >= ADD_MAX && !progExtraPublicou) {
+        progExtraPublicou = 1;
+        printf("[plugins] primeira fonte de plugin em %u ms: %s\n",
+               (unsigned)(SDL_GetTicks() - progInicio), local[q].a[0].provedor);
+      }
       stream_lista_acrescentar(local[q].a, local[q].n, local[q].idx);
       progPublicou = 1;
     }
@@ -510,24 +545,38 @@ unsigned addons_busca_ms(void) {
   return addons_busca_parcial() ? SDL_GetTicks() - progInicio : 0;
 }
 
-int addons_faltam(char *nomes, unsigned tam) {
-  int i, k = 0;
+static void juntarNome(char *nomes, unsigned tam, size_t *usado, int k, const char *nome) {
+  if (nomes && tam && *usado + 1 < tam) {
+    int w = snprintf(nomes + *usado, tam - *usado, "%s%s", k ? ", " : "", nome);
+    if (w > 0) *usado += (size_t)w;
+    if (*usado >= tam) *usado = tam - 1;
+  }
+}
+
+int addons_faltam_tipo(char *nomes, unsigned tam, int *plugins) {
+  int i, k = 0, p = 0;
   size_t usado = 0;
   if (nomes && tam) nomes[0] = 0;
+  if (plugins) *plugins = 0;
   if (!addons_busca_parcial()) return 0;
   pthread_mutex_lock(&progTrava);
   for (i = 0; i < nAddon && i < ADD_MAX; i++) {
     if (progEstado[i] != 1) continue;
-    if (nomes && tam && usado + 1 < tam) {
-      int w = snprintf(nomes + usado, tam - usado, "%s%s", k ? ", " : "", addon[i].nome);
-      if (w > 0) usado += (size_t)w;
-      if (usado >= tam) usado = tam - 1;
-    }
+    juntarNome(nomes, tam, &usado, k, addon[i].nome);
     k++;
   }
+  // Os plugins depois dos addons, como na folha.
+  for (i = 0; i < ADD_EXTRA_MAX; i++) {
+    if (progEstadoEx[i] != 1) continue;
+    juntarNome(nomes, tam, &usado, k, progNomeEx[i]);
+    k++; p++;
+  }
   pthread_mutex_unlock(&progTrava);
+  if (plugins) *plugins = p;
   return k;
 }
+
+int addons_faltam(char *nomes, unsigned tam) { return addons_faltam_tipo(nomes, tam, NULL); }
 
 int addons_pendente_antes(int idx) {
   int i, r = 0;
@@ -535,6 +584,8 @@ int addons_pendente_antes(int idx) {
   pthread_mutex_lock(&progTrava);
   for (i = 0; i < idx && i < nAddon && i < ADD_MAX; i++)
     if (progEstado[i] == 1) { r = 1; break; }
+  for (i = 0; !r && i < idx - ADD_MAX && i < ADD_EXTRA_MAX; i++)
+    if (progEstadoEx[i] == 1) r = 1;
   pthread_mutex_unlock(&progTrava);
   return r;
 }
@@ -545,6 +596,8 @@ int addons_pendente_nome(const char *nome) {
   pthread_mutex_lock(&progTrava);
   for (i = 0; i < nAddon && i < ADD_MAX; i++)
     if (progEstado[i] == 1 && !strcasecmp(addon[i].nome, nome)) { r = 1; break; }
+  for (i = 0; !r && i < ADD_EXTRA_MAX; i++)
+    if (progEstadoEx[i] == 1 && !strcasecmp(progNomeEx[i], nome)) r = 1;
   pthread_mutex_unlock(&progTrava);
   return r;
 }
@@ -1595,14 +1648,69 @@ static void segundaChance(Consulta *c, int fios) {
   free(c2.baldes); free(orig);
 }
 
+// MAIS UMA ORIGEM DE FONTES: os plugins Nuvio (plugins.c, F09), ligados por
+// ponteiro para este modulo continuar compilando sozinho nos testes. Roda num
+// fio proprio AO MESMO TEMPO que os addons; cada scraper entra na folha como
+// mais uma origem (progMarcarEx) e a lista final soma as fontes dele depois
+// das dos addons, com o nome do scraper como provedor.
+static OrigemExtra origemExtra;
+static int (*origemExtraAtiva)(void);
+void addons_definir_origem_extra(OrigemExtra f, int (*ativa)(void)) {
+  origemExtra = f; origemExtraAtiva = ativa;
+}
+int addons_origem_extra_ativa(void) { return origemExtra && origemExtraAtiva && origemExtraAtiva(); }
+
+typedef struct {
+  const char *id, *tipo;
+  int (*cancelado)(void *); void *ctx;
+  int progresso;
+  Stream *l; int n;
+} PedidoExtra;
+static int cancelaExtra(void *u) {
+  PedidoExtra *p = u;
+  return p->cancelado && p->cancelado(p->ctx) ? 1 : 0;
+}
+static void avisoExtra(void *u, int k, const char *nome, int estado, const void *fontes, int n) {
+  PedidoExtra *p = u;
+  if (!p->progresso) return;
+  progMarcarEx(k, nome, (const Stream *)fontes, n, estado);
+}
+static void *fioExtra(void *u) {
+  PedidoExtra *p = u;
+  p->n = origemExtra(p->id, p->tipo, cancelaExtra, p, avisoExtra, p, &p->l);
+  return NULL;
+}
+
 static int consultar(const char *id, const char *tipo, const char *base, int fios,
                      int (*cancelado)(void *), void *ctx, Stream **saida,
                      Resumo *rs, int progresso) {
   Consulta c;
   Stream *achados = NULL;
   int n = 0, i, q;
+  PedidoExtra extra;
+  pthread_t fioEx;
+  int temExtra = 0;
   *saida = NULL;
-  if (!id || !*id || !tipo || !*tipo || nAddon <= 0) return 0;
+  if (!id || !*id || !tipo || !*tipo) return 0;
+  // So na busca ampla: canal com origem conhecida pergunta a um addon so.
+  memset(&extra, 0, sizeof extra);
+  if (!(base && *base) && addons_origem_extra_ativa()) {
+    pthread_attr_t a;
+    extra.id = id; extra.tipo = tipo; extra.cancelado = cancelado; extra.ctx = ctx;
+    extra.progresso = progresso;
+    pthread_attr_init(&a);
+    pthread_attr_setstacksize(&a, 512u * 1024);
+    temExtra = pthread_create(&fioEx, &a, fioExtra, &extra) == 0;
+    pthread_attr_destroy(&a);
+    if (!temExtra) fioExtra(&extra);
+  }
+  if (nAddon <= 0) {
+    if (temExtra) pthread_join(fioEx, NULL);
+    if (cancelado && cancelado(ctx)) { free(extra.l); return -1; }
+    if (extra.n > 0) { *saida = extra.l; return extra.n; }
+    free(extra.l);
+    return 0;
+  }
   memset(&c, 0, sizeof c);
   c.id = id; c.tipo = tipo; c.tipoAlt = tipoAlternativo(tipo);
   c.cancelado = cancelado; c.ctx = ctx;
@@ -1715,6 +1823,12 @@ static int consultar(const char *id, const char *tipo, const char *base, int fio
   }
   free(c.baldes);
   pthread_mutex_destroy(&c.trava);
+  if (temExtra) pthread_join(fioEx, NULL);
+  if (extra.n > 0) {
+    Stream *tmp = realloc(achados, sizeof(Stream) * (size_t)(n + extra.n));
+    if (tmp) { achados = tmp; memcpy(achados + n, extra.l, sizeof(Stream) * (size_t)extra.n); n += extra.n; }
+  }
+  free(extra.l);
   // Cancelada, a lista pode estar pela metade: nao e resposta, e lixo.
   if (cancelado && cancelado(ctx)) { free(achados); return -1; }
   *saida = achados;
@@ -1808,7 +1922,7 @@ static void dispararBusca(void) {
   fioVivo = 1;
   progLimpar();
   progLigado = alvoVod();
-  progPublicou = 0;
+  progPublicou = 0; progExtraPublicou = 0;
   progInicio = SDL_GetTicks();
   capturarEscopo(&fioEscopo);
   snprintf(fioBase, sizeof fioBase, "%s", alvoBase);
@@ -1829,7 +1943,7 @@ static void buscarPedido(const char *imdb, const char *tipo, int forcar) {
   resumo.valido = 0;
   // Recusa de conta do debrid vale por busca: a nova volta a tentar todos.
   debrid_nova_busca();
-  if (!nAddon) { stream_definir_lista(NULL, 0); resumoDaLista(&resumo); estado = ADD_VAZIO; return; }
+  if (!nAddon && !addons_origem_extra_ativa()) { stream_definir_lista(NULL, 0); resumoDaLista(&resumo); estado = ADD_VAZIO; return; }
   if (fioVivo) {
     if (forcar || strcmp(imdb, alvoId) || strcmp(tipo ? tipo : "movie", alvoTipo)) {
       snprintf(pendId, sizeof pendId, "%s", imdb);

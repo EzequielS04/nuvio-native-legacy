@@ -22,7 +22,8 @@ void ajustes_atualizar(float dt, Uint32 agora);
 void ajustes_desenhar(Uint32 agora);
 int  ajustes_quer_sair(void);
 // 1 quando a linha "Addons" foi acionada. Lido e zerado na chamada.
-int  ajustes_pediu_addons(void);   // 1 quando o Back deve fechar a tela
+int  ajustes_pediu_addons(void);
+int  ajustes_pediu_plugins(void);   // OK em Plugins (F09): o app.c abre a tela   // 1 quando o Back deve fechar a tela
 int  ajustes_pediu_diagnostico(void);
 // OK em "Teste de velocidade" (Ajustes › Diagnóstico). Lido e zerado pelo app.c.
 int  ajustes_pediu_velocidade(void);
@@ -250,6 +251,10 @@ float ajustes_ilha_x(void);
 // A tela de addons (addonsui.c) desenhada no arranjo de Ajustes: indice,
 // folha com os addons e o inspetor do manifesto do addon em `foco`.
 void  ajustes_desenhar_addons(int foco);
+// A tela de plugins (pluginsui.c, F09) no mesmo arranjo. nivel 0 = lista
+// (liga/desliga, adicionar, repositorios); 1 = scrapers do repositorio `repo`.
+typedef struct { int nivel, foco, repo, armado; const char *aviso; } AjPluginsVista;
+void  ajustes_desenhar_plugins(const AjPluginsVista *v);
 // KIT DAS ILHAS (Glass UI) para as telas que saem de Ajustes: diagnostico,
 // teste de velocidade e diagnostico da Live TV. Mesmo material e mesmas pecas
 // da tela de Ajustes (ajustes_ux_ilha.inc).

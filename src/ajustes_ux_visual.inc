@@ -170,6 +170,7 @@ static const char *ajVisualIcone(int op) {
     case AJ_PERFIL_ATIVO: return "aj_user-round";
     case AJ_SYNC: return "aj_cloud";
     case AJ_ADDONS: return "aj_user-round";
+    case AJ_PLUGINS: return "aj_puzzle";
     case AJ_ADDONS_PRINCIPAL: return "aj_user-round";
     case AJ_PERFIL_PESQ: return "aj_user-round";
     case AJ_PERFIL_EDITAR: return "aj_user-round";

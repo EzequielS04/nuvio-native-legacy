@@ -19,6 +19,7 @@
 #include "idiomaauto.h"
 #include "linguas.h"
 #include "addons.h"
+#include "plugins.h"
 #include "gfx.h"
 #include "escala.h"
 #include "text.h"
@@ -354,6 +355,8 @@ typedef enum {
   // #241 (1.8): experimental zoom of the trailer video plane, native .tpk only.
   // LOCAL (each Samsung model reacts differently), default Desligado.
   AJ_TRAILER_ZOOM_TPK,
+  // Plugins Nuvio (F09): abre a tela; o liga/desliga mora em plugins.c.
+  AJ_PLUGINS,
   AJ_N
 } OpcaoId;
 
@@ -1046,6 +1049,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Sincronia por áudio",             V_LIGA, 2),
   ESC("Cache de seek em disco",          V_CACHE_SEEK, 4),
   ESC("Zoom do trailer (experimental)",  V_LIGA, 2),   // local: trailerZoomTpkLocal (.tpk)
+  ACAO("Plugins"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1227,6 +1231,7 @@ static const char *CHAVE[] = {
   "legendaSyncAudioLocal",
   "cacheSeekLocal",
   "trailerZoomTpkLocal",
+  "-plugins",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1367,6 +1372,8 @@ _Static_assert(sizeof valor / sizeof *valor == AJ_N,
 // outras telas, e ganhar essa dependencia agora era o comeco de um no.
 static int pediuAddons;
 int ajustes_pediu_addons(void) { int v = pediuAddons; pediuAddons = 0; return v; }
+static int pediuPlugins;
+int ajustes_pediu_plugins(void) { int v = pediuPlugins; pediuPlugins = 0; return v; }
 static int pediuDiagnostico;
 int ajustes_pediu_diagnostico(void) { int v = pediuDiagnostico; pediuDiagnostico = 0; return v; }
 static int pediuVelocidade;
@@ -3948,6 +3955,12 @@ static const char *textoLeitura(int op) {
       default:             return i18n("conectar");
     }
   }
+  if (op == AJ_PLUGINS) {
+    if (!plugins_disponivel()) return i18n("Indisponível nesta plataforma");
+    if (!plugins_ligado()) return i18n("Desligado");
+    snprintf(buf, sizeof buf, i18n("%d repositórios"), plugins_n_repos());
+    return buf;
+  }
   if (op == AJ_ADDONS) {
     int i, lig = 0, n = addons_n();
     for (i = 0; i < n; i++) if (addons_ativo(i)) lig++;
@@ -4399,6 +4412,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_PERFIL_ATIVO: return "Perfil em uso nesta TV. Trocar de perfil é feito na tela de perfis, ao abrir o app.";
     case AJ_SYNC: return "Estado da última troca de dados com a sua conta: addons, progresso, coleções e preferências.";
     case AJ_ADDONS: return "Abre a lista de addons da sua conta, para ligar e desligar cada um nesta TV.";
+    case AJ_PLUGINS: return "Scrapers em JavaScript dos repositórios de plugins do Nuvio, como mais uma fonte na lista, ao lado dos add-ons. Os repositórios vêm da sua conta. Desligado por padrão.";
     case AJ_TRAKT: return "Conecta a sua conta do Trakt para marcar o que assistiu e usar a sua lista.";
     case AJ_SIMKL: return "Conecta a sua conta do Simkl, uma alternativa ao Trakt para acompanhar séries.";
     case AJ_DISCORD: return "Mostra no seu perfil do Discord o que você está assistindo, com o cartaz e o tempo. Só sai alguma coisa enquanto um vídeo toca neste perfil.";
@@ -4519,7 +4533,7 @@ static const char *efeitoOpcao(int op) {
       return (op == AJ_TRAKT ? traktauth_estado() == TRA_LIGADO : simklauth_estado() == SMK_LIGADO)
         ? "OK abre o vínculo de novo, com QR e código. As setas laterais não fazem nada nesta linha."
         : "OK abre o vínculo, com QR e código. As setas laterais não fazem nada nesta linha.";
-    case AJ_ADDONS: case AJ_DISCORD:
+    case AJ_ADDONS: case AJ_DISCORD: case AJ_PLUGINS:
       return "OK abre. As setas laterais não fazem nada nesta linha.";
     default: return NULL;
   }
@@ -5229,6 +5243,7 @@ static void eventoTela(const SDL_Event *e) {
     if (focoOp == AJ_VER_REGISTRO) { registro_abrir(); return; }
     if (focoOp == AJ_GUIA) { guiaAbrir(0); return; }
     if (focoOp == AJ_ADDONS) { pediuAddons = 1; return; }
+    if (focoOp == AJ_PLUGINS) { pediuPlugins = 1; return; }
     if (focoOp == AJ_DIAGNOSTICO) { pediuDiagnostico = 1; return; }
     if (focoOp == AJ_HERO_CATALOGOS) { if (!inativa(focoOp)) heroFonteCiclar(+1); return; }
     if (focoOp == AJ_VELOCIDADE) { pediuVelocidade = 1; return; }
@@ -5978,7 +5993,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_RESOLUCAO: case AJ_QUALIDADE_IMG: case AJ_TEX_MB:
     case AJ_ESPACO:
       return AJPV_TV;
-    case AJ_ADDONS: case AJ_STALKER_PORTAL: case AJ_STALKER_MAC:
+    case AJ_ADDONS: case AJ_PLUGINS: case AJ_STALKER_PORTAL: case AJ_STALKER_MAC:
     case AJ_STALKER_LIMPAR: case AJ_XTREAM_SERVIDOR: case AJ_XTREAM_USUARIO:
     case AJ_XTREAM_SENHA: case AJ_XTREAM_LIMPAR: case AJ_FANART_CHAVE:
     case AJ_SEEKR_CHAVE: case AJ_SEEKR_TESTAR:
