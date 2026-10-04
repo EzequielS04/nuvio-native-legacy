@@ -56,6 +56,27 @@ Detalhes do servidor:
   e o `enviarAtividade` atual de recomenda.c (fileira "Entre amigos" via
   `perfil.ativ`) usam. A rota decide pelo campo `ev`.
 
+## POST /v1/rec/resposta (resposta direta a uma rec recebida)
+
+Migracao: `migracao-007-resposta.sql` (colunas `rec.resposta`, `rec.respondido`).
+**Rodar a migracao ANTES do deploy** (o `GET /v1/amigo` passa a ler as colunas).
+
+```
+{"id": <rec>, "reacao": 1|0|-1|null, "texto": "a-z0-9 e espaco, ate 60"}
+```
+
+Resposta `{"ok":1,"n":0|1}`. Marca `comecou=terminou=visto=aberto=1` e grava
+`respondido` (epoch). `reacao` null/ausente e texto vazio NAO apagam o que ja
+havia. So a rec mandada PARA quem responde muda (`n:0` para id alheio). NAO
+passa pelo alcance: e um gesto explicito ("Fulano vai ver sua resposta"), nao
+atividade automatica. Limite 120/h por pessoa. `GET /v1/amigo` ganha
+`resposta` e `respondido` em cada item de `recs`.
+
+Cliente: `src/recresp.c` (estado local em `recomendacoes-respostas.txt`,
+enviado pelo fio de `recomenda.c`). Fontes do gesto: "Ja assisti" no menu do
+OK longo da aba Amigos, o fim no player (`atividade.c`, mesmo "fim" do resto do
+app) e o cartao "O que achou?" dos creditos (`reacao.c`, passo 2: mensagem).
+
 ## GET /v1/feed?desde=<id>
 
 Eventos `inicio|fim|abandono|reacao|salvo` de quem eu posso ver, mais novo

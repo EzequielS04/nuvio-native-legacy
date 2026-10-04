@@ -35,6 +35,22 @@ int  ctx_pediu_detalhes(void);
 // "Remover dos Salvos" (o mesmo OP_LISTA do cartaz: lista local + Trakt ou
 // Simkl + espelho) e, quando da, "Marcar como assistido".
 void ctx_abrir_salvo(const CatItem *titulo);
+// O MESMO MENU NAS ABAS ATIVIDADE E AMIGOS do painel (modo social). Com IMDb
+// sao as acoes do titulo do modo painel (sem "Mover para categoria") e, por
+// ultimo, as `extras` da linha; sem IMDb (a linha de um amigo: `titulo` e o
+// nome, `meta` a linha de apoio, `poster` a foto) sao SO as extras. A extra
+// escolhida sai uma vez em ctx_pediu_extra() (o indice em `extras`); quem
+// abriu faz o resto. `confirmar` = passa antes pela pagina de confirmacao
+// (pergunta com %s = titulo/nome, texto, kicker; o botao e o proprio rotulo).
+// Rotulos sao chaves de i18n; os ponteiros tem de viver ate o menu fechar.
+#define CTX_EXTRAS_MAX 3
+typedef struct {
+  const char *rot, *icone;
+  int confirmar;
+  const char *kicker, *pergunta, *texto;
+} CtxExtra;
+void ctx_abrir_social(const CatItem *titulo, const CtxExtra *extras, int n);
+int  ctx_pediu_extra(void);
 // 1 enquanto o menu aberto e o do painel: app.c o desenha POR CIMA do painel e
 // entrega a ele as teclas que chegariam ao painel.
 int  ctx_do_painel(void);

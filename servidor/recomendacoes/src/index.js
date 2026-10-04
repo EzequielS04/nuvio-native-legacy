@@ -15,7 +15,7 @@ import { rotaTrailerImdb, rotaTrailerYoutube } from "./trailer.js";
 import { rotaNoticia, rotaNoticiaImg } from "./noticia.js";
 import { rotaAmigos, limpezaAmigos, despublicar, garantirPerfil, avatarPublico, limitar } from "./amigos.js";
 import { rotaEuNome, rotaAlcance, rotaEvento, rotaFeed, rotaAmigo, limpezaSocial,
-         limparNome, avatarPerfilOk, resolverNome } from "./social.js";
+         limparNome, avatarPerfilOk, resolverNome, rotaRecResposta } from "./social.js";
 
 const DIA = 86400;
 const RETENCAO = 90 * DIA;
@@ -721,6 +721,9 @@ export default {
     if (rota === "/v1/rec" && req.method === "GET")       return rotaReceber(env, quem, url, req);
     if (rota === "/v1/rec/visto" && req.method === "POST") return rotaVisto(env, quem, corpo);
     if (rota === "/v1/rec/apagar" && req.method === "POST") return rotaApagar(env, quem, corpo);
+    // Resposta direta a uma rec recebida (social.js; exige migracao-007).
+    if (rota === "/v1/rec/resposta" && req.method === "POST")
+      return rotaRecResposta(env, quem, corpo, h, limitar, limparTexto);
     if (rota === "/v1/registro" && req.method === "POST")   return rotaRegistro(env, quem, corpo);
 
     // Perfil publico, busca, pedidos, bloqueio e atividade (amigos.js).

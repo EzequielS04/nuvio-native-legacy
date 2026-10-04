@@ -22,6 +22,9 @@
 #include "home.h"
 #include "layout.h"
 #include "salvospainel.h"
+#include "ctxmenu.h"
+#include "reacao.h"
+#include "recresp.h"
 #include "socialvis.h"
 #include "tex_cache.h"
 #include "text.h"
@@ -66,6 +69,7 @@ static void quadros(int n, const char *bmp) {
     tex_bombear(8);
     home_atualizar(1.0f / 60.0f, agora);
     spainel_atualizar(1.0f / 60.0f, agora);
+    ctx_atualizar(1.0f / 60.0f, agora);
     if (desenho == D_PERFIL) amigoperfil_atualizar(1.0f / 60.0f, agora);
     txt_novo_quadro();
     tex_novo_quadro();
@@ -76,6 +80,7 @@ static void quadros(int n, const char *bmp) {
     else {
       home_desenhar(agora);
       if (desenho == D_PAINEL) spainel_desenhar(agora);
+      if (desenho == D_PAINEL && ctx_aberto()) ctx_desenhar(agora);
     }
     if (bmp && i == n - 1) gravarBmp(bmp);
     SDL_GL_SwapWindow(janela);
@@ -282,6 +287,46 @@ int main(int argc, char **argv) {
   quadros(90, NULL);
   snprintf(bmp, sizeof bmp, "%s-painel-amigos-nome.bmp", saida);
   quadros(1, bmp);
+  // --- W10 (03/10): menu do OK longo nas abas, "Ja assisti" e Assistidas ---
+  { SDL_Event e;
+    int k;
+    memset(&e, 0, sizeof e);
+    e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_UP;
+    for (k = 0; k < 12; k++) spainel_evento(&e);      // primeira linha (a rec)
+    e.key.keysym.sym = SDLK_DOWN; spainel_evento(&e);
+    quadros(30, NULL);
+    e.key.keysym.sym = SDLK_RETURN; spainel_evento(&e);   // segura OK
+    SDL_Delay(760);
+    quadros(40, NULL);
+    snprintf(bmp, sizeof bmp, "%s-painel-amigos-menu.bmp", saida);
+    quadros(1, bmp);
+    e.type = SDL_KEYUP; ctx_evento(&e);
+    e.type = SDL_KEYDOWN;
+    e.key.keysym.sym = SDLK_DOWN;
+    for (k = 0; k < 3; k++) ctx_evento(&e);           // "Ja assisti"
+    e.key.keysym.sym = SDLK_RETURN; ctx_evento(&e);
+    quadros(60, NULL);
+    snprintf(bmp, sizeof bmp, "%s-painel-ja-assisti.bmp", saida);
+    quadros(1, bmp);
+    reacao_evento(&e, 0);                               // Gostei
+    quadros(40, NULL);
+    snprintf(bmp, sizeof bmp, "%s-painel-mensagem.bmp", saida);
+    quadros(1, bmp);
+    reacao_evento(&e, 0);                               // "Valeu pela dica!"
+    quadros(60, NULL);
+    snprintf(bmp, sizeof bmp, "%s-painel-assistidas.bmp", saida);
+    quadros(1, bmp);
+    printf("rec 1: assistida %d respondida %d\n", recresp_assistida(1), recresp_respondida(1));
+    // Atividade: OK longo na primeira linha.
+    spainel_ir_aba(1);
+    quadros(60, NULL);
+    e.key.keysym.sym = SDLK_RETURN; spainel_evento(&e);
+    SDL_Delay(760);
+    quadros(40, NULL);
+    snprintf(bmp, sizeof bmp, "%s-painel-atividade-menu.bmp", saida);
+    quadros(1, bmp);
+    e.key.keysym.sym = SDLK_ESCAPE; ctx_evento(&e);
+    quadros(20, NULL); }
   spainel_fechar();
   quadros(30, NULL);
 

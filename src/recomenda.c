@@ -29,6 +29,7 @@
 #include "logotitulo.h"
 #include "artemetahub.h"
 #include "perfis.h"
+#include "recresp.h"
 #define NV_ESCALA_TELA_ATIVA   // mede pela tela do fator ativo (escala.h)
 #include "escala.h"
 #include <stdio.h>
@@ -1076,6 +1077,7 @@ unsigned recomenda_geracao(void) {
 
 void recomenda_esquecer(void) {
   dados_apagar("amigos-vistos.txt");
+  recresp_esquecer();   // "Ja assisti" e respostas sao desta pessoa, como a lista
   if (!mtx) { geracao++; }
   if (!mtx) { dados_apagar(REC_ARQ); dados_apagar(REC_ARQ_CURSOR);
               dados_apagar(REC_ARQ_CARTAO); dados_apagar(REC_ARQ_EU);
@@ -1784,6 +1786,27 @@ static void confirmarVistas(const char **cab) {
   snprintf(corpo + k, sizeof corpo - k, "]}");
   url("/v1/rec/visto");
   free(rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, NULL));
+}
+
+// POST /v1/rec/resposta (recresp.h): "Ja assisti", gostei/nao gostei e a
+// mensagem curta. Uma por ciclo de 200 ms basta — sao gestos de uma pessoa.
+// 2xx confirma a versao enviada; 404 (rec que o servidor ja apagou pela
+// retencao) tambem, para a linha nao ficar tentando para sempre. O resto fica
+// pendente e sai no proximo ciclo.
+static void enviarRespostas(const char **cab) {
+  char corpo[256];
+  long long rec;
+  unsigned versao;
+  int i, st;
+  for (i = 0; i < 4 && recresp_pendente(corpo, sizeof corpo, &rec, &versao); i++) {
+    st = 0;
+    url("/v1/rec/resposta");
+    free(rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st));
+    printf("[recomenda] resposta rec %lld HTTP %d\n", rec, st);
+    fflush(stdout);
+    if ((st >= 200 && st < 300) || st == 404) recresp_confirmar(rec, versao);
+    else break;
+  }
 }
 
 // =============================================================================
@@ -3063,6 +3086,7 @@ static int ciclo(void) {
   enviarFila(cab);
   tratarContatos(cab);
   confirmarVistas(cab);
+  enviarRespostas(cab);
   SDL_LockMutex(mtx);
   querSug = pedirSugestoes; pedirSugestoes = 0;
   SDL_UnlockMutex(mtx);

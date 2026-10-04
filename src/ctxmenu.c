@@ -135,6 +135,14 @@ static Uint32 holdDesde;
 // comecou exatamente assim.
 static int     doPainel;
 static CatItem copiaPainel;
+// MODO SOCIAL (abas Atividade e Amigos do painel, dono 03/10: "falta o menu
+// contextual na aba activity e friends"): o mesmo modo painel, sem "Mover para
+// categoria" (isso e dos Salvos), mais as acoes da LINHA que o painel passa
+// (CtxExtra: "Ja assisti", "Ver perfil"...). Sem IMDb (a linha do amigo) o
+// menu tem SO as extras, com o nome no cabecalho.
+static int      doSocial;
+static CtxExtra extras[CTX_EXTRAS_MAX];
+static int      nExtras, extraPedido = -1, confExtra = -1;
 // Removeu pelo painel: o menu sai sozinho quando a remocao CONFIRMA — a linha
 // ja nao existe mais atras dele, e o foco do painel foi para a seguinte.
 static int     fecharAoConfirmar;
@@ -213,7 +221,8 @@ static int nOps;
 static float focoAnim[CTX_MAX];
 static int holdObservador;
 enum { OP_DETALHES, OP_LISTA, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR,
-       OP_ESTILO, OP_CATEGORIA, OP_L_ABRIR, OP_L_FIXAR, OP_L_HOME };
+       OP_ESTILO, OP_CATEGORIA, OP_L_ABRIR, OP_L_FIXAR, OP_L_HOME,
+       OP_EXTRA = 100 };   // OP_EXTRA + k = extras[k] (modo social)
 // "Mover para categoria" pedido no modo painel: o IMDb do titulo, consumido
 // uma vez pelo painel (ctx_pediu_categoria), que abre a escolha dele.
 static char pedCategoriaImdb[24];
@@ -298,7 +307,7 @@ static int indiceAtual(void) {
 static const CatItem *itemAtual(void) {
   int i = indiceAtual();
   const CatItem *ci = i >= 0 ? cat_item(i) : NULL;
-  if (!ci && doPainel && copiaPainel.imdb[0]) ci = &copiaPainel;
+  if (!ci && doPainel && (copiaPainel.imdb[0] || doSocial)) ci = &copiaPainel;
   return ci;
 }
 
@@ -343,6 +352,14 @@ static void montar(void) {
     return;
   }
   if (!ci) return;
+  // A LINHA DO AMIGO nao e titulo: so as acoes dela.
+  if (doSocial && !ci->imdb[0]) {
+    int k;
+    for (k = 0; k < nExtras; k++) juntar(extras[k].rot, OP_EXTRA + k);
+    if (foco >= nOps) foco = nOps > 0 ? nOps - 1 : 0;
+    if (foco < 0) foco = 0;
+    return;
+  }
   // "Mais informações" no painel, que e o nome que o dono deu ao pedir; o
   // efeito e o mesmo "Ver detalhes" do cartaz (a pagina do titulo).
   juntar(doPainel ? "Mais informações" : "Ver detalhes", OP_DETALHES);
@@ -361,7 +378,7 @@ static void montar(void) {
   }
   // AS CATEGORIAS DA PESSOA (salvosorg.h) so existem no painel de Salvos: e
   // la que o titulo esta salvo e e la que a escolha abre.
-  if (doPainel && ci->imdb[0]) juntar("Mover para categoria", OP_CATEGORIA);
+  if (doPainel && !doSocial && ci->imdb[0]) juntar("Mover para categoria", OP_CATEGORIA);
   // O web so oferece "assistido" em filme e serie — nao em canal nem evento,
   // que sao tipos que os addons do dono tambem declaram.
   //
@@ -405,6 +422,11 @@ static void montar(void) {
   // destaque ficam com o visual deles — a home nem passa a chave).
   if (!doPainel && filChave[0] && fil_estilos(filChave, NULL, NULL, FIL_TIPO_N) > 0)
     juntar("Estilo da fileira", OP_ESTILO);
+  // As acoes da linha social por ULTIMO: sao dela, nao do titulo.
+  if (doSocial) {
+    int k;
+    for (k = 0; k < nExtras; k++) juntar(extras[k].rot, OP_EXTRA + k);
+  }
   // O FOCO TEM DE CABER NA LISTA QUE ACABOU DE SER MONTADA.
   //
   // montar() roda de novo a cada confirmacao, e a lista ENCOLHE em casos
@@ -459,6 +481,7 @@ void ctx_abrir(int indice) {
   }
   if (indice < 0 || indice >= cat_n() || !cat_item(indice)) { filChave[0] = 0; return; }
   doPainel = 0;
+  doSocial = 0;
   soFileira = 0;
   doLista = 0;
   abrirComum(indice);
@@ -490,7 +513,7 @@ void ctx_abrir_lista(const LstLista *l) {
   if (holdCancelado) { holdCancelado = 0; holdPronto = 0; return; }
   if (!l) return;
   filChave[0] = 0;
-  doPainel = 0; soFileira = 0;
+  doPainel = 0; soFileira = 0; doSocial = 0;
   lista = *l;
   doLista = 1;
   abrirComum(-1);
@@ -515,6 +538,7 @@ void ctx_abrir_fileira(const char *chave, const char *titulo) {
   ctx_fileira(chave, titulo);
   if (fil_estilos(filChave, NULL, NULL, FIL_TIPO_N) < 1) { filChave[0] = 0; return; }
   doPainel = 0;
+  doSocial = 0;
   soFileira = 1;
   doLista = 0;
   abrirComum(-1);
@@ -557,9 +581,33 @@ void ctx_abrir_salvo(const CatItem *titulo) {
   salvos_id_titulo(titulo->imdb, copiaPainel.imdb, sizeof copiaPainel.imdb);
   if (!copiaPainel.tipo[0]) snprintf(copiaPainel.tipo, sizeof copiaPainel.tipo, "movie");
   doPainel = 1;
+  doSocial = 0;
   doLista = 0;
   abrirComum(-1);
 }
+
+void ctx_abrir_social(const CatItem *titulo, const CtxExtra *ex, int n) {
+  int k;
+  if (holdCancelado) { holdCancelado = 0; holdPronto = 0; return; }
+  if (!titulo || (!titulo->imdb[0] && n < 1)) return;
+  filChave[0] = 0;
+  soFileira = 0;
+  copiaPainel = *titulo;
+  if (copiaPainel.imdb[0]) {
+    salvos_id_titulo(titulo->imdb, copiaPainel.imdb, sizeof copiaPainel.imdb);
+    if (!copiaPainel.tipo[0]) snprintf(copiaPainel.tipo, sizeof copiaPainel.tipo, "movie");
+  }
+  nExtras = 0;
+  for (k = 0; ex && k < n && k < CTX_EXTRAS_MAX; k++) extras[nExtras++] = ex[k];
+  extraPedido = -1;
+  confExtra = -1;
+  doPainel = 1;
+  doSocial = 1;
+  doLista = 0;
+  abrirComum(-1);
+}
+
+int ctx_pediu_extra(void) { int v = extraPedido; extraPedido = -1; return v; }
 
 int ctx_do_painel(void) { return aberto && doPainel; }
 void ctx_centro_dica(float cx) { dicaCx = cx; }
@@ -681,6 +729,21 @@ static void aplicar(void) {
     montar(); return;
   }
   if (!ci) return;
+  if (acao >= OP_EXTRA && acao < OP_EXTRA + nExtras) {
+    int k = acao - OP_EXTRA;
+    // A EXTRA QUE NAO SE DESFAZ (remover amigo) passa pela mesma pagina de
+    // confirmacao de "Tirar de Continuar assistindo", com o foco em Cancelar.
+    if (extras[k].confirmar && pagina != 2) {
+      pagina = 2; confFoco = 1; confExtra = k;
+      confAnim[0] = confAnim[1] = 0.0f;
+      return;
+    }
+    extraPedido = k;
+    confExtra = -1;
+    pagina = 0;
+    aberto = 0;
+    return;
+  }
   // SO A ESPERA BLOQUEIA, e nao "ja houve uma operacao".
   //
   // A guarda antiga era `operacao != CTX_OP_NENHUMA && estado != FALHA`, e
@@ -890,7 +953,7 @@ void ctx_evento(const SDL_Event *e) {
     // Da pagina de estilos, Voltar volta ao menu do titulo — com o foco na
     // entrada de onde a pessoa veio. Sem titulo por tras (colecao), fecha.
     // Voltar CANCELA: nada foi gravado ao mover o foco, so a previa mudou.
-    if (pagina == 2) { pagina = 0; return; }   // Voltar = Cancelar
+    if (pagina == 2) { pagina = 0; confExtra = -1; return; }   // Voltar = Cancelar
     if (pagina == 1 && !soFileira) {
       pagina = 0; montar();
       for (foco = 0; foco < nOps && ops[foco].acao != OP_ESTILO; foco++) {}
@@ -905,7 +968,7 @@ void ctx_evento(const SDL_Event *e) {
     if (k == SDLK_LEFT)  { confFoco = 0; return; }
     if (k == SDLK_RIGHT) { confFoco = 1; return; }
     if (k == SDLK_RETURN || k == SDLK_KP_ENTER || k == SDLK_SPACE) {
-      if (confFoco == 0) aplicar(); else pagina = 0;
+      if (confFoco == 0) aplicar(); else { pagina = 0; confExtra = -1; }
     }
     return;
   }
@@ -1262,8 +1325,16 @@ static float botaoConf(int i, float x, float y, const char *rot, float f, float 
 static void desenhaConfirmar(const CatItem *ci, float a) {
   char pergunta[240];
   const char *texto = i18n("O ponto onde você parou é apagado. O título volta para a fileira se você assistir de novo.");
+  const char *kicker = "Continuar assistindo", *botao = "Tirar da fileira";
   float tw = CONF_W - 2.0f * CONF_PAD, hTit, hTxt, alt, x, y, bx;
   snprintf(pergunta, sizeof pergunta, i18n("Tirar %s da fileira?"), ci->titulo);
+  if (confExtra >= 0 && confExtra < nExtras) {
+    const CtxExtra *x0 = &extras[confExtra];
+    snprintf(pergunta, sizeof pergunta, i18n(x0->pergunta ? x0->pergunta : "%s"), ci->titulo);
+    texto = i18n(x0->texto ? x0->texto : "");
+    kicker = x0->kicker ? x0->kicker : "";
+    botao = x0->rot;
+  }
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
     gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * a); }
   // Medir antes de desenhar (alfa 0): a pergunta pode quebrar com um nome
@@ -1279,14 +1350,14 @@ static void desenhaConfirmar(const CatItem *ci, float a) {
   }
   ilhaCtx((GfxRect){ x, y, CONF_W, alt }, 36.0f, a);
   y += CONF_PAD;
-  kickerCtx("Continuar assistindo", x + CONF_PAD, y, a);
+  kickerCtx(kicker, x + CONF_PAD, y, a);
   y += 18.0f + 8.0f;
   txt_bloco_corta(TXT_ILHA_PERGUNTA, pergunta, 243, 242, 239, x + CONF_PAD, y, tw, 44.0f, a, 2);
   y += hTit + 14.0f;
   txt_bloco_corta(TXT_ILHA_TEXTO, texto, 243, 242, 239, x + CONF_PAD, y, tw, 30.0f, .62f * a, 4);
   y += hTxt + 34.0f;
   bx = x + CONF_PAD;
-  bx += botaoConf(0, bx, y, i18n("Tirar da fileira"), confAnim[0], a) + 12.0f;
+  bx += botaoConf(0, bx, y, i18n(botao), confAnim[0], a) + 12.0f;
   botaoConf(1, bx, y, i18n("Cancelar"), confAnim[1], a);
 }
 
@@ -1610,7 +1681,11 @@ static void ctx_desenharCorpo_(Uint32 agora) {
       case OP_RECOMENDAR: icone = "aj_users"; break;
       case OP_ESTILO:     icone = "aj_rows-3"; break;
       case OP_CATEGORIA:  icone = "aj_folders"; break;
-      default: break;
+      default:
+        if (ops[i].acao >= OP_EXTRA && ops[i].acao < OP_EXTRA + nExtras &&
+            extras[ops[i].acao - OP_EXTRA].icone)
+          icone = extras[ops[i].acao - OP_EXTRA].icone;
+        break;
     }
     linhaCtx(r, ops[i].rot, icone, f, a);
   }
