@@ -1,6 +1,6 @@
 // DESENHO DAS NOTAS na pagina de titulo: a linha do hero (marca + valor na
-// escala do site) e a secao "Notas" (heatmap por fonte + resumo + grade de
-// episodios). As decisoes — escala, cor, ordem, encaixe — moram em
+// escala do site), a secao "Notas" (cartao de nota + blocos por fonte) e o
+// cartao "Notas por episodio" do bloco "Numeros da temporada" (serieaud.c). As decisoes — escala, cor, ordem, encaixe — moram em
 // notasfontes.c; aqui so se desenha.
 #ifndef NV_NOTASUI_H
 #define NV_NOTASUI_H
@@ -38,22 +38,34 @@ typedef struct {
   int (*epNota)(int t, int i);
 } NotasSecao;
 
-// A secao se divide em DUAS fileiras do D-pad, como a audiencia: o heatmap por
-// fonte com o resumo, e a grade de episodios. Numa fileira so, a grade ficava
-// abaixo da dobra sem nenhum jeito de o foco chegar nela.
+// A secao (Glass UI 1.8): cartao de nota a esquerda (media, critica x publico,
+// menor/maior) e uma grade de DUAS colunas com um bloco por fonte. Cada bloco
+// e uma coluna do foco (detail.c anda na grade com as setas).
 int   notasui_fontes_tem(const NotasSecao *s);
-// A "nota Nuvio": a media 0..100 das fontes (a do anel da secao), ou -1 com
-// menos de duas fontes.
-int   notasui_media(const NotasSecao *s);
-int   notasui_grade_tem(const NotasSecao *s);
-// Alturas do CONTEUDO (sem o cabecalho que detail.c desenha). Baratas: nao
-// rasterizam nada.
+int   notasui_fontes_n(const NotasSecao *s);      // blocos = colunas do foco
+// Altura do CONTEUDO (sem o cabecalho que detail.c desenha). Barata: nao
+// rasteriza nada.
 float notasui_fontes_altura(const NotasSecao *s);
-float notasui_grade_altura(const NotasSecao *s);
-// Desenham com o canto superior esquerdo em (x, y); `y` pode estar fora da
-// tela (nao custa nada). Devolvem a altura ocupada.
-float notasui_fontes_desenhar(const NotasSecao *s, float x, float y, float a);
-float notasui_grade_desenhar(const NotasSecao *s, float x, float y, float a);
+// Desenha com o canto superior esquerdo em (x, y); `y` pode estar fora da tela
+// (nao custa nada). `foco[i]` e a mola de foco 0..1 do bloco i (NULL = nenhum).
+// Devolve a altura ocupada.
+float notasui_fontes_desenhar(const NotasSecao *s, float x, float y, float a,
+                              const float *foco);
+// Grade de DUAS colunas: quem anda no D-pad precisa saber o passo vertical.
+#define NOTASUI_COLUNAS 2
+
+// Cartao "Notas por episodio" do bloco "Numeros da temporada" (serie):
+// temporadas x episodios dentro de `card`; (selT, selI) e o episodio em foco
+// no bloco (indice da temporada em `s`, indice do episodio), -1 = nenhum.
+void  notasui_mapa_card(const NotasSecao *s, GfxRect card, int selT, int selI, float a);
+
+// ESCALA DE COR comum as notas e aos graficos: laranja < 70, amarelo 70..82,
+// verde > 82 (0..100). A rampa e a mesma paleta, continua, para nota de
+// episodio em decimos (6,0 laranja .. 9,0+ menta).
+void  notasui_cor_faixa(int n100, float *r, float *g, float *b);
+void  notasui_cor_rampa(int decimos, float *r, float *g, float *b);
+// Material dos cartoes (vidro ou solido, conforme Ajustes), o mesmo dos blocos.
+void  notasui_painel(GfxRect r, float raio, float a);
 // Volta o portao do texto (nova pagina de titulo).
 void  notasui_reiniciar(void);
 
