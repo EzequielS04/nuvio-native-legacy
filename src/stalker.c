@@ -27,6 +27,7 @@ static char deviceId[80];
 static char serial[64];
 static char token[128];
 static char caminho[96];      // endpoint que respondeu ("/server/load.php"...)
+static char baseEf[256];      // base que respondeu (portal, ou o host puro no fallback)
 static time_t tokenEm;
 static int   perfilLido = -1;
 static int   lido;
@@ -77,9 +78,18 @@ static void normalizarPortal(const char *entrada, char *dst, unsigned tam) {
   n = (unsigned)strcspn(lim, "?#");
   lim[n] = 0;
   while (n > 0 && (lim[n - 1] == '/' || lim[n - 1] == ' ')) lim[--n] = 0;
-  if (n >= 2 && lim[n - 2] == '/' && (lim[n - 1] == 'c' || lim[n - 1] == 'C')) {
-    lim[n -= 2] = 0;
-    while (n > 0 && lim[n - 1] == '/') lim[--n] = 0;
+  // "/c", "/c/" ja caram acima ou aqui; "/c/index.html" e "/c/index.php"
+  // (um unico nome de arquivo depois do /c) tambem.
+  {
+    char *c = NULL, *q = lim;
+    while ((q = strstr(q, "/c")) != NULL) {
+      if (q[2] == 0 || (q[2] == '/' && !strchr(q + 3, '/'))) { c = q; break; }
+      q += 2;
+    }
+    if (c) {
+      *c = 0; n = (unsigned)(c - lim);
+      while (n > 0 && lim[n - 1] == '/') lim[--n] = 0;
+    }
   }
   // O esquema volta como http: portal Stalker com TLS e raro, e quando existe
   // o host costuma vir com a porta 443 explicita — caso em que quem configurou
@@ -105,7 +115,7 @@ static const char *arquivo(void) {
 }
 
 static void limparSessao(void) {
-  token[0] = 0; caminho[0] = 0; tokenEm = 0;
+  token[0] = 0; caminho[0] = 0; baseEf[0] = 0; tokenEm = 0;
 }
 
 // Corpo da leitura, SEM travar: quem chama ja segura travaSessao. Existe
@@ -290,36 +300,63 @@ static const char *ROTAS[] = {
   "/server/load.php", "/portal.php", "/stalker_portal/server/load.php", NULL
 };
 
-// A rota i da varredura, ou NULL quando nao ha mais. Com prefixo (o portal ja
-// leva o caminho colado), ele entra antes em "prefixo/server/load.php" e
-// "prefixo/portal.php"; "/stalker_portal/..." so e tentado se o prefixo nao o
-// traz.
-static const char *rotaDaVarredura(int i) {
-  if (i == 2 && prefixoTemStalkerPortal(portal)) return NULL;
-  return ROTAS[i];
+// Fim do "http://host[:porta]" dentro de `base`: onde comeca o prefixo.
+static size_t tamHost(const char *base) {
+  const char *p = base + 7;               // normalizarPortal sempre poe http://
+  const char *barra = strchr(p, '/');
+  return barra ? (size_t)(barra - base) : strlen(base);
+}
+
+// Candidatos da varredura, na ordem. Com prefixo (o portal ja leva o caminho
+// colado), ele entra antes: "prefixo/server/load.php" e "prefixo/portal.php"
+// ("/stalker_portal/..." so se o prefixo nao o traz). Se NENHUM responder, as
+// rotas da raiz contra o host puro: quem colou "host/qualquer/c/" com o portal
+// na raiz continua funcionando. Devolve 0 quando acabou; `rota` NULL = pular.
+static int candidato(int k, char *base, unsigned tam, const char **rota) {
+  size_t h = tamHost(portal);
+  int prefixo = portal[h] != 0;
+  if (k < 3) {
+    snprintf(base, tam, "%s", portal);
+    *rota = (k == 2 && prefixoTemStalkerPortal(portal)) ? NULL : ROTAS[k];
+    return 1;
+  }
+  if (k < 6 && prefixo) {
+    snprintf(base, tam, "%.*s", (int)h, portal);
+    *rota = ROTAS[k - 3];
+    return 1;
+  }
+  return 0;
 }
 
 // Refaz o handshake e guarda o token. Chamada SEMPRE com travaSessao presa.
 static int handshakeTravado(void) {
-  int i;
+  int k, lembrada = caminho[0] != 0;
   token[0] = 0;
-  for (i = 0; rotaDaVarredura(i); i++) {
-    char *corpo;
+  for (k = 0; ; k++) {
+    char *corpo, base[256];
+    const char *rota;
     // Rota que ja provou funcionar entra primeiro nas vezes seguintes; na
     // primeira, `caminho` esta vazio e a varredura e a ordem acima.
-    const char *rota = caminho[0] ? caminho : rotaDaVarredura(i);
-    corpo = pedir(portal, mac, rota, "", "type=stb&action=handshake&token=&prehash=0");
+    if (lembrada) {
+      snprintf(base, sizeof base, "%s", baseEf[0] ? baseEf : portal);
+      rota = caminho;
+    } else if (!candidato(k, base, sizeof base, &rota)) {
+      break;
+    }
+    if (!rota) continue;
+    corpo = pedir(base, mac, rota, "", "type=stb&action=handshake&token=&prehash=0");
     if (temJs(corpo)) {
       char t[128];
       if (js_texto_raiz(corpo, "token", t, sizeof t) && t[0]) {
         snprintf(token, sizeof token, "%s", t);
         snprintf(caminho, sizeof caminho, "%s", rota);
+        snprintf(baseEf, sizeof baseEf, "%s", base);
         tokenEm = time(NULL);
         free(corpo);
         // get_profile confirma o MAC. Portal que recusa a assinatura responde
         // aqui, e nao no handshake — sem esta chamada o app so descobriria no
         // create_link, com a pessoa ja olhando a tela de carregar.
-        corpo = pedir(portal, mac, caminho, token, "type=stb&action=get_profile&hd=1&num_banks=2"
+        corpo = pedir(baseEf, mac, caminho, token, "type=stb&action=get_profile&hd=1&num_banks=2"
                                            "&stb_type=MAG250&image_version=218&auth_second_step=0");
         if (corpo) free(corpo);
         return 1;
@@ -327,7 +364,7 @@ static int handshakeTravado(void) {
     }
     if (corpo) free(corpo);
     // A rota lembrada falhou: esquecer e varrer de novo a partir do inicio.
-    if (caminho[0]) { caminho[0] = 0; i = -1; }
+    if (lembrada) { lembrada = 0; caminho[0] = 0; baseEf[0] = 0; k = -1; }
   }
   return 0;
 }
@@ -354,7 +391,6 @@ static char *chamar(const char *consulta, int renovarAntes) {
   if (!portal[0] || !mac[0]) { pthread_mutex_unlock(&travaSessao); return NULL; }
   // O pedido conserva o cadastro que encontrou sob a trava. Nao usa copias
   // globais: o guia pode iniciar outra requisicao enquanto este HTTP espera.
-  snprintf(portalLocal, sizeof portalLocal, "%s", portal);
   snprintf(macLocal, sizeof macLocal, "%s", mac);
   if (!token[0] ||
       (renovarAntes && tokenEm && time(NULL) - tokenEm > ST_TOKEN_VALIDO_S)) {
@@ -362,6 +398,7 @@ static char *chamar(const char *consulta, int renovarAntes) {
   }
   snprintf(tok, sizeof tok, "%s", token);
   snprintf(rota, sizeof rota, "%s", caminho);
+  snprintf(portalLocal, sizeof portalLocal, "%s", baseEf[0] ? baseEf : portal);
   pthread_mutex_unlock(&travaSessao);
 
   corpo = pedir(portalLocal, macLocal, rota, tok, consulta);
@@ -383,6 +420,7 @@ static char *chamar(const char *consulta, int renovarAntes) {
   }
   snprintf(tok, sizeof tok, "%s", token);
   snprintf(rota, sizeof rota, "%s", caminho);
+  snprintf(portalLocal, sizeof portalLocal, "%s", baseEf[0] ? baseEf : portal);
   pthread_mutex_unlock(&travaSessao);
 
   corpo = pedir(portalLocal, macLocal, rota, tok, consulta);
