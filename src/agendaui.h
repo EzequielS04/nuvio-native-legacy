@@ -1,8 +1,9 @@
 // Tela AGENDA: a LINHA DO TEMPO das series que o dono acompanha.
 //
-// Uma coluna, um eixo vertical, uma estacao por serie, ordenada pela data do
-// proximo episodio. O D-pad so sobe e desce; OK abre o MODAL da linha (acoes,
-// historico de lancamentos desde o lembrete, noticias). Ver agendaui.c.
+// Layout C1 (o mesmo dos Ajustes A3): a esquerda o episodio em foco grande, a
+// direita uma ilha com a lista agrupada sobre o fio do tempo. O D-pad so sobe
+// e desce; OK abre o MODAL da linha (acoes, lembrete, historico, noticias).
+// Ver agendaui.c.
 //
 // Os dados vem inteiros de agenda.c — esta tela nao sabe de rede, de TMDB nem
 // de arquivo. Ela pede agenda_montar() ao abrir e desenha o que voltar.

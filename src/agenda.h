@@ -97,6 +97,11 @@ typedef struct {
   // Primeiro genero (TMDB genres[0].name ou Cinemeta genres[0]). A tela so usa
   // quando o catalogo nao tem o item: com catalogo, o genero dele manda.
   char genero[48];
+  // ARTE DE PAISAGEM para a coluna da esquerda da Agenda (C1): o still do
+  // proximo episodio quando o TMDB ja tem, senao o backdrop da serie (TMDB ou
+  // `background` do Cinemeta), senao o backdrop do catalogo. "" = so o cartaz.
+  // Sai dos MESMOS corpos que o fio ja baixa: nenhum pedido novo.
+  char fundo[512];
 } AgItem;
 
 // Le o cache e os lembretes do perfil ativo. Chamar depois de dados_iniciar.
@@ -121,6 +126,10 @@ void agenda_registrar(const char *imdb, const char *titulo, const char *poster,
 void agenda_registrar_extra(const char *imdb, const char *sinopse,
                             const char *tipoEp, const char *rede,
                             const char *genero, int duracao, int temporadas);
+
+// A arte de paisagem (still do episodio ou backdrop) no MESMO registro.
+// Vazio nao apaga o que ja estava; sem registro nao cria.
+void agenda_registrar_fundo(const char *imdb, const char *url);
 
 // Registro guardado, ou NULL. O ponteiro vale ate a proxima escrita — copie
 // se for atravessar um quadro.
