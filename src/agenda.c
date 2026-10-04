@@ -51,6 +51,8 @@ typedef struct {
   // progresso ou de um lembrete e que, sem isto, ficava com a linha de apoio
   // vazia. Ultimo campo da linha do TSV, pela regra de gravarCache.
   char genero[48];
+  // Arte de paisagem (still do proximo episodio ou backdrop). 17o campo.
+  char fundo[512];
 } AgReg;
 
 static AgReg cache[AG_CACHE_MAX];
@@ -354,7 +356,7 @@ static const char *campo(const char *p, char *dst, size_t tam) {
 // perde a sinopse e ganha de volta na proxima passada do fio. Inserir no MEIO
 // deslocaria todos os campos seguintes em silencio, e o sintoma seria uma data
 // no lugar do nome do episodio.
-#define AG_LINHA_BYTES 1600
+#define AG_LINHA_BYTES 2200
 
 static void gravarCache(void) {
   char *txt;
@@ -365,22 +367,23 @@ static void gravarCache(void) {
   if (!txt) return;
   txt[0] = 0;
   for (i = 0; i < nCache; i++) {
-    char t[160], po[512], ne[120], si[400], re[64], ge[48];
+    char t[160], po[512], ne[120], si[400], re[64], ge[48], fu[512];
     limpo(t, sizeof t, cache[i].titulo);
     limpo(po, sizeof po, cache[i].poster);
     limpo(ne, sizeof ne, cache[i].nomeEp);
     limpo(si, sizeof si, cache[i].sinopse);
     limpo(re, sizeof re, cache[i].rede);
     limpo(ge, sizeof ge, cache[i].genero);
+    limpo(fu, sizeof fu, cache[i].fundo);
     usado += (size_t)snprintf(txt + usado, cap - usado,
                               "%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\t%s\t%lld"
-                              "\t%s\t%s\t%s\t%d\t%d\t%s\n",
+                              "\t%s\t%s\t%s\t%d\t%d\t%s\t%s\n",
                               cache[i].imdb, t, po, cache[i].situacao,
                               cache[i].temporada, cache[i].episodio, ne,
                               cache[i].dataProx, cache[i].dataUlt,
                               cache[i].visto,
                               si, cache[i].tipoEp, re,
-                              cache[i].duracao, cache[i].temporadas, ge);
+                              cache[i].duracao, cache[i].temporadas, ge, fu);
     if (usado + AG_LINHA_BYTES >= cap) break;
   }
   dados_gravar_leve(arquivo("agenda"), txt);
@@ -415,6 +418,7 @@ static void lerCache(void) {
     q = campo(q, n, sizeof n); r.duracao = atoi(n);
     q = campo(q, n, sizeof n); r.temporadas = atoi(n);
     q = campo(q, r.genero, sizeof r.genero);
+    q = campo(q, r.fundo, sizeof r.fundo);
     (void)q;
     if (r.imdb[0]) cache[nCache++] = r;
     while (*p && *p != '\n') p++;
@@ -590,6 +594,22 @@ void agenda_registrar_extra(const char *imdb, const char *sinopse,
   pthread_mutex_unlock(&trava);
 }
 
+void agenda_registrar_fundo(const char *imdb, const char *url) {
+  char id[24];
+  AgReg *r;
+  if (!url || !url[0]) return;
+  serieDe(id, sizeof id, imdb);
+  if (!id[0]) return;
+  pthread_mutex_lock(&trava);
+  r = acharTrancado(id);
+  if (r && strcmp(r->fundo, url)) {
+    snprintf(r->fundo, sizeof r->fundo, "%s", url);
+    cacheSujo = 1;
+    gravarCache();
+  }
+  pthread_mutex_unlock(&trava);
+}
+
 const AgItem *agenda_registro(const char *imdb) {
   static AgItem it;
   char id[24];
@@ -611,6 +631,7 @@ const AgItem *agenda_registro(const char *imdb) {
   snprintf(it.tipoEp, sizeof it.tipoEp, "%s", r->tipoEp);
   snprintf(it.rede, sizeof it.rede, "%s", r->rede);
   snprintf(it.genero, sizeof it.genero, "%s", r->genero);
+  snprintf(it.fundo, sizeof it.fundo, "%s", r->fundo);
   it.duracao = r->duracao; it.temporadas = r->temporadas;
   pthread_mutex_unlock(&trava);
   it.lembrete = agenda_lembrete(id);
@@ -808,6 +829,7 @@ static void poe(const char *imdb, const char *titulo, const char *poster) {
     snprintf(it->tipoEp, sizeof it->tipoEp, "%s", r->tipoEp);
     snprintf(it->rede, sizeof it->rede, "%s", r->rede);
     snprintf(it->genero, sizeof it->genero, "%s", r->genero);
+    snprintf(it->fundo, sizeof it->fundo, "%s", r->fundo);
     it->duracao = r->duracao; it->temporadas = r->temporadas;
     // O cache e quem tem o titulo bom quando o catalogo ainda nao publicou —
     // e o caso do primeiro arranque, em que a tela abre antes da descoberta.
@@ -815,6 +837,13 @@ static void poe(const char *imdb, const char *titulo, const char *poster) {
       snprintf(it->titulo, sizeof it->titulo, "%s", r->titulo);
     if (!it->poster[0] && r->poster[0])
       snprintf(it->poster, sizeof it->poster, "%s", r->poster);
+  }
+  // Sem arte de paisagem no registro, o backdrop que o CATALOGO ja tem (e que a
+  // home provavelmente ja pos no cache de textura).
+  if (!it->fundo[0]) {
+    int idc = cat_indice_por_imdb(id);
+    const CatItem *ci = idc >= 0 ? cat_item(idc) : NULL;
+    if (ci && ci->backdrop[0]) snprintf(it->fundo, sizeof it->fundo, "%s", ci->backdrop);
   }
   it->lembrete = agenda_lembrete(id);
 }
@@ -952,6 +981,7 @@ typedef struct {
   int  temp, ep;
   char nomeEp[120], dataProx[16], dataUlt[16];
   char sinopse[400], tipoEp[24], rede[64], genero[48];
+  char fundo[512];         // still do proximo episodio, senao backdrop
   int  duracao, temporadas;
   int  prox, ult;
   const char *fonte;       // quem decidiu o proximo; NULL = ninguem
@@ -994,6 +1024,11 @@ static int tmdbLer(AgBusca *b, const char *corpo) {
       js_texto(o, of, "overview", b->sinopse, sizeof b->sinopse);
       js_texto(o, of, "episode_type", b->tipoEp, sizeof b->tipoEp);
       b->duracao = (int)js_num(o, of, "runtime", 0.0);
+      // O STILL do episodio, quando o TMDB ja tem (raro antes de ir ao ar).
+      { char sp[200] = "";
+        js_texto(o, of, "still_path", sp, sizeof sp);
+        if (sp[0] == '/')
+          snprintf(b->fundo, sizeof b->fundo, "https://image.tmdb.org/t/p/w780%s", sp); }
     }
   }
   bl = strstr(corpo, "\"last_episode_to_air\"");
@@ -1039,6 +1074,13 @@ static int tmdbLer(AgBusca *b, const char *corpo) {
     js_texto_raiz_em(corpo, fim, "name", b->titulo, sizeof b->titulo);
     js_texto_raiz_em(corpo, fim, "poster_path", pp, sizeof pp);
     if (pp[0] == '/') snprintf(b->poster, sizeof b->poster, "https://image.tmdb.org/t/p/w342%s", pp); }
+  // O BACKDROP da raiz, quando o episodio nao trouxe still: a arte grande da
+  // coluna da esquerda da Agenda.
+  if (!b->fundo[0]) {
+    char bp[200] = "";
+    js_texto_raiz_em(corpo, fim, "backdrop_path", bp, sizeof bp);
+    if (bp[0] == '/') snprintf(b->fundo, sizeof b->fundo, "https://image.tmdb.org/t/p/w780%s", bp);
+  }
   // `status` sempre vem no corpo do TMDB; e ele que autoriza apagar uma data
   // velha em agenda_registrar. Sem ele nao se conclui nada.
   if (!b->status[0] && !b->dataProx[0]) return 0;
@@ -1219,6 +1261,7 @@ static int cinemetaLer(AgBusca *b, const char *corpo, const char *hoje) {
     }
   }
   if (!b->status[0]) js_texto_raiz_em(m, fim, "status", b->status, sizeof b->status);
+  if (!b->fundo[0]) js_texto_raiz_em(m, fim, "background", b->fundo, sizeof b->fundo);
   if (!b->genero[0]) {
     const char *g = js_array(m, fim, "genres");
     if (g && *g == '"') {
@@ -1298,6 +1341,7 @@ static int gravarBusca(const char *imdb, const char *titulo, const AgBusca *b) {
                    b->nomeEp, b->dataProx, b->dataUlt);
   agenda_registrar_extra(imdb, b->sinopse, b->tipoEp, b->rede, b->genero,
                          b->duracao, b->temporadas);
+  agenda_registrar_fundo(imdb, b->fundo);
   return 1;
 }
 
