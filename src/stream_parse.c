@@ -15,6 +15,56 @@ static long tamanhoMB(double valor) {
   return isfinite(valor) && valor > 0 && valor < (double)LONG_MAX ? (long)valor : 0;
 }
 
+// Find only a direct property of this exact object. JSON strings and nested
+// objects are skipped; proxyHeaders/request cannot masquerade as videoSize.
+static const char *valorRaiz(const char *p, const char *fim, const char *nome) {
+  int depth = 0;
+  size_t n = strlen(nome);
+  if (!p || p >= fim || *p != '{') return NULL;
+  while (p < fim) {
+    if (*p == '"') {
+      const char *ini = ++p;
+      while (p < fim && *p != '"') {
+        if (*p == '\\' && p + 1 < fim) p++;
+        p++;
+      }
+      if (p >= fim) return NULL;
+      const char *apos = p + 1;
+      while (apos < fim && isspace((unsigned char)*apos)) apos++;
+      if (depth == 1 && (size_t)(p - ini) == n && !memcmp(ini, nome, n) && apos < fim && *apos == ':') {
+        apos++; while (apos < fim && isspace((unsigned char)*apos)) apos++;
+        return apos < fim ? apos : NULL;
+      }
+    } else if (*p == '{' || *p == '[') depth++;
+    else if (*p == '}' || *p == ']') { if (--depth == 0) break; }
+    p++;
+  }
+  return NULL;
+}
+
+// Decimal integers only, parsed without double rounding. Numeric strings
+// are accepted for compatibility, but fractions/exponents/overflow are
+// unavailable for fit. Legacy display size remains separate below.
+static uint64_t bytesExatos(const char *obj, const char *fim) {
+  const char *bh = valorRaiz(obj, fim, "behaviorHints"), *p, *bf;
+  uint64_t valor = 0;
+  int quoted;
+  if (!bh || *bh != '{' || !(bf = js_fim(bh)) || bf > fim) return 0;
+  p = valorRaiz(bh, bf, "videoSize");
+  if (!p) return 0;
+  quoted = *p == '"'; if (quoted) p++;
+  if (p >= bf || !isdigit((unsigned char)*p)) return 0;
+  if (!quoted && *p == '0' && p + 1 < bf && isdigit((unsigned char)p[1])) return 0;
+  while (p < bf && isdigit((unsigned char)*p)) {
+    unsigned d = (unsigned)(*p++ - '0');
+    if (valor > (STREAMFIT_BYTES_MAX - d) / 10) return 0;
+    valor = valor * 10 + d;
+  }
+  if (quoted) { if (p >= bf || *p++ != '"') return 0; }
+  while (p < bf && isspace((unsigned char)*p)) p++;
+  return p < bf && (*p == ',' || *p == '}') ? valor : 0;
+}
+
 static int contem(const char *s, const char *termo) {
   for (; *s; s++) if (!strncasecmp(s, termo, strlen(termo))) return 1;
   return 0;
@@ -214,8 +264,10 @@ int stream_extrair(const char *json, const char *provedor, Stream **saida) {
       s.badges = badges_detectar(texto);
       s.mp4 = token(texto, "mp4") || contem(s.url, ".mp4");
       s.foraCache = stream_texto_fora_de_cache(texto);
+      s.tamanhoBytes = bytesExatos(p, fim);
       double bytes = js_num(p, fim, "videoSize", 0);
-      if (bytes > 0) s.tamanhoMB = tamanhoMB(bytes / (1024.0 * 1024.0));
+      if (s.tamanhoBytes) s.tamanhoMB = tamanhoMB((double)s.tamanhoBytes / 1048576.0);
+      else if (bytes > 0) s.tamanhoMB = tamanhoMB(bytes / (1024.0 * 1024.0));
       else {
         const char *u = strstr(texto, " GB");
         double escala = 1024;

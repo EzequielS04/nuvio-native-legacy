@@ -101,6 +101,67 @@ static char contexto[320];
 // 64 e o mesmo tamanho que app.c usa para montar "tt1234567:99:99" e para os
 // ids de canal do stalker/xtream, que sao os maiores que passam por aqui.
 static char alvoPedido[64], alvoLista[64];
+static pthread_mutex_t fitMetaTrava = PTHREAD_MUTEX_INITIALIZER;
+static char fitMetaAlvo[64], fitFotoAlvo[64];
+static double fitMetaSeg, fitFotoSeg;
+static StreamfitDuracao fitMetaOrigem;
+static StreamfitFoto fitFoto;
+static StreamfitResultado *fitResultados;
+static unsigned char *fitClasses;
+static int fitCap, fitN;
+static int aberta;
+
+void stream_fit_duracao(const char *alvo, double seg, StreamfitDuracao origem) {
+  if (!alvo || !*alvo || strlen(alvo) >= sizeof fitMetaAlvo) return;
+  if (!isfinite(seg) || seg < 1 || seg > 86400 ||
+      (origem != SF_DUR_METADATA && origem != SF_DUR_MEDIA)) { seg = 0; origem = SF_DUR_DESCONHECIDA; }
+  pthread_mutex_lock(&fitMetaTrava);
+  // Late metadata cannot overwrite a real measured duration of this item.
+  if (origem != SF_DUR_METADATA || fitMetaOrigem != SF_DUR_MEDIA || strcmp(alvo, fitMetaAlvo)) {
+    snprintf(fitMetaAlvo, sizeof fitMetaAlvo, "%s", alvo);
+    fitMetaSeg = seg; fitMetaOrigem = origem;
+  }
+  pthread_mutex_unlock(&fitMetaTrava);
+}
+
+static void fitAbrir(void) {
+  streamfit_foto(&fitFoto, streamfit_agora_ms());
+  snprintf(fitFotoAlvo, sizeof fitFotoAlvo, "%s", alvoPedido);
+  pthread_mutex_lock(&fitMetaTrava);
+  fitFotoSeg = fitFotoAlvo[0] && !strcmp(fitMetaAlvo, fitFotoAlvo) ? fitMetaSeg : 0;
+  pthread_mutex_unlock(&fitMetaTrava);
+  fitN = 0;
+}
+
+// Cache by stable raw index, not display position. URL resolution and new
+// measurements while open do not reclassify an existing card. New arrivals
+// use the same frozen host/network/runtime evidence as the initial cards.
+static void fitAtualizar(void) {
+  if (n > fitCap) {
+    int cap = n + 32;
+    StreamfitResultado *r = realloc(fitResultados, (size_t)cap * sizeof *r);
+    unsigned char *c = realloc(fitClasses, (size_t)cap);
+    if (r) fitResultados = r;
+    if (c) fitClasses = c;
+    if (!r || !c) return;
+    fitCap = cap;
+  }
+  while (fitN < n && fitN < fitCap) {
+    Stream *s = &lista[fitN];
+    // A new title must never inherit the previous title's frozen runtime.
+    double seg = !strcmp(alvoLista, fitFotoAlvo) ? fitFotoSeg : 0;
+    fitClasses[fitN] = (unsigned char)streamfit_classificar(&fitFoto, s->url,
+                                      s->tamanhoBytes, seg, &fitResultados[fitN]);
+    fitN++;
+  }
+}
+
+StreamfitClasse stream_fit_folha_estado(int indice, StreamfitResultado *saida) {
+  StreamfitResultado r = {0};
+  if (aberta && indice >= 0 && indice < fitN && indice < n) r = fitResultados[indice];
+  if (saida) *saida = r;
+  return r.classe;
+}
 void stream_definir_alvo(const char *id) {
   snprintf(alvoPedido, sizeof alvoPedido, "%s", id ? id : "");
 }
@@ -237,6 +298,7 @@ void stream_definir_lista_idade(const Stream *l, int qtd, Uint32 idade) {
   for (i = 0; i < k && nova; i++) { nova[i].selosPacoteVer = 0; selosPacoteDa(&nova[i]); }
   pthread_mutex_lock(&verTrava);
   free(lista); lista = nova; n = nova ? k : 0; atual = -1;
+  fitN = 0; // raw identities have been replaced; preserve an open snapshot
   free(chave); free(exib); chave = NULL; exib = NULL;
   if (n > 0) {
     chave = malloc(sizeof *chave * (size_t)n);
@@ -1476,6 +1538,7 @@ static long tamanhoOrdem(int i) { return lista[i].tamanhoMB > 0 ? lista[i].taman
 // do mesmo grupo de qualidade (Remux de 60 GB contra encode de 4 GB), e a
 // ordem do addon nao e a de ninguem que esta escolhendo.
 static int *grupoTmp;
+static int *grupoFitTmp;
 static int grupoTmpCap;
 static void montar(int automatica) {
   float y = 0;
@@ -1504,11 +1567,16 @@ static void montar(int automatica) {
   }
   if (grupoTmpCap < n) {
     int *t = realloc(grupoTmp, (n + 32) * sizeof *t);
-    if (!t) { nOrdem = 0; return; }
-    grupoTmp = t; grupoTmpCap = n + 32;
+    int *f = realloc(grupoFitTmp, (n + 32) * sizeof *f);
+    if (t) grupoTmp = t;
+    if (f) grupoFitTmp = f;
+    if (!t || !f) { nOrdem = 0; return; }
+    grupoTmpCap = n + 32;
   }
+  fitAtualizar();
   nOrdem = 0;
-  if (melhorFolha >= 0 && melhorFolha < n && passaFiltro(melhorFolha) && nFiltrados() > 1) {
+  if (melhorFolha >= 0 && melhorFolha < n && passaFiltro(melhorFolha) && nFiltrados() > 1 &&
+      (melhorFolha >= fitN || fitClasses[melhorFolha] != SF_PESADA)) {
     m = melhorFolha;
     porLinha(m, &y, automatica);
     y += FOLHA_SEC_GAP - FOLHA_LINHA_GAP;
@@ -1528,6 +1596,9 @@ static void montar(int automatica) {
       while (j >= 0 && tamanhoOrdem(grupoTmp[j]) < tamanhoOrdem(v)) { grupoTmp[j + 1] = grupoTmp[j]; j--; }
       grupoTmp[j + 1] = v;
     }
+    // Preserve the approved quality groups and descending-size base order.
+    // Only measured-heavy sources move back within their own group.
+    streamfit_particionar(grupoTmp, nt, fitClasses, fitN, grupoFitTmp);
     if (!nt) continue;
     if (nOrdem) y += FOLHA_SEC_GAP;
     secY[g] = y;
@@ -1591,6 +1662,7 @@ static void desenharAudioBars(float x, float y, float alt, float alfa, Uint32 ag
 
 void stream_folha_abrir(void) {
   int excl, aut, alvo;
+  fitAbrir();
   aberta=1; escolha=-1; grupo=1; filtro=0; soMp4=0; soCache=0; soDub=0; recarregar=0;
   atualizarProvedores();
   ondever_apps_atualizar();
@@ -1618,6 +1690,13 @@ void stream_folha_abrir(void) {
   printf("[fonte] folha: %d de %d na lista (%d addon(s); %d torrent(s) sem debrid "
          "descartado(s); %d ja recusada(s) pelo automatico, continuam na folha)\n",
          nFiltrados(), n, nProvedores - 1, descartadosSemDebrid, excl);
+  int conhecidos = 0, pesados = 0;
+  for (int i = 0; i < fitN; i++) {
+    conhecidos += fitClasses[i] != SF_DESCONHECIDA;
+    pesados += fitClasses[i] == SF_PESADA;
+  }
+  printf("[stream_fit] snapshot hosts=%d classified=%d heavy=%d origin=diagnostic\n",
+         fitFoto.n, conhecidos, pesados);
   fflush(stdout);
 }
 int stream_folha_aberta(void) { return aberta; }

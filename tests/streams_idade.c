@@ -9,6 +9,13 @@ static Uint32 relogio;
 Uint32 SDL_GetTicks(void) { return relogio; }
 int debrid_ativo(void) { return 0; }
 int p2p_ativo(void) { return 0; }
+// This fixture tests signed-link age, with the optional badge package off.
+// The production list now invokes these boundaries before publishing it.
+int selospacote_ativo(void) { return -1; }
+unsigned selospacote_versao(void) { return 1; }
+int selospacote_casar(const char *const *p, int n, unsigned short *o, int m) {
+  (void)p; (void)n; (void)o; (void)m; return 0;
+}
 int main(void) {
   Stream s = {0};
   strcpy(s.url, "https://video.invalid/assinado.mp4");

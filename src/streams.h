@@ -13,6 +13,7 @@
 #define NV_STREAMS_H
 #include <SDL2/SDL.h>
 #include <stdint.h>
+#include "streamfit.h"
 
 // A lista cresce conforme a resposta dos addons; a UI virtualiza as linhas.
 
@@ -31,6 +32,10 @@ typedef struct {
   uint64_t badges;     // classificados uma vez, nunca regex no desenho
   int  mp4;             // 1 = MP4 progressivo; 0 = HLS ou outro
   long tamanhoMB;       // 0 quando desconhecido
+  // Per-file bytes declared by behaviorHints.videoSize, without rounding or
+  // text/season-pack heuristics. 0 = no trustworthy exact-size provenance.
+  // https://github.com/Stremio/stremio-addon-sdk/blob/master/docs/api/responses/stream.md
+  uint64_t tamanhoBytes;
   char descricao[2048];
   char arquivo[512];
   // O QUE O ADDON DECLARA COMO "a mesma fonte" entre episodios:
@@ -250,6 +255,15 @@ int  stream_canal_prazo_longo(int idx);
 
 // --- folha de fontes (a lista que sobe por cima do player/detalhe) ---
 void stream_folha_abrir(void);
+// Root feeds an actual movie/episode metadata runtime or measured media
+// duration for this exact target. Never supply PLR_DUR_PADRAO, a season's
+// total runtime or a guessed "45 minutes". 0/unknown clears provenance.
+// Thread-safe; a sheet already open keeps its frozen duration/speed data.
+void stream_fit_duracao(const char *alvo, double segundos, StreamfitDuracao origem);
+// Frozen classification of an existing source while the sheet is open.
+// Returns unknown without evidence. For UI, demand is an estimate, not a
+// guarantee; the caller can display age, budget and diagnostic origin.
+StreamfitClasse stream_fit_folha_estado(int indice, StreamfitResultado *saida);
 int  stream_folha_aberta(void);
 // QUANTAS LINHAS A FOLHA MOSTRA AGORA — issue #132 ("so 1 fonte listada"). A
 // folha lista a lista INTEIRA de stream_definir_lista; so os filtros que a
