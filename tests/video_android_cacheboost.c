@@ -10,6 +10,7 @@ void *SDL_AndroidGetJNIEnv(void);
 void *SDL_AndroidGetActivity(void);
 #include "../src/video_android.c"
 #include "../src/cacheboost.c"
+#include "../src/audsync.c"   // F06 nativeAudioEstado feeds the boost state too
 #include <assert.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -127,7 +128,7 @@ int main(void) {
   Java_space_nuvio_nativelegacy_NvPlayer_nativeCache(&env, NULL, CB_CACHE_DISCO_CHEIO, 1024, 0, 0);
   assert(cacheboost_cache_aviso() != NULL);
   cacheboost_sessao(); cacheboost_volume_passo(1); cacheboost_volume_passo(1);
-  Java_space_nuvio_nativelegacy_NvPlayer_nativeGanho(&env, NULL, CB_GANHO_PASSTHROUGH);
+  Java_space_nuvio_nativelegacy_NvPlayer_nativeAudioEstado(&env, NULL, 2);   // F06 tap: bitstream
   assert(cacheboost_volume() == 100 && cacheboost_volume_teto() == 100);
 
   // An older Kotlin shell without cache()/ganho(): nothing crosses, open works.

@@ -161,6 +161,7 @@ static const char *uxSinonimos(int op) {
     case AJ_HERO_TRAILER_SOM: case AJ_DET_TRAILER_SOM:
       return "trailer trailers som audio mudo silencio volume";
     case AJ_HERO_TRAILER_ESPERA: return "trailer trailers espera tempo demora atraso";
+    case AJ_LEG_SYNC_AUDIO: return "sincronia sincronizar legenda audio fala falas atraso automatico sync subtitle speech";
     case AJ_LOGO_TRAILER: return "trailer trailers logo marca titulo oled queimar burn-in esconder canto";
     case AJ_TRAILER_FONTE: return "trailer trailers fonte origem provedor apple imdb youtube";
     case AJ_TRAILER_QUAL: return "trailer trailers qualidade resolucao definicao";

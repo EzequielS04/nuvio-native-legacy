@@ -42,11 +42,20 @@ volume" do [README](README.md) e a linha F07 do
 - **Volume** (`GanhoAudioProcessor.kt`, `GanhoMath.kt`): 0–100% é o
   `ExoPlayer.volume`; 100–200% é ganho real no PCM (200% = +6,02 dB), com
   limitador suave (tanh acima de −1 dBFS), linear abaixo dele, intocado a
-  100%. Passthrough/bitstream/offload não passam por processadores: a linha
+  100%. Passthrough/bitstream não passa por processadores: a linha
   fica limitada a 100% com o motivo; o passthrough nunca é desligado em
   silêncio. Escolhido em vez de `LoudnessEnhancer` porque vale para toda saída
   PCM, inclusive o decodificador FFmpeg, não depende de efeito de sessão da
   TV e a conta é testável.
+- Convivência com F06 (sincronia por áudio): o sink é
+  `AudioSyncSink(DefaultAudioSink[GanhoAudioProcessor])`. A escuta do F06 lê
+  `handleBuffer` na ENTRADA do sink (PCM decodificado com o tempo de mídia,
+  antes de qualquer processamento), então a sincronia analisa o sinal sem
+  reforço nem limitador; o ganho do F07 roda na cadeia de processadores, no
+  que vai para a saída. A detecção PCM × bitstream é uma só: o formato de
+  entrada que o `AudioSyncSink.configure` relata por `nativeAudioEstado`
+  alimenta o `audsync` e também o estado do reforço (`cacheboost`). Offload de
+  PCM não é ligado neste player; se um dia for, o reforço precisa considerar.
 - Volume é da sessão: volta a 100% a cada título aberto; troca de fonte e
   reconexão reaplicam o valor da sessão.
 
@@ -75,4 +84,4 @@ volume" do [README](README.md) e a linha F07 do
   192 MB da TCL (o cache é disco; o teto do buffer em RAM não mudou).
 - ENOSPC real num armazenamento cheio; limpeza após matar o app.
 - Volume acima de 100% audível e sem clipping em áudio PCM real, e o estado de
-  passthrough com receptor AC3/E-AC3 (o relato vem de `onAudioTrackInitialized`).
+  passthrough com receptor AC3/E-AC3 (o relato vem do formato de entrada do sink, via F06).

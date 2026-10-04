@@ -699,7 +699,7 @@ static void pontilhada(float x0, float y0, float x1, float y1, float d,
 
 // Numero grande em forma curta. "388 mil", "24.1 mi".
 static void curto(char *dst, unsigned tam, long v) {
-  if (v >= 1000000L) snprintf(dst, tam, i18n("%.1f mi"), v / 1000000.0);
+  if (v >= 1000000L) { snprintf(dst, tam, i18n("%.1f mi"), v / 1000000.0); idioma_decimal_texto(dst, ajustes_idioma()); }
   else if (v >= 10000L) snprintf(dst, tam, i18n("%ld mil"), (v + 500) / 1000);
   else snprintf(dst, tam, "%ld", v);
 }
@@ -894,6 +894,7 @@ static void cardRetencao(GfxRect c, const SaBloco *b, int usar, float a) {
              0.941f, 0.541f, 0.294f, a);
     snprintf(txt, sizeof txt, i18n("maior queda: E%d → E%d, -%.1f pp"),
              eps[quedaI - 1].ep, eps[quedaI].ep, queda / 10.0);
+    idioma_decimal_texto(txt, ajustes_idioma());
     l = txt_linha(TXT_LOG_18B, txt, 240, 138, 75, 255);
     lx = xq + 16.0f;
     if (lx + (float)l.w > px + pw) lx = xq - 16.0f - (float)l.w;
@@ -1042,6 +1043,7 @@ float serieaud_bloco(float x, float y, const SaBloco *b, float a) {
       snprintf(txt, sizeof txt,
                i18n("Série inteira: %s reproduções para %s pessoas — %.1f por espectador, somando todos os episódios"),
                s1, s2, serieaud_rever_serie() / 100.0);
+      idioma_decimal_texto(txt, ajustes_idioma());
       ls = txt_linha_corta(TXT_DET_META2, txt, 180, 184, 192, 255, NV_TELA_W - 2.0f * x);
       txt_desenhar_alpha(ls, x, y + (float)l.h + 8.0f, aa);
     } }

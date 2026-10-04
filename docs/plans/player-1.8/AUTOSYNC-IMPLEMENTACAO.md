@@ -69,7 +69,7 @@ Pontos mínimos no player/faixas:
 
 Uma referência ASS completa de sidecar/coletor existente pode virar `LegendaDocumento` somente quando o chamador confirmou sua origem, faixa, sessão e completude. Uma referência externa completa pode ser usada pela engine nos testes/comparações explícitas, mas não equivale a uma referência embutida. Na ausência de referência real completa, o produto deve manter offset automático zero e mostrar indisponível, sem esperar nem mudar a seleção da pessoa.
 
-VAD, PCM, speech model, AudioSync, download de modelo e APIs de ASR não foram implementados por este módulo. Nenhum modelo ou licença nova foi incorporado. Separar esses capabilities evita anunciar áudio sync apenas porque a engine temporal existe.
+VAD, PCM, speech model, AudioSync, download de modelo e APIs de ASR não foram implementados por este módulo. (F06 depois adicionou a referência por áudio no Android, sem mudar limiares da engine: ver `AUDIOSYNC-CAPACIDADE.md`.) Nenhum modelo ou licença nova foi incorporado. Separar esses capabilities evita anunciar áudio sync apenas porque a engine temporal existe.
 
 ## Verificação executada
 

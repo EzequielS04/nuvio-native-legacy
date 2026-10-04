@@ -32,6 +32,7 @@
 #include "idioma.h"
 #include "linguas.h"
 #include "streamfitpassiva.h"
+#include "audsync.h"
 #include "cacheboost.h"
 #include <SDL2/SDL.h>
 #include <jni.h>
@@ -78,6 +79,38 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeIniciar(JNIE
   if (!resolverMetodos(env)) { gCls = NULL; printf("[video] android: metodos do NvPlayer nao achados\n"); }
   else printf("[video] android: ponte do NvPlayer pronta\n");
   fflush(stdout);
+}
+
+// --- F06: PCM do audio tocando (AudioSyncTap.kt) -----------------------------
+// O tap so existe numa casca que o anuncia: o primeiro nativeAudioEstado
+// registra o backend. Casca antiga = plataforma sem PCM (o ajuste diz isso).
+static void ligarTap(int on);
+JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeAudioEstado(JNIEnv *env, jclass cls, jint fmt) {
+  static int registrado;
+  (void)env; (void)cls;
+  if (!registrado) { registrado = 1; audsync_backend(ligarTap); }
+  audsync_formato((int)fmt);
+  // F07: the same sink-input format decides the boost. AudioSyncTap FMT_*
+  // (0 none, 1 PCM, 2 bitstream) maps 1:1 to CB_GANHO_* (unknown, PCM,
+  // passthrough): with bitstream the gain processor never sees samples.
+  { static int ultimoGanho = -1;
+    int g = fmt == 1 ? CB_GANHO_PCM : fmt == 2 ? CB_GANHO_PASSTHROUGH : CB_GANHO_DESCONHECIDO;
+    cacheboost_ganho_relato(g);
+    if (g != ultimoGanho && g != CB_GANHO_DESCONHECIDO) {
+      printf("[video] android audio: %s\n", g == CB_GANHO_PASSTHROUGH ? "passthrough (sem reforco)" : "PCM (reforco disponivel)");
+      fflush(stdout);
+    }
+    ultimoGanho = g; }
+}
+// Fio de reproducao do ExoPlayer. Copia para a pilha e entrega ao anel
+// limitado do audsync.c: nenhuma alocacao, nunca espera o analisador.
+JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeAudioPcm(JNIEnv *env, jclass cls, jshortArray pcm, jint n, jlong ptsUs) {
+  jshort b[2048];
+  (void)cls;
+  if (!pcm || n <= 0 || n > (jint)(sizeof b / sizeof *b)) return;
+  (*env)->GetShortArrayRegion(env, pcm, 0, n, b);
+  if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); return; }
+  audsync_pcm((const int16_t *)b, (int)n, (int64_t)ptsUs);
 }
 
 // Plano B se o Kotlin nao chamou nativeIniciar antes do primeiro uso (lib
@@ -175,6 +208,14 @@ static void kInt(jmethodID m, int v) {
   JNIEnv *env = ambiente();
   if (!env) return;
   (*env)->CallStaticVoidMethod(env, gCls, m, (jint)v);
+  fimChamada(env);
+}
+
+// escolher(3, on): liga/desliga o tap no Kotlin (so posta ao fio principal).
+static void ligarTap(int on) {
+  JNIEnv *env = ambiente();
+  if (!env) return;
+  (*env)->CallStaticVoidMethod(env, gCls, mEscolher, (jint)3, (jint)(on ? 1 : 0));
   fimChamada(env);
 }
 
@@ -365,9 +406,9 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeHdr(JNIEnv *
   fflush(stdout);
 }
 
-// F07: what the Kotlin player did with the seek cache in this open, and the
-// state of the audio output (PCM = the gain processor sees the samples;
-// passthrough/offload = it does not). Kotlin main thread; cacheboost locks.
+// F07: what the Kotlin player did with the seek cache in this open. Kotlin
+// main thread; cacheboost locks. (The audio output state for the boost comes
+// from F06's nativeAudioEstado, below: one detection for both features.)
 JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeCache(JNIEnv *env, jclass cls, jint estado, jint pedidoMb, jint limiteMb, jint usadoMb) {
   static int ultimo = -1;
   (void)env; (void)cls;
@@ -377,13 +418,6 @@ JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeCache(JNIEnv
     printf("[video] android cache: estado %d, pedido %d MB, limite %d MB\n", (int)estado, (int)pedidoMb, (int)limiteMb);
     fflush(stdout);
   }
-}
-JNIEXPORT void JNICALL Java_space_nuvio_nativelegacy_NvPlayer_nativeGanho(JNIEnv *env, jclass cls, jint estado) {
-  (void)env; (void)cls;
-  cacheboost_ganho_relato(estado);
-  printf("[video] android audio: %s\n", estado == CB_GANHO_PASSTHROUGH ? "passthrough (sem reforco)" :
-         estado == CB_GANHO_PCM ? "PCM (reforco disponivel)" : "desconhecido");
-  fflush(stdout);
 }
 
 enum { EV_PRONTO = 1, EV_TOCANDO = 2, EV_PAUSADO = 3, EV_FIM = 4, EV_ERRO = 5,

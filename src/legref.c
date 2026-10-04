@@ -9,6 +9,12 @@
 #include <strings.h>
 #include <time.h>
 #include <errno.h>
+// strcasestr is a GNU extension: the webOS toolchain and emcc do not declare it.
+static int contemSemCaixa(const char *h, const char *n) {
+  size_t k = strlen(n);
+  for (; *h; h++) if (!strncasecmp(h, n, k)) return 1;
+  return 0;
+}
 
 #define LR_CABECA   (64L * 1024L)        // inicio do arquivo: EBML, SeekHead, Info, Tracks
 #define LR_TRACKS_MAX (2L * 1024L * 1024L)
@@ -400,7 +406,7 @@ static int letreiro(const Faixa *f) {
   static const char *const p[] = { "forced", "sign", "song", "letreiro", "forzad", "forcé" };
   size_t i;
   if (f->forced) return 1;
-  for (i = 0; i < sizeof p / sizeof *p; i++) if (strcasestr(f->nome, p[i])) return 1;
+  for (i = 0; i < sizeof p / sizeof *p; i++) if (contemSemCaixa(f->nome, p[i])) return 1;
   return 0;
 }
 static int mesmoIdioma(const char *a, const char *b) {

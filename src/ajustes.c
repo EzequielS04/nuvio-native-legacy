@@ -342,6 +342,12 @@ typedef enum {
   // principal ("Da conta" segue subtitle_secondary_language do perfil). No fim
   // pelo mesmo motivo dos outros: valor[] e CHAVE[] sao posicionais.
   AJ_LEG_LINGUA2,
+  // SINCRONIA POR AUDIO (F06, 1.8): oferece "Por audio" na linha de
+  // sincronizacao automatica do seletor de legendas, onde o backend entrega o
+  // PCM decodificado (hoje so Android). LOCAL (o PCM e o passthrough sao desta
+  // TV), padrao DESLIGADO. No fim pelo mesmo motivo: valor[] e CHAVE[] sao
+  // posicionais.
+  AJ_LEG_SYNC_AUDIO,
   // F07 (1.8): seek cache on disk for the Android player (cacheboost.h). LOCAL
   // (disk and backend are this TV's), append-only like every option above.
   AJ_CACHE_SEEK,
@@ -1034,6 +1040,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Tamanho dos ajustes", V_TAMANHO_AJUSTES, 3),
   ESC("Esconder logo durante o trailer", V_LIGA, 2),
   ESC("Idioma da legenda secundária",    V_LINGUA, 2),
+  ESC("Sincronia por áudio",             V_LIGA, 2),
   ESC("Cache de seek em disco",          V_CACHE_SEEK, 4),
 };
 
@@ -1213,6 +1220,7 @@ static const char *CHAVE[] = {
   "tamanhoAjustesLocal",
   "logoTrailerLocal",
   "legendaSecundariaIdioma",
+  "legendaSyncAudioLocal",
   "cacheSeekLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
@@ -1612,6 +1620,7 @@ float ajustes_tamanho_ajustes(void) {
   return v >= 0 && v < 3 ? F[v] : 0.8f;
 }
 int ajustes_esconder_logo_trailer(void) { return lig(AJ_LOGO_TRAILER); }
+int ajustes_legenda_sync_audio(void) { return lig(AJ_LEG_SYNC_AUDIO); }
 int ajustes_cache_seek_mb(void) {
   static const int MB[] = { 0, 256, 512, 1024 };
   int v = valor[AJ_CACHE_SEEK];
@@ -3382,6 +3391,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_TAMANHO_UI:     /* o tamanho e desta tela, e o web nao tem */
     case AJ_TAMANHO_AJUSTES:
     case AJ_LOGO_TRAILER:   /* so a protecao de OLED desta TV */
+    case AJ_LEG_SYNC_AUDIO: /* PCM e passthrough sao desta TV; o web nao tem */
     case AJ_CACHE_SEEK:     /* F07: o disco e o player sao desta TV */
     case AJ_FUNDO:          /* o desfoque custa GPU desta TV; o web nao tem */
     case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: /* teste do vidro: visual desta TV */
@@ -3964,6 +3974,7 @@ static const char *textoLeitura(int op) {
     int itens = 0; long bytes = 0;
     tex_estatisticas(&itens, NULL, &bytes, NULL, NULL);
     snprintf(buf, sizeof buf, i18n("%.1f MB · %d imagens"), bytes / 1048576.0, itens);
+    idioma_decimal_texto(buf, ajustes_idioma());
     return buf;
   }
   // ACAO SEM VALOR PROPRIO. Este `return` era o da memoria de imagens, e toda
@@ -4173,12 +4184,30 @@ static const char *ajudaOpcao(int op) {
       return "Sem Pôsteres personalizados ligado o pôster já é o que o addon manda. Escolha um serviço para decidir quem vence.";
     if (op == AJ_ADDON_LOGO)
       return "O logo do addon só é trocado pela Arte localizada do TMDB. Ative TMDB e Arte localizada para escolher.";
-    return "Ative Efeito de profundidade para personalizar este detalhe.";
+    // #238: estas cinco caiam na frase da profundidade, que nao tem nada a ver
+    // com elas ("Espera pelos add-ons" mandava ligar o Efeito de profundidade).
+    if (op == AJ_FONTE_PRAZO)
+      return "Desative Escolher a fonte ao reproduzir para usar a espera: escolhendo à mão, nada é escolhido sozinho.";
+    if (op == AJ_SEEKR_FITA || op == AJ_SEEKR_AJUSTE)
+      return "Ative Miniaturas na barra de tempo para ajustar as miniaturas.";
+    if (op == AJ_SELOS_PACOTE_REM)
+      return "Só dá para remover um pacote que foi adicionado nesta TV.";
+    if (op == AJ_SAIDA_PLAYER)
+      return "Ative Relógio na tela: sem ele o player não tem para onde minimizar.";
+    if (op == AJ_POSTER_INST || op == AJ_POSTER_TOKEN || op == AJ_POSTER_EXTRA ||
+        op == AJ_POSTER_CHAVE || op == AJ_POSTER_MODELO || op == AJ_POSTER_TESTAR)
+      return "Este campo vale para outro serviço. Escolha o serviço em Pôsteres personalizados.";
+    if (op == AJ_PROF_BORDA || op == AJ_PROF_BRILHO || op == AJ_PROF_COBERTURA ||
+        op == AJ_PROF_POSTERS || op == AJ_PROF_CW || op == AJ_PROF_EPS ||
+        op == AJ_PROF_ELENCO || op == AJ_PROF_TRAILERS)
+      return "Ative Efeito de profundidade para personalizar este detalhe.";
+    return "Indisponível com os ajustes atuais.";
   }
   switch (op) {
     // --- Reproducao
     case AJ_QUALIDADE: return "Define a preferência de resolução. A disponibilidade depende das fontes do addon.";
     case AJ_DV: case AJ_ATMOS: return "Preferência para fontes compatíveis. O formato disponível também depende do arquivo e da TV.";
+    case AJ_LEG_SYNC_AUDIO: return "Compara as falas do áudio com a legenda externa para acertar o atraso. Só onde o player entrega o áudio decodificado e sem passthrough; vale só nesta TV.";
     case AJ_LEG_LINGUA2: return "Segunda legenda, mostrada no alto da tela junto com a principal. Só arquivos SRT/VTT dos addons. \"Da conta\" segue o que está no seu perfil.";
     case AJ_LEG_LINGUA: return "Idioma ligado sozinho quando o vídeo começa. Legendas dos addons aparecem em inglês e no idioma escolhido aqui. \"Da conta\" segue o que está no seu perfil.";
     case AJ_AUD_LINGUA: return "Faixa de áudio escolhida quando o arquivo tem mais de uma. Se o idioma não existir no arquivo, o player usa a primeira.";

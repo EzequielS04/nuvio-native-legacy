@@ -312,7 +312,7 @@ static void valorEstilo(int linha, char *dst, size_t tam) {
   switch (linha) {
     case 0:
       if (assrender_ativo())
-        snprintf(dst, tam, "%d%% \xc2\xb7 ASS \xc3\x97%.2f", e->tamanho, e->tamanho / 120.0);
+        snprintf(dst, tam, "%d%% \xc2\xb7 ASS \xc3\x97%.2f", e->tamanho, e->tamanho / 120.0), idioma_decimal_texto(dst, ajustes_idioma());
       else
         snprintf(dst, tam, "%d%%", e->tamanho);
       break;
@@ -478,6 +478,8 @@ static void escolherLegenda(int i) {
 
 static void aplicar(void) {
   if (coluna == 0) {
+    // F06: outra faixa de audio = outras falas; a escuta em curso nao vale mais.
+    if (video_audio_atual() != foco[0]) legsync_audio_trocou();
     video_escolher_audio(foco[0]);
   } else {
     // A pessoa escolheu: a automatica nao mexe mais nesta sessao, nem se a

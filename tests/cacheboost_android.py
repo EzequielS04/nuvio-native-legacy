@@ -65,7 +65,8 @@ with tempfile.TemporaryDirectory(prefix="nuvio-cacheboost-android-", dir=os.envi
     guava = jar("com.google.guava", "guava", "33.3.1-android")
     deps.append(guava)
     sources = [kt / n for n in ("NvPlayer.kt", "ParaleloDataSource.kt", "PassivoMedidor.kt", "NuvioActivity.kt",
-                                "CacheSessao.kt", "CacheMidia.kt", "GanhoMath.kt", "GanhoAudioProcessor.kt")]
+                                "CacheSessao.kt", "CacheMidia.kt", "GanhoMath.kt", "GanhoAudioProcessor.kt",
+                                "AudioSyncTap.kt", "AudioSyncSink.kt")]
     java_roots = []
     if sdl.is_dir():
         java_roots = ["-Xjava-source-roots=" + str(sdl)]

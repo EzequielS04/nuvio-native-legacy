@@ -633,10 +633,10 @@ void notasui_mapa_card(const NotasSecao *s, GfxRect c, int selT, int selI, float
   if (melhorT >= 0) {
     char b1[64], b2[64], b[140];
     snprintf(b1, sizeof b1, i18n("Melhor: T%dE%d  ·  %.1f"), s->tempNum(melhorT),
-             s->epNum(melhorT, melhorI), melhor / 10.0f);
+             s->epNum(melhorT, melhorI), melhor / 10.0f); idioma_decimal_texto(b1, ajustes_idioma());
     if (piorT >= 0 && (piorT != melhorT || piorI != melhorI)) {
       snprintf(b2, sizeof b2, i18n("Pior: T%dE%d  ·  %.1f"), s->tempNum(piorT),
-               s->epNum(piorT, piorI), pior / 10.0f);
+               s->epNum(piorT, piorI), pior / 10.0f); idioma_decimal_texto(b2, ajustes_idioma());
       snprintf(b, sizeof b, "%s.   %s.", b1, b2);
     } else snprintf(b, sizeof b, "%s.", b1);
     txt_bloco_corta(TXT_ILHA_SUB, b, 180, 184, 192, px, c.y + c.h - 30.0f - 52.0f,

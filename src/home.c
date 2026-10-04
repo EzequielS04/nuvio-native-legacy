@@ -3092,7 +3092,7 @@ static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
   char nota[8];
   nota[0] = 0;
   int imdbRating = ci ? imdbnota_obter(ci->imdb, ci->nota, !strcmp(ci->tipo,"series")) : 0;
-  if (imdbRating > 0) snprintf(nota, sizeof nota, "%.1f", imdbRating / 10.0f);
+  if (imdbRating > 0) { snprintf(nota, sizeof nota, "%.1f", imdbRating / 10.0f); idioma_decimal_texto(nota, ajustes_idioma()); }
   int temSec = (destaque[0] || selo || nota[0]);
 
   const char *sinopse = (ci && ci->sinopse[0]) ? ci->sinopse : "";
