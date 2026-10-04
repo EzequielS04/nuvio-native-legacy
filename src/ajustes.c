@@ -2154,7 +2154,8 @@ static const char *seekrMascarada(void) {
   snprintf(m, sizeof m, "····%s", n > 4 ? seekrChave + n - 4 : "");
   return m;
 }
-int ajustes_seekr_ligado(void) { return lig(AJ_SEEKR_LIGADO) && (seekrChave[0] || seekrEmbutida()); }
+int ajustes_seekr_habilitado(void) { return lig(AJ_SEEKR_LIGADO); }
+int ajustes_seekr_ligado(void) { return ajustes_seekr_habilitado() && (seekrChave[0] || seekrEmbutida()); }
 int ajustes_seekr_fita(void)   { return lig(AJ_SEEKR_FITA); }
 int ajustes_seekr_ajuste_s(void) { return valor[AJ_SEEKR_AJUSTE]; }
 

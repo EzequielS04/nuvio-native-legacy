@@ -2762,6 +2762,68 @@ void player_atualizar(float dt, Uint32 agora) {
 // atual, cada uma com o seu tempo. Sem quadro pronto a ilha ja nasce no lugar
 // com o tempo certo e o anel de 12 pontos: o Seekr nao parece desligado.
 // O tempo e o do QUADRO (cue), nao a posicao crua (seekrvtt.h).
+// Status is shown only while scrubbing, in the same material as the preview.
+// These lines use fixed translated labels and numeric usage/times only;
+// neither credentials nor provider responses enter the OSD.
+static int seekrStatusLinhas(int est, const SeekrUso *uso, int temChave,
+                             char linhas[3][192]) {
+  int n = 1;
+  char hora[48];
+  memset(linhas, 0, 3 * 192);
+  if (est == SEEKR_PRONTO || est == SEEKR_BUSCANDO ||
+      (est == SEEKR_DESLIGADO && temChave) ||
+      est < SEEKR_DESLIGADO || est > SEEKR_RELOGIO_INDISPONIVEL) return 0;
+  if (est == SEEKR_DESLIGADO)
+    snprintf(linhas[0], 192, "Seekr · %s", i18n("sem chave"));
+  else snprintf(linhas[0], 192, "%s", i18n(seekr_estado_rotulo(est)));
+  if (est == SEEKR_LIMITE_LOCAL && uso) {
+    if (!uso->persistente) {
+      snprintf(linhas[0], 192, "%s", i18n(seekr_estado_rotulo(SEEKR_ARMAZENAMENTO_INDISPONIVEL)));
+    } else {
+      snprintf(linhas[n++], 192, i18n("%d de %d consultas hoje (UTC)"), uso->usadas, uso->limite);
+      if (uso->relogioAtrasado)
+        snprintf(linhas[n++], 192, "%s", i18n(seekr_estado_rotulo(SEEKR_RELOGIO_INDISPONIVEL)));
+      else if (seekr_horario_local(uso->reinicioUtc, hora, sizeof hora))
+        snprintf(linhas[n++], 192, i18n("Renova em %s (hora local)"), hora);
+    }
+  } else if (est == SEEKR_LIMITE_PROVEDOR && uso) {
+    if (uso->relogioAtrasado)
+      snprintf(linhas[n++], 192, "%s", i18n(seekr_estado_rotulo(SEEKR_RELOGIO_INDISPONIVEL)));
+    else if (seekr_horario_local(uso->retryUtc, hora, sizeof hora))
+      snprintf(linhas[n++], 192, i18n("Tente após %s (hora local)"), hora);
+  }
+  return n;
+}
+
+static void seekrStatus(float bx, float bw, float frac, float yBarra, float a, int est) {
+  char linhas[3][192];
+  SeekrUso uso;
+  int n, k;
+  float w = 360.0f, h, x, y;
+  if (!scrubbing) return;
+  seekr_uso(&uso);
+  n = seekrStatusLinhas(est, &uso, seekr_tem_chave(), linhas);
+  if (!n) return;
+  for (k = 0; k < n; k++) {
+    float medida = (float)txt_largura(k ? TXT_G18M : TXT_G20B, linhas[k]) + 48.0f;
+    if (medida > w) w = medida;
+  }
+  if (w > 760.0f) w = 760.0f;
+  h = 32.0f + (float)n * 30.0f;
+  x = bx + bw * frac - w * 0.5f;
+  if (x < PLR_MARGEM) x = PLR_MARGEM;
+  if (x + w > bx + bw) x = bx + bw - w;
+  y = yBarra - 24.0f - h;
+  plrui_material((GfxRect){x, y, w, h}, 26.0f, 0, a);
+  for (k = 0; k < n; k++) {
+    int tinta = k ? 180 : 243;
+    TxtLinha l = txt_linha_corta(k ? TXT_G18M : TXT_G20B, linhas[k],
+                                tinta, tinta, tinta, 255, w - 48.0f);
+    txt_desenhar_alpha(l, x + (w - (float)l.w) * 0.5f,
+                       y + 16.0f + (float)k * 30.0f + (30.0f - (float)l.h) * 0.5f, a);
+  }
+}
+
 static void seekrMiniatura(float bx, float bw, float frac, float yBarra, float a) {
   GLuint t[3] = { 0, 0, 0 };
   double cue[3] = { -1, -1, -1 };
@@ -2769,9 +2831,12 @@ static void seekrMiniatura(float bx, float bw, float frac, float yBarra, float a
   const float w = 384.0f, h = 216.0f, ws = 256.0f, hs = 144.0f, vao = 12.0f, linha = 52.0f;
   float x, y, tot, xs[3];
   Uint32 agora = SDL_GetTicks();
-  if (ehCanal() || !(scrubbing || posVisSolto) || a < 0.05f || !ajustes_seekr_ligado()) return;
-  est = seekr_estado();
-  if (est != SEEKR_PRONTO && est != SEEKR_BUSCANDO) return;
+  if (ehCanal() || !(scrubbing || posVisSolto) || a < 0.05f || !ajustes_seekr_habilitado()) return;
+  est = seekr_tem_chave() ? seekr_estado() : SEEKR_DESLIGADO;
+  if (est != SEEKR_PRONTO && est != SEEKR_BUSCANDO) {
+    seekrStatus(bx, bw, frac, yBarra, a, est);
+    return;
+  }
   seekr_definir_ajuste_ms((long)ajustes_seekr_ajuste_s() * 1000L);
   fita = ajustes_seekr_fita();
   n = fita ? 3 : 1;
