@@ -3278,6 +3278,14 @@ static void corpoCarregando(GfxRect r, float a, void *u) {
   plrui_respira(x + 6.0f + 5.0f, y + 16.0f, 10.0f, agora, a);
   { TxtLinha l = txt_linha(TXT_G26B, "Abrindo fonte", 243, 242, 239, 255);
     txt_desenhar_alpha(l, x + 6.0f + 10.0f + 16.0f, y + 16.0f - (float)l.h * 0.5f, a); }
+  // "Fonte 2 de 3" na ponta direita da linha do titulo (o cabecalho sumiu
+  // com o relogio, entao ele mora aqui).
+  if (tentativaN >= 2 && tentativaM >= tentativaN) {
+    char fd[48];
+    snprintf(fd, sizeof fd, i18n("Fonte %d de %d"), tentativaN, tentativaM);
+    { TxtLinha l = txt_linha(TXT_G19M, fd, 243, 242, 239, 140);
+      txt_desenhar_alpha(l, x + w - 6.0f - (float)l.w, y + 16.0f - (float)l.h * 0.5f, a); }
+  }
   y += 32.0f + 6.0f;
   if (linhaEp[0]) {
     TxtLinha l = txt_linha_corta(TXT_ILHA_SUB, linhaEp, 243, 242, 239, 153, w - 32.0f);
@@ -3513,13 +3521,9 @@ void player_desenhar(Uint32 agora) {
   // quando o automatico ja esta na segunda.
   if (player_carregando()) {
     { PlrIlhaPedido pd;
-      char dir[48] = "";
       memset(&pd, 0, sizeof pd);
       pd.semFim = 1;
-      if (tentativaN >= 2 && tentativaM >= tentativaN) {
-        snprintf(dir, sizeof dir, i18n("Fonte %d de %d"), tentativaN, tentativaM);
-        pd.direita = dir;
-      }
+      pd.centro = 1;   // cartao no meio da tela, sem relogio (dono, 03/10)
       pd.w = 680.0f; pd.h = alturaCarregando();
       pd.corpo = corpoCarregando;
       plrilha_pedir(&pd); }
