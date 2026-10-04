@@ -298,13 +298,13 @@ if [ "$1" = "--ipk" ]; then
   # AVISOS DE LICENCA do motor (libtorrent, Boost, OpenSSL, nuvio-engine).
   printf '%s\n' "$LISTA" | grep -qE 'licencas/p2p-avisos\.txt$' || {
     echo "    ABORTADO: o pacote nao leva licencas/p2p-avisos.txt"; rm -f "$IPK"; exit 1; }
-  # MOTOR P2P: pasta achada = o binario DENTRO do pacote tem de te-lo. A guarda
+  # MOTOR P2P: pasta achada = o binario DENTRO do pacote tem de te-lo (marca "Nuvio Engine/", simbolos da API sao ocultos). A guarda
   # fica no arquivo pronto, nao no flag que se passou ao compilador.
   if [ -n "$NV_P2P_DIR" ]; then
     mkdir -p "$PALCO/x" && tar xzf "$PALCO/data.tar.gz" -C "$PALCO/x" 2>/dev/null
     MOT=$(find "$PALCO/x" -name nuvio-proto -type f | head -1)
-    if [ -z "$MOT" ] || [ "$(strings "$MOT" | grep -c 'nuvio_engine_create')" -lt 1 ]; then
-      echo "    ABORTADO: o nuvio-proto do pacote nao tem o motor P2P (nuvio_engine_create)"; rm -f "$IPK"; exit 1
+    if [ -z "$MOT" ] || [ "$(strings "$MOT" | grep -c 'Nuvio Engine/')" -lt 1 ]; then
+      echo "    ABORTADO: o nuvio-proto do pacote nao tem o motor P2P (marca "Nuvio Engine/")"; rm -f "$IPK"; exit 1
     fi
     echo "    motor P2P dentro do nuvio-proto do pacote"
   else

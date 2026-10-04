@@ -81,7 +81,7 @@ nv_p2p_resolver android
 case $'\n'"$LISTA"$'\n' in *$'\n'"assets/licencas/p2p-avisos.txt"$'\n'*) ;; *) echo "release-android: faltou assets/licencas/p2p-avisos.txt" >&2; exit 1;; esac
 if [ -n "$NV_P2P_DIR" ]; then
   for abi in arm64-v8a armeabi-v7a; do
-    m=$(unzip -p "$A" "lib/$abi/libmain.so" | strings | grep -c 'nuvio_engine_create' || true)
+    m=$(unzip -p "$A" "lib/$abi/libmain.so" | strings | grep -c 'Nuvio Engine/' || true)
     [ "$m" -ge 1 ] || { echo "release-android: $A lib/$abi/libmain.so sem o motor P2P" >&2; exit 1; }
   done
   echo "release-android: motor P2P (nuvio-engine) nas duas ABIs"

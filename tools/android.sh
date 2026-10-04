@@ -112,8 +112,8 @@ for a in "${APKS[@]}"; do
   printf '%s\n' "$L" | grep -q '^assets/licencas/p2p-avisos.txt$' || { echo "android.sh: $a sem assets/licencas" >&2; exit 1; }
   if [ -n "$NV_P2P_DIR" ]; then   # motor pedido: o simbolo da API C tem de estar nas DUAS libmain.so
     for abi in arm64-v8a armeabi-v7a; do
-      m=$(unzip -p "$a" "lib/$abi/libmain.so" | strings | grep -c 'nuvio_engine_create' || true)
-      [ "$m" -ge 1 ] || { echo "android.sh: $a lib/$abi/libmain.so SEM o motor P2P (nuvio_engine_create)" >&2; exit 1; }
+      m=$(unzip -p "$a" "lib/$abi/libmain.so" | strings | grep -c 'Nuvio Engine/' || true)
+      [ "$m" -ge 1 ] || { echo "android.sh: $a lib/$abi/libmain.so SEM o motor P2P (marca "Nuvio Engine/")" >&2; exit 1; }
     done
     echo "  motor P2P dentro das duas libmain.so"
   fi
