@@ -305,7 +305,7 @@ static GfxRect ajInspR(void) { return (GfxRect){ ajInspX(), AJI_MARGEM, NV_VTELA
 #define AJ2_MARGEM     (40.0f / AJ2_S)
 // 770 (era 660): os nomes inteiros em Montserrat, a fonte mais larga que a TV
 // oferece — "Languages and subtitles" em 44/600 mede 563 e a linha tira 198.
-#define AJ2_MENU_W     770.0f
+#define AJ2_MENU_W     730.0f
 // Recolhida (degrau 1 e 2), a ilha do menu encolhe ate a coluna de icones: os
 // dois chips de icone lado a lado (18 + 64 + 12 + 64 + 18). A lista da A3 fica
 // a direita e a arte da opcao ocupa o lugar que o menu largou.
@@ -416,7 +416,7 @@ static int ajEditandoLinha(int op) {
 #define AJ_REGUA_FILA 72.0f
 #define AJ_REGUA_H (4.0f * AJ_REGUA_FILA + 4.0f)
 #define AJ2_FUNDO_BAIXO 237.75f   // 4 + cartao (10 + 150,75 + 10 + 29 + 10) + 24
-static int aj2FocoNaLista(int i) { return i == focoItem && !focoIndice && !uxCabecalho && uxIndice >= 2; }
+static int aj2FocoNaLista(int i) { return i == focoItem && !focoIndice && uxIndice >= 2; }
 static float aj2AjudaAltura(int op, float w) {
   return txt_bloco(TXT_V2_28, uxResumo(op), 0, 0, 0, 0, -4000, w, 36.4f, 0, 4);
 }
@@ -1010,33 +1010,6 @@ static void ajDesenharGrupo(int item, float y, float a) {
   txt_desenhar_alpha(t, x + 22, yc - t.h * 0.5f, a);
   txt_desenhar_alpha(c, x + w - 22 - c.w, yc - c.h * 0.5f + 1.0f, 0.60f * a);
   gfx_cor((GfxRect){ x, y + 20.0f + 31.2f + 8.0f, w, 2 }, 0, 1, 1, 1, 0.18f * a);
-}
-
-// O chip "Avançados N" do cabecalho da lista (60 de altura, 22/600). Devolve a largura.
-static int ajNAvancadas(void) {
-  int n = 0, i;
-  for (i = secIni[secAtual] + 1; i < secFim(secAtual); i++)
-    if (TELA[i].tipo == IT_OPC && uxAvancada(TELA[i].op)) n++;
-  return n;
-}
-static float ajChipAvancados(float xDir, float y, int foco, float a) {
-  char t[16];
-  int n = ajNAvancadas(), vis = uxAvancados[secAtual];
-  TxtLinha r, q;
-  float w, x;
-  if (!n) return 0;
-  snprintf(t, sizeof t, "%d", n);
-  r = foco ? ajTxtT(TXT_V2_CHIP, "Avançados") : ajTxt(TXT_V2_CHIP, "Avançados");
-  q = foco ? ajTxtT(TXT_V2_24, t) : ajTxt(TXT_V2_24, t);
-  w = 24 + 24 + 10 + r.w + 10 + q.w + 24;
-  x = xDir - w;
-  if (foco) ajPilulaAcento((GfxRect){ x, y, w, 60 }, 30, a);
-  else ajNeutro((GfxRect){ x, y, w, 60 }, 30, 0.08f, AJ_CHIP_SOL, a);
-  if (foco) ajIconeT(vis ? "aj_eye" : "aj_eye-off", x + 24, y + 18, 24, a);
-  else ajIcone(vis ? "aj_eye" : "aj_eye-off", x + 24, y + 18, 24, 0.85f * a);
-  txt_desenhar_alpha(r, x + 58, y + (60 - r.h) * 0.5f, (foco ? 1.0f : 0.85f) * a);
-  txt_desenhar_alpha(q, x + 58 + r.w + 10, y + (60 - q.h) * 0.5f, (foco ? 0.65f : 0.45f) * a);
-  return w;
 }
 
 // Cabecalho da folha: kicker + titulo 40/700 + sub. Devolve onde a lista comeca.

@@ -38,7 +38,7 @@ int main(void) {
   seekrCarregar();
   assert(!strcmp(efetiva, NV_SEEKR_API_KEY));
   assert(!strstr(seekrMascarada(), NV_SEEKR_API_KEY));
-  for (int i = 0; i < AJ_MAX_SECOES; i++) uxAvancados[i] = 1;
+  valor[AJ_AVANCADAS] = 0;   /* advanced options shown (global toggle on) */
   int visiveis = 0;
   for (int i = 0; i < AJ_N_TELA; i++)
     if (TELA[i].tipo == IT_OPC && (TELA[i].op == AJ_SEEKR_CHAVE || TELA[i].op == AJ_SEEKR_TESTAR))

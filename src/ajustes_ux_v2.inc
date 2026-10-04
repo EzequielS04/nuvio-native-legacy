@@ -70,22 +70,23 @@ static int aj2Degrau(void) {
 // mais ficam nas medidas cheias e a lista rola.
 #define AJ2_MENU_LN    aj2Ln
 #define AJ2_MENU_GAP   aj2Gap
-#define AJ2_MENU_CHIP  64.0f   // as duas pilulas do alto (Buscar, Diferentes do padrao)
-#define AJ2_MENU_TOPOL 89.0f   // onde comeca a lista: chips 64 + 12 + fio 1 + 12
-#define AJ2_MENU_GT    34.0f   // titulo de grupo (Telas, Assistir, Conta e sistema)
+#define AJ2_MENU_CHIP  56.0f   // as duas pilulas do alto (Buscar, Diferentes do padrao)
+#define AJ2_MENU_TOPOL 77.0f   // onde comeca a lista: chips 56 + 10 + fio 1 + 10
+#define AJ2_MENU_GT    30.0f   // titulo de grupo (Telas, Assistir, Conta e sistema)
 #define AJ2_MENU_GT_EX aj2GtEx // respiro extra antes do 2o e do 3o grupo
 #define AJ2_MENU_FADE  aj2Fade
-#define AJ2_MENU_ICO   46.0f
-#define AJ2_MENU_ICO_GAP 22.0f
+#define AJ2_MENU_ICO   34.0f
+#define AJ2_MENU_ICO_GAP 18.0f
 #define AJ2_MENU_RESERVA 80.0f // o que a linha aberta (descricao de 2 linhas) soma a uma fechada
 #define AJ2_NMENU (AJ_MAX_SECOES + 2)
 static float aj2MH[AJ2_NMENU], aj2MV[AJ2_NMENU], aj2MDesc[AJ2_NMENU], aj2MTempo[AJ2_NMENU];
 static float aj2MRol, aj2MRolV, aj2SupY, aj2SupYv, aj2SupH, aj2SupHv;
 static int aj2MIni;
-static float aj2Ln = 74.0f, aj2Gap = 3.0f, aj2GtEx = 26.0f, aj2Fade = 70.0f;
-// f = 1: medidas cheias (74 / 3 / 26); f = 0: as compactas (66 / 2 / 14).
+static float aj2Ln = 58.0f, aj2Gap = 3.0f, aj2GtEx = 18.0f, aj2Fade = 70.0f;
+// f = 1: medidas cheias (58 / 3 / 18); f = 0: as compactas (50 / 2 / 10).
+// R6 (04/10): o indice estava "enorme" — linha, icone e corpo menores.
 static float aj2MenuNecessario(float f, int nLin) {
-  float ln = 66.0f + 8.0f * f, gap = 2.0f + f, ex = 14.0f + 12.0f * f;
+  float ln = 50.0f + 8.0f * f, gap = 2.0f + f, ex = 10.0f + 8.0f * f;
   return AJ2_MENU_TOPOL + 3.0f * AJ2_MENU_GT + 2.0f * ex + (float)nLin * (ln + gap) + AJ2_MENU_RESERVA;
 }
 static void aj2MenuMedir(void) {
@@ -96,7 +97,7 @@ static void aj2MenuMedir(void) {
   aj2Fade = 70.0f;
   if (n1 > janela && n0 <= janela) { f = (janela - n0) / (n1 - n0); aj2Fade = 0.0f; }
   else if (n1 <= janela) aj2Fade = 0.0f;
-  aj2Ln = 66.0f + 8.0f * f; aj2Gap = 2.0f + f; aj2GtEx = 14.0f + 12.0f * f;
+  aj2Ln = 50.0f + 8.0f * f; aj2Gap = 2.0f + f; aj2GtEx = 10.0f + 8.0f * f;
 }
 static const char *aj2MenuTitulo(int j) {
   return j == 0 ? "Buscar ajuste" : j == 1 ? "Diferentes do padrão" : TELA[secIni[j - 2]].titulo;
@@ -216,33 +217,40 @@ static void aj2DesenharMenu(const Aj2Pose *p) {
   // lado, para caberem na coluna de icones.
   { float cy = topo - aj2MRol, cx = m.x + AJ2_MENU_PAD, mkc = aj2MenuMascara(cy + AJ2_MENU_CHIP * 0.5f, base);
     float livre = AJ2_MENU_W - 2 * AJ2_MENU_PAD, rot = p->mRot < 0 ? 0 : p->mRot > 1 ? 1 : p->mRot;
-    float fio = aj2MenuMascara(cy + AJ2_MENU_CHIP + 12.0f, base);
+    float fio = aj2MenuMascara(cy + AJ2_MENU_CHIP + 10.0f, base);
     int c;
-    for (c = 0; c < 2 && n >= 2; c++) {
-      const char *rot_ = i18n(c == 0 ? "Buscar" : "Diferentes do padrão");
-      float wc = AJ2_MENU_CHIP, wf, w;
+    for (c = 0; c < 3 && n >= 2; c++) {
+      const char *rot_ = i18n(c == 0 ? "Buscar" : c == 1 ? "Diferentes do padrão" : "Avançadas");
+      float wc = AJ2_MENU_CHIP, wf, w, ac = c == 2 ? rot : 1.0f;
       TxtLinha tl;
       GfxRect r;
-      int sel = c == uxIndice, fc = sel && focoIndice;
-      wf = 22.0f + 30.0f + 12.0f + 26.0f;
-      tl = ajTxtC(TXT_V2_GRUPO, rot_, 400.0f);
+      int sel = c == uxIndice, fc = c == 2 ? focoIndice && uxChipAv : sel && focoIndice && !uxChipAv;
+      int lig_ = c == 2 && lig(AJ_AVANCADAS);
+      if (c == 2 && rot <= 0.003f) break;   // recolhido: so as duas primeiras cabem na coluna
+      wf = 18.0f + 26.0f + 8.0f + 14.0f;
+      tl = ajTxtC(TXT_V2_SEG, rot_, 400.0f);
       wf += tl.w;
       if (c == 1 && cx + wf > m.x + AJ2_MENU_PAD + livre) wf = m.x + AJ2_MENU_PAD + livre - cx;
       w = wc + (wf - wc) * rot;
+      if (c == 2 && cx + w > m.x + AJ2_MENU_PAD + livre) w = wc;   // idioma longo: so o icone
       r = (GfxRect){ cx, cy, w, AJ2_MENU_CHIP };
       if (mkc > 0.003f) {
-        if (sel) ajNeutro(r, 32.0f, fc ? 0.16f : 0.11f, 0.169f, 0.176f, 0.204f, mkc);
-        else ajNeutro(r, 32.0f, 0.10f, AJ_CHIP_SOL, mkc);
-        if (fc) gfx_cor(r, 32.0f / r.h, ar, ag, ab, 0.14f * mkc);   // toque leve do acento no chip em foco
-        ajIcone(c == 0 ? "aj_search" : "aj_rotate-ccw-clock", cx + 17.0f + 5.0f * rot, cy + (AJ2_MENU_CHIP - 30.0f) * 0.5f, 30.0f, (sel ? 1.0f : 0.86f) * mkc);
-        if (rot > 0.003f) {
-          TxtLinha tc = ajTxtC(TXT_V2_GRUPO, rot_, w - 22.0f - 30.0f - 12.0f - 26.0f);
-          txt_desenhar_alpha(tc, cx + 64.0f, cy + (AJ2_MENU_CHIP - tc.h) * 0.5f, (sel ? 1.0f : 0.9f) * mkc * rot);
+        float mc = mkc * ac;
+        if (c < 2 && sel) ajNeutro(r, 28.0f, fc ? 0.16f : 0.11f, 0.169f, 0.176f, 0.204f, mc);
+        else if (fc) ajNeutro(r, 28.0f, 0.16f, 0.169f, 0.176f, 0.204f, mc);
+        else ajNeutro(r, 28.0f, 0.10f, AJ_CHIP_SOL, mc);
+        if (fc) gfx_cor(r, 28.0f / r.h, ar, ag, ab, 0.14f * mc);   // toque leve do acento no chip em foco
+        else if (lig_) gfx_cor(r, 28.0f / r.h, ar, ag, ab, 0.22f * mc);   // ligado: o acento do app
+        ajIcone(c == 0 ? "aj_search" : c == 1 ? "aj_rotate-ccw-clock" : lig_ ? "aj_eye" : "aj_eye-off",
+                cx + 15.0f + 3.0f * rot, cy + (AJ2_MENU_CHIP - 26.0f) * 0.5f, 26.0f, ((sel || fc || lig_) ? 1.0f : 0.86f) * mc);
+        if (rot > 0.003f && w > wc + 4.0f) {
+          TxtLinha tc = ajTxtC(TXT_V2_SEG, rot_, w - 18.0f - 26.0f - 8.0f - 14.0f);
+          txt_desenhar_alpha(tc, cx + 52.0f, cy + (AJ2_MENU_CHIP - tc.h) * 0.5f, ((sel || fc || lig_) ? 1.0f : 0.9f) * mc * rot);
         }
       }
-      cx += w + 12.0f;
+      cx += w + 10.0f;
     }
-    if (fio > 0.003f) gfx_cor((GfxRect){ m.x + AJ2_MENU_PAD + 24.0f, cy + AJ2_MENU_CHIP + 12.0f, m.w - 2 * AJ2_MENU_PAD - 48.0f, 1 }, 0, 1, 1, 1, 0.08f * fio);
+    if (fio > 0.003f) gfx_cor((GfxRect){ m.x + AJ2_MENU_PAD + 24.0f, cy + AJ2_MENU_CHIP + 10.0f, m.w - 2 * AJ2_MENU_PAD - 48.0f, 1 }, 0, 1, 1, 1, 0.08f * fio);
   }
   for (j = 0; j < n; j++) {
     float y = topo + aj2MenuY(j) - aj2MRol, h = aj2MH[j];
@@ -265,12 +273,12 @@ static void aj2DesenharMenu(const Aj2Pose *p) {
       TxtLinha t, cn;
       char qn[16];
       snprintf(qn, sizeof qn, "%d", aj2ContaOpcoes(j - 2));
-      cn = ajTxt(TXT_V2_28, qn);
+      cn = ajTxt(TXT_V2_26, qn);
       { float livre = AJ2_MENU_W - 2 * AJ2_MENU_PAD - 28 - AJ2_MENU_ICO - AJ2_MENU_ICO_GAP - 20 - cn.w - 16;
         TxtEstilo e = ativa ? TXT_V2_MENU_B : TXT_V2_MENU;
         // Nome que nao cabe inteiro (idiomas longos): um corpo menor antes do
         // corte com reticencias.
-        if ((float)txt_largura(e, aj2MenuTitulo(j)) > livre) e = TXT_V2_ROT;
+        if ((float)txt_largura(e, aj2MenuTitulo(j)) > livre) e = TXT_V2_28;
         t = ajTxtC(e, aj2MenuTitulo(j), livre); }
       txt_desenhar_alpha(cn, m.x + m.w - AJ2_MENU_PAD - 28.0f - cn.w, lc - cn.h * 0.5f, 0.5f * mk * p->mRot);
       txt_desenhar_alpha(t, rx + 28 + AJ2_MENU_ICO + AJ2_MENU_ICO_GAP, lc - t.h * 0.5f, al * mk * p->mRot);

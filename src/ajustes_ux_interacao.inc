@@ -188,6 +188,21 @@ static int uxEvento(SDL_Keycode k) {
     // Esquerda/Direita andam entre elas; a Esquerda da primeira sai.
     static int ultimaPilula = 0;
     if (uxIndice < 2) ultimaPilula = uxIndice;
+    // O terceiro chip do alto, "Avancadas": liga/desliga as opcoes avancadas em
+    // TODAS as categorias (uma vez, em vez de uma por categoria).
+    if (uxChipAv) {
+      if (k == SDLK_LEFT) { uxChipAv = 0; return 1; }
+      if (uxOk(k)) {
+        int novo = valor[AJ_AVANCADAS] == 0 ? 1 : 0;
+        if (definirValorDireto(AJ_AVANCADAS, novo)) uxNotificar("Ajuste salvo nesta TV.");
+        else uxNotificar("Não foi possível salvar. O valor anterior foi mantido.");
+        return 1;
+      }
+      if (k == SDLK_DOWN) { uxChipAv = 0; uxIndice = 2; focarSecao(0); return 1; }
+      if (uxVoltar(k)) { sair = 1; return 1; }
+      return 1;
+    }
+    if (uxIndice == 1 && k == SDLK_RIGHT) { uxChipAv = 1; uxVeioBusca = 0; return 1; }
     if (uxIndice == 1 && k == SDLK_LEFT) { uxIndice = 0; uxVeioBusca = 0; return 1; }
     if (uxIndice == 0 && k == SDLK_RIGHT) { uxIndice = 1; uxVeioBusca = 0; uxListarDiferencas(); return 1; }
     if (uxVoltar(k) || k == SDLK_LEFT) { sair = 1; return 1; }
@@ -222,23 +237,12 @@ static int uxEvento(SDL_Keycode k) {
   if (k == SDLK_UP || k == SDLK_DOWN || k == SDLK_LEFT ||
       k == SDLK_PAGEUP || k == SDLK_PAGEDOWN) uxRetornarOp = -1;
   if (uxVoltar(k) || k == SDLK_LEFT) {
-    focoIndice = 1; uxCabecalho = 0; sairArmado = 0; return 1;
-  }
-  if (uxCabecalho) {
-    if (uxOk(k)) {
-      uxAvancados[secAtual] = !uxAvancados[secAtual];
-      // Nunca deixar um foco escondido depois de recolher os avançados.
-      if (!focavel(focoItem)) {
-        focar(primeiroDaSecao(secAtual)); uxCabecalho = 1;
-      }
-    } else if (k == SDLK_DOWN) { focar(primeiroDaSecao(secAtual)); }
-    return 1;
+    focoIndice = 1; sairArmado = 0; return 1;
   }
   if (k == SDLK_UP || k == SDLK_DOWN) {
     int dir = k == SDLK_DOWN ? 1 : -1, i;
     for (i = focoItem + dir; i > secIni[secAtual] && i < secFim(secAtual); i += dir)
       if (focavel(i)) { focar(i); return 1; }
-    if (dir < 0) uxCabecalho = 1;
     return 1;
   }
   if (k == SDLK_RIGHT) return 1;

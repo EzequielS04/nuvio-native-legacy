@@ -363,6 +363,9 @@ typedef enum {
   // sao posicionais. O ligado e LOCAL; endereco/token moram em
   // jellyfin-p<N>.txt (por perfil, 0600), nunca em ajustes.txt nem na conta.
   AJ_JF_LIGADO, AJ_JF_SERVIDOR, AJ_JF_ENTRAR, AJ_JF_SAIR,
+  // R6 (04/10): interruptor GLOBAL das opcoes avancadas (substitui o "Avancados"
+  // por categoria). LOCAL, V_LIGA: 1 = Desligado. No fim: valor[]/CHAVE[] posicionais.
+  AJ_AVANCADAS,
   AJ_N
 } OpcaoId;
 
@@ -1066,6 +1069,7 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Endereço do Jellyfin"),
   ACAO("Entrar no Jellyfin"),
   ACAO("Sair do Jellyfin"),
+  ESC("Mostrar opções avançadas",       V_LIGA, 2),   // local: avancadasLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1250,6 +1254,7 @@ static const char *CHAVE[] = {
   "-plugins",
   // LOCAL e SEM o "-" (sobrevive ao fechamento); o resto e acao/estado.
   "jellyfinLocal", "-jellyfinServidor", "-jellyfinEntrar", "-jellyfinSair",
+  "avancadasLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1476,7 +1481,8 @@ static float paginaA = 1.0f;   // entrada da pagina da categoria (0..1)
 static int sair = 0;
 
 // Rascunho e navegação separados dos valores persistentes.
-static int uxIndice = 2, uxCabecalho, uxAvancados[AJ_MAX_SECOES];
+static int uxIndice = 2;
+static int uxChipAv;   // foco no chip "Avancadas" do alto do indice (liga/desliga global)
 static int uxUltimoItem[AJ_MAX_SECOES];
 static int uxAbrirOp = -1, uxPediuBusca, uxVeioBusca, uxRetornarOp = -1;
 static int uxDifs[AJ_N], uxNDifs, uxDifFoco;
@@ -3442,6 +3448,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_PERFIL_EDITAR:
     case AJ_P2P_LIGADO:     /* o servidor P2P e um aparelho da rede desta casa */
     case AJ_JF_LIGADO:
+    case AJ_AVANCADAS:      /* so a vista desta TV */
     case AJ_POSTER_PROV:    /* servico e rede desta casa: nao segue a conta */
     case AJ_DET_SO_CINEMETA: /* o web nao tem esta escolha */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
@@ -3794,7 +3801,7 @@ int ajustes_iniciar(void) {
   scrollY = 0.0f; velY = 0.0f; sair = 0; sairArmado = 0;
   // Reabre na categoria em que estava, com o foco no indice (ver focoIndice).
   if (secAtual < 0 || secAtual >= nSecoes) secAtual = 0;
-  focoIndice = 1;
+  focoIndice = 1; uxChipAv = 0;
   focarSecao(secAtual);
   // "Experimentar a cor viva" (cartao de novidades): abre em Aparencia com o
   // foco JA na linha da cor, e nao no indice — quem apertou o botao quer
@@ -4225,7 +4232,7 @@ static int visivel(int i) {
   if (TELA[i].tipo == IT_OPC) {
     int op = TELA[i].op;
     if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) return 0;
-    if (uxAvancada(op) && !uxAvancados[secDoItem[i]]) return 0;
+    if (uxAvancada(op) && !lig(AJ_AVANCADAS)) return 0;
   }
   return 1;
 }
@@ -4237,7 +4244,7 @@ static void focar(int i) {
   focoItem = i;
   focoOp = TELA[i].tipo == IT_OPC ? TELA[i].op : -1;
   secAtual = secDoItem[i];
-  uxIndice = secAtual + 2; uxCabecalho = 0;
+  uxIndice = secAtual + 2; uxChipAv = 0;
   uxUltimoItem[secAtual] = i;
   emEdicao = 0;
   sairArmado = 0;
@@ -4264,7 +4271,9 @@ static void focarOpcao(int op) {
   int i;
   for (i = 0; i < AJ_N_TELA; i++) {
     if (TELA[i].tipo != IT_OPC || TELA[i].op != op) continue;
-    if (uxAvancada(op)) uxAvancados[secDoItem[i]] = 1;
+    // Busca/atalho para uma avancada: liga o interruptor global (so na memoria;
+    // grava junto com o proximo ajuste salvo) em vez de esconder o destino.
+    if (uxAvancada(op) && !lig(AJ_AVANCADAS)) valor[AJ_AVANCADAS] = 0;
     focar(i);
     focoIndice = 0;
     return;
@@ -4532,6 +4541,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
     case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
     case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
+    case AJ_AVANCADAS: return "Mostra, em todas as categorias, as opções técnicas marcadas como Avançado. Vale só para esta TV.";
     case AJ_LOGO_TRAILER: return "Para TVs OLED: não deixa a logo parada na tela enquanto o trailer toca.";
     case AJ_TRAILER_ZOOM_TPK: return "Tira as barras pretas do trailer ampliando a imagem; em algumas TVs Samsung pode deixar a tela preta ou mostrar a tela inicial da TV.";
     case AJ_CACHE_SEEK: return "Guarda no disco o trecho já baixado do vídeo, para voltar sem baixar de novo. Apagado ao fechar o player.";
@@ -5561,7 +5571,7 @@ void ajustes_atualizar(float dt, Uint32 agora) {
     // Com o foco na coluna de categorias a linha DESCANSA: o preenchimento
     // de realce e o do foco, e o foco esta na categoria — duas superficies
     // claras ao mesmo tempo diriam "voce esta em dois lugares".
-    float alvo = (i == focoItem && !focoIndice && !uxCabecalho && uxIndice >= 2) ? 1.0f : 0.0f;
+    float alvo = (i == focoItem && !focoIndice && uxIndice >= 2) ? 1.0f : 0.0f;
     animItem[i] = ajustes_animacoes_reduzidas() ? alvo : anim_mola(animItem[i], alvo, dt,
                             alvo > animItem[i] ? NV_MOLA_FOCO : NV_MOLA_DESFOCO);
   }
@@ -5584,7 +5594,6 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       if (fim - topo > AJ_BASE - AJ_TOPO) fim = topo + (AJ_BASE - AJ_TOPO);
       if (fim > base) base = fim; }
   }
-  if (uxCabecalho) topo = base = 0.0f;
   float alvo = scrollY;
   // PAGINA NOVA: a lista passa a ser outra categoria. A rolagem nao anima de
   // uma lista para a outra — recomeca do topo, e a pagina entra por
@@ -6114,6 +6123,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER:
     case AJ_TAMANHO_UI: case AJ_TAMANHO_AJUSTES: case AJ_FUNDO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
+    case AJ_AVANCADAS:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL:
@@ -6247,7 +6257,6 @@ void ajustes_teste_ux_captura(int cenario) {
                        getenv("NUVIO_SHOT_VIDRO") && atoi(getenv("NUVIO_SHOT_VIDRO")));
   valor[AJ_IDIOMA] = IDIOMA_PT + 1;
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
-  memset(uxAvancados, 0, sizeof uxAvancados);
   scrollY = velY = 0; paginaA = 1;
   focarSecao(0); focoIndice = 1;
   if (cenario == 1 || cenario == 2) focarOpcao(AJ_HOME_LAYOUT);
@@ -6260,7 +6269,7 @@ void ajustes_teste_ux_captura(int cenario) {
   }
   if (cenario == 6) focarOpcao(AJ_TEX_MB);
   if (cenario == 7) { focarOpcao(AJ_LARGURA_DP); uxAbrirEditor(AJ_LARGURA_DP); uxEvento(SDLK_DOWN); }
-  if (cenario == 8) { focarOpcao(AJ_HOME_LAYOUT); uxCabecalho = 1; }
+  if (cenario == 8) { focarSecao(0); uxIndice = 1; focoIndice = 1; uxChipAv = 1; }
   if (cenario == 9) { valor[AJ_IDIOMA] = IDIOMA_EN + 1; focarOpcao(AJ_HOME_LAYOUT); uxAbrirEditor(AJ_HOME_LAYOUT); }
   if (cenario == 21) focarOpcao(AJ_FOCO_TRAILER);
   if (cenario == 22) { focarOpcao(AJ_FOCO_TRAILER); uxAbrirEditor(AJ_FOCO_TRAILER); }
@@ -6330,7 +6339,6 @@ int ajustes_teste_quadro(const char *id) {
   // pill sits in the Settings corner (with NUVIO_SHOT_MENU in the capture).
   if (getenv("NUVIO_SHOT_LAYOUT") && *getenv("NUVIO_SHOT_LAYOUT")) valor[AJ_HOME_LAYOUT] = atoi(getenv("NUVIO_SHOT_LAYOUT"));
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
-  memset(uxAvancados, 0, sizeof uxAvancados);
   scrollY = velY = 0; paginaA = 1;
   filAberta = 0; riscoFolha = 0;
   focarSecao(0); focoIndice = 1;
@@ -6356,7 +6364,7 @@ int ajustes_teste_quadro(const char *id) {
                                 184.0f, 0.28f,  0.0f,  1.0f, 0.0f, 0.0f };
     }
     else if (!strcmp(id, "v2-editor")) { int k; focarOpcao(AJ_FIL_LIMITE); uxAbrirEditor(AJ_FIL_LIMITE); for (k = 0; k < 5; k++) uxEvento(SDLK_RIGHT); }
-    else if (!strcmp(id, "v2-fundo-opcao")) { ajArteFundoN = 7; focarOpcao(AJ_FUNDO); uxAbrirEditor(AJ_FUNDO); uxPendente = 2; uxAvancados[secAtual] = 0; }
+    else if (!strcmp(id, "v2-fundo-opcao")) { ajArteFundoN = 7; focarOpcao(AJ_FUNDO); uxAbrirEditor(AJ_FUNDO); uxPendente = 2; }
     else if (!strncmp(id, "v2-fundo-", 9)) {
       ajArteFundoN = 7;
       valor[AJ_FUNDO] = !strcmp(id, "v2-fundo-borrada") ? 1 : !strncmp(id, "v2-fundo-frost", 14) ? 2 : 0;
@@ -6379,7 +6387,7 @@ int ajustes_teste_quadro(const char *id) {
   // dono, 04/10: o aviso cobria a ultima linha).
   else if (!strcmp(id, "aviso")) { focarOpcao(AJ_TAMANHO_AJUSTES); uxNotificar("Ajuste salvo nesta TV."); }
   else if (!strcmp(id, "cartazes")) { ajArteFundoN = 13; valor[AJ_LARGURA_DP] = 128; focarOpcao(AJ_LARGURA_DP); }
-  else if (!strcmp(id, "memoria")) { ajArteFundoN = 21; ajMemFixa = 1; focarOpcao(AJ_ESPACO); uxAvancados[secAtual] = 1; }
+  else if (!strcmp(id, "memoria")) { ajArteFundoN = 21; ajMemFixa = 1; focarOpcao(AJ_ESPACO); }
   else if (!strcmp(id, "cor")) { ajArteFundoN = 9; focarOpcao(AJ_TEMA); uxAbrirEditor(AJ_TEMA); }
   else if (!strcmp(id, "relogio")) { ajArteFundoN = 0; focarOpcao(AJ_RELOGIO); }
   else if (!strcmp(id, "reproducao")) { ajArteFundoN = 15; valor[AJ_QUALIDADE] = 1; focarOpcao(AJ_DV); }
