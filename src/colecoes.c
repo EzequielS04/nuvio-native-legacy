@@ -263,6 +263,24 @@ pronto:
   return melhor;
 }
 
+#ifdef NV_TPK40
+// Tizen 4/5's manual ELF loader cannot initialize compiler TLS (tpk.sh rejects
+// PT_TLS). Same per-thread snapshot lifetime with a pthread key, as discord.c.
+static pthread_key_t colCopiaKey;
+static pthread_once_t colCopiaOnce = PTHREAD_ONCE_INIT;
+static int colCopiaKeyOk;
+static void colCopiaCriar(void) { colCopiaKeyOk = pthread_key_create(&colCopiaKey, free) == 0; }
+static ColFolder *colCopiaDoFio(void) {
+  pthread_once(&colCopiaOnce, colCopiaCriar);
+  if (!colCopiaKeyOk) return NULL;
+  ColFolder *p = pthread_getspecific(colCopiaKey);
+  if (!p) {
+    p = calloc(1, sizeof *p);
+    if (p && pthread_setspecific(colCopiaKey, p)) { free(p); p = NULL; }
+  }
+  return p;
+}
+#endif
 const ColFolder *col_por_catalogo(const char *base,const char *type,const char *id) {
   // Base vazia nao pergunta nada: sem esta guarda uma consulta sem URL casava
   // com QUALQUER fonte cuja base ainda estivesse vazia — um falso positivo que
@@ -271,7 +289,13 @@ const ColFolder *col_por_catalogo(const char *base,const char *type,const char *
   // Discovery runs concurrently with main-thread account sync. Never let it
   // observe the cleared/partially parsed builder or keep a pointer that sync
   // can replace after the lock is released.
+#ifdef NV_TPK40
+  ColFolder *copiaP = colCopiaDoFio();
+  if (!copiaP) return NULL;
+#define copia (*copiaP)
+#else
   static __thread ColFolder copia;
+#endif
   const ColFolder *resultado = NULL;
   pthread_mutex_lock(&colTrava);
   for(int i=0;i<count;i++) {
@@ -285,6 +309,9 @@ const ColFolder *col_por_catalogo(const char *base,const char *type,const char *
 pronto:
   pthread_mutex_unlock(&colTrava);
   return resultado;
+#ifdef NV_TPK40
+#undef copia
+#endif
 }
 /* Arte editorial: JPEG primeiro, PNG depois.
  *

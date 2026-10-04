@@ -4,6 +4,7 @@
 #include "layout.h"
 #include "ajustes.h"
 #include "trailerfonte.h"
+#include "video.h"      // trailer_osd_desenhar reads video_pos/duracao on every target
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
