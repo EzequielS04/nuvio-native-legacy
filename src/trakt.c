@@ -380,6 +380,37 @@ static int episodioExiste(const char *corpo, const char *serie, int t, int e) {
   return strstr(corpo, chave) != NULL;
 }
 
+// OBRAS JA TENTADAS NO CINEMETA PARA A NOTA, nesta sessao (#243). Sem isto, quem
+// o Cinemeta nao da nota (ou que estoura o tempo) voltava a rede a cada refacao
+// da fileira. Tentou uma vez (achou, sem nota ou falhou), conta como satisfeito.
+#define TK_TENTADAS_MAX 64
+static char tentadas[TK_TENTADAS_MAX][24];
+static int nTentadas, proxTentada;
+static pthread_mutex_t tentadasTrava = PTHREAD_MUTEX_INITIALIZER;
+static void obraBase(const char *imdb, char *out, size_t n) {
+  size_t i = 0;
+  while (imdb[i] && imdb[i] != ':' && i + 1 < n) { out[i] = imdb[i]; i++; }
+  out[i] = 0;
+}
+static int jaTentada(const char *imdb) {
+  char b[24]; int i, r = 0;
+  obraBase(imdb, b, sizeof b);
+  pthread_mutex_lock(&tentadasTrava);
+  for (i = 0; i < nTentadas && !r; i++) r = !strcmp(tentadas[i], b);
+  pthread_mutex_unlock(&tentadasTrava);
+  return r;
+}
+static void marcarTentada(const char *imdb) {
+  char b[24];
+  obraBase(imdb, b, sizeof b);
+  if (jaTentada(imdb)) return;
+  pthread_mutex_lock(&tentadasTrava);
+  if (nTentadas < TK_TENTADAS_MAX) snprintf(tentadas[nTentadas++], sizeof tentadas[0], "%s", b);
+  else { snprintf(tentadas[proxTentada], sizeof tentadas[0], "%s", b);
+         proxTentada = (proxTentada + 1) % TK_TENTADAS_MAX; }
+  pthread_mutex_unlock(&tentadasTrava);
+}
+
 static int enfeitar(CatItem *d, const char *tipo) {
   char url[300], *corpo;
   char serie[24];
@@ -412,6 +443,7 @@ static int enfeitar(CatItem *d, const char *tipo) {
   // 8 s e nao 20: ate oito destes em paralelo antes da primeira fileira.
   // Medido no Mac: 2,1 s no caso bom; com um item lento eram 20 s vazios.
   corpo = rede_baixar(url, 8);
+  marcarTentada(d->imdb);
   if (!corpo) {
     // "A seguir" sem meta: nao da para confirmar que o episodio existe.
     if (proximo) return 0;
@@ -568,7 +600,8 @@ static int enfeitar(CatItem *d, const char *tipo) {
 // do `nota`, e o selo IMDb ficava em branco. A guarda continua: so pula a rede
 // de quem ja tem tudo.
 static int itemPronto(const CatItem *d) {
-  return d->poster[0] && d->backdrop[0] && d->sinopse[0] && d->nota > 0;
+  return d->poster[0] && d->backdrop[0] && d->sinopse[0] &&
+         (d->nota > 0 || jaTentada(d->imdb));
 }
 
 // ENFEITAR EM PARALELO.

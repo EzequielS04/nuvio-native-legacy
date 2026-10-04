@@ -100,6 +100,16 @@ int main(void) {
   for (i = 0; i < 5; i++) assert(strstr(urlsApagadas[i], "/sync/playback/10"));
   // e uma segunda vez nao ha mais o que apagar
   assert(trakt_playback_remover("tt12042964:1:8") == 0 && apagados == 5);
+  // Cinemeta sem nota (ou que falha) e tentado UMA vez na sessao, nao a cada refacao.
+  if (getenv("SEM_NOTA")) {
+    int antes = cinemetaGets;
+    static CatItem w[2];
+    memset(w, 0, sizeof w);
+    n = trakt_continuar(w, 2);
+    assert(cinemetaGets == antes);   // ja tentado na chamada de cima
+    n = trakt_enfeitar_lote(w, n);
+    assert(cinemetaGets == antes);
+  }
   puts("trakt_cw_dup: PASS");
   return 0;
 }
