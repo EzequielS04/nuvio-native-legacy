@@ -232,23 +232,23 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
       for(i=0;i<5;i++) { SUP(i==0?3:2,39,50+i*42,24,24,0.3f); }
       ACC(31,56,4,12,1);
       ajImg(ajArte(AJA_FUNDO,12),RR(92,34,340,110),10*s,0.76f);
-      SUP(2,92,34,340,110,0.09f); LUZ(92,34,340,110,0.09f,0.10f);
+      LUZ(92,34,340,110,0.09f,0.10f);
       ajLogo(ajArte(AJA_LOGO,12),PX(110),PY(48),140*s,34*s,0.95f);
       BRI(110,86,150,10,0.75f); BAR(3,110,104,110); BAR(2,110,118,80);
       PILL(3,110,50,56,20);
       for(i=0;i<5;i++) { float bx=92+i*70; ajImg(ajArte(AJA_POSTER,13+i),RR(bx,160,62,88),7*s,1);
-        SUP(i==1?3:2,bx,160,62,88,0.09f); LUZ(bx,160,62,88,0.09f,0.07f); }
+        LUZ(bx,160,62,88,0.09f,0.07f); }
       break; }
     case 1: {   // Cartazes: tres cartazes (o do meio em foco) e as formas
       for(i=0;i<3;i++) { float f=i==1, bw=f?112:96, bh=f?172:150, bx=70+i*132-(f?8:0), by=f?34:52;
         ajImg(ajArte(AJA_POSTER,16+i),RR(bx,by,bw,bh),10*s,f?1.0f:0.82f);
-        SUP(f?3:2,bx,by,bw,bh,0.07f); LUZ(bx,by,bw,bh,0.07f,f?0.13f:0.08f);
+        LUZ(bx,by,bw,bh,0.07f,f?0.13f:0.08f);
         BRI(bx+14,by+bh-34,bw*0.6f,8,f?0.7f:0.35f); BAR(3,bx+14,by+bh-18,bw*0.4f); }
       for(i=0;i<3;i++) { float rr=i==0?0.08f:i==1?0.3f:0.5f; SUP(i==1?3:2,140+i*72,236,52,52,rr); }
       ACC(228,296,20,4,1); break; }
     case 2: {   // Trailers: a janela de video com o trailer tocando
       ajImg(ajArte(AJA_FUNDO,15),RR(42,40,350,196),12*s,0.9f);
-      SUP(2,42,40,350,196,0.06f); LUZ(42,40,350,196,0.06f,0.14f);
+      LUZ(42,40,350,196,0.06f,0.14f);
       SUP(3,60,56,62,18,0.5f); BRI(70,63,42,4,0.6f);
       gfx_cor(RR(194,102,62,62),0.5f,0.953f,0.949f,0.937f,0.92f);
       gfx_icone((GfxRect){PX(209),PY(117),34*s,34*s},"aj_play",0.08f,0.08f,0.09f,0.9f);
@@ -257,9 +257,9 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
       break; }
     case 3: {   // Pagina do titulo: capa, titulo, selos e notas
       ajImg(ajArte(AJA_FUNDO,3),RR(40,36,360,86),10*s,0.88f);
-      SUP(2,40,36,360,86,0.1f); LUZ(40,36,360,86,0.1f,0.12f);
+      LUZ(40,36,360,86,0.1f,0.12f);
       ajImg(ajArte(AJA_POSTER,8),RR(58,64,70,106),8*s,1);
-      SUP(3,58,64,70,106,0.08f); LUZ(58,64,70,106,0.08f,0.10f);
+      LUZ(58,64,70,106,0.08f,0.10f);
       ajLogo(ajArte(AJA_LOGO,3),PX(144),PY(54),150*s,46*s,0.96f);
       BRI(144,128,170,14,0.8f); BAR(3,144,152,120);
       for(i=0;i<3;i++) PILL(2,144+i*58,170,50,16);
@@ -267,7 +267,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
       BAR(2,58,248,320); BAR(2,58,266,260); break; }
     case 4: {   // Reproducao: o player, legenda, e a barra de tempo
       ajImg(ajArte(AJA_FUNDO,7),RR(38,36,386,222),12*s,0.9f);
-      SUP(2,38,36,386,222,0.05f); LUZ(38,36,386,222,0.05f,0.12f);
+      LUZ(38,36,386,222,0.05f,0.12f);
       SUP(3,140,176,182,34,0.35f); BRI(156,185,150,6,0.7f); BRI(172,198,118,5,0.5f);
       PILL(3,62,226,300,8); ACC(62,226,128,8,1); gfx_cor(RR(184,222,16,16),0.5f,1,1,1,0.95f);
       gfx_cor(RR(204,90,54,54),0.5f,0.953f,0.949f,0.937f,0.92f); gfx_icone((GfxRect){PX(217),PY(103),28*s,28*s},"aj_play",0.08f,0.08f,0.09f,0.9f);
@@ -275,7 +275,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
     case 5: {   // Idiomas e legendas: tres linhas, cada uma com o codigo escolhido
       static const char *const cod[3] = { "PT", "EN", "ES" };
       static const char *const ico[3] = { "aj_languages", "aj_audio-lines", "aj_captions" };
-      ajImg(ajArte(AJA_FUNDO,21),RR(40,40,370,214),12*s,0.22f);
+      ajImg(ajArte(AJA_FUNDO,21),RR(40,40,370,214),12*s,0.45f);
       for(i=0;i<3;i++) { float by=40+i*76;
         SUP(2,40,by,370,62,0.3f); SUP(3,54,by+11,40,40,0.5f); ICON(ico[i],61,by+18,26,0.85f);
         BAR(3,112,by+20,i==0?120:96); BAR(3,112,by+36,70);
@@ -289,7 +289,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
         gfx_cor(RR(44+i*40,44,32,32),0.5f,((c>>16)&255)/255.0f,((c>>8)&255)/255.0f,(c&255)/255.0f,0.95f); }
       SUP(2,44,100,140,120,0.1f); LUZ(44,100,140,120,0.1f,0.14f);
       ajImg(ajArte(AJA_POSTER,9),RR(100,140,140,96),9*s,1);
-      SUP(3,100,140,140,96,0.1f); BRI(116,160,70,8,0.7f); BAR(2,116,178,98); BAR(2,116,194,70);
+      SUP(3,100,188,140,48,0.2f); BRI(116,198,70,8,0.7f); BAR(2,116,214,98);
       SUP(2,262,100,150,88,0.1f); 
       ICON("aj_type",284,114,36,0.9f); BAR(3,330,128,64); BAR(3,330,144,44);
       PILL(2,262,204,92,36); ICON("aj_clock",274,211,22,0.8f); BRI(302,218,36,8,0.7f);
@@ -306,7 +306,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
         BAR(3,44,by+15,24);
         for(j=0;j<2;j++) { float bx=j==0?88:88+(i%2?112:84)+8, bw=j==0?(i%2?104:76):(i%3?130:98);
           if(!temLogoCanal) ajImg(ajArte(AJA_POSTER,22+i*2+j),RR(bx,by,bw,38),7*s,0.82f);
-          SUP(i==2&&j==0?3:2,bx,by,bw,38,0.2f); BAR(i==2&&j==0?2:3,bx+12,by+15,bw*0.55f); } }
+          if(temLogoCanal) SUP(i==2&&j==0?3:2,bx,by,bw,38,0.2f); BAR(i==2&&j==0?2:3,bx+12,by+15,bw*0.55f); } }
       gfx_cor(RR(171,38,3,232),0.05f,ar,ag,ab,0.9f); ACC(166,28,13,13,1);
       break; }
     case 8: {   // Contas e servicos: perfis e o que esta conectado
@@ -316,14 +316,16 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
           char avatar[1200]; const char *fonte;
           snprintf(avatar,sizeof avatar,"%s/icones/mt_perfil.png",uxDirArte);
           fonte=p && p->avatarUrl[0]?p->avatarUrl:avatar;
-          ajImg(fonte,RR(bx,by,d,d),0.5f*d*s,f?0.95f:0.62f);
+          SUP(3,bx,by,d,d,0.5f);
+          if(p && p->avatarUrl[0]) ajImg(fonte,RR(bx,by,d,d),0.5f*d*s,f?0.95f:0.62f);
+          else ajLogo(fonte,PX(bx+d*0.2f),PY(by+d*0.2f),d*0.6f*s,d*0.6f*s,f?0.95f:0.62f);
           { const char *label=p && p->nome[0]?p->nome:"Perfil";
             TxtLinha nome=ajTxtC(TXT_MINI,label,98*s);
             txt_desenhar_alpha(nome,PX(bx+72),PY(by+23),0.9f); }
         } }
       for(i=0;i<3;i++) { static const char *const sv[3]={"aj_cloud","aj_plug","aj_key-round"};
         SUP(2,40,140+i*40,370,34,0.5f);
-        if(i==1) { char marca[1200]; snprintf(marca,sizeof marca,"%s/marcas/trakt.png",uxDirArte); ajImg(marca,RR(50,146+i*40,48,20),4*s,0.95f); }
+        if(i==1) { char marca[1200]; snprintf(marca,sizeof marca,"%s/marcas/trakt.png",uxDirArte); ajLogo(marca,PX(50),PY(146+i*40),48*s,20*s,0.95f); }
         else ICON(sv[i],54,146+i*40,18,0.8f);
         BAR(3,106,153+i*40,i==0?110:80);
         if(i<2) ACC(380,152+i*40,14,14,1); else gfx_cor(RR(380,152+i*40,14,14),0.5f,1,1,1,0.18f); }
@@ -340,9 +342,10 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
     default: {  // Sobre e ajuda: o guia, a versao e a atualizacao
       SUP(2,40,40,180,220,0.06f); SUP(2,228,40,180,220,0.06f);
       { char marca[1200]; snprintf(marca,sizeof marca,"%s/marcas/nuvio_wordmark.png",uxDirArte);
-        ajImg(marca,RR(60,50,140,44),0,0.96f);
-        TxtLinha versao=ajTxt(TXT_MINI,NV_VERSAO); txt_desenhar_alpha(versao,PX(62),PY(103),0.72f); }
-      for(i=0;i<5;i++) { BAR(3,60,70+i*28,i==4?70:140); BAR(3,248,70+i*28,i==2?80:140); }
+        ajLogo(marca,PX(60),PY(52),140*s,44*s,0.96f);
+        TxtLinha versao=ajTxt(TXT_MINI,NV_VERSAO); txt_desenhar_alpha(versao,PX(62),PY(104),0.72f); }
+      for(i=0;i<4;i++) { BAR(3,60,132+i*18,i==3?70:140); }
+      for(i=0;i<5;i++) BAR(3,248,70+i*28,i==2?80:140);
       PILL(3,60,214,76,26); BRI(74,223,48,8,0.7f);
       SUP(3,248,206,140,40,0.5f); ICON("aj_download",262,215,22,0.85f); ACC(380,220,10,10,1); BAR(2,292,222,64);
       break; }
