@@ -7,6 +7,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.net.Uri
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.LinkProperties
 import android.os.Build
 import android.os.Bundle
 import android.os.Process
@@ -68,6 +72,7 @@ class NuvioActivity : SDLActivity() {
         jaCriada = true
         prepararAmbiente()
         super.onCreate(savedInstanceState)
+        observarRede()
 
         // SDLActivity.mLayout e um RelativeLayout com a SDLSurface dentro.
         // O video fica no indice 0 (atras); a SDLSurface fica por cima, em
@@ -92,6 +97,82 @@ class NuvioActivity : SDLActivity() {
             }
         } catch (_: Exception) {}
         Process.killProcess(Process.myPid())
+    }
+
+    // The default route is identified by Android, not a guessed IP/SSID.
+    // A new route, relevant capabilities or link properties invalidate the
+    // diagnostic immediately. Values stay process-local and are never logged.
+    private external fun nativeRedeAlterou(sequencia: Long, conhecida: Boolean)
+    private val redeTrava = Any()
+    private var redeSequencia = 0L
+    private var redeFechada = false
+    private var redeAtual: Network? = null
+    private var redeCap: Int? = null
+    private var redeLink: LinkProperties? = null
+    private var redeBloqueada = false
+    private var redeMonitor: ConnectivityManager? = null
+    private var redeCallback: ConnectivityManager.NetworkCallback? = null
+
+    private fun publicarRede() {
+        // Called under redeTrava, including destruction and failure paths.
+        if (redeSequencia == Long.MAX_VALUE) {
+            // An exhausted observer cannot represent any more identities.
+            nativeRedeAlterou(redeSequencia, false)
+            return
+        }
+        redeSequencia++
+        val conhecida = !redeFechada && redeAtual != null && redeLink != null &&
+            redeCap?.let { (it and 3) == 3 } == true && !redeBloqueada
+        nativeRedeAlterou(redeSequencia, conhecida)
+    }
+
+    private fun observarRede() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        val cb = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = synchronized(redeTrava) {
+                if (redeFechada) return@synchronized
+                redeAtual = network; redeCap = null; redeLink = null; redeBloqueada = false
+                publicarRede()
+            }
+            override fun onCapabilitiesChanged(network: Network, cap: NetworkCapabilities) = synchronized(redeTrava) {
+                if (redeFechada || network != redeAtual) return@synchronized
+                var chave = 0
+                if (cap.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) chave = chave or 1
+                if (cap.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) chave = chave or 2
+                if (cap.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) chave = chave or 4
+                if (cap.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) chave = chave or 8
+                // Transport changes matter; changing an estimated bandwidth
+                // alone is not a new network and must not erase real evidence.
+                for (i in 0..7) if (cap.hasTransport(i)) chave = chave or (1 shl (i + 4))
+                if (redeCap != chave) { redeCap = chave; publicarRede() }
+            }
+            override fun onLinkPropertiesChanged(network: Network, link: LinkProperties) = synchronized(redeTrava) {
+                if (redeFechada || network != redeAtual) return@synchronized
+                // The callback delivers its own parcelled snapshot. Keep it
+                // read-only; the LinkProperties copy constructor is hidden.
+                if (redeLink != link) { redeLink = link; publicarRede() }
+            }
+            override fun onBlockedStatusChanged(network: Network, blocked: Boolean) = synchronized(redeTrava) {
+                if (redeFechada || network != redeAtual) return@synchronized
+                if (redeBloqueada != blocked) { redeBloqueada = blocked; publicarRede() }
+            }
+            override fun onLost(network: Network) = synchronized(redeTrava) {
+                if (redeFechada || network != redeAtual) return@synchronized
+                redeAtual = null; redeCap = null; redeLink = null; publicarRede()
+            }
+        }
+        try {
+            cm.registerDefaultNetworkCallback(cb)
+            redeMonitor = cm; redeCallback = cb
+        } catch (_: Exception) {
+            synchronized(redeTrava) { redeFechada = true; redeAtual = null; redeCap = null; redeLink = null; publicarRede() }
+        }
+    }
+
+    private fun fecharRede() {
+        synchronized(redeTrava) { redeFechada = true; redeAtual = null; redeLink = null; publicarRede() }
+        redeCallback?.let { cb -> try { redeMonitor?.unregisterNetworkCallback(cb) } catch (_: Exception) {} }
+        redeCallback = null; redeMonitor = null
     }
 
     // Chamado pelo C (android_pedir_superficie), do fio do SDL, antes de criar a
@@ -237,6 +318,7 @@ class NuvioActivity : SDLActivity() {
     }
 
     override fun onDestroy() {
+        fecharRede()
         NvPlayer.encerrar()
         val saindo = isFinishing
         super.onDestroy()

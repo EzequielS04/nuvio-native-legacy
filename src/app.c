@@ -1256,6 +1256,7 @@ static void tocarCanal(const CatItem *it) {
   if (ni < 0) return;
   limparFonteVOD();
   if (player_aberto() || player_retido()) player_encerrar();
+  diagnostico_cancelar_vazao();
   player_abrir(ni, NULL);
   // cat_acrescentar e cat_definir_tudo correm juntos: se uma republicacao
   // atravessou os dois, ni ja nao e o canal. A marca garante a sessao.
@@ -1869,6 +1870,7 @@ static void trocaDeTituloSeSolicitada(void) {
 }
 
 void app_atualizar(float dt, Uint32 agora) {
+  if (player_aberto() || player_mini_ativo()) diagnostico_cancelar_vazao();
   // Login e escolha de perfil retornam cedo; a atividade da conta anterior
   // precisa sair antes deles, junto de qualquer modal/pedido ja enfileirado.
   ilhacart_validar_identidade();
@@ -2739,6 +2741,7 @@ void app_atualizar(float dt, Uint32 agora) {
       // por isso passa por sucesso.
       const CatItem *ci = cat_item(detail_indice());
       limparFonteVOD();
+      diagnostico_cancelar_vazao();
       player_abrir(detail_indice(), NULL);
       episodioDoDetalhe();
       // CW direto (issue #93): o episodio que o card anunciava vale sobre o
@@ -3161,6 +3164,7 @@ void app_atualizar(float dt, Uint32 agora) {
       int titulo=player_aberto()?player_indice():detail_indice(), t=0,e=0;
       if (player_aberto()) { player_episodio_atual(&t,&e); player_encerrar(); }
       else detail_ep_foco(&t,&e);
+      diagnostico_cancelar_vazao();
       player_abrir(titulo,NULL);
       player_definir_episodio(t,e);
       stream_definir_atual(fonte);
@@ -3261,6 +3265,7 @@ void app_atualizar(float dt, Uint32 agora) {
   { int t,e;
     if (aguardandoFonte != 2 && episodios_escolheu(&t,&e) && player_aberto()) {
       int titulo=player_indice();
+      diagnostico_cancelar_vazao();
       player_encerrar(); player_abrir(titulo,NULL);
       player_definir_episodio(t,e);
       marco("buscando fontes"); buscarParaPlayer(); aguardandoFonte=1;
@@ -3269,6 +3274,7 @@ void app_atualizar(float dt, Uint32 agora) {
   { int t,e;
     if (aguardandoFonte != 2 && player_pediu_proximo(&t,&e) && player_aberto()) {
       int titulo=player_indice();
+      diagnostico_cancelar_vazao();
       player_encerrar(); player_abrir(titulo,NULL); player_definir_episodio(t,e);
       marco("proximo episodio: buscando fontes"); buscarParaPlayer(); aguardandoFonte=1;
     }
@@ -3405,6 +3411,7 @@ void app_atualizar(float dt, Uint32 agora) {
       //     (que ja corta no ':' — era o que o atalho reimplementava a mao).
       int titulo = player_indice();
       player_encerrar();
+      diagnostico_cancelar_vazao();
       player_abrir(titulo, NULL);
       player_definir_episodio(t, e);
       // DEPOIS de player_definir_episodio, e a ordem e o conserto de um bug

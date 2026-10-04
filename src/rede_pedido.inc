@@ -13,11 +13,13 @@ typedef struct {
   size_t corpoCap, cabCap, vistosCab;
   size_t tetoCorpo, tetoCab;
   int head, status;
+  uint64_t descartado;
 } PedidoCtx;
 
 static unsigned pedidoMs(uint64_t v) { return v > UINT_MAX ? UINT_MAX : (unsigned)v; }
 static int pedidoParar(PedidoCtx *c) {
   RedeErro e = rede_job_estado(c->p->job);
+  if (e == REDE_OK && c->p->parar && c->p->parar(c->p->parar_usuario)) e = REDE_CANCELADO;
   if (e == REDE_OK && pedidoAgoraMs() >= c->prazo) e = REDE_PRAZO;
   if (e != REDE_OK && c->r->erro == REDE_OK) c->r->erro = e;
   return c->r->erro != REDE_OK;
@@ -70,7 +72,7 @@ static size_t pedidoCab(void *b, size_t size, size_t count, void *u) {
     fim = strchr(c->r->mime, ';'); if (fim) *fim = 0;
   } else if (n > 12 && !strncasecmp(s, "Retry-After:", 12)) {
     c->r->retry_after_s = retrySegundos(s + 12, n - 12);
-  } else if (!c->head && n > 15 && !strncasecmp(s, "Content-Length:", 15)) {
+  } else if (!c->head && !c->p->janela_corpo_ms && n > 15 && !strncasecmp(s, "Content-Length:", 15)) {
     size_t i = 15, valor = 0;
     while (i < n && (s[i] == ' ' || s[i] == '\t')) i++;
     while (i < n && isdigit((unsigned char)s[i])) {
@@ -93,6 +95,25 @@ static size_t pedidoCorpo(void *b, size_t size, size_t count, void *u) {
   if (size && count > SIZE_MAX / size) { c->r->erro = REDE_LIMITE_CORPO; return 0; }
   n = size * count;
   if (pedidoParar(c)) return 0;
+  if (c->p->janela_corpo_ms && !(c->p->seguir &&
+      (c->status == 301 || c->status == 302 || c->status == 303 || c->status == 307 || c->status == 308))) {
+    uint64_t agora = pedidoAgoraMs();
+    size_t prefixo;
+    if (c->primeiro && agora - c->primeiro >= c->p->janela_corpo_ms) {
+      c->r->fim_janela = 1; return 0;
+    }
+    if (n > c->p->max_descartado - c->descartado) { c->r->fim_teto = 1; return 0; }
+    if (n && !c->primeiro) {
+      c->primeiro = c->janela = agora;
+      c->r->primeiro_byte_ms = pedidoMs(agora - c->inicio);
+    }
+    prefixo = sizeof c->r->prefixo - c->r->n_prefixo;
+    if (prefixo > n) prefixo = n;
+    memcpy(c->r->prefixo + c->r->n_prefixo, b, prefixo);
+    c->r->n_prefixo += (unsigned)prefixo;
+    c->descartado += n;
+    return n;
+  }
   /* Cap applies to decoded bytes, including gzip expansion, before malloc. */
   if (n > c->tetoCorpo - c->r->n_corpo) { c->r->erro = REDE_LIMITE_CORPO; return 0; }
   if (n && !c->primeiro) {
@@ -126,6 +147,11 @@ static int pedidoProgresso(void *u, long long total, long long agora,
   if (pedidoParar(c)) return 1;
   if (agora >= 0 && (uint64_t)agora > c->fio) c->fio = (uint64_t)agora;
   pedidoIntervalo(c, pedidoAgoraMs(), 0);
+  if (c->p->janela_corpo_ms && c->primeiro &&
+      !(c->p->seguir && pedidoEhRedirect(c->status)) &&
+      pedidoAgoraMs() - c->primeiro >= c->p->janela_corpo_ms) {
+    c->r->fim_janela = 1; return 1;
+  }
   return pedidoParar(c);
 }
 
@@ -220,6 +246,8 @@ int rede_pedir(const RedePedido *p, RedeResposta *r) {
       c.tetoCorpo > REDE_CORPO_MAXIMO || c.tetoCab > REDE_CAB_MAXIMO ||
       p->prazo_ms > 300000 || (p->n_corpo && !p->corpo) ||
       p->n_corpo > REDE_CORPO_PADRAO || ((c.head || !strcmp(metodo, "GET")) && p->n_corpo) ||
+      p->janela_corpo_ms > 60000 || (p->janela_corpo_ms &&
+        (strcmp(metodo, "GET") || !p->max_descartado || p->max_descartado > UINT64_C(2147483648))) ||
       !pedidoCabsValidos(p->cabecalhos, c.tetoCab)) {
     r->erro = REDE_ENTRADA; return 0;
   }
@@ -259,10 +287,11 @@ int rede_pedir(const RedePedido *p, RedeResposta *r) {
     PEDIDO_OPT(OPT_NOSIGNAL, 1L);
     PEDIDO_OPT(OPT_SSL_VERIFYPEER, 1L);
     PEDIDO_OPT(OPT_SSL_VERIFYHOST, 2L);
-    if (p->ca_arquivo) PEDIDO_OPT(OPT_CAINFO, p->ca_arquivo);
+    if (p->ca_arquivo || discordCa[0]) PEDIDO_OPT(OPT_CAINFO, p->ca_arquivo ? p->ca_arquivo : discordCa);
     PEDIDO_OPT(OPT_USERAGENT, "Nuvio/1.8");
-    /* Buffered requests retain negotiated decompression. */
-    PEDIDO_OPT(OPT_ACCEPT_ENCODING, "");
+    /* Media diagnostics measure the player's wire body, without transparent
+     * gzip inflation. Buffered requests retain negotiated decompression. */
+    PEDIDO_OPT(OPT_ACCEPT_ENCODING, p->janela_corpo_ms ? (void *)NULL : "");
     PEDIDO_OPT(OPT_HTTPHEADER, lista);
     PEDIDO_OPT(OPT_NOBODY, c.head ? 1L : 0L);
     PEDIDO_OPT(OPT_CUSTOMREQUEST, metodo);
@@ -293,14 +322,15 @@ int rede_pedir(const RedePedido *p, RedeResposta *r) {
     agora = pedidoAgoraMs();
     if (c.primeiro) r->corpo_ms = pedidoMs(agora - c.primeiro);
     if (pedidoParar(&c)) break;
-    if (r->curl_erro) {
+    if (r->curl_erro && !(p->janela_corpo_ms && (r->fim_janela || r->fim_teto) &&
+        (r->curl_erro == 23 || r->curl_erro == 42))) {
       r->erro = r->curl_erro == 28 ? REDE_PRAZO : REDE_TRANSPORTE; break;
     }
     if (!p->seguir || !pedidoEhRedirect(r->status)) {
       pedidoIntervalo(&c, agora, 1);
       if (pedidoParar(&c)) break;
       /* Empty 204/HEAD still owns a terminated buffer like an ordinary reply. */
-      if (!r->corpo) {
+      if (!r->corpo && !p->janela_corpo_ms) {
         r->corpo = calloc(1, 1);
         if (!r->corpo) { r->erro = REDE_MEMORIA; break; }
       }
@@ -330,6 +360,7 @@ int rede_pedir(const RedePedido *p, RedeResposta *r) {
     r->n_cabecalhos = 0; r->mime[0] = 0; r->retry_after_s = 0;
     r->bytes_fio = r->corpo_ms = r->primeiro_byte_ms = r->intervalos_completos = 0;
     c.fio = c.baseFio = c.primeiro = c.janela = 0;
+    c.descartado = 0; r->n_prefixo = 0; r->fim_janela = r->fim_teto = 0;
   }
 fim:
   r->ms = pedidoMs(pedidoAgoraMs() - c.inicio);

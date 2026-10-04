@@ -13,6 +13,8 @@ void diagnostico_iniciar(void);
 // sem apresentacao nem objetivo; o Voltar do resultado sai da tela. Chamar
 // antes de trocar para TELA_DIAGNOSTICO (o atalho de Ajustes, em app.c).
 void diagnostico_abrir_velocidade(void);
+// UI thread: stop an active speed test before opening playback/mini player.
+void diagnostico_cancelar_vazao(void);
 void diagnostico_recuperar_checkpoint(void);
 void diagnostico_evento(const SDL_Event *e);
 void diagnostico_atualizar(float dt, Uint32 agora);

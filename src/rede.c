@@ -1273,6 +1273,9 @@ static int abrir(void) {
 void rede_preparar(void) { abrir(); }
 
 /* Request novo isolado do handle/controles por fio dos wrappers. */
+// Trusted Mozilla bundle configured once at startup. Android's libcurl has
+// no system CA fallback; strict per-request TLS also needs this bundle.
+static char discordCa[600];
 #include "rede_pedido.inc"
 
 char *rede_baixar_bin(const char *url, int segundos, long *tam) {
@@ -1639,7 +1642,6 @@ char *rede_apagar(const char *url, int segundos, const char *const *cab,
 }
 
 // Set once at startup before OAuth/WebSocket workers begin.
-static char discordCa[600];
 void rede_discord_ca(const char *caminho) {
   snprintf(discordCa, sizeof discordCa, "%s", caminho ? caminho : "");
 }

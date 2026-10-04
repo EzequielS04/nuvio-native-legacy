@@ -55,6 +55,13 @@ typedef struct {
   RedeJob *job;
   void (*intervalo)(const RedeIntervalo *, void *);
   void *intervalo_usuario;
+  /* Optional streamed/discarded GET: keeps only a 512-byte prefix. Stops at
+   * window or cap, never allocates the media body. A byte cap does not prove
+   * a completed time window. Zero keeps the normal buffered contract. */
+  unsigned janela_corpo_ms;  /* from first body byte; max 60 s */
+  uint64_t max_descartado;    /* required with window; max 2 GiB */
+  int (*parar)(void *);       /* additional caller cancellation, no UI work */
+  void *parar_usuario;
 } RedePedido;
 typedef struct {
   int status, curl_erro;
@@ -65,6 +72,9 @@ typedef struct {
   int retry_after_s;
   unsigned ms, primeiro_byte_ms, corpo_ms, intervalos_completos;
   uint64_t bytes_fio;   /* separado de n_corpo (descomprimido) */
+  unsigned char prefixo[512];
+  unsigned n_prefixo;
+  int fim_janela, fim_teto; /* intentional discard stops, not transport EOF */
 } RedeResposta;
 unsigned rede_pedido_capacidades(void);
 int rede_pedir(const RedePedido *pedido, RedeResposta *resposta);

@@ -47,6 +47,9 @@
 #include "layout.h"
 #include "perfiltv.h"
 #include "rede.h"
+#include "redemarca.h"
+#include "streamfitdiag.h"
+#include "player.h"
 #include "fonteauto.h"
 #include "streams.h"
 #include "vazao.h"
@@ -302,6 +305,7 @@ typedef struct {
   SDL_Thread *fio;
   int aberto;             // a tela mostra o teste no lugar do diagnostico
   int modo;               // FONTEAUTO_*, lido no fio de desenho
+  uint64_t rede;          // trustworthy network epoch captured on UI thread
   char titulo[VAZ_TITULOS][64];
   int nTitulo;
   VazAddon addon[DIAG_MAX_ADDONS];
@@ -1528,6 +1532,8 @@ static VazResultado falhaDaMedida(const RedeVazao *r, int amostras) {
 
 typedef enum { MN_OK, MN_FALHA, MN_AVISO, MN_REPETIDO, MN_CANCELADO } MnRes;
 
+static int fitVazCancelado(void *u) { (void)u; return atomic_load(&vz.cancelado); }
+
 // Por que uma fonte ficou sem medida, para o LOG (nunca vai para a tela).
 enum { MOT_HTTP, MOT_RESOLVEU, MOT_AVISO, MOT_REDIR };
 static void logMotivo(int ciclo, int n, int addon, int m) {
@@ -1563,7 +1569,7 @@ static MnRes medirNucleo(const VazCand *c, int janelaS, char hosts[][96], int nH
   // o link do addon redireciona para o CDN do debrid, e e esse final que diz
   // se e aviso e de qual host e. Fonte com proxyHeaders vai direto (a
   // resolucao nao manda cabecalho, e o CDN que confere Referer recusaria).
-  if (!cab) {
+  if (!cab && !vz.rede) {
     if (rede_url_final(c->url, DIAG_TIMEOUT_S, fim, sizeof fim)) alvo = fim;
     else {
 #ifdef __EMSCRIPTEN__
@@ -1586,11 +1592,18 @@ static MnRes medirNucleo(const VazCand *c, int janelaS, char hosts[][96], int nH
   if (hostPub && nhp) vazao_host_publico(alvo, hostPub, nhp);
   memset(f, 0, sizeof *f);
   vz.fonteIniMs = SDL_GetTicks();
-  n = rede_medir_vazao(alvo, cab, janelaS, VAZ_INICIO_BYTE, VAZ_TETO_BYTES,
-                       (volatile int *)&vz.cancelado, f->kbps, VAZAO_SEG_MAX, r,
-                       fim2, sizeof fim2);
+  if (vz.rede) {
+    StreamfitDiagControle ctl = { .rede = vz.rede, .cancelado = fitVazCancelado };
+    n = streamfitdiag_medir(alvo, cab, janelaS, VAZ_INICIO_BYTE, VAZ_TETO_BYTES,
+                            &ctl, f->kbps, VAZAO_SEG_MAX, r, fim2, sizeof fim2);
+    if (r->status == 416 && !r->cancelado)
+      n = streamfitdiag_medir(alvo, cab, janelaS, 0, VAZ_TETO_BYTES,
+                              &ctl, f->kbps, VAZAO_SEG_MAX, r, fim2, sizeof fim2);
+  } else n = rede_medir_vazao(alvo, cab, janelaS, VAZ_INICIO_BYTE, VAZ_TETO_BYTES,
+                              (volatile int *)&vz.cancelado, f->kbps, VAZAO_SEG_MAX, r,
+                              fim2, sizeof fim2);
   // 416: o arquivo e menor que o deslocamento. Do comeco, entao.
-  if (r->status == 416 && !r->cancelado)
+  if (!vz.rede && r->status == 416 && !r->cancelado)
     n = rede_medir_vazao(alvo, cab, janelaS, 0, VAZ_TETO_BYTES,
                          (volatile int *)&vz.cancelado, f->kbps, VAZAO_SEG_MAX, r,
                          fim2, sizeof fim2);
@@ -1607,6 +1620,7 @@ static MnRes medirNucleo(const VazCand *c, int janelaS, char hosts[][96], int nH
   f->bytes = r->bytes;
   f->ms = r->ms;
   vazao_resumir(f->kbps, n, &f->r);
+  if (fim2[0]) vazao_host(fim2, host, 96);
   // O host mostrado e o do link que respondeu, depois dos redirecionamentos.
   if (hostPub && nhp && fim2[0]) vazao_host_publico(fim2, hostPub, nhp);
   return MN_OK;
@@ -1816,12 +1830,14 @@ static int vazaoWorker(void *arg) {
 // ciclo.
 static void iniciarVazaoModo(VazCicloModo modo) {
   int i;
+  if (player_aberto() || player_mini_ativo()) return;
   if (atomic_load(&vz.estado) == 1 || atomic_load(&d.estado) == 1 || d.fioSug) return;
   if (vz.fio) { SDL_WaitThread(vz.fio, NULL); vz.fio = NULL; }
   liberarCandidatas();
   memset(&vz, 0, sizeof vz);
   vz.aberto = 1;
   vz.ciclo = modo;
+  vz.rede = redemarca_atual();
   vz.modo = ajustes_fonte_primeira() ? FONTEAUTO_PRIMEIRA : FONTEAUTO_MELHOR;
   // FILME do catalogo, que e o que /stream/movie/ responde; sem nenhum, um
   // classico que todo addon de fontes tem.
@@ -1845,6 +1861,10 @@ static void iniciarVazaoModo(VazCicloModo modo) {
 }
 
 static void iniciarVazao(void) { iniciarVazaoModo(VCM_RAPIDO); }
+
+void diagnostico_cancelar_vazao(void) {
+  if (atomic_load(&vz.estado) == 1) atomic_store(&vz.cancelado, 1);
+}
 
 // BOTOES DO RESULTADO DO TESTE DE VELOCIDADE. O ciclo completo e o "por
 // add-on" so aparecem com MAIS DE 3 fontes de link direto (com 3 ou menos o
