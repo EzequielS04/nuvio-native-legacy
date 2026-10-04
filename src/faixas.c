@@ -221,8 +221,14 @@ int faixas_aberta(void) { return aberta; }
 int faixas_estilo_topo(void) { return aberta && modo && coluna == FX_COL_ESTILO; }
 float faixas_anim(void) { return anim; }
 
+// CANAL AO VIVO NAO TEM LEGENDA DE ADDON (dono, 03/10: "a legenda ta errada,
+// ta pegando e uma de filmes"). A lista de addons.c e GLOBAL: guarda o que o
+// ultimo filme/episodio pediu, e abrir um canal nao pede de novo (tocarCanal),
+// entao a folha do canal listava o OpenSubtitles do filme anterior. No canal
+// so valem as faixas do proprio fluxo (closed caption, DVB). tests/faixas_canal.
+static int nLegAddon(void) { return player_id_canal()[0] ? 0 : addons_n_legendas(); }
 static int nLegendas(void) {
-  int n = video_n_legenda() + addons_n_legendas();
+  int n = video_n_legenda() + nLegAddon();
   return n;
 }
 
@@ -795,7 +801,8 @@ static void linhaLista(int col, int i, float x, float y, float w, float a) {
     idioma = f ? f->idioma : NULL;
   } else if (i == 0) {
     snprintf(nome, sizeof nome, "%s", i18n("Nenhuma"));
-    snprintf(sub, sizeof sub, "%s", i18n("Sem legenda"));
+    snprintf(sub, sizeof sub, "%s", i18n(player_id_canal()[0] && !nLegendas()
+                                         ? "Sem legendas neste canal" : "Sem legenda"));
     icone = "pl_eye-off";
   } else {
     int k = legDaLinha(i - 1), emb = video_n_legenda();

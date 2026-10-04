@@ -14,6 +14,7 @@
 #include <SDL2/SDL.h>
 #include <time.h>
 #include "epg.h"
+#include "gfx.h"
 
 // --- ZAPPING COM DEBOUNCE -----------------------------------------------------
 // Apertar CH+ tres vezes seguidas nao pode abrir tres canais (cada um custa uma
@@ -80,7 +81,12 @@ typedef struct {
 // Foco, barra e botoes leem o acento de ajustes_acento() (via botoes.c), como
 // o guia: o OSD nao recebe cor de quem chama.
 const char *aovivo_rotulo(int botao);
+// O OSD NAO desenha a hora nem as Informacoes: as duas sao a ilha do relogio
+// do player (plrilha.h). player.c chama plrilha_relogio e, com infoAberta,
+// pede a ilha com o corpo abaixo (u = o AoVivoOsd, vivo ate o proximo quadro).
 void aovivo_osd_desenhar(const AoVivoOsd *o, float a);
+float aovivo_info_altura(const AoVivoOsd *o);
+void aovivo_info_corpo(GfxRect c, float a, void *u);
 
 // Banner do zapping: quem vai tocar quando o debounce vencer.
 typedef struct {

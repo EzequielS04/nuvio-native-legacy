@@ -257,6 +257,7 @@ void player_shot_buscando(int sim);
 void player_shot_video(int sim);
 // Canal: a grade, o numero, quanto atras do ao vivo, o botao em foco e o
 // painel de Informacoes.
+void player_shot_favorito(int f);   // 1 = botao Favorito na fileira, 2 = e o canal nos favoritos
 void player_shot_canal(const AoVivoEpg *e, int numero, int atrasS, int botaoFoco, int info);   // comVideo sem furo: a arte faz de video
 #endif
 

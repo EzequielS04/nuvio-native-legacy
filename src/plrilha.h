@@ -39,6 +39,7 @@ typedef struct {
   int aberta;               // 1 = pilula aberta de 64 (aviso), 0 = 56
   int modal;                // 1 = miolo do modal (.86)
   int centro;               // 1 = cartao SOZINHO no meio da tela (sem relogio nem medidor); so o corpo
+  int respira;              // 1 = o ponto que respira antes da frase (atividade: o canal sintonizando)
 } PlrIlhaPedido;
 
 void plrilha_pedir(const PlrIlhaPedido *p);

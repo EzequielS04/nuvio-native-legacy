@@ -746,6 +746,72 @@ int main(int argc, char **argv) {
     salvar("aovivo-zap");
     extra = NULL;
   }
+  // AO VIVO NA ILHA DO RELOGIO (W17): a hora e a ilha do player, e Audio,
+  // Legendas, Fontes e Informacoes crescem dela; sintonizando e uma linha so
+  // na propria ilha; o Favorito com estrela cheia.
+  if (quer(argc, argv, "aovivo-ilha")) {
+    static Stream st[2];
+    int i;
+    SDL_Event ev;
+    abrirCanal(0, 3, 0, 12, "Sportv 2", "Campeonato Brasileiro: Rodada 24", "img/bd/36.jpg");
+    player_shot_favorito(1);
+    quadros(10);
+    player_shot_estado(relogio, 0, 0, 1, 0, 0, 0);
+    quadros(60);
+    salvar("aovivo-ilha-relogio");
+    player_shot_favorito(2);
+    quadros(20);
+    salvar("aovivo-ilha-favorito");
+    player_shot_favorito(0);
+    // Audio e Legendas: as faixas do proprio fluxo (sem legenda de addon).
+    { VideoSimulacao v; memset(&v, 0, sizeof v);
+      v.largura = 1920; v.altura = 1080; v.pronto = 1; v.nAudio = 2; v.audioAtual = 0;
+      faixa(&v.audio[0], "Portugu\xc3\xaas  \xc2\xb7  AAC \xc2\xb7 2.0", "pt", "");
+      faixa(&v.audio[1], "Ingl\xc3\xaas  \xc2\xb7  AAC \xc2\xb7 2.0", "en", "");
+      v.nLeg = 0; v.legAtual = -1;
+      video_simular(&v); }
+    faixas_abrir_em(0);
+    quadros(10); salvar("aovivo-ilha-audio-meio");
+    quadros(80); salvar("aovivo-ilha-audio");
+    faixas_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
+    quadros(60);
+    faixas_abrir_em(1);
+    quadros(90); salvar("aovivo-ilha-legendas");
+    faixas_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
+    quadros(60);
+    // Fontes do canal: o mesmo canal em HLS e TS.
+    memset(st, 0, sizeof st);
+    for (i = 0; i < 2; i++) {
+      snprintf(st[i].rotulo, sizeof st[i].rotulo, i ? "Xtream (TS)" : "Xtream (HLS, proxy)");
+      snprintf(st[i].provedor, sizeof st[i].provedor, "xtream");
+      snprintf(st[i].url, sizeof st[i].url, "http://exemplo/canal%d", i);
+      st[i].altura = 1080; st[i].fileIdx = -1;
+    }
+    stream_definir_lista(st, 2);
+    stream_definir_atual(0);
+    player_shot_estado(relogio, 0, 0, 1, 0, 0, 0);
+    quadros(30);
+    stream_folha_canal(1);
+    stream_folha_contexto("Sportv 2");
+    stream_folha_abrir();
+    quadros(90); salvar("aovivo-ilha-fontes");
+    memset(&ev, 0, sizeof ev); ev.type = SDL_KEYDOWN; ev.key.keysym.sym = SDLK_ESCAPE;
+    stream_folha_evento(&ev);
+    quadros(60);
+    // Informacoes: o corpo da ilha.
+    abrirCanal(0, 7, 1, 12, "Sportv 2", "Campeonato Brasileiro: Rodada 24", "img/bd/36.jpg");
+    quadros(10);
+    player_shot_estado(relogio, 0, 0, 1, 0, 0, 0);
+    quadros(60); salvar("aovivo-ilha-info");
+    player_shot_canal(NULL, 12, 0, 0, 0);
+    // Sintonizando: uma linha so, na ilha do relogio.
+    abrirCanal(0, 0, 0, 13, "Globo News", "Em Foco", "img/bd/21.jpg");
+    player_shot_video(0);
+    { VideoSimulacao v; memset(&v, 0, sizeof v); video_simular(&v); }
+    player_shot_carregando(1);
+    quadros(90); salvar("aovivo-ilha-sintonizando");
+    player_shot_carregando(0);
+  }
   if (quer(argc, argv, "ilha-crescendo")) {
     // Tres instantes da MESMA superficie: a pilula, o meio da mola e a lista.
     abrir(&filme); simularFaixas();
