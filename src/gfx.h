@@ -282,6 +282,7 @@ extern float gfx_tex_aspect_atual;
 // estiver por baixo, e a luz ambiente pendente (gfx_ambiente) nao e pintada.
 // Quem liga desliga logo depois do desenho, como gfx_tex_aspect_atual.
 extern int gfx_arte_opaca_atual;
+int gfx_arte_veu(GfxRect r, GLuint tex, float base, float aEsq, float aDir, float a);
 // Deslize da arte do destaque dentro do proprio retangulo, em fracao da largura
 // (so GFX_HERO, GFX_HERO_CHEIO e GFX_VITRINE). Quem define devolve a 0.
 extern float gfx_desliza_atual;

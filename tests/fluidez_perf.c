@@ -288,6 +288,27 @@ static void cenario(SDL_Window *w, const char *cen) {
   relatar(cen, "ajustes", qs, n);
   if (getenv("NV_RASTRO")) { gfx_rastro_grandes = 1; quadro(w, NULL, t); t += 16; gfx_rastro_grandes = 0; }
   if (getenv("PERF_BMP")) { char b[800]; snprintf(b, sizeof b, "%s-%s-ajustes.bmp", getenv("PERF_BMP"), cen); guardar(b); }
+  // CATEGORIAS: dentro de cada uma (lista + inspetor com a arte/previa), rolando.
+  { static const int ordem[3] = { 0, 2, 4 };
+    int c, k, pos = 0;
+    for (c = 0; c < 3; c++) {
+      char nome[32];
+      while (pos > ordem[c]) { tecla(SDLK_UP); pos--; quadro(w, NULL, t); t += 16; }
+      while (pos < ordem[c]) { tecla(SDLK_DOWN); pos++; quadro(w, NULL, t); t += 16; }
+      for (i = 0; i < 40; i++) { quadro(w, NULL, t); t += 16; }
+      tecla(SDLK_RETURN);
+      for (i = 0; i < 120; i++) { quadro(w, NULL, t); t += 16; }
+      for (i = 0; i < n; i++) {
+        if (i % 8 == 0) tecla(i < n / 2 ? SDLK_DOWN : SDLK_UP);
+        quadro(w, &qs[i], t); t += 16;
+      }
+      snprintf(nome, sizeof nome, "ajustes-cat%d", ordem[c]);
+      relatar(cen, nome, qs, n);
+      if (getenv("NV_RASTRO")) { gfx_rastro_grandes = 1; quadro(w, NULL, t); t += 16; gfx_rastro_grandes = 0; }
+      if (getenv("PERF_BMP")) { char b[800]; snprintf(b, sizeof b, "%s-%s-%s.bmp", getenv("PERF_BMP"), cen, nome); guardar(b); }
+      for (k = 0; k < 3; k++) { tecla(SDLK_AC_BACK); for (i = 0; i < 20; i++) { quadro(w, NULL, t); t += 16; } }
+    }
+  }
   ajustes_encerrar();
   naAjustes = 0;
   for (i = 0; i < 60; i++) { quadro(w, NULL, t); t += 16; }

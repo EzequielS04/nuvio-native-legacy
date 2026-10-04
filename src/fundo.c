@@ -8,14 +8,21 @@
 
 int fundo_modo(void) { return ajustes_fundo(); }
 
-static void arte(GfxRect r, float raioPx, const char *c, float a) {
+// veu = 1: a arte de tela cheia e o veu do mockup saem numa passada so
+// (gfx_arte_veu) quando o caminho permite; devolve 1 se o veu ja foi aplicado.
+static int arte(GfxRect r, float raioPx, const char *c, float a, int veu) {
   GLuint t = (c && c[0]) ? tex_obter_larg(c, r.w > r.h * 1.78f ? r.w : r.h * 1.78f) : 0;
-  if (!t) { gfx_cor(r, raioPx / r.h, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a); return; }
+  int feito = 0;
+  if (!t) { gfx_cor(r, raioPx / r.h, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a); return 0; }
   gfx_tex_aspect_atual = tex_aspecto(c);
   gfx_arte_opaca_atual = tex_opaca(c);   // tela cheia opaca: a luz por baixo nao e pintada
-  gfx_rect(r, t, GFX_ARTE, 0, 0, 0, raioPx / r.h, 1, 1, 1, a);
+  // O veu: 40% no meio, 62% na borda esquerda (+0,367 do que falta) e 50% na direita (+0,167).
+  if (veu && raioPx <= 0.0f && a >= 0.999f)
+    feito = gfx_arte_veu(r, t, 0.40f, 0.367f, 0.167f, a);
+  if (!feito) gfx_rect(r, t, GFX_ARTE, 0, 0, 0, raioPx / r.h, 1, 1, 1, a);
   gfx_arte_opaca_atual = 0;
   gfx_tex_aspect_atual = 0;
+  return feito;
 }
 // A cor de uma regiao da paleta com saturacao +35% e brilho 62%.
 #ifndef FUNDO_BRILHO
@@ -95,7 +102,7 @@ void fundo_desenhar_modo(int modo, GfxRect r, float raioPx, const char *c, float
   if (modo == FUNDO_FROST) { foscoPreparar(r, raioPx, c); frost(r, raioPx, a); return; }
   if (modo == FUNDO_BORRADA && borrada(r, raioPx, c, a)) return;
   foscoPreparar(r, raioPx, c);
-  arte(r, raioPx, c, a);
+  if (arte(r, raioPx, c, a, raioPx <= 0.0f)) return;
   if (raioPx > 0.0f) { gfx_cor(r, raioPx / r.h, 0, 0, 0, 0.42f * a); return; }
   // O veu do mockup: linear-gradient(90deg, 62%, 40% no meio, 50%). Um
   // chapado de 40% e, por cima, as duas metades em degrade (GFX_VEU_CSS,
