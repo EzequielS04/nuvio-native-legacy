@@ -84,6 +84,7 @@ void amigoperfil_evento(const SDL_Event *e) {
       e->key.keysym.scancode == NV_SCANCODE_BACK) { sair = 1; return; }
   if (fila < 0) return;
   if (k == SDLK_LEFT && col > 0) col--;
+  else if (k == SDLK_LEFT) { sair = 1; return; }   // comeco da fileira: o app abre a barra
   else if (k == SDLK_RIGHT && col + 1 < nFila(fila)) col++;
   else if (k == SDLK_UP || k == SDLK_DOWN) {
     int d = k == SDLK_UP ? -1 : 1, f;
