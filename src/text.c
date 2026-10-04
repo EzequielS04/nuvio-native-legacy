@@ -8,6 +8,7 @@
 #include "gfx.h"
 #include "layout.h"
 #include "marco.h"
+#include "bidi.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <string.h>
@@ -629,7 +630,15 @@ static struct { unsigned long long h; unsigned n; unsigned char fam, estilo, var
 // tabela e esquecida junto com a de fonteDe.
 #define LG_MEM 4096
 static struct { unsigned long long h; unsigned n; unsigned char fam, estilo, enf, var, ok, cam; int w; } lgMem[LG_MEM];
-static void fdEsquecer(void) { memset(fdMem, 0, sizeof fdMem); memset(lgMem, 0, sizeof lgMem); }
+// COBERTURA DAS FORMAS ARABES (bidi.c). Um bit por codepoint de FB50-FEFF, por
+// fonte: "ja perguntei" e "tem". Chaveado pelo ponteiro da fonte, esquecido junto
+// com as outras tabelas (a fonte pode ser fechada e reaberta).
+#define AR_INI 0xFB50u
+#define AR_N   (0xFF00u - AR_INI)
+#define AR_FONTES 8
+static struct { TTF_Font *f; unsigned char viu[(AR_N + 7) / 8], tem[(AR_N + 7) / 8]; } arMem[AR_FONTES];
+static TTF_Font *arLogada;
+static void fdEsquecer(void) { memset(fdMem, 0, sizeof fdMem); memset(lgMem, 0, sizeof lgMem); memset(arMem, 0, sizeof arMem); arLogada = NULL; }
 
 // Fonte com que a linha `s` deve ser desenhada. Devolve a principal quando ela
 // da conta — que e o caso da esmagadora maioria das linhas.
@@ -715,6 +724,54 @@ static TTF_Font *fonteDeLento(TxtFamilia familia, TxtEstilo estilo, const char *
   if (e == ESC_CJK) e = variacaoCjk();
   r = reservaDe(e, estilo, s);
   return r ? r : principal;
+}
+
+typedef struct { TTF_Font *f; int slot; } ArCtx;
+static int arTemGlifo(unsigned cp, void *u) {
+  ArCtx *c = (ArCtx *)u;
+  unsigned i;
+  if (!c->f || cp < AR_INI || cp >= 0xFF00u) return 1;
+  i = cp - AR_INI;
+  if (!(arMem[c->slot].viu[i >> 3] & (1u << (i & 7)))) {
+    arMem[c->slot].viu[i >> 3] |= (unsigned char)(1u << (i & 7));
+    if (TTF_GlyphIsProvided(c->f, (Uint16)cp)) arMem[c->slot].tem[i >> 3] |= (unsigned char)(1u << (i & 7));
+  }
+  return (arMem[c->slot].tem[i >> 3] >> (i & 7)) & 1;
+}
+
+// Linha de legenda, ja quebrada, em ordem visual (ver bidi.h). O arabe so e
+// "moldado" para as formas de apresentacao se a fonte que desenharia o arabe
+// (a que fonteDe escolhe para uma letra arabe) tem esses glifos; sem eles so
+// reordena, e o texto continua legivel (letras soltas) em vez de virar quadrado.
+int txt_bidi_legenda(TxtFamilia familia, TxtEstilo estilo, const char *in, char *out, size_t tam) {
+  ArCtx c = { NULL, 0 };
+  int r, i, livre = -1;
+  if (!tam) return 0;
+  { const unsigned char *p = (const unsigned char *)in;      // fast path sem consultar fonte
+    while (p && *p && *p < 0x80) p++;
+    if (!p || !*p) return bidi_visual_utf8(in, out, tam); }
+  camadaAtualizar();
+  if (estilo >= 0 && estilo < TXT_NFONTES) c.f = fonteDe(familia, estilo, "\xd8\xa7");  // alef
+  if (c.f) {
+    for (i = 0; i < AR_FONTES; i++) {
+      if (arMem[i].f == c.f) { c.slot = i; livre = -2; break; }
+      if (!arMem[i].f && livre == -1) livre = i;
+    }
+    if (livre != -2) {
+      if (livre < 0) { livre = 0; memset(&arMem[0], 0, sizeof arMem[0]); }
+      arMem[livre].f = c.f; c.slot = livre;
+    }
+    if (arLogada != c.f) {
+      const char *nome = TTF_FontFaceFamilyName(c.f);
+      arLogada = c.f;
+      if (arTemGlifo(0xFEFB, &c) && arTemGlifo(0xFEE1, &c) && arTemGlifo(0xFEB3, &c))
+        printf("[bidi] arabic: shaping on (font %s)\n", nome ? nome : "?");
+      else
+        printf("[bidi] arabic: reorder only, font %s lacks presentation forms\n", nome ? nome : "?");
+    }
+  }
+  r = bidi_visual_utf8_ex(in, out, tam, c.f ? arTemGlifo : NULL, &c);
+  return r;
 }
 
 // Qual fonte desenharia a linha, em texto: "principal", "inter" (a Inter

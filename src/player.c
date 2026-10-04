@@ -105,6 +105,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "ponteiro.h"
 #include "atividade.h"
 #include "reacao.h"
+#include "bidi.h"
 
 // Quanto tempo os controles ficam de pe sem receber tecla. Medido a olho no
 // aparelho: perto de 4s. Menos que isso e o usuario perde a barra no meio de
@@ -2997,7 +2998,11 @@ typedef struct { TxtLinha cor[PLR_LEG_LINHAS], borda[PLR_LEG_LINHAS]; int n; flo
 
 static void blocoLinha(LegBloco *bl, TxtEstilo est, const char *linha, int r, int g, int b,
                        TxtFamilia fam, int enf) {
+  char visual[768];
   if (bl->n >= PLR_LEG_LINHAS) return;
+  // Arabic/Hebrew: shape + visual order of the ALREADY WRAPPED line (bidi.c).
+  // Latin text comes back byte-identical.
+  if (txt_bidi_legenda(fam, est, linha, visual, sizeof visual) > 0) linha = visual;
   bl->cor[bl->n]   = txt_linha_corta_enfase(est, linha, r, g, b, 255, PLR_LEG_LARG, fam, enf);
   bl->borda[bl->n] = legEstilo.borda ? txt_linha_corta_enfase(est, linha, 0, 0, 0, 255, PLR_LEG_LARG, fam, enf) : (TxtLinha){0};
   if (bl->cor[bl->n].w > bl->w) bl->w = bl->cor[bl->n].w;

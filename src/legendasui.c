@@ -17,6 +17,7 @@
 #include <string.h>
 #include <strings.h>
 #include <ctype.h>
+#include "bidi.h"
 
 // --- identity -------------------------------------------------------------------
 // FNV-1a 64 over the fields that identify a candidate within one media session.
@@ -686,6 +687,13 @@ static void corEstilo(int i, int *r, int *g, int *b) {
 
 typedef struct { TxtLinha cor, borda; } Leg2Linha;
 
+// Arabic/Hebrew: shape + visual order of an already wrapped line (bidi.c),
+// in place. Latin text is left byte-identical.
+static void visualLinha(TxtFamilia fam, TxtEstilo est, char *linha) {
+  char v[768];
+  if (txt_bidi_legenda(fam, est, linha, v, sizeof v) > 0) memcpy(linha, v, strlen(v) + 1);
+}
+
 static int quebrar(const LegendaCue *c, TxtEstilo est, int r, int g, int b, int borda,
                    float maxW, Leg2Linha *out, int max) {
   char texto[768], *linha, *salva;
@@ -699,6 +707,7 @@ static int quebrar(const LegendaCue *c, TxtEstilo est, int r, int g, int b, int 
       snprintf(tent, sizeof tent, "%s%s%s", atual, atual[0] ? " " : "", pal);
       if (atual[0] && txt_linha_corta_enfase(est, tent, r, g, b, 255, 1e9f, fam, enf).w > maxW) {
         if (n >= max) break;
+        visualLinha(fam, est, atual);
         out[n].cor = txt_linha_corta_enfase(est, atual, r, g, b, 255, maxW, fam, enf);
         out[n].borda = borda ? txt_linha_corta_enfase(est, atual, 0, 0, 0, 255, maxW, fam, enf) : (TxtLinha){0};
         n++;
@@ -706,6 +715,7 @@ static int quebrar(const LegendaCue *c, TxtEstilo est, int r, int g, int b, int 
       } else snprintf(atual, sizeof atual, "%s", tent);
     }
     if (atual[0] && n < max) {
+      visualLinha(fam, est, atual);
       out[n].cor = txt_linha_corta_enfase(est, atual, r, g, b, 255, maxW, fam, enf);
       out[n].borda = borda ? txt_linha_corta_enfase(est, atual, 0, 0, 0, 255, maxW, fam, enf) : (TxtLinha){0};
       n++;

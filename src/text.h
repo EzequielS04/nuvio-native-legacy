@@ -188,6 +188,9 @@ void txt_definir_fonte_interface(TxtFamilia familia);
 TxtFamilia txt_fonte_interface(void);
 // Que fonte desenharia a linha `s` no estilo dado, em texto ("principal",
 // "inter", "reserva:CJK:/caminho"). Para teste e diagnostico; NULL = nenhuma.
+// Linha de legenda ja quebrada -> ordem visual, arabe moldado so se a fonte tem
+// as formas de apresentacao (bidi.c). Devolve como bidi_visual_utf8.
+int txt_bidi_legenda(TxtFamilia familia, TxtEstilo estilo, const char *in, char *out, size_t tam);
 const char *txt_fonte_da_linha(TxtFamilia familia, TxtEstilo estilo, const char *s);
 
 // Instrumentacao: quantas linhas foram RASTERIZADAS (nao vieram do cache) no
