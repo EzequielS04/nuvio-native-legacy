@@ -21,6 +21,9 @@ if not enum:
     sys.exit("FALHA: enum OpcaoId nao encontrado em " + args.fonte)
 corpo = re.sub(r"//[^\n]*", "", enum.group(1))
 opcoes = [n.strip() for n in corpo.split(",") if n.strip() and n.strip() != "AJ_N"]
+# Retired from the screen on purpose; the enum slot stays (positional valor[]/CHAVE[]).
+RETIRADAS = {"AJ_RELOGIO_POS"}  # 1.8: clock island is always top-right
+opcoes = [op for op in opcoes if op not in RETIRADAS]
 
 tabela = re.search(r"static const Item TELA\[\] = \{(.*?)\n\};", catalogo, re.S)
 if not tabela:
