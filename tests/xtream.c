@@ -257,6 +257,16 @@ int main(void) {
   xtream_definir_servidor("http://meu.servidor.tv:8080");
   assert(xtream_url("xtream:9", url, sizeof url) && !strcmp(url, "http://meu.servidor.tv:8080/live/u/p/9.m3u8"));
   puts("ok  https direto; url de video sempre direta");
+  // #237: URL colada com caminho (o painel Xtream fica sempre na raiz) —
+  // o caminho cai fora, o esquema e a porta ficam.
+  xtream_definir_servidor("http://srv.tv:8080/c/");
+  assert(!strcmp(xtream_servidor_curto(), "srv.tv:8080"));
+  xtream_definir_servidor("  https://srv.tv/custom/player_api.php?x=1 ");
+  assert(!strcmp(xtream_servidor_curto(), "srv.tv"));
+  assert(strstr(disco, "servidor\thttps://srv.tv\n"));
+  xtream_definir_servidor("srv.tv:8000/xyz");
+  assert(strstr(disco, "servidor\thttp://srv.tv:8000\n"));
+  puts("ok  servidor com caminho colado normaliza para a raiz");
   puts("xtream: tudo ok");
   return 0;
 }

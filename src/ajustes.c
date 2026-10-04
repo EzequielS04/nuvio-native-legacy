@@ -728,7 +728,7 @@ static int stCampo;
 // precisa de ponto, dois pontos e hifen; MAC so de hexadecimal e dois pontos, e
 // oferecer o resto so daria chance de digitar um MAC invalido.
 static const char *ST_ALFA_PORTAL =
-  "abcdefghijklmnopqrstuvwxyz0123456789.:-";
+  "abcdefghijklmnopqrstuvwxyz0123456789.:-/_";
 static const char *ST_ALFA_MAC = "0123456789abcdef:";
 // Usuario e senha de Xtream sao o que o provedor gerou: letras dos dois casos,
 // digitos e uns poucos sinais. Sem espaco — nenhum painel Xtream o aceita.
@@ -2887,7 +2887,7 @@ static const char *pstTexto(int op) {
     } }
 }
 // Teclado de cada campo. O TOKEN e o MODELO sao longos: usam o teclado LONGO.
-static const char *PST_ALFA_INST   = "abcdefghijklmnopqrstuvwxyz0123456789.:-";
+static const char *PST_ALFA_INST   = "abcdefghijklmnopqrstuvwxyz0123456789.:-/_";
 static const char *PST_ALFA_TOKEN  =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.~=-:/";
 static const char *PST_ALFA_EXTRA  = "abcdefghijklmnopqrstuvwxyz0123456789=&_.,-%";
@@ -5175,7 +5175,7 @@ static void eventoTela(const SDL_Event *e) {
       teclado_abrir_com(mac ? "MAC do portal" : "Portal Stalker (MAC)",
                         mac ? "Formato 00:1a:79:xx:xx:xx"
                             : "Endereço e porta, sem http://",
-                        mac ? 17 : 48,
+                        mac ? 17 : 64,
                         mac ? ST_ALFA_MAC : ST_ALFA_PORTAL,
                         (!mac && stalker_configurado()) ? stalker_portal_curto() : NULL);
       return;

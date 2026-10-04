@@ -21,12 +21,12 @@
 
 typedef struct { char id[80], cmd[192]; } StCmd;
 
-static char portal[256];      // base ja normalizada, sem barra no fim
+static char portal[256];      // base + prefixo de caminho, sem barra no fim
 static char mac[32];
 static char deviceId[80];
 static char serial[64];
 static char token[128];
-static char caminho[64];      // endpoint que respondeu ("/server/load.php"...)
+static char caminho[96];      // endpoint que respondeu ("/server/load.php"...)
 static time_t tokenEm;
 static int   perfilLido = -1;
 static int   lido;
@@ -62,26 +62,38 @@ static void urlenc(const char *s, char *dst, unsigned tam) {
   dst[k] = 0;
 }
 
-// Tira esquema, barra final e qualquer caminho que a pessoa tenha colado junto
-// ("http://portal.tv:8080/c/" e "portal.tv:8080" tem de virar a mesma coisa).
+// Tira esquema e barra final, e guarda o PREFIXO de caminho que a pessoa colou
+// ("http://portal.tv:8080/c/" e "portal.tv:8080" viram a mesma coisa;
+// "portal.tv/meuportal/c/" vira "http://portal.tv/meuportal"). O "/c" final e
+// a pagina do cliente, nao parte do prefixo. Consulta e fragmento caem fora.
 static void normalizarPortal(const char *entrada, char *dst, unsigned tam) {
   const char *p = entrada ? entrada : "";
-  const char *barra;
-  char host[256];
+  char lim[256];
   unsigned n;
+  while (*p == ' ') p++;
   if (!strncmp(p, "http://", 7)) p += 7;
   else if (!strncmp(p, "https://", 8)) p += 8;
-  barra = strchr(p, '/');
-  n = barra ? (unsigned)(barra - p) : (unsigned)strlen(p);
-  if (n >= sizeof host) n = sizeof host - 1;
-  memcpy(host, p, n); host[n] = 0;
-  while (n > 0 && (host[n - 1] == '/' || host[n - 1] == ' ')) host[--n] = 0;
+  snprintf(lim, sizeof lim, "%s", p);
+  n = (unsigned)strcspn(lim, "?#");
+  lim[n] = 0;
+  while (n > 0 && (lim[n - 1] == '/' || lim[n - 1] == ' ')) lim[--n] = 0;
+  if (n >= 2 && lim[n - 2] == '/' && (lim[n - 1] == 'c' || lim[n - 1] == 'C')) {
+    lim[n -= 2] = 0;
+    while (n > 0 && lim[n - 1] == '/') lim[--n] = 0;
+  }
   // O esquema volta como http: portal Stalker com TLS e raro, e quando existe
   // o host costuma vir com a porta 443 explicita — caso em que quem configurou
   // digitou https e a normalizacao acima o removeu. Preferir http aqui e o que
   // funciona nos portais reais; um https quebrado apareceria como "sem
   // resposta", que e o mesmo diagnostico de portal errado.
-  snprintf(dst, tam, "http://%s", host);
+  snprintf(dst, tam, "http://%s", lim);
+}
+
+// O prefixo ja termina em /stalker_portal? Entao a rota "/stalker_portal/..."
+// da lista cairia duplicada.
+static int prefixoTemStalkerPortal(const char *base) {
+  size_t n = strlen(base), k = strlen("/stalker_portal");
+  return n >= k && !strcmp(base + n - k, "/stalker_portal");
 }
 
 // ----------------------------------------------------------------- cadastro
@@ -201,7 +213,7 @@ int stalker_configurado(void) {
 }
 
 const char *stalker_portal_curto(void) {
-  static char curto[128];
+  static char curto[256];
   const char *p;
   pthread_mutex_lock(&travaSessao);
   carregarTravado();
@@ -278,15 +290,24 @@ static const char *ROTAS[] = {
   "/server/load.php", "/portal.php", "/stalker_portal/server/load.php", NULL
 };
 
+// A rota i da varredura, ou NULL quando nao ha mais. Com prefixo (o portal ja
+// leva o caminho colado), ele entra antes em "prefixo/server/load.php" e
+// "prefixo/portal.php"; "/stalker_portal/..." so e tentado se o prefixo nao o
+// traz.
+static const char *rotaDaVarredura(int i) {
+  if (i == 2 && prefixoTemStalkerPortal(portal)) return NULL;
+  return ROTAS[i];
+}
+
 // Refaz o handshake e guarda o token. Chamada SEMPRE com travaSessao presa.
 static int handshakeTravado(void) {
   int i;
   token[0] = 0;
-  for (i = 0; ROTAS[i]; i++) {
+  for (i = 0; rotaDaVarredura(i); i++) {
     char *corpo;
     // Rota que ja provou funcionar entra primeiro nas vezes seguintes; na
     // primeira, `caminho` esta vazio e a varredura e a ordem acima.
-    const char *rota = caminho[0] ? caminho : ROTAS[i];
+    const char *rota = caminho[0] ? caminho : rotaDaVarredura(i);
     corpo = pedir(portal, mac, rota, "", "type=stb&action=handshake&token=&prehash=0");
     if (temJs(corpo)) {
       char t[128];
@@ -319,7 +340,7 @@ static int handshakeTravado(void) {
 // tokens e o segundo invalida o primeiro — o sintoma seria uma lista que
 // carrega e um canal que nao abre, alternando, sem erro nenhum no log.
 static char *chamar(const char *consulta, int renovarAntes) {
-  char tok[128], rota[64];
+  char tok[128], rota[96];
   char portalLocal[256], macLocal[32];
   char *corpo;
 
