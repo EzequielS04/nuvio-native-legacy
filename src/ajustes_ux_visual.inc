@@ -145,7 +145,6 @@ static const char *ajVisualIcone(int op) {
     case AJ_DISCORD: return "aj_message-square";
     case AJ_ANIM: return "aj_activity";
     case AJ_RELOGIO: return "aj_clock";
-    case AJ_RELOGIO_POS: return "aj_clock";
     case AJ_VIDRO_CONTORNO: return "aj_layers";
     case AJ_VIDRO_OPAC: return "aj_layers";
     case AJ_VIDRO_FOSCO: return "aj_layers";

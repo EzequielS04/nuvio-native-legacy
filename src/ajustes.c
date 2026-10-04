@@ -6107,7 +6107,7 @@ int ajustes_teste_quadro(const char *id) {
   else if (!strcmp(id, "cartazes")) { ajArteFundoN = 13; valor[AJ_LARGURA_DP] = 128; focarOpcao(AJ_LARGURA_DP); }
   else if (!strcmp(id, "memoria")) { ajArteFundoN = 21; ajMemFixa = 1; focarOpcao(AJ_ESPACO); uxAvancados[secAtual] = 1; }
   else if (!strcmp(id, "cor")) { ajArteFundoN = 9; focarOpcao(AJ_TEMA); uxAbrirEditor(AJ_TEMA); }
-  else if (!strcmp(id, "relogio")) { ajArteFundoN = 0; focarOpcao(AJ_RELOGIO_POS); uxAbrirEditor(AJ_RELOGIO_POS); uxEvento(SDLK_RIGHT); uxEvento(SDLK_RIGHT); }
+  else if (!strcmp(id, "relogio")) { ajArteFundoN = 0; focarOpcao(AJ_RELOGIO); }
   else if (!strcmp(id, "reproducao")) { ajArteFundoN = 15; valor[AJ_QUALIDADE] = 1; focarOpcao(AJ_DV); }
   else if (!strcmp(id, "contas")) { ajArteFundoN = 13; focarOpcao(AJ_TRAKT); }
   else if (!strcmp(id, "teclado")) {

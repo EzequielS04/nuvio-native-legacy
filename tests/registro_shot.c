@@ -72,7 +72,7 @@ static void arte(int qual, float veu) {
 enum { CENA_PAINEL, CENA_AVISO, CENA_AJ, CENA_TEL, CENA_QUEDA, CENA_HUD, CENA_HUD_PILULA };
 static void relogio(float x) {
   ilha_relogio_visivel(1);
-  ilha_ancorar(x, 36, 0);
+  ilha_posicionar(1); (void)x;
   ilha_desenhar(SDL_GetTicks());
 }
 static void captura(const char *id, int cena) {
@@ -98,7 +98,7 @@ static void captura(const char *id, int cena) {
         if (!registro_envio_aberto()) relogio(ajustes_ilha_x());
         break;
       case CENA_TEL: arte(2, 0.30f); telemetria_atualizar(1.0f / 60.0f, SDL_GetTicks()); telemetria_desenhar(SDL_GetTicks()); break;
-      case CENA_QUEDA: arte(1, 0.30f); avisos_atualizar(1.0f / 60.0f, SDL_GetTicks()); ilha_relogio_visivel(1); ilha_ancorar(48, 36, 0); ilha_desenhar(SDL_GetTicks()); break;
+      case CENA_QUEDA: arte(1, 0.30f); avisos_atualizar(1.0f / 60.0f, SDL_GetTicks()); ilha_relogio_visivel(1); ilha_posicionar(1); ilha_desenhar(SDL_GetTicks()); break;
       case CENA_HUD: arte(1, 0.30f); relogio(48); desempenho_desenhar(SDL_GetTicks(), 0); break;
       case CENA_HUD_PILULA: arte(2, 0); gfx_cor((GfxRect){ 0, 0, 1920, 240 }, 0, 0, 0, 0, 0.0f); relogio(48); desempenho_desenhar(SDL_GetTicks(), 1); break;
     }

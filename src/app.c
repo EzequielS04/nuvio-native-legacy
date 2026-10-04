@@ -3707,17 +3707,12 @@ static void desenharTelas(Uint32 agora) {
 // ONDE O RELOGIO DA ILHA CABE (ilha.h). Em toda tela de menu (Home, Explorar,
 // Guia, Busca, Biblioteca, Perfil, Social, Add-ons, Agenda), no carrossel
 // ampliado ("Ver tudo") e na pagina do titulo — pedido do dono (03/10): antes
-// so a Home mostrava. Nas telas com titulo no topo esquerdo ele fica na
-// DIREITA mesmo com "Posicao: Esquerda" (ver relogioDireitaForcada), como no
-// Guia. Nunca com uma camada de tela cheia na frente (explicadores, cartoes de
+// so a Home mostrava. Ele fica sempre na DIREITA. Nunca com uma camada de tela cheia na frente
+// (explicadores, cartoes de
 // atualizacao/crash/lembrete, menu de contexto, folhas de fontes/episodios/
 // faixas): a pilula ficaria boiando sobre o veu de outra coisa. Os AVISOS da
 // ilha nao passam por aqui — eles aparecem em qualquer tela fora do player.
 static int spotVeuPronto;   // o veu do Spotlight ja esta na copia congelada
-static int relogioDireitaForcada(void) {
-  if (vertudo_aberta()) return 1;                    // titulo da colecao no topo esquerdo
-  return tela != TELA_HOME && !detail_aberto();     // Explorar/Biblioteca/... poem o titulo la
-}
 static int relogioCabe(void) {
   // AJUSTES NO GLASS UI (mockup de 03/10): o relogio fica no canto, em cima da
   // ilha de categorias — a tela nao tem mais titulo ali. Com folha, vinculo ou
@@ -3910,8 +3905,7 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto() && !player_aberto() && sessao_logada() &&
       tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL) {
     ilha_relogio_visivel(relogioCabe() && ajustes_relogio_ligado());
-    ilha_posicionar(tela == TELA_GUIA || relogioDireitaForcada());
-    if (tela == TELA_AJUSTES && ajustes_relogio_pos() != 2) ilha_ancorar(ajustes_ilha_x(), NV_ILHA_Y, 0);
+    ilha_posicionar(1);
     // O painel de Salvos que nasceu da pilula recolhe para ela (o retangulo
     // do quadro anterior) e, enquanto esta na tela, a cobre.
     { float ix = 0, iy = 0, iw = 0, ih = 0;
@@ -3947,7 +3941,7 @@ void app_desenhar(Uint32 agora) {
   // A ilha do relogio fica acima do painel de registro, no canto de sempre.
   if (registro_aberto() && sessao_logada()) {
     ilha_relogio_visivel(ajustes_relogio_ligado());
-    ilha_ancorar(48.0f, NV_ILHA_Y, 0);
+    ilha_posicionar(1);
     ilha_desenhar(agora);
   }
 }

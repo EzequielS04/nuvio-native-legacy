@@ -78,7 +78,7 @@ static const Item TELA[] = {
   SEC("Aparência", "Cor, transparência, fonte, animações e relógio", "aj_palette"),
     OPC(AJ_TEMA), OPC(AJ_FUNDO), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_FONTE_UI),
     OPC(AJ_TAMANHO_UI), OPC(AJ_TAMANHO_AJUSTES), OPC(AJ_ICONE_APP),
-    OPC(AJ_ANIM), OPC(AJ_RELOGIO), OPC(AJ_RELOGIO_POS), OPC(AJ_VIDRO_CONTORNO),
+    OPC(AJ_ANIM), OPC(AJ_RELOGIO), OPC(AJ_VIDRO_CONTORNO),
     OPC(AJ_VIDRO_OPAC), OPC(AJ_VIDRO_FOSCO),
 
   SEC("TV ao vivo", "Provedor e solução de problemas ao assistir canais", "aj_tv-minimal-play"),

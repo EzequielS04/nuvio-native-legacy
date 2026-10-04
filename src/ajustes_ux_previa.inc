@@ -243,7 +243,7 @@ static int ajLayoutAtual(void) { return ajustes_home_layout(); }
 static AjMini ajMiniPadrao(void) {
   AjMini m = { ajLayoutAtual(), ajArteFundoN, 2, valor[AJ_LANDSCAPE] == 0, !ajustes_rail_recolhida() || ajustes_rail_moderna(), 1, !ajustes_hero_ligado() };
   if (valor[AJ_RELOGIO] != 0) m.relogio = -1;
-  else m.relogio = valor[AJ_RELOGIO_POS] == 0 ? 2 : valor[AJ_RELOGIO_POS] == 1 ? 0 : 1;
+  else m.relogio = 1;   // sempre a direita
   return m;
 }
 static float ajPreviaLayout(float x, float y, float w) {
@@ -256,16 +256,6 @@ static float ajPreviaLayout(float x, float y, float w) {
   ajMiniHome(m, x, y, w);
   for (i = 0; i < 3; i++) { o[i] = m; o[i].lay = i; }
   return w * 9.0f / 16.0f + 16.0f + ajOpcoesMini(o, ajMiniRotuloV2 ? N2 : N, 3, sel, x, y + w * 9.0f / 16.0f + 16.0f, w);
-}
-static float ajPreviaRelogio(float x, float y, float w) {
-  AjMini m = ajMiniPadrao(), o[3];
-  static const char *const N[3] = { "Automática", "Esquerda", "Direita" };
-  int i, sel = valor[AJ_RELOGIO_POS];
-  if (ajEditandoLinha(AJ_RELOGIO_POS)) sel = uxPendente;
-  m.relogio = sel == 0 ? 2 : sel == 1 ? 0 : 1;
-  ajMiniHome(m, x, y, w);
-  for (i = 0; i < 3; i++) { o[i] = m; o[i].relogio = i == 0 ? 2 : i == 1 ? 0 : 1; }
-  return w * 9.0f / 16.0f + 16.0f + ajOpcoesMini(o, N, 3, sel, x, y + w * 9.0f / 16.0f + 16.0f, w);
 }
 static float ajPreviaHome(float x, float y, float w) {
   ajMiniHome(ajMiniPadrao(), x, y, w);
@@ -688,7 +678,6 @@ static float ajPrevia(int op, float x, float y, float w) {
   switch (op) {
     case AJ_ICONE_APP: h = ajPreviaIconeApp(x,y,w); break;
     case AJ_HOME_LAYOUT: h = ajPreviaLayout(x,y,w); break;
-    case AJ_RELOGIO_POS: h = ajPreviaRelogio(x,y,w); break;
     case AJ_LARGURA_DP: case AJ_RAIO_DP: h = ajPreviaCartaz(op,x,y,w); break;
     case AJ_ESPACO: case AJ_TEX_MB: h = ajPainelMemoria(x,y,w); break;
     case AJ_TEMA: case AJ_COR_LOGO: h = ajPreviaCor(x,y,w); break;

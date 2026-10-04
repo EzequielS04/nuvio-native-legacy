@@ -36,7 +36,7 @@ static void captura(const char *nome, SDL_Window *win, int tela) {
     else diagnostico_desenhar(SDL_GetTicks());
     if (getenv("NUVIO_SHOT_ILHA")) {   // a ilha do relogio, como o app poe
       ilha_relogio_visivel(1);
-      ilha_ancorar(ajustes_ilha_x(), 36, 0);
+      ilha_posicionar(1);
       ilha_desenhar(SDL_GetTicks());
       SDL_Delay(12);
     }

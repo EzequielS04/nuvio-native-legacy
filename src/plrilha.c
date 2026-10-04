@@ -83,10 +83,7 @@ void plrilha_relogio(float a, double f) {
 void plrilha_esconder(void) { escondida = 1; }
 
 int plrilha_direita(void) {
-  int pos = ajustes_relogio_pos();
-  if (pos == 2) return 1;
-  if (pos == 1) return 0;
-  return ajustes_home_layout() == HOME_LAYOUT_DINAMICA;
+  return 1;   // sempre a direita (dono, 03/10)
 }
 
 int plrilha_rect(GfxRect *r) { if (ultOk && r) *r = ultRect; return ultOk; }
