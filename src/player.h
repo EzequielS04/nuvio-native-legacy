@@ -95,6 +95,8 @@ float player_posicao_seg(void);
 int   player_pausado(void);
 float player_duracao_seg(void);
 int   player_eh_canal(void);
+// StreamFit (F03): 1 + real backend duration of the player's own source.
+int   player_duracao_midia(double *seg);
 
 // Liga a fonte numa sessao ja aberta. Existe porque o link so pode ser pedido
 // no ultimo instante (ver stream_idade_ms), entao a tela abre antes de haver

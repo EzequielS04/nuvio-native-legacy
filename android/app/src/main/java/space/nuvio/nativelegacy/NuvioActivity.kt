@@ -117,12 +117,15 @@ class NuvioActivity : SDLActivity() {
         // Called under redeTrava, including destruction and failure paths.
         if (redeSequencia == Long.MAX_VALUE) {
             // An exhausted observer cannot represent any more identities.
+            PassivoMedidor.redeGlobal = 0L
             nativeRedeAlterou(redeSequencia, false)
             return
         }
         redeSequencia++
         val conhecida = !redeFechada && redeAtual != null && redeLink != null &&
             redeCap?.let { (it and 3) == 3 } == true && !redeBloqueada
+        // The passive StreamFit meter tags its windows with the same epoch.
+        PassivoMedidor.redeGlobal = if (conhecida) redeSequencia else 0L
         nativeRedeAlterou(redeSequencia, conhecida)
     }
 

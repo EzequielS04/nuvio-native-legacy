@@ -1294,6 +1294,18 @@ int  player_com_video(void) { return comVideo && !retido && video_pronto(); }
 int   player_pausado(void) { return !tocando; }
 float player_duracao_seg(void) { return duracaoSeg; }
 int   player_eh_canal(void) { return ehCanal(); }
+// StreamFit (F03): the backend's REAL duration of this session's own source,
+// never duracaoSeg (which starts as PLR_DUR_PADRAO or a meta guess). Not a
+// channel, not while waiting for a source, not before the backend is ready;
+// the shared pipeline counts only while comVideo says it is the player's.
+int player_duracao_midia(double *seg) {
+  double d;
+  if (!aberto || !comVideo || esperandoFonte || ehCanal() || !video_ativo() || !video_pronto()) return 0;
+  d = video_duracao();
+  if (!(d >= 120.0 && d <= 86400.0)) return 0;   // provider error clips are short
+  if (seg) *seg = d;
+  return 1;
+}
 
 // Esta abrindo o fluxo: ha video pedido, mas ainda nao ha imagem.
 int  player_carregando(void) { return esperandoFonte || (comVideo && !video_pronto()); }

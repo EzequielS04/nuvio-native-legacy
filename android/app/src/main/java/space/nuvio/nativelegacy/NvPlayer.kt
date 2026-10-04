@@ -110,6 +110,22 @@ object NvPlayer {
     @JvmStatic external fun nativePos(ms: Int)
     @JvmStatic external fun nativeHdr(hdr: String, dv: Int, atmos: Int)
     @JvmStatic external fun nativeRetomada(geracao: Int, aceita: Int)
+    @JvmStatic external fun nativeFitPassiva(rede: Long, geracao: Int, origem: String, kbps: IntArray, fimMs: Long)
+
+    // StreamFit passivo (PassivoMedidor.kt). Entrega de qualquer fio (os
+    // pedacos baixam em fios proprios); o C so trava um mutex curto.
+    private val medidor = PassivoMedidor(
+        { SystemClock.elapsedRealtime() }, { System.currentTimeMillis() }, { PassivoMedidor.redeGlobal }
+    ) { e ->
+        try { nativeFitPassiva(e.rede, e.geracao, e.origem, e.kbps, e.fimMs) }
+        catch (t: UnsatisfiedLinkError) { Log.w(TAG, "passivo sem lib: $t") }
+    }
+    private var medidorToken = 0L
+    private fun medirEstado(p: ExoPlayer) {
+        val st = p.playbackState
+        medidor.estado(medidorToken,
+            p.playWhenReady && (st == Player.STATE_READY || st == Player.STATE_BUFFERING), pronto)
+    }
 
     private fun atual(minha: Int) = minha == sessao && pedidoAtivo == pedidos.get()
     private fun confirmarRetomada(geracao: Int, aceita: Boolean) {
@@ -217,7 +233,10 @@ object NvPlayer {
             http.setDefaultRequestProperties(props)
             // Arquivo progressivo vem em varias conexoes (ParaleloDataSource.kt:
             // o Android limita a janela TCP de cada uma); HLS/DASH seguem na unica.
-            val rede = ParaleloDataSource.Factory(ua, props, http)
+            // A geracao e a sessao nativa desta abertura (0 numa casca antiga:
+            // o C nunca aceita a telemetria passiva dela).
+            medidorToken = medidor.sessao(geracao)
+            val rede = ParaleloDataSource.Factory(ua, props, http, medidor, medidorToken)
 
             // ON (e nao PREFER): o decodificador da plataforma e o passthrough
             // continuam primeiro; o FFmpeg so entra no codec que a TV nao tem.
@@ -292,6 +311,7 @@ object NvPlayer {
     // morre na conferencia do numero.
     private fun liberar() {
         sessao++
+        medidor.encerrar()
         val p = player
         player = null
         pronto = false
@@ -477,6 +497,7 @@ object NvPlayer {
                 Player.STATE_ENDED -> ev(EV_FIM)
                 else -> {}
             }
+            medirEstado(p)
         }
 
         // Pausa pedida com o player em buffer nao passa por onIsPlayingChanged
@@ -485,6 +506,7 @@ object NvPlayer {
             if (!atual(minha)) return
             val p = player ?: return
             if (!playWhenReady && !p.isPlaying && p.playbackState != Player.STATE_ENDED) ev(EV_PAUSADO)
+            medirEstado(p)
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
