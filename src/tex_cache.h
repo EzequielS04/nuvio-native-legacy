@@ -147,6 +147,9 @@ int  tex_cor_fundo(const char *caminho, float *r, float *g, float *b);
 // mesma medida de tex_marca_escura, exposta crua: o guia a usa para escolher
 // um azulejo ESCURO sob logo claro (o Paramount+ branco sumia no claro).
 int  tex_luminancia(const char *caminho);
+// 1 se a textura carregada tem alfa 255 em TODO pixel (conferido no decode);
+// 0 se tem transparencia, nao carregou ou nao se sabe.
+int  tex_opaca(const char *caminho);
 
 // Chamar uma vez por quadro, na thread de desenho: sobe para a GPU o que a
 // thread de decode terminou. Devolve quantas subiu.

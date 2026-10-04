@@ -43,6 +43,7 @@ static int progAtual = -1;
 // Proporcao da textura corrente, para o "cover". Fica global porque o desenho e
 // imediato: quem chama define antes de cada rect com textura.
 float gfx_tex_aspect_atual = 0.0f;
+int gfx_arte_opaca_atual = 0;
 float gfx_janela_atual[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
 // TEXTURA (cor de destaque "Textura"): a do titulo em cena, posta uma vez por
 // quadro por ajustes_textura_quadro. 0 = desligada.
@@ -1183,7 +1184,9 @@ static const char *FS_CORPO[GFX_NMODOS] = {
   "  float d = uPar.x < 0.5 ? 1.0 - vUv.y : uPar.x < 1.5 ? vUv.y : uPar.x < 2.5 ? vUv.x : 1.0 - vUv.x;\n"
   "  d = clamp(d / max(uPar.y, 0.001), 0.0, 1.0);\n"
   "  float g = uFoco > 0.0 ? pow(1.0 - d, uFoco) : 1.0 - smoothstep(0.0, 1.0, d);\n"
-  "  gl_FragColor = nv_dither(uCor.rgb, uCor.a * g);\n"
+  // uRaio (que este modo nao usa para canto) = um chapado da MESMA cor por
+  // baixo do degrade, ja composto: 1-(1-base)(1-veu). 0 = so o degrade.
+  "  gl_FragColor = nv_dither(uCor.rgb, uRaio + (1.0 - uRaio) * uCor.a * g);\n"
   "}\n",
 
   // GFX_MINI — o alvo de uma miniatura (gfx_mini_*): a textura e um FBO
@@ -1476,6 +1479,16 @@ void gfx_veu_css(GfxRect r, int borda, float curva, float fim, float a) {
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.002f) return;
   gfx_rect(r, 0, GFX_VEU_CSS, curva, (float)borda, fim > 0.0f ? fim : 1.0f, 0.0f, 0, 0, 0, a);
 }
+// O veu com um chapado preto de alfa `base` por baixo, na mesma passada: o que
+// era gfx_cor(r, 0, 0,0,0, base) + gfx_veu_css(...) vira uma camada so. A
+// opacidade de grupo entra no chapado aqui (no degrade ela entra pelo uCor).
+void gfx_veu_css_base(GfxRect r, int borda, float curva, float fim, float a, float base) {
+  float b = base * gfx_opacidade_grupo;
+  if (r.w <= 0.0f || r.h <= 0.0f || (a <= 0.002f && b <= 0.002f)) return;
+  if (b > 1.0f) b = 1.0f;
+  if (b < 0.0f) b = 0.0f;
+  gfx_rect(r, 0, GFX_VEU_CSS, curva, (float)borda, fim > 0.0f ? fim : 1.0f, b, 0, 0, 0, a);
+}
 static int efeitosMinimos = 0;
 void gfx_definir_efeitos_minimos(int m) { efeitosMinimos = m ? 1 : 0; }
 int  gfx_efeitos_minimos(void) { return efeitosMinimos; }
@@ -1622,7 +1635,15 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   clearCor = modo == GFX_COR && cheia && raio <= 0.0f && ca * gfx_opacidade_grupo >= 0.999f;
   if (ambPendente) {
     // Tela cheia e opaco: a luz por baixo nao apareceria. Senao, ela primeiro.
-    if (cheia && (comAmb || clearCor || opaco || modo == GFX_FUNDO_DIN)) ambPendente = 0;
+    // A ARTE OPACA DE TELA CHEIA (o fundo dos Ajustes e da pagina do titulo,
+    // fundo.c) tambem esconde a luz: todo texel tem alfa 255 (tex_opaca) e o
+    // GFX_ARTE sem canto le a textura inteira no retangulo. A mistura continua
+    // ligada — so a franja de 1 px da borda da TELA, se tiver cobertura parcial,
+    // passa a misturar com o clear em vez da luz. Uma tela cheia a menos por
+    // quadro nos Ajustes com a Imersiva (tests/fluidez_perf.sh, cenario dono).
+    int arteCobre = modo == GFX_ARTE && gfx_arte_opaca_atual && raio <= 0.0f &&
+                    ca * gfx_opacidade_grupo >= 0.999f && gfx_desliza_atual == 0.0f;
+    if (cheia && (comAmb || clearCor || opaco || arteCobre || modo == GFX_FUNDO_DIN)) ambPendente = 0;
     else gfx_ambiente_descarregar();
   }
   if (gfxFreqMs == 0.0) gfxFreqMs = 1000.0 / (double)SDL_GetPerformanceFrequency();
@@ -2054,8 +2075,7 @@ void gfx_vidro_painel(GfxRect r, float raio, float fundo, float a) {
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
   al = fundo * k; if (al > 1.0f) al = 1.0f;
   gfx_vidro_fosco(r, raio, a);
-  gfx_cor(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, al * a);
-  gfx_vidro_matiz(r, raio, a);
+  gfx_vidro_miolo(r, raio, VIDRO_MIOLO, VIDRO_MIOLO, VIDRO_MIOLO * 1.04f, al * a, a);
 }
 // IMERSIVA NO VIDRO (acentos-mockup.html, quadro 5): a ilha leva 16% da luz
 // do destaque (L 0,42, croma <= 0,11), entrando e saindo com a luz ambiente.
@@ -2065,13 +2085,45 @@ void gfx_vidro_matiz(GfxRect r, float raio, float a) {
   if (f <= 0.002f || r.w <= 0.0f || r.h <= 0.0f) return;
   gfx_cor(r, raio, nv_luz_viva[0], nv_luz_viva[1], nv_luz_viva[2], f);
 }
+// MIOLO + MATIZ NUMA PASSADA SO. As duas camadas sao cor lisa no MESMO
+// retangulo com os MESMOS cantos, e "B sobre A sobre o fundo" e, pela conta da
+// mistura (SRC_ALPHA/ONE_MINUS_SRC_ALPHA na cor, ONE/ONE_MINUS_SRC_ALPHA no
+// alfa), uma camada so com
+//   alfa = aA + aB - aA*aB   e   cor = (cB*aB + cA*aA*(1-aB)) / alfa.
+// Nesta GPU o custo e o de preenchimento: cada ilha de vidro com a Imersiva
+// eram duas camadas misturadas do tamanho dela (tests/fluidez_perf.sh, Ajustes
+// no cenario do dono: 0,84 tela por quadro so de matiz). O pixel muda so pelo
+// arredondamento de 8 bits da camada intermediaria (1 nivel) e na franja de
+// 1 px do canto, onde a cobertura parcial entra uma vez em vez de duas.
+// A opacidade de grupo entra NA CONTA (cada camada a recebia sozinha).
+void gfx_vidro_miolo(GfxRect r, float raio, float cr, float cg, float cb, float ca, float a) {
+  float f = 0.16f * nv_ambiente_forca * a, g = gfx_opacidade_grupo, aA, aB, al;
+  if (r.w <= 0.0f || r.h <= 0.0f) return;
+  // Sem matiz, ou com a matiz na cor exata do destaque com o degrade ligado (o
+  // gfx_rect a trocaria pelo degrade): as duas passadas de sempre.
+  if (f <= 0.002f || g <= 0.001f ||
+      (nv_grad_ativo && nv_luz_viva[0] == nv_acento_viva[0] &&
+       nv_luz_viva[1] == nv_acento_viva[1] && nv_luz_viva[2] == nv_acento_viva[2])) {
+    gfx_cor(r, raio, cr, cg, cb, ca);
+    gfx_vidro_matiz(r, raio, a);
+    return;
+  }
+  aA = ca * g; if (aA > 1.0f) aA = 1.0f; if (aA < 0.0f) aA = 0.0f;
+  aB = f * g;  if (aB > 1.0f) aB = 1.0f;
+  al = aA + aB - aA * aB;
+  if (al <= 0.0f) return;
+  gfx_cor(r, raio,
+          (nv_luz_viva[0] * aB + cr * aA * (1.0f - aB)) / al,
+          (nv_luz_viva[1] * aB + cg * aA * (1.0f - aB)) / al,
+          (nv_luz_viva[2] * aB + cb * aA * (1.0f - aB)) / al,
+          al / g);
+}
 // Painel lateral/flutuante (menu, Fontes, Salvos): miolo frio translucido e um
 // brilho largo no alto, sem aro.
 void gfx_vidro_folha(GfxRect r, float raio, float a) {
   if (r.w <= 0.0f || r.h <= 0.0f || a <= 0.001f) return;
   gfx_vidro_fosco(r, raio, a);
-  gfx_cor(r, raio, 0.085f, 0.088f, 0.10f, ajustes_vidro_opacidade() * a);
-  gfx_vidro_matiz(r, raio, a);
+  gfx_vidro_miolo(r, raio, 0.085f, 0.088f, 0.10f, ajustes_vidro_opacidade() * a, a);
   gfx_brilho_topo(r, raio, 0.38f, 0.88f, 0.92f, 1.0f, 0.06f * a);
 }
 void gfx_vidro_aro(GfxRect r, float raio, float esp, float cr, float cg, float cb, float ca) {

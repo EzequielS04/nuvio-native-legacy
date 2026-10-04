@@ -320,8 +320,7 @@ static void desenhaMaterial(const MenuGeo *g, float a) {
              * gfx_vidro_opacidade();
     if (al > 1.0f) al = 1.0f;
     gfx_vidro_fosco(r, raio, a);
-    gfx_cor(r, raio, 14.0f / 255.0f, 15.0f / 255.0f, 18.0f / 255.0f, al * a);
-    gfx_vidro_matiz(r, raio, a);
+    gfx_vidro_miolo(r, raio, 14.0f / 255.0f, 15.0f / 255.0f, 18.0f / 255.0f, al * a, a);
     gfx_luz_canto(r, raio, g->w * .22f + (r.w - g->w), -0.40f * r.h, 0.48f * r.h,
                   1, 1, 1, .10f * a);
   } else {

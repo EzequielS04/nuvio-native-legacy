@@ -1,4 +1,5 @@
 #include "sync.h"
+#include <time.h>
 #include "sessao.h"
 #include "nuvem.h"
 #include "perfis.h"
@@ -1309,6 +1310,34 @@ int sync_periodico(unsigned agoraMs) {
   return 1;
 }
 
+// QUANTO O CICLO CUSTA NO FIO PRINCIPAL. Registros da TCL Smart TV Pro do
+// dono (Android 14, Mali-G52, 04/10/2026): a cada cinco minutos um quadro com
+// `upd=59..232 ms`, sempre no mesmo segundo de "[colecoes] 129 pastas vindas da
+// conta". O log mostrava QUE era o ciclo, nao QUAL passo. A linha sai so
+// quando o total passa de 8 ms (meio quadro), uma por ciclo.
+static double syncRelogioMs(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return t.tv_sec * 1000.0 + t.tv_nsec / 1e6;
+}
+enum { SP_ADDONS, SP_CRED, SP_ORDEM, SP_COLECOES, SP_SINCRONIZAR, SP_BIBLIOTECA,
+       SP_VISTOS, SP_REMONTAR, SP_AJUSTES, SP_PROGRESSO, SP_N };
+static double spMs[SP_N], spMarca;
+static void spMarcar(int fase) { double t = syncRelogioMs(); spMs[fase] += t - spMarca; spMarca = t; }
+static void spRelatar(void) {
+  static const char *const NOME[SP_N] = { "addons", "credenciais", "ordem", "colecoes",
+    "sincronizar", "biblioteca", "vistos", "remontar", "ajustes", "progresso" };
+  double total = 0;
+  int i;
+  for (i = 0; i < SP_N; i++) total += spMs[i];
+  if (total >= 8.0) {
+    printf("[sync] aplicado no fio principal em %.1f ms:", total);
+    for (i = 0; i < SP_N; i++) if (spMs[i] >= 0.5) printf(" %s=%.1f", NOME[i], spMs[i]);
+    printf("\n");
+    fflush(stdout);
+  }
+}
+
 void sync_passo(unsigned agoraMs) {
   // ANTES DA PORTEIRA de `fioPronto`: ver o comentario em rodar(). O resto do
   // ciclo continua sendo aplicado de uma vez, no fim — so os addons saem na
@@ -1340,6 +1369,8 @@ void sync_passo(unsigned agoraMs) {
   if (!fioVivo || !fioPronto) return;
   fioVivo = 0;
   fioPronto = 0;
+  memset(spMs, 0, sizeof spMs);
+  spMarca = syncRelogioMs();
 
   // O CICLO INTEIRO E DE UM PERFIL SO. Trocar de perfil com o fio no ar (a
   // pessoa entra no 1 e volta ao 2 antes de o ciclo acabar) fazia o ciclo do 1
@@ -1389,6 +1420,7 @@ void sync_passo(unsigned agoraMs) {
   }
   // O pull precede o push: depois dele a caixa antiga nao vale como confirmacao.
   temAddonsRem = 0;
+  spMarcar(SP_ADDONS);
   // Vinculo feito NESTA TV ganha do que a conta manda: o servidor nao aceita o
   // push de "trakt" (400 22023), entao a linha da conta pode ser um token
   // antigo e vencido — aplica-lo por cima do novo devolvia 401 em tudo logo
@@ -1410,6 +1442,7 @@ void sync_passo(unsigned agoraMs) {
                       temTraktRem = 0; }
   if (temTmdb)      { desc_tmdb_definir(tmdbKey);   temTmdb = 0; }
   if (temMdb)       { extras_definir_chave(mdbKey); temMdb = 0; }
+  spMarcar(SP_CRED);
   // A ordem da home entra no MESMO remontar, e so quando MUDOU de verdade.
   // Uma remontagem por ciclo de sync custaria a home inteira a cada 5 minutos,
   // e o baseline de jank desta TV nao tem essa folga; duas remontagens no mesmo
@@ -1428,15 +1461,18 @@ void sync_passo(unsigned agoraMs) {
     catHomeBlob = NULL;
     temCatHomeBlob = 0;
   }
+  spMarcar(SP_ORDEM);
   if (temColBlob && colBlob) {
     unsigned antes = col_revisao();
     colfileiras_receber(colBlob);
     if (antes != col_revisao()) soFileiras = 1;
     free(colBlob); colBlob = NULL; temColBlob = 0;
   }
+  spMarcar(SP_COLECOES);
   // Publish account additions, removals and visibility while Settings is open;
   // relying on the next Home draw left the editor on an older snapshot (#233).
   if (atualizarColecoes) colfileiras_sincronizar();
+  spMarcar(SP_SINCRONIZAR);
   // A BIBLIOTECA DA CONTA. Ler e aplicar sao passos separados de proposito:
   // contalib_ler_biblioteca pode RECUSAR a resposta (lista remota vazia com
   // lista guardada — secao 1.6, regra 1), e nesse caso o que ja esta no
@@ -1459,6 +1495,7 @@ void sync_passo(unsigned agoraMs) {
     if (contalib_ler_biblioteca(bibBlob) > 0) contalib_aplicar_catalogo();
     free(bibBlob); bibBlob = NULL; temBibBlob = 0;
   }
+  spMarcar(SP_BIBLIOTECA);
   // OS VISTOS DA CONTA, e so quando o Trakt NAO esta no ar.
   //
   // E o que o web faz: `shouldUseSupabaseWatchProgressSync` em
@@ -1482,13 +1519,15 @@ void sync_passo(unsigned agoraMs) {
     if (rev != contalib_vistos_revisao() && !trakt_ativo() && !simkl_ativo())
       desc_refazer_continuar();
   }
+  spMarcar(SP_VISTOS);
   // Rede so quando muda o que buscar. Quando as duas coisas mudam no mesmo
   // ciclo, o ciclo de rede ja remonta as fileiras no fim — nao ha o que somar.
   // Credencial nova pede a volta inteira de novo (o Trakt ja lido e o velho);
   // so a lista de addons, nem sempre — ver desc_repetir_addons.
   if (remontar) desc_repetir_silencioso();   // sync: a pessoa nao pediu, sem alerta na ilha
   else if (soAddons) desc_repetir_addons();
-  else if (soFileiras) desc_remontar_fileiras(); }
+  else if (soFileiras) desc_remontar_fileiras();
+  spMarcar(SP_REMONTAR); }
   if (temAjustesBlob && ajustesBlob) {
     ajustes_aplicar_blob(ajustesBlob);
     // O BLOB NAO E LIBERADO AQUI (mudou em #85): ele e a base da costura que
@@ -1504,12 +1543,15 @@ void sync_passo(unsigned agoraMs) {
       relatado = ajustesBlob;
       ajustes_tmdb_idioma_relatar(ajustesBlob);
     } }
+  spMarcar(SP_AJUSTES);
   // Progresso da conta: progresso.c decide linha a linha (pendente local vence,
   // senao o mais novo), guarda ate o que nao tem titulo no catalogo ainda, e
   // o catalogo recebe so o que foi aceito.
   // Aceito novo refaz a fileira: sem isto o que o celular assistiu so aparecia
   // em "Continuar assistindo" no proximo ciclo de descoberta (issue #38).
   if (syncprog_aplicar(NULL) > 0) desc_refazer_continuar();
+  spMarcar(SP_PROGRESSO);
+  spRelatar();
   if (estado == SYNC_PRONTO) ultimoOk = agoraMs;
   // O ciclo parado na pergunta de perfil nao chegou a perguntar nada: o estado
   // do servidor continua o do ciclo anterior.

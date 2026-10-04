@@ -29,7 +29,11 @@ int colfileiras_receber(const char *json) {
   colfileiras_contexto();
   unsigned rev = col_revisao();
   int cap = 0, n = 0;
-  if (col_tem_conta() && col_resposta_valida(json))
+  // SEM VALIDAR DUAS VEZES. col_definir_json valida a resposta inteira antes de
+  // mexer em qualquer coisa; validar aqui tambem dobrava o custo do ciclo de
+  // sync (tests/sync_aplicar_perf.sh: a validacao era metade do tempo). Resposta
+  // invalida nao muda col_revisao(), e entao `antes` simplesmente nao e usado.
+  if (col_tem_conta())
     for (int i = 0; i < col_n(); i++) {
       const ColFolder *f = col_folder(i);
       if (f && !f->extra) cap += f->nSources;
