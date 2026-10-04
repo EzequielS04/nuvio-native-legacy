@@ -72,7 +72,12 @@ int main(void) {
   conferePerfilResultado(0);
   montarRelatorio();
   assert(strstr(d.relatorio, "perfil_candidato=160|4|1920\n"));
+  assert(strstr(d.relatorio, "perfil_testado=160|4|1920\n"));
   assert(strstr(d.relatorio, "perfil_ativo=96|4|1920\n"));
+  assert(strstr(d.relatorio, "perfil_aprovado=none\n"));
+  assert(strstr(d.relatorio, "tex_orcamento_origem=automatic\n"));
+  assert(strstr(d.relatorio, "tex_orcamento_auto_mb=96\n"));
+  assert(strstr(d.relatorio, "tex_teto_aparelho_mb=160\n"));
   puts("ok  aplicar -> reteste pior -> restaura sozinho (sem gravar perfil)");
 
   // 1b. DESEMPENHO, reteste um pouco melhor mas DENTRO DO RUIDO (100 ms de
@@ -123,6 +128,9 @@ int main(void) {
   tex_definir_orcamento_mb(0);
   cfg = dados_ler("diagnostico-otimizacao.cfg");
   assert(cfg && strstr(cfg, "fios_rede=2") && strstr(cfg, "heroi=1280")); free(cfg);
+  montarRelatorio();
+  assert(strstr(d.relatorio, "perfil_testado=96|2|1280\n"));
+  assert(strstr(d.relatorio, "perfil_aprovado=96|2|1280\n"));
   puts("ok  aplicar -> reteste melhor -> mantem e grava o perfil");
 
   // 3. Restaurar anterior (botao): volta ao que valia e apaga o perfil.
@@ -173,6 +181,19 @@ int main(void) {
   tex_definir_orcamento_auto_mb(0);
   puts("ok  candidato igual ao perfil atual: nada aplicado");
 
+  // Uma escolha manual tardia conserva seu valor e tambem o automatico
+  // anterior: voltar a Automatico nao pode ressuscitar o candidato rejeitado.
+  reset(DIAG_QUALIDADE);
+  assert(aplicarCandidato() && orcamento() == 160);
+  tex_definir_orcamento_mb(128);
+  d.medAntes = med(1000, 0); d.medDepois = med(800, 0);
+  concluirComparacao();
+  assert(d.aplicacao == DA_ALTERADO && orcamento() == 128);
+  assert(tex_orcamento_auto_mb() == 96);
+  tex_definir_orcamento_mb(0);
+  assert(orcamento() == 96 && !dados_ler("diagnostico-otimizacao.cfg"));
+  puts("ok  escolha manual tardia nao promove candidato ao voltar para Automatico");
+
   // 8. ARRANQUE: perfil do disco acima do teto (TV trocada, arquivo antigo) e
   // limitado; checkpoint pendente (experimento interrompido) e descartado.
   dados_gravar("diagnostico-otimizacao.cfg", "versao=2\nmodo=qualidade\ntex_mb=999\nfios_rede=9\nheroi=3840\n");
@@ -181,6 +202,17 @@ int main(void) {
   assert(orcamento() == 160 && tex_fios_rede() == 4 && tex_teto_heroi() == 1920);
   assert(!dados_ler("diagnostico-otimizacao.checkpoint"));
   puts("ok  perfil do disco limitado pela RAM; experimento interrompido descartado");
+
+  // Mesmo com manual ativo no arranque, o automatico aprovado deve voltar
+  // por baixo: e o comportamento real do setter do cache, nao so um double.
+  tex_definir_orcamento_mb(128);
+  tex_definir_orcamento_auto_mb(96);
+  assert(orcamento() == 128 && tex_orcamento_auto_mb() == 96);
+  diagnostico_recuperar_checkpoint();
+  assert(orcamento() == 128 && tex_orcamento_auto_mb() == 160);
+  tex_definir_orcamento_mb(0);
+  assert(orcamento() == 160);
+  puts("ok  arranque manual conserva Automatico aprovado ao voltar para ele");
 
   // 9. SUGESTAO DO DESTAQUE: o reteste pior desfaz a troca do ajuste.
   reset(DIAG_QUALIDADE);

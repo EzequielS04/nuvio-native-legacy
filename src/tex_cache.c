@@ -2779,6 +2779,8 @@ void tex_definir_orcamento_auto_mb(int mb) {
   if (orcFixo == 0) tex_definir_orcamento_mb(0);
 }
 
+int tex_orcamento_auto_mb(void) { return orcAuto; }
+
 void tex_definir_fios_rede(int n) {
   if (!mtx) return;
   SDL_LockMutex(mtx);

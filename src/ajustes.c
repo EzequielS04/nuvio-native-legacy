@@ -3157,7 +3157,7 @@ int ajustes_aplicar_blob(const char *json) {
     // (heroCatalogKeys, versao, espaco) e nao vem do blob.
     if (OPCOES[i].tipo == OP_LEITURA || OPCOES[i].tipo == OP_ACAO) continue;
     if (!CHAVE[i] || CHAVE[i][0] == '-') continue;
-    if (i == AJ_FONTE_UI || i == AJ_IDIOMA) continue;
+    if (somenteDesteAparelho(i)) continue;
     // MEDIDO na TV, com uma conta de verdade: o blob NAO e um mapa plano de
     // camelCase. Ele e
     //   {"version":1,"features":{"layout_settings":{

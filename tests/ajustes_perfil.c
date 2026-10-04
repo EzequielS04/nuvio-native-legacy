@@ -57,6 +57,23 @@ int main(void) {
     assert(strstr(t, CHAVE[AJ_HERO]));
     free(t); }
 
+  // An older or foreign client may upload device-only keys. Pull must
+  // protect the same settings that export and profile copies protect.
+  valor[AJ_TEX_MB] = 1;
+  valor[AJ_QUALIDADE_IMG] = 1;
+  valor[AJ_GPU_EFEITOS] = 1;
+  valor[AJ_HERO] = 1;
+  char blob[1024];
+  snprintf(blob, sizeof blob,
+           "{\"%s\":2,\"%s\":0,\"%s\":0,\"%s\":0}",
+           CHAVE[AJ_TEX_MB], CHAVE[AJ_QUALIDADE_IMG],
+           CHAVE[AJ_GPU_EFEITOS], CHAVE[AJ_HERO]);
+  ajustes_aplicar_blob(blob);
+  assert(valor[AJ_TEX_MB] == 1);
+  assert(valor[AJ_QUALIDADE_IMG] == 1);
+  assert(valor[AJ_GPU_EFEITOS] == 1);
+  assert(valor[AJ_HERO] == 0);  // Person preference still follows the account.
+
   // Logout: nenhuma copia sobra.
   ajustes_perfil_esquecer();
   assert(ajustes_perfil_restaurar(1) == 0);

@@ -109,7 +109,11 @@ typedef enum {
   DA_DESLIGADO,        // build com NV_DIAG_AUTO_OPT=0
   DA_CANCELADO,        // Voltar no meio: o anterior voltou
   DA_RESTAURADO_MANUAL, // a pessoa pediu o anterior
-  DA_RUIDO             // nao piorou, mas nao ganhou alem da margem: o anterior voltou
+  DA_RUIDO,            // nao piorou, mas nao ganhou alem da margem: o anterior voltou
+  DA_SEM_PERFIL,       // perfil aprovado nao gravou: o anterior voltou
+  DA_LIMITADO,         // o cache recusou todas as mudancas solicitadas
+  DA_ALTERADO,         // escolha local mudou durante a amostra: nao aprovar
+  DA_RESTAURADO_SESSAO // runtime restaurado, persistencia recusou a volta
 } DiagAplicacao;
 
 // O botao "Aplicar sugestao" da arte do destaque.
@@ -148,7 +152,7 @@ typedef struct {
   _Atomic int cancelado;
   _Atomic int sondasProntas;   // fio -> desenho: fases 1 e 2 acabaram
   _Atomic int passesProntos;   // desenho -> fio: comparacao decidida
-  _Atomic int experimento;     // candidato no ar, ainda sem veredito
+  _Atomic int experimento;     // 0 nenhum, 1 teste, 2 dono desenho, -1 timeout
   _Atomic int enviando;
   _Atomic int sugPronta;       // fio da sugestao terminou a medida
   SDL_Thread *fio, *fioEnvio, *fioSug;
@@ -196,7 +200,9 @@ typedef struct {
   // de memoria que justifica subir o orcamento (ptv_decidir).
   long despSessao;
   PtvMedida medFrio, medAntes, medDepois;
-  PtvPerfil perfAntes, perfCand;
+  PtvPerfil perfAntes, perfCand, perfTeste;
+  int travadoTeste;
+  int autoAntes, autoTeste;   // Automatico anterior e temporario, fora do manual
   int travadoMb;
   char *cfgAntes;         // o perfil aprovado que valia antes (ou NULL)
   DiagAplicacao aplicacao;
@@ -402,6 +408,10 @@ static const char *aplicacaoNome(DiagAplicacao a) {
     case DA_CANCELADO: return "cancelada";
     case DA_RESTAURADO_MANUAL: return "restaurada_manual";
     case DA_RUIDO: return "mantido_ruido";
+    case DA_SEM_PERFIL: return "sem_perfil";
+    case DA_LIMITADO: return "limitada";
+    case DA_ALTERADO: return "alterada_durante_teste";
+    case DA_RESTAURADO_SESSAO: return "restaurada_sessao";
     default: return "sem_acao";
   }
 }
@@ -636,41 +646,101 @@ static void perfilDoResultado(PtvPerfil *antes, PtvPerfil *atual) {
   *antes = d.aplicacao == DA_MANTIDO ? d.perfAntes : *atual;
 }
 
+static int perfilIgual(const PtvPerfil *a, const PtvPerfil *b) {
+  return a->texMb == b->texMb && a->fiosRede == b->fiosRede && a->heroiLarg == b->heroiLarg;
+}
+
 static const char *modoNome(void) {
   return d.modo == DIAG_DESEMPENHO ? "desempenho" : "qualidade";
 }
 
+static void restaurarAutomaticoTeste(void) {
+  // Uma escolha automatica nova tambem pode substituir o candidato. So
+  // devolva o automatico antigo se o temporario desta rodada ainda vigora.
+  if (tex_orcamento_auto_mb() == d.autoTeste)
+    tex_definir_orcamento_auto_mb(d.autoAntes);
+}
+
 static void restaurarAntes(void) {
-  aplicarPerfilTex(&d.perfAntes, d.travadoMb);
-  printf("[diagnostico] perfil anterior restaurado: %d MB, %d fios, heroi %d\n",
-         d.perfAntes.texMb, d.perfAntes.fiosRede, d.perfAntes.heroiLarg);
+  // A escolha manual pode ter chegado DEPOIS de aplicar o candidato. O
+  // setter conserva essa escolha ativa e devolve o automatico anterior por
+  // baixo dela, para que Automatico nao promova um perfil nunca aprovado.
+  restaurarAutomaticoTeste();
+  tex_definir_fios_rede(d.perfAntes.fiosRede);
+  tex_definir_teto_heroi(d.perfAntes.heroiLarg);
+  { PtvPerfil atual;
+    perfilAtual(&atual, NULL, NULL);
+    printf("[diagnostico] previous image profile restored: active %d MB, %d workers, hero %d px; automatic %d MB\n",
+           atual.texMb, atual.fiosRede, atual.heroiLarg, tex_orcamento_auto_mb()); }
   fflush(stdout);
 }
 
 // Quem pega o experimento o desfaz. Fio de desenho (Voltar, reteste pior) ou
 // fio do diagnostico (tela fora de cena): a troca atomica garante uma vez so.
 static int desfazerExperimento(void) {
-  if (atomic_exchange(&d.experimento, 0) != 1) return 0;
+  int esperado = 1;
+  // Estado 2 pertence ao desenho ate gravar ou restaurar. Um timeout do
+  // worker nao pode apagar esse estado nem restaurar durante a gravacao.
+  if (!atomic_compare_exchange_strong(&d.experimento, &esperado, 0)) return 0;
   restaurarAntes();
   dados_apagar("diagnostico-otimizacao.checkpoint");
   return 1;
+}
+
+// O timeout precisa disputar a MESMA reserva que o desenho. Marcar cancelado
+// antes de perder para estado 2 esconderia o resultado de um commit valido e
+// diria "nada mudou" apesar do novo perfil aprovado no disco.
+static int cancelarPorPrazo(void) {
+  int estado = atomic_load(&d.experimento);
+  if (atomic_load(&d.passesProntos) || (estado != 0 && estado != 1)) return 0;
+  if (!atomic_compare_exchange_strong(&d.experimento, &estado, -1)) return 0;
+  // Um veredito concluido publica passesProntos ANTES de liberar estado 2.
+  // Portanto, se o CAS viu 0 depois dessa liberacao, nao cancela o resultado.
+  if (atomic_load(&d.passesProntos)) {
+    atomic_store(&d.experimento, 0);
+    return 0;
+  }
+  atomic_store(&d.cancelado, 1);
+  if (estado == 1) {
+    restaurarAntes();
+    dados_apagar("diagnostico-otimizacao.checkpoint");
+    d.aplicacao = DA_CANCELADO;
+  }
+  atomic_store(&d.experimento, 0);
+  return 1;
+}
+
+static void finalizarVeredito(void) {
+  atomic_store(&d.passesProntos, 1);
+  atomic_store(&d.experimento, 0);
 }
 
 // Candidato no ar. 0 = nada aplicado (d.aplicacao diz por que).
 static int aplicarCandidato(void) {
   long mem = 0;
   char ck[256];
-  int ok;
+  int ok, esperado = 0;
+  // Preparar o candidato tambem e uma transacao do desenho: um timeout no
+  // passe ANTES nao pode restaurar e depois deixar aparecer um candidato.
+  if (!atomic_compare_exchange_strong(&d.experimento, &esperado, 2)) return 0;
+  if (atomic_load(&d.cancelado)) {
+    d.aplicacao = DA_CANCELADO;
+    finalizarVeredito();
+    return 0;
+  }
   perfilAtual(&d.perfAntes, &d.travadoMb, &mem);
+  d.autoAntes = tex_orcamento_auto_mb();
   ptv_candidato(ptv_plataforma(), mem,
                 d.modo == DIAG_DESEMPENHO ? PTV_DESEMPENHO : PTV_QUALIDADE,
                 d.travadoMb, &d.perfCand);
 #if !NV_DIAG_AUTO_OPT
   d.aplicacao = DA_DESLIGADO;
+  finalizarVeredito();
   return 0;
 #endif
-  if (!memcmp(&d.perfCand, &d.perfAntes, sizeof d.perfCand)) {
+  if (perfilIgual(&d.perfCand, &d.perfAntes)) {
     d.aplicacao = DA_IGUAL;
+    finalizarVeredito();
     return 0;
   }
   // CHECKPOINT ANTES DE MEXER: o candidato vive so em memoria ate o veredito,
@@ -686,12 +756,28 @@ static int aplicarCandidato(void) {
   if (!ok) {
     snprintf(d.erro, sizeof d.erro, "%s", "Não foi possível salvar o checkpoint");
     d.aplicacao = DA_SEM_CHECKPOINT;
+    finalizarVeredito();
     return 0;
   }
   aplicarPerfilTex(&d.perfCand, d.travadoMb);
+  d.autoTeste = tex_orcamento_auto_mb();
+  // A API do cache pode limitar ou recusar um pedido. O reteste comprova o
+  // perfil REAL desta rodada, nunca o numero pedido pelo candidato.
+  perfilAtual(&d.perfTeste, &d.travadoTeste, NULL);
+  if (perfilIgual(&d.perfTeste, &d.perfAntes)) {
+    restaurarAutomaticoTeste();
+    dados_apagar("diagnostico-otimizacao.checkpoint");
+    d.aplicacao = DA_LIMITADO;
+    printf("[diagnostico] image profile unchanged: requested %d/%d/%d, active %d/%d/%d\n",
+           d.perfCand.texMb, d.perfCand.fiosRede, d.perfCand.heroiLarg,
+           d.perfTeste.texMb, d.perfTeste.fiosRede, d.perfTeste.heroiLarg);
+    finalizarVeredito();
+    return 0;
+  }
   atomic_store(&d.experimento, 1);
-  printf("[diagnostico] candidato %s no ar: %d MB, %d fios, heroi %d (antes %d/%d/%d)\n",
-         modoNome(), d.perfCand.texMb, d.perfCand.fiosRede, d.perfCand.heroiLarg,
+  printf("[diagnostico] testing image profile: %d MB, %d workers, hero %d px (requested %d/%d/%d; previous %d/%d/%d)\n",
+         d.perfTeste.texMb, d.perfTeste.fiosRede, d.perfTeste.heroiLarg,
+         d.perfCand.texMb, d.perfCand.fiosRede, d.perfCand.heroiLarg,
          d.perfAntes.texMb, d.perfAntes.fiosRede, d.perfAntes.heroiLarg);
   fflush(stdout);
   return 1;
@@ -704,21 +790,56 @@ static int aplicarCandidato(void) {
 static void concluirComparacao(void) {
   const char *m = NULL;
   PtvDecisao dec;
+  PtvPerfil atual;
+  int travado, esperado = 1;
   if (atomic_load(&d.experimento) != 1) return;
-  dec = ptv_decidir(&d.perfAntes, &d.perfCand, &d.medAntes, &d.medDepois, d.despSessao, &m);
+  if (atomic_load(&d.cancelado)) {
+    if (desfazerExperimento()) d.aplicacao = DA_CANCELADO;
+    return;
+  }
+  // Claim the whole decision: rollback can win before this CAS, never while
+  // the main-thread owner persists its verdict or restores a failed write.
+  if (!atomic_compare_exchange_strong(&d.experimento, &esperado, 2)) return;
+  perfilAtual(&atual, &travado, NULL);
+  if (!perfilIgual(&atual, &d.perfTeste) || travado != d.travadoTeste) {
+    // Nao atribuir a amostra antiga a uma nova escolha do usuario, nem
+    // desfazer essa escolha para restaurar o perfil do inicio da rodada.
+    restaurarAutomaticoTeste();
+    dados_apagar("diagnostico-otimizacao.checkpoint");
+    d.aplicacao = DA_ALTERADO;
+    printf("[diagnostico] image profile changed during retest: active %d/%d/%d, tested %d/%d/%d; profile not saved\n",
+           atual.texMb, atual.fiosRede, atual.heroiLarg,
+           d.perfTeste.texMb, d.perfTeste.fiosRede, d.perfTeste.heroiLarg);
+    finalizarVeredito();
+    return;
+  }
+  dec = ptv_decidir(&d.perfAntes, &d.perfTeste, &d.medAntes, &d.medDepois, d.despSessao, &m);
   if (dec != PTV_DEC_APLICAR) {
-    desfazerExperimento();
+    restaurarAntes();
+    dados_apagar("diagnostico-otimizacao.checkpoint");
     d.aplicacao = dec == PTV_DEC_RESTAURAR ? DA_RESTAURADO_AUTO : DA_RUIDO;
     d.motivo = m;
   } else {
     char cfg[256];
-    atomic_store(&d.experimento, 0);
-    ptv_serializar(&d.perfCand, modoNome(), cfg, sizeof cfg);
-    dados_gravar("diagnostico-otimizacao.cfg", cfg);
-    dados_apagar("diagnostico-otimizacao.checkpoint");
-    d.aplicacao = DA_MANTIDO;
+    PtvPerfil persistida = d.perfTeste;
+    // O teste nao alterou memoria travada. Aprovar fios/heroi nao transforma
+    // o valor manual ativo no automatico; este continua sendo o anterior.
+    if (d.travadoMb) persistida.texMb = d.autoAntes;
+    if (!ptv_serializar(&persistida, modoNome(), cfg, sizeof cfg) ||
+        !dados_gravar("diagnostico-otimizacao.cfg", cfg)) {
+      // A gravacao atomica falhada conserva o .cfg anterior. Sem confirmar
+      // persistencia, a TV nao deve anunciar um perfil aprovado que sumira
+      // no proximo arranque.
+      restaurarAntes();
+      dados_apagar("diagnostico-otimizacao.checkpoint");
+      d.aplicacao = DA_SEM_PERFIL;
+      printf("[diagnostico] image profile save failed: previous profile restored\n");
+    } else {
+      dados_apagar("diagnostico-otimizacao.checkpoint");
+      d.aplicacao = DA_MANTIDO;
+    }
   }
-  printf("[diagnostico] reteste: antes %d ms/%d falhas/pior %d ms, depois %d ms/%d falhas/pior %d ms -> %s%s%s\n",
+  printf("[diagnostico] retest: before %d ms/%d failures/worst %d ms, after %d ms/%d failures/worst %d ms -> %s%s%s\n",
          d.medAntes.artesMs, d.medAntes.falhas, d.medAntes.piorQuadroMs,
          d.medDepois.artesMs, d.medDepois.falhas, d.medDepois.piorQuadroMs,
          aplicacaoNome(d.aplicacao), m ? ": " : "", m ? m : "");
@@ -727,15 +848,21 @@ static void concluirComparacao(void) {
     printf("[diagnostico] active image profile: %d MB, %d workers, hero %d px\n",
            ativo.texMb, ativo.fiosRede, ativo.heroiLarg); }
   fflush(stdout);
+  finalizarVeredito();
 }
 
 // "Restaurar anterior", depois de um perfil mantido.
 static void restaurarManual(void) {
-  if (d.aplicacao != DA_MANTIDO) return;
+  int ok;
+  if (d.aplicacao != DA_MANTIDO && d.aplicacao != DA_RESTAURADO_SESSAO) return;
+  // O botao e uma nova ordem explicita: restaura o automatico anterior
+  // mesmo se outro perfil automatico mudou depois de concluir a rodada.
+  tex_definir_orcamento_auto_mb(d.autoAntes);
   restaurarAntes();
-  if (d.cfgAntes) dados_gravar("diagnostico-otimizacao.cfg", d.cfgAntes);
-  else dados_apagar("diagnostico-otimizacao.cfg");
-  d.aplicacao = DA_RESTAURADO_MANUAL;
+  if (d.cfgAntes) ok = dados_gravar("diagnostico-otimizacao.cfg", d.cfgAntes);
+  else ok = dados_apagar("diagnostico-otimizacao.cfg");
+  d.aplicacao = ok ? DA_RESTAURADO_MANUAL : DA_RESTAURADO_SESSAO;
+  if (!ok) printf("[diagnostico] previous image profile restored for this session only: persistence failed\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -960,14 +1087,14 @@ static const char *vazaoNome(VazResultado r) {
 
 static void montarRelatorio(void) {
   int texItens = 0, texPend = 0, texQuentes = 0, texSlots = 0;
-  int texMb = 0, fios = 0, fiosMax = 0, i;
+  int texMb = 0, texFixo = 0, fios = 0, fiosMax = 0, i;
   long texBytes = 0, texLimite = 0, memTotal = 0;
   char *p = d.relatorio;
   size_t left = sizeof d.relatorio;
   int wrote;
   PtvPerfil ativo;
   tex_estatisticas(&texItens, &texPend, &texBytes, &texQuentes, NULL);
-  tex_orcamento_info(&texMb, &memTotal, NULL, &texSlots);
+  tex_orcamento_info(&texMb, &memTotal, &texFixo, &texSlots);
   texLimite = tex_orcamento_bytes();
   tex_threads_info(&fios, &fiosMax);
   perfilAtual(&ativo, NULL, NULL);
@@ -986,6 +1113,17 @@ static void montarRelatorio(void) {
              d.perfAntes.texMb, d.perfAntes.fiosRede, d.perfAntes.heroiLarg,
              d.perfCand.texMb, d.perfCand.fiosRede, d.perfCand.heroiLarg, d.travadoMb);
   ACRESCENTA("perfil_ativo=%d|%d|%d\n", ativo.texMb, ativo.fiosRede, ativo.heroiLarg);
+  ACRESCENTA("perfil_testado=%d|%d|%d\ntex_orcamento_origem=%s\ntex_orcamento_auto_mb=%d\ntex_teto_aparelho_mb=%d\n",
+             d.perfTeste.texMb, d.perfTeste.fiosRede, d.perfTeste.heroiLarg,
+             texFixo == 1 ? "build" : texFixo == 2 ? "environment" : texFixo == 3 ? "manual" : "automatic",
+             tex_orcamento_auto_mb(),
+             ptv_tex_teto_mb(ptv_plataforma(), memTotal));
+  { char *cfg = dados_ler("diagnostico-otimizacao.cfg");
+    PtvPerfil aprovado;
+    if (cfg && ptv_ler(cfg, &aprovado))
+      ACRESCENTA("perfil_aprovado=%d|%d|%d\n", aprovado.texMb, aprovado.fiosRede, aprovado.heroiLarg);
+    else ACRESCENTA("perfil_aprovado=none\n");
+    free(cfg); }
   ACRESCENTA("amostra_artes=%d\nartes_frio_ms=%d\nartes_antes_ms=%d\nartes_depois_ms=%d\nartes_falhas_antes=%d\nartes_falhas_depois=%d\npior_quadro_antes_ms=%d\npior_quadro_depois_ms=%d\ndespejos_quentes_depois=%d\nmotivo=%s\n",
              d.nArte, d.medFrio.artesMs, d.medAntes.artesMs, d.medDepois.artesMs,
              d.medAntes.falhas, d.medDepois.falhas, d.medAntes.piorQuadroMs,
@@ -1181,9 +1319,9 @@ static int diagnosticoWorker(void *arg) {
     while (!atomic_load(&d.passesProntos) && !atomic_load(&d.cancelado)) {
       if (SDL_GetTicks() - ini > DIAG_PASSES_MAX_MS) {
         // A tela saiu de cena no meio: sem veredito, o candidato nao fica.
-        atomic_store(&d.cancelado, 1);
-        if (desfazerExperimento()) d.aplicacao = DA_CANCELADO;
-        break;
+        // Se o desenho ja prepara ou confirma o perfil, espera seu veredito
+        // em vez de anunciar cancelamento sobre um commit aprovado.
+        if (cancelarPorPrazo()) break;
       }
       SDL_Delay(30);
     } }
@@ -1762,7 +1900,7 @@ static void juntarFios(int esperarTodos) {
 void diagnostico_iniciar(void) {
   // VOLTAR A TELA NO MEIO DE UM TESTE nao pode zerar o estado: o fio ainda
   // escreve em `d`. A barra lateral deixa sair durante o teste.
-  if (atomic_load(&d.estado) == 1 || d.fioSug || atomic_load(&d.enviando) ||
+  if (atomic_load(&d.estado) == 1 || atomic_load(&d.experimento) != 0 || d.fioSug || atomic_load(&d.enviando) ||
       atomic_load(&vz.estado) == 1) {
     sairTela = 0;
     // O atalho com um teste de velocidade JA rodando (a barra lateral deixa
@@ -1804,7 +1942,7 @@ void diagnostico_recuperar_checkpoint(void) {
   char *ck = dados_ler("diagnostico-otimizacao.checkpoint");
   char *cfg;
   if (ck) {
-    printf("[diagnostico] experimento interrompido na sessao anterior: candidato descartado\n");
+    printf("[diagnostico] previous image profile test interrupted: candidate discarded\n");
     dados_apagar("diagnostico-otimizacao.checkpoint");
     free(ck);
   }
@@ -1816,9 +1954,15 @@ void diagnostico_recuperar_checkpoint(void) {
     tex_orcamento_info(NULL, &mem, &fixo, NULL);
     if (ptv_ler(cfg, &pf)) {
       ptv_limitar(ptv_plataforma(), mem, &pf);
+      // Manual conserva seu valor ativo, mas Automatico deve continuar
+      // significando o perfil aprovado quando a pessoa voltar a ele.
+      if (fixo == 3) tex_definir_orcamento_auto_mb(pf.texMb);
       aplicarPerfilTex(&pf, fixo);
-      printf("[diagnostico] perfil aprovado aplicado: %d MB, %d fios, heroi %d\n",
-             pf.texMb, pf.fiosRede, pf.heroiLarg);
+      { PtvPerfil atual;
+        perfilAtual(&atual, NULL, NULL);
+        printf("[diagnostico] approved image profile loaded: requested %d/%d/%d, active %d/%d/%d, budget lock %d\n",
+               pf.texMb, pf.fiosRede, pf.heroiLarg,
+               atual.texMb, atual.fiosRede, atual.heroiLarg, fixo); }
     }
     free(cfg);
   }
@@ -1826,7 +1970,7 @@ void diagnostico_recuperar_checkpoint(void) {
 
 static void iniciarTeste(void) {
   int intro = d.intro, i, t, f;
-  if (atomic_load(&d.estado) == 1 || d.fioSug || atomic_load(&d.enviando)) return;
+  if (atomic_load(&d.estado) == 1 || atomic_load(&d.experimento) != 0 || d.fioSug || atomic_load(&d.enviando)) return;
   // Um teste por vez: o diagnostico mediria a rede ocupada pela vazao.
   if (atomic_load(&vz.estado) == 1) return;
   juntarFios(1);
@@ -1878,7 +2022,7 @@ static const char *const BOTAO_ROTULO[B_N] = {
 
 static int botaoVisivel(int b) {
   switch (b) {
-    case B_RESTAURAR: return d.aplicacao == DA_MANTIDO;
+    case B_RESTAURAR: return d.aplicacao == DA_MANTIDO || d.aplicacao == DA_RESTAURADO_SESSAO;
     case B_SUGESTAO: return d.sugEstado == DS_PROPOSTA;
     case B_REENVIAR: return (d.envioFalhou || d.vazaoPendente) && d.relatorio[0] &&
                             !atomic_load(&d.enviando);
@@ -2260,6 +2404,10 @@ static const char *textoAplicacao(int *cor) {
     case DA_CANCELADO: *cor = 2; return "Cancelado: configuração anterior restaurada";
     case DA_RESTAURADO_MANUAL: *cor = 1; return "Configuração anterior restaurada";
     case DA_RUIDO: *cor = 1; return "Diferença dentro do ruído: o perfil atual foi mantido";
+    case DA_SEM_PERFIL: *cor = 2; return "Não foi possível salvar o perfil: configuração anterior restaurada";
+    case DA_LIMITADO: *cor = 2; return "Perfil limitado pela configuração: nada foi alterado";
+    case DA_ALTERADO: *cor = 2; return "Configuração mudou durante o teste: perfil não salvo";
+    case DA_RESTAURADO_SESSAO: *cor = 2; return "Configuração anterior restaurada só nesta sessão: falha ao salvar";
     default: return "Nada foi aplicado";
   }
 }

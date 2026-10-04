@@ -194,6 +194,10 @@ void tex_definir_orcamento_mb(int mb);
 // o padrao do aparelho com 0. Travado pelo teto da RAM; nao passa por cima de
 // Ajustes, de NV_TEX_MB_FIXO nem de NUVIO_TEX_MB.
 void tex_definir_orcamento_auto_mb(int mb);
+// Padrao automatico realmente guardado, mesmo sob um valor manual ativo.
+// Permite desfazer um experimento sem promover seu candidato depois que a
+// pessoa voltar de uma escolha manual para Automatico.
+int tex_orcamento_auto_mb(void);
 // PARAMETROS DO PERFIL QUE MUDAM AO VIVO, sem reiniciar (ver perfiltv.h):
 // quantos fios de rede de arte ficam ativos (1..criados; o excedente espera)
 // e o teto de decodificacao do heroi (0 = so a regra de qualidade). O teto do

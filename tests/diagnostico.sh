@@ -9,6 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 bash tests/diagnostico_dispatch.sh
+bash tests/diagnostico_persistencia.sh
 
 cc tests/diagnostico.c src/perfiltv.c -Isrc -o /tmp/nuvio-diagnostico \
   -O1 -g -Wall -Wextra
