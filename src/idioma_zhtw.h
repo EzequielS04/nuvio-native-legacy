@@ -529,6 +529,7 @@
   T("Apple TV", "Apple TV"),
   T("Apple TV e Moderno", "Apple TV and Modern"),
   T("Aqui está o que esta versão trouxe. O resto do app está explicado no Guia de uso.", "以下是此版本帶來的內容。應用程式的其他部分在使用指南中說明。"),
+  T("Aqui só aparece o que %s compartilha.", "這裡只顯示 %s 分享的內容。"),
   T("Arcade N", "Arcade N"),
   T("Arco", "Arc"),
   T("Arco de qualidade", "品質走勢"),

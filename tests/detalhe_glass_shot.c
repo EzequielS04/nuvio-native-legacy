@@ -79,6 +79,7 @@
 #include "../src/detail.c"
 
 #include "dados.h"
+#include "ilha.h"
 
 #define IMDB_SERIE "tt12637874"
 #define IMDB_FILME "tt33612209"
@@ -306,6 +307,10 @@ static void quadros(int n) {
     glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     detail_desenhar(SDL_GetTicks());
+    // NUVIO_SHOT_RELOGIO=1: the clock island over the page, as app.c draws it.
+    if (getenv("NUVIO_SHOT_RELOGIO")) {
+      ilha_relogio_visivel(1); ilha_posicionar(1); ilha_desenhar(SDL_GetTicks());
+    }
     if (i < n - 1) SDL_GL_SwapWindow(janela);
   }
 }
@@ -373,6 +378,8 @@ int main(int argc, char **argv) {
       fputs("vidroLocal 0\n", f);
     else fputs("vidroLocal 1\n", f);
     // Ajustes > Aparencia > Fundo: 0 Arte, 1 Arte borrada, 2 Frost.
+    // NUVIO_SHOT_FONTE=3: Montserrat, the interface font of the owner's TV.
+    if (getenv("NUVIO_SHOT_FONTE")) fprintf(f, "fonteInterface %d\n", atoi(getenv("NUVIO_SHOT_FONTE")));
     if (getenv("NUVIO_SHOT_FUNDO")) fprintf(f, "fundoLocal %d\n", atoi(getenv("NUVIO_SHOT_FUNDO")));
     fclose(f);
     ajustes_dir(dd); }

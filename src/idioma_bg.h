@@ -529,6 +529,7 @@
   T("Apple TV", "Apple TV"),
   T("Apple TV e Moderno", "Apple TV and Modern"),
   T("Aqui está o que esta versão trouxe. O resto do app está explicado no Guia de uso.", "Ето какво донесе тази версия. Останалото от приложението е обяснено в Наръчника."),
+  T("Aqui só aparece o que %s compartilha.", "Тук се вижда само това, което споделя %s."),
   T("Arcade N", "Arcade N"),
   T("Arco", "Arc"),
   T("Arco de qualidade", "Дъга на качеството"),

@@ -529,6 +529,7 @@
   T("Apple TV", "Apple TV"),
   T("Apple TV e Moderno", "Apple TV and Modern"),
   T("Aqui está o que esta versão trouxe. O resto do app está explicado no Guia de uso.", "Ορίστε τι έφερε αυτή η έκδοση. Η υπόλοιπη εφαρμογή εξηγείται στο Εγχειρίδιο."),
+  T("Aqui só aparece o que %s compartilha.", "Εδώ εμφανίζονται μόνο όσα μοιράζεται το %s."),
   T("Arcade N", "Arcade N"),
   T("Arco", "Arc"),
   T("Arco de qualidade", "Τόξο ποιότητας"),

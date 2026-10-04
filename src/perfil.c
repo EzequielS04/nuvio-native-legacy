@@ -60,12 +60,18 @@
 // AS MEDIDAS DO MOCKUP (px de 1920x1080). Cabecalho a 56 do topo, avatar de
 // 120 e 28 ate o nome; numeros a 36 do cabecalho, 120 de altura e 20 de vao;
 // os tres cartoes de baixo a 24 deles, o primeiro com 400 de largura.
-#define PF_TOPO           56.0f
+// LAYOUT DINAMICA: a pilula da barra ("‹ Perfil e Stats") ocupa o topo
+// esquerdo (y 44..104), exatamente onde o avatar e o nome comecam. Quando ela
+// esta la, o conteudo todo desce o que for preciso para ficar 20 abaixo dela
+// (o mesmo vao de busca.c/buTopoEsq). Sem a pilula, PF_DY e 0 e nada muda.
+static float pfDy(void);
+#define PF_DY             pfDy()
+#define PF_TOPO          (56.0f + PF_DY)
 #define PF_AVATAR        120.0f
-#define PF_NUM_Y         212.0f
+#define PF_NUM_Y        (212.0f + PF_DY)
 #define PF_NUM_H         120.0f
 #define PF_NUM_GAP        20.0f
-#define PF_CARD_Y        356.0f
+#define PF_CARD_Y       (356.0f + PF_DY)
 #define PF_CARD_MIN_H    324.0f
 #define PF_CARD_GAP       24.0f
 #define PF_CAL_W         400.0f
@@ -113,6 +119,13 @@
 #define PF_ESC_LIN    (20.5f / NV_FT_ROW_TITULO) // 19/600
 #define PF_ESC_APOIO  (16.5f / NV_FT_CAPTION2)   // 15/400
 #define PF_ESC_AMIGO  (19.5f / NV_FT_CAPTION2)   // 18/400
+
+static float pfDy(void) {
+  float px, py, pw, ph;
+  if (menu_pilula_rect(&px, &py, &pw, &ph) && py + ph + 20.0f > 56.0f)
+    return py + ph + 20.0f - 56.0f;
+  return 0.0f;
+}
 
 static PerfilDados dados;
 static int aberto, sair, carregando, temDados;

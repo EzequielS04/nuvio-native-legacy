@@ -528,6 +528,7 @@
   { "Apple TV", "Apple TV" },
   { "Apple TV e Moderno", "Apple TV and Modern" },
   { "Aqui está o que esta versão trouxe. O resto do app está explicado no Guia de uso.", "Here's what this version brought. The rest of the app is explained in the User guide." },
+  { "Aqui só aparece o que %s compartilha.", "Only what %s shares shows up here." },
   { "Arcade N", "Arcade N" },
   { "Arco", "Arc" },
   { "Arco de qualidade", "Quality arc" },
