@@ -220,7 +220,7 @@ static struct { const char *rot; int acao; } ops[CTX_MAX];
 static int nOps;
 static float focoAnim[CTX_MAX];
 static int holdObservador;
-enum { OP_DETALHES, OP_LISTA, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR,
+enum { OP_DETALHES, OP_LISTA, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR, OP_DISPENSAR,
        OP_ESTILO, OP_CATEGORIA, OP_L_ABRIR, OP_L_FIXAR, OP_L_HOME,
        OP_EXTRA = 100 };   // OP_EXTRA + k = extras[k] (modo social)
 // "Mover para categoria" pedido no modo painel: o IMDb do titulo, consumido
@@ -237,6 +237,9 @@ static char pedCategoriaImdb[24];
 // a lista de formas. Um grupo de colecao nao tem titulo por tras — o cartao e
 // uma pasta — e abre direto na pagina 1 (soFileira).
 static char filChave[192], filTitulo[96];
+// "Dispensar" do cartao "Retomar agora": pedido pela home (pend) e valido para
+// o menu aberto (op).
+static int dispensarPend, dispensarOp;
 static int  pagina, soFileira;
 // PAGINA 2: A CONFIRMACAO de "Tirar de Continuar assistindo" (dono, 02/10:
 // modal de ilha do mockup "ilha" tela 7). Tirar apaga o ponto de retomada
@@ -422,6 +425,8 @@ static void montar(void) {
   // destaque ficam com o visual deles — a home nem passa a chave).
   if (!doPainel && filChave[0] && fil_estilos(filChave, NULL, NULL, FIL_TIPO_N) > 0)
     juntar("Estilo da fileira", OP_ESTILO);
+  // Cartao "Retomar agora": soltar o titulo da faixa, sem apagar progresso.
+  if (!doPainel && dispensarOp) juntar("Dispensar", OP_DISPENSAR);
   // As acoes da linha social por ULTIMO: sao dela, nao do titulo.
   if (doSocial) {
     int k;
@@ -477,9 +482,10 @@ void ctx_abrir(int indice) {
   if (holdCancelado) {
     holdCancelado = 0;
     holdPronto = 0;
+    dispensarPend = 0;
     return;
   }
-  if (indice < 0 || indice >= cat_n() || !cat_item(indice)) { filChave[0] = 0; return; }
+  if (indice < 0 || indice >= cat_n() || !cat_item(indice)) { filChave[0] = 0; dispensarPend = 0; return; }
   doPainel = 0;
   doSocial = 0;
   soFileira = 0;
@@ -524,6 +530,8 @@ void ctx_abrir_lista(const LstLista *l) {
 int ctx_pediu_lista(void) { int v = listaPedida; listaPedida = 0; return v; }
 int ctx_lista_alterou(void) { int v = listaAlterou; listaAlterou = 0; return v; }
 
+void ctx_dispensar_retomar(int on) { dispensarPend = on ? 1 : 0; }
+
 void ctx_fileira(const char *chave, const char *titulo) {
   snprintf(filChave, sizeof filChave, "%s", chave ? chave : "");
   snprintf(filTitulo, sizeof filTitulo, "%s", titulo ? titulo : "");
@@ -552,6 +560,7 @@ static void abrirComum(int indice) {
   holdPronto = 0;
   esperandoSoltura = 1;   // o OK que abriu ainda esta afundado; ver a nota acima
   idx = indice; foco = 0; aberto = 1; pedDetalhes = -1;
+  dispensarOp = dispensarPend; dispensarPend = 0;
   temCartaz = 0; cartazFixo = 0;
   pagina = soFileira ? 1 : 0;
   estFoco = -1;               // montar() poe o foco na forma atual
@@ -872,6 +881,11 @@ static void aplicar(void) {
       // mesma razao que salvospainel.c copia: o vetor do catalogo troca de
       // bloco a cada republicacao da descoberta.
       if (recenviar_abrir(ci)) aberto = 0;
+      break;
+    case OP_DISPENSAR:
+      home_retomar_dispensar();
+      aberto = 0;
+      pagina = 0;
       break;
     case OP_TIRAR_CONTINUAR: {
       // COPIA ANTES: `ci` aponta para dentro do bloco do catalogo, e
@@ -1678,6 +1692,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
       case OP_ASSISTIDO: icone = historicoDe(ci) == 1
                                  ? "aj_eye-off" : "aj_eye"; break;
       case OP_TIRAR_CONTINUAR: icone = "aj_x"; break;
+      case OP_DISPENSAR:  icone = "aj_x"; break;
       case OP_RECOMENDAR: icone = "aj_users"; break;
       case OP_ESTILO:     icone = "aj_rows-3"; break;
       case OP_CATEGORIA:  icone = "aj_folders"; break;

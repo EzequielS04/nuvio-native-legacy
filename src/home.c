@@ -1019,6 +1019,7 @@ static void abrirMenuCartaz(void) {
   const Fileira *s;
   if (focoHero || foco.fileira < 0 || foco.fileira >= nFileiras) {
     ctx_fileira(NULL, NULL);
+    ctx_dispensar_retomar(0);
     ctx_abrir(heroAtual);
     return;
   }
@@ -1034,6 +1035,8 @@ static void abrirMenuCartaz(void) {
   if (s->tipo == FILEIRA_CONTINUE || !strcmp(s->chave, "continue_watching"))
     ctx_fileira(NULL, NULL);
   else ctx_fileira(s->chave, s->titulo);
+  // "Dispensar" so no cartao de "Retomar agora" (ctxmenu.h).
+  ctx_dispensar_retomar(s->tipo == FILEIRA_RETORNO);
   ctx_abrir(fileiraItemIndice(s, foco.coluna));
 }
 
@@ -5507,6 +5510,29 @@ void home_registrar_retorno(int indice, double posSeg, double durSeg) {
   snprintf(retomarId, sizeof retomarId, "%s", c ? c->imdb : "");
 }
 const char *home_retomar_imdb(void) { return retomarId; }
+// DISPENSAR o cartao "Retomar agora" (menu do cartao). Esquece o titulo: a
+// faixa some e NAO volta numa republicacao (retomarId vazio), so quando uma
+// NOVA saida do player a recolocar (home_registrar_retorno). Progresso e sync
+// nao sao tocados. Quem segura o titulo fora de "Continuar assistindo"
+// (cwretido) solta no passo seguinte do app (cwRetidoSincronizar) e o poe na
+// FRENTE da fileira, sem refazer o resto.
+void home_retomar_dispensar(void) {
+  if (!retomarId[0] && retomarIndice < 0) return;
+  retomarId[0] = 0;
+  retomarIndice = -1;
+  retomarRev++;
+  printf("[home] cartao Retomar agora dispensado\n");
+  fflush(stdout);
+}
+// Troca de conta/perfil: o cartao era da pessoa anterior. Solta o hold em
+// silencio (sem por o titulo na frente do Continuar da pessoa nova).
+void home_retomar_esquecer(void) {
+  if (!retomarId[0] && retomarIndice < 0) return;
+  retomarId[0] = 0;
+  retomarIndice = -1;
+  retomarRev++;
+  cw_retido_definir("");
+}
 int home_quer_sair(void) { return sair; }
 
 int home_item_focado(HomeItem *out) {

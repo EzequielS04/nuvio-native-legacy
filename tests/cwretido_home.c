@@ -47,6 +47,7 @@ int  trailer_tocando(void) { return 0; }
 int ctx_aberto(void) { return 0; }
 void ctx_abrir(int indice) { (void)indice; }
 void ctx_fileira(const char *c, const char *t) { (void)c; (void)t; }
+void ctx_dispensar_retomar(int on) { (void)on; }
 void ctx_abrir_fileira(const char *c, const char *t) { (void)c; (void)t; }
 void vertudo_abrir(const char *b, const char *t, const char *c, const char *ti) {
   (void)b; (void)t; (void)c; (void)ti;
@@ -162,6 +163,42 @@ int main(void) {
   { CatItem novo = *cat_item(cat_indice_por_imdb("tt100")); naFrente(&novo); }
   quadro();
   conferir("faixa soltou: tt100 na frente", "tt100 tt200:2:4 tt300");
+  // DISPENSAR o cartao "Retomar agora" (menu do cartao, home_retomar_dispensar).
+  // Mesma sincronia de app.c (cwRetidoSincronizar): ao soltar, o titulo vai
+  // para a FRENTE de Continuar assistindo.
+  assert(ajustes_shot_valor("relogioTelaLocal", 1) && !ajustes_relogio_ligado());
+  home_registrar_retorno(cat_indice_por_imdb("tt300"), 500.0, 3000.0);
+  assert(cw_retido_definir(cw_retido_escolher(0, "", home_retomar_imdb())));
+  quadro();
+  conferir("retomar segura tt300", "tt100 tt200:2:4");
+  assert(naHome("last_session") && naHome("last_session")->tipo == FILEIRA_RETORNO);
+  home_retomar_dispensar();
+  { char antes[64]; snprintf(antes, sizeof antes, "%s", cw_retido());
+    assert(cw_retido_definir(cw_retido_escolher(0, "", home_retomar_imdb())));
+    assert(antes[0] && !cw_retido_exclui(antes));
+    { CatItem novo = *cat_item(cat_indice_por_imdb(antes)); naFrente(&novo); } }
+  quadro();
+  conferir("dispensado: tt300 na frente", "tt300 tt100 tt200:2:4");
+  assert(!naHome("last_session"));
+  puts("ok  o cartao dispensado sai e o titulo entra na frente");
+  // Republicacao (rede/catalogo): o cartao NAO volta.
+  cw[0] = *cat_item(cat_indice_por_imdb("tt300")); cw[1] = *cat_item(0); cw[2] = *cat_item(1);
+  cat_trocar_continuar(cw, 3);
+  quadro(); quadro();
+  assert(!naHome("last_session") && !home_retomar_imdb()[0]);
+  puts("ok  republicacao nao traz o cartao de volta");
+  // Uma NOVA saida do player poe o cartao de novo (e o segura).
+  home_registrar_retorno(cat_indice_por_imdb("tt100"), 700.0, 3000.0);
+  assert(cw_retido_definir(cw_retido_escolher(0, "", home_retomar_imdb())));
+  quadro();
+  assert(naHome("last_session") && !strcmp(home_retomar_imdb(), "tt100"));
+  puts("ok  nova saida mostra o cartao de novo");
+  // Troca de conta/perfil: esquece e solta o hold sem pedir a frente.
+  home_retomar_esquecer();
+  assert(!cw_retido()[0] && !home_retomar_imdb()[0]);
+  quadro();
+  assert(!naHome("last_session"));
+  puts("ok  troca de conta/perfil esquece o cartao");
   puts("cwretido_home: tudo ok");
   return 0;
 }
