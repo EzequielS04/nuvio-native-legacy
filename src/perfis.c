@@ -1,3 +1,4 @@
+void jellyfin_perfil_trocou(void);   // jellyfin.c: cancel in-flight work, load this profile
 #include "perfis.h"
 #include "sessao.h"
 #include "nuvem.h"
@@ -363,11 +364,15 @@ void perfis_carregar_ativo(void) {
 
 void perfis_definir_ativo(int indice) {
   char linha[32];
+  int ativoAntes = ativo;
   if (indice <= 0) return;
   ativo = indice;
   fil_definir_perfil(indice);
   fontepref_definir_perfil(indice);
   arteesc_definir_perfil(indice);
+  // Personal servers are per profile: drop the previous profile's in-flight
+  // requests and load this profile's connection (jellyfin.h).
+  if (indice != ativoAntes) jellyfin_perfil_trocou();
   escolhido = 1;
   gravado = 1;
   snprintf(linha, sizeof linha, "%d\n", indice);

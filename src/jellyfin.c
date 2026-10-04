@@ -869,6 +869,7 @@ typedef struct {
 
 typedef struct {
   int ativo, iniciado, pausado;
+  double ultPos;
   unsigned geracao;
   unsigned long long ultimoMs, criadoMs;
   JfSessaoPlay s;
@@ -1189,9 +1190,26 @@ int jellyfin_qc_permitido(void) {
   return q;
 }
 
+static int ultimoErro;
+static const char *textoErro(int e);
 static void definirEstadoLocked(JfEstado e, const char *det) {
   estado = e;
   copiar(detalhe, sizeof detalhe, det);
+}
+// Failure for the Settings row: the UI translates the code; the log gets the
+// English reason (no secret, no address).
+static void definirErroLocked(int e) {
+  estado = JF_EST_ERRO;
+  ultimoErro = e;
+  detalhe[0] = 0;
+  printf("[jellyfin] action failed: %s\n", textoErro(e));
+}
+int jellyfin_ultimo_erro(void) {
+  int e;
+  pthread_mutex_lock(&trava);
+  e = ultimoErro;
+  pthread_mutex_unlock(&trava);
+  return e;
 }
 
 int jellyfin_definir_servidor(const char *url) {
@@ -1201,7 +1219,7 @@ int jellyfin_definir_servidor(const char *url) {
   if (!jellyfin_disponivel()) return 0;
   if (jf_url_normalizar(url, norm, sizeof norm) != JF_OK) {
     pthread_mutex_lock(&trava);
-    definirEstadoLocked(JF_EST_ERRO, "invalid address");
+    definirErroLocked(JF_ERR_ENTRADA);
     pthread_mutex_unlock(&trava);
     return 0;
   }
@@ -1330,6 +1348,7 @@ static const char *textoErro(int e) {
   switch (e) {
     case JF_ERR_REDE: return "server did not answer";
     case JF_ERR_AUTH: return "sign-in refused";
+    case JF_ERR_ENTRADA: return "invalid address";
     case JF_ERR_HTTP: return "server error";
     case JF_ERR_FORMATO: return "not a Jellyfin server";
     case JF_ERR_INDISPONIVEL: return "unavailable on this platform";
@@ -1379,7 +1398,7 @@ static void tarefaVerificar(const Tarefa *t) {
       gravarConta(&conta, perfilLido);
       snprintf(det, sizeof det, "%s · %s", c.servidorNome[0] ? c.servidorNome : "Jellyfin", c.versao);
       definirEstadoLocked(JF_EST_SERVIDOR_OK, det);
-    } else definirEstadoLocked(JF_EST_ERRO, textoErro(e));
+    } else definirErroLocked(e);
   }
   pthread_mutex_unlock(&trava);
   fecharTarefa(j);
@@ -1395,7 +1414,7 @@ static void tarefaSenha(Tarefa *t) {
   if (e == JF_OK) publicarConta(t, j, &c);
   else {
     pthread_mutex_lock(&trava);
-    if (aindaVale(t, j)) definirEstadoLocked(JF_EST_ERRO, e == JF_ERR_AUTH ? "wrong username or password" : textoErro(e));
+    if (aindaVale(t, j)) definirErroLocked(e);
     pthread_mutex_unlock(&trava);
   }
   apagarSegredo(&c, sizeof c);
@@ -1417,7 +1436,7 @@ static void tarefaQc(const Tarefa *t) {
     pthread_mutex_lock(&trava);
     if (aindaVale(t, j)) {
       if (e == JF_ERR_QC_DESLIGADO) qcPermitido = 0;
-      definirEstadoLocked(JF_EST_ERRO, textoErro(e));
+      definirErroLocked(e);
     }
     pthread_mutex_unlock(&trava);
     fecharTarefa(j);
@@ -1448,7 +1467,7 @@ static void tarefaQc(const Tarefa *t) {
   if (e == JF_OK) publicarConta(t, j, &c);
   else {
     pthread_mutex_lock(&trava);
-    if (aindaVale(t, j) && meu == cancelEntrada) definirEstadoLocked(JF_EST_ERRO, textoErro(e));
+    if (aindaVale(t, j) && meu == cancelEntrada) definirErroLocked(e);
     pthread_mutex_unlock(&trava);
   }
 fim:
@@ -1679,6 +1698,16 @@ void jellyfin_reproducao_tick(const char *url, double pos, double dur, int tocan
   if (!s->iniciado) {
     // "Started" only once real playback runs, never on the probe/open.
     if (tocando) {
+      int i;
+      // SOURCE SWITCH inside the player: the previous session of this
+      // generation is over, so it gets its stop (and transcode release)
+      // before the new one starts.
+      for (i = 0; i < JF_SESSOES; i++)
+        if (&sessoes[i] != s && sessoes[i].ativo && sessoes[i].iniciado) {
+          relatarLocked(JF_REL_FIM, &sessoes[i], sessoes[i].ultPos);
+          apagarSegredo(sessoes[i].s.url, sizeof sessoes[i].s.url);
+          sessoes[i].ativo = 0;
+        }
       s->iniciado = 1; s->pausado = 0; s->ultimoMs = agora;
       relatarLocked(JF_REL_INICIO, s, pos);
     }
@@ -1689,6 +1718,7 @@ void jellyfin_reproducao_tick(const char *url, double pos, double dur, int tocan
     s->ultimoMs = agora;
     relatarLocked(JF_REL_PROGRESSO, s, pos);
   }
+  if (pos > 0) s->ultPos = pos;
   pthread_mutex_unlock(&trava);
 }
 

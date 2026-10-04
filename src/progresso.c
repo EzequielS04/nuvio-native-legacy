@@ -1,5 +1,6 @@
 #include "progresso.h"
 #include "idbase.h"
+#include "jfid.h"
 #include "dados.h"
 #include "perfis.h"
 #include <pthread.h>
@@ -251,6 +252,7 @@ int prog_gravar_local(const char *imdb, int temporada, int episodio,
   ProgRegistro r;
   int i, ok;
   if (!imdb || !*imdb || !temposValidos(posSeg, durSeg)) return 0;
+  if (jfid_e(imdb)) return 0;   // personal-server ids never sync to the account
   memset(&r, 0, sizeof r);
   { int tI = 0, eI = 0;
     prog_content_id(r.contentId, sizeof r.contentId, imdb, &tI, &eI);

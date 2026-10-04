@@ -246,13 +246,18 @@ static void testarIntegracao(void) {
   jellyfin_reproducao_tick(lista[0].url, 1, 7200, 1);
   jellyfin_reproducao_tick(lista[0].url, 2, 7200, 1);                    // < 10 s: no progress
   jellyfin_reproducao_tick(lista[0].url, 3, 7200, 0);                    // pause, immediate
-  jellyfin_reproducao_fim(lista[0].url, 3, 7200);
+  jellyfin_reproducao_tick(lista[1].url, 0, 7200, 1);                    // source switch: stop 0, start 1
+  jellyfin_reproducao_fim(lista[0].url, 3, 7200);                        // already stopped
+  jellyfin_reproducao_fim(lista[1].url, 5, 7200);                        // stop + transcode release
   jellyfin_reproducao_tick(lista[0].url, 4, 7200, 1);                    // session gone
   fim = ms() + 5000;
   while (jellyfin_relatorios_pendentes() && ms() < fim) dormir(20);
   ev = controle("events");
-  assert(conta(ev, "\"Playing\"") == 1 && conta(ev, "\"Progress\"") == 1 && conta(ev, "\"Stopped\"") == 1);
-  assert(strstr(ev, "\"pause\"") && strstr(ev, "\"DirectPlay\"") && !strstr(ev, "\"release\""));
+  assert(conta(ev, "\"Playing\"") == 2 && conta(ev, "\"Progress\"") == 1 && conta(ev, "\"Stopped\"") == 2);
+  assert(strstr(ev, "\"pause\"") && strstr(ev, "\"DirectPlay\"") && conta(ev, "\"release\"") == 1);
+  // Order: start(0), pause(0), stop(0) at its last position, start(1), stop(1).
+  { const char *a = strstr(ev, "\"Stopped\", \"ticks\": 30000000"), *b = strstr(ev, "\"Transcode\"");
+    assert(a && b && a < b); }
   assert(strstr(ev, "Nuvio Desktop"));
   free(ev);
   free(lista);

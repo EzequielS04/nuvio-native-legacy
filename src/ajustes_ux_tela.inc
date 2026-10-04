@@ -101,6 +101,8 @@ static const Item TELA[] = {
       OPC(AJ_DEBRID_RD), OPC(AJ_DEBRID_TB), OPC(AJ_DEBRID_PM), OPC(AJ_DEBRID_AD),
       OPC(AJ_DEBRID_AD_TESTAR), OPC(AJ_MDB_CHAVE), OPC(AJ_FANART_CHAVE),
     ROT("P2P"), OPC(AJ_P2P_LIGADO), OPC(AJ_P2P_URL), OPC(AJ_P2P_TESTAR),
+    ROT("Servidores pessoais"),
+      OPC(AJ_JF_LIGADO), OPC(AJ_JF_SERVIDOR), OPC(AJ_JF_ENTRAR), OPC(AJ_JF_SAIR),
 
   SEC("Desempenho desta TV", "Resolução, imagens, efeitos e diagnóstico", "aj_monitor-cog"),
     OPC(AJ_RESOLUCAO), OPC(AJ_QUALIDADE_IMG),

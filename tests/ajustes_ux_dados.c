@@ -258,7 +258,7 @@ static void bloqueadosESegredos(void) {
 
 int main(void) {
   char dir[] = "/tmp/nuvio-aj-ux-dados-XXXXXX";
-  assert(AJ_DISCORD == AJ_ICONE_APP + 1 && AJ_TAMANHO_AJUSTES == AJ_DISCORD + 1 && AJ_LOGO_TRAILER == AJ_TAMANHO_AJUSTES + 1 && AJ_LEG_LINGUA2 == AJ_LOGO_TRAILER + 1 && AJ_LEG_LINGUA2 == AJ_N - 1);
+  assert(AJ_DISCORD == AJ_ICONE_APP + 1 && AJ_TAMANHO_AJUSTES == AJ_DISCORD + 1 && AJ_LOGO_TRAILER == AJ_TAMANHO_AJUSTES + 1 && AJ_LEG_LINGUA2 == AJ_LOGO_TRAILER + 1 && AJ_JF_LIGADO == AJ_LEG_LINGUA2 + 1 && AJ_JF_SAIR == AJ_N - 1);
   assert(!strcmp(CHAVE[AJ_DISCORD], "-discord"));
   assert(!uxTemPadrao(AJ_DISCORD));
   assert(familiaPreviaOpcao(AJ_DISCORD) == AJPV_RASTREIO);

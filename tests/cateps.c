@@ -31,6 +31,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
+#include "jellyfin_stub.inc"
 
 Uint32 SDL_GetTicks(void) { return 0; }
 

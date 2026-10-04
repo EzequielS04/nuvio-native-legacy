@@ -149,13 +149,15 @@ typedef enum {
   JF_EST_EXPIROU,        // server said 401: sign in again
   JF_EST_ERRO            // last action failed; detail says why
 } JfEstado;
-// Snapshot for the Settings rows. `detalhe` is display text (server name and
-// version, the Quick Connect code, or the failure), never a secret.
+// Snapshot for the Settings rows. `detalhe` is display data (server name and
+// version, or the Quick Connect code), never a secret; failures are codes
+// (jellyfin_ultimo_erro) so the UI can translate them.
 JfEstado jellyfin_estado(char *detalhe, size_t tam);
 const char *jellyfin_servidor_curto(void);  // host[:port] for display, "" none
 const char *jellyfin_usuario(void);
 int  jellyfin_conectado(void);
 int  jellyfin_qc_permitido(void);           // known after the server check
+int  jellyfin_ultimo_erro(void);            // JF_ERR_* behind JF_EST_ERRO
 
 // Non-blocking actions (queued on the control worker). 0 if refused.
 int  jellyfin_definir_servidor(const char *url);
