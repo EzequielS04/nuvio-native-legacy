@@ -421,7 +421,7 @@ static const char *rotuloBotao(int i) {
   if (modalQual == ILHA_ESTREIA) return i == 0 ? i18n("Assistir") : i18n("Depois");
   if (i == 0) return modalQual == ILHA_AMIGO ? i18n("Ver também") : i18n("Retomar");
   if (i == 1) return i18n("Detalhes");
-  return i18n("Fechar");
+  return i18n("Dispensar");   // a mesma palavra do menu do cartao "Retomar agora"
 }
 static const char *iconeBotao(int i) {
   if (modalAviso) return modalM.botaoIcone[i][0] ? modalM.botaoIcone[i] : NULL;
