@@ -73,7 +73,22 @@ static void copiar(PlrIlhaPedido *d, const PlrIlhaPedido *s, char *t, char *dr, 
   d->icone = ic[0] ? ic : NULL;
 }
 
+// CARTAO CENTRAL (dono, 03/10: "ao abrir o filme pode deixar o componente de
+// opening source no meio da tela, centralizado, mesmo sem o relogio"): o
+// pedido com `centro` nao passa pela ilha do canto. Vira um cartao no mesmo
+// material, so com o corpo, no centro, que entra e sai por alfa.
+static PlrIlhaPedido cen, cenUlt;
+static char cenT[200], cenD[80], cenI[32], cenUT[200], cenUD[80], cenUI[32];
+static int temCen;
+static float cenA;
+static Uint32 cenQuadro;
+
 void plrilha_pedir(const PlrIlhaPedido *p) {
+  if (p->centro && p->w > 0.0f && p->h > 0.0f) {
+    copiar(&cen, p, cenT, cenD, cenI);
+    temCen = 1;
+    return;
+  }
   // Quem tem corpo vence quem e so aviso: a lista aberta nao vira toast.
   if (temPed && ped.w > 0.0f && p->w <= 0.0f) return;
   copiar(&ped, p, pedTexto, pedDir, pedIcone);
@@ -183,9 +198,27 @@ static void desenharLinha(const PlrIlhaPedido *p, const Linha *L, float x, float
 
 static void plrilha_desenharCorpo_(Uint32 agora);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
+static void cartaoCentro(Uint32 agora) {
+  float dt = cenQuadro ? (float)(agora - cenQuadro) / 1000.0f : 1.0f / 60.0f;
+  cenQuadro = agora;
+  if (dt > 0.1f) dt = 0.1f;
+  if (temCen) copiar(&cenUlt, &cen, cenUT, cenUD, cenUI);
+  if (anim_politica_reduzida || ajustes_animacoes_reduzidas()) cenA = temCen ? 1.0f : 0.0f;
+  else cenA = anim_mola(cenA, temCen ? 1.0f : 0.0f, dt, temCen ? 10.0f : 12.0f);
+  temCen = 0;
+  if (cenA < 0.01f) { cenA = 0.0f; return; }
+  { const PlrIlhaPedido *c = &cenUlt;
+    GfxRect R = { (NV_TELA_W - c->w) * 0.5f, (NV_TELA_H - c->h) * 0.5f, c->w, c->h };
+    plrui_material(R, RAIO_CORPO, c->modal, cenA);
+    gfx_recorte(R.x, R.y, R.w, R.h);
+    if (c->corpo) c->corpo(R, cenA, c->u);
+    gfx_sem_recorte(); }
+}
+
 void plrilha_desenhar(Uint32 agora) {
   ESCALA_INI();
   plrilha_desenharCorpo_(agora);
+  cartaoCentro(agora);
   ESCALA_FIM();
 }
 static void plrilha_desenharCorpo_(Uint32 agora) {

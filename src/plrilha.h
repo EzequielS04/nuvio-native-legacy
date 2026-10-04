@@ -38,6 +38,7 @@ typedef struct {
   void *u;
   int aberta;               // 1 = pilula aberta de 64 (aviso), 0 = 56
   int modal;                // 1 = miolo do modal (.86)
+  int centro;               // 1 = cartao SOZINHO no meio da tela (sem relogio nem medidor); so o corpo
 } PlrIlhaPedido;
 
 void plrilha_pedir(const PlrIlhaPedido *p);
