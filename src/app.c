@@ -3715,12 +3715,9 @@ static void desenharTelas(Uint32 agora) {
   faixas_desenhar(agora);
   // A ILHA DO RELOGIO DENTRO DO PLAYER (plrilha.h), por cima de todas as
   // camadas dele: a pilula da hora, os avisos e o que nasce dela (Audio,
-  // Legendas, estilo, carregando, erro). Com a folha de Fontes por cima ela
-  // sai — a folha cobre o lado do relogio no layout Dinamica.
-  if (player_aberto()) {
-    if (stream_folha_anim() > 0.02f) plrilha_esconder();
-    plrilha_desenhar(agora);
-  }
+  // Legendas, estilo, carregando, erro) — e a folha de Fontes, que cresce
+  // dela (streams.c) e por isso nao a esconde mais.
+  if (player_aberto()) plrilha_desenhar(agora);
 }
 
 // ONDE O RELOGIO DA ILHA CABE (ilha.h). So na home, que tem o topo esquerdo

@@ -20,6 +20,7 @@ const char *ajustes_qualidade(void) { return "Automatica"; }
 int ajustes_fonte_texto_addon(void) { return 0; }
 int video_pode_forcar_sdr(void) { return 0; }
 void video_forcar_sdr(void) {}
+int player_aberto(void) { return 0; }
 void ondever_apps_atualizar(void) {}
 int ondever_n(const char *id) { (void)id;return 2; }
 int ondever_item(const char *id,int ix,OndeVer *o) { (void)id;(void)ix;(void)o;return 0; }

@@ -339,6 +339,21 @@ int ondever_item(const char *imdb, int i, OndeVer *dst) {
   return ok;
 }
 
+#ifdef NV_SHOT_HOOKS
+// Capturas: a lista de um titulo sem rede (tests/player_glass_shot.c).
+void ondever_shot(const char *imdb, const OndeVer *l, int n) {
+  char base[32];
+  baseDe(imdb, base, sizeof base);
+  if (n > ONDEVER_MAX) n = ONDEVER_MAX;
+  pthread_mutex_lock(&trava);
+  snprintf(publicado, sizeof publicado, "%s", base);
+  snprintf(pedido, sizeof pedido, "%s", base);
+  for (int i = 0; i < n; i++) itens[i] = l[i];
+  nItens = n; consultando = 0; falhou = 0;
+  pthread_mutex_unlock(&trava);
+}
+#endif
+
 // --- apps instalados -------------------------------------------------------------
 
 #define APPS_MAX 160
