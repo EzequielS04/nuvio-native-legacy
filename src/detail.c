@@ -3453,7 +3453,7 @@ static void logoCinema(float a) {
   const char *arqLogo = logoDe(idx);
   GLuint texLogo = arqLogo ? tex_obter_larg_qualquer(arqLogo, NV_DETW_LOGO_MAXW) : 0;
   float baseY = trailercinema_base();
-  if (a <= 0.005f) return;
+  if (a <= 0.005f || ajustes_esconder_logo_trailer()) return;
   if (texLogo) {
     float asp = tex_aspecto(arqLogo);
     float h, w;

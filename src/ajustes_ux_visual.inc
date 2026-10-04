@@ -141,6 +141,7 @@ static const char *ajVisualIcone(int op) {
     case AJ_FONTE_UI: return "aj_type";
     case AJ_TAMANHO_UI: return "aj_maximize-2";
     case AJ_TAMANHO_AJUSTES: return "aj_sliders-horizontal";
+    case AJ_LOGO_TRAILER: return "aj_eye-off";
     case AJ_ICONE_APP: return "aj_image-plus";
     case AJ_DISCORD: return "aj_message-square";
     case AJ_ANIM: return "aj_activity";
