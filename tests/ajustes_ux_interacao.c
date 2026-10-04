@@ -44,15 +44,34 @@ int main(void) {
   key(SDLK_ESCAPE); igual(antes); free(antes);
   valor[AJ_VIDRO] = original;
 
-  // Foco e rascunho não alteram nem o valor nem o arquivo; Back cancela.
-  original = valor[AJ_RELOGIO]; antes = arquivo(); abrir(AJ_RELOGIO);
-  key(SDLK_DOWN); assert(uxPendente != original); assert(valor[AJ_RELOGIO] == original); igual(antes);
+  // Interruptor (Ligado/Desligado): OK troca e grava na hora, sem editor nem
+  // confirmacao; sem ajuste de risco, nunca abre o aviso.
+  valor[AJ_RELOGIO] = 0; assert(gravar()); assert(ehInterruptor(AJ_RELOGIO));
+  focarOpcao(AJ_RELOGIO); antes = arquivo();
+  key(SDLK_RETURN);
+  assert(!uxEditor && !uxAvisoRisco && !uxRestaurar && valor[AJ_RELOGIO] == 1);
+  { char *depois = arquivo(); assert(strcmp(antes, depois)); free(depois); } free(antes);
+  assert(strstr(uxAviso, "salvo"));
+  key(SDLK_RETURN); assert(!uxEditor && valor[AJ_RELOGIO] == 0);
+  // Falha de disco: o valor anterior fica e o aviso diz que nao salvou.
+  { char falho[1400]; snprintf(falho, sizeof falho, "%s/ausente", dir); snprintf(dirAjustes, sizeof dirAjustes, "%s", falho);
+    key(SDLK_RETURN); assert(valor[AJ_RELOGIO] == 0 && !uxEditor); assert(strstr(uxAviso, "salvar"));
+    snprintf(dirAjustes, sizeof dirAjustes, "%s", dir); }
+  // Interruptor inativo (depende de outro) continua abrindo o aviso de requisito.
+  valor[AJ_VIDRO] = 1; focarOpcao(AJ_VIDRO_CONTORNO); key(SDLK_RETURN); assert(uxEditor == 2); key(SDLK_ESCAPE);
+  valor[AJ_VIDRO] = 0;
+  focarOpcao(AJ_RELOGIO);
+
+  // Foco e rascunho (escolha, nao interruptor) não alteram nem o valor nem o arquivo; Back cancela.
+  valor[AJ_HOME_LAYOUT] = 0; assert(gravar());
+  original = valor[AJ_HOME_LAYOUT]; antes = arquivo(); abrir(AJ_HOME_LAYOUT);
+  key(SDLK_DOWN); assert(uxPendente != original); assert(valor[AJ_HOME_LAYOUT] == original); igual(antes);
   SDL_Event repetida = {0}; repetida.type = SDL_KEYDOWN;
   repetida.key.keysym.sym = SDLK_RETURN; repetida.key.repeat = 1;
-  ajustes_evento(&repetida); assert(uxEditor && valor[AJ_RELOGIO] == original); igual(antes);
-  key(SDLK_ESCAPE); assert(!uxEditor); assert(valor[AJ_RELOGIO] == original); igual(antes); free(antes);
-  abrir(AJ_RELOGIO); key(SDLK_DOWN); key(SDLK_RETURN);
-  assert(!uxEditor && valor[AJ_RELOGIO] != original);
+  ajustes_evento(&repetida); assert(uxEditor && valor[AJ_HOME_LAYOUT] == original); igual(antes);
+  key(SDLK_ESCAPE); assert(!uxEditor); assert(valor[AJ_HOME_LAYOUT] == original); igual(antes); free(antes);
+  abrir(AJ_HOME_LAYOUT); key(SDLK_DOWN); key(SDLK_RETURN);
+  assert(!uxEditor && valor[AJ_HOME_LAYOUT] != original);
   antes = arquivo(); key(SDLK_LEFT); assert(focoIndice); igual(antes); free(antes);
 
   // Número só aplica o candidato final, sem gravar cada passo.
@@ -95,14 +114,14 @@ int main(void) {
   assert(uxIndice == 1 && uxDifFoco == foco && uxNDifs == n);
 
   // Falha de disco deixa o editor aberto e preserva o valor anterior.
-  abrir(AJ_RELOGIO); original = valor[AJ_RELOGIO]; key(SDLK_UP);
+  valor[AJ_HOME_LAYOUT] = 0; abrir(AJ_HOME_LAYOUT); original = valor[AJ_HOME_LAYOUT]; key(SDLK_DOWN);
   snprintf(bad, sizeof bad, "%s/ausente", dir); snprintf(dirAjustes, sizeof dirAjustes, "%s", bad);
-  key(SDLK_RETURN); assert(uxEditor && valor[AJ_RELOGIO] == original); assert(strstr(uxAviso, "salvar"));
+  key(SDLK_RETURN); assert(uxEditor && valor[AJ_HOME_LAYOUT] == original); assert(strstr(uxAviso, "salvar"));
   snprintf(dirAjustes, sizeof dirAjustes, "%s", dir); key(SDLK_ESCAPE);
 
   // Mudança externa durante edição exige rever o candidato antes de aplicar.
-  abrir(AJ_RELOGIO); key(SDLK_UP); valor[AJ_RELOGIO] = 0; assert(gravar());
-  key(SDLK_RETURN); assert(uxEditor && uxPendente == 0); assert(strstr(uxAviso, "outra tela")); key(SDLK_ESCAPE);
+  valor[AJ_HOME_LAYOUT] = 0; abrir(AJ_HOME_LAYOUT); key(SDLK_DOWN); valor[AJ_HOME_LAYOUT] = 2; assert(gravar());
+  key(SDLK_RETURN); assert(uxEditor && uxPendente == 2); assert(strstr(uxAviso, "outra tela")); key(SDLK_ESCAPE);
 
   // Avançado encontrado pela busca é revelado e alcançável, sem ciclos extras.
   ajustes_abrir_opcao(AJ_TEX_MB); ajustes_iniciar();
@@ -148,8 +167,8 @@ int main(void) {
   assert(valor[AJ_RELOGIO] == confirmado);
 
   // Sair da tela descarta rascunho (Spotlight / troca de tela / fechamento).
-  abrir(AJ_RELOGIO); original = valor[AJ_RELOGIO]; key(SDLK_DOWN);
-  ajustes_encerrar(); assert(!uxEditor && valor[AJ_RELOGIO] == original);
+  abrir(AJ_HOME_LAYOUT); original = valor[AJ_HOME_LAYOUT]; key(SDLK_DOWN);
+  ajustes_encerrar(); assert(!uxEditor && valor[AJ_HOME_LAYOUT] == original);
   char path[700]; snprintf(path, sizeof path, "%s/ajustes.txt", dir); unlink(path);
   snprintf(path, sizeof path, "%s/ajustes-locais.txt", dir); unlink(path);
   rmdir(dir); SDL_Quit();

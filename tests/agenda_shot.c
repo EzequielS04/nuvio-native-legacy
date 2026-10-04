@@ -94,6 +94,12 @@ enum { DES_AGENDA = 0, DES_AVISO, DES_MENU, DES_DETALHE };
 // que e feita em portugues como o resto do repositorio, e o album do post em
 // ingles. Recompilar para trocar a lingua e o tipo de atrito que faz alguem
 // publicar a captura errada — NUVIO_SHOT_EN=1 resolve sem tocar no codigo.
+// FONTE DA INTERFACE POR VARIAVEL: NUVIO_SHOT_FONTE=3 (Montserrat, a da TV do
+// dono) grava a mesma chave "fonteInterface" do ajustes.txt do aparelho.
+static void fonteDeTeste(FILE *f) {
+  const char *fo = getenv("NUVIO_SHOT_FONTE");
+  if (fo && *fo) fprintf(f, "fonteInterface %d\n", atoi(fo));
+}
 static void ajustesDeTeste(int idiomaIngles, int animReduzidas) {
   char caminho[600];
   const char *temaEnv = getenv("NUVIO_SHOT_THEME");
@@ -104,6 +110,7 @@ static void ajustesDeTeste(int idiomaIngles, int animReduzidas) {
   f = fopen(caminho, "w");
   if (!f) return;
   fprintf(f, "idioma %d\nanimacoes %d\n", idiomaIngles, animReduzidas);
+  fonteDeTeste(f);
   shot_arte_material(f);   // NUVIO_SHOT_VIDRO=0: o material solido
   if (temaEnv && *temaEnv) {
     char *fim;
@@ -378,6 +385,7 @@ static void idiomaDeTeste(int idioma) {
   f = fopen(caminho, "w");
   if (!f) return;
   fprintf(f, "idioma %d\nanimacoes 0\n", idioma);
+  fonteDeTeste(f);
   fclose(f);
   ajustes_dir(dados_dir());
 }
@@ -522,6 +530,9 @@ int main(int argc, char **argv) {
       snprintf(ci[i].tipo, sizeof ci[i].tipo, "%s", "series");
       snprintf(ci[i].titulo, sizeof ci[i].titulo, "%s", TIT[i]);
       snprintf(ci[i].poster, sizeof ci[i].poster, "deploy/app/art/0%d.jpg", i);
+      // A arte de paisagem da coluna da esquerda (C1) sai do backdrop do
+      // catalogo quando o registro nao tem still/backdrop proprio.
+      snprintf(ci[i].backdrop, sizeof ci[i].backdrop, "deploy/app/art/0%d.jpg", i);
       snprintf(ci[i].genero, sizeof ci[i].genero, "%s", GEN[i]);
       snprintf(ci[i].meta, sizeof ci[i].meta, "%s", "2026 · 3 temporadas");
       ci[i].nota = NOTA[i];
@@ -540,7 +551,11 @@ int main(int argc, char **argv) {
     return 0;
   }
   if (getenv("NUVIO_SHOT_SO") && !strcmp(getenv("NUVIO_SHOT_SO"), "calendario")) {
-    tecla(SDLK_UP); tecla(SDLK_RIGHT); tecla(SDLK_RETURN);
+    // O FOCO NO SEGMENTADO da ilha (C1): "Mes" focado, "Lista" ainda ativa.
+    tecla(SDLK_UP); tecla(SDLK_RIGHT);
+    snprintf(nome, sizeof nome, "%s-cabecalho.bmp", saida);
+    captura(nome, w);
+    tecla(SDLK_RETURN);
     snprintf(nome, sizeof nome, "%s-calendario.bmp", saida);
     captura(nome, w);
     tecla(SDLK_RETURN); tecla(SDLK_RETURN);
@@ -712,7 +727,7 @@ int main(int argc, char **argv) {
     f = fopen(caminho, "w");
     if (f) { fprintf(f, "idioma %d\nanimacoes 0\ntmdb_enabled 1\n",
                      getenv("NUVIO_SHOT_EN") && *getenv("NUVIO_SHOT_EN") != '0');
-             fclose(f); ajustes_dir(dados_dir()); } }
+             fonteDeTeste(f); fclose(f); ajustes_dir(dados_dir()); } }
   printf("chave TMDB para o fio: [%s]\n", desc_chave_tmdb()[0] ? "sim" : "nao");
   agendaui_iniciar();
   snprintf(nome, sizeof nome, "%s-tmdbdesligado.bmp", saida);

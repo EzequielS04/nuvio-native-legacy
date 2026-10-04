@@ -75,6 +75,9 @@ void home_registrar_retorno(int indice, double posSeg, double durSeg);
 int  home_retorno_vale(int indice, double posSeg, double durSeg);
 // O titulo da faixa "Retomar agora" (relogio desligado); "" sem sessao. Ver cwretido.h.
 const char *home_retomar_imdb(void);
+// Dispensar o cartao "Retomar agora" (menu do cartao) e esquece-lo na troca de conta/perfil.
+void home_retomar_dispensar(void);
+void home_retomar_esquecer(void);
 int  home_quer_sair(void);
 int  home_pediu_abrir(void);   // OK pressionado: consome o pedido
 int  home_pediu_tocar(void);   // OK num card de retomada com "OK no card" = Retomar

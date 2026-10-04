@@ -143,6 +143,7 @@ static CatItem copiaPainel;
 static int      doSocial;
 static CtxExtra extras[CTX_EXTRAS_MAX];
 static int      nExtras, extraPedido = -1, confExtra = -1;
+static int      pendExtra = -1;   // extra a soltar quando o historico confirmar
 // Removeu pelo painel: o menu sai sozinho quando a remocao CONFIRMA — a linha
 // ja nao existe mais atras dele, e o foco do painel foi para a seguinte.
 static int     fecharAoConfirmar;
@@ -220,7 +221,7 @@ static struct { const char *rot; int acao; } ops[CTX_MAX];
 static int nOps;
 static float focoAnim[CTX_MAX];
 static int holdObservador;
-enum { OP_DETALHES, OP_LISTA, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR,
+enum { OP_DETALHES, OP_LISTA, OP_ASSISTIDO, OP_TIRAR_CONTINUAR, OP_RECOMENDAR, OP_DISPENSAR,
        OP_ESTILO, OP_CATEGORIA, OP_L_ABRIR, OP_L_FIXAR, OP_L_HOME,
        OP_EXTRA = 100 };   // OP_EXTRA + k = extras[k] (modo social)
 // "Mover para categoria" pedido no modo painel: o IMDb do titulo, consumido
@@ -237,6 +238,9 @@ static char pedCategoriaImdb[24];
 // a lista de formas. Um grupo de colecao nao tem titulo por tras — o cartao e
 // uma pasta — e abre direto na pagina 1 (soFileira).
 static char filChave[192], filTitulo[96];
+// "Dispensar" do cartao "Retomar agora": pedido pela home (pend) e valido para
+// o menu aberto (op).
+static int dispensarPend, dispensarOp;
 static int  pagina, soFileira;
 // PAGINA 2: A CONFIRMACAO de "Tirar de Continuar assistindo" (dono, 02/10:
 // modal de ilha do mockup "ilha" tela 7). Tirar apaga o ponto de retomada
@@ -322,6 +326,20 @@ static void juntar(const char *rot, int acao) {
   ops[nOps].rot = rot; ops[nOps].acao = acao; nOps++;
 }
 
+// "MARCAR COMO ASSISTIDO" so existe em filme e serie com IMDb; no painel, serie
+// so quando o catalogo a tem (a copia nao traz as temporadas).
+static int assistidoPossivel(const CatItem *ci, int i) {
+  return ci && ci->imdb[0] && (!strcmp(ci->tipo, "movie") || !strcmp(ci->tipo, "series")) &&
+         (!doPainel || i >= 0 || !strcmp(ci->tipo, "movie"));
+}
+// A extra que se junta a "Marcar como assistido" (CtxExtra.juntaAssistido), ou -1.
+static int extraJunta(void) {
+  int k;
+  if (!doSocial) return -1;
+  for (k = 0; k < nExtras; k++) if (extras[k].juntaAssistido) return k;
+  return -1;
+}
+
 static void montar(void) {
   int i = indiceAtual();
   const CatItem *ci = itemAtual();
@@ -385,14 +403,19 @@ static void montar(void) {
   // NO PAINEL, SERIE SO COM O CATALOGO. A copia da lista local nao tem as
   // temporadas, e desmarcar uma serie no Simkl sem elas apaga a serie da
   // biblioteca de la (ver visto.c/simkl.c). Filme nao tem esse risco.
-  if (ci->imdb[0] && (!strcmp(ci->tipo, "movie") || !strcmp(ci->tipo, "series")) &&
-      (!doPainel || i >= 0 || !strcmp(ci->tipo, "movie"))) {
+  if (assistidoPossivel(ci, i) && extraJunta() < 0) {
     juntar(estadoOperacao == CTX_PENDENTE && operacao == CTX_OP_HISTORICO
              ? (intencao ? "Marcando como assistido..."
                          : "Desmarcando como assistido...")
              : (historicoDe(ci) == 1 ? "Desmarcar como assistido"
                                      : "Marcar como assistido"),
            OP_ASSISTIDO);
+  } else if (extraJunta() >= 0) {
+    // "JA ASSISTI" DA RECOMENDACAO: UMA acao so, no lugar de "Marcar como
+    // assistido". Enquanto o historico espera o 2xx, o rotulo diz isso.
+    int k = extraJunta();
+    juntar(estadoOperacao == CTX_PENDENTE && operacao == CTX_OP_HISTORICO
+             ? "Marcando como assistido..." : extras[k].rot, OP_EXTRA + k);
   }
   // TIRAR DE "CONTINUAR ASSISTINDO".
   //
@@ -422,10 +445,12 @@ static void montar(void) {
   // destaque ficam com o visual deles — a home nem passa a chave).
   if (!doPainel && filChave[0] && fil_estilos(filChave, NULL, NULL, FIL_TIPO_N) > 0)
     juntar("Estilo da fileira", OP_ESTILO);
+  // Cartao "Retomar agora": soltar o titulo da faixa, sem apagar progresso.
+  if (!doPainel && dispensarOp) juntar("Dispensar", OP_DISPENSAR);
   // As acoes da linha social por ULTIMO: sao dela, nao do titulo.
   if (doSocial) {
     int k;
-    for (k = 0; k < nExtras; k++) juntar(extras[k].rot, OP_EXTRA + k);
+    for (k = 0; k < nExtras; k++) if (k != extraJunta()) juntar(extras[k].rot, OP_EXTRA + k);
   }
   // O FOCO TEM DE CABER NA LISTA QUE ACABOU DE SER MONTADA.
   //
@@ -477,9 +502,10 @@ void ctx_abrir(int indice) {
   if (holdCancelado) {
     holdCancelado = 0;
     holdPronto = 0;
+    dispensarPend = 0;
     return;
   }
-  if (indice < 0 || indice >= cat_n() || !cat_item(indice)) { filChave[0] = 0; return; }
+  if (indice < 0 || indice >= cat_n() || !cat_item(indice)) { filChave[0] = 0; dispensarPend = 0; return; }
   doPainel = 0;
   doSocial = 0;
   soFileira = 0;
@@ -524,6 +550,8 @@ void ctx_abrir_lista(const LstLista *l) {
 int ctx_pediu_lista(void) { int v = listaPedida; listaPedida = 0; return v; }
 int ctx_lista_alterou(void) { int v = listaAlterou; listaAlterou = 0; return v; }
 
+void ctx_dispensar_retomar(int on) { dispensarPend = on ? 1 : 0; }
+
 void ctx_fileira(const char *chave, const char *titulo) {
   snprintf(filChave, sizeof filChave, "%s", chave ? chave : "");
   snprintf(filTitulo, sizeof filTitulo, "%s", titulo ? titulo : "");
@@ -552,6 +580,7 @@ static void abrirComum(int indice) {
   holdPronto = 0;
   esperandoSoltura = 1;   // o OK que abriu ainda esta afundado; ver a nota acima
   idx = indice; foco = 0; aberto = 1; pedDetalhes = -1;
+  dispensarOp = dispensarPend; dispensarPend = 0;
   temCartaz = 0; cartazFixo = 0;
   pagina = soFileira ? 1 : 0;
   estFoco = -1;               // montar() poe o foco na forma atual
@@ -601,6 +630,7 @@ void ctx_abrir_social(const CatItem *titulo, const CtxExtra *ex, int n) {
   for (k = 0; ex && k < n && k < CTX_EXTRAS_MAX; k++) extras[nExtras++] = ex[k];
   extraPedido = -1;
   confExtra = -1;
+  pendExtra = -1;
   doPainel = 1;
   doSocial = 1;
   doLista = 0;
@@ -711,6 +741,42 @@ static void aplicarEstilo(void) {
   aberto = 0;
 }
 
+// MARCAR/DESMARCAR NO HISTORICO DA CONTA (o corpo de OP_ASSISTIDO, e tambem o
+// passo de historico do "Ja assisti" da recomendacao: `soMarcar` nunca desmarca).
+static void iniciarAssistido(int atual, const CatItem *ci, int soMarcar) {
+      intencao = soMarcar ? 1 : (historicoDe(ci) == 1 ? 0 : 1);
+      opItem = *ci; opTinhaRetomada = ci->progresso > 0 || ci->restanteMin > 0;
+      snprintf(operacaoImdb, sizeof operacaoImdb, "%s", ci->imdb);
+      operacao = CTX_OP_HISTORICO;
+      opSimkl = 0;
+      avisoOp = NULL;
+      espelhoAplicado = 0;
+      estadoOperacao = CTX_PENDENTE;
+      // SIMKL E CONTA NUVIO, em fio (visto.c), com ou sem Trakt. Antes daqui
+      // so havia o Trakt, e sem ele esta acao era "[trakt] historico recusado:
+      // Trakt desligado" e CTX_FALHA — o "sem o traktv nao ta dando o watched"
+      // do dono. As temporadas vao junto porque desmarcar serie no Simkl sem
+      // elas apagaria a serie da biblioteca de la (ver simkl.c).
+      visto_titulo(ci->imdb, ci->tipo, ci->temporadas, ci->nTemporadas, intencao,
+                   visto_destinos());
+      if (trakt_ativo()) {
+        // O caminho do Trakt NAO MUDOU: mesmo pedido, mesma espera, espelho so
+        // depois do 2xx em ctx_atualizar.
+        if (!trakt_assistido_tipo(ci->imdb, ci->tipo, intencao))
+          estadoOperacao = CTX_FALHA;
+      } else {
+        // SEM TRAKT NAO HA RESPOSTA A ESPERAR (o mesmo raciocinio do "+" na
+        // Lista do Nuvio, acima): o local e a verdade desta TV, aplicado agora,
+        // e a conta o devolve no proximo pull (sync.c aplica os vistos da
+        // conta justamente quando o Trakt esta desligado).
+        espelharAssistido(atual, ci, intencao);
+        estadoOperacao = CTX_CONFIRMADA;
+        espelhoAplicado = 1;
+        desc_remontar_fileiras();
+        anunciarAssistido(intencao);
+      }
+}
+
 static void aplicar(void) {
   int atual = indiceAtual();
   const CatItem *ci = itemAtual();
@@ -731,6 +797,15 @@ static void aplicar(void) {
   if (!ci) return;
   if (acao >= OP_EXTRA && acao < OP_EXTRA + nExtras) {
     int k = acao - OP_EXTRA;
+    if (extras[k].juntaAssistido && assistidoPossivel(ci, indiceAtual()) &&
+        historicoDe(ci) != 1) {
+      // "JA ASSISTI": primeiro o historico da conta (so marca). A extra sai
+      // quando ele confirma — agora, sem Trakt, ou em ctx_atualizar com o 2xx.
+      if (estadoOperacao == CTX_PENDENTE) return;
+      iniciarAssistido(indiceAtual(), ci, 1);
+      if (estadoOperacao == CTX_PENDENTE) { pendExtra = k; montar(); return; }
+      if (estadoOperacao == CTX_FALHA) { montar(); return; }
+    }
     // A EXTRA QUE NAO SE DESFAZ (remover amigo) passa pela mesma pagina de
     // confirmacao de "Tirar de Continuar assistindo", com o foco em Cancelar.
     if (extras[k].confirmar && pagina != 2) {
@@ -827,39 +902,7 @@ static void aplicar(void) {
       montar();
       break;
     case OP_ASSISTIDO:
-      // Progresso e posicao de retomada, nao historico. So um retrato de
-      // historico confirmado pode inverter a acao para "desmarcar".
-      intencao = historicoDe(ci) == 1 ? 0 : 1;
-      opItem = *ci; opTinhaRetomada = ci->progresso > 0 || ci->restanteMin > 0;
-      snprintf(operacaoImdb, sizeof operacaoImdb, "%s", ci->imdb);
-      operacao = CTX_OP_HISTORICO;
-      opSimkl = 0;
-      avisoOp = NULL;
-      espelhoAplicado = 0;
-      estadoOperacao = CTX_PENDENTE;
-      // SIMKL E CONTA NUVIO, em fio (visto.c), com ou sem Trakt. Antes daqui
-      // so havia o Trakt, e sem ele esta acao era "[trakt] historico recusado:
-      // Trakt desligado" e CTX_FALHA — o "sem o traktv nao ta dando o watched"
-      // do dono. As temporadas vao junto porque desmarcar serie no Simkl sem
-      // elas apagaria a serie da biblioteca de la (ver simkl.c).
-      visto_titulo(ci->imdb, ci->tipo, ci->temporadas, ci->nTemporadas, intencao,
-                   visto_destinos());
-      if (trakt_ativo()) {
-        // O caminho do Trakt NAO MUDOU: mesmo pedido, mesma espera, espelho so
-        // depois do 2xx em ctx_atualizar.
-        if (!trakt_assistido_tipo(ci->imdb, ci->tipo, intencao))
-          estadoOperacao = CTX_FALHA;
-      } else {
-        // SEM TRAKT NAO HA RESPOSTA A ESPERAR (o mesmo raciocinio do "+" na
-        // Lista do Nuvio, acima): o local e a verdade desta TV, aplicado agora,
-        // e a conta o devolve no proximo pull (sync.c aplica os vistos da
-        // conta justamente quando o Trakt esta desligado).
-        espelharAssistido(atual, ci, intencao);
-        estadoOperacao = CTX_CONFIRMADA;
-        espelhoAplicado = 1;
-        desc_remontar_fileiras();
-        anunciarAssistido(intencao);
-      }
+      iniciarAssistido(atual, ci, 0);
       montar();
       break;
     case OP_CATEGORIA:
@@ -872,6 +915,11 @@ static void aplicar(void) {
       // mesma razao que salvospainel.c copia: o vetor do catalogo troca de
       // bloco a cada republicacao da descoberta.
       if (recenviar_abrir(ci)) aberto = 0;
+      break;
+    case OP_DISPENSAR:
+      home_retomar_dispensar();
+      aberto = 0;
+      pagina = 0;
       break;
     case OP_TIRAR_CONTINUAR: {
       // COPIA ANTES: `ci` aponta para dentro do bloco do catalogo, e
@@ -1041,6 +1089,10 @@ void ctx_atualizar(float dt, Uint32 agora) {
     int novo = opSimkl ? simkl_lista_estado() : trakt_operacao_estado(operacao);
     if (novo == CTX_CONFIRMADA || novo == CTX_FALHA) {
       estadoOperacao = novo;
+      if (pendExtra >= 0) {
+        if (novo == CTX_CONFIRMADA) { extraPedido = pendExtra; aberto = 0; pagina = 0; }
+        pendExtra = -1;
+      }
       if (!espelhoAplicado && itemAtual()) {
         const CatItem *ci = itemAtual();
         if (ci && novo == CTX_CONFIRMADA) {
@@ -1678,6 +1730,7 @@ static void ctx_desenharCorpo_(Uint32 agora) {
       case OP_ASSISTIDO: icone = historicoDe(ci) == 1
                                  ? "aj_eye-off" : "aj_eye"; break;
       case OP_TIRAR_CONTINUAR: icone = "aj_x"; break;
+      case OP_DISPENSAR:  icone = "aj_x"; break;
       case OP_RECOMENDAR: icone = "aj_users"; break;
       case OP_ESTILO:     icone = "aj_rows-3"; break;
       case OP_CATEGORIA:  icone = "aj_folders"; break;

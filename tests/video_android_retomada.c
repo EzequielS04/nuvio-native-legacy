@@ -93,5 +93,15 @@ int main(void) {
   assert(video_tocar_posicao("https://example.invalid/invalido.mp4", 2147484));
   assert(video_tocar("https://example.invalid/inicio.mp4"));
   assert(chamadasPosicao == posicoes);
+  // StreamFit (F03): with the current shell, a start at 0 also goes through
+  // abrirPosicao so Kotlin learns the generation; resume state stays -1.
+  ausente = 0; assert(resolverMetodos(&env)); mParar = (jmethodID)(uintptr_t)4;
+  normais = chamadasNormais;
+  assert(video_tocar("https://example.invalid/zero.mp4"));
+  assert(chamadasPosicao == posicoes + 1 && chamadasNormais == normais && recebidoMs == 0);
+  assert((unsigned)recebidoGeracao == video_android_sessao() && video_retomada_inicial_estado() == -1);
+  Java_space_nuvio_nativelegacy_NvPlayer_nativeRetomada(&env, NULL, recebidoGeracao, 0);
+  assert(video_retomada_inicial_estado() == -1);
+  puts("ok inicio em 0 entrega a geracao sem mudar a retomada");
   puts("video Android retomada: PASS (JNI, geracoes, fallback e limites)");
 }

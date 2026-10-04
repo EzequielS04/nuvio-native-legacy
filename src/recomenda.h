@@ -603,13 +603,19 @@ typedef struct {
   // recs que EU mandei para ela, mais nova primeiro (so grau 1)
   int  nRecs;
   struct { long long id, criado; char imdb[24], tipo[8], titulo[160], poster[512];
-           int estado, temReacao, reacao, terminou; } recs[REC_AMIGO_RECS];
+           int estado, temReacao, reacao, terminou;
+           // resposta DIRETA de quem recebeu (POST /v1/rec/resposta): a mensagem
+           // curta ("" = nenhuma) e o epoch em que respondeu (0 = nao respondeu).
+           char resposta[64]; long long respondido; } recs[REC_AMIGO_RECS];
   // gosto parecido: % de titulos com a MESMA reacao (so se os dois compartilham)
   int  temGosto, gostoTotal, gostoIguais, gostoPct;
 } RecAmigo;
 
 // Enfileira a leitura. Se o cache em disco for desta pessoa, ele ja fica
 // disponivel em recomenda_amigo() antes da rede. Estado em recomenda_amigo_estado.
+// Funde o estado de assistida/resposta de um corpo de GET /v1/rec em recresp.h.
+// E o que a rede faz a cada sondagem; exposta para o teste.
+void recomenda_fundir_respostas(const char *corpo);
 int  recomenda_amigo_pedir(const char *id);
 int  recomenda_amigo(RecAmigo *saida);    // 1 = ha dados (cache ou novos)
 int  recomenda_amigo_estado(void);        // REC_SOC_* (NADA/INDO/OK/FALHA/NAO_ACHOU/NEGADO)

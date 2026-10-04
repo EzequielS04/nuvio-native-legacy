@@ -31,6 +31,7 @@
 #include "video_reconexao.h"
 #include "idioma.h"
 #include "linguas.h"
+#include "streamfitpassiva.h"
 #include <SDL2/SDL.h>
 #include <jni.h>
 #include <stdio.h>
@@ -323,6 +324,15 @@ static unsigned novaRetomada(int estado) {
   pthread_mutex_unlock(&travaRetomada);
   return geracao;
 }
+// StreamFit (F03): the session the Kotlin player received with its open; the
+// passive telemetry gate (streamfitpassiva.c) only accepts this generation.
+unsigned video_android_sessao(void) {
+  unsigned g;
+  pthread_mutex_lock(&travaRetomada);
+  g = sessao;
+  pthread_mutex_unlock(&travaRetomada);
+  return g;
+}
 static void estadoRetomada(int estado) {
   pthread_mutex_lock(&travaRetomada);
   retomadaInicialEstado = estado;
@@ -399,8 +409,11 @@ static int abrirSessao(int inicioMs) {
       if (c) (*env)->DeleteLocalRef(env, c);
       fimChamada(env); falhou = 1; return 0;
     }
-    if (inicioMs > 0 && mAbrirPosicao) {
-      estadoRetomada(0);
+    // abrirPosicao also when starting at 0: it is how the Kotlin side learns
+    // this session's generation (StreamFit passive telemetry). At 0 the
+    // resume state stays -1, exactly as the plain abrir path left it.
+    if (mAbrirPosicao) {
+      if (inicioMs > 0) estadoRetomada(0);
       (*env)->CallStaticVoidMethod(env, gCls, mAbrirPosicao, u, c, (jint)inicioMs, (jint)geracao);
       if ((*env)->ExceptionCheck(env)) {
         (*env)->ExceptionClear(env);

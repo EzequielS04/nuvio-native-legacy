@@ -121,6 +121,8 @@ typedef struct {
   int  estado;          // SV_REC_*
   int  reacao;          // SV_REAC_*
   long long quando;
+  char resposta[64];    // a mensagem curta de quem recebeu ("" = nenhuma)
+  long long respondido; // epoch da resposta direta; 0 = nao respondeu
 } SvEnviada;
 
 typedef struct {
@@ -161,6 +163,11 @@ int  socialvis_perfil(const char *id, SvPerfil *saida);
 // O que EU mandei para essa pessoa, o mais novo (para a cadeia "Voce mandou ›
 // viu › gostou" da linha do amigo). 1 = ha.
 int  socialvis_ultima_enviada(const char *id, SvEnviada *saida);
+// O estado de uma rec que EU mandei, em UMA expressao ja traduzida: "ainda não
+// viu", "abriu", "começou", "viu", "viu · gostou" / "mais ou menos" / "não
+// gostou" (a resposta de quem recebeu), "Gostou"... Vale para a legenda do
+// cartaz e para a cadeia da linha do amigo. `ok` (opcional) = 1 quando ele ja viu.
+const char *socialvis_enviada_rotulo(const SvEnviada *m, int *ok);
 
 // O anel laranja apaga: a novidade dessa pessoa foi vista. Grava em disco so
 // quando muda (amigos-vistos.txt).

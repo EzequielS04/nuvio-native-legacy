@@ -80,7 +80,7 @@ static const Item TELA[] = {
       OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
 
   SEC("Idiomas e legendas", "Idioma da interface, áudio, legenda e metadados", "aj_languages"),
-    OPC(AJ_IDIOMA), OPC(AJ_AUD_LINGUA), OPC(AJ_LEG_LINGUA), OPC(AJ_TMDB_IDIOMA),
+    OPC(AJ_IDIOMA), OPC(AJ_AUD_LINGUA), OPC(AJ_LEG_LINGUA), OPC(AJ_LEG_LINGUA2), OPC(AJ_TMDB_IDIOMA),
 
   SEC("TV ao vivo", "Provedor e solução de problemas ao assistir canais", "aj_tv-minimal-play"),
     ROT("Provedor"),

@@ -112,6 +112,7 @@ typedef struct {
   char idioma[8];
   char url[600];
   char provedor[64]; // nome do addon que devolveu esta legenda
+  char arquivo[96];  // subtitleFileName / movieReleaseName as sent; "" = not sent
 } Legenda;
 
 void addons_buscar_legendas(const char *imdb, const char *tipo);
@@ -136,6 +137,16 @@ int  addons_n_legendas(void);
 // precisa dessa distincao; a folha nao, ela so mostra o que ha.
 int  addons_legendas_prontas(void);
 const Legenda *addons_legenda(int i);
+// ATOMIC SNAPSHOT of the subtitle list: copies up to `max` entries while the
+// list mutex is held, so a reader never sees a list being replaced (the
+// pointer from addons_legenda() is read after the unlock and can race the
+// worker). `geracao` (optional) receives the list generation; `prontas`
+// (optional) the same answer as addons_legendas_prontas(), from the same lock.
+// Returns how many entries were copied.
+int  addons_legendas_copiar(Legenda *dst, int max, unsigned *geracao, int *prontas);
+#ifdef NV_SHOT_HOOKS
+void addons_shot_legendas(const Legenda *v, int n);
+#endif
 
 
 // --- lista para a tela de addons --------------------------------------------

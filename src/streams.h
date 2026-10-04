@@ -259,7 +259,13 @@ void stream_folha_abrir(void);
 // duration for this exact target. Never supply PLR_DUR_PADRAO, a season's
 // total runtime or a guessed "45 minutes". 0/unknown clears provenance.
 // Thread-safe; a sheet already open keeps its frozen duration/speed data.
+// SF_DUR_METADATA and SF_DUR_MEDIA are stored apart; 0 clears only the one
+// named, SF_DUR_DESCONHECIDA clears both. Media beats metadata of the target.
 void stream_fit_duracao(const char *alvo, double segundos, StreamfitDuracao origem);
+// Catalog runtime lookup used when the sheet opens and no pushed value
+// exists for the target. Called on the UI thread with the exact target id;
+// must answer 0 unless it can prove the runtime belongs to that id.
+void stream_fit_fonte_metadados(double (*fonte)(const char *alvo));
 // Frozen classification of an existing source while the sheet is open.
 // Returns unknown without evidence. For UI, demand is an estimate, not a
 // guarantee; the caller can display age, budget and diagnostic origin.

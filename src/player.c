@@ -61,6 +61,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "traktscrobble.h"
 #include "sync.h"
 #include "parental.h"
+#include "plrguia.h"
 #include "episodios.h"
 #include "streams.h"
 #include "badges.h"
@@ -94,6 +95,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "plrui.h"
 #include "escala.h"
 #include "plrilha.h"
+#include "legendasui.h"   /* F04: second subtitle band */
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -167,7 +169,6 @@ static void avisarCascaAberto(int v) { (void)v; }
 // Depois disto o aviso nao entra mais: e um aviso do comeco do filme, e a
 // resposta pode chegar tarde. Ver a nota no desenho.
 #define PG_LIMITE_SEG     45.0f
-#define PG_SEG_SAIDA       0.8f
 
 // Transporte compacto. Os saltos continuam acessiveis pelas setas na barra.
 // A ORDEM DO MOCKUP APROVADO (03/10): Play, Legendas, Audio, Proporcao,
@@ -1160,6 +1161,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
     comVideo = (url && *url && video_tocar(proxyts_resolver(url, px, sizeof px))); }
   mkvass_video_aberto(comVideo);
   legsync_iniciar(comVideo ? video_url_atual() : "");   // F05: geracao nova, sem rede nem espera
+  legsync_ui_ligar();   // F05: a linha de AutoSync do seletor de legendas (legendasui.c)
   aplicarAspecto();
 
   const CatItem *c = item();
@@ -1296,6 +1298,18 @@ int  player_com_video(void) { return comVideo && !retido && video_pronto(); }
 int   player_pausado(void) { return !tocando; }
 float player_duracao_seg(void) { return duracaoSeg; }
 int   player_eh_canal(void) { return ehCanal(); }
+// StreamFit (F03): the backend's REAL duration of this session's own source,
+// never duracaoSeg (which starts as PLR_DUR_PADRAO or a meta guess). Not a
+// channel, not while waiting for a source, not before the backend is ready;
+// the shared pipeline counts only while comVideo says it is the player's.
+int player_duracao_midia(double *seg) {
+  double d;
+  if (!aberto || !comVideo || esperandoFonte || ehCanal() || !video_ativo() || !video_pronto()) return 0;
+  d = video_duracao();
+  if (!(d >= 120.0 && d <= 86400.0)) return 0;   // provider error clips are short
+  if (seg) *seg = d;
+  return 1;
+}
 
 // Esta abrindo o fluxo: ha video pedido, mas ainda nao ha imagem.
 int  player_carregando(void) { return esperandoFonte || (comVideo && !video_pronto()); }
@@ -3106,6 +3120,12 @@ static void desenharLegendaExterna(void){
   // F05: manual + automatico aceito, UMA vez, so para o documento dono do
   // overlay (sem ele, o manual intacto). Positivo adianta, como sempre.
   int atraso = legsync_offset_ms(legEstilo.atrasoMs);
+  /* F04: SECOND SUBTITLE (legendasui.h). Before every primary early return
+   * (libass, no cues) so both show in every branch; its own document and
+   * offset, in the top band. Geometry is passed explicitly. */
+  { PlrRect av = areaVideoLegenda();
+    LegendasGeo g2 = { av.x, av.y, av.w, av.h, anim * entrada, entrada, posLegenda() };
+    legendasui_desenhar_secundaria(&g2); }
   assrender_aplicar_invalidacao();
   assrender_definir_cor(0, 0, 0, 0);
   if (assrender_ativo()) {
@@ -3152,7 +3172,7 @@ static void desenharLegendaExterna(void){
   // previa da barra de estilo mostrou isso na primeira captura.
   if(legEstilo.posicao>=3) base-=(legEstilo.posicao-3)*48.f;
   else base+=(3-legEstilo.posicao)*20.f;
-  float baseTopo = 80.f;             // pilha do \an8 (letreiros), de cima para baixo
+  float baseTopo = legendasui_topo_livre(80.f);  // pilha do \an8 (letreiros), abaixo da 2a legenda (F04)
   float baseMeio = NV_TELA_H * .5f;
   for (i = 0; i < n; i++) {
     const LegendaCue *c = &cues[i];
@@ -3734,43 +3754,10 @@ void player_desenhar(Uint32 agora) {
     if (np > 0 && pgDesde &&
         (float)(agora - pgDesde) / 1000.0f < PG_SEG_TOTAL) {
       tg = (float)(agora - pgDesde) / 1000.0f;
-      float saida = anim_clamp((PG_SEG_TOTAL - tg) / PG_SEG_SAIDA, 0.0f, 1.0f);
-      // UMA ILHA DISCRETA NO CANTO (Glass UI): kicker com a classificacao e
-      // as linhas "categoria ......... gravidade" com fio entre elas. A barra
-      // de acento que crescia pela lateral saiu (era decoracao); a gravidade
-      // Severo leva o ambar, que e estado. Com a pilula da hora no mesmo
-      // canto, a ilha desce para baixo dela.
-      float eI = anim_clamp(tg / 0.30f, 0.0f, 1.0f);
-      float aI = entrada * saida * (1.0f - (1.0f - eI) * (1.0f - eI));
-      float x0 = plrilha_direita() ? NV_VTELA_W - PLR_MARGEM - 520.0f : PLR_MARGEM, y0 = PLR_PAD_Y;
-      float hI = 26.0f + 18.0f + 8.0f + np * 50.0f + 26.0f;
-      ESCALA_INI();   // a ilha do guia parental e OSD: tela virtual
-      { GfxRect ir;
-        if (plrilha_rect(&ir) && ir.y < y0 + hI && fabsf(ir.x - x0) < 600.0f) y0 = ir.y + ir.h + 14.0f; }
-      gfx_veu_css((GfxRect){ 0, 0, NV_VTELA_W, 260.0f }, 1, 1.38f, 1.0f, 0.52f * aI * (1.0f - anim));
-      plrui_material((GfxRect){ x0, y0, 520.0f, hI }, 30.0f, 0, aI);
-      { char k[48];
-        const CatItem *ci = item();
-        if (ci && ci->classificacao[0]) snprintf(k, sizeof k, i18n("Guia parental \xc2\xb7 %s"), ci->classificacao);
-        else snprintf(k, sizeof k, "%s", i18n("Guia parental"));
-        plrui_kicker(k, x0 + 30.0f, y0 + 26.0f, 243, 242, 239, aI * 0.45f); }
-      for (int i = 0; i < np; i++) {
-        float yl = y0 + 26.0f + 18.0f + 8.0f + i * 50.0f;
-        float ts = anim_clamp((tg - 0.18f - i * 0.10f) / 0.30f, 0.0f, 1.0f);
-        float ee = 1.0f - (1.0f - ts) * (1.0f - ts);
-        float ag = aI * ee;
-        const char *gv = parental_gravidade(i);
-        int forte = gv && !strcmp(gv, "Severo");
-        TxtLinha lr, lg;
-        if (ag <= 0.004f) continue;
-        if (i) gfx_cor((GfxRect){ x0 + 30.0f, yl, 460.0f, 1.0f }, 0.0f, 1, 1, 1, 0.07f * ag);
-        lr = txt_linha_corta(TXT_G22M, parental_rotulo(i), 243, 242, 239, 255, 300.0f);
-        lg = forte ? txt_linha(TXT_ILHA_SUB, gv, 240, 185, 74, 255)
-                   : txt_linha(TXT_ILHA_SUB, gv, 243, 242, 239, 140);
-        txt_desenhar_alpha(lr, x0 + 30.0f, yl + 25.0f - (float)lr.h * 0.5f, ag);
-        txt_desenhar_alpha(lg, x0 + 490.0f - (float)lg.w, yl + 25.0f - (float)lg.h * 0.5f, ag);
-      }
-      ESCALA_FIM();
+      // NASCE DA ILHA DO RELOGIO (plrguia.c): a pilula cresce ate o corpo com
+      // as linhas e volta a hora quando a janela fecha. Cede aos outros pedidos.
+      { const CatItem *ci = item();
+        plrguia_pedir(tg, anim, ci ? ci->classificacao : ""); }
     }
   }
 

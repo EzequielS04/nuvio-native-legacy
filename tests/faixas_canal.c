@@ -24,12 +24,11 @@ int main(void) {
   // A movie: embedded + addon subtitles, as before.
   assert(nLegendas() == 3);
   nEmb = 1;
-  // +1 "Nenhuma", +1 the AutoSync row (F05, last line; movies only).
-  assert(nLegendas() == 4 && nLinhas(1) == 6 && linhaSync() == 5);
+  assert(nLegendas() == 4 && nLinhas(1) == 5);
   // A live channel: the movie list left in memory must not show up.
   canal = "xtream:1:42";
   nEmb = 0;
-  assert(nLegendas() == 0 && nLinhas(1) == 1 && linhaSync() < 0);   // only "Nenhuma", no AutoSync
+  assert(nLegendas() == 0 && nLinhas(1) == 1);   // only "Nenhuma"
   nEmb = 2;                                       // closed captions of the stream
   assert(nLegendas() == 2 && nLinhas(1) == 3);
   puts("live channel subtitles: only the stream's own tracks, no addon list ok");

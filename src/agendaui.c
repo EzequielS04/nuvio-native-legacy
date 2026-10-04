@@ -203,9 +203,10 @@ static float agEscala(void) { return escala_min(AG_ESCALA_MIN); }
 // 90x130 em foco; 14 entre cartoes. O cartao vai ate a margem direita — o
 // mockup aprovado (02/10) e posterior ao pedido de cartao estreito (21/09).
 #define AG_TOPO         64.0f
-// A MARGEM DO MOCKUP e 96 (padding 64/96 da .pg), nao os 104 do recuo do app.
-// A rail fixa (144 reais) entra dividida pela escala: a tela virtual e menor.
-#define AG_MARGEM 96.0f
+// A MARGEM do MES: 80 virtuais = os 96 reais da C1 (ver c1()), para a grade do
+// mes comecar na mesma coluna do titulo. A rail fixa (144 reais) entra
+// dividida pela escala: a tela virtual e menor.
+#define AG_MARGEM 80.0f
 static float agX(void) { return ajustes_rail_largura_fixa() / agEscala() + AG_MARGEM; }
 static float agFim(void) { return NV_TELA_W - AG_MARGEM; }
 #define AG_LISTA_Y     218.0f   // reserva uma faixa abaixo do subtitulo para os controles
@@ -485,26 +486,15 @@ static float  notGateA, notTrechoA;
 // A altura do painel da noticia anda por mola ate o alvo do estado (900 com
 // texto ou carregando, AGL_H_FALHA no fallback). 0 = encaixa no primeiro quadro.
 static float  notH, notHAlvo = 900.0f;
+// A esquerda da C1: o item em foco e o anterior (copias), e o esvanecer entre
+// as duas artes (0 = so a anterior, 1 = so a atual).
+static AgItem arteCur, arteAnt;
+static float  arteT = 1.0f;
 
 enum { AG_CAB_LISTA = 1, AG_CAB_MES, AG_CAB_ANTERIOR, AG_CAB_HOJE, AG_CAB_PROXIMO };
 
-// Onde a lista comeca a rolar, e onde ela termina. O cabecalho ocupa o topo e
-// nao rola junto: numa TV perder o titulo da tela ao descer uma linha faz a
-// pessoa esquecer onde esta.
-static float listaTopo(void) { return AG_LISTA_Y; }
+// Onde a grade do MES termina (a lista da C1 mede pela ilha, ver c1()).
 static float listaBase(void) { return NV_TELA_H - NV_MARGEM_Y; }
-
-// A linha do separador "sem data prevista": a PRIMEIRA linha da lista que nao
-// tem data futura. -1 quando todas tem (ou quando a lista esta vazia).
-static int indiceSeparador(void) {
-  int i;
-  for (i = 0; i < agenda_n(); i++) {
-    const AgItem *it = agenda_lista(i);
-    if (!it) continue;
-    if (!it->dataProx[0] || agenda_dias(it->dataProx) < 0) return i;
-  }
-  return -1;
-}
 
 static int temData(const AgItem *it) {
   return it && it->dataProx[0] && agenda_dias(it->dataProx) >= 0;
@@ -585,44 +575,80 @@ static int eventosDoDia(int *indices, int max) {
   return n;
 }
 
-static float alturaFoco(const AgItem *it);
+// --- C1: A GEOMETRIA DA TELA (dono aprovou a variacao C1 de agenda-v2.html) --
+//
+// A mesma divisao dos Ajustes A3: a ESQUERDA mostra o episodio em foco grande
+// (arte, quando, titulo, episodio, sinopse, lembrete) e a DIREITA e uma ilha
+// com a lista compacta agrupada (Hoje / Esta semana / Mais tarde / sem data)
+// sobre o fio do tempo. As medidas sao as do mockup em pixel REAL de
+// 1920x1080 (Montserrat, a fonte da TV do dono): P() converte para a tela
+// virtual da Agenda, que continua com o piso de 120% para o mes e os paineis.
+// Assim a lista sai do tamanho que o dono aprovou em qualquer escala.
+static float P(float px) { return px / agEscala(); }
 
-// A ALTURA DA LINHA anda com o foco: 132 em repouso, alturaFoco no cartao
-// focado (182 ou mais, com a sinopse). E a UNICA funcao que responde isso —
-// yDe, alturaDoc e a rolagem chamam aqui, para nao discordarem do desenho. A
-// guarda por animFoco poupa a medida nas linhas paradas: sem ela yDe faria
-// n*n medidas por quadro.
-static float alturaLinha(int i) {
-  if (i < 0 || i >= AG_MAX || animFoco[i] < 0.002f) return AG_LINHA_H;
-  return AG_LINHA_H + animFoco[i] * (alturaFoco(agenda_lista(i)) - AG_LINHA_H);
+typedef struct {
+  float x0;                     // margem esquerda (rail + 96)
+  float artY, artW, artH;       // a arte grande
+  float infoY;                  // o bloco de texto da esquerda
+  float pnX, pnY, pnW, pnH;     // a ilha da direita
+  float lsX, lsY, lsW, lsH;     // a lista (dentro da ilha, abaixo do cabecalho)
+} AgC1;
+
+static AgC1 c1(void) {
+  AgC1 L;
+  float dir = NV_TELA_W - P(56), avail;
+  L.x0 = ajustes_rail_largura_fixa() / agEscala() + P(96);
+  avail = dir - L.x0;
+  // 760 de arte, 74 de vao e 934 de ilha no mockup (1768 sem rail): com a rail
+  // fixa as tres partes encolhem juntas, na mesma proporcao.
+  L.artW = avail * 760.0f / 1768.0f;
+  L.artH = L.artW * 428.0f / 760.0f;
+  L.artY = P(150);
+  L.infoY = L.artY + L.artH + P(28);
+  L.pnX = L.x0 + L.artW + avail * 74.0f / 1768.0f;
+  L.pnY = P(112);
+  L.pnW = dir - L.pnX;
+  L.pnH = NV_TELA_H - P(44) - L.pnY;
+  L.lsX = L.pnX + P(22);
+  L.lsY = L.pnY + P(22) + P(44) + P(8);
+  L.lsW = L.pnW - P(44);
+  L.lsH = L.pnY + L.pnH - P(22) - L.lsY;
+  return L;
 }
 
-// A FAIXA que abre a linha `i`: so o separador "sem data prevista". A faixa de
-// origem "HOJE" e os cabecalhos de mes sairam com o mockup — o dia de hoje e o
-// ponto no fio e o numeral no acento, e uma data de outro mes ja se escreve
-// "4/11" (desenhaEstacao). UMA funcao mede e desenha, para a rolagem nao
-// discordar do desenho; alturaFaixas e a mesma chamada com `desenhar` = 0.
-static float faixas(int i, float xCard, float xFim, float xEixo, float y,
-                    int desenhar);
-
-static float alturaFaixas(int i) {
-  return faixas(i, 0.0f, 0.0f, 0.0f, 0.0f, 0);
+// O GRUPO de uma linha: 0 hoje, 1 os proximos seis dias, 2 mais tarde, 3 sem
+// data (encerrada, cancelada, sem anuncio — continuam linhas de verdade, com o
+// modal e as noticias, so apagadas e no fim).
+static int grupoDe(const AgItem *it) {
+  int d;
+  if (!temData(it)) return 3;
+  d = agenda_dias(it->dataProx);
+  return d == 0 ? 0 : d < 7 ? 1 : 2;
 }
+static int grupo(int i) { return grupoDe(agenda_lista(i)); }
 
-// y do TOPO DA LINHA `i` (ja depois das faixas dela) em coordenada de
-// DOCUMENTO, antes da rolagem. O(n) por chamada e O(n2) no quadro; com o teto
-// de 120 itens sao 14 mil somas de float, que nao aparecem em medicao nenhuma.
+#define AG_ROW_H   116.0f   // 96 de miniatura + 10 em cima e embaixo
+#define AG_GRP_H    51.0f   // .grp: 18 + texto + 6 + fio + 6
+#define AG_GAP       4.0f
+
+// y do TOPO DA LINHA `i` em coordenada de DOCUMENTO (antes da rolagem). Um
+// cabecalho de grupo entra antes da primeira linha de cada grupo.
 static float yDe(int i) {
   float y = 0.0f;
-  int j;
-  for (j = 0; j < i; j++) y += alturaFaixas(j) + alturaLinha(j) + AG_LINHA_GAP;
-  return y + alturaFaixas(i);
+  int j, g = -1;
+  for (j = 0; j <= i && j < agenda_n(); j++) {
+    int gj = grupo(j);
+    if (gj != g) { y += P(AG_GRP_H) + P(AG_GAP); g = gj; }
+    if (j < i) y += P(AG_ROW_H) + P(AG_GAP);
+  }
+  return y;
 }
+static int abreGrupo(int i) { return i == 0 || grupo(i) != grupo(i - 1); }
 
 static float alturaDoc(void) {
   int n = agenda_n();
   if (n <= 0) return 0.0f;
-  return yDe(n - 1) + alturaLinha(n - 1);
+  return yDe(n - 1) + P(AG_ROW_H);
 }
 
 int agendaui_iniciar(void) {
@@ -637,6 +663,8 @@ int agendaui_iniciar(void) {
   ctxAberto = 0; ctxUltimo = 0; ctxFoco = 0; ctxA = 0.0f; notFoco = 0;
   notRol = notRolAlvo = notRolMax = notVel = 0.0f;
   for (i = 0; i < AG_MAX; i++) animFoco[i] = 0.0f;
+  memset(&arteCur, 0, sizeof arteCur); memset(&arteAnt, 0, sizeof arteAnt);
+  arteT = 1.0f;
   agenda_iniciar();
   agenda_montar();
   versaoVista = agenda_versao();
@@ -1004,16 +1032,15 @@ void agendaui_atualizar(float dt, Uint32 agora) {
                         : anim_mola(animFoco[i], a, dt,
                                     a > animFoco[i] ? NV_MOLA_FOCO : NV_MOLA_DESFOCO);
   }
-  // ROLAGEM MINIMA para a linha focada caber, e nao "alinhar ao topo": alinhar
-  // empurra o cabecalho para fora na primeira descida. Mesma regra da
-  // Biblioteca — ver a nota 2 no topo de biblioteca.c.
-  //
-  // Levar em conta as FAIXAS da linha tambem: rolar so o suficiente para a
-  // linha aparecer deixaria o cabecalho do mes fora da tela, e o mes e o que da
-  // sentido ao numeral logo abaixo.
-  topo = listaTopo(); base = listaBase();
-  y = yDe(foco) - alturaFaixas(foco);
-  h = alturaFaixas(foco) + alturaLinha(foco);
+  // ROLAGEM MINIMA para a linha focada caber, e nao "alinhar ao topo" — mesma
+  // regra da Biblioteca. Quando a linha abre um grupo, o cabecalho dele entra
+  // junto: "Qui 17" sem o "Esta semana" em cima perde o contexto.
+  { AgC1 L = c1();
+    topo = 0.0f; base = L.lsH;
+    y = yDe(foco);
+    h = P(AG_ROW_H);
+    if (abreGrupo(foco)) { y -= P(AG_GRP_H) + P(AG_GAP); h += P(AG_GRP_H) + P(AG_GAP); }
+    if (foco == 0) { h += y; y = 0.0f; } }
   alvoY = scrollY;
   if (y - alvoY < 0.0f) alvoY = y;
   if (y + h - alvoY > base - topo) alvoY = y + h - (base - topo);
@@ -1021,6 +1048,18 @@ void agendaui_atualizar(float dt, Uint32 agora) {
     if (maxY < 0.0f) maxY = 0.0f;
     if (alvoY > maxY) alvoY = maxY;
     if (alvoY < 0.0f) alvoY = 0.0f; }
+  // A ESQUERDA ACOMPANHA O FOCO com um esvanecer curto da arte: a anterior fica
+  // por baixo ate a nova cobrir. Guardada por COPIA (o ponteiro de agenda_lista
+  // nao sobrevive a uma remontagem).
+  { const AgItem *f = agenda_lista(foco);
+    if (f && strcmp(f->imdb, arteCur.imdb)) {
+      if (arteCur.imdb[0]) { arteAnt = arteCur; arteT = 0.0f; }
+      else arteT = 1.0f;
+    }
+    if (f) arteCur = *f;
+    else memset(&arteCur, 0, sizeof arteCur);
+    arteT = reduz ? 1.0f : arteT + dt * 5.0f;
+    if (arteT > 1.0f) arteT = 1.0f; }
   scrollY = anim_mola2_reduzida(&velY, scrollY, alvoY, dt, NV_MOLA2_SCROLL, reduz);
 }
 
@@ -1052,10 +1091,6 @@ static void txtEsc(TxtLinha l, float x, float y, float esc, float a) {
   r.w = (float)l.w * esc; r.h = (float)l.h * esc;
   gfx_rect(r, l.tex, GFX_TEXTO, 0, 0, 0, 0.0f, 1, 1, 1, a);
 }
-// A linha cortada para caber em `larg` DEPOIS de reduzida.
-static TxtLinha txtCortaEsc(TxtEstilo e, const char *s, int c, float larg, float esc) {
-  return txt_linha_corta(e, s, c, c, c, 255, larg / esc);
-}
 static float altLinha(TxtEstilo e, int c);
 // O ROTULO EM CAIXA ALTA do mockup (.cap2: 15/600, letter-spacing .06em): o
 // TXT_MINI (15 bold) espacado. `x` < 0 so mede.
@@ -1069,80 +1104,106 @@ static void acentoInt(int *r, int *g, int *b) {
   *b = (int)(ab * 255.0f + 0.5f);
 }
 
-// `y` e o topo da FAIXA (antes da linha). Devolve a altura ocupada. So o
-// separador das series sem data: o rotulo em caixa alta na coluna dos cartoes,
-// e o fio passa a TRACEJADO dali para baixo (desenhaEixo) — o tempo acaba de
-// ser interrompido, e um fio continuo diria que a contagem segue.
-static float faixas(int i, float xCard, float xFim, float xEixo, float y,
-                    int desenhar) {
-  char rot[80];
-  (void)xFim; (void)xEixo;
-  if (i != indiceSeparador()) return 0.0f;
-  if (desenhar) {
-    float h = altLinha(TXT_MINI, 123);
-    maiusc(rot, sizeof rot, i18n("Sem data prevista"));
-    kicker(rot, 123, 123, 125, xCard + 4.0f, y + AG_FAIXA_H - 14.0f - h, 1.0f);
+// --- C1: AS PECAS DA TELA ----------------------------------------------------
+//
+// Corpos do mockup em pixel real, rasterizados no estilo mais proximo ACIMA e
+// desenhados reduzidos (txtEsc), como o resto deste arquivo: reduzir com
+// GL_LINEAR nao borra. `S` e o corpo do estilo na tabela de text.c.
+#define AG_INK    244, 245, 247
+#define AG_INK2   179, 183, 191
+#define AG_INK3   117, 122, 132
+
+// ALTURA DA CAIXA DE LINHA de um estilo, medida na fonte ativa. "Hg" tem
+// ascendente e descendente: medir a string real faria a base oscilar entre
+// linhas. A cor e a de quem desenha, para cair na mesma entrada do cache.
+static float altLinha(TxtEstilo e, int c) {
+  float h = (float)txt_linha(e, "Hg", c, c, c, 255).h;
+  return h > 0.0f ? h : 28.0f;
+}
+static float escDe(float realPx, float S) { return P(realPx) / S; }
+// Uma linha cortada em `larg` e desenhada em `realPx`. Devolve a largura na
+// tela; `x` < 0 so mede.
+static float txC1(TxtEstilo e, float S, const char *s, int r, int g, int b,
+                  float x, float y, float realPx, float larg, float a) {
+  float esc = escDe(realPx, S);
+  TxtLinha l;
+  if (!s || !s[0]) return 0.0f;
+  l = txt_linha_corta(e, s, r, g, b, 255, larg / esc);
+  if (x >= 0.0f) txtEsc(l, x, y, esc, a);
+  return (float)l.w * esc;
+}
+static float hC1(TxtEstilo e, float S, float realPx, int c) {
+  return altLinha(e, c) * escDe(realPx, S);
+}
+// Texto corrido em ate `max` linhas, com "…" na ultima (agQuebra, a mesma
+// quebra da sinopse do cartao do lembrete). Devolve as linhas desenhadas.
+static int blocoC1(TxtEstilo e, float S, const char *s, float x, float y,
+                   float realPx, float larg, float leadReal, int max,
+                   int r, int g, int b, float a) {
+  char lin[AG_SIN_MAX][512];
+  const char *resto;
+  float esc = escDe(realPx, S);
+  int n, k;
+  if (!s || !s[0] || max <= 0) return 0;
+  n = agQuebra(e, s, larg / esc, max, lin, &resto, r, g, b);
+  for (k = 0; k < n; k++)
+    txtEsc(txt_linha_corta(e, lin[k], r, g, b, 255, larg / esc),
+           x, y + P(leadReal) * (float)k, esc, a);
+  if (resto[0]) {
+    txtEsc(txt_linha_corta(e, resto, r, g, b, 255, larg / esc),
+           x, y + P(leadReal) * (float)n, esc, a);
+    n++;
   }
-  return AG_FAIXA_H;
+  return n;
 }
 
-// A ESTACAO: dia da semana em caixa alta, o numeral em 36/800, quanto falta em
-// 15 — empilhados a partir do TOPO do cartao (como no mockup, onde a data e o
-// cabecalho da linha) e alinhados A DIREITA contra o fio: alinhada a esquerda,
-// "9" e "18" comecam no mesmo x e terminam em x diferentes, e a coluna deixa de
-// ser coluna. HOJE vai no acento (rotulo e numeral); o resto em branco e cinza.
-//
-// UMA DATA DE OUTRO MES se escreve "4/11" no numeral. E o que o mockup faz no
-// lugar dos cabecalhos de mes, e o que impede "4" de ler como daqui a dois dias.
-//
-// Sem data, o numeral da lugar a SITUACAO. Nunca um traco, nunca "a definir".
-static void desenhaEstacao(const AgItem *it, float xDir, float yTopo, int hoje) {
-  int d = temData(it) ? agenda_dia(it->dataProx) : 0;
-  int ai, agi, abi;
-  float y = yTopo + 6.0f;
-  acentoInt(&ai, &agi, &abi);
-
-  if (!temData(it)) {
-    const char *sit;
-    TxtLinha t;
-    float esc = 18.0f / NV_FT_HERO_META;
-    switch (it->situacao) {
-      case AG_ENCERRADA: sit = i18n("Encerrada"); break;
-      case AG_CANCELADA: sit = i18n("Cancelada"); break;
-      case AG_PRODUCAO:  sit = i18n("Em produção"); break;
-      default:           sit = i18n("Sem data"); break;
-    }
-    t = txtCortaEsc(TXT_HERO_META, sit, 150, AG_EST_W + 40.0f, esc);
-    txtEsc(t, xDir - (float)t.w * esc, y + 4.0f, esc, 1.0f);
-    return;
-  }
-
-  { char semM[20], num[16], falta[64];
-    const char *hj = agenda_hoje();
-    float w, escN = 39.5f / NV_FT_TITULO3, escF = 15.8f / NV_FT_CAPTION2;
-    int cK = hoje ? ai : 123, cKg = hoje ? agi : 123, cKb = hoje ? abi : 125;
-    TxtLinha dia, fal;
-    maiusc(semM, sizeof semM,
-           i18n(agenda_semana_nome(agenda_semana(it->dataProx))));
-    w = kicker(semM, cK, cKg, cKb, -1.0f, 0.0f, 1.0f);
-    kicker(semM, cK, cKg, cKb, xDir - w, y, 1.0f);
-    y += altLinha(TXT_MINI, 123) - 3.0f;
-    if (hj && (agenda_mes(hj) != agenda_mes(it->dataProx) ||
-               agenda_ano(hj) != agenda_ano(it->dataProx)))
-      snprintf(num, sizeof num, "%d/%d", d, agenda_mes(it->dataProx));
-    else
-      snprintf(num, sizeof num, "%d", d);
-    dia = hoje ? txt_linha(TXT_TITULO3, num, ai, agi, abi, 255)
-               : txt_linha(TXT_TITULO3, num, 245, 245, 243, 255);
-    // 36/800 no CSS; 39,5 aqui pela mesma medida dos corpos do cartao (ver
-    // escTitulo). A caixa reduzida do TITULO3 tem a folga do line-height normal.
-    txtEsc(dia, xDir - (float)dia.w * escN, y, escN, 1.0f);
-    y += (float)dia.h * escN - 4.0f;
-    agenda_falta(it->dataProx, falta, sizeof falta);
-    fal = txtCortaEsc(TXT_CAPTION2, falta, 116, AG_EST_W + 40.0f, escF);
-    txtEsc(fal, xDir - (float)fal.w * escF, y, escF, 1.0f);
-  }
+// O acento clareado do mockup (color-mix com branco): kicker a 45%, selo a 50%.
+static void acentoClaro(float fr, int *r, int *g, int *b) {
+  int ar, ag, ab;
+  acentoInt(&ar, &ag, &ab);
+  *r = (int)(ar * fr + 255.0f * (1.0f - fr) + 0.5f);
+  *g = (int)(ag * fr + 255.0f * (1.0f - fr) + 0.5f);
+  *b = (int)(ab * fr + 255.0f * (1.0f - fr) + 0.5f);
 }
+
+// PRIMEIRA LETRA MAIUSCULA ("qui" -> "Qui"), sem quebrar acento ou cirilico:
+// a primeira sequencia UTF-8 passa pela mesma maiusc do resto do arquivo.
+static void capital(char *dst, size_t tam, const char *s) {
+  size_t n = 1;
+  char ini[8], up[16];
+  if (!tam) return;
+  dst[0] = 0;
+  if (!s || !s[0]) return;
+  while (s[n] && ((unsigned char)s[n] & 0xC0) == 0x80 && n < 4) n++;
+  memcpy(ini, s, n); ini[n] = 0;
+  maiusc(up, sizeof up, ini);
+  snprintf(dst, tam, "%s%s", up, s + n);
+}
+
+// A DATA CURTA da linha: "Hoje", "Qui 17", "Qua 4/11" (outro mes leva o mes).
+static void dataLinha(const AgItem *it, char *dst, size_t tam) {
+  char sem[24];
+  const char *hj = agenda_hoje();
+  int d = agenda_dia(it->dataProx), m = agenda_mes(it->dataProx);
+  dst[0] = 0;
+  if (!temData(it)) return;
+  if (agenda_dias(it->dataProx) == 0) { snprintf(dst, tam, "%s", i18n("Hoje")); return; }
+  capital(sem, sizeof sem, i18n(agenda_semana_nome(agenda_semana(it->dataProx))));
+  if (hj && (agenda_mes(hj) != m || agenda_ano(hj) != agenda_ano(it->dataProx)))
+    snprintf(dst, tam, "%s %d/%d", sem, d, m);
+  else
+    snprintf(dst, tam, "%s %d", sem, d);
+}
+
+static const char *situacaoTxt(const AgItem *it) {
+  switch (it->situacao) {
+    case AG_ENCERRADA: return i18n("Encerrada");
+    case AG_CANCELADA: return i18n("Cancelada");
+    case AG_PRODUCAO:  return i18n("Em produção");
+  }
+  return NULL;
+}
+
 // Segunda linha do conteudo: o episodio. Vazio quando nao ha nada verdadeiro a
 // dizer — e ai a linha some.
 static void linhaEpisodio(const AgItem *it, char *dst, size_t tam) {
@@ -1170,307 +1231,421 @@ static void linhaEpisodio(const AgItem *it, char *dst, size_t tam) {
     snprintf(dst, tam, "%s", i18n("Sem data confirmada"));
 }
 
-// Terceira linha: o MARCO primeiro, depois rede · duracao · temporadas. O marco
-// vem na frente porque e a unica coisa desta linha que muda de um episodio para
-// o seguinte — "Final da temporada" e a razao de alguem marcar o lembrete.
-// GENERO, ANO E A MARCA DO IMDb SAIRAM com o mockup (out/2026): a linha de meta
-// dele e "Final da temporada · Apple TV+ · 58 min", e os tres extras (que o
-// catalogo dava) faziam a linha passar da metade do cartao.
-static void linhaApoio(const AgItem *it, char *dst, size_t tam) {
-  char marco[64], apoio[240];
-  dst[0] = 0;
-  agenda_marco(it, marco, sizeof marco);
-  agenda_apoio(it, apoio, sizeof apoio);
-  if (marco[0] && apoio[0]) snprintf(dst, tam, "%s \xc2\xb7 %s", marco, apoio);
-  else if (marco[0])        snprintf(dst, tam, "%s", marco);
-  else                      snprintf(dst, tam, "%s", apoio);
-}
-// A QUARTA LINHA, so na linha em foco: a ultima manchete como citacao (dono,
-// 21/09/2026: "embaixo, em forma de citacao, a ultima noticia e escrito hold
-// to read more") ou, sem manchete, a sinopse do proximo episodio. `noticia`
-// diz qual das duas saiu — e o que decide se a dica de segurar OK aparece.
-static int linhaExtra(const AgItem *it, char *dst, size_t tam, int *noticia) {
-  const Noticia *nt;
-  *noticia = 0;
-  dst[0] = 0;
-  if (!it) return 0;
-  nt = noticias_item(it->imdb, 0);
-  if (nt && nt->titulo[0]) {
-    snprintf(dst, tam, "\xe2\x80\x9c%s\xe2\x80\x9d", nt->titulo);
-    *noticia = 1;
-    return 1;
+// A ARTE DE UMA LINHA, em "cover" no retangulo: a de paisagem (still/backdrop)
+// quando ha; senao o CARTAZ inteiro, nitido e centrado, sobre a copia desfocada
+// dele mesmo — cortar um cartaz em pe para 16:9 mostraria so o meio do rosto.
+// Sem nada carregado, o retangulo neutro (e o que fica por baixo do esvanecer).
+static void arteItem(GfxRect r, const AgItem *it, float raioPx, float a) {
+  float raio = raioPx / r.h;
+  gfx_cor(r, raio, 0.16f, 0.17f, 0.19f, a);
+  if (!it || a <= 0.001f) return;
+  if (it->fundo[0]) {
+    GLuint t = tex_obter_larg(it->fundo, r.w);
+    float asp = tex_aspecto(it->fundo);
+    if (t && asp > 0.0f) {
+      gfx_tex_aspect_atual = asp;
+      gfx_rect(r, t, GFX_CARD, 0, 0, 0, raio, 0, 0, 0, a);
+      gfx_tex_aspect_atual = 0.0f;
+      return;
+    }
   }
-  if (it->sinopse[0]) { snprintf(dst, tam, "%s", it->sinopse); return 1; }
-  return 0;
+  if (it->poster[0]) {
+    float ch = r.h - 2.0f * P(r.h > P(200) ? 24.0f : 8.0f);
+    GLuint t = tex_obter_larg(it->poster, ch * 2.0f / 3.0f);
+    float asp = tex_aspecto(it->poster);
+    if (t && asp > 0.0f) {
+      GLuint d = gfx_desfocado(t, it->poster);
+      GfxRect cz = { 0, 0, ch * asp, ch };
+      if (d) {
+        gfx_tex_aspect_atual = asp;
+        gfx_rect(r, d, GFX_CARD, 0, 0, 0, raio, 0, 0, 0, a);
+        gfx_tex_aspect_atual = 0.0f;
+        gfx_cor(r, raio, 0, 0, 0, 0.35f * a);
+      }
+      if (cz.w > r.w - P(16)) { cz.w = r.w - P(16); cz.h = cz.w / asp; }
+      cz.x = r.x + (r.w - cz.w) * 0.5f; cz.y = r.y + (r.h - cz.h) * 0.5f;
+      gfx_tex_aspect_atual = asp;
+      gfx_rect(cz, t, GFX_CARD, 0, 0, 0, P(raioPx > 16.0f ? 14.0f : 8.0f) / cz.h, 0, 0, 0, a);
+      gfx_tex_aspect_atual = 0.0f;
+    }
+  }
 }
 
-// --- AS MEDIDAS DO CARTAO, num lugar so ------------------------------------
-//
-// Da coluna de datas para a direita: AG_EST_W, 28, o fio de 2, 28, e o cartao
-// ate a margem direita. Quem mede a altura (alturaFoco, para a rolagem) e quem
-// desenha (desenhaConteudo) partem da MESMA conta — separadas, elas ja
-// discordaram neste arquivo e o sintoma foi texto passando por baixo do icone.
-typedef struct {
-  float xEst;     // borda DIREITA da coluna de datas
-  float xEixo;    // centro do fio
-  float xCard, wCard;
-} AgMedidas;
-
-static AgMedidas medidasDaTela(void) {
-  AgMedidas m;
-  float x = agX();
-  float fim = agFim();
-  m.xEst  = x + AG_EST_W;
-  m.xEixo = m.xEst + AG_EIXO_GAP + AG_EIXO_W * 0.5f;
-  m.xCard = m.xEst + AG_EIXO_GAP * 2.0f + AG_EIXO_W;
-  m.wCard = fim - m.xCard;
-  return m;
-}
-
-// ALTURA DA CAIXA DE LINHA de um estilo, medida na fonte ativa. "Hg" tem
-// ascendente e descendente: medir a string real faria a base oscilar entre
-// linhas ("TER" nao tem descendente). A cor e a de quem desenha, para cair na
-// mesma entrada do cache de txt_linha.
-static float altLinha(TxtEstilo e, int c) {
-  float h = (float)txt_linha(e, "Hg", c, c, c, 255).h;
-  return h > 0.0f ? h : 28.0f;
-}
-
-// OS CORPOS DO CARTAO, medidos na captura do mockup e nao lidos do CSS. O
-// mockup e Inter VARIAVEL no navegador, que abaixo de ~24 px troca para o
-// desenho otico de texto: mais largo e de olho maior. O mesmo "19px" la mede
-// 8-10% a mais que a Inter estatica daqui (subtitulo: 436 x 399 px). Entao os
-// corpos sao os que dao a MESMA largura na tela: titulo 27,5 -> 32 (26 -> 30
-// no CSS), episodio 21 (19), meta 17,5 (16), sinopse 18,5 (17).
-static float escTitulo(float f) { return (26.3f + 3.9f * f) / NV_FT_ROW_TITULO; }
-// Vao entre as linhas do cartao, medido na captura (margin-top 4 / 6 do CSS,
-// mas a caixa da linha daqui e maior que a do navegador).
-#define AG_GAP_EP    1.0f
-#define AG_GAP_META  4.0f
-#define AG_ESC_EP   (19.7f / NV_FT_CAPTION2)
-#define AG_ESC_META (16.55f / NV_FT_CAPTION2)
-#define AG_ESC_SIN  (17.6f / NV_FT_CAPTION2)
-
-// O CHIP DO LEMBRETE (mockup: 44 de altura, 18 de recuo, sino de traco de 20,
-// 8 de vao, 16/600 — 17 aqui, pela medida de escTitulo, e em BOLD: 600 sobre
-// escuro e Bold pela regra de text.c). Ligado e ESTADO, nao foco: o acento a
-// 22% com texto no acento.
-// Desligado, a pilula de vidro (branco a 7%) com o texto a 60%. Devolve a
-// largura; `desenhar` = 0 so mede.
-static float chipLembrete(float xDir, float cy, int ligado, float a, int desenhar) {
-  const char *rot = ligado ? i18n("Lembrete ativo") : i18n("Lembrar-me");
-  int ai, agi, abi, c;
-  float esc = 16.3f / NV_FT_HERO_SEC, w;
-  TxtLinha l;
-  acentoInt(&ai, &agi, &abi);
-  c = 160;
-  l = ligado ? txt_linha(TXT_HERO_SEC, rot, ai, agi, abi, 255)
-             : txt_linha(TXT_HERO_SEC, rot, c, c, c, 255);
-  w = 18.0f + 20.0f + 8.0f + (float)l.w * esc + 18.0f;
+// O SELO de marco: "Final da temporada" na arte (pilula escura), "Final" /
+// "Estreia" na linha (pilula no acento a 16%). Devolve a largura.
+static float seloC1(const char *s, float x, float y, int escuro, float a, int desenhar) {
+  float w, h, padX = P(10), padY = P(4);
+  int r, g, b;
+  if (!s || !s[0]) return 0.0f;
+  if (escuro) { r = g = b = 255; } else acentoClaro(0.5f, &r, &g, &b);
+  w = txC1(TXT_AJ_CAPS13, 14, s, r, g, b, -1.0f, 0, 15.0f, P(600), 1.0f) + 2.0f * padX;
+  h = hC1(TXT_AJ_CAPS13, 14, 15.0f, r) + 2.0f * padY;
   if (desenhar && a > 0.001f) {
-    GfxRect r = { xDir - w, cy - AG_CHIP_H * 0.5f, w, AG_CHIP_H };
-    float ir = ligado ? ai / 255.0f : c / 255.0f;
-    float ig = ligado ? agi / 255.0f : c / 255.0f;
-    float ib = ligado ? abi / 255.0f : c / 255.0f;
-    if (ligado) gfx_cor(r, 0.5f, ai / 255.0f, agi / 255.0f, abi / 255.0f, 0.22f * a);
-    else if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, 0.07f * a);
-    else gfx_cor(r, 0.5f, .141f, .149f, .173f, a);      // #24262c
-    gfx_icone((GfxRect){ r.x + 18.0f, cy - 10.0f, 20.0f, 20.0f }, "sino_traco", ir, ig, ib, a);
-    txtEsc(l, r.x + 46.0f, cy - (float)l.h * esc * 0.5f, esc, a);
+    GfxRect pr = { x, y, w, h };
+    if (escuro) gfx_cor(pr, 0.5f, 0, 0, 0, 0.55f * a);
+    else {
+      float ar, ag, ab;
+      ajustes_acento(&ar, &ag, &ab);
+      gfx_cor(pr, 0.5f, ar, ag, ab, 0.16f * a);
+    }
+    txC1(TXT_AJ_CAPS13, 14, s, r, g, b, x + padX, y + padY, 15.0f, P(600), a);
   }
   return w;
 }
 
-// Onde o texto do cartao acaba: antes do chip, quando ha chip.
+// O CHIP do mockup (.chip / .chip.on): pilula de 22/600; `on` = branco cheio
+// com texto escuro. O sino Lucide (aj_bell) entra quando `sino`.
+static float chipC1(const char *s, float x, float y, int on, int sino, float a) {
+  float padX = P(22), padY = P(12), ic = sino ? P(23) + P(10) : 0.0f;
+  int c = on ? 17 : 244;
+  float tw = txC1(TXT_AJ_SEG, 20, s, c, c, c, -1.0f, 0, 22.0f, P(400), 1.0f);
+  float th = hC1(TXT_AJ_SEG, 20, 22.0f, c);
+  GfxRect r = { x, y, padX * 2.0f + ic + tw, padY * 2.0f + th };
+  if (on) gfx_cor(r, 0.5f, 1, 1, 1, a);
+  else if (ajustes_vidro()) gfx_cor(r, 0.5f, 1, 1, 1, 0.07f * a);
+  else gfx_cor(r, 0.5f, .141f, .149f, .173f, a);
+  if (sino)
+    gfx_icone((GfxRect){ x + padX, y + (r.h - P(23)) * 0.5f, P(23), P(23) }, "aj_bell",
+              c / 255.0f, c / 255.0f, c / 255.0f, a);
+  txC1(TXT_AJ_SEG, 20, s, c, c, c, x + padX + ic, y + padY, 22.0f, P(400), a);
+  return r.w;
+}
+
 static int temChip(const AgItem *it) {
   return it->lembrete || agenda_pode_lembrar(it->imdb);
 }
-static float larguraTexto(const AgItem *it, const AgMedidas *m, float f) {
-  float cz = AG_CZ_W0 + (AG_CZ_W1 - AG_CZ_W0) * f;
-  float fim = m->xCard + m->wCard - AG_CARD_PX;
-  if (temChip(it)) fim -= chipLembrete(fim, 0.0f, it->lembrete, 1.0f, 0) + AG_CZ_GAP;
-  return fim - (m->xCard + AG_CARD_PX + cz + AG_CZ_GAP);
-}
 
-// A QUARTA LINHA (sinopse ou citacao da noticia) quebrada em ate AG_CIT_MAX
-// linhas a 17 px, e a dica de segurar OK quando e noticia. Devolve a altura que
-// ela ocupa ABAIXO da meta (10 de vao incluso); 0 sem texto. Medida e desenho
-// numa funcao so, pela mesma regra de faixas().
-static float quartaLinha(const AgItem *it, float x, float y, float larg,
-                         float a, int desenhar) {
-  char extra[300], lin[AG_SIN_MAX][512];
-  const char *resto;
-  int noticia, n, k, c = 167;
-  float hl;
-  if (!linhaExtra(it, extra, sizeof extra, &noticia)) return 0.0f;
-  if (larg > AG_SIN_W) larg = AG_SIN_W;
-  n = agQuebra(TXT_CAPTION2, extra, larg / AG_ESC_SIN, AG_CIT_MAX, lin, &resto, c, c, c);
-  hl = altLinha(TXT_CAPTION2, c) * AG_ESC_SIN;
-  if (desenhar) {
-    for (k = 0; k < n; k++)
-      txtEsc(txtCortaEsc(TXT_CAPTION2, lin[k], c, larg, AG_ESC_SIN),
-             x, y + 10.0f + AG_SIN_LD17 * (float)k, AG_ESC_SIN, a);
-    if (resto[0])
-      txtEsc(txtCortaEsc(TXT_CAPTION2, resto, c, larg, AG_ESC_SIN),
-             x, y + 10.0f + AG_SIN_LD17 * (float)n, AG_ESC_SIN, a);
+// O AVISO DE FONTE, so quando o TMDB esta fora E falta dado na lista. Sem o
+// TMDB o fio cai para o Trakt e o Cinemeta (agenda.c, "AS TRES FONTES"), que
+// nao tem rede nem marco de temporada e as vezes nem data — e o dono pediu
+// que a tela dissesse isso. Duas frases porque sao duas causas com saidas
+// diferentes: ajuste desligado tem conserto em Ajustes; pacote sem chave
+// nenhuma nao tem, e mandar a pessoa a um ajuste que nao resolve seria mentir.
+static const char *avisoFonte(void) {
+  const char *chave = desc_chave_tmdb_reserva();   /* ver fioAgenda em agenda.c */
+  int i, n = agenda_n(), falta = 0;
+  if (chave && chave[0]) return NULL;
+  for (i = 0; i < n && !falta; i++) {
+    const AgItem *it = agenda_lista(i);
+    if (it && (!it->poster[0] || !it->titulo[0] ||
+               (!it->dataProx[0] && !it->dataUlt[0] && it->situacao == AG_DESCONHECIDA)))
+      falta = 1;
   }
-  if (resto[0]) n++;
-  if (n < 1) n = 1;
-  { float h = 10.0f + AG_SIN_LD17 * (float)(n - 1) + (AG_SIN_LD17 > hl ? AG_SIN_LD17 : hl);
-    if (noticia) {
-      // Cortada na coluna: em alemao e russo a dica passa de 500 px.
-      if (desenhar)
-        txtEsc(txtCortaEsc(TXT_CAPTION2, i18n("OK para ler mais"), 138, larg, AG_ESC_META),
-               x, y + h + 2.0f, AG_ESC_META, a);
-      h += 2.0f + altLinha(TXT_CAPTION2, 138) * AG_ESC_META;
-    }
-    return h; }
+  if (!falta) return NULL;
+  { const char *res = desc_chave_tmdb_reserva();
+    return (res && res[0])
+      ? i18n("TMDB desligado: datas e cartazes vêm do Cinemeta e podem faltar em algumas séries · Ajustes › Integrações › TMDB")
+      : i18n("Sem chave do TMDB: datas e cartazes vêm do Cinemeta e podem faltar em algumas séries"); }
 }
 
-// A altura do bloco de texto com o foco em `f`: titulo, 4, episodio, 6, meta e
-// a quarta linha entrando com f.
-static float alturaBloco(const AgItem *it, float f, float extra) {
-  char ep[220], apoio[300];
-  float h = altLinha(TXT_ROW_TITULO, 245) * escTitulo(f);
-  linhaEpisodio(it, ep, sizeof ep);
-  linhaApoio(it, apoio, sizeof apoio);
-  if (ep[0])    h += AG_GAP_EP + altLinha(TXT_CAPTION2, 176) * AG_ESC_EP;
-  if (apoio[0]) h += AG_GAP_META + altLinha(TXT_CAPTION2, 120) * AG_ESC_META;
-  return h + extra * f;
-}
+// A ESQUERDA: a arte grande do item em foco (com o esvanecer da anterior), o
+// selo, e embaixo o quando, o titulo, o episodio, a sinopse e os chips.
+static void desenhaEsquerda(const AgC1 *L, float a) {
+  const AgItem *it = arteCur.imdb[0] ? &arteCur : NULL;
+  GfxRect art = { L->x0, L->artY, L->artW, L->artH };
+  float t = arteT * arteT * (3.0f - 2.0f * arteT);
+  float y = L->infoY, w = L->artW;
+  const char *aviso = avisoFonte();
+  char buf[400], marco[64];
+  int maxSin;
 
-// QUANTO MEDE O CARTAO EM FOCO: o min-height do mockup (182) ou o bloco
-// inteiro com a quarta linha e 16 de cada lado, o que for maior.
-static float alturaFoco(const AgItem *it) {
-  AgMedidas m = medidasDaTela();
-  float extra, h;
-  if (!it) return AG_FOCO_H;
-  extra = quartaLinha(it, 0, 0, larguraTexto(it, &m, 1.0f), 0, 0);
-  h = alturaBloco(it, 1.0f, extra) + AG_CARD_PY * 2.0f;
-  return h > AG_FOCO_H ? h : AG_FOCO_H;
-}
+  if (t < 1.0f && arteAnt.imdb[0]) arteItem(art, &arteAnt, 24.0f, a);
+  arteItem(art, it, 24.0f, a * (arteAnt.imdb[0] ? t : 1.0f));
+  if (!it) return;
+  a *= 0.25f + 0.75f * t;
 
-// O MATERIAL DO CARTAO (.vid do mockup). Reusa o material comum para que
-// opacidade, fosco e brilho acompanhem Ajustes; foco continua sendo apenas
-// uma superficie, sem anel. O solido preserva as cores exatas do mockup.
-static void cartaoMaterial(GfxRect r, float f) {
-  float raio = AG_CARD_RAIO / r.h;
-  // A SOMBRA do .vid: 0 14px 40px preto a 30% (45% no solido, 0 10px 30px).
-  gfx_rect((GfxRect){ r.x - 30.0f, r.y - 10.0f, r.w + 60.0f, r.h + 64.0f }, 0, GFX_SOMBRA,
-           1.0f, 0, 0, 0.5f, 0, 0, 0, ajustes_vidro() ? .80f : .90f);
-  if (ajustes_vidro()) {
-    gfx_vidro_folha(r, raio, 1.0f);
-    // O foco do .vid do mockup clareia a superficie, sem o anel de selecao.
-    if (f > 0.01f) gfx_cor(r, raio, .204f, .212f, .235f, .82f * f);
-  } else {
-    gfx_cor(r, raio, .082f, .086f, .102f, 1.0f);
-    if (f > 0.01f) gfx_cor(r, raio, .169f, .176f, .204f, f);
-  }
-}
+  // O selo: o marco do episodio; sem data, a situacao da serie.
+  marco[0] = 0;
+  if (!agenda_marco(it, marco, sizeof marco) && !temData(it) && situacaoTxt(it))
+    snprintf(marco, sizeof marco, "%s", situacaoTxt(it));
+  if (marco[0]) seloC1(marco, art.x + P(26), art.y + P(26), 1, a, 1);
 
-// O CONTEUDO DA LINHA: o cartao, o cartaz, titulo / episodio / meta, a sinopse
-// so em foco e o chip do lembrete. Tudo centrado na altura viva do cartao
-// (align-items: center do mockup); o cartaz e o titulo crescem com a mola.
-//
-// O CHIP APARECE EM TODA LINHA que pode ter lembrete — "Lembrar-me" de vidro
-// ou "Lembrete ativo" no acento —, e nao so na focada: e o que o mockup mostra,
-// e um estado que so aparece no foco nao se le de longe.
-static void desenhaConteudo(const AgItem *it, const AgMedidas *m, float y,
-                            float h, float f) {
-  char ep[220], apoio[300];
-  GfxRect card = { m->xCard, y, m->wCard, h };
-  float czW = AG_CZ_W0 + (AG_CZ_W1 - AG_CZ_W0) * f;
-  float czH = AG_CZ_H0 + (AG_CZ_H1 - AG_CZ_H0) * f;
-  float tx = m->xCard + AG_CARD_PX + czW + AG_CZ_GAP;
-  float textW = larguraTexto(it, m, f), escT = escTitulo(f);
-  float extra = 0.0f, yb;
-  int emFoco = f > 0.5f;
-  int cEp = emFoco ? 186 : 176, cMeta = emFoco ? 138 : 120;
-  TxtLinha t, l2, l3;
-
-  cartaoMaterial(card, f);
-
-  { GfxRect cz = { m->xCard + AG_CARD_PX, y + (h - czH) * 0.5f, czW, czH };
-    GLuint tex = it->poster[0] ? tex_obter_larg(it->poster, AG_CZ_W1) : 0;
-    if (tex) {
-      gfx_tex_aspect_atual = czW / czH;
-      gfx_rect(cz, tex, GFX_CARD, 0, 0, 0, AG_CZ_RAIO / czH, 0, 0, 0, 1.0f);
-      gfx_tex_aspect_atual = 0.0f;
+  // O QUANDO, no acento clareado e em caixa alta: "QUA 16 · HOJE",
+  // "QUA 4/11 · EM 7 SEMANAS". Sem data: "SEM DATA PREVISTA".
+  { char cru[160], dl[48], falta[64];
+    int kr, kg, kb;
+    acentoClaro(0.45f, &kr, &kg, &kb);
+    cru[0] = 0;
+    if (temData(it)) {
+      char sem[24];
+      const char *hj = agenda_hoje();
+      int d = agenda_dia(it->dataProx), m = agenda_mes(it->dataProx);
+      snprintf(sem, sizeof sem, "%s", i18n(agenda_semana_nome(agenda_semana(it->dataProx))));
+      if (hj && (agenda_mes(hj) != m || agenda_ano(hj) != agenda_ano(it->dataProx)))
+        snprintf(dl, sizeof dl, "%s %d/%d", sem, d, m);
+      else snprintf(dl, sizeof dl, "%s %d", sem, d);
+      agenda_falta(it->dataProx, falta, sizeof falta);
+      snprintf(cru, sizeof cru, falta[0] ? "%s \xc2\xb7 %s" : "%s", dl, falta);
     } else {
-      // Sem cartaz, um retangulo neutro — e nao a inicial do titulo: a linha ja
-      // tem o nome escrito ao lado, e a letra viraria ruido.
-      gfx_cor(cz, AG_CZ_RAIO / czH, 0.18f, 0.19f, 0.21f, 1.0f);
+      // A situacao ja esta no selo da arte: aqui vai o que ela significa.
+      snprintf(cru, sizeof cru, "%s", i18n("Sem data prevista"));
+    }
+    maiusc(buf, sizeof buf, cru);
+    txt_tracking(TXT_AJ_CAPS13, buf, kr, kg, kb, L->x0, y, 0.8f * a, 1.8f);
+    y += altLinha(TXT_AJ_CAPS13, kr) + P(10); }
+
+  // O titulo, 46/700.
+  txC1(TXT_ILHA_TITULO, 40, it->titulo[0] ? it->titulo : i18n("Série"), AG_INK,
+       L->x0, y, 46.0f, w, a);
+  y += hC1(TXT_ILHA_TITULO, 40, 46.0f, 244) + P(8);
+
+  // "T3 E9 · The Last Empress · Apple TV+ · 58 min" (o marco ja esta no selo).
+  { char ep[220], apoio[240];
+    linhaEpisodio(it, ep, sizeof ep);
+    agenda_apoio(it, apoio, sizeof apoio);
+    if (ep[0] && apoio[0]) snprintf(buf, sizeof buf, "%s \xc2\xb7 %s", ep, apoio);
+    else snprintf(buf, sizeof buf, "%s", ep[0] ? ep : apoio);
+    if (buf[0]) {
+      txC1(TXT_V2_24, 24, buf, AG_INK2, L->x0, y, 24.0f, w, a);
+      y += hC1(TXT_V2_24, 24, 24.0f, 179) + P(12);
     } }
 
-  if (temChip(it))
-    chipLembrete(m->xCard + m->wCard - AG_CARD_PX, y + h * 0.5f, it->lembrete, 1.0f, 1);
+  // A sinopse (21, ate 3 linhas) e, quando ha, a ultima manchete como citacao
+  // com a dica de abrir — o que o cartao focado dizia antes. OK abre o modal
+  // da linha, e "Ultimas noticias" mora nele.
+  { const Noticia *nt = noticias_item(it->imdb, 0);
+    int temNot = nt && nt->titulo[0];
+    maxSin = temNot ? 2 : 3;
+    if (aviso) maxSin--;
+    if (it->sinopse[0]) {
+      int k = blocoC1(TXT_AJ_ESTADO, 18, it->sinopse, L->x0, y, 21.0f, w, 30.0f, maxSin, AG_INK2, a);
+      y += P(30) * (float)k + P(6);
+    }
+    if (temNot) {
+      const char *dica = i18n("OK para ler mais");
+      float dw = txC1(TXT_ILHA_APOIO, 16, dica, AG_INK3, -1.0f, 0, 18.0f, w, 1.0f);
+      float qw;
+      snprintf(buf, sizeof buf, "\xe2\x80\x9c%s\xe2\x80\x9d", nt->titulo);
+      qw = txC1(TXT_AJ_ESTADO, 18, buf, 205, 208, 214, L->x0, y, 21.0f, w - dw - P(14), a);
+      txC1(TXT_ILHA_APOIO, 16, dica, AG_INK3, L->x0 + qw + P(14), y + P(3), 18.0f, dw + 1.0f, a);
+      y += P(30) + P(6);
+    } }
 
-  linhaEpisodio(it, ep, sizeof ep);
-  linhaApoio(it, apoio, sizeof apoio);
-  // A quarta linha so existe com foco: medida na largura de foco (a mesma de
-  // alturaFoco), e entra no bloco proporcional a f para o texto nao saltar.
-  if (f > 0.01f) extra = quartaLinha(it, 0, 0, textW, 0, 0);
-  t  = txtCortaEsc(TXT_ROW_TITULO, it->titulo[0] ? it->titulo : i18n("Série"), 245,
-                   textW, escT);
-  l2 = ep[0] ? txtCortaEsc(TXT_CAPTION2, ep, cEp, textW, AG_ESC_EP) : (TxtLinha){ 0, 0, 0 };
-  l3 = apoio[0] ? txtCortaEsc(TXT_CAPTION2, apoio, cMeta, textW, AG_ESC_META)
-                : (TxtLinha){ 0, 0, 0 };
-  yb = y + (h - alturaBloco(it, f, extra)) * 0.5f;
-  txtEsc(t, tx, yb, escT, 1.0f);
-  yb += altLinha(TXT_ROW_TITULO, 245) * escT;
-  if (l2.tex) { yb += AG_GAP_EP; txtEsc(l2, tx, yb, AG_ESC_EP, 1.0f);
-                yb += altLinha(TXT_CAPTION2, 176) * AG_ESC_EP; }
-  if (l3.tex) { yb += AG_GAP_META; txtEsc(l3, tx, yb, AG_ESC_META, 1.0f);
-                yb += altLinha(TXT_CAPTION2, 120) * AG_ESC_META; }
+  // Os chips: o estado do lembrete e "Ver serie". Sao ESTADO, nao foco — o
+  // D-pad mora na lista; OK abre o modal, onde ligar/desligar e abrir o titulo
+  // continuam sendo acoes (mesmo caminho de antes).
+  y += P(10);
+  { float x = L->x0;
+    if (temChip(it))
+      x += chipC1(it->lembrete ? i18n("Lembrete ativo") : i18n("Lembrar-me"), x, y,
+                  it->lembrete, 1, a) + P(12);
+    chipC1(i18n("Ver série"), x, y, 0, 0, a); }
 
-  // RECORTADA PELO CARTAO: a sinopse entra junto com a mola da altura, e nos
-  // quadros em que o cartao ainda nao cresceu ela passaria da borda de baixo.
-  // A tesoura no cartao (com a area da lista, o recorte vigente) revela o texto
-  // junto com a borda, em qualquer quadro e em qualquer fonte.
-  if (extra > 0.0f) {
-    float y0 = card.y > listaTopo() ? card.y : listaTopo();
-    float y1 = card.y + card.h < listaBase() ? card.y + card.h : listaBase();
-    gfx_recorte(card.x, y0, card.w, y1 - y0);
-    quartaLinha(it, tx, yb, textW, f, 1);
-    gfx_recorte(0, listaTopo(), NV_TELA_W, listaBase() - listaTopo());
+  if (aviso) {
+    // Ambar apagado e nao o acento: e informacao, nao erro. No pe da coluna.
+    float lh = P(23);
+    int nl = agendaui_sinopse_linhas(TXT_ILHA_HORA, aviso, w / escDe(16.0f, 15), 2, 214, 178, 110);
+    if (nl < 1) nl = 1;
+    blocoC1(TXT_ILHA_HORA, 15, aviso, L->x0, NV_TELA_H - P(44) - lh * (float)nl,
+            16.0f, w, 23.0f, 2, 214, 178, 110, a);
   }
 }
 
-// O FIO DO TEMPO (mockup: 2 px de branco a 8%). Continuo ate o separador,
-// tracejado depois dele — dali para baixo nao ha tempo, so situacao.
-static void desenhaEixo(float xEixo, float y0, float y1, int tracejado) {
-  // SO O QUE ESTA NA TELA: tracejado ao longo de um documento de 32 series eram
-  // centenas de retangulos por quadro fora do recorte (46 fps na C9, 21/09).
-  if (y0 < -AG_TRACO * 2.0f) y0 = -AG_TRACO * 2.0f + fmodf(y0, AG_TRACO * 2.0f);
-  if (y1 > NV_TELA_H + AG_TRACO * 2.0f) y1 = NV_TELA_H + AG_TRACO * 2.0f;
-  if (y1 <= y0) return;
-  if (!tracejado) {
-    // Raio por pixel: o do gfx_cor e fracao da ALTURA, e 0,5 num fio de 600 px
-    // pedia um canto de 300 px (o fio sumia, so a ponta aparecia).
-    gfx_cor((GfxRect){ xEixo - AG_EIXO_W * 0.5f, y0, AG_EIXO_W, y1 - y0 },
-            (AG_EIXO_W * 0.5f) / (y1 - y0), 1, 1, 1, 0.08f);
-    return;
+// O SEGMENTADO Lista/Mes do mockup (.seg): trilho de vidro, o item ATIVO em
+// branco cheio com texto escuro. Com o foco no cabecalho, o item FOCADO e o
+// branco; o ativo nao focado fica no degrau claro com o texto no acento — o
+// estado continua legivel sem anel de foco.
+static float segC1(float xDir, float yc, int desenhar) {
+  const char *rot[2] = { i18n("Lista"), i18n("Mês") };
+  int id[2] = { AG_CAB_LISTA, AG_CAB_MES };
+  float padX = P(16), padY = P(6), pad = P(4), gap = P(4), w[2], h, total, x;
+  int k, ar, ag, ab;
+  acentoInt(&ar, &ag, &ab);
+  h = hC1(TXT_AJ_SEG, 20, 21.0f, 17) + 2.0f * padY;
+  for (k = 0; k < 2; k++)
+    w[k] = txC1(TXT_AJ_SEG, 20, rot[k], 17, 17, 17, -1.0f, 0, 21.0f, P(300), 1.0f) + 2.0f * padX;
+  total = pad * 2.0f + w[0] + gap + w[1];
+  if (!desenhar) return total;
+  { GfxRect tr = { xDir - total, yc - h * 0.5f - pad, total, h + pad * 2.0f };
+    if (ajustes_vidro()) gfx_cor(tr, 0.5f, 1, 1, 1, 0.07f);
+    else gfx_cor(tr, 0.5f, .141f, .149f, .173f, 1.0f);
+    x = tr.x + pad; }
+  for (k = 0; k < 2; k++) {
+    int ativo = (id[k] == AG_CAB_MES) == (vistaMes != 0);
+    int foc = focoCabecalho == id[k];
+    int branco = focoCabecalho ? foc : ativo;
+    GfxRect ir = { x, yc - h * 0.5f, w[k], h };
+    if (branco) gfx_cor(ir, 0.5f, 1, 1, 1, 1.0f);
+    else if (ativo) gfx_cor(ir, 0.5f, 1, 1, 1, 0.12f);
+    if (branco)
+      txC1(TXT_AJ_SEG, 20, rot[k], 17, 17, 17, x + padX, ir.y + padY, 21.0f, P(300), 1.0f);
+    else if (ativo)
+      txC1(TXT_AJ_SEG, 20, rot[k], ar, ag, ab, x + padX, ir.y + padY, 21.0f, P(300), 1.0f);
+    else
+      txC1(TXT_AJ_SUB, 20, rot[k], AG_INK2, x + padX, ir.y + padY, 21.0f, P(300), 1.0f);
+    x += w[k] + gap;
   }
-  { float y = y0;
-    while (y < y1) {
-      float h = AG_TRACO;
-      if (y + h > y1) h = y1 - y;
-      gfx_cor((GfxRect){ xEixo - AG_EIXO_W * 0.5f, y, AG_EIXO_W, h }, 0.0f,
-              1, 1, 1, 0.08f);
-      y += AG_TRACO * 2.0f;
-    } }
+  return total;
 }
 
-// O PONTO DE HOJE no fio: 14 px no acento com um halo de 6 px a 25%
-// (box-shadow 0 0 0 6px do mockup). So nas linhas de hoje — e o unico ponto da
-// tela, e por isso o olho cai nele antes de ler qualquer palavra.
-static void desenhaPonto(float xEixo, float cy) {
-  float ar, ag, ab, d = AG_PONTO + 12.0f;
+// A ILHA DA DIREITA: o material das ilhas (salvospainel.c, painelFlutuante):
+// sombra curta, miolo de vidro (gfx_vidro_folha) ou solido e a luz larga e
+// fraca no canto de cima. Sem aro.
+static void ilhaC1(GfxRect p) {
+  const int vid = ajustes_vidro();
+  float raio = P(36) / p.h;
+  gfx_rect((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f }, 0, GFX_SOMBRA,
+           1.0f, 0, 0, 0.5f, 0, 0, 0, .38f);
+  if (vid) gfx_vidro_folha(p, raio, 1.0f);
+  else gfx_cor(p, raio, .071f, .075f, .086f, .98f);
+  gfx_luz_canto(p, raio, p.w * .25f, -p.h * .25f, p.w * .9f, 1, 1, 1, vid ? .06f : .04f);
+}
+
+// O cabecalho da ilha: a contagem a esquerda e o segmentado a direita.
+static void cabecalhoIlha(const AgC1 *L) {
+  char sub[200];
+  int i, n = agenda_n(), comData = 0;
+  float yc = L->pnY + P(22) + P(22);
+  float segW = segC1(L->pnX + L->pnW - P(22), yc, 1);
+  for (i = 0; i < n; i++) if (temData(agenda_lista(i))) comData++;
+  if (n == 0)
+    snprintf(sub, sizeof sub, "%s", i18n("Salve uma série ou comece a assistir para ela aparecer aqui"));
+  else if (comData == 1)
+    snprintf(sub, sizeof sub, i18n("%d série com data confirmada · %d acompanhadas"), comData, n);
+  else
+    snprintf(sub, sizeof sub, i18n("%d séries com data confirmada · %d acompanhadas"), comData, n);
+  txC1(TXT_AJ_ESTADO, 18, sub, AG_INK2, L->pnX + P(22),
+       yc - hC1(TXT_AJ_ESTADO, 18, 20.0f, 179) * 0.5f, 20.0f,
+       L->pnW - P(44) - segW - P(20), 1.0f);
+}
+
+// O FIO DO TEMPO: 3 px a 18 do inicio da lista, no acento no topo e
+// esvanecendo para o neutro (branco a 12%) — o degrade do mockup em faixas.
+// Segue o DOCUMENTO: o acento e o comeco da agenda (hoje), nao o topo da ilha.
+static void fioC1(const AgC1 *L, float y0, float y1) {
+  float ar, ag, ab, x = L->lsX + P(18) - P(1.5f), passo = P(8), y, gr;
   ajustes_acento(&ar, &ag, &ab);
-  gfx_cor((GfxRect){ xEixo - d * 0.5f, cy - d * 0.5f, d, d }, 0.5f, ar, ag, ab, 0.25f);
-  gfx_cor((GfxRect){ xEixo - AG_PONTO * 0.5f, cy - AG_PONTO * 0.5f, AG_PONTO, AG_PONTO },
-          0.5f, ar, ag, ab, 1.0f);
+  gr = (y1 - y0) * 0.4f;
+  if (gr > P(420)) gr = P(420);
+  if (gr < 1.0f) gr = 1.0f;
+  for (y = y0; y < y1; y += passo) {
+    float h = y + passo > y1 ? y1 - y : passo;
+    float t = (y - y0) / gr;
+    if (y + h < L->lsY || y > L->lsY + L->lsH) continue;
+    if (t > 1.0f) t = 1.0f;
+    gfx_cor((GfxRect){ x, y, P(3), h }, 0.0f,
+            ar + (1.0f - ar) * t, ag + (1.0f - ag) * t, ab + (1.0f - ab) * t,
+            1.0f - 0.88f * t);
+  }
 }
+
+// O PONTO de cada linha no fio: 14 px, miolo #2a2d33 e aro de 3 a 35%; o da
+// linha em foco acende (miolo branco, aro no acento, halo de 6 a 30%).
+static void pontoC1(float cx, float cy, float f) {
+  float ar, ag, ab, d = P(14), aro = P(20);
+  ajustes_acento(&ar, &ag, &ab);
+  if (f > 0.01f) {
+    float hd = aro + P(12);
+    gfx_cor((GfxRect){ cx - hd * 0.5f, cy - hd * 0.5f, hd, hd }, 0.5f, ar, ag, ab, 0.30f * f);
+  }
+  gfx_cor((GfxRect){ cx - aro * 0.5f, cy - aro * 0.5f, aro, aro }, 0.5f, 1, 1, 1, 0.35f * (1.0f - f));
+  gfx_cor((GfxRect){ cx - aro * 0.5f, cy - aro * 0.5f, aro, aro }, 0.5f, ar, ag, ab, f);
+  gfx_cor((GfxRect){ cx - d * 0.5f, cy - d * 0.5f, d, d }, 0.5f,
+          .165f + .835f * f, .176f + .824f * f, .2f + .8f * f, 1.0f);
+}
+
+// O cabecalho de grupo (.grp): caps espacadas a 17 no cinza claro, fio de 1 px
+// embaixo — a mesma voz dos cabecalhos de secao dos Ajustes.
+static void grupoC1(const AgC1 *L, int g, int qtd, float y) {
+  char cru[80], rot[120];
+  const char *nome = g == 0 ? i18n("Hoje") : g == 1 ? i18n("Esta semana")
+                   : g == 2 ? i18n("Mais tarde") : i18n("Sem data prevista");
+  float ty = y + P(18);
+  if (g == 3) snprintf(cru, sizeof cru, "%s \xc2\xb7 %d", nome, qtd);
+  else snprintf(cru, sizeof cru, "%s", nome);
+  maiusc(rot, sizeof rot, cru);
+  txt_tracking(TXT_AJ_CAPS13, rot, AG_INK2, L->lsX + P(46), ty, 1.0f, 1.6f);
+  gfx_cor((GfxRect){ L->lsX, y + P(AG_GRP_H) - P(7), L->lsW, P(1) }, 0, 1, 1, 1, 0.08f);
+}
+
+// UMA LINHA (.ar): miniatura 170x96, nome (+ selo Estreia/Final), meta e o sino
+// a direita — cheio e claro com lembrete, de traco e apagado sem. A linha em
+// foco ganha a superficie do mockup (acento a 14% sobre branco a 12%). As sem
+// data ficam a 55% fora do foco.
+static void linhaC1(const AgC1 *L, const AgItem *it, float y, float f) {
+  float x = L->lsX + P(46), w = L->lsW - P(46);
+  float tx = x + P(14) + P(170) + P(18), sinoW = P(26), tw;
+  float apaga = grupoDe(it) == 3 ? 0.55f + 0.45f * f : 1.0f;
+  char meta[300], dl[48], selo[32];
+  GfxRect r = { x, y, w, P(AG_ROW_H) };
+  if (f > 0.01f) {
+    float ar, ag, ab;
+    ajustes_acento(&ar, &ag, &ab);
+    gfx_cor(r, P(18) / r.h, .14f * ar + .86f, .14f * ag + .86f, .14f * ab + .86f, .243f * f);
+  }
+  arteItem((GfxRect){ x + P(14), y + P(10), P(170), P(96) }, it, 16.0f, apaga);
+
+  // O sino: so em quem pode ter lembrete.
+  if (temChip(it)) {
+    GfxRect ic = { x + w - P(14) - sinoW, y + (r.h - sinoW) * 0.5f, sinoW, sinoW };
+    if (it->lembrete) gfx_icone(ic, "sino", 244 / 255.0f, 245 / 255.0f, 247 / 255.0f, apaga);
+    else gfx_icone(ic, "aj_bell", 179 / 255.0f, 183 / 255.0f, 191 / 255.0f, 0.55f * apaga);
+  }
+  tw = x + w - P(14) - sinoW - P(18) - tx;
+
+  // Nome + selo curto.
+  selo[0] = 0;
+  if (!strcmp(it->tipoEp, "premiere")) snprintf(selo, sizeof selo, "%s", i18n("Estreia"));
+  else if (!strcmp(it->tipoEp, "finale")) snprintf(selo, sizeof selo, "%s", i18n("Final"));
+  { float sw = selo[0] ? seloC1(selo, 0, 0, 0, 1.0f, 0) : 0.0f;
+    float nh = hC1(TXT_ILHA_NOME, 24, 24.0f, 244), mh = hC1(TXT_ILHA_APOIO, 16, 18.0f, 179);
+    float ny = y + (r.h - nh - P(2) - mh) * 0.5f, nw;
+    nw = txC1(TXT_ILHA_NOME, 24, it->titulo[0] ? it->titulo : i18n("Série"), AG_INK,
+              tx, ny, 24.0f, sw > 0.0f ? tw - sw - P(10) : tw, apaga);
+    if (sw > 0.0f)
+      seloC1(selo, tx + nw + P(10), ny + (nh - hC1(TXT_AJ_CAPS13, 14, 15.0f, 255) - P(8)) * 0.5f,
+             0, apaga, 1);
+
+    // A meta: "Qui 17 · T2 E4 · HBO"; mais tarde leva "em 7 semanas"; sem
+    // data, a situacao e o ultimo episodio.
+    meta[0] = 0;
+    if (temData(it)) {
+      size_t u;
+      dataLinha(it, dl, sizeof dl);
+      u = (size_t)snprintf(meta, sizeof meta, "%s", dl);
+      if (grupoDe(it) == 2) {
+        char fal[64];
+        agenda_falta(it->dataProx, fal, sizeof fal);
+        if (fal[0] && u < sizeof meta) u += (size_t)snprintf(meta + u, sizeof meta - u, " \xc2\xb7 %s", fal);
+      }
+      if (it->temporada > 0 && it->episodio > 0 && u < sizeof meta)
+        u += (size_t)snprintf(meta + u, sizeof meta - u, " \xc2\xb7 T%d E%d", it->temporada, it->episodio);
+      if (it->rede[0] && u < sizeof meta)
+        snprintf(meta + u, sizeof meta - u, " \xc2\xb7 %s", it->rede);
+    } else {
+      char ep[220];
+      const char *sit = situacaoTxt(it);
+      linhaEpisodio(it, ep, sizeof ep);
+      if (sit && ep[0]) snprintf(meta, sizeof meta, "%s \xc2\xb7 %s", sit, ep);
+      else snprintf(meta, sizeof meta, "%s", sit ? sit : ep[0] ? ep : i18n("Sem data"));
+    }
+    txC1(TXT_ILHA_APOIO, 16, meta, AG_INK2, tx, ny + nh + P(2), 18.0f, tw, apaga); }
+}
+
+// A LISTA inteira dentro da ilha, rolada e recortada nela.
+static void desenhaLista(const AgC1 *L) {
+  int n = agenda_n(), i, semData = 0;
+  float top = L->lsY - scrollY;
+  for (i = 0; i < n; i++) if (grupo(i) == 3) semData++;
+  gfx_recorte(L->pnX, L->lsY, L->pnW, L->lsH);
+  if (n > 0) fioC1(L, top + P(10), top + alturaDoc() - P(10));
+  for (i = 0; i < n && i < AG_MAX; i++) {
+    const AgItem *it = agenda_lista(i);
+    float y = top + yDe(i);
+    if (!it) continue;
+    if (abreGrupo(i)) {
+      float gy = y - P(AG_GRP_H) - P(AG_GAP);
+      if (gy < L->lsY + L->lsH && gy + P(AG_GRP_H) > L->lsY)
+        grupoC1(L, grupo(i), semData, gy);
+    }
+    if (y > L->lsY + L->lsH || y + P(AG_ROW_H) < L->lsY) continue;
+    linhaC1(L, it, y, animFoco[i]);
+    pontoC1(L->lsX + P(18), y + P(AG_ROW_H) * 0.5f, animFoco[i]);
+  }
+  gfx_sem_recorte();
+}
+
+
 // --- os paineis flutuantes: o modal da linha, as manchetes, a noticia ------------
 //
 // NA LINGUAGEM DOS PAINEIS FLUTUANTES (menu.c, 21/09/2026): superficie
@@ -2283,7 +2458,7 @@ static void desenhaCalendarioMensal(void) {
   // (domingo a sabado), e as datas adjacentes ficam visiveis como contexto.
   for (c = 0; c < 7; c++) {
     char sem[24];
-    maiusc(sem, sizeof sem, agenda_semana_nome(DIAS[c]));
+    maiusc(sem, sizeof sem, i18n(agenda_semana_nome(DIAS[c])));
     kicker(sem, 135, 138, 146, x + c * (celW + espacX) + 12.0f, semanaY, 1.0f);
   }
   for (c = 0; c < 42; c++) {
@@ -2332,121 +2507,58 @@ static void desenhaCalendarioMensal(void) {
 }
 
 static void desenharNaEscala(Uint32 agora) {
-  AgMedidas m = medidasDaTela();
-  float x = agX();
-  float xDir = agFim();
-  int n = agenda_n(), i, sep = indiceSeparador();
-  float topo = listaTopo(), base = listaBase();
-  float yc = AG_TOPO;
+  AgC1 L = c1();
+  int n = agenda_n();
   relogio = agora;
 
-  // O CABECALHO DO MOCKUP: "Agenda" em 56/800 e o subtitulo em 19 a 55%, 8
-  // abaixo. Empilhado pela altura MEDIDA: um deslocamento cravado so acerta numa
-  // fonte (o "48 + 74" que existiu aqui punha o subtitulo sobre o "g").
-  // SAIRAM a data por extenso do canto e a frase "OK abre as opcoes. A TV nao
-  // avisa sozinha": o mockup nao tem nenhuma das duas, e a segunda continua
-  // dita no proprio modal do lembrete. Lista/Mes e um seletor real: a lista
-  // continua sendo a timeline e Mes abre a grade com os episodios daquele dia.
-  { TxtLinha t = txt_linha(TXT_TITULO2, i18n("Agenda"), 245, 245, 243, 255);
-    if (!menu_pilula_titulo()) txt_desenhar(t, x, yc);   // Dinamica: na pilula
-    yc += (float)t.h + 4.0f; }
+  // O TITULO pequeno no canto (C1, como nos Ajustes A3): 40/700. Na Dinamica
+  // ele mora na pilula da barra.
+  if (!menu_pilula_titulo())
+    txC1(TXT_ILHA_TITULO, 40, i18n("Agenda"), AG_INK, L.x0, P(56), 40.0f, L.artW, 1.0f);
 
-  { char sub[200];
-    int comData = 0;
-    float esc = 19.4f / NV_FT_CAPTION2;   // 19 no CSS, medido na captura
-    for (i = 0; i < n; i++)
-      if (temData(agenda_lista(i))) comData++;
-    if (n == 0)
-      snprintf(sub, sizeof sub, "%s",
-               i18n("Salve uma série ou comece a assistir para ela aparecer aqui"));
-    else if (comData == 1)
-      snprintf(sub, sizeof sub, i18n("%d série com data confirmada · %d acompanhadas"), comData, n);
-    else
-      snprintf(sub, sizeof sub, i18n("%d séries com data confirmada · %d acompanhadas"), comData, n);
-    { TxtLinha l = txtCortaEsc(TXT_CAPTION2, sub, 140, xDir - x, esc);
-      txtEsc(l, x, yc, esc, 1.0f);
-      yc += (float)l.h * esc + 6.0f; } }
-
-  // O AVISO DE FONTE, so quando o TMDB esta fora E falta dado na lista. Sem o
-  // TMDB o fio cai para o Trakt e o Cinemeta (agenda.c, "AS TRES FONTES"), que
-  // nao tem rede nem marco de temporada e as vezes nem data — e o dono pediu
-  // que a tela dissesse isso em vez de a pessoa achar que a Agenda quebrou.
-  // Duas frases porque sao duas causas com saidas diferentes: ajuste
-  // desligado tem conserto em Ajustes (o caminho e o de ajustes.c: secao
-  // "Integracoes", bloco e chave "TMDB"); pacote sem chave nenhuma nao tem, e
-  // mandar a pessoa a um ajuste que nao resolve seria mentir.
-  // Cabe entre o subtitulo e o primeiro cartao, no corpo da meta (16).
-  { const char *chave = desc_chave_tmdb_reserva();   /* ver fioAgenda em agenda.c */
-    int falta = 0;
-    if (!chave || !chave[0]) {
-      for (i = 0; i < n && !falta; i++) {
-        const AgItem *it = agenda_lista(i);
-        if (it && (!it->poster[0] || !it->titulo[0] ||
-                   (!it->dataProx[0] && !it->dataUlt[0] && it->situacao == AG_DESCONHECIDA)))
-          falta = 1;
-      }
-    }
-    if (falta) {
-      const char *res = desc_chave_tmdb_reserva();
-      const char *msg = (res && res[0])
-        ? i18n("TMDB desligado: datas e cartazes vêm do Cinemeta e podem faltar em algumas séries · Ajustes › Integrações › TMDB")
-        : i18n("Sem chave do TMDB: datas e cartazes vêm do Cinemeta e podem faltar em algumas séries");
-      // Ambar apagado e nao o acento: e informacao, nao erro.
-      float esc = 16.0f / NV_FT_CAPTION2;
-      TxtLinha l = txt_linha_corta(TXT_CAPTION2, msg, 214, 178, 110, 255, (xDir - x) / esc);
-      txtEsc(l, x, yc, esc, 1.0f);
-    } }
-
-  desenhaBarraCalendario(x, xDir);
-
-  // ESTADO VAZIO: o despertador DESLIGADO, grande e apagado, no lugar onde a
-  // lista vai ficar. Uma tela so com duas frases cinzas nao diz se ela esta
-  // vazia ou se quebrou; o icone diz do que a tela trata antes de a pessoa ler.
-  if (n == 0) {
-    float lado = 220.0f;
-    GfxRect ic = { x + (xDir - x - lado) * 0.5f,
-                   topo + (base - topo - lado) * 0.5f - 40.0f, lado, lado };
-    agendaui_despertador(ic, 0, 0.30f, 0.30f, 0.30f, 0.55f, agora, 0);
-    return;
-  }
-
+  // MES: a grade de sempre (o mesmo layout e a mesma navegacao de antes), com
+  // a contagem e o aviso de fonte sob o titulo. Ver o relatorio da C1: a grade
+  // nao coube dentro da ilha sem refazer a navegacao do mes.
   if (vistaMes) {
-    desenhaCalendarioMensal();
+    float x = agX(), xDir = agFim(), yc = P(110);
+    char sub[200];
+    const char *aviso = avisoFonte();
+    int i, comData = 0;
+    for (i = 0; i < n; i++) if (temData(agenda_lista(i))) comData++;
+    if (n == 0)
+      snprintf(sub, sizeof sub, "%s", i18n("Salve uma série ou comece a assistir para ela aparecer aqui"));
+    else
+      snprintf(sub, sizeof sub, i18n(comData == 1 ? "%d série com data confirmada · %d acompanhadas"
+                                                  : "%d séries com data confirmada · %d acompanhadas"),
+               comData, n);
+    txC1(TXT_AJ_ESTADO, 18, sub, AG_INK2, x, yc, 20.0f, xDir - x, 1.0f);
+    if (aviso)
+      txC1(TXT_ILHA_HORA, 15, aviso, 214, 178, 110, x, yc + P(30), 16.0f, xDir - x, 1.0f);
+    desenhaBarraCalendario(x, xDir);
+    if (n > 0) desenhaCalendarioMensal();
     if (ctxA > 0.01f) desenhaContexto(ctxA);
     return;
   }
 
-  // Um pouco acima do primeiro cartao: o halo do ponto de hoje (y + 29 - 13)
-  // fica dentro do recorte.
-  gfx_recorte(0, topo, NV_TELA_W, base - topo);
+  ilhaC1((GfxRect){ L.pnX, L.pnY, L.pnW, L.pnH });
+  cabecalhoIlha(&L);
 
-  // O FIO PRIMEIRO, atras de tudo: do topo do primeiro cartao ao fim do ultimo
-  // cartao com data, tracejado dali ate o fim. Inteiro, e nao por linha, para
-  // nao ter emendas no separador.
-  { float yIni = topo + yDe(0) - scrollY;
-    float yFim = topo + yDe(n - 1) + alturaLinha(n - 1) - scrollY;
-    float yCorte = yFim;
-    if (sep >= 0) yCorte = topo + yDe(sep) - alturaFaixas(sep) - scrollY;
-    if (yCorte < yIni) yCorte = yIni;
-    if (yCorte > yFim) yCorte = yFim;
-    desenhaEixo(m.xEixo, yIni, yCorte, 0);
-    desenhaEixo(m.xEixo, yCorte, yFim, 1); }
-
-  for (i = 0; i < n && i < AG_MAX; i++) {
-    const AgItem *it = agenda_lista(i);
-    float hFaixa = alturaFaixas(i);
-    float y = topo + yDe(i) - scrollY;
-    float h = alturaLinha(i);
-    int hoje;
-    if (!it) continue;
-    if (y - hFaixa > base || y + h < topo) continue;
-    faixas(i, m.xCard, m.xCard + m.wCard, m.xEixo, y - hFaixa, 1);
-    hoje = temData(it) && agenda_dias(it->dataProx) == 0;
-    desenhaEstacao(it, m.xEst, y, hoje);
-    if (hoje) desenhaPonto(m.xEixo, y + 29.0f);
-    desenhaConteudo(it, &m, y, h, animFoco[i]);
+  // ESTADO VAZIO: o sino grande e apagado no lugar da arte, e a frase de
+  // sempre (no cabecalho da ilha). A tela diz do que trata antes de ler.
+  if (n == 0) {
+    GfxRect art = { L.x0, L.artY, L.artW, L.artH };
+    float lado = L.artH * 0.42f;
+    gfx_cor(art, P(24) / art.h, 1, 1, 1, ajustes_vidro() ? 0.05f : 0.04f);
+    agendaui_despertador((GfxRect){ art.x + (art.w - lado) * 0.5f, art.y + (art.h - lado) * 0.5f,
+                                    lado, lado }, 0, 0.30f, 0.30f, 0.30f, 0.55f, agora, 0);
+    blocoC1(TXT_AJ_ESTADO, 18,
+            i18n("Salve uma série ou comece a assistir para ela aparecer aqui"),
+            L.x0, L.infoY, 21.0f, L.artW, 30.0f, 3, AG_INK2, 1.0f);
+    return;
   }
-  gfx_sem_recorte();
+
+  desenhaEsquerda(&L, 1.0f);
+  desenhaLista(&L);
   if (ctxA > 0.01f) desenhaContexto(ctxA);
 }
 

@@ -93,7 +93,7 @@ Três módulos novos ligam a engine ao player, um idioma (slot principal):
 
 - `src/legref.c/h` — coletor **independente** da referência embutida. Lê por HTTP Range, em fio próprio, uma faixa de texto (S_TEXT/UTF8, ASS, SSA) de um Matroska usando só o índice (SeekHead → Cues → CueRelativePosition). Não chama `mkvass_*`, `legenda_carregar`, `assrender_*` nem `video_*` (conferido por `nm` em `tests/legref.sh`): a faixa da pessoa não muda. Documento só sai `COMPLETO` quando todos os blocos indexados chegaram; sem Cues da faixa, sem BlockDuration, lacing, servidor sem Range (200) ou orçamento esgotado → indisponível com motivo. Letreiros/forced nunca servem de referência. Preferência pelo idioma da externa; exclusões por TrackNumber para "outra referência". MP4/tx3g não é lido. Desligado em WGT/AVPlay e nos `.tpk` (`legref_disponivel`), onde a UI diz "Indisponível nesta plataforma".
 - `src/legsync.c/h` — sessão: geração nova em `player_abrir`, cancelamento em `lembrarFonte` (fechar o player), troca de URL detectada em `player_atualizar` (troca de fonte), troca de faixa em `faixas.c` (embutida/nenhuma/outra externa). A externa vira `LegendaDocumento` no próprio fio do download (`legenda_carregar_com`). A referência só é lida quando a pessoa pede Rápida/Completa; seek, buffering e buffer de vídeo < 20 s pausam a leitura e cancelam a análise, que retoma 2 s depois de calmo. Orçamento: 12 MiB por leitura, 24 MiB por mídia, 8 Ranges/s. `legsync_offset_ms(manual)` devolve manual + automático aceito, aplicado uma vez em `desenharLegendaExterna`, e só enquanto o documento analisado é o dono do overlay.
-- `src/legsyncui.c` — última linha da folha de Legendas (que cresce da ilha do relógio): estado traduzido, ação entre ‹ › (Rápida, Completa, Desfazer, Outra referência, Parar), offset aceito no acento à direita. Some em canal ao vivo. Não conta como faixa na contagem/posição.
+- `src/legsyncui.c` — provedor (`legsync_ui_ligar` → `legendasui_definir_sync`) da linha "Sincronização automática" do seletor de legendas do F04 (`legendasui.c`, que cresce da ilha do relógio). A linha só existe no slot principal, com legenda externa ativa e fora de canal ao vivo: estado traduzido embaixo do título, ação entre ‹ › (Rápida, Completa, Desfazer, Outra referência, Parar), "Indisponível nesta plataforma" onde não há coletor. Não entra no "N de M"; com foco nela o rodapé diz o que o OK faz. A seleção da legenda passa por `faixas_escolher_externa`/`escolherLegenda`, que chamam `legsync_primaria_*`.
 
 Nunca bloqueia o início: criar o contexto não faz rede; nada é lido antes do pedido. Só resultado ACEITO pela engine muda o offset; recusa mostra "Sem confiança suficiente; nada foi alterado".
 
@@ -101,7 +101,7 @@ Nunca bloqueia o início: criar o contexto não faz rede; nada é lido antes do 
 
 ```sh
 bash tests/legref.sh     # 17 casos + HTTP real (rede.c/libcurl): completo, redirect, sem-Range
-bash tests/legsync.sh    # 13 casos: aceite +2,5 s/−1,2 s, desfazer, outra referência, seek,
+bash tests/legsync.sh    # 14 casos (inclui o provedor do seletor): aceite +2,5 s/−1,2 s, desfazer, outra referência, seek,
                          # troca de fonte/faixa, download atrasado, cancelamento com Range preso
                          # (fechar, fonte, embutida, outra externa, desligar), teardown, plataforma
 SANITIZE=1 / SANITIZE=thread nos dois e em tests/autosync.sh: sem erros

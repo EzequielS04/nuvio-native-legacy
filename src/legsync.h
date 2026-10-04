@@ -74,16 +74,11 @@ int  legsync_acao(int acao);            // 1 = aceita no estado atual
 LegSyncVisao legsync_visao(int slot);   // slot 1: LEGSYNC_DEPOIS
 
 // --- API DE APRESENTACAO (legsyncui.c) -------------------------------------
-// Para o seletor do F04 (provider de uma linha por slot) e, ate o merge, para
-// a folha atual de legendas (faixas.c).
 void legsync_texto(const LegSyncVisao *v, char *dst, unsigned tam);  // i18n
 const char *legsync_acao_rotulo(int acao);                            // i18n
-void legsync_linha_desenhar(float x, float y, float w, float h, int foco, float a);
-// Tecla com o foco na linha: ESQUERDA/DIREITA escolhem a acao, OK executa.
-// 0 = nao consumiu (DIREITA depois da ultima acao vai ao Estilo).
-int  legsync_linha_tecla(int tecla);  // SDL_Keycode
-// Chave i18n (pt, sem traduzir) da acao que o OK faz agora na linha; NULL sem acao.
-const char *legsync_linha_acao_chave(void);
+// Liga o AutoSync como provedor da linha de sincronizacao do seletor de
+// legendas do F04 (legendasui_definir_sync). Idempotente; thread da UI.
+void legsync_ui_ligar(void);
 
 // So para testes: leitor do legref antes do primeiro legsync_iniciar.
 void legsync_teste_leitor(LegRefLer ler, void *u);

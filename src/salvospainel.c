@@ -1517,7 +1517,9 @@ static void abrirMenuSocial(void) {
   CtxExtra ex[CTX_EXTRAS_MAX];
   int n = 0;
   static const CtxExtra PERFIL = { "Ver perfil", "aj_users", 0, NULL, NULL, NULL };
-  static const CtxExtra ASSISTI = { "Já assisti", "check", 0, NULL, NULL, NULL };
+  // "Já assisti" TOMA O LUGAR de "Marcar como assistido": faz o historico da
+  // conta e so depois marca a rec e abre o cartao (juntaAssistido, ctxmenu.h).
+  static const CtxExtra ASSISTI = { "Já assisti", "check", 0, NULL, NULL, NULL, 1 };
   static const CtxExtra RESPONDER = { "Responder", "aj_users", 0, NULL, NULL, NULL };
   static const CtxExtra REMOVER = { "Remover amigo", "aj_x", 1, "Amigos",
     "Remover %s dos amigos?",
@@ -3145,17 +3147,9 @@ static void desenhaAmigoLinha(int i, int idx, float dx, float y, float a, Uint32
     SvEnviada m;
     if (socialvis_ultima_enviada(c->id, &m)) {
       snprintf(linha3, sizeof linha3, i18n("Você mandou %s"), m.titulo);
-      if (m.estado == SV_REC_VIU) {
-        size_t k = strlen(linha3);
-        snprintf(linha3 + k, sizeof linha3 - k, " \xe2\x80\xba %s", i18n("viu"));
-        if (m.reacao == SV_REAC_GOSTOU) {
-          k = strlen(linha3);
-          snprintf(linha3 + k, sizeof linha3 - k, " \xe2\x80\xba %s", i18n("gostou"));
-        }
-      } else {
-        size_t k = strlen(linha3);
+      { size_t k = strlen(linha3);
         snprintf(linha3 + k, sizeof linha3 - k, " \xe2\x80\xba %s",
-                 i18n(m.estado == SV_REC_ABRIU ? "abriu" : "ainda não viu"));
+                 socialvis_enviada_rotulo(&m, NULL));
       }
     }
   }

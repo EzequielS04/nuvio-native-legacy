@@ -102,7 +102,7 @@ int ling_casa(const char *codigo, const char *pref) {
 // ------------------------------------------------------------ preferencias
 
 static char contaLeg[16], contaLeg2[16], contaAud[16];
-static char localLeg[16], localAud[16];
+static char localLeg[16], localAud[16], localLeg2[16];
 
 // As sentinelas do web viram vazio (= sem filtro) ou "none" (= nenhuma).
 // "DEVICE"/"DEFAULT"/"ORIGINAL" dizem "deixe o arquivo decidir", que deste lado
@@ -130,6 +130,7 @@ static void guardarLocal(char *dest, size_t n, const char *v) {
 }
 void ling_local_legenda(const char *v)  { guardarLocal(localLeg, sizeof localLeg, v); }
 void ling_local_audio(const char *v)    { guardarLocal(localAud, sizeof localAud, v); }
+void ling_local_legenda2(const char *v) { guardarLocal(localLeg2, sizeof localLeg2, v); }
 
 // A escolha desta TV ganha da conta. Quem mexeu no aparelho quis mexer AQUI, e
 // ver a proxima sincronizacao desfazer isso e o tipo de comportamento que faz a
@@ -158,8 +159,14 @@ static const char *emVigor(const char *local, const char *conta) {
   return local;
 }
 const char *ling_legenda(void)  { return emVigor(localLeg, contaLeg); }
-// A secundaria so existe na conta: a tela oferece uma escolha, nao duas.
-const char *ling_legenda2(void) { return localLeg[0] ? "" : contaLeg2; }
+// A SECUNDARIA (F04): Ajustes desta TV agora tem a linha dela. Escolhida
+// aqui, vale a regra da principal (emVigor). Em "Da conta" fica o
+// comportamento de antes: a da conta, a nao ser que a PRINCIPAL tenha sido
+// escolhida nesta TV (ai a conta nao manda em nenhuma das duas).
+const char *ling_legenda2(void) {
+  if (localLeg2[0]) return emVigor(localLeg2, contaLeg2);
+  return localLeg[0] ? "" : contaLeg2;
+}
 const char *ling_audio(void)    { return emVigor(localAud, contaAud); }
 
 // ------------------------------------------------------------ lista da UI

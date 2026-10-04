@@ -133,8 +133,13 @@ static int focoEscuro(void) { return tintaFoco() < 128; }   // superficie do foc
 #define AJ_PAD           24.0f    // borda da linha ao texto
 // A janela da LISTA dentro da folha (Glass UI): abaixo do cabecalho da folha
 // (kicker, titulo e sub) ate 18 px da base da ilha.
-#define AJ_TOPO        (112.0f / ajustes_tamanho_ajustes() + 185.7f)
-#define AJ_BASE        (NV_VTELA_H - 40.0f / ajustes_tamanho_ajustes())
+// A3 (04/10): o cabecalho compacto da lista (titulo da categoria + chip
+// Avancados, 96) e o rodape proprio (dicas e o aviso "Ajuste salvo", 72) que o
+// aviso nao cubra mais a ultima linha.
+#define AJ_TOPO        (112.0f / ajustes_tamanho_ajustes() + AJ_A3_CAB)
+#define AJ_BASE        (NV_VTELA_H - 40.0f / ajustes_tamanho_ajustes() - AJ_A3_RODAPE)
+#define AJ_A3_CAB       96.0f
+#define AJ_A3_RODAPE    72.0f
 // Raio da linha em fracao do menor lado (o SDF do shader e normalizado):
 // 12px sobre 88 de altura.
 #define AJ_RAIO           0.14f
@@ -333,6 +338,10 @@ typedef enum {
   AJ_DISCORD,
   AJ_TAMANHO_AJUSTES, // local, append-only; 80/90/100%, default 80%
   AJ_LOGO_TRAILER,    // local, append-only; hide the corner title logo while a trailer plays (OLED)
+  // Idioma da legenda SECUNDARIA (F04, 1.8): a mesma lista e a mesma regra da
+  // principal ("Da conta" segue subtitle_secondary_language do perfil). No fim
+  // pelo mesmo motivo dos outros: valor[] e CHAVE[] sao posicionais.
+  AJ_LEG_LINGUA2,
   AJ_N
 } OpcaoId;
 
@@ -1009,6 +1018,7 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Discord"),
   ESC("Tamanho dos ajustes", V_TAMANHO_AJUSTES, 3),
   ESC("Esconder logo durante o trailer", V_LIGA, 2),
+  ESC("Idioma da legenda secundária",    V_LINGUA, 2),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1186,6 +1196,7 @@ static const char *CHAVE[] = {
   "-discord",
   "tamanhoAjustesLocal",
   "logoTrailerLocal",
+  "legendaSecundariaIdioma",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -2618,6 +2629,7 @@ void ajustes_dir(const char *dir) {
   // A escolha lida do disco so existe de verdade quando chega em linguas.c.
   rotulosDeIdioma();
   aplicarIdioma(AJ_LEG_LINGUA);
+  aplicarIdioma(AJ_LEG_LINGUA2);
   aplicarIdioma(AJ_AUD_LINGUA);
   txt_definir_fonte_interface((TxtFamilia)valor[AJ_FONTE_UI]);
   gfx_escala_ui_definir(ajustes_tamanho_ui());
@@ -3425,6 +3437,7 @@ int ajustes_perfil_restaurar(int perfil) {
   if (mudou) {
     gravar();
     aplicarIdioma(AJ_LEG_LINGUA);
+    aplicarIdioma(AJ_LEG_LINGUA2);
     aplicarIdioma(AJ_AUD_LINGUA);
   }
   printf("[ajustes] ajustes do perfil %d restaurados desta TV (%d mudaram)\n",
@@ -4141,6 +4154,7 @@ static const char *ajudaOpcao(int op) {
     // --- Reproducao
     case AJ_QUALIDADE: return "Define a preferência de resolução. A disponibilidade depende das fontes do addon.";
     case AJ_DV: case AJ_ATMOS: return "Preferência para fontes compatíveis. O formato disponível também depende do arquivo e da TV.";
+    case AJ_LEG_LINGUA2: return "Segunda legenda, mostrada no alto da tela junto com a principal. Só arquivos SRT/VTT dos addons. \"Da conta\" segue o que está no seu perfil.";
     case AJ_LEG_LINGUA: return "Idioma ligado sozinho quando o vídeo começa. Legendas dos addons aparecem em inglês e no idioma escolhido aqui. \"Da conta\" segue o que está no seu perfil.";
     case AJ_AUD_LINGUA: return "Faixa de áudio escolhida quando o arquivo tem mais de uma. Se o idioma não existir no arquivo, o player usa a primeira.";
     case AJ_PAUSA_OVERLAY: return "Ao pausar, sobe uma ficha com a sinopse e os dados do que você está vendo.";
@@ -4422,7 +4436,7 @@ static const char *efeitoOpcao(int op) {
       return "Vale só nesta TV. Ao mudar, a fileira é remontada na hora.";
     case AJ_IDIOMA:
       return "Ao mudar, as fileiras são remontadas para os títulos saírem no idioma novo.";
-    case AJ_LEG_LINGUA:
+    case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2:
       return "Se um título já estiver aberto, a busca de legendas é refeita um instante depois.";
     case AJ_PROF:
       return "É o ajuste mais caro desta tela para a TV desenhar. Desligue se a rolagem engasgar.";
@@ -5024,7 +5038,7 @@ static int definirValorDireto(int op, int novo) {
     valor[op] = fil_limite_gravado();
     fil_confirmar_limite();
   }
-  if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) aplicarIdioma(op);
+  if (op == AJ_LEG_LINGUA || op == AJ_LEG_LINGUA2 || op == AJ_AUD_LINGUA) aplicarIdioma(op);
   if (op == AJ_IDIOMA) { idiomaEscolhido(); desc_repetir(); }
   if (op == AJ_FONTE_UI) txt_definir_fonte_interface((TxtFamilia)novo);
   if (op == AJ_TAMANHO_UI) gfx_escala_ui_definir(ajustes_tamanho_ui());
@@ -5372,8 +5386,8 @@ void ajustes_atualizar(float dt, Uint32 agora) {
 // vazia, que e como linguas.c representa "sem escolha local, siga a conta".
 static void aplicarIdioma(int op) {
   const char *c = ling_opcao_codigo(valor[op]);
-  if (op == AJ_LEG_LINGUA) {
-    ling_local_legenda(c);
+  if (op == AJ_LEG_LINGUA || op == AJ_LEG_LINGUA2) {
+    if (op == AJ_LEG_LINGUA) ling_local_legenda(c); else ling_local_legenda2(c);
     // A lista de legendas do titulo carregado foi montada com o idioma ANTERIOR
     // e nao se refaz sozinha (ver addons_legendas_reiniciar). Mas NAO refazer
     // aqui, e sim depois de a pessoa PARAR de mexer: esta funcao roda a cada
@@ -5393,7 +5407,7 @@ static void aplicarIdioma(int op) {
 // unicas dinamicas: a lista vem de linguas.c e nao da tabela OPCOES, que e
 // const e foi escrita antes de linguas.c existir.
 static int nValores(int op) {
-  if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) return nLingua > 0 ? nLingua : 1;
+  if (op == AJ_LEG_LINGUA || op == AJ_LEG_LINGUA2 || op == AJ_AUD_LINGUA) return nLingua > 0 ? nLingua : 1;
   if (op == AJ_SELOS_PACOTE) return 1 + selospacote_n();
 #ifndef __EMSCRIPTEN__
   // "YouTube" (o 4o valor) so toca no .wgt da Samsung (trailerfonte.c, existe).
@@ -5422,7 +5436,7 @@ static const char *textoValor(int op) {
     snprintf(buf, sizeof buf, "%d%s", valor[op], o->sufixo ? o->sufixo : "");
     return buf;
   }
-  if (op == AJ_LEG_LINGUA || op == AJ_AUD_LINGUA) {
+  if (op == AJ_LEG_LINGUA || op == AJ_LEG_LINGUA2 || op == AJ_AUD_LINGUA) {
     int v = valor[op];
     return (v >= 0 && v < nLingua && V_LINGUA[v]) ? V_LINGUA[v] : "Da conta";
   }
@@ -5827,7 +5841,7 @@ typedef enum {
 
 static AjPreview familiaPreviaOpcao(int op) {
   switch (op) {
-    case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA:
+    case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2:
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES:
     case AJ_SELOS_PACOTE:
@@ -6079,6 +6093,9 @@ int ajustes_teste_quadro(const char *id) {
   valor[AJ_IDIOMA] = IDIOMA_PT + 1;
   // NUVIO_SHOT_IDIOMA=N (IDIOMA_*: 1 en, 4 ru, 6 de...): o quadro sai nesse idioma.
   if (getenv("NUVIO_SHOT_IDIOMA") && *getenv("NUVIO_SHOT_IDIOMA")) valor[AJ_IDIOMA] = atoi(getenv("NUVIO_SHOT_IDIOMA")) + 1;
+  // NUVIO_SHOT_LAYOUT=2 (HOME_LAYOUT_*): the owner's Dinamica layout, whose menu
+  // pill sits in the Settings corner (with NUVIO_SHOT_MENU in the capture).
+  if (getenv("NUVIO_SHOT_LAYOUT") && *getenv("NUVIO_SHOT_LAYOUT")) valor[AJ_HOME_LAYOUT] = atoi(getenv("NUVIO_SHOT_LAYOUT"));
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
   memset(uxAvancados, 0, sizeof uxAvancados);
   scrollY = velY = 0; paginaA = 1;
@@ -6092,6 +6109,11 @@ int ajustes_teste_quadro(const char *id) {
     valor[AJ_LANDSCAPE] = 1;   // o mockup: "Pôsteres horizontais" desligado
     ajArteFundoN = 12;
     if (!strcmp(id, "v2-menu")) { focarSecao(0); uxIndice = 2; focoIndice = 1; }
+    else if (!strncmp(id, "v2-menu-", 8) && id[8] >= '0' && id[8] <= '9') {   // index on category N
+      int sN = atoi(id + 8);
+      if (sN >= nSecoes) return 0;
+      focarSecao(sN); uxIndice = 2 + sN; focoIndice = 1;
+    }
     else if (!strcmp(id, "v2-menu-passando")) { ajArteFundoN = 13; focarSecao(1); uxIndice = 3; focoIndice = 1; }
     else if (!strcmp(id, "v2-aberto") || !strcmp(id, "v2-130")) focarOpcao(AJ_HOME_LAYOUT);
     else if (!strcmp(id, "v2-transicao")) {
@@ -6120,6 +6142,9 @@ int ajustes_teste_quadro(const char *id) {
   }
   else if (!strncmp(id, "guia", 4)) { if (!ajustesTesteGuia(id)) return 0; }
   else if (!strcmp(id, "principal")) { focarOpcao(AJ_HOME_LAYOUT); }
+  // O aviso "Ajuste salvo nesta TV." logo depois de mudar uma opcao (foto do
+  // dono, 04/10: o aviso cobria a ultima linha).
+  else if (!strcmp(id, "aviso")) { focarOpcao(AJ_TAMANHO_AJUSTES); uxNotificar("Ajuste salvo nesta TV."); }
   else if (!strcmp(id, "cartazes")) { ajArteFundoN = 13; valor[AJ_LARGURA_DP] = 128; focarOpcao(AJ_LARGURA_DP); }
   else if (!strcmp(id, "memoria")) { ajArteFundoN = 21; ajMemFixa = 1; focarOpcao(AJ_ESPACO); uxAvancados[secAtual] = 1; }
   else if (!strcmp(id, "cor")) { ajArteFundoN = 9; focarOpcao(AJ_TEMA); uxAbrirEditor(AJ_TEMA); }

@@ -16,10 +16,17 @@ typedef enum {
   SF_SEM_MEDIDA, SF_BITRATE_ESTIMADO
 } StreamfitRazao;
 typedef enum { SF_DUR_DESCONHECIDA = 0, SF_DUR_METADATA, SF_DUR_MEDIA } StreamfitDuracao;
+// Provenance of a host's current window. A newer completed window replaces
+// the older one whichever origin it has; the snapshot keeps the origin so the
+// UI can say where the number came from.
+typedef enum {
+  SF_ORIGEM_NENHUMA = 0, SF_ORIGEM_DIAGNOSTICO, SF_ORIGEM_PASSIVA
+} StreamfitOrigem;
 
 typedef struct {
   char host[STREAMFIT_HOST_MAX]; // canonical public authority, never a URL
-  int amostras, otimoKbps, maximoKbps, medianaKbps;
+  int amostras, otimoKbps, maximoKbps, medianaKbps, sustentadoKbps; // sustained = p20
+  int origem; // StreamfitOrigem
   uint64_t medidaMs;
 } StreamfitHost;
 
@@ -35,7 +42,8 @@ typedef struct {
   StreamfitClasse classe;
   StreamfitRazao razao;
   double necessarioKbps;
-  int otimoKbps, maximoKbps, amostras;
+  int otimoKbps, maximoKbps, amostras, sustentadoKbps;
+  int origem; // StreamfitOrigem; NENHUMA unless a host window was used
   uint64_t idadeMs;
 } StreamfitResultado;
 
@@ -54,6 +62,13 @@ void streamfit_limpar(void);
 // cannot extend the life of old measurements or mix different test windows.
 int streamfit_diagnostico(uint64_t rede, const char *urlFinal,
                          const int *kbps, int n, uint64_t fimMs);
+// Passive playback telemetry (Android ParaleloDataSource only). Same rules as
+// the diagnostic: final host, unchanged network, 5..48 valid one-second
+// intervals of media transfer (stalls included as zero; cache, pause and
+// buffer-full idle excluded by the producer). The caller is responsible for
+// rejecting stale playback generations (streamfitpassiva.c).
+int streamfit_passiva(uint64_t rede, const char *urlFinal,
+                      const int *kbps, int n, uint64_t fimMs);
 void streamfit_foto(StreamfitFoto *saida, uint64_t agoraMs);
 uint64_t streamfit_agora_ms(void);
 

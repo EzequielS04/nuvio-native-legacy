@@ -144,10 +144,6 @@ static void heroReiniciar(void);
 // que o cabecalho dos proprios modulos usa. Constante e nao medida por txt_linha
 // porque ela entra em alturaSecao, que roda no empilhamento de todo quadro.
 #define CHAMADA_H    124.0f
-// Vao entre os tres graficos de audiencia. O mesmo NV_DETF_SEC_GAP que separa
-// secoes de filme: os tres paineis tem cabecalho proprio e leem como tres
-// blocos, nao como um bloco de tres partes.
-#define AUD_GAP       64.0f
 // Divisao do par frases | ficha. 1040 e a largura do bloco de texto do heroi
 // (NV_DETW2_TEXTO_W) e dos "Detalhes do Filme", e os 592 que sobram sao
 // exatamente a largura em que a ficha de producao foi desenhada e julgada (ver
@@ -448,37 +444,13 @@ static int audTempAberta = -1;// NUMERO da temporada que audAberta descreve
 // da aba "Avaliações" na MESMA temporada dos graficos.
 static int audTempVista = -1;
 static int frasesAberta;
-// Altura MEDIDA no ultimo desenho. Os dois modulos so dizem quanto ocuparam
-// DEPOIS de desenhar (e o valor de retorno de cada painel), e o empilhamento
-// precisa do numero antes. Um quadro de atraso e o preco, e ele so aparece nas
-// duas trocas de estado que existem (chamada -> carregando -> pronto), nunca
-// por quadro: a secao de frases e a ultima do documento (mexe so no docFim) e a
-// de audiencia so muda de altura com o foco DENTRO dela, onde a rolagem ja mira
-// o topo dela, que nao se move.
-static float audAlt[3] = { 380.0f, 402.0f, 484.0f }, frasesAlt = 520.0f;
-// PISO DE ALTURA DE CADA BANDA, e ele nao e cosmetico — e o que impede o unico
-// defeito grave que a altura-medida-no-ultimo-desenho pode causar.
-//
-// MEDIDO na captura (tests/detail_secoes_shot.sh, 1920x1080): com a temporada
-// inteira na mao o arco ocupa 380, o radar 402 e a impressao digital 484. Os
-// tres sao dominados por constantes fixas do modulo (a caixa do grafico mede
-// 210, 200 e 200) — o que varia com o conteudo sao poucas linhas de rodape, e
-// sempre PARA MAIS.
-//
-// O DEFEITO QUE ISTO CORRIGE apareceu na captura do estado "carregando": no
-// quadro em que a banda troca de vazia para cheia, o empilhamento ainda usa a
-// altura do quadro anterior (~140, a do aviso de vazio) e o CABECALHO DO RADAR
-// era desenhado POR CIMA da curva do arco. E o mesmo acidente que a secao do
-// Trakt ja teve contra os avatares do elenco, e um quadro dele ja e o suficiente
-// para a pessoa ver dois textos sobrepostos ao entrar na secao.
-//
-// Com o piso, a banda vazia RESERVA o espaco que o grafico vai ocupar — que e a
-// mesma disciplina dos esqueletos de episodio e de elenco deste arquivo
-// ("ocupa exatamente as coordenadas finais, para a resposta so preencher e nao
-// deslocar a pagina"). A medida so pode fazer a banda CRESCER.
-static const float AUD_PISO[3] = { 380.0f, 402.0f, 484.0f };
-// 1 quando a fileira `r` e uma das tres bandas de audiencia. Vira indice em
-// audAlt com `r - SEC_AUD_ARCO`.
+// Altura MEDIDA no ultimo desenho das frases: o modulo so diz quanto ocupou
+// DEPOIS de desenhar. Um quadro de atraso, so na troca chamada -> pronto, e a
+// secao e a ultima do documento (mexe so no docFim). Os graficos da serie nao
+// precisam disto: o bloco "Numeros da temporada" tem altura fixa.
+static float frasesAlt = 520.0f;
+// 1 quando a fileira `r` e uma das tres bandas de audiencia (so SEC_AUD_ARCO,
+// o bloco "Numeros da temporada", tem colunas hoje).
 #define EH_AUD(r) ((r) >= SEC_AUD_ARCO && (r) <= SEC_AUD_DIGITAL)
 
 // As quatro secoes do web, com o topo do GRUPO em coordenada de documento — e
@@ -530,12 +502,28 @@ typedef enum { SEC_TEMPORADAS, SEC_EPISODIOS, SEC_ABAS_INFO, SEC_ELENCO, SEC_REL
 // tecnica e Producao. Ela NAO e a ordem do enum, porque o enum tambem e a
 // ordem do D-pad da SERIE (que empilha diferente); no filme o empilhamento
 // (recalcularLayout) e o D-pad (moverFileira) seguem esta tabela.
+//
+// NOTAS (dono, 03/10): no FILME e a PRIMEIRA secao abaixo do hero; na SERIE vem
+// logo abaixo dos episodios, antes das abas/elenco e dos graficos da serie. A
+// serie tem a propria tabela porque o enum (que a serie usava como ordem do
+// D-pad) mantem as Notas depois da audiencia.
 static const int ORDEM_FILME[] = {
-  SEC_TEMPORADAS, SEC_EPISODIOS, SEC_ABAS_INFO, SEC_ELENCO, SEC_RELACIONADOS,
-  SEC_AUD_ARCO, SEC_AUD_RADAR, SEC_AUD_DIGITAL, SEC_NOTAS, SEC_NOTAS_EP,
+  SEC_NOTAS, SEC_TEMPORADAS, SEC_EPISODIOS, SEC_ABAS_INFO, SEC_ELENCO, SEC_RELACIONADOS,
+  SEC_AUD_ARCO, SEC_AUD_RADAR, SEC_AUD_DIGITAL, SEC_NOTAS_EP,
+  SEC_TRAILERS, SEC_COLECAO, SEC_COMENTARIOS,
+  SEC_ESTUDIOS, SEC_FRASES, SEC_DETALHES };
+// NUMEROS DA TEMPORADA (Glass UI 1.8, mockup "Notas e graficos"): os tres
+// graficos da serie viraram UM bloco logo depois das Notas. Ele usa a fileira
+// SEC_AUD_ARCO (SEC_NUMEROS); RADAR, DIGITAL e NOTAS_EP ficaram sem colunas.
+static const int ORDEM_SERIE[] = {
+  SEC_TEMPORADAS, SEC_EPISODIOS, SEC_NOTAS, SEC_AUD_ARCO, SEC_ABAS_INFO, SEC_ELENCO,
+  SEC_RELACIONADOS, SEC_AUD_RADAR, SEC_AUD_DIGITAL, SEC_NOTAS_EP,
   SEC_TRAILERS, SEC_COLECAO, SEC_COMENTARIOS,
   SEC_ESTUDIOS, SEC_FRASES, SEC_DETALHES };
 #define N_ORDEM ((int)(sizeof ORDEM_FILME / sizeof ORDEM_FILME[0]))
+#define SEC_NUMEROS SEC_AUD_ARCO
+static int ehSerie(void);
+static const int *ordemSecoes(void) { return ehSerie() ? ORDEM_SERIE : ORDEM_FILME; }
 // Definida adiante, junto do resto das consultas ao catalogo; declarada aqui
 // porque recalcularLayout, cabecalhoDe e nAvaliaveis, todas acima dela,
 // precisam separar serie de filme.
@@ -545,6 +533,11 @@ static float estAltura(void);
 static float yItem(int r, int c);
 static int epApple(void);
 static float epExtraAltura(void);
+static float epAppleExtra(void);
+static float notasBloco(void);
+static float notasTopoSerie(void);
+static float numerosTopoSerie(void);
+static float alturaSecao(int r);
 static float epTempY(void);
 static float epRowY(void);
 static float serieGrupo(int r);
@@ -774,6 +767,15 @@ static int secaoPresente(int r) {
 // posicoes absolutas dos blocos .dt): 87 antes do elenco, 60 antes das notas,
 // 44 antes dos comentarios, 83 antes de "Mais como este", 52 antes da linha
 // Colecao | Frases e 73 antes da Ficha | Producao.
+// Alvo da rolagem de uma secao ALTA (Notas com muitas fontes, Numeros da
+// temporada): o topo sobe o bastante para o bloco inteiro caber na tela,
+// nunca acima de 10% nem abaixo dos 33% de sempre.
+static float alvoQueCabe(float h) {
+  float a = (NV_TELA_H - h - 40.0f) / NV_TELA_H;
+  if (a > NV_DETP_ALVO_FILEIRA) a = NV_DETP_ALVO_FILEIRA;
+  if (a < 0.10f) a = 0.10f;
+  return a;
+}
 static float vaoAntes(int r) {
   switch (r) {
     case SEC_ELENCO:       return 87.0f;
@@ -800,9 +802,19 @@ static void recalcularLayout(void) {
     for (r = 0; r < N_SECOES; r++) {
       topoSec[r] = conteudoSec[r] = G[r] +
         (r >= SEC_ABAS_INFO && r <= SEC_ELENCO ? epExtraAltura() : 0);
+      // NOTAS na serie: logo abaixo dos episodios, onde antes comecavam as abas
+      // (G_ABAS); o bloco inteiro empurra abas e elenco (epExtraAltura).
+      if (r == SEC_NOTAS) {
+        topoSec[r] = conteudoSec[r] = notasTopoSerie();
+        if (secaoN(r) > 0) conteudoSec[r] += NV_DETF_CAB_H + NV_DETF_CAB_GAP;
+      }
+      // NUMEROS DA TEMPORADA logo depois das Notas; o titulo e do proprio bloco.
+      if (r == SEC_NUMEROS) topoSec[r] = conteudoSec[r] = numerosTopoSerie();
       alvoSec[r] = (r == SEC_ABAS_INFO) ? NV_DETP_ALVO_ABAS
                                         : NV_DETP_ALVO_FILEIRA;
     }
+    alvoSec[SEC_NOTAS] = alvoQueCabe(alturaSecao(SEC_NOTAS));
+    alvoSec[SEC_NUMEROS] = alvoQueCabe(alturaSecao(SEC_NUMEROS));
     docFim = NV_DETP_FIM;
     // SECAO DO TRAKT NA SERIE: empilhada abaixo do elenco, como na referencia.
     // Era o "falta a secao do trakt na de series" — ela existia so em filme.
@@ -828,7 +840,7 @@ static void recalcularLayout(void) {
     // mesma regra: nascem onde a aba ativa termina e empurram o que vem depois.
     // Altura vinda do ultimo desenho (ver audAlt), porque cada grafico so diz
     // quanto ocupou depois de desenhado.
-    for (r = SEC_AUD_ARCO; r <= SEC_AUD_DIGITAL; r++) {
+    for (r = SEC_AUD_RADAR; r <= SEC_AUD_DIGITAL; r++) {
       topoSec[r] = conteudoSec[r] = y;
       if (secaoN(r) <= 0) continue;
       y += alturaSecao(r) + NV_DETF_SEC_GAP;
@@ -837,7 +849,7 @@ static void recalcularLayout(void) {
     }
     // NOTAS: heatmap por fonte e grade de episodios, com cabecalho proprio como
     // os trailers logo abaixo (topo do grupo = linha do titulo).
-    for (r = SEC_NOTAS; r <= SEC_NOTAS_EP; r++) {
+    for (r = SEC_NOTAS_EP; r <= SEC_NOTAS_EP; r++) {
       topoSec[r] = conteudoSec[r] = y;
       if (secaoN(r) <= 0) continue;
       conteudoSec[r] = y + NV_DETF_CAB_H + NV_DETF_CAB_GAP;
@@ -885,8 +897,9 @@ static void recalcularLayout(void) {
     return;
   }
   { float y = NV_DETF_HERO_FIM;
-    for (r = 0; r < N_SECOES; r++) {
+    for (int o = 0; o < N_ORDEM; o++) {
       float h;
+      r = ORDEM_FILME[o];
       topoSec[r] = conteudoSec[r] = y;
       alvoSec[r] = NV_DETP_ALVO_FILEIRA;
       // Secao ausente nao ocupa altura — salvo o ELENCO enquanto o meta do
@@ -904,7 +917,8 @@ static void recalcularLayout(void) {
     // Fim REAL do documento, nao os 2473 da serie: um filme e bem mais curto e
     // copiar aquele numero deixaria a pagina rolar para muito depois do fim.
     docFim = y - NV_DETF_SEC_GAP + NV_DETF_PAD_FIM;
-    if (docFim < NV_TELA_H) docFim = NV_TELA_H; }
+    if (docFim < NV_TELA_H) docFim = NV_TELA_H;
+    alvoSec[SEC_NOTAS] = alvoQueCabe(alturaSecao(SEC_NOTAS)); }
 }
 
 // As abas sao DINAMICAS, como no web: renderSeriesInsightSection
@@ -1647,7 +1661,28 @@ static float epCardW(void) { return epApple() ? 420.0f : NV_DETP_EP_W; }
 static float epCardH(void) { return epApple() ? 500.0f : NV_DETP_EP_H; }
 static float epCardPasso(void) { return epApple() ? 452.0f : NV_DETP_EP_PASSO; }
 static float epThumbH(void) { return epApple() ? 236.0f : NV_DETP_EP_THUMB_H; }
-static float epExtraAltura(void) { return epApple() ? epCardH() - 414.0f : 0.0f; }
+static float epAppleExtra(void) { return epApple() ? epCardH() - 414.0f : 0.0f; }
+// Bloco das Notas na serie (cabecalho + fileira + vao), que empurra abas e
+// elenco; 0 enquanto as notas nao chegaram.
+// Topo do cabecalho: fundo dos cartoes de episodio + o vao antes das notas (60,
+// o mesmo de vaoAntes).
+static float notasTopoSerie(void) { return epRowY() + epCardH() + 60.0f; }
+// Fim das Notas (= topo dos Numeros da temporada, que vem logo depois).
+static float numerosTopoSerie(void) {
+  float y = notasTopoSerie();
+  if (secaoN(SEC_NOTAS) > 0)
+    y += NV_DETF_CAB_H + NV_DETF_CAB_GAP + alturaSecao(SEC_NOTAS) + NV_DETF_SEC_GAP;
+  return y;
+}
+// Notas + Numeros da temporada empurram abas e elenco juntos.
+static float notasBloco(void) {
+  float fim;
+  if (!ehSerie() || (secaoN(SEC_NOTAS) <= 0 && secaoN(SEC_NUMEROS) <= 0)) return 0.0f;
+  fim = numerosTopoSerie();
+  if (secaoN(SEC_NUMEROS) > 0) fim += alturaSecao(SEC_NUMEROS) + NV_DETF_SEC_GAP;
+  return fim - NV_DETP_G_ABAS - epAppleExtra();
+}
+static float epExtraAltura(void) { return epAppleExtra() + notasBloco(); }
 static float epTempY(void) { return epApple() ? 1160.0f : NV_DETP_TEMP_Y; }
 static float epRowY(void) { return epApple() ? 1286.0f : NV_DETP_EP_Y; }
 static float epAbasY(void) { return (epApple() ? 1758.0f : NV_DETP_ABA_Y) + epExtraAltura(); }
@@ -1676,16 +1711,14 @@ static float alturaSecao(int r) {
     // As duas sob demanda: a CHAMADA enquanto ninguem entrou (titulo +
     // procedencia + custo, tres linhas) e a altura MEDIDA no ultimo desenho
     // depois disso.
-    case SEC_AUD_ARCO:
+    // NUMEROS DA TEMPORADA: altura fixa, carregando ou nao (os cartoes dizem
+    // o estado por dentro), entao os dados chegam sem deslocar a pagina.
+    case SEC_AUD_ARCO:  return serieaud_bloco_altura();
     case SEC_AUD_RADAR:
-    case SEC_AUD_DIGITAL: {
-      int b = r - SEC_AUD_ARCO;
-      if (!audAberta) return CHAMADA_H;
-      return audAlt[b] > AUD_PISO[b] ? audAlt[b] : AUD_PISO[b];
-    }
+    case SEC_AUD_DIGITAL: return 0.0f;
     case SEC_FRASES:    return frasesAberta ? frasesAlt : CHAMADA_H;
     case SEC_NOTAS:     return notasui_fontes_altura(notasDados());
-    case SEC_NOTAS_EP:  return notasui_grade_altura(notasDados());
+    case SEC_NOTAS_EP:  return 0.0f;
   }
   return 0.0f;
 }
@@ -1792,37 +1825,26 @@ static int secaoN(int r) {
     case SEC_DETALHES:
       if (ehSerie()) return 0;
       return nLinhasDetalhe() > 0 ? 1 : 0;
-    // UMA COLUNA POR EPISODIO da temporada escolhida: e o seletor do painel de
-    // impressao digital, que destaca um episodio de cada vez
+    // NUMEROS DA TEMPORADA: UMA COLUNA POR EPISODIO da temporada escolhida
+    // (ate o teto de pedidos do modulo, SA_EP_MAX). Esquerda/direita anda pelos
+    // episodios e o mesmo episodio fica em foco nos tres cartoes
     // (serieaud_selecionar). A contagem sai de extras.h e nao do modulo de
-    // audiencia — ela precisa existir ANTES do primeiro pedido, senao a secao
-    // teria zero colunas, focus_mover pularia por cima dela (focus.c) e o
-    // pedido nunca poderia ser disparado: a secao ficaria inalcancavel para
-    // sempre por depender de si mesma.
+    // audiencia: ela precisa existir ANTES do primeiro pedido, senao a fileira
+    // teria zero colunas, focus_mover pularia por cima dela e o pedido (que sai
+    // quando o foco ENTRA) nunca poderia ser disparado.
     //
-    // Sem essa lista a secao NAO EXISTE, e e a mesma condicao que "sem Trakt":
-    // as notas por episodio e os numeros dos episodios saem todos do
-    // `seasons?extended=episodes,full`. Nao ha aqui uma secao oferecida que nao
-    // possa funcionar nesta instalacao.
-    // A PRIMEIRA BANDA E A PORTA. Ela existe assim que ha lista de episodios —
-    // e por ela que o foco entra e o pedido sai. As outras duas so ganham
-    // coluna DEPOIS disso: enquanto ninguem entrou, elas nao tem nada para
-    // desenhar, e uma fileira que recebe foco sem desenhar nada e exatamente o
-    // que este arquivo ja evita em tres outros lugares.
-    //
-    // O ARCO e o RADAR sao UMA coluna: o foco pousa, a pagina rola ate o
-    // grafico e pronto. Quem tem uma coluna POR EPISODIO e a impressao digital,
-    // onde a escolha muda o rodape de numeros crus (serieaud_selecionar).
-    case SEC_AUD_ARCO:
-      return audTemp() >= 0 ? 1 : 0;
-    case SEC_AUD_RADAR:
-      return (audAberta && audTemp() >= 0) ? 1 : 0;
-    case SEC_AUD_DIGITAL: {
+    // Sem a lista de episodios do Trakt o bloco NAO EXISTE: as notas por
+    // episodio e os numeros dos episodios saem todos do
+    // `seasons?extended=episodes,full`.
+    case SEC_AUD_ARCO: {
       int t = audTemp(), n;
-      if (!audAberta || t < 0) return 0;
+      if (t < 0) return 0;
       n = extras_n_eps(t);
-      return n < N_ITENS ? n : N_ITENS;
+      return n < SA_EP_MAX ? n : SA_EP_MAX;
     }
+    case SEC_AUD_RADAR:
+    case SEC_AUD_DIGITAL:
+      return 0;
     // UMA COLUNA SO, sempre, e por dois motivos que puxam para o mesmo lado:
     //
     //   as frases sao uma lista VERTICAL (como a aba "Coleção"), entao o que
@@ -1843,13 +1865,13 @@ static int secaoN(int r) {
     // consulta que nunca aconteceu.
     case SEC_FRASES:
       return (ci && ci->imdb[0]) ? 1 : 0;
-    // UMA COLUNA, como as frases: nada dentro dela se escolhe, o foco so precisa
-    // pousar para a pagina rolar ate o painel. Sem nenhuma nota nem nota de
-    // episodio a secao nao existe (nada de painel vazio).
+    // Sem nenhuma nota a secao nao existe (nada de painel vazio).
+    // UM BLOCO POR FONTE na grade de duas colunas (detail_evento anda nela).
     case SEC_NOTAS:
-      return notasui_fontes_tem(notasDados()) ? 1 : 0;
+      return notasui_fontes_n(notasDados());
+    // A grade de episodios virou o cartao "Notas por episodio" do bloco acima.
     case SEC_NOTAS_EP:
-      return (ehSerie() && notasui_grade_tem(notasDados())) ? 1 : 0;
+      return 0;
   }
   return 0;
 }
@@ -2390,8 +2412,8 @@ void detail_evento(const SDL_Event *e) {
       // colunaLembrada — a fileira de temporadas abria sempre na primeira aba,
       // e ela e quem trocaria a lista de episodios para a temporada errada no
       // proximo quadro (ver o sincronizador em detail_atualizar).
-      for (int o = 0; o < N_SECOES; o++) {
-        int r = ehSerie() ? o : ORDEM_FILME[o];
+      for (int o = 0; o < N_ORDEM; o++) {
+        int r = ordemSecoes()[o];
         if (secaoColunas(r) > 0) {
           int alvo = foco.colunaLembrada[r];
           if (alvo >= secaoColunas(r)) alvo = secaoColunas(r) - 1;
@@ -2433,6 +2455,24 @@ void detail_evento(const SDL_Event *e) {
   // primeiro da T1 continua pedindo o menu lateral).
   if (ehSerie() && foco.fileira == SEC_EPISODIOS && (k == SDLK_LEFT || k == SDLK_RIGHT) &&
       detail_ep_borda(k == SDLK_RIGHT ? 1 : -1)) return;
+  // NOTAS: os blocos de fonte sao uma grade de DUAS colunas. Cima/baixo anda
+  // dentro dela antes de sair da secao; esquerda/direita nao atravessa a linha
+  // (esquerda na coluna da esquerda pede o menu, como nas outras fileiras).
+  if (foco.fileira == SEC_NOTAS) {
+    int nc = foco.nColunas[SEC_NOTAS], c = foco.coluna;
+    // Linha de baixo incompleta: da coluna da direita desce para o ultimo bloco.
+    if (k == SDLK_DOWN && c / NOTASUI_COLUNAS < (nc - 1) / NOTASUI_COLUNAS) {
+      foco.coluna = c + NOTASUI_COLUNAS < nc ? c + NOTASUI_COLUNAS : nc - 1;
+      return;
+    }
+    if (k == SDLK_UP && c >= NOTASUI_COLUNAS) { foco.coluna -= NOTASUI_COLUNAS; return; }
+    if (k == SDLK_RIGHT) {
+      if (c % NOTASUI_COLUNAS < NOTASUI_COLUNAS - 1 && c + 1 < nc) foco.coluna++;
+      return;
+    }
+    if (k == SDLK_LEFT && c % NOTASUI_COLUNAS > 0) { foco.coluna--; return; }
+    if (k == SDLK_LEFT) { pediuMenu = 1; return; }
+  }
   if (k == SDLK_RIGHT) {
     if (!focus_mover(&foco, 1, 0) && !ehSerie() && parDir(foco.fileira) >= 0 &&
         foco.nColunas[parDir(foco.fileira)] > 0) {
@@ -2678,12 +2718,14 @@ static void revalidarIdx(void) {
 // ficam no heroi (mockup "detalhe-retomar"): a pagina fica no topo, com a arte.
 static int focoNoTopo(void) { return 0; }
 
+static float blocoAnt[2] = { -1.0f, -1.0f };   // Notas / Numeros no quadro anterior
+
 void detail_atualizar(float dt, Uint32 agora) {
   // `agora` ficou sem uso quando o repouso da troca de temporada saiu (ver a
   // nota mais abaixo). Fica na assinatura porque ela e a mesma de todas as
   // telas e app.c chama todas do mesmo jeito.
   (void)agora;
-  if (!aberto) return;
+  if (!aberto) { blocoAnt[0] = blocoAnt[1] = -1.0f; return; }
   // SAINDO: interrompe os dois fios antes mesmo de a mola terminar. Chamar todo
   // quadro nao custa nada (e um flag sob mutex) e evita precisar de uma borda:
   // `saindo` tambem e ligado por caminhos que nao passam pelo Voltar, como o
@@ -2888,15 +2930,12 @@ void detail_atualizar(float dt, Uint32 agora) {
   // estao no mesmo titulo (e na mesma temporada, no caso da audiencia) —, entao
   // chamar por quadro enquanto o foco esta aqui e a forma mais simples de nao
   // precisar de uma borda de "entrou agora" que erra quando o catalogo remonta.
-  if (nivel >= 1 && EH_AUD(foco.fileira)) {
+  if (nivel >= 1 && foco.fileira == SEC_NUMEROS) {
     // AS NOTAS JA ESTAO NA MAO. Vem do mesmo `seasons?extended=episodes,full`
-    // que desenha as pastilhas da aba "Avaliações"; o arco nao custa pedido.
+    // que desenha as pastilhas da aba "Avaliações"; so a retencao custa pedido.
     abrirAudiencia();
-    // O episodio em destaque no painel 3 e a COLUNA focada — e so na banda da
-    // impressao digital, que e a unica com uma coluna por episodio. Nas outras
-    // duas a coluna e sempre 0 e mexer na selecao por causa dela apagaria o
-    // episodio escolhido toda vez que o foco passasse por cima delas.
-    if (foco.fileira == SEC_AUD_DIGITAL) serieaud_selecionar(foco.coluna);
+    // O episodio em foco nos tres cartoes e a COLUNA focada.
+    serieaud_selecionar(foco.coluna);
   }
   // TROCAR DE TEMPORADA LA EM CIMA MEXE EM DUAS COISAS AQUI EMBAIXO.
   //
@@ -3060,6 +3099,30 @@ void detail_atualizar(float dt, Uint32 agora) {
   // --- rolagem VERTICAL -----------------------------------------------------
   // O topo do grupo focado vai para 33% da altura util (40% nas abas). E a
   // regra do web, e nao um "rola o necessario": conferida nos quatro grupos.
+  // NOTAS CHEGANDO TARDE (rede) nao pode empurrar o que o foco esta olhando:
+  // a secao nasce ACIMA de quase tudo, entao tudo abaixo dela desce o bloco
+  // inteiro. Se o foco esta abaixo, a rolagem anda junto (a fileira focada fica
+  // onde estava na tela) em vez de a mola arrastar a pagina depois.
+  // O MESMO vale para os NUMEROS DA TEMPORADA (serie), que nascem logo abaixo
+  // das Notas quando a lista de episodios do Trakt chega.
+  { static const int BLOCOS[2] = { SEC_NOTAS, SEC_NUMEROS };
+    int kb;
+    for (kb = 0; kb < 2; kb++) {
+      int sec = BLOCOS[kb];
+      float bloco = secaoN(sec) > 0
+          ? conteudoSec[sec] - topoSec[sec] + alturaSecao(sec) + NV_DETF_SEC_GAP
+          : 0.0f;
+      if (blocoAnt[kb] >= 0.0f && bloco != blocoAnt[kb] && nivel >= 1) {
+        const int *ordem = ordemSecoes();
+        int o, depois = 0, visto = 0;
+        for (o = 0; o < N_ORDEM; o++) {
+          if (ordem[o] == sec) visto = 1;
+          else if (ordem[o] == foco.fileira) { depois = visto; break; }
+        }
+        if (depois) scrollY += bloco - blocoAnt[kb];
+      }
+      blocoAnt[kb] = bloco;
+    } }
   float alvoY = 0.0f;
   if (nivel >= 1 && foco.fileira >= 0 && foco.fileira < N_SECOES && !focoNoTopo()) {
     // Mira o topo do CONTEUDO (o trilho), nao o do grupo: o cabecalho da secao
@@ -3508,6 +3571,7 @@ static Uint32 metaChegouEm;
 static void heroReiniciar(void) {
   textogate_reiniciar(&gateHero);
   notasui_reiniciar();
+  serieaud_bloco_reiniciar();
   sinVisto[0] = sinAnt[0] = 0; sinVistoInit = 0; sinTrocaDesde = 0;
   hSinVis = 0.0f; hSinInit = 0; hSinTick = 0;
   metaEsqVisto = 0; metaChegouEm = 0;
@@ -5192,22 +5256,21 @@ static void desenhaRelacionados(float x, float y, float a, int primeiro, int lim
 // GFX_MARCA; como a superficie em foco permanece escura, a marca segue clara
 // enquanto o cartao recebe o accent configuravel.
 static void desenhaEstudio(float x, float y, int i, float f, float a) {
-  GfxRect r = { x, y, EST_CARD_W, EST_CARD_H };
+  GfxRect r0 = { x, y, EST_CARD_W, EST_CARD_H };
+  GfxRect r = foco_zoom(r0, f);
   const char *logo = extras_estudio_logo(i);
-  float ar, ag, ab;
+  const float raio = 14.0f / EST_CARD_H;
   GLuint t;
-  // REPOUSO = a MESMA superficie neutra dos outros cartoes da pagina (moldura:
-  // navy escuro, ou o vidro neutro com a Interface de vidro). Antes o repouso
-  // com vidro ligado passava por gfx_cartao_foco_vidro com foco 0, que ainda
-  // lava o cartao na cor do realce — com tema Dinamico o cartao ficava num
-  // degrade amarelado que nenhum outro cartao tem (dono, 29/09/2026). O foco e
-  // o mesmo de "Mais como este": o cartao de realce por cima.
+  // MESMO FOCO DOS OUTROS CARTOES DA PAGINA (focoprof.h): anel so com "Foco no
+  // cartaz" ligado, senao o cartao cresce; profundidade pelo ajuste de
+  // cartazes. Antes o foco aqui era um preenchimento no acento (ou o vidro de
+  // realce) que "Mais como este" e o Elenco nao tem — na Moderna o estudio era
+  // o unico cartao da pagina com outra linguagem de foco (dono, 03/10/2026).
+  // REPOUSO = a mesma superficie neutra dos demais (moldura).
+  if (!ajustes_vidro()) foco_anel(r0, raio, f, a);
   moldura(r, 14.0f, a);
-  if (f > 0.001f) {
-    ajustes_acento(&ar, &ag, &ab);
-    if (ajustes_vidro()) gfx_vidro_cartao(r, 14.0f / EST_CARD_H, f, a);
-    else gfx_cartao_foco_vidro(r, 14.0f / EST_CARD_H, f, a, ar, ag, ab);
-  }
+  if (ajustes_vidro()) foco_anel(r0, raio, f, a);
+  foco_profundidade(r, raio, ajustes_profundidade_posters(), a);
   t = logo[0] ? tex_obter(logo) : 0;
   if (t) {
     float ap = tex_aspecto(logo), w, h, fr, fg, fb;
@@ -5215,18 +5278,12 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
     if (ap <= 0.0f) ap = 3.0f;
     h = 52.0f; w = h * ap;
     if (w > EST_CARD_W - 36.0f) { w = EST_CARD_W - 36.0f; h = w / ap; }
-    // RECORTE = a borda da imagem e transparente (tex_cor_fundo devolve 2).
-    // E a mesma medida que o guia usa para decidir entre tingir e desenhar, e
-    // ela olha o ARQUIVO, nao adivinha pelo nome.
     recorte = tex_cor_fundo(logo, &fr, &fg, &fb) != 1;
-    { GfxRect rl = { x + (EST_CARD_W - w) * 0.5f,
-                     y + (EST_CARD_H - h) * 0.5f, w, h };
+    { float k = r.w / EST_CARD_W;
+      GfxRect rl = { r.x + (r.w - w * k) * 0.5f,
+                     r.y + (r.h - h * k) * 0.5f, w * k, h * k };
       gfx_tex_aspect_atual = 0.0f;
-      // LOGO RECORTADO SEMPRE BRANCO (dono: "a logo nao fica branca e fica
-      // ruim de ler"). So o logo escuro era pintado; o colorido ia com a cor
-      // do arquivo e o escuro medio (o "T-STREET" preto a 80%) escapava da
-      // medida de tex_marca_escura e sumia no cartao. Logo com fundo proprio
-      // (sem recorte) continua como veio: ali a placa faz parte da marca.
+      // Logo recortado sempre branco; logo com fundo proprio fica como veio.
       if (recorte) {
         float tom = 0.93f;
         gfx_rect(rl, t, GFX_MARCA, 0, 0, 0, 0.0f, tom, tom, tom, a);
@@ -5234,12 +5291,12 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
         gfx_rect(rl, t, GFX_ARTE, 0, 0, 0, 8.0f / h, 1, 1, 1, a);
       } }
   } else {
-    int c = 208;
+    int c = f > 0.5f ? 245 : 208;
     TxtLinha ln = txt_linha_corta(TXT_DET_META2, extras_estudio_nome(i),
                                   c, c, 220, 255,
                                   EST_CARD_W - 28.0f);
-    txt_desenhar_alpha(ln, x + (EST_CARD_W - ln.w) * 0.5f,
-                       y + (EST_CARD_H - ln.h) * 0.5f, a * 0.95f);
+    txt_desenhar_alpha(ln, r.x + (r.w - ln.w) * 0.5f,
+                       r.y + (r.h - ln.h) * 0.5f, a * 0.95f);
   }
 }
 
@@ -5806,27 +5863,22 @@ static float desenhaChamada(float x, float y, const char *titulo,
   return lt.h + 6.0f + lf.h + 10.0f + lc.h;
 }
 
-// OS TRES GRAFICOS, empilhados. Cada um devolve o que ocupou — e a unica forma
-// de saber a altura, porque ela depende do texto que coube e de quantos
-// episodios responderam.
-//
-// O `a` da pagina nao e repassado: os modulos desenham com txt_desenhar e
-// gfx_cor de alfa proprio, sem parametro de opacidade. Nao e problema aqui
-// porque estas secoes ficam a ~1900 px do topo do documento e so aparecem com
-// a pagina ja assentada (pg == 1); a abertura da tela nunca as mostra.
-static float desenhaAudiencia(int banda, float x, float y, float a) {
-  GfxRect r = { x, y, NV_TELA_W - NV_DETP_X * 2, 0.0f };
-  // A CHAMADA fica so na PRIMEIRA banda: as outras duas nem existem antes de
-  // alguem entrar (secaoN devolve 0), entao repetir o aviso tres vezes seria
-  // tres vezes o mesmo paragrafo sobre a mesma coisa.
-  if (!audAberta)
-    return desenhaChamada(x, y, "Audiência da temporada",
-                          "Quem marcou cada episódio no Trakt — não é a audiência geral",
-                          "Uma consulta por episódio: carrega quando você desce até aqui",
-                          a);
-  if (banda == 0) return serieaud_arco(r);
-  if (banda == 1) return serieaud_radar(r);
-  return serieaud_digital(r);
+// NUMEROS DA TEMPORADA (so serie): os tres cartoes de serieaud_bloco, com o
+// episodio em foco = a coluna focada (ou a ultima lembrada, com o foco fora).
+static void desenhaNumeros(float x, float y, float a) {
+  SaBloco b;
+  int t = audTemp();
+  if (t < 0) return;
+  memset(&b, 0, sizeof b);
+  b.temporada = extras_temporada_numero(t);
+  b.tempIdx = t;
+  b.sel = (nivel >= 1 && foco.fileira == SEC_NUMEROS) ? foco.coluna
+                                                      : foco.colunaLembrada[SEC_NUMEROS];
+  if (b.sel < 0 || b.sel >= secaoN(SEC_NUMEROS)) b.sel = 0;
+  b.selEp = extras_ep_numero(t, b.sel);
+  b.aberto = audAberta && audTempAberta == b.temporada;
+  b.notas = notasDados();
+  serieaud_bloco(x, y, &b, a);
 }
 
 // FRASES A ESQUERDA, FICHA A DIREITA. Sao duas fontes diferentes (Wikiquote e
@@ -5904,11 +5956,11 @@ static void cabecalhoSecao(int r, const char *cab, float x, float base, float a)
 // coluna de cada fileira. Devolve 1 se moveu.
 static int moverFileira(int dy) {
   int o, pos = -1;
-  if (ehSerie()) return focus_mover(&foco, 0, dy);
-  for (o = 0; o < N_ORDEM; o++) if (ORDEM_FILME[o] == foco.fileira) pos = o;
+  const int *ordem = ordemSecoes();
+  for (o = 0; o < N_ORDEM; o++) if (ordem[o] == foco.fileira) pos = o;
   if (pos < 0) return focus_mover(&foco, 0, dy);
   for (o = pos + dy; o >= 0 && o < N_ORDEM; o += dy) {
-    int r = ORDEM_FILME[o];
+    int r = ordem[o];
     // O par da mesma linha (Colecao | Frases, Ficha | Producao) e esquerda/
     // direita, nao cima/baixo.
     if (parEsq(r) == foco.fileira || parDir(r) == foco.fileira) continue;
@@ -6064,20 +6116,13 @@ static void desenhaSecao(int r, float a, Uint32 agora) {
       // destaque), como os cartazes de "Mais como este" no filme. A altura
       // medida volta para o empilhamento do proximo quadro.
       case SEC_AUD_ARCO:
-      case SEC_AUD_RADAR:
-      case SEC_AUD_DIGITAL:
-        if (c == 0)
-          audAlt[r - SEC_AUD_ARCO] =
-              desenhaAudiencia(r - SEC_AUD_ARCO, NV_DETP_X, y, a);
+        if (c == 0) desenhaNumeros(NV_DETP_X, y, a);
         break;
       case SEC_FRASES:
         if (c == 0) frasesAlt = desenhaFrases(NV_DETP_X, y, a);
         break;
       case SEC_NOTAS:
-        if (c == 0) notasui_fontes_desenhar(notasDados(), NV_DETP_X, y, a);
-        break;
-      case SEC_NOTAS_EP:
-        if (c == 0) notasui_grade_desenhar(notasDados(), NV_DETP_X, y, a);
+        if (c == 0) notasui_fontes_desenhar(notasDados(), NV_DETP_X, y, a, animFoco[SEC_NOTAS]);
         break;
       case SEC_ESTUDIOS:
         desenhaEstudio(x, y, c, f, a);

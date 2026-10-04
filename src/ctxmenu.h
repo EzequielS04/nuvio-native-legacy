@@ -48,6 +48,12 @@ typedef struct {
   const char *rot, *icone;
   int confirmar;
   const char *kicker, *pergunta, *texto;
+  // 1 = esta extra TOMA O LUGAR de "Marcar como assistido" e tambem o faz (so
+  // marca, nunca desmarca; ja marcado no historico so passa adiante). A extra
+  // so sai em ctx_pediu_extra() depois que o historico confirma — falhou: o menu
+  // fica com o erro e o mesmo OK tenta de novo. Sem historico possivel
+  // (serie fora do catalogo, sem IMDb) ela e so a propria extra.
+  int juntaAssistido;
 } CtxExtra;
 void ctx_abrir_social(const CatItem *titulo, const CtxExtra *extras, int n);
 int  ctx_pediu_extra(void);
@@ -63,6 +69,10 @@ const char *ctx_pediu_categoria(void);
 // com uma chave que aceita forma (fil_estilos), o menu ganha "Estilo da
 // fileira". NULL/"" = sem a opcao (destaque, Continuar assistindo).
 void ctx_fileira(const char *chave, const char *titulo);
+// O proximo ctx_abrir e o do cartao "Retomar agora": ganha "Dispensar" (solta o
+// titulo da faixa, home_retomar_dispensar). Consumido por ctx_abrir; a home
+// passa 0 nos outros cartoes.
+void ctx_dispensar_retomar(int on);
 // Menu SO da fileira, para o cartao que nao e titulo (pasta de colecao, pilha
 // fechada do ranking): abre direto no modal de estilo — formas a esquerda,
 // previa da fileira a direita (home_previa_fileira). Nao abre nada se a chave

@@ -14,6 +14,14 @@
 #include <unistd.h>
 
 static const char *DIR;
+// legsyncui.c (provedor do seletor do F04) sem SDL: stubs do que ele chama.
+#include "legendasui.h"
+static LegendasSyncProvider prov; static int provLigado;
+void legendasui_definir_sync(const LegendasSyncProvider *p) { provLigado = p != NULL; if (p) prov = *p; }
+const char *i18n(const char *s) { return s; }
+void plrui_decimal(char *s) { (void)s; }
+static const char *canalId = "";
+const char *player_id_canal(void) { return canalId; }
 static int capacidades = REDE_CAP_JOB;
 unsigned rede_pedido_capacidades(void) { return (unsigned)capacidades; }
 int rede_pedir(const RedePedido *p, RedeResposta *r) { (void)p; memset(r, 0, sizeof *r); r->erro = REDE_INDISPONIVEL; return 0; }
@@ -251,6 +259,31 @@ int main(int argc, char **argv) {
     }
   }
   casos++;
+
+  // 9c. PROVEDOR do seletor de legendas (legsyncui.c -> legendasui): linha so
+  //     no slot principal, so com externa ativa, nunca em canal ao vivo; as
+  //     acoes da linha sao as de agora e executar roda a escolhida.
+  { const char *rot[8]; int n;
+    legsync_ui_ligar(); assert(provLigado);
+    legsync_iniciar(MKV);
+    assert(!prov.estado(0, prov.u) && !prov.estado(1, prov.u));        // sem externa: sem linha
+    legsync_primaria_outra(1); assert(!prov.estado(0, prov.u));       // embutida: sem linha
+    legsync_primaria_externa("ext://0/ext_mais2500.srt", "pt", "P");
+    esperarFase(MKV, LEGSYNC_PRONTA);
+    assert(prov.estado(0, prov.u) && !prov.estado(1, prov.u));         // segundo idioma: depois
+    canalId = "xtream:1:2"; assert(!prov.estado(0, prov.u)); canalId = "";
+    n = prov.acoes(0, rot, 8, prov.u);
+    assert(n == 2 && !strcmp(rot[0], "R\xc3\xa1pida") && !strcmp(rot[1], "Completa"));
+    assert(prov.acoes(1, rot, 8, prov.u) == 0);
+    prov.executar(0, 1, prov.u);                                        // Completa
+    v = esperarFase(MKV, LEGSYNC_ACEITA); assert(abs(v.offsetAutoMs - 2500) <= 25);
+    assert(strstr(prov.estado(0, prov.u), "Sincronizada"));
+    n = prov.acoes(0, rot, 8, prov.u);
+    assert(n >= 1 && !strcmp(rot[0], "Desfazer"));
+    prov.executar(0, 0, prov.u);                                        // Desfazer
+    assert(legsync_visao(0).fase == LEGSYNC_DESFEITA && legsync_offset_ms(0) == 0);
+    prov.executar(0, 99, prov.u);                                       // indice velho: nada
+    casos++; }
 
   // 10. Fim de sessao e corridas de teardown: leitura presa, download pendente,
   //     analise em curso, 40 sessoes seguidas; depois destruir com tudo no ar.

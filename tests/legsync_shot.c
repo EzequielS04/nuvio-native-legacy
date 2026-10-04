@@ -1,5 +1,5 @@
-// Capturas da linha de AutoSync (F05) na folha de legendas, que cresce da ilha
-// do relogio (faixas.c + plrilha.c). Tudo real: legenda externa baixada por
+// Capturas da linha de AutoSync (F05) no seletor de legendas do F04
+// (legendasui.c, aberto por faixas_abrir_em(1)), que cresce da ilha do relogio. Tudo real: legenda externa baixada por
 // legenda.c, referencia embutida lida por Range (legref.c + rede.c) de um MKV
 // servido por tests/legref_rangesrv.py, analise pela engine (autosync.c).
 // Fora da suite (janela GL e olho humano):
@@ -125,17 +125,18 @@ int main(int argc, char **argv) {
   player_erro_fonte(); player_limpar_erro_fonte();
   quadros(20);
 
-  // Sem legenda externa: a linha diz o que falta, sem acao.
+  // Sem legenda externa: o seletor nao tem linha de AutoSync.
   faixas_abrir_em(1);
   quadros(40);
-  for (i = 0; i < 8; i++) tecla(SDLK_DOWN);   // a linha de AutoSync e a ultima
-  quadros(30);
   v = legsync_visao(0); assert(v.fase == LEGSYNC_INDISPONIVEL && v.acoes == 0);
   salvar(saida, "1-sem-externa");
 
   // A externa (+2,5 s) escolhida: pronta, Rapida entre < >.
   legsync_primaria_externa(srt, "pt", "OpenSubtitles");
   v = esperar(LEGSYNC_PRONTA);
+  // A linha (slot principal) fica logo acima de "Mais opcoes", a ultima.
+  for (i = 0; i < 12; i++) tecla(SDLK_DOWN);
+  tecla(SDLK_UP);
   quadros(20);
   salvar(saida, "2-pronta-rapida");
   tecla(SDLK_RIGHT);                           // Completa

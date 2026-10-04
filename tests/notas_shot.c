@@ -350,6 +350,8 @@ static void escolher(const char *linhas) {
   fputs(linhas, f);
   { const char *lg = getenv("NUVIO_SHOT_IDIOMA");
     if (lg && *lg) fprintf(f, "idioma %d\n", atoi(lg)); }
+  // NUVIO_SHOT_VIDRO=1: Interface de vidro ligada (V_LIGA: 0 = Ligado).
+  if (getenv("NUVIO_SHOT_VIDRO")) fputs("vidroLocal 0\n", f);
   fclose(f);
   ajustes_dir(dd);
 }
@@ -383,6 +385,23 @@ static void secaoFoco(int i, int sec) {
   quadros(220);
 }
 #define secaoNotas(i) secaoFoco((i), SEC_NOTAS)
+
+// Cache do /stats da serie de ensaio (formato de serieaud.c): o bloco
+// "Numeros da temporada" carrega do disco, sem rede. `ate` = episodios com dado.
+static void cacheAudiencia(int temp, int ate) {
+  char nome[80], buf[4096];
+  size_t k = 0;
+  int i;
+  snprintf(nome, sizeof nome, "serieaud-%s-t%d.txt", IMDB_SERIE, temp);
+  k += (size_t)snprintf(buf + k, sizeof buf - k, "# nuvio serieaud v1\n");
+  k += (size_t)snprintf(buf + k, sizeof buf - k, "%s\t%d\t%lld\t%ld\t%ld\n",
+                        IMDB_SERIE, temp, (long long)time(NULL), 24126034L, 404730L);
+  for (i = 0; i < N_T2 && i < ate; i++)
+    k += (size_t)snprintf(buf + k, sizeof buf - k, "%d\t%ld\t%ld\t%d\t%d\n",
+                          SERIE_T2[i].ep, SERIE_T2[i].w, SERIE_T2[i].p,
+                          SERIE_T2[i].com, SERIE_T2[i].vot);
+  assert(dados_gravar_leve(nome, buf));
+}
 
 int main(int argc, char **argv) {
   const char *saida = argc > 1 ? argv[1] : "/tmp/nv-notas-shots/n";
@@ -459,26 +478,64 @@ int main(int argc, char **argv) {
   hero(0);
   snprintf(nome, sizeof nome, "%s-7-titulo-serie.png", saida); gravar(nome);
 
-  // --- 8. FILME: a secao Notas, todas as fontes.
+  // --- 8. FILME: a secao Notas, todas as fontes (onze blocos, seis linhas).
   escolher(TODAS);
   secaoNotas(1);
+  assert(secaoN(SEC_NOTAS) == notasui_fontes_n(notasDados()));
   snprintf(nome, sizeof nome, "%s-8-filme-secao.png", saida); gravar(nome);
+  // 8b. D-pad dentro da grade: baixo desce uma linha, direita anda na linha,
+  //     esquerda na coluna da esquerda nao muda de bloco.
+  { SDL_Event ev; memset(&ev, 0, sizeof ev); ev.type = SDL_KEYDOWN;
+    ev.key.keysym.sym = SDLK_DOWN;  detail_evento(&ev); assert(foco.fileira == SEC_NOTAS && foco.coluna == 2);
+    ev.key.keysym.sym = SDLK_RIGHT; detail_evento(&ev); assert(foco.coluna == 3);
+    ev.key.keysym.sym = SDLK_RIGHT; detail_evento(&ev); assert(foco.coluna == 3);
+    ev.key.keysym.sym = SDLK_UP;    detail_evento(&ev); assert(foco.coluna == 1);
+    ev.key.keysym.sym = SDLK_DOWN;  detail_evento(&ev); detail_evento(&ev); assert(foco.coluna == 5);
+    quadros(60); }
+  snprintf(nome, sizeof nome, "%s-8b-filme-foco-bloco.png", saida); gravar(nome);
 
   // --- 9. FILME: so critica (sem comparativo) e uma nota so.
   notas(78, 0, 0, 870, 0, 0, 0, 0, 0, 0, 0);
   secaoNotas(1);
   snprintf(nome, sizeof nome, "%s-9-filme-poucas.png", saida); gravar(nome);
 
-  // --- 10. SERIE: a secao Notas com a grade de 2 temporadas.
+  // --- 10. SERIE: a secao Notas logo abaixo dos episodios.
   notas(89, 830, 810, 940, 880, 810, 43, 79, 0, 0, 850);
   secaoNotas(0);
   snprintf(nome, sizeof nome, "%s-10-serie-secao.png", saida); gravar(nome);
-  secaoFoco(0, SEC_NOTAS_EP);
-  snprintf(nome, sizeof nome, "%s-10b-serie-grade.png", saida); gravar(nome);
+  // 10b. NUMEROS DA TEMPORADA antes de entrar (sem cache: nada pedido ainda),
+  //      com o foco nas Notas e a pagina rolada a mao ate o bloco.
+  assert(secaoN(SEC_NUMEROS) == N_T2);
+  assert(topoSec[SEC_NUMEROS] >= conteudoSec[SEC_NOTAS] + alturaSecao(SEC_NOTAS));
+  assert(topoSec[SEC_ABAS_INFO] >= topoSec[SEC_NUMEROS] + alturaSecao(SEC_NUMEROS));
+  parado = 1; scrollY = topoSec[SEC_NUMEROS] - 120.0f; quadros(40); parado = 0;
+  snprintf(nome, sizeof nome, "%s-10b-serie-numeros-chamada.png", saida); gravar(nome);
+  // 10c. Dentro do bloco, com o /stats da T2 no cache: os tres cartoes, E1.
+  cacheAudiencia(2, N_T2);
+  secaoFoco(0, SEC_NUMEROS);
+  assert(audAberta);
+  snprintf(nome, sizeof nome, "%s-10c-serie-numeros-e1.png", saida); gravar(nome);
+  // 10d. Direita x7: o E8 em foco nos tres cartoes.
+  { SDL_Event ev; int q; memset(&ev, 0, sizeof ev); ev.type = SDL_KEYDOWN;
+    ev.key.keysym.sym = SDLK_RIGHT;
+    for (q = 0; q < 7; q++) detail_evento(&ev);
+    assert(foco.fileira == SEC_NUMEROS && foco.coluna == 7);
+    quadros(60); }
+  snprintf(nome, sizeof nome, "%s-10d-serie-numeros-e8.png", saida); gravar(nome);
+  // 10e. Ordem do D-pad: Notas -> Numeros -> abas/elenco.
+  { SDL_Event ev; memset(&ev, 0, sizeof ev); ev.type = SDL_KEYDOWN;
+    ev.key.keysym.sym = SDLK_UP; detail_evento(&ev);
+    assert(foco.fileira == SEC_NOTAS);
+    foco.coluna = notasui_fontes_n(notasDados()) - 1;
+    ev.key.keysym.sym = SDLK_DOWN; detail_evento(&ev);
+    assert(foco.fileira == SEC_NUMEROS);
+    detail_evento(&ev);
+    assert(foco.fileira == SEC_ABAS_INFO || foco.fileira == SEC_ELENCO); }
 
-  // --- 11. SERIE com 27 temporadas: a grade encolhe, rotulos de 5 em 5.
+  // --- 11. SERIE com 27 temporadas: o mapa encolhe, rotulos de 5 em 5; a T2
+  //         (a T2 continua com o /stats que o modulo ja tem em memoria).
   serieGrande = 1;
-  secaoFoco(0, SEC_NOTAS_EP);
+  secaoFoco(0, SEC_NUMEROS);
   snprintf(nome, sizeof nome, "%s-11-serie-27-temporadas.png", saida); gravar(nome);
   serieGrande = 0;
 

@@ -1,21 +1,18 @@
-// Apresentacao do AutoSync (F05): textos traduzidos, rotulos das acoes e a
-// linha minima da folha de legendas atual. Fica separado de legsync.c para o
-// nucleo ser testado sem GL e para o coordenador mover a linha para o seletor
-// do F04 (legendasui.c) no merge sem tocar o nucleo.
+// Apresentacao do AutoSync (F05): textos traduzidos, rotulos das acoes e o
+// PROVEDOR da linha de sincronizacao do seletor de legendas do F04
+// (legendasui.h, LegendasSyncProvider). Fica separado de legsync.c para o
+// nucleo ser testado sem GL.
 #include "legsync.h"
 #include "idioma.h"
-#include "gfx.h"
-#include "text.h"
 #include "plrui.h"
-#include "ajustes.h"
-#include <SDL2/SDL.h>
+#include "player.h"
+#include "legendasui.h"
 #include <stdio.h>
 #include <string.h>
 
 static const int ORDEM[] = { LEGSYNC_ACAO_RAPIDA, LEGSYNC_ACAO_COMPLETA, LEGSYNC_ACAO_DESFAZER,
                              LEGSYNC_ACAO_OUTRA, LEGSYNC_ACAO_PARAR };
 #define N_ACOES ((int)(sizeof ORDEM / sizeof *ORDEM))
-static int acaoSel;
 
 const char *legsync_acao_rotulo(int a) {
   switch (a) {
@@ -65,87 +62,45 @@ void legsync_texto(const LegSyncVisao *v, char *dst, unsigned tam) {
   }
 }
 
-static int acaoValida(int acoes) {
-  int i;
-  if (acaoSel & acoes) return acaoSel;
-  for (i = 0; i < N_ACOES; i++) if (ORDEM[i] & acoes) return acaoSel = ORDEM[i];
-  return acaoSel = 0;
+// --- provedor do seletor (legendasui.c) ----------------------------------------
+// So o slot PRINCIPAL e so com legenda EXTERNA ativa (embutida ja acompanha o
+// video; nenhuma nao tem o que sincronizar); nunca em canal ao vivo. O segundo
+// idioma ainda nao sincroniza: a linha dele nao aparece.
+static int acoesAgora(int slot, int *lista, int max) {
+  LegSyncVisao v;
+  int i, n = 0;
+  if (slot != 0) return 0;
+  v = legsync_visao(0);
+  for (i = 0; i < N_ACOES && n < max; i++) if (v.acoes & ORDEM[i]) lista[n++] = ORDEM[i];
+  return n;
 }
 
-const char *legsync_linha_acao_chave(void) {
-  LegSyncVisao v = legsync_visao(0);
-  switch (acaoValida(v.acoes)) {
-    case LEGSYNC_ACAO_RAPIDA:   return "R\xc3\xa1pida";
-    case LEGSYNC_ACAO_COMPLETA: return "Completa";
-    case LEGSYNC_ACAO_DESFAZER: return "Desfazer";
-    case LEGSYNC_ACAO_OUTRA:    return "Outra refer\xc3\xaancia";
-    case LEGSYNC_ACAO_PARAR:    return "Parar";
-  }
-  return NULL;
+static const char *pEstado(int slot, void *u) {
+  static char b[200];
+  LegSyncVisao v;
+  (void)u;
+  if (slot != 0 || player_id_canal()[0]) return NULL;
+  v = legsync_visao(0);
+  if (v.fase == LEGSYNC_INDISPONIVEL && (v.motivo == LEGSYNC_M_SEM_EXTERNA || v.motivo == LEGSYNC_M_EMBUTIDA))
+    return NULL;
+  legsync_texto(&v, b, sizeof b);
+  return b;
 }
 
-// Ha acao possivel antes/depois da escolhida (os discos < > apagam sem ela).
-static int vizinha(int acoes, int atual, int passo) {
-  int i, pos = -1;
-  for (i = 0; i < N_ACOES; i++) if (ORDEM[i] == atual) pos = i;
-  if (pos < 0) return 0;
-  for (i = pos + passo; i >= 0 && i < N_ACOES; i += passo) if (ORDEM[i] & acoes) return 1;
-  return 0;
+static int pAcoes(int slot, const char **rot, int max, void *u) {
+  int l[N_ACOES], n = acoesAgora(slot, l, max < N_ACOES ? max : N_ACOES), i;
+  (void)u;
+  for (i = 0; i < n; i++) rot[i] = legsync_acao_rotulo(l[i]);
+  return n;
 }
 
-int legsync_linha_tecla(int k) {
-  LegSyncVisao v = legsync_visao(0);
-  int i, atual = acaoValida(v.acoes), pos = -1;
-  for (i = 0; i < N_ACOES; i++) if (ORDEM[i] == atual) pos = i;
-  if (k == SDLK_RETURN || k == SDLK_KP_ENTER) { if (atual) legsync_acao(atual); return 1; }
-  if (k == SDLK_LEFT) {
-    for (i = pos - 1; i >= 0; i--) if (ORDEM[i] & v.acoes) { acaoSel = ORDEM[i]; break; }
-    return 1;
-  }
-  if (k == SDLK_RIGHT) {
-    for (i = pos + 1; i < N_ACOES; i++) if (pos >= 0 && (ORDEM[i] & v.acoes)) { acaoSel = ORDEM[i]; return 1; }
-    return 0;   // depois da ultima acao: a folha leva ao Estilo, como antes
-  }
-  return 0;
+static void pExecutar(int slot, int acao, void *u) {
+  int l[N_ACOES], n = acoesAgora(slot, l, N_ACOES);
+  (void)u;
+  if (acao >= 0 && acao < n) legsync_acao(l[acao]);
 }
 
-void legsync_linha_desenhar(float x, float y, float w, float h, int foco, float a) {
-  LegSyncVisao v = legsync_visao(0);
-  char sub[200], titulo[96];
-  float ar, ag, ab, dir = 0.0f, tx, tw;
-  int atual = acaoValida(v.acoes);
-  GfxRect face = { x + 22.0f, y + (h - 52.0f) * 0.5f, 52.0f, 52.0f };
-  ajustes_acento(&ar, &ag, &ab);
-  if (foco) plrui_linha_foco((GfxRect){ x, y, w, h }, 22.0f, a);
-  if (ajustes_vidro()) gfx_cor(face, 16.0f / face.h, 1, 1, 1, (foco ? 0.12f : 0.07f) * a);
-  else gfx_cor(face, 16.0f / face.h, foco ? 0.22f : 0.125f, foco ? 0.227f : 0.129f, foco ? 0.259f : 0.153f, a);
-  gfx_icone((GfxRect){ face.x + 15.0f, face.y + 15.0f, 22.0f, 22.0f }, "aj_wand", 1, 1, 1, (foco ? 1.0f : 0.7f) * a);
-  legsync_texto(&v, sub, sizeof sub);
-  snprintf(titulo, sizeof titulo, "%s", i18n("Sincroniza\xc3\xa7\xc3\xa3o autom\xc3\xa1tica"));
-  // A DIREITA: com foco, a acao escolhida entre < >; sem foco, o offset aceito.
-  if (foco && atual) {
-    TxtLinha l = txt_linha(TXT_G16B, legsync_acao_rotulo(atual), 243, 242, 239, 255);
-    float cx = x + w - 22.0f, cy = y + h * 0.5f, dw = 30.0f;
-    float ad = vizinha(v.acoes, atual, 1) ? 1.0f : 0.3f, ae = vizinha(v.acoes, atual, -1) ? 1.0f : 0.3f;
-    cx -= dw; gfx_cor((GfxRect){ cx, cy - 15.0f, dw, 30.0f }, 0.5f, 1, 1, 1, 0.10f * ad * a);
-    gfx_icone((GfxRect){ cx + 6.0f, cy - 9.0f, 18.0f, 18.0f }, "pl_chevron-right", 1, 1, 1, ad * a);
-    cx -= 10.0f + (float)l.w;
-    txt_desenhar_alpha(l, cx, cy - (float)l.h * 0.5f, a);
-    cx -= 10.0f + dw; gfx_cor((GfxRect){ cx, cy - 15.0f, dw, 30.0f }, 0.5f, 1, 1, 1, 0.10f * ae * a);
-    gfx_icone((GfxRect){ cx + 6.0f, cy - 9.0f, 18.0f, 18.0f }, "pl_chevron-left", 1, 1, 1, ae * a);
-    dir = x + w - cx + 12.0f;
-  } else if (v.fase == LEGSYNC_ACEITA) {
-    char s[32]; TxtLinha l;
-    segundos(v.offsetAutoMs, s, sizeof s);
-    l = txt_linha(TXT_G16B, s, (int)(ar * 255), (int)(ag * 255), (int)(ab * 255), 255);
-    txt_desenhar_alpha(l, x + w - 22.0f - (float)l.w, y + (h - (float)l.h) * 0.5f, a);
-    dir = (float)l.w + 34.0f;
-  }
-  tx = face.x + face.w + 18.0f; tw = w - (tx - x) - 22.0f - dir;
-  { int c = foco ? 255 : 219, cs = v.fase == LEGSYNC_INDISPONIVEL || v.fase == LEGSYNC_DEPOIS ? 110 : 140;
-    TxtLinha ln = txt_linha_corta(TXT_ILHA_FORTE, titulo, c, c, c - 2, 255, tw);
-    TxtLinha ls = txt_linha_corta(TXT_ILHA_GENERO, sub, cs, cs, cs - 2, 255, tw);
-    float th = (float)ln.h + 5.0f + (float)ls.h, ty = y + (h - th) * 0.5f;
-    txt_desenhar_alpha(ln, tx, ty, a);
-    txt_desenhar_alpha(ls, tx, ty + (float)ln.h + 5.0f, a); }
+void legsync_ui_ligar(void) {
+  static const LegendasSyncProvider p = { pEstado, pAcoes, pExecutar, NULL };
+  legendasui_definir_sync(&p);
 }

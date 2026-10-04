@@ -536,6 +536,63 @@ int main(int argc, char **argv) {
 
   montarCatalogo();
 
+  // NV_ORDER_ONLY: Notas first below the hero on movies, right under the
+  // episodes on series; D-pad order and late-arrival anchoring follow it.
+  if (getenv("NV_ORDER_ONLY")) {
+    extrasCardsLigados = 1; relacionadosFixtureN = 10;
+    for (int item = 0; item < 2; item++) {
+      const char *k = item ? "movie" : "series";
+      SDL_Event ev = {0}; ev.type = SDL_KEYDOWN;
+      abrir(item, item ? SEC_NOTAS : SEC_EPISODIOS, 0);
+      assert(secaoN(SEC_NOTAS) > 0);
+      if (item) {
+        assert(topoSec[SEC_NOTAS] == NV_DETF_HERO_FIM);
+        assert(topoSec[SEC_ELENCO] > topoSec[SEC_NOTAS]);
+        assert(topoSec[SEC_RELACIONADOS] > topoSec[SEC_NOTAS]);
+      } else {
+        assert(conteudoSec[SEC_NOTAS] > conteudoSec[SEC_EPISODIOS]);
+        assert(topoSec[SEC_ABAS_INFO] >= conteudoSec[SEC_NOTAS] + alturaSecao(SEC_NOTAS));
+        assert(topoSec[SEC_ELENCO] > topoSec[SEC_NOTAS]);
+        // Numeros da temporada logo depois das Notas, antes das abas.
+        assert(topoSec[SEC_AUD_ARCO] >= conteudoSec[SEC_NOTAS] + alturaSecao(SEC_NOTAS));
+        assert(topoSec[SEC_ABAS_INFO] >= topoSec[SEC_AUD_ARCO] + alturaSecao(SEC_AUD_ARCO));
+      }
+      // D-pad: down from the episodes (series) / from Notas (movie) walks the order.
+      if (!item) {
+        ev.key.keysym.sym = SDLK_DOWN; detail_evento(&ev);
+        assert(foco.fileira == SEC_NOTAS);
+        for (int q = 0; q < 90; q++) { SDL_Delay(16); quadros(1); }
+        snprintf(nome, sizeof nome, "%s-series-notas-below-episodes.png", saida);
+        gravar(nome);
+        // Baixo anda na grade de blocos das Notas e sai para os Numeros da
+        // temporada, depois para as abas/elenco.
+        for (int q = 0; q < 8 && foco.fileira == SEC_NOTAS; q++) detail_evento(&ev);
+        assert(foco.fileira == SEC_AUD_ARCO);
+        detail_evento(&ev);
+        assert(foco.fileira == SEC_ABAS_INFO || foco.fileira == SEC_ELENCO);
+        ev.key.keysym.sym = SDLK_UP; detail_evento(&ev);
+        assert(foco.fileira == SEC_AUD_ARCO);
+        detail_evento(&ev); assert(foco.fileira == SEC_NOTAS);
+        foco.coluna = 0;
+        detail_evento(&ev); assert(foco.fileira == SEC_EPISODIOS);
+      } else {
+        for (int q = 0; q < 90; q++) { SDL_Delay(16); quadros(1); }
+        snprintf(nome, sizeof nome, "%s-movie-notas-first.png", saida);
+        gravar(nome);
+        ev.key.keysym.sym = SDLK_DOWN;
+        for (int q = 0; q < 8 && foco.fileira == SEC_NOTAS; q++) detail_evento(&ev);
+        assert(foco.fileira == SEC_ELENCO);
+        ev.key.keysym.sym = SDLK_UP; detail_evento(&ev);
+        assert(foco.fileira == SEC_NOTAS);
+      }
+      // Hero: down lands on the first focusable row of the new order.
+      nivel = 0; foco.fileira = 0; ev.key.keysym.sym = SDLK_DOWN; detail_evento(&ev);
+      (void)k;
+    }
+    puts("PASS: Notas order (movie first, series after episodes)");
+    SDL_GL_DeleteContext(gl); SDL_DestroyWindow(janela); SDL_Quit(); return 0;
+  }
+
   if (getenv("NV_ROWS_ONLY")) {
     extrasCardsLigados = 1; relacionadosFixtureN = 10;
     for (int item = 0; item < 2; item++) {
@@ -580,28 +637,15 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-1-serie-chamada.png", saida);
   gravar(nome);
 
-  // --- 2. SERIE, foco na primeira banda: o arco de qualidade.
+  // --- 2. SERIE, foco no bloco "Numeros da temporada": os tres cartoes, E1.
   abrir(0, SEC_AUD_ARCO, 0);
-  snprintf(nome, sizeof nome, "%s-2-serie-arco.png", saida);
+  snprintf(nome, sizeof nome, "%s-2-serie-numeros-e1.png", saida);
   gravar(nome);
 
-  // --- 3. Uma descida: o radar entra nos mesmos 33% da tela.
-  foco.fileira = SEC_AUD_RADAR; foco.coluna = 0;
-  quadros(90);
-  snprintf(nome, sizeof nome, "%s-3-serie-radar.png", saida);
-  gravar(nome);
-
-  // --- 4. Outra descida: a impressao digital, com o primeiro episodio escolhido.
-  foco.fileira = SEC_AUD_DIGITAL; foco.coluna = 0;
-  quadros(90);
-  snprintf(nome, sizeof nome, "%s-4-serie-digital-e1.png", saida);
-  gravar(nome);
-
-  // --- 5. D-pad andado ate o episodio 8: o destaque e o rodape de numeros
-  //        crus tem de acompanhar.
+  // --- 5. D-pad andado ate o episodio 8: o destaque acompanha nos tres cartoes.
   foco.coluna = 7;
   quadros(60);
-  snprintf(nome, sizeof nome, "%s-5-serie-digital-e8.png", saida);
+  snprintf(nome, sizeof nome, "%s-5-serie-numeros-e8.png", saida);
   gravar(nome);
 
   // --- 6. SERIE, foco nas FRASES, caso VAZIO — o que acontece em 10 de 12

@@ -514,7 +514,7 @@ async function rotaEnviar(env, quem, corpo) {
   return json({ ok: 1, id: r.meta?.last_row_id || 0 });
 }
 
-async function rotaReceber(env, quem, url, req) {
+export async function rotaReceber(env, quem, url, req) {
   const desde = Math.max(0, parseInt(url.searchParams.get("desde") || "0", 10) || 0);
   const r = await env.DB.prepare(
     // `deAvatar` sai do JOIN e nao da linha de `rec`: a foto e de QUEM MANDOU,
@@ -524,11 +524,25 @@ async function rotaReceber(env, quem, url, req) {
     // foi apagada — a linha continua valida, so fica sem nome e sem foto.
     "SELECT r.id, r.de, COALESCE(p.nome, '') AS deNome, " +
     "COALESCE(p.avatar, '') AS deAvatar, r.criado, r.imdb, r.tipo, r.titulo, " +
-    "r.poster, r.ano, r.modelo, r.texto, r.nota, r.visto " +
+    "r.poster, r.ano, r.modelo, r.texto, r.nota, r.visto, " +
+    "r.terminou, r.reacao, r.resposta, r.respondido " +
     "FROM rec r LEFT JOIN pessoa p ON p.id = r.de " +
     "WHERE r.para = ? AND r.id > ? ORDER BY r.id DESC LIMIT 50"
   ).bind(quem.id, desde).all();
   const itens = r.results || [];
+  // O ESTADO DE "ASSISTIDA"/RESPOSTA DE TODAS AS RECS, nao so das novas: `desde`
+  // so entrega ids novos, e uma rec respondida em OUTRA TV tem id velho. Vai
+  // sem o cartaz (a TV ja tem), limitado ao que o cliente guarda (120).
+  const rs = await env.DB.prepare(
+    "SELECT id, terminou, reacao, resposta, respondido FROM rec " +
+    "WHERE para = ? AND (terminou = 1 OR respondido > 0 OR reacao IS NOT NULL) " +
+    "ORDER BY id DESC LIMIT 120"
+  ).bind(quem.id).all();
+  const respostas = (rs.results || []).map((x) => ({
+    id: x.id, terminou: x.terminou ? 1 : 0,
+    reacao: x.reacao === null || x.reacao === undefined ? null : x.reacao,
+    resposta: x.resposta || "", respondido: x.respondido || 0,
+  }));
   const maiorId = itens.reduce((m, x) => (x.id > m ? x.id : m), desde);
   const naoVistas = itens.filter((x) => !x.visto).length;
 
@@ -537,11 +551,14 @@ async function rotaReceber(env, quem, url, req) {
   // nome) de quem mandou nao invalida o 304, entao a cara nova so aparece na
   // proxima recomendacao. E o preco combinado de uma sondagem por minuto por
   // TV, e nao um esquecimento.
-  const etag = `"${quem.id.length}-${maiorId}-${naoVistas}"`;
+  // O estado das respostas entra no ETag (quantas, soma dos instantes e das
+  // reacoes): responder em outra TV tem de invalidar o 304 desta.
+  const sig = respostas.reduce((a, x) => a + x.respondido + (x.reacao === null ? 0 : x.reacao + 2) + x.terminou, 0);
+  const etag = `"${quem.id.length}-${maiorId}-${naoVistas}-${respostas.length}.${sig}"`;
   if (req.headers.get("if-none-match") === etag) {
     return new Response(null, { status: 304, headers: { etag } });
   }
-  return json({ cursor: maiorId, novas: naoVistas, itens }, 200, { etag });
+  return json({ cursor: maiorId, novas: naoVistas, itens, respostas }, 200, { etag });
 }
 
 async function rotaVisto(env, quem, corpo) {

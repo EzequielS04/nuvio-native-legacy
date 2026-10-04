@@ -66,6 +66,30 @@ int recresp_aplicar(RecResp *r, int ev, int reacao, const char *texto, long long
   return 1;
 }
 
+int recresp_mesclar(RecResp *r, int terminou, int reacao, const char *texto,
+                    long long respondido, long long agora) {
+  RecResp antes;
+  char t[RECRESP_TEXTO_MAX + 4];
+  int servidorNovo;
+  if (!r || r->rec <= 0) return 0;
+  if (r->versao > r->enviada) return 0;     // mudanca daqui ainda nao enviada: vence
+  antes = *r;
+  if (!r->quando && !r->assistida && !r->respondida) r->reacao = RECRESP_SEM_REACAO;
+  servidorNovo = respondido > r->quando;
+  if (terminou) r->assistida = 1;
+  if (respondido > 0) { r->assistida = 1; r->respondida = 1; }
+  if (reacao >= -1 && reacao <= 1 && (servidorNovo || r->reacao == RECRESP_SEM_REACAO))
+    r->reacao = reacao;
+  limparTexto(t, sizeof t, texto);
+  if (t[0] && (servidorNovo || !r->texto[0])) snprintf(r->texto, sizeof r->texto, "%s", t);
+  if (antes.assistida == r->assistida && antes.respondida == r->respondida &&
+      antes.reacao == r->reacao && !strcmp(antes.texto, r->texto) && antes.quando)
+    return 0;
+  if (respondido > r->quando) r->quando = respondido;
+  if (!r->quando) r->quando = agora;
+  return 1;
+}
+
 static void jsonEsc(char *dst, size_t tam, const char *s) {
   size_t k = 0;
   for (; s && *s && k + 7 < tam; s++) {
@@ -190,6 +214,22 @@ void recresp_responder(long long rec, int reacao, const char *texto) {
   gesto(rec, RECRESP_EV_RESPONDEU, reacao, texto);
 }
 void recresp_pular(long long rec) { gesto(rec, RECRESP_EV_PULOU, RECRESP_SEM_REACAO, NULL); }
+
+void recresp_do_servidor(long long rec, int terminou, int reacao, const char *texto,
+                         long long respondido) {
+  if (rec <= 0) return;
+  if (!terminou && respondido <= 0 && !(reacao >= -1 && reacao <= 1)) return;
+  pthread_mutex_lock(&trava);
+  { RecResp *r = linhaDe(rec);
+    if (recresp_mesclar(r, terminou, reacao, texto, respondido, (long long)time(NULL))) {
+      gravar();
+      revisao++;
+      printf("[recresp] rec %lld do servidor: assistida %d respondida %d reacao %d\n", rec,
+             r->assistida, r->respondida, r->reacao);
+      fflush(stdout);
+    } }
+  pthread_mutex_unlock(&trava);
+}
 
 unsigned recresp_revisao(void) {
   unsigned v;
