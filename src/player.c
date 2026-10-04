@@ -2739,6 +2739,16 @@ void player_atualizar(float dt, Uint32 agora) {
 
   anim = anim_mola(anim, visivel ? 1.0f : 0.0f, dt,
                    visivel ? NV_MOLA_FOCO : NV_MOLA_DESFOCO);
+  // ABRINDO A FONTE, SO A ILHA (dono, 03/10: "quando clicar para ver o filme
+  // so mostrar o componente de carregando sem mostrar o player; agora o player
+  // fica sempre visivel"). player_abrir pede os controles (visivel = 1) e o
+  // prazo de esconder nao corre com o fluxo abrindo, entao titulo, barra e
+  // botoes ficavam de pe em volta da ilha de "Abrindo fonte" ate a imagem
+  // chegar. Agora o OSD fica em zero enquanto abre e o prazo e empurrado: na
+  // primeira imagem os controles entram pela mola e somem no prazo normal.
+  // O erro nao passa aqui (o modal da ilha e a saida), nem o canal, cujo
+  // banner de zapping e o OSD proprio contam a troca.
+  if (player_carregando() && !erroFonte && !ehCanal()) { anim = 0.0f; ultimoInput = agora; }
   // Com os controles apagando, `cheio` NAO volta a 1: o resto nao pode
   // reaparecer no meio do fade-out da barra. Ele so sobe quando alguem pediu
   // os controles inteiros com eles em pe.

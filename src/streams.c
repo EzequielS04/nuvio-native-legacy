@@ -32,6 +32,8 @@
 #include "video.h"
 #include "botoes.h"
 #include "ponteiro.h"
+#include "player.h"
+#include "plrilha.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 
@@ -54,7 +56,18 @@
 // Onde a lista comeca. Desce uma linha quando os filtros nao cabem ao lado do
 // titulo (cabExtra, ver medirCabecalho).
 static float cabExtra;
-#define FOLHA_TOPO     (286.0f + cabExtra)
+// NO PLAYER A FOLHA NASCE DA ILHA DO RELOGIO (dono, 03/10: "no player o
+// componente do source tem que sair da ilha do relogio"), como Audio,
+// Legendas e Episodios: plrilha.h cresce a pilula da hora ate o corpo, no
+// canto do relogio, e a folha desenha dentro dele. Fora do player (detalhe)
+// segue a folha da borda direita. `folhaOY` desce o conteudo para baixo do
+// cabecalho da ilha e `folhaBase` e onde a lista termina.
+static float folhaOY, folhaBase;
+#define FOLHA_ILHA_Y     48.0f   // plrilha.c: Y_TOPO
+#define FOLHA_ILHA_CAB   64.0f   // plrilha.c: CAB_H (a linha da hora)
+#define FOLHA_ILHA_BASE  48.0f   // margem de baixo = a de cima
+#define FOLHA_ILHA_PAD   22.0f   // do cabecalho ao kicker, como os Episodios
+#define FOLHA_TOPO     (286.0f + cabExtra + folhaOY)
 static int medirCabecalho(void);
 #define FOLHA_LINHA_H  112.0f  // linha sem marca e sem arquivo
 #define FOLHA_MARCA_H   30.0f  // "SUA ESCOLHA ANTERIOR" / "REPRODUZINDO AGORA"
@@ -1559,7 +1572,7 @@ static void montar(int automatica) {
     memset(secN, 0, sizeof secN);
     nOrdem = needed;
     for (k = 0; k < needed; k++) {
-      ordem[k] = -2-k; linhaY[k] = y; linhaH[k] = 158.0f;
+      ordem[k] = -2-k; linhaY[k] = y; linhaH[k] = FOLHA_LINHA_H;
       y += linhaH[k] + FOLHA_LINHA_GAP;
     }
     alturaTotal = y;
@@ -1615,7 +1628,18 @@ static int linhaDe(int indice) {
   for (int r = 0; r < nOrdem; r++) if (ordem[r] == indice) return r;
   return -1;
 }
-static float areaLista(void) { return NV_TELA_H - FOLHA_MARGEM - 16.0f - FOLHA_TOPO; }
+static int folhaIlha(void) { return player_aberto(); }
+static float folhaIlhaH(void) { return NV_TELA_H - FOLHA_ILHA_Y - FOLHA_ILHA_CAB - FOLHA_ILHA_BASE; }
+static void folhaGeometria(void) {
+  if (folhaIlha()) {
+    folhaOY = FOLHA_ILHA_Y + FOLHA_ILHA_CAB + FOLHA_ILHA_PAD - 74.0f;
+    folhaBase = NV_TELA_H - FOLHA_ILHA_BASE - 16.0f;
+  } else {
+    folhaOY = 0.0f;
+    folhaBase = NV_TELA_H - FOLHA_MARGEM - 16.0f;
+  }
+}
+static float areaLista(void) { return folhaBase - FOLHA_TOPO; }
 // A linha em foco no meio da area; a primeira de um grupo leva o cabecalho
 // junto, senao subir ate ela deixaria "4K" escondido acima da borda.
 static float alvoRolagem(void) {
@@ -1664,6 +1688,7 @@ void stream_folha_abrir(void) {
   int excl, aut, alvo;
   fitAbrir();
   aberta=1; escolha=-1; grupo=1; filtro=0; soMp4=0; soCache=0; soDub=0; recarregar=0;
+  folhaGeometria();
   atualizarProvedores();
   ondever_apps_atualizar();
   // A FOLHA ABRE NA FONTE QUE IMPORTA: a que esta tocando, senao a que o
@@ -1804,6 +1829,7 @@ void stream_folha_evento(const SDL_Event *e) {
 void stream_folha_atualizar(float dt, Uint32 agora) {
   int nf;
   medirCabecalho();
+  folhaGeometria();
   (void)agora;
   anim=anim_mola(anim,aberta?1:0,dt,NV_MOLA_TELA);
   atualizarProvedores();
@@ -1846,21 +1872,37 @@ static void ponteiroFolhaFora(int a, int b) { (void)a; (void)b; aberta = 0; }
 
 // Availability lives in its own tab so asynchronous responses cannot shift
 // source indexes, focus or an in-progress debrid resolution.
-static void desenharOnde(GfxRect r, const OndeVer *o, int selected) {
-  const int solid = selected && !ajustes_vidro();
-  const int title = solid ? ajustes_tinta_foco() : 236;
-  const int detail = solid ? ajustes_tinta_foco2() : 160;
-  const int actionInk = solid ? ajustes_tinta_foco2() : 190;
-  const float side=56.0f, left=r.x+18.0f, text=left+side+20.0f;
+//
+// A LINHA DO SERVICO E A LINHA DA FONTE (dono, 03/10: "no source, a aba de
+// streaming ta fora do padrao"). Era um cartao proprio: fundo em toda linha,
+// foco num bloco CHEIO de acento com halo, logo a esquerda empurrando o
+// texto para fora da coluna das outras abas e a acao numa terceira linha.
+// Agora e a mesma anatomia da fonte: nome no TXT_CALLOUT na coluna `tx`,
+// linha de apoio cinza onde a fonte tem os selos, e a coluna da direita com
+// a marca do servico (as cores da marca ficam, como as logos dos selos) e a
+// acao em cinza embaixo, no lugar do tamanho e do addon. Foco so pela
+// superficie clara, sem acento e sem contorno.
+static void desenharOnde(GfxRect r, float tx, float tr, const OndeVer *o, int selected, float a) {
+  const int c = selected ? 255 : 205;
+  const int cd = selected ? 180 : 130;
+  const int cp = selected ? 150 : 110;
+  const float side = 40.0f;
+  float colW, cy = r.y + 20.0f;
   const char *action;
-  int state=ondever_estado(o->nome);
-  action=state==ONDE_ABRIR ? "Abrir app" : state==ONDE_LOJA ? "Ver na loja"
-        : state==ONDE_PROCURAR ? "Procurar na loja" : "Disponível neste serviço";
-  GLuint logo=o->logo[0] ? tex_obter(o->logo) : 0;
-  if(logo) gfx_rect((GfxRect){left,r.y+20,side,side},logo,GFX_CARD,0,0,0,.2f,1,1,1,anim);
-  txt_desenhar_alpha(txt_linha_corta(TXT_CALLOUT,o->nome,title,solid ? title : 239,solid ? title : 243,255,r.w-120),text,r.y+20,anim);
-  txt_desenhar_alpha(txt_linha_corta(TXT_CAPTION2,o->gratis ? "Grátis / com anúncios" : "Na assinatura",detail,solid ? detail : 164,solid ? detail : 174,255,r.w-120),text,r.y+58,anim);
-  txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,action,actionInk,solid ? actionInk : 194,solid ? actionInk : 204,255,r.w-44),left,r.y+108,anim);
+  TxtLinha la;
+  int state = ondever_estado(o->nome);
+  GLuint logo = o->logo[0] ? tex_obter(o->logo) : 0;
+  action = state==ONDE_ABRIR ? "Abrir app" : state==ONDE_LOJA ? "Ver na loja"
+         : state==ONDE_PROCURAR ? "Procurar na loja" : "Disponível neste serviço";
+  la = txt_linha_corta(TXT_PG_FIM, action, cp, cp, cp - 2, 255, 260);
+  colW = (float)la.w > side ? (float)la.w : side;
+  if (logo) gfx_rect((GfxRect){tr - side, cy, side, side}, logo, GFX_CARD, 0, 0, 0, .2f, 1, 1, 1,
+                     a * (selected ? 1.0f : .85f));
+  txt_desenhar_alpha(la, tr - la.w, cy + 46.0f, a);
+  txt_desenhar_alpha(txt_linha_corta(TXT_CALLOUT, o->nome, c, c, c - 2, 255, tr - tx - colW - 28.0f), tx, cy, a);
+  txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META, o->gratis ? "Grátis / com anúncios" : "Na assinatura",
+                                     cd, cd, cd, 255, tr - tx - colW - 28.0f),
+                     tx, cy + 40.0f + (FOLHA_SELO_H - 26.0f) * .5f, a);
 }
 
 // Texto em maiusculas espacadas da linha de marca e dos cabecalhos de grupo.
@@ -1989,21 +2031,38 @@ static int medirCabecalho(void) {
 }
 
 static void stream_folha_desenharCorpo_(Uint32 agora);
+static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void stream_folha_desenhar(Uint32 agora) {
   ESCALA_INI();
   stream_folha_desenharCorpo_(agora);
   ESCALA_FIM();
 }
+static Uint32 folhaAgora;
+// O corpo dentro da ilha (plrilha.h): `a` ja traz a entrada e a saida da
+// forma, e a ilha segue chamando o ultimo corpo enquanto encolhe.
+static void corpoIlhaFolha(GfxRect c, float a, void *u) {
+  (void)u;
+  corpoFolha(c.x, c.w, a, folhaAgora, 1);
+}
 static void stream_folha_desenharCorpo_(Uint32 agora) {
-  float ar, ag, ab;
-  int ai, nf, automatica, melhor;
   if(anim<.005f) return;
+  folhaGeometria();
+  folhaAgora = agora;
+  if (folhaIlha()) {
+    // O video sem veu cheio: so o degrade do lado da ilha, como Episodios e
+    // Audio/Legendas.
+    gfx_veu_css((GfxRect){0,0,NV_TELA_W,NV_TELA_H},plrilha_direita()?3:2,1.38f,1.0f,.42f*anim);
+    if (!aberta) return;   // fechando: a ilha encolhe com o ultimo corpo
+    { PlrIlhaPedido p;
+      memset(&p,0,sizeof p);
+      p.w = FOLHA_W;
+      p.h = folhaIlhaH();
+      p.corpo = corpoIlhaFolha;
+      plrilha_pedir(&p); }
+    return;
+  }
   float x=NV_TELA_W-FOLHA_W-FOLHA_MARGEM+(1-anim)*(FOLHA_W+FOLHA_MARGEM);
-  float lx=x+FOLHA_PAD_E, rw=FOLHA_W-FOLHA_PAD_E-FOLHA_PAD_D;
-  float tx=lx+FOLHA_TXT, tr=lx+rw-FOLHA_TXT;
-  ajustes_acento(&ar,&ag,&ab);
-  ai=(int)(ar*255.0f+.5f);
   // A FOLHA E UMA ILHA (dono, 02/10, mockups "Glass UI — ilha"): flutua a
   // NV_FOLHA_MARGEM das tres bordas, raio NV_FOLHA_RAIO, sombra curta e uma
   // luz larga no canto de cima — o mesmo material da ilha do relogio. O ajuste
@@ -2016,8 +2075,25 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
                0,GFX_SOMBRA,1.0f,0,0,.5f,0,0,0,.38f*anim);
       gfx_vidro_folha(corpo,FOLHA_RAIO_IL/corpo.h,anim);
     } else plrui_material(corpo,FOLHA_RAIO_IL,0,anim); }
+  corpoFolha(x, FOLHA_W, anim, agora, 0);
+}
+// `anim` aqui e o alfa do corpo (sombra a variavel da mola de proposito: na
+// ilha quem manda na opacidade e a forma, nao a mola da folha).
+static void corpoFolha(float x, float w, float anim, Uint32 agora, int ilha) {
+  float ar, ag, ab;
+  int ai, nf, automatica, melhor;
+  float lx=x+FOLHA_PAD_E, rw=w-FOLHA_PAD_E-FOLHA_PAD_D;
+  float tx=lx+FOLHA_TXT, tr=lx+rw-FOLHA_TXT;
+  const float oy=folhaOY;
+  GfxRect ilhaR={x,0,w,NV_TELA_H};
+  ajustes_acento(&ar,&ag,&ab);
+  ai=(int)(ar*255.0f+.5f);
+  if (ilha) plrilha_rect(&ilhaR);
   int ptr = aberta && anim > .5f && ponteiro_ativo();
-  if (ptr) {
+  if (ptr && ilha) {
+    ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, ponteiroFolhaFora, 0, 0);
+    ponteiro_alvo(ilhaR.x, ilhaR.y, ilhaR.w, ilhaR.h, NULL, NULL, 0, 0);
+  } else if (ptr) {
     ponteiro_alvo(0, 0, x, NV_TELA_H, NULL, ponteiroFolhaFora, 0, 0);
     // O painel em si absorve o clique no vazio (nao fecha, nao da OK).
     ponteiro_alvo(x, 0, FOLHA_W, NV_TELA_H, NULL, NULL, 0, 0);
@@ -2027,16 +2103,16 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
   { float cw = 0, ch = 0;
     if (contexto[0]) {
       // Kicker do Glass UI: 15/700 em caixa alta espacada, cinza 45%.
-      cw = plrui_kicker(contexto,tx,74,243,242,239,anim*.45f) + 22.0f; ch = 18.0f;
+      cw = plrui_kicker(contexto,tx,oy+74,243,242,239,anim*.45f) + 22.0f; ch = 18.0f;
     }
     // AINDA HA ADDON RESPONDENDO, com fonte ja na lista (#221): a lista vai
     // crescer, e quem escolhe agora escolhe entre o que chegou. Na linha do
     // contexto, no acento, para nao disputar com o titulo nem com a ajuda.
     if (n > 0 && addons_ocupado() && rw-360-cw > 80) {
-      if (cw > 0) gfx_cor((GfxRect){tx+cw-13.5f,74+ch*.5f-2.5f,5,5},.5f,.5f,.5f,.49f,anim);
-      txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,"Buscando mais fontes…",ai,(int)(ag*255),(int)(ab*255),255,rw-360-cw),tx+cw,72,anim);
+      if (cw > 0) gfx_cor((GfxRect){tx+cw-13.5f,oy+74+ch*.5f-2.5f,5,5},.5f,.5f,.5f,.49f,anim);
+      txt_desenhar_alpha(txt_linha_corta(TXT_HERO_META,"Buscando mais fontes…",ai,(int)(ag*255),(int)(ab*255),255,rw-360-cw),tx+cw,oy+72,anim);
     } }
-  txt_desenhar_alpha(txt_linha(TXT_ILHA_TITULO,"Fontes",243,242,239,255),tx,94,anim);
+  txt_desenhar_alpha(txt_linha(TXT_ILHA_TITULO,"Fontes",243,242,239,255),tx,oy+94,anim);
   { int nbt=nBotoes(), dois=medirCabecalho(); float *bw=bwCab, bx=lx+rw, fx=lx;
     // Linha do titulo: tudo (uma linha) ou so os discos (duas), a direita.
     for(int i=nbt-1;i>=0;i--){
@@ -2046,13 +2122,11 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
     for(int i=0;i<nbt;i++){
       int b=botaoDe(i);
       GfxRect r;
-      if(dois && !iconeBotao(b)) { r=(GfxRect){fx,100+FOLHA_CAB_LINHA,bw[i],FOLHA_CHIP_H}; fx+=bw[i]+10.0f; }
-      else { r=(GfxRect){bx,100,bw[i],FOLHA_CHIP_H}; bx+=bw[i]+10.0f; }
+      if(dois && !iconeBotao(b)) { r=(GfxRect){fx,oy+100+FOLHA_CAB_LINHA,bw[i],FOLHA_CHIP_H}; fx+=bw[i]+10.0f; }
+      else { r=(GfxRect){bx,oy+100,bw[i],FOLHA_CHIP_H}; bx+=bw[i]+10.0f; }
       if (ptr) ponteiro_alvo(r.x, r.y, r.w, r.h, ponteiroFolhaBotao, NULL, i, 0);
       chipFolha(r,rotuloBotao(b),iconeBotao(b),grupo==-1&&foco==i,botaoLigado(b),anim);
     } }
-  if (filtro == -1 && grupo != -1)
-    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,"Disponibilidade: TMDB / JustWatch. Abre o app, não o título.",160,160,158,255,rw),lx,156+cabExtra,anim);
   // A LINHA DE AJUDA so aparece com o cabecalho em foco: "Sem HDR" nao se
   // explica pelo rotulo, e o rotulo nao pode crescer sem estourar a pilula.
   if (grupo==-1) {
@@ -2073,11 +2147,11 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
       ajuda=soMp4
         ? "Mostrando só containers MP4 (útil para achar Dolby Vision em MP4). OK tira o filtro."
         : "Filtra a lista para fontes em MP4. OK liga o filtro.";
-    if(ajuda) txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,160,160,158,255,rw),lx,170+cabExtra,anim);
+    if(ajuda) txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,ajuda,160,160,158,255,rw),lx,oy+170+cabExtra,anim);
   }
   // SELETOR DE ADDON, segmentado: o selecionado em superficie clara, o foco
   // no acento. Quantas fontes cada addon tem, ao lado do nome.
-  { int cnt[13]={0}; float iw[14], sx, segY=(grupo==-1?204.0f:186.0f)+cabExtra, maxW=rw+4.0f;
+  { int cnt[13]={0}; float iw[14], sx, segY=(grupo==-1?204.0f:186.0f)+cabExtra+oy, maxW=rw+4.0f;
     TxtLinha nome[14], num[14];
     for(int i=0;i<n;i++){ if(!passaChips(i)) continue; cnt[0]++;
       for(int j=1;j<nProvedores;j++) if(!strcmp(provedores[j],lista[i].provedor)){cnt[j]++;break;} }
@@ -2111,7 +2185,7 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
   melhor = melhorFolha = stream_automatico();
   montar(automatica);
   nf=nOrdem;
-  gfx_recorte(x,FOLHA_TOPO-8,FOLHA_W,NV_TELA_H-FOLHA_MARGEM-16.0f-(FOLHA_TOPO-8));
+  gfx_recorte(x,FOLHA_TOPO-8,w,folhaBase-(FOLHA_TOPO-8));
   // CABECALHOS DE GRUPO: "4K  ULTRA HD ........ 3 fontes", com um fio embaixo.
   for(int g=0;g<FOLHA_GRUPOS;g++){
     float y; char q[48];
@@ -2148,9 +2222,11 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
     if (i <= -2) {
       OndeVer o;
       if (ptr) ponteiro_alvo(r.x,r.y,r.w,r.h,ponteiroFolhaLinha,NULL,row,0);
-      if (sel) focoFonte(r,22.0f/r.h,anim);
-      else gfx_cor(r,22.0f/r.h,1,1,1,.04f*anim);
-      if (ondever_item(alvoPedido,-i-2,&o)) desenharOnde(r,&o,sel);
+      if (sel) {
+        if (ajustes_vidro()) gfx_cor(r,FOLHA_RAIO/h,1,1,1,.12f*anim);
+        else gfx_cor(r,FOLHA_RAIO/h,.17f,.176f,.204f,anim);
+      }
+      if (ondever_item(alvoPedido,-i-2,&o)) desenharOnde(r,tx,tr,&o,sel,anim);
       continue;
     }
     if (i < 0) continue;
@@ -2318,8 +2394,13 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
   // construcao. O modo passa pelo nv_dither; cor escura, entao nao sai no
   // nivel de efeitos leves.
   if (rolagem > 1.0f) { float e=rolagem>30.0f?1.0f:rolagem/30.0f;
-    gfx_rect((GfxRect){x,FOLHA_TOPO-8,FOLHA_W,34},0,GFX_BRILHO_TOPO,0,1.0f,0,0,
+    gfx_rect((GfxRect){x,FOLHA_TOPO-8,w,34},0,GFX_BRILHO_TOPO,0,1.0f,0,0,
              .071f,.075f,.086f,(ajustes_vidro()?.78f:.98f)*e*anim); }
+  // A FONTE DOS DADOS, como rodape da lista (era uma linha solta entre o
+  // cabecalho e as abas, na borda do cartao e nao na coluna do texto).
+  if (nf && filtro == -1)
+    txt_desenhar_alpha(txt_linha_corta(TXT_PG_FIM,"Disponibilidade: TMDB / JustWatch. Abre o app, não o título.",110,110,108,255,tr-tx),
+                       tx,FOLHA_TOPO+alturaTotal-rolagem+12.0f,anim);
   if(!nf && filtro == -1) {
     const int state=ondever_status(alvoPedido);
     const char *message=state==ONDE_BUSCANDO ? "Buscando onde assistir…" : state==ONDE_FALHOU ? "Não foi possível consultar a disponibilidade." : "Nenhum serviço informado para esta região.";
@@ -2344,5 +2425,7 @@ static void stream_folha_desenharCorpo_(Uint32 agora) {
     // Com servicos de streaming na lista, a frase vem DEPOIS deles.
     txt_bloco(TXT_PG_FIM,s,196,199,204,tx,FOLHA_TOPO+20,rw-52,28,anim,3);
   }
-  gfx_sem_recorte();
+  // Na ilha, de volta ao recorte dela (plrilha corta a forma inteira).
+  if (ilha) gfx_recorte(ilhaR.x,ilhaR.y,ilhaR.w,ilhaR.h);
+  else gfx_sem_recorte();
 }

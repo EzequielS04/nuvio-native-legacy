@@ -73,4 +73,7 @@ void ondever_apps_limpar(void);
 int ondever_extrair(const char *json, const char *country, OndeVer *out, int capacity);
 enum { ONDE_SEM_PEDIDO, ONDE_BUSCANDO, ONDE_PRONTO, ONDE_FALHOU };
 int ondever_status(const char *id);
+#ifdef NV_SHOT_HOOKS
+void ondever_shot(const char *imdb, const OndeVer *l, int n);
+#endif
 #endif

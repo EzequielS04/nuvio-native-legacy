@@ -36,6 +36,7 @@
 #include "guialembrete.h"
 #include "aovivo.h"
 #include "ilha.h"
+#include "ondever.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -85,7 +86,6 @@ static void quadros(int n) {
     episodios_desenhar();
     stream_folha_desenhar(relogio);
     faixas_desenhar(relogio);
-    if (stream_folha_anim() > 0.02f) plrilha_esconder();
     plrilha_desenhar(relogio);
     if (extra) extra();
     SDL_Delay(1);
@@ -635,6 +635,76 @@ int main(int argc, char **argv) {
     stream_folha_abrir();
     quadros(90);
     salvar("fontes");
+  }
+  // ABRINDO COMO NO APP (dono, 03/10: "so mostrar o componente de carregando
+  // sem mostrar o player"): player_abrir sem o atalho de erro que `abrir()`
+  // usa para esconder o OSD, entao os controles estao pedidos como na TV.
+  if (quer(argc, argv, "abrindo")) {
+    Stream st;
+    CatItem l1[1];
+    // A folha de um quadro anterior ("fontes") fecha antes.
+    faixas_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
+    stream_folha_evento(&(SDL_Event){ .key = { .type = SDL_KEYDOWN, .keysym = { .sym = SDLK_ESCAPE } } });
+    quadros(60);
+    memset(&st, 0, sizeof st);
+    snprintf(st.rotulo, sizeof st.rotulo, "Project Hail Mary 2160p");
+    snprintf(st.provedor, sizeof st.provedor, "AIOStreams");
+    snprintf(st.url, sizeof st.url, "http://exemplo/phm.mkv");
+    st.tamanhoMB = (long)(21.4 * 1024);
+    st.badges = badges_bit("r-4k") | badges_bit("v-dv") | badges_bit("a-atmos");
+    stream_definir_lista(&st, 1);
+    l1[0] = filme; cat_definir(l1, 1);
+    player_abrir(0, NULL);
+    simular(0, 0, "", 0, 0);
+    stream_definir_atual(0);
+    player_shot_carregando(1);
+    quadros(120);
+    salvar("abrindo");
+    // A imagem chegou: os controles entram so agora.
+    // (No desktop video_pronto() e 0: sem comVideo a arte faz de imagem.)
+    player_shot_carregando(0);
+    simular(3840, 1606, "", 1, 1);
+    quadros(40);
+    salvar("abrindo-tocou");
+  }
+  // A ABA DE STREAMING ("Onde ver") da folha de Fontes, com dois servicos.
+  if (quer(argc, argv, "onde-ver")) {
+    static Stream st[2];
+    OndeVer ov[3];
+    SDL_Event ev;
+    int i;
+    memset(st, 0, sizeof st);
+    memset(ov, 0, sizeof ov);
+    for (i = 0; i < 2; i++) {
+      snprintf(st[i].rotulo, sizeof st[i].rotulo, "Project Hail Mary");
+      snprintf(st[i].provedor, sizeof st[i].provedor, "AIOStreams");
+      snprintf(st[i].url, sizeof st[i].url, "http://exemplo/o%d.mkv", i);
+      st[i].tamanhoMB = i ? 4200 : 21400; st[i].altura = i ? 1080 : 2160; st[i].fileIdx = -1;
+    }
+    snprintf(ov[0].nome, sizeof ov[0].nome, "Prime Video");
+    snprintf(ov[0].logo, sizeof ov[0].logo, "deploy/app/art/03.jpg");
+    snprintf(ov[1].nome, sizeof ov[1].nome, "Apple TV");
+    snprintf(ov[1].logo, sizeof ov[1].logo, "deploy/app/art/07.jpg");
+    snprintf(ov[2].nome, sizeof ov[2].nome, "Pluto TV");
+    snprintf(ov[2].logo, sizeof ov[2].logo, "deploy/app/art/11.jpg");
+    ov[2].gratis = 1;
+    abrir(&filme); simular(3840, 1606, "", 1, 1);
+    stream_definir_alvo("tt12345678");
+    ondever_shot("tt12345678", ov, 3);
+    stream_definir_lista(st, 2);
+    stream_definir_atual(0);
+    quadros(10);
+    player_shot_esconder();
+    stream_folha_contexto("Project Hail Mary");
+    stream_folha_abrir();
+    // Para a esquerda numa fonte troca a aba: "Todos" -> "Onde ver".
+    memset(&ev, 0, sizeof ev); ev.type = SDL_KEYDOWN; ev.key.keysym.sym = SDLK_LEFT;
+    stream_folha_evento(&ev);
+    quadros(90);
+    salvar("onde-ver");
+    memset(&ev, 0, sizeof ev); ev.type = SDL_KEYDOWN; ev.key.keysym.sym = SDLK_ESCAPE;
+    stream_folha_evento(&ev);
+    quadros(60);
   }
   if (quer(argc, argv, "trailer")) {
     VideoSimulacao v; memset(&v, 0, sizeof v);
