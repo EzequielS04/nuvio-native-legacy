@@ -590,7 +590,7 @@ char *legenda_utf8(const char *bytes, long n, const char **origem) {
   return out;
 }
 
-typedef struct { char url[1400]; unsigned g; } Pedido;
+typedef struct { char url[1400]; unsigned g; LegendaBaixada pronto; void *u; } Pedido;
 static void *baixar(void *u) {
   Pedido *p=u; long nb=0; const char *cs="utf-8";
   char *bruto=rede_baixar_bin(p->url,20,&nb);
@@ -621,6 +621,9 @@ static void *baixar(void *u) {
     // trocou) apagava o libass da faixa nova.
     assrender_limpar();
   }
+  /* AutoSync (legsync.c): o mesmo corpo vira documento imutavel neste fio,
+   * fora do lock do overlay. Sempre chamado, para o dono soltar `u`. */
+  if (p->pronto) p->pronto(corpo, p->g, legenda_ligada_em(p->g), p->u);
   free(corpo);
   free(v);
   printf("[legenda] %s: %d blocos%s\n",ass?"ASS/SSA":"SubRip",n,n?"":" (falha)");
@@ -628,17 +631,22 @@ static void *baixar(void *u) {
   free(p);return NULL;
 }
 
-void legenda_carregar(const char *url) {
-  Pedido *p; pthread_t fio;
-  if(!url||!*url)return;
-  p=calloc(1,sizeof *p);if(!p)return;
+void legenda_carregar(const char *url) { legenda_carregar_com(url, NULL, NULL); }
+unsigned legenda_carregar_com(const char *url, LegendaBaixada pronto, void *u) {
+  Pedido *p; pthread_t fio; unsigned g;
+  if(!url||!*url){ if(pronto)pronto(NULL,0,0,u); return 0; }
+  p=calloc(1,sizeof *p);if(!p){ if(pronto)pronto(NULL,0,0,u); return 0; }
+  p->pronto=pronto;p->u=u;
   pthread_mutex_lock(&trava);
   ligada=1;p->g=++geracao;free(cues);cues=NULL;nCues=0;maiorDur=0;
   pthread_mutex_unlock(&trava);
   assrender_geracao(p->g);
   assrender_limpar_fontes();
   snprintf(p->url,sizeof p->url,"%s",url);
-  if(pthread_create(&fio,NULL,baixar,p)==0)pthread_detach(fio);else free(p);
+  g=p->g;
+  if(pthread_create(&fio,NULL,baixar,p)==0)pthread_detach(fio);
+  else { if(pronto)pronto(NULL,g,0,u); free(p); }
+  return g;
 }
 
 // O MESMO caminho de baixar(), sem rede: o corpo ja esta na mao. Serve ao

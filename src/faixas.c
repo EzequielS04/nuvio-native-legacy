@@ -15,6 +15,7 @@
 #include "linguas.h"
 #include "plrui.h"
 #include "plrilha.h"
+#include "legsync.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <stdio.h>
@@ -29,6 +30,11 @@
 // 3 e nao 2: a folha de legenda tem a LISTA e o ESTILO, e FX_COL_ESTILO e o
 // indice 2. Com dois slots a coluna de estilo escrevia fora do vetor.
 static int aberta, coluna, foco[3];
+// AUTOSYNC (F05): ultima linha da lista de legendas, ate o seletor do F04
+// receber a linha por slot. `focoSync` prende o foco nela quando a lista
+// cresce por baixo (legendas de addon chegando).
+static int focoSync;
+static int linhaSync(void);
 // ROLAGEM POR COLUNA, em LINHAS (nao em pixels): a folha desenhava todas as
 // faixas a partir do topo e o painel tem altura limitada — com muitas legendas
 // as ultimas caiam fora do painel e da tela. O foco chegava nelas, os olhos
@@ -195,7 +201,7 @@ void faixas_abrir(void) { faixas_abrir_em(0); }
 // existir); o que muda e onde o foco comeca.
 void faixas_abrir_em(int col) {
   int n;
-  aberta = 1;
+  aberta = 1; focoSync = 0;
   modo = (col == 1) ? 1 : 0;
   coluna = modo;                 // audio -> col 0; legenda -> col 1
   foco[0] = video_audio_atual();
@@ -231,6 +237,10 @@ static int nLegendas(void) {
   int n = video_n_legenda() + nLegAddon();
   return n;
 }
+// Canal ao vivo nao tem legenda externa (so as do proprio stream): sem linha
+// de AutoSync. -1 nunca casa com um foco.
+static int temSync(void) { return !player_id_canal()[0]; }
+static int linhaSync(void) { return temSync() ? nLegendas() + 1 : -1; }
 
 // ORDEM DA LISTA: as embutidas de dialogo, depois as de LETREIROS ("Signs &
 // Songs", forced), depois as dos addons. A faixa de letreiros so traduz placas
@@ -258,7 +268,7 @@ static int linhaDaLeg(int i) {
 static int nLinhas(int col) {
   if (col == FX_COL_ESTILO) return FX_N_ESTILO;
   if (col == 0) { int n = video_n_audio(); return n; }
-  return nLegendas() + 1;   // +1 pela linha "Desativada"
+  return nLegendas() + 1 + temSync();   // +1 "Desativada", +1 AutoSync (ultima, fora do canal)
 }
 
 // --- COLUNA DE ESTILO --------------------------------------------------------
@@ -408,10 +418,11 @@ static void escolherLegenda(int i) {
     // aqui jogaria isso fora.
     if (!vaiAoApp) mkvass_parar();
     legOverlay = -1; legOverlayEsperando = -1; legOverlayRetomar = 0; legOverlayTV = 0;
-    if (i < 0)        { video_escolher_legenda(-1); legenda_desligar(); legExterna = -1; }
+    if (i < 0)        { video_escolher_legenda(-1); legenda_desligar(); legExterna = -1; legsync_primaria_outra(0); }
     else if (i < emb) {
       const VideoFaixa *f = video_legenda(i);
       int ord = video_legenda_ordinal_mkv(i);
+      legsync_primaria_outra(1);
       legenda_desligar(); legExterna = -1;
       // FAIXA ASS: o overlay do app assume (#92). O pipeline fica com a legenda
       // desligada e o mkvass colhe o texto do MKV a frente do playhead; se ele
@@ -448,7 +459,7 @@ static void escolherLegenda(int i) {
       // nada, e a folha diria "ativa" sobre uma legenda que nunca subiu.
       if (l) {
         /* A fonte e os 16 tamanhos agora sao nossos, nao do firmware webOS. */
-        video_escolher_legenda(-1); legenda_carregar(l->url); legExterna = i;
+        video_escolher_legenda(-1); legsync_primaria_externa(l->url, l->idioma, l->provedor); legExterna = i;
       }
     }
   }
@@ -534,6 +545,10 @@ void faixas_evento(const SDL_Event *e) {
   if (!aberta || e->type != SDL_KEYDOWN) return;
   k = e->key.keysym.sym;
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE) { aberta = 0; return; }
+  if (modo && coluna == 1) {
+    if (focoSync) foco[1] = linhaSync();
+    if (foco[1] == linhaSync() && legsync_linha_tecla(k)) return;
+  }
   // Esquerda/direita andam entre a LISTA e o ESTILO, e so na folha de legenda.
   // Na de audio nao ha para onde ir — antes elas pulavam para a coluna de
   // legenda, que e justamente o que fazia os dois botoes do player parecerem o
@@ -560,8 +575,10 @@ void faixas_evento(const SDL_Event *e) {
   }
   if (k == SDLK_LEFT)  { if (modo && coluna == FX_COL_ESTILO) coluna = 1; return; }
   if (k == SDLK_RIGHT) { if (modo && coluna == 1) coluna = FX_COL_ESTILO; return; }
-  if (k == SDLK_UP)    { if (foco[coluna] > 0) foco[coluna]--; ajustarRolagem(); return; }
+  if (k == SDLK_UP)    { if (foco[coluna] > 0) foco[coluna]--; focoSync = modo && coluna == 1 && foco[1] == linhaSync();
+                         ajustarRolagem(); return; }
   if (k == SDLK_DOWN)  { if (foco[coluna] < nLinhas(coluna) - 1) foco[coluna]++;
+                         focoSync = modo && coluna == 1 && foco[1] == linhaSync();
                          ajustarRolagem(); return; }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
     // Na coluna de ESTILO o OK CICLA o valor e aplica na hora, sem fechar: o
@@ -799,6 +816,9 @@ static void linhaLista(int col, int i, float x, float y, float w, float a) {
     const VideoFaixa *f = video_audio(i);
     partirRotulo(f ? f->rotulo : "", nome, sizeof nome, sub, sizeof sub);
     idioma = f ? f->idioma : NULL;
+  } else if (i == linhaSync()) {
+    legsync_linha_desenhar(x, y, w, IL_LN_H, sel, a);
+    return;
   } else if (i == 0) {
     snprintf(nome, sizeof nome, "%s", i18n("Nenhuma"));
     snprintf(sub, sizeof sub, "%s", i18n(player_id_canal()[0] && !nLegendas()
@@ -856,12 +876,13 @@ static void corpoLista(GfxRect c, float a) {
         txt_desenhar_alpha(l, x0 + w - 10.0f - l.w, ty + (float)t.h - (float)l.h - 8.0f, a); }
     } else {
       const char *rot[2] = { "Faixas", "Estilo" };
-      int cont[2] = { n, -1 };
+      int cont[2] = { n - temSync(), -1 };   // a linha de AutoSync nao e faixa
       float sw = plrui_seg(rot, cont, 2, coluna == FX_COL_ESTILO ? 1 : 0, 0, -1.0f, 0, a);
       plrui_seg(rot, cont, 2, coluna == FX_COL_ESTILO ? 1 : 0, 0, x0 + w - 10.0f - sw,
                 ty + (float)t.h - 54.0f, a);
     } }
   y += IL_TIT_H + 14.0f;
+  if (col == 1 && focoSync) foco[1] = linhaSync();
   visiveis = IL_VIS;
   ajustarRolagem();
   r = rolagem[col]; fim = r + visiveis; if (fim > n) fim = n;
@@ -872,10 +893,18 @@ static void corpoLista(GfxRect c, float a) {
   gfx_cor((GfxRect){ x0, y, w, 1.0f }, 0.0f, 1, 1, 1, 0.07f * a);
   { char q[32];
     float yc = y + 16.0f + 15.0f;
-    snprintf(q, sizeof q, i18n("%d de %d"), n ? foco[col] + 1 : 0, n);
-    { TxtLinha l = txt_linha(TXT_ILHA_APOIO, q, 243, 242, 239, 115);
+    int naSync = col == 1 && foco[1] == linhaSync(), nf = n - (col == 1 ? temSync() : 0);
+    // A posicao conta so faixas; na linha de AutoSync ela some e as dicas
+    // dizem o que o OK faz ali.
+    snprintf(q, sizeof q, i18n("%d de %d"), nf ? foco[col] + 1 : 0, nf);
+    if (!naSync) { TxtLinha l = txt_linha(TXT_ILHA_APOIO, q, 243, 242, 239, 115);
       txt_desenhar_alpha(l, x0 + 10.0f, yc - (float)l.h * 0.5f, a); }
-    if (!modo) {
+    if (naSync) {
+      const char *acao = legsync_linha_acao_chave();
+      const char *k[3] = { "OK", "\xe2\x86\x90 \xe2\x86\x92", "Voltar" }, *rt[3] = { acao, "Op\xc3\xa7\xc3\xa3o", "Fechar" };
+      if (acao) plrui_dicas(k, rt, 3, x0 + w - 10.0f, yc, 1, a);
+      else plrui_dicas(k + 2, rt + 2, 1, x0 + w - 10.0f, yc, 1, a);
+    } else if (!modo) {
       const char *k[2] = { "OK", "Voltar" }, *rt[2] = { "Usar esta faixa", "Fechar" };
       plrui_dicas(k, rt, 2, x0 + w - 10.0f, yc, 1, a);
     } else {
@@ -933,7 +962,7 @@ static void corpoEstilo(GfxRect c, float a) {
   int i;
   { TxtLinha t = txt_linha(TXT_G30B, "Legendas", 243, 242, 239, 255);
     const char *rot[2] = { "Faixas", "Estilo" };
-    int cont[2] = { nLinhas(1), -1 };
+    int cont[2] = { nLinhas(1) - temSync(), -1 };
     float yc = y + IL_EST_TOPO * 0.5f;
     txt_desenhar_alpha(t, x0 + 10.0f, yc - (float)t.h * 0.5f, a);
     plrui_seg(rot, cont, 2, 1, 0, x0 + 10.0f + (float)t.w + 18.0f, yc - 27.0f, a);

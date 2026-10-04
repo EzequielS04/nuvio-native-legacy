@@ -86,3 +86,33 @@ cc -Isrc -Wall -Wextra -Werror -fsyntax-only src/autosync.c
 ASan/UBSan e ThreadSanitizer passam sem erros observados. Os testes do parser ASS/SRT/VTT legado continuam passando. As timelines são sintéticas e os offsets têm ground truth determinístico; ainda falta um corpus de legendas legais reais com anotações humanas, medição de falsos aceites/recall e benchmark físico por plataforma. O maior tempo observado em uma execução sintética normal no Mac foi24ms, e102ms sob ThreadSanitizer; isso não estima latência de nenhuma TV.
 
 Não houve compile integral, instalação na TV, publicação nem ligação de backend/player feita por este módulo isolado.
+
+## Integração no player (F05, 04/10/2026)
+
+Três módulos novos ligam a engine ao player, um idioma (slot principal):
+
+- `src/legref.c/h` — coletor **independente** da referência embutida. Lê por HTTP Range, em fio próprio, uma faixa de texto (S_TEXT/UTF8, ASS, SSA) de um Matroska usando só o índice (SeekHead → Cues → CueRelativePosition). Não chama `mkvass_*`, `legenda_carregar`, `assrender_*` nem `video_*` (conferido por `nm` em `tests/legref.sh`): a faixa da pessoa não muda. Documento só sai `COMPLETO` quando todos os blocos indexados chegaram; sem Cues da faixa, sem BlockDuration, lacing, servidor sem Range (200) ou orçamento esgotado → indisponível com motivo. Letreiros/forced nunca servem de referência. Preferência pelo idioma da externa; exclusões por TrackNumber para "outra referência". MP4/tx3g não é lido. Desligado em WGT/AVPlay e nos `.tpk` (`legref_disponivel`), onde a UI diz "Indisponível nesta plataforma".
+- `src/legsync.c/h` — sessão: geração nova em `player_abrir`, cancelamento em `lembrarFonte` (fechar o player), troca de URL detectada em `player_atualizar` (troca de fonte), troca de faixa em `faixas.c` (embutida/nenhuma/outra externa). A externa vira `LegendaDocumento` no próprio fio do download (`legenda_carregar_com`). A referência só é lida quando a pessoa pede Rápida/Completa; seek, buffering e buffer de vídeo < 20 s pausam a leitura e cancelam a análise, que retoma 2 s depois de calmo. Orçamento: 12 MiB por leitura, 24 MiB por mídia, 8 Ranges/s. `legsync_offset_ms(manual)` devolve manual + automático aceito, aplicado uma vez em `desenharLegendaExterna`, e só enquanto o documento analisado é o dono do overlay.
+- `src/legsyncui.c` — última linha da folha de Legendas (que cresce da ilha do relógio): estado traduzido, ação entre ‹ › (Rápida, Completa, Desfazer, Outra referência, Parar), offset aceito no acento à direita. Some em canal ao vivo. Não conta como faixa na contagem/posição.
+
+Nunca bloqueia o início: criar o contexto não faz rede; nada é lido antes do pedido. Só resultado ACEITO pela engine muda o offset; recusa mostra "Sem confiança suficiente; nada foi alterado".
+
+### Verificação
+
+```sh
+bash tests/legref.sh     # 17 casos + HTTP real (rede.c/libcurl): completo, redirect, sem-Range
+bash tests/legsync.sh    # 13 casos: aceite +2,5 s/−1,2 s, desfazer, outra referência, seek,
+                         # troca de fonte/faixa, download atrasado, cancelamento com Range preso
+                         # (fechar, fonte, embutida, outra externa, desligar), teardown, plataforma
+SANITIZE=1 / SANITIZE=thread nos dois e em tests/autosync.sh: sem erros
+bash tests/legsync_shot.sh DIR   # capturas GL, Montserrat, HTTP real
+```
+
+Fixtures reais por ffmpeg e mkvmerge (`tests/legref_fixtures.sh`).
+
+### Limites
+
+- Tolerância fixa em 250 ms (padrão da engine); não há ajuste na interface.
+- Segundo idioma: a engine tem dois slots, o player usa só o principal; slot 1 responde "disponível depois".
+- Referência só de MKV com Cues por bloco de legenda (ffmpeg e mkvmerge escrevem). MP4, MKV sem Cues da faixa e legendas de imagem (PGS/VobSub) ficam indisponíveis.
+- Sem prova em TV: concorrência real com a conexão do vídeo em LG/Android, CDNs que limitam Range, e tempo de leitura em filme longo. Nenhum corpus humano ainda.

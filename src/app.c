@@ -97,6 +97,7 @@
 #include "debrid.h"
 #include "p2p.h"
 #include "player.h"
+#include "legsync.h"
 #include "streams.h"
 #include "stalker.h"
 #include "xtream.h"
@@ -4024,6 +4025,7 @@ void app_encerrar(void) {
   }
   aguardandoFonte = 0;
   player_encerrar();
+  legsync_destruir();   // F05: join dos fios do AutoSync, depois do player
   discord_encerrar();   // a atividade some na hora, sem esperar o Discord notar a queda
   video_encerrar();    // solta o nome LS2 antes do processo sumir (deploy mata sem aviso)
   ajustes_encerrar();
