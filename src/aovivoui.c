@@ -34,6 +34,7 @@
 #include "layout.h"
 #include "idioma.h"
 #include "plrui.h"
+#include "plrilha.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <stdio.h>
@@ -60,7 +61,7 @@ static const char *icone(int b) {
   switch (b) {
     case AV_B_PAUSA: return NULL;   // play/pause conforme o estado
     case AV_B_GUIA: return "pl_list";
-    case AV_B_FAV: return "pl_star";
+    case AV_B_FAV: return "pl_star";   // pl_star-f com o canal nos favoritos (iconeDe)
     case AV_B_AUDIO: return "pl_audio-lines";
     case AV_B_LEGENDA: return "pl_captions";
     case AV_B_INFO: return "pl_info";
@@ -99,6 +100,11 @@ static const char *rotuloDe(const AoVivoOsd *o, int b) {
   return aovivo_rotulo(b);
 }
 static const char *iconeDe(const AoVivoOsd *o, int b) {
+  // FAVORITO: estrela CHEIA quando o canal esta nos favoritos, contorno quando
+  // nao (dono, 03/10: "o favorito tem que deixar a estrela filled quando
+  // clicar"). `favorito` e relido a cada quadro (guia_e_favorito), entao o OK
+  // troca o desenho no quadro seguinte.
+  if (b == AV_B_FAV) return o->favorito ? "pl_star-f" : "pl_star";
   return b == AV_B_PAUSA ? (o->pausado ? "pl_play-f" : "pl_pause-f") : icone(b);
 }
 
@@ -178,7 +184,6 @@ void aovivo_osd_desenhar(const AoVivoOsd *o, float a) {
   ESCALA_FIM();
 }
 static void aovivo_osd_desenharCorpo_(const AoVivoOsd *o, float a) {
-  int i;
   time_t agoraT = time(NULL);
   if (a <= 0.004f || !o) return;
   gfx_veu_css((GfxRect){ 0, 0, NV_TELA_W, 260.0f }, 1, 1.38f, 1.0f, 0.52f * a);
@@ -204,17 +209,18 @@ static void aovivo_osd_desenharCorpo_(const AoVivoOsd *o, float a) {
         if (num.w) { txt_desenhar_alpha(num, xs, ry, a); xs += (float)num.w + 12.0f; }
         if (fm >= 0) xs += marca_formato((FormatoMarca)fm, xs, ry + 1.0f, 20.0f, 0.953f, 0.949f, 0.937f, a * 0.75f) + 12.0f;
         else if (o->res[0]) xs += badge_desenhar(xs, ry, o->res, BADGE_NEUTRO, a) + 12.0f;
-        if (o->favorito) gfx_icone((GfxRect){ xs, ry + 2.0f, 18.0f, 18.0f }, "pl_star", 0.961f, 0.773f, 0.259f, a); } } }
+        if (o->favorito) gfx_icone((GfxRect){ xs, ry + 2.0f, 18.0f, 18.0f }, "pl_star-f", 0.961f, 0.773f, 0.259f, a); } } }
 
-  // --- A HORA, pilula da ilha a direita; o estado da pausa abaixo dela ------
-  { char hora[8];
-    float yr = 68.0f;
-    hhmm(hora, sizeof hora, agoraT);
-    { TxtLinha lh = txt_linha(TXT_ILHA_NOME, hora, 243, 242, 239, 255);
-      GfxRect p = { NV_TELA_W - AV_X - (float)lh.w - 48.0f, yr, (float)lh.w + 48.0f, 56.0f };
-      plrui_material(p, 28.0f, 0, a);
-      txt_desenhar_alpha(lh, p.x + 24.0f, p.y + (56.0f - (float)lh.h) * 0.5f, a); }
-    yr += 56.0f + 14.0f;
+  // --- O ESTADO DA PAUSA, abaixo da ILHA DO RELOGIO -------------------------
+  // A HORA NAO E MAIS DESENHADA AQUI (dono, 03/10: "no live tv o source nao ta
+  // saindo do relogio, nem o audio nem a legenda, igual e no outro player").
+  // Era uma pilula propria, 20 px abaixo da ilha do player, e as folhas de
+  // Fontes, Audio, Legendas e as Informacoes cresciam de OUTRO lugar (a ilha do
+  // player, sem relogio no canal). Agora a hora e a ilha do player
+  // (plrilha_relogio, chamado por player.c) e tudo nasce dela, como no filme.
+  { float yr = 48.0f + 56.0f + 14.0f;   // Y_TOPO + PIL_H de plrilha.c + vao
+    GfxRect ir;
+    if (plrilha_rect(&ir) && ir.y + ir.h + 14.0f > yr) yr = ir.y + ir.h + 14.0f;
     if (o->pausado) { pausao_selo(NV_TELA_W - AV_X, yr, 1, a); yr += PAUSAO_SELO_H + 12.0f; }
     if (o->pausado && (o->pausaS > 0 || o->janelaS >= 60)) {
       char l2[160] = "", p1[64] = "", p2[80] = "";
@@ -231,34 +237,6 @@ static void aovivo_osd_desenharCorpo_(const AoVivoOsd *o, float a) {
       TxtLinha lb = txt_linha(TXT_ILHA_SUB, "Carregando o fluxo…", 240, 185, 74, 255);
       txt_desenhar_alpha(lb, NV_TELA_W - AV_X - lb.w, yr, a);
       yr += lb.h + 6.0f;
-    }
-    // INFORMACOES: ilha a direita, com as MESMAS marcas do OSD de filme no
-    // topo e as linhas "rotulo ...... valor" com fio entre elas.
-    if (o->infoAberta && o->nInfo > 0) {
-      float pw = 600.0f, ph = 30.0f + 18.0f + (o->nMarcas ? 16.0f + 32.0f : 0.0f) + 18.0f + o->nInfo * 46.0f + 16.0f;
-      GfxRect p = { NV_TELA_W - AV_X - pw, 180.0f, pw, ph };
-      float y = p.y + 30.0f, mx = p.x + 30.0f;
-      plrui_material(p, 32.0f, 0, a);
-      plrui_kicker("Informações", p.x + 30.0f, y, 243, 242, 239, a * 0.45f);
-      y += 18.0f;
-      if (o->nMarcas) {
-        y += 16.0f;
-        for (i = 0; i < o->nMarcas; i++)
-          mx += marca_formato((FormatoMarca)o->marcas[i], mx, y, 32.0f, 0.953f, 0.949f, 0.937f, a * 0.8f) + 18.0f;
-        y += 32.0f;
-      }
-      y += 18.0f;
-      for (i = 0; i < o->nInfo; i++) {
-        char rot[72];
-        const char *val = strstr(o->info[i], ": ");
-        snprintf(rot, sizeof rot, "%.*s", val ? (int)(val - o->info[i]) : (int)strlen(o->info[i]), o->info[i]);
-        gfx_cor((GfxRect){ p.x + 30.0f, y, pw - 60.0f, 1.0f }, 0.0f, 1, 1, 1, 0.07f * a);
-        { TxtLinha lr = txt_linha_corta(TXT_G18R, rot, 243, 242, 239, 128, pw * 0.5f);
-          txt_desenhar_alpha(lr, p.x + 30.0f, y + 23.0f - (float)lr.h * 0.5f, a); }
-        if (val) { TxtLinha lv = txt_linha_corta(TXT_G18R, val + 2, 243, 242, 239, 255, pw * 0.5f - 40.0f);
-                   txt_desenhar_alpha(lv, p.x + pw - 30.0f - lv.w, y + 23.0f - (float)lv.h * 0.5f, a); }
-        y += 46.0f;
-      }
     } }
 
   // --- O PROGRAMA, de baixo para cima a partir da barra ----------------------
@@ -332,6 +310,37 @@ static void aovivo_osd_desenharCorpo_(const AoVivoOsd *o, float a) {
   fileiraBotoes(o, AV_BTN_Y, a);
 }
 
+
+// INFORMACOES: o CORPO da ilha do relogio (plrilha.h), pedido por player.c com
+// "Informacoes" no cabecalho. As MESMAS marcas do OSD de filme no topo e as
+// linhas "rotulo ...... valor" com fio entre elas. Era um cartao proprio a
+// direita, abaixo da pilula da hora, que nao saia dela.
+float aovivo_info_altura(const AoVivoOsd *o) {
+  if (!o || o->nInfo <= 0) return 0.0f;
+  return 18.0f + (o->nMarcas ? 32.0f + 16.0f : 0.0f) + o->nInfo * 46.0f + 16.0f;
+}
+void aovivo_info_corpo(GfxRect c, float a, void *u) {
+  const AoVivoOsd *o = (const AoVivoOsd *)u;
+  float y = c.y + 18.0f, mx = c.x + 30.0f, pw = c.w;
+  int i;
+  if (!o || a <= 0.004f) return;
+  if (o->nMarcas) {
+    for (i = 0; i < o->nMarcas; i++)
+      mx += marca_formato((FormatoMarca)o->marcas[i], mx, y, 32.0f, 0.953f, 0.949f, 0.937f, a * 0.8f) + 18.0f;
+    y += 32.0f + 16.0f;
+  }
+  for (i = 0; i < o->nInfo; i++) {
+    char rot[72];
+    const char *val = strstr(o->info[i], ": ");
+    snprintf(rot, sizeof rot, "%.*s", val ? (int)(val - o->info[i]) : (int)strlen(o->info[i]), o->info[i]);
+    if (i || o->nMarcas) gfx_cor((GfxRect){ c.x + 30.0f, y, pw - 60.0f, 1.0f }, 0.0f, 1, 1, 1, 0.07f * a);
+    { TxtLinha lr = txt_linha_corta(TXT_G18R, rot, 243, 242, 239, 128, pw * 0.5f);
+      txt_desenhar_alpha(lr, c.x + 30.0f, y + 23.0f - (float)lr.h * 0.5f, a); }
+    if (val) { TxtLinha lv = txt_linha_corta(TXT_G18R, val + 2, 243, 242, 239, 255, pw * 0.5f - 40.0f);
+               txt_desenhar_alpha(lv, c.x + pw - 30.0f - lv.w, y + 23.0f - (float)lv.h * 0.5f, a); }
+    y += 46.0f;
+  }
+}
 
 // ZAPPING: ilha na margem (era um cartao 900x132 opaco), com a marca, o
 // numero, o nome, o programa que entra e "Trocando de canal…" com o ponto que

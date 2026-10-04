@@ -570,8 +570,10 @@ static void buscarParaPlayerModo(int renovar) {
   // do E6" de "a lista do E5 que ninguem invalidou". Ver streams.h.
   stream_definir_alvo(alvo);
   if (idC[0]) {
+    // SEM LEGENDA DE ADDON NO CANAL: o id do canal ia ao OpenSubtitles como
+    // "movie" (Recarregar da folha). As do canal sao as do fluxo (faixas.c).
     if (renovar) addons_buscar_renovar(alvo,"tv"); else addons_buscar(alvo,"tv");
-    addons_buscar_legendas(alvo,"tv"); return;
+    return;
   }
   {
     const CatItem *c = cat_item(player_indice());

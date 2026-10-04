@@ -262,7 +262,7 @@ static Uint32 pgDesde;
 static int   comVideo = 0;
 #ifdef NV_SHOT_HOOKS
 static int   shotSemFuro, shotBusca;
-static int   shotEpgOk, shotNumero, shotAtras;
+static int   shotEpgOk, shotNumero, shotAtras, shotFav;   // shotFav: 1 = botao, 2 = nos favoritos
 static AoVivoEpg shotEpg;
 #endif
 static int   pedFaixas = 0;
@@ -2013,6 +2013,9 @@ static int avBotoes(int *ids) {
   ids[n++] = AV_B_ANT;
   ids[n++] = AV_B_PROX;
   if (guia_info_canal(player_id_canal(), NULL, NULL, NULL, 0)) ids[n++] = AV_B_FAV;
+#ifdef NV_SHOT_HOOKS
+  else if (shotFav) ids[n++] = AV_B_FAV;
+#endif
   ids[n++] = AV_B_AUDIO;
   ids[n++] = AV_B_LEGENDA;
   ids[n++] = AV_B_INFO;
@@ -2078,6 +2081,9 @@ static void avMontarOsd(AoVivoOsd *o) {
   o->nBotoes = n;
   o->foco = (botaoAV < n) ? botaoAV : n - 1;
   o->favorito = guia_e_favorito(id);
+#ifdef NV_SHOT_HOOKS
+  if (shotFav) o->favorito = shotFav == 2;
+#endif
   o->pausado = !tocando && avPodePausar();
   o->atrasoS = avAtrasoS(SDL_GetTicks());
 #ifdef NV_SHOT_HOOKS
@@ -3520,7 +3526,20 @@ void player_desenhar(Uint32 agora) {
   // respira, "Abrindo fonte", a linhaEp, a fonte escolhida (marcas, addon e
   // tamanho) e o trilho dentro dela. Na ponta do cabecalho, "Fonte 2 de 3"
   // quando o automatico ja esta na segunda.
-  if (player_carregando()) {
+  if (player_carregando() && ehCanal()) {
+    // CANAL SINTONIZANDO: a versao COMPACTA, uma linha na propria ilha do
+    // relogio (dono, 03/10: "no player do live tv vamos usar a versao compacta
+    // do opening source, sendo na mesma linha do relogio, uma linha"). O ponto
+    // que respira, o canal e "Sintonizando…", e a hora — sem cartao no meio,
+    // sem corpo: o zap e frequente e a troca nao pode tapar a tela.
+    static char lin[200];
+    PlrIlhaPedido pd;
+    memset(&pd, 0, sizeof pd);
+    if (itemCanal.titulo[0]) snprintf(lin, sizeof lin, "%s \xc2\xb7 %s", itemCanal.titulo, i18n("Sintonizando…"));
+    else snprintf(lin, sizeof lin, "%s", i18n("Sintonizando…"));
+    pd.texto = lin; pd.respira = 1; pd.semFim = 1; pd.aberta = 1;
+    plrilha_pedir(&pd);
+  } else if (player_carregando()) {
     { PlrIlhaPedido pd;
       memset(&pd, 0, sizeof pd);
       pd.semFim = 1;
@@ -3785,11 +3804,24 @@ void player_desenhar(Uint32 agora) {
       }
     }
     if (a > 0.005f && !erroFonte) {
-      AoVivoOsd o;
+      // static: a ilha chama o corpo das Informacoes em plrilha_desenhar,
+      // depois desta funcao, e enquanto encolhe (aovivo.h).
+      static AoVivoOsd o;
       desenharLegendaExterna();
       if (!zapEst.pend) {
         avMontarOsd(&o);
         aovivo_osd_desenhar(&o, a);
+        // A HORA E A ILHA DO PLAYER, como no filme: Fontes, Audio, Legendas
+        // e Informacoes crescem dela (o OSD do canal tinha pilula propria).
+        plrilha_relogio(a, -1.0);
+        if (o.infoAberta && o.nInfo > 0) {
+          PlrIlhaPedido pd;
+          memset(&pd, 0, sizeof pd);
+          pd.icone = "pl_info"; pd.texto = i18n("Informações"); pd.semFim = 1;
+          pd.w = 600.0f; pd.h = aovivo_info_altura(&o);
+          pd.corpo = aovivo_info_corpo; pd.u = &o;
+          plrilha_pedir(&pd);
+        }
       }
     } else {
       desenharLegendaExterna();
@@ -4083,6 +4115,7 @@ void player_shot_canal(const AoVivoEpg *e, int numero, int atrasS, int botaoFoco
   shotEpgOk = e != NULL; if (e) shotEpg = *e; shotNumero = numero; shotAtras = atrasS;
   botaoAV = botaoFoco; infoAV = info;
 }
+void player_shot_favorito(int f) { shotFav = f; }
 void player_shot_estado(Uint32 agora, float pos, float dur, int toca, int bt,
                         int barra, int so) {
   posSeg = posVis = pos; posVisSolto = 0;

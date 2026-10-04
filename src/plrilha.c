@@ -139,6 +139,7 @@ static float montar(const PlrIlhaPedido *p, Linha *L) {
   L->temFim = (!p || !p->semFim) && fim[0];
   L->hora = txt_linha(TXT_ILHA_NOME, h, 243, 242, 239, 255);
   if (L->temIcone) w += 24.0f + 12.0f;
+  if (p && p->respira) w += 10.0f + 14.0f;
   if (L->temTxt) {
     L->txt = txt_linha_corta(TXT_ILHA_NOME, p->texto, 243, 242, 239, 255, PLR_TEXTO_MAX);
     w += (float)L->txt.w + 12.0f;
@@ -165,6 +166,10 @@ static void desenharLinha(const PlrIlhaPedido *p, const Linha *L, float x, float
     else if (p->corIcone == 2) ajustes_acento(&cr, &cg, &cb);
     gfx_icone((GfxRect){ x, yc - 12.0f, 24.0f, 24.0f }, p->icone, cr, cg, cb, a);
     x += 24.0f + 12.0f;
+  }
+  if (p && p->respira) {
+    plrui_respira(x + 5.0f, yc, 10.0f, SDL_GetTicks(), a);
+    x += 10.0f + 14.0f;
   }
   if (L->temTxt) {
     txt_desenhar_alpha(L->txt, x, yc - (float)L->txt.h * 0.5f, a);
