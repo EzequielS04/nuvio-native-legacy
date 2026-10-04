@@ -3886,13 +3886,11 @@ void app_desenhar(Uint32 agora) {
     else if (homeCarregando) { homeCarregando = 0; homeConcluida = agora; }
     int concluida = homeConcluida && agora - homeConcluida < 1000u;
     if (load.ativo || concluida || ilha_modal_aberto()) {
-      char details[640];
       const char *stage = !load.ativo ? i18n("Home carregada") :
         load.fase == 2 ? i18n("Carregando fileiras…") : i18n("Sincronizando a Home…");
-      snprintf(details, sizeof details,
-        i18n("%s\nTempo: %u s · Add-ons consultados: %d de %d\nFileiras atualizadas: %d · Falhas: %d\nVocê pode continuar navegando enquanto a Home atualiza."),
-        stage, load.ms / 1000u, load.addonsProntos, load.addonsTotal, load.fileiras, load.falhas);
-      ilha_atividade_detalhes(i18n("Carregamento da Home"), details);
+      IlhaAtvCarga carga = { NULL, load.ms, load.addonsProntos, load.addonsTotal, load.fileiras, load.falhas, load.ativo };
+      ilha_atividade_detalhes(i18n("Carregamento da Home"), stage);
+      ilha_atividade_carga(&carga);
       if (load.ativo) {
         char shortStatus[160];
         snprintf(shortStatus, sizeof shortStatus, "%s · %s", i18n("Carregando fileiras…"), i18n("Detalhes"));

@@ -163,6 +163,11 @@ void ilha_atividade(const char *texto, float progresso);
 void ilha_atividade_ex(const char *texto, float progresso, const char *icone);
 // Optional live details: NULL removes the activity's expandable panel.
 void ilha_atividade_detalhes(const char *titulo, const char *texto);
+// Compact stats for the expandable panel (Home loading): the panel then draws
+// a thin progress bar, a live m:ss counter and stat chips instead of text lines.
+// Set it right AFTER ilha_atividade_detalhes() (which clears it); NULL = none.
+typedef struct { const char *etapa; unsigned ms; int prontos, total, fileiras, falhas, ativo; } IlhaAtvCarga;
+void ilha_atividade_carga(const IlhaAtvCarga *c);
 int ilha_atividade_expansivel(void);
 
 // Onde o relogio pode ficar, decidido por quadro por app.c (a home tem o topo
