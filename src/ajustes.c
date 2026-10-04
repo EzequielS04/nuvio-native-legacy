@@ -2110,18 +2110,16 @@ static const char *fanartMascarada(void) {
   return m;
 }
 
-// CHAVE DO SEEKR (seekr.h). Duas origens:
-//   - EMBUTIDA (NV_SEEKR_API_KEY, do local.properties via tools/env.sh): a do
-//     dono, decisao dele em 03/10/2026 sabendo que os termos do servico pedem
-//     chave por pessoa e que quem tiver o pacote consegue extrai-la. Com ela,
-//     a chave e o "Testar" saem dos Ajustes e ficam so os interruptores.
-//   - PESSOAL (build sem a chave): seekr.txt na pasta de dados, nunca no
-//     ajustes.txt nem na conta, so mascarada na tela, como a do fanart.tv.
+// Two local key sources: the package default (NV_SEEKR_API_KEY) and a personal
+// override in seekr.txt, never in account preferences. The personal key is
+// masked and takes priority; removing it restores the package default.
+// The TV's budget of50lookups per day applies to either key.
 #ifndef NV_SEEKR_API_KEY
 #define NV_SEEKR_API_KEY ""
 #endif
 static int seekrEmbutida(void) { return NV_SEEKR_API_KEY[0] != 0; }
 static char seekrChave[96];
+static int seekrSalvarFalhou;
 static const char *SEEKR_ALFA =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-";
 static void seekrLimpar(char *dst, size_t n, const char *t) {
@@ -2132,30 +2130,31 @@ static void seekrLimpar(char *dst, size_t n, const char *t) {
 }
 static void seekrCarregar(void) {
   char *t;
-  if (seekrEmbutida()) {
-    seekrLimpar(seekrChave, sizeof seekrChave, NV_SEEKR_API_KEY);
-    seekr_definir_chave(seekrChave);
-    return;
-  }
   t = dados_ler("seekr.txt");
   seekrLimpar(seekrChave, sizeof seekrChave, t);
   free(t);
-  seekr_definir_chave(seekrChave);
+  seekr_definir_chave(seekrChave[0] ? seekrChave : NV_SEEKR_API_KEY);
 }
 static void seekrDefinir(const char *txt) {
-  seekrLimpar(seekrChave, sizeof seekrChave, txt);
-  if (seekrChave[0]) dados_gravar("seekr.txt", seekrChave);
-  else dados_apagar("seekr.txt");
-  seekr_definir_chave(seekrChave);
+  char nova[sizeof seekrChave];
+  seekrLimpar(nova, sizeof nova, txt);
+  seekrSalvarFalhou = 0;
+  if (!strcmp(nova, seekrChave)) return;
+  if (nova[0] ? !dados_gravar("seekr.txt", nova) : !dados_apagar("seekr.txt")) {
+    seekrSalvarFalhou = 1;
+    return; // Keep the effective and durable old key consistent on failure.
+  }
+  snprintf(seekrChave, sizeof seekrChave, "%s", nova);
+  seekr_definir_chave(seekrChave[0] ? seekrChave : NV_SEEKR_API_KEY);
 }
 static const char *seekrMascarada(void) {
   static char m[24];
   size_t n = strlen(seekrChave);
-  if (!n) return i18n("Não configurado");
+  if (!n) return i18n(seekrEmbutida() ? "Chave padrão do aplicativo" : "Não configurado");
   snprintf(m, sizeof m, "····%s", n > 4 ? seekrChave + n - 4 : "");
   return m;
 }
-int ajustes_seekr_ligado(void) { return lig(AJ_SEEKR_LIGADO) && seekrChave[0]; }
+int ajustes_seekr_ligado(void) { return lig(AJ_SEEKR_LIGADO) && (seekrChave[0] || seekrEmbutida()); }
 int ajustes_seekr_fita(void)   { return lig(AJ_SEEKR_FITA); }
 int ajustes_seekr_ajuste_s(void) { return valor[AJ_SEEKR_AJUSTE]; }
 
@@ -2367,8 +2366,8 @@ static void *skTesteFioF(void *u) {
   return NULL;
 }
 static void skTesteIniciar(void) {
-  if (skFioVivo || !seekrChave[0]) return;
-  snprintf(skTesteChave, sizeof skTesteChave, "%s", seekrChave);
+  if (skFioVivo || (!seekrChave[0] && !seekrEmbutida())) return;
+  snprintf(skTesteChave, sizeof skTesteChave, "%s", seekrChave[0] ? seekrChave : NV_SEEKR_API_KEY);
   atomic_store_explicit(&skTeste, 1, memory_order_release);
   if (pthread_create(&skFio, NULL, skTesteFioF, NULL) != 0) {
     skTesteRes = -1;
@@ -2386,12 +2385,41 @@ static void skTesteRecolher(void) {
 }
 static const char *skTesteTexto(void) {
   int e = atomic_load_explicit(&skTeste, memory_order_acquire);
-  if (!seekrChave[0]) return i18n("informe a chave primeiro");
+  if (!seekrChave[0] && !seekrEmbutida()) return i18n("informe a chave primeiro");
   if (e == 0) return i18n("OK testa");
+  if (strcmp(skTesteChave, seekrChave[0] ? seekrChave : NV_SEEKR_API_KEY)) return i18n("OK testa");
   if (e == 1 || e == 3) return i18n("testando…");
   if (skTesteRes > 0) return i18n("chave válida");
   if (skTesteRes == 0) return i18n("chave recusada");
   return i18n("sem resposta do servidor");
+}
+
+static const char *seekrAjuda(int op) {
+  static char texto[900];
+  char uso[140], libera[100] = "", hora[48];
+  SeekrUso u; seekr_uso(&u);
+  const char *situacao = i18n(seekr_estado_rotulo(seekr_estado()));
+  if (seekrSalvarFalhou)
+    situacao = i18n("Não foi possível salvar a chave. A chave anterior foi mantida.");
+  else if (!u.persistente)
+    situacao = i18n(seekr_estado_rotulo(SEEKR_ARMAZENAMENTO_INDISPONIVEL));
+  else if (u.relogioAtrasado)
+    situacao = i18n("Confira a data e a hora desta TV. O contador não foi reiniciado.");
+  if (u.persistente)
+    snprintf(uso, sizeof uso, i18n("%d de %d consultas hoje (UTC)"), u.usadas, u.limite);
+  else snprintf(uso, sizeof uso, "%s", i18n("Uso do Seekr indisponível"));
+  long long quando = seekr_estado() == SEEKR_LIMITE_PROVEDOR ? u.retryUtc : u.reinicioUtc;
+  if (u.persistente && !u.relogioAtrasado && seekr_horario_local(quando, hora, sizeof hora))
+    snprintf(libera, sizeof libera, i18n(seekr_estado() == SEEKR_LIMITE_PROVEDOR ?
+             "Tente após %s (hora local)" : "Renova em %s (hora local)"), hora);
+  const char *sobre = op == AJ_SEEKR_TESTAR ?
+    "Testar a chave não gasta consultas. Os limites do Seekr são separados do limite desta TV." :
+    "Até 50 consultas por instalação e dia UTC, compartilhadas por todos os perfis e chaves. Cache não gasta consultas; uma tentativa enviada à rede gasta mesmo se falhar.";
+  // The Settings inspector has four lines. Keep live usage/reset/state ahead
+  // of explanatory copy so a long translation cannot hide the actionable data.
+  snprintf(texto, sizeof texto, "%s\n%s%s%s\n%s", uso, libera,
+           libera[0] ? "\n" : "", situacao, i18n(sobre));
+  return texto;
 }
 
 // "ADICIONAR PACOTE DE SELOS": baixa o JSON do pacote por URL (fio proprio, como
@@ -3724,7 +3752,14 @@ static const char *textoLeitura(int op) {
   }
   if (op == AJ_FANART_CHAVE) return fanartMascarada();
   if (op == AJ_SEEKR_CHAVE) return seekrMascarada();
-  if (op == AJ_SEEKR_TESTAR) return skTesteTexto();
+  if (op == AJ_SEEKR_TESTAR) {
+    static char seekrValor[160];
+    SeekrUso u; seekr_uso(&u);
+    if (u.persistente)
+      snprintf(seekrValor, sizeof seekrValor, i18n("%s · %d/%d"), skTesteTexto(), u.usadas, u.limite);
+    else snprintf(seekrValor, sizeof seekrValor, "%s", i18n("Uso do Seekr indisponível"));
+    return seekrValor;
+  }
   if (op == AJ_SELOS_PACOTE_ADD) return spAddTexto();
   if (op == AJ_SELOS_PACOTE_REM) {
     int a = selospacote_ativo();
@@ -3988,7 +4023,6 @@ static int visivel(int i) {
   if (TELA[i].tipo == IT_OPC) {
     int op = TELA[i].op;
     if ((op == AJ_PERFIL_PESQ || op == AJ_PERFIL_EDITAR) && !recomenda_ativo()) return 0;
-    if ((op == AJ_SEEKR_CHAVE || op == AJ_SEEKR_TESTAR) && seekrEmbutida()) return 0;
     if (uxAvancada(op) && !uxAvancados[secDoItem[i]]) return 0;
   }
   return 1;
@@ -4308,13 +4342,11 @@ static const char *ajudaOpcao(int op) {
     case AJ_MDB_LIGADO: return "O MDBList junta notas de várias fontes na página do título. Desligar esconde a fileira inteira.";
     case AJ_MDB_CHAVE: return "A chave vem da sua conta Nuvio ou do arquivo do pacote. Não dá para digitar nesta TV.";
     case AJ_SEEKR_LIGADO:
-      if (seekrEmbutida())
-        return "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv).";
-      return "Mostra uma miniatura do filme acima da barra enquanto você avança ou volta. As imagens vêm do Seekr (seekr.tv) e precisam da sua chave pessoal; cada título aberto conta uma consulta da sua cota diária.";
-    case AJ_SEEKR_CHAVE: return "Sua chave pessoal do Seekr, gratuita na prévia em seekr.tv. Fica só nesta TV e aparece mascarada.";
+      return seekrAjuda(op);
+    case AJ_SEEKR_CHAVE: return seekrSalvarFalhou ? seekrAjuda(op) : "Sua chave pessoal do Seekr, gratuita na prévia em seekr.tv. Fica só nesta TV e aparece mascarada.";
     case AJ_SEEKR_FITA: return "Mostra o quadro anterior e o seguinte ao lado da miniatura, com o tempo de cada um. Deixa claro que há um quadro a cada 10 segundos.";
     case AJ_SEEKR_AJUSTE: return "Use quando a miniatura mostra sempre a cena de alguns segundos antes ou depois. Acontece quando a sua versão do título é diferente da usada pelo Seekr (outro corte, abertura mais longa). Vale para todos os títulos; volte a 0 ao trocar de filme.";
-    case AJ_SEEKR_TESTAR: return "Pergunta ao Seekr se a chave vale. Não envia nada sobre o que você assiste.";
+    case AJ_SEEKR_TESTAR: return seekrAjuda(op);
     case AJ_FANART_CHAVE: return "Sua chave pessoal do fanart.tv, gratuita em fanart.tv/get-an-api-key. Com ela a fonte fanart.tv entra no Background do hero. Fica só nesta TV e aparece mascarada.";
     case AJ_MDB_TRAKT: case AJ_MDB_IMDB: case AJ_MDB_TMDB:
     case AJ_MDB_LETTER: case AJ_MDB_TOMATES: case AJ_MDB_AUDIENCIA:

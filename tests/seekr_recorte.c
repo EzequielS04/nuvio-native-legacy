@@ -10,13 +10,19 @@
 #include <assert.h>
 #include "../src/rede.h"
 static char *lerArquivo(const char *url, int s, long *n);
-#define rede_baixar_bin(u, s, n) lerArquivo(u, s, n)
 #include "../src/seekr.c"
 void gfx_tex_esquecer(GLuint t) { (void)t; }
 // Dubles: este teste nao consulta a API.
 char *rede_baixar(const char *u, int s) { (void)u; (void)s; return NULL; }
 char *rede_baixar_st(const char *u, int s, const char *const *c, int *st) {
   (void)u; (void)s; (void)c; if (st) *st = 0; return NULL; }
+char *rede_baixar_st_retry(const char *u, int s, const char *const *c, int *st, int *retry) {
+  if (retry) *retry = 0; return rede_baixar_st(u, s, c, st); }
+char *rede_baixar_bin_medido_controle(const char *u, int s, const char *const *c,
+                                     const RedeControle *controle, long *n, RedeMedida *medida) {
+  (void)c; (void)controle; memset(medida, 0, sizeof *medida);
+  char *bytes = lerArquivo(u, s, n); medida->status = bytes ? 200 : 0; return bytes;
+}
 
 static char *lerArquivo(const char *url, int s, long *n) {
   FILE *f = fopen(url, "rb"); char *b; long t;

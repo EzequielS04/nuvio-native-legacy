@@ -6,27 +6,48 @@
 // enquanto a pessoa procura um ponto no filme. Nao e fonte de video, catalogo
 // nem addon Stremio: so a miniatura.
 //
-// CHAVE PESSOAL, NUNCA NO PACOTE. Os termos (seekr.tv/terms) proibem publicar
-// a chave ou embuti-la em software cliente, e cada chave e de UMA pessoa e UM
-// projeto. Entao cada um tira a sua em seekr.tv, digita nos Ajustes, e ela
-// fica so nesta TV (seekr.txt na pasta de dados), mascarada — como a do
-// fanart.tv. O servico manda a chave SO no /sprites; VTT e folhas sao
-// assinados e vao sem cabecalho, como o SDK oficial faz.
+// A personal key entered in Settings stays on this TV, masked, and takes
+// precedence over the package's default key. Removing it restores the default.
+// Keys are sent only to /sprites or /v1/keys/validate; signed VTT/JPEG hops
+// never receive them. Neither key values nor signed URLs belong in logs.
 //
-// Cota da previa gratuita: 5000 consultas, 20 filmes e 70 episodios por dia,
-// por chave. Por isso a consulta sai UMA vez por titulo aberto, e so com o
-// ajuste ligado.
+// This app additionally limits /sprites to 50 dispatches/day per installation,
+// across all accounts, profiles and keys. The provider's limits are separate.
 #ifndef NV_SEEKR_H
 #define NV_SEEKR_H
 #include "gl_compat.h"
+#include "seekrquota.h"
+#include <stddef.h>
 
 enum {
   SEEKR_DESLIGADO = 0,  // sem chave, ajuste desligado ou nada pedido
   SEEKR_BUSCANDO,
   SEEKR_PRONTO,         // ha cues
-  SEEKR_SEM_PREVIA,     // a API nao tem este titulo (ou a rede falhou)
-  SEEKR_CHAVE_RECUSADA  // 401/403: chave invalida ou revogada
+  SEEKR_SEM_PREVIA,     // titulo sem preview; network failure has its own state
+  SEEKR_CHAVE_RECUSADA, // 401/403: chave invalida ou revogada
+  SEEKR_LIMITE_LOCAL,
+  SEEKR_LIMITE_PROVEDOR,
+  SEEKR_REDE_INDISPONIVEL,
+  SEEKR_ARMAZENAMENTO_INDISPONIVEL,
+  SEEKR_RELOGIO_INDISPONIVEL
 };
+
+typedef struct {
+  int usadas, restantes, limite;
+  int relogioAtrasado, persistente;
+  long long reinicioUtc, retryUtc;
+  int http;
+  unsigned latenciaMs;
+} SeekrUso;
+void seekr_uso(SeekrUso *uso);
+// Stable UI labels (Portuguese i18n keys); no key, URL or response body.
+const char *seekr_estado_rotulo(int estado);
+// Format an absolute reset/retry instant using this TV's local timezone.
+// Returns 0 when the instant cannot be represented; never changes the UTC ledger.
+int seekr_horario_local(long long utc, char *saida, size_t tamanho);
+// Explicit retry/refresh still reserves another call. No automatic request
+// occurs while the provider's Retry-After is active.
+void seekr_tentar_novamente(void);
 
 // Chave lida/gravada pelos Ajustes. "" apaga.
 void seekr_definir_chave(const char *chave);

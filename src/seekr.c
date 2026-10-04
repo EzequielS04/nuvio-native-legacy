@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <ctype.h>
 
 static pthread_mutex_t trava = PTHREAD_MUTEX_INITIALIZER;
 static char     chave[96];
@@ -20,6 +22,10 @@ static SeekrVtt vtt;
 // O que ja foi pedido, para a mesma combinacao nao gastar outra consulta da
 // cota (o player re-chama a cada troca de estado).
 static char pedImdb[64]; static int pedT, pedE; static long pedDur;
+static long long expiraUtc, retryUtc;
+static Uint32 expiraTick;
+static int ultimoHttp;
+static unsigned ultimaLatencia;
 
 // FOLHA DECODIFICADA: uma so, a ultima. Uma folha serve dezenas de cues
 // seguidas, e procurar no filme anda quase sempre dentro dela; decodificar de
@@ -52,9 +58,11 @@ static Uint32 relogioUso;
 
 void seekr_definir_chave(const char *c) {
   pthread_mutex_lock(&trava);
+  if (!strcmp(chave, c ? c : "")) { pthread_mutex_unlock(&trava); return; }
   snprintf(chave, sizeof chave, "%s", c ? c : "");
   // Chave nova: o que foi recusado ou achado com a anterior nao vale mais.
   geracao++; estado = SEEKR_DESLIGADO; pedImdb[0] = 0;
+  expiraUtc = retryUtc = 0; ultimoHttp = 0; ultimaLatencia = 0;
   pthread_mutex_unlock(&trava);
 }
 int seekr_tem_chave(void) {
@@ -72,6 +80,42 @@ int seekr_estado(void) {
   pthread_mutex_lock(&trava); r = estado; pthread_mutex_unlock(&trava);
   return r;
 }
+const char *seekr_estado_rotulo(int est) {
+  switch (est) {
+    case SEEKR_BUSCANDO: return "Buscando miniaturas";
+    case SEEKR_PRONTO: return "Miniaturas disponíveis";
+    case SEEKR_SEM_PREVIA: return "Este título não tem miniaturas";
+    case SEEKR_CHAVE_RECUSADA: return "Chave do Seekr recusada";
+    case SEEKR_LIMITE_LOCAL: return "Limite diário desta TV atingido";
+    case SEEKR_LIMITE_PROVEDOR: return "Limite temporário do Seekr";
+    case SEEKR_REDE_INDISPONIVEL: return "Seekr sem conexão";
+    case SEEKR_ARMAZENAMENTO_INDISPONIVEL: return "Não foi possível guardar o uso do Seekr";
+    case SEEKR_RELOGIO_INDISPONIVEL: return "Ajuste a data e a hora desta TV";
+    default: return "Miniaturas não solicitadas";
+  }
+}
+int seekr_horario_local(long long utc, char *saida, size_t tamanho) {
+  struct tm local;
+  time_t instante = (time_t)utc;
+  if (!saida || !tamanho) return 0;
+  saida[0] = 0;
+  if (utc <= 0 || (long long)instante != utc || !localtime_r(&instante, &local)) return 0;
+  return strftime(saida, tamanho, "%d/%m %H:%M", &local) != 0;
+}
+void seekr_uso(SeekrUso *uso) {
+  if (!uso) return;
+  SeekrQuotaUso q;
+  seekrquota_uso((long long)time(NULL), &q);
+  pthread_mutex_lock(&trava);
+  *uso = (SeekrUso){q.usadas, q.restantes, q.limite, q.relogioAtrasado,
+                   q.persistente, q.reinicioUtc, retryUtc, ultimoHttp, ultimaLatencia};
+  pthread_mutex_unlock(&trava);
+}
+void seekr_tentar_novamente(void) {
+  pthread_mutex_lock(&trava);
+  if (estado != SEEKR_BUSCANDO && (long long)time(NULL) >= retryUtc) pedImdb[0] = 0;
+  pthread_mutex_unlock(&trava);
+}
 
 static void soltarFolha(void) {
   if (folhaSup) SDL_FreeSurface(folhaSup);
@@ -88,6 +132,7 @@ static void limparTudo(void) {
   seekr_vtt_liberar(&vtt);
   soltarFolha(); soltarJpg(); soltarProntos();
   pedImdb[0] = 0;
+  expiraUtc = 0;
 }
 
 void seekr_ocioso(void) {
@@ -106,33 +151,130 @@ void seekr_desligar(void) {
   pthread_mutex_unlock(&trava);
 }
 
-typedef struct { char url[512]; char cab[160]; unsigned g; } Pedido;
+typedef struct {
+  char url[512], cab[160], key[96], imdb[64];
+  int t, e;
+  long dur;
+  unsigned g;
+} Pedido;
+#define SK_LOOKUPS 8
+static Pedido *consultas[SK_LOOKUPS];
+
+static int pedidoAtual(Pedido *p) {
+  int atual;
+  pthread_mutex_lock(&trava); atual = p->g == geracao; pthread_mutex_unlock(&trava);
+  return atual;
+}
+static long long urlExpira(const char *url, long long agora) {
+  const char *p = strstr(url, "?exp=");
+  if (!p) p = strstr(url, "&exp=");
+  if (p) {
+    char *fim;
+    long long exp = strtoll(p + 5, &fim, 10);
+    if (fim > p + 5 && (*fim == 0 || *fim == '&' || *fim == '#') && exp > 0)
+      return exp;
+  }
+  // Unknown TTL is kept only in memory and capped conservatively.
+  return agora + 300;
+}
 
 static void *consultar(void *u) {
   Pedido *p = u;
   const char *cabs[2] = { p->cab, NULL };
-  int st = 0, n = 0, novo = SEEKR_SEM_PREVIA;
-  char vttUrl[2300], *corpo, *txt = NULL;
+  int st = 0, n = 0, novo = SEEKR_SEM_PREVIA, tentativas = 0;
+  char vttUrl[2300];
+  long long expira = 0, repetir = 0;
+  Uint32 inicio = SDL_GetTicks();
   SeekrVtt v; memset(&v, 0, sizeof v);
-  corpo = rede_baixar_st(p->url, 12, cabs, &st);
-  if (st == 401 || st == 403) novo = SEEKR_CHAVE_RECUSADA;
-  else if (st == 200 && corpo && seekr_ler_lookup(corpo, vttUrl, sizeof vttUrl - 8)) {
-    // st=1: o servico ja entrega os tempos na linha do tempo do cliente (aplica
-    // o `scale` de conversao de quadros), como o SDK oficial pede.
-    strcat(vttUrl, strchr(vttUrl, '?') ? "&st=1" : "?st=1");
-    txt = rede_baixar(vttUrl, 15);    // sem chave: o VTT e assinado
-    n = txt ? seekr_vtt_ler(txt, &v) : 0;
-    if (n > 0) novo = SEEKR_PRONTO;
+  // At most one bounded transport/5xx or expired-signature retry. Every
+  // /sprites attempt independently reserves BEFORE dispatching.
+  for (int tentativa = 0; tentativa < 2 && pedidoAtual(p); tentativa++) {
+    pthread_mutex_lock(&trava);
+    long long freio = !strcmp(chave, p->key) ? retryUtc : 0;
+    pthread_mutex_unlock(&trava);
+    long long agora = (long long)time(NULL);
+    if (freio > agora) { novo = SEEKR_LIMITE_PROVEDOR; repetir = freio; break; }
+    int reserva = seekrquota_reservar(agora);
+    if (reserva != SEEKR_QUOTA_OK) {
+      novo = reserva == SEEKR_QUOTA_LIMITE ? SEEKR_LIMITE_LOCAL :
+             reserva == SEEKR_QUOTA_RELOGIO ? SEEKR_RELOGIO_INDISPONIVEL :
+             SEEKR_ARMAZENAMENTO_INDISPONIVEL;
+      if (reserva != SEEKR_QUOTA_LIMITE) repetir = agora + 30;
+      break;
+    }
+    if (!pedidoAtual(p)) break; // Reserved calls are not refunded after cancellation.
+    int depois = 0;
+    tentativas++;
+    novo = SEEKR_SEM_PREVIA; repetir = 0;
+    char *corpo = rede_baixar_st_retry(p->url, 12, cabs, &st, &depois);
+    if (st == 401 || st == 403) novo = SEEKR_CHAVE_RECUSADA;
+    else if (st == 429) {
+      novo = SEEKR_LIMITE_PROVEDOR;
+      repetir = (long long)time(NULL) + (depois > 0 ? depois : 60);
+    } else if (st == 0 || st >= 500 || (st == 200 && !corpo)) {
+      novo = SEEKR_REDE_INDISPONIVEL;
+      repetir = agora + 30;
+      free(corpo);
+      if (!tentativa && pedidoAtual(p)) { SDL_Delay(200 + SDL_GetTicks() % 100); continue; }
+      break;
+    } else if (st == 200 && corpo && seekr_ler_lookup(corpo, vttUrl, sizeof vttUrl - 8)) {
+      expira = urlExpira(vttUrl, agora);
+      if (expira <= agora) {
+        free(corpo);
+        if (!tentativa) continue;
+        break;
+      }
+      // Signed VTT/tiles never receive the API key and never reserve quota.
+      strcat(vttUrl, strchr(vttUrl, '?') ? "&st=1" : "?st=1");
+      int vttSt = 0;
+      char *txt = rede_baixar_st(vttUrl, 15, NULL, &vttSt);
+      if (vttSt == 403) {
+        free(corpo); free(txt);
+        if (!tentativa) continue; // Fresh signed URLs cost another lookup.
+        break;
+      }
+      n = vttSt == 200 && txt ? seekr_vtt_ler(txt, &v) : 0;
+      if (n > 0) {
+        for (int i = 0; i < v.nFolhas; i++)
+          if (urlExpira(v.folhas[i], agora) < expira) expira = urlExpira(v.folhas[i], agora);
+        novo = expira > agora ? SEEKR_PRONTO : SEEKR_SEM_PREVIA;
+      } else if (vttSt == 0 || vttSt >= 500) {
+        novo = SEEKR_REDE_INDISPONIVEL; repetir = agora + 30;
+      }
+      free(txt);
+    }
+    free(corpo);
+    break;
   }
-  // Nunca a URL inteira no log: o VTT e as folhas levam assinatura.
-  printf("[seekr] /sprites http=%d cues=%d folhas=%d\n", st, n, v.nFolhas);
+  SeekrQuotaUso uso;
+  seekrquota_uso((long long)time(NULL), &uso);
+  unsigned latencia = SDL_GetTicks() - inicio;
+  // Stable English events; never print keys, title IDs or signed URLs.
+  const char *razao = novo == SEEKR_LIMITE_LOCAL ? "device_daily_limit" :
+                     novo == SEEKR_LIMITE_PROVEDOR ? "provider_rate_limit" :
+                     novo == SEEKR_CHAVE_RECUSADA ? "key_rejected" :
+                     novo == SEEKR_REDE_INDISPONIVEL ? "network" :
+                     novo == SEEKR_ARMAZENAMENTO_INDISPONIVEL ? "storage" :
+                     novo == SEEKR_RELOGIO_INDISPONIVEL ? "clock_unset" :
+                     novo == SEEKR_SEM_PREVIA ? "no_preview" : "ready";
+  printf("[seekr] lookup result=%s used=%d limit=50\n", razao, uso.usadas);
+  printf("[seekr] lookup http=%d state=%d attempts=%d cues=%d sheets=%d used=%d limit=50 latency_ms=%u\n",
+         st, novo, tentativas, n, v.nFolhas, uso.usadas, latencia);
   fflush(stdout);
-  free(corpo); free(txt);
   pthread_mutex_lock(&trava);
+  for (int i = 0; i < SK_LOOKUPS; i++) if (consultas[i] == p) consultas[i] = NULL;
+  if (st == 429 && !strcmp(chave, p->key) && repetir > retryUtc) retryUtc = repetir;
   if (p->g == geracao) {
     seekr_vtt_liberar(&vtt); soltarFolha(); soltarJpg();
     vtt = v; memset(&v, 0, sizeof v);
     estado = novo;
+    expiraUtc = novo == SEEKR_PRONTO ? expira : 0;
+    long long validade = expiraUtc - (long long)time(NULL);
+    if (validade < 0) validade = 0;
+    if (validade > 21600) validade = 21600;
+    expiraTick = SDL_GetTicks() + (Uint32)(validade * 1000);
+    retryUtc = repetir;
+    ultimoHttp = st; ultimaLatencia = latencia;
   }
   pthread_mutex_unlock(&trava);
   seekr_vtt_liberar(&v);
@@ -149,8 +291,34 @@ void seekr_pedir(const char *imdb, int t, int e, long durMs) {
   // Mesma combinacao: nada a fazer. A duracao entra com folga de 2 s — o
   // pipeline refina o numero nos primeiros segundos e cada refino seria uma
   // consulta a mais da cota.
-  if (!strcmp(pedImdb, imdb) && pedT == t && pedE == e &&
-      labs(pedDur - durMs) < 2000) { pthread_mutex_unlock(&trava); return; }
+  long long agora = (long long)time(NULL);
+  int mesmo = !strcmp(pedImdb, imdb) && pedT == t && pedE == e && labs(pedDur - durMs) < 2000;
+  if (retryUtc > agora) { pthread_mutex_unlock(&trava); return; }
+  if (mesmo) {
+    if (estado == SEEKR_BUSCANDO || estado == SEEKR_CHAVE_RECUSADA || estado == SEEKR_SEM_PREVIA ||
+        (estado == SEEKR_PRONTO && expiraUtc > agora &&
+         (Sint32)(expiraTick - SDL_GetTicks()) > 0)) { pthread_mutex_unlock(&trava); return; }
+    if (estado == SEEKR_LIMITE_LOCAL) {
+      SeekrQuotaUso uso; seekrquota_uso(agora, &uso);
+      if (!uso.restantes) { pthread_mutex_unlock(&trava); return; }
+    }
+  }
+  int livre = -1;
+  Pedido *igual = NULL;
+  for (int i = 0; i < SK_LOOKUPS; i++) {
+    Pedido *q = consultas[i];
+    if (!q) { if (livre < 0) livre = i; continue; }
+    if (!strcmp(q->key, chave) && !strcmp(q->imdb, imdb) && q->t == t && q->e == e &&
+        labs(q->dur - durMs) < 2000) igual = q;
+  }
+  if (igual) {
+    snprintf(pedImdb, sizeof pedImdb, "%s", imdb); pedT = t; pedE = e; pedDur = durMs;
+    geracao++; igual->g = geracao; estado = SEEKR_BUSCANDO;
+    seekr_vtt_liberar(&vtt); soltarFolha(); soltarJpg(); soltarProntos();
+    pthread_mutex_unlock(&trava);
+    return;
+  }
+  if (livre < 0) { pthread_mutex_unlock(&trava); return; }
   p = calloc(1, sizeof *p);
   if (!p) { pthread_mutex_unlock(&trava); return; }
   snprintf(pedImdb, sizeof pedImdb, "%s", imdb); pedT = t; pedE = e; pedDur = durMs;
@@ -158,10 +326,20 @@ void seekr_pedir(const char *imdb, int t, int e, long durMs) {
   seekr_vtt_liberar(&vtt); soltarFolha(); soltarJpg(); soltarProntos();
   snprintf(p->url, sizeof p->url, "%s", url);
   snprintf(p->cab, sizeof p->cab, "X-API-Key: %s", chave);
+  snprintf(p->key, sizeof p->key, "%s", chave);
+  snprintf(p->imdb, sizeof p->imdb, "%s", imdb);
+  p->t = t; p->e = e; p->dur = durMs;
   p->g = geracao;
+  consultas[livre] = p;
   pthread_mutex_unlock(&trava);
   if (pthread_create(&fio, NULL, consultar, p) == 0) pthread_detach(fio);
-  else free(p);
+  else {
+    pthread_mutex_lock(&trava);
+    for (int i = 0; i < SK_LOOKUPS; i++) if (consultas[i] == p) consultas[i] = NULL;
+    if (p->g == geracao) { estado = SEEKR_REDE_INDISPONIVEL; retryUtc = agora + 10; }
+    pthread_mutex_unlock(&trava);
+    free(p);
+  }
 }
 
 // --- recorte -----------------------------------------------------------------
@@ -184,6 +362,13 @@ static SDL_Surface *decodificar(const unsigned char *b, long n) {
 
 typedef struct { char url[2300]; int folha, cue, x, y, w, h; unsigned g; } Recorte;
 
+static char *baixarFolha(const char *url, long *n, int *http) {
+  RedeMedida medida = {0};
+  char *bytes = rede_baixar_bin_medido_controle(url, 15, NULL, NULL, n, &medida);
+  if (http) *http = medida.status;
+  return bytes;
+}
+
 static void *recortar(void *u) {
   Recorte *r = u;
   SDL_Surface *s = NULL;
@@ -203,12 +388,20 @@ static void *recortar(void *u) {
       memcpy(b, jpgBytes, (size_t)jpgN); n = jpgN;
     }
     pthread_mutex_unlock(&trava);
-    if (!b) { b = rede_baixar_bin(r->url, 15, &n); baixou = 1; }   // assinada, sem chave
+    int http = 0;
+    if (!b) { b = baixarFolha(r->url, &n, &http); baixou = 1; }   // assinada, sem chave
     s = b && n > 0 ? decodificar((unsigned char *)b, n) : NULL;
-    printf("[seekr] folha %d: %dx%d, %ld KB %s em %u ms\n", r->folha, s ? s->w : 0, s ? s->h : 0,
-           n / 1024, baixou ? "baixada" : "do cache", SDL_GetTicks() - t0);
+    printf("[seekr] sheet index=%d width=%d height=%d kb=%ld source=%s latency_ms=%u\n",
+           r->folha, s ? s->w : 0, s ? s->h : 0, n / 1024,
+           baixou ? "network" : "cache", SDL_GetTicks() - t0);
     fflush(stdout);
     pthread_mutex_lock(&trava);
+    if (!s && baixou && r->g == geracao) {
+      if (http == 403) expiraUtc = 0; // Next player tick refreshes through quota.
+      else if (http == 0 || http >= 500) {
+        estado = SEEKR_REDE_INDISPONIVEL; retryUtc = (long long)time(NULL) + 30;
+      }
+    }
     if (s && r->g == geracao) {
       soltarFolha(); folhaSup = s; folhaIdx = r->folha; folhaG = r->g;
       if (baixou) { soltarJpg(); jpgBytes = b; jpgN = n; jpgIdx = r->folha; jpgG = r->g; b = NULL; }
@@ -293,7 +486,10 @@ int seekr_quadros(double posSeg, int n, GLuint *texs, double *cueSeg) {
   g = geracao;
   memcpy(pr, prontos, sizeof pr);
   memset(prontos, 0, sizeof prontos);
-  if (estado != SEEKR_PRONTO) { pthread_mutex_unlock(&trava); for (k = 0; k < SK_SLOTS; k++) free(pr[k].px); return 0; }
+  if (estado != SEEKR_PRONTO || expiraUtc <= (long long)time(NULL) ||
+      (Sint32)(expiraTick - SDL_GetTicks()) <= 0) {
+    pthread_mutex_unlock(&trava); for (k = 0; k < SK_SLOTS; k++) free(pr[k].px); return 0;
+  }
   i = seekr_vtt_cue(&vtt, (long)(posSeg * 1000.0) + ajusteMs);
   if (i >= 0) {
     // Com fita: anterior, atual, seguinte (as que existem). A ATUAL vem
@@ -387,9 +583,16 @@ int seekr_validar(const char *c) {
   if (!c || !*c) return 0;
   snprintf(cab, sizeof cab, "X-API-Key: %s", c);
   corpo = rede_baixar_st("https://api.seekr.tv/v1/keys/validate", 10, cabs, &st);
-  if (!corpo || st == 0) r = -1;
-  else r = strstr(corpo, "\"valid\":true") ? 1 : 0;
-  printf("[seekr] validar http=%d -> %d\n", st, r); fflush(stdout);
+  if (st == 401 || st == 403) r = 0;
+  else if (!corpo || st == 0) r = -1;
+  else if (st >= 500 || st == 429) r = -1;
+  else {
+    const char *v = strstr(corpo, "\"valid\"");
+    v = v ? strchr(v, ':') : NULL;
+    if (v) { v++; while (isspace((unsigned char)*v)) v++; }
+    r = v && !strncmp(v, "true", 4) ? 1 : 0;
+  }
+  printf("[seekr] validate http=%d result=%d\n", st, r); fflush(stdout);
   free(corpo);
   return r;
 }

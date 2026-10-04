@@ -18,6 +18,7 @@
 #include "episodios.h"
 #include "streams.h"
 #include "seekr.h"
+#include "dados.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <assert.h>
@@ -136,6 +137,7 @@ int main(int argc, char **argv) {
     fclose(f);
     ajustes_dir(getenv("NUVIO_DADOS")); }
   ajustes_iniciar();
+  dados_iniciar("deploy/app/art");
   if (getenv("NUVIO_SHOT_VIDRO")) ajustes_definir_vidro(1);
 
   seekr_definir_chave(k);

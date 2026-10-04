@@ -5,6 +5,7 @@
 //   bash tests/seekr_vivo.sh                       # sem chave
 //   SEEKR_API_KEY=... bash tests/seekr_vivo.sh     # com a sua (nunca no log)
 #include "../src/seekr.h"
+#include "../src/dados.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -17,6 +18,7 @@ static int esperar(int de) {
 }
 
 int main(void) {
+  dados_iniciar("deploy/app/art");
   const char *k = getenv("SEEKR_API_KEY");
   int com = k && *k, v, e;
   if (!com) k = "sk_live_00000000000000000000000000000000";
