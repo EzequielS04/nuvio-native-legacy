@@ -2979,6 +2979,15 @@ float home_topo_fracao(void) {
   return f < 0.0f ? 0.0f : (f > 1.0f ? 1.0f : f);
 }
 
+// O RELOGIO SOME NO CARROSSEL DA APPLE TV (dono, 04/10: "o relogio nao deve
+// aparecer somente no carrossel do Apple TV... ele pode voltar assim que
+// expandir"). Layout Dinamica com o destaque inteiro na tela (pagina no topo):
+// Rolada a pagina (o carrossel expandiu em fileiras), volta 0 e a ilha
+// reaparece pela animacao de sempre (ilha_relogio_visivel). Outros layouts: 0.
+int home_relogio_oculto(void) {
+  return layoutHome() == HOME_LAYOUT_DINAMICA && home_topo_fracao() > 0.5f;
+}
+
 void home_hero_rect(float *x, float *y, float *w, float *h) {
   GfxRect r = heroArteRect;
   // Dinamica com o destaque ja rolado para fora: a pagina do titulo cresce a
