@@ -1486,7 +1486,7 @@ void sync_passo(unsigned agoraMs) {
   // ciclo, o ciclo de rede ja remonta as fileiras no fim — nao ha o que somar.
   // Credencial nova pede a volta inteira de novo (o Trakt ja lido e o velho);
   // so a lista de addons, nem sempre — ver desc_repetir_addons.
-  if (remontar) desc_repetir();
+  if (remontar) desc_repetir_silencioso();   // sync: a pessoa nao pediu, sem alerta na ilha
   else if (soAddons) desc_repetir_addons();
   else if (soFileiras) desc_remontar_fileiras(); }
   if (temAjustesBlob && ajustesBlob) {
