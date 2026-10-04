@@ -1,6 +1,8 @@
 package space.nuvio.nativelegacy
 
 import android.app.Activity
+import android.content.Context
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -21,10 +23,13 @@ import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.util.Util
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -111,6 +116,39 @@ object NvPlayer {
     @JvmStatic external fun nativeHdr(hdr: String, dv: Int, atmos: Int)
     @JvmStatic external fun nativeRetomada(geracao: Int, aceita: Int)
     @JvmStatic external fun nativeFitPassiva(rede: Long, geracao: Int, origem: String, kbps: IntArray, fimMs: Long)
+    // F07 (src/video_android.c -> cacheboost.h): seek cache state of this open
+    // and the audio output (1 = PCM, the boost works; 2 = passthrough/offload).
+    @JvmStatic external fun nativeCache(estado: Int, pedidoMb: Int, limiteMb: Int, usadoMb: Int)
+    @JvmStatic external fun nativeGanho(estado: Int)
+
+    // --- F07: seek cache and volume boost ---------------------------------------
+    // The cache limit is STICKY (the C side sends it only when it changes) and
+    // read at each open; any thread writes it, the open reads it on main.
+    @Volatile private var cacheMbPedido = 0
+    private var cacheMidia: CacheMidia? = null
+    private var cacheEstado = CacheSessao.DESLIGADO
+    private var cacheTiques = 0
+    // Volume of this open (0..200) and the processor of its audio sink.
+    private var ganhoPct = 100
+    private var processador: GanhoAudioProcessor? = null
+    private var passthrough = false
+    private const val GANHO_PCM = 1
+    private const val GANHO_PASSTHROUGH = 2
+    private const val CACHE_RELATO_TIQUES = 8      // 8 x 250 ms: usage every 2 s
+
+    private fun relatarCache(minha: Int) {
+        if (!atual(minha)) return
+        val c = cacheMidia
+        val ativo = c != null && cacheEstado == CacheSessao.ATIVO
+        try {
+            nativeCache(cacheEstado, cacheMbPedido, if (ativo) c!!.limiteMb else 0, if (ativo) c!!.usadoMb() else 0)
+        } catch (e: UnsatisfiedLinkError) { Log.w(TAG, "cache sem lib: $e") }
+    }
+
+    private fun aplicarGanho() {
+        player?.volume = GanhoMath.volumePlayer(ganhoPct)
+        processador?.ganho = if (passthrough) 1f else GanhoMath.reforco(ganhoPct)
+    }
 
     // StreamFit passivo (PassivoMedidor.kt). Entrega de qualquer fio (os
     // pedacos baixam em fios proprios); o C so trava um mutex curto.
@@ -144,6 +182,8 @@ object NvPlayer {
     fun iniciar(activity: Activity, camada: FrameLayout) {
         this.activity = activity
         this.camada = camada
+        // F07: seek cache folders of a process that died (crash, kill) go now.
+        CacheMidia.limparSobras(activity.cacheDir)
         val sv = SurfaceView(activity)
         sv.visibility = View.GONE
         camada.addView(sv, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -195,6 +235,12 @@ object NvPlayer {
         principal.post { if (pedido == pedidos.get()) player?.seekTo(ms.coerceAtLeast(0).toLong()) }
     }
     @JvmStatic fun volume(pct: Int) { principal.post { player?.volume = pct.coerceIn(0, 100) / 100f } }
+    // F07: cache limit for the NEXT opens (MB, 0 = off) and the session volume
+    // 0..200 (above 100 only while the audio is PCM).
+    @JvmStatic fun cache(mb: Int) { cacheMbPedido = mb.coerceIn(0, 1024) }
+    @JvmStatic fun ganho(pct: Int) {
+        principal.post { ganhoPct = GanhoMath.pct(pct); aplicarGanho() }
+    }
     @JvmStatic fun janela(x: Int, y: Int, w: Int, h: Int, encaixa: Int) { principal.post { definirJanela(x, y, w, h, encaixa != 0) } }
     @JvmStatic fun escolher(tipo: Int, idx: Int) { principal.post { escolherMain(tipo, idx) } }
 
@@ -238,9 +284,52 @@ object NvPlayer {
             medidorToken = medidor.sessao(geracao)
             val rede = ParaleloDataSource.Factory(ua, props, http, medidor, medidorToken)
 
+            // F07: SEEK CACHE over the chain above, progressive HTTP VOD only.
+            // HLS/DASH (and the live channels, which C never arms) stay out:
+            // their segments and playlists have no tested cache contract.
+            val baixa = url.lowercase()
+            val adaptativo = baixa.contains(".m3u8") || baixa.contains("m3u8?") || baixa.contains(".mpd")
+            val pedidoCache = cacheMbPedido
+            var origem: androidx.media3.datasource.DataSource.Factory = rede
+            if (pedidoCache <= 0) cacheEstado = CacheSessao.DESLIGADO
+            else if (adaptativo || !ParaleloDataSource.serve(Uri.parse(url))) cacheEstado = CacheSessao.NAO_SE_APLICA
+            else {
+                val (c, estado) = CacheMidia.criar(act.cacheDir, pedidoCache) { semEspaco ->
+                    // Loader thread: back to main, only for this session.
+                    principal.post {
+                        if (!atual(minha) || cacheEstado != CacheSessao.ATIVO) return@post
+                        cacheEstado = if (semEspaco) CacheSessao.DISCO_CHEIO else CacheSessao.FALHOU
+                        Log.w(TAG, "seek cache off for this session (${if (semEspaco) "ENOSPC" else "write error"})")
+                        relatarCache(minha)
+                    }
+                }
+                cacheMidia = c
+                cacheEstado = estado
+                if (c != null) origem = c.fabrica(rede)
+            }
+            relatarCache(minha)
+
+            // F07: VOLUME BOOST. Every open starts at 100% (the C side re-sends
+            // the session volume right after the open); the gain processor is
+            // per player, inside the audio sink.
+            ganhoPct = 100; passthrough = false
+            val proc = GanhoAudioProcessor()
+            processador = proc
+
             // ON (e nao PREFER): o decodificador da plataforma e o passthrough
             // continuam primeiro; o FFmpeg so entra no codec que a TV nao tem.
-            val renderizadores = androidx.media3.exoplayer.DefaultRenderersFactory(act)
+            val renderizadores = object : androidx.media3.exoplayer.DefaultRenderersFactory(act) {
+                // Same sink as the default (float output and playback params as
+                // asked), plus the gain processor. The FFmpeg renderer gets
+                // this same sink.
+                override fun buildAudioSink(context: Context, enableFloatOutput: Boolean,
+                                            enableAudioTrackPlaybackParams: Boolean): AudioSink =
+                    DefaultAudioSink.Builder(context)
+                        .setEnableFloatOutput(enableFloatOutput)
+                        .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                        .setAudioProcessors(arrayOf(proc))
+                        .build()
+            }
                 .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
                 .setEnableDecoderFallback(true)
             // TETO DO BUFFER EM BYTES (03/10, TCL C755: dois OutOfMemoryError
@@ -259,7 +348,7 @@ object NvPlayer {
                 .setMediaSourceFactory(DefaultMediaSourceFactory(act)
                     // DefaultDataSource e nao so http: o trailer da Apple chega como
                     // file:// (master reduzido a uma variante em dados/trailer, trailerapple.c).
-                    .setDataSourceFactory(DefaultDataSource.Factory(act, rede)))
+                    .setDataSourceFactory(DefaultDataSource.Factory(act, origem)))
                 .build()
             player = p
             // Foco de audio GAIN; perder o foco pausa (o C ve o evento 3).
@@ -280,7 +369,6 @@ object NvPlayer {
             aplicarEncaixe()
 
             val item = MediaItem.Builder().setUri(url)
-            val baixa = url.lowercase()
             if (baixa.contains(".m3u8") || baixa.contains("m3u8?")) item.setMimeType(MimeTypes.APPLICATION_M3U8)
             else if (baixa.contains(".mpd")) item.setMimeType(MimeTypes.APPLICATION_MPD)
             val mediaItem = item.build()
@@ -328,6 +416,14 @@ object NvPlayer {
             try { p.clearVideoSurface() } catch (e: Exception) { }
             try { p.release() } catch (e: Exception) { Log.w(TAG, "release: $e") }
         }
+        // F07: the session cache goes with its player (released and deleted
+        // off the main thread, after the canceled loaders unwind).
+        cacheMidia?.liberar()
+        cacheMidia = null
+        cacheEstado = CacheSessao.DESLIGADO
+        cacheTiques = 0
+        processador = null
+        passthrough = false
         superficie?.visibility = View.GONE
     }
 
@@ -337,6 +433,10 @@ object NvPlayer {
             if (!atual(minha)) return
             val p = player ?: return
             try { nativePos(p.currentPosition.coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()) } catch (e: UnsatisfiedLinkError) { }
+            if (cacheMidia != null && cacheEstado == CacheSessao.ATIVO && ++cacheTiques >= CACHE_RELATO_TIQUES) {
+                cacheTiques = 0
+                relatarCache(minha)
+            }
             principal.postDelayed(this, TIQUE_MS)
         }
     }
@@ -583,6 +683,19 @@ object NvPlayer {
     }
 
     private fun analitico(minha: Int) = object : AnalyticsListener {
+        // F07: PCM reaches the gain processor; passthrough (AC3/E-AC3/DTS/
+        // TrueHD bitstream) and offload do not. Passthrough is never switched
+        // off to make room for the boost: the boost is unavailable and C says so.
+        override fun onAudioTrackInitialized(eventTime: AnalyticsListener.EventTime, config: AudioSink.AudioTrackConfig) {
+            if (!atual(minha)) return
+            val pass = !Util.isEncodingLinearPcm(config.encoding) || config.offload
+            passthrough = pass
+            // Only the processor: the player volume belongs to ganho()/volume()
+            // (a muted trailer must stay muted when its audio track starts).
+            processador?.ganho = if (pass) 1f else GanhoMath.reforco(ganhoPct)
+            try { nativeGanho(if (pass) GANHO_PASSTHROUGH else GANHO_PCM) } catch (e: UnsatisfiedLinkError) { }
+        }
+
         override fun onVideoDecoderInitialized(
             eventTime: AnalyticsListener.EventTime, decoderName: String,
             initializedTimestampMs: Long, initializationDurationMs: Long

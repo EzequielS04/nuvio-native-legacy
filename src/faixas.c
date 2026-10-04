@@ -17,6 +17,7 @@
 #include "plrilha.h"
 #include "legendasui.h"
 #include "legsync.h"
+#include "cacheboost.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <stdio.h>
@@ -191,6 +192,13 @@ static int modo;
 static int nLinhas(int col);
 static int linhaDaLeg(int i);
 
+// F07: VOLUME ROW at the top of the AUDIO sheet (0-200%, per session). Focus on
+// it is `volFoco`; LEFT/RIGHT change it in 10% steps, live. Only focusable
+// where the backend has the gain (cacheboost_suportado: Android); elsewhere
+// it is drawn dimmed with "Não disponível nesta TV".
+static int volFoco;
+static int volFocavel(void) { return cacheboost_suportado(); }
+
 void faixas_abrir(void) { faixas_abrir_em(0); }
 
 // Abre JA NA COLUNA que o botao pediu. O player tem um icone de audio e um de
@@ -204,6 +212,7 @@ void faixas_abrir_em(int col) {
   aberta = 1;
   modo = (col == 1) ? 1 : 0;
   coluna = modo;                 // audio -> col 0; legenda -> col 1
+  volFoco = 0;
   foco[0] = video_audio_atual();
   // A legenda pode estar desligada (-1); a primeira linha da coluna e sempre
   // "Desativada", entao o indice da lista e deslocado em um.
@@ -221,6 +230,9 @@ void faixas_abrir_em(int col) {
       if (foco[c] < 0)  foco[c] = 0;
     rolagem[c] = 0;
     } }
+  // No track list yet (the audio list arrives after the first frames): the
+  // volume row is the only thing to focus.
+  if (!modo && !nLinhas(0) && volFocavel()) volFoco = 1;
 }
 
 int faixas_aberta(void) { return aberta; }
@@ -552,6 +564,20 @@ void faixas_evento(const SDL_Event *e) {
     return;
   }
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE) { aberta = 0; return; }
+  // F07: the volume row of the audio sheet. The change is live (no OK needed);
+  // OK just closes, like Back.
+  if (!modo && volFoco) {
+    if (!volFocavel()) { volFoco = 0; return; }
+    if (k == SDLK_LEFT || k == SDLK_RIGHT) {
+      int antes = cacheboost_volume(), v = cacheboost_volume_passo(k == SDLK_RIGHT ? 1 : -1);
+      if (v != antes) cacheboost_backend_ganho(v);
+      return;
+    }
+    if (k == SDLK_DOWN) { if (nLinhas(0) > 0) volFoco = 0; return; }
+    if (k == SDLK_RETURN || k == SDLK_KP_ENTER) { aberta = 0; return; }
+    return;
+  }
+  if (!modo && k == SDLK_UP && foco[0] == 0 && volFocavel()) { volFoco = 1; return; }
   // Esquerda/direita andam entre a LISTA e o ESTILO, e so na folha de legenda.
   // Na de audio nao ha para onde ir — antes elas pulavam para a coluna de
   // legenda, que e justamente o que fazia os dois botoes do player parecerem o
@@ -760,11 +786,13 @@ static void ajustarRolagem(void) {
 // Linhas da lista a vista: 6, ou menos se a ilha nao couber na altura da tela
 // virtual (escala.h; em 150% sao 4). A conta: o miolo fixo da ilha (183), a
 // pilula da hora por cima (~60) e as margens de cima e de baixo.
-static int ilVis(void) {
-  int n = (int)((NV_TELA_H - 48.0f - 40.0f - 60.0f - 183.0f + 4.0f) / (88.0f + 4.0f));
+static int ilVisN(int extra) {
+  int n = (int)((NV_TELA_H - 48.0f - 40.0f - 60.0f - 183.0f + 4.0f) / (88.0f + 4.0f)) - extra;
   return n > 6 ? 6 : n < 2 ? 2 : n;
 }
-#define IL_VIS        ilVis()
+#define IL_VIS        ilVisN(0)
+// The audio sheet spends one line on the volume row (F07).
+#define IL_VIS_COL(c) ilVisN((c) == 0 ? 1 : 0)
 #define IL_EST_CEL_H 92.0f
 #define IL_EST_TOPO  56.0f
 
@@ -807,7 +835,7 @@ static void rostoIdioma(GfxRect r, const char *idioma, const char *icone, int se
 
 // Uma linha da lista (audio ou legenda) em (x, y), largura w.
 static void linhaLista(int col, int i, float x, float y, float w, float a) {
-  int sel = col == coluna && i == foco[col];
+  int sel = col == coluna && i == foco[col] && !(col == 0 && volFoco);
   const char *marca = NULL, *icone = NULL, *idioma = NULL;
   char nome[64], sub[96];
   int ativo;
@@ -849,11 +877,78 @@ static void linhaLista(int col, int i, float x, float y, float w, float a) {
   }
 }
 
-static int visiveisLista(int col) { int n = nLinhas(col); return n < IL_VIS ? n : IL_VIS; }
+static int visiveisLista(int col) { int n = nLinhas(col); return n < IL_VIS_COL(col) ? n : IL_VIS_COL(col); }
+
+// F07: the island's red (the live dot of ilha.c), the app's alert color.
+#define VOL_VERMELHO 1.0f, 0.353f, 0.322f
+#define VOL_BARRA_W 112.0f
+#define VOL_VAO     12.0f   // gap between the volume row and the track list
+
+// The volume row: the same anatomy as a track row (face, name, line below)
+// and, on the right, the 0-200% bar with the 100% tick and the value. Above
+// 100 the value and the part of the bar past the tick turn red.
+static void linhaVolume(float x, float y, float w, float a) {
+  int disp = volFocavel(), pt = cacheboost_ganho_estado() == CB_GANHO_PASSTHROUGH;
+  int sel = disp && volFoco && !modo, v = cacheboost_volume(), acima = v > CB_VOL_NORMAL;
+  float da = disp ? a : a * 0.5f, dir = x + w - 22.0f, tx, tw;
+  GfxRect lr = { x, y, w, IL_LN_H };
+  const char *sub = !disp ? "Não disponível nesta TV"
+                  : pt    ? "Passthrough: o receptor controla o volume"
+                  : acima ? "Reforço ativo, só neste vídeo" : "Só neste vídeo";
+  if (sel) plrui_linha_foco(lr, 22.0f, a);
+  rostoIdioma((GfxRect){ x + 22.0f, y + (IL_LN_H - 52.0f) * 0.5f, 52.0f, 52.0f }, NULL, "pl_audio-lines", sel, da);
+  if (disp) {
+    char val[16];
+    float yc = y + IL_LN_H * 0.5f, bx, fr = (float)v / (float)CB_VOL_MAX, meio;
+    int c = sel ? 255 : 219;
+    TxtLinha lv;
+    snprintf(val, sizeof val, "%d%%", v);
+    lv = acima ? txt_linha(TXT_ILHA_FORTE, val, 255, 90, 82, 255) : txt_linha(TXT_ILHA_FORTE, val, c, c, c - 2, 255);
+    // The value has a fixed slot ("200%") so the bar does not walk while it changes.
+    { float slot = (float)txt_largura(TXT_ILHA_FORTE, "200%");
+      if (sel) {
+        GfxRect d = { dir - 34.0f, yc - 17.0f, 34.0f, 34.0f };
+        gfx_cor(d, 0.5f, 1, 1, 1, 0.10f * a);
+        gfx_icone((GfxRect){ d.x + 7.0f, d.y + 7.0f, 20.0f, 20.0f }, "pl_chevron-right", 1, 1, 1, a);
+        dir -= 34.0f + 10.0f;
+      }
+      txt_desenhar_alpha(lv, dir - (float)lv.w, yc - (float)lv.h * 0.5f, a);
+      dir -= slot + 16.0f;
+      if (sel) {
+        GfxRect d = { dir - 34.0f, yc - 17.0f, 34.0f, 34.0f };
+        gfx_cor(d, 0.5f, 1, 1, 1, 0.10f * a);
+        gfx_icone((GfxRect){ d.x + 7.0f, d.y + 7.0f, 20.0f, 20.0f }, "pl_chevron-left", 1, 1, 1, a);
+        dir -= 34.0f + 14.0f;
+      } }
+    // Passthrough: no bar (there is no boost to show); the reason gets the room.
+    if (pt) goto semBarra;
+    bx = dir - VOL_BARRA_W;
+    meio = bx + VOL_BARRA_W * 0.5f;
+    gfx_cor((GfxRect){ bx, yc - 3.0f, VOL_BARRA_W, 6.0f }, 0.5f, 1, 1, 1, 0.16f * a);
+    if (fr > 0.0f) {
+      float fim = bx + VOL_BARRA_W * (fr > 1.0f ? 1.0f : fr);
+      gfx_cor((GfxRect){ bx, yc - 3.0f, (fim < meio ? fim : meio) - bx, 6.0f }, 0.5f, 1, 1, 1, 0.85f * a);
+      if (fim > meio) gfx_cor((GfxRect){ meio, yc - 3.0f, fim - meio, 6.0f }, 0.5f, VOL_VERMELHO, a);
+    }
+    // Tick at 100%: the boundary between the normal volume and the boost.
+    gfx_cor((GfxRect){ meio - 1.0f, yc - 9.0f, 2.0f, 18.0f }, 0.0f, 1, 1, 1, (pt ? 0.25f : 0.45f) * a);
+    dir = bx - 18.0f;
+  semBarra:;
+  }
+  tx = x + 22.0f + 52.0f + 18.0f;
+  tw = dir - tx;
+  { int c = sel ? 255 : 219, cs = 122;
+    TxtLinha ln = txt_linha_corta(TXT_ILHA_FORTE, "Volume", c, c, c - 2, 255, tw);
+    TxtLinha ls = txt_linha_corta(TXT_ILHA_GENERO, sub, cs, cs, cs - 2, 255, tw);
+    float th = (float)ln.h + 5.0f + (float)ls.h, ty = y + (IL_LN_H - th) * 0.5f;
+    txt_desenhar_alpha(ln, tx, ty, da);
+    txt_desenhar_alpha(ls, tx, ty + (float)ln.h + 5.0f, da); }
+}
 
 static float alturaLista(int col) {
   int n = visiveisLista(col);
   float h = IL_PAD_Y + IL_TIT_H + 14.0f;
+  if (col == 0) h += IL_LN_H + VOL_VAO;
   if (n > 0) h += n * IL_LN_H + (n - 1) * IL_LN_VAO;
   else h += 60.0f;
   return h + 14.0f + IL_PE_H + IL_PAD_Y;
@@ -880,7 +975,8 @@ static void corpoLista(GfxRect c, float a) {
                 ty + (float)t.h - 54.0f, a);
     } }
   y += IL_TIT_H + 14.0f;
-  visiveis = IL_VIS;
+  if (!modo) { linhaVolume(x0, y, w, a); y += IL_LN_H + VOL_VAO; }
+  visiveis = IL_VIS_COL(col);
   ajustarRolagem();
   r = rolagem[col]; fim = r + visiveis; if (fim > n) fim = n;
   for (i = r; i < fim; i++) linhaLista(col, i, x0, y + (i - r) * (IL_LN_H + IL_LN_VAO), w, a);
@@ -890,10 +986,18 @@ static void corpoLista(GfxRect c, float a) {
   gfx_cor((GfxRect){ x0, y, w, 1.0f }, 0.0f, 1, 1, 1, 0.07f * a);
   { char q[32];
     float yc = y + 16.0f + 15.0f;
-    snprintf(q, sizeof q, i18n("%d de %d"), n ? foco[col] + 1 : 0, n);
+    if (!modo && volFoco) {
+      // The real gain in decibels: 200% is +6.0 dB, not "twice as loud".
+      int v = cacheboost_volume();
+      if (v > 0) { snprintf(q, sizeof q, "%+.1f dB", cacheboost_volume_db(v)); plrui_decimal(q); }
+      else snprintf(q, sizeof q, "-\xe2\x88\x9e dB");
+    } else snprintf(q, sizeof q, i18n("%d de %d"), n ? foco[col] + 1 : 0, n);
     { TxtLinha l = txt_linha(TXT_ILHA_APOIO, q, 243, 242, 239, 115);
       txt_desenhar_alpha(l, x0 + 10.0f, yc - (float)l.h * 0.5f, a); }
-    if (!modo) {
+    if (!modo && volFoco) {
+      const char *k[2] = { "\xe2\x86\x90 \xe2\x86\x92", "Voltar" }, *rt[2] = { "Ajustar", "Fechar" };
+      plrui_dicas(k, rt, 2, x0 + w - 10.0f, yc, 1, a);
+    } else if (!modo) {
       const char *k[2] = { "OK", "Voltar" }, *rt[2] = { "Usar esta faixa", "Fechar" };
       plrui_dicas(k, rt, 2, x0 + w - 10.0f, yc, 1, a);
     } else {

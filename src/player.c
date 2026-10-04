@@ -95,6 +95,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "plrui.h"
 #include "escala.h"
 #include "plrilha.h"
+#include "cacheboost.h"
 #include "legendasui.h"   /* F04: second subtitle band */
 #include <time.h>
 #include <stdio.h>
@@ -1149,6 +1150,8 @@ void player_abrir(int indiceCatalogo, const char *url) {
   esperandoFonte = (url == NULL);
   // Legenda externa e da sessao que acabou, nao desta.
   faixas_reiniciar();
+  // F07: volume back to 100% and the cache report of the last title forgotten.
+  cacheboost_sessao();
   // O modo de proporcao e do APARELHO, nao da sessao: reler aqui e o que faz
   // "Zoom cinema" continuar valendo no filme seguinte, como no web.
   prefsLer();
@@ -1157,6 +1160,9 @@ void player_abrir(int indiceCatalogo, const char *url) {
   // Reconexao so no filme/episodio: canal ao vivo tem o watchdog de app.c.
   video_definir_reconexao(!ehCanal());
   video_definir_modo_live(ehCanal() ? ajustes_livetv_modo() : 0);
+  // F07: seek cache for this open (live channels never; the backend also
+  // refuses HLS/DASH). Arms only the next video_tocar: trailers stay uncached.
+  cacheboost_backend_cache(ehCanal() ? 0 : ajustes_cache_seek_mb());
   { char px[96];
     comVideo = (url && *url && video_tocar(proxyts_resolver(url, px, sizeof px))); }
   mkvass_video_aberto(comVideo);
@@ -1235,6 +1241,7 @@ static void tocarFonte(const char *url) {
   marco("abrir: url ao pipeline");
   video_definir_reconexao(!ehCanal());
   video_definir_modo_live(ehCanal() ? ajustes_livetv_modo() : 0);
+  cacheboost_backend_cache(ehCanal() ? 0 : ajustes_cache_seek_mb());   // F07, ver player_abrir
   { char px[96];
 #ifdef NV_ANDROID
     // app.c define episodio e "do inicio" antes de entregar a fonte. O
@@ -2448,6 +2455,10 @@ void player_atualizar(float dt, Uint32 agora) {
     snprintf(toastIcone, sizeof toastIcone, "aj_triangle-alert"); toastCor = 1;
     toastAte = agora + 6000;
   }
+  // F07: the seek cache turned itself off (no free space at open, or the disk
+  // filled up mid-session). Playback goes on; one short notice per session.
+  if (comVideo) { const char *av = cacheboost_cache_aviso();
+    if (av) player_toast_ex(i18n(av), 5000, "aj_database", 1); }
   // REDE CAIU no meio do video (video_reconexao.h): um aviso por tentativa.
   { static int reconVisto;
     int t = comVideo ? video_reconectando() : 0;

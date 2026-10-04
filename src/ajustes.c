@@ -342,6 +342,9 @@ typedef enum {
   // principal ("Da conta" segue subtitle_secondary_language do perfil). No fim
   // pelo mesmo motivo dos outros: valor[] e CHAVE[] sao posicionais.
   AJ_LEG_LINGUA2,
+  // F07 (1.8): seek cache on disk for the Android player (cacheboost.h). LOCAL
+  // (disk and backend are this TV's), append-only like every option above.
+  AJ_CACHE_SEEK,
   AJ_N
 } OpcaoId;
 
@@ -370,6 +373,18 @@ static const char *V_FONTE_PRAZO[] = { "3 s", "5 s", "8 s", "Todos os add-ons" }
 // Indice gravado em tamanhoUiLocal; o fator sai de ajustes_tamanho_ui.
 static const char *V_TAMANHO_UI[] = { "100%", "120%", "130%", "150%" };
 static const char *V_TAMANHO_AJUSTES[] = { "80%", "90%", "100%" };
+// F07: the order is cacheboost_cache_mb's (0, 256, 512, 1024 MB).
+static const char *V_CACHE_SEEK[] = { "Desligado", "256 MB", "512 MB", "1 GB" };
+// Only the Android player has an app-controlled disk cache (cacheboost.h);
+// LG/Samsung show the row with "Não disponível nesta TV". Compile-time, so the
+// many tests that compile ajustes.c alone need no extra source.
+static int cacheSeekExiste(void) {
+#ifdef NV_ANDROID
+  return 1;
+#else
+  return 0;
+#endif
+}
 // Indice gravado em fundoLocal (ajustes_fundo).
 static const char *V_FUNDO[] = { "Arte", "Arte borrada", "Frost" };
 static const char *V_VIDRO_OPAC[] = { "60%", "70%", "78%", "86%", "92%" };
@@ -1019,6 +1034,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Tamanho dos ajustes", V_TAMANHO_AJUSTES, 3),
   ESC("Esconder logo durante o trailer", V_LIGA, 2),
   ESC("Idioma da legenda secundária",    V_LINGUA, 2),
+  ESC("Cache de seek em disco",          V_CACHE_SEEK, 4),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1197,6 +1213,7 @@ static const char *CHAVE[] = {
   "tamanhoAjustesLocal",
   "logoTrailerLocal",
   "legendaSecundariaIdioma",
+  "cacheSeekLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1595,6 +1612,11 @@ float ajustes_tamanho_ajustes(void) {
   return v >= 0 && v < 3 ? F[v] : 0.8f;
 }
 int ajustes_esconder_logo_trailer(void) { return lig(AJ_LOGO_TRAILER); }
+int ajustes_cache_seek_mb(void) {
+  static const int MB[] = { 0, 256, 512, 1024 };
+  int v = valor[AJ_CACHE_SEEK];
+  return cacheSeekExiste() && v >= 0 && v < 4 ? MB[v] : 0;
+}
 int ajustes_icone_app(void) { return valor[AJ_ICONE_APP]; }
 int ajustes_saida_player_home(void) { return lig(AJ_RELOGIO) && valor[AJ_SAIDA_PLAYER] == 0; }
 int ajustes_selo_visto(void) { return lig(AJ_SELO_VISTO); }
@@ -3360,6 +3382,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_TAMANHO_UI:     /* o tamanho e desta tela, e o web nao tem */
     case AJ_TAMANHO_AJUSTES:
     case AJ_LOGO_TRAILER:   /* so a protecao de OLED desta TV */
+    case AJ_CACHE_SEEK:     /* F07: o disco e o player sao desta TV */
     case AJ_FUNDO:          /* o desfoque custa GPU desta TV; o web nao tem */
     case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO: /* teste do vidro: visual desta TV */
     case AJ_SELO_VISTO:     /* o web nao tem a escolha */
@@ -3983,6 +4006,7 @@ static int inativa(int op) {
     case AJ_SAIDA_PLAYER: return !lig(AJ_RELOGIO);
     // Escolhendo a mao, a folha abre com o que chegou: nao ha escolha a apressar.
     case AJ_FONTE_PRAZO: return lig(AJ_FONTE_MANUAL);
+    case AJ_CACHE_SEEK:  return !cacheSeekExiste();
     // Som: na Samsung (.wgt) o trailer e sempre mudo (trailerfonte_com_som).
     case AJ_HERO_TRAILER_SOM:
       return !lig(AJ_HERO_TRAILER) || !trailerfonte_com_som(trailerfonte_tizen());
@@ -4121,6 +4145,7 @@ static const char *ajudaOpcao(int op) {
     if (op == AJ_RAIL_BLUR) return "Ative a barra lateral moderna para usar o desfoque.";
     if (op == AJ_HERO_CATALOGOS) return "Ative Mostrar destaque para exibir os catálogos no topo da Home.";
     if (op == AJ_HERO_CHEIO) return "Só vale no layout Moderna. No Padrão o destaque é um banner, e na Dinâmica ele ocupa a largura toda e sobe junto com a rolagem.";
+    if (op == AJ_CACHE_SEEK) return "Não disponível nesta TV. O player da LG e da Samsung não deixa o app guardar o vídeo em disco.";
     if (op == AJ_DESCOBRIR) return "A tela Descobrir do app web ainda não existe nesta TV. A escolha fica guardada na conta.";
     if ((op >= AJ_CW_OK && op <= AJ_CW_ORDEM) || op == AJ_CW_CONCLUIDO)
       return op == AJ_CW_BLUR_PROX && ajustes_cw_ligado()
@@ -4331,6 +4356,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
     case AJ_RELOGIO_POS: return "Em que canto de cima fica a pílula do relógio e dos avisos. Automática fica à direita, em qualquer layout. Esquerda no layout Dinâmica fica ao lado da pílula do menu.";
     case AJ_LOGO_TRAILER: return "Para TVs OLED: não deixa a logo parada na tela enquanto o trailer toca.";
+    case AJ_CACHE_SEEK: return "Guarda no disco o trecho já baixado do vídeo, para voltar sem baixar de novo. Apagado ao fechar o player.";
     case AJ_ANIM: return "Use Reduzidas para movimentos mais discretos ao navegar pela interface.";
     case AJ_RESOLUCAO: return "4K desenha a interface em 4K nas TVs que permitem; muitas ignoram o pedido e continuam em 1080p. 720p desenha em 1280x720 e amplia para a tela: mais leve em TV fraca, com texto um pouco mais suave. Reinicie o app depois de mudar. O vídeo não muda: segue a qualidade da fonte.";
     case AJ_PERFIL_ATIVO: return "Perfil em uso nesta TV. Trocar de perfil é feito na tela de perfis, ao abrir o app.";
@@ -4436,6 +4462,8 @@ static const char *efeitoOpcao(int op) {
       return "Vale só nesta TV. Ao mudar, a fileira é remontada na hora.";
     case AJ_IDIOMA:
       return "Ao mudar, as fileiras são remontadas para os títulos saírem no idioma novo.";
+    case AJ_CACHE_SEEK:
+      return "Vale a partir do próximo vídeo. Sem espaço livre, o cache fica menor ou desligado.";
     case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2:
       return "Se um título já estiver aberto, a busca de legendas é refeita um instante depois.";
     case AJ_PROF:
@@ -5440,6 +5468,7 @@ static const char *textoValor(int op) {
     int v = valor[op];
     return (v >= 0 && v < nLingua && V_LINGUA[v]) ? V_LINGUA[v] : "Da conta";
   }
+  if (op == AJ_CACHE_SEEK && !cacheSeekExiste()) return "Não disponível nesta TV";
   if (op == AJ_SELOS_PACOTE) {
     int v = valor[op];
     return v > 0 && v <= selospacote_n() ? selospacote_nome(v - 1) : "Do Nuvio";
@@ -5841,7 +5870,7 @@ typedef enum {
 
 static AjPreview familiaPreviaOpcao(int op) {
   switch (op) {
-    case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2:
+    case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: case AJ_LEG_LINGUA: case AJ_LEG_LINGUA2: case AJ_CACHE_SEEK:
     case AJ_AUD_LINGUA: case AJ_PAUSA_OVERLAY: case AJ_FONTE_MANUAL:
     case AJ_FONTE_AUTO: case AJ_FONTE_REPOR: case AJ_FONTE_TEXTO: case AJ_SELOS_CORES:
     case AJ_SELOS_PACOTE:

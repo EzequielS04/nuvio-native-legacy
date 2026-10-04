@@ -58,7 +58,9 @@ with tempfile.TemporaryDirectory(prefix="nuvio-streamfit-passive-", dir=os.envir
     deps.append(jar("androidx.annotation", "annotation-jvm", "1.6.0"))
     deps.append(aar_jar("androidx.annotation", "annotation-experimental", "1.4.0", tmp))
     deps.append(jar("com.google.guava", "guava", "33.3.1-android"))
-    sources = [kt / "NvPlayer.kt", kt / "ParaleloDataSource.kt", kt / "PassivoMedidor.kt", kt / "NuvioActivity.kt"]
+    sources = [kt / "NvPlayer.kt", kt / "ParaleloDataSource.kt", kt / "PassivoMedidor.kt", kt / "NuvioActivity.kt",
+               # F07: NvPlayer layers the seek cache and the gain processor
+               kt / "CacheSessao.kt", kt / "CacheMidia.kt", kt / "GanhoMath.kt", kt / "GanhoAudioProcessor.kt"]
     java_roots = []
     if sdl.is_dir():
         java_roots = ["-Xjava-source-roots=" + str(sdl)]
