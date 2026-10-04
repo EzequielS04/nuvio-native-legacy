@@ -530,12 +530,24 @@ typedef enum { SEC_TEMPORADAS, SEC_EPISODIOS, SEC_ABAS_INFO, SEC_ELENCO, SEC_REL
 // tecnica e Producao. Ela NAO e a ordem do enum, porque o enum tambem e a
 // ordem do D-pad da SERIE (que empilha diferente); no filme o empilhamento
 // (recalcularLayout) e o D-pad (moverFileira) seguem esta tabela.
+//
+// NOTAS (dono, 03/10): no FILME e a PRIMEIRA secao abaixo do hero; na SERIE vem
+// logo abaixo dos episodios, antes das abas/elenco e dos graficos da serie. A
+// serie tem a propria tabela porque o enum (que a serie usava como ordem do
+// D-pad) mantem as Notas depois da audiencia.
 static const int ORDEM_FILME[] = {
-  SEC_TEMPORADAS, SEC_EPISODIOS, SEC_ABAS_INFO, SEC_ELENCO, SEC_RELACIONADOS,
-  SEC_AUD_ARCO, SEC_AUD_RADAR, SEC_AUD_DIGITAL, SEC_NOTAS, SEC_NOTAS_EP,
+  SEC_NOTAS, SEC_TEMPORADAS, SEC_EPISODIOS, SEC_ABAS_INFO, SEC_ELENCO, SEC_RELACIONADOS,
+  SEC_AUD_ARCO, SEC_AUD_RADAR, SEC_AUD_DIGITAL, SEC_NOTAS_EP,
+  SEC_TRAILERS, SEC_COLECAO, SEC_COMENTARIOS,
+  SEC_ESTUDIOS, SEC_FRASES, SEC_DETALHES };
+static const int ORDEM_SERIE[] = {
+  SEC_TEMPORADAS, SEC_EPISODIOS, SEC_NOTAS, SEC_ABAS_INFO, SEC_ELENCO, SEC_RELACIONADOS,
+  SEC_AUD_ARCO, SEC_AUD_RADAR, SEC_AUD_DIGITAL, SEC_NOTAS_EP,
   SEC_TRAILERS, SEC_COLECAO, SEC_COMENTARIOS,
   SEC_ESTUDIOS, SEC_FRASES, SEC_DETALHES };
 #define N_ORDEM ((int)(sizeof ORDEM_FILME / sizeof ORDEM_FILME[0]))
+static int ehSerie(void);
+static const int *ordemSecoes(void) { return ehSerie() ? ORDEM_SERIE : ORDEM_FILME; }
 // Definida adiante, junto do resto das consultas ao catalogo; declarada aqui
 // porque recalcularLayout, cabecalhoDe e nAvaliaveis, todas acima dela,
 // precisam separar serie de filme.
@@ -545,6 +557,10 @@ static float estAltura(void);
 static float yItem(int r, int c);
 static int epApple(void);
 static float epExtraAltura(void);
+static float epAppleExtra(void);
+static float notasBloco(void);
+static float notasTopoSerie(void);
+static float alturaSecao(int r);
 static float epTempY(void);
 static float epRowY(void);
 static float serieGrupo(int r);
@@ -800,6 +816,12 @@ static void recalcularLayout(void) {
     for (r = 0; r < N_SECOES; r++) {
       topoSec[r] = conteudoSec[r] = G[r] +
         (r >= SEC_ABAS_INFO && r <= SEC_ELENCO ? epExtraAltura() : 0);
+      // NOTAS na serie: logo abaixo dos episodios, onde antes comecavam as abas
+      // (G_ABAS); o bloco inteiro empurra abas e elenco (epExtraAltura).
+      if (r == SEC_NOTAS) {
+        topoSec[r] = conteudoSec[r] = notasTopoSerie();
+        if (secaoN(r) > 0) conteudoSec[r] += NV_DETF_CAB_H + NV_DETF_CAB_GAP;
+      }
       alvoSec[r] = (r == SEC_ABAS_INFO) ? NV_DETP_ALVO_ABAS
                                         : NV_DETP_ALVO_FILEIRA;
     }
@@ -837,7 +859,7 @@ static void recalcularLayout(void) {
     }
     // NOTAS: heatmap por fonte e grade de episodios, com cabecalho proprio como
     // os trailers logo abaixo (topo do grupo = linha do titulo).
-    for (r = SEC_NOTAS; r <= SEC_NOTAS_EP; r++) {
+    for (r = SEC_NOTAS_EP; r <= SEC_NOTAS_EP; r++) {
       topoSec[r] = conteudoSec[r] = y;
       if (secaoN(r) <= 0) continue;
       conteudoSec[r] = y + NV_DETF_CAB_H + NV_DETF_CAB_GAP;
@@ -885,8 +907,9 @@ static void recalcularLayout(void) {
     return;
   }
   { float y = NV_DETF_HERO_FIM;
-    for (r = 0; r < N_SECOES; r++) {
+    for (int o = 0; o < N_ORDEM; o++) {
       float h;
+      r = ORDEM_FILME[o];
       topoSec[r] = conteudoSec[r] = y;
       alvoSec[r] = NV_DETP_ALVO_FILEIRA;
       // Secao ausente nao ocupa altura — salvo o ELENCO enquanto o meta do
@@ -1647,7 +1670,17 @@ static float epCardW(void) { return epApple() ? 420.0f : NV_DETP_EP_W; }
 static float epCardH(void) { return epApple() ? 500.0f : NV_DETP_EP_H; }
 static float epCardPasso(void) { return epApple() ? 452.0f : NV_DETP_EP_PASSO; }
 static float epThumbH(void) { return epApple() ? 236.0f : NV_DETP_EP_THUMB_H; }
-static float epExtraAltura(void) { return epApple() ? epCardH() - 414.0f : 0.0f; }
+static float epAppleExtra(void) { return epApple() ? epCardH() - 414.0f : 0.0f; }
+// Bloco das Notas na serie (cabecalho + fileira + vao), que empurra abas e
+// elenco; 0 enquanto as notas nao chegaram.
+// Topo do cabecalho: fundo dos cartoes de episodio + o vao antes das notas (60,
+// o mesmo de vaoAntes).
+static float notasTopoSerie(void) { return epRowY() + epCardH() + 60.0f; }
+static float notasBloco(void) {
+  if (!ehSerie() || secaoN(SEC_NOTAS) <= 0) return 0.0f;
+  return notasTopoSerie() - NV_DETP_G_ABAS - epAppleExtra() + NV_DETF_CAB_H + NV_DETF_CAB_GAP + alturaSecao(SEC_NOTAS) + NV_DETF_SEC_GAP;
+}
+static float epExtraAltura(void) { return epAppleExtra() + notasBloco(); }
 static float epTempY(void) { return epApple() ? 1160.0f : NV_DETP_TEMP_Y; }
 static float epRowY(void) { return epApple() ? 1286.0f : NV_DETP_EP_Y; }
 static float epAbasY(void) { return (epApple() ? 1758.0f : NV_DETP_ABA_Y) + epExtraAltura(); }
@@ -2390,8 +2423,8 @@ void detail_evento(const SDL_Event *e) {
       // colunaLembrada — a fileira de temporadas abria sempre na primeira aba,
       // e ela e quem trocaria a lista de episodios para a temporada errada no
       // proximo quadro (ver o sincronizador em detail_atualizar).
-      for (int o = 0; o < N_SECOES; o++) {
-        int r = ehSerie() ? o : ORDEM_FILME[o];
+      for (int o = 0; o < N_ORDEM; o++) {
+        int r = ordemSecoes()[o];
         if (secaoColunas(r) > 0) {
           int alvo = foco.colunaLembrada[r];
           if (alvo >= secaoColunas(r)) alvo = secaoColunas(r) - 1;
@@ -2678,12 +2711,14 @@ static void revalidarIdx(void) {
 // ficam no heroi (mockup "detalhe-retomar"): a pagina fica no topo, com a arte.
 static int focoNoTopo(void) { return 0; }
 
+static float notasAnt = -1.0f;   // bloco das Notas no quadro anterior
+
 void detail_atualizar(float dt, Uint32 agora) {
   // `agora` ficou sem uso quando o repouso da troca de temporada saiu (ver a
   // nota mais abaixo). Fica na assinatura porque ela e a mesma de todas as
   // telas e app.c chama todas do mesmo jeito.
   (void)agora;
-  if (!aberto) return;
+  if (!aberto) { notasAnt = -1.0f; return; }
   // SAINDO: interrompe os dois fios antes mesmo de a mola terminar. Chamar todo
   // quadro nao custa nada (e um flag sob mutex) e evita precisar de uma borda:
   // `saindo` tambem e ligado por caminhos que nao passam pelo Voltar, como o
@@ -3060,6 +3095,23 @@ void detail_atualizar(float dt, Uint32 agora) {
   // --- rolagem VERTICAL -----------------------------------------------------
   // O topo do grupo focado vai para 33% da altura util (40% nas abas). E a
   // regra do web, e nao um "rola o necessario": conferida nos quatro grupos.
+  // NOTAS CHEGANDO TARDE (rede) nao pode empurrar o que o foco esta olhando:
+  // a secao nasce ACIMA de quase tudo, entao tudo abaixo dela desce o bloco
+  // inteiro. Se o foco esta abaixo, a rolagem anda junto (a fileira focada fica
+  // onde estava na tela) em vez de a mola arrastar a pagina depois.
+  { float bloco = secaoN(SEC_NOTAS) > 0
+        ? conteudoSec[SEC_NOTAS] - topoSec[SEC_NOTAS] + alturaSecao(SEC_NOTAS) + NV_DETF_SEC_GAP
+        : 0.0f;
+    if (notasAnt >= 0.0f && bloco != notasAnt && nivel >= 1) {
+      const int *ordem = ordemSecoes();
+      int o, depois = 0, vistoNotas = 0;
+      for (o = 0; o < N_ORDEM; o++) {
+        if (ordem[o] == SEC_NOTAS) vistoNotas = 1;
+        else if (ordem[o] == foco.fileira) { depois = vistoNotas; break; }
+      }
+      if (depois) scrollY += bloco - notasAnt;
+    }
+    notasAnt = bloco; }
   float alvoY = 0.0f;
   if (nivel >= 1 && foco.fileira >= 0 && foco.fileira < N_SECOES && !focoNoTopo()) {
     // Mira o topo do CONTEUDO (o trilho), nao o do grupo: o cabecalho da secao
@@ -5192,22 +5244,21 @@ static void desenhaRelacionados(float x, float y, float a, int primeiro, int lim
 // GFX_MARCA; como a superficie em foco permanece escura, a marca segue clara
 // enquanto o cartao recebe o accent configuravel.
 static void desenhaEstudio(float x, float y, int i, float f, float a) {
-  GfxRect r = { x, y, EST_CARD_W, EST_CARD_H };
+  GfxRect r0 = { x, y, EST_CARD_W, EST_CARD_H };
+  GfxRect r = foco_zoom(r0, f);
   const char *logo = extras_estudio_logo(i);
-  float ar, ag, ab;
+  const float raio = 14.0f / EST_CARD_H;
   GLuint t;
-  // REPOUSO = a MESMA superficie neutra dos outros cartoes da pagina (moldura:
-  // navy escuro, ou o vidro neutro com a Interface de vidro). Antes o repouso
-  // com vidro ligado passava por gfx_cartao_foco_vidro com foco 0, que ainda
-  // lava o cartao na cor do realce — com tema Dinamico o cartao ficava num
-  // degrade amarelado que nenhum outro cartao tem (dono, 29/09/2026). O foco e
-  // o mesmo de "Mais como este": o cartao de realce por cima.
+  // MESMO FOCO DOS OUTROS CARTOES DA PAGINA (focoprof.h): anel so com "Foco no
+  // cartaz" ligado, senao o cartao cresce; profundidade pelo ajuste de
+  // cartazes. Antes o foco aqui era um preenchimento no acento (ou o vidro de
+  // realce) que "Mais como este" e o Elenco nao tem — na Moderna o estudio era
+  // o unico cartao da pagina com outra linguagem de foco (dono, 03/10/2026).
+  // REPOUSO = a mesma superficie neutra dos demais (moldura).
+  if (!ajustes_vidro()) foco_anel(r0, raio, f, a);
   moldura(r, 14.0f, a);
-  if (f > 0.001f) {
-    ajustes_acento(&ar, &ag, &ab);
-    if (ajustes_vidro()) gfx_vidro_cartao(r, 14.0f / EST_CARD_H, f, a);
-    else gfx_cartao_foco_vidro(r, 14.0f / EST_CARD_H, f, a, ar, ag, ab);
-  }
+  if (ajustes_vidro()) foco_anel(r0, raio, f, a);
+  foco_profundidade(r, raio, ajustes_profundidade_posters(), a);
   t = logo[0] ? tex_obter(logo) : 0;
   if (t) {
     float ap = tex_aspecto(logo), w, h, fr, fg, fb;
@@ -5215,18 +5266,12 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
     if (ap <= 0.0f) ap = 3.0f;
     h = 52.0f; w = h * ap;
     if (w > EST_CARD_W - 36.0f) { w = EST_CARD_W - 36.0f; h = w / ap; }
-    // RECORTE = a borda da imagem e transparente (tex_cor_fundo devolve 2).
-    // E a mesma medida que o guia usa para decidir entre tingir e desenhar, e
-    // ela olha o ARQUIVO, nao adivinha pelo nome.
     recorte = tex_cor_fundo(logo, &fr, &fg, &fb) != 1;
-    { GfxRect rl = { x + (EST_CARD_W - w) * 0.5f,
-                     y + (EST_CARD_H - h) * 0.5f, w, h };
+    { float k = r.w / EST_CARD_W;
+      GfxRect rl = { r.x + (r.w - w * k) * 0.5f,
+                     r.y + (r.h - h * k) * 0.5f, w * k, h * k };
       gfx_tex_aspect_atual = 0.0f;
-      // LOGO RECORTADO SEMPRE BRANCO (dono: "a logo nao fica branca e fica
-      // ruim de ler"). So o logo escuro era pintado; o colorido ia com a cor
-      // do arquivo e o escuro medio (o "T-STREET" preto a 80%) escapava da
-      // medida de tex_marca_escura e sumia no cartao. Logo com fundo proprio
-      // (sem recorte) continua como veio: ali a placa faz parte da marca.
+      // Logo recortado sempre branco; logo com fundo proprio fica como veio.
       if (recorte) {
         float tom = 0.93f;
         gfx_rect(rl, t, GFX_MARCA, 0, 0, 0, 0.0f, tom, tom, tom, a);
@@ -5234,12 +5279,12 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
         gfx_rect(rl, t, GFX_ARTE, 0, 0, 0, 8.0f / h, 1, 1, 1, a);
       } }
   } else {
-    int c = 208;
+    int c = f > 0.5f ? 245 : 208;
     TxtLinha ln = txt_linha_corta(TXT_DET_META2, extras_estudio_nome(i),
                                   c, c, 220, 255,
                                   EST_CARD_W - 28.0f);
-    txt_desenhar_alpha(ln, x + (EST_CARD_W - ln.w) * 0.5f,
-                       y + (EST_CARD_H - ln.h) * 0.5f, a * 0.95f);
+    txt_desenhar_alpha(ln, r.x + (r.w - ln.w) * 0.5f,
+                       r.y + (r.h - ln.h) * 0.5f, a * 0.95f);
   }
 }
 
@@ -5904,11 +5949,11 @@ static void cabecalhoSecao(int r, const char *cab, float x, float base, float a)
 // coluna de cada fileira. Devolve 1 se moveu.
 static int moverFileira(int dy) {
   int o, pos = -1;
-  if (ehSerie()) return focus_mover(&foco, 0, dy);
-  for (o = 0; o < N_ORDEM; o++) if (ORDEM_FILME[o] == foco.fileira) pos = o;
+  const int *ordem = ordemSecoes();
+  for (o = 0; o < N_ORDEM; o++) if (ordem[o] == foco.fileira) pos = o;
   if (pos < 0) return focus_mover(&foco, 0, dy);
   for (o = pos + dy; o >= 0 && o < N_ORDEM; o += dy) {
-    int r = ORDEM_FILME[o];
+    int r = ordem[o];
     // O par da mesma linha (Colecao | Frases, Ficha | Producao) e esquerda/
     // direita, nao cima/baixo.
     if (parEsq(r) == foco.fileira || parDir(r) == foco.fileira) continue;
