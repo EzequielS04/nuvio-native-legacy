@@ -230,6 +230,7 @@ int  video_iniciar(void) { if (!travaLeg) travaLeg = SDL_CreateMutex(); return h
 int  video_iniciar_auto(void) { return hAbrir != NULL; }
 int  video_registro_negado(void) { return 0; }
 
+static int emTrailer = 0;   // ver video_tpk_trailer_marcar
 // Abre urlAtual no host. Serve a fonte nova e ao recarregar da reconexao.
 static int abrirSessao(void) {
   atomic_store(&temErroDetalhe, 0);
@@ -239,6 +240,7 @@ static int abrirSessao(void) {
   comecou = 0; comecouEm = 0; audioPend = legPend = -1;
   if (!travaLeg) travaLeg = SDL_CreateMutex();
   legendaLimpar(1);
+  emTrailer = 0;
   sessao++;
   if (!hAbrir) { falhou = 1; printf("[video] tpk: host sem player\n"); return 0; }
   hAbrir(urlAtual, cabecalhos);
@@ -398,6 +400,7 @@ void video_bombear(void) {
   }
 }
 void video_parar(void) {
+  emTrailer = 0;
   audioPend = legPend = -1; comecou = 0; comecouEm = 0;
   legendaLimpar(1);
   nv_recon_zerar(&recon);
@@ -457,7 +460,10 @@ void video_janela(int x, int y, int w, int h) { if (hJanela) hJanela(x, y, w, h)
 #endif
 // Flag de EXECUCAO (#241): Ajustes > Trailers > "Zoom do trailer (experimental)"
 // deixa cada dono testar na propria TV. Comeca no padrao de compilacao acima.
-static int zoomRoi = NV_TPK_ZOOM_ROI;
+static int zoomRoi = 0;
+// 1 so enquanto o que toca e um TRAILER (trailer.c marca depois do video_tocar);
+// zerado a cada abertura e em video_parar. O player normal nunca ganha ROI fora da tela.
+void video_tpk_trailer_marcar(int sim) { emTrailer = sim ? 1 : 0; }
 void video_tpk_zoom_roi_definir(int ligado) {
   ligado = ligado ? 1 : 0;
   if (ligado == zoomRoi) return;
@@ -493,7 +499,7 @@ void video_janela_fonte(int sx, int sy, int sw, int sh, int dx, int dy, int dw, 
          sx, sy, sw, sh, qw, qh, X, Y, W, H);
   fflush(stdout);
 
-  if (!zoomRoi && !roiNaTela(X, Y, W, H)) {
+  if (!NV_TPK_ZOOM_ROI && !(zoomRoi && emTrailer) && !roiNaTela(X, Y, W, H)) {
     if (roiForaLogado != sessao) {
       roiForaLogado = sessao;
       printf("[video] tpk: roi fora da tela nao vai ao plano, fica o destino %d,%d %dx%d (sem zoom)\n",
@@ -508,7 +514,8 @@ void video_janela_fonte(int sx, int sy, int sw, int sh, int dx, int dy, int dw, 
   ultRoiX = X; ultRoiY = Y; ultRoiW = W; ultRoiH = H; temRoi = 1;
   video_janela(X, Y, W, H);
 }
-int  video_recorte_fonte(void) { return zoomRoi; }
+int  video_recorte_fonte(void) { return NV_TPK_ZOOM_ROI; }   // player: nunca o ajuste do trailer
+int  video_recorte_fonte_trailer(void) { return NV_TPK_ZOOM_ROI || zoomRoi; }
 // O host prende o plano em mais de um ponto depois do prepare; um ROI pedido
 // cedo pode ser engolido. trailer.c/player.c repetem o pedido nos primeiros
 // segundos por aqui — reenvia o ultimo ROI calculado, sem recalcular.

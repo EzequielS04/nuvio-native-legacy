@@ -178,6 +178,11 @@ void   video_tpk_log_host(const char *linha);   // tpk.c repassa cada linha do h
 // execucao; o padrao e NV_TPK_ZOOM_ROI (0). Loga "[trailer] tpk zoom ROI: ...".
 void   video_tpk_zoom_roi_definir(int ligado);
 int    video_tpk_zoom_roi(void);
+// trailer.c marca que o que toca agora e um trailer (so ele pode ter ROI fora da tela).
+void   video_tpk_trailer_marcar(int sim);
+int    video_recorte_fonte_trailer(void);   // so o trailer: o ajuste em execucao
+#else
+static inline int video_recorte_fonte_trailer(void) { return video_recorte_fonte(); }
 #endif
 
 // --- faixas -----------------------------------------------------------------

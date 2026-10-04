@@ -317,7 +317,7 @@ static void nativoAplicar(void) {
     int sw, sh, sx, sy;
     trailer_recorte(video_largura(), video_altura(), ajustes_trailer_zoom(),
                     rect.w, rect.h, &sx, &sy, &sw, &sh);
-    if (video_recorte_fonte())
+    if (video_recorte_fonte_trailer())
       video_janela_fonte(sx, sy, sw, sh,
                          (int)rect.x, (int)rect.y, (int)rect.w, (int)rect.h);
     recortePendente = 0;
@@ -359,6 +359,9 @@ void trailer_abrir(const char *fonte, GfxRect r, int som, int modoCheia) {
 #else
   if (nova) {
     if (!video_tocar(fonte)) return;
+#ifdef NV_TPK
+    video_tpk_trailer_marcar(1);
+#endif
     tocouFonte = 0;
     volumePendente = 1; recortePendente = 1; pausado = 0; reaplicarAte = 0;
     tocandoDesde = 0; quadroInteiroEnviado = 0;
@@ -456,7 +459,7 @@ int trailer_mostra_video(void) {
   // a esperar, o LetterBox de sempre ja e a imagem certa.
   // "Original" so dispensa a espera quando o destino tambem nao pede corte
   // (o cover de trailer_recorte num destino que nao e da proporcao do video).
-  int semCorte = !video_recorte_fonte();
+  int semCorte = !video_recorte_fonte_trailer();
   if (!semCorte && ajustes_trailer_zoom() <= 1.001f && video_largura() > 0 && video_altura() > 0) {
     int sx, sy, sw, sh;
     trailer_recorte(video_largura(), video_altura(), 1.0f, rect.w, rect.h, &sx, &sy, &sw, &sh);
