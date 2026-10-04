@@ -3746,7 +3746,7 @@ static int relogioCabe(void) {
   // teclado por cima ele some, como na home com um cartao na frente.
   if (tela == TELA_AJUSTES) return !menu_aberto() && ajustes_relogio_cabe();
   if (tela == TELA_HOME) { if (!homePronta) return 0; }
-  else if (tela != TELA_EXPLORAR && tela != TELA_GUIA && tela != TELA_BUSCA &&
+  else if (tela != TELA_EXPLORAR && tela != TELA_BUSCA &&
            tela != TELA_BIBLIOTECA && tela != TELA_PERFIL && tela != TELA_SOCIAL &&
            tela != TELA_ADDONS && tela != TELA_AGENDA) return 0;
   // O MENU ABERTO NAO ESCONDE MAIS O RELOGIO (Glass UI, mockup "ilha" tela 1):

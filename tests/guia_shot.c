@@ -264,6 +264,17 @@ int main(int argc, char **argv) {
   glViewport(0, 0, 1920, 1080);
   gfx_tamanho_alvo(1920, 1080);
   if (getenv("NUVIO_SHOT_VIDRO")) ajustes_definir_vidro(1);
+  if (getenv("NUVIO_SHOT_TOPO")) {
+    extern void ajustes_teste_vidro_env(void);
+    const char *dir = getenv("NUVIO_DADOS"); FILE *f;
+    assert(dir && *dir); snprintf(nome, sizeof nome, "%s/ajustes.txt", dir);
+    f = fopen(nome, "w"); assert(f);
+    fprintf(f, "idioma 0\nselected_theme %s\nvidroLocal %d\n",
+            getenv("NUVIO_SHOT_TEMA") ? getenv("NUVIO_SHOT_TEMA") : "2",
+            getenv("NUVIO_SHOT_SOLIDO") ? 1 : 0);
+    fclose(f);
+    ajustes_dir(dir); ajustes_teste_vidro_env();
+  }
   assert(gfx_iniciar());
   assert(txt_iniciar("deploy/app", 1));
   tex_iniciar(64);
@@ -364,6 +375,22 @@ int main(int argc, char **argv) {
   snprintf(nome, sizeof nome, "%s-lista-topo.bmp", saida);
   capturaTela(nome, w, 1);
   focoTopo = 0; animTopo[G_TOPO_PREVIEW] = 0.0f;
+
+  // Barra de cima, cada botao em foco (W18): NUVIO_SHOT_TOPO=1; tema/material
+  // pelo ambiente (NUVIO_SHOT_TEMA = selected_theme, NUVIO_SHOT_SOLIDO).
+  if (getenv("NUVIO_SHOT_TOPO")) {
+    int k;
+    for (k = 0; k < G_TOPO_N; k++) {
+      int j;
+      for (j = 0; j < G_TOPO_N; j++) animTopo[j] = 0.0f;
+      focoTopo = 1; topoCol = k; animTopo[k] = 1.0f; focoAnelOk = 0;
+      snprintf(nome, sizeof nome, "%s-topo-%d.bmp", saida, k);
+      capturaTela(nome, w, 1);
+    }
+    focoTopo = 0;
+    { int j; for (j = 0; j < G_TOPO_N; j++) animTopo[j] = 0.0f; }
+    return 0;
+  }
 
   janelaDesl = 60; focoAnelOk = 0;
   snprintf(nome, sizeof nome, "%s-lista-adiante.bmp", saida);

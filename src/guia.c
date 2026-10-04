@@ -3208,7 +3208,9 @@ static float desenharTopo(float a) {
       else plrui_botao_repouso(r, a);
     }
     ct = f > 0.5f ? ajustes_tinta_foco() : sel ? 245 : 168;
-    { TxtLinha t = txt_linha(TXT_PG_ROTULO, rot[i], ct, ct + 1, ct + 5 > 255 ? 255 : ct + 5, 255);
+    { // ct+1 estourava 255 -> 0 no canal verde (tinta branca = magenta no foco).
+      TxtLinha t = txt_linha(TXT_PG_ROTULO, rot[i], ct, ct < 255 ? ct + 1 : 255,
+                             ct + 5 > 255 ? 255 : ct + 5, 255);
       float tx = r.x + (r.w - (float)t.w) * 0.5f;
       if (i == G_TOPO_PREVIEW) {
         // Ponto de estado: verde ligado, cinza desligado. O texto ja diz,
