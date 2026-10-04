@@ -74,8 +74,15 @@ static const char *ajArte(int tipo, int n) {
   return b;
 }
 // Arte em "cover" num retangulo de cantos `raioPx`. Devolve 1 se desenhou.
+static int ajVisualSemFoto;
 static int ajImg(const char *c, GfxRect r, float raioPx, float a) {
   GLuint t;
+  if (ajVisualSemFoto) {
+    float d = fminf(r.w, r.h)*0.32f;
+    gfx_cor(r, raioPx/r.h, 0.24f,0.25f,0.29f,a);
+    gfx_icone((GfxRect){r.x+(r.w-d)*0.5f,r.y+(r.h-d)*0.5f,d,d},"aj_image",1,1,1,0.55f*a);
+    return 1;
+  }
   if (!c || !c[0] || r.w < 1.0f || r.h < 1.0f || a <= 0.003f) return 0;
   t = tex_obter_larg(c, r.w > r.h * 1.78f ? r.w : r.h * 1.78f);
   if (!t) {
@@ -91,6 +98,11 @@ static int ajImg(const char *c, GfxRect r, float raioPx, float a) {
 static float ajLogo(const char *c, float x, float y, float maxW, float maxH, float a) {
   GLuint t;
   float asp, w, h;
+  if (ajVisualSemFoto) {
+    float d = fminf(maxH,maxW*0.25f);
+    gfx_icone((GfxRect){x,y,d,d},"aj_clapperboard",1,1,1,0.85f*a);
+    return d;
+  }
   if (!c || !c[0]) return 0.0f;
   t = tex_obter_larg(c, maxW);
   if (!t) return 0.0f;
@@ -691,23 +703,39 @@ static const char *ajEstadoAcao(int op) {
 static void aj2Chevron(float xDir, float yc, float al) {
   ajIcone("aj_chevron-right", xDir - 30.0f, yc - 15.0f, 30.0f, al);
 }
-static float aj2ChipLiga(float xDir, float yc, int ligado, float a) {
-  TxtLinha t;
-  float w, ar, ag, ab, mr, mg, mb;
-  ajustes_acento(&ar, &ag, &ab);
-  ajustes_acento_marca(&mr, &mg, &mb);
-  if (ligado) {   // chip ligado: o acento a 22% e o texto na MARCA
-    t = txt_linha(TXT_V2_CHIP, "Ligado", (int)(mr * 255 + 0.5f), (int)(mg * 255 + 0.5f), (int)(mb * 255 + 0.5f), 255);
-    w = 22 + 9 + 10 + t.w + 22;
-    gfx_cor((GfxRect){ xDir - w, yc - 24, w, 48 }, 0.5f, ar, ag, ab, 0.22f * a);
-    gfx_cor((GfxRect){ xDir - w + 22, yc - 4.5f, 9, 9 }, 0.5f, mr, mg, mb, a);
-    txt_desenhar_alpha(t, xDir - w + 41, yc - t.h * 0.5f, a);
-  } else {
-    t = ajTxt(TXT_V2_CHIP, "Desligado");
-    w = 22 + t.w + 22;
-    ajNeutro((GfxRect){ xDir - w, yc - 24, w, 48 }, 24, 0.07f, AJ_CHIP_SOL, a);
-    txt_desenhar_alpha(t, xDir - w + 22, yc - t.h * 0.5f, 0.5f * a);
+// Estado visual por opcao; persistencia usa sempre o candidato inteiro.
+static float ajMovValor[AJ_N];
+static unsigned char ajMovPronto[AJ_N];
+static void ajMovReiniciar(void) { memset(ajMovPronto, 0, sizeof ajMovPronto); }
+static float ajMov(int op, float alvo) {
+  if (!ajMovPronto[op] || ajustes_animacoes_reduzidas()) {
+    ajMovValor[op] = alvo; ajMovPronto[op] = 1;
   }
+  return ajMovValor[op];
+}
+static float ajMovFracao(int op, int alvo) {
+  const Opcao *o = &OPCOES[op];
+  float v = ajMov(op, alvo);
+  return o->max > o->min ? (v-o->min)/(o->max-o->min) : 0.0f;
+}
+static void ajMovAtualizar(float dt) {
+  int op;
+  float k = 1.0f - expf(-22.0f * fmaxf(0.0f, dt));
+  for (op = 0; op < AJ_N; op++) if (ajMovPronto[op]) {
+    float alvo = uxEditor == 1 && uxOp == op ? uxPendente : uxValorAtual(op);
+    if (ajustes_animacoes_reduzidas() || fabsf(alvo-ajMovValor[op]) < 0.001f) ajMovValor[op] = alvo;
+    else ajMovValor[op] += (alvo-ajMovValor[op])*k;
+  }
+}
+static float aj2ChipLiga(int op, float xDir, float yc, int ligado, float a) {
+  TxtLinha t = ajTxt(TXT_V2_CHIP, ligado ? "Ligado" : "Desligado");
+  float ar,ag,ab, on = 1.0f-ajMov(op, valor[op]);
+  float w = t.w+18+82;
+  ajustes_acento(&ar,&ag,&ab);
+  ajNeutro((GfxRect){xDir-82,yc-22,82,44},22,0.10f,AJ_CHIP_SOL,a);
+  gfx_cor((GfxRect){xDir-82,yc-22,82,44},0.5f,ar,ag,ab,0.32f*on*a);
+  gfx_cor((GfxRect){xDir-76+38*on,yc-16,32,32},0.5f,1,1,1,(0.55f+0.45f*on)*a);
+  txt_desenhar_alpha(t,xDir-w,yc-t.h*0.5f,a);
   return w;
 }
 static float aj2SegLargura(int op, int n) {
@@ -723,12 +751,23 @@ static float aj2Seg(int op, int n, int sel, int ed, float xDir, float yc, float 
   int i;
   ajNeutro((GfxRect){ x, yc - h * 0.5f, w, h }, h * 0.5f, 0.06f, 0.114f, 0.118f, 0.137f, a);
   x += 5.0f;
+  { float pos = ajMov(op, sel), left = x, pw = 0, off = 0;
+    int lo = (int)floorf(pos), hi;
+    if(lo<0) lo=0;
+    if(lo>=n) lo=n-1;
+    hi=lo+1<n?lo+1:lo;
+    for(i=0;i<lo;i++) off += txt_largura(TXT_V2_SEG,ajRotSeg(op,i))+48.0f;
+    pw=txt_largura(TXT_V2_SEG,ajRotSeg(op,lo))+44.0f;
+    left += off+(pos-lo)*(pw+4.0f);
+    pw += (pos-lo)*(txt_largura(TXT_V2_SEG,ajRotSeg(op,hi))+44.0f-pw);
+    if(ed) ajPilulaAcento((GfxRect){left,yc-ih*0.5f,pw,ih},ih*0.5f,a);
+    else ajNeutro((GfxRect){left,yc-ih*0.5f,pw,ih},ih*0.5f,0.14f,0.204f,0.212f,0.243f,a);
+  }
   for (i = 0; i < n; i++) {
     int ac = i == sel && ed;
     TxtLinha t = ac ? ajTxtT(TXT_V2_SEG, ajRotSeg(op, i)) : ajTxt(TXT_V2_SEG, ajRotSeg(op, i));
     float iw = t.w + 44.0f, al = 0.55f;
-    if (ac) { ajPilulaAcento((GfxRect){ x, yc - ih * 0.5f, iw, ih }, ih * 0.5f, a); al = 1; }
-    else if (i == sel) { ajNeutro((GfxRect){ x, yc - ih * 0.5f, iw, ih }, ih * 0.5f, 0.14f, 0.204f, 0.212f, 0.243f, a); al = 1; }
+    if (i == sel) al = 1;
     txt_desenhar_alpha(t, x + 22, yc - t.h * 0.5f, al * a);
     x += iw + 4.0f;
   }
@@ -786,7 +825,7 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
     if (n > 3) n = 3;
     cauda = aj2Seg(op, n, ed ? uxPendente : valor[op], ed, xDir, yc, aTx);
   } else if (tipo == AJL_TOG) {
-    cauda = aj2ChipLiga(xDir, yc, lig(op), aT);
+    cauda = aj2ChipLiga(op, xDir, yc, lig(op), aT);
   } else if (tipo == AJL_ESC || tipo == AJL_NUM) {
     char vb[96];
     const char *v = textoValor(op);
@@ -794,7 +833,7 @@ static void ajDesenharLinha(int item, float y, float f, float a) {
     if (op == AJ_FUNDO && ed) { uxValorTexto(op, uxPendente, vb, sizeof vb); v = vb; }
     if (!desligada) { aj2Chevron(x, yc, (emFoco ? 0.7f : 0.32f) * aT); x -= 30.0f + 14.0f; }
     if (tipo == AJL_NUM) {
-      aj2Trilho(x - 170.0f, yc, 170.0f, ajFracao(op, valor[op]), emFoco, aT);
+      aj2Trilho(x - 170.0f, yc, 170.0f, ajMovFracao(op, valor[op]), emFoco, aT);
       x -= 170.0f + 14.0f;
     }
     { int fv = marcaDoValor(op, v);
@@ -1042,6 +1081,7 @@ static float ajEf(const char *icone, const char *s, float x, float y, float w, f
   ajBloco(TXT_AJ_ESTADO, s, x + 16 + 20 + 12, y + 14, tw, 24.65f, 0.72f * a, 6);
   return h + 28;
 }
+#include "ajustes_ux_visual.inc"
 #include "ajustes_ux_previa.inc"
 #include "ajustes_ux_v2.inc"
 #include "ajustes_ux_ilha.inc"

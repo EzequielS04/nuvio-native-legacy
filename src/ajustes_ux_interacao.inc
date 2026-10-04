@@ -127,6 +127,17 @@ static int uxEvento(SDL_Keycode k) {
       if (uxPendente >= nValores(uxOp)) uxPendente = nValores(uxOp) - 1;
       return 1;
     }
+    // Barra horizontal: laterais editam, baixo/cima navegam para restaurar.
+    if (uxEditor == 1 && OPCOES[uxOp].tipo == OP_NUMERO) {
+      if (k == SDLK_UP || k == SDLK_DOWN) {
+        uxRodape = k == SDLK_DOWN && uxTemPadrao(uxOp); return 1;
+      }
+      if (k == SDLK_LEFT || k == SDLK_RIGHT) {
+        if (!uxRodape) uxPendente = limita(uxOp, uxPendente +
+          (k == SDLK_RIGHT ? 1 : -1) * OPCOES[uxOp].passo);
+        return 1;
+      }
+    }
     if (k == SDLK_RIGHT && uxTemPadrao(uxOp)) { uxRodape = 1; return 1; }
     if (k == SDLK_LEFT) { uxRodape = 0; return 1; }
     if (uxOk(k)) {
