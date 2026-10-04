@@ -76,9 +76,10 @@ static int cmpCue(const void *a, const void *b);
 
 // --- SRT / WebVTT ------------------------------------------------------------
 
-int legenda_extrair_srt(const char *corpo, LegendaCue **saida) {
+static int extrairSrt(const char *corpo,LegendaCue **saida,int *parcial) {
   char *buf,*p,*linha; int n=0,cap=128;
   LegendaCue *v;
+  if(parcial)*parcial=0;
   if (saida) *saida=NULL;
   if (!corpo || !saida) return 0;
   buf=strdup(corpo); if(!buf)return 0;
@@ -96,7 +97,7 @@ int legenda_extrair_srt(const char *corpo, LegendaCue **saida) {
     for(char *q=linha;*q;q++)if(*q==',')*q='.';
     for(char *q=seta;*q;q++)if(*q==',')*q='.';
     double ini=tempo(linha),fim=tempo(seta);
-    if(ini<0||fim<=ini)continue;
+    if(ini<0||fim<=ini){if(parcial)*parcial=1;continue;}
     char texto[768]={0}; size_t usado=0;
     while(*p) {
       char *nl=strchr(p,'\n'); if(nl)*nl++=0;
@@ -108,7 +109,7 @@ int legenda_extrair_srt(const char *corpo, LegendaCue **saida) {
       p=nl?nl:p+strlen(p);
     }
     entidade(texto); if(!texto[0])continue;
-    { LegendaCue *nv=crescer(v,n,&cap); if(!nv)break; v=nv; }
+    { LegendaCue *nv=crescer(v,n,&cap); if(!nv){if(parcial)*parcial=1;break;} v=nv; }
     memset(&v[n],0,sizeof v[n]);
     v[n].inicio=ini; v[n].fim=fim; v[n].cor=-1;
     v[n].posX=v[n].posY=-1.0f; v[n].ordem=n;
@@ -120,6 +121,10 @@ int legenda_extrair_srt(const char *corpo, LegendaCue **saida) {
   // SRT/VTT reordenado pelo servidor tambem precisa satisfazer esse contrato.
   qsort(v,(size_t)n,sizeof *v,cmpCue);
   *saida=v;return n;
+}
+
+int legenda_extrair_srt(const char *corpo,LegendaCue **saida) {
+  return extrairSrt(corpo,saida,NULL);
 }
 
 // --- ASS / SSA ---------------------------------------------------------------
@@ -346,7 +351,7 @@ static int cmpCue(const void *a, const void *b) {
   return x->ordem - y->ordem;
 }
 
-int legenda_extrair_ass(const char *corpo, LegendaCue **saida) {
+static int extrairAss(const char *corpo,LegendaCue **saida,int *parcial) {
   char *buf,*p;
   LegendaCue *v;
   AssEstilo est[ASS_MAX_ESTILOS];
@@ -358,6 +363,7 @@ int legenda_extrair_ass(const char *corpo, LegendaCue **saida) {
   int temFmtEstilo=0;
   int cIni=1,cFim=2,cEstilo=3,cTexto=9;       /* colunas de Dialogue: */
 
+  if(parcial)*parcial=0;
   if (saida) *saida=NULL;
   if (!corpo || !saida) return 0;
   buf=strdup(corpo); if(!buf) return 0;
@@ -446,9 +452,9 @@ int legenda_extrair_ass(const char *corpo, LegendaCue **saida) {
       copiaCampo(campoAss(linha,cFim),fim,sizeof fim);
       copiaCampo(campoAss(linha,cEstilo),nomeEst,sizeof nomeEst);
       pt = campoAss(linha,cTexto);
-      if (!pt) continue;
+      if (!pt) {if(parcial)*parcial=1;continue;}
       a=tempo(trim(ini)); b=tempo(trim(fim));
-      if (a<0 || b<=a) continue;
+      if (a<0 || b<=a) {if(parcial)*parcial=1;continue;}
 
       memset(&c,0,sizeof c);
       c.cor=-1; c.posX=c.posY=-1.0f;
@@ -465,7 +471,7 @@ int legenda_extrair_ass(const char *corpo, LegendaCue **saida) {
       if (!texto[0]) continue;
       c.inicio=a; c.fim=b; c.resX=resX; c.resY=resY; c.ordem=n;
       snprintf(c.texto,sizeof c.texto,"%s",texto);
-      { LegendaCue *nv=crescer(v,n,&cap); if(!nv) break; v=nv; }
+      { LegendaCue *nv=crescer(v,n,&cap); if(!nv){if(parcial)*parcial=1;break;} v=nv; }
       v[n++]=c;
     }
   }
@@ -476,6 +482,10 @@ int legenda_extrair_ass(const char *corpo, LegendaCue **saida) {
   // inseridos depois da traducao sai fora de ordem com frequencia.
   qsort(v,(size_t)n,sizeof *v,cmpCue);
   *saida=v; return n;
+}
+
+int legenda_extrair_ass(const char *corpo,LegendaCue **saida) {
+  return extrairAss(corpo,saida,NULL);
 }
 
 int legenda_extrair(const char *corpo, LegendaCue **saida) {
@@ -753,4 +763,132 @@ int legenda_texto(double posSeg,int atrasoMs,char *dst,size_t tam) {
   if(legenda_cues(posSeg,atrasoMs,&c,1)!=1)return 0;
   snprintf(dst,tam,"%s",c.texto);
   return 1;
+}
+
+struct LegendaDocumento {
+  pthread_mutex_t trava;
+  unsigned refs;
+  LegendaDocumentoInfo info;
+  LegendaCue *cues;
+  int n;
+  double maiorDur;
+  uint64_t hash;
+};
+
+static uint64_t documentoHash(uint64_t h, const void *bytes, size_t n) {
+  const unsigned char *p=bytes;
+  while(n--) { h ^= *p++; h *= UINT64_C(1099511628211); }
+  return h;
+}
+
+/* Takes ownership even on error; sort/hash never run under the overlay lock. */
+static LegendaDocumento *documentoAdotar(LegendaCue *v,int n,
+                                        const LegendaDocumentoInfo *info) {
+  LegendaDocumento *d; int i;
+  if (!info || !v || n<=0 || n>LEG_MAX_CUES ||
+      !isfinite(info->duracaoSeg) || info->duracaoSeg<0) {free(v);return NULL;}
+  for(i=0;i<n;i++)
+    if(!isfinite(v[i].inicio)||!isfinite(v[i].fim)||
+       v[i].inicio<0||v[i].fim<=v[i].inicio) {free(v);return NULL;}
+  d=calloc(1,sizeof *d); if(!d){free(v);return NULL;}
+  d->cues=v;
+  if(pthread_mutex_init(&d->trava,NULL)) {
+    free(v);free(d);return NULL;
+  }
+  d->info=*info;
+  d->info.idioma[sizeof d->info.idioma-1]=0;
+  d->info.origem[sizeof d->info.origem-1]=0;
+  d->info.identidade[sizeof d->info.identidade-1]=0;
+  d->n=n;d->refs=1;
+  qsort(d->cues,(size_t)n,sizeof *v,cmpCue);
+  d->hash=UINT64_C(14695981039346656037);
+  d->hash=documentoHash(d->hash,d->info.idioma,strlen(d->info.idioma));
+  d->hash=documentoHash(d->hash,d->info.origem,strlen(d->info.origem));
+  d->hash=documentoHash(d->hash,d->info.identidade,strlen(d->info.identidade));
+  for(i=0;i<n;i++) {
+    LegendaCue *c=&d->cues[i]; c->texto[sizeof c->texto-1]=0;
+    double dur=c->fim-c->inicio;
+    if(dur>d->maiorDur)d->maiorDur=dur;
+    d->hash=documentoHash(d->hash,&c->inicio,sizeof c->inicio);
+    d->hash=documentoHash(d->hash,&c->fim,sizeof c->fim);
+    d->hash=documentoHash(d->hash,c->texto,strlen(c->texto));
+  }
+  return d;
+}
+
+LegendaDocumento *legenda_documento_de_cues(const LegendaCue *v,int n,
+                                           const LegendaDocumentoInfo *info) {
+  if(!v||!info||n<=0||n>LEG_MAX_CUES)return NULL;
+  LegendaCue *copia=malloc((size_t)n*sizeof *v);if(!copia)return NULL;
+  memcpy(copia,v,(size_t)n*sizeof *v);
+  return documentoAdotar(copia,n,info);
+}
+
+LegendaDocumento *legenda_documento_criar(const char *corpo,
+                                        const LegendaDocumentoInfo *info) {
+  /* Keep a worker-side parse from duplicating an unbounded server response. */
+  if(!corpo || strnlen(corpo,16u*1024u*1024u+1)>16u*1024u*1024u)return NULL;
+  if(!info)return NULL;
+  LegendaCue *v=NULL;int parcial=0;
+  int n=legenda_eh_ass(corpo)?extrairAss(corpo,&v,&parcial):extrairSrt(corpo,&v,&parcial);
+  LegendaDocumentoInfo real=*info;
+  /* Legacy playback can render a valid prefix after OOM/malformed timings;
+   * AutoSync must never mistake that useful prefix for a complete reference. */
+  if(parcial)real.flags&=~LEGENDA_DOC_COMPLETO;
+  return documentoAdotar(v,n,&real);
+}
+
+LegendaDocumento *legenda_documento_bytes(const char *bytes,long n,
+                                         const LegendaDocumentoInfo *info) {
+  if(!bytes||n<=0||n>16L*1024L*1024L)return NULL;
+  char *corpo=legenda_utf8(bytes,n,NULL);
+  LegendaDocumento *d=legenda_documento_criar(corpo,info);
+  free(corpo);return d;
+}
+
+LegendaDocumento *legenda_documento_ativo(unsigned dono,
+                                         const LegendaDocumentoInfo *info) {
+  int n=0;LegendaCue *v;
+  pthread_mutex_lock(&trava);
+  if(ligada&&geracao==dono)n=nCues;
+  pthread_mutex_unlock(&trava);
+  if(n<=0||!info)return NULL;
+  v=malloc((size_t)n*sizeof *v);if(!v)return NULL;
+  pthread_mutex_lock(&trava);
+  if(!ligada||geracao!=dono||nCues!=n){pthread_mutex_unlock(&trava);free(v);return NULL;}
+  memcpy(v,cues,(size_t)n*sizeof *v);
+  pthread_mutex_unlock(&trava);
+  return documentoAdotar(v,n,info);
+}
+
+LegendaDocumento *legenda_documento_reter(LegendaDocumento *d) {
+  if(!d)return NULL;
+  pthread_mutex_lock(&d->trava);d->refs++;pthread_mutex_unlock(&d->trava);
+  return d;
+}
+void legenda_documento_liberar(LegendaDocumento *d) {
+  int fim;
+  if(!d)return;
+  pthread_mutex_lock(&d->trava);fim=!--d->refs;pthread_mutex_unlock(&d->trava);
+  if(fim){pthread_mutex_destroy(&d->trava);free(d->cues);free(d);}
+}
+const LegendaDocumentoInfo *legenda_documento_info(const LegendaDocumento *d) {
+  return d?&d->info:NULL;
+}
+const LegendaCue *legenda_documento_dados(const LegendaDocumento *d,int *n) {
+  if(n)*n=d?d->n:0;return d?d->cues:NULL;
+}
+uint64_t legenda_documento_hash(const LegendaDocumento *d) {return d?d->hash:0;}
+int legenda_documento_cues(const LegendaDocumento *d,double posSeg,
+                           int atrasoMs,LegendaCue *dst,int max) {
+  double t=posSeg+(double)atrasoMs/1000;int lo=0,hi,i,n=0;
+  if(!d||!dst||max<=0||!isfinite(t))return 0;
+  hi=d->n;
+  while(lo<hi){int m=(lo+hi)/2;if(d->cues[m].inicio<=t)lo=m+1;else hi=m;}
+  for(i=lo-1;i>=0&&n<max;i--){
+    if(d->cues[i].inicio<t-d->maiorDur)break;
+    if(t<=d->cues[i].fim)dst[n++]=d->cues[i];
+  }
+  for(i=0;i<n/2;i++){LegendaCue tmp=dst[i];dst[i]=dst[n-1-i];dst[n-1-i]=tmp;}
+  return n;
 }
