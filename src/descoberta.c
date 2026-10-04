@@ -1406,6 +1406,10 @@ static int  maniProx;
 static unsigned maniGeracao;
 
 static pthread_mutex_t cargaTrava = PTHREAD_MUTEX_INITIALIZER;
+// 1 = a volta em curso foi pedida em segundo plano (desc_repetir_silencioso).
+// Um pedido da pessoa (desc_repetir) a derruba para 0; o contrario nao a
+// esconde. Escrita so no fio principal.
+static volatile int montSilenciosa;
 static DescHomeCarga carga;
 static Uint32 cargaDesde;
 static void cargaFase(int fase) {
@@ -1414,7 +1418,12 @@ static void cargaFase(int fase) {
 void desc_home_carga(DescHomeCarga *estado) {
   if (!estado) return;
   pthread_mutex_lock(&cargaTrava);
-  carga.ativo = desc_montando();
+  // O ALERTA DA ILHA (app.c) SO ACENDE PARA UMA VOLTA VISIVEL: a de arranque ou
+  // a que a pessoa pediu. O refazer do "Continuar assistindo" (cwVivo: a cada
+  // 10 min, a cada saida do player, a cada sync) e as voltas silenciosas do
+  // sync nao entram — desc_montando() segue contando as duas para quem espera
+  // a home (troca de perfil). Prova: tests/homecarga_ilha.sh.
+  carga.ativo = buscando && !montSilenciosa;
   if (carga.ativo && cargaDesde) carga.ms = SDL_GetTicks() - cargaDesde;
   *estado = carga;
   pthread_mutex_unlock(&cargaTrava);
@@ -4221,7 +4230,7 @@ static void *montar(void *u) {
         printf("[desc] a estrutura nova pede catalogo que esta volta nao "
                "buscou (%s): ciclo de rede depois deste\n", qual);
         fflush(stdout);
-        desc_repetir();
+        desc_repetir_silencioso();
       }
       // Com ciclo de rede pedido (aqui ou pela propria remontagem, quando a
       // colecao engoliu fileiras e sobrou catalogo fora do teto) o snapshot
@@ -4469,11 +4478,22 @@ void desc_remontar_fileiras(void) {
            engolidas, catalogosNaoPedidos);
     fflush(stdout);
     catalogosNaoPedidos = 0;
-    desc_repetir();
+    desc_repetir_silencioso();
   }
 }
 
+static void repetirInterno(void);
 void desc_repetir(void) {
+  montSilenciosa = 0;
+  repetirInterno();
+}
+// Mesmo pedido, sem acender o alerta da ilha: sync, remontagem que a propria
+// descoberta pede, lista de addons que mudou sozinha.
+void desc_repetir_silencioso(void) {
+  if (!buscando) montSilenciosa = 1;
+  repetirInterno();
+}
+static void repetirInterno(void) {
   montagemGeracao++;
   geracaoPedida++;
   if (!buscando) { desc_iniciar(); return; }
@@ -4490,7 +4510,7 @@ void desc_repetir_addons(void) {
   atendido = buscando && !listaLidaNaVolta;
   if (atendido) { geracaoPedida++; repetirAoFim = 1; }
   pthread_mutex_unlock(&listaTrava);
-  if (!atendido) { desc_repetir(); return; }
+  if (!atendido) { desc_repetir_silencioso(); return; }
   printf("[desc] addons novos: a volta em curso ainda nao leu a lista; atendido por ela\n");
   fflush(stdout);
 }

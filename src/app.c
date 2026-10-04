@@ -3723,23 +3723,33 @@ static void desenharTelas(Uint32 agora) {
   }
 }
 
-// ONDE O RELOGIO DA ILHA CABE (ilha.h). So na home, que tem o topo esquerdo
-// vazio acima da rail e do destaque; Ajustes, Explorar, Guia e Biblioteca poem
-// o titulo ali. E nunca com uma camada de tela cheia na frente (explicadores,
-// cartoes de atualizacao/crash/lembrete, menu aberto, detalhe, "Ver tudo"):
-// a pilula ficaria boiando sobre o veu de outra coisa. Os AVISOS da ilha nao
-// passam por aqui — eles aparecem em qualquer tela fora do player.
+// ONDE O RELOGIO DA ILHA CABE (ilha.h). Em toda tela de menu (Home, Explorar,
+// Guia, Busca, Biblioteca, Perfil, Social, Add-ons, Agenda), no carrossel
+// ampliado ("Ver tudo") e na pagina do titulo — pedido do dono (03/10): antes
+// so a Home mostrava. Nas telas com titulo no topo esquerdo ele fica na
+// DIREITA mesmo com "Posicao: Esquerda" (ver relogioDireitaForcada), como no
+// Guia. Nunca com uma camada de tela cheia na frente (explicadores, cartoes de
+// atualizacao/crash/lembrete, menu de contexto, folhas de fontes/episodios/
+// faixas): a pilula ficaria boiando sobre o veu de outra coisa. Os AVISOS da
+// ilha nao passam por aqui — eles aparecem em qualquer tela fora do player.
 static int spotVeuPronto;   // o veu do Spotlight ja esta na copia congelada
+static int relogioDireitaForcada(void) {
+  if (vertudo_aberta()) return 1;                    // titulo da colecao no topo esquerdo
+  return tela != TELA_HOME && !detail_aberto();     // Explorar/Biblioteca/... poem o titulo la
+}
 static int relogioCabe(void) {
   // AJUSTES NO GLASS UI (mockup de 03/10): o relogio fica no canto, em cima da
   // ilha de categorias — a tela nao tem mais titulo ali. Com folha, vinculo ou
   // teclado por cima ele some, como na home com um cartao na frente.
   if (tela == TELA_AJUSTES) return !menu_aberto() && ajustes_relogio_cabe();
-  if (tela != TELA_HOME || !homePronta) return 0;
+  if (tela == TELA_HOME) { if (!homePronta) return 0; }
+  else if (tela != TELA_EXPLORAR && tela != TELA_GUIA && tela != TELA_BUSCA &&
+           tela != TELA_BIBLIOTECA && tela != TELA_PERFIL && tela != TELA_SOCIAL &&
+           tela != TELA_ADDONS && tela != TELA_AGENDA) return 0;
   // O MENU ABERTO NAO ESCONDE MAIS O RELOGIO (Glass UI, mockup "ilha" tela 1):
   // a ilha do menu nasce logo abaixo da do relogio, na mesma margem
   // (ilha_posicionar), e as duas formam a coluna da esquerda.
-  if (detail_aberto() || vertudo_aberta() || ctx_aberto()) return 0;
+  if (ctx_aberto() || stream_folha_aberta() || faixas_aberta() || episodios_aberto()) return 0;
   if (sintro_aberto() || novidades_aberto() || novidades11_aberto() || novidades12_aberto() ||
       novidades13_aberto() || novidades131_aberto() || novidades132_aberto() ||
       novidades133_aberto() || novidades134_aberto() || novidades139_aberto() ||
@@ -3908,7 +3918,7 @@ void app_desenhar(Uint32 agora) {
   if (!registro_aberto() && !player_aberto() && sessao_logada() &&
       tela != TELA_LOGIN && tela != TELA_ESCOLHA_PERFIL) {
     ilha_relogio_visivel(relogioCabe() && ajustes_relogio_ligado());
-    ilha_posicionar(tela == TELA_GUIA);
+    ilha_posicionar(tela == TELA_GUIA || relogioDireitaForcada());
     if (tela == TELA_AJUSTES && ajustes_relogio_pos() != 2) ilha_ancorar(ajustes_ilha_x(), NV_ILHA_Y, 0);
     // O painel de Salvos que nasceu da pilula recolhe para ela (o retangulo
     // do quadro anterior) e, enquanto esta na tela, a cobre.

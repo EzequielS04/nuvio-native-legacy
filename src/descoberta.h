@@ -51,6 +51,10 @@ void desc_iniciar(void);
 // se um ciclo ja estiver no ar, o pedido fica guardado e roda ao fim dele, em
 // vez de ser descartado. Chamar do fio principal.
 void desc_repetir(void);
+// Igual a desc_repetir, mas a volta nao acende o alerta "Carregamento da Home"
+// da ilha: para o que a pessoa nao pediu (sync, remontagem interna). Se ja ha
+// uma volta visivel em curso ela continua visivel.
+void desc_repetir_silencioso(void);
 // Remonta porque a LISTA DE ADDONS mudou (sync). Mais barato que desc_repetir:
 // se a montagem em curso ainda nao leu a lista, ela ja vai ler a nova, e o
 // pedido e atendido por ela — sem jogar fora o Trakt que ela ja buscou. Se ja
@@ -64,6 +68,8 @@ void desc_refazer_continuar(void);
 // uma pedida para o fim dela) ou o "Continuar assistindo" sendo refeito. E o
 // que a troca de perfil espera antes de mostrar a home (app.c).
 int  desc_montando(void);
+// `ativo` aqui e so a volta VISIVEL (arranque ou pedida pela pessoa): o que
+// acende o alerta da ilha. O Continuar refeito e as voltas silenciosas nao.
 typedef struct { int ativo, fase, fileiras, falhas, addonsProntos, addonsTotal; unsigned ms; } DescHomeCarga;
 void desc_home_carga(DescHomeCarga *estado);
 // A metade LOCAL de "Tirar de Continuar assistindo": progresso, carimbo de
