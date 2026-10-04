@@ -58,6 +58,9 @@ static unsigned ordemSeq;
 
 static char atvTexto[160], atvTitulo[96], atvDetalhes[640];
 static int modalAtividade;
+static IlhaAtvCarga atvCarga;   // etapa aponta para atvDetalhes
+static int atvTemCarga;
+static float atvBarraA;         // preenchimento animado da barra do painel
 static float atvProg = -1.0f;
 static int  atvV2;              // ilha_atividade_ex: o desenho de 72
 static char atvIcone[32];       // "" = o ponto que respira
@@ -337,6 +340,13 @@ void ilha_atividade(const char *texto, float progresso) {
 void ilha_atividade_detalhes(const char *titulo, const char *texto) {
   snprintf(atvTitulo, sizeof atvTitulo, "%s", titulo ? titulo : "");
   snprintf(atvDetalhes, sizeof atvDetalhes, "%s", texto ? texto : "");
+  atvTemCarga = 0;
+}
+void ilha_atividade_carga(const IlhaAtvCarga *c) {
+  if (!c) { atvTemCarga = 0; return; }
+  atvCarga = *c;
+  atvCarga.etapa = atvDetalhes;
+  atvTemCarga = 1;
 }
 int ilha_atividade_expansivel(void) { return atvDetalhes[0] && atvVisto && SDL_GetTicks() - atvVisto < 400u; }
 
@@ -438,7 +448,7 @@ int ilha_modal_abrir(void) {
   modalAtividade = ilha_atividade_expansivel();
   if (!modalAtividade && cartaoVez < 0) return 0;
   if (!modalAtividade) abrirCartao(cartaoVez);
-  else { modalAberto = 1; modalAviso = 0; modalFoco = 0; modalDesde = SDL_GetTicks(); memset(modalFocoA, 0, sizeof modalFocoA); }
+  else { atvBarraA = 0.0f; modalAberto = 1; modalAviso = 0; modalFoco = 0; modalDesde = SDL_GetTicks(); memset(modalFocoA, 0, sizeof modalFocoA); }
   return 1;
 }
 
@@ -1118,10 +1128,13 @@ static void desenharCartao(const IlhaCartao *c, int qual, GfxRect r, float a) {
 #define MD_RAIO     30.0f
 #define MD_LOGO_W  380.0f
 #define MD_LOGO_H   80.0f
+#define AT_W       640.0f   // painel da atividade (Home loading)
+#define AT_H       292.0f
 
 static GfxRect modalAlvo(GfxRect p, int dir) {
-  float mw = modalAviso && modalM.cabecalho ? MC_W : MD_W;
-  GfxRect m = { dir ? p.x + p.w - mw : p.x, p.y, mw, modalAviso ? modalAvisoH : MD_H };
+  int compacto = modalAtividade && atvTemCarga;
+  float mw = compacto ? AT_W : modalAviso && modalM.cabecalho ? MC_W : MD_W;
+  GfxRect m = { dir ? p.x + p.w - mw : p.x, p.y, mw, compacto ? AT_H : modalAviso ? modalAvisoH : MD_H };
   if (m.x + m.w > NV_TELA_W - 40.0f) m.x = NV_TELA_W - 40.0f - m.w;
   if (m.x < 40.0f) m.x = 40.0f;
   return m;
@@ -1361,6 +1374,67 @@ static void desenharModal(GfxRect m, float a) {
   int i;
   if (a < 0.01f) return;
   ajustes_acento(&cr, &cg, &cb);
+  if (modalAtividade && atvTemCarga) {
+    // PAINEL COMPACTO da carga da Home: titulo + etapa a esquerda, o tempo
+    // como contador ao vivo (m:ss) a direita, a barra fina dos add-ons e dois
+    // chips (Fileiras, Falhas). Sem botao: Voltar, OK ou tocar fora fecham.
+    const IlhaAtvCarga *k = &atvCarga;
+    float iw = m.w - MD_PAD * 2, x0 = m.x + MD_PAD, y0 = m.y + MD_PAD;
+    unsigned seg = k->ms / 1000u;
+    char tm[24], num[32];
+    TxtLinha title = txt_linha_corta(TXT_CALLOUT, atvTitulo, 246, 247, 252, 255, iw - 150.0f);
+    TxtLinha stage = txt_linha_corta(TXT_CAPTION, k->etapa, 190, 194, 204, 255, iw - 150.0f);
+    snprintf(tm, sizeof tm, "%u:%02u", seg / 60u, seg % 60u);
+    TxtLinha tl = txt_linha(TXT_TITULO3, tm, 246, 247, 252, 255);
+    txt_desenhar_alpha(title, x0, y0, a);
+    txt_desenhar_alpha(stage, x0, y0 + (float)title.h + 6.0f, a);
+    txt_desenhar_alpha(tl, x0 + iw - (float)tl.w, y0 + ((float)(title.h + stage.h) + 6.0f - (float)tl.h) * 0.5f, a);
+    float by0 = y0 + (float)title.h + (float)stage.h + 34.0f;
+    GfxRect tr = { x0, by0, iw, 8.0f };
+    float alvoB = k->total > 0 ? (float)k->prontos / (float)k->total : 0.0f;
+    int quieto = anim_politica_reduzida || ajustes_animacoes_reduzidas();
+    if (!k->ativo) alvoB = 1.0f;
+    if (alvoB > 1.0f) alvoB = 1.0f;
+    atvBarraA = quieto ? alvoB : atvBarraA + (alvoB - atvBarraA) * 0.14f;
+    gfx_cor(tr, 0.5f, 1.0f, 1.0f, 1.0f, 0.14f * a);
+    { float fw = tr.w * atvBarraA;
+      if (k->ativo && k->total <= 0) fw = tr.w * 0.18f;
+      if (fw > 8.0f) gfx_cor((GfxRect){ tr.x, tr.y, fw, tr.h }, 0.5f, cr, cg, cb, a);
+      // A luz que varre o trecho cheio: so enquanto carrega.
+      if (k->ativo && !quieto && fw > 40.0f) {
+        float ph = (float)(SDL_GetTicks() % 1400u) / 1400.0f, lw = 70.0f;
+        float lx = tr.x - lw + (fw + lw) * ph, lx1 = lx + lw;
+        if (lx < tr.x) lx = tr.x;
+        if (lx1 > tr.x + fw) lx1 = tr.x + fw;
+        if (lx1 - lx > 4.0f) gfx_cor((GfxRect){ lx, tr.y, lx1 - lx, tr.h }, 0.5f, 1.0f, 1.0f, 1.0f, 0.38f * a);
+      } }
+    { TxtLinha ad = txt_linha(TXT_CAPTION2, i18n("Add-ons"), 176, 180, 190, 255);
+      snprintf(num, sizeof num, "%d / %d", k->prontos, k->total);
+      TxtLinha nl = txt_linha(TXT_CAPTION2, num, 226, 228, 234, 255);
+      float ly = by0 + 8.0f + 14.0f;
+      txt_desenhar_alpha(ad, x0, ly, a);
+      txt_desenhar_alpha(nl, x0 + iw - (float)nl.w, ly, a);
+      by0 = ly + (float)ad.h + 26.0f; }
+    { const char *rot[2] = { i18n("Fileiras"), i18n("Falhas") };
+      int val[2] = { k->fileiras, k->falhas }, c2;
+      float cw2 = (iw - 16.0f) * 0.5f, ch2 = 60.0f;
+      for (c2 = 0; c2 < 2; c2++) {
+        GfxRect chip = { x0 + c2 * (cw2 + 16.0f), by0, cw2, ch2 };
+        int ruim = c2 == 1 && val[c2] > 0;
+        TxtLinha lb = txt_linha(TXT_CAPTION2, rot[c2], 176, 180, 190, 255);
+        snprintf(num, sizeof num, "%d", val[c2]);
+        TxtLinha vl = txt_linha(TXT_CALLOUT, num, ruim ? 255 : 246, ruim ? 90 : 247, ruim ? 82 : 252, 255);
+        gfx_cor(chip, 0.5f, 1.0f, 1.0f, 1.0f, 0.08f * a);
+        txt_desenhar_alpha(lb, chip.x + 24.0f, chip.y + (ch2 - (float)lb.h) * 0.5f, a);
+        txt_desenhar_alpha(vl, chip.x + chip.w - 24.0f - (float)vl.w, chip.y + (ch2 - (float)vl.h) * 0.5f, a);
+      } }
+    if (a > 0.3f) {
+      ponteiro_camada();
+      ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, pontFora, 0, 0);
+      ponteiro_alvo(m.x, m.y, m.w, m.h, NULL, pontFora, 0, 0);
+    }
+    return;
+  }
   if (modalAtividade) {
     GfxRect box = {ax, ay, 120, 120};
     gfx_cor(box, 0.22f, 0.14f, 0.15f, 0.17f, a);
