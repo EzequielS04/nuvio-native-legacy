@@ -2997,7 +2997,8 @@ typedef struct {
 // the button overlap the information underneath it.
 static HeroCopyLayout heroCopyLayout(float base, float hSin, int hasMeta,
                                      int hasSec, float captionH, float logoH,
-                                     float btnH, float btnGap, float minTop) {
+                                     float btnH, float btnGap, float minTop,
+                                     float slot) {
   HeroCopyLayout p;
   p.synopsis = base - hSin;
   p.secondary = p.synopsis - (hasSec ? (hSin > 0 ? NV_HERO_COPY_LINHA : 0) + NV_LD_HERO_SEC : 0);
@@ -3005,7 +3006,14 @@ static HeroCopyLayout heroCopyLayout(float base, float hSin, int hasMeta,
   p.caption = p.meta - (captionH > 0 ? NV_HERO_COPY_LINHA + captionH : 0);
   p.action = p.caption - NV_HERO_COPY_LINHA - btnH;
   p.logoHeight = fminf(logoH, fmaxf(48.0f, p.action - btnGap - minTop));
-  p.logo = p.action - btnGap - p.logoHeight;
+  // `slot` 1 = the action button is (or may be) on screen: the logo sits above
+  // it. `slot` 0 = no button (Moderna with focus on the rows): the empty button
+  // slot collapses and the logo sits on the text, one line gap above it.
+  // The size above always uses the full slot so the logo never rescales.
+  float bottom = p.action - btnGap;
+  float colado = p.caption - NV_HERO_COPY_LINHA;
+  if (slot < 1.0f) bottom = colado + (bottom - colado) * fmaxf(slot, 0.0f);
+  p.logo = bottom - p.logoHeight;
   return p;
 }
 
@@ -3017,7 +3025,8 @@ static HeroCopyLayout heroCopyLayout(float base, float hSin, int hasMeta,
 static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
                              float base, int lay, int cheio, float logoH,
                              float sinW, int sinLinhas, float aTexto,
-                             float aCopy, float cin, float btnH, float btnGap) {
+                             float aCopy, float cin, float btnH, float btnGap,
+                             float slot) {
   int contHero = (ci && ci->progresso > 0 && ci->restanteMin > 0);
   int seguirHero = (ci && ci->progresso == 0 && (trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb) || cwo_conta_a_seguir(ci->imdb)));
 
@@ -3118,7 +3127,7 @@ static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
   else if (lay == HOME_LAYOUT_DINAMICA)
     minTop = base - (NV_DIN_HERO_H - NV_DIN_TEXTO_BASE) + 54.0f;
   HeroCopyLayout copy = heroCopyLayout(base, hSin, metaLinha[0] != 0, temSec,
-                                      captionH, logoH, btnH, btnGap, minTop);
+                                      captionH, logoH, btnH, btnGap, minTop, slot);
   logoH = copy.logoHeight;
   float ySin = copy.synopsis, ySec = copy.secondary, yMeta = copy.meta;
   float logoY = copy.logo - cin * NV_CINEMA_DESCE;
@@ -3718,14 +3727,16 @@ static void desenhaHero(Uint32 agora, float saida) {
     base = r.y + NV_DIN_HERO_H - NV_DIN_TEXTO_BASE + descidaCopy;
   }
   base += bordaPag.x;   // retorno de borda do Cima no destaque
+  // Moderna: without the button the logo hugs the text (owner 03/10).
+  float slotBtn = (lay == HOME_LAYOUT_MODERNA) ? aBotao : 1.0f;
   float x = ajustes_conteudo_x();
   // TROCA DESLIZADA: o bloco do titulo que sai anda junto com a arte dele, e o
   // do que entra vem colado atras, na mesma distancia (a largura da arte).
   if (deslizando && cAnt && cAnt != ci)
     desenhaCopiaHero(cAnt, 0, x + dAnt * r.w, base, lay, cheio, logoH, sinW,
-                     sinLinhas, aTexto, aCopy, cin, btnH, btnGap);
+                     sinLinhas, aTexto, aCopy, cin, btnH, btnGap, slotBtn);
   float actionY = desenhaCopiaHero(ci, 1, x + dAtu * r.w, base, lay, cheio, logoH, sinW,
-                   sinLinhas, aTexto, aCopy, cin, btnH, btnGap);
+                   sinLinhas, aTexto, aCopy, cin, btnH, btnGap, slotBtn);
 
   // O BOTAO E A POSICAO, que so existem enquanto o destaque tem o foco.
   //
