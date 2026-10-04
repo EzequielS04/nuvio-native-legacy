@@ -24,6 +24,7 @@
 // o caso de um primeiro arranque — a remocao e o que este teste cobra.
 #include "../src/homeestado.h"
 unsigned homeestado_geracao(void) { return 1; }
+unsigned recomenda_geracao(void) { return 1; }
 int homeestado_contexto_valido(void) { return 0; }
 int homeestado_tem_fileira(const char *chave) { (void)chave; return 0; }
 int homeestado_ordem_fileira(const char *chave) { (void)chave; return -1; }

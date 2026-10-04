@@ -2213,8 +2213,10 @@ static void *fioCatalogo(void *u) {
 
 // "Continuar assistindo" a partir do progresso local (progresso.c), no mesmo
 // formato que trakt_continuar devolve: imdb (composto em serie), tipo,
-// porcentagem, temporada/episodio — e o resto vem do Cinemeta pelo mesmo
-// enfeite. Mais recente primeiro (prog_ler ja ordena). Entra o que esta entre
+// porcentagem, temporada/episodio. Reaproveita o catalogo/cache por identidade
+// antes do enfeite remoto: um id de provider nao e conhecido pelo Cinemeta e
+// uma queda de rede nao pode apagar o registro local. Mais recente primeiro
+// (prog_ler ja ordena). Entra o que esta entre
 // 1% e o Percentual assistido (ajustes_cw_concluido, 90 de fabrica), os mesmos
 // limites de home_registrar_retorno; titulo terminado nao e "continuar". O proximo episodio de uma serie terminada fica para depois.
 // Os registros do disco para montarContinuar, UM buffer para continuarLocal e
@@ -2242,10 +2244,17 @@ static int continuarLocal(CatItem *saida, int max) {
     if (repetido) continue;
     d = &saida[n];
     memset(d, 0, sizeof *d);
+    cat_copiar_por_id(r->contentId, r->episodio > 0 ? "series" : "movie", d);
+    // O catalogo pode guardar outro episodio desta obra. Metadados do titulo
+    // permanecem; o episodio e o tempo pertencem ao progresso de agora.
+    if (d->temporada != r->temporada || d->episodio != r->episodio)
+      d->nomeEpisodio[0] = 0;
+    d->temporada = r->temporada;
+    d->episodio = r->episodio;
     d->progresso = (int)(100.0 * p);
+    d->restanteMin = (int)((r->durSeg - r->posSeg) / 60.0 + 0.5);
     // O instante ja esta aqui, no registro: carimbar agora poupa a busca por
-    // chave que instanteDaConta faria depois, e sobrevive a compactacao do
-    // trakt_enfeitar_lote. Ver retomadoMs em catalogo.h.
+    // chave que instanteDaConta faria depois. Ver retomadoMs em catalogo.h.
     d->retomadoMs = r->lastWatchedMs;
     if (r->episodio > 0) {
       d->temporada = r->temporada;
@@ -2259,7 +2268,36 @@ static int continuarLocal(CatItem *saida, int max) {
     }
     n++;
   }
-  n = trakt_enfeitar_lote(saida, n);
+  // O enfeite remoto compacta quem ficou sem poster. Para o progresso local
+  // isso era perda de registro (#158), sobretudo kitsu/tmdb e providers
+  // offline. Enriquece uma copia e reaplica por identidade; uma falha deixa
+  // os metadados conhecidos (ou a reserva da UI), sem inventar arte.
+  if (n > 0) {
+    CatItem *enfeitadas = malloc(sizeof *enfeitadas * (size_t)n);
+    if (enfeitadas) {
+      int ni, j;
+      memcpy(enfeitadas, saida, sizeof *enfeitadas * (size_t)n);
+      // A reserva exibida na rodada offline nao e um titulo resolvido.
+      // Enfeitar completa somente campos vazios; deixe-o substituir essa
+      // reserva quando a rede voltar, sem apagar a copia que a UI ja tem.
+      for (i = 0; i < n; i++)
+        if (!strcmp(enfeitadas[i].titulo,
+                    i18n(!strcmp(enfeitadas[i].tipo, "series") ? "Programa de TV" : "Filme")))
+          enfeitadas[i].titulo[0] = 0;
+      ni = trakt_enfeitar_lote(enfeitadas, n);
+      for (i = 0; i < n; i++)
+        for (j = 0; j < ni; j++)
+          if (!strcmp(saida[i].imdb, enfeitadas[j].imdb) &&
+              !strcmp(saida[i].tipo, enfeitadas[j].tipo)) {
+            saida[i] = enfeitadas[j]; break;
+          }
+      free(enfeitadas);
+    }
+    for (i = 0; i < n; i++)
+      if (!saida[i].titulo[0])
+        snprintf(saida[i].titulo, sizeof saida[i].titulo, "%s",
+                 i18n(!strcmp(saida[i].tipo, "series") ? "Programa de TV" : "Filme"));
+  }
   if (n) printf("[desc] continuar assistindo local: %d\n", n);
   return n;
 }

@@ -100,7 +100,7 @@ int  addons_pendente_nome(const char *nome);
 // que puxa SDL) e este cabecalho e incluido por modulos que os testes compilam
 // sem SDL (tests/colecoes.sh). Definida em addons.c.
 
-// --- legendas externas (OpenSubtitles) ---------------------------------------
+// --- legendas externas dos addons -------------------------------------------
 // Addon de legenda responde em /subtitles/<tipo>/<id>.json com
 // {"subtitles":[{lang,url,subtitleFileName,...}]}. Sao dezenas por titulo, a
 // maioria em idiomas que nao interessam — por isso a lista e FILTRADA por
@@ -111,6 +111,7 @@ typedef struct {
   char rotulo[64];   // "Portugues (BR)  ·  Silo.S01E05.WEB"
   char idioma[8];
   char url[600];
+  char provedor[64]; // nome do addon que devolveu esta legenda
 } Legenda;
 
 void addons_buscar_legendas(const char *imdb, const char *tipo);

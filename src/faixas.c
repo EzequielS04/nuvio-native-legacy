@@ -342,7 +342,7 @@ static void ciclarEstilo(int linha) {
 }
 
 // Rotulo da linha `i` da coluna de legenda. Ate video_n_legenda() sao as
-// embutidas; depois vem as do OpenSubtitles.
+// embutidas; depois vem as dos addons.
 static const char *rotuloLegenda(int i, const char **marca) {
   int emb = video_n_legenda();
   *marca = NULL;
@@ -380,7 +380,7 @@ static const char *rotuloLegenda(int i, const char **marca) {
   }
   { const Legenda *l = addons_legenda(i - emb);
     if (!l) return "";
-    *marca = "OpenSubtitles";
+    *marca = l->provedor[0] ? l->provedor : i18n("Legenda externa");
     return l->rotulo; }
 }
 

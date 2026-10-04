@@ -1430,6 +1430,22 @@ int cat_id_stream(int indiceItem, int t, int e, char *dst, unsigned tam) {
   return 1;
 }
 
+int cat_copiar_por_id(const char *id, const char *tipo, CatItem *saida) {
+  size_t tam;
+  int i, melhor = -1;
+  if (!id || !*id || !saida) return 0;
+  tam = idbase_len(id);
+  pthread_mutex_lock(&pubTrava);
+  for (i = 0; itens && i < n; i++) {
+    if (idbase_len(itens[i].imdb) != tam || strncmp(itens[i].imdb, id, tam) ||
+        (tipo && *tipo && strcmp(tipo_base(itens[i].tipo), tipo_base(tipo)))) continue;
+    if (melhor < 0 || (!itens[melhor].poster[0] && itens[i].poster[0])) melhor = i;
+  }
+  if (melhor >= 0) *saida = itens[melhor];
+  pthread_mutex_unlock(&pubTrava);
+  return melhor >= 0;
+}
+
 int cat_n_fileiras(void) { return nFils; }
 const CatFileira *cat_fileira(int r) {
   return (r >= 0 && r < nFils) ? &fils[r] : NULL;

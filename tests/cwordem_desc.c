@@ -10,6 +10,7 @@
 // o caso de um primeiro arranque — a remocao e o que este teste cobra.
 #include "../src/homeestado.h"
 unsigned homeestado_geracao(void) { return 1; }
+unsigned recomenda_geracao(void) { return 1; }
 int homeestado_contexto_valido(void) { return 0; }
 int homeestado_tem_fileira(const char *chave) { (void)chave; return 0; }
 int homeestado_ordem_fileira(const char *chave) { (void)chave; return -1; }
@@ -211,6 +212,9 @@ int contalib_sementes_a_seguir(ContaSemente *s, int m, int a) {
 }
 static int consultadas;
 int trakt_enfeitar_lote(CatItem *s, int n) {
+#ifdef CWLOCAL_ENFEITAR
+  return cwlocal_enfeitar_lote(s, n);
+#else
   int r, w = 0, k;
   for (r = 0; r < n; r++) {
     int fica = 1;
@@ -227,6 +231,7 @@ int trakt_enfeitar_lote(CatItem *s, int n) {
     if (fica) s[w++] = s[r];
   }
   return w;
+#endif
 }
 
 static long long relogioProg(void) { return 1000000; }
