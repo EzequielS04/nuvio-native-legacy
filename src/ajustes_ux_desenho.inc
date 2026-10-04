@@ -74,15 +74,8 @@ static const char *ajArte(int tipo, int n) {
   return b;
 }
 // Arte em "cover" num retangulo de cantos `raioPx`. Devolve 1 se desenhou.
-static int ajVisualSemFoto;
 static int ajImg(const char *c, GfxRect r, float raioPx, float a) {
   GLuint t;
-  if (ajVisualSemFoto) {
-    float d = fminf(r.w, r.h)*0.32f;
-    gfx_cor(r, raioPx/r.h, 0.24f,0.25f,0.29f,a);
-    gfx_icone((GfxRect){r.x+(r.w-d)*0.5f,r.y+(r.h-d)*0.5f,d,d},"aj_image",1,1,1,0.55f*a);
-    return 1;
-  }
   if (!c || !c[0] || r.w < 1.0f || r.h < 1.0f || a <= 0.003f) return 0;
   t = tex_obter_larg(c, r.w > r.h * 1.78f ? r.w : r.h * 1.78f);
   if (!t) {
@@ -98,11 +91,6 @@ static int ajImg(const char *c, GfxRect r, float raioPx, float a) {
 static float ajLogo(const char *c, float x, float y, float maxW, float maxH, float a) {
   GLuint t;
   float asp, w, h;
-  if (ajVisualSemFoto) {
-    float d = fminf(maxH,maxW*0.25f);
-    gfx_icone((GfxRect){x,y,d,d},"aj_clapperboard",1,1,1,0.85f*a);
-    return d;
-  }
   if (!c || !c[0]) return 0.0f;
   t = tex_obter_larg(c, maxW);
   if (!t) return 0.0f;

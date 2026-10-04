@@ -318,38 +318,56 @@ static void aj2DesenharResumo(float a) {
   gfx_opacidade_grupo = grupo * a;
   ajIlha(r, 40.0f, 1, 0);
   if (uxIndice >= 2) {
-    int sec = uxIndice - 2, i, nOp = 0, nAv = 0;
-    float ph = w * 9.0f / 16.0f, cx, cy, cw, numW;
+    // A imagem da categoria preenche o quadro de cima (16:9, arte real de ponta
+    // a ponta); embaixo, a descricao com a contagem a direita, os grupos em
+    // chips e as dicas no rodape — o mesmo raio e o mesmo vao da camada 2.
+    int sec = uxIndice - 2, i, nOp = 0, nAv = 0, nl = 1;
+    float ph = w * 9.0f / 16.0f, numW, descW, descH, chipsH, abaixo, fimUtil, cx, cy;
+    const float CH = 46.0f, CG = 10.0f, LH = 34.0f;
+    const char *desc = sec < (int)(sizeof SECAO_AJUDA / sizeof *SECAO_AJUDA) ? SECAO_AJUDA[sec] : TELA[secIni[sec]].sub;
     char q[16], t[96];
     TxtLinha ln, lt;
-    aj2PreviaCategoria(sec, x, y, w, ph);
-    y += ph + 26.0f;
     for (i = secIni[sec] + 1; i < secFim(sec); i++)
       if (TELA[i].tipo == IT_OPC) { nOp++; if (uxAvancada(TELA[i].op)) nAv++; }
     snprintf(q, sizeof q, "%d", nOp);
     snprintf(t, sizeof t, nAv == 1 ? i18n("opções · %d avançada") : i18n("opções · %d avançadas"), nAv);
-    ln = ajTxt(TXT_V2_NUM, q); lt = ajTxt(TXT_V2_26, t);
+    ln = ajTxt(TXT_V2_NUM, q); lt = ajTxt(TXT_V2_24, t);
     numW = ln.w + 10.0f + lt.w;
-    // chips dos grupos (os ROT da categoria), quebrando linha
-    cx = x; cy = y; cw = w - numW - 26.0f;
-    { int nl = 1;
-      for (i = secIni[sec] + 1; i < secFim(sec); i++) {
-        TxtLinha c;
-        float bw;
-        if (TELA[i].tipo != IT_ROT) continue;
-        c = ajTxt(TXT_V2_SEG, TELA[i].titulo);
-        bw = 22 + c.w + 22;
-        if (cx > x && cx + bw > x + cw) { cx = x; cy += 56.0f + 12.0f; nl++; }
-        ajNeutro((GfxRect){ cx, cy, bw, 56 }, 28, 0.08f, AJ_CHIP_SOL, 1);
-        txt_desenhar_alpha(c, cx + 22, cy + (56 - c.h) * 0.5f, 0.85f);
-        cx += bw + 12.0f;
-      }
-      { float bloco = cx == x && nl == 1 ? 56.0f : (cy - y) + 56.0f, ycn = y + bloco * 0.5f;
-        float nx = x + w - numW;
-        // alinhados pela base, como o inline do mockup
-        float base = ycn + ln.h * 0.32f;
-        txt_desenhar(ln, nx, ycn - ln.h * 0.5f);
-        txt_desenhar_alpha(lt, nx + ln.w + 10.0f, base - lt.h * 0.80f, 0.55f); } }
+    descW = w - numW - 40.0f;
+    descH = txt_bloco(TXT_V2_26, desc, 0, 0, 0, x, -4000, descW, LH, 0, 2);
+    if (descH < ln.h) descH = ln.h;
+    // chips: mede as linhas antes de desenhar
+    cx = x;
+    for (i = secIni[sec] + 1; i < secFim(sec); i++) {
+      float bw;
+      if (TELA[i].tipo != IT_ROT) continue;
+      bw = 20 + ajTxt(TXT_V2_24, TELA[i].titulo).w + 20;
+      if (cx > x && cx + bw > x + w) { cx = x; nl++; }
+      cx += bw + CG;
+    }
+    chipsH = cx == x ? 0 : nl * CH + (nl - 1) * CG;
+    abaixo = 24.0f + descH + (chipsH > 0 ? 18.0f + chipsH : 0);
+    fimUtil = r.y + r.h - 40.0f - 40.0f - 24.0f;   // acima das dicas
+    if (y + ph + abaixo > fimUtil) ph = fimUtil - abaixo - y;
+    aj2PreviaCategoria(sec, x, y, w, ph);
+    y += ph + 24.0f;
+    ajBloco(TXT_V2_26, desc, x, y, descW, LH, 0.66f, 2);
+    { float base = y + ln.h * 0.80f, nx = x + w - numW;
+      txt_desenhar(ln, nx, y - 4.0f);
+      txt_desenhar_alpha(lt, nx + ln.w + 10.0f, base - lt.h * 0.80f - 4.0f, 0.55f); }
+    y += descH + 18.0f;
+    cx = x; cy = y;
+    for (i = secIni[sec] + 1; i < secFim(sec); i++) {
+      TxtLinha c;
+      float bw;
+      if (TELA[i].tipo != IT_ROT) continue;
+      c = ajTxt(TXT_V2_24, TELA[i].titulo);
+      bw = 20 + c.w + 20;
+      if (cx > x && cx + bw > x + w) { cx = x; cy += CH + CG; }
+      ajNeutro((GfxRect){ cx, cy, bw, CH }, CH * 0.5f, 0.08f, AJ_CHIP_SOL, 1);
+      txt_desenhar_alpha(c, cx + 20, cy + (CH - c.h) * 0.5f, 0.85f);
+      cx += bw + CG;
+    }
   } else if (uxIndice == 1) {
     // Diferentes do padrao: as opcoes fora do padrao, com o valor de agora.
     int i;
@@ -399,8 +417,14 @@ static void aj2DesenharResumo(float a) {
 // inicial e a home de verdade em miniatura; Cartazes e arte sao tres cartazes
 // no tamanho da home; as outras usam a previa da primeira opcao, recortada.
 static float aj2PreviaCategoria(int sec, float x, float y, float w, float h) {
-  (void)h;
-  return ajVisualCena(sec, -1, x, y, w);
+  float cheia = w * 9.0f / 16.0f;
+  if (h >= cheia - 0.5f) return ajVisualCena(sec, -1, x, y, w);
+  // Sem altura para o 16:9 (Ajustes grandes): o quadro encolhe por cima e por
+  // baixo, a cena fica no meio.
+  gfx_recorte(x, y, w, h);
+  ajVisualCena(sec, -1, x, y - (cheia - h) * 0.5f, w);
+  gfx_sem_recorte();
+  return h;
 }
 // A tela de Ajustes da v2 em miniatura no fundo `modo` (cartoes do Fundo e a
 // previa do inspetor): o fundo de verdade e tres ilhas com tracos no lugar do

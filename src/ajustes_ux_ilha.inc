@@ -89,12 +89,7 @@ static void aj2Dicas(const AjDica *d, int n, float x, float yBase, float w, floa
   aj2DicasLinha(d, n, x + 6.0f, yBase - 18.0f, TXT_V2_KBD18, 36, 40, 11, TXT_V2_24, 10, 24, 1, a);
 }
 static float aj2Previa(int op, float x, float y, float w) {
-  if (op == AJ_TEMA) {
-    int anterior = ajVisualSemFoto;
-    float h;
-    ajVisualSemFoto = 1; h = aj2PreviaCor(x,y,w); ajVisualSemFoto = anterior;
-    return h;
-  }
+  if (op == AJ_TEMA) return aj2PreviaCor(x, y, w);
   return ajPrevia(op, x, y, w);
 }
 // A COLUNA DA ARTE (A3): a previa da opcao em foco grande, sem ilha, com o
@@ -109,10 +104,9 @@ static void ajDesenharInspetor(void) {
   int op = categoria ? -1 : focoOp;
   if (!aj2TemInsp()) return;
   { int opPv = op >= 0 ? op : -1;
-    if (opPv < 0) {   // categoria: a previa da primeira opcao dela
-      int it = primeiroDaSecao(secAtual);
-      if (TELA[it].tipo == IT_OPC) opPv = TELA[it].op;
-    }
+    // Categoria em foco (cabecalho ou menu): a imagem da categoria, nao a
+    // previa da primeira opcao dela.
+    if (opPv < 0) y += ajVisualCena(secAtual, -1, x, y, w);
     if (opPv >= 0) {
       // Editando na linha, a previa ja mostra o valor PENDENTE (so desenho).
       int salvo = valor[opPv], ed = ajEditandoLinha(opPv);

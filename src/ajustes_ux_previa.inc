@@ -488,31 +488,6 @@ static float ajPreviaCor(float x, float y, float w) {
   return h + 14 + 64;
 }
 
-// O PLAYER com as marcas que as opcoes de imagem e som afetam (no lugar das
-// caixas de ajudaFluxoReproducao). Marca apagada = a opcao esta desligada.
-static float ajPreviaPlayer(float x, float y, float w) {
-  float h = w * 304.0f / 540.0f, bx = x + 24, by;
-  static const FormatoMarca M[3] = { FMT_4K, FMT_DV, FMT_ATMOS };
-  int i, on[3];
-  on[0] = valor[AJ_QUALIDADE] <= 1; on[1] = lig(AJ_DV); on[2] = lig(AJ_ATMOS);
-  ajImg(ajArte(AJA_FUNDO, 15), (GfxRect){ x, y, w, h }, 22, 1);
-  gfx_rect((GfxRect){ x, y + h * 0.4f, w, h * 0.6f }, 0, GFX_VEU_BAIXO, 0, 0, 0, 22.0f / (h * 0.6f), 0, 0, 0, 0.85f);
-  by = y + h - 22 - 18 - 6 - 5 - 14 - 34 - 12 - 17 - 2 - 24;
-  { TxtLinha t = ajTxt(TXT_ILHA_ITEM, ajTituloN(15)); txt_desenhar(t, bx, by); by += 24 + 2; }
-  { TxtLinha t = ajTxtC(TXT_AJ_MINI14, ajMetaTitulo(15), w - 48); txt_desenhar_alpha(t, bx, by, 0.6f); by += 17 + 12; }
-  for (i = 0; i < 3; i++) {
-    float mw = marca_formato_largura(M[i], 34);
-    marca_formato(M[i], bx, by, 34, 1, 1, 1, on[i] ? 0.78f : 0.22f);
-    bx += mw + 14;
-  }
-  by += 34 + 14;
-  gfx_cor((GfxRect){ x + 24, by, w - 48, 5 }, 0.5f, 1, 1, 1, 0.2f);
-  gfx_cor((GfxRect){ x + 24, by, (w - 48) * 0.38f, 5 }, 0.5f, 0.953f, 0.949f, 0.937f, 1);
-  by += 5 + 6;
-  { TxtLinha a = ajTxt(TXT_AJ_MINI14, "21:40"), b = ajTxt(TXT_AJ_MINI14, "58:12");
-    txt_desenhar_alpha(a, x + 24, by, 0.55f); txt_desenhar_alpha(b, x + w - 24 - b.w, by, 0.55f); }
-  return h;
-}
 // As resolucoes que o teto de "Qualidade maxima" deixa passar.
 static float ajBarrasQualidade(float x, float y, float w) {
   static const FormatoMarca F[3] = { FMT_720, FMT_1080, FMT_4K };
@@ -562,28 +537,6 @@ static float ajPreviaServico(int op, float x, float y, float w) {
 }
 
 // --- PREVIAS POR FAMILIA (o lugar dos diagramas de caixas e da foto fixa) ----
-// O CARTAZ EM FOCO com os ajustes de foco: expande (1,08 e sombra) so com
-// "Expandir" ligado, rebordo com "Borda no cartaz", e o brilho de borda do
-// efeito de profundidade.
-static float ajPreviaFoco(float x, float y, float w) {
-  float cw = 148, ch = 222, gap = 22, x0 = x + (w - 3 * cw - 2 * gap) * 0.5f, raio = ajustes_raio_poster_px() * cw / 256.0f;
-  int i, exp = ajustes_expandir_poster(), borda = ajustes_borda_foco(), prof = ajustes_profundidade();
-  static const int P[3] = { 13, 12, 15 };
-  float ar, ag, ab;
-  ajustes_acento(&ar, &ag, &ab);
-  ajNeutro((GfxRect){ x, y, w, 330 }, 22, 0.035f, 0.106f, 0.110f, 0.129f, 1);
-  for (i = 0; i < 3; i += 2) ajImg(ajArte(AJA_POSTER, P[i]), (GfxRect){ x0 + i * (cw + gap), y + 54, cw, ch }, raio, 0.7f);
-  { float s = exp ? 1.08f : 1.0f, fw = cw * s, fh = ch * s, fx = x0 + cw + gap - (fw - cw) * 0.5f, fy = y + 54 - (fh - ch) * 0.5f;
-    GfxRect r = { fx, fy, fw, fh };
-    if (exp) gfx_rect((GfxRect){ fx - 20, fy + 6, fw + 40, fh + 44 }, 0, GFX_SOMBRA, 1, 0, 0, 0.5f, 0, 0, 0, 0.55f);
-    ajImg(ajArte(AJA_POSTER, P[1]), r, raio * s, 1);
-    if (prof) gfx_brilho_topo(r, raio * s / fh, 0.3f, 1, 1, 1, 0.16f);
-    if (borda) gfx_anel(r, raio * s / fh, 3, ar, ag, ab, 1); }
-  { const char *t = exp ? "O cartaz em foco cresce e ganha sombra" : "O cartaz em foco fica do mesmo tamanho";
-    TxtLinha l = ajTxtC(TXT_ILHA_APOIO, t, w - 40);
-    txt_desenhar_alpha(l, x + (w - l.w) * 0.5f, y + 330 - 34, 0.45f); }
-  return 330;
-}
 // CONTINUAR ASSISTINDO: tres titulos na forma escolhida, com o progresso.
 static float ajPreviaContinuar(float x, float y, float w) {
   int est = ajustes_cw_estilo(), lig2 = ajustes_cw_ligado(), i;
@@ -611,27 +564,6 @@ static float ajPreviaContinuar(float x, float y, float w) {
   gfx_sem_recorte();
   if (!lig2) { TxtLinha l = ajTxt(TXT_AJ_CHIP, "Desligado"); txt_desenhar_alpha(l, x + w - 24 - l.w, y + 22, 0.6f); }
   return H;
-}
-// PAGINA DO TITULO: a arte, o logo, a meta e os botoes, com o veu escolhido.
-static float ajPreviaDetalhe(float x, float y, float w) {
-  float h = w * 304.0f / 540.0f, ar, ag, ab;
-  int ti = ajTinta();
-  ajustes_acento(&ar, &ag, &ab);
-  ajImg(ajArte(AJA_FUNDO, 3), (GfxRect){ x, y, w, h }, 22, 1);
-  gfx_rect((GfxRect){ x, y, w, h }, 0, GFX_VEU, 0, 0, 0, 22.0f / h, 0, 0, 0, 0.6f + 0.4f * valor[AJ_DET_VEU] / 100.0f);
-  ajLogo(ajArte(AJA_LOGO, 3), x + 26, y + 40, 240, 90, 1);
-  { TxtLinha m = ajTxtC(TXT_AJ_MINI14, ajMetaTitulo(3), w - 52); txt_desenhar_alpha(m, x + 26, y + 150, 0.75f); }
-  { TxtLinha l = ajTxtT(TXT_AJ_CHIP, "Reproduzir");
-    float bw = 20 + 16 + 8 + l.w + 20;
-    ajPilulaAcento((GfxRect){ x + 26, y + 182, bw, 44 }, 22, 1);
-    gfx_rect((GfxRect){ x + 46, y + 196, 14, 16 }, 0, GFX_PLAY, 0, 0, 0, 0, ti / 255.0f, ti / 255.0f, ti / 255.0f, 1);
-    txt_desenhar(l, x + 70, y + 182 + (44 - l.h) * 0.5f);
-    if (lig(AJ_DET_TRAILER)) {
-      TxtLinha t = ajTxt(TXT_AJ_CHIP, "Trailer");
-      gfx_cor((GfxRect){ x + 26 + bw + 10, y + 182, t.w + 40, 44 }, 0.5f, 1, 1, 1, 0.14f);
-      txt_desenhar(t, x + 26 + bw + 30, y + 182 + (44 - t.h) * 0.5f);
-    } }
-  return h;
 }
 // CARTAO DO AJUSTE para contas, servicos, dados e acoes: o icone da secao, o
 // nome, o valor atual e o que a linha faz.
@@ -670,25 +602,184 @@ static float ajPreviaIconeApp(float x, float y, float w) {
   return passo * 2.0f;
 }
 
-// A previa da opcao em foco. Devolve a altura usada (0 = sem previa).
+static void aj2MiniFundo(int modo, float x, float y, float w, float a);
+// --- O EFEITO DE CADA OPCAO -----------------------------------------------------
+// O player em miniatura com os controles no tamanho `F` (Tamanho da interface):
+// titulo, barra de tempo, o painel lateral e o botao central crescem juntos.
+static void ajMiniPlayerUi(GfxRect r, float F, float a) {
+  float k = r.w / 640.0f, m = 32.0f * k, u = k * F;
+  ajImg(ajArte(AJA_FUNDO, 7), r, 12.0f * r.w / 280.0f, a);
+  gfx_recorte(r.x, r.y, r.w, r.h);
+  gfx_veu_css((GfxRect){ r.x, r.y + r.h * 0.4f, r.w, r.h * 0.6f }, 0, 0, 1.0f, 0.85f * a);
+  { float pw = 170 * u, ph = 200 * u, px = r.x + r.w - m - pw, py = r.y + m;
+    int i;
+    ajCenaVidro((GfxRect){ px, py, pw, ph }, 18 * u, a);
+    for (i = 0; i < 4; i++) {
+      float by = py + 22 * u + i * 42 * u;
+      if (by + 10 * u > py + ph) break;
+      if (i == 1) gfx_cor((GfxRect){ px + 10 * u, by - 10 * u, pw - 20 * u, 34 * u }, 0.5f, 1, 1, 1, 0.12f * a);
+      gfx_cor((GfxRect){ px + 22 * u, by, (i == 1 ? 110 : 90) * u, 12 * u }, 0.5f, 0.953f, 0.949f, 0.937f, (i == 1 ? 0.85f : 0.45f) * a);
+    } }
+  { float d = 70 * u;
+    gfx_cor((GfxRect){ r.x + (r.w - d) * 0.5f - 60 * k, r.y + r.h * 0.42f - d * 0.5f, d, d }, 0.5f, 1, 1, 1, 0.9f * a);
+    gfx_icone((GfxRect){ r.x + (r.w - d) * 0.5f - 60 * k + d * 0.3f, r.y + r.h * 0.42f - d * 0.2f, d * 0.4f, d * 0.4f }, "aj_play", 0.08f, 0.08f, 0.09f, a); }
+  { float by = r.y + r.h - m - 6 * u;
+    ajTextoMini(ajTituloN(7), 24 * u, 1, r.x + m, by - 24 * u - 24 * u * 1.2f, 243, 242, 239, a);
+    gfx_cor((GfxRect){ r.x + m, by, r.w - 2 * m, 6 * u }, 0.5f, 1, 1, 1, 0.25f * a);
+    gfx_cor((GfxRect){ r.x + m, by, (r.w - 2 * m) * 0.38f, 6 * u }, 0.5f, 0.953f, 0.949f, 0.937f, a); }
+  gfx_sem_recorte();
+}
+// Uma faixa da tela de Ajustes no tamanho `F` (Tamanho dos Ajustes): quanto
+// maior, menos linhas cabem na ilha. Cartao de 180x300.
+static void ajMiniAjustesUi(GfxRect r, float F, float a) {
+  static const int OPS[8] = { AJ_TEMA, AJ_FUNDO, AJ_COR_LOGO, AJ_VIDRO, AJ_FONTE_UI, AJ_TAMANHO_UI, AJ_ANIM, AJ_RELOGIO };
+  float k = r.w / 180.0f, u = k * F * 1.15f, ix = r.x + 10 * k, iy = r.y + 10 * k, iw = r.w - 20 * k, ih = r.h - 20 * k;
+  float y, lh = 40 * u;
+  int i;
+  ajImg(ajFundoArte(), r, 14 * k, a);
+  gfx_cor(r, 14 * k / r.h, 0.031f, 0.031f, 0.039f, 0.35f * a);
+  gfx_recorte(r.x, r.y, r.w, r.h);
+  ajCenaVidro((GfxRect){ ix, iy, iw, ih }, 16 * k, a);
+  ajTextoMini(i18n("Aparência"), 18 * u, 1, ix + 12 * k, iy + 12 * k, 243, 242, 239, a);
+  y = iy + 12 * k + 18 * u * 1.2f + 10 * k;
+  for (i = 0; i < 8 && y + lh <= iy + ih - 6 * k; i++) {
+    TxtEstilo e = ajEstiloPxS(14 * u, i == 1);
+    TxtLinha l = txt_linha_corta(e, rotuloOpcao(OPS[i]), AJ_TX, iw - 24 * k);
+    if (i == 1) gfx_cor((GfxRect){ ix + 6 * k, y, iw - 12 * k, lh }, 0.5f, 1, 1, 1, 0.12f * a);
+    txt_desenhar_alpha(l, ix + 14 * k, y + (lh - l.h) * 0.5f, (i == 1 ? 1.0f : 0.7f) * a);
+    y += lh + 2 * k;
+  }
+  gfx_sem_recorte();
+}
+// O rotulo do valor no canto do cartao de uma escolha.
+static void ajRotuloValor(int op, int v, float x, float y, float s, float a) {
+  char t[96];
+  TxtEstilo e = ajEstiloPxS(14 * s, 1);
+  TxtLinha l;
+  uxValorTexto(op, v, t, sizeof t);
+  l = txt_linha(e, t, 243, 242, 239, 255);
+  ajCenaVidro((GfxRect){ x, y, l.w + 24 * s, l.h + 12 * s }, (l.h + 12 * s) * 0.5f, a);
+  txt_desenhar_alpha(l, x + 12 * s, y + 6 * s, a);
+}
+// TAMANHO DA INTERFACE: as quatro telas do player lado a lado, a escolhida
+// acesa e com o anel do acento.
+static float ajPreviaTamanhoUi(int op, float x, float y, float w) {
+  static const float F[4] = { 1.0f, 1.2f, 1.3f, 1.5f };
+  float s = w / 640.0f, h = w * 9.0f / 16.0f, tw = 284 * s, th = tw * 9.0f / 16.0f, gx = 16 * s, gy = 14 * s;
+  float x0 = x + (w - 2 * tw - gx) * 0.5f, y0 = y + (h - 2 * th - gy) * 0.5f, ar, ag, ab;
+  int n = nValores(op), sel = valor[op], k;
+  ajustes_acento(&ar, &ag, &ab);
+  if (n > 4) n = 4;
+  ajCenaArte(ajArte(AJA_FUNDO, 7), (GfxRect){ x, y, w, h }, 22, 0.72f);
+  for (k = 0; k < n; k++) {
+    GfxRect r = { x0 + (k % 2) * (tw + gx), y0 + (k / 2) * (th + gy), tw, th };
+    ajMiniPlayerUi(r, F[k], 1);
+    if (k != sel) gfx_cor(r, 12.0f * r.w / 280.0f / r.h, 0.031f, 0.031f, 0.039f, 0.5f);
+    ajRotuloValor(op, k, r.x + 10 * s, r.y + 10 * s, s, k == sel ? 1.0f : 0.7f);
+    if (k == sel) gfx_anel_fora(r, 12.0f * r.w / 280.0f / r.h, 3 * s, 3 * s, ar, ag, ab, 1);
+  }
+  return h;
+}
+// TAMANHO DOS AJUSTES: tres faixas da tela de Ajustes em 80, 90 e 100%.
+static float ajPreviaTamanhoAjustes(int op, float x, float y, float w) {
+  static const float F[3] = { 0.8f, 0.9f, 1.0f };
+  // Os cartoes ficam no alto: embaixo, a direita, mora o segmentado 80/90/100.
+  float s = w / 640.0f, h = w * 9.0f / 16.0f, cw = 184 * s, ch = 236 * s, g = 20 * s;
+  float x0 = x + (w - 3 * cw - 2 * g) * 0.5f, y0 = y + 22 * s, ar, ag, ab;
+  int n = nValores(op), sel = valor[op], k;
+  ajustes_acento(&ar, &ag, &ab);
+  if (n > 3) n = 3;
+  ajCenaArte(ajArte(AJA_FUNDO, 9), (GfxRect){ x, y, w, h }, 22, 0.72f);
+  for (k = 0; k < n; k++) {
+    GfxRect r = { x0 + k * (cw + g), y0, cw, ch };
+    ajMiniAjustesUi(r, F[k], 1);
+    if (k != sel) gfx_cor(r, 14 * s / r.h, 0.031f, 0.031f, 0.039f, 0.5f);
+    // Sem rotulo no cartao: o segmentado logo abaixo diz 80/90/100 na mesma ordem.
+    if (k == sel) gfx_anel_fora(r, 14 * s / r.h, 3 * s, 3 * s, ar, ag, ab, 1);
+  }
+  return h;
+}
+// FONTE DA INTERFACE: "Aa" e um titulo na fonte escolhida, e a lista das
+// fontes, cada uma escrita nela mesma.
+static float ajPreviaFonte(int op, float x, float y, float w) {
+  float s = w / 640.0f, h = w * 9.0f / 16.0f, ar, ag, ab;
+  int n = nValores(op), sel = valor[op], k;
+  ajustes_acento(&ar, &ag, &ab);
+  if (sel < 0 || sel >= TXT_FAMILIA_N) sel = 0;
+  ajCenaArte(ajArte(AJA_FUNDO, 9), (GfxRect){ x, y, w, h }, 22, 0.3f);
+  ajCenaVidro((GfxRect){ x + 28 * s, y + 28 * s, w - 56 * s, h - 56 * s }, 24 * s, 1);
+  { TxtLinha l = txt_linha_familia(ajEstiloPxS(96 * s, 1), "Aa", 243, 242, 239, 255, (TxtFamilia)sel);
+    txt_desenhar(l, x + 56 * s, y + 52 * s);
+    l = txt_linha_corta_familia(ajEstiloPxS(24 * s, 1), ajTituloN(9), 243, 242, 239, 255, 250 * s, (TxtFamilia)sel);
+    txt_desenhar(l, x + 58 * s, y + 200 * s);
+    l = txt_linha_corta_familia(ajEstiloPxS(14 * s, 0), ajMetaTitulo(9), 243, 242, 239, 255, 250 * s, (TxtFamilia)sel);
+    txt_desenhar_alpha(l, x + 58 * s, y + 240 * s, 0.6f); }
+  if (n > TXT_FAMILIA_N) n = TXT_FAMILIA_N;
+  for (k = 0; k < n; k++) {
+    char t[96];
+    float ly = y + (52 + k * 44) * s;
+    TxtLinha l;
+    uxValorTexto(op, k, t, sizeof t);
+    l = txt_linha_corta_familia(ajEstiloPxS(20 * s, k == sel), t, 243, 242, 239, 255, 220 * s, (TxtFamilia)k);
+    if (k == sel) {
+      gfx_cor((GfxRect){ x + 340 * s, ly - 6 * s, 244 * s, 40 * s }, 0.5f, 1, 1, 1, 0.10f);
+      gfx_cor((GfxRect){ x + 354 * s, ly + 14 * s - 4 * s, 8 * s, 8 * s }, 0.5f, ar, ag, ab, 1);
+    }
+    txt_desenhar_alpha(l, x + 372 * s, ly + 14 * s - l.h * 0.5f, k == sel ? 1.0f : 0.55f);
+  }
+  return h;
+}
+
+// As previas em cartao (altura propria): ficam no meio do quadro 16:9, sobre a
+// arte da categoria escurecida, para a coluna ter sempre o mesmo quadro.
+static float ajPreviaCarta(int op, float x, float y, float w) {
+  switch (op) {
+    case AJ_ICONE_APP: return ajPreviaIconeApp(x, y, w);
+    case AJ_TRAKT: case AJ_SIMKL: return ajPreviaServico(op, x, y, w);
+    case AJ_ENVIAR_LOG: case AJ_VER_REGISTRO: case AJ_ENVIO_AUTO:
+      registro_pacote(x, y, w, 300, 9, i18n("últimos 200 KB"), 1); return 300;
+    case AJ_CW_LIGADO: case AJ_CW_OK: case AJ_CW_ESTILO: case AJ_CW_THUMB: case AJ_CW_BLUR_PROX:
+    case AJ_CW_ORDEM: case AJ_CW_NAO_EXIBIDOS: case AJ_CW_FURTHEST: case AJ_CW_CONCLUIDO:
+      return ajPreviaContinuar(x, y, w);
+    case AJ_ESPACO: case AJ_TEX_MB: return ajPainelMemoria(x, y, w);
+    default: return -1;
+  }
+}
+static float ajPreviaEmQuadro(int op, float x, float y, float w) {
+  static int cOp = -1, cW, cV, cE, cVid;
+  static float cH;
+  float box = w * 9.0f / 16.0f, pad = 28.0f * w / 640.0f, h;
+  int sec = uxSecaoDe(op);
+  if (cOp != op || cW != (int)w || cV != valor[op] || cE != valor[AJ_CW_ESTILO] || cVid != ajVid()) {
+    float g = gfx_opacidade_grupo;   // mede sem aparecer
+    gfx_opacidade_grupo = 0;
+    cH = ajPreviaCarta(op, x + pad, y, w - 2 * pad);
+    gfx_opacidade_grupo = g;
+    cOp = op; cW = (int)w; cV = valor[op]; cE = valor[AJ_CW_ESTILO]; cVid = ajVid();
+  }
+  h = cH;
+  if (h < 0) return -1;
+  if (h > box - 2 * pad) return ajPreviaCarta(op, x, y, w);   // alta: ocupa a largura toda
+  ajCenaArte(ajArte(AJA_FUNDO, ajCenaArteN(sec)), (GfxRect){ x, y, w, box }, 22, 0.62f);
+  // Com o segmentado no canto de baixo (ajDesenharInspetor), o cartao sobe.
+  ajPreviaCarta(op, x + pad, y + (ajSegmentada(op) ? pad : (box - h) * 0.5f), w - 2 * pad);
+  return box;
+}
+
+// A previa da opcao em foco: a do efeito dela quando existe; senao a imagem
+// da categoria (nunca o icone da opcao nem uma cena de outra categoria).
 static float ajPrevia(int op, float x, float y, float w) {
   float h = -1;
-  int anterior = ajVisualSemFoto;
-  ajVisualSemFoto = 1;
   switch (op) {
-    case AJ_ICONE_APP: h = ajPreviaIconeApp(x,y,w); break;
-    case AJ_HOME_LAYOUT: h = ajPreviaLayout(x,y,w); break;
-    case AJ_LARGURA_DP: case AJ_RAIO_DP: h = ajPreviaCartaz(op,x,y,w); break;
-    case AJ_ESPACO: case AJ_TEX_MB: h = ajPainelMemoria(x,y,w); break;
-    case AJ_TEMA: case AJ_COR_LOGO: h = ajPreviaCor(x,y,w); break;
-    case AJ_QUALIDADE: case AJ_DV: case AJ_ATMOS: h = ajPreviaPlayer(x,y,w); break;
-    case AJ_TRAKT: case AJ_SIMKL: h = ajPreviaServico(op,x,y,w); break;
-    // O fim do log de verdade, no mesmo mono do painel (mockup quadro 7).
-    case AJ_ENVIAR_LOG: case AJ_VER_REGISTRO: case AJ_ENVIO_AUTO:
-      registro_pacote(x,y,w,300,9,i18n("últimos 200 KB"),1); h=300; break;
-    default: break;
+    case AJ_HOME_LAYOUT: h = ajPreviaLayout(x, y, w); break;
+    case AJ_LARGURA_DP: case AJ_RAIO_DP: h = ajPreviaCartaz(op, x, y, w); break;
+    case AJ_TEMA: case AJ_COR_LOGO: h = ajPreviaCor(x, y, w); break;
+    case AJ_FUNDO: aj2MiniFundo(valor[AJ_FUNDO], x, y, w, 1); h = w * 9.0f / 16.0f; break;
+    case AJ_TAMANHO_UI: h = ajPreviaTamanhoUi(op, x, y, w); break;
+    case AJ_TAMANHO_AJUSTES: h = ajPreviaTamanhoAjustes(op, x, y, w); break;
+    case AJ_FONTE_UI: h = ajPreviaFonte(op, x, y, w); break;
+    default: h = ajPreviaEmQuadro(op, x, y, w); break;
   }
-  ajVisualSemFoto = anterior;
   return h >= 0 ? h : ajVisualCena(uxSecaoDe(op), op, x, y, w);
 }
 
