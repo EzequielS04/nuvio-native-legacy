@@ -1,5 +1,9 @@
 # Roadmap geral do Nuvio Native Legacy
 
+## Planejamento vigente — 03/10/2026
+
+A1.7.4 já está publicada. O plano atual para integrar, otimizar e entregar a1.8 está em [releases/1.8.0/PLANO.md](releases/1.8.0/PLANO.md), com [inventário Git](releases/1.8.0/INVENTARIO.md). As etapas/versões abaixo são o registro histórico de02/10 e não definem o estado atual.
+
 Atualizado em 02/10/2026 21:39 BRT. Planejamento local sobre `release/1.7.2`, com candidata compilada de `b71471bc`. Este é o mapa entre versões; a auditoria detalhada de logs, branches e sessões fica em [releases/1.7.2/ROADMAP.md](releases/1.7.2/ROADMAP.md).
 
 O dono rejeitou o mockup da ilha e pediu continuidade no roadmap. As quatro funcionalidades daquele mockup saem da fila. A ilha já integrada e seu bugfix de isolamento por conta/perfil permanecem. Não há novo desenho da ilha aprovado.
