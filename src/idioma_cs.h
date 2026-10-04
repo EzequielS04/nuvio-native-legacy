@@ -4039,6 +4039,8 @@
   T("viu", "viděl(a)"),
   T("viu o que você mandou", "viděl(a), co jste poslali"),
   T("viu · gostou", "viděl(a) · líbilo se"),
+  T("viu · mais ou menos", "viděl(a) · ušlo to"),
+  T("viu · não gostou", "viděl(a) · nelíbilo se"),
   T("vocês gostaram de %d títulos iguais", "oběma se líbilo %d stejných titulů"),
   T("vídeo", "video"),
   T("webOS 3", "webOS 3"),

@@ -4039,6 +4039,8 @@
   T("viu", "megnézte"),
   T("viu o que você mandou", "megnézte, amit küldtél"),
   T("viu · gostou", "megnézte · tetszett"),
+  T("viu · mais ou menos", "megnézte · elment"),
+  T("viu · não gostou", "megnézte · nem tetszett"),
   T("vocês gostaram de %d títulos iguais", "%d közös cím tetszett mindkettőtöknek"),
   T("vídeo", "videó"),
   T("webOS 3", "webOS 3"),

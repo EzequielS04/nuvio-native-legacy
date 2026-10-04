@@ -49,6 +49,21 @@ int  recresp_aplicar(RecResp *r, int ev, int reacao, const char *texto, long lon
 // Corpo JSON de POST /v1/rec/resposta para `r`. Devolve o tamanho, 0 se nao coube.
 size_t recresp_json(const RecResp *r, char *dst, size_t tam);
 
+// Funde o estado que o SERVIDOR tem de uma rec recebida (GET /v1/rec) em `r`,
+// para "Assistidas" valer nos outros aparelhos da mesma pessoa:
+//   terminou    rec.terminou (1 = assistida em algum aparelho)
+//   reacao      1 | 0 | -1, ou RECRESP_SEM_REACAO (null)
+//   texto       a mensagem (pode vir vazia)
+//   respondido  epoch da resposta, 0 = nunca respondeu
+// REGRAS: linha com mudanca local NAO enviada (versao > enviada) nao e tocada —
+// o que a pessoa fez aqui vence ate o servidor confirmar. Fora isso o servidor
+// so ACRESCENTA (assistida/respondida nunca voltam atras) e sua reacao/mensagem
+// vence quando `respondido` e mais novo que a ultima mudanca local, ou quando
+// aqui nao ha valor. A linha fundida fica "enviada" (nada a reenviar).
+// Devolve 1 se algo mudou.
+int  recresp_mesclar(RecResp *r, int terminou, int reacao, const char *texto,
+                     long long respondido, long long agora);
+
 // --- estado ----------------------------------------------------------------------
 int  recresp_ler(long long rec, RecResp *saida);   // 1 = ha linha
 int  recresp_assistida(long long rec);
@@ -58,6 +73,10 @@ void recresp_responder(long long rec, int reacao, const char *texto);
 void recresp_pular(long long rec);
 // Sobe a cada mudanca local; quem desenha remonta a lista quando muda.
 unsigned recresp_revisao(void);
+// recresp_mesclar sobre a linha de `rec` (criada se preciso). Nao faz nada para
+// um estado vazio (nem assistida, nem resposta, nem reacao).
+void recresp_do_servidor(long long rec, int terminou, int reacao, const char *texto,
+                         long long respondido);
 
 // --- fio de rede (recomenda.c) ---------------------------------------------------
 // A proxima linha a enviar: copia o corpo e devolve 1, com `rec`/`versao` para

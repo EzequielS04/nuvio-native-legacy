@@ -333,9 +333,49 @@ int main(int argc, char **argv) {
   // --- perfil ---
   desenho = D_PERFIL;
   amigoperfil_abrir("nuvio:pedro");
+  // O perfil do servidor de exemplo, pelo MESMO parse da rede (amigoParse): o
+  // Pedro respondeu duas recs que eu mandei, uma com mensagem curta.
+  { char j[2048];
+    long long t = (long long)time(NULL);
+    snprintf(j, sizeof j,
+      "{\"id\":\"nuvio:pedro\",\"nome\":\"Pedro\",\"grau\":1,\"desde\":%lld,\"origem\":\"codigo\","
+      "\"compartilha\":1,\"mes\":{\"mes\":\"2026-10\",\"seg\":111600,\"filmes\":12,\"series\":4},"
+      "\"gostou\":[{\"imdb\":\"tt0000101\",\"midia\":\"movie\",\"titulo\":\"Project Hail Mary\","
+      "\"poster\":\"deploy/app/art/poster/03.jpg\",\"criado\":%lld}],"
+      "\"recs\":[{\"id\":9,\"imdb\":\"tt0000102\",\"tipo\":\"movie\",\"titulo\":\"Duna: Parte Dois\","
+      "\"poster\":\"deploy/app/art/poster/05.jpg\",\"criado\":%lld,\"estado\":\"reacao\",\"terminou\":1,"
+      "\"reacao\":1,\"resposta\":\"valeu pela dica\",\"respondido\":%lld},"
+      "{\"id\":8,\"imdb\":\"tt0000108\",\"tipo\":\"movie\",\"titulo\":\"A Chegada\","
+      "\"poster\":\"deploy/app/art/poster/17.jpg\",\"criado\":%lld,\"estado\":\"reacao\",\"terminou\":1,"
+      "\"reacao\":0,\"resposta\":\"achei meio lento\",\"respondido\":%lld},"
+      "{\"id\":7,\"imdb\":\"tt0000109\",\"tipo\":\"movie\",\"titulo\":\"Blade Runner 2049\","
+      "\"poster\":\"deploy/app/art/poster/11.jpg\",\"criado\":%lld,\"estado\":\"entregue\",\"reacao\":null,"
+      "\"resposta\":\"\",\"respondido\":0},"
+      "{\"id\":6,\"imdb\":\"tt0000110\",\"tipo\":\"movie\",\"titulo\":\"Sicario\","
+      "\"poster\":\"deploy/app/art/poster/12.jpg\",\"criado\":%lld,\"estado\":\"reacao\",\"terminou\":1,"
+      "\"reacao\":-1,\"resposta\":\"\",\"respondido\":%lld}]}",
+      t - 60 * 86400, t - 3600, t - 2 * 86400, t - 3600, t - 3 * 86400, t - 7200, t - 86400,
+      t - 5 * 86400, t - 1800);
+    assert(amigoParse(j, &amigo));
+    temAmigo = 1; amigoEstado = REC_SOC_OK; }
   quadros(90, NULL);
   snprintf(bmp, sizeof bmp, "%s-perfil-pedro.bmp", saida);
   quadros(1, bmp);
+  // A RESPOSTA DE QUEM RECEBEU (W22): foco na fileira "Voce mandou".
+  { SDL_Event e; int k;
+    memset(&e, 0, sizeof e);
+    e.type = SDL_KEYDOWN;
+    e.key.keysym.sym = SDLK_DOWN;
+    quadros(60, NULL);
+    for (k = 0; k < 3; k++) amigoperfil_evento(&e);
+    quadros(60, NULL);
+    snprintf(bmp, sizeof bmp, "%s-perfil-pedro-resposta.bmp", saida);
+    quadros(1, bmp);
+    e.key.keysym.sym = SDLK_RIGHT;
+    amigoperfil_evento(&e);
+    quadros(60, NULL);
+    snprintf(bmp, sizeof bmp, "%s-perfil-pedro-resposta2.bmp", saida);
+    quadros(1, bmp); }
   amigoperfil_abrir("nuvio:marina");
   quadros(90, NULL);
   snprintf(bmp, sizeof bmp, "%s-perfil-marina.bmp", saida);

@@ -4039,6 +4039,8 @@
   T("viu", "đã xem"),
   T("viu o que você mandou", "đã xem phim bạn gửi"),
   T("viu · gostou", "đã xem · thích"),
+  T("viu · mais ou menos", "đã xem · tạm được"),
+  T("viu · não gostou", "đã xem · không thích"),
   T("vocês gostaram de %d títulos iguais", "cả hai cùng thích %d phim giống nhau"),
   T("vídeo", "video"),
   T("webOS 3", "webOS 3"),

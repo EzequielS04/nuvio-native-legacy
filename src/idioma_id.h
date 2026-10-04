@@ -4039,6 +4039,8 @@
   T("viu", "ditonton"),
   T("viu o que você mandou", "menonton kirimanmu"),
   T("viu · gostou", "ditonton · suka"),
+  T("viu · mais ou menos", "ditonton · biasa saja"),
+  T("viu · não gostou", "ditonton · tidak suka"),
   T("vocês gostaram de %d títulos iguais", "kalian sama-sama menyukai %d judul"),
   T("vídeo", "video"),
   T("webOS 3", "webOS 3"),

@@ -4039,6 +4039,8 @@
   T("viu", "sett"),
   T("viu o que você mandou", "så det du sendte"),
   T("viu · gostou", "sett · likte"),
+  T("viu · mais ou menos", "sett · sånn passe"),
+  T("viu · não gostou", "sett · likte ikke"),
   T("vocês gostaram de %d títulos iguais", "dere likte begge %d av de samme titlene"),
   T("vídeo", "video"),
   T("webOS 3", "webOS 3"),

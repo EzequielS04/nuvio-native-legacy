@@ -4038,6 +4038,8 @@
   T("viu", "a văzut"),
   T("viu o que você mandou", "a văzut ce i-ai trimis"),
   T("viu · gostou", "a văzut · a apreciat"),
+  T("viu · mais ou menos", "a văzut · așa și așa"),
+  T("viu · não gostou", "a văzut · nu i-a plăcut"),
   T("vocês gostaram de %d títulos iguais", "v-au plăcut amândurora %d titluri"),
   T("vídeo", "video"),
   T("webOS 3", "webOS 3"),

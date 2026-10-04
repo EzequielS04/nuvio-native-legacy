@@ -4038,6 +4038,8 @@
   T("viu", "посмотрел"),
   T("viu o que você mandou", "посмотрел то, что вы отправили"),
   T("viu · gostou", "посмотрел · понравилось"),
+  T("viu · mais ou menos", "посмотрел · так себе"),
+  T("viu · não gostou", "посмотрел · не понравилось"),
   T("vocês gostaram de %d títulos iguais", "вам обоим понравилось %d одинаковых названий"),
   T("vídeo", "видео"),
   T("webOS 3", "webOS 3"),

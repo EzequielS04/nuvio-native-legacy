@@ -4039,6 +4039,8 @@
   T("viu", "гледа"),
   T("viu o que você mandou", "гледа това, което изпратихте"),
   T("viu · gostou", "гледа · хареса"),
+  T("viu · mais ou menos", "гледа · горе-долу"),
+  T("viu · não gostou", "гледа · не хареса"),
   T("vocês gostaram de %d títulos iguais", "и на двамата ви харесаха %d еднакви заглавия"),
   T("vídeo", "видео"),
   T("webOS 3", "webOS 3"),

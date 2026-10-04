@@ -4038,6 +4038,8 @@
   T("viu", "vu"),
   T("viu o que você mandou", "a vu ce que vous avez envoyé"),
   T("viu · gostou", "vu · aimé"),
+  T("viu · mais ou menos", "vu · moyen"),
+  T("viu · não gostou", "vu · n'a pas aimé"),
   T("vocês gostaram de %d títulos iguais", "vous avez aimé %d titres en commun"),
   T("vídeo", "vidéo"),
   T("webOS 3", "webOS 3"),

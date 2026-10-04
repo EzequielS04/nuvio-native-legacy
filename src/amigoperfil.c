@@ -272,6 +272,22 @@ void amigoperfil_desenhar(Uint32 agora) {
       txt_desenhar_alpha(l, lx, 988.0f, a); }
   }
 
+  // A RESPOSTA DE QUEM RECEBEU, no cartaz de "Você mandou" em foco: o que ela
+  // fez com o título e, se escreveu, a mensagem curta (so texto limpo, entre aspas).
+  if (fila == AP_MANDOU && col < perf.nMandou) {
+    const SvEnviada *m = &perf.mandou[col];
+    if (m->estado == SV_REC_VIU || m->respondido > 0) {
+      snprintf(buf, sizeof buf, "%s: %s", perf.a.nome, socialvis_enviada_rotulo(m, NULL));
+      { TxtLinha l = txt_linha_corta(TXT_MINI, buf, 188, 185, 198, 255, lw);
+        txt_desenhar_alpha(l, lx, 956.0f, a); }
+      if (m->resposta[0]) {
+        snprintf(buf, sizeof buf, "\xe2\x80\x9c%s\xe2\x80\x9d", m->resposta);
+        { TxtLinha l = txt_linha_corta(TXT_MINI, buf, 247, 192, 138, 255, lw);
+          txt_desenhar_alpha(l, lx, 988.0f, a); }
+      }
+    }
+  }
+
   // --- as tres fileiras ---
   for (f = 0; f < AP_NFILAS; f++) {
     float y = AP_FILA_TOPO + (float)f * AP_FILA_PASSO;
@@ -300,14 +316,9 @@ void amigoperfil_desenhar(Uint32 agora) {
         const SvEnviada *m = &perf.mandou[c];
         cartaz(r, m->poster, fc, a);
         // O ESTADO, que e o motivo desta fileira existir.
-        { const char *st = m->estado == SV_REC_VIU
-                             ? (m->reacao == SV_REAC_GOSTOU ? "viu · gostou" : "viu")
-                         : m->estado == SV_REC_COMECOU ? "começou"
-                         : m->estado == SV_REC_REAGIU ? (m->reacao == SV_REAC_GOSTOU ? "Gostou"
-                                                       : m->reacao == SV_REAC_NAO ? "Não gostou" : "Mais ou menos")
-                         : m->estado == SV_REC_ABRIU ? "abriu" : "ainda não viu";
-          int ok = m->estado == SV_REC_VIU;
-          legenda(x, y + AP_PH + 10.0f, i18n(st),
+        { int ok = 0;
+          const char *st = socialvis_enviada_rotulo(m, &ok);
+          legenda(x, y + AP_PH + 10.0f, st,
                   ok ? 111 : 160, ok ? 207 : 158, ok ? 151 : 170, a); }
       } else {
         const SvEvento *e = f == AP_ASSISTINDO ? &perf.assistindo[c] : &perf.gostou[c];

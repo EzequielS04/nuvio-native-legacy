@@ -48,6 +48,12 @@ typedef struct {
   const char *rot, *icone;
   int confirmar;
   const char *kicker, *pergunta, *texto;
+  // 1 = esta extra TOMA O LUGAR de "Marcar como assistido" e tambem o faz (so
+  // marca, nunca desmarca; ja marcado no historico so passa adiante). A extra
+  // so sai em ctx_pediu_extra() depois que o historico confirma — falhou: o menu
+  // fica com o erro e o mesmo OK tenta de novo. Sem historico possivel
+  // (serie fora do catalogo, sem IMDb) ela e so a propria extra.
+  int juntaAssistido;
 } CtxExtra;
 void ctx_abrir_social(const CatItem *titulo, const CtxExtra *extras, int n);
 int  ctx_pediu_extra(void);

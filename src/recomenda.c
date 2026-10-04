@@ -1559,6 +1559,44 @@ static void lerItem(const char *p, const char *f, RecItem *r) {
   if (!r->deNome[0] && r->de[0]) rec_nome_exibicao(r->deNome, sizeof r->deNome, "", r->de);
 }
 
+// O ESTADO "ASSISTIDA"/RESPOSTA QUE O SERVIDOR TEM (GET /v1/rec: campos
+// terminou/reacao/resposta/respondido em cada item e o vetor `respostas` com o
+// estado de TODAS as recs, ids velhos inclusive). Funde em recresp.c: o que a
+// pessoa fez aqui e ainda nao foi enviado vence; fora isso o servidor acrescenta.
+// Servidor antigo nao manda nada disto e nada acontece.
+static void fundirRespostaDoServidor(const char *p, const char *f, unsigned ger) {
+  long long id = (long long)js_num(p, f, "id", 0.0);
+  int terminou = (int)js_num(p, f, "terminou", 0.0) > 0;
+  int reacao = (int)js_num(p, f, "reacao", (double)RECRESP_SEM_REACAO);
+  long long resp = (long long)js_num(p, f, "respondido", 0.0);
+  char texto[RECRESP_TEXTO_MAX + 4] = "";
+  if (id <= 0) return;
+  js_texto(p, f, "resposta", texto, sizeof texto);
+  SDL_LockMutex(mtx);
+  if (ger == geracao) recresp_do_servidor(id, terminou, reacao, texto, resp);
+  SDL_UnlockMutex(mtx);
+}
+static void fundirRespostasJson(const char *r, unsigned ger) {
+  const char *p = js_array(r, NULL, "respostas");
+  while (p && *p == '{') {
+    const char *f = js_fim(p);
+    fundirRespostaDoServidor(p, f, ger);
+    p = js_prox(f);
+  }
+  p = js_array(r, NULL, "itens");
+  while (p && *p == '{') {
+    const char *f = js_fim(p);
+    fundirRespostaDoServidor(p, f, ger);
+    p = js_prox(f);
+  }
+}
+// Para o teste (tests/recresp.c): o mesmo caminho da rede, sem rede.
+void recomenda_fundir_respostas(const char *corpo) {
+  unsigned ger;
+  SDL_LockMutex(mtx); ger = geracao; SDL_UnlockMutex(mtx);
+  fundirRespostasJson(corpo, ger);
+}
+
 // GET /v1/rec?desde=<cursor>, com If-None-Match. Devolve 1 quando falou com o
 // servidor (inclusive no 304, que e a resposta NORMAL e nao uma falha).
 static int lerRecs(const char **cab) {
@@ -1615,6 +1653,7 @@ static int lerRecs(const char **cab) {
     }
     p = js_prox(f);
   }
+  fundirRespostasJson(r, ger);
   SDL_LockMutex(mtx);
   // Saiu da conta enquanto isto estava no ar: nada do que voltou e desta
   // pessoa, e gravar seria desfazer o logout.
@@ -2509,6 +2548,11 @@ static int amigoParse(const char *r, RecAmigo *a) {
     a->recs[a->nRecs].estado = estadoRecDe(est);
     a->recs[a->nRecs].terminou = (int)js_num(p, f, "terminou", 0.0) > 0 ||
                                 a->recs[a->nRecs].estado == REC_REC_TERMINOU;
+    // A resposta direta de quem recebeu (migracao 007): so texto limpo e o
+    // instante. Servidor sem ela: campos ausentes = sem resposta.
+    js_texto(p, f, "resposta", a->recs[a->nRecs].resposta, sizeof a->recs[0].resposta);
+    semTab(a->recs[a->nRecs].resposta);
+    a->recs[a->nRecs].respondido = (long long)js_num(p, f, "respondido", 0.0);
     if (a->recs[a->nRecs].estado == REC_REC_REAGIU) {
       a->recs[a->nRecs].temReacao = 1;
       a->recs[a->nRecs].reacao = (int)js_num(p, f, "reacao", 0.0);

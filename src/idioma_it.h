@@ -4039,6 +4039,8 @@
   T("viu", "visto"),
   T("viu o que você mandou", "ha visto quello che gli hai mandato"),
   T("viu · gostou", "visto · piaciuto"),
+  T("viu · mais ou menos", "visto · così così"),
+  T("viu · não gostou", "visto · non gli è piaciuto"),
   T("vocês gostaram de %d títulos iguais", "vi sono piaciuti %d titoli uguali"),
   T("vídeo", "video"),
   T("webOS 3", "webOS 3"),

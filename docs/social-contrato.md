@@ -77,6 +77,35 @@ enviado pelo fio de `recomenda.c`). Fontes do gesto: "Ja assisti" no menu do
 OK longo da aba Amigos, o fim no player (`atividade.c`, mesmo "fim" do resto do
 app) e o cartao "O que achou?" dos creditos (`reacao.c`, passo 2: mensagem).
 
+### GET /v1/rec: o estado de "Assistidas" nos outros aparelhos (W22)
+
+Sem migracao nova: le `rec.terminou`, `rec.reacao`, `rec.resposta`,
+`rec.respondido` (migracoes 006 e 007). Resposta (campos novos em **negrito**;
+cliente antigo ignora, cliente novo tolera a ausencia):
+
+```
+{"cursor": N, "novas": N,
+ "itens": [{... campos de sempre ..., "terminou":0|1, "reacao":1|0|-1|null,
+            "resposta":"", "respondido":0}],
+ "respostas": [{"id":<rec>, "terminou":0|1, "reacao":1|0|-1|null,
+                "resposta":"", "respondido":<epoch>|0}]}
+```
+
+- `respostas` traz o estado de TODA rec da pessoa que ja foi assistida
+  (`terminou=1`), respondida (`respondido>0`) ou reagida, ids velhos inclusive —
+  `?desde=` so entrega ids novos, e uma rec respondida em outra TV tem id velho.
+  Ate 120, mais nova primeiro, sem cartaz/titulo (a TV ja tem a rec).
+- O ETag passou a `"<n>-<maiorId>-<naoVistas>-<respostas>.<sig>"`: responder em
+  outra TV invalida o 304. A primeira sondagem depois do deploy e um 200.
+- Cliente (`recomenda.c` -> `recresp_do_servidor`): funde no estado local. Linha
+  com mudanca local ainda nao enviada (`versao > enviada`) nao e tocada; fora
+  isso o servidor so acrescenta (assistida/respondida nunca voltam atras) e a
+  reacao/mensagem dele vence se `respondido` for mais novo que a ultima mudanca
+  local ou se aqui nao houver valor. O que veio do servidor nao e reenviado.
+- `GET /v1/amigo` (quem MANDOU ve a resposta): `recs[].resposta` e
+  `recs[].respondido` ja existiam; o perfil do amigo agora os mostra (cartaz
+  "viu · gostou / mais ou menos / nao gostou" e, em foco, a mensagem).
+
 ## GET /v1/feed?desde=<id>
 
 Eventos `inicio|fim|abandono|reacao|salvo` de quem eu posso ver, mais novo

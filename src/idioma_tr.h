@@ -4039,6 +4039,8 @@
   T("viu", "izledi"),
   T("viu o que você mandou", "gönderdiğini izledi"),
   T("viu · gostou", "izledi · beğendi"),
+  T("viu · mais ou menos", "izledi · fena değil"),
+  T("viu · não gostou", "izledi · beğenmedi"),
   T("vocês gostaram de %d títulos iguais", "ikiniz de %d aynı başlığı beğendiniz"),
   T("vídeo", "video"),
   T("webOS 3", "webOS 3"),
