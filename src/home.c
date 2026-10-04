@@ -3149,7 +3149,10 @@ static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
       // O LOGO DO TITULO acompanha a ARTE, nao o texto. MEDIDO: 205 ms depois
       // da tecla a arte antiga ainda estava a 85% e o logo JA tinha sumido por
       // inteiro; ele so reaparece no mesmo quadro em que a arte nova entra.
-      gfx_rect(rl, tlogo, m, 0, 0, 0, 0.0f, 1, 1, 1, aTexto * heroEntra); }
+      // OLED: com a opcao ligada o logo some enquanto o trailer toca (cin = 1) em vez
+      // de ficar parado no canto; volta quando o trailer para.
+      gfx_rect(rl, tlogo, m, 0, 0, 0, 0.0f, 1, 1, 1,
+               aTexto * heroEntra * (ajustes_esconder_logo_trailer() ? 1.0f - cin : 1.0f)); }
   } else if (mostraNomeLogo && !caption) {
     // .legacy-webos .home-hero-title-text: 76px (components.css:19164), nao os
     // 56 do tema padrao.
@@ -3167,7 +3170,7 @@ static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
       if (cin > 0.005f) {
         TxtLinha t2 = txt_linha_corta(TXT_TITULO2, ci->titulo, 255, 255, 255, 255,
                                       NV_DETW_LOGO_MAXW * 0.5f);
-        txt_desenhar_alpha(t2, x, trailercinema_base() - t2.h, aTexto * cin);
+        txt_desenhar_alpha(t2, x, trailercinema_base() - t2.h, ajustes_esconder_logo_trailer() ? 0.0f : aTexto * cin);
       }
     }
   }

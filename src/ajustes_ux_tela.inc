@@ -58,6 +58,7 @@ static const Item TELA[] = {
     ROT("Som e imagem"),
       OPC(AJ_HERO_TRAILER_SOM), OPC(AJ_DET_TRAILER_SOM), OPC(AJ_TRAILER_FONTE),
       OPC(AJ_HERO_TRAILER_ESPERA), OPC(AJ_TRAILER_QUAL), OPC(AJ_TRAILER_ASPECTO),
+      OPC(AJ_LOGO_TRAILER),
 
   SEC("Aparência", "Cor, transparência, fonte, animações e relógio", "aj_palette"),
     OPC(AJ_TEMA), OPC(AJ_FUNDO), OPC(AJ_COR_LOGO), OPC(AJ_VIDRO), OPC(AJ_FONTE_UI),
