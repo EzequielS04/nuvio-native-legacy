@@ -1947,7 +1947,7 @@
   T("Mover", "Flyt"),
   T("Mover o bloco", "Flyt blokken"),
   T("Mover para categoria", "Flyt til kategori"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Ændrer kun størrelsen på Indstillinger på dette TV. Standard: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Ændrer kun størrelsen på Indstillinger på dette TV. Standard: 80%."),
   T("Mudar", "Skift"),
   T("Mude quando quiser", "Ændr det, når du vil"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "For mange forsøg. Vent et minut, og prøv igen."),

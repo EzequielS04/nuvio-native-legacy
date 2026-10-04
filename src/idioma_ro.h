@@ -1946,7 +1946,7 @@
   T("Mover", "Mută"),
   T("Mover o bloco", "Mută blocul"),
   T("Mover para categoria", "Mută în categorie"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Schimbă doar dimensiunea setărilor pe acest televizor. Implicit: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Schimbă doar dimensiunea setărilor pe acest televizor. Implicit: 80%."),
   T("Mudar", "Schimbă"),
   T("Mude quando quiser", "Schimbă oricând"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Prea multe încercări. Așteaptă un minut și încearcă din nou."),

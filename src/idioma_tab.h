@@ -1946,7 +1946,7 @@
   { "Mover", "Move" },
   { "Mover o bloco", "Move the block" },
   { "Mover para categoria", "Move to category" },
-  { "Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Changes only the size of Settings on this TV. The default is 90%." },
+  { "Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Changes only the size of Settings on this TV. The default is 80%." },
   { "Mudar", "Change" },
   { "Mude quando quiser", "Change it whenever" },
   { "Muitas tentativas. Espere um minuto e tente de novo.", "Too many attempts. Wait a minute and try again." },

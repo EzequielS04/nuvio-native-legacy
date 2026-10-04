@@ -1947,7 +1947,7 @@
   T("Mover", "Di chuyển"),
   T("Mover o bloco", "Di chuyển khối"),
   T("Mover para categoria", "Chuyển đến danh mục"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Chỉ thay đổi kích thước Cài đặt trên TV này. Mặc định: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Chỉ thay đổi kích thước Cài đặt trên TV này. Mặc định: 80%."),
   T("Mudar", "Đổi"),
   T("Mude quando quiser", "Đổi bất cứ lúc nào"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Quá nhiều lần thử. Hãy đợi một phút rồi thử lại."),

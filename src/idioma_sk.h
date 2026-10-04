@@ -1947,7 +1947,7 @@
   T("Mover", "Presunúť"),
   T("Mover o bloco", "Presunúť blok"),
   T("Mover para categoria", "Presunúť do kategórie"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Mení iba veľkosť nastavení na tejto TV. Predvolená hodnota: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Mení iba veľkosť nastavení na tejto TV. Predvolená hodnota: 80%."),
   T("Mudar", "Zmeniť"),
   T("Mude quando quiser", "Zmeňte kedykoľvek"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Príliš veľa pokusov. Počkajte minútu a skúste to znova."),

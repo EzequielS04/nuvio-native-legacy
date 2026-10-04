@@ -1947,7 +1947,7 @@
   T("Mover", "Áthelyezés"),
   T("Mover o bloco", "Blokk áthelyezése"),
   T("Mover para categoria", "Áthelyezés kategóriába"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Csak a Beállítások méretét módosítja ezen a TV-n. Alapértelmezés: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Csak a Beállítások méretét módosítja ezen a TV-n. Alapértelmezés: 80%."),
   T("Mudar", "Módosítás"),
   T("Mude quando quiser", "Bármikor megváltoztathatod"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Túl sok próbálkozás. Várj egy percet, és próbáld újra."),

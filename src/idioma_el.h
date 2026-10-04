@@ -1947,7 +1947,7 @@
   T("Mover", "Μετακίνηση"),
   T("Mover o bloco", "Μετακίνηση μπλοκ"),
   T("Mover para categoria", "Μετακίνηση σε κατηγορία"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Αλλάζει μόνο το μέγεθος των Ρυθμίσεων σε αυτήν την TV. Προεπιλογή: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Αλλάζει μόνο το μέγεθος των Ρυθμίσεων σε αυτήν την TV. Προεπιλογή: 80%."),
   T("Mudar", "Αλλαγή"),
   T("Mude quando quiser", "Άλλαξέ το όποτε θέλεις"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Πάρα πολλές προσπάθειες. Περίμενε ένα λεπτό και δοκίμασε ξανά."),

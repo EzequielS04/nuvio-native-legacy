@@ -1947,7 +1947,7 @@
   T("Mover", "Pindahkan"),
   T("Mover o bloco", "Pindahkan blok"),
   T("Mover para categoria", "Pindahkan ke kategori"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Hanya mengubah ukuran Pengaturan di TV ini. Default: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Hanya mengubah ukuran Pengaturan di TV ini. Default: 80%."),
   T("Mudar", "Ubah"),
   T("Mude quando quiser", "Ubah kapan saja"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Terlalu banyak percobaan. Tunggu satu menit lalu coba lagi."),

@@ -1946,7 +1946,7 @@
   T("Mover", "Verschieben"),
   T("Mover o bloco", "Block verschieben"),
   T("Mover para categoria", "In Kategorie verschieben"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Ändert nur die Größe der Einstellungen auf diesem TV. Standard: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Ändert nur die Größe der Einstellungen auf diesem TV. Standard: 80%."),
   T("Mudar", "Ändern"),
   T("Mude quando quiser", "Jederzeit änderbar"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Zu viele Versuche. Warte eine Minute und versuche es erneut."),

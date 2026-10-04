@@ -1947,7 +1947,7 @@
   T("Mover", "Verplaatsen"),
   T("Mover o bloco", "Blok verplaatsen"),
   T("Mover para categoria", "Verplaatsen naar categorie"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Wijzigt alleen de grootte van Instellingen op deze tv. Standaard: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Wijzigt alleen de grootte van Instellingen op deze tv. Standaard: 80%."),
   T("Mudar", "Wijzigen"),
   T("Mude quando quiser", "Wijzig het wanneer je wilt"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Te veel pogingen. Wacht een minuut en probeer opnieuw."),

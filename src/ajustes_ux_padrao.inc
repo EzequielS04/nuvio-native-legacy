@@ -204,4 +204,4 @@
   0, /* app icon: Original */
 
   0, /* Discord action; appended to preserve option indices */
-  1, /* Settings size: 90%, independent of global UI zoom */
+  0, /* Settings size: 80%, independent of global UI zoom */

@@ -1947,7 +1947,7 @@
   T("Mover", "Pomjeri"),
   T("Mover o bloco", "Pomjeri blok"),
   T("Mover para categoria", "Premjesti u kategoriju"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Mijenja samo veličinu postavki na ovom TV-u. Zadano: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Mijenja samo veličinu postavki na ovom TV-u. Zadano: 80%."),
   T("Mudar", "Promijeni"),
   T("Mude quando quiser", "Promijenite kad god želite"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Previše pokušaja. Sačekajte minutu i pokušajte ponovo."),

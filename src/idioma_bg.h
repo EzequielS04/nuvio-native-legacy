@@ -1947,7 +1947,7 @@
   T("Mover", "Премести"),
   T("Mover o bloco", "Премести блока"),
   T("Mover para categoria", "Премести в категория"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Променя само размера на настройките на този телевизор. По подразбиране: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Променя само размера на настройките на този телевизор. По подразбиране: 80%."),
   T("Mudar", "Промени"),
   T("Mude quando quiser", "Променете когато пожелаете"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Твърде много опити. Изчакайте минута и опитайте отново."),

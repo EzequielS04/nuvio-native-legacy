@@ -1947,7 +1947,7 @@
   T("Mover", "移動"),
   T("Mover o bloco", "まとめて移動"),
   T("Mover para categoria", "カテゴリに移動"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "このテレビの設定画面のサイズだけを変更します。初期値は90%です。"),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "このテレビの設定画面のサイズだけを変更します。初期値は80%です。"),
   T("Mudar", "変更"),
   T("Mude quando quiser", "いつでも変更できます"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "試行回数が多すぎます。1 分待ってからもう一度お試しください。"),

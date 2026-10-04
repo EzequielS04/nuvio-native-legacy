@@ -1947,7 +1947,7 @@
   T("Mover", "Perkelti"),
   T("Mover o bloco", "Perkelti bloką"),
   T("Mover para categoria", "Perkelti į kategoriją"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Keičia tik nustatymų dydį šiame TV. Numatytoji reikšmė: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Keičia tik nustatymų dydį šiame TV. Numatytoji reikšmė: 80%."),
   T("Mudar", "Keisti"),
   T("Mude quando quiser", "Pakeiskite bet kada"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Per daug bandymų. Palaukite minutę ir bandykite dar kartą."),

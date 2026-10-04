@@ -331,7 +331,7 @@ typedef enum {
   AJ_VIDRO_OPAC, AJ_VIDRO_FOSCO,
   AJ_ICONE_APP, // append-only: keeps Glass option indices
   AJ_DISCORD,
-  AJ_TAMANHO_AJUSTES, // local, append-only; 80/90/100%, default 90%
+  AJ_TAMANHO_AJUSTES, // local, append-only; 80/90/100%, default 80%
   AJ_N
 } OpcaoId;
 
@@ -1575,7 +1575,7 @@ float ajustes_tamanho_ajustes(void) {
 #ifdef AJUSTES_TESTE
   if (ajEscalaTestePct) return ajEscalaTestePct / 100.0f;
 #endif
-  return v >= 0 && v < 3 ? F[v] : 0.9f;
+  return v >= 0 && v < 3 ? F[v] : 0.8f;
 }
 int ajustes_icone_app(void) { return valor[AJ_ICONE_APP]; }
 int ajustes_saida_player_home(void) { return lig(AJ_RELOGIO) && valor[AJ_SAIDA_PLAYER] == 0; }
@@ -4271,7 +4271,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_GPU_EFEITOS: return "Automático mede a TV nos primeiros segundos e, se ela não der conta, tira os efeitos mais pesados. Completos mantém tudo; Leves tira desfoque e brilho para deixar a navegação mais lisa.";
     case AJ_FONTE_UI: return "Altera a tipografia dos menus. A fonte das legendas é escolhida separadamente no player.";
     case AJ_TAMANHO_UI: return "Aumenta os controles do player, os painéis e os avisos. Os Ajustes têm um tamanho próprio.";
-    case AJ_TAMANHO_AJUSTES: return i18n("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.");
+    case AJ_TAMANHO_AJUSTES: return i18n("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.");
     case AJ_TEMA: return "Cor do botão em foco e das marcas de estado. Os claros levam texto escuro, os profundos texto branco — sempre a 4,5:1 ou mais.";
     case AJ_VIDRO_OPAC: return "Teste: quanto os painéis de vidro deixam a arte aparecer. O valor do meio é o de hoje; menos é mais transparente, mais é mais escuro e fácil de ler.";
     case AJ_VIDRO_FOSCO: return "Teste: põe a arte borrada atrás de cada painel de vidro, como um vidro jateado. Onde não há arte borrada, o vidro fica como sempre.";

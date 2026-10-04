@@ -1947,7 +1947,7 @@
   T("Mover", "移動"),
   T("Mover o bloco", "移動整組"),
   T("Mover para categoria", "移到分類"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "僅更改此電視上設定的大小。預設值為90%。"),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "僅更改此電視上設定的大小。預設值為80%。"),
   T("Mudar", "變更"),
   T("Mude quando quiser", "隨時可以變更"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "嘗試次數過多。請等一分鐘後再試一次。"),

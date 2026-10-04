@@ -1947,7 +1947,7 @@
   T("Mover", "Taşı"),
   T("Mover o bloco", "Bloğu taşı"),
   T("Mover para categoria", "Kategoriye taşı"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Yalnızca bu TV’deki Ayarların boyutunu değiştirir. Varsayılan: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Yalnızca bu TV’deki Ayarların boyutunu değiştirir. Varsayılan: 80%."),
   T("Mudar", "Değiştir"),
   T("Mude quando quiser", "İstediğin zaman değiştir"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Çok fazla deneme. Bir dakika bekleyip tekrar dene."),

@@ -1947,7 +1947,7 @@
   T("Mover", "Przenieś"),
   T("Mover o bloco", "Przenieś blok"),
   T("Mover para categoria", "Przenieś do kategorii"),
-  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 90%.", "Zmienia tylko rozmiar ustawień na tym telewizorze. Domyślnie: 90%."),
+  T("Muda só o tamanho dos Ajustes nesta TV. O padrão é 80%.", "Zmienia tylko rozmiar ustawień na tym telewizorze. Domyślnie: 80%."),
   T("Mudar", "Zmień"),
   T("Mude quando quiser", "Zmień w dowolnym momencie"),
   T("Muitas tentativas. Espere um minuto e tente de novo.", "Zbyt wiele prób. Odczekaj minutę i spróbuj ponownie."),
