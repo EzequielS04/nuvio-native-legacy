@@ -83,6 +83,22 @@ int  reacao_detalhe_abrir(const CatItem *ci);
 // A linha discreta, no canto inferior direito. `a` = alpha da pagina.
 void reacao_detalhe_dica(const CatItem *ci, float a);
 
+// --- aba Amigos: "Ja assisti" numa recomendacao recebida -----------------------
+// O MESMO cartao, modal e sem contagem, centrado em `cx` (o meio do painel; <0
+// = meio da tela). Passo 1: gostei / mais ou menos / nao gostei (vai a quem
+// mandou e vale como a reacao do titulo); passo 2: "Valeu pela dica!",
+// "Escrever mensagem" (teclado de tela) ou "Agora nao". Voltar fecha sem
+// responder — a rec continua assistida. 1 = abriu.
+int  reacao_rec_abrir(long long rec, const char *imdb, const char *titulo, const char *midia,
+                      const char *poster, const char *nome, float cx);
+int  reacao_painel_aberta(void);
+// Quem e dono da tela (o painel) chama os dois por quadro e entrega as teclas a
+// reacao_evento(e, 0) enquanto reacao_painel_aberta().
+void reacao_painel_atualizar(float dt, Uint32 agora);
+void reacao_painel_desenhar(Uint32 agora);
+// 0 = pergunta da reacao, 1 = "mandar uma mensagem?", -1 = fechado. Teste.
+int  reacao_passo(void);
+
 // Para o teste de tela: abre o cartao como no player, com origem opcional.
 void reacao_teste_abrir(const char *imdb, const char *titulo, const char *midia,
                         long long rec, const char *nomeRec, int envia);

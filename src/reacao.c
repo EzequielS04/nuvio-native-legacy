@@ -15,6 +15,8 @@
 #include "trakt.h"
 #include "plrui.h"
 #include "recomenda.h"
+#include "recresp.h"
+#include "teclado.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <stdio.h>
@@ -30,6 +32,14 @@
 
 static const char *const ROTULO[3] = { "Gostei", "Mais ou menos", "Não gostei" };
 static const int VALOR[3] = { REACAO_GOSTEI, REACAO_MAIS_MENOS, REACAO_NAO };
+// O SEGUNDO PASSO, so quando o titulo veio de uma recomendacao (dono, 03/10:
+// "responder para a pessoa se gostou ou nao e mandar uma msg ou nao"). O
+// MESMO cartao, as mesmas pilulas: nada de um segundo cartao empilhado.
+static const char *const ROTULO_MSG[3] = { "Valeu pela dica!", "Escrever mensagem", "Agora não" };
+// O que viaja com "Valeu pela dica!": no alfabeto que o servidor guarda
+// (a-z0-9 e espaco, recresp.h), e a frase traduzida e so a pilula.
+#define MSG_RAPIDA "valeu pela dica"
+#define MSG_ALFABETO "abcdefghijklmnopqrstuvwxyz0123456789 "
 
 // --- regras puras ----------------------------------------------------------------
 
@@ -182,6 +192,13 @@ static struct {
   long long rec;
   int    envia;                  // "vai ver sua resposta" so com envio de verdade
   int    foco;
+  // 0 = gostei/nao gostei; 1 = "mandar uma mensagem?" (so com rec de origem).
+  int    passo;
+  int    escrevendo;             // o teclado de tela esta aberto por este cartao
+  // ABERTO PELA ABA AMIGOS ("Ja assisti", salvospainel.c): modal, sem
+  // contagem, centrado em `cx` (o painel) em vez do canto do player.
+  int    modoPainel;
+  float  cx;
   float  anim, focoA[3];
   Uint32 desde;                  // ultima tecla (ou abertura), para os 8 s
 } c;
@@ -205,9 +222,30 @@ static void abrir(const char *imdb, const char *midia, const char *titulo,
   c.rec = atividade_origem(c.imdb, c.nome, sizeof c.nome);
   c.envia = atividade_envia();
   c.desde = agora;
+  c.cx = -1.0f;
+}
+
+// A RESPOSTA A QUEM MANDOU e direta (POST /v1/rec/resposta, recresp.h): ela
+// sai com o servico compilado, mesmo com a atividade automatica desligada. E
+// isso que torna verdadeira a frase "Ana vai ver sua resposta".
+static int respondeAmigo(void) { return c.rec > 0 && recomenda_ativo(); }
+
+// Fecha o teclado de tela aberto por este cartao (Voltar sintetico: e o unico
+// fechamento que teclado.h oferece, e devolve TECLADO_CANCELOU).
+static void fecharTeclado(void) {
+  if (c.escrevendo && teclado_aberto()) {
+    SDL_Event ev;
+    memset(&ev, 0, sizeof ev);
+    ev.type = SDL_KEYDOWN;
+    ev.key.keysym.sym = SDLK_ESCAPE;
+    teclado_evento(&ev);
+    (void)teclado_resultado();
+  }
+  c.escrevendo = 0;
 }
 
 void reacao_fechar(void) {
+  fecharTeclado();
   c.aberto = 0;
   oferecido[0] = 0;
   durVista = durEstavel = 0.0;
@@ -229,6 +267,8 @@ void reacao_responder(const char *imdb, int v) {
     semTab(r->nome); semTab(r->titulo);
   }
   gravar();
+  // A RESPOSTA A QUEM MANDOU: a rec vai para "Assistidas" com a reacao.
+  if (r->rec > 0) recresp_responder(r->rec, v, NULL);
   atividade_reacao(r->imdb, r->midia, r->titulo,
                    c.imdb[0] && !strcmp(c.imdb, r->imdb) ? c.poster : "", v, r->rec);
   nota = reacao_nota_trakt(v);
@@ -251,6 +291,7 @@ void reacao_player_atualizar(float dt, Uint32 agora, const CatItem *ci, int ehSe
     c.focoA[i] = anim_mola(c.focoA[i], (c.aberto && c.foco == i) ? 1.0f : 0.0f, dt,
                            c.foco == i ? NV_MOLA_FOCO : NV_MOLA_DESFOCO);
   // A CONTAGEM: 8 s desde a abertura ou da ultima tecla. So no player.
+  if (c.escrevendo) { teclado_atualizar(dt, agora); c.desde = agora; }
   if (c.aberto && !c.modoDetalhe && agora - c.desde >= REACAO_TIMEOUT_MS) c.aberto = 0;
   // DURACAO ESTAVEL, a mesma guarda do posplay: a duracao provisoria do
   // primeiro instante nao pode fazer a "metade do filme" chegar aos 15 s.
@@ -260,8 +301,15 @@ void reacao_player_atualizar(float dt, Uint32 agora, const CatItem *ci, int ehSe
   atividade_id_puro(id, sizeof id, ci->imdb);
   if (strncmp(id, "tt", 2) || !strcmp(oferecido, id)) return;
   if (durEstavel < 8.0) return;
-  { int st = reacao_estado(id);
-    if (st >= -1 && st <= 1) return; }
+  // VEIO DE UM AMIGO E AINDA NAO FOI RESPONDIDO (dono, 03/10: "se eu ver uma
+  // serie ou um episodio que a pessoa mandou, no final ... aparecer a msg se
+  // gostei ou nao"): pergunta mesmo com o titulo ja avaliado e, na serie, no
+  // fim de QUALQUER episodio — nao so no fim da temporada.
+  { long long rec = recomenda_ativo() ? atividade_origem(id, NULL, 0) : 0;
+    int peloAmigo = rec > 0 && !recresp_respondida(rec);
+    int st = reacao_estado(id);
+    if (st >= -1 && st <= 1 && !peloAmigo) return;
+    if (peloAmigo) temProximo = proxOutraTemporada = 0; }
   if (!reacao_regra_perguntar(ehSerie, temProximo, proxOutraTemporada, pos, dur, cred)) return;
   snprintf(oferecido, sizeof oferecido, "%s", id);
   abrir(id, ehSerie ? "series" : "movie", ci->titulo, ci->poster, 0, agora);
@@ -273,11 +321,46 @@ void reacao_player_atualizar(float dt, Uint32 agora, const CatItem *ci, int ehSe
   fflush(stdout);
 }
 
+// O teclado do passo 2 respondeu. Chamado por quem anima o cartao.
+static void tecladoResultado(void) {
+  int r;
+  if (!c.escrevendo) return;
+  r = teclado_resultado();
+  if (r == TECLADO_PRONTO) {
+    const char *t = teclado_texto();
+    c.escrevendo = 0;
+    if (t && t[0]) recresp_responder(c.rec, RECRESP_SEM_REACAO, t);
+    else recresp_pular(c.rec);
+    c.aberto = 0;
+  } else if (r == TECLADO_CANCELOU) {
+    c.escrevendo = 0;           // volta as tres pilulas, com o foco em "Escrever"
+    c.desde = ultimoAgora;
+  }
+}
+
+static void escolherMensagem(void) {
+  if (c.foco == 0) { recresp_responder(c.rec, RECRESP_SEM_REACAO, MSG_RAPIDA); c.aberto = 0; }
+  else if (c.foco == 1) {
+    char tit[160];
+    snprintf(tit, sizeof tit, i18n("Mensagem para %s"), c.nome);
+    teclado_abrir_com(tit, "Curta, sem acentos. Vazio não manda nada.",
+                      RECRESP_TEXTO_MAX, MSG_ALFABETO, NULL);
+    c.escrevendo = 1;
+  } else { recresp_pular(c.rec); c.aberto = 0; }
+}
+
 int reacao_evento(const SDL_Event *e, int controlesVisiveis) {
   SDL_Keycode k;
+  // O TECLADO DO PASSO 2 E DONO DE TODA TECLA, com ou sem a barra do player.
+  if (c.aberto && c.escrevendo) {
+    if (teclado_aberto()) teclado_evento(e);
+    tecladoResultado();
+    return 1;
+  }
   if (!c.aberto || e->type != SDL_KEYDOWN) return 0;
   if (controlesVisiveis && !c.modoDetalhe) return 0;
   k = e->key.keysym.sym;
+  if (e->key.repeat && (k == SDLK_RETURN || k == SDLK_KP_ENTER)) return 1;
   if (k == SDLK_AC_BACK || k == SDLK_ESCAPE || k == SDLK_BACKSPACE ||
       e->key.keysym.scancode == NV_SCANCODE_BACK) {
     c.aberto = 0;               // pula; a pendencia fica
@@ -286,7 +369,14 @@ int reacao_evento(const SDL_Event *e, int controlesVisiveis) {
   if (k == SDLK_LEFT)  { if (c.foco > 0) c.foco--; c.desde = ultimoAgora; return 1; }
   if (k == SDLK_RIGHT) { if (c.foco < 2) c.foco++; c.desde = ultimoAgora; return 1; }
   if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
+    if (c.passo == 1) { escolherMensagem(); c.desde = ultimoAgora; return 1; }
     reacao_responder(c.imdb, VALOR[c.foco]);
+    // COM AMIGO NA ORIGEM o cartao continua: "mandar uma mensagem?". A
+    // reacao ja foi (recresp_responder dentro de reacao_responder).
+    if (respondeAmigo() && c.nome[0]) {
+      c.passo = 1; c.foco = 0; c.desde = ultimoAgora;
+      return 1;
+    }
     c.aberto = 0;
     return 1;
   }
@@ -311,9 +401,11 @@ static void linhaOrigem(char *dst, size_t n) {
 static void reacao_desenharCorpo_(Uint32 agora, float baseY);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void reacao_desenhar(Uint32 agora, float baseY) {
-  ESCALA_INI();
-  reacao_desenharCorpo_(agora, baseY);
-  ESCALA_FIM();
+  { ESCALA_INI();
+    reacao_desenharCorpo_(agora, baseY);
+    ESCALA_FIM(); }
+  // O teclado do passo 2 por cima do cartao (ele cuida da propria escala).
+  if (c.aberto && c.escrevendo && teclado_aberto()) teclado_desenhar(agora);
 }
 static void reacao_desenharCorpo_(Uint32 agora, float baseY) {
   float a = c.anim, w = 760.0f, h, x, y, lead, hp, pw = 0.0f;
@@ -321,17 +413,30 @@ static void reacao_desenharCorpo_(Uint32 agora, float baseY) {
   static const char *const ICONE[3] = { "pl_thumbs-up", NULL, "pl_thumbs-down" };
   int i;
   if (a < 0.01f || !c.imdb[0]) return;
-  snprintf(perg, sizeof perg, i18n("O que achou de %s?"), c.titulo);
+  const char *const *rot = c.passo == 1 ? ROTULO_MSG : ROTULO;
+  static const char *const ICONE_MSG[3] = { NULL, NULL, NULL };
+  const char *const *ico = c.passo == 1 ? ICONE_MSG : ICONE;
+  if (c.passo == 1) snprintf(perg, sizeof perg, i18n("Mandar uma mensagem para %s?"), c.nome);
+  else snprintf(perg, sizeof perg, i18n("O que achou de %s?"), c.titulo);
   linhaOrigem(orig, sizeof orig);
   ver[0] = 0;
-  if (orig[0] && c.envia) snprintf(ver, sizeof ver, i18n("%s vai ver sua resposta"), c.nome);
-  for (i = 0; i < 3; i++) pw += plrui_botao_largura(ROTULO[i], ICONE[i]) + (i ? 12.0f : 0.0f);
+  if (orig[0] && (c.envia || respondeAmigo()))
+    snprintf(ver, sizeof ver, i18n("%s vai ver sua resposta"), c.nome);
+  for (i = 0; i < 3; i++) pw += plrui_botao_largura(rot[i], ico[i]) + (i ? 12.0f : 0.0f);
   if (pw + 72.0f > w) w = pw + 72.0f;
   lead = (float)txt_linha(TXT_ILHA_PERGUNTA, "Ág", 245, 246, 248, 255).h + 6.0f;
   hp = txt_bloco_corta(TXT_ILHA_PERGUNTA, perg, 0, 0, 0, -4000.0f, -4000.0f, w - 72.0f, lead, 0.0f, 2);
   h = 34.0f + (orig[0] ? 30.0f + 8.0f : 0.0f) + hp + 26.0f + 60.0f + 24.0f + 22.0f + 30.0f;
   x = NV_TELA_W - RX_MARGEM - w;
   y = baseY - h + (1.0f - a) * 24.0f;
+  if (c.modoPainel) {
+    // Sobre o painel: centrado nele e na altura da tela, como o menu do
+    // cartaz aberto pelo painel (ctx_centro_dica).
+    x = (c.cx >= 0.0f ? c.cx : NV_TELA_W * 0.5f) - w * 0.5f;
+    if (x + w > NV_TELA_W - 24.0f) x = NV_TELA_W - 24.0f - w;
+    if (x < 24.0f) x = 24.0f;
+    y = (NV_TELA_H - h) * 0.5f + (1.0f - a) * 24.0f;
+  }
   plrui_material((GfxRect){ x, y, w, h }, 36.0f, 0, a);
   { float ty = y + 34.0f, tx = x + 36.0f;
     if (orig[0]) {
@@ -343,7 +448,7 @@ static void reacao_desenharCorpo_(Uint32 agora, float baseY) {
     txt_bloco_corta(TXT_ILHA_PERGUNTA, perg, 243, 242, 239, tx, ty, w - 72.0f, lead, a, 2);
     ty += hp + 26.0f;
     { float bx = tx;
-      for (i = 0; i < 3; i++) bx += plrui_botao(bx, ty, ROTULO[i], ICONE[i], c.focoA[i], a) + 12.0f; }
+      for (i = 0; i < 3; i++) bx += plrui_botao(bx, ty, rot[i], ico[i], c.focoA[i], a) + 12.0f; }
     ty += 60.0f + 24.0f;
     { float yc = ty + 11.0f, tw = 0.0f;
       if (ver[0]) {
@@ -352,7 +457,7 @@ static void reacao_desenharCorpo_(Uint32 agora, float baseY) {
         tw = (float)lv.w + 18.0f;
       }
       // A CONTAGEM VISIVEL: sem ela o cartao sumiria "do nada".
-      if (!c.modoDetalhe && c.aberto) {
+      if (!c.modoDetalhe && c.aberto && !c.escrevendo) {
         float resta = 1.0f - (float)(agora - c.desde) / (float)REACAO_TIMEOUT_MS;
         if (resta < 0.0f) resta = 0.0f;
         plrui_trilho((GfxRect){ tx + tw, yc - 2.0f, w - 72.0f - tw, 4.0f }, resta, 0.953f, 0.949f, 0.937f, a * 0.55f);
@@ -382,7 +487,8 @@ void reacao_detalhe_dica(const CatItem *ci, float a) {
   TxtLinha l, s;
   float x, y, w;
   // O cartao aberto (pela pagina) desenha por cima de tudo, com a mola dele.
-  if (c.aberto && c.modoDetalhe) {
+  if (c.aberto && c.modoDetalhe && !c.modoPainel) {
+    if (c.escrevendo) { teclado_atualizar(1.0f / 60.0f, SDL_GetTicks()); tecladoResultado(); }
     c.anim = anim_mola(c.anim, 1.0f, 1.0f / 60.0f, NV_MOLA_TELA);
     { int i;
       for (i = 0; i < 3; i++)
@@ -391,7 +497,7 @@ void reacao_detalhe_dica(const CatItem *ci, float a) {
     reacao_desenhar(SDL_GetTicks(), NV_TELA_H - 48.0f);
     return;
   }
-  if (c.modoDetalhe && !c.aberto) c.anim = 0.0f;
+  if (c.modoDetalhe && !c.aberto && !c.modoPainel) c.anim = 0.0f;
   if (a < 0.01f || !reacao_detalhe_pendente(ci)) return;
   snprintf(perg, sizeof perg, i18n("O que achou de %s?"), ci->titulo);
   // DISCRETA: texto pequeno e cinza, sem caixa de foco — ela nao e um botao,
@@ -417,3 +523,46 @@ void reacao_teste_abrir(const char *imdb, const char *titulo, const char *midia,
 
 // O cartao esta (ou ainda esta saindo) na tela do player.
 int reacao_visivel(void) { return c.anim > 0.01f && c.imdb[0] && !c.modoDetalhe; }
+
+// --- aba Amigos ("Ja assisti") ------------------------------------------------------
+
+int reacao_rec_abrir(long long rec, const char *imdb, const char *titulo, const char *midia,
+                     const char *poster, const char *nome, float cx) {
+  char id[24];
+  if (rec <= 0 || !imdb) return 0;
+  atividade_id_puro(id, sizeof id, imdb);
+  if (strncmp(id, "tt", 2)) return 0;
+  fecharTeclado();
+  abrir(id, midia, titulo, poster, 1, SDL_GetTicks());
+  // A ORIGEM E A LINHA EM QUE A PESSOA DEU OK, e nao a busca por titulo.
+  c.rec = rec;
+  snprintf(c.nome, sizeof c.nome, "%s", nome ? nome : "");
+  c.modoPainel = 1;
+  c.cx = cx;
+  c.anim = 0.0f;
+  ultimoAgora = SDL_GetTicks();
+  return 1;
+}
+
+int reacao_painel_aberta(void) { return c.aberto && c.modoPainel; }
+
+void reacao_painel_atualizar(float dt, Uint32 agora) {
+  int i;
+  ultimoAgora = agora;
+  if (!c.modoPainel) return;
+  if (c.escrevendo) { teclado_atualizar(dt, agora); tecladoResultado(); }
+  c.anim = anim_mola(c.anim, c.aberto ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
+  for (i = 0; i < 3; i++)
+    c.focoA[i] = anim_mola(c.focoA[i], (c.aberto && c.foco == i) ? 1.0f : 0.0f, dt,
+                           c.foco == i ? NV_MOLA_FOCO : NV_MOLA_DESFOCO);
+  if (!c.aberto && c.anim < 0.01f) { c.modoPainel = 0; c.imdb[0] = 0; }
+}
+
+void reacao_painel_desenhar(Uint32 agora) {
+  if (!c.modoPainel || c.anim < 0.01f) return;
+  { GfxRect tela = { 0, 0, 1920.0f, 1080.0f };
+    gfx_cor(tela, 0.0f, 0, 0, 0, 0.55f * c.anim); }
+  reacao_desenhar(agora, NV_TELA_H);
+}
+
+int reacao_passo(void) { return c.aberto ? c.passo : -1; }

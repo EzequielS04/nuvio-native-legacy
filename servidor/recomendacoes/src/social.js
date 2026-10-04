@@ -340,17 +340,49 @@ export async function rotaAmigo(env, quem, url, h, garantirPerfil) {
 
   if (grau === 1) {
     const r = await env.DB.prepare(
-      "SELECT id, imdb, tipo, titulo, poster, criado, visto, aberto, comecou, terminou, reacao " +
-      "FROM rec WHERE de = ? AND para = ? ORDER BY id DESC LIMIT ?").bind(quem.id, alvo, RECS_MAX).all();
+      "SELECT id, imdb, tipo, titulo, poster, criado, visto, aberto, comecou, terminou, reacao, " +
+      "resposta, respondido FROM rec WHERE de = ? AND para = ? ORDER BY id DESC LIMIT ?").bind(quem.id, alvo, RECS_MAX).all();
     saida.recs = (r.results || []).map((x) => ({
       id: x.id, imdb: x.imdb, tipo: x.tipo, titulo: x.titulo, poster: x.poster, criado: x.criado,
       estado: estadoRec(x), reacao: x.reacao === null ? null : x.reacao,
       // Reagir e concluir sao fatos independentes. `estado` pode mostrar a
       // reacao sem esconder uma conclusao conhecida da TV que recebe.
       terminou: x.terminou ? 1 : 0,
+      // A resposta direta de quem recebeu (POST /v1/rec/resposta, migracao 007).
+      resposta: x.resposta || "", respondido: x.respondido || 0,
     }));
   }
   return h.json(saida);
+}
+
+// --- POST /v1/rec/resposta ------------------------------------------------------
+//
+// "JA ASSISTI" NUMA RECOMENDACAO RECEBIDA, com a reacao (1 | 0 | -1) e uma
+// mensagem curta, as duas opcionais. Corpo:
+//   {"id": <rec>, "reacao": 1|0|-1|null, "texto": "..."}
+//
+// NAO PASSA PELO ALCANCE, ao contrario de /v1/atividade: aquela rota carrega o
+// que o player manda SOZINHO; esta e uma resposta que a pessoa deu de
+// proposito, a quem lhe mandou o titulo, numa tela que diz que ele vai ver. So
+// muda a rec mandada PARA quem responde (`para = quem.id`); id alheio = n 0.
+//
+// `reacao` ausente ou null NAO apaga uma reacao ja gravada (o "Ja assisti" sem
+// resposta nao desfaz um "Gostei" dado nos creditos). Texto vazio idem.
+export async function rotaRecResposta(env, quem, corpo, h, limitar, limparTexto) {
+  const t = h.agora();
+  const id = parseInt(corpo?.id, 10);
+  if (!Number.isInteger(id) || id <= 0) return h.erro("sem id", 400);
+  if (!(await limitar(env, `resp:${quem.id}`, 120, 3600, t))) return h.erro("limite", 429);
+  const r = corpo?.reacao;
+  const reacao = r === 1 || r === 0 || r === -1 ? r : null;
+  const texto = limparTexto(corpo?.texto);
+  const res = await env.DB.prepare(
+    "UPDATE rec SET comecou = 1, terminou = 1, visto = 1, aberto = 1, " +
+    "reacao = COALESCE(?, reacao), " +
+    "resposta = CASE WHEN ? <> '' THEN ? ELSE resposta END, respondido = ? " +
+    "WHERE id = ? AND para = ?"
+  ).bind(reacao, texto, texto, t, id, quem.id).run();
+  return h.json({ ok: 1, n: res?.meta?.changes ?? res?.changes ?? 0 });
 }
 
 export function limpezaSocial(env, t) {

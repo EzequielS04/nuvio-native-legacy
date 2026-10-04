@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { rotaAmigo, rotaEvento } from "./src/social.js";
+import { rotaAmigo, rotaEvento, rotaRecResposta } from "./src/social.js";
 
 const NOW = 1791054000;
 const ME = "nuvio:reader", FRIEND = "nuvio:friend";
@@ -19,7 +19,8 @@ const h = {
 function fixture(t) {
   const sqlite = new DatabaseSync(":memory:");
   t.after(() => sqlite.close());
-  for (const name of ["schema.sql", "migracao-005-amigos.sql", "migracao-006-social.sql"])
+  for (const name of ["schema.sql", "migracao-005-amigos.sql", "migracao-006-social.sql",
+                     "migracao-007-resposta.sql"])
     sqlite.exec(readFileSync(new URL(name, import.meta.url), "utf8"));
   sqlite.prepare("INSERT INTO pessoa (id, nome, criado, visto, alcance) VALUES (?, ?, ?, ?, 1)")
     .run(ME, "Reader", NOW, NOW);
@@ -54,7 +55,12 @@ function fixture(t) {
     assert.equal(response.status, 200);
     return response.json();
   };
-  return { sqlite, friend, event };
+  const reply = async (body, who = FRIEND) => {
+    const clean = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+    const response = await rotaRecResposta(env, { id: who }, body, h, async () => true, clean);
+    return { status: response.status, body: response.status === 200 ? await response.json() : null };
+  };
+  return { sqlite, friend, event, reply };
 }
 
 test("recommendation completion remains independent of reactions and opening", async (t) => {
@@ -120,4 +126,27 @@ test("private friend activity stays hidden after the reaction query changes", as
   assert.equal(result.compartilha, 0);
   assert.deepEqual(result.gostou, []);
   assert.equal(result.gosto, null);
+});
+
+test("a direct reply marks the recommendation watched even with activity sharing off", async (t) => {
+  const { sqlite, friend, reply } = fixture(t);
+  const id = Number(sqlite.prepare(
+    "INSERT INTO rec (de, para, criado, imdb, tipo, titulo) VALUES (?, ?, ?, 'tt9', 'movie', 'Movie')"
+  ).run(ME, FRIEND, NOW).lastInsertRowid);
+  sqlite.prepare("UPDATE pessoa SET alcance = 0 WHERE id = ?").run(FRIEND);
+  assert.equal((await reply({ id })).body.n, 1, "watched without reaction or message");
+  let rec = (await friend()).recs[0];
+  assert.equal(rec.terminou, 1);
+  assert.equal(rec.reacao, null, "no reaction was given");
+  assert.equal(rec.respondido, NOW);
+  assert.equal((await reply({ id, reacao: 1, texto: "Valeu, AMEI!!" })).body.n, 1);
+  rec = (await friend()).recs[0];
+  assert.equal(rec.reacao, 1);
+  assert.equal(rec.resposta, "valeu amei");
+  await reply({ id, texto: "" });
+  rec = (await friend()).recs[0];
+  assert.equal(rec.reacao, 1, "a later reply without reaction keeps the reaction");
+  assert.equal(rec.resposta, "valeu amei", "an empty message keeps the message");
+  assert.equal((await reply({ id, reacao: -1 }, ME)).body.n, 0, "the sender cannot answer their own rec");
+  assert.equal((await reply({ id: 0 })).status, 400);
 });

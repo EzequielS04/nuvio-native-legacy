@@ -1,6 +1,7 @@
 // Ver atividade.h. A disciplina e a de recomenda.c: o estado atras de um mutex,
 // a rede num fio, e quem chama do laco de desenho nunca espera rede nenhuma.
 #include "atividade.h"
+#include "recresp.h"
 #include "recomenda.h"
 #include "dados.h"
 #include "perfis.h"
@@ -317,6 +318,11 @@ static int pctDe(double pos, double dur) {
 static void emitir(const char *ev, int pct) {
   AtivEvento e = trecho.base;
   snprintf(e.ev, sizeof e.ev, "%s", ev);
+  // TERMINOU O QUE UM AMIGO MANDOU: a rec vai para "Assistidas" NESTE
+  // aparelho e no servidor (recresp.h), com ou sem o envio de atividade
+  // permitido — e o mesmo "fim" que vale para o resto do app, e a resposta
+  // direta a quem mandou nao e atividade automatica.
+  if (!strcmp(ev, "fim") && e.rec > 0) recresp_marcar_assistida(e.rec);
   e.pct = pct;
   e.seg = (int)(trecho.seg + 0.5);
   trecho.seg = 0.0;

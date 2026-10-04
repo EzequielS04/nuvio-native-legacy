@@ -35,6 +35,8 @@
 #include "botoes.h"
 #include "socialvis.h"
 #include "svdesenho.h"
+#include "recresp.h"
+#include "reacao.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
 #include <stdio.h>
@@ -247,6 +249,12 @@ enum { SP_ABA_SALVOS = 0, SP_ABA_ATIVIDADE = 1, SP_ABA_SOCIAL = 2, SP_ABA_AVISOS
 static int aba;
 static RecItem recs[REC_MAX];
 static int nRecs;
+// "ASSISTIDAS" (dono, 03/10): a rec marcada com "Ja assisti" (ou concluida no
+// player) desce para um grupo proprio no fim das recomendacoes. Retrato de
+// recresp.h na reconstrucao; `recResp` e a resposta dada (para a 3a linha).
+static unsigned char recVista[REC_MAX];
+static RecResp recResp[REC_MAX];
+static unsigned rrRev;
 
 // A ABA SOCIAL DEIXOU DE SER UMA LISTA SO. Ela tem agora quatro tipos de linha
 // com ALTURAS DIFERENTES, e por isso existe este vetor em vez de um indice
@@ -364,8 +372,15 @@ static int temPedidoPerfil;
 // Sao 10 px, e nao um cabecalho de secao: um rotulo ali repetiria o titulo da
 // propria linha, que e exatamente o ar de formulario que se quer evitar.
 #define SPS_SEP_APARECER 10.0f
-// A linha da Atividade: rosto pequeno, cartaz 64x96 e tres linhas de texto.
-#define SPA_H         SPI_H
+// A linha da Atividade: rosto, cartaz e tres linhas de texto. MAIOR que a
+// linha da ilha (dono, 03/10: "na aba activity eu to achando muito pequeno o
+// poster; vamos tentar primeiro aumentando o texto e o poster"): capa 72x106
+// em vez de 52x76 e o texto na escala _L da lista com capa dos Salvos.
+#define SPA_H        142.0f
+#define SPA_AV        60.0f
+#define SPA_CAP_W     72.0f
+#define SPA_CAP_H    106.0f
+#define SPA_CAP_RAIO  11.0f
 // A cadeia sob a linha do amigo: a pilula (SVD_CHIP_H) e o ar ate ela.
 #define SPS_CADEIA_H    0.0f   // a cadeia virou o terceiro andar da linha
 
@@ -852,6 +867,10 @@ static float socialAntes(int i) {
   if (i < 0 || i >= nSocial) return 0.0f;
   // POR PESSOA: um rotulo com o nome de quem mandou antes da primeira
   // recomendacao de cada pessoa.
+  if (social[i].tipo == SPS_REC && recVista[social[i].idx]) {
+    if (i == 0 || social[i - 1].tipo != SPS_REC || !recVista[social[i - 1].idx]) return sh;
+    return 0.0f;
+  }
   if (social[i].tipo == SPS_REC && sorg_social() == SORG_SOCIAL_PESSOA) {
     if (i == 0 || social[i - 1].tipo != SPS_REC) return sh;
     return strcmp(recs[social[i].idx].de, recs[social[i - 1].idx].de) ? sh : 0.0f;
@@ -930,6 +949,23 @@ static void reconstruirSocial(void) {
       recs[j] = t;
     }
   }
+  // AS ASSISTIDAS VAO PARA O FIM, em grupo proprio, sem mudar a ordem dentro
+  // de cada metade (particao estavel).
+  rrRev = recresp_revisao();
+  { RecItem tmp[REC_MAX];
+    int k = 0, pass;
+    for (pass = 0; pass < 2; pass++)
+      for (i = 0; i < nRecs; i++) {
+        int v = recresp_assistida(recs[i].id);
+        if (v == pass) tmp[k++] = recs[i];
+      }
+    memcpy(recs, tmp, sizeof recs[0] * (size_t)nRecs);
+    for (i = 0; i < nRecs; i++) {
+      memset(&recResp[i], 0, sizeof recResp[i]);
+      recResp[i].reacao = RECRESP_SEM_REACAO;
+      recresp_ler(recs[i].id, &recResp[i]);
+      recVista[i] = (unsigned char)(recResp[i].assistida ? 1 : 0);
+    } }
   for (i = 0; i < REC_SUGESTOES_MAX && nSugs < REC_SUGESTOES_MAX; i++)
     if (recomenda_sugestao(i, &sugs[nSugs])) nSugs++;
     else break;
@@ -1406,12 +1442,114 @@ static int linhaSeguravel(void) {
   return aba == SP_ABA_SALVOS && foco >= 0 && foco < nLinhas;
 }
 
+// UMA LINHA DAS ABAS ATIVIDADE/AMIGOS que o OK longo segura: titulo do feed,
+// recomendacao recebida ou amigo (dono, 03/10: "falta o menu contextual na
+// aba activity e friends").
+static int linhaSocialSeguravel(void) {
+  if (aba == SP_ABA_ATIVIDADE) {
+    const SvEvento *ev = foco >= 0 ? socialvis_evento(foco) : NULL;
+    return ev && ev->imdb[0];
+  }
+  if (aba == SP_ABA_SOCIAL && foco >= 0 && foco < nSocial)
+    return (social[foco].tipo == SPS_REC && social[foco].idx >= 0 && social[foco].idx < nRecs) ||
+           (social[foco].tipo == SPS_AMIGO && social[foco].idx >= 0 && social[foco].idx < nCtts);
+  return 0;
+}
+
+// O QUE AS EXTRAS DO MENU SOCIAL FAZEM. O menu (ctxmenu.c) so devolve o
+// indice; a acao e a linha ficam guardadas aqui ate ele responder.
+enum { SPX_ASSISTI = 1, SPX_RESPONDER, SPX_PERFIL, SPX_REMOVER };
+static int      menuSxAcao[CTX_EXTRAS_MAX];
+static RecItem  menuSxRec;
+static char     menuSxPessoa[96], menuSxNome[64];
+
+static void abrirMenuSocial(void) {
+  CatItem c;
+  CtxExtra ex[CTX_EXTRAS_MAX];
+  int n = 0;
+  static const CtxExtra PERFIL = { "Ver perfil", "aj_users", 0, NULL, NULL, NULL };
+  static const CtxExtra ASSISTI = { "Já assisti", "check", 0, NULL, NULL, NULL };
+  static const CtxExtra RESPONDER = { "Responder", "aj_users", 0, NULL, NULL, NULL };
+  static const CtxExtra REMOVER = { "Remover amigo", "aj_x", 1, "Amigos",
+    "Remover %s dos amigos?",
+    "O vínculo é desfeito nos dois lados e as recomendações não lidas dessa pessoa somem." };
+  if (!linhaSocialSeguravel()) return;
+  memset(&c, 0, sizeof c);
+  memset(&menuSxRec, 0, sizeof menuSxRec);
+  menuSxPessoa[0] = menuSxNome[0] = 0;
+  if (aba == SP_ABA_ATIVIDADE) {
+    const SvEvento *ev = socialvis_evento(foco);
+    snprintf(c.imdb, sizeof c.imdb, "%s", ev->imdb);
+    snprintf(c.tipo, sizeof c.tipo, "%s", ev->tipo[0] ? ev->tipo : "movie");
+    snprintf(c.titulo, sizeof c.titulo, "%s", ev->titulo);
+    snprintf(c.poster, sizeof c.poster, "%s", ev->poster[0] ? ev->poster : ev->arte);
+    if (ev->pessoaId[0]) {
+      snprintf(menuSxPessoa, sizeof menuSxPessoa, "%s", ev->pessoaId);
+      menuSxAcao[n] = SPX_PERFIL; ex[n++] = PERFIL;
+    }
+  } else if (social[foco].tipo == SPS_REC) {
+    const RecItem *r = &recs[social[foco].idx];
+    menuSxRec = *r;
+    snprintf(c.imdb, sizeof c.imdb, "%s", r->imdb);
+    snprintf(c.tipo, sizeof c.tipo, "%s", r->tipo[0] ? r->tipo : "movie");
+    snprintf(c.titulo, sizeof c.titulo, "%s", r->titulo);
+    snprintf(c.poster, sizeof c.poster, "%s", r->poster);
+    c.nota = r->nota;
+    if (!recVista[social[foco].idx]) { menuSxAcao[n] = SPX_ASSISTI; ex[n++] = ASSISTI; }
+    else if (!recResp[social[foco].idx].respondida) { menuSxAcao[n] = SPX_RESPONDER; ex[n++] = RESPONDER; }
+    if (r->de[0]) {
+      snprintf(menuSxPessoa, sizeof menuSxPessoa, "%s", r->de);
+      menuSxAcao[n] = SPX_PERFIL; ex[n++] = PERFIL;
+    }
+    // "Mais informações" a partir daqui abre o titulo COM a origem, como o OK.
+    atividade_marcar_origem(r->id, r->imdb, r->deNome);
+  } else {
+    const RecContato *ct = &ctts[social[foco].idx];
+    rec_nome_exibicao(c.titulo, sizeof c.titulo, ct->nome, ct->id);
+    snprintf(c.poster, sizeof c.poster, "%s", ct->avatar);
+    snprintf(menuSxPessoa, sizeof menuSxPessoa, "%s", ct->id);
+    snprintf(menuSxNome, sizeof menuSxNome, "%s", c.titulo);
+    menuSxAcao[n] = SPX_PERFIL; ex[n++] = PERFIL;
+    menuSxAcao[n] = SPX_REMOVER; ex[n++] = REMOVER;
+  }
+  ctx_abrir_social(&c, ex, n);
+}
+
+// A extra escolhida no menu social (por quadro, em spainel_atualizar).
+static void extraSocial(int k) {
+  if (k < 0 || k >= CTX_EXTRAS_MAX) return;
+  switch (menuSxAcao[k]) {
+    case SPX_ASSISTI:
+      recresp_marcar_assistida(menuSxRec.id);
+      recomenda_pedir_agora();
+      reconstruirSocial();
+      /* fall through: "se quiser, responder" — o mesmo cartao dos creditos */
+    case SPX_RESPONDER:
+      reacao_rec_abrir(menuSxRec.id, menuSxRec.imdb, menuSxRec.titulo, menuSxRec.tipo,
+                       menuSxRec.poster, menuSxRec.deNome, SP_X + SP_W * 0.5f);
+      break;
+    case SPX_PERFIL:
+      if (menuSxPessoa[0]) {
+        snprintf(pedidoPerfil, sizeof pedidoPerfil, "%s", menuSxPessoa);
+        temPedidoPerfil = 1;
+        aberto = 0;
+      }
+      break;
+    case SPX_REMOVER:
+      if (menuSxPessoa[0]) { recomenda_remover_contato(menuSxPessoa); reconstruirSocial(); }
+      if (foco >= nSocial) foco = nSocial > 0 ? nSocial - 1 : 0;
+      break;
+    default: break;
+  }
+}
+
 // Abre o menu do cartaz sobre a linha focada. A linha vira um CatItem com o
 // que o painel sabe dela; o menu troca pela copia do catalogo quando ela
 // existe (ver o modo painel em ctxmenu.c).
 static void abrirMenu(void) {
   CatItem c;
   const SPLinha *l;
+  if (aba == SP_ABA_ATIVIDADE || aba == SP_ABA_SOCIAL) { abrirMenuSocial(); return; }
   if (!linhaSeguravel()) return;
   l = &linhas[foco];
   memset(&c, 0, sizeof c);
@@ -1435,11 +1573,121 @@ static void abrirMenu(void) {
 }
 
 // O toque curto de sempre: entrega o IMDb e fecha, app.c abre o titulo.
+static void okSocial(void);
 static void abrirLinha(void) {
+  if (aba == SP_ABA_ATIVIDADE || aba == SP_ABA_SOCIAL) { okSocial(); return; }
   if (foco >= 0 && foco < nLinhas) {
     snprintf(pedido, sizeof pedido, "%s", linhas[foco].id);
     temPedido = 1;
     aberto = 0;
+  }
+}
+
+// O TOQUE CURTO nas abas Atividade e Amigos: o que o KEYDOWN fazia antes de
+// essas linhas ganharem o menu do OK longo (agora decidido na soltura).
+static void okSocial(void) {
+  if (aba == SP_ABA_ATIVIDADE) {
+    const SvEvento *ev = socialvis_evento(foco);
+    if (ev && ev->imdb[0]) {
+      snprintf(pedido, sizeof pedido, "%s", ev->imdb);
+      temPedido = 1;
+      aberto = 0;
+    }
+    return;
+  }
+  if (aba == SP_ABA_SOCIAL) {
+    if (foco < 0 || foco >= nSocial) return;
+    switch (social[foco].tipo) {
+      case SPS_CONSENT_NAO:
+      case SPS_CONSENT_SIM:
+        recomenda_responder_aparecer(social[foco].tipo == SPS_CONSENT_SIM);
+        reconstruirSocial();
+        // A LISTA COMECA DO TOPO depois da resposta. Manter o foco na linha 1
+        // deixaria o dedo em cima de uma sugestao que a pessoa nem viu
+        // aparecer, e o proximo OK a adicionaria como contato.
+        foco = 0;
+        scrollY = 0.0f; velY = 0.0f;
+        memset(animFoco, 0, sizeof animFoco);
+        recomenda_marcar_vistas();
+        return;
+      case SPS_SUG:
+        // UMA ACAO, como o pedido pediu: o OK vincula. O servidor recalcula
+        // as sugestoes antes de aceitar, entao um id que ja nao esta na lista
+        // (a pessoa revogou entre a tela e o OK) volta recusado.
+        if (social[foco].idx >= 0 && social[foco].idx < nSugs)
+          recomenda_adicionar_sugerido(sugs[social[foco].idx].id);
+        reconstruirSocial();
+        if (foco >= nSocial) foco = nSocial > 0 ? nSocial - 1 : 0;
+        return;
+      case SPS_ADICIONAR:
+        // A TELA DE AMIGOS. O painel FICA ABERTO atras: a modal e uma camada
+        // por cima dele e Voltar devolve o foco aqui, em vez de jogar a
+        // pessoa de volta na home.
+        recenviar_abrir_amigos();
+        return;
+      case SPS_ENCONTRAR:
+        // Como a tela de amigos: o painel FICA aberto atras da modal.
+        pessoas_abrir();
+        return;
+      case SPS_AMIGO:
+        // O PERFIL DO AMIGO (amigoperfil.h). app.c abre e o painel fecha.
+        if (social[foco].idx >= 0 && social[foco].idx < nCtts) {
+          snprintf(pedidoPerfil, sizeof pedidoPerfil, "%s", ctts[social[foco].idx].id);
+          temPedidoPerfil = 1;
+          aberto = 0;
+        }
+        return;
+#if SP_V2
+      case SPS_ALC_0:
+      case SPS_ALC_1:
+      case SPS_ALC_2:
+        recomenda_responder_alcance(social[foco].tipo - SPS_ALC_0);
+        escolhendoAlcance = 0;
+        reconstruirSocial();
+        foco = 0;
+        scrollY = 0.0f; velY = 0.0f;
+        memset(animFoco, 0, sizeof animFoco);
+        return;
+      case SPS_ALCANCE: {
+        // REABRE A PERGUNTA, com o foco na resposta de agora: trocar de nivel
+        // e escolher de novo, lendo as tres, e nao um OK que gira valores.
+        int n = recomenda_alcance();
+        escolhendoAlcance = 1;
+        reconstruirSocial();
+        foco = (n >= 0 && n <= 2) ? n : 0;
+        scrollY = 0.0f; velY = 0.0f;
+        memset(animFoco, 0, sizeof animFoco);
+        return; }
+      case SPS_NOME:
+        tecladoPara = TK_NOME_SOCIAL;
+        teclado_abrir_com("Como você aparece",
+                          "Seu nome para os amigos. Vazio usa o nome do perfil.",
+                          32, "abcdefghijklmnopqrstuvwxyz0123456789 -'", recomenda_minha_exibicao());
+        return;
+#else
+      case SPS_ALC_0: case SPS_ALC_1: case SPS_ALC_2: case SPS_ALCANCE: case SPS_NOME:
+        return;
+#endif
+      case SPS_APARECER:
+        // MUDAR DE IDEIA CUSTA UM OK, nos dois sentidos. Sem confirmacao de
+        // proposito: desligar e a direcao segura, e pedir "tem certeza?" para
+        // sair de uma lista e o padrao que faz as pessoas desistirem de sair.
+        recomenda_responder_aparecer(recomenda_aparecer() != REC_APARECER_SIM);
+        reconstruirSocial();
+        return;
+      default:
+        // A ACAO QUE IMPORTA E ABRIR O TITULO, e o contrato para isso ja
+        // existe: o painel entrega o IMDb e app.c resolve. Ele nao conhece
+        // detail.c nem a descoberta, exatamente como antes.
+        if (social[foco].idx >= 0 && social[foco].idx < nRecs) {
+          snprintf(pedido, sizeof pedido, "%s", recs[social[foco].idx].imdb);
+          atividade_marcar_origem(recs[social[foco].idx].id, recs[social[foco].idx].imdb,
+                                  recs[social[foco].idx].deNome);
+          temPedido = 1;
+          aberto = 0;
+        }
+        return;
+    }
   }
 }
 
@@ -1450,6 +1698,9 @@ static int teclaOk(SDL_Keycode k) {
 void spainel_evento(const SDL_Event *e) {
   SDL_Keycode k;
   if (!aberto) return;
+  // O CARTAO "O QUE ACHOU?" de uma rec ("Ja assisti") e modal sobre o painel,
+  // com o teclado dele por cima.
+  if (reacao_painel_aberta()) { reacao_evento(e, 0); return; }
   // O teclado e a escolha aberta ficam POR CIMA da lista: a tecla e deles.
   if (teclado_aberto()) { teclado_evento(e); return; }
   if (pop) { popEvento(e); return; }
@@ -1561,108 +1812,15 @@ void spainel_evento(const SDL_Event *e) {
       if (avisos_lista_ok(foco)) spainel_fechar();
       return;
     }
-    if (aba == SP_ABA_ATIVIDADE) {
-      const SvEvento *ev = socialvis_evento(foco);
-      if (ev && ev->imdb[0]) {
-        snprintf(pedido, sizeof pedido, "%s", ev->imdb);
-        temPedido = 1;
-        aberto = 0;
+    // ATIVIDADE E AMIGOS: titulo e amigo tem menu (OK longo); o resto decide
+    // no KEYDOWN, como sempre.
+    if (aba == SP_ABA_ATIVIDADE || aba == SP_ABA_SOCIAL) {
+      if (linhaSocialSeguravel()) {
+        if (!e->key.repeat && !okDesde) { okDesde = SDL_GetTicks(); if (!okDesde) okDesde = 1; }
+        return;
       }
+      okSocial();
       return;
-    }
-    if (aba == SP_ABA_SOCIAL) {
-      if (foco < 0 || foco >= nSocial) return;
-      switch (social[foco].tipo) {
-        case SPS_CONSENT_NAO:
-        case SPS_CONSENT_SIM:
-          recomenda_responder_aparecer(social[foco].tipo == SPS_CONSENT_SIM);
-          reconstruirSocial();
-          // A LISTA COMECA DO TOPO depois da resposta. Manter o foco na linha 1
-          // deixaria o dedo em cima de uma sugestao que a pessoa nem viu
-          // aparecer, e o proximo OK a adicionaria como contato.
-          foco = 0;
-          scrollY = 0.0f; velY = 0.0f;
-          memset(animFoco, 0, sizeof animFoco);
-          recomenda_marcar_vistas();
-          return;
-        case SPS_SUG:
-          // UMA ACAO, como o pedido pediu: o OK vincula. O servidor recalcula
-          // as sugestoes antes de aceitar, entao um id que ja nao esta na lista
-          // (a pessoa revogou entre a tela e o OK) volta recusado.
-          if (social[foco].idx >= 0 && social[foco].idx < nSugs)
-            recomenda_adicionar_sugerido(sugs[social[foco].idx].id);
-          reconstruirSocial();
-          if (foco >= nSocial) foco = nSocial > 0 ? nSocial - 1 : 0;
-          return;
-        case SPS_ADICIONAR:
-          // A TELA DE AMIGOS. O painel FICA ABERTO atras: a modal e uma camada
-          // por cima dele e Voltar devolve o foco aqui, em vez de jogar a
-          // pessoa de volta na home.
-          recenviar_abrir_amigos();
-          return;
-        case SPS_ENCONTRAR:
-          // Como a tela de amigos: o painel FICA aberto atras da modal.
-          pessoas_abrir();
-          return;
-        case SPS_AMIGO:
-          // O PERFIL DO AMIGO (amigoperfil.h). app.c abre e o painel fecha.
-          if (social[foco].idx >= 0 && social[foco].idx < nCtts) {
-            snprintf(pedidoPerfil, sizeof pedidoPerfil, "%s", ctts[social[foco].idx].id);
-            temPedidoPerfil = 1;
-            aberto = 0;
-          }
-          return;
-#if SP_V2
-        case SPS_ALC_0:
-        case SPS_ALC_1:
-        case SPS_ALC_2:
-          recomenda_responder_alcance(social[foco].tipo - SPS_ALC_0);
-          escolhendoAlcance = 0;
-          reconstruirSocial();
-          foco = 0;
-          scrollY = 0.0f; velY = 0.0f;
-          memset(animFoco, 0, sizeof animFoco);
-          return;
-        case SPS_ALCANCE: {
-          // REABRE A PERGUNTA, com o foco na resposta de agora: trocar de nivel
-          // e escolher de novo, lendo as tres, e nao um OK que gira valores.
-          int n = recomenda_alcance();
-          escolhendoAlcance = 1;
-          reconstruirSocial();
-          foco = (n >= 0 && n <= 2) ? n : 0;
-          scrollY = 0.0f; velY = 0.0f;
-          memset(animFoco, 0, sizeof animFoco);
-          return; }
-        case SPS_NOME:
-          tecladoPara = TK_NOME_SOCIAL;
-          teclado_abrir_com("Como você aparece",
-                            "Seu nome para os amigos. Vazio usa o nome do perfil.",
-                            32, "abcdefghijklmnopqrstuvwxyz0123456789 -'", recomenda_minha_exibicao());
-          return;
-#else
-        case SPS_ALC_0: case SPS_ALC_1: case SPS_ALC_2: case SPS_ALCANCE: case SPS_NOME:
-          return;
-#endif
-        case SPS_APARECER:
-          // MUDAR DE IDEIA CUSTA UM OK, nos dois sentidos. Sem confirmacao de
-          // proposito: desligar e a direcao segura, e pedir "tem certeza?" para
-          // sair de uma lista e o padrao que faz as pessoas desistirem de sair.
-          recomenda_responder_aparecer(recomenda_aparecer() != REC_APARECER_SIM);
-          reconstruirSocial();
-          return;
-        default:
-          // A ACAO QUE IMPORTA E ABRIR O TITULO, e o contrato para isso ja
-          // existe: o painel entrega o IMDb e app.c resolve. Ele nao conhece
-          // detail.c nem a descoberta, exatamente como antes.
-          if (social[foco].idx >= 0 && social[foco].idx < nRecs) {
-            snprintf(pedido, sizeof pedido, "%s", recs[social[foco].idx].imdb);
-            atividade_marcar_origem(recs[social[foco].idx].id, recs[social[foco].idx].imdb,
-                                    recs[social[foco].idx].deNome);
-            temPedido = 1;
-            aberto = 0;
-          }
-          return;
-      }
     }
     // A decisao fica para a soltura (ou para o limiar, em spainel_atualizar).
     // A repeticao automatica do controle nao rearma: o relogio e do primeiro
@@ -1680,7 +1838,10 @@ void spainel_atualizar(float dt, Uint32 agora) {
   float alvo, topo, base;
   // A barra de "Segure OK" do menu do cartaz, centrada no painel enquanto ele e
   // dono do D-pad; fora dele, no centro da tela como sempre.
-  ctx_centro_dica(aberto && aba == SP_ABA_SALVOS ? SP_X + SP_W * 0.5f : -1.0f);
+  ctx_centro_dica(aberto && (aba == SP_ABA_SALVOS || aba == SP_ABA_ATIVIDADE || aba == SP_ABA_SOCIAL)
+                  ? SP_X + SP_W * 0.5f : -1.0f);
+  reacao_painel_atualizar(dt, agora);
+  if (!aberto && reacao_painel_aberta()) reacao_fechar();
   if (!aberto) okDesde = 0;
   if (!aberto && entrada < 0.002f) {
     if (entrada != 0.0f) entrada = 0.0f;
@@ -1707,6 +1868,16 @@ void spainel_atualizar(float dt, Uint32 agora) {
   if (aberto && okDesde && SDL_GetTicks() - okDesde >= NV_HOLD_MS) {
     okDesde = 0;
     abrirMenu();
+  }
+  // A acao da linha social escolhida no menu ("Ja assisti", "Ver perfil"...).
+  { int k = ctx_pediu_extra();
+    if (k >= 0 && aberto) extraSocial(k); }
+  // "Ja assisti"/resposta mudou (aqui, no player ou pelo fio): a lista remonta
+  // e a rec desce para "Assistidas".
+  if (aberto && aba == SP_ABA_SOCIAL && rrRev != recresp_revisao() && !reacao_painel_aberta()) {
+    int f = foco;
+    reconstruirSocial();
+    foco = f < nSocial ? f : (nSocial > 0 ? nSocial - 1 : 0);
   }
   // "Mais informações" no menu do painel: o mesmo contrato do toque curto.
   { const char *id = ctx_pediu_detalhes_imdb();
@@ -2269,6 +2440,18 @@ static void desenhaRecLinha(int linha, int idx, float dx, float y, float a, Uint
   rec_quando_texto(q, sizeof q, r->criado);
   snprintf(l3, sizeof l3, "%s", q);
   est = socialvis_meu_estado(r->imdb, &pct, &te, &ee);
+  if (recVista[idx]) {
+    const RecResp *rr = &recResp[idx];
+    juntar(l3, sizeof l3, i18n("Você assistiu"));
+    juntar(l3, sizeof l3, rr->reacao == 1 ? i18n("Gostou") : rr->reacao == 0 ? i18n("Mais ou menos")
+                         : rr->reacao == -1 ? i18n("Não gostou") : "");
+    if (rr->texto[0]) {
+      char fr[96];
+      snprintf(fr, sizeof fr, "\xe2\x80\x9c%s\xe2\x80\x9d", rr->texto);
+      juntar(l3, sizeof l3, fr);
+    }
+    est = 0;
+  } else
   if (est == 2) juntar(l3, sizeof l3, i18n("Você viu"));
   else if (est == 1) {
     char d[64];
@@ -2980,15 +3163,17 @@ static void desenhaAtividadeVazia(float dx, float y0, float a) {
 static void desenhaAtvLinha(int i, float dx, float y, float a, Uint32 agora) {
   const SvEvento *e = socialvis_evento(i);
   float f = (i >= 0 && i < SP_MAX) ? animFoco[i] : 0.0f, v = focoVisual(f);
-  float px = SP_X + dx + SP_PAD, tx = px + SPI_AV + SPI_AV_GAP;
-  float larg = SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPI_CAP_W - 18.0f - tx;
+  float px = SP_X + dx + SP_PAD, tx = px + SPA_AV + SPI_AV_GAP;
+  float larg = SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPA_CAP_W - 18.0f - tx;
   char linha[220], ep[24], q[48], tit[220];
   if (!e) return;
   { GfxRect r = linhaIlhaRet(dx, y, SPA_H);
     superficieItem(r, SP_LINHA_RAIO / r.h, f, a); }
-  rostoIlha((GfxRect){ px, y + (SPA_H - SPI_AV) * 0.5f, SPI_AV, SPI_AV },
+  rostoIlha((GfxRect){ px, y + (SPA_H - SPA_AV) * 0.5f, SPA_AV, SPA_AV },
             e->pessoaAvatar, e->pessoaNome, e->pessoaId, e->acao == SV_AGORA, a, agora);
-  capaIlha(dx, y, SPA_H, e->poster[0] ? e->poster : e->arte, a);
+  { GfxRect c = { SP_X + dx + SP_LINHA_X + SP_LINHA_W - SP_LINHA_PADX - SPA_CAP_W,
+                  y + (SPA_H - SPA_CAP_H) * 0.5f, SPA_CAP_W, SPA_CAP_H };
+    capaArte(c, e->poster[0] ? e->poster : e->arte, SPA_CAP_RAIO, a); }
   socialvis_ep(e, ep, sizeof ep);
   if (ep[0]) snprintf(tit, sizeof tit, "%s \xc2\xb7 %s", e->titulo, ep);
   else snprintf(tit, sizeof tit, "%s", e->titulo);
@@ -3000,7 +3185,13 @@ static void desenhaAtvLinha(int i, float dx, float y, float a, Uint32 agora) {
   else if (e->acao == SV_ABANDONO && e->pct >= 0)
     snprintf(linha, sizeof linha, i18n("Parou aos %d%%"), e->pct);
   juntar(linha, sizeof linha, q);
-  andaresIlha(tx, y, SPA_H, larg, v, a, e->pessoaNome, socialvis_verbo(e), tit, linha);
+  // OS TRES ANDARES NA ESCALA _L (28 / 22 / 17), centrados na linha de 142.
+  { float ty = y + (SPA_H - (34.0f + 5.0f + 27.0f + 5.0f + 21.0f)) * 0.5f;
+    nomeVerboEst(TXT_ILHA_NOME_L, e->pessoaNome, socialvis_verbo(e), tx, ty, larg, v, a);
+    ty += 34.0f + 5.0f;
+    txt_desenhar_alpha(txtIlha(TXT_ILHA_SUB_L, tit, larg), tx, ty, a * 0.62f);
+    ty += 27.0f + 5.0f;
+    if (linha[0]) txt_desenhar_alpha(txtIlha(TXT_ILHA_HORA_L, linha, larg), tx, ty, a * 0.38f); }
 }
 
 static void desenhaVazio(float dx, float a) {
@@ -3122,9 +3313,10 @@ static void desenharPainel(Uint32 agora);
 static void spainel_desenharCorpo_(Uint32 agora);
 // Camada ampliada (escala.h): o corpo desenha na tela virtual.
 void spainel_desenhar(Uint32 agora) {
-  ESCALA_INI();
-  spainel_desenharCorpo_(agora);
-  ESCALA_FIM();
+  { ESCALA_INI();
+    spainel_desenharCorpo_(agora);
+    ESCALA_FIM(); }
+  reacao_painel_desenhar(agora);   // "Ja assisti" -> "O que achou?" (reacao.h)
 }
 static void spainel_desenharCorpo_(Uint32 agora) {
   desenharPainel(agora);
@@ -3286,7 +3478,9 @@ static void desenharPainel(Uint32 agora) {
         }
         // Por pessoa: o nome de quem mandou abre o grupo dele.
         if (social[i].tipo == SPS_REC && y + cab >= listaTopo() && y <= SP_LISTA_BASE)
-          desenhaSecao(SP_X + x, y, recs[social[i].idx].deNome, a, cab < SP_SECAO_H - 0.5f);
+          desenhaSecao(SP_X + x, y, recVista[social[i].idx] ? "Assistidas"
+                                                             : recs[social[i].idx].deNome,
+                       a, cab < SP_SECAO_H - 0.5f);
         y += cab;
       }
       // Fora da janela nao custa texto nem textura — mesma razao da lista de
