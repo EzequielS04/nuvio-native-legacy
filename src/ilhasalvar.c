@@ -71,7 +71,7 @@ void ilhasalvar_aviso(const CatItem *ci, int entrou) {
   memset(&a, 0, sizeof a);
   a.icone = "aj_bookmark"; a.frase = txt; a.titulo = ci->titulo;
   a.onde = "";   // a frase ja diz onde
-  a.thumb = ci->poster; a.tipo = entrou ? ILHA_ACENTO : ILHA_INFO; a.voar = entrou;
+  a.thumb = ci->poster; a.arte = ci->backdrop; a.tipo = entrou ? ILHA_ACENTO : ILHA_INFO; a.voar = entrou;
   a.desfazer = desfazerSalvar; a.ctx = &c; a.ctxN = sizeof c;
   ilhaacao_feita(&a);
 }

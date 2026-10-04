@@ -609,7 +609,7 @@ static void anunciarAssistido(int intencao) {
   memset(&a, 0, sizeof a);
   a.icone = intencao ? "check" : "aj_x";
   a.frase = intencao ? i18n("Marcado como assistido") : i18n("Marcado como não assistido");
-  a.titulo = opItem.titulo; a.thumb = opItem.poster;
+  a.titulo = opItem.titulo; a.thumb = opItem.poster; a.arte = opItem.backdrop;
   a.tipo = intencao ? ILHA_OK : ILHA_INFO;
   if (!(intencao && opTinhaRetomada)) { a.desfazer = desfazerAssistido; a.ctx = &c; a.ctxN = sizeof c; }
   ilhaacao_feita(&a);
