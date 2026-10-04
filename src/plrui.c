@@ -64,10 +64,7 @@ void plrui_disco_osd(GfxRect r, float a) {
 int plrui_tinta(void) { return ajustes_tinta_foco(); }
 
 void plrui_decimal(char *s) {
-  char *p;
-  if (idioma_ponto_decimal(ajustes_idioma())) return;
-  for (p = s; p && *p; p++)
-    if (*p == '.' && p > s && p[-1] >= '0' && p[-1] <= '9' && p[1] >= '0' && p[1] <= '9') *p = ',';
+  idioma_decimal_texto(s, ajustes_idioma());
 }
 
 #define BT_H     60.0f
