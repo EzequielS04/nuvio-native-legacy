@@ -261,6 +261,14 @@ static void bloqueadosESegredos(void) {
  * inactive, says so and the accessor never asks the backend for a cache. */
 static void zoomTpk(void) {
   int i, vezes = 0;
+  { int n = 0;   // F06: sincronia pelo audio so na tela do Android
+    for (i = 0; i < AJ_N_TELA; i++) if (TELA[i].tipo == IT_OPC && TELA[i].op == AJ_LEG_SYNC_AUDIO) n++;
+#ifdef NV_ANDROID
+    assert(n == 1);
+#else
+    assert(n == 0 && !ajustes_legenda_sync_audio());
+#endif
+  }
   assert(!strcmp(CHAVE[AJ_TRAILER_ZOOM_TPK], "trailerZoomTpkLocal"));
   assert(valorPadrao[AJ_TRAILER_ZOOM_TPK] == 1);   // Desligado
   assert(!strcmp(OPCOES[AJ_TRAILER_ZOOM_TPK].valores[1], "Desligado"));

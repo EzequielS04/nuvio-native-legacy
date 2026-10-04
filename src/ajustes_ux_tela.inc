@@ -83,7 +83,14 @@ static const Item TELA[] = {
       OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
 
   SEC("Idiomas e legendas", "Idioma da interface, áudio, legenda e metadados", "aj_languages"),
-    OPC(AJ_IDIOMA), OPC(AJ_AUD_LINGUA), OPC(AJ_LEG_LINGUA), OPC(AJ_LEG_LINGUA2), OPC(AJ_LEG_SYNC_AUDIO), OPC(AJ_TMDB_IDIOMA),
+    OPC(AJ_IDIOMA), OPC(AJ_AUD_LINGUA), OPC(AJ_LEG_LINGUA), OPC(AJ_LEG_LINGUA2),
+#ifdef NV_ANDROID
+    // Sincronia pelo audio (F06): so o player do Android entrega o PCM. Na LG e
+    // na Samsung a linha so diria "indisponivel nesta plataforma" (decisao do
+    // dono, 04/10).
+    OPC(AJ_LEG_SYNC_AUDIO),
+#endif
+    OPC(AJ_TMDB_IDIOMA),
 
   SEC("TV ao vivo", "Provedor e solução de problemas ao assistir canais", "aj_tv-minimal-play"),
     ROT("Provedor"),
