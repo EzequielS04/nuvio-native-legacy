@@ -94,6 +94,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "plrui.h"
 #include "escala.h"
 #include "plrilha.h"
+#include "legendasui.h"   /* F04: second subtitle band */
 #include <time.h>
 #include <stdio.h>
 #include <string.h>
@@ -3097,6 +3098,12 @@ static void desenharLegendaExterna(void){
    * apagava o karaoke e as placas coloridas. A folha mostra essas linhas como
    * preservadas (faixas.c). */
   int r, g, b;
+  /* F04: SECOND SUBTITLE (legendasui.h). Before every primary early return
+   * (libass, no cues) so both show in every branch; its own document and
+   * offset, in the top band. Geometry is passed explicitly. */
+  { PlrRect av = areaVideoLegenda();
+    LegendasGeo g2 = { av.x, av.y, av.w, av.h, anim * entrada, entrada, posLegenda() };
+    legendasui_desenhar_secundaria(&g2); }
   assrender_aplicar_invalidacao();
   assrender_definir_cor(0, 0, 0, 0);
   if (assrender_ativo()) {
@@ -3143,7 +3150,7 @@ static void desenharLegendaExterna(void){
   // previa da barra de estilo mostrou isso na primeira captura.
   if(legEstilo.posicao>=3) base-=(legEstilo.posicao-3)*48.f;
   else base+=(3-legEstilo.posicao)*20.f;
-  float baseTopo = 80.f;             // pilha do \an8 (letreiros), de cima para baixo
+  float baseTopo = legendasui_topo_livre(80.f);  // pilha do \an8 (letreiros), abaixo da 2a legenda (F04)
   float baseMeio = NV_TELA_H * .5f;
   for (i = 0; i < n; i++) {
     const LegendaCue *c = &cues[i];

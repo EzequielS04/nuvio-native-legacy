@@ -632,6 +632,31 @@ const Legenda *addons_legenda(int i) {
   return r;
 }
 
+int addons_legendas_copiar(Legenda *dst, int max, unsigned *geracao, int *prontas) {
+  int n, i;
+  pthread_mutex_lock(&legTrava);
+  n = nLegs < max ? nLegs : max;
+  if (n < 0) n = 0;
+  for (i = 0; i < n; i++) dst[i] = legs[i];
+  if (geracao) *geracao = legGeracao;
+  if (prontas) *prontas = !fioLegVivo && legId[0];
+  pthread_mutex_unlock(&legTrava);
+  return n;
+}
+
+#ifdef NV_SHOT_HOOKS
+// Captures (tests/legendas_shot.c): a subtitle list without network.
+void addons_shot_legendas(const Legenda *v, int n) {
+  pthread_mutex_lock(&legTrava);
+  if (n > LEG_MAX) n = LEG_MAX;
+  if (n < 0) n = 0;
+  memcpy(legs, v, (size_t)n * sizeof *v);
+  nLegs = n;
+  legGeracao++;
+  pthread_mutex_unlock(&legTrava);
+}
+#endif
+
 // Grupos de idioma da busca de legenda, NA ORDEM em que aparecem.
 //
 // O QUE ESTAVA AQUI: duas listas cravadas ("pob","pt-br",... e "eng","en",...)
@@ -812,6 +837,7 @@ static void *buscarLegendas(void *u) {
             if (!nome[0]) js_texto(q, f, "movieReleaseName", nome, sizeof nome);
             snprintf(d->idioma, sizeof d->idioma, "%s", l);
             snprintf(d->provedor, sizeof d->provedor, "%s", addon[i].nome);
+            snprintf(d->arquivo, sizeof d->arquivo, "%s", nome);
             if (temporada > 0 && episodio > 0)
               snprintf(d->rotulo, sizeof d->rotulo, i18n("T%dE%d  \xc2\xb7  %s%s%.22s"),
                        temporada, episodio, i18n(ling_nome(l)), nome[0] ? "  \xc2\xb7  " : "", nome);
