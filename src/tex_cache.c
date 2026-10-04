@@ -465,6 +465,7 @@ unsigned long tex_hash_public(const char *caminho) {
 }
 
 int    tex_n_busca = 0;
+unsigned tex_n_falta = 0;
 double tex_ms_busca = 0.0;
 int    tex_despejos = 0;
 int    tex_despejos_quentes = 0;
@@ -3202,6 +3203,7 @@ static GLuint tex_obter_limite(const char *caminho, int limite, int urgente,
       }
     }
   }
+  if (!saida) tex_n_falta++;
   SDL_UnlockMutex(mtx);
   return saida;
 }

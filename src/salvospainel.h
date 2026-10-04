@@ -49,6 +49,8 @@ void spainel_fundo(int podeParar, unsigned rev, void (*fundo)(void *), void *ctx
 int  spainel_n_reconstrucoes(void);
 // Quantas vezes o fundo parado foi pintado no FBO.
 int  spainel_n_fundos(void);
+// Quantas linhas da aba Salvos estao em "Continuar" (com progresso). Testes.
+int  spainel_n_continuar(void);
 
 // IMDb do titulo que o dono escolheu, ou NULL. Consumido uma vez. Quem resolve
 // o id no catalogo e abre o detalhe e o roteador (app.c) — o painel nao conhece

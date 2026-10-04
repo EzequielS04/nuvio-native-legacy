@@ -59,7 +59,8 @@
 // ESQUERDA DO PAINEL — o mockup poe a ilha a 40 da borda e a folha de Fontes
 // real a 24, entao o que se copia e a distancia de dentro, nao a absoluta:
 //   cabecalho  40 de ar; o kicker (15 caixa alta) e "Social" (40 bold) a 48 da
-//              borda; o disco de fechar (56) alinhado pela base do titulo
+//              borda. SEM o disco de fechar do mockup: o dono pediu para tirar
+//              o X (03/10); VOLTAR e ESQUERDA na borda fecham.
 //   abas       136 do topo, o seletor a 42 da borda: 5 de folga, segmentos de
 //              45 (19 semibold, 20 de recuo, contagem 16 em cinza a 9 do rotulo)
 //   lista      217 do topo; linhas de 26 a 26 das bordas, raio 22, 18/22 de
@@ -75,8 +76,6 @@
 #define SP_LINHA_RAIO   22.0f
 #define SP_KICK_Y      (SP_Y + 40.0f)
 #define SP_TIT_Y       (SP_Y + 62.0f)
-#define SP_FECHAR_D     56.0f
-#define SP_FECHAR_Y    (SP_Y + 54.0f)
 // ABAS. Elas so existem quando o servico de recomendacoes foi compilado
 // (recomenda_ativo); sem ele o painel e exatamente o que era, sem uma linha a
 // mais de cromo para uma funcao que nao existe naquele pacote.
@@ -242,8 +241,6 @@ static int nCont;            // quantas das primeiras linhas sao "Continuar"
 enum { SP_ABA_SALVOS = 0, SP_ABA_ATIVIDADE = 1, SP_ABA_SOCIAL = 2, SP_ABA_AVISOS = 3,
        SP_ABA_N = 4 };
 #define SP_FOCO_ABAS (-1)
-// O disco de fechar do cabecalho (desenhaFechar). -3, porque -2 e a barra.
-#define SP_FOCO_FECHAR (-3)
 static int aba;
 static RecItem recs[REC_MAX];
 static int nRecs;
@@ -468,6 +465,61 @@ static void legendasDaBarra(SPLinha *l);
 static int tipoGrupo(const char *tipo, const char *id, int serie);
 static int anoDe(const char *meta);
 static void organizar(void);
+// O QUE ACABOU DE SER VISTO ENTRA EM "CONTINUAR" (dono, 03/10: "as coisas que
+// acabei de ver nao tao aparecendo no social, na parte saved; tem que aparecer
+// ele com a barra e o tempo"). A uniao (salvos_uniao) so leva o que esta
+// SALVO — a lista local e o que a conta marcou naLista —, entao um filme
+// comecado sem "+" nunca virava linha, e um salvo da conta cujo progresso so
+// existe na copia da fileira Continuar assistindo (sem a marca) ficava sem
+// barra. Aqui a fileira "continue_watching" do catalogo, que e onde o progresso
+// local, o da conta e o do Trakt ja chegam juntos (descoberta.c), completa a
+// lista: titulo novo vira linha com a barra e o tempo; titulo ja listado sem
+// progresso ganha o da fileira. So itens com progresso: o "proximo episodio"
+// sem nada visto e assunto da home, nao de "Continuar".
+static void preencherDoCat(SPLinha *l, const CatItem *c) {
+  l->progresso = c->progresso;
+  l->temporada = c->temporada;
+  l->episodio  = c->episodio;
+  l->restanteMin = c->restanteMin;
+  if (c->nota > 0) l->nota = c->nota;
+  if (c->poster[0]) snprintf(l->poster, sizeof l->poster, "%s", c->poster);
+  if (c->meta[0])   snprintf(l->meta, sizeof l->meta, "%s", c->meta);
+  if (ehSerie(c->tipo, c->nTemporadas)) l->serie = 1;
+  if (c->backdrop[0]) snprintf(l->fundo, sizeof l->fundo, "%s", c->backdrop);
+}
+static void vistosAgora(void) {
+  int r, nf = cat_n_fileiras(), base = nLinhas;
+  for (r = 0; r < nf; r++) {
+    const CatFileira *f = cat_fileira(r);
+    int k;
+    if (!f || strcmp(f->chave, "continue_watching")) continue;
+    for (k = f->ini; k < f->ini + f->n; k++) {
+      const CatItem *c = cat_item(k);
+      int j, achou = -1;
+      SPLinha *l;
+      if (!c || !c->imdb[0] || c->progresso <= 0) continue;
+      for (j = 0; j < nLinhas && achou < 0; j++)
+        if (salvos_mesmo_titulo(linhas[j].id, c->imdb)) achou = j;
+      if (achou >= 0) {
+        // Ja listado: so completa a barra de quem nao tinha (os acrescentados
+        // aqui ja vieram com a copia mais recente da fileira).
+        if (achou < base && linhas[achou].progresso <= 0) preencherDoCat(&linhas[achou], c);
+        continue;
+      }
+      if (nLinhas >= SP_MAX || !garantirLinhas(nLinhas + 1)) return;
+      l = &linhas[nLinhas++];
+      memset(l, 0, sizeof *l);
+      snprintf(l->id, sizeof l->id, "%s", c->imdb);
+      snprintf(l->titulo, sizeof l->titulo, "%s", c->titulo);
+      preencherDoCat(l, c);
+      l->tipoG = tipoGrupo(c->tipo, l->id, l->serie);
+      l->ano = anoDe(l->meta);
+      l->cat = sorg_categoria_de(l->id);
+    }
+    break;
+  }
+}
+
 static void reconstruir(void) {
   static SalvosEntrada *uniao;
   static int capUniao;
@@ -513,21 +565,12 @@ static void reconstruir(void) {
     // O PROGRESSO SO EXISTE NO CATALOGO. A lista local guarda o que e dela
     // (titulo, poster, quando entrou); posicao de retomada e de progresso.c e
     // muda sem passar por aqui. Guardar uma copia envelheceria em minutos.
-    if (c) {
-      l->progresso = c->progresso;
-      l->temporada = c->temporada;
-      l->episodio  = c->episodio;
-      l->restanteMin = c->restanteMin;
-      if (c->nota > 0) l->nota = c->nota;
-      if (c->poster[0]) snprintf(l->poster, sizeof l->poster, "%s", c->poster);
-      if (c->meta[0])   snprintf(l->meta, sizeof l->meta, "%s", c->meta);
-      if (ehSerie(c->tipo, c->nTemporadas)) l->serie = 1;
-      if (c->backdrop[0]) snprintf(l->fundo, sizeof l->fundo, "%s", c->backdrop);
-    }
+    if (c) preencherDoCat(l, c);
     l->tipoG = tipoGrupo(s ? s->tipo : c->tipo, l->id, l->serie);
     l->ano = anoDe(l->meta);
     l->cat = sorg_categoria_de(l->id);
   }
+  vistosAgora();
   for (i = 0; i < nLinhas; i++) { legendasDaBarra(&linhas[i]); linhas[i].orig = i; }
   // A ORDEM DE SEMPRE era: a uniao na ordem acima e, por cima, quem tem
   // progresso subindo para "Continuar". Agora a ordem e o agrupamento sao da
@@ -1480,20 +1523,6 @@ void spainel_evento(const SDL_Event *e) {
   // ESQUERDA NA LINHA DE ABAS NAO FECHA SE HA PARA ONDE IR. Fora dela, e fora
   // da primeira aba, ela continua sendo "sair pela borda" — o gesto que
   // perfil.c ja tinha nesta posicao.
-  // O DISCO DE FECHAR: OK fecha, BAIXO volta para as abas (ou a lista, sem
-  // abas). Direita nao tem para onde ir; esquerda ja fecha, como em todo o
-  // painel.
-  if (foco == SP_FOCO_FECHAR) {
-    if (teclaOk(k)) { if (!e->key.repeat) spainel_fechar(); return; }
-    if (k == SDLK_DOWN) {
-      foco = temAbas() ? SP_FOCO_ABAS : (temBarra() ? SP_FOCO_BARRA : (nVisiveis() > 0 ? 0 : SP_FOCO_FECHAR));
-      return;
-    }
-    // Com abas, ESQUERDA volta a ultima delas (foi a DIREITA que trouxe ate
-    // aqui); sem abas ela fecha, como no resto do painel.
-    if (k == SDLK_LEFT) { if (temAbas()) foco = SP_FOCO_ABAS; else spainel_fechar(); return; }
-    return;
-  }
   if (k == SDLK_LEFT) {
     if (temAbas() && foco == SP_FOCO_ABAS && aba != SP_ABA_SALVOS) {
       trocarAba(proximaAba(aba, -1)); return;
@@ -1507,8 +1536,7 @@ void spainel_evento(const SDL_Event *e) {
   if (k == SDLK_RIGHT) {
     if (temAbas() && foco == SP_FOCO_ABAS) {
       int p = proximaAba(aba, 1);
-      if (p == aba) foco = SP_FOCO_FECHAR;   // da ultima aba, o disco de fechar
-      else trocarAba(p);
+      if (p != aba) trocarAba(p);   // da ultima aba nao ha para onde ir
     }
     else if (foco == SP_FOCO_BARRA) { if (barraFoco + 1 < nChips()) barraFoco++; }
     else if (aba == SP_ABA_SALVOS && foco >= 0 && foco + 1 < nLinhas &&
@@ -1534,16 +1562,14 @@ void spainel_evento(const SDL_Event *e) {
     // DE CIMA DA LISTA SOBE PARA A BARRA (se ha) E DAI PARA AS ABAS, e nao
     // para lugar nenhum. Sem isto a unica forma de trocar de aba seria fechar
     // e reabrir o painel.
-    // SEM ABAS, A BARRA SOBE PARA O DISCO DE FECHAR. Com abas, CIMA para
-    // nelas como sempre (quem desce de volta tem de cair nas abas, e uma
-    // sequencia "CIMA ate parar, BAIXO" continua chegando a barra); o disco
-    // fica a DIREITA da ultima aba.
-    if (foco == SP_FOCO_BARRA) { foco = temAbas() ? SP_FOCO_ABAS : SP_FOCO_FECHAR; return; }
+    // Sem abas a barra e o topo: CIMA para nela.
+    if (foco == SP_FOCO_BARRA) { if (temAbas()) foco = SP_FOCO_ABAS; return; }
     if (foco == SP_FOCO_ABAS) return;
     if (aba == SP_ABA_SALVOS && foco < nLinhas) {
       int v = celulaVizinha(foco, -1);
       if (v >= 0) { foco = v; return; }
-      foco = temBarra() ? SP_FOCO_BARRA : temAbas() ? SP_FOCO_ABAS : SP_FOCO_FECHAR;
+      if (temBarra()) foco = SP_FOCO_BARRA;
+      else if (temAbas()) foco = SP_FOCO_ABAS;
       return;
     }
     if (foco == 0 && temAbas()) { foco = temBarra() ? SP_FOCO_BARRA : SP_FOCO_ABAS; return; }
@@ -1788,7 +1814,7 @@ void spainel_atualizar(float dt, Uint32 agora) {
   // Biblioteca. Alinhar a focada ao topo joga o cabecalho para fora na primeira
   // descida e a pessoa perde de vista em que painel esta.
   alvo = scrollY;
-  if (foco == SP_FOCO_ABAS || foco == SP_FOCO_BARRA || foco == SP_FOCO_FECHAR) alvo = 0.0f;
+  if (foco == SP_FOCO_ABAS || foco == SP_FOCO_BARRA) alvo = 0.0f;
   else if (nVisiveis() > 0 && foco >= 0 && foco < nVisiveis()) {
     float janela = SP_LISTA_BASE - listaTopo();
     topo = topoDe(foco);
@@ -2351,20 +2377,6 @@ static float abasLargura(void) {
     w += segLargura(i, &t, &n, 176) + SP_SEG_VAO;
   }
   return w;
-}
-
-// O DISCO DE FECHAR (".dsc": 56, branco a 8 %, solido #24262c, o X da
-// Lucide a 85 %). E foco de verdade, e nao enfeite: o OK fecha — um botao
-// que o D-pad nao alcanca seria mentira numa TV. Chega-se nele pela DIREITA
-// a partir da ultima aba (ou por CIMA, sem abas). Focado, vira a pilula
-// cheia no acento, como os discos da folha de Fontes (chipFolha).
-static void desenhaFechar(float dx, float a) {
-  GfxRect r = { SP_X + dx + SP_W - SP_PAD - SP_FECHAR_D, SP_FECHAR_Y, SP_FECHAR_D, SP_FECHAR_D };
-  int focado = foco == SP_FOCO_FECHAR;
-  float c = .85f * 243.0f / 255.0f, g = r.h * .42f;
-  botaoSup(r, 0.5f, focado ? 1.0f : 0.0f, a);
-  if (focado) c = ajustes_tinta_foco() / 255.0f;
-  gfx_icone((GfxRect){ r.x + (r.w - g) * .5f, r.y + (r.h - g) * .5f, g, g }, "aj_x", c, c, c, a);
 }
 
 // AS ABAS SAO UM SELETOR SEGMENTADO (".seg" do mockup): conteiner pilula em
@@ -3057,14 +3069,35 @@ static void veuInteiro(void) {
 // quando o painel abriu — um cartaz, o fundo do destaque logo depois do
 // arranque — ficaria congelada como esqueleto; tres pinturas a mais custam
 // tres quadros no ritmo de antes, e so na abertura.
+//
+// A COPIA TAMBEM E REFEITA ENQUANTO SAIU FALTANDO ARTE (relato do dono, 03/10:
+// "quando a sidebar social ta aberta, depois de um tempo a home some e so
+// volta quando eu fecho"). Parada, a home nao e desenhada, entao a arte dela
+// esfria no cache e e a primeira a ser despejada quando as capas e os rostos
+// do painel entram. Ate ai a copia segura a imagem. Mas a primeira
+// republicacao do catalogo (Continuar assistindo refeito, sync) sobe
+// cat_revisao, a copia e repintada com o cache sem a arte da home — e ficava
+// assim: os pedidos daquele unico quadro caducavam (pedido velho, tex_cache.c)
+// e nada mais repintava. REPRODUZIDO em tests/spainel_fundo_tempo.sh: arte
+// nova no cache + republicar = 60 % -> 3 % de conteudo na faixa da home.
+// Agora, se a pintura teve pedido sem textura (tex_n_falta), ela e refeita a
+// cada SP_FUNDO_FALTA_MS — abaixo dos 200 ms que fazem um pedido caducar — ate
+// sair inteira, com um teto para arte que nunca chega.
 static const Uint32 SP_FUNDO_REFAZ_MS[] = { 400, 1500, 4000 };
+#define SP_FUNDO_FALTA_MS   150
+#define SP_FUNDO_FALTA_MAX  80     /* ~12 s de tentativas por invalidacao */
 void spainel_fundo(int podeParar, unsigned rev, void (*fundo)(void *), void *ctx) {
-  static int pronto, refeitas;
+  static int pronto, refeitas, faltou, tentativas;
   static unsigned revPronto;
-  static Uint32 desde;
+  static Uint32 desde, pintadoEm;
   int parado = podeParar && aberto && entrada >= 0.999f && gfx_snap_ok();
-  if (!parado) { pronto = 0; refeitas = 0; }
-  else if (rev != revPronto) pronto = 0;
+  if (!parado) { pronto = 0; refeitas = 0; faltou = 0; tentativas = 0; }
+  else if (rev != revPronto) { pronto = 0; tentativas = 0; }
+  else if (pronto && faltou && tentativas < SP_FUNDO_FALTA_MAX &&
+           SDL_GetTicks() - pintadoEm >= SP_FUNDO_FALTA_MS) {
+    pronto = 0;
+    tentativas++;
+  }
   else if (pronto && refeitas < (int)(sizeof SP_FUNDO_REFAZ_MS / sizeof *SP_FUNDO_REFAZ_MS) &&
            SDL_GetTicks() - desde >= SP_FUNDO_REFAZ_MS[refeitas]) {
     pronto = 0;
@@ -3078,13 +3111,16 @@ void spainel_fundo(int podeParar, unsigned rev, void (*fundo)(void *), void *ctx
     glClearColor(NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
   }
-  if (fundo) fundo(ctx);
+  { unsigned faltas0 = tex_n_falta;
+    if (fundo) fundo(ctx);
+    faltou = tex_n_falta != faltas0; }
   if (parado) {
     veuInteiro();
     gfx_sem_recorte();
     gfx_snap_terminar();
     gfx_snap_desenhar();
     if (!refeitas) desde = SDL_GetTicks();
+    pintadoEm = SDL_GetTicks();
     pronto = 1;
     revPronto = rev;
     fundosPintados++;
@@ -3194,8 +3230,8 @@ static void desenharPainel(Uint32 agora) {
   gfx_recorte(SP_X + x, SP_Y, SP_W, SP_H);
 
   // O CABECALHO DO MOCKUP (".kick" + ".ttl" + ".dsc"): o resumo da aba em
-  // caixa alta pequena e espacada a 45 %, "Social" em 40 bold embaixo e o
-  // disco de fechar a direita, alinhado pela base do titulo. Era a contagem
+  // caixa alta pequena e espacada a 45 %, "Social" em 40 bold embaixo (o
+  // disco de fechar do mockup saiu a pedido do dono, 03/10). Era a contagem
   // solta a direita das abas e nenhum titulo — o painel nao dizia o nome
   // dele (dono, 02/10, comparando com o mockup). As PARTES passam por i18n; a
   // juncao, nao (ver metaTexto).
@@ -3234,7 +3270,6 @@ static void desenharPainel(Uint32 agora) {
   { TxtLinha t = txt_linha(TXT_ILHA_TITULO, temAbas() ? "Social" : "Salvos",
                            SPI_FG_R, SPI_FG_G, SPI_FG_B, 255);
     txt_desenhar_alpha(t, SP_X + x + SP_PAD, SP_TIT_Y, a); }
-  desenhaFechar(x, a);
   if (temAbas()) desenhaAbas(x, a);
   if (temBarra()) desenhaBarra(x, a);
 
@@ -3377,3 +3412,5 @@ static void desenharPainel(Uint32 agora) {
 
   gfx_sem_recorte();
 }
+
+int spainel_n_continuar(void) { if (listaVelha()) reconstruir(); return nCont; }
