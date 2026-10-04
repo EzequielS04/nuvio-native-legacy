@@ -21,7 +21,10 @@ int main(void) {
   assert(NV_DETP_G_EP == 1194 && NV_DETP_EP_Y == 1286);
   assert(NV_DETP_EP_W == 640 && NV_DETP_EP_H == 414);
   assert(CAR_TEXTO_SOBE == 64);
-  assert(ORDEM_FILME[SEC_ELENCO] == SEC_ELENCO);
+  // Ratings first below the hero on movies; right after the episodes on series.
+  assert(ORDEM_FILME[0] == SEC_NOTAS);
+  assert(ORDEM_SERIE[1] == SEC_EPISODIOS && ORDEM_SERIE[2] == SEC_NOTAS &&
+         ORDEM_SERIE[3] == SEC_ABAS_INFO);
   CatItem c = {0};
   const char *u = "https://image.tmdb.org/t/p/w500/image.png";
   assert(!mostrarNomeLogo(&c, u, 1, "pt-BR"));
