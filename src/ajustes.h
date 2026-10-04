@@ -360,6 +360,7 @@ float ajustes_tamanho_ui(void);
 float ajustes_tamanho_ajustes(void);
 int   ajustes_esconder_logo_trailer(void);   // 1 = hide the corner title logo while a trailer plays
 int   ajustes_legenda_sync_audio(void);      // 1 = offer "Por audio" in subtitle AutoSync (F06; local, default off)
+int   ajustes_trailer_zoom_tpk(void);        // #241: 1 = experimental trailer zoom on the native .tpk (local, default off)
 int   ajustes_cache_seek_mb(void);           // F07: seek cache limit in MB for the next video (0 = off / not on this TV)
 #ifdef AJUSTES_TESTE
 void  ajustes_teste_escala(int percentual); // fixture only; does not persist

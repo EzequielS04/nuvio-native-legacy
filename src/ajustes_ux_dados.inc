@@ -152,6 +152,7 @@ static const char *uxSinonimos(int op) {
     case AJ_AUD_LINGUA: return "idioma audio dublado dublagem original voz language";
     case AJ_LEG_LINGUA: return "idioma legenda legendado subtitle subtitles cc closed captions";
     case AJ_LEG_LINGUA2: return "idioma legenda secundaria segunda dupla dual second subtitle subtitles";
+    case AJ_TRAILER_ZOOM_TPK: return "trailer zoom barras pretas tarja ampliar recorte tela preta samsung experimental";
     case AJ_CACHE_SEEK: return "cache seek buffer disco armazenamento voltar avancar travando carregando";
     case AJ_TMDB_IDIOMA: return "idioma metadados titulo sinopse traducao tmdb";
     case AJ_HERO_TRAILER: return "trailer trailers destaque topo hero autoplay automatico";

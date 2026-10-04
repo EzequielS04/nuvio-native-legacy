@@ -73,6 +73,24 @@ int main(void) {
   confere("canario deixa o roi de zoom passar", -803, -191, 3530, 1466);
 #else
   if (video_recorte_fonte()) { printf("FALHA recorte ligado no padrao\n"); falhas++; }
+  // Runtime flag (#241): trailer-only. The player never sees it.
+  video_tpk_zoom_roi_definir(1);
+  if (video_recorte_fonte()) { printf("FALHA flag vazou para o player\n"); falhas++; }
+  if (!video_recorte_fonte_trailer() || !video_tpk_zoom_roi()) { printf("FALHA flag em execucao nao liga\n"); falhas++; }
+  video_janela_fonte(872, 208, 2082, 1170, 0, 0, 1920, 1080);
+  naTela("flag ligada, reproducao normal: roi continua na tela");
+  video_tpk_trailer_marcar(1);
+  video_janela_fonte(872, 208, 2082, 1170, 0, 0, 1920, 1080);
+  confere("flag ligada + trailer deixa o roi fora da tela passar", -803, -191, 3530, 1466);
+  video_tpk_trailer_marcar(0);
+  video_janela_fonte(872, 208, 2082, 1170, 0, 0, 1920, 1080);
+  naTela("trailer desmarcado: roi volta para a tela");
+  video_tpk_trailer_marcar(1);
+  video_tocar("http://x/filme.m3u8");   // outra abertura zera a marca
+  video_janela_fonte(872, 208, 2082, 1170, 0, 0, 1920, 1080);
+  naTela("nova abertura nao e trailer");
+  video_tpk_zoom_roi_definir(0);
+  if (video_recorte_fonte()) { printf("FALHA flag em execucao nao desliga\n"); falhas++; }
   // O mesmo pedido do registro 11875 ("-> roi -803,-191 3530x1466").
   video_janela_fonte(872, 208, 2082, 1170, 0, 0, 1920, 1080);
   naTela("zoom do trailer 3828x1588");
