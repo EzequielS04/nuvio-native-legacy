@@ -827,6 +827,25 @@ void legendasui_desenhar_secundaria(const LegendasGeo *g) {
   if (!g->junto) bandaFim = y;
 }
 
+// Altura do bloco da segunda legenda agora (0 = nada a mostrar). O player usa
+// para abrir lugar EMBAIXO da principal no modo "Junto da principal".
+float legendasui_altura_secundaria(const LegendasGeo *g) {
+  LegendaCue cues[LEGENDA_SIMULTANEAS];
+  Leg2Linha ln[LEG2_LINHAS];
+  const VideoLegendaEstilo *e = player_leg_estilo();
+  int n, i, nl = 0, r, gg, b, fundo, borda;
+  float altura = 0.0f;
+  TxtEstilo est;
+  if (!g || g->videoW < 1920.0f * 0.6f) return 0.0f;
+  n = legenda2_cues(g->pos, cues, LEGENDA_SIMULTANEAS);
+  if (n <= 0) return 0.0f;
+  estiloSecundario(e, &est, &r, &gg, &b, &fundo, &borda);
+  for (i = 0; i < n && nl < LEG2_LINHAS; i++)
+    nl += quebrar(&cues[i], est, r, gg, b, borda, 1800.0f, ln + nl, LEG2_LINHAS - nl);
+  for (i = 0; i < nl; i++) altura += (float)ln[i].cor.h + (i ? 5.0f : 0.0f);
+  return altura;
+}
+
 float legendasui_topo_livre(float minimo) {
   return bandaFim > 0.0f && bandaFim + 12.0f > minimo ? bandaFim + 12.0f : minimo;
 }

@@ -59,6 +59,7 @@ void  legendasui_desenhar_secundaria(const LegendasGeo *g);
 void  legendasui_banda_zerar(void);
 // Lowest y the primary's TOP-anchored stack (\an7-9) may start at so it does
 // not collide with the second band drawn this frame. `minimo` when no band.
+float legendasui_altura_secundaria(const LegendasGeo *g);
 float legendasui_topo_livre(float minimo);
 
 // --- AutoSync (F05) plugs in here ---------------------------------------------

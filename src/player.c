@@ -3261,8 +3261,11 @@ static double escalaFonteAss(void) {
 // Base (y) da pilha de baixo da legenda principal: posicao da folha, barra de
 // controles e botao de proximo episodio. Compartilhada com a segunda legenda
 // em modo "Junto da principal" (R4).
+// Lugar que a segunda legenda ocupa EMBAIXO da principal ("Junto da
+// principal"): a principal sobe isso. Zero fora desse modo.
+static float leg2Reserva;
 static float baseLegendaPrincipal(void) {
-  float base = visivel && !faixas_estilo_topo() ? 760.f : 1000.f;
+  float base = (visivel && !faixas_estilo_topo() ? 760.f : 1000.f) - leg2Reserva;
   if (ofertaProximo()) base = 690.f;
   // Abaixo do padrao (3) o passo e de 20 e nao de 48: com 48 as posicoes 1 e 2
   // punham a base em 1144 e 1096, fora da tela de 1080 — a legenda sumia, e a
@@ -3291,7 +3294,22 @@ static void desenharLegendaExternaCorpo(void) {
   int junto = ajustes_leg2_junto();
   LegendasGeo g2 = { av.x, av.y, av.w, av.h, anim * entrada, entrada, posLegenda(), junto, 0.0f };
   float topo = -1.0f;
+  // "Junto da principal": A SECUNDARIA FICA EMBAIXO (dono, 05/10/2026; antes
+  // ia em cima). A principal sobe a altura dela e ela termina onde a principal
+  // terminava. Com ASS (libass) a principal nao se move — ali a secundaria
+  // continua em cima, estimada como sempre.
+  leg2Reserva = 0.0f;
   if (junto) legendasui_banda_zerar(); else legendasui_desenhar_secundaria(&g2);
+  if (junto && !assrender_ativo()) {
+    float h2 = legendasui_altura_secundaria(&g2);
+    float baseOrig = baseLegendaPrincipal();
+    if (h2 > 0.0f) leg2Reserva = h2 + 10.0f;
+    desenharLegendaPrincipal(&topo);
+    leg2Reserva = 0.0f;
+    g2.baseY = baseOrig + 10.0f;   // o bloco termina na base original
+    legendasui_desenhar_secundaria(&g2);
+    return;
+  }
   desenharLegendaPrincipal(&topo);
   if (junto) { g2.baseY = topo >= 0.0f ? topo : baseLegendaPrincipal(); legendasui_desenhar_secundaria(&g2); }
 }
