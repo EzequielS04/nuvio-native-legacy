@@ -389,7 +389,9 @@ int main(void) {
      e so com a saida para a home valendo. */
   assert(AJ_MANTER_VIDEO == AJ_NOVIDADES20 + 1 && AJ_MANTER_VIDEO == AJ_N - 3);
   /* 2.0: tela de descanso (estilo e fonte da vitrine), LOCAIS, no fim. */
-  assert(AJ_DESCANSO_ESTILO == AJ_MANTER_VIDEO + 1 && AJ_DESCANSO_FONTE == AJ_N - 1);
+  assert(AJ_DESCANSO_ESTILO == AJ_MANTER_VIDEO + 1 && AJ_DESCANSO_FONTE == AJ_RELOGIO_12H - 1);
+  // Formato do relogio (2.0): local, no fim, padrao 24 h.
+  assert(AJ_RELOGIO_12H == AJ_N - 1 && !strcmp(CHAVE[AJ_RELOGIO_12H], "relogio12hLocal") && valorPadrao[AJ_RELOGIO_12H] == 0);
   assert(!strcmp(CHAVE[AJ_DESCANSO_ESTILO], "descansoEstiloLocal") && !strcmp(CHAVE[AJ_DESCANSO_FONTE], "descansoFonteLocal"));
   assert(valorPadrao[AJ_DESCANSO_ESTILO] == 0 && valorPadrao[AJ_DESCANSO_FONTE] == 0);
   assert(somenteDesteAparelho(AJ_DESCANSO_ESTILO) && somenteDesteAparelho(AJ_DESCANSO_FONTE));

@@ -160,7 +160,7 @@ static const char *ajVisualIcone(int op) {
     case AJ_DESCANSO_FONTE: return "aj_film";
     case AJ_BRILHO_PLAYER: return "aj_sun-dim";
     case AJ_MANTER_VIDEO: return "aj_memory-stick";
-    case AJ_RELOGIO: return "aj_clock";
+    case AJ_RELOGIO: case AJ_RELOGIO_12H: return "aj_clock";
     case AJ_VIDRO_CONTORNO: return "aj_layers";
     case AJ_VIDRO_OPAC: return "aj_layers";
     case AJ_VIDRO_FOSCO: return "aj_layers";
