@@ -46,3 +46,16 @@ A Inter não tem kana nem hanzi. `text.c` manda a linha para uma fonte de reserv
 | Arquivo | Bytes | SHA-256 |
 |---|---:|---|
 | `DroidSansFallback-Subset.ttf` | 1226652 | `7f4ff9c7ad1d4dd471e2f24ab27bc48b09d9dec0329a22b524f6664062eb7bc2` |
+
+## Fonte árabe embarcada
+
+A Samsung não traz fonte árabe e o texto saía em quadrados (#253, #258). O pacote leva `NotoNaskhArabic-Subset.ttf`, última da lista `ESC_ARABE` em `text.c`, depois das fontes de sistema (LG, Android, Mac).
+
+- Origem: Noto Naskh Arabic Regular 2.021, The Noto Project Authors, SIL OFL 1.1 (`NotoNaskhArabic-OFL.txt`), de github.com/notofonts/arabic.
+- Modificada: subconjunto com ASCII, U+0600–06FF, U+0750–077F e as formas de apresentação U+FB50–FDFF e U+FE70–FEFF, sem hinting e sem tabelas de layout. As formas de apresentação são obrigatórias: `src/bidi.c` faz a junção trocando cada letra por elas, não há HarfBuzz.
+- Regerar: `python3 tools/fonte-arabe.py /caminho/NotoNaskhArabic-Regular.ttf` (precisa de fontTools).
+- Conferir no Mac: `bash tests/text_familias.sh` (reabre o renderer com `NUVIO_SEM_RESERVA_DE_SISTEMA=1`).
+
+| Arquivo | Bytes | SHA-256 |
+|---|---:|---|
+| `NotoNaskhArabic-Subset.ttf` | 90372 | `a43af24c9307d838d89593fc86342ab024973ffa0d7f71bac76849afe2ce5675` |

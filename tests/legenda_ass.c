@@ -126,6 +126,16 @@ int main(void) {
     u = legenda_utf8(c1251, (long)strlen(c1251), &cs);
     OK(u && !strcmp(cs, "windows-1251") && !strcmp(u, "Привет, как дела"), "cp1251 cirilico (%s: %s)", cs, u ? u : "-");
     free(u);
+    // Arabe em Windows-1256 (#247, #261)
+    static const char c1256[] = "\xE3\xD1\xCD\xC8\xC7\xA1" " \xDF\xED\xDD" " \xCD\xC7\xE1\xDF" " \xC7\xE1\xED\xE6\xE3\xBF" " \xC3\xE4\xC7" " \xC8\xCE\xED\xD1" " \xD4\xDF\xD1\xC7" " \xE1\xDF";
+    u = legenda_utf8(c1256, (long)strlen(c1256), &cs);
+    OK(u && !strcmp(cs, "windows-1256") && !strcmp(u, "مرحبا، كيف حالك اليوم؟ أنا بخير شكرا لك"), "cp1256 arabe (%s)", cs);
+    free(u);
+    // Russo com palavras em maiusculas continua 1251
+    static const char c1251m[] = "\xC2\xCD\xC8\xCC\xC0\xCD\xC8\xC5! \xCE\xCF\xC0\xD1\xCD\xCE\xD1\xD2\xDC! \xCF\xF0\xE8\xE2\xE5\xF2, \xEA\xE0\xEA" " \xE4\xE5\xEB\xE0, \xE2\xF1\xB8" " \xF5\xEE\xF0\xEE\xF8\xEE";
+    u = legenda_utf8(c1251m, (long)strlen(c1251m), &cs);
+    OK(u && !strcmp(cs, "windows-1251") && !strcmp(u, "ВНИМАНИЕ! ОПАСНОСТЬ! Привет, как дела, всё хорошо"), "cp1251 com maiusculas (%s)", cs);
+    free(u);
     // UTF-8 com BOM: tira o BOM, nao mexe no resto
     static const char bom[] = "\xEF\xBB\xBFol\xC3\xA1";
     u = legenda_utf8(bom, (long)strlen(bom), &cs);

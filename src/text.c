@@ -1112,13 +1112,17 @@ int txt_iniciar(const char *dirRecursos, float escala) {
   // Fontes de RESERVA (ver Escrita), em ordem de preferencia por escrita. Na TV
   // sao as de sistema (LG e Droid, medidas no cmap de uma C9); no Mac, as do
   // sistema que cobrem cada escrita — ali isto e so para a previa nao mentir; e
-  // por ultimo, para o CJK, o subconjunto embarcado (o WASM da Samsung nao tem
-  // fonte de sistema nenhuma).
+  // por ultimo, para o CJK e o arabe, o subconjunto embarcado (o WASM da Samsung
+  // nao tem fonte de sistema nenhuma).
   // Largura RES_CAND: as listas abaixo tem no maximo 7 caminhos, e o laco para
   // no NULL. Com um vetor menor que a lista o terminador era descartado em
   // silencio e a busca seguia lendo a linha de baixo.
   char cjkEmbarcada[600];
   snprintf(cjkEmbarcada, sizeof cjkEmbarcada, "%sfonts/DroidSansFallback-Subset.ttf", base);
+  // Arabe: a Samsung nao traz fonte arabe (#253, #258). O recorte tem as formas
+  // de apresentacao que o bidi.c produz (tools/fonte-arabe.py).
+  char arabeEmbarcada[600];
+  snprintf(arabeEmbarcada, sizeof arabeEmbarcada, "%sfonts/NotoNaskhArabic-Subset.ttf", base);
   { const char *cand[ESC_N][RES_CAND + 1] = {
       /* ESC_CJK (japones)  */ { "/usr/share/fonts/LG_Display_JP.ttf",
                                  "/usr/share/fonts/DroidSansFallback.ttf",
@@ -1149,7 +1153,8 @@ int txt_iniciar(const char *dirRecursos, float escala) {
                                  "/System/Library/Fonts/Supplemental/GeezaPro.ttc",
                                  "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
                                  "/system/fonts/NotoNaskhArabic-Regular.ttf",
-                                 "/system/fonts/NotoSansArabic-Regular.ttf", NULL },
+                                 "/system/fonts/NotoSansArabic-Regular.ttf",
+                                 arabeEmbarcada, NULL },
       /* ESC_CIRILICO_ETC   */ { "/usr/share/fonts/DroidSansFallback.ttf",
                                  "/usr/share/fonts/DroidSans.ttf",
                                  "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
@@ -1165,7 +1170,7 @@ int txt_iniciar(const char *dirRecursos, float escala) {
       int n = 0;
       for (int i = 0; cand[e][i] && n < RES_CAND; i++) {
         FILE *fr;
-        if (soEmbarcada && cand[e][i] != cjkEmbarcada) continue;
+        if (soEmbarcada && cand[e][i] != cjkEmbarcada && cand[e][i] != arabeEmbarcada) continue;
         fr = fopen(cand[e][i], "rb");
         if (fr) { fclose(fr);
                   snprintf(caminhoReserva[e][n], sizeof caminhoReserva[e][n], "%s", cand[e][i]);
