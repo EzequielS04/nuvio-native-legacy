@@ -152,6 +152,7 @@ int trakt_recusada(void) { return estadoLer(&credRecusada); }
 // As tabelas da ultima leitura (definidas mais abaixo, junto de quem as
 // preenche). Os contadores ficam aqui porque trakt_esquecer os zera.
 static int nUlt, nProxIds, nPlay;
+static void proxMemLimpar(void);   // memoria do "a seguir" (mais abaixo)
 
 void trakt_esquecer(void) {
   pthread_mutex_lock(&travaCred);
@@ -167,6 +168,7 @@ void trakt_esquecer(void) {
   // para os cards do perfil novo. Zerar contadores so encurta uma varredura que
   // o fio da descoberta esteja fazendo — nunca a faz passar do fim.
   nUlt = nProxIds = nPlay = 0;
+  proxMemLimpar();
   estadoEscrever(&credRecusada, 0);
   trakt_social_reavaliar();
   printf("[trakt] credencial esquecida\n");
@@ -194,6 +196,7 @@ int trakt_definir(const char *tk, const char *cli) {
   ligado = token[0] && cliente[0];
   int ativo = ligado;
   pthread_mutex_unlock(&travaCred);
+  proxMemLimpar();
   // Token NOVO limpa a marca de recusa — e o mesmo caminho por onde a
   // renovacao (traktauth) e o pareamento novo chegam.
   estadoEscrever(&credRecusada, 0);
@@ -411,6 +414,53 @@ static void marcarTentada(const char *imdb) {
   pthread_mutex_unlock(&tentadasTrava);
 }
 
+// MEMORIA DAS FICHAS DO CATALOGO (B2, arranque). O log da C9 mostra os MESMOS
+// ids sendo baixados de novo a cada volta da descoberta (tt4955642 tres vezes
+// nos primeiros 40 s, a lista inteira do "Continuar" refeita 3x): cada volta
+// pagava de novo uma ficha por titulo, ~12-20 GETs, para o texto e a duracao que
+// nao mudam em minutos. Guarda o corpo por (tipo, id, idioma) por 15 min, no
+// maximo 24 fichas e so as de ate 256 KB (o videos[] de serie longa e grande).
+// Falha nunca e guardada: o proximo ciclo tenta a rede de novo.
+#define TK_FICHA_MAX 24
+#define TK_FICHA_TTL_S 900
+#define TK_FICHA_BYTES (256 * 1024)
+static struct { char chave[64]; char *corpo; time_t quando; } fichas[TK_FICHA_MAX];
+static int fichaProx;
+static pthread_mutex_t fichaTrava = PTHREAD_MUTEX_INITIALIZER;
+
+static char *fichaChave(char *k, size_t n, const char *tipo, const char *id) {
+  snprintf(k, n, "%s/%s/%s", tipo, id, metaprov_idioma());
+  return k;
+}
+static char *fichaBuscar(const char *tipo, const char *id) {
+  char k[64], *r = NULL;
+  int i;
+  fichaChave(k, sizeof k, tipo, id);
+  pthread_mutex_lock(&fichaTrava);
+  for (i = 0; i < TK_FICHA_MAX && !r; i++)
+    if (fichas[i].corpo && !strcmp(fichas[i].chave, k) &&
+        time(NULL) - fichas[i].quando < TK_FICHA_TTL_S)
+      r = strdup(fichas[i].corpo);
+  pthread_mutex_unlock(&fichaTrava);
+  return r;
+}
+static void fichaGuardar(const char *tipo, const char *id, const char *corpo) {
+  char k[64], *c;
+  int i;
+  if (!corpo || strlen(corpo) > TK_FICHA_BYTES) return;
+  c = strdup(corpo);
+  if (!c) return;
+  fichaChave(k, sizeof k, tipo, id);
+  pthread_mutex_lock(&fichaTrava);
+  for (i = 0; i < TK_FICHA_MAX; i++)
+    if (fichas[i].corpo && !strcmp(fichas[i].chave, k)) break;
+  if (i == TK_FICHA_MAX) { i = fichaProx; fichaProx = (fichaProx + 1) % TK_FICHA_MAX; }
+  free(fichas[i].corpo);
+  snprintf(fichas[i].chave, sizeof fichas[i].chave, "%s", k);
+  fichas[i].corpo = c; fichas[i].quando = time(NULL);
+  pthread_mutex_unlock(&fichaTrava);
+}
+
 static int enfeitar(CatItem *d, const char *tipo) {
   char url[300], *corpo;
   char serie[24];
@@ -442,7 +492,11 @@ static int enfeitar(CatItem *d, const char *tipo) {
   // 8 s e nao 20: ate oito destes em paralelo antes da primeira fileira.
   // Medido no Mac: 2,1 s no caso bom; com um item lento eram 20 s vazios.
   // Catalogo do Nuvio primeiro (5 s, e some por 1 min se cair), Cinemeta depois.
-  corpo = metaprov_meta(tipo, serie, 8, NULL);
+  corpo = fichaBuscar(tipo, serie);
+  if (!corpo) {
+    corpo = metaprov_meta(tipo, serie, 8, NULL);
+    if (corpo) fichaGuardar(tipo, serie, corpo);
+  }
   marcarTentada(d->imdb);
   if (!corpo) {
     // "A seguir" sem meta: nao da para confirmar que o episodio existe.
@@ -622,24 +676,44 @@ static int itemPronto(const CatItem *d) {
 #define TK_FIOS 3
 
 typedef struct { CatItem *d; char tipo[8]; int ok; } TarefaEnf;
-static TarefaEnf *enfTarefas;
-static int enfN, enfProx;
-static pthread_mutex_t enfTrava = PTHREAD_MUTEX_INITIALIZER;
+// A FILA DE CADA LOTE E DO LOTE (B2, arranque). Eram globais (enfTarefas/enfN/
+// enfProx), o que obrigava quem enfeita a rodar um de cada vez: o feed social
+// esperava a fileira "Continuar assistindo" inteira (medido na LG: 7 s, e 2,7 s
+// no Android) so porque os dois dividiam esta fila. Com a fila por lote, os dois
+// lotes enfeitam ao mesmo tempo; cada fio so escreve no CatItem que pegou.
+typedef struct {
+  TarefaEnf *t;
+  int n, prox;
+  pthread_mutex_t trava;
+} FilaEnf;
 
 static void *fioEnfeitar(void *u) {
-  (void)u;
+  FilaEnf *f = (FilaEnf *)u;
   for (;;) {
     int meu;
-    pthread_mutex_lock(&enfTrava);
-    if (enfProx >= enfN) { pthread_mutex_unlock(&enfTrava); return NULL; }
-    meu = enfProx++;
-    pthread_mutex_unlock(&enfTrava);
-    { CatItem *d = enfTarefas[meu].d;
+    pthread_mutex_lock(&f->trava);
+    if (f->prox >= f->n) { pthread_mutex_unlock(&f->trava); return NULL; }
+    meu = f->prox++;
+    pthread_mutex_unlock(&f->trava);
+    { CatItem *d = f->t[meu].d;
       // Pronto = arte + sinopse. Arte so (metahub) ainda pode querer o
       // Cinemeta para texto; `ok` 1 sobrevive a compactacao.
-      if (itemPronto(d)) enfTarefas[meu].ok = 1;
-      else enfTarefas[meu].ok = enfeitar(d, enfTarefas[meu].tipo); }
+      if (itemPronto(d)) f->t[meu].ok = 1;
+      else f->t[meu].ok = enfeitar(d, f->t[meu].tipo); }
   }
+}
+
+// Roda a fila em TK_FIOS fios e espera todos.
+static void enfeitarFila(FilaEnf *f) {
+  pthread_t fios[TK_FIOS];
+  int criados = 0, q;
+  pthread_mutex_init(&f->trava, NULL);
+  f->prox = 0;
+  for (q = 0; q < TK_FIOS; q++)
+    if (pthread_create(&fios[criados], NULL, fioEnfeitar, f) == 0) criados++;
+  if (!criados) fioEnfeitar(f);      // sem fios: em serie, mesmo resultado
+  for (q = 0; q < criados; q++) pthread_join(fios[q], NULL);
+  pthread_mutex_destroy(&f->trava);
 }
 
 // ENFEITAR os n itens em TK_FIOS fios, e so entao compactar. Compacta quem
@@ -662,32 +736,28 @@ int trakt_enfeitar_lote(CatItem *saida, int n) {
   if (jaFeitos) { printf("[trakt] enfeite: %d de %d ja vieram prontos\n", jaFeitos, n);
                   fflush(stdout); }
   if (jaFeitos == n) return n;
-  enfTarefas = calloc((size_t)n, sizeof(TarefaEnf));
-  if (enfTarefas) {
-    pthread_t fios[TK_FIOS];
-    int criados = 0, q, r, w;
-    for (q = 0; q < n; q++) {
-      enfTarefas[q].d = &saida[q];
-      snprintf(enfTarefas[q].tipo, sizeof enfTarefas[q].tipo, "%s", saida[q].tipo);
-    }
-    enfN = n; enfProx = 0;
-    for (q = 0; q < TK_FIOS; q++)
-      if (pthread_create(&fios[criados], NULL, fioEnfeitar, NULL) == 0) criados++;
-    if (!criados) fioEnfeitar(NULL);      // sem fios: em serie, mesmo resultado
-    for (q = 0; q < criados; q++) pthread_join(fios[q], NULL);
-
-    for (r = 0, w = 0; r < n; r++)
-      if (enfTarefas[r].ok) { if (w != r) saida[w] = saida[r]; w++; }
-    n = w;
-    free(enfTarefas); enfTarefas = NULL; enfN = 0;
-  } else {
-    // Sem memoria para a fila: em serie, no proprio fio.
-    int r, w;
-    for (r = 0, w = 0; r < n; r++)
-      if (itemPronto(&saida[r]) ||
-          enfeitar(&saida[r], saida[r].tipo)) { if (w != r) saida[w] = saida[r]; w++; }
-    n = w;
-  }
+  { FilaEnf fila;
+    fila.t = calloc((size_t)n, sizeof(TarefaEnf));
+    fila.n = n;
+    if (fila.t) {
+      int q, r, w;
+      for (q = 0; q < n; q++) {
+        fila.t[q].d = &saida[q];
+        snprintf(fila.t[q].tipo, sizeof fila.t[q].tipo, "%s", saida[q].tipo);
+      }
+      enfeitarFila(&fila);
+      for (r = 0, w = 0; r < n; r++)
+        if (fila.t[r].ok) { if (w != r) saida[w] = saida[r]; w++; }
+      n = w;
+      free(fila.t);
+    } else {
+      // Sem memoria para a fila: em serie, no proprio fio.
+      int r, w;
+      for (r = 0, w = 0; r < n; r++)
+        if (itemPronto(&saida[r]) ||
+            enfeitar(&saida[r], saida[r].tipo)) { if (w != r) saida[w] = saida[r]; w++; }
+      n = w;
+    } }
   return n;
 }
 
@@ -894,30 +964,87 @@ static int proxN, proxProx;
 static const char *const *proxCab;
 static pthread_mutex_t proxTrava = PTHREAD_MUTEX_INITIALIZER;
 
+// MEMORIA DO "A SEGUIR" CONFIRMADO (B2, arranque). Cada volta da descoberta
+// (arranque, escolha de perfil, sync que trouxe addons, ciclo de 5 min) refazia
+// um GET por serie candidata: 21 deles = ~4 s medidos na LG e no Android, quase
+// sempre com a mesma resposta. O "proximo episodio" que o Trakt devolve e funcao
+// do que foi visto, e o que foi visto aparece no ultimo episodio do historico;
+// entao a chave (serie, temporada e episodio vistos) basta: assistiu mais um,
+// a chave muda e o GET sai de novo. Guarda so a resposta POSITIVA (estado 1):
+// "sem proximo" muda sozinho quando o episodio novo vai ao ar, e nao e guardado.
+#define TK_PROX_MEM 64
+static struct { char imdb[24]; int tv, ev, t, e; } proxMem[TK_PROX_MEM];
+static int nProxMem, proxMemProx;
+static pthread_mutex_t proxMemTrava = PTHREAD_MUTEX_INITIALIZER;
+
+static int proxMemBuscar(const char *imdb, int tv, int ev, int *t, int *e) {
+  int i, r = 0;
+  pthread_mutex_lock(&proxMemTrava);
+  for (i = 0; i < nProxMem && !r; i++)
+    if (proxMem[i].tv == tv && proxMem[i].ev == ev && !strcmp(proxMem[i].imdb, imdb)) {
+      *t = proxMem[i].t; *e = proxMem[i].e; r = 1;
+    }
+  pthread_mutex_unlock(&proxMemTrava);
+  return r;
+}
+static void proxMemGuardar(const char *imdb, int tv, int ev, int t, int e) {
+  int i;
+  pthread_mutex_lock(&proxMemTrava);
+  for (i = 0; i < nProxMem; i++)
+    if (!strcmp(proxMem[i].imdb, imdb)) break;
+  if (i == nProxMem) {
+    if (nProxMem < TK_PROX_MEM) i = nProxMem++;
+    else { i = proxMemProx; proxMemProx = (proxMemProx + 1) % TK_PROX_MEM; }
+  }
+  snprintf(proxMem[i].imdb, sizeof proxMem[i].imdb, "%s", imdb);
+  proxMem[i].tv = tv; proxMem[i].ev = ev; proxMem[i].t = t; proxMem[i].e = e;
+  pthread_mutex_unlock(&proxMemTrava);
+}
+// Esquecida quando a credencial muda (outra conta Trakt, outro historico).
+static void proxMemLimpar(void) {
+  pthread_mutex_lock(&proxMemTrava);
+  nProxMem = 0; proxMemProx = 0;
+  pthread_mutex_unlock(&proxMemTrava);
+}
+
+// Os GETs de "a seguir" sao so espera de rede: mais fios que o enfeite.
+#define TK_FIOS_PROX 6
+
 static void *fioProximo(void *x) {
   (void)x;
   for (;;) {
     int meu;
     char url[160], *corpo;
+    const char *imdb;
+    int tv, ev;
     pthread_mutex_lock(&proxTrava);
     if (proxProx >= proxN) { pthread_mutex_unlock(&proxTrava); return NULL; }
     meu = proxProx++;
     pthread_mutex_unlock(&proxTrava);
+    imdb = ult[proxTarefas[meu].u].imdb;
+    tv = ult[proxTarefas[meu].u].temporada;
+    ev = ult[proxTarefas[meu].u].episodio;
+    if (proxMemBuscar(imdb, tv, ev, &proxTarefas[meu].t, &proxTarefas[meu].e)) {
+      proxTarefas[meu].estado = 1;
+      continue;
+    }
     snprintf(url, sizeof url,
              "https://api.trakt.tv/shows/%s/progress/watched?hidden=false&specials=false",
-             ult[proxTarefas[meu].u].imdb);
+             imdb);
     corpo = rede_baixar_com(url, 8, proxCab);
     proxTarefas[meu].estado = tk_prog_proximo(corpo, &proxTarefas[meu].t, &proxTarefas[meu].e);
+    if (proxTarefas[meu].estado == 1)
+      proxMemGuardar(imdb, tv, ev, proxTarefas[meu].t, proxTarefas[meu].e);
     free(corpo);
   }
 }
 
 static void consultarProximos(TarefaProx *v, int n, const char *const *cab) {
-  pthread_t fios[TK_FIOS];
+  pthread_t fios[TK_FIOS_PROX];
   int q, criados = 0;
   if (n <= 0) return;
   proxTarefas = v; proxN = n; proxProx = 0; proxCab = cab;
-  for (q = 0; q < TK_FIOS && q < n; q++)
+  for (q = 0; q < TK_FIOS_PROX && q < n; q++)
     if (pthread_create(&fios[criados], NULL, fioProximo, NULL) == 0) criados++;
   if (!criados) fioProximo(NULL);
   for (q = 0; q < criados; q++) pthread_join(fios[q], NULL);
@@ -1111,6 +1238,24 @@ static int dedupObras(CatItem *v, int n) {
   return w;
 }
 
+// O HISTORICO E OS FILMES VISTOS NAO DEPENDEM DO PLAYBACK (B2, arranque). Os tres
+// GETs saiam um depois do outro (playback, historico, last_activities + paginas
+// de filmes) e, na LG e no Android, eram ~4 s dos 9-14 s ate a fileira "Continuar
+// assistindo". Agora saem juntos; cada um escreve em estado proprio (play[]/nPlay
+// so o playback, ult[]/nUlt so o historico, o mapa de vistos sob travaCred).
+typedef struct { const char *const *cab; HistoricoPedido pedido; } PedidoHist;
+
+static void *fioHistorico(void *u) {
+  PedidoHist *h = (PedidoHist *)u;
+  carregarHistoricoReal(h->cab, h->pedido);
+  return NULL;
+}
+static void *fioFilmesVistos(void *u) {
+  PedidoHist *h = (PedidoHist *)u;
+  carregarFilmesVistos(h->cab, h->pedido);
+  return NULL;
+}
+
 int trakt_continuar(CatItem *saida, int max) {
   const char *cab[4];
   char aut[200], chave[140];
@@ -1121,8 +1266,19 @@ int trakt_continuar(CatItem *saida, int max) {
   HistoricoPedido pedido = historicoPedido();
   if (!cabecalhosPedido(pedido, cab, aut, sizeof aut, chave, sizeof chave)) return 0;
   nPlay = 0;
+  // Historico e filmes vistos em fios proprios enquanto o playback baixa. Sem
+  // fio (pthread_create falhou, ou WebAssembly sem threads): ficam em serie,
+  // depois do playback, como antes.
+  PedidoHist ph = { cab, pedido };
+  pthread_t fioHist, fioFilmes;
+  int hist = pthread_create(&fioHist, NULL, fioHistorico, &ph) == 0;
+  int filmes = pthread_create(&fioFilmes, NULL, fioFilmesVistos, &ph) == 0;
   corpo = rede_baixar_com("https://api.trakt.tv/sync/playback?extended=full", 25, cab);
-  if (!corpo) { continuarFalhou = 1; printf("[trakt] sem resposta\n"); return 0; }
+  if (!corpo) {
+    if (hist) pthread_join(fioHist, NULL);
+    if (filmes) pthread_join(fioFilmes, NULL);
+    continuarFalhou = 1; printf("[trakt] sem resposta\n"); return 0;
+  }
   // O corpo e um array na raiz; js_array procura por chave, entao anda-se a mao.
   p = strchr(corpo, '[');
   p = p ? p + 1 : NULL;
@@ -1202,8 +1358,10 @@ int trakt_continuar(CatItem *saida, int max) {
   }
   free(corpo);
   n = dedupObras(saida, n);
-  carregarHistoricoReal(cab, pedido);
-  carregarFilmesVistos(cab, pedido);
+  if (hist) pthread_join(fioHist, NULL); else carregarHistoricoReal(cab, pedido);
+  // Os filmes vistos seguem rodando durante os GETs de "a seguir" e do enfeite
+  // abaixo; so sao esperados no fim, antes de a fileira sair.
+  if (!filmes) carregarFilmesVistos(cab, pedido);
   printf("[trakt] historico: %d serie(s) com ultimo episodio visto\n", nUlt);
   // "A SEGUIR": serie cujo ultimo episodio visto terminou e que nao esta
   // pausada em nada. Entra com progresso 0 no episodio seguinte; enfeitar()
@@ -1288,6 +1446,7 @@ int trakt_continuar(CatItem *saida, int max) {
   // "number", mesmo com ?extended=full. Nao retentar sem medicao nova.
 
   n = trakt_enfeitar_lote(saida, n);
+  if (filmes) pthread_join(fioFilmes, NULL);
 
   printf("[trakt] %d em andamento\n", n);
   fflush(stdout);
@@ -1431,20 +1590,18 @@ int trakt_social(CatItem *saida, int max) {
   // O feed ja vem ordenado do mais recente. A arte e resolvida em paralelo,
   // com o mesmo limite de tres conexoes usado pelo Continue Assistindo.
   if (n > 0) {
-    TarefaEnf *tarefasSoc = calloc((size_t)n, sizeof *tarefasSoc);
-    if (tarefasSoc) {
-      pthread_t fios[TK_FIOS]; int criados = 0, q;
-      enfTarefas = tarefasSoc; enfN = n; enfProx = 0;
+    FilaEnf fila;
+    fila.t = calloc((size_t)n, sizeof *fila.t);
+    fila.n = n;
+    if (fila.t) {
+      int q;
       for (q = 0; q < n; q++) {
-        tarefasSoc[q].d = &saida[q];
-        snprintf(tarefasSoc[q].tipo, sizeof tarefasSoc[q].tipo, "%s", saida[q].tipo);
+        fila.t[q].d = &saida[q];
+        snprintf(fila.t[q].tipo, sizeof fila.t[q].tipo, "%s", saida[q].tipo);
       }
-      for (q = 0; q < TK_FIOS; q++)
-        if (pthread_create(&fios[criados], NULL, fioEnfeitar, NULL) == 0) criados++;
-      if (!criados) fioEnfeitar(NULL);
-      for (q = 0; q < criados; q++) pthread_join(fios[q], NULL);
+      enfeitarFila(&fila);
       // Arte indisponivel nao pode apagar uma pessoa real do feed.
-      free(tarefasSoc); enfTarefas = NULL; enfN = 0;
+      free(fila.t);
     }
   }
   printf("[trakt] %d atividades de amigos\n", n); fflush(stdout);
