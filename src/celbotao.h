@@ -55,10 +55,32 @@ int  celb_pegar(int dono, char *dst, size_t n);
 int  celb_evento(const SDL_Event *e);
 // Uma vez por quadro (app.c): as molas do botao e do cartao.
 void celb_atualizar(float dt);
-// O cartao, por cima de tudo. Sem cartao, nao faz nada.
+// O cartao, por cima de tudo. Sem cartao (ou com o QR hospedado), nao faz nada.
 void celb_desenhar(void);
 
+// --- HOSPEDADO: o QR dentro da superficie do dono ---
+// POR QUE EXISTE (dono, 05/10/2026, modal de teclado): o cartao ancora num
+// botao, e a modal de teclado nao tem botao — tem um segmento "Digitar pelo
+// celular" numa coluna. O cartao abria num canto da tela, sem ligacao com o
+// gesto. Quem ja e uma superficie propria (uma modal) pede o QR hospedado e o
+// desenha onde o gesto aconteceu; o Spotlight e a Busca continuam no cartao.
+//
+// O servidor, o token, o dono e celb_pegar sao os MESMOS: so mudam o desenho e
+// o teclado — hospedado, celb_evento so consome o Voltar (fecha o QR, nao a
+// tela do dono) e o resto segue para o dono, que continua navegavel.
+int   celb_abrir_embutido(int dono, const char *titulo);
+// 1 = aberto E hospedado por esse dono.
+int   celb_embutido(int dono);
+// Altura que o bloco pede numa coluna de largura `w`, com no maximo `hMax`
+// disponivel: escolhe o arranjo que cabe (QR + frase ao lado, empilhado, ou so
+// QR e endereco). O QR nunca encolhe. 0 se nao esta hospedado por esse dono.
+float celb_embutido_altura(int dono, float w, float hMax);
+// Desenha o bloco com o canto em (r.x, r.y), largura r.w e ate r.h de altura,
+// no sistema de coordenadas de quem chama. Sem fundo nem camada: e conteudo
+// do dono.
+void  celb_desenhar_em(int dono, GfxRect r, float alpha);
+
 // --- testes ---
-// Onde o cartao ficou no ultimo desenho (0 se fechado).
+// Onde o cartao (ou o bloco hospedado) ficou no ultimo desenho (0 se fechado).
 GfxRect celb_cartao_rect(void);
 #endif

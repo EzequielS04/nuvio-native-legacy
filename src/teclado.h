@@ -13,10 +13,20 @@
 // direita, e transformar aquilo numa camada por cima mudaria a tela de busca
 // inteira, que nao e o assunto de quem so quer digitar seis caracteres.
 //
-// SEM ESPACO, de proposito. Esta modal nasceu para codigo de pareamento: seis
-// caracteres de `a-z0-9`, sem espaco possivel. A ultima fileira e
-// apagar/limpar/pronto. Quando o texto livre da recomendacao entrar, o espaco
-// entra como quarta tecla dessa fileira — nao como uma segunda modal.
+// A FORMA: uma ilha de duas colunas. A ESQUERDA o contexto, o titulo, a dica,
+// o campo e os modos (teclado da TV | falar | digitar pelo celular) — e, com o
+// celular aberto, o QR embaixo deles, dentro da modal. A DIREITA a grade e a
+// fileira apagar / limpar / concluir.
+//
+// O FOCO SEGUE O DESENHO: ESQUERDA na primeira coluna de qualquer fileira da
+// grade entra na coluna da esquerda; DIREITA volta para a tecla de onde saiu.
+// La dentro, o campo fica em cima e os segmentos embaixo (CIMA/BAIXO), e
+// ESQUERDA/DIREITA andam entre os segmentos. CIMA da primeira fileira da grade
+// nao faz nada.
+//
+// O ALFABETO E DO CHAMADOR, sempre: so se digita o que ele passou. A modal
+// nasceu para codigo de pareamento (seis caracteres de `a-z0-9`) e esse
+// teclado continua igual. O espaco existe onde o alfabeto o tem.
 #ifndef NV_TECLADO_H
 #define NV_TECLADO_H
 #include <SDL2/SDL.h>
@@ -43,6 +53,14 @@ void teclado_abrir(const char *titulo, const char *dica, int max);
 // e, passando de 42, colunas (13, depois ate 20 — ver TE_COLS_LONGO em
 // teclado.c e a #88); um menor encolhe a grade. `inicial` NULL comeca vazio.
 //
+// ALFABETO COM AS DUAS CAIXAS VIRA CAMADAS (ver CAMADAS em teclado.c): em vez
+// de a-z, A-Z, digitos e sinais todos a vista, a grade mostra 0-9 e a-z em 10
+// colunas, com uma tecla de MAIUSCULAS (um OK = so a proxima letra, dois =
+// travada, tres = desliga) e, se os sinais nao couberem ao lado do "z", uma
+// tecla que troca para a camada de SINAIS. O conjunto que pode ser digitado
+// continua sendo exatamente o do alfabeto: maiuscula que ele nao tem nao sai,
+// e alfabeto sem as duas caixas nao ganha tecla nenhuma.
+//
 // Existe porque endereco de portal precisa de ponto, dois pontos e hifen, e
 // MAC precisa so de 0-9a-f e dois pontos — grades diferentes, uma modal so. Ver
 // a nota no topo: a saida errada seria uma segunda modal.
@@ -51,7 +69,7 @@ void teclado_abrir_com(const char *titulo, const char *dica, int max,
 // Depois de teclado_abrir_com: que campo e este. SENHA mostra um ponto por
 // caractere; EMAIL e SENHA pedem o teclado certo ao sistema (Android). A
 // proxima abertura volta a TEXTO.
-// EMAIL e SENHA (#216) tambem tiram o botao do celular: quem entra por e-mail
+// EMAIL e SENHA (#216) tambem tiram o modo do celular: quem entra por e-mail
 // e quem nao tem celular a mao. EMAIL ganha 13 colunas e uma fileira de
 // atalhos (.com, @gmail.com...); SENHA ganha "mostrar/ocultar". Onde o teclado
 // do sistema abre sozinho (Android) ele ja abre aqui.
@@ -65,8 +83,22 @@ void teclado_mascarar(int liga);
 void teclado_contexto(const char *kicker);
 int  teclado_mascarado(void);
 int  teclado_aberto(void);
-// Para testes: foco na barra do campo (1 campo, 2 Falar, 0 no teclado).
+// Para testes: foco na coluna da esquerda (0 na grade; 1 campo, 2 Falar,
+// 3 Digitar pelo celular, 4 o segmento Teclado da TV).
 int  teclado_foco_campo(void);
+// Para testes: camada a vista (0 letras, 1 sinais) e maiusculas (0 desligada,
+// 1 so a proxima letra, 2 travada).
+int  teclado_camada(void);
+int  teclado_caixa(void);
+// Para testes: finge o que existe neste aparelho (teclado da TV, voz,
+// celular); -1 devolve cada um ao que o aparelho diz.
+void teclado_teste_modos(int ime, int voz, int cel);
+// Para testes: em que parte da modal o foco esta.
+enum { TECLADO_FOCO_ESQUERDA = 0, TECLADO_FOCO_CARACTERE, TECLADO_FOCO_MEIO, TECLADO_FOCO_ACOES };
+int  teclado_foco_tipo(void);
+// Para testes: finge em que fileira do segmentado cada modo caiu (a quebra de
+// verdade e medida no desenho e depende do idioma). Vale ate o proximo desenho.
+void teclado_teste_quebra(int f0, int f1, int f2);
 void teclado_evento(const SDL_Event *e);
 void teclado_atualizar(float dt, Uint32 agora);
 void teclado_desenhar(Uint32 agora);
