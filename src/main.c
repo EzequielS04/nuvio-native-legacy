@@ -1519,8 +1519,9 @@ int main(int argc, char **argv) {
         // afogava os casos lentos de verdade.
         int lenta = fpsAgora < 45.0 && quentes >= 10 && (Uint32)(agora - ultModos) >= 30000u;
         if (lenta) { ultModos = agora;
-          printf("[gpu-modos] lento: fps=%.1f layout=%d cor-viva=%d vidro=%d\n",
-                 fpsAgora, ajustes_home_layout(), ajustes_cor_viva(), ajustes_vidro()); }
+          printf("[gpu-modos] lento: fps=%.1f layout=%d cor-viva=%d vidro=%d tela=%s\n",
+                 fpsAgora, ajustes_home_layout(), ajustes_cor_viva(), ajustes_vidro(),
+                 app_tela_nome()); }
         if (fo || lenta || getenv("NUVIO_FILL_MODOS")) {
           int k; printf("[gpu-modos] fill: forca=%.2f |", nv_ambiente_forca);
           for (k = 0; k < GFX_NMODOS; k++) if (gfx_fill_modo_ult[k] > 0.02) printf(" %d=%.2f", k, gfx_fill_modo_ult[k]);

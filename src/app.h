@@ -31,6 +31,8 @@ void app_evento(const SDL_Event *e);
 void app_atualizar(float dt, Uint32 agora);
 void app_desenhar(Uint32 agora);
 int  app_quer_sair(void);
+// Nome curto da tela em cena ("home", "player", "episodios"...), para o log.
+const char *app_tela_nome(void);
 // 1 quando CH+/CH- trocam de canal: guia aberto, ou um canal tocando (tela
 // cheia ou no canto). Fora disso, no Android, CH+ e CH- fazem o papel das
 // teclas AZUL e VERMELHA, que o controle nao tem (main.c).

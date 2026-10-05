@@ -447,6 +447,26 @@ static int pedirFonteJob(int tipo, unsigned geracao, const char *id, int renovan
 
 static Tela tela = TELA_HOME;
 static int sair = 0;
+
+// Nome curto da tela em cena, para o log de campo ("[gpu-modos] lento: ...
+// tela=episodios"). O que fica POR CIMA vence: painel de Fontes, Episodios e
+// Faixas sobre o player, Salvos, menu e detalhe sobre a home. Sem isto a linha
+// de FPS baixo nao diz em que tela a TV caiu, e nao ha como separar o custo do
+// vidro em Episodios do custo em qualquer outra. So letras minusculas e '-'.
+const char *app_tela_nome(void) {
+  static const char *const NOMES[] = {
+    "login", "escolha-perfil", "home", "explorar", "guia", "busca", "biblioteca", "perfil",
+    "ajustes", "diagnostico", "player", "social", "addons", "agenda", "livetv-diag", "plugins"
+  };
+  if (stream_folha_aberta()) return "fontes";
+  if (episodios_aberto()) return "episodios";
+  if (faixas_aberta()) return "faixas";
+  if (spainel_aberto()) return "salvos";
+  if (menu_aberto()) return "menu";
+  if (tela == TELA_HOME && detail_aberto()) return "detalhe";
+  if ((unsigned)tela < sizeof NOMES / sizeof *NOMES) return NOMES[tela];
+  return "?";
+}
 static int saiuPorEsquerda;   // a ultima tecla foi ESQUERDA (ver app_evento)
 // A barra e uma camada de navegacao, mas nao pode disputar o Guia de TV nem
 // um canal minimizado. Manter a regra aqui evita que cada tela invente sua
