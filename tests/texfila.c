@@ -124,6 +124,17 @@ int main(void) {
     for (k = 0; k < 4; k++) assert(tirarFila(f, &ini, fim) == esperado[k]); }
   puts("ok  dois urgentes saem na ordem de chegada entre si");
 
+  // 5b. LOGO (nivel 2) fura ate o urgente de tela cheia (nivel 1); dois logos
+  //     seguem a ordem de chegada; o resto continua FIFO.
+  encher(f, &ini, &fim, ordem, 6);
+  itens[11].urgente = 1; itens[14].urgente = 2; itens[15].urgente = 2;
+  assert(tirarFila(f, &ini, fim) == 14);
+  assert(tirarFila(f, &ini, fim) == 15);
+  assert(tirarFila(f, &ini, fim) == 11);
+  { int esperado[3] = { 10, 12, 13 };
+    for (k = 0; k < 3; k++) assert(tirarFila(f, &ini, fim) == esperado[k]); }
+  puts("ok  logo (nivel 2) fura ate o fundo de tela cheia");
+
   // 6. A FILA QUE DEU A VOLTA no vetor circular. O bug classico deste tipo de
   //    codigo mora aqui: com ini > fim o "puxar para a frente" atravessa o zero.
   { int idx[4] = { 20, 21, 22, 23 };

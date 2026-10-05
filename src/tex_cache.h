@@ -64,6 +64,10 @@ struct SDL_Surface *tex_reduzir(struct SDL_Surface *src, int lw, int lh);
 GLuint tex_obter_larg(const char *caminho, float largLayout);
 // Entrega a textura menor ja existente enquanto a maior e reprocessada.
 GLuint tex_obter_larg_qualquer(const char *caminho, float largLayout);
+// Para LOGO DE TITULO: igual as duas acima, mas o pedido fura a fila de rede e
+// a de decode (ate a frente do fundo de tela cheia). Ver tex_cache.c.
+GLuint tex_obter_logo_larg(const char *caminho, float largLayout);
+GLuint tex_obter_logo_larg_qualquer(const char *caminho, float largLayout);
 
 // Como tex_obter_larg, para arte QUE SO VALE POR UM INSTANTE: o quadro de uma
 // sequencia animada, que a tela mostra por 67 ms e troca. O cache a despeja
