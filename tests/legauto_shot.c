@@ -192,6 +192,7 @@ int main(int argc, char **argv) {
   faixas_shot_pilula(2, "pt", "OpenSubtitles", relogio); quadros(40); salvar("pilula-2-sincronizando");
   faixas_shot_pilula(3, "pt", "OpenSubtitles", relogio); quadros(40); salvar("pilula-3-aplicada");
   faixas_shot_pilula(4, "pt", "", relogio); quadros(40); salvar("pilula-4-nenhuma");
+  faixas_shot_pilula(5, "pt", "OpenSubtitles", relogio); quadros(40); salvar("pilula-5-nao-sincronizada");
   puts("legauto_shot: ok");
   return 0;
 }

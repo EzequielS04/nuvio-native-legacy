@@ -59,7 +59,8 @@ static struct {
   int autoTroca, autoVolta;       // o proximo primaria_externa vem do trocador
   char autoNome[64];
   uint64_t autoTent[LS_AUTO_MAX + 2]; int nAutoTent;
-  unsigned autoDesde;             // quando o plano comecou a trabalhar (teto LS_AUTO_TETO_MS)
+  unsigned autoDesde;             // ultimo PROGRESSO do plano (teto LS_AUTO_TETO_MS sem progresso)
+  long long autoMarca;            // assinatura do progresso visto em autoDesde
   int autoLog;                    // ultima fase que foi ao log
 } L = { .querModo = -1 };
 #define LS_AUTO_TETO_MS 45000u
@@ -509,15 +510,26 @@ void legsync_passo(const char *url, double pos, double folga, int sensivel, unsi
               audsync_motivo(st.motivo), st.reinicios, st.descartados);
     } else audsync_pausar(sensivel);
   }
-  // TETO DO PLANO AUTOMATICO. Na TV do dono a linha "Sincronizacao automatica"
-  // ficava em "Sincronizando…" para sempre: nada vencia o plano quando a
-  // referencia nunca chegava (leitura parcial pendurada, faixa de referencia
-  // que nao fecha, audio sem fala). Passado o teto, o plano desiste com a
-  // legenda aplicada como esta, e o estado vira "Nao deu para sincronizar".
+  // TETO DO PLANO AUTOMATICO, SEM PROGRESSO. Na TV do dono a linha
+  // "Sincronizacao automatica" ficava em "Sincronizando…" para sempre quando a
+  // referencia nunca chegava (leitura parcial pendurada, audio sem fala): o
+  // plano desiste com a legenda aplicada como esta ("Nao deu para
+  // sincronizar"). O teto contava 45 s DESDE O INICIO, e a referencia de um
+  // longa custa um Range por fala (~1300) a no maximo LS_RITMO por segundo:
+  // mais de 2 minutos no melhor caso. O teto vencia SEMPRE no meio da leitura,
+  // cancelava o que ja tinha vindo e nenhum filme sincronizava (dono, 04/10:
+  // "em todos os filmes ela fala que ta ok e ta fora de sincronia";
+  // tests/legsync.c 12g). Agora o relogio recomeca a cada passo real (Range
+  // lido, faixa nova, escuta, analise, download): so uma etapa PARADA por
+  // LS_AUTO_TETO_MS desiste.
   if (L.autoFase == 1) {
-    if (!L.autoDesde) L.autoDesde = agora | 1u;
+    long long marca = (long long)L.autoEtapa * 1000003LL + L.primFase * 7919LL + (L.refDoc != NULL) * 104729LL +
+                      (long long)L.refPedido * 15485863LL + L.solicitou * 31LL + L.nAutoTent * 524287LL;
+    if (L.refPedido) { LegRefStatus st = legref_status(L.ref); marca += st.pedidos * 3LL + st.feitos * 131071LL; }
+    if (L.audPedido) { AudSyncStatus st = audsync_status(); marca += (long long)st.progresso * 8191LL + st.fase; }
+    if (!L.autoDesde || marca != L.autoMarca) { L.autoDesde = agora | 1u; L.autoMarca = marca; }
     else if (agora - L.autoDesde > LS_AUTO_TETO_MS) {
-      printf("[legsync] automatico: teto de %u s sem fechar (etapa %d, fase %d, ref=%d, pedido=%d); a legenda fica como esta\n",
+      printf("[legsync] automatico: %u s sem progresso (etapa %d, fase %d, ref=%d, pedido=%d); a legenda fica como esta\n",
              LS_AUTO_TETO_MS / 1000u, L.autoEtapa, L.primFase, L.refDoc != NULL, (int)L.refPedido);
       fflush(stdout);
       L.autoFase = 3; L.autoEtapa = 9; L.autoPend = 0; L.autoDesde = 0;

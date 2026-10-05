@@ -126,6 +126,26 @@ void legsync_texto_simples(const LegSyncVisao *v, char *dst, unsigned tam) {
   if (v->autoFase == 1) snprintf(dst, tam, "%s", i18n("Sincronizando\xe2\x80\xa6"));
 }
 
+// The pill used to show the green check for every outcome: "Legenda aplicada ·
+// X", plus a small "sem ajuste de tempo" when the plan gave up. On the owner's
+// TV the plan gave up on every film (the 45 s cap fired mid reference read,
+// legsync.c), so every film read as "ok" while nothing had been corrected.
+// Synced is only what the
+// renderer is actually using: an ACCEPTED result in force (legsync_offset_ms
+// adds the automatic offset only in that state).
+int legsync_pilula_final(const LegSyncVisao *v, const char *provedor, char *dst, unsigned tam) {
+  char s[32];
+  const char *p = provedor && *provedor ? provedor : "";
+  if (!dst || !tam) return 0;
+  if (v && v->fase == LEGSYNC_ACEITA) {
+    segundos(v->offsetAutoMs, s, sizeof s);
+    snprintf(dst, tam, i18n("Legenda sincronizada \xc2\xb7 %s \xc2\xb7 %s"), p, s);
+    return 1;
+  }
+  snprintf(dst, tam, i18n("Legenda aplicada \xc2\xb7 %s \xc2\xb7 n\xc3\xa3o sincronizada"), p);
+  return 0;
+}
+
 static int acoesAgora(int slot, int *lista, int max) {
   LegSyncVisao v;
   int n = 0;

@@ -62,6 +62,7 @@ static unsigned char *lerMkv(void *u, const char *url, long long ini, long n, lo
 }
 
 static unsigned agora = 1000;
+#define LS_AUTO_TETO_TESTE 45000u   // src/legsync.c LS_AUTO_TETO_MS
 static void passo(const char *url, int sensivel) { agora += 50; legsync_passo(url, 30.0, 60.0, sensivel, agora); }
 static LegSyncVisao esperarFase(const char *url, LegSyncFase f) {
   LegSyncVisao v;
@@ -131,6 +132,24 @@ static void conferirNaTela(int total) {
     }
   }
   assert(casou > 50);
+  legenda_documento_liberar(emb);
+}
+
+// O mesmo para o FILME de 2 h (filme_emb.srt x filme_ext_mais2500.srt).
+static void conferirFilme(int total) {
+  long n; char *b = arquivo("filme_emb.srt", &n); LegendaDocumentoInfo i = { .flags = LEGENDA_DOC_COMPLETO };
+  LegendaDocumento *emb = legenda_documento_bytes(b, n, &i); int casou = 0, errou = 0;
+  free(b);
+  for (double t = 60; t < 7150; t += 1.37) {
+    LegendaCue a, e;
+    int na = legenda_cues(t, total, &a, 1), ne = legenda_documento_cues(emb, t, 0, &e, 1);
+    if (na && ne) {
+      int x = -1, y = -2; sscanf(a.texto, "Fala traduzida numero %d", &x); sscanf(e.texto, "Film line %d", &y);
+      if (x == y) casou++; else errou++;
+    } else if (na != ne) errou++;
+  }
+  if (errou) fprintf(stderr, "filme: %d instantes com a fala errada na tela (offset %d)\n", errou, total);
+  assert(casou > 500 && !errou);
   legenda_documento_liberar(emb);
 }
 
@@ -295,6 +314,8 @@ int main(int argc, char **argv) {
   agora += 50000;
   passo(MKV, 0);
   assert(legsync_visao(0).autoFase == 3);
+  { char t[200]; v = legsync_visao(0);                     // a pilula nao pode dizer "ok"
+    assert(!legsync_pilula_final(&v, "P", t, sizeof t) && strstr(t, "n\xc3\xa3o sincronizada") && legsync_offset_ms(0) == 0); }
   travar = 0; legsync_encerrar(); legsync_teste_auto(0); casos++;
   // Fechar o player LOGO depois de pedir a analise (referencia ja lida): o
   // resultado da sessao velha nunca aparece na sessao nova do mesmo arquivo.
@@ -350,6 +371,11 @@ int main(int argc, char **argv) {
     legsync_primaria_externa("ext://0/ext_mais2500.srt", "pt", "Boa");
     v = esperarAuto(MKV, 2);
     assert(v.fase == LEGSYNC_ACEITA && abs(v.offsetAutoMs - 2500) <= 25 && !v.autoTrocou && trocas == 0);
+    // O que o renderer usa (player.c: legenda_cues(pos, legsync_offset_ms(manual)))
+    // e o aceito, e a pilula diz o numero que esta valendo.
+    conferirNaTela(legsync_offset_ms(0));
+    { char t[200];
+      assert(legsync_pilula_final(&v, "Boa", t, sizeof t) && !strncmp(t, "Legenda sincronizada \xc2\xb7 Boa \xc2\xb7 +2.", 30)); }
     assert(!strcmp(prov.estado(0, prov.u), "Sincronizada"));
     assert(prov.acoes(0, rot, 8, prov.u) == 1 && !strcmp(rot[0], "Desfazer"));
     prov.executar(0, 0, prov.u);
@@ -375,11 +401,83 @@ int main(int argc, char **argv) {
     legsync_iniciar(MKV3); trocas = 0; cand[0] = "ext_mais2500.srt"; nCand = 1;
     legsync_primaria_externa("ext://0/ext_ruim.srt", "pt", "Ruim");
     v = esperarAuto(MKV3, 3); assert(trocas == 0 && legsync_offset_ms(0) == 0);
+    { char t[200]; assert(!legsync_pilula_final(&v, "Ruim", t, sizeof t) && strstr(t, "n\xc3\xa3o sincronizada")); }
 
     // 12e. Outro idioma nao entra: sem candidata do mesmo idioma, volta sozinha ao fim.
     legsync_iniciar(MKV); trocas = 0; cand[0] = "ext_mais2500.srt"; nCand = 1; candIdioma = "en";
     legsync_primaria_externa("ext://0/ext_ruim.srt", "pt", "Ruim");
     v = esperarAuto(MKV, 3); assert(trocas == 0); candIdioma = "pt";
+
+    // 12f. REGRESSAO "fala que ta ok e ta fora de sincronia" (dono, 04/10).
+    //      Traducao de verdade: outro corte das falas, bordas com folga de
+    //      quadro, +2,0 s do video. O plano automatico RODA o AutoSync contra a
+    //      embutida (sem a pessoa operar nada), a engine recusa (fail-closed: as
+    //      bordas nao casam todas), e entao: nada muda no que o renderer desenha
+    //      (so o manual) e a pilula diz "nao sincronizada" com o aviso, nunca
+    //      "Legenda aplicada" com o check como antes.
+    { int p0; char t[200];
+      pthread_mutex_lock(&LM); p0 = pedidosLeitor; pthread_mutex_unlock(&LM);
+      legsync_iniciar(MKV); trocas = 0; nCand = 0;
+      legsync_primaria_externa("ext://0/ext_traduzida_mais2000.srt", "pt", "OpenSubtitles");
+      v = esperarAuto(MKV, 3);
+      pthread_mutex_lock(&LM); assert(pedidosLeitor > p0); pthread_mutex_unlock(&LM);   // leu a referencia
+      assert(v.fase == LEGSYNC_RECUSADA && v.motivo == LEGSYNC_M_CONFIANCA);          // a engine julgou e recusou
+      assert(legsync_offset_ms(0) == 0 && legsync_offset_ms(300) == 300);              // renderer: so o manual
+      assert(!legsync_pilula_final(&v, "OpenSubtitles", t, sizeof t));
+      assert(!strcmp(t, "Legenda aplicada \xc2\xb7 OpenSubtitles \xc2\xb7 n\xc3\xa3o sincronizada"));
+      // No instante t do video a externa desenhada e a que o arquivo traz em t:
+      // nenhum deslocamento escondido.
+      { long n; char *b = arquivo("ext_traduzida_mais2000.srt", &n);
+        LegendaDocumentoInfo i = { .flags = LEGENDA_DOC_COMPLETO };
+        LegendaDocumento *ext = legenda_documento_bytes(b, n, &i); int vistos = 0;
+        free(b);
+        for (double x = 30; x < 590; x += 0.41) {
+          LegendaCue a, e;
+          int na = legenda_cues(x, legsync_offset_ms(0), &a, 1), ne = legenda_documento_cues(ext, x, 0, &e, 1);
+          assert(na == ne); if (na) { assert(!strcmp(a.texto, e.texto)); vistos++; }
+        }
+        assert(vistos > 50); legenda_documento_liberar(ext); }
+      // Recusa com a mesma faixa do arquivo: a pilula final nao vira "sincronizada"
+      // com o tempo nem depois de mais passos.
+      for (int k = 0; k < 50; k++) passo(MKV, 0);
+      v = legsync_visao(0); assert(!legsync_pilula_final(&v, "OpenSubtitles", t, sizeof t)); }
+
+    // 12g. REGRESSAO "em todos os filmes ela fala que ta ok e ta fora de
+    //      sincronia" (dono, 04/10). Um longa de 2 h (1332 falas) com a
+    //      externa +2,5 s e a embutida no MKV. A referencia custa UM Range por
+    //      fala (cada fala mora num Cluster) e a TV le no maximo LS_RITMO = 8
+    //      Ranges/s: o relogio do player aqui anda 125 ms por Range, o melhor
+    //      caso da TV (sem latencia de rede). Antes, o teto de 45 s do plano
+    //      vencia aos ~360 Ranges, cancelava a leitura, deixava a legenda +2,5 s
+    //      e a pilula dizia "Legenda aplicada" com o check. Agora o teto so
+    //      vence sem PROGRESSO: a leitura termina, a engine aceita, o renderer
+    //      desenha a fala certa e a pilula diz "sincronizada".
+    { const char *FILME = "https://cdn.example/d/filme.mkv";
+      int p0, ranges = 0; unsigned t0; char t[200];
+      atrasoLeitorUs = 1500;
+      legsync_iniciar(FILME); trocas = 0; nCand = 0;
+      pthread_mutex_lock(&LM); p0 = pedidosLeitor; pthread_mutex_unlock(&LM);
+      legsync_primaria_externa("ext://0/filme_ext_mais2500.srt", "pt", "OpenSubtitles");
+      t0 = agora;
+      for (int k = 0; k < 400000; k++) {
+        unsigned alvo;
+        pthread_mutex_lock(&LM); ranges = pedidosLeitor - p0; pthread_mutex_unlock(&LM);
+        alvo = t0 + (unsigned)ranges * 125u + (unsigned)k / 8u;   // 1/LS_RITMO s por Range
+        agora = alvo > agora ? alvo : agora + 1;
+        legsync_passo(FILME, 30.0, 60.0, 0, agora);
+        v = legsync_visao(0);
+        if (v.autoFase != 1) break;
+        usleep(200);
+      }
+      atrasoLeitorUs = 0;
+      printf("[12g] filme: %d Ranges, relogio do player %u s, autoFase %d, fase %d, offset em vigor %d ms\n",
+             ranges, (agora - t0) / 1000u, v.autoFase, v.fase, legsync_offset_ms(0));
+      assert(ranges > 1200 && agora - t0 > 3u * LS_AUTO_TETO_TESTE);  // ~um Range por fala: > 2 min a 8/s
+      assert(v.autoFase == 2 && v.fase == LEGSYNC_ACEITA && abs(v.offsetAutoMs - 2500) <= 25);
+      assert(legsync_offset_ms(0) == v.offsetAutoMs);
+      conferirFilme(legsync_offset_ms(0));                      // a fala certa no instante certo
+      assert(legsync_pilula_final(&v, "OpenSubtitles", t, sizeof t) && strstr(t, "sincronizada \xc2\xb7 OpenSubtitles \xc2\xb7 +2."));
+      legsync_encerrar(); }
     casos++; }
   legsync_teste_auto(0); legsync_definir_trocador(NULL);
 
