@@ -195,6 +195,9 @@ static const char *ajVisualIcone(int op) {
     case AJ_JF_SERVIDOR: return "aj_server";
     case AJ_JF_ENTRAR: return "aj_log-in";
     case AJ_JF_SAIR: return "aj_log-out";
+    case AJ_EM_SERVIDOR: case AJ_PX_SERVIDOR: return "aj_server";
+    case AJ_EM_ENTRAR: case AJ_PX_ENTRAR: return "aj_log-in";
+    case AJ_EM_SAIR: case AJ_PX_SAIR: return "aj_log-out";
     case AJ_RESOLUCAO: return "aj_monitor-play";
     case AJ_QUALIDADE_IMG: return "aj_images";
     case AJ_NAV_RAPIDA: return "aj_zap";

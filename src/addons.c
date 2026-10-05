@@ -11,7 +11,7 @@
 #include "fontecache.h"
 #include "sessao.h"
 #include "perfis.h"
-#include "jellyfin.h"
+#include "servidores.h"
 #include "badges.h"
 // So para a cache UNICA de manifesto (desc_manifesto_cache_obter/guardar): ver
 // a nota grande em sondar(), mais abaixo.
@@ -70,7 +70,7 @@ static unsigned versaoLista;   // ver addons_versao
 static _Atomic AddEstado estado = ADD_PARADO;
 static pthread_t fio;
 static char alvoId[64], alvoTipo[16];
-// The current target is a Jellyfin item (jfid.h): sources come from the
+// The current target is a personal-server item (jfid.h: Jellyfin/Emby/Plex): sources come from the
 // server's PlaybackInfo, never from addons (an opaque server id must not
 // reach third-party addons).
 static int jfAlvo;
@@ -446,7 +446,7 @@ AddEstado addons_estado(void) {
   AddEstado e = atomic_load(&estado);
   if (jfAlvo) {
     Stream *l = NULL;
-    int n = 0, r = jellyfin_fontes_colher(alvoId, &l, &n), i;
+    int n = 0, r = servidores_fontes_colher(alvoId, &l, &n), i;
     if (r == JF_FONTES_PENDENTE) return ADD_BUSCANDO;
     jfAlvo = 0;
     if (r == JF_FONTES_PRONTO) {
@@ -456,10 +456,10 @@ AddEstado addons_estado(void) {
         l[i].badges = badges_detectar(t);
       }
       stream_definir_lista(l, n);
-      printf("[addons] %d Jellyfin source(s)\n", n);
+      printf("[addons] %d personal-server source(s)\n", n);
     } else {
       stream_definir_lista(NULL, 0);
-      printf("[addons] Jellyfin sources unavailable\n");
+      printf("[addons] personal-server sources unavailable\n");
     }
     free(l);
     estado = n ? ADD_PRONTO : ADD_VAZIO;
@@ -1680,12 +1680,33 @@ static void segundaChance(Consulta *c, int fios) {
 // fio proprio AO MESMO TEMPO que os addons; cada scraper entra na folha como
 // mais uma origem (progMarcarEx) e a lista final soma as fontes dele depois
 // das dos addons, com o nome do scraper como provedor.
-static OrigemExtra origemExtra;
-static int (*origemExtraAtiva)(void);
+// Ate duas origens (plugins Nuvio e o servidor Plex casado por IMDb/TMDB), cada
+// uma no proprio fio: a consulta rapida ao Plex nao espera os scrapers e os
+// scrapers nao seguram a fonte do servidor. As listas se somam na ordem de
+// registro.
+#define ORIGENS_EXTRA_MAX 2
+static OrigemExtra origensExtra[ORIGENS_EXTRA_MAX];
+static int (*origensExtraAtiva[ORIGENS_EXTRA_MAX])(void);
+static int nOrigensExtra;
 void addons_definir_origem_extra(OrigemExtra f, int (*ativa)(void)) {
-  origemExtra = f; origemExtraAtiva = ativa;
+  int i;
+  if (!f) return;
+  for (i = 0; i < nOrigensExtra; i++)
+    if (origensExtra[i] == f) { origensExtraAtiva[i] = ativa; return; }
+  if (nOrigensExtra < ORIGENS_EXTRA_MAX) {
+    origensExtra[nOrigensExtra] = f;
+    origensExtraAtiva[nOrigensExtra] = ativa;
+    nOrigensExtra++;
+  }
 }
-int addons_origem_extra_ativa(void) { return origemExtra && origemExtraAtiva && origemExtraAtiva(); }
+static int origemExtraViva(int i) {
+  return origensExtra[i] && origensExtraAtiva[i] && origensExtraAtiva[i]();
+}
+int addons_origem_extra_ativa(void) {
+  int i;
+  for (i = 0; i < nOrigensExtra; i++) if (origemExtraViva(i)) return 1;
+  return 0;
+}
 
 typedef struct {
   const char *id, *tipo;
@@ -1702,9 +1723,46 @@ static void avisoExtra(void *u, int k, const char *nome, int estado, const void 
   if (!p->progresso) return;
   progMarcarEx(k, nome, (const Stream *)fontes, n, estado);
 }
+typedef struct { PedidoExtra *pai; OrigemExtra f; Stream *l; int n; } UmaOrigem;
+static void *fioUmaOrigem(void *u) {
+  UmaOrigem *o = u;
+  o->n = o->f(o->pai->id, o->pai->tipo, cancelaExtra, o->pai, avisoExtra, o->pai, &o->l);
+  return NULL;
+}
 static void *fioExtra(void *u) {
   PedidoExtra *p = u;
-  p->n = origemExtra(p->id, p->tipo, cancelaExtra, p, avisoExtra, p, &p->l);
+  UmaOrigem o[ORIGENS_EXTRA_MAX];
+  pthread_t f[ORIGENS_EXTRA_MAX];
+  int vivo[ORIGENS_EXTRA_MAX], i, total = 0;
+  memset(o, 0, sizeof o);
+  for (i = 0; i < nOrigensExtra; i++) {
+    vivo[i] = 0;
+    if (!origemExtraViva(i)) continue;
+    o[i].pai = p; o[i].f = origensExtra[i];
+    // A ultima origem roda neste fio; as anteriores em fios proprios.
+    if (i + 1 < nOrigensExtra) {
+      pthread_attr_t a;
+      pthread_attr_init(&a);
+      pthread_attr_setstacksize(&a, 512u * 1024);
+      vivo[i] = pthread_create(&f[i], &a, fioUmaOrigem, &o[i]) == 0;
+      pthread_attr_destroy(&a);
+      if (!vivo[i]) fioUmaOrigem(&o[i]);
+    } else fioUmaOrigem(&o[i]);
+  }
+  for (i = 0; i < nOrigensExtra; i++) {
+    if (vivo[i]) pthread_join(f[i], NULL);
+    if (o[i].n > 0) total += o[i].n;
+  }
+  if (total > 0) {
+    Stream *l = malloc(sizeof(Stream) * (size_t)total);
+    int k = 0;
+    if (l) {
+      for (i = 0; i < nOrigensExtra; i++)
+        if (o[i].n > 0) { memcpy(l + k, o[i].l, sizeof(Stream) * (size_t)o[i].n); k += o[i].n; }
+      p->l = l; p->n = k;
+    }
+  }
+  for (i = 0; i < nOrigensExtra; i++) free(o[i].l);
   return NULL;
 }
 
@@ -1981,7 +2039,7 @@ static void buscarPedido(const char *imdb, const char *tipo, int forcar) {
     snprintf(alvoTipo, sizeof alvoTipo, "%s", tipo && *tipo ? tipo : "movie");
     alvoBase[0] = 0;
     stream_definir_lista(NULL, 0);
-    jfAlvo = jellyfin_fontes_pedir(alvoId);
+    jfAlvo = servidores_fontes_pedir(alvoId);
     estado = jfAlvo ? ADD_BUSCANDO : ADD_VAZIO;
     return;
   }

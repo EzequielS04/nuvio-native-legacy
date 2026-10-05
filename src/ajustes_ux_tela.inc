@@ -117,6 +117,8 @@ static const Item TELA[] = {
 #endif
     ROT("Servidores pessoais"),
       OPC(AJ_JF_LIGADO), OPC(AJ_JF_SERVIDOR), OPC(AJ_JF_ENTRAR), OPC(AJ_JF_SAIR),
+      OPC(AJ_EM_SERVIDOR), OPC(AJ_EM_ENTRAR), OPC(AJ_EM_SAIR),
+      OPC(AJ_PX_ENTRAR), OPC(AJ_PX_SERVIDOR), OPC(AJ_PX_SAIR),
 
   SEC("Desempenho desta TV", "Resolução, imagens, efeitos e diagnóstico", "aj_monitor-cog"),
     OPC(AJ_RESOLUCAO), OPC(AJ_QUALIDADE_IMG),
