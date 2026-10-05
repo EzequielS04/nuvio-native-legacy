@@ -2632,7 +2632,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "選択中のものは、インターフェース全体で枠線ではなく塗りつぶしで表示されます。"),
   T("O que estão dizendo", "みんなの声"),
   T("O que fazer quando algo não funciona", "うまく動かないときの対処"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "パネルの後ろに表示するもの。アート：作品の画像をくっきり。ぼかしアート：色だけ。フロスト：アクセントカラーで色付けしたすりガラス面。ガラスUIがオフのときはパネルが不透明なので効果は小さくなります。"),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "パネルの後ろに表示するもの。アート：作品の画像をくっきり。ぼかしアート：作品の画像をぼかして表示。フロスト：アクセントカラーで色付けしたすりガラス面。ガラスUIがオフのときはパネルが不透明なので効果は小さくなります。"),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "途中まで見たものと、シリーズの次のエピソード。カード、OK で続きを再生するかページを開くか、列の順番を選びます。"),
   T("O que foi aplicado", "適用された内容"),
   T("O que há de novo", "新機能"),

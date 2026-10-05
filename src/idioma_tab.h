@@ -2631,7 +2631,7 @@
   { "O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "What is selected is now filled, never outlined, across the whole interface." },
   { "O que estão dizendo", "What people are saying" },
   { "O que fazer quando algo não funciona", "What to do when something doesn't work" },
-  { "O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "What sits behind the panels. Art: the title's image, sharp. Blurred art: only its colors. Frost: a matte surface tinted by the accent color. With glass interface off the panels are opaque and the effect is small." },
+  { "O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "What sits behind the panels. Art: the title's image, sharp. Blurred art: the title's image, blurred. Frost: a matte surface tinted by the accent color. With glass interface off the panels are opaque and the effect is small." },
   { "O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "What you left halfway and the next episode of your series. Choose the card, whether OK resumes or opens the page, and the row order." },
   { "O que foi aplicado", "What was applied" },
   { "O que há de novo", "What's new" },

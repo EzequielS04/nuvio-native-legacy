@@ -2632,7 +2632,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Ό,τι είναι επιλεγμένο είναι πλέον γεμάτο, ποτέ με περίγραμμα, σε ολόκληρη τη διεπαφή."),
   T("O que estão dizendo", "Τι λένε"),
   T("O que fazer quando algo não funciona", "Τι να κάνετε όταν κάτι δεν λειτουργεί"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Τι βρίσκεται πίσω από τα πάνελ. Εικόνα: η εικόνα του τίτλου, καθαρή. Θολή εικόνα: μόνο τα χρώματά της. Παγωνιά: ματ επιφάνεια στο χρώμα έμφασης. Με τη γυάλινη διεπαφή κλειστή τα πάνελ είναι αδιαφανή και το εφέ μικρό."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Τι βρίσκεται πίσω από τα πάνελ. Εικόνα: η εικόνα του τίτλου, καθαρή. Θολή εικόνα: η εικόνα του τίτλου, θολωμένη. Παγωνιά: ματ επιφάνεια στο χρώμα έμφασης. Με τη γυάλινη διεπαφή κλειστή τα πάνελ είναι αδιαφανή και το εφέ μικρό."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Ό,τι αφήσατε στη μέση και το επόμενο επεισόδιο των σειρών σας. Επιλέξτε την κάρτα, αν το OK συνεχίζει ή ανοίγει τη σελίδα, και τη σειρά της γραμμής."),
   T("O que foi aplicado", "Τι εφαρμόστηκε"),
   T("O que há de novo", "Τι νέο υπάρχει"),

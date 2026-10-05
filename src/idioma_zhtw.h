@@ -2632,7 +2632,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "目前選中的項目現在在整個介面中都是填滿樣式，不再使用外框。"),
   T("O que estão dizendo", "大家怎麼說"),
   T("O que fazer quando algo não funciona", "出現問題時怎麼辦"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "面板後方顯示的內容。海報：作品圖片，清晰。模糊海報：只保留它的顏色。磨砂：以強調色著色的磨砂表面。關閉玻璃介面時面板不透明，效果較小。"),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "面板後方顯示的內容。海報：作品圖片，清晰。模糊海報：作品圖片，模糊處理。磨砂：以強調色著色的磨砂表面。關閉玻璃介面時面板不透明，效果較小。"),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "你看到一半的內容和劇集的下一集。選擇卡片樣式、OK 是繼續播放還是開啟頁面，以及行的順序。"),
   T("O que foi aplicado", "已套用的內容"),
   T("O que há de novo", "新功能"),

@@ -2632,7 +2632,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Tai, kas pasirinkta, dabar visoje sąsajoje užpildoma, o ne apibrėžiama kontūru."),
   T("O que estão dizendo", "Ką sako kiti"),
   T("O que fazer quando algo não funciona", "Ką daryti, kai kas nors neveikia"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Kas yra už skydelių. Vaizdas: pavadinimo paveikslėlis, ryškus. Suliejęs vaizdas: tik jo spalvos. Šerkšnas: matinis paviršius akcento spalva. Išjungus stiklo sąsają skydeliai nepermatomi, o efektas mažas."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Kas yra už skydelių. Vaizdas: pavadinimo paveikslėlis, ryškus. Suliejęs vaizdas: pavadinimo paveikslėlis, sulietas. Šerkšnas: matinis paviršius akcento spalva. Išjungus stiklo sąsają skydeliai nepermatomi, o efektas mažas."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Kas liko pusiaukelėje, ir kita serialų serija. Pasirink kortelę, ar OK tęsia ar atidaro puslapį, ir eilutės tvarką."),
   T("O que foi aplicado", "Kas pritaikyta"),
   T("O que há de novo", "Kas naujo"),

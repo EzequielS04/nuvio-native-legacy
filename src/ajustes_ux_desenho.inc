@@ -261,10 +261,9 @@ static float ajBloco(TxtEstilo e, const char *s, float x, float y, float w, floa
 // O desenho mora em fundo.c (a pagina do titulo usa o mesmo); resumo:
 //   Arte: a arte do titulo nitida com o veu do mockup (preto ~50%, chapado: veu
 //         de cor unica nao faz faixa no painel de 8 bits).
-//   Arte borrada: so as cores dela — a LUZ ASSADA da "Dinamica imersiva" (o
-//         quadro de 320x180 de gfx_ambiente) com a paleta da arte, saturacao
-//         +35% e brilho 62%. Nenhum desfoque por quadro: o assado so refaz
-//         quando a paleta muda.
+//   Arte borrada: a arte do titulo DESFOCADA (gfx_desfocado, assada num
+//         quadro de 320x180). Nenhum desfoque por quadro: o assado so refaz
+//         quando a arte muda.
 //   Frost: sem arte. Cinza frio com tres luzes largas no acento (58%, 38% e
 //         14%); todo degrade pelo nv_dither (GFX_VEU_CSS e GFX_LUZ).
 #include "corviva.h"

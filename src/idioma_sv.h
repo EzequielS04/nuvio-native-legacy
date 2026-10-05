@@ -2632,7 +2632,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Det som är markerat är nu fyllt, aldrig omgivet av en kontur, i hela gränssnittet."),
   T("O que estão dizendo", "Vad folk säger"),
   T("O que fazer quando algo não funciona", "Vad du gör när något inte fungerar"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Det som ligger bakom panelerna. Bild: titelns bild, skarp. Suddig bild: bara dess färger. Frost: matt yta i accentfärgen. Med glasgränssnittet av är panelerna ogenomskinliga och effekten liten."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Det som ligger bakom panelerna. Bild: titelns bild, skarp. Suddig bild: titelns bild, suddad. Frost: matt yta i accentfärgen. Med glasgränssnittet av är panelerna ogenomskinliga och effekten liten."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Det du lämnat halvvägs och nästa avsnitt i dina serier. Välj kortet, om OK fortsätter eller öppnar sidan, och radens ordning."),
   T("O que foi aplicado", "Vad som tillämpades"),
   T("O que há de novo", "Vad som är nytt"),

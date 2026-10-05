@@ -2631,7 +2631,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Ce este selectat acum este umplut, nu conturat, în toată interfața."),
   T("O que estão dizendo", "Ce spun oamenii"),
   T("O que fazer quando algo não funciona", "Ce faci când ceva nu merge"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Ce se află în spatele panourilor. Artă: imaginea titlului, clară. Artă estompată: doar culorile ei. Frost: suprafață mată colorată de culoarea de accent. Cu interfața de sticlă oprită panourile sunt opace și efectul e mic."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Ce se află în spatele panourilor. Artă: imaginea titlului, clară. Artă estompată: imaginea titlului, estompată. Frost: suprafață mată colorată de culoarea de accent. Cu interfața de sticlă oprită panourile sunt opace și efectul e mic."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Ce ai lăsat la jumătate și următorul episod al serialelor. Alege cardul, dacă OK reia sau deschide pagina și ordinea rândului."),
   T("O que foi aplicado", "Ce s-a aplicat"),
   T("O que há de novo", "Ce e nou"),
