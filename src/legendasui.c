@@ -351,16 +351,20 @@ static int ativoNoSlot(int slot, const LegUiCand *c) {
   return !strcmp(prim, c->id);
 }
 
+// ATRASO EM REGUA (pedido de usuario, 05/10): era um botao de 0,25 s por
+// toque. Agora cada toque anda 0,1 s e SEGURAR a seta anda 0,5 s por
+// repeticao; a regua mostra onde o valor esta entre -10 e +10 s.
+#define LU_ATRASO_MAX 10000
 static void mudarAtraso(int passo) {
   if (alvo == 0) {
     VideoLegendaEstilo *e = player_leg_estilo();
     e->atrasoMs += passo;
-    if (e->atrasoMs > 5000) e->atrasoMs = 5000;
-    if (e->atrasoMs < -5000) e->atrasoMs = -5000;
+    if (e->atrasoMs > LU_ATRASO_MAX) e->atrasoMs = LU_ATRASO_MAX;
+    if (e->atrasoMs < -LU_ATRASO_MAX) e->atrasoMs = -LU_ATRASO_MAX;
     player_leg_estilo_mudou();
   } else {
     int v = legenda2_offset_manual() + passo;
-    legenda2_definir_offset_manual(v > 5000 ? 5000 : v < -5000 ? -5000 : v);
+    legenda2_definir_offset_manual(v > LU_ATRASO_MAX ? LU_ATRASO_MAX : v < -LU_ATRASO_MAX ? -LU_ATRASO_MAX : v);
   }
 }
 
@@ -394,7 +398,7 @@ int legendasui_evento(const SDL_Event *e) {
   if (k == SDLK_LEFT || k == SDLK_RIGHT) {
     int d = k == SDLK_RIGHT ? 1 : -1;
     if (l && l->tipo == LR_ALVO) { alvo = d > 0; return LEGUI_TRATADO; }
-    if (l && l->tipo == LR_ATRASO) { mudarAtraso(250 * d); return LEGUI_TRATADO; }
+    if (l && l->tipo == LR_ATRASO) { mudarAtraso((e->key.repeat ? 500 : 100) * d); return LEGUI_TRATADO; }
     if (l && l->tipo == LR_SYNC) {
       const char *rot[4];
       int n = nAcoes(l->slot, rot, 4);
@@ -612,15 +616,23 @@ static void desenharLinha(const LuiLinha *l, int sel, float x, float y, float w,
       dir -= 12.0f;
     }
   }
-  if (l->tipo == LR_ATRASO && sel) {
-    // < > discs: LEFT/RIGHT change 0.25 s, like the Estilo bar.
-    GfxRect d = { dir - 34.0f, y + (LU_LN_H - 34.0f) * 0.5f, 34.0f, 34.0f };
-    gfx_cor(d, 0.5f, 1, 1, 1, 0.10f * a);
-    gfx_icone((GfxRect){ d.x + 7.0f, d.y + 7.0f, 20.0f, 20.0f }, "pl_chevron-right", 1, 1, 1, a);
-    d.x -= 34.0f + 8.0f;
-    gfx_cor(d, 0.5f, 1, 1, 1, 0.10f * a);
-    gfx_icone((GfxRect){ d.x + 7.0f, d.y + 7.0f, 20.0f, 20.0f }, "pl_chevron-left", 1, 1, 1, a);
-    dir -= 2.0f * 34.0f + 8.0f + 12.0f;
+  if (l->tipo == LR_ATRASO) {
+    // Regua: trilho de -10 a +10 s, marca no zero, preenchido do zero ate o
+    // valor na cor de destaque; o botao so aparece com a linha em foco.
+    int v = l->slot ? legenda2_offset_manual() : player_leg_estilo()->atrasoMs;
+    float tw = 260.0f, tx = dir - tw - 6.0f, cy = y + LU_LN_H * 0.5f;
+    float k = (float)v / (float)LU_ATRASO_MAX, px, ar, ag, ab, al = (sel ? 1.0f : 0.55f) * a;
+    k = k < -1.0f ? -1.0f : k > 1.0f ? 1.0f : k;
+    px = tx + tw * 0.5f + k * tw * 0.5f;
+    ajustes_acento_marca(&ar, &ag, &ab);
+    gfx_cor((GfxRect){ tx, cy - 3.0f, tw, 6.0f }, 0.5f, 1, 1, 1, 0.14f * al);
+    if (v) gfx_cor((GfxRect){ v > 0 ? tx + tw * 0.5f : px, cy - 3.0f, fabsf(px - (tx + tw * 0.5f)), 6.0f }, 0.5f, ar, ag, ab, al);
+    gfx_cor((GfxRect){ tx + tw * 0.5f - 1.0f, cy - 9.0f, 2.0f, 18.0f }, 0, 1, 1, 1, 0.38f * al);
+    if (sel) {
+      gfx_cor((GfxRect){ px - 12.0f, cy - 12.0f, 24.0f, 24.0f }, 0.5f, 0.055f, 0.059f, 0.071f, a);
+      gfx_cor((GfxRect){ px - 9.0f, cy - 9.0f, 18.0f, 18.0f }, 0.5f, 0.953f, 0.949f, 0.937f, a);
+    } else gfx_cor((GfxRect){ px - 6.0f, cy - 6.0f, 12.0f, 12.0f }, 0.5f, 0.953f, 0.949f, 0.937f, al);
+    dir = tx - 18.0f;
   }
   { float tx = x + 22.0f + 52.0f + 18.0f, tw = dir - tx;
     int c = sel ? 255 : 219, cs = 122;

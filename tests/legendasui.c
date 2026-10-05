@@ -294,13 +294,13 @@ int main(void) {
   // Offsets are per slot: the second slot's offset never moves the primary's.
   focarChave("m|atraso");
   tecla(SDLK_RIGHT); tecla(SDLK_RIGHT);
-  assert(estilo.atrasoMs == 500 && secOffset == 0);
+  assert(estilo.atrasoMs == 200 && secOffset == 0);   // 0,1 s por toque (a regua)
   focarChave("m|alvo");
   tecla(SDLK_RIGHT);
   assert(alvo == 1);
   focarChave("m|atraso");
   tecla(SDLK_LEFT);
-  assert(secOffset == -250 && estilo.atrasoMs == 500);
+  assert(secOffset == -100 && estilo.atrasoMs == 200);
   // Estilo is still one RIGHT away from a candidate row; Back returns to the
   // simple view on the More options row, a second Back closes.
   focarChave("m|-");
