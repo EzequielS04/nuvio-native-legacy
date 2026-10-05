@@ -262,6 +262,11 @@ static int         filNAntes[MAX_FIL];
 // home escondida atras do player, de Ajustes, da selecao de perfil) faz as
 // fileiras visiveis entrarem de novo, em cascata, na volta.
 static Uint32      fileirasVistasEm;
+// Primeira vez que um card de fileira foi PINTADO (ver o marcador em
+// home_desenhar): -1 enquanto nao aconteceu. Nao e o mesmo que
+// fileirasVistasEm — aquele e o ultimo quadro, este e o PRIMEIRO e so uma
+// vez por sessao, para o par publicar -> pintar do arranque.
+static int          tPrimeiraFileiraPintada = -1;
 static float scrollX[MAX_FIL];
 static float scrollY = 0.0f;
 // Pastas da fileira "Streaming" que o layout Dinamica levou para a barra.
@@ -5477,6 +5482,22 @@ void home_desenhar(Uint32 agora) {
           CartaoFoco ck = { r, c, tipo, cItem, caminho, t, aArte, deitado, rotuloFora, abre, esc, f,
                             px, py, w, h, (!focoHero && focus_indice(&foco, r, c)) ? varreFoco : 0.0f };
           pintarCartao(&ck, raio);
+          // MARCADOR "PRIMEIRA FILEIRA PINTADA" (#7 do handoff de desempenho,
+          // 05/10). "primeira fileira da rede pronta" e "catalogo da rede
+          // publicado" (descoberta.c) medem quando o DADO esta pronto; nada
+          // media quando ele chegou aos PIXELS — sem este marco nao se mede
+          // publicar -> pintar, a janela que a pessoa sente no arranque ("hero
+          // sem arte no prazo" e a maior dor de campo medida no D1). Aqui, no
+          // primeiro card NORMAL de fileira de verdade que foi PINTADO (o
+          // pintarCartao acima): uma unica vez por sessao, no primeiro card —
+          // pintar uma fileira inteira so para marcar atrasaria o numero que
+          // o marcador existe para medir. Hero/social/top10 nao contam: nao
+          // representam a fileira comum da home.
+          if (tPrimeiraFileiraPintada < 0 && tipo != FILEIRA_SOCIAL &&
+              tipo != FILEIRA_TOP10 && !focoHero) {
+            tPrimeiraFileiraPintada = (int)agora;
+            marco("primeira fileira pintada");
+          }
           if (!focoHero && focus_indice(&foco, r, c)) { cartaoFoco = ck; cartaoFocoRaio = raio; temCartaoFoco = 1;
             snprintf(cartaoFocoArte, sizeof cartaoFocoArte, "%s", caminho ? caminho : "");
             cartaoFoco.caminho = caminho ? cartaoFocoArte : NULL; }
