@@ -99,6 +99,60 @@ int ling_casa(const char *codigo, const char *pref) {
   return !strcasecmp(familia(codigo), familia(pref));
 }
 
+// NORMALIZA a etiqueta de idioma que o addon manda. Um addon (AIOStreams)
+// manda "PORTUGUESE"/"Portuguese (Brazil)" em vez de codigo; Legenda.idioma
+// tem 8 bytes e o nome saia cortado ("PORTUGU", selo "PO") e, pior, nao casava
+// com a preferencia "pt". Codigo conhecido fica como veio (minusculo); nome
+// vira codigo pelo radical; o resto e cortado em 7 so como ultimo recurso.
+void ling_normalizar(const char *raw, char *out, unsigned tam) {
+  char t[64];
+  unsigned i, n = 0;
+  const char *c;
+  if (!out || !tam) return;
+  out[0] = 0;
+  if (!raw) return;
+  while (*raw == ' ') raw++;
+  for (i = 0; raw[i] && n + 1 < sizeof t; i++) t[n++] = (char)(raw[i] >= 'A' && raw[i] <= 'Z' ? raw[i] + 32 : raw[i]);
+  while (n && t[n - 1] == ' ') n--;
+  t[n] = 0;
+  for (i = 0; i < NOMES_N; i++)
+    if (!strcmp(t, NOMES[i].cod)) { snprintf(out, tam, "%s", t); return; }
+  if (n <= 5 && n >= 2 && (n < 4 || t[2] == '-' || t[2] == '_')) {   // "pt-br", "en_us", "zh-hant"
+    for (i = 0; i < n; i++) if (t[i] == ' ') break;
+    if (i == n) { if (n > 2 && t[2] == '_') t[2] = '-'; snprintf(out, tam, "%s", t); return; }
+  }
+  c = ling_do_nome(t);
+  if (c) { snprintf(out, tam, "%s", c); return; }
+  snprintf(out, tam, "%.7s", t);
+}
+
+// Selo de 2 a 5 letras para o rosto da linha: "PT-BR" para o portugues do
+// Brasil, "PT", "EN"... pela familia. Etiqueta que a tabela nao conhece: as 2
+// primeiras letras em caixa alta.
+const char *ling_selo(const char *cod) {
+  static char b[4][8];
+  static int giro;
+  char *d = b[giro++ & 3];
+  const char *f;
+  size_t k;
+  if (!cod || !*cod) { d[0] = '?'; d[1] = 0; return d; }
+  if (!strcasecmp(cod, "pob") || !strcasecmp(cod, "pt-br") || !strcasecmp(cod, "pt_br") ||
+      !strcasecmp(cod, "ptb") || !strcasecmp(cod, "br")) return "PT-BR";
+  f = familia(cod);
+  for (k = 0; f[k] && k < 2; k++) d[k] = (char)(f[k] >= 'a' && f[k] <= 'z' ? f[k] - 32 : f[k]);
+  d[k] = 0;
+  return d;
+}
+
+// O quanto `cod` serve a preferencia `pref`: 0 nao casa, 2 mesma familia, 3 o
+// melhor (portugues: o do Brasil ganha do de Portugal; o resto: codigo igual).
+int ling_afinidade(const char *cod, const char *pref) {
+  if (!pref || !*pref) return 1;
+  if (!cod || !*cod || !ling_casa(cod, pref)) return 0;
+  if (!strcmp(familia(pref), "pt")) return !strcmp(ling_selo(cod), "PT-BR") ? 3 : 2;
+  return !strcasecmp(cod, pref) ? 3 : 2;
+}
+
 // ------------------------------------------------------------ preferencias
 
 static char contaLeg[16], contaLeg2[16], contaAud[16];

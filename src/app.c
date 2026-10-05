@@ -1929,6 +1929,7 @@ void app_evento(const SDL_Event *e) {
 
   // A folha de fontes fica acima de tudo: ela e uma pergunta, e enquanto ela
   // esta em pe nada mais deve responder ao D-pad.
+  if (faixas_pilula_tecla(e)) return;
   if (faixas_aberta()) { faixas_evento(e); return; }
   if (episodios_aberto()) { episodios_evento(e); return; }
   if (stream_folha_aberta()) { stream_folha_evento(e); return; }

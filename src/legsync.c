@@ -59,7 +59,10 @@ static struct {
   int autoTroca, autoVolta;       // o proximo primaria_externa vem do trocador
   char autoNome[64];
   uint64_t autoTent[LS_AUTO_MAX + 2]; int nAutoTent;
+  unsigned autoDesde;             // quando o plano comecou a trabalhar (teto LS_AUTO_TETO_MS)
+  int autoLog;                    // ultima fase que foi ao log
 } L = { .querModo = -1 };
+#define LS_AUTO_TETO_MS 45000u
 static LegSyncTrocador trocador;
 static int autoLigado = 1;        // so os testes do menu manual o desligam
 void legsync_teste_auto(int ligado) { pthread_mutex_lock(&M); autoLigado = ligado; pthread_mutex_unlock(&M); }
@@ -506,8 +509,33 @@ void legsync_passo(const char *url, double pos, double folga, int sensivel, unsi
               audsync_motivo(st.motivo), st.reinicios, st.descartados);
     } else audsync_pausar(sensivel);
   }
+  // TETO DO PLANO AUTOMATICO. Na TV do dono a linha "Sincronizacao automatica"
+  // ficava em "Sincronizando…" para sempre: nada vencia o plano quando a
+  // referencia nunca chegava (leitura parcial pendurada, faixa de referencia
+  // que nao fecha, audio sem fala). Passado o teto, o plano desiste com a
+  // legenda aplicada como esta, e o estado vira "Nao deu para sincronizar".
+  if (L.autoFase == 1) {
+    if (!L.autoDesde) L.autoDesde = agora | 1u;
+    else if (agora - L.autoDesde > LS_AUTO_TETO_MS) {
+      printf("[legsync] automatico: teto de %u s sem fechar (etapa %d, fase %d, ref=%d, pedido=%d); a legenda fica como esta\n",
+             LS_AUTO_TETO_MS / 1000u, L.autoEtapa, L.primFase, L.refDoc != NULL, (int)L.refPedido);
+      fflush(stdout);
+      L.autoFase = 3; L.autoEtapa = 9; L.autoPend = 0; L.autoDesde = 0;
+      if (L.refPedido) { legref_cancelar(L.ref); L.refPedido = 0; }
+      if (L.audPedido) pararAudio();
+      autosync_cancelar(L.sync, 0);
+    }
+  } else L.autoDesde = 0;
   // Competicao: seek/buffer pausa a leitura; buffer de video curto tambem.
   autoPasso();
+  if (L.autoFase != L.autoLog) {
+    L.autoLog = L.autoFase;
+    printf("[legsync] automatico: %s (etapa %d, legenda %s, referencia %s)\n",
+           L.autoFase == 1 ? "sincronizando" : L.autoFase == 2 ? "sincronizada" : L.autoFase == 3 ? "nao deu" : "sem plano",
+           L.autoEtapa, L.primFase == 0 ? "baixando" : L.primFase == 2 ? "incompleta" : "baixada",
+           L.refDoc ? "lida" : L.refPedido ? "lendo" : L.ref ? "nenhuma" : "indisponivel nesta plataforma");
+    fflush(stdout);
+  }
   legref_pausar(L.ref, sensivel || (folga >= 0.0 && folga < LS_FOLGA_MIN));
   if (sensivel) {
     AutoSyncResultado e = autosync_estado(L.sync, 0);

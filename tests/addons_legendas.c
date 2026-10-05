@@ -2,13 +2,14 @@
 #include "../src/addons.c"
 #include <assert.h>
 static const char *responses[3];
-static int requests, status[3] = {200, 200, 200};
+static _Atomic int requests;
+static int status[3] = {200, 200, 200};
 char *rede_baixar_medido_controle(const char *url, int seconds,
                                   const char *const *headers,
                                   const RedeControle *controle,
                                   RedeMedida *medida) {
   int idx = -1;
-  assert(!headers && !controle && seconds == 25);
+  assert(!headers && !controle && seconds == LEG_TETO_S);
   for (int i = 0; i < 3; i++) {
     char base[80]; snprintf(base, sizeof base, "https://fixture.invalid/provider%d/", i);
     if (!strncmp(url, base, strlen(base))) idx = i;

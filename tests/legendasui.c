@@ -324,6 +324,25 @@ int main(void) {
     montarLinhas();
     assert(linhaDe("sync|p") < 0 && linhaDe("sync|s") < 0); }
 
+  // --- foto da TV (04/10): a lingua preferida vem primeiro, "PORTUGUESE" tem nome
+  //     e selo inteiros, e as duas "Nenhuma" nao se parecem ---
+  { char nm[96], sb[160]; const char *id, *ic; int at, ap, a, b;
+    nAdd = 3; ativaEmb = -1; nEmb = 0;
+    addon(0, "eng", "AIOStreams", "", "https://h.invalid/a");
+    ling_normalizar("PORTUGUESE", add[1].idioma, sizeof add[1].idioma);
+    snprintf(add[1].provedor, sizeof add[1].provedor, "AIOStreams");
+    snprintf(add[1].url, sizeof add[1].url, "https://h.invalid/b");
+    addon(2, "pob", "OpenSubtitles", "", "https://h.invalid/c");
+    ling_local_legenda("pt"); ling_local_legenda2("");
+    legendasui_abrir();
+    assert(linhas[0].tipo == LR_CAND && ling_casa(cand[linhas[0].cand].idioma, "pt"));
+    a = linhaDe("p|-"); assert(a >= 0);
+    textoLinha(&linhas[a], nm, sizeof nm, sb, sizeof sb, &id, &ic, &at, &ap);
+    assert(!strcmp(nm, "Nenhuma"));
+    b = linhaDe("s|-");
+    if (b >= 0) { textoLinha(&linhas[b], nm, sizeof nm, sb, sizeof sb, &id, &ic, &at, &ap); assert(!strcmp(nm, "Sem segunda legenda")); }
+    assert(!strcmp(ling_selo(add[1].idioma), "PT")); }
+
   assert(tecla(SDLK_ESCAPE) == LEGUI_FECHAR && !aberto);
   // Media change drops the second slot.
   snprintf(sec, sizeof sec, "a1"); secOffset = 900;

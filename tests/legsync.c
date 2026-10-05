@@ -283,6 +283,19 @@ int main(int argc, char **argv) {
     if (caso == 3) assert(v.fase == LEGSYNC_PRONTA);             // a nova escolha, sem automatico herdado
     if (caso == 4) assert(v.motivo == LEGSYNC_M_SEM_EXTERNA);
   }
+  // 9c. "Sincronizando..." para sempre (foto da TV, 04/10): leitura da referencia
+  //     presa, nada fecha o plano. Passado o teto o plano desiste, a legenda
+  //     fica como esta e o estado e "nao deu" (autoFase 3), nao "trabalhando".
+  legsync_teste_auto(1);
+  travar = 1;
+  legsync_iniciar(MKV);
+  legsync_primaria_externa("ext://0/ext_mais2500.srt", "pt", "P");
+  for (int k = 0; k < 40; k++) { passo(MKV, 0); usleep(2000); }
+  assert(legsync_visao(0).autoFase == 1);
+  agora += 50000;
+  passo(MKV, 0);
+  assert(legsync_visao(0).autoFase == 3);
+  travar = 0; legsync_encerrar(); legsync_teste_auto(0); casos++;
   // Fechar o player LOGO depois de pedir a analise (referencia ja lida): o
   // resultado da sessao velha nunca aparece na sessao nova do mesmo arquivo.
   for (int k = 0; k < 20; k++) {
