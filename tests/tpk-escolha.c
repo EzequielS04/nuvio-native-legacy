@@ -7,6 +7,10 @@
 // subtitle wait out the player's settle window. This pins the split: audio
 // out on the first tick, the subtitle out after the settle, and a change
 // during playback going out immediately.
+//
+// The subtitle window counts from the first FRAME, not from EV_TOCANDO (which
+// arrives while the buffer is still filling), so the fake host has to be able to
+// report a position - a fixed 0 could never satisfy it.
 #include <stdio.h>
 #include <string.h>
 #include "video.h"
@@ -44,7 +48,9 @@ static void hAbrir(const char *u, const char *c) { (void)u; (void)c; }
 static void hSem(void) {}
 static void hInt(int v) { (void)v; }
 static void hJanela(int x, int y, int w, int h) { (void)x; (void)y; (void)w; (void)h; }
-static int  hPos(void) { return 0; }
+// The position is the proof of a frame (LEG_QUADRO_S in video_tpk.c).
+static int fakePosMs;
+static int  hPos(void) { return fakePosMs; }
 
 // The fake host counts what actually reaches it.
 static int nAudios, nLegs, ultAudio, ultLeg;
@@ -78,9 +84,14 @@ int main(void) {
   ok("choices before playing stay in the app", nAudios == 0 && nLegs == 0);
 
   // --- 2. audio leaves on the first tick ------------------------------------
-  nv_tpk_video_evento(2, 0, 0);          // playback starts
+  nv_tpk_video_evento(2, 0, 0);          // playback starts (EV_TOCANDO)
   video_bombear();
   ok("audio leaves on the first tick", nAudios == 1 && ultAudio == 0);
+  // EV_TOCANDO alone is not a frame.
+  ok("the subtitle does not leave on EV_TOCANDO alone", nLegs == 0);
+  // The position advancing is the frame.
+  fakePosMs = 300;   // 0.30 s > LEG_QUADRO_S (0.25)
+  video_bombear();
   ok("the subtitle waits for the settle", nLegs == 0);
 
   char cue[1024];
@@ -102,13 +113,22 @@ int main(void) {
   video_escolher_audio(0);ok("playback audio changes immediately",nAudios==2);
 
   // New session resets settle state. Superseded deferred choice uses latest.
+  // A new session means a new buffer, so the position starts at 0 again.
+  fakePosMs = 0;
   video_tocar("http://x/new.mkv");nv_tpk_video_evento(1,100000,0);
   nv_tpk_video_faixa(1,0,"ru");nv_tpk_video_faixa(1,1,"en");nv_tpk_video_faixas_fim(0,0);
   video_escolher_legenda(0);video_escolher_legenda(1);
+  int legAntes = nLegs;
   nv_tpk_video_evento(2,0,0);video_bombear();
-  ok("new session does not reuse previous settle time",nLegs==1);
+  // No sleep here, and that is the test: an inherited frame would make the window
+  // already expired and the write would go out on this first pump. Sleeping would
+  // measure the same thing but depend on SDL_Delay not overshooting.
+  ok("new session waits for its own frame",nLegs==legAntes);
+  fakePosMs = 300;   // now the first frame of THIS session
+  video_bombear();
+  ok("new session does not reuse previous settle time",nLegs==legAntes);
   SDL_Delay(2600);video_bombear();
-  ok("latest deferred subtitle leaves after settle",nLegs==2&&ultLeg==1);
+  ok("latest deferred subtitle leaves after settle",nLegs==legAntes+1&&ultLeg==1);
   ok("cue emitted during deferred host dispatch is hidden",!video_legenda_nativa(cue,sizeof cue));
   nv_tpk_video_legenda("new session cue",3000);
   ok("new session cue renders after dispatch",video_legenda_nativa(cue,sizeof cue));
