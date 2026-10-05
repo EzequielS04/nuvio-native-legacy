@@ -1,13 +1,17 @@
 // Regression: unknown logo language and fullscreen carousel edge navigation.
-#define desc_pedir_titulo_tmdb capturar_rota_tmdb
+#define desc_pedir_titulo_semente capturar_rota_tmdb
 #define extras_relacionado_imdb relacionado_tmdb_fixture
 #include "../src/detail.c"
-#undef desc_pedir_titulo_tmdb
+#undef desc_pedir_titulo_semente
 #undef extras_relacionado_imdb
 #include <assert.h>
 static long rotaId;
 static char rotaTipo[16];
-void capturar_rota_tmdb(long id, const char *tipo) {
+// detail.c now opens a TMDB recommendation through desc_pedir_titulo_semente
+// (click seed: title/year/poster); the stub keeps it free of I/O.
+void capturar_rota_tmdb(const char *imdb, long id, const char *tipo, const char *titulo,
+                        const char *ano, const char *poster) {
+  (void)imdb; (void)titulo; (void)ano; (void)poster;
   rotaId = id;
   snprintf(rotaTipo, sizeof rotaTipo, "%s", tipo);
 }
