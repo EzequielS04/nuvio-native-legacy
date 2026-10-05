@@ -204,6 +204,11 @@ static int retomandoSalto; // seek requested playback; buffering is not user pau
 // Uma unica sessao VOD pausada, por no maximo dois minutos. Nao abre conexao
 // especulativa: e o pipeline que ja estava exibindo este titulo.
 //
+// SO SE A PESSOA PEDIR (dono, 05/10): "segurar o filme esta estragando a
+// experiencia". O padrao e NAO reter — sair libera o pipeline na hora e o
+// Retomar abre pela fonte guardada, sem busca nos addons. Reter e o ajuste
+// avancado "Manter o video pronto ao sair" (ajustes_manter_video, podeReter).
+//
 // O PRECO DE RETER MAIS: o pipeline e um so. Enquanto a sessao esta retida o
 // trailer do destaque da home nao toca (home_trailer_passo exige
 // !player_retido(), app.c) — sao ate 2 min de home sem trailer
@@ -265,6 +270,12 @@ static void corFocoPlayer(float *r, float *g, float *b) { ajustes_acento(r, g, b
 // outra ha a busca de fonte, que pode levar segundos). Zero enquanto nao houve.
 // A guia parental se apoia nisto para aparecer UMA vez, no comeco, e sumir.
 static Uint32 inicioImagem = 0;
+// MEDIDA DO RETOMAR (05/10): desde player_abrir ate o pronto e ate o primeiro
+// "tocando" depois de aplicada a retomada. E o numero para comparar, na TV, o
+// Retomar sem reter (fonte guardada + posicao) com o retido ("retomada pronta").
+// So log; nao decide nada.
+static Uint32 abertoEm;
+static int    medirAbertura, tocouMedido;
 // Quando os selos do guia parental entraram na tela. Ver a nota no desenho.
 static Uint32 pgDesde;
 // AS DUAS VARIAVEIS DE MIDIA. Todo o resto do arquivo le so daqui — quando o
@@ -1186,6 +1197,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   memset(&zapEst, 0, sizeof zapEst); bannerAV = 0.0f; botaoAV = 0; infoAV = 0; pedRecarregar = 0;
   avLat0 = -1.0; avAtraso = 0.0; avPausaDesde = 0;
   retomadaAplicada=0; semRetomada=0;
+  abertoEm = SDL_GetTicks(); medirAbertura = 1; tocouMedido = 0;
 #ifdef NV_ANDROID
   retomarSeg = 0.0; retomadaNaPreparacao = 0;
 #endif
@@ -1604,7 +1616,10 @@ void player_encerrar(void) {
 
 static int podeReter(void) {
   const CatItem *c = item();
-  return ajustes_relogio_ligado() && ajustes_saida_player_home() &&
+  // OPT-IN (05/10): so com "Manter o video pronto ao sair" (Avancado, padrao
+  // Desligado; nunca no perfil seguro). Sem ele a saida fecha a sessao na hora
+  // e o Retomar reabre pela fonte guardada (fontevolta.h).
+  return ajustes_manter_video() &&
          comVideo && !ehCanal() && c && c->imdb[0] && !erroFonte &&
          video_pronto() && video_ativo() && !video_falhou() && !video_terminou() &&
          !video_conflito_recurso() && !video_reconectando() && video_url_atual()[0] &&
@@ -1673,6 +1688,7 @@ int player_retomar_retido(const char *imdb, int t, int e) {
   entrada = 1.0f; visivel = 0; anim = 0.0f; soBarra = 0;
   scrubbing = barraFoco = 0; encolhe = 1.0f; encolheT = encolheAlvo = 0.0f;
   ultimoInput = agora; retomadaAplicada = 1; tocando = 1;
+  medirAbertura = 0;   // a medida desta volta e a "retomada pronta" abaixo
   relogio_zerar(&relLeg);
   avisarCascaAberto(1); aplicarAspecto();
   mkvass_video_aberto(1);
@@ -2608,7 +2624,14 @@ void player_atualizar(float dt, Uint32 agora) {
   // tempo dela — contar da abertura da tela faria a guia gastar o prazo
   // enquanto o app ainda procurava fonte, e ela sumiria antes de o filme
   // aparecer.
-  if (!inicioImagem && comVideo && video_pronto()) { inicioImagem = agora; acordar(); }
+  if (!inicioImagem && comVideo && video_pronto()) {
+    inicioImagem = agora; acordar();
+    if (medirAbertura && !ehCanal()) {
+      printf("[player] pronto em %u ms desde a abertura (retomada %d%%)\n",
+             (unsigned)(SDL_GetTicks() - abertoEm), retomarPct);
+      fflush(stdout);
+    }
+  }
   if (saindo && saidaIlhaDesde && prepararRetencao &&
       (video_pausa_confirmada() ||
        (Sint32)(SDL_GetTicks() - saidaIlhaDesde) >= (Sint32)PLR_SAIDA_ILHA_TETO_MS)) {
@@ -2702,6 +2725,12 @@ void player_atualizar(float dt, Uint32 agora) {
 #endif
     }
     tocando = video_tocando();
+    if (tocando && retomadaAplicada && medirAbertura && !tocouMedido && !ehCanal()) {
+      tocouMedido = 1;
+      printf("[player] tocando em %u ms desde a abertura (retomada %d%%)\n",
+             (unsigned)(SDL_GetTicks() - abertoEm), retomarPct);
+      fflush(stdout);
+    }
     if (tocando && !scrubbing) retomandoSalto = 0;
     { const CatItem *ci = ehCanal() ? NULL : item();
       // Personal-server check-ins: start once playback really runs, progress

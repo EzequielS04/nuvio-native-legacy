@@ -405,6 +405,10 @@ int   ajustes_abertura(void);
 // Sair do player no meio vai para a HOME, minimizando o titulo na ilha (o
 // relogio ligado e Ao sair do player = home). 0 = a pagina do titulo, como antes.
 int   ajustes_saida_player_home(void);
+// "Manter o video pronto ao sair" (Avancado, padrao Desligado): o player pode
+// reter a sessao pausada ao sair para a ilha (player.c, PLR_RETIDO_MS). So com
+// a saida para a home valendo; sempre 0 no perfil seguro.
+int   ajustes_manter_video(void);
 // Selo de visto no cartaz da home (#212). 1 = ligado (o de fabrica).
 int   ajustes_selo_visto(void);
 // MODO SEGURO (seguro.h). Chamar no arranque, DEPOIS de ajustes_dir e de

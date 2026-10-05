@@ -396,6 +396,12 @@ typedef enum {
   // 2.0: "Novidades 2.0" (Sobre e ajuda) reabre o guia da 2.0 (novidades20.h).
   // Acao. No fim: valor[]/CHAVE[] posicionais.
   AJ_NOVIDADES20,
+  // RETOMADA (05/10): manter a sessao do player pausada por ate 2 min ao sair
+  // para a ilha (player.c, PLR_RETIDO_MS). Avancada, LOCAL, padrao DESLIGADO:
+  // segura o decoder e o pipeline unico (sem trailer na home nesse tempo). Sem
+  // ela o Retomar abre pela fonte guardada (fontevolta.h). No fim: valor[]/CHAVE[]
+  // posicionais.
+  AJ_MANTER_VIDEO,
   AJ_N
 } OpcaoId;
 
@@ -1137,6 +1143,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Esmaecer quando parado",          V_ESMAECER, 4),         // local: esmaecerLocal
   ESC("Brilho da interface no player",   V_BRILHO_PLAYER, 4),    // local: brilhoPlayerLocal
   ACAO("Novidades 2.0"),
+  ESC("Manter o vídeo pronto ao sair",   V_LIGA, 2),             // local: manterVideoLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1330,6 +1337,7 @@ static const char *CHAVE[] = {
   "buscaCinemetaLocal",
   "esmaecerLocal", "brilhoPlayerLocal",
   "-novidades20",
+  "manterVideoLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1769,6 +1777,7 @@ int ajustes_leg2_cor(void) { int v = valor[AJ_LEG2_COR]; return v >= 1 && v <= 6
 int ajustes_leg2_fundo(void) { int v = valor[AJ_LEG2_FUNDO]; return v >= 1 && v <= 5 ? v - 1 : -1; }
 int ajustes_leg2_borda(void) { int v = valor[AJ_LEG2_BORDA]; return v >= 1 && v <= 3 ? v - 1 : -1; }
 int ajustes_saida_player_home(void) { return lig(AJ_RELOGIO) && valor[AJ_SAIDA_PLAYER] == 0; }
+int ajustes_manter_video(void) { return ajustes_saida_player_home() && lig(AJ_MANTER_VIDEO) && !SEGURO; }
 int ajustes_selo_visto(void) { return lig(AJ_SELO_VISTO); }
 static void riscoNotar(int op, int antes);
 void ajustes_definir_vidro(int ligado) { int a = valor[AJ_VIDRO]; valor[AJ_VIDRO] = ligado ? 0 : 1; gravar(); riscoNotar(AJ_VIDRO, a); }
@@ -3557,6 +3566,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_BUSCA_CINEMETA: /* o web nao tem esta escolha */
     case AJ_ESMAECER: case AJ_BRILHO_PLAYER: /* o painel OLED e desta TV */
+    case AJ_MANTER_VIDEO:   /* a memoria e o decoder sao desta TV */
     case AJ_ENQUETES:       /* o web nao tem a ilha; a conta guarda o opt-out por outro caminho (enquete.c) */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
@@ -4370,6 +4380,8 @@ static int inativa(int op) {
     case AJ_SELOS_PACOTE_REM: return selospacote_ativo() < 0 || !selospacote_da_tv(selospacote_ativo());
     // Sem o relogio nao ha ilha para onde minimizar: sai para a pagina, como antes.
     case AJ_SAIDA_PLAYER: return !lig(AJ_RELOGIO);
+    // So existe sessao para manter quando a saida vai para a ilha.
+    case AJ_MANTER_VIDEO: return !ajustes_saida_player_home();
     // AJ_FONTE_PRAZO NAO DEPENDE DE NADA (#238). Era desligada com "Escolher a
     // fonte ao reproduzir", mas app.c (autoParcialPronto) ainda usa o prazo
     // quando ha fonte lembrada para o titulo, mesmo escolhendo a mao.
@@ -4550,6 +4562,8 @@ static const char *ajudaOpcao(int op) {
       return "Só dá para remover um pacote que foi adicionado nesta TV.";
     if (op == AJ_SAIDA_PLAYER)
       return "Ative Relógio na tela: sem ele o player não tem para onde minimizar.";
+    if (op == AJ_MANTER_VIDEO)
+      return "Só vale com Ao sair do player em Voltar para a home e o Relógio na tela ligado.";
     if (op == AJ_POSTER_INST || op == AJ_POSTER_TOKEN || op == AJ_POSTER_EXTRA ||
         op == AJ_POSTER_CHAVE || op == AJ_POSTER_MODELO || op == AJ_POSTER_TESTAR)
       return "Este campo vale para outro serviço. Escolha o serviço em Pôsteres personalizados.";
@@ -4763,6 +4777,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
     case AJ_ESMAECER: return "Para TVs OLED: sem apertar nada, a tela escurece aos poucos e depois quase apaga, com um relógio que anda devagar. Qualquer tecla acorda (a primeira só acorda, não faz nada). Nunca esmaece com o filme tocando; com ele pausado, sim.";
+    case AJ_MANTER_VIDEO: return "Ao sair de um filme para a home, o vídeo fica pausado e carregado por até 2 minutos, e o Retomar volta na hora. Custa caro: a memória do vídeo e o player ficam presos, o trailer da home não toca nesse tempo e TVs mais fracas podem ficar lentas. Desligado (padrão), o player é liberado ao sair e o Retomar reabre direto pela fonte que estava tocando, sem procurar nos add-ons.";
     case AJ_BRILHO_PLAYER: return "Escurece os controles, o título e a barra do player (as legendas não mudam). Com o filme tocando e a barra parada, ela ainda baixa um degrau até você apertar uma tecla.";
     case AJ_BUSCA_CINEMETA: return "Ligado (padrão): a busca consulta o catálogo do Nuvio e, se ele falhar, o Cinemeta; um add-on Cinemeta instalado também responde. Desligado: o Cinemeta fica de fora da busca, e só o catálogo do Nuvio e os seus add-ons respondem. Não muda a ficha do título (veja Usar sempre o Cinemeta).";
     case AJ_ENQUETES: return "Ligado, o Nuvio pode convidar você a votar numa enquete curta na ilha do relógio. Desligado, nenhuma aparece. A escolha fica na sua conta.";
@@ -6362,7 +6377,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER:
     case AJ_TAMANHO_UI: case AJ_TAMANHO_AJUSTES: case AJ_FUNDO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
     case AJ_AVANCADAS: case AJ_LOGO_APP: case AJ_ABERTURA:
-    case AJ_ESMAECER: case AJ_BRILHO_PLAYER:
+    case AJ_ESMAECER: case AJ_BRILHO_PLAYER: case AJ_MANTER_VIDEO:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL: case AJ_ENQUETES:

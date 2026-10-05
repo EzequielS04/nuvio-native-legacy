@@ -222,3 +222,4 @@
   2, /* dim when idle (OLED): 5 min */
   1, /* player UI brightness (OLED): 80% */
   0, /* 2.0 guide (Sobre e ajuda › Novidades 2.0): action */
+  1, /* keep the video ready on exit: Desligado (V_LIGA: 1); retention costs memory */

@@ -85,7 +85,7 @@ static const Item TELA[] = {
     ROT("Imagem e som"), OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS), OPC(AJ_CACHE_SEEK),
     ROT("Durante e depois"),
       OPC(AJ_PAUSA_OVERLAY), OPC(AJ_REACAO_CREDITOS), OPC(AJ_CW_CONCLUIDO), OPC(AJ_SAIDA_PLAYER),
-      OPC(AJ_BRILHO_PLAYER),
+      OPC(AJ_MANTER_VIDEO), OPC(AJ_BRILHO_PLAYER),
     ROT("Seekr"),
       OPC(AJ_SEEKR_LIGADO), OPC(AJ_SEEKR_CHAVE), OPC(AJ_SEEKR_TESTAR),
       OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
@@ -193,6 +193,7 @@ static int uxAvancada(int op) {
     case AJ_P2P_LIGADO: case AJ_P2P_URL: case AJ_P2P_TESTAR:
     case AJ_TEX_MB:
     case AJ_SEEKR_AJUSTE:
+    case AJ_MANTER_VIDEO:
       return 1;
     default:
       return 0;

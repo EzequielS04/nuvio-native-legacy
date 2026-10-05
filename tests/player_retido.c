@@ -5,6 +5,8 @@
 #include "perfis.h"
 #include "streams.h"
 #include "fontevolta.h"
+#include "ajustes.h"
+#include <stdlib.h>
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -52,6 +54,16 @@ int main(void) {
   puts("player_retido: inicio");
   assert(SDL_Init(SDL_INIT_TIMER) == 0);
   perfis_definir_ativo(1);
+
+  // De fabrica (sem ajustes.txt, instalacao antiga ou nova) nao retem.
+  assert(!ajustes_manter_video());
+  // O ajuste ligado (ajustes.txt desta TV) volta ao comportamento retido.
+  { char cam[600]; const char *d = getenv("NUVIO_DADOS"); FILE *f;
+    assert(d && *d);
+    snprintf(cam, sizeof cam, "%s/ajustes.txt", d);
+    f = fopen(cam, "w"); assert(f); fputs("manterVideoLocal 0\n", f); fclose(f);
+    ajustes_dir(d); }
+  assert(ajustes_manter_video());
   abrir("movie");
   player_preparar_retencao();
   assert(!player_suspender()); // tocando local=0 nao e confirmacao
@@ -143,5 +155,29 @@ int main(void) {
     abrir("channel"); stream_definir_lista(&st, 1); stream_definir_atual(0); player_encerrar();
     assert(fontevolta_pegar("fixture-titulo", "fixture-conta-a", 1, SDL_GetTicks(), &got));
     puts("ok lista trocada e canal nao mexem na entrada"); }
+  // DESLIGADO (o padrao de fabrica, 05/10): sem "Manter o video pronto ao sair" nada e retido. A saida
+  // solta o pipeline na hora e a fonte fica guardada para o Retomar.
+  { char cam[600]; const char *d = getenv("NUVIO_DADOS"); FILE *f;
+    snprintf(cam, sizeof cam, "%s/ajustes.txt", d);
+    f = fopen(cam, "w"); assert(f); fputs("manterVideoLocal 1\n", f); fclose(f);
+    ajustes_dir(d); }
+  assert(!ajustes_manter_video());
+  { Stream st0; Stream got0; memset(&st0, 0, sizeof st0);
+    snprintf(st0.url, sizeof st0.url, "https://example.invalid/fixture.mp4");
+    stream_definir_lista(&st0, 1); stream_definir_atual(0);
+    abrir("movie"); stream_definir_atual(0);
+    int p0 = paradas, pa0 = pausas;
+    player_preparar_retencao();
+    assert(pausas == pa0);           // nem pausa para reter
+    confirmado = 1;
+    assert(!player_suspender() && !player_retido());
+    player_encerrar();
+    assert(paradas == p0 + 1 && !player_retido() && !player_aberto());
+    assert(fontevolta_pegar("fixture-titulo", "fixture-conta-a", 1, SDL_GetTicks(), &got0));
+    assert(!strcmp(got0.url, st0.url));
+    assert(!player_retomar_retido("fixture-titulo", 0, 0));
+    fontevolta_esquecer("teste"); stream_definir_lista(NULL, 0); }
+  puts("ok padrao: sair libera o pipeline e guarda a fonte para o Retomar");
+
   SDL_Quit(); puts("player_retido: tudo ok");
 }

@@ -1,8 +1,9 @@
 // A FONTE QUE ESTAVA TOCANDO, para o Retomar nao repetir a busca nos addons.
 //
-// O que ela encurta. A sessao pausada fica retida por PLR_RETIDO_MS (player.c)
-// e o Retomar dentro desse prazo volta em ~1 ms. Passado o prazo, o Retomar era
-// uma reproducao nova: busca em todos os addons, verificacao, abertura — 8 a
+// O que ela encurta. Desde 05/10 sair do player NAO retem a sessao por padrao
+// (a retencao de PLR_RETIDO_MS, player.c, virou o ajuste avancado "Manter o
+// video pronto ao sair"): este e o caminho NORMAL do Retomar. Sem ela, o
+// Retomar era uma reproducao nova: busca em todos os addons, verificacao, abertura — 8 a
 // 14 s ate o primeiro quadro na TCL (medido). Mas o link que tocava ainda e,
 // quase sempre, o mesmo que a busca escolheria de novo. Aqui fica UMA entrada:
 // a fonte da ultima sessao de filme/episodio que tocou de verdade, com quem
