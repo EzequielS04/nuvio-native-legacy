@@ -38,10 +38,13 @@
 #include "corviva.h"
 #include "dados.h"
 #include "detail.h"
+#include "extras.h"   // extras_shot_relacionados (NV_SHOT_HOOKS): fileiras do detalhe
 #include "fundo.h"
 #include "gfx.h"
 #include "home.h"
 #include "layout.h"
+#include "perfis.h"    // perfis_carregar_ativo (cena perfil)
+#include "perfilsel.h"  // a tela de escolha, medida (#2 do handoff 1.8)
 #include "tex_cache.h"
 #include "text.h"
 #include <SDL2/SDL.h>
@@ -187,9 +190,45 @@ static void povoar(void) {
       snprintf(c->classificacao, sizeof c->classificacao, "%s", t % 2 ? "14" : "");
       c->nota = 50 + t % 45;
       if (f == 0 && i < 6) { c->progresso = 10 + i * 6; c->restanteMin = 20 + i; }
+      // O DETALHE DA TV NAO E VAZIO (#2 do handoff de desempenho 1.8,
+      // 05/10): na C9 a pagina do titulo mede 7,4 telas/quadro com fileiras
+      // de arte (relacionados, elenco), e o fixture media 3,0 porque nenhum
+      // desses dados existia aqui. O ELENCO vem do CatItem (catalogo.h) e
+      // as TEMPORADAS tambem; a foto e local como o poster. Sem isto a
+      // pagina do fixture nao representa a da TV e todo numero de detalhe
+      // sai otimista.
+      if (i < 6) {
+        c->nElenco = 6;
+        for (int e = 0; e < 6; e++)
+          snprintf(c->elenco[e].foto, sizeof c->elenco[e].foto,
+                   "deploy/app/art/elenco/%02d_%d.jpg", i, e);
+        snprintf(c->elenco[0].nome, sizeof c->elenco[0].nome, "Ator de Teste Um");
+        snprintf(c->elenco[1].nome, sizeof c->elenco[1].nome, "Atora de Teste Dois");
+        snprintf(c->elenco[2].nome, sizeof c->elenco[2].nome, "Elenco Tres");
+        snprintf(c->elenco[3].nome, sizeof c->elenco[3].nome, "Elenco Quatro");
+        snprintf(c->elenco[4].nome, sizeof c->elenco[4].nome, "Elenco Cinco");
+        snprintf(c->elenco[5].nome, sizeof c->elenco[5].nome, "Elenco Seis");
+      }
+      if (!(t % 3)) {   // series: a pagina ganha as fileiras de temporada
+        c->nTemporadas = 3;
+        for (int tp = 0; tp < 3; tp++) c->temporadas[tp] = tp + 1;
+      }
     }
   }
   cat_definir_tudo(itens, NCAT, fils, NFIL);
+  // RELACIONADOS com arte: o mesmo hook das capturas (NV_SHOT_HOOKS). Sem ele
+  // a secao "Recomendacoes" nao existe no fixture e a TV desenha 8 cards.
+  { static const char *rt[8] = { "Relacionado Um", "Relacionado Dois",
+                                 "Relacionado Tres", "Relacionado Quatro",
+                                 "Relacionado Cinco", "Relacionado Seis",
+                                 "Relacionado Sete", "Relacionado Oito" };
+    static const char *ra[8] = { "2020", "2019", "2021", "2018",
+                                 "2022", "2017", "2023", "2016" };
+    static const char *rp[8] = { "deploy/app/art/12.jpg", "deploy/app/art/10.jpg",
+                                 "deploy/app/art/16.jpg", "deploy/app/art/14.jpg",
+                                 "deploy/app/art/32.jpg", "deploy/app/art/03.jpg",
+                                 "deploy/app/art/36.jpg", "deploy/app/art/02.jpg" };
+    extras_shot_relacionados(rt, ra, rp, 8); }
 }
 
 static void ajusta(const char *cenario) {
@@ -352,6 +391,40 @@ static void cenario(SDL_Window *w, const char *cen) {
   ajustes_encerrar();
   naAjustes = 0;
   for (i = 0; i < 60; i++) { quadro(w, NULL, t); t += 16; }
+  // ESCOLHA DE PERFIL (#2 do handoff de desempenho 1.8, 05/10): a TV do dono
+  // mede esta tela a 7,4 telas/quadro (log [gpu-modos] tela=escolha-perfil:
+  // sombra 2,46 + cor 2,05 + card 0,93 + luz ambiente 1,00, cor-viva=4) e o
+  // harness nem a desenhava — era a maior divergencia fixture/TV do detalhe.
+  // O mural usa os posters do CATALOGO (muralRecriar, cat_item) e os perfis
+  // vem de perfis.txt no NUVIO_DADOS: 4 perfis com fundo/avatar locais, como
+  // na conta de verdade.
+  { FILE *f;
+    char cam[700];
+    snprintf(cam, sizeof cam, "%s/%s", dirDados, "perfis.txt");
+    f = fopen(cam, "w");
+    assert(f);
+    fprintf(f,
+      "1\t0\t1\t0\t#8A5CF6\tSala\tdeploy/app/art/00.jpg\tdeploy/app/art/03.jpg\n"
+      "2\t0\t0\t0\t#F59E0B\tInfantil\tdeploy/app/art/01.jpg\tdeploy/app/art/07.jpg\n"
+      "3\t0\t0\t0\t#10B981\tDocumentarios\tdeploy/app/art/02.jpg\tdeploy/app/art/11.jpg\n"
+      "4\t0\t0\t0\t#EF4444\tPapo\tdeploy/app/art/04.jpg\tdeploy/app/art/15.jpg\n");
+    fclose(f);
+    perfis_carregar_ativo();
+    perfilsel_iniciar();
+    { static const Tela pf = { perfilsel_evento, perfilsel_atualizar, perfilsel_desenhar, 0 };
+      telaAtual = &pf;
+      for (i = 0; i < 180; i++) { quadro(w, NULL, t); t += 16; }   // entrada + burst assenta
+      for (i = 0; i < n; i++) {
+        if (i % 12 == 0) tecla(i < n / 2 ? SDLK_RIGHT : SDLK_LEFT);
+        quadro(w, &qs[i], t); t += 16;
+      }
+      relatar(cen, "perfil", qs, n);
+      if (getenv("NV_RASTRO")) { gfx_rastro_grandes = 1; quadro(w, NULL, t); t += 16; gfx_rastro_grandes = 0; }
+      if (getenv("PERF_BMP")) { char b[800]; snprintf(b, sizeof b, "%s-%s-perfil.bmp", getenv("PERF_BMP"), cen); guardar(b); }
+      telaAtual = NULL;
+    }
+    for (i = 0; i < 60; i++) { quadro(w, NULL, t); t += 16; }
+  }
   // BIBLIOTECA, AGENDA, SALVOS e MENU: assenta, mede parado e com a seta.
   { static const Tela bib = { biblioteca_evento, biblioteca_atualizar, biblioteca_desenhar, 0 };
     static const Tela age = { agendaui_evento, agendaui_atualizar, agendaui_desenhar, 0 };
