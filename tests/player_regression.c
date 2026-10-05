@@ -327,6 +327,9 @@ static void testar(void) {
   //   E o que NAO acabou continua nao acabando: metade do episodio nao marca
   //   nada, com ou sem marcador.
   assert(!player_regra_concluiu(540,1080,0) && !player_regra_proximo(540,1080,0));
+  /* R8: the old 10% window refused credits at 1346s of 1500s (154s left). */
+  assert(player_regra_proximo(1346,1500,1346) && !player_regra_proximo(1300,1500,1346));
+  assert(!player_regra_proximo(1200,1500,1100));   /* 400s left: still refused */
   assert(!player_regra_concluiu(0,0,0));      // sem duracao nao ha o que concluir
 
   // Ordem da rail: Inicio, Explorar, Guia TV, Busca. Um DOWN para em Explorar,

@@ -70,6 +70,8 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "mkvass.h"
 #include "relogio.h"
 #include "intro.h"
+#include "credfonte.h"
+#include "credaprende.h"
 #include "seekr.h"
 #include "visto.h"     /* fim de episodio/filme para Simkl e conta */
 #include "vistoep.h"   /* o check de "assistido" na lista de episodios (issue #100) */
@@ -409,6 +411,20 @@ void player_marcar_canal(const CatItem *it) {
   canalSessao = 1;
   itemCanal = *it;
 }
+// "38 min" / "1 h 5 min" do catalogo -> segundos (0 = nao deu para ler). So
+// serve de ESCALA para o marcador de um episodio vizinho (credfonte.h).
+static double duracaoTexto(const char *s) {
+  int h = 0, m = 0; const char *p = s ? s : "";
+  while (*p) {
+    if (*p >= '0' && *p <= '9') {
+      int v = 0; while (*p >= '0' && *p <= '9') v = v * 10 + (*p++ - '0');
+      while (*p == ' ') p++;
+      if (*p == 'h' || *p == 'H') h = v; else m = v;
+    } else p++;
+  }
+  return (double)(h * 60 + m) * 60.0;
+}
+static int credFonteAtual;
 static int epT, epE, pedFontes, erroFonte, pedProxT, pedProxE;
 // Dentro de player_abrir: o episodio ainda e o do progresso, nao o que vai
 // tocar. Ver a nota la — segura a invalidacao da lista de fontes (#101).
@@ -457,6 +473,12 @@ int  player_pediu_guia_cheio(void) { int v = pedGuiaCheio; pedGuiaCheio = 0; ret
 int  player_pediu_zap(void)  { int v = pedZap;  pedZap  = 0; return v; }
 int  player_pediu_recarregar(void) { int v = pedRecarregar; pedRecarregar = 0; return v; }
 void player_episodio_atual(int *t, int *e) { *t = epT; *e = epE; }
+// O dono avancou na mao (Comecar agora): lembra quanto faltava (credaprende.h).
+void player_aprender_creditos(void) {
+  const CatItem *c = item();
+  if (c && c->imdb[0] && epT > 0 && comVideo && video_pronto())
+    cred_aprender(c->imdb, duracaoSeg, posSeg, credFonteAtual);
+}
 int player_pediu_fontes(void) { int p = pedFontes; pedFontes = 0; return p; }
 int player_pediu_proximo(int *t,int *e) {
   if(!pedProxT||!pedProxE)return 0;
@@ -612,7 +634,15 @@ void player_definir_episodio(int t, int e) {
     }
   }
   if(idx!=introIdx||epT!=introT||epE!=introE){
-    introIdx=idx;introT=epT;introE=epE;intro_pedir(c->imdb,epT,epE);
+    introIdx=idx;introT=epT;introE=epE;
+    { double dA=0,dP=0;
+      for(int ix=idxAtual(),i=0;i<cat_n_episodios(ix);i++){
+        const CatEp *ep=cat_episodio(ix,i);
+        if(!ep||ep->temporada!=epT)continue;
+        if(ep->episodio==epE-1)dA=duracaoTexto(ep->duracao);
+        else if(ep->episodio==epE+1)dP=duracaoTexto(ep->duracao);
+      }
+      intro_pedir_vizinhos(c->imdb,epT,epE,dA,dP); }
     credAvisado=credFimAvisado=semProxAvisado=0;credAvisadoEm=0;
   }
 }
@@ -1348,6 +1378,33 @@ static void alvoStream(char *dst, unsigned tam) {
   else snprintf(dst, tam, "%s", c->imdb);
 }
 
+// ONDE OS CREDITOS COMECAM, pelas fontes de credfonte.h (capitulo, TheIntroDB,
+// episodio vizinho, o que o dono ensinou). 0 = nenhuma: vale a estimativa.
+// `credFonteAtual` e a que mandou da ultima vez, para o log (uma linha por
+// mudanca) e para o cred_aprender.
+static double credEfetivo(void) {
+  const CatItem *c = item();
+  static int ultimaFonte = -1; static long ultimoInicio = -1;
+  CredEntrada e; int f; double s;
+  memset(&e, 0, sizeof e);
+  e.dur = duracaoSeg;
+  e.capitulo = video_creditos();
+  e.introdb = intro_creditos_seg();
+  if (c && c->imdb[0] && epT > 0 && epE > 0) {
+    cred_viz_ler(c->imdb, epT, &e.vizInicio, &e.vizDur);
+    e.aprendidoResto = cred_aprendido_resto(c->imdb);
+  }
+  s = cred_escolher(&e, &f);
+  credFonteAtual = f;
+  if (f != CRED_FONTE_NENHUMA && video_pronto() && duracaoSeg >= 120.0f &&
+      (f != ultimaFonte || (long)s != ultimoInicio)) {
+    ultimaFonte = f; ultimoInicio = (long)s;
+    printf("[credits] source=%s start=%.0fs of %.0fs\n", cred_fonte_nome(f), s, (double)duracaoSeg);
+    fflush(stdout);
+  }
+  return s;
+}
+
 // A FONTE PARA O PROXIMO RETOMAR (fontevolta.h). Roda uma vez por sessao, no
 // fechamento de verdade ou na suspensao — nunca no descarte da retida, que ja
 // passou por aqui. So a sessao que TOCOU guarda: pronto, sem erro, duracao de
@@ -1361,8 +1418,7 @@ static void lembrarFonte(void) {
   if (ehCanal() || !comVideo) return;
   if (erroFonte || video_falhou()) { fontevolta_esquecer("sessao falhou"); return; }
   if (!video_pronto() || duracaoSeg < 120.0f) return;
-  cred = video_creditos();
-  if (cred <= 1.0) cred = intro_creditos_seg();
+  cred = credEfetivo();
   if (player_regra_concluiu(posSeg, duracaoSeg, cred)) { fontevolta_esquecer("titulo concluido"); return; }
   // A lista pode ter sido trocada por baixo (a busca de fundo do Retomar que
   // abriu pela fonte guardada): quem toca e a entrada que ja existe.
@@ -1420,9 +1476,8 @@ static void fecharSessao(int manter) {
     // Agora ha um numero so, e e o do cartao (player_regra_concluiu). As duas
     // fontes de marcador sao lidas na mesma ordem de ofertaProximo: o capitulo
     // do Matroska descreve ESTA copia, o TheIntroDB descreve o lancamento.
-    double cred = video_creditos();
+    double cred = credEfetivo();
     int concluiu;
-    if (cred <= 1.0) cred = intro_creditos_seg();
     concluiu = player_regra_concluiu(posSeg, duracaoSeg, cred);
     float pos = concluiu ? duracaoSeg : posSeg;
     // Pelo indice CORRENTE do titulo, nao pelo guardado: depois de uma
@@ -1541,7 +1596,7 @@ static int podeReter(void) {
          !video_conflito_recurso() && !video_reconectando() && video_url_atual()[0] &&
          duracaoSeg >= 120.0f && home_retorno_vale(idxAtual(), posSeg, duracaoSeg) &&
          !player_regra_concluiu(posSeg, duracaoSeg,
-                               video_creditos() > 1.0 ? video_creditos() : intro_creditos_seg());
+                               credEfetivo());
 }
 
 void player_preparar_retencao(void) {
@@ -1835,18 +1890,22 @@ static int temUltimoBotao(void) {
 // sendo "ainda aparece antes do final", e com razao: dez minutos antes do fim
 // nao e credito por nenhuma medida. A fracao sozinha erra no episodio longo.
 //
-// Agora: no maximo 10% do episodio, no maximo 5 minutos, e nunca menos que os
-// 2 minutos da regra de baixo (senao a guarda seria mais apertada que o
-// fallback e o marcador nunca valeria nada).
-//     22 min -> 132 s     50 min -> 300 s     80 min -> 300 s
-#define PLR_CRED_FRACAO 0.10
-#define PLR_CRED_TETO_S 300.0
-#define PLR_CRED_PISO_S 120.0
+// R8: a regra anterior (10%, teto 300 s, piso 120 s) recusou num log de webOS
+// um marcador valido: "comecam em 1346s de 1500s, sobram 154s, janela 150s" —
+// 10% de um episodio de 25 min sao 150 s, e creditos de 2m34 sao normais. O
+// erro que a guarda quer barrar (#34) e marcador MINUTOS fora do lugar, entao
+// agora aceita-se o que sobra ate 8% da duracao ou 5 min, o que for MAIOR,
+// com teto de 10 min:
+//     25 min -> 300 s     50 min -> 300 s     3 h -> 600 s
+#define PLR_CRED_FRACAO 0.08
+#define PLR_CRED_BASE_S 300.0
+#define PLR_CRED_TETO_S 600.0
+#define PLR_CRED_PISO_S 120.0   // estimativa sem marcador: os 2 min finais
 
 static double credJanelaDe(double durSeg) {
   double j = durSeg * PLR_CRED_FRACAO;
+  if (j < PLR_CRED_BASE_S) j = PLR_CRED_BASE_S;
   if (j > PLR_CRED_TETO_S) j = PLR_CRED_TETO_S;
-  if (j < PLR_CRED_PISO_S) j = PLR_CRED_PISO_S;
   return j;
 }
 static double credJanela(void) { return credJanelaDe(duracaoSeg); }
@@ -1890,8 +1949,7 @@ static int ofertaProximo(void) {
   // funcao so olhava o TheIntroDB (por intro_ativo), entao um episodio em MKV
   // com capitulo de creditos tinha o capitulo ignorado aqui e obedecido no
   // painel de filme — duas leituras diferentes do mesmo arquivo.
-  double cred = video_creditos();
-  if (cred <= 1.0) cred = intro_creditos_seg();
+  double cred = credEfetivo();
   if (cred > 1.0) {
     // SANIDADE: ver a nota de credJanela acima. Marcador que sobra mais que a
     // janela nao e credito, e dado errado — cai na regra de baixo.
@@ -2328,6 +2386,7 @@ void player_evento(const SDL_Event *e) {
       // de tudo em player_evento e ja consome o OK enquanto o cartao esta no
       // ar. Manter esta linha faria o OK disparar a troca duas vezes.
       { double fim;if(trechoPulavel(&fim)){
+          { int tp=0;if(intro_ativo(posSeg,NULL,&tp)&&tp==INTRO_CREDITOS)player_aprender_creditos(); }
           posSeg=(float)puloDestino(fim);if(comVideo)video_buscar(posSeg);return; } }
       // O OK com os controles escondidos e o Play/Pause: os controles sobem
       // com o foco NO PLAY, nao onde ficou da ultima vez (Legendas, Audio,
@@ -2547,7 +2606,7 @@ void player_atualizar(float dt, Uint32 agora) {
   // RECUO DO VIDEO: alvo pelo painel de creditos, e o caminho ate ele em poucos
   // degraus espacados. `encolheEm` e o proximo instante permitido — sem ele
   // isto viraria uma chamada ao pipeline por quadro.
-  encolheAlvo = (posplay_visivel() && comVideo) ? 1.0f : 0.0f;   // agora e o T
+  encolheAlvo = (posplay_visivel() && !posplay_sobre_video() && comVideo) ? 1.0f : 0.0f;   // agora e o T
   if (encolheT != encolheAlvo && agora >= encolheEm) {
     float passo = 1.0f / (float)PLR_ENC_PASSOS;
     if (encolheT < encolheAlvo) {
@@ -2631,8 +2690,7 @@ void player_atualizar(float dt, Uint32 agora) {
       // tocando e fim (90% ou creditos, pela MESMA regra da saida). Sem envio
       // permitido, atividade.c so acompanha o trecho e nada sai.
       if (ci && ci->imdb[0] && video_pronto() && duracaoSeg >= 120.0f) {
-        double cr = video_creditos();
-        if (cr <= 1.0) cr = intro_creditos_seg();
+        double cr = credEfetivo();
         atividade_player_passo(ci, epT, epE, posSeg, duracaoSeg, tocando && !scrubbing,
                                player_regra_concluiu(posSeg, duracaoSeg, cr), dt);
       }
@@ -2747,8 +2805,7 @@ void player_atualizar(float dt, Uint32 agora) {
     if (!ehCanal() && ci && comVideo && video_pronto() && duracaoSeg >= 120.0f &&
         (!eSerie || (cat_n_episodios(idxAtual()) > 0 && !desc_episodios_carregando(idxAtual())))) {
       const CatEp *px = eSerie ? player_proximo_episodio() : NULL;
-      double cr = video_creditos();
-      if (cr <= 1.0) cr = intro_creditos_seg();
+      double cr = credEfetivo();
       reacao_player_atualizar(dt, agora, ci, eSerie, posSeg, duracaoSeg, cr,
                               px != NULL, px && px->temporada != epT);
     } else reacao_player_atualizar(dt, agora, NULL, 0, 0, 0, 0, 0, 0); }

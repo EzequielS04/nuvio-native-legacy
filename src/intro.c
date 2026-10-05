@@ -1,6 +1,8 @@
 #include "intro.h"
 #include "rede.h"
 #include "js.h"
+#include "credfonte.h"
+#include <time.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -46,20 +48,68 @@ int intro_extrair(const char *j,IntroTrecho *out,int max){
   return n;
 }
 
-typedef struct{char url[256];unsigned g;}Pedido;
+typedef struct{char id[24];int t,e;double durAnt,durProx;unsigned g;}Pedido;
+
+static void montarUrl(char *url,size_t n,const char *id,int t,int e){
+  if(t>0&&e>0)
+    snprintf(url,n,"https://api.theintrodb.org/v3/media?imdb_id=%s&season=%d&episode=%d",id,t,e);
+  else
+    snprintf(url,n,"https://api.theintrodb.org/v3/media?imdb_id=%s",id);
+}
+
+// UM EPISODIO NO SERVIDOR, com o cache de "nao conheco": 404 e dado que falta
+// (medido: a API esta no ar, so nao tem todo episodio), e repetir o pedido a
+// cada abertura so gasta rede. Devolve o JSON (free) ou NULL.
+static char *pedirEp(const char *id,int t,int e){
+  char url[256],*j;long agora=(long)time(NULL);
+  if(t>0&&e>0&&cred_404_visto(id,t,e,agora))return NULL;
+  montarUrl(url,sizeof url,id,t,e);
+  j=rede_baixar(url,12);
+  if(!j&&t>0&&e>0)cred_404_marcar(id,t,e,agora);
+  return j;
+}
+
+static int geracaoVale(unsigned g){int v;pthread_mutex_lock(&trava);v=(g==geracao);pthread_mutex_unlock(&trava);return v;}
+
+// SEM MARCADOR DESTE EPISODIO: olha os vizinhos da mesma temporada (E-1 e
+// E+1, no maximo DOIS pedidos, e nenhum se a temporada ja tem um guardado).
+// Guarda o inicio dos creditos e a duracao do vizinho, para o player converter
+// em "quanto falta para o fim" na duracao real do episodio que esta tocando.
+static void tentarVizinhos(const Pedido *p){
+  int cand[2],k,nc=0;double durs[2];
+  double ini,dv;
+  if(p->t<1||p->e<1||cred_viz_ler(p->id,p->t,&ini,&dv))return;
+  if(p->e>1){cand[nc]=p->e-1;durs[nc++]=p->durAnt;}
+  cand[nc]=p->e+1;durs[nc++]=p->durProx;
+  for(k=0;k<nc;k++){
+    char*j;IntroTrecho v[8];int n,i;double melhor=0.0;
+    if(!geracaoVale(p->g))return;
+    j=pedirEp(p->id,p->t,cand[k]);
+    n=j?intro_extrair(j,v,8):0;free(j);
+    for(i=0;i<n;i++)if(v[i].tipo==INTRO_CREDITOS&&v[i].inicio>melhor)melhor=v[i].inicio;
+    if(melhor>1.0){
+      cred_viz_guardar(p->id,p->t,melhor,durs[k]);
+      printf("[intro] no marker for E%d; neighbour E%d has credits at %.0fs\n",p->e,cand[k],melhor);
+      fflush(stdout);
+      return;
+    }
+  }
+}
 
 static void *baixar(void *u){
-  Pedido*p=u;char*j=rede_baixar(p->url,12);IntroTrecho v[8];
-  int n=j?intro_extrair(j,v,8):0;
+  Pedido*p=u;char*j=pedirEp(p->id,p->t,p->e);IntroTrecho v[8];
+  int n=j?intro_extrair(j,v,8):0,temCred=0;
   free(j);
+  for(int i=0;i<n;i++)if(v[i].tipo==INTRO_CREDITOS)temCred=1;
   pthread_mutex_lock(&trava);
   if(p->g==geracao){memcpy(trechos,v,(size_t)n*sizeof *v);nTrechos=n;}
   pthread_mutex_unlock(&trava);
   printf("[intro] %d marcadores\n",n);fflush(stdout);
+  if(!temCred)tentarVizinhos(p);
   free(p);return NULL;
 }
 
-void intro_pedir(const char *imdb,int t,int e){
+void intro_pedir_vizinhos(const char *imdb,int t,int e,double durAnt,double durProx){
   Pedido*p;pthread_t fio;int nId;
   // FILME PASSA. A guarda antiga exigia temporada e episodio, porque o servico
   // antigo exigia — era ela que deixava todo filme sem marcador.
@@ -68,16 +118,14 @@ void intro_pedir(const char *imdb,int t,int e){
   pthread_mutex_lock(&trava);nTrechos=0;p->g=++geracao;pthread_mutex_unlock(&trava);
   // O id do catalogo pode vir como "tt123:1:2" (serie com episodio embutido);
   // a API quer so a parte do imdb.
-  nId=(int)strcspn(imdb,":");
-  if(t>0&&e>0)
-    snprintf(p->url,sizeof p->url,
-             "https://api.theintrodb.org/v3/media?imdb_id=%.*s&season=%d&episode=%d",
-             nId,imdb,t,e);
-  else
-    snprintf(p->url,sizeof p->url,
-             "https://api.theintrodb.org/v3/media?imdb_id=%.*s",nId,imdb);
+  nId=(int)strcspn(imdb,":");if(nId>(int)sizeof p->id-1)nId=(int)sizeof p->id-1;
+  memcpy(p->id,imdb,(size_t)nId);
+  p->t=t>0&&e>0?t:0;p->e=t>0&&e>0?e:0;
+  p->durAnt=durAnt;p->durProx=durProx;
   if(pthread_create(&fio,NULL,baixar,p)==0)pthread_detach(fio);else free(p);
 }
+
+void intro_pedir(const char *imdb,int t,int e){intro_pedir_vizinhos(imdb,t,e,0.0,0.0);}
 
 void intro_desligar(void){pthread_mutex_lock(&trava);geracao++;nTrechos=0;pthread_mutex_unlock(&trava);}
 
