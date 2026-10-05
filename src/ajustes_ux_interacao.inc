@@ -42,6 +42,7 @@ static int uxRequisito(int op) {
     case AJ_PROF_ELENCO: case AJ_PROF_TRAILERS: return AJ_PROF;
     case AJ_SEEKR_FITA: case AJ_SEEKR_AJUSTE: return AJ_SEEKR_LIGADO;
     case AJ_SAIDA_PLAYER: return AJ_RELOGIO;
+    case AJ_MANTER_VIDEO: return !lig(AJ_RELOGIO) ? AJ_RELOGIO : AJ_SAIDA_PLAYER;
     case AJ_TMDB_IDIOMA: case AJ_TMDB_ARTE: case AJ_TMDB_FICHA: case AJ_TMDB_DATAS:
     case AJ_TMDB_ELENCO: case AJ_TMDB_PROD: case AJ_TMDB_REDES: case AJ_TMDB_EPS:
     case AJ_TMDB_TRAILERS: case AJ_TMDB_MAIS: case AJ_TMDB_COL: case AJ_TMDB_CW:

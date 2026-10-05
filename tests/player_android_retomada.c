@@ -6,6 +6,8 @@
 #include "progresso.h"
 #include "linguas.h"
 #include "dados.h"
+#include "ajustes.h"
+#include <stdlib.h>
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -58,6 +60,13 @@ int main(void) {
   ack = 1; quadro(); quadro(); assert(buscas == 0);
   puts("ok posicao salva chega no prepare, sem segundo seek ou uso de meta");
 
+  // Reter e opt-in (05/10, "Manter o video pronto ao sair"): de fabrica nao retem.
+  player_preparar_retencao(); assert(!player_suspender());
+  { char cam[600]; const char *d = getenv("NUVIO_DADOS"); FILE *f;
+    assert(d && *d);
+    snprintf(cam, sizeof cam, "%s/ajustes.txt", d);
+    f = fopen(cam, "w"); assert(f); fputs("manterVideoLocal 0\n", f); fclose(f);
+    ajustes_dir(d); }
   player_preparar_retencao(); assert(player_suspender());
   int n = cargas;
   assert(player_retomar_retido("fixture-filme", 0, 0)); quadro();

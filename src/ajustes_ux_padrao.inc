@@ -221,3 +221,4 @@
   0, /* search Cinemeta (#231): Ligado (V_LIGA: 0 = Ligado), as before */
   2, /* dim when idle (OLED): 5 min */
   1, /* player UI brightness (OLED): 80% */
+  1, /* keep the video ready on exit: Desligado (V_LIGA: 1); retention costs memory */

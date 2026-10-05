@@ -204,6 +204,11 @@ static int retomandoSalto; // seek requested playback; buffering is not user pau
 // Uma unica sessao VOD pausada, por no maximo dois minutos. Nao abre conexao
 // especulativa: e o pipeline que ja estava exibindo este titulo.
 //
+// SO SE A PESSOA PEDIR (dono, 05/10): "segurar o filme esta estragando a
+// experiencia". O padrao e NAO reter — sair libera o pipeline na hora e o
+// Retomar abre pela fonte guardada, sem busca nos addons. Reter e o ajuste
+// avancado "Manter o video pronto ao sair" (ajustes_manter_video, podeReter).
+//
 // O PRECO DE RETER MAIS: o pipeline e um so. Enquanto a sessao esta retida o
 // trailer do destaque da home nao toca (home_trailer_passo exige
 // !player_retido(), app.c) — sao ate 2 min de home sem trailer
@@ -1604,7 +1609,10 @@ void player_encerrar(void) {
 
 static int podeReter(void) {
   const CatItem *c = item();
-  return ajustes_relogio_ligado() && ajustes_saida_player_home() &&
+  // OPT-IN (05/10): so com "Manter o video pronto ao sair" (Avancado, padrao
+  // Desligado; nunca no perfil seguro). Sem ele a saida fecha a sessao na hora
+  // e o Retomar reabre pela fonte guardada (fontevolta.h).
+  return ajustes_manter_video() &&
          comVideo && !ehCanal() && c && c->imdb[0] && !erroFonte &&
          video_pronto() && video_ativo() && !video_falhou() && !video_terminou() &&
          !video_conflito_recurso() && !video_reconectando() && video_url_atual()[0] &&
