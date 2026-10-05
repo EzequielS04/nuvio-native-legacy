@@ -53,8 +53,10 @@ const char *ling_nome(const char *c) {
   // na MESMA expressao devolvem o mesmo ponteiro. O teste pegou isso valendo
   // "glg" == "cat", porque a comparacao acontecia depois das duas escritas.
   // Tambem afeta qualquer printf com dois idiomas.
+  // __atomic_fetch_add: a busca de legendas chama isto de um fio por addon, e
+  // um `giro++` simples deixava dois fios com a mesma posicao.
   { static char cx[4][16]; static int giro;
-    char *d = cx[giro++ & 3];
+    char *d = cx[__atomic_fetch_add(&giro, 1, __ATOMIC_RELAXED) & 3];
     size_t k;
     for (k = 0; c[k] && k + 1 < 16; k++)
       d[k] = (c[k] >= 'a' && c[k] <= 'z') ? (char)(c[k] - 32) : c[k];
@@ -66,7 +68,10 @@ const char *ling_nome(const char *c) {
 // etiquetada "pob", "por" ou "pt-BR". Pedir portugues e receber "nao ha
 // legenda" porque o arquivo diz "pob" seria absurdo para quem assiste — a
 // distincao regional importa na hora de ORDENAR, nao na de aceitar.
-static const char *familia(const char *c) {
+// `buf` (8 bytes) e do CHAMADOR: o resultado para codigo fora da tabela mora la.
+// Antes era um anel estatico compartilhado, e a busca de legendas chama isto de
+// um fio por addon — dois fios pegavam a mesma posicao e um lia o texto do outro.
+static const char *familia(const char *c, char *buf) {
   static const struct { const char *cod, *fam; } F[] = {
     { "pob","pt" },{ "por","pt" },{ "ptb","pt" },{ "pt-br","pt" },{ "pt_br","pt" },{ "br","pt" },
     { "eng","en" },{ "en-us","en" },{ "en_us","en" },{ "en-gb","en" },{ "en_gb","en" },
@@ -81,8 +86,7 @@ static const char *familia(const char *c) {
   for (i = 0; i < sizeof F / sizeof *F; i++)
     if (!strcasecmp(c, F[i].cod)) return F[i].fam;
   // "pt-BR" generico: o que vem antes do tracinho ja e a familia.
-  { static char base[4][8]; static int giro;
-    char *d = base[giro++ & 3];
+  { char *d = buf;
     size_t k;
     for (k = 0; c[k] && c[k] != '-' && c[k] != '_' && k + 1 < 8; k++)
       d[k] = (char)(c[k] >= 'A' && c[k] <= 'Z' ? c[k] + 32 : c[k]);
@@ -96,7 +100,8 @@ int ling_casa(const char *codigo, const char *pref) {
   if (!pref || !*pref) return 1;            // sem preferencia: passa tudo
   if (!codigo || !*codigo) return 0;
   if (!strcasecmp(codigo, pref)) return 1;
-  return !strcasecmp(familia(codigo), familia(pref));
+  { char a[8], b[8];
+    return !strcasecmp(familia(codigo, a), familia(pref, b)); }
 }
 
 // NORMALIZA a etiqueta de idioma que o addon manda. Um addon (AIOStreams)
@@ -132,13 +137,14 @@ void ling_normalizar(const char *raw, char *out, unsigned tam) {
 const char *ling_selo(const char *cod) {
   static char b[4][8];
   static int giro;
-  char *d = b[giro++ & 3];
+  char *d = b[__atomic_fetch_add(&giro, 1, __ATOMIC_RELAXED) & 3];
+  char fam[8];
   const char *f;
   size_t k;
   if (!cod || !*cod) { d[0] = '?'; d[1] = 0; return d; }
   if (!strcasecmp(cod, "pob") || !strcasecmp(cod, "pt-br") || !strcasecmp(cod, "pt_br") ||
       !strcasecmp(cod, "ptb") || !strcasecmp(cod, "br")) return "PT-BR";
-  f = familia(cod);
+  f = familia(cod, fam);
   for (k = 0; f[k] && k < 2; k++) d[k] = (char)(f[k] >= 'a' && f[k] <= 'z' ? f[k] - 32 : f[k]);
   d[k] = 0;
   return d;
@@ -149,7 +155,8 @@ const char *ling_selo(const char *cod) {
 int ling_afinidade(const char *cod, const char *pref) {
   if (!pref || !*pref) return 1;
   if (!cod || !*cod || !ling_casa(cod, pref)) return 0;
-  if (!strcmp(familia(pref), "pt")) return !strcmp(ling_selo(cod), "PT-BR") ? 3 : 2;
+  { char fam[8];
+    if (!strcmp(familia(pref, fam), "pt")) return !strcmp(ling_selo(cod), "PT-BR") ? 3 : 2; }
   return !strcasecmp(cod, pref) ? 3 : 2;
 }
 
@@ -334,7 +341,8 @@ const char *ling_do_nome(const char *nome) {
     if (!temRadical(nome, NOME_IDIOMA[i].radical)) continue;
     if (!achado) { achado = c; continue; }
     // "Brazilian Portuguese": mesma familia, fica o mais especifico (pob).
-    if (!strcasecmp(familia(achado), familia(c))) {
+    char fa[8], fc[8];
+    if (!strcasecmp(familia(achado, fa), familia(c, fc))) {
       if (!strcmp(c, "pob")) achado = c;
       continue;
     }
