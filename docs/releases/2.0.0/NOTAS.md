@@ -32,9 +32,12 @@ The first time you open it, a short guide walks through what changed. It stays i
 - New option to leave Cinemeta out of search (#231).
 - Samsung .tpk: subtitles timed from the first frame (#251, thanks KeijoMika).
 - Search found only people after the add-on list changed.
+- Samsung: Blue and CH+ no longer type an "s" in Search, and the Guide button opens the app's TV Guide instead of leaving the app.
 - Home opens faster and the catalog on disk went from 26.9 MB to 1.9 MB.
 
 ## Notes
+
+**Samsung .tpk: install this version by hand.** 2.0 changes the app's images and fonts, and the automatic update only replaces the program, so it is not offered this time.
 
 | Platform | File |
 | --- | --- |
