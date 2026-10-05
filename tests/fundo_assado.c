@@ -241,7 +241,8 @@ int main(void) {
    * quadro de 320x180): assado = direto, e a conferencia passa. */
   carregar(ARTE_A);
   d = comparar(FUNDO_BORRADA, ARTE_A, 0, "borrada");
-  if (d > 4.0) { printf("FALHA: borrada assada difere da direta\n"); falhas++; }
+  /* 40: o assado e a media de 25 copias deslocadas (fundo.c pintarBorrada), nao a copia direta */
+  if (d > 40.0) { printf("FALHA: borrada assada difere da direta\n"); falhas++; }
   printf("conferencia borrada: %d\n", fundo_conferencia(FUNDO_BORRADA));
   if (fundo_conferencia(FUNDO_BORRADA) != 1) { printf("FALHA: conferencia da borrada\n"); falhas++; }
 
@@ -265,7 +266,7 @@ int main(void) {
    * 1bcd6ebe isto saia QUASE PRETO: o veu substituia a luz). */
   carregar(ARTE_B);
   d = comparar(FUNDO_BORRADA, ARTE_B, 1, "borrada, mistura desligada antes");
-  if (d > 4.0) { printf("FALHA: borrada assada com a mistura desligada difere\n"); falhas++; }
+  if (d > 40.0) { printf("FALHA: borrada assada com a mistura desligada difere\n"); falhas++; }
 
   /* (4) COM A DINAMICA IMERSIVA LIGADA: a luz da cena e assada por
    * gfx_ambiente_preparar todo quadro (main.c). A Borrada tem o seu canal:

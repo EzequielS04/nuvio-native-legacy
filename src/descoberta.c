@@ -890,6 +890,9 @@ static int buscando;
 // Identidade da montagem em voo. Troca de conta/perfil/config invalida o fio
 // antigo antes que ele publique ou grave um snapshot privado no contexto novo.
 static volatile unsigned montagemGeracao;
+// 0 = nao espere; 1 = espere (perfil ainda nao escolhido); 2 = espere, com prazo.
+static int (*esperaAddons)(void);
+void desc_espera_addons_definir(int (*f)(void)) { esperaAddons = f; }
 // Lido pelo fio de montagem no fim do ciclo e escrito pelo laco principal.
 // `volatile` porque sao fios diferentes; nao ha corrida real de valor — o pior
 // caso e uma remontagem a mais, que e barata perto de perder o pedido.
@@ -3756,6 +3759,35 @@ static void *montar(void *u) {
     // seguinte nem era baixado, e AIOStreams e Akashi TV ficavam invisiveis
     // para o app inteiro so porque o Xperience, lido antes, declara 605
     // catalogos. lerManifesto ja para de GRAVAR sozinho quando enche.
+    // ESPERA OS ADDONS DA CONTA antes de ler a lista. Esta volta larga no
+    // arranque, e o sync so entrega os addons do perfil depois que a pessoa o
+    // escolhe: lida vazia, a volta pedia 0 catalogos e PUBLICAVA 2 fileiras por
+    // cima das 7 do cache (e gravava o cache menor), e a Home refazia mais duas
+    // vezes — 2, 4, 9, 15 fileiras chegando de uma vez, sem aviso na ilha
+    // (todo arranque da TCL do dono desde 05/10/2026 a tarde; nos bons os
+    // addons chegavam antes: "7 ad13 A 15"). Enquanto o perfil nao foi
+    // escolhido espera sem prazo (a tela e a de perfis); depois, ate 10 s.
+    // Sem conta, sync falho ou remontagem pedida: segue como antes.
+    // Uma espera por execucao: conta sem addon nenhum paga os 10 s uma vez.
+    // Quem encerra antes e a chegada dos addons ou qualquer remontagem pedida
+    // (o sync pede uma ao aplicar a conta: montagemGeracao muda).
+    // Quem sabe de conta e de perfil e o app (desc_espera_addons_definir): os
+    // testes que compilam este arquivo sozinho nao tem sessao nem perfis.
+    { static int jaEsperou;
+      int k;
+      if (!jaEsperou && esperaAddons && addons_n() == 0 && esperaAddons()) {
+        Uint32 desde = 0;
+        jaEsperou = 1;
+        printf("[desc] esperando os addons da conta antes de montar a Home\n"); fflush(stdout);
+        while (minhaGeracao == montagemGeracao && addons_n() == 0 && (k = esperaAddons()) != 0) {
+          if (k == 2) {   // perfil ja escolhido: o prazo corre
+            if (!desde) desde = SDL_GetTicks();
+            else if (SDL_GetTicks() - desde > 10000u) break;
+          }
+          SDL_Delay(50);
+        }
+        printf("[desc] addons da conta: %d (espera encerrada)\n", addons_n()); fflush(stdout);
+      } }
     // A LISTA DE ADDONS E LIDA AQUI. Marcar o instante e o que permite dizer,
     // no fim, se um pedido de remontagem que chegou no meio do caminho ja foi
     // atendido por esta volta. Ver geracaoPedida.

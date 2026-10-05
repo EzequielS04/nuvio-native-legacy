@@ -179,6 +179,10 @@ int  desc_busca_geracao(void);
 // Registro dos alvos, chamado pelo carregamento dos manifestos. `zerar` repoe
 // so o Cinemeta.
 void desc_alvos_busca_zerar(void);
+// A primeira volta espera os addons da conta em vez de montar a Home com a
+// lista vazia. `f` devolve 0 (nao espere: sem conta), 1 (espere: perfil ainda
+// nao escolhido) ou 2 (espere ate 10 s). Sem gancho, nao ha espera.
+void desc_espera_addons_definir(int (*f)(void));
 void desc_alvo_busca(const char *base, const char *tipo, const char *id,
                      const char *titulo, const char *addon);
 

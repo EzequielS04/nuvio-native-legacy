@@ -500,6 +500,13 @@ static int nvPrimeiroQuadroFeito;
 #ifdef __EMSCRIPTEN__
 static int window_primeiro_quadro_feito(void) { return nvPrimeiroQuadroFeito; }
 #endif
+// Para a descoberta (descoberta.h): com conta, a primeira volta espera os
+// addons do perfil em vez de montar a Home com a lista vazia.
+static int esperaAddonsDaConta(void) {
+  if (!sessao_logada()) return 0;
+  return perfis_precisa_escolher() ? 1 : 2;
+}
+
 int main(int argc, char **argv) {
   // NUMERO COM PONTO, SEMPRE. O host .NET do .tpk poe o processo no locale do
   // idioma da TV, e em alemao/portugues/russo o printf("%.2f") sai "0,50" e o
@@ -1008,6 +1015,7 @@ int main(int argc, char **argv) {
   // ontem por dois segundos.
   trakt_carregar(dirArte);
   desc_tmdb(dirArte);
+  desc_espera_addons_definir(esperaAddonsDaConta);
   desc_iniciar();
   // RESOLUCAO DE LAYOUT, e nao metade: o snapshot e o fundo parado atras do
   // painel de Salvos (app.c), e a esquerda dele e uma faixa de 1120 px da home

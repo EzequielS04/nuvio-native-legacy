@@ -1471,6 +1471,11 @@ double gfx_fill_modo[GFX_NMODOS];
 int gfx_rastro_grandes;
 double gfx_fill_modo_ult[GFX_NMODOS];   // o do quadro anterior (o log le este)
 static int efeitosLeves = 0;
+// Dentro do ASSADO de um fundo (gfx_luz_canal) as GFX_LUZ valem mesmo com
+// efeitos leves: o assado e pintado uma vez por cor, nao por quadro. Sem isto
+// o Frost de toda TV no nivel 1 (TCL, Samsung Q80A: "[cor] fundo frost lido:
+// esperado 61,60,59 ... tela 20,21,25") saia so com a base, quase preto.
+static int assandoCanal = 0;
 void gfx_definir_efeitos_leves(int leves) { efeitosLeves = leves ? 1 : 0; }
 int  gfx_efeitos_leves(void) { return efeitosLeves; }
 int gfx_veu_card_por(float fracao, float alfa) {
@@ -1668,7 +1673,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   // Smart TV Pro (Android 14, Mali-G52, D1 14886: "[gpu-nivel] nivel 1 -> 1
   // (salvo)"): no nivel 1 o card do CW saia sem veu. Os realces sao brancos
   // (soma >= 2,6); os veus, quase pretos.
-  if (efeitosLeves && (modo == GFX_LUZ ||
+  if (efeitosLeves && ((modo == GFX_LUZ && !assandoCanal) ||
       (modo == GFX_BRILHO_TOPO && cr + cg + cb > 1.5f))) return;
   // Efeitos minimos: sombra e halo tambem saem (o anel continua marcando o foco).
   if (efeitosMinimos && modo == GFX_SOMBRA) return;
@@ -2326,7 +2331,9 @@ GLuint gfx_luz_canal(int canal, const float *chave, int n, void (*pintar)(void *
   canPronto[canal] = 1; canLeve[canal] = efeitosLeves; canModos[canal] = gfx_modos_desligados;
   canLado[canal] = (canLado[canal] + 1) % CAN_ALVOS;
   gfx_n_fundo_assados++;
+  assandoCanal = 1;
   ambAssarEm(canFbo[canal][canLado[canal]], pintar, ctx);
+  assandoCanal = 0;
   return canTex[canal][canLado[canal]];
 }
 // A passada de tela do ambPintar: GFX_SNAP de tela cheia (fonte FBO), opaca e
