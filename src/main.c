@@ -108,6 +108,7 @@ static void aoSinalTerminar(int sig) {
 #include "layout.h"
 #include "plugins.h"
 #include "plex.h"
+#include "esmaecer.h"
 
 // RSS DO PROCESSO, em MB, lido de /proc/self/statm. E o numero que responde
 // "da para subir o orcamento de texturas?" — o teto de 96 MB foi escolhido
@@ -1083,6 +1084,14 @@ int main(int argc, char **argv) {
     // continua desenhada por baixo, mas nao deve reagir ao D-pad.
     while (SDL_PollEvent(&e)) {
       ponteiro_diag(&e);
+      // PROTECAO DE OLED (esmaecer.h): toda acao da pessoa acorda a tela, e a
+      // tecla que acorda so acorda — nao age.
+      if (e.type == SDL_KEYDOWN || e.type == SDL_KEYUP || e.type == SDL_MOUSEMOTION ||
+          e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP ||
+          e.type == SDL_MOUSEWHEEL || e.type == SDL_FINGERDOWN) {
+        int age = e.type == SDL_KEYDOWN || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_FINGERDOWN;
+        if (esmaecer_entrada(SDL_GetTicks(), age)) continue;
+      }
       // Teclado do sistema (entrada_texto.h): ve o texto ANTES de qualquer tela.
       texto_sistema_observar(&e);
       if (e.type == SDL_WINDOWEVENT) {
@@ -1279,6 +1288,22 @@ int main(int argc, char **argv) {
     // COR VIVA: UMA vez por quadro, antes do desenho. Consome o pedido que o
     // desenho do quadro anterior fez (corviva_definir) e anda a transicao; o
     // desenho deste quadro so le o resultado (ajustes_acento, NV_COR_FUNDO_*).
+    // PROTECAO DE OLED: "parado" = nenhuma tecla E nenhum video tocando de
+    // verdade (pausado conta como parado).
+    esmaecer_escolha(ajustes_esmaecer());
+    esmaecer_quadro(agora, dt,
+                    (player_aberto() || player_mini_ativo()) && player_com_video() &&
+                    !player_pausado() && !player_carregando());
+    { int escuro;
+      // Escuro e sem filme: solta o "manter tela ligada" (so o Android segura
+      // fora do player; na LG o app ja o libera sem filme, ver video.c).
+      if (esmaecer_mudou_escuro(&escuro)) {
+#ifdef NV_ANDROID
+        if (escuro) SDL_EnableScreenSaver(); else SDL_DisableScreenSaver();
+#endif
+        printf("[esmaecer] %s\n", escuro ? "tela quase apagada (estagio 2)" : "acordou");
+        fflush(stdout);
+      } }
     ajustes_idioma_auto_tick();   // locale da TV (webOS): chega de um fio
     corviva_quadro(dt, ajustes_cor_viva(), ajustes_cor_logo(),
                    ajustes_animacoes_reduzidas());
@@ -1331,6 +1356,7 @@ int main(int argc, char **argv) {
       abertura_fundo_fica(app_no_login());
       abertura_desenhar(agora, dt, pend);
     }
+    esmaecer_desenhar(agora);   // o veu da protecao de OLED, UMA passada no fim do quadro
     ponteiro_desenhar();
     // GIF QUE NINGUEM DESENHOU ha 1,5 s sai da memoria (tela de perfis
     // fechada, foco fora do cartaz). Ver gif_ocioso em gif.h.
