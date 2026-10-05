@@ -152,54 +152,57 @@ static void escapar(char *dst, size_t n, const char *s) {
   dst[k] = 0;
 }
 
-// A PAGINA NO CELULAR, na paleta do logo Nuvio Legacy (1.7.2): ameixa, creme,
-// laranja, amarelo e vermelho, as listras retro sob o titulo e as curvas do
-// login atras. Tudo embutido: a pagina vem da TV pela rede local e a CSP abaixo
-// (default-src 'none') nao deixa buscar nada, nem fonte nem imagem — por isso
-// as curvas sao <svg> no corpo, e nao background com data:.
+// A PAGINA NO CELULAR, na linguagem 2.0 (ilha): fundo quase preto com UMA luz
+// suave na cor de realce da TV num canto, e o conteudo num cartao-ilha (raio
+// grande, sombra curta, sem contorno). A cor de realce entra por variaveis CSS
+// (--a, --at, --l: ver estiloAcento). Tudo embutido: a pagina vem da TV pela
+// rede local e a CSP abaixo (default-src 'none') nao deixa buscar nada, nem
+// fonte nem imagem.
 #define CEL_ESTILO \
   "<meta name=viewport content='width=device-width,initial-scale=1'>" \
-  "<meta name=theme-color content='#1b0a19'>" \
-  "<style>*{box-sizing:border-box}html{background:#1b0a19}" \
-  "body{margin:0;min-height:100vh;font:17px -apple-system,system-ui,sans-serif;color:#fee6c4;" \
-  "background:radial-gradient(120%% 80%% at 50%% 0%%,#3a1424 0%%,#1b0a19 60%%);overflow-x:hidden}" \
-  "svg.f{position:fixed;pointer-events:none;z-index:0}svg.f1{left:-40px;bottom:-60px;width:62vw;max-width:340px}" \
-  "svg.f2{right:-30px;top:-50px;width:40vw;max-width:220px;transform:rotate(180deg)}" \
-  "main{position:relative;z-index:1;max-width:560px;margin:0 auto;padding:36px 22px 48px}" \
-  ".k{font:700 12px system-ui,sans-serif;letter-spacing:.16em;color:#f28c34;margin:0 0 10px}" \
-  "h1{font-size:27px;line-height:1.15;margin:0 0 14px;color:#fee6c4}" \
-  ".l{margin:0 0 18px}.l i{display:block;height:5px;border-radius:9px;margin:0 0 4px}" \
-  ".l i:nth-child(1){width:150px;background:#f27c1e}.l i:nth-child(2){width:122px;background:#f5a623}" \
-  ".l i:nth-child(3){width:94px;background:#d6342a}" \
-  "p{color:#d6beaa;margin:0 0 18px;line-height:1.4}" \
-  "textarea{width:100%%;min-height:9em;font:19px ui-monospace,monospace;padding:16px;border-radius:18px;" \
-  "border:1.5px solid rgba(254,230,196,.22);background:rgba(28,10,26,.78);color:#fee6c4;outline:0;" \
-  "-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}" \
-  "textarea:focus{border-color:#f28c34;box-shadow:0 0 0 3px rgba(242,124,30,.25)}" \
-  "textarea::placeholder{color:rgba(254,230,196,.45)}" \
-  "button{font:700 18px system-ui,sans-serif;padding:16px 22px;border-radius:999px;border:0;margin-top:14px;cursor:pointer}" \
-  ".ok{background:#f27c1e;color:#220c1e;width:100%%;box-shadow:0 8px 26px rgba(242,124,30,.35)}" \
+  "<meta name=theme-color content='#0b0c0f'>" \
+  "<style>*{box-sizing:border-box}html{background:#0b0c0f}" \
+  "body{margin:0;min-height:100vh;font:17px -apple-system,system-ui,sans-serif;color:#fff;" \
+  "background:radial-gradient(90%% 55%% at 100%% 0%%,var(--l) 0%%,rgba(11,12,15,0) 70%%),#0b0c0f;" \
+  "background-attachment:fixed;overflow-x:hidden}" \
+  "main{max-width:540px;margin:24px auto;width:calc(100%% - 32px);padding:30px 24px 26px;border-radius:28px;" \
+  "background:rgba(20,21,25,.86);box-shadow:0 10px 28px rgba(0,0,0,.45)}" \
+  ".k{font:600 12px system-ui,sans-serif;letter-spacing:.16em;color:rgba(255,255,255,.5);margin:0 0 10px}" \
+  "h1{font-size:26px;line-height:1.2;font-weight:600;margin:0 0 12px;color:#fff}" \
+  "p{color:rgba(255,255,255,.62);margin:0 0 20px;line-height:1.45}" \
+  "textarea{display:block;width:100%%;min-height:9em;font:19px ui-monospace,monospace;padding:16px;border-radius:18px;" \
+  "border:0;background:rgba(255,255,255,.06);color:#fff;outline:0}" \
+  "textarea:focus{box-shadow:0 0 0 2px var(--a)}" \
+  "textarea::placeholder{color:rgba(255,255,255,.4)}" \
+  "button{font:600 18px system-ui,sans-serif;padding:16px 22px;border-radius:999px;border:0;margin-top:14px;cursor:pointer}" \
+  ".ok{background:var(--a);color:var(--at);width:100%%}" \
   ".ok:active{transform:scale(.98)}" \
-  ".sec{background:rgba(254,230,196,.12);color:#fee6c4}.r{display:flex;gap:8px}" \
-  ".v{display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:18vh}" \
-  ".c{width:84px;height:84px;border-radius:50%%;background:#f27c1e;color:#220c1e;font:800 44px system-ui;" \
-  "display:flex;align-items:center;justify-content:center;margin:0 0 22px;box-shadow:0 10px 30px rgba(242,124,30,.4)}" \
-  ".v .l{display:flex;flex-direction:column;align-items:center}</style>"
+  ".sec{background:rgba(255,255,255,.10);color:#fff}.r{display:flex;gap:8px}" \
+  ".v{display:flex;flex-direction:column;align-items:center;text-align:center;margin-top:18vh}" \
+  ".c{width:84px;height:84px;border-radius:50%%;background:var(--a);color:var(--at);font:700 44px system-ui;" \
+  "display:flex;align-items:center;justify-content:center;margin:0 0 22px}" \
+  ".v h1{margin:0}</style>"
 
-// As curvas do login (laranja, amarelo, vermelho) e o cabecalho da marca.
-#define CEL_CURVA \
-  "<path d='M-60 330C110 380 210 520 250 860' stroke='#d6342a' stroke-width='36' fill='none'/>" \
-  "<path d='M-60 270C140 320 270 480 310 860' stroke='#f5a623' stroke-width='36' fill='none'/>" \
-  "<path d='M-60 210C170 260 330 440 370 860' stroke='#f27c1e' stroke-width='36' fill='none'/>"
-#define CEL_FUNDO \
-  "<svg class='f f1' viewBox='0 0 400 800' aria-hidden=true opacity='.55'>" CEL_CURVA "</svg>" \
-  "<svg class='f f2' viewBox='0 0 400 800' aria-hidden=true opacity='.35'>" CEL_CURVA "</svg>"
 #define CEL_MARCA "<div class=k>NUVIO LEGACY</div>"
-#define CEL_LISTRAS "<div class=l><i></i><i></i><i></i></div>"
+
+// A cor de realce da TV como variaveis CSS: --a (cor), --at (tinta do rotulo
+// sobre ela: preto ou branco pela luminancia) e --l (a luz do canto).
+void ajustes_acento(float *r, float *g, float *b);
+int  ajustes_tinta_foco(void);
+static void estiloAcento(char *dst, size_t n) {
+  float r = 0.9f, g = 0.9f, b = 0.9f;
+  int R, G, B;
+  ajustes_acento(&r, &g, &b);
+  R = (int)(r * 255.0f + 0.5f); G = (int)(g * 255.0f + 0.5f); B = (int)(b * 255.0f + 0.5f);
+  R = R < 0 ? 0 : R > 255 ? 255 : R; G = G < 0 ? 0 : G > 255 ? 255 : G; B = B < 0 ? 0 : B > 255 ? 255 : B;
+  snprintf(dst, n, "<style>:root{--a:#%02x%02x%02x;--at:%s;--l:rgba(%d,%d,%d,.34)}</style>",
+           R, G, B, ajustes_tinta_foco() > 128 ? "#fff" : "#111", R, G, B);
+}
 
 static void montarPaginas(const char *titulo) {
-  char t[256], h1[256], ph[256], colar[96], enviar[128], fim[384], usado[384], cel[128];
+  char t[256], h1[256], ph[256], colar[96], enviar[128], fim[384], usado[384], cel[128], cv[128];
   int lang = ajustes_idioma();
+  estiloAcento(cv, sizeof cv);
   escapar(t, sizeof t, i18n(titulo && *titulo ? titulo : "Digitar pelo celular"));
   escapar(cel, sizeof cel, i18n("Digitar pelo celular"));
   escapar(h1, sizeof h1, i18n("Cole ou digite o texto e envie. Ele aparece no campo da TV."));
@@ -213,8 +216,8 @@ static void montarPaginas(const char *titulo) {
   // transferencia existe (no http da LAN o Safari e o Chrome a escondem: la a
   // pessoa toca e segura no campo).
   snprintf(pagina, sizeof pagina,
-    "<!doctype html><html lang='%s'><head><meta charset=utf-8><title>%s</title>" CEL_ESTILO
-    "</head><body>" CEL_FUNDO "<main>" CEL_MARCA "<h1>%s</h1>" CEL_LISTRAS "<p>%s</p>"
+    "<!doctype html><html lang='%s'><head><meta charset=utf-8><title>%s</title>" CEL_ESTILO "%s"
+    "</head><body><main>" CEL_MARCA "<h1>%s</h1><p>%s</p>"
     "<form method=post action='/%s' accept-charset=utf-8>"
     "<textarea name=t id=t maxlength=%d autocapitalize=off autocomplete=off autocorrect=off "
     "spellcheck=false placeholder='%s' autofocus></textarea>"
@@ -224,17 +227,16 @@ static void montarPaginas(const char *titulo) {
     "if(navigator.clipboard&&navigator.clipboard.readText){c.hidden=false;"
     "c.onclick=function(){navigator.clipboard.readText().then(function(x){t.value=x;}).catch(function(){t.focus();});};}"
     "</script></body></html>",
-    idioma_iso(lang), cel, t, h1, token, CEL_CORPO_MAX / 4, ph, colar, enviar);
+    idioma_iso(lang), cel, cv, t, h1, token, CEL_CORPO_MAX / 4, ph, colar, enviar);
   snprintf(pagEnviado, sizeof pagEnviado,
-    "<!doctype html><html lang='%s'><head><meta charset=utf-8><title>%s</title>" CEL_ESTILO
-    "</head><body>" CEL_FUNDO "<main class=v><div class=c>&#10003;</div>" CEL_MARCA
-    "<h1>%s</h1>" CEL_LISTRAS "</main></body></html>",
-    idioma_iso(lang), cel, fim);
+    "<!doctype html><html lang='%s'><head><meta charset=utf-8><title>%s</title>" CEL_ESTILO "%s"
+    "</head><body><main class=v><div class=c>&#10003;</div>" CEL_MARCA
+    "<h1>%s</h1></main></body></html>",
+    idioma_iso(lang), cel, cv, fim);
   snprintf(pagUsado, sizeof pagUsado,
-    "<!doctype html><html lang='%s'><head><meta charset=utf-8><title>%s</title>" CEL_ESTILO
-    "</head><body>" CEL_FUNDO "<main>" CEL_MARCA "<h1>%s</h1>" CEL_LISTRAS
-    "</main></body></html>",
-    idioma_iso(lang), cel, usado);
+    "<!doctype html><html lang='%s'><head><meta charset=utf-8><title>%s</title>" CEL_ESTILO "%s"
+    "</head><body><main>" CEL_MARCA "<h1>%s</h1></main></body></html>",
+    idioma_iso(lang), cel, cv, usado);
 }
 
 // --- HTTP -----------------------------------------------------------------------
