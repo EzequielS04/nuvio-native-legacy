@@ -1,4 +1,5 @@
 // Exercise the actual manifest consumer and worker, without network access.
+int ajustes_busca_cinemeta(void) { return 1; }
 #include "../src/descoberta.c"
 #include <assert.h>
 #include <stdatomic.h>

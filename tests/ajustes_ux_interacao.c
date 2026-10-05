@@ -64,13 +64,14 @@ int main(void) {
 
   // #238: opcao inativa explica a dependencia DELA, nunca a da profundidade.
   { int i0 = valor[AJ_FONTE_MANUAL], r0 = valor[AJ_RELOGIO], s0 = valor[AJ_SEEKR_LIGADO];
-    int ops[] = { AJ_FONTE_PRAZO, AJ_SAIDA_PLAYER, AJ_SEEKR_FITA, AJ_SEEKR_AJUSTE };
+    int ops[] = { AJ_SAIDA_PLAYER, AJ_SEEKR_FITA, AJ_SEEKR_AJUSTE };
     valor[AJ_FONTE_MANUAL] = 0; valor[AJ_RELOGIO] = 1; valor[AJ_SEEKR_LIGADO] = 1;  // 0 = ligado (lig)
     for (i = 0; i < (int)(sizeof ops / sizeof ops[0]); i++) {
       assert(inativa(ops[i]));
       assert(!strstr(ajudaOpcao(ops[i]), "profundidade"));
     }
-    assert(strstr(ajudaOpcao(AJ_FONTE_PRAZO), "Escolher a fonte ao reproduzir"));
+    assert(!inativa(AJ_FONTE_PRAZO));   /* #238: sem dependencia, nem da profundidade nem de Escolher a fonte */
+    valor[AJ_FONTE_MANUAL] = 1; assert(!inativa(AJ_FONTE_PRAZO)); valor[AJ_FONTE_MANUAL] = 0;
     assert(strstr(ajudaOpcao(AJ_SAIDA_PLAYER), "Relógio na tela"));
     assert(strstr(ajudaOpcao(AJ_SEEKR_FITA), "Miniaturas na barra de tempo"));
     valor[AJ_FONTE_MANUAL] = i0; valor[AJ_RELOGIO] = r0; valor[AJ_SEEKR_LIGADO] = s0;

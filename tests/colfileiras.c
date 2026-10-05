@@ -15,6 +15,7 @@
 // Sem o conserto, o passo 3 nao casa e os catalogos da colecao viram fileira.
 #include <assert.h>
 #include <unistd.h>
+int ajustes_busca_cinemeta(void) { return 1; }
 #include "../src/descoberta.c"
 #include "jellyfin_stub.inc"
 Uint32 SDL_GetTicks(void) { return 0; }

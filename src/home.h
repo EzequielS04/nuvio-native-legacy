@@ -72,6 +72,7 @@ void home_encerrar(void);
 void home_registrar_retorno(int indice, double posSeg, double durSeg);
 // O criterio da faixa, sozinho: entre 1% e o Percentual assistido. A ilha
 // (ilhacart.c) usa o mesmo, para a atividade ao vivo durar o mesmo que ela.
+int  home_proximo_desfocar(const CatItem *ci, const char *arte);   // #232
 int  home_retorno_vale(int indice, double posSeg, double durSeg);
 // O titulo da faixa "Retomar agora" (relogio desligado); "" sem sessao. Ver cwretido.h.
 const char *home_retomar_imdb(void);

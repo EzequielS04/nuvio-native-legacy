@@ -430,6 +430,7 @@ int   ajustes_botao_trailer(void);           // detailPageTrailerButtonEnabled
 int   ajustes_meta_externo(void);            // preferExternalMetaAddonDetail
 // "Usar sempre o Cinemeta": 1 = a ficha e os episodios vem so do Cinemeta (como
 // antes); 0 (padrao) = catalogo primeiro, ver descoberta.c (metaCatalogo).
+int   ajustes_busca_cinemeta(void);   // 0 = Cinemeta fora da busca (#231)
 int   ajustes_meta_so_cinemeta(void);
 
 // --- LAYOUT: foco no poster --------------------------------------------------

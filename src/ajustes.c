@@ -387,6 +387,8 @@ typedef enum {
   // N3: "Receber enquetes" (ligado por padrao). LOCAL, espelho do opt-out que
   // mora na conta (enquete.c). No fim: valor[]/CHAVE[] posicionais.
   AJ_ENQUETES,
+  // #231: "Buscar no Cinemeta" (Ligado = como sempre). LOCAL. No fim: valor[]/CHAVE[] posicionais.
+  AJ_BUSCA_CINEMETA,
   AJ_N
 } OpcaoId;
 
@@ -1122,6 +1124,7 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Logo do app",                     V_LOGO_APP, 2),         // local: logoAppLocal
   ESC("Abertura do app",                 V_ABERTURA, 3),         // local: aberturaAppLocal
   ESC("Receber enquetes",                V_LIGA, 2),             // local: enquetesLocal (espelho do opt-out da conta)
+  ESC("Buscar no Cinemeta",              V_LIGA, 2),             // local: buscaCinemetaLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1312,6 +1315,7 @@ static const char *CHAVE[] = {
   "fontePrioridadeLocal", "fonteHdrLocal",
   "logoAppLocal", "aberturaAppLocal",
   "enquetesLocal",
+  "buscaCinemetaLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1589,6 +1593,7 @@ int ajustes_fonte_manual(void)        { return lig(AJ_FONTE_MANUAL); }
 int ajustes_fonte_primeira(void)      { return valor[AJ_FONTE_AUTO] == 1; }
 int ajustes_fonte_prioridade(void) { int v = valor[AJ_FONTE_PRIORIDADE]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_enquetes(void)         { return lig(AJ_ENQUETES); }
+int ajustes_busca_cinemeta(void)   { return lig(AJ_BUSCA_CINEMETA); }
 void ajustes_espelhar_enquetes(int ligado) { int n = ligado ? 0 : 1; if (valor[AJ_ENQUETES] != n) { valor[AJ_ENQUETES] = n; gravar(); } }
 int ajustes_fonte_hdr(void)        { int v = valor[AJ_FONTE_HDR]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_fonte_texto_addon(void)   { return valor[AJ_FONTE_TEXTO] == 1; }
@@ -3529,6 +3534,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_DET_SO_CINEMETA: /* o web nao tem esta escolha */
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
+    case AJ_BUSCA_CINEMETA: /* o web nao tem esta escolha */
     case AJ_ENQUETES:       /* o web nao tem a ilha; a conta guarda o opt-out por outro caminho (enquete.c) */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
@@ -4342,8 +4348,9 @@ static int inativa(int op) {
     case AJ_SELOS_PACOTE_REM: return selospacote_ativo() < 0 || !selospacote_da_tv(selospacote_ativo());
     // Sem o relogio nao ha ilha para onde minimizar: sai para a pagina, como antes.
     case AJ_SAIDA_PLAYER: return !lig(AJ_RELOGIO);
-    // Escolhendo a mao, a folha abre com o que chegou: nao ha escolha a apressar.
-    case AJ_FONTE_PRAZO: return lig(AJ_FONTE_MANUAL);
+    // AJ_FONTE_PRAZO NAO DEPENDE DE NADA (#238). Era desligada com "Escolher a
+    // fonte ao reproduzir", mas app.c (autoParcialPronto) ainda usa o prazo
+    // quando ha fonte lembrada para o titulo, mesmo escolhendo a mao.
     case AJ_CACHE_SEEK:  return !cacheSeekExiste();
     // Som: na Samsung (.wgt) o trailer e sempre mudo (trailerfonte_com_som).
     case AJ_HERO_TRAILER_SOM:
@@ -4515,8 +4522,6 @@ static const char *ajudaOpcao(int op) {
       return "O logo do addon só é trocado pela Arte localizada do TMDB. Ative TMDB e Arte localizada para escolher.";
     // #238: estas cinco caiam na frase da profundidade, que nao tem nada a ver
     // com elas ("Espera pelos add-ons" mandava ligar o Efeito de profundidade).
-    if (op == AJ_FONTE_PRAZO)
-      return "Desative Escolher a fonte ao reproduzir para usar a espera: escolhendo à mão, nada é escolhido sozinho.";
     if (op == AJ_SEEKR_FITA || op == AJ_SEEKR_AJUSTE)
       return "Ative Miniaturas na barra de tempo para ajustar as miniaturas.";
     if (op == AJ_SELOS_PACOTE_REM)
@@ -4735,6 +4740,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_ADDONS_PRINCIPAL: return "Os outros perfis desta conta usam os addons do perfil principal. Desligado, cada perfil usa os seus — a não ser que a conta já diga para usar os do principal.";
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
+    case AJ_BUSCA_CINEMETA: return "Ligado (padrão): a busca consulta o catálogo do Nuvio e, se ele falhar, o Cinemeta; um add-on Cinemeta instalado também responde. Desligado: o Cinemeta fica de fora da busca, e só o catálogo do Nuvio e os seus add-ons respondem. Não muda a ficha do título (veja Usar sempre o Cinemeta).";
     case AJ_ENQUETES: return "Ligado, o Nuvio pode convidar você a votar numa enquete curta na ilha do relógio. Desligado, nenhuma aparece. A escolha fica na sua conta.";
     case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
     case AJ_SAIDA_PLAYER: return "Ao sair de um filme ou episódio no meio. Home: o vídeo encolhe até a pílula do relógio, que fica com o título para você retomar (CH+ ou AZUL). Página do título: volta para onde você estava. Só vale com o relógio na tela; terminar o título segue para o próximo episódio como sempre.";
@@ -6311,7 +6317,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_CW_FURTHEST: case AJ_CW_NAO_EXIBIDOS: case AJ_CW_ORDEM:
       return AJPV_CONTINUAR;
     case AJ_DET_BLUR_NAO_VISTOS: case AJ_DET_TRAILER: case AJ_DET_META_EXT:
-    case AJ_DET_SO_CINEMETA:
+    case AJ_DET_SO_CINEMETA: case AJ_BUSCA_CINEMETA:
     case AJ_DET_DATA_CHEIA: case AJ_DET_VEU: case AJ_DET_TRAILER_AUTO:
     case AJ_DET_TRAILER_SOM:
     case AJ_TRAILER_QUAL: case AJ_TRAILER_ASPECTO: case AJ_TRAILER_FONTE: case AJ_TRAILER_ZOOM_TPK:

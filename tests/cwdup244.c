@@ -1,27 +1,6 @@
-// "TIRAR DE CONTINUAR ASSISTINDO" SAI NA HORA E NAO VOLTA COM O REMOTO VELHO.
-//
-// Pedido do dono (22/09): "na samsung o remove watching nao ta atualizando a
-// fila na hora". Duas metades, uma por binario (ver tests/cwremover.sh):
-//
-//   ESTE ARQUIVO — a fileira PUBLICADA e a refacao. descoberta.c inteiro entra
-//   por #include (como tests/cateps.c), com catalogo.c e progresso.c DE
-//   VERDADE; so a rede e duble: um "Trakt" falso cujo /sync/playback o teste
-//   controla, com o paused_at que quiser.
-//     1. remover -> a janela "continue_watching" publicada nao tem mais o
-//        item, as outras fileiras nao mudam de conteudo e cat_revisao sobe
-//        (sem ela a home do guarda curto nao remonta; tests/cwremover_home.c);
-//     2. uma refacao que recebe do Trakt o item com paused_at MAIS VELHO que a
-//        remocao (o DELETE ainda nao chegou la) nao o traz de volta;
-//     3. idem para a refacao que montou ANTES da remocao e publica DEPOIS
-//        (fio em voo) e para o ciclo completo (cat_definir_tudo);
-//     4. o retrato da ultima montagem (desc_remontar_fileiras, a cada sync)
-//        nao devolve a janela velha;
-//     5. com paused_at MAIS NOVO (assistiu de novo em outro aparelho) ele
-//        volta — e tambem quando o registro novo e LOCAL.
-//
-//   bash tests/cwremover.sh
-// Duples do estado da home (merge do Codex): sem snapshot valido aqui, que e
-// o caso de um primeiro arranque — a remocao e o que este teste cobra.
+// #244: Continuar assistindo mostra cada obra UMA vez (Trakt x Simkl x conta, chave de
+// episodio x chave de serie, varias gravacoes), a fonte escolhida vale, e marcar como
+// assistido tira a obra de vez.
 #include "../src/homeestado.h"
 unsigned homeestado_geracao(void) { return 1; }
 unsigned recomenda_geracao(void) { return 1; }
@@ -56,7 +35,9 @@ char *dados_ler(const char *nome)                 { (void)nome; return NULL; }
 int   dados_gravar(const char *nome, const char *c) { (void)nome; (void)c; return 1; }
 int   dados_apagar(const char *nome)              { (void)nome; return 1; }
 void  SDL_Delay(Uint32 ms)                 { usleep(ms * 1000); }
-int   ajustes_cw_fonte(void)               { return 0; }   // AJ_CWF_AMBAS
+static int traktLigado = 1;
+static int fonteTeste = 0;
+int   ajustes_cw_fonte(void)               { return fonteTeste; }
 int   ajustes_tmdb_ligado(void)            { return 0; }
 int   ajustes_tmdb_basico(void)            { return 0; }
 int   ajustes_meta_externo(void)           { return 0; }
@@ -98,8 +79,22 @@ int   fil_unir(const char *const *c, int n, int *s, int m) {
   int i; (void)c; for (i = 0; i < n && i < m; i++) s[i] = i; return i;
 }
 void  marco(const char *n)                 { (void)n; }
-int   simkl_ativo(void)                    { return 0; }
-int   simkl_continuar(CatItem *s, int m)   { (void)s; (void)m; return 0; }
+static int simklLigado = 0;
+int   simkl_ativo(void)                    { return simklLigado; }
+static void um(CatItem *c, const char *imdb, const char *tipo, int t, int e, int prog, long long ms) {
+  memset(c, 0, sizeof *c);
+  snprintf(c->imdb, sizeof c->imdb, "%s", imdb);
+  snprintf(c->titulo, sizeof c->titulo, "Titulo %s", imdb);
+  snprintf(c->tipo, sizeof c->tipo, "%s", tipo);
+  c->temporada = t; c->episodio = e; c->progresso = prog; c->retomadoMs = ms;
+}
+int   simkl_continuar(CatItem *s, int m) {
+  if (m < 3) return 0;
+  um(&s[0], "tt500:1:8", "series", 1, 8, 30, 800000);   // a mesma obra do Trakt
+  um(&s[1], "tt600", "series", 1, 2, 10, 700000);
+  um(&s[2], "tt600:1:2", "series", 1, 2, 10, 700001);   // duplicata dentro do Simkl
+  return 3;
+}
 int   simkl_e_a_seguir(const char *id)     { (void)id; return 0; }
 int   simkl_plantowatch(CatItem *s, int m) { (void)s; (void)m; return 0; }
 int   ajustes_salvos_no_simkl(void)        { return 0; }
@@ -111,7 +106,7 @@ int   trakt_social(CatItem *s, int m)      { (void)s; (void)m; return 0; }
 int   trakt_e_a_seguir(const char *id)     { (void)id; return 0; }
 // "A seguir" da conta (#199): sem vistos aqui, e com o Trakt "no ar" o caminho
 // nem roda. So para linkar.
-int   trakt_ativo(void)                    { return 1; }
+int   trakt_ativo(void)                    { return traktLigado; }
 int   ajustes_cw_do_episodio_mais_alto(void) { return 1; }
 int   contalib_sementes_a_seguir(ContaSemente *s, int m, int a) { (void)s; (void)m; (void)a; return 0; }
 const char *nuvem_trakt_cliente(void)      { return ""; }
@@ -130,20 +125,14 @@ int   arte_reserva_registrar(const char *url, const char *imdb, int poster) {
 
 // --- O "TRAKT" FALSO ---------------------------------------------------------
 // /sync/playback: tres filmes pausados. O teste mexe no paused_at de tt2.
-static long long pausadoTt2 = 900000;
-static int nFalsos = 3;   // o 6. teste (#205) acrescenta tt4 no meio de uma montagem
 int trakt_continuar(CatItem *s, int m) {
-  static const char *ids[4] = { "tt1", "tt2", "tt3", "tt4" };
   int i;
-  for (i = 0; i < nFalsos && i < m; i++) {
-    memset(&s[i], 0, sizeof s[i]);
-    snprintf(s[i].imdb, sizeof s[i].imdb, "%s", ids[i]);
-    snprintf(s[i].titulo, sizeof s[i].titulo, "Filme %s", ids[i]);
-    snprintf(s[i].tipo, sizeof s[i].tipo, "movie");
-    s[i].progresso = 40;
-    s[i].retomadoMs = i == 1 ? pausadoTt2 : 900000 - i;
-  }
-  return i;
+  if (m < 6 || !traktLigado) return 0;
+  // 5 gravacoes do mesmo episodio pausado (chave de episodio) + a serie por chave pura
+  for (i = 0; i < 3; i++) um(&s[i], "tt500:1:8", "series", 1, 8, 30, 900000 - i);
+  um(&s[3], "tt500", "series", 1, 8, 30, 899000);       // chave da serie
+  um(&s[4], "tt700", "movie", 0, 0, 40, 600000);
+  return 5;
 }
 int   trakt_continuar_falhou(void)        { return 0; }
 
@@ -197,126 +186,50 @@ static void cicloCompleto(void) {
   cat_definir_tudo(lote, nc + 2, filsMontadas, 2);
 }
 
+
+static int quantos(const char *obra) {
+  const CatFileira *f = fileiraPorChave("continue_watching");
+  int i, k = 0;
+  size_t L = strlen(obra);
+  if (!f) return 0;
+  for (i = 0; i < f->n; i++) {
+    const char *im = cat_item(f->ini + i)->imdb;
+    if (!strncmp(im, obra, L) && (im[L] == 0 || im[L] == ':')) k++;
+  }
+  return k;
+}
+static void ciclo(void) {
+  CatItem lote[CONT_MAX];
+  int nc = montarContinuar(lote, CONT_MAX);
+  cat_definir_tudo(lote, nc, (CatFileira[]){ { .chave = "continue_watching", .ini = 0, .n = nc } }, 1);
+}
 int main(void) {
-  unsigned rev;
   prog_definir_relogio(relogioTeste);
-
-  cicloCompleto();
-  assert(nContinuar() == 3 && naContinuar("tt2"));
-  conferirLista();
-
-  // 1. REMOVER: a fileira publicada ja nao tem o item, no mesmo passo.
-  rev = cat_revisao();
-  assert(desc_tirar_continuar("tt2", 0, 0) == 1);
-  assert(!naContinuar("tt2"));
-  assert(nContinuar() == 2 && naContinuar("tt1") && naContinuar("tt3"));
-  conferirLista();
-  assert(cat_revisao() != rev);
-  puts("ok  remover tira o card da fileira publicada e sobe a revisao");
-
-  // 2. REFACAO com o Trakt ainda devolvendo tt2, paused_at de ANTES da
-  //    remocao (900000 < 1000000): nao volta.
-  agora = 1000500;
-  fioContinuar(NULL);
-  assert(!naContinuar("tt2") && nContinuar() == 2);
-  conferirLista();
-  puts("ok  refacao com paused_at mais velho que a remocao nao traz de volta");
-
-  // 3a. FIO EM VOO: montou antes da remocao (tt2 no lote), publica depois.
-  { CatItem lote[CONT_MAX]; int k;
-    memset(lote, 0, sizeof lote);
-    for (k = 0; k < 3; k++) {
-      snprintf(lote[k].imdb, sizeof lote[k].imdb, "tt%d", k + 1);
-      lote[k].progresso = 40; lote[k].retomadoMs = 900000 - k;
-    }
-    cat_trocar_continuar(lote, 3);
-    assert(!naContinuar("tt2") && nContinuar() == 2);
-    conferirLista(); }
-  // 3b. CICLO COMPLETO que montou a fileira antes e publica depois.
-  { CatItem lote[5]; CatFileira fs[2]; int k;
-    memset(lote, 0, sizeof lote); memset(fs, 0, sizeof fs);
-    for (k = 0; k < 3; k++) {
-      snprintf(lote[k].imdb, sizeof lote[k].imdb, "tt%d", k + 1);
-      lote[k].progresso = 40; lote[k].retomadoMs = 900000 - k;
-    }
-    snprintf(lote[3].imdb, sizeof lote[3].imdb, "tt90");
-    snprintf(lote[4].imdb, sizeof lote[4].imdb, "tt91");
-    snprintf(fs[0].chave, sizeof fs[0].chave, "continue_watching"); fs[0].n = 3;
-    snprintf(fs[1].chave, sizeof fs[1].chave, "lista"); fs[1].ini = 3; fs[1].n = 2;
-    cat_definir_tudo(lote, 5, fs, 2);
-    assert(!naContinuar("tt2") && nContinuar() == 2);
-    conferirLista(); }
-  puts("ok  publicacao montada antes da remocao (refacao e ciclo) nao traz de volta");
-
-  // 4. O RETRATO DA MONTAGEM (desc_remontar_fileiras roda a cada sync) e o
-  //    de ANTES: continue_watching n=3 e "lista" em ini=3. cat_trocar_continuar
-  //    e a remocao deslocaram as janelas publicadas sem tocar filsMontadas;
-  //    republicar o retrato poria "lista" um titulo adiante e a retomada com
-  //    o primeiro da lista dentro. A janela publicada vence.
-  cicloCompleto();                 // retrato novo ja sem tt2 (n=2)
-  filsMontadas[0].n = 3;           // o retrato velho de antes da remocao
-  filsMontadas[1].ini = 3;
-  desc_remontar_fileiras();
-  assert(!naContinuar("tt2") && nContinuar() == 2);
-  conferirLista();
-  puts("ok  remontar sem rede nao devolve a janela velha");
-
-  // 5a. ASSISTIU DE NOVO EM OUTRO APARELHO: paused_at depois da remocao.
-  pausadoTt2 = 1000200;
-  agora = 1000800;
-  fioContinuar(NULL);
-  assert(naContinuar("tt2") && nContinuar() == 3);
-  conferirLista();
-  puts("ok  paused_at mais novo que a remocao traz de volta");
-
-  // 5b. ASSISTIU DE NOVO AQUI: o Trakt ainda com o paused_at velho, mas o
-  //     player gravou local depois da remocao.
-  assert(desc_tirar_continuar("tt3", 0, 0) == 1 && !naContinuar("tt3"));
-  agora = 1001000;
-  fioContinuar(NULL);
-  assert(!naContinuar("tt3"));
-  agora = 1002000;
-  assert(prog_gravar_local("tt3", 0, 0, 600.0, 6000.0));
-  fioContinuar(NULL);
-  assert(naContinuar("tt3"));
-  conferirLista();
-  puts("ok  registro local mais novo que a remocao traz de volta");
-
-  // 6. A REFACAO DO MEIO DA MONTAGEM FICA (#205). montar() calcula a fileira
-  //    no comeco e publica segundos depois; no meio, o sync trouxe tt4 e a
-  //    refacao o publicou. A publicacao de montar() nao pode devolver a
-  //    lista velha (na Q80A: 5 "a seguir" viravam 1 ate a refacao seguinte).
-  { CatItem lote[CONT_MAX + 2]; CatFileira fs[2]; int nc;
-    agora = 1003000;
-    nc = montarContinuar(lote, CONT_MAX);   // como montar(): o lote velho
-    cwGerMontar = cwGer;
-    assert(nc == 3);
-    memset(&lote[nc], 0, sizeof lote[0] * 2);
-    snprintf(lote[nc].imdb, sizeof lote[nc].imdb, "tt90");
-    snprintf(lote[nc + 1].imdb, sizeof lote[nc + 1].imdb, "tt91");
-    memset(fs, 0, sizeof fs);
-    snprintf(fs[0].chave, sizeof fs[0].chave, "continue_watching"); fs[0].n = nc;
-    snprintf(fs[1].chave, sizeof fs[1].chave, "lista"); fs[1].ini = nc; fs[1].n = 2;
-    nFalsos = 4;
-    fioContinuar(NULL);                     // a refacao do meio
-    assert(nContinuar() == 4 && naContinuar("tt4"));
-    publicarMontagem(lote, nc + 2, fs, 2);  // o fim de montar(), lote velho
-    assert(nContinuar() == 4 && naContinuar("tt4"));
-    conferirLista();
-    // E SEM REFACAO NO MEIO a lista de montar() vale: o ciclo novo calculou
-    // depois da ultima refacao, entao ele e o mais novo.
-    nFalsos = 3;
-    nc = montarContinuar(lote, CONT_MAX);
-    cwGerMontar = cwGer;
-    memset(&lote[nc], 0, sizeof lote[0] * 2);
-    snprintf(lote[nc].imdb, sizeof lote[nc].imdb, "tt90");
-    snprintf(lote[nc + 1].imdb, sizeof lote[nc + 1].imdb, "tt91");
-    fs[0].n = nc; fs[1].ini = nc;
-    publicarMontagem(lote, nc + 2, fs, 2);
-    assert(nContinuar() == 3 && !naContinuar("tt4"));
-    conferirLista(); }
-  puts("ok  refacao feita no meio da montagem nao e coberta pela publicacao do fim");
-
-  puts("cwremover: tudo ok");
+  // 1. Fonte "Ambas": cada obra uma vez, mesmo com varias gravacoes e chaves de episodio/serie.
+  simklLigado = 1; fonteTeste = 0;
+  ciclo();
+  assert(quantos("tt500") == 1);
+  assert(quantos("tt600") == 1);
+  assert(quantos("tt700") == 1);
+  assert(nContinuar() == 3);
+  // 2. Fonte so Trakt: nada do Simkl.
+  fonteTeste = 2; ciclo();
+  assert(quantos("tt500") == 1 && quantos("tt700") == 1 && quantos("tt600") == 0 && nContinuar() == 2);
+  // 3. Fonte so Simkl: nada do Trakt, e a duplicata interna some.
+  fonteTeste = 3; ciclo();
+  assert(quantos("tt500") == 1 && quantos("tt600") == 1 && quantos("tt700") == 0 && nContinuar() == 2);
+  // 4. Fonte so conta Nuvio: sem registro local, vazia.
+  fonteTeste = 1; ciclo();
+  assert(nContinuar() == 0);
+  // 5. "Marcar como assistido" (ctxmenu): tombstone + tirar da fileira = a obra sai de
+  //    todas as chaves e NAO volta quando o remoto ainda a devolve.
+  fonteTeste = 0; ciclo();
+  assert(quantos("tt500") == 1);
+  prog_marcar_removido("tt500:1:8");
+  assert(cat_tirar_continuar("tt500:1:8") >= 1);
+  assert(quantos("tt500") == 0);
+  agora += 10; ciclo();
+  assert(quantos("tt500") == 0 && quantos("tt600") == 1);
+  puts("cwdup244: tudo ok");
   return 0;
 }

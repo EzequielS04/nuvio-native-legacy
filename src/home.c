@@ -770,6 +770,21 @@ static const char *arteDoItem(const CatItem *item, int *ehPoster) {
 static float vitVeu = 0.9f, vitAncora = 0.5f, vitDissolve = 0.0f, vitRaio = 0.0f;
 // Onde o veu de baixo comeca, 0..1 da altura da arte (0 = o padrao do shader).
 static float vitVeuIni = 0.0f;
+// #232 (re-relato do #177): "Desfocar proximo episodio" so valia para o cartao
+// do fim do player. O destaque da home (arte_hero_do_item) pede o STILL do
+// episodio de quem e "a seguir" e o desenhava nitido: ajustes_cw_desfocar_proximo
+// nao tinha nenhum chamador. Aqui: item de serie sem progresso que e o proximo
+// episodio de uma serie, desenhado com o still do episodio (nunca a arte do
+// titulo, que nao entrega nada), com o ajuste ligado.
+int home_proximo_desfocar(const CatItem *ci, const char *arte) {
+  const char *still;
+  if (!ci || !arte || !arte[0] || !ajustes_cw_desfocar_proximo() || !ajustes_cw_ligado()) return 0;
+  if (strcmp(ci->tipo, "series") || ci->progresso != 0) return 0;
+  if (!(trakt_e_a_seguir(ci->imdb) || simkl_e_a_seguir(ci->imdb) || cwo_conta_a_seguir(ci->imdb))) return 0;
+  still = artehero_url_episodio(ci);
+  return still && !strcmp(still, arte);
+}
+
 // `desl` = deslize de lado em fracao de r.w (troca deslizada); 0 = no lugar.
 // A arte de tela anda DENTRO do retangulo pelo shader, com as rampas paradas;
 // o poster (que nao preenche o retangulo) anda o rect inteiro, e quem chama
@@ -796,6 +811,10 @@ static int desenhaArteHero(GfxRect r, GfxModo modo, const CatItem *item,
   if (alpha <= 0.004f) return 1;   // invisivel: nem o quad de tela cheia
   tex = tex_obter_hero(arte);
   if (!tex) return 0;
+  if (home_proximo_desfocar(item, arte)) {
+    tex = gfx_desfocado(tex, arte);   // copia 96x54; sem ela, nada (nunca o still nitido)
+    if (!tex) return 0;
+  }
   gfx_tex_aspect_atual = tex_aspecto(arte);
   gfx_desliza_atual = ehPoster ? 0.0f : desl;
   if (!ehPoster && modo == GFX_VITRINE) {
@@ -831,6 +850,7 @@ static int heroArtePlana(const CatItem *item, const char *path, float *asp) {
   if (item && path && path[0] && item->poster[0] && !strcmp(path, item->poster))
     ehPoster = 1;
   if (!arte || !arte[0] || ehPoster) return 0;
+  if (home_proximo_desfocar(item, arte)) return 0;   // camadas usa a textura nitida
   *asp = tex_aspecto(arte);
   return 1;
 }
@@ -4431,6 +4451,7 @@ static void desenhaPilha(int idxCat, int stackN, float px, float py, float h, fl
 static void desenhaArteCard(GfxRect card, TipoFileira tipo, const char *caminho, GLuint t,
                             const CatItem *cItem, float f, float raio, float aArte,
                             float varre) {
+  if (t && home_proximo_desfocar(cItem, caminho)) t = gfx_desfocado(t, caminho);
   if (t) {
     // SEM PARALAXE OSCILANTE no card focado.
     //

@@ -207,6 +207,7 @@ char *metaprov_busca_com(const char *tipo, const char *termo, int seg_nuvio,
     if (falhaDeRede(st)) nuvioPausar();
     printf("[meta] busca %s: Nuvio falhou (http %d); Cinemeta\n", tipo, st);
   }
+  if (seg_cine < 0) return NULL;   // #231: Cinemeta fora da busca
   metaprov_url_busca(url, sizeof url, METAPROV_CINEMETA, tipo, termo, NULL);
   c = get(url, seg_cine, &st, ctx);
   if (c && !metaprov_busca_valida(c)) { free(c); c = NULL; }

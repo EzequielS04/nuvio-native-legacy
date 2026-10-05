@@ -14,6 +14,7 @@
 //      (id do TMDB -> IMDb), e a ficha vem num unico /meta depois.
 //
 //   bash tests/abrirtitulo.sh
+int ajustes_busca_cinemeta(void) { return 1; }
 #include "../src/descoberta.c"
 Uint32 SDL_GetTicks(void) { return 0; }
 #include "../src/progresso.h"

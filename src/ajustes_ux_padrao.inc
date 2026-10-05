@@ -218,3 +218,4 @@
   0, 0, /* automatic source (R9b): Equilibrio; HDR e Dolby Vision: Preferir */
   0, 0, /* 2.0 (N1): app logo: Novo; app opening: Padrao */
   0, /* receive polls (N3): Ligado (V_LIGA: 0 = Ligado) */
+  0, /* search Cinemeta (#231): Ligado (V_LIGA: 0 = Ligado), as before */
