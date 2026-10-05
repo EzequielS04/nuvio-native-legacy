@@ -1167,7 +1167,9 @@ void spot_evento(const SDL_Event *e) {
     else spot_fechar();
     return;
   }
+  // A AZUL / CH+ do controle chega com sym "s": tecla de controle nao escreve.
   if (!(e->key.keysym.mod & (KMOD_CTRL | KMOD_ALT | KMOD_GUI)) &&
+      e->key.keysym.scancode != NV_SCANCODE_BLUE &&
       ((k >= SDLK_a && k <= SDLK_z) || (k >= SDLK_0 && k <= SDLK_9) || k == SDLK_SPACE)) {
     if (k != SDLK_SPACE || (nConsulta && consulta[nConsulta - 1] != ' ')) {
       char um[2] = { (char)k, 0 };

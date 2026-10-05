@@ -16,6 +16,7 @@
 // isso sem que nenhum dos lados precise saber o que o outro faz.
 #ifdef NV_TPK
 #include "tpkdesp.h"
+#include "layout.h"
 #include <SDL2/SDL.h>
 #include "tpk_egl.h"
 #include <GLES2/gl2.h>
@@ -378,6 +379,8 @@ void nv_tpk_tecla(const char *nome, int apertou) {
   e.key.state = apertou ? SDL_PRESSED : SDL_RELEASED;
   e.key.keysym.sym = k;
   e.key.keysym.scancode = SDL_GetScancodeFromKey(k);
+  // A AZUL do controle e a AZUL do app, nao a letra "s".
+  if (!strcmp(nome, "XF86Blue")) e.key.keysym.scancode = (SDL_Scancode)NV_SCANCODE_BLUE;
   SDL_PushEvent(&e);
 }
 #endif

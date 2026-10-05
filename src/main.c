@@ -1172,7 +1172,14 @@ int main(int argc, char **argv) {
           e.key.keysym.scancode = (SDL_Scancode)(sobe ? NV_SCANCODE_CH_UP : NV_SCANCODE_CH_DOWN);
           e.key.keysym.sym = sobe ? SDLK_PAGEUP : SDLK_PAGEDOWN;
         } else {
+#ifdef NV_TPK
+          // Na Samsung o CH+ vai com o scancode da AZUL de verdade: como a
+          // letra "s" ele era recusado com campo de texto ativo e o Spotlight
+          // o escrevia (relato de 05/10/2026).
+          e.key.keysym.scancode = sobe ? (SDL_Scancode)NV_SCANCODE_BLUE : SDL_SCANCODE_F5;
+#else
           e.key.keysym.scancode = sobe ? SDL_SCANCODE_S : SDL_SCANCODE_F5;
+#endif
           e.key.keysym.sym = sobe ? SDLK_s : SDLK_F5;
         }
       }
