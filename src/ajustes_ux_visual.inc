@@ -156,6 +156,8 @@ static const char *ajVisualIcone(int op) {
     case AJ_ENQUETES: return "aj_bell";
     case AJ_BUSCA_CINEMETA: return "aj_list-x";
     case AJ_ESMAECER: return "aj_moon";
+    case AJ_DESCANSO_ESTILO: return "aj_image";
+    case AJ_DESCANSO_FONTE: return "aj_film";
     case AJ_BRILHO_PLAYER: return "aj_sun-dim";
     case AJ_MANTER_VIDEO: return "aj_memory-stick";
     case AJ_RELOGIO: return "aj_clock";

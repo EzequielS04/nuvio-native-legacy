@@ -14,16 +14,32 @@ static void quadros(unsigned de, unsigned ate, int reproduzindo) {
 
 int main(void) {
   // Tempos -> estagio (5 min: veu aos 5, escuro 3 min depois).
-  assert(esmaecer_estagio_para(MIN(4) + 59000u, 2) == ESM_ACESO);
-  assert(esmaecer_estagio_para(MIN(5), 2) == ESM_VEU);
-  assert(esmaecer_estagio_para(MIN(8) - 1u, 2) == ESM_VEU);
-  assert(esmaecer_estagio_para(MIN(8), 2) == ESM_ESCURO);
-  assert(esmaecer_estagio_para(MIN(2), 1) == ESM_VEU && esmaecer_estagio_para(MIN(10), 3) == ESM_VEU);
-  assert(esmaecer_estagio_para(MIN(1000), 0) == ESM_ACESO);   // desligado
-  assert(esmaecer_estagio_para(MIN(1000), 9) == ESM_ACESO);   // escolha invalida
+  assert(esmaecer_estagio_para(MIN(4) + 59000u, 4, ESM_ESTILO_ESCURECER) == ESM_ACESO);
+  assert(esmaecer_estagio_para(MIN(5), 4, ESM_ESTILO_ESCURECER) == ESM_VEU);
+  assert(esmaecer_estagio_para(MIN(8) - 1u, 4, ESM_ESTILO_ESCURECER) == ESM_VEU);
+  assert(esmaecer_estagio_para(MIN(8), 4, ESM_ESTILO_ESCURECER) == ESM_ESCURO);
+  assert(esmaecer_estagio_para(MIN(2), 3, ESM_ESTILO_ESCURECER) == ESM_VEU && esmaecer_estagio_para(MIN(10), 5, ESM_ESTILO_ESCURECER) == ESM_VEU);
+  assert(esmaecer_estagio_para(MIN(1000), 0, ESM_ESTILO_ESCURECER) == ESM_ACESO);   // desligado
+  assert(esmaecer_estagio_para(MIN(1000), 9, ESM_ESTILO_ESCURECER) == ESM_ACESO);   // escolha invalida
+  // 30 s e 1 min (2.0, "ate 30 s").
+  assert(esmaecer_estagio_para(29999u, 1, ESM_ESTILO_ESCURECER) == ESM_ACESO && esmaecer_estagio_para(30000u, 1, ESM_ESTILO_ESCURECER) == ESM_VEU);
+  assert(esmaecer_estagio_para(MIN(1), 2, ESM_ESTILO_ESCURECER) == ESM_VEU);
+  // Padrao = 2 min.
+  esmaecer_escolha(-1); assert(escolhaAtual == ESM_PADRAO && esmaecer_ms(ESM_PADRAO) == MIN(2));
+  // TELA DE DESCANSO (vitrine/relogio): 5 s de veu e depois o preto inteiro.
+  assert(esmaecer_estagio_para(MIN(2), 3, ESM_ESTILO_VITRINE) == ESM_VEU);
+  assert(esmaecer_estagio_para(MIN(2) + ESM_DESCANSO_MS - 1u, 3, ESM_ESTILO_VITRINE) == ESM_VEU);
+  assert(esmaecer_estagio_para(MIN(2) + ESM_DESCANSO_MS, 3, ESM_ESTILO_RELOGIO) == ESM_ESCURO);
+  assert(esmaecer_alfa_do_estagio(ESM_ESCURO, ESM_ESTILO_VITRINE) == ESM_ALFA_DESCANSO);
+  assert(esmaecer_alfa_do_estagio(ESM_ESCURO, ESM_ESTILO_ESCURECER) == ESM_ALFA_ESCURO);
+  esmaecer_reiniciar(); esmaecer_escolha(3); esmaecer_estilo(ESM_ESTILO_VITRINE);
+  quadros(0, MIN(2) + ESM_DESCANSO_MS + 3000u, 0);
+  assert(esmaecer_descanso() && esmaecer_veu() == ESM_ALFA_DESCANSO);
+  assert(esmaecer_entrada(MIN(3), 1) == 1 && !esmaecer_descanso());
+  esmaecer_estilo(ESM_ESTILO_ESCURECER);
 
   // Ocioso: acende, esmaece em ~1,5 s ate 60%, depois a 92%.
-  esmaecer_reiniciar(); esmaecer_escolha(2);
+  esmaecer_reiniciar(); esmaecer_escolha(4);
   esmaecer_quadro(0, 0.1f, 0);
   quadros(100, MIN(5) - 100, 0);
   assert(esmaecer_estagio() == ESM_ACESO && esmaecer_veu() == 0.0f);
@@ -33,6 +49,7 @@ int main(void) {
   assert(esmaecer_veu() == ESM_ALFA_VEU && !esmaecer_apagado());
   quadros(MIN(5) + 2100, MIN(8) + 6000, 0);
   assert(esmaecer_estagio() == ESM_ESCURO && esmaecer_apagado() && esmaecer_veu() == ESM_ALFA_ESCURO);
+  assert(!esmaecer_descanso());   // "so escurecer" nao tem tela de descanso
   { int esc = -1; assert(esmaecer_mudou_escuro(&esc) && esc == 1 && !esmaecer_mudou_escuro(&esc)); }
 
   // A primeira tecla acorda na hora e e consumida; a repeticao logo depois
@@ -55,7 +72,7 @@ int main(void) {
   }
 
   // NUNCA durante a reproducao: tocando por 30 minutos sem tecla nao esmaece.
-  esmaecer_reiniciar(); esmaecer_escolha(1);
+  esmaecer_reiniciar(); esmaecer_escolha(3);
   { unsigned t;
     for (t = 0; t <= MIN(30); t += 1000) esmaecer_quadro(t, 1.0f, 1);
     assert(esmaecer_estagio() == ESM_ACESO && esmaecer_veu() == 0.0f);

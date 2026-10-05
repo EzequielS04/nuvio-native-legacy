@@ -94,6 +94,8 @@ int ajustes_animacoes_reduzidas(void);
 // V_BRILHO_PLAYER (padrao 1 = 80%).
 int ajustes_esmaecer(void);
 int ajustes_brilho_player(void);
+int ajustes_descanso_estilo(void);   // ESM_ESTILO_* (esmaecer.h)
+int ajustes_descanso_fonte(void);    // DESC_FONTE_* (descanso.h)
 int ajustes_dolby_vision(void);
 int ajustes_dolby_atmos(void);
 // pauseOverlayEnabled: o painel de ficha que sobe alguns segundos depois de
@@ -245,7 +247,7 @@ int   ajustes_home_layout(void);
 int   ajustes_hero_fonte(void);         // origem local da arte do hero (ARTEHERO_*)
 // 1 = destaque/detalhe com foto diferente da do card (regra em artehero.h).
 int   ajustes_hero_arte_diferente(void);
-int   ajustes_ps_fundo(void);            // 0 mural, 1 listras, 2 arte do perfil
+int   ajustes_ps_fundo(void);            // 0 filmes, 1 listras, 2 arte do perfil, 3 luz, 4 projetor
 int   ajustes_ps_fundo_automatico(void); // #90: fundo da escolha de perfil (psfundo.c)
 // Teto de memoria para imagens escolhido em Ajustes, em MB; 0 = automatico.
 int   ajustes_tex_mb(void);

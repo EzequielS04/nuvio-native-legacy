@@ -14,6 +14,7 @@
 #include "celbotao.h"
 #include "ponteiro.h"
 #include "app.h"
+#include "descanso.h"
 #include "iconeapp.h"
 #include "logoapp.h"
 #include "registro.h"
@@ -2188,6 +2189,10 @@ void app_atualizar(float dt, Uint32 agora) {
   // Animacoes reduzidas valem para TODA mola e rampa do app (anim.h), nao so
   // para as telas que lembravam de perguntar. Uma leitura por quadro.
   anim_politica_reduzida = ajustes_animacoes_reduzidas();
+  // OK na vitrine da tela de descanso (descanso.h): abre o titulo, so com a
+  // Home na frente. Em outra tela o OK so acordou.
+  { int k = descanso_pedido_abrir();
+    if (k >= 0 && app_na_home()) abrirPorIndice(k); }
   vigiarMotorP2p();
   diagnostico_intro_atualizar(dt, agora);
   // Spotlight: a mola de entrada/saida e o ditado correm em qualquer tela; o

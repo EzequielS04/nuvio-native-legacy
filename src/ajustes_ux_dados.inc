@@ -158,6 +158,8 @@ static const char *uxSinonimos(int op) {
     case AJ_ABERTURA: return "abertura splash inicio animacao zoom esmaecer fade direto rapido logo entrada boot arranque";
     case AJ_ESMAECER: return "esmaecer escurecer apagar tela parado ocioso inatividade protecao oled burn-in screensaver descanso tempo minutos dim";
     case AJ_MANTER_VIDEO: return "manter video pronto sair retomar rapido instantaneo pausado reter memoria pipeline ilha trailer avancado";
+    case AJ_DESCANSO_ESTILO: return "descanso screensaver protetor vitrine relogio hora filmes escurecer estilo";
+    case AJ_DESCANSO_FONTE: return "descanso vitrine titulos lista continuar catalogo filmes series";
     case AJ_BRILHO_PLAYER: return "brilho interface player controles barra escurecer forte claro oled hdr osd luz";
     case AJ_NOVIDADES20: return "novidades novo versao 2.0 tour guia o que mudou mudancas whats new";
     case AJ_BUSCA_CINEMETA: return "busca pesquisa cinemeta catalogo nuvio addon excluir desligar resultados procurar search";

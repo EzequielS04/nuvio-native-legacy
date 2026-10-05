@@ -314,6 +314,12 @@ extern float gfx_opacidade_grupo;
 // Nao aninha. Miniaturas e passadas internas ficam de fora.
 void gfx_transformar(float ox, float oy, float s, float dx, float dy);
 void gfx_sem_transformar(void);
+// GIRO DE GRUPO: todo retangulo desenhado ate gfx_sem_girar sai girado `rad`
+// radianos em torno de (cx, cy), em coordenadas de layout. Existe para a parede
+// inclinada da escolha de perfil e o feixe do projetor (perfilsel.c). O recorte
+// (tesoura) NAO gira. Nao aninha; passadas internas ficam de fora.
+void gfx_girar(float rad, float cx, float cy);
+void gfx_sem_girar(void);
 // Janela do GFX_JANELA: x, y, w, h do rect no quadro da arte em tela cheia,
 // em fracao (0..1). Quem desenha devolve a {0,0,1,1}.
 extern float gfx_janela_atual[4];

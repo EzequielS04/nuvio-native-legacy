@@ -19,8 +19,21 @@
 #ifndef ESMAECER_H
 #define ESMAECER_H
 
-// Escolhas do ajuste (indices de V_ESMAECER): 0 desligado, 1 = 2 min, 2 = 5 min, 3 = 10 min.
-#define ESM_ESCOLHAS 4
+// Escolhas do ajuste (indices de V_ESMAECER): 0 desligado, 1 = 30 s, 2 = 1 min,
+// 3 = 2 min (padrao), 4 = 5 min, 5 = 10 min.
+#define ESM_ESCOLHAS 6
+#define ESM_PADRAO   3
+// TELA DE DESCANSO (2.0): o que aparece depois que a tela escurece. Indices de
+// V_DESCANSO_ESTILO. VITRINE e RELOGIO escurecem de vez em poucos segundos e
+// desenham por cima (descanso.c); ESCURECER e o comportamento de antes (veu de
+// 60% e, 3 min depois, 92% com o relogio pequeno andando).
+#define ESM_ESTILO_VITRINE   0
+#define ESM_ESTILO_RELOGIO   1
+#define ESM_ESTILO_ESCURECER 2
+#define ESM_ESTILOS          3
+// Com VITRINE/RELOGIO: quanto o veu de 60% fica antes de ir ao preto.
+#define ESM_DESCANSO_MS 5000u
+#define ESM_ALFA_DESCANSO 1.0f
 // Estagios.
 #define ESM_ACESO   0
 #define ESM_VEU     1   // ~60% preto
@@ -32,15 +45,23 @@
 // Velocidade do esmaecer (alfa por segundo): 0 -> 60% em 1,5 s.
 #define ESM_VELOCIDADE  0.40f
 
-// Minutos ate o estagio 1 para a escolha (0 = nunca).
-int  esmaecer_minutos(int escolha);
-// PURA: estagio para `ocioMs` sem tecla.
-int  esmaecer_estagio_para(unsigned ocioMs, int escolha);
-float esmaecer_alfa_do_estagio(int estagio);
+// Milissegundos ate o estagio 1 para a escolha (0 = nunca).
+unsigned esmaecer_ms(int escolha);
+// PURAS: estagio para `ocioMs` sem tecla, e o alfa do veu nesse estagio.
+int  esmaecer_estagio_para(unsigned ocioMs, int escolha, int estilo);
+float esmaecer_alfa_do_estagio(int estagio, int estilo);
 
 // Estado. `agora` em ms (SDL_GetTicks).
 void  esmaecer_reiniciar(void);
 void  esmaecer_escolha(int escolha);
+void  esmaecer_estilo(int estilo);
+int   esmaecer_estilo_atual(void);
+// 1 = a tela de descanso (vitrine ou relogio) esta no ar: estagio 2 com um
+// desses estilos e o veu ja no preto. descanso.c desenha por cima.
+int   esmaecer_descanso(void);
+// 1 = a tela de descanso do Nuvio esta ligada (tempo e estilo vitrine/relogio):
+// o screensaver da TV deve ser segurado (video.c, webOS).
+int   esmaecer_segura_protetor_tv(void);
 // Chamar para CADA evento de pessoa (tecla, ponteiro). `consumivel` = o evento
 // age se passar (KEYDOWN, clique). Devolve 1 se o evento deve ser engolido (a
 // primeira tecla que acorda a tela, e a repeticao dela logo depois).

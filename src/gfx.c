@@ -37,6 +37,8 @@ typedef struct {
   GLint leve;    // uLeve: 1 = efeitos leves (sem dither), ver gfx_definir_efeitos_leves
   GLint sub;     // uSub do VS: o pedaco do rect desenhado (gfx_sombra_vazada)
   float subAtual[4];
+  GLint giro;    // uGiro do VS: rotacao de grupo (gfx_girar)
+  float giroAtual[4];
   float altAtual, margemAtual, leveAtual;  // o ultimo valor enviado: so chama o GL se mudar
   float telaAtual[2];       // o uTela enviado (muda so dentro de uma miniatura)
 } Programa;
@@ -115,12 +117,21 @@ void gfx_transformar(float ox, float oy, float s, float dx, float dy) {
   gfxTr.ox = ox; gfxTr.oy = oy; gfxTr.s = s; gfxTr.dx = dx; gfxTr.dy = dy;
 }
 void gfx_sem_transformar(void) { gfxTr.on = 0; }
+// GIRO DE GRUPO (gfx_girar): cos, sin e o pivo em pixels do alvo. Identidade
+// = (1, 0, 0, 0). Aplicado no vertice, depois do fator da camada.
+static float giroLayout[3];          // angulo e pivo como quem chamou pediu
+static int   giroOn;
+void gfx_girar(float rad, float cx, float cy) {
+  giroOn = rad != 0.0f;
+  giroLayout[0] = rad; giroLayout[1] = cx; giroLayout[2] = cy;
+}
+void gfx_sem_girar(void) { giroOn = 0; }
 #define GFX_TR_RECT(x, y, w, h) do { if (gfxTr.on) { \
     x = gfxTr.ox + ((x) - gfxTr.ox) * gfxTr.s + gfxTr.dx; \
     y = gfxTr.oy + ((y) - gfxTr.oy) * gfxTr.s + gfxTr.dy; \
     w *= gfxTr.s; h *= gfxTr.s; } } while (0)
-#define ESC_REAL_INI() float escGuard_ = escAtiva; int trGuard_ = gfxTr.on; escAtiva = 1.0f; gfxTr.on = 0
-#define ESC_REAL_FIM() escAtiva = escGuard_; gfxTr.on = trGuard_
+#define ESC_REAL_INI() float escGuard_ = escAtiva; int trGuard_ = gfxTr.on, giGuard_ = giroOn; escAtiva = 1.0f; gfxTr.on = 0; giroOn = 0
+#define ESC_REAL_FIM() escAtiva = escGuard_; gfxTr.on = trGuard_; giroOn = giGuard_
 
 static GLuint snapFbo = 0, snapTex = 0;
 static int snapW = 0, snapH = 0;
@@ -169,12 +180,18 @@ static const char *VS =
   // gfx_sombra_vazada pular o miolo de uma sombra que um painel opaco cobre.
   // A margem de 1 px so cresce nos lados do pedaco que sao borda do rect.
   "uniform vec4 uSub;\n"
+  // uGiro: rotacao de grupo (gfx_girar) — cos, sin e o pivo em pixels. O
+  // default de um uniform recem-linkado e 0, e por isso gfx_iniciar manda
+  // (1, 0, 0, 0) a todo programa: com cos 0 tudo colapsaria no pivo.
+  "uniform vec4 uGiro;\n"
   "void main(){\n"
   "  vec2 a = mix(uSub.xy, uSub.zw, aPos);\n"
   "  vec2 sg = mix(-step(uSub.xy, vec2(0.0)), step(vec2(1.0), uSub.zw), aPos);\n"
   "  vec2 e = sg * uMargem * step(0.5, min(uRect.z, uRect.w));\n"
   "  vUv = a + e / max(uRect.zw, vec2(0.5));\n"
   "  vec2 p = uRect.xy + a * uRect.zw + e;\n"
+  "  vec2 dg = p - uGiro.zw;\n"
+  "  p = uGiro.zw + vec2(dg.x*uGiro.x - dg.y*uGiro.y, dg.x*uGiro.y + dg.y*uGiro.x);\n"
   "  vAmb = vec2(p.x/uTela.x, 1.0-p.y/uTela.y);\n"
   "  gl_Position = vec4(p.x/uTela.x*2.0-1.0, 1.0-p.y/uTela.y*2.0, 0.0, 1.0);\n"
   "}\n";
@@ -1352,6 +1369,7 @@ int gfx_iniciar(void) {
     progs[m].leve   = glGetUniformLocation(p, "uLeve");
     progs[m].jan    = glGetUniformLocation(p, "uJan");
     progs[m].sub    = glGetUniformLocation(p, "uSub");
+    progs[m].giro   = glGetUniformLocation(p, "uGiro");
     progs[m].altAtual = -1.0f;
     progs[m].telaAtual[0] = NV_TELA_W; progs[m].telaAtual[1] = NV_TELA_H;
     progs[m].margemAtual = 0.0f;   // o default de um uniform recem-linkado e 0
@@ -1362,6 +1380,9 @@ int gfx_iniciar(void) {
     if (progs[m].sub >= 0) glUniform4f(progs[m].sub, 0.0f, 0.0f, 1.0f, 1.0f);
     progs[m].subAtual[0] = progs[m].subAtual[1] = 0.0f;
     progs[m].subAtual[2] = progs[m].subAtual[3] = 1.0f;
+    if (progs[m].giro >= 0) glUniform4f(progs[m].giro, 1.0f, 0.0f, 0.0f, 0.0f);
+    progs[m].giroAtual[0] = 1.0f;
+    progs[m].giroAtual[1] = progs[m].giroAtual[2] = progs[m].giroAtual[3] = 0.0f;
     glUniform1i(progs[m].tex, 0);
     if (progs[m].amb >= 0) glUniform1i(progs[m].amb, 1);
     if (progs[m].texB >= 0) glUniform1i(progs[m].texB, 2);
@@ -1693,7 +1714,7 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     duplo = 1; opaco = 1;
     comAmb = nv_ambiente_forca > 0.001f;
   }
-  cheia = r.x <= 0.0f && r.y <= 0.0f && r.x + r.w >= NV_TELA_W && r.y + r.h >= NV_TELA_H;
+  cheia = !giroOn && r.x <= 0.0f && r.y <= 0.0f && r.x + r.w >= NV_TELA_W && r.y + r.h >= NV_TELA_H;
   // COR CHAPADA DE TELA CHEIA, canto vivo e alfa 1 (o fundo opaco que varias
   // telas pintam por cima do clear): e um glClear com essa cor — o mesmo
   // pixel (a mistura de alfa 1 devolve a cor e alfa 1), sem passar dois
@@ -1821,6 +1842,18 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     }
     if (P->alt >= 0 && alt != P->altAtual) { glUniform1f(P->alt, alt); P->altAtual = alt; }
     if (P->margem >= 0 && mg != P->margemAtual) { glUniform1f(P->margem, mg); P->margemAtual = mg; } }
+  if (P->giro >= 0) {
+    float g[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+    if (giroOn) {
+      float e = escAtiva;
+      g[0] = cosf(giroLayout[0]); g[1] = sinf(giroLayout[0]);
+      g[2] = giroLayout[1] * e;   g[3] = giroLayout[2] * e;
+    }
+    if (memcmp(P->giroAtual, g, sizeof g)) {
+      glUniform4f(P->giro, g[0], g[1], g[2], g[3]);
+      memcpy(P->giroAtual, g, sizeof g);
+    }
+  }
   if (P->sub >= 0 && memcmp(P->subAtual, subAtual, sizeof subAtual)) {
     glUniform4f(P->sub, subAtual[0], subAtual[1], subAtual[2], subAtual[3]);
     memcpy(P->subAtual, subAtual, sizeof subAtual);

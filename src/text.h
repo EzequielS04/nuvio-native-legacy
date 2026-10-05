@@ -162,6 +162,7 @@ typedef enum {
   // GUIA DA 2.0 (novidades20.c): "Nuvio 2.0" do hero (mockup 120/800) e o
   // negrito das frases dos capitulos (24/600, par do TXT_V2_24).
   TXT_W20_HERO, TXT_W20_24B,
+  TXT_DESC_HORA,   // relogio da tela de descanso (230, Montserrat ExtraLight; so digitos e ':')
   TXT_NFONTES
 } TxtEstilo;
 

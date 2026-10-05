@@ -402,6 +402,10 @@ typedef enum {
   // ela o Retomar abre pela fonte guardada (fontevolta.h). No fim: valor[]/CHAVE[]
   // posicionais.
   AJ_MANTER_VIDEO,
+  // Tela de descanso (2.0, descanso.h): o que aparece depois do escurecer
+  // (Vitrine/Relogio/So escurecer) e de onde a vitrine tira os titulos. LOCAIS.
+  // No fim: valor[]/CHAVE[] posicionais.
+  AJ_DESCANSO_ESTILO, AJ_DESCANSO_FONTE,
   AJ_N
 } OpcaoId;
 
@@ -429,7 +433,11 @@ static const char *V_RELOGIO_POS[] = { "Automática", "Esquerda", "Direita" };
 // Indices gravados em fontePrioridadeLocal / fonteHdrLocal (ajustes_fonte_prioridade/_hdr).
 static const char *V_FONTE_PRIORIDADE[] = { "Equilíbrio", "Qualidade máxima", "Começar rápido" };
 static const char *V_FONTE_HDR[] = { "Preferir", "Indiferente", "Evitar" };
-static const char *V_ESMAECER[] = { "Desligado", "2 min", "5 min", "10 min" };
+// 2.0: "ate 30 s" (dono, 05/10). Indices = esmaecer.h (ESM_ESCOLHAS); o
+// ajuste nunca saiu numa versao publicada, entao os indices antigos nao migram.
+static const char *V_ESMAECER[] = { "Desligado", "30 s", "1 min", "2 min", "5 min", "10 min" };
+static const char *V_DESCANSO_ESTILO[] = { "Vitrine", "Relógio", "Só escurecer" };
+static const char *V_DESCANSO_FONTE[]  = { "Catálogo", "Minha lista e Continuar" };
 static const char *V_BRILHO_PLAYER[] = { "100%", "80%", "65%", "50%" };
 static const char *V_LOGO_APP[] = { "Novo", "Clássico" };
 static const char *V_ABERTURA[] = { "Padrão", "Só esmaece", "Direto" };
@@ -507,7 +515,9 @@ static const char *V_FONTE_TEXTO[] = { "Do Nuvio", "Do addon", "Logo do título"
 // Indices GRAVADOS em ajustes.txt: 0 = mural de capas (era "Automático"),
 // 1 = listras do login (era "Desligado"), 2 = arte do perfil em foco (2.0).
 // Valor novo SEMPRE no fim: quem ja tinha 0 ou 1 continua com o mesmo fundo.
-static const char *V_PS_FUNDO[]  = { "Mural", "Listras", "Arte do perfil" };
+// 2.0: o "Mural" virou "Filmes" (a parede de cada perfil) e entram "Luz" e
+// "Projetor" no fim — os indices 0..2 continuam os mesmos.
+static const char *V_PS_FUNDO[]  = { "Filmes", "Listras", "Arte do perfil", "Luz", "Projetor" };
 // Teto de memoria para imagens. O indice vira MB em ajustes_tex_mb; 0 e a
 // regra automatica pela RAM (tex_cache.c). Escolha por APARELHO: fica no
 // ajustes.txt e nunca vai para a conta — a TV da sala e a do quarto nao tem
@@ -878,7 +888,7 @@ static const Opcao OPCOES[AJ_N] = {
   // (fil_hero_fonte), a mesma da folha de fileiras. A chave continua "-":
   // quem grava a escolha e fileiras.c.
   ACAO("Catálogos do destaque"),                  // fil_hero_fonte
-  ESC("Fundo da escolha de perfil", V_PS_FUNDO, 3), // local: ver psfundo.c
+  ESC("Fundo da escolha de perfil", V_PS_FUNDO, 5), // local: ver psfundo.c
   ESC("Local do Descobrir",         V_DESCOBRIR, 3), // discoverLocation
   ESC("Rótulos nos pôsteres",       V_LIGA, 2),   // posterLabelsEnabled
   ESC("Nome do addon no catálogo",  V_LIGA, 2),   // catalogAddonNameEnabled
@@ -1140,10 +1150,12 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Abertura do app",                 V_ABERTURA, 3),         // local: aberturaAppLocal
   ESC("Receber enquetes",                V_LIGA, 2),             // local: enquetesLocal (espelho do opt-out da conta)
   ESC("Buscar no Cinemeta",              V_LIGA, 2),             // local: buscaCinemetaLocal
-  ESC("Esmaecer quando parado",          V_ESMAECER, 4),         // local: esmaecerLocal
+  ESC("Tela de descanso",                V_ESMAECER, 6),         // local: esmaecerLocal
   ESC("Brilho da interface no player",   V_BRILHO_PLAYER, 4),    // local: brilhoPlayerLocal
   ACAO("Novidades 2.0"),
   ESC("Manter o vídeo pronto ao sair",   V_LIGA, 2),             // local: manterVideoLocal
+  ESC("Estilo do descanso",              V_DESCANSO_ESTILO, 3),  // local: descansoEstiloLocal
+  ESC("Títulos da vitrine",              V_DESCANSO_FONTE, 2),   // local: descansoFonteLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1338,6 +1350,7 @@ static const char *CHAVE[] = {
   "esmaecerLocal", "brilhoPlayerLocal",
   "-novidades20",
   "manterVideoLocal",
+  "descansoEstiloLocal", "descansoFonteLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1621,7 +1634,9 @@ int ajustes_fonte_primeira(void)      { return valor[AJ_FONTE_AUTO] == 1; }
 int ajustes_fonte_prioridade(void) { int v = valor[AJ_FONTE_PRIORIDADE]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_enquetes(void)         { return lig(AJ_ENQUETES); }
 int ajustes_busca_cinemeta(void)   { return lig(AJ_BUSCA_CINEMETA); }
-int ajustes_esmaecer(void)         { int v = valor[AJ_ESMAECER]; return v < 0 || v > 3 ? 2 : v; }
+int ajustes_esmaecer(void)         { int v = valor[AJ_ESMAECER]; return v < 0 || v > 5 ? 3 : v; }
+int ajustes_descanso_estilo(void)  { int v = valor[AJ_DESCANSO_ESTILO]; return v < 0 || v > 2 ? 0 : v; }
+int ajustes_descanso_fonte(void)   { int v = valor[AJ_DESCANSO_FONTE]; return v < 0 || v > 1 ? 0 : v; }
 int ajustes_brilho_player(void)    { int v = valor[AJ_BRILHO_PLAYER]; return v < 0 || v > 3 ? 1 : v; }
 void ajustes_espelhar_enquetes(int ligado) { int n = ligado ? 0 : 1; if (valor[AJ_ENQUETES] != n) { valor[AJ_ENQUETES] = n; gravar(); } }
 int ajustes_fonte_hdr(void)        { int v = valor[AJ_FONTE_HDR]; return v < 0 || v > 2 ? 0 : v; }
@@ -1905,7 +1920,7 @@ int ajustes_hero_fonte(void) {
 // escolhendo arte do catalogo como reserva; "Desligado" (indice 1) = a tela de
 // perfil volta a nao desenhar nada alem do que o proprio perfil traz.
 int ajustes_ps_fundo_automatico(void) { return lig(AJ_PS_FUNDO); }
-int ajustes_ps_fundo(void) { int v = valor[AJ_PS_FUNDO]; return v >= 0 && v <= 2 ? v : 0; }
+int ajustes_ps_fundo(void) { int v = valor[AJ_PS_FUNDO]; return v >= 0 && v <= 4 ? v : 0; }
 int ajustes_tex_mb(void) {
   int i = valor[AJ_TEX_MB];
   if (SEGURO && i >= 5) i = 0;            // 400/512 MB: volta ao automatico da RAM
@@ -3567,6 +3582,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_BUSCA_CINEMETA: /* o web nao tem esta escolha */
     case AJ_ESMAECER: case AJ_BRILHO_PLAYER: /* o painel OLED e desta TV */
     case AJ_MANTER_VIDEO:   /* a memoria e o decoder sao desta TV */
+    case AJ_DESCANSO_ESTILO: case AJ_DESCANSO_FONTE: /* tela de descanso: desta TV */
     case AJ_ENQUETES:       /* o web nao tem a ilha; a conta guarda o opt-out por outro caminho (enquete.c) */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
@@ -4369,6 +4385,10 @@ static int inativa(int op) {
     // nao existe nesta TV — o "Explorar" daqui e outra tela. A escolha vem e
     // vai para a conta, mas aqui nao muda nada, e a linha tem de dizer isso.
     case AJ_DESCOBRIR:    return 1;
+    // Tela de descanso: o estilo depende de haver descanso; os titulos, de ele
+    // ser a vitrine.
+    case AJ_DESCANSO_ESTILO: return valor[AJ_ESMAECER] == 0;
+    case AJ_DESCANSO_FONTE:  return valor[AJ_ESMAECER] == 0 || ajustes_descanso_estilo() != 0;
     case AJ_CW_OK: case AJ_CW_FONTE:
     case AJ_CW_ESTILO: case AJ_CW_THUMB: case AJ_CW_FURTHEST:
     case AJ_CW_NAO_EXIBIDOS: case AJ_CW_ORDEM: case AJ_CW_CONCLUIDO:
@@ -4647,7 +4667,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_RAIL_BLUR: return "Desfoca a arte atrás da barra lateral moderna em vez de usar um fundo sólido.";
     case AJ_HERO: return "O bloco grande no topo da Home, com a arte e o nome de um título em destaque.";
     case AJ_HERO_CATALOGOS: return "De onde vêm os títulos do destaque: os primeiros do catálogo, um sorteio, ou uma fileira da Home. OK troca.";
-    case AJ_PS_FUNDO: return "Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.";
+    case AJ_PS_FUNDO: return "Fundo da tela de escolha de perfil. Filmes: os cartazes do que cada perfil assistiu, numa parede inclinada. Luz: preto com uma luz na cor do perfil. Projetor: sala de cinema antes da sessão. Também a arte do perfil desfocada ou as listras do login.";
     case AJ_DESCOBRIR: return "Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.";
     case AJ_SELO_VISTO: return "Um check pequeno no canto de cima do pôster dos títulos que você já assistiu, pelo Trakt, pela conta ou marcados nesta TV.";
     case AJ_ROTULOS: return "Escreve o nome do título abaixo do cartaz. A maior parte da arte já traz o nome impresso.";
@@ -4776,8 +4796,10 @@ static const char *ajudaOpcao(int op) {
     case AJ_ADDONS_PRINCIPAL: return "Os outros perfis desta conta usam os addons do perfil principal. Desligado, cada perfil usa os seus — a não ser que a conta já diga para usar os do principal.";
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
-    case AJ_ESMAECER: return "Para TVs OLED: sem apertar nada, a tela escurece aos poucos e depois quase apaga, com um relógio que anda devagar. Qualquer tecla acorda (a primeira só acorda, não faz nada). Nunca esmaece com o filme tocando; com ele pausado, sim.";
     case AJ_MANTER_VIDEO: return "Ao sair de um filme para a home, o vídeo fica pausado e carregado por até 2 minutos, e o Retomar volta na hora. Custa caro: a memória do vídeo e o player ficam presos, o trailer da home não toca nesse tempo e TVs mais fracas podem ficar lentas. Desligado (padrão), o player é liberado ao sair e o Retomar reabre direto pela fonte que estava tocando, sem procurar nos add-ons.";
+    case AJ_ESMAECER: return "Quanto tempo sem apertar nada até a tela escurecer e entrar o descanso. Qualquer tecla acorda (a primeira só acorda, não faz nada). Nunca com o filme tocando; com ele pausado, a tela só escurece.";
+    case AJ_DESCANSO_ESTILO: return "Vitrine mostra títulos do catálogo em tela cheia, um de cada vez; OK abre o que está na tela. Relógio mostra a hora grande e a próxima estreia da Agenda. Só escurecer apaga a tela quase toda, com um relógio pequeno. Nos três nada fica parado no mesmo lugar.";
+    case AJ_DESCANSO_FONTE: return "De onde a vitrine tira os títulos: o catálogo inteiro, ou só o que está na sua lista e em Continuar assistindo.";
     case AJ_BRILHO_PLAYER: return "Escurece os controles, o título e a barra do player (as legendas não mudam). Com o filme tocando e a barra parada, ela ainda baixa um degrau até você apertar uma tecla.";
     case AJ_BUSCA_CINEMETA: return "Ligado (padrão): a busca consulta o catálogo do Nuvio e, se ele falhar, o Cinemeta; um add-on Cinemeta instalado também responde. Desligado: o Cinemeta fica de fora da busca, e só o catálogo do Nuvio e os seus add-ons respondem. Não muda a ficha do título (veja Usar sempre o Cinemeta).";
     case AJ_ENQUETES: return "Ligado, o Nuvio pode convidar você a votar numa enquete curta na ilha do relógio. Desligado, nenhuma aparece. A escolha fica na sua conta.";
@@ -6378,6 +6400,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_TAMANHO_UI: case AJ_TAMANHO_AJUSTES: case AJ_FUNDO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
     case AJ_AVANCADAS: case AJ_LOGO_APP: case AJ_ABERTURA:
     case AJ_ESMAECER: case AJ_BRILHO_PLAYER: case AJ_MANTER_VIDEO:
+    case AJ_DESCANSO_ESTILO: case AJ_DESCANSO_FONTE:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL: case AJ_ENQUETES:

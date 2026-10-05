@@ -1,4 +1,5 @@
 #include "video.h"
+#include "esmaecer.h"
 #include "video_escala.h"
 #include "video_reconexao.h"
 #include "idioma.h"
@@ -1335,9 +1336,13 @@ static int aoPedidoScreensaver(LSHandle *h, LSMessage *m, void *u) {
     if (*fim) return 1;
   }
   segurar = midia[0] && tocando && !pausaPedida && !terminou && !falhou;
+  // A tela de descanso do Nuvio (vitrine/relogio) e quem cuida da TV parada:
+  // o screensaver da LG entraria por cima dela no mesmo minuto.
+  if (!segurar && esmaecer_segura_protetor_tv()) segurar = 2;
   snprintf(b, sizeof b, "{\"clientName\":\"space.nuvio.native.legacy\",\"ack\":%s,\"timestamp\":%s}",
            segurar ? "false" : "true", ts);
-  printf("[video] screensaver pedido: %s\n", segurar ? "seguro (filme tocando)" : "liberado");
+  printf("[video] screensaver pedido: %s\n", segurar == 2 ? "seguro (tela de descanso do Nuvio)"
+                                           : segurar ? "seguro (filme tocando)" : "liberado");
   fflush(stdout);
   lsChamar("luna://com.webos.service.tvpower/power/responseScreenSaverRequest",
            b, NULL, NULL, "responseScreenSaverRequest");
@@ -1516,6 +1521,10 @@ static int iniciar(int automatico) {
   printf("[video] pronto (webOS %d, acb=%ld, janela=%s)\n",
          webosMaior(), acb, expWin[0] ? expWin : "-");
   fflush(stdout);
+  // TELA DE DESCANSO (esmaecer.h): o pedido do screensaver da TV passa a ser
+  // respondido desde ja, e nao so no primeiro filme. Sem tela de descanso do
+  // Nuvio a resposta continua ack:true (o da TV entra como sempre).
+  protegerScreensaver();
   return 1;
 }
 

@@ -441,9 +441,25 @@ static void ajcHomePerfil(int A) {
   GfxRect q = { ajc.x, ajc.y, 640 * ajc.s, ajc.h };
   gfx_cor(q, 22 / q.h, 0.047f, 0.051f, 0.063f, 1);
   gfx_recorte(q.x, q.y, q.w, q.h);
+  // Os indices sao os de V_PS_FUNDO: 0 Filmes, 1 Listras, 2 Arte do perfil,
+  // 3 Luz, 4 Projetor. (1 e 2 estavam trocados aqui: a previa de "Listras"
+  // mostrava a arte borrada e a de "Arte do perfil", as listras.)
   if (v == 0) { for (i = 0; i < 24; i++) CIMG(ajArte(AJA_POSTER, AJ_POS[i % 14]), (i % 8) * 82 - 10, (i / 8) * 124 - 14, 76, 116, 8, 0.45f); }
-  else if (v == 1) ajcBorrada(ajArte(AJA_FUNDO, A), q, 22, 0.8f);
-  else { char c[1200]; snprintf(c, sizeof c, "%s/marcas/login-fundo.jpg", uxDirArte); ajImg(c, q, 22, 1); }
+  else if (v == 2) ajcBorrada(ajArte(AJA_FUNDO, A), q, 22, 0.8f);
+  else if (v == 1) { char c[1200]; snprintf(c, sizeof c, "%s/marcas/login-fundo.jpg", uxDirArte); ajImg(c, q, 22, 1); }
+  else {
+    const ContaPerfil *pf = n > 0 ? perfis_item(0) : NULL;
+    float lr = 0.43f, lg = 0.18f, lb = 0.92f;
+    unsigned cv = 0;
+    if (pf && pf->corHex[0] == '#' && sscanf(pf->corHex + 1, "%6x", &cv) == 1) {
+      lr = ((cv >> 16) & 255) / 255.0f; lg = ((cv >> 8) & 255) / 255.0f; lb = (cv & 255) / 255.0f;
+    }
+    if (v == 4) { lr = 0.62f * 0.95f + 0.38f * lr; lg = 0.62f * 0.67f + 0.38f * lg; lb = 0.62f * 0.35f + 0.38f * lb; }
+    gfx_rect(CR(v == 4 ? 70 : -120, v == 4 ? -260 : 60, 500, 500), 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
+             lr, lg, lb, v == 4 ? 0.55f : 0.45f);
+    if (v == 4) { for (i = 0; i < 16; i++) gfx_cor(CR(i * 42 - 6, 4, 22, 12), 0.3f, 0.24f, 0.17f, 0.12f, 1);
+                  for (i = 0; i < 16; i++) gfx_cor(CR(i * 42 - 6, 344, 22, 12), 0.3f, 0.24f, 0.17f, 0.12f, 1); }
+  }
   gfx_sem_recorte();
   gfx_cor(q, 22 / q.h, 0.031f, 0.031f, 0.039f, 0.45f);
   ajcFoco(AJ_PS_FUNDO, 8, 8, 624, 344, 18);
