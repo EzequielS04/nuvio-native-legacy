@@ -3312,7 +3312,13 @@ static void desenhaHero(Uint32 agora, float saida) {
   // O DESTAQUE PRINCIPAL DA MODERNA E SEMPRE TELA CHEIA (dono, 04/10): com o
   // foco no proprio destaque ele e outra coisa que o resto da home. O ajuste
   // "Fundo em tela cheia" so decide a arte quando o foco esta nas fileiras.
-  int cheio = ajustes_hero_cheio() || (lay == HOME_LAYOUT_MODERNA && focoHero);
+  // A fileira de AMIGOS tambem: o destaque dela e outra tela (fundo social,
+  // autoria, ficha) desenhada para a arte inteira; na faixa a arte parava no
+  // meio e sobrava o fundo social dos lados (dono, 05/10).
+  int cheio = ajustes_hero_cheio() ||
+              (lay == HOME_LAYOUT_MODERNA &&
+               (focoHero || (foco.fileira >= 0 && foco.fileira < nFileiras &&
+                             fileiras[foco.fileira].tipo == FILEIRA_SOCIAL)));
   // Em tela cheia o bloco sobe 70px (ver layout.h).
   GfxModo modoHero = cheio ? GFX_HERO_CHEIO : GFX_HERO;
   GfxRect r = cheio ? (GfxRect){ 0, 0, NV_TELA_W, NV_HERO_CHEIO_H }
