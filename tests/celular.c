@@ -13,6 +13,8 @@
 // Dublês: so o que celular.c usa de fora.
 const char *i18n(const char *s) { return s; }
 int ajustes_idioma(void) { return 0; }
+void ajustes_acento(float *r, float *g, float *b) { *r = 0.96f; *g = 0.55f; *b = 0.2f; }
+int ajustes_tinta_foco(void) { return 18; }
 
 static char saida[16384];
 static int curl(const char *args) {

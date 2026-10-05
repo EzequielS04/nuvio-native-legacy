@@ -65,13 +65,12 @@ void celb_botao(int d, GfxRect r, int focado, PonteiroFn focar, int a, int b, fl
   c = (GfxRect){ r.x - r.w * (esc - 1.0f) * 0.5f, r.y - r.h * (esc - 1.0f) * 0.5f, r.w * esc, r.h * esc };
   // A MESMA FAMILIA DO FALAR (spotlight.c, busca.c, teclado.c): disco de
   // 0,2 de cinza em repouso, cheio na cor do realce no foco, com a mancha
-  // difusa curta. O fio claro em repouso e o que diz "botao" sem foco.
+  // difusa curta. Sem aro (ilha 2.0): o disco claro sobre a arte ja diz "botao".
   if (k > 0.01f)
     gfx_rect((GfxRect){ c.x - 12, c.y - 12, c.w + 24, c.h + 24 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
              ar, ag, ab, 0.30f * k * alpha);
   gfx_cor(c, 0.5f, anim_mistura(0.18f, ar, k), anim_mistura(0.185f, ag, k),
           anim_mistura(0.205f, ab, k), alpha);
-  gfx_vidro_aro(c, 0.5f, 1.5f, 1.0f, 1.0f, 1.0f, 0.14f * (1.0f - k) * alpha);
   t = k > 0.5f ? ajustes_tinta_foco() : 224;
   gfx_icone((GfxRect){ c.x + c.w * 0.26f, c.y + c.h * 0.26f, c.w * 0.48f, c.h * 0.48f }, "aj_smartphone",
             t / 255.0f, t / 255.0f, t / 255.0f, alpha);
@@ -250,12 +249,15 @@ static void celb_desenharCorpo_(void) {
     ponteiro_alvo(x, y, w, h, NULL, temQr ? NULL : regerarPonteiro, 0, 0);
   }
   ajustes_acento(&ar, &ag, &ab);
-  gfx_rect((GfxRect){ x - 40.0f, y - 20.0f, w + 80.0f, h + 70.0f }, 0, GFX_SOMBRA,
-           1.0f, 0, 0, 0.5f, 0, 0, 0, 0.55f * a);
-  { float raio = 26.0f / (w < h ? w : h);
-    if (ajustes_vidro()) { gfx_cor(cartao, raio, 0.03f, 0.032f, 0.04f, 0.70f * a); gfx_vidro_folha(cartao, raio, a); }
-    else gfx_cor(cartao, raio, 0.075f, 0.078f, 0.090f, 0.98f * a);
-    gfx_vidro_aro(cartao, raio, 1.5f, 1.0f, 1.0f, 1.0f, 0.12f * a); }
+  // ILHA 2.0 (a mesma de salvospainel.c): sombra curta, miolo de vidro ou
+  // solido, a luz do canto de cima e NENHUM aro.
+  { const int vid = ajustes_vidro();
+    const float raio = 28.0f / h;
+    gfx_rect((GfxRect){ x - 18.0f, y - 8.0f, w + 36.0f, h + 40.0f }, 0, GFX_SOMBRA,
+             1.0f, 0, 0, 0.5f, 0, 0, 0, 0.42f * a);
+    if (vid) { gfx_cor(cartao, raio, 0.03f, 0.032f, 0.04f, 0.70f * a); gfx_vidro_folha(cartao, raio, a); }
+    else gfx_cor(cartao, raio, .098f, .102f, .118f, .99f * a);
+    gfx_luz_canto(cartao, raio, w * .25f, -h * .25f, w * .9f, ar, ag, ab, (vid ? .10f : .08f) * a); }
 
   { TxtLinha t = txt_linha_corta(TXT_CALLOUT, i18n("Digitar pelo celular"), 245, 248, 255, 255,
                                  w - 2 * CB_PAD - 40.0f);
