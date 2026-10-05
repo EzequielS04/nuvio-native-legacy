@@ -464,12 +464,68 @@ static const char *pedidoVideo(void) {
 // Mesmo protocolo das outras ferramentas: escreva uma URL em /tmp/nuvio-video e
 // o app toca. E o unico jeito de testar reproducao sem alguem no sofa — e o
 // video nao pode ser conferido por captura, porque vive em outro plano.
+//
+// A SONDAGEM SAI DO FIO PRINCIPAL (05/10/2026). No Android o pedido mora em
+// /data (775f9db9), e o stat() dele rodava em TODO quadro dentro do `aux` — que
+// e so isto e a captura. A TCL do dono, ao abrir um 4K Dolby Vision, mostrou
+// `aux=21569.1` e `aux=147.2` no [quadro]: o unico syscall que toca disco nesse
+// trecho e esse stat. Acho (sem prova ainda) que o /data parou sob escrita
+// pesada (cache de seek do F07 gravando o 4K, ou o p2p) e o lookup esperou a
+// fila do eMMC. Seja qual for o motivo do disco, o fio de desenho nao pode
+// esperar por ele: um fio olha o arquivo a cada 250 ms e o quadro so le duas
+// variaveis atomicas. A linha "[aux] stat ... levou" mostra quando o disco
+// para — era o que faltava para provar o congelamento.
+#ifndef __EMSCRIPTEN__
+static _Atomic long pedVidTam;      // tamanho visto pelo fio (<=0: nada)
+static _Atomic long pedVidMtime;    // st_mtime visto pelo fio
+static _Atomic int pedVidFioOk;     // 1 = o fio esta de pe
+static void *pedVidFio(void *x) {
+  (void)x;
+  for (;;) {
+    struct stat st;
+    struct timespec a, b;
+    double ms;
+    int ok;
+    clock_gettime(CLOCK_MONOTONIC, &a);
+    ok = stat(pedidoVideo(), &st) == 0;
+    clock_gettime(CLOCK_MONOTONIC, &b);
+    ms = (double)(b.tv_sec - a.tv_sec) * 1000.0 + (double)(b.tv_nsec - a.tv_nsec) / 1e6;
+    if (ms > 100.0) {
+      printf("[aux] stat do pedido de video levou %.0f ms (disco parado; fora do fio principal)\n", ms);
+      fflush(stdout);
+    }
+    atomic_store(&pedVidMtime, ok ? (long)st.st_mtime : 0L);
+    atomic_store(&pedVidTam, ok ? (long)st.st_size : -1L);
+    { struct timespec z = { 0, 250000000L }; nanosleep(&z, NULL); }
+  }
+  return NULL;
+}
+#endif
 static void videoSeSolicitado(void) {
   static time_t bloqueado;
   char url[1024];
   FILE *f;
   p2pTesteBombear();
+#ifndef __EMSCRIPTEN__
+  { static int tentou;
+    if (!tentou) {
+      pthread_t t;
+      tentou = 1;
+      pedidoVideo();   // monta o caminho aqui, antes do fio ler
+      atomic_store(&pedVidTam, -1L);
+      if (pthread_create(&t, NULL, pedVidFio, NULL) == 0) { pthread_detach(t); atomic_store(&pedVidFioOk, 1); }
+    }
+    if (atomic_load(&pedVidFioOk)) {
+      // Mesma regra de pedidoNovo, com o que o fio viu.
+      if (atomic_load(&pedVidTam) <= 0) return;
+      if (bloqueado && (time_t)atomic_load(&pedVidMtime) == bloqueado) return;
+      bloqueado = 0;
+      atomic_store(&pedVidTam, -1L);   // atendido; o fio volta a olhar em 250 ms
+    } else if (!pedidoNovo(pedidoVideo(), &bloqueado)) return;
+  }
+#else
   if (!pedidoNovo(pedidoVideo(), &bloqueado)) return;
+#endif
   f = fopen(pedidoVideo(), "r");
   if (!f) return;
   if (fgets(url, sizeof url, f)) {
