@@ -62,5 +62,8 @@ int spainel_pediu_perfil(char *id, size_t tam);
 // Para os testes: abre direto numa aba (0 Salvos, 1 Atividade, 2 Amigos,
 // 3 Avisos), com o foco na primeira linha da lista.
 void spainel_ir_aba(int aba);
+// Abre (se preciso) na aba Atividade e poe o foco no primeiro evento de amigo
+// do titulo `imdb` (a lista rola ate ele). Sem evento desse titulo, so a aba.
+void spainel_abrir_titulo(const char *imdb);
 
 #endif

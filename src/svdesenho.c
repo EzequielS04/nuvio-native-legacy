@@ -94,6 +94,10 @@ static void foto(GfxRect r, const char *url, const char *nome, const char *id, f
     txt_desenhar_alpha(l, r.x + (r.w - l.w) * 0.5f, r.y + (r.h - l.h) * 0.5f, a); }
 }
 
+void svd_avatar(GfxRect r, const char *url, const char *nome, const char *id, float a) {
+  foto(r, url, nome, id, a);
+}
+
 // Anel por fora de um disco: `folga` px de vao, `esp` de traco.
 static void anelDisco(GfxRect r, float folga, float esp, float cr, float cg, float cb, float a) {
   gfx_anel_fora(r, 0.5f, folga, esp, cr, cg, cb, a);
@@ -124,6 +128,74 @@ void svd_rosto(GfxRect r, const SvAmigo *am, float foco, float a, Uint32 t) {
     float cy = fr.y + fr.h * 0.5f + d * 0.5f * 0.7071f;
     svd_ponto_vivo(cx, cy, pd, pd * 0.18f, a, t);
   }
+}
+
+// Selo de canto do rosto: coracao (gostou, #e5566e) ou check (viu, verde).
+static void seloAmigo(float cx, float cy, float d, int gostou, float a) {
+  float ic = d * 0.62f;
+  gfx_rect((GfxRect){ cx - d * 0.5f - d * 0.11f, cy - d * 0.5f - d * 0.11f, d * 1.22f, d * 1.22f },
+           0, GFX_DISCO, 0, 0, 0, 0, 0.03f, 0.035f, 0.045f, a);
+  if (gostou) gfx_rect((GfxRect){ cx - d * 0.5f, cy - d * 0.5f, d, d }, 0, GFX_DISCO, 0, 0, 0, 0,
+                       0.898f, 0.337f, 0.431f, a);
+  else gfx_rect((GfxRect){ cx - d * 0.5f, cy - d * 0.5f, d, d }, 0, GFX_DISCO, 0, 0, 0, 0,
+                0.235f, 0.561f, 0.420f, a);
+  gfx_icone((GfxRect){ cx - ic * 0.5f, cy - ic * 0.5f, ic, ic }, gostou ? "aj_heart" : "aj_check",
+            1.0f, 1.0f, 1.0f, a);
+}
+
+float svd_amigos_pilha(float x, float y, float d, const AmigosTitulo *t, int n,
+                       int selos, const float anel[3], float a) {
+  float passo = d * 0.71f, aro = d * 0.07f, larg = d;
+  int i;
+  if (!t || n <= 0) return 0.0f;
+  if (n > t->n) n = t->n;
+  for (i = 0; i < n; i++) {
+    const AmigoTit *f = &t->a[i];
+    float fx = x + passo * (float)i;
+    gfx_rect((GfxRect){ fx, y, d, d }, 0, GFX_DISCO, 0, 0, 0, 0, anel[0], anel[1], anel[2], a);
+    foto((GfxRect){ fx + aro, y + aro, d - 2 * aro, d - 2 * aro }, f->avatar, f->nome, f->id, a);
+    if (selos) {
+      float sd = d * 0.40f;
+      seloAmigo(fx + d - sd * 0.42f, y + d - sd * 0.38f, sd, f->gostou, a);
+    }
+    larg = passo * (float)i + d;
+  }
+  return larg;
+}
+
+float svd_amigos_chip(float x, float y, float h, float maxW, const AmigosTitulo *t, float a) {
+  static const float ANEL[3] = { 0.035f, 0.04f, 0.05f };
+  float d = h * 0.74f, pad = (h - d) * 0.5f;
+  int rostos, resto;
+  TxtLinha l;
+  char num[16];
+  float larg = 0.0f, tw = 0.0f;
+  if (!t || t->total <= 0 || t->n <= 0) return 0.0f;
+  for (rostos = t->n < 2 ? t->n : 2; rostos >= 0; rostos--) {
+    resto = t->total - rostos;
+    tw = 0.0f;
+    if (resto > 0) {
+      snprintf(num, sizeof num, "+%d", resto);
+      l = txt_linha(TXT_CAPTION, num, 245, 245, 248, 255);
+      tw = (float)l.w + pad * 1.2f;
+    }
+    larg = pad * 1.6f + (rostos ? d + d * 0.71f * (float)(rostos - 1) : 0.0f) + tw;
+    if (rostos == 0) larg = pad * 2.0f + tw;
+    if (larg <= maxW) break;
+  }
+  if (rostos < 0 || larg > maxW) return 0.0f;
+  gfx_cor((GfxRect){ x, y + 2.0f, larg, h }, 0.5f, 0, 0, 0, 0.25f * a);
+  gfx_cor((GfxRect){ x, y, larg, h }, 0.5f, 0.03f, 0.035f, 0.045f, 0.70f * a);
+  { float cx = x + pad * 0.8f;
+    if (rostos) cx += svd_amigos_pilha(cx, y + pad, d, t, rostos, 0, ANEL, a);
+    else cx = x + pad;
+    resto = t->total - rostos;
+    if (resto > 0) {
+      snprintf(num, sizeof num, "+%d", resto);
+      l = txt_linha(TXT_CAPTION, num, 245, 245, 248, 255);
+      txt_desenhar_alpha(l, cx + (rostos ? pad * 0.6f : 0.0f), y + (h - l.h) * 0.5f, a);
+    } }
+  return larg;
 }
 
 void svd_rosto_acao(GfxRect r, const char *icone, float foco, float a) {

@@ -1708,6 +1708,18 @@ static void alternarSalvos(int comModal) {
   else spainel_abrir();
 }
 
+// OK NA ILHA DE AMIGOS DA PAGINA DO TITULO (detail.c): o mesmo painel da tecla
+// azul (nascendo da ilha do relogio quando ela esta na tela), ja na aba
+// Atividade e no primeiro evento de amigo daquele titulo.
+static void abrirSocialNoTitulo(const char *imdb) {
+  float ix, iy, iw, ih;
+  if (!spainel_aberto()) {
+    if (ajustes_relogio_ligado() && ilha_rect(&ix, &iy, &iw, &ih)) spainel_abrir_de(ix, iy, iw, ih);
+    else spainel_abrir();
+  }
+  spainel_abrir_titulo(imdb);
+}
+
 void app_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
   ilhacart_validar_identidade();
@@ -1984,6 +1996,8 @@ void app_evento(const SDL_Event *e) {
       menu_abrir_sobre(1);
       saiuPorEsquerda = 0;
     }
+    { char im[24];
+      if (detail_aberto() && detail_pediu_amigos(im, sizeof im)) abrirSocialNoTitulo(im); }
     return;
   }
   // O MENU DO CARTAZ ABERTO PELO PAINEL (segurar OK numa linha de Salvos)

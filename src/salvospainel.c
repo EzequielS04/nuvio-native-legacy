@@ -437,6 +437,17 @@ void spainel_ir_aba(int a) {
   if (a != aba) trocarAba(a);
   foco = nVisiveis() > 0 ? 0 : SP_FOCO_ABAS;
 }
+void spainel_abrir_titulo(const char *imdb) {
+  int i, n;
+  spainel_ir_aba(SP_ABA_ATIVIDADE);
+  if (aba != SP_ABA_ATIVIDADE || !imdb || !imdb[0]) return;
+  socialvis_atualizar();
+  n = socialvis_n_eventos();
+  for (i = 0; i < n; i++) {
+    const SvEvento *ev = socialvis_evento(i);
+    if (ev && !strcmp(ev->imdb, imdb)) { foco = i; break; }
+  }
+}
 int spainel_pediu_perfil(char *id, size_t tam) {
   if (!temPedidoPerfil) return 0;
   temPedidoPerfil = 0;

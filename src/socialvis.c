@@ -306,6 +306,7 @@ static void svDeRecEvento(const RecEvento *r, SvEvento *e) {
   e->pct = r->pct > 0 ? r->pct : -1;
   e->restanteMin = -1;
   e->quando = r->quando;
+  e->nota = r->acao == REC_ACAO_NOTA ? r->nota : 0;
   // A arte deitada vem do catalogo (o feed so traz o cartaz).
   k = cat_indice_por_imdb(r->imdb);
   if (k >= 0) {

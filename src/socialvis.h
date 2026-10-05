@@ -105,6 +105,7 @@ typedef struct {
   int  restanteMin;     // -1 = nao se sabe
   long long quando;     // epoch s; 0 = nao se sabe
   int  sobreMinhaRec;
+  int  nota;            // so SV_AVALIOU: nota do tracker 0..100; 0 = nao se sabe
 } SvEvento;
 
 typedef struct {

@@ -395,6 +395,18 @@ int main(int argc, char **argv) {
   { char ar[1024]; if (realpath("deploy/app/art", ar)) extras_carregar(ar); }
   montarCatalogo();
   cacheFrases();
+  // NUVIO_SHOT_AMIGOS=1: amigos falsos (feed externo) no filme e na serie.
+  if (getenv("NUVIO_SHOT_AMIGOS")) {
+    SvEvento e[5]; memset(e, 0, sizeof e);
+    for (int i = 0; i < 5; i++) { e[i].pct = -1; e[i].restanteMin = -1; e[i].quando = (long long)time(NULL) - 600 * i;
+      snprintf(e[i].imdb, sizeof e[i].imdb, "%s", i < 3 ? IMDB_FILME : IMDB_SERIE); }
+    snprintf(e[0].pessoaId, 96, "nuvio:mari"); snprintf(e[0].pessoaNome, 64, "Mari"); e[0].acao = SV_REACAO; e[0].reacao = SV_REAC_GOSTOU;
+    snprintf(e[1].pessoaId, 96, "nuvio:fabi"); snprintf(e[1].pessoaNome, 64, "Fabi"); e[1].acao = SV_FIM; e[1].temporada = 1; e[1].episodio = 8;
+    snprintf(e[2].pessoaId, 96, "nuvio:rafa"); snprintf(e[2].pessoaNome, 64, "Rafa"); e[2].acao = SV_FIM;
+    snprintf(e[3].pessoaId, 96, "nuvio:mari"); snprintf(e[3].pessoaNome, 64, "Mari"); e[3].acao = SV_REACAO; e[3].reacao = SV_REAC_GOSTOU;
+    snprintf(e[4].pessoaId, 96, "nuvio:fabi"); snprintf(e[4].pessoaNome, 64, "Fabi"); e[4].acao = SV_FIM; e[4].temporada = 1; e[4].episodio = 8;
+    socialvis_definir_feed(e, 5);
+  }
 
   if (quer(argc, argv, "filme-topo")) { abrir(1, 0, 0, 0); gravar("filme-topo"); }
   if (quer(argc, argv, "filme-trailers")) { abrir(1, 1, SEC_TRAILERS, 0); gravar("filme-trailers"); }

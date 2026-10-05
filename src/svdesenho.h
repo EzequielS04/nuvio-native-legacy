@@ -10,6 +10,7 @@
 #include "gfx.h"
 #include "text.h"
 #include "socialvis.h"
+#include "amigostitulo.h"
 #include <SDL2/SDL.h>
 
 // As cores de estado. A novidade e LARANJA fixo e o ao vivo VERDE fixo, e
@@ -41,6 +42,21 @@ void  svd_ponto_vivo(float cx, float cy, float d, float borda, float a, Uint32 t
 void  svd_rosto(GfxRect r, const SvAmigo *am, float foco, float a, Uint32 t);
 // Um rosto de acao ("+ Adicionar"): disco neutro com o icone.
 void  svd_rosto_acao(GfxRect r, const char *icone, float foco, float a);
+
+// SO A FOTO (ou a inicial no disco colorido), sem anel de estado. `r` e o
+// quadrado/disco. O mesmo desenho dos rostos da fileira "Amigos assistindo".
+void  svd_avatar(GfxRect r, const char *url, const char *nome, const char *id, float a);
+// AMIGOS DE UM TITULO (amigostitulo.h). Pilha de ate `n` rostos de diametro `d`
+// sobrepostos, comecando em (x, y) topo; `anel` e a cor do aro que separa um
+// rosto do outro (a do fundo sobre o qual a pilha esta). `selos` = 1 poe o
+// coracao (gostou) ou o check (viu) no canto de baixo de cada rosto. Devolve a
+// largura gasta.
+float svd_amigos_pilha(float x, float y, float d, const AmigosTitulo *t, int n,
+                       int selos, const float anel[3], float a);
+// O chip de vidro no canto de cima do cartaz: ate 2 rostos + "+N". `maxW` limita
+// a largura (o selo "Assistido" fica do outro lado): se nao cabe, 1 rosto, ou so
+// o numero. Devolve a largura gasta (0 = nao coube nem assim).
+float svd_amigos_chip(float x, float y, float h, float maxW, const AmigosTitulo *t, float a);
 
 // Barra fina de progresso: trilho e preenchimento na cor de realce.
 void  svd_barra(GfxRect r, int pct, float a);
