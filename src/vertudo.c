@@ -403,16 +403,16 @@ static const char *retratoLocal(const ColFolder *folder) {
 // Usa os shaders e o cache existentes, sem blur ou novas texturas por frame.
 // FUNDO DA COLECAO: sempre Frost ou a arte borrada da pasta, nunca a arte crua
 // ("em colecoes deixa o fundo sempre frost ou blur", 04/10/2026). Ajustes >
-// Fundo = Frost fica Frost; senao a arte borrada (fundo.c), e sem arte/paleta
+// Fundo = Frost fica Frost; senao a arte borrada (fundo.c), e sem a arte
 // ainda cai no Frost. A arte de cabecalho (editorial, retrato) vem POR CIMA.
 static void fundoColecao(float a) {
-  CorvivaPaleta pal;
   GfxRect tela={0,0,NV_TELA_W,NV_TELA_H};
+  GLuint t=0;
   const char *art=collection?(collection->editorial&&collection->detailHero[0]
                               ?collection->detailHero:col_banner(collection)):"";
   int modo=fundo_modo()==FUNDO_FROST?FUNDO_FROST:FUNDO_BORRADA;
-  if(art&&art[0])tex_obter_hero(art);   /* pede a textura: a paleta sai dela */
-  if(modo==FUNDO_BORRADA&&(!art||!art[0]||!corviva_paleta(art,&pal)||!pal.ok))modo=FUNDO_FROST;
+  if(art&&art[0])t=tex_obter_hero(art);   /* a Borrada desfoca esta textura */
+  if(modo==FUNDO_BORRADA&&!t)modo=FUNDO_FROST;
   fundo_desenhar_modo(modo,tela,0.0f,art,a);
 }
 static void themeBackground(float a) {

@@ -6,11 +6,10 @@
 //   FUNDO_ARTE    (0, padrao) a arte nitida em "cover" com o veu escuro do
 //                 mockup (linear 90deg: 62%, 40% no meio, 50%), em degrade
 //                 pelo nv_dither;
-//   FUNDO_BORRADA (1) so as cores da arte: a luz assada de 320x180 da
-//                 "Dinâmica imersiva" (gfx_ambiente) com a paleta da arte,
-//                 saturacao +35% e brilho 62%, e um veu de 28%. Nenhum
-//                 desfoque por quadro; o assado so refaz quando a paleta muda.
-//                 Sem paleta ainda (arte nao decodificada), cai no ARTE;
+//   FUNDO_BORRADA (1) a arte DESFOCADA: a copia de 96x54 de gfx_desfocado
+//                 assada em "cover" num quadro de 320x180 e ampliada, com um
+//                 veu de 28%. Nenhum desfoque por quadro; o assado so refaz
+//                 quando a arte muda. Sem a arte ainda, o fundo liso;
 //   FUNDO_FROST   (2) sem arte: cinza frio com tres luzes largas na cor de
 //                 ajustes_acento() (58%, 38%, 14%), tudo por GFX_VEU_CSS e
 //                 GFX_LUZ (nv_dither: painel de 8 bits nao faz faixa).
@@ -29,8 +28,8 @@ int  fundo_modo(void);
 // texturas; NULL ou "" = sem arte, so a cor de fundo e o veu) e alfa `a`.
 void fundo_desenhar(GfxRect area, const char *arteUrl, float a);
 // O mesmo, num modo pedido (as previas de Ajustes › Fundo). `raioPx` arredonda
-// os cantos (0 na tela cheia); fora da tela cheia o Borrada usa quatro luzes
-// com a paleta no lugar do assado, que e de tela inteira.
+// os cantos (0 na tela cheia); fora da tela cheia a Borrada estica a copia
+// desfocada no retangulo, sem o assado, que e de tela inteira.
 void fundo_desenhar_modo(int modo, GfxRect area, float raioPx, const char *arteUrl, float a);
 
 // Uma vez por quadro (main.c, depois de gfx_ambiente_preparar): com "Vidro
@@ -38,6 +37,10 @@ void fundo_desenhar_modo(int modo, GfxRect area, float raioPx, const char *arteU
 // vidro (gfx_vidro_fosco) desenhar dentro dos paineis. Nada se nao ha arte em
 // cena. Refaz so quando a paleta muda.
 void fundo_fosco_quadro(void);
+
+// O veu escuro da Borrada de tela cheia nos proximos desenhos (0..1; < 0 volta
+// aos 28% de sempre). A pagina do titulo usa mais: o texto fica sobre ela.
+void fundo_borrada_veu(float forca);
 
 // A conferencia de uma vez do fundo de tela cheia `modo` (FUNDO_BORRADA ou
 // FUNDO_FROST, fundo.c): -1 ainda nao, 1 o pixel da tela bateu com a conta do

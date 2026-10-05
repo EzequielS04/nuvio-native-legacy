@@ -3003,6 +3003,28 @@ GLuint gfx_desfocado(GLuint src, const char *chave) {
   return desf[vago].tex;
 }
 
+// DIAGNOSTICO DE UMA VEZ (fundo.c, "Arte borrada"): um pixel da copia
+// desfocada `tex` (u da esquerda, v de cima, 0..1). A copia sai de pe, entao
+// a linha 0 do alvo e o topo da imagem. Devolve 0 se `tex` nao e uma copia.
+int gfx_desfocado_px(GLuint tex, float u, float v, unsigned char rgb[3]) {
+  unsigned char px[4];
+  GLint ant;
+  int i, x, y, achou = 0;
+  for (i = 0; i < NV_DESF_N; i++) if (tex && desf[i].tex == tex) achou = 1;
+  if (!achou || !desfFbo) return 0;
+  x = (int)(u * NV_DESF_W); y = (int)(v * NV_DESF_H);
+  if (x < 0) x = 0; if (x >= NV_DESF_W) x = NV_DESF_W - 1;
+  if (y < 0) y = 0; if (y >= NV_DESF_H) y = NV_DESF_H - 1;
+  ant = fboLigado();
+  glBindFramebuffer(GL_FRAMEBUFFER, desfFbo);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
+  glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, px);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, desfTmp, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)ant);
+  rgb[0] = px[0]; rgb[1] = px[1]; rgb[2] = px[2];
+  return 1;
+}
+
 static void desfEncerrar(void) {
   for (int i = 0; i < NV_DESF_N; i++) {
     if (desf[i].tex) { gfx_tex_esquecer(desf[i].tex); glDeleteTextures(1, &desf[i].tex); }

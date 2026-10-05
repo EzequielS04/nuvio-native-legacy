@@ -5596,11 +5596,9 @@ static void desenhaListaColecao(float a) {
   // FUNDO DA LISTA: SEMPRE Frost ou arte borrada, nunca a arte crua ("em
   // colecoes deixa o fundo sempre frost ou blur, ta feio assim", 04/10/2026).
   // Ajustes > Fundo = Frost fica Frost; qualquer outro vira a arte borrada da
-  // colecao (fundo.c: so as cores da arte), e sem arte/paleta ainda cai no Frost.
-  { CorvivaPaleta pal;
-    int modo = fundo_modo() == FUNDO_FROST ? FUNDO_FROST : FUNDO_BORRADA;
-    (void)tf;
-    if (modo == FUNDO_BORRADA && (!fundo[0] || !corviva_paleta(fundo, &pal) || !pal.ok))
+  // colecao (fundo.c: a arte desfocada), e sem a arte ainda cai no Frost.
+  { int modo = fundo_modo() == FUNDO_FROST ? FUNDO_FROST : FUNDO_BORRADA;
+    if (modo == FUNDO_BORRADA && (!fundo[0] || !tf))
       modo = FUNDO_FROST;
     gfx_cor(tela, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a);
     fundo_desenhar_modo(modo, tela, 0.0f, fundo, a);
@@ -6440,6 +6438,12 @@ static void desenhaPessoa(float a) {
 }
 
 
+// A ARTE BORRADA NA PAGINA DO TITULO (fundo.c: a arte desfocada) leva um veu
+// mais forte que os 28% dos Ajustes: aqui o texto do heroi (titulo, sinopse,
+// generos) fica direto sobre ela, e uma arte clara desfocada deixava o texto
+// cinza sobre cinza claro (captura de tests/fluidez_perf.sh, cenario borrada).
+#define DET_VEU_BORRADA 0.55f
+
 // FOLHA + TIRA DE CARTOES do carrossel. A folha e um gfx_cor opaco de tela
 // cheia, que gfx_rect transforma em glClear; cada cartao e UM quad opaco
 // (GFX_JANELA) com os cantos no SDF. Na abertura a folha sobe sobre a home e
@@ -6469,7 +6473,9 @@ static void carFundo(void) {
   // a pagina assentada continua usando uma unica passada de arte.
   if (expandida > 0.0f) {
     if (especial) {
+      fundo_borrada_veu(DET_VEU_BORRADA);
       fundo_desenhar_modo(modo, tela, 0.0f, arteAtual, expandida * a);
+      fundo_borrada_veu(-1.0f);
       if (pg > 0.005f) gfx_cor(tela, 0.0f, 0.043f, 0.047f, 0.055f, 0.55f * pg * expandida * a);
       nv_ambiente_forca = 1.0f;
     } else gfx_ambiente(expandida * a);
@@ -6571,7 +6577,7 @@ static void detalheFundo(float s) {
   // AJUSTES > FUNDO (fundo.h), como no mockup Glass UI (quadro "Detalhe"):
   //   Arte          a arte nitida; ao rolar ela SAI (o mockup rola a arte para
   //                 fora e o resto da pagina fica no #0b0c0e liso);
-  //   Arte borrada  so as cores da arte atras de tudo, e a arte nitida no topo
+  //   Arte borrada  a arte desfocada atras de tudo, e a arte nitida no topo
   //                 a direita, vazando nas bordas (a mascara do .hero); ao
   //                 rolar as cores ficam, sob um veu (o .dt-cobre do imersivo);
   //   Frost         a superficie fosca no acento, com a mesma arte no topo.
@@ -6598,7 +6604,9 @@ static void detalheFundo(float s) {
     return;
   }
   { GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+    fundo_borrada_veu(DET_VEU_BORRADA);
     fundo_desenhar_modo(modo, tela, 0.0f, arte, aEntrada);
+    fundo_borrada_veu(-1.0f);
     // Ao rolar: o veu do .dt-cobre do imersivo (50-60%) por cima das cores.
     if (pg > 0.005f) gfx_cor(tela, 0.0f, 0.043f, 0.047f, 0.055f, 0.55f * pg * aEntrada); }
   // A arte nitida do topo, vazando nas bordas (o GFX_DETALHE com o caminho
