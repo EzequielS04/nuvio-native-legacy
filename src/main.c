@@ -503,8 +503,9 @@ static int window_primeiro_quadro_feito(void) { return nvPrimeiroQuadroFeito; }
 // Para a descoberta (descoberta.h): com conta, a primeira volta espera os
 // addons do perfil em vez de montar a Home com a lista vazia.
 static int esperaAddonsDaConta(void) {
-  if (!sessao_logada()) return 0;
-  return perfis_precisa_escolher() ? 1 : 2;
+  if (!sessao_logada() || sync_estado() == SYNC_FALHOU) return 0;
+  if (perfis_precisa_escolher()) return 1;
+  return sync_perfil_pronto() ? 0 : 2;   // ciclo terminado E aplicado para o perfil ativo
 }
 
 int main(int argc, char **argv) {

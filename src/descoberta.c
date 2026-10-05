@@ -3784,18 +3784,23 @@ static void *montar(void *u) {
     // testes que compilam este arquivo sozinho nao tem sessao nem perfis.
     { static int jaEsperou;
       int k;
-      if (!jaEsperou && esperaAddons && addons_n() == 0 && esperaAddons()) {
+      // ESPERA O CICLO INTEIRO DA CONTA, nao so os addons: as colecoes e a
+      // ordem chegam ~3 s depois deles (TCL: addons 06.05, "sync aplicado"
+      // 09.31), e a volta que ja tinha escolhido os catalogos refazia a Home
+      // no meio — 14 fileiras, cai para 8, volta para 14 com outras. Enquanto
+      // isso a tela e a do cache.
+      if (!jaEsperou && esperaAddons && esperaAddons()) {
         Uint32 desde = 0;
         jaEsperou = 1;
-        printf("[desc] esperando os addons da conta antes de montar a Home\n"); fflush(stdout);
-        while (minhaGeracao == montagemGeracao && addons_n() == 0 && (k = esperaAddons()) != 0) {
+        printf("[desc] esperando a conta (addons, colecoes, ordem) antes de montar a Home\n"); fflush(stdout);
+        while (minhaGeracao == montagemGeracao && (k = esperaAddons()) != 0) {
           if (k == 2) {   // perfil ja escolhido: o prazo corre
             if (!desde) desde = SDL_GetTicks();
             else if (SDL_GetTicks() - desde > 10000u) break;
           }
           SDL_Delay(50);
         }
-        printf("[desc] addons da conta: %d (espera encerrada)\n", addons_n()); fflush(stdout);
+        printf("[desc] conta pronta: %d addon(s) (espera encerrada)\n", addons_n()); fflush(stdout);
       } }
     // A LISTA DE ADDONS E LIDA AQUI. Marcar o instante e o que permite dizer,
     // no fim, se um pedido de remontagem que chegou no meio do caminho ja foi
