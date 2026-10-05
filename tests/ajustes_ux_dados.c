@@ -333,7 +333,19 @@ static void artePorSubmenu(void) {
   // A mesma imagem nao pede troca; submenu ou categoria diferente pede.
   assert(ajCenaChave(AJS_REPRODUCAO, AJ_DV) == ajCenaChave(AJS_REPRODUCAO, AJ_ATMOS));
   assert(ajCenaChave(AJS_REPRODUCAO, AJ_DV) != ajCenaChave(AJS_REPRODUCAO, AJ_PAUSA_OVERLAY));
-  assert(ajCenaChave(AJS_REPRODUCAO, AJ_FONTE_MANUAL) == ajCenaChave(AJS_REPRODUCAO, -1));
+  // O primeiro bloco tem cena propria (o que ele controla), diferente da
+  // visao geral da categoria; cada bloco com cena tem a sua.
+  assert(ajCenaChave(AJS_REPRODUCAO, AJ_FONTE_MANUAL) != ajCenaChave(AJS_REPRODUCAO, -1));
+  assert(ajCenaChave(AJS_REPRODUCAO, AJ_FONTE_MANUAL) == ajCenaChave(AJS_REPRODUCAO, AJ_FONTE_PRAZO));
+  { int vistoC[AJC_N] = { 0 }, ultimaC = -1, k2;
+    for (k2 = 0; k2 < AJ_N_TELA; k2++) {
+      int c;
+      if (TELA[k2].tipo != IT_OPC) continue;
+      c = ajCenaSecao(TELA[k2].op);
+      if (c < 0 || c == ultimaC) continue;
+      assert(c < AJC_N && (!vistoC[c] || TELA[k2].op == AJ_TMDB_IDIOMA));   // um bloco, uma cena: nada repetido em outro lugar
+      vistoC[c] = 1; ultimaC = c;
+    } }
   assert(ajCenaChave(AJS_CONTAS, -1) != ajCenaChave(AJS_CARTAZES, -1));
   assert(ajCenaChave(AJS_HOME, AJ_CW_LIGADO) == ajCenaChave(AJS_HOME, AJ_CW_ORDEM));
 }

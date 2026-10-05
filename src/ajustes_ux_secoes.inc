@@ -306,6 +306,23 @@ static void ajcTela(const char *arte, float a, float b, float c, float d, float 
   CIMG(arte, a, b, c, d, 12, al);
   gfx_veu_css(CR(a, b + d * 0.45f, c, d * 0.55f), 0, 0, 1.0f, 0.75f * al);
 }
+// Um still de episodio da amostra (deploy/app/art/ep: so as series tem) e
+// uma foto de elenco (art/elenco, 12 titulos), escolhidos pelo titulo `n`.
+static const char *ajcEp(int n, int k) {
+  static const char *const S[10] = { "00_1", "01_1", "15_1", "17_1", "19_1", "21_1", "23_1", "25_1", "27_1", "29_1" };
+  static char b[6][1200];
+  static int j;
+  j = (j + 1) % 6;
+  snprintf(b[j], sizeof b[j], "%s/ep/%s_%02d.jpg", uxDirArte, S[(n < 0 ? 0 : n) % 10], k);
+  return b[j];
+}
+static const char *ajcElenco(int n, int k) {
+  static char b[4][1200];
+  static int j;
+  j = (j + 1) % 4;
+  snprintf(b[j], sizeof b[j], "%s/elenco/%02d_%d.jpg", uxDirArte, (n < 0 ? 0 : n) % 12, k);
+  return b[j];
+}
 // Indice de um logo de canal/titulo da amostra.
 static const char *ajcLogoAmostra(int n) {
   static char b[4][1200];
@@ -462,7 +479,7 @@ static void ajcTitAparece(int A) {
   for (i = 0; i < 4; i++) {
     float bx = 36 + i * 146;
     int visto = i == 0, borra = !visto && lig(AJ_DET_BLUR_NAO_VISTOS);
-    snprintf(ep, sizeof ep, "%s/ep/%02d_1_%02d.jpg", uxDirArte, A % 40, i + 1);
+    snprintf(ep, sizeof ep, "%s", ajcEp(A, i + 1));
     if (borra) ajcBorrada(ep, CR(bx, 196, 134, 76), 10 * ajc.s, 1); else CIMG(ep, bx, 196, 134, 76, 10, 1);
     if (borra) CICON("aj_eye-off", bx + 55, 222, 24, 0.85f);
     gfx_cor(CR(bx + 8, 262, 118, 4), 0.5f, 1, 1, 1, 0.25f);
@@ -516,9 +533,9 @@ static void ajcTitDados(int A) {
                    ajc.op == AJ_TMDB_REDES)) { o = ajc.op; f = 1; al = mestre && lig(o) ? 1.0f : 0.3f; }
     CVIDA(bx, by, 180, 146, 18, 1);
     switch (i) {
-      case 0: for (k = 0; k < 3; k++) { snprintf(c, sizeof c, "%s/elenco/%02d_%d.jpg", uxDirArte, A % 24, k);
+      case 0: for (k = 0; k < 3; k++) { snprintf(c, sizeof c, "%s", ajcElenco(A, k));
                 CIMG(c, bx + 14 + k * 54, by + 18, 46, 46, 23, al); } break;
-      case 1: for (k = 0; k < 2; k++) { snprintf(c, sizeof c, "%s/ep/%02d_1_%02d.jpg", uxDirArte, A % 40, k + 1);
+      case 1: for (k = 0; k < 2; k++) { snprintf(c, sizeof c, "%s", ajcEp(A, k + 1));
                 CIMG(c, bx + 14 + k * 80, by + 18, 72, 46, 8, al); } break;
       case 2: CIMG(ajArte(AJA_FUNDO, A + 1), bx + 14, by + 14, 152, 56, 8, al); CICON("aj_play", bx + 80, by + 32, 20, al); break;
       case 3: for (k = 2; k >= 0; k--) CIMG(ajArte(AJA_POSTER, AJ_POS[(A + k) % 14]), bx + 50 + k * 16, by + 12 - k * 2 + 4, 46, 66, 6, al * (1.0f - k * 0.2f)); break;
@@ -596,8 +613,8 @@ static void ajcCarForma(int A) {
     float bx = 268 + (i % 2) * 174, by = 36 + (i / 2) * 98, cw = i == 0 ? 56 : i == 3 ? 72 : 150, ch = i == 0 ? 84 : 72;
     float al = prof && lig(OP[i]) ? 1.0f : 0.45f;
     GfxRect r;
-    if (i == 3) { snprintf(c, sizeof c, "%s/elenco/%02d_%d.jpg", uxDirArte, A % 24, 0); r = CR(bx + 39, by + 6, 72, 72); ajImg(c, r, 36 * ajc.s, 1); }
-    else if (i == 2) { snprintf(c, sizeof c, "%s/ep/%02d_1_01.jpg", uxDirArte, A % 40); r = CR(bx, by + 6, cw, ch); ajImg(c, r, 10 * ajc.s, 1); }
+    if (i == 3) { snprintf(c, sizeof c, "%s", ajcElenco(A, 0)); r = CR(bx + 39, by + 6, 72, 72); ajImg(c, r, 36 * ajc.s, 1); }
+    else if (i == 2) { snprintf(c, sizeof c, "%s", ajcEp(A, 1)); r = CR(bx, by + 6, cw, ch); ajImg(c, r, 10 * ajc.s, 1); }
     else { r = CR(bx + (i == 0 ? 47 : 0), by + 2, cw, ch); ajImg(ajArte(i == 0 ? AJA_POSTER : AJA_FUNDO, AJ_POS[(A + i) % 14]), r, 10 * ajc.s, 1); }
     if (i == 1) gfx_cor((GfxRect){ r.x + 8 * ajc.s, r.y + r.h - 9 * ajc.s, (r.w - 16 * ajc.s) * 0.6f, 4 * ajc.s }, 0.5f, ajc.ar, ajc.ag, ajc.ab, 1);
     if (i == 4) CICON("aj_play", bx + 65, by + 28, 20, 0.9f);
@@ -845,7 +862,7 @@ static void ajcRepSeekr(int A) {
   for (i = -1; i <= 1; i++) {
     float cw = i ? 140 : 196, ch = cw * 9 / 16, cx = 320 + i * 178 - cw * 0.5f, cy = 250 - ch;
     if (i && !fita) continue;
-    snprintf(ep, sizeof ep, "%s/ep/%02d_1_%02d.jpg", uxDirArte, A % 40, i + 3);
+    snprintf(ep, sizeof ep, "%s", ajcEp(A, i + 3));
     CIMG(ep, cx, cy, cw, ch, 10, (i ? 0.6f : 1.0f) * al);
     if (!i) gfx_anel(CR(cx, cy, cw, ch), 10.0f / ch, 2 * ajc.s, 1, 1, 1, 0.9f * al);
     ajcTxt(i < 0 ? "41:10" : i > 0 ? "41:30" : "41:20", 11, !i, cx + cw * 0.5f - 16, 256, 0, (i ? 0.5f : 1.0f) * al);
