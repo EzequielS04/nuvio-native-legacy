@@ -30,6 +30,35 @@ static int aplicarProgressoDoDisco(void);
 // nunca a pega e segue lendo pelo protocolo de ordem de escrita: `n` zera
 // antes de o ponteiro trocar, e o bloco velho nao e liberado na hora.
 static pthread_mutex_t pubTrava = PTHREAD_MUTEX_INITIALIZER;
+
+// ESPERA PELA TRAVA DE PUBLICACAO, MEDIDA. trylock primeiro: o caso normal
+// (livre) nao paga relogio nenhum. So a espera real e cronometrada, e so a
+// acima de 8 ms vira linha de log (no maximo uma por segundo) — e o que separa
+// "o fio principal ficou parado esperando o catalogo" de "foi outra coisa".
+// `catFioPrincipal` e preenchido por cat_quadro (que roda no fio de desenho).
+#include <time.h>
+static pthread_t catFioPrincipal;
+static int catFioPrincipalOk;
+double cat_relogio_ms(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
+}
+static void catTravar(void) {
+  double t0, ms;
+  static double ultimoLog;
+  if (pthread_mutex_trylock(&pubTrava) == 0) return;
+  t0 = cat_relogio_ms();
+  pthread_mutex_lock(&pubTrava);
+  ms = cat_relogio_ms() - t0;
+  if (ms > 8.0 && t0 - ultimoLog > 1000.0) {
+    ultimoLog = t0;
+    printf("[perf] cat: espera de %.0f ms pela trava de publicacao (%s)\n", ms,
+           catFioPrincipalOk && pthread_equal(pthread_self(), catFioPrincipal)
+             ? "fio principal" : "outro fio");
+    fflush(stdout);
+  }
+}
 #include <string.h>
 #include <stdlib.h>
 #ifdef NV_CAT_TEST_ANTES_TRAVA
@@ -91,7 +120,8 @@ static void aposentar(CatItem *bloco) {
 // quadro que ja acabou. Sobra so o mais recente (a folga de uma troca).
 void cat_quadro(void) {
   int k;
-  pthread_mutex_lock(&pubTrava);
+  if (!catFioPrincipalOk) { catFioPrincipal = pthread_self(); catFioPrincipalOk = 1; }
+  catTravar();
   if (nAposentados > 1) {
     for (k = 0; k < nAposentados - 1; k++) free(aposentados[k]);
     aposentados[0] = aposentados[nAposentados - 1];
@@ -102,7 +132,7 @@ void cat_quadro(void) {
 
 int cat_blocos_aposentados(void) {
   int q;
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   q = nAposentados;
   pthread_mutex_unlock(&pubTrava);
   return q;
@@ -275,7 +305,7 @@ static int historico_pos(const char *imdb, const char *tipo, int criar) {
 // visto confirmado, 1 = visto confirmado.
 int cat_historico_estado_item(int indice) {
   char id[64], tipo[16];
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   if (!itens || indice < 0 || indice >= n || !itens[indice].imdb[0]) {
     pthread_mutex_unlock(&pubTrava);
     return -1;
@@ -663,6 +693,57 @@ int ajustes_idioma(void);
 // perfil 1 nao pagar um arranque sem cache por nada; o de qualquer outro
 // perfil e recusado e apagado.
 #define CACHE_VERSAO 6
+// Mesmo cabecalho, itens CODIFICADOS (zeros em corrida). Um CatItem tem ~16 KB
+// e quase tudo e zero (buffers de URL dimensionados para o pior caso): 1600
+// titulos eram 25,6 MB gravados na MEMFS dentro da trava do sistema de arquivos
+// e levados ao IndexedDB pela syncfs, SINCRONA, no fio principal — e relidos
+// por inteiro a cada abertura. A magia diferente (e nao a versao) mantem o
+// teste de versao 5 e o formato do cabecalho como estavam; uma build antiga
+// que encontre este arquivo o descarta como "outra build".
+#define CACHE_MAGIA_RLE 0x4E56434Cu
+#define RLE_ZMIN 16u   /* corrida de zeros que vale separar */
+
+/* Formato: pares {u32 zeros, u32 literal, bytes[literal]} ate cobrir `n`.
+   dst == NULL so mede. */
+static size_t rleCodificar(const unsigned char *src, size_t n, unsigned char *dst) {
+  size_t i = 0, saida = 0;
+  while (i < n) {
+    size_t z = 0, l = 0, j;
+    unsigned zz, ll;
+    while (i + z < n && src[i + z] == 0) z++;
+    j = i + z;
+    while (j + l < n) {
+      size_t k = 0;
+      if (src[j + l] == 0) {
+        while (j + l + k < n && src[j + l + k] == 0 && k < RLE_ZMIN) k++;
+        if (k >= RLE_ZMIN || j + l + k >= n) break;
+        l += k;       /* zeros curtos ficam no literal */
+        continue;
+      }
+      l++;
+    }
+    zz = (unsigned)z; ll = (unsigned)l;
+    if (dst) { memcpy(dst + saida, &zz, 4); memcpy(dst + saida + 4, &ll, 4); memcpy(dst + saida + 8, src + j, l); }
+    saida += 8 + l;
+    i = j + l;
+  }
+  return saida;
+}
+static int rleDecodificar(const unsigned char *enc, size_t encN, unsigned char *dst, size_t n) {
+  size_t i = 0, o = 0;
+  memset(dst, 0, n);
+  while (i < encN) {
+    unsigned zz, ll;
+    if (i + 8 > encN) return 0;
+    memcpy(&zz, enc + i, 4); memcpy(&ll, enc + i + 4, 4);
+    i += 8;
+    if (zz > n - o || ll > n - o - zz || ll > encN - i) return 0;
+    o += zz;
+    memcpy(dst + o, enc + i, ll);
+    o += ll; i += ll;
+  }
+  return o <= n;
+}
 #define CACHE_VERSAO_SO_P1 5
 
 typedef struct {
@@ -822,14 +903,33 @@ int cat_gravar_cache_se_identidade(const char *dirArte, const char *donoEsperado
   identidadeAtual(c.usuario, sizeof c.usuario, &c.perfil);
   if (!donoEsperado || strcmp(c.usuario, donoEsperado) || c.perfil != perfilEsperado)
     return 0;
-  CACHE_FS_TRAVAR();
-  f = fopen(tmp, "wb");
-  if (!f) { CACHE_FS_LIBERAR(); return 0; }
-  if (fwrite(&c, sizeof c, 1, f) != 1 ||
-      fwrite(itens, sizeof(CatItem), (size_t)n, f) != (size_t)n ||
-      (nFils > 0 &&
-       fwrite(fils, sizeof(CatFileira), (size_t)nFils, f) != (size_t)nFils)) {
-    fclose(f); remove(tmp); CACHE_FS_LIBERAR(); return 0;
+  { /* CODIFICA FORA DA TRAVA DO SISTEMA DE ARQUIVOS: so o fwrite fica dentro. */
+    double t0 = cat_relogio_ms(), t1, t2;
+    size_t rawN = sizeof(CatItem) * (size_t)n, encN;
+    unsigned char *enc;
+    unsigned long long encN64;
+    encN = rleCodificar((const unsigned char *)itens, rawN, NULL);
+    enc = malloc(encN ? encN : 1);
+    if (!enc) return 0;
+    rleCodificar((const unsigned char *)itens, rawN, enc);
+    c.magia = CACHE_MAGIA_RLE;
+    encN64 = encN;
+    t1 = cat_relogio_ms();
+    CACHE_FS_TRAVAR();
+    f = fopen(tmp, "wb");
+    if (!f) { CACHE_FS_LIBERAR(); free(enc); return 0; }
+    if (fwrite(&c, sizeof c, 1, f) != 1 ||
+        fwrite(&encN64, sizeof encN64, 1, f) != 1 ||
+        fwrite(enc, 1, encN, f) != encN ||
+        (nFils > 0 &&
+         fwrite(fils, sizeof(CatFileira), (size_t)nFils, f) != (size_t)nFils)) {
+      fclose(f); remove(tmp); CACHE_FS_LIBERAR(); free(enc); return 0;
+    }
+    free(enc);
+    t2 = cat_relogio_ms();
+    printf("[perf] cat cache: %zu KB -> %zu KB, codifica %.1f ms (fora da trava), escreve %.1f ms (dentro da trava do FS)\n",
+           rawN / 1024, encN / 1024, t1 - t0, t2 - t1);
+    fflush(stdout);
   }
   fclose(f);
   // A profile/account switch during serialization must not publish the old
@@ -870,7 +970,7 @@ int cat_ler_cache(const char *dirArte) {
   if (!f) return 0;
   if (fread(&c, sizeof c, 1, f) != 1) { fclose(f); return 0; }
   // RECUSA em vez de ler torto. Struct diferente = arquivo de outra build.
-  if (c.magia != CACHE_MAGIA ||
+  if ((c.magia != CACHE_MAGIA && c.magia != CACHE_MAGIA_RLE) ||
       !(c.versao == CACHE_VERSAO ||
         (c.versao == CACHE_VERSAO_SO_P1 && c.perfil == 1)) ||
       c.tamItem != sizeof(CatItem) || c.tamFileira != sizeof(CatFileira) ||
@@ -910,7 +1010,20 @@ int cat_ler_cache(const char *dirArte) {
   }
   novo = malloc(sizeof(CatItem) * (size_t)(c.nItens > 0 ? c.nItens : 1));
   if (!novo) { fclose(f); return 0; }
-  if (fread(novo, sizeof(CatItem), (size_t)c.nItens, f) != (size_t)c.nItens) {
+  if (c.magia == CACHE_MAGIA_RLE) {
+    unsigned long long encN64 = 0;
+    size_t rawN = sizeof(CatItem) * (size_t)c.nItens;
+    unsigned char *enc;
+    if (fread(&encN64, sizeof encN64, 1, f) != 1 || encN64 > (unsigned long long)rawN * 2 + 64) {
+      free(novo); fclose(f); remove(caminho); return 0;
+    }
+    enc = malloc(encN64 ? (size_t)encN64 : 1);
+    if (!enc || fread(enc, 1, (size_t)encN64, f) != (size_t)encN64 ||
+        !rleDecodificar(enc, (size_t)encN64, (unsigned char *)novo, rawN)) {
+      free(enc); free(novo); fclose(f); remove(caminho); return 0;
+    }
+    free(enc);
+  } else if (fread(novo, sizeof(CatItem), (size_t)c.nItens, f) != (size_t)c.nItens) {
     free(novo); fclose(f); remove(caminho); return 0;
   }
   if (c.nFileiras > 0) {
@@ -967,7 +1080,7 @@ unsigned long cat_assinatura_de(const CatItem *lista, int qtd,
 
 unsigned long cat_assinatura(void) {
   unsigned long h;
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   h = cat_assinatura_de(itens, n, fils, nFils);
   pthread_mutex_unlock(&pubTrava);
   return h;
@@ -1273,7 +1386,7 @@ static void tirarDaJanela(int r, int indice) {
 int cat_tirar_item_da_fileira(int indice) {
   int r;
   if (indice < 0 || indice >= n) return 0;
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   for (r = 0; r < nFils; r++) {
     CatFileira *f = &fils[r];
     char nome[sizeof f->chave];
@@ -1347,7 +1460,7 @@ static int removidoVence(const CatItem *c, const void *u) {
 int cat_tirar_continuar(const char *imdb) {
   int k;
   if (!imdb || !imdb[0]) return 0;
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   k = podarContinuar(mesmaObraQue, imdb);
   pthread_mutex_unlock(&pubTrava);
   printf("[cat] %s tirado de Continuar assistindo: %d card(s)\n", imdb, k);
@@ -1447,7 +1560,7 @@ int cat_copiar_por_id(const char *id, const char *tipo, CatItem *saida) {
   int i, melhor = -1;
   if (!id || !*id || !saida) return 0;
   tam = idbase_len(id);
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   for (i = 0; itens && i < n; i++) {
     if (idbase_len(itens[i].imdb) != tam || strncmp(itens[i].imdb, id, tam) ||
         (tipo && *tipo && strcmp(tipo_base(itens[i].tipo), tipo_base(tipo)))) continue;
@@ -1465,7 +1578,7 @@ const CatFileira *cat_fileira(int r) {
 
 int cat_home_apenas_fixas(void) {
   int r, i, inicial = 1;
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   for (r = 0; r < nFils; r++)
     if (strcmp(fils[r].chave, "continue_watching") &&
         strcmp(fils[r].chave, "social_activity")) { inicial = 0; break; }
@@ -1487,7 +1600,7 @@ int cat_copiar_fileira(const char *chave, CatItem *saida, int max,
                        CatFileira *meta) {
   int r, qtd;
   if (!chave || !*chave || !saida || max < 1) return 0;
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   for (r = 0; r < nFils; r++) {
     CatFileira *f = &fils[r];
     if (strcmp(f->chave, chave) || f->n < 1) continue;
@@ -1524,7 +1637,7 @@ static void definir_na_lista(int i, int naLista) {
 
 void cat_definir_na_lista(int i, int naLista) {
   CAT_TESTE_ANTES_TRAVA();
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   definir_na_lista(i, naLista);
   pthread_mutex_unlock(&pubTrava);
 }
@@ -1537,7 +1650,7 @@ int cat_definir_na_lista_imdb(const char *imdb, int naLista) {
   if (!imdb || !imdb[0]) return 0;
   snprintf(id, sizeof id, "%s", imdb);
   CAT_TESTE_ANTES_TRAVA();
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   for (i = 0; itens && i < n; i++)
     if (!strcmp(itens[i].imdb, id)) { definir_na_lista(i, naLista); k++; }
   pthread_mutex_unlock(&pubTrava);
@@ -1549,7 +1662,7 @@ int cat_imdb_na_lista(const char *imdb) {
   if (!imdb || !imdb[0]) return 0;
   snprintf(id, sizeof id, "%s", imdb);
   CAT_TESTE_ANTES_TRAVA();
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   for (i = 0; itens && i < n; i++)
     if (itens[i].naLista && !strcmp(itens[i].imdb, id)) { achou = 1; break; }
   pthread_mutex_unlock(&pubTrava);
@@ -1563,7 +1676,7 @@ void cat_atualizar_item(int i, const CatItem *item) {
   if (!item) return;
   copia = *item;
   CAT_TESTE_ANTES_TRAVA();
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   if (itens && i >= 0 && i < n &&
       !strcmp(itens[i].imdb, copia.imdb) &&
       (!tipo_certo(itens[i].tipo) || !strcmp(tipo_base(itens[i].tipo), tipo_base(copia.tipo)))) {
@@ -1592,7 +1705,7 @@ int cat_acrescentar_lote(const CatItem *v, int qtd, int *saidaIdx) {
   // abaixo copiava o `n` novo para dentro do bloco do `n` velho e passava do
   // fim — heap corrompido, abort no proximo free. tests/catcorrida.sh.
   CAT_TESTE_ANTES_TRAVA();
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   if (n < 1) { pthread_mutex_unlock(&pubTrava); return 0; }
   if (n + qtd > CAT_MAX) qtd = CAT_MAX - n;
   if (qtd < 1) { pthread_mutex_unlock(&pubTrava); return 0; }
@@ -1623,7 +1736,7 @@ int cat_mesclar_listas(const CatItem *v, int qtd) {
   CatItem *novo;
   int m, k, i, marcados = 0, novos = 0;
   if (!v || qtd < 1) return 0;
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   // NADA MUDA, NADA SE COPIA. E o caso comum da volta silenciosa (a mesma
   // lista de cinco minutos atras): cada troca de bloco copia o catalogo
   // inteiro, e o CatItem passa de 15 KB.
@@ -1676,7 +1789,7 @@ int cat_acrescentar(const CatItem *item) {
   if (!item) return -1;
   // Mesma regra de cat_acrescentar_lote: `n` so com a trava.
   CAT_TESTE_ANTES_TRAVA();
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   if (n < 1 || n >= CAT_MAX) { pthread_mutex_unlock(&pubTrava); return -1; }
   novoN = n + 1;
   novo = malloc(sizeof(CatItem) * (size_t)novoN);
@@ -1703,7 +1816,7 @@ void cat_republicar_fileiras(const CatFileira *novasFils, int nNovas) {
   int k, q, v = 0;
   if (!novasFils || nNovas < 1 || n < 1) return;
   q = nNovas > CAT_FIL_MAX ? CAT_FIL_MAX : nNovas;
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   // A JANELA QUE ESTA PUBLICADA VENCE A DA MONTAGEM, para a mesma chave. Quem
   // chama (desc_remontar_fileiras) republica o retrato da ultima montagem
   // completa, e ele nao sabe do que mudou depois SEM REDE: um card tirado de
@@ -1768,6 +1881,7 @@ void cat_republicar_fileiras(const CatFileira *novasFils, int nNovas) {
 
 void cat_definir_tudo(const CatItem *lista, int qtd,
                       const CatFileira *novasFils, int nNovas) {
+  double tIni = cat_relogio_ms(), tFora = 0, tTrava = 0, tProg = 0;
   if (qtd < 0 || qtd > CAT_MAX || (qtd > 0 && !lista)) return;
   // TROCA DE BLOCO, sem realloc no lugar.
   //
@@ -1807,7 +1921,9 @@ void cat_definir_tudo(const CatItem *lista, int qtd,
     // As fileiras caem JUNTO com `n`. Elas sao janelas (ini,n) no vetor de
     // itens; deixar as antigas de pe por um quadro enquanto o vetor troca faz o
     // desenho ler fora da faixa.
-    pthread_mutex_lock(&pubTrava);
+    tFora = cat_relogio_ms() - tIni;
+    catTravar();
+    tTrava = cat_relogio_ms();
     __atomic_store_n(&n, 0, __ATOMIC_RELEASE);
     nFils = 0;
     aposentar(itens);
@@ -1835,17 +1951,22 @@ void cat_definir_tudo(const CatItem *lista, int qtd,
     // logo abaixo de qualquer jeito.
     podarContinuar(removidoVence, NULL);
     pthread_mutex_unlock(&pubTrava);
+    tTrava = cat_relogio_ms() - tTrava;
   }
   // Episodios do catalogo anterior nao valem para o novo: os indices mudaram.
   nEps = 0;
   zerarFaixas(nAlocado);
   catRevisao++; mudou();
   (void)0;
+  tProg = cat_relogio_ms();
   // O progresso e por imdb e vive em progresso.c, entao sobrevive a troca —
   // mas precisa ser reaplicado, porque os itens novos nasceram zerados. E aqui
   // que uma linha da conta que antes nao casava com nada passa a casar, quando
   // o titulo dela entra no catalogo.
   aplicarProgressoDoDisco();
+  printf("[perf] cat_definir_tudo: %d itens, fora da trava %.1f ms, DENTRO da trava %.1f ms, progresso do disco %.1f ms, total %.1f ms\n",
+         qtd, tFora, tTrava, cat_relogio_ms() - tProg, cat_relogio_ms() - tIni);
+  fflush(stdout);
 }
 
 // TROCA SO A JANELA DE "CONTINUAR ASSISTINDO" (issue #38).
@@ -1872,7 +1993,7 @@ void cat_trocar_continuar(const CatItem *lista, int qtd) {
   CatItem *novo;
   int r, cw = -1, cwIni = 0, cwN = 0, delta, novoN, nv = 0;
   if (qtd < 0) qtd = 0;
-  pthread_mutex_lock(&pubTrava);
+  catTravar();
   for (r = 0; r < nFils; r++)
     if (!strcmp(fils[r].chave, "continue_watching")) {
       cw = r; cwIni = fils[r].ini; cwN = fils[r].n; break;

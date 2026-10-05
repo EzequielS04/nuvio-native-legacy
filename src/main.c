@@ -493,6 +493,10 @@ EM_ASYNC_JS(void, nv_ceder_quadro, (), {
 });
 #endif
 
+static int nvPrimeiroQuadroFeito;
+#ifdef __EMSCRIPTEN__
+static int window_primeiro_quadro_feito(void) { return nvPrimeiroQuadroFeito; }
+#endif
 int main(int argc, char **argv) {
   // NUMERO COM PONTO, SEMPRE. O host .NET do .tpk poe o processo no locale do
   // idioma da TV, e em alemao/portugues/russo o printf("%.2f") sai "0,50" e o
@@ -1060,6 +1064,19 @@ int main(int argc, char **argv) {
     // aqui nenhum ponteiro de item do quadro anterior esta mais na mao, entao
     // os blocos trocados fora durante ele podem morrer. Ver cat_quadro.
     cat_quadro();
+#ifdef __EMSCRIPTEN__
+    // FASE ATUAL para o observer de longtask do shell (window.__nvFase): a
+    // tarefa longa e atribuida a quem estava em cena quando ela foi vista.
+    // So cruza para o JS quando a fase muda (poucas vezes por sessao).
+    { static const char *faseAnt;
+      static int jaPrimeiro;
+      const char *fase;
+      if (!jaPrimeiro && window_primeiro_quadro_feito()) jaPrimeiro = 1;
+      fase = !jaPrimeiro ? "startup" : (player_aberto() ? "player"
+           : (desc_montando() ? "catalog" : "home"));
+      if (fase != faseAnt) { faseAnt = fase; EM_ASM({ window.__nvFase = UTF8ToString($0); }, fase); }
+    }
+#endif
     // Enquanto o detalhe existe ele fica com o teclado inteiro: a home
     // continua desenhada por baixo, mas nao deve reagir ao D-pad.
     while (SDL_PollEvent(&e)) {
@@ -1350,7 +1367,7 @@ int main(int argc, char **argv) {
     // Bandeira PROPRIA e nao `if (!quadros)`: `quadros` zera a cada relatorio
     // de 3 s, entao aquilo carimbaria "primeiro quadro" tres vezes por minuto.
     { static int jaCarimbou;
-      if (!jaCarimbou) { jaCarimbou = 1; marco("primeiro quadro na tela");
+      if (!jaCarimbou) { jaCarimbou = 1; nvPrimeiroQuadroFeito = 1; marco("primeiro quadro na tela");
 #ifdef __EMSCRIPTEN__
         // Chegou: zera o contador de arranques falhados (tizen-shell.html).
         EM_ASM({ try { localStorage.setItem('nv-boot-falhas', '0'); } catch (e) {} });
@@ -1442,10 +1459,10 @@ int main(int argc, char **argv) {
           longN    = EM_ASM_INT({ var L = window.__nvLong; return L ? (L.n | 0) : -1; });
           longSoma = EM_ASM_INT({ var L = window.__nvLong; return L ? (L.soma | 0) : -1; });
           EM_ASM({ var L = window.__nvLong; if (!L) return;
-                   var q = L.quem || "-"; var i = 0;
+                   var q = (L.quem || "-") + "@" + (L.fase || "?"); var i = 0;
                    for (; i < q.length && i < 62; i++) HEAPU8[$0 + i] = q.charCodeAt(i) & 127;
                    HEAPU8[$0 + i] = 0;
-                   L.max = 0; L.n = 0; L.soma = 0; L.quem = ""; }, quem);
+                   L.max = 0; L.n = 0; L.soma = 0; L.quem = ""; L.fase = ""; }, quem);
           printf("[navegador] js=%d/%d MiB raf-max=%d ms raf-lentos=%d escondida=%d"
                  " longtask-max=%d ms n=%d soma=%d ms quem=%s c-max=%d ms fora-max=%d ms\n",
                  jsMB, jsLimMB, rafMax, rafLentos, escondida, longMax, longN, longSoma, quem,
