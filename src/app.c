@@ -1694,6 +1694,20 @@ static int azulPodeAbrirSalvos(const SDL_Event *e) {
   }
 }
 
+// Abre/fecha o painel de Salvos+Avisos pelo caminho da AZUL. `comModal` 0 e o
+// "Cima na pagina do titulo": abre direto, sem o modal de cartao da ilha.
+static void alternarSalvos(int comModal) {
+  static Uint32 ultimoToque;
+  Uint32 agoraTecla = SDL_GetTicks();
+  float ix, iy, iw, ih;
+  if (agoraTecla - ultimoToque < 400) return;   // repeticao do firmware
+  ultimoToque = agoraTecla;
+  if (spainel_aberto()) spainel_fechar();
+  else if (comModal && (ilha_cartao_na_tela() || ilha_atividade_expansivel()) && ilha_modal_abrir()) {}
+  else if (ajustes_relogio_ligado() && ilha_rect(&ix, &iy, &iw, &ih)) spainel_abrir_de(ix, iy, iw, ih);
+  else spainel_abrir();
+}
+
 void app_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
   ilhacart_validar_identidade();
@@ -1792,15 +1806,7 @@ void app_evento(const SDL_Event *e) {
       ((ilha_cartao_na_tela() || ilha_atividade_expansivel()) && !spainel_aberto() &&
        (e->key.keysym.scancode==NV_SCANCODE_CH_UP || e->key.keysym.sym==SDLK_PAGEUP))) &&
      azulPodeAbrirSalvos(e)) {
-    static Uint32 ultimoToque;
-    Uint32 agoraTecla = SDL_GetTicks();
-    float ix, iy, iw, ih;
-    if (agoraTecla - ultimoToque < 400) return;   // repeticao do firmware
-    ultimoToque = agoraTecla;
-    if(spainel_aberto())spainel_fechar();
-    else if ((ilha_cartao_na_tela() || ilha_atividade_expansivel()) && ilha_modal_abrir()) {}
-    else if (ajustes_relogio_ligado() && ilha_rect(&ix, &iy, &iw, &ih)) spainel_abrir_de(ix, iy, iw, ih);
-    else spainel_abrir();
+    alternarSalvos(1);
     return;
   }
 
@@ -1970,6 +1976,8 @@ void app_evento(const SDL_Event *e) {
   if (detail_aberto() && menu_aberto()) { menu_evento(e); return; }
   if (detail_aberto()) {
     detail_evento(e);
+    // CIMA no alto da pagina (controle sem tecla colorida): o mesmo painel.
+    if (detail_aberto() && detail_pediu_social() && azulPodeAbrirSalvos(e)) alternarSalvos(0);
     // No MESMO evento, como a home: diferido um quadro, as teclas seguintes
     // do controle ainda cairiam na pagina.
     if (detail_aberto() && detail_pediu_menu() && sidebar_permitida()) {
@@ -4011,12 +4019,11 @@ static int relogioCabe(void) {
   // ilha de categorias — a tela nao tem mais titulo ali. Com folha, vinculo ou
   // teclado por cima ele some, como na home com um cartao na frente.
   if (tela == TELA_AJUSTES) return !menu_aberto() && ajustes_relogio_cabe();
-  if (tela == TELA_HOME) {
-    if (!homePronta) return 0;
-    // Carrossel da Apple TV (Dinamica) sem expandir: sem relogio. A pagina do
-    // titulo e "Ver tudo" estao por cima da home e mantem o relogio.
-    if (!detail_aberto() && !vertudo_aberta() && home_relogio_oculto()) return 0;
-  }
+  // CARROSSEL DE TITULOS DA APPLE TV (cartao de vizinhos, sem expandir): sem
+  // relogio (dono, 04/10). Ele volta, pela animacao da ilha, quando o cartao
+  // estica para a pagina.
+  if (detail_aberto() && detail_relogio_oculto()) return 0;
+  if (tela == TELA_HOME) { if (!homePronta) return 0; }
   else if (tela != TELA_EXPLORAR && tela != TELA_BUSCA &&
            tela != TELA_BIBLIOTECA && tela != TELA_PERFIL && tela != TELA_SOCIAL &&
            tela != TELA_ADDONS && tela != TELA_PLUGINS && tela != TELA_AGENDA) return 0;

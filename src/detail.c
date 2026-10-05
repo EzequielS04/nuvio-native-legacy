@@ -249,6 +249,7 @@ static Uint32 trailerPrazo = 0;
 // 03/10: "pode abrir por cima"). Antes a tecla ligava `saindo` junto e a
 // pagina fechava para a barra abrir sobre a tela de baixo. Voltar/DIREITA na
 // barra devolvem o foco aqui; um destino escolhido fecha a pagina (app.c).
+static int    pediuSocial = 0; // CIMA no alto da pagina: abrir Salvos/Avisos (ver app.c)
 static int    pediuMenu = 0;   // ESQUERDA na borda: abrir a barra por cima (ver app.c)
 // A barra esta aberta por cima (detail_sob_menu): o trailer segue tocando,
 // MUDO, e o som volta quando ela fecha. `somAntesMenu` lembra se tinha som.
@@ -1435,6 +1436,8 @@ static int carDesenhaFundo(void) {
 }
 
 int detail_aberto(void) { return aberto; }
+int detail_relogio_oculto(void) { return aberto && carro && !carCheia && nivel == 0; }
+int detail_pediu_social(void) { int p = pediuSocial; pediuSocial = 0; return p; }
 
 // 0..1 de quanto o detalhe ja tomou a tela. A home le isto para DESCER as
 // fileiras enquanto ele entra: e o movimento que o dono descreve como "so os
@@ -2413,6 +2416,7 @@ void detail_evento(const SDL_Event *e) {
     // CIMA na linha de botoes nao fazia nada; com uma reacao pendente ele abre
     // a pergunta (reacao.h). Sem pendencia, continua sem fazer nada.
     if (k == SDLK_UP && reacao_detalhe_abrir(cat_item(idx))) return;
+    if (k == SDLK_UP && !e->key.repeat) { pediuSocial = 1; return; }
     // CARROSSEL: a primeira seta para baixo so estica o cartao (ver carCheia).
     if (k == SDLK_DOWN && carro && !carCheia) { carCheia = 1; return; }
     if (k == SDLK_DOWN) {

@@ -572,6 +572,12 @@ int ilha_evento(const SDL_Event *e) {
 static void pontFoco(int i, int b) { (void)b; modalFoco = i; }
 static void pontFora(int a, int b) { (void)a; (void)b; ilha_modal_fechar(0); }
 static void pontSalvos(int a, int b) { (void)a; (void)b; if (modalAberto) pedir(ILHA_PEDIU_SALVOS); }
+// Magic Remote: o clique no relogio parado abre o painel de Salvos/Avisos
+// (o mesmo pedido do modal; app.c o atende de qualquer tela fora do player).
+static void pontRelogio(int a, int b) {
+  (void)a; (void)b;
+  pedido = ILHA_PEDIU_SALVOS; pedidoQual = -1; memset(&pedidoC, 0, sizeof pedidoC);
+}
 static void pontPilula(int a, int b) { (void)a; (void)b; ilha_modal_abrir(); }
 static void pontAviso(int a, int b) { (void)a; (void)b; abrirDoAviso(); }
 
@@ -1932,6 +1938,7 @@ static void ilha_desenharCorpo_(Uint32 agora) {
     gfx_sem_recorte();
     // Magic Remote: o clique na pilula com um cartao abre o modal.
     if (modalT <= 0.0f && (mostra == M_CARTAO || (mostra == M_ATIVIDADE && ilha_atividade_expansivel())) && A > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontPilula, 0, 0);
+    if (modalT <= 0.0f && mostra == M_RELOGIO && relogioQuer && A > 0.5f) ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontRelogio, 0, 0);
     // E num aviso com modal (ou que abre um cartao), o mesmo clique abre o dele.
     if (modalT <= 0.0f && mostra == M_AVISO && temCur && (cur.temModal || cur.cartao || cur.acao) && A > 0.5f)
       ponteiro_alvo(r.x, r.y, r.w, r.h, NULL, pontAviso, 0, 0);

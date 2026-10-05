@@ -80,6 +80,7 @@
 
 #include "dados.h"
 #include "ilha.h"
+#include "salvospainel.h"
 
 #define IMDB_SERIE "tt12637874"
 #define IMDB_FILME "tt33612209"
@@ -310,6 +311,13 @@ static void quadros(int n) {
     // NUVIO_SHOT_RELOGIO=1: the clock island over the page, as app.c draws it.
     if (getenv("NUVIO_SHOT_RELOGIO")) {
       ilha_relogio_visivel(1); ilha_posicionar(1); ilha_desenhar(SDL_GetTicks());
+    }
+    // NUVIO_SHOT_PAINEL=1: o painel de Salvos/Avisos aberto POR CIMA da pagina,
+    // como app.c o desenha agora (sem o `!detail_aberto()` de antes).
+    if (getenv("NUVIO_SHOT_PAINEL")) {
+      if (!spainel_aberto()) spainel_abrir();
+      spainel_atualizar(1.0f / 60.0f, SDL_GetTicks());
+      if (spainel_visivel()) spainel_desenhar(SDL_GetTicks());
     }
     if (i < n - 1) SDL_GL_SwapWindow(janela);
   }
