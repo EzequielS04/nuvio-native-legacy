@@ -171,17 +171,28 @@ static const char *motivoTV(int i) {
 enum { PIL_OFF = 0, PIL_PROCURANDO, PIL_SINCRONIZANDO, PIL_APLICADA, PIL_FALHOU };
 #define PIL_MIN_MS      900u
 #define PIL_APLICADA_MS 3600u
+#define PIL_SEMSYNC_MS  6000u   // "nao sincronizada" fica mais: e um aviso, nao um sucesso
 #define PIL_FALHOU_MS   8000u
 #define PIL_BAIXAR_TETO 20000u   // a legenda escolhida nao baixou: desiste da narracao
+// A referencia de um longa leva minutos (um Range por fala, legsync.c): a
+// pilula nao fica "Sincronizando…" esse tempo todo. Passado isto ela diz a
+// verdade de agora ("nao sincronizada") e some; o plano segue em segundo plano
+// e, se ele aceitar depois, a pilula volta com "Legenda sincronizada · +x s".
+#define PIL_SINC_MAX    12000u
 static int emTroca;
-static int pilEstado, pilRastreia, pilBusca, pilSemSync, pilFalhaBaixar, pilTroca;
+// pilFinal: 0 externa nao sincronizada, 1 externa sincronizada (offset aceito
+// em vigor), 2 embutida (acompanha o video por natureza).
+static int pilEstado, pilRastreia, pilBusca, pilFinal, pilFalhaBaixar, pilTroca;
+static char pilTexto[200];
 static Uint32 pilDesde, pilIniciou;
 static char pilIdioma[16], pilProvedor[64];
 static uint64_t pilHash;
+static int pilEspera;            // o plano segue depois da pilula: avisar se aceitar (pilZerar nao apaga)
+static uint64_t pilEsperaHash;   // a legenda que o plano esta tentando (para legauto_lembrar)
 
 static Uint32 pilAgora(void) { return SDL_GetTicks(); }
 static void pilIr(int e, Uint32 agora) { if (pilEstado != e) { pilEstado = e; pilDesde = agora ? agora : 1u; } }
-static void pilZerar(void) { pilEstado = pilRastreia = pilBusca = pilSemSync = pilFalhaBaixar = 0; pilTroca = 0; pilHash = 0; }
+static void pilZerar(void) { pilEstado = pilRastreia = pilBusca = pilFinal = pilFalhaBaixar = 0; pilTroca = 0; pilHash = 0; pilTexto[0] = 0; }
 
 // Nome do provedor sem o sufixo de hospedagem ("AIOStreams | ElfHosted" -> "AIOStreams").
 static void pilProvedorCurto(const char *src, char *dst, size_t n) {
@@ -203,7 +214,7 @@ static void pilFalhou(const char *idioma, Uint32 agora) {
 }
 static void pilExterna(const Legenda *l) {
   Uint32 agora = pilAgora();
-  pilBusca = 0; pilRastreia = 1; pilSemSync = 0; pilFalhaBaixar = 0;
+  pilBusca = 0; pilRastreia = 1; pilFinal = 0; pilFalhaBaixar = 0; pilEspera = 0;
   snprintf(pilIdioma, sizeof pilIdioma, "%s", l->idioma);
   pilProvedorCurto(l->provedor[0] ? l->provedor : l->rotulo, pilProvedor, sizeof pilProvedor);
   pilHash = legsync_hash_url(l->url);
@@ -212,33 +223,61 @@ static void pilExterna(const Legenda *l) {
   pilIr(PIL_PROCURANDO, agora);
 }
 static void pilEmbutida(const char *rotulo, Uint32 agora) {
-  pilBusca = pilRastreia = 0; pilSemSync = 0;
+  pilBusca = pilRastreia = 0; pilFinal = 2; pilEspera = 0;
   snprintf(pilProvedor, sizeof pilProvedor, "%s", rotulo && *rotulo ? rotulo : i18n("Embutida"));
   pilIr(PIL_APLICADA, agora);
 }
 
+static void pilLembrar(void) {
+  const CatItem *ci = cat_item(player_indice());
+  if (ci && pilHash) legauto_lembrar(ci->imdb[0] ? ci->imdb : ci->titulo, pilIdioma, pilHash);
+}
+
 static void pilAtualizar(Uint32 agora) {
   int quer;
+  if (!player_aberto()) pilEspera = 0;
+  // Resultado que chegou DEPOIS da pilula sumir: so um aceito em vigor volta a
+  // falar; recusa/teto ja foram ditos ("nao sincronizada").
+  if (pilEspera && pilEstado == PIL_OFF) {
+    LegSyncVisao v = legsync_visao(0);
+    if (v.autoFase == 2 && v.fase == LEGSYNC_ACEITA) {
+      pilEspera = 0; pilRastreia = 0; pilHash = pilEsperaHash;
+      pilFinal = legsync_pilula_final(&v, pilProvedor, pilTexto, sizeof pilTexto);
+      pilLembrar();
+      pilIr(PIL_APLICADA, agora);
+    } else if (v.autoFase != 1) pilEspera = 0;
+    return;
+  }
   if (pilEstado == PIL_OFF) return;
   if (!player_aberto() || (pilBusca && !legAuto)) { pilZerar(); return; }
   if (pilRastreia) {
     LegSyncVisao v = legsync_visao(0);
     if (v.fase == LEGSYNC_AGUARDANDO) quer = PIL_PROCURANDO;
     else if (v.autoFase == 1) quer = PIL_SINCRONIZANDO;
-    else { quer = PIL_APLICADA; pilSemSync = v.autoFase == 3; }
+    else quer = PIL_APLICADA;
     if (quer == PIL_PROCURANDO && agora - pilIniciou > PIL_BAIXAR_TETO) { pilFalhaBaixar = 1; pilFalhou(pilIdioma, agora); return; }
-    if (quer == PIL_APLICADA && v.autoFase == 2 && pilHash) {
-      const CatItem *ci = cat_item(player_indice());
-      if (ci) legauto_lembrar(ci->imdb[0] ? ci->imdb : ci->titulo, pilIdioma, pilHash);
+    if (quer == PIL_APLICADA && v.autoFase == 2 && pilHash) pilLembrar();
+    // Leitura longa: a pilula diz o estado de agora e libera a tela; o plano
+    // continua e pilEspera traz o aceite tardio de volta.
+    if (pilEstado == PIL_SINCRONIZANDO && quer == PIL_SINCRONIZANDO && agora - pilDesde >= PIL_SINC_MAX) {
+      pilEspera = 1; pilEsperaHash = pilHash; pilTroca = 0; pilIr(PIL_APLICADA, agora);
     }
     // so avanca (nunca volta a "Procurando" por oscilacao) e respeita o tempo minimo
     if (quer != pilEstado && (pilEstado == PIL_PROCURANDO || (pilEstado == PIL_SINCRONIZANDO && quer == PIL_APLICADA) ||
-                              (pilEstado == PIL_APLICADA && quer == PIL_SINCRONIZANDO && pilTroca)) &&
+                              (pilEstado == PIL_APLICADA && quer == PIL_SINCRONIZANDO && pilTroca && !pilEspera)) &&
         agora - pilDesde >= PIL_MIN_MS)
       pilIr(quer, agora);
-    else if (pilEstado == PIL_APLICADA && quer == PIL_APLICADA) pilSemSync = v.autoFase == 3;
+    // O texto final sai do estado REAL: "sincronizada" so com o offset aceito
+    // em vigor (legsync_pilula_final); recusa, sem referencia, teto de 45 s e
+    // sem plano dizem "nao sincronizada".
+    if (pilEstado == PIL_APLICADA) {
+      int antes = pilFinal;
+      pilFinal = legsync_pilula_final(&v, pilProvedor, pilTexto, sizeof pilTexto);
+      if (pilFinal && !antes) pilDesde = agora | 1u;   // aceitou com a pilula de pe: o tempo de ler
+      if (pilFinal || v.autoFase != 1) pilEspera = 0;
+    }
   }
-  if (pilEstado == PIL_APLICADA && agora - pilDesde >= PIL_APLICADA_MS) pilZerar();
+  if (pilEstado == PIL_APLICADA && agora - pilDesde >= (pilFinal == 0 ? PIL_SEMSYNC_MS : PIL_APLICADA_MS)) pilZerar();
   else if (pilEstado == PIL_FALHOU && agora - pilDesde >= PIL_FALHOU_MS) pilZerar();
 }
 
@@ -253,11 +292,19 @@ int faixas_pilula_tecla(const SDL_Event *e) {
 }
 
 #ifdef NV_SHOT_HOOKS
-// Capturas: poe a pilula num estado fixo (1 procurando, 2 sincronizando, 3 aplicada, 4 falhou, 0 apaga).
+// Capturas: poe a pilula num estado fixo (1 procurando, 2 sincronizando,
+// 3 aplicada e sincronizada +2,5 s, 4 falhou, 5 aplicada sem sincronia, 0 apaga).
 void faixas_shot_pilula(int estado, const char *idioma, const char *provedor, Uint32 agora) {
   pilZerar();
   snprintf(pilIdioma, sizeof pilIdioma, "%s", idioma ? idioma : "");
   snprintf(pilProvedor, sizeof pilProvedor, "%s", provedor ? provedor : "");
+  if (estado == 3 || estado == 5) {
+    LegSyncVisao v;
+    memset(&v, 0, sizeof v);
+    v.fase = estado == 3 ? LEGSYNC_ACEITA : LEGSYNC_RECUSADA; v.offsetAutoMs = 2500;
+    pilFinal = legsync_pilula_final(&v, pilProvedor, pilTexto, sizeof pilTexto);
+    estado = PIL_APLICADA;
+  }
   pilEstado = estado; pilDesde = agora | 1u;
 }
 #endif
@@ -277,8 +324,13 @@ static void pilPedir(void) {
       snprintf(texto, sizeof texto, "%s", i18n("Sincronizando…"));
       p.respira = 1; break;
     case PIL_APLICADA:
-      snprintf(texto, sizeof texto, i18n(pilSemSync ? "Legenda aplicada · %s · sem ajuste de tempo" : "Legenda aplicada · %s"), pilProvedor);
-      p.icone = "pl_check"; p.corIcone = 2; break;
+      // Embutida: acompanha o video. Externa: so o texto que legsyncui montou
+      // do estado real; sem sincronia o icone e o aviso ambar, nunca o check.
+      if (pilFinal == 2 || !pilTexto[0]) snprintf(texto, sizeof texto, i18n("Legenda aplicada · %s"), pilProvedor);
+      else snprintf(texto, sizeof texto, "%s", pilTexto);
+      if (pilFinal == 0 && pilTexto[0]) { p.icone = "pl_triangle-alert"; p.corIcone = 1; }
+      else { p.icone = "pl_check"; p.corIcone = 2; }
+      break;
     default:
       snprintf(texto, sizeof texto, pilFalhaBaixar ? "%s" : i18n("Nenhuma legenda em %s"),
                pilFalhaBaixar ? i18n("Não deu para baixar a legenda") : nome);
@@ -313,7 +365,8 @@ static int autoTroca(const char *idioma, const uint64_t *tent, int n, int voltar
     pilTroca = 1;   // a pilula segue em "Sincronizando…" com a nova
     emTroca = 1; faixas_escolher_externa(&v[j]); emTroca = 0;
     pilProvedorCurto(nome, pilProvedor, sizeof pilProvedor); pilHash = h;
-    if (pilEstado == PIL_APLICADA) pilIr(PIL_SINCRONIZANDO, pilAgora());
+    if (pilEspera) pilEsperaHash = h;
+    if (pilEstado == PIL_APLICADA && !pilEspera) pilIr(PIL_SINCRONIZANDO, pilAgora());
     return 1;
   }
   return 0;
@@ -325,7 +378,7 @@ void faixas_reiniciar(void) {
   legOverlayFalhas = legOverlayRecusas = legOverlayNoGoEstado = 0; legOverlayRetomar = 0;
   legOverlayTV = legOverlayColhidos = 0;
   mkvass_parar(); legenda_desligar();
-  legAuto = 1; legAutoDesde = 0; pilZerar();
+  legAuto = 1; legAutoDesde = 0; pilZerar(); pilEspera = 0;
   legendasui_reiniciar();   // F04: the second subtitle belongs to the session too
 }
 
@@ -585,7 +638,7 @@ static void escolherLegenda(int i) {
     // aqui jogaria isso fora.
     if (!vaiAoApp) mkvass_parar();
     legOverlay = -1; legOverlayEsperando = -1; legOverlayRetomar = 0; legOverlayTV = 0;
-    if (i < 0)        { pilZerar(); video_escolher_legenda(-1); legenda_desligar(); legExterna = -1; legExternaId[0] = 0;
+    if (i < 0)        { pilZerar(); pilEspera = 0; video_escolher_legenda(-1); legenda_desligar(); legExterna = -1; legExternaId[0] = 0;
                         legsync_primaria_outra(0); }   // F05: sem externa, sem AutoSync
     else if (i < emb) {
       const VideoFaixa *f = video_legenda(i);

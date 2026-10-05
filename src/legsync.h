@@ -111,6 +111,12 @@ void legsync_texto(const LegSyncVisao *v, char *dst, unsigned tam);  // i18n
 const char *legsync_acao_rotulo(int acao);
 // R4: a linha unica e simples do seletor (sem menu). Vazio = esconder a linha.
 void legsync_texto_simples(const LegSyncVisao *v, char *dst, unsigned tam);                            // i18n
+// Final line of the automatic-subtitle pill once the plan stopped working.
+// "Legenda sincronizada · <provedor> · +x,xx s" ONLY when an accepted result
+// is the offset in force (fase ACEITA); anything else (refused, no reference,
+// 45 s cap, no plan, undone) is "Legenda aplicada · <provedor> · não
+// sincronizada". Returns 1 when synced. i18n.
+int legsync_pilula_final(const LegSyncVisao *v, const char *provedor, char *dst, unsigned tam);
 // Liga o AutoSync como provedor da linha de sincronizacao do seletor de
 // legendas do F04 (legendasui_definir_sync). Idempotente; thread da UI.
 void legsync_ui_ligar(void);

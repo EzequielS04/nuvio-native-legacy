@@ -3,7 +3,7 @@
 #   bash tests/legref_fixtures.sh DIR
 set -eu
 D=${1:-${TMPDIR:-/tmp}/nv-legref-fx}; mkdir -p "$D"
-[ -f "$D/.ok" ] && exit 0
+[ -f "$D/.ok" ] && [ -f "$D/ext_traduzida_mais2000.srt" ] && [ -f "$D/filme.mkv" ] && exit 0
 command -v ffmpeg >/dev/null && command -v mkvmerge >/dev/null || { echo "precisa de ffmpeg e mkvmerge"; exit 2; }
 python3 - "$D" <<'PY'
 import random, sys
@@ -26,6 +26,24 @@ def srt(name, shift=0.0, pt=False):
             txt = ("Fala traduzida numero %d diferente" % (i + 1)) if pt else s
             f.write("%d\n%s --> %s\n%s\n\n" % (i + 1, ts(a + shift), ts(b + shift), txt))
 srt("emb.srt"); srt("ext_mais2500.srt", 2.5, pt=True); srt("ext_menos1200.srt", -1.2)
+# Traducao de verdade (como as do OpenSubtitles): outra segmentacao (falas
+# vizinhas juntas, falas longas partidas em duas coladas) e bordas com folga
+# de quadro, +2,0 s do video. A engine recusa este par (fail-closed); o teste
+# de regressao confere que a pilula NAO diz "sincronizada" e que nada mudou.
+random.seed(11)
+with open("%s/ext_traduzida_mais2000.srt" % d, "w") as f:
+    out = []; i = 0
+    while i < len(ev):
+        a, b, _ = ev[i]
+        if i + 1 < len(ev) and ev[i + 1][0] - b < 1.0 and random.random() < 0.6:
+            b = ev[i + 1][1]; i += 1
+        if b - a > 3.0 and random.random() < 0.5:
+            m = (a + b) / 2; out.append((a, m)); out.append((m, b))
+        else: out.append((a, b))
+        i += 1
+    for k, (a, b) in enumerate(out):
+        a += 2.0 + random.uniform(-0.12, 0.12); b += 2.0 + random.uniform(-0.12, 0.12)
+        f.write("%d\n%s --> %s\nFala traduzida %d com outro corte\n\n" % (k + 1, ts(a), ts(b), k + 1))
 with open("%s/emb.ass" % d, "w") as f:
     f.write("[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\n\n[V4+ Styles]\n"
             "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
@@ -34,6 +52,22 @@ with open("%s/emb.ass" % d, "w") as f:
     for a, b, s in ev:
         f.write("Dialogue: 0,%s,%s,Default,,0,0,0,,{\\i1}%s{\\i0}\n" % (ass_ts(a), ass_ts(b), s))
 print(len(ev))
+# FILME de 2 h (regressao "fala que ta ok e ta fora de sincronia"): a mesma
+# densidade de falas de um longa (~1300), cada uma num Cluster diferente. A
+# referencia embutida custa UM Range por fala; no ritmo de producao (8/s) isso
+# passa de 2 minutos, e o plano automatico desistia aos 45 s.
+random.seed(23)
+t = 12.0; fev = []
+while t < 7180:
+    dur = random.uniform(1.0, 3.5)
+    fev.append((t, t + dur, "Film line %d number %d" % (len(fev) + 1, random.randint(0, 99999))))
+    t += dur + random.uniform(0.3, 6.0)
+with open("%s/filme_emb.srt" % d, "w") as f:
+    for i, (a, b, s) in enumerate(fev): f.write("%d\n%s --> %s\n%s\n\n" % (i + 1, ts(a), ts(b), s))
+with open("%s/filme_ext_mais2500.srt" % d, "w") as f:
+    for i, (a, b, s) in enumerate(fev):
+        f.write("%d\n%s --> %s\nFala traduzida numero %d diferente\n\n" % (i + 1, ts(a + 2.5), ts(b + 2.5), i + 1))
+print(len(fev))
 PY
 cd "$D"
 # ~23 MB: os blocos de legenda ficam ESPALHADOS entre megabytes de video, como num filme.
@@ -48,4 +82,8 @@ mkvmerge -q -o semcues.mkv video.mkv --cues 0:none --language 0:eng emb.srt
 # So letreiro.
 mkvmerge -q -o soforced.mkv video.mkv --language 0:eng --forced-display-flag 0:1 emb.srt
 ffmpeg -loglevel error -y -i video.mkv -c copy video.mp4
+# ~40 MB, 2 h: video minusculo, mas um Cluster a cada 5 s como num filme.
+ffmpeg -loglevel error -y -f lavfi -t 7200 -i "testsrc2=s=160x90:r=2" -c:v libx264 -preset ultrafast -b:v 40k -g 10 video_filme.mkv
+mkvmerge -q -o filme.mkv video_filme.mkv --language 0:eng filme_emb.srt
+rm -f video_filme.mkv
 touch .ok
