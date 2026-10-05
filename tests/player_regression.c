@@ -205,6 +205,7 @@ static void testar(void) {
     // #128: a busca que comeca escondida sobe SO a barra e o tempo, e segue
     // assim enquanto a pessoa so busca.
     assert(player_so_barra());
+    SDL_Delay(320);   // passo so a cada 300 ms (salto.h)
     teclaPlayer(SDLK_RIGHT);assert(player_foco_na_barra()&&player_posicao_seg()>p0+15.0f);
     teclaPlayer(SDLK_LEFT);assert(player_foco_na_barra()&&player_posicao_seg()<p0+25.0f);
     assert(player_so_barra()); }
