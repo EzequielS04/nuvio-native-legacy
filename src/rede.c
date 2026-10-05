@@ -132,6 +132,8 @@ typedef struct {
   UsoHost usoHost[REDE_HOSTS_POR_FIO];
   long teto;
   int restoRecusado;
+  char erroTxt[200];
+  char erroBuf[256];
 } RedeFio;
 static pthread_key_t fioChave;
 static pthread_once_t fioUma = PTHREAD_ONCE_INIT;
@@ -676,8 +678,14 @@ static _Thread_local int redeCurlLocal;
 // Texto do ultimo erro de TRANSPORTE deste fio ("curl 35: ..."), para a tela de
 // login e o log do APK de release (#223): o stderr da libcurl nao chega a lugar
 // nenhum la. Sem segredo: a libcurl so descreve a falha, nunca o corpo.
+#ifdef NV_TPK40
+// 4/5: sem TLS de compilador (ver o RedeFio la em cima).
+#define redeErroTxt (redeFio()->erroTxt)
+#define redeErroBuf (redeFio()->erroBuf)
+#else
 static _Thread_local char redeErroTxt[200];
 static _Thread_local char redeErroBuf[256];   // CURLOPT_ERRORBUFFER (>= 256 bytes)
+#endif
 // CA bundle (Mozilla, art/discord-ca.pem) configured once at startup. Android's
 // libcurl+mbedTLS is built with no CA path at all.
 static char discordCa[600];
