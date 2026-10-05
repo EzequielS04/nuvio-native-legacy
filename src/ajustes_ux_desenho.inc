@@ -522,6 +522,21 @@ static void aj2Regua(GfxRect ln, float y, float a) {
     // entrava no primeiro chip: o tracking aperta antes (ajCapsC).
     ajCapsC(TXT_AJ_CAPS13, KICK[f][0], 1.82f, kx, cy - 18.0f, 0.45f * a, kcol - 8.0f);
     ajCapsC(TXT_AJ_CAPS13, KICK[f][1], 1.82f, kx, cy + 1.0f, 0.45f * a, kcol - 8.0f);
+    // Largura do nome nas pilulas (filas 2 e 3): a natural quando a fila cabe
+    // ate a borda do bloco; senao o teto desce, e so os nomes mais longos
+    // encolhem (em partes iguais "From the art" cortava com folga do lado).
+    float maxT = 9999.0f;
+    if (f >= 2) {
+      float cabe = ln.x + ln.w - 18.0f - bx - (n - 1) * 10.0f - n * (7 + 42 + 10 + 18), tw[5], soma = 0;
+      int passo;
+      for (k = 0; k < n; k++) { tw[k] = ajTxt(TXT_V2_SEG, V_TEMA[L[k]]).w; soma += tw[k]; }
+      for (passo = 0; soma > cabe && passo < 40; passo++) {
+        float maior = 0;
+        for (k = 0; k < n; k++) if (tw[k] > maior) maior = tw[k];
+        maxT = maior - 6.0f;
+        for (soma = 0, k = 0; k < n; k++) { if (tw[k] > maxT) tw[k] = maxT; soma += tw[k]; }
+      }
+    }
     for (k = 0; k < n; k++) {
       int v = L[k];
       if (f < 2) { aj2Bolinha(v, bx + 28.0f + k * 72.0f, cy, v == alvo, v == sel && v != alvo, a); continue; }
@@ -534,7 +549,6 @@ static void aj2Regua(GfxRect ln, float y, float a) {
         const char *nome = V_TEMA[v], *url = ajFundoArte();
         const char *ic = v == AJ_TEMA_DINAMICA ? IC[0] : v == AJ_TEMA_GRADIENTE ? IC[1] : v == AJ_TEMA_IMERSIVA ? IC[2] :
                          v == AJ_TEMA_TEXTURA ? IC[3] : IC[4];
-        float maxT = (ln.x + ln.w - 18.0f - bx - (n - 1) * 10.0f) / n - (7 + 42 + 10 + 18);
         TxtLinha t = ajTxtC(TXT_V2_SEG, nome, maxT);
         float w = 7 + 42 + 10 + t.w + 18, c1[3], c2[3];
         GfxRect p = { px, cy - 28.0f, w, 56 };
