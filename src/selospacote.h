@@ -13,11 +13,40 @@
 #define SELOS_MAX_PACOTES 3
 #define SELOS_MAX_CASADOS 16
 
+// PACOTES EMBUTIDOS (dono, 05/10/2026: "use o primeiro como o padrao e o
+// segundo como a versao colorida"): os dois pacotes do Xperience em
+// deploy/app/art/selos (tools/selos-xperience.py). "Do Nuvio" (selospacote_ativo
+// == -1) passa a ser o pacote PADRAO deles; com selospacote_colorido(1) vale o
+// COLORIDO, e onde ele nao tem selo (streaming, edicoes, FLAC...) o padrao
+// cobre. Sem a pasta, selospacote_casar devolve 0 e quem chama usa a deteccao
+// antiga (badges.c).
+//
+// UMA CHAVE para as imagens: com SELOS_IMAGENS_NA_REDE 0 (o que vale) saem do
+// pacote da TV, sem depender do CDN do Xperience; com 1 sao baixadas do
+// imageURL de cada filtro (e a pasta selos/ pode sair do pacote do app).
+#ifndef SELOS_IMAGENS_NA_REDE
+#define SELOS_IMAGENS_NA_REDE 0
+#endif
+// `dir` = a pasta da arte (a mesma de badges_carregar). Barata; pode repetir.
+void selospacote_dir_embutidos(const char *dir);
+// 1 liga o pacote colorido (Ajustes > Selos coloridos). Sobe a versao se mudou.
+void selospacote_colorido(int ligado);
+// 1 se os embutidos carregaram (a pasta existe e tem filtros).
+int  selospacote_embutidos_ok(void);
+
+// Que arte e a do filtro (quem desenha decide a tinta):
+//   SELO_ARTE_PACOTE  pacote do usuario: a imagem sai como veio
+//   SELO_ARTE_BRANCA  embutido, padrao: branca, a forma no alfa — tinge
+//   SELO_ARTE_COR     embutido, colorido: tem cor propria, vai numa peca escura
+typedef enum { SELO_ARTE_PACOTE = 0, SELO_ARTE_BRANCA, SELO_ARTE_COR } SeloArte;
+
 typedef struct {
   const char *nome;        // texto da pilula quando nao ha imagem
   const char *imagem;      // URL (ou caminho) da imagem; "" = sem
   int   temTag, temTexto, temBorda;   // 0 = o pacote nao define
   float tag[4], texto[4], borda[4];   // RGBA 0..1
+  int   arte;              // SeloArte
+  int   resolucao;         // 1 = do grupo de resolucao (a folha de fontes a tira da fileira)
 } SeloFiltro;
 
 typedef enum {

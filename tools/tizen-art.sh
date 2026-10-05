@@ -24,7 +24,7 @@
 #                                            mdblist) e ajustes. Nunca.
 #
 # O que sobra e o que o app precisa para nao nascer sem cara:
-#   icones/ badges/ marcas/ prov/  ~1,0 MB -> cromo da interface (marcas/ inclui os logos do 2.0: logo-novo-*.png, logo-classico.png). Sem icones/ a
+#   icones/ badges/ selos/ marcas/ prov/  ~1,0 MB -> cromo da interface (marcas/ inclui os logos do 2.0: logo-novo-*.png, logo-classico.png). Sem icones/ a
 #                                             interface fica sem icone nenhum.
 #   *.jpg da raiz                  8,1 MB  -> os backdrops da home. Sem eles o
 #                                             log diz "home: nenhum backdrop".
@@ -42,7 +42,7 @@ DESTINO="${NUVIO_ARTE_ESTAGIO:-build/art-pacote}"
 rm -rf "$DESTINO"
 mkdir -p "$DESTINO"
 
-for d in icones icones-app badges marcas prov editorial logo poster ep elenco; do
+for d in icones icones-app badges selos marcas prov editorial logo poster ep elenco; do
   [ -d "$ORIGEM/$d" ] && cp -R "$ORIGEM/$d" "$DESTINO/"
 done
 # Public trust roots only; never copy arbitrary PEM or token files.
@@ -85,7 +85,7 @@ if find "$DESTINO" -name '*.webp' | grep -q .; then
     # 3595-3632) right when the source sheet opens. 64 px is ~2.3x the drawn
     # height: still sharp and decodes ~9x fewer pixels.
     RED=""
-    case "$w" in */badges/*) RED="--resampleHeight 64" ;; esac
+    case "$w" in */badges/*|*/selos/*) RED="--resampleHeight 64" ;; esac
     if [ "$CONV" = sips ]; then
       sips -s format png $RED "$w" --out "${w%.webp}.png" >/dev/null 2>&1 || {
         echo "tizen-art.sh: failed converting $w" >&2; exit 1; }
@@ -103,6 +103,8 @@ if find "$DESTINO" -name '*.webp' | grep -q .; then
   # `sed -i ''` is BSD syntax: on GNU sed the '' becomes the script itself and
   # the command dies with "cannot read ...: No such file". `-i.bak` + rm works
   # on both.
+  # selos/ has no index to rewrite: src/selospacote.c falls back from the .webp
+  # name to .png by itself (the name is derived from each filter's imageURL).
   if [ -f "$DESTINO/badges/index.json" ]; then
     sed -i.bak 's/\.webp"/.png"/g' "$DESTINO/badges/index.json" && rm -f "$DESTINO/badges/index.json.bak"
   fi

@@ -7,6 +7,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <strings.h>
+#include <unistd.h>
 
 // Ver selospacote.h. Espelha streamBadgeRules.js do app web (normalizacao,
 // limite de 3, dedupe por sourceUrl, candidatos de casamento).
@@ -146,7 +147,7 @@ static J *jAchar(const J *o, const char *chave, int prof) {
 }
 
 // ---- normalizacao (streamBadgeRules.js) -------------------------------------
-typedef struct {
+typedef struct FiltroRawS {
   char *id, *grupo, *nome, *padrao, *imagem, *tag, *estilo, *texto, *borda;
   int ativo;
 } FiltroRaw;
@@ -328,6 +329,9 @@ typedef struct {
   RegexJs *re;
   SeloFiltro pub;
   char *chave;      // imageURL (ou nome) em minuscula: o dedupe do web
+  const struct FiltroRawS *raw;   // o cru de onde veio (so os embutidos usam)
+  int rank;         // embutidos: posicao do grupo na fileira
+  int subst;        // embutidos, padrao: o colorido cobre este selo
 } FiltroC;
 typedef struct {
   const PacoteRaw *raw;
@@ -413,6 +417,7 @@ static void compilaPacote(Pacote *p) {
       printf("[selos] padrao ignorado (\"%s\", %s): %s\n", f->nome, p->nome, erro); }
       continue;
     }
+    c->raw = f;
     c->pub.nome = f->nome; c->pub.imagem = f->imagem;
     parseCor(f->tag, &c->pub.temTag, c->pub.tag);
     parseCor(f->texto, &c->pub.temTexto, c->pub.texto);
@@ -670,6 +675,189 @@ int selospacote_remover(int i) {
 #define CAND_MAX 48
 #define CAND_BYTES 2200
 
+// Um filtro casa se algum candidato (ou todos juntos) passa no regex.
+static int filtroCasa(const FiltroC *c, char *const *cand, const size_t *lens, int ncand,
+                      const char *junto, size_t jn) {
+  int i, achou = 0;
+  for (i = 0; i < ncand && !achou; i++) achou = regexjs_testar(c->re, cand[i], lens[i]);
+  if (!achou && junto) achou = regexjs_testar(c->re, junto, jn);
+  return achou;
+}
+
+// ---- pacotes embutidos (padrao + colorido) -------------------------------------
+static char dirEmb[480];
+static PacoteRaw embRaw[2];          // 0 padrao, 1 colorido
+static Pacote embPac[2];
+static int embTentou, embOk, modoCor;
+
+// Mesma regra de tools/selos-xperience.py (plano()): o que vem depois de
+// "/badges/" com "/" virando "_".
+static void nomeLocal(char *d, size_t n, const char *url) {
+  const char *p = strstr(url, "/badges/");
+  size_t k = 0;
+  p = p ? p + 8 : (strrchr(url, '/') ? strrchr(url, '/') + 1 : url);
+  for (; *p && k + 1 < n; p++) d[k++] = *p == '/' ? '_' : *p;
+  d[k] = 0;
+}
+static int existe(const char *caminho) { return access(caminho, R_OK) == 0; }
+
+// O colorido cobre estes selos do padrao (mesmo papel, arte com cor); o resto
+// o colorido nao tem e o padrao fica. Os niveis de grupo de release (remux-N,
+// blu-ray-N, web-N) viram o selo unico de origem do colorido.
+static int cobertoPeloColorido(const char *id) {
+  static const char *const IDS[] = {
+    "q-r", "q-b", "q-w", "src-webrip", "src-hdtv", "src-dvdrip",
+    "r-4k", "r-1080", "r-720", "r-480p",
+    "v-imax-e-2", "v-imax-2", "v-dv-hdr10p", "v-dv-hdr10", "v-dv-hdr", "a-dv",
+    "v-hdr10p", "v-hdr10", "v-hdr", "v-hlg", "v-10bit", "v-sdr",
+    "a-atmos-truehd", "a-dtsx-hdma", "a-atmos-ddplus", "a-dtsx-hd", "a-at", "a-dtsx",
+    "a-th", "a-dtsma", "a-dtshd", "a-dp", "gv-dts-es", "a-dts", "a-dd",
+    "ch-71", "ch-51", "s-h265", "s-h264",
+  };
+  size_t k;
+  if (!strncmp(id, "remux-", 6) || !strncmp(id, "blu-ray-", 8) || !strncmp(id, "web-", 4)) return 1;
+  for (k = 0; k < sizeof IDS / sizeof *IDS; k++) if (!strcmp(id, IDS[k])) return 1;
+  return 0;
+}
+// Posicao do grupo do colorido na fileira (a mesma ordem dos grupos do padrao:
+// origem/qualidade, resolucao, video, audio, canais, codec).
+static int postoGrupoColorido(const char *g) {
+  static const struct { const char *g; int rank; } T[] = {
+    {"source", 3}, {"resolution", 2}, {"video-tech", 5}, {"bit-depth", 5},
+    {"audio-tech", 6}, {"audio-channels", 7}, {"video-codec", 8},
+  };
+  size_t k;
+  for (k = 0; k < sizeof T / sizeof *T; k++) if (!strcmp(g, T[k].g)) return T[k].rank;
+  return 5;
+}
+
+static char *lerTudo(const char *caminho) {
+  FILE *f = fopen(caminho, "rb");
+  long n; char *b;
+  if (!f) return NULL;
+  fseek(f, 0, SEEK_END); n = ftell(f); rewind(f);
+  if (n <= 0 || n > 4 * 1024 * 1024) { fclose(f); return NULL; }
+  b = malloc((size_t)n + 1);
+  if (b && fread(b, 1, (size_t)n, f) != (size_t)n) { free(b); b = NULL; }
+  if (b) b[n] = 0;
+  fclose(f);
+  return b;
+}
+
+static void embLiberar(void) {
+  int k;
+  for (k = 0; k < 2; k++) { pacoteDesmonta(&embPac[k]); pacoteLiberar(&embRaw[k]); }
+  embTentou = embOk = 0;
+}
+
+static int embCarregar(void) {
+  static const char *const ARQ[2] = { "padrao", "colorido" };
+  int k, i;
+  if (embTentou) return embOk;
+  embTentou = 1;
+  if (!dirEmb[0]) return 0;
+  for (k = 0; k < 2; k++) {
+    char caminho[600], *txt;
+    J *j;
+    snprintf(caminho, sizeof caminho, "%s/selos/%s.json", dirEmb, ARQ[k]);
+    txt = lerTudo(caminho);
+    if (!txt) continue;
+    j = jParse(txt, strlen(txt));
+    free(txt);
+    if (!j) continue;
+    if (!normImport(j, ARQ[k], &embRaw[k])) { jLiberar(j); continue; }
+    jLiberar(j);
+    for (i = 0; i < embRaw[k].nf; i++) {
+      FiltroRaw *f = &embRaw[k].f[i];
+      char local[200], novo[700];
+      if (!f->imagem[0]) continue;
+#if SELOS_IMAGENS_NA_REDE
+      (void)local; (void)novo;
+#else
+      nomeLocal(local, sizeof local, f->imagem);
+      snprintf(novo, sizeof novo, "%s/selos/%s", dirEmb, local);
+      if (!existe(novo)) {   // o estagio do Tizen/Android troca webp por png
+        char *pt = strrchr(novo, '.');
+        if (pt && !strcmp(pt, ".webp")) { strcpy(pt, ".png"); }
+      }
+      free(f->imagem);
+      f->imagem = existe(novo) ? strdup(novo) : strdup("");
+      if (!f->imagem) f->imagem = strdup("");
+#endif
+    }
+    embPac[k].raw = &embRaw[k];
+    nomeDe(&embPac[k]);
+    compilaPacote(&embPac[k]);
+    for (i = 0; i < embPac[k].nc; i++) {
+      FiltroC *c = &embPac[k].c[i];
+      const FiltroRaw *f = c->raw;
+      int g, rank = 0;
+      c->pub.arte = k == 0 ? SELO_ARTE_BRANCA : SELO_ARTE_COR;
+      if (k == 0) {
+        for (g = 0; g < embRaw[k].ng; g++) if (!strcmp(embRaw[k].g[g].id, f->grupo)) rank = g;
+        c->subst = cobertoPeloColorido(f->id);
+        c->pub.resolucao = !strcmp(f->grupo, "gr");
+      } else {
+        rank = postoGrupoColorido(f->grupo);
+        c->pub.resolucao = !strcmp(f->grupo, "resolution");
+      }
+      c->rank = rank;
+    }
+  }
+  embOk = embPac[0].nc > 0;
+  printf("[selos] embutidos: padrao %d, colorido %d filtros%s\n", embPac[0].nc, embPac[1].nc,
+         SELOS_IMAGENS_NA_REDE ? " (imagens do CDN)" : "");
+  fflush(stdout);
+  return embOk;
+}
+
+void selospacote_dir_embutidos(const char *dir) {
+  if (!dir) dir = "";
+  if (!strcmp(dir, dirEmb)) return;
+  embLiberar();
+  snprintf(dirEmb, sizeof dirEmb, "%s", dir);
+  versao++;
+  // Agora, no fio principal da partida: o casamento roda depois no fio que
+  // monta a lista de fontes, e nao deve ser ele a abrir os arquivos.
+  embCarregar();
+}
+void selospacote_colorido(int ligado) {
+  ligado = ligado != 0;
+  if (ligado == modoCor) return;
+  modoCor = ligado;
+  versao++;
+}
+int selospacote_embutidos_ok(void) { return embCarregar(); }
+
+typedef struct { int rank; unsigned short id; } Acerto;
+static int casarEmbutido(char *const *cand, const size_t *lens, int ncand, const char *junto, size_t jn,
+                         unsigned short *ids, int max) {
+  Acerto h[256];
+  int nh = 0, ci, d, k, n, nd = embPac[0].nc;
+  int colorido = modoCor && embPac[1].nc > 0;
+  for (ci = 0; ci < nd && nh < 200; ci++) {
+    const FiltroC *c = &embPac[0].c[ci];
+    if (colorido && c->subst) continue;
+    if (!filtroCasa(c, cand, lens, ncand, junto, jn)) continue;
+    for (d = 0; d < nh; d++) if (!strcmp(embPac[0].c[h[d].id].chave, c->chave)) break;
+    if (d < nh) continue;
+    h[nh].rank = c->rank; h[nh].id = (unsigned short)ci; nh++;
+  }
+  if (colorido) for (ci = 0; ci < embPac[1].nc && nh < 250; ci++) {
+    const FiltroC *c = &embPac[1].c[ci];
+    if (!filtroCasa(c, cand, lens, ncand, junto, jn)) continue;
+    h[nh].rank = c->rank; h[nh].id = (unsigned short)(nd + ci); nh++;
+  }
+  // Insercao estavel por posicao do grupo: dentro do grupo vale a ordem do pacote.
+  for (k = 1; k < nh; k++) {
+    Acerto x = h[k];
+    for (d = k - 1; d >= 0 && h[d].rank > x.rank; d--) h[d + 1] = h[d];
+    h[d + 1] = x;
+  }
+  for (n = 0; n < nh && n < max; n++) ids[n] = h[n].id;
+  return n;
+}
+
 int selospacote_casar(const char *const *campos, int nc, unsigned short *ids, int max) {
   char *arena, *cand[CAND_MAX + 1];
   size_t lens[CAND_MAX + 1];
@@ -678,8 +866,9 @@ int selospacote_casar(const char *const *campos, int nc, unsigned short *ids, in
   char *junto;
   size_t jn = 0, jcap = 0;
   selospacote_iniciar();
-  if (ativo < 0 || max <= 0) return 0;
-  p = &pac[ativo];
+  if (max <= 0) return 0;
+  if (ativo < 0 && !embCarregar()) return 0;
+  p = ativo >= 0 ? &pac[ativo] : NULL;
   arena = malloc((size_t)(CAND_MAX + 1) * CAND_BYTES);
   if (!arena) return 0;
   for (i = 0; i < nc && ncand < CAND_MAX; i++) {
@@ -712,12 +901,11 @@ int selospacote_casar(const char *const *campos, int nc, unsigned short *ids, in
       junto[jn] = 0;
     }
   } else junto = NULL;
+  if (!p) { n = casarEmbutido(cand, lens, ncand, junto, jn, ids, max); free(junto); free(arena); return n; }
   for (ci = 0; ci < p->nc && n < max; ci++) {
     const FiltroC *c = &p->c[ci];
-    int achou = 0, d;
-    for (i = 0; i < ncand && !achou; i++) achou = regexjs_testar(c->re, cand[i], lens[i]);
-    if (!achou && junto) achou = regexjs_testar(c->re, junto, jn);
-    if (!achou) continue;
+    int d;
+    if (!filtroCasa(c, cand, lens, ncand, junto, jn)) continue;
     for (d = 0; d < n; d++) if (!strcmp(p->c[ids[d]].chave, c->chave)) break;
     if (d < n) continue;
     ids[n++] = (unsigned short)ci;
@@ -727,6 +915,12 @@ int selospacote_casar(const char *const *campos, int nc, unsigned short *ids, in
 }
 
 const SeloFiltro *selospacote_filtro(unsigned short id) {
-  if (ativo < 0 || id >= pac[ativo].nc) return NULL;
+  if (ativo < 0) {
+    int nd = embPac[0].nc;
+    if (!embOk) return NULL;
+    if (id < nd) return &embPac[0].c[id].pub;
+    return id - nd < embPac[1].nc ? &embPac[1].c[id - nd].pub : NULL;
+  }
+  if (id >= pac[ativo].nc) return NULL;
   return &pac[ativo].c[id].pub;
 }
