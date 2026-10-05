@@ -34,6 +34,7 @@
 #include <unistd.h>
 int arte_reserva_episodios(const char *imdb, const char *corpo) { (void)imdb; (void)corpo; return 0; }
 
+int ajustes_busca_cinemeta(void) { return 1; }
 #include "../src/descoberta.c"
 #include "jellyfin_stub.inc"
 Uint32 SDL_GetTicks(void) { return 0; }

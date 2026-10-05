@@ -721,7 +721,13 @@ static void espelharAssistido(int atual, const CatItem *ci, int intencao) {
     // readmitia o item pelo /sync/playback que o servidor ainda devolvia (ou
     // por uma pausa que o DELETE nao alcancou), so sem a barra.
     prog_marcar_removido(ci->imdb);
+    // E O CARD SAI DA FILEIRA NA HORA (#244): zerar a barra deixava os cards da
+    // obra ali, "marca todos mas nao remove nenhum". Mesma remocao do "Tirar".
+    // Depois de zerar: tirar desloca a janela e `atual` deixaria de valer.
     cat_zerar_progresso(atual);
+    { char obra[sizeof ci->imdb];   // `ci` aponta para o bloco que a poda desloca
+      snprintf(obra, sizeof obra, "%s", ci->imdb);
+      cat_tirar_continuar(obra); }
   }
 }
 

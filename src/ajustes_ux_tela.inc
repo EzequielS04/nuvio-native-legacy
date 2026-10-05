@@ -34,6 +34,7 @@ static const Item TELA[] = {
       OPC(AJ_TMDB_PROD), OPC(AJ_TMDB_REDES), OPC(AJ_TMDB_EPS),
       OPC(AJ_TMDB_TRAILERS), OPC(AJ_TMDB_MAIS), OPC(AJ_TMDB_COL), OPC(AJ_TMDB_CW),
       OPC(AJ_DET_META_EXT), OPC(AJ_DET_SO_CINEMETA),
+    ROT("Busca"), OPC(AJ_BUSCA_CINEMETA),
 
   SEC("Cartazes e arte", "Cartaz em foco, formato e origem da arte", "aj_images"),
     ROT("Cartaz em foco"),

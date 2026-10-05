@@ -734,8 +734,12 @@ static int consultarAlvo(const AlvoBusca *a, const char *termo,
   // 6 s por alvo, como o web (SEARCH_CATALOG_TIMEOUT 6500). Addon lento nao
   // trava a tela: a fileira dele so aparece quando chegar, e as outras ja
   // estao la. O alvo do Nuvio tem 5 s e, se falhar, o Cinemeta mais 6.
+  // #231: com "Buscar no Cinemeta" desligado, nem o add-on Cinemeta nem a reserva
+  // do catalogo do Nuvio (seg_cine < 0) respondem.
+  if (!a->nuvio && !ajustes_busca_cinemeta() && baseEhCinemeta(a->base)) return 0;
   if (a->nuvio) {
-    corpo = metaprov_busca_com(a->tipo, termo, METAPROV_NUVIO_S, 6,
+    corpo = metaprov_busca_com(a->tipo, termo, METAPROV_NUVIO_S,
+                               ajustes_busca_cinemeta() ? 6 : -1,
                                metaprov_get_rede, NULL, NULL);
   } else {
     urlEscapar(termo, esc, sizeof esc);
@@ -2652,7 +2656,18 @@ static int montarContinuar(CatItem *saida, int max) {
   // TRAKT E SIMKL NA MESMA OBRA: fica o de instante mais novo. Os dois
   // costumam concordar (muita gente sincroniza um no outro), e dois cards da
   // mesma serie seriam o defeito que continuarLocal ja evita.
-  for (i = 0; i < nT; i++) remotos[nR++] = &doTrakt[i];
+  // A mesma obra DENTRO do Trakt tambem entra uma vez (#244: o mesmo episodio
+  // 5x). trakt_continuar ja guarda a gravacao mais nova por obra; esta e a rede
+  // de seguranca para a chave de episodio x chave de serie e para quem chegar
+  // por outro caminho.
+  for (i = 0; i < nT; i++) {
+    int k, achou = -1;
+    for (k = 0; k < nR && achou < 0; k++)
+      if (mesmaObra(remotos[k], &doTrakt[i])) achou = k;
+    if (achou < 0) { remotos[nR++] = &doTrakt[i]; continue; }
+    repetidos++;
+    if (instanteDaConta(&doTrakt[i]) > instanteDaConta(remotos[achou])) remotos[achou] = &doTrakt[i];
+  }
   for (i = 0; i < nS; i++) {
     int k, achou = -1;
     for (k = 0; k < nR && achou < 0; k++)

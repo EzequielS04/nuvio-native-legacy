@@ -19,6 +19,7 @@
 //   5. id que nao e do IMDb (kitsu:) nao vai ao Cinemeta.
 //
 //   bash tests/detalheanime.sh
+int ajustes_busca_cinemeta(void) { return 1; }
 #include "../src/descoberta.c"
 Uint32 SDL_GetTicks(void) { return 0; }
 #include "../src/progresso.h"
