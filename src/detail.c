@@ -72,6 +72,8 @@
 #include <math.h>
 #include "ponteiro.h"
 #include "plrui.h"
+#include "svdesenho.h"
+#include "amigostitulo.h"
 static void ponteiroDetalhe(int r, int c);   // ponteiro do Magic Remote (#99)
 static int moverFileira(int dy);
 static void heroReiniciar(void);
@@ -212,6 +214,19 @@ static int  ratSinc;
 
 static int maisAcoes;
 static int  botao = 0;      // botao em foco no hero
+// A ILHA DE AMIGOS (quem assistiu/gostou deste titulo), logo abaixo dos botoes:
+// um alvo focavel do nivel 0, entre os botoes e as secoes. Baixo nos botoes cai
+// nela, baixo nela entra nas secoes, cima volta aos botoes. OK pede ao roteador
+// (app.c) para abrir o painel Social na atividade deste titulo.
+static int  focoAmigos = 0;
+static int  pedAmigos = 0;
+#define DET_PTR_AMIGOS 99
+#define NV_DETW_AMIGOS_H   76.0f
+#define NV_DETW_AMIGOS_GAP 18.0f
+static int  amigosDoTitulo(AmigosTitulo *t) {
+  const CatItem *c = cat_item(idx);
+  return c && c->imdb[0] && amigostitulo_obter(c->imdb, t);
+}
 static int  pedReproduzir = 0, pedMarcar = 0, pedFontes = 0;
 // Marcar como ASSISTIDO. Separado de pedMarcar, que e "adicionar a lista".
 static int  pedAssistido = 0;
@@ -1202,7 +1217,7 @@ static void abrirInterno(const HomeItem *it) {
   trocaarte_fechar();
   audAberta = 0; audTempAberta = -1; audTempVista = -1; frasesAberta = 0;
   item = *it;
-  aberto = 1; saindo = 0; nivel = 0; botao = 0;
+  aberto = 1; saindo = 0; nivel = 0; botao = 0; focoAmigos = 0;
   heroReiniciar();
   t = 0.0f; pg = 0.0f; scrollY = 0.0f; velY = 0.0f; abaInfo = 0; pessoaAberta = 0;
   relFoco = 0; colListaAberta = 0; colListaFoco = 0;
@@ -2205,7 +2220,9 @@ void detail_evento(const SDL_Event *e) {
     if (!okDesceEm) return;
     dur = SDL_GetTicks() - okDesceEm;
     okDesceEm = 0;
-    if (nivel == 0) {
+    if (nivel == 0 && focoAmigos) {
+      pedAmigos = 1;
+    } else if (nivel == 0) {
       // Ordem FIXA: primario, adicionar a lista, marcar como visto, fontes.
       //
       // O botao do olho caia no `else` e abria a folha de FONTES — ele nunca
@@ -2412,6 +2429,17 @@ void detail_evento(const SDL_Event *e) {
   if (nivel == 0) {
     // CIMA na linha de botoes nao fazia nada; com uma reacao pendente ele abre
     // a pergunta (reacao.h). Sem pendencia, continua sem fazer nada.
+    // CIMA na ilha de amigos volta ao botao em que estava; BAIXO entra nas secoes;
+    // ESQUERDA pede o menu lateral como o primeiro botao.
+    if (focoAmigos) {
+      if (k == SDLK_UP) { focoAmigos = 0; return; }
+      if (k == SDLK_LEFT) { pediuMenu = 1; return; }
+      if (k != SDLK_DOWN) return;
+      focoAmigos = 0;
+    } else if (k == SDLK_DOWN && !(carro && !carCheia)) {
+      AmigosTitulo at;
+      if (amigosDoTitulo(&at)) { focoAmigos = 1; return; }
+    }
     if (k == SDLK_UP && reacao_detalhe_abrir(cat_item(idx))) return;
     // CARROSSEL: a primeira seta para baixo so estica o cartao (ver carCheia).
     if (k == SDLK_DOWN && carro && !carCheia) { carCheia = 1; return; }
@@ -3732,7 +3760,11 @@ static void heroWeb(float a, float desloc) {
   float yMeta2 = NV_DETW2_BASE - NV_DETW2_SELO_H;
   float yMeta1 = yMeta2 - NV_DETW2_META_GAP - NV_DETW2_M1_H;
   float ySin   = yMeta1 - NV_DETW2_GAP_SIN - hSin;
-  float yAcoes = ySin - NV_DETW2_GAP_ACOES - NV_DETW2_BTN_H - hCaption;
+  AmigosTitulo amg;
+  int temAmg = amigosDoTitulo(&amg);
+  if (!temAmg) focoAmigos = 0;
+  float hAmg = temAmg ? NV_DETW_AMIGOS_H + NV_DETW_AMIGOS_GAP : 0.0f;
+  float yAcoes = ySin - NV_DETW2_GAP_ACOES - NV_DETW2_BTN_H - hCaption - hAmg;
   // BLOCO DE LINHAS DE ESTADO, empilhado de baixo para cima logo acima dos
   // botoes. Sao duas, e a ordem tem razao: a retomada explica o BOTAO e fica
   // colada nele; a agenda ("Próximo episódio T2E5 · em 3 dias") explica o
@@ -3937,6 +3969,32 @@ static void heroWeb(float a, float desloc) {
       bx += NV_DETW2_CIRC + NV_DETW2_BTN_GAP;
     }
   }
+
+  // --- ILHA DE AMIGOS, logo abaixo dos botoes ----------------------------------
+  if (temAmg) {
+    static const float ANEL[3] = { 0.075f, 0.08f, 0.095f };
+    float y0 = yAcoes + NV_DETW2_BTN_H + hCaption + NV_DETW_AMIGOS_GAP;
+    float d = 52.0f, pad = (NV_DETW_AMIGOS_H - d) * 0.5f;
+    int foc = nivel == 0 && focoAmigos;
+    char l1[200];
+    TxtLinha t1, t2;
+    float pw, larg, tintaF = ajustes_acento_tinta(NULL, NULL, NULL);
+    int c1 = foc ? (int)(tintaF * 255.0f) : 255, c2 = foc ? (int)(tintaF * 255.0f * 0.85f) : 179;
+    int nr = amg.n < 3 ? amg.n : 3;
+    amigostitulo_linha_ilha(&amg, l1, sizeof l1);
+    t1 = txt_linha_corta(TXT_DET_META2, l1, c1, c1, c1, 255, NV_DETW2_TEXTO_W - 200.0f);
+    t2 = txt_linha(TXT_HERO_META, i18n("Abrir para ver o que acharam"), c2, c2, c2, 255);
+    pw = d + d * 0.71f * (float)(nr - 1);
+    larg = pad + pw + 18.0f + (t1.w > t2.w ? t1.w : t2.w) + 30.0f;
+    { GfxRect ilha = { NV_DETW2_X, y0, larg, NV_DETW_AMIGOS_H };
+      if (foc) plrui_pilula_foco(ilha, a);
+      else plrui_material(ilha, NV_DETW_AMIGOS_H * 0.5f, 0, a);
+      svd_amigos_pilha(ilha.x + pad, y0 + pad, d, &amg, nr, 1, ANEL, a);
+      { float tx = ilha.x + pad + pw + 18.0f;
+        float bloco = t1.h + 2.0f + t2.h, ty = y0 + (NV_DETW_AMIGOS_H - bloco) * 0.5f;
+        txt_desenhar_alpha(t1, tx, ty, a);
+        txt_desenhar_alpha(t2, tx, ty + t1.h + 2.0f, a * (foc ? 0.9f : 0.8f)); }
+      if (a > 0.3f) ponteiro_alvo(ilha.x, ilha.y, ilha.w, ilha.h, ponteiroDetalhe, NULL, -1, DET_PTR_AMIGOS); } }
 
   // --- linha da AGENDA ------------------------------------------------------
   // Cor de realce e nao branco: e a unica linha do hero que fala de uma data
@@ -5964,7 +6022,9 @@ static float desenhaFrases(float x, float y, float a) {
 // PONTEIRO (#99). r < 0 = botao `c` do hero (nivel 0); senao secao r, coluna
 // c (nivel 1) — as mesmas variaveis que as setas mexem em detail_evento.
 static void ponteiroDetalhe(int r, int c) {
+  if (r < 0 && c == DET_PTR_AMIGOS) { nivel = 0; focoAmigos = 1; return; }
   if (r < 0) {
+    focoAmigos = 0;
     if (c < 0 || c >= nBotoes()) return;
     nivel = 0; botao = c;
     return;
@@ -6531,6 +6591,7 @@ static void detalheFundo(float s) {
 
 void detail_desenhar(Uint32 agora) {
   if (!aberto) return;
+  amigostitulo_atualizar();   // barato: so remonta quando o feed social mudou
   // COR VIVA: a pagina do titulo manda na cor, acima da home que pode estar
   // desenhada por baixo (a prioridade resolve o mesmo quadro). A chave e a
   // MESMA arte que o fundo pede em tela cheia logo abaixo.
@@ -6637,6 +6698,13 @@ void detail_pedir_reproduzir(void) { pedReproduzir = 1; }
 int detail_pediu_abrir(void) { int v = pedAbrir; pedAbrir = -1; return v; }
 int detail_pediu_assistido(void) { int v = pedAssistido; pedAssistido = 0; return v; }
 int detail_pediu_marcar(void)     { int v = pedMarcar;     pedMarcar = 0;     return v; }
+int detail_pediu_amigos(char *imdb, size_t tam) {
+  const CatItem *c = cat_item(idx);
+  if (!pedAmigos) return 0;
+  pedAmigos = 0;
+  if (imdb && tam) snprintf(imdb, tam, "%s", c ? c->imdb : "");
+  return 1;
+}
 int detail_pediu_fontes(void)     { int v = pedFontes;     pedFontes = 0;     return v; }
 // "Reproduzir desde o inicio" ainda cai no mesmo caminho do primario: o
 // roteador so sabe abrir o player no ponto salvo. Consumir o pedido aqui evita

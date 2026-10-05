@@ -42,6 +42,8 @@
 #include "gif.h"
 #include "gifcolecao.h"
 #include "badges.h"
+#include "svdesenho.h"
+#include "amigostitulo.h"
 #include "extras.h"
 #include "diretor.h"
 #include "descoberta.h"
@@ -3014,7 +3016,7 @@ static int heroNomeLogo(const CatItem *ci, const char *url, int loaded,
 }
 
 typedef struct {
-  float logo, logoHeight, action, caption, meta, secondary, synopsis;
+  float logo, logoHeight, action, caption, friends, meta, secondary, synopsis;
 } HeroCopyLayout;
 
 // One bottom boundary, measured text and the same order for every layout.
@@ -3023,12 +3025,14 @@ typedef struct {
 static HeroCopyLayout heroCopyLayout(float base, float hSin, int hasMeta,
                                      int hasSec, float captionH, float logoH,
                                      float btnH, float btnGap, float minTop,
-                                     float slot) {
+                                     float slot, float friendsH) {
   HeroCopyLayout p;
   p.synopsis = base - hSin;
   p.secondary = p.synopsis - (hasSec ? (hSin > 0 ? NV_HERO_COPY_LINHA : 0) + NV_LD_HERO_SEC : 0);
   p.meta = p.secondary - (hasMeta ? ((hasSec || hSin > 0) ? NV_HERO_COPY_LINHA : 0) + NV_LD_HERO_META : 0);
-  p.caption = p.meta - (captionH > 0 ? NV_HERO_COPY_LINHA + captionH : 0);
+  // A linha de AMIGOS (quem gostou / assistiu) fica logo acima da meta.
+  p.friends = p.meta - (friendsH > 0 ? NV_HERO_COPY_LINHA + friendsH : 0);
+  p.caption = p.friends - (captionH > 0 ? NV_HERO_COPY_LINHA + captionH : 0);
   p.action = p.caption - NV_HERO_COPY_LINHA - btnH;
   p.logoHeight = fminf(logoH, fmaxf(48.0f, p.action - btnGap - minTop));
   // `slot` 1 = the action button is (or may be) on screen: the logo sits above
@@ -3151,8 +3155,11 @@ static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
     minTop = base - (NV_PAD_BANNER_H - NV_PAD_TEXTO_BASE) + 24.0f;
   else if (lay == HOME_LAYOUT_DINAMICA)
     minTop = base - (NV_DIN_HERO_H - NV_DIN_TEXTO_BASE) + 54.0f;
+  AmigosTitulo amigos;
+  int temAmigos = ci && ci->imdb[0] && amigostitulo_obter(ci->imdb, &amigos);
+  float friendsH = temAmigos ? NV_AMIGOS_HERO_H : 0.0f;
   HeroCopyLayout copy = heroCopyLayout(base, hSin, metaLinha[0] != 0, temSec,
-                                      captionH, logoH, btnH, btnGap, minTop, slot);
+                                      captionH, logoH, btnH, btnGap, minTop, slot, friendsH);
   logoH = copy.logoHeight;
   float ySin = copy.synopsis, ySec = copy.secondary, yMeta = copy.meta;
   float logoY = copy.logo - cin * NV_CINEMA_DESCE;
@@ -3212,6 +3219,18 @@ static float desenhaCopiaHero(const CatItem *ci, int principal, float x,
   if (caption && aCopy > 0.004f)
     txt_bloco_corta(TXT_HERO_META, ci->titulo, 255, 255, 255, x, copy.caption,
                     sinW, NV_LD_HERO_META, aCopy, 1);
+
+  if (temAmigos && aCopy > 0.004f) {
+    static const float ANEL[3] = { 0.04f, 0.045f, 0.055f };
+    char linha[200];
+    float d = NV_AMIGOS_HERO_H, lx;
+    lx = x + svd_amigos_pilha(x, copy.friends, d, &amigos, amigos.n < 3 ? amigos.n : 3, 1, ANEL, aCopy) + 14.0f;
+    amigostitulo_linha_destaque(&amigos, linha, sizeof linha);
+    if (linha[0]) {
+      TxtLinha lf = txt_linha_corta(TXT_HERO_META, linha, 214, 217, 224, 255, sinW - (lx - x));
+      txt_desenhar_alpha(lf, lx, copy.friends + (d - lf.h) * 0.5f, aCopy);
+    }
+  }
 
   if (metaLinha[0] && aCopy > 0.004f) {
     float badgeW=ci?badges_desenhar(badges_provedor(ci->provNome),x,yMeta,150,24,aCopy):0;
@@ -4802,7 +4821,7 @@ static char cartaoFocoArte[1024];
 // no acento e a palavra "Assistido". Altura e recuo acompanham a largura do
 // cartao (26..32); abaixo de 150 de largura so o check, num disco da mesma
 // altura. Sombra rasa separa o selo de um poster claro.
-static void desenhaSeloVisto(float px, float py, float w) {
+static float desenhaSeloVisto(float px, float py, float w) {
   float h = w * 0.13f, m = w * 0.06f, ic, pw;
   float ar, ag, ab;
   int compacto = w < 150.0f;
@@ -4820,7 +4839,24 @@ static void desenhaSeloVisto(float px, float py, float w) {
     gfx_cor((GfxRect){ mx, my, pw, h }, 0.5f, 0.05f, 0.055f, 0.067f, 0.80f);
     { float ix = compacto ? mx + (h - ic) * 0.5f : mx + h * 0.36f;
       gfx_icone((GfxRect){ ix, my + (h - ic) * 0.5f, ic, ic }, "check", ar, ag, ab, 1.0f);
-      if (!compacto) txt_desenhar(t, ix + ic + 6.0f, my + (h - t.h) * 0.5f); } }
+      if (!compacto) txt_desenhar(t, ix + ic + 6.0f, my + (h - t.h) * 0.5f); }
+    return mx; }
+}
+
+// CHIP DE AMIGOS no canto de cima A ESQUERDA do cartaz (amigostitulo.h): ate 2
+// rostos + "+N". Fica longe do titulo (embaixo) e do selo "Assistido" (a
+// direita): `limiteX` e a borda esquerda desse selo, e o chip encolhe para nao
+// passar dela.
+static void desenhaChipAmigos(const CatItem *ci, float px, float py, float w, float limiteX, float a) {
+  AmigosTitulo at;
+  float h = w * 0.17f, m = w * 0.045f;
+  if (!ci || !ci->imdb[0] || w < 110.0f) return;
+  if (!amigostitulo_obter(ci->imdb, &at)) return;
+  if (h < 28.0f) h = 28.0f;
+  if (h > 38.0f) h = 38.0f;
+  if (m < 8.0f) m = 8.0f;
+  if (m > 14.0f) m = 14.0f;
+  svd_amigos_chip(px + m, py + m, h, limiteX - 6.0f - (px + m), &at, a);
 }
 
 static void pintarCartao(const CartaoFoco *k, float raio) {
@@ -4882,10 +4918,13 @@ static void pintarCartao(const CartaoFoco *k, float raio) {
           // no Trakt (ou marcado pelo menu, que zera o progresso) nunca
           // ganhava o selo. Leitura O(1) por cartaz (hash em catalogo.c),
           // sem pedido de rede: o mapa ja veio no ciclo da descoberta.
+          float limiteSelo = px + w;
           if (cItem && tipo != FILEIRA_CONTINUE && tipo != FILEIRA_RETORNO &&
               ajustes_selo_visto() && cat_visto(cItem)) {
-            desenhaSeloVisto(px, py, w);
+            limiteSelo = desenhaSeloVisto(px, py, w);
           }
+          if (cItem && tipo != FILEIRA_CONTINUE && tipo != FILEIRA_RETORNO)
+            desenhaChipAmigos(cItem, px, py, w, limiteSelo, aArte);
 
           // `cardDepthEnabled` mais o interruptor por secao: `cardDepthPosters`
           // nas fileiras de catalogo, `cardDepthContinueWatching` na primeira.
@@ -4988,6 +5027,7 @@ int home_cartao_foco_por_cima(int indice) {
 }
 
 void home_desenhar(Uint32 agora) {
+  amigostitulo_atualizar();   // barato: so remonta quando o feed social mudou
   // O REBORDO DO CARTAZ EM FOCO e ajuste da pessoa, e ele mora no shader do
   // GFX_CARD (nao e um retangulo desenhado por cima): por isso vai por uma
   // variavel de modulo, uma vez por quadro, e nao em cada chamada.

@@ -10,7 +10,7 @@
 # recompilam quando o .c muda; detail.c entra pelo include do teste.
 set -eu
 cd "$(dirname "$0")/.."
-OBJ=/tmp/nuvio-detglass-obj
+OBJ=${OBJ:-/tmp/nuvio-detglass-obj}
 mkdir -p "$OBJ" "$1"
 NUVIO_DADOS=$(mktemp -d /tmp/nuvio-detglass-dados.XXXXXX)
 export NUVIO_DADOS
