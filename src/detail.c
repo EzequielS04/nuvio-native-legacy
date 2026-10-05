@@ -1112,9 +1112,23 @@ static const char *arteDe(int i) {
   // Congelada, MAS NAO PRESA A UM 404: a url da fonte escolhida pode ser
   // virtual (TMDB/Trakt pelo id, artereserva.h) e so se sabe se ela existe
   // depois do download. Falhou, solta e escolhe de novo (cai na seguinte).
+  // CONGELADA NO CARTAZ, E O FUNDO CHEGOU: solta. Titulo aberto pelas
+  // Recomendacoes nasce de uma SEMENTE (so titulo e cartaz) e a ficha traz o
+  // fundo 1-2 s depois; a pagina ficava com o cartaz esticado ate fechar
+  // (dono, 05/10/2026). So vale nesse sentido: fundo por fundo nao troca.
+  if (i == idx && arteFixa[0] && arteFixaPoster) {
+    const CatItem *c = cat_item(i);
+    if (c && c->backdrop[0]) { arteFixa[0] = 0; arteFixaPoster = 0; }
+  }
   if (i == idx && arteFixa[0] && !tex_falhou(arteFixa)) return arteFixa;
   { const char *u = arteDeViva(i);
-    if (i == idx && u) snprintf(arteFixa, sizeof arteFixa, "%s", u);
+    if (i == idx && u) {
+      const CatItem *c = cat_item(i);
+      snprintf(arteFixa, sizeof arteFixa, "%s", u);
+      // Marcado AQUI, junto com o congelamento: arteDetalheEhPoster so marcava
+      // se fosse chamada antes desta, e depois dela devolvia o 0 de fabrica.
+      arteFixaPoster = c && !c->backdrop[0] && c->poster[0];
+    }
     return u; }
 }
 static const char *arteDeViva(int i) {
