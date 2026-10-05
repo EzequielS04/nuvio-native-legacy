@@ -1518,6 +1518,15 @@ int main(int argc, char **argv) {
         // repouso; com 50 a linha saia para 12 de 12 pessoas na 1.6.1 e
         // afogava os casos lentos de verdade.
         int lenta = fpsAgora < 45.0 && quentes >= 10 && (Uint32)(agora - ultModos) >= 30000u;
+        // UMA LINHA POR SESSAO (e outra se a pessoa mudar algo): sem ela o vidro
+        // so aparece nas sessoes lentas, e nao ha como saber quantas sessoes com
+        // vidro ligado andam bem. Com ela a proporcao tem denominador.
+        { static int sLay = -1, sCor = -1, sVid = -1;
+          int lay = ajustes_home_layout(), cor = ajustes_cor_viva(), vid = ajustes_vidro();
+          if (lay != sLay || cor != sCor || vid != sVid) {
+            sLay = lay; sCor = cor; sVid = vid;
+            printf("[gpu-modos] sessao: layout=%d cor-viva=%d vidro=%d\n", lay, cor, vid);
+          } }
         if (lenta) { ultModos = agora;
           printf("[gpu-modos] lento: fps=%.1f layout=%d cor-viva=%d vidro=%d tela=%s\n",
                  fpsAgora, ajustes_home_layout(), ajustes_cor_viva(), ajustes_vidro(),
