@@ -206,6 +206,11 @@ void tex_threads_info(int *usadas, int *disponiveis);
 // Teto escolhido em Ajustes, em MB, aplicado ao vivo e travado pelo que a RAM
 // da TV suporta; 0 volta ao automatico. `fixo` passa a 3 quando esta em vigor.
 void tex_definir_orcamento_mb(int mb);
+// Aviso de pressao de memoria do sistema (Android onTrimMemory, de qualquer fio):
+// baixa o teto por 30 s e o proximo quadro despeja arte fria ate caber.
+// `tex_pressao_pct` e a tabela nivel -> % do teto que fica (100 = sem efeito).
+void tex_pressao_memoria(int nivel);
+int  tex_pressao_pct(int nivel);
 // O valor que "Automatico" significa: o perfil aprovado pelo diagnostico, ou
 // o padrao do aparelho com 0. Travado pelo teto da RAM; nao passa por cima de
 // Ajustes, de NV_TEX_MB_FIXO nem de NUVIO_TEX_MB.

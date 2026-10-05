@@ -569,6 +569,9 @@ static int pedidoObsoleto(const Item *it) {
          agora - it->ultimoPedido >= NV_TEX_STALE_MS;
 }
 
+static void podar(void);
+static int pressaoAtiva(void);
+
 void tex_novo_quadro(void) {
   tex_n_busca = 0;
   tex_ms_busca = 0.0;
@@ -590,6 +593,9 @@ void tex_novo_quadro(void) {
       desistir(i);
     }
   }
+  // PRESSAO DE MEMORIA (tex_pressao_memoria): o aviso chega de outro fio, que
+  // nao tem contexto GL e nao pode despejar textura. Quem despeja e este quadro.
+  if (pressaoAtiva()) podar();
   SDL_UnlockMutex(mtx);
 }
 
@@ -758,8 +764,64 @@ sai:
 
 // Despeja os menos usados ate caber no orcamento. Chamada com o mutex travado.
 // Para quando so resta arte quente ou em voo: ver despejar().
+//
+// PRESSAO DE MEMORIA DO SISTEMA (Android onTrimMemory). Um upload de textura
+// chegou a levar 16 s com o low-memory killer ativo (HANDOFF-PERFORMANCE, item
+// 4): o app seguia pedindo memoria enquanto o sistema tentava tirar dela.
+// Sob aviso, o teto efetivo cai por uns segundos e podar() despeja arte FRIA
+// ate caber — nunca a quente nem a em voo (ver despejar). Passado o prazo o teto
+// volta sozinho: onTrimMemory avisa na transicao, nao enquanto dura.
+// Escrito pelo fio da JNI, lido pelo fio de desenho; int de 32 bits, sem trava.
+#define NV_TEX_PRESSAO_MS 30000u
+static volatile int pressaoPct = 100;
+static volatile Uint32 pressaoAte;
+static int pressaoAtiva(void) {
+  if (pressaoPct >= 100) return 0;
+  if ((int)(SDL_GetTicks() - pressaoAte) >= 0) {
+    pressaoPct = 100;
+    printf("[tex] pressao de memoria passou: teto de volta a %ld MB\n", orcamento / (1024L * 1024L));
+    fflush(stdout);
+    return 0;
+  }
+  return 1;
+}
+static long limiteBytes(void) {
+  return pressaoAtiva() ? orcamento / 100 * pressaoPct : orcamento;
+}
+// Niveis de ComponentCallbacks2.onTrimMemory -> fracao do teto que fica.
+// 5/10/15 sao com o app em primeiro plano (MODERATE/LOW/CRITICAL); 20 e a UI
+// escondida; 40+ e o app em segundo plano; 60/80 o processo na ponta da lista
+// do killer. Nivel desconhecido ou < 5 nao muda nada.
+int tex_pressao_pct(int nivel) {
+  if (nivel >= 60) return 25;
+  if (nivel >= 20) return 50;
+  if (nivel >= 15) return 40;
+  if (nivel >= 10) return 60;
+  if (nivel >= 5) return 80;
+  return 100;
+}
+void tex_pressao_memoria(int nivel) {
+  int pct = tex_pressao_pct(nivel);
+  if (pct >= 100) return;
+  /* Aviso mais fraco nao afrouxa um mais forte ainda em vigor. */
+  if (pressaoAtiva() && pressaoPct < pct) pct = pressaoPct;
+  pressaoPct = pct;
+  pressaoAte = SDL_GetTicks() + NV_TEX_PRESSAO_MS;
+  printf("[tex] pressao de memoria (trim %d): teto a %d%% por %u s\n", nivel, pct, NV_TEX_PRESSAO_MS / 1000u);
+  fflush(stdout);
+}
+#ifdef NV_ANDROID
+#include <jni.h>
+JNIEXPORT void JNICALL
+Java_space_nuvio_nativelegacy_NuvioActivity_nativeTrimMemoria(JNIEnv *env, jobject act, jint nivel) {
+  (void)env; (void)act;
+  tex_pressao_memoria((int)nivel);
+}
+#endif
+
 static void podar(void) {
-  while (bytesUsados > orcamento)
+  long lim = limiteBytes();
+  while (bytesUsados > lim)
     if (despejar(0) < 0) break;
 }
 

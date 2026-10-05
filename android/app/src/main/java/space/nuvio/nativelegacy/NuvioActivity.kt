@@ -103,6 +103,19 @@ class NuvioActivity : SDLActivity() {
     // A new route, relevant capabilities or link properties invalidate the
     // diagnostic immediately. Values stay process-local and are never logged.
     private external fun nativeRedeAlterou(sequencia: Long, conhecida: Boolean)
+
+    // O sistema avisa quando a memoria aperta (RUNNING_MODERATE/LOW/CRITICAL em
+    // primeiro plano, UI_HIDDEN e BACKGROUND fora dele). O nucleo C baixa o
+    // teto do cache de texturas por 30 s e despeja arte fria. Um upload chegou
+    // a levar 16 s com o low-memory killer ativo. SDLActivity so repassa
+    // onLowMemory (o aviso mais forte), nao estes degraus.
+    private external fun nativeTrimMemoria(nivel: Int)
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // Antes de a libmain.so carregar nao ha para quem avisar.
+        try { nativeTrimMemoria(level) } catch (_: UnsatisfiedLinkError) { }
+    }
     private val redeTrava = Any()
     private var redeSequencia = 0L
     private var redeFechada = false
