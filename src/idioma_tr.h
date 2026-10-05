@@ -2508,7 +2508,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Seçili olan artık tüm arayüzde hep dolu, asla çerçeveli değil."),
   T("O que estão dizendo", "Neler söyleniyor"),
   T("O que fazer quando algo não funciona", "Bir şey çalışmadığında ne yapmalı"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Panellerin arkasında ne olduğu. Görsel: başlığın görüntüsü, net. Bulanık görsel: yalnızca renkleri. Buzlu: vurgu rengiyle tonlanmış mat yüzey. Cam arayüz kapalıyken paneller opaktır ve etki küçüktür."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Panellerin arkasında ne olduğu. Görsel: başlığın görüntüsü, net. Bulanık görsel: başlığın görüntüsü, bulanıklaştırılmış. Buzlu: vurgu rengiyle tonlanmış mat yüzey. Cam arayüz kapalıyken paneller opaktır ve etki küçüktür."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Yarım bıraktıkların ve dizilerin sonraki bölümü. Kartı, OK'nin devam edip etmeyeceğini ya da sayfayı açacağını ve satırın sırasını seç."),
   T("O que foi aplicado", "Uygulananlar"),
   T("O que há de novo", "Yenilikler"),

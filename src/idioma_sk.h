@@ -2508,7 +2508,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Vybrané je teraz vyplnené, nikdy len obrysom, v celom rozhraní."),
   T("O que estão dizendo", "Čo sa hovorí"),
   T("O que fazer quando algo não funciona", "Čo robiť, keď niečo nefunguje"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Čo je za panelmi. Obrázok: obraz titulu, ostrý. Rozmazaný obrázok: len jeho farby. Námraza: matná plocha vo farbe zvýraznenia. Pri vypnutom sklenenom rozhraní sú panely nepriehľadné a efekt je malý."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Čo je za panelmi. Obrázok: obraz titulu, ostrý. Rozmazaný obrázok: obraz titulu, rozmazaný. Námraza: matná plocha vo farbe zvýraznenia. Pri vypnutom sklenenom rozhraní sú panely nepriehľadné a efekt je malý."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Čo zostalo napoly a ďalší diel seriálov. Vyber kartu, či OK pokračuje alebo otvorí stránku, a poradie riadku."),
   T("O que foi aplicado", "Čo bolo použité"),
   T("O que há de novo", "Novinky"),

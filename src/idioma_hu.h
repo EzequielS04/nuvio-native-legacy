@@ -2508,7 +2508,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "A kijelölt elem mostantól kitöltött, sosem csak körvonalas, az egész felületen."),
   T("O que estão dizendo", "Mit mondanak"),
   T("O que fazer quando algo não funciona", "Mi a teendő, ha valami nem működik"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Ami a panelek mögött van. Kép: a cím képe, élesen. Elmosott kép: csak a színei. Dér: matt felület a kiemelőszínnel. Kikapcsolt üvegfelületnél a panelek átlátszatlanok, és a hatás kicsi."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Ami a panelek mögött van. Kép: a cím képe, élesen. Elmosott kép: a cím képe, elmosva. Dér: matt felület a kiemelőszínnel. Kikapcsolt üvegfelületnél a panelek átlátszatlanok, és a hatás kicsi."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Amit félbehagytál, és a sorozatok következő része. Válaszd ki a kártyát, hogy az OK folytatja vagy megnyitja az oldalt, és a sor sorrendjét."),
   T("O que foi aplicado", "Mi lett alkalmazva"),
   T("O que há de novo", "Újdonságok"),

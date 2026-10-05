@@ -2508,7 +2508,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Zaznaczony element jest teraz zawsze wypełniony, nigdy tylko obrysowany, w całym interfejsie."),
   T("O que estão dizendo", "Co mówią inni"),
   T("O que fazer quando algo não funciona", "Co zrobić, gdy coś nie działa"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "To, co jest za panelami. Grafika: obraz tytułu, ostry. Rozmyta grafika: tylko jego kolory. Szron: matowa powierzchnia w kolorze akcentu. Przy wyłączonym szklanym interfejsie panele są nieprzezroczyste, a efekt jest mały."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "To, co jest za panelami. Grafika: obraz tytułu, ostry. Rozmyta grafika: obraz tytułu, rozmyty. Szron: matowa powierzchnia w kolorze akcentu. Przy wyłączonym szklanym interfejsie panele są nieprzezroczyste, a efekt jest mały."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "To, co zostało w połowie, i następny odcinek seriali. Wybierz kartę, czy OK wznawia, czy otwiera stronę, i kolejność rzędu."),
   T("O que foi aplicado", "Co zastosowano"),
   T("O que há de novo", "Co nowego"),

@@ -2508,7 +2508,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Mục đang chọn giờ luôn được tô đầy, không bao giờ chỉ có viền, trên toàn bộ giao diện."),
   T("O que estão dizendo", "Mọi người nói gì"),
   T("O que fazer quando algo não funciona", "Làm gì khi có thứ không hoạt động"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Những gì nằm sau các bảng. Ảnh: hình của tựa phim, sắc nét. Ảnh làm mờ: chỉ còn màu của nó. Sương giá: bề mặt mờ nhuộm màu nhấn. Khi tắt giao diện kính, các bảng không trong suốt và hiệu ứng nhỏ."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Những gì nằm sau các bảng. Ảnh: hình của tựa phim, sắc nét. Ảnh làm mờ: hình của tựa phim, được làm mờ. Sương giá: bề mặt mờ nhuộm màu nhấn. Khi tắt giao diện kính, các bảng không trong suốt và hiệu ứng nhỏ."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Những gì bạn xem dở và tập tiếp theo của series. Chọn thẻ, OK sẽ xem tiếp hay mở trang, và thứ tự của hàng."),
   T("O que foi aplicado", "Những gì đã áp dụng"),
   T("O que há de novo", "Có gì mới"),

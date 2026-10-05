@@ -2508,7 +2508,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Yang terpilih kini selalu terisi, tidak pernah hanya garis tepi, di seluruh antarmuka."),
   T("O que estão dizendo", "Apa kata orang"),
   T("O que fazer quando algo não funciona", "Apa yang dilakukan saat ada yang tidak berfungsi"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Apa yang ada di belakang panel. Gambar: gambar judul, tajam. Gambar buram: hanya warnanya. Embun beku: permukaan doff yang diwarnai warna aksen. Dengan antarmuka kaca mati, panel buram dan efeknya kecil."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Apa yang ada di belakang panel. Gambar: gambar judul, tajam. Gambar buram: gambar judul, dibuat buram. Embun beku: permukaan doff yang diwarnai warna aksen. Dengan antarmuka kaca mati, panel buram dan efeknya kecil."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Yang Anda tinggalkan di tengah dan episode berikutnya dari serial Anda. Pilih kartunya, apakah OK melanjutkan atau membuka halaman, dan urutan barisnya."),
   T("O que foi aplicado", "Apa yang diterapkan"),
   T("O que há de novo", "Yang baru"),

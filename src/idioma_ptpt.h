@@ -2508,7 +2508,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "O que está selecionado agora aparece preenchido, sem contorno, em toda a interface."),
   T("O que estão dizendo", "O que estão a dizer"),
   T("O que fazer quando algo não funciona", "O que fazer quando algo não funciona"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte desfocada: só as cores dela. Geada: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte desfocada: a imagem do título, desfocada. Geada: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "O que ficou a meio e o próximo episódio das séries. Escolha o cartão, se o OK retoma ou abre a página, e a ordem da fila."),
   T("O que foi aplicado", "O que foi aplicado"),
   T("O que há de novo", "O que há de novo"),

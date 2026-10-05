@@ -2508,7 +2508,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Wat geselecteerd is, is nu overal in de interface gevuld, nooit omlijnd."),
   T("O que estão dizendo", "Wat mensen zeggen"),
   T("O que fazer quando algo não funciona", "Wat te doen als iets niet werkt"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Wat achter de panelen staat. Afbeelding: het beeld van de titel, scherp. Vervaagde afbeelding: alleen de kleuren. Frost: mat oppervlak in de accentkleur. Met de glasinterface uit zijn de panelen dekkend en is het effect klein."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Wat achter de panelen staat. Afbeelding: het beeld van de titel, scherp. Vervaagde afbeelding: het beeld van de titel, vervaagd. Frost: mat oppervlak in de accentkleur. Met de glasinterface uit zijn de panelen dekkend en is het effect klein."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Wat je half hebt gezien en de volgende aflevering van je series. Kies de kaart, of OK hervat of de pagina opent, en de volgorde van de rij."),
   T("O que foi aplicado", "Wat is toegepast"),
   T("O que há de novo", "Wat is er nieuw"),

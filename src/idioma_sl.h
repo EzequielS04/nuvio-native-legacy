@@ -2508,7 +2508,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Izbrano je zdaj zapolnjeno, nikoli samo obrobljeno, v celotnem vmesniku."),
   T("O que estão dizendo", "Kaj pravijo"),
   T("O que fazer quando algo não funciona", "Kaj storiti, ko nekaj ne deluje"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Kaj je za ploščami. Slika: podoba naslova, ostra. Zamegljena slika: samo njene barve. Ivje: motna površina v barvi poudarka. Ko je steklen vmesnik izklopljen, so plošče neprosojne in učinek je majhen."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Kaj je za ploščami. Slika: podoba naslova, ostra. Zamegljena slika: podoba naslova, zamegljena. Ivje: motna površina v barvi poudarka. Ko je steklen vmesnik izklopljen, so plošče neprosojne in učinek je majhen."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Kar je ostalo na pol, in naslednja epizoda serij. Izberi kartico, ali OK nadaljuje ali odpre stran, in vrstni red vrstice."),
   T("O que foi aplicado", "Kaj je bilo uporabljeno"),
   T("O que há de novo", "Novosti"),

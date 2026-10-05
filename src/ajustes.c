@@ -332,7 +332,7 @@ typedef enum {
   // mesmo motivo: valor[] e CHAVE[] sao posicionais.
   AJ_TAMANHO_UI,
   // FUNDO (Aparencia, Ajustes v2): o que fica atras dos paineis — a arte do
-  // titulo (o de sempre), a mesma arte borrada (a luz assada da Imersiva) ou o
+  // titulo (o de sempre), a mesma arte desfocada (fundo.c, gfx_desfocado) ou o
   // Frost (superficie fria tingida pelo acento). LOCAL: o desfoque custa GPU e
   // o Frost depende do acento desta TV. No fim pelo mesmo motivo: valor[] e
   // CHAVE[] sao posicionais.
@@ -4711,7 +4711,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_TEMA: return "Cor do botão em foco e das marcas de estado. Os claros levam texto escuro, os profundos texto branco — sempre a 4,5:1 ou mais.";
     case AJ_VIDRO_OPAC: return "Teste: quanto os painéis de vidro deixam a arte aparecer. O valor do meio é o de hoje; menos é mais transparente, mais é mais escuro e fácil de ler.";
     case AJ_VIDRO_FOSCO: return "Teste: põe a arte borrada atrás de cada painel de vidro, como um vidro jateado. Onde não há arte borrada, o vidro fica como sempre.";
-    case AJ_FUNDO: return "O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.";
+    case AJ_FUNDO: return "O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.";
     case AJ_P2P_LIGADO:
       // Com o motor neste pacote o aviso diz o que a TV passa a fazer (baixar
       // e COMPARTILHAR), o teto de disco e o risco legal.

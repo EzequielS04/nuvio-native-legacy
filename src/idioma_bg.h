@@ -2508,7 +2508,7 @@
   T("O que está selecionado agora é preenchido, sem contorno, em toda a interface.", "Избраното вече е запълнено, а не очертано, в целия интерфейс."),
   T("O que estão dizendo", "Какво казват"),
   T("O que fazer quando algo não funciona", "Какво да направите, когато нещо не работи"),
-  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: só as cores dela. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Какво е зад панелите. Изображение: картината на заглавието, рязка. Размазано изображение: само цветовете ѝ. Скреж: матова повърхност в цвета на акцента. При изключен стъклен интерфейс панелите са плътни и ефектът е малък."),
+  T("O que fica atrás dos painéis. Arte: a imagem do título, nítida. Arte borrada: a imagem do título desfocada. Frost: superfície fosca tingida pela cor de destaque. Com a interface de vidro desligada os painéis são opacos e o efeito é pequeno.", "Какво е зад панелите. Изображение: картината на заглавието, рязка. Размазано изображение: картината на заглавието, размазана. Скреж: матова повърхност в цвета на акцента. При изключен стъклен интерфейс панелите са плътни и ефектът е малък."),
   T("O que ficou pela metade e o próximo episódio das séries. Escolha o card, se o OK retoma ou abre a página, e a ordem da fileira.", "Недогледаното и следващият епизод на сериалите ви. Изберете картата, дали OK продължава или отваря страницата, и реда на реда."),
   T("O que foi aplicado", "Какво беше приложено"),
   T("O que há de novo", "Какво е новото"),
