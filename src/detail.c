@@ -5331,28 +5331,6 @@ static void desenhaRelacionados(float x, float y, float a, int primeiro, int lim
 // arredondada, sem over-scan e sem ganho. O recorte monocromatico continua no
 // GFX_MARCA; como a superficie em foco permanece escura, a marca segue clara
 // enquanto o cartao recebe o accent configuravel.
-// FOCO SEM ANEL (Ajustes > Foco no cartaz desligado): so o crescimento de 6 %
-// nao diz nada num cartao de texto/logo, e o cartao da colecao nem crescia — o
-// dono: "nao mostra o accent quando esta em foco" (Studios) e "nao da para
-// saber que esta focado" (Colecao), 04/10/2026. O mesmo halo no acento que o
-// cartao de foco das linhas da lista usa (gfx_cartao_foco_vidro), atras do
-// cartao. Com o anel ligado nada muda: o anel ja e o acento.
-static void focoHaloAcento(GfxRect r, float f, float a) {
-  float ar, ag, ab, folga = r.h * 0.38f;
-  if (f <= 0.01f || ajustes_borda_foco()) return;
-  ajustes_acento(&ar, &ag, &ab);
-  gfx_rect((GfxRect){ r.x - folga, r.y - folga, r.w + folga * 2.0f, r.h + folga * 2.0f },
-           0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.44f * f * a);
-}
-// Superficie do cartao em foco sem anel: a MESMA do cartao de foco das linhas
-// (gfx_cartao_foco_vidro), cruzada com o repouso por `f`.
-static void focoSuperficieAcento(GfxRect r, float raio, float f, float a) {
-  float ar, ag, ab;
-  if (f <= 0.01f || ajustes_borda_foco()) return;
-  ajustes_acento(&ar, &ag, &ab);
-  gfx_cartao_foco_vidro(r, raio, 1.0f, a * f, ar, ag, ab);
-}
-
 static void desenhaEstudio(float x, float y, int i, float f, float a) {
   GfxRect r0 = { x, y, EST_CARD_W, EST_CARD_H };
   GfxRect r = foco_zoom(r0, f);
@@ -5365,10 +5343,12 @@ static void desenhaEstudio(float x, float y, int i, float f, float a) {
   // realce) que "Mais como este" e o Elenco nao tem — na Moderna o estudio era
   // o unico cartao da pagina com outra linguagem de foco (dono, 03/10/2026).
   // REPOUSO = a mesma superficie neutra dos demais (moldura).
-  focoHaloAcento(r, f, a);
+  // Sem anel o foco nao pode ser so o crescimento de 6 % num cartao de logo:
+  // sobe para a superficie clara neutra das linhas em foco (plrui_linha_foco),
+  // sem acento, sem halo.
   if (!ajustes_vidro()) foco_anel(r0, raio, f, a);
   moldura(r, 14.0f, a);
-  focoSuperficieAcento(r, 14.0f / r.h, f, a);
+  if (!ajustes_borda_foco() && f > 0.01f) plrui_linha_foco(r, 14.0f, f * a);
   if (ajustes_vidro()) foco_anel(r0, raio, f, a);
   foco_profundidade(r, raio, ajustes_profundidade_posters(), a);
   t = logo[0] ? tex_obter(logo) : 0;
@@ -5606,9 +5586,7 @@ static void desenhaListaColecao(float a) {
     float tx = lx + 13.0f + COLL_PO_W + 32.0f, tw = lx + lw - 32.0f - tx, ty;
     if (ly + COLL_LIN_H < 0.0f || ly > NV_TELA_H) continue;
     if (foc) {
-      float ar, ag, ab;
-      ajustes_acento(&ar, &ag, &ab);
-      gfx_cartao_foco_vidro(lin, 20.0f / lin.h, 1.0f, a, ar, ag, ab);
+      plrui_linha_foco(lin, 20.0f, a);   // a mesma linha em foco dos Ajustes/Agenda
     } else {
       moldura(lin, 20.0f, a * 0.55f);
     }

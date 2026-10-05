@@ -614,13 +614,9 @@ void vertudo_desenhar(Uint32 agora) {
     if (!viewItem(i, &it)) continue;
     { GfxRect r0 = { cx, cy, VT_CARD_W, VT_CARD_H }, r = r0;
       float aArte;
-      // SEM ANEL: o foco e o crescimento (focoprof.h) e um halo no acento — o
-      // mesmo das outras grades. Antes o anel branco fixo ignorava os Ajustes.
+      // SEM ANEL: o foco e o crescimento (focoprof.h), como nas outras grades,
+      // sem halo colorido. Antes o anel branco fixo ignorava os Ajustes.
       if (sel && !tabFocus && !ajustes_borda_foco()) {
-        float ar, ag, ab, folga = r0.h * 0.38f;
-        ajustes_acento(&ar, &ag, &ab);
-        gfx_rect((GfxRect){ cx - folga, cy - folga, r0.w + folga * 2.0f, r0.h + folga * 2.0f },
-                 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f, ar, ag, ab, 0.44f * ac);
         r = foco_zoom(r0, 1.0f);
       }
       if (sel && !tabFocus && ajustes_borda_foco()) {
