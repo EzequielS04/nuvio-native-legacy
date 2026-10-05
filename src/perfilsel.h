@@ -52,6 +52,8 @@ typedef struct {
   int particulas;
   int burst;
   int burst_desenhado;
+  float amb_t;        /* cross-fade do ambiente do perfil, 0..1 */
+  int amb_atual, amb_ant;
 } PerfilSelTesteEstado;
 void perfilsel_teste_estado(PerfilSelTesteEstado *estado);
 #endif

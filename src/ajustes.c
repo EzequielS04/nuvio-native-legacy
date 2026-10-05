@@ -476,7 +476,10 @@ static const char *V_FONTE_TEXTO[] = { "Do Nuvio", "Do addon", "Logo do título"
 // escolhida): aquela preferencia e por PERFIL, e aqui, antes de alguem
 // escolher um perfil, nao ha perfil para ler a preferencia dele (ver a nota em
 // perfilsel.c).
-static const char *V_PS_FUNDO[]  = { "Automático", "Desligado" };
+// Indices GRAVADOS em ajustes.txt: 0 = mural de capas (era "Automático"),
+// 1 = listras do login (era "Desligado"), 2 = arte do perfil em foco (2.0).
+// Valor novo SEMPRE no fim: quem ja tinha 0 ou 1 continua com o mesmo fundo.
+static const char *V_PS_FUNDO[]  = { "Mural", "Listras", "Arte do perfil" };
 // Teto de memoria para imagens. O indice vira MB em ajustes_tex_mb; 0 e a
 // regra automatica pela RAM (tex_cache.c). Escolha por APARELHO: fica no
 // ajustes.txt e nunca vai para a conta — a TV da sala e a do quarto nao tem
@@ -847,7 +850,7 @@ static const Opcao OPCOES[AJ_N] = {
   // (fil_hero_fonte), a mesma da folha de fileiras. A chave continua "-":
   // quem grava a escolha e fileiras.c.
   ACAO("Catálogos do destaque"),                  // fil_hero_fonte
-  ESC("Fundo da escolha de perfil", V_PS_FUNDO, 2), // local: ver psfundo.c
+  ESC("Fundo da escolha de perfil", V_PS_FUNDO, 3), // local: ver psfundo.c
   ESC("Local do Descobrir",         V_DESCOBRIR, 3), // discoverLocation
   ESC("Rótulos nos pôsteres",       V_LIGA, 2),   // posterLabelsEnabled
   ESC("Nome do addon no catálogo",  V_LIGA, 2),   // catalogAddonNameEnabled
@@ -1847,6 +1850,7 @@ int ajustes_hero_fonte(void) {
 // escolhendo arte do catalogo como reserva; "Desligado" (indice 1) = a tela de
 // perfil volta a nao desenhar nada alem do que o proprio perfil traz.
 int ajustes_ps_fundo_automatico(void) { return lig(AJ_PS_FUNDO); }
+int ajustes_ps_fundo(void) { int v = valor[AJ_PS_FUNDO]; return v >= 0 && v <= 2 ? v : 0; }
 int ajustes_tex_mb(void) {
   int i = valor[AJ_TEX_MB];
   if (SEGURO && i >= 5) i = 0;            // 400/512 MB: volta ao automatico da RAM
@@ -4579,7 +4583,7 @@ static const char *ajudaOpcao(int op) {
     case AJ_RAIL_BLUR: return "Desfoca a arte atrás da barra lateral moderna em vez de usar um fundo sólido.";
     case AJ_HERO: return "O bloco grande no topo da Home, com a arte e o nome de um título em destaque.";
     case AJ_HERO_CATALOGOS: return "De onde vêm os títulos do destaque: os primeiros do catálogo, um sorteio, ou uma fileira da Home. OK troca.";
-    case AJ_PS_FUNDO: return "A tela \"Quem está assistindo?\" mostra arte do catálogo atrás dos perfis. Desligado, fica o fundo de listras do login.";
+    case AJ_PS_FUNDO: return "Fundo da tela de escolha de perfil: o mural de capas do catálogo, a arte do perfil em foco desfocada (sem arte, o mural) ou as listras do login.";
     case AJ_DESCOBRIR: return "Onde fica a tela Descobrir: junto da Busca, como item próprio na barra lateral, ou em lugar nenhum.";
     case AJ_SELO_VISTO: return "Um check pequeno no canto de cima do pôster dos títulos que você já assistiu, pelo Trakt, pela conta ou marcados nesta TV.";
     case AJ_ROTULOS: return "Escreve o nome do título abaixo do cartaz. A maior parte da arte já traz o nome impresso.";
