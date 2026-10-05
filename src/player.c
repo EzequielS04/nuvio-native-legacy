@@ -42,6 +42,7 @@
 #include "layout.h"
 #include "catalogo.h"
 #include "artehero.h"
+#include "logotitulo.h"
 #include "corviva.h"
 
 // A CASCA DO TIZEN PRECISA SABER SE O PLAYER ESTA NA TELA. tools/tizen-shell.html
@@ -3423,12 +3424,33 @@ static void desenharAcoesEpisodioCorpo(void){
 }
 
 // --- O CORPO DA ILHA AO ABRIR A FONTE E NO ERRO ------------------------------
-static float alturaCarregando(void) { return 22.0f + 32.0f + 6.0f + 24.0f + 18.0f + 52.0f + 18.0f + 4.0f + 22.0f; }
+// A ARTE DO TITULO NO TOPO DO CARTAO (dono, 04/10: "o opening source podia
+// mostrar a arte da logo"): a mesma logo do hero/detalhe (logotitulo.h), numa
+// caixa reservada e centrada; sem logo, o nome em texto na MESMA caixa.
+#define CAR_LOGO_H 92.0f
+#define CAR_LOGO_W 440.0f
+static void arteCarregando(float x, float y, float w, float a) {
+  const CatItem *ci = (!ehCanal()) ? item() : NULL;
+  const char *u = ci ? logotitulo_url(ci, CAR_LOGO_W) : NULL;
+  GLuint t = u ? tex_obter_larg_qualquer(u, CAR_LOGO_W) : 0;
+  float asp = t ? tex_aspecto(u) : 0.0f;
+  if (t && asp > 0.01f) {
+    float lw = CAR_LOGO_W, lh = lw / asp;
+    if (lh > CAR_LOGO_H) { lh = CAR_LOGO_H; lw = lh * asp; }
+    logotitulo_desenhar(ci, "", TXT_G30B, x + (w - lw) * 0.5f, y, CAR_LOGO_W, CAR_LOGO_H, 0.0f, a);
+  } else if (ci && ci->titulo[0]) {
+    TxtLinha l = txt_linha_corta(TXT_G30B, ci->titulo, 245, 248, 255, 255, w - 24.0f);
+    txt_desenhar_alpha(l, x + (w - (float)l.w) * 0.5f, y + (CAR_LOGO_H - (float)l.h) * 0.5f, a);
+  }
+}
+static float alturaCarregando(void) { return 22.0f + CAR_LOGO_H + 16.0f + 32.0f + 6.0f + 24.0f + 18.0f + 52.0f + 18.0f + 4.0f + 22.0f; }
 static void corpoCarregando(GfxRect r, float a, void *u) {
   float x = r.x + 18.0f, w = r.w - 36.0f, y = r.y + 22.0f;
   Uint32 agora = SDL_GetTicks();
   const Stream *st = stream_item(stream_atual());
   (void)u;
+  arteCarregando(x, y, w, a);
+  y += CAR_LOGO_H + 16.0f;
   plrui_respira(x + 6.0f + 5.0f, y + 16.0f, 10.0f, agora, a);
   { TxtLinha l = txt_linha(TXT_G26B, "Abrindo fonte", 243, 242, 239, 255);
     txt_desenhar_alpha(l, x + 6.0f + 10.0f + 16.0f, y + 16.0f - (float)l.h * 0.5f, a); }
