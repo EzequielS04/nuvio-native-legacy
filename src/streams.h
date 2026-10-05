@@ -205,6 +205,8 @@ int  stream_texto_fora_de_cache(const char *texto);
 // titulo aberto: o teste de velocidade do diagnostico mede primeiro a fonte
 // que o automatico escolheria, com a mesma regra, sem copia-la.
 long stream_pontos(const Stream *s);
+// R9b: o que a tela mostra (1/0; -1 = desconhecido, o padrao, nao penaliza).
+void stream_definir_tela(int hdr, int dv);
 int  stream_cabe_no_teto(const Stream *s);
 
 // TORRENT SEM URL ESCOLHIDO A DEDO NA FOLHA. A escolha manual chamava

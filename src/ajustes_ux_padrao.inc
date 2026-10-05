@@ -215,3 +215,4 @@
   1, /* show advanced options (R6): Desligado (V_LIGA: 1 = Desligado) */
   0, 0, 0, 0, 0, /* second subtitle (R4): No topo; Automatico; Igual a principal x3 */
   0, 0, 0, 0, 0, 0, /* Emby (address, sign in, sign out) and Plex (sign in, server, sign out): actions */
+  0, 0, /* automatic source (R9b): Equilibrio; HDR e Dolby Vision: Preferir */

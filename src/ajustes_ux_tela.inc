@@ -72,7 +72,7 @@ static const Item TELA[] = {
   SEC("Reprodução", "Fonte, imagem, som e comportamento do player", "aj_circle-play"),
     ROT("Escolha da fonte"),
       OPC(AJ_FONTE_MANUAL), OPC(AJ_FONTE_AUTO), OPC(AJ_FONTE_REPOR),
-      OPC(AJ_FONTE_PRAZO), OPC(AJ_FONTE_TEXTO),
+      OPC(AJ_FONTE_PRIORIDADE), OPC(AJ_FONTE_HDR), OPC(AJ_FONTE_PRAZO), OPC(AJ_FONTE_TEXTO),
       OPC(AJ_SELOS_CORES),
       OPC(AJ_SELOS_PACOTE), OPC(AJ_SELOS_PACOTE_ADD), OPC(AJ_SELOS_PACOTE_REM),
     ROT("Imagem e som"), OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS), OPC(AJ_CACHE_SEEK),

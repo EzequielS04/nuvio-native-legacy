@@ -127,6 +127,9 @@ int ajustes_fonte_repor(void);
 // Prazo, em ms, da escolha automatica com a lista ainda enchendo (#221); 0 =
 // esperar todos os addons. "Espera pelos add-ons" em Ajustes.
 int ajustes_fonte_prazo_ms(void);
+// R9b: 0 Equilibrio, 1 Qualidade maxima, 2 Começar rápido / 0 Preferir, 1 Indiferente, 2 Evitar HDR e DV.
+int ajustes_fonte_prioridade(void);
+int ajustes_fonte_hdr(void);
 
 // Idioma da interface: um IDIOMA_* de idiomacod.h (pt, en, ro, uk, ru, fr, de, es). Valor
 // gravado fora do intervalo (arquivo editado a mao) cai em portugues.

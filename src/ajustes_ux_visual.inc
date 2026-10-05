@@ -114,6 +114,7 @@ static const char *ajVisualIcone(int op) {
     case AJ_FONTE_AUTO: return "aj_list-video";
     case AJ_FONTE_REPOR: return "aj_list-video";
     case AJ_FONTE_PRAZO: return "aj_list-video";
+    case AJ_FONTE_PRIORIDADE: case AJ_FONTE_HDR: return "aj_list-video";
     case AJ_FONTE_TEXTO: return "aj_list-video";
     case AJ_SELOS_CORES: return "aj_list-video";
     case AJ_SELOS_PACOTE: return "aj_list-video";
