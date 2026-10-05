@@ -107,13 +107,20 @@ static float ajLogo(const char *c, float x, float y, float maxW, float maxH, flo
 
 // --- MATERIAL -------------------------------------------------------------------
 static int ajVid(void) { return ajustes_vidro(); }
+// A sombra da ilha. `opaca` = o miolo vem por cima com alfa 1 (o solido): a
+// parte da mancha que ele cobre nao e desenhada (gfx_sombra_vazada, o furo e a
+// ilha sem a faixa do canto arredondado). No vidro o miolo e translucido e a
+// mancha inteira aparece por baixo dele.
+static void ajIlhaSombra(GfxRect r, float raioPx, float al, int opaca) {
+  gfx_sombra_sob((GfxRect){ r.x - 20, r.y - 6, r.w + 40, r.h + 46 }, 1.0f, 0.0f, 0.5f, 0, 0, 0, al,
+                 r, raioPx, opaca ? 1.0f : 0.0f);
+}
 // Ilha: sombra curta, miolo (vidro 80% / solido #15161A) e a luz larga do canto
 // de cima, sem contorno. `modal` = miolo a 86%, para a ilha por cima de outra.
 static void ajIlha(GfxRect r, float raioPx, float a, int modal) {
   float raio = raioPx / r.h;
   if (a <= 0.003f) return;
-  gfx_rect((GfxRect){ r.x - 20, r.y - 6, r.w + 40, r.h + 46 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
-           0, 0, 0, (ajVid() ? 0.36f : 0.45f) * a);
+  ajIlhaSombra(r, raioPx, (ajVid() ? 0.36f : 0.45f) * a, !ajVid() && a >= 0.999f);
   if (ajVid()) {
     // Teste do vidro: opacidade (78% = 0.80/0.86 de sempre) e fosco.
     float miolo = (modal ? 0.86f : 0.80f) * gfx_vidro_opacidade();
@@ -127,8 +134,7 @@ static void ajIlha(GfxRect r, float raioPx, float a, int modal) {
 // Ilha com o miolo do vidro a `miolo` (o editor da v2: 88%).
 static void ajIlhaMiolo(GfxRect r, float raioPx, float miolo) {
   float raio = raioPx / r.h;
-  gfx_rect((GfxRect){ r.x - 20, r.y - 6, r.w + 40, r.h + 46 }, 0, GFX_SOMBRA, 1.0f, 0, 0, 0.5f,
-           0, 0, 0, ajVid() ? 0.36f : 0.45f);
+  ajIlhaSombra(r, raioPx, ajVid() ? 0.36f : 0.45f, !ajVid());
   if (ajVid()) {
     float m = miolo * gfx_vidro_opacidade();
     gfx_vidro_fosco(r, raio, 1);

@@ -1484,8 +1484,8 @@ static float segC1(float xDir, float yc, int desenhar) {
 static void ilhaC1(GfxRect p) {
   const int vid = ajustes_vidro();
   float raio = P(36) / p.h;
-  gfx_rect((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f }, 0, GFX_SOMBRA,
-           1.0f, 0, 0, 0.5f, 0, 0, 0, .38f);
+  gfx_sombra_sob((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f }, 1.0f, 0, 0.5f,
+                 0, 0, 0, .38f, p, raio * p.h, vid ? 0.0f : .98f);
   if (vid) gfx_vidro_folha(p, raio, 1.0f);
   else gfx_cor(p, raio, .071f, .075f, .086f, .98f);
   gfx_luz_canto(p, raio, p.w * .25f, -p.h * .25f, p.w * .9f, 1, 1, 1, vid ? .06f : .04f);

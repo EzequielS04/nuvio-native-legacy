@@ -25,8 +25,8 @@ void plrui_material(GfxRect r, float raioPx, int modal, float a) {
     gfx_luz_canto(r, raio, r.w * 0.22f, -r.h * 0.40f,
                   (r.w > r.h ? r.w : r.h) * 0.62f, 1, 1, 1, 0.10f * a);
   } else {
-    gfx_rect((GfxRect){ r.x - 16.0f, r.y - 4.0f, r.w + 32.0f, r.h + 30.0f }, 0, GFX_SOMBRA,
-             1.0f, 0, 0, 0.5f, 0, 0, 0, 0.45f * a);
+    gfx_sombra_sob((GfxRect){ r.x - 16.0f, r.y - 4.0f, r.w + 32.0f, r.h + 30.0f }, 1.0f, 0, 0.5f,
+                   0, 0, 0, 0.45f * a, r, raio * r.h, a);
     gfx_cor(r, raio, 0.082f, 0.086f, 0.102f, a);
   }
 }
