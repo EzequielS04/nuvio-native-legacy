@@ -13,7 +13,6 @@
 #include "sessao.h"
 #include "catalogo.h"
 #include "iconeapp.h"
-#include "logoapp.h"
 #include "cachearte.h"
 #include "ponteiro.h"
 #include "plrui.h"
@@ -61,13 +60,12 @@
 #define PS_ARTE_H       648.0f   // faixa da arte de fundo do perfil focado
 // CARTAO "CONTINUAR" sob o perfil em foco (2.0, variante B): a peca da ilha
 // (material vidro/solido, mini capa, trilho) com o ultimo item da pessoa.
-#define PS_CONT_W      520.0f
-#define PS_CONT_H       96.0f
-#define PS_CONT_RAIO    30.0f
-#define PS_CONT_CAPA_W  44.0f
-#define PS_CONT_CAPA_H  64.0f
-#define PS_CONT_TRILHO 200.0f
-#define PS_CONT_Y_MAX  792.0f   // topo, com o avatar no teto; abaixo disso sobe com o avatar
+#define PS_CONT_W      760.0f
+#define PS_CONT_H      172.0f
+#define PS_CONT_RAIO    36.0f
+#define PS_CONT_CAPA_W  92.0f
+#define PS_CONT_CAPA_H 132.0f
+#define PS_CONT_Y_MAX  812.0f   // topo, com o avatar no teto; abaixo disso sobe com o avatar
 #define PS_HALO_N            3   // poucos aneis suaves, sem efeito de alvo
 #define PS_HALO_ATE      0.66f   // quanto o ultimo anel passa do avatar
 #define PS_HALO_ALFA     0.040f
@@ -604,31 +602,39 @@ static void contDesenhar(int i, float cx, float yTopo, float f, float a) {
   if (r.x + r.w > NV_TELA_W - 40.0f) r.x = NV_TELA_W - 40.0f - r.w;
   r.y = yTopo + (1.0f - (f > 1.0f ? 1.0f : f)) * 14.0f;   // sobe ao entrar no foco
   plrui_material(r, PS_CONT_RAIO, 0, af);
+  // CARTAO GRANDE (dono, 05/10: "a informacao do que foi visto maior e mais
+  // bonita"): capa de 92x132, "Continuar assistindo" no destaque, o titulo em
+  // letra de titulo, episodio embaixo e a barra na largura toda com o tempo
+  // que falta. Era uma tira de 96 de altura com capa de 44.
   yc = r.y + r.h * 0.5f;
   { GfxRect capa = { r.x + 20.0f, yc - PS_CONT_CAPA_H * 0.5f, PS_CONT_CAPA_W, PS_CONT_CAPA_H };
     if (k->tex) {
       gfx_tex_aspect_atual = tex_aspecto(k->c.poster);
       gfx_card_forcar_cover_atual = 1.0f;
-      gfx_rect(capa, k->tex, GFX_CARD, 0.0f, 0.0f, 0.0f, 8.0f / PS_CONT_CAPA_H, 0, 0, 0, af);
+      gfx_rect(capa, k->tex, GFX_CARD, 0.0f, 0.0f, 0.0f, 14.0f / PS_CONT_CAPA_H, 0, 0, 0, af);
       gfx_card_forcar_cover_atual = 0.0f;
       gfx_tex_aspect_atual = 0.0f;
-    } else gfx_cor(capa, 8.0f / PS_CONT_CAPA_H, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G,
+    } else gfx_cor(capa, 14.0f / PS_CONT_CAPA_H, NV_COR_ESQUELETO_R, NV_COR_ESQUELETO_G,
                    NV_COR_ESQUELETO_B, af); }
-  x = r.x + 20.0f + PS_CONT_CAPA_W + 18.0f;
-  avail = r.x + r.w - 26.0f - x;
-  meta = k->meta[0] ? txt_linha_corta(TXT_CAPTION2, k->meta, 176, 180, 190, 255, avail * 0.6f)
-                    : (TxtLinha){ 0 };
-  tit = txt_linha_corta(TXT_BODY, k->c.titulo, 240, 242, 246, 255,
-                        avail - (meta.w ? (float)meta.w + 12.0f : 0.0f));
-  txt_desenhar_alpha(tit, x, yc - 14.0f - (float)tit.h * 0.5f, af);
-  if (meta.w)
-    txt_desenhar_alpha(meta, x + (float)tit.w + 12.0f, yc - 14.0f - (float)meta.h * 0.5f, af);
+  x = r.x + 20.0f + PS_CONT_CAPA_W + 28.0f;
+  avail = r.x + r.w - 34.0f - x;
+  ajustes_acento_marca(&cr, &cg, &cb);
+  { TxtLinha kick = txt_linha_corta(TXT_CAPTION2, "Continuar assistindo",
+                                    (int)(cr * 255.0f), (int)(cg * 255.0f), (int)(cb * 255.0f), 255, avail);
+    float y = r.y + 24.0f;
+    txt_desenhar_alpha(kick, x, y, af);
+    y += (float)kick.h + 8.0f;
+    tit = txt_linha_corta(TXT_TITULO3, k->c.titulo, 244, 245, 248, 255, avail);
+    txt_desenhar_alpha(tit, x, y, af);
+    y += (float)tit.h + 6.0f;
+    meta = k->meta[0] ? txt_linha_corta(TXT_CALLOUT, k->meta, 190, 193, 202, 255, avail) : (TxtLinha){ 0 };
+    if (meta.w) txt_desenhar_alpha(meta, x, y, af); }
+  rest = txt_linha_corta(TXT_CAPTION2, k->restante, 200, 203, 212, 255, avail * 0.5f);
   ajustes_acento(&cr, &cg, &cb);
   { float pr = k->c.progresso > 1.0f ? 1.0f : k->c.progresso;
-    plrui_trilho((GfxRect){ x, yc + 14.0f - 2.0f, PS_CONT_TRILHO, 4.0f }, pr, cr, cg, cb, af); }
-  rest = txt_linha_corta(TXT_CAPTION2, k->restante, 176, 180, 190, 255,
-                         avail - PS_CONT_TRILHO - 14.0f);
-  txt_desenhar_alpha(rest, x + PS_CONT_TRILHO + 14.0f, yc + 14.0f - (float)rest.h * 0.5f, af);
+    float ty = r.y + r.h - 34.0f, tw = avail - (rest.w ? (float)rest.w + 18.0f : 0.0f);
+    plrui_trilho((GfxRect){ x, ty - 3.0f, tw, 6.0f }, pr, cr, cg, cb, af);
+    if (rest.w) txt_desenhar_alpha(rest, x + tw + 18.0f, ty - (float)rest.h * 0.5f, af); }
 }
 
 // --- AMBIENTE DO PERFIL (2.0, variante A) ------------------------------------
@@ -1262,7 +1268,7 @@ void perfilsel_desenhar(Uint32 agora) {
                        PS_TITULO_Y + subida + 3.0f, a * 0.78f);
     txt_desenhar_alpha(t, (NV_TELA_W - t.w) * 0.5f, PS_TITULO_Y + subida, a); }
 
-  logoapp_marca((GfxRect){ NV_MARGEM_X, NV_MARGEM_Y + subida, 72.0f, 72.0f }, a);
+  // Sem a marca no canto (dono, 05/10): a tela e so a pergunta e as pessoas.
 
   // Enquanto a lista nao chega, dizer isso. Uma tela com titulo e nada abaixo
   // le como travamento.
@@ -1357,41 +1363,15 @@ void perfilsel_desenhar(Uint32 agora) {
     }
   }
 
-  // A dica DIZ O QUE O VOLTAR FAZ. A tela agora aparece a cada arranque, e sem
-  // esta linha o Voltar e uma tecla que ou fecha o app ou nao faz nada — as
-  // duas leituras erradas. Quando ha um perfil de ontem, ele e nomeado: um
-  // clique no controle e a pessoa esta na home dela.
-  // As dicas moram numa ILHA de vidro (a mesma peca do player), e nao mais
-  // soltas no rodape. A dica DIZ O QUE O VOLTAR FAZ: a tela aparece a cada
-  // arranque, e quando ha um perfil de ontem ele e nomeado — um clique e a
-  // pessoa esta na home dela. Ilha do mockup: 68 de altura, raio 34, 30 de
-  // respiro, 64 acima da borda de baixo.
-  { const ContaPerfil *at = perfis_item_ativo();
-    char seguir[160];
-    const char *k[3] = { "\xe2\x86\x90 \xe2\x86\x92", "OK", "Voltar" };
-    const char *rt[3] = { "Mover", "Entrar no perfil", seguir };
-    int n = 2;
-    float larg, ilhaW;
-    GfxRect ilha;
-    seguir[0] = 0;
-    if (preparando) {
-      TxtLinha l = txt_linha(TXT_ILHA_APOIO, i18n("Preparando o perfil…"), 209, 207, 204, 255);
-      larg = (float)l.w;
-      ilhaW = larg + PS_ILHA_PAD * 2.0f;
-      ilha = (GfxRect){ (NV_TELA_W - ilhaW) * 0.5f, PS_DICA_Y, ilhaW, PS_ILHA_H };
-      plrui_material(ilha, PS_ILHA_H * 0.5f, 0, a);
-      txt_desenhar_alpha(l, ilha.x + PS_ILHA_PAD, ilha.y + (ilha.h - (float)l.h) * 0.5f, a);
-    } else {
-      if (perfis_pode_dispensar() && at && at->nome[0]) {
-        snprintf(seguir, sizeof seguir, i18n("Seguir como %s"), at->nome);
-        n = 3;
-      }
-      larg = plrui_dicas(k, rt, n, 0.0f, 0.0f, 0, 0.0f);
-      ilhaW = larg + PS_ILHA_PAD * 2.0f;
-      ilha = (GfxRect){ (NV_TELA_W - ilhaW) * 0.5f, PS_DICA_Y, ilhaW, PS_ILHA_H };
-      plrui_material(ilha, PS_ILHA_H * 0.5f, 0, a);
-      plrui_dicas(k, rt, n, ilha.x + PS_ILHA_PAD, ilha.y + PS_ILHA_H * 0.5f, 0, a);
-    } }
+  // SEM ILHA DE DICAS NO RODAPE (dono, 05/10). So o "Preparando o perfil…"
+  // continua, porque e estado e nao instrucao.
+  if (preparando) {
+    TxtLinha l = txt_linha(TXT_ILHA_APOIO, i18n("Preparando o perfil…"), 209, 207, 204, 255);
+    float ilhaW = (float)l.w + PS_ILHA_PAD * 2.0f;
+    GfxRect ilha = { (NV_TELA_W - ilhaW) * 0.5f, PS_DICA_Y, ilhaW, PS_ILHA_H };
+    plrui_material(ilha, PS_ILHA_H * 0.5f, 0, a);
+    txt_desenhar_alpha(l, ilha.x + PS_ILHA_PAD, ilha.y + (ilha.h - (float)l.h) * 0.5f, a);
+  }
 
   if (animPin > 0.004f) desenhaPin();
 }
