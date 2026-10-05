@@ -5,11 +5,12 @@ The first time you open it, a short guide walks through what changed. It stays i
 ## Added
 
 - **Glass UI.** Every panel is now an island, like the clock. Glass or solid, 18 accent colors, and art, blurred art or Frost as the background.
+- **New look by default.** Everyone starts 2.0 on the Immersive accent with Logo color and the Frost background. Change it in Settings › Appearance.
 - **New logo and startup.** The Classic logo is still there. Three ways to open the app: Default, Fade only, Direct.
 - **Screensaver.** Showcase from your catalog, Clock with the next premiere, or just dim. It never starts while something is playing.
 - **Home and menu.** Floating rail in Modern, full-height bar in Default. Library, Search (with People) and a monthly Schedule were redone.
 - **Title page.** Logo, actions, info and Ratings in one card, a Watch trailer button, friends who watched it, and season charts for series.
-- **Player.** Audio and Subtitles open from the corner island. Second subtitle track, subtitle AutoSync, and seeking that speeds up while you hold.
+- **Player.** Audio and Subtitles open from the corner island. Second subtitle track, subtitle AutoSync, a delay slider, and seeking that speeds up while you hold.
 - **Sources.** "Best for this TV" first, groups by quality, filters for MP4 only, Cached and Dubbed. StreamFit measures your network before lowering quality.
 - **Social.** Trakt, Simkl and Letterboxd become one person, without duplicated friends. Recommend titles, answer "Already watched", polls on the clock.
 - **Profiles.** New Movies background built from what each profile watched, plus Light and Projector. Shows Continue watching for the focused profile.
