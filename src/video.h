@@ -167,6 +167,8 @@ const char *video_erro_texto(void);
 // nunca comeca" — o sintoma do #158, com bufferRange subindo e nenhum
 // videoInfo. Onde a plataforma nao da o sinal (Tizen), 1: nao afirma nada.
 int video_decoder_anunciou(void);
+int video_dts_legenda_desenhar(double seconds, int delay_ms, float x, float y, float w, float h, float alpha);
+const char *video_dts_saida(void);  // actual local conversion output, empty for native playback
 int    video_audio_nao_suportado(void);  // uMS errorCode 200: video segue sem som
 int    video_terminou(void); // 1 depois do fim de fluxo (endOfStream) da fonte atual
 // 1 depois que OUTRO app tomou o video da TV nesta sessao (so o .tpk sabe:
@@ -206,6 +208,9 @@ typedef struct {
   // Faixa so de LETREIROS ("Signs", "Songs", "Signs & Songs", FlagForced): nao
   // traduz o dialogo. A folha rotula como tal e lista por ultimo.
   int  letreiro;
+  int canais;        // original audio channels, 0 unknown
+  int stream_index;  // source demux index for DTS sessions, -1 in native webOS
+  int stream_id;     // original container track ID, -1 when unknown
 } VideoFaixa;
 
 int  video_n_audio(void);
@@ -317,7 +322,7 @@ void video_encerrar(void);
 // que estiver aqui — faixas, tamanho, HDR, Atmos, buffer — para as telas do
 // player serem desenhadas com dados de um video "de verdade". Zerado (o padrao)
 // e o mesmo coto mudo de sempre. Nos alvos de TV a funcao nao existe.
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(NV_LINUX_DESKTOP)
 typedef struct {
   int nAudio, nLeg, audioAtual, legAtual;
   VideoFaixa audio[8], leg[8];

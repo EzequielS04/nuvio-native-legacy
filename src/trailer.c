@@ -274,7 +274,7 @@ static int    imagemVista;
 static Uint32 tocandoVisto;
 #endif
 int trailer_suportado(void) {
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(NV_LINUX_DESKTOP)
   return 0;
 #else
   // O FRACASSO NAO TRAVA, MAS TEM TETO. O deploy mata o processo e relanca

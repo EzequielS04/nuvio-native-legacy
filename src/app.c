@@ -448,6 +448,9 @@ static int pedirFonteJob(int tipo, unsigned geracao, const char *id, int renovan
 #include <stdio.h>
 
 static Tela tela = TELA_HOME;
+#ifdef NV_LINUX_DESKTOP
+static int uiPreview;
+#endif
 static int sair = 0;
 
 // Nome curto da tela em cena, para o log de campo ("[gpu-modos] lento: ...
@@ -1520,6 +1523,10 @@ static void guiaComCanalNoAr(void) {
 static int homePronta;
 
 int app_iniciar(const char *dirArte) {
+#ifdef NV_LINUX_DESKTOP
+  const char *preview = getenv("NUVIO_UI_PREVIEW");
+  uiPreview = preview && !strcmp(preview, "1");
+#endif
   ajustes_recursos(dirArte);
   login_recursos(dirArte);
   diagnostico_recuperar_checkpoint();
@@ -1563,6 +1570,12 @@ int app_iniciar(const char *dirArte) {
   recomenda_ao_mudar_alcance(atividade_definir_permitido);
   // Sem conta, o app abre no login. Com sessao gravada ele nem passa por ela —
   // pedir o codigo de novo a cada arranque seria o mesmo que nao ter gravado.
+#ifdef NV_LINUX_DESKTOP
+  if (uiPreview) {
+    tela = TELA_HOME;
+    printf("[linux] UI preview: no account sync or video playback\n");
+  } else
+#endif
   if (sessao_logada()) {
     tela = TELA_HOME;
     // Com sessao gravada o ciclo comeca no arranque: e ele que traz os addons
@@ -2252,7 +2265,11 @@ void app_atualizar(float dt, Uint32 agora) {
   // Sessao perdida no meio do uso (renovacao recusada): voltar ao login e a
   // unica saida honesta. Continuar na home mostraria o catalogo de exemplo do
   // pacote como se fosse o da pessoa.
-  if (!sessao_logada()) {
+  if (!sessao_logada()
+#ifdef NV_LINUX_DESKTOP
+      && !uiPreview
+#endif
+     ) {
     invalidarPerfil();
     tela = TELA_LOGIN;
     login_iniciar();

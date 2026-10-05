@@ -226,6 +226,9 @@ to fix bugs. You can also turn on automatic log sending in Settings.
 
 ```bash
 bash tools/mac.sh              # build and run on macOS (UI only, no video)
+bash tools/linux.sh            # build and run on Linux (UI only, no video)
+bash tools/linux.sh --build    # compile the Linux desktop preview only
+bash tools/linux.sh --preview  # browse the Linux UI without signing in
 bash tools/arm.sh              # cross-compile for LG in Docker and deploy over ssh
 bash tools/arm.sh --ipk        # also produce the .ipk
 bash tools/tizen.sh            # build the Samsung target (WebAssembly)
@@ -234,6 +237,35 @@ bash tools/tpk.sh              # native Samsung: the four .tpk (Docker + .NET 8)
 bash tools/release-samsung.sh  # every Samsung package for a release, checked
 bash tools/hb-repo.sh <ipk> <dir>   # Homebrew Channel repo files for a release
 ```
+
+On an x86_64 Linux host with Podman, build the SDK with its x86_64 toolchain
+and select the runtime and packaging CLI explicitly:
+
+```bash
+podman build --platform linux/amd64 \
+  --build-arg SDK_URL=https://github.com/openlgtv/buildroot-nc4/releases/download/webos-a38c582/arm-webos-linux-gnueabi_sdk-buildroot-x86_64.tar.gz \
+  -t nuvio-webos-sdk tools/
+NUVIO_CONTAINER_RUNTIME=podman NUVIO_BUILD_PLATFORM=linux/amd64 \
+  NUVIO_ARES_PACKAGE=/path/to/ares-package bash tools/arm.sh --ipk --build
+```
+
+`--ipk --build` creates the package without deploying to a TV. The target
+binary is ARMv7 regardless of the build host architecture.
+
+webOS builds include DTS audio fallback by default. TVs that accept DTS keep
+native playback; when the selected DTS track is unsupported, the app converts
+its audio to stereo AAC and keeps video on the TV's hardware pipeline. See the
+[DTS guide](docs/features/dts/README.md) for limits and verification, and
+[DTS Debug build commands](tools/dts-pipeline/DEBUG.md) for a separate diagnostic
+app that can be installed alongside the normal one.
+
+For Linux UI previews, install the SDL2, SDL2_image, SDL2_ttf, GLES2, EGL and
+zlib development packages, a C compiler and pkg-config. `--preview` skips login
+and uses a separate data directory. Arrow keys and Enter navigate; Escape or
+Backspace goes back. Video playback is unavailable in this desktop preview.
+
+Builds read `local.properties` from the repository root or the legacy neighboring
+web project; `NUVIO_PROPERTIES` selects another file.
 
 Tests are shell scripts in `tests/` (`bash tests/<name>.sh`); most of them build
 a piece of `src/` on the host with the network or the TV faked.
@@ -299,6 +331,14 @@ this grew alongside. So the whole thing goes out under the same terms.
 Settings icons: [Lucide](https://lucide.dev), ISC license. The unmodified SVGs
 and the license text are in `deploy/app/art/icones/lucide/`; the `aj_*.png` next
 to them are rasterized by `tools/icones-lucide.sh`.
+
+DTS-enabled builds use libraries from the [FFmpeg project](https://ffmpeg.org/)
+under **LGPL 2.1 or later**. `tools/build-dts-ffmpeg.sh` records the exact release
+source URL and checksum; `tools/arm.sh` includes its license and provenance in
+`licenses/dts/` inside the app package. The
+[DTS distribution notes](docs/features/dts/README.md#dependency-provenance-and-distribution)
+describe the corresponding source and static relinking materials needed with
+binary releases.
 
 "Nuvio", the logo and the wordmark belong to the original authors. The GPL covers
 the code, **not** the name or the branding. They appear here only to say which

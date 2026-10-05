@@ -17,6 +17,7 @@
 //
 // O irmao e novidades.c: mesmo cartao central, mesma regra de fechamento.
 #include "horafmt.h"
+#include "app_id.h"
 #include "atualizacao.h"
 #include "ilha.h"
 #include "dados.h"
@@ -129,7 +130,7 @@ static void at_sha256_hex(const unsigned char *buf, size_t n, char *hex65) {
 #define AT_URL   "https://api.github.com/repos/iqui27/nuvio-native-legacy/releases/latest"
 #define AT_ARQ   "atualizacao-vista.txt"
 #define AT_PAGINA "https://github.com/iqui27/nuvio-native-legacy/releases"
-#define AT_APPID  "space.nuvio.native.legacy"
+#define AT_APPID  NV_APP_ID
 #define AT_LUNA_PUB "/usr/bin/luna-send-pub"
 #define AT_LOG_INST "/tmp/nuvio-instalar.log"
 #define AT_HB_DIR   "/media/developer/apps/usr/palm/applications/org.webosbrew.hbchannel"
@@ -243,7 +244,7 @@ static int  apkPerm;
 // tools/env.sh e tools/arm.sh), so por tests/atualizacao_shot.sh.
 #if defined(NV_AT_INSTALA)
 #define AT_INSTALA NV_AT_INSTALA
-#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__) && !defined(NV_TPK) && !defined(NV_ANDROID)
+#elif !defined(__EMSCRIPTEN__) && !defined(__APPLE__) && !defined(NV_LINUX_DESKTOP) && !defined(NV_TPK) && !defined(NV_ANDROID)
 #define AT_INSTALA 1
 #else
 #define AT_INSTALA 0
@@ -613,6 +614,11 @@ static int fioConsulta(void *arg) {
 // Sem o Homebrew Channel instalado nao ha caminho nenhum, e o cartao volta a
 // ser so aviso (ver podeInstalar).
 static int fioInstalar(void *arg) {
+#ifdef NV_DTS_DEBUG
+  /* Production release IPKs carry the production ID; never install them from
+   * an isolated diagnostic app, including through a stale update card. */
+  (void)arg; return 0;
+#endif
   char cmd[900];
   (void)arg;
   { char extra[110] = "";
@@ -698,6 +704,9 @@ static int temInstalador(void) {
 }
 
 static int podeInstalar(void) {
+#ifdef NV_DTS_DEBUG
+  return 0;
+#endif
   return AT_INSTALA && ipkUrl[0] && estado == AT_PARADO && temInstalador();
 }
 
@@ -943,6 +952,9 @@ static int podeReconsultar(void) {
 }
 
 void atualizacao_verificar(void) {
+#ifdef NV_DTS_DEBUG
+  return; /* Debug IPKs are installed explicitly, outside production updates. */
+#endif
   static long ultChamada;
   long rel = (long)time(NULL);
   int vence;
@@ -964,6 +976,9 @@ void atualizacao_verificar(void) {
 }
 
 void atualizacao_procurar_agora(void) {
+#ifdef NV_DTS_DEBUG
+  return;
+#endif
   if (!mtx) mtx = SDL_CreateMutex();
   if (!mtx || !podeReconsultar()) return;
   SDL_LockMutex(mtx);

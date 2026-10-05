@@ -7,7 +7,7 @@
 # o app web ja a publica no bundle. Quem NAO pode entrar no pacote e o que hoje
 # esta em art/trakt.txt e art/addons.txt: aquilo e credencial de PESSOA.
 #
-#   eval "cc src/*.c $(tools/env.sh) ..."
+#   eval "cc src/*.c src/dts/*.c $(tools/env.sh) ..."
 set -e
 
 REQUIRE_CORE=0
@@ -23,7 +23,12 @@ case "${1:-}" in
     ;;
 esac
 
-PROP="${NUVIO_PROPERTIES:-$(cd "$(dirname "$0")/../.." && pwd)/NuvioWeb-0.3.38-beta/local.properties}"
+LOCAL_PROP="$(cd "$(dirname "$0")/.." && pwd)/local.properties"
+if [ -f "$LOCAL_PROP" ]; then
+  PROP="${NUVIO_PROPERTIES:-$LOCAL_PROP}"
+else
+  PROP="${NUVIO_PROPERTIES:-$(cd "$(dirname "$0")/../.." && pwd)/NuvioWeb-0.3.38-beta/local.properties}"
+fi
 
 valor() {
   [ -f "$PROP" ] || return 0

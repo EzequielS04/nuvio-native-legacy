@@ -37,6 +37,11 @@ TV_IP="${NUVIO_TV_IP:-192.168.1.32}"
 TV_PASS="${NUVIO_TV_PASS:-alpine}"
 APP_ID="space.nuvio.native.legacy"
 ARES="${NUVIO_ARES_PACKAGE:-../NuvioWeb-0.3.38-beta/node_modules/.bin/ares-package}"
+CONTAINER_RUNTIME="${NUVIO_CONTAINER_RUNTIME:-docker}"
+BUILD_PLATFORM="${NUVIO_BUILD_PLATFORM:-linux/arm64}"
+SDK_IMAGE="${NUVIO_SDK_IMAGE:-nuvio-webos-sdk}"
+DTS_ENABLED="${NUVIO_DTS_FFMPEG:-1}"
+case "$DTS_ENABLED" in 0|1) ;; *) echo 'NUVIO_DTS_FFMPEG deve ser 0 ou 1' >&2; exit 2;; esac
 
 # --high-cache pode vir antes ou depois de --build/--ipk. So muda uma -D e os
 # nomes; o codigo e o mesmo — e por isso a variante nao precisa de branch.
@@ -80,11 +85,16 @@ tools/env.sh --env-file "$ENVF"
 nv_p2p_resolver arm
 P2P_VOL=""
 [ -n "$NV_P2P_DIR" ] && P2P_VOL="-v $NV_P2P_DIR:/p2p"
-docker run --rm --platform linux/arm64 --env-file "$ENVF" $P2P_VOL \
-  -e NUVIO_P2P_MOTOR="${NV_P2P_DIR:+1}" \
+DTS_ENV=()
+if [ -n "${NUVIO_DTS_ROOT:-}" ]; then DTS_ENV=(-e "NUVIO_DTS_ROOT=$NUVIO_DTS_ROOT"); fi
+"$CONTAINER_RUNTIME" run --rm --platform "$BUILD_PLATFORM" --env-file "$ENVF" \
+  -e NUVIO_P2P_MOTOR="${NV_P2P_DIR:+1}" $P2P_VOL \
   -e NUVIO_EXTRA_CFLAGS="${NUVIO_EXTRA_CFLAGS:-}" \
   -e NUVIO_ASS_LIBASS="${NUVIO_ASS_LIBASS:-1}" \
-  -v "$PWD":/work nuvio-webos-sdk sh -c '
+  -e NUVIO_DTS_FFMPEG="$DTS_ENABLED" \
+  "${DTS_ENV[@]}" \
+  -v "$PWD":/work:z "$SDK_IMAGE" sh -c '
+  set -e
   SR=$NUVIO_SYSROOT
   ASS=$NUVIO_ASS_ROOT
   ASS_CFLAGS=""
@@ -93,6 +103,14 @@ docker run --rm --platform linux/arm64 --env-file "$ENVF" $P2P_VOL \
     [ -f "$ASS/include/ass/ass.h" ] || { echo "libass ARM ausente na imagem; reconstrua tools/Dockerfile ou use NUVIO_ASS_LIBASS=0" >&2; exit 2; }
     ASS_CFLAGS="-DNV_ASS_LIBASS -I$ASS/include"
     ASS_LIBS="-L$ASS/lib -Wl,--start-group -lass -lharfbuzz -lfribidi -lfreetype -Wl,--end-group"
+  fi
+  DTS_CFLAGS=""
+  DTS_LIBS=""
+  if [ "${NUVIO_DTS_FFMPEG:-1}" = "1" ]; then
+    DTS=$NUVIO_DTS_ROOT
+    [ -f "$DTS/include/libavcodec/avcodec.h" ] || { echo "FFmpeg DTS ausente; reconstrua tools/Dockerfile ou use NUVIO_DTS_FFMPEG=0" >&2; exit 2; }
+    DTS_CFLAGS="-DNV_DTS_FFMPEG -I$DTS/include"
+    DTS_LIBS="-L$DTS/lib -Wl,--start-group -lavformat -lavcodec -lswresample -lavutil -Wl,--end-group -lpthread -lm"
   fi
   # -DNV_WEBOS: a identidade do alvo tem que vir daqui, porque o compilador
   # webos define __linux__ igual a qualquer Linux e a toolchain nao tem macro
@@ -106,7 +124,7 @@ docker run --rm --platform linux/arm64 --env-file "$ENVF" $P2P_VOL \
     # versao (ou nenhuma), e libatomic.so.1 nao e garantida.
     P2P_LIBS="/p2p/build-arm/libnuvio_engine.a /p2p/build-arm/_deps/nuvio_libtorrent-build/libtorrent-rasterbar.a $SR/usr/lib/libssl.a $SR/usr/lib/libcrypto.a -static-libgcc -Wl,-Bstatic -lstdc++ -latomic -Wl,-Bdynamic -lrt -Wl,--gc-sections"
   fi
-  arm-webos-linux-gnueabi-gcc src/*.c -o nuvio-proto.arm -O2 -DNV_WEBOS $NUVIO_EXTRA_CFLAGS $ASS_CFLAGS $P2P_CFLAGS \
+  arm-webos-linux-gnueabi-gcc src/*.c src/dts/*.c -o nuvio-proto.arm -O2 -DNV_WEBOS $NUVIO_EXTRA_CFLAGS $ASS_CFLAGS $P2P_CFLAGS $DTS_CFLAGS \
     -DNV_SUPABASE_URL="\"$NV_SUPABASE_URL\"" \
     -DNV_SUPABASE_ANON_KEY="\"$NV_SUPABASE_ANON_KEY\"" \
     -DNV_TV_LOGIN_BASE="\"$NV_TV_LOGIN_BASE\"" \
@@ -120,7 +138,18 @@ docker run --rm --platform linux/arm64 --env-file "$ENVF" $P2P_VOL \
     -DNV_DISCORD_CLIENT_ID="\"${NV_DISCORD_CLIENT_ID:-}\"" \
     -DNV_VERSAO="\"$NV_VERSAO\"" \
     -I$SR/usr/include -I$SR/usr/include/SDL2 \
-    -lSDL2 -lSDL2_image -lSDL2_ttf -lGLESv2 -lEGL $P2P_LIBS -ldl -lpthread -lz -lm $ASS_LIBS'
+    -lSDL2 -lSDL2_image -lSDL2_ttf -lGLESv2 -lEGL $P2P_LIBS -ldl -lpthread -lz -lm $ASS_LIBS $DTS_LIBS
+  mkdir -p deploy/app/lib
+  find deploy/app/lib -maxdepth 1 -type f -name "dts-starfish-webos*.so" -delete
+  if [ -d deploy/app/licenses/dts ]; then
+    find deploy/app/licenses/dts -maxdepth 1 -type f \
+      \( -name "COPYING.LGPLv2.1" -o -name "SOURCE.txt" \) -delete
+  fi
+  if [ "${NUVIO_DTS_FFMPEG:-1}" = "1" ]; then
+    bash tools/build-dts-pipeline.sh --in-container --output deploy/app/lib
+    mkdir -p deploy/app/licenses/dts
+    cp "$DTS/COPYING.LGPLv2.1" "$DTS/SOURCE.txt" deploy/app/licenses/dts/
+  fi'
 
 # CONFERE que a configuracao entrou MESMO no binario. Sem isto o unico sintoma
 # e a tela de login dizendo que o pacote saiu sem servidor, ja na TV.
@@ -341,6 +370,19 @@ SCP="sshpass -p $TV_PASS scp -o StrictHostKeyChecking=no -q ${NUVIO_SSH_OPTS:-}"
 # atualizar.
 $SSH "root@$TV_IP" "mkdir -p $APPDIR"
 
+DTS_PAYLOAD=()
+if [ "$DTS_ENABLED" = 1 ]; then
+  DTS_PAYLOAD=(lib/dts-starfish-webos3.so lib/dts-starfish-webos4.so
+               licenses/dts/COPYING.LGPLv2.1 licenses/dts/SOURCE.txt)
+  echo "==> enviando adaptadores DTS e avisos de licenca"
+  $SSH "root@$TV_IP" "mkdir -p $APPDIR/lib $APPDIR/licenses/dts"
+  for arquivo in "${DTS_PAYLOAD[@]}"; do
+    $SCP "deploy/app/$arquivo" "root@$TV_IP:$APPDIR/$arquivo.novo"
+    # Existing processes retain their mapped adapter until the app restarts.
+    $SSH "root@$TV_IP" "mv -f $APPDIR/$arquivo.novo $APPDIR/$arquivo && chmod 644 $APPDIR/$arquivo"
+  done
+fi
+
 echo "==> enviando binario para $TV_IP"
 $SCP nuvio-proto.arm "root@$TV_IP:$APPDIR/nuvio-proto.novo"
 # Renomear em vez de sobrescrever: se o app estiver rodando, o executavel esta
@@ -425,6 +467,14 @@ if [ "$LOCAL" != "$REMOTO" ]; then
   exit 1
 fi
 echo "    ok ($LOCAL)"
+for arquivo in "${DTS_PAYLOAD[@]}"; do
+  LOCAL=$(md5 -q "deploy/app/$arquivo" 2>/dev/null || md5sum "deploy/app/$arquivo" | cut -d' ' -f1)
+  REMOTO=$($SSH "root@$TV_IP" "md5sum $APPDIR/$arquivo | cut -d' ' -f1" | tr -d '\r')
+  if [ "$LOCAL" != "$REMOTO" ]; then
+    echo "    FALHOU: $arquivo local $LOCAL != TV $REMOTO"; exit 1
+  fi
+  echo "    ok ($arquivo)"
+done
 
 # launch NAO reinicia um app que ja esta rodando: so o traz para frente (ver
 # FERRAMENTAS.md). Dois deploys desta tarde foram lidos no log de um processo

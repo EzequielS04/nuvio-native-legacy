@@ -1,3 +1,4 @@
+#include "app_id.h"
 #include "registro.h"
 #include "dados.h"
 #include "gfx.h"
@@ -110,7 +111,7 @@ const char *registro_arquivo(void) {
     const char *env = getenv("NUVIO_LOG");
     resolvido = 1;
     if (env && env[0]) snprintf(caminho, sizeof caminho, "%s", env);
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(NV_LINUX_DESKTOP)
     // No Mac o log vai para o TERMINAL e continua assim. Para exercitar o
     // painel na previa:  NUVIO_LOG=/tmp/nuvio.log bash tools/mac.sh
     else caminho[0] = 0;
@@ -118,7 +119,11 @@ const char *registro_arquivo(void) {
     else snprintf(caminho, sizeof caminho, "%s/nuvio.log",
                   getenv("NUVIO_DADOS") ? getenv("NUVIO_DADOS") : ".");
 #else
+#ifdef NV_DTS_DEBUG
+    else snprintf(caminho, sizeof caminho, "/tmp/" NV_APP_ID ".log");
+#else
     else snprintf(caminho, sizeof caminho, "/tmp/nuvio.log");
+#endif
 #endif
   }
   return caminho[0] ? caminho : NULL;
