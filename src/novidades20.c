@@ -1535,7 +1535,8 @@ static void telaResumo(float a, float dy) {
   { TxtLinha t = txt(TXT_AJ_NUM64, "O que muda pra você"); txt_desenhar_alpha(t, x, y, a); y += t.h + 10; }
   { char l[300];
     TxtLinha t;
-    snprintf(l, sizeof l, "%s%s", essencial ? i18n("Só o essencial. ") : "", i18n("Tudo isso já vem na 2.0. O que for experimental fica desligado até você ligar."));
+    snprintf(l, sizeof l, "%s%s%s", essencial ? i18n("Só o essencial.") : "", essencial ? " " : "",
+             i18n("Tudo isso já vem na 2.0. O que for experimental fica desligado até você ligar."));
     t = txtC(TXT_V2_26, l, 1728);
     txt_desenhar_alpha(t, x, y, 0.6f * a);
     y += t.h + 34; }
