@@ -282,7 +282,10 @@ enum { SPS_CONSENT_NAO = 0, SPS_CONSENT_SIM, SPS_REC, SPS_SUG,
        SPS_ALC_0, SPS_ALC_1, SPS_ALC_2, SPS_ALCANCE, SPS_NOME,
        // F08: o Trakt ligado a este perfil (unir / separar). So existe com o
        // servidor que sabe ("identidade1") e com algo a dizer.
-       SPS_IDENT };
+       SPS_IDENT,
+       // F08: Simkl (so com login nesta TV ou ja ligado) e Letterboxd (usuario
+       // DECLARADO, o servidor nao confere). Mesma gramatica da linha do Trakt.
+       SPS_SIMKL, SPS_LETTERBOXD };
 // A API do alcance e do nome so existe no socialsrv (branch agente/socialsrv).
 // Ate o merge as linhas ficam desligadas; NV_SOCIAL_V2_UI liga so a tela (o
 // teste de captura o usa com a API de mentira).
@@ -309,9 +312,23 @@ static int consentEstado = -1;
 static int alcEstado = -2, escolhendoAlcance;
 // A linha do Trakt ligado: o que a reconstrucao viu (situacao*8 + op) e o
 // segundo OK que separa (o primeiro so pergunta).
+// identConfirma guarda (tipo da linha + 1) que espera o segundo OK; 0 = nenhuma.
 static int identVisto = -1, identConfirma, identSeparando;
 static int identChave(void) {
-  return recomenda_identidade_situacao() * 8 + recomenda_identidade_op();
+  int k = recomenda_identidade_situacao() * 8 + recomenda_identidade_op();
+  k = k * 4 + recomenda_identidade_estado(REC_IDENT_SIMKL);
+  k = k * 8 + recomenda_identidade_op_de(REC_IDENT_SIMKL);
+  k = k * 4 + recomenda_identidade_estado(REC_IDENT_LETTERBOXD);
+  k = k * 8 + recomenda_identidade_op_de(REC_IDENT_LETTERBOXD);
+  return k;
+}
+// Simkl/Letterboxd: a linha existe quando da para ligar, ja esta ligada, ou
+// ainda ha um aviso do ultimo pedido para ler (depois do OK ela some, se for o caso).
+static int identServicoVisivel(int prov) {
+  int e = recomenda_identidade_estado(prov), op = recomenda_identidade_op_de(prov);
+  return e == REC_IDENT_E_PODE || e == REC_IDENT_E_LIGADO ||
+         (op != REC_IDENT_OP_NADA && op != REC_IDENT_OP_OK && e != REC_IDENT_E_INDISPONIVEL) ||
+         op == REC_IDENT_OP_SEM_SERVICO;
 }
 #endif
 #define SPS_ALC_TOPO 205.0f   // medido na captura com o corpo da ilha (19/27)
@@ -920,6 +937,8 @@ static float socialAlt(int i) {
     case SPS_ALCANCE:   return SPS_H_APARECER;
     case SPS_NOME:      return SPS_H_APARECER;
     case SPS_IDENT:     return SPS_H_APARECER;
+    case SPS_SIMKL:     return SPS_H_APARECER;
+    case SPS_LETTERBOXD: return SPS_H_APARECER;
     default:            return SPS_H_CONSENT;
   }
 }
@@ -1088,6 +1107,12 @@ static void reconstruirSocial(void) {
         nSocial < SP_SOCIAL_MAX) {
       social[nSocial].tipo = SPS_IDENT; social[nSocial].idx = 0; nSocial++;
     } }
+  if (identServicoVisivel(REC_IDENT_SIMKL) && nSocial < SP_SOCIAL_MAX) {
+    social[nSocial].tipo = SPS_SIMKL; social[nSocial].idx = 0; nSocial++;
+  }
+  if (identServicoVisivel(REC_IDENT_LETTERBOXD) && nSocial < SP_SOCIAL_MAX) {
+    social[nSocial].tipo = SPS_LETTERBOXD; social[nSocial].idx = 0; nSocial++;
+  }
 #endif
   if (nSocial < SP_SOCIAL_MAX) {
     social[nSocial].tipo = SPS_APARECER; social[nSocial].idx = 0; nSocial++;
@@ -1196,7 +1221,7 @@ static char  popTitulo[200], popSub[200], popItem[24];
 
 // O TECLADO DO APP (teclado.h) para nome de categoria: letras, numeros,
 // espaco e hifen. A primeira letra sai maiuscula (sorg_nome_limpo).
-enum { TK_NADA = 0, TK_CRIAR, TK_MOVER, TK_RENOMEAR, TK_NOME_SOCIAL };
+enum { TK_NADA = 0, TK_CRIAR, TK_MOVER, TK_RENOMEAR, TK_NOME_SOCIAL, TK_LETTERBOXD };
 static int tecladoPara;
 static const char *ALFA_NOME = "abcdefghijklmnopqrstuvwxyz0123456789 -";
 #define SP_NOME_LETRAS 24
@@ -1391,6 +1416,12 @@ static void tecladoResultado(void) {
   // O NOME PARA OS AMIGOS: vazio volta ao nome do perfil (recomenda.h).
   if (tecladoPara == TK_NOME_SOCIAL) {
     if (r == TECLADO_PRONTO && t) recomenda_definir_nome(t);
+    tecladoPara = TK_NADA;
+    return;
+  }
+  // O USUARIO DO LETTERBOXD: declarado. Vazio ou curto demais nao faz nada.
+  if (tecladoPara == TK_LETTERBOXD) {
+    if (r == TECLADO_PRONTO && t && t[0]) { recomenda_identidade_letterboxd_declarar(t); reconstruirSocial(); }
     tecladoPara = TK_NADA;
     return;
   }
@@ -1747,7 +1778,7 @@ static void okSocial(void) {
         int sit = recomenda_identidade_situacao();
         if (recomenda_identidade_op() == REC_IDENT_OP_INDO) return;
         if (sit == REC_IDENT_UNIDA) {
-          if (!identConfirma) { identConfirma = 1; return; }
+          if (identConfirma != SPS_IDENT + 1) { identConfirma = SPS_IDENT + 1; return; }
           identConfirma = 0; identSeparando = 1;
           recomenda_identidade_separar();
         } else if (sit == REC_IDENT_PODE_UNIR) {
@@ -1755,6 +1786,50 @@ static void okSocial(void) {
           recomenda_identidade_unir();
         } else recomenda_identidade_op_limpar();
         reconstruirSocial();
+        return; }
+      case SPS_SIMKL: {
+        // O token e o do Simkl em Ajustes: nunca e pedido de novo aqui.
+        int op = recomenda_identidade_op_de(REC_IDENT_SIMKL), e;
+        if (op == REC_IDENT_OP_INDO) return;
+        if (op == REC_IDENT_OP_CONFLITO || op == REC_IDENT_OP_RECUSADO || op == REC_IDENT_OP_SEM_SERVICO) {
+          recomenda_identidade_op_limpar_de(REC_IDENT_SIMKL);
+          reconstruirSocial();
+          return;
+        }
+        recomenda_identidade_op_limpar_de(REC_IDENT_SIMKL);
+        e = recomenda_identidade_estado(REC_IDENT_SIMKL);
+        if (e == REC_IDENT_E_LIGADO) {
+          if (identConfirma != SPS_SIMKL + 1) { identConfirma = SPS_SIMKL + 1; return; }
+          identConfirma = 0; identSeparando = 1;
+          recomenda_identidade_simkl_separar();
+        } else if (e == REC_IDENT_E_PODE) {
+          identSeparando = 0;
+          recomenda_identidade_simkl_unir();
+        }
+        reconstruirSocial();
+        return; }
+      case SPS_LETTERBOXD: {
+        int op = recomenda_identidade_op_de(REC_IDENT_LETTERBOXD), e;
+        if (op == REC_IDENT_OP_INDO) return;
+        if (op == REC_IDENT_OP_CONFLITO || op == REC_IDENT_OP_RECUSADO) {
+          recomenda_identidade_op_limpar_de(REC_IDENT_LETTERBOXD);
+          reconstruirSocial();
+          return;
+        }
+        recomenda_identidade_op_limpar_de(REC_IDENT_LETTERBOXD);
+        e = recomenda_identidade_estado(REC_IDENT_LETTERBOXD);
+        if (e == REC_IDENT_E_LIGADO) {
+          if (identConfirma != SPS_LETTERBOXD + 1) { identConfirma = SPS_LETTERBOXD + 1; return; }
+          identConfirma = 0; identSeparando = 1;
+          recomenda_identidade_letterboxd_separar();
+          reconstruirSocial();
+        } else if (e == REC_IDENT_E_PODE) {
+          identSeparando = 0;
+          tecladoPara = TK_LETTERBOXD;
+          teclado_abrir_com("Seu usuário no Letterboxd",
+                            "Só você vê. O servidor não confere se é seu.",
+                            30, "abcdefghijklmnopqrstuvwxyz0123456789_", "");
+        }
         return; }
       case SPS_NOME:
         tecladoPara = TK_NOME_SOCIAL;
@@ -1764,6 +1839,7 @@ static void okSocial(void) {
         return;
 #else
       case SPS_ALC_0: case SPS_ALC_1: case SPS_ALC_2: case SPS_ALCANCE: case SPS_NOME: case SPS_IDENT:
+      case SPS_SIMKL: case SPS_LETTERBOXD:
         return;
 #endif
       case SPS_APARECER:
@@ -1987,7 +2063,7 @@ void spainel_atualizar(float dt, Uint32 agora) {
 #if SP_V2
   // O "OK de novo para separar" vale so enquanto o foco esta na linha.
   if (identConfirma && !(aberto && aba == SP_ABA_SOCIAL && foco >= 0 && foco < nSocial &&
-                         social[foco].tipo == SPS_IDENT)) identConfirma = 0;
+                         social[foco].tipo + 1 == identConfirma)) identConfirma = 0;
 #endif
   if (aberto && aba == SP_ABA_SOCIAL &&
       (nRecs != recomenda_n() || nSugs != recomenda_n_sugestoes() ||
@@ -3122,12 +3198,39 @@ static void desenhaAjusteSocial(int i, float dx, float y, float alt, float a) {
     if (op == REC_IDENT_OP_INDO) valor = i18n(identSeparando ? "Separando…" : "Unindo…");
     else if (op == REC_IDENT_OP_CONFLITO) valor = i18n("Essa conta Trakt já está em outro perfil");
     else if (op == REC_IDENT_OP_FALHA) valor = i18n("Não foi possível. OK para tentar de novo");
-    else if (sit == REC_IDENT_UNIDA && identConfirma)
+    else if (sit == REC_IDENT_UNIDA && identConfirma == SPS_IDENT + 1)
       valor = i18n("OK de novo para separar. O que já foi unido continua aqui");
     else if (sit == REC_IDENT_UNIDA) {
       snprintf(buf, sizeof buf, i18n("Unido a %s · amigos e atividade juntos"), recomenda_identidade_trakt());
       valor = buf;
     } else valor = i18n("OK para unir amigos e atividade do Trakt a este perfil");
+  } else
+  if (social[i].tipo == SPS_SIMKL) {
+    int e = recomenda_identidade_estado(REC_IDENT_SIMKL), op = recomenda_identidade_op_de(REC_IDENT_SIMKL);
+    titulo = "Simkl neste perfil";
+    if (op == REC_IDENT_OP_INDO) valor = i18n(identSeparando ? "Separando…" : "Unindo…");
+    else if (op == REC_IDENT_OP_SEM_SERVICO) valor = i18n("O servidor ainda não oferece o Simkl");
+    else if (op == REC_IDENT_OP_CONFLITO) valor = i18n("Essa conta Simkl já está em outro perfil");
+    else if (op == REC_IDENT_OP_RECUSADO) valor = i18n("O Simkl não aceitou o login desta TV. Entre de novo em Ajustes");
+    else if (op == REC_IDENT_OP_FALHA) valor = i18n("Não foi possível. OK para tentar de novo");
+    else if (e == REC_IDENT_E_LIGADO && identConfirma == SPS_SIMKL + 1)
+      valor = i18n("OK de novo para separar. O que já foi unido continua aqui");
+    else if (e == REC_IDENT_E_LIGADO) valor = i18n("Simkl unido a este perfil");
+    else valor = i18n("OK para unir o Simkl a este perfil");
+  } else
+  if (social[i].tipo == SPS_LETTERBOXD) {
+    int e = recomenda_identidade_estado(REC_IDENT_LETTERBOXD), op = recomenda_identidade_op_de(REC_IDENT_LETTERBOXD);
+    titulo = "Letterboxd neste perfil";
+    if (op == REC_IDENT_OP_INDO) valor = i18n(identSeparando ? "Separando…" : "Unindo…");
+    else if (op == REC_IDENT_OP_CONFLITO || op == REC_IDENT_OP_RECUSADO || op == REC_IDENT_OP_FALHA)
+      valor = i18n("Não foi possível. OK para tentar de novo");
+    else if (e == REC_IDENT_E_LIGADO && identConfirma == SPS_LETTERBOXD + 1) {
+      snprintf(buf, sizeof buf, i18n("OK de novo para remover @%s"), recomenda_identidade_usuario_letterboxd());
+      valor = buf;
+    } else if (e == REC_IDENT_E_LIGADO) {
+      snprintf(buf, sizeof buf, i18n("@%s · informado por você, só você vê"), recomenda_identidade_usuario_letterboxd());
+      valor = buf;
+    } else valor = i18n("OK para informar seu usuário do Letterboxd. Só você vê");
   } else
   if (social[i].tipo == SPS_NOME) {
     titulo = "Como você aparece";
@@ -3638,6 +3741,8 @@ static void desenharPainel(Uint32 agora) {
           case SPS_ALCANCE:
           case SPS_NOME:
           case SPS_IDENT:
+          case SPS_SIMKL:
+          case SPS_LETTERBOXD:
             desenhaAjusteSocial(i, x, y, alt, a);
             break;
           default:

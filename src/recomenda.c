@@ -17,6 +17,7 @@
 #include "rede.h"
 #include "js.h"
 #include "trakt.h"
+#include "simklauth.h"
 #include "sessao.h"
 #include "gfx.h"
 #include "text.h"
@@ -125,7 +126,15 @@ static char       meuCodigo[16];
 static int  identRecurso;
 static char identTrakt[64];
 static int  identPedido;          // 0 nada, 1 unir, 2 separar
-static int  identOp;              // REC_IDENT_OP_*
+// Um resultado POR SERVICO (REC_IDENT_*): o Trakt e o de sempre (identOp); Simkl
+// e Letterboxd entram pelo mesmo pedido unico (identProv), um de cada vez.
+static int  identOpP[REC_IDENT_N];
+#define identOp identOpP[REC_IDENT_TRAKT]
+static int  identProv;            // de quem e o identPedido
+static char identArg[40];         // usuario declarado do Letterboxd a enviar
+static int  identSimklLig;        // Simkl verificado neste perfil
+static char identLbUsuario[40];   // Letterboxd declarado ("" = nenhum)
+static int  identSimklOff;        // o servidor respondeu 501: sem SIMKL_CLIENT_ID
 
 // APARECER PARA OUTRAS PESSOAS. `aparecer` e um dos tres REC_APARECER_*;
 // `aparecerPendente` e -1 quando nao ha nada a dizer ao servidor, ou 0/1 para
@@ -583,18 +592,78 @@ const char *recomenda_identidade_trakt(void) {
   SDL_LockMutex(mtx); snprintf(c, sizeof c, "%s", identTrakt); SDL_UnlockMutex(mtx);
   return c;
 }
-static int identEnfileirar(int op) {
+static int identOcupado(void) {
+  int i;
+  for (i = 0; i < REC_IDENT_N; i++) if (identOpP[i] == REC_IDENT_OP_INDO) return 1;
+  return 0;
+}
+static int identEnfileirar(int prov, int op, const char *arg) {
   int ok = 0;
   if (!recomenda_ativo() || !mtx) return 0;
   SDL_LockMutex(mtx);
-  if (identRecurso && identOp != REC_IDENT_OP_INDO) {
-    identPedido = op; identOp = REC_IDENT_OP_INDO; pedidoAgora = 1; ok = 1;
+  if (identRecurso && !identOcupado()) {
+    identPedido = op; identProv = prov; identOpP[prov] = REC_IDENT_OP_INDO;
+    snprintf(identArg, sizeof identArg, "%s", arg ? arg : "");
+    pedidoAgora = 1; ok = 1;
   }
   SDL_UnlockMutex(mtx);
   return ok;
 }
-int recomenda_identidade_unir(void)    { return identEnfileirar(1); }
-int recomenda_identidade_separar(void) { return identEnfileirar(2); }
+int recomenda_identidade_unir(void)    { return identEnfileirar(REC_IDENT_TRAKT, 1, NULL); }
+int recomenda_identidade_separar(void) { return identEnfileirar(REC_IDENT_TRAKT, 2, NULL); }
+
+// SIMKL E LETTERBOXD (F08, linhas da aba Social). Simkl: so se esta TV ja tem
+// login do Simkl (o token e o de Ajustes, nunca pedido de novo) ou se ja ha um
+// ligado (para poder desligar). Letterboxd: sempre que o servidor sabe; o
+// usuario e DECLARADO, o servidor nao confere nada e so a propria pessoa o ve.
+int recomenda_identidade_estado(int prov) {
+  int r = REC_IDENT_E_INDISPONIVEL;
+  if ((prov != REC_IDENT_SIMKL && prov != REC_IDENT_LETTERBOXD) || !recomenda_ativo() || !mtx)
+    return r;
+  SDL_LockMutex(mtx);
+  if (identRecurso) {
+    if (prov == REC_IDENT_SIMKL)
+      r = identSimklLig ? REC_IDENT_E_LIGADO : identSimklOff ? REC_IDENT_E_SEM_SERVICO
+        : simklauth_token()[0] ? REC_IDENT_E_PODE : REC_IDENT_E_INDISPONIVEL;
+    else
+      r = identLbUsuario[0] ? REC_IDENT_E_LIGADO : REC_IDENT_E_PODE;
+  }
+  SDL_UnlockMutex(mtx);
+  return r;
+}
+int recomenda_identidade_op_de(int prov) {
+  int v;
+  if (prov < 0 || prov >= REC_IDENT_N || !mtx) return REC_IDENT_OP_NADA;
+  SDL_LockMutex(mtx); v = identOpP[prov]; SDL_UnlockMutex(mtx);
+  return v;
+}
+void recomenda_identidade_op_limpar_de(int prov) {
+  if (prov < 0 || prov >= REC_IDENT_N || !mtx) return;
+  SDL_LockMutex(mtx);
+  if (identOpP[prov] != REC_IDENT_OP_INDO) identOpP[prov] = REC_IDENT_OP_NADA;
+  SDL_UnlockMutex(mtx);
+}
+const char *recomenda_identidade_usuario_letterboxd(void) {
+  static char c[40];
+  if (!mtx) return "";
+  SDL_LockMutex(mtx); snprintf(c, sizeof c, "%s", identLbUsuario); SDL_UnlockMutex(mtx);
+  return c;
+}
+int recomenda_identidade_simkl_unir(void)       { return identEnfileirar(REC_IDENT_SIMKL, 1, NULL); }
+int recomenda_identidade_simkl_separar(void)    { return identEnfileirar(REC_IDENT_SIMKL, 2, NULL); }
+int recomenda_identidade_letterboxd_declarar(const char *usuario) {
+  char u[40]; size_t i, n = 0;
+  // minusculas, a-z 0-9 _ (o que o servidor aceita); o resto some.
+  for (i = 0; usuario && usuario[i] && n + 1 < sizeof u; i++) {
+    char c = usuario[i];
+    if (c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a');
+    if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') u[n++] = c;
+  }
+  u[n] = 0;
+  if (n < 2 || n > 30) return 0;
+  return identEnfileirar(REC_IDENT_LETTERBOXD, 1, u);
+}
+int recomenda_identidade_letterboxd_separar(void) { return identEnfileirar(REC_IDENT_LETTERBOXD, 2, NULL); }
 
 int recomenda_aparecer(void) {
   int v;
@@ -1213,7 +1282,9 @@ void recomenda_esquecer(void) {
   // quando alguem sai da conta voltaria vinculando a pessoa ERRADA — a
   // identidade do cabecalho ja e a da conta seguinte.
   vincCodigo[0] = 0; vincNome[0] = 0; vincEstado = REC_VINC_NADA;
-  identRecurso = 0; identTrakt[0] = 0; identPedido = 0; identOp = REC_IDENT_OP_NADA;
+  identRecurso = 0; identTrakt[0] = 0; identPedido = 0;
+  memset(identOpP, 0, sizeof identOpP);
+  identSimklLig = 0; identLbUsuario[0] = 0; identSimklOff = 0; identArg[0] = 0;
   removerId[0] = 0;
   pedirTrakt = 0; traktEstado = REC_TRAKT_NADA; traktAchados = 0;
   // O PERFIL, OS ACHADOS, OS PEDIDOS E A ATIVIDADE TAMBEM. Nada social de quem
@@ -1321,8 +1392,8 @@ static int registrar(const char **cab) {
   char id[96] = "", codigo[16] = "";
   int st = 0, desc = 0, alc = -1;
   char nome[64] = "", exib[40] = "", corpoEu[800];
-  char slugLigado[64] = "";
-  int recurso = 0;
+  char slugLigado[64] = "", lbLigado[40] = "";
+  int recurso = 0, simklLigado = 0;
   // O NOME E A FOTO DO PERFIL ATIVO vao junto: o token da conta Nuvio nao diz
   // nome nenhum (user_metadata vazio), e era por isso que um amigo por codigo
   // aparecia como UUID. Sem perfil na lista, corpo vazio (o servidor mantem).
@@ -1365,6 +1436,8 @@ static int registrar(const char **cab) {
         js_texto(e, f, "sujeito", suj, sizeof suj);
         if (!strcmp(prov, "trakt") && js_num(e, f, "verificado", 0.0) > 0 && suj[0])
           snprintf(slugLigado, sizeof slugLigado, "%s", suj);
+        if (!strcmp(prov, "simkl") && js_num(e, f, "verificado", 0.0) > 0) simklLigado = 1;
+        if (!strcmp(prov, "letterboxd") && suj[0]) snprintf(lbLigado, sizeof lbLigado, "%s", suj);
         e = js_prox(f);
       } }
   }
@@ -1379,6 +1452,8 @@ static int registrar(const char **cab) {
   if (codigo[0]) snprintf(meuCodigo, sizeof meuCodigo, "%s", codigo);
   identRecurso = recurso;
   snprintf(identTrakt, sizeof identTrakt, "%s", slugLigado);
+  identSimklLig = simklLigado;
+  snprintf(identLbUsuario, sizeof identLbUsuario, "%s", lbLigado);
   registrado = 1;
   gravarEu();
   socNovoRegistrado(nome, exib, alc);
@@ -2215,14 +2290,60 @@ static int lerPedidos(const char **cab) {
 // /v1/eu e refeito: e ele que diz o id canonico e o que ficou ligado.
 static void tratarIdentidade(const char **cab) {
   static char corpo[3600], tok[3300];
-  int op, st = 0, res = REC_IDENT_OP_FALHA;
-  char *r;
+  int op, prov, st = 0, res = REC_IDENT_OP_FALHA;
+  char arg[40], *r;
   unsigned g;
   SDL_LockMutex(mtx);
-  op = identPedido; identPedido = 0; g = geracao;
+  op = identPedido; identPedido = 0; prov = identProv; g = geracao;
+  snprintf(arg, sizeof arg, "%s", identArg);
   SDL_UnlockMutex(mtx);
   if (!op) return;
   corpo[0] = 0;
+  if (prov == REC_IDENT_SIMKL || prov == REC_IDENT_LETTERBOXD) {
+    // SIMKL: a prova e o token que o app ja guarda (Ajustes); o servidor o
+    // confere em api.simkl.com e nao o guarda. NUNCA vai para o log.
+    // LETTERBOXD: so o usuario, declarado.
+    const char *nome = prov == REC_IDENT_SIMKL ? "simkl" : "letterboxd";
+    if (op == 2) {
+      snprintf(corpo, sizeof corpo, "{\"provedor\":\"%s\"}", nome);
+      url("/v1/identidades/desvincular");
+    } else if (prov == REC_IDENT_SIMKL) {
+      if (simklauth_token()[0]) {
+        jsonEsc(tok, sizeof tok, simklauth_token());
+        snprintf(corpo, sizeof corpo, "{\"provedor\":\"simkl\",\"token\":\"%s\"}", tok);
+      }
+      url("/v1/identidades/vincular");
+    } else {
+      jsonEsc(tok, sizeof tok, arg);
+      snprintf(corpo, sizeof corpo, "{\"provedor\":\"letterboxd\",\"usuario\":\"%s\"}", tok);
+      url("/v1/identidades/vincular");
+    }
+    if (corpo[0]) {
+      r = rede_postar_st(fioUrl, REC_TEMPO_REDE, cab, corpo, &st);
+      free(r);
+      res = (st >= 200 && st < 300) ? REC_IDENT_OP_OK
+          : st == 409 ? REC_IDENT_OP_CONFLITO
+          : st == 501 ? REC_IDENT_OP_SEM_SERVICO
+          : (st == 401 || st == 403) ? REC_IDENT_OP_RECUSADO : REC_IDENT_OP_FALHA;
+    }
+    memset(tok, 0, sizeof tok); memset(corpo, 0, sizeof corpo);
+    printf("[recomenda] identidade %s %s HTTP %d\n", nome, op == 1 ? "ligar" : "desligar", st);
+    fflush(stdout);
+    SDL_LockMutex(mtx);
+    if (g == geracao) {
+      identOpP[prov] = res;
+      if (res == REC_IDENT_OP_SEM_SERVICO) identSimklOff = 1;
+      if (res == REC_IDENT_OP_OK) {
+        // Reflete na hora; o /v1/eu refeito logo abaixo confirma.
+        if (prov == REC_IDENT_SIMKL) identSimklLig = op == 1;
+        else snprintf(identLbUsuario, sizeof identLbUsuario, "%s", op == 1 ? arg : "");
+        registrado = 0;
+        pedidoAgora = 1;
+      }
+    }
+    SDL_UnlockMutex(mtx);
+    return;
+  }
   if (op == 1) {
     if (!strcmp(fioVia, "X-Nuvio-Auth: trakt")) {
       // Pelo Trakt: a prova e a conta Nuvio, com o PERFIL ativo (o servidor
