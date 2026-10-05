@@ -190,11 +190,11 @@ int main(void) {
     if (!mkdtemp(dir)) { falhas++; goto fim; }
     snprintf(cam, sizeof cam, "%s/ajustes.txt", dir);
     f = fopen(cam, "w");
-    fputs("selected_theme 13\n", f); fclose(f);        // Dinâmica estilizada
+    fputs("selected_theme 12\n", f); fclose(f);        // Da arte (13, Dinâmica estilizada, saiu em b6e14d69)
     ajustes_dir(dir);
-    confere("local = Dinâmica estilizada", ajustes_cor_viva(), 2);
+    confere("local = Da arte", ajustes_cor_viva(), 1);   // CORVIVA_SIMPLES
     ajustes_aplicar_blob(CONTA_JADE);
-    confere("JADE da conta nao desfaz o dinamico", ajustes_cor_viva(), 2);
+    confere("JADE da conta nao desfaz o dinamico", ajustes_cor_viva(), 1);
     n = ajustes_mesclar_blob(CONTA_JADE, &saida);
     confere("dinamico nao sobe (nada a costurar)", n, 0);
     confere("e o JADE da conta fica", saida == NULL, 1);
@@ -207,7 +207,7 @@ int main(void) {
     ajustes_aplicar_blob(CONTA_JADE);
     { float r, g, b; ajustes_acento(&r, &g, &b);
       confere("com tema fixo, o JADE da conta e aplicado",
-              (int)(r * 255 + .5f) == 0x7b && (int)(g * 255 + .5f) == 0xf0, 1); }
+              (int)(r * 255 + .5f) == 0x83 && (int)(g * 255 + .5f) == 0xe5   /* JADE 0x83e5bc since b6e14d69 */, 1); }
     n = ajustes_mesclar_blob(
       "{\"features\":{\"theme_settings\":{"
       "\"selected_theme\":{\"type\":\"string\",\"value\":\"OCEAN\"}}}}", &saida);

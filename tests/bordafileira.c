@@ -6,6 +6,7 @@
 // como tests/fimfileira.c): Direita no ultimo cartao, Esquerda na coluna 0
 // (continua abrindo o menu, sem batida) e Cima no destaque.
 #include <assert.h>
+int ctx_aberto(void) { return 0; }   // home.c asks whether the context menu is open
 #include "../src/home.c"
 
 

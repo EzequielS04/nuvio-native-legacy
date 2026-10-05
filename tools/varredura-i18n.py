@@ -258,6 +258,20 @@ def contexto(txt, i):
 # "nao sei o que e": sem esta lista a ferramenta nao pode virar teste, e sem
 # virar teste ela nao impede a proxima regressao.
 IGNORAR = {
+    # RC 1.8 triage, each checked in the source:
+    # - sync.c NOME[] are the labels of the "[sync] etapas" LOG line; "ver" is a
+    #   field name in the jellyfin conta file; "forcé" is a pattern legref.c
+    #   letreiro() matches against track names (comparison data, like "português").
+    "biblioteca", "ver", "forcé",
+    # - pluginjs.c error texts only go to the "[plugins] <nome>: ..." log line
+    #   (plugins.c prints res.erro; no screen draws it).
+    "cabecalhos maiores que o teto", "callback do fetch", "codigo do scraper",
+    "orcamento de rede dos plugins esgotado", "resposta maior que o teto",
+    "sem contexto (orcamento)", "sem memoria", "sem runtime (orcamento)",
+    "prazo de %d ms",
+    # - salvospainel.c: the format sits in a CtxExtra initializer and ctxmenu.c
+    #   (ctx confirmation, i18n(x0->pergunta)) translates it; the key is in idioma_tab.h.
+    "Remover %s dos amigos?",
     # Registro do app (03/10): etiquetas de area do log ([fonte], [legendas])
     # que registro.c procura para agrupar as linhas, icones passados aos
     # atalhos de desenho, e nomes proprios/arquivos que nao se traduzem.

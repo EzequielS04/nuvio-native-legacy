@@ -38,7 +38,10 @@ rg -q 'home.c:.*NV_HOLD_MS.*KEYUP' src/ctxmenu.h
 # animado ate CTX_MAX. Aqui se cobra que o numero de opcoes que montar() pode
 # empilhar nunca passe do vetor, e que ops[] so seja escrito por juntar().
 ctx_max=$(rg -n '^#define CTX_MAX ' src/ctxmenu.c | sed 's/.*CTX_MAX *//')
-n_juntar=$(rg -c '^\s*juntar\(' src/ctxmenu.c)
+# O menu de LISTA (72fc391f: Abrir lista / Biblioteca / Home, ops OP_L_*) e um
+# ramo que termina em `return` dentro de montar(): nunca empilha com as demais,
+# entao so as linhas de juntar() de fora dele contam contra o teto.
+n_juntar=$(rg '^\s*juntar\(' src/ctxmenu.c | rg -vc 'OP_L_')
 [ "$n_juntar" -le "$ctx_max" ] || {
   echo "ctxmenu: $n_juntar opcoes possiveis para CTX_MAX=$ctx_max" >&2; exit 1; }
 rg -q 'ops\[nOps\]\.rot = rot' src/ctxmenu.c
@@ -56,7 +59,9 @@ linha_conf=$(rg -n 'acao == OP_TIRAR_CONTINUAR && pagina != 2' src/ctxmenu.c | c
 linha_tirar=$(rg -n 'desc_tirar_continuar\(imdb, temp, ep\)' src/ctxmenu.c | cut -d: -f1)
 [ -n "$linha_conf" ] && [ "$linha_conf" -lt "$linha_tirar" ] || {
   echo 'ctxmenu: tirar de Continuar sem a confirmacao antes' >&2; exit 1; }
-rg -q 'if \(confFoco == 0\) aplicar\(\); else pagina = 0;' src/ctxmenu.c
+# The cancel branch also resets confExtra (confirmation of extra actions, 24edc98e);
+# the contract is unchanged: first button applies, anything else goes back to page 0.
+rg -q 'if \(confFoco == 0\) aplicar\(\); else \{ pagina = 0; confExtra = -1; \}' src/ctxmenu.c
 
 # A ilha do menu sempre fica fora do cartaz focado: direita quando cabe,
 # esquerda como segunda opcao e, sem largura livre, dentro dos limites da tela.

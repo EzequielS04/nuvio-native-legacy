@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdatomic.h>
+int ctx_aberto(void) { return 0; }   // home.c asks whether the context menu is open
 #include "../src/home.c"
 
 void cachearte_marcar_grupo(int grupo, const char *url, int variante, int essencial, int emUso) {

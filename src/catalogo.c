@@ -234,6 +234,12 @@ static const char *tipo_base(const char *tipo) {
   return "movie";
 }
 
+// "movie"/"series"/"show" are certain types; anything else ("anime" from AIOMetadata
+// catalogs, empty) is a catalog guess that buscarEps resolves via /meta (10da34b0).
+static int tipo_certo(const char *tipo) {
+  return tipo && (!strcmp(tipo, "movie") || !strcmp(tipo, "series") || !strcmp(tipo, "show"));
+}
+
 static unsigned hist_hash(const char *id, const char *tipo) {
   unsigned h = 2166136261u;
   while (*id) { h ^= (unsigned char)*id++; h *= 16777619u; }
@@ -1560,8 +1566,8 @@ void cat_atualizar_item(int i, const CatItem *item) {
   pthread_mutex_lock(&pubTrava);
   if (itens && i >= 0 && i < n &&
       !strcmp(itens[i].imdb, copia.imdb) &&
-      !strcmp(tipo_base(itens[i].tipo), tipo_base(copia.tipo))) {
-    itens[i] = copia;
+      (!tipo_certo(itens[i].tipo) || !strcmp(tipo_base(itens[i].tipo), tipo_base(copia.tipo)))) {
+    itens[i] = copia;   // an uncertain stored type may be resolved to movie/series
     mudou();
   }
   pthread_mutex_unlock(&pubTrava);
