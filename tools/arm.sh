@@ -36,7 +36,7 @@ cd "$(dirname "$0")/.."
 TV_IP="${NUVIO_TV_IP:-192.168.1.32}"
 TV_PASS="${NUVIO_TV_PASS:-alpine}"
 APP_ID="space.nuvio.native.legacy"
-ARES="../NuvioWeb-0.3.38-beta/node_modules/.bin/ares-package"
+ARES="${NUVIO_ARES_PACKAGE:-../NuvioWeb-0.3.38-beta/node_modules/.bin/ares-package}"
 
 # --high-cache pode vir antes ou depois de --build/--ipk. So muda uma -D e os
 # nomes; o codigo e o mesmo — e por isso a variante nao precisa de branch.
