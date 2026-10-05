@@ -86,6 +86,7 @@
 #include "ilhacart.h"
 #include "cwretido.h"
 #include "ilhasinais.h"
+#include "enquete.h"
 #include "recintro.h"
 #include "atualizacao.h"
 #include "pipintro.h"
@@ -2291,6 +2292,7 @@ void app_atualizar(float dt, Uint32 agora) {
         // visita), e o blob da conta dele por cima. Ver sync_trocar_perfil.
         sync_trocar_perfil(perfilAntes);
         ilhasinais_perfil_trocado();   // "Agora no perfil Lia" na ilha (02/10)
+        enquete_perfil_trocado();      // a enquete do perfil anterior sai (N3)
         // AS COLECOES DO PERFIL ANTERIOR SAEM JA. col_definir_json so roda
         // quando a conta manda linhas, entao um perfil sem colecoes ficava
         // com as do anterior para sempre.
