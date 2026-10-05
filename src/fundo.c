@@ -116,9 +116,8 @@ int fundo_conferencia(int modo) {
 
 // O Frost direto em (u, v) de uma tela cheia: base, degrade de cima e as tres
 // luzes (GFX_LUZ: queda suave ao quadrado).
-static void refFrost(const float ac[3], float u, float v, int luz, float o[3]) {
-  static const float L[3][4] = { { 0.14f, 0.08f, 1.05f, 0.70f }, { 0.92f, 0.96f, 0.90f, 0.45f },
-                                 { 0.70f, 0.30f, 0.60f, 0.18f } };
+static void refFrost(const float *ac, float u, float v, int luz, float o[3]) {
+  static const float L[3][3] = { { 0.14f, 0.08f, 1.05f }, { 0.92f, 0.96f, 0.90f }, { 0.70f, 0.30f, 0.60f } };
   static const float B[3] = { 0.043f, 0.047f, 0.055f }, T[3] = { 0.082f, 0.086f, 0.102f };
   const float A = 1920.0f / 1080.0f;
   float g = v / 0.70f;
@@ -130,8 +129,8 @@ static void refFrost(const float ac[3], float u, float v, int luz, float o[3]) {
     float px = (u - L[i][0]) * A, py = v - L[i][1], t = 1.0f - sqrtf(px * px + py * py) / L[i][2], sv, al;
     t = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
     sv = t * t * (3.0f - 2.0f * t);
-    al = sv * sv * L[i][3];
-    for (j = 0; j < 3; j++) o[j] = o[j] * (1.0f - al) + ac[j] * al;
+    al = sv * sv * ac[9 + i];
+    for (j = 0; j < 3; j++) o[j] = o[j] * (1.0f - al) + ac[i * 3 + j] * al;
   }
 }
 static int nivel(float c) { return (int)(c * 255.0f + 0.5f); }
@@ -380,26 +379,41 @@ static int borrada(GfxRect r, float raioPx, const char *c, float a) {
 // matiz com L 0,42 e croma <= 0,11 (ajustes_acento_luz) — Branco vira nevoa
 // neutra e Jade nao acende a tela. Fundo linear(165deg, #15161A, #0B0C0E 70%)
 // e as tres luzes a 70%, 45% e 18%.
+// AS TRES LUZES: cor (9) e forca (3). Fora da Imersiva, a luz do destaque nas
+// tres, a 70/45/18%. NA IMERSIVA (dono, 05/10: "o fundo frost no imersivo ta
+// sempre preto, nao ta com a cor imersiva") cada luz e uma REGIAO da cena — as
+// mesmas cores que a Home pinta — e mais forte, porque aqui elas sao so tres
+// manchas e nao a tela inteira.
+static void frostLuzes(float c[12]) {
+  static const float F[3] = { 0.70f, 0.45f, 0.18f }, FI[3] = { 0.90f, 0.70f, 0.45f };
+  float ac[3], k = nv_ambiente_forca < 0.0f ? 0.0f : nv_ambiente_forca > 1.0f ? 1.0f : nv_ambiente_forca;
+  int i, j;
+  ajustes_acento_luz(&ac[0], &ac[1], &ac[2]);
+  for (i = 0; i < 3; i++) {
+    for (j = 0; j < 3; j++) c[i * 3 + j] = ac[j] + (nv_ambiente_viva[i][j] - ac[j]) * k;
+    c[9 + i] = F[i] + (FI[i] - F[i]) * k;
+  }
+}
 static void frost(GfxRect r, float raioPx, float a) {
-  float ar, ag, ab, rr = raioPx / r.h;
-  ajustes_acento_luz(&ar, &ag, &ab);
+  float c[12], rr = raioPx / r.h;
+  frostLuzes(c);
   gfx_cor(r, rr, 0.043f, 0.047f, 0.055f, a);   // #0B0C0E
   gfx_rect(r, 0, GFX_VEU_CSS, 1.0f, 1.0f, 0.70f, rr, 0.082f, 0.086f, 0.102f, a);   // #15161A em cima
-  gfx_luz_canto(r, rr, r.w * 0.14f, r.h * 0.08f, r.h * 1.05f, ar, ag, ab, 0.70f * a);
-  gfx_luz_canto(r, rr, r.w * 0.92f, r.h * 0.96f, r.h * 0.90f, ar, ag, ab, 0.45f * a);
-  gfx_luz_canto(r, rr, r.w * 0.70f, r.h * 0.30f, r.h * 0.60f, ar, ag, ab, 0.18f * a);
+  gfx_luz_canto(r, rr, r.w * 0.14f, r.h * 0.08f, r.h * 1.05f, c[0], c[1], c[2], c[9] * a);
+  gfx_luz_canto(r, rr, r.w * 0.92f, r.h * 0.96f, r.h * 0.90f, c[3], c[4], c[5], c[10] * a);
+  gfx_luz_canto(r, rr, r.w * 0.70f, r.h * 0.30f, r.h * 0.60f, c[6], c[7], c[8], c[11] * a);
 }
 static void pintarFrost(void *ctx) {
   (void)ctx;
   frost((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 1.0f);
 }
 static void frostTela(GfxRect r, float raioPx, float a) {
-  float k[6];
+  float k[15];
   GLuint t = 0;
   if (!telaCheia(r) || raioPx > 0.0f) { frost(r, raioPx, a); return; }
-  ajustes_acento_luz(&k[0], &k[1], &k[2]);
-  k[3] = NV_COR_FUNDO_R; k[4] = NV_COR_FUNDO_G; k[5] = NV_COR_FUNDO_B;
-  if (conferido[K_FROST] != 0) t = gfx_luz_canal(CANAL_FROST, k, 6, pintarFrost, NULL);
+  frostLuzes(k);
+  k[12] = NV_COR_FUNDO_R; k[13] = NV_COR_FUNDO_G; k[14] = NV_COR_FUNDO_B;
+  if (conferido[K_FROST] != 0) t = gfx_luz_canal(CANAL_FROST, k, 15, pintarFrost, NULL);
   if (t) gfx_luz_canal_desenhar(t, a, NULL, 1);
   else frost(r, raioPx, a);
   depoisDoFrost(t, k, a);

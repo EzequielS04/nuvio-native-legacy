@@ -673,6 +673,14 @@ void corviva_quadro(float dt, int modo, int usarLogo, int reduzido) {
   memcpy(novo[1], FUNDO, sizeof novo[1]);   // o estilizado (base tingida) saiu
   for (k = 0; k < 3; k++) memcpy(novo[2 + k], fonteOk ? fonte->grad[k] : BRANCO, sizeof novo[0]);
   for (k = 0; k < 4; k++) memcpy(novo[5 + k], temCena ? cena.regiao[k] : FUNDO, sizeof novo[0]);
+  // "Cor da logo" tambem vale para a LUZ da Imersiva (dono, 05/10: "o imersivo
+  // da logo nao ta pegando a cor da logo"): as quatro luzes saiam sempre das
+  // regioes da ARTE, e so o destaque seguia o logo. Com logo de cor, sao o
+  // destaque e o degrade dele, na mesma faixa de luz das regioes.
+  if (usarLogo && temCena && temLogo && cenaLogo.ok) {
+    ajustarRegiao(cenaLogo.acento, novo[5]);
+    for (k = 0; k < 3; k++) ajustarRegiao(cenaLogo.grad[k], novo[6 + k]);
+  }
   grad = fonteOk && modo == CORVIVA_GRADIENTE;
   forca = (modo == CORVIVA_IMERSIVA && temCena) ? 1.0f : 0.0f;
 
