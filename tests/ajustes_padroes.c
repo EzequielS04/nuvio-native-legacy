@@ -59,7 +59,8 @@ int main(void) {
   valor[AJ_RESOLUCAO] = 0;
   assert(ajustes_relogio_ligado() && ajustes_relogio_pos() == 0);   // relogio: ligado, automatico
   assert(ajustes_selo_visto());   // selo de visto no cartaz: ligado (#212)
-  assert(valor[AJ_TEMA] == 0);
+  assert(valor[AJ_TEMA] == AJ_TEMA_IMERSIVA && valor[AJ_FUNDO] == 2);   // aparencia de fabrica da 2.0: Imersiva + Frost
+  assert(valor[AJ_COR_LOGO] == 0 && valor[AJ_VIDRO] == 1);               // Cor da logo ligada, vidro desligado
   // O "+" salva no Trakt. Este assert passava POR ACASO de 22/09 ate o #149:
   // o vetor estava sete casas curto (as linhas do Stalker e do Xtream), e o 1
   // que caia aqui era o do envio automatico. As duas pontas da faixa agora.

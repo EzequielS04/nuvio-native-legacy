@@ -89,7 +89,9 @@ static void escoposPorValor(void) {
   assert(!strcmp(audioAntes, ling_audio()) && !strcmp(legAntes, ling_legenda()));
   valor[AJ_TEMA] = AJ_TEMA_DINAMICA;
   assert(!strcmp(uxEscopo(AJ_TEMA), "Só nesta TV"));
-  assert(!strcmp(uxEscopoValor(AJ_TEMA, uxValorPadrao(AJ_TEMA)), "Conta/perfil"));
+  // O padrao da 2.0 e a Imersiva, que e desta TV (a conta nao a conhece).
+  assert(!strcmp(uxEscopoValor(AJ_TEMA, uxValorPadrao(AJ_TEMA)), "Só nesta TV"));
+  assert(!strcmp(uxEscopoValor(AJ_TEMA, 0), "Conta/perfil"));
   assert(valor[AJ_TEMA] == AJ_TEMA_DINAMICA);
   valor[AJ_TEMA] = AJ_TEMA_DINAMICA - 1;
   assert(!strcmp(uxEscopo(AJ_TEMA), "Conta/perfil"));

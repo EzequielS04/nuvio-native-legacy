@@ -2858,6 +2858,22 @@ void ajustes_dir(const char *dir) {
       dados_gravar("perfilfundo-20.txt", "1\n");
       gravar();
     } }
+  // MIGRACAO UNICA (2.0): a aparencia de quem ja tinha o app vira a de fabrica
+  // da 2.0 — Imersiva, Cor da logo ligada, fundo Frost e interface de vidro
+  // desligada. Decisao do dono (05/10/2026): "para novos e antigos usuarios".
+  // Uma vez so; quem trocar depois, fica. Em modo seguro (SEGURO) a cor
+  // dinamica continua desligada na leitura, como sempre.
+  { char *m = dados_ler("aparencia-20.txt");
+    if (m) free(m);
+    else {
+      printf("[ajustes] aparencia -> Imersiva + Cor da logo + Frost, sem vidro (migracao unica da 2.0)\n");
+      valor[AJ_TEMA] = AJ_TEMA_IMERSIVA;
+      valor[AJ_COR_LOGO] = 0;        // V_LIGA: 0 = Ligado
+      valor[AJ_FUNDO] = FUNDO_FROST;
+      valor[AJ_VIDRO] = 1;           // V_LIGA: 1 = Desligado
+      dados_gravar("aparencia-20.txt", "1\n");
+      gravar();
+    } }
   // O limite mora em fileiras.c; esta linha e so o espelho dele. Ler daqui em
   // vez de gravar evita a divergencia: o arquivo de ajustes nao guarda o
   // numero, entao nao ha como os dois discordarem.

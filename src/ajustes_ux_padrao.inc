@@ -95,7 +95,7 @@
   // ultimo degrau e o ingles. Quem prefere outro troca em Ajustes -> Interface,
   // e a escolha fica gravada (e desliga o automatico).
   0, 0, 0,          /* idioma, animacoes, resolucao (0 = 1080p) */
-  0,                /* tema (cor de destaque): o primeiro, o de sempre */
+  AJ_TEMA_IMERSIVA, /* tema (cor de destaque): Imersiva desde a 2.0 (dono, 05/10/2026) */
   0,                /* cor da logo (so com tema dinamico): ligada */
   // O COMENTARIO ANTIGO AQUI ESTAVA ERRADO, e o erro so nao machucou por sorte.
   // Ele dizia `0, 0, /* versao, espaco */` logo depois do idioma, mas esta
@@ -197,7 +197,7 @@
   0,                /* guia de uso: acao */
   0, 0, 0,          /* pacote de selos (espelho de selospacote_ativo), adicionar e remover: o embutido */
   0,                /* tamanho da interface: 100%, o de sempre */
-  0,                /* fundo: Arte, o de sempre */
+  2,                /* fundo: Frost desde a 2.0 (FUNDO_FROST; dono, 05/10/2026) */
   2,                /* opacidade do vidro: 78%, a de sempre */
   0,                /* vidro fosco: desligado */
 
