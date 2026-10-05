@@ -363,7 +363,12 @@ static void fotosDoElenco(CatItem *d, const char *imdbSerie, int serie, int mant
   // sinopse em ingles num app em outro idioma. O elenco, que e o que precisa
   // de nomes para casar, fica atras da propria guarda.
   chave = desc_chave_tmdb();            // "" com a integracao desligada
-  if (!chave[0]) return;
+  if (!chave[0]) {
+    printf("[desc] elenco %s: sem chave do TMDB (integracao %s)\n", imdbSerie,
+           ajustes_tmdb_ligado() ? "ligada, chave vazia" : "desligada");
+    fflush(stdout);
+    return;
+  }
   snprintf(url, sizeof url, "%s/find/%s?api_key=%s&external_source=imdb_id",
            TMDB, imdbSerie, chave);
   corpo = rede_baixar(url, 20);
@@ -6493,7 +6498,8 @@ static void *buscarEps(void *u) {
       // e UMA temporada, e o titulo/sinopse do TMDB da serie inteira
       // sobrescreveriam os dela.
       if (idbase_e_imdb(it->imdb))
-        fotosDoElenco(&edit, idBase, !strcmp(it->tipo, "series"), manter); }
+        fotosDoElenco(&edit, idBase, !strcmp(it->tipo, "series"), manter);
+      else { printf("[desc] elenco %s: id fora do IMDb, sem fotos (meta pedido como %s)\n", it->imdb, serie); fflush(stdout); } }
     if (alvoItem >= 0 && (alvoItem = epAlvoDe(alvoItem, meuId)) >= 0) cat_atualizar_item(alvoItem, &edit);
     printf("[desc] %s: %d atores, dir='%s', %d temporadas\n",
            edit.titulo, edit.nElenco, edit.direcao, edit.nTemporadas);
