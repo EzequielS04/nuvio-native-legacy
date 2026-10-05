@@ -1,13 +1,21 @@
-# Handoff: fonte árabe embarcada e release 2.0 (05/10/2026)
+# Handoff 2.0: tudo o que falta até a release (05/10/2026)
 
-Quem assume: termina as duas tarefas abaixo, nesta ordem. Leia este arquivo inteiro antes de mexer.
+Quem assume: este é o documento ÚNICO do que falta para publicar a 2.0. Termina as tarefas na ordem abaixo. Leia o arquivo inteiro antes de mexer. Nada aqui autoriza publicar: tag, release, push, `avisos.json` e respostas em issue precisam de "pode" do dono.
+
+## Ordem de trabalho
+
+1. **Tarefa 1** — fonte árabe embarcada na Samsung + legenda em Windows-1256 (7 issues de árabe).
+2. **Tarefa 2** — consertos de código que cabem na 2.0 (#254, #255, #252) e conferências pendentes.
+3. **Tarefa 3** — provas em TV que faltam (Android, LG, Samsung).
+4. **Tarefa 4** — release 2.0.0 (pacotes, notas, publicação só com autorização).
+5. **Depois da release** — respostas curtas nas issues e pedidos de log.
 
 ## Onde está tudo
 
 - Checkout de integração: `/Users/hrocha/.codex/worktrees/integration-180-glass/nuvio-native-legacy`, branch `codex/integration-180-glass`. HEAD no momento deste handoff: `cdc000aa` (ou um commit acima, se a sessão anterior commitar mais). Tudo **local, sem push**.
 - `master` = última release publicada (1.7.4). A 2.0 sai da integração.
 - Triagem das 44 issues abertas contra a 2.0: [ISSUES-2.0.md](ISSUES-2.0.md). Uma correção a ela: #226/#234 (ícone do launcher no Android) **já estão** na integração (`src/iconeapp.c` + `activity-alias` no `AndroidManifest.xml`); o relatório diz que só estavam em `agente/icones`, e isso está errado.
-- Handoffs anteriores ainda válidos: [HANDOFF-NEXT-AGENT.md](HANDOFF-NEXT-AGENT.md), [HANDOFF-FUNDOS-DESCANSO.md](HANDOFF-FUNDOS-DESCANSO.md).
+- Handoffs anteriores (contexto, já incorporados aqui): [HANDOFF-NEXT-AGENT.md](HANDOFF-NEXT-AGENT.md), [HANDOFF-FUNDOS-DESCANSO.md](HANDOFF-FUNDOS-DESCANSO.md).
 
 ### Entrou na integração hoje (05/10)
 
@@ -30,7 +38,7 @@ Quem assume: termina as duas tarefas abaixo, nesta ordem. Leia este arquivo inte
 
 ---
 
-## Tarefa 1 — fonte árabe embarcada (Samsung)
+## Tarefa 1 — fonte árabe embarcada (Samsung) e legenda em Windows-1256
 
 ### Por que
 
@@ -54,14 +62,45 @@ São 7 issues de árabe (#239 #245 #247 #250 #253 #258 #261). A forma das letras
 5. Prova no Mac: uma legenda árabe e um título árabe com `NUVIO_SEM_RESERVA_DE_SISTEMA=1` (ver `tests/` com "arabe"/"bidi" — `grep -l bidi tests/*.c`). Captura antes/depois: quadrados → letras unidas, da direita para a esquerda.
 6. Commit em português ou inglês, no estilo do repo, com `Co-Authored-By`.
 
-### Fora deste item (anotar nas notas, não fazer agora)
+### Legenda em Windows-1256 (#247, #261) — fazer junto
 
-- #247/#261: legenda em **Windows-1256** não é detectada (`src/legenda.c` ~495–560 só trata UTF-8/16, 1251, 1252). Conserto pequeno e de alto retorno se der tempo: detectar 1256 e converter (tabela de 128 posições). Se fizer, teste com arquivo `.srt` em cp1256.
-- #250 (interface em árabe) e #260 (layout RTL): features grandes, fora da 2.0.
+`src/legenda.c` ~495–560 só detecta UTF-8/16, 1251 e 1252. Legenda árabe antiga vem em **cp1256** e sai como lixo mesmo com bidi e fonte. Detectar (alta frequência de bytes 0xC1–0xED com poucos ASCII de letra latina) e converter por tabela de 128 posições (0x80–0xFF → Unicode). Teste com um `.srt` em cp1256 (gerar com `iconv -t CP1256`), no mesmo estilo dos testes de legenda existentes.
+
+### Fora da 2.0 (decisão do dono)
+
+- #250 (interface em árabe) e #260 (layout RTL): features grandes.
 
 ---
 
-## Tarefa 2 — release 2.0
+## Tarefa 2 — consertos que cabem na 2.0 e conferências
+
+Fonte: [ISSUES-2.0.md](ISSUES-2.0.md). Só o que dá para fazer sem relator:
+
+- **#254 (Samsung .tpk 6) Home não atualiza ao instalar/remover addon, catálogos "fantasma".** Nenhum commit trata. Reproduzir no Mac: instalar e remover um addon com catálogo e coleções, e ver se as fileiras somem/aparecem sem reiniciar. Relacionado ao conserto de hoje `cdc000aa` (busca não refazia ao mudar addons): olhe os outros pontos que dependem de `desc_alvos_busca_zerar`/lista de addons e guardam estado da lista antiga.
+- **#255 (Samsung .tpk 6) Home mostra só 5 coleções.** Não ficou provado que o corte é o da TV; a UI não avisa quando corta. Pelo menos: log claro do corte e, se houver teto, dizer qual.
+- **#252 Idioma de áudio padrão para anime.** Faixa sem tag de idioma é ignorada na escolha automática (`src/video.c` ~884). Conserto mínimo: faixa sem idioma não pode perder para nada quando é a única do tipo; opção "só para anime" é feature, fora.
+- **#249** está resolvida para séries; o comentário em `src/posplay.c:411` ainda fala em 52% e está velho — corrigir o comentário.
+- **#241** zoom do trailer no `.tpk` continua Desligado de fábrica: confirmar com o dono se fica assim (a ajuda avisa tela preta em algumas Samsung).
+- **#226/#234 ícone do launcher no Android**: o código existe (troca o `activity-alias` ao sair do app). Na TCL nenhum alias trocou ainda. Pedir ao dono para trocar o ícone em Ajustes e sair pelo Home, e ler `adb logcat | grep app-icon` + `dumpsys package space.nuvio.nativelegacy | grep -A12 enabledComponents`.
+- **Addon "Minha TV"** (`*.baby-beamup.club`) do dono não responde manifesto (timeout 12–20 s). É servidor dele; só confirmar que a Home não espera por ele.
+
+---
+
+## Tarefa 3 — provas em TV que faltam
+
+| Onde | O quê | Como |
+|---|---|---|
+| Android TCL `192.168.1.128:5555` | Detalhe: Notas → topo e "logo cresce do nada" (`359b8000`) | Dono navega; `adb logcat` linhas `FPS=`, `[quadro]`, `[gpu-modos] ... tela=detalhe`. Antes: 37–41 FPS e `fill=4.7–4.9x` na volta. |
+| Android TCL | Spotlight acha títulos depois de mudar addons (`cdc000aa`) | Adicionar/remover addon e buscar o mesmo termo. |
+| LG C9 `192.168.1.32` | Build das mudanças de hoje (`tools/arm.sh --alto-cache`) | `ssh -o ProxyCommand=none root@192.168.1.32` (senha alpine); log em `/tmp/space.nuvio.native.legacy.log`; conferir `/proc/<pid>/exe`. |
+| LG C9 | Descanso: vitrine parada, relógio troca de lugar com fade, sem hora na vitrine | Ajustes › Aparência › Tela de descanso 30 s. |
+| Samsung | Nada de hoje foi provado. Prioridade: #233/#254/#255 e árabe | Só o dono/relatores têm Samsung. |
+
+O `.tpk` 6+ gerado mais cedo (`LG WEB/nuvio-tpk-build/build/tpk/Nuvio-1.7.4-NuvioTpk60.tpk`) está **velho** (antes de #251, descanso parado, busca, detalhe). Refazer na release.
+
+---
+
+## Tarefa 4 — release 2.0
 
 **Versão: 2.0.0** (o dono decidiu que 1.8 vira 2.0). Pedir confirmação ao dono antes de publicar qualquer coisa: tag, release no GitHub, push, `avisos.json` e respostas em issue são públicos.
 
@@ -90,6 +129,15 @@ São 7 issues de árabe (#239 #245 #247 #250 #253 #258 #261). A forma das letras
 - LG: build das mudanças de hoje sendo instalada na C9 quando este handoff foi escrito.
 - Samsung (.wgt e .tpk): nada de hoje foi provado em Samsung. Os riscos maiores são #233/#254/#255 (catálogos e coleções no .tpk) e a fonte árabe da Tarefa 1.
 - #223 (Android 11, tela preta no login) e #211 (LG webOS 4 fecha ao abrir) dependem dos relatores.
+
+---
+
+## Depois da release
+
+- Responder curto (memória do dono: "manda bíblia ninguém lê") nas resolvidas: #223 #231 #233 #235 #237 #238 #239 #243 #244 #245 #249 e nas "resolvida antes" (#188 #197 #202 #209 #227) pedindo para fechar.
+- Pedir log na 2.0: #211 (LG webOS 4 fecha ao abrir), #228 (trailer na Q80A), #232 (miniatura não desfocada), #240 (demora Torbox), #246 (seek HEVC anime), #256 (autoplay do próximo), #158 (Live TV C4), #171 (P2P/Torrentio no .tpk).
+- PR #259 (DTS): o dono decide se comenta. Achados estão no topo deste arquivo. Remover o app "Nuvio Legacy DTS Debug" da C9 quando ele mandar.
+- PR #251 entrou: agradecer o KeijoMika e fechar o PR apontando o commit `247688b4` (o merge foi local, na integração).
 
 ### Chaves da conta (medido hoje, só nomes)
 
