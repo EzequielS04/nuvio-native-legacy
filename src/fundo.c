@@ -418,7 +418,10 @@ static void frostTela(GfxRect r, float raioPx, float a) {
   // do Frost ficavam quase pretas ao lado disso.
   if (nv_ambiente_forca > 0.5f) {
     gfx_cor(r, 0.0f, NV_COR_FUNDO_R, NV_COR_FUNDO_G, NV_COR_FUNDO_B, a);
-    gfx_ambiente(a * 0.998f);
+    // Opaco (alfa 1): a luz vai pelo caminho SEM mistura do gfx_ambiente, o
+    // mesmo do quadro da Home. A 0,998 era uma tela cheia misturada a mais por
+    // quadro, e a TCL caia para 34 fps na pagina do titulo (log de 05/10).
+    gfx_ambiente(a >= 0.999f ? 1.0f : a * 0.998f);
     return;
   }
   frostLuzes(k);
