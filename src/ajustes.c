@@ -1545,6 +1545,9 @@ static int sair = 0;
 // Rascunho e navegação separados dos valores persistentes.
 static int uxIndice = 2;
 static int uxChipAv;   // foco no chip "Avancadas" do alto do indice (liga/desliga global)
+// A fileira de cada pilula do alto (0 Buscar, 1 Diferentes, 2 Avancadas): quem
+// mede e o desenho (aj2ChipsMedir, pelo texto traduzido); a navegacao so le.
+static int uxChipLinha[3];
 static int uxUltimoItem[AJ_MAX_SECOES];
 static int uxAbrirOp = -1, uxPediuBusca, uxVeioBusca, uxRetornarOp = -1;
 static int uxDifs[AJ_N], uxNDifs, uxDifFoco;
@@ -6552,6 +6555,8 @@ int ajustes_teste_quadro(const char *id) {
   // NUVIO_SHOT_LAYOUT=2 (HOME_LAYOUT_*): the owner's Dinamica layout, whose menu
   // pill sits in the Settings corner (with NUVIO_SHOT_MENU in the capture).
   if (getenv("NUVIO_SHOT_LAYOUT") && *getenv("NUVIO_SHOT_LAYOUT")) valor[AJ_HOME_LAYOUT] = atoi(getenv("NUVIO_SHOT_LAYOUT"));
+  // NUVIO_SHOT_AVANCADAS=1: opcoes avancadas a mostra (a pilula ligada no indice).
+  if (getenv("NUVIO_SHOT_AVANCADAS")) valor[AJ_AVANCADAS] = 0;
   uxCancelar(); uxAviso[0] = 0; uxRetornarOp = -1;
   scrollY = velY = 0; paginaA = 1;
   filAberta = 0; riscoFolha = 0;
@@ -6590,10 +6595,25 @@ int ajustes_teste_quadro(const char *id) {
     return 1;
   }
   if (!strncmp(id, "op:", 3)) {   // qualquer opcao, pela chave do disco
-    int op, k;
-    for (op = -1, k = 0; k < AJ_N; k++) if (CHAVE[k] && !strcmp(CHAVE[k], id + 3)) op = k;
-    if (op < 0) return 0;
-    focarOpcao(op);
+    // "op:chave=N" grava o valor N antes de focar; "op:chave=N,outra=M" grava
+    // tambem outras opcoes (a previa de uma depende das vizinhas).
+    int op, k, primeira = -1;
+    char lista[256], *par, *ctx = NULL;
+    snprintf(lista, sizeof lista, "%s", id + 3);
+    for (par = strtok_r(lista, ",", &ctx); par; par = strtok_r(NULL, ",", &ctx)) {
+      char *ig = strchr(par, '=');
+      if (ig) *ig = 0;
+      for (op = -1, k = 0; k < AJ_N; k++) {
+        const char *c = CHAVE[k];
+        if (c && c[0] == '-') c++;
+        if (c && !strcmp(c, par)) op = k;
+      }
+      if (op < 0) return 0;
+      if (ig) valor[op] = atoi(ig + 1);
+      if (primeira < 0) primeira = op;
+    }
+    if (primeira < 0) return 0;
+    focarOpcao(primeira);
   }
   else if (!strncmp(id, "guia", 4)) { if (!ajustesTesteGuia(id)) return 0; }
   else if (!strcmp(id, "principal")) { focarOpcao(AJ_HOME_LAYOUT); }
@@ -6633,6 +6653,7 @@ int ajustes_teste_quadro(const char *id) {
     focarOpcao(AJ_FIL_ORDEM);
     fil_definir_tipo("com.linvo.cinemeta_movie_top", FIL_TIPO_DESTAQUE); filAberta = 1; filFoco = 3; filCampo = 2; filPegou = 0; filTopo = 0; filNaBarra = 0;
     filAba = !strcmp(id, "fileiras-fora"); filForaAgrupada = 1;
+    if (getenv("NUVIO_SHOT_DADOS")) fil_normalizar();   // como o OK na linha faz, com o arquivo de verdade
     if (filAba) {   // o grupo do mockup: Akashi, AIOStreams e Xperience fora da Home
       int k;
       static const int FORA[4] = { 11, 13, 14, 15 };

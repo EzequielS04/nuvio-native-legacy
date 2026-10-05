@@ -184,14 +184,28 @@ static int uxEvento(SDL_Keycode k) {
     uxPediuBusca = 2; uxVeioBusca = 0; return 1;
   }
   if (focoIndice) {
-    // As duas pilulas do alto (0 Buscar, 1 Diferentes) dividem uma linha:
-    // Esquerda/Direita andam entre elas; a Esquerda da primeira sai.
+    // As tres pilulas do alto (0 Buscar, 1 Diferentes, 2 Avancadas) ficam em
+    // uma, duas ou tres fileiras (uxChipLinha, medido pelo texto traduzido).
+    // Esquerda/Direita andam dentro da fileira; a Esquerda da primeira de uma
+    // fileira sai; Cima/Baixo trocam de fileira e, depois da ultima, descem
+    // para a lista.
     static int ultimaPilula = 0;
+    int chip = uxChipAv ? 2 : uxIndice < 2 ? uxIndice : -1;
     if (uxIndice < 2) ultimaPilula = uxIndice;
+    if (chip >= 0 && (k == SDLK_UP || k == SDLK_DOWN)) {
+      int alvoL = uxChipLinha[chip] + (k == SDLK_DOWN ? 1 : -1), c, dest = -1;
+      for (c = 0; c < 3 && dest < 0; c++) if (uxChipLinha[c] == alvoL) dest = c;
+      if (dest >= 0) {   // ha outra fileira de pilulas nesse sentido
+        uxChipAv = dest == 2; uxIndice = dest == 0 ? 0 : 1; uxVeioBusca = 0;
+        if (uxIndice == 1) uxListarDiferencas();
+        return 1;
+      }
+    }
     // O terceiro chip do alto, "Avancadas": liga/desliga as opcoes avancadas em
     // TODAS as categorias (uma vez, em vez de uma por categoria).
     if (uxChipAv) {
-      if (k == SDLK_LEFT) { uxChipAv = 0; return 1; }
+      if (k == SDLK_LEFT && uxChipLinha[2] == uxChipLinha[1]) { uxChipAv = 0; return 1; }
+      if (k == SDLK_LEFT) { sair = 1; return 1; }
       if (uxOk(k)) {
         int novo = valor[AJ_AVANCADAS] == 0 ? 1 : 0;
         if (definirValorDireto(AJ_AVANCADAS, novo)) uxNotificar("Ajuste salvo nesta TV.");
@@ -202,14 +216,23 @@ static int uxEvento(SDL_Keycode k) {
       if (uxVoltar(k)) { sair = 1; return 1; }
       return 1;
     }
-    if (uxIndice == 1 && k == SDLK_RIGHT) { uxChipAv = 1; uxVeioBusca = 0; return 1; }
-    if (uxIndice == 1 && k == SDLK_LEFT) { uxIndice = 0; uxVeioBusca = 0; return 1; }
-    if (uxIndice == 0 && k == SDLK_RIGHT) { uxIndice = 1; uxVeioBusca = 0; uxListarDiferencas(); return 1; }
+    if (uxIndice == 1 && k == SDLK_RIGHT && uxChipLinha[2] == uxChipLinha[1]) { uxChipAv = 1; uxVeioBusca = 0; return 1; }
+    if (uxIndice == 1 && k == SDLK_RIGHT) return 1;
+    if (uxIndice == 1 && k == SDLK_LEFT && uxChipLinha[1] == uxChipLinha[0]) { uxIndice = 0; uxVeioBusca = 0; return 1; }
+    if (uxIndice == 0 && k == SDLK_RIGHT && uxChipLinha[1] == uxChipLinha[0]) { uxIndice = 1; uxVeioBusca = 0; uxListarDiferencas(); return 1; }
+    if (uxIndice == 0 && k == SDLK_RIGHT) return 1;
     if (uxVoltar(k) || k == SDLK_LEFT) { sair = 1; return 1; }
     if (k == SDLK_UP || k == SDLK_DOWN) {
       int dest = uxIndice + (k == SDLK_DOWN ? 1 : -1);
       if (uxIndice < 2) { if (k == SDLK_UP) return 1; dest = 2; }
-      else if (dest < 2) dest = ultimaPilula;
+      else if (dest < 2) {
+        // Subindo da lista: a pilula de antes, se ela esta na fileira de baixo;
+        // senao a primeira da fileira de baixo (a mais perto da lista).
+        int c, ult = uxChipLinha[2];
+        dest = ultimaPilula;
+        if (uxChipLinha[dest] != ult) for (c = 0; c < 2; c++) if (uxChipLinha[c] == ult) { dest = c; break; }
+        if (uxChipLinha[dest] != ult) { uxChipAv = 1; dest = 1; }   // so as Avancadas la embaixo
+      }
       if (dest < 0 || dest >= nSecoes + 2) return 1;
       if (dest >= 2) focarSecao(dest - 2);
       uxIndice = dest; uxVeioBusca = 0;
