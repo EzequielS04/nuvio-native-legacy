@@ -615,6 +615,7 @@
   T("Assistir", "Žiūrėti"),
   T("Assistir T%dE%d", "Žiūrėti S%dE%d"),
   T("Assistir do começo", "Groti nuo pradžios"),
+  T("Assistir trailer", "Žiūrėti anonsą"),
   T("Assistiu", "Žiūrėjo"),
   T("Assistiu recentemente", "Neseniai žiūrėta"),
   T("Assistiu recentemente: %s", "Neseniai žiūrėjo: %s"),

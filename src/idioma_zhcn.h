@@ -615,6 +615,7 @@
   T("Assistir", "观看"),
   T("Assistir T%dE%d", "观看 S%dE%d"),
   T("Assistir do começo", "从头播放"),
+  T("Assistir trailer", "观看预告片"),
   T("Assistiu", "看过"),
   T("Assistiu recentemente", "最近观看"),
   T("Assistiu recentemente: %s", "最近看过：%s"),

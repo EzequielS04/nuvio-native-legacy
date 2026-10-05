@@ -84,7 +84,7 @@ static float cenA, cenCorpoA, cenW, cenH, cenVW, cenVH;
 static Uint32 cenQuadro;
 // Quanto a pilula da HORA segura depois que um corpo com `voltaRelogio` acaba,
 // antes de encolher e sair (o corpo vira o relogio e ai some).
-#define HORA_SEGURA_MS 1600u
+#define HORA_SEGURA_MS 800u
 static Uint32 horaAte;
 static int prevVolta;
 

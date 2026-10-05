@@ -615,6 +615,7 @@
   T("Assistir", "Προβολή"),
   T("Assistir T%dE%d", "Δες S%dE%d"),
   T("Assistir do começo", "Αναπαραγωγή από την αρχή"),
+  T("Assistir trailer", "Δείτε το τρέιλερ"),
   T("Assistiu", "Παρακολούθησε"),
   T("Assistiu recentemente", "Είδα πρόσφατα"),
   T("Assistiu recentemente: %s", "Είδε πρόσφατα: %s"),

@@ -210,7 +210,8 @@ int fx_colecao_nota(int i) { return COL_NOTA[i]; }
 int fx_n_estudios(void)       { return extrasCardsLigados ? 3 : 0; }
 const char *fx_estudio_nome(int i) { return EST_NOME[i]; }
 const char *fx_estudio_logo(int i) { (void)i; return ""; }
-int fx_n_trailers(void)       { return 0; }
+static int trailerBotaoLigado;
+int fx_n_trailers(void)       { return trailerBotaoLigado ? 1 : 0; }
 int fx_nota_trakt(void)       { return 82; }
 
 // SO a serie de ensaio tem temporadas. O filme devolve zero, que e o estado
@@ -831,6 +832,18 @@ int main(int argc, char **argv) {
     snprintf(nome, sizeof nome, "%s-22-filme-olho-visto.png", saida);
     gravar(nome); }
 
+  // --- 23/24. #234: o botao "Assistir trailer" (ultimo circular) em repouso e
+  //            em foco, com a dica do nome acima.
+  trailerBotaoLigado = 1;
+  abrir(1, SEC_ELENCO, 0);
+  nivel = 0; botao = 0;
+  quadros(60);
+  snprintf(nome, sizeof nome, "%s-23-filme-botao-trailer.png", saida);
+  gravar(nome);
+  botao = nBotoesTodos() - 1; for (int w = 0; w < 12; w++) { quadros(5); SDL_Delay(150); }
+  quadros(40);
+  snprintf(nome, sizeof nome, "%s-24-filme-botao-trailer-foco.png", saida);
+  gravar(nome);
 
   SDL_GL_DeleteContext(gl);
   SDL_DestroyWindow(janela);

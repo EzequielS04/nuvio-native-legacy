@@ -615,6 +615,7 @@
   T("Assistir", "Tonton"),
   T("Assistir T%dE%d", "Tonton S%dE%d"),
   T("Assistir do começo", "Putar dari awal"),
+  T("Assistir trailer", "Tonton trailer"),
   T("Assistiu", "Menonton"),
   T("Assistiu recentemente", "Baru saja ditonton"),
   T("Assistiu recentemente: %s", "Baru menonton: %s"),
