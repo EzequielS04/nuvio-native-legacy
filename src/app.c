@@ -4019,6 +4019,9 @@ static void desenharTelas(Uint32 agora) {
       ctx_desenhar(agora);
     }
   }
+  // BRILHO DA INTERFACE DO PLAYER (esmaecer.h): tudo daqui ate a ilha do player
+  // multiplica a cor pelo fator (a legenda se isenta em player.c).
+  if (player_aberto()) gfx_osd_mult = player_osd_brilho();
   CAMADA_SE(player_aberto());
   player_desenhar(agora);
   // O overlay do guia vai POR CIMA do player — o video continua atras do fundo
@@ -4035,6 +4038,7 @@ static void desenharTelas(Uint32 agora) {
   // Legendas, estilo, carregando, erro) — e a folha de Fontes, que cresce
   // dela (streams.c) e por isso nao a esconde mais.
   if (player_aberto()) plrilha_desenhar(agora);
+  gfx_osd_mult = 1.0f;
 }
 
 // ONDE O RELOGIO DA ILHA CABE (ilha.h). Em toda tela de menu (Home, Explorar,

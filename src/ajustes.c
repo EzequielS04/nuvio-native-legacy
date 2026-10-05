@@ -389,6 +389,10 @@ typedef enum {
   AJ_ENQUETES,
   // #231: "Buscar no Cinemeta" (Ligado = como sempre). LOCAL. No fim: valor[]/CHAVE[] posicionais.
   AJ_BUSCA_CINEMETA,
+  // Protecao de OLED (esmaecer.h): esmaecer a tela parada (Desligado/2/5/10 min,
+  // padrao 5) e brilho da interface do player (100/80/65/50%, padrao 80%). LOCAIS.
+  // No fim: valor[]/CHAVE[] posicionais.
+  AJ_ESMAECER, AJ_BRILHO_PLAYER,
   AJ_N
 } OpcaoId;
 
@@ -416,6 +420,8 @@ static const char *V_RELOGIO_POS[] = { "Automática", "Esquerda", "Direita" };
 // Indices gravados em fontePrioridadeLocal / fonteHdrLocal (ajustes_fonte_prioridade/_hdr).
 static const char *V_FONTE_PRIORIDADE[] = { "Equilíbrio", "Qualidade máxima", "Começar rápido" };
 static const char *V_FONTE_HDR[] = { "Preferir", "Indiferente", "Evitar" };
+static const char *V_ESMAECER[] = { "Desligado", "2 min", "5 min", "10 min" };
+static const char *V_BRILHO_PLAYER[] = { "100%", "80%", "65%", "50%" };
 static const char *V_LOGO_APP[] = { "Novo", "Clássico" };
 static const char *V_ABERTURA[] = { "Padrão", "Só esmaece", "Direto" };
 static const char *V_FONTE_PRAZO[] = { "3 s", "5 s", "8 s", "Todos os add-ons" };
@@ -1125,6 +1131,8 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Abertura do app",                 V_ABERTURA, 3),         // local: aberturaAppLocal
   ESC("Receber enquetes",                V_LIGA, 2),             // local: enquetesLocal (espelho do opt-out da conta)
   ESC("Buscar no Cinemeta",              V_LIGA, 2),             // local: buscaCinemetaLocal
+  ESC("Esmaecer quando parado",          V_ESMAECER, 4),         // local: esmaecerLocal
+  ESC("Brilho da interface no player",   V_BRILHO_PLAYER, 4),    // local: brilhoPlayerLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1316,6 +1324,7 @@ static const char *CHAVE[] = {
   "logoAppLocal", "aberturaAppLocal",
   "enquetesLocal",
   "buscaCinemetaLocal",
+  "esmaecerLocal", "brilhoPlayerLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1594,6 +1603,8 @@ int ajustes_fonte_primeira(void)      { return valor[AJ_FONTE_AUTO] == 1; }
 int ajustes_fonte_prioridade(void) { int v = valor[AJ_FONTE_PRIORIDADE]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_enquetes(void)         { return lig(AJ_ENQUETES); }
 int ajustes_busca_cinemeta(void)   { return lig(AJ_BUSCA_CINEMETA); }
+int ajustes_esmaecer(void)         { int v = valor[AJ_ESMAECER]; return v < 0 || v > 3 ? 2 : v; }
+int ajustes_brilho_player(void)    { int v = valor[AJ_BRILHO_PLAYER]; return v < 0 || v > 3 ? 1 : v; }
 void ajustes_espelhar_enquetes(int ligado) { int n = ligado ? 0 : 1; if (valor[AJ_ENQUETES] != n) { valor[AJ_ENQUETES] = n; gravar(); } }
 int ajustes_fonte_hdr(void)        { int v = valor[AJ_FONTE_HDR]; return v < 0 || v > 2 ? 0 : v; }
 int ajustes_fonte_texto_addon(void)   { return valor[AJ_FONTE_TEXTO] == 1; }
@@ -3535,6 +3546,7 @@ static int somenteDesteAparelho(int op) {
     case AJ_ITENS_FILEIRA:  /* memoria desta TV: 1 GB aguenta menos */
     case AJ_GPU_EFEITOS:    /* a GPU e desta TV */
     case AJ_BUSCA_CINEMETA: /* o web nao tem esta escolha */
+    case AJ_ESMAECER: case AJ_BRILHO_PLAYER: /* o painel OLED e desta TV */
     case AJ_ENQUETES:       /* o web nao tem a ilha; a conta guarda o opt-out por outro caminho (enquete.c) */
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER: /* o web nao tem a ilha */
     case AJ_FONTE_PRAZO:    /* o web nao tem: a rede e os addons sao desta casa */
@@ -4740,6 +4752,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_ADDONS_PRINCIPAL: return "Os outros perfis desta conta usam os addons do perfil principal. Desligado, cada perfil usa os seus — a não ser que a conta já diga para usar os do principal.";
     case AJ_VIDRO_CONTORNO: return "O contorno das linhas e dos cartões, inclusive o do foco. Desligado, o item em foco é marcado só por um fundo mais claro na cor de destaque.";
     case AJ_COR_LOGO: return "Com um tema dinâmico, a cor sai do logo do título em vez da arte de fundo. Logo branco ou preto usa a arte.";
+    case AJ_ESMAECER: return "Para TVs OLED: sem apertar nada, a tela escurece aos poucos e depois quase apaga, com um relógio que anda devagar. Qualquer tecla acorda (a primeira só acorda, não faz nada). Nunca esmaece com o filme tocando; com ele pausado, sim.";
+    case AJ_BRILHO_PLAYER: return "Escurece os controles, o título e a barra do player (as legendas não mudam). Com o filme tocando e a barra parada, ela ainda baixa um degrau até você apertar uma tecla.";
     case AJ_BUSCA_CINEMETA: return "Ligado (padrão): a busca consulta o catálogo do Nuvio e, se ele falhar, o Cinemeta; um add-on Cinemeta instalado também responde. Desligado: o Cinemeta fica de fora da busca, e só o catálogo do Nuvio e os seus add-ons respondem. Não muda a ficha do título (veja Usar sempre o Cinemeta).";
     case AJ_ENQUETES: return "Ligado, o Nuvio pode convidar você a votar numa enquete curta na ilha do relógio. Desligado, nenhuma aparece. A escolha fica na sua conta.";
     case AJ_RELOGIO: return "Desligado, a pílula do relógio não fica na tela em repouso. Os avisos continuam saindo dela: ela aparece só para o aviso e some depois.";
@@ -6336,6 +6350,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER:
     case AJ_TAMANHO_UI: case AJ_TAMANHO_AJUSTES: case AJ_FUNDO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
     case AJ_AVANCADAS: case AJ_LOGO_APP: case AJ_ABERTURA:
+    case AJ_ESMAECER: case AJ_BRILHO_PLAYER:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL: case AJ_ENQUETES:

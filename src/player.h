@@ -96,6 +96,9 @@ void  player_limpar_legenda_nativa(char *s);
 int   player_texto_legenda_nativa(char *dst, int tam);
 float player_posicao_seg(void);
 int   player_pausado(void);
+// Fator de cor do OSD do player (Ajustes > Brilho da interface no player + degrau
+// automatico com a barra parada). 1 = sem efeito. Ver esmaecer.h.
+float player_osd_brilho(void);
 float player_duracao_seg(void);
 int   player_eh_canal(void);
 // StreamFit (F03): 1 + real backend duration of the player's own source.

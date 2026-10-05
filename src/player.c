@@ -88,6 +88,7 @@ static void avisarCascaAberto(int v) { (void)v; }
 #include "xtream.h"
 #include "xtepg.h"   /* grade curta do Xtream quando a XMLTV nao casa (#158) */
 #include "ajustes.h"
+#include "esmaecer.h"
 #include "proxyts.h"
 #include "perfis.h"
 #include "sessao.h"
@@ -3222,7 +3223,15 @@ static float baseLegendaPrincipal(void) {
 }
 
 static void desenharLegendaPrincipal(float *topoPilha);
+static void desenharLegendaExternaCorpo(void);
+/* A legenda e conteudo do filme, nao interface: o brilho do player nao a toca. */
 static void desenharLegendaExterna(void) {
+  const float osd = gfx_osd_mult;
+  gfx_osd_mult = 1.0f;
+  desenharLegendaExternaCorpo();
+  gfx_osd_mult = osd;
+}
+static void desenharLegendaExternaCorpo(void) {
   /* F04: SECOND SUBTITLE (legendasui.h). Before every primary early return
    * (libass, no cues) so both show in every branch; its own document and
    * offset. R4: "No topo" draws it first, in the top band; "Junto da
@@ -4299,3 +4308,13 @@ void player_shot_esconder(void) { visivel = 0; anim = 0.0f; }
 void player_shot_carregando(int sim) { esperandoFonte = sim; erroFonte = 0; }
 void player_shot_buscando(int sim) { shotBusca = sim; scrubbing = sim; posVisSolto = sim; }
 #endif
+
+// BRILHO DA INTERFACE DO PLAYER (esmaecer.h): o fator de cor que app.c aplica
+// (gfx_osd_mult) a tudo o que o player desenha por cima do video. O degrau
+// automatico so vale com o filme tocando e a barra parada.
+float player_osd_brilho(void) {
+  Uint32 agora = SDL_GetTicks();
+  return esmaecer_brilho_osd(ajustes_brilho_player(),
+                             agora > ultimoInput ? agora - ultimoInput : 0u,
+                             tocando);
+}
