@@ -66,11 +66,48 @@ void fundo_fosco_quadro(void) {
       !corviva_cena_paleta(&p)) return;
   assar(&p, 0.0f);
 }
+// O FUNDO DE TELA CHEIA E ASSADO (gfx_fundo_assado): o desenho de sempre vai
+// para o quadro pequeno so quando a chave muda, e cada quadro paga UM quad
+// opaco — o custo do fundo da Dinamica. Slots: 0 a Arte borrada com o veu, 1 a
+// mesma sem o veu (a fonte do vidro fosco, que antes lia o assado sem veu), 2 o
+// Frost.
+#define SLOT_BORRADA      0
+#define SLOT_BORRADA_CRUA 1
+#define SLOT_FROST        2
+typedef struct { float amb[4][3]; int veu; } Borrada;
+static void pintarBorrada(void *ctx) {
+  const Borrada *b = ctx;
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  float amb[4][3], forca = nv_ambiente_forca, tempo = nv_tempo_viva;
+  memcpy(amb, nv_ambiente_viva, sizeof amb);
+  memcpy(nv_ambiente_viva, b->amb, sizeof amb);
+  nv_ambiente_forca = 1.0f; nv_tempo_viva = 0.0f;
+  gfx_rect(tela, 0, GFX_AMBIENTE, 0, 0, 0, 0, 1, 1, 1, 1.0f);
+  memcpy(nv_ambiente_viva, amb, sizeof amb);
+  nv_ambiente_forca = forca; nv_tempo_viva = tempo;
+  if (b->veu) gfx_cor(tela, 0.0f, 0.024f, 0.027f, 0.035f, 0.28f);
+}
+static GLuint borradaAssada(const CorvivaPaleta *p, int veu) {
+  Borrada b;
+  float k[16];
+  int i;
+  for (i = 0; i < 4; i++) tingir(p->regiao[i], b.amb[i]);
+  b.veu = veu;
+  memcpy(k, b.amb, sizeof b.amb);
+  k[12] = NV_COR_FUNDO_R; k[13] = NV_COR_FUNDO_G; k[14] = NV_COR_FUNDO_B; k[15] = (float)veu;
+  return gfx_fundo_assado(veu ? SLOT_BORRADA : SLOT_BORRADA_CRUA, k, 16, pintarBorrada, &b);
+}
 static int borrada(GfxRect r, float raioPx, const char *c, float a) {
   CorvivaPaleta p;
   int i;
   if (!c || !c[0] || !corviva_paleta(c, &p) || !p.ok) return 0;
   if (telaCheia(r) && raioPx <= 0.0f) {
+    GLuint t = borradaAssada(&p, 1);
+    if (t) {
+      if (ajustes_vidro() && ajustes_vidro_fosco()) gfx_vidro_fosco_fonte(borradaAssada(&p, 0));
+      gfx_fundo_assado_desenhar(t, a);
+      return 1;
+    }
     assar(&p, a);
   } else {
     static const float PX[4][2] = { { 0.0f, 0.5f }, { 1.0f, 0.5f }, { 0.5f, 0.0f }, { 0.5f, 1.0f } };
@@ -88,6 +125,22 @@ static int borrada(GfxRect r, float raioPx, const char *c, float a) {
 // matiz com L 0,42 e croma <= 0,11 (ajustes_acento_luz) — Branco vira nevoa
 // neutra e Jade nao acende a tela. Fundo linear(165deg, #15161A, #0B0C0E 70%)
 // e as tres luzes a 70%, 45% e 18%.
+static void frost(GfxRect r, float raioPx, float a);
+static void pintarFrost(void *ctx) {
+  (void)ctx;
+  frost((GfxRect){ 0, 0, NV_TELA_W, NV_TELA_H }, 0.0f, 1.0f);
+}
+static int frostAssado(GfxRect r, float raioPx, float a) {
+  float k[6];
+  GLuint t;
+  if (!telaCheia(r) || raioPx > 0.0f) return 0;
+  ajustes_acento_luz(&k[0], &k[1], &k[2]);
+  k[3] = NV_COR_FUNDO_R; k[4] = NV_COR_FUNDO_G; k[5] = NV_COR_FUNDO_B;
+  t = gfx_fundo_assado(SLOT_FROST, k, 6, pintarFrost, NULL);
+  if (!t) return 0;
+  gfx_fundo_assado_desenhar(t, a);
+  return 1;
+}
 static void frost(GfxRect r, float raioPx, float a) {
   float ar, ag, ab, rr = raioPx / r.h;
   ajustes_acento_luz(&ar, &ag, &ab);
@@ -99,7 +152,11 @@ static void frost(GfxRect r, float raioPx, float a) {
 }
 void fundo_desenhar_modo(int modo, GfxRect r, float raioPx, const char *c, float a) {
   if (r.w < 1 || r.h < 1 || a <= 0.003f) return;
-  if (modo == FUNDO_FROST) { foscoPreparar(r, raioPx, c); frost(r, raioPx, a); return; }
+  if (modo == FUNDO_FROST) {
+    foscoPreparar(r, raioPx, c);
+    if (!frostAssado(r, raioPx, a)) frost(r, raioPx, a);
+    return;
+  }
   if (modo == FUNDO_BORRADA && borrada(r, raioPx, c, a)) return;
   foscoPreparar(r, raioPx, c);
   if (arte(r, raioPx, c, a, raioPx <= 0.0f)) return;

@@ -525,6 +525,17 @@ void gfx_vidro_fosco(GfxRect r, float raio, float a);
 // O quadro tem video vivo (furo) por baixo: o fosco nao desenha ate o proximo
 // gfx_novo_quadro (o assado e a luz da arte, nao o que passa no video).
 void gfx_vidro_fosco_bloquear(void);
+// Fonte do fosco ate o proximo gfx_novo_quadro: o fundo assado deste quadro
+// (fundo.c, "Arte borrada"), no lugar do assado da luz imersiva.
+void gfx_vidro_fosco_fonte(GLuint tex);
+// FUNDO ASSADO (fundo.c): o quadro pequeno (320x180) do `slot` (0..2), pintado
+// por `pintar(ctx)` em coordenadas de layout de tela cheia so quando `chave`
+// (n <= 24 floats) muda. Devolve a textura (0 = sem FBO: desenhe direto).
+GLuint gfx_fundo_assado(int slot, const float *chave, int n, void (*pintar)(void *), void *ctx);
+// Um quad de tela cheia com o assado (GFX_FOSCO, nv_dither): opaco e sem
+// mistura com alfa 1.
+void gfx_fundo_assado_desenhar(GLuint tex, float a);
+extern int gfx_n_fundo_assados;
 // Fator da opacidade do vidro: 1,0 = os 78% de sempre (ajustes_vidro_opacidade / 0,78).
 float gfx_vidro_opacidade(void);
 void gfx_ambiente(float alfa);
