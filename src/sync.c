@@ -27,6 +27,7 @@ void servidores_esquecer_todos(void);   // servidores.c: wipe every profile's to
 #include "vistoep.h"
 #include "progresso.h"
 #include "perfilcont.h"
+#include "psparede.h"
 #include "syncprog.h"
 #include "ajustes.h"
 #include "catordem.h"
@@ -1947,6 +1948,7 @@ void sync_esquecer_usuario(void) {
   perfis_esquecer();
   prog_esquecer_tudo();
   perfilcont_esquecer();
+  psparede_esquecer();   // a parede de cada perfil (fundo "Filmes") e da conta que saiu
   syncprog_esquecer();
 
   // As caixas que o fio preenche tambem: um ciclo que terminou logo antes do

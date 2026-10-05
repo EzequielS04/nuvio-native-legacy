@@ -159,6 +159,7 @@ typedef enum {
   TXT_V2_A3TIT,    // titulo da opcao sob a arte (46/700)
   // LISTA COM CAPA dos Salvos (painel lateral), ~17 % acima da escala da ilha.
   TXT_ILHA_NOME_L, TXT_ILHA_SUB_L, TXT_ILHA_HORA_L,
+  TXT_DESC_HORA,   // relogio da tela de descanso (230, Montserrat ExtraLight; so digitos e ':')
   TXT_NFONTES
 } TxtEstilo;
 

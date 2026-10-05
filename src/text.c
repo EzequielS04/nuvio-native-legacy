@@ -96,10 +96,13 @@ static SDL_RWops     *rwFonteCam[TXT_NCAM][TXT_FAMILIA_N][TXT_NFONTES];
 #define rwFonte (rwFonteCam[camada])
 // A JetBrains Mono do registro (PESO_MONO_R/B): dois arquivos lidos uma vez, na
 // primeira familia que abrir um estilo TXT_MONO*, e vivos ate txt_encerrar.
-static char           caminhoMono[2][512];
-static unsigned char *bytesMono[2];
-static size_t         tamMono[2];
-static int            monoTentada[2];
+// O TERCEIRO e o numeral fino do relogio da tela de descanso (PESO_FINO,
+// fonts/Montserrat-ExtraLight-Relogio.ttf, so digitos e ':'), pelo mesmo
+// caminho: um arquivo, em toda familia.
+static char           caminhoMono[3][512];
+static unsigned char *bytesMono[3];
+static size_t         tamMono[3];
+static int            monoTentada[3];
 
 // Le o arquivo inteiro para um buffer novo. NULL se nao abrir.
 static unsigned char *lerTudo(const char *caminho, size_t *tam) {
@@ -236,7 +239,10 @@ enum { PESO_REGULAR, PESO_MEDIUM, PESO_BOLD,
        // linhas do log a usam e uma coluna de log so alinha em monoespacada.
        // Sem o arquivo, o estilo cai no Regular/Bold da familia (ver
        // carregarFamilia) — o texto continua legivel, so desalinha.
-       PESO_MONO_R, PESO_MONO_B };
+       PESO_MONO_R, PESO_MONO_B,
+       // Numeral fino do relogio da tela de descanso (descanso.c). Sem o
+       // arquivo cai no Regular da familia.
+       PESO_FINO };
 static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { NV_FT_TITULO1,  PESO_BOLD   },   // titulo do filme na tela de detalhe
   // ERA PESO_REGULAR, pelo cabecalho espacado da pagina de titulo do app da
@@ -396,6 +402,7 @@ static const struct { int corpo, peso; } ESTILOS[TXT_NFONTES] = {
   { 28, PESO_BOLD    },   // TXT_ILHA_NOME_L (24 + 17 %)
   { 22, PESO_REGULAR },   // TXT_ILHA_SUB_L (19 + 16 %)
   { 17, PESO_REGULAR },   // TXT_ILHA_HORA_L (15 + 13 %)
+  { 230, PESO_FINO   },   // TXT_DESC_HORA: numeral do relogio da tela de descanso
 };
 
 // RESERVA PARA O QUE A INTER NAO TEM.
@@ -946,7 +953,7 @@ static int carregarFamilia(TxtFamilia familia) {
         if (!bytesMono[m]) printf("fonte mono indisponivel: %s\n", caminhoMono[m]);
       }
       if (bytesMono[m]) { buf = bytesMono[m]; tam = tamMono[m]; }
-      else { peso = m ? PESO_BOLD : PESO_REGULAR; buf = bytesPeso[familia][peso]; tam = tamPeso[familia][peso]; }
+      else { peso = m == 1 ? PESO_BOLD : PESO_REGULAR; buf = bytesPeso[familia][peso]; tam = tamPeso[familia][peso]; }
     } else { buf = bytesPeso[familia][peso]; tam = tamPeso[familia][peso]; }
     rw = SDL_RWFromConstMem(buf, (int)tam);
     fontes[familia][i] = rw
@@ -985,7 +992,7 @@ static void abrirEstiloCamada(TxtFamilia familia, int i) {
   if (peso >= PESO_MONO_R) {
     int m = peso - PESO_MONO_R;
     if (bytesMono[m]) { buf = bytesMono[m]; tam = tamMono[m]; }
-    else { peso = m ? PESO_BOLD : PESO_REGULAR; buf = bytesPeso[familia][peso]; tam = tamPeso[familia][peso]; }
+    else { peso = m == 1 ? PESO_BOLD : PESO_REGULAR; buf = bytesPeso[familia][peso]; tam = tamPeso[familia][peso]; }
   } else { buf = bytesPeso[familia][peso]; tam = tamPeso[familia][peso]; }
   if (!buf) return;
   rw = SDL_RWFromConstMem(buf, (int)tam);
@@ -1081,6 +1088,7 @@ int txt_iniciar(const char *dirRecursos, float escala) {
   snprintf(caminhoPeso[TXT_FAMILIA_ATKINSON][2], 512, "%sfonts/AtkinsonHyperlegibleNext-Bold.ttf", base);
   snprintf(caminhoMono[0], 512, "%sfonts/JetBrainsMonoNL-Regular.ttf", base);
   snprintf(caminhoMono[1], 512, "%sfonts/JetBrainsMonoNL-SemiBold.ttf", base);
+  snprintf(caminhoMono[2], 512, "%sfonts/Montserrat-ExtraLight-Relogio.ttf", base);
 #ifdef NV_ANDROID
   // Android: nao ha LG_Display nem /usr/share/fonts. A "LG" vira Roboto do
   // sistema e a "Droid" a DroidSans (so nas versoes antigas) ou Roboto.
@@ -1201,7 +1209,7 @@ void txt_encerrar(void) {
   memset(familiaTentada, 0, sizeof familiaTentada);
   memset(avisoFallback, 0, sizeof avisoFallback);
   memset(caminhoReserva, 0, sizeof caminhoReserva);
-  for (int m = 0; m < 2; m++) { free(bytesMono[m]); bytesMono[m] = NULL; tamMono[m] = 0; monoTentada[m] = 0; }
+  for (int m = 0; m < 3; m++) { free(bytesMono[m]); bytesMono[m] = NULL; tamMono[m] = 0; monoTentada[m] = 0; }
   TTF_Quit();
 }
 

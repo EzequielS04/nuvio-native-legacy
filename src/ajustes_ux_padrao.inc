@@ -219,5 +219,7 @@
   0, 0, /* 2.0 (N1): app logo: Novo; app opening: Padrao */
   0, /* receive polls (N3): Ligado (V_LIGA: 0 = Ligado) */
   0, /* search Cinemeta (#231): Ligado (V_LIGA: 0 = Ligado), as before */
-  2, /* dim when idle (OLED): 5 min */
+  3, /* rest screen delay (OLED): 2 min */
   1, /* player UI brightness (OLED): 80% */
+  0, /* rest screen style: Vitrine */
+  0, /* showcase titles: Catalogo */

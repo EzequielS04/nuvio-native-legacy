@@ -74,7 +74,9 @@ static const Item TELA[] = {
     ROT("Texto e tamanho"),
       OPC(AJ_FONTE_UI), OPC(AJ_TAMANHO_UI), OPC(AJ_TAMANHO_AJUSTES),
     ROT("Movimento e relógio"),
-      OPC(AJ_ANIM), OPC(AJ_RELOGIO), OPC(AJ_ESMAECER),
+      OPC(AJ_ANIM), OPC(AJ_RELOGIO),
+    ROT("Tela de descanso"),
+      OPC(AJ_ESMAECER), OPC(AJ_DESCANSO_ESTILO), OPC(AJ_DESCANSO_FONTE),
 
   SEC("Reprodução", "Fonte, imagem, som e comportamento do player", "aj_circle-play"),
     ROT("Escolha da fonte"),

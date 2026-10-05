@@ -18,6 +18,8 @@
 #include "ponteiro.h"
 #include "plrui.h"
 #include "perfilcont.h"
+#include "psparede.h"
+#include "psestilos.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -529,6 +531,32 @@ static float vaoDe(int m, float d) {
   return g < PS_VAO_MIN ? PS_VAO_MIN : g;
 }
 
+// --- FUNDOS NOVOS (2.0): Filmes, Luz, Projetor (psestilos.h) -----------------
+// O fundo que vale agora. "Filmes" numa TV que caiu para efeitos minimos (nivel
+// de GPU 2) vira "Luz": a parede sao dezenas de cartazes de tela inteira.
+static int modoFundo(void) {
+  int m = ajustes_ps_fundo();
+  if (m == PS_FUNDO_FILMES && gfx_efeitos_minimos()) return PS_FUNDO_LUZ;
+  return m;
+}
+
+static const char *muralUrls[PS_MURAL_MAX];
+static void montarCena(PSCena *c, int reduzida) {
+  int m = perfis_n(), i;
+  const ContaPerfil *p = m > 0 && foco >= 0 && foco < m ? perfis_item(foco) : NULL;
+  memcpy(c->luz, muralLuz, sizeof c->luz);
+  { float d = diametro(m), vao = vaoDe(m, d), larg = (float)m * d + (float)(m - 1) * vao;
+    c->xFoco = m > 0 ? (NV_TELA_W - larg) * 0.5f + (float)foco * (d + vao) + d * 0.5f
+                     : NV_TELA_W * 0.5f; }
+  c->perfil = p ? p->indice : 0;
+  c->semParede = p ? p->temPin : 1;
+  for (i = 0; i < muralN && i < PS_MURAL_MAX; i++) muralUrls[i] = muralCapas[i].url;
+  c->mural = muralUrls;
+  c->muralN = muralN;
+  c->reduzida = reduzida;
+  c->parado = pinDe >= 0;
+}
+
 // --- CARTAO CONTINUAR (2.0, variante B) --------------------------------------
 static void contMontar(PSCont *k) {
   const PerfilCont *c = &k->c;
@@ -713,6 +741,10 @@ void perfilsel_iniciar(void) {
   foco = perfis_indice_sugerido();
   contN = -1;
   ambAtual = ambAnt = -1; ambT = 1.0f; ambAtualPronto = 0;
+  // A parede do perfil que estava ativo vai para o disco agora, com o catalogo
+  // dele em memoria (psparede.h).
+  psparede_registrar();
+  psestilos_iniciar();
   for (i = 0; i < CONTA_PERFIL_MAX; i++) animFoco[i] = (i == foco) ? 1.0f : 0.0f;
   muralAtualizarAlvosLuz();
   memcpy(muralLuz, muralLuzAlvo, sizeof muralLuz);
@@ -898,6 +930,12 @@ void perfilsel_atualizar(float dt, Uint32 agora) {
   }
 
   muralAtualizarAlvosLuz();
+  { PSCena cena;
+    int modo = modoFundo();
+    if (modo == PS_FUNDO_FILMES || modo == PS_FUNDO_LUZ || modo == PS_FUNDO_PROJETOR) {
+      montarCena(&cena, reduzida);
+      psestilos_atualizar(dt, &cena, modo);
+    } }
   { int mudou = 0;
     for (i = 0; i < 6; i++)
       if (fabsf(muralLuzAlvo[i] - muralLuzAlvoAnterior[i]) > 0.0001f) { mudou = 1; break; }
@@ -1205,12 +1243,18 @@ void perfilsel_desenhar(Uint32 agora) {
   // As capas sao contexto em baixa opacidade; a fileira de perfis continua
   // sendo a primeira coisa que o olhar encontra e recebe toda a legibilidade.
   // AJ_PS_FUNDO desligado: sem mural. O ajuste existia e nao era lido.
-  { int modo = ajustes_ps_fundo();
-    float cob = modo == 2 ? ambDesenhar(a) : 0.0f;
-    // Modo "Arte do perfil": o mural so aparece onde a arte nao cobre (perfil
-    // sem arte, ou a arte ainda baixando).
-    if (modo != 1 && cob < 0.999f)
-      muralDesenhar(a * (1.0f - cob) * (pinDe >= 0 ? 0.30f : 1.0f), reduzida); }
+  { int modo = modoFundo();
+    if (modo == PS_FUNDO_FILMES || modo == PS_FUNDO_LUZ || modo == PS_FUNDO_PROJETOR) {
+      PSCena cena;
+      montarCena(&cena, reduzida);
+      psestilos_desenhar(&cena, modo, a * (pinDe >= 0 ? 0.30f : 1.0f));
+    } else {
+      float cob = modo == PS_FUNDO_ARTE ? ambDesenhar(a) : 0.0f;
+      // Modo "Arte do perfil": o mural so aparece onde a arte nao cobre (perfil
+      // sem arte, ou a arte ainda baixando).
+      if (modo != PS_FUNDO_LISTRAS && cob < 0.999f)
+        muralDesenhar(a * (1.0f - cob) * (pinDe >= 0 ? 0.30f : 1.0f), reduzida);
+    } }
 
   { TxtLinha t = txt_linha(TXT_TITULO1, "Quem está assistindo?", 255, 255, 255, 255);
     TxtLinha sombra = txt_linha(TXT_TITULO1, "Quem está assistindo?", 0, 0, 0, 230);

@@ -7,9 +7,11 @@
 #include "gfx.h"
 #include "layout.h"
 #include "text.h"
+#include "descanso.h"
 #endif
 
-static int   escolhaAtual = 2;
+static int   escolhaAtual = ESM_PADRAO;
+static int   estiloAtual = ESM_ESTILO_VITRINE;
 static unsigned ultimaEntrada;
 static int   temEntrada;
 static unsigned acordouEm;
@@ -18,21 +20,26 @@ static int   estagio;
 static float veu;
 static int   avisoEscuro = -1;   // -1 nada pendente; 0/1 = novo valor
 
-int esmaecer_minutos(int escolha) {
-  static const int M[ESM_ESCOLHAS] = { 0, 2, 5, 10 };
-  return escolha >= 0 && escolha < ESM_ESCOLHAS ? M[escolha] : 0;
+unsigned esmaecer_ms(int escolha) {
+  static const unsigned S[ESM_ESCOLHAS] = { 0, 30, 60, 120, 300, 600 };
+  return escolha >= 0 && escolha < ESM_ESCOLHAS ? S[escolha] * 1000u : 0u;
 }
 
-int esmaecer_estagio_para(unsigned ocioMs, int escolha) {
-  unsigned t = (unsigned)esmaecer_minutos(escolha) * 60u * 1000u;
+static int estiloValido(int e) { return e >= 0 && e < ESM_ESTILOS ? e : ESM_ESTILO_VITRINE; }
+
+int esmaecer_estagio_para(unsigned ocioMs, int escolha, int estilo) {
+  unsigned t = esmaecer_ms(escolha);
+  unsigned fim = estiloValido(estilo) == ESM_ESTILO_ESCURECER ? ESM_NO_FIM_MS : ESM_DESCANSO_MS;
   if (!t) return ESM_ACESO;
   if (ocioMs < t) return ESM_ACESO;
-  if (ocioMs < t + ESM_NO_FIM_MS) return ESM_VEU;
+  if (ocioMs < t + fim) return ESM_VEU;
   return ESM_ESCURO;
 }
 
-float esmaecer_alfa_do_estagio(int e) {
-  return e == ESM_ESCURO ? ESM_ALFA_ESCURO : e == ESM_VEU ? ESM_ALFA_VEU : 0.0f;
+float esmaecer_alfa_do_estagio(int e, int estilo) {
+  if (e == ESM_ESCURO)
+    return estiloValido(estilo) == ESM_ESTILO_ESCURECER ? ESM_ALFA_ESCURO : ESM_ALFA_DESCANSO;
+  return e == ESM_VEU ? ESM_ALFA_VEU : 0.0f;
 }
 
 void esmaecer_reiniciar(void) {
@@ -41,8 +48,10 @@ void esmaecer_reiniciar(void) {
 }
 
 void esmaecer_escolha(int escolha) {
-  escolhaAtual = escolha >= 0 && escolha < ESM_ESCOLHAS ? escolha : 2;
+  escolhaAtual = escolha >= 0 && escolha < ESM_ESCOLHAS ? escolha : ESM_PADRAO;
 }
+void esmaecer_estilo(int estilo) { estiloAtual = estiloValido(estilo); }
+int  esmaecer_estilo_atual(void) { return estiloAtual; }
 
 static void definirEstagio(int e) {
   if (e == estagio) return;
@@ -71,8 +80,8 @@ void esmaecer_quadro(unsigned agora, float dt, int reproduzindo) {
   // Tocando de verdade: o relogio da ociosidade fica parado em "agora". Ao
   // pausar, os N minutos contam da pausa.
   if (reproduzindo) ultimaEntrada = agora;
-  definirEstagio(esmaecer_estagio_para(agora - ultimaEntrada, escolhaAtual));
-  alvo = esmaecer_alfa_do_estagio(estagio);
+  definirEstagio(esmaecer_estagio_para(agora - ultimaEntrada, escolhaAtual, estiloAtual));
+  alvo = esmaecer_alfa_do_estagio(estagio, estiloAtual);
   if (dt < 0.0f) dt = 0.0f;
   if (dt > 0.1f) dt = 0.1f;
   if (veu < alvo) { veu += ESM_VELOCIDADE * dt; if (veu > alvo) veu = alvo; }
@@ -81,7 +90,13 @@ void esmaecer_quadro(unsigned agora, float dt, int reproduzindo) {
 
 int   esmaecer_estagio(void) { return estagio; }
 float esmaecer_veu(void) { return veu; }
-int   esmaecer_apagado(void) { return estagio == ESM_ESCURO && veu >= ESM_ALFA_ESCURO - 0.001f; }
+int   esmaecer_apagado(void) {
+  return estagio == ESM_ESCURO && veu >= esmaecer_alfa_do_estagio(ESM_ESCURO, estiloAtual) - 0.001f;
+}
+int   esmaecer_segura_protetor_tv(void) {
+  return esmaecer_ms(escolhaAtual) > 0 && estiloAtual != ESM_ESTILO_ESCURECER;
+}
+int   esmaecer_descanso(void) { return estiloAtual != ESM_ESTILO_ESCURECER && esmaecer_apagado(); }
 int   esmaecer_mudou_escuro(int *escuro) {
   if (avisoEscuro < 0) return 0;
   if (escuro) *escuro = avisoEscuro;
@@ -112,6 +127,13 @@ void esmaecer_desenhar(unsigned agora) {
   if (veu <= 0.002f) return;
   gfx_opacidade_grupo = 1.0f; gfx_osd_mult = 1.0f;
   gfx_cor(tela, 0, 0, 0, 0, veu);
+  // TELA DE DESCANSO: vitrine ou relogio, por cima do preto. O estilo
+  // "so escurecer" segue com o relogio pequeno abaixo.
+  if (estiloAtual != ESM_ESTILO_ESCURECER) {
+    if (esmaecer_descanso()) descanso_desenhar(agora);
+    gfx_opacidade_grupo = g; gfx_osd_mult = m;
+    return;
+  }
   // O RELOGIO que anda: so quando o veu ja passou de 80% (nunca por cima de
   // uma tela ainda legivel). Cada eixo com um periodo diferente, para a rota
   // nao repetir; pouco brilho (cinza escuro), nada parado no mesmo pixel.

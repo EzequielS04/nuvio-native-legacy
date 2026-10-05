@@ -109,6 +109,7 @@ static void aoSinalTerminar(int sig) {
 #include "plugins.h"
 #include "plex.h"
 #include "esmaecer.h"
+#include "descanso.h"
 
 // RSS DO PROCESSO, em MB, lido de /proc/self/statm. E o numero que responde
 // "da para subir o orcamento de texturas?" — o teto de 96 MB foi escolhido
@@ -1090,6 +1091,11 @@ int main(int argc, char **argv) {
           e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP ||
           e.type == SDL_MOUSEWHEEL || e.type == SDL_FINGERDOWN) {
         int age = e.type == SDL_KEYDOWN || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_FINGERDOWN;
+        // OK na vitrine da tela de descanso abre o titulo que esta nela
+        // (descanso.h). A tecla continua engolida: quem abre e o app.c.
+        if (e.type == SDL_KEYDOWN && esmaecer_descanso() &&
+            (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_KP_ENTER))
+          descanso_pedir_abrir();
         if (esmaecer_entrada(SDL_GetTicks(), age)) continue;
       }
       // Teclado do sistema (entrada_texto.h): ve o texto ANTES de qualquer tela.
@@ -1291,9 +1297,15 @@ int main(int argc, char **argv) {
     // PROTECAO DE OLED: "parado" = nenhuma tecla E nenhum video tocando de
     // verdade (pausado conta como parado).
     esmaecer_escolha(ajustes_esmaecer());
+    // Com o player aberto (filme pausado) fica so o escurecer de antes: a
+    // vitrine pediria texturas de tela cheia com o decodificador ocupado.
+    esmaecer_estilo(player_aberto() ? ESM_ESTILO_ESCURECER : ajustes_descanso_estilo());
     esmaecer_quadro(agora, dt,
                     (player_aberto() || player_mini_ativo()) && player_com_video() &&
                     !player_pausado() && !player_carregando());
+    // TELA DE DESCANSO: vitrine/relogio por cima do preto (descanso.h).
+    descanso_quadro(agora, dt, esmaecer_descanso(),
+                    ajustes_descanso_estilo(), ajustes_descanso_fonte());
     { int escuro;
       // Escuro e sem filme: solta o "manter tela ligada" (so o Android segura
       // fora do player; na LG o app ja o libera sem filme, ver video.c).
