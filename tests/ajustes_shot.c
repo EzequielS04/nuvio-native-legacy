@@ -251,6 +251,12 @@ int main(int argc, char **argv) {
     char lista[1024], *id, *ctx = NULL;
     snprintf(lista, sizeof lista, "%s", getenv("NUVIO_AJ_QUADROS"));
     for (id = strtok_r(lista, " ,", &ctx); id; id = strtok_r(NULL, " ,", &ctx)) {
+      // "id@N": grava o quadro N depois de chegar nele (o padrao e 60, a tela
+      // ja parada). Para ver a TROCA de cena no meio do caminho:
+      //   NUVIO_AJ_QUADROS="reproducao op:pausaOverlay@8"
+      { char *arroba = strchr(id, '@');
+        quadrosCaptura = 60;
+        if (arroba) { *arroba = 0; quadrosCaptura = atoi(arroba + 1) > 0 ? atoi(arroba + 1) : 60; } }
       if (!ajustes_teste_quadro(id)) { printf("quadro desconhecido: %s\n", id); continue; }
       // NUVIO_SHOT_FONTE=3 (TXT_FAMILIA_*): the interface font the TV uses
       // (Montserrat on the owner's Android TV), so truncation shows like there.
@@ -263,8 +269,10 @@ int main(int argc, char **argv) {
         e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_DOWN;
         for (k = 0; k < 4 && spot_linha_focada() < 0; k++) spot_evento(&e);
       }
-      snprintf(nome, sizeof nome, "%s-%s.png", saida, id);
+      if (quadrosCaptura != 60) snprintf(nome, sizeof nome, "%s-%s-q%d.png", saida, id, quadrosCaptura);
+      else snprintf(nome, sizeof nome, "%s-%s.png", saida, id);
       captura(nome, w);
+      quadrosCaptura = 60;
       if (spot_aberto()) spot_fechar();
     }
     goto fim_capturas;

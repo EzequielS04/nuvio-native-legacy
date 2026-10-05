@@ -305,6 +305,38 @@ static void cacheSeek(void) {
   assert(i >= 0 && resultados[i].bloqueado);
 }
 
+// Cada categoria e cada submenu (ROT) tem a SUA arte: nenhum indice de
+// AJ_ARTE_SEC se repete, todo bloco de ajustes_ux_tela.inc tem coluna, e a
+// opcao devolve a arte do bloco dela (o primeiro bloco fica com a da categoria).
+static void artePorSubmenu(void) {
+  int visto[40] = { 0 }, s, g, i;
+  montarTela();
+  assert(nSecoes == 11);
+  for (s = 0; s < 11; s++) {
+    int blocos = 0, ultimo = -1;
+    assert(AJ_ARTE_SEC[s][0] >= 0);
+    for (g = 0; g < AJ_ARTE_BLOCOS; g++) {
+      int n = AJ_ARTE_SEC[s][g];
+      if (n < 0) continue;
+      assert(n < 40 && !visto[n]);
+      visto[n] = 1;
+    }
+    for (i = secIni[s] + 1; i < secFim(s); i++) {
+      if (TELA[i].tipo == IT_ROT) { blocos++; continue; }
+      if (TELA[i].tipo != IT_OPC) continue;
+      g = blocos > 0 ? blocos - 1 : 0;
+      assert(g < AJ_ARTE_BLOCOS && AJ_ARTE_SEC[s][g] >= 0);
+      assert(ajCenaArteOp(TELA[i].op) == AJ_ARTE_SEC[s][g]);
+      if (g != ultimo) { assert(g == ultimo + 1); ultimo = g; }
+    }
+  }
+  // A mesma imagem nao pede troca; submenu ou categoria diferente pede.
+  assert(ajCenaChave(AJS_REPRODUCAO, AJ_DV) == ajCenaChave(AJS_REPRODUCAO, AJ_ATMOS));
+  assert(ajCenaChave(AJS_REPRODUCAO, AJ_DV) != ajCenaChave(AJS_REPRODUCAO, AJ_PAUSA_OVERLAY));
+  assert(ajCenaChave(AJS_REPRODUCAO, AJ_FONTE_MANUAL) == ajCenaChave(AJS_REPRODUCAO, -1));
+  assert(ajCenaChave(AJS_CONTAS, -1) != ajCenaChave(AJS_CARTAZES, -1));
+  assert(ajCenaChave(AJS_HOME, AJ_CW_LIGADO) == ajCenaChave(AJS_HOME, AJ_CW_ORDEM));
+}
 int main(void) {
   char dir[] = "/tmp/nuvio-aj-ux-dados-XXXXXX";
   assert(AJ_DISCORD == AJ_ICONE_APP + 1 && AJ_TAMANHO_AJUSTES == AJ_DISCORD + 1 && AJ_LOGO_TRAILER == AJ_TAMANHO_AJUSTES + 1 && AJ_LEG_LINGUA2 == AJ_LOGO_TRAILER + 1 && AJ_LEG_SYNC_AUDIO == AJ_LEG_LINGUA2 + 1 && AJ_CACHE_SEEK == AJ_LEG_SYNC_AUDIO + 1 && AJ_TRAILER_ZOOM_TPK == AJ_CACHE_SEEK + 1 && AJ_PLUGINS == AJ_TRAILER_ZOOM_TPK + 1 && AJ_JF_LIGADO == AJ_PLUGINS + 1 && AJ_JF_SAIR == AJ_PLUGINS + 4 && AJ_AVANCADAS == AJ_JF_SAIR + 1 && AJ_LEG2_POS == AJ_AVANCADAS + 1 && AJ_EM_SERVIDOR == AJ_LEG2_BORDA + 1 && AJ_PX_SAIR == AJ_EM_SERVIDOR + 5 && AJ_FONTE_PRIORIDADE == AJ_PX_SAIR + 1 && AJ_FONTE_HDR == AJ_ABERTURA - 2 && AJ_LOGO_APP == AJ_FONTE_HDR + 1 && AJ_ENQUETES == AJ_ABERTURA + 1 && AJ_ENQUETES == AJ_N - 2);
@@ -342,6 +374,7 @@ int main(void) {
   int discordCount=0;
   for (int i=0;i<AJ_N_TELA;i++) if(TELA[i].tipo==IT_OPC && TELA[i].op==AJ_DISCORD) discordCount++;
   assert(discordCount==1);
+  artePorSubmenu();
   cacheSeek();
   zoomTpk();
   prazoDosAddonsIntegrado();

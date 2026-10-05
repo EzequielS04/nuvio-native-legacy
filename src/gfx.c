@@ -1593,6 +1593,10 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
               float cr, float cg, float cb, float ca) {
   int comAmb = 0, opaco = 0, cheia, clearCor, duplo = 0;
   if ((int)modo < 0 || (int)modo >= GFX_NMODOS) return;
+  // Grupo a 0 = "desenhar sem aparecer" (quem mede uma previa ou pede as
+  // texturas de uma cena que ainda nao entrou): todo modo multiplica o alfa
+  // pelo grupo, entao nada chegaria a tela — nao gasta a GPU com isso.
+  if (gfx_opacidade_grupo <= 0.0f) return;
   GFX_TR_RECT(r.x, r.y, r.w, r.h);
   if (escAtiva != 1.0f) { r.x *= escAtiva; r.y *= escAtiva; r.w *= escAtiva; r.h *= escAtiva; }
   // A COR DO DESTAQUE E A ASSINATURA. Com o degrade ligado, todo retangulo ou

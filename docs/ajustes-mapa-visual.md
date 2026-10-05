@@ -23,6 +23,19 @@ preview. The `case` order of `ajVisualCena` follows the SEC order of src/ajustes
 | Performance on this TV | FPS meter and memory/image bars |
 | About and help | wordmark, version, update button, guide QR |
 
+## Art per category and per submenu
+
+Every category and every submenu (the `ROT` blocks of src/ajustes_ux_tela.inc) has its own backdrop: `AJ_ARTE_SEC`
+in src/ajustes_ux_visual.inc (row = category, column = block; column 0 is the category image and also serves the
+first block). 34 of the 40 bundled samples are used, none twice (11, 24, 28, 29, 34, 36 are free). A new `ROT`
+needs a column there; tests/ajustes_ux_dados.c fails otherwise. With the account catalogue loaded the index picks
+title N of the catalogue instead of sample N.
+
+Scene changes go through `ajCenaTroca` (src/ajustes_ux_secoes.inc): the previous scene stays on screen until the
+textures of the new one are ready (never the grey placeholder), then the new one fades in over 0.22 s. One layer at
+rest, two only during the fade; while the arrow key is held the fade waits for the focus to settle. Scenes of
+different heights, and options that share the same image (`ajCenaChave`), switch directly.
+
 ## Option preview (layer 2 left column)
 
 | Option(s) | Preview |
@@ -44,4 +57,4 @@ preview. The `case` order of `ajVisualCena` follows the SEC order of src/ajustes
 | App icon | launcher icon gallery on the category art |
 | Storage, image memory | image-memory panel |
 | Logs (view / send / auto) | log tail on the category art |
-| everything else | the category image of its own category |
+| everything else | the category scene of its own category, on the art of its submenu |

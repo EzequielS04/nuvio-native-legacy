@@ -74,6 +74,15 @@ static const char *ajArte(int tipo, int n) {
            tipo == AJA_LOGO ? "png" : "jpg");
   return b;
 }
+// Imagens pedidas e ainda nao prontas durante o desenho de uma cena: a troca
+// de cenas (ajustes_ux_secoes.inc) segura a cena anterior enquanto este numero
+// sobe. A que ja falhou (404, arquivo que nao existe) nao conta: nunca vem.
+static int ajCenaFaltas;
+// A cena de um quadro (0 = resumo do indice, 1 = coluna da arte) com a troca
+// suave; devolve a altura da cena PEDIDA. Ver ajustes_ux_secoes.inc.
+enum { AJ_TROCA_RESUMO = 0, AJ_TROCA_INSPETOR, AJ_TROCA_N };
+static float ajCenaTroca(int quadro, int sec, int op, float x, float y, float w, float corte);
+static void ajCenaTrocaAtualizar(float dt);
 // Arte em "cover" num retangulo de cantos `raioPx`. Devolve 1 se desenhou.
 static int ajImg(const char *c, GfxRect r, float raioPx, float a) {
   GLuint t;
@@ -81,6 +90,7 @@ static int ajImg(const char *c, GfxRect r, float raioPx, float a) {
   t = tex_obter_larg(c, r.w > r.h * 1.78f ? r.w : r.h * 1.78f);
   if (!t) {
     gfx_cor(r, raioPx / r.h, 0.16f, 0.165f, 0.18f, 0.6f * a);
+    if (!tex_falhou(c)) ajCenaFaltas++;
     return 0;
   }
   gfx_tex_aspect_atual = tex_aspecto(c);
@@ -94,7 +104,7 @@ static float ajLogo(const char *c, float x, float y, float maxW, float maxH, flo
   float asp, w, h;
   if (!c || !c[0]) return 0.0f;
   t = tex_obter_larg(c, maxW);
-  if (!t) return 0.0f;
+  if (!t) { if (!tex_falhou(c)) ajCenaFaltas++; return 0.0f; }
   asp = tex_aspecto(c);
   if (asp <= 0.0f) asp = 3.0f;
   w = maxW; h = w / asp;
@@ -1109,3 +1119,4 @@ static float ajEf(const char *icone, const char *s, float x, float y, float w, f
 #include "ajustes_ux_ilha.inc"
 #include "ajustes_ux_fileiras.inc"
 #include "ajustes_ux_guia.inc"
+#include "ajustes_ux_secoes.inc"

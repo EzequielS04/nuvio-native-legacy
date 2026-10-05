@@ -261,6 +261,13 @@ static float ajPreviaHome(float x, float y, float w) {
   ajMiniHome(ajMiniPadrao(), x, y, w);
   return w * 9.0f / 16.0f;
 }
+// A mesma Home com outro titulo no destaque (a arte do submenu em foco).
+static float ajPreviaHomeArte(float x, float y, float w, int arte) {
+  AjMini m = ajMiniPadrao();
+  m.art = arte;
+  ajMiniHome(m, x, y, w);
+  return w * 9.0f / 16.0f;
+}
 
 // Tres cartazes de verdade no tamanho e no canto escolhidos, o do meio com o
 // foco da home (sobe 1,08 e ganha sombra, sem borda), e o trilho do intervalo.
@@ -610,7 +617,7 @@ static float ajPreviaLogoApp(float x, float y, float w) {
   float ar, ag, ab, gx, gy, grande;
   int i;
   ajustes_acento(&ar, &ag, &ab);
-  ajCenaArte(ajArte(AJA_FUNDO, ajCenaArteN(uxSecaoDe(AJ_LOGO_APP))), (GfxRect){ x, y, w, box }, 22, 0.62f);
+  ajCenaArte(ajArte(AJA_FUNDO, ajCenaArteOp(AJ_LOGO_APP)), (GfxRect){ x, y, w, box }, 22, 0.62f);
   grande = box * 0.44f;
   logoapp_miniatura(sel, (GfxRect){ x + (w - grande) * 0.5f, y + box * 0.05f, grande, grande }, 0, 1.0f);
   gx = x + (w - (lado * LOGO_N + gap * (LOGO_N - 1))) * 0.5f;
@@ -707,7 +714,7 @@ static float ajPreviaTamanhoUi(int op, float x, float y, float w) {
   int n = nValores(op), sel = valor[op], k;
   ajustes_acento(&ar, &ag, &ab);
   if (n > 4) n = 4;
-  ajCenaArte(ajArte(AJA_FUNDO, 7), (GfxRect){ x, y, w, h }, 22, 0.72f);
+  ajCenaArte(ajArte(AJA_FUNDO, ajCenaArteOp(op)), (GfxRect){ x, y, w, h }, 22, 0.72f);
   for (k = 0; k < n; k++) {
     GfxRect r = { x0 + (k % 2) * (tw + gx), y0 + (k / 2) * (th + gy), tw, th };
     ajMiniPlayerUi(r, F[k], 1);
@@ -726,7 +733,7 @@ static float ajPreviaTamanhoAjustes(int op, float x, float y, float w) {
   int n = nValores(op), sel = valor[op], k;
   ajustes_acento(&ar, &ag, &ab);
   if (n > 3) n = 3;
-  ajCenaArte(ajArte(AJA_FUNDO, 9), (GfxRect){ x, y, w, h }, 22, 0.72f);
+  ajCenaArte(ajArte(AJA_FUNDO, ajCenaArteOp(op)), (GfxRect){ x, y, w, h }, 22, 0.72f);
   for (k = 0; k < n; k++) {
     GfxRect r = { x0 + k * (cw + g), y0, cw, ch };
     ajMiniAjustesUi(r, F[k], 1);
@@ -743,7 +750,7 @@ static float ajPreviaFonte(int op, float x, float y, float w) {
   int n = nValores(op), sel = valor[op], k;
   ajustes_acento(&ar, &ag, &ab);
   if (sel < 0 || sel >= TXT_FAMILIA_N) sel = 0;
-  ajCenaArte(ajArte(AJA_FUNDO, 9), (GfxRect){ x, y, w, h }, 22, 0.3f);
+  ajCenaArte(ajArte(AJA_FUNDO, ajCenaArteOp(op)), (GfxRect){ x, y, w, h }, 22, 0.3f);
   ajCenaVidro((GfxRect){ x + 28 * s, y + 28 * s, w - 56 * s, h - 56 * s }, 24 * s, 1);
   { TxtLinha l = txt_linha_familia(ajEstiloPxS(96 * s, 1), "Aa", 243, 242, 239, 255, (TxtFamilia)sel);
     txt_desenhar(l, x + 56 * s, y + 52 * s);
@@ -786,7 +793,6 @@ static float ajPreviaEmQuadro(int op, float x, float y, float w) {
   static int cOp = -1, cW, cV, cE, cVid;
   static float cH;
   float box = w * 9.0f / 16.0f, pad = 28.0f * w / 640.0f, h;
-  int sec = uxSecaoDe(op);
   if (cOp != op || cW != (int)w || cV != valor[op] || cE != valor[AJ_CW_ESTILO] || cVid != ajVid()) {
     float g = gfx_opacidade_grupo;   // mede sem aparecer
     gfx_opacidade_grupo = 0;
@@ -797,7 +803,7 @@ static float ajPreviaEmQuadro(int op, float x, float y, float w) {
   h = cH;
   if (h < 0) return -1;
   if (h > box - 2 * pad) return ajPreviaCarta(op, x, y, w);   // alta: ocupa a largura toda
-  ajCenaArte(ajArte(AJA_FUNDO, ajCenaArteN(sec)), (GfxRect){ x, y, w, box }, 22, 0.62f);
+  ajCenaArte(ajArte(AJA_FUNDO, ajCenaArteOp(op)), (GfxRect){ x, y, w, box }, 22, 0.62f);
   // Com o segmentado no canto de baixo (ajDesenharInspetor), o cartao sobe.
   ajPreviaCarta(op, x + pad, y + (ajSegmentada(op) ? pad : (box - h) * 0.5f), w - 2 * pad);
   return box;
