@@ -114,16 +114,14 @@ static void avisarCascaAberto(int v) { (void)v; }
 // aparelho: perto de 4s. Menos que isso e o usuario perde a barra no meio de
 // uma leitura; muito mais e a interface some tarde demais e atrapalha a cena.
 #define PLR_ESCONDE_MS   4000u
-// Salto de 10s do avanca/retrocede. E o passo do controle da Apple, e ele so
+// Salto de 10s (SALTO_SEG, salto.h) do avanca/retrocede. E o passo do controle da Apple, e ele so
 // vale com os controles em pe: cegamente, seta seria um pulo invisivel.
-#define PLR_SALTO_SEG    10.0f
-// AVANCO SEGURADO: o passo cresce enquanto a tecla continua repetindo. Sem
-// isto, atravessar meia hora de filme a 10 s por toque sao 180 toques — foi a
-// queixa. Os degraus dobram e param em 120 s: mais que isso e impossivel parar
-// onde se quer, porque cada repeticao pula mais do que a pessoa consegue ler.
-#define PLR_SALTO_D1      6     // repeticoes ate 30 s
-#define PLR_SALTO_D2     14     // ate 60 s
-#define PLR_SALTO_D3     26     // ate 120 s
+// AVANCO SEGURADO: o passo cresce com o TEMPO de tecla segurada (nao com a
+// contagem de repeticoes, que depende do controle) e anda no maximo ~3 vezes
+// por segundo. Atravessar meia hora de filme a 10 s por toque eram 180 toques
+// — foi a queixa — mas a primeira versao disparava a ~20 min/s e "ja voava pro
+// final". A regra e os degraus estao em salto.h.
+#include "salto.h"
 // Sem tecla por este tempo, o avanco termina: manda a posicao ao pipeline e
 // retoma. 420 ms e maior que o intervalo de repeticao do controle (que na C9
 // fica perto de 100 ms) e menor que o tempo de reacao de quem soltou de
@@ -182,10 +180,11 @@ enum { PLR_PLAY, PLR_CC, PLR_AUDIO, PLR_ASPECTO,
        PLR_FONTES, PLR_EPISODIOS, PLR_NBTNS };
 
 // Avanco em curso: enquanto vale, posSeg e do DONO e nao do pipeline.
-static int    scrubbing, scrubPassos, scrubTocava;
+static int    scrubbing, scrubPassos, scrubTocava, scrubDir;
 static Uint32 scrubUltimo;
+static SaltoEst scrubSalto;   // rajada do teclado (salto.h)
 // BUSCA SUAVE: o que a BARRA mostra durante o avanco. posSeg anda em degraus
-// (10 s, 30 s, 60 s, 120 s por repeticao da tecla) e desenhar direto dele fazia
+// (10 s, 30 s, 60 s, 120 s por passo, ~3 passos por segundo) e desenhar direto dele fazia
 // o preenchimento saltar aos trancos. posVis persegue posSeg por mola de
 // segunda ordem; so a barra le posVis. O TEMPO escrito e o seek continuam em
 // posSeg, o alvo exato. Fora do avanco (e depois de assentar) posVis = posSeg.
@@ -1136,7 +1135,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
   aberto = 1; saindo = 0; pediuSair = 0; barraFoco = 0;
   // Titulo novo: um avanco em curso do anterior mandaria a posicao velha ao
   // pipeline novo assim que o silencio vencesse.
-  scrubbing = 0; scrubPassos = 0; scrubTocava = 0;
+  scrubbing = 0; scrubPassos = 0; scrubTocava = 0; scrubDir = 0;
   posVis = 0.0f; posVisV = 0.0f; posVisSolto = 0;
   encolhe = 1.0f; encolheAlvo = 0.0f; encolheT = 0.0f; encolheEm = 0;
   posplay_fechar();   // titulo novo, painel do anterior nao vale mais
@@ -2248,7 +2247,7 @@ static void avTecla(SDL_Keycode k) {
 // TRES COISAS QUE ESTAVAM ERRADAS AQUI, todas relatadas depois de usar:
 //
 // 1. Passo fixo de 10 s. Segurando a tecla, chegar ao fim de um filme levava
-//    centenas de repeticoes. Agora o passo cresce com a insistencia.
+//    centenas de repeticoes. Agora o passo cresce com o tempo segurado.
 //
 // 2. A barra VOLTAVA sozinha para onde estava. A causa nao era o salto: e que
 //    player_atualizar reescreve posSeg com video_pos() a cada quadro, e o
@@ -2261,22 +2260,28 @@ static void avTecla(SDL_Keycode k) {
 //    mexia no pipeline com o video correndo. Agora o video PAUSA ao comecar o
 //    avanco e volta a tocar sozinho ao terminar, se estava tocando — e o
 //    pipeline recebe UMA posicao, no fim, em vez de uma por toque.
-static void saltar(int dir) {
-  float passo = PLR_SALTO_SEG;
+static void saltar(int dir, int repeticao) {
+  int novo = 0;
   if (!scrubbing) {
     scrubbing = 1;
     scrubPassos = 0;
     scrubTocava = tocando || retomandoSalto;
     pausao_fechar();
     if (tocando && comVideo) { video_pausar(1); tocando = 0; }
+    novo = 1;
   }
+  // Trocar de direcao no meio da rajada recomeca a rampa: quem passou do ponto
+  // e volta quer o passo pequeno de novo, nao o de 2 minutos.
+  if (dir != scrubDir) novo = 1;
+  scrubDir = dir;
+  Uint32 agora = SDL_GetTicks();
+  // Repeticao de tecla segurada entre dois passos: so mantem o avanco vivo (scrubUltimo), nao anda.
+  float passo = salto_tecla(&scrubSalto, novo, repeticao, agora, duracaoSeg);
+  scrubUltimo = agora;
+  if (passo <= 0.0f) return;
   scrubPassos++;
-  if      (scrubPassos > PLR_SALTO_D3) passo = PLR_SALTO_SEG * 12.0f;
-  else if (scrubPassos > PLR_SALTO_D2) passo = PLR_SALTO_SEG * 6.0f;
-  else if (scrubPassos > PLR_SALTO_D1) passo = PLR_SALTO_SEG * 3.0f;
   posSeg += dir * passo;
   posSeg = anim_clamp(posSeg, 0.0f, duracaoSeg);
-  scrubUltimo = SDL_GetTicks();
 }
 
 // Fim do avanco: manda a posicao escolhida e devolve o estado de antes.
@@ -2404,7 +2409,7 @@ void player_evento(const SDL_Event *e) {
       acordar();
       barraFoco = 1; skipFoco = 0; soBarra = 1;
       if (anim < 0.05f) cheio = 0.0f;   // de tudo apagado: o resto nem comeca a subir
-      saltar(k == SDLK_RIGHT ? 1 : -1);
+      saltar(k == SDLK_RIGHT ? 1 : -1, e->key.repeat);
       return;
     }
     if (k == SDLK_UP || k == SDLK_DOWN || k == SDLK_LEFT || k == SDLK_RIGHT) {
@@ -2486,8 +2491,8 @@ void player_evento(const SDL_Event *e) {
   }
   if (barraFoco) {
     // Na barra, ESQUERDA e DIREITA procuram no filme em vez de trocar de botao.
-    if (k == SDLK_LEFT)       saltar(-1);
-    else if (k == SDLK_RIGHT) saltar(1);
+    if (k == SDLK_LEFT)       saltar(-1, e->key.repeat);
+    else if (k == SDLK_RIGHT) saltar(1, e->key.repeat);
     else if (k == SDLK_DOWN)  barraFoco = 0;
     acordar();
     return;
