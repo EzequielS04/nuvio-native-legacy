@@ -492,6 +492,44 @@ int main(int argc, char **argv) {
       player_shot_video(0); simular(0, 0, "", 0, 0);
     }
   }
+  if (quer(argc, argv, "abrindo-compacto") || quer(argc, argv, "abrindo-expandido") ||
+      quer(argc, argv, "abrindo-fim")) {
+    // A fonte abrindo: o estado compacto, o expandido (BAIXO) e o fim da
+    // abertura em tres quadros (comeco, meio, perto do fim).
+    Stream st;
+    int q;
+    memset(&st, 0, sizeof st);
+    snprintf(st.rotulo, sizeof st.rotulo, "Fallout.S01E03.The.Head.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR10.H265-NTb");
+    snprintf(st.provedor, sizeof st.provedor, "AIOStreams");
+    snprintf(st.url, sizeof st.url, "http://exemplo/fallout.mkv");
+    st.tamanhoMB = (long)(18.2 * 1024);
+    st.badges = badges_bit("r-4k") | badges_bit("v-hdr10") | badges_bit("a-atmos");
+    for (q = 0; q < 3; q++) {
+      static const char *ids[3] = { "abrindo-compacto", "abrindo-expandido", "abrindo-fim" };
+      if (!quer(argc, argv, ids[q])) continue;
+      stream_definir_lista(&st, 1);
+      abrir(&serie); simular(0, 0, "", 0, 0);
+      stream_definir_atual(0);
+      player_definir_tentativa(2, 3);
+      player_shot_carregando(1);
+      quadros(90);
+      if (q >= 1) {
+        SDL_Event e; memset(&e, 0, sizeof e);
+        e.type = SDL_KEYDOWN; e.key.keysym.sym = SDLK_DOWN;
+        player_evento(&e);
+        quadros(120);
+      }
+      if (q == 0 || q == 1) salvar(ids[q]);
+      if (q == 2) {
+        player_shot_carregando(0);
+        quadros(3);  salvar("abrindo-fim-1");
+        quadros(7);  salvar("abrindo-fim-2");
+        quadros(10); salvar("abrindo-fim-3");
+        quadros(40);
+      }
+      player_definir_tentativa(0, 0);
+    }
+  }
   if (quer(argc, argv, "carregando")) {
     Stream st;
     memset(&st, 0, sizeof st);

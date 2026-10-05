@@ -237,6 +237,7 @@ static void cartaoCentro(Uint32 agora) {
     float w = cenW < 8.0f ? 8.0f : cenW, h = cenH < 8.0f ? 8.0f : cenH;
     GfxRect R = { (NV_TELA_W - w) * 0.5f, (NV_TELA_H - h) * 0.5f, w, h };
     GfxRect F = { (NV_TELA_W - c->w) * 0.5f, (NV_TELA_H - c->h) * 0.5f, c->w, c->h };
+    if (c->ancoraTopo) F.y = R.y;   // o conteudo desce/sobe com a forma (nao salta para o centro novo)
     // O raio acompanha a forma como na ilha: da pilula (meia altura) ao do corpo.
     float cresce = anim_clamp((h - PIL_H) / 120.0f, 0.0f, 1.0f);
     float raio = RAIO_CORPO * cresce + h * 0.5f * (1.0f - cresce);
@@ -244,7 +245,8 @@ static void cartaoCentro(Uint32 agora) {
     if (raio > w * 0.5f) raio = w * 0.5f;
     plrui_material(R, raio, c->modal, cenA);
     gfx_recorte(R.x, R.y, R.w, R.h);
-    // O corpo fica no tamanho final, centrado, e o recorte da forma o corta.
+    // O corpo fica no tamanho final e o recorte da forma o corta (centrado, ou
+    // preso ao topo da forma com `ancoraTopo`).
     if (c->corpo && cenCorpoA > 0.01f) c->corpo(F, cenCorpoA * cenA, c->u);
     gfx_sem_recorte(); }
 }

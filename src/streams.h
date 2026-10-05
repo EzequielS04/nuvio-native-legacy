@@ -272,6 +272,9 @@ void stream_fit_fonte_metadados(double (*fonte)(const char *alvo));
 // Returns unknown without evidence. For UI, demand is an estimate, not a
 // guarantee; the caller can display age, budget and diagnostic origin.
 StreamfitClasse stream_fit_folha_estado(int indice, StreamfitResultado *saida);
+// Medida de rede REAL do host de `s`, agora (cartao de "Abrindo fonte" expandido).
+// 0 = sem medida: l1/l2 vazias.
+int stream_fit_abrindo(const Stream *s, char *l1, size_t n1, char *l2, size_t n2);
 int  stream_folha_aberta(void);
 // QUANTAS LINHAS A FOLHA MOSTRA AGORA — issue #132 ("so 1 fonte listada"). A
 // folha lista a lista INTEIRA de stream_definir_lista; so os filtros que a

@@ -508,6 +508,16 @@ const CatEp *player_proximo_episodio(void) {
 static char erroTitulo[160], erroDica[160];
 // "Fonte 2 de 3": a tentativa do automatico VOD (app.c, tentarProximaFonteVOD).
 static int tentativaN, tentativaM;
+// ABRINDO A FONTE, COMPACTO POR PADRAO (dono, 05/10): o cartao nasce enxuto —
+// o ponto, o estado e as marcas da fonte — e o BAIXO expande os detalhes.
+// abrindoExp e o pedido (BAIXO liga, CIMA desliga); abrindoT (0..1) e a mola
+// que faz o conteudo cruzar junto com o crescimento do cartao.
+static int abrindoExp;
+static float abrindoT;
+static Uint32 abrindoDesde, abrindoAgora, abrindoUlt;
+static int abrindoViva;   // o quadro anterior estava abrindo
+static float abrindoFundo;   // o preto da abertura, que sai junto com o cartao
+static Uint32 abrindoFundoUlt;
 // O botao em foco no modal do erro: 0 = Abrir Fontes, 1 = Voltar.
 static int erroBotao;
 void player_definir_tentativa(int n, int max) { tentativaN = n; tentativaM = max; }
@@ -1169,6 +1179,7 @@ void player_abrir(int indiceCatalogo, const char *url) {
     if (canalSessao) { guia_carregar(); epg_iniciar(); } }
   tocando = 1; retomandoSalto = 0; visivel = 1; anim = 0.0f; entrada = 0.0f; soBarra = 0; cheio = 1.0f; fileira = 1.0f;
   pedFontes = erroFonte = pedFaixas = pedProxT = pedProxE = 0; inicioImagem = 0;
+  abrindoExp = 0; abrindoT = 0.0f; abrindoDesde = 0;
   erroTitulo[0] = erroDica[0] = 0;
   pedGuia = pedZap = pedGuiaCheio = 0;
   memset(&zapEst, 0, sizeof zapEst); bannerAV = 0.0f; botaoAV = 0; infoAV = 0; pedRecarregar = 0;
@@ -2333,6 +2344,16 @@ void player_evento(const SDL_Event *e) {
     return;
   }
 
+  // ABRINDO A FONTE: BAIXO expande o cartao e CIMA o recolhe. Antes o BAIXO aqui
+  // so movia o foco dos botoes do OSD, que fica apagado enquanto a fonte abre
+  // (anim = 0): a tecla nao fazia nada visivel. Voltar continua cancelando (acima)
+  // e o OK/Fontes nao mudam. Com a folha de Fontes aberta a tecla e dela
+  // (app.c nem chega aqui). Canal sintonizando fica de fora.
+  if (player_carregando() && !ehCanal() && !stream_folha_aberta()) {
+    if (k == SDLK_DOWN) { abrindoExp = 1; return; }
+    if (k == SDLK_UP && abrindoExp) { abrindoExp = 0; return; }
+  }
+
   // PAINEL DE PAUSA: com ele de pe, a tecla e DELE. Vem antes de tudo o que
   // sobra (inclusive da tecla de proporcao) porque e o que o web faz — la o
   // ramo `if (this.pauseOverlayVisible)` engole o evento inteiro
@@ -3445,74 +3466,162 @@ static void arteCarregando(float x, float y, float w, float a) {
     txt_desenhar_alpha(l, x + (w - (float)l.w) * 0.5f, y + (CAR_LOGO_H - (float)l.h) * 0.5f, a);
   }
 }
-static float alturaCarregando(void) { return 22.0f + CAR_LOGO_H + 16.0f + 32.0f + 6.0f + 24.0f + 18.0f + 52.0f + 18.0f + 4.0f + 22.0f; }
+// AS LINHAS DE DETALHE do cartao expandido: so o que o app SABE neste instante.
+// Nome da fonte, addon e tamanho vem da propria fonte; "Rede" e a medida real do
+// host dela (streamfit), que so existe onde a rede e conhecida (Android) e ja
+// houve diagnostico ou reproducao recente. Velocidade de download, latencia e
+// bitrate AO VIVO nao existem enquanto a fonte abre (o pipeline so informa
+// ativo/pronto, ver o trilho abaixo): nao entram, em vez de um numero inventado.
+// NUNCA a URL: ela pode carregar a chave do debrid.
+typedef struct { char rot[40]; char val[220]; } AbrLinha;
+#define ABR_MAX 6
+static int abrFitIdx = -2;
+static char abrFit1[160], abrFit2[160];
+static int linhasAbrindo(const Stream *st, AbrLinha *L) {
+  int n = 0;
+  if (!st) return 0;
+  if (st->rotulo[0]) { snprintf(L[n].rot, sizeof L[n].rot, "Fonte"); snprintf(L[n].val, sizeof L[n].val, "%s", st->rotulo); n++; }
+  if (st->provedor[0]) { snprintf(L[n].rot, sizeof L[n].rot, "Addon"); snprintf(L[n].val, sizeof L[n].val, "%s", st->provedor); n++; }
+  if (st->tamanhoMB > 0) {
+    snprintf(L[n].rot, sizeof L[n].rot, "Tamanho");
+    if (st->tamanhoMB >= 1024) snprintf(L[n].val, sizeof L[n].val, "%.1f GB", st->tamanhoMB / 1024.0);
+    else snprintf(L[n].val, sizeof L[n].val, "%ld MB", st->tamanhoMB);
+    plrui_decimal(L[n].val);
+    n++;
+  }
+  if (abrFitIdx != stream_atual()) {   // a medida e relida so quando a fonte muda
+    abrFitIdx = stream_atual();
+    stream_fit_abrindo(st, abrFit1, sizeof abrFit1, abrFit2, sizeof abrFit2);
+  }
+  if (abrFit1[0]) {
+    snprintf(L[n].rot, sizeof L[n].rot, "Rede"); snprintf(L[n].val, sizeof L[n].val, "%s", abrFit1); n++;
+    if (abrFit2[0]) { L[n].rot[0] = 0; snprintf(L[n].val, sizeof L[n].val, "%s", abrFit2); n++; }
+  }
+  return n;
+}
+// Alturas (22 de respiro, a logo, o titulo, ...). O compacto reserva sempre a
+// fileira das marcas: a troca de fonte nao pode mudar a altura do cartao.
+#define ABR_COMPACTO_H (22.0f + CAR_LOGO_H + 16.0f + 32.0f + 10.0f + 24.0f + 22.0f)
+static float alturaExpandido(void) {
+  AbrLinha L[ABR_MAX];
+  const Stream *st = stream_item(stream_atual());
+  float h = 22.0f + CAR_LOGO_H + 16.0f + 32.0f + 6.0f;
+  if (linhaEp[0]) h += 24.0f + 10.0f;
+  if (st && st->badges) h += 24.0f + 14.0f;
+  h += 1.0f + 10.0f + (float)linhasAbrindo(st, L) * 30.0f + 8.0f;
+  h += 24.0f + 14.0f + 4.0f + 22.0f;
+  return h;
+}
+static float alturaCarregando(void) { return abrindoExp ? alturaExpandido() : ABR_COMPACTO_H; }
+// A mola que cruza o compacto e o expandido (chamada por quadro, fora do corpo).
+static void abrindoAtualizar(Uint32 agora) {
+  float dt = abrindoUlt ? (float)(agora - abrindoUlt) / 1000.0f : 1.0f / 60.0f;
+  abrindoUlt = agora; abrindoAgora = agora;
+  if (dt > 0.1f) dt = 0.1f;
+  if (ajustes_animacoes_reduzidas()) abrindoT = abrindoExp ? 1.0f : 0.0f;
+  else abrindoT = anim_mola(abrindoT, abrindoExp ? 1.0f : 0.0f, dt, 12.0f);
+}
 static void corpoCarregando(GfxRect r, float a, void *u) {
   float x = r.x + 18.0f, w = r.w - 36.0f, y = r.y + 22.0f;
   Uint32 agora = SDL_GetTicks();
   const Stream *st = stream_item(stream_atual());
+  float t = abrindoT, ac = a * (1.0f - t), ae = a * t, yc;
+  AbrLinha L[ABR_MAX];
+  int nL, i;
+  char fd[48];
   (void)u;
+  fd[0] = 0;
+  if (tentativaN >= 2 && tentativaM >= tentativaN)
+    snprintf(fd, sizeof fd, i18n("Fonte %d de %d"), tentativaN, tentativaM);
   arteCarregando(x, y, w, a);
   y += CAR_LOGO_H + 16.0f;
+  // O ESSENCIAL, nos dois estados: o ponto que respira e o estado.
   plrui_respira(x + 6.0f + 5.0f, y + 16.0f, 10.0f, agora, a);
   { TxtLinha l = txt_linha(TXT_G26B, "Abrindo fonte", 243, 242, 239, 255);
     txt_desenhar_alpha(l, x + 6.0f + 10.0f + 16.0f, y + 16.0f - (float)l.h * 0.5f, a); }
-  // "Fonte 2 de 3" na ponta direita da linha do titulo (o cabecalho sumiu
-  // com o relogio, entao ele mora aqui).
-  if (tentativaN >= 2 && tentativaM >= tentativaN) {
-    char fd[48];
-    snprintf(fd, sizeof fd, i18n("Fonte %d de %d"), tentativaN, tentativaM);
-    { TxtLinha l = txt_linha(TXT_G19M, fd, 243, 242, 239, 140);
-      txt_desenhar_alpha(l, x + w - 6.0f - (float)l.w, y + 16.0f - (float)l.h * 0.5f, a); }
+  // A dica de tecla na ponta direita da linha do estado: no compacto leva aos
+  // detalhes, no expandido volta. Discreta (o apoio cinza das outras dicas).
+  if (ac > 0.01f) { const char *k[1] = { "Baixo" }, *rt[1] = { "Detalhes" };
+    plrui_dicas(k, rt, 1, x + w - 6.0f, y + 16.0f, 1, ac * 0.85f); }
+  if (ae > 0.01f) { const char *k[1] = { "Cima" }, *rt[1] = { "Recolher" };
+    plrui_dicas(k, rt, 1, x + w - 6.0f, y + 16.0f, 1, ae * 0.85f); }
+  yc = y + 32.0f;
+
+  // COMPACTO: as marcas do que esta fonte tem (resolucao, HDR/DV, audio), no
+  // estilo cinza do app, e o "Fonte 2 de 3" miudo na ponta direita.
+  if (ac > 0.01f) {
+    float yy = yc + 10.0f;
+    if (st && st->badges) badges_desenhar_tom(st->badges, x + 32.0f, yy, w * 0.62f, 24.0f, .52f, .52f, .52f, ac);
+    if (fd[0]) {
+      TxtLinha l = txt_linha(TXT_ILHA_APOIO, fd, 243, 242, 239, 140);
+      txt_desenhar_alpha(l, x + w - 6.0f - (float)l.w, yy + 12.0f - (float)l.h * 0.5f, ac);
+    }
   }
-  y += 32.0f + 6.0f;
-  if (linhaEp[0]) {
-    TxtLinha l = txt_linha_corta(TXT_ILHA_SUB, linhaEp, 243, 242, 239, 153, w - 32.0f);
-    txt_desenhar_alpha(l, x + 32.0f, y, a);
-  }
-  y += 24.0f + 18.0f;
-  // Sem fonte escolhida ainda (st NULL) nao ha o que mostrar na caixa: a caixa
-  // vazia era so um retangulo escuro (TV do dono, 04/10). O espaco fica, para o
-  // cartao nao mudar de altura quando a fonte entra.
-  { GfxRect cx = { x, y, w, 52.0f };
-    if (st) {
-      char d[160];
-      if (ajustes_vidro()) gfx_cor(cx, 20.0f / 52.0f, 1, 1, 1, 0.05f * a);
-      else gfx_cor(cx, 20.0f / 52.0f, 0.118f, 0.122f, 0.141f, a);
-      float lw = 0.0f;
-      if (st->badges) lw = badges_desenhar_tom(st->badges, x + 18.0f, y + 14.0f, w * 0.55f, 24.0f, .52f, .52f, .52f, a);
-      (void)lw;
-      if (st->tamanhoMB > 0)
-        snprintf(d, sizeof d, "%s \xc2\xb7 %.1f GB", st->provedor, st->tamanhoMB / 1024.0);
-      else snprintf(d, sizeof d, "%s", st->provedor);
-      plrui_decimal(d); plrui_limpar_sep(d);
-      { TxtLinha l = txt_linha_corta(TXT_G18R, d, 243, 242, 239, 140, w * 0.4f);
-        txt_desenhar_alpha(l, x + w - 18.0f - l.w, y + 26.0f - (float)l.h * 0.5f, a); }
-    } }
-  y += 52.0f + 18.0f;
-  // O TRILHO E INDETERMINADO, DE PROPOSITO. O pipeline nao da porcentagem
-  // de abertura: video.h so diz ativo/pronto (loadCompleted), e o buffer_fim
-  // antes do pronto e contra uma duracao que ainda nao existe. Uma barra que
-  // "enche" com o tempo ou com as duas etapas mentiria sobre quanto falta.
-  // Entao um brilho atravessa o trilho da esquerda para a direita e recomeca;
-  // com Animacoes reduzidas o trilho fica inteiro no acento apagado, parado.
-  { float ar, ag, ab;
-    GfxRect tr = { x, y, w, 4.0f };
-    ajustes_acento(&ar, &ag, &ab);
-    gfx_cor(tr, 0.5f, 1, 1, 1, 0.16f * a);
-    if (ajustes_animacoes_reduzidas()) gfx_cor(tr, 0.5f, ar, ag, ab, 0.45f * a);
-    else {
-      float t = (float)(agora % 1600u) / 1600.0f, seg = 0.30f;
-      float x0 = x + (w * (1.0f + seg)) * t - w * seg, x1 = x0 + w * seg;
-      if (x0 < x) x0 = x;
-      if (x1 > x + w) x1 = x + w;
-      if (x1 - x0 > 1.0f) {
-        // Pontas suaves: o miolo cheio e duas abas a 45% de cada lado.
-        float aba = (x1 - x0) * 0.22f;
-        gfx_cor((GfxRect){ x0, y, x1 - x0, 4.0f }, 0.5f, ar, ag, ab, 0.45f * a);
-        if (x1 - x0 > aba * 2.0f + 4.0f)
-          gfx_cor((GfxRect){ x0 + aba, y, x1 - x0 - aba * 2.0f, 4.0f }, 0.5f, ar, ag, ab, a);
+
+  // EXPANDIDO: o episodio, as marcas e as linhas de detalhe com valor real.
+  if (ae > 0.01f) {
+    float yy = yc + 6.0f;
+    float lx = x + 32.0f;
+    if (linhaEp[0]) {
+      TxtLinha l = txt_linha_corta(TXT_ILHA_SUB, linhaEp, 243, 242, 239, 153, w - 32.0f);
+      txt_desenhar_alpha(l, lx, yy, ae);
+      yy += 24.0f + 10.0f;
+    }
+    if (st && st->badges) {
+      badges_desenhar_tom(st->badges, lx, yy, w * 0.62f, 24.0f, .52f, .52f, .52f, ae);
+      yy += 24.0f + 14.0f;
+    }
+    gfx_cor((GfxRect){ x, yy, w, 1.0f }, 0.0f, 1, 1, 1, 0.07f * ae);
+    yy += 1.0f + 10.0f;
+    nL = linhasAbrindo(st, L);
+    for (i = 0; i < nL; i++) {
+      float cy = yy + 15.0f;
+      if (L[i].rot[0]) {
+        TxtLinha rl = txt_linha(TXT_ILHA_APOIO, L[i].rot, 243, 242, 239, 115);
+        txt_desenhar_alpha(rl, x + 6.0f, cy - (float)rl.h * 0.5f, ae);
       }
-    } }
+      { TxtLinha vl = txt_linha_corta(TXT_G19M, L[i].val, 243, 242, 239, 215, w * 0.74f);
+        txt_desenhar_alpha(vl, x + w - 6.0f - (float)vl.w, cy - (float)vl.h * 0.5f, ae); }
+      yy += 30.0f;
+    }
+    yy += 8.0f;
+    // Ha quanto tempo esta abrindo (relogio do proprio player) e a tentativa.
+    { char el[48];
+      unsigned sec = abrindoDesde ? (unsigned)((abrindoAgora - abrindoDesde) / 1000u) : 0u;
+      TxtLinha l;
+      snprintf(el, sizeof el, i18n("Abrindo há %u s"), sec);
+      l = txt_linha(TXT_G19M, el, 243, 242, 239, 140);
+      txt_desenhar_alpha(l, x + 6.0f, yy + 12.0f - (float)l.h * 0.5f, ae);
+      if (fd[0]) {
+        l = txt_linha(TXT_G19M, fd, 243, 242, 239, 140);
+        txt_desenhar_alpha(l, x + w - 6.0f - (float)l.w, yy + 12.0f - (float)l.h * 0.5f, ae);
+      } }
+    yy += 24.0f + 14.0f;
+    // O TRILHO E INDETERMINADO, DE PROPOSITO. O pipeline nao da porcentagem
+    // de abertura: video.h so diz ativo/pronto (loadCompleted), e o buffer_fim
+    // antes do pronto e contra uma duracao que ainda nao existe. Uma barra que
+    // "enche" com o tempo ou com as duas etapas mentiria sobre quanto falta.
+    // Entao um brilho atravessa o trilho da esquerda para a direita e recomeca;
+    // com Animacoes reduzidas o trilho fica inteiro no acento apagado, parado.
+    { float ar, ag, ab;
+      GfxRect tr = { x, yy, w, 4.0f };
+      ajustes_acento(&ar, &ag, &ab);
+      gfx_cor(tr, 0.5f, 1, 1, 1, 0.16f * ae);
+      if (ajustes_animacoes_reduzidas()) gfx_cor(tr, 0.5f, ar, ag, ab, 0.45f * ae);
+      else {
+        float tt = (float)(agora % 1600u) / 1600.0f, seg = 0.30f;
+        float x0 = x + (w * (1.0f + seg)) * tt - w * seg, x1 = x0 + w * seg;
+        if (x0 < x) x0 = x;
+        if (x1 > x + w) x1 = x + w;
+        if (x1 - x0 > 1.0f) {
+          // Pontas suaves: o miolo cheio e duas abas a 45% de cada lado.
+          float aba = (x1 - x0) * 0.22f;
+          gfx_cor((GfxRect){ x0, yy, x1 - x0, 4.0f }, 0.5f, ar, ag, ab, 0.45f * ae);
+          if (x1 - x0 > aba * 2.0f + 4.0f)
+            gfx_cor((GfxRect){ x0 + aba, yy, x1 - x0 - aba * 2.0f, 4.0f }, 0.5f, ar, ag, ab, ae);
+        }
+      } }
+  }
 }
 
 // O MODAL DO ERRO: o motivo (36/700), a dica e os dois botoes. ESQUERDA e
@@ -3565,7 +3674,6 @@ void player_fundo_fora_do_furo(GfxRect furo, int recuado, const CatItem *c) {
 }
 
 void player_desenhar(Uint32 agora) {
-  (void)agora;
   if (!aberto) return;
   const CatItem *c = item();
   // COR VIVA: o titulo que TOCA manda na cor (abrindo, OSD, pausa, pos-play),
@@ -3710,9 +3818,31 @@ void player_desenhar(Uint32 agora) {
   // ABRINDO A FONTE (Glass UI, revisto pelo dono em 03/10): fundo PRETO, sem
   // a arte, sem o logo e sem anel no meio da tela. O estado mora so na ILHA
   // do canto, crescida como a atividade da ilha do relogio — o ponto que
-  // respira, "Abrindo fonte", a linhaEp, a fonte escolhida (marcas, addon e
-  // tamanho) e o trilho dentro dela. Na ponta do cabecalho, "Fonte 2 de 3"
-  // quando o automatico ja esta na segunda.
+  // respira e "Abrindo fonte", com as marcas da fonte logo abaixo (cartao
+  // COMPACTO, o padrao). O BAIXO expande: linhaEp, nome da fonte, addon,
+  // tamanho, rede, ha quanto tempo abre e o trilho; o CIMA recolhe. "Fonte 2
+  // de 3" quando o automatico ja esta na segunda.
+  // O PRETO DA ABERTURA SAI COM O CARTAO. Ao chegar a imagem o preto opaco sumia
+  // no mesmo quadro e o cartao encolhia sobre um corte seco; agora o preto
+  // esvai com a mesma taxa (12) com que a ilha do relogio apaga a atividade, por
+  // cima da imagem ja entrando. Animacoes reduzidas: corta, como as outras.
+  { float dtf = abrindoFundoUlt ? (float)(agora - abrindoFundoUlt) / 1000.0f : 1.0f / 60.0f;
+    abrindoFundoUlt = agora;
+    if (dtf > 0.1f) dtf = 0.1f;
+    if (player_carregando() && !ehCanal()) abrindoFundo = 1.0f;
+    else if (abrindoFundo > 0.0f) {
+      abrindoFundo = ajustes_animacoes_reduzidas() ? 0.0f : anim_mola(abrindoFundo, 0.0f, dtf, 12.0f);
+      if (abrindoFundo < 0.01f) abrindoFundo = 0.0f;
+      else if (player_com_video() && !erroFonte && !saindo && !ehCanal())
+        gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, abrindoFundo);
+    } }
+  // Uma abertura NOVA (a anterior acabou, ou o player reabriu): volta ao compacto
+  // e zera o relogio. Ao acabar, o estado fica como esta para o cartao sair com o
+  // mesmo conteudo (a saida e a da ilha, plrilha.c).
+  if (player_carregando() && !ehCanal()) {
+    if (!abrindoViva) { abrindoDesde = agora; abrindoExp = 0; abrindoT = 0.0f; abrFitIdx = -2; }
+    abrindoViva = 1;
+  } else abrindoViva = 0;
   if (player_carregando() && ehCanal()) {
     // CANAL SINTONIZANDO: a versao COMPACTA, uma linha na propria ilha do
     // relogio (dono, 03/10: "no player do live tv vamos usar a versao compacta
@@ -3732,9 +3862,11 @@ void player_desenhar(Uint32 agora) {
     // linhas (foto do dono, 04/10). Escolhida a fonte, a folha sai e o cartao
     // entra no lugar dela.
     { PlrIlhaPedido pd;
+      abrindoAtualizar(agora);
       memset(&pd, 0, sizeof pd);
       pd.semFim = 1;
       pd.centro = 1;   // cartao no meio da tela, sem relogio (dono, 03/10)
+      pd.ancoraTopo = 1;   // o conteudo acompanha o topo ao crescer/encolher
       pd.w = 680.0f; pd.h = alturaCarregando();
       pd.corpo = corpoCarregando;
       plrilha_pedir(&pd); }
