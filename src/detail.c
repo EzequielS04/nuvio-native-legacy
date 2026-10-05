@@ -6496,7 +6496,9 @@ static void desenhaPessoa(float a) {
 // mais forte que os 28% dos Ajustes: aqui o texto do heroi (titulo, sinopse,
 // generos) fica direto sobre ela, e uma arte clara desfocada deixava o texto
 // cinza sobre cinza claro (captura de tests/fluidez_perf.sh, cenario borrada).
-#define DET_VEU_BORRADA 0.55f
+// Era 55% e na C9 a pagina ficava bem mais escura que os Ajustes com o mesmo
+// fundo (dono, 05/10: "nos Ajustes ta melhor"). 36%: um pouco acima dos 28%.
+#define DET_VEU_BORRADA 0.36f
 
 // FOLHA + TIRA DE CARTOES do carrossel. A folha e um gfx_cor opaco de tela
 // cheia, que gfx_rect transforma em glClear; cada cartao e UM quad opaco
