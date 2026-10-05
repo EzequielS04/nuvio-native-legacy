@@ -17,6 +17,7 @@
 #include "spotlight.h"
 #include "fileiras.h"
 #include "catalogo.h"
+#include "dados.h"
 #include "gfx.h"
 #include "ilha.h"
 #include "iconeapp.h"
@@ -171,6 +172,9 @@ int main(int argc, char **argv) {
   // FILEIRAS DE MENTIRA cobrindo as origens que a folha sabe distinguir: o
   // catalogo de addon (com nome de addon e tipo), o grupo de colecoes, e as
   // fileiras que o proprio app monta.
+  // NUVIO_SHOT_DADOS=<pasta>: the rows of a real fileirasui*.txt (a COPY in a
+  // scratch folder, never the app's own) instead of the fake ones below.
+  if (getenv("NUVIO_SHOT_DADOS")) { setenv("NUVIO_DADOS", getenv("NUVIO_SHOT_DADOS"), 1); dados_iniciar("deploy/app/art"); goto fileiras_prontas; }
   fil_registrar("continue_watching", "Continuar assistindo", "", "", 12);
   fil_registrar("social_activity", "Entre amigos", "", "", 6);
   // NUVIO_SHOT_CANAIS=iguais|mistos|distintos (mistos: os 8 primeiros repetem o logo): no lugar de "Popular", a fileira de
@@ -214,6 +218,7 @@ int main(int argc, char **argv) {
   fil_remover(7);   // Anime
   fil_remover(9);   // sem nome
   fil_remover(12);  // Animes
+  fileiras_prontas:
 
   ajustes_iniciar();
   if (getenv("NUVIO_SHOT_AJUSTES_ESCALA"))
@@ -250,7 +255,7 @@ int main(int argc, char **argv) {
   if (getenv("NUVIO_AJ_QUADROS")) {
     char lista[1024], *id, *ctx = NULL;
     snprintf(lista, sizeof lista, "%s", getenv("NUVIO_AJ_QUADROS"));
-    for (id = strtok_r(lista, " ,", &ctx); id; id = strtok_r(NULL, " ,", &ctx)) {
+    for (id = strtok_r(lista, " ", &ctx); id; id = strtok_r(NULL, " ", &ctx)) {
       // "id@N": grava o quadro N depois de chegar nele (o padrao e 60, a tela
       // ja parada). Para ver a TROCA de cena no meio do caminho:
       //   NUVIO_AJ_QUADROS="reproducao op:pausaOverlay@8"
@@ -261,6 +266,18 @@ int main(int argc, char **argv) {
       // NUVIO_SHOT_FONTE=3 (TXT_FAMILIA_*): the interface font the TV uses
       // (Montserrat on the owner's Android TV), so truncation shows like there.
       if (getenv("NUVIO_SHOT_FONTE")) ajustes_teste_fonte_interface(atoi(getenv("NUVIO_SHOT_FONTE")));
+      // NUVIO_SHOT_TECLAS="dddr": keys sent after the frame is set up (u d l r,
+      // o = OK, b = Back), to capture a scrolled list or a changed value.
+      if (getenv("NUVIO_SHOT_TECLAS")) {
+        const char *t;
+        // One frame first: the header pills measure their rows while drawing,
+        // and the navigation reads that layout.
+        ajustes_atualizar(1.0f / 60.0f, SDL_GetTicks());
+        ajustes_desenhar(SDL_GetTicks());
+        for (t = getenv("NUVIO_SHOT_TECLAS"); *t; t++)
+          tecla(*t == 'u' ? SDLK_UP : *t == 'd' ? SDLK_DOWN : *t == 'l' ? SDLK_LEFT : *t == 'r' ? SDLK_RIGHT
+                : *t == 'o' ? SDLK_RETURN : SDLK_ESCAPE);
+      }
       if (!strcmp(id, "guia-busca")) {
         int k;
         SDL_Event e = { 0 };

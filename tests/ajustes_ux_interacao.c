@@ -177,6 +177,18 @@ int main(void) {
     valor[AJ_AVANCADAS] = 0;
     for (i = 0; i < AJ_N_TELA; i++) if (TELA[i].tipo == IT_OPC && uxAvancada(TELA[i].op)) assert(visivel(i) || TELA[i].op == AJ_ICONE_APP);
     focoIndice = 1; }   // focus on the index: the row rests (no hover)
+  // Top pills in several rows (uxChipLinha, measured by the draw): Up/Down change
+  // row, Left/Right stay inside it.
+  { focoIndice = 1; uxChipAv = 0; uxChipLinha[0] = 0; uxChipLinha[1] = 1; uxChipLinha[2] = 1;
+    uxIndice = 0; key(SDLK_RIGHT); assert(uxIndice == 0 && !uxChipAv);          // Buscar alone in its row
+    key(SDLK_DOWN); assert(uxIndice == 1 && !uxChipAv);                         // down to Diferentes
+    key(SDLK_RIGHT); assert(uxChipAv);                                          // same row as Avancadas
+    key(SDLK_UP); assert(!uxChipAv && uxIndice == 0);                           // up to Buscar
+    uxChipLinha[0] = 0; uxChipLinha[1] = 0; uxChipLinha[2] = 1;
+    uxIndice = 1; uxChipAv = 0; key(SDLK_RIGHT); assert(!uxChipAv && uxIndice == 1);   // Avancadas is a row below
+    key(SDLK_DOWN); assert(uxChipAv);
+    key(SDLK_UP); assert(!uxChipAv && uxIndice == 0);
+    uxChipLinha[0] = uxChipLinha[1] = uxChipLinha[2] = 0; uxIndice = 1; focoIndice = 1; }
   valor[AJ_ANIM] = 1; ajustes_atualizar(1.0f, SDL_GetTicks());
   assert(animItem[focoItem] == 0);
 
