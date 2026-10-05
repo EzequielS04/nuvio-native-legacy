@@ -23,6 +23,7 @@ void player_do_inicio(void);
 double player_regra_retomada_inicial(double posSalva, double durSalva,
                                      int percentual, int concluido);
 void player_episodio_atual(int *temporada, int *episodio);
+void player_aprender_creditos(void);
 int player_indice(void);
 const char *player_linha_episodio(void);
 int player_pediu_fontes(void);

@@ -1,5 +1,6 @@
 #include "mkv.h"
 #include "rede.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -66,8 +67,12 @@ static long lerTam(const unsigned char *p, long resta, int *usou) {
   return (long)v;
 }
 
-static unsigned long lerUint(const unsigned char *p, long n) {
-  unsigned long v = 0;
+// 64 BITS DE PROPOSITO (unsigned long tem 32 na TV ARM de 32 bits). O
+// ChapterTimeStart vem em NANOSSEGUNDOS: 7405 s sao 7,4e12, e em 32 bits o
+// valor dava a volta a cada 4,29 s. Era o "creditos nomeados em 0s, ultimo
+// \"End Credits\" em 0s" do log da C9 (capitulo final de um filme de 7712 s).
+static uint64_t lerUint(const unsigned char *p, long n) {
+  uint64_t v = 0;
   long i;
   if (n < 1 || n > 8) return 0;
   for (i = 0; i < n; i++) v = (v << 8) | p[i];

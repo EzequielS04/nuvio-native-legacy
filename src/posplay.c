@@ -84,6 +84,9 @@ static int    proxT, proxE;          // proximo episodio, quando ha
 static char   proxNome[120];
 
 int posplay_visivel(void) { return visivel; }
+// Cartao do proximo episodio: SOBRE o video em tela cheia (o video nao recua).
+// Os relacionados do filme, bem mais altos, continuam recuando o video.
+int posplay_sobre_video(void) { return visivel && serie; }
 
 // SAIR DA TELA PRESERVANDO A ESCOLHA, e a diferenca com posplay_fechar e o
 // issue #14 inteiro.
@@ -357,7 +360,7 @@ int posplay_evento(const SDL_Event *e) {
   }
   if (serie) {
     if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
-      pedT = proxT; pedE = proxE; esconder(); return 1;
+      player_aprender_creditos(); pedT = proxT; pedE = proxE; esconder(); return 1;
     }
     return 0;
   }
@@ -443,6 +446,10 @@ static void posplay_desenharCorpo_(Uint32 agora, float baseY) {
       const CatEp *e = cat_episodio(idx, i);
       if (e && e->temporada == proxT && e->episodio == proxE) { px = e; break; }
     }
+    // O VIDEO SEGUE EM TELA CHEIA atras do cartao (R8): um veu suave na base
+    // garante a leitura sobre qualquer cena, sem escurecer o video todo.
+    gfx_rect((GfxRect){ 0.0f, NV_TELA_H - 560.0f, NV_TELA_W, 560.0f }, 0, GFX_VEU_BAIXO,
+             0, 0, 0, 0.0f, 0.0f, 0.0f, 0.0f, 0.62f * a);
     plrui_material(ilha, 36.0f, 0, a);
     tr = (GfxRect){ ilha.x + 28.0f, ilha.y + 28.0f, 448.0f, 252.0f };
     { const char *arte = (px && px->thumb[0]) ? px->thumb : (ci ? ci->backdrop : "");
