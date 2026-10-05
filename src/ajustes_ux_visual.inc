@@ -149,6 +149,8 @@ static const char *ajVisualIcone(int op) {
     case AJ_LEG_SYNC_AUDIO: return "aj_audio-lines";
     case AJ_LEG2_POS: case AJ_LEG2_TAMANHO: case AJ_LEG2_COR: case AJ_LEG2_FUNDO: case AJ_LEG2_BORDA: return "aj_captions";
     case AJ_ICONE_APP: return "aj_image-plus";
+    case AJ_LOGO_APP: return "aj_image";
+    case AJ_ABERTURA: return "aj_clapperboard";
     case AJ_DISCORD: return "aj_message-square";
     case AJ_ANIM: return "aj_activity";
     case AJ_RELOGIO: return "aj_clock";
@@ -544,7 +546,7 @@ static float ajVisualCena(int sec, int op, float x, float y, float w) {
                                        0x175A28, 0x174D97, 0x1752AC, 0x104B55, 0x1FC93A };
       ajCenaArte(ajArte(AJA_FUNDO, 3), q, rr, 0.6f);
       VID(36, 36, 344, 288, 24);
-      { char marca[1200]; snprintf(marca, sizeof marca, "%s/marcas/nuvio_wordmark.png", uxDirArte);
+      { const char *marca = logoapp_caminho(logoapp_atual(), LOGO_F_HORIZONTAL);
         ajLogo(marca, PX(62), PY(64), 170 * s, 48 * s, 0.96f); }
       TXT(NV_VERSAO, 18, 1, 62, 132, 0.85f);
       BAR(62, 172, 220, 0.4f); BAR(62, 190, 170, 0.4f);

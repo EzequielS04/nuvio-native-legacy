@@ -63,6 +63,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "iconeapp.h"
+#include "logoapp.h"
+#include "abertura.h"
 
 // Settings has its own canvas and scale, independent of the global UI zoom.
 // Layout, text measurement, drawing and pointer targets share this factor.
@@ -378,6 +380,9 @@ typedef enum {
   // maxima / Começar rápido) e o que fazer com HDR e Dolby Vision (Preferir /
   // Indiferente / Evitar). LOCAIS. No fim: valor[]/CHAVE[] posicionais.
   AJ_FONTE_PRIORIDADE, AJ_FONTE_HDR,
+  // 2.0 (N1): logo do app (Novo | Classico) and opening style (Padrao | So esmaece |
+  // Direto). LOCAL, for everyone (no supporter gate). Append-only.
+  AJ_LOGO_APP, AJ_ABERTURA,
   AJ_N
 } OpcaoId;
 
@@ -405,6 +410,8 @@ static const char *V_RELOGIO_POS[] = { "Automática", "Esquerda", "Direita" };
 // Indices gravados em fontePrioridadeLocal / fonteHdrLocal (ajustes_fonte_prioridade/_hdr).
 static const char *V_FONTE_PRIORIDADE[] = { "Equilíbrio", "Qualidade máxima", "Começar rápido" };
 static const char *V_FONTE_HDR[] = { "Preferir", "Indiferente", "Evitar" };
+static const char *V_LOGO_APP[] = { "Novo", "Clássico" };
+static const char *V_ABERTURA[] = { "Padrão", "Só esmaece", "Direto" };
 static const char *V_FONTE_PRAZO[] = { "3 s", "5 s", "8 s", "Todos os add-ons" };
 // Indice gravado em tamanhoUiLocal; o fator sai de ajustes_tamanho_ui.
 static const char *V_TAMANHO_UI[] = { "100%", "120%", "130%", "150%" };
@@ -1108,6 +1115,8 @@ static const Opcao OPCOES[AJ_N] = {
   ACAO("Sair do Plex"),
   ESC("A escolha automática prioriza",   V_FONTE_PRIORIDADE, 3), // local: fontePrioridadeLocal
   ESC("HDR e Dolby Vision",              V_FONTE_HDR, 3),        // local: fonteHdrLocal
+  ESC("Logo do app",                     V_LOGO_APP, 2),         // local: logoAppLocal
+  ESC("Abertura do app",                 V_ABERTURA, 3),         // local: aberturaAppLocal
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1296,6 +1305,7 @@ static const char *CHAVE[] = {
   "legenda2PosLocal", "legenda2TamanhoLocal", "legenda2CorLocal", "legenda2FundoLocal", "legenda2BordaLocal",
   "-embyServidor", "-embyEntrar", "-embySair", "-plexEntrar", "-plexServidor", "-plexSair",
   "fontePrioridadeLocal", "fonteHdrLocal",
+  "logoAppLocal", "aberturaAppLocal",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1712,6 +1722,8 @@ int ajustes_cache_seek_mb(void) {
   return cacheSeekExiste() && v >= 0 && v < 4 ? MB[v] : 0;
 }
 int ajustes_icone_app(void) { return valor[AJ_ICONE_APP]; }
+int ajustes_logo_app(void) { int v = valor[AJ_LOGO_APP]; return v < 0 || v > 1 ? 0 : v; }
+int ajustes_abertura(void) { int v = valor[AJ_ABERTURA]; return v < 0 || v > 2 ? 0 : v; }
 // R4: estilo proprio da segunda legenda. -1 / 0 = segue a principal.
 int ajustes_leg2_junto(void) { return valor[AJ_LEG2_POS] == 1; }
 int ajustes_leg2_tamanho(void) {
@@ -3451,7 +3463,7 @@ int ajustes_aplicar_blob(const char *json) {
 // exigiria adivinhar a feature e o `type`, e um blob com forma errada e pior
 // que uma chave a menos.
 static int somenteDesteAparelho(int op) {
-  if (op == AJ_ICONE_APP) return 1;
+  if (op == AJ_ICONE_APP || op == AJ_LOGO_APP || op == AJ_ABERTURA) return 1;
   switch (op) {
     // LAYOUT/APARELHO: nao sobem nem que o blob tenha a chave.
     // A regra que separa: se o valor descreve ESTA TV (RAM, painel, rede,
@@ -4546,6 +4558,8 @@ static const char *ajudaOpcao(int op) {
     case AJ_FONTE_MANUAL: return "Ao mandar reproduzir, abre a lista de fontes em vez de escolher sozinho. Canal ao vivo não pergunta.";
     case AJ_FONTE_AUTO: return "Melhor fonte: prefere 4K, Dolby Vision e MP4 e confere uma fonte por vez. Primeira da lista: toca a primeira que o addon mandou e não confere nenhuma outra — para quem já filtra e ordena no AIOStreams.";
     case AJ_FONTE_PRIORIDADE: return "Equilíbrio: HDR e Dolby Vision ganham de SDR na mesma resolução ou numa abaixo, e uma fonte que a sua conexão claramente não sustenta desce. Qualidade máxima: a maior resolução permitida, depois Dolby Vision, HDR10+, HDR10 e SDR, sem rebaixar por velocidade. Começar rápido: prefere fontes em cache e arquivos menores, que abrem mais depressa. Sempre rebaixa uma fonte que a conexão medida não sustenta.";
+    case AJ_LOGO_APP: return "O símbolo que o Nuvio mostra na abertura e nas telas de entrada. Novo é o play em degradê; Clássico é a TV retrô de sempre. Vale só nesta TV.";
+    case AJ_ABERTURA: return "Como o logo some quando o app abre. Padrão para um instante, aproxima e esmaece; Só esmaece não aproxima; Direto abre a Home sem parar. Vale só nesta TV.";
     case AJ_FONTE_HDR: return "Preferir: fontes com HDR ou Dolby Vision vêm na frente. Indiferente: o formato não conta. Evitar: prefere SDR na mesma resolução. O Dolby Vision só entra se estiver ligado em Imagem e som; perfil 5 sem HDR10 fica atrás do HDR10, porque sai com cores erradas fora de TV Dolby Vision. Só vale para a escolha automática.";
     case AJ_FONTE_TEXTO: return "Do Nuvio: o nome do título em cima e os logos de qualidade embaixo. Do addon: o nome e a descrição exatamente como o addon manda — para quem já formata o texto no AIOStreams. Logo do título: a logo do título no lugar do nome escrito.";
     case AJ_FONTE_PRAZO: return "As fontes aparecem na lista assim que cada add-on responde. A escolha automática não espera o mais lento: sai quando já há uma fonte boa ou depois deste tempo. Com uma fonte escolhida antes neste título, o add-on dela é sempre esperado.";
@@ -6304,7 +6318,7 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_COR_LOGO: case AJ_FONTE_UI: case AJ_VIDRO: case AJ_VIDRO_CONTORNO:
     case AJ_RELOGIO: case AJ_RELOGIO_POS: case AJ_SAIDA_PLAYER:
     case AJ_TAMANHO_UI: case AJ_TAMANHO_AJUSTES: case AJ_FUNDO: case AJ_VIDRO_OPAC: case AJ_VIDRO_FOSCO:
-    case AJ_AVANCADAS:
+    case AJ_AVANCADAS: case AJ_LOGO_APP: case AJ_ABERTURA:
       return AJPV_INTERFACE;
     case AJ_PERFIL_ATIVO: case AJ_SYNC: case AJ_SAIR:
     case AJ_PERFIL_PESQ: case AJ_PERFIL_EDITAR: case AJ_ADDONS_PRINCIPAL:
@@ -6566,6 +6580,17 @@ int ajustes_teste_quadro(const char *id) {
   }
   else if (!strncmp(id, "guia", 4)) { if (!ajustesTesteGuia(id)) return 0; }
   else if (!strcmp(id, "principal")) { focarOpcao(AJ_HOME_LAYOUT); }
+  // 2.0 N1: logo e abertura. NUVIO_N1_LOGO / NUVIO_N1_ABERT escolhem o valor salvo.
+  else if (!strncmp(id, "n1-", 3)) {
+    if (getenv("NUVIO_N1_LOGO")) valor[AJ_LOGO_APP] = atoi(getenv("NUVIO_N1_LOGO"));
+    if (getenv("NUVIO_N1_ABERT")) valor[AJ_ABERTURA] = atoi(getenv("NUVIO_N1_ABERT"));
+    ajArteFundoN = 3;
+    if (!strcmp(id, "n1-logo")) focarOpcao(AJ_LOGO_APP);
+    else if (!strcmp(id, "n1-abertura")) focarOpcao(AJ_ABERTURA);
+    else if (!strcmp(id, "n1-logo-seletor")) { focarOpcao(AJ_LOGO_APP); uxAbrirEditor(AJ_LOGO_APP); }
+    else if (!strcmp(id, "n1-abertura-seletor")) { focarOpcao(AJ_ABERTURA); uxAbrirEditor(AJ_ABERTURA); }
+    else return 0;
+  }
   // O aviso "Ajuste salvo nesta TV." logo depois de mudar uma opcao (foto do
   // dono, 04/10: o aviso cobria a ultima linha).
   else if (!strcmp(id, "aviso")) { focarOpcao(AJ_TAMANHO_AJUSTES); uxNotificar("Ajuste salvo nesta TV."); }

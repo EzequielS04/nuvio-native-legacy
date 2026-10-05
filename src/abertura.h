@@ -21,6 +21,7 @@
 #ifndef NV_ABERTURA_H
 #define NV_ABERTURA_H
 #include <SDL2/SDL.h>
+#include "gfx.h"
 
 // Carrega art/marcas/abertura.jpg, ou a marca (nuvio_wordmark.png). Sem os dois, a abertura
 // vira so o fundo esvanecendo. Depois de gfx_iniciar (precisa de contexto GL).
@@ -35,5 +36,11 @@ void abertura_fundo_fica(int sim);
 void abertura_tecla(void);
 // 1 enquanto ainda cobre a tela.
 int  abertura_ativa(void);
+
+// Previa viva para os Ajustes: uma volta da abertura em laco em `r` (estilo 0..2 =
+// Padrao/So esmaece/Direto; logo = LOGO_NOVO/LOGO_CLASSICO), `agora` em ms. Desenha
+// so o veu e a marca: o que fica por baixo e de quem chama.
+// `raio` = raio dos cantos em fracao da altura (como gfx_cor).
+void abertura_previa(GfxRect r, float raio, int estilo, int logo, Uint32 agora, float alfa);
 
 #endif

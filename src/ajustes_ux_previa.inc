@@ -602,6 +602,43 @@ static float ajPreviaIconeApp(float x, float y, float w) {
   return passo * 2.0f;
 }
 
+// LOGO DO APP (2.0 N1): o logo escolhido grande e os dois candidatos em
+// ladrilho de 64 px, como a galeria de icones; o anel marca o salvo/escolhido.
+static float ajPreviaLogoApp(float x, float y, float w) {
+  const float box = w * 9.0f / 16.0f, lado = 72.0f * w / 640.0f, gap = lado * 0.9f;
+  const int sel = valor[AJ_LOGO_APP];
+  float ar, ag, ab, gx, gy, grande;
+  int i;
+  ajustes_acento(&ar, &ag, &ab);
+  ajCenaArte(ajArte(AJA_FUNDO, ajCenaArteN(uxSecaoDe(AJ_LOGO_APP))), (GfxRect){ x, y, w, box }, 22, 0.62f);
+  grande = box * 0.44f;
+  logoapp_miniatura(sel, (GfxRect){ x + (w - grande) * 0.5f, y + box * 0.05f, grande, grande }, 0, 1.0f);
+  gx = x + (w - (lado * LOGO_N + gap * (LOGO_N - 1))) * 0.5f;
+  gy = y + box * 0.62f;
+  for (i = 0; i < LOGO_N; i++) {
+    GfxRect r = { gx + i * (lado + gap), gy, lado, lado };
+    logoapp_miniatura(i, r, 1, i == sel ? 1.0f : 0.65f);
+    if (i == sel) gfx_anel_fora(r, 18.0f / lado, 2.0f, 3.0f, ar, ag, ab, 0.9f);
+    { TxtLinha nome = ajTxtC(TXT_AJ_MINI12, V_LOGO_APP[i], lado + gap);
+      txt_desenhar_alpha(nome, r.x + (lado - nome.w) * 0.5f, r.y + lado + 10.0f, i == sel ? 1.0f : 0.6f); }
+  }
+  return box;
+}
+// ABERTURA DO APP (2.0 N1): uma volta da abertura em laco sobre a "home", com o
+// logo escolhido e o estilo em foco — a mesma conta de abertura.c.
+static float ajPreviaAbertura(float x, float y, float w) {
+  const float box = w * 9.0f / 16.0f, rr = 22.0f;
+  GfxRect q = { x, y, w, box };
+  static long fixo = -2;   // NUVIO_AB_PREVIA_MS: congela o laco (capturas)
+  if (fixo == -2) { const char *e = getenv("NUVIO_AB_PREVIA_MS"); fixo = e ? atol(e) : -1; }
+  ajImg(ajArte(AJA_FUNDO, 3), q, rr, 1);
+  gfx_recorte(q.x, q.y, q.w, q.h);
+  abertura_previa(q, rr / box, valor[AJ_ABERTURA], valor[AJ_LOGO_APP] == LOGO_CLASSICO ? LOGO_CLASSICO : LOGO_NOVO,
+                  fixo >= 0 ? (Uint32)fixo : SDL_GetTicks(), 1.0f);
+  gfx_sem_recorte();
+  return box;
+}
+
 static void aj2MiniFundo(int modo, float x, float y, float w, float a);
 // --- O EFEITO DE CADA OPCAO -----------------------------------------------------
 // O player em miniatura com os controles no tamanho `F` (Tamanho da interface):
@@ -778,6 +815,8 @@ static float ajPrevia(int op, float x, float y, float w) {
     case AJ_TAMANHO_UI: h = ajPreviaTamanhoUi(op, x, y, w); break;
     case AJ_TAMANHO_AJUSTES: h = ajPreviaTamanhoAjustes(op, x, y, w); break;
     case AJ_FONTE_UI: h = ajPreviaFonte(op, x, y, w); break;
+    case AJ_LOGO_APP: h = ajPreviaLogoApp(x, y, w); break;
+    case AJ_ABERTURA: h = ajPreviaAbertura(x, y, w); break;
     default: h = ajPreviaEmQuadro(op, x, y, w); break;
   }
   return h >= 0 ? h : ajVisualCena(uxSecaoDe(op), op, x, y, w);

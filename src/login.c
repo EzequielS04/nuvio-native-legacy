@@ -1,5 +1,6 @@
 #include "login.h"
 #include "iconeapp.h"
+#include "logoapp.h"
 #include "sessao.h"
 #include "nuvem.h"
 #include "qr.h"
@@ -387,7 +388,7 @@ void login_desenhar(Uint32 agora) {
   ponteiro_camada();
   ponteiro_alvo(0, 0, NV_TELA_W, NV_TELA_H, NULL, NULL, 0, 0);
 
-  iconeapp_marca((GfxRect){ NV_MARGEM_X, NV_MARGEM_Y, 72.0f, 72.0f }, 1.0f);
+  logoapp_marca((GfxRect){ NV_MARGEM_X, NV_MARGEM_Y, 72.0f, 72.0f }, 1.0f);
 
   y = 118.0f;
   linhaCentrada(TXT_TITULO1, "Entrar na sua conta", 255, 255, 255, y, 1.0f);
