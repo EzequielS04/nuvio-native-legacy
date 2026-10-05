@@ -472,6 +472,8 @@ int           cat_similares(int indice, int *saida, int max);
 // Quantas vezes o catalogo INTEIRO foi trocado. Muda => todo indice guardado
 // fora daqui deixou de valer, e as faixas de episodio foram zeradas.
 unsigned      cat_revisao(void);
+// Relogio monotonico em ms, para os marcadores [perf] da publicacao.
+double        cat_relogio_ms(void);
 // Sobe a cada mudanca em QUALQUER item (marca de lista, progresso, item novo,
 // substituido ou removido), alem de toda troca do bloco. Barata de ler por
 // quadro; quem deriva uma lista do catalogo reconstroi so quando ela muda.

@@ -2959,9 +2959,12 @@ static void cwDepoisDePublicar(CatItem *c, int k) {
 // Toda publicacao de montar() passa por aqui (em partes e a do fim).
 static void publicarMontagem(const CatItem *lote, int n, const CatFileira *fils, int nf) {
   int k;
+  double t0 = cat_relogio_ms();
   CatItem *cw = cwAntesDePublicar(&k);
   cat_definir_tudo(lote, n, fils, nf);
   cwDepoisDePublicar(cw, k);
+  printf("[perf] publicarMontagem: %d itens, %d fileiras, %.1f ms\n", n, nf, cat_relogio_ms() - t0);
+  fflush(stdout);
 }
 
 // A METADE LOCAL DE "TIRAR DE CONTINUAR ASSISTINDO", toda no fio de quem
@@ -3265,7 +3268,11 @@ static int salvarSnapshot(const CatFileira *fils, int n, unsigned geracao) {
       }
     if (i < n && m < CAT_FIL_MAX) todas[m++] = fils[i];
   }
-  return homeestado_salvar_se_geracao(todas, m, geracao);
+  { double t0 = cat_relogio_ms();
+    int r = homeestado_salvar_se_geracao(todas, m, geracao);
+    printf("[perf] snapshot da home: %d fileiras em %.1f ms\n", m, cat_relogio_ms() - t0);
+    fflush(stdout);
+    return r; }
 }
 
 // A FONTE (dono, perfil, idioma, addons) continua a mesma de quando a volta

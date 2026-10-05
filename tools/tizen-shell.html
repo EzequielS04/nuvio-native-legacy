@@ -367,7 +367,7 @@
       // que separa "nosso wasm" de "runtime da TV" sem profiler no aparelho
       // (registro do Tizen 9 de 20/09/2026: swap de 200-480 ms sem que o C
       // estivesse fazendo nada). src/main.c le e zera no [navegador].
-      window.__nvLong = { max: 0, n: 0, soma: 0, quem: "" };
+      window.__nvLong = { max: 0, n: 0, soma: 0, quem: "", fase: "" };
       try {
         new PerformanceObserver(function (lista) {
           var L = window.__nvLong;
@@ -375,6 +375,7 @@
             L.n++; L.soma += e.duration;
             if (e.duration > L.max) {
               L.max = e.duration;
+              L.fase = window.__nvFase || "?";
               var a = e.attribution && e.attribution[0];
               L.quem = e.name + (a ? "/" + a.containerType + (a.containerSrc ? ":" + a.containerSrc.slice(-24) : "") : "");
             }
