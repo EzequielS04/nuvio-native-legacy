@@ -509,6 +509,14 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
 
 // Atalhos legiveis para os casos comuns.
 void gfx_cor(GfxRect r, float raio, float cr, float cg, float cb, float ca);
+// A mancha GFX_SOMBRA em `s` sem o miolo `furo`, que um painel OPACO pintado em
+// seguida cobre inteiro (mesmo pixel, menos preenchimento). Ver gfx.c.
+void gfx_sombra_vazada(GfxRect s, float foco, float parx, float raio, float cr, float cg, float cb, float ca,
+                       GfxRect furo);
+// A sombra `s` de um painel que vem por cima com alfa `alfaPainel` e canto de
+// `raioPx` pixels: vazada quando o painel e opaco (>= 0,98), inteira senao.
+void gfx_sombra_sob(GfxRect s, float foco, float parx, float raio, float cr, float cg, float cb,
+                    float ca, GfxRect painel, float raioPx, float alfaPainel);
 // Destaque em camadas numa passada so (o crossfade): devolve 0 sem desenhar
 // se nao puder garantir o mesmo pixel do caminho em duas passadas.
 int gfx_hero_camadas(GfxRect r, GfxModo modo, GLuint texA, float aspA, float alfaA,

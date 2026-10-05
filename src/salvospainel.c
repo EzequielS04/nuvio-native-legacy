@@ -3490,8 +3490,8 @@ static void desenharPainel(Uint32 agora) {
     // Fontes: sombra curta, miolo de vidro (gfx_vidro_folha) ou solido e uma
     // luz larga e fraca no canto de cima. Sem aro. Nascendo da pilula do
     // relogio a forma e a mesma, so o retangulo muda.
-    gfx_rect((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f }, 0, GFX_SOMBRA,
-             1.0f, 0, 0, 0.5f, 0, 0, 0, .38f * as);
+    gfx_sombra_sob((GfxRect){ p.x - 18.0f, p.y - 8.0f, p.w + 36.0f, p.h + 40.0f }, 1.0f, 0, 0.5f,
+                   0, 0, 0, .38f * as, p, raioForma * p.h, vid ? 0.0f : .98f * as);
     if (vid) gfx_vidro_folha(p, raioForma, as);
     else gfx_cor(p, raioForma, .071f, .075f, .086f, .98f * as);
     gfx_luz_canto(p, raioForma, p.w * .25f, -p.h * .25f, p.w * .9f, 1, 1, 1, (vid ? .06f : .04f) * as);

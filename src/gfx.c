@@ -35,6 +35,8 @@ typedef struct {
   GLint margem;  // uMargem do VS: 1 px de folga no quad dos modos de SDF
   GLint jan;     // uJan: janela do GFX_JANELA
   GLint leve;    // uLeve: 1 = efeitos leves (sem dither), ver gfx_definir_efeitos_leves
+  GLint sub;     // uSub do VS: o pedaco do rect desenhado (gfx_sombra_vazada)
+  float subAtual[4];
   float altAtual, margemAtual, leveAtual;  // o ultimo valor enviado: so chama o GL se mudar
   float telaAtual[2];       // o uTela enviado (muda so dentro de uma miniatura)
 } Programa;
@@ -58,6 +60,9 @@ void gfx_textura_definir(GLuint tex, const float janela[4], float aspecto,
 }
 int gfx_textura_ativa(void) { return txTex != 0; }
 float gfx_card_forcar_cover_atual = 0.0f;
+// O pedaco do rect que o proximo gfx_rect desenha (uSub). So gfx_sombra_vazada
+// mexe, e devolve a (0,0,1,1) antes de sair.
+static float subAtual[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
 // Camadas do destaque (gfx_hero_camadas): a camada B e o fundo, lidos por
 // gfx_rect no desenho imediato que a funcao dispara.
 static GLuint camTexB;
@@ -157,10 +162,18 @@ static const char *VS =
   // de tela cheia (home nas fileiras a 45 fps; 60 so com esta troca);
   // interpolada, nada. Nos centros de pixel os dois numeros sao iguais.
   "varying highp vec2 vAmb;\n"
+  // uSub: o PEDACO do rect que o quad cobre (x0, y0, x1, y1 em fracao dele;
+  // (0,0,1,1) = o rect inteiro). vUv continua medido no rect inteiro, entao o
+  // fragmento de um pedaco e o MESMO do desenho inteiro — e o que deixa
+  // gfx_sombra_vazada pular o miolo de uma sombra que um painel opaco cobre.
+  // A margem de 1 px so cresce nos lados do pedaco que sao borda do rect.
+  "uniform vec4 uSub;\n"
   "void main(){\n"
-  "  vec2 e = (aPos * 2.0 - 1.0) * uMargem * step(0.5, min(uRect.z, uRect.w));\n"
-  "  vUv = aPos + e / max(uRect.zw, vec2(0.5));\n"
-  "  vec2 p = uRect.xy + aPos * uRect.zw + e;\n"
+  "  vec2 a = mix(uSub.xy, uSub.zw, aPos);\n"
+  "  vec2 sg = mix(-step(uSub.xy, vec2(0.0)), step(vec2(1.0), uSub.zw), aPos);\n"
+  "  vec2 e = sg * uMargem * step(0.5, min(uRect.z, uRect.w));\n"
+  "  vUv = a + e / max(uRect.zw, vec2(0.5));\n"
+  "  vec2 p = uRect.xy + a * uRect.zw + e;\n"
   "  vAmb = vec2(p.x/uTela.x, 1.0-p.y/uTela.y);\n"
   "  gl_Position = vec4(p.x/uTela.x*2.0-1.0, 1.0-p.y/uTela.y*2.0, 0.0, 1.0);\n"
   "}\n";
@@ -1332,12 +1345,17 @@ int gfx_iniciar(void) {
     progs[m].margem = glGetUniformLocation(p, "uMargem");
     progs[m].leve   = glGetUniformLocation(p, "uLeve");
     progs[m].jan    = glGetUniformLocation(p, "uJan");
+    progs[m].sub    = glGetUniformLocation(p, "uSub");
     progs[m].altAtual = -1.0f;
     progs[m].telaAtual[0] = NV_TELA_W; progs[m].telaAtual[1] = NV_TELA_H;
     progs[m].margemAtual = 0.0f;   // o default de um uniform recem-linkado e 0
     progs[m].leveAtual = 0.0f;
     glUseProgram(p);
     glUniform2f(progs[m].tela, NV_TELA_W, NV_TELA_H);
+    // O default de um uniform recem-linkado e 0: o pedaco tem de nascer inteiro.
+    if (progs[m].sub >= 0) glUniform4f(progs[m].sub, 0.0f, 0.0f, 1.0f, 1.0f);
+    progs[m].subAtual[0] = progs[m].subAtual[1] = 0.0f;
+    progs[m].subAtual[2] = progs[m].subAtual[3] = 1.0f;
     glUniform1i(progs[m].tex, 0);
     if (progs[m].amb >= 0) glUniform1i(progs[m].amb, 1);
     if (progs[m].texB >= 0) glUniform1i(progs[m].texB, 2);
@@ -1685,15 +1703,18 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   Uint64 t0 = SDL_GetPerformanceCounter();
 #endif
   gfx_n_rect++;
-  { float area = (r.w * r.h) / (NV_TELA_W * NV_TELA_H);
+  { float area = (r.w * r.h) / (NV_TELA_W * NV_TELA_H) *
+                 (subAtual[2] - subAtual[0]) * (subAtual[3] - subAtual[1]);
     if (gfx_rastro_grandes && (area >= 0.12f || (modo == GFX_COR && area >= 0.01f)))
       printf("[qd-rect] modo=%d %.0fx%.0f@%.0f,%.0f a=%.2f raio=%.0f tex=%u\n", (int)modo, r.w, r.h, r.x, r.y,
              ca * gfx_opacidade_grupo, raio, (unsigned)tex);
     gfx_fill += area;
     gfx_fill_modo[modo] += area;
-    { float x0 = r.x < 0.0f ? 0.0f : r.x, y0 = r.y < 0.0f ? 0.0f : r.y;
-      float x1 = r.x + r.w > NV_TELA_W ? NV_TELA_W : r.x + r.w;
-      float y1 = r.y + r.h > NV_TELA_H ? NV_TELA_H : r.y + r.h;
+    { float sx0 = r.x + r.w * subAtual[0], sy0 = r.y + r.h * subAtual[1];
+      float sx1 = r.x + r.w * subAtual[2], sy1 = r.y + r.h * subAtual[3];
+      float x0 = sx0 < 0.0f ? 0.0f : sx0, y0 = sy0 < 0.0f ? 0.0f : sy0;
+      float x1 = sx1 > NV_TELA_W ? NV_TELA_W : sx1;
+      float y1 = sy1 > NV_TELA_H ? NV_TELA_H : sy1;
       if (x1 > x0 && y1 > y0) gfx_fill_vis += (double)((x1 - x0) * (y1 - y0)) / (NV_TELA_W * NV_TELA_H); }
     if (area >= 0.5f) { gfx_n_cheio++;
 #ifdef NV_FLUIDEZ_PERF
@@ -1785,6 +1806,10 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
     }
     if (P->alt >= 0 && alt != P->altAtual) { glUniform1f(P->alt, alt); P->altAtual = alt; }
     if (P->margem >= 0 && mg != P->margemAtual) { glUniform1f(P->margem, mg); P->margemAtual = mg; } }
+  if (P->sub >= 0 && memcmp(P->subAtual, subAtual, sizeof subAtual)) {
+    glUniform4f(P->sub, subAtual[0], subAtual[1], subAtual[2], subAtual[3]);
+    memcpy(P->subAtual, subAtual, sizeof subAtual);
+  }
   if (P->leve >= 0 && (float)efeitosLeves != P->leveAtual) {
     P->leveAtual = (float)efeitosLeves;
     glUniform1f(P->leve, P->leveAtual);
@@ -1815,6 +1840,51 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
 
 void gfx_cor(GfxRect r, float raio, float cr, float cg, float cb, float ca) {
   gfx_rect(r, 0, GFX_COR, 0, 0, 0, raio, cr, cg, cb, ca);
+}
+// SOMBRA SOB UM PAINEL OPACO, SEM O MIOLO. A mancha (GFX_SOMBRA) de uma ilha
+// cobre o retangulo da ilha inteira, e a ilha opaca pintada logo depois
+// esconde tudo o que caiu dentro dela: era preenchimento com mistura jogado
+// fora. MEDIDO (tests/fluidez_perf.sh, Ajustes): 0,90 tela de GFX_SOMBRA por
+// quadro, ~0,7 dela embaixo das duas ilhas. Aqui a mesma mancha sai em ate
+// quatro faixas em volta de `furo` (o miolo da ilha que ela cobre de certeza,
+// ja descontado o canto arredondado). Cada faixa e o MESMO rect com outro uSub,
+// entao todo fragmento desenhado e identico ao do desenho inteiro.
+// So chame se o que vier por cima pinta `furo` inteiro com alfa 1.
+void gfx_sombra_vazada(GfxRect s, float foco, float parx, float raio, float cr, float cg, float cb, float ca,
+                       GfxRect furo) {
+  float x0, y0, x1, y1;
+  if (s.w <= 0.0f || s.h <= 0.0f) return;
+  x0 = (furo.x - s.x) / s.w; x1 = (furo.x + furo.w - s.x) / s.w;
+  y0 = (furo.y - s.y) / s.h; y1 = (furo.y + furo.h - s.y) / s.h;
+  if (furo.w <= 0.0f || furo.h <= 0.0f || x0 <= 0.0f || y0 <= 0.0f || x1 >= 1.0f || y1 >= 1.0f ||
+      progs[GFX_SOMBRA].sub < 0) {
+    gfx_rect(s, 0, GFX_SOMBRA, foco, parx, 0, raio, cr, cg, cb, ca);
+    return;
+  }
+  // A luz ambiente pendente sai ANTES, com o quad inteiro: senao ela seria
+  // pintada de dentro do primeiro gfx_rect abaixo, ja com o uSub da faixa (a
+  // Agenda da C9 saia com a luz so na faixa de cima).
+  gfx_ambiente_descarregar();
+  { const float f[4][4] = { { 0, 0, 1, y0 }, { 0, y1, 1, 1 }, { 0, y0, x0, y1 }, { x1, y0, 1, y1 } };
+    int k;
+    for (k = 0; k < 4; k++) {
+      memcpy(subAtual, f[k], sizeof subAtual);
+      gfx_rect(s, 0, GFX_SOMBRA, foco, parx, 0, raio, cr, cg, cb, ca);
+    }
+    subAtual[0] = subAtual[1] = 0.0f; subAtual[2] = subAtual[3] = 1.0f; }
+}
+// A sombra de uma ILHA/folha (`painel`, canto `raioPx` em pixels) que vai ser
+// pintada por cima com alfa `alfaPainel`. Com o miolo opaco (>= 0,98 depois da
+// opacidade de grupo) a mancha sai sem o que ele cobre. A 0,98 sobram 2% da
+// mancha atras do miolo: no maximo 0,02 x 0,45 do fundo, menos de 1 nivel de
+// 8 bits sobre o fundo escuro destas telas.
+void gfx_sombra_sob(GfxRect s, float foco, float parx, float raio, float cr, float cg, float cb,
+                    float ca, GfxRect painel, float raioPx, float alfaPainel) {
+  float m = raioPx + 2.0f;
+  if (alfaPainel * gfx_opacidade_grupo >= 0.98f && painel.w > 2.0f * m && painel.h > 2.0f * m)
+    gfx_sombra_vazada(s, foco, parx, raio, cr, cg, cb, ca,
+                      (GfxRect){ painel.x + m, painel.y + m, painel.w - 2.0f * m, painel.h - 2.0f * m });
+  else gfx_rect(s, 0, GFX_SOMBRA, foco, parx, 0, raio, cr, cg, cb, ca);
 }
 // AS CAMADAS DO DESTAQUE NUMA PASSADA (GFX_HERO_CAM / GFX_HERO_CHEIO_CAM). Devolve 0
 // quando nao pode garantir o mesmo pixel do caminho em duas passadas — e
@@ -2355,7 +2425,8 @@ void gfx_furo(GfxRect r) {
   if (ambPendente) { if (cheia) ambPendente = 0; else gfx_ambiente_descarregar(); }
   ambIntacta = 0;
   gfx_n_rect++;
-  { float area = (r.w * r.h) / (NV_TELA_W * NV_TELA_H);
+  { float area = (r.w * r.h) / (NV_TELA_W * NV_TELA_H) *
+                 (subAtual[2] - subAtual[0]) * (subAtual[3] - subAtual[1]);
     if (gfx_rastro_grandes) printf("[qd-rect] furo %.0fx%.0f@%.0f,%.0f\n", r.w, r.h, r.x, r.y);
     gfx_fill += area; gfx_fill_modo[GFX_COR] += area;
     if (area >= 0.5f) gfx_n_cheio++; }

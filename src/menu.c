@@ -309,8 +309,8 @@ static void desenhaMaterial(const MenuGeo *g, float a) {
   { int vidro = ajustes_vidro();
     float b = MK(vidro ? 40.0f : 30.0f), dy = MK(vidro ? 14.0f : 10.0f);
     GfxRect s = { r.x - b, r.y + dy - b, r.w + 2.0f * b, r.h + 2.0f * b };
-    gfx_rect(s, 0, GFX_SOMBRA, 1.0f, b * 1.41f * gfx_escala(), 0, (g->raio + b) / s.h,
-             0, 0, 0, (vidro ? 0.36f : 0.45f) * a); }
+    gfx_sombra_sob(s, 1.0f, b * 1.41f * gfx_escala(), (g->raio + b) / s.h,
+                   0, 0, 0, (vidro ? 0.36f : 0.45f) * a, r, g->raio, vidro ? 0.0f : a); }
   if (ajustes_vidro()) {
     // Fechada, os .80 do mockup (a rail fica sobre a arte do destaque).
     // Aberto, o painel cobre o TEXTO da home (titulo, sinopse, "Continuar

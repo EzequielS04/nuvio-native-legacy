@@ -20,12 +20,18 @@
 //   dinamica  layout Dinamica
 //   dono      Dinamica + "Dinamica imersiva" + vidro: a TCL Smart TV Pro do dono
 //             (Android 14, Mali-G52; [gpu-modos] layout=2 cor-viva=4 vidro=1)
+//   c9        Dinamica + "Dinamica imersiva" SEM vidro: a LG C9 do dono
+//             ([gpu-modos] layout=2 cor-viva=4 vidro=0, 04/10)
 //
 // Cada fase sai com media, p95 e o PIOR quadro (des+upd) com o que ele fez:
 // texto rasterizado, artes enviadas a GPU, desenhos. Depois da home de cada
 // cenario, a lista dos Ajustes e rolada para baixo (uma seta a cada 8 quadros)
 // e para cima. NV_QUADROS=1 imprime todo quadro acima de 2 ms.
+#include "agendaui.h"
 #include "ajustes.h"
+#include "biblioteca.h"
+#include "menu.h"
+#include "salvospainel.h"
 #include "catalogo.h"
 #include "corviva.h"
 #include "dados.h"
@@ -59,6 +65,15 @@ typedef struct {
   double modo[GFX_NMODOS];
 } Quadro;
 static int naAjustes;
+// OUTRAS TELAS (04/10): Biblioteca e Agenda no lugar da home; painel de Salvos
+// e menu lateral POR CIMA da home, como em app.c.
+typedef struct {
+  void (*evento)(const SDL_Event *);
+  void (*atualizar)(float, Uint32);
+  void (*desenhar)(Uint32);
+  int sobreHome;
+} Tela;
+static const Tela *telaAtual;
 
 // Desenhos de tela cheia COM mistura: e a conta que a Mali paga a mais (uma
 // leitura da tela por pixel). Medido pelo gfx_rect via gancho de contagem.
@@ -75,6 +90,7 @@ static void tecla(SDL_Keycode k) {
   memset(&e, 0, sizeof e);
   e.type = SDL_KEYDOWN;
   e.key.keysym.sym = k;
+  if (telaAtual) { telaAtual->evento(&e); e.type = SDL_KEYUP; telaAtual->evento(&e); return; }
   if (naAjustes) { ajustes_evento(&e); return; }
   if (detail_aberto()) detail_evento(&e); else home_evento(&e);
   e.type = SDL_KEYUP;
@@ -105,7 +121,10 @@ static void quadro(SDL_Window *w, Quadro *q, Uint32 agora) {
   tex_bombear(3);
   txt_rasterizadas = 0; txt_ms = 0.0;
   t0 = SDL_GetPerformanceCounter();
-  if (naAjustes) ajustes_atualizar(dt, agora);
+  if (telaAtual) {
+    if (telaAtual->sobreHome) home_atualizar(dt, agora);
+    telaAtual->atualizar(dt, agora);
+  } else if (naAjustes) ajustes_atualizar(dt, agora);
   else { home_atualizar(dt, agora); detail_atualizar(dt, agora); }
   corviva_quadro(dt, ajustes_cor_viva(), ajustes_cor_logo(), ajustes_animacoes_reduzidas());
   t1 = SDL_GetPerformanceCounter();
@@ -118,7 +137,10 @@ static void quadro(SDL_Window *w, Quadro *q, Uint32 agora) {
   glClear(GL_COLOR_BUFFER_BIT);
   gfx_ambiente(1.0f);
   txt_novo_quadro();
-  if (naAjustes) ajustes_desenhar(agora);
+  if (telaAtual) {
+    if (telaAtual->sobreHome) home_desenhar(agora);
+    telaAtual->desenhar(agora);
+  } else if (naAjustes) ajustes_desenhar(agora);
   else { if (!detail_cobre_tela()) home_desenhar(agora); detail_desenhar(agora); }
   gfx_ambiente_descarregar();
   t2 = SDL_GetPerformanceCounter();
@@ -174,6 +196,7 @@ static void ajusta(const char *cenario) {
   int layout = 0, vidro = 0, tema = 0, cheio = 1;
   if (!strcmp(cenario, "imersiva")) { vidro = 1; tema = 15; }
   else if (!strcmp(cenario, "dono")) { layout = 2; vidro = 1; tema = 15; }
+  else if (!strcmp(cenario, "c9")) { layout = 2; vidro = 0; tema = 15; }
   else if (!strcmp(cenario, "padrao")) layout = 1;
   else if (!strcmp(cenario, "dinamica")) layout = 2;
   snprintf(cam, sizeof cam, "%s/ajustes.txt", dirDados);
@@ -274,6 +297,7 @@ static void cenario(SDL_Window *w, const char *cen) {
       for (i = 0; i < 180; i++) { quadro(w, NULL, t); t += 16; }
       for (i = 0; i < n; i++) { quadro(w, &qs[i], t); t += 16; }
       relatar(cen, "detalhe", qs, n);
+      if (getenv("NV_RASTRO")) { gfx_rastro_grandes = 1; quadro(w, NULL, t); t += 16; gfx_rastro_grandes = 0; }
       if (getenv("PERF_BMP")) { char b[800]; snprintf(b, sizeof b, "%s-%s-detalhe.bmp", getenv("PERF_BMP"), cen); guardar(b); }
       // A PAGINA do titulo (seta para baixo: o cartao vira tela cheia), onde
       // entra Ajustes > Fundo (fundo.c).
@@ -281,6 +305,7 @@ static void cenario(SDL_Window *w, const char *cen) {
       for (i = 0; i < 180; i++) { quadro(w, NULL, t); t += 16; }
       for (i = 0; i < n; i++) { quadro(w, &qs[i], t); t += 16; }
       relatar(cen, "pagina", qs, n);
+      if (getenv("NV_RASTRO")) { gfx_rastro_grandes = 1; quadro(w, NULL, t); t += 16; gfx_rastro_grandes = 0; }
       if (getenv("PERF_BMP")) { char b[800]; snprintf(b, sizeof b, "%s-%s-pagina.bmp", getenv("PERF_BMP"), cen); guardar(b); }
       tecla(SDLK_AC_BACK);
       for (i = 0; i < 60; i++) { quadro(w, NULL, t); t += 16; }
@@ -323,10 +348,39 @@ static void cenario(SDL_Window *w, const char *cen) {
   ajustes_encerrar();
   naAjustes = 0;
   for (i = 0; i < 60; i++) { quadro(w, NULL, t); t += 16; }
+  // BIBLIOTECA, AGENDA, SALVOS e MENU: assenta, mede parado e com a seta.
+  { static const Tela bib = { biblioteca_evento, biblioteca_atualizar, biblioteca_desenhar, 0 };
+    static const Tela age = { agendaui_evento, agendaui_atualizar, agendaui_desenhar, 0 };
+    static const Tela sal = { spainel_evento, spainel_atualizar, spainel_desenhar, 1 };
+    static const Tela men = { menu_evento, menu_atualizar, menu_desenhar, 1 };
+    const Tela *ts[4] = { &bib, &age, &sal, &men };
+    static const char *const nomes[4] = { "biblioteca", "agenda", "salvos", "menu" };
+    int k;
+    for (k = 0; k < 4; k++) {
+      if (k == 0) biblioteca_iniciar();
+      else if (k == 1) agendaui_iniciar();
+      else if (k == 2) spainel_abrir();
+      else menu_abrir();
+      telaAtual = ts[k];
+      for (i = 0; i < 150; i++) { quadro(w, NULL, t); t += 16; }
+      for (i = 0; i < n; i++) {
+        if (i % 12 == 0) tecla(i < n / 2 ? SDLK_DOWN : SDLK_UP);
+        quadro(w, &qs[i], t); t += 16;
+      }
+      relatar(cen, nomes[k], qs, n);
+      if (getenv("NV_RASTRO")) { gfx_rastro_grandes = 1; quadro(w, NULL, t); t += 16; gfx_rastro_grandes = 0; }
+      if (getenv("PERF_BMP")) { char b[800]; snprintf(b, sizeof b, "%s-%s-%s.bmp", getenv("PERF_BMP"), cen, nomes[k]); guardar(b); }
+      if (k == 0) biblioteca_encerrar();
+      else if (k == 2) spainel_fechar();
+      else if (k == 3) menu_fechar();
+      telaAtual = NULL;
+      for (i = 0; i < 60; i++) { quadro(w, NULL, t); t += 16; }
+    }
+  }
 }
 
 int main(int argc, char **argv) {
-  static const char *const todos[] = { "moderna", "imersiva", "padrao", "dinamica", "dono" };
+  static const char *const todos[] = { "moderna", "imersiva", "padrao", "dinamica", "dono", "c9" };
   const char *so = getenv("NV_CENARIO");
   SDL_Window *w;
   SDL_GLContext gl;
@@ -362,7 +416,7 @@ int main(int argc, char **argv) {
   ajusta(so ? so : "moderna");
   assert(home_iniciar("deploy/app/art"));
   povoar();
-  for (i = 0; i < 5; i++)
+  for (i = 0; i < 6; i++)
     if (!so || !strcmp(so, todos[i])) cenario(w, todos[i]);
   SDL_GL_DeleteContext(gl);
   SDL_DestroyWindow(w);
