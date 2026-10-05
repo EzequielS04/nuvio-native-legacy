@@ -44,6 +44,7 @@
 #include "js.h"
 #include "artehero.h"
 #include "jellyfin.h"
+#include "plex.h"
 #include "artereserva.h"
 #include "corviva.h"
 #include "fundo.h"
@@ -369,6 +370,10 @@ typedef enum {
   // R4: SEGUNDA LEGENDA, posicao e estilo proprios. Todos LOCAIS (o estilo da
   // principal tambem e desta TV: player.txt). "Igual a principal" = como era.
   AJ_LEG2_POS, AJ_LEG2_TAMANHO, AJ_LEG2_COR, AJ_LEG2_FUNDO, AJ_LEG2_BORDA,
+  // Emby e Plex, ao lado do Jellyfin (mesmo interruptor AJ_JF_LIGADO). Estado em
+  // emby-p<N>.txt / plex-p<N>.txt (por perfil, 0600): nunca em ajustes.txt.
+  AJ_EM_SERVIDOR, AJ_EM_ENTRAR, AJ_EM_SAIR,
+  AJ_PX_ENTRAR, AJ_PX_SERVIDOR, AJ_PX_SAIR,
   AJ_N
 } OpcaoId;
 
@@ -1085,6 +1090,12 @@ static const Opcao OPCOES[AJ_N] = {
   ESC("Cor da segunda legenda",          V_LEG2_COR, 7),      // local: legenda2CorLocal
   ESC("Fundo da segunda legenda",        V_LEG2_FUNDO, 6),    // local: legenda2FundoLocal
   ESC("Borda da segunda legenda",        V_LEG2_BORDA, 4),    // local: legenda2BordaLocal
+  ACAO("Endereço do Emby"),
+  ACAO("Entrar no Emby"),
+  ACAO("Sair do Emby"),
+  ACAO("Entrar no Plex"),
+  ACAO("Servidor do Plex"),
+  ACAO("Sair do Plex"),
 };
 
 // Nome de cada opcao no arquivo. O formato era POSICIONAL — uma linha por
@@ -1271,6 +1282,7 @@ static const char *CHAVE[] = {
   "jellyfinLocal", "-jellyfinServidor", "-jellyfinEntrar", "-jellyfinSair",
   "avancadasLocal",
   "legenda2PosLocal", "legenda2TamanhoLocal", "legenda2CorLocal", "legenda2FundoLocal", "legenda2BordaLocal",
+  "-embyServidor", "-embyEntrar", "-embySair", "-plexEntrar", "-plexServidor", "-plexSair",
 };
 // QUATRO VETORES PARALELOS indexados pelo mesmo enum AJ_*: OPCOES, CHAVE,
 // valor e as secoes. OPCOES ja e declarado [AJ_N], e `valor` aceita inicializacao
@@ -1461,7 +1473,8 @@ int ajustes_foco_no_indice(void) { return focoIndice; }
 // e a opcao 0 do enum).
 static int sairArmado;
 static int pedeConfirmacao(int op) {
-  return op == AJ_SAIR || op == AJ_STALKER_LIMPAR || op == AJ_XTREAM_LIMPAR || op == AJ_JF_SAIR;
+  return op == AJ_SAIR || op == AJ_STALKER_LIMPAR || op == AJ_XTREAM_LIMPAR || op == AJ_JF_SAIR ||
+         op == AJ_EM_SAIR || op == AJ_PX_SAIR;
 }
 
 // --- folha "Ordenar e ativar fileiras" --------------------------------------
@@ -3934,6 +3947,110 @@ static void jfAtivar(int op) {
   teclado_abrir_com("Usuário do Jellyfin", "", 64, XT_ALFA_CONTA, NULL);
 }
 
+// EMBY: o mesmo desenho do Jellyfin, sem Quick Connect (so usuario e senha).
+static const char *emTexto(int op) {
+  static char buf[192];
+  char det[160];
+  JfEstado e;
+  if (!jellyfin_disponivel()) return i18n("Indisponível nesta plataforma");
+  e = emby_estado(det, sizeof det);
+  if (op == AJ_EM_SERVIDOR) {
+    const char *s = emby_servidor_curto();
+    if (e == JF_EST_VERIFICANDO) return i18n("Conferindo o servidor…");
+    if (e == JF_EST_ERRO && emby_ultimo_erro() == JF_ERR_FORMATO) return i18n("Não é um servidor Emby");
+    if (e == JF_EST_ERRO && emby_ultimo_erro() == JF_ERR_ENTRADA) return i18n("Falhou");
+    if (e == JF_EST_ERRO && emby_ultimo_erro() == JF_ERR_REDE && !s[0])
+      return i18n("O servidor não respondeu dentro do prazo.");
+    return s[0] ? s : i18n("Não configurado");
+  }
+  if (op == AJ_EM_ENTRAR) {
+    switch (e) {
+      case JF_EST_CONECTADO:
+        snprintf(buf, sizeof buf, i18n("Conectado: %s"), emby_usuario());
+        return buf;
+      case JF_EST_ENTRANDO: return i18n("Entrando…");
+      case JF_EST_EXPIROU: return i18n("expirou — reconectar");
+      case JF_EST_ERRO:
+        switch (emby_ultimo_erro()) {
+          case JF_ERR_AUTH: return i18n("Usuário ou senha incorretos");
+          case JF_ERR_REDE: return i18n("O servidor não respondeu dentro do prazo.");
+          default: return i18n("Falhou");
+        }
+      case JF_EST_SERVIDOR_OK: return det[0] ? (snprintf(buf, sizeof buf, "%s", det), buf) : "";
+      default: return i18n("Não configurado");
+    }
+  }
+  return "";
+}
+static void emAtivar(int op) {
+  JfEstado e;
+  if (!ajustes_jellyfin_ligado()) return;
+  e = emby_estado(NULL, 0);
+  if (op == AJ_EM_SERVIDOR) {
+    stCampo = op;
+    teclado_abrir_com("Endereço do Emby",
+                      "IP e porta do servidor, como 192.168.1.5:8096, ou o endereço com https://",
+                      120, JF_ALFA_URL, emby_servidor_curto()[0] ? emby_servidor_curto() : NULL);
+    return;
+  }
+  if (op == AJ_EM_SAIR) { emby_esquecer(); desc_repetir_silencioso(); return; }
+  if (op != AJ_EM_ENTRAR) return;
+  if (e == JF_EST_ENTRANDO) { emby_cancelar_entrada(); return; }
+  if (e == JF_EST_CONECTADO) { emby_recarregar_bibliotecas(); return; }
+  if (e == JF_EST_SEM_SERVIDOR || e == JF_EST_VERIFICANDO) return;
+  stCampo = AJ_EM_ENTRAR;
+  jfUsuario[0] = 0;
+  teclado_abrir_com("Usuário do Emby", "", 64, XT_ALFA_CONTA, NULL);
+}
+
+// PLEX: sem teclado. A TV mostra o codigo de 4 letras e a pessoa o digita em
+// plex.tv/link no celular; o token chega por polling.
+static const char *pxTexto(int op) {
+  static char buf[192];
+  char det[160];
+  PxEstado e;
+  if (!plex_disponivel()) return i18n("Indisponível nesta plataforma");
+  e = plex_estado(det, sizeof det);
+  if (op == AJ_PX_SERVIDOR) {
+    const char *s = plex_servidor_nome();
+    if (e == PX_EST_ENTRANDO) return i18n("Entrando…");
+    return s[0] && e == PX_EST_CONECTADO ? s : i18n("Não configurado");
+  }
+  if (op == AJ_PX_ENTRAR) {
+    switch (e) {
+      case PX_EST_CONECTADO:
+        snprintf(buf, sizeof buf, i18n("Conectado: %s"), plex_usuario()[0] ? plex_usuario() : plex_servidor_nome());
+        return buf;
+      case PX_EST_CODIGO:
+        if (!det[0]) return i18n("Entrando…");
+        snprintf(buf, sizeof buf, i18n("Código %s · digite em plex.tv/link"), det);
+        return buf;
+      case PX_EST_ENTRANDO: return i18n("Entrando…");
+      case PX_EST_EXPIROU: return i18n("expirou — reconectar");
+      case PX_EST_ERRO:
+        switch (plex_ultimo_erro()) {
+          case PX_ERR_EXPIRADO: return i18n("o código expirou — OK pede outro");
+          case PX_ERR_SEM_SERVIDOR: return i18n("Nenhum servidor Plex nesta conta");
+          case PX_ERR_REDE: return i18n("O servidor não respondeu dentro do prazo.");
+          default: return i18n("Falhou");
+        }
+      default: return i18n("Não configurado");
+    }
+  }
+  return "";
+}
+static void pxAtivar(int op) {
+  PxEstado e;
+  if (!ajustes_jellyfin_ligado()) return;
+  e = plex_estado(NULL, 0);
+  if (op == AJ_PX_SERVIDOR) { plex_proximo_servidor(); return; }
+  if (op == AJ_PX_SAIR) { plex_esquecer(); desc_repetir_silencioso(); return; }
+  if (op != AJ_PX_ENTRAR) return;
+  if (e == PX_EST_CODIGO || e == PX_EST_ENTRANDO) { plex_cancelar_entrada(); return; }
+  if (e == PX_EST_CONECTADO) { plex_recarregar_bibliotecas(); return; }
+  plex_entrar();
+}
+
 static const char *textoLeitura(int op) {
   static char buf[64];
   // MASCARADO, sempre. Esta tela e fotografada e colada em issue — foi assim
@@ -4001,6 +4118,8 @@ static const char *textoLeitura(int op) {
   if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco
                              : p2pmotor_disponivel() ? i18n("Nesta TV") : i18n("Não configurado");
   if (op >= AJ_JF_SERVIDOR && op <= AJ_JF_SAIR) return jfTexto(op);
+  if (op >= AJ_EM_SERVIDOR && op <= AJ_EM_SAIR) return emTexto(op);
+  if (op >= AJ_PX_ENTRAR && op <= AJ_PX_SAIR) return pxTexto(op);
   if (op == AJ_P2P_URL) return p2pEndereco[0] ? p2pEndereco : i18n("Não configurado");
   if (op == AJ_P2P_TESTAR) return p2pTesteTexto();
   if (op >= AJ_POSTER_INST && op <= AJ_POSTER_TESTAR) return pstTexto(op);
@@ -4544,7 +4663,13 @@ static const char *ajudaOpcao(int op) {
       if (p2pmotor_disponivel())
         return "Opcional. Vazio, a TV baixa sozinha. Com o IP e a porta de um servidor de streaming do Stremio na sua rede (por exemplo 192.168.1.5:11470), quem baixa é ele e a TV só toca.";
       return "IP e porta do servidor de streaming do Stremio na sua rede, por exemplo 192.168.1.5:11470. Em Docker: docker run -p 11470:11470 stremio/server.";
-    case AJ_JF_LIGADO: return "Experimental. Mostra na Home os filmes e séries do seu servidor Jellyfin e toca por ele. O token fica só nesta TV e neste perfil; a senha nunca é guardada.";
+    case AJ_JF_LIGADO: return "Experimental. Mostra na Home os filmes e séries do seu servidor Jellyfin/Emby/Plex e toca por ele. O token fica só nesta TV e neste perfil; a senha nunca é guardada.";
+    case AJ_EM_SERVIDOR: return "IP e porta do servidor, como 192.168.1.5:8096, ou o endereço com https://";
+    case AJ_EM_ENTRAR: return "Pede usuário e senha do Emby. A senha só vai ao servidor e nunca é guardada; fica só um token nesta TV e neste perfil.";
+    case AJ_EM_SAIR: return "Pede o OK duas vezes. Encerra a sessão no servidor e apaga o token desta TV.";
+    case AJ_PX_ENTRAR: return "Mostra um código de 4 letras: digite em plex.tv/link no celular. Nada é digitado nesta TV; só um token fica aqui.";
+    case AJ_PX_SERVIDOR: return "OK passa para o próximo servidor da sua conta Plex.";
+    case AJ_PX_SAIR: return "Pede o OK duas vezes. Apaga os tokens desta TV; o aparelho continua listado em plex.tv/devices até você remover.";
     case AJ_JF_SERVIDOR: return "IP e porta do servidor, como 192.168.1.5:8096, ou o endereço com https://";
     case AJ_JF_ENTRAR: return "Usa o Quick Connect se o servidor permitir: aprove o código em outro app do Jellyfin. Senão, pede usuário e senha.";
     case AJ_JF_SAIR: return "Pede o OK duas vezes. Encerra a sessão no servidor e apaga o token desta TV.";
@@ -5488,6 +5613,8 @@ static void eventoTela(const SDL_Event *e) {
       return;
     }
     if (focoOp >= AJ_JF_SERVIDOR && focoOp <= AJ_JF_SAIR) { jfAtivar(focoOp); return; }
+    if (focoOp >= AJ_EM_SERVIDOR && focoOp <= AJ_EM_SAIR) { emAtivar(focoOp); return; }
+    if (focoOp >= AJ_PX_ENTRAR && focoOp <= AJ_PX_SAIR) { pxAtivar(focoOp); return; }
     if (focoOp == AJ_PERFIL_EDITAR) { pessoas_abrir_perfil(); return; }
     if (focoOp == AJ_P2P_TESTAR) { p2pTesteIniciar(); return; }
     if (focoOp >= AJ_POSTER_INST && focoOp <= AJ_POSTER_TESTAR) { pstAtivar(focoOp); return; }
@@ -5568,28 +5695,31 @@ void ajustes_atualizar(float dt, Uint32 agora) {
       else if (stCampo == AJ_SELOS_PACOTE_ADD) spAdicionar(teclado_texto());
       else if (stCampo == AJ_P2P_URL)         ajustes_definir_p2p_url(teclado_texto());
       else if (stCampo == AJ_JF_SERVIDOR)     jellyfin_definir_servidor(teclado_texto());
-      else if (stCampo == AJ_JF_ENTRAR && !jfUsuario[0] && teclado_texto()[0]) {
+      else if (stCampo == AJ_EM_SERVIDOR)     emby_definir_servidor(teclado_texto());
+      else if ((stCampo == AJ_JF_ENTRAR || stCampo == AJ_EM_ENTRAR) && !jfUsuario[0] && teclado_texto()[0]) {
         // Username typed: the password modal opens next, masked. The keyboard
         // buffer is wiped as soon as each value is handed over.
         snprintf(jfUsuario, sizeof jfUsuario, "%s", teclado_texto());
         teclado_esquecer();
-        teclado_abrir_com("Senha do Jellyfin", "", 128, JF_ALFA_SENHA, NULL);
+        teclado_abrir_com(stCampo == AJ_EM_ENTRAR ? "Senha do Emby" : "Senha do Jellyfin", "", 128,
+                          JF_ALFA_SENHA, NULL);
         teclado_tipo(TECLADO_TIPO_SENHA);
         teclado_mascarar(1);
         r = TECLADO_NADA;   // stay on this field: next result is the password
-      } else if (stCampo == AJ_JF_ENTRAR && jfUsuario[0]) {
+      } else if ((stCampo == AJ_JF_ENTRAR || stCampo == AJ_EM_ENTRAR) && jfUsuario[0]) {
         char senha[160];
         snprintf(senha, sizeof senha, "%s", teclado_texto());
         teclado_esquecer();
-        jellyfin_entrar_senha(jfUsuario, senha);   // wipes senha
+        if (stCampo == AJ_EM_ENTRAR) emby_entrar_senha(jfUsuario, senha);   // wipes senha
+        else jellyfin_entrar_senha(jfUsuario, senha);                       // wipes senha
         memset(jfUsuario, 0, sizeof jfUsuario);
       }
       else if (stCampo >= AJ_POSTER_INST && stCampo <= AJ_POSTER_MODELO) pstDefinir(stCampo, teclado_texto());
       else if (debIdx(stCampo) >= 0)          debDefinir(stCampo, teclado_texto());
-      else if (stCampo != AJ_JF_ENTRAR) stalker_definir_portal(teclado_texto());
+      else if (stCampo != AJ_JF_ENTRAR && stCampo != AJ_EM_ENTRAR) stalker_definir_portal(teclado_texto());
       if (r == TECLADO_PRONTO) stCampo = 0;
     } else if (r == TECLADO_CANCELOU) {
-      if (stCampo == AJ_JF_ENTRAR) { teclado_esquecer(); memset(jfUsuario, 0, sizeof jfUsuario); }
+      if (stCampo == AJ_JF_ENTRAR || stCampo == AJ_EM_ENTRAR) { teclado_esquecer(); memset(jfUsuario, 0, sizeof jfUsuario); }
       stCampo = 0;
     } }
   // Repouso da escolha de idioma de legenda: ver aplicarIdioma.
@@ -6190,6 +6320,8 @@ static AjPreview familiaPreviaOpcao(int op) {
     case AJ_DIAGNOSTICO: case AJ_VELOCIDADE: case AJ_LIVETV_DIAG:
     case AJ_P2P_URL: case AJ_P2P_TESTAR:
     case AJ_JF_SERVIDOR: case AJ_JF_ENTRAR: case AJ_JF_SAIR:
+    case AJ_EM_SERVIDOR: case AJ_EM_ENTRAR: case AJ_EM_SAIR:
+    case AJ_PX_ENTRAR: case AJ_PX_SERVIDOR: case AJ_PX_SAIR:
     case AJ_POSTER_INST: case AJ_POSTER_TOKEN: case AJ_POSTER_EXTRA:
     case AJ_POSTER_CHAVE: case AJ_POSTER_MODELO: case AJ_POSTER_TESTAR:
     case AJ_DEBRID_AD: case AJ_DEBRID_AD_TESTAR: case AJ_DEBRID_RD:
