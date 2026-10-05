@@ -544,6 +544,11 @@ GLuint gfx_fundo_assado(int slot, const float *chave, int n, void (*pintar)(void
 // mistura com alfa 1.
 void gfx_fundo_assado_desenhar(GLuint tex, float a);
 extern int gfx_n_fundo_assados;
+// 1 = o desenho direto de sempre, sem quadro pequeno (testes comparam os dois).
+extern int gfx_fundo_assado_desligado;
+// A conferencia de criacao (gfx.c): -1 nao feita, 1 o padrao voltou certo, 0
+// errado (o fundo fica no desenho direto pela sessao).
+extern int gfx_fundo_assado_conferencia;
 // Fator da opacidade do vidro: 1,0 = os 78% de sempre (ajustes_vidro_opacidade / 0,78).
 float gfx_vidro_opacidade(void);
 void gfx_ambiente(float alfa);
