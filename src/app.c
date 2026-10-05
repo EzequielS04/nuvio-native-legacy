@@ -1684,8 +1684,13 @@ static int azulPodeAbrirSalvos(const SDL_Event *e) {
       faixas_aberta() || episodios_aberto() || stream_folha_aberta() ||
       guia_overlay_aberta() || pessoas_aberto() || recomenda_aberta() || recenviar_aberto())
     return 0;
+  // So no teclado de verdade (Mac/desktop). No Android a AZUL, o CH+ e o
+  // MENU/BOOKMARK CHEGAM como "s" (NuvioActivity/main.c) e o SDL pode deixar o
+  // text input ligado: a regra recusava o atalho e o CH+ parou de abrir a ilha.
+#ifndef NV_ANDROID
   if (e->key.keysym.sym == SDLK_s && e->key.keysym.scancode != NV_SCANCODE_BLUE &&
       SDL_IsTextInputActive()) return 0;
+#endif
   switch (tela) {
     case TELA_HOME: case TELA_EXPLORAR: case TELA_BUSCA: case TELA_BIBLIOTECA:
     case TELA_PERFIL: case TELA_SOCIAL: case TELA_ADDONS: case TELA_PLUGINS:
