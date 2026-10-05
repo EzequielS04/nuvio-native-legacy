@@ -3282,7 +3282,10 @@ static void desenhaHero(Uint32 agora, float saida) {
   // dois estados da MESMA tela, nao dois layouts — e cada um tem a sua rampa de
   // degrade, medida separadamente (ver GFX_HERO e GFX_HERO_CHEIO em gfx.c).
   const int lay = layoutHome();
-  int cheio = ajustes_hero_cheio();
+  // O DESTAQUE PRINCIPAL DA MODERNA E SEMPRE TELA CHEIA (dono, 04/10): com o
+  // foco no proprio destaque ele e outra coisa que o resto da home. O ajuste
+  // "Fundo em tela cheia" so decide a arte quando o foco esta nas fileiras.
+  int cheio = ajustes_hero_cheio() || (lay == HOME_LAYOUT_MODERNA && focoHero);
   // Em tela cheia o bloco sobe 70px (ver layout.h).
   GfxModo modoHero = cheio ? GFX_HERO_CHEIO : GFX_HERO;
   GfxRect r = cheio ? (GfxRect){ 0, 0, NV_TELA_W, NV_HERO_CHEIO_H }
