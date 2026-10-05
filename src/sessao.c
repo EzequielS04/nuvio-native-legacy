@@ -89,6 +89,18 @@ static void lerJwt(const char *token) {
     expiraEm = (long)js_num(payload, fim, "exp", 0); }
 }
 
+// Forma de JWT (tres partes nao vazias, sem espaco): so a FORMA, a assinatura e
+// do servidor. Serve para recusar lixo gravado por uma falha no meio do login.
+static int jwtValido(const char *t) {
+  const char *p1, *p2;
+  if (!t || !*t || strpbrk(t, " \t\r\n")) return 0;
+  p1 = strchr(t, '.');
+  if (!p1 || p1 == t) return 0;
+  p2 = strchr(p1 + 1, '.');
+  if (!p2 || p2 == p1 + 1 || !p2[1]) return 0;
+  return 1;
+}
+
 // Folga de 30s, igual a do web: um token que vence durante a requisicao volta
 // como 401 e custa a viagem inteira.
 static int vencido(void) {
@@ -106,11 +118,21 @@ static int falhaServidor(int st) { return st == 0 || st == 429 || st >= 500; }
 // A frase da tela para "o servidor da conta nao respondeu". i18n no FORMATO,
 // como o resto deste arquivo: a frase final, com o numero, nunca casaria com
 // a chave.
+// Sem HTTP (st == 0) a causa e de transporte; o texto da libcurl ("curl 35:
+// ...") vai junto, na tela e no log, porque o APK de release nao mostra o stderr
+// dela (#223). Sem segredo: so o codigo e a frase da biblioteca.
+static void anexarTransporte(char *dst, unsigned tam, int st) {
+  const char *t = nuvem_ultimo_erro();
+  size_t n = strlen(dst);
+  if (st == 0 && t && t[0] && n + 4 < tam) snprintf(dst + n, tam - n, " [%s]", t);
+}
+
 static void erroServidor(int st) {
   if (st) snprintf(erro, sizeof erro,
                    i18n("O servidor da conta Nuvio não respondeu (HTTP %d). Tente de novo em alguns minutos."), st);
   else    snprintf(erro, sizeof erro, "%s",
                    i18n("O servidor da conta Nuvio não respondeu. Tente de novo em alguns minutos."));
+  anexarTransporte(erro, sizeof erro, st);
 }
 
 // ---------------------------------------------------------------- disco
@@ -148,7 +170,9 @@ static int guardarTokens(const char *corpo, int ehAnonima) {
       js_texto(ses, fim, "refresh_token", r, sizeof r);
     }
   }
-  if (!a[0]) return 0;
+  if (!a[0] || !jwtValido(a)) return 0;
+  // ATOMICO (#223): o que ja estava (sessao anterior, anonima) so e trocado
+  // quando a resposta nova esta inteira; resposta torta nao deixa meia sessao.
   snprintf(acesso, sizeof acesso, "%s", a);
   snprintf(renovar, sizeof renovar, "%s", r);
   anonima = ehAnonima ? 1 : 0;
@@ -172,7 +196,7 @@ static int sessaoAnonima(void) {
   // dedicado. O web tenta os dois na mesma ordem.
   resp = nuvem_post("/auth/v1/token?grant_type=anonymous", "{}", NULL, &st);
   if (resp && st >= 200 && st < 300 && guardarTokens(resp, 1)) { free(resp); return 1; }
-  printf("[sessao] sessao anonima: HTTP %d\n", st);
+  printf("[sessao] sessao anonima: HTTP %d %s\n", st, nuvem_ultimo_erro());
   if (falhaServidor(st)) erroServidor(st);
   else snprintf(erro, sizeof erro, "sessao anonima recusada (HTTP %d)", st);
   free(resp);
@@ -367,7 +391,7 @@ static void *fioPedir(void *u) {
     // registro para dizer QUEM respondeu 400 — o PostgREST (JSON com
     // "message") ou algo na frente dele (Cloudflare responde texto puro,
     // "error code: 502", medido em 02/10). O corpo de erro nao traz segredo.
-    printf("[sessao] pedido de codigo: HTTP %d: %.160s\n", st, resp ? resp : "(sem corpo)");
+    printf("[sessao] pedido de codigo: HTTP %d %s: %.160s\n", st, nuvem_ultimo_erro(), resp ? resp : "(sem corpo)");
     if (falhaServidor(st)) erroServidor(st);
     else if (msg[0]) snprintf(erro, sizeof erro, "o servidor recusou: %s", msg);
     else snprintf(erro, sizeof erro,
@@ -503,8 +527,9 @@ static void *fioEmail(void *u) {
   } else {
     // So o status vai para o log: o corpo de erro do GoTrue repete o e-mail
     // em algumas versoes ("User with email x not found").
-    printf("[sessao] login por e-mail: HTTP %d\n", st);
+    printf("[sessao] login por e-mail: HTTP %d %s\n", st, nuvem_ultimo_erro());
     sessao_email_erro_de(st == 200 ? 0 : st, resp, erroEmail, sizeof erroEmail);
+    anexarTransporte(erroEmail, sizeof erroEmail, st);
     if (st >= 200 && st < 300)
       snprintf(erroEmail, sizeof erroEmail, "%s", i18n("O servidor da conta Nuvio não respondeu. Tente de novo em alguns minutos."));
     estado = SES_DESLOGADO;
@@ -560,7 +585,17 @@ void sessao_iniciar(void) {
   snprintf(renovar, sizeof renovar, "%s", l2 ? l2 : "");
   anonima = (l3 && atoi(l3) == 1);
   free(buf);
+  // SESSAO PELA METADE nunca vira estado (#223): arquivo truncado, token que
+  // nao e JWT, ou conta sem `sub`. Descarta de memoria e de disco e cai na tela
+  // de login — antes o app subia "logado" sem conta e a tela ficava em branco
+  // ate a pessoa limpar os dados.
   lerJwt(acesso);
+  if (acesso[0] && (!jwtValido(acesso) || (!anonima && !sub[0]))) {
+    printf("[sessao] sessao gravada invalida: descartada, indo para o login\n");
+    limpar();
+    dados_apagar(ARQ_SESSAO);
+    return;
+  }
   // Sessao anonima gravada NAO conta como conta: ela existe so como degrau para
   // pedir o codigo, e tratar isso como "logado" faria o app pular a tela de
   // login e depois falhar em todo sync com 401 sem explicar nada.

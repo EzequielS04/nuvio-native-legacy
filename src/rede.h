@@ -355,6 +355,9 @@ void rede_preparar(void);
 //
 // Escreve em `dst` e devolve `dst`, para poder ir direto num printf. Texto sem
 // "://" e copiado como esta (nao e URL, nao ha caminho a esconder).
+// Texto da falha de transporte do ULTIMO pedido deste fio ("curl 35: ..."), ou
+// "" quando ele passou. Sem URL, corpo ou segredo; serve a tela e ao log (#223).
+const char *rede_ultimo_erro(void);
 const char *rede_url_publica(const char *url, char *dst, unsigned tam);
 
 // URL DE IMAGEM/META PARA LOG, mais util que rede_url_publica mas igualmente
