@@ -45,6 +45,7 @@
 #include "text.h"
 #include "detail.h"
 #include "dados.h"
+#include "negcache.h"
 #include "p2pmotor.h"
 #include <pthread.h>
 #include <stdatomic.h>
@@ -662,6 +663,7 @@ int main(int argc, char **argv) {
   // SDL: mexe em getenv/fopen/mkdir, e no Emscripten monta o IDBFS. `dirArte`
   // ja esta resolvido desde o topo do main.
   dados_iniciar(dirArte);
+  negcache_disco(dados_ler, dados_gravar_leve);   // 404 de API de metadados lembrado entre arranques
   #ifdef NV_LEVE
   printf("[leve] build de diagnostico: pool de fios 12, sem canal de avisos, sem recomendacoes, sem sync periodico, sem GIF de foco\n");
 #endif

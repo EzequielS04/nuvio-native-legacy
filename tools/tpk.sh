@@ -135,6 +135,12 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
   objdump -T /work/build/tpk/libnuvio.so | grep -oE "GLIBC_[0-9.]+" | sort -uV | tail -1 | sed "s/^/  glibc minima: /"
   objdump -p /work/build/tpk/libnuvio.so | grep NEEDED
   objdump -T /work/build/tpk/libnuvio.so | grep -E " nv_tpk_" | awk "{print \"  exporta \" \$NF}"
+  # Todo [DllImport("libnuvio.so")] do host tem de estar EXPORTADO (-fvisibility=hidden
+  # esconde o que nao leva visibility("default"): EntryPointNotFoundException em
+  # "apps-init" em 8 TVs da 1.7.4).
+  for f in $(grep -rhoE "DllImport\(\"libnuvio.so\"\)\] static extern [a-z]+ nv_[a-z0-9_]+" tizen-tpk/*.cs tizen-tpk/NuvioTpk40/*.cs | awk "{print \$NF}" | sort -u); do
+    objdump -T /work/build/tpk/libnuvio.so | grep -qE " $f\$" || { echo "libnuvio.so nao exporta $f (falta visibility default?)" >&2; exit 1; }
+  done
 
   echo "[1b/3] libnuvio-tpk40.so (Tizen 4/5: -DNV_TPK40, sem TLS, com DT_HASH)"
   # So as unidades que citam NV_TPK40 sao recompiladas; as demais sao os MESMOS
@@ -168,6 +174,12 @@ docker run --rm --platform linux/arm/v5 --env-file "$ENVF" $P2P_VOL \
   echo "  sem PT_TLS, sem R_ARM_TLS_*, sem __tls_get_addr, com DT_HASH: ok"
   readelf -rW "$L40" | grep -oE "R_ARM_[A-Z0-9_]+" | sort | uniq -c | sed "s/^/  reloc /"
   objdump -T "$L40" | grep -E " nv_tpk" | awk "{print \"  exporta \" \$NF}"
+  # Todo [DllImport("libnuvio.so")] do host tem de estar EXPORTADO (-fvisibility=hidden
+  # esconde o que nao leva visibility("default"): EntryPointNotFoundException em
+  # "apps-init" em 8 TVs da 1.7.4).
+  for f in $(grep -rhoE "DllImport\(\"libnuvio.so\"\)\] static extern [a-z]+ nv_[a-z0-9_]+" tizen-tpk/*.cs tizen-tpk/NuvioTpk40/*.cs | awk "{print \$NF}" | sort -u); do
+    objdump -T "$L40" | grep -qE " $f\$" || { echo "libnuvio-tpk40.so nao exporta $f (falta visibility default?)" >&2; exit 1; }
+  done
 '
 
 echo "[2/3] host .NET + pacotes"
@@ -240,6 +252,9 @@ for T in "$SAIDA"/*.tpk; do
   fi
   grep -qE " lib/libnuvio.so$" <<<"$L" || { echo "$T sem lib/libnuvio.so" >&2; exit 1; }
   grep -qE " res/art/" <<<"$L" || { echo "$T sem res/art" >&2; exit 1; }
+  for f in abertura.jpg login-fundo.jpg logo-novo-marca.png logo-classico.png; do
+    grep -qE " res/art/marcas/$f$" <<<"$L" || { echo "$T sem res/art/marcas/$f" >&2; exit 1; }
+  done
   grep -qE " res/licencas/p2p-avisos.txt$" <<<"$L" || { echo "$T sem res/licencas/p2p-avisos.txt" >&2; exit 1; }
   # Motor pedido (pasta achada) => TODO .tpk 6+ tem de levar a .so dele; o 4/5, nunca.
   case "$T" in

@@ -399,7 +399,7 @@ if ! ( set -o pipefail
      | grep -v 'unknown extended header keyword'; then
   :
 fi
-if ! $SSH "root@$TV_IP" "test -f $APPDIR/art/marcas/trakt.png && test -f $APPDIR/art/marcas/logo-novo-marca.png"; then
+if ! $SSH "root@$TV_IP" "test -f $APPDIR/art/marcas/trakt.png && test -f $APPDIR/art/marcas/logo-novo-marca.png && test -f $APPDIR/art/marcas/abertura.jpg && test -f $APPDIR/art/marcas/login-fundo.jpg"; then
   echo "    FALHOU: a arte nao chegou na TV"; exit 1
 fi
 rm -f deploy/app/appinfo.json.stamped

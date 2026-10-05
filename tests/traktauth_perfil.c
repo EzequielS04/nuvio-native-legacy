@@ -87,6 +87,7 @@ int trakt_definir(const char *tk, const char *cli) {
 void trakt_esquecer(void) { definido[0] = 0; ativo = 0; nEsquecer++; }
 int  trakt_ativo(void)    { return ativo; }
 int  trakt_recusada(void) { return 0; }
+void trakt_sessao_morta(void) {}
 
 const char *nuvem_trakt_cliente(void) { return "cliente-teste"; }
 const char *nuvem_trakt_segredo(void) { return "segredo-teste"; }
