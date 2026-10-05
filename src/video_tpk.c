@@ -64,8 +64,10 @@ static atomic_int temErroDetalhe;
 // write at 0.00 s of the first tick was accepted by the player's bookkeeping
 // and NEVER applied to the demuxer. Audio only needed the deferral (measured:
 // the Korean audio came up right); the subtitle waits for the player to settle.
-static volatile int comecou;                 // playback has really started
-static Uint32 comecouEm;                     // when it started (SDL clock)
+// Counted from the first FRAME, not from EV_TOCANDO - see escolhasPendentes.
+static volatile int comecou;                 // the FRAME arrived (not EV_TOCANDO)
+static Uint32 comecouEm;                     // when the frame arrived (SDL clock)
+static volatile int audioComecou;            // audio only needs the first tick
 static int audioPend = -1, legPend = -1;     // choice waiting to be written
 
 // RECONEXAO (video_reconexao.h). O evento 5 chega de qualquer fio e so ANOTA;
@@ -236,7 +238,7 @@ static int abrirSessao(void) {
   ativo = 1; pronto = falhou = terminou = tocando = 0;
   largura = altura = durMs = 0; bufferando = 1; bufferDesde = SDL_GetTicks();
   nAudio = nLeg = 0; audioAtual = 0; legAtual = -1;
-  comecou = 0; comecouEm = 0; audioPend = legPend = -1;
+  comecou = 0; comecouEm = 0; audioComecou = 0; audioPend = legPend = -1;
   if (!travaLeg) travaLeg = SDL_CreateMutex();
   legendaLimpar(1);
   sessao++;
@@ -330,27 +332,49 @@ static void sondaMkv(double pos) {
   }
 }
 
-// THE DEFERRED CHOICE LEAVES once playback has really started: the host's
-// EV_TOCANDO, or the position clock moving (a host that never sends
-// EV_TOCANDO). AUDIO leaves on the first tick - measured to be enough (the
-// Korean audio came up right on the TV). SUBTITLE waits LEG_ACOMODAR_MS
-// longer: the write at 0.00 s was swallowed EVEN while already playing (the
-// player's bookkeeping said "already on 2" while the demuxer kept track 0).
-// With this, the cue-text defense of the companion PR is only a fallback.
+// A deferred choice leaves once playback has really started. AUDIO leaves on the
+// first tick, measured to be enough. SUBTITLE waits longer: at 0.00 s the write
+// was swallowed even while Playing (the player's bookkeeping said "already on 2"
+// while the demuxer kept track 0).
+//
+// The subtitle window used to count from EV_TOCANDO, which the host emits right
+// after Start() with the buffer still filling - `tocando` does not prove a
+// decoded frame exists. The 2500 ms expired during buffering and the write landed
+// on nothing. Measured over five sessions on the TV, the write took effect only
+// when it fell after the first frame (see the commit message for the table); the
+// one session where it worked was the one whose buffer was slow.
 #define LEG_ACOMODAR_MS 2500u
+// The frame is proven by the position passing 0.25 s - the same signal the hole
+// of #188 uses (player.c). It is the only "there is a picture" evidence Tizen
+// exposes through .NET. Deliberately no ceiling: the one slow-buffer session that
+// worked took 4519 ms, so a timeout would fire mid-buffer and restore the bug.
+#define LEG_QUADRO_S   0.25
+static int temQuadro(void) { return pronto && video_pos() >= LEG_QUADRO_S; }
 static void escolhasPendentes(void) {
   Uint32 agora = SDL_GetTicks();
-  if (!comecou && (tocando || (pronto && video_pos() > 0))) { comecou = 1; comecouEm = agora; }
-  if (!comecou) return;
-  if (audioPend >= 0) {
+  // Audio keeps its own state: it leaves on the first tick and never had this
+  // defect, so it must not be made to wait for the frame.
+  if (!audioComecou && (tocando || temQuadro())) audioComecou = 1;
+  if (audioComecou && audioPend >= 0) {
     int i = audioPend; audioPend = -1;
     printf("[video] tpk: deferred audio dispatched track=%d\n", i);
     fflush(stdout);
     if (hEscolher) hEscolher(0, faixaAudio[i].numero);
   }
+  // The subtitle window counts from this, the first frame.
+  if (!comecou && temQuadro()) {
+    comecou = 1; comecouEm = agora;
+    // The position is the frame evidence and this logs it: on a RESUMED episode
+    // the seek target can read >= LEG_QUADRO_S before any frame is decoded, and
+    // the log would show "first frame" at 2730.12s one tick into the session.
+    printf("[video] tpk: first frame at %.2fs\n", video_pos());
+    fflush(stdout);
+  }
+  if (!comecou) return;
   if (legPend >= 0 && agora - comecouEm >= LEG_ACOMODAR_MS) {
     int i = legPend; legPend = -1;
-    printf("[video] tpk: settled subtitle dispatched track=%d\n", i);
+    printf("[video] tpk: settled subtitle dispatched track=%d (frame at %u ms)\n",
+           i, (unsigned)(agora - comecouEm));
     fflush(stdout);
     legendaEnviar(i);
   }
@@ -398,7 +422,7 @@ void video_bombear(void) {
   }
 }
 void video_parar(void) {
-  audioPend = legPend = -1; comecou = 0; comecouEm = 0;
+  audioPend = legPend = -1; comecou = 0; comecouEm = 0; audioComecou = 0;
   legendaLimpar(1);
   nv_recon_zerar(&recon);
   reconErroPend = 0; reconFaixasPend = 0; reconBuscarMs = -1;
@@ -562,9 +586,9 @@ int  video_legenda_atual(void) { return legAtual; }
 void video_escolher_audio(int i) {
   if (i < 0 || i >= nAudio) return;
   audioAtual = i;
-  // Defer until playing: an early write can be accepted but ignored on the
-  // measured firmware. This is not a restriction of the .NET API contract.
-  if (!comecou) { audioPend = i; return; }
+  // Deferred until the first tick: a write before Start is accepted and ignored.
+  // The tick, not the frame - audio was measured working that way.
+  if (!audioComecou) { audioPend = i; return; }
   if (hEscolher) hEscolher(0, faixaAudio[i].numero);
 }
 void video_escolher_legenda(int i) {
