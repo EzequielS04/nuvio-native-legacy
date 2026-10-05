@@ -700,6 +700,17 @@ void desc_alvos_busca_zerar(void) {
       a->nuvio = 1;
     } }
   memset(resAlvo, 0, sizeof resAlvo);
+  // ESQUECE O TERMO JA PEDIDO. Sem isto, depois que a lista de addons muda (um
+  // addon novo, o ciclo de sync) os resultados eram apagados aqui mas
+  // desc_buscar(o mesmo texto) voltava cedo por "termo igual" e nao consultava
+  // os alvos novos: a busca ficava so com as pessoas, que vem do TMDB por outro
+  // caminho (dono, 05/10: "o spotlight so ta achando pessoas"). Subir a geracao
+  // tambem descarta o que os fios ainda estiverem trazendo dos alvos antigos,
+  // cujos indices ja nao valem.
+  buscaPedido[0] = 0;
+  buscaTermo[0] = 0;
+  proximoAlvo = 0;
+  geracao++;
   pthread_mutex_unlock(&buscaTrava);
 }
 
