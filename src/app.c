@@ -1727,6 +1727,18 @@ static void abrirSocialNoTitulo(const char *imdb) {
   spainel_abrir_titulo(imdb);
 }
 
+// O circular "Explorar" da pagina do titulo: a pagina fecha e a toca do coelho
+// comeca nele. Voltar no primeiro degrau da toca pede a pagina de volta
+// (explorar_pediu_abrir), com a grade de climas por baixo.
+static void abrirExplorarNoTitulo(void) {
+  MapaObra o;
+  if (!mapa_obra_do_catalogo(detail_indice(), &o)) return;
+  detail_fechar_seco();
+  trocarTela(TELA_EXPLORAR);
+  menu_definir_destino(MENU_EXPLORAR);
+  explorar_abrir_titulo(&o);
+}
+
 void app_evento(const SDL_Event *e) {
   if (e->type == SDL_QUIT) { sair = 1; return; }
   ilhacart_validar_identidade();
@@ -2006,6 +2018,7 @@ void app_evento(const SDL_Event *e) {
     }
     { char im[24];
       if (detail_aberto() && detail_pediu_amigos(im, sizeof im)) abrirSocialNoTitulo(im); }
+    if (detail_aberto() && detail_pediu_explorar()) abrirExplorarNoTitulo();
     return;
   }
   // O MENU DO CARTAZ ABERTO PELO PAINEL (segurar OK numa linha de Salvos)

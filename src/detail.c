@@ -220,6 +220,7 @@ static int  botao = 0;      // botao em foco no hero
 // (app.c) para abrir o painel Social na atividade deste titulo.
 static int  focoAmigos = 0;
 static int  pedAmigos = 0;
+static int  pedExplorar = 0;   // circular "Explorar": o roteador abre a toca neste titulo
 #define DET_PTR_AMIGOS 99
 #define NV_DETW_AMIGOS_H   76.0f
 #define NV_DETW_AMIGOS_GAP 18.0f
@@ -1982,9 +1983,18 @@ static int temTrailer(void) {
   if (trailer_suportado() && trailerFonte(0, NULL, 1)) return 1;
   return extras_n_trailers() > 0;
 }
+// "EXPLORAR" (Explorar 2.0): o ULTIMO circular, depois do trailer. Abre a toca
+// do coelho neste titulo (explorar.h); so filme e serie, que sao o que a
+// vizinhanca sabe cruzar.
+static int temExplorar(void) {
+  const CatItem *ci = cat_item(idx);
+  if (!ci || !ci->titulo[0]) return 0;
+  return !strcmp(ci->tipo, "movie") || !strcmp(ci->tipo, "series");
+}
 static int nBotoesTodos(void) {
   return (ehSerie() ? 3 : 4) + (temInicio() ? 1 : 0) + (temLembrar() ? 1 : 0)
-         + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0) + (temTrailer() ? 1 : 0);
+         + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0) + (temTrailer() ? 1 : 0)
+         + (temExplorar() ? 1 : 0);
 }
 
 static int acoesAgrupadas(void) {
@@ -2004,7 +2014,7 @@ static int nBotoes(void) {
 // e os circulares escorregam um para a direita.
 enum { ACAO_PRIMARIO = 0, ACAO_LISTA = 1, ACAO_ASSISTIDO = 2, ACAO_FONTES = 3,
        ACAO_INICIO = 4, ACAO_RECOMENDAR = 5, ACAO_LEMBRAR = 6, ACAO_ARTE = 7,
-       ACAO_TRAILER = 8 };
+       ACAO_TRAILER = 8, ACAO_EXPLORAR = 9 };
 static int acaoEm(int n) {
   if (n == 0) return ACAO_PRIMARIO;
   if (temInicio()) {
@@ -2030,6 +2040,9 @@ static int acaoEm(int n) {
   // O "Trocar arte" vem DEPOIS do recomendar, e a conta e a mesma: a ultima
   // posicao da linha, antes do salto da serie.
   // O "Assistir trailer" e o ultimo, depois do "Trocar arte".
+  if (temExplorar() && n == (ehSerie() ? 3 : 4) + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0)
+                            + (temTrailer() ? 1 : 0))
+    return ACAO_EXPLORAR;
   if (temTrailer() && n == (ehSerie() ? 3 : 4) + (temRecomendar() ? 1 : 0) + (temArte() ? 1 : 0))
     return ACAO_TRAILER;
   if (temArte() && n == (ehSerie() ? 3 : 4) + (temRecomendar() ? 1 : 0))
@@ -2295,6 +2308,10 @@ void detail_evento(const SDL_Event *e) {
         pedAssistido = 1;
       } else if (acao == ACAO_TRAILER) {
         tocarTrailerCheio(0);
+      } else if (acao == ACAO_EXPLORAR) {
+        // O roteador (app.c) fecha a pagina e abre a toca neste titulo.
+        trailer_fechar();
+        pedExplorar = 1;
       } else if (acao == ACAO_ARTE) {
         // A tela de escolha come o teclado ate fechar (topo de detail_evento).
         trailer_fechar();
@@ -3327,6 +3344,10 @@ static void desenhaBotao(GfxRect r, const char *rot, int icone, int focado, floa
       gfx_icone(ig, cat_visto(cat_item(idx)) ? "visto" : "naovisto", ic, ic, ic, a);
     } else if (icone == ACAO_TRAILER) {
       gfx_icone(ig, "aj_clapperboard", ic, ic, ic, a);
+    } else if (icone == ACAO_EXPLORAR) {
+      // BUSSOLA do Lucide (aj_compass.png, ja no pacote): o mesmo traco dos
+      // vizinhos, e o glifo universal de "explorar".
+      gfx_icone(ig, "aj_compass", ic, ic, ic, a);
     } else if (icone == ACAO_ARTE) {
       // MOLDURA COM MONTANHA: o glifo universal de "imagem". PNG de
       // deploy/app/art/icones como os vizinhos; arte.svg descreve o desenho.
@@ -4005,6 +4026,8 @@ static void heroWeb(float a, float desloc) {
         else desenhaBotao(rc,NULL,action,selected,a*stagger);
         if (selected && action == ACAO_TRAILER && stagger > .85f)
           desenhaDicaBotao(rc, i18n("Assistir trailer"), a);
+        if (selected && action == ACAO_EXPLORAR && stagger > .85f)
+          desenhaDicaBotao(rc, i18n("Explorar a partir daqui"), a);
         if (maisAcoes && a > .3f && stagger > .85f)
           ponteiro_alvo(rc.x,rc.y,rc.w,rc.h,ponteiroDetalhe,NULL,-1,j);
       }
@@ -4016,6 +4039,8 @@ static void heroWeb(float a, float desloc) {
       desenhaBotao(rc, NULL, acaoEm(nb), nivel == 0 && botao == nb, a);
       if (nivel == 0 && botao == nb && acaoEm(nb) == ACAO_TRAILER)
         desenhaDicaBotao(rc, i18n("Assistir trailer"), a);
+      if (nivel == 0 && botao == nb && acaoEm(nb) == ACAO_EXPLORAR)
+        desenhaDicaBotao(rc, i18n("Explorar a partir daqui"), a);
       if (a > 0.3f) ponteiro_alvo(rc.x, rc.y, rc.w, rc.h, ponteiroDetalhe, NULL, -1, nb);
       bx += NV_DETW2_CIRC + NV_DETW2_BTN_GAP;
     }
@@ -6735,6 +6760,7 @@ int detail_pediu_amigos(char *imdb, size_t tam) {
   return 1;
 }
 int detail_pediu_fontes(void)     { int v = pedFontes;     pedFontes = 0;     return v; }
+int detail_pediu_explorar(void)   { int v = pedExplorar;   pedExplorar = 0;   return v; }
 // "Reproduzir desde o inicio" ainda cai no mesmo caminho do primario: o
 // roteador so sabe abrir o player no ponto salvo. Consumir o pedido aqui evita
 // que ele fique pendurado.
