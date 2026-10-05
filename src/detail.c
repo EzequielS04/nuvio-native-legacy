@@ -359,6 +359,9 @@ static TrailerCinema trailerCinema;
 // `cheia` 1 = o botao Trailer (tela cheia, com som onde ha): no .tpk, em
 // Automatico, o IMDb vem antes da Apple, porque la a Apple e so video
 // (trailerfonte_escolher_cheia, #178). O fundo passa 0 e nao muda.
+#ifdef NV_TPK
+static char trailerCheiaLogada[32];
+#endif
 static int trailerSemFonteLogado = 0;
 static const char *trailerFonte(int k, int *qual, int cheia) {
   const CatItem *ci = cat_item(idx);
@@ -390,7 +393,12 @@ static const char *trailerFonte(int k, int *qual, int cheia) {
   if (d == TRF_ABRE) {
     if (qual) *qual = q;
 #ifdef NV_TPK
-    if (cheia) { printf("[trailer] detalhe: tela cheia pela fonte %s (ajuste %d)\n", trailerfonte_nome(q), aj); fflush(stdout); }
+    // UMA linha por titulo: isto roda a cada quadro, e o log do testador da
+    // Samsung (corte de 200 KB) saiu com 1693 copias e nada mais (05/10/2026).
+    if (cheia && ci && strcmp(trailerCheiaLogada, ci->imdb)) {
+      snprintf(trailerCheiaLogada, sizeof trailerCheiaLogada, "%s", ci->imdb);
+      printf("[trailer] detalhe: tela cheia pela fonte %s (ajuste %d)\n", trailerfonte_nome(q), aj); fflush(stdout);
+    }
 #endif
     return u;
   }

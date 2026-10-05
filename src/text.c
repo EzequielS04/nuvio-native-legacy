@@ -770,13 +770,20 @@ int txt_bidi_legenda(TxtFamilia familia, TxtEstilo estilo, const char *in, char 
       if (livre < 0) { livre = 0; memset(&arMem[0], 0, sizeof arMem[0]); }
       arMem[livre].f = c.f; c.slot = livre;
     }
+    // Uma linha por FAMILIA, nao por troca de fonte: cada tamanho e um
+    // TTF_Font proprio e a alternancia entre eles repetia a linha 113 vezes
+    // num log de 200 KB (Samsung, 05/10/2026).
     if (arLogada != c.f) {
       const char *nome = TTF_FontFaceFamilyName(c.f);
+      static char familiaLogada[64];
       arLogada = c.f;
-      if (arTemGlifo(0xFEFB, &c) && arTemGlifo(0xFEE1, &c) && arTemGlifo(0xFEB3, &c))
-        printf("[bidi] arabic: shaping on (font %s)\n", nome ? nome : "?");
-      else
-        printf("[bidi] arabic: reorder only, font %s lacks presentation forms\n", nome ? nome : "?");
+      if (strcmp(familiaLogada, nome ? nome : "?")) {
+        snprintf(familiaLogada, sizeof familiaLogada, "%s", nome ? nome : "?");
+        if (arTemGlifo(0xFEFB, &c) && arTemGlifo(0xFEE1, &c) && arTemGlifo(0xFEB3, &c))
+          printf("[bidi] arabic: shaping on (font %s)\n", nome ? nome : "?");
+        else
+          printf("[bidi] arabic: reorder only, font %s lacks presentation forms\n", nome ? nome : "?");
+      }
     }
   }
   r = bidi_visual_utf8_ex(in, out, tam, c.f ? arTemGlifo : NULL, &c);
