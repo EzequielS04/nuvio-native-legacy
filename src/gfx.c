@@ -84,6 +84,7 @@ int gfx_veu_na_arte = 0;
 // Mesmo regime do rebordo: global, e quem mexe devolve a 0.
 float gfx_desliza_atual = 0.0f;
 float gfx_opacidade_grupo = 1.0f;
+float gfx_osd_mult = 1.0f;
 // Tamanho real do alvo da tela (em retina, maior que 1920x1080). Guardado aqui
 // porque toda volta de FBO precisa restaurar o viewport com ele.
 static int telaW = (int)NV_TELA_W, telaH = (int)NV_TELA_H;
@@ -1602,6 +1603,11 @@ void gfx_rect(GfxRect r, GLuint tex, GfxModo modo, float foco,
   // texturas de uma cena que ainda nao entrou): todo modo multiplica o alfa
   // pelo grupo, entao nada chegaria a tela — nao gasta a GPU com isso.
   if (gfx_opacidade_grupo <= 0.0f) return;
+  // BRILHO DA INTERFACE DO PLAYER: multiplica a cor, nao o alfa (esmaecer.h).
+  if (gfx_osd_mult < 0.999f &&
+      (modo == GFX_COR || modo == GFX_TEXTO || modo == GFX_ANEL || modo == GFX_MARCA)) {
+    cr *= gfx_osd_mult; cg *= gfx_osd_mult; cb *= gfx_osd_mult;
+  }
   GFX_TR_RECT(r.x, r.y, r.w, r.h);
   if (escAtiva != 1.0f) { r.x *= escAtiva; r.y *= escAtiva; r.w *= escAtiva; r.h *= escAtiva; }
   // A COR DO DESTAQUE E A ASSINATURA. Com o degrade ligado, todo retangulo ou

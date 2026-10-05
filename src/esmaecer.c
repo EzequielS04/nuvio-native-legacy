@@ -1,0 +1,145 @@
+#include "esmaecer.h"
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#ifndef ESMAECER_SEM_GFX
+#include "gfx.h"
+#include "layout.h"
+#include "text.h"
+#endif
+
+static int   escolhaAtual = 2;
+static unsigned ultimaEntrada;
+static int   temEntrada;
+static unsigned acordouEm;
+static int   acordou;
+static int   estagio;
+static float veu;
+static int   avisoEscuro = -1;   // -1 nada pendente; 0/1 = novo valor
+
+int esmaecer_minutos(int escolha) {
+  static const int M[ESM_ESCOLHAS] = { 0, 2, 5, 10 };
+  return escolha >= 0 && escolha < ESM_ESCOLHAS ? M[escolha] : 0;
+}
+
+int esmaecer_estagio_para(unsigned ocioMs, int escolha) {
+  unsigned t = (unsigned)esmaecer_minutos(escolha) * 60u * 1000u;
+  if (!t) return ESM_ACESO;
+  if (ocioMs < t) return ESM_ACESO;
+  if (ocioMs < t + ESM_NO_FIM_MS) return ESM_VEU;
+  return ESM_ESCURO;
+}
+
+float esmaecer_alfa_do_estagio(int e) {
+  return e == ESM_ESCURO ? ESM_ALFA_ESCURO : e == ESM_VEU ? ESM_ALFA_VEU : 0.0f;
+}
+
+void esmaecer_reiniciar(void) {
+  ultimaEntrada = 0; temEntrada = 0; acordou = 0; acordouEm = 0;
+  estagio = ESM_ACESO; veu = 0.0f; avisoEscuro = -1;
+}
+
+void esmaecer_escolha(int escolha) {
+  escolhaAtual = escolha >= 0 && escolha < ESM_ESCOLHAS ? escolha : 2;
+}
+
+static void definirEstagio(int e) {
+  if (e == estagio) return;
+  if ((e == ESM_ESCURO) != (estagio == ESM_ESCURO)) avisoEscuro = e == ESM_ESCURO;
+  estagio = e;
+}
+
+int esmaecer_entrada(unsigned agora, int consumivel) {
+  int dimmed = estagio != ESM_ACESO || veu > 0.001f;
+  ultimaEntrada = agora; temEntrada = 1;
+  if (dimmed) {
+    // ACORDA NA HORA e engole a tecla que acordou.
+    definirEstagio(ESM_ACESO);
+    veu = 0.0f;
+    acordou = 1; acordouEm = agora;
+    return consumivel;
+  }
+  // A repeticao da MESMA tecla segurada logo depois de acordar tambem nao age.
+  if (acordou && consumivel && agora - acordouEm < 300u) return 1;
+  return 0;
+}
+
+void esmaecer_quadro(unsigned agora, float dt, int reproduzindo) {
+  float alvo;
+  if (!temEntrada) { ultimaEntrada = agora; temEntrada = 1; }
+  // Tocando de verdade: o relogio da ociosidade fica parado em "agora". Ao
+  // pausar, os N minutos contam da pausa.
+  if (reproduzindo) ultimaEntrada = agora;
+  definirEstagio(esmaecer_estagio_para(agora - ultimaEntrada, escolhaAtual));
+  alvo = esmaecer_alfa_do_estagio(estagio);
+  if (dt < 0.0f) dt = 0.0f;
+  if (dt > 0.1f) dt = 0.1f;
+  if (veu < alvo) { veu += ESM_VELOCIDADE * dt; if (veu > alvo) veu = alvo; }
+  else if (veu > alvo) { veu = alvo; }   // acordar e instantaneo
+}
+
+int   esmaecer_estagio(void) { return estagio; }
+float esmaecer_veu(void) { return veu; }
+int   esmaecer_apagado(void) { return estagio == ESM_ESCURO && veu >= ESM_ALFA_ESCURO - 0.001f; }
+int   esmaecer_mudou_escuro(int *escuro) {
+  if (avisoEscuro < 0) return 0;
+  if (escuro) *escuro = avisoEscuro;
+  avisoEscuro = -1;
+  return 1;
+}
+
+float esmaecer_brilho_base(int escolha) {
+  static const float B[4] = { 1.0f, 0.80f, 0.65f, 0.50f };
+  return escolha >= 0 && escolha < 4 ? B[escolha] : 0.80f;
+}
+
+float esmaecer_brilho_osd(int escolha, unsigned parado_ms, int tocando) {
+  float f = esmaecer_brilho_base(escolha);
+  if (tocando && parado_ms > BRILHO_AUTO_MS) {
+    float t = (float)(parado_ms - BRILHO_AUTO_MS) / (float)BRILHO_AUTO_RAMPA;
+    if (t > 1.0f) t = 1.0f;
+    t = t * t * (3.0f - 2.0f * t);
+    f *= 1.0f - (1.0f - BRILHO_AUTO_PASSO) * t;
+  }
+  return f < 0.40f ? 0.40f : f;
+}
+
+#ifndef ESMAECER_SEM_GFX
+void esmaecer_desenhar(unsigned agora) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  float g = gfx_opacidade_grupo, m = gfx_osd_mult;
+  if (veu <= 0.002f) return;
+  gfx_opacidade_grupo = 1.0f; gfx_osd_mult = 1.0f;
+  gfx_cor(tela, 0, 0, 0, 0, veu);
+  // O RELOGIO que anda: so quando o veu ja passou de 80% (nunca por cima de
+  // uma tela ainda legivel). Cada eixo com um periodo diferente, para a rota
+  // nao repetir; pouco brilho (cinza escuro), nada parado no mesmo pixel.
+  if (veu > 0.80f) {
+    static char horaTxt[8];
+    static TxtLinha l;
+    static time_t seg;
+    time_t t = time(NULL);
+    if (t != seg || !l.tex) {
+      struct tm lt;
+      seg = t;
+      if (localtime_r(&t, &lt)) {
+        char h[8];
+        strftime(h, sizeof h, "%H:%M", &lt);
+        if (!l.tex || strcmp(h, horaTxt)) {
+          snprintf(horaTxt, sizeof horaTxt, "%s", h);
+          l = txt_linha(TXT_BODY, horaTxt, 120, 120, 120, 255);
+        }
+      }
+    }
+    if (l.tex) {
+      float s = (float)agora / 1000.0f;
+      float px = 0.5f + 0.5f * sinf(s / 41.0f), py = 0.5f + 0.5f * sinf(s / 67.0f + 1.3f);
+      float x = 120.0f + px * (NV_TELA_W - 240.0f - (float)l.w);
+      float y = 120.0f + py * (NV_TELA_H - 240.0f - (float)l.h);
+      txt_desenhar_alpha(l, x, y, (veu - 0.80f) / 0.12f);
+    }
+  }
+  gfx_opacidade_grupo = g; gfx_osd_mult = m;
+}
+#endif

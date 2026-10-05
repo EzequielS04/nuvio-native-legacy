@@ -89,6 +89,10 @@ void ajustes_encerrar(void);
 // e um ajuste de acessibilidade, nao um gosto, e uma tela que o ignora nao
 // serve para quem o ligou.
 int ajustes_animacoes_reduzidas(void);
+// Protecao de OLED (esmaecer.h): indice de V_ESMAECER (padrao 2 = 5 min) e de
+// V_BRILHO_PLAYER (padrao 1 = 80%).
+int ajustes_esmaecer(void);
+int ajustes_brilho_player(void);
 int ajustes_dolby_vision(void);
 int ajustes_dolby_atmos(void);
 // pauseOverlayEnabled: o painel de ficha que sobe alguns segundos depois de

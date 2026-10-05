@@ -74,7 +74,7 @@ static const Item TELA[] = {
     ROT("Texto e tamanho"),
       OPC(AJ_FONTE_UI), OPC(AJ_TAMANHO_UI), OPC(AJ_TAMANHO_AJUSTES),
     ROT("Movimento e relógio"),
-      OPC(AJ_ANIM), OPC(AJ_RELOGIO),
+      OPC(AJ_ANIM), OPC(AJ_RELOGIO), OPC(AJ_ESMAECER),
 
   SEC("Reprodução", "Fonte, imagem, som e comportamento do player", "aj_circle-play"),
     ROT("Escolha da fonte"),
@@ -85,6 +85,7 @@ static const Item TELA[] = {
     ROT("Imagem e som"), OPC(AJ_QUALIDADE), OPC(AJ_DV), OPC(AJ_ATMOS), OPC(AJ_CACHE_SEEK),
     ROT("Durante e depois"),
       OPC(AJ_PAUSA_OVERLAY), OPC(AJ_REACAO_CREDITOS), OPC(AJ_CW_CONCLUIDO), OPC(AJ_SAIDA_PLAYER),
+      OPC(AJ_BRILHO_PLAYER),
     ROT("Seekr"),
       OPC(AJ_SEEKR_LIGADO), OPC(AJ_SEEKR_CHAVE), OPC(AJ_SEEKR_TESTAR),
       OPC(AJ_SEEKR_FITA), OPC(AJ_SEEKR_AJUSTE),
