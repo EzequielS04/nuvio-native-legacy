@@ -3539,6 +3539,29 @@ static void corpoErro(GfxRect r, float a, void *u) {
 }
 
 static void desenharOsd(Uint32 agora, float a, float ac, const CatItem *c);
+// O QUE FICA FORA DO FURO. Video em tela cheia com barras (Original, 2.39:1,
+// 4:3...): PRETO de verdade, (0,0,0,1). O Glass UI (5a058b6c) trocou o chapado
+// por #0B0C0E para todo caso, e na TCL (Android TV) as barras viraram cinza.
+// So o video RECUADO (A seguir / Mais como este) tem em volta a arte do titulo
+// desfocada, escurecida, com sombra sob o cartaz.
+void player_fundo_fora_do_furo(GfxRect furo, int recuado, const CatItem *c) {
+  GfxRect tela = { 0, 0, NV_TELA_W, NV_TELA_H };
+  if (!(furo.w < NV_TELA_W - 0.5f || furo.h < NV_TELA_H - 0.5f)) return;
+  if (!recuado) { gfx_cor(tela, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f); return; }
+  { const char *arte = (c && c->backdrop[0]) ? artehero_url(c) : NULL;
+    GLuint tb = arte ? tex_obter_larg(arte, 480) : 0;
+    if (tb) tb = gfx_desfocado(tb, arte);   // a copia 96x54 desfocada (#133)
+    gfx_cor(tela, 0.0f, 0.043f, 0.047f, 0.055f, 1.0f);
+    if (tb) {
+      gfx_tex_aspect_atual = tex_aspecto(arte);
+      gfx_rect(tela, tb, GFX_CARD, 0, 0, 0, 0.0f, 0, 0, 0, 1.0f);
+      gfx_tex_aspect_atual = 0.0f;
+      gfx_cor(tela, 0.0f, 0, 0, 0, 0.58f);
+    }
+    gfx_rect((GfxRect){ furo.x - 40.0f, furo.y - 10.0f, furo.w + 80.0f, furo.h + 90.0f }, 0, GFX_SOMBRA,
+             1.0f, 0, 0, 0.5f, 0, 0, 0, 0.5f); }
+}
+
 void player_desenhar(Uint32 agora) {
   (void)agora;
   if (!aberto) return;
@@ -3591,6 +3614,10 @@ void player_desenhar(Uint32 agora) {
       } else furar = 0;
     } }
 #endif
+#ifdef NV_ANDROID
+  // Video vivo por baixo: o vidro fosco (assado de 320x180) nao desenha ali.
+  if (furar) gfx_vidro_fosco_bloquear();
+#endif
   if (furar) {
     // O furo acompanha o MESMO retangulo que foi ao plano de hardware, cortado
     // na tela. Furar sempre a tela inteira, como antes, deixava faixa preta nos
@@ -3626,21 +3653,7 @@ void player_desenhar(Uint32 agora) {
       // textura pequena esticada) e escurecida, em vez do preto; o video ganha
       // raio de cartaz e sombra.
       int recuado = encolhe < 0.999f;
-      if (furo.w < NV_TELA_W - 0.5f || furo.h < NV_TELA_H - 0.5f) {
-        const char *arte = (recuado && c && c->backdrop[0]) ? artehero_url(c) : NULL;
-        GLuint tb = arte ? tex_obter_larg(arte, 480) : 0;
-        if (tb) tb = gfx_desfocado(tb, arte);   // a copia 96x54 desfocada (#133)
-        gfx_cor(tela, 0.0f, 0.043f, 0.047f, 0.055f, 1.0f);
-        if (tb) {
-          gfx_tex_aspect_atual = tex_aspecto(arte);
-          gfx_rect(tela, tb, GFX_CARD, 0, 0, 0, 0.0f, 0, 0, 0, 1.0f);
-          gfx_tex_aspect_atual = 0.0f;
-          gfx_cor(tela, 0.0f, 0, 0, 0, 0.58f);
-        }
-        if (recuado)
-          gfx_rect((GfxRect){ furo.x - 40.0f, furo.y - 10.0f, furo.w + 80.0f, furo.h + 90.0f }, 0, GFX_SOMBRA,
-                   1.0f, 0, 0, 0.5f, 0, 0, 0, 0.5f);
-      }
+      player_fundo_fora_do_furo(furo, recuado, c);
 #ifdef NV_SHOT_HOOKS
       if (shotSemFuro) {
         const char *arte = c && c->backdrop[0] ? artehero_url(c) : NULL;
