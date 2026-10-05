@@ -22,6 +22,7 @@
 #include <strings.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <time.h>
 #include <stdatomic.h>
 
 // 16, e nao 12. O sync le ate SY_ADD_MAX (16) addons da conta e entregava a
@@ -855,99 +856,167 @@ static int distribuirLegendas(const LegLote *lotes, int nLotes, int nGrupos,
   return n;
 }
 
+// BUSCA DE LEGENDAS EM PARALELO (legenda automatica, 04/10).
+//
+// Era SERIAL: um addon por vez, 25 s de teto cada, e a lista so aparecia para o
+// resto do app quando o ULTIMO terminava. Um addon lento segurava a legenda
+// automatica (addons_legendas_prontas) e a folha por ate 75 s, e no log da TV
+// os tres addons respondiam um depois do outro (0,5 + 0,4 + 0,6 s).
+// Agora cada addon tem o seu fio, o teto e de LEG_TETO_S, e a lista e PUBLICADA
+// a cada resposta (a folha ganha linhas ao vivo); "prontas" so quando todos
+// voltaram.
+#define LEG_TETO_S 8
+
+typedef struct {
+  LegLote *lotes;          // um por addon
+  int nLotes, nGrupos;
+  const char *grupos[3];
+  char gruposTexto[3][16];
+  char id[64], tipo[16];
+  int temporada, episodio;
+  unsigned geracao;
+  pthread_mutex_t m;       // guarda lotes
+} LegBusca;
+
+typedef struct { LegBusca *B; int i; } LegFio;
+
+static void publicarLegendas(LegBusca *B) {
+  Legenda achadas[LEG_MAX] = {{0}};
+  int n;
+  pthread_mutex_lock(&B->m);
+  n = distribuirLegendas(B->lotes, B->nLotes, B->nGrupos, achadas);
+  pthread_mutex_unlock(&B->m);
+  pthread_mutex_lock(&legTrava);
+  if (!legParar && B->geracao == legGeracao) {
+    memcpy(legs, achadas, sizeof achadas);
+    nLegs = n;
+  }
+  pthread_mutex_unlock(&legTrava);
+}
+
+static void *buscarUmAddon(void *u) {
+  LegFio *F = u;
+  LegBusca *B = F->B;
+  int i = F->i, array = 0, recebidas = 0, gi;
+  char url[900], *corpo;
+  const char *p, *q;
+  RedeMedida medida = {0};
+  LegLote *lote = calloc(1, sizeof *lote);
+  if (!lote) return NULL;
+  if (pedidoMudou(B->geracao)) { free(lote); return NULL; }
+  snprintf(url, sizeof url, "%s/subtitles/%s/%s.json", addon[i].base, B->tipo, B->id);
+  corpo = rede_baixar_medido_controle(url, LEG_TETO_S, NULL, NULL, &medida);
+  if (pedidoMudou(B->geracao)) { free(corpo); free(lote); return NULL; }
+  p = js_array(corpo, NULL, "subtitles");
+  // js_array devolve NULL tambem para []: o diagnostico precisa distinguir
+  // um array vazio de uma resposta sem o resource esperado.
+  array = arrayDeLegendas(corpo);
+  for (q = p; q;) {
+    const char *f = js_fim(q);
+    if (!f || f <= q) break;
+    recebidas++;
+    q = js_prox(f);
+  }
+  for (gi = 0; gi < B->nGrupos; gi++) {
+    int noGrupo = 0, teto = LEG_MAX / B->nGrupos;
+    for (q = p; q && noGrupo < teto;) {
+      const char *f = js_fim(q);
+      char l[64] = "", cod[16], nome[120] = "";
+      Legenda *d = &lote->itens[lote->n];
+      if (!f || f <= q) break;
+      if (*q == '{' && episodioCorreto(q, f, B->temporada, B->episodio) &&
+          js_texto(q, f, "lang", l, sizeof l)) {
+        // "PORTUGUESE" / "Portuguese (Brazil)" / "por" / "pt-BR" viram um
+        // codigo so; antes o nome entrava cortado em 8 bytes ("PORTUGU") e
+        // nao casava com a preferencia.
+        ling_normalizar(l, cod, sizeof cod);
+        if (ling_casa(cod, B->grupos[gi]) && js_texto(q, f, "url", d->url, sizeof d->url)) {
+          js_texto(q, f, "subtitleFileName", nome, sizeof nome);
+          if (!nome[0]) js_texto(q, f, "movieReleaseName", nome, sizeof nome);
+          snprintf(d->idioma, sizeof d->idioma, "%s", cod);
+          snprintf(d->provedor, sizeof d->provedor, "%s", addon[i].nome);
+          snprintf(d->arquivo, sizeof d->arquivo, "%s", nome);
+          if (B->temporada > 0 && B->episodio > 0)
+            snprintf(d->rotulo, sizeof d->rotulo, i18n("T%dE%d  \xc2\xb7  %s%s%.22s"),
+                     B->temporada, B->episodio, i18n(ling_nome(cod)), nome[0] ? "  \xc2\xb7  " : "", nome);
+          else
+            snprintf(d->rotulo, sizeof d->rotulo, "%s%s%.36s",
+                     i18n(ling_nome(cod)), nome[0] ? "  \xc2\xb7  " : "", nome);
+          lote->grupo[lote->n++] = (unsigned char)gi;
+          noGrupo++;
+        }
+      }
+      q = js_prox(f);
+    }
+  }
+  // Somente medidas e enumeracoes publicas. Nao registrar URL, id do
+  // titulo, corpo, nome de arquivo, nome configurado ou cabecalhos.
+  printf("[addon-recurso] addon=%d resource=subtitles tipo=%s http=%d bytes=%ld ms=%lu array=%d recebidas=%d candidatas=%d\n",
+         i + 1, !strcmp(B->tipo, "movie") ? "movie" : !strcmp(B->tipo, "series") ? "series" : "outro",
+         medida.status, medida.bytes, medida.ms, array, recebidas, lote->n);
+  fflush(stdout);
+  free(corpo);
+  pthread_mutex_lock(&B->m);
+  B->lotes[i] = *lote;
+  pthread_mutex_unlock(&B->m);
+  free(lote);
+  publicarLegendas(B);
+  return NULL;
+}
+
+static unsigned relogioMs(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (unsigned)(t.tv_sec * 1000u + t.tv_nsec / 1000000u);
+}
+
 static void *buscarLegendas(void *u) {
   (void)u;
   for (;;) {
-    Legenda achadas[LEG_MAX] = {{0}};
-    LegLote *lotes;
-    char id[64], tipo[16], gruposTexto[3][16];
-    const char *grupos[3];
-    unsigned geracao;
-    int nAchadas = 0, temporada, episodio, i, nLotes, nGrupos;
+    LegBusca B;
+    LegFio fio[ADD_MAX];
+    pthread_t th[ADD_MAX];
+    int criado[ADD_MAX] = {0};
+    unsigned t0 = relogioMs();
+    int i, nAtivos = 0;
 
+    memset(&B, 0, sizeof B);
+    pthread_mutex_init(&B.m, NULL);
     pthread_mutex_lock(&legTrava);
-    if (legParar) { fioLegVivo = 0; pthread_mutex_unlock(&legTrava); return NULL; }
-    snprintf(id, sizeof id, "%s", legId);
-    snprintf(tipo, sizeof tipo, "%s", legTipo);
-    geracao = legGeracao;
+    if (legParar) { fioLegVivo = 0; pthread_mutex_unlock(&legTrava); pthread_mutex_destroy(&B.m); return NULL; }
+    snprintf(B.id, sizeof B.id, "%s", legId);
+    snprintf(B.tipo, sizeof B.tipo, "%s", legTipo);
+    B.geracao = legGeracao;
     pthread_mutex_unlock(&legTrava);
-    episodioPedido(id, &temporada, &episodio);
-    nGrupos = gruposIdioma(grupos);
-    for (i = 0; i < nGrupos; i++) {
-      snprintf(gruposTexto[i], sizeof gruposTexto[i], "%s", grupos[i]);
-      grupos[i] = gruposTexto[i];
+    episodioPedido(B.id, &B.temporada, &B.episodio);
+    B.nGrupos = gruposIdioma(B.grupos);
+    for (i = 0; i < B.nGrupos; i++) {
+      snprintf(B.gruposTexto[i], sizeof B.gruposTexto[i], "%s", B.grupos[i]);
+      B.grupos[i] = B.gruposTexto[i];
     }
-    nLotes = nAddon < ADD_MAX ? nAddon : ADD_MAX;
-    lotes = calloc((size_t)(nLotes > 0 ? nLotes : 1), sizeof *lotes);
-    if (!lotes) printf("[legendas] candidatos: memoria indisponivel\n");
+    B.nLotes = nAddon < ADD_MAX ? nAddon : ADD_MAX;
+    B.lotes = calloc((size_t)(B.nLotes > 0 ? B.nLotes : 1), sizeof *B.lotes);
+    if (!B.lotes) printf("[legendas] candidatos: memoria indisponivel\n");
 
-    for (i = 0; lotes && i < nLotes; i++) {
-      char url[900], *corpo;
-      const char *p, *q;
-      RedeMedida medida = {0};
-      int array = 0, recebidas = 0, gi;
+    for (i = 0; B.lotes && i < B.nLotes; i++) {
       // Addon que nao declara legenda nao e consultado.
       if (!addon[i].ativo || !addon[i].legenda) continue;
-      if (pedidoMudou(geracao)) break;
-      snprintf(url, sizeof url, "%s/subtitles/%s/%s.json",
-               addon[i].base, tipo, id);
-      corpo = rede_baixar_medido_controle(url, 25, NULL, NULL, &medida);
-      if (pedidoMudou(geracao)) { free(corpo); break; }
-      p = js_array(corpo, NULL, "subtitles");
-      // js_array devolve NULL tambem para []: o diagnostico precisa distinguir
-      // um array vazio de uma resposta sem o resource esperado.
-      array = arrayDeLegendas(corpo);
-      for (q = p; q;) {
-        const char *f = js_fim(q);
-        if (!f || f <= q) break;
-        recebidas++;
-        q = js_prox(f);
-      }
-      for (gi = 0; gi < nGrupos; gi++) {
-        int noGrupo = 0, teto = LEG_MAX / nGrupos;
-        for (q = p; q && noGrupo < teto;) {
-          const char *f = js_fim(q);
-          char l[16] = "", nome[120] = "";
-          Legenda *d = &lotes[i].itens[lotes[i].n];
-          if (!f || f <= q) break;
-          if (*q == '{' && episodioCorreto(q, f, temporada, episodio) &&
-              js_texto(q, f, "lang", l, sizeof l) && ling_casa(l, grupos[gi]) &&
-              js_texto(q, f, "url", d->url, sizeof d->url)) {
-            js_texto(q, f, "subtitleFileName", nome, sizeof nome);
-            if (!nome[0]) js_texto(q, f, "movieReleaseName", nome, sizeof nome);
-            snprintf(d->idioma, sizeof d->idioma, "%s", l);
-            snprintf(d->provedor, sizeof d->provedor, "%s", addon[i].nome);
-            snprintf(d->arquivo, sizeof d->arquivo, "%s", nome);
-            if (temporada > 0 && episodio > 0)
-              snprintf(d->rotulo, sizeof d->rotulo, i18n("T%dE%d  \xc2\xb7  %s%s%.22s"),
-                       temporada, episodio, i18n(ling_nome(l)), nome[0] ? "  \xc2\xb7  " : "", nome);
-            else
-              snprintf(d->rotulo, sizeof d->rotulo, "%s%s%.36s",
-                       i18n(ling_nome(l)), nome[0] ? "  \xc2\xb7  " : "", nome);
-            lotes[i].grupo[lotes[i].n++] = (unsigned char)gi;
-            noGrupo++;
-          }
-          q = js_prox(f);
-        }
-      }
-      // Somente medidas e enumeracoes publicas. Nao registrar URL, id do
-      // titulo, corpo, nome de arquivo, nome configurado ou cabecalhos.
-      printf("[addon-recurso] addon=%d resource=subtitles tipo=%s http=%d bytes=%ld ms=%lu array=%d recebidas=%d candidatas=%d\n",
-             i + 1, !strcmp(tipo, "movie") ? "movie" : !strcmp(tipo, "series") ? "series" : "outro",
-             medida.status, medida.bytes, medida.ms, array, recebidas, lotes[i].n);
-      free(corpo);
+      fio[i].B = &B; fio[i].i = i;
+      if (pthread_create(&th[i], NULL, buscarUmAddon, &fio[i]) == 0) { criado[i] = 1; nAtivos++; }
+      else buscarUmAddon(&fio[i]);      // sem fio novo: faz aqui mesmo
     }
-    if (lotes) nAchadas = distribuirLegendas(lotes, nLotes, nGrupos, achadas);
-    free(lotes);
+    for (i = 0; i < B.nLotes; i++) if (criado[i]) pthread_join(th[i], NULL);
 
+    free(B.lotes);
+    pthread_mutex_destroy(&B.m);
     pthread_mutex_lock(&legTrava);
     if (legParar) { fioLegVivo = 0; pthread_mutex_unlock(&legTrava); return NULL; }
-    if (geracao != legGeracao) { pthread_mutex_unlock(&legTrava); continue; }
-    memcpy(legs, achadas, sizeof achadas);
-    nLegs = nAchadas;
+    if (B.geracao != legGeracao) { pthread_mutex_unlock(&legTrava); continue; }
     fioLegVivo = 0;
+    i = nLegs;
     pthread_mutex_unlock(&legTrava);
-    printf("[legendas] concluida: %d\n", nAchadas);
+    printf("[legendas] concluida: %d (%d addon(s) em paralelo, %u ms)\n", i, nAtivos,
+           relogioMs() - t0);
     fflush(stdout);
     return NULL;
   }

@@ -17,6 +17,7 @@
 #include "plrilha.h"
 #include "legendasui.h"
 #include "legsync.h"
+#include "legauto.h"
 #include "cacheboost.h"
 #define NV_ESCALA_TELA   // o arquivo inteiro mede pela tela virtual (escala.h)
 #include "escala.h"
@@ -158,6 +159,136 @@ static const char *motivoTV(int i) {
   return "?";
 }
 
+
+// --- A PILULA DA LEGENDA AUTOMATICA (dono, 04/10) -----------------------------
+// "Quando clicar na linguagem o componente tem que diminuir para avisar o que
+// ta fazendo": escolhida a legenda (ou decidida sozinha), a ilha da folha ENCOLHE
+// numa pilula (a mesma mola de plrilha.c: o ultimo corpo sai com o alfa caindo
+// enquanto a forma vira a pilula) e narra: "Procurando legendas em Portugues…"
+// -> "Sincronizando…" -> "Legenda aplicada · OpenSubtitles" (e some), ou "Nenhuma
+// legenda em Portugues" com o OK de volta para a lista. Cada estado fica no
+// minimo PIL_MIN_MS na tela, senao uma legenda que baixa em 200 ms piscaria.
+enum { PIL_OFF = 0, PIL_PROCURANDO, PIL_SINCRONIZANDO, PIL_APLICADA, PIL_FALHOU };
+#define PIL_MIN_MS      900u
+#define PIL_APLICADA_MS 3600u
+#define PIL_FALHOU_MS   8000u
+#define PIL_BAIXAR_TETO 20000u   // a legenda escolhida nao baixou: desiste da narracao
+static int emTroca;
+static int pilEstado, pilRastreia, pilBusca, pilSemSync, pilFalhaBaixar, pilTroca;
+static Uint32 pilDesde, pilIniciou;
+static char pilIdioma[16], pilProvedor[64];
+static uint64_t pilHash;
+
+static Uint32 pilAgora(void) { return SDL_GetTicks(); }
+static void pilIr(int e, Uint32 agora) { if (pilEstado != e) { pilEstado = e; pilDesde = agora ? agora : 1u; } }
+static void pilZerar(void) { pilEstado = pilRastreia = pilBusca = pilSemSync = pilFalhaBaixar = 0; pilTroca = 0; pilHash = 0; }
+
+// Nome do provedor sem o sufixo de hospedagem ("AIOStreams | ElfHosted" -> "AIOStreams").
+static void pilProvedorCurto(const char *src, char *dst, size_t n) {
+  size_t k = 0;
+  while (src && src[k] && k + 1 < n) { if (src[k] == '|') break; dst[k] = src[k]; k++; }
+  while (k && dst[k - 1] == ' ') k--;
+  dst[k] = 0;
+}
+
+static void pilBuscando(const char *idioma, Uint32 agora) {
+  if (pilBusca || pilRastreia) return;
+  pilBusca = 1; snprintf(pilIdioma, sizeof pilIdioma, "%s", idioma);
+  pilIr(PIL_PROCURANDO, agora);
+}
+static void pilFalhou(const char *idioma, Uint32 agora) {
+  pilBusca = pilRastreia = 0;
+  snprintf(pilIdioma, sizeof pilIdioma, "%s", idioma);
+  pilIr(PIL_FALHOU, agora);
+}
+static void pilExterna(const Legenda *l) {
+  Uint32 agora = pilAgora();
+  pilBusca = 0; pilRastreia = 1; pilSemSync = 0; pilFalhaBaixar = 0;
+  snprintf(pilIdioma, sizeof pilIdioma, "%s", l->idioma);
+  pilProvedorCurto(l->provedor[0] ? l->provedor : l->rotulo, pilProvedor, sizeof pilProvedor);
+  pilHash = legsync_hash_url(l->url);
+  pilIniciou = agora;
+  pilEstado = PIL_OFF;           // recomeca do inicio mesmo se a anterior ainda estava de pe
+  pilIr(PIL_PROCURANDO, agora);
+}
+static void pilEmbutida(const char *rotulo, Uint32 agora) {
+  pilBusca = pilRastreia = 0; pilSemSync = 0;
+  snprintf(pilProvedor, sizeof pilProvedor, "%s", rotulo && *rotulo ? rotulo : i18n("Embutida"));
+  pilIr(PIL_APLICADA, agora);
+}
+
+static void pilAtualizar(Uint32 agora) {
+  int quer;
+  if (pilEstado == PIL_OFF) return;
+  if (!player_aberto() || (pilBusca && !legAuto)) { pilZerar(); return; }
+  if (pilRastreia) {
+    LegSyncVisao v = legsync_visao(0);
+    if (v.fase == LEGSYNC_AGUARDANDO) quer = PIL_PROCURANDO;
+    else if (v.autoFase == 1) quer = PIL_SINCRONIZANDO;
+    else { quer = PIL_APLICADA; pilSemSync = v.autoFase == 3; }
+    if (quer == PIL_PROCURANDO && agora - pilIniciou > PIL_BAIXAR_TETO) { pilFalhaBaixar = 1; pilFalhou(pilIdioma, agora); return; }
+    if (quer == PIL_APLICADA && v.autoFase == 2 && pilHash) {
+      const CatItem *ci = cat_item(player_indice());
+      if (ci) legauto_lembrar(ci->imdb[0] ? ci->imdb : ci->titulo, pilIdioma, pilHash);
+    }
+    // so avanca (nunca volta a "Procurando" por oscilacao) e respeita o tempo minimo
+    if (quer != pilEstado && (pilEstado == PIL_PROCURANDO || (pilEstado == PIL_SINCRONIZANDO && quer == PIL_APLICADA) ||
+                              (pilEstado == PIL_APLICADA && quer == PIL_SINCRONIZANDO && pilTroca)) &&
+        agora - pilDesde >= PIL_MIN_MS)
+      pilIr(quer, agora);
+    else if (pilEstado == PIL_APLICADA && quer == PIL_APLICADA) pilSemSync = v.autoFase == 3;
+  }
+  if (pilEstado == PIL_APLICADA && agora - pilDesde >= PIL_APLICADA_MS) pilZerar();
+  else if (pilEstado == PIL_FALHOU && agora - pilDesde >= PIL_FALHOU_MS) pilZerar();
+}
+
+// OK na pilula de falha: o caminho de volta para a lista de legendas.
+int faixas_pilula_tecla(const SDL_Event *e) {
+  if (pilEstado != PIL_FALHOU || faixas_aberta() || !player_aberto()) return 0;
+  if (e->type != SDL_KEYDOWN) return 0;
+  if (e->key.keysym.sym != SDLK_RETURN && e->key.keysym.sym != SDLK_KP_ENTER) return 0;
+  pilZerar();
+  faixas_abrir_em(1);
+  return 1;
+}
+
+#ifdef NV_SHOT_HOOKS
+// Capturas: poe a pilula num estado fixo (1 procurando, 2 sincronizando, 3 aplicada, 4 falhou, 0 apaga).
+void faixas_shot_pilula(int estado, const char *idioma, const char *provedor, Uint32 agora) {
+  pilZerar();
+  snprintf(pilIdioma, sizeof pilIdioma, "%s", idioma ? idioma : "");
+  snprintf(pilProvedor, sizeof pilProvedor, "%s", provedor ? provedor : "");
+  pilEstado = estado; pilDesde = agora | 1u;
+}
+#endif
+
+static void pilPedir(void) {
+  static char texto[200], dir[48];
+  char nome[64];
+  PlrIlhaPedido p;
+  if (pilEstado == PIL_OFF || aberta) return;
+  memset(&p, 0, sizeof p);
+  snprintf(nome, sizeof nome, "%s", i18n(ling_nome(pilIdioma)));
+  switch (pilEstado) {
+    case PIL_PROCURANDO:
+      snprintf(texto, sizeof texto, i18n("Procurando legendas em %s…"), nome);
+      p.respira = 1; break;
+    case PIL_SINCRONIZANDO:
+      snprintf(texto, sizeof texto, "%s", i18n("Sincronizando…"));
+      p.respira = 1; break;
+    case PIL_APLICADA:
+      snprintf(texto, sizeof texto, i18n(pilSemSync ? "Legenda aplicada · %s · sem ajuste de tempo" : "Legenda aplicada · %s"), pilProvedor);
+      p.icone = "pl_check"; p.corIcone = 2; break;
+    default:
+      snprintf(texto, sizeof texto, pilFalhaBaixar ? "%s" : i18n("Nenhuma legenda em %s"),
+               pilFalhaBaixar ? i18n("Não deu para baixar a legenda") : nome);
+      snprintf(dir, sizeof dir, "%s", i18n("OK abre a lista"));
+      p.icone = "pl_triangle-alert"; p.corIcone = 1; p.direita = dir; break;
+  }
+  p.texto = texto; p.semFim = 1; p.aberta = 1;
+  plrilha_pedir(&p);
+}
+
 // Chamada quando uma sessao de reproducao nova comeca: a legenda externa e da
 // sessao, nao do aparelho. Sem isto o titulo seguinte abriria a folha marcando
 // como ativa uma legenda que nao foi escolhida para ele.
@@ -179,7 +310,10 @@ static int autoTroca(const char *idioma, const uint64_t *tent, int n, int voltar
       if (jaFoi) continue;
     }
     snprintf(nome, tamNome, "%s", v[j].provedor[0] ? v[j].provedor : v[j].rotulo);
-    faixas_escolher_externa(&v[j]);
+    pilTroca = 1;   // a pilula segue em "Sincronizando…" com a nova
+    emTroca = 1; faixas_escolher_externa(&v[j]); emTroca = 0;
+    pilProvedorCurto(nome, pilProvedor, sizeof pilProvedor); pilHash = h;
+    if (pilEstado == PIL_APLICADA) pilIr(PIL_SINCRONIZANDO, pilAgora());
     return 1;
   }
   return 0;
@@ -191,7 +325,7 @@ void faixas_reiniciar(void) {
   legOverlayFalhas = legOverlayRecusas = legOverlayNoGoEstado = 0; legOverlayRetomar = 0;
   legOverlayTV = legOverlayColhidos = 0;
   mkvass_parar(); legenda_desligar();
-  legAuto = 1; legAutoDesde = 0;
+  legAuto = 1; legAutoDesde = 0; pilZerar();
   legendasui_reiniciar();   // F04: the second subtitle belongs to the session too
 }
 
@@ -451,12 +585,13 @@ static void escolherLegenda(int i) {
     // aqui jogaria isso fora.
     if (!vaiAoApp) mkvass_parar();
     legOverlay = -1; legOverlayEsperando = -1; legOverlayRetomar = 0; legOverlayTV = 0;
-    if (i < 0)        { video_escolher_legenda(-1); legenda_desligar(); legExterna = -1; legExternaId[0] = 0;
+    if (i < 0)        { pilZerar(); video_escolher_legenda(-1); legenda_desligar(); legExterna = -1; legExternaId[0] = 0;
                         legsync_primaria_outra(0); }   // F05: sem externa, sem AutoSync
     else if (i < emb) {
       const VideoFaixa *f = video_legenda(i);
       int ord = video_legenda_ordinal_mkv(i);
       legsync_primaria_outra(1);   // F05: a embutida ja acompanha o video
+      pilEmbutida(i18n("Embutida"), pilAgora());
       legenda_desligar(); legExterna = -1; legExternaId[0] = 0;
       // FAIXA ASS: o overlay do app assume (#92). O pipeline fica com a legenda
       // desligada e o mkvass colhe o texto do MKV a frente do playhead; se ele
@@ -495,6 +630,7 @@ static void escolherLegenda(int i) {
         /* A fonte e os 16 tamanhos agora sao nossos, nao do firmware webOS. */
         // F05: legsync carrega pelo mesmo legenda.c e guarda o documento.
         video_escolher_legenda(-1); legsync_primaria_externa(l->url, l->idioma, l->provedor); legExterna = i;
+        if (!emTroca) pilExterna(l);
         legendasui_id_addon(l, legExternaId);
       }
     }
@@ -519,8 +655,8 @@ static void aplicar(void) {
 // porque as duas listas podem nunca "fechar": a sonda do MKV so dispara com
 // buffer saudavel, e numa fonte lenta isso demora; o fio de legendas consulta
 // cada addon com 25 s de teto. Vencido o prazo, decide-se com o que ha.
-#define FX_AUTO_EMB_MS  30000u   // espera pelos idiomas das embutidas
-#define FX_AUTO_FIM_MS  60000u   // desiste de vez: legenda ligada no minuto 5 assusta
+#define FX_AUTO_EMB_MS  10000u   // espera pelos idiomas das embutidas (era 30 s: a legenda do addon ja estava na mao)
+#define FX_AUTO_FIM_MS  30000u   // desiste de vez: legenda ligada no minuto 5 assusta
 static void legendaAutomatica(Uint32 agora) {
   const char *emb[NV_FAIXA_MAX], *add[LEG_MAX];
   const CatItem *ci;
@@ -556,9 +692,18 @@ static void legendaAutomatica(Uint32 agora) {
   }
   if (passou >= FX_AUTO_FIM_MS) embFechado = addFechado = 1;
   r = ling_legenda_auto(ling_legenda(), emb, nEmb, embFechado, add, nAdd, addFechado);
-  if (r == LING_AUTO_ESPERA) return;
+  if (r == LING_AUTO_ESPERA) {
+    // Passou do primeiro instante e ainda procura: a ilha diz o que esta fazendo.
+    if (passou >= 1200u && ling_legenda()[0] && strcasecmp(ling_legenda(), "none")) pilBuscando(ling_legenda(), agora);
+    return;
+  }
   legAuto = 0;
   if (r == LING_AUTO_NADA) {
+    if (ling_legenda()[0] && strcasecmp(ling_legenda(), "none")) {
+      // Antes era silencio: a pessoa nao sabia se o app tentou. Agora a ilha diz.
+      pilFalhou(ling_legenda(), agora);
+    }
+    pilBusca = 0;
     if (ling_legenda()[0] && strcasecmp(ling_legenda(), "none"))
       printf("[legenda] automatica: nada em '%s' (%d embutida(s), %d de addon)\n",
              ling_legenda(), nEmb, nAdd);
@@ -571,6 +716,15 @@ static void legendaAutomatica(Uint32 agora) {
   if (r == legendaAtiva() &&
       !(r < nEmb && legOverlay != r && ehAss(video_legenda(r)) && video_legenda_ordinal_mkv(r) >= 0))
     return;
+  // Varias legendas do idioma: a melhor, nao a primeira que respondeu (idioma
+  // exato, nome parecido com o arquivo, a que ja deu certo neste titulo).
+  if (r >= nEmb) {
+    Legenda v[LEG_MAX];
+    int nv = addons_legendas_copiar(v, LEG_MAX, NULL, NULL);
+    uint64_t lem = ci ? legauto_lembrada(ci->imdb[0] ? ci->imdb : ci->titulo, ling_legenda()) : 0;
+    int b = legauto_escolher(v, nv, ling_legenda(), video_url_atual(), NULL, 0, lem);
+    if (b >= 0 && b < nAdd) r = nEmb + b;
+  }
   printf("[legenda] automatica: '%s' -> %s %d (%s) aos %u ms\n", ling_legenda(),
          r < nEmb ? "embutida" : "addon", r < nEmb ? r : r - nEmb,
          r < nEmb ? emb[r] : add[r - nEmb], (unsigned)passou);
@@ -677,6 +831,7 @@ void faixas_atualizar(float dt, Uint32 agora) {
   // piscaria no caminho de volta.
   if (aberta || anim < .01f) animTopo = anim_mola(animTopo, faixas_estilo_topo() ? 1.0f : 0.0f, dt, NV_MOLA_TELA);
   legendaAutomatica(agora);
+  pilAtualizar(agora);
   // Recuo vencido: a MESMA faixa de novo. O overlay nao foi desligado — o que
   // ja estava colhido continua na tela, e o fio novo retoma do sidecar parcial.
   if (legOverlay >= 0 && legOverlayRetomar && (Sint32)(agora - legOverlayRetomar) >= 0) {
@@ -849,14 +1004,10 @@ static void rostoIdioma(GfxRect r, const char *idioma, const char *icone, int se
   if (icone) {
     gfx_icone((GfxRect){ r.x + 15.0f, r.y + 15.0f, 22.0f, 22.0f }, icone, 1, 1, 1, (sel ? 1.0f : 0.7f) * a);
   } else if (idioma && idioma[0]) {
-    char c[4] = { 0 };
-    int i;
-    for (i = 0; i < 3 && idioma[i] && idioma[i] != '-' && idioma[i] != '_'; i++)
-      c[i] = (char)(idioma[i] >= 'a' && idioma[i] <= 'z' ? idioma[i] - 32 : idioma[i]);
-    if (i == 3 && c[2]) c[2] = 0;   /* "por" -> "PO": dois caracteres, como o mockup */
-    { int k = sel ? 255 : 178;
-      TxtLinha l = txt_linha(TXT_G16B, c, k, k, k, 255);
-      txt_tracking(TXT_G16B, c, k, k, k, r.x + (r.w - (float)l.w - 1.0f) * 0.5f, r.y + (r.h - (float)l.h) * 0.5f, a, 1.0f); }
+    const char *c = ling_selo(idioma);
+    int k = sel ? 255 : 178;
+    TxtLinha l = txt_linha(strlen(c) > 3 ? TXT_ILHA_APOIO : TXT_G16B, c, k, k, k, 255);
+    txt_desenhar_alpha(l, r.x + (r.w - (float)l.w) * 0.5f, r.y + (r.h - (float)l.h) * 0.5f, a);
   }
 }
 
@@ -1113,6 +1264,7 @@ void faixas_desenhar(Uint32 agora) {
 }
 static void faixas_desenharCorpo_(Uint32 agora) {
   (void)agora;
+  pilPedir();   // a pilula da legenda automatica (so com a folha fechada)
   if (anim < .01f) return;
   { int dir = plrilha_direita(), est = faixas_estilo_topo();
     // O video fica sem veu cheio: so o degrade do lado da ilha (a lista) ou o
@@ -1148,6 +1300,7 @@ void faixas_escolher_externa(const Legenda *l) {
   legOverlay = -1; legOverlayEsperando = -1; legOverlayRetomar = 0; legOverlayTV = 0;
   video_escolher_legenda(-1);
   legsync_primaria_externa(l->url, l->idioma, l->provedor);   // F05: carrega e vira documento do AutoSync
+  if (!emTroca) pilExterna(l);
   legendasui_id_addon(l, id);
   legExterna = -1;
   n = addons_legendas_copiar(v, LEG_MAX, NULL, NULL);

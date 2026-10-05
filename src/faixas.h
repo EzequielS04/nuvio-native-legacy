@@ -30,6 +30,8 @@ int  faixas_estilo_topo(void);
 float faixas_anim(void);
 void faixas_evento(const SDL_Event *e);
 void faixas_atualizar(float dt, Uint32 agora);
+// OK na pilula "Nenhuma legenda em ...": abre a lista de legendas. 1 = tratou a tecla.
+int  faixas_pilula_tecla(const SDL_Event *e);
 void faixas_desenhar(Uint32 agora);
 
 // F04: what the subtitle selector (legendasui.c) needs from the primary.

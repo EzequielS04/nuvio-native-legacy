@@ -194,9 +194,17 @@ static void gruposDoSlot(int slot, const char *ativo) {
   const char *pref = prefLinha(slot);
   int i, k;
   if (slot) secOculta = 0;
-  for (i = 0; i < nCand && nLinhasV < LUI_MAX_LINHAS - 4; i++) {
-    const LegUiCand *c = &cand[i];
+  int passo, ii;
+  // A LINGUA PREFERIDA PRIMEIRO (foto do dono, 04/10: Ingles na frente de
+  // Portugues com o idioma em portugues): 3 = o melhor (pt-BR para quem pediu
+  // portugues), 2 = a mesma familia, 1 = sem preferencia, 0 = o resto (so a
+  // que esta ativa). A ordem de chegada dos addons manda dentro de cada grau.
+  for (passo = 3; passo >= 0; passo--)
+  for (ii = 0; ii < nCand && nLinhasV < LUI_MAX_LINHAS - 4; ii++) {
+    const LegUiCand *c;
     char org[80], chave[96];
+    i = ii; c = &cand[i];
+    if (ling_afinidade(c->idioma, pref) != passo) continue;
     int casa = slot ? (pref[0] && ling_casa(c->idioma, pref)) : (!pref[0] || ling_casa(c->idioma, pref));
     if (!casa && strcmp(c->id, ativo)) continue;
     if (slot && !legendasui_cand_secundaria_ok(c)) {
@@ -444,13 +452,11 @@ static void rosto(GfxRect r, const char *idioma, const char *icone, int sel, flo
   if (icone) {
     gfx_icone((GfxRect){ r.x + 15.0f, r.y + 15.0f, 22.0f, 22.0f }, icone, 1, 1, 1, (sel ? 1.0f : 0.7f) * a);
   } else if (idioma && idioma[0]) {
-    char c[4] = { 0 };
-    int i, k = sel ? 255 : 178;
-    for (i = 0; i < 3 && idioma[i] && idioma[i] != '-' && idioma[i] != '_'; i++)
-      c[i] = (char)toupper((unsigned char)idioma[i]);
-    if (i == 3) c[2] = 0;
-    { TxtLinha l = txt_linha(TXT_G16B, c, k, k, k, 255);
-      txt_desenhar_alpha(l, r.x + (r.w - (float)l.w) * 0.5f, r.y + (r.h - (float)l.h) * 0.5f, a); }
+    // "PT-BR", "PT", "EN": a familia, e nao as 2 primeiras letras do codigo ("por" virava "PO").
+    const char *c = ling_selo(idioma);
+    int k = sel ? 255 : 178;
+    TxtLinha l = txt_linha(strlen(c) > 3 ? TXT_ILHA_APOIO : TXT_G16B, c, k, k, k, 255);
+    txt_desenhar_alpha(l, r.x + (r.w - (float)l.w) * 0.5f, r.y + (r.h - (float)l.h) * 0.5f, a);
   }
 }
 
@@ -486,7 +492,9 @@ static void textoLinha(const LuiLinha *l, char *nome, size_t tn, char *sub, size
   nome[0] = sub[0] = 0; *idioma = NULL; *icone = NULL; *ativo = 0; *apagada = 0;
   switch (l->tipo) {
     case LR_NENHUMA:
-      snprintf(nome, tn, "%s", i18n("Nenhuma"));
+      // A segunda lista tem a SUA "nenhuma": com o mesmo nome da primeira as
+      // duas pareciam repetidas (foto do dono, 04/10).
+      snprintf(nome, tn, "%s", i18n(!mais && l->slot == 1 ? "Sem segunda legenda" : "Nenhuma"));
       if (!mais && l->slot == 1 && secOculta)
         snprintf(sub, ts, "%s", secOculta == 1 ? i18n("Embutida como secundária: indisponível")
                                                : i18n("ASS como secundária: indisponível"));

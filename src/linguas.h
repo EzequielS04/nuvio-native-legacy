@@ -43,6 +43,9 @@ const char *ling_do_nome(const char *nome);
 // pedir "pt" aceita "por", "pob", "pt-BR", "ptb". Preferencia vazia casa com
 // TUDO — e o modo sem filtro.
 int ling_casa(const char *codigo, const char *pref);
+void ling_normalizar(const char *raw, char *out, unsigned tam);
+const char *ling_selo(const char *cod);
+int ling_afinidade(const char *cod, const char *pref);
 
 // Preferencias em vigor. Devolvem "" quando nao ha preferencia (sem filtro) e
 // "none" quando a pessoa pediu explicitamente NENHUMA legenda.
